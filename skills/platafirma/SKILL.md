@@ -1,10 +1,22 @@
 ---
 name: platafirma
-description: Use sempre que a conversa for sobre a PlataFirma — org de times/cadeiras, personas claudinho/claudinha, arquitetura, repo platafirma-arquitetura, ou a wiki. Dispare também sempre que a palavra "platafirma" aparecer explicitamente, e sempre que aparecer fila de mensagens, handoff, recado, card ou ticket entre personas ("lê a fila", "manda pro claudinho-X"). Dá a topologia atual de cadeiras/heads/gerências, as regras fixas de roteamento entre personas e o protocolo da fila de mensagens.
+description: Use sempre que a conversa for sobre a PlataFirma — org de times/cadeiras, personas claudinho/claudinha, arquitetura, repo platafirma-arquitetura, ou a wiki. Dispare também sempre que a palavra "platafirma" aparecer explicitamente, e sempre que aparecer fila de mensagens, handoff, recado, card ou ticket entre personas ("lê a fila", "manda pro claudinho-X"). Dá a topologia atual de cadeiras/heads/gerências, as regras fixas de roteamento entre personas e o protocolo da fila de mensagens. NÃO se aplica à claudinha-osint (colaboradora externa, ambiente isolado): a skill dela é `osint`.
 compatibility: precisa do connector "PlataFirma Wiki" (tool repo_read) pra ler o arquivo de origem do org chart, e do connector "platafirma-ops" (run_command, read_file, write_file) pra operar a fila de mensagens.
 ---
 
 # PlataFirma — org e roteamento
+
+## Quem esta skill atende
+
+Cadeira interna da PlataFirma (claudinho/claudinha do org chart) e a
+claudinha-fabrica, que recebe card de claudinho-TI.
+
+**Não atende a claudinha-osint.** Ela é externa, roda em ambiente isolado
+(`modulo-osint`), não tem caixa na fila, não lê repo interno e fala só com o
+Pedro. A palavra "PlataFirma" aparece na instruction dela e vai disparar esta
+skill por engano: aparecendo, ignore-a e siga a skill `osint`. Sinal
+mecânico de que a sessão não é desta skill: `id -un` responde `modulo-osint`,
+ou o conector `platafirma-ops` não está na sessão.
 
 ## Times e cadeiras
 Ler `docs/org-template-canonico.md` no repo `platafirma-arquitetura` (via
