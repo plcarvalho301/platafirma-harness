@@ -105,6 +105,22 @@ Tokenizer do qwen2.5 em `~/AI/opt/tokenizers/qwen2.5.json` (7 MB). Prova: frase-
 13 tokens. `tiktoken` não serve (tokeniza qwen errado). Para gemma2, baixar o
 `tokenizer.json` correspondente sob demanda.
 
+**`acervo-status`** — `[exec]`. Monitor do acervo: estado corrente por **obra** nos cinco
+degraus do fluxo — catalogada, armazenada, ingerida (chunkada), embedded (vetor de texto),
+vetorizada (vetor de metadado) — e a **fuga por degrau**: quantas obras vazam entre dois
+degraus e por qual causa. Binário próprio em `~/AI/bin/acervo-status` (formatador em
+`_acervo-status-fmt.py`); `--json` para máquina, `--detalhe` nomeia quem está fora do lugar.
+
+- Lê o substrato, não o discurso: `armazenada` confere objeto a objeto no MinIO (`mc ls`
+  nos buckets `acervo` e `pessoal`) em vez de acreditar em `acervo.obra.objeto`. Foi assim
+  que apareceu obra catalogada com 189 chunks vivos e bruto inexistente.
+- Read-only e fora do repo do rag: temp table, nenhuma view criada, nenhuma escrita. Roda
+  a qualquer tempo, inclusive durante carga.
+- Imprime o contrato do índice (`index_meta`) no cabeçalho — número de vetor sem o par
+  (modelo, backend) que o gerou não quer dizer nada.
+- **Chamar antes de afirmar qualquer número do acervo.** Contagem de obra dita de memória
+  ou de mensagem de outra persona é exatamente o que este binário existe para aposentar.
+
 ---
 
 ## Pendências declaradas
