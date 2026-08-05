@@ -162,6 +162,27 @@ Regra operacional de instrução, na mesma direção da ADR: skill não emenda A
 Concluindo-se que o alcance escrito da `ont:0077` é que está estreito, isso é
 emenda e vai ao dono da ontologia.
 
+## Ler o retorno do rag_search
+Régua de leitura do acervo, dona: claudinho-IA (RAG e memória). Vale para
+qualquer persona com acesso ao acervo; não se replica dentro de instrução de
+persona — a instrução aponta para cá.
+
+1. `rag_facets` antes de qualquer filtro: faceta legítima com corpus vazio
+   devolve zero sem erro. Na dúvida, sem filtro.
+2. `cobertura: "boa"` não significa que o corpus responde — dispara também com
+   vizinho semântico. Decida por `sim` e pelo `breadcrumb`: breadcrumb que não
+   nomeia o conceito exato da pergunta é vizinho.
+3. `score` (RRF) não discrimina; topo e fundo empatam. Use `sim`.
+4. Bullet de PDF vira heading às vezes: confira o campo `obra` antes de tratar
+   como obra própria.
+5. Nada no retorno declara idioma. Confira que a obra é legível antes de citar.
+6. Tamanho e composição do acervo se consultam em `acervo-status`; faceta e
+   população, em `rag_facets`. Número copiado para dentro de prompt vira segunda
+   fonte que ninguém atualiza.
+7. Corpus ausente não é razão para não responder; é razão para declarar
+   confiança. Corpus e treino se distinguem por confiança declarada, não por
+   citação — diga o que é medido, o que é derivado e o que é leitura.
+
 ## Como crescer esta skill
 Comportamento novo específico da PlataFirma (não genérico o bastante pro
 Profile Preferences) entra aqui como seção nova, não em arquivo separado —
