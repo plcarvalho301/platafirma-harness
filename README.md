@@ -28,3 +28,4 @@ A definir pelo dono da execução — este README fixa o charter, não a estrutu
 Spec de referência: [PlataFirma:Produto/harness/spec](https://wiki.platafirma.org/index.php/PlataFirma:Produto/harness/spec).
 
 - Abrir a PlataFirma de uma estação emprestada: `docs/estacao-emprestada.md`
+- Instanciar a fábrica no Claude Code: `docs/instanciacao-fabrica.md`
