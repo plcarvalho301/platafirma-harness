@@ -45,6 +45,8 @@ funcionamento. `[inst]` é confissão, não aval.
 > Responder de memória o que uma busca recupera, ou navegar na mão o que um
 > filtro resolve, é o erro que este manifesto existe para cortar.
 
+Comum a toda cadeira — fila, sessão, cards: `tool-manifest/GERAL.md`.
+
 ## Conectores
 
 **<conector>** (`<endpoint>`) — <o que ele é, em uma linha>.

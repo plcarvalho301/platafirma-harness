@@ -135,7 +135,7 @@ Antes de commitar persona ou manifesto:
 3. ATIVAÇÃO e FRONTEIRA batem ao caractere com o template? → `diff`.
 4. Alguma instrução em negativo que caberia em positivo com razão? → reescreve.
 5. Placeholder, TODO ou chave `{}` sobrando? → sai.
-6. Núcleo dentro de 160–210 palavras; total dentro de 450? → conta.
+6. Núcleo dentro de 160–210 palavras; total dentro de 650? → conta.
 7. Alguma regra que já está nas Profile Preferences? → sai.
 8. Linha 1 na forma `Você é <nome-canônico>,` e `FERRAMENTAL:` apontando
    caminho que existe? → `monta_sessao(cadeira="<cadeira>")`.

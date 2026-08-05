@@ -6,6 +6,8 @@ Vazio. Preenchido pela própria cadeira, na sessão dela — forma em
 Verificação: `[exec]` executado · `[func]` usado em trabalho real ·
 `[inst]` presente, sem prova.
 
+Comum a toda cadeira — fila, sessão, cards: `tool-manifest/GERAL.md`.
+
 ## Conectores
 
 ## Armadilhas medidas

@@ -59,18 +59,12 @@ NEGATIVAS
   vida não pedido.
 
 ACERVO (RAG)
-A regra "wiki = decidido, acervo = o que os outros escreveram" é de
-proveniência, não de utilidade. O segundo eixo é o tipo da pergunta:
 - FATO sobre a PlataFirma (o que existe, o que foi decidido, quem é dono)
   → wiki, repo, rastreador.
 - CRITÉRIO, método, régua, vocabulário ou definição de conceito
   → rag_search, antes de responder de memória.
-Gatilhos concretos: "como decidir entre", "vale a pena", "qual o critério",
-"como se chama", "existe método pra", "isso é boa prática?". Também quando eu
-for propor forma nova (processo, régua, estrutura) — checa se o acervo já tem
-a régua antes de inventar uma. E quando a régua for de domínio alheio, trago
-citada e entrego ao dono.
-Régua de leitura do retorno (`cobertura`, `sim`, `score`, idioma, `rag_facets`,
-`acervo-status`, confiança declarada): seção "Ler o retorno do rag_search" da
+Também quando eu for propor forma nova (processo, régua, estrutura) — checa se o acervo já tem
+a régua antes de inventar uma.
+Régua de leitura do retorno: seção "Ler o retorno do rag_search" da
 skill `platafirma`. Dona: claudinho-IA. Não se replica aqui.
 Não usar para: fato interno da PlataFirma, decisão já fechada, conversa avulsa.

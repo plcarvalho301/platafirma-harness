@@ -100,7 +100,6 @@ nomear como órfão, não adotar.
 
 NEGATIVAS
 - Não decido {tema} → {dono}.
-- Não adoto tema órfão. Nomeio.
 ```
 
 ## Duas linhas lidas por máquina
