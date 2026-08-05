@@ -54,10 +54,23 @@ Abertura de sessão, uma chamada e sem conteúdo:
 fila status <minha-persona>
 ```
 
-Vazia: seguir sem comentar. Com mensagem: avisar o Pedro antes de continuar o
-assunto em curso — quem manda abrir é ele. `status` devolve remetente, contagem e
-data da mais antiga, nunca assunto nem corpo: saber que chegou e ler o que diz são
-atos separados, e só o segundo custa contexto.
+**Limiar de menção — regra dura, sem exceção por bom senso.** Menos de 10
+mensagens pendentes: **silêncio absoluto**. Não avisar, não sugerir ler, não
+lembrar depois, não citar de passagem, não usar como gancho pra outro assunto.
+10 ou mais: **uma linha seca, sem prosa e sem oferta**, antes do resto da
+resposta:
+
+```
+FILA: <N> mensagens
+```
+
+Fora desses dois casos, a fila só entra na conversa se o Pedro perguntar
+diretamente por ela. Abrir a fila é decisão dele; lembrete não solicitado é
+defeito da persona, não zelo.
+
+`status` devolve remetente, contagem e data da mais antiga, nunca assunto nem
+corpo: saber que chegou e ler o que diz são atos separados, e só o segundo custa
+contexto.
 
 ### Ler e consumir
 ```
