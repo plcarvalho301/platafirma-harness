@@ -1,0 +1,76 @@
+#!/usr/bin/env bash
+# infra — estado e operação da infraestrutura local (contêiner, unit, timer).
+# Encapsula as três pegadinhas conhecidas: DOCKER_HOST rootless, restart que
+# mata a própria chamada, e alvo que pode ser contêiner ou unit de usuário.
+set -euo pipefail
+
+export DOCKER_HOST="${DOCKER_HOST:-unix:///run/user/$(id -u)/docker.sock}"
+COMPOSE="${INFRA_COMPOSE:-$HOME/AI/platafirma-core/docker-compose.yml}"
+
+uso() {
+  cat >&2 <<'FIM'
+uso:
+  infra estado                   contêineres, units de usuário e timers, uma tela
+  infra saude                    /health do ops, contêiner não-saudável, disco, RAM
+  infra logs <alvo> [n]          alvo = nome de contêiner OU unit --user (default 50)
+  infra restart <unit>           destacado: sobrevive ao fim desta chamada
+  infra compose <args...>        docker compose com o -f do platafirma-core
+FIM
+  exit 2
+}
+
+cmd="${1:-}"; shift || uso
+
+case "$cmd" in
+  estado)
+    echo "== contêineres"
+    docker ps --format '{{.Names}}\t{{.Status}}' | sort
+    echo
+    echo "== units de usuário (ativas e falhadas)"
+    systemctl --user list-units --type=service --state=running,failed \
+      --no-pager --no-legend | sed 's/^[●*] *//' | awk '{print $1"\t"$4}'
+    echo
+    echo "== timers"
+    systemctl --user list-timers --no-pager --no-legend | awk '{print $NF"\t"$1,$2,$3}'
+    ;;
+
+  saude)
+    echo -n "ops-mcp /health: "
+    curl -sf --max-time 5 http://127.0.0.1:8010/health || echo "SEM RESPOSTA"
+    echo
+    echo "== contêiner parado ou não-saudável"
+    docker ps -a --format '{{.Names}}\t{{.Status}}' \
+      | grep -Ev 'Up .*(healthy)?$' | grep -Ei 'exited|unhealthy|restarting' || echo "(nenhum)"
+    echo
+    echo "== unit falhada"
+    systemctl --user list-units --state=failed --no-pager --no-legend || true
+    echo
+    echo "== disco e memória"
+    df -h / | tail -1
+    free -h | sed -n 2p
+    ;;
+
+  logs)
+    alvo="${1:?uso: infra logs <alvo> [n]}"; n="${2:-50}"
+    if docker ps -a --format '{{.Names}}' | grep -qx "$alvo"; then
+      docker logs --tail "$n" "$alvo" 2>&1
+    else
+      journalctl --user -u "$alvo" -n "$n" --no-pager
+    fi
+    ;;
+
+  restart)
+    unit="${1:?uso: infra restart <unit>}"
+    # Destacado: restart de ops-mcp pelo caminho direto mata a chamada em curso.
+    systemd-run --user --collect --unit="infra-restart-$$" \
+      systemctl --user restart "$unit"
+    echo "restart de $unit despachado destacado; conferir com: infra estado"
+    ;;
+
+  compose)
+    [ -r "$COMPOSE" ] || { echo "compose não legível: $COMPOSE" >&2; exit 1; }
+    docker compose -f "$COMPOSE" "$@"
+    ;;
+
+  *) uso ;;
+esac
