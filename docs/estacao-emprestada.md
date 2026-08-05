@@ -51,6 +51,14 @@ quatro ferramentas que executariam ou escreveriam **na estação emprestada**. L
 local (`Read`, `Grep`, `Glob`) segue liberada: ler o clone é ler texto que já está no
 disco.
 
+O modo é `bypassPermissions`, e é o que torna a estação usável: sem ele, cada tool call
+pede aprovação, uma por uma. O modo não amplia poder nenhum — o que ele dispensa é o
+clique, e o que sobra depois dos quatro `deny` são as tools MCP, que já executam na
+máquina do dono com auditoria. O `allow` nominal (`mcp__platafirma-ops`,
+`mcp__platafirma-wiki`) vale quando os servidores vêm deste `.mcp.json`; numa sessão
+logada pela conta claude.ai o nome do servidor é o UUID do conector, e aí só o modo
+resolve.
+
 Regra de precedência do Claude Code: `deny` vence `allow` em qualquer nível, e vale em
 todos os modos de permissão. Consequência prática e desejada: da estação emprestada não
 se commita, não se edita arquivo e não se roda comando local. Escrita e execução passam
