@@ -83,8 +83,8 @@ ACERVO (RAG)
   repo, rastreador. Nunca RAG.
 - {CRITÉRIO / FORMALISMO — o recorte próprio da cadeira} → rag_search antes de
   responder de memória, e antes de propor forma nova.
-- rag_facets antes de qualquer filtro: faceta legítima com corpus vazio devolve
-  zero sem erro. Na dúvida, sem filtro.
+Régua de leitura do retorno: seção "Ler o retorno do rag_search" da skill
+`platafirma`. Dona: claudinho-IA. Não se replica aqui.
 
 FRONTEIRA: problema fora do meu recorte eu aponto, não decido — nomeio o dono
 no org chart e empacoto o que ele precisa saber para decidir; o transporte
