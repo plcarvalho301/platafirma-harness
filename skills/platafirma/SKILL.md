@@ -38,79 +38,74 @@ topologia de memória.
 - devops é conceito transversal, não cadeira — atravessa só TI.
 
 ## Fila de mensagens entre personas
-Transporte assíncrono entre claudinhos, sob `fila/` na raiz do connector
-`platafirma-ops`. **Um arquivo por mensagem, uma caixa por destinatário.**
-Nunca acumular mensagens num `.md` único: `write_file` substitui o arquivo
-inteiro, e duas escritas concorrentes perdem mensagem em silêncio.
+Transporte assíncrono entre as cadeiras, no ambiente do usuário `claudinho`.
+**Uma caixa é um arquivo**, `fila/<persona>.md`, e cada mensagem é um bloco
+dentro dele. Operada só pelo comando `fila` (`~/AI/bin/fila`, já no PATH do
+`run_command`).
 
-Na primeira ativação desta skill em cada sessão, checar a própria caixa:
+**`write_file` contra `fila/<persona>.md` destrói a caixa**: a tool substitui o
+arquivo inteiro, sem erro. O comando anexa sob `flock`, e não há outra porta.
+Criar `fila/<persona>/` como diretório é o formato antigo, aposentado — comando
+nenhum lê, e a mensagem some de vista sem sumir do disco.
+
+Abertura de sessão, uma chamada e sem conteúdo:
 
 ```
-ls -1 fila/<minha-persona>/
+fila status <minha-persona>
 ```
 
-Vazia: seguir sem comentar. Com arquivo: avisar o Pedro antes de continuar o
-assunto em curso.
-
-### Escrever
-1. Destinatário tem que ser nome que existe em `docs/org-template-canonico.md`.
-   Nome fora da lista: recusar e devolver pro Pedro — caixa fantasma não é lida
-   por ninguém.
-2. `write_file` em `fila/<destinatario>/<YYYYMMDDThhmmss>-<remetente>.md`
-   (cria os diretórios sozinho).
-3. Confirmar em prosa, no máximo uma linha:
-   `- msg enviada para <destinatario>: <one-liner do assunto>`.
-   Nunca instruir o Pedro a colar "lê a fila" ou qualquer comando — o
-   transporte é decisão dele, não prompt do claudinho.
-
-Envelope:
-
-```markdown
----
-de: claudinho-IA
-para: claudinho-TI
-em: 2026-07-30T22:10:37-03:00
-tipo: decisao | resposta | pedido | minuta | demanda | handoff
-assunto: uma linha
-ref: card do Vikunja (tarefas.platafirma.org) / página da wiki / caminho no repo
-responde: 20260730T214012-claudinho-TI.md
----
-
-corpo
-```
-
-`ref` e `responde` vazios quando não houver — exceto `ref`, obrigatório em
-`decisao` (onde o canônico foi gravado: a mensagem anuncia, nunca registra)
-e em `minuta` (a página em minuta). Sentido de cada tipo, os tipos de
-trabalho e os dois cruzamentos com card: guia `Ajuda:Despachar um
-expediente` na wiki — o guia é a fonte; divergindo, esta instrução
-encolhe. Corpo **auto-contido**: quem lê
-não tem a fita da conversa que gerou a mensagem. Corpo que depende de "como a
-gente falou" é mensagem defeituosa — reescrever antes de gravar.
+Vazia: seguir sem comentar. Com mensagem: avisar o Pedro antes de continuar o
+assunto em curso — quem manda abrir é ele. `status` devolve remetente, contagem e
+data da mais antiga, nunca assunto nem corpo: saber que chegou e ler o que diz são
+atos separados, e só o segundo custa contexto.
 
 ### Ler e consumir
 ```
-ls -1 fila/<minha-persona>/
-cat fila/<minha-persona>/<arquivo>
-rm fila/<minha-persona>/<arquivo>
+fila ler <minha-persona> [remetente]
+fila consumir <minha-persona> <id>...
 ```
 
-`rm` só depois de processar a mensagem — nunca ler em lote e apagar tudo antes
-de agir. Mensagem que gera resposta vira mensagem nova na caixa do remetente,
-com `responde:` preenchido.
+`consumir` só depois de processar a mensagem. Ler em lote e consumir tudo antes de
+agir perde o que ainda não foi feito, e não há como recuperar. Mensagem que gera
+resposta vira envio novo, com `--responde <id>`.
+
+### Escrever
+```
+fila enviar <destinatario> --de <minha-persona> --tipo <tipo> --assunto <assunto> \
+     [--ref <ref>] [--responde <id>]        # corpo em stdin
+```
+
+Destinatário fora de `fila/.personas` é recusado, e caixa encerrada devolve o aviso
+de para onde ir — nenhum dos dois some em silêncio. O envelope tem só `tipo`,
+`assunto`, `ref` e `responde`: `de`, `em` e `para` saíram, porque o id do bloco
+carrega remetente e data, e a caixa é o destinatário. `ref` é obrigatório em
+`decisao` (onde o canônico foi gravado: a mensagem anuncia, nunca registra) e em
+`minuta`.
+
+Corpo **auto-contido**: quem lê não tem a fita da conversa que gerou a mensagem.
+Corpo que depende de "como a gente falou" é mensagem defeituosa — reescrever antes
+de enviar.
+
+Confirmar em prosa, no máximo uma linha:
+`- msg enviada para <destinatario>: <one-liner do assunto>`.
+Nunca instruir o Pedro a colar comando — o transporte é decisão dele, não prompt
+do claudinho.
+
+Sentido de cada tipo, os tipos de trabalho e os dois cruzamentos com card: guia
+`Ajuda:Despachar um expediente`. O instrumento, com as armadilhas medidas:
+`PlataFirma:Mensageria`. As duas são fonte; divergindo, esta instrução encolhe.
 
 ### Bastão de turno (carta para si mesmo)
 
 Fecha o loop encerramento→abertura (etapa 5→2 da jornada): ao encerrar expediente
-com trabalho em curso, escrever mensagem **na própria caixa**, `tipo: handoff`,
-`para:` = a própria persona. A abertura seguinte consome (a checagem de caixa
-acima já a encontra por construção) e dá `rm` depois de processar.
+com trabalho em curso, enviar mensagem para a **própria caixa**, `--tipo handoff`.
+A abertura seguinte a encontra no `status` e consome depois de processar.
 
 Conteúdo **por subtração** — só o resíduo que canal nenhum carrega: hipótese
 viva, beco descartado e por quê, próxima jogada. Fato tem canal próprio e vai
 pra ele ANTES de encerrar: decisão→wiki, compromisso→tracker, artefato→git,
 expediente→fila. Bastão que registra fato é defeituoso — reescrever antes de
-gravar; é a regra que o impede de virar quinto canal e competir com a wiki
+enviar; é a regra que o impede de virar quinto canal e competir com a wiki
 como fonte de verdade.
 
 Spec: `PlataFirma:Produto/harness/spec` (S3) na wiki.

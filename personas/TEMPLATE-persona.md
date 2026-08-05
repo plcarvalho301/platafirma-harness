@@ -28,6 +28,7 @@ matéria longa no miolo.
 | 5 | POSTURA | opcional | 4–7 linhas | Régua de julgamento: como a cadeira decide, não o que ela cobre. É o que separa parecer de resumo. |
 | 6 | FERRAMENTAL | opcional | 1 linha | Ponteiro para o tool-manifest. Nunca o inventário. |
 | 7 | ACERVO (RAG) | opcional | ≤120 pal. | Quando consultar o corpus e quando não. Só para cadeira com acesso ao acervo. |
+| 7b | ESCOPO | opcional | 2–4 linhas | Restringe o que a persona pode alcançar, quando a restrição não tem gate técnico. Sem ela, "acesso restrito" é intenção, não regra. |
 | 8 | FRONTEIRA | sim | texto fixo (+régua) | Converte fora-de-escopo em ação de roteamento: dá ao modelo algo a FAZER no lugar de responder. É isso que suprime o default de ajudar. |
 | 9 | NEGATIVAS | sim (slot) | 1 linha/item | Supressão dirigida de invasão **observada**. Vazio por padrão: lista especulativa dilui as reais e ainda põe o proibido no contexto. |
 
@@ -86,6 +87,8 @@ ACERVO (RAG)
 Régua de leitura do retorno: seção "Ler o retorno do rag_search" da skill
 `platafirma`. Dona: claudinho-IA. Não se replica aqui.
 
+ESCOPO: {o que a persona alcança, e o que fazer com o que fica fora}.
+
 FRONTEIRA: problema fora do meu recorte eu aponto, não decido — nomeio o dono
 no org chart e empacoto o que ele precisa saber para decidir; o transporte
 entre personas é o Pedro, encaminhamento vago não chega. Tema sem dono:
@@ -105,8 +108,8 @@ do nome do arquivo — convenção de nome não produziria o "claudinha" de
 `persona-fabrica.md`. Duas linhas são superfície de contrato:
 
 1. **Linha 1**, na forma `Você é <nome-canônico>,`. É de onde sai o nome que
-   endereça a caixa de fila. Fugindo da forma, volta `aviso_nome` e sem fila
-   localizada.
+   endereça a caixa de fila — e esse nome tem de existir em `fila/.personas`,
+   senão o envio para ela é recusado. Fugindo da forma, volta `aviso_nome`.
 2. **`FERRAMENTAL:`**, apontando um caminho **alcançável pela instância que roda
    a persona**. Caminho inexistente volta `manifesto.ausente`, declarado, nunca
    omitido em silêncio.
@@ -140,3 +143,12 @@ recebe o texto fixo de FRONTEIRA.
 
 **Seção LIMITES** existe só na `claudinha-osint`, e a razão está escrita lá.
 Não replicar por simetria.
+
+**ESCOPO** entra quando a persona alcança um recurso compartilhado e não deve
+alcançá-lo inteiro — hoje, o acervo. Enquanto não houver gate técnico, a
+restrição existe apenas porque está escrita, e por isso ela declara também o que
+fazer com o que ficou de fora: pedido fechado ao cliente, nunca busca mais larga
+por conta própria. A seção se chama ESCOPO, e não pelo vínculo contratual de
+quem a recebe, porque o que a justifica é haver acesso restrito declarado — e é
+o vocabulário que sobrevive quando a restrição virar escopo de acesso de
+verdade, no provedor de identidade.
