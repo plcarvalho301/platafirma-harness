@@ -1,13 +1,130 @@
 # tool-manifest — claudinho-TI
 
-Vazio. Preenchido pela própria cadeira, na sessão dela — forma em
-`tool-manifest/TEMPLATE-tool-manifest.md`.
+Substitui: ~/AI/tool_manifest.md (03/08/2026)
 
-Verificação: `[exec]` executado · `[func]` usado em trabalho real ·
-`[inst]` presente, sem prova.
+Ambiente: Linux Mint 22.3, usuário `claudinho` (uid 1001), **sem sudo** — pacote
+de sistema é pedido ao dono, em duas linhas separadas (`apt update` e
+`apt install`, nunca com `&&`: update não-zero por repo de terceiro faz o
+install sumir em silêncio). `~/AI/bin` e `~/.local/bin` já estão no PATH do
+subprocesso; binário próprio é chamável pelo nome. `cwd` default: `~/AI`.
+Segredos (`OPS_AUTH_TOKEN`, `TUNNEL_TOKEN`) não descem para o subprocesso.
+
+Verificação: cada linha declara **como** — `[exec]` binário executado ·
+`[func]` importado e usado em trabalho real · `[inst]` presente, sem prova.
+Tudo abaixo é `[exec]` em 05/08/2026 salvo onde marcado.
+
+> **Regra de ouro:** existindo verbo para o que vou fazer, chamo o verbo.
+> Reimplementar cliente REST, montar `docker exec` na mão ou repetir credencial
+> em script de sessão é o erro que este manifesto existe para cortar.
+
+Formato: necessidade : chamada. Opção detalhada sai de `<comando>` sem argumento.
 
 ## Conectores
 
+**platafirma-ops** (`ops.platafirma.org`) — a caixa do claudinho (uid 1001).
+- `run_command` · `read_file` · `write_file` — shell e arquivos sob `~/AI`.
+- `monta_sessao` — contexto de abertura de uma cadeira numa chamada. Sob
+  demanda, não gate de entrada.
+
+**PlataFirma Wiki** (`mcp.platafirma.org`) — conhecimento canônico, acervo, repos.
+- `platafirma_index` uma vez por sessão sobre a PlataFirma · `search_pages` /
+  `get_page` / `edit_page` / `query_cargo` · `repo_tree` / `repo_read` /
+  `repo_grep` / `repo_sync` · `rag_search` / `rag_facets` para **critério** de
+  engenharia (fato da PlataFirma nunca sai do RAG).
+
+## Geral — toda cadeira
+
+```
+ver minha caixa                 : fila status <persona>
+ler mensagens                   : fila ler <persona> [remetente]
+baixar o que processei          : fila consumir <persona> <id>... | --de <rem> | --todas
+mandar recado                   : fila enviar <dest> --de <rem> --tipo <t> --assunto <a>
+                                  (corpo em stdin; --ref, --responde opcionais)
+abrir sessão de uma cadeira     : monta-sessao <cadeira>   [tool monta_sessao é a via boa]
+
+ler um card                     : tarefas ler <id>
+listar projetos                 : tarefas projetos
+listar cards abertos            : tarefas listar <projeto>        (listar-tudo inclui fechados)
+abrir card                      : tarefas criar <projeto> "<título>" [--desc "<txt>"|--desc-stdin] [--prio N]
+comentar                        : tarefas comentar <id> ["<txt>"]  sem txt, lê stdin
+fechar                          : tarefas fechar <id>
+amarrar subtarefa               : tarefas sub <pai> <filho>
+o que o verbo não cobre         : tarefas api <MÉTODO> <caminho> | tarefas api-corpo (JSON em stdin)
+
+o que está no ar                : infra estado
+está tudo saudável?             : infra saude
+log de contêiner ou unit        : infra logs <alvo> [n]     descobre qual dos dois é
+reiniciar sem se matar          : infra restart <unit>      destacado por systemd-run
+mexer no compose do core        : infra compose <args...>
+
+estado do repo                  : git -C ~/AI/<repo> status --short
+publicar                        : git -C ~/AI/<repo> add -A && git ... commit -m "..." && git ... push
+job > 2 min                     : longjob run <nome> <cmd...>   | list, logs, status, log, stop
+
+venv reprodutível               : uv venv / uv pip install / uvx <pkg>
+rodar script solto              : python3 (3.12.3, sem shim de pip — usar uv pip)
+
+buscar em ~/AI                  : rg <padrão>          (~16 ms; grep -r aposentado)
+achar arquivo                   : fd <nome>
+ler JSON / YAML / log           : jq · yq (não usar regex em config) · lnav
+histórico de carga              : sar                  (única que responde "há 3 horas")
+espaço                          : df -h · du -sh · ncdu
+```
+
+Projetos do rastreador: `46 Cards` · `1 Inbox` são projetos reais; id negativo
+(`-6 Fabrica`, `-7 Carteira`, `-8 Triagem`, `-9 Parado`, `-10 Épico-Harness`,
+`-11 Carteira pessoal`, `-12 Refino`) é **filtro salvo** — lê, não recebe card.
+
+Clones de trabalho: `platafirma-{core,conhecimento,arquitetura,harness,motor,posto}`
+e `modulo-osint`, todos em `~/AI`.
+
+## Por domínio — ponteiro, não manual
+
+```
+acervo, estado por obra         : acervo-status [--json] [--detalhe]
+pôr arquivo na fila do acervo   : acervo-drop [--pessoal|--copiar|-n] <arquivo>
+carregar planilha de ingestão   : acervo-ingerir [--apply]        dry-run por default
+SQL no acervo                   : docker exec -i rag-extractor-pg psql -U rag -d rag_extractor -At -F ' :: ' -c "<sql>"
+objeto no MinIO                 : mc rm --versions --force pf/<bucket>/<sha256>
+inferência local                : curl 127.0.0.1:11434/... · nvitop · nvcc (CUDA 13.2)
+
+segredo em repo                 : gitleaks · trufflehog · detect-secrets
+código                          : semgrep · bandit · pip-audit
+imagem e SBOM                   : trivy · grype · syft · dive · dockle · hadolint
+identidade e política           : kcadm · jwt · oauth2c · step · opa
+TLS e host                      : testssl.sh · sslyze · ssh-audit · lynis · oscap-casco
+
+cifrar, assinar, copiar         : age · sops · minisign · cosign · restic · rsync
+```
+
+Ferramental de segurança: usar é permitido, decidir sobre ele não — a cadeira é
+claudinho-seguranca. `~/AI/.venv` (ontologia) e `~/AI/.venv-harness` (eval) são
+de outras cadeiras: ler, não escrever.
+
 ## Armadilhas medidas
 
+- **`repo_read`/`repo_grep`/`repo_tree` leem o espelho do ref remoto.** Depois
+  de `git push`, chamar `repo_sync` ou as três servem o SHA velho, em silêncio.
+- **`&&` encadeado no `run_command`**: passo intermediário não-zero derruba o
+  resto sem erro visível. Usar `;` ou chamadas separadas.
+- **Restart do ops-mcp mata a chamada em curso.** `infra restart` já despacha
+  destacado; `systemctl --user restart ops-mcp` direto, não.
+- **`~/.config/systemd/user/ops-mcp.service` é root-owned**: mudança de
+  comportamento do ops-mcp é no código, nunca na unit.
+- **Comando longo direto no `run_command`** morre no timeout e leva o process
+  group junto. Acima de 2 minutos é `longjob`.
+- **`mc rm` sem `--versions`** deixa delete marker: o objeto some da listagem,
+  continua ocupando espaço e continua contando no console.
+- **UPDATE de classificação no acervo** leva sempre `AND especie_id IS NULL` —
+  o dono classifica em paralelo pelo NocoDB (`127.0.0.1:8081`).
+- **`~/AI/{archi_base,i-have-adhd,ollama-orchestrator}`** dão "dubious
+  ownership" no git: são de outro dono, não são repo de trabalho. Ignorar.
+
 ## Pendências declaradas
+
+- `shellcheck` · `shfmt` · `ruff` · `pytest` ausentes; instaláveis sem
+  privilégio, presos à decisão de branching.
+- `restic` presente e **sem repositório configurado**; `deploy/backup-cofre.timer`
+  existe no repo e não está `enabled` no user.
+- `ops-server` roda fora do compose; migração prevista para a janela 4b.
+- `docs/tunnel-oauth-runbook.md` referencia `docs/deploy.md`, inexistente.

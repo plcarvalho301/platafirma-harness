@@ -39,14 +39,18 @@ Escopo de usuário, na conta que roda a fábrica:
 ```
 ~/.claude/CLAUDE.md       persona da fábrica (build) e recorte vigente
 ~/.claude/settings.json   perfil de permissão
-~/.claude/card            acesso ao rastreador
+~/.claude/vikunja.env     credencial do rastreador (0600), da conta
+~/.local/bin/tarefas      verbo do rastreador — symlink para o harness
 ```
 
 Fonte canônica da persona: `platafirma-harness/personas/persona-fabrica.md`. O
 arquivo instalado é build dessa fonte; reexecutar o instalador atualiza.
 
 Instalador: `platafirma-core/deploy/agente/instala.sh` — symlink onde o destino
-enxerga a fonte, cópia onde não enxerga.
+enxerga a fonte, cópia onde não enxerga. Ele liga `tarefas` a partir de
+`~/AI/platafirma-harness/bin/tarefas`; sem o clone do harness a conta fica sem
+verbo de rastreador, e o instalador diz isso em voz alta. O token continua sendo
+o da conta (leitura e comentário; fechar card é aceite de claudinho-TI).
 
 ## O que o repositório alvo carrega
 

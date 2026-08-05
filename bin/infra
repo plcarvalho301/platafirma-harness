@@ -6,6 +6,7 @@ set -euo pipefail
 
 export DOCKER_HOST="${DOCKER_HOST:-unix:///run/user/$(id -u)/docker.sock}"
 COMPOSE="${INFRA_COMPOSE:-$HOME/AI/platafirma-core/docker-compose.yml}"
+OPS_HEALTH="${INFRA_OPS_HEALTH:-http://127.0.0.1:8010/health}"
 
 uso() {
   cat >&2 <<'FIM'
@@ -19,58 +20,69 @@ FIM
   exit 2
 }
 
+# --- leituras elementares ---------------------------------------------------
+
+conteineres()      { docker ps --format '{{.Names}}\t{{.Status}}' | sort; }
+conteineres_doentes() {
+  docker ps -a --format '{{.Names}}\t{{.Status}}' \
+    | grep -Ei 'exited|unhealthy|restarting' || echo "(nenhum)"
+}
+units_vivas() {
+  systemctl --user list-units --type=service --state=running,failed \
+    --no-pager --no-legend | sed 's/^[●*] *//' | awk '{print $1"\t"$4}'
+}
+units_falhadas()   { systemctl --user list-units --state=failed --no-pager --no-legend || true; }
+timers()           { systemctl --user list-timers --no-pager --no-legend | awk '{print $NF"\t"$1,$2,$3}'; }
+e_conteiner()      { docker ps -a --format '{{.Names}}' | grep -qx "$1"; }
+
+# --- verbos -----------------------------------------------------------------
+
+estado() {
+  echo "== contêineres";                        conteineres
+  echo; echo "== units de usuário (ativas e falhadas)"; units_vivas
+  echo; echo "== timers";                       timers
+}
+
+saude() {
+  echo -n "ops-mcp /health: "
+  curl -sf --max-time 5 "$OPS_HEALTH" || echo "SEM RESPOSTA"
+  echo; echo "== contêiner parado ou não-saudável"; conteineres_doentes
+  echo; echo "== unit falhada";                     units_falhadas
+  echo; echo "== disco e memória"
+  df -h / | tail -1
+  free -h | sed -n 2p
+}
+
+logs() {
+  local alvo="$1" n="${2:-50}"
+  if e_conteiner "$alvo"; then
+    docker logs --tail "$n" "$alvo" 2>&1
+  else
+    journalctl --user -u "$alvo" -n "$n" --no-pager
+  fi
+}
+
+# Restart direto do ops-mcp mata a chamada em curso: despachar destacado.
+restart() {
+  systemd-run --user --collect --unit="infra-restart-$$" \
+    systemctl --user restart "$1"
+  echo "restart de $1 despachado destacado; conferir com: infra estado"
+}
+
+compose() {
+  [ -r "$COMPOSE" ] || { echo "compose não legível: $COMPOSE" >&2; exit 1; }
+  docker compose -f "$COMPOSE" "$@"
+}
+
+# --- despacho ---------------------------------------------------------------
+
 cmd="${1:-}"; shift || uso
 
 case "$cmd" in
-  estado)
-    echo "== contêineres"
-    docker ps --format '{{.Names}}\t{{.Status}}' | sort
-    echo
-    echo "== units de usuário (ativas e falhadas)"
-    systemctl --user list-units --type=service --state=running,failed \
-      --no-pager --no-legend | sed 's/^[●*] *//' | awk '{print $1"\t"$4}'
-    echo
-    echo "== timers"
-    systemctl --user list-timers --no-pager --no-legend | awk '{print $NF"\t"$1,$2,$3}'
-    ;;
-
-  saude)
-    echo -n "ops-mcp /health: "
-    curl -sf --max-time 5 http://127.0.0.1:8010/health || echo "SEM RESPOSTA"
-    echo
-    echo "== contêiner parado ou não-saudável"
-    docker ps -a --format '{{.Names}}\t{{.Status}}' \
-      | grep -Ev 'Up .*(healthy)?$' | grep -Ei 'exited|unhealthy|restarting' || echo "(nenhum)"
-    echo
-    echo "== unit falhada"
-    systemctl --user list-units --state=failed --no-pager --no-legend || true
-    echo
-    echo "== disco e memória"
-    df -h / | tail -1
-    free -h | sed -n 2p
-    ;;
-
-  logs)
-    alvo="${1:?uso: infra logs <alvo> [n]}"; n="${2:-50}"
-    if docker ps -a --format '{{.Names}}' | grep -qx "$alvo"; then
-      docker logs --tail "$n" "$alvo" 2>&1
-    else
-      journalctl --user -u "$alvo" -n "$n" --no-pager
-    fi
-    ;;
-
-  restart)
-    unit="${1:?uso: infra restart <unit>}"
-    # Destacado: restart de ops-mcp pelo caminho direto mata a chamada em curso.
-    systemd-run --user --collect --unit="infra-restart-$$" \
-      systemctl --user restart "$unit"
-    echo "restart de $unit despachado destacado; conferir com: infra estado"
-    ;;
-
-  compose)
-    [ -r "$COMPOSE" ] || { echo "compose não legível: $COMPOSE" >&2; exit 1; }
-    docker compose -f "$COMPOSE" "$@"
-    ;;
-
-  *) uso ;;
+  estado)  estado ;;
+  saude)   saude ;;
+  logs)    logs "${1:?uso: infra logs <alvo> [n]}" "${2:-50}" ;;
+  restart) restart "${1:?uso: infra restart <unit>}" ;;
+  compose) compose "$@" ;;
+  *)       uso ;;
 esac

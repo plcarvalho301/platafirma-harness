@@ -3,55 +3,63 @@
 # Verbo genérico de propósito: hoje o backend é Vikunja; o nome não o cita para
 # que a troca de backend não obrigue a reescrever chamada em persona nenhuma.
 #
-# Credencial: VIKUNJA_API_TOKEN, do ambiente ou de $TAREFAS_ENV
-# (default ~/AI/platafirma-core/.env). Base: $TAREFAS_BASE.
+# Credencial: primeiro token achado em $TAREFAS_ENV, ~/AI/platafirma-core/.env
+# ou ~/.claude/vikunja.env (conta da fabrica). Base: $TAREFAS_BASE.
 set -euo pipefail
 
-ENVFILE="${TAREFAS_ENV:-$HOME/AI/platafirma-core/.env}"
 BASE="${TAREFAS_BASE:-https://tarefas.platafirma.org/api/v1}"
 
-if [ -z "${VIKUNJA_API_TOKEN:-}" ]; then
-  [ -r "$ENVFILE" ] || {
-    echo "sem credencial: $ENVFILE não existe ou não é legível" >&2
-    echo "(ou exporte VIKUNJA_API_TOKEN no ambiente)" >&2
-    exit 1
-  }
-  set -a; . "$ENVFILE"; set +a
-fi
-AUTH="Authorization: Bearer ${VIKUNJA_API_TOKEN:?VIKUNJA_API_TOKEN vazio em $ENVFILE}"
+carrega_credencial() {
+  [ -n "${VIKUNJA_API_TOKEN:-}" ] && return 0
+  local f
+  for f in "${TAREFAS_ENV:-}" "$HOME/AI/platafirma-core/.env" "$HOME/.claude/vikunja.env"; do
+    [ -n "$f" ] && [ -r "$f" ] || continue
+    set -a; . "$f"; set +a
+    # ~/.claude/vikunja.env (conta da fabrica) nomeia a chave sem o infixo API.
+    VIKUNJA_API_TOKEN="${VIKUNJA_API_TOKEN:-${VIKUNJA_TOKEN:-}}"
+    [ -n "$VIKUNJA_API_TOKEN" ] && { BASE="${VIKUNJA_BASE:-$BASE}"; return 0; }
+  done
+  echo "sem credencial: nenhum de \$TAREFAS_ENV, ~/AI/platafirma-core/.env," >&2
+  echo "~/.claude/vikunja.env traz token (ou exporte VIKUNJA_API_TOKEN)." >&2
+  exit 1
+}
 
 uso() {
   cat >&2 <<'FIM'
 uso:
   tarefas projetos                        id e nome de cada projeto
-  tarefas listar <projeto> [--todos]      cards abertos (--todos inclui fechados)
+  tarefas listar <projeto>                cards abertos
+  tarefas listar-tudo <projeto>           inclui os fechados
   tarefas ler <id>                        card em texto, com labels e descrição
   tarefas criar <projeto> "<título>" [--desc "<txt>"|--desc-stdin] [--prio N]
   tarefas comentar <id> ["<txt>"]         sem texto, lê de stdin
   tarefas fechar <id>                     marca done (GET, muta, POST inteiro)
   tarefas sub <pai> <filho>               declara <filho> subtarefa de <pai>
-  tarefas api <MÉTODO> <caminho> [-]      escotilha: corpo JSON em stdin com "-"
+  tarefas api <MÉTODO> <caminho>          escotilha, sem corpo
+  tarefas api-corpo <MÉTODO> <caminho>    escotilha, corpo JSON em stdin
 FIM
   exit 2
 }
 
-api() { # api MÉTODO /caminho [-]
-  local m="$1" p="$2"
-  if [ "${3:-}" = "-" ]; then
-    curl -sfS -X "$m" "$BASE$p" -H "$AUTH" -H 'Content-Type: application/json' -d @-
-  else
-    curl -sfS -X "$m" "$BASE$p" -H "$AUTH"
-  fi
+# --- transporte -------------------------------------------------------------
+
+busca() { # busca MÉTODO /caminho
+  curl -sfS -X "$1" "$BASE$2" -H "Authorization: Bearer $VIKUNJA_API_TOKEN"
 }
 
-# texto -> HTML: o rastreador guarda descrição e comentário em HTML.
+envia() { # envia MÉTODO /caminho  (corpo JSON em stdin)
+  curl -sfS -X "$1" "$BASE$2" -H "Authorization: Bearer $VIKUNJA_API_TOKEN" \
+       -H 'Content-Type: application/json' -d @-
+}
+
+# --- descrição: o rastreador guarda em HTML ---------------------------------
+
 para_html() {
   python3 -c 'import html,sys
 t = html.escape(sys.stdin.read().strip())
 print("".join("<p>%s</p>" % b.replace("\n", "<br>") for b in t.split("\n\n") if b.strip()))'
 }
 
-# HTML -> texto legível no terminal.
 para_texto() {
   sed -e 's#</p>#\n#g' -e 's#<br */\?>#\n#g' -e 's#</h[0-9]>#\n#g' \
       -e 's#<li>#  - #g' -e 's#</li>#\n#g' -e 's#</pre>#\n#g' \
@@ -59,72 +67,76 @@ para_texto() {
       -e 's#&lt;#<#g' -e 's#&gt;#>#g' -e 's#&quot;#"#g' -e 's#&amp;#\&#g' | cat -s
 }
 
+# --- verbos -----------------------------------------------------------------
+
+linhas_de_card() { # filtra o JSON de uma lista de cards em id / marca / título
+  jq -r "$1"' | "\(.id)\t\(if .done then "x" else " " end)\t\(.title)"'
+}
+
+cards_do_projeto() { busca GET "/projects/$1/tasks?per_page=200"; }
+
+projetos()     { busca GET /projects | jq -r '.[] | "\(.id)\t\(.title)"'; }
+listar()       { cards_do_projeto "$1" | linhas_de_card '.[] | select(.done == false)'; }
+listar_tudo()  { cards_do_projeto "$1" | linhas_de_card '.[]'; }
+
+ler() {
+  busca GET "/tasks/$1" | jq -r '
+    "# \(.title)\n\(.identifier) · projeto=\(.project_id) · done=\(.done) · labels: \([.labels[]?.title]|join(", "))\n\n\(.description // "")"' \
+    | para_texto
+}
+
+criar() {
+  local proj="$1" titulo="$2"; shift 2
+  local desc="" prio=0
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --desc)       desc="$2"; shift 2 ;;
+      --desc-stdin) desc="$(cat)"; shift ;;
+      --prio)       prio="$2"; shift 2 ;;
+      *) echo "opção desconhecida: $1" >&2; exit 2 ;;
+    esac
+  done
+  local html=""
+  [ -n "$desc" ] && html="$(printf '%s' "$desc" | para_html)"
+  jq -n --arg t "$titulo" --arg d "$html" --argjson p "$prio" \
+     '{title:$t, description:$d, priority:$p}' \
+    | envia PUT "/projects/$proj/tasks" \
+    | jq -r '"card \(.id) criado: \(.title)"'
+}
+
+comentar() {
+  local id="$1" txt="${2:-$(cat)}"
+  jq -n --arg c "$(printf '%s' "$txt" | para_html)" '{comment:$c}' \
+    | envia PUT "/tasks/$id/comments" \
+    | jq -r --arg id "$id" '"comentário \(.id) publicado no card \($id)"'
+}
+
+fechar() {
+  busca GET "/tasks/$1" | jq '.done = true' | envia POST "/tasks/$1" \
+    | jq -r '"card \(.id) fechado: \(.title)"'
+}
+
+subtarefa() {
+  jq -n --argjson o "$2" '{other_task_id:$o, relation_kind:"subtask"}' \
+    | envia PUT "/tasks/$1/relations" >/dev/null
+  echo "card $2 agora é subtarefa de $1"
+}
+
+# --- despacho ---------------------------------------------------------------
+
+carrega_credencial
 cmd="${1:-}"; shift || uso
 
 case "$cmd" in
-  projetos)
-    api GET /projects | jq -r '.[] | "\(.id)\t\(.title)"'
-    ;;
-
-  listar)
-    proj="${1:?uso: tarefas listar <projeto> [--todos]}"
-    todos="${2:-}"
-    api GET "/projects/$proj/tasks?per_page=200" \
-      | jq -r --arg t "$todos" '
-          .[] | select($t == "--todos" or .done == false)
-          | "\(.id)\t\(if .done then "x" else " " end)\t\(.title)"'
-    ;;
-
-  ler)
-    id="${1:?uso: tarefas ler <id>}"
-    api GET "/tasks/$id" | jq -r '
-      "# \(.title)\n\(.identifier) · projeto=\(.project_id) · done=\(.done) · labels: \([.labels[]?.title]|join(", "))\n\n\(.description // "")"' \
-      | para_texto
-    ;;
-
-  criar)
-    proj="${1:?uso: tarefas criar <projeto> \"<título>\" [--desc ...]}"; titulo="${2:?título}"; shift 2
-    desc=""; prio=0
-    while [ $# -gt 0 ]; do
-      case "$1" in
-        --desc)       desc="$2"; shift 2 ;;
-        --desc-stdin) desc="$(cat)"; shift ;;
-        --prio)       prio="$2"; shift 2 ;;
-        *) echo "opção desconhecida: $1" >&2; exit 2 ;;
-      esac
-    done
-    html=""; [ -n "$desc" ] && html="$(printf '%s' "$desc" | para_html)"
-    jq -n --arg t "$titulo" --arg d "$html" --argjson p "$prio" \
-       '{title:$t, description:$d, priority:$p}' \
-      | api PUT "/projects/$proj/tasks" - \
-      | jq -r '"card \(.id) criado: \(.title)"'
-    ;;
-
-  comentar)
-    id="${1:?uso: tarefas comentar <id> [\"<txt>\"]}"
-    if [ $# -ge 2 ]; then txt="$2"; else txt="$(cat)"; fi
-    jq -n --arg c "$(printf '%s' "$txt" | para_html)" '{comment:$c}' \
-      | api PUT "/tasks/$id/comments" - \
-      | jq -r --arg id "$id" '"comentário \(.id) publicado no card \($id)"'
-    ;;
-
-  fechar)
-    id="${1:?uso: tarefas fechar <id>}"
-    api GET "/tasks/$id" | jq '.done = true' | api POST "/tasks/$id" - \
-      | jq -r '"card \(.id) fechado: \(.title)"'
-    ;;
-
-  sub)
-    pai="${1:?uso: tarefas sub <pai> <filho>}"; filho="${2:?filho}"
-    jq -n --argjson o "$filho" '{other_task_id:$o, relation_kind:"subtask"}' \
-      | api PUT "/tasks/$pai/relations" - >/dev/null
-    echo "card $filho agora é subtarefa de $pai"
-    ;;
-
-  api)
-    m="${1:?uso: tarefas api <MÉTODO> <caminho> [-]}"; p="${2:?caminho}"
-    api "$m" "$p" "${3:-}"
-    ;;
-
-  *) uso ;;
+  projetos)    projetos ;;
+  listar)      listar      "${1:?uso: tarefas listar <projeto>}" ;;
+  listar-tudo) listar_tudo "${1:?uso: tarefas listar-tudo <projeto>}" ;;
+  ler)         ler         "${1:?uso: tarefas ler <id>}" ;;
+  criar)       criar "${1:?projeto}" "${2:?título}" "${@:3}" ;;
+  comentar)    comentar "${1:?uso: tarefas comentar <id> [\"<txt>\"]}" "${2:-$(cat)}" ;;
+  fechar)      fechar      "${1:?uso: tarefas fechar <id>}" ;;
+  sub)         subtarefa "${1:?pai}" "${2:?filho}" ;;
+  api)         busca "${1:?método}" "${2:?caminho}" ;;
+  api-corpo)   envia "${1:?método}" "${2:?caminho}" ;;
+  *)           uso ;;
 esac

@@ -11,6 +11,9 @@ Módulo do harness (`arq:0019`): a superfície de contato entre as personas
   `origem: <repo>@<blob_sha>`, `fonte: <path>`, `sincronizado_em: <ISO 8601>`.
   Carimbo à mão é proibido pela spec: mente por construção.
 - **MCP do harness** — predicado do mapa de entrypoints e `identity_check(persona)`.
+- **Verbos de operação** (`bin/`) — o que toda cadeira chama por `run_command`:
+  `fila`, `monta-sessao`, `tarefas` (rastreador), `infra` (contêiner, unit,
+  timer), `acervo-status`. Fonte única: `~/AI/bin` e `~/.local/bin` são symlink.
 
 ## Não entra
 
