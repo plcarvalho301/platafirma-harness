@@ -3,6 +3,9 @@
 Comum a todas as cadeiras. Redação de claudinho-TI; forma de RH. Manifesto de
 cadeira não replica o que está aqui — aponta.
 
+> **Verbo novo em `bin/`, mesmo commit:** linha aqui antes do push. Ferramenta
+> existente e não indexada é ferramenta inexistente.
+
 
 ```
 ver minha caixa                 : fila status <persona>
