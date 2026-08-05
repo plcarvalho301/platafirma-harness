@@ -26,3 +26,5 @@ O harness é **cliente** da malha de mensageria (`platafirma-motor`, `arq:0017`/
 
 A definir pelo dono da execução — este README fixa o charter, não a estrutura.
 Spec de referência: [PlataFirma:Produto/harness/spec](https://wiki.platafirma.org/index.php/PlataFirma:Produto/harness/spec).
+
+- Abrir a PlataFirma de uma estação emprestada: `docs/estacao-emprestada.md`
