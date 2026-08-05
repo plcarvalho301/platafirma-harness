@@ -1,0 +1,56 @@
+#!/usr/bin/env bash
+# monta-sessao <cadeira> — imprime numa volta o contexto de abertura da cadeira:
+# persona, manifesto declarado por ela, org canônico e a fila dela.
+#
+# As duas variáveis saem do texto da persona, não do nome do arquivo:
+#   linha 1        "Você é <nome>,"        -> nome canônico, que é o diretório da fila
+#   linha FERRAMENTAL:                     -> caminho do manifesto
+# Convenção de nome de arquivo não produz o "claudinha" de persona-fabrica.md.
+set -euo pipefail
+
+RAIZ="${PF_RAIZ:-$HOME/AI}"
+cd "$RAIZ"
+
+C="${1:-}"
+if [ -z "$C" ]; then
+  echo "uso: monta-sessao <cadeira>" >&2
+  echo "cadeiras:" >&2
+  ls -1 platafirma-harness/personas/persona-*.md | sed 's#.*/persona-##; s/\.md$//' >&2
+  exit 2
+fi
+
+P="platafirma-harness/personas/persona-$C.md"
+if [ ! -f "$P" ]; then
+  echo "não existe $P" >&2
+  ls -1 platafirma-harness/personas/persona-*.md | sed 's#.*/persona-##; s/\.md$//' >&2
+  exit 1
+fi
+
+for r in platafirma-harness platafirma-arquitetura; do
+  git -C "$r" pull --ff-only -q 2>/dev/null || echo "(aviso: $r não atualizou — conteúdo abaixo é o do clone)" >&2
+done
+
+N=$(sed -n '1s/^Você é \([A-Za-z-]*\).*/\1/p' "$P")
+M=$(sed -n 's/^FERRAMENTAL: *\([^ ]*\.md\).*/\1/p' "$P" | head -1)
+
+echo "== cadeira: ${N:-<nome não resolvido na linha 1 de $P>} =="
+
+for f in "$P" ${M:-} platafirma-arquitetura/docs/org-template-canonico.md; do
+  if [ -f "$f" ]; then
+    echo "===== $f ====="
+    cat "$f"
+  else
+    echo "===== $f ===== (AUSENTE)"
+  fi
+done
+
+if [ -z "$M" ]; then
+  echo "(aviso: $P não declara linha FERRAMENTAL: — manifesto não entrou)"
+fi
+
+if [ -n "$N" ] && [ -d "fila/$N" ]; then
+  echo "===== fila/$N ====="
+  ls -1 "fila/$N"
+else
+  echo "===== fila ===== (sem caixa — demanda entra por outra porta)"
+fi
