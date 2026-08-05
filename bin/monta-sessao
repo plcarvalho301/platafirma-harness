@@ -48,15 +48,15 @@ if [ -z "$M" ]; then
   echo "(aviso: $P não declara linha FERRAMENTAL: — manifesto não entrou)"
 fi
 
-# Caixa que é ARQUIVO em vez de diretório é porteiro deliberado: fecha o endereço e
-# diz por onde ir. O texto dele É a resposta — engolir isso devolve "sem caixa" para
-# quem precisava do roteamento.
-if [ -n "$N" ] && [ -d "fila/$N" ]; then
-  echo "===== fila/$N (aberta) ====="
-  ls -1 "fila/$N"
-elif [ -n "$N" ] && [ -f "fila/$N" ]; then
-  echo "===== fila/$N (FECHADA — porteiro) ====="
-  cat "fila/$N"
+# Fila lida sempre pelo comando `fila`, nunca pelo sistema de arquivos: reimplementar
+# aqui o parser do formato de caixa criaria segunda fonte da mesma regra, e a
+# divergência entre as duas apareceria como mensagem sumida.
+if [ -z "$N" ]; then
+  echo "===== fila ===== (nome não resolvido — sem persona não há como saber a caixa)"
+elif out=$(fila status "$N" 2>&1); then
+  echo "===== fila: $N ====="
+  echo "$out"
 else
-  echo "===== fila ===== (endereço inexistente — demanda entra por outra porta)"
+  echo "===== fila: $N (FECHADA — porteiro) ====="
+  echo "$out"
 fi
