@@ -4,7 +4,7 @@ Ambiente: Linux Mint 22.3 (base Ubuntu 24.04), usuário `claudinho` (uid 1001).
 Sudo não direto — só via Pedro (janela presencial). Binários próprios em `~/AI/bin`
 (já no PATH das sessões `run_command`); ferramentas Python isoladas via `uv`/`uv tool`.
 
-Verificado em 2026-08-03 executando cada item. Cada linha declara **como**:
+Verificado em 2026-08-03 e 2026-08-04 executando cada item. Cada linha declara **como**:
 `[exec]` binário executado · `[func]` importado e testado em uso real · `[inst]`
 presente, sem prova de funcionamento.
 
@@ -65,7 +65,7 @@ conectores Google/Figma/Canva — fora do uso frequente do harness; não detalho
 
 | modelo | capability | uso | verif. |
 |---|---|---|---|
-| `bge-m3:latest` | embedding (1024-d) | embedder do RAG (indexação e query) | `[func]` embed real testado |
+| `bge-m3:latest` | embedding (1024-d) | disponível via Ollama; sem uso corrente no harness | `[inst]` |
 | `qwen2.5:14b` | completion + tools | gerador / loop agêntico local | `[inst]` |
 | `gemma2:27b-instruct-q4_1` | completion | gerador maior | `[inst]` |
 | `qwen:latest` (4B) | completion | leve | `[inst]` |
@@ -104,6 +104,19 @@ qrels/run mínimo. Warnings de Numba/LaTeX no import são cosméticos.
 Tokenizer do qwen2.5 em `~/AI/opt/tokenizers/qwen2.5.json` (7 MB). Prova: frase-teste →
 13 tokens. `tiktoken` não serve (tokeniza qwen errado). Para gemma2, baixar o
 `tokenizer.json` correspondente sob demanda.
+
+**Embedder e revisor do RAG** — vivem no `rag/.venv` do próprio repo `platafirma-conhecimento`,
+não no Ollama e não neste manifesto por padrão; registrados aqui porque medidos por mim
+diretamente em 04/08/2026.
+
+- **`Qwen/Qwen3-Embedding-0.6B`** — `[func]`. Embedder de indexação e query do RAG, torch/GPU.
+  Carimbado em `public.index_meta` (`embed_backend=torch`). 1024-d — mesma dimensão do
+  `bge-m3`, o que torna conferência por dimensão insuficiente pra distinguir os dois.
+- **`BAAI/bge-reranker-v2-m3`** — `[func]`. Cross-encoder do gate de abstenção (`cobertura`).
+  VRAM residente ~1,1 GiB fp16. AUC 0,873 contra 0,782 do sinal por similaridade, medido sobre
+  47 perguntas cobertas × 36 não cobertas. Custo: busca sobe de ~250 ms pra ~1.100 ms de
+  mediana com pool de 40 candidatos — otimização de latência é o item 1 do card
+  `tarefas.platafirma.org/tasks/299`.
 
 **`acervo-status`** — `[exec]`. Monitor do acervo: estado corrente por **obra** nos cinco
 degraus do fluxo — catalogada, armazenada, ingerida (chunkada), embedded (vetor de texto),
