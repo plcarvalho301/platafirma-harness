@@ -33,7 +33,9 @@ matéria longa no miolo.
 | 9 | NEGATIVAS | sim (slot) | 1 linha/item | Supressão dirigida de invasão **observada**. Vazio por padrão: lista especulativa dilui as reais e ainda põe o proibido no contexto. |
 
 **Orçamento total.** Núcleo (1–4, 8, 9): 160–210 palavras. Com blocos
-opcionais: teto de 450. Uniformidade é requisito entre seções equivalentes —
+opcionais: teto de 650 — medido, não estimado: POSTURA e ACERVO preenchidos
+custam de 250 a 400 palavras somados, e as duas personas mais bem escritas hoje
+ficam em ~630. Uniformidade é requisito entre seções equivalentes —
 variação de comprimento vira variação de peso relativo no condicionamento. Ela
 não é requisito entre cadeira com corpus e cadeira sem: bloco a mais com efeito
 nomeado é diferença legítima, comprimento diferente na mesma seção não é.
