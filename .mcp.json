@@ -1,0 +1,18 @@
+{
+  "mcpServers": {
+    "platafirma-ops": {
+      "type": "http",
+      "url": "https://ops.platafirma.org/mcp",
+      "headers": {
+        "Authorization": "Bearer ${PF_OPS_TOKEN}"
+      }
+    },
+    "platafirma-wiki": {
+      "type": "http",
+      "url": "https://mcp.platafirma.org/mcp",
+      "headers": {
+        "Authorization": "Bearer ${PF_WIKI_TOKEN}"
+      }
+    }
+  }
+}

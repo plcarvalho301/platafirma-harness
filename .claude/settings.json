@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "defaultMode": "default",
+    "deny": [
+      "Bash",
+      "Write",
+      "Edit",
+      "NotebookEdit"
+    ]
+  }
+}
