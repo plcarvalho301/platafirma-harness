@@ -1,6 +1,11 @@
 {
+  "enableAllProjectMcpServers": true,
   "permissions": {
-    "defaultMode": "default",
+    "defaultMode": "bypassPermissions",
+    "allow": [
+      "mcp__platafirma-ops",
+      "mcp__platafirma-wiki"
+    ],
     "deny": [
       "Bash",
       "Write",
