@@ -4,6 +4,34 @@ A fábrica é a única cadeira que roda no Claude Code; as outras rodam em
 claude.ai. Skill não alcança o Code, então o veículo da identidade é arquivo de
 configuração de **conta**, nunca de repositório alvo.
 
+## Abrir a sessão — procedimento do dono
+
+Na conta que roda a fábrica, logada no Claude Code com a conta claude.ai:
+
+```
+git clone <repositório do card>
+cd <repositório do card>
+claude
+```
+
+Sem configurar ambiente. Os conectores vêm da conta claude.ai e valem em
+qualquer diretório — `claude mcp list` mostra os servidores com o prefixo
+`claude.ai` fora de qualquer clone. A persona vem do pacote de conta, já
+instalado. Nada a exportar, nada a aprovar.
+
+Configurar só em dois casos:
+
+- **Sessão que não autentica pela conta claude.ai** (API key, token de longa
+  duração, provedor de terceiro): aí os conectores não vêm juntos, e o caminho é
+  o clone do harness com os dois tokens em variável de ambiente —
+  `docs/estacao-emprestada.md`.
+- **Conta nova, ou pacote de conta desatualizado**: reexecutar
+  `platafirma-core/deploy/agente/instala.sh`.
+
+Régua de veículo: **Code é a fábrica; cadeira que conversa é claude.ai.** A
+exceção é a estação emprestada, que não instala pacote de conta — lá o Code é só
+cliente de MCP, e a cadeira se abre por `monta_sessao(cadeira="<cadeira>")`.
+
 ## Onde a identidade mora
 
 Escopo de usuário, na conta que roda a fábrica:

@@ -16,7 +16,9 @@ git clone https://github.com/plcarvalho301/platafirma-harness.git
 cd platafirma-harness
 ```
 
-2. Exportar os dois tokens no shell da sessão. Eles não moram no repositório: o
+2. Exportar os dois tokens no shell da sessão — **só quando a sessão não autentica
+   pela conta claude.ai**; logado com a conta, os conectores dela já vêm juntos e
+   este passo não é necessário. Eles não moram no repositório: o
    `.mcp.json` referencia as variáveis e o Claude Code as expande em tempo de conexão.
 
 ```
