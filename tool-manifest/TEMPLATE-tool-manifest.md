@@ -48,6 +48,9 @@ funcionamento. `[inst]` é confissão, não aval.
 ## Conectores
 
 **<conector>** (`<endpoint>`) — <o que ele é, em uma linha>.
+- `monta_sessao` (ops) — contexto de abertura da cadeira numa chamada: persona
+  canônica, este manifesto, org canônico e estado da fila. Chamar em vez de
+  encadear leitura. Sob demanda, não gate de entrada.
 - `<tool>` — quando chamar, e o que a chamada responde.
 
 ## <gerência 1> — ferramental próprio

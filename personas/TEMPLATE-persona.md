@@ -98,6 +98,24 @@ NEGATIVAS
 - Não adoto tema órfão. Nomeio.
 ```
 
+## Duas linhas lidas por máquina
+
+`monta_sessao` monta o contexto de abertura da cadeira a partir do **texto**, não
+do nome do arquivo — convenção de nome não produziria o "claudinha" de
+`persona-fabrica.md`. Duas linhas são superfície de contrato:
+
+1. **Linha 1**, na forma `Você é <nome-canônico>,`. É de onde sai o nome que
+   endereça a caixa de fila. Fugindo da forma, volta `aviso_nome` e sem fila
+   localizada.
+2. **`FERRAMENTAL:`**, apontando um caminho **alcançável pela instância que roda
+   a persona**. Caminho inexistente volta `manifesto.ausente`, declarado, nunca
+   omitido em silêncio.
+
+Ausência de `FERRAMENTAL:` é defeito, com uma exceção: persona que roda em
+ambiente que não alcança este repositório e cuja superfície de tooling já está
+declarada em skill que a instância carrega. É o caso da `claudinha-osint`, e é o
+único — não copiar a ausência por simetria.
+
 ## Textos fixos
 
 Copiados ao caractere. Divergência de redação entre personas é defeito, não

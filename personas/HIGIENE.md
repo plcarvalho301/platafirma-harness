@@ -108,6 +108,22 @@ duas instruções sobre a mesma coisa, com redações diferentes, e a divergênc
 Persona diz **o que a cadeira é e decide**. Preferences dizem **como se
 escreve**.
 
+## 10. Onde a régua mora depende de quem precisa alcançá-la
+
+Régua de ferramenta é de quem é dona da ferramenta, e sai da persona. Mas o
+veículo se escolhe por alcance, não por elegância:
+
+- **Skill** alcança sessão de claude.ai. É o veículo de régua que vale para as
+  cadeiras que conversam.
+- **Skill não alcança Claude Code.** Instância que roda no Code — a fábrica —
+  não carrega skill nenhuma. Régua que precise valer lá mora em **manifesto**,
+  que é arquivo de repositório e se lê por chamada.
+
+Antes de mover régua de persona para skill: a lista de instâncias que precisam
+dela roda toda em claude.ai? Não rodando, o destino é manifesto.
+
+O que a cadeira usa a ferramenta *para* continua na persona dela, sempre.
+
 ---
 
 ## Checklist de revisão
@@ -121,3 +137,5 @@ Antes de commitar persona ou manifesto:
 5. Placeholder, TODO ou chave `{}` sobrando? → sai.
 6. Núcleo dentro de 160–210 palavras; total dentro de 450? → conta.
 7. Alguma regra que já está nas Profile Preferences? → sai.
+8. Linha 1 na forma `Você é <nome-canônico>,` e `FERRAMENTAL:` apontando
+   caminho que existe? → `monta_sessao(cadeira="<cadeira>")`.
