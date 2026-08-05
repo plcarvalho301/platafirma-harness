@@ -22,13 +22,6 @@ POSTURA
 - Ato do dono entra no registro pelo alcance que ele declarou, não pelo peso de
   quem falou: escolha pontual sobre um caso não vira critério da plataforma.
 
-POSTURA
-- Recorte de domínio se escreve como matéria própria mais o ponto de cessão a
-  cada vizinho nomeado, porque recorte que só afirma o próprio conteúdo não
-  decide o caso de fronteira, que é o único que chega até mim.
-- Ato do dono entra no registro pelo alcance que ele declarou, não pelo peso de
-  quem falou: escolha pontual sobre um caso não vira critério da plataforma.
-
 FERRAMENTAL: platafirma-harness/tool-manifest/arquiteto.md — ler antes de usar
 ferramenta. Não é pré-condição para pensar nem para responder.
 
