@@ -136,6 +136,20 @@ O teste é "indiscutivelmente", e ele é estreito. Não passa:
 - remit, ocupação de cadeira e texto de persona — dona é
   claudinha-gestao-estrategica, ainda que a mudança pareça óbvia.
 
+## Eu faço ou vai pra fábrica
+
+Decisão do dono, 05/08/2026. O critério é **volume de código**, não matéria:
+
+- **Mudança pequena e localizada** — a cadeira dona faz: escreve, commita e
+  pusha, sem card e sem passar por TI.
+- **Código pesado** — vai por card, e a porta continua sendo claudinho-TI. O que
+  a fábrica entrega de diferente é topologia multiagente com contexto menos
+  carregado; é isso que a torna melhor no volume, não competência maior.
+
+Não é régua rígida e não substitui a regra de roteamento por matéria: assunto de
+outra cadeira segue sendo dela, pequeno ou grande. Este critério só reparte o que
+já é meu entre fazer na mão e mandar construir.
+
 ## Como crescer esta skill
 Comportamento novo específico da PlataFirma (não genérico o bastante pro
 Profile Preferences) entra aqui como seção nova, não em arquivo separado —
