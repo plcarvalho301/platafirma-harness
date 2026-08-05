@@ -11,6 +11,10 @@ ESPIA="claudinha-gestao-estrategica"
 uso() {
   cat >&2 <<'EOF'
 uso:
+  IDENTIDADE: toda operacao exige saber QUEM opera — PF_CADEIRA no ambiente
+  ou --eu <persona>. Caixa alheia nao se le, nao se consome. Enviar (append
+  na caixa do outro) continua permitido e e a unica escrita cruzada.
+
   fila status <persona>              quem mandou e quantas — sem conteudo
   fila status --todas                (so claudinha-gestao-estrategica)
   fila ler <persona> [remetente]     imprime as mensagens, mais nova em cima
@@ -18,7 +22,7 @@ uso:
   fila consumir <persona> <id>...    remove os blocos processados
   fila consumir <persona> --de <remetente>
   fila consumir <persona> --todas
-  fila enviar <destinatario> --de <remetente> --tipo <t> --assunto <a>
+  fila enviar <destinatario> [--de <remetente>] --tipo <t> --assunto <a>
               [--ref <r>] [--responde <id>]      (corpo em stdin)
 EOF
   exit 2
@@ -44,14 +48,74 @@ valida_persona() {
   return 1
 }
 
+# ---------- identidade ----------
+# Nao e autenticacao: todas as cadeiras rodam sob a mesma uid, entao quem quiser
+# forjar --eu consegue. E declaracao explicita, que mata o acidente (escrever ou
+# consumir a caixa errada) e deixa rastro. Fronteira de verdade exige uid por
+# persona ou identidade no token — desenho, nao flag.
+EU=""
+
+resolve_eu() {
+  local c="${PF_EU:-${PF_CADEIRA-}}"
+  [[ -n "$c" ]] || return 1
+  local lista="$RAIZ/.personas" cand
+  if [[ -f "$lista" ]]; then
+    grep -qxF "$c" "$lista" && { EU="$c"; return 0; }
+    for cand in "claudinho-$c" "claudinha-$c"; do
+      grep -qxF "$cand" "$lista" && { EU="$cand"; return 0; }
+    done
+    printf 'erro: identidade "%s" nao esta em %s\n' "$c" "$lista" >&2
+    exit 1
+  fi
+  EU="$c"; return 0
+}
+
+exige_eu() {
+  resolve_eu && return 0
+  cat >&2 <<'EOM'
+erro: nao sei quem esta operando a fila.
+  exporte PF_CADEIRA=<cadeira>  (ex.: PF_CADEIRA=IA)  ou passe --eu <persona>.
+  sem isso a fila nao abre caixa nenhuma — foi assim que uma caixa alheia ja foi
+  sobrescrita.
+EOM
+  exit 1
+}
+
+so_minha() {
+  local alvo="$1"
+  [[ "$alvo" == "$EU" ]] && return 0
+  [[ "$EU" == "$ESPIA" ]] && return 0
+  printf 'erro: a caixa de "%s" nao e tua (voce e %s) — nao le, nao consome.\n' "$alvo" "$EU" >&2
+  printf 'para falar com ela: fila enviar %s --tipo <t> --assunto <a>\n' "$alvo" >&2
+  exit 1
+}
+
+so_espia() {
+  [[ "$EU" == "$ESPIA" ]] && return 0
+  printf 'erro: --todas e so da %s (voce e %s).\n' "$ESPIA" "$EU" >&2
+  exit 1
+}
+
+# extrai --eu <persona> de qualquer posicao; devolve o resto dos args
+ARGS=()
+colhe_eu() {
+  ARGS=()
+  while [[ $# -gt 0 ]]; do
+    if [[ "$1" == "--eu" ]]; then PF_EU="${2-}"; shift 2; continue; fi
+    ARGS+=("$1"); shift
+  done
+}
+
 # ---------- status ----------
 cmd_status() {
   local alvo="${1-}"; [[ -n "$alvo" ]] || uso
   local personas
   if [[ "$alvo" == "--todas" ]]; then
+    so_espia
     personas=$(personas_com_caixa)
   else
     valida_persona "$alvo" || exit 1
+    so_minha "$alvo"
     personas="$alvo"
   fi
   local vazio=1
@@ -97,9 +161,11 @@ cmd_ler() {
   local remet="${2-}"
   local personas
   if [[ "$alvo" == "--todas" ]]; then
+    so_espia
     personas=$(personas_com_caixa)
   else
     valida_persona "$alvo" || exit 1
+    so_minha "$alvo"
     personas="$alvo"
   fi
   local vazio=1
@@ -122,6 +188,7 @@ cmd_consumir() {
   local p="${1-}"; shift || true
   [[ -n "$p" && $# -gt 0 ]] || uso
   valida_persona "$p" || exit 1
+  so_minha "$p"
   local f; f=$(caixa "$p")
   [[ -s "$f" ]] || { echo "caixa vazia"; return 0; }
 
@@ -181,6 +248,11 @@ cmd_enviar() {
       *) uso ;;
     esac
   done
+  [[ -n "$de" ]] || de="$EU"
+  if [[ "$de" != "$EU" ]]; then
+    printf 'erro: --de "%s" nao bate com a identidade da sessao (%s) — remetente nao se forja.\n' "$de" "$EU" >&2
+    exit 1
+  fi
   [[ -n "$de" && -n "$tipo" && -n "$assunto" ]] || uso
   valida_persona "$para" || exit 1
   valida_persona "$de" || exit 1
@@ -216,10 +288,13 @@ cmd_enviar() {
   printf '%s\n' "$id"
 }
 
-case "${1-}" in
-  status)   shift; cmd_status "$@" ;;
-  ler)      shift; cmd_ler "$@" ;;
-  consumir) shift; cmd_consumir "$@" ;;
-  enviar)   shift; cmd_enviar "$@" ;;
+verbo="${1-}"; shift || true
+colhe_eu "$@"
+set -- ${ARGS+"${ARGS[@]}"}
+case "$verbo" in
+  status)   exige_eu; cmd_status "$@" ;;
+  ler)      exige_eu; cmd_ler "$@" ;;
+  consumir) exige_eu; cmd_consumir "$@" ;;
+  enviar)   exige_eu; cmd_enviar "$@" ;;
   *) uso ;;
 esac
