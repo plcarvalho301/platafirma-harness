@@ -39,6 +39,7 @@ Em `tool-manifest/GERAL.md`, comum a todas as cadeiras. Não se replica aqui.
 ## Por domínio — ponteiro, não manual
 
 ```
+card no tracker (Vikunja)       : tarefas projetos|listar|ler|criar|comentar|fechar|sub
 acervo, estado por obra         : acervo-status [--json] [--detalhe]
 pôr arquivo na fila do acervo   : acervo-drop [--pessoal|--copiar|-n] <arquivo>
 carregar planilha de ingestão   : acervo-ingerir [--apply]        dry-run por default
