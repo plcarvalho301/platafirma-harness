@@ -17,6 +17,10 @@ Tudo abaixo é `[exec]` em 05/08/2026 salvo onde marcado.
 > Reimplementar cliente REST, montar `docker exec` na mão ou repetir credencial
 > em script de sessão é o erro que este manifesto existe para cortar.
 
+> **Verbo novo em `bin/`, mesmo commit:** linha aqui antes do push. Ferramenta
+> existente e não indexada é ferramenta inexistente — foi o que aconteceu com
+> `bin/tarefas`.
+
 Formato: necessidade : chamada. Opção detalhada sai de `<comando>` sem argumento.
 
 ## Conectores
