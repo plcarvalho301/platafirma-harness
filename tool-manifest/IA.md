@@ -18,6 +18,11 @@ avaliação). Organizado pelas três gerências: inferência, RAG/memória, agen
 
 ---
 
+Operacional comum a toda cadeira (fila, tarefas, infra, git, venv, busca) não
+repete aqui — está em `tool-manifest/GERAL.md`.
+
+---
+
 ## Conectores — o que já tenho; chamar antes de fazer na mão
 
 **platafirma-ops** (`ops.platafirma.org`) — minha caixa (uid 1001).
