@@ -150,6 +150,18 @@ Não é régua rígida e não substitui a regra de roteamento por matéria: assu
 outra cadeira segue sendo dela, pequeno ou grande. Este critério só reparte o que
 já é meu entre fazer na mão e mandar construir.
 
+## Citação do acervo
+Card, comentário de card e mensagem de fila não citam obra do acervo para
+justificar a própria afirmação — `ont:0077` já proíbe em artefato registrado, e
+o efeito aqui é o mesmo: quem lê não vai buscar a obra, e a persona destinatária
+paga a revisão. Corte: se remover a referência não muda o que a frase afirma,
+ela sai. Fichamento, resenha e vínculo normativo continuam citando — ali a obra
+é objeto, não autoridade.
+
+Regra operacional de instrução, na mesma direção da ADR: skill não emenda ADR.
+Concluindo-se que o alcance escrito da `ont:0077` é que está estreito, isso é
+emenda e vai ao dono da ontologia.
+
 ## Como crescer esta skill
 Comportamento novo específico da PlataFirma (não genérico o bastante pro
 Profile Preferences) entra aqui como seção nova, não em arquivo separado —
