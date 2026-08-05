@@ -48,9 +48,15 @@ if [ -z "$M" ]; then
   echo "(aviso: $P não declara linha FERRAMENTAL: — manifesto não entrou)"
 fi
 
+# Caixa que é ARQUIVO em vez de diretório é porteiro deliberado: fecha o endereço e
+# diz por onde ir. O texto dele É a resposta — engolir isso devolve "sem caixa" para
+# quem precisava do roteamento.
 if [ -n "$N" ] && [ -d "fila/$N" ]; then
-  echo "===== fila/$N ====="
+  echo "===== fila/$N (aberta) ====="
   ls -1 "fila/$N"
+elif [ -n "$N" ] && [ -f "fila/$N" ]; then
+  echo "===== fila/$N (FECHADA — porteiro) ====="
+  cat "fila/$N"
 else
-  echo "===== fila ===== (sem caixa — demanda entra por outra porta)"
+  echo "===== fila ===== (endereço inexistente — demanda entra por outra porta)"
 fi
