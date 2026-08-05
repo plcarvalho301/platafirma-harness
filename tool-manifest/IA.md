@@ -24,6 +24,15 @@ avaliação). Organizado pelas três gerências: inferência, RAG/memória, agen
 - `run_command` — shell como claudinho: git, docker rootless, `uv`, `systemctl --user`,
   tocar o Ollama (`127.0.0.1:11434`), ler estado do host.
 - `read_file` / `write_file` — arquivos sob `~/AI`.
+- `monta_sessao` — `[func]`. Contexto de abertura de qualquer cadeira numa chamada:
+  persona canônica, tool-manifest que ELA declara, org canônico e estado da fila.
+  Substitui as 4–6 leituras encadeadas da abertura de sessão — chamar em vez de
+  encadear `read_file`. Nome canônico e caminho do manifesto saem do texto da persona
+  (linha 1 e linha `FERRAMENTAL:`), nunca do nome do arquivo. Fila vem só em envelope;
+  o corpo sai por `read_file`. Não traz acervo: faceta e população são ponteiro
+  (`rag_facets`), nunca valor. Caixa fechada por arquivo-porteiro devolve o texto do
+  porteiro, que é onde está o roteamento alternativo. Fallback de máquina:
+  `~/AI/platafirma-harness/bin/monta-sessao <cadeira>`.
 
 **PlataFirma Wiki** (`mcp.platafirma.org`) — conhecimento canônico + acervo + repos.
 - `platafirma_index` — mapa de entrada; chamar UMA vez quando o assunto é a PlataFirma.
