@@ -1,0 +1,238 @@
+{
+ "sonda": "T0",
+ "n": "09",
+ "persona": "persona-nao-declarada",
+ "pergunta": "o que é uma decisão arquitetural e quando se registra",
+ "parametros_congelados": {
+  "texto": "secao",
+  "k": 8,
+  "dominio": null,
+  "subdominio": null,
+  "frente": null,
+  "colecao": null
+ },
+ "chamada_em": "2026-08-04T16:49:46.355020+00:00",
+ "acervo_sha": "f04c1ae0865d2af70ab0cc3532e8c2964edb64bd5d611c340cf6233d689f06ea",
+ "retorno": {
+  "fontes": [
+   {
+    "n": 1,
+    "obra": "Ontology of architectural design decisions in software-intensive systems",
+    "arquivo": "Krutchen (2004).pdf",
+    "section_id": "krutchen-2004-1998#2",
+    "breadcrumb": [
+     "2 From the Greek κρισις, decision and κρινείν, to decide"
+    ],
+    "sim": 0.681,
+    "score": 0.0164,
+    "rerank": null,
+    "codigo_exato": false,
+    "texto": null
+   },
+   {
+    "n": 2,
+    "obra": "Software Architecture Knowledge Management: Theory and Practice",
+    "arquivo": "Software Architecture Knowledge Management - Theory and Practice (2009) - Babar, Dingsoyr, Lago, van Vliet.pdf",
+    "section_id": "software-architecture-knowledge-management-theory-and-practice-2009-babar-dingsoyr-lago-van-vliet-1998#3.4.1",
+    "breadcrumb": [
+     "3 Documentation of Software Architecture",
+     "3.4 Architectural Design Decisions",
+     "3.4.1 What Is an Architectural Design Decision?"
+    ],
+    "sim": 0.645,
+    "score": 0.0161,
+    "rerank": null,
+    "codigo_exato": false,
+    "texto": null
+   },
+   {
+    "n": 3,
+    "obra": "Software Architecture Knowledge Management: Theory and Practice",
+    "arquivo": "Software Architecture Knowledge Management - Theory and Practice (2009) - Babar, Dingsoyr, Lago, van Vliet.pdf",
+    "section_id": "software-architecture-knowledge-management-theory-and-practice-2009-babar-dingsoyr-lago-van-vliet-1998#3.4",
+    "breadcrumb": [
+     "3 Documentation of Software Architecture",
+     "3.4 Architectural Design Decisions"
+    ],
+    "sim": 0.637,
+    "score": 0.0159,
+    "rerank": null,
+    "codigo_exato": false,
+    "texto": null
+   },
+   {
+    "n": 4,
+    "obra": "Software Architecture Knowledge Management: Theory and Practice",
+    "arquivo": "Software Architecture Knowledge Management - Theory and Practice (2009) - Babar, Dingsoyr, Lago, van Vliet.pdf",
+    "section_id": "software-architecture-knowledge-management-theory-and-practice-2009-babar-dingsoyr-lago-van-vliet-1998#1.2.2.1",
+    "breadcrumb": [
+     "1 Software Architecture and Knowledge Management",
+     "1.2.2.1 Architecture as a Set of Design Decisions"
+    ],
+    "sim": 0.615,
+    "score": 0.0156,
+    "rerank": null,
+    "codigo_exato": false,
+    "texto": null
+   },
+   {
+    "n": 5,
+    "obra": "Ontology of architectural design decisions in software-intensive systems",
+    "arquivo": "Krutchen (2004).pdf",
+    "section_id": "krutchen-2004-1998#_",
+    "breadcrumb": [],
+    "sim": 0.584,
+    "score": 0.0154,
+    "rerank": null,
+    "codigo_exato": false,
+    "texto": null
+   },
+   {
+    "n": 6,
+    "obra": "Fundamentals of Software Architecture (2025)",
+    "arquivo": "Fundamentals of Software Architecture_ A Modern Engineering Approach{Mark Richards_ Neal Ford}(2025 March 25, O&_039_Reilly Media){111205155} libgen.li.pdf",
+    "section_id": "fundamentals-of-software-architecture_-a-modern-engineering-approach-mark-richards_-neal-ford-2025-march-25-o-_039_reilly-media-111205155-libgen-li-2025#architectural-decisions",
+    "breadcrumb": [
+     "Chapter 20: Architectural Patterns",
+     "Architectural Decisions"
+    ],
+    "sim": 0.614,
+    "score": 0.0152,
+    "rerank": null,
+    "codigo_exato": false,
+    "texto": null
+   },
+   {
+    "n": 7,
+    "obra": "Fundamentals of Software Architecture (2025)",
+    "arquivo": "Fundamentals of Software Architecture_ A Modern Engineering Approach{Mark Richards_ Neal Ford}(2025 March 25, O&_039_Reilly Media){111205155} libgen.li.pdf",
+    "section_id": "fundamentals-of-software-architecture_-a-modern-engineering-approach-mark-richards_-neal-ford-2025-march-25-o-_039_reilly-media-111205155-libgen-li-2025#chapter-2-architectural-thinking",
+    "breadcrumb": [
+     "Chapter 2: Architectural Thinking"
+    ],
+    "sim": 0.603,
+    "score": 0.0149,
+    "rerank": null,
+    "codigo_exato": false,
+    "texto": null
+   },
+   {
+    "n": 8,
+    "obra": "Continuous Architecture in Practice",
+    "arquivo": "Continuous Architecture in Practice (Murat Erder & Pierre Pureur).pdf",
+    "section_id": "continuous-architecture-in-practice-murat-erder-pierre-pureur-2021#drive-architectural-decisions-which-are-the-primary-unit-of-",
+    "breadcrumb": [
+     "Chapter 2 Architecture in Practice: Essential Activities",
+     "•• Drive architectural decisions, which are the primary unit of work of architec-"
+    ],
+    "sim": 0.601,
+    "score": 0.0147,
+    "rerank": null,
+    "codigo_exato": false,
+    "texto": null
+   }
+  ],
+  "contexto": "[1] (Krutchen (2004).pdf · krutchen-2004-1998#2) — 2 From the Greek κρισις, decision and κρινείν, to decide\n2 From the Greek κρισις, decision and κρινείν, to decide\n2\n Decided: Current position of the architect, or\ndocuments not usually associated with software\narchitecture.\narchitecture team; must be consistent with other,\nrelated decisions.\n Approved: by a review, or a board (not significantly\nExecutive decisions usually frame or constrain\nexistence and property decisions.\ndifferent than decided, though, in low ceremony\norganizations).\n Challenged: Previously approved or decided\n4. Attributes of Architectural Design\nDecisions\ndecision that is now in jeopardy; it may go back to\napproved without ceremony, but can also be\ndemoted to tentative or rejected.\n Rejected: decision that does not hold in the current\nSee a summary of the attributes in table 1.\n4.1. Epitome (or the Decision itself)\nsystem; but we keep them around as part of the\nsystem rationale (see Subsumes below)\n Obsolesced: Similar to rejected, but the decision\nThis is a short textual statement of the design decision,\na few words or a one-liner. This text serves to\nsummarize the decisions, to list them, to label them in\ndiagrams, etc.\n4.2. Rationale\nwas not explicitly rejected (in favour of another one\nfor example), but simply became ‘moot’, irrelevant\nas a result of some higher level restructuring for\nexample.\nThis scheme may be too simple for certain\nenvironments, or too complicated for others; it has to\nmatch a specific decision and approval process. The\nstates can be used to make queries, and as a filter when\nvis\n\n[2] (Software Architecture Knowledge Management - Theory and Practice (2009) - Babar, Dingsoyr, Lago, van Vliet.pdf · software-architecture-knowledge-management-theory-and-practice-2009-babar-dingsoyr-lago-van-vliet-1998#3.4.1) — 3 Documentation of Software Architecture › 3.4 Architectural Design Decisions › 3.4.1 What Is an Architectural Design Decision?\n3.4.1 What Is an Architectural Design Decision?\nIn his 2003 paper, Jan Bosch [48] stressed the importance of design decisions as\n“a ﬁrst class citizen”, but did not describe in detail what they consist of. Tyree and\nAckerman describe the structure of an architectural design decision (see Table 1.1 in\nChap. 1) [325]. Kruchten in [190], then with Lago and van Vliet in [192], introduce\na more detailed template for documenting design decisions, particularly stressing\nrelationships between design decisions and between design decisions and other ar-\ntifacts. Tang [314], Dueñas and Capilla [66, 103] have variations, and the SHARK\nworkshop in 2006 attempted to reconcile all these views.\nHere is an example of attributes of an architectural design decision, from [190]\nand [192]:\n• Epitome (or the Decision itself). This is a short textual statement of the design\ndecision, a few words or a one liner. This text serves to summarize the decisions,\nto list them, to label them in diagrams, etc.\n• Rationale. This is a textual explanation of the “why” of the decision, its justi-\nﬁcation. Care should be taken not to simply paraphrase or repeat information\ncaptured in other attributes, but to add value. If the rationale is expressed in a\ncomplete external document, for example, a tradeoff analysis, then the rationale\npoints to this document.\n• Scope. Some decisions may have limited scope, in time, in the organizations, or in\nthe design and implementation (see the overrides relationship below). By\n\n[3] (Software Architecture Knowledge Management - Theory and Practice (2009) - Babar, Dingsoyr, Lago, van Vliet.pdf · software-architecture-knowledge-management-theory-and-practice-2009-babar-dingsoyr-lago-van-vliet-1998#3.4) — 3 Documentation of Software Architecture › 3.4 Architectural Design Decisions\n(contexto do pai · software-architecture-knowledge-management-theory-and-practice-2009-babar-dingsoyr-lago-van-vliet-1998#3)\n3 decades, from very intuitive and informal, to very structured, abstract and for-\nmal, from simple diagrams and metaphors, design notations, and speciﬁc languages.\nAs our understanding of architectural knowledge evolved, the importance of de-\nsign rationale and the decision process became more and more prominent. There is\nhowever a constant through this evolution: the systematic use of metaphors.\n---\n3.4 Architectural Design Decisions\n\n[4] (Software Architecture Knowledge Management - Theory and Practice (2009) - Babar, Dingsoyr, Lago, van Vliet.pdf · software-architecture-knowledge-management-theory-and-practice-2009-babar-dingsoyr-lago-van-vliet-1998#1.2.2.1) — 1 Software Architecture and Knowledge Management › 1.2.2.1 Architecture as a Set of Design Decisions\n(contexto do pai · software-architecture-knowledge-management-theory-and-practice-2009-babar-dingsoyr-lago-van-vliet-1998#1)\n1 Software Architecture and Knowledge Management\n3\n• Architecture is inﬂuenced by the background and expertise of the architect. If an\narchitect has positive experience with, say, a layered architecture, he is likely to\nuse that same approach on his next project.\n• Architecture is inﬂuenced by its technical and organisational environment. In\nﬁnancial applications, for instance, government rules ma\n---\n1.2.2.1 Architecture as a Set of Design Decisions\nIf architecture is the set of design decisions, then documenting the architecture boils\ndown to documenting the set of design decisions. This is usually not done, though.\nWe can usually get at the result of the design decisions, the solutions chosen, but not\nat the reasoning behind them. Much of the rationale behind the solutions is usually\nlost forever, or resides only in the head of the few people associated with them, if\nthey are still around.\nSo the reasoning behind a design decision is not explicitly captured. This is tacit\nknowledge, essential for the solution chosen, but not documented. At a later stage, it\nthen becomes difﬁcult to trace the reasons of certain design decisions. In particular,\nduring evolution one may stumble upon these design decisions, try to undo them\nor work around them, and get into trouble when this turns out to be costly if not\nimpossible.\nThere are different types of undocumented design decisions:\n• The design decision is implicit: the architect is unaware of the decision, or it\nconcerns ‘of course’ knowledge. Examples include earlier experience, implicit\ncompany policies to use certain approaches, standards, and the like.\n• The design decision is explicit but undocumented: the architect takes a decision\nfor a very speciﬁc reason (e.g. the decision to use a certain user-interface policy\nbecause of time constraints). The reasoning is not documented, and thus is likely\nto vaporize over time.\n\n[5] (Krutchen (2004).pdf · krutchen-2004-1998#_)\nAn Ontology of Architectural Design Decisions\nin Software-Intensive Systems\nPhilippe Kruchten\nUniversity of British Columbia\nVancouver, B.C., Canada\npbk@ece.ubc.ca\ndecision itself, and to the decision process: rationale,\navoided alternatives, etc. In this paper we attempt to\nmake architectural design decision a first-class entity\nin software architecture representation, as suggested by\n(Bosch, 2004) or (Tyree & Ackerman, 2005). And we,\nsoftware engineers, are not alone: “In the engineering\nresearch community, there is a growing recognition\nthat decisions are the fundamental construct in\nengineering design” (Chen & al., 2000).\nAbstract\nArchitectural design decisions deserve to be first\nclass entities in the process of developing complex\nsoftware-intensive systems. Preserving the graphs of\ndecisions and all their interdependencies will support\nthe evolution and maintenance of such systems. In this\npaper we present a possible ontology of architectural\ndesign decisions, their attributes and relationships, for\ncomplex, software-intensive systems.\nKeywords: software architecture, design decisions,\ndesign rationale\n2. Organizing Architectural Design\nDecisions\n1. Introduction\nWe propose in this paper a model of design decisions,\nwhere the decision is made a first class entity, in its\nprocess context, and not subsumed by a design artifact,\nsuch as subsystem, class, process, technology, etc. We\npropose a classification of design decisions (Section 3),\nsuggest a set of attributes releva\n\n[6] (Fundamentals of Software Architecture_ A Modern Engineering Approach{Mark Richards_ Neal Ford}(2025 March 25, O&_039_Reilly Media){111205155} libgen.li.pdf · fundamentals-of-software-architecture_-a-modern-engineering-approach-mark-richards_-neal-ford-2025-march-25-o-_039_reilly-media-111205155-libgen-li-2025#architectural-decisions) — Chapter 20: Architectural Patterns › Architectural Decisions\n(contexto do pai · fundamentals-of-software-architecture_-a-modern-engineering-approach-mark-richards_-neal-ford-2025-march-25-o-_039_reilly-media-111205155-libgen-li-2025#chapter-20-architectural-patterns)\nChapter 20: Architectural Patterns\n1. Name two patterns that implement the architectural concern of separation of\n1.\noperational and domain concerns.\n2. What component does an orchestrated workflow have that is absent from chor‐\n2.\neographed ones?\n3. What are some advantages of using a single broker in an event-driven architec‐\n3.\nture? What are some disadvantages?\n4. What two data operations does\n---\nArchitectural Decisions\nOne of the core expectations of an architect is to make architectural decisions.\nArchitectural decisions usually involve the structure of the application or system, but\nthey may involve technology decisions as well, particularly when those technology\ndecisions impact architectural characteristics. Whatever the context, a good archi‐\ntectural decision is one that helps guide development teams in making the right\ntechnical choices. Making architectural decisions involves gathering enough relevant\ninformation, justifying the decision, documenting the decision, and effectively com‐\nmunicating that decision to the right stakeholders.\n\n[7] (Fundamentals of Software Architecture_ A Modern Engineering Approach{Mark Richards_ Neal Ford}(2025 March 25, O&_039_Reilly Media){111205155} libgen.li.pdf · fundamentals-of-software-architecture_-a-modern-engineering-approach-mark-richards_-neal-ford-2025-march-25-o-_039_reilly-media-111205155-libgen-li-2025#chapter-2-architectural-thinking) — Chapter 2: Architectural Thinking\nChapter 2: Architectural Thinking\nHow much thought and planning is involved in the decision?\nA decision that takes a couple of minutes is more likely to be tactical and hence\nmore about design, whereas a decision requiring weeks of planning is likely to be\nmore strategic and hence more about architecture.\nHow many people are involved in the decision?\nA decision made alone or with a colleague is likely more tactical and on the\ndesign side of the spectrum, whereas a decision requiring lots of meetings with\nmany different stakeholders is likely more strategic and on the architectural side\nof the spectrum.\nIs the decision a long-term vision or a short-term action?\nA decision that is likely to change soon is usually tactical in nature and would be\nmore about design, whereas one that will last a very long time is typically more\nstrategic and more about architecture.\nWhile these questions are a bit subjective, they nevertheless help in determining\nwhether something is strategic or tactical, and thus more about architecture or\ndesign.\n\n[8] (Continuous Architecture in Practice (Murat Erder & Pierre Pureur).pdf · continuous-architecture-in-practice-murat-erder-pierre-pureur-2021#drive-architectural-decisions-which-are-the-primary-unit-of-) — Chapter 2 Architecture in Practice: Essential Activities › •• Drive architectural decisions, which are the primary unit of work of architec-\n(contexto do pai · continuous-architecture-in-practice-murat-erder-pierre-pureur-2021#chapter-2-architecture-in-practice-essential-activities)\nChapter 2 Architecture in Practice: Essential Activities\n24\nCustomer Demand\nDelivery\nManagement\nProduct\nManagement\nDelivery Demand\nArchitecture\nConceptual Integrity\nFigure 2.1 Balancing role of architecture\nimportance of the activities, while emphasizing the responsibility of the team rather\nthan of a single person.\nIn his seminal book, The Mythical Man Month,2 Frederick Brooks puts a high\npriorit\n---\n•• Drive architectural decisions, which are the primary unit of work of architec-\ntural activities. Continuous Architecture recommends explicitly focusing on\narchitectural decisions because if we do not understand and capture architec-\ntural decisions, we lose the knowledge of tradeoffs made in a particular con-\ntext. Without this knowledge, the team is inhibited from being able to support\nthe long-term evolution of the software product. As we refer to our case study,\nwe highlight key architectural decisions the team has made.",
+  "cobertura": "boa",
+  "perguntas": [
+   "o que é uma decisão arquitetural e quando se registra"
+  ],
+  "filtro": {
+   "dominio": [],
+   "subdominio": [],
+   "frente": [],
+   "colecao": []
+  },
+  "aviso": null,
+  "indice": {
+   "acervo_sha": "f04c1ae0865d2af70ab0cc3532e8c2964edb64bd5d611c340cf6233d689f06ea",
+   "chunks": 139477,
+   "chunks_recuperaveis": 119164,
+   "chunks_com_vetor": 119164,
+   "chunks_nao_textuais": 20313,
+   "documentos_sem_chunk": 46,
+   "obras_catalogadas": 685,
+   "obras_ingeridas": 659,
+   "conceitos": 196,
+   "embed_model": "Qwen/Qwen3-Embedding-0.6B",
+   "embed_backend": "torch",
+   "embed_query_instruction": "Given a search query, retrieve relevant passages that answer the query",
+   "embed_meta_beta": 0.15,
+   "modo": "hybrid",
+   "rrf_k": 60,
+   "rrf_w_vec": 1.0,
+   "rrf_w_id": 2.0,
+   "rrf_w_lex": 0.5,
+   "hybrid_lexical": false,
+   "rerank_model": null,
+   "sha_calculado_em": "2026-08-04T16:48:28+00:00"
+  }
+ },
+ "formalizacao": {
+  "termo": "decisao arquitetural (ADR)",
+  "wiki": {
+   "pagina_com_titulo_igual_ao_termo": null,
+   "titulos_testados_ausentes": [
+    "Decisão arquitetural",
+    "ADR"
+   ],
+   "paginas_com_o_termo_no_titulo": [
+    {
+     "titulo": "Arquitetura:ADRs",
+     "criada_em": "2026-08-03T00:44:25Z",
+     "ultima_edicao_em": "2026-08-03T00:44:25Z"
+    },
+    {
+     "titulo": "Arquitetura:Registro-de-decisoes",
+     "criada_em": "2026-08-03T00:44:25Z",
+     "ultima_edicao_em": "2026-08-03T00:44:25Z"
+    },
+    {
+     "titulo": "PlataFirma:Decisões/adrs",
+     "criada_em": "2026-07-29T20:45:12Z",
+     "ultima_edicao_em": "2026-08-03T00:44:25Z"
+    },
+    {
+     "titulo": "Frente:mdm-rh/adr",
+     "criada_em": "2026-07-28T13:01:05Z",
+     "ultima_edicao_em": "2026-08-01T03:22:11Z"
+    }
+   ],
+   "vizinhas_consultadas": []
+  },
+  "adr": {
+   "adr_com_o_termo_no_titulo": [
+    {
+     "repo": "platafirma-arquitetura",
+     "caminho": "macro-global/decisions/0005-politica-do-registro-de-decisoes.md",
+     "criada_em": "2026-07-29T15:41:28-03:00",
+     "ultima_edicao_em": "2026-08-01T13:22:20-03:00"
+    },
+    {
+     "repo": "platafirma-arquitetura",
+     "caminho": "macro-global/decisions/0006-adocoes-do-registro-institucional.md",
+     "criada_em": "2026-07-29T15:41:28-03:00",
+     "ultima_edicao_em": "2026-07-30T02:28:35-03:00"
+    },
+    {
+     "repo": "platafirma-arquitetura",
+     "caminho": "macro-global/decisions/0015-forma-da-adr.md",
+     "criada_em": "2026-07-30T02:11:23-03:00",
+     "ultima_edicao_em": "2026-08-04T08:45:49-03:00"
+    }
+   ],
+   "ausencia": false,
+   "vizinhas_consultadas": []
+  },
+  "medida": {
+   "medido_em": "2026-08-04T16:45:00Z",
+   "fonte_wiki": "MediaWiki API interna (127.0.0.1:8080), prop=revisions, primeira e ultima revisao",
+   "fonte_adr": "git log --diff-filter=A (criacao) e git log -1 (ultima edicao) nos clones locais",
+   "repos_sha": {
+    "platafirma-arquitetura": "3158694036f799bca47ef8d6d56420ee37a3a416",
+    "platafirma-conhecimento": "5b6c364c14005a2332ed7f6279a7a7bceccc6225"
+   },
+   "criterio": "'nomeia o termo' = o termo aparece no titulo da pagina ou no nome do arquivo da ADR. Ausencia registrada explicitamente."
+  }
+ }
+}

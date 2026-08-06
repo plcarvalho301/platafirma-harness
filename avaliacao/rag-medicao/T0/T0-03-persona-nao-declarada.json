@@ -1,0 +1,236 @@
+{
+ "sonda": "T0",
+ "n": "03",
+ "persona": "persona-nao-declarada",
+ "pergunta": "o que é arquitetura de software",
+ "parametros_congelados": {
+  "texto": "secao",
+  "k": 8,
+  "dominio": null,
+  "subdominio": null,
+  "frente": null,
+  "colecao": null
+ },
+ "chamada_em": "2026-08-04T16:49:45.412313+00:00",
+ "acervo_sha": "f04c1ae0865d2af70ab0cc3532e8c2964edb64bd5d611c340cf6233d689f06ea",
+ "retorno": {
+  "fontes": [
+   {
+    "n": 1,
+    "obra": "Continuous Architecture in Practice",
+    "arquivo": "Continuous Architecture in Practice (Murat Erder & Pierre Pureur).pdf",
+    "section_id": "continuous-architecture-in-practice-murat-erder-pierre-pureur-2021#in-chapters-8-and-9-we-look-at-what-is-ahead-we-discuss-the-",
+    "breadcrumb": [
+     "in Practice",
+     "•• In Chapters 8 and 9, we look at what is ahead. We discuss the role of architec-"
+    ],
+    "sim": 0.657,
+    "score": 0.0164,
+    "rerank": null,
+    "codigo_exato": false,
+    "texto": null
+   },
+   {
+    "n": 2,
+    "obra": "Continuous Architecture in Practice",
+    "arquivo": "Continuous Architecture in Practice (Murat Erder & Pierre Pureur).pdf",
+    "section_id": "continuous-architecture-in-practice-murat-erder-pierre-pureur-2021#what-do-we-mean-by-architecture",
+    "breadcrumb": [
+     "in Practice",
+     "What Do We Mean by Architecture?"
+    ],
+    "sim": 0.654,
+    "score": 0.0161,
+    "rerank": null,
+    "codigo_exato": false,
+    "texto": null
+   },
+   {
+    "n": 3,
+    "obra": "Continuous Architecture in Practice",
+    "arquivo": "Continuous Architecture in Practice (Murat Erder & Pierre Pureur).pdf",
+    "section_id": "continuous-architecture-in-practice-murat-erder-pierre-pureur-2021#xxiii",
+    "breadcrumb": [
+     "in Practice",
+     "xxiii"
+    ],
+    "sim": 0.636,
+    "score": 0.0159,
+    "rerank": null,
+    "codigo_exato": false,
+    "texto": null
+   },
+   {
+    "n": 4,
+    "obra": "Software Architecture Knowledge Management: Theory and Practice",
+    "arquivo": "Software Architecture Knowledge Management - Theory and Practice (2009) - Babar, Dingsoyr, Lago, van Vliet.pdf",
+    "section_id": "software-architecture-knowledge-management-theory-and-practice-2009-babar-dingsoyr-lago-van-vliet-1998#3.2",
+    "breadcrumb": [
+     "3 decades, from very intuitive and informal, to very structured, abstract and for-",
+     "3.2 Evolution of Architectural Representation"
+    ],
+    "sim": 0.641,
+    "score": 0.0156,
+    "rerank": null,
+    "codigo_exato": false,
+    "texto": null
+   },
+   {
+    "n": 5,
+    "obra": "Continuous Architecture in Practice",
+    "arquivo": "Continuous Architecture in Practice (Murat Erder & Pierre Pureur).pdf",
+    "section_id": "continuous-architecture-in-practice-murat-erder-pierre-pureur-2021#perception-of-architects-as-not-delivering-solutions-or-addi",
+    "breadcrumb": [
+     "in Practice",
+     "•• Perception of architects as not delivering solutions or adding value."
+    ],
+    "sim": 0.631,
+    "score": 0.0154,
+    "rerank": null,
+    "codigo_exato": false,
+    "texto": null
+   },
+   {
+    "n": 6,
+    "obra": "Fundamentals of Software Architecture (2025)",
+    "arquivo": "Fundamentals of Software Architecture_ A Modern Engineering Approach{Mark Richards_ Neal Ford}(2025 March 25, O&_039_Reilly Media){111205155} libgen.li.pdf",
+    "section_id": "fundamentals-of-software-architecture_-a-modern-engineering-approach-mark-richards_-neal-ford-2025-march-25-o-_039_reilly-media-111205155-libgen-li-2025#architecture-as-an-engineering-discipline-repeatable",
+    "breadcrumb": [
+     "Architecture",
+     "• Architecture as an engineering discipline: Repeatable"
+    ],
+    "sim": 0.627,
+    "score": 0.0152,
+    "rerank": null,
+    "codigo_exato": false,
+    "texto": null
+   },
+   {
+    "n": 7,
+    "obra": "Fundamentals of Software Architecture (2025)",
+    "arquivo": "Fundamentals of Software Architecture_ A Modern Engineering Approach{Mark Richards_ Neal Ford}(2025 March 25, O&_039_Reilly Media){111205155} libgen.li.pdf",
+    "section_id": "fundamentals-of-software-architecture_-a-modern-engineering-approach-mark-richards_-neal-ford-2025-march-25-o-_039_reilly-media-111205155-libgen-li-2025#architectural-thinking",
+    "breadcrumb": [
+     "Part III: Techniques and Soft Skills",
+     "Architectural Thinking"
+    ],
+    "sim": 0.624,
+    "score": 0.0147,
+    "rerank": null,
+    "codigo_exato": false,
+    "texto": null
+   },
+   {
+    "n": 8,
+    "obra": "Software Architecture Knowledge Management: Theory and Practice",
+    "arquivo": "Software Architecture Knowledge Management - Theory and Practice (2009) - Babar, Dingsoyr, Lago, van Vliet.pdf",
+    "section_id": "software-architecture-knowledge-management-theory-and-practice-2009-babar-dingsoyr-lago-van-vliet-1998#13.5",
+    "breadcrumb": [
+     "21 http://openmanagement.org/community/open",
+     "13.5 Summary"
+    ],
+    "sim": 0.632,
+    "score": 0.0145,
+    "rerank": null,
+    "codigo_exato": false,
+    "texto": null
+   }
+  ],
+  "contexto": "[1] (Continuous Architecture in Practice (Murat Erder & Pierre Pureur).pdf · continuous-architecture-in-practice-murat-erder-pierre-pureur-2021#in-chapters-8-and-9-we-look-at-what-is-ahead-we-discuss-the-) — in Practice › •• In Chapters 8 and 9, we look at what is ahead. We discuss the role of architec-\n•• In Chapters 8 and 9, we look at what is ahead. We discuss the role of architec-\nture in dealing with emerging technologies and conclude with the challenges of\npracticing architecture today in the era of agile and DevOps as well as poten-\ntial ways to meet those challenges.\nWe expect some of our readers to be software architects who understand the\nclassical fundamentals of the field (perhaps from a book such as Software Archi-\ntecture in Practice2 or Software Systems Architecture3), but who recognize the\nneed to update their approach to meet the challenges of today’s fast-moving soft-\nware development environment. The book is also likely to be of interest to soft-\nware engineers who want to learn about software architecture and design and\nwho will be attracted by our practical, delivery-oriented focus.\nTo keep the scope of this book manageable and focused on what has changed\nsince our last book, we assume that readers are familiar with the basics of main-\nstream technical topics such as information security, cloud computing, microser-\nvice-based architecture, and common automation techniques such as automated\ntesting and deployment pipelines. We expect that our readers are also familiar\nwith the fundamental techniques of architectural design, how to create a visual\nmodel of their software, and associated techniques such as the domain-driven\ndesign (DDD) approach.4 For those who feel unsure about architectural design\nfundamentals, we suggest starting with a well-defined appr\n\n[2] (Continuous Architecture in Practice (Murat Erder & Pierre Pureur).pdf · continuous-architecture-in-practice-murat-erder-pierre-pureur-2021#what-do-we-mean-by-architecture) — in Practice › What Do We Mean by Architecture?\nWhat Do We Mean by Architecture?\nWhen we talk about architecture, we are concerned with software architecture. But\nhow can we define software architecture? Let us look at a few common definitions.\n1\nChapter 1 Why Software Architecture Is More Important than Ever\n2\nAccording to the portal maintained by the International Federation for Informa-\ntion Processing (IFIP) Working Group 2.10 on Software Architecture:1\nSoftware architecture refers to the fundamental structures of a software system and\nthe discipline of creating such structures and systems. Each structure comprises soft-\nware elements, relations among them, and properties of both elements and relations.\nThe architecture of a software system is a metaphor, analogous to the architecture of\na building. It functions as a blueprint for the system and the developing project, laying\nout the tasks necessary to be executed by the design teams.\nSoftware architecture is about making fundamental structural choices that are costly\nto change once implemented. Software architecture choices include specific structural\noptions from possibilities in the design of the software. . . .\nDocumenting software architecture facilitates communication between stakehold-\ners, captures early decisions about the high-level design, and allows reuse of design\ncomponents between projects\nThe International Standards Organization and Institute of Electrical and\nElectronics Engineers (IEEE) uses the following definition:2\nArchitecture: Fundamental concept\n\n[3] (Continuous Architecture in Practice (Murat Erder & Pierre Pureur).pdf · continuous-architecture-in-practice-murat-erder-pierre-pureur-2021#xxiii) — in Practice › xxiii\nxxiii\nSoftware Systems Architecture provides a starting point, and Simon Brown’s\nbooks6,7 are a more recent and very accessible introduction to it.\nThe other foundational architectural practice that we don’t discuss in this book is\nhow to assess a software architecture. This topic is covered in chapter 6 of our previ-\nous book, chapter 14 of Software Systems Architecture, and chapter 21 of Software\nArchitecture in Practice. You can also find a lot of information about architectural\nevaluation methods such as the Architecture Tradeoff Analysis Method (ATAM) via\nan Internet search.\nWe also assume an existing knowledge of agile development and so do not\nprovide in-depth discussions of software development life cycle processes such as\nagile, Scrum, and the Scaled Agile Framework (SAFe), nor do we discuss soft-\nware deployment and operation approaches, such as DevSecOps, in any depth.\nWe deliberately do not include details on any specific technology domain (e.g.,\ndatabase, security, automation). We of course refer to these topics where rele-\nvant, but we assume our readers are generally familiar with them. We covered\nthese topics, except for technology details, in Continuous Architecture. Also,\nplease note that terms defined in the glossary are highlighted in bold the first\ntime they appear in this book.\nThe foundations of software architecture haven’t changed in the last four\nyears. The overall goal of architecture remains to enable early and continuous\ndelivery of business value\n\n[4] (Software Architecture Knowledge Management - Theory and Practice (2009) - Babar, Dingsoyr, Lago, van Vliet.pdf · software-architecture-knowledge-management-theory-and-practice-2009-babar-dingsoyr-lago-van-vliet-1998#3.2) — 3 decades, from very intuitive and informal, to very structured, abstract and for- › 3.2 Evolution of Architectural Representation\n(contexto do pai · software-architecture-knowledge-management-theory-and-practice-2009-babar-dingsoyr-lago-van-vliet-1998#3)\n3 decades, from very intuitive and informal, to very structured, abstract and for-\nmal, from simple diagrams and metaphors, design notations, and speciﬁc languages.\nAs our understanding of architectural knowledge evolved, the importance of de-\nsign rationale and the decision process became more and more prominent. There is\nhowever a constant through this evolution: the systematic use of metaphors.\n---\n3.2 Evolution of Architectural Representation\nThe ﬁrst reference to the phrase “software architecture” occurred in 1969 at a\nconference on software engineering techniques organized by NATO [65]. Some\nof our ﬁeld’s most prestigious pioneers, including Tony Hoare, Edsger Dijkstra,\nAlan Perlis, Per Brinch Hansen, Friedrich Bauer, and Niklaus Wirth, attended\nthis meeting. From then until the late 1980s, the word “architecture” was used\nmostly in the sense of system architecture (meaning a computer system’s physi-\ncal structure) or sometimes in the narrower sense of a given family of computers’\ninstruction set. Key sources about a software system’s organization came from Fred\nBrooks in 1975 [54], Butler Lampson in 1983 [198], David Parnas from 1972 to\n1986 [244, 245, 246, 247], and John Mills whose 1985 article looked more into the\nprocess and pragmatics of architecting [227]. The concept of software architecture\nas a distinct discipline started to emerge in 1990 [297]. A 1991 article by Winston\nW. Royce and Walker Royce (father and son) was the ﬁrst to position software ar-\nchitecture – in both title and perspective – between technology and process [269].\nEberhardt Rechtin dedicated a few sections to software in his 1991 book Systems\nArchitecting: Creating and Building Complex Systems [263].\n\n[5] (Continuous Architecture in Practice (Murat Erder & Pierre Pureur).pdf · continuous-architecture-in-practice-murat-erder-pierre-pureur-2021#perception-of-architects-as-not-delivering-solutions-or-addi) — in Practice › •• Perception of architects as not delivering solutions or adding value.\n•• Perception of architects as not delivering solutions or adding value.\nChapter 1 Why Software Architecture Is More Important than Ever\n6\n\n[6] (Fundamentals of Software Architecture_ A Modern Engineering Approach{Mark Richards_ Neal Ford}(2025 March 25, O&_039_Reilly Media){111205155} libgen.li.pdf · fundamentals-of-software-architecture_-a-modern-engineering-approach-mark-richards_-neal-ford-2025-march-25-o-_039_reilly-media-111205155-libgen-li-2025#architecture-as-an-engineering-discipline-repeatable) — Architecture › • Architecture as an engineering discipline: Repeatable\n(contexto do pai · fundamentals-of-software-architecture_-a-modern-engineering-approach-mark-richards_-neal-ford-2025-march-25-o-_039_reilly-media-111205155-libgen-li-2025#architecture)\nArchitecture\n1. What was the main driving force behind service-oriented architecture?\n1.\n2. What are the four primary service types within a service-oriented architecture?\n2.\n3. List some of the factors that led to the downfall of service-oriented architecture.\n3.\n4. Is SOA technically partitioned or domain partitioned?\n4.\n5. How is domain reuse addressed in SOA? How is operational reuse addressed\n---\n• Architecture as an engineering discipline: Repeatable\nresults, metrics, and concrete valuations that add rigor\nto software architecture\nSOFTWARE ARCHITECTURE\nISBN: 978-1-098-17551-1\nUS $79.99 CAN $99.99\n5 7 9 9 9\n9\n7 8 1 0 9 8 1 7 5 5 1 1\n\n[7] (Fundamentals of Software Architecture_ A Modern Engineering Approach{Mark Richards_ Neal Ford}(2025 March 25, O&_039_Reilly Media){111205155} libgen.li.pdf · fundamentals-of-software-architecture_-a-modern-engineering-approach-mark-richards_-neal-ford-2025-march-25-o-_039_reilly-media-111205155-libgen-li-2025#architectural-thinking) — Part III: Techniques and Soft Skills › Architectural Thinking\n(contexto do pai · fundamentals-of-software-architecture_-a-modern-engineering-approach-mark-richards_-neal-ford-2025-march-25-o-_039_reilly-media-111205155-libgen-li-2025#part-iii-techniques-and-soft-skills)\nPart III: Techniques and Soft Skills\nParts I and II focus on technical aspects of the job, but a major part of the role\nof software architect involves what are traditionally called soft skills: skills that\ninvolve other people instead of technology. Ironically, soft skills are often the\nmost difficult for burgeoning architects to acquire, because the main pathways\nto the software architect role ty\n---\nArchitectural Thinking\nArchitectural thinking is about seeing things with an architect’s eye—in other words,\nfrom an architectural point of view. Understanding how a particular change might\nimpact overall scalability, paying attention to how different parts of a system interact,\nand knowing which third-party libraries and frameworks would be most appropriate\nfor a given situation are all examples of thinking architecturally.\nBeing able to think like an architect first involves understanding what software\narchitecture is and the differences between architecture and design. It then involves\nhaving a wide breadth of knowledge to see solutions and possibilities that others do\nnot see; understanding the importance of business drivers and how they translate\nto architectural concerns; and understanding, analyzing, and reconciling trade-offs\nbetween various solutions and technologies.\nIn this chapter, we explore these aspects of thinking like an architect.\n\n[8] (Software Architecture Knowledge Management - Theory and Practice (2009) - Babar, Dingsoyr, Lago, van Vliet.pdf · software-architecture-knowledge-management-theory-and-practice-2009-babar-dingsoyr-lago-van-vliet-1998#13.5) — 21 http://openmanagement.org/community/open › 13.5 Summary\n(contexto do pai · software-architecture-knowledge-management-theory-and-practice-2009-babar-dingsoyr-lago-van-vliet-1998#21)\n21 http://openmanagement.org/community/open\nstandards/omc\ndesign\npatterns\n11 AKM in Open Source Communities\n213\npackage classes. This information is available from FLOSS tools. Future research\ncan identify such “interesting” pieces of information from existing OSS resources\nand use SAR integration with these resources in a constructive approach, to produce\narchitectural knowledge.\nOne should also \n---\n13.5 Summary\nWe set out on this survey with two goals, which were both achieved: to establish\nthe current state of architectural knowledge sharing in the ABC company and its\ncustomers, and to gain insight into the mechanisms around architectural knowledge\nsharing in projects. In order to gain this insight, we looked at architects’ responses to\nfour questions about AK sharing, and the correlations between these responses and\ntheir latest projects’ success and size, and we reasoned about impact mechanisms\nand causality.\nThe analysis revealed the following mechanisms:\n• Architects face many challenges sharing architectural knowledge in projects\n• These challenges are more numerous and diverse in larger projects than in smaller\nones.\n• The most common of these challenges are related to group level communication\nissues, the quality of codiﬁed knowledge and planning issues.\n• However, these common challenges are not correlated with project success, so\napparently they are generally neutralized somehow.\n• The only challenges that are correlated with project success are the ones related\nto interpersonal relationships: conﬂicts, trust and willingness to share knowledge.\n13 Successful Architectural Knowledge Sharing: Beware of Emotions\n259\n• Architects’ motivation to share knowledge is more personal in less successful\nprojects.\n• Architects do not see management as an important factor in Architectural Knowl-\nedge Sharing, but those architects that are motivated by management tend to wor",
+  "cobertura": "boa",
+  "perguntas": [
+   "o que é arquitetura de software"
+  ],
+  "filtro": {
+   "dominio": [],
+   "subdominio": [],
+   "frente": [],
+   "colecao": []
+  },
+  "aviso": null,
+  "indice": {
+   "acervo_sha": "f04c1ae0865d2af70ab0cc3532e8c2964edb64bd5d611c340cf6233d689f06ea",
+   "chunks": 139477,
+   "chunks_recuperaveis": 119164,
+   "chunks_com_vetor": 119164,
+   "chunks_nao_textuais": 20313,
+   "documentos_sem_chunk": 46,
+   "obras_catalogadas": 685,
+   "obras_ingeridas": 659,
+   "conceitos": 196,
+   "embed_model": "Qwen/Qwen3-Embedding-0.6B",
+   "embed_backend": "torch",
+   "embed_query_instruction": "Given a search query, retrieve relevant passages that answer the query",
+   "embed_meta_beta": 0.15,
+   "modo": "hybrid",
+   "rrf_k": 60,
+   "rrf_w_vec": 1.0,
+   "rrf_w_id": 2.0,
+   "rrf_w_lex": 0.5,
+   "hybrid_lexical": false,
+   "rerank_model": null,
+   "sha_calculado_em": "2026-08-04T16:48:28+00:00"
+  }
+ },
+ "formalizacao": {
+  "termo": "arquitetura de software",
+  "wiki": {
+   "pagina_com_titulo_igual_ao_termo": null,
+   "titulos_testados_ausentes": [
+    "Arquitetura de software"
+   ],
+   "paginas_com_o_termo_no_titulo": [],
+   "vizinhas_consultadas": [
+    {
+     "titulo": "Arquiteturas",
+     "criada_em": "2026-07-15T20:16:36Z",
+     "ultima_edicao_em": "2026-07-28T03:05:47Z"
+    },
+    {
+     "titulo": "Engenharia-software",
+     "criada_em": "2026-07-15T20:16:36Z",
+     "ultima_edicao_em": "2026-07-28T03:54:05Z"
+    },
+    {
+     "titulo": "Arquitetura:Índice",
+     "criada_em": "2026-08-01T20:14:57Z",
+     "ultima_edicao_em": "2026-08-03T00:46:27Z"
+    },
+    {
+     "titulo": "Arquitetura:Topologia",
+     "criada_em": "2026-07-29T12:14:18Z",
+     "ultima_edicao_em": "2026-08-03T00:45:22Z"
+    }
+   ]
+  },
+  "adr": {
+   "adr_com_o_termo_no_titulo": [],
+   "ausencia": true,
+   "arquivos_de_decisao_que_mencionam_o_termo_no_corpo": 0,
+   "vizinhas_consultadas": [
+    {
+     "repo": "platafirma-arquitetura",
+     "caminho": "macro-global/decisions/0025-componente-e-substrato.md",
+     "criada_em": "2026-08-03T18:50:58-03:00",
+     "ultima_edicao_em": "2026-08-03T18:57:44-03:00"
+    },
+    {
+     "repo": "platafirma-arquitetura",
+     "caminho": "macro-global/decisions/0026-camada-de-fronteira.md",
+     "criada_em": "2026-08-03T18:57:44-03:00",
+     "ultima_edicao_em": "2026-08-03T18:57:44-03:00"
+    }
+   ]
+  },
+  "medida": {
+   "medido_em": "2026-08-04T16:45:00Z",
+   "fonte_wiki": "MediaWiki API interna (127.0.0.1:8080), prop=revisions, primeira e ultima revisao",
+   "fonte_adr": "git log --diff-filter=A (criacao) e git log -1 (ultima edicao) nos clones locais",
+   "repos_sha": {
+    "platafirma-arquitetura": "3158694036f799bca47ef8d6d56420ee37a3a416",
+    "platafirma-conhecimento": "5b6c364c14005a2332ed7f6279a7a7bceccc6225"
+   },
+   "criterio": "'nomeia o termo' = o termo aparece no titulo da pagina ou no nome do arquivo da ADR. Ausencia registrada explicitamente."
+  }
+ }
+}

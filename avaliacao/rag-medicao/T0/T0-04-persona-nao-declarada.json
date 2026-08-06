@@ -1,0 +1,209 @@
+{
+ "sonda": "T0",
+ "n": "04",
+ "persona": "persona-nao-declarada",
+ "pergunta": "o que é arquitetura de dados",
+ "parametros_congelados": {
+  "texto": "secao",
+  "k": 8,
+  "dominio": null,
+  "subdominio": null,
+  "frente": null,
+  "colecao": null
+ },
+ "chamada_em": "2026-08-04T16:49:45.577673+00:00",
+ "acervo_sha": "f04c1ae0865d2af70ab0cc3532e8c2964edb64bd5d611c340cf6233d689f06ea",
+ "retorno": {
+  "fontes": [
+   {
+    "n": 1,
+    "obra": "Data Governance (2nd)",
+    "arquivo": "dokumen.pub_data-governance-how-to-design-deploy-and-sustain-an-effective-data-governance-program-2nbsped-012815831x-9780128158319.pdf",
+    "section_id": "dokumen-pub_data-governance-how-to-design-deploy-and-sustain-an-effective-data-governance-program-2nbsped-012815831x-9780128158319-2020#data-architecture",
+    "breadcrumb": [
+     "­Data Governance",
+     "Data literacy and concepts",
+     "­Data architecture"
+    ],
+    "sim": 0.614,
+    "score": 0.0164,
+    "rerank": null,
+    "codigo_exato": false,
+    "texto": null
+   },
+   {
+    "n": 2,
+    "obra": "Fundamentals of Data Engineering",
+    "arquivo": "Fundamentals of Data Engineering (Joe Reis & Matt Housley) (1st Edition, 2022).pdf",
+    "section_id": "fundamentals-of-data-engineering-joe-reis-matt-housley-1st-edition-2022-2022#data-architecture-defined",
+    "breadcrumb": [
+     "Chapter 3: Designing Good Data Architecture",
+     "Data Architecture Defined"
+    ],
+    "sim": 0.615,
+    "score": 0.0161,
+    "rerank": null,
+    "codigo_exato": false,
+    "texto": null
+   },
+   {
+    "n": 3,
+    "obra": "Fundamentals of Data Engineering",
+    "arquivo": "Fundamentals of Data Engineering (Joe Reis & Matt Housley) (1st Edition, 2022).pdf",
+    "section_id": "fundamentals-of-data-engineering-joe-reis-matt-housley-1st-edition-2022-2022#examples-and-types-of-data-architecture",
+    "breadcrumb": [
+     "Chapter 3: Designing Good Data Architecture",
+     "Examples and Types of Data Architecture"
+    ],
+    "sim": 0.61,
+    "score": 0.0159,
+    "rerank": null,
+    "codigo_exato": false,
+    "texto": null
+   },
+   {
+    "n": 4,
+    "obra": "DAMA-DMBOK: Data Management Body of Knowledge",
+    "arquivo": "DMBOK.pdf",
+    "section_id": "dmbok-2015#4.2",
+    "breadcrumb": [
+     "31 http://bit.ly/2sTfugb",
+     "4.2 Adjustment and Communication"
+    ],
+    "sim": 0.593,
+    "score": 0.0156,
+    "rerank": null,
+    "codigo_exato": false,
+    "texto": null
+   },
+   {
+    "n": 5,
+    "obra": "manual de procedimento do extrator de dados DW SIASS",
+    "arquivo": "manual de procedimento do extrator de dados DW SIASS.pdf",
+    "section_id": "manual-de-procedimento-do-extrator-de-dados-dw-siass-2024#8",
+    "breadcrumb": [
+     "DATA WAREHOUSE – DW SIASS",
+     "8. ANEXO - Arquitetura dos dados do DW SIASS, versão 1.13 (25/05/2022) . 15"
+    ],
+    "sim": 0.617,
+    "score": 0.0154,
+    "rerank": null,
+    "codigo_exato": false,
+    "texto": null
+   },
+   {
+    "n": 6,
+    "obra": "Continuous Architecture in Practice",
+    "arquivo": "Continuous Architecture in Practice (Murat Erder & Pierre Pureur).pdf",
+    "section_id": "continuous-architecture-in-practice-murat-erder-pierre-pureur-2021#data",
+    "breadcrumb": [
+     "Chapter 9 Conclusion",
+     "Data"
+    ],
+    "sim": 0.615,
+    "score": 0.0149,
+    "rerank": null,
+    "codigo_exato": false,
+    "texto": null
+   },
+   {
+    "n": 7,
+    "obra": "DAMA-DMBOK: Data Management Body of Knowledge",
+    "arquivo": "DMBOK.pdf",
+    "section_id": "dmbok-2015#5.2",
+    "breadcrumb": [
+     "31 http://bit.ly/2sTfugb",
+     "5.2 Organization and Cultural Change"
+    ],
+    "sim": 0.582,
+    "score": 0.0147,
+    "rerank": null,
+    "codigo_exato": false,
+    "texto": null
+   },
+   {
+    "n": 8,
+    "obra": "DAMA-DMBOK: Data Management Body of Knowledge",
+    "arquivo": "DMBOK.pdf",
+    "section_id": "dmbok-2015#1.2~2",
+    "breadcrumb": [
+     "31 http://bit.ly/2sTfugb",
+     "1.2 Data Architecture Outcomes and Practices"
+    ],
+    "sim": 0.578,
+    "score": 0.0145,
+    "rerank": null,
+    "codigo_exato": false,
+    "texto": null
+   }
+  ],
+  "contexto": "[1] (dokumen.pub_data-governance-how-to-design-deploy-and-sustain-an-effective-data-governance-program-2nbsped-012815831x-9780128158319.pdf · dokumen-pub_data-governance-how-to-design-deploy-and-sustain-an-effective-data-governance-program-2nbsped-012815831x-9780128158319-2020#data-architecture) — ­Data Governance › Data literacy and concepts › ­Data architecture\n(contexto do pai · dokumen-pub_data-governance-how-to-design-deploy-and-sustain-an-effective-data-governance-program-2nbsped-012815831x-9780128158319-2020#data-literacy-and-concepts)\nData literacy and concepts\n­Chapter Outline\nMetaphors are hard to implement.\nJohn Ladley\n---\n­Data architecture\nAnother term often heard within a conversation related to IM or DG is data or information architecture.\nThe DMBOK definition of information architecture, or data architecture, is somewhat convoluted and\ntilted toward a technical explanation. The entire definition can be read in the DMBOK, but here is a\nsummary:\n1. A master set of data models and design approaches identifying the strategic data requirements\nand the components of DM solutions, usually at an enterprise level.\n2. The “data” column of the Zachman Framework for Enterprise Architecture identifies\nsix different classes of design artifacts, each representing a different level of abstraction.\n(Note: This is not exactly a business definition like we promised. See Chapter 2 for an\nexplanation of Zachman.)\n3. In some common usage, the physical technology infrastructure supporting DM, including\ndatabase servers, data replication tools, and middleware.\nThe author would never use the preceding definition when educating management as DG is\n­deployed. Rather, a much simpler version would be used:\n•\nData architecture is a representation of the DM environment, its components, and their\ninteractions. This picture, or abstraction, interrelates the framework, people, processes,\nprojects, policies, technologies, and procedures to manage and use valuable enterprise\ninformation assets.\n\n[2] (Fundamentals of Data Engineering (Joe Reis & Matt Housley) (1st Edition, 2022).pdf · fundamentals-of-data-engineering-joe-reis-matt-housley-1st-edition-2022-2022#data-architecture-defined) — Chapter 3: Designing Good Data Architecture › Data Architecture Defined\n(contexto do pai · fundamentals-of-data-engineering-joe-reis-matt-housley-1st-edition-2022-2022#chapter-3-designing-good-data-architecture)\nChapter 3: Designing Good Data Architecture\nbusiness and IT leaders with signature-ready recommendations for adjusting policies\nand projects to achieve targeted business outcomes that capitalize on relevant business\ndisruptions.\n---\nData Architecture Defined\nNow that you understand enterprise architecture, let’s dive into data architecture by\nestablishing a working definition that will set the stage for the rest of the book. Data\narchitecture is a subset of enterprise architecture, inheriting its properties: processes,\nstrategy, change management, and evaluating trade-offs. Here are a couple of defini‐\ntions of data architecture that influence our definition.\n\n[3] (Fundamentals of Data Engineering (Joe Reis & Matt Housley) (1st Edition, 2022).pdf · fundamentals-of-data-engineering-joe-reis-matt-housley-1st-edition-2022-2022#examples-and-types-of-data-architecture) — Chapter 3: Designing Good Data Architecture › Examples and Types of Data Architecture\n(contexto do pai · fundamentals-of-data-engineering-joe-reis-matt-housley-1st-edition-2022-2022#chapter-3-designing-good-data-architecture)\nChapter 3: Designing Good Data Architecture\nbusiness and IT leaders with signature-ready recommendations for adjusting policies\nand projects to achieve targeted business outcomes that capitalize on relevant business\ndisruptions.\n---\nExamples and Types of Data Architecture\nBecause data architecture is an abstract discipline, it helps to reason by example. In\nthis section, we outline prominent examples and types of data architecture that are\npopular today. Though this set of examples is by no means exhaustive, the intention is\nto expose you to some of the most common data architecture patterns and to get you\nthinking about the requisite flexibility and trade-off analysis needed when designing\na good architecture for your use case.\n\n[4] (DMBOK.pdf · dmbok-2015#4.2) — 31 http://bit.ly/2sTfugb › 4.2 Adjustment and Communication\n(contexto do pai · dmbok-2015#31)\n31 http://bit.ly/2sTfugb\nDATA GOVERNANCE • 89\nset of assertions (the standard). It does not need to make the same decision all over again for each project.\nEnforcing standards should promote consistent results from the processes using them.\nUnfortunately, creating or adopting standards is often a politicized process and these goals get lost. Most\norganizations are not well-practiced at developing \n---\n4.2 Adjustment and Communication\nData Governance programs are implemented incrementally within the context of a wider business and data\nmanagement strategy. Success requires keeping the wider goals in mind while putting the pieces in place. The DG\nteam will need to be flexible and adjust its approach as conditions shift. Tools required to manage and\ncommunicate changes include:\nBusiness / DG strategy map: This map connects DG activity with business needs. Periodically measuring\nand communicating how DG is helping the business is vital to obtain ongoing support for the program.\nDG roadmap: The roadmap to DG should not be rigid. It should be adapted to changes in business\nenvironment or priorities.\nOngoing business case for DG: The business case must be adjusted periodically to reflect changing\npriorities and financial realities of the organization.\nDG metrics: Metrics will need to grow and change as the DG program matures.\n5. Metrics\nTo counter resistance or the challenge of a long learning curve, a DG program must be able to measure progress\nand success through metrics that demonstrate how DG participants have added business value and attained\nobjectives.\nIn order to manage the behavior changes required, it is important to measure progress of the rollout of data\ngovernance, compliance with the data governance requirements, and the value data governance is bringing to the\norganization. Metrics that reinforce DG’s value and those that verify the organization has the resources r\n\n[5] (manual de procedimento do extrator de dados DW SIASS.pdf · manual-de-procedimento-do-extrator-de-dados-dw-siass-2024#8) — DATA WAREHOUSE – DW SIASS › 8. ANEXO - Arquitetura dos dados do DW SIASS, versão 1.13 (25/05/2022) . 15\n(contexto do pai · manual-de-procedimento-do-extrator-de-dados-dw-siass-2024#data-warehouse-dw-siass)\nDATA WAREHOUSE – DW SIASS\nDATA WAREHOUSE – DW SIASS\n1ª EDIÇÃO\nBrasília/DF, junho de 2024\nMINISTÉRIO DA GESTÃO E DA INOVAÇÃO EM SERVIÇOS PÚBLICOS\nSecretaria de Gestão de Pessoas e Secretaria de Relações do trabalho.\n“www.gov\n2024, SECRETARIA DE GESTÃO DE PESSOAS e SECRETARIA DE RELAÇÕES DO TRABALHO.\nNORMALIZAÇÃO BIBLIOGRÁFICA. Coordenação Geral de Administração, Atendimento e\nDocumentação do Minist\n---\n8. ANEXO - Arquitetura dos dados do DW SIASS, versão 1.13 (25/05/2022) . 15\n3\nDISPOSIÇÕES GERAIS\n1.\nAPRESENTAÇÃO\nA Política de Atenção à Saúde e Segurança do Trabalho do Servidor Público Federal (PASS) e o Subsistema\nIntegrado de Atenção à Saúde do Servidor Público Federal (SIASS) foram estabelecidos pelo Governo Federal\ncom o Decreto nº 6.833, de 29 de abril de 2009, e visam o efetivo e integral desenvolvimento de ações\nrelacionadas à gestão de pessoas, o que requer a produção de conhecimento sobre a saúde e o bem-estar\ndos servidores.\nA Secretaria de Relações de Trabalho (SRT) do Ministério da Gestão e da Inovação em Serviços Públicos\n(MGI) é a responsável pela implementação e aperfeiçoamento da Política de Atenção à Saúde e Segurança\ndo Trabalho do Servidor Público Federal (PASS), cujo objetivo é desenvolver ações e programas nas áreas da\nperícia oficial, promoção à saúde, vigilância dos ambientes e processos de trabalho, prevenção e\nacompanhamento da saúde do servidor, e a assistência à saúde.\nConsiderando que a execução das ações da Política de Atenção à Saúde e Segurança do Trabalho do Servidor\nPúblico Federal (PASS), articulada em nível central e com o envolvimento dos diversos órgãos que compõem\no Sistema de Pessoal Civil da Administração Federal (SIPEC), deve ser pautada também em dados\nepidemiológicos, propõe-se a ferramenta do Data Warehouse DW SIASS, visando ao atendimento das\ndemandas relativas a atenção à saúde do servidor.\nNesse sentido, para sistematizar os da\n\n[6] (Continuous Architecture in Practice (Murat Erder & Pierre Pureur).pdf · continuous-architecture-in-practice-murat-erder-pierre-pureur-2021#data) — Chapter 9 Conclusion › Data\n(contexto do pai · continuous-architecture-in-practice-murat-erder-pierre-pureur-2021#chapter-9-conclusion)\nChapter 9 Conclusion\n260\nwith a practical guide on how to update classical software architecture practice in\norder to meet the complex challenges of today’s applications. We also revisit some of\nthe core topics of software architecture, such as the evolving role of the architect in\nthe development team, meeting stakeholders’ quality attribute needs, and the impor-\ntance of architecture in managing\n---\nData\nAn important development in the field of architecture during the last few years has\nbeen an increased focus on data. Data is an extremely fast-evolving and interesting\narchitectural topic.\nProcessing data is the reason that IT systems exist. The goal of almost every tech-\nnology that has been developed to date is to make sure that data is processed more\neffectively and efficiently. With the proliferation of connected devices and Internet\nusage, the amount of data in the world is increasing exponentially. This has created a\nneed to manage, correlate, and analyze data in flexible ways so that we can find con-\nnections and drive insights. The technology response has had a significant impact on\nhow systems are developed. From a data architectural perspective, we identified three\nmain drivers:\n\n[7] (DMBOK.pdf · dmbok-2015#5.2) — 31 http://bit.ly/2sTfugb › 5.2 Organization and Cultural Change\n(contexto do pai · dmbok-2015#31)\n31 http://bit.ly/2sTfugb\nDATA GOVERNANCE • 89\nset of assertions (the standard). It does not need to make the same decision all over again for each project.\nEnforcing standards should promote consistent results from the processes using them.\nUnfortunately, creating or adopting standards is often a politicized process and these goals get lost. Most\norganizations are not well-practiced at developing \n---\n5.2 Organization and Cultural Change\nThe speed with which an organization adopts architectural practices depends on how adaptive its culture is. The\nnature of design work requires that architects collaborate with developers and other creative thinkers throughout\nthe organization. Often such people are used to working in their own ways. They may embrace or resist the\nchange required to adopt formal architecture principles and tools.\nOutput-oriented, strategically aligned organizations are in the best position to adopt architectural practices.\nThese organizations are most often goal-oriented, aware of customer and partner challenges, and capable of\nprioritizing based on common objectives.\nThe ability of an organization to adopt Data Architecture practices depends on several factors:\nCultural receptivity to architectural approach (developing an architecture-friendly culture)\nOrganizational recognition of data as a business asset, not just an IT concern\nOrganizational ability to let go of a local perspective and adopt an enterprise perspective on data\nOrganizational ability to integrate architectural deliverables into project methodology\nLevel of acceptance of formal data governance\nAbility to look holistically at the enterprise, rather than being focused solely on project delivery and IT\nsolutioning (Edvinsson, 2013)\n6. Data Architecture Governance\nData Architecture activities directly support the alignment and control of data. Data architects often act as\nbusiness liaisons for \n\n[8] (DMBOK.pdf · dmbok-2015#1.2~2) — 31 http://bit.ly/2sTfugb › 1.2 Data Architecture Outcomes and Practices\n(contexto do pai · dmbok-2015#31)\n31 http://bit.ly/2sTfugb\nDATA GOVERNANCE • 89\nset of assertions (the standard). It does not need to make the same decision all over again for each project.\nEnforcing standards should promote consistent results from the processes using them.\nUnfortunately, creating or adopting standards is often a politicized process and these goals get lost. Most\norganizations are not well-practiced at developing \n---\n1.2 Data Architecture Outcomes and Practices\nPrimary Data Architecture outcomes include:\nData storage and processing requirements\nDesigns of structures and plans that meet the current and long-term data requirements of the enterprise\nData Architecture\nDefinition: Identifying the data needs of the enterprise (regardless of structure), and\ndesigning and maintaining the master blueprints to meet those needs. Using master\nblueprints to guide data integration, control data assets, and align data investments with\nbusiness strategy.\nGoals:\n1. Identify data storage and processing requirements.\n2. Design structures and plans to meet the current and long-term data requirements of the enterprise.\n3. Strategically prepare organizations to quickly evolve their products, services, and data to take advantage\nof business opportunities inherent in emerging technologies.\nBusiness\nDrivers\nInputs:\nEnterprise\nArchitecture\nBusiness\nArchitecture\nIT Standards and\nGoals\nData Strategies\nActivities:\n1.\nEstablish Enterprise Data\nArchitecture (P)\nDeliverables:\nData Architecture\nDesign\nData Flows\nData Value Chains\nEnterprise Data\nModel\nImplementation\nRoadmap\n1. Evaluate Existing Data\nArchitecture Specifications\n2. Develop a Roadmap\n3. Manage Enterprise\nRequirements within Projects\n(D)\n2.\nIntegrate with Enterprise\nArchitecture (O)\nSuppliers:\nEnterprise\nArchitects\nData Stewards\nSubject Matter\nExperts\nData Analysts\nParticipants:\nEnterprise Data Architects\nData Modelers\nConsumers:\nDatabase\nAdministrators\nSoft",
+  "cobertura": "boa",
+  "perguntas": [
+   "o que é arquitetura de dados"
+  ],
+  "filtro": {
+   "dominio": [],
+   "subdominio": [],
+   "frente": [],
+   "colecao": []
+  },
+  "aviso": null,
+  "indice": {
+   "acervo_sha": "f04c1ae0865d2af70ab0cc3532e8c2964edb64bd5d611c340cf6233d689f06ea",
+   "chunks": 139477,
+   "chunks_recuperaveis": 119164,
+   "chunks_com_vetor": 119164,
+   "chunks_nao_textuais": 20313,
+   "documentos_sem_chunk": 46,
+   "obras_catalogadas": 685,
+   "obras_ingeridas": 659,
+   "conceitos": 196,
+   "embed_model": "Qwen/Qwen3-Embedding-0.6B",
+   "embed_backend": "torch",
+   "embed_query_instruction": "Given a search query, retrieve relevant passages that answer the query",
+   "embed_meta_beta": 0.15,
+   "modo": "hybrid",
+   "rrf_k": 60,
+   "rrf_w_vec": 1.0,
+   "rrf_w_id": 2.0,
+   "rrf_w_lex": 0.5,
+   "hybrid_lexical": false,
+   "rerank_model": null,
+   "sha_calculado_em": "2026-08-04T16:48:28+00:00"
+  }
+ },
+ "formalizacao": {
+  "termo": "arquitetura de dados",
+  "wiki": {
+   "pagina_com_titulo_igual_ao_termo": null,
+   "titulos_testados_ausentes": [
+    "Arquitetura de dados"
+   ],
+   "paginas_com_o_termo_no_titulo": [],
+   "vizinhas_consultadas": [
+    {
+     "titulo": "Engenharia-dados",
+     "criada_em": "2026-07-28T03:54:05Z",
+     "ultima_edicao_em": "2026-07-28T03:54:05Z"
+    }
+   ]
+  },
+  "adr": {
+   "adr_com_o_termo_no_titulo": [],
+   "ausencia": true,
+   "arquivos_de_decisao_que_mencionam_o_termo_no_corpo": 0,
+   "vizinhas_consultadas": []
+  },
+  "medida": {
+   "medido_em": "2026-08-04T16:45:00Z",
+   "fonte_wiki": "MediaWiki API interna (127.0.0.1:8080), prop=revisions, primeira e ultima revisao",
+   "fonte_adr": "git log --diff-filter=A (criacao) e git log -1 (ultima edicao) nos clones locais",
+   "repos_sha": {
+    "platafirma-arquitetura": "3158694036f799bca47ef8d6d56420ee37a3a416",
+    "platafirma-conhecimento": "5b6c364c14005a2332ed7f6279a7a7bceccc6225"
+   },
+   "criterio": "'nomeia o termo' = o termo aparece no titulo da pagina ou no nome do arquivo da ADR. Ausencia registrada explicitamente."
+  }
+ }
+}
