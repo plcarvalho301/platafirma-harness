@@ -22,10 +22,11 @@ mais cara desta lista.**
 
 ## 0. Abertura de sessão
 
-```bash
-ls -1 fila/claudinho-conhecimento/     # protocolo do índice: caixa cheia, avisar o dono antes de seguir
-source ~/AI/.venv/bin/activate         # só se for usar Python
-```
+`fila status claudinho-conhecimento` / `fila ler claudinho-conhecimento` -- comandos
+e protocolo em `GERAL.md`. **`ls -1 fila/claudinho-conhecimento/` não funciona mais:**
+a fila trocou de um diretório de arquivos por persona para um arquivo `.md` único
+lido pelo binário `fila` -- confirmado nesta sessão (05/08), o caminho antigo dá
+"No such file or directory".
 
 `platafirma_index` uma vez por sessão sobre a PlataFirma, antes de responder —
 é ele que dá endereço de repo, regra de fechados e o protocolo da fila. Uma
@@ -346,10 +347,13 @@ de imagem (`trivy`, `syft`).
 Atravessou para cá: `networkx`, `rdflib`, `rapidfuzz`, `langdetect`, `ftfy` (§F)
 — e o formato deste documento.
 
-O corpus de ontologia dela **já está no meu acervo**: `BFO2-Reference`,
-`Building Ontologies with BFO`, `Ontological Anti-Patterns` (duas entradas),
-`e-ARQ Brasil`, `SKOS`, `VCGE`, `Ontology Matching`, Guizzardi em `UFO-L` e
-`Ontological Foundations`. Não há lacuna de acervo a fechar por esse lado.
+O corpus de ontologia dela em boa parte já está no meu acervo: `BFO2-Reference`,
+`Building Ontologies with BFO`, `e-ARQ Brasil`, `SKOS`, `VCGE`, `Ontological
+Foundations for Structural Conceptual Models`. **Correção 05/08, conferida no
+Postgres:** `Ontology Matching` (Euzenat & Shvaiko) e `Ontological Anti-Patterns`
+(Sales & Guizzardi) NÃO estão -- a linha anterior dizia o contrário e estava errada.
+São exatamente 2 das 3 obras que claudinho-IA reportou ausentes no rechaveamento
+do gold-set T2 (20260805T213646); a lacuna é real, não falso-negativo do matching dela.
 
 O que vale copiar do §G dela não é conteúdo, é forma: índice `problema → obra →
 página`, com o custo declarado. A wiki recupera por faceta e por busca, não por
