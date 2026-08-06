@@ -24,6 +24,9 @@ fechar                          : tarefas fechar <id>
 amarrar subtarefa               : tarefas sub <pai> <filho>
 o que o verbo não cobre         : tarefas api <MÉTODO> <caminho> | tarefas api-corpo (JSON em stdin)
 
+estado do acervo (5 degraus)    : acervo-status            [--json | --detalhe]
+                                  ÚNICA fonte de número do acervo — ver regra abaixo
+
 o que está no ar                : infra estado
 está tudo saudável?             : infra saude
 log de contêiner ou unit        : infra logs <alvo> [n]     descobre qual dos dois é
@@ -43,6 +46,13 @@ ler JSON / YAML / log           : jq · yq (não usar regex em config) · lnav
 histórico de carga              : sar                  (única que responde "há 3 horas")
 espaço                          : df -h · du -sh · ncdu
 ```
+
+> **Número do acervo sai de `acervo-status`, nunca de SQL na mão.** Contagem crua
+> `WHERE embedding IS NULL` inclui os chunks não-textuais (tabela, figura, layout),
+> que nunca recebem vetor por contrato do embedder (`NOT is_not_text AND length(text)>0`)
+> — subtrair total menos vetorizados fabrica uma pendência que não existe. Pendência
+> real é a linha `embedding parcial` do próprio instrumento. Vale pra toda cadeira:
+> quem afirma número do acervo sem ter rodado o instrumento está reportando, não medindo.
 
 Projetos do rastreador: `46 Cards` · `1 Inbox` são projetos reais; id negativo
 (`-6 Fabrica`, `-7 Carteira`, `-8 Triagem`, `-9 Parado`, `-10 Épico-Harness`,

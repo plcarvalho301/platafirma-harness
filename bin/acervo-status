@@ -85,8 +85,12 @@ SELECT json_build_object(
   ),
   'chunks', json_build_object(
     'total',      (SELECT count(*) FROM chunks),
-    'com_vetor',  (SELECT count(*) FROM chunks WHERE embedding IS NOT NULL),
-    'com_vetor_meta', (SELECT count(*) FROM chunks WHERE embedding_meta IS NOT NULL)
+    'textuais',   (SELECT count(*) FROM chunks WHERE NOT is_not_text AND length(text) > 0),
+    'nao_textuais', (SELECT count(*) FROM chunks WHERE is_not_text OR length(text) = 0),
+    'com_vetor',  (SELECT count(*) FROM chunks
+                     WHERE NOT is_not_text AND length(text) > 0 AND embedding IS NOT NULL),
+    'com_vetor_meta', (SELECT count(*) FROM chunks
+                     WHERE NOT is_not_text AND length(text) > 0 AND embedding_meta IS NOT NULL)
   )
 );
 EOSQL

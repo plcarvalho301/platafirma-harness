@@ -170,6 +170,26 @@ Regra operacional de instrução, na mesma direção da ADR: skill não emenda A
 Concluindo-se que o alcance escrito da `ont:0077` é que está estreito, isso é
 emenda e vai ao dono da ontologia.
 
+## Medir antes de afirmar (instrumento > SQL na mão)
+
+Vale para qualquer cadeira. Existindo instrumento para a pergunta, o número sai
+dele — consulta na mão contra o banco só quando o instrumento não responde, e aí
+declarando que foi na mão.
+
+- acervo (obras, chunks, vetores, fuga por degrau): `acervo-status`
+- facetas e população do índice: `rag_facets`
+- catálogo dos verbos: `tool-manifest/GERAL.md`
+
+O modo de falha não é errar a conta: é acertar uma conta que mede outra coisa.
+`SELECT count(*) FROM chunks WHERE embedding IS NULL` roda sem erro e devolve
+dezenas de milhares de chunks não-textuais, que nunca recebem vetor por contrato
+do embedder. Quem subtrai isso do total fabrica uma pendência inexistente e a
+carrega adiante como fato. A defesa é o instrumento, não o cuidado.
+
+Mesma regra para capacidade do código: o que o pipeline sabe fazer se lê no
+código (`EXTRATORES` em `rag_extractor/pipeline.py`, por exemplo), não em `docs/`.
+Doc é narrativa e envelhece sem avisar; código é o fato.
+
 ## Ler o retorno do rag_search
 Régua de leitura do acervo, dona: claudinho-IA (RAG e memória). Vale para
 qualquer persona com acesso ao acervo; não se replica dentro de instrução de

@@ -30,4 +30,7 @@ for rot, ch in [
     v = f[ch]
     print(f'  {"!" if v else " "} {rot:.<34} {v:>5}')
 print()
-print(f'  chunks: {k["total"]} · com vetor {k["com_vetor"]} · com vetor de metadado {k["com_vetor_meta"]}')
+print(f'  chunks: {k["total"]}  =  {k["textuais"]} textuais + {k["nao_textuais"]} não-textuais')
+print(f'  dos textuais: {k["com_vetor"]} com vetor · {k["com_vetor_meta"]} com vetor de metadado')
+print(f'  o não-textual (tabela, figura, artefato de layout) NUNCA recebe vetor: `embedding IS')
+print(f'  NULL` cru conta esses e não mede pendência. A pendência real é "embedding parcial".')

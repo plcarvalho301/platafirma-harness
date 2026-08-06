@@ -236,9 +236,9 @@ Facetas com corpus vazio hoje (filtrar por elas devolve zero **legitimamente**):
 `padroes-integracao`, `seg-operacional`, seis dos sete subdomínios de `ia`,
 e as frentes `casco-platafirma`, `paper-capability-trap`, `wiki`.
 
-Índice: 78.592 chunks, 67.772 com vetor, 10.820 não-textuais, 34 documentos sem
-chunk. 365 obras ingeridas de 779 catalogadas. Modelo `Qwen/Qwen3-Embedding-0.6B`,
-modo `hybrid`, RRF k=60.
+Índice: modelo `Qwen/Qwen3-Embedding-0.6B`, modo `hybrid`, RRF k=60. **Tamanho e
+composição não se escrevem aqui** — rodar `acervo-status`. Número copiado pra dentro
+de manifesto vira segunda fonte que ninguém atualiza.
 
 **Fronteira:** quais facetas existem e o que os valores significam é meu; quais
 descem ao índice e com que peso é da claudinho-IA. Os pesos RRF acima são
