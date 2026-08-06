@@ -1,0 +1,182 @@
+{
+ "sonda": "T0",
+ "n": "30",
+ "bloco": "B",
+ "persona": "persona-nao-declarada",
+ "pergunta": "nível de garantia de autenticação",
+ "parametros_congelados": {
+  "texto": "secao",
+  "k": 8,
+  "dominio": null,
+  "subdominio": null,
+  "frente": null,
+  "colecao": null
+ },
+ "chamada_em": "2026-08-06T22:45:50.288037+00:00",
+ "acervo_sha": "24ed2cbf607e73ab1e8ab79c0d286bf2996b5751db4e63cfb97c2f313dfc25c7",
+ "retorno": {
+  "fontes": [
+   {
+    "n": 1,
+    "obra": "NIST SP 800-63B-4 — Authentication",
+    "arquivo": "NIST.SP.800-63b-4.pdf",
+    "section_id": "nist-sp-800-63b-4-2025#list-of-figures",
+    "breadcrumb": [
+     "NIST Special Publication",
+     "List of Figures"
+    ],
+    "sim": 0.589,
+    "score": 0.0164,
+    "rerank": 0.673,
+    "codigo_exato": false,
+    "texto": null
+   },
+   {
+    "n": 2,
+    "obra": "NIST SP 800-63-4 — Digital Identity Guidelines",
+    "arquivo": "NIST.SP.800-63-4.pdf",
+    "section_id": "nist-sp-800-63-4-2025#list-of-figures",
+    "breadcrumb": [
+     "NIST Special Publication",
+     "List of Figures"
+    ],
+    "sim": 0.565,
+    "score": 0.0149,
+    "rerank": 0.601,
+    "codigo_exato": false,
+    "texto": null
+   },
+   {
+    "n": 3,
+    "obra": "Solving Identity Management in Modern Applications",
+    "arquivo": "SOLVING IDENTITY MANAGEMENT IN MODERN APPLICATIONS _ -- Yvonne Wilson & Abhishek Hingnikar -- 2nd ed_, 2022 -- Apress L_ P_ -- isbn13 9781484282601 -- 0d5eb03d064be5d06fb8d2bd2cc6e852 -- Anna’s Archive.epub",
+    "section_id": "solving-identity-management-in-modern-applications-_-yvonne-wilson-abhishek-hingnikar-2nd-ed_-2022-apress-l_-p_-isbn13-9781484282601-0d5eb03d064be5d06fb8d2bd2cc6e852-anna-s-archive#step-up-authentication",
+    "breadcrumb": [
+     "12. Stronger Authentication",
+     "Stronger Forms of Authentication",
+     "Step-Up Authentication"
+    ],
+    "sim": 0.533,
+    "score": 0.0111,
+    "rerank": 0.895,
+    "codigo_exato": false,
+    "texto": null
+   },
+   {
+    "n": 4,
+    "obra": "NIST SP 800-63B-4 — Authentication",
+    "arquivo": "NIST.SP.800-63b-4.pdf",
+    "section_id": "nist-sp-800-63b-4-2025#justin-p-richer",
+    "breadcrumb": [
+     "NIST Special Publication",
+     "Justin P. Richer"
+    ],
+    "sim": 0.567,
+    "score": 0.0159,
+    "rerank": 0.316,
+    "codigo_exato": false,
+    "texto": null
+   },
+   {
+    "n": 5,
+    "obra": "NIST SP 800-63B-4 — Authentication",
+    "arquivo": "NIST.SP.800-63b-4.pdf",
+    "section_id": "nist-sp-800-63b-4-2025#a-minimum-font-size-of-12-points-as-long-as-the-text-fits-fo",
+    "breadcrumb": [
+     "NIST Special Publication",
+     "* A minimum font size of 12 points as long as the text fits for display on"
+    ],
+    "sim": 0.541,
+    "score": 0.0143,
+    "rerank": 0.367,
+    "codigo_exato": false,
+    "texto": null
+   },
+   {
+    "n": 6,
+    "obra": "NIST SP 800-63A-4 — Identity Proofing",
+    "arquivo": "NIST.SP.800-63a-4.pdf",
+    "section_id": "nist-sp-800-63a-4-2025#what-identity-evidence-they-will-need-to-bring-to-a-future-s",
+    "breadcrumb": [
+     "NIST Special Publication",
+     "* What identity evidence they will need to bring to a future session."
+    ],
+    "sim": 0.55,
+    "score": 0.0135,
+    "rerank": 0.256,
+    "codigo_exato": false,
+    "texto": null
+   },
+   {
+    "n": 7,
+    "obra": "Guia Livre: Referência de Migração para Software Livre do Governo Federal, Versão 1.0",
+    "arquivo": "guia-livrev1-02-referencia-migracao-software-livre-governo-federal.pdf",
+    "section_id": "guia-livrev1-02-referencia-migracao-software-livre-governo-federal-2005#12.4.2",
+    "breadcrumb": [
+     "12 Cenário 1 – Windows®",
+     "12.4 Questões Gerais . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .",
+     "12.4.2 Serviços de autenticação . . . . . . . . . . . . . . . . . . . . . . . . . ."
+    ],
+    "sim": 0.593,
+    "score": 0.0147,
+    "rerank": 0.114,
+    "codigo_exato": false,
+    "texto": null
+   },
+   {
+    "n": 8,
+    "obra": "Manual de Condutas Técnicas 11 — Volume II: procedimentos de ensaios para avaliação de conformidade aos requisitos técnicos de softwares de AC e AR no âmbito da ICP-Brasil",
+    "arquivo": "MCT ITI vol 2.pdf",
+    "section_id": "mct-iti-vol-2-2010#introdução",
+    "breadcrumb": [
+     "Introdução"
+    ],
+    "sim": 0.553,
+    "score": 0.0154,
+    "rerank": 0.008,
+    "codigo_exato": false,
+    "texto": null
+   }
+  ],
+  "contexto": "[1] (NIST.SP.800-63b-4.pdf · nist-sp-800-63b-4-2025#list-of-figures) — NIST Special Publication › List of Figures\nList of Figures\nFig. 1.\nTransfer of secret to primary device . . . . . . . . . . . . . . . . . . . .\n19\nFig. 2.\nTransfer of secret to out-of-band device . . . . . . . . . . . . . . . . . .\n19\nFig. 3.\nUsability considerations by authenticator type\n. . . . . . . . . . . . . .\n77\nvi\nPreface\nThis publication and its companion volumes — [SP800-63], [SP800-63A], and\n[SP800-63C] — provide technical guidelines for organizations to implement digital\nidentity services.\nThis document, SP 800-63B, provides requirements to credential service providers (CSPs)\nfor remote user authentication at each of three authentication assurance levels (AALs).\nAcknowledgments\nThe authors would like to thank their fellow collaborators — Christine Abruzzi, Sarbari\nGupta, Connie LaSalle, Diana Proud-Madruga, and Maria Vachino — on the current\nrevision of this special publication, as well as Kerrianne Buchanan, Greg Fiumara,\nand Evelyn Petrella for their contributions and review. The authors would like to also\nacknowledge the past contributions of Donna F. Dodson, W. Timothy Polk, Emad A.\nNabbus, Paul A. Grassi, Elaine M. Newton, Ray Perlner, William E. Burr, Kristen K. Greene,\nMary F. Theofanos, Kaitlin Boeckl, Kat Megas, Ellen Nadeau, Ben Piccarreta, and Danna\nGabel O’Rourke.\nvii\n1.\nIntroduction\nThis section is informative.\nAuthentication is the process of determining the validity of one or more authenticators\nused to claim a digital identity by establishing that a subject attempting to access\na digital se\n\n[2] (NIST.SP.800-63-4.pdf · nist-sp-800-63-4-2025#list-of-figures) — NIST Special Publication › List of Figures\nList of Figures\nFig. 1.\nSample Identity Proofing and Enrollment Digital Identity Model . . . . .\n11\nFig. 2.\nSample Authentication Process\n. . . . . . . . . . . . . . . . . . . . . .\n13\nFig. 3.\nNon-Federated Digital Identity Model Example . . . . . . . . . . . . . .\n16\nFig. 4.\nFederated Digital Identity Model Example . . . . . . . . . . . . . . . . .\n17\nFig. 5.\nFederated Digital Identity Model with Subscriber-Controlled Wallet Exam-\nple\n. . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .\n19\nFig. 6.\nHigh-level diagram of the Digital Identity Risk Management Process Flow\n25\nv\nPreface\nThis publication and its companion volumes — [SP800-63A], [SP800-63B], and\n[SP800-63C] — provide technical and process guidelines to organizations for the\nimplementation of digital identity services.\nAcknowledgments\nThe authors would like to thank their fellow collaborators — Christine Abruzzi, James\nL. Fenton, Justin P. Richer, and Maria Vachino — on the current revision of this special\npublication, as well as Kerrianne Buchanan and Evelyn Petrella for their contributions\nand review. The authors would also like to acknowledge the past contributions of Donna\nF. Dodson, Elaine M. Newton, Ray A. Perlner, W. Timothy Polk, Emad A. Nabbus, Paul A.\nGrassi, Michael E. Garcia, Kaitlin Boeckl, Joni Brennan, Ellen Nadeau, Ben Piccarreta, and\nDanna Gabel O’Rourke.\nvi\n1.\nIntroduction\nThis section is informative.\nThe rapid proliferation of online services over the past few years has heighte\n\n[3] (SOLVING IDENTITY MANAGEMENT IN MODERN APPLICATIONS _ -- Yvonne Wilson & Abhishek Hingnikar -- 2nd ed_, 2022 -- Apress L_ P_ -- isbn13 9781484282601 -- 0d5eb03d064be5d06fb8d2bd2cc6e852 -- Anna’s Archive.epub · solving-identity-management-in-modern-applications-_-yvonne-wilson-abhishek-hingnikar-2nd-ed_-2022-apress-l_-p_-isbn13-9781484282601-0d5eb03d064be5d06fb8d2bd2cc6e852-anna-s-archive#step-up-authentication) — 12. Stronger Authentication › Stronger Forms of Authentication › Step-Up Authentication\n(contexto do pai · solving-identity-management-in-modern-applications-_-yvonne-wilson-abhishek-hingnikar-2nd-ed_-2022-apress-l_-p_-isbn13-9781484282601-0d5eb03d064be5d06fb8d2bd2cc6e852-anna-s-archive#stronger-forms-of-authentication)\nTo avoid the weakness of static passwords , there are several stronger forms of authentication that can be used. One widely used mechanism has been to send a one-time password (OTP) to a user via SMS text message or email. The OTP is often a numeric code that is generated by an application and sent to the user at the time of authentication. The user enters the OTP into a login screen to complete t\n---\nWhen a user authenticates, an authenticated session is created with a certain level of authentication assurance that the user is the legitimate owner of the account. For example, if a user logs in with a static password , there is some chance the password was stolen and the account is being used by an imposter, so the user’s session might be considered at “level one” in terms of authentication assurance. If a user subsequently authenticates with a stronger form of authentication such as a one-time password generated on their mobile phone, the confidence that the user logging in is the legitimate account owner is much higher because it would be harder for someone to impersonate the user when their phone is required for authentication. After authenticating with the one-time password , the user’s session might then be considered at “level two” for authentication assurance. (Our choice of levels and names is an arbitrary example for purposes of illustration.) Step-up authentication is the process of authenticating with a stronger form of authentication in order to elevate the authentication assurance level of an existing authentication session.\nAuthorization policy may require authentication sessions to be at a specific authentication assurance level in order for a user to access resources or execute transactions that involve more risk. Applications with features that vary in sensitivity can use step-up authentication to require stronger authentication for more sensitive transact\n\n[4] (NIST.SP.800-63b-4.pdf · nist-sp-800-63b-4-2025#justin-p-richer) — NIST Special Publication › Justin P. Richer\nJustin P. Richer\nThis publication is available free of charge from:\nhttps://doi.org/10.6028/NIST.SP.800-63B-4\nDavid Temoshok\nNaomi Lefkovitz *\nRyan Galluzzo\nApplied Cybersecurity Division\nInformation Technology Laboratory\nYee-Yin Choong\nInformation Access Division\nInformation Technology Laboratory\nAndrew Regenscheid\nComputer Security Division\nInformation Technology Laboratory\nJames L. Fenton\nAltmode Networks\nJustin P. Richer\nBespoke Engineering\n* Former NIST employee; all work for this publication was done while at NIST.\nThis publication is available free of charge from:\nhttps://doi.org/10.6028/NIST.SP.800-63B-4\nU.S. Department of Commerce\nHoward Lutnick, Secretary\nNational Institute of Standards and Technology\nCraig Burkhardt, Acting Under Secretary for Standards and Technology and Acting NIST Director\nCertain equipment, instruments, software, or materials, commercial or non-commercial,\nare identified in this paper in order to specify the experimental procedure adequately.\nSuch identification does not imply recommendation or endorsement of any product\nor service by NIST, nor does it imply that the materials or equipment identified are\nnecessarily the best available for the purpose.\nThere may be references in this publication to other publications currently under\ndevelopment by NIST in accordance with its assigned statutory responsibilities. The\ninformation in this publication, including concepts and methodologies, may be used by\nfederal agencies even before the completion of\n\n[5] (NIST.SP.800-63b-4.pdf · nist-sp-800-63b-4-2025#a-minimum-font-size-of-12-points-as-long-as-the-text-fits-fo) — NIST Special Publication › * A minimum font size of 12 points as long as the text fits for display on\n* A minimum font size of 12 points as long as the text fits for display on\nthe device\n– Avoid using icons (e.g., padlocks or shields) that might be confused with\nsecurity indicators in browsers.\n• Consider user experience during authenticator entry:\n– Offer the option to display text during entry, as masked text entry is error-\nprone. Once a given character is displayed long enough for the user to see, it\ncan be hidden. Consider the device when determining masking delay time,\nas it takes longer to enter passwords on mobile devices (e.g., tablets and\nsmartphones) than on traditional desktop computers. Ensure that masking\ndelay durations are consistent with user needs.\n– Ensure that the time allowed for text entry is adequate (i.e., the entry screen\ndoes not time out prematurely). Ensure that the allowed text entry times are\nconsistent with user needs.\n70\n– Provide clear, meaningful, and actionable feedback on entry errors to reduce\nuser confusion and frustration. Significant usability implications arise when\nusers have no way of knowing that they have entered text incorrectly.\n– Allow at least 10 entry attempts for authenticators that require the entry of\nthe authenticator output by the user. The longer and more complex the entry\ntext, the greater the likelihood of user entry errors.\n– Provide clear, meaningful feedback on the number of remaining allowed\nattempts. For rate limiting (i.e., throttling), inform users how long they have\nto wait until the next attempt.\n• Minimize t\n\n[6] (NIST.SP.800-63a-4.pdf · nist-sp-800-63a-4-2025#what-identity-evidence-they-will-need-to-bring-to-a-future-s) — NIST Special Publication › * What identity evidence they will need to bring to a future session.\n* What identity evidence they will need to bring to a future session.\n– If enrollment is not successful, provide users with clear instructions for\nalternative identity proofing and enrollment options (e.g., on-site attended,\nuse of trusted referee).\n• If users receive an authenticator during the enrollment session, provide\ninstructions on its use and maintenance. For example, information could include\ninstructions for use (especially if there are different requirements for first-time\nuse or initialization), information on authenticator expiration, how to protect the\nauthenticator, and what to do if the authenticator is lost or stolen.\n• For both in-person and remote identity proofing, additional usability\nconsiderations apply:\n– At the start of the enrollment session, operators or attendants need to\nexplain their role to users (e.g., whether operators or attendants will walk\nusers through the enrollment session or observe silently and only interact as\nneeded).\n76\n– At the start of the enrollment session, inform users that they must not depart\nduring the session and that their actions must be visible throughout the\nsession.\n– When biometric samples are collected during the enrollment session, provide\nusers with clear instructions on how to complete the capture process. The\ninstructions are best given just prior to the process. Verbal instructions with\nguidance from a live operator are the most effective (e.g., instructing users\nwhere the biometric capture device is and how to \n\n[7] (guia-livrev1-02-referencia-migracao-software-livre-governo-federal.pdf · guia-livrev1-02-referencia-migracao-software-livre-governo-federal-2005#12.4.2) — 12 Cenário 1 – Windows® › 12.4 Questões Gerais . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . › 12.4.2 Serviços de autenticação . . . . . . . . . . . . . . . . . . . . . . . . . .\n(contexto do pai · guia-livrev1-02-referencia-migracao-software-livre-governo-federal-2005#12.4)\n12.4 Questões Gerais . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .\n144\n---\n12.4.2 Serviços de autenticação . . . . . . . . . . . . . . . . . . . . . . . . . .\n146\n\n[8] (MCT ITI vol 2.pdf · mct-iti-vol-2-2010#introdução) — Introdução\nIntrodução\nEste documento descreve os procedimentos de ensaio para homologação de software de AC e\nAR no âmbito da infra-estrutura de Chaves Públicas Brasileira, a ICP-Brasil.\nOs procedimentos de homologação fazem referência ao conjunto de métodos que serão usados\npara avaliar se um software de AC e AR está ou não em conformidade com os requisitos\ntécnicos definidos pelo “Manual de Condutas Técnicas 11 - Volume I”.\n1.1\nOrganização deste documento\nCada seção deste documento contém um conjunto de requisitos que representam citações\ndiretas do próprio texto do “Manual de Condutas Técnicas 11 - Volume I”. Os requisitos estão\norganizados da seguinte forma:\nREQUISITO <número do requisito>.<número\nde sequência do requisito>:\ne “número\ndo requisito”: corresponde ao número de área definido no Manual de\nCondutas Técnicas 11 — Volume I.\n“número de sequência\ndo requisito”: corresponde a um identificador sequencial dos\nrequisitos.\nOs procedimentos de homologação visam a orientar sobre como proceder nos ensaios para um\nsoftware de AC e AR. Os procedimentos de ensaio estão classificados e agrupados por Níveis\nde Segurança de Homologação da seguinte forma:\nNSH 1: Este nível não requer depósito e análise de código-fonte associado ao software\nde AC e AR em homologação;\nNSH 2: Este nível requer depósito e análise apenas de código-fonte de componentes\nespecíficos associados ao software de AC e AR em homologação;\nNSH 3: Este nível requer depósito e análise de código-fonte completo associado ao\nso",
+  "cobertura": "boa",
+  "sinal": {
+   "medida": "rerank",
+   "valor": 0.895,
+   "piso": 0.79
+  },
+  "perguntas": [
+   "nível de garantia de autenticação"
+  ],
+  "filtro": {
+   "dominio": [],
+   "subdominio": [],
+   "frente": [],
+   "colecao": []
+  },
+  "aviso": null,
+  "indice": {
+   "acervo_sha": "24ed2cbf607e73ab1e8ab79c0d286bf2996b5751db4e63cfb97c2f313dfc25c7",
+   "chunks": 145240,
+   "chunks_recuperaveis": 124463,
+   "chunks_com_vetor": 124463,
+   "chunks_nao_textuais": 20777,
+   "documentos_sem_chunk": 4,
+   "obras_catalogadas": 694,
+   "obras_ingeridas": 623,
+   "conceitos": 205,
+   "embed_model": "Qwen/Qwen3-Embedding-0.6B",
+   "embed_backend": "torch",
+   "embed_query_instruction": "Given a search query, retrieve relevant passages that answer the query",
+   "embed_meta_beta": 0.15,
+   "modo": "hybrid",
+   "rrf_k": 60,
+   "rrf_w_vec": 1.0,
+   "rrf_w_id": 2.0,
+   "rrf_w_lex": 0.5,
+   "hybrid_lexical": false,
+   "rerank_model": "BAAI/bge-reranker-v2-m3",
+   "sha_calculado_em": "2026-08-06T22:45:16+00:00"
+  }
+ }
+}

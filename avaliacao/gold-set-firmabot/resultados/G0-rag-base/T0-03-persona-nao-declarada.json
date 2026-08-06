@@ -1,0 +1,180 @@
+{
+ "sonda": "T0",
+ "n": "03",
+ "bloco": "A",
+ "persona": "persona-nao-declarada",
+ "pergunta": "o que é arquitetura de software?",
+ "parametros_congelados": {
+  "texto": "secao",
+  "k": 8,
+  "dominio": null,
+  "subdominio": null,
+  "frente": null,
+  "colecao": null
+ },
+ "chamada_em": "2026-08-06T22:45:20.401631+00:00",
+ "acervo_sha": "24ed2cbf607e73ab1e8ab79c0d286bf2996b5751db4e63cfb97c2f313dfc25c7",
+ "retorno": {
+  "fontes": [
+   {
+    "n": 1,
+    "obra": "Fundamentals of Software Architecture (2025)",
+    "arquivo": "Fundamentals of Software Architecture_ A Modern Engineering Approach{Mark Richards_ Neal Ford}(2025 March 25, O&_039_Reilly Media){111205155} libgen.li.pdf",
+    "section_id": "fundamentals-of-software-architecture_-a-modern-engineering-approach-mark-richards_-neal-ford-2025-march-25-o-_039_reilly-media-111205155-libgen-li-2025#architecture-as-an-engineering-discipline-repeatable",
+    "breadcrumb": [
+     "Architecture",
+     "• Architecture as an engineering discipline: Repeatable"
+    ],
+    "sim": 0.63,
+    "score": 0.0149,
+    "rerank": 0.905,
+    "codigo_exato": false,
+    "texto": null
+   },
+   {
+    "n": 2,
+    "obra": null,
+    "arquivo": "Software-Architecture-in-Practice-Bass-Clements-Kazman.pdf",
+    "section_id": "software-architecture-in-practice-bass-clements-kazman-2012#1.1",
+    "breadcrumb": [
+     "Introduction",
+     "1.1 What Software Architecture Is and What It Isn’t"
+    ],
+    "sim": 0.598,
+    "score": 0.0115,
+    "rerank": 0.929,
+    "codigo_exato": false,
+    "texto": null
+   },
+   {
+    "n": 3,
+    "obra": "Continuous Architecture in Practice",
+    "arquivo": "Continuous Architecture in Practice (Murat Erder & Pierre Pureur).pdf",
+    "section_id": "continuous-architecture-in-practice-murat-erder-pierre-pureur-2021#what-do-we-mean-by-architecture",
+    "breadcrumb": [
+     "in Practice",
+     "What Do We Mean by Architecture?"
+    ],
+    "sim": 0.65,
+    "score": 0.0161,
+    "rerank": 0.248,
+    "codigo_exato": false,
+    "texto": null
+   },
+   {
+    "n": 4,
+    "obra": null,
+    "arquivo": "Software-Architecture-in-Practice-Bass-Clements-Kazman.pdf",
+    "section_id": "software-architecture-in-practice-bass-clements-kazman-2012#introduction",
+    "breadcrumb": [
+     "Introduction"
+    ],
+    "sim": 0.609,
+    "score": 0.0128,
+    "rerank": 0.63,
+    "codigo_exato": false,
+    "texto": null
+   },
+   {
+    "n": 5,
+    "obra": "Continuous Architecture in Practice",
+    "arquivo": "Continuous Architecture in Practice (Murat Erder & Pierre Pureur).pdf",
+    "section_id": "continuous-architecture-in-practice-murat-erder-pierre-pureur-2021#xxiii",
+    "breadcrumb": [
+     "in Practice",
+     "xxiii"
+    ],
+    "sim": 0.634,
+    "score": 0.0154,
+    "rerank": 0.297,
+    "codigo_exato": false,
+    "texto": null
+   },
+   {
+    "n": 6,
+    "obra": "Continuous Architecture in Practice",
+    "arquivo": "Continuous Architecture in Practice (Murat Erder & Pierre Pureur).pdf",
+    "section_id": "continuous-architecture-in-practice-murat-erder-pierre-pureur-2021#in-chapters-8-and-9-we-look-at-what-is-ahead-we-discuss-the-",
+    "breadcrumb": [
+     "in Practice",
+     "•• In Chapters 8 and 9, we look at what is ahead. We discuss the role of architec-"
+    ],
+    "sim": 0.659,
+    "score": 0.0164,
+    "rerank": 0.15,
+    "codigo_exato": false,
+    "texto": null
+   },
+   {
+    "n": 7,
+    "obra": "Continuous Architecture in Practice",
+    "arquivo": "Continuous Architecture in Practice (Murat Erder & Pierre Pureur).pdf",
+    "section_id": "continuous-architecture-in-practice-murat-erder-pierre-pureur-2021#perception-of-architects-as-not-delivering-solutions-or-addi",
+    "breadcrumb": [
+     "in Practice",
+     "•• Perception of architects as not delivering solutions or adding value."
+    ],
+    "sim": 0.631,
+    "score": 0.0152,
+    "rerank": 0.291,
+    "codigo_exato": false,
+    "texto": null
+   },
+   {
+    "n": 8,
+    "obra": null,
+    "arquivo": "Software-Architecture-in-Practice-Bass-Clements-Kazman.pdf",
+    "section_id": "software-architecture-in-practice-bass-clements-kazman-2012#27.7",
+    "breadcrumb": [
+     "360 Part Three Architecture in the Life Cycle 18—Documenting Software Architectures",
+     "27.7 Discussion Questions"
+    ],
+    "sim": 0.63,
+    "score": 0.0156,
+    "rerank": 0.203,
+    "codigo_exato": false,
+    "texto": null
+   }
+  ],
+  "contexto": "[1] (Fundamentals of Software Architecture_ A Modern Engineering Approach{Mark Richards_ Neal Ford}(2025 March 25, O&_039_Reilly Media){111205155} libgen.li.pdf · fundamentals-of-software-architecture_-a-modern-engineering-approach-mark-richards_-neal-ford-2025-march-25-o-_039_reilly-media-111205155-libgen-li-2025#architecture-as-an-engineering-discipline-repeatable) — Architecture › • Architecture as an engineering discipline: Repeatable\n(contexto do pai · fundamentals-of-software-architecture_-a-modern-engineering-approach-mark-richards_-neal-ford-2025-march-25-o-_039_reilly-media-111205155-libgen-li-2025#architecture)\nArchitecture\n1. What was the main driving force behind service-oriented architecture?\n1.\n2. What are the four primary service types within a service-oriented architecture?\n2.\n3. List some of the factors that led to the downfall of service-oriented architecture.\n3.\n4. Is SOA technically partitioned or domain partitioned?\n4.\n5. How is domain reuse addressed in SOA? How is operational reuse addressed\n---\n• Architecture as an engineering discipline: Repeatable\nresults, metrics, and concrete valuations that add rigor\nto software architecture\nSOFTWARE ARCHITECTURE\nISBN: 978-1-098-17551-1\nUS $79.99 CAN $99.99\n5 7 9 9 9\n9\n7 8 1 0 9 8 1 7 5 5 1 1\n\n[2] (Software-Architecture-in-Practice-Bass-Clements-Kazman.pdf · software-architecture-in-practice-bass-clements-kazman-2012#1.1) — Introduction › 1.1 What Software Architecture Is and What It Isn’t\n1.1 What Software Architecture Is and What It Isn’t\nThere are many definitions of software architecture, easily discoverable with\na web search, but the one we like is this one:\nThe software architecture of a system is the set of structures needed to\nreason about the system, which comprise software elements, relations\namong them, and properties of both.\nThis definition stands in contrast to other definitions that talk about the sys-\ntem’s “early” or “major” design decisions. While it is true that many architectural\ndecisions are made early, not all are—especially in Agile or spiral-development\nprojects. It’s also true that very many decisions are made early that are not archi-\ntectural. Also, it’s hard to look at a decision and tell whether or not it’s “major.”\nSometimes only time will tell. And since writing down an architecture is one of\nthe architect’s most important obligations, we need to know now which decisions\nan architecture comprises.\nStructures, on the other hand, are fairly easy to identify in software, and they\nform a powerful tool for system design.\nLet us look at some of the implications of our definition.\nArchitecture Is a Set of Software Structures\nThis is the first and most obvious implication of our definition. A structure is sim-\nply a set of elements held together by a relation. Software systems are composed\nof many structures, and no single structure holds claim to being the architecture.\nThere are three categories of architectural structures, which will \n\n[3] (Continuous Architecture in Practice (Murat Erder & Pierre Pureur).pdf · continuous-architecture-in-practice-murat-erder-pierre-pureur-2021#what-do-we-mean-by-architecture) — in Practice › What Do We Mean by Architecture?\nWhat Do We Mean by Architecture?\nWhen we talk about architecture, we are concerned with software architecture. But\nhow can we define software architecture? Let us look at a few common definitions.\n1\nChapter 1 Why Software Architecture Is More Important than Ever\n2\nAccording to the portal maintained by the International Federation for Informa-\ntion Processing (IFIP) Working Group 2.10 on Software Architecture:1\nSoftware architecture refers to the fundamental structures of a software system and\nthe discipline of creating such structures and systems. Each structure comprises soft-\nware elements, relations among them, and properties of both elements and relations.\nThe architecture of a software system is a metaphor, analogous to the architecture of\na building. It functions as a blueprint for the system and the developing project, laying\nout the tasks necessary to be executed by the design teams.\nSoftware architecture is about making fundamental structural choices that are costly\nto change once implemented. Software architecture choices include specific structural\noptions from possibilities in the design of the software. . . .\nDocumenting software architecture facilitates communication between stakehold-\ners, captures early decisions about the high-level design, and allows reuse of design\ncomponents between projects\nThe International Standards Organization and Institute of Electrical and\nElectronics Engineers (IEEE) uses the following definition:2\nArchitecture: Fundamental concept\n\n[4] (Software-Architecture-in-Practice-Bass-Clements-Kazman.pdf · software-architecture-in-practice-bass-clements-kazman-2012#introduction) — Introduction\nIntroduction\nWhat is a software architecture? What is it good for? How does it come to be?\nWhat effect does its existence have? These are the questions we answer in Part I.\nChapter 1 deals with a technical perspective on software architecture. We\ndefine it and relate it to system and enterprise architectures. We discuss how the\narchitecture can be represented in different views to emphasize different perspec-\ntives on the architecture. We define patterns and discuss what makes a “good”\narchitecture.\nIn Chapter 2, we discuss the uses of an architecture. You may be surprised\nthat we can find so many—ranging from a vehicle for communication among\nstakeholders to a blueprint for implementation, to the carrier of the system’s\nquality attributes. We also discuss how the architecture provides a reasoned basis\nfor schedules and how it provides the foundation for training new members on a\nteam.\nFinally, in Chapter 3, we discuss the various contexts in which a software ar-\nchitecture exists. It exists in a technical context, in a project life-cycle context, in\na business context, and in a professional context. Each of these contexts defines a\nrole for the software architecture to play, or an influence on it. These impacts and\ninfluences define the Architecture Influence Cycle.\n1\nThis page intentionally left blank\n1\nWhat Is Software\nArchitecture?\nGood judgment is usually the result of experience.\nAnd experience is frequently the result of bad\njudgment. But to learn from the experience o\n\n[5] (Continuous Architecture in Practice (Murat Erder & Pierre Pureur).pdf · continuous-architecture-in-practice-murat-erder-pierre-pureur-2021#xxiii) — in Practice › xxiii\nxxiii\nSoftware Systems Architecture provides a starting point, and Simon Brown’s\nbooks6,7 are a more recent and very accessible introduction to it.\nThe other foundational architectural practice that we don’t discuss in this book is\nhow to assess a software architecture. This topic is covered in chapter 6 of our previ-\nous book, chapter 14 of Software Systems Architecture, and chapter 21 of Software\nArchitecture in Practice. You can also find a lot of information about architectural\nevaluation methods such as the Architecture Tradeoff Analysis Method (ATAM) via\nan Internet search.\nWe also assume an existing knowledge of agile development and so do not\nprovide in-depth discussions of software development life cycle processes such as\nagile, Scrum, and the Scaled Agile Framework (SAFe), nor do we discuss soft-\nware deployment and operation approaches, such as DevSecOps, in any depth.\nWe deliberately do not include details on any specific technology domain (e.g.,\ndatabase, security, automation). We of course refer to these topics where rele-\nvant, but we assume our readers are generally familiar with them. We covered\nthese topics, except for technology details, in Continuous Architecture. Also,\nplease note that terms defined in the glossary are highlighted in bold the first\ntime they appear in this book.\nThe foundations of software architecture haven’t changed in the last four\nyears. The overall goal of architecture remains to enable early and continuous\ndelivery of business value\n\n[6] (Continuous Architecture in Practice (Murat Erder & Pierre Pureur).pdf · continuous-architecture-in-practice-murat-erder-pierre-pureur-2021#in-chapters-8-and-9-we-look-at-what-is-ahead-we-discuss-the-) — in Practice › •• In Chapters 8 and 9, we look at what is ahead. We discuss the role of architec-\n•• In Chapters 8 and 9, we look at what is ahead. We discuss the role of architec-\nture in dealing with emerging technologies and conclude with the challenges of\npracticing architecture today in the era of agile and DevOps as well as poten-\ntial ways to meet those challenges.\nWe expect some of our readers to be software architects who understand the\nclassical fundamentals of the field (perhaps from a book such as Software Archi-\ntecture in Practice2 or Software Systems Architecture3), but who recognize the\nneed to update their approach to meet the challenges of today’s fast-moving soft-\nware development environment. The book is also likely to be of interest to soft-\nware engineers who want to learn about software architecture and design and\nwho will be attracted by our practical, delivery-oriented focus.\nTo keep the scope of this book manageable and focused on what has changed\nsince our last book, we assume that readers are familiar with the basics of main-\nstream technical topics such as information security, cloud computing, microser-\nvice-based architecture, and common automation techniques such as automated\ntesting and deployment pipelines. We expect that our readers are also familiar\nwith the fundamental techniques of architectural design, how to create a visual\nmodel of their software, and associated techniques such as the domain-driven\ndesign (DDD) approach.4 For those who feel unsure about architectural design\nfundamentals, we suggest starting with a well-defined appr\n\n[7] (Continuous Architecture in Practice (Murat Erder & Pierre Pureur).pdf · continuous-architecture-in-practice-murat-erder-pierre-pureur-2021#perception-of-architects-as-not-delivering-solutions-or-addi) — in Practice › •• Perception of architects as not delivering solutions or adding value.\n•• Perception of architects as not delivering solutions or adding value.\nChapter 1 Why Software Architecture Is More Important than Ever\n6\n\n[8] (Software-Architecture-in-Practice-Bass-Clements-Kazman.pdf · software-architecture-in-practice-bass-clements-kazman-2012#27.7) — 360 Part Three Architecture in the Life Cycle 18—Documenting Software Architectures › 27.7 Discussion Questions\n(contexto do pai · software-architecture-in-practice-bass-clements-kazman-2012#360)\n360 Part Three Architecture in the Life Cycle 18—Documenting Software Architectures\n---\n27.7 Discussion Questions\n1.\nDraw the architecture influence cycle for Web 2.0 software systems in gen-\neral, and for one of its flagship examples (such as Twitter or Facebook).\n2.\nCreate a complete pattern description for the core/periphery pattern, mod-\neled on those in Chapter 13.\n3.\nHow might the role of architecture documentation be different for an\nedge-dominant system?\n4.\nWhich architectural views would you expect to be the most important to\ndocument for a system built under the Metropolis model?\n27.7 Discussion Questions\n539\n5.\nHow would you establish the architecturally significant requirements for\nthe core? Would you use a Quality Attribute Workshop, or would you use\nsomething less structured and more open? Why?\n6.\nMetropolis systems are frequently open source. Some organizations that\nmight want to contribute to or build on top of such a system may balk at\nreleasing all of their code to the public. What architectural means might\nyou employ to address this situation?\n7.\nChoose your favorite crowdsourced system. Write a testability scenario for\nthis system, and choose a set of testability tactics that you would use for it.\n8.\nConstructing and releasing an application on a platform such as the iPhone\nor the Android requires the developer to adhere to certain specifications and\nto pass through certain hoops. Redraw Figure 27.2 to reflect the Apple iP-\nhone ecosystem and the Android ecosystem.\n9.\nFind a study that discusses the motivation of Wikipedia contributors. Find\n",
+  "cobertura": "boa",
+  "sinal": {
+   "medida": "rerank",
+   "valor": 0.929,
+   "piso": 0.79
+  },
+  "perguntas": [
+   "o que é arquitetura de software?"
+  ],
+  "filtro": {
+   "dominio": [],
+   "subdominio": [],
+   "frente": [],
+   "colecao": []
+  },
+  "aviso": null,
+  "indice": {
+   "acervo_sha": "24ed2cbf607e73ab1e8ab79c0d286bf2996b5751db4e63cfb97c2f313dfc25c7",
+   "chunks": 145240,
+   "chunks_recuperaveis": 124463,
+   "chunks_com_vetor": 124463,
+   "chunks_nao_textuais": 20777,
+   "documentos_sem_chunk": 4,
+   "obras_catalogadas": 694,
+   "obras_ingeridas": 623,
+   "conceitos": 205,
+   "embed_model": "Qwen/Qwen3-Embedding-0.6B",
+   "embed_backend": "torch",
+   "embed_query_instruction": "Given a search query, retrieve relevant passages that answer the query",
+   "embed_meta_beta": 0.15,
+   "modo": "hybrid",
+   "rrf_k": 60,
+   "rrf_w_vec": 1.0,
+   "rrf_w_id": 2.0,
+   "rrf_w_lex": 0.5,
+   "hybrid_lexical": false,
+   "rerank_model": "BAAI/bge-reranker-v2-m3",
+   "sha_calculado_em": "2026-08-06T22:45:16+00:00"
+  }
+ }
+}

@@ -1,0 +1,178 @@
+{
+ "sonda": "T0",
+ "n": "11",
+ "bloco": "B",
+ "persona": "persona-nao-declarada",
+ "pergunta": "DDD",
+ "parametros_congelados": {
+  "texto": "secao",
+  "k": 8,
+  "dominio": null,
+  "subdominio": null,
+  "frente": null,
+  "colecao": null
+ },
+ "chamada_em": "2026-08-06T22:45:29.296703+00:00",
+ "acervo_sha": "24ed2cbf607e73ab1e8ab79c0d286bf2996b5751db4e63cfb97c2f313dfc25c7",
+ "retorno": {
+  "fontes": [
+   {
+    "n": 1,
+    "obra": "Implementing Domain-Driven Design",
+    "arquivo": "Implementing Domain-Driven Design (vaughn-vernon).pdf",
+    "section_id": "implementing-domain-driven-design-vaughn-vernon-2013#chapter-1-getting-started-with-ddd~3",
+    "breadcrumb": [
+     "Chapter 14: Application",
+     "Chapter 1. Getting Started with DDD"
+    ],
+    "sim": 0.539,
+    "score": 0.0156,
+    "rerank": 0.899,
+    "codigo_exato": false,
+    "texto": null
+   },
+   {
+    "n": 2,
+    "obra": "Domain-Driven Design in Software Development: A Systematic Literature Review on Implementation, Challenges, and Effectiveness",
+    "arquivo": "The Structural Synthesis: Evolution and Convergence of Business Architecture and DDD.pdf",
+    "section_id": "the-structural-synthesis-evolution-and-convergence-of-business-architecture-and-ddd-2025#1",
+    "breadcrumb": [
+     "1 to 4, we focused on extracting quantitative data."
+    ],
+    "sim": 0.544,
+    "score": 0.0149,
+    "rerank": 0.935,
+    "codigo_exato": false,
+    "texto": null
+   },
+   {
+    "n": 3,
+    "obra": "Domain-Driven Design in Software Development: A Systematic Literature Review on Implementation, Challenges, and Effectiveness",
+    "arquivo": "The Structural Synthesis: Evolution and Convergence of Business Architecture and DDD.pdf",
+    "section_id": "the-structural-synthesis-evolution-and-convergence-of-business-architecture-and-ddd-2025#_",
+    "breadcrumb": [],
+    "sim": 0.549,
+    "score": 0.0154,
+    "rerank": 0.872,
+    "codigo_exato": false,
+    "texto": null
+   },
+   {
+    "n": 4,
+    "obra": "Implementing Domain-Driven Design",
+    "arquivo": "Implementing Domain-Driven Design (vaughn-vernon).pdf",
+    "section_id": "implementing-domain-driven-design-vaughn-vernon-2013#why-you-should-do-ddd",
+    "breadcrumb": [
+     "Chapter 14: Application",
+     "Chapter 1. Getting Started with DDD",
+     "Why You Should Do DDD"
+    ],
+    "sim": 0.52,
+    "score": 0.0145,
+    "rerank": 0.714,
+    "codigo_exato": false,
+    "texto": null
+   },
+   {
+    "n": 5,
+    "obra": "Implementing Domain-Driven Design",
+    "arquivo": "Implementing Domain-Driven Design (vaughn-vernon).pdf",
+    "section_id": "implementing-domain-driven-design-vaughn-vernon-2013#wrap-up",
+    "breadcrumb": [
+     "Chapter 14: Application",
+     "Chapter 1. Getting Started with DDD",
+     "Wrap-Up"
+    ],
+    "sim": 0.528,
+    "score": 0.0152,
+    "rerank": 0.608,
+    "codigo_exato": false,
+    "texto": null
+   },
+   {
+    "n": 6,
+    "obra": "Implementing Domain-Driven Design",
+    "arquivo": "Implementing Domain-Driven Design (vaughn-vernon).pdf",
+    "section_id": "implementing-domain-driven-design-vaughn-vernon-2013#chapter-1-getting-started-with-ddd~2",
+    "breadcrumb": [
+     "Chapter 1: Getting Started with DDD"
+    ],
+    "sim": 0.519,
+    "score": 0.0141,
+    "rerank": 0.723,
+    "codigo_exato": false,
+    "texto": null
+   },
+   {
+    "n": 7,
+    "obra": "Implementing Domain-Driven Design",
+    "arquivo": "Implementing Domain-Driven Design (vaughn-vernon).pdf",
+    "section_id": "implementing-domain-driven-design-vaughn-vernon-2013#chapter-1-getting-started-with-ddd",
+    "breadcrumb": [
+     "Chapter 1 Getting Started with DDD"
+    ],
+    "sim": 0.514,
+    "score": 0.0137,
+    "rerank": 0.698,
+    "codigo_exato": false,
+    "texto": null
+   },
+   {
+    "n": 8,
+    "obra": "Implementing Domain-Driven Design",
+    "arquivo": "Implementing Domain-Driven Design (vaughn-vernon).pdf",
+    "section_id": "implementing-domain-driven-design-vaughn-vernon-2013#the-challenges-of-applying-ddd",
+    "breadcrumb": [
+     "Chapter 14: Application",
+     "Chapter 1. Getting Started with DDD",
+     "The Challenges of Applying DDD"
+    ],
+    "sim": 0.492,
+    "score": 0.012,
+    "rerank": 0.877,
+    "codigo_exato": false,
+    "texto": null
+   }
+  ],
+  "contexto": "[1] (Implementing Domain-Driven Design (vaughn-vernon).pdf · implementing-domain-driven-design-vaughn-vernon-2013#chapter-1-getting-started-with-ddd~3) — Chapter 14: Application › Chapter 1. Getting Started with DDD\n(contexto do pai · implementing-domain-driven-design-vaughn-vernon-2013#chapter-14-application)\nChapter 14 Application\nUser Interface\nRendering Domain Objects\nRender Data Transfer Object from Aggregate Instances\nUse a Mediator to Publish Aggregate Internal State\nRender Aggregate Instances from a Domain Payload Object\nState Representations of Aggregate Instances\nUse Case Optimal Repository Queries\nDealing with Multiple, Disparate Clients\nRendition Adapters and Handling User Edits\nApplication \n---\nChapter 1. Getting Started with DDD\nDesign is not just what it looks like and feels like. Design is how it works.\n—Steve Jobs\nWe strive to produce quality in the software we develop. We achieve some quality by using tests to help us avoid delivering\nsoftware with a fatal number of bugs. Yet, even if we could produce completely bug-free software, that in itself does not\nnecessarily mean that a quality software model is designed. The software model—the way the software expresses the solution\nto the business goal being sought—could still suffer greatly. Delivering software with few defects is obviously good. Still, we\ncan reach higher for a well-designed software model that explicitly reflects the intended business objective, and our work may\neven reach the level of great.\nThe software development approach called Domain-Driven Design, or DDD, exists to help us more readily succeed at\nachieving high-quality software model designs. When implemented correctly, DDD helps us reach the point where our design\nis exactly how the software works. This book is about helping you correctly implement DDD.\nYou may be completely new to DDD, you may have tried it and struggled, or you may have already succeeded with it before.\nRegardless, you no doubt are reading this book because you want to improve your ability to implement DDD, and you can. The\nchapter road map helps you target your specific needs.\nRoad Map to This Chapter\n• Discover what DDD can do for your projects and your teams as you gra\n\n[2] (The Structural Synthesis: Evolution and Convergence of Business Architecture and DDD.pdf · the-structural-synthesis-evolution-and-convergence-of-business-architecture-and-ddd-2025#1) — 1 to 4, we focused on extracting quantitative data.\n1 to 4, we focused on extracting quantitative data.\nThe frequencies and\npercentages of each identified category were then computed and reported\nto address these specific research questions. This approach allowed us to\nquantify and present the distribution and prevalence of different factors and\nconcepts relevant to the research questions under consideration.\nConversely, for RQs pertaining to RQs 5 to 7, we concentrated on ex-\ntracting qualitative data from the primary studies. To synthesize and in-\nterpret these qualitative findings, we applied a narrative synthesis method\nbased on the guidance provided by Popay et al. [23]. This involved systemati-\ncally extracting key information and important findings from each individual\nstudy. Subsequently, we conducted a comprehensive analysis and interpre-\ntation of the extracted qualitative data to draw overarching and meaningful\nconclusions in response to the respective research questions. The narrative\nsynthesis approach allowed us to integrate diverse qualitative evidence, ex-\nplore patterns and themes across the studies, and provide a cohesive and\ncomprehensive understanding of the research questions in question.\n4. Results\nThis section presents a comprehensive analysis of the findings obtained\nfrom our SLR conducted on DDD and aims to address the research questions\nby providing a detailed exploration of the current state of research pertain-\ning to DDD in the literature. Through a meticulous examination of various\narticles, studi\n\n[3] (The Structural Synthesis: Evolution and Convergence of Business Architecture and DDD.pdf · the-structural-synthesis-evolution-and-convergence-of-business-architecture-and-ddd-2025#_)\nGraphical Abstract\nDomain-Driven Design in Software Development:\nA Systematic\nLiterature Review on Implementation, Challenges, and Effective-\nness\nOzan Özkan, Önder Babur, Mark van den Brand\narXiv:2310.01905v4 [cs.SE] 27 Jun 2025\nHighlights\nDomain-Driven Design in Software Development:\nA Systematic\nLiterature Review on Implementation, Challenges, and Effective-\nness\nOzan Özkan, Önder Babur, Mark van den Brand\n• This Systematic Literature Review (SLR) on Domain-Driven Design\n(DDD) highlights its potential benefits in software development and the\nimportance of involving key stakeholders for successful implementation.\n• Studies suggest a growing interest and adoption of DDD in the context\nof microservices since 2017. However, more empirical research is needed\nto fully understand the benefits and challenges of implementing DDD\nin different software development scenarios.\n• The study reveals variations in the implementation and evaluation of\nthe DDD principles in the included studies.\n• To improve the quality of DDD research, future studies should focus on\nthe consistent use of DDD principles, robust evaluation methodologies,\nand open discussion of both advantages and limitations. This approach\ncan provide a comprehensive understanding of DDD’s potential and\npractical implications\n• The implementation of DDD significantly depends on the expertise of\nstakeholders. Experienced developers and domain experts are crucial\nto effectively applying DDD concepts and practices.\n• Collaborati\n\n[4] (Implementing Domain-Driven Design (vaughn-vernon).pdf · implementing-domain-driven-design-vaughn-vernon-2013#why-you-should-do-ddd) — Chapter 14: Application › Chapter 1. Getting Started with DDD › Why You Should Do DDD\nWhy You Should Do DDD\nActually, I’ve already given you some pretty good reasons why DDD makes so much practical sense. At the risk of breaking\nthe DRY principle (“Don’t repeat yourself”), I reiterate them here and also add to the earlier reasons. Does anyone hear an\necho?\n• Put domain experts and developers on a level playing field, which produces software that makes perfect sense to\nthe business, not just the coders. This doesn’t mean merely tolerating the opposite group. It means becoming one\ncohesive, tight-knit team.\n• That “makes sense to the business” thing means investing in the business by making software that is as close as\npossible to what the business leaders and experts would create if they were the coders.\n• You can actually teach the business more about itself. No domain expert, no C-level manager, no one, ever knows\nevery single thing about the business. It’s a constant discovery process that becomes more insightful over time. With\nDDD, everybody learns because everybody contributes to discovery discussions.\n• Centralizing knowledge is key, because with that the business is capable of ensuring that understanding the software\nis not locked in “tribal knowledge,” available only to a select few, who are usually only the developers.\n• There are zero translations between the domain experts, the software developers, and the software. That doesn’t\nmean maybe some few translations. It means zero translations because your team develops a common, shared\nlanguage that eve\n\n[5] (Implementing Domain-Driven Design (vaughn-vernon).pdf · implementing-domain-driven-design-vaughn-vernon-2013#wrap-up) — Chapter 14: Application › Chapter 1. Getting Started with DDD › Wrap-Up\nWrap-Up\nWell, that’s a pretty encouraging start with DDD. I think by now you probably have gotten a good feeling that you and your\nteam can actually succeed with an advanced software development technique. I agree.\nOf course, we aren’t going to oversimplify things. Implementing DDD takes real concerted effort. If it were easy, everybody\nwould be writing great code, and we know that just doesn’t happen. So get ready. It will be worth it, because your design will\nbe exactly how your software works.\nHere’s what you’ve learned so far:\n• You’ve discovered what DDD can do for your projects and your teams to help you grapple with domain\ncomplexity.\n• You found out how to score your project to see if it deserves the DDD investment.\n• You considered the common alternatives to DDD and why using those approaches often leads to problems.\n• You’ve grasped the foundations of DDD and are prepared to take the first steps on your project.\n• You’ve found out how to sell DDD to your management, domain experts, and technical team members.\n• You are now armed with knowledge of how to succeed while facing the challenges of DDD.\nHere’s where we’re going next. The next two chapters are on the all-important strategic design, followed by a chapter on\nsoftware architectures with DDD. This is really important stuff to get a handle on before you move to the subsequent chapters\non tactical modeling.\n\n[6] (Implementing Domain-Driven Design (vaughn-vernon).pdf · implementing-domain-driven-design-vaughn-vernon-2013#chapter-1-getting-started-with-ddd~2) — Chapter 1: Getting Started with DDD\nChapter 1: Getting Started with DDD\nThis chapter introduces you to the benefits of using DDD and how to achieve the most from it. You will learn what DDD can\ndo for your projects and your teams as you grapple with complexity. You’ll find out how to score your project to see if it\ndeserves the DDD investment. You will consider the common alternatives to DDD and why they often lead to problems. The\nchapter lays the foundations of DDD as you learn how to take the first steps on your project, and it even gives you some ways\nto sell DDD to your management, domain experts, and technical team members. That will enable you to face the challenges of\nusing DDD armed with the knowledge of how to succeed.\nYou are introduced to a project case study that involves a fictitious company and team, yet one with real-world DDD\nchallenges. The company, with the charter to create innovative SaaS-based products in a multitenant environment, experiences\nmany of the mistakes common to DDD adoption but makes vital discoveries that help the teams solve their issues and keep the\nproject on track. The project is one that most developers can relate to, as it involves developing a Scrum-based project\nmanagement application. This case study introduction sets the stage for subsequent chapters. Each strategic and tactical pattern\nis taught through the eyes of the team, both as they err and as they make strides toward maturity in implementing DDD\nsuccessfully.\n\n[7] (Implementing Domain-Driven Design (vaughn-vernon).pdf · implementing-domain-driven-design-vaughn-vernon-2013#chapter-1-getting-started-with-ddd) — Chapter 1 Getting Started with DDD\nChapter 1 Getting Started with DDD\nCan I DDD?\nWhy You Should Do DDD\nHow to Do DDD\nThe Business Value of Using DDD\n1. The Organization Gains a Useful Model of Its Domain\n2. A Refined, Precise Definition and Understanding of the Business Is Developed\n3. Domain Experts Contribute to Software Design\n4. A Better User Experience Is Gained\n5. Clean Boundaries Are Placed around Pure Models\n6. Enterprise Architecture Is Better Organized\n7. Agile, Iterative, Continuous Modeling Is Used\n8. New Tools, Both Strategic and Tactical, Are Employed\nThe Challenges of Applying DDD\nFiction, with Bucketfuls of Reality\nWrap-Up\n\n[8] (Implementing Domain-Driven Design (vaughn-vernon).pdf · implementing-domain-driven-design-vaughn-vernon-2013#the-challenges-of-applying-ddd) — Chapter 14: Application › Chapter 1. Getting Started with DDD › The Challenges of Applying DDD\nThe Challenges of Applying DDD\nAs you implement DDD, you will encounter challenges. So has everyone else who has succeeded at it. What are the common\nchallenges and how do we justify using DDD as we face them? I will discuss the more common ones:\n• Allowing for the time and effort required to create a Ubiquitous Language\n• Involving domain experts at the outset and continuously with the project\n• Changing the way developers think about solutions in their domain\nOne of the greatest challenges in using DDD can be the time and effort required to think about the business domain, research\nconcepts and terminology, and converse with domain experts in order to discover, capture, and enhance the Ubiquitous\nLanguage rather than coding in techno-babble. If you want to apply DDD completely, with the greatest value to the business\nit’s going to require more thought and effort, and it’s going to take more time. That’s the way it is, period.\nIt can also be a challenge to solicit the necessary involvement from domain experts. No matter how difficult it is, make sure\nyou do. If you don’t get commitment from at least one real expert, you are not going to uncover deep knowledge of the domain.\nWhen you do get the domain experts’ involvement, the onus falls back on the developers. Developers must converse with and\nlisten carefully to the true experts, molding their spoken language into software that reflects their mental model of the domain.\nIf the domain you are working in is truly distinguishi",
+  "cobertura": "boa",
+  "sinal": {
+   "medida": "rerank",
+   "valor": 0.935,
+   "piso": 0.79
+  },
+  "perguntas": [
+   "DDD"
+  ],
+  "filtro": {
+   "dominio": [],
+   "subdominio": [],
+   "frente": [],
+   "colecao": []
+  },
+  "aviso": null,
+  "indice": {
+   "acervo_sha": "24ed2cbf607e73ab1e8ab79c0d286bf2996b5751db4e63cfb97c2f313dfc25c7",
+   "chunks": 145240,
+   "chunks_recuperaveis": 124463,
+   "chunks_com_vetor": 124463,
+   "chunks_nao_textuais": 20777,
+   "documentos_sem_chunk": 4,
+   "obras_catalogadas": 694,
+   "obras_ingeridas": 623,
+   "conceitos": 205,
+   "embed_model": "Qwen/Qwen3-Embedding-0.6B",
+   "embed_backend": "torch",
+   "embed_query_instruction": "Given a search query, retrieve relevant passages that answer the query",
+   "embed_meta_beta": 0.15,
+   "modo": "hybrid",
+   "rrf_k": 60,
+   "rrf_w_vec": 1.0,
+   "rrf_w_id": 2.0,
+   "rrf_w_lex": 0.5,
+   "hybrid_lexical": false,
+   "rerank_model": "BAAI/bge-reranker-v2-m3",
+   "sha_calculado_em": "2026-08-06T22:45:16+00:00"
+  }
+ }
+}

@@ -1,0 +1,175 @@
+{
+ "sonda": "T0",
+ "n": "23",
+ "bloco": "B",
+ "persona": "persona-nao-declarada",
+ "pergunta": "gestão de incidente",
+ "parametros_congelados": {
+  "texto": "secao",
+  "k": 8,
+  "dominio": null,
+  "subdominio": null,
+  "frente": null,
+  "colecao": null
+ },
+ "chamada_em": "2026-08-06T22:45:42.086356+00:00",
+ "acervo_sha": "24ed2cbf607e73ab1e8ab79c0d286bf2996b5751db4e63cfb97c2f313dfc25c7",
+ "retorno": {
+  "fontes": [
+   {
+    "n": 1,
+    "obra": "Tecnologia da informação — Técnicas de segurança — Código de prática para a gestão da segurança da informação",
+    "arquivo": "ABNT NBR ISO_IEC 27002 _ Tecnologia da informação — Técnicas -- Associação Brasileira De Normas Técnicas Abnt Nbr Iso_Iec -- 2005 -- ABNT -- isbn13 9788507006480 -- 62e1020583370899e70398aca4fb4a32 -- Anna’s Archive.pdf",
+    "section_id": "abnt-nbr-iso_iec-27002-_-tecnologia-da-informação-técnicas-associac-a-o-brasileira-de-normas-te-cnicas-abnt-nbr-iso_iec-2005-abnt-isbn13-9788507006480-62e1020583370899e70398aca4fb4a32-anna-s-archive-2005#13.2.1",
+    "breadcrumb": [
+     "13 Gestão de incidentes de segurança da informação",
+     "13.2 Gestão de incidentes de segurança da informação e melhorias",
+     "13.2.1 Responsabilidades e procedimentos"
+    ],
+    "sim": 0.672,
+    "score": 0.0164,
+    "rerank": 0.965,
+    "codigo_exato": false,
+    "texto": null
+   },
+   {
+    "n": 2,
+    "obra": "Tecnologia da informação — Técnicas de segurança — Código de prática para a gestão da segurança da informação",
+    "arquivo": "ABNT NBR ISO_IEC 27002 _ Tecnologia da informação — Técnicas -- Associação Brasileira De Normas Técnicas Abnt Nbr Iso_Iec -- 2005 -- ABNT -- isbn13 9788507006480 -- 62e1020583370899e70398aca4fb4a32 -- Anna’s Archive.pdf",
+    "section_id": "abnt-nbr-iso_iec-27002-_-tecnologia-da-informação-técnicas-associac-a-o-brasileira-de-normas-te-cnicas-abnt-nbr-iso_iec-2005-abnt-isbn13-9788507006480-62e1020583370899e70398aca4fb4a32-anna-s-archive-2005#13.2",
+    "breadcrumb": [
+     "13 Gestão de incidentes de segurança da informação",
+     "13.2 Gestão de incidentes de segurança da informação e melhorias"
+    ],
+    "sim": 0.669,
+    "score": 0.0161,
+    "rerank": 0.989,
+    "codigo_exato": false,
+    "texto": null
+   },
+   {
+    "n": 3,
+    "obra": "Decreto nº 10.748/2021 — Rede Federal de Gestão de Incidentes Cibernéticos",
+    "arquivo": "D10748.pdf",
+    "section_id": "d10748-2021#_",
+    "breadcrumb": [],
+    "sim": 0.655,
+    "score": 0.0159,
+    "rerank": 0.952,
+    "codigo_exato": false,
+    "texto": null
+   },
+   {
+    "n": 4,
+    "obra": "Tecnologia da informação — Técnicas de segurança — Código de prática para a gestão da segurança da informação",
+    "arquivo": "ABNT NBR ISO_IEC 27002 _ Tecnologia da informação — Técnicas -- Associação Brasileira De Normas Técnicas Abnt Nbr Iso_Iec -- 2005 -- ABNT -- isbn13 9788507006480 -- 62e1020583370899e70398aca4fb4a32 -- Anna’s Archive.pdf",
+    "section_id": "abnt-nbr-iso_iec-27002-_-tecnologia-da-informação-técnicas-associac-a-o-brasileira-de-normas-te-cnicas-abnt-nbr-iso_iec-2005-abnt-isbn13-9788507006480-62e1020583370899e70398aca4fb4a32-anna-s-archive-2005#13",
+    "breadcrumb": [
+     "13 Gestão de incidentes de segurança da informação"
+    ],
+    "sim": 0.663,
+    "score": 0.0156,
+    "rerank": 0.915,
+    "codigo_exato": false,
+    "texto": null
+   },
+   {
+    "n": 5,
+    "obra": "Política de Segurança da Informação e Comunicação do Laboratório Nacional de Computação Científica",
+    "arquivo": "POSIC LNCC - 2019.pdf",
+    "section_id": "posic-lncc-2019-2013#55",
+    "breadcrumb": [
+     "55 http://www.planalto.gov.br/ccivil_03/_Ato2011-2014/2012/Decreto/D7845.htm"
+    ],
+    "sim": 0.674,
+    "score": 0.0152,
+    "rerank": 0.965,
+    "codigo_exato": false,
+    "texto": null
+   },
+   {
+    "n": 6,
+    "obra": "Tecnologia da informação — Técnicas de segurança — Código de prática para a gestão da segurança da informação",
+    "arquivo": "ABNT NBR ISO_IEC 27002 _ Tecnologia da informação — Técnicas -- Associação Brasileira De Normas Técnicas Abnt Nbr Iso_Iec -- 2005 -- ABNT -- isbn13 9788507006480 -- 62e1020583370899e70398aca4fb4a32 -- Anna’s Archive.pdf",
+    "section_id": "abnt-nbr-iso_iec-27002-_-tecnologia-da-informação-técnicas-associac-a-o-brasileira-de-normas-te-cnicas-abnt-nbr-iso_iec-2005-abnt-isbn13-9788507006480-62e1020583370899e70398aca4fb4a32-anna-s-archive-2005#120~2",
+    "breadcrumb": [
+     "120 páginas"
+    ],
+    "sim": 0.662,
+    "score": 0.0154,
+    "rerank": 0.897,
+    "codigo_exato": false,
+    "texto": null
+   },
+   {
+    "n": 7,
+    "obra": "Norma Complementar nº 08/IN01/DSIC/GSIPR",
+    "arquivo": "NC08 GSIPR.pdf",
+    "section_id": "nc08-gsipr-2003#2",
+    "breadcrumb": [
+     "2 CONSIDERAÇÕES INICIAIS"
+    ],
+    "sim": 0.65,
+    "score": 0.0132,
+    "rerank": 0.96,
+    "codigo_exato": false,
+    "texto": null
+   },
+   {
+    "n": 8,
+    "obra": "Norma Complementar 21/IN01/DSIC/GSIPR",
+    "arquivo": "NC21 GSIPR.pdf",
+    "section_id": "nc21-gsipr-2012#2.2",
+    "breadcrumb": [
+     "2 CONSIDERAÇÕES INICIAIS",
+     "2.2 O processo de Gestão da Segurança da Informação e Comunicações abrange as atividades de"
+    ],
+    "sim": 0.662,
+    "score": 0.0137,
+    "rerank": 0.87,
+    "codigo_exato": false,
+    "texto": null
+   }
+  ],
+  "contexto": "[1] (ABNT NBR ISO_IEC 27002 _ Tecnologia da informação — Técnicas -- Associação Brasileira De Normas Técnicas Abnt Nbr Iso_Iec -- 2005 -- ABNT -- isbn13 9788507006480 -- 62e1020583370899e70398aca4fb4a32 -- Anna’s Archive.pdf · abnt-nbr-iso_iec-27002-_-tecnologia-da-informação-técnicas-associac-a-o-brasileira-de-normas-te-cnicas-abnt-nbr-iso_iec-2005-abnt-isbn13-9788507006480-62e1020583370899e70398aca4fb4a32-anna-s-archive-2005#13.2.1) — 13 Gestão de incidentes de segurança da informação › 13.2 Gestão de incidentes de segurança da informação e melhorias › 13.2.1 Responsabilidades e procedimentos\n13.2.1 Responsabilidades e procedimentos\nConvém que responsabilidades e procedimentos de gestão sejam estabelecidos para assegurar respostas\nrápidas, efetivas e ordenadas a incidentes de segurança da informação.\nConvém que, adicionalmente à notificação de eventos de segurança da informação e fragilidades (ver 13.1), o\nmonitoramento de sistemas, alertas e vulnerabilidades (10.10.2) seja utilizado para a detecção de incidentes\nde segurança da informação. Convém que as seguintes diretrizes para procedimentos de gestão de incidentes\nde segurança da informação sejam consideradas:\nprocedimentos sejam estabelecidos para manusear diferentes tipos de incidentes de segurança da\ninformação, incluindo:\n1) falhas de sistemas de informações e perda de serviços;\n2) código malicioso (ver 10.4.1);\n3) denial of service (negação de serviço);\n4) erros resultantes de dados incompletos ou inconsistentes;\n5) violações de confidencialidade e integridade;\n6) uso impróprio de sistemas de informação;\nalém dos planos de contingência (ver 14.1.3), convém que os procedimentos também considerem\n(ver 13.2.2):\n1) análise e identificação da causa do incidente;\n2) retenção;\n3) planejamento e implementação de ação corretiva para prevenir a sua repetição, se necessário;\n4) comunicação com aqueles afetados ou envolvidos com a recuperação do incidente;\n5) notificação da ação para a autoridade apropriada;\n100\nconvém que trilhas de auditoria e evidências similares sejam coletadas (ver 13.2.3) e protegidas, como\napro\n\n[2] (ABNT NBR ISO_IEC 27002 _ Tecnologia da informação — Técnicas -- Associação Brasileira De Normas Técnicas Abnt Nbr Iso_Iec -- 2005 -- ABNT -- isbn13 9788507006480 -- 62e1020583370899e70398aca4fb4a32 -- Anna’s Archive.pdf · abnt-nbr-iso_iec-27002-_-tecnologia-da-informação-técnicas-associac-a-o-brasileira-de-normas-te-cnicas-abnt-nbr-iso_iec-2005-abnt-isbn13-9788507006480-62e1020583370899e70398aca4fb4a32-anna-s-archive-2005#13.2) — 13 Gestão de incidentes de segurança da informação › 13.2 Gestão de incidentes de segurança da informação e melhorias\n13.2 Gestão de incidentes de segurança da informação e melhorias\nObjetivo: Assegurar que um enfoque consistente e efetivo seja aplicado à gestão de incidentes de segurança\nda informação.\nConvém que responsabilidades e procedimentos estejam definidos para o manuseio efetivo de eventos de\nsegurança da informação e fragilidades, uma vez que estes tenham sido notificados. Convém que um\nprocesso de melhoria continua seja aplicado às respostas, monitoramento, avaliação e gestão total de\nincidentes de segurança da informação.\nConvém que onde evidências sejam exigidas, estas sejam coletadas para assegurar a conformidade com as\nexigências legais.\n\n[3] (D10748.pdf · d10748-2021#_)\nPresidência da República\nSecretaria-Geral\nSubchefia para Assuntos Jurídicos\nDECRETO Nº 10.748, DE 16 DE JULHO DE 2021\nInstitui a Rede Federal de Gestão de Incidentes\nCibernéticos.\nO PRESIDENTE DA REPÚBLICA, no uso da atribuição que lhe confere o art. 84, caput, inciso VI, alínea “a”,\nda Constituição,\nDECRETA:\nCAPÍTULO I\nDA REDE FEDERAL DE GESTÃO DE INCIDENTES CIBERNÉTICOS\nArt. 1º Fica instituída a Rede Federal de Gestão de Incidentes Cibernéticos, nos termos do disposto no inciso\nVII do caput do art. 15 do Decreto nº 9.637, de 26 de dezembro de 2018.\n§ 1º A participação dos órgãos e das entidades da administração pública federal direta, autárquica e\nfundacional na Rede Federal de Gestão de Incidentes Cibernéticos será obrigatória.\n§ 2º A participação das empresas públicas e das sociedades de economia mista federais e das suas\nsubsidiárias na Rede Federal de Gestão de Incidentes Cibernéticos será voluntária e ocorrerá por meio de adesão.\n§ 3º A Secretaria de Governo Digital da Secretaria Especial de Desburocratização, Gestão e Governo Digital do\nMinistério da Economia participará da Rede Federal de Gestão de Incidentes Cibernéticos na condição de órgão\ncentral do Sistema de Administração dos Recursos de Tecnologia da Informação - Sisp do Poder Executivo federal.\nArt. 2º A Rede Federal de Gestão de Incidentes Cibernéticos tem por finalidade aprimorar e manter a\ncoordenação entre órgãos e entidades da administração pública federal direta, autárquica e fundacional para\nprevenção,\n\n[4] (ABNT NBR ISO_IEC 27002 _ Tecnologia da informação — Técnicas -- Associação Brasileira De Normas Técnicas Abnt Nbr Iso_Iec -- 2005 -- ABNT -- isbn13 9788507006480 -- 62e1020583370899e70398aca4fb4a32 -- Anna’s Archive.pdf · abnt-nbr-iso_iec-27002-_-tecnologia-da-informação-técnicas-associac-a-o-brasileira-de-normas-te-cnicas-abnt-nbr-iso_iec-2005-abnt-isbn13-9788507006480-62e1020583370899e70398aca4fb4a32-anna-s-archive-2005#13) — 13 Gestão de incidentes de segurança da informação\n13 Gestão de incidentes de segurança da informação\n\n[5] (POSIC LNCC - 2019.pdf · posic-lncc-2019-2013#55) — 55 http://www.planalto.gov.br/ccivil_03/_Ato2011-2014/2012/Decreto/D7845.htm\n55 http://www.planalto.gov.br/ccivil_03/_Ato2011-2014/2012/Decreto/D7845.htm\n22\nParágrafo único. O dispositivo de segurança pode bloquear automaticamente conteúdo\nincompatível com esta política.\nArt. 132º. A Rede de dados deverá ser segmentada.\ni. Caso algum projeto de pesquisa necessite, recomenda-se que seja criada uma sub-rede\nexclusiva para o mesmo;\nii. Recomenda-se que cada segmento tenha um conjunto de endereços IPs próprio;\niii. Recomenda-se que o fluxo de dados entre os segmentos seja isolado e controlado.\nArt. 133º. A COTIC, deve controlar a liberação de acesso aos serviços hospedados, nas máquinas\nconectadas à rede.\n§1. Recomenda-se que o controle e a liberação de acesso sejam baseados nos protocolos\nusados.\n§2. Quando ocorrer uma solicitação de liberação de serviço hospedado na rede do LNCC\npara acesso externo à rede da instituição, a comissão de segurança, ou equipe por ela\ndelegada, deve explicitamente autorizar tal liberação.\nArt. 134º. Para que a segurança na rede interna seja mantida, a COTIC deve manter registro e\nsupervisionar os serviços providos pela rede.\nArt. 135º. Deve-se configurar em toda máquina ou dispositivo que provê algum serviço de rede um\ncontrole de acesso baseado em ACLs ou algo similar.\nParágrafo Único: Recomenda-se que a ferramenta de controle de acesso mantenha\num registro das tentativas de conexão.\nArt. 136º. Todas as máquinas administradas pela COTIC devem ter um pacote de segurança\ndevidamente instalado e configurado.\nArt. 137º. Recomen\n\n[6] (ABNT NBR ISO_IEC 27002 _ Tecnologia da informação — Técnicas -- Associação Brasileira De Normas Técnicas Abnt Nbr Iso_Iec -- 2005 -- ABNT -- isbn13 9788507006480 -- 62e1020583370899e70398aca4fb4a32 -- Anna’s Archive.pdf · abnt-nbr-iso_iec-27002-_-tecnologia-da-informação-técnicas-associac-a-o-brasileira-de-normas-te-cnicas-abnt-nbr-iso_iec-2005-abnt-isbn13-9788507006480-62e1020583370899e70398aca4fb4a32-anna-s-archive-2005#120~2) — 120 páginas\n120 páginas\n©ABNT 2005\nO ABNT 2005\nTodos os direitos reservados. A menos que especificado de outro modo, nenhuma parte desta publicação pode ser reproduzida\nou por qualquer meio, eletrônico ou mecânico, incluindo fotocópia e microfilme, sem permissão por escrito pela ABNT.\nSede da ABNT\nAv.Treze de Maio, 13 - 28o andar\n20031-901 - Rio de Janeiro - RJ\nTel.: + 55 21 3974-2300\nFax: + 55 21 2220-1762\nabnt@abnt.org.br\nwww.abnt.org.br\nImpresso no Brasil\nii\nSumário\nPágina\nPrefácio NacCionall...............:ccc:ssssseceececeeeececcenseeeeeeeeceececensseneeeeeeeseceecsasnseneeeeeeeeeocausassseeseeeeseeececcecssseeeeseeeesesceassseneneeees vii\n0\n[oligo\nTo [8 [o7= To PRNNNDNNANENNANERNNNA NDA\nx\n0.1\nO que é segurança da iINFOFMAGAO?..........cccccececeeeeseesseeeeeeeeeeeeeceusneneeeeeeeeeeeeauseneaeeeeeeeoueusasaaeaeeeeeseeeeenensnsaeaees x\n0.2\nPor que a segurança da informação é necessária?...................\nesse\ncaeneeneneasasaranannana x\n0.3\nComo estabelecer requisitos de segurança da informação ........cccceeeeeeseeeeeenseneeeeeeeeeeeesseenseeseeneaneaasneaneess xi\n0.4\nAnalisando/avaliando os riscos de segurança da iNfOrMaGad.............::ccececeeseesssssseeeneeseeeseneeaenseneeeeeseaees xi\n0.5\nSeleção de controles........................ assis\nae xi\n0.6\nPonto de partida para a segurança da informação.....................iitiseceessssssareeerenecenassasnsrernenemenaaanaasas xii\n0.7\nFatores críticos de sucesso ........ccccceseseceeeeesseeeeeeeesneeeeeeeueeeeeeeasneeeseausceseeeusasee\n\n[7] (NC08 GSIPR.pdf · nc08-gsipr-2003#2) — 2 CONSIDERAÇÕES INICIAIS\n2 CONSIDERAÇÕES INICIAIS\n2.1\nO gerenciamento de incidentes de segurança em redes de computadores requer especial\natenção da alta administração dos órgãos e entidades da APF.\n2.2\nA troca de informações sobre o gerenciamento de incidentes de segurança em redes de\ncomputadores entre as ETIR e a Coordenação Geral de Tratamento de Incidentes de Segurança em\nRedes de Computadores - CGTIR permite, entre outras coisas:\n2.2.1 promover o intercâmbio científico-tecnológico relacionado a incidentes de segurança\nem redes de computadores;\n2.2.2 apoiar órgãos e entidades da APF nas atividades de gerenciamento e tratamento de\nincidentes de segurança em redes de computadores, quando necessário;\n2.2.3 monitorar e analisar tecnicamente os incidentes de segurança em redes de\ncomputadores da APF, permitindo a criação de métricas e/ou alertas;\n2.2.4 implementar mecanismos que permitam a avaliação dos danos ocasionados por\nincidentes de segurança em redes de computadores da APF;\n2.2.5 apoiar, incentivar e contribuir, no âmbito da APF, para a capacitação no tratamento\nde incidentes de segurança em redes de computadores.\n\n[8] (NC21 GSIPR.pdf · nc21-gsipr-2012#2.2) — 2 CONSIDERAÇÕES INICIAIS › 2.2 O processo de Gestão da Segurança da Informação e Comunicações abrange as atividades de\n(contexto do pai · nc21-gsipr-2012#2)\n2 CONSIDERAÇÕES INICIAIS\n---\n2.2 O processo de Gestão da Segurança da Informação e Comunicações abrange as atividades de\nregistro de eventos, coleta e preservação de evidências de incidentes de segurança em redes\ncomputacionais, o qual inclui a identificação das causas e o tratamento dos incidentes.",
+  "cobertura": "boa",
+  "sinal": {
+   "medida": "rerank",
+   "valor": 0.989,
+   "piso": 0.79
+  },
+  "perguntas": [
+   "gestão de incidente"
+  ],
+  "filtro": {
+   "dominio": [],
+   "subdominio": [],
+   "frente": [],
+   "colecao": []
+  },
+  "aviso": null,
+  "indice": {
+   "acervo_sha": "24ed2cbf607e73ab1e8ab79c0d286bf2996b5751db4e63cfb97c2f313dfc25c7",
+   "chunks": 145240,
+   "chunks_recuperaveis": 124463,
+   "chunks_com_vetor": 124463,
+   "chunks_nao_textuais": 20777,
+   "documentos_sem_chunk": 4,
+   "obras_catalogadas": 694,
+   "obras_ingeridas": 623,
+   "conceitos": 205,
+   "embed_model": "Qwen/Qwen3-Embedding-0.6B",
+   "embed_backend": "torch",
+   "embed_query_instruction": "Given a search query, retrieve relevant passages that answer the query",
+   "embed_meta_beta": 0.15,
+   "modo": "hybrid",
+   "rrf_k": 60,
+   "rrf_w_vec": 1.0,
+   "rrf_w_id": 2.0,
+   "rrf_w_lex": 0.5,
+   "hybrid_lexical": false,
+   "rerank_model": "BAAI/bge-reranker-v2-m3",
+   "sha_calculado_em": "2026-08-06T22:45:16+00:00"
+  }
+ }
+}

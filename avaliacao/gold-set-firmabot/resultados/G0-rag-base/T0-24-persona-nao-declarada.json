@@ -1,0 +1,185 @@
+{
+ "sonda": "T0",
+ "n": "24",
+ "bloco": "B",
+ "persona": "persona-nao-declarada",
+ "pergunta": "gestão de mudança",
+ "parametros_congelados": {
+  "texto": "secao",
+  "k": 8,
+  "dominio": null,
+  "subdominio": null,
+  "frente": null,
+  "colecao": null
+ },
+ "chamada_em": "2026-08-06T22:45:43.396717+00:00",
+ "acervo_sha": "24ed2cbf607e73ab1e8ab79c0d286bf2996b5751db4e63cfb97c2f313dfc25c7",
+ "retorno": {
+  "fontes": [
+   {
+    "n": 1,
+    "obra": "ISO 31000:2018 — Risk management — Guidelines",
+    "arquivo": "ISO31000_2018.pdf",
+    "section_id": "iso31000_2018-2018#5.7",
+    "breadcrumb": [
+     "844 Alocando recursos",
+     "5.7 Molhoria"
+    ],
+    "sim": 0.614,
+    "score": 0.0161,
+    "rerank": 0.386,
+    "codigo_exato": false,
+    "texto": null
+   },
+   {
+    "n": 2,
+    "obra": "Guia Livre: Referência de Migração para Software Livre do Governo Federal, Versão 1.0",
+    "arquivo": "guia-livrev1-02-referencia-migracao-software-livre-governo-federal.pdf",
+    "section_id": "guia-livrev1-02-referencia-migracao-software-livre-governo-federal-2005#introdução",
+    "breadcrumb": [
+     "Introdução"
+    ],
+    "sim": 0.564,
+    "score": 0.0123,
+    "rerank": 0.793,
+    "codigo_exato": false,
+    "texto": null
+   },
+   {
+    "n": 3,
+    "obra": "Tecnologia da informação — Técnicas de segurança — Código de prática para a gestão da segurança da informação",
+    "arquivo": "ABNT NBR ISO_IEC 27002 _ Tecnologia da informação — Técnicas -- Associação Brasileira De Normas Técnicas Abnt Nbr Iso_Iec -- 2005 -- ABNT -- isbn13 9788507006480 -- 62e1020583370899e70398aca4fb4a32 -- Anna’s Archive.pdf",
+    "section_id": "abnt-nbr-iso_iec-27002-_-tecnologia-da-informação-técnicas-associac-a-o-brasileira-de-normas-te-cnicas-abnt-nbr-iso_iec-2005-abnt-isbn13-9788507006480-62e1020583370899e70398aca4fb4a32-anna-s-archive-2005#10.1.2",
+    "breadcrumb": [
+     "10 Gerenciamento das operações e comunicações",
+     "10.1 Procedimentos e responsabilidades operacionais",
+     "10.1.2 Gestão de mudanças"
+    ],
+    "sim": 0.564,
+    "score": 0.0108,
+    "rerank": 0.991,
+    "codigo_exato": false,
+    "texto": null
+   },
+   {
+    "n": 4,
+    "obra": "Tecnologia da informação — Técnicas de segurança — Código de prática para a gestão da segurança da informação",
+    "arquivo": "ABNT NBR ISO_IEC 27002 _ Tecnologia da informação — Técnicas -- Associação Brasileira De Normas Técnicas Abnt Nbr Iso_Iec -- 2005 -- ABNT -- isbn13 9788507006480 -- 62e1020583370899e70398aca4fb4a32 -- Anna’s Archive.pdf",
+    "section_id": "abnt-nbr-iso_iec-27002-_-tecnologia-da-informação-técnicas-associac-a-o-brasileira-de-normas-te-cnicas-abnt-nbr-iso_iec-2005-abnt-isbn13-9788507006480-62e1020583370899e70398aca4fb4a32-anna-s-archive-2005#10.2.3",
+    "breadcrumb": [
+     "10 Gerenciamento das operações e comunicações",
+     "10.2 Gerenciamento de serviços terceirizados",
+     "10.2.3 Gerenciamento de mudanças para serviços terceirizados"
+    ],
+    "sim": 0.559,
+    "score": 0.0105,
+    "rerank": 0.981,
+    "codigo_exato": false,
+    "texto": null
+   },
+   {
+    "n": 5,
+    "obra": "DAMA-DMBOK: Data Management Body of Knowledge",
+    "arquivo": "DMBOK.pdf",
+    "section_id": "dmbok-2015#3.7~3",
+    "breadcrumb": [
+     "88 Sourced and used with permission from Robert Abate / EMC Corporation.",
+     "3.7 DMO Alternatives and Design Considerations"
+    ],
+    "sim": 0.589,
+    "score": 0.0159,
+    "rerank": 0.142,
+    "codigo_exato": false,
+    "texto": null
+   },
+   {
+    "n": 6,
+    "obra": "Data Governance (2nd)",
+    "arquivo": "dokumen.pub_data-governance-how-to-design-deploy-and-sustain-an-effective-data-governance-program-2nbsped-012815831x-9780128158319.pdf",
+    "section_id": "dokumen-pub_data-governance-how-to-design-deploy-and-sustain-an-effective-data-governance-program-2nbsped-012815831x-9780128158319-2020#chapter-4-overview-a-day-in-the-life-of-a-data-governance",
+    "breadcrumb": [
+     "­Data Governance",
+     "and its capabilities",
+     "Chapter 4 Overview: A day in the life of a data governance"
+    ],
+    "sim": 0.646,
+    "score": 0.0164,
+    "rerank": 0.014,
+    "codigo_exato": false,
+    "texto": null
+   },
+   {
+    "n": 7,
+    "obra": "CompTIA Security+ Certification Study Guide: Network Security Essentials",
+    "arquivo": "Security+ - Ahmed Sheik.pdf",
+    "section_id": "security-ahmed-sheik-2020#why-change-management",
+    "breadcrumb": [
+     "Chapter 5 Risk Management",
+     "and Disaster Recovery",
+     "Why Change Management?"
+    ],
+    "sim": 0.609,
+    "score": 0.0139,
+    "rerank": 0.272,
+    "codigo_exato": false,
+    "texto": null
+   },
+   {
+    "n": 8,
+    "obra": "Data Governance (2nd)",
+    "arquivo": "dokumen.pub_data-governance-how-to-design-deploy-and-sustain-an-effective-data-governance-program-2nbsped-012815831x-9780128158319.pdf",
+    "section_id": "dokumen-pub_data-governance-how-to-design-deploy-and-sustain-an-effective-data-governance-program-2nbsped-012815831x-9780128158319-2020#essential-questions~11",
+    "breadcrumb": [
+     "­Data Governance",
+     "Operation and change",
+     "­Essential questions"
+    ],
+    "sim": 0.579,
+    "score": 0.0156,
+    "rerank": 0.016,
+    "codigo_exato": false,
+    "texto": null
+   }
+  ],
+  "contexto": "[1] (ISO31000_2018.pdf · iso31000_2018-2018#5.7) — 844 Alocando recursos › 5.7 Molhoria\n(contexto do pai · iso31000_2018-2018#844)\n844 Alocando recursos\n— cultura\nda organização,\nConvém que a Alta Direção\nos órgãos de supervisão. onde aplcávl. assegurem a alocação do\nrecursos apropriados para a gestão do fiscos, que podem incluir, mas não estão limitados a.\n— “normas, dretrizes e modelos adotados pola organização:\n— pessoas, hablidades, experiência e competência.\ncapacidades entendidas em termos de recursos e conhecimento (po\n---\n5.7 Molhoria\n— sistemas de gestão da informação e do conhecimento:\n5714\nAdaptação\n— necessidados da trunamanto\ndesenvolvimento\nprofissional.\nConvêm que a organização monitora «\nadapte cortiuamento a estutura de gestão de riscos para\n“abordar as mudanças extomas e internas. Ao fazer isso, a organização pode melhorar sou valor.\nConvém que a organização considera as capacidades o restições dos recursos axistantos.\n\n[2] (guia-livrev1-02-referencia-migracao-software-livre-governo-federal.pdf · guia-livrev1-02-referencia-migracao-software-livre-governo-federal-2005#introdução) — Introdução\nIntrodução\nAs orientações apresentadas neste Trabalho foram objeto de estudo do Grupo de Trabalho\nMigração para Software Livre do Governo Federal, com participação da Comunidade Software\nLivre Brasileira, na intenção de construirmos um guia cujo respaldo alcance também qualquer\nentidade interessada em promover equivalentes projetos de migração.\nNossas metas para essas diretrizes são:\n1. ajudar os Administradores a deﬁnir uma estratégia para migração planejada e gerenciada;\n2. orientar o conjunto de diretrizes e deﬁnições deste Guia aos Padrões de Interoperabili-\ndade do Governo Brasileiro (e-PING), cujas informações detalhadas podem ser obtidas em\n<http://www.eping.e.gov.br>;\n3. criar condições para maior detalhamento técnico destas migrações na página do Software\nLivre do Governo Federal: <http://www.softwarelivre.gov.br>;\n4. descrever, em termos técnicos, como pode ser realizada tal migração. As orientações preten-\ndem ter uso concreto para Administradores; portanto, devem ser relevantes e precisas, além\nde acessíveis e compreensíveis. Este não é um manual de referências técnicas detalhadas:\no detalhamento prático acontece nos estudos de caso apresentados na Parte V. A estrutura\npretende possibilitar e facilitar as mudanças à proporção que os Administradores adquiram\nexperiência, segurança e os produtos disponíveis atendam às suas necessidades.\nPara alcançar esses objetivos, é imperativo que mantenhamos o conteúdo atualizado e remova-\nmos quaisquer imprecisões. Para tanto, \n\n[3] (ABNT NBR ISO_IEC 27002 _ Tecnologia da informação — Técnicas -- Associação Brasileira De Normas Técnicas Abnt Nbr Iso_Iec -- 2005 -- ABNT -- isbn13 9788507006480 -- 62e1020583370899e70398aca4fb4a32 -- Anna’s Archive.pdf · abnt-nbr-iso_iec-27002-_-tecnologia-da-informação-técnicas-associac-a-o-brasileira-de-normas-te-cnicas-abnt-nbr-iso_iec-2005-abnt-isbn13-9788507006480-62e1020583370899e70398aca4fb4a32-anna-s-archive-2005#10.1.2) — 10 Gerenciamento das operações e comunicações › 10.1 Procedimentos e responsabilidades operacionais › 10.1.2 Gestão de mudanças\n(contexto do pai · abnt-nbr-iso_iec-27002-_-tecnologia-da-informação-técnicas-associac-a-o-brasileira-de-normas-te-cnicas-abnt-nbr-iso_iec-2005-abnt-isbn13-9788507006480-62e1020583370899e70398aca4fb4a32-anna-s-archive-2005#10.1)\n10.1 Procedimentos e responsabilidades operacionais\nObjetivo: Garantir a operação segura e correta dos recursos de processamento da informação.\nConvém que os procedimentos e responsabilidades pela gestão e operação de todos os recursos de\nprocessamento das informações sejam definidos.\nIsto abrange o desenvolvimento de procedimentos\noperacionais apropriados.\nConvém que seja utilizada a segregação d\n---\n10.1.2 Gestão de mudanças\nConvém que modificações nos recursos de processamento da informação e sistemas sejam controladas.\nConvém que sistemas operacionais e aplicativos estejam sujeitos a rígido controle de gestão de mudanças.\nEm particular, convém que os seguintes itens sejam considerados:\nidentificação e registro das mudanças significativas;\nplanejamento e testes das mudanças;\navaliação de impactos potenciais, incluindo impactos de segurança, de tais mudanças;\nprocedimento formal de aprovação das mudanças propostas;\ncomunicação dos detalhes das mudanças para todas as pessoas envolvidas;\nprocedimentos de recuperação, incluindo procedimentos e responsabilidades pela interrupção e\nrecuperação de mudanças em caso de insucesso ou na ocorrência de eventos inesperados.\nConvém que sejam estabelecidos os procedimentos e responsabilidades gerenciais formais para garantir que\nhaja\num controle satisfatório de todas as mudanças em equipamentos, software ou\nprocedimentos.\nQuando mudanças forem realizadas, convém que seja mantido um registro de auditoria contendo todas as\ninformações relevantes.\nO controle inadequado de modificações nos sistemas e nos recursos de processamento da informação é uma\ncausa comum de falhas de segurança ou de sistema. Mudanças a ambientes operacionais, especialmente\nquando da transferência de um sistema em desenvolvimento para o estágio operacional, podem trazer\nimpactos à confiabilidade de aplicações (ver 12.5.1).\nConvém que mudanças em sistemas operacionais\n\n[4] (ABNT NBR ISO_IEC 27002 _ Tecnologia da informação — Técnicas -- Associação Brasileira De Normas Técnicas Abnt Nbr Iso_Iec -- 2005 -- ABNT -- isbn13 9788507006480 -- 62e1020583370899e70398aca4fb4a32 -- Anna’s Archive.pdf · abnt-nbr-iso_iec-27002-_-tecnologia-da-informação-técnicas-associac-a-o-brasileira-de-normas-te-cnicas-abnt-nbr-iso_iec-2005-abnt-isbn13-9788507006480-62e1020583370899e70398aca4fb4a32-anna-s-archive-2005#10.2.3) — 10 Gerenciamento das operações e comunicações › 10.2 Gerenciamento de serviços terceirizados › 10.2.3 Gerenciamento de mudanças para serviços terceirizados\n(contexto do pai · abnt-nbr-iso_iec-27002-_-tecnologia-da-informação-técnicas-associac-a-o-brasileira-de-normas-te-cnicas-abnt-nbr-iso_iec-2005-abnt-isbn13-9788507006480-62e1020583370899e70398aca4fb4a32-anna-s-archive-2005#10.2)\n10.2 Gerenciamento de serviços terceirizados\nObjetivo: Implementar e manter o nível apropriado de segurança da informação e de entrega de serviços em\nconsonância com acordos de entrega de serviços terceirizados.\nConvém que a organização verifique a implementação dos acordos, monitore a conformidade com tais acordos\ne gerencie as mudanças para garantir que os serviços entregues atendem a todos os r\n---\n10.2.3 Gerenciamento de mudanças para serviços terceirizados\nConvém que mudanças no provisionamento dos serviços, incluindo manutenção e melhoria da política de\nsegurança da informação, procedimentos e controles existentes, sejam gerenciadas levando-se em conta a\ncriticidade dos sistemas e processos de negócio envolvidos e a reanálise/reavaliação de riscos.\nO processo de gerenciamento de mudanças para serviços terceirizados precisa levar em conta:\nmudanças feitas pela organização para a implementação de:\n1) melhorias dos serviços correntemente oferecidos;\n2) desenvolvimento de quaisquer novas aplicações ou sistemas;\n3) modificações ou atualizações das políticas e procedimentos da organização;\n4) novos controles para resolver os incidentes de segurança da informação e para melhorar a\nsegurança;\nmudanças em serviços de terceiros para implementação de:\n1) | mudanças e melhorias em redes;\n2)\nuso de novas tecnologias;\n3)\nadoção de novos produtos ou novas versões;\n4)\nnovas ferramentas e ambientes de desenvolvimento;\n5)\nmudanças de localização física dos recursos de serviços;\n6)\nmudanças de fornecedores.\n\n[5] (DMBOK.pdf · dmbok-2015#3.7~3) — 88 Sourced and used with permission from Robert Abate / EMC Corporation. › 3.7 DMO Alternatives and Design Considerations\n(contexto do pai · dmbok-2015#88)\n88 Sourced and used with permission from Robert Abate / EMC Corporation.\n504 • DMBOK2\nConceptual DW/BI and Big Data Architecture\nSources\nBI\nData Warehouse\nApplication\nOperational\nData Mastering\nData Quality Intervention\nEnrichment & Augmentation\nReporting\nDependent\nData Stores\nOpertional Reporting\nStaging Area\n& Analyics\nReport Interact\nClean\nIntegrate\nGeospatial and\nDemographic Analytics\nOperatio\n---\n3.7 DMO Alternatives and Design Considerations\nMost organizations start with a decentralized model before they move toward a formal Data Management\nOrganization (DMO). As an organization sees the impact of improvements in data quality, it may start to\nformalize accountability through a data management RACI matrix and evolve into a network model. Over time,\nsynergies between the distributed roles will become more obvious and economies of scale will be identified that\nwill pull some roles and people into organized groups. Eventually, this can morph into a hybrid or federated\nmodel.\nSome organizations don’t have the luxury of going through this maturity process. They are forced to mature\nquickly based on a market shock or new government regulations. In such a case, it is important to proactively\naddress the discomfort associated with the organizational change if it is to be successful and sustainable. (See\nChapter 17.)\nWhichever model is chosen, remember that simplicity and usability are essential for acceptance and\nsustainability. If the operating model fits the culture of a company, then data management and proper\ngovernance can be embedded in operations and aligned with strategy. Keep these tips in mind when\nconstructing an Operating Model:\nDetermine the starting point by assessing current state\nTie the operating model to organization structure\nTake into account:\no\nOrganization Complexity + Maturity\no\nDomain Complexity + Maturity\no\nScalability\nGet executive sponsorship – a mu\n\n[6] (dokumen.pub_data-governance-how-to-design-deploy-and-sustain-an-effective-data-governance-program-2nbsped-012815831x-9780128158319.pdf · dokumen-pub_data-governance-how-to-design-deploy-and-sustain-an-effective-data-governance-program-2nbsped-012815831x-9780128158319-2020#chapter-4-overview-a-day-in-the-life-of-a-data-governance) — ­Data Governance › and its capabilities › Chapter 4 Overview: A day in the life of a data governance\n(contexto do pai · dokumen-pub_data-governance-how-to-design-deploy-and-sustain-an-effective-data-governance-program-2nbsped-012815831x-9780128158319-2020#and-its-capabilities)\nand its capabilities\n­Chapter Outline\nLaws are sand, customs are rock. Laws can be evaded and punishment escaped but an openly\ntransgressed custom brings sure punishment.\nMark Twain\n---\nChapter 4 Overview: A day in the life of a data governance\nA frequent question I get from executives is “what does it look like?” This means that the current\nunderstanding is DG is something entirely different and unrecognizable.\nEnsuring a good understanding of how a DG program looks and works is essential to getting\nparticipants engaged. The concept of assimilating DG into everyday corporate life adds additional\nchallenge, since you are not only defining and implementing a discrete program; you are also at-\ntempting to alter behavior to a point that the long-term program is visible only through verification\nand adjustment.\nWhether DG is new or has become endemic and institutionalized, there is a collection of elements\nthat characterize a DG program. Understanding how these aspects work together aids in understanding\nthe “big picture.” This chapter reviews the scope and content of these elements at an executive level, it\ncovers what DG looks like in operation, and it addresses the types of capabilities that can be deployed.\nThe chapter will start with a short overview of a case study.\nIntroducing the case study\nRocky Health Systems is a regional provider of medical services in a large western state of the\nUnited States of America.1 It serves a rural population and has grown over time by various small\nhospitals and physicians merging and remerging. As such its applications are fragmented.\nRocky started a DG program one year ago. It was initially driven by a joint request from\n\n[7] (Security+ - Ahmed Sheik.pdf · security-ahmed-sheik-2020#why-change-management) — Chapter 5 Risk Management › and Disaster Recovery › Why Change Management?\n(contexto do pai · security-ahmed-sheik-2020#and-disaster-recovery)\nand Disaster Recovery\nChange management is a structured approach for performing and recording changes\nduring software development and system operation. In a technology-­based environment,\nchange management involves keeping track of the details of the system. Sometimes change\nmanagement is considered expensive, nonproductive, or unnecessary. In this chapter\nyou will learn about some of the essentia\n---\nWhy Change Management?\nChange management is a structured approach for performing and recording changes\nduring software development and system operation. Change management is an essential\npart of creating a viable governance and control structure and critical compliance with\nthe Sarbanes–Oxley Act.\n87\n© Ahmed F. Sheikh 2020\nA. F Sheikh, CompTIA Security+ Certification Study Guide, https://doi.org/10.1007/978-1-4842-6234-4_6\n\n[8] (dokumen.pub_data-governance-how-to-design-deploy-and-sustain-an-effective-data-governance-program-2nbsped-012815831x-9780128158319.pdf · dokumen-pub_data-governance-how-to-design-deploy-and-sustain-an-effective-data-governance-program-2nbsped-012815831x-9780128158319-2020#essential-questions~11) — ­Data Governance › Operation and change › ­Essential questions\n(contexto do pai · dokumen-pub_data-governance-how-to-design-deploy-and-sustain-an-effective-data-governance-program-2nbsped-012815831x-9780128158319-2020#operation-and-change)\nOperation and change\n­Chapter Outline\nManage resistance\n225\nToo many people were working on the mind without paying sufficient attention to the heart.\nKotter and Cohen\n---\n­Essential questions\nThe change management items address the people aspect. Getting people to address the emotional\nelement of adopting discipline that has been nonexistent. “More than any other single finding, we\n­discovered in this … project that people changed less because of facts or data that shifted their thinking\nthan because compelling experiences changed their feelings. This emotional component was always\npresent in the most successful change stories and was usually missing in the least successful. Too many\npeople were working on the mind without paying sufficient attention to the heart.”3\nDG needs to be applied to various programs and projects. This means integrating DG with these\nefforts. A PMO is very helpful as the vehicle for DG. If none exists, then the sponsor and operating\nframework needs to make sure that individual efforts are using DG oversight.\nFollow your training and communications plans. They are there for a reason.\nLastly, the various programs and projects being governed need to be monitored for the effective-\nness of the DG processes. Frequent collection of metrics and successes of the data-related projects is\nessential.",
+  "cobertura": "boa",
+  "sinal": {
+   "medida": "rerank",
+   "valor": 0.991,
+   "piso": 0.79
+  },
+  "perguntas": [
+   "gestão de mudança"
+  ],
+  "filtro": {
+   "dominio": [],
+   "subdominio": [],
+   "frente": [],
+   "colecao": []
+  },
+  "aviso": null,
+  "indice": {
+   "acervo_sha": "24ed2cbf607e73ab1e8ab79c0d286bf2996b5751db4e63cfb97c2f313dfc25c7",
+   "chunks": 145240,
+   "chunks_recuperaveis": 124463,
+   "chunks_com_vetor": 124463,
+   "chunks_nao_textuais": 20777,
+   "documentos_sem_chunk": 4,
+   "obras_catalogadas": 694,
+   "obras_ingeridas": 623,
+   "conceitos": 205,
+   "embed_model": "Qwen/Qwen3-Embedding-0.6B",
+   "embed_backend": "torch",
+   "embed_query_instruction": "Given a search query, retrieve relevant passages that answer the query",
+   "embed_meta_beta": 0.15,
+   "modo": "hybrid",
+   "rrf_k": 60,
+   "rrf_w_vec": 1.0,
+   "rrf_w_id": 2.0,
+   "rrf_w_lex": 0.5,
+   "hybrid_lexical": false,
+   "rerank_model": "BAAI/bge-reranker-v2-m3",
+   "sha_calculado_em": "2026-08-06T22:45:16+00:00"
+  }
+ }
+}

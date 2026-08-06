@@ -1,0 +1,174 @@
+{
+ "sonda": "T0",
+ "n": "25",
+ "bloco": "B",
+ "persona": "persona-nao-declarada",
+ "pergunta": "observabilidade",
+ "parametros_congelados": {
+  "texto": "secao",
+  "k": 8,
+  "dominio": null,
+  "subdominio": null,
+  "frente": null,
+  "colecao": null
+ },
+ "chamada_em": "2026-08-06T22:45:44.487644+00:00",
+ "acervo_sha": "24ed2cbf607e73ab1e8ab79c0d286bf2996b5751db4e63cfb97c2f313dfc25c7",
+ "retorno": {
+  "fontes": [
+   {
+    "n": 1,
+    "obra": "Observability Engineering",
+    "arquivo": "Observability engineering _ achieving production excellence -- Charity Majors, Liz Fong-Jones, George Miranda -- 1, US, 2022 -- O'Reilly Media, -- isbn13 9781492076445 -- 3cea24d6e5ea9fff019a11833bc29235 -- Anna’s Archive.epub",
+    "section_id": "observability-engineering-_-achieving-production-excellence-charity-majors-liz-fong-jones-george-miranda-1-us-2022-o-reilly-media-isbn13-9781492076445-3cea24d6e5ea9fff019a11833bc29235-anna-s-archive#introducing-observability-as-a-practice",
+    "breadcrumb": [
+     "Introducing Observability as a Practice"
+    ],
+    "sim": 0.644,
+    "score": 0.0159,
+    "rerank": 0.881,
+    "codigo_exato": false,
+    "texto": null
+   },
+   {
+    "n": 2,
+    "obra": "Observability Engineering",
+    "arquivo": "Observability engineering _ achieving production excellence -- Charity Majors, Liz Fong-Jones, George Miranda -- 1, US, 2022 -- O'Reilly Media, -- isbn13 9781492076445 -- 3cea24d6e5ea9fff019a11833bc29235 -- Anna’s Archive.epub",
+    "section_id": "observability-engineering-_-achieving-production-excellence-charity-majors-liz-fong-jones-george-miranda-1-us-2022-o-reilly-media-isbn13-9781492076445-3cea24d6e5ea9fff019a11833bc29235-anna-s-archive#the-mathematical-definition-of-observability",
+    "breadcrumb": [
+     "The Mathematical Definition of Observability"
+    ],
+    "sim": 0.672,
+    "score": 0.0164,
+    "rerank": 0.762,
+    "codigo_exato": false,
+    "texto": null
+   },
+   {
+    "n": 3,
+    "obra": "Observability Engineering",
+    "arquivo": "Observability engineering _ achieving production excellence -- Charity Majors, Liz Fong-Jones, George Miranda -- 1, US, 2022 -- O'Reilly Media, -- isbn13 9781492076445 -- 3cea24d6e5ea9fff019a11833bc29235 -- Anna’s Archive.epub",
+    "section_id": "observability-engineering-_-achieving-production-excellence-charity-majors-liz-fong-jones-george-miranda-1-us-2022-o-reilly-media-isbn13-9781492076445-3cea24d6e5ea9fff019a11833bc29235-anna-s-archive#chapter-22-where-to-go-from-here",
+    "breadcrumb": [
+     "Chapter 22. Where to Go from Here"
+    ],
+    "sim": 0.668,
+    "score": 0.0161,
+    "rerank": 0.779,
+    "codigo_exato": false,
+    "texto": null
+   },
+   {
+    "n": 4,
+    "obra": "Observability Engineering",
+    "arquivo": "Observability engineering _ achieving production excellence -- Charity Majors, Liz Fong-Jones, George Miranda -- 1, US, 2022 -- O'Reilly Media, -- isbn13 9781492076445 -- 3cea24d6e5ea9fff019a11833bc29235 -- Anna’s Archive.epub",
+    "section_id": "observability-engineering-_-achieving-production-excellence-charity-majors-liz-fong-jones-george-miranda-1-us-2022-o-reilly-media-isbn13-9781492076445-3cea24d6e5ea9fff019a11833bc29235-anna-s-archive#chapter-5-structured-events-are-the-building-blocks-of-obser",
+    "breadcrumb": [
+     "Chapter 5. Structured Events Are the Building Blocks of Observability"
+    ],
+    "sim": 0.615,
+    "score": 0.0149,
+    "rerank": 0.896,
+    "codigo_exato": false,
+    "texto": null
+   },
+   {
+    "n": 5,
+    "obra": "Observability Engineering",
+    "arquivo": "Observability engineering _ achieving production excellence -- Charity Majors, Liz Fong-Jones, George Miranda -- 1, US, 2022 -- O'Reilly Media, -- isbn13 9781492076445 -- 3cea24d6e5ea9fff019a11833bc29235 -- Anna’s Archive.epub",
+    "section_id": "observability-engineering-_-achieving-production-excellence-charity-majors-liz-fong-jones-george-miranda-1-us-2022-o-reilly-media-isbn13-9781492076445-3cea24d6e5ea9fff019a11833bc29235-anna-s-archive#part-i-the-path-to-observability",
+    "breadcrumb": [
+     "Part I. The Path to Observability"
+    ],
+    "sim": 0.63,
+    "score": 0.0154,
+    "rerank": 0.749,
+    "codigo_exato": false,
+    "texto": null
+   },
+   {
+    "n": 6,
+    "obra": "Building Microservices (2nd)",
+    "arquivo": "Building Microservices Designing Fine-Grained Systems 2nd By Sam Newman.pdf",
+    "section_id": "building-microservices-designing-fine-grained-systems-2nd-by-sam-newman-2021#observability-versus-monitoring",
+    "breadcrumb": [
+     "Observability",
+     "Observability Versus Monitoring"
+    ],
+    "sim": 0.635,
+    "score": 0.0141,
+    "rerank": 0.821,
+    "codigo_exato": false,
+    "texto": null
+   },
+   {
+    "n": 7,
+    "obra": "Observability Engineering",
+    "arquivo": "Observability engineering _ achieving production excellence -- Charity Majors, Liz Fong-Jones, George Miranda -- 1, US, 2022 -- O'Reilly Media, -- isbn13 9781492076445 -- 3cea24d6e5ea9fff019a11833bc29235 -- Anna’s Archive.epub",
+    "section_id": "observability-engineering-_-achieving-production-excellence-charity-majors-liz-fong-jones-george-miranda-1-us-2022-o-reilly-media-isbn13-9781492076445-3cea24d6e5ea9fff019a11833bc29235-anna-s-archive#why-we-wrote-this-book",
+    "breadcrumb": [
+     "Why We Wrote This Book"
+    ],
+    "sim": 0.584,
+    "score": 0.0128,
+    "rerank": 0.885,
+    "codigo_exato": false,
+    "texto": null
+   },
+   {
+    "n": 8,
+    "obra": "Observability Engineering",
+    "arquivo": "Observability engineering _ achieving production excellence -- Charity Majors, Liz Fong-Jones, George Miranda -- 1, US, 2022 -- O'Reilly Media, -- isbn13 9781492076445 -- 3cea24d6e5ea9fff019a11833bc29235 -- Anna’s Archive.epub",
+    "section_id": "observability-engineering-_-achieving-production-excellence-charity-majors-liz-fong-jones-george-miranda-1-us-2022-o-reilly-media-isbn13-9781492076445-3cea24d6e5ea9fff019a11833bc29235-anna-s-archive#debugging-with-observability",
+    "breadcrumb": [
+     "Debugging with Observability"
+    ],
+    "sim": 0.606,
+    "score": 0.0143,
+    "rerank": 0.648,
+    "codigo_exato": false,
+    "texto": null
+   }
+  ],
+  "contexto": "[1] (Observability engineering _ achieving production excellence -- Charity Majors, Liz Fong-Jones, George Miranda -- 1, US, 2022 -- O'Reilly Media, -- isbn13 9781492076445 -- 3cea24d6e5ea9fff019a11833bc29235 -- Anna’s Archive.epub · observability-engineering-_-achieving-production-excellence-charity-majors-liz-fong-jones-george-miranda-1-us-2022-o-reilly-media-isbn13-9781492076445-3cea24d6e5ea9fff019a11833bc29235-anna-s-archive#introducing-observability-as-a-practice) — Introducing Observability as a Practice\nSimilar to introducing security or testability into your applications, observability is an ongoing practice that is a responsibility shared by anyone responsible for developing and running a production service. Building effective observable systems is not a one-time effort. You cannot simply take a checkbox approach to introducing technical capabilities and declare that your organization has “achieved” observability any more than you can do that with security or testability. Observability must be introduced as a practice .\nObservability begins as a capability that can be measured as a technical attribute of a system: can your system be observed or not (see Chapter 1 )? As highlighted several times throughout this book, production systems are sociotechnical. Once a system has observability as a technical attribute, the next step is measured by how well your teams and the system operate together (see Part III ). Just because a system can be observed does not mean that it is being observed effectively .\nThe goal of observability is to provide engineering teams the capability to develop, operate, thoroughly debug, and report on their systems. Teams must be empowered to explore their curiosity by asking arbitrary questions about their system to better understand its behavior. They must be incentivized to interrogate their systems proactively, both by their tools and with management support. A sophisticated analytics platform is useless if the team using it feels overwhelmed by the\n\n[2] (Observability engineering _ achieving production excellence -- Charity Majors, Liz Fong-Jones, George Miranda -- 1, US, 2022 -- O'Reilly Media, -- isbn13 9781492076445 -- 3cea24d6e5ea9fff019a11833bc29235 -- Anna’s Archive.epub · observability-engineering-_-achieving-production-excellence-charity-majors-liz-fong-jones-george-miranda-1-us-2022-o-reilly-media-isbn13-9781492076445-3cea24d6e5ea9fff019a11833bc29235-anna-s-archive#the-mathematical-definition-of-observability) — The Mathematical Definition of Observability\nThe term “observability” was coined by engineer Rudolf E. Kálmán in 1960. It has since grown to mean many different things in different communities. Let’s explore the landscape before turning to our own definition for modern software systems.\nIn his 1960 paper, Kálmán introduced a characterization he called observability to describe mathematical control systems. 1 In control theory , observability is defined as a measure of how well internal states of a system can be inferred from knowledge of its external outputs.\nThis definition of observability would have you study observability and controllability as mathematical duals, along with sensors, linear algebra equations, and formal methods. This traditional definition of observability is the realm of mechanical engineers and those who manage physical systems with a specific end state in mind.\nIf you are looking for a mathematical and process engineering oriented textbook, you’ve come to the wrong place. Those books definitely exist, and any mechanical engineer or control systems engineer will inform you (usually passionately and at great length) that observability has a formal meaning in traditional systems engineering terminology. However, when that same concept is adapted for use with squishier virtual software systems, it opens up a radically different way of interacting with and understanding the code you write.\nApplying Observability to Software Systems\n\n[3] (Observability engineering _ achieving production excellence -- Charity Majors, Liz Fong-Jones, George Miranda -- 1, US, 2022 -- O'Reilly Media, -- isbn13 9781492076445 -- 3cea24d6e5ea9fff019a11833bc29235 -- Anna’s Archive.epub · observability-engineering-_-achieving-production-excellence-charity-majors-liz-fong-jones-george-miranda-1-us-2022-o-reilly-media-isbn13-9781492076445-3cea24d6e5ea9fff019a11833bc29235-anna-s-archive#chapter-22-where-to-go-from-here) — Chapter 22. Where to Go from Here\nIn this book, we’ve looked at observability for software systems from many angles. We’ve covered what observability is and how that concept operates when adapted for software systems—from its functional requirements, to functional outcomes, to sociotechnical practices that must change to support its adoption.\nTo review, this is how we defined observability at the start of this book:\nObservability for software systems is a measure of how well you can understand and explain any state your system can get into, no matter how novel or bizarre. You must be able to comparatively debug that bizarre or novel state across all dimensions of system state data, and combinations of dimensions, in an ad hoc iterative investigation, without being required to define or predict those debugging needs in advance. If you can understand any bizarre or novel state without needing to ship new code, you have observability.\nObservability for software systems is a measure of how well you can understand and explain any state your system can get into, no matter how novel or bizarre. You must be able to comparatively debug that bizarre or novel state across all dimensions of system state data, and combinations of dimensions, in an ad hoc iterative investigation, without being required to define or predict those debugging needs in advance. If you can understand any bizarre or novel state without needing to ship new code, you have observability.\nNow that we’ve covered the many concepts and practices intertw\n\n[4] (Observability engineering _ achieving production excellence -- Charity Majors, Liz Fong-Jones, George Miranda -- 1, US, 2022 -- O'Reilly Media, -- isbn13 9781492076445 -- 3cea24d6e5ea9fff019a11833bc29235 -- Anna’s Archive.epub · observability-engineering-_-achieving-production-excellence-charity-majors-liz-fong-jones-george-miranda-1-us-2022-o-reilly-media-isbn13-9781492076445-3cea24d6e5ea9fff019a11833bc29235-anna-s-archive#chapter-5-structured-events-are-the-building-blocks-of-obser) — Chapter 5. Structured Events Are the Building Blocks of Observability\nIn this chapter, we examine the fundamental building block of observability: the structured event. Observability is a measure of how well you can understand and explain any state your system can get into, no matter how novel or bizarre. To do that, you must be able to get answers to any question you can ask, without anticipating or predicting a need to answer that question in advance. For that to be possible, several technical prerequisites must first be met.\nThroughout this book, we address the many technical prerequisites necessary for observability. In this chapter, we start with the telemetry needed to understand and explain any state your system may be in. Asking any question, about any combination of telemetry details, requires the ability to arbitrarily slice and dice data along any number of dimensions. It also requires that your telemetry be gathered in full resolution, down to the lowest logical level of granularity that also retains the context in which it was gathered. For observability, that means gathering telemetry at the per service or per request level.\nWith old-fashioned-style metrics, you had to define custom metrics up front if you wanted to ask a new question and gather new telemetry to answer it. In a metrics world, the way to get answers to any possible question is to gather and store every possible metric—which is simply impossible (and, even if it were possible, prohibitively expensive). Further, metrics do not retain the context of the event, simply \n\n[5] (Observability engineering _ achieving production excellence -- Charity Majors, Liz Fong-Jones, George Miranda -- 1, US, 2022 -- O'Reilly Media, -- isbn13 9781492076445 -- 3cea24d6e5ea9fff019a11833bc29235 -- Anna’s Archive.epub · observability-engineering-_-achieving-production-excellence-charity-majors-liz-fong-jones-george-miranda-1-us-2022-o-reilly-media-isbn13-9781492076445-3cea24d6e5ea9fff019a11833bc29235-anna-s-archive#part-i-the-path-to-observability) — Part I. The Path to Observability\nThis section defines concepts that are referenced throughout the rest of this book. You will learn what observability is, how to identify an observable system, and why observability-based debugging techniques are better suited for managing modern software systems than monitoring-based debugging techniques.\nChapter 1 examines the roots of the term “observability,” shows how that concept has been adapted for use in software systems, and provides concrete questions you can ask yourself to determine if you have an observable system.\nChapter 2 looks at the practices engineers use to triage and locate sources of issues using traditional monitoring methods. Those methods are then contrasted with methods used in observability-based systems. This chapter describes these methods at a high level, but the technical and workflow implementations will become more concrete in Part II .\nChapter 3 is a case study written by coauthor Charity Majors and told from her perspective. This chapter brings concepts from the first two chapters into a practical case study illustrating when and why the shift toward observability becomes absolutely necessary.\nChapter 4 illustrates how and why industry trends have helped popularize the need for observability and how that fits into emerging spaces, like the cloud native ecosystem .\nChapter 1. What Is Observability?\n\n[6] (Building Microservices Designing Fine-Grained Systems 2nd By Sam Newman.pdf · building-microservices-designing-fine-grained-systems-2nd-by-sam-newman-2021#observability-versus-monitoring) — Observability › Observability Versus Monitoring\n(contexto do pai · building-microservices-designing-fine-grained-systems-2nd-by-sam-newman-2021#observability)\nObservability\nAs I’ve shown so far, I hope, breaking our system up into smaller, fine-grained\nmicroservices results in multiple benefits. It also, as we’ve also covered in some\ndepth, adds significant sources of new complexity. In no situation is this\nincreased complexity more evident than when it comes to understanding the\nbehavior of our systems in a production environment. Very early on, you’ll\n---\nObservability Versus Monitoring\nWe’re going to start delving into how we begin solving some of the problems\nwe’ve just outlined, but before we do, I think it’s important that we explore a\nterm that has gained a lot of popularity since I wrote the first edition of this book\n—observability.\nAs is often the case, the concept of observability has been around for decades\nbut has only recently come to software development. The observability of a\nsystem is the extent to which you can understand the internal state of the system\nfrom external outputs. It typically requires a more holistic understanding of your\nsoftware—seeing it more as a system rather as than a set of disparate entities.\nIn practice, the more observable a system is, the easier it will be for us to\nunderstand what the problem is when something goes wrong. Our understanding\nof the external outputs helps us track down the underlying issue more quickly.\nThe challenge is that often we will need to create these external outputs, and use\ndifferent types of tools to understand the outputs.\nMonitoring, on the other hand, is something we do. We monitor the system. We\nlook at it. Things will start to go wrong if you focus on just the monitoring—the\nactivity—without thinking about what you expect that activity to achieve.\nMore traditional approaches to monitoring would have you think in advance\nabout what could go wrong and define alerting mechanisms to tell you when\nthese things happened. But as the system becomes increasingly \n\n[7] (Observability engineering _ achieving production excellence -- Charity Majors, Liz Fong-Jones, George Miranda -- 1, US, 2022 -- O'Reilly Media, -- isbn13 9781492076445 -- 3cea24d6e5ea9fff019a11833bc29235 -- Anna’s Archive.epub · observability-engineering-_-achieving-production-excellence-charity-majors-liz-fong-jones-george-miranda-1-us-2022-o-reilly-media-isbn13-9781492076445-3cea24d6e5ea9fff019a11833bc29235-anna-s-archive#why-we-wrote-this-book) — Why We Wrote This Book\nObservability has become a popular topic that has quickly garnered a lot of interest and attention. With its rise in popularity, “observability” has been unfortunately mischaracterized as a synonym for “monitoring” or “system telemetry.” Observability is a characteristic of software systems. Further, it’s a characteristic that can be effectively utilized only in production software systems when teams adopt new practices that support its ongoing development. Thus, introducing observability into your systems is both a technical challenge and a cultural challenge.\nWe are particularly passionate and outspoken about the topic of observability. We are so passionate about it that we started a company whose sole purpose is to bring the power of observability to all teams that manage production software. We spearheaded a new category of observability tools, and other vendors have followed suit.\nWhile we all work for Honeycomb , our intention here is not to sell you on our tools. We have written this book to explain how and why we adapted the original concept of observability to manage modern software systems. You can achieve observability with different tools and in different ways. However, we believe that our dedication to advancing the practice of observability in the software industry makes us uniquely qualified to write a guide that describes—in great detail—the common challenges and effective solutions. You can apply the concepts in this book, regardless of your tool choices, to \n\n[8] (Observability engineering _ achieving production excellence -- Charity Majors, Liz Fong-Jones, George Miranda -- 1, US, 2022 -- O'Reilly Media, -- isbn13 9781492076445 -- 3cea24d6e5ea9fff019a11833bc29235 -- Anna’s Archive.epub · observability-engineering-_-achieving-production-excellence-charity-majors-liz-fong-jones-george-miranda-1-us-2022-o-reilly-media-isbn13-9781492076445-3cea24d6e5ea9fff019a11833bc29235-anna-s-archive#debugging-with-observability) — Debugging with Observability\nInstead of limiting the cardinality and dimensionality of telemetry data, observability tools encourage developers to gather rich telemetry for every possible event that could occur, passing along the full context of any given request and storing it for possible use at some point down the line. Observability tools are specifically designed to query against high-cardinality, high-dimensionality data.\nTherefore, for debugging, you can interrogate your event data in any number of arbitrary ways. With observability, you iteratively investigate conditions you care about by exploring your data to see what it can reveal about the state of your system. You ask a question that you did not need to predict in advance to find answers or clues that will lead you to ask the next question, and the next, and the next. You repeat that pattern again and again until you find the needle in the proverbial haystack that you’re looking for. A key function of observable systems is the ability to explore your system in open-ended ways.\nThe explorability of a system is measured by how well you can ask any question and inspect its corresponding internal state. Explorability means you can iteratively investigate and eventually understand any state your system has gotten itself into—even if you have never seen that state before—without needing to predict what those states might be in advance. Again, observability means that you can understand and explain any state your system can get into—no matter how n",
+  "cobertura": "boa",
+  "sinal": {
+   "medida": "rerank",
+   "valor": 0.896,
+   "piso": 0.79
+  },
+  "perguntas": [
+   "observabilidade"
+  ],
+  "filtro": {
+   "dominio": [],
+   "subdominio": [],
+   "frente": [],
+   "colecao": []
+  },
+  "aviso": null,
+  "indice": {
+   "acervo_sha": "24ed2cbf607e73ab1e8ab79c0d286bf2996b5751db4e63cfb97c2f313dfc25c7",
+   "chunks": 145240,
+   "chunks_recuperaveis": 124463,
+   "chunks_com_vetor": 124463,
+   "chunks_nao_textuais": 20777,
+   "documentos_sem_chunk": 4,
+   "obras_catalogadas": 694,
+   "obras_ingeridas": 623,
+   "conceitos": 205,
+   "embed_model": "Qwen/Qwen3-Embedding-0.6B",
+   "embed_backend": "torch",
+   "embed_query_instruction": "Given a search query, retrieve relevant passages that answer the query",
+   "embed_meta_beta": 0.15,
+   "modo": "hybrid",
+   "rrf_k": 60,
+   "rrf_w_vec": 1.0,
+   "rrf_w_id": 2.0,
+   "rrf_w_lex": 0.5,
+   "hybrid_lexical": false,
+   "rerank_model": "BAAI/bge-reranker-v2-m3",
+   "sha_calculado_em": "2026-08-06T22:45:16+00:00"
+  }
+ }
+}

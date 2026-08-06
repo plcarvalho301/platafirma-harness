@@ -1,0 +1,179 @@
+{
+ "sonda": "T0",
+ "n": "08",
+ "bloco": "A",
+ "persona": "persona-nao-declarada",
+ "pergunta": "o que é criptografia pós-quântica?",
+ "parametros_congelados": {
+  "texto": "secao",
+  "k": 8,
+  "dominio": null,
+  "subdominio": null,
+  "frente": null,
+  "colecao": null
+ },
+ "chamada_em": "2026-08-06T22:45:25.969816+00:00",
+ "acervo_sha": "24ed2cbf607e73ab1e8ab79c0d286bf2996b5751db4e63cfb97c2f313dfc25c7",
+ "retorno": {
+  "fontes": [
+   {
+    "n": 1,
+    "obra": "Ameaça da computação quântica e a transição para a criptografia pós-quântica: relatório executivo de segurança",
+    "arquivo": "Ameaça da Computação Quântica e a Transição para a Criptografia Pós-Quântica_ Relatório Executivo de Segurança.docx",
+    "section_id": "ameaça-da-computação-quântica-e-a-transição-para-a-criptografia-pós-quântica_-relatório-executivo-de-segurança#criptografia-pós-quântica-pqc-e-mitigação",
+    "breadcrumb": [
+     "Ameaça da Computação Quântica e a Transição para a Criptografia Pós-Quântica: Relatório Executivo de Segurança",
+     "Criptografia Pós-Quântica (PQC) e Mitigação"
+    ],
+    "sim": 0.825,
+    "score": 0.0164,
+    "rerank": 0.995,
+    "codigo_exato": false,
+    "texto": null
+   },
+   {
+    "n": 2,
+    "obra": "Consolidação de Matrizes PQC",
+    "arquivo": "Consolidação de Matrizes PQC.xlsx",
+    "section_id": "consolidação-de-matrizes-pqc#algoritmos",
+    "breadcrumb": [
+     "Algoritmos"
+    ],
+    "sim": 0.762,
+    "score": 0.0161,
+    "rerank": 0.957,
+    "codigo_exato": false,
+    "texto": null
+   },
+   {
+    "n": 3,
+    "obra": "Transição Brasileira para a Prontidão Pós-Quântica (PQC) e Soberania Digital",
+    "arquivo": "Transição Brasileira para a Prontidão Pós-Quântica (PQC) e Soberania Digital.docx",
+    "section_id": "transição-brasileira-para-a-prontidão-pós-quântica-pqc-e-soberania-digital#1.5",
+    "breadcrumb": [
+     "TRANSIÇÃO BRASILEIRA PARA A PRONTIDÃO PÓS-QUÂNTICA (PQC) E SOBERANIA DIGITAL",
+     "1. DOCUMENTO DE DIAGNÓSTICO FORMAL",
+     "1.5. Síntese e Viabilidade de Intervenção"
+    ],
+    "sim": 0.74,
+    "score": 0.0159,
+    "rerank": 0.93,
+    "codigo_exato": false,
+    "texto": null
+   },
+   {
+    "n": 4,
+    "obra": "OSIC 15/2024 — Normatização e regulação de tecnologias emergentes no contexto da cibersegurança",
+    "arquivo": "osic-15-24.pdf",
+    "section_id": "osic-15-24-2024#3.2.1",
+    "breadcrumb": [
+     "02 3, e os ór gã os e entid ade s da APF ad otem no rmas inte rn as e boas prát ic",
+     "3.2 Desafios da Computação Quântica para a Segurança da Informação e a Cibersegurança",
+     "3.2.1 Quebra da criptografia assimétrica"
+    ],
+    "sim": 0.734,
+    "score": 0.0147,
+    "rerank": 0.982,
+    "codigo_exato": false,
+    "texto": null
+   },
+   {
+    "n": 5,
+    "obra": "Relatório executivo: a transição para a criptografia pós-quântica (PQC) e a proteção das infraestruturas críticas no Brasil",
+    "arquivo": "Relatório Executivo_ A Transição para a Criptografia Pós-Quântica (PQC) e a Proteção das Infraestruturas Críticas no Brasil.docx",
+    "section_id": "relatório-executivo_-a-transição-para-a-criptografia-pós-quântica-pqc-e-a-proteção-das-infraestruturas-críticas-no-brasil#6",
+    "breadcrumb": [
+     "Relatório Executivo: A Transição para a Criptografia Pós-Quântica (PQC) e a Proteção das Infraestruturas Críticas no Brasil",
+     "6. Conclusão e Recomendações de Urgência"
+    ],
+    "sim": 0.693,
+    "score": 0.0145,
+    "rerank": 0.98,
+    "codigo_exato": false,
+    "texto": null
+   },
+   {
+    "n": 6,
+    "obra": "OSIC 15/2024 — Normatização e regulação de tecnologias emergentes no contexto da cibersegurança",
+    "arquivo": "osic-15-24.pdf",
+    "section_id": "osic-15-24-2024#3.4",
+    "breadcrumb": [
+     "02 3, e os ór gã os e entid ade s da APF ad otem no rmas inte rn as e boas prát ic",
+     "3.4 Conclusões"
+    ],
+    "sim": 0.713,
+    "score": 0.0137,
+    "rerank": 0.975,
+    "codigo_exato": false,
+    "texto": null
+   },
+   {
+    "n": 7,
+    "obra": "Uma Extensão Pós-Quântica Híbrida para o Protocolo Matrix: Avaliação Experimental e Impacto Sistêmico",
+    "arquivo": "SBRC_2026_Matrix_PQC.pdf",
+    "section_id": "sbrc_2026_matrix_pqc-1994#_",
+    "breadcrumb": [],
+    "sim": 0.706,
+    "score": 0.0139,
+    "rerank": 0.941,
+    "codigo_exato": false,
+    "texto": null
+   },
+   {
+    "n": 8,
+    "obra": "Relatório executivo: a transição para a criptografia pós-quântica (PQC) e a proteção das infraestruturas críticas no Brasil",
+    "arquivo": "Relatório Executivo_ A Transição para a Criptografia Pós-Quântica (PQC) e a Proteção das Infraestruturas Críticas no Brasil.docx",
+    "section_id": "relatório-executivo_-a-transição-para-a-criptografia-pós-quântica-pqc-e-a-proteção-das-infraestruturas-críticas-no-brasil#1",
+    "breadcrumb": [
+     "Relatório Executivo: A Transição para a Criptografia Pós-Quântica (PQC) e a Proteção das Infraestruturas Críticas no Brasil",
+     "1. Ameaça e Contexto Estratégico: O Desafio da Computação Quântica"
+    ],
+    "sim": 0.669,
+    "score": 0.0135,
+    "rerank": 0.898,
+    "codigo_exato": false,
+    "texto": null
+   }
+  ],
+  "contexto": "[1] (Ameaça da Computação Quântica e a Transição para a Criptografia Pós-Quântica_ Relatório Executivo de Segurança.docx · ameaça-da-computação-quântica-e-a-transição-para-a-criptografia-pós-quântica_-relatório-executivo-de-segurança#criptografia-pós-quântica-pqc-e-mitigação) — Ameaça da Computação Quântica e a Transição para a Criptografia Pós-Quântica: Relatório Executivo de Segurança › Criptografia Pós-Quântica (PQC) e Mitigação\n(contexto do pai · ameaça-da-computação-quântica-e-a-transição-para-a-criptografia-pós-quântica_-relatório-executivo-de-segurança#ameaça-da-computação-quântica-e-a-transição-para-a-criptogra)\nAmeaça da Computação Quântica e a Transição para a Criptografia Pós-Quântica: Relatório Executivo de Segurança\n---\nCriptografia Pós-Quântica (PQC) e Mitigação\nA defesa primária contra a ameaça quântica é a transição para a Criptografia Pós-Quântica (PQC) . A PQC utiliza algoritmos matemáticos que se acredita serem seguros mesmo contra o poder de processamento de computadores quânticos.\n\n[2] (Consolidação de Matrizes PQC.xlsx · consolidação-de-matrizes-pqc#algoritmos) — Algoritmos\nAlgoritmo | Categoria (Estratégica) | Classe Técnica | Descrição | Origem\nAES (Advanced Encryption Standard) | Simétricos de Alta Vazão | Algoritmos Simétricos (Cifras de Bloco e Fluxo) | Padrão de cifra de blocos amplamente adotado em todo o mundo. Citado em diversas variações de tamanho de chave e modo de operação: AES-128, AES-192, AES-256, AES-GCM (modo autenticado) e AES-256-CBC. | EUA, N/A\nChaCha / ChaCha20 | Simétricos Leves / Nacionais | Algoritmos Simétricos (Cifras de Bloco e Fluxo) | Cifra de fluxo de altíssimo desempenho, intrinsecamente resistente a ataques de tempo, comumente pareada com o MAC Poly1305 formando a cifra autenticada ChaCha20-Poly1305. | EUA\nSalsa / Salsa20 | Simétricos Leves / Nacionais | Algoritmos Simétricos (Cifras de Bloco e Fluxo) | Cifra de fluxo precursora da qual o algoritmo ChaCha derivou. | EUA\nSM4 | Simétricos de Alta Vazão | Algoritmos Simétricos (Cifras de Bloco e Fluxo) | Padrão chinês comercial de cifra de bloco de 128 bits. É apontado como a principal alternativa chinesa ao AES, possuindo modos como AEAD_SM4_GCM e AEAD_SM4_CCM. | China\nForró e Xote | Simétricos Leves / Nacionais | Algoritmos Simétricos (Cifras de Bloco e Fluxo) | Algoritmos de cifra de fluxo de arquitetura ARX, baseados no ChaCha20. Desenvolvidos no Brasil, visam ser leves, mais rápidos e robustos, desenhados inclusive visando urnas eletrônicas e dispositivos de restrito desempenho computacional (IoT). | Brasil\nKeeLoq | Simétricos Leves / Nacionais | Algoritmos Sim\n\n[3] (Transição Brasileira para a Prontidão Pós-Quântica (PQC) e Soberania Digital.docx · transição-brasileira-para-a-prontidão-pós-quântica-pqc-e-soberania-digital#1.5) — TRANSIÇÃO BRASILEIRA PARA A PRONTIDÃO PÓS-QUÂNTICA (PQC) E SOBERANIA DIGITAL › 1. DOCUMENTO DE DIAGNÓSTICO FORMAL › 1.5. Síntese e Viabilidade de Intervenção\n(contexto do pai · transição-brasileira-para-a-prontidão-pós-quântica-pqc-e-soberania-digital#1)\n1. DOCUMENTO DE DIAGNÓSTICO FORMAL\n---\n1.5. Síntese e Viabilidade de Intervenção\nAs soluções fundamentadas apenas em chaves públicas clássicas estão condenadas. Para evitar o colapso irreversível de seus segredos e de sua soberania, é imprescindível que o Brasil aborde a transição para a Criptografia Pós-Quântica como um imperativo de financiamento contínuo de Defesa. O sucesso demandará uma estratégia híbrida (Quantum-Safe-by-Design), conjugando novos padrões algorítmicos com raízes de confiança em hardware e uma política firme de apoio às Empresas Estratégicas de Defesa para sanar o déficit físico.\n\n[4] (osic-15-24.pdf · osic-15-24-2024#3.2.1) — 02 3, e os ór gã os e entid ade s da APF ad otem no rmas inte rn as e boas prát ic › 3.2 Desafios da Computação Quântica para a Segurança da Informação e a Cibersegurança › 3.2.1 Quebra da criptografia assimétrica\n(contexto do pai · osic-15-24-2024#3.2)\n3.2 Desafios da Computação Quântica para a Segurança da Informação e a Cibersegurança\nA computação quântica apresenta desafios significativos para a segurança da\ninformação e cibersegurança, especialmente em relação à criptografia, que é\na base para a proteção de dados digitais. Abaixo estão os principais desafios e as so\nsoluções emergentes:\n---\n3.2.1 Quebra da criptografia assimétrica\nDesafio: algoritmos quânticos, como o Shor’s algorithm, poderiam quebrar a maioria dos sistemas de\ncriptografia assimétrica (como RSA e ECC) usados atualmente. Esses sistemas dependem d\na dificuldade de fatoração de grandes números ou do problema do logaritmo discreto, que podem ser r\nresolvidos eficientemente com computadores quânticos.\nSoluções:\nCriptografia pós-quântica: desenvolvimento de novos algoritmos resistentes a ataques\nquânticos, como a criptografia baseada em reticulados (lattice-based cryptography)\ne assinaturas hash-based. O NIST divulgou em agosto diferentes padrões de algoritmos pós-quânticos, baseados em reticulados, stateless hash-based e stateful hash-based.Criptografia pós-quântica: desenvolvimento de novos algoritmos resistentes a ataques quânticos, como a criptografia baseada em reticulados (lattice-based cryptography) e assinaturas hash-based. O NIST divulgou em agosto diferentes padrões de algoritmos pós-quânticos, baseados em reticulados, stateless hash-based e stateful hash-based.\nCriptografia pós-quântica: desenvolvimento de novos algoritmos resistentes a ataques quânticos, como a criptografia baseada em reticulados (lattice-based cryptography) e assinaturas hash-based. O NIST divulgou em agosto diferentes padrões de algoritmos pós-quânticos, baseados em reticulados, stateless hash-based e stateful hash-based. .\n15\nAdoção gradual: governos e empresas devem começar a implementar criptografia pós-\nquântica em \n\n[5] (Relatório Executivo_ A Transição para a Criptografia Pós-Quântica (PQC) e a Proteção das Infraestruturas Críticas no Brasil.docx · relatório-executivo_-a-transição-para-a-criptografia-pós-quântica-pqc-e-a-proteção-das-infraestruturas-críticas-no-brasil#6) — Relatório Executivo: A Transição para a Criptografia Pós-Quântica (PQC) e a Proteção das Infraestruturas Críticas no Brasil › 6. Conclusão e Recomendações de Urgência\n(contexto do pai · relatório-executivo_-a-transição-para-a-criptografia-pós-quântica-pqc-e-a-proteção-das-infraestruturas-críticas-no-brasil#relatório-executivo-a-transição-para-a-criptografia-pós-quân)\nRelatório Executivo: A Transição para a Criptografia Pós-Quântica (PQC) e a Proteção das Infraestruturas Críticas no Brasil\n---\n6. Conclusão e Recomendações de Urgência\nA transição para a criptografia pós-quântica é um imperativo para a preservação da soberania e dos interesses nacionais. O Estado brasileiro deve priorizar a adoção de modelos de criptografia híbrida (combinando segurança clássica e PQC) para mitigar o risco iminente de descriptografia retrospectiva.\n\n[6] (osic-15-24.pdf · osic-15-24-2024#3.4) — 02 3, e os ór gã os e entid ade s da APF ad otem no rmas inte rn as e boas prát ic › 3.4 Conclusões\n(contexto do pai · osic-15-24-2024#02)\n02 3, e os ór gã os e entid ade s da APF ad otem no rmas inte rn as e boas prát ic\nas de con tro le de ac esso, tais c omo o M ode lo de Pol ít ica e G est ão de Con tr\nole de Acesso, da SGD/MGI .\n10\n---\n3.4 Conclusões\nA computação quântica promete avanços revolucionários em várias áreas, mas também traz ameaças\nsignificativas à segurança digital.\nA criptografia pós-quântica e a criptografia quântica, em especial a primeira no curto prazo, surgem\ncomo soluções necessárias para proteger informações no futuro quântico.\nEm longo prazo, a tecnologia de distribuição quântica de chaves (QKD), uma tarefa da criptografia\nquântica, permitirá que duas partes gerem e compartilhem uma chave secreta aleatória para\ncriptografar e descriptografar mensagens entre elas.\nA coordenação regulatória global e nos níveis nacionais será essencial para garantir uma transição\nsegura, tempestiva e eficaz para esses novos paradigmas tecnológicos, protegendo a integridade do\ns sistemas istemas de informação diante de um ‘futuro quântico’ iminente.\n19\n4. INTERNET DAS COISAS (IoT): RISCOS E DESAFIOS\nESPECÍFICOS DE SEGURANÇA\n\n[7] (SBRC_2026_Matrix_PQC.pdf · sbrc_2026_matrix_pqc-1994#_)\nUma Extensão Pós-Quântica Híbrida para o Protocolo\nMatrix: Avaliação Experimental e Impacto Sistêmico\nMarcos Ortiz1, Vinícius Lagrota2, Gilvan Maia1, Rodrigo Pacheco2 e Paulo Rego1\n1Mestrado e Doutorado em Ciência da Computação (MDCC)\nUniversidade Federal do Ceará (UFC)\n2Centro de Pesquisa e Desenvolvimento para a Segurança das Comunicações (CEPESC)\nmdo@ufc.br, paulo@dc.ufc.br, gilvanmaia@virtual.ufc.br\nvinicius.1232@abin.gov.br,rodrigo.6874@abin.gov.br\nAbstract. Quantum computing threatens E2EE messenger encryption, driving\nthe adoption of post-quantum cryptography (PQC). This study evaluates the hy-\nbrid integration of CRYSTALS-Kyber into the Matrix protocol, extending the key\nagreement and the Double Ratchet. Experimental tests demonstrate that the\nprimary bottleneck is bandwidth, with a +548% overhead in setup and +252%\nin key rotations, while the impact on CPU and user experience is negligible\n(≈16 ms to 100 ms). The cost of rotations scales quadratically, indicating that\nrigid security policies are inefficient and demand adaptive strategies to balance\nsecurity and network consumption.\nResumo. A computação quântica ameaça a criptografia de mensageiros E2EE,\nimpulsionando a adoção de criptografia pós-quântica (PQC). Este estudo ava-\nlia a integração híbrida do CRYSTALS-Kyber no protocolo Matrix, estendendo\no acordo de chaves e o Double Ratchet. Testes demonstraram que o principal\ngargalo é a largura de banda, com overhead de +548% no setup e +252% nas\nrotações de chaves, \n\n[8] (Relatório Executivo_ A Transição para a Criptografia Pós-Quântica (PQC) e a Proteção das Infraestruturas Críticas no Brasil.docx · relatório-executivo_-a-transição-para-a-criptografia-pós-quântica-pqc-e-a-proteção-das-infraestruturas-críticas-no-brasil#1) — Relatório Executivo: A Transição para a Criptografia Pós-Quântica (PQC) e a Proteção das Infraestruturas Críticas no Brasil › 1. Ameaça e Contexto Estratégico: O Desafio da Computação Quântica\n(contexto do pai · relatório-executivo_-a-transição-para-a-criptografia-pós-quântica-pqc-e-a-proteção-das-infraestruturas-críticas-no-brasil#relatório-executivo-a-transição-para-a-criptografia-pós-quân)\nRelatório Executivo: A Transição para a Criptografia Pós-Quântica (PQC) e a Proteção das Infraestruturas Críticas no Brasil\n---\n1. Ameaça e Contexto Estratégico: O Desafio da Computação Quântica\nA ascensão da computação quântica não representa apenas uma evolução tecnológica, mas um desafio direto à Soberania Digital do Estado brasileiro. Conforme fundamentado na OSIC 15/2024 , o processamento quântico, ao utilizar propriedades de superposição e emaranhamento, torna obsoletos os pilares da segurança digital contemporânea. A vulnerabilidade reside na aplicação do Algoritmo de Shor , capaz de quebrar sistemas de criptografia assimétrica baseados em fatoração de grandes números ( RSA ) e logaritmos discretos ( ECC/Curvas Elípticas ). Adicionalmente, o Algoritmo de Grover impacta a criptografia simétrica, exigindo, no mínimo, o dobro do tamanho das chaves ( AES-256 ) para manter os níveis atuais de segurança.Dentro da doutrina de Defesa Nacional , estabelecida pelo Decreto nº 12.725/2025 (PND/END) , a transição para a Criptografia Pós-Quântica (PQC) é tratada como uma Capacidade do Estado essencial. Esta transição sustenta o Pilar 3D (Desenvolvimento, Diplomacia e Defesa) , garantindo que a Nação possa resistir a pressões e ameaças de qualquer natureza.A urgência estratégica é ditada pela ameaça \"Harvest Now, Decrypt Later\" (HNDL) — também referida como SNDL (Store Now, Decrypt Later) ou descriptografia retrospectiva. Agentes adversários estão interceptando e armazenando dados classificados e comunicações de Estado protegidas por algoritmos clássicos para descriptografá-los assim que computadores quântico",
+  "cobertura": "boa",
+  "sinal": {
+   "medida": "rerank",
+   "valor": 0.995,
+   "piso": 0.79
+  },
+  "perguntas": [
+   "o que é criptografia pós-quântica?"
+  ],
+  "filtro": {
+   "dominio": [],
+   "subdominio": [],
+   "frente": [],
+   "colecao": []
+  },
+  "aviso": null,
+  "indice": {
+   "acervo_sha": "24ed2cbf607e73ab1e8ab79c0d286bf2996b5751db4e63cfb97c2f313dfc25c7",
+   "chunks": 145240,
+   "chunks_recuperaveis": 124463,
+   "chunks_com_vetor": 124463,
+   "chunks_nao_textuais": 20777,
+   "documentos_sem_chunk": 4,
+   "obras_catalogadas": 694,
+   "obras_ingeridas": 623,
+   "conceitos": 205,
+   "embed_model": "Qwen/Qwen3-Embedding-0.6B",
+   "embed_backend": "torch",
+   "embed_query_instruction": "Given a search query, retrieve relevant passages that answer the query",
+   "embed_meta_beta": 0.15,
+   "modo": "hybrid",
+   "rrf_k": 60,
+   "rrf_w_vec": 1.0,
+   "rrf_w_id": 2.0,
+   "rrf_w_lex": 0.5,
+   "hybrid_lexical": false,
+   "rerank_model": "BAAI/bge-reranker-v2-m3",
+   "sha_calculado_em": "2026-08-06T22:45:16+00:00"
+  }
+ }
+}

@@ -1,0 +1,182 @@
+{
+ "sonda": "T0",
+ "n": "33",
+ "bloco": "B",
+ "persona": "persona-nao-declarada",
+ "pergunta": "limite de WIP",
+ "parametros_congelados": {
+  "texto": "secao",
+  "k": 8,
+  "dominio": null,
+  "subdominio": null,
+  "frente": null,
+  "colecao": null
+ },
+ "chamada_em": "2026-08-06T22:45:53.807310+00:00",
+ "acervo_sha": "24ed2cbf607e73ab1e8ab79c0d286bf2996b5751db4e63cfb97c2f313dfc25c7",
+ "retorno": {
+  "fontes": [
+   {
+    "n": 1,
+    "obra": "Essential Kanban Condensed",
+    "arquivo": "Essential-Kanban-Condensed-v1.0.0.pdf",
+    "section_id": "essential-kanban-condensed-v1-0-0-2015#foreword",
+    "breadcrumb": [
+     "Foreword"
+    ],
+    "sim": 0.707,
+    "score": 0.0161,
+    "rerank": 0.866,
+    "codigo_exato": false,
+    "texto": null
+   },
+   {
+    "n": 2,
+    "obra": "The Lean Product Playbook",
+    "arquivo": "The Lean Product Playbook _ How to Innovate with Minimum -- Dan Olsen -- 1_ Auflage, New York, NY, 2015 -- John Wiley & Sons, Incorporated -- isbn13 9781118960875 -- 394d682a1bbdfbbe1b594302cc30ece4 -- Anna’s Archive.epub",
+    "section_id": "the-lean-product-playbook-_-how-to-innovate-with-minimum-dan-olsen-1_-auflage-new-york-ny-2015-john-wiley-sons-incorporated-isbn13-9781118960875-394d682a1bbdfbbe1b594302cc30ece4-anna-s-archive#kanban",
+    "breadcrumb": [
+     "Part III Building and Optimizing Your Product",
+     "Kanban"
+    ],
+    "sim": 0.669,
+    "score": 0.0147,
+    "rerank": 0.837,
+    "codigo_exato": false,
+    "texto": null
+   },
+   {
+    "n": 3,
+    "obra": "The Principles of Product Development Flow: Second Generation Lean Product Development",
+    "arquivo": "The Principles of Product Development Flow_ Second -- Donald G Reinertsen -- 2016.epub",
+    "section_id": "the-principles-of-product-development-flow_-second-donald-g-reinertsen-2016#w18-the-principle-of-differential-service-differentiate-qual",
+    "breadcrumb": [
+     "Applying WIP Constraints",
+     "WIP Constraints in Practice",
+     "W18: The Principle of Differential Service: Differentiate quality of service by workstream."
+    ],
+    "sim": 0.64,
+    "score": 0.0141,
+    "rerank": 0.701,
+    "codigo_exato": false,
+    "texto": null
+   },
+   {
+    "n": 4,
+    "obra": "The Principles of Product Development Flow: Second Generation Lean Product Development",
+    "arquivo": "The Principles of Product Development Flow_ Second -- Donald G Reinertsen -- 2016.epub",
+    "section_id": "the-principles-of-product-development-flow_-second-donald-g-reinertsen-2016#6",
+    "breadcrumb": [
+     "6"
+    ],
+    "sim": 0.723,
+    "score": 0.0164,
+    "rerank": 0.35,
+    "codigo_exato": false,
+    "texto": null
+   },
+   {
+    "n": 5,
+    "obra": "Accelerate: The Science of Lean Software and DevOps",
+    "arquivo": "Accelerate - The Science of Lean Software and DevOps.pdf",
+    "section_id": "accelerate-the-science-of-lean-software-and-devops-2018#lean-management-practices",
+    "breadcrumb": [
+     "SOFTWARE",
+     "LEAN MANAGEMENT PRACTICES"
+    ],
+    "sim": 0.588,
+    "score": 0.0119,
+    "rerank": 0.797,
+    "codigo_exato": false,
+    "texto": null
+   },
+   {
+    "n": 6,
+    "obra": "The Principles of Product Development Flow: Second Generation Lean Product Development",
+    "arquivo": "The Principles of Product Development Flow_ Second -- Donald G Reinertsen -- 2016.epub",
+    "section_id": "the-principles-of-product-development-flow_-second-donald-g-reinertsen-2016#w1-the-principle-of-wip-constraints-constrain-wip-to-control",
+    "breadcrumb": [
+     "Applying WIP Constraints",
+     "The Economic Logic of WIP Control",
+     "W1: The Principle of WIP Constraints: Constrain WIP to control cycle time and flow."
+    ],
+    "sim": 0.633,
+    "score": 0.013,
+    "rerank": 0.645,
+    "codigo_exato": false,
+    "texto": null
+   },
+   {
+    "n": 7,
+    "obra": "The Principles of Product Development Flow: Second Generation Lean Product Development",
+    "arquivo": "The Principles of Product Development Flow_ Second -- Donald G Reinertsen -- 2016.epub",
+    "section_id": "the-principles-of-product-development-flow_-second-donald-g-reinertsen-2016#w6-the-principle-of-demand-blocking-block-all-demand-when-wi",
+    "breadcrumb": [
+     "Applying WIP Constraints",
+     "Reacting to Emergent Queues",
+     "W6: The Principle of Demand Blocking: Block all demand when WIP reaches its upper limit."
+    ],
+    "sim": 0.682,
+    "score": 0.0152,
+    "rerank": 0.363,
+    "codigo_exato": false,
+    "texto": null
+   },
+   {
+    "n": 8,
+    "obra": "The Principles of Product Development Flow: Second Generation Lean Product Development",
+    "arquivo": "The Principles of Product Development Flow_ Second -- Donald G Reinertsen -- 2016.epub",
+    "section_id": "the-principles-of-product-development-flow_-second-donald-g-reinertsen-2016#reacting-to-emergent-queues",
+    "breadcrumb": [
+     "Applying WIP Constraints",
+     "Reacting to Emergent Queues"
+    ],
+    "sim": 0.64,
+    "score": 0.0139,
+    "rerank": 0.439,
+    "codigo_exato": false,
+    "texto": null
+   }
+  ],
+  "contexto": "[1] (Essential-Kanban-Condensed-v1.0.0.pdf · essential-kanban-condensed-v1-0-0-2015#foreword) — Foreword\nForeword\nKanban is a method that shows us how our work works.\nIt brings us a shared understanding of the work we do, including\nthe rules by which we do the work, how much we can handle at\na time, and how well we deliver work to our internal and external\ncustomers.\nOnce we achieve this understanding, we can start to improve. We\ncan become more predictable and work at a more sustainable pace.\nCommunication and collaboration goes up. So does quality. The\npeople doing the work can act more independently because they\ndevelop an innate understanding of risk management.\nWe can also use Kanban to achieve better alignment across our entire\nenterprise, meaning that sweeping strategic goals can be achieved.\nKanban’s focus on managed commitment and a balanced flow\nof work leads to greater agility. If market conditions change or\nissues with dependencies arise, Kanban provides the ability to\nchange course quickly. This is why we call it the Alternative Path\nto Agility.\nIn 2011, Lean Kanban University set out to establish a standard of\nquality for the way Kanban is taught and practiced. Today we have\na curriculum of Kanban training at all levels, which includes pro-\nfessional development programs as well as community events and\nresources. A global network of LKU trainers and coaches assures\nthe quality and consistency of Kanban and the ongoing evolution of\nthis body of knowledge.\nv\nThis short book covers core concepts as we understand Kanban.\nIt is based on the contributions of a vibrant gl\n\n[2] (The Lean Product Playbook _ How to Innovate with Minimum -- Dan Olsen -- 1_ Auflage, New York, NY, 2015 -- John Wiley & Sons, Incorporated -- isbn13 9781118960875 -- 394d682a1bbdfbbe1b594302cc30ece4 -- Anna’s Archive.epub · the-lean-product-playbook-_-how-to-innovate-with-minimum-dan-olsen-1_-auflage-new-york-ny-2015-john-wiley-sons-incorporated-isbn13-9781118960875-394d682a1bbdfbbe1b594302cc30ece4-anna-s-archive#kanban) — Part III Building and Optimizing Your Product › Kanban\n(contexto do pai · the-lean-product-playbook-_-how-to-innovate-with-minimum-dan-olsen-1_-auflage-new-york-ny-2015-john-wiley-sons-incorporated-isbn13-9781118960875-394d682a1bbdfbbe1b594302cc30ece4-anna-s-archive#part-iii-building-and-optimizing-your-product)\nAt this point, you have validated your target customer, their underserved needs, your value proposition, your MVP feature set, and your UX. As a result, you should feel confident about the blueprint you've developed. Validating product-market fit with prototypes is incredibly valuable, but now it's time to turn your blueprint into an actual working product that customers can use.\nBuilding the prod\n---\nAnother popular flavor of Agile development is kanban, a process adapted from the system Toyota developed to improve how they build cars. The Toyota Production System focused on just-in-time production and eliminating waste. I studied the original kanban system and Lean manufacturing, which inspired the Lean software development movement, in my graduate program at Virginia Tech.\nManufacturing workers use paper kanban cards to physically signal when additional work should be pulled into the system. These cards have been adapted in software development as virtual cards that each represent a work item but don't actually generate a pull signal. Instead, it's up to the team members to proactively pull the next work item forward.\nA core principle of kanban is to visualize work. Each card is a user story or a development task that supports a user story. The cards are arranged on a kanban board, which consists of a set of columns, one for each different state of work. The columns are arranged left-to-right in the order in which work flows. See Figure 12.4 for an example of a kanban board. This kanban board has the following set of columns from left to right: “backlog,” “ready,” “in development,” “development done,” “in testing,” “testing done,” and “deployed”—defined as follows:\nBacklog : Items to be potentially worked on, sorted in priority order.\nReady : Items that have been selected from the backlog and are ready for development.\nIn development : Items that a developer has started\n\n[3] (The Principles of Product Development Flow_ Second -- Donald G Reinertsen -- 2016.epub · the-principles-of-product-development-flow_-second-donald-g-reinertsen-2016#w18-the-principle-of-differential-service-differentiate-qual) — Applying WIP Constraints › WIP Constraints in Practice › W18: The Principle of Differential Service: Differentiate quality of service by workstream.\n(contexto do pai · the-principles-of-product-development-flow_-second-donald-g-reinertsen-2016#wip-constraints-in-practice)\nAt this point, we will focus on eight practical principles for controlling WIP. These involve some slightly more subtle aspects of queue size control. Many of these more sophisticated strategies exploit the active queue management methods used on the Internet. We will begin by looking at aging analysis and escalation processes. Next, we will look at three sophisticated strategies used on the Inter\n---\nNow, let’s consider another sophisticated approach for controlling the nonhomogeneous flows that we see in product development. Since our workstream has a wide range of delay costs, it can make economic sense to subdivide the workstream into categories with different quality of service goals. This allows us to achieve better service for the high cost-of-delay jobs.\nWe can do this by categorizing jobs in broad categories of high, medium, and low delay costs. We can then target a specific flow-through time for each category of work and use Little’s Formula, Principle Q12 , to determine its WIP limit. If we set both a WIP limit and a capacity allocation, this will control the flow-through time for that category.\nUsing a method like this, we can achieve different flow-through times for different categories of work, even when they are using a shared resource.\nFor example, at one software company, they permit one hot job in their software maintenance workstream. This hot job has head-of-the-line privileges in all queues, although it does not preempt work that is already underway at the resource. As a result, this job experiences no queue time and flows through the system very quickly.\nFigure 6-7 provides an example of how we can allocate our resource pool and set WIP constraints to provide different target flow-through times. Many of our economic difficulties in controlling WIP come from treating it as a homogeneous flow. Since it is not homogeneous, it is usually better to break i\n\n[4] (The Principles of Product Development Flow_ Second -- Donald G Reinertsen -- 2016.epub · the-principles-of-product-development-flow_-second-donald-g-reinertsen-2016#6) — 6\nApplying WIP Constraints\n\n[5] (Accelerate - The Science of Lean Software and DevOps.pdf · accelerate-the-science-of-lean-software-and-devops-2018#lean-management-practices) — SOFTWARE › LEAN MANAGEMENT PRACTICES\n(contexto do pai · accelerate-the-science-of-lean-software-and-devops-2018#software)\nSOFTWARE\nT\nhe theory and practice of management in the context of software\ndelivery has gone through signiëcant change over the decades, with\nmultiple paradigms in play. For many years, the project and program\nmanagement paradigm, found in frameworks such as the Project\nManagement Institute and PRINCE2, dominated. Following the release of\nthe Agile Manifesto in 2001, Agile methods rapidly gained t\n---\nLEAN MANAGEMENT PRACTICES\nIn our research, we modeled Lean management and its application to\nsoftware delivery with three components (Figure 7.1 along with\nlightweight change management, discussed later in this chapter):\n1. Limiting work in progress (WIP), and using these limits to drive\nprocess improvement and increase throughput\n2. Creating and maintaining visual displays showing key quality and\nproductivity metrics and the current status of work (including\ndefects), making these visual displays available to both engineers\nand leaders, and aligning these metrics with operational goals\n3. Using data from application performance and infrastructure\nmonitoring tools to make business decisions on a daily basis\nFigure 7.1: Components of Lean Management\ne use of WIP limits and visual displays is well known in the Lean\ncommunity. ey are used to ensure that teams don’t become\noverburdened (which may lead to longer lead times) and to expose\nobstacles to ìow. What is most interesting is that WIP limits on their own\ndo not strongly predict delivery performance. It’s only when they’re\ncombined with the use of visual displays and have a feedback loop from\nproduction monitoring tools back to delivery teams or the business that\nwe see a strong eﬀect. When teams use these tools together, we see a much\nstronger positive eﬀect on software delivery performance.\nIt is also worth going into a bit more detail on what exactly we’re\nmeasuring. In the case of WIP, we’re not just asking teams wheth\n\n[6] (The Principles of Product Development Flow_ Second -- Donald G Reinertsen -- 2016.epub · the-principles-of-product-development-flow_-second-donald-g-reinertsen-2016#w1-the-principle-of-wip-constraints-constrain-wip-to-control) — Applying WIP Constraints › The Economic Logic of WIP Control › W1: The Principle of WIP Constraints: Constrain WIP to control cycle time and flow.\n(contexto do pai · the-principles-of-product-development-flow_-second-donald-g-reinertsen-2016#the-economic-logic-of-wip-control)\nThe First Queue Size Control Principle, Q13, provided a qualitative introduction to the concept of controlling queue size. Now we can treat this topic more quantitatively. Many product developers underestimate the mind-set shift required to begin focusing on controlling WIP rather than controlling cycle time. Today, 100 percent of product developers monitor the cycle time through their processes. \n---\nIn Chapter 3 , we discussed the time behavior of queues. We pointed out that high-queue states occur infrequently, yet, when they occur, they last a long time, and they do disproportionate economic damage. This naturally raises the question, what would happen if we prevented high-queue states? The simplest way to do this is to block arrivals when the queue becomes large. This type of queueing system is known as an M/M/1/k queueing system, where k represents the maximum limit on the number of items in the system. You may remember that the queueing system we described in Chapter 3 was called an M/M/1/∞ queueing system, a system where k equals infinity.\nWhen we set a limit on WIP, we create one positive effect and two negative ones. The positive effect is to reduce average cycle time. The first negative effect is that we permanently reject potentially valuable demand. The second negative effect is that we ultimately reduce our capacity utilization, because we have permanently lost the demand that we rejected during periods of congestion.\nFigure 6-2 shows what happens when we implement different levels of WIP constraints on a M/M/1/∞ queueing system. The WIP constraints are shown as multipliers of the average WIP level that would occur in the system without any WIP constraint. A relatively light WIP constraint, twice the average WIP level, produces a significant 28 percent cycle-time savings. Yet, it only causes a 1 percent penalty in the form of underutilization and blocking cos\n\n[7] (The Principles of Product Development Flow_ Second -- Donald G Reinertsen -- 2016.epub · the-principles-of-product-development-flow_-second-donald-g-reinertsen-2016#w6-the-principle-of-demand-blocking-block-all-demand-when-wi) — Applying WIP Constraints › Reacting to Emergent Queues › W6: The Principle of Demand Blocking: Block all demand when WIP reaches its upper limit.\nThe simplest way to use a WIP constraint is to block all demand when WIP reaches its upper limit. This is the method used in the kanban system. It is also the method used in a standard telephone system, which provides a busy signal to users when no lines are available.\nWe can accomplish this blocking in two ways. First, we can eject the arriving job from the system. This may seem like an extreme approach, but it enforces a true upper-limit on global WIP and cycle time. Remember that it takes a long time to correct a high-queue state, and the queue can do enormous damage during this high-queue period.\nThe second way to block demand is to hold back the job in an upstream queue. This does not actually reduce demand, it just shifts the location of the queue. Such an approach can actually generate economic benefits if different queues have different holding costs, as we shall see in Principle W21 . This approach of queue shifting is actually used quite cleverly in the TPS. The TPS holds back work rather than ejecting it, but the amount of work in upstream queues is carefully controlled, because they also have WIP constraints.\nW7: The Principle of WIP Purging: When WIP is high, purge low-value projects.\n\n[8] (The Principles of Product Development Flow_ Second -- Donald G Reinertsen -- 2016.epub · the-principles-of-product-development-flow_-second-donald-g-reinertsen-2016#reacting-to-emergent-queues) — Applying WIP Constraints › Reacting to Emergent Queues\n(contexto do pai · the-principles-of-product-development-flow_-second-donald-g-reinertsen-2016#applying-wip-constraints)\nIt is easier to start work than it is to finish it.\nIt is easier to grow WIP than it is to reduce it.\nHow does Toyota maintain short cycle times in their factories? It uses WIP constraints to limit maximum inventory levels. How does the Internet enable the slowest personal computer to communicate reliably with the fastest supercomputer, even through a network of constantly and unpredictably varyin\n---\nIn fact, the real art of managing queues is not about monitoring them and setting limits, it lies in what we do when we reach the limits. In this section, we will provide you with nine possible ways to respond to WIP excursions. The first three are demand-focused. They involve blocking new demand, shedding existing projects, and shedding features.\nThe next five approaches are supply-focused. They involve pulling resources, using part-timers, using specialists, creating T-shaped resources, and cross-training workers at adjacent processes.\nThe final approach involves changing the job mix. With nine tools in our toolkit we have a variety of approaches for controlling WIP.\nW6: The Principle of Demand Blocking: Block all demand when WIP reaches its upper limit.",
+  "cobertura": "boa",
+  "sinal": {
+   "medida": "rerank",
+   "valor": 0.866,
+   "piso": 0.79
+  },
+  "perguntas": [
+   "limite de WIP"
+  ],
+  "filtro": {
+   "dominio": [],
+   "subdominio": [],
+   "frente": [],
+   "colecao": []
+  },
+  "aviso": null,
+  "indice": {
+   "acervo_sha": "24ed2cbf607e73ab1e8ab79c0d286bf2996b5751db4e63cfb97c2f313dfc25c7",
+   "chunks": 145240,
+   "chunks_recuperaveis": 124463,
+   "chunks_com_vetor": 124463,
+   "chunks_nao_textuais": 20777,
+   "documentos_sem_chunk": 4,
+   "obras_catalogadas": 694,
+   "obras_ingeridas": 623,
+   "conceitos": 205,
+   "embed_model": "Qwen/Qwen3-Embedding-0.6B",
+   "embed_backend": "torch",
+   "embed_query_instruction": "Given a search query, retrieve relevant passages that answer the query",
+   "embed_meta_beta": 0.15,
+   "modo": "hybrid",
+   "rrf_k": 60,
+   "rrf_w_vec": 1.0,
+   "rrf_w_id": 2.0,
+   "rrf_w_lex": 0.5,
+   "hybrid_lexical": false,
+   "rerank_model": "BAAI/bge-reranker-v2-m3",
+   "sha_calculado_em": "2026-08-06T22:45:16+00:00"
+  }
+ }
+}

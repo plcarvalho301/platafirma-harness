@@ -1,0 +1,185 @@
+{
+ "sonda": "T0",
+ "n": "15",
+ "bloco": "B",
+ "persona": "persona-nao-declarada",
+ "pergunta": "continuant e occurrent",
+ "parametros_congelados": {
+  "texto": "secao",
+  "k": 8,
+  "dominio": null,
+  "subdominio": null,
+  "frente": null,
+  "colecao": null
+ },
+ "chamada_em": "2026-08-06T22:45:33.831833+00:00",
+ "acervo_sha": "24ed2cbf607e73ab1e8ab79c0d286bf2996b5751db4e63cfb97c2f313dfc25c7",
+ "retorno": {
+  "fontes": [
+   {
+    "n": 1,
+    "obra": "Basic Formal Ontology 2.0 — Specification and User's Guide",
+    "arquivo": "BFO2-Reference.docx",
+    "section_id": "bfo2-reference#continuant",
+    "breadcrumb": [
+     "Specification",
+     "Continuant"
+    ],
+    "sim": 0.704,
+    "score": 0.0161,
+    "rerank": 0.958,
+    "codigo_exato": false,
+    "texto": null
+   },
+   {
+    "n": 2,
+    "obra": "Basic Formal Ontology 2.0 — Specification and User's Guide",
+    "arquivo": "BFO2-Reference.docx",
+    "section_id": "bfo2-reference#occurrent",
+    "breadcrumb": [
+     "Specification",
+     "Occurrent"
+    ],
+    "sim": 0.682,
+    "score": 0.0159,
+    "rerank": 0.93,
+    "codigo_exato": false,
+    "texto": null
+   },
+   {
+    "n": 3,
+    "obra": "Basic Formal Ontology 2.0 — Specification and User's Guide",
+    "arquivo": "BFO2-Reference.docx",
+    "section_id": "bfo2-reference#the-dichotomy-of-continuant-and-occurrent",
+    "breadcrumb": [
+     "2012 instance_of temporal region, John’s birth instance_of process.",
+     "The dichotomy of ‘continuant’ and ‘occurrent’"
+    ],
+    "sim": 0.658,
+    "score": 0.0154,
+    "rerank": 0.986,
+    "codigo_exato": false,
+    "texto": null
+   },
+   {
+    "n": 4,
+    "obra": "Basic Formal Ontology 2.0 — Specification and User's Guide",
+    "arquivo": "BFO2-Reference.docx",
+    "section_id": "bfo2-reference#relations-of-parthood-disambiguated",
+    "breadcrumb": [
+     "Introduction",
+     "Summary of major changes from BFO 1.1 to BFO 2.0",
+     "New simplified treatment of boundaries and regions",
+     "Relations of parthood disambiguated"
+    ],
+    "sim": 0.675,
+    "score": 0.0156,
+    "rerank": 0.931,
+    "codigo_exato": false,
+    "texto": null
+   },
+   {
+    "n": 5,
+    "obra": "Basic Formal Ontology 2.0 — Specification and User's Guide",
+    "arquivo": "BFO2-Reference.docx",
+    "section_id": "bfo2-reference#2.13",
+    "breadcrumb": [
+     "2 Organization of BFO 6",
+     "2.13 The dichotomy of ‘continuant’ and ‘occurrent’ 16"
+    ],
+    "sim": 0.784,
+    "score": 0.0164,
+    "rerank": 0.556,
+    "codigo_exato": false,
+    "texto": null
+   },
+   {
+    "n": 6,
+    "obra": "Basic Formal Ontology 2.0 — Specification and User's Guide",
+    "arquivo": "BFO2-Reference.docx",
+    "section_id": "bfo2-reference#further-relations-defined-in-terms-of-parthood",
+    "breadcrumb": [
+     "Specification",
+     "Relations of parthood",
+     "Further relations defined in terms of parthood"
+    ],
+    "sim": 0.63,
+    "score": 0.0149,
+    "rerank": 0.706,
+    "codigo_exato": false,
+    "texto": null
+   },
+   {
+    "n": 7,
+    "obra": "Basic Formal Ontology 2.0 — Specification and User's Guide",
+    "arquivo": "BFO2-Reference.docx",
+    "section_id": "bfo2-reference#relation-of-specific-dependence",
+    "breadcrumb": [
+     "Specification",
+     "Relation of specific dependence"
+    ],
+    "sim": 0.615,
+    "score": 0.0143,
+    "rerank": 0.787,
+    "codigo_exato": false,
+    "texto": null
+   },
+   {
+    "n": 8,
+    "obra": "Basic Formal Ontology 2.0 — Specification and User's Guide",
+    "arquivo": "BFO2-Reference.docx",
+    "section_id": "bfo2-reference#why-processes-do-not-change",
+    "breadcrumb": [
+     "Specification",
+     "Qualities and processes as s-dependent entities",
+     "Why processes do not change"
+    ],
+    "sim": 0.611,
+    "score": 0.0141,
+    "rerank": 0.612,
+    "codigo_exato": false,
+    "texto": null
+   }
+  ],
+  "contexto": "[1] (BFO2-Reference.docx · bfo2-reference#continuant) — Specification › Continuant\n(contexto do pai · bfo2-reference#specification)\nSpecification\n---\nContinuant\nThe continuant branch of BFO 2.0 incorporates both material and immaterial continuants extended and potentially moving in space, and the spatial regions at which they are located and through which they move, and the associated spatial boundaries. (The approach is similar to the two-leveled approaches developed in [69, 70], though it avoids the reference to ‘quantities of matter’ or ‘bare matter’ which form their starting point.)\na(continuant)[Elucidation: A continuant is an entity that persists, endures, or continues to exist through time while maintaining its identity. [008-002]]\nContinuants include also spatial regions. note(material entity)[Material entities (continuants) can preserve their identity even while gaining and losing material parts. Continuants are contrasted with occurrents, which unfold themselves in successive temporal parts or phases [60]. ]\na(continuant)[Axiom: if b is a continuant and if, for some t, c is continuant_part of b at t, then c is a continuant. [009-002]]\na(continuant)[Axiom: if b is a continuant and if, for some t, c has_continuant_part b at t, then c is a continuant. [126-001]]\nIf an occurrent occupies_temporal_region a 2-minute temporal region, then the occurrent is the sum of two non-overlapping temporal parts (see below), each of 1-minute duration. Continuants have no temporal parts in this sense.\nContinuant\nnote(ontology)[BFO’s treatment of continuants and occurrents – as also its treatment of regions, /*below – thus */rests on\n\n[2] (BFO2-Reference.docx · bfo2-reference#occurrent) — Specification › Occurrent\n(contexto do pai · bfo2-reference#specification)\nSpecification\n---\nOccurrent\na(occurrent)[Elucidation: An occurrent is an entity that unfolds itself in time or it is the instantaneous boundary of such an entity (for example a beginning or an ending) or it is a temporal or spatiotemporal region which such an entity occupies_temporal_region or occupies_spatiotemporal_region. [077-002]]\nnote(process)[The realm of occurrents has fewer natural units than the realm of independent continuants. Thus no counterpart of ‘object’ can be found here. In BFO 1.0 ‘process’ served as such a counterpart. In BFO 2.0 ‘process’ is, rather, the occurrent counterpart of ‘material entity’. Those natural – as contrasted with engineered, deliberately executed – units which do exist in the realm of occurrents are typically either parasitic on the existence of natural units on the continuant side, or they are fiat in nature. Thus we can count lives; we can count football games; we can count chemical reactions performed in experiments or in chemical manufacturing. We cannot count the processes taking place, for instance, in an episode of insect mating behavior.\nEven where natural units are identifiable, for example cycles in a cyclical process such as the beating of a heart, the processes in question form a sequence with no discontinuities. Thus there are here no temporal gaps that are analogous to the spatial gaps that separate for instance billiard balls or planets. Lives of organisms are process units, but they too result from a continuous series of pre-life, process\n\n[3] (BFO2-Reference.docx · bfo2-reference#the-dichotomy-of-continuant-and-occurrent) — 2012 instance_of temporal region, John’s birth instance_of process. › The dichotomy of ‘continuant’ and ‘occurrent’\n(contexto do pai · bfo2-reference#2012)\n2012 instance_of temporal region, John’s birth instance_of process.\n---\nThe dichotomy of ‘continuant’ and ‘occurrent’\nThe dichotomy between continuant and occurrent ontologies forms the central organizing axis of the BFO ontology. The BFO view of this dichotomy derives in part from Zemach [60], who distinguishes between\nnon-continuant entities, which Zemach calls ‘events’, are defined by the fact that they can be sliced along any spatial and temporal dimensions to yield parts (for example the first year of the life of your table; the entire life of your table top – as contrasted with the life of your table legs – and so forth).\nAn event, for Zemach, is an entity that exists, in its entirety, in the area defined by its spatiotemporal boundaries, and each part of this area contains a part of the whole event. There are indefinitely many ways to carve the world into events, some of which are useful and interesting (e.g., for the physicist) and some of which – the vast majority –create hodge-podge collections of no interest whatsoever. [60, pp. 233 f.]\nnote(continuant)[Continuant entities are entities which can be sliced to yield parts only along the spatial dimension, yielding for example the parts of your table which we call its legs, its top, its nails. ‘My desk stretches from the window to the door. It has spatial parts, and can be sliced (in space) in two. With respect to time, however, a thing is a continuant.’ [60, p. 240] Some qualities can be sliced in this way also – for instance the color quality of a cube of Murano glass.\nThus you, for exa\n\n[4] (BFO2-Reference.docx · bfo2-reference#relations-of-parthood-disambiguated) — Introduction › Summary of major changes from BFO 1.1 to BFO 2.0 › New simplified treatment of boundaries and regions › Relations of parthood disambiguated\n(contexto do pai · bfo2-reference#new-simplified-treatment-of-boundaries-and-regions)\nNew simplified treatment of boundaries and regions\nnote(continuant fiat boundary)[In BFO 1.1 the assumption was made that the external surface of a material entity such as a cell could be treated as if it were a boundary in the mathematical sense. The new document propounds the view that when we talk about external surfaces of material objects in this way then we are talking about something fiat. \n---\nRelations of parthood disambiguated\nHitherto BFO has distinguished parthood between continuants and occurrents by means of the at t suffix used for the former; henceforth we will use the explicit distinction between continuant_part_of and occurrent_part_of (still using the at t suffix for the former).\n\n[5] (BFO2-Reference.docx · bfo2-reference#2.13) — 2 Organization of BFO 6 › 2.13 The dichotomy of ‘continuant’ and ‘occurrent’ 16\n(contexto do pai · bfo2-reference#2)\n2 Organization of BFO 6\n---\n2.13 The dichotomy of ‘continuant’ and ‘occurrent’ 16\n\n[6] (BFO2-Reference.docx · bfo2-reference#further-relations-defined-in-terms-of-parthood) — Specification › Relations of parthood › Further relations defined in terms of parthood\n(contexto do pai · bfo2-reference#relations-of-parthood)\nRelations of parthood\nAs our starting point in understanding the parthood relation, we take the axioms of Minimal Extensional Mereology as defined by Simons [46, pp. 26-31], assuming, with Simons, the axioms of first order predicate calculus. The axioms (reformulations of SA1-3 and SA6 in Simons’ numbering) are:\nAntisymmetry: If x part of y, then if y part of x, then x = y.\nTransitivity: If x part\n---\nFurther relations defined in terms of parthood\nProper parthood relations can be easily defined, as follows:\nFor continuants:\na(proper_continuant_part_of)[Definition: b proper_continuant_part_of c at t =Def. b continuant_part_of c at t & b and c are not identical. [004-001]]\nFor occurrents:\na(proper_occurrent_part_of)[Definition: b proper_occurrent_part_of c =Def. b occurrent_part_of c & b and c are not identical. [005-001]]\nWe can also define inverse relations:\nFor continuants:\na(has_continuant_part)[Definition: b has_continuant_part c at t = Def. c continuant_part_of b at t. [006-001]\n]\na(has_proper_continuant_part)[Definition: b has_proper_continuant_part c at t = Def. c proper_continuant_part_of b at t. [XXX-001]]\nFor occurrents:\na(has_occurrent_part)[Definition: b has_occurrent_part c = Def. c occurrent_part_of b. [007-001\n]\na(has_proper_occurrent_part)[Definition: b has_proper_occurrent_part c = Def. c proper_occurrent_part_of b. [XXX-001]]\n\n[7] (BFO2-Reference.docx · bfo2-reference#relation-of-specific-dependence) — Specification › Relation of specific dependence\n(contexto do pai · bfo2-reference#specification)\nSpecification\n---\nRelation of specific dependence\nSpecific dependence is a relation (henceforth: s-depends on) that obtains between one entity and another when the first entity cannot exist unless the second entity exists also. This relation can be either one-sided, in the sense that b s-depends_on c, but not (c s-depends_on b), or reciprocal where b and c s-depend_on each other. There are cases where a single entity is s-dependent on multiple other entities in either or both senses of ‘s-dependence’. In a future version of BFO, further varieties of dependence will be defined, including boundary dependence which holds between entities of lower dimension and the higher-dimensional entities which they bound. On the distinction between boundary dependence and specific dependence see [72].\na(s-depends on)[Elucidation: To say that b s-depends_on c at t is to say that\nb and c do not share common parts\n& b is of a nature such that it cannot exist unless c exists\n& b is not a boundary of c and b is not a site of which c is the host [64]. [012-002]]\nas(s-depends on)[Domain: specifically dependent continuant\\; process; process boundary]\nRange:\nrange(s-depends on)[for one-sided s-dependence: independent continuant;] process\nrange(s-depends on)[for reciprocal s-dependence: dependent continuant\\; process]\nas(s-depends on)[Examples (for one-sided dependence): A pain s-depends_on the organism that is experiencing the pain\\, a shape s-depends_on the shaped object\\, a gait s-depends_on the walking object. (All\n\n[8] (BFO2-Reference.docx · bfo2-reference#why-processes-do-not-change) — Specification › Qualities and processes as s-dependent entities › Why processes do not change\n(contexto do pai · bfo2-reference#qualities-and-processes-as-s-dependent-entities)\nQualities and processes as s-dependent entities\n---\nWhy processes do not change\nImagine, first, John, a BFO:object, who, on the first of the month, either does or does not go on a one-month diet. In the former case John’s determinable weight quality will decrease; in the latter case this quality will remain constant. In either case at the end of the month, John will remain the same object as he was on the first of the month. Both John and his weight are first class entities, thus instantiating universals (person, and weight) represented in corresponding BFO-conformant ontologies.\nIn the case of a process – for example John’s life – in contrast, no parallel scenario is imaginable. Of course we can imagine John’s life as varying under two different scenarios – life with diet; life without diet. But then, however small the variation from one imagined life to another, we are here imagining two different lives.\nAs Galton and Mizoguchi point out [53], persuasive arguments have been presented in the literature to the effect that processes cannot change, because processes are changes (they are changes in those continuant entities which are their participants). Certainly we have ways of speaking whose surface grammar suggests that processes can change. But when we say, for example, let’s speed up this process, then what we mean is: let’s ensure that some on-going process is one which will be quicker than the process that would have occurred had we not made some specific extra effort.\nBecause independent continuants may gain and lose pa",
+  "cobertura": "boa",
+  "sinal": {
+   "medida": "rerank",
+   "valor": 0.986,
+   "piso": 0.79
+  },
+  "perguntas": [
+   "continuant e occurrent"
+  ],
+  "filtro": {
+   "dominio": [],
+   "subdominio": [],
+   "frente": [],
+   "colecao": []
+  },
+  "aviso": null,
+  "indice": {
+   "acervo_sha": "24ed2cbf607e73ab1e8ab79c0d286bf2996b5751db4e63cfb97c2f313dfc25c7",
+   "chunks": 145240,
+   "chunks_recuperaveis": 124463,
+   "chunks_com_vetor": 124463,
+   "chunks_nao_textuais": 20777,
+   "documentos_sem_chunk": 4,
+   "obras_catalogadas": 694,
+   "obras_ingeridas": 623,
+   "conceitos": 205,
+   "embed_model": "Qwen/Qwen3-Embedding-0.6B",
+   "embed_backend": "torch",
+   "embed_query_instruction": "Given a search query, retrieve relevant passages that answer the query",
+   "embed_meta_beta": 0.15,
+   "modo": "hybrid",
+   "rrf_k": 60,
+   "rrf_w_vec": 1.0,
+   "rrf_w_id": 2.0,
+   "rrf_w_lex": 0.5,
+   "hybrid_lexical": false,
+   "rerank_model": "BAAI/bge-reranker-v2-m3",
+   "sha_calculado_em": "2026-08-06T22:45:16+00:00"
+  }
+ }
+}

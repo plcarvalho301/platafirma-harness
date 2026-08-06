@@ -1,0 +1,183 @@
+{
+ "sonda": "T0",
+ "n": "26",
+ "bloco": "B",
+ "persona": "persona-nao-declarada",
+ "pergunta": "trunk-based development",
+ "parametros_congelados": {
+  "texto": "secao",
+  "k": 8,
+  "dominio": null,
+  "subdominio": null,
+  "frente": null,
+  "colecao": null
+ },
+ "chamada_em": "2026-08-06T22:45:45.661439+00:00",
+ "acervo_sha": "24ed2cbf607e73ab1e8ab79c0d286bf2996b5751db4e63cfb97c2f313dfc25c7",
+ "retorno": {
+  "fontes": [
+   {
+    "n": 1,
+    "obra": "Accelerate: State of DevOps 2023",
+    "arquivo": "2023-dora-accelerate-state-of-devops-report.pdf",
+    "section_id": "2023-dora-accelerate-state-of-devops-report-2023#trunk-based-development",
+    "breadcrumb": [
+     "3.6x",
+     "The models",
+     "• Trunk-based development"
+    ],
+    "sim": 0.805,
+    "score": 0.0164,
+    "rerank": 0.959,
+    "codigo_exato": false,
+    "texto": null
+   },
+   {
+    "n": 2,
+    "obra": "Accelerate: State of DevOps 2022",
+    "arquivo": "2022-dora-accelerate-state-of-devops-report.pdf",
+    "section_id": "2022-dora-accelerate-state-of-devops-report-2022#trunk-based-development",
+    "breadcrumb": [
+     "2022 Accelerate",
+     "05 Surprises",
+     "Trunk-based development"
+    ],
+    "sim": 0.715,
+    "score": 0.0161,
+    "rerank": 0.999,
+    "codigo_exato": false,
+    "texto": null
+   },
+   {
+    "n": 3,
+    "obra": "State of DevOps Report 2016",
+    "arquivo": "2016-state-of-devops-report.pdf",
+    "section_id": "2016-state-of-devops-report-2016#shifting-left",
+    "breadcrumb": [
+     "Chapter 04 — Building quality in",
+     "Shifting Left"
+    ],
+    "sim": 0.671,
+    "score": 0.0159,
+    "rerank": 0.983,
+    "codigo_exato": false,
+    "texto": null
+   },
+   {
+    "n": 4,
+    "obra": "Accelerate: State of DevOps 2019",
+    "arquivo": "2019-dora-accelerate-state-of-devops-report.pdf",
+    "section_id": "2019-dora-accelerate-state-of-devops-report-2019#technical-practices",
+    "breadcrumb": [
+     "TECHNICAL PRACTICES"
+    ],
+    "sim": 0.658,
+    "score": 0.0156,
+    "rerank": 0.996,
+    "codigo_exato": false,
+    "texto": null
+   },
+   {
+    "n": 5,
+    "obra": "State of DevOps Report 2017",
+    "arquivo": "2017-state-of-devops-report.pdf",
+    "section_id": "2017-state-of-devops-report-2017#trunk-based-development",
+    "breadcrumb": [
+     "practices",
+     "Trunk-based development"
+    ],
+    "sim": 0.611,
+    "score": 0.0152,
+    "rerank": 0.991,
+    "codigo_exato": false,
+    "texto": null
+   },
+   {
+    "n": 6,
+    "obra": "Building Microservices (2nd)",
+    "arquivo": "Building Microservices Designing Fine-Grained Systems 2nd By Sam Newman.pdf",
+    "section_id": "building-microservices-designing-fine-grained-systems-2nd-by-sam-newman-2021#branching-models",
+    "breadcrumb": [
+     "Chapter 7. Build",
+     "A Brief Introduction to Continuous Integration",
+     "Branching Models"
+    ],
+    "sim": 0.616,
+    "score": 0.0154,
+    "rerank": 0.948,
+    "codigo_exato": false,
+    "texto": null
+   },
+   {
+    "n": 7,
+    "obra": "Accelerate: The Science of Lean Software and DevOps",
+    "arquivo": "Accelerate - The Science of Lean Software and DevOps.pdf",
+    "section_id": "accelerate-the-science-of-lean-software-and-devops-2018#trunk-based-development",
+    "breadcrumb": [
+     "Chapter 10)",
+     "TRUNK-BASED DEVELOPMENT"
+    ],
+    "sim": 0.584,
+    "score": 0.0149,
+    "rerank": 0.977,
+    "codigo_exato": false,
+    "texto": null
+   },
+   {
+    "n": 8,
+    "obra": "Accelerate: State of DevOps 2021",
+    "arquivo": "2021-dora-accelerate-state-of-devops-report.pdf",
+    "section_id": "2021-dora-accelerate-state-of-devops-report-2021#technical-devops-capabilities",
+    "breadcrumb": [
+     "Chapter 3",
+     "Technical DevOps capabilities"
+    ],
+    "sim": 0.497,
+    "score": 0.0145,
+    "rerank": 0.919,
+    "codigo_exato": false,
+    "texto": null
+   }
+  ],
+  "contexto": "[1] (2023-dora-accelerate-state-of-devops-report.pdf · 2023-dora-accelerate-state-of-devops-report-2023#trunk-based-development) — 3.6x › The models › • Trunk-based development\n• Trunk-based development\n• Trunk-based development\nReverses\nUnderrepresented\n• Trunk-based development\nKey outcomes\n\n[2] (2022-dora-accelerate-state-of-devops-report.pdf · 2022-dora-accelerate-state-of-devops-report-2022#trunk-based-development) — 2022 Accelerate › 05 Surprises › Trunk-based development\nTrunk-based development\nIndividuals with 16+ years of experience that use\ntrunk-based development realize the benefits of\nthe practice and see:\nTrunk-based development is the practice of\ncontinuously merging code into the trunk and avoiding\n Increased overall software delivery performance\nlong-lived feature branches. This practice is considered\n Decreased amounts of unplanned work\na complement to continuous integration and has been\n Decreased error-proneness\nshown for years to accelerate software delivery velocity.\n Decreased change failure rate\nDue to the shift in demographics this year around\nThis is likely due to the additional practices required\nyears of experience on the job, we are able to see that\nto successfully implement Trunk-based development.\nexperience matters when implementing trunk-based\nTeams that do not have rigorously enforced rules\ndevelopment. Last year we had 40% of respondents\naround never walking away from a broken trunk or that\nstate they had 16+yrs on the job and this year that\ndo not use gated code branches and auto-roll back\ncategory represented just 13%. Continuing to validate\ncode that breaks the trunk will certainly experience\nour “Delivery Depends” theme, we see that folks with\npain when trying to develop on the trunk.\nless experience overall have less positive results around\ntrunk-based development and see:\nHowever, the presence of trunk-based\ndevelopment shows a positive impact on overall\n Decreased overall software delivery performance\no\n\n[3] (2016-state-of-devops-report.pdf · 2016-state-of-devops-report-2016#shifting-left) — Chapter 04 — Building quality in › Shifting Left\n(contexto do pai · 2016-state-of-devops-report-2016#chapter-04-building-quality-in)\nChapter 04 — Building quality in\n22\nIf we consider software development as a linear phase-gate or waterfall\nprocess, we typically include at least these stages: design, development,\ntest and release. In a traditional software development cycle, testing —\nincluding security testing — happens after development on a release is\ncomplete. Once defects are discovered (and debate over whether they\nare in\n---\nShifting Left\n“Shifting left” is about building quality\ninto the software development process.\nWhen you shift left, fewer things break\nin production, because any issues are\ndetected and resolved earlier.\nThink of the software delivery process as\na manufacturing assembly line. The far\nleft is the developer’s laptop where the\ncode originates, and the far right is the\nproduction environment where this code\neventually ends up. When you shift left,\ninstead of testing quality only at the end,\nyou have multiple feedback loops along the\nway to ensure that software gets delivered\nto users quickly, at a high level of quality.\nnature unpredictable, further pushing out delivery dates and creating a\ncycle of firefighting and heroics.\nA key idea that continuous delivery borrows from lean thinking is the\nconcept of building quality in. As W. Edwards Deming introduces in\nhis Fourteen Points for the Transformation of Management, “Cease\ndependence on inspection to achieve quality. Eliminate the need for\ninspection on a mass basis by building quality into the product in\nthe first place.” In this model, rather than taking a phased approach,\nFor more information on how continuous\nintegration and continuous delivery shift\nquality to the left, see the\n2015 State of DevOps Report.\ndevelopers work with security and testing experts to design and deliver\nwork in small batches throughout the product lifecycle. This idea is also\nknown as shifting left.\n23\nIn last year’s study, our analysis showed that th\n\n[4] (2019-dora-accelerate-state-of-devops-report.pdf · 2019-dora-accelerate-state-of-devops-report-2019#technical-practices) — TECHNICAL PRACTICES\nTECHNICAL PRACTICES\nExecuting for maximum effect\nMany organizations wanting to adopt DevOps look for a set of prescriptive\nsteps or best practices to guide their journey. However, every organization\nis different and which practices to adopt depends on the current state\nof the organization—including the state of its technology, culture, and\nprocesses—and its short- and long-term goals.\nThe solution is to take a holistic approach, where you first work to\nunderstand the constraints in your current software delivery process\nwith an eye to your short- and long-term outcomes in measurable terms.\nThen empower teams to decide how best to accomplish those outcomes—\nafter all, they are the experts in their work and context.14 Those who adopt\nthis approach see more scalable and flexible solutions, and by not having\nto micromanage detailed execution plans, management can focus on\nhigh-level outcomes, allowing their organizations to grow. By focusing on\ndesigning and executing short-term outcomes that support the long-term\nstrategy, teams are able to adjust to emergent and unanticipated\n14 This approach derives from the work of Mike Rother based on his study of Toyota, which is described in detail at\nhttp://www-personal.umich.edu/~mrother/Homepage.html.\n38\nAccelerate: State of DevOps 2019 | How Do We Improve SDO & Organizational Performance?\nproblems, outperforming their peers whose three-\nteam-level and organization-level—can and\nand five-year plans cannot be flexible and nimble\nshould p\n\n[5] (2017-state-of-devops-report.pdf · 2017-state-of-devops-report-2017#trunk-based-development) — practices › Trunk-based development\n(contexto do pai · 2017-state-of-devops-report-2017#practices)\npractices\n04\n05\n06\n2\npractices\n06\nToday, DevOps is viewed as the path to faster\ndelivery of software, greater efficiency, and the\nability to pull ahead of the competition. Some,\neager to start on the DevOps path, begin by\nresearching which tools they should buy. More\nimportant than specific tools, though, are the\ntechnical practices that enable you to achieve the\nvery things that most people turn \n---\nTrunk-based development\nLast year, we investigated the role that trunk-based\ndevelopment plays in continuous delivery. While our\nexperience shows that developers in high-performing\nteams work in small batches and develop off of trunk\nor master, rather than long-lived feature branches,\nmany practitioners in the industry routinely work in\nbranches or forks. Last year’s results confirmed that the\nfollowing development practices contribute to higher\nsoftware delivery performance:\nDespite abundant evidence that trunk-based\ndevelopment practices contribute to better software\ndelivery performance, some developers who are used to\nthe GitHub-recommended workflow remain skeptical.\nThe GitHub-recommended workflow suggests\ndeveloping from branches, and only periodically\nmerging to trunk. Working on short-lived branches that\nare merged into trunk at least daily is consistent with\ncommonly accepted continuous integration practices.\nWe have heard, for example, that branching strategies\nare effective, as long as development teams don’t\nmaintain branches for too long. But what is too long?\n• Merging code into trunk on a daily basis.\n• Having branches or forks with very short lifetimes\n(less than a day).\n• Having fewer than three active branches.\nWe also found that teams without code lock periods\nhad higher software delivery performance. (The ability\nto work without code lock periods is supported by the\npractices described above.)\nTechnical practices\n40\nThis year we conducted additional analys\n\n[6] (Building Microservices Designing Fine-Grained Systems 2nd By Sam Newman.pdf · building-microservices-designing-fine-grained-systems-2nd-by-sam-newman-2021#branching-models) — Chapter 7. Build › A Brief Introduction to Continuous Integration › Branching Models\n(contexto do pai · building-microservices-designing-fine-grained-systems-2nd-by-sam-newman-2021#a-brief-introduction-to-continuous-integration)\nA Brief Introduction to Continuous Integration\nContinuous integration (CI) has been around for a number of years. However,\nit’s worth spending a bit of time going over the basics, as there are some\ndifferent options to consider, especially when we think about the mapping\nbetween microservices, builds, and version control repositories.\nWith CI, the core goal is to keep everyone in sync with each ot\n---\nBranching Models\nFew topics around build and deployment seem to cause as much of a controversy\nas that of using source code branching for feature development. Branching in\nsource code allows for development to be done in isolation without disrupting\nthe work being done by others. On the surface, creating a source code branch for\neach feature being worked on—otherwise known as feature branching—seems\nlike a useful concept.\nThe problem is that when you work on a feature branch, you aren’t regularly\nintegrating your changes with everyone else. Fundamentally, you are delaying\nintegration. And when you finally decide to integrate your changes with\neveryone else, you’ll have a much more complex merge.\nThe alternative approach is to have everyone check in to the same “trunk” of\nsource code. To keep changes from impacting other people, techniques like\nfeature flags are used to “hide” incomplete work. This technique of everyone\nworking off the same trunk is called trunk-based development.\nThe discussion around this topic is nuanced, but my own take is that the benefits\nof frequent integration—and validation of that integration—are significant\nenough that trunk-based development is my preferred style of development.\nMoreover, the work to implement feature flags is frequently beneficial in terms\nof progressive delivery, a concept we’ll explore in Chapter 8.\nBE CAREFUL ABOUT BRANCHES\nIntegrate early, and integrate often. Avoid the use of long-lived branches for feature\ndevelopment, and c\n\n[7] (Accelerate - The Science of Lean Software and DevOps.pdf · accelerate-the-science-of-lean-software-and-devops-2018#trunk-based-development) — Chapter 10) › TRUNK-BASED DEVELOPMENT\n(contexto do pai · accelerate-the-science-of-lean-software-and-devops-2018#chapter-10)\nChapter 10)\nHigher levels of software delivery performance (lead time, deploy\nfrequency, time to restore service)\nLower change fail rates\nA generative, performance-oriented culture (see Chapter 3)\nese relationships are shown in Figure 4.2.\nFigure 4.2: Impacts of Continuous Delivery\nEven better, our research found that improvements in CD brought\npayoﬀs in the way that work felt. is means that inv\n---\nTRUNK-BASED DEVELOPMENT\nOur research also found that developing oﬀ trunk/master rather than on\nlong-lived feature branches was correlated with higher delivery\nperformance. Teams that did well had fewer than three active branches at\nany time, their branches had very short lifetimes (less than a day) before\nbeing merged into trunk and never had “code freeze” or stabilization\nperiods. It’s worth re-emphasizing that these results are independent of\nteam size, organization size, or industry.\nEven after ënding that trunk-based development practices contribute\nto better software delivery performance, some developers who are used to\nthe “GitHub Flow” workìow6 remain skeptical. is workìow relies heavily\non developing with branches and only periodically merging to trunk. We\nhave heard, for example, that branching strategies are eﬀective if\ndevelopment teams don’t maintain branches for too long—and we agree\nthat working on short-lived branches that are merged into trunk at least\ndaily is consistent with commonly accepted continuous integration\npractices.\nWe conducted additional research and found that teams using branches\nthat live a short amount of time (integration times less than a day)\ncombined with short merging and integration periods (less than a day) do\nbetter in terms of software delivery performance than teams using longer-\nlived branches. Anecdotally, and based on our own experience, we\nhypothesize that this is because having multiple long-lived branches\ndiscourages both ref\n\n[8] (2021-dora-accelerate-state-of-devops-report.pdf · 2021-dora-accelerate-state-of-devops-report-2021#technical-devops-capabilities) — Chapter 3 › Technical DevOps capabilities\nTechnical DevOps capabilities\nLoosely coupled architecture\nOur research shows that organizations who\nundergo a DevOps transformation by adopting\ncontinuous delivery are more likely to have\nprocesses that are high quality, low-risk, and\ncost-effective.\nOur research continues to show that you can improve\nIT performance by working to reduce fine-grained\ndependencies between services and teams. In fact,\nthis is one of the strongest predictors of successful\ncontinuous delivery. Using a loosely coupled\narchitecture, teams can scale, fail, test, and deploy\nindependently of one another. Teams can move at\ntheir own pace, work in smaller batches, accrue less\ntechnical debt, and recover faster from failure.\nSpecifically, we measured the following\ntechnical practices:\n• Loosely coupled architecture\n• Trunk-based development\n• Continuous testing\nContinuous testing and\ncontinuous integration\n• Continuous integration\n• Use of open source technologies\nSimilar to our findings from previous years, we show\nthat continuous testing is a strong predictor of\nsuccessful continuous delivery. Elite performers\nwho meet their reliability targets are 3.7 times more\nlikely to leverage continuous testing. By incorporating\nearly and frequent testing throughout the delivery\nprocess, with testers working alongside developers\nthroughout, teams can iterate and make changes\nto their product, service, or application more\nquickly. You can use this feedback loop to deliver\nvalue to your customers while also easily\n",
+  "cobertura": "boa",
+  "sinal": {
+   "medida": "rerank",
+   "valor": 0.999,
+   "piso": 0.79
+  },
+  "perguntas": [
+   "trunk-based development"
+  ],
+  "filtro": {
+   "dominio": [],
+   "subdominio": [],
+   "frente": [],
+   "colecao": []
+  },
+  "aviso": null,
+  "indice": {
+   "acervo_sha": "24ed2cbf607e73ab1e8ab79c0d286bf2996b5751db4e63cfb97c2f313dfc25c7",
+   "chunks": 145240,
+   "chunks_recuperaveis": 124463,
+   "chunks_com_vetor": 124463,
+   "chunks_nao_textuais": 20777,
+   "documentos_sem_chunk": 4,
+   "obras_catalogadas": 694,
+   "obras_ingeridas": 623,
+   "conceitos": 205,
+   "embed_model": "Qwen/Qwen3-Embedding-0.6B",
+   "embed_backend": "torch",
+   "embed_query_instruction": "Given a search query, retrieve relevant passages that answer the query",
+   "embed_meta_beta": 0.15,
+   "modo": "hybrid",
+   "rrf_k": 60,
+   "rrf_w_vec": 1.0,
+   "rrf_w_id": 2.0,
+   "rrf_w_lex": 0.5,
+   "hybrid_lexical": false,
+   "rerank_model": "BAAI/bge-reranker-v2-m3",
+   "sha_calculado_em": "2026-08-06T22:45:16+00:00"
+  }
+ }
+}

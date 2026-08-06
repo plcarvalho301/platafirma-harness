@@ -1,0 +1,170 @@
+{
+ "sonda": "T0",
+ "n": "10",
+ "bloco": "A",
+ "persona": "persona-nao-declarada",
+ "pergunta": "o que é curadoria de acervo?",
+ "parametros_congelados": {
+  "texto": "secao",
+  "k": 8,
+  "dominio": null,
+  "subdominio": null,
+  "frente": null,
+  "colecao": null
+ },
+ "chamada_em": "2026-08-06T22:45:28.226002+00:00",
+ "acervo_sha": "24ed2cbf607e73ab1e8ab79c0d286bf2996b5751db4e63cfb97c2f313dfc25c7",
+ "retorno": {
+  "fontes": [
+   {
+    "n": 1,
+    "obra": "NOBRADE: Norma brasileira de descrição arquivística",
+    "arquivo": "nobrade-conarq.pdf",
+    "section_id": "nobrade-conarq-2006#21",
+    "breadcrumb": [
+     "21 Excerto disponível em http://www.collectionscanada.ca/iso/tc46sc9/standard/5964e.htm. Acesso em: 6 jul. 2006."
+    ],
+    "sim": 0.548,
+    "score": 0.0159,
+    "rerank": 0.063,
+    "codigo_exato": false,
+    "texto": null
+   },
+   {
+    "n": 2,
+    "obra": "Cartilha de Governança de Dados — Volume III: Papéis e Responsabilidades de Governança de Dados no Poder Executivo Federal",
+    "arquivo": "cartilha de governança vol 3.pdf",
+    "section_id": "cartilha-de-governança-vol-3-2026#_",
+    "breadcrumb": [],
+    "sim": 0.558,
+    "score": 0.0156,
+    "rerank": 0.036,
+    "codigo_exato": false,
+    "texto": null
+   },
+   {
+    "n": 3,
+    "obra": "Cartilha de Governança de Dados — Volume I: Conceitos Iniciais",
+    "arquivo": "cartilha-de-governanca-de-dados-volume1-8-12.pdf",
+    "section_id": "cartilha-de-governanca-de-dados-volume1-8-12-1998#5.2",
+    "breadcrumb": [
+     "5.2 Riscos da não implementação da Governança de Dados"
+    ],
+    "sim": 0.527,
+    "score": 0.0139,
+    "rerank": 0.034,
+    "codigo_exato": false,
+    "texto": null
+   },
+   {
+    "n": 4,
+    "obra": "Cartilha do Catálogo Nacional de Dados",
+    "arquivo": "Cartilha do Catálogo Nacional de Dados.pdf",
+    "section_id": "cartilha-do-catálogo-nacional-de-dados#introdução",
+    "breadcrumb": [
+     "Introdução"
+    ],
+    "sim": 0.569,
+    "score": 0.0161,
+    "rerank": 0.01,
+    "codigo_exato": false,
+    "texto": null
+   },
+   {
+    "n": 5,
+    "obra": "Estudo Técnico Preliminar 3/2026 e anexos — Central de Atendimento Multimeios (Contact Center Omnichannel)",
+    "arquivo": "apendices-do-tr.pdf",
+    "section_id": "apendices-do-tr-2026#4.1",
+    "breadcrumb": [
+     "6 (seis) cadeiras giratórias estilo presidente, com braços de apoio, encosto alto, altura ajustável e",
+     "4.1 A Curadoria e Gestão de Conteúdos e Processos consiste nos ciclos relativos às atividades de obtenção,"
+    ],
+    "sim": 0.547,
+    "score": 0.0141,
+    "rerank": 0.026,
+    "codigo_exato": false,
+    "texto": null
+   },
+   {
+    "n": 6,
+    "obra": "Decreto nº 4.073/2002 — Regulamentação da Lei nº 8.159/1991 (política nacional de arquivos públicos e privados)",
+    "arquivo": "D4073.pdf",
+    "section_id": "d4073-2002#_",
+    "breadcrumb": [],
+    "sim": 0.539,
+    "score": 0.0149,
+    "rerank": 0.017,
+    "codigo_exato": false,
+    "texto": null
+   },
+   {
+    "n": 7,
+    "obra": "ISAD(G): Norma geral internacional de descrição arquivística — Segunda Edição",
+    "arquivo": "isad-g-2001-conarq-pt.pdf",
+    "section_id": "isad-g-2001-conarq-pt-1999#5963",
+    "breadcrumb": [
+     "5963 Documentation - Methods for examining documents, determining their subject, and"
+    ],
+    "sim": 0.566,
+    "score": 0.0164,
+    "rerank": 0.004,
+    "codigo_exato": false,
+    "texto": null
+   },
+   {
+    "n": 8,
+    "obra": "NOBRADE: Norma brasileira de descrição arquivística",
+    "arquivo": "nobrade-conarq.pdf",
+    "section_id": "nobrade-conarq-2006#22",
+    "breadcrumb": [
+     "22 ARQUIVO NACIONAL (Brasil). Dicionário brasileiro de terminologia arquivística. Rio de Janeiro: O Arquivo, 2005."
+    ],
+    "sim": 0.503,
+    "score": 0.0128,
+    "rerank": 0.024,
+    "codigo_exato": false,
+    "texto": null
+   }
+  ],
+  "contexto": "[1] (nobrade-conarq.pdf · nobrade-conarq-2006#21) — 21 Excerto disponível em http://www.collectionscanada.ca/iso/tc46sc9/standard/5964e.htm. Acesso em: 6 jul. 2006.\n21 Excerto disponível em http://www.collectionscanada.ca/iso/tc46sc9/standard/5964e.htm. Acesso em: 6 jul. 2006.\n13\nGLOSSÁRIO\nAs definições a seguir devem ser entendidas no contexto desta Norma. A sua elaboração\nbaseou-se no Dicionário brasileiro de terminologia arquivística.22\nacervo\nTotalidade de documentos de uma entidade custodiadora.\narquivo\nConjunto de documentos produzidos e acumulados por uma entida-\nde coletiva pública ou privada, pessoa ou família, no desempenho\nde suas atividades, independentemente da natureza dos suportes.\nautor\nDesignação genérica para quem cria um documento.\ncódigo de referência\nCódigo elaborado de acordo com a Norma Geral Internacional de\nDescrição Arquivística – ISAD(G), destinado a identificar qual-\nquer unidade de descrição.\ncoleção\nConjunto de documentos com características comuns, reunidos\nintencionalmente.\ncolecionador\nEntidade coletiva, pessoa ou família responsável pela formação\nde uma coleção.\ndata-assunto\nElemento de identificação cronológica do assunto de um docu-\nmento, independentemente da sua data de produção.\ndata crônica\nElemento de identificação cronológica que tem por referencial\num calendário.\ndata de acumulação\nElemento de identificação cronológica que leva em consideração\nvariantes da história de formação do acervo como herança de fun-\ndos, sucessão arquivística e aquisições por compra ou doação.\ndata de produção\nElemento de identificação cronológica pelo qual se indica a data\nem que o documento foi produzido.\ndata-limite\nE\n\n[2] (cartilha de governança vol 3.pdf · cartilha-de-governança-vol-3-2026#_)\nCARTILHA DE\nGOVERNANÇA DE DADOS\nVolume III\nPAPÉIS E RESPONSABILIDADES DE GOVERNANÇA DE\nDADOS NO PODER EXECUTIVO FEDERAL\nVersão 1.1\nBrasília, fevereiro de 2026\nMINISTÉRIO DA GESTÃO E DA INOVAÇÃO EM SERVIÇOS PÚBLICOS\nEsther Dweck\nMinistra\nSECRETARIA DE GOVERNO DIGITAL\nRogério Souza Mascarenhas\nSecretário de Governo Digital\nDIRETORIA DE INFRAESTRUTURA DE DADOS\nMarcos Moreira\nDiretor de Infraestrutura de Dados\nCOORDENAÇÃO-GERAL DE GOVERNANÇA DE DADOS\nDaniela Nunes de Menezes\nCoordenadora-Geral de Governança de Dados\nEQUIPE TÉCNICA DE ELABORAÇÃO\nFlávio Lopes de Morais\nNádia Lopes Cerqueira\nDIAGRAMAÇÃO\nLeandro Santa Rosa da Costa\nSumário\nApresentação\nA Governança e a Gestão de Dados desempenham um papel basilar na\nimplementação da estratégia de transformação digital do Estado para melhoria\ndos serviços e das políticas públicas, em que as organizações buscam extrair valor\ne evidências de seus ativos de dados, garantir a conformidade e segurança,\nfacilitar a tomada de decisões embasadas, promover a cultura de dados,\nestabelecer responsabilidade e prestação de contas.\nSegundo a OCDE (2023), o avanço da Governança de Dados no setor público\nse tornou uma prioridade máxima para a maioria dos países a fim de garantir o uso\nde dados como um ativo estratégico. De acordo com os resultados da dimensão\ndo Setor Público orientado por dados, cerca de dois terços dos países têm em\nvigor funções de liderança dedicadas, arranjos de governança e instrumentos\nestratégicos para dados. Eles são importa\n\n[3] (cartilha-de-governanca-de-dados-volume1-8-12.pdf · cartilha-de-governanca-de-dados-volume1-8-12-1998#5.2) — 5.2 Riscos da não implementação da Governança de Dados\n5.2 Riscos da não implementação da Governança de Dados\nDiversos são os riscos que podem ser mitigados com a implementação da Governança\nde Dados na organização, com impactos abrangentes nos níveis estratégico, tático e opera­\ncional. Como exemplo podemos mencionar:\n• Risco de não conformidade em relação a regulações de privacidade e de sigilo:\nEsse tipo de risco diz respeito à crescente evolução normativa acerca da gestão de da­\ndos e informações, especialmente no âmbito da Administração Pública Federal, com desta­\nque para a Lei de Acesso à Informação (Lei n° 12.527/2011), ao Marco Civil da Internet (Lei\nn° 12.965/2014) e à Lei Geral de Proteção de Dados Pessoais (Lei n° 13.709/2018). Manter-\nse em conformidade legal é um grande desafio, cujo papel da Governança de Dados auxilia\nsobremaneira no seu enfrentamento.\n15\nImpacto: O risco de não conformidade em relação às regulações de privacidade e de\nsigilo tem como possíveis impactos negativos, além das sanções legais previstas, a possi­\nbilidade de acesso indevido a dados pessoais, sensíveis e sigilosos, bem como o seu uso\nindevido. Situações como essas podem ainda ocasionar, em última análise, danos à ima­\ngem, seja da instituição por expor falhas de controles internos relacionados à custódia e ao\nacesso aos dados, seja do particular cujos dados foram utilizados indevidamente.\nOrigens: Dar-se por diversos fatores como o próprio desconhecimento, por parte do\ncurador [1] do dado, de normas relacionadas a privacidade e sigilo de\n\n[4] (Cartilha do Catálogo Nacional de Dados.pdf · cartilha-do-catálogo-nacional-de-dados#introdução) — Introdução\nIntrodução\n. . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .\n3\n1.2\nIND e o Catálogo . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .\n3\n1.2.1\nObjetivos da IND . . . . . . . . . . . . . . . . . . . . . . . . . . . . .\n3\n1.2.2\nContexto . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .\n3\n1.3\nCatálogo Nacional de Dados . . . . . . . . . . . . . . . . . . . . . . . . . . .\n4\n1.4\nImportância do Catálogo Nacional de Dados . . . . . . . . . . . . . . . . . .\n4\n1.5\nBenefícios do Catálogo Nacional de Dados . . . . . . . . . . . . . . . . . . .\n5\n1.6\nPossíveis cenários\n. . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .\n6\n1.7\nEscopo e não escopo . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .\n7\n1.7.1\nEscopo\n. . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .\n7\n1.7.2\nNão escopo . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .\n7\n1.8\nPapeis e responsabilidade . . . . . . . . . . . . . . . . . . . . . . . . . . . .\n7\n1.8.1\nInstância Estratégica de Governança de Dados . . . . . . . . . . . .\n7\n1.8.2\nExecutivo de Dados . . . . . . . . . . . . . . . . . . . . . . . . . . .\n7\n1.8.3\nCurador . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .\n7\n1.8.4\nGestor de Tecnologia da Informação e Comunicação . . . . . . . . .\n8\n1.8.5\nUsuário Consumidor de Metadados . . . . . . . . . . . . . . . . . .\n8\n1.8.6\nCustodiante de dados . . . . . . . . . . . . . . . . . . . . . . . . . .\n8\n\n[5] (apendices-do-tr.pdf · apendices-do-tr-2026#4.1) — 6 (seis) cadeiras giratórias estilo presidente, com braços de apoio, encosto alto, altura ajustável e › 4.1 A Curadoria e Gestão de Conteúdos e Processos consiste nos ciclos relativos às atividades de obtenção,\n(contexto do pai · apendices-do-tr-2026#6)\n6 (seis) cadeiras giratórias estilo presidente, com braços de apoio, encosto alto, altura ajustável e\nrodinhas, que atendam à NR-17. A sala do cliente deve ser personalizada com identidade visual dos\nórgãos CONTRATANTES. Deve permitir a inserção de elementos de comunicação/identidade visual,\nincluindo a aplicação de artefatos e técnicas que permitam a categorização de Co-Branding do espaço\nfísico,\n---\n4.1 A Curadoria e Gestão de Conteúdos e Processos consiste nos ciclos relativos às atividades de obtenção,\ncompreensão, roteirização, manutenção e avaliação dos fluxos de atendimento (humano ou automatizado)\nseus scripts de atendimento e outros conforme:\n\nLevantamento dos procedimentos e rotinas existentes no MEC para cada unidade/autarquia atendida;\n\nProdução das informações necessárias ao atendimento;\n\nOtimização, em conjunto com profissionais do MEC e órgãos vinculados, dos procedimentos e rotinas\nlevantados para adequação aos procedimentos de atendimento;\n\nDefinição, elaboração e implantação dos processos otimizados aos serviços de atendimento\nrealizados pela Central;\n\nElaboração e implementação dos procedimentos operacionais padrão e dos roteiros de atendimento\nque comporão a base de conhecimento informatizada utilizada no teleatendimento receptivo, ativo e\nvia multicanais, após validação pelas equipes do MEC;\n\nAcompanhamento da eficiência e eficácia dos documentos produzidos;\n\nAtualização dos documentos de conhecimento conforme necessário;\n\nEntrevista com as áreas de negócio e técnicas do MEC, FNDE, INEP e CAPES para criar documentos\nde conhecimento, scripts e procedimentos;\n\nMonitoramento e avaliação dos resultados da aplicação dos roteiros com o objetivo de melhorar a\nqualidade dos serviços prestados;\n\n[6] (D4073.pdf · d4073-2002#_)\nPresidência da República\nCasa Civil\nSubchefia para Assuntos Jurídicos\nDECRETO No 4.073, DE 3 DE JANEIRO DE 2002.\nRegulamenta a Lei no 8.159, de 8 de janeiro de 1991, que\ndispõe sobre a política nacional de arquivos públicos e\nprivados.\nO PRESIDENTE DA REPÚBLICA, no uso da atribuição que lhe confere o art. 84, inciso IV, da Constituição, e tendo\nem vista o disposto na Lei no 8.159, de 8 de janeiro de 1991,\nDECRETA:\nCapítulo |\nDO CONSELHO NACIONAL DE ARQUIVOS\n=\nAlanatrancao\nada\nvAINIAO\nMAILADDO\nUV\nLJ ING\nWIIG\nU\nUT VV\nLJ IN\nq\nArt. 1o\nO Conselho Nacional de Arquivos - CONARQ, órgão colegiado instituído no âmbito do Arquivo Nacional,\ncriado pelo art. 26 da Lei no 8.159, de 8 de janeiro de 1991, tem por finalidade definir a política nacional de arquivos\npúblicos e privados.\nArt. 22 Compete ao CONARQ:\n)\n(W2\n| - estabelecer diretrizes e orientações técnicas para o funcionamento do Sistema Nacional de Arquivos —\nSINAR, com vistas à gestão, à preservação e ao acesso aos documentos de arquivos;\n(Redação dada pelo Decreto no\n12.599, de 2025)\n|| - promover o inter-relacionamento de arquivos públicos, privados e comunitários, com vistas ao intercâmbio e à\nintegração sistêmica das atividades arquivísticas;\nIII - propor à Ministra de Estado da Gestão e da Inovação em Serviços Públicos atos normativos necessários à\nimplementação, ao monitoramento e ao aprimoramento da política nacional de arquivos, com vistas a ampliar o processo\nde participação social sobre a referida política; (Redação dada\n\n[7] (isad-g-2001-conarq-pt.pdf · isad-g-2001-conarq-pt-1999#5963) — 5963 Documentation - Methods for examining documents, determining their subject, and\n5963 Documentation - Methods for examining documents, determining their subject, and\nselecting indexing terms, ISO 2788 Documentation – Guidelines for the estab1ishment and\ndevelopment of monolingual thesauri e ISO 999 Information and documentation –\nGuidelines for the content, organization and presentation of indexes.\nI.15\nPara citar uma fonte publicada em qualquer elemento de descrição, siga a última\nversão da ISO 690 Documentation - Bibliographic references - Content, form and\nstructure.\n0. GLOSSÁRIO DE TERMOS ASSOCIADOS ÀS REGRAS GERAIS\n0.1\nO presente glossário, com termos e suas respectivas definições, é parte integrante\ndestas regras de descrição. As definições devem ser entendidas como tendo sido\nformuladas especificamente para os propósitos deste documento.∗\nAcesso (access) - A possibilidade de utilizar documentos de um fundo, geralmente sujeita a\nregras e condições.\nArranjo (arrangement) - Os processos intelectuais e físicos e os resultados da análise e\norganização de documentos de acordo com princípios arquivísticos.\nAutor (author) - O indivíduo ou a entidade coletiva responsável pelo conteúdo intelectual\nde um documento. Não confundir com o produtor do documento.\nAvaliação (appraisal) - O processo pelo qual se determina o prazo de guarda de\ndocumentos.\nColeção (collection) - Uma reunião artificial de documentos acumulados com base em\nalguma característica comum, sem atentar para a sua proveniência. Não confundir\ncom um fundo arquivístico.\nControle de autoridade (au\n\n[8] (nobrade-conarq.pdf · nobrade-conarq-2006#22) — 22 ARQUIVO NACIONAL (Brasil). Dicionário brasileiro de terminologia arquivística. Rio de Janeiro: O Arquivo, 2005.\n22 ARQUIVO NACIONAL (Brasil). Dicionário brasileiro de terminologia arquivística. Rio de Janeiro: O Arquivo, 2005.\n(Publicações técnicas-AN, n. 51)\n14\ndossiê\nUnidade de arquivamento constituída de documentos relaciona-\ndos entre si por assunto (ação, evento, pessoa, lugar, projeto).\nVer também processo.\nelemento de descrição\nCada uma das categorias de informação que compõem a descri-\nção normalizada de documentos.\nentidade coletiva\nGrupo de pessoas que age de maneira organizada e é identifica-\ndo por um nome específico, variando no seu grau e forma de\norganização, como instituições e movimentos sociais, políticos,\neconômicos, científicos, culturais, militares e religiosos, bem como\nfeiras, seminários, congressos, expedições, naves, aeronaves e\nembarcações.\nentidade custodiadora\nEntidade responsável pela custódia e acesso a um acervo.\nentidade produtora\nVer produtor.\nespécie documental\nDivisão de gênero documental que reúne tipos documentais por\nsuas características comuns de estruturação da informação. São\nexemplos de espécies documentais ata, carta, decreto, disco, fil-\nme, fotografia, memorando, ofício, planta, relatório.\nfundo\nConjunto de documentos de uma mesma proveniência. Termo\nque equivale a arquivo.\ngênero documental\nReunião de espécies documentais que se assemelham por suas\ncaracterísticas essenciais, particularmente o suporte e o forma-\nto, e que exigem processamento técnico específico e, por vezes,\nmediação técnica para acesso, como documento audiovisual, do-\ncume",
+  "cobertura": "fraca",
+  "sinal": {
+   "medida": "rerank",
+   "valor": 0.063,
+   "piso": 0.79
+  },
+  "perguntas": [
+   "o que é curadoria de acervo?"
+  ],
+  "filtro": {
+   "dominio": [],
+   "subdominio": [],
+   "frente": [],
+   "colecao": []
+  },
+  "aviso": null,
+  "indice": {
+   "acervo_sha": "24ed2cbf607e73ab1e8ab79c0d286bf2996b5751db4e63cfb97c2f313dfc25c7",
+   "chunks": 145240,
+   "chunks_recuperaveis": 124463,
+   "chunks_com_vetor": 124463,
+   "chunks_nao_textuais": 20777,
+   "documentos_sem_chunk": 4,
+   "obras_catalogadas": 694,
+   "obras_ingeridas": 623,
+   "conceitos": 205,
+   "embed_model": "Qwen/Qwen3-Embedding-0.6B",
+   "embed_backend": "torch",
+   "embed_query_instruction": "Given a search query, retrieve relevant passages that answer the query",
+   "embed_meta_beta": 0.15,
+   "modo": "hybrid",
+   "rrf_k": 60,
+   "rrf_w_vec": 1.0,
+   "rrf_w_id": 2.0,
+   "rrf_w_lex": 0.5,
+   "hybrid_lexical": false,
+   "rerank_model": "BAAI/bge-reranker-v2-m3",
+   "sha_calculado_em": "2026-08-06T22:45:16+00:00"
+  }
+ }
+}

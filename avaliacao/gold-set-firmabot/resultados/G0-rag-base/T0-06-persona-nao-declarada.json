@@ -1,0 +1,180 @@
+{
+ "sonda": "T0",
+ "n": "06",
+ "bloco": "A",
+ "persona": "persona-nao-declarada",
+ "pergunta": "o que é um domínio em gestão do conhecimento?",
+ "parametros_congelados": {
+  "texto": "secao",
+  "k": 8,
+  "dominio": null,
+  "subdominio": null,
+  "frente": null,
+  "colecao": null
+ },
+ "chamada_em": "2026-08-06T22:45:24.095778+00:00",
+ "acervo_sha": "24ed2cbf607e73ab1e8ab79c0d286bf2996b5751db4e63cfb97c2f313dfc25c7",
+ "retorno": {
+  "fontes": [
+   {
+    "n": 1,
+    "obra": "Learning Domain-Driven Design",
+    "arquivo": "Learning Domain-Driven Design_ Aligning Software Architecture and Business Strategy.pdf",
+    "section_id": "learning-domain-driven-design_-aligning-software-architecture-and-business-strategy-2022#chapter-2-discovering-domain-knowledge",
+    "breadcrumb": [
+     "Chapter 2: Discovering Domain Knowledge"
+    ],
+    "sim": 0.535,
+    "score": 0.0147,
+    "rerank": 0.193,
+    "codigo_exato": false,
+    "texto": null
+   },
+   {
+    "n": 2,
+    "obra": "WonderWeb Deliverable D18: Ontology Library (final)",
+    "arquivo": "D18.pdf",
+    "section_id": "d18-2001#appendix-d-wordnet-dolce-alignment",
+    "breadcrumb": [
+     "WonderWeb Deliverable D18",
+     "APPENDIX D: WORDNET-DOLCE alignment"
+    ],
+    "sim": 0.631,
+    "score": 0.0164,
+    "rerank": 0.127,
+    "codigo_exato": false,
+    "texto": null
+   },
+   {
+    "n": 3,
+    "obra": "Learning Domain-Driven Design",
+    "arquivo": "Learning Domain-Driven Design_ Aligning Software Architecture and Business Strategy.pdf",
+    "section_id": "learning-domain-driven-design_-aligning-software-architecture-and-business-strategy-2022#domain-knowledge",
+    "breadcrumb": [
+     "Chapter 11: Evolving Design Decisions",
+     "Domain Knowledge"
+    ],
+    "sim": 0.593,
+    "score": 0.0159,
+    "rerank": 0.052,
+    "codigo_exato": false,
+    "texto": null
+   },
+   {
+    "n": 4,
+    "obra": "Learning Domain-Driven Design",
+    "arquivo": "Learning Domain-Driven Design_ Aligning Software Architecture and Business Strategy.pdf",
+    "section_id": "learning-domain-driven-design_-aligning-software-architecture-and-business-strategy-2022#discovering-domain-knowledge",
+    "breadcrumb": [
+     "Chapter 1: Analyzing Business Domains",
+     "Discovering Domain Knowledge"
+    ],
+    "sim": 0.595,
+    "score": 0.0161,
+    "rerank": 0.022,
+    "codigo_exato": false,
+    "texto": null
+   },
+   {
+    "n": 5,
+    "obra": "Fundamentals of Data Engineering",
+    "arquivo": "Fundamentals of Data Engineering (Joe Reis & Matt Housley) (1st Edition, 2022).pdf",
+    "section_id": "fundamentals-of-data-engineering-joe-reis-matt-housley-1st-edition-2022-2022#domains-and-services",
+    "breadcrumb": [
+     "Chapter 3: Designing Good Data Architecture",
+     "Domains and Services"
+    ],
+    "sim": 0.583,
+    "score": 0.0154,
+    "rerank": 0.004,
+    "codigo_exato": false,
+    "texto": null
+   },
+   {
+    "n": 6,
+    "obra": "Domain-Driven Design",
+    "arquivo": "Domain-Driven Design - Tackling Complexity in the Heart of Software (Eric Evans).pdf",
+    "section_id": "domain-driven-design-tackling-complexity-in-the-heart-of-software-eric-evans-2003#part-i-putting-the-domain-model-to-work",
+    "breadcrumb": [
+     "Part I: Putting the Domain Model to Work"
+    ],
+    "sim": 0.552,
+    "score": 0.0152,
+    "rerank": 0.002,
+    "codigo_exato": false,
+    "texto": null
+   },
+   {
+    "n": 7,
+    "obra": "Domain-Driven Design",
+    "arquivo": "Domain-Driven Design - Tackling Complexity in the Heart of Software (Eric Evans).pdf",
+    "section_id": "domain-driven-design-tackling-complexity-in-the-heart-of-software-eric-evans-2003#who-does-the-work",
+    "breadcrumb": [
+     "Chapter Fifteen. Distillation",
+     "Core Domain",
+     "Who Does the Work?"
+    ],
+    "sim": 0.54,
+    "score": 0.0149,
+    "rerank": 0.0,
+    "codigo_exato": false,
+    "texto": null
+   },
+   {
+    "n": 8,
+    "obra": "Learning Domain-Driven Design",
+    "arquivo": "Learning Domain-Driven Design_ Aligning Software Architecture and Business Strategy.pdf",
+    "section_id": "learning-domain-driven-design_-aligning-software-architecture-and-business-strategy-2022#challenges",
+    "breadcrumb": [
+     "Chapter 2: Discovering Domain Knowledge",
+     "Challenges"
+    ],
+    "sim": 0.535,
+    "score": 0.0145,
+    "rerank": 0.0,
+    "codigo_exato": false,
+    "texto": null
+   }
+  ],
+  "contexto": "[1] (Learning Domain-Driven Design_ Aligning Software Architecture and Business Strategy.pdf · learning-domain-driven-design_-aligning-software-architecture-and-business-strategy-2022#chapter-2-discovering-domain-knowledge) — Chapter 2: Discovering Domain Knowledge\nChapter 2: Discovering Domain Knowledge\nResearch into why software projects fail has shown that effective communication is\nessential for knowledge sharing and project success.2 Yet, despite its importance,\neffective communication is rarely observed in software projects. Often, businesspeo‐\nple and engineers have no direct interaction with one another. Instead, domain\nknowledge is pushed down from domain experts to engineers. It is delivered through\npeople playing the role of mediators, or “translators,” systems/business analysts, prod‐\nuct owners, and project managers. Such common knowledge sharing flow is illustra‐\nted in Figure 2-1.\nFigure 2-1. Knowledge sharing flow in a software project\nDuring the traditional software development lifecycle, the domain knowledge is\n“translated” into an engineer-friendly form known as an analysis model, which is a\ndescription of the system’s requirements rather than an understanding of the business\ndomain behind it. While the intentions may be good, such mediation is hazardous to\nknowledge sharing. In any translation, information is lost; in this case, domain\nknowledge that is essential for solving business problems gets lost on its way to the\nsoftware engineers. This is not the only such translation on a typical software project.\nThe analysis model is translated into the software design model (a software design\ndocument, which is translated into an implementation model or the source code\nitself). As often happens, documents go out of date \n\n[2] (D18.pdf · d18-2001#appendix-d-wordnet-dolce-alignment) — WonderWeb Deliverable D18 › APPENDIX D: WORDNET-DOLCE alignment\nAPPENDIX D: WORDNET-DOLCE alignment\n(DEFMODULE \"TOP/DOLCE/DESCRIPTIONS/COMMUNICATION/DOCUMENTS/PLANS/SYSTEMS/WNATOP/WNAT\"\n:INCLUDES (\"WNATOP\")\n:SHADOW (SETTING ISSUE SUBSTRATE WORLD ATOM))\n(IN-MODULE \"TOP/DOLCE/DESCRIPTIONS/COMMUNICATION/DOCUMENTS/PLANS/SYSTEMS/WNATOP/WNAT\")\n(IN-DIALECT :KIF)\n(DEFCONCEPT SETTING (?SELF)\n:=> (NON-PHYSICAL-PLACE ?SELF)\n:AXIOMS (AND (SUBJECT SETTING LOCATIONS)\n(DOCUMENTATION SETTING\n\"the physical position of something; ’he changed the setting on the thermostat’\")\n(HAS-I-TOPIC SETTING |Factotum|) (WORD SETTING |setting|)))\n(DEFCONCEPT ISSUE (?SELF)\n:=> (QUALITATIVE-ROLE ?SELF)\n:AXIOMS (AND (SUBJECT ISSUE COGNITION)\n(DOCUMENTATION ISSUE\n\"an important question that is in dispute and must be settled; ’the issue could be settled by\nrequiring public education for everyone’; ’politicians never discuss the real issues’\")\n(HAS-I-TOPIC ISSUE |Factotum|) (WORD ISSUE |issue|)))\n(DEFCONCEPT SUBSTRATE (?SELF)\n:=> (SUBSTANCE-ROLE ?SELF)\n:AXIOMS (AND (SUBJECT SUBSTRATE SUBSTANCES)\n(DOCUMENTATION SUBSTRATE\n\"the substance acted upon by an enzyme or ferment\")\n(HAS-I-TOPIC SUBSTRATE |Chemistry|) (WORD SUBSTRATE |substrate|)))\n(DEFCONCEPT WORLD (?SELF)\n:=> (QUALITATIVE-ROLE ?SELF)\n:AXIOMS (AND (SUBJECT WORLD OBJECTS)\n(DOCUMENTATION WORLD\n\"a part of the earth that can be considered separately; ’the outdoor world’; ’the world of insects’\")\n(HAS-I-TOPIC WORLD |Earth|) (WORD WORLD |world|)))\n(DEFCONCEPT ATOM (?SELF)\n:=> (CHEMICAL-OBJECT ?SELF)\n:AXIOMS (AND (SUBJECT ATOM\n\n[3] (Learning Domain-Driven Design_ Aligning Software Architecture and Business Strategy.pdf · learning-domain-driven-design_-aligning-software-architecture-and-business-strategy-2022#domain-knowledge) — Chapter 11: Evolving Design Decisions › Domain Knowledge\n(contexto do pai · learning-domain-driven-design_-aligning-software-architecture-and-business-strategy-2022#chapter-11-evolving-design-decisions)\nChapter 11: Evolving Design Decisions\nBuyIT’s decision to replace the off-the-shelf solution with its own implementation has\nturned inventory management from a generic subdomain into a core subdomain:\nsuccessful implementation of the functionality will provide BuyIT additional compet‐\nitive advantage over its competitors—the competitors will remain “stuck” with the\ngeneric solution and will not be\n---\nDomain Knowledge\nAs you’ll recall, the core tenet of domain-driven design is that domain knowledge is\nessential for designing a successful software system. Acquiring domain knowledge is\none of the most challenging aspects of software engineering, especially for the core\nsubdomains. A core subdomain’s logic is not only complicated, but also expected to\nchange often. Moreover, modeling is an ongoing process. Models have to improve as\nmore knowledge of the business domain is acquired.\nMany times, the business domain’s complexity is implicit. Initially, everything seems\nsimple and straightforward. The initial simplicity is often deceptive and it quickly\nmorphs into complexity. As more functionality is added, more and more edge cases,\ninvariants, and rules are discovered. Such insights are often disruptive, requiring\nrebuilding the model from the ground up, including the boundaries of the bounded\ncontexts, aggregates, and other implementation details.\nFrom a strategic design standpoint, it’s a useful heuristic to design the bounded con‐\ntexts’ boundaries according to the level of domain knowledge. The cost of decompos‐\ning a system into bounded contexts that, over time, turn out to be incorrect can be\nhigh. Therefore, when the domain logic is unclear and changes often, it makes sense\nto design the bounded contexts with broader boundaries. Then, as domain knowl‐\nedge is discovered over time and changes to the business logic stabilize, those broad\nbounded contexts can be decomposed \n\n[4] (Learning Domain-Driven Design_ Aligning Software Architecture and Business Strategy.pdf · learning-domain-driven-design_-aligning-software-architecture-and-business-strategy-2022#discovering-domain-knowledge) — Chapter 1: Analyzing Business Domains › Discovering Domain Knowledge\n(contexto do pai · learning-domain-driven-design_-aligning-software-architecture-and-business-strategy-2022#chapter-1-analyzing-business-domains)\nChapter 1: Analyzing Business Domains\nUber’s core subdomains affect its bottom line. This is how the company differentiates\nitself from its competitors. This is the company’s strategy for providing better service\nto its customers and/or maximizing its profitability. To maintain a competitive\nadvantage, core subdomains involve inventions, smart optimizations, business know-\nhow, or other intellectu\n---\nDiscovering Domain Knowledge\nIt’s developers’ (mis)understanding, not domain experts’ knowledge, that gets released in\nproduction.\n—Alberto Brandolini\nIn the previous chapter, we started exploring business domains. You learned how to\nidentify a company’s business domains, or areas of activity, and analyze its strategy to\ncompete in them; that is, its business subdomains’ boundaries and types.\nThis chapter continues the topic of business domain analysis but in a different\ndimension: depth. It focuses on what happens inside a subdomain: its business func‐\ntion and logic. You will learn the domain-driven design tool for effective communica‐\ntion and knowledge sharing: the ubiquitous language. Here we will use it to learn the\nintricacies of business domains. Later in the book we will use it to model and imple‐\nment their business logic in software.\n\n[5] (Fundamentals of Data Engineering (Joe Reis & Matt Housley) (1st Edition, 2022).pdf · fundamentals-of-data-engineering-joe-reis-matt-housley-1st-edition-2022-2022#domains-and-services) — Chapter 3: Designing Good Data Architecture › Domains and Services\n(contexto do pai · fundamentals-of-data-engineering-joe-reis-matt-housley-1st-edition-2022-2022#chapter-3-designing-good-data-architecture)\nChapter 3: Designing Good Data Architecture\nbusiness and IT leaders with signature-ready recommendations for adjusting policies\nand projects to achieve targeted business outcomes that capitalize on relevant business\ndisruptions.\n---\nDomains and Services\nDomain: A sphere of knowledge, influence, or activity. The subject area to which the\nuser applies a program is the domain of the software.\n—Eric Evans19\nBefore diving into the components of the architecture, let’s briefly cover two terms\nyou’ll see come up very often: domain and services. A domain is the real-world\nsubject area for which you’re architecting. A service is a set of functionality whose\ngoal is to accomplish a task. For example, you might have a sales order-processing\nservice whose task is to process orders as they are created. The sales order-processing\nservice’s only job is to process orders; it doesn’t provide other functionality, such as\ninventory management or updating user profiles.\nA domain can contain multiple services. For example, you might have a sales domain\nwith three services: orders, invoicing, and products. Each service has particular tasks\nthat support the sales domain. Other domains may also share services (Figure 3-3).\nIn this case, the accounting domain is responsible for basic accounting functions:\ninvoicing, payroll, and accounts receivable (AR). Notice the accounting domain\nshares the invoice service with the sales domain since a sale generates an invoice,\n18 “FinOps Foundation Soars to 300 Members and Introduces New Partner Tiers for Cloud Service Providers\nand Vendors,” Business Wire, June 17, 2019, https://oreil.ly/XcwYO.\n19 Eric Evans, Domain-Driven Design Reference: Definitions and Pattern Summaries (March 2015),\nh\n\n[6] (Domain-Driven Design - Tackling Complexity in the Heart of Software (Eric Evans).pdf · domain-driven-design-tackling-complexity-in-the-heart-of-software-eric-evans-2003#part-i-putting-the-domain-model-to-work) — Part I: Putting the Domain Model to Work\nPart I: Putting the Domain Model to Work\nChapter One. Crunching Knowledge\nIngredients of Effective Modeling\nKnowledge Crunching\nContinuous Learning\nKnowledge-Rich Design\nDeep Models\nChapter Two. Communication and the Use of Language\nUbiquitous Language\nModeling Out Loud\nOne Team, One Language\nDocuments and Diagrams\nExplanatory Models\nChapter Three. Binding Model and Implementation\nModel-Driven Design\nModeling Paradigms and Tool Support\nLetting the Bones Show: Why Models Matter to Users\nHands-On Modelers\nPart I: Putting the Domain Model to Work\nThis eighteenth-century Chinese map represents the whole world. In the center and taking\nup most of the space is China, surrounded by perfunctory representations of other countries.\nThis was a model of the world appropriate to that society, which had intentionally turned\ninward. The worldview that the map represents must not have been helpful in dealing with\nforeigners. Certainly it would not serve modern China at all. Maps are models, and every\nmodel represents some aspect of reality or an idea that is of interest. A model is a\nsimplification. It is an interpretation of reality that abstracts the aspects relevant to solving\nthe problem at hand and ignores extraneous detail.\nEvery software program relates to some activity or interest of its user. That subject area to\nwhich the user applies the program is the domain of the software. Some domains involve the\nphysical world: The domain of an airline-booking program involves real people get\n\n[7] (Domain-Driven Design - Tackling Complexity in the Heart of Software (Eric Evans).pdf · domain-driven-design-tackling-complexity-in-the-heart-of-software-eric-evans-2003#who-does-the-work) — Chapter Fifteen. Distillation › Core Domain › Who Does the Work?\n(contexto do pai · domain-driven-design-tackling-complexity-in-the-heart-of-software-eric-evans-2003#core-domain)\nCore Domain\nIn designing a large system, there are so many contributing components, all\ncomplicated and all absolutely necessary to success, that the essence of the domain\nmodel, the real business asset, can be obscured and neglected.\nA system that is hard to understand is hard to change. The effect of a change is hard to foresee. A\ndeveloper who wanders outside his or her own area of familiarity \n---\nWho Does the Work?\nThe most technically proficient members of project teams seldom have much knowledge of the\ndomain. This limits their usefulness and reinforces the tendency to assign them to supporting\ncomponents, sustaining a vicious circle in which lack of knowledge keeps them away from the work\nthat would build domain knowledge.\nIt is essential to break this cycle by assembling a team matching up a set of strong developers\nwho have a long-term commitment and an interest in becoming repositories of domain knowledge\nwith one or more domain experts who know the business deeply. Domain design is interesting,\ntechnically challenging work when approached seriously, and developers can be found who see it\nthis way.\nIt is usually not practical to hire short-term, outside design expertise for the nuts and bolts of\ncreating the CORE DOMAIN, because the team needs to accumulate domain knowledge, and a\ntemporary member is a leak in the bucket. On the other hand, an expert in a teaching/mentoring\nrole can be very valuable by helping the team build its domain design skills and facilitating the use\nof sophisticated principles that team members probably have not mastered.\nFor similar reasons, it is unlikely that the CORE DOMAIN can be purchased. Efforts have been made\nto build industry-specific model frameworks, conspicuous examples being the semiconductor\nindustry consortium SEMATECH's CIM framework for semiconductor manufacturing automation,\nand IBM's \"San Francisco\" frameworks for a w\n\n[8] (Learning Domain-Driven Design_ Aligning Software Architecture and Business Strategy.pdf · learning-domain-driven-design_-aligning-software-architecture-and-business-strategy-2022#challenges) — Chapter 2: Discovering Domain Knowledge › Challenges\nChallenges\nIn theory, cultivating a ubiquitous language sounds like a simple, straightforward\nprocess. In practice, it isn’t. The only reliable way to gather domain knowledge is to\nconverse with domain experts. Quite often, the most important knowledge is tacit. It’s\nnot documented or codified but resides only in the minds of domain experts. The\nonly way to access it is to ask questions.\nAs you gain experience in this practice, you will notice that frequently, this process\ninvolves not merely discovering knowledge that is already there, but rather co-\ncreating the model in tandem with domain experts. There may be ambiguities and\neven white spots in domain experts’ own understanding of the business domain; for\nexample, defining only the “happy path” scenarios but not considering edge cases that\nchallenge the accepted assumptions. Furthermore, you may encounter business\ndomain concepts that lack explicit definitions. Asking questions about the nature of\nthe business domain often makes such implicit conflicts and white spots explicit. This\nis especially common for core subdomains. In such a case, the learning process is\nmutual—you are helping the domain experts better understand their field.\n5 But please don’t fall into the trap of thinking that domain experts will write Gherkin tests.\n30\nWhen introducing domain-driven design practices to a brownfield project, you will\nnotice that there is already a formed language for describing the business domain,\nand that the stakeholders us",
+  "cobertura": "fraca",
+  "sinal": {
+   "medida": "rerank",
+   "valor": 0.193,
+   "piso": 0.79
+  },
+  "perguntas": [
+   "o que é um domínio em gestão do conhecimento?"
+  ],
+  "filtro": {
+   "dominio": [],
+   "subdominio": [],
+   "frente": [],
+   "colecao": []
+  },
+  "aviso": null,
+  "indice": {
+   "acervo_sha": "24ed2cbf607e73ab1e8ab79c0d286bf2996b5751db4e63cfb97c2f313dfc25c7",
+   "chunks": 145240,
+   "chunks_recuperaveis": 124463,
+   "chunks_com_vetor": 124463,
+   "chunks_nao_textuais": 20777,
+   "documentos_sem_chunk": 4,
+   "obras_catalogadas": 694,
+   "obras_ingeridas": 623,
+   "conceitos": 205,
+   "embed_model": "Qwen/Qwen3-Embedding-0.6B",
+   "embed_backend": "torch",
+   "embed_query_instruction": "Given a search query, retrieve relevant passages that answer the query",
+   "embed_meta_beta": 0.15,
+   "modo": "hybrid",
+   "rrf_k": 60,
+   "rrf_w_vec": 1.0,
+   "rrf_w_id": 2.0,
+   "rrf_w_lex": 0.5,
+   "hybrid_lexical": false,
+   "rerank_model": "BAAI/bge-reranker-v2-m3",
+   "sha_calculado_em": "2026-08-06T22:45:16+00:00"
+  }
+ }
+}
