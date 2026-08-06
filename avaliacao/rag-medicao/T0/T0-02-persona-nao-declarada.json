@@ -1,8 +1,9 @@
 {
  "sonda": "T0",
  "n": "02",
+ "bloco": "A",
  "persona": "persona-nao-declarada",
- "pergunta": "o que distingue um tipo de um papel",
+ "pergunta": "o que distingue um tipo de um papel?",
  "parametros_congelados": {
   "texto": "secao",
   "k": 8,
@@ -11,8 +12,8 @@
   "frente": null,
   "colecao": null
  },
- "chamada_em": "2026-08-04T16:49:45.244276+00:00",
- "acervo_sha": "f04c1ae0865d2af70ab0cc3532e8c2964edb64bd5d611c340cf6233d689f06ea",
+ "chamada_em": "2026-08-06T20:52:52.127259+00:00",
+ "acervo_sha": "24ed2cbf607e73ab1e8ab79c0d286bf2996b5751db4e63cfb97c2f313dfc25c7",
  "retorno": {
   "fontes": [
    {
@@ -24,7 +25,7 @@
      "Case Management",
      "Appendix 85 Insurance Report"
     ],
-    "sim": 0.584,
+    "sim": 0.634,
     "score": 0.0164,
     "rerank": null,
     "codigo_exato": false,
@@ -32,11 +33,13 @@
    },
    {
     "n": 2,
-    "obra": "Institutionalized Organizations: Formal Structure as Myth and Ceremony",
-    "arquivo": "Institutionalized Organizations Formal Structure as Myth and Ceremony.pdf",
-    "section_id": "institutionalized-organizations-formal-structure-as-myth-and-ceremony-2016#_",
-    "breadcrumb": [],
-    "sim": 0.28,
+    "obra": "Teoria dos Direitos Fundamentais",
+    "arquivo": "alexy-robert-teoria-dos-direitos-fundamentais.pdf",
+    "section_id": "alexy-robert-teoria-dos-direitos-fundamentais-1986#327",
+    "breadcrumb": [
+     "327 e ss. · Adalbert Podlech, Gehalt und Funktionen des allgemeinen verfassungs-"
+    ],
+    "sim": 0.306,
     "score": 0.009,
     "rerank": null,
     "codigo_exato": false,
@@ -44,37 +47,84 @@
    },
    {
     "n": 3,
-    "obra": "Institutionalized Organizations: Formal Structure as Myth and Ceremony",
-    "arquivo": "Institutionalized Organizations Formal Structure as Myth and Ceremony.pdf",
-    "section_id": "institutionalized-organizations-formal-structure-as-myth-and-ceremony-2016#1",
+    "obra": "Teoria dos Direitos Fundamentais",
+    "arquivo": "alexy-robert-teoria-dos-direitos-fundamentais.pdf",
+    "section_id": "alexy-robert-teoria-dos-direitos-fundamentais-1986#62",
     "breadcrumb": [
-     "1 Work on this paper was conducted at the Stanford Center for Research and Development"
+     "62 e ss., 138 e ss., 240 e ss., 275 e ss."
     ],
-    "sim": 0.269,
-    "score": 0.0089,
+    "sim": 0.301,
+    "score": 0.0088,
     "rerank": null,
     "codigo_exato": false,
     "texto": null
    },
    {
     "n": 4,
-    "obra": "Dynamics of Organizational Practices and Identities - Oxford Scholarship",
-    "arquivo": "The Institutional Logics Perspective A New Approach to Culture, Structure and Process.pdf",
-    "section_id": "the-institutional-logics-perspective-a-new-approach-to-culture-structure-and-process-2015#introduction",
+    "obra": "Teoria dos Direitos Fundamentais",
+    "arquivo": "alexy-robert-teoria-dos-direitos-fundamentais.pdf",
+    "section_id": "alexy-robert-teoria-dos-direitos-fundamentais-1986#13",
     "breadcrumb": [
-     "Introduction"
+     "13 .. Peter Lerche (Uberma}J und Verfassungsrecht, p. 106) designa também a"
     ],
-    "sim": 0.269,
-    "score": 0.0088,
+    "sim": 0.297,
+    "score": 0.0087,
+    "rerank": null,
+    "codigo_exato": false,
+    "texto": null
+   },
+   {
+    "n": 5,
+    "obra": "Teoria dos Direitos Fundamentais",
+    "arquivo": "alexy-robert-teoria-dos-direitos-fundamentais.pdf",
+    "section_id": "alexy-robert-teoria-dos-direitos-fundamentais-1986#543",
+    "breadcrumb": [
+     "543 e ss., 583 e ss., 603 e ss., 641 e ss.; e Martin Kriele, Befreiung und politische"
+    ],
+    "sim": 0.26,
+    "score": 0.0081,
+    "rerank": null,
+    "codigo_exato": false,
+    "texto": null
+   },
+   {
+    "n": 6,
+    "obra": "Teoria dos Direitos Fundamentais",
+    "arquivo": "alexy-robert-teoria-dos-direitos-fundamentais.pdf",
+    "section_id": "alexy-robert-teoria-dos-direitos-fundamentais-1986#50",
+    "breadcrumb": [
+     "50 e ss. Hohfeld utiliza os conceitos power (competência), liability (sujeição), disa-"
+    ],
+    "sim": 0.255,
+    "score": 0.0078,
+    "rerank": null,
+    "codigo_exato": false,
+    "texto": null
+   },
+   {
+    "n": 7,
+    "obra": "Teoria dos Direitos Fundamentais",
+    "arquivo": "alexy-robert-teoria-dos-direitos-fundamentais.pdf",
+    "section_id": "alexy-robert-teoria-dos-direitos-fundamentais-1986#21~2",
+    "breadcrumb": [
+     "21 .. se se compreende o enunciado \"o igual deve ser tratado igualmente; o desi-"
+    ],
+    "sim": 0.213,
+    "score": 0.0067,
     "rerank": null,
     "codigo_exato": false,
     "texto": null
    }
   ],
-  "contexto": "[1] (Digital Forensics Processing and Procedures_ Meeting the Requirements of ISO 17020, ISO 17025, ISO 27001 and Best Practice Requirements (2013, Syngress).epub · digital-forensics-processing-and-procedures_-meeting-the-requirements-of-iso-17020-iso-17025-iso-27001-and-best-practice-requirements-2013-syngress#appendix-85-insurance-report) — Case Management › Appendix 85 Insurance Report\n(contexto do pai · digital-forensics-processing-and-procedures_-meeting-the-requirements-of-iso-17020-iso-17025-iso-27001-and-best-practice-requirements-2013-syngress#case-management)\nAbstract\n---\nPaper type\n\n[2] (Institutionalized Organizations Formal Structure as Myth and Ceremony.pdf · institutionalized-organizations-formal-structure-as-myth-and-ceremony-2016#_)\nInstitutionalized Organizations: Formal Structure\nas Myth and Ceremonyl\nJohn W. Meyer and Brian Rowan\nStanford University\nMany formal organizational structures arise as reflections of ratio-\nnalized institutional rules. The elaboration of such rules in modern\nstates and societies accounts in part for the expansion and increased\ncomplexity of formal organizational structures. Institutional rules\nfunction as myths which organizations incorporate, gaining legitimacy,\nresources, stability, and enhanced survival prospects. Organizations\nwhose structures become isomorphic with the myths of the institu-\ntional environment-in contrast with those primarily structured by\nthe demands of technical production and exchange-decrease internal\ncoordination and control in order to maintain legitimacy. Structures\nare decoupled from each other and from ongoing activities. In place of\ncoordination, inspection, and evaluation, a logic of confidence and\ngood faith is employed.\nFormal organizations are generally understood to be systems of coordinated\nand controlled activities that arise when work is embedded in complex\nnetworks of technical relations and boundary-spanning exchanges. But in\nmodern societies formal organizational structures arise in highly institu-\ntionalized contexts. Professions, policies, and programs are created along\nwith the products and services that they are understood to produce rational-\nly. This permits many new organizations to spring up and forces existing\nones to incorporate new practices and procedures. That is, organizations are\ndriven to incorporate the practices and procedures defined by prevailing\nrationalized concepts of organizational work and institutionalized in society.\nOrganizations that do so increase their legitimacy and their survival pros-\npects, independent of the immediate efficacy of the acquired practices and\nprocedures.\nInstitutionalized products, services, techniques, policies, and programs\nfunction as powerful myths, and many organizations adopt them cere-\nmonially. But conformity to institutionalized rules often conflicts sharply\n\n[3] (Institutionalized Organizations Formal Structure as Myth and Ceremony.pdf · institutionalized-organizations-formal-structure-as-myth-and-ceremony-2016#1) — 1 Work on this paper was conducted at the Stanford Center for Research and Development\n1 Work on this paper was conducted at the Stanford Center for Research and Development\nin Teaching (SCRDT) and was supported by the National Institute of Education (contract\nno. NE-C-00-3-0062). The views expressed here do not, of course, reflect NIE positions.\nMany colleagues in the SCRDT, the Stanford Organizations Training Program, the Ameri-\ncan Sociological Association's work group on Organizations and Environments, and the\nNIE gave help and encouragement. In particular, H. Acland, A. Bergesen, J. Boli-Bennett,\nT. Deal, J. Freeman, P. Hirsch, J. G. March, W. R. Scott, and W. Starbuck made helpful\nsuggestions.\n340\nAJS Volume 83 Number 2\nAll use subject to University of Chicago Press Terms and Conditions (http://www.journals.uchicago.edu/t-and-c).\nwith efficiency criteria and, conversely, to coordinate and control activity\nin order to promote efficiency undermines an organization's ceremonial\nconformity and sacrifices its support and legitimacy. To maintain ceremonial\nconformity, organizations that reflect institutional rules tend to buffer their\nformal structures from the uncertainties of technical activities by becoming\nloosely coupled, building gaps between their formal structures and actual\nwork activities.\nThis paper argues that the formal structures of many organizations in\npostindustrial society (Bell 1973) dramatically reflect the myths of their\ninstitutional environments instead of the demands of their work activities.\nThe first part describes prevailing theories of the origins of formal structures\nand the main problem the theories confront. The second part discusses an\nalternative source of formal structures: myths embedded in the institutional\nenvironment. The third part develops the argument that organizations\nreflecting institutionalized environments maintain gaps between their\nformal structures and their ongoing work activities. The final part sum-\nmarizes by discussing some research implications.\nThroughout the paper, institutionalized rules are distinguished sharply\n1 Work on this paper was conducted at the Stanford Center for Research and Development\nfrom prevailing social behaviors. Institutionalized rules are classifications\nbuilt into society as reciprocated typifications or interpretations (Berger\nand Luckmann 1967, p. 54). Such rules may be simply taken for granted or\nmay be supported by public opinion or the force of law (Starbuck 1976).\nInstitutions inevitably involve normative obligations but often enter into\nsocial life primarily as facts which must be taken into account by actors.\nInstitutionalization involves the processes by which social processes, obliga-\ntions, or actualities come to take on a rulelike status in social thought and\naction. So, for example, the social status of doctor is a highly institutionalized\nrule (both normative and cognitive) for managing illness as well as a social\nrole made up of particular behaviors, relations, and expectations. Research\nand development is an institutionalized category of\n\n[4] (The Institutional Logics Perspective A New Approach to Culture, Structure and Process.pdf · the-institutional-logics-perspective-a-new-approach-to-culture-structure-and-process-2015#introduction) — Introduction\nIntroduction\nIn this chapter, we develop theory about how the dynamics of\norganizational practices and identities within and across\norganizations relate to institutional logics. From the inception\nof the institutional logics perspective, the concepts of practice\nand identity have both been integral (Friedland and Alford\n1991). However, while they provide important conceptual\nfocal points for scholarly research, most research to date has\nnot effectively analyzed how institutional logics shape and are\nshaped by the material instantiations of logics—the practices\nand identities of concrete actors. In this chapter, we argue\nthat practices and identities are fundamentally interrelated\nwith institutional logics, and that concrete behaviors related to\nidentities and practices are usefully understood via their\nrelation to institutional logics in a given empirical setting.\nWhile the conceptual relationships we posit between\ninstitutional logics on the one hand and identity and practice\non the other are meant to be general, theoretical development\nin this chapter will focus on organization-level processes.\nOver the past couple of decades, diverse and growing\nscholarly attention has been paid to practice across the social\nsciences (see, e.g., Schatzki, Knorr-Cetina, and von Savigny\n2001). For many social theorists, practice is a key concept that\nlinks broader cultural belief systems and social structures\n(including institutional logics) to individual and organizational\naction (e.g., Bourdieu 1977, 1984). Practice refers to forms or\nconstellations of socially meaningful activity that are relatively\ncoherent and established (see, e.g., MacIntyre 1981). A\ndistinction is often made between activity, which refers to\nmore mundane behaviors or everyday work, and practice\nwhich refers to a set of meaningful activities that are informed\nby wider cultural beliefs (e.g., Engeström 1999; Jarzabkowski\n2005). Lounsbury and Crumley (2007: 995) elaborate that “\nPage 2 of 27\nIntroduction\nPRINTED FROM OXFORD SCHOLARSHIP ONLINE (www.oxfordscholarship.com). (c) Copyright Oxford University Press, 2015. All\nRights Reserved. Under the terms of the licence agreement, an individual user may print out a PDF of a single chapter of a\nmonograph in OSO for personal use (for details see http://www.oxfordscholarship.com/page/privacy-policy). Subscriber: Kainan\n(p.129)\nactivity involves acts that are generally devoid of\ndeeper social meaning or reflection such as pounding a nail,\nwhile practice, such as professional carpentry, provides order\nand meaning to a set of otherwise banal activities.”\nWhile much of the research on practice is motivated by\nanthropological or ethnological understandings of human\naction (e.g., Bourdieu 1977; Geertz 1995; Ortner 1984), much\nempirical work in organizational studies and management\ndoes focus on individual behavior, institutional work, and\npractices in a way that tends to bracket wider societal\ndynamics (Jarzabkowski 2004; Weick, Sutcliffe, and Obstfeld\n",
+  "contexto": "[1] (Digital Forensics Processing and Procedures_ Meeting the Requirements of ISO 17020, ISO 17025, ISO 27001 and Best Practice Requirements (2013, Syngress).epub · digital-forensics-processing-and-procedures_-meeting-the-requirements-of-iso-17020-iso-17025-iso-27001-and-best-practice-requirements-2013-syngress#appendix-85-insurance-report) — Case Management › Appendix 85 Insurance Report\n(contexto do pai · digital-forensics-processing-and-procedures_-meeting-the-requirements-of-iso-17020-iso-17025-iso-27001-and-best-practice-requirements-2013-syngress#case-management)\nAbstract\n---\nPaper type\n\n[2] (alexy-robert-teoria-dos-direitos-fundamentais.pdf · alexy-robert-teoria-dos-direitos-fundamentais-1986#327) — 327 e ss. · Adalbert Podlech, Gehalt und Funktionen des allgemeinen verfassungs-\n327 e ss. · Adalbert Podlech, Gehalt und Funktionen des allgemeinen verfassungs-\nrechtlich~n Gleichheitssatzes, pp. 274 e ss.; Bemhard Schlink, Abwiigung im Verjas-\nsungsrecht, pp. 180 e ss.\n164\ne princípios não disciplinam sua própria aplicação, e o sopesamento,\nportanto, ficaria sujeito ao arbítrio daquele que sopesa. Onde começa\no sopesamento terminaria o controle por meio de normas e métodos.\nEle abriria espaço para o subjetivismo e o decisionismo dos juízes.\nEssas objeções são procedentes se com elas se quiser dizer que o so-\npesamento não é um procedimento que conduza, em todo e qualquer\ncaso, a um resultado único e inequívoco. Mas elas não são proceden-\ntes quando daí se conclui que o sopesamento é um procedimento não-\nracional ou irracional.\nAnteriormente foi demonstrado que as colisões entre princípios\ndevem ser resolvidas por meio da definição de uma relação de prece-\ndências condicionadas. Como exemplo foi utilizado o caso Lebach,\nno qual o Tribunal Constitucional Federal solucionou a colisão entre\na proteção da personalidade (P1) e a liberdade de informar via radio-\ndifusão (Pz) por meio da aceitação de uma precedência de P 1 no caso\nde ?ma \"repetição do noticiário televisivo sobre um grave crime, não\nmais revestido de um interesse atual pela informação\", que \"coloca\nem risco a ressoci!11ização do autor\" ( C2). 209 A partir daí, 0 tribunal\nelaborou um enunciado de preferências com a seguinte forma:\n(1) (Pr P P2) C2.\nSegundo a lei de colisão, 210 desse enunciado decorre uma regra:\n(2) C2 ~R.\na qual, sob as condições C2, comina a conseqüência jurídica de p\n(R).\nr\n2.2.2.1 O modelo decisionista e o modelo fundamentado\nSe o sopesamento se resumisse à formulação de um tal enuncia\n\n[3] (alexy-robert-teoria-dos-direitos-fundamentais.pdf · alexy-robert-teoria-dos-direitos-fundamentais-1986#62) — 62 e ss., 138 e ss., 240 e ss., 275 e ss.\n62 e ss., 138 e ss., 240 e ss., 275 e ss.\n22. Nesse contexto, é elucidativa a diferenciação feita por Peczenick entfe justi-\nficação profunda e justificação suficiente no contexto jurídico. Cf. Aleksander Pecze-\nnick, Grundlagen der juristischen Argumentation, Wien: Springer, 1983, pp. 1 e ss.\n\"9 ,'- .-\n,.~ '7\n·-\n'\n-\n'·'\n0\n\\}._,\n::_ç,,,,t-i '. 'l• Cç_.J ~\n,)\n1 () •'- 0,\nOBJETO E TAREFA DE UMA TEORIA DOS DIREITOS FUNDAMENTAIS\n37\nNa história da Ciência do Direito e, mais ainda, na história das\nteorias sobre a Ciência do Direito, os pesos dados a cada uma das três\ndimensões variam. A transição da jurisprudência dos conceitos para a\njurisprudência dos valores, passando pela jurisprudência dos interes-\nses, é um claro exemplo disso.23 O que, em cada caso, é considerado\ncomo jurídico em sentido estrito e próprio depende de como seja de-\nfinido o relacionamento entre as três dimensões. Para se determinar\nessa relação é necessário um ponto de vista abrangente. A natureza da\nCiência dg-'Direito como uma disciplina prática é um ponto de vista\ndesse tipo. A Ciência do Direito, na forma como levada a cabo hoje,\né, em primeira instância, uma disciplina prática, porque a pergunta\ncentral, em rrm caso real ou hipotético, diz respeito ao que deve ser.\nNa Ciência do Direito essa questão é formulada a partir de uma pers-\npectiva que corresponde à perspectiva do juiz. 24 Isso não significa que\na Ciência do Direito não possa abranger outras perspectivas, nem que\nsempre diga respeito diretamente à solução de casos concretos, mas\nsomente que a perspectiva do juiz é a perspectiva típica da Ciência do\nDireito e que os enunciados e teorias desenvolvidos a partir dela,\nmesmo quando abstratos, referem-se sempre \n\n[4] (alexy-robert-teoria-dos-direitos-fundamentais.pdf · alexy-robert-teoria-dos-direitos-fundamentais-1986#13) — 13 .. Peter Lerche (Uberma}J und Verfassungsrecht, p. 106) designa também a\n13 .. Peter Lerche (Uberma}J und Verfassungsrecht, p. 106) designa também a\nlei a~ton~adora como \"norm~ 'interventora\"'. Isso é correto na medida em que uma\nautonzaça? para o :stabelec1mento de restrições, a qual sempre é uma autorização\npara. uma interven~ao, é algo potencial e indiretamente restritivo ou interventivo no\nsentido exposto acima.\n'\nDIREITOS FUNDAMENTAIS E SUAS RESTRIÇÕES\n283\nque pode ser dito acerca do caráter restritivo das normas mandatórias\ne proibitivas é também aplicável, em sua essência, a outras espécies de\nnormas. Em razão disso, aqui serão analisadas apenas as normas man-\ndatórias e proibitivas. Neste ponto, de fundamental importància é a dis-\ntinção entre regras e princípios. Inicio com uma breve análise das regras\nque estabelecem restrições. Uma regra (compatível com a Constitui-\nção) é uma restrição a um direito fundamental se, com sua vigência,\nno lugar de uma liberdade fundamental prima facie ou de um direito\nfundamenlal prima facie, surge Ullla não-liberdade definitiva ou um\nnão-direit~ definitivo de igual conteúdo. 14 Alguns exemplos podem\nesclarecer isso. Enquanto não existe o dever de usar capacete, dirigido\naos motociclistas, o titular do direito fundamental tem, em razão do\nprincípio da liberdade geral de ação, uma liberdade fundamental pri-\nma facie para, como motociclista, usar ou não usar um capacete. As-\nsim que o dever passa a existir, passa o titular a estar em uma posição\nde não-liberdade definitiva, em face do Estado, no que diz respeito a\nusar ou não usar capacete. A regra que obriga os motociclistas a usar\ncapacete é uma restrição a um direito fundamental, porque em virtude\nde sua vigência surge, no lugar da liberdade prima facie, uma não-li\n\n[5] (alexy-robert-teoria-dos-direitos-fundamentais.pdf · alexy-robert-teoria-dos-direitos-fundamentais-1986#543) — 543 e ss., 583 e ss., 603 e ss., 641 e ss.; e Martin Kriele, Befreiung und politische\n543 e ss., 583 e ss., 603 e ss., 641 e ss.; e Martin Kriele, Befreiung und politische\nAufkliirung Freiburg: Herder, 1980, pp. 57 e ss.\n67. Cf. o tópico IV deste capítulo.\nO DIREITO GERAL DE IGUALDADE\n419\nração seus múltiplos efeitos - é mais simples e mais seguro em sua\naplicação que o princípio da igualdade fática. Um pai que presenteia\nseus dois filhos com duas bolas idênticas satisfaz plenamente, sem\ngrandes reflexões e com segurança, a igualdade em seu sentido rela-\ncionado ao ato. Por outro lado, é altamente incerto e de difícil decisão\nsaber se ele também promove alguma igualdade relacionada a conse-\nqüências. Se um dos filhos fica feliz com o presente, e o outro não, po-\nde-se dizer que, ao menos no que diz respeito ao critério de igualdade\nde felicidade, não houve a promoção de uma igualdade relacionada a\nconseqfi.êhcias. O critério de igualdade de felicidade é um dos crité-\nrios mais inseguros de igualdade fática, mas ele sublinha um proble-\nma central na promoção da igualdade fática, que consiste no fato de\nque aquele que decide consegue ter uma visão apenas incompleta do\nprocesso de fomento dessa igualdade e pode controlá-lo apenas par-\ncialmente. Diante disso tudo, não há dúvidas de que o princípio da\nigualdade jurídica não deve ser abandonado em favor do princípio\nda igualdade fática.\n3. Sobre o papel do princípio da igualdade fálica\nPara evitar uma colisão de igualdades no âmbito do art. 3°, § lº,\nsobra apenas a possibilidade de se renunciar à atribuição a esse artigo\nde um princípio de igualdade fática como princípio que garanta um\ndireito subjetivo plenamente vinculante e também exigível judicialmen-\nte. Para isso, no entanto, não é necessário excluí-lo do ordenamento\nj\n\n[6] (alexy-robert-teoria-dos-direitos-fundamentais.pdf · alexy-robert-teoria-dos-direitos-fundamentais-1986#50) — 50 e ss. Hohfeld utiliza os conceitos power (competência), liability (sujeição), disa-\n50 e ss. Hohfeld utiliza os conceitos power (competência), liability (sujeição), disa-\nbility (não-competência) e immunity (não-sujeição). Uma terminologia próxima à\naqui utilizada pode ser encontrada em Ross: competence (competência), subjection\n(sujeição), disability (não-competência) e immunity (não-sujeição). Cf, Alf Ross,\nDirectives and Norms, p. 119.\n179. BVerjGE 26, 215.\n180. BVerjGE 21, 73 (76-77).\nDIREITOS FUNDAMENTAIS COMO DIREITOS SUBJETIVOS\n245\ncluiu a competência para alienar propriedades na proteção do art. 14,\n0 que tem como conseqüência o fato de que para a revogação de deter-\nminadas competências - como a de alienar livremente propriedades\nrurais e florestais - seja exigida uma justificação. Aqui interessa ape-\nnas o fato de que, com isso, se aceita a existência de um direito funda-\nmental prima facie 181 a uma competência. Esse direito tem a estrutura\ndo direito à não-eliminação de uma posição, exposto anteriormente. É\ninteressante como o tribunal fundamenta esse direito a uma competên-\ncia: \"Essafapacidade é também um componente elementar da liberdade\nde ação' no âmbito da ordenação da propriedade. Por isso, uma proibi-\nção de alienação é uma das intervenções mais graves nesse âmbito de\nliberdade dos cidadãos\".181 Imediatamente antes dessa passagem, afir-\nma que o art. 14, § 1 •, 1, da Constituição alemã garante \"a propriedade\nprivada como um instituto jurídico\". E acrescenta: \"Essa garantia asse-\ngura um conjunto básico de normas, que definem a propriedade no\nsentido desse dispositivo de direito fundamental\". Com isso, o direito\na uma competência é associado tanto ao conceito de garantia de insti-\ntutos quanto ao conceito de liberdade.\nO núcleo dogmático da teoria d\n\n[7] (alexy-robert-teoria-dos-direitos-fundamentais.pdf · alexy-robert-teoria-dos-direitos-fundamentais-1986#21~2) — 21 .. se se compreende o enunciado \"o igual deve ser tratado igualmente; o desi-\n21 .. se se compreende o enunciado \"o igual deve ser tratado igualmente; o desi-\ngual, desigualmente\" no sentido de um postulado de uma práxis decisória universali-\nzante, ent~o, a segunda parte desse enunciado suscita problemas. Sempre que tanto a\nquanto b tiverem cometJ.do uma fraude, devem ambos ser tratados de forma igual, nos\ntermos do § ~63, 1, do Código Penal alemão - sem prejuízo da aplicação de outras\nno~as penais-, de .fonna a que ambos devam ser punidos com uma pena privativa\nde liberdade de até cinco anos ou multa. Nesse sentido, é verdadeiro que o igual deve\nser tratado de fonna igual. É verdadeiro também que, se a cometeu e b não cometeu\numa frau~e, a e b devem ser tratados de fonna desigual no que diz respeito ao § 263,\n1, ~o Código Penal alemão. Assim, é correto que o desigual deve ser tratado de forma\n~es1gual. Mas não é verdadeiro que sempre que, ao contrário de a, b não tenha come-\ntido uma f~aude, isto é, que seja desigual em face de a no que diz respeito ao § 263,\n1, do ~ódtgo Penal. alemão, deverá b ser tratado de fonna diversa daquela de a; b\npode nao ter comendo fraude, mas receptação, que é, tanto quanto fraude, punível\ncom pena privativa de liberdade de até cinco anos ou multa. Em relação a nonnas que\nexpressam condições suficientes, mas não necessárias, para uma conseqüência jurídi-\nca, nos tennos de uma interpretação como postulado de uma práxis decisória univer-\nsalizante é válido somente o enunciado \"o igual deve ser tratado igualmente;', mas\nnão o enunciado \"o desigual deve ser tratado desigualmente\" (cf. Ota Weinberger\n\"Gleichheitspostulate\", p. 150).\n'\nO DIREITO GERAL DE IGUALDADE\n399\nPara se chegar a uma vinculação substancial do legislador, é ne-\ncess",
   "cobertura": "boa",
+  "sinal": {
+   "medida": "sim",
+   "valor": 0.634,
+   "piso": 0.55
+  },
   "perguntas": [
-   "o que distingue um tipo de um papel"
+   "o que distingue um tipo de um papel?"
   ],
   "filtro": {
    "dominio": [],
@@ -84,15 +134,15 @@
   },
   "aviso": null,
   "indice": {
-   "acervo_sha": "f04c1ae0865d2af70ab0cc3532e8c2964edb64bd5d611c340cf6233d689f06ea",
-   "chunks": 139477,
-   "chunks_recuperaveis": 119164,
-   "chunks_com_vetor": 119164,
-   "chunks_nao_textuais": 20313,
-   "documentos_sem_chunk": 46,
-   "obras_catalogadas": 685,
-   "obras_ingeridas": 659,
-   "conceitos": 196,
+   "acervo_sha": "24ed2cbf607e73ab1e8ab79c0d286bf2996b5751db4e63cfb97c2f313dfc25c7",
+   "chunks": 145240,
+   "chunks_recuperaveis": 124463,
+   "chunks_com_vetor": 124463,
+   "chunks_nao_textuais": 20777,
+   "documentos_sem_chunk": 4,
+   "obras_catalogadas": 694,
+   "obras_ingeridas": 623,
+   "conceitos": 205,
    "embed_model": "Qwen/Qwen3-Embedding-0.6B",
    "embed_backend": "torch",
    "embed_query_instruction": "Given a search query, retrieve relevant passages that answer the query",
@@ -104,47 +154,7 @@
    "rrf_w_lex": 0.5,
    "hybrid_lexical": false,
    "rerank_model": null,
-   "sha_calculado_em": "2026-08-04T16:48:28+00:00"
-  }
- },
- "formalizacao": {
-  "termo": "tipo / papel",
-  "wiki": {
-   "pagina_com_titulo_igual_ao_termo": null,
-   "titulos_testados_ausentes": [
-    "Tipo",
-    "Papel"
-   ],
-   "paginas_com_o_termo_no_titulo": [],
-   "vizinhas_consultadas": [
-    {
-     "titulo": "Ajuda:Método/taxonomia",
-     "criada_em": "2026-07-18T19:48:52Z",
-     "ultima_edicao_em": "2026-07-25T16:07:21Z"
-    }
-   ]
-  },
-  "adr": {
-   "adr_com_o_termo_no_titulo": [
-    {
-     "repo": "platafirma-arquitetura",
-     "caminho": "macro-global/capabilities/seguranca/decisions/0004-modelo-abac-com-papel-como-atributo.md",
-     "criada_em": "2026-07-30T19:07:26-03:00",
-     "ultima_edicao_em": "2026-07-30T19:07:26-03:00"
-    }
-   ],
-   "ausencia_para_tipo": true,
-   "vizinhas_consultadas": []
-  },
-  "medida": {
-   "medido_em": "2026-08-04T16:45:00Z",
-   "fonte_wiki": "MediaWiki API interna (127.0.0.1:8080), prop=revisions, primeira e ultima revisao",
-   "fonte_adr": "git log --diff-filter=A (criacao) e git log -1 (ultima edicao) nos clones locais",
-   "repos_sha": {
-    "platafirma-arquitetura": "3158694036f799bca47ef8d6d56420ee37a3a416",
-    "platafirma-conhecimento": "5b6c364c14005a2332ed7f6279a7a7bceccc6225"
-   },
-   "criterio": "'nomeia o termo' = o termo aparece no titulo da pagina ou no nome do arquivo da ADR. Ausencia registrada explicitamente."
+   "sha_calculado_em": "2026-08-06T20:52:50+00:00"
   }
  }
 }

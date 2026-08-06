@@ -1,0 +1,175 @@
+{
+ "sonda": "T0",
+ "n": "13",
+ "bloco": "B",
+ "persona": "persona-nao-declarada",
+ "pergunta": "arquitetura de negócios",
+ "parametros_congelados": {
+  "texto": "secao",
+  "k": 8,
+  "dominio": null,
+  "subdominio": null,
+  "frente": null,
+  "colecao": null
+ },
+ "chamada_em": "2026-08-06T20:52:54.582191+00:00",
+ "acervo_sha": "24ed2cbf607e73ab1e8ab79c0d286bf2996b5751db4e63cfb97c2f313dfc25c7",
+ "retorno": {
+  "fontes": [
+   {
+    "n": 1,
+    "obra": "BIZBOK Guide",
+    "arquivo": "BIZBOK_Guide_v11.pdf",
+    "section_id": "bizbok_guide_v11-2022#information-concept",
+    "breadcrumb": [
+     "Information Concept"
+    ],
+    "sim": 0.561,
+    "score": 0.0164,
+    "rerank": null,
+    "codigo_exato": false,
+    "texto": null
+   },
+   {
+    "n": 2,
+    "obra": "BIZBOK Guide",
+    "arquivo": "BIZBOK_Guide_v11.pdf",
+    "section_id": "bizbok_guide_v11-2022#business-architecture-practitioner",
+    "breadcrumb": [
+     "Business Architecture Practitioner"
+    ],
+    "sim": 0.532,
+    "score": 0.0161,
+    "rerank": null,
+    "codigo_exato": false,
+    "texto": null
+   },
+   {
+    "n": 3,
+    "obra": "Architecture Modernization",
+    "arquivo": "NickTune_ArchModernization.pdf",
+    "section_id": "nicktune_archmodernization-2024#prepare-to-embrace-a-new-architecture-mindset",
+    "breadcrumb": [
+     "2 Preparing for the journey",
+     "Prepare to embrace a new architecture mindset"
+    ],
+    "sim": 0.547,
+    "score": 0.0159,
+    "rerank": null,
+    "codigo_exato": false,
+    "texto": null
+   },
+   {
+    "n": 4,
+    "obra": "BIZBOK Guide",
+    "arquivo": "BIZBOK_Guide_v11.pdf",
+    "section_id": "bizbok_guide_v11-2022#top-traits-of-the-business-architect",
+    "breadcrumb": [
+     "Top Traits of the Business Architect"
+    ],
+    "sim": 0.529,
+    "score": 0.0156,
+    "rerank": null,
+    "codigo_exato": false,
+    "texto": null
+   },
+   {
+    "n": 5,
+    "obra": null,
+    "arquivo": "Software-Architecture-in-Practice-Bass-Clements-Kazman.pdf",
+    "section_id": "software-architecture-in-practice-bass-clements-kazman-2012#23.3",
+    "breadcrumb": [
+     "360 Part Three Architecture in the Life Cycle 18—Documenting Software Architectures",
+     "23.3 Putting Theory into Practice: The CBAM"
+    ],
+    "sim": 0.554,
+    "score": 0.0154,
+    "rerank": null,
+    "codigo_exato": false,
+    "texto": null
+   },
+   {
+    "n": 6,
+    "obra": "BIZBOK Guide",
+    "arquivo": "BIZBOK_Guide_v11.pdf",
+    "section_id": "bizbok_guide_v11-2022#business-architect-extended-competencies-and-skills-palette",
+    "breadcrumb": [
+     "Business Architect Extended Competencies and Skills Palette"
+    ],
+    "sim": 0.526,
+    "score": 0.0152,
+    "rerank": null,
+    "codigo_exato": false,
+    "texto": null
+   },
+   {
+    "n": 7,
+    "obra": "BIZBOK Guide",
+    "arquivo": "BIZBOK_Guide_v11.pdf",
+    "section_id": "bizbok_guide_v11-2022#section-3-10-the-role-of-the-business-architect",
+    "breadcrumb": [
+     "SECTION 3.10: THE ROLE OF THE BUSINESS ARCHITECT"
+    ],
+    "sim": 0.525,
+    "score": 0.0149,
+    "rerank": null,
+    "codigo_exato": false,
+    "texto": null
+   },
+   {
+    "n": 8,
+    "obra": "BIZBOK Guide",
+    "arquivo": "BIZBOK_Guide_v11.pdf",
+    "section_id": "bizbok_guide_v11-2022#communicate-business-value",
+    "breadcrumb": [
+     "Communicate Business Value"
+    ],
+    "sim": 0.524,
+    "score": 0.0147,
+    "rerank": null,
+    "codigo_exato": false,
+    "texto": null
+   }
+  ],
+  "contexto": "[1] (BIZBOK_Guide_v11.pdf · bizbok_guide_v11-2022#information-concept) — Information Concept\nInformation Concept\nWay in which to represent business terms and semantics within the context of business\narchitecture.\n\n[2] (BIZBOK_Guide_v11.pdf · bizbok_guide_v11-2022#business-architecture-practitioner) — Business Architecture Practitioner\nBusiness Architecture Practitioner\nOne who applies business architecture to solve business problems and deliver business\nvalue.\n\n[3] (NickTune_ArchModernization.pdf · nicktune_archmodernization-2024#prepare-to-embrace-a-new-architecture-mindset) — 2 Preparing for the journey › Prepare to embrace a new architecture mindset\nPrepare to embrace a new architecture mindset\n18\nPrepare to embrace Conway’s law\n18\n■Prepare to embrace\ncollaborative architecture practices\n18\n■Prepare to connect\narchitecture and strategy\n19\n■Prepare to move beyond\nbusiness and IT silos\n20\n2.3\n\n[4] (BIZBOK_Guide_v11.pdf · bizbok_guide_v11-2022#top-traits-of-the-business-architect) — Top Traits of the Business Architect\nTop Traits of the Business Architect\nWhat are the top traits for an individual that would allow them to excel as a business architect?\n409\nHuman resource teams and job boards tend to focus on traits that lean towards the technical.\nWhile these “skills” can be useful, a growing history shows that a wide variety of traits can lead\nto identifying practitioners for a practice or for individuals to self-assess their skills and seek to\nbuild out those skills to excel in the practice.1\n1. Holistic Thinker: Business architects think big picture and long-term. Business architects\nmust be able to separate the forest from the trees in order to examine vast business\necosystems and deliver value across the strategy execution spectrum. It is easy to become\noverwhelmed by scope and complexity, but the business architect should be able to\ninvoke core principles and skills to visualize challenges and solutions across business unit\nsilos. Business architects are problem solvers and trusted advisors because of their\nstructured thinking and rational approaches. Business architects see beyond the details\nand consider root causes and opportunities for solving a problem smarter.\n2. High Business IQ: It takes much less time to learn business architecture principles than it\ndoes to understand the cross-functional workings of a given organization and related\nindustry. Business architects need to understand their business ecosystem and who to\nengage for more clarity and detail as well as have a strong \n\n[5] (Software-Architecture-in-Practice-Bass-Clements-Kazman.pdf · software-architecture-in-practice-bass-clements-kazman-2012#23.3) — 360 Part Three Architecture in the Life Cycle 18—Documenting Software Architectures › 23.3 Putting Theory into Practice: The CBAM\n(contexto do pai · software-architecture-in-practice-bass-clements-kazman-2012#360)\n360 Part Three Architecture in the Life Cycle 18—Documenting Software Architectures\n---\n23.3 Putting Theory into Practice: The CBAM\nWith the concepts in place we can now describe techniques for putting\nthem into practice, in the form of a method we call the Cost Benefit Analysis\nMethod (CBAM). As we describe the method, remember that, like all of our\nstakeholder-based methods, it could take any of the forms for stakeholder interac-\ntion that we discussed in the introduction to Part III.\nPracticalities of Utility Curve Determination\nTo build the utility-response curve, we first determine the quality attribute levels\nfor the best-case and worst-case situations. The best-case quality attribute level is\nthat above which the stakeholders foresee no further utility. For example, a sys-\ntem response to the user of 0.1 second is perceived as instantaneous, so improv-\ning it further so that it responds in 0.03 second has no additional utility. Simi-\nlarly, the worst-case quality attribute level is a minimum threshold above which a\n23.3 Putting Theory into Practice: The CBAM\n443\nsystem must perform; otherwise it is of no use to the stakeholders. These levels—\nbest-case and worst-case—are assigned utility values of 100 and 0, respectively.\nWe then determine the current and desired utility levels for the scenario. The re-\nspective utility values (between 0 and 100) for various alternative strategies are\nelicited from the stakeholders, using the best-case and worst-case values as refer-\nence points. For example, our current design provides utility about half as good\nas we wo\n\n[6] (BIZBOK_Guide_v11.pdf · bizbok_guide_v11-2022#business-architect-extended-competencies-and-skills-palette) — Business Architect Extended Competencies and Skills Palette\nBusiness Architect Extended Competencies and Skills Palette\nx Presentation and story-telling\nx Influencing and persuading\nx Framework development\nx Planning and organizing\nx Estimating techniques\nx Investment planning\nx Customer service\nx Problem solving\nx Design thinking\nx Gap analysis\n1 Skills Framework for the Information Age, www.sfia-online.org\nx Change design and delivery methods\nx Commercial and financial awareness\nx Communication (written and verbal)\nx Business and technology alignment\nx Business case development\nx Business case development\nx Architecture development\nx Capability assessments\nx Cultural awareness\nx Business modeling\nx Analytical thinking\nawareness\n\n[7] (BIZBOK_Guide_v11.pdf · bizbok_guide_v11-2022#section-3-10-the-role-of-the-business-architect) — SECTION 3.10: THE ROLE OF THE BUSINESS ARCHITECT\nSECTION 3.10: THE ROLE OF THE BUSINESS ARCHITECT\nThis section defines the role of a business architect. While the core focus of the BIZBOK® Guide\nis on the business architecture discipline, this section translates its concepts into what it means\nfor the individuals who practice the discipline and builds upon the concepts introduced in section\n3.2 Business Architecture Governance and appendix B.2 Business Architecture Roles and\nCompetencies. This section is meant to provide an overall perspective on the practitioner role\ndefinition and ideal traits. It provides a general context for individuals seeking to improve their\nskills, graduate to a business architecture practitioner, or to use business architecture in context\nof a broader set of responsibilities one might hold.\n\n[8] (BIZBOK_Guide_v11.pdf · bizbok_guide_v11-2022#communicate-business-value) — Communicate Business Value\nCommunicate Business Value\nAt some point, someone within the organization is likely to offer the idea of introducing business\narchitecture into the organization as a means of achieving various business goals. Whoever takes\non this role will want to systematically build a business case for business architecture. Often, this\neffort requires identifying and documenting salient issues within the organization. The following\nexamples are commonly found in many businesses:\nx Executive issues not getting addressed due to inability to communicate requirements\nto solution teams\nx Stakeholder/customer issues related to misalignment of concepts or terminology\nx Multiple business units delivering conflicting information\n291\nx Inability to synchronize information due to conflicting vocabulary\nx Multiple teams working at cross-purposes and delivering poorly synchronized results\nx Failures related to miscommunication or inarticulate requirements\nx Cost of developing business requirements that are not delivering results\nx Issues related to executive reporting or synchronization of financial information\nDocumenting these and other challenges within the organization, which should include specifics\nthat executives can easily understand, will begin to build the case for business architecture. When\nengaging business executives, the focus must remain on business value as it relates to their\nstrategies and top priorities. For example:\nx Focus on high-payback areas where costs or uncontrolled growth ",
+  "cobertura": "boa",
+  "sinal": {
+   "medida": "sim",
+   "valor": 0.561,
+   "piso": 0.55
+  },
+  "perguntas": [
+   "arquitetura de negócios"
+  ],
+  "filtro": {
+   "dominio": [],
+   "subdominio": [],
+   "frente": [],
+   "colecao": []
+  },
+  "aviso": null,
+  "indice": {
+   "acervo_sha": "24ed2cbf607e73ab1e8ab79c0d286bf2996b5751db4e63cfb97c2f313dfc25c7",
+   "chunks": 145240,
+   "chunks_recuperaveis": 124463,
+   "chunks_com_vetor": 124463,
+   "chunks_nao_textuais": 20777,
+   "documentos_sem_chunk": 4,
+   "obras_catalogadas": 694,
+   "obras_ingeridas": 623,
+   "conceitos": 205,
+   "embed_model": "Qwen/Qwen3-Embedding-0.6B",
+   "embed_backend": "torch",
+   "embed_query_instruction": "Given a search query, retrieve relevant passages that answer the query",
+   "embed_meta_beta": 0.15,
+   "modo": "hybrid",
+   "rrf_k": 60,
+   "rrf_w_vec": 1.0,
+   "rrf_w_id": 2.0,
+   "rrf_w_lex": 0.5,
+   "hybrid_lexical": false,
+   "rerank_model": null,
+   "sha_calculado_em": "2026-08-06T20:52:50+00:00"
+  }
+ }
+}

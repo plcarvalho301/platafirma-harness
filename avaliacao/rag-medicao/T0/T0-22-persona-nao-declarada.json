@@ -1,0 +1,179 @@
+{
+ "sonda": "T0",
+ "n": "22",
+ "bloco": "B",
+ "persona": "persona-nao-declarada",
+ "pergunta": "avaliação heurística",
+ "parametros_congelados": {
+  "texto": "secao",
+  "k": 8,
+  "dominio": null,
+  "subdominio": null,
+  "frente": null,
+  "colecao": null
+ },
+ "chamada_em": "2026-08-06T20:52:56.320889+00:00",
+ "acervo_sha": "24ed2cbf607e73ab1e8ab79c0d286bf2996b5751db4e63cfb97c2f313dfc25c7",
+ "retorno": {
+  "fontes": [
+   {
+    "n": 1,
+    "obra": "Human Problem Solving: The State of the Theory in 1970",
+    "arquivo": "Simon_1970_-_Human_Problem_Solving,_The_State_of_the_Theory_in_1970.pdf",
+    "section_id": "simon_1970_-_human_problem_solving-_the_state_of_the_theory_in_1970#5",
+    "breadcrumb": [
+     "5 Some of this evidence is reviewed in Newell and Simon"
+    ],
+    "sim": 0.559,
+    "score": 0.0164,
+    "rerank": null,
+    "codigo_exato": false,
+    "texto": null
+   },
+   {
+    "n": 2,
+    "obra": "Information Architecture: For the Web and Beyond",
+    "arquivo": "Information_Architecture_For_The_Web_And_Beyond_Fourth_Edition.pdf",
+    "section_id": "information_architecture_for_the_web_and_beyond_fourth_edition-1998#10",
+    "breadcrumb": [
+     "10 “Defining the damned thing”—or DTDT, as it is often shortened on Twitter and mail‐"
+    ],
+    "sim": 0.558,
+    "score": 0.0161,
+    "rerank": null,
+    "codigo_exato": false,
+    "texto": null
+   },
+   {
+    "n": 3,
+    "obra": "Lei nº 6.880/1980 — Estatuto dos Militares",
+    "arquivo": "NC20 IN01_DSIC_GSIPR.pdf",
+    "section_id": "nc20-in01_dsic_gsipr-1980#7.3",
+    "breadcrumb": [
+     "7 IMPLEMENTAÇÃO",
+     "7.3 Avaliação"
+    ],
+    "sim": 0.558,
+    "score": 0.0159,
+    "rerank": null,
+    "codigo_exato": false,
+    "texto": null
+   },
+   {
+    "n": 4,
+    "obra": "Threat Modeling: Designing for Security",
+    "arquivo": "Adam Shostack - Threat Modeling_ Designing for Security.pdf",
+    "section_id": "adam-shostack-threat-modeling_-designing-for-security-2014#ceremony-analysis-heuristics",
+    "breadcrumb": [
+     "Part IV ■ Threat Modeling in Technologies and Tricky Areas",
+     "Ceremony Analysis Heuristics"
+    ],
+    "sim": 0.543,
+    "score": 0.0154,
+    "rerank": null,
+    "codigo_exato": false,
+    "texto": null
+   },
+   {
+    "n": 5,
+    "obra": "ABNT NBR ISO/IEC 27701:2019 — Técnicas de segurança — Extensão da ABNT NBR ISO/IEC 27001 e 27002 para gestão da privacidade da informação",
+    "arquivo": "[Norma Brasileira] ABNT_CB-021 Computadores e Processamento de Dados - ABNT NBR ISO_IEC 27701_2019 Técnicas de segurança — Extensão da ABNT NBR ISO_IEC 27001 e ABNT NBR ISO_IEC 27002 para gestão da p (2019, ABNT -.pdf",
+    "section_id": "norma-brasileira-abnt_cb-021-computadores-e-processamento-de-dados-abnt-nbr-iso_iec-27701_2019-técnicas-de-segurança-extensão-da-abnt-nbr-iso_iec-27001-e-abnt-nbr-iso_iec-27002-para-gestão-da-p-2019-abnt-2019#5.7",
+    "breadcrumb": [
+     "5 Requisitos específicos de um SGPI relacionados à ABNT NBR ISO/IEC 27001",
+     "5.7 Avaliação de desempenho"
+    ],
+    "sim": 0.548,
+    "score": 0.0152,
+    "rerank": null,
+    "codigo_exato": false,
+    "texto": null
+   },
+   {
+    "n": 6,
+    "obra": "Guia de Elaboração de PDTIC do SISP, versão 2.1",
+    "arquivo": "Guia de PDTIC do SISP v2.1.pdf",
+    "section_id": "guia-de-pdtic-do-sisp-v2-1-2021#4.4",
+    "breadcrumb": [
+     "7 - PROCESSO DE ACOMPANHAMENTO DO PDTIC",
+     "4.4 Planejar a avaliação;"
+    ],
+    "sim": 0.538,
+    "score": 0.0149,
+    "rerank": null,
+    "codigo_exato": false,
+    "texto": null
+   },
+   {
+    "n": 7,
+    "obra": "Learning Domain-Driven Design",
+    "arquivo": "Learning Domain-Driven Design_ Aligning Software Architecture and Business Strategy.pdf",
+    "section_id": "learning-domain-driven-design_-aligning-software-architecture-and-business-strategy-2022#design-heuristics",
+    "breadcrumb": [
+     "Chapter 9: Communication Patterns",
+     "Design Heuristics"
+    ],
+    "sim": 0.537,
+    "score": 0.0147,
+    "rerank": null,
+    "codigo_exato": false,
+    "texto": null
+   },
+   {
+    "n": 8,
+    "obra": "Learning Domain-Driven Design",
+    "arquivo": "Learning Domain-Driven Design_ Aligning Software Architecture and Business Strategy.pdf",
+    "section_id": "learning-domain-driven-design_-aligning-software-architecture-and-business-strategy-2022#heuristic",
+    "breadcrumb": [
+     "Chapter 9: Communication Patterns",
+     "Heuristic"
+    ],
+    "sim": 0.531,
+    "score": 0.0145,
+    "rerank": null,
+    "codigo_exato": false,
+    "texto": null
+   }
+  ],
+  "contexto": "[1] (Simon_1970_-_Human_Problem_Solving,_The_State_of_the_Theory_in_1970.pdf · simon_1970_-_human_problem_solving-_the_state_of_the_theory_in_1970#5) — 5 Some of this evidence is reviewed in Newell and Simon\n5 Some of this evidence is reviewed in Newell and Simon\n(in press, Ch. 14).\n150\nAMERICAN PSYCHOLOGIST\nConsider the cryptarithmetic problem\nNot only does this heuristic of processing the\nmost-constrained columns first almost eliminate the\nneed for search, but it also reduces the demands on\nthe short-term memory of the problem solver. All\nthe information he has acquired up to any given\npoint can be represented on a single external dis-\nplay, simply by replacing each letter by the digit\nassigned to it as soon as the assignment is made.\nSince the assignments are definite, not tentative,\nno provision need be made by an error-free process-\ning system for correcting wrong assignments, nor\nfor keeping track of assignments that were tried\npreviously and failed.\nThe human information-\nprocessing system is subject to error, however, hence\nrequires back-up capabilities not predictable from\nthe demands of the task environment.\nDONALD\n+GERALD\nROBERT\nwhich has been studied on both shores of the At-\nlantic, in England by Bart.lett (1958), and in the\nUnited States in our own laboratory (Newell, 1967;\nNewell & Simon, in press, Part II). The problem\nis to substitute numbers for the letters in the three\nnames in such a way as to produce a correct arith-\nmetic sum.\nAs the problem is usually posed, the\nhint is given that D = 5. If we look at the proto-\ncols of subjects who solve the problem, we find that\nthey all substitute numbers for the letters in ap-\nproximately the same sequence.\nFirst, they \n\n[2] (Information_Architecture_For_The_Web_And_Beyond_Fourth_Edition.pdf · information_architecture_for_the_web_and_beyond_fourth_edition-1998#10) — 10 “Defining the damned thing”—or DTDT, as it is often shortened on Twitter and mail‐\n10 “Defining the damned thing”—or DTDT, as it is often shortened on Twitter and mail‐\ning lists—is an ongoing source of contention in the IA community, to the merriment of\nsome and annoyance of others. When you make a living labeling things, squabbles\nabout conceptual boundaries are an occupational hazard.\n22\nChapter 1: The Problems That Information Architecture Addresses\nCHAPTER 2\nDefining Information Architecture\nWe say nothing essential about the\ncathedral when we speak of its stones.\n—Antoine de Saint-Exupéry\nIn this chapter, we’ll cover:\n• A working definition (or four!) of information architecture\n• Why it’s so hard to point to something and say, “that’s a\ngreat IA”!\n• A model for effective IA design\nIf you’re new to information architecture, at this point you may be\nwondering what this is all about. This chapter has answers for you!\nAnd if you have been working in one of the UX design disciplines\nfor a while, you may be thinking, “But isn’t information architecture\nabout making sitemaps, wireframes, and website navigation\nmenus?” Well, yes—these are important elements of information\narchitecture design. But there is much more to this story! In this\nchapter, we’ll give you a broader picture of what information archi‐\ntecture is—and isn’t.\n23\nDefinitions\nLet’s start by clarifying what we mean by information architecture:\n1. The structural design of shared information environments\n2. The synthesis of organization, labeling, search, and navigation\nsystems within digital, p\n\n[3] (NC20 IN01_DSIC_GSIPR.pdf · nc20-in01_dsic_gsipr-1980#7.3) — 7 IMPLEMENTAÇÃO › 7.3 Avaliação\n(contexto do pai · nc20-in01_dsic_gsipr-1980#7)\n7 Implementação\n---\n7.3 Avaliação\n\n[4] (Adam Shostack - Threat Modeling_ Designing for Security.pdf · adam-shostack-threat-modeling_-designing-for-security-2014#ceremony-analysis-heuristics) — Part IV ■ Threat Modeling in Technologies and Tricky Areas › Ceremony Analysis Heuristics\n(contexto do pai · adam-shostack-threat-modeling_-designing-for-security-2014#part-iv-threat-modeling-in-technologies-and-tricky-areas)\nPart IV ■ Threat Modeling in Technologies and Tricky Areas\nlot of words have been written on the security properties of web and\ncloud, they’re actually only a little more complex to threat model than\nother operational environments.)\n■Chapter 14: Accounts and Identity are far more nuanced than web or\ncloud, and begin to intrude on the human world, where poor choices\nin design can cause people to av\n---\nCeremony Analysis Heuristics\nThere are a set of threats that can be discovered simply and easily with some\nheuristics, and a set of threats that are more likely to be found with more struc-\ntured work. Each heuristic has advice for addressing the threat. The fi rst four\nare extracted from Ellison’s “Ceremony Design and Analysis” (IACR Cryptology\nePrint Archive 2007) to contextualize them as heuristics, while the fi nal two are\nother heuristics that may help you.\n\n[5] ([Norma Brasileira] ABNT_CB-021 Computadores e Processamento de Dados - ABNT NBR ISO_IEC 27701_2019 Técnicas de segurança — Extensão da ABNT NBR ISO_IEC 27001 e ABNT NBR ISO_IEC 27002 para gestão da p (2019, ABNT -.pdf · norma-brasileira-abnt_cb-021-computadores-e-processamento-de-dados-abnt-nbr-iso_iec-27701_2019-técnicas-de-segurança-extensão-da-abnt-nbr-iso_iec-27001-e-abnt-nbr-iso_iec-27002-para-gestão-da-p-2019-abnt-2019#5.7) — 5 Requisitos específicos de um SGPI relacionados à ABNT NBR ISO/IEC 27001 › 5.7 Avaliação de desempenho\n(contexto do pai · norma-brasileira-abnt_cb-021-computadores-e-processamento-de-dados-abnt-nbr-iso_iec-27701_2019-técnicas-de-segurança-extensão-da-abnt-nbr-iso_iec-27001-e-abnt-nbr-iso_iec-27002-para-gestão-da-p-2019-abnt-2019#5)\n5 Requisitos específicos de um SGPI relacionados à ABNT NBR ISO/IEC 27001\n---\n5.7 Avaliação de desempenho\n\n[6] (Guia de PDTIC do SISP v2.1.pdf · guia-de-pdtic-do-sisp-v2-1-2021#4.4) — 7 - PROCESSO DE ACOMPANHAMENTO DO PDTIC › 4.4 Planejar a avaliação;\n(contexto do pai · guia-de-pdtic-do-sisp-v2-1-2021#7)\n7 - PROCESSO DE ACOMPANHAMENTO DO PDTIC\nO Processo de Acompanhamento do PDTIC consiste em auxiliar a gestão e a\ngovernança de TIC com foco na mensuração do desempenho da TIC organizacional. Essa\nmensuração visa monitorar e avaliar a implementação das ações, o uso dos recursos e a\nentrega dos serviços, com o objetivo de atender às estratégias e aos objetivos do negócio.\nDessa forma, o processo de a\n---\n4.4 Planejar a avaliação;\n\n[7] (Learning Domain-Driven Design_ Aligning Software Architecture and Business Strategy.pdf · learning-domain-driven-design_-aligning-software-architecture-and-business-strategy-2022#design-heuristics) — Chapter 9: Communication Patterns › Design Heuristics\n(contexto do pai · learning-domain-driven-design_-aligning-software-architecture-and-business-strategy-2022#chapter-9-communication-patterns)\nChapter 9: Communication Patterns\nIn some cases, it can be more cost-effective and convenient to offload the translation\nlogic to an external component such as an API gateway pattern. The API gateway\ncomponent can be an open source software-based solution such as Kong or KrakenD,\nor it can be a cloud vendor’s managed service such as AWS API Gateway, Google Api‐\ngee, or Azure API Management.\nFor bo\n---\nDesign Heuristics\n“It depends” is the correct answer to almost any question in software engineering, but\nnot really practical. In this chapter, we will explore what “it” depends on.\nIn Part I of the book, you learned domain-driven design tools for analyzing business\ndomains and making strategic design decisions. In Part II, we explored tactical design\npatterns: the different ways to implement business logic, organize system architec‐\nture, and establish communication between a system’s components. This chapter\nbridges Parts I and II. You will learn heuristics for applying analysis tools to drive var‐\nious software design decisions: that is, (business) domain-driven (software) design.\nBut first, since this chapter is about design heuristics, let’s start by defining the term\nheuristic.\n\n[8] (Learning Domain-Driven Design_ Aligning Software Architecture and Business Strategy.pdf · learning-domain-driven-design_-aligning-software-architecture-and-business-strategy-2022#heuristic) — Chapter 9: Communication Patterns › Heuristic\n(contexto do pai · learning-domain-driven-design_-aligning-software-architecture-and-business-strategy-2022#chapter-9-communication-patterns)\nChapter 9: Communication Patterns\nIn some cases, it can be more cost-effective and convenient to offload the translation\nlogic to an external component such as an API gateway pattern. The API gateway\ncomponent can be an open source software-based solution such as Kong or KrakenD,\nor it can be a cloud vendor’s managed service such as AWS API Gateway, Google Api‐\ngee, or Azure API Management.\nFor bo\n---\nHeuristic\nA heuristic is not a hard rule that is guaranteed and mathematically proven to be cor‐\nrect in 100% of cases. Rather, it’s a rule of thumb: not guaranteed to be perfect, yet\nsufficient for one’s immediate goals. In other words, using heuristics is an effective\nproblem-solving approach that ignores the noise inherent in many cues, focusing\ninstead on the “swamping forces” reflected in the most important cues.1\nThe heuristics presented in this chapter focus on the essential properties of the differ‐\nent business domains and on the essence of the problems addressed by the various\ndesign decisions.\n1 Gigerenzer, G., Todd, P. M., & ABC Research Group (Research Group, Max Planck Institute, Germany).\n(1999). Simple Heuristics That Make Us Smart. New York: Oxford University Press.\n159",
+  "cobertura": "boa",
+  "sinal": {
+   "medida": "sim",
+   "valor": 0.559,
+   "piso": 0.55
+  },
+  "perguntas": [
+   "avaliação heurística"
+  ],
+  "filtro": {
+   "dominio": [],
+   "subdominio": [],
+   "frente": [],
+   "colecao": []
+  },
+  "aviso": null,
+  "indice": {
+   "acervo_sha": "24ed2cbf607e73ab1e8ab79c0d286bf2996b5751db4e63cfb97c2f313dfc25c7",
+   "chunks": 145240,
+   "chunks_recuperaveis": 124463,
+   "chunks_com_vetor": 124463,
+   "chunks_nao_textuais": 20777,
+   "documentos_sem_chunk": 4,
+   "obras_catalogadas": 694,
+   "obras_ingeridas": 623,
+   "conceitos": 205,
+   "embed_model": "Qwen/Qwen3-Embedding-0.6B",
+   "embed_backend": "torch",
+   "embed_query_instruction": "Given a search query, retrieve relevant passages that answer the query",
+   "embed_meta_beta": 0.15,
+   "modo": "hybrid",
+   "rrf_k": 60,
+   "rrf_w_vec": 1.0,
+   "rrf_w_id": 2.0,
+   "rrf_w_lex": 0.5,
+   "hybrid_lexical": false,
+   "rerank_model": null,
+   "sha_calculado_em": "2026-08-06T20:52:50+00:00"
+  }
+ }
+}

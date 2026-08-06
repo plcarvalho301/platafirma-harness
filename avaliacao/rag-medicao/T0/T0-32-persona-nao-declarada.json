@@ -1,0 +1,184 @@
+{
+ "sonda": "T0",
+ "n": "32",
+ "bloco": "B",
+ "persona": "persona-nao-declarada",
+ "pergunta": "cost of delay",
+ "parametros_congelados": {
+  "texto": "secao",
+  "k": 8,
+  "dominio": null,
+  "subdominio": null,
+  "frente": null,
+  "colecao": null
+ },
+ "chamada_em": "2026-08-06T20:52:58.591755+00:00",
+ "acervo_sha": "24ed2cbf607e73ab1e8ab79c0d286bf2996b5751db4e63cfb97c2f313dfc25c7",
+ "retorno": {
+  "fontes": [
+   {
+    "n": 1,
+    "obra": "Escaping the Build Trap",
+    "arquivo": "Escaping the build trap _ how effective product management -- Melissa Perri -- Business book summary, First edition, Sebastopol, CA, 2018 -- O'Reilly -- isbn13 9781491973790 -- 2045057266451ca90d62b3d5c1382142 -- Anna’s Archive.epub",
+    "section_id": "escaping-the-build-trap-_-how-effective-product-management-melissa-perri-business-book-summary-first-edition-sebastopol-ca-2018-o-reilly-isbn13-9781491973790-2045057266451ca90d62b3d5c1382142-anna-s-archive#prioritizing-work",
+    "breadcrumb": [
+     "Prioritizing Work"
+    ],
+    "sim": 0.755,
+    "score": 0.0164,
+    "rerank": null,
+    "codigo_exato": false,
+    "texto": null
+   },
+   {
+    "n": 2,
+    "obra": "Accelerate: State of DevOps 2018",
+    "arquivo": "2018-dora-accelerate-state-of-devops-report.pdf",
+    "section_id": "2018-dora-accelerate-state-of-devops-report-2018#misguided-performers",
+    "breadcrumb": [
+     "MISGUIDED PERFORMERS"
+    ],
+    "sim": 0.646,
+    "score": 0.0161,
+    "rerank": null,
+    "codigo_exato": false,
+    "texto": null
+   },
+   {
+    "n": 3,
+    "obra": "The Principles of Product Development Flow: Second Generation Lean Product Development",
+    "arquivo": "The Principles of Product Development Flow_ Second -- Donald G Reinertsen -- 2016.epub",
+    "section_id": "the-principles-of-product-development-flow_-second-donald-g-reinertsen-2016#e3-the-principle-of-quantified-cost-of-delay-if-you-only-qua",
+    "breadcrumb": [
+     "The Economic View",
+     "The Project Economic Framework",
+     "E3: The Principle of Quantified Cost of Delay: If you only quantify one thing, quantify the cost of delay."
+    ],
+    "sim": 0.628,
+    "score": 0.0159,
+    "rerank": null,
+    "codigo_exato": false,
+    "texto": null
+   },
+   {
+    "n": 4,
+    "obra": "The Principles of Product Development Flow: Second Generation Lean Product Development",
+    "arquivo": "The Principles of Product Development Flow_ Second -- Donald G Reinertsen -- 2016.epub",
+    "section_id": "the-principles-of-product-development-flow_-second-donald-g-reinertsen-2016#blindness-to-queues",
+    "breadcrumb": [
+     "The Principles of Flow",
+     "What Is the Problem?",
+     "Blindness to Queues"
+    ],
+    "sim": 0.625,
+    "score": 0.0156,
+    "rerank": null,
+    "codigo_exato": false,
+    "texto": null
+   },
+   {
+    "n": 5,
+    "obra": "Investment Valuation",
+    "arquivo": "Aswath Damodaran - Investment Valuation_ Tools and Techniques for Determining the Value of Any Asset,  (2002, Wiley) - libgen.lc.pdf",
+    "section_id": "aswath-damodaran-investment-valuation_-tools-and-techniques-for-determining-the-value-of-any-asset-2002-wiley-libgen-lc-2001#23",
+    "breadcrumb": [
+     "23 See Inselbag and Kaufold (1997)."
+    ],
+    "sim": 0.601,
+    "score": 0.0149,
+    "rerank": null,
+    "codigo_exato": false,
+    "texto": null
+   },
+   {
+    "n": 6,
+    "obra": "The Principles of Product Development Flow: Second Generation Lean Product Development",
+    "arquivo": "The Principles of Product Development Flow_ Second -- Donald G Reinertsen -- 2016.epub",
+    "section_id": "the-principles-of-product-development-flow_-second-donald-g-reinertsen-2016#f16-the-hdcf-scheduling-principle-when-job-durations-are-hom",
+    "breadcrumb": [
+     "Controlling Flow Under Uncertainty",
+     "Sequencing Work",
+     "F16: The HDCF Scheduling Principle: When job durations are homogeneous, do the high cost-of-delay job first."
+    ],
+    "sim": 0.562,
+    "score": 0.0147,
+    "rerank": null,
+    "codigo_exato": false,
+    "texto": null
+   },
+   {
+    "n": 7,
+    "obra": "2020-devops-transformation-google-cloud-dora",
+    "arquivo": "2020-devops-transformation-google-cloud-dora.pdf",
+    "section_id": "2020-devops-transformation-google-cloud-dora-2019#can-represent-savings-to-the-business",
+    "breadcrumb": [
+     "Transformation",
+     "Calculating Return Using Value and Cost",
+     "can represent savings to the business."
+    ],
+    "sim": 0.556,
+    "score": 0.0145,
+    "rerank": null,
+    "codigo_exato": false,
+    "texto": null
+   },
+   {
+    "n": 8,
+    "obra": "Designing Data-Intensive Applications",
+    "arquivo": "Designing Data-Intensive Applications (Kleppmann) - annas-archive.epub",
+    "section_id": "designing-data-intensive-applications-kleppmann-annas-archive#latency-and-resource-utilization",
+    "breadcrumb": [
+     "Network partitions",
+     "Synchronous Versus Asynchronous Networks",
+     "Can we not simply make network delays predictable?",
+     "Latency and Resource Utilization"
+    ],
+    "sim": 0.551,
+    "score": 0.0143,
+    "rerank": null,
+    "codigo_exato": false,
+    "texto": null
+   }
+  ],
+  "contexto": "[1] (Escaping the build trap _ how effective product management -- Melissa Perri -- Business book summary, First edition, Sebastopol, CA, 2018 -- O'Reilly -- isbn13 9781491973790 -- 2045057266451ca90d62b3d5c1382142 -- Anna’s Archive.epub · escaping-the-build-trap-_-how-effective-product-management-melissa-perri-business-book-summary-first-edition-sebastopol-ca-2018-o-reilly-isbn13-9781491973790-2045057266451ca90d62b3d5c1382142-anna-s-archive#prioritizing-work) — Prioritizing Work\nTo get to a Version 1, you need to prioritize your work. Prioritization, as I mentioned earlier, is a top issue for most product managers. There are many frameworks out there that will help you prioritize, like benefits mapping , Kano models , and others, but my favorite is Cost of Delay . If you understand the desired outcomes from a strategic perspective, you can use Cost of Delay to help you determine what to ship sooner.\nIn his book, The Principles of Product Development Flow , Don Reinertsen talks about the importance of Cost of Delay in prioritizing work. He calls it “the one thing” that should be quantified. Cost of Delay is a numeric value that describes the impact of time on the outcomes you hope to achieve. It combines urgency and value so that you can measure impact and prioritize what you should be doing first.\nWhen you think of building and releasing that first version of the product, you need to consider the trade-offs between the amount of value you can capture with the scope of the release and the time it takes to get it out the door. It’s an optimization problem. You want to reduce scope enough so that you can capture the maximum value in the right time.\nIf you wait too long because you overscoped the release, you lose the money you could have been making. Worse, a competitor could swoop in and steal your market. Then you’d have a higher threshold to entry, and your product will need to be light years better than the competition’s. On the flip side, you don’t\n\n[2] (2018-dora-accelerate-state-of-devops-report.pdf · 2018-dora-accelerate-state-of-devops-report-2018#misguided-performers) — MISGUIDED PERFORMERS\nMISGUIDED PERFORMERS\nAnalysis shows that low-performing teams\nare 3.9 times more likely to use functional\noutsourcing (overall) than elite performance\nteams, and 3.2 times more likely to use\noutsourcing of any of the following functions:\napplication development, IT operations work,\nor testing and QA. This suggests that\noutsourcing by function is rarely adopted\nby elite performers.\nRecall our “misguided performers” from the Software\nDelivery Performance section: the group with\ndeployment frequency and lead time for changes\nslower than or on par with our low performers.\nWhile this group has a better change fail rate than\nlow performers, it also reports the longest time to\nrestore service, with downtimes of one to six months.\nMisguided performers also report the highest use of\noutsourcing, which likely contributes to their slower\nperformance and significantly slower recovery from\ndowntime. When working in an outsourcing context,\nit can take months to implement, test, and deploy\nfixes for incidents caused by code problems.\nLet’s take a deeper look into the impact\nof outsourcing by function. Using the\ninformation we have about the elite and\nlow-performing profiles, we can quantify\nand estimate some of the consequences in\ndollars. First, we know that elite performers\ntypically deliver software multiple times per\nday, whereas low performers deliver between\nonce every month and once every six months.\n45\nOutsourcing tends to lead to batching work—and thus long lead times—\nbecause the \n\n[3] (The Principles of Product Development Flow_ Second -- Donald G Reinertsen -- 2016.epub · the-principles-of-product-development-flow_-second-donald-g-reinertsen-2016#e3-the-principle-of-quantified-cost-of-delay-if-you-only-qua) — The Economic View › The Project Economic Framework › E3: The Principle of Quantified Cost of Delay: If you only quantify one thing, quantify the cost of delay.\n(contexto do pai · the-principles-of-product-development-flow_-second-donald-g-reinertsen-2016#the-project-economic-framework)\nFortunately, there is a straightforward way to solve this problem. We quantify the overall economic impact of decisions using a project economic framework. This framework treats a project as a black box that is designed to produce life-cycle profits. As Figure 2-1 shows, we commonly use five key economic objectives as measures of performance for a project. We vary each measure independently and as\n---\nIn theory, by following Principle E1 , we will automatically quantify the cost of delay (COD) for our projects. In practice, since 85 percent of companies do not quantify cost of delay, it is worth highlighting this particular sensitivity. We simply have no business trading money for cycle time if we do not know the economic value of cycle time.\nConsider the following example. Unhappy with late deliveries, a project manager decides he can reduce variability by inserting a safety margin or buffer in his schedule. He reduces uncertainty in the schedule by committing to an 80 percent confidence schedule. But, what is the cost of this buffer? The project manager is actually trading cycle time for variability. We can only know if this is a good trade-off if we quantify both the value of cycle time and the economic benefit of reduced variability.\nIn our experience, no single sensitivity is more eye-opening than COD. As this book progresses, you will see that the economics of flow is almost always dominated by the cost of queues. If we cannot quantify the cost of a queue on the critical path, then we cannot quantify the benefit of reducing this queue. If we cannot quantify the benefit, we can’t generate support for major changes.\nWe need COD to evaluate the cost of queues, the value of excess capacity, the benefit of smaller batch sizes, and value of variability reduction. Cost of delay is the golden key that unlocks many doors. It has an astonishing power to totally transform the m\n\n[4] (The Principles of Product Development Flow_ Second -- Donald G Reinertsen -- 2016.epub · the-principles-of-product-development-flow_-second-donald-g-reinertsen-2016#blindness-to-queues) — The Principles of Flow › What Is the Problem? › Blindness to Queues\n(contexto do pai · the-principles-of-product-development-flow_-second-donald-g-reinertsen-2016#what-is-the-problem)\nToday’s orthodoxy has institutionalized a set of internally consistent but dysfunctional beliefs. This has created a tightly interlocking and self-reinforcing system, a system from which it is very difficult to break free. Even when we change one piece, the other pieces hold us back by blocking the benefits of our change. When our change fails to produce benefits, we revert to our old approaches.\n\n---\nFew developers realize that queues are the single most important cause of poor product development performance. Queues cause our development process to have too much design-in-process inventory (DIP). Developers are unaware of DIP, they do not measure it, and they do not manage it. They do not even realize that DIP is a problem. For example, product developers will say that they want to be more innovative and never realize that high levels of DIP undermine this objective. When DIP is high, cycle times are long. When cycle times are long, innovation occurs so late that it becomes imitation.\nThere are two important reasons why product developers are blind to DIP. First, inventory is financially invisible in product development. We do not carry partially completed designs as assets on our balance sheet; we expense R&D costs as they are incurred. If we ask the chief financial officer how much inventory we have in product development, the answer will be, “Zero.”\nSecond, we are blind to product development inventory because it is usually physically invisible. DIP is information, not physical objects. We do not see piles of DIP when we walk through the engineering department. In product development, our inventory is bits on a disk drive, and we have very big disk drives in product development.\nBut if we are blind to DIP, then we are also blind to the danger in operating with high levels of DIP. As you shall see in Chapter 3 , queues lie at the root of a large number of product devel\n\n[5] (Aswath Damodaran - Investment Valuation_ Tools and Techniques for Determining the Value of Any Asset,  (2002, Wiley) - libgen.lc.pdf · aswath-damodaran-investment-valuation_-tools-and-techniques-for-determining-the-value-of-any-asset-2002-wiley-libgen-lc-2001#23) — 23 See Inselbag and Kaufold (1997).\n23 See Inselbag and Kaufold (1997).\n56\nThe benefits of breaking a firm down into pieces clearly increase as a firm becomes\nmore diverse in its operations. These benefits have to be weighed off against the costs\nassociated with more imprecise information and greater estimation problems.\nConclusion\nThis chapter develops an alternative approach to discounted cashflow valuation.\nThe cashflows to the firm are discounted at the weighted average cost of capital to obtain\nthe value of the firm, which when reduced by the market value of outstanding debt, yields\nthe value of equity. Since the cashflow to the firm is a cashflow prior to debt payments,\nthis approach is more straightforward to use when there is significant leverage or when\nleverage changes over time, though the weighted average cost of capital, used to discount\nfree cashflows to the firm, has to be adjusted for changes in leverage. Finally, the costs of\ncapital can be estimated at different debt ratios and used to estimate the optimal debt ratio\nfor a firm.\nThe alternative approach to firm valuation is the APV approach, where we add\nthe effect on value of debt (tax benefits – bankruptcy costs) to the unlevered firm value.\nThis approach can also be used to estimate the optimal debt ratio for the firm.\n57\nProblems\n1. Respond true or false to the following statements about the free cash flow to the firm.\nA. The free cash flow to the firm is always higher than the free cash flow to equity.\nB. The free cash flow to the firm is\n\n[6] (The Principles of Product Development Flow_ Second -- Donald G Reinertsen -- 2016.epub · the-principles-of-product-development-flow_-second-donald-g-reinertsen-2016#f16-the-hdcf-scheduling-principle-when-job-durations-are-hom) — Controlling Flow Under Uncertainty › Sequencing Work › F16: The HDCF Scheduling Principle: When job durations are homogeneous, do the high cost-of-delay job first.\n(contexto do pai · the-principles-of-product-development-flow_-second-donald-g-reinertsen-2016#sequencing-work)\nA third dimension of flow control is how we sequence work. In manufacturing systems, like the Toyota Production System, work is processed on a first-in-first-out (FIFO) basis. This is a perfect approach when the work items have similar task durations and similar costs of delay. Manufacturing processes rarely exploit queueing discipline because queueing discipline creates no economic payoff when ta\n---\nWhen all job durations are the same but delay costs differ, it is best to do the high delay cost first (HDCF). We delay the jobs with a low cost of delay so that we can service those with a high cost of delay. This is shown in Figure 7-10 . Again, the incremental area between the two graphs shows the savings from the optimum task sequence.\nF17: The WSJF Scheduling Principle: When job durations and delay costs are not homogeneous, use WSJF.\n\n[7] (2020-devops-transformation-google-cloud-dora.pdf · 2020-devops-transformation-google-cloud-dora-2019#can-represent-savings-to-the-business) — Transformation › Calculating Return Using Value and Cost › can represent savings to the business.\n(contexto do pai · 2020-devops-transformation-google-cloud-dora-2019#calculating-return-using-value-and-cost)\nCalculating Return Using Value and Cost\nLet’s see how ROI calculations break down in terms of both value and savings, keeping in mind that all\ncosts that a business avoids are considered returns to the business. We used conservative estimates\nfor these calculations. Your numbers may be higher or lower based on your specific circumstances.\nWe present the complete methodology for the calculations so\n---\ncan represent savings to the business.\nThis section provides an example.\n24\nTo calculate Cost of Downtime per Year, we use the following equation:\nCost of\nDowntime\nChange\nfail rate\npercentage\nDeployment\nMean time\nto restore\nOutage cost\nfrequency\nper year\n\n[8] (Designing Data-Intensive Applications (Kleppmann) - annas-archive.epub · designing-data-intensive-applications-kleppmann-annas-archive#latency-and-resource-utilization) — Network partitions › Synchronous Versus Asynchronous Networks › Can we not simply make network delays predictable? › Latency and Resource Utilization\n(contexto do pai · designing-data-intensive-applications-kleppmann-annas-archive#can-we-not-simply-make-network-delays-predictable)\nNote that a circuit in a telephone network is very different from a TCP connection: a circuit is a fixed amount of reserved bandwidth which nobody else can use while the circuit is established, whereas the packets of a TCP connection opportunistically use whatever network bandwidth is available. You can give TCP a variable-sized block of data (e.g., an email or a web page), and it will try to tran\n---\nMore generally, you can think of variable delays as a consequence of dynamic resource partitioning.\nSay you have a wire between two telephone switches that can carry up to 10,000 simultaneous calls. Each circuit that is switched over this wire occupies one of those call slots. Thus, you can think of the wire as a resource that can be shared by up to 10,000 simultaneous users. The resource is divided up in a static way: even if you’re the only call on the wire right now, and all other 9,999 slots are unused, your circuit is still allocated the same fixed amount of bandwidth as when the wire is fully utilized.\nBy contrast, the internet shares network bandwidth dynamically . Senders push and jostle with each other to get their packets over the wire as quickly as possible, and the network switches decide which packet to send (i.e., the bandwidth allocation) from one moment to the next. This approach has the downside of queueing, but the advantage is that it maximizes utilization of the wire. The wire has a fixed cost, so if you utilize it better, each byte you send over the wire is cheaper.\nA similar situation arises with CPUs: if you share each CPU core dynamically between several threads, one thread sometimes has to wait in the operating system’s run queue while another thread is running, so a thread can be paused for varying lengths of time. However, this utilizes the hardware better than if you allocated a static number of CPU cycles to each thread (see “Response time guarant",
+  "cobertura": "boa",
+  "sinal": {
+   "medida": "sim",
+   "valor": 0.755,
+   "piso": 0.55
+  },
+  "perguntas": [
+   "cost of delay"
+  ],
+  "filtro": {
+   "dominio": [],
+   "subdominio": [],
+   "frente": [],
+   "colecao": []
+  },
+  "aviso": null,
+  "indice": {
+   "acervo_sha": "24ed2cbf607e73ab1e8ab79c0d286bf2996b5751db4e63cfb97c2f313dfc25c7",
+   "chunks": 145240,
+   "chunks_recuperaveis": 124463,
+   "chunks_com_vetor": 124463,
+   "chunks_nao_textuais": 20777,
+   "documentos_sem_chunk": 4,
+   "obras_catalogadas": 694,
+   "obras_ingeridas": 623,
+   "conceitos": 205,
+   "embed_model": "Qwen/Qwen3-Embedding-0.6B",
+   "embed_backend": "torch",
+   "embed_query_instruction": "Given a search query, retrieve relevant passages that answer the query",
+   "embed_meta_beta": 0.15,
+   "modo": "hybrid",
+   "rrf_k": 60,
+   "rrf_w_vec": 1.0,
+   "rrf_w_id": 2.0,
+   "rrf_w_lex": 0.5,
+   "hybrid_lexical": false,
+   "rerank_model": null,
+   "sha_calculado_em": "2026-08-06T20:52:50+00:00"
+  }
+ }
+}

@@ -1,0 +1,173 @@
+{
+ "sonda": "T0",
+ "n": "20",
+ "bloco": "B",
+ "persona": "persona-nao-declarada",
+ "pergunta": "opportunity solution tree",
+ "parametros_congelados": {
+  "texto": "secao",
+  "k": 8,
+  "dominio": null,
+  "subdominio": null,
+  "frente": null,
+  "colecao": null
+ },
+ "chamada_em": "2026-08-06T20:52:55.916522+00:00",
+ "acervo_sha": "24ed2cbf607e73ab1e8ab79c0d286bf2996b5751db4e63cfb97c2f313dfc25c7",
+ "retorno": {
+  "fontes": [
+   {
+    "n": 1,
+    "obra": null,
+    "arquivo": "Continuous-Discovery-Habits-Torres.epub",
+    "section_id": "continuous-discovery-habits-torres#_",
+    "breadcrumb": [],
+    "sim": 0.674,
+    "score": 0.0164,
+    "rerank": null,
+    "codigo_exato": false,
+    "texto": null
+   },
+   {
+    "n": 2,
+    "obra": "Empowered",
+    "arquivo": "Empowered_ Ordinary People, Extraordinary Products (2020).pdf",
+    "section_id": "empowered_-ordinary-people-extraordinary-products-2020#note~7",
+    "breadcrumb": [
+     "Team Objectives",
+     "Note"
+    ],
+    "sim": 0.634,
+    "score": 0.0139,
+    "rerank": null,
+    "codigo_exato": false,
+    "texto": null
+   },
+   {
+    "n": 3,
+    "obra": "Structured Analytic Techniques for Intelligence Analysis",
+    "arquivo": "Structured Analytic Techniques for Intelligence Analysis -- Richards J_ Heuer Jr_ & Randolph H_ Pherson -- bd871d021c3dbb819309c52ac3203ae5 -- Anna’s Archive.pdf",
+    "section_id": "structured-analytic-techniques-for-intelligence-analysis-richards-j_-heuer-jr_-randolph-h_-pherson-bd871d021c3dbb819309c52ac3203ae5-anna-s-archive-2001#_",
+    "breadcrumb": [],
+    "sim": 0.586,
+    "score": 0.0127,
+    "rerank": null,
+    "codigo_exato": false,
+    "texto": null
+   },
+   {
+    "n": 4,
+    "obra": "User Story Mapping",
+    "arquivo": "User Story Mapping _ Discover the Whole Story, Build the -- Patton, Jeff -- O'Reilly Media, Sebastopol, CA, 2014 -- O'Reilly Media, Incorporated -- isbn13 9781491904862 -- 5fff2bdcb512649c186c96b64d40c267 -- Anna’s Archive.epub",
+    "section_id": "user-story-mapping-_-discover-the-whole-story-build-the-patton-jeff-o-reilly-media-sebastopol-ca-2014-o-reilly-media-incorporated-isbn13-9781491904862-5fff2bdcb512649c186c96b64d40c267-anna-s-archive#o",
+    "breadcrumb": [
+     "User Story Mapping",
+     "Index",
+     "O"
+    ],
+    "sim": 0.54,
+    "score": 0.0111,
+    "rerank": null,
+    "codigo_exato": false,
+    "texto": null
+   },
+   {
+    "n": 5,
+    "obra": "User Story Mapping",
+    "arquivo": "User Story Mapping _ Discover the Whole Story, Build the -- Patton, Jeff -- O'Reilly Media, Sebastopol, CA, 2014 -- O'Reilly Media, Incorporated -- isbn13 9781491904862 -- 5fff2bdcb512649c186c96b64d40c267 -- Anna’s Archive.epub",
+    "section_id": "user-story-mapping-_-discover-the-whole-story-build-the-patton-jeff-o-reilly-media-sebastopol-ca-2014-o-reilly-media-incorporated-isbn13-9781491904862-5fff2bdcb512649c186c96b64d40c267-anna-s-archive#start-with-opportunities",
+    "breadcrumb": [
+     "User Story Mapping",
+     "Start with Opportunities"
+    ],
+    "sim": 0.539,
+    "score": 0.011,
+    "rerank": null,
+    "codigo_exato": false,
+    "texto": null
+   },
+   {
+    "n": 6,
+    "obra": "User Story Mapping",
+    "arquivo": "User Story Mapping _ Discover the Whole Story, Build the -- Patton, Jeff -- O'Reilly Media, Sebastopol, CA, 2014 -- O'Reilly Media, Incorporated -- isbn13 9781491904862 -- 5fff2bdcb512649c186c96b64d40c267 -- Anna’s Archive.epub",
+    "section_id": "user-story-mapping-_-discover-the-whole-story-build-the-patton-jeff-o-reilly-media-sebastopol-ca-2014-o-reilly-media-incorporated-isbn13-9781491904862-5fff2bdcb512649c186c96b64d40c267-anna-s-archive#dig-deeper-trash-it-or-think-about-it",
+    "breadcrumb": [
+     "User Story Mapping",
+     "Dig Deeper, Trash It, or Think About It"
+    ],
+    "sim": 0.534,
+    "score": 0.0105,
+    "rerank": null,
+    "codigo_exato": false,
+    "texto": null
+   },
+   {
+    "n": 7,
+    "obra": "User Story Mapping",
+    "arquivo": "User Story Mapping _ Discover the Whole Story, Build the -- Patton, Jeff -- O'Reilly Media, Sebastopol, CA, 2014 -- O'Reilly Media, Incorporated -- isbn13 9781491904862 -- 5fff2bdcb512649c186c96b64d40c267 -- Anna’s Archive.epub",
+    "section_id": "user-story-mapping-_-discover-the-whole-story-build-the-patton-jeff-o-reilly-media-sebastopol-ca-2014-o-reilly-media-incorporated-isbn13-9781491904862-5fff2bdcb512649c186c96b64d40c267-anna-s-archive#have-conversations-about-opportunities",
+    "breadcrumb": [
+     "User Story Mapping",
+     "Have Conversations About Opportunities"
+    ],
+    "sim": 0.532,
+    "score": 0.0104,
+    "rerank": null,
+    "codigo_exato": false,
+    "texto": null
+   },
+   {
+    "n": 8,
+    "obra": "Jobs to Be Done",
+    "arquivo": "Jobs to Be Done_ Theory to Practice -- Anthony W_ Ulwick -- 2016 -- IDEA BITE PRESS -- d31e4f186f13cfdfefae798a1561f9cc -- Anna’s Archive.epub",
+    "section_id": "jobs-to-be-done_-theory-to-practice-anthony-w_-ulwick-2016-idea-bite-press-d31e4f186f13cfdfefae798a1561f9cc-anna-s-archive#_",
+    "breadcrumb": [],
+    "sim": 0.556,
+    "score": 0.0102,
+    "rerank": null,
+    "codigo_exato": false,
+    "texto": null
+   }
+  ],
+  "contexto": "[1] (Continuous-Discovery-Habits-Torres.epub · continuous-discovery-habits-torres#_)\nCopyrighted Material\nContinuous Discovery Habits: Discover Products That Create Customer Value and Business Value\nCopyright © 2021 by Teresa Torres. All Rights Reserved.\nNo part of this publication may be reproduced, stored in a retrieval system or transmitted, in any form or by any means—electronic, mechanical, photocopying, recording or otherwise—without prior written permission from the publisher, except for the inclusion of brief quotations in a review.\nFor information about this title or to order other books and/or electronic media, contact the publisher:\nPublisher: Product Talk LLC, ProductTalk.org , Bend, OR 97703\nAuthor and Illustrations: Teresa Torres\nEditor: Melissa Suzuno\nCover Art: 1106 Design and Weiher Creative\nInterior Design: 1106 Design\nLibrary of Congress Control Number: 2021902811\nISBN: 978-1-7366333-0-4\nPrinted in the United States of America\nTABLE OF CONTENTS\nForeword: Chris Mercuri\nForeword: Marty Cagan\nIntroduction\nPART 1: WHAT IS CONTINUOUS DISCOVERY?\nChapter One: The What and Why of Continuous Discovery\nChapter Two: A Common Framework for Continuous Discovery\nPART 2: THE CONTINUOUS DISCOVERY HABITS\nChapter Three: Focusing on Outcomes Over Outputs\nDiscovering Opportunities\nChapter Four: Visualizing What You Know\nChapter Five: Continuous Interviewing\nChapter Six: Mapping the Opportunity Space\nChapter Seven: Prioritizing Opportunities, Not Solutions\nDiscovering Solutions\nChapter Eight: Supercharged Ideation\nChapter Nine: Identifying Hidden Assumptions\nCh\n\n[2] (Empowered_ Ordinary People, Extraordinary Products (2020).pdf · empowered_-ordinary-people-extraordinary-products-2020#note~7) — Team Objectives › Note\n(contexto do pai · empowered_-ordinary-people-extraordinary-products-2020#team-objectives)\nTeam Objectives\nMost of these companies have heard that Google and\nothers use the OKR (Objectives and Key Results) technique\nto manage their work, and the CEO watched a video or\nread a book and thought it sounded easy. So they adopted\nthe technique—layering it on top of their existing product\nroadmaps and culture—and every quarter there's a\nplanning exercise that consumes a few weeks and is then\nl\n---\nNote\n1 This technique is described in INSPIRED.\nNote\n1 I often encourage teams to pursue multiple approaches to\ndiﬀicult and critically important problems. \"Opportunity\nSolution Trees,\" invented by discovery coach Teresa\nTorres, is a helpful technique for identifying and\nevaluating multiple approaches to solving an important\nproblem.\nNote\n1 This term was coined by my friend and OKR coach, Felipe\nCastro.\nNote\n1 Christina Wodtke, Radical Focus (San Francisco: Cucina\nMedia LLC, 2015) and The Team That Managed Itself\n(San Francisco: Cucina Media LLC, 2019) are good\nexamples.\n\n[3] (Structured Analytic Techniques for Intelligence Analysis -- Richards J_ Heuer Jr_ & Randolph H_ Pherson -- bd871d021c3dbb819309c52ac3203ae5 -- Anna’s Archive.pdf · structured-analytic-techniques-for-intelligence-analysis-richards-j_-heuer-jr_-randolph-h_-pherson-bd871d021c3dbb819309c52ac3203ae5-anna-s-archive-2001#_)\n@importknig\nПеревод этой книги подготовлен сообществом \"Книжный импорт\".\nКаждые несколько дней в нём выходят любительские переводы новых зарубежных\nкниг в жанре non-fiction, которые скорее всего никогда не будут официально\nизданы в России.\nВсе переводы распространяются бесплатно и в ознакомительных целях среди\nподписчиков сообщества.\nПодпишитесь на нас в Telegram: https://t.me/importknig\nРичардс Дж. Хойер, Рэндольф Х. «Структурированные аналитические методы\nдля анализа разведданных»\nОглавление\n2\nПРЕДИСЛОВИЕ\nДжон Маклафлин\nСтарший научный сотрудник, Школа перспективных международных исследований\nимени Пола Х. Нитце, Университет Джона Хопкинса\nБывший заместитель директора Центрального разведывательного управления и\nисполняющий обязанности директора Центральной разведки\nКак бы интенсивно ни изучалось и ни критиковалось разведывательное\nсообщество Америки, анализу разведданных обычно уделяется мало внимания.\nБольшинство оценок сосредоточено на таких вопросах, как тайные операции за\nрубежом и секретные действия, возможно, потому, что они лучше соответствуют\nпопулярным представлениям о мире разведки.\nИ все же анализ, вероятно, никогда не был столь важной частью профессии - или\nболее востребованным политиками. В отличие от биполярной динамики времен\nхолодной войны, новый мир усеян несостоятельными государствами, угрозами\nраспространения,\nрегиональными\nкризисами,\nвосходящими\nдержавами\nи\nопасными негосударственными субъектами - и все это на фоне экспоненциальных\nизменений в таких разн\n\n[4] (User Story Mapping _ Discover the Whole Story, Build the -- Patton, Jeff -- O'Reilly Media, Sebastopol, CA, 2014 -- O'Reilly Media, Incorporated -- isbn13 9781491904862 -- 5fff2bdcb512649c186c96b64d40c267 -- Anna’s Archive.epub · user-story-mapping-_-discover-the-whole-story-build-the-patton-jeff-o-reilly-media-sebastopol-ca-2014-o-reilly-media-incorporated-isbn13-9781491904862-5fff2bdcb512649c186c96b64d40c267-anna-s-archive#o) — User Story Mapping › Index › O\n(contexto do pai · user-story-mapping-_-discover-the-whole-story-build-the-patton-jeff-o-reilly-media-sebastopol-ca-2014-o-reilly-media-incorporated-isbn13-9781491904862-5fff2bdcb512649c186c96b64d40c267-anna-s-archive#index)\nA\n---\nObama Campaign Dashboard, Use Simple Maps During Story Workshops\nObama, Barack, Use Simple Maps During Story Workshops\nopening strategy, Opening-, Mid-, and Endgame Strategy\nopportunities, Start with Opportunities – Be Picky\nbeing picky about, Be Picky canvas approach to sizing up, Dig Deeper, Trash It, or Think About It flow of spaces in, Dig Deeper, Trash It, or Think About It digging deeper, trashing, or thinking about, Dig Deeper, Trash It, or Think About It go/no-go decisions on, Opportunity Shouldn’t Be a Euphemism having conversations about, Have Conversations About Opportunities in story discussion and splitting stage, Stories Are Actually Like Asteroids starting with, Start with Opportunities story mapping and, Story Mapping and Opportunities\nbeing picky about, Be Picky\ncanvas approach to sizing up, Dig Deeper, Trash It, or Think About It\nflow of spaces in, Dig Deeper, Trash It, or Think About It\nflow of spaces in, Dig Deeper, Trash It, or Think About It\ndigging deeper, trashing, or thinking about, Dig Deeper, Trash It, or Think About It\ngo/no-go decisions on, Opportunity Shouldn’t Be a Euphemism\nhaving conversations about, Have Conversations About Opportunities\nin story discussion and splitting stage, Stories Are Actually Like Asteroids\nstarting with, Start with Opportunities\nstory mapping and, Story Mapping and Opportunities\nOpportunity Assessment template, Dig Deeper, Trash It, or Think About It\nopportunity backlog, Start with Opportunities , Have Conversations Ab\n\n[5] (User Story Mapping _ Discover the Whole Story, Build the -- Patton, Jeff -- O'Reilly Media, Sebastopol, CA, 2014 -- O'Reilly Media, Incorporated -- isbn13 9781491904862 -- 5fff2bdcb512649c186c96b64d40c267 -- Anna’s Archive.epub · user-story-mapping-_-discover-the-whole-story-build-the-patton-jeff-o-reilly-media-sebastopol-ca-2014-o-reilly-media-incorporated-isbn13-9781491904862-5fff2bdcb512649c186c96b64d40c267-anna-s-archive#start-with-opportunities) — User Story Mapping › Start with Opportunities\n(contexto do pai · user-story-mapping-_-discover-the-whole-story-build-the-patton-jeff-o-reilly-media-sebastopol-ca-2014-o-reilly-media-incorporated-isbn13-9781491904862-5fff2bdcb512649c186c96b64d40c267-anna-s-archive#user-story-mapping)\nJeff Patton\nJeff Patton\n---\nThe story’s journey starts as an idea. It may be an idea for a new feature, or a whole new product. It could be a change we’d like that would improve a feature we already have. It could be a problem we need to solve. But I’ll use the term opportunity , because it’s an opportunity for us to make something that we’ll benefit from. I suggest you name and build a list of these opportunities. I call them an opportunity backlog .\nOur first good story conversation is a higher-level, who-what-why discussion. And our big goal is to make a go/no-go decision. Go doesn’t mean we’ll build it. It means we’ll go forward with deeper-dive discussions to really understand the story. But I don’t want to move forward with spending lots of time doing this if we can detect that it’s a bad idea from the outset. No-go is a polite way of saying “trash.” So, let’s call this a go-forward/trash decision. Remember, there’s always too much to build, and killing a mediocre opportunity before it wastes too much of everyone’s time should be celebrated.\nUse opportunity discussions to agree the problem is worth solving—to make a go-forward or trash decision.\nUse opportunity discussions to agree the problem is worth solving—to make a go-forward or trash decision.\nDiscover a Minimum Viable Solution\n\n[6] (User Story Mapping _ Discover the Whole Story, Build the -- Patton, Jeff -- O'Reilly Media, Sebastopol, CA, 2014 -- O'Reilly Media, Incorporated -- isbn13 9781491904862 -- 5fff2bdcb512649c186c96b64d40c267 -- Anna’s Archive.epub · user-story-mapping-_-discover-the-whole-story-build-the-patton-jeff-o-reilly-media-sebastopol-ca-2014-o-reilly-media-incorporated-isbn13-9781491904862-5fff2bdcb512649c186c96b64d40c267-anna-s-archive#dig-deeper-trash-it-or-think-about-it) — User Story Mapping › Dig Deeper, Trash It, or Think About It\n(contexto do pai · user-story-mapping-_-discover-the-whole-story-build-the-patton-jeff-o-reilly-media-sebastopol-ca-2014-o-reilly-media-incorporated-isbn13-9781491904862-5fff2bdcb512649c186c96b64d40c267-anna-s-archive#user-story-mapping)\nJeff Patton\nJeff Patton\n---\n“Go” doesn’t mean “We’re gonna build this thing,” it means we’ll move the opportunity forward into deeper discovery discussion. During discovery, it’ll take a lot more discussion—probably with others not in the room. If this is a new feature or an entirely new product, it’ll take diving a lot deeper into customers and users and how they solve their problems today. Ideally, we’ll talk to them directly. It’ll take exploring and prototyping different solutions. It’ll take lots of deeper discussions in light of what you and your team learn to make a decision about what specifically you’ll need to build to be valuable to customers, users, and your organization. And, after all that work, you still might decide to kill the idea.\n“No-go” is a great result of an opportunity discussion. Remember, there’s always more to build than there is time. If the opportunity doesn’t look promising based on your discussion, trash it now. It may be a good idea to involve the people who championed the idea in the discussion so hopefully they come to the same conclusion.\nYour group may not have enough information to make either a go or a no-go decision. If that’s the case, make a list of what you need to learn, and together get to work getting the information you need.\nIf you still can’t make a go or no-go decision, you can always put it back into the opportunity backlog to discuss later. That’s called procrastination, and I do it a lot.\nWhen looking at product opportunities, I’ve used Marty Cagan’s O\n\n[7] (User Story Mapping _ Discover the Whole Story, Build the -- Patton, Jeff -- O'Reilly Media, Sebastopol, CA, 2014 -- O'Reilly Media, Incorporated -- isbn13 9781491904862 -- 5fff2bdcb512649c186c96b64d40c267 -- Anna’s Archive.epub · user-story-mapping-_-discover-the-whole-story-build-the-patton-jeff-o-reilly-media-sebastopol-ca-2014-o-reilly-media-incorporated-isbn13-9781491904862-5fff2bdcb512649c186c96b64d40c267-anna-s-archive#have-conversations-about-opportunities) — User Story Mapping › Have Conversations About Opportunities\n(contexto do pai · user-story-mapping-_-discover-the-whole-story-build-the-patton-jeff-o-reilly-media-sebastopol-ca-2014-o-reilly-media-incorporated-isbn13-9781491904862-5fff2bdcb512649c186c96b64d40c267-anna-s-archive#user-story-mapping)\nJeff Patton\nJeff Patton\n---\nWhen we come up with ideas, these ideas are often pretty big—but not always. In story lingo, you could call them epics , but I prefer to call them opportunities . No matter what you call them, they’re still stories, and the goal of the first conversations we have about them is to decide whether to move forward with them, or trash them. For each one of these opportunities, we can discuss:\nWho they’re for\nAt this level, it’s often different groups of users, customers, or a target market.\nWhat problems we’re solving\nFor each type of user, we can talk about what problems we’re solving for them. We’ll need to talk about how they solve their problems today by using manual tools, our competitors’ products, or worse, our product that’s causing them pain today.\nWhat we’re imagining\nWe may have some ideas about what the product or feature should be. We should discuss those ideas.\nWhy\nIt’s a good time to discuss why it benefits our organization to build software for these users. Solving users’ problems usually isn’t enough. We also need to consider the ultimate return on this software investment and whether this investment is aligned with our current business strategy. I’m not saying we need to calculate return on investment (ROI), because anyone who can do that at this stage is likely full of something other than just stories. Just discuss in general terms how we imagine it’ll benefit our organization if we build it.\nSize\nAt this level, even when they’re big, we can start to give some \n\n[8] (Jobs to Be Done_ Theory to Practice -- Anthony W_ Ulwick -- 2016 -- IDEA BITE PRESS -- d31e4f186f13cfdfefae798a1561f9cc -- Anna’s Archive.epub · jobs-to-be-done_-theory-to-practice-anthony-w_-ulwick-2016-idea-bite-press-d31e4f186f13cfdfefae798a1561f9cc-anna-s-archive#_)\nJOBS TO BE DONE: THEORY TO PRACTICE\nCopyright © October 2016\nby Anthony W. Ulwick\nAll Right Reserved\nISBN# 978-0-9905767-5-4\nNo part of this publication may be reproduced, stored in a retrieval system or transmitted in any form or by any means, electronic, mechanical, photocopying, recording or otherwise, without prior permission of the author and/or publisher.\nThis publication is designed to provide accurate and authoritative information in regard to the subject matter covered. The publisher, authors, and editors specifically disclaim any liability, loss or risk incurred as a result of the use and application, either directly or indirectly, of any information contained in this publication, whether or not negligently provided. All processes, procedures, and forms are suggestions only, and changes must be made depending on the specific circumstances in each case.\nPublished by IDEA BITE PRESS\nwww.ideabitepress.com\nPrinted in the United States of America\n“ Anthony Ulwick has taken the guesswork out of innovation. For 25 years he has worked to guide companies to success. He has done this by introducing us to Jobs-to-be-Done theory , and converting it to practice using his rigorous innovation process known as Outcome-Driven Innovation .\nThe vast majority of innovation projects fail. With Ulwick's process we finally learn what the best know already - innovation cannot be left to chance. It can and should be managed for successful outcomes.\nI call him the Deming of Innovation becaus",
+  "cobertura": "boa",
+  "sinal": {
+   "medida": "sim",
+   "valor": 0.674,
+   "piso": 0.55
+  },
+  "perguntas": [
+   "opportunity solution tree"
+  ],
+  "filtro": {
+   "dominio": [],
+   "subdominio": [],
+   "frente": [],
+   "colecao": []
+  },
+  "aviso": null,
+  "indice": {
+   "acervo_sha": "24ed2cbf607e73ab1e8ab79c0d286bf2996b5751db4e63cfb97c2f313dfc25c7",
+   "chunks": 145240,
+   "chunks_recuperaveis": 124463,
+   "chunks_com_vetor": 124463,
+   "chunks_nao_textuais": 20777,
+   "documentos_sem_chunk": 4,
+   "obras_catalogadas": 694,
+   "obras_ingeridas": 623,
+   "conceitos": 205,
+   "embed_model": "Qwen/Qwen3-Embedding-0.6B",
+   "embed_backend": "torch",
+   "embed_query_instruction": "Given a search query, retrieve relevant passages that answer the query",
+   "embed_meta_beta": 0.15,
+   "modo": "hybrid",
+   "rrf_k": 60,
+   "rrf_w_vec": 1.0,
+   "rrf_w_id": 2.0,
+   "rrf_w_lex": 0.5,
+   "hybrid_lexical": false,
+   "rerank_model": null,
+   "sha_calculado_em": "2026-08-06T20:52:50+00:00"
+  }
+ }
+}

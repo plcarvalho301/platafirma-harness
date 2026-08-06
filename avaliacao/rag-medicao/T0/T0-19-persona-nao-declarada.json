@@ -1,0 +1,168 @@
+{
+ "sonda": "T0",
+ "n": "19",
+ "bloco": "B",
+ "persona": "persona-nao-declarada",
+ "pergunta": "quantização de modelo",
+ "parametros_congelados": {
+  "texto": "secao",
+  "k": 8,
+  "dominio": null,
+  "subdominio": null,
+  "frente": null,
+  "colecao": null
+ },
+ "chamada_em": "2026-08-06T20:52:55.691554+00:00",
+ "acervo_sha": "24ed2cbf607e73ab1e8ab79c0d286bf2996b5751db4e63cfb97c2f313dfc25c7",
+ "retorno": {
+  "fontes": [
+   {
+    "n": 1,
+    "obra": "Quantize with Confidence? An Empirical Study of Quantization for Code Generation",
+    "arquivo": "afrin-etal-quantize-with-confidence-2607.14181.pdf",
+    "section_id": "afrin-etal-quantize-with-confidence-2607-14181-2026#_",
+    "breadcrumb": [],
+    "sim": 0.596,
+    "score": 0.0164,
+    "rerank": null,
+    "codigo_exato": false,
+    "texto": null
+   },
+   {
+    "n": 2,
+    "obra": "llama.cpp — formato GGUF e quantização",
+    "arquivo": "llamacpp-gguf-quantizacao-39eab74.txt",
+    "section_id": "llamacpp-gguf-quantizacao-39eab74#_",
+    "breadcrumb": [],
+    "sim": 0.56,
+    "score": 0.0139,
+    "rerank": null,
+    "codigo_exato": false,
+    "texto": null
+   },
+   {
+    "n": 3,
+    "obra": "LLM Engineer’s Handbook",
+    "arquivo": "LLM Engineer’s Handbook -- Paul Iusztin _ Maxime Labonne -- 1, 2024 -- Packt Publishing -- 7a1b0b7dfb7b93773885008ea1b694ea -- Anna’s Archive.epub",
+    "section_id": "llm-engineer-s-handbook-paul-iusztin-_-maxime-labonne-1-2024-packt-publishing-7a1b0b7dfb7b93773885008ea1b694ea-anna-s-archive#quantization-with-gptq-and-exl2",
+    "breadcrumb": [
+     "Model quantization",
+     "Quantization with GPTQ and EXL2"
+    ],
+    "sim": 0.564,
+    "score": 0.013,
+    "rerank": null,
+    "codigo_exato": false,
+    "texto": null
+   },
+   {
+    "n": 4,
+    "obra": "Can Compressed LLMs Truly Act? An Empirical Evaluation of Agentic Capabilities in LLM Compression",
+    "arquivo": "dong-etal-acbench-2505.19433.pdf",
+    "section_id": "dong-etal-acbench-2505-19433-2025#_",
+    "breadcrumb": [],
+    "sim": 0.545,
+    "score": 0.0123,
+    "rerank": null,
+    "codigo_exato": false,
+    "texto": null
+   },
+   {
+    "n": 5,
+    "obra": "Adversarial Machine Learning: A Taxonomy and Terminology of Attacks and Mitigations",
+    "arquivo": "NIST.AI.100-2e2025.pdf",
+    "section_id": "nist-ai-100-2e2025-2025#_",
+    "breadcrumb": [],
+    "sim": 0.532,
+    "score": 0.0112,
+    "rerank": null,
+    "codigo_exato": false,
+    "texto": null
+   },
+   {
+    "n": 6,
+    "obra": "Norma Complementar nº 05/IN01/DSIC/GSIPR",
+    "arquivo": "NC05 GSIPR.pdf",
+    "section_id": "nc05-gsipr-2003#7.2",
+    "breadcrumb": [
+     "7 MODELO DE IMPLEMENTAÇÃO",
+     "7.2 Modelo 2 – Centralizado"
+    ],
+    "sim": 0.529,
+    "score": 0.0111,
+    "rerank": null,
+    "codigo_exato": false,
+    "texto": null
+   },
+   {
+    "n": 7,
+    "obra": "LLM Engineer’s Handbook",
+    "arquivo": "LLM Engineer’s Handbook -- Paul Iusztin _ Maxime Labonne -- 1, 2024 -- Packt Publishing -- 7a1b0b7dfb7b93773885008ea1b694ea -- Anna’s Archive.epub",
+    "section_id": "llm-engineer-s-handbook-paul-iusztin-_-maxime-labonne-1-2024-packt-publishing-7a1b0b7dfb7b93773885008ea1b694ea-anna-s-archive#model-quantization",
+    "breadcrumb": [
+     "Model quantization"
+    ],
+    "sim": 0.523,
+    "score": 0.0106,
+    "rerank": null,
+    "codigo_exato": false,
+    "texto": null
+   },
+   {
+    "n": 8,
+    "obra": "Norma Complementar nº 05/IN01/DSIC/GSIPR",
+    "arquivo": "NC05 GSIPR.pdf",
+    "section_id": "nc05-gsipr-2003#7.3",
+    "breadcrumb": [
+     "7 MODELO DE IMPLEMENTAÇÃO",
+     "7.3 Modelo 3 – Descentralizado"
+    ],
+    "sim": 0.517,
+    "score": 0.0105,
+    "rerank": null,
+    "codigo_exato": false,
+    "texto": null
+   }
+  ],
+  "contexto": "[1] (afrin-etal-quantize-with-confidence-2607.14181.pdf · afrin-etal-quantize-with-confidence-2607-14181-2026#_)\nQuantize with Confidence? An Empirical Study of\nQuantization for Code Generation\nSaima Afrin\nMd. Zahidul Haque\nAntonio Mastropaolo\nAURA Lab\nDepartment of Computer Science\nAURA Lab\nDepartment of Computer Science\nAURA Lab\nDepartment of Computer Science\nWilliam & Mary\nWilliamsburg, VA, USA\nWilliam & Mary\nWilliamsburg, VA, USA\nWilliam & Mary\nWilliamsburg, VA, USA\namastropaolo@wm.edu\nsafrin@wm.edu\nmhaque@wm.edu\nto various aspects of software development automation, in-\ncluding code generation [1, 2], code summarization [3, 4], code\ntranslation [5], and test case generation [6], showcasing their\nversatility and impact across the whole spectrum of activities\ncharacterizing the software development lifecycle.\nAbstract—The growing adoption of local inference frame-\nworks such as Ollama has made it increasingly common for\ndevelopers to run large code models on laptops and other\nresource-constrained hardware. In these settings, post-training\nquantization is essential for reducing memory footprint and\nenabling practical deployment. However, practitioners currently\nlack clear guidance on how different quantization techniques\naffect the functional correctness and quality of generated code.\nIn this paper, we empirically investigate the extent to which\nstate-of-the-art quantization methods — including GPTQ, AWQ,\nQuIP#, AQLM, BitsAndBytes, and GGUF, affect two large code\nmodel families representative of the current state of practice:\nQwen2.5-Coder and CodeLlama. Using McEval and CoderEval,\ntw\n\n[2] (llamacpp-gguf-quantizacao-39eab74.txt · llamacpp-gguf-quantizacao-39eab74#_)\nllama.cpp — formato GGUF e quantização\nRendição textual do recorte capturado do repositório ggml-org/llama.cpp no commit 39eab74. Objeto de origem: llamacpp-gguf-quantizacao-39eab74.tar.gz Ordem: especificação do formato, biblioteca, ferramenta. O anexo traz as enumerações de tipo extraídas de gguf-py/gguf/constants.py — o restante do arquivo é código e não entra.\n============================================================================== # Especificação do formato GGUF origem: llama.cpp@39eab74/ggml_docs_gguf.md ==============================================================================\n# GGUF\nGGUF is a file format for storing models for inference with GGML and executors based on GGML. GGUF is a binary format that is designed for fast loading and saving of models, and for ease of reading. Models are traditionally developed using PyTorch or another framework, and then converted to GGUF for use in GGML.\nIt is a successor file format to GGML, GGMF and GGJT, and is designed to be unambiguous by containing all the information needed to load a model. It is also designed to be extensible, so that new information can be added to models without breaking compatibility.\nFor more information about the motivation behind GGUF, see [Historical State of Affairs](#historical-state-of-affairs).\n## Specification\nGGUF is a format based on the existing GGJT, but makes a few changes to the format to make it more extensible and easier to use. The following features are desired:\n- Single-file\n\n[3] (LLM Engineer’s Handbook -- Paul Iusztin _ Maxime Labonne -- 1, 2024 -- Packt Publishing -- 7a1b0b7dfb7b93773885008ea1b694ea -- Anna’s Archive.epub · llm-engineer-s-handbook-paul-iusztin-_-maxime-labonne-1-2024-packt-publishing-7a1b0b7dfb7b93773885008ea1b694ea-anna-s-archive#quantization-with-gptq-and-exl2) — Model quantization › Quantization with GPTQ and EXL2\nWhile GGUF and llama.cpp offer CPU inference with GPU offloading, GPTQ and EXL2 are two quantization formats dedicated to GPUs. This makes them both faster than llama.cpp during inference. In particular, EXL2 offers the highest throughput with its dedicated library, ExLlamaV2.\nGPTQ and EXL2 quants are based on the GPTQ algorithm, introduced by Frantar et al. (2023). It optimizes weight quantization for LLMs by refining the Optimal Brain Quantization ( OBQ ) approach to handle extensive matrices efficiently. It begins with a Cholesky decomposition of the Hessian inverse, ensuring numerical stability. Instead of quantizing weights in a strict order, GPTQ processes them in batches, updating columns and associated blocks iteratively. This method leverages lazy batch updates, reducing computational redundancy and memory bottlenecks.\nWhile GPTQ is limited to 4-bit precision, EXL2 offers more flexibility with a highly customizable precision that can mix different quantization levels. This allows for precise bitrates between 2 and 8 bits per weight, such as 2.3 , 3.5 , or 6.0 . It can also apply multiple quantization levels to each linear layer, prioritizing more important weights with higher bit quantization. Parameters are selected automatically, by quantizing each matrix multiple times and choosing a combination that minimizes the quantization error while meeting a target bitrate. In practice, this allows 70B models to run on a single 24 GB GPU with 2.55-bit precision.\nThe inferen\n\n[4] (dong-etal-acbench-2505.19433.pdf · dong-etal-acbench-2505-19433-2025#_)\nCan Compressed LLMs Truly Act? An Empirical Evaluation of Agentic\nCapabilities in LLM Compression\nPeijie Dong * 1 Zhenheng Tang * 2 Xiang Liu 1 Lujun Li 2 Xiaowen Chu 1 Bo Li 2\nAbstract\nstrated transformative capabilities in domains ranging from\ncode synthesis (Roziere et al., 2023) and scientific re-\nsearch (Li et al., 2024d) to multi-agent collaboration (Wang\net al., 2024a;b; Li et al., 2023a; Wu et al., 2024b). Despite\nthese advances, their practical deployment remains hindered\nby prohibitive computational and memory costs (Samsi\net al., 2023b; Stojkovic et al., 2024). Post-training compres-\nsion techniques—notably pruning (Sun et al., 2024c; Dong\net al., 2024b) and quantization (Park et al., 2024; Dong et al.,\n2024c)—address this challenge by reducing model size by\nup to 4× while preserving performance on standard bench-\nmarks like perplexity and arithmetic tasks (Zhang et al.,\n2024d).\nPost-training compression reduces the computa-\ntional and memory costs of large language mod-\nels (LLMs), enabling resource-efficient deploy-\nment.\nHowever, existing compression bench-\nmarks only focus on language modeling (e.g.,\nperplexity) and natural language understanding\ntasks (e.g., GLUE accuracy), ignoring the agen-\ntic capabilities—workflow, tool use/function call,\nlong-context understanding and real-world appli-\ncation. We introduce the Agent Compression\nBenchmark (ACBench), the first comprehensive\nbenchmark for evaluating how compression im-\npacts LLMs’ agentic abilities. ACBench \n\n[5] (NIST.AI.100-2e2025.pdf · nist-ai-100-2e2025-2025#_)\nNIST Trustworthy and Responsible AI\nAdversarial Machine Learning\nA Taxonomy and Terminology of Attacks and Mitigations\nApostol Vassilev\nAlina Oprea\nAlie Fordyce\nHyrum Anderson\nXander Davies\nMaia Hamin\nThis publication is available free of charge from:\nhttps://doi.org/10.6028/NIST.AI.100-2e2025\nNIST Trustworthy and Responsible AI\nAdversarial Machine Learning\nA Taxonomy and Terminology of Attacks and Mitigations\nApostol Vassilev\nAlina Oprea\nComputer Security Division\nNortheastern University\nInformation Technology Laboratory\nMaia Hamin\nAlie Fordyce\nU.S. AI Safety Institute\nHyrum Anderson\nNational Institute of Standards and\nCisco\nTechnology\nXander Davies\nU.K. AI Security Institute\nThis publication is available free of charge from:\nhttps://doi.org/10.6028/NIST.AI.100-2e2025\nU.S. Department of Commerce\nHoward Lutnick, Secretary\nNational Institute of Standards and Technology\nCraig Burkhardt, Acting Under Secretary of Commerce for Standards and Technology and Acting NIST Director\nCertain commercial equipment, instruments, software, or materials, commercial or non-commercial, are\nidentified in this paper in order to specify the experimental procedure adequately. Such identification does\nnot imply recommendation or endorsement of any product or service by NIST, nor does it imply that the\nmaterials or equipment identified are necessarily the best available for the purpose.\nNIST Technical Series Policies\nCopyright, Use, and Licensing Statements\nNIST Technical Series Publication Identifie\n\n[6] (NC05 GSIPR.pdf · nc05-gsipr-2003#7.2) — 7 MODELO DE IMPLEMENTAÇÃO › 7.2 Modelo 2 – Centralizado\n(contexto do pai · nc05-gsipr-2003#7)\n7 MODELO DE IMPLEMENTAÇÃO\nCada órgão ou entidade deverá estabelecer, dentre os modelos apresentados abaixo, aquele que\nmelhor se adequar às suas necessidades e limitações, ressalvado que, independentemente do modelo\nescolhido, deverão ser observadas as diretrizes desta Norma Complementar. Nada obstante, em\nquaisquer dos modelos estabelecidos deverá ser designado formalmente o Agente Responsável, q\n---\n7.2 Modelo 2 – Centralizado\n\n[7] (LLM Engineer’s Handbook -- Paul Iusztin _ Maxime Labonne -- 1, 2024 -- Packt Publishing -- 7a1b0b7dfb7b93773885008ea1b694ea -- Anna’s Archive.epub · llm-engineer-s-handbook-paul-iusztin-_-maxime-labonne-1-2024-packt-publishing-7a1b0b7dfb7b93773885008ea1b694ea-anna-s-archive#model-quantization) — Model quantization\nQuantization refers to the process of representing the weights and activations of a neural network using lower-precision data types. In the context of LLMs, quantization primarily focuses on reducing the precision of the model’s weights and activations.\nBy default, weights are typically stored in a 16-bit or 32-bit floating-point format (FP16 or FP32), which provides high precision but comes at the cost of increased memory usage and computational complexity. Quantization is a solution to reduce the memory footprint and accelerate the inference of LLMs.\nIn addition to these benefits, larger models with over 30 billion parameters can outperform smaller models (7B–13B LLMs) in terms of quality when quantized to 2- or 3-bit precision. This means they can achieve superior performance while maintaining a comparable memory footprint.\nIn this section, we will introduce the concepts of quantization, GGUF with llama.cpp , GPTQ, and EXL2, along with an overview of additional techniques. In addition to the code provided in this section, you can refer to AutoQuant ( bit.ly/autoquant ) to quantize their models using a Google Colab notebook.\nIntroduction to quantization\n\n[8] (NC05 GSIPR.pdf · nc05-gsipr-2003#7.3) — 7 MODELO DE IMPLEMENTAÇÃO › 7.3 Modelo 3 – Descentralizado\n(contexto do pai · nc05-gsipr-2003#7)\n7 MODELO DE IMPLEMENTAÇÃO\nCada órgão ou entidade deverá estabelecer, dentre os modelos apresentados abaixo, aquele que\nmelhor se adequar às suas necessidades e limitações, ressalvado que, independentemente do modelo\nescolhido, deverão ser observadas as diretrizes desta Norma Complementar. Nada obstante, em\nquaisquer dos modelos estabelecidos deverá ser designado formalmente o Agente Responsável, q\n---\n7.3 Modelo 3 – Descentralizado",
+  "cobertura": "boa",
+  "sinal": {
+   "medida": "sim",
+   "valor": 0.596,
+   "piso": 0.55
+  },
+  "perguntas": [
+   "quantização de modelo"
+  ],
+  "filtro": {
+   "dominio": [],
+   "subdominio": [],
+   "frente": [],
+   "colecao": []
+  },
+  "aviso": null,
+  "indice": {
+   "acervo_sha": "24ed2cbf607e73ab1e8ab79c0d286bf2996b5751db4e63cfb97c2f313dfc25c7",
+   "chunks": 145240,
+   "chunks_recuperaveis": 124463,
+   "chunks_com_vetor": 124463,
+   "chunks_nao_textuais": 20777,
+   "documentos_sem_chunk": 4,
+   "obras_catalogadas": 694,
+   "obras_ingeridas": 623,
+   "conceitos": 205,
+   "embed_model": "Qwen/Qwen3-Embedding-0.6B",
+   "embed_backend": "torch",
+   "embed_query_instruction": "Given a search query, retrieve relevant passages that answer the query",
+   "embed_meta_beta": 0.15,
+   "modo": "hybrid",
+   "rrf_k": 60,
+   "rrf_w_vec": 1.0,
+   "rrf_w_id": 2.0,
+   "rrf_w_lex": 0.5,
+   "hybrid_lexical": false,
+   "rerank_model": null,
+   "sha_calculado_em": "2026-08-06T20:52:50+00:00"
+  }
+ }
+}

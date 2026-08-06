@@ -1,0 +1,184 @@
+{
+ "sonda": "T0",
+ "n": "24",
+ "bloco": "B",
+ "persona": "persona-nao-declarada",
+ "pergunta": "gestão de mudança",
+ "parametros_congelados": {
+  "texto": "secao",
+  "k": 8,
+  "dominio": null,
+  "subdominio": null,
+  "frente": null,
+  "colecao": null
+ },
+ "chamada_em": "2026-08-06T20:52:56.804550+00:00",
+ "acervo_sha": "24ed2cbf607e73ab1e8ab79c0d286bf2996b5751db4e63cfb97c2f313dfc25c7",
+ "retorno": {
+  "fontes": [
+   {
+    "n": 1,
+    "obra": "Data Governance (2nd)",
+    "arquivo": "dokumen.pub_data-governance-how-to-design-deploy-and-sustain-an-effective-data-governance-program-2nbsped-012815831x-9780128158319.pdf",
+    "section_id": "dokumen-pub_data-governance-how-to-design-deploy-and-sustain-an-effective-data-governance-program-2nbsped-012815831x-9780128158319-2020#chapter-4-overview-a-day-in-the-life-of-a-data-governance",
+    "breadcrumb": [
+     "­Data Governance",
+     "and its capabilities",
+     "Chapter 4 Overview: A day in the life of a data governance"
+    ],
+    "sim": 0.645,
+    "score": 0.0164,
+    "rerank": null,
+    "codigo_exato": false,
+    "texto": null
+   },
+   {
+    "n": 2,
+    "obra": "ISO 31000:2018 — Risk management — Guidelines",
+    "arquivo": "ISO31000_2018.pdf",
+    "section_id": "iso31000_2018-2018#5.7",
+    "breadcrumb": [
+     "844 Alocando recursos",
+     "5.7 Molhoria"
+    ],
+    "sim": 0.613,
+    "score": 0.0161,
+    "rerank": null,
+    "codigo_exato": false,
+    "texto": null
+   },
+   {
+    "n": 3,
+    "obra": "Data Governance (2nd)",
+    "arquivo": "dokumen.pub_data-governance-how-to-design-deploy-and-sustain-an-effective-data-governance-program-2nbsped-012815831x-9780128158319.pdf",
+    "section_id": "dokumen-pub_data-governance-how-to-design-deploy-and-sustain-an-effective-data-governance-program-2nbsped-012815831x-9780128158319-2020#essential-questions~11",
+    "breadcrumb": [
+     "­Data Governance",
+     "Operation and change",
+     "­Essential questions"
+    ],
+    "sim": 0.579,
+    "score": 0.0159,
+    "rerank": null,
+    "codigo_exato": false,
+    "texto": null
+   },
+   {
+    "n": 4,
+    "obra": "DAMA-DMBOK: Data Management Body of Knowledge",
+    "arquivo": "DMBOK.pdf",
+    "section_id": "dmbok-2015#3.7~3",
+    "breadcrumb": [
+     "88 Sourced and used with permission from Robert Abate / EMC Corporation.",
+     "3.7 DMO Alternatives and Design Considerations"
+    ],
+    "sim": 0.588,
+    "score": 0.0156,
+    "rerank": null,
+    "codigo_exato": false,
+    "texto": null
+   },
+   {
+    "n": 5,
+    "obra": "DAMA-DMBOK: Data Management Body of Knowledge",
+    "arquivo": "DMBOK.pdf",
+    "section_id": "dmbok-2015#2.9",
+    "breadcrumb": [
+     "29 http://bit.ly/2spRr7e.",
+     "2.9 Engage Change Management"
+    ],
+    "sim": 0.586,
+    "score": 0.0154,
+    "rerank": null,
+    "codigo_exato": false,
+    "texto": null
+   },
+   {
+    "n": 6,
+    "obra": "CISSP All-in-One Exam Guide",
+    "arquivo": "CISSP Guide - Shon Harris.pdf",
+    "section_id": "cissp-guide-shon-harris-2000#change-management",
+    "breadcrumb": [
+     "Software Development Security",
+     "Change Management"
+    ],
+    "sim": 0.614,
+    "score": 0.0152,
+    "rerank": null,
+    "codigo_exato": false,
+    "texto": null
+   },
+   {
+    "n": 7,
+    "obra": "Data Governance (2nd)",
+    "arquivo": "dokumen.pub_data-governance-how-to-design-deploy-and-sustain-an-effective-data-governance-program-2nbsped-012815831x-9780128158319.pdf",
+    "section_id": "dokumen-pub_data-governance-how-to-design-deploy-and-sustain-an-effective-data-governance-program-2nbsped-012815831x-9780128158319-2020#ramification-and-benefits~4",
+    "breadcrumb": [
+     "­Data Governance",
+     "Implementation",
+     "­Ramification and benefits"
+    ],
+    "sim": 0.572,
+    "score": 0.0149,
+    "rerank": null,
+    "codigo_exato": false,
+    "texto": null
+   },
+   {
+    "n": 8,
+    "obra": "DAMA-DMBOK: Data Management Body of Knowledge",
+    "arquivo": "DMBOK.pdf",
+    "section_id": "dmbok-2015#5.3~5",
+    "breadcrumb": [
+     "88 Sourced and used with permission from Robert Abate / EMC Corporation.",
+     "5.3 Developing a Vision and Strategy"
+    ],
+    "sim": 0.577,
+    "score": 0.0147,
+    "rerank": null,
+    "codigo_exato": false,
+    "texto": null
+   }
+  ],
+  "contexto": "[1] (dokumen.pub_data-governance-how-to-design-deploy-and-sustain-an-effective-data-governance-program-2nbsped-012815831x-9780128158319.pdf · dokumen-pub_data-governance-how-to-design-deploy-and-sustain-an-effective-data-governance-program-2nbsped-012815831x-9780128158319-2020#chapter-4-overview-a-day-in-the-life-of-a-data-governance) — ­Data Governance › and its capabilities › Chapter 4 Overview: A day in the life of a data governance\n(contexto do pai · dokumen-pub_data-governance-how-to-design-deploy-and-sustain-an-effective-data-governance-program-2nbsped-012815831x-9780128158319-2020#and-its-capabilities)\nand its capabilities\n­Chapter Outline\nLaws are sand, customs are rock. Laws can be evaded and punishment escaped but an openly\ntransgressed custom brings sure punishment.\nMark Twain\n---\nChapter 4 Overview: A day in the life of a data governance\nA frequent question I get from executives is “what does it look like?” This means that the current\nunderstanding is DG is something entirely different and unrecognizable.\nEnsuring a good understanding of how a DG program looks and works is essential to getting\nparticipants engaged. The concept of assimilating DG into everyday corporate life adds additional\nchallenge, since you are not only defining and implementing a discrete program; you are also at-\ntempting to alter behavior to a point that the long-term program is visible only through verification\nand adjustment.\nWhether DG is new or has become endemic and institutionalized, there is a collection of elements\nthat characterize a DG program. Understanding how these aspects work together aids in understanding\nthe “big picture.” This chapter reviews the scope and content of these elements at an executive level, it\ncovers what DG looks like in operation, and it addresses the types of capabilities that can be deployed.\nThe chapter will start with a short overview of a case study.\nIntroducing the case study\nRocky Health Systems is a regional provider of medical services in a large western state of the\nUnited States of America.1 It serves a rural population and has grown over time by various small\nhospitals and physicians merging and remerging. As such its applications are fragmented.\nRocky started a DG program one year ago. It was initially driven by a joint request from\n\n[2] (ISO31000_2018.pdf · iso31000_2018-2018#5.7) — 844 Alocando recursos › 5.7 Molhoria\n(contexto do pai · iso31000_2018-2018#844)\n844 Alocando recursos\n— cultura\nda organização,\nConvém que a Alta Direção\nos órgãos de supervisão. onde aplcávl. assegurem a alocação do\nrecursos apropriados para a gestão do fiscos, que podem incluir, mas não estão limitados a.\n— “normas, dretrizes e modelos adotados pola organização:\n— pessoas, hablidades, experiência e competência.\ncapacidades entendidas em termos de recursos e conhecimento (po\n---\n5.7 Molhoria\n— sistemas de gestão da informação e do conhecimento:\n5714\nAdaptação\n— necessidados da trunamanto\ndesenvolvimento\nprofissional.\nConvêm que a organização monitora «\nadapte cortiuamento a estutura de gestão de riscos para\n“abordar as mudanças extomas e internas. Ao fazer isso, a organização pode melhorar sou valor.\nConvém que a organização considera as capacidades o restições dos recursos axistantos.\n\n[3] (dokumen.pub_data-governance-how-to-design-deploy-and-sustain-an-effective-data-governance-program-2nbsped-012815831x-9780128158319.pdf · dokumen-pub_data-governance-how-to-design-deploy-and-sustain-an-effective-data-governance-program-2nbsped-012815831x-9780128158319-2020#essential-questions~11) — ­Data Governance › Operation and change › ­Essential questions\n(contexto do pai · dokumen-pub_data-governance-how-to-design-deploy-and-sustain-an-effective-data-governance-program-2nbsped-012815831x-9780128158319-2020#operation-and-change)\nOperation and change\n­Chapter Outline\nManage resistance\n225\nToo many people were working on the mind without paying sufficient attention to the heart.\nKotter and Cohen\n---\n­Essential questions\nThe change management items address the people aspect. Getting people to address the emotional\nelement of adopting discipline that has been nonexistent. “More than any other single finding, we\n­discovered in this … project that people changed less because of facts or data that shifted their thinking\nthan because compelling experiences changed their feelings. This emotional component was always\npresent in the most successful change stories and was usually missing in the least successful. Too many\npeople were working on the mind without paying sufficient attention to the heart.”3\nDG needs to be applied to various programs and projects. This means integrating DG with these\nefforts. A PMO is very helpful as the vehicle for DG. If none exists, then the sponsor and operating\nframework needs to make sure that individual efforts are using DG oversight.\nFollow your training and communications plans. They are there for a reason.\nLastly, the various programs and projects being governed need to be monitored for the effective-\nness of the DG processes. Frequent collection of metrics and successes of the data-related projects is\nessential.\n\n[4] (DMBOK.pdf · dmbok-2015#3.7~3) — 88 Sourced and used with permission from Robert Abate / EMC Corporation. › 3.7 DMO Alternatives and Design Considerations\n(contexto do pai · dmbok-2015#88)\n88 Sourced and used with permission from Robert Abate / EMC Corporation.\n504 • DMBOK2\nConceptual DW/BI and Big Data Architecture\nSources\nBI\nData Warehouse\nApplication\nOperational\nData Mastering\nData Quality Intervention\nEnrichment & Augmentation\nReporting\nDependent\nData Stores\nOpertional Reporting\nStaging Area\n& Analyics\nReport Interact\nClean\nIntegrate\nGeospatial and\nDemographic Analytics\nOperatio\n---\n3.7 DMO Alternatives and Design Considerations\nMost organizations start with a decentralized model before they move toward a formal Data Management\nOrganization (DMO). As an organization sees the impact of improvements in data quality, it may start to\nformalize accountability through a data management RACI matrix and evolve into a network model. Over time,\nsynergies between the distributed roles will become more obvious and economies of scale will be identified that\nwill pull some roles and people into organized groups. Eventually, this can morph into a hybrid or federated\nmodel.\nSome organizations don’t have the luxury of going through this maturity process. They are forced to mature\nquickly based on a market shock or new government regulations. In such a case, it is important to proactively\naddress the discomfort associated with the organizational change if it is to be successful and sustainable. (See\nChapter 17.)\nWhichever model is chosen, remember that simplicity and usability are essential for acceptance and\nsustainability. If the operating model fits the culture of a company, then data management and proper\ngovernance can be embedded in operations and aligned with strategy. Keep these tips in mind when\nconstructing an Operating Model:\nDetermine the starting point by assessing current state\nTie the operating model to organization structure\nTake into account:\no\nOrganization Complexity + Maturity\no\nDomain Complexity + Maturity\no\nScalability\nGet executive sponsorship – a mu\n\n[5] (DMBOK.pdf · dmbok-2015#2.9) — 29 http://bit.ly/2spRr7e. › 2.9 Engage Change Management\n(contexto do pai · dmbok-2015#29)\n29 http://bit.ly/2spRr7e.\nDATA GOVERNANCE • 85\n---\n2.9 Engage Change Management\nOrganizational Change Management (OCM) is the vehicle for bringing about change in an organization’s systems\nand processes. The Change Management Institute posits that organizational change management is more than just\nthe ‘people side of projects’. It should be viewed as the approach the whole organization uses to manage change\nwell. Organizations often manage the transitions of projects rather than the evolution of the organization (Anderson\nand Ackerson, 2012). An organization that is mature in its management of change builds a clear organizational\nvision, actively leads and monitors change from the top, and designs and manages smaller change efforts. It adapts\nchange initiatives based on the feedback and collaboration of the whole organization (Change Management\nInstitute, 2012). (See Chapter 17.)\nFor many organizations, the formality and discipline inherent in DG differ from existing practices. Adopting them\nrequires that people change their behaviors and interactions. A formal OCM program, with the right executive\nsponsor, is critical to driving the behavioral changes required to sustain DG. Organizations should create a team\nresponsible for:\nPlanning: Planning change management, including performing stakeholder analysis, gaining sponsorship,\nand establishing a communications approach to overcome resistance to change.\nTraining: Creating and executing training plans for data governance programs.\nInfluencing systems development: Engaging with \n\n[6] (CISSP Guide - Shon Harris.pdf · cissp-guide-shon-harris-2000#change-management) — Software Development Security › Change Management\n(contexto do pai · cissp-guide-shon-harris-2000#software-development-security)\nSoftware Development Security\nThis chapter presents the following:\n• Common software development issues\n• Software development life cycles\n• Secure software development approaches\n• Development/operations integration (DevOps)\n• Change management\n• Security of development environments\n• Programming language and concepts\n• Malware types and attacks\n• Security of acquired software\nAlways code as if t\n---\nChange Management\nOne of the key processes on which to focus for improvement involves how we deal with the\ninevitable changes. These can cause a lot of havoc if not managed properly and in a\ndeliberate manner. Changes could take place for several reasons. During the development\nphases, a customer may alter requirements and ask that certain functionalities be added,\nremoved, or modified. In production, changes may need to happen because of other\n1322\nchanges in the environment, new requirements of a software product or system, or newly\nreleased patches or upgrades. These changes should be carefully analyzed, approved, and\nproperly incorporated such that they do not affect any original functionality in an adverse\nway.\nChange management is a systematic approach to deliberately regulating the changing\nnature of projects, including software development projects. It is a management process\nthat takes into account not just the technical issues, but also resources (like people and\nmoney), project life cycle, and even organizational climate. Many times, the hardest part of\nmanaging change is not the change itself, but the effects it has in the organization. Many of\nus have been on the receiving end of a late-afternoon phone call in which we’re told to\nchange our plans because of a change in a project on which we weren’t even working. An\nimportant part of change management is controlling change.\n\n[7] (dokumen.pub_data-governance-how-to-design-deploy-and-sustain-an-effective-data-governance-program-2nbsped-012815831x-9780128158319.pdf · dokumen-pub_data-governance-how-to-design-deploy-and-sustain-an-effective-data-governance-program-2nbsped-012815831x-9780128158319-2020#ramification-and-benefits~4) — ­Data Governance › Implementation › ­Ramification and benefits\n(contexto do pai · dokumen-pub_data-governance-how-to-design-deploy-and-sustain-an-effective-data-governance-program-2nbsped-012815831x-9780128158319-2020#implementation)\n­Implementation\nThis is the step where DG plans the details for the “go live” events of DG. The team will define the\nevents that take the organization from a nongoverned to a governed state for its data assets. In addition,\nthe requirements and groundwork are laid to sustain the DG program (i.e., detailed preparations to ad-\ndress the changes required by the DG program) (Fig. 6.9).\nResults\nImpleme\n---\n­Ramification and benefits\nThe obvious benefit is the initial engagement of more stakeholders. There is an indication that DG is\nreal (and hopefully there is visible sufficient support), and projects or programs will at least be open to\nthe offer of assistance.\nOf course, this is also a point where any potential resistance (which is guaranteed to happen) will\nbecome very evident. You may want to take a bit of time and assess resistance levels. (Not politics—\npolitics will always follow you around.) Assess resistance to change. Organization change management\nhas started.\n­Ramification and benefits\nThe obvious benefit is the engagement of more stakeholders. There is an indication that DG is real (and\nhopefully there is visible sufficient support), and projects or programs will at least be open to the offer\nof assistance.\nAgain, perhaps to a greater extent, resistance will appear and your OCM plans need to be ready.\n­Ramification and benefits\nSuccess and sustainability for DG will require early visibility. So, make sure the initial increments\ngenerate value and good impressions. This accomplishes two things:\n1. The DG participants gain valuable experience and the organization is exposed to DG.\n2. The early efforts in governing result in feedback that will indicate any required adjustments to\ntraining, staff, or operating model of DG.\nTake a deliverables-based approach to this task. Even though you are rolling out a sustainable pro-\ngram, you still want to have the team work towa\n\n[8] (DMBOK.pdf · dmbok-2015#5.3~5) — 88 Sourced and used with permission from Robert Abate / EMC Corporation. › 5.3 Developing a Vision and Strategy\n(contexto do pai · dmbok-2015#88)\n88 Sourced and used with permission from Robert Abate / EMC Corporation.\n504 • DMBOK2\nConceptual DW/BI and Big Data Architecture\nSources\nBI\nData Warehouse\nApplication\nOperational\nData Mastering\nData Quality Intervention\nEnrichment & Augmentation\nReporting\nDependent\nData Stores\nOpertional Reporting\nStaging Area\n& Analyics\nReport Interact\nClean\nIntegrate\nGeospatial and\nDemographic Analytics\nOperatio\n---\n5.3 Developing a Vision and Strategy\nA common mistake in change management efforts is to rely on either authoritarian decree or micromanagement\nto get the change moving. Neither approach is effective if the change situation is complex.\nIf the goal is behavior change, unless the boss is very powerful, authoritarian decree approaches work poorly\neven in simple situations. Without ‘the power of kings’ behind it, an authoritarian decree is unlikely to break\nthrough all the forces of resistance. The Change Agents tend to be ignored, undermined, or worked around.\nAlmost inevitably, some change resister will call the Change Agent’s bluff to test the authority and clout behind\nthe change process.\nMicromanagement tries to get around this weakness by defining in specific detail what employees should do\nand then monitoring compliance. This can overcome some of the barriers to change but will, over time, take\nincreasing lengths of time as management have to spend more time detailing the work practices and methods for\nthe new changed behaviors as the level of complexity associated with the change increases.\nThe only approach that consistently allows Change Agents to break through the status quo is to base change on\na clear and compelling vision that provides momentum.\nDATA MANAGEMENT AND ORGANIZATIONAL CHANGE MANAGEMENT • 591\nAuthoritarian\nDecree\nMicromanagement\nVision\nForces that support the status quo\nFigure 116 Vision Breaks Through Status Quo",
+  "cobertura": "boa",
+  "sinal": {
+   "medida": "sim",
+   "valor": 0.645,
+   "piso": 0.55
+  },
+  "perguntas": [
+   "gestão de mudança"
+  ],
+  "filtro": {
+   "dominio": [],
+   "subdominio": [],
+   "frente": [],
+   "colecao": []
+  },
+  "aviso": null,
+  "indice": {
+   "acervo_sha": "24ed2cbf607e73ab1e8ab79c0d286bf2996b5751db4e63cfb97c2f313dfc25c7",
+   "chunks": 145240,
+   "chunks_recuperaveis": 124463,
+   "chunks_com_vetor": 124463,
+   "chunks_nao_textuais": 20777,
+   "documentos_sem_chunk": 4,
+   "obras_catalogadas": 694,
+   "obras_ingeridas": 623,
+   "conceitos": 205,
+   "embed_model": "Qwen/Qwen3-Embedding-0.6B",
+   "embed_backend": "torch",
+   "embed_query_instruction": "Given a search query, retrieve relevant passages that answer the query",
+   "embed_meta_beta": 0.15,
+   "modo": "hybrid",
+   "rrf_k": 60,
+   "rrf_w_vec": 1.0,
+   "rrf_w_id": 2.0,
+   "rrf_w_lex": 0.5,
+   "hybrid_lexical": false,
+   "rerank_model": null,
+   "sha_calculado_em": "2026-08-06T20:52:50+00:00"
+  }
+ }
+}

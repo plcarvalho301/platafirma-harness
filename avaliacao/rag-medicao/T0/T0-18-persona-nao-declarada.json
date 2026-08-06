@@ -1,0 +1,192 @@
+{
+ "sonda": "T0",
+ "n": "18",
+ "bloco": "B",
+ "persona": "persona-nao-declarada",
+ "pergunta": "estratégia de chunking",
+ "parametros_congelados": {
+  "texto": "secao",
+  "k": 8,
+  "dominio": null,
+  "subdominio": null,
+  "frente": null,
+  "colecao": null
+ },
+ "chamada_em": "2026-08-06T20:52:55.521106+00:00",
+ "acervo_sha": "24ed2cbf607e73ab1e8ab79c0d286bf2996b5751db4e63cfb97c2f313dfc25c7",
+ "retorno": {
+  "fontes": [
+   {
+    "n": 1,
+    "obra": "A Simple Guide to Retrieval Augmented Generation",
+    "arquivo": "A Simple Guide to Retrieval Augmented Generation -- Abhinav Kimothi -- 1, 2025 -- Manning Publications Co_ LLC -- isbn13 9781633435858 -- 305d96b4b3bafbadff8e71a246471b9c -- Anna’s Archive.epub",
+    "section_id": "a-simple-guide-to-retrieval-augmented-generation-abhinav-kimothi-1-2025-manning-publications-co_-llc-isbn13-9781633435858-305d96b4b3bafbadff8e71a246471b9c-anna-s-archive#figure-3-2-data-chunking-process",
+    "breadcrumb": [
+     "3 Indexing pipeline: Creating a knowledge base for RAG",
+     "3.2 Data splitting (chunking)",
+     "3.2.2 Chunking process",
+     "Figure 3.2 Data-chunking process"
+    ],
+    "sim": 0.706,
+    "score": 0.0164,
+    "rerank": null,
+    "codigo_exato": false,
+    "texto": null
+   },
+   {
+    "n": 2,
+    "obra": "A Simple Guide to Retrieval Augmented Generation",
+    "arquivo": "A Simple Guide to Retrieval Augmented Generation -- Abhinav Kimothi -- 1, 2025 -- Manning Publications Co_ LLC -- isbn13 9781633435858 -- 305d96b4b3bafbadff8e71a246471b9c -- Anna’s Archive.epub",
+    "section_id": "a-simple-guide-to-retrieval-augmented-generation-abhinav-kimothi-1-2025-manning-publications-co_-llc-isbn13-9781633435858-305d96b4b3bafbadff8e71a246471b9c-anna-s-archive#3.2",
+    "breadcrumb": [
+     "3 Indexing pipeline: Creating a knowledge base for RAG",
+     "3.2 Data splitting (chunking)"
+    ],
+    "sim": 0.668,
+    "score": 0.0161,
+    "rerank": null,
+    "codigo_exato": false,
+    "texto": null
+   },
+   {
+    "n": 3,
+    "obra": "Design for How People Learn",
+    "arquivo": "Design for How People Learn (Eva Spring's Library) -- Dirksen, Julie -- Pearson Education Limited (US titles), [N_p_], 2011 -- New Riders Publishing -- isbn13 9780132693721 -- ef4c3eb26dd29ef03335c587d41b7f45 -- Anna’s Archive.epub",
+    "section_id": "design-for-how-people-learn-eva-spring-s-library-dirksen-julie-pearson-education-limited-us-titles-n_p_-2011-new-riders-publishing-isbn13-9780132693721-ef4c3eb26dd29ef03335c587d41b7f45-anna-s-archive#what-s-the-limit",
+    "breadcrumb": [
+     "Design For How People Learn",
+     "4. How Do We Remember?",
+     "Memory In & Out",
+     "Short-Term or Working Memory",
+     "What’s the Limit?"
+    ],
+    "sim": 0.657,
+    "score": 0.0159,
+    "rerank": null,
+    "codigo_exato": false,
+    "texto": null
+   },
+   {
+    "n": 4,
+    "obra": "A Simple Guide to Retrieval Augmented Generation",
+    "arquivo": "A Simple Guide to Retrieval Augmented Generation -- Abhinav Kimothi -- 1, 2025 -- Manning Publications Co_ LLC -- isbn13 9781633435858 -- 305d96b4b3bafbadff8e71a246471b9c -- Anna’s Archive.epub",
+    "section_id": "a-simple-guide-to-retrieval-augmented-generation-abhinav-kimothi-1-2025-manning-publications-co_-llc-isbn13-9781633435858-305d96b4b3bafbadff8e71a246471b9c-anna-s-archive#table-6-1-advanced-rag-strategies-with-their-benefits-and-li",
+    "breadcrumb": [
+     "6 Progression of RAG systems: Naïve, advanced, and modular RAG",
+     "6.5 Post-retrieval techniques",
+     "6.5.1 Compression",
+     "Re-ranking",
+     "Table 6.1 Advanced RAG strategies with their benefits and limitations"
+    ],
+    "sim": 0.632,
+    "score": 0.0156,
+    "rerank": null,
+    "codigo_exato": false,
+    "texto": null
+   },
+   {
+    "n": 5,
+    "obra": "A Simple Guide to Retrieval Augmented Generation",
+    "arquivo": "A Simple Guide to Retrieval Augmented Generation -- Abhinav Kimothi -- 1, 2025 -- Manning Publications Co_ LLC -- isbn13 9781633435858 -- 305d96b4b3bafbadff8e71a246471b9c -- Anna’s Archive.epub",
+    "section_id": "a-simple-guide-to-retrieval-augmented-generation-abhinav-kimothi-1-2025-manning-publications-co_-llc-isbn13-9781633435858-305d96b4b3bafbadff8e71a246471b9c-anna-s-archive#application-and-use-case-requirements",
+    "breadcrumb": [
+     "3 Indexing pipeline: Creating a knowledge base for RAG",
+     "3.2 Data splitting (chunking)",
+     "3.2.4 Choosing a chunking strategy",
+     "Application and use case requirements"
+    ],
+    "sim": 0.632,
+    "score": 0.0154,
+    "rerank": null,
+    "codigo_exato": false,
+    "texto": null
+   },
+   {
+    "n": 6,
+    "obra": "A Simple Guide to Retrieval Augmented Generation",
+    "arquivo": "A Simple Guide to Retrieval Augmented Generation -- Abhinav Kimothi -- 1, 2025 -- Manning Publications Co_ LLC -- isbn13 9781633435858 -- 305d96b4b3bafbadff8e71a246471b9c -- Anna’s Archive.epub",
+    "section_id": "a-simple-guide-to-retrieval-augmented-generation-abhinav-kimothi-1-2025-manning-publications-co_-llc-isbn13-9781633435858-305d96b4b3bafbadff8e71a246471b9c-anna-s-archive#3.2.4",
+    "breadcrumb": [
+     "3 Indexing pipeline: Creating a knowledge base for RAG",
+     "3.2 Data splitting (chunking)",
+     "3.2.4 Choosing a chunking strategy"
+    ],
+    "sim": 0.624,
+    "score": 0.0152,
+    "rerank": null,
+    "codigo_exato": false,
+    "texto": null
+   },
+   {
+    "n": 7,
+    "obra": "AI Engineering (for True Epub)",
+    "arquivo": "AI Engineering (for True Epub) -- Chip Huyen -- 2024 -- O'Reilly Media, Inc_ -- 9158ae54a30c2dc321ba23c12a596f97 -- Anna’s Archive.pdf",
+    "section_id": "ai-engineering-for-true-epub-chip-huyen-2024-o-reilly-media-inc_-9158ae54a30c2dc321ba23c12a596f97-anna-s-archive-2025#introduction",
+    "breadcrumb": [
+     "Introduction"
+    ],
+    "sim": 0.625,
+    "score": 0.0149,
+    "rerank": null,
+    "codigo_exato": false,
+    "texto": null
+   },
+   {
+    "n": 8,
+    "obra": "A Simple Guide to Retrieval Augmented Generation",
+    "arquivo": "A Simple Guide to Retrieval Augmented Generation -- Abhinav Kimothi -- 1, 2025 -- Manning Publications Co_ LLC -- isbn13 9781633435858 -- 305d96b4b3bafbadff8e71a246471b9c -- Anna’s Archive.epub",
+    "section_id": "a-simple-guide-to-retrieval-augmented-generation-abhinav-kimothi-1-2025-manning-publications-co_-llc-isbn13-9781633435858-305d96b4b3bafbadff8e71a246471b9c-anna-s-archive#3.2.2",
+    "breadcrumb": [
+     "3 Indexing pipeline: Creating a knowledge base for RAG",
+     "3.2 Data splitting (chunking)",
+     "3.2.2 Chunking process"
+    ],
+    "sim": 0.614,
+    "score": 0.0147,
+    "rerank": null,
+    "codigo_exato": false,
+    "texto": null
+   }
+  ],
+  "contexto": "[1] (A Simple Guide to Retrieval Augmented Generation -- Abhinav Kimothi -- 1, 2025 -- Manning Publications Co_ LLC -- isbn13 9781633435858 -- 305d96b4b3bafbadff8e71a246471b9c -- Anna’s Archive.epub · a-simple-guide-to-retrieval-augmented-generation-abhinav-kimothi-1-2025-manning-publications-co_-llc-isbn13-9781633435858-305d96b4b3bafbadff8e71a246471b9c-anna-s-archive#figure-3-2-data-chunking-process) — 3 Indexing pipeline: Creating a knowledge base for RAG › 3.2 Data splitting (chunking) › 3.2.2 Chunking process › Figure 3.2 Data-chunking process\n3.2.3 Chunking methods\n\n[2] (A Simple Guide to Retrieval Augmented Generation -- Abhinav Kimothi -- 1, 2025 -- Manning Publications Co_ LLC -- isbn13 9781633435858 -- 305d96b4b3bafbadff8e71a246471b9c -- Anna’s Archive.epub · a-simple-guide-to-retrieval-augmented-generation-abhinav-kimothi-1-2025-manning-publications-co_-llc-isbn13-9781633435858-305d96b4b3bafbadff8e71a246471b9c-anna-s-archive#3.2) — 3 Indexing pipeline: Creating a knowledge base for RAG › 3.2 Data splitting (chunking)\n(contexto do pai · a-simple-guide-to-retrieval-augmented-generation-abhinav-kimothi-1-2025-manning-publications-co_-llc-isbn13-9781633435858-305d96b4b3bafbadff8e71a246471b9c-anna-s-archive#3)\nThis chapter covers\n---\nBreaking down long pieces of text to manageable segments is called data splitting or chunking . This section discusses why chunking is necessary and the different chunking strategies. We also use functions from LangChain to illustrate a few examples.\n3.2.1 Advantages of chunking\n\n[3] (Design for How People Learn (Eva Spring's Library) -- Dirksen, Julie -- Pearson Education Limited (US titles), [N_p_], 2011 -- New Riders Publishing -- isbn13 9780132693721 -- ef4c3eb26dd29ef03335c587d41b7f45 -- Anna’s Archive.epub · design-for-how-people-learn-eva-spring-s-library-dirksen-julie-pearson-education-limited-us-titles-n_p_-2011-new-riders-publishing-isbn13-9780132693721-ef4c3eb26dd29ef03335c587d41b7f45-anna-s-archive#what-s-the-limit) — Design For How People Learn › 4. How Do We Remember? › Memory In & Out › Short-Term or Working Memory › What’s the Limit?\n(contexto do pai · design-for-how-people-learn-eva-spring-s-library-dirksen-julie-pearson-education-limited-us-titles-n_p_-2011-new-riders-publishing-isbn13-9780132693721-ef4c3eb26dd29ef03335c587d41b7f45-anna-s-archive#short-term-or-working-memory)\nOnce something has attracted your attention, it moves into your short-term or working memory. If it succeeds in penetrating your short-term memory, it’s probably something that:\n• Is significant to you for some reason\n• You are looking for\n• You need to take action on\n• Surprises or confounds your expectations\nWorking memory has a relatively short duration and limited capacity, but you use it pret\n---\nHow much can you hold in working memory? There is a fair amount of research on the limits of working memory, and there’s a well-known statistic about 7 2 items in working memory, but the real answer is it depends . ( Miller 1956 )\nIn all likelihood, you can’t repeat all the data from the previous table (the temperature, the Dow Jones numbers, and the sports scores) without going back and checking it again. The main reason you can’t is because those numbers have no significance for you, beyond being an example in this book.\nAn additional reason would be the quantity of information—there were several discrete facts in that table (12°, Celsius, Dow Jones, 56 points, 0.5%, 11, 781, UConn Huskies, Stanford Cardinal, 71, 59). That’s more pieces of individual information than most people can remember without some kind of memory aid or device.\nRead this number, and then close your eyes and try to repeat it:\n6 7 1 8\nHow’d you do? In all likelihood you did pretty well at retaining that briefly. Four discrete digits is usually well within the limits of working memory.\nNow try this number:\n9 3 4 8 7 1 6 2 5\nThat one is a little harder, right? Maybe you were able to retain all nine digits, but if you dropped some digits they were likely to be somewhere in the middle of the string of numbers. That would be an example of primacy and recency effects, which suggest we are more likely to remember something at the beginning of a sequence or list (primacy) and also more likely to remember the mo\n\n[4] (A Simple Guide to Retrieval Augmented Generation -- Abhinav Kimothi -- 1, 2025 -- Manning Publications Co_ LLC -- isbn13 9781633435858 -- 305d96b4b3bafbadff8e71a246471b9c -- Anna’s Archive.epub · a-simple-guide-to-retrieval-augmented-generation-abhinav-kimothi-1-2025-manning-publications-co_-llc-isbn13-9781633435858-305d96b4b3bafbadff8e71a246471b9c-anna-s-archive#table-6-1-advanced-rag-strategies-with-their-benefits-and-li) — 6 Progression of RAG systems: Naïve, advanced, and modular RAG › 6.5 Post-retrieval techniques › 6.5.1 Compression › Re-ranking › Table 6.1 Advanced RAG strategies with their benefits and limitations\n(contexto do pai · a-simple-guide-to-retrieval-augmented-generation-abhinav-kimothi-1-2025-manning-publications-co_-llc-isbn13-9781633435858-305d96b4b3bafbadff8e71a246471b9c-anna-s-archive#re-ranking)\nReordering all the retrieved documents ensures that the most relevant information is prioritized for the generation step. It refines retrieval results by prioritizing documents that are more contextually appropriate for the query, improving the overall quality and accuracy of information used for generation. Re-ranking also addresses the question of prioritization when a hybrid approach to retriev\n---\nStrategy\nStrategy\nDescription\nDescription\nBenefits\nBenefits\nChallenges\nChallenges\nChunk optimization\nChunk optimization\nAdjusting document chunks for optimal size and context\nAdjusting document chunks for optimal size and context\nImproves retrieval accuracy, processing speed, and storage\nImproves retrieval accuracy, processing speed, and storage\nRequires experimentation; optimal chunk varies by use case\nRequires experimentation; optimal chunk varies by use case\nMetadata enhancements\nMetadata enhancements\nEnriching chunks with additional metadata for better filtering and searchability\nEnriching chunks with additional metadata for better filtering and searchability\nImproves retrieval efficiency; reduces noise\nImproves retrieval efficiency; reduces noise\nRequires careful schema design; manages processing costs\nRequires careful schema design; manages processing costs\nIndex structures\nIndex structures\nOrganizing data in structured formats for efficient retrieval\nOrganizing data in structured formats for efficient retrieval\nEnhances accuracy and context in retrieval\nEnhances accuracy and context in retrieval\nIncreases memory and computational load\nIncreases memory and computational load\nQuery expansion\nQuery expansion\nEnriching the user query to retrieve more relevant information\nEnriching the user query to retrieve more relevant information\nIncreases recall; overcomes brief queries\nIncreases recall; overcomes brief queries\nMay reduce precision; risk of contextual drift\nMay reduce \n\n[5] (A Simple Guide to Retrieval Augmented Generation -- Abhinav Kimothi -- 1, 2025 -- Manning Publications Co_ LLC -- isbn13 9781633435858 -- 305d96b4b3bafbadff8e71a246471b9c -- Anna’s Archive.epub · a-simple-guide-to-retrieval-augmented-generation-abhinav-kimothi-1-2025-manning-publications-co_-llc-isbn13-9781633435858-305d96b4b3bafbadff8e71a246471b9c-anna-s-archive#application-and-use-case-requirements) — 3 Indexing pipeline: Creating a knowledge base for RAG › 3.2 Data splitting (chunking) › 3.2.4 Choosing a chunking strategy › Application and use case requirements\nThe nature of the use case you’re addressing may also determine the optimal chunking strategy. For a direct question-answering system, shorter chunks are likely used for precise results, while for summarization tasks, longer chunks may make more sense. If the results of your system need to serve as an input to another downstream application, that may also influence the choice of the chunking strategy.\nEmbeddings model\n\n[6] (A Simple Guide to Retrieval Augmented Generation -- Abhinav Kimothi -- 1, 2025 -- Manning Publications Co_ LLC -- isbn13 9781633435858 -- 305d96b4b3bafbadff8e71a246471b9c -- Anna’s Archive.epub · a-simple-guide-to-retrieval-augmented-generation-abhinav-kimothi-1-2025-manning-publications-co_-llc-isbn13-9781633435858-305d96b4b3bafbadff8e71a246471b9c-anna-s-archive#3.2.4) — 3 Indexing pipeline: Creating a knowledge base for RAG › 3.2 Data splitting (chunking) › 3.2.4 Choosing a chunking strategy\nWe have seen that there are many chunking methods available. Which chunking method to use (i.e., whether to use a single method or multiple methods) is a question that comes up during the creation of the indexing pipeline. There are no guidelines or rules to answer this question. However, certain features of the application that you’re developing can guide you toward an effective strategy.\nNature of the content\n\n[7] (AI Engineering (for True Epub) -- Chip Huyen -- 2024 -- O'Reilly Media, Inc_ -- 9158ae54a30c2dc321ba23c12a596f97 -- Anna’s Archive.pdf · ai-engineering-for-true-epub-chip-huyen-2024-o-reilly-media-inc_-9158ae54a30c2dc321ba23c12a596f97-anna-s-archive-2025#introduction) — Introduction\nIntroduction to Embedding\nSince computers work with numbers, a model needs to convert its\ninput into numerical representations that computers can process.\nAn embedding is a numerical representation that aims to capture the\nmeaning of the original data.\nAn embedding is a vector. For example, the sentence “the cat sits on\na mat” might be represented using an embedding vector that looks\nlike this: [0.11, 0.02, 0.54] . Here, I use a small vector as an\nexample. In reality, the size of an embedding vector (the number of\nelements in the embedding vector) is typically between 100 and\n13\n10,000.\nModels trained especially to produce embeddings include the open\nsource models BERT, CLIP (Contrastive Language–Image Pre-\ntraining), and Sentence Transformers. There are also proprietary\n14\nembedding models provided as APIs.\nTable 3-2 shows the\nembedding sizes of some popular models.\nTable 3-2. Embedding sizes used by common models.\nModel\nEmbedding size\nGoogle’s BERT\nBERT base: 768\nBERT large: 1024\nOpenAI’s CLIP\nImage: 512\nText: 512\nOpenAI Embeddings API\ntext-embedding-3-small: 1536\ntext-embedding-3-large: 3072\nCohere’s Embed v3\nembed-english-v3.0: 1024\nembed-english-light-3.0: 384\nBecause models typically require their inputs to first be\ntransformed into vector representations, many ML models,\nincluding GPTs and Llamas, also involve a step to generate\nembeddings. “Transformer architecture” visualizes the embedding\nlayer in a transformer model. If you have access to the\nintermediate layers of\n\n[8] (A Simple Guide to Retrieval Augmented Generation -- Abhinav Kimothi -- 1, 2025 -- Manning Publications Co_ LLC -- isbn13 9781633435858 -- 305d96b4b3bafbadff8e71a246471b9c -- Anna’s Archive.epub · a-simple-guide-to-retrieval-augmented-generation-abhinav-kimothi-1-2025-manning-publications-co_-llc-isbn13-9781633435858-305d96b4b3bafbadff8e71a246471b9c-anna-s-archive#3.2.2) — 3 Indexing pipeline: Creating a knowledge base for RAG › 3.2 Data splitting (chunking) › 3.2.2 Chunking process\nThe chunking process can be divided into three steps, as illustrated in figure 3.2:\nDivide the longer text into compact, meaningful units (e.g., sentences or paragraphs).\nMerge the smaller units into larger chunks until a specific size is achieved. After that, this chunk is treated as an independent segment of text.\nWhen creating a new chunk, include a part of the previous chunk at the start of the new chunk. This overlap is necessary to maintain contextual continuity.\nThis process is also known as “small to big” chunking.\nFigure 3.2 Data-chunking process",
+  "cobertura": "boa",
+  "sinal": {
+   "medida": "sim",
+   "valor": 0.706,
+   "piso": 0.55
+  },
+  "perguntas": [
+   "estratégia de chunking"
+  ],
+  "filtro": {
+   "dominio": [],
+   "subdominio": [],
+   "frente": [],
+   "colecao": []
+  },
+  "aviso": null,
+  "indice": {
+   "acervo_sha": "24ed2cbf607e73ab1e8ab79c0d286bf2996b5751db4e63cfb97c2f313dfc25c7",
+   "chunks": 145240,
+   "chunks_recuperaveis": 124463,
+   "chunks_com_vetor": 124463,
+   "chunks_nao_textuais": 20777,
+   "documentos_sem_chunk": 4,
+   "obras_catalogadas": 694,
+   "obras_ingeridas": 623,
+   "conceitos": 205,
+   "embed_model": "Qwen/Qwen3-Embedding-0.6B",
+   "embed_backend": "torch",
+   "embed_query_instruction": "Given a search query, retrieve relevant passages that answer the query",
+   "embed_meta_beta": 0.15,
+   "modo": "hybrid",
+   "rrf_k": 60,
+   "rrf_w_vec": 1.0,
+   "rrf_w_id": 2.0,
+   "rrf_w_lex": 0.5,
+   "hybrid_lexical": false,
+   "rerank_model": null,
+   "sha_calculado_em": "2026-08-06T20:52:50+00:00"
+  }
+ }
+}
