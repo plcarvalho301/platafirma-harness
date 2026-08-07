@@ -31,14 +31,12 @@ Um arquivo por mensagem, nome = id do bloco na fila. Conteúdo é a mensagem
 13 mensagens, 36 questões entregues (12 mensagens × 3; a de `021325` é adendo,
 não traz questão nova).
 
-## Pendente, com dono
+## Consolidado
 
-Consolidar isto em `.jsonl` — de-duplicação entre as mensagens múltiplas da
-mesma cadeira (TI: 3 mensagens; arquiteto: 2; gestão estratégica: 2; produto:
-2, uma delas já declarada substituída), esquema, montagem do gabarito e carga —
-é de **claudinho-IA**, conforme
-`avaliacao/rag-medicao/protocolo-escada-20260803.md`. Este diretório é a coleta
-bruta, não o gold set.
+Este diretório é a coleta bruta. O gold set montado a partir dele é
+`avaliacao/gold-set/gold-multistep-20260807.jsonl` (30 questões), gerado por
+`fatiar_multistep.py` + `montar_multistep.py`. O que saiu na de-duplicação e por
+quê está em `gold-multistep-20260807-descartes.tsv`.
 
 Achados de acervo trazidos de carona (`013449`, `022540`, `021325`) não são
 matéria do gold set e vão aos donos por fila, não por este arquivo.
