@@ -5,7 +5,7 @@ resultados moram aqui, não em `docs/`.
 
     procedimento.md            protocolo de execução, congelado
     perguntas-simples.md       34 sondas (bloco A conceitual + bloco B dicionário estrito)
-    perguntas-complexas.md     multi-hop — não desenhado
+    perguntas-complexas.md     multi-hop — desenho do estrato (coleta e gold em avaliacao/gold-set/)
     t0_sonda_34.py             executor
     resultados/G0-rag-base/    recuperação pura (rag_search), sem gerador
     resultados/G0-<modelo>/    geração local, um diretório por modelo

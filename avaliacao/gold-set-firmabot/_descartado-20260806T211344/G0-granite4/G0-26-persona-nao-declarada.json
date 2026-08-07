@@ -1,0 +1,47 @@
+{
+ "sonda": "G0",
+ "n": "26",
+ "bloco": "B",
+ "persona": "persona-nao-declarada",
+ "modelo": "granite4:latest",
+ "pergunta": "trunk-based development",
+ "contexto_de": {
+  "rodada": "G0-rag-base",
+  "acervo_sha": "24ed2cbf607e73ab1e8ab79c0d286bf2996b5751db4e63cfb97c2f313dfc25c7",
+  "n_fontes": 8,
+  "chars_contexto": 14042,
+  "cobertura_rag": "boa"
+ },
+ "amostragem": {
+  "temperature": 0,
+  "seed": 42,
+  "num_ctx": 16384,
+  "num_predict": 900
+ },
+ "chamada_em": "2026-08-07T00:07:50.456340+00:00",
+ "latencia_ms": 2838,
+ "tokens": {
+  "prompt_eval_count": 3199,
+  "eval_count": 281,
+  "eval_duration": 2107492000,
+  "prompt_eval_duration": 505882000,
+  "load_duration": 79103335,
+  "total_duration": 2837561932
+ },
+ "medidas": {
+  "chars": 1119,
+  "frases": 10,
+  "frases_com_citacao": 3,
+  "taxa_citacao": 0.3,
+  "fontes_citadas": [
+   3,
+   5,
+   7
+  ],
+  "citacoes_fora_do_intervalo": [],
+  "declarou_nao_cobertura": false
+ },
+ "resposta_vazia": false,
+ "raciocinio_chars": 0,
+ "resposta": "Trunk-based development é uma prática de desenvolvimento onde o código é continuamente mesclado em um ramo principal (trunk ou master) e evita a criação de longas bifurcações. Essa abordagem é considerada complementar à integração contínua e tem sido demonstrado que acelera a velocidade de entrega do software.\n\nFontes:\n\n1. [3] Discutem sobre \"Shifting Left\", enfatizando que desenvolver em relação ao trunk ou master, em vez de longas bifurcações, é associado a melhor desempenho na entrega de software.\n2. [5] Relata que, apesar da evidência mostrando que as práticas de trunk-based development contribuem para melhor desempenho na entrega de software, alguns desenvolvedores ainda duvidam e preferem o fluxo de trabalho do GitHub, que envolve o uso de bifurcações.\n3. [7] Expõe que a pesquisa encontrou correlação entre práticas de Continuous Delivery (como trunk-based development) e melhor desempenho na entrega de software, além de cultura mais produtiva.\n\nPortanto, o acervo cobre explicitamente o conceito de trunk-based development como uma prática que contribui para melhor desempenho na entrega de software."
+}

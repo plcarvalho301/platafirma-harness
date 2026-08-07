@@ -1,0 +1,45 @@
+{
+ "sonda": "G0",
+ "n": "02",
+ "bloco": "A",
+ "persona": "persona-nao-declarada",
+ "modelo": "qwen3.5:9b",
+ "pergunta": "o que distingue um tipo de um papel?",
+ "contexto_de": {
+  "rodada": "G0-rag-base",
+  "acervo_sha": "24ed2cbf607e73ab1e8ab79c0d286bf2996b5751db4e63cfb97c2f313dfc25c7",
+  "n_fontes": 7,
+  "chars_contexto": 12036,
+  "cobertura_rag": "fraca"
+ },
+ "amostragem": {
+  "temperature": 0,
+  "seed": 42,
+  "num_ctx": 16384,
+  "num_predict": 900
+ },
+ "chamada_em": "2026-08-07T00:08:44.417131+00:00",
+ "latencia_ms": 2237,
+ "tokens": {
+  "prompt_eval_count": 3655,
+  "eval_count": 21,
+  "eval_duration": 411829000,
+  "prompt_eval_duration": 1494420000,
+  "load_duration": 225264717,
+  "total_duration": 2236996168
+ },
+ "medidas": {
+  "chars": 83,
+  "frases": 2,
+  "frases_com_citacao": 1,
+  "taxa_citacao": 0.5,
+  "fontes_citadas": [
+   1
+  ],
+  "citacoes_fora_do_intervalo": [],
+  "declarou_nao_cobertura": true
+ },
+ "resposta_vazia": false,
+ "raciocinio_chars": 0,
+ "resposta": "Não há informação nas fontes fornecidas sobre o que distingue um tipo de papel. [1]"
+}

@@ -1,0 +1,46 @@
+{
+ "sonda": "G0",
+ "n": "27",
+ "bloco": "B",
+ "persona": "persona-nao-declarada",
+ "modelo": "granite4:latest",
+ "pergunta": "feature flag",
+ "contexto_de": {
+  "rodada": "G0-rag-base",
+  "acervo_sha": "24ed2cbf607e73ab1e8ab79c0d286bf2996b5751db4e63cfb97c2f313dfc25c7",
+  "n_fontes": 8,
+  "chars_contexto": 14646,
+  "cobertura_rag": "boa"
+ },
+ "amostragem": {
+  "temperature": 0,
+  "seed": 42,
+  "num_ctx": 16384,
+  "num_predict": 900
+ },
+ "chamada_em": "2026-08-07T00:07:52.563134+00:00",
+ "latencia_ms": 2105,
+ "tokens": {
+  "prompt_eval_count": 3539,
+  "eval_count": 174,
+  "eval_duration": 1318237000,
+  "prompt_eval_duration": 569419000,
+  "load_duration": 84535039,
+  "total_duration": 2105232822
+ },
+ "medidas": {
+  "chars": 672,
+  "frases": 5,
+  "frases_com_citacao": 2,
+  "taxa_citacao": 0.4,
+  "fontes_citadas": [
+   1,
+   3
+  ],
+  "citacoes_fora_do_intervalo": [],
+  "declarou_nao_cobertura": false
+ },
+ "resposta_vazia": false,
+ "raciocinio_chars": 0,
+ "resposta": "Feature flag é um mecanismo que permite que uma funcionalidade seja desligada ou ligada, ou trocada entre duas implementações diferentes de alguma funcionalidade. Essa abordagem pode ser especialmente útil durante a migração para microserviços, permitindo que a funcionalidade existente no monólito seja mantida em funcionamento enquanto se desenvolve e implanta novos recursos em microserviços.\n\nFontes:\n[1] Building Microservices Designing Fine-Grained Systems 2nd By Sam Newman.pdf · building-microservices-designing-fine-grained-systems-2nd-by-sam-newman-2021#feature-toggles\n[3] NickTune_ArchModernization.pdf · nicktune_archmodernization-2024#platform-capabilities~2"
+}

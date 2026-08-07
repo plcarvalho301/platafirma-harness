@@ -1,0 +1,46 @@
+{
+ "sonda": "G0",
+ "n": "05",
+ "bloco": "A",
+ "persona": "persona-nao-declarada",
+ "modelo": "gemma4:12b",
+ "pergunta": "o que é governança de dados?",
+ "contexto_de": {
+  "rodada": "G0-rag-base",
+  "acervo_sha": "24ed2cbf607e73ab1e8ab79c0d286bf2996b5751db4e63cfb97c2f313dfc25c7",
+  "n_fontes": 8,
+  "chars_contexto": 12902,
+  "cobertura_rag": "boa"
+ },
+ "amostragem": {
+  "temperature": 0,
+  "seed": 42,
+  "num_ctx": 16384,
+  "num_predict": 900
+ },
+ "chamada_em": "2026-08-07T00:17:40.698104+00:00",
+ "latencia_ms": 13877,
+ "tokens": {
+  "prompt_eval_count": 4069,
+  "eval_count": 118,
+  "eval_duration": 2630612000,
+  "prompt_eval_duration": 2024746000,
+  "load_duration": 9208535566,
+  "total_duration": 13877443913
+ },
+ "medidas": {
+  "chars": 584,
+  "frases": 2,
+  "frases_com_citacao": 2,
+  "taxa_citacao": 1.0,
+  "fontes_citadas": [
+   2,
+   6
+  ],
+  "citacoes_fora_do_intervalo": [],
+  "declarou_nao_cobertura": false
+ },
+ "resposta_vazia": false,
+ "raciocinio_chars": 0,
+ "resposta": "A governança de dados desempenha um papel basilar na implementação da estratégia de transformação digital do Estado para melhoria dos serviços e das políticas públicas, permitindo que as organizações extraiam valor e evidências de seus ativos de dados, garantam a conformidade e segurança, facilitem a tomada de decisões embasadas, promovam a cultura de dados, estabeleçam responsabilidade e prestação de contas [2]. Além disso, ela é utilizada para integrar e convergir os esforços das diversas unidades, impactando diretamente nas entregas de produtos de dados para a sociedade [6]."
+}

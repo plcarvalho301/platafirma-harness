@@ -1,0 +1,43 @@
+{
+ "sonda": "G0",
+ "n": "18",
+ "bloco": "B",
+ "persona": "persona-nao-declarada",
+ "modelo": "granite4:latest",
+ "pergunta": "estratégia de chunking",
+ "contexto_de": {
+  "rodada": "G0-rag-base",
+  "acervo_sha": "24ed2cbf607e73ab1e8ab79c0d286bf2996b5751db4e63cfb97c2f313dfc25c7",
+  "n_fontes": 8,
+  "chars_contexto": 13467,
+  "cobertura_rag": "boa"
+ },
+ "amostragem": {
+  "temperature": 0,
+  "seed": 42,
+  "num_ctx": 16384,
+  "num_predict": 900
+ },
+ "chamada_em": "2026-08-07T00:18:11.177405+00:00",
+ "latencia_ms": 1445,
+ "tokens": {
+  "prompt_eval_count": 3744,
+  "eval_count": 80,
+  "eval_duration": 602413000,
+  "prompt_eval_duration": 608454000,
+  "load_duration": 81809365,
+  "total_duration": 1445343361
+ },
+ "medidas": {
+  "chars": 405,
+  "frases": 3,
+  "frases_com_citacao": 0,
+  "taxa_citacao": 0.0,
+  "fontes_citadas": [],
+  "citacoes_fora_do_intervalo": [],
+  "declarou_nao_cobertura": false
+ },
+ "resposta_vazia": false,
+ "raciocinio_chars": 0,
+ "resposta": "A chunking strategy is necessary for breaking down long pieces of text into manageable segments that can be processed by models like LLMs. The choice of chunking method depends on the nature of the application, such as whether it's a direct question-answering system or involves summarization tasks. Embeddings model also plays a crucial role in determining the optimal chunk size for different use cases."
+}

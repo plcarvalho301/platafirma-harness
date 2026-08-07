@@ -1,0 +1,34 @@
+01. o que é um conceito e qual seu critério de identidade?
+02. o que distingue um tipo de um papel?
+03. o que é arquitetura de software?
+04. o que é arquitetura de dados?
+05. o que é governança de dados?
+06. o que é um domínio em gestão do conhecimento?
+07. o que é inteligência?
+08. o que é criptografia pós-quântica?
+09. o que é uma decisão arquitetural e quando se registra?
+10. o que é curadoria de acervo?
+11. DDD
+12. convergência sociotécnica
+13. arquitetura de negócios
+14. vocabulário controlado
+15. continuant e occurrent
+16. proveniência arquivística
+17. fusão recíproca de rankings
+18. estratégia de chunking
+19. quantização de modelo
+20. opportunity solution tree
+21. posicionamento de produto
+22. avaliação heurística
+23. gestão de incidente
+24. gestão de mudança
+25. observabilidade
+26. trunk-based development
+27. feature flag
+28. teste de contrato
+29. cryptoperiod
+30. nível de garantia de autenticação
+31. gestão de acesso privilegiado
+32. cost of delay
+33. limite de WIP
+34. role charter

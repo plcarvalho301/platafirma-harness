@@ -1,0 +1,613 @@
+{
+ "modelo": "qwen3.5:9b",
+ "ps_apos_primeira_sonda": {
+  "models": [
+   {
+    "name": "qwen3.5:9b",
+    "model": "qwen3.5:9b",
+    "size": 6165354249,
+    "digest": "6488c96fa5faab64bb65cbd30d4289e20e6130ef535a93ef9a49f42eda893ea7",
+    "details": {
+     "parent_model": "",
+     "format": "gguf",
+     "family": "qwen35",
+     "families": [
+      "qwen35"
+     ],
+     "parameter_size": "9.7B",
+     "quantization_level": "Q4_K_M"
+    },
+    "expires_at": "2026-08-06T21:18:42.177916336-03:00",
+    "size_vram": 6165354249,
+    "context_length": 16384
+   }
+  ]
+ },
+ "amostragem": {
+  "temperature": 0,
+  "seed": 42,
+  "num_ctx": 16384,
+  "num_predict": 900
+ },
+ "sistema": "Voce responde APENAS com base nas fontes numeradas fornecidas.\nRegras, sem excecao:\n1. Toda frase cita a fonte entre colchetes, ex.: [3].\n2. Use so as fontes que tratam do conceito EXATO perguntado; fonte vizinha nao serve.\n3. Se nenhuma fonte cobrir o conceito perguntado, diga que o acervo nao cobre. Nao responda pela vizinha, nao complete com conhecimento proprio.\nResponda em portugues do Brasil, direto, sem preambulo.",
+ "linhas": [
+  {
+   "n": "01",
+   "bloco": "A",
+   "latencia_ms": 10224,
+   "tok_s": 69.1,
+   "chars": 642,
+   "frases": 4,
+   "frases_com_citacao": 3,
+   "taxa_citacao": 0.75,
+   "fontes_citadas": [
+    3,
+    4,
+    6,
+    7,
+    8
+   ],
+   "citacoes_fora_do_intervalo": [],
+   "declarou_nao_cobertura": true
+  },
+  {
+   "n": "02",
+   "bloco": "A",
+   "latencia_ms": 2237,
+   "tok_s": 51.0,
+   "chars": 83,
+   "frases": 2,
+   "frases_com_citacao": 1,
+   "taxa_citacao": 0.5,
+   "fontes_citadas": [
+    1
+   ],
+   "citacoes_fora_do_intervalo": [],
+   "declarou_nao_cobertura": true
+  },
+  {
+   "n": "03",
+   "bloco": "A",
+   "latencia_ms": 3147,
+   "tok_s": 56.7,
+   "chars": 448,
+   "frases": 2,
+   "frases_com_citacao": 2,
+   "taxa_citacao": 1.0,
+   "fontes_citadas": [
+    2,
+    3
+   ],
+   "citacoes_fora_do_intervalo": [],
+   "declarou_nao_cobertura": false
+  },
+  {
+   "n": "04",
+   "bloco": "A",
+   "latencia_ms": 4228,
+   "tok_s": 56.3,
+   "chars": 773,
+   "frases": 4,
+   "frases_com_citacao": 4,
+   "taxa_citacao": 1.0,
+   "fontes_citadas": [
+    1,
+    2,
+    3,
+    5
+   ],
+   "citacoes_fora_do_intervalo": [],
+   "declarou_nao_cobertura": false
+  },
+  {
+   "n": "05",
+   "bloco": "A",
+   "latencia_ms": 4357,
+   "tok_s": 55.8,
+   "chars": 658,
+   "frases": 3,
+   "frases_com_citacao": 3,
+   "taxa_citacao": 1.0,
+   "fontes_citadas": [
+    2,
+    3,
+    4,
+    6,
+    8
+   ],
+   "citacoes_fora_do_intervalo": [],
+   "declarou_nao_cobertura": false
+  },
+  {
+   "n": "06",
+   "bloco": "A",
+   "latencia_ms": 3286,
+   "tok_s": 56.9,
+   "chars": 361,
+   "frases": 3,
+   "frases_com_citacao": 3,
+   "taxa_citacao": 1.0,
+   "fontes_citadas": [
+    5,
+    6
+   ],
+   "citacoes_fora_do_intervalo": [],
+   "declarou_nao_cobertura": false
+  },
+  {
+   "n": "07",
+   "bloco": "A",
+   "latencia_ms": 6292,
+   "tok_s": 55.8,
+   "chars": 1159,
+   "frases": 5,
+   "frases_com_citacao": 5,
+   "taxa_citacao": 1.0,
+   "fontes_citadas": [
+    1,
+    2,
+    3,
+    7,
+    8
+   ],
+   "citacoes_fora_do_intervalo": [],
+   "declarou_nao_cobertura": false
+  },
+  {
+   "n": "08",
+   "bloco": "A",
+   "latencia_ms": 4164,
+   "tok_s": 56.3,
+   "chars": 574,
+   "frases": 3,
+   "frases_com_citacao": 3,
+   "taxa_citacao": 1.0,
+   "fontes_citadas": [
+    1,
+    4,
+    8
+   ],
+   "citacoes_fora_do_intervalo": [],
+   "declarou_nao_cobertura": false
+  },
+  {
+   "n": "09",
+   "bloco": "A",
+   "latencia_ms": 4913,
+   "tok_s": 56.2,
+   "chars": 901,
+   "frases": 4,
+   "frases_com_citacao": 4,
+   "taxa_citacao": 1.0,
+   "fontes_citadas": [
+    1,
+    3,
+    8
+   ],
+   "citacoes_fora_do_intervalo": [],
+   "declarou_nao_cobertura": false
+  },
+  {
+   "n": "10",
+   "bloco": "A",
+   "latencia_ms": 4109,
+   "tok_s": 53.8,
+   "chars": 411,
+   "frases": 3,
+   "frases_com_citacao": 1,
+   "taxa_citacao": 0.333,
+   "fontes_citadas": [
+    1,
+    3,
+    4,
+    5,
+    8
+   ],
+   "citacoes_fora_do_intervalo": [],
+   "declarou_nao_cobertura": true
+  },
+  {
+   "n": "11",
+   "bloco": "B",
+   "latencia_ms": 8479,
+   "tok_s": 56.6,
+   "chars": 203,
+   "frases": 2,
+   "frases_com_citacao": 1,
+   "taxa_citacao": 0.5,
+   "fontes_citadas": [
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8
+   ],
+   "citacoes_fora_do_intervalo": [],
+   "declarou_nao_cobertura": true
+  },
+  {
+   "n": "12",
+   "bloco": "B",
+   "latencia_ms": 2999,
+   "tok_s": 56.7,
+   "chars": 285,
+   "frases": 2,
+   "frases_com_citacao": 1,
+   "taxa_citacao": 0.5,
+   "fontes_citadas": [
+    2
+   ],
+   "citacoes_fora_do_intervalo": [],
+   "declarou_nao_cobertura": false
+  },
+  {
+   "n": "13",
+   "bloco": "B",
+   "latencia_ms": 3720,
+   "tok_s": 56.2,
+   "chars": 714,
+   "frases": 4,
+   "frases_com_citacao": 4,
+   "taxa_citacao": 1.0,
+   "fontes_citadas": [
+    1,
+    2,
+    6
+   ],
+   "citacoes_fora_do_intervalo": [],
+   "declarou_nao_cobertura": false
+  },
+  {
+   "n": "14",
+   "bloco": "B",
+   "latencia_ms": 3911,
+   "tok_s": 56.1,
+   "chars": 686,
+   "frases": 4,
+   "frases_com_citacao": 4,
+   "taxa_citacao": 1.0,
+   "fontes_citadas": [
+    2,
+    3,
+    5,
+    6
+   ],
+   "citacoes_fora_do_intervalo": [],
+   "declarou_nao_cobertura": false
+  },
+  {
+   "n": "15",
+   "bloco": "B",
+   "latencia_ms": 5665,
+   "tok_s": 56.1,
+   "chars": 998,
+   "frases": 4,
+   "frases_com_citacao": 4,
+   "taxa_citacao": 1.0,
+   "fontes_citadas": [
+    1,
+    2,
+    3
+   ],
+   "citacoes_fora_do_intervalo": [],
+   "declarou_nao_cobertura": false
+  },
+  {
+   "n": "16",
+   "bloco": "B",
+   "latencia_ms": 3210,
+   "tok_s": 56.1,
+   "chars": 336,
+   "frases": 3,
+   "frases_com_citacao": 3,
+   "taxa_citacao": 1.0,
+   "fontes_citadas": [
+    4,
+    6,
+    7
+   ],
+   "citacoes_fora_do_intervalo": [],
+   "declarou_nao_cobertura": false
+  },
+  {
+   "n": "17",
+   "bloco": "B",
+   "latencia_ms": 4513,
+   "tok_s": 51.3,
+   "chars": 574,
+   "frases": 2,
+   "frases_com_citacao": 2,
+   "taxa_citacao": 1.0,
+   "fontes_citadas": [
+    1,
+    4
+   ],
+   "citacoes_fora_do_intervalo": [],
+   "declarou_nao_cobertura": false
+  },
+  {
+   "n": "18",
+   "bloco": "B",
+   "latencia_ms": 6052,
+   "tok_s": 55.7,
+   "chars": 1067,
+   "frases": 5,
+   "frases_com_citacao": 4,
+   "taxa_citacao": 0.8,
+   "fontes_citadas": [
+    3,
+    4,
+    5,
+    8
+   ],
+   "citacoes_fora_do_intervalo": [],
+   "declarou_nao_cobertura": false
+  },
+  {
+   "n": "19",
+   "bloco": "B",
+   "latencia_ms": 4512,
+   "tok_s": 55.7,
+   "chars": 566,
+   "frases": 3,
+   "frases_com_citacao": 3,
+   "taxa_citacao": 1.0,
+   "fontes_citadas": [
+    3
+   ],
+   "citacoes_fora_do_intervalo": [],
+   "declarou_nao_cobertura": false
+  },
+  {
+   "n": "20",
+   "bloco": "B",
+   "latencia_ms": 2795,
+   "tok_s": 57.0,
+   "chars": 207,
+   "frases": 1,
+   "frases_com_citacao": 1,
+   "taxa_citacao": 1.0,
+   "fontes_citadas": [
+    2
+   ],
+   "citacoes_fora_do_intervalo": [],
+   "declarou_nao_cobertura": false
+  },
+  {
+   "n": "21",
+   "bloco": "B",
+   "latencia_ms": 4412,
+   "tok_s": 53.1,
+   "chars": 755,
+   "frases": 4,
+   "frases_com_citacao": 4,
+   "taxa_citacao": 1.0,
+   "fontes_citadas": [
+    1,
+    4,
+    5,
+    8
+   ],
+   "citacoes_fora_do_intervalo": [],
+   "declarou_nao_cobertura": false
+  },
+  {
+   "n": "22",
+   "bloco": "B",
+   "latencia_ms": 3478,
+   "tok_s": 56.4,
+   "chars": 427,
+   "frases": 2,
+   "frases_com_citacao": 1,
+   "taxa_citacao": 0.5,
+   "fontes_citadas": [
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8
+   ],
+   "citacoes_fora_do_intervalo": [],
+   "declarou_nao_cobertura": false
+  },
+  {
+   "n": "23",
+   "bloco": "B",
+   "latencia_ms": 4282,
+   "tok_s": 56.2,
+   "chars": 689,
+   "frases": 4,
+   "frases_com_citacao": 4,
+   "taxa_citacao": 1.0,
+   "fontes_citadas": [
+    1,
+    3,
+    8
+   ],
+   "citacoes_fora_do_intervalo": [],
+   "declarou_nao_cobertura": false
+  },
+  {
+   "n": "24",
+   "bloco": "B",
+   "latencia_ms": 5820,
+   "tok_s": 56.0,
+   "chars": 1113,
+   "frases": 4,
+   "frases_com_citacao": 4,
+   "taxa_citacao": 1.0,
+   "fontes_citadas": [
+    1,
+    3,
+    4,
+    7
+   ],
+   "citacoes_fora_do_intervalo": [],
+   "declarou_nao_cobertura": false
+  },
+  {
+   "n": "25",
+   "bloco": "B",
+   "latencia_ms": 3803,
+   "tok_s": 46.0,
+   "chars": 395,
+   "frases": 3,
+   "frases_com_citacao": 3,
+   "taxa_citacao": 1.0,
+   "fontes_citadas": [
+    3,
+    4,
+    6
+   ],
+   "citacoes_fora_do_intervalo": [],
+   "declarou_nao_cobertura": false
+  },
+  {
+   "n": "26",
+   "bloco": "B",
+   "latencia_ms": 4395,
+   "tok_s": 56.3,
+   "chars": 741,
+   "frases": 3,
+   "frases_com_citacao": 3,
+   "taxa_citacao": 1.0,
+   "fontes_citadas": [
+    2,
+    7
+   ],
+   "citacoes_fora_do_intervalo": [],
+   "declarou_nao_cobertura": false
+  },
+  {
+   "n": "27",
+   "bloco": "B",
+   "latencia_ms": 4235,
+   "tok_s": 49.8,
+   "chars": 588,
+   "frases": 3,
+   "frases_com_citacao": 3,
+   "taxa_citacao": 1.0,
+   "fontes_citadas": [
+    1,
+    2
+   ],
+   "citacoes_fora_do_intervalo": [],
+   "declarou_nao_cobertura": false
+  },
+  {
+   "n": "28",
+   "bloco": "B",
+   "latencia_ms": 2399,
+   "tok_s": 60.3,
+   "chars": 56,
+   "frases": 1,
+   "frases_com_citacao": 0,
+   "taxa_citacao": 0.0,
+   "fontes_citadas": [],
+   "citacoes_fora_do_intervalo": [],
+   "declarou_nao_cobertura": true
+  },
+  {
+   "n": "29",
+   "bloco": "B",
+   "latencia_ms": 3654,
+   "tok_s": 55.5,
+   "chars": 312,
+   "frases": 2,
+   "frases_com_citacao": 1,
+   "taxa_citacao": 0.5,
+   "fontes_citadas": [
+    2,
+    4
+   ],
+   "citacoes_fora_do_intervalo": [],
+   "declarou_nao_cobertura": true
+  },
+  {
+   "n": "30",
+   "bloco": "B",
+   "latencia_ms": 3187,
+   "tok_s": 56.4,
+   "chars": 288,
+   "frases": 2,
+   "frases_com_citacao": 1,
+   "taxa_citacao": 0.5,
+   "fontes_citadas": [
+    3
+   ],
+   "citacoes_fora_do_intervalo": [],
+   "declarou_nao_cobertura": true
+  },
+  {
+   "n": "31",
+   "bloco": "B",
+   "latencia_ms": 3627,
+   "tok_s": 56.1,
+   "chars": 499,
+   "frases": 3,
+   "frases_com_citacao": 3,
+   "taxa_citacao": 1.0,
+   "fontes_citadas": [
+    1,
+    6,
+    7
+   ],
+   "citacoes_fora_do_intervalo": [],
+   "declarou_nao_cobertura": false
+  },
+  {
+   "n": "32",
+   "bloco": "B",
+   "latencia_ms": 4350,
+   "tok_s": 56.1,
+   "chars": 621,
+   "frases": 3,
+   "frases_com_citacao": 3,
+   "taxa_citacao": 1.0,
+   "fontes_citadas": [
+    4,
+    6,
+    7
+   ],
+   "citacoes_fora_do_intervalo": [],
+   "declarou_nao_cobertura": false
+  },
+  {
+   "n": "33",
+   "bloco": "B",
+   "latencia_ms": 4528,
+   "tok_s": 50.2,
+   "chars": 621,
+   "frases": 3,
+   "frases_com_citacao": 3,
+   "taxa_citacao": 1.0,
+   "fontes_citadas": [
+    6,
+    7
+   ],
+   "citacoes_fora_do_intervalo": [],
+   "declarou_nao_cobertura": false
+  },
+  {
+   "n": "34",
+   "bloco": "B",
+   "latencia_ms": 3263,
+   "tok_s": 56.6,
+   "chars": 545,
+   "frases": 3,
+   "frases_com_citacao": 3,
+   "taxa_citacao": 1.0,
+   "fontes_citadas": [
+    3
+   ],
+   "citacoes_fora_do_intervalo": [],
+   "declarou_nao_cobertura": false
+  }
+ ]
+}

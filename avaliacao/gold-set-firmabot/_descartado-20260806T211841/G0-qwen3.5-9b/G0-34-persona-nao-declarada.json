@@ -1,0 +1,45 @@
+{
+ "sonda": "G0",
+ "n": "34",
+ "bloco": "B",
+ "persona": "persona-nao-declarada",
+ "modelo": "qwen3.5:9b",
+ "pergunta": "role charter",
+ "contexto_de": {
+  "rodada": "G0-rag-base",
+  "acervo_sha": "24ed2cbf607e73ab1e8ab79c0d286bf2996b5751db4e63cfb97c2f313dfc25c7",
+  "n_fontes": 8,
+  "chars_contexto": 8744,
+  "cobertura_rag": "fraca"
+ },
+ "amostragem": {
+  "temperature": 0,
+  "seed": 42,
+  "num_ctx": 16384,
+  "num_predict": 900
+ },
+ "chamada_em": "2026-08-07T00:16:04.161912+00:00",
+ "latencia_ms": 3311,
+ "tokens": {
+  "prompt_eval_count": 2377,
+  "eval_count": 108,
+  "eval_duration": 1903126000,
+  "prompt_eval_duration": 1003683000,
+  "load_duration": 276827444,
+  "total_duration": 3310876579
+ },
+ "medidas": {
+  "chars": 545,
+  "frases": 3,
+  "frases_com_citacao": 3,
+  "taxa_citacao": 1.0,
+  "fontes_citadas": [
+   3
+  ],
+  "citacoes_fora_do_intervalo": [],
+  "declarou_nao_cobertura": false
+ },
+ "resposta_vazia": false,
+ "raciocinio_chars": 0,
+ "resposta": "O documento de carta (charter) é um documento crítico para um programa de governança de dados que tem como propósitos definir o quadro operacional, documentar os objetivos e identificar componentes como conselhos ou patrocinadores [3]. Ele também estabelece o nível de autoridade dos órgãos operacionais da DG e identifica os tipos de federação e participantes [3]. Em organizações maiores, pode ser necessário uma carta separada para cada \"camada\" do quadro operacional, incluindo cartas específicas para patrocinadores, conselhos e fóruns [3]."
+}

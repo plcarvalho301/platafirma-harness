@@ -1,0 +1,43 @@
+{
+ "sonda": "G0",
+ "n": "13",
+ "bloco": "B",
+ "persona": "persona-nao-declarada",
+ "modelo": "granite4:latest",
+ "pergunta": "arquitetura de negócios",
+ "contexto_de": {
+  "rodada": "G0-rag-base",
+  "acervo_sha": "24ed2cbf607e73ab1e8ab79c0d286bf2996b5751db4e63cfb97c2f313dfc25c7",
+  "n_fontes": 8,
+  "chars_contexto": 9020,
+  "cobertura_rag": "boa"
+ },
+ "amostragem": {
+  "temperature": 0,
+  "seed": 42,
+  "num_ctx": 16384,
+  "num_predict": 900
+ },
+ "chamada_em": "2026-08-07T00:17:16.839806+00:00",
+ "latencia_ms": 14369,
+ "tokens": {
+  "prompt_eval_count": 1957,
+  "eval_count": 457,
+  "eval_duration": 3326012000,
+  "prompt_eval_duration": 352311000,
+  "load_duration": 10681966444,
+  "total_duration": 14369071724
+ },
+ "medidas": {
+  "chars": 1806,
+  "frases": 10,
+  "frases_com_citacao": 0,
+  "taxa_citacao": 0.0,
+  "fontes_citadas": [],
+  "citacoes_fora_do_intervalo": [],
+  "declarou_nao_cobertura": false
+ },
+ "resposta_vazia": false,
+ "raciocinio_chars": 0,
+ "resposta": "Arquitetura de negócios é um conjunto de práticas e ferramentas que ajudam a definir, planejar, implementar e gerenciar as estruturas organizacionais necessárias para alcançar os objetivos estratégicos de uma empresa. Ela inclui a definição de modelos de negócio, a criação de visões estratégicas e táticas, a identificação de oportunidades de inovação e a implementação de soluções que apoiem esses objetivos.\n\nA arquitetura de negócios é fundamental para garantir que as atividades da empresa estejam alinhadas com os objetivos estratégicos e que haja uma comunicação clara entre diferentes departamentos e equipes. Ela também ajuda a identificar áreas de melhoria, inovação e otimização de processos.\n\nA arquitetura de negócios é frequentemente usada em conjunto com outras práticas de gestão, como o desenvolvimento estratégico, a planejamento financeiro e a gestão de riscos. Ela também pode ser integrada com ferramentas de modelagem de negócio, como o Business Model Canvas, para facilitar a comunicação e a colaboração entre diferentes partes interessadas.\n\nA adoção da arquitetura de negócios pode ajudar a resolver problemas relacionados à falta de comunicação entre departamentos, conflitos de informações e resultados mal sincronizados. Ela também pode contribuir para reduzir custos associados à implementação de soluções que não entregam os resultados esperados e melhorar a tomada de decisões estratégicas.\n\nEm resumo, a arquitetura de negócios é uma abordagem holística que visa criar um entendimento compartilhado da organização e seus objetivos, bem como identificar oportunidades para inovação e melhoria. Ela é essencial para garantir que as atividades da empresa estejam alinhadas com os objetivos estratégicos e que haja uma comunicação clara entre diferentes departamentos e equipes."
+}

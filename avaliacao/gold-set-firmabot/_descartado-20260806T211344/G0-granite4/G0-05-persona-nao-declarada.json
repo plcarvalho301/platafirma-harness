@@ -1,0 +1,49 @@
+{
+ "sonda": "G0",
+ "n": "05",
+ "bloco": "A",
+ "persona": "persona-nao-declarada",
+ "modelo": "granite4:latest",
+ "pergunta": "o que é governança de dados?",
+ "contexto_de": {
+  "rodada": "G0-rag-base",
+  "acervo_sha": "24ed2cbf607e73ab1e8ab79c0d286bf2996b5751db4e63cfb97c2f313dfc25c7",
+  "n_fontes": 8,
+  "chars_contexto": 12902,
+  "cobertura_rag": "boa"
+ },
+ "amostragem": {
+  "temperature": 0,
+  "seed": 42,
+  "num_ctx": 16384,
+  "num_predict": 900
+ },
+ "chamada_em": "2026-08-07T00:09:47.304771+00:00",
+ "latencia_ms": 23206,
+ "tokens": {
+  "prompt_eval_count": 4390,
+  "eval_count": 601,
+  "eval_duration": 21903689000,
+  "prompt_eval_duration": 1114725000,
+  "load_duration": 83058971,
+  "total_duration": 23205905657
+ },
+ "medidas": {
+  "chars": 2272,
+  "frases": 10,
+  "frases_com_citacao": 6,
+  "taxa_citacao": 0.6,
+  "fontes_citadas": [
+   1,
+   2,
+   5,
+   6,
+   8
+  ],
+  "citacoes_fora_do_intervalo": [],
+  "declarou_nao_cobertura": false
+ },
+ "resposta_vazia": false,
+ "raciocinio_chars": 0,
+ "resposta": "Governança de dados é o conjunto de princípios, políticas, processos, práticas e tecnologias que garantem a gestão adequada dos dados em uma organização ou instituição. Ela envolve a definição de papéis e responsabilidades claros, a criação de estruturas organizacionais para o gerenciamento de dados, a implementação de processos de qualidade e segurança de dados, bem como a promoção da transparência e da responsabilidade na utilização desses recursos. A governança de dados também inclui a definição de padrões e políticas relacionadas à privacidade, segurança e conformidade com as leis e regulamentos aplicáveis.\n\nFonte: [1]\n\nOutras fontes também reforçam essa definição:\n\n- O artigo 3.5 do Decreto nº 10.046 de 2019 (fonte [8]) estabelece que a governança de dados deve ser responsável por simplificar a oferta de serviços públicos, orientar e otimizar a formulação, implementação, avaliação e monitoramento de políticas públicas, possibilitar a análise das condições de acesso e manutenção de benefícios sociais e fiscais, promover a melhoria da qualidade e fidedignidade dos dados custodiados pela administração pública federal e aumentar a qualidade e eficiência das operações internas da administração pública federal.\n\n- O artigo 5.2 do Decreto nº 10.046 de 2019 (fonte [8]) identifica o risco de não conformidade em relação às regulações de privacidade e sigilo, que pode ter impactos negativos como acesso indevido a dados pessoais, sensíveis e sigilosos, bem como seu uso indevido.\n\n- A Cartilha de Governança de Dados (fonte [2]) destaca que a governança de dados é fundamental para garantir o uso de dados como ativo estratégico, garantir conformidade e segurança, facilitar a tomada de decisões embasadas, promover a cultura de dados, estabelecer responsabilidade e prestação de contas.\n\n- A Cartilha do Catálogo Nacional de Dados (fonte [5]) define o Catálogo Nacional de Dados como um instrumento estratégico para garantir que os dados sejam usados de forma eficaz e eficiente, promovendo a transparência, a responsabilidade e a inovação na sociedade.\n\n- O Modelo de Maturidade de Dados (fonte [6]) destaca a importância da governança de dados para melhorar a qualidade e consistência das políticas públicas, maximizando os benefícios para a sociedade."
+}

@@ -1,0 +1,46 @@
+{
+ "sonda": "G0",
+ "n": "27",
+ "bloco": "B",
+ "persona": "persona-nao-declarada",
+ "modelo": "qwen3.5:9b",
+ "pergunta": "feature flag",
+ "contexto_de": {
+  "rodada": "G0-rag-base",
+  "acervo_sha": "24ed2cbf607e73ab1e8ab79c0d286bf2996b5751db4e63cfb97c2f313dfc25c7",
+  "n_fontes": 8,
+  "chars_contexto": 14646,
+  "cobertura_rag": "boa"
+ },
+ "amostragem": {
+  "temperature": 0,
+  "seed": 42,
+  "num_ctx": 16384,
+  "num_predict": 900
+ },
+ "chamada_em": "2026-08-07T00:15:38.731252+00:00",
+ "latencia_ms": 3982,
+ "tokens": {
+  "prompt_eval_count": 3701,
+  "eval_count": 115,
+  "eval_duration": 2036769000,
+  "prompt_eval_duration": 1530781000,
+  "load_duration": 286947486,
+  "total_duration": 3982081091
+ },
+ "medidas": {
+  "chars": 588,
+  "frases": 3,
+  "frases_com_citacao": 3,
+  "taxa_citacao": 1.0,
+  "fontes_citadas": [
+   1,
+   2
+  ],
+  "citacoes_fora_do_intervalo": [],
+  "declarou_nao_cobertura": false
+ },
+ "resposta_vazia": false,
+ "raciocinio_chars": 0,
+ "resposta": "Feature flags, também conhecidos como feature toggles, são mecanismos que permitem ocultar funcionalidades implantadas atrás de um interruptor que pode ser usado para ligar ou desligar a funcionalidade [1]. Eles são frequentemente usados no desenvolvimento baseado em trunk (trunk-based development), onde funcionalidades não concluídas podem ser verificadas e implantadas, mas ainda ocultas dos usuários finais [1]. Além disso, feature toggles permitem alternar entre duas implementações diferentes de alguma funcionalidade ou desligar uma característica que está causando problemas [2]."
+}

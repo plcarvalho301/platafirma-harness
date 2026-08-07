@@ -1,0 +1,48 @@
+{
+ "sonda": "G0",
+ "n": "04",
+ "bloco": "A",
+ "persona": "persona-nao-declarada",
+ "modelo": "gemma4:12b",
+ "pergunta": "o que é arquitetura de dados?",
+ "contexto_de": {
+  "rodada": "G0-rag-base",
+  "acervo_sha": "24ed2cbf607e73ab1e8ab79c0d286bf2996b5751db4e63cfb97c2f313dfc25c7",
+  "n_fontes": 8,
+  "chars_contexto": 11325,
+  "cobertura_rag": "boa"
+ },
+ "amostragem": {
+  "temperature": 0,
+  "seed": 42,
+  "num_ctx": 16384,
+  "num_predict": 900
+ },
+ "chamada_em": "2026-08-07T00:12:20.756335+00:00",
+ "latencia_ms": 15394,
+ "tokens": {
+  "prompt_eval_count": 2894,
+  "eval_count": 212,
+  "eval_duration": 4719398000,
+  "prompt_eval_duration": 1460077000,
+  "load_duration": 9201895978,
+  "total_duration": 15393742944
+ },
+ "medidas": {
+  "chars": 999,
+  "frases": 5,
+  "frases_com_citacao": 4,
+  "taxa_citacao": 0.8,
+  "fontes_citadas": [
+   1,
+   2,
+   3,
+   5
+  ],
+  "citacoes_fora_do_intervalo": [],
+  "declarou_nao_cobertura": false
+ },
+ "resposta_vazia": false,
+ "raciocinio_chars": 0,
+ "resposta": "A arquitetura de dados pode ser definida de diversas formas dependendo do contexto:\n\n*   É um subconjunto da arquitetura corporativa, herdando propriedades como processos, estratégia, gestão de mudanças e avaliação de compensações (trade-offs) [1].\n*   É uma representação do ambiente de gerenciamento de dados (DM), seus componentes e suas interações, relacionando o framework, pessoas, processos, projetos, políticas, tecnologias e procedimentos para gerenciar e usar ativos de informação valiosos da empresa [2].\n*   Segundo a definição do DAMA, é identificar as necessidades de dados da empresa (independentemente da estrutura) e projetar e manter os modelos mestres (master blueprints) para atender a essas necessidades, servindo para guiar a integração de dados, controlar ativos de dados e alinhar investimentos em dados com a estratégia de negócios [3].\n*   Reflete o estado atual e futuro dos sistemas de dados que apoiam as necessidades e estratégias de longo prazo de uma organização [5]."
+}

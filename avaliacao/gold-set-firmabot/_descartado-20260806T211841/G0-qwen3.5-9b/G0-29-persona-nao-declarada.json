@@ -1,0 +1,46 @@
+{
+ "sonda": "G0",
+ "n": "29",
+ "bloco": "B",
+ "persona": "persona-nao-declarada",
+ "modelo": "qwen3.5:9b",
+ "pergunta": "cryptoperiod",
+ "contexto_de": {
+  "rodada": "G0-rag-base",
+  "acervo_sha": "24ed2cbf607e73ab1e8ab79c0d286bf2996b5751db4e63cfb97c2f313dfc25c7",
+  "n_fontes": 8,
+  "chars_contexto": 12975,
+  "cobertura_rag": "boa"
+ },
+ "amostragem": {
+  "temperature": 0,
+  "seed": 42,
+  "num_ctx": 16384,
+  "num_predict": 900
+ },
+ "chamada_em": "2026-08-07T00:15:44.800248+00:00",
+ "latencia_ms": 3648,
+ "tokens": {
+  "prompt_eval_count": 4452,
+  "eval_count": 77,
+  "eval_duration": 1362125000,
+  "prompt_eval_duration": 1850007000,
+  "load_duration": 293057805,
+  "total_duration": 3647650657
+ },
+ "medidas": {
+  "chars": 312,
+  "frases": 2,
+  "frases_com_citacao": 1,
+  "taxa_citacao": 0.5,
+  "fontes_citadas": [
+   2,
+   4
+  ],
+  "citacoes_fora_do_intervalo": [],
+  "declarou_nao_cobertura": true
+ },
+ "resposta_vazia": false,
+ "raciocinio_chars": 0,
+ "resposta": "O acervo não cobre o conceito exato de \"cryptoperiod\". Nenhuma das fontes fornecidas define ou discute especificamente esse termo; as fontes tratam do ciclo de vida criptográfico [2], [4] e cronogramas de migração para pós-quântica, mas sem mencionar a duração específica da validade de uma chave (cryptoperiod)."
+}

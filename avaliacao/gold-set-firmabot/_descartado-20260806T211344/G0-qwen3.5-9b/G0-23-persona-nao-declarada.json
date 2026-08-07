@@ -1,0 +1,47 @@
+{
+ "sonda": "G0",
+ "n": "23",
+ "bloco": "B",
+ "persona": "persona-nao-declarada",
+ "modelo": "qwen3.5:9b",
+ "pergunta": "gestão de incidente",
+ "contexto_de": {
+  "rodada": "G0-rag-base",
+  "acervo_sha": "24ed2cbf607e73ab1e8ab79c0d286bf2996b5751db4e63cfb97c2f313dfc25c7",
+  "n_fontes": 8,
+  "chars_contexto": 10669,
+  "cobertura_rag": "boa"
+ },
+ "amostragem": {
+  "temperature": 0,
+  "seed": 42,
+  "num_ctx": 16384,
+  "num_predict": 900
+ },
+ "chamada_em": "2026-08-07T00:10:16.966303+00:00",
+ "latencia_ms": 4282,
+ "tokens": {
+  "prompt_eval_count": 3590,
+  "eval_count": 131,
+  "eval_duration": 2331812000,
+  "prompt_eval_duration": 1503331000,
+  "load_duration": 258697016,
+  "total_duration": 4282376360
+ },
+ "medidas": {
+  "chars": 689,
+  "frases": 4,
+  "frases_com_citacao": 4,
+  "taxa_citacao": 1.0,
+  "fontes_citadas": [
+   1,
+   3,
+   8
+  ],
+  "citacoes_fora_do_intervalo": [],
+  "declarou_nao_cobertura": false
+ },
+ "resposta_vazia": false,
+ "raciocinio_chars": 0,
+ "resposta": "A gestão de incidente envolve estabelecer responsabilidades e procedimentos para assegurar respostas rápidas, efetivas e ordenadas [1]. O processo abrange atividades como registro de eventos, coleta e preservação de evidências, identificação das causas e tratamento dos incidentes [8]. Além disso, deve-se considerar diretrizes que incluem análise da causa do incidente, retenção de informações, planejamento de ação corretiva para prevenir repetição e comunicação com os afetados ou envolvidos na recuperação [1]. A participação em redes federais de gestão pode ser obrigatória para órgãos públicos ou voluntária por adesão no caso de empresas públicas e sociedades de economia mista [3]."
+}

@@ -1,0 +1,43 @@
+{
+ "sonda": "G0",
+ "n": "01",
+ "bloco": "A",
+ "persona": "persona-nao-declarada",
+ "modelo": "gemma4:12b",
+ "pergunta": "o que é um conceito e qual seu critério de identidade?",
+ "contexto_de": {
+  "rodada": "G0-rag-base",
+  "acervo_sha": "24ed2cbf607e73ab1e8ab79c0d286bf2996b5751db4e63cfb97c2f313dfc25c7",
+  "n_fontes": 8,
+  "chars_contexto": 11425,
+  "cobertura_rag": "fraca"
+ },
+ "amostragem": {
+  "temperature": 0,
+  "seed": 42,
+  "num_ctx": 16384,
+  "num_predict": 900
+ },
+ "chamada_em": "2026-08-07T00:16:44.206818+00:00",
+ "latencia_ms": 19907,
+ "tokens": {
+  "prompt_eval_count": 3780,
+  "eval_count": 7,
+  "eval_duration": 160573000,
+  "prompt_eval_duration": 1926090000,
+  "load_duration": 17792447405,
+  "total_duration": 19891716520
+ },
+ "medidas": {
+  "chars": 19,
+  "frases": 1,
+  "frases_com_citacao": 0,
+  "taxa_citacao": 0.0,
+  "fontes_citadas": [],
+  "citacoes_fora_do_intervalo": [],
+  "declarou_nao_cobertura": true
+ },
+ "resposta_vazia": false,
+ "raciocinio_chars": 0,
+ "resposta": "O acervo não cobre."
+}

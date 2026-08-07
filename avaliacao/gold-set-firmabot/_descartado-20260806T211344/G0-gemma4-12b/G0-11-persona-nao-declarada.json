@@ -1,0 +1,49 @@
+{
+ "sonda": "G0",
+ "n": "11",
+ "bloco": "B",
+ "persona": "persona-nao-declarada",
+ "modelo": "gemma4:12b",
+ "pergunta": "DDD",
+ "contexto_de": {
+  "rodada": "G0-rag-base",
+  "acervo_sha": "24ed2cbf607e73ab1e8ab79c0d286bf2996b5751db4e63cfb97c2f313dfc25c7",
+  "n_fontes": 8,
+  "chars_contexto": 13155,
+  "cobertura_rag": "boa"
+ },
+ "amostragem": {
+  "temperature": 0,
+  "seed": 42,
+  "num_ctx": 16384,
+  "num_predict": 900
+ },
+ "chamada_em": "2026-08-07T00:13:07.775296+00:00",
+ "latencia_ms": 10051,
+ "tokens": {
+  "prompt_eval_count": 3048,
+  "eval_count": 357,
+  "eval_duration": 7932734000,
+  "prompt_eval_duration": 1517260000,
+  "load_duration": 298663773,
+  "total_duration": 10050998847
+ },
+ "medidas": {
+  "chars": 1658,
+  "frases": 9,
+  "frases_com_citacao": 7,
+  "taxa_citacao": 0.778,
+  "fontes_citadas": [
+   1,
+   3,
+   4,
+   7,
+   8
+  ],
+  "citacoes_fora_do_intervalo": [],
+  "declarou_nao_cobertura": false
+ },
+ "resposta_vazia": false,
+ "raciocinio_chars": 0,
+ "resposta": "O Design-Driven Domain (DDD) é uma abordagem de desenvolvimento de software que visa ajudar a alcançar modelos de software de alta qualidade, onde o design do software reflete exatamente como ele funciona e expressa a solução para o objetivo de negócio [1].\n\nAs principais características e benefícios do DDD incluem:\n*   **Alinhamento com o Negócio:** O DDD coloca especialistas de domínio e desenvolvedores em um mesmo nível, criando uma equipe coesa que produz software que faz sentido para o negócio, não apenas para os programadores [4]. Isso elimina a necessidade de traduções entre especialistas, desenvolvedores e o software através do desenvolvimento de uma linguagem compartilhada [4].\n*   **Descoberta e Conhecimento:** O processo permite que todos aprendam sobre o negócio por meio de discussões de descoberta, centralizando o conhecimento e evitando que ele fique restrito apenas aos desenvolvedores (\"conhecimento tribal\") [4].\n*   **Valor Organizacional:** A implementação do DDD proporciona à organização um modelo útil de seu domínio, desenvolve uma definição precisa do negócio, permite a contribuição de especialistas no design do software e resulta em melhores experiências para o usuário [7].\n*   **Complexidade e Desafios:** O uso de DDD ajuda as equipes a lidarem com a complexidade do domínio [5, 6]. No entanto, exige esforço considerável para criar uma Linguagem Ubíqua (Ubiquitous Language), envolver especialistas continuamente e mudar a forma como os desenvolvedores pensam sobre as soluções no domínio [8].\n*   **Contexto de Microserviços:** Há um interesse e adoção crescente do DDD no contexto de microserviços desde 2017 [3]."
+}

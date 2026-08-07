@@ -1,0 +1,45 @@
+{
+ "sonda": "G0",
+ "n": "30",
+ "bloco": "B",
+ "persona": "persona-nao-declarada",
+ "modelo": "qwen3.5:9b",
+ "pergunta": "nível de garantia de autenticação",
+ "contexto_de": {
+  "rodada": "G0-rag-base",
+  "acervo_sha": "24ed2cbf607e73ab1e8ab79c0d286bf2996b5751db4e63cfb97c2f313dfc25c7",
+  "n_fontes": 8,
+  "chars_contexto": 13149,
+  "cobertura_rag": "boa"
+ },
+ "amostragem": {
+  "temperature": 0,
+  "seed": 42,
+  "num_ctx": 16384,
+  "num_predict": 900
+ },
+ "chamada_em": "2026-08-07T00:10:44.468075+00:00",
+ "latencia_ms": 3187,
+ "tokens": {
+  "prompt_eval_count": 3654,
+  "eval_count": 70,
+  "eval_duration": 1240803000,
+  "prompt_eval_duration": 1530686000,
+  "load_duration": 269171130,
+  "total_duration": 3186168632
+ },
+ "medidas": {
+  "chars": 288,
+  "frases": 2,
+  "frases_com_citacao": 1,
+  "taxa_citacao": 0.5,
+  "fontes_citadas": [
+   3
+  ],
+  "citacoes_fora_do_intervalo": [],
+  "declarou_nao_cobertura": true
+ },
+ "resposta_vazia": false,
+ "raciocinio_chars": 0,
+ "resposta": "O acervo não cobre o conceito exato perguntado. As fontes fornecidas mencionam \"níveis\" de garantia (como AALs ou níveis arbitrários de exemplo) [3], mas nenhuma fonte define especificamente um valor numérico, escala padrão ou definição técnica para o \"nível de garantia de autenticação\"."
+}

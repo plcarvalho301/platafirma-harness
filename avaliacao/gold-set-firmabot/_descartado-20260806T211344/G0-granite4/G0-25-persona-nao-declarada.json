@@ -1,0 +1,45 @@
+{
+ "sonda": "G0",
+ "n": "25",
+ "bloco": "B",
+ "persona": "persona-nao-declarada",
+ "modelo": "granite4:latest",
+ "pergunta": "observabilidade",
+ "contexto_de": {
+  "rodada": "G0-rag-base",
+  "acervo_sha": "24ed2cbf607e73ab1e8ab79c0d286bf2996b5751db4e63cfb97c2f313dfc25c7",
+  "n_fontes": 8,
+  "chars_contexto": 16147,
+  "cobertura_rag": "boa"
+ },
+ "amostragem": {
+  "temperature": 0,
+  "seed": 42,
+  "num_ctx": 16384,
+  "num_predict": 900
+ },
+ "chamada_em": "2026-08-07T00:07:47.617267+00:00",
+ "latencia_ms": 1843,
+ "tokens": {
+  "prompt_eval_count": 3698,
+  "eval_count": 131,
+  "eval_duration": 989330000,
+  "prompt_eval_duration": 598585000,
+  "load_duration": 85815450,
+  "total_duration": 1842539692
+ },
+ "medidas": {
+  "chars": 549,
+  "frases": 4,
+  "frases_com_citacao": 1,
+  "taxa_citacao": 0.25,
+  "fontes_citadas": [
+   5
+  ],
+  "citacoes_fora_do_intervalo": [],
+  "declarou_nao_cobertura": false
+ },
+ "resposta_vazia": false,
+ "raciocinio_chars": 0,
+ "resposta": "Observabilidade é um conceito que se refere à capacidade de entender e explicar qualquer estado que um sistema possa ter, independentemente de ser novo ou bizarro. É uma medida de como bem você pode compreender e diagnosticar problemas em seu sistema sem precisar definir ou prever esses problemas com antecedência. Para alcançar observabilidade, é necessário coletar e analisar dados de telemetria em detalhes granulares, permitindo que os desenvolvedores explorem e investiguem o comportamento do sistema de maneira iterativa e aberta.\n\nFonte: [5]"
+}

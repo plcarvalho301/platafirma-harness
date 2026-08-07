@@ -1,0 +1,45 @@
+{
+ "sonda": "G0",
+ "n": "17",
+ "bloco": "B",
+ "persona": "persona-nao-declarada",
+ "modelo": "granite4:latest",
+ "pergunta": "fusão recíproca de rankings",
+ "contexto_de": {
+  "rodada": "G0-rag-base",
+  "acervo_sha": "24ed2cbf607e73ab1e8ab79c0d286bf2996b5751db4e63cfb97c2f313dfc25c7",
+  "n_fontes": 8,
+  "chars_contexto": 13491,
+  "cobertura_rag": "boa"
+ },
+ "amostragem": {
+  "temperature": 0,
+  "seed": 42,
+  "num_ctx": 16384,
+  "num_predict": 900
+ },
+ "chamada_em": "2026-08-07T00:18:09.730680+00:00",
+ "latencia_ms": 9979,
+ "tokens": {
+  "prompt_eval_count": 3964,
+  "eval_count": 436,
+  "eval_duration": 3351231000,
+  "prompt_eval_duration": 698221000,
+  "load_duration": 5917420874,
+  "total_duration": 9979278817
+ },
+ "medidas": {
+  "chars": 1845,
+  "frases": 11,
+  "frases_com_citacao": 1,
+  "taxa_citacao": 0.091,
+  "fontes_citadas": [
+   5
+  ],
+  "citacoes_fora_do_intervalo": [],
+  "declarou_nao_cobertura": false
+ },
+ "resposta_vazia": false,
+ "raciocinio_chars": 0,
+ "resposta": "Fusão recíproca de rankings é uma técnica utilizada em sistemas de busca e recomendação para combinar as listas de resultados ordenadas por diferentes algoritmos ou modelos, com o objetivo de melhorar a qualidade das sugestões ou resultados apresentados ao usuário. Essa abordagem foi discutida pela primeira vez por Cormack et al. em 2009, no contexto de métodos de aprendizado supervisionado para otimizar rankings.\n\nA ideia central da fusão recíproca é considerar a posição dos itens na lista original (ou ranking) ao combinar diferentes listas ordenadas. Ao contrário de outras técnicas que combinam rankings apenas com base nas pontuações ou classificações individuais, a fusão recíproca leva em conta o impacto da posição dos itens na qualidade geral do resultado final.\n\nA abordagem descrita por Cormack et al. envolve a ordenação dos documentos de acordo com uma função simples que considera a posição dos itens (reciprocal rank), sem necessariamente precisar das pontuações individuais dos sistemas. Essa técnica tem sido demonstrada como tendendo a produzir melhores resultados do que qualquer um dos sistemas individuais ou métodos tradicionais de combinação, como o Condorcet Fuse.\n\nA importância da fusão recíproca reside em sua simplicidade e eficácia, pois não requer nenhum algoritmo especializado ou informações globais para ser aplicada. Ela pode ser implementada facilmente, ordenando os itens de acordo com a posição relativa nos rankings originais, o que permite uma combinação significativa da diversidade presente nas listas individuais sem perder a informação relevante contida em cada um.\n\nEssa abordagem tem sido aplicada em várias áreas além do domínio de busca e recomendação, como na análise de documentos para informações de inteligência (ver [5]), demonstrando sua versatilidade e eficácia em diferentes contextos."
+}

@@ -1,0 +1,43 @@
+{
+ "sonda": "G0",
+ "n": "02",
+ "bloco": "A",
+ "persona": "persona-nao-declarada",
+ "modelo": "granite4:latest",
+ "pergunta": "o que distingue um tipo de um papel?",
+ "contexto_de": {
+  "rodada": "G0-rag-base",
+  "acervo_sha": "24ed2cbf607e73ab1e8ab79c0d286bf2996b5751db4e63cfb97c2f313dfc25c7",
+  "n_fontes": 7,
+  "chars_contexto": 12036,
+  "cobertura_rag": "fraca"
+ },
+ "amostragem": {
+  "temperature": 0,
+  "seed": 42,
+  "num_ctx": 16384,
+  "num_predict": 900
+ },
+ "chamada_em": "2026-08-07T00:14:30.747254+00:00",
+ "latencia_ms": 16401,
+ "tokens": {
+  "prompt_eval_count": 3935,
+  "eval_count": 373,
+  "eval_duration": 13887754000,
+  "prompt_eval_duration": 2277064000,
+  "load_duration": 83212068,
+  "total_duration": 16400836733
+ },
+ "medidas": {
+  "chars": 1457,
+  "frases": 19,
+  "frases_com_citacao": 0,
+  "taxa_citacao": 0.0,
+  "fontes_citadas": [],
+  "citacoes_fora_do_intervalo": [],
+  "declarou_nao_cobertura": false
+ },
+ "resposta_vazia": false,
+ "raciocinio_chars": 0,
+ "resposta": "### O que distingue um tipo de um papel?\n\nUm tipo de papel é distinguido por suas características específicas e funções dentro de um sistema ou contexto. Essas características podem incluir:\n\n1. **Função**: Cada tipo de papel tem uma função particular dentro do sistema. Por exemplo, em processos legais, pode haver papéis distintos como juiz, advogado, réu e acusador.\n\n2. **Poderes e Limitações**: Os papéis são definidos por um conjunto de poderes (competências) e limitações (não-competências). Por exemplo, um juiz tem o poder de julgar casos legais, mas não pode infringir a liberdade dos réus.\n\n3. **Direitos e Obrigações**: Cada papel vem com direitos específicos e obrigações. Por exemplo, um advogado tem o direito de representar seus clientes, mas também a obrigação de manter a confidencialidade.\n\n4. **Interdependência**: Os papéis podem interagir entre si de maneiras específicas. Por exemplo, o papel do juiz pode depender da interpretação e aplicação dos princípios legais por parte dos advogados.\n\n5. **Contexto e Aplicação**: A aplicação de um papel pode variar dependendo do contexto legal ou institucional em que ele opera. Por exemplo, a liberdade de expressão pode ser um direito fundamental em um país democrático, mas pode ter restrições durante tempos de guerra.\n\nEssas distinções são fundamentais para entender como os papéis operam dentro de um sistema jurídico ou qualquer outro contexto complexo onde múltiplos papéis interagem."
+}

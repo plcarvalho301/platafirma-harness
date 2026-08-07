@@ -1,0 +1,43 @@
+{
+ "sonda": "G0",
+ "n": "24",
+ "bloco": "B",
+ "persona": "persona-nao-declarada",
+ "modelo": "granite4:latest",
+ "pergunta": "gestão de mudança",
+ "contexto_de": {
+  "rodada": "G0-rag-base",
+  "acervo_sha": "24ed2cbf607e73ab1e8ab79c0d286bf2996b5751db4e63cfb97c2f313dfc25c7",
+  "n_fontes": 8,
+  "chars_contexto": 15034,
+  "cobertura_rag": "boa"
+ },
+ "amostragem": {
+  "temperature": 0,
+  "seed": 42,
+  "num_ctx": 16384,
+  "num_predict": 900
+ },
+ "chamada_em": "2026-08-07T00:07:45.773436+00:00",
+ "latencia_ms": 3533,
+ "tokens": {
+  "prompt_eval_count": 4120,
+  "eval_count": 340,
+  "eval_duration": 2622287000,
+  "prompt_eval_duration": 689563000,
+  "load_duration": 84541923,
+  "total_duration": 3533200985
+ },
+ "medidas": {
+  "chars": 1351,
+  "frases": 15,
+  "frases_com_citacao": 0,
+  "taxa_citacao": 0.0,
+  "fontes_citadas": [],
+  "citacoes_fora_do_intervalo": [],
+  "declarou_nao_cobertura": false
+ },
+ "resposta_vazia": false,
+ "raciocinio_chars": 0,
+ "resposta": "Gestão de mudança é um processo estruturado para realizar e registrar alterações durante o desenvolvimento de software e operação do sistema. É essencial para criar uma estrutura de governança viável e cumprir a Lei Sarbanes-Oxley.\n\nA gestão de mudanças envolve manter registros detalhados do sistema, que às vezes pode ser considerada cara, inútil ou desnecessária em um ambiente tecnológico. No entanto, é crucial para o sucesso da governança e controle dentro de uma estrutura de TI.\n\nAs perguntas essenciais sobre a gestão de mudanças incluem:\n\n1. Como gerenciar resistência às mudanças?\n2. Como integrar DG em vários programas e projetos?\n3. Como garantir que os processos de DG sejam monitorados para eficácia?\n\nPara lidar com essas questões, é importante aplicar a gestão de mudança aos vários programas e projetos, integrando-a ao processo de desenvolvimento e operação do sistema. Isso pode ser feito por meio da criação de um PMO ou garantindo que o suporte e supervisão da organização estejam em vigor para cada projeto individual.\n\nAlém disso, é crucial seguir os planos de treinamento e comunicação, pois eles têm um propósito específico. Por fim, monitorar regularmente as métricas e os resultados dos projetos relacionados a dados é essencial para garantir que os processos de gestão de mudanças estejam funcionando conforme o esperado."
+}

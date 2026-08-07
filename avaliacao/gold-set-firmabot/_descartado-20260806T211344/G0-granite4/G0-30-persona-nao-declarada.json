@@ -1,0 +1,43 @@
+{
+ "sonda": "G0",
+ "n": "30",
+ "bloco": "B",
+ "persona": "persona-nao-declarada",
+ "modelo": "granite4:latest",
+ "pergunta": "nível de garantia de autenticação",
+ "contexto_de": {
+  "rodada": "G0-rag-base",
+  "acervo_sha": "24ed2cbf607e73ab1e8ab79c0d286bf2996b5751db4e63cfb97c2f313dfc25c7",
+  "n_fontes": 8,
+  "chars_contexto": 13149,
+  "cobertura_rag": "boa"
+ },
+ "amostragem": {
+  "temperature": 0,
+  "seed": 42,
+  "num_ctx": 16384,
+  "num_predict": 900
+ },
+ "chamada_em": "2026-08-07T00:08:02.095775+00:00",
+ "latencia_ms": 3691,
+ "tokens": {
+  "prompt_eval_count": 3521,
+  "eval_count": 375,
+  "eval_duration": 2851570000,
+  "prompt_eval_duration": 567825000,
+  "load_duration": 78501226,
+  "total_duration": 3691110233
+ },
+ "medidas": {
+  "chars": 1415,
+  "frases": 12,
+  "frases_com_citacao": 0,
+  "taxa_citacao": 0.0,
+  "fontes_citadas": [],
+  "citacoes_fora_do_intervalo": [],
+  "declarou_nao_cobertura": false
+ },
+ "resposta_vazia": false,
+ "raciocinio_chars": 0,
+ "resposta": "A certificação NIST SP 800-63B, versão 4, define três níveis de garantia de autenticação (Authentication Assurance Levels - AALs), que variam com base na complexidade e segurança exigidas para a autenticação. Esses níveis são:\n\n1. **AAL1**: Este é o nível mais básico de garantia de autenticação, onde a confiança no processo de autenticação é relativamente baixa. Exemplos incluem a autenticação apenas com uma senha ou um código simples enviado por SMS.\n\n2. **AAL2**: Neste nível, há uma melhoria significativa na segurança do processo de autenticação em comparação ao AAL1. Isso pode envolver o uso de um método de autenticação mais complexo, como a autenticação multifator (MFA) que inclui algo que o usuário sabe (como uma senha), algo que o usuário tem (como um dispositivo móvel para receber um OTP), e/ou algo que o usuário é (como biométrica).\n\n3. **AAL3**: Este é o nível mais alto de garantia de autenticação, exigindo a maior segurança e confiabilidade no processo de autenticação. O AAL3 geralmente envolve métodos de autenticação avançados que são muito difíceis de serem comprometidos por ataques de vários tipos, incluindo ataques sofisticados de phishing ou interceptação.\n\nEsses níveis ajudam a definir o padrão mínimo de segurança necessário para diferentes tipos de transações e serviços baseados em identidade digital, garantindo que os sistemas estejam adequadamente protegidos contra ameaças."
+}

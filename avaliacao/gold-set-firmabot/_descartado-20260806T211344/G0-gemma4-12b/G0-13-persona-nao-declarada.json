@@ -1,0 +1,45 @@
+{
+ "sonda": "G0",
+ "n": "13",
+ "bloco": "B",
+ "persona": "persona-nao-declarada",
+ "modelo": "gemma4:12b",
+ "pergunta": "arquitetura de negócios",
+ "contexto_de": {
+  "rodada": "G0-rag-base",
+  "acervo_sha": "24ed2cbf607e73ab1e8ab79c0d286bf2996b5751db4e63cfb97c2f313dfc25c7",
+  "n_fontes": 8,
+  "chars_contexto": 9020,
+  "cobertura_rag": "boa"
+ },
+ "amostragem": {
+  "temperature": 0,
+  "seed": 42,
+  "num_ctx": 16384,
+  "num_predict": 900
+ },
+ "chamada_em": "2026-08-07T00:13:14.785960+00:00",
+ "latencia_ms": 3530,
+ "tokens": {
+  "prompt_eval_count": 2027,
+  "eval_count": 87,
+  "eval_duration": 1918124000,
+  "prompt_eval_duration": 1030445999,
+  "load_duration": 294174467,
+  "total_duration": 3529754651
+ },
+ "medidas": {
+  "chars": 408,
+  "frases": 2,
+  "frases_com_citacao": 2,
+  "taxa_citacao": 1.0,
+  "fontes_citadas": [
+   2
+  ],
+  "citacoes_fora_do_intervalo": [],
+  "declarou_nao_cobertura": false
+ },
+ "resposta_vazia": false,
+ "raciocinio_chars": 0,
+ "resposta": "A arquitetura de negócios é composta por visões fundamentais (que incluem capacidade, organização, valor, informação e são consideradas estáveis) e visões estendidas (que incluem estratégia, iniciativas, produtos, partes interessadas e política, sendo mais dinâmicas) [2]. A arquitetura de negócios serve como a base sobre a qual diversas práticas e cenários de arquitetura de negócios são fundamentados [2]."
+}

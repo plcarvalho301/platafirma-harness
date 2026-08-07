@@ -1,0 +1,48 @@
+{
+ "sonda": "G0",
+ "n": "06",
+ "bloco": "A",
+ "persona": "persona-nao-declarada",
+ "modelo": "granite4:latest",
+ "pergunta": "o que é um domínio em gestão do conhecimento?",
+ "contexto_de": {
+  "rodada": "G0-rag-base",
+  "acervo_sha": "24ed2cbf607e73ab1e8ab79c0d286bf2996b5751db4e63cfb97c2f313dfc25c7",
+  "n_fontes": 8,
+  "chars_contexto": 15329,
+  "cobertura_rag": "fraca"
+ },
+ "amostragem": {
+  "temperature": 0,
+  "seed": 42,
+  "num_ctx": 16384,
+  "num_predict": 900
+ },
+ "chamada_em": "2026-08-07T00:10:07.642359+00:00",
+ "latencia_ms": 20337,
+ "tokens": {
+  "prompt_eval_count": 3541,
+  "eval_count": 474,
+  "eval_duration": 17524473000,
+  "prompt_eval_duration": 2550997000,
+  "load_duration": 82487869,
+  "total_duration": 20336486769
+ },
+ "medidas": {
+  "chars": 1746,
+  "frases": 23,
+  "frases_com_citacao": 4,
+  "taxa_citacao": 0.174,
+  "fontes_citadas": [
+   1,
+   3,
+   4,
+   5
+  ],
+  "citacoes_fora_do_intervalo": [],
+  "declarou_nao_cobertura": false
+ },
+ "resposta_vazia": false,
+ "raciocinio_chars": 0,
+ "resposta": "Um domínio em gestão do conhecimento refere-se à área de atividade ou o conjunto de informações que uma organização ou equipe de trabalho está envolvida. É um conceito central na teoria da Domínio-Dirigida (DDD) e na gestão de projetos de software.\n\nNa DDD, um domínio é a fonte de conhecimento que guia o design e a implementação de um sistema de software. Ele representa uma área específica do negócio ou uma parte significativa dele, como \"compras\", \"financeiro\" ou \"logística\". O domínio contém regras, conceitos e lógica que descrevem como o negócio opera em um nível fundamental.\n\nA gestão do conhecimento dentro de um domínio envolve:\n\n1. Entender as necessidades centrais do negócio e os problemas críticos que precisam ser resolvidos.\n2. Co-criar modelos com especialistas no domínio para capturar a lógica e as regras essenciais.\n3. Desenvolver uma linguagem compartilhada (linguagem ubiquitária) entre desenvolvedores, analistas de negócios e especialistas do domínio para facilitar a comunicação e reduzir mal-entendidos.\n4. Organizar o conhecimento em módulos ou componentes lógicos que refletem as fronteiras naturais do domínio.\n5. Atualizar continuamente o modelo conforme novas informações são adquiridas.\n\nA gestão eficaz do conhecimento dentro de um domínio é crucial para a qualidade, manutenibilidade e adaptabilidade do software desenvolvido. Ele ajuda a garantir que as decisões de design estejam alinhadas com os objetivos estratégicos do negócio e que o sistema possa evoluir conforme as necessidades comerciais mudam ao longo do tempo.\n\nFontes:\n[1] Chapter 2: Discovering Domain Knowledge\n[3] Chapter 11: Evolving Design Decisions\n[4] Chapter 1: Analyzing Business Domains\n[5] Chapter 3: Designing Good Data Architecture"
+}

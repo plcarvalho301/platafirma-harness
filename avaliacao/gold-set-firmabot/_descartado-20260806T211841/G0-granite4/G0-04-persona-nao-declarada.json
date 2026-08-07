@@ -1,0 +1,43 @@
+{
+ "sonda": "G0",
+ "n": "04",
+ "bloco": "A",
+ "persona": "persona-nao-declarada",
+ "modelo": "granite4:latest",
+ "pergunta": "o que é arquitetura de dados?",
+ "contexto_de": {
+  "rodada": "G0-rag-base",
+  "acervo_sha": "24ed2cbf607e73ab1e8ab79c0d286bf2996b5751db4e63cfb97c2f313dfc25c7",
+  "n_fontes": 8,
+  "chars_contexto": 11325,
+  "cobertura_rag": "boa"
+ },
+ "amostragem": {
+  "temperature": 0,
+  "seed": 42,
+  "num_ctx": 16384,
+  "num_predict": 900
+ },
+ "chamada_em": "2026-08-07T00:14:41.787454+00:00",
+ "latencia_ms": 4909,
+ "tokens": {
+  "prompt_eval_count": 2669,
+  "eval_count": 102,
+  "eval_duration": 3636037000,
+  "prompt_eval_duration": 1077395000,
+  "load_duration": 86467317,
+  "total_duration": 4909332638
+ },
+ "medidas": {
+  "chars": 403,
+  "frases": 2,
+  "frases_com_citacao": 0,
+  "taxa_citacao": 0.0,
+  "fontes_citadas": [],
+  "citacoes_fora_do_intervalo": [],
+  "declarou_nao_cobertura": false
+ },
+ "resposta_vazia": false,
+ "raciocinio_chars": 0,
+ "resposta": "Arquitetura de Dados é um subconjunto da Arquitetura Empresarial que inclui processos, estratégia, gerenciamento de mudanças e avaliação de trade-offs. Ela define a representação do ambiente de dados, seus componentes e suas interações, bem como o framework, pessoas, processos, políticas, tecnologias e procedimentos necessários para gerenciar e utilizar efetivamente os ativos informativos da empresa."
+}

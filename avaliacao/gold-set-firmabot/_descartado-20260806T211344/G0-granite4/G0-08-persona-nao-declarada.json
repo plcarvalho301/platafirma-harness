@@ -1,0 +1,46 @@
+{
+ "sonda": "G0",
+ "n": "08",
+ "bloco": "A",
+ "persona": "persona-nao-declarada",
+ "modelo": "granite4:latest",
+ "pergunta": "o que é criptografia pós-quântica?",
+ "contexto_de": {
+  "rodada": "G0-rag-base",
+  "acervo_sha": "24ed2cbf607e73ab1e8ab79c0d286bf2996b5751db4e63cfb97c2f313dfc25c7",
+  "n_fontes": 8,
+  "chars_contexto": 12053,
+  "cobertura_rag": "boa"
+ },
+ "amostragem": {
+  "temperature": 0,
+  "seed": 42,
+  "num_ctx": 16384,
+  "num_predict": 900
+ },
+ "chamada_em": "2026-08-07T00:10:33.136742+00:00",
+ "latencia_ms": 8645,
+ "tokens": {
+  "prompt_eval_count": 4003,
+  "eval_count": 166,
+  "eval_duration": 6305651000,
+  "prompt_eval_duration": 2105928000,
+  "load_duration": 84549201,
+  "total_duration": 8644686721
+ },
+ "medidas": {
+  "chars": 573,
+  "frases": 5,
+  "frases_com_citacao": 2,
+  "taxa_citacao": 0.4,
+  "fontes_citadas": [
+   1,
+   3
+  ],
+  "citacoes_fora_do_intervalo": [],
+  "declarou_nao_cobertura": false
+ },
+ "resposta_vazia": false,
+ "raciocinio_chars": 0,
+ "resposta": "Criptografia pós-quântica é um conjunto de algoritmos criptográficos projetados para serem seguros contra ataques de computadores quânticos. Esses algoritmos são baseados em problemas matemáticos que são considerados difíceis para computadores clássicos e quânticos resolverem, garantindo a segurança das informações mesmo diante do avanço da tecnologia quântica.\n\nFontes:\n[1] Ameaça da Computação Quântica e a Transição para a Criptografia Pós-Quântica: Relatório Executivo de Segurança\n[3] Desafios da Computação Quântica para a Segurança da Informação e a Cibersegurança"
+}

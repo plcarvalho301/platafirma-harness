@@ -1,0 +1,48 @@
+{
+ "sonda": "G0",
+ "n": "18",
+ "bloco": "B",
+ "persona": "persona-nao-declarada",
+ "modelo": "qwen3.5:9b",
+ "pergunta": "estratégia de chunking",
+ "contexto_de": {
+  "rodada": "G0-rag-base",
+  "acervo_sha": "24ed2cbf607e73ab1e8ab79c0d286bf2996b5751db4e63cfb97c2f313dfc25c7",
+  "n_fontes": 8,
+  "chars_contexto": 13467,
+  "cobertura_rag": "boa"
+ },
+ "amostragem": {
+  "temperature": 0,
+  "seed": 42,
+  "num_ctx": 16384,
+  "num_predict": 900
+ },
+ "chamada_em": "2026-08-07T00:15:01.246878+00:00",
+ "latencia_ms": 6045,
+ "tokens": {
+  "prompt_eval_count": 4217,
+  "eval_count": 218,
+  "eval_duration": 3880515000,
+  "prompt_eval_duration": 1749394000,
+  "load_duration": 279554654,
+  "total_duration": 6045171351
+ },
+ "medidas": {
+  "chars": 1067,
+  "frases": 5,
+  "frases_com_citacao": 4,
+  "taxa_citacao": 0.8,
+  "fontes_citadas": [
+   3,
+   4,
+   5,
+   8
+  ],
+  "citacoes_fora_do_intervalo": [],
+  "declarou_nao_cobertura": false
+ },
+ "resposta_vazia": false,
+ "raciocinio_chars": 0,
+ "resposta": "A estratégia de chunking (ou *data splitting*) consiste em dividir textos longos em segmentos gerenciáveis para superar os limites da janela de contexto dos LLMs e mitigar o problema \"lost-in-the-middle\" [5]. O processo envolve três etapas principais: dividir o texto longo em unidades compactas e significativas (como frases ou parágrafos), fundir essas unidades menores até atingir um tamanho específico, e incluir uma parte do chunk anterior no início de cada novo chunk para preservar a continuidade contextual [4][5]. Existem diferentes métodos disponíveis, incluindo *fixed size* (tamanho fixo), especializado (*specialized*), semântico (*semantic*) e agêntico (*agentic*). A escolha da estratégia deve considerar a natureza do conteúdo, o comprimento esperado e a complexidade das consultas dos usuários, os requisitos de uso do aplicativo e o modelo de embeddings utilizado [5][8]. Para sistemas de resposta direta a perguntas, chunks menores são preferíveis para resultados precisos, enquanto tarefas de sumarização podem se beneficiar de chunks maiores [3]."
+}

@@ -1,0 +1,47 @@
+{
+ "sonda": "G0",
+ "n": "11",
+ "bloco": "B",
+ "persona": "persona-nao-declarada",
+ "modelo": "granite4:latest",
+ "pergunta": "DDD",
+ "contexto_de": {
+  "rodada": "G0-rag-base",
+  "acervo_sha": "24ed2cbf607e73ab1e8ab79c0d286bf2996b5751db4e63cfb97c2f313dfc25c7",
+  "n_fontes": 8,
+  "chars_contexto": 13155,
+  "cobertura_rag": "boa"
+ },
+ "amostragem": {
+  "temperature": 0,
+  "seed": 42,
+  "num_ctx": 16384,
+  "num_predict": 900
+ },
+ "chamada_em": "2026-08-07T00:16:51.179073+00:00",
+ "latencia_ms": 17343,
+ "tokens": {
+  "prompt_eval_count": 3006,
+  "eval_count": 418,
+  "eval_duration": 3137972000,
+  "prompt_eval_duration": 556867000,
+  "load_duration": 13636238245,
+  "total_duration": 17343338511
+ },
+ "medidas": {
+  "chars": 1636,
+  "frases": 18,
+  "frases_com_citacao": 4,
+  "taxa_citacao": 0.222,
+  "fontes_citadas": [
+   1,
+   4,
+   5
+  ],
+  "citacoes_fora_do_intervalo": [],
+  "declarou_nao_cobertura": false
+ },
+ "resposta_vazia": false,
+ "raciocinio_chars": 0,
+ "resposta": "DDD (Domain-Driven Design) é uma abordagem de desenvolvimento de software que visa a criação de um modelo coeso e compartilhado entre domínio e código, facilitando a comunicação entre os diferentes stakeholders do projeto. As principais fontes fornecem informações sobre as vantagens e desafios de implementar DDD, bem como o processo de integração com a equipe e a gestão.\n\nAs principais conclusões são:\n\n1. DDD permite que domínio e desenvolvedores estejam em um nível igualitário, produzindo software que faz sentido para a empresa e não apenas para os programadores (Steve Jobs). [1]\n2. Investir no entendimento do domínio pelo time de desenvolvimento resulta em software mais próximo da realidade empresarial e permite que o time aprenda sobre o domínio (Ozan Özkan et al.). [4]\n3. DDD centraliza o conhecimento, evitando a propriedade \"tribal\" do software e permitindo que qualquer pessoa no time entenda como funciona (Ozan Özkan et al.). [4]\n4. A implementação de DDD requer esforço e comprometimento da equipe, gerentes e especialistas domínio para superar os desafios e alcançar o sucesso (Implementing Domain-Driven Design). [5]\n\nAs principais fontes fornecem informações sobre as vantagens do uso de DDD, como a criação de um modelo compartilhado entre domínio e código, que reflete a realidade empresarial. No entanto, também destacam os desafios, como o tempo e esforço necessários para criar uma linguagem universal e envolver especialistas no projeto.\n\nEm resumo, DDD é uma abordagem valiosa para desenvolvimento de software que requer comprometimento da equipe e gestão para superar os desafios e alcançar as vantagens."
+}
