@@ -1,0 +1,45 @@
+{
+ "sonda": "G0",
+ "n": "07",
+ "bloco": "A",
+ "persona": "persona-nao-declarada",
+ "modelo": "granite4:latest",
+ "pergunta": "o que é inteligência?",
+ "contexto_de": {
+  "rodada": "G0-rag-base",
+  "acervo_sha": "24ed2cbf607e73ab1e8ab79c0d286bf2996b5751db4e63cfb97c2f313dfc25c7",
+  "n_fontes": 8,
+  "chars_contexto": 11553,
+  "cobertura_rag": "boa"
+ },
+ "amostragem": {
+  "temperature": 0,
+  "seed": 42,
+  "num_ctx": 16384,
+  "num_predict": 900
+ },
+ "chamada_em": "2026-08-07T00:19:02.481439+00:00",
+ "latencia_ms": 2691,
+ "tokens": {
+  "prompt_eval_count": 3681,
+  "eval_count": 248,
+  "eval_duration": 1880585000,
+  "prompt_eval_duration": 596761000,
+  "load_duration": 78997146,
+  "total_duration": 2690725631
+ },
+ "medidas": {
+  "chars": 965,
+  "frases": 5,
+  "frases_com_citacao": 3,
+  "taxa_citacao": 0.6,
+  "fontes_citadas": [
+   1
+  ],
+  "citacoes_fora_do_intervalo": [],
+  "declarou_nao_cobertura": false
+ },
+ "resposta_vazia": false,
+ "raciocinio_chars": 0,
+ "resposta": "Inteligência é o conjunto de funções e processos que permitem a coleta, análise e disseminação de informações para apoiar decisões e ações em um contexto específico. No contexto das ciências cognitivas, inteligência refere-se à capacidade de adquirir conhecimento, aplicá-lo de forma eficaz e adaptar-se a novas situações (Fonte: [1]). Em termos mais amplos, como no âmbito dos governos, do meio empresarial ou em organizações sociais, inteligência pode ser entendida como informação ou conhecimento que é usado para apoiar processos de tomada de decisões (Fonte: [1]).\n\nNo contexto das atividades de Inteligência, especialmente no Brasil, a definição mais restrita de inteligência como sendo a coleta de informações sem o consentimento, cooperação ou conhecimento dos alvos da ação é aplicada. Isso significa que a inteligência pode envolver a obtenção de dados sigilosos ou clandestinos que são usados para informar decisões políticas e estratégicas (Fonte: [1])."
+}

@@ -1,0 +1,43 @@
+{
+ "sonda": "G0",
+ "n": "08",
+ "bloco": "A",
+ "persona": "persona-nao-declarada",
+ "modelo": "granite4:latest",
+ "pergunta": "o que é criptografia pós-quântica?",
+ "contexto_de": {
+  "rodada": "G0-rag-base",
+  "acervo_sha": "24ed2cbf607e73ab1e8ab79c0d286bf2996b5751db4e63cfb97c2f313dfc25c7",
+  "n_fontes": 8,
+  "chars_contexto": 12053,
+  "cobertura_rag": "boa"
+ },
+ "amostragem": {
+  "temperature": 0,
+  "seed": 42,
+  "num_ctx": 16384,
+  "num_predict": 900
+ },
+ "chamada_em": "2026-08-07T00:19:05.924299+00:00",
+ "latencia_ms": 3442,
+ "tokens": {
+  "prompt_eval_count": 4003,
+  "eval_count": 335,
+  "eval_duration": 2568072000,
+  "prompt_eval_duration": 653557000,
+  "load_duration": 83389297,
+  "total_duration": 3441880324
+ },
+ "medidas": {
+  "chars": 1287,
+  "frases": 7,
+  "frases_com_citacao": 0,
+  "taxa_citacao": 0.0,
+  "fontes_citadas": [],
+  "citacoes_fora_do_intervalo": [],
+  "declarou_nao_cobertura": false
+ },
+ "resposta_vazia": false,
+ "raciocinio_chars": 0,
+ "resposta": "Criptografia pós-quântica (PQC) refere-se a um conjunto de algoritmos criptográficos projetados para serem seguros contra ataques de computadores quânticos. Esses algoritmos são baseados em problemas matemáticos que são considerados difíceis tanto para computadores clássicos quanto para quânticos, garantindo a segurança das informações em um futuro onde a tecnologia quântica estiver amplamente disponível.\n\nA ameaça da computação quântica reside no poder de processamento exponencialmente maior que esses dispositivos podem oferecer em relação aos computadores tradicionais. Algoritmos como o Shor's e o Grover podem, respectivamente, quebrar a criptografia RSA/ECC (assimétrica) e AES (simétrica), levando a uma grave vulnerabilidade na segurança das informações.\n\nPara mitigar esse risco, é essencial transitar para sistemas de criptografia que sejam resistentes a ataques quânticos. A comunidade científica está desenvolvendo e padronizando algoritmos PQC, como os baseados em reticulados, hash functions e código, que são considerados seguros contra computadores quânticos.\n\nA adoção de criptografia pós-quântica é um imperativo para garantir a soberania digital do país, protegendo informações sensíveis e mantendo a confiança em sistemas de comunicação e transações eletrônicas."
+}

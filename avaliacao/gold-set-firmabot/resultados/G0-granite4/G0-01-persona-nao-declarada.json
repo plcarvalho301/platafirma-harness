@@ -1,0 +1,50 @@
+{
+ "sonda": "G0",
+ "n": "01",
+ "bloco": "A",
+ "persona": "persona-nao-declarada",
+ "modelo": "granite4:latest",
+ "pergunta": "o que é um conceito e qual seu critério de identidade?",
+ "contexto_de": {
+  "rodada": "G0-rag-base",
+  "acervo_sha": "24ed2cbf607e73ab1e8ab79c0d286bf2996b5751db4e63cfb97c2f313dfc25c7",
+  "n_fontes": 8,
+  "chars_contexto": 11425,
+  "cobertura_rag": "fraca"
+ },
+ "amostragem": {
+  "temperature": 0,
+  "seed": 42,
+  "num_ctx": 16384,
+  "num_predict": 900
+ },
+ "chamada_em": "2026-08-07T00:18:46.016715+00:00",
+ "latencia_ms": 4526,
+ "tokens": {
+  "prompt_eval_count": 3833,
+  "eval_count": 314,
+  "eval_duration": 2398059000,
+  "prompt_eval_duration": 670015000,
+  "load_duration": 1434942321,
+  "total_duration": 4512797924
+ },
+ "medidas": {
+  "chars": 1181,
+  "frases": 9,
+  "frases_com_citacao": 6,
+  "taxa_citacao": 0.667,
+  "fontes_citadas": [
+   1,
+   2,
+   3,
+   4,
+   5,
+   6
+  ],
+  "citacoes_fora_do_intervalo": [],
+  "declarou_nao_cobertura": false
+ },
+ "resposta_vazia": false,
+ "raciocinio_chars": 0,
+ "resposta": "um conceito é um agrupamento de fatos, objetos ou entidades que compartilham características comuns e podem ser distinguíveis por critérios específicos. O critério de identidade para um conceito refere-se aos elementos distintivos ou propriedades que definem esse grupo e permitem a sua diferenciação de outros grupos ou conceitos.\n\nFontes:\n\n[1] Introdução ao Tractatus Logico-Philosophicus, onde Wittgenstein discute a importância da clareza na expressão para entender os conceitos lógicos e filosóficos.\n\n[2] Teoria dos Direitos Fundamentais, que aborda a identificação e aplicação de princípios fundamentais em leis e políticas públicas.\n\n[3] Avaliação Ontológica com OntoClean, onde é discutido a importância da clareza e consistência na definição de conceitos e metapropriedades.\n\n[4] Doutrina da Atividade de Inteligência, que define os princípios e fundamentos para a atividade de inteligência.\n\n[5] KIF version of DOLCE-Lite+, onde são definidas as propriedades e relações lógicas entre conceitos em um modelo ontológico.\n\n[6] Conceitos e Definições da Doutrina dos Direitos Fundamentais, que apresenta os fundamentos teóricos para a identificação de direitos fundamentais."
+}

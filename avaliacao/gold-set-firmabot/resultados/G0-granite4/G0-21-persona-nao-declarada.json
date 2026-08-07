@@ -1,0 +1,47 @@
+{
+ "sonda": "G0",
+ "n": "21",
+ "bloco": "B",
+ "persona": "persona-nao-declarada",
+ "modelo": "granite4:latest",
+ "pergunta": "posicionamento de produto",
+ "contexto_de": {
+  "rodada": "G0-rag-base",
+  "acervo_sha": "24ed2cbf607e73ab1e8ab79c0d286bf2996b5751db4e63cfb97c2f313dfc25c7",
+  "n_fontes": 8,
+  "chars_contexto": 13368,
+  "cobertura_rag": "fraca"
+ },
+ "amostragem": {
+  "temperature": 0,
+  "seed": 42,
+  "num_ctx": 16384,
+  "num_predict": 900
+ },
+ "chamada_em": "2026-08-07T00:19:56.797689+00:00",
+ "latencia_ms": 3125,
+ "tokens": {
+  "prompt_eval_count": 3066,
+  "eval_count": 322,
+  "eval_duration": 2414592000,
+  "prompt_eval_duration": 483017000,
+  "load_duration": 81529048,
+  "total_duration": 3125335226
+ },
+ "medidas": {
+  "chars": 1316,
+  "frases": 15,
+  "frases_com_citacao": 3,
+  "taxa_citacao": 0.2,
+  "fontes_citadas": [
+   1,
+   3,
+   7
+  ],
+  "citacoes_fora_do_intervalo": [],
+  "declarou_nao_cobertura": false
+ },
+ "resposta_vazia": false,
+ "raciocinio_chars": 0,
+ "resposta": "Posicionamento de produto envolve definir onde um produto encontra-se dentro de um mercado específico e como ele se diferencia dos concorrentes. Isso inclui entender o que torna o produto especial e por que é valioso para os clientes. O posicionamento ajuda a comunicar claramente ao público as vantagens do produto em relação às alternativas disponíveis.\n\nPara alcançar um bom posicionamento, é necessário:\n\n1. Definir uma linguagem comum de posicionamento para evitar mal-entendidos entre os membros da equipe (Step 3). [1]\n2. Identificar e agrupar as características do produto em torno de temas-chave que representem o valor que ele oferece aos clientes (Step 6). \n3. Determinar quem se importa muito com esses temas de valor, ou seja, quais segmentos de mercado são os mais relevantes para o sucesso do produto (Step 7).\n\nAlém disso, é importante estar atento às mudanças no contexto do mercado e nas percepções dos clientes, pois isso pode exigir ajustes no posicionamento do produto sem que ele realmente tenha mudado (Trap 2). [3]\n\nPor fim, a documentação do processo de posicionamento deve ser clara e compartilhada dentro da empresa para garantir que todos estejam alinhados e possam usar o posicionamento para informar decisões em branding, marketing, vendas, criação de produtos e suporte ao cliente. [7]"
+}

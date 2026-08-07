@@ -1,0 +1,43 @@
+{
+ "sonda": "G0",
+ "n": "14",
+ "bloco": "B",
+ "persona": "persona-nao-declarada",
+ "modelo": "granite4:latest",
+ "pergunta": "vocabulário controlado",
+ "contexto_de": {
+  "rodada": "G0-rag-base",
+  "acervo_sha": "24ed2cbf607e73ab1e8ab79c0d286bf2996b5751db4e63cfb97c2f313dfc25c7",
+  "n_fontes": 8,
+  "chars_contexto": 7108,
+  "cobertura_rag": "boa"
+ },
+ "amostragem": {
+  "temperature": 0,
+  "seed": 42,
+  "num_ctx": 16384,
+  "num_predict": 900
+ },
+ "chamada_em": "2026-08-07T00:19:35.865374+00:00",
+ "latencia_ms": 1747,
+ "tokens": {
+  "prompt_eval_count": 2238,
+  "eval_count": 141,
+  "eval_duration": 1050575000,
+  "prompt_eval_duration": 359377000,
+  "load_duration": 77948197,
+  "total_duration": 1744031949
+ },
+ "medidas": {
+  "chars": 579,
+  "frases": 3,
+  "frases_com_citacao": 0,
+  "taxa_citacao": 0.0,
+  "fontes_citadas": [],
+  "citacoes_fora_do_intervalo": [],
+  "declarou_nao_cobertura": false
+ },
+ "resposta_vazia": false,
+ "raciocinio_chars": 0,
+ "resposta": "Vocabulário controlado é usado para melhorar a eficácia dos sistemas de armazenamento e recuperação de informações, navegabilidade da web e outros ambientes que identificam e localizam conteúdo através de descrições em linguagem. O objetivo principal do controle de vocabulários é alcançar consistência na descrição de objetos de conteúdo e facilitar a recuperação. Esse controle é realizado por três métodos principais: definir o alcance ou significado das palavras; usar a relação de equivalência para ligar palavras sinônimas e quase-sinônimas; e distinguir entre homografias."
+}

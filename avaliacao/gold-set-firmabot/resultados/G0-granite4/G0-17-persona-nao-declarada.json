@@ -1,0 +1,43 @@
+{
+ "sonda": "G0",
+ "n": "17",
+ "bloco": "B",
+ "persona": "persona-nao-declarada",
+ "modelo": "granite4:latest",
+ "pergunta": "fusão recíproca de rankings",
+ "contexto_de": {
+  "rodada": "G0-rag-base",
+  "acervo_sha": "24ed2cbf607e73ab1e8ab79c0d286bf2996b5751db4e63cfb97c2f313dfc25c7",
+  "n_fontes": 8,
+  "chars_contexto": 13491,
+  "cobertura_rag": "boa"
+ },
+ "amostragem": {
+  "temperature": 0,
+  "seed": 42,
+  "num_ctx": 16384,
+  "num_predict": 900
+ },
+ "chamada_em": "2026-08-07T00:19:45.272337+00:00",
+ "latencia_ms": 3870,
+ "tokens": {
+  "prompt_eval_count": 3964,
+  "eval_count": 388,
+  "eval_duration": 2981610000,
+  "prompt_eval_duration": 659807000,
+  "load_duration": 80386216,
+  "total_duration": 3869925029
+ },
+ "medidas": {
+  "chars": 1610,
+  "frases": 9,
+  "frases_com_citacao": 0,
+  "taxa_citacao": 0.0,
+  "fontes_citadas": [],
+  "citacoes_fora_do_intervalo": [],
+  "declarou_nao_cobertura": false
+ },
+ "resposta_vazia": false,
+ "raciocinio_chars": 0,
+ "resposta": "Fusão recíproca de rankings é uma técnica utilizada em sistemas de busca e recomendação para combinar as listas de resultados ordenadas por diferentes algoritmos ou modelos, tendo como objetivo melhorar a qualidade das listas de resultados finais. Essa abordagem foi discutida por Cormack et al. em 2009, destacando que a Reciprocal Rank Fusion (RRF) é uma técnica simples e eficaz para combinar rankings sem necessidade de um algoritmo complexo de votação ou informações globais.\n\nA RRF funciona ordenando os documentos com base em uma função de pontuação simples que considera apenas a posição do documento na lista de resultados de cada sistema individual. Essa abordagem tem como objetivo capturar a diversidade e a qualidade das listas de resultados geradas por diferentes sistemas, sem ser dominada por um único sistema ou por preferências fortemente expressas.\n\nA principal vantagem da RRF é que ela combina rankings de maneira eficiente e precisa, sem a necessidade de manter todas as listas de resultados em memória simultaneamente. Além disso, a RRF tem sido demonstrada superar outras técnicas de fusão de rankings, como o Condorcet Fuse, em várias avaliações de desempenho.\n\nEm resumo, a fusão recíproca de rankings é uma técnica simples e eficaz para combinar listas de resultados ordenadas por diferentes sistemas ou algoritmos, com o objetivo de melhorar a qualidade das listas finais. Essa abordagem tem sido demonstrada superar outras técnicas de fusão de rankings em várias avaliações de desempenho e é uma alternativa viável para melhorar a qualidade dos resultados de busca ou recomendação."
+}

@@ -1,10 +1,10 @@
-# Consolidado T0 — recuperação + geração, 3 arms, mesmo prompt
+# Consolidado T0 — recuperação + geração — 3 arms, mesmo prompt
 
 Gerado por `tooling/consolidar-firmabot.py`. `G0-rag-base` (o que o
-rag_search devolveu) + os 3 geradores respondendo em cima do mesmo
-`contexto` congelado, com o mesmo `prompt-firmabot.md` como sistema.
-Lista de obras é só o que apareceu nas fontes — não é julgamento de
-qual é "a" fonte certa, isso é da claudinho-IA.
+rag_search devolveu) + o(s) gerador(es) respondendo em cima do mesmo
+`contexto` congelado, com `prompt-firmabot.md` como sistema. Lista de
+obras é só o que apareceu nas fontes — não é julgamento de qual é "a"
+fonte certa, isso é da claudinho-IA.
 
 ---
 

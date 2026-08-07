@@ -1,0 +1,50 @@
+{
+ "sonda": "G0",
+ "n": "09",
+ "bloco": "A",
+ "persona": "persona-nao-declarada",
+ "modelo": "granite4:latest",
+ "pergunta": "o que é uma decisão arquitetural e quando se registra?",
+ "contexto_de": {
+  "rodada": "G0-rag-base",
+  "acervo_sha": "24ed2cbf607e73ab1e8ab79c0d286bf2996b5751db4e63cfb97c2f313dfc25c7",
+  "n_fontes": 8,
+  "chars_contexto": 13482,
+  "cobertura_rag": "boa"
+ },
+ "amostragem": {
+  "temperature": 0,
+  "seed": 42,
+  "num_ctx": 16384,
+  "num_predict": 900
+ },
+ "chamada_em": "2026-08-07T00:19:11.700800+00:00",
+ "latencia_ms": 5776,
+ "tokens": {
+  "prompt_eval_count": 3314,
+  "eval_count": 662,
+  "eval_duration": 5013898000,
+  "prompt_eval_duration": 528289000,
+  "load_duration": 82599049,
+  "total_duration": 5775543436
+ },
+ "medidas": {
+  "chars": 2658,
+  "frases": 19,
+  "frases_com_citacao": 6,
+  "taxa_citacao": 0.316,
+  "fontes_citadas": [
+   1,
+   2,
+   3,
+   6,
+   7,
+   8
+  ],
+  "citacoes_fora_do_intervalo": [],
+  "declarou_nao_cobertura": false
+ },
+ "resposta_vazia": false,
+ "raciocinio_chars": 0,
+ "resposta": "Uma decisão arquitetural é uma escolha fundamental feita pelo arquiteto ou pela equipe de arquitetos que define aspectos importantes da estrutura e comportamento do sistema a ser desenvolvido. Essas decisões podem envolver a seleção de padrões de projeto, tecnologias específicas, estruturas de dados, mecanismos de comunicação entre componentes, etc., e geralmente têm um impacto significativo no design geral do sistema.\n\nDe acordo com as fontes fornecidas:\n\n1. **Fundamentals of Software Architecture** [1]: As decisões arquitetônicas são fundamentais para o projeto de sistemas, pois ajudam a guiar as equipes de desenvolvimento em relação às escolhas técnicas corretas. Elas envolvem não apenas a estrutura do aplicativo ou sistema, mas também podem incluir decisões tecnológicas que afetam características arquitetônicas.\n\n2. **Technologies Blog** [2]: No contexto de projetos ágeis, as decisões arquitetônicas devem ser descritas e definidas de forma modular e atualizável, pois não todas serão tomadas ao mesmo tempo ou no início do projeto. A documentação deve ser valiosa e atualizada para facilitar a compreensão e evolução do sistema.\n\n3. **Continuous Architecture** [3]: As decisões arquitetônicas são o principal elemento de trabalho na prática da arquitetura, sendo essenciais para entender as razões por trás das escolhas feitas e para suportar a evolução futura do produto software.\n\n4. **Software Architecture Knowledge Management** [6]: As decisões arquitetônicas devem ser documentadas de forma detalhada, incluindo atributos como o \"epitome\" (uma declaração breve da decisão), o \"rationale\" (justificativa para a decisão) e o \"scope\" (limitações ou alcance da decisão).\n\n5. **Software Architecture Knowledge Management** [7]: A documentação da arquitetura deve incluir detalhes das decisões tomadas, como por exemplo, escolhas de padrões de projeto, tecnologias específicas, estruturas de dados e mecanismos de comunicação entre componentes.\n\n6. **Software Architecture Knowledge Management** [8]: A documentação da arquitetura deve incluir detalhes das decisões tomadas, como por exemplo, escolhas de padrões de projeto, tecnologias específicas, estruturas de dados e mecanismos de comunicação entre componentes.\n\nEm resumo, uma decisão arquitetural é fundamental para o design do sistema, influenciando a seleção de padrões, tecnologias e outras escolhas que definem a estrutura e comportamento do software. O registro dessas decisões é crucial para garantir que as equipes possam entender e manter o sistema ao longo do tempo, especialmente durante períodos de evolução ou quando novos desenvolvedores precisam se integrar ao projeto."
+}

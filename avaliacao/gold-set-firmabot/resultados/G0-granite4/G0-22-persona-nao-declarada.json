@@ -1,0 +1,43 @@
+{
+ "sonda": "G0",
+ "n": "22",
+ "bloco": "B",
+ "persona": "persona-nao-declarada",
+ "modelo": "granite4:latest",
+ "pergunta": "avaliação heurística",
+ "contexto_de": {
+  "rodada": "G0-rag-base",
+  "acervo_sha": "24ed2cbf607e73ab1e8ab79c0d286bf2996b5751db4e63cfb97c2f313dfc25c7",
+  "n_fontes": 8,
+  "chars_contexto": 9586,
+  "cobertura_rag": "fraca"
+ },
+ "amostragem": {
+  "temperature": 0,
+  "seed": 42,
+  "num_ctx": 16384,
+  "num_predict": 900
+ },
+ "chamada_em": "2026-08-07T00:19:59.148682+00:00",
+ "latencia_ms": 2350,
+ "tokens": {
+  "prompt_eval_count": 2617,
+  "eval_count": 236,
+  "eval_duration": 1744723000,
+  "prompt_eval_duration": 410024000,
+  "load_duration": 75634951,
+  "total_duration": 2349819019
+ },
+ "medidas": {
+  "chars": 923,
+  "frases": 5,
+  "frases_com_citacao": 0,
+  "taxa_citacao": 0.0,
+  "fontes_citadas": [],
+  "citacoes_fora_do_intervalo": [],
+  "declarou_nao_cobertura": true
+ },
+ "resposta_vazia": false,
+ "raciocinio_chars": 0,
+ "resposta": "A avaliação heurística é um método de análise que utiliza regras ou princípios gerais para orientar a tomada de decisões em situações onde não há soluções matematicamente prováveis ou certas. Esses heurísticos são baseados na experiência e no conhecimento prático, permitindo uma abordagem eficiente e econômica para resolver problemas complexos sem precisar de análises detalhadas e custosas.\n\nNo contexto da Informação Arquitetura (IA), a avaliação heurística pode ser aplicada para avaliar a qualidade e a usabilidade de sistemas de informação, como sites ou aplicações web. Por exemplo, ao avaliar um site, uma heurística poderia ser verificar se o layout é intuitivo e se as informações são organizadas de forma lógica, facilitando a navegação do usuário.\n\nEm resumo, a avaliação heurística é uma abordagem prática que utiliza regras gerais para orientar decisões em situações onde não há soluções certas ou prováveis."
+}

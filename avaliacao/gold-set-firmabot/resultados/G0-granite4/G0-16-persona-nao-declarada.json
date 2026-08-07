@@ -1,0 +1,46 @@
+{
+ "sonda": "G0",
+ "n": "16",
+ "bloco": "B",
+ "persona": "persona-nao-declarada",
+ "modelo": "granite4:latest",
+ "pergunta": "proveniência arquivística",
+ "contexto_de": {
+  "rodada": "G0-rag-base",
+  "acervo_sha": "24ed2cbf607e73ab1e8ab79c0d286bf2996b5751db4e63cfb97c2f313dfc25c7",
+  "n_fontes": 8,
+  "chars_contexto": 12765,
+  "cobertura_rag": "boa"
+ },
+ "amostragem": {
+  "temperature": 0,
+  "seed": 42,
+  "num_ctx": 16384,
+  "num_predict": 900
+ },
+ "chamada_em": "2026-08-07T00:19:41.401319+00:00",
+ "latencia_ms": 3191,
+ "tokens": {
+  "prompt_eval_count": 3916,
+  "eval_count": 295,
+  "eval_duration": 2266925000,
+  "prompt_eval_duration": 668863000,
+  "load_duration": 81653571,
+  "total_duration": 3191053812
+ },
+ "medidas": {
+  "chars": 1110,
+  "frases": 9,
+  "frases_com_citacao": 2,
+  "taxa_citacao": 0.222,
+  "fontes_citadas": [
+   3,
+   5
+  ],
+  "citacoes_fora_do_intervalo": [],
+  "declarou_nao_cobertura": false
+ },
+ "resposta_vazia": false,
+ "raciocinio_chars": 0,
+ "resposta": "O conceito de proveniência arquivística refere-se à história e origem dos documentos ou do arquivo em si. Isso inclui informações sobre a criação, aquisição, as transferências de propriedade e qualquer outra ação que tenha contribuído para a formação do arquivo atual. A proveniência é crucial para entender o contexto histórico e a autenticidade dos documentos dentro do arquivo.\n\nFontes:\n\n1. [3] (isad-g-2001-conarq-pt.pdf · isad-g-2001-conarq-pt-1999#3.2.3) - Esta fonte discute a importância de registrar a história arquivística, que inclui as sucessivas transferências de propriedade e outras ações que contribuíram para a estrutura atual do arquivo.\n\n2. [5] (nobrade-conarq.pdf · nobrade-conarq-2006#3.1) - Esta fonte também enfatiza a necessidade de registrar o âmbito e conteúdo do arquivo, incluindo as origens dos documentos e como eles foram adquiridos ou transferidos.\n\nEssas fontes destacam que a proveniência arquivística é uma parte essencial da descrição e catalogação de um arquivo, fornecendo informações críticas sobre o contexto histórico e a autenticidade dos documentos dentro do arquivo."
+}
