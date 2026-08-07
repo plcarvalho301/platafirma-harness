@@ -1,0 +1,13 @@
+## Observabilidade
+
+**Definição.** Para sistemas de software, observabilidade é a medida de quão bem você consegue entender e explicar qualquer estado que o sistema possa assumir, por mais novo ou bizarro que seja — sendo capaz de depurar esse estado de forma comparativa, cruzando todas as dimensões dos dados de estado do sistema e suas combinações, numa investigação iterativa e ad hoc, sem precisar prever essas necessidades de depuração com antecedência. Se você consegue entender um estado novo ou bizarro sem precisar publicar código novo, você tem observabilidade.
+
+*(Tradução minha do trecho — a definição aparece formulada nesses termos em [3], que a repete como a definição fixada no Capítulo 1 da obra; [4] e [8] reiteram a mesma ideia central ao tratar dos blocos de construção e da depuração via observabilidade.)*
+
+**Origem do termo.** O termo "observability" foi cunhado pelo engenheiro Rudolf E. Kálmán em 1960, num sentido de teoria de controle: uma medida de quão bem os estados internos de um sistema podem ser inferidos a partir do conhecimento de suas saídas externas. Essa é a origem matemática/formal do conceito, ligada a sistemas mecânicos e de engenharia de controle — distinta, mas adaptada, para o uso em sistemas de software. *(Transcrito/derivado de [2].)*
+
+**Observabilidade × monitoramento.** A observabilidade de um sistema é a extensão em que se consegue entender o estado interno do sistema a partir de suas saídas externas — normalmente exige uma compreensão mais holística do software, olhando-o como sistema, não como conjunto de entidades separadas. Monitoramento, por sua vez, é algo que você *faz*: é a atividade de olhar o sistema. Abordagens tradicionais de monitoramento pedem que você pense com antecedência no que pode dar errado e defina mecanismos de alerta para quando isso acontecer — o que se torna limitante à medida que o sistema cresce em complexidade. *(Transcrito/derivado de [6], Building Microservices, seção "Observability Versus Monitoring".)*
+
+**Nota complementar.** Uma fonte observa que observabilidade não é algo que se "atinge" com uma abordagem de checklist: ela começa como capacidade técnica do sistema (pode ou não ser observado), mas só se realiza como prática quando os times efetivamente a usam para explorar e entender o comportamento do sistema em produção — sistemas de produção são sociotécnicos, então ter a capacidade técnica não garante que ela está sendo exercida bem. *(Transcrito/derivado de [1].)*
+
+Não usei [5] e [7] na definição em si porque tratam de estrutura do livro (sumário de parte) e motivação editorial dos autores — não sustentam o conceito.

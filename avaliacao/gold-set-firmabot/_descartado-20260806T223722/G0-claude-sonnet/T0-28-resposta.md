@@ -1,0 +1,7 @@
+Nenhuma das fontes que chegaram trata do conceito "teste de contrato" (contract testing) — a prática de engenharia de software que verifica se as interações entre um serviço consumidor e um serviço provedor respeitam um contrato de interface acordado (schema de requisição/resposta, formatos, códigos de erro), tipicamente usada para não depender de ambiente de integração completo a cada mudança.
+
+O que as fontes trazem é outra coisa: falam de **contrato administrativo** de TI — obrigações da contratante/contratada em contratação pública (fonte 1), modelo de contrato de desenvolvimento de software em órgãos públicos com suas métricas e problemas (fontes 3, 5, 7), licenciamento de software via termo de referência (fonte 4), CAPEX/OPEX em licenciamento perpétuo (fonte 6), e práticas comerciais de fabricantes de TI auditadas pelo TCU (fonte 8). Nenhuma delas usa "teste" no sentido de verificação de compatibilidade de contrato de software, nem "contrato" no sentido de interface entre serviços.
+
+Como as fontes não cobrem o conceito exato perguntado, a definição acima é **leitura minha, sem fonte no que chegou** — não decorre de nenhuma das oito.
+
+Se a pergunta era sobre **contrato administrativo/contratual de TI** (não "contract testing"), me diga que reoriento a resposta para o que as fontes 1, 3, 5, 6, 7 e 8 efetivamente cobrem.
