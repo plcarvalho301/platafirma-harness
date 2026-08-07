@@ -1,20 +1,18 @@
 #!/usr/bin/env python3
 """Roda as sondas do gold-set-firmabot no gerador via `claude -p`: uma chamada
-isolada por sonda (processo novo, sem sessao persistida, sem tools). Resolve
-isolamento e janela de contexto ao mesmo tempo -- o custo e trocar candidato
-local por API.
+isolada por sonda (processo novo, sem sessao persistida, sem tools).
 
-Arm oficial da escada desde 2026-08-06 (decisao do dono, direto -- nao passou
-por desenho formal de instrumento porque e trivial: rodar via API e o que o
-dono faria na mao, isto so automatiza). Continua sendo referencia de TETO, nao
-candidato a substituir os locais: G0-gemma4-12b / G0-granite4 / G0-qwen3.5-9b
-medem o que roda na propria maquina sem depender de nuvem, que e o que importa
-pro objetivo de soberania de dado do orgao publico. Este arm mede o teto de
-qualidade que o RAG permite, pra separar "o gerador local e fraco" de "o
-contexto que o RAG entrega e o teto de qualquer gerador".
+Prompt IDENTICO ao usado nos arms locais (g0_geracao.py, gemma4-12b e
+qwen3.5-9b): mesmo `prompt-firmabot.md` como system, mesmo formato de mensagem
+(PERGUNTA: / FONTES:). E a condicao para os 3 arms serem comparaveis --
+decisao do dono, 2026-08-06.
 
-Reentrante: pula sonda cujo arquivo de resposta ja existe (e nao comeca com
-ERRO), entao pode ser interrompido e rodado de novo sem repetir chamada paga.
+Nao identico: amostragem. `claude -p` nao expoe temperature/seed/num_predict
+na CLI (--help nao lista), diferente dos locais (temperature=0, seed=42,
+num_predict=900 via API do Ollama). Assimetria que fica registrada, nao
+escondida -- nao ha flag pra fechar por aqui.
+
+Reentrante: pula sonda ja respondida.
 
 Uso: python3 tooling/rodar-firmabot-claude.py [--model sonnet] [--out DIR]
 """
@@ -44,7 +42,7 @@ def main():
         n = data["n"]
         pergunta = data["pergunta"]
         contexto = data["retorno"]["contexto"]
-        user_msg = f"{pergunta}\n\nFontes:\n\n{contexto}"
+        user_msg = f"PERGUNTA: {pergunta}\n\nFONTES:\n{contexto}"
 
         out_path = out_dir / f"T0-{n}-resposta.md"
         if out_path.exists() and not out_path.read_text().startswith("ERRO"):
@@ -76,10 +74,12 @@ def main():
         f"por sonda (--no-session-persistence, --tools \"\", processo novo a cada sonda).\n\n"
         f"    modelo      {args.model}\n"
         f"    num_ctx     n/a (API, nao GPU local)\n"
-        f"    amostragem  padrao da CLI — sem flag de temperature exposta em --print\n\n"
+        f"    amostragem  nao exposta na CLI --print (sem temperature/seed/num_predict)\n"
+        f"    sistema     avaliacao/gold-set-firmabot/prompt-firmabot.md — IDENTICO ao\n"
+        f"                usado em G0-gemma4-12b e G0-qwen3.5-9b (g0_geracao.py)\n\n"
         f"Arm oficial (decisao do dono, 2026-08-06), papel de referência de teto —\n"
-        f"não substitui G0-gemma4-12b / G0-granite4 / G0-qwen3.5-9b, que medem\n"
-        f"viabilidade local. Ver docstring do script para o motivo da distinção.\n"
+        f"não substitui G0-gemma4-12b / G0-qwen3.5-9b, que medem viabilidade local.\n"
+        f"Prompt agora idêntico aos dois; amostragem não é controlável via --print.\n"
     )
     print(f"pronto: {out_dir}", file=sys.stderr)
 

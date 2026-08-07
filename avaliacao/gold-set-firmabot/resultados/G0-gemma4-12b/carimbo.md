@@ -1,15 +1,38 @@
 # Carimbo — G0 geração local, gemma4:12b
 
-Não executado.
+Rodada: 2026-08-06T21:13–21:27Z (aprox.) · 34 sondas · executor `g0_geracao.py`
 
-## Candidato congelado
+## Ambiente servido
 
-    modelo         gemma4:12b
-    digest         4eb23ef187e2
-    disco          7,6 GB
-    residente      8,4 GB com num_ctx=16384
-    PROCESSOR      100% GPU
-    build          única por tamanho (QAT), sem escolha de quantização
+    modelo          gemma4:12b
+    digest          4eb23ef187e2
+    parametros      11.9B
+    quantizacao     Q4_K_M
+    PROCESSOR       100% GPU (ollama ps no momento da rodada)
 
-Amostragem a usar: `temperature=0`, seed fixa. Um modelo por vez: `keep_alive=0` e parada
-explícita entre arms.
+## Parâmetros congelados
+
+    sistema         avaliacao/gold-set-firmabot/prompt-firmabot.md — IDÊNTICO
+                    ao usado em G0-claude-referencia desde 2026-08-06
+    formato usuário PERGUNTA: <pergunta>\n\nFONTES:\n<contexto>
+    temperature     0
+    seed            42
+    num_ctx         16384
+    num_predict     900
+    contexto        campo `contexto` congelado de G0-rag-base (não re-recuperado)
+
+## Agregados (aritmética simples sobre `_resumo.json`, sem julgamento de cobertura)
+
+    declarou_nao_cobertura   7/34
+    taxa_citação média       0.74
+    latência média           6526 ms
+    tok/s médio              45.8
+
+Classificação de cobertura (boa/fraca) não entra aqui — é da claudinho-IA,
+mesma régua do carimbo de G0-rag-base.
+
+## Autoria
+
+Script `g0_geracao.py`, sentado sem commit na pasta do harness antes desta
+rodada de consolidação. Autoria não confirmada por mensagem de fila; o dono
+declarou ter sido ele mesmo, sessão não lembrada. Script agora commitado.

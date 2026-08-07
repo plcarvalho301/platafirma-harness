@@ -1,0 +1,49 @@
+{
+ "sonda": "G0",
+ "n": "10",
+ "bloco": "A",
+ "persona": "persona-nao-declarada",
+ "modelo": "qwen3.5:9b",
+ "pergunta": "o que é curadoria de acervo?",
+ "contexto_de": {
+  "rodada": "G0-rag-base",
+  "acervo_sha": "24ed2cbf607e73ab1e8ab79c0d286bf2996b5751db4e63cfb97c2f313dfc25c7",
+  "n_fontes": 8,
+  "chars_contexto": 13442,
+  "cobertura_rag": "fraca"
+ },
+ "amostragem": {
+  "temperature": 0,
+  "seed": 42,
+  "num_ctx": 16384,
+  "num_predict": 900
+ },
+ "chamada_em": "2026-08-07T00:21:26.534292+00:00",
+ "latencia_ms": 3180,
+ "tokens": {
+  "prompt_eval_count": 4087,
+  "eval_count": 100,
+  "eval_duration": 1452186000,
+  "prompt_eval_duration": 1411775000,
+  "load_duration": 216587343,
+  "total_duration": 3180089190
+ },
+ "medidas": {
+  "chars": 411,
+  "frases": 3,
+  "frases_com_citacao": 1,
+  "taxa_citacao": 0.333,
+  "fontes_citadas": [
+   1,
+   3,
+   4,
+   5,
+   8
+  ],
+  "citacoes_fora_do_intervalo": [],
+  "declarou_nao_cobertura": true
+ },
+ "resposta_vazia": false,
+ "raciocinio_chars": 0,
+ "resposta": "O conceito exato de \"curadoria de acervo\" não é definido nas fontes fornecidas. As fontes tratam de termos relacionados a arquivos (como [1], [8]), governança de dados e curadores de dados ([3], [4]), ou gestão de conteúdos em atendimento ao cliente ([5]), mas nenhuma delas define especificamente o que é \"curadoria de acervo\". Portanto, com base estrita nas fontes fornecidas, não há resposta para a pergunta."
+}

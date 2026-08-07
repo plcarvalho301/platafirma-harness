@@ -1,0 +1,49 @@
+{
+ "sonda": "G0",
+ "n": "18",
+ "bloco": "B",
+ "persona": "persona-nao-declarada",
+ "modelo": "gemma4:12b",
+ "pergunta": "estratégia de chunking",
+ "contexto_de": {
+  "rodada": "G0-rag-base",
+  "acervo_sha": "24ed2cbf607e73ab1e8ab79c0d286bf2996b5751db4e63cfb97c2f313dfc25c7",
+  "n_fontes": 8,
+  "chars_contexto": 13467,
+  "cobertura_rag": "boa"
+ },
+ "amostragem": {
+  "temperature": 0,
+  "seed": 42,
+  "num_ctx": 16384,
+  "num_predict": 900
+ },
+ "chamada_em": "2026-08-07T00:24:44.843761+00:00",
+ "latencia_ms": 9059,
+ "tokens": {
+  "prompt_eval_count": 4361,
+  "eval_count": 282,
+  "eval_duration": 6254966000,
+  "prompt_eval_duration": 2173070000,
+  "load_duration": 302015987,
+  "total_duration": 9058761803
+ },
+ "medidas": {
+  "chars": 1380,
+  "frases": 6,
+  "frases_com_citacao": 6,
+  "taxa_citacao": 1.0,
+  "fontes_citadas": [
+   3,
+   5,
+   6,
+   7,
+   8
+  ],
+  "citacoes_fora_do_intervalo": [],
+  "declarou_nao_cobertura": false
+ },
+ "resposta_vazia": false,
+ "raciocinio_chars": 0,
+ "resposta": "A escolha de uma estratégia de chunking (ou divisão de dados) não possui regras ou diretrizes fixas, mas pode ser guiada por características específicas da aplicação em desenvolvimento [3], [7]. A seleção da estratégia deve basear-se na natureza do conteúdo, no comprimento e complexidade esperados das consultas dos usuários, nos requisitos de caso de uso da aplicação e no modelo de embeddings utilizado [5].\n\nA natureza do caso de uso influencia a escolha: sistemas de perguntas e respostas diretas tendem a utilizar fragmentos (chunks) menores para resultados precisos, enquanto tarefas de sumarização podem se beneficiar de fragmentos maiores [3]. Além disso, o tipo de consulta recebido pelo sistema RAG também determina a estratégia; por exemplo, consultas curtas e diretas exigem tamanhos de fragmentos diferentes de consultas longas e complexas, pois combinar consultas longas com fragmentos curtos ou consultas curtas com fragmentos grandes pode ser ineficiente ou gerar resultados parcialmente irrelevantes [8].\n\nExistem diversos métodos disponíveis, que variam desde técnicas simples (tamanho fixo por caracteres) até métodos mais sofisticados como a divisão por tokens, métodos especializados para diferentes formatos de dados e técnicas experimentais como o \"semantic chunking\" e \"agentic chunking\" [6]. Uma estratégia de chunking pode incluir múltiplos métodos [5]."
+}

@@ -1,0 +1,48 @@
+{
+ "sonda": "G0",
+ "n": "07",
+ "bloco": "A",
+ "persona": "persona-nao-declarada",
+ "modelo": "gemma4:12b",
+ "pergunta": "o que é inteligência?",
+ "contexto_de": {
+  "rodada": "G0-rag-base",
+  "acervo_sha": "24ed2cbf607e73ab1e8ab79c0d286bf2996b5751db4e63cfb97c2f313dfc25c7",
+  "n_fontes": 8,
+  "chars_contexto": 11553,
+  "cobertura_rag": "boa"
+ },
+ "amostragem": {
+  "temperature": 0,
+  "seed": 42,
+  "num_ctx": 16384,
+  "num_predict": 900
+ },
+ "chamada_em": "2026-08-07T00:23:40.892346+00:00",
+ "latencia_ms": 8902,
+ "tokens": {
+  "prompt_eval_count": 3442,
+  "eval_count": 298,
+  "eval_duration": 6613009000,
+  "prompt_eval_duration": 1701879000,
+  "load_duration": 293787616,
+  "total_duration": 8901425685
+ },
+ "medidas": {
+  "chars": 1329,
+  "frases": 8,
+  "frases_com_citacao": 5,
+  "taxa_citacao": 0.625,
+  "fontes_citadas": [
+   1,
+   6,
+   7,
+   8
+  ],
+  "citacoes_fora_do_intervalo": [],
+  "declarou_nao_cobertura": false
+ },
+ "resposta_vazia": false,
+ "raciocinio_chars": 0,
+ "resposta": "Existem diferentes definições para o termo inteligência conforme as fontes:\n\n*   **Definição Ampla:** É toda informação coletada, organizada ou analisada para atender à demanda de um tomador de decisões [1]. Nesta acepção, é equivalente a conhecimento ou informação [1, 2].\n*   **Definição Restrita:** É a coleta de informações sem o consentimento, cooperação ou conhecimento por parte dos alvos da ação; nesta acepção, é equivalente a segredo ou informação secreta [1].\n*   **Atividade Especializada:** É uma atividade especializada que exige o emprego de meios sigilosos para preservar ações, métodos, processos, profissionais e fontes. Ela desenvolve ações de caráter sigiloso para obter dados indispensáveis ao processo decisório que estão indisponíveis para coleta ordinária devido ao acesso negado por seus detentores [8].\n*   **Definição Legal (Brasil):** É a atividade que objetiva a obtenção, análise e disseminação de conhecimentos dentro e fora do território nacional sobre fatos e situações de imediata ou potencial influência sobre o processo decisório e a ação governamental e sobre a salvaguarda e a segurança da sociedade e do Estado [7].\n*   **Produção de Conhecimento:** É caracterizada pela produção de conhecimentos com a finalidade de apontar oportunidades e ameaças à consecução dos objetivos nacionais [6]."
+}

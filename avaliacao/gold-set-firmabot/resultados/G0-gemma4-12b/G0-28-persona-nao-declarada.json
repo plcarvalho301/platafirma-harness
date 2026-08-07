@@ -1,0 +1,45 @@
+{
+ "sonda": "G0",
+ "n": "28",
+ "bloco": "B",
+ "persona": "persona-nao-declarada",
+ "modelo": "gemma4:12b",
+ "pergunta": "teste de contrato",
+ "contexto_de": {
+  "rodada": "G0-rag-base",
+  "acervo_sha": "24ed2cbf607e73ab1e8ab79c0d286bf2996b5751db4e63cfb97c2f313dfc25c7",
+  "n_fontes": 8,
+  "chars_contexto": 13758,
+  "cobertura_rag": "fraca"
+ },
+ "amostragem": {
+  "temperature": 0,
+  "seed": 42,
+  "num_ctx": 16384,
+  "num_predict": 900
+ },
+ "chamada_em": "2026-08-07T00:26:04.691942+00:00",
+ "latencia_ms": 3833,
+ "tokens": {
+  "prompt_eval_count": 4418,
+  "eval_count": 46,
+  "eval_duration": 1001115000,
+  "prompt_eval_duration": 2192801000,
+  "load_duration": 300794258,
+  "total_duration": 3833040790
+ },
+ "medidas": {
+  "chars": 200,
+  "frases": 1,
+  "frases_com_citacao": 1,
+  "taxa_citacao": 1.0,
+  "fontes_citadas": [
+   2
+  ],
+  "citacoes_fora_do_intervalo": [],
+  "declarou_nao_cobertura": false
+ },
+ "resposta_vazia": false,
+ "raciocinio_chars": 0,
+ "resposta": "O processo de teste das soluções surgidas a partir de desafios abertos a startups deve ser padronizado e contar com métricas claras de sucesso ou falha de teste, além do prazo de duração do teste [2]."
+}

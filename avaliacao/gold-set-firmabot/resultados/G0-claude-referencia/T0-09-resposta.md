@@ -1,49 +1,11 @@
-## O que é uma decisão arquitetural
+Uma decisão arquitetural é, segundo [1], aquela que geralmente envolve a estrutura da aplicação ou do sistema, podendo também abranger decisões de tecnologia quando estas impactam características arquiteturais; uma boa decisão orienta os times de desenvolvimento nas escolhas técnicas corretas [1]. Complementarmente, [3] define a decisão arquitetural como a unidade primária de trabalho das atividades arquiteturais, e [4] reforça essa visão ao descrever a arquitetura como um "fluxo de decisões".
 
-Uma decisão arquitetural é a decisão que estrutura a aplicação ou sistema — e pode incluir decisões de tecnologia quando elas afetam características arquiteturais (os "-ilities": performance, disponibilidade, etc.). Não é qualquer escolha técnica; é a que orienta os times de desenvolvimento nas escolhas técnicas certas.
+Do ponto de vista estrutural, uma decisão de design arquitetural possui atributos formais: epítome (o enunciado curto da decisão), rationale (a justificativa do porquê) e escopo (limites em tempo, organização ou implementação) [6], [5]. Kruchten também descreve estados possíveis de uma decisão ao longo do tempo — decided, approved, challenged, rejected, obsolesced — indicando que o registro não é estático, mas acompanha o ciclo de vida da decisão [5].
 
-> "Architectural decisions usually involve the structure of the application or system, but they may involve technology decisions as well, particularly when those technology decisions impact architectural characteristics. [...] a good architectural decision is one that helps guide development teams in making the right technical choices."
+Quanto ao "quando se registra": [1] indica que o processo de decisão arquitetural inclui, entre suas etapas, reunir informação relevante, justificar, documentar e comunicar a decisão aos stakeholders certos — ou seja, a documentação é parte constitutiva do próprio ato de decidir, não uma etapa posterior opcional [1].
 
-— transcrito de *Fundamentals of Software Architecture* (Richards & Ford), Chapter 20: Architectural Patterns › Architectural Decisions.
+Segundo [2], em projetos ágeis nem todas as decisões são tomadas de uma vez nem no início do projeto; o registro deve ocorrer de forma contínua, em documentos pequenos e modulares, justamente porque documentos grandes não são mantidos atualizados nem lidos. A motivação por trás de uma decisão é um dos aspectos mais difíceis de rastrear ao longo da vida do projeto, o que justifica registrar no momento em que a decisão é tomada [2].
 
-Duas fontes complementam esse conceito colocando a decisão como **unidade de trabalho da atividade arquitetural**, não como artefato acessório:
+[4] detalha um mecanismo prático: um quadro kanban de decisões arquiteturais, com colunas como Backlog, In Progress, Ready for Decision e Decision Made, recomendando não apenas documentar as decisões mas também definir antecipadamente quais decisões precisam ser tomadas e suas dependências.
 
-> "Drive architectural decisions, which are the primary unit of work of architectural activities."
-
-— transcrito de *Continuous Architecture in Practice* (Erder & Pureur), Chapter 2 › Drive architectural decisions...
-
-E na mesma obra, a ideia de que a arquitetura *é* esse fluxo de decisões:
-
-> "the key unit of work of architecture is an architectural decision [...] architecture is just a flow of decisions."
-
-— transcrito de *Continuous Architecture in Practice*, Chapter 2 › Architecture as a Flow of Decisions.
-
-Um terceiro ângulo, mais estrutural, descreve a decisão pelos seus atributos mínimos — pelo menos um enunciado curto (epítome) e a justificativa (rationale):
-
-> "Epitome (or the Decision itself). This is a short textual statement of the design decision [...] Rationale. This is a textual explanation of the 'why' of the decision, its justification."
-
-— transcrito de *Software Architecture Knowledge Management* (Babar et al.), Chapter 3.4.1 What Is an Architectural Design Decision?, citando o framework de Kruchten.
-
-## Quando se registra
-
-Aqui as fontes não dão uma regra de "quando" no sentido de gatilho temporal explícito, mas dão dois elementos que, juntos, permitem responder por derivação:
-
-**1. Registrar é parte constitutiva do ato de decidir, não uma etapa posterior facultativa.** Fundamentals of Software Architecture lista documentar e comunicar como parte do mesmo processo de "fazer" a decisão, junto com reunir informação e justificar — transcrito acima, mesmo trecho de [1].
-
-**2. O registro deve ser modular e feito no momento em que a decisão é tomada, não como documentação monolítica ao final.** Michael Nygard argumenta que projetos ágeis não fazem todas as decisões de uma vez nem no início, e que documentos pequenos e modulares têm chance real de se manter atualizados — ao contrário de documentos grandes:
-
-> "Not all decisions will be made at once, nor will all of them be done when the project begins. [...] Documents that assist the team itself can have value, but only if they are kept up to date. Large documents are never kept up to date. Small, modular documents have at least a chance at being updated."
-
-— transcrito de adr2.pdf (Michael Nygard, "Documenting Architecture Decisions", 2011).
-
-*Continuous Architecture in Practice* propõe operacionalizar isso com um quadro Kanban de decisões (Backlog → In Progress → Ready for Decision → Decision Made), recomendando identificar de antemão quais decisões serão necessárias e suas dependências, e tratar a documentação como parte do fluxo até o estado "Decision Made" — transcrito de [4], mesma seção citada acima.
-
-**Derivado dessas duas fontes:** o registro acontece no momento em que a decisão é tomada (não antes, especulativamente, nem muito depois, de memória), e como artefato pequeno e específico daquela decisão — não como capítulo de um documento de especificação geral.
-
-Como reforço do porquê disso importa, *Software Architecture Knowledge Management* descreve o custo de não registrar no momento certo — decisão implícita (o arquiteto nem percebe que decidiu) ou explícita mas não documentada (decidida por um motivo específico, mas a razão não é escrita e se perde com o tempo):
-
-> "The design decision is explicit but undocumented: the architect takes a decision for a very specific reason [...] The reasoning is not documented, and thus is likely to vaporize over time."
-
-— transcrito de [8], Chapter 1.2.2.1 Architecture as a Set of Design Decisions.
-
-Nenhuma das fontes que chegaram detalha um gatilho formal (ex.: "toda decisão acima de X impacto" ou "em toda reunião de arquitetura") — se você precisa desse critério operacional específico, as fontes não cobrem esse nível.
+Por fim, [3] e [8] justificam a necessidade do registro: sem capturar as decisões arquiteturais, perde-se o conhecimento dos tradeoffs feitos em determinado contexto, o que impede a equipe de sustentar a evolução de longo prazo do produto [3]. [8] descreve o risco do registro ausente — decisões implícitas (o arquiteto nem percebe que decidiu) ou explícitas mas não documentadas (decididas por razão específica, mas sem registro da razão) tendem a se perder com o tempo, dificultando o rastreio posterior, especialmente durante a evolução do sistema [8].

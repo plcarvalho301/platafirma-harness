@@ -1,0 +1,46 @@
+{
+ "sonda": "G0",
+ "n": "08",
+ "bloco": "A",
+ "persona": "persona-nao-declarada",
+ "modelo": "gemma4:12b",
+ "pergunta": "o que é criptografia pós-quântica?",
+ "contexto_de": {
+  "rodada": "G0-rag-base",
+  "acervo_sha": "24ed2cbf607e73ab1e8ab79c0d286bf2996b5751db4e63cfb97c2f313dfc25c7",
+  "n_fontes": 8,
+  "chars_contexto": 12053,
+  "cobertura_rag": "boa"
+ },
+ "amostragem": {
+  "temperature": 0,
+  "seed": 42,
+  "num_ctx": 16384,
+  "num_predict": 900
+ },
+ "chamada_em": "2026-08-07T00:23:46.148533+00:00",
+ "latencia_ms": 5255,
+ "tokens": {
+  "prompt_eval_count": 3778,
+  "eval_count": 126,
+  "eval_duration": 2775901000,
+  "prompt_eval_duration": 1874613000,
+  "load_duration": 297018442,
+  "total_duration": 5254662415
+ },
+ "medidas": {
+  "chars": 546,
+  "frases": 3,
+  "frases_com_citacao": 2,
+  "taxa_citacao": 0.667,
+  "fontes_citadas": [
+   1,
+   4
+  ],
+  "citacoes_fora_do_intervalo": [],
+  "declarou_nao_cobertura": false
+ },
+ "resposta_vazia": false,
+ "raciocinio_chars": 0,
+ "resposta": "A criptografia pós-quântica (PQC) é definida como o uso de algoritmos matemáticos que são considerados seguros mesmo contra o poder de processamento de computadores quânticos [1]. Ela é apresentada como uma solução necessária para proteger informações no futuro quântico e como a defesa primária contra as ameaças geradas pela computação quântica [1, 6]. A PQC envolve o desenvolvimento de novos algoritmos resistentes a ataques quânticos, tais como a criptografia baseada em reticulados (lattice-based cryptography) e assinaturas hash-based [4]."
+}

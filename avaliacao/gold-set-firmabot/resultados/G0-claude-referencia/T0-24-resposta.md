@@ -1,28 +1,9 @@
-## Gestão de mudança
+Gestão de mudança é um processo estruturado para executar e registrar alterações durante o desenvolvimento de software e a operação de sistemas [7]. Trata-se de parte essencial da criação de uma estrutura de governança e controle viável, com relevância para conformidade regulatória como a Lei Sarbanes-Oxley [7].
 
-**Definição** (transcrita de [7], Security+ – Ahmed Sheikh, Capítulo 5 "Risk Management and Disaster Recovery" › "Why Change Management?"):
+No contexto de segurança da informação, convém que modificações nos recursos de processamento da informação e sistemas sejam controladas, com sistemas operacionais e aplicativos sujeitos a rígido controle de gestão de mudanças [3]. Os itens que convém serem considerados incluem: identificação e registro das mudanças significativas; planejamento e testes das mudanças; avaliação de impactos potenciais, incluindo impactos de segurança; procedimento formal de aprovação das mudanças propostas; comunicação dos detalhes das mudanças para todas as pessoas envolvidas; e procedimentos de recuperação para casos de insucesso ou eventos inesperados [3]. Convém também que sejam estabelecidos procedimentos e responsabilidades gerenciais formais para garantir controle satisfatório de todas as mudanças em equipamentos, software ou procedimentos, mantendo-se registro de auditoria com as informações relevantes [3]. O controle inadequado de modificações é apontado como causa comum de falhas de segurança ou de sistema, especialmente na transferência de um sistema em desenvolvimento para o estágio operacional [3].
 
-> "Change management is a structured approach for performing and recording changes during software development and system operation" — em tradução livre: gestão de mudança é uma abordagem estruturada para executar e registrar mudanças durante o desenvolvimento de software e a operação de sistemas.
+Para serviços terceirizados, o gerenciamento de mudanças precisa levar em conta tanto mudanças feitas pela organização (melhorias de serviços, novas aplicações, modificações de políticas, novos controles de segurança) quanto mudanças em serviços de terceiros (melhorias em redes, novas tecnologias, novos produtos, novas ferramentas e ambientes de desenvolvimento, mudanças de localização física e de fornecedores) [4]. Essa gestão deve levar em conta a criticidade dos sistemas e processos de negócio envolvidos e a reanálise/reavaliação de riscos [4].
 
-A mesma fonte acrescenta que a gestão de mudança é parte essencial da estrutura de governança e controle, e crítica para conformidade com a Sarbanes–Oxley Act (transcrito).
+Há também a dimensão humana da gestão de mudança: os itens de change management endereçam o aspecto das pessoas, e conseguir que elas lidem com o elemento emocional de adotar uma disciplina antes inexistente é central — mudanças de comportamento decorrem mais de experiências emocionalmente marcantes do que de fatos ou dados [8]. Recomenda-se seguir planos de treinamento e comunicação e monitorar continuamente a efetividade dos processos, com coleta frequente de métricas [8].
 
-**A norma ABNT NBR ISO/IEC 27002** trata do mesmo conceito em termos operacionais, em 10.1.2 "Gestão de mudanças" [3]. Transcrito da fonte, os elementos que convém considerar são:
-
-- identificação e registro das mudanças significativas;
-- planejamento e testes das mudanças;
-- avaliação de impactos potenciais, incluindo impactos de segurança;
-- procedimento formal de aprovação das mudanças propostas;
-- comunicação dos detalhes às pessoas envolvidas;
-- procedimentos de recuperação em caso de insucesso ou evento inesperado.
-
-A norma justifica isso dizendo que "o controle inadequado de modificações nos sistemas e nos recursos de processamento da informação é uma causa comum de falhas de segurança ou de sistema" (transcrito), e recomenda manter registro de auditoria de toda mudança realizada.
-
-**Caso específico de terceiros**, também na 27002, em 10.2.3 "Gerenciamento de mudanças para serviços terceirizados" [4]: o processo precisa levar em conta tanto mudanças feitas pela própria organização (melhorias de serviço, novas aplicações, novas políticas, novos controles) quanto mudanças do lado do fornecedor (novas tecnologias, novos produtos, mudanças de localização física ou de fornecedor) — sempre considerando a criticidade dos sistemas envolvidos e a reavaliação de riscos (transcrito).
-
-**Complemento — a dimensão de pessoas**: a obra de governança de dados [8], na seção "Operation and change › Essential questions", trata gestão de mudança sob o ângulo comportamental: cita que as pessoas mudam menos por dados e fatos e mais por experiências que afetam suas emoções (citação de Kotter e Cohen, transcrita), e recomenda monitorar a efetividade dos processos de gestão de mudança por métricas frequentes. Essa fonte é sobre change management dentro de um programa de governança de dados especificamente, não uma definição geral do conceito.
-
-**Fontes deixadas de fora por não tratarem do conceito exato** (vizinhos semânticos, não "gestão de mudança"):
-- [1] ISO 31000, 5.7 "Melhoria/Adaptação" — fala de adaptação contínua da *estrutura de gestão de riscos*, não do processo de gestão de mudança em si.
-- [2] Guia de migração para software livre — introdução geral do guia, sem definir o conceito.
-- [5] DMBOK, 3.7 — menciona "organizational change" de passagem, ao tratar de modelo operacional de dados, sem defini-lo.
-- [6] Data Governance, Cap. 4 overview — introduz um estudo de caso, não trata de change management.
+O acervo não cobre gestão de mudança como disciplina formal (frameworks como ADKAR, Kotter em detalhe, ou metodologias específicas de change management corporativo) além do que consta nessas quatro fontes.

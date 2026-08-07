@@ -1,0 +1,47 @@
+{
+ "sonda": "G0",
+ "n": "13",
+ "bloco": "B",
+ "persona": "persona-nao-declarada",
+ "modelo": "qwen3.5:9b",
+ "pergunta": "arquitetura de negócios",
+ "contexto_de": {
+  "rodada": "G0-rag-base",
+  "acervo_sha": "24ed2cbf607e73ab1e8ab79c0d286bf2996b5751db4e63cfb97c2f313dfc25c7",
+  "n_fontes": 8,
+  "chars_contexto": 9020,
+  "cobertura_rag": "boa"
+ },
+ "amostragem": {
+  "temperature": 0,
+  "seed": 42,
+  "num_ctx": 16384,
+  "num_predict": 900
+ },
+ "chamada_em": "2026-08-07T00:21:34.359712+00:00",
+ "latencia_ms": 3034,
+ "tokens": {
+  "prompt_eval_count": 1999,
+  "eval_count": 140,
+  "eval_duration": 2009326000,
+  "prompt_eval_duration": 712709000,
+  "load_duration": 218602286,
+  "total_duration": 3034344276
+ },
+ "medidas": {
+  "chars": 714,
+  "frases": 4,
+  "frases_com_citacao": 4,
+  "taxa_citacao": 1.0,
+  "fontes_citadas": [
+   1,
+   2,
+   6
+  ],
+  "citacoes_fora_do_intervalo": [],
+  "declarou_nao_cobertura": false
+ },
+ "resposta_vazia": false,
+ "raciocinio_chars": 0,
+ "resposta": "O conceito de arquitetura de negócios é definido como a aplicação da arquitetura de negócios para resolver problemas de negócios e entregar valor [1]. A Parte 2 do guia estabelece o que pode ser chamado de \"arquitetura de negócios fundamental\", fornecendo princípios, diretrizes e cenários de uso para estabelecer e mapear visões fundamentais e estendidas dos negócios [2]. As visões fundamentais incluem capacidade, organização, valor e informação, enquanto as visões estendidas incluem estratégia, iniciativas, produtos, partes interessadas e política [2]. A arquitetura de negócios pode ser usada em conjunto com modelos de negócios para impulsionar inovação e apoiar resultados organizacionais específicos [6]."
+}

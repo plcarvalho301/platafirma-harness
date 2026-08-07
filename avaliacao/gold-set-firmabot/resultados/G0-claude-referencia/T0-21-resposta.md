@@ -1,23 +1,13 @@
-## Posicionamento de produto
+Posicionamento de produto é o processo deliberado de definir o contexto de mercado em que um produto compete, de forma a evidenciar seus benefícios óbvios sobre alternativas [1]. A ideia central é que a maioria dos produtos pode ser posicionada em múltiplos mercados diferentes — o produto não está fadado a permanecer em um mercado onde ninguém reconhece seu valor [6].
 
-**Definição** (transcrito de [5], seção *POSITIONING AS CONTEXT*, obra *Obviously Awesome: How to Nail Product Positioning*, de April Dunford):
+**Posicionamento como contexto.** Posicionar um produto funciona como a cena de abertura de um filme: dá ao público as informações básicas para entender o que está diante dele [5]. Sem esse trabalho deliberado, equipes caem em duas armadilhas: ficar presa à ideia original do que o produto deveria ser sem perceber que ele virou outra coisa, ou manter um posicionamento que já foi correto mas que o mercado ao redor mudou [3] [5].
 
-> "Context enables people to figure out what's important. Positioning products is a lot like context setting in the opening of a movie."
+**Vocabulário comum.** Para reposicionar um produto, a equipe precisa abandonar noções pré-concebidas e construir um vocabulário de posicionamento compartilhado, já que o mesmo produto pode ser "muitas coisas para muitos tipos de compradores" [1].
 
-Ou seja: posicionamento é o trabalho de dar contexto a um produto — do mesmo jeito que a cena de abertura de um filme ajuda o espectador a responder rapidamente "onde estamos, quem são esses personagens, devo torcer por eles ou contra eles, isso é triste ou é engraçado". Sem esse contexto deliberado, o comprador não sabe onde encaixar o produto na cabeça dele.
+**Dos atributos ao valor.** O processo envolve agrupar atributos e recursos em "temas" de valor, sempre pela perspectiva do cliente — o exercício não é listar cada funcionalidade, mas destacar o que é mais crítico e diferenciado, trazendo esse valor único para o centro [2].
 
-A mesma fonte descreve uma armadilha comum (derivado de [5]): produtos criadores tendem a achar que só existe uma forma de posicionar uma oferta, presos à ideia original de "o que eu construí" (ex.: "sobremesa" ou "e-mail"), quando na verdade o mesmo produto poderia ser reposicionado em outro mercado (ex.: "lanche" ou "chat") — e isso não é acidente, é escolha deliberada.
+**Categoria e tendências.** Posicionar o produto dentro de uma categoria de mercado estabelecida ajuda o cliente a entender rapidamente do que se trata e se deve considerá-lo; de forma opcional, apoiar-se em tendências relevantes do setor pode reforçar por que o produto importa agora [4].
 
-**O objetivo do processo** (transcrito de [1], *STEP 3 — Align Your Positioning Vocabulary*):
+**Registro e compartilhamento.** Por fim, o posicionamento só é útil se for compartilhado na organização, com aceite de todos, para orientar branding, marketing, vendas, produto e sucesso do cliente — daí a recomendação de documentá-lo, inclusive num "canvas de posicionamento" que relaciona categoria de mercado, alternativas competitivas, atributos, valor e segmentos de cliente [7].
 
-> "The goal of the 10-Step Positioning Process is to find the best position for a product, one that puts the product in the context of a market where it can easily win because the product has obvious benefits over alternatives."
-
-A mesma fonte observa (derivado de [1]) que a maioria dos produtos pode ser "muitas coisas para muitos tipos de compradores" — por isso é preciso um vocabulário comum de equipe antes de tentar reposicionar, largando bagagem de posicionamento anterior.
-
-**Risco de desatualização** (transcrito/derivado de [3], *POSITIONING AS CONTEXT › The Two Traps › Trap 2*): um posicionamento pode ficar ruim não porque o produto mudou, mas porque o mercado ao redor dele mudou — a fonte ilustra com o caso do "diet muffin" que virou irrelevante quando o mesmo produto, com os mesmos ingredientes, passou a ser vendido como "gluten-free paleo snack" pela concorrência.
-
-**Componentes e captura**: as fontes [4] e [7] cobrem partes específicas do processo — [4] fala de um dos "5 (mais 1) componentes" (tendências relevantes como elemento opcional de contexto) e [7] descreve o *Step 10*, a captura do posicionamento em documento e em um "positioning canvas" (nome do produto, categoria de mercado, alternativas competitivas, atributos, valor e segmentos de cliente) para que o posicionamento tenha adesão da empresa e informe marca, marketing, vendas e produto — isso é transcrito de [7].
-
-**Conclusão do livro** (transcrito de [6]): "Any product can be positioned in multiple markets" e "Great positioning rarely comes by default" — reforça que posicionamento é resultado de trabalho deliberado (testar, falhar, tentar de novo), não algo que acontece sozinho.
-
-As fontes [2] (Step 6, sobre agrupar valor em "temas") não tratam do conceito geral de posicionamento em si, mas de uma etapa específica do processo de dez passos — deixei fora da definição central porque o breadcrumb aponta para uma técnica intermediária, não para o conceito.
+Em suma: bom posicionamento não acontece por padrão — exige deliberação, teste, falha e nova tentativa [6], e a introdução do próprio material reconhece que, apesar de não ser um tema "moderno", ainda é mal compreendido e mal executado por muita gente [8].

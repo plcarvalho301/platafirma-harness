@@ -1,0 +1,52 @@
+{
+ "sonda": "G0",
+ "n": "22",
+ "bloco": "B",
+ "persona": "persona-nao-declarada",
+ "modelo": "qwen3.5:9b",
+ "pergunta": "avaliação heurística",
+ "contexto_de": {
+  "rodada": "G0-rag-base",
+  "acervo_sha": "24ed2cbf607e73ab1e8ab79c0d286bf2996b5751db4e63cfb97c2f313dfc25c7",
+  "n_fontes": 8,
+  "chars_contexto": 9586,
+  "cobertura_rag": "fraca"
+ },
+ "amostragem": {
+  "temperature": 0,
+  "seed": 42,
+  "num_ctx": 16384,
+  "num_predict": 900
+ },
+ "chamada_em": "2026-08-07T00:22:05.369996+00:00",
+ "latencia_ms": 2822,
+ "tokens": {
+  "prompt_eval_count": 2697,
+  "eval_count": 110,
+  "eval_duration": 1567454000,
+  "prompt_eval_duration": 945749000,
+  "load_duration": 217009703,
+  "total_duration": 2821741626
+ },
+ "medidas": {
+  "chars": 427,
+  "frases": 2,
+  "frases_com_citacao": 1,
+  "taxa_citacao": 0.5,
+  "fontes_citadas": [
+   1,
+   2,
+   3,
+   4,
+   5,
+   6,
+   7,
+   8
+  ],
+  "citacoes_fora_do_intervalo": [],
+  "declarou_nao_cobertura": false
+ },
+ "resposta_vazia": false,
+ "raciocinio_chars": 0,
+ "resposta": "O conceito de \"avaliação heurística\" não é coberto pelas fontes fornecidas [1], [2], [3], [4], [5], [6], [7] ou [8]. As fontes tratam de arquitetura da informação, resolução de problemas humanos, modelagem de ameaças com heurísticas específicas (como \"Ceremony Analysis\"), requisitos de segurança e definições gerais de heurística como regras práticas, mas não descrevem o processo específico chamado de \"avaliação heurística\"."
+}

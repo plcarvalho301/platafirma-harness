@@ -1,28 +1,11 @@
-**Definição**
+Criptografia pós-quântica (PQC) é o conjunto de algoritmos matemáticos desenvolvidos para permanecer seguros mesmo diante do poder de processamento de computadores quânticos, funcionando como defesa primária contra a ameaça quântica [1].
 
-Criptografia Pós-Quântica (PQC) é a defesa primária contra a ameaça representada pela computação quântica: ela usa algoritmos matemáticos que se acredita serem seguros mesmo contra o poder de processamento de computadores quânticos. *(Transcrito de [1] — Ameaça da Computação Quântica e a Transição para a Criptografia Pós-Quântica: Relatório Executivo de Segurança › Criptografia Pós-Quântica (PQC) e Mitigação.)*
+Sua necessidade surge porque algoritmos quânticos — como o Algoritmo de Shor — conseguem quebrar sistemas de criptografia assimétrica atuais (RSA e ECC), que dependem da dificuldade de fatoração de grandes números ou do logaritmo discreto [4][8]. Já o Algoritmo de Grover impacta a criptografia simétrica, exigindo o dobro do tamanho de chaves (ex.: AES-256) para manter o nível de segurança [8].
 
-**Por que ela existe (a ameaça que motiva)**
+Entre as abordagens técnicas de PQC estão a criptografia baseada em reticulados (lattice-based) e as assinaturas baseadas em hash (hash-based), sendo que o NIST divulgou padrões nessas categorias [4]. Um exemplo prático dessa família é o CRYSTALS-Kyber, algoritmo lattice-based avaliado em integração híbrida com o protocolo Matrix para acordo de chaves [7].
 
-Algoritmos quânticos como o de Shor conseguem quebrar a maioria dos sistemas de criptografia assimétrica usados hoje (RSA, ECC), que dependem da dificuldade de fatorar números grandes ou resolver o problema do logaritmo discreto — problemas que um computador quântico resolve de forma eficiente. Já o algoritmo de Grover afeta a criptografia simétrica, exigindo o dobro do tamanho de chave (ex.: AES-256) para manter o nível de segurança atual. *(Transcrito/derivado de [4] — OSIC 15/2024 › 3.2 Desafios da Computação Quântica › 3.2.1 Quebra da criptografia assimétrica; e de [8] — Relatório Executivo PQC e Infraestruturas Críticas › 1. Ameaça e Contexto Estratégico.)*
+A urgência da adoção é reforçada pela ameaça "Harvest Now, Decrypt Later" (HNDL/SNDL) — ou descriptografia retrospectiva —, em que adversários armazenam hoje dados cifrados classicamente para descriptografá-los assim que dispuserem de computação quântica capaz disso [8].
 
-Essa urgência é reforçada pela ameaça "Harvest Now, Decrypt Later" (HNDL/SNDL): adversários já interceptam e armazenam hoje dados cifrados classicamente para descriptografá-los assim que dispuserem de computação quântica capaz disso. *(Transcrito de [8].)*
+A estratégia recomendada não é a substituição pura, mas a criptografia híbrida, combinando segurança clássica com PQC, para mitigar esse risco de descriptografia futura [5]. No caso brasileiro, essa transição é tratada como imperativo de soberania digital e de financiamento contínuo de Defesa, sob uma abordagem "Quantum-Safe-by-Design" [3].
 
-**Como ela é construída, tecnicamente**
-
-As soluções emergentes de PQC incluem, entre outras, criptografia baseada em reticulados (lattice-based) e assinaturas hash-based (stateless e stateful); o NIST já publicou padrões nessas famílias. *(Transcrito de [4].)*
-
-**Distinção importante**
-
-PQC não é o mesmo que "criptografia quântica": PQC é a solução de curto prazo baseada em algoritmos matemáticos clássicos resistentes a ataque quântico; já a distribuição quântica de chaves (QKD) — uma técnica de criptografia quântica propriamente dita, que usa fenômenos físicos para gerar/compartilhar chaves — é tratada como solução de mais longo prazo. *(Transcrito de [6] — OSIC 15/2024 › 3.4 Conclusões.)*
-
-**Modelo de adoção recomendado nas fontes**
-
-As fontes de contexto brasileiro recomendam uma transição em modelo híbrido — combinando criptografia clássica com PQC ("Quantum-Safe-by-Design") — para mitigar o risco de descriptografia retrospectiva, em vez de substituição abrupta. *(Transcrito/derivado de [3] e [5].)*
-
-**Exemplo de aplicação prática**
-
-Um estudo técnico (SBRC 2026) avaliou a integração híbrida do algoritmo CRYSTALS-Kyber (PQC baseado em reticulados) ao protocolo Matrix, medindo overhead de banda (+548% no setup, +252% nas rotações de chave) com impacto desprezível em CPU/latência — ilustrando o custo de engenharia real de adotar PQC em um sistema de mensageria. *(Transcrito de [7]; nota: o abstract da fonte veio em inglês, mas há resumo equivalente em português no próprio trecho, por isso não deixei a fonte de fora.)*
-
----
-Observação: a fonte [2] (Consolidação de Matrizes PQC.xlsx) trata de algoritmos *simétricos clássicos* (AES, ChaCha, SM4 etc.), não de algoritmos pós-quânticos propriamente ditos no trecho que chegou — por isso não a usei para sustentar a definição de PQC, ela não é o vizinho semântico correto aqui.
+Por fim, distingue-se da criptografia quântica propriamente dita (como a distribuição quântica de chaves, QKD): a PQC é apontada como solução necessária de curto prazo, enquanto a QKD é vista como tecnologia de mais longo prazo [6].

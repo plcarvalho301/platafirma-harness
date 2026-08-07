@@ -1,0 +1,46 @@
+{
+ "sonda": "G0",
+ "n": "14",
+ "bloco": "B",
+ "persona": "persona-nao-declarada",
+ "modelo": "gemma4:12b",
+ "pergunta": "vocabulário controlado",
+ "contexto_de": {
+  "rodada": "G0-rag-base",
+  "acervo_sha": "24ed2cbf607e73ab1e8ab79c0d286bf2996b5751db4e63cfb97c2f313dfc25c7",
+  "n_fontes": 8,
+  "chars_contexto": 7108,
+  "cobertura_rag": "boa"
+ },
+ "amostragem": {
+  "temperature": 0,
+  "seed": 42,
+  "num_ctx": 16384,
+  "num_predict": 900
+ },
+ "chamada_em": "2026-08-07T00:24:21.625223+00:00",
+ "latencia_ms": 8325,
+ "tokens": {
+  "prompt_eval_count": 2373,
+  "eval_count": 294,
+  "eval_duration": 6513616000,
+  "prompt_eval_duration": 1202918000,
+  "load_duration": 295581360,
+  "total_duration": 8324783302
+ },
+ "medidas": {
+  "chars": 1453,
+  "frases": 7,
+  "frases_com_citacao": 5,
+  "taxa_citacao": 0.714,
+  "fontes_citadas": [
+   6,
+   8
+  ],
+  "citacoes_fora_do_intervalo": [],
+  "declarou_nao_cobertura": false
+ },
+ "resposta_vazia": false,
+ "raciocinio_chars": 0,
+ "resposta": "O objetivo principal do controle de vocabulário é alcançar a consistência na descrição de objetos de conteúdo e facilitar a recuperação [3, 5]. O controle de vocabulário é alcançado por três métodos principais: definir o escopo ou significado dos termos; usar a relação de equivalência para ligar termos sinônimos ou quase sinônimos; e distinguir entre homógrafos [2, 5].\n\nExistem quatro princípios importantes do controle de vocabulário que orientam seu design e desenvolvimento: eliminar ambiguidades, controlar sinônimos, estabelecer relações entre termos quando apropriado e realizar testes e validação de termos [6]. Um objetivo principal é garantir que cada conceito distinto seja descrito por uma única forma linguística; se existirem múltiplas formas, estas devem ser controladas ou regularizadas para que o conteúdo não fique espalhado pelo sistema sob múltiplos pontos de acesso, mas seja reunido em um só lugar [6]. A eliminação de ambiguidades e a compensação da sinonímia garantem que cada termo tenha apenas um significado e que apenas um termo possa ser usado para representar um determinado conceito ou entidade [6].\n\nVocabulários controlados são geralmente usados para descrever conteúdo atribuindo termos para representar metadados associados a objetos de conteúdo, organizar conteúdos em sites e atividades semelhantes [8]. Para fins deste padrão, um termo é definido como uma ou mais palavras usadas para representar um conceito [8]."
+}

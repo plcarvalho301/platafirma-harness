@@ -1,0 +1,49 @@
+{
+ "sonda": "G0",
+ "n": "25",
+ "bloco": "B",
+ "persona": "persona-nao-declarada",
+ "modelo": "gemma4:12b",
+ "pergunta": "observabilidade",
+ "contexto_de": {
+  "rodada": "G0-rag-base",
+  "acervo_sha": "24ed2cbf607e73ab1e8ab79c0d286bf2996b5751db4e63cfb97c2f313dfc25c7",
+  "n_fontes": 8,
+  "chars_contexto": 16147,
+  "cobertura_rag": "boa"
+ },
+ "amostragem": {
+  "temperature": 0,
+  "seed": 42,
+  "num_ctx": 16384,
+  "num_predict": 900
+ },
+ "chamada_em": "2026-08-07T00:25:44.496242+00:00",
+ "latencia_ms": 10942,
+ "tokens": {
+  "prompt_eval_count": 4030,
+  "eval_count": 374,
+  "eval_duration": 8286763999,
+  "prompt_eval_duration": 2004649000,
+  "load_duration": 301108299,
+  "total_duration": 10942142404
+ },
+ "medidas": {
+  "chars": 1777,
+  "frases": 9,
+  "frases_com_citacao": 5,
+  "taxa_citacao": 0.556,
+  "fontes_citadas": [
+   1,
+   2,
+   3,
+   6,
+   7
+  ],
+  "citacoes_fora_do_intervalo": [],
+  "declarou_nao_cobertura": false
+ },
+ "resposta_vazia": false,
+ "raciocinio_chars": 0,
+ "resposta": "A observabilidade pode ser definida de diferentes formas dependendo do contexto:\n\n*   **Em sistemas de controle (definição original):** É uma medida de quão bem os estados internos de um sistema podem ser inferidos a partir do conhecimento de suas saídas externas [2].\n*   **Para sistemas de software:** É uma medida de quão bem você pode entender e explicar qualquer estado em que seu sistema possa entrar, independentemente de quão novo ou bizarro ele seja [3, 4]. Isso implica na capacidade de depurar esse estado através de diversas dimensões de dados de forma iterativa e ad hoc, sem a necessidade de prever ou definir essas necessidades de depuração antecipadamente [3, 4]. Se for possível entender qualquer estado incomum sem precisar enviar novos códigos, o sistema possui observabilidade [3].\n*   **Como prática e característica:** A observabilidade é uma característica dos sistemas de software que, quando adotada como uma prática contínua (e não apenas um checklist técnico), permite que as equipes desenvolvam, operem, depurem e relatem seus sistemas de forma eficaz [1]. Ela envolve a capacidade de explorar o sistema de maneira aberta, permitindo responder a perguntas arbitrárias sobre seu comportamento [1, 8].\n*   **Diferença entre Observabilidade e Monitoramento:** Enquanto o monitoramento é uma atividade que geralmente foca em prever o que pode dar errado e definir alertas para esses eventos específicos, a observabilidade foca na capacidade de entender o estado interno do sistema através de saídas externas para investigar problemas rapidamente [6]. A observabilidade não deve ser confundida com apenas \"telemetria\" ou \"monitoramento\", pois envolve desafios técnicos e culturais para que as equipes possam interrogar os dados de forma exploratória [7]."
+}

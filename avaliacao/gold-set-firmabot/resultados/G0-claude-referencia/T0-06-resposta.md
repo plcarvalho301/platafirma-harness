@@ -1,21 +1,9 @@
-As fontes que chegaram não tratam de "domínio" como conceito de Gestão do Conhecimento (KM) enquanto disciplina — nenhum breadcrumb nomeia esse conceito exato. O que chegou usa "domínio" no sentido de Domain-Driven Design (DDD) e arquitetura de software/dados, que é um vizinho semântico, não a mesma coisa.
+O acervo não cobre especificamente "domínio" no contexto de **gestão do conhecimento** como disciplina. As fontes disponíveis tratam do conceito de domínio no contexto de **Domain-Driven Design (DDD)** e **arquitetura de dados**, que são áreas correlatas mas não idênticas à pergunta feita.
 
-Dentro do que chegou, a definição mais próxima e citável é a transcrita em [5], que por sua vez cita Eric Evans:
+Pelo que as fontes cobrem sobre o conceito de domínio (em engenharia de software/dados):
 
-> "Domain: A sphere of knowledge, influence, or activity. The subject area to which the user applies a program is the domain of the software."
+Domínio é definido como "uma esfera de conhecimento, influência ou atividade. A área de assunto à qual o usuário aplica um programa é o domínio do software" [5]. Um domínio pode conter múltiplos serviços — por exemplo, um domínio de vendas pode conter serviços de pedidos, faturamento e produtos [5].
 
-— transcrito de *Fundamentals of Data Engineering* (Reis & Housley), Capítulo 3: Designing Good Data Architecture › Domains and Services, citando Eric Evans.
+Na perspectiva de Eric Evans, "toda área de assunto à qual o usuário aplica o programa é o domínio do software" [6], e alguns domínios envolvem o mundo físico, como o domínio de um programa de reservas de companhia aérea [6].
 
-A obra original de Evans, em [6], traz a mesma ideia com outras palavras:
-
-> "That subject area to which the user applies the program is the domain of the software."
-
-— transcrito de *Domain-Driven Design* (Eric Evans), Part I: Putting the Domain Model to Work.
-
-Nesses dois casos, "domínio" é definido como a área de conhecimento, influência ou atividade à qual um software (ou um sistema de conhecimento, por extensão) se aplica — o assunto/esfera que delimita o que está dentro e fora do escopo de modelagem. Isso é transcrito da fonte, não é uma definição de KM propriamente dita.
-
-As demais fontes de DDD ([1], [3], [4], [7], [8]) tratam de *domain knowledge* (conhecimento de domínio) — como descobri-lo, comunicá-lo via linguagem ubíqua, e como ele evolui — o que é adjacente mas não é a definição de "domínio" em si nem pertence ao vocabulário de KM.
-
-A fonte [2] é um artefato técnico de alinhamento ontológico WordNet-DOLCE em formato KIF/Lisp; não contém prosa definindo "domínio" e não sustenta afirmação sobre o conceito perguntado — deixo de fora por não ter matéria aplicável.
-
-**Sobre "domínio" especificamente em Gestão do Conhecimento** (como área de expertise reconhecida, comunidade de prática, taxonomia de conhecimento organizacional): as fontes não cobrem esse enquadramento. Se você quiser, posso responder com o que sei sobre isso — mas seria leitura minha, sem fonte no que chegou.
+Se a pergunta é sobre gestão do conhecimento como disciplina (KM), com seus próprios frameworks de "domínio de conhecimento", o acervo não cobre esse conceito exato — as fontes [3], [4] e [8] tratam de "conhecimento de domínio" (domain knowledge) dentro do DDD, que é sobre descobrir e modelar lógica de negócio, não sobre domínios como categoria estrutural em KM.

@@ -1,35 +1,13 @@
-## Observabilidade
+**Observabilidade** é um conceito que tem origem na engenharia de controle: o termo foi cunhado pelo engenheiro Rudolf E. Kálmán em 1960 para descrever sistemas de controle matemáticos, sendo definida como uma medida de quão bem os estados internos de um sistema podem ser inferidos a partir de seus outputs externos [2].
 
-**Definição** (transcrita da fonte [3], *Observability Engineering*, Capítulo 22 — "Where to Go from Here", que retoma a definição dada no Capítulo 1):
+Ao ser adaptado para sistemas de software modernos, o conceito ganha uma definição própria: observabilidade é uma medida de quão bem você consegue entender e explicar qualquer estado em que seu sistema possa entrar, por mais novo ou bizarro que seja, sendo capaz de depurar comparativamente esse estado através de todas as dimensões dos dados de estado do sistema, em uma investigação iterativa e ad hoc, sem precisar definir ou prever essas necessidades de depuração com antecedência [3].
 
-> "Observability for software systems is a measure of how well you can understand and explain any state your system can get into, no matter how novel or bizarre. You must be able to comparatively debug that bizarre or novel state across all dimensions of system state data, and combinations of dimensions, in an ad hoc iterative investigation, without being required to define or predict those debugging needs in advance. If you can understand any bizarre or novel state without needing to ship new code, you have observability."
+Um dos pilares técnicos dessa definição é o evento estruturado, considerado o bloco fundamental de construção da observabilidade: é preciso obter respostas para qualquer pergunta que se possa fazer, sem antecipar ou prever a necessidade de respondê-la com antecedência, o que exige telemetria coletada em resolução total, no nível de granularidade mais baixo possível, mantendo o contexto em que foi coletada [4].
 
-Em resumo (derivado da fonte): observabilidade é a capacidade de entender e explicar qualquer estado — inclusive estados nunca vistos antes — de um sistema em produção, fazendo perguntas ad hoc sobre os dados sem precisar prever essas perguntas com antecedência nem alterar o código para respondê-las.
+A observabilidade não deve ser confundida com monitoramento: monitoramento é algo que se *faz* — você observa o sistema e, tradicionalmente, precisa pensar com antecedência no que pode dar errado para definir mecanismos de alerta. Já a observabilidade é uma característica *do* sistema — a extensão em que se pode entender o estado interno de um sistema a partir de seus outputs externos, exigindo uma compreensão mais holística do software como um todo, não como um conjunto de entidades separadas [6].
 
-### Origem do termo
+Essa distinção também é reforçada quanto ao uso indevido do termo: observabilidade tem sido erroneamente tratada como sinônimo de "monitoramento" ou "telemetria de sistema", quando na verdade é uma característica do software que só pode ser efetivamente utilizada em sistemas de produção quando as equipes adotam novas práticas que sustentam seu desenvolvimento contínuo — tornando sua introdução tanto um desafio técnico quanto cultural [7].
 
-Transcrito de [2] (Capítulo 1, "The Mathematical Definition of Observability"): o termo foi cunhado pelo engenheiro Rudolf E. Kálmán em 1960, na teoria de controle, onde observabilidade é "a measure of how well internal states of a system can be inferred from knowledge of its external outputs". A obra deixa claro que essa definição matemática original foi adaptada — de forma "radicalmente diferente" — para sistemas de software, e não é o enfoque do livro.
+Do ponto de vista de debugging, ferramentas de observabilidade incentivam a coleta de telemetria rica para cada evento possível, com o contexto completo de cada requisição, permitindo interrogar os dados de forma arbitrária: você faz uma pergunta que não precisou prever de antemão, e a resposta leva à próxima pergunta, repetidamente, até encontrar a causa do problema. Essa capacidade é chamada de explorabilidade — a medida de quão bem se pode investigar iterativamente e entender qualquer estado do sistema, mesmo um nunca visto antes, sem prever esse estado com antecedência [8].
 
-### Observabilidade vs. monitoramento
-
-De [6] (*Building Microservices*, 2ª ed., Sam Newman, seção "Observability Versus Monitoring"), transcrito/próximo do original:
-
-> "The observability of a system is the extent to which you can understand the internal state of the system from external outputs."
-
-O mesmo trecho distingue: monitoramento é uma *atividade* (você monitora, observa o sistema), enquanto observabilidade é uma *propriedade* do sistema. Abordagens tradicionais de monitoramento exigem prever com antecedência o que pode dar errado e definir alertas para isso — o que se torna limitado à medida que o sistema cresce em complexidade (trecho cortado na fonte antes de concluir o raciocínio).
-
-### Observabilidade como prática (não capacidade pontual)
-
-Transcrito de [1] (Introdução, "Introducing Observability as a Practice"): assim como segurança ou testabilidade, observabilidade "is an ongoing practice that is a responsibility shared by anyone responsible for developing and running a production service" — não é algo que se "alcança" com uma checkbox técnica. A fonte marca dois planos: (1) capacidade técnica — o sistema pode ser observado?; e (2) prática sociotécnica — as equipes e o sistema operam bem juntos, já que "just because a system can be observed does not mean that it is being observed effectively."
-
-### Pré-requisito técnico: o evento estruturado
-
-Derivado de [4] (Capítulo 5, "Structured Events Are the Building Blocks of Observability"): para sustentar a definição acima, o livro aponta o **evento estruturado** como bloco de construção fundamental — telemetria coletada em resolução completa, no nível de request/serviço, preservando o contexto de captura, permitindo fatiar os dados em qualquer combinação de dimensões sem definição prévia. A fonte contrasta isso com métricas tradicionais, que exigem definição de antemão e perdem o contexto do evento.
-
-### Debugging exploratório
-
-De [8] ("Debugging with Observability"): a *explorability* de um sistema é medida por quão bem se pode fazer qualquer pergunta e inspecionar o estado interno correspondente — investigação iterativa e aberta, sem prever de antemão quais estados serão investigados.
-
----
-
-**Nota sobre as fontes:** todos os trechos usados vêm de duas obras específicas do acervo — *Observability Engineering* (Majors, Fong-Jones, Miranda) e *Building Microservices* (Newman) — ambas com identificação completa (autor, ano, ISBN quando aplicável). Não há conflito entre elas: a segunda converge com a primeira na definição central (estado interno inferível a partir de saídas externas), acrescentando o contraste com monitoramento.
+Por fim, observabilidade não é um estado que se "alcança" de uma vez, como um checkbox — assim como segurança ou testabilidade, é uma prática contínua e uma responsabilidade compartilhada por quem desenvolve e opera um serviço em produção. Sistemas de produção são sociotécnicos: primeiro a observabilidade existe como capacidade técnica mensurável (o sistema pode ou não ser observado); depois, o sucesso é medido por quão bem equipes e sistema operam juntos, já que ter a capacidade técnica não garante que o sistema esteja sendo observado de forma eficaz [1].

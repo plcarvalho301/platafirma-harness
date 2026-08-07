@@ -1,30 +1,23 @@
-**Definição**
+Trunk-based development é a prática de mesclar código continuamente no trunk (branch principal), evitando feature branches de vida longa [2][6]. É considerada complementar à integração contínua e demonstra, ao longo de anos de pesquisa, acelerar a velocidade de entrega de software [2].
 
-Trunk-based development é a prática de integrar código continuamente no "tronco" (trunk/master) em vez de manter branches de feature de vida longa. Para evitar que trabalho incompleto vaze para os demais, usa-se feature flags para "esconder" o que ainda não está pronto. É considerada complementar à integração contínua.
-— Transcrito/derivado de *Building Microservices, 2nd ed.* (Sam Newman), Capítulo 7, seção "Branching Models": "The alternative approach is to have everyone check in to the same 'trunk' of source code. To keep changes from impacting other people, techniques like feature flags are used to 'hide' incomplete work. This technique of everyone working off the same trunk is called trunk-based development."
+**Definição e mecânica**
 
-Convergindo com isso, o *2022 DORA Accelerate State of DevOps Report* (seção "Trunk-based development") transcreve: "the practice of continuously merging code into the trunk and avoiding long-lived feature branches [...] considered a complement to continuous integration."
+A prática consiste em todos os desenvolvedores fazerem check-in na mesma "trunk" do código-fonte; para evitar que mudanças incompletas afetem outros, usam-se técnicas como feature flags para "esconder" trabalho não finalizado [6]. Isso se opõe ao feature branching, em que o trabalho isolado em branches atrasa a integração e gera merges mais complexos quando finalmente ocorrem [6].
 
-**Critérios operacionais que caracterizam a prática (empíricos)**
+**Evidências de impacto no desempenho**
 
-Transcrito de *Accelerate: The Science of Lean Software and DevOps* (Cap. 10, seção "Trunk-based development") e do *2017 State of DevOps Report* (seção "Trunk-based development", que apresenta os mesmos critérios do ano anterior):
-- Merge de código no trunk pelo menos uma vez ao dia.
-- Branches (ou forks) com vida muito curta — menos de um dia antes de serem integradas.
-- Menos de três branches ativas simultaneamente por equipe.
-- Ausência de períodos de "code freeze" ou estabilização.
+A pesquisa da Accelerate mostrou que desenvolver a partir do trunk/master, em vez de branches de longa duração, correlaciona-se com maior desempenho de entrega de software [7]. Times de melhor desempenho apresentavam: menos de três branches ativos a qualquer momento, branches com vida muito curta (menos de um dia) antes de serem mescladas ao trunk, e nunca tinham períodos de "code freeze" ou estabilização [7]. Esses resultados são independentes de tamanho de time, tamanho de organização ou indústria [7].
 
-**Impacto associado (achado de pesquisa, não definição)**
+O relatório de 2017 confirma achados similares: mesclar código no trunk diariamente, branches ou forks com vida muito curta (menos de um dia), e menos de três branches ativos contribuem para maior desempenho de entrega [5]. Times sem períodos de "code lock" também apresentaram desempenho superior [5].
 
-Derivado das mesmas fontes DORA/Accelerate: equipes que seguem esses critérios apresentam maior desempenho de entrega de software (lead time, frequência de deploy, tempo de restauração) e menor taxa de falha em mudanças — resultado, segundo o relato, independente de tamanho de time, de organização ou de indústria (Accelerate, Cap. 10).
+**Contraponto ao GitHub Flow**
 
-O *2022 DORA Report* (seção "Trunk-based development") acrescenta um recorte por experiência: profissionais com 16+ anos que praticam trunk-based development tendem a realizar os benefícios da prática (maior desempenho geral, menos trabalho não planejado, menor propensão a erro, menor change failure rate); já profissionais com menos experiência apresentam resultados menos positivos — atribuído, no texto, à ausência das práticas complementares necessárias (regras rígidas contra deixar o trunk quebrado, gated branches, auto-rollback).
+Apesar das evidências, alguns desenvolvedores acostumados ao workflow recomendado pelo GitHub — que depende fortemente de desenvolvimento em branches com merges periódicos ao trunk — permanecem céticos [5][7]. A pesquisa argumenta que trabalhar em branches curtas, mescladas ao trunk pelo menos diariamente, é consistente com práticas de integração contínua amplamente aceitas [5][7].
 
-**Ressalva sobre resistência à prática**
+**Papel da experiência (achado de 2022)**
 
-Transcrito do *2017 State of DevOps Report*: existe ceticismo de desenvolvedores acostumados ao fluxo recomendado pelo GitHub ("GitHub Flow"), que se apoia em desenvolvimento por branches com merges periódicos ao trunk — mas o relatório argumenta que esse fluxo, quando as branches são de fato curtas (menos de um dia), é compatível com os critérios de integração contínua acima.
+O relatório de 2022 aponta que a experiência do profissional importa na implementação: indivíduos com 16+ anos de experiência que usam trunk-based development percebem os benefícios da prática — maior desempenho geral de entrega, menos trabalho não planejado, menos propensão a erros e menor taxa de falha em mudanças [2]. Já profissionais com menos experiência tendem a ver resultados menos positivos, incluindo desempenho geral de entrega reduzido [2]. Isso é atribuído às práticas adicionais necessárias para implementar a técnica com sucesso — como regras rigorosas contra deixar o trunk quebrado sem correção e uso de gated code branches com rollback automático quando o trunk quebra [2].
 
-**Fontes que apareceram mas não sustentam a definição**
+**Posição no conjunto de capacidades técnicas DevOps**
 
-- Fonte [8] (2021 DORA) apenas lista "Trunk-based development" como uma das capacidades técnicas medidas, sem defini-la no trecho — não usada para conceituar.
-- Fonte [3] (2016 State of DevOps, "Shifting Left") e fonte [4] (2019 DORA, "Technical Practices") tratam de conceitos vizinhos (shift-left/qualidade, abordagem holística de práticas técnicas), não do conceito exato — deixadas de fora da definição.
-- Fonte [1] (2023 DORA) trouxe só cabeçalhos repetidos de headings ("Trunk-based development") sem corpo de texto no trecho recebido — não sustenta afirmação, mera lista/sumário.
+O relatório DORA de 2021 lista trunk-based development como uma das capacidades técnicas medidas, ao lado de arquitetura fracamente acoplada, testes contínuos e integração contínua [8].

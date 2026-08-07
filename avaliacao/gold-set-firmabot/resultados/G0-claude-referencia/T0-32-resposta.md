@@ -1,9 +1,19 @@
-## Cost of Delay
+Cost of Delay (CoD) é um valor numérico que descreve o impacto do tempo sobre os resultados que se deseja alcançar, combinando urgência e valor para medir impacto e priorizar o que deve ser feito primeiro [4].
 
-**Definição** (transcrito de [6]): Cost of Delay (COD) é o valor numérico que quantifica o impacto econômico do tempo sobre os objetivos de um projeto — combina urgência e valor para medir o custo de adiar uma entrega. Reinertsen a chama de "a chave de ouro que destrava muitas portas": é o que permite avaliar o custo de filas, o valor de capacidade excedente, o benefício de lotes menores e o valor da redução de variabilidade. Sem quantificar o COD, não é possível saber se vale a pena trocar dinheiro por tempo de ciclo (ex.: inserir uma margem de segurança no cronograma tem um custo, mas só se sabe se a troca compensa se o valor do tempo de ciclo estiver quantificado).
+**Origem e definição central**
 
-**Origem:** *The Principles of Product Development Flow* (Donald G. Reinertsen), seção "The Economic View › The Project Economic Framework › E3: The Principle of Quantified Cost of Delay: If you only quantify one thing, quantify the cost of delay." — o próprio nome do princípio é "se você só for quantificar uma coisa, quantifique o cost of delay" (transcrito).
+Reinertsen chama CoD de "a única coisa" que deveria ser quantificada em desenvolvimento de produto [4]. Segundo o princípio E3 (Quantified Cost of Delay), se você só for quantificar uma coisa, quantifique o cost of delay [6]. Na teoria, seguindo o princípio E1, o CoD seria automaticamente quantificado nos projetos; na prática, 85% das empresas não o quantificam, por isso vale destacar essa sensibilidade específica — não faz sentido trocar dinheiro por tempo de ciclo sem saber o valor econômico desse tempo [6].
 
-**Complemento** (transcrito de [4], *Escaping the Build Trap*, seção "Prioritizing Work"): Melissa Perri cita esse mesmo conceito de Reinertsen como seu framework de priorização preferido — ao entender os outcomes estratégicos desejados, o COD ajuda a decidir o que entregar primeiro, pesando o valor capturado contra o tempo até o lançamento; atrasar demais por escopo excessivo custa receita perdida e pode abrir espaço para concorrentes.
+**Por que importa**
 
-**Nota:** as fontes [3] e [5], do mesmo livro de Reinertsen, tratam de conceito vizinho — filas, Little's Law e DIP (design-in-process inventory) — que fundamentam o raciocínio econômico por trás do COD, mas não definem o termo em si; não as usei para sustentar a definição. As fontes [1], [2] e [8] não tratam de cost of delay e ficaram de fora.
+Nenhuma outra sensibilidade é tão reveladora quanto o CoD: a economia do fluxo é quase sempre dominada pelo custo das filas, e sem quantificar o custo de uma fila no caminho crítico não é possível quantificar o benefício de reduzi-la — e sem quantificar o benefício, não se consegue gerar apoio para mudanças relevantes [6]. O CoD é necessário para avaliar o custo das filas, o valor da capacidade excedente, o benefício de lotes menores e o valor da redução de variabilidade; é descrito como "a chave de ouro que abre muitas portas" [6].
+
+Na conclusão da visão econômica, o CoD é apontado como a regra de decisão que mais transforma o raciocínio, justamente por estar ausente na maioria das empresas hoje — com ela, o custo oculto das filas fica exposto ao entendimento econômico [7].
+
+**Aplicação em priorização de produto**
+
+Melissa Perri trata CoD como seu framework preferido de priorização, à frente de benefits mapping e Kano models: entendendo os resultados estratégicos desejados, o CoD ajuda a determinar o que deve ser entregue mais cedo, combinando urgência e valor em uma medida de impacto [4]. Ela relaciona isso ao trade-off entre escopo e tempo de lançamento — esperar demais por overscoping tem custo de oportunidade (dinheiro que se deixou de ganhar) e risco competitivo [4].
+
+**Relação com filas**
+
+O conceito de CoD conecta-se diretamente ao problema de "cegueira a filas": poucos desenvolvedores percebem que filas são a causa mais importante do desempenho ruim em desenvolvimento de produto, gerando inventário em processo (DIP) alto e ciclos longos [5] — é exatamente esse custo de fila que o CoD permite quantificar [6].

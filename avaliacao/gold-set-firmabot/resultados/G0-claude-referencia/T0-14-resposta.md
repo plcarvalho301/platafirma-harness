@@ -1,21 +1,7 @@
-**Vocabulário controlado**
+Vocabulário controlado é usado para melhorar a efetividade de sistemas de armazenamento e recuperação de informação, sistemas de navegação web e outros ambientes que buscam identificar e localizar conteúdo desejado por meio de descrição em linguagem [3]. O propósito primário é alcançar consistência na descrição de objetos de conteúdo e facilitar a recuperação [3][5].
 
-**Definição (derivada das fontes, composta a partir de trechos que não trazem — no recorte recebido — uma entrada de glossário fechada para o termo exato "controlled vocabulary")**
+O controle de vocabulário é alcançado por três métodos principais: definir o escopo/significado dos termos; usar a relação de equivalência para ligar termos sinônimos ou quase sinônimos; e distinguir entre homógrafos [2][5].
 
-Um vocabulário controlado é um conjunto de termos selecionados da linguagem natural para representar conceitos e descrever objetos de conteúdo — usado para indexação, organização de sites e sistemas de recuperação de informação (derivado de [8], *5.2.1 Terms*, e do resumo em [5]). O controle sobre esses termos é alcançado por três métodos:
+Há quatro princípios importantes que orientam o design e desenvolvimento do vocabulário controlado: eliminar ambiguidade; controlar sinônimos; estabelecer relações entre termos onde apropriado; e testar e validar termos [6]. Um objetivo central é assegurar que cada conceito distinto seja descrito por uma única forma linguística — se existirem múltiplas formas, elas devem ser controladas ou regularizadas para que o conteúdo não fique disperso sob múltiplos pontos de acesso, mas reunido em um só lugar [6].
 
-> "Vocabulary control is achieved by three principal methods: Defining the scope, or meaning, of terms; Using the equivalence relationship to link synonymous and nearly synonymous terms; and Distinguishing among homographs."
-— transcrito de [2] (*1 Introduction › 1.2 How Vocabulary Control is Achieved*)
-
-**Propósito** — transcrito de [3] (*1 Introduction*):
-> "Vocabulary control is used to improve the effectiveness of information storage and retrieval systems, Web navigation systems, and other environments that seek to both identify and locate desired content via some sort of description using language. The primary purpose of vocabulary control is to achieve consistency in the description of content objects and to facilitate retrieval."
-
-**Princípios que orientam o desenho** — transcrito de [6] (*5 Controlled Vocabularies – Purpose, Concepts, Principles, and Structure › 5.3 Principles*): eliminar ambiguidade, controlar sinônimos, estabelecer relações entre termos quando pertinente, e testar/validar os termos. A mesma fonte acrescenta: "A major goal of vocabulary control is to ensure that each distinct concept is described by a single linguistic form."
-
-**Escopo da obra** — derivado do resumo em [5] (*ISBN: 1-880124-65-3*): o standard cobre vocabulários controlados monolíngues nas formas de listas, synonym rings, taxonomias e tesauros.
-
----
-
-Observações sobre as fontes:
-- [4] (*4.1 Definitions*) é a seção de glossário formal do padrão, mas o trecho recebido cobre apenas as entradas de "associative relationship" até "category" (ordem alfabética) — a entrada para "controlled vocabulary" em si não veio no recorte, então não posso transcrever uma definição de dicionário formal do termo.
-- [1] e [7] são, respectivamente, um título de seção (5) e o sumário do documento — não têm matéria própria para sustentar afirmação, por isso não foram usados como base de conteúdo.
+Para os fins da norma, "termo" é definido como uma ou mais palavras usadas para representar um conceito, selecionadas da linguagem natural para inclusão em um vocabulário controlado; o termo pode se referir tanto a "termos preferidos" quanto a "termos de entrada" (não-preferidos) [8].

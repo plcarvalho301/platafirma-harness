@@ -1,0 +1,47 @@
+{
+ "sonda": "G0",
+ "n": "32",
+ "bloco": "B",
+ "persona": "persona-nao-declarada",
+ "modelo": "gemma4:12b",
+ "pergunta": "cost of delay",
+ "contexto_de": {
+  "rodada": "G0-rag-base",
+  "acervo_sha": "24ed2cbf607e73ab1e8ab79c0d286bf2996b5751db4e63cfb97c2f313dfc25c7",
+  "n_fontes": 8,
+  "chars_contexto": 16348,
+  "cobertura_rag": "boa"
+ },
+ "amostragem": {
+  "temperature": 0,
+  "seed": 42,
+  "num_ctx": 16384,
+  "num_predict": 900
+ },
+ "chamada_em": "2026-08-07T00:26:25.938245+00:00",
+ "latencia_ms": 7202,
+ "tokens": {
+  "prompt_eval_count": 3931,
+  "eval_count": 209,
+  "eval_duration": 4611675000,
+  "prompt_eval_duration": 1951456000,
+  "load_duration": 300604574,
+  "total_duration": 7202381308
+ },
+ "medidas": {
+  "chars": 877,
+  "frases": 6,
+  "frases_com_citacao": 6,
+  "taxa_citacao": 1.0,
+  "fontes_citadas": [
+   4,
+   6,
+   7
+  ],
+  "citacoes_fora_do_intervalo": [],
+  "declarou_nao_cobertura": false
+ },
+ "resposta_vazia": false,
+ "raciocinio_chars": 0,
+ "resposta": "O \"Cost of Delay\" (Custo do Atraso) é um valor numérico que descreve o impacto do tempo nos resultados que se deseja alcançar [4]. Ele combina urgência e valor para permitir a medição de impacto e a priorização do que deve ser feito primeiro [4].\n\nO conceito é descrito como \"a única coisa\" que deve ser quantificada [4]. O Cost of Delay (COD) funciona como uma regra de decisão que permite trazer o custo oculto das filas para o entendimento econômico, permitindo quantificar o impacto econômico de produtos que ficam parados em filas [7]. Além disso, o COD é essencial para avaliar o custo de filas, o valor de capacidade excedente, o benefício de tamanhos de lote menores e o valor da redução de variabilidade [6]. Sem a quantificação do valor do tempo de ciclo (através do COD), não é possível saber se trocas entre tempo de ciclo e redução de incerteza são vantajosas [6]."
+}

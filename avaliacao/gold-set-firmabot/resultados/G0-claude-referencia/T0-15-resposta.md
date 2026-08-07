@@ -1,32 +1,21 @@
-## Continuant
+**Continuant**
 
-**Definição (transcrito da fonte [1], elucidação formal do BFO):**
-"A continuant is an entity that persists, endures, or continues to exist through time while maintaining its identity."
+Continuant é uma entidade que persiste, perdura ou continua a existir através do tempo mantendo sua identidade [1]. O ramo continuant do BFO 2.0 incorpora continuantes materiais e imateriais, estendidos e potencialmente móveis no espaço, além das regiões espaciais onde se localizam e pelas quais se movem, e suas fronteiras espaciais associadas [1]. Entidades materiais continuant podem preservar sua identidade mesmo ganhando e perdendo partes materiais [1]. Continuants não têm partes temporais no sentido em que occurrents têm — se um occurrent ocupa uma região temporal de 2 minutos, ele é a soma de duas partes temporais não sobrepostas, cada uma de 1 minuto; continuants não se dividem dessa forma [1].
 
-A fonte [1] complementa (transcrito): continuants incluem também regiões espaciais, e "material entities (continuants) can preserve their identity even while gaining and losing material parts." Além disso, dois axiomas são dados (transcritos):
-- "if b is a continuant and if, for some t, c is continuant_part of b at t, then c is a continuant."
-- "if b is a continuant and if, for some t, c has_continuant_part b at t, then c is a continuant."
+Há axiomas formais: se b é continuant e, para algum t, c é continuant_part de b em t, então c é continuant [1]; e reciprocamente, se b é continuant e, para algum t, c has_continuant_part b em t, então c é continuant [1].
 
-Um ponto central (transcrito): "Continuants have no temporal parts in this sense" — ao contrário dos occurrents, que se decompõem em partes temporais sucessivas.
+**Occurrent**
 
-**De onde sai:** BFO2-Reference.docx, seção *Specification › Continuant*.
+Occurrent é uma entidade que se desdobra a si mesma no tempo, ou é a fronteira instantânea de tal entidade (por exemplo um começo ou um fim), ou é uma região temporal ou espaço-temporal que tal entidade ocupa (occupies_temporal_region ou occupies_spatiotemporal_region) [2]. O domínio dos occurrents tem menos unidades naturais que o dos continuants independentes — não há um contraparte natural de "objeto" nesse domínio; em BFO 1.0 "processo" cumpria esse papel, mas em BFO 2.0 "processo" é o contraparte occurrent de "entidade material" [2]. Unidades naturais em occurrents (vidas, jogos de futebol, reações químicas) são tipicamente parasitárias das unidades do lado continuant, ou são fiat [2].
 
-## Occurrent
+**A dicotomia continuant/occurrent**
 
-**Definição (transcrito da fonte [2], elucidação formal do BFO):**
-"An occurrent is an entity that unfolds itself in time or it is the instantaneous boundary of such an entity (for example a beginning or an ending) or it is a temporal or spatiotemporal region which such an entity occupies_temporal_region or occupies_spatiotemporal_region."
+Essa dicotomia é o eixo organizador central da ontologia BFO [3]. Deriva em parte de Zemach, que distingue entidades não-continuant ("eventos"), definidas por poderem ser fatiadas ao longo de qualquer dimensão espacial e temporal para gerar partes (por exemplo o primeiro ano da vida de uma mesa) [3]. Já entidades continuant só podem ser fatiadas para gerar partes ao longo da dimensão espacial — por exemplo as pernas, o tampo e os pregos de uma mesa; em relação ao tempo, porém, a coisa é continuant [3]. Um exemplo de instanciação: "2012" instance_of temporal region, e "o nascimento de John" instance_of process (isto é, occurrent) [3].
 
-A fonte [2] observa ainda (transcrito) que o domínio dos occurrents tem poucas "unidades naturais" comparado ao dos continuants — não há um contraparte natural de "objeto"; em BFO 2.0, "process" é o contraparte ocorrente de "material entity". Unidades identificáveis (vidas, jogos de futebol, reações químicas) são ou parasitárias da existência de unidades no lado continuant, ou de natureza *fiat*.
+**Parthood diferenciada por tipo**
 
-**De onde sai:** BFO2-Reference.docx, seção *Specification › Occurrent*.
+O BFO distingue parthood entre continuants e occurrents usando relações explícitas: continuant_part_of (com sufixo "at t", pois a parte pode variar no tempo) versus occurrent_part_of (sem esse sufixo) [4]. Dessa distinção derivam relações inversas e de parte própria: proper_continuant_part_of e has_continuant_part (com "at t") para continuants; proper_occurrent_part_of e has_occurrent_part para occurrents [6].
 
-## A dicotomia entre os dois
+**Processos não mudam (occurrent)**
 
-A fonte [3] (seção *The dichotomy of 'continuant' and 'occurrent'*) traz o pano de fundo teórico, transcrito: essa dicotomia "forms the central organizing axis of the BFO ontology" e deriva em parte de Zemach [60]. Segundo essa origem:
-
-- **Occurrents** (chamados "events" por Zemach) podem ser fatiados em qualquer dimensão, espacial e temporal, para gerar partes.
-- **Continuants**, por contraste, só podem ser fatiados ao longo da dimensão espacial — cita o exemplo da mesa: "'My desk stretches from the window to the door. It has spatial parts, and can be sliced (in space) in two. With respect to time, however, a thing is a continuant.'"
-
-Isso é coerente com o que a fonte [1] afirma sobre ausência de partes temporais nos continuants, e com a nota (derivado da fonte [1], que cita [60]) de que continuants "are contrasted with occurrents, which unfold themselves in successive temporal parts or phases."
-
-**Observação sobre parthood:** a fonte [4] (transcrito) mostra que o BFO distingue formalmente parthood entre os dois ramos com relações próprias — `continuant_part_of` (com sufixo `at t`, pois a composição de um continuant pode mudar no tempo) versus `occurrent_part_of` (sem sufixo temporal, pois um occurrent já é definido pela sua extensão temporal). A fonte [6] detalha as relações derivadas (`proper_continuant_part_of`, `has_continuant_part`, `proper_occurrent_part_of`, `has_occurrent_part`), reforçando que os dois ramos não compartilham a mesma mereologia.
+Um ponto específico sobre occurrents: processos não mudam, porque processos SÃO mudanças — são as mudanças que ocorrem nos continuants que deles participam [8]. Isso contrasta com continuants (como John e sua qualidade de peso), que podem mudar permanecendo o mesmo objeto ao longo do tempo [8].

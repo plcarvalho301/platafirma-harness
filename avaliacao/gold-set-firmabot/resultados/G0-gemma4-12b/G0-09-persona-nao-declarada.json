@@ -1,0 +1,47 @@
+{
+ "sonda": "G0",
+ "n": "09",
+ "bloco": "A",
+ "persona": "persona-nao-declarada",
+ "modelo": "gemma4:12b",
+ "pergunta": "o que é uma decisão arquitetural e quando se registra?",
+ "contexto_de": {
+  "rodada": "G0-rag-base",
+  "acervo_sha": "24ed2cbf607e73ab1e8ab79c0d286bf2996b5751db4e63cfb97c2f313dfc25c7",
+  "n_fontes": 8,
+  "chars_contexto": 13482,
+  "cobertura_rag": "boa"
+ },
+ "amostragem": {
+  "temperature": 0,
+  "seed": 42,
+  "num_ctx": 16384,
+  "num_predict": 900
+ },
+ "chamada_em": "2026-08-07T00:23:53.296535+00:00",
+ "latencia_ms": 7147,
+ "tokens": {
+  "prompt_eval_count": 3447,
+  "eval_count": 211,
+  "eval_duration": 4669095000,
+  "prompt_eval_duration": 1704689000,
+  "load_duration": 290152200,
+  "total_duration": 7146433963
+ },
+ "medidas": {
+  "chars": 971,
+  "frases": 5,
+  "frases_com_citacao": 4,
+  "taxa_citacao": 0.8,
+  "fontes_citadas": [
+   1,
+   3,
+   4
+  ],
+  "citacoes_fora_do_intervalo": [],
+  "declarou_nao_cobertura": false
+ },
+ "resposta_vazia": false,
+ "raciocinio_chars": 0,
+ "resposta": "Uma decisão arquitetural é uma das principais expectativas de um arquiteto e envolve a estrutura do aplicativo ou sistema, podendo também envolver decisões tecnológicas quando estas impactam as características arquiteturais [1]. Elas são consideradas a unidade básica de trabalho das atividades de arquitetura [3, 4] e, se não forem compreendidas e capturadas, resultam na perda do conhecimento sobre as trocas (*trade-offs*) feitas em um contexto específico [3].\n\nO registro (documentação) dessas decisões deve ocorrer para garantir que a justificativa e o raciocínio por trás das escolhas não sejam perdidos ao longo do tempo, permitindo que a equipe suporte a evolução de longo prazo do produto [3, 8]. O processo de decisão envolve coletar informações relevantes, justificar a escolha, documentá-la e comunicá-la aos stakeholders adequados [1]. Recomenda-se não apenas documentar as decisões, mas também defini-las antecipadamente e identificar suas dependências [4]."
+}
