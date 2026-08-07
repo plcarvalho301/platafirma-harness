@@ -69,6 +69,19 @@ existe pra fechar.
 - **Escrita de git/wiki é manual**, sob pedido explícito do dono — não é
   trigger automático de fim de sessão.
 
+## Fila — consumir após ler
+
+Mensagem lida e respondida na mesma sessão: consumir antes de encerrar. Se
+precisar dela consistida em outro lugar depois, é disciplina de quem lê, não
+motivo pra deixar a caixa acumulando.
+
+**Gatilho é subir a mensagem pro contexto** (`fila ler`), não ela aparecer
+como resultado de outra leitura (ex.: grep, listagem, ferramenta que varre o
+diretório da fila por engano). Sem chamada explícita de leitura, não consome.
+
+Mensagem que fica aberta por dependência não fechada não se consome — segue
+na caixa até resolver.
+
 Projetos do rastreador: `46 Cards` · `1 Inbox` são projetos reais; id negativo
 (`-6 Fabrica`, `-7 Carteira`, `-8 Triagem`, `-9 Parado`, `-10 Épico-Harness`,
 `-11 Carteira pessoal`, `-12 Refino`) é **filtro salvo** — lê, não recebe card.
