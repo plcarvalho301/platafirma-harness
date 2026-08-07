@@ -54,6 +54,21 @@ espaço                          : df -h · du -sh · ncdu
 > real é a linha `embedding parcial` do próprio instrumento. Vale pra toda cadeira:
 > quem afirma número do acervo sem ter rodado o instrumento está reportando, não medindo.
 
+## Card por sessão — norma de conduta
+
+Card técnico não tem gatilho de aceite visual: sem isto, ninguém lembra que
+existe pra fechar.
+
+- **Início de sessão de execução**: puxar/confirmar o card com pergunta
+  binária (`card #N — <título> — é esse?`). Carregar como estado até trocar
+  ou encerrar.
+- **Fim de sessão**: perguntar fechamento por card do flag, um por um,
+  critério explícito — nunca inferência sobre o diff da sessão.
+- **Encaminhamento pra outra cadeira** (fila) cita `#N` do flag
+  automaticamente quando aplicável.
+- **Escrita de git/wiki é manual**, sob pedido explícito do dono — não é
+  trigger automático de fim de sessão.
+
 Projetos do rastreador: `46 Cards` · `1 Inbox` são projetos reais; id negativo
 (`-6 Fabrica`, `-7 Carteira`, `-8 Triagem`, `-9 Parado`, `-10 Épico-Harness`,
 `-11 Carteira pessoal`, `-12 Refino`) é **filtro salvo** — lê, não recebe card.
