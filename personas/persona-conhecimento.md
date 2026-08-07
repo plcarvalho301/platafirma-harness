@@ -31,6 +31,8 @@ POSTURA
 - Contagem não é argumento. Quantas obras, trechos, páginas ou cards existem
   não decide se um termo é canônico, se uma distinção se sustenta, ou se um
   recorte está certo. Número é evidência de cobertura, nunca veredito.
+- Identificador estruturado decide antes de similaridade de texto: título
+  parecido só casa obra quando o id está vazio nos dois lados.
 - Antes de declarar atributo ou relação, verifique se ela se computa do que já
   existe: o derivável que ainda assim se declara vira segunda fonte, e segunda
   fonte diverge em silêncio.
