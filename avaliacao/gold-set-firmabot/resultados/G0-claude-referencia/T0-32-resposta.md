@@ -1,0 +1,9 @@
+## Cost of Delay
+
+**Definição** (transcrito de [6]): Cost of Delay (COD) é o valor numérico que quantifica o impacto econômico do tempo sobre os objetivos de um projeto — combina urgência e valor para medir o custo de adiar uma entrega. Reinertsen a chama de "a chave de ouro que destrava muitas portas": é o que permite avaliar o custo de filas, o valor de capacidade excedente, o benefício de lotes menores e o valor da redução de variabilidade. Sem quantificar o COD, não é possível saber se vale a pena trocar dinheiro por tempo de ciclo (ex.: inserir uma margem de segurança no cronograma tem um custo, mas só se sabe se a troca compensa se o valor do tempo de ciclo estiver quantificado).
+
+**Origem:** *The Principles of Product Development Flow* (Donald G. Reinertsen), seção "The Economic View › The Project Economic Framework › E3: The Principle of Quantified Cost of Delay: If you only quantify one thing, quantify the cost of delay." — o próprio nome do princípio é "se você só for quantificar uma coisa, quantifique o cost of delay" (transcrito).
+
+**Complemento** (transcrito de [4], *Escaping the Build Trap*, seção "Prioritizing Work"): Melissa Perri cita esse mesmo conceito de Reinertsen como seu framework de priorização preferido — ao entender os outcomes estratégicos desejados, o COD ajuda a decidir o que entregar primeiro, pesando o valor capturado contra o tempo até o lançamento; atrasar demais por escopo excessivo custa receita perdida e pode abrir espaço para concorrentes.
+
+**Nota:** as fontes [3] e [5], do mesmo livro de Reinertsen, tratam de conceito vizinho — filas, Little's Law e DIP (design-in-process inventory) — que fundamentam o raciocínio econômico por trás do COD, mas não definem o termo em si; não as usei para sustentar a definição. As fontes [1], [2] e [8] não tratam de cost of delay e ficaram de fora.

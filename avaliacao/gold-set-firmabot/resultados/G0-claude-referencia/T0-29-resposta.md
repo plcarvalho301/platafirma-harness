@@ -1,0 +1,7 @@
+Nenhuma das fontes que chegaram cobre o conceito exato de **cryptoperiod**.
+
+A fonte que seria a referência canônica para esse termo é a NIST SP 800-57 Part 1 [1], mas o trecho que chegou dela é só o sumário (table of contents) da publicação — não tem matéria, é lista de números de seção sem texto. Não dá para sustentar uma definição a partir disso.
+
+As fontes [2] e [4] tratam de **cryptographic life cycle** (ciclo de vida criptográfico) — o processo de identificar necessidade de criptografia, escolher algoritmo, provisionar e gerenciar chaves até que o sistema fique obsoleto e o ciclo recomece. É um conceito vizinho, mas não é o mesmo que cryptoperiod: o ciclo de vida trata da vida útil do *sistema/algoritmo* como um todo, enquanto cryptoperiod, no uso padrão de gestão de chaves (NIST SP 800-57), é o intervalo de tempo específico durante o qual uma *chave criptográfica particular* está autorizada para uso antes de ser trocada. São conceitos relacionados, mas não intercambiáveis, e por isso [2]/[4] não respondem pela pergunta.
+
+Como leitura minha, sem fonte no que chegou: cryptoperiod costuma ser definido como o tempo de vida útil de uma chave específica, dimensionado a partir de fatores como volume de dados protegidos sob a mesma chave, sensibilidade da informação, exposição a ataque e custo operacional de rotação — mas essa definição não está sustentada por nenhuma das fontes que chegaram neste turno.

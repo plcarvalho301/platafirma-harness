@@ -4,10 +4,17 @@ isolada por sonda (processo novo, sem sessao persistida, sem tools). Resolve
 isolamento e janela de contexto ao mesmo tempo -- o custo e trocar candidato
 local por API.
 
-NAO e um quarto arm comparavel a G0-gemma4-12b / G0-granite4 / G0-qwen3.5-9b:
-aqueles medem viabilidade de MODELO LOCAL (o que roda na maquina, sem
-depender de nuvem). Este e referencia de teto via API -- decisao de incluir
-como arm oficial e do desenho do instrumento, nao deste script.
+Arm oficial da escada desde 2026-08-06 (decisao do dono, direto -- nao passou
+por desenho formal de instrumento porque e trivial: rodar via API e o que o
+dono faria na mao, isto so automatiza). Continua sendo referencia de TETO, nao
+candidato a substituir os locais: G0-gemma4-12b / G0-granite4 / G0-qwen3.5-9b
+medem o que roda na propria maquina sem depender de nuvem, que e o que importa
+pro objetivo de soberania de dado do orgao publico. Este arm mede o teto de
+qualidade que o RAG permite, pra separar "o gerador local e fraco" de "o
+contexto que o RAG entrega e o teto de qualquer gerador".
+
+Reentrante: pula sonda cujo arquivo de resposta ja existe (e nao comeca com
+ERRO), entao pode ser interrompido e rodado de novo sem repetir chamada paga.
 
 Uso: python3 tooling/rodar-firmabot-claude.py [--model sonnet] [--out DIR]
 """
@@ -40,6 +47,9 @@ def main():
         user_msg = f"{pergunta}\n\nFontes:\n\n{contexto}"
 
         out_path = out_dir / f"T0-{n}-resposta.md"
+        if out_path.exists() and not out_path.read_text().startswith("ERRO"):
+            print(f"[{n}] já feito, pulando", file=sys.stderr)
+            continue
         print(f"[{n}] {pergunta[:60]!r}", file=sys.stderr)
 
         result = subprocess.run(
@@ -63,14 +73,13 @@ def main():
         f"# Carimbo — G0 geração, claude ({args.model})\n\n"
         f"Rodada: {datetime.datetime.utcnow().isoformat()}Z\n\n"
         f"Executor: tooling/rodar-firmabot-claude.py — uma chamada `claude -p` isolada\n"
-        f"por sonda (--no-session-persistence, --tools \"\", sem CLAUDE.md/skills do\n"
-        f"repo porque cada processo e novo e nao herda sessao anterior).\n\n"
+        f"por sonda (--no-session-persistence, --tools \"\", processo novo a cada sonda).\n\n"
         f"    modelo      {args.model}\n"
         f"    num_ctx     n/a (API, nao GPU local)\n"
         f"    amostragem  padrao da CLI — sem flag de temperature exposta em --print\n\n"
-        f"NAO comparavel a G0-gemma4-12b / G0-granite4 / G0-qwen3.5-9b: aqueles medem\n"
-        f"modelo local, este e referencia de teto via API. Incluir como arm oficial da\n"
-        f"escada e decisao de desenho do instrumento, nao deste script.\n"
+        f"Arm oficial (decisao do dono, 2026-08-06), papel de referência de teto —\n"
+        f"não substitui G0-gemma4-12b / G0-granite4 / G0-qwen3.5-9b, que medem\n"
+        f"viabilidade local. Ver docstring do script para o motivo da distinção.\n"
     )
     print(f"pronto: {out_dir}", file=sys.stderr)
 
