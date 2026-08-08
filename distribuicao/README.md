@@ -31,13 +31,17 @@ na arbitragem.
 
 Contagem de reivindicações por obra:
 
-- **zero** — órfã. Candidata a sair do corpus; a lista vai para o dono.
+- **zero** — órfã. Fica no corpus com o `dominio_atual` que já tem; o dono
+  classifica a mão, fora desta rodada.
 - **uma** — fecha ali, sem arbitragem, ainda que contrarie o `dominio_atual`.
 - **duas ou mais** — conflito. Arbitragem por claudinho-conhecimento e pelo
   dono; a decisão fica em `rodada-1/conflitos.csv`
   (`obra_id,reivindicantes,vencedor,motivo`).
 
-Fechada a arbitragem, o dono de cada domínio define os subdomínios dele.
+Fechada a arbitragem, o dono de cada domínio define os subdomínios dele —
+sem critério formal nem rodada própria; cada dono corta do jeito que fizer
+sentido pra ele. Divergência entre cadeiras não trava esta etapa: se resolve
+depois, na leitura do reasoner e do Pedro.
 
 ## Rodada 2 — o que já está fixo
 
@@ -50,6 +54,6 @@ Fechada a arbitragem, o dono de cada domínio define os subdomínios dele.
 Aberto, a decidir antes de abrir a rodada 2:
 
 - Quantos conceitos por cadeira, e se a cota é fixa ou proporcional ao tamanho
-  do domínio (`seguranca-privacidade` tem 106 obras na base; `inteligencia`, 1).
+  do domínio (`seguranca-privacidade` tem 120 obras na base; `inteligencia`, 1).
 - O que fazer com os 205 conceitos que já existem em `acervo.conceito`, 62
   deles já com pai.
