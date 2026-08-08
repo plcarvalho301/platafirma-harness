@@ -56,7 +56,7 @@
       * Cartilha de Governança de Dados — Volume III: Papéis e Responsabilidades de Governança de Dados no Poder Executivo Federal
 
 * **implantabilidade-independente** — Implantabilidade independente `[claudinho-TI]`
-   * definição: Propriedade de uma fronteira de construção pela qual uma mudança dentro dela pode ser implantada e liberada sem implantar nenhuma outra parte do sistema. Exige contrato explícito e estável na fronteira, com evolução retrocompatível; fronteiras que compartilham banco ou exigem liberação coordenada não a possuem, qualquer que seja o nome que carreguem.
+   * definição: Propriedade de uma parte do sistema que pode ir ao ar sozinha: muda-se ali, publica-se ali, e nada mais precisa ser publicado junto. Para isso a fronteira precisa de um contrato explícito e estável — o que ela aceita e o que devolve — e cada mudança tem que continuar honrando o que os vizinhos já usam. Partes que dividem o mesmo banco de dados ou que só sobem em bloco coordenado não têm essa propriedade, ainda que se chamem serviços ou microsserviços.
    * natureza: disposicao
    * estatuto: doutrinario
    * âncoras:
@@ -65,7 +65,7 @@
       * Continuous Delivery Pipelines: How To Build Better Software Faster _(ocorre em engenharia-software)_
 
 * **ordenacao-causal** — Ordenação causal de eventos `[claudinho-TI]`
-   * definição: Em sistema distribuído, a única ordem observável entre eventos é a relação aconteceu-antes — parcial, definida por sequência local e troca de mensagem. Eventos não conectados por essa relação são concorrentes; qualquer ordem total entre eles é imposta por convenção (relógio lógico, timestamp), não observada. Uma afirmação de ordem é causal se deriva da relação parcial; é convencional se exige desempate arbitrário.
+   * definição: Em um sistema espalhado por várias máquinas, não há relógio comum confiável. A única ordem real entre acontecimentos é a que a causalidade dá: A veio antes de B se os dois ocorreram em sequência na mesma máquina, ou se A enviou uma mensagem que B recebeu. Acontecimentos sem esse elo são simultâneos de verdade — não existe resposta para qual veio primeiro. Qualquer ordem total que o sistema exiba entre eles foi imposta por uma regra de desempate, e tratar essa convenção como fato é fonte clássica de erro em sistema distribuído.
    * natureza: fenomeno
    * estatuto: natural
    * âncoras:
@@ -98,7 +98,7 @@
       * Ontology of architectural design decisions in software-intensive systems
 
 * **registro-de-decisao-arquitetural** — Registro de decisão arquitetural `[claudinho-TI]`
-   * definição: Documento curto e imutável que fixa uma decisão de construção com contexto, decisão em voz afirmativa e consequências, portando estado próprio (proposta, aceita, substituída). Um documento é registro de decisão se preserva o porquê contra mudança de contexto e se muda por substituição encadeada, nunca por edição do registro original.
+   * definição: Documento de uma página que fixa uma decisão técnica importante: qual era a situação, o que se decidiu e o que isso custa daqui para frente. Escreve-se no momento da decisão e não se edita depois — mudou a decisão, escreve-se um registro novo que declara substituir o antigo, e o antigo fica. O que ele protege é o porquê: sem o registro, quem chega meses depois vê só a escolha, desfaz sem conhecer o motivo e paga o problema que a escolha original evitava.
    * natureza: modelo
    * estatuto: doutrinario
    * âncoras:
@@ -128,7 +128,7 @@
       * Essential Kanban Condensed
 
 * **desempenho-de-entrega** — Desempenho de entrega de software `[claudinho-TI]`
-   * definição: Medição do processo de entrega por quatro resultados pareados — tempo de ciclo da mudança, frequência de implantação, taxa de falha de mudança e tempo de recuperação — em que vazão e estabilidade são lidas juntas e movem juntas. Uma medida é de desempenho de entrega se afere resultado global do processo (não produção local de artefato) e se sua melhora não se compra com a piora do par.
+   * definição: Quatro medidas dizem se uma equipe entrega software bem: quanto tempo uma mudança leva do código pronto até o ar, com que frequência se publica, que fração das publicações quebra algo, e quanto tempo leva para consertar quando quebra. As duas primeiras medem velocidade; as duas últimas, estabilidade — e uma década de pesquisa mostra que as melhores equipes são boas nas quatro ao mesmo tempo: velocidade não se compra com quebra, nem estabilidade com lentidão. A medida olha o resultado do processo inteiro, não o esforço de cada etapa — medir esforço local premia gente ocupada, não software entregue.
    * natureza: modelo
    * estatuto: doutrinario
    * âncoras:
@@ -138,7 +138,7 @@
       * Accelerate: State of DevOps 2019
 
 * **esteira-de-implantacao** — Esteira de implantação `[claudinho-TI]`
-   * definição: Caminho único e automatizado que leva toda mudança de commit a artefato liberável, atravessando estágios eliminatórios (verificação rápida, artefato versionado, aceitação em ambiente similar a produção). Algo é esteira de implantação se nenhuma mudança chega ao ar por fora dela e se cada estágio pode rejeitar o candidato.
+   * definição: Caminho automatizado que toda mudança de código percorre até estar pronta para publicação: testes rápidos primeiro, depois o pacote versionado, depois testes de aceitação num ambiente igual ao de produção. Cada etapa pode reprovar e devolver a mudança; o que atravessa tudo está pronto para o ar. O ponto é ser o caminho único: existindo um atalho manual por fora, a garantia da esteira vale zero, porque ninguém sabe o que entrou sem passar por ela.
    * natureza: processo
    * estatuto: doutrinario
    * âncoras:
@@ -146,7 +146,7 @@
       * Accelerate: The Science of Lean Software and DevOps
 
 * **fabrica-de-software** — Fábrica de software (modelo de contratação) `[claudinho-TI]`
-   * definição: Arranjo contratual que separa quem especifica (cliente) de quem produz (fornecedor) e remunera a produção por artefato medido (ponto de função, UST). A métrica de pagamento passa a governar o comportamento de produção: otimiza-se o que o contrato mede, não o resultado do software em uso. Um arranjo é fábrica de software se a fronteira contratual e a métrica de remuneração precedem e condicionam o processo de construção.
+   * definição: Modelo de contratação de desenvolvimento em que o cliente especifica, o fornecedor produz e o pagamento sai de uma métrica sobre o artefato — tanto por ponto de função, uma unidade que estima o tamanho do que foi construído. É o arranjo dominante na administração pública federal brasileira. O mecanismo que o define: a métrica de pagamento passa a governar a produção — o fornecedor otimiza o que o contrato mede, não o que o software resolve em uso — e a fronteira contratual entre especificar e construir se ergue antes de qualquer linha de código.
    * natureza: modelo
    * estatuto: instituido
    * âncoras:
@@ -154,7 +154,7 @@
       * Gestão ágil e clientes cascata: desafios e alternativas para fábricas de software
 
 * **falha-sistemica** — Falha sistêmica `[claudinho-TI]`
-   * definição: Em sistema complexo defendido em camadas, a catástrofe exige a conjunção de múltiplas falhas pequenas atravessando defesas simultaneamente; falha de ponto único não basta. "Causa raiz" única é atribuição retrospectiva do analista, não propriedade do evento — a análise correta busca as condições latentes concorrentes, não um culpado singular.
+   * definição: Em sistema grande e cheio de proteções, o desastre nunca vem de um erro só: vem de várias falhas pequenas, cada uma inofensiva sozinha, que se alinham e atravessam as defesas juntas. Por isso a pergunta "qual foi a causa raiz?" engana — apontar uma causa única é escolha de quem analisa depois, não fato do acidente. A análise que ensina algo procura as condições que já estavam armadas antes, e o que segurou o sistema nas tantas vezes em que não caiu.
    * natureza: fenomeno
    * estatuto: natural
    * âncoras:
@@ -162,7 +162,7 @@
       * The Site Reliability Workbook
 
 * **implantabilidade-independente** — Implantabilidade independente `[claudinho-TI]`
-   * definição: Propriedade de uma fronteira de construção pela qual uma mudança dentro dela pode ser implantada e liberada sem implantar nenhuma outra parte do sistema. Exige contrato explícito e estável na fronteira, com evolução retrocompatível; fronteiras que compartilham banco ou exigem liberação coordenada não a possuem, qualquer que seja o nome que carreguem.
+   * definição: Propriedade de uma parte do sistema que pode ir ao ar sozinha: muda-se ali, publica-se ali, e nada mais precisa ser publicado junto. Para isso a fronteira precisa de um contrato explícito e estável — o que ela aceita e o que devolve — e cada mudança tem que continuar honrando o que os vizinhos já usam. Partes que dividem o mesmo banco de dados ou que só sobem em bloco coordenado não têm essa propriedade, ainda que se chamem serviços ou microsserviços.
    * natureza: disposicao
    * estatuto: doutrinario
    * âncoras:
@@ -180,7 +180,7 @@
       * ISC2 CISSP Certified Information Systems Security Professional Official Study Guide _(ocorre em seguranca-privacidade)_
 
 * **orcamento-de-erro** — Orçamento de erro `[claudinho-TI]`
-   * definição: Conversão de um alvo de confiabilidade (SLO) na quantidade de indisponibilidade que o negócio aceita gastar num período. A decisão operacional (alertar, congelar mudança, priorizar confiabilidade sobre feature) é tomada pela taxa projetada de queima do orçamento, não pelo evento pontual de falha.
+   * definição: A quantidade de falha que um serviço tem permissão de acumular num período, derivada da meta de confiabilidade prometida: prometeu 99,9% de sucesso no mês, o 0,1% restante é o orçamento — cerca de 43 minutos de indisponibilidade que podem ser gastos. As decisões do dia a dia saem do ritmo de gasto, não do incidente isolado: queimando rápido, congela-se mudança e prioriza-se estabilidade; sobrando orçamento, há espaço para arriscar. O alerta certo dispara quando o ritmo projetado esgota o orçamento antes do fim do período — cedo o bastante para agir, não depois da promessa quebrada.
    * natureza: modelo
    * estatuto: doutrinario
    * âncoras:
@@ -196,7 +196,7 @@
       * COBIT 5: Enabling Processes
 
 * **refatoracao-segura** — Refatoração segura `[claudinho-TI]`
-   * definição: Mudança de estrutura interna que preserva comportamento observável, executada em passos pequenos verificados por teste a cada passo. Código sem teste (legado) exige primeiro criar o ponto de verificação — costura e teste de caracterização — antes de qualquer mudança; intervenção estrutural sem verificação a cada passo não é refatoração, é edição arriscada.
+   * definição: Mudar a estrutura interna do código sem mudar o que ele faz, em passos pequenos, rodando os testes a cada passo — o teste verde confirma que o comportamento sobreviveu à mudança. Código sem teste exige um passo anterior: primeiro criar o teste que fotografa o comportamento atual, mesmo com defeitos, e só então mexer. Mexer em estrutura sem verificação a cada passo não é refatorar, é editar no escuro — e é assim que a limpeza bem-intencionada quebra o que funcionava.
    * natureza: processo
    * estatuto: doutrinario
    * âncoras:
@@ -205,7 +205,7 @@
       * Test-Driven Development: By Example
 
 * **servico-de-ti** — Serviço de TI `[claudinho-TI]`
-   * definição: Meio de entregar valor a um cliente sem que ele carregue os custos e riscos específicos da entrega. Algo é serviço se cria valor para o cliente por si; o que habilita ou compõe a entrega sem valer sozinho para o cliente é componente de serviço, construído sobre itens de configuração.
+   * definição: Aquilo que uma área de TI entrega e que o cliente reconhece como valor por si — o e-mail que funciona, o sistema no ar — sem carregar o custo e o risco de fazer funcionar. O que existe por baixo (servidor, banco, rede) habilita a entrega mas não vale nada sozinho para o cliente: é componente, não serviço. Confundir os dois infla o catálogo com itens que ninguém contrataria, gera cobrança que o cliente não reconhece e impede priorizar o portfólio, porque tudo virou serviço.
    * natureza: modelo
    * estatuto: doutrinario
    * âncoras:
