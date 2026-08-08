@@ -29,6 +29,12 @@ Perguntas do julgamento:
    * contraste com o vizinho `necessidade-de-conhecer`, que extrai mecanismo transponível (dois eixos independentes, conjunção obrigatória) da mesma família normativa — prova de que dava para fazer.
 * **fluxo-de-valor** `[claudinho-arquiteto]` — falha (b), quase-falha (a)
    * "acumula itens de valor até a proposição de valor final", "habilitado por capacidades": BIZBOK-speak com dois termos indefinidos dentro da régua. Definição inteira por contraste taxonômico (vs capability, vs processo); o problema que o conceito resolve não aparece.
+* **design-centrado-no-humano** `[claudinha-produto]` — falha (a), quase-falha (c)
+   * recita a ISO 9241-210: as quatro condições são as da norma, na ordem da norma. Mesmo defeito de `governanca-publica` e `credenciamento-de-seguranca` — o problema (sistema rejeitado pelo usuário) mora no falseador, não na régua.
+   * "itera até eliminar a incerteza" é cláusula inauditável dentro de uma régua que se anuncia como quatro condições verificáveis; a norma diz iterar, não eliminar.
+   * sem contraste: não separa DCH de "conversamos com uns usuários", e todo time é generoso ao ler a si mesmo.
+   * (c): "processo de desenvolvimento" solda a régua a produto digital sem necessidade — o mecanismo serve a política pública, serviço presencial, formulário.
+   * ⚪ hipótese de mecanismo: o que distingue não é envolver usuário, é o veredito sobre a solução vir de fora de quem a projetou — avaliação com poder de veto, inclusive no aceite. Confirmaria: aplicar às obras já ancoradas e ver se reprova time que pesquisou, desenhou e aprovou sozinho.
 * **gestao-por-resultado-pactuado** `[claudinha-gestao-estrategica]` — falha (c)
    * régua soldada ao instrumento: "termo de ciência e responsabilidade" é peça do PGD, não mecanismo. O mecanismo real (aferição contra o pactuado substitui controle de presença) transpõe; como escrito, só decide dentro do programa federal.
 * **interacao-tardia** `[claudinho-IA]` — quase-falha (a), quase-falha (c)
@@ -43,16 +49,16 @@ Perguntas do julgamento:
 * **expressividade-vs-tratabilidade** `[claudinho-conhecimento]` — (b): "construtor", "fragmento (perfil)", "axioma admissível" pesam, mas a frase-núcleo ("ganhar poder de afirmação custa computabilidade") é clara e salva. Reordenar: núcleo primeiro.
 * **cascata-de-objetivos** `[claudinho-arquiteto]` — (b): "objetivo de alinhamento" é termo COBIT sem definição. Uma aposição resolve.
 * **abertura-por-padrao** `[claudinho-arquiteto]` — (b): segunda frase é voltada ao classificador ("decide contra classificação da informação... regimes de base legal") e pressupõe outras réguas. A primeira frase sozinha passa.
-* **design-centrado-no-humano** `[claudinha-produto]` — (a): moldura de checklist de conformidade ISO; o problema (sistemas rejeitados pelos usuários) mora no falseador, não na definição. Trazer para a régua.
 * **servico-de-ti** `[claudinho-TI]` — (a): a distinção serviço/componente está posta, mas não o que quebra ao confundi-los (catálogo inflado, cobrança de item sem valor). Uma frase resolve.
 
 ## Achado sistemático — rótulo dentro da definição
 
-Regra derivada nº 1 de `Estudos-ontologias/conceito`: a definição não pode conter o rótulo. Cinco propostas contêm, no padrão "Algo é X se...":
+Regra derivada nº 1 de `Estudos-ontologias/conceito`: a definição não pode conter o rótulo. Seis propostas contêm, no padrão "Algo é X se...":
 
 * **esteira-de-implantacao**, **fabrica-de-software**, **desempenho-de-entrega**, **servico-de-ti** `[claudinho-TI]`; **registro-de-decisao-arquitetural** `[claudinho-TI]` (variante "Um documento é registro de decisão se...").
+* **design-centrado-no-humano** `[claudinha-produto]` — "Um processo de desenvolvimento é centrado no humano quando satisfaz quatro condições...". Mesma ocorrência, cadeira do próprio julgamento.
 
-Não é circularidade — a cláusula articula o teste de decidibilidade, o espírito da regra está atendido. Mas a letra reprova, e a correção é mecânica: reescrever o teste sem o rótulo ("nenhuma mudança chega ao ar por fora dela" já decide sozinha). Concentrado em claudinho-TI; vale aviso de estilo à cadeira.
+Não é circularidade — a cláusula articula o teste de decidibilidade, o espírito da regra está atendido. Mas a letra reprova, e a correção é mecânica: reescrever o teste sem o rótulo ("nenhuma mudança chega ao ar por fora dela" já decide sozinha). Concentrado em claudinho-TI, com uma ocorrência em claudinha-produto.
 
 ## O que passa limpo
 
