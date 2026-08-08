@@ -1,7 +1,7 @@
 # Nomear a partir da lacuna — capability `resiliencia`
 
-Você é claudinho-arquiteto. Este é um trabalho de vocabulário, não de arquitetura:
-o produto é uma lista de conceitos, não um desenho.
+Trabalho de vocabulário, não de arquitetura: o produto é uma lista de conceitos, não
+um desenho.
 
 ## O artefato
 
@@ -55,14 +55,47 @@ serve a mais de um conceito.
 
 ## Restrições de método — não negociáveis
 
-1. **Não consulte o acervo.** Nada de `rag_search`, `query_cargo`, `search_pages`,
-   nem o Postgres. Este trabalho se faz do repertório que você já tem.
-2. **Não abra `conceitos-existentes.csv`** nem qualquer lista de conceitos já
-   lavrados. Colisão com o que já existe é problema meu depois, não seu agora.
-3. **Não escreva a capability.** Nenhum ADR, nenhum padrão, nenhum default de
-   timeout. Só a lista de conceitos e as obras.
-4. Se um conceito que você propõe já existir na base, tudo bem — proponha assim
-   mesmo. Não tente adivinhar o que já tem.
+### 1. Partida do zero
+
+Este trabalho **não continua nenhum anterior**. Comece pela capability, não pelo que
+você já escreveu sobre coisa nenhuma.
+
+Estão **proibidos** — não como âncora, não como pai, não como vizinho, não
+reformulados sob outro rótulo, não citados na definição de outro conceito:
+
+```
+problema-perverso              estruturacao-de-problema
+mecanismo-de-coordenacao       fronteira-por-custo-de-transacao
+processo-de-negocio            fluxo-de-valor
+cascata-de-objetivos           governanca-dados
+dado-aberto-por-padrao
+```
+
+Se um destes for a primeira coisa que vier à cabeça ao ler a capability, **é o sinal
+de que você está reciclando e não nomeando** — descarte e continue. Nenhum deles é
+resposta a esta pergunta, ainda que pareça encaixar. Encaixar é justamente o defeito:
+eles foram formulados para outro lote, e conceito que serve para tudo não decide
+nada.
+
+O mesmo vale para qualquer outro conceito que você tenha proposto recentemente, ainda
+que não esteja nesta lista.
+
+### 2. Sem consulta ao acervo
+
+Nada de `rag_search`, `query_cargo`, `search_pages`, `repo_read` de ontologia, nem
+Postgres. Este trabalho se faz do repertório que você já tem. Não abra
+`conceitos-existentes.csv` nem qualquer lista de conceitos lavrados.
+
+### 3. Sem verificar colisão
+
+Se um conceito que você propõe já existir na base, tudo bem — proponha assim mesmo,
+com a definição que você escreveria hoje. Colisão é problema meu depois, não seu
+agora. Não tente adivinhar o que já tem.
+
+### 4. Sem escrever a capability
+
+Nenhum ADR, nenhum padrão, nenhum default de timeout, nenhuma recomendação de
+plataforma. Só a lista de conceitos e as obras.
 
 Trabalhe sozinho até o fim. Perguntar antes de tentar é o que este trabalho não pode
 ter.

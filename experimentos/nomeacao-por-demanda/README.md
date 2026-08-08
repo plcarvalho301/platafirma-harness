@@ -53,6 +53,15 @@ Aplicados aos dois conjuntos depois da coleta, nunca antes:
 - **O acervo.** Proibido por restrição explícita no prompt: consultar o corpus
   converte demanda em oferta, que é exatamente a variável sob teste.
 
+O prompt **não** carrega linha de persona: a sessão roda dentro do Project da cadeira,
+que já a fornece.
+
+Os 9 slugs do conjunto de controle entram no prompt **nomeados um a um, como
+proibição**. Bloqueio genérico não segura: a cadeira defaulta para o que acabou de
+formular, e o resultado seria a rodada 2 reescrita. Nomeá-los tem custo de ancoragem
+conhecido — mas o custo do default é maior, e a lista nominal é o que permite auditar
+a violação na saída.
+
 ## Limite conhecido
 
 Segurança é um campo com terminologia consolidada e pública — NIST CSF, CIS Controls,
