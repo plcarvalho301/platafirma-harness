@@ -1,0 +1,67 @@
+obra_id,nota
+9c0de616-5da2-4449-8325-3c6a9c9e4a16,BEIR: régua de generalização zero-shot do recuperador — referência para decidir troca de embedder sem treino no domínio.
+8488499a-032f-45e9-aa57-cc00062bf04a,ColBERT: late interaction como alternativa ao bi-encoder puro; entra na decisão de arquitetura de recuperação.
+0abce3d7-d52a-4857-98e1-55f740854336,ColBERTv2: custo de índice da late interaction — decide se a opção cabe no orçamento de disco e latência.
+a06bee67-eae0-48d1-a962-459e307d9e2e,Definição original de nDCG: métrica que o runner de avaliação do gold set calcula; régua do que conta como acerto.
+9841c613-c9d6-4dda-b283-775f25224789,Fundamenta ganho graduado sobre relevância binária — base do desenho dos qrels do gold set.
+02b2fdcb-bed3-490f-a0dd-2b59653140bb,DPR: define recuperação densa por bi-encoder — o desenho que o RAG da firma implementa.
+6fecbe12-bedc-44d3-8184-9aef4879aaeb,HNSW: parâmetros do índice ANN que ajusto no trade-off recall × latência.
+6327e3d8-0272-4183-873c-2f088ffe770f,Manning IR: base canônica de indexação e avaliação de recuperação; referência de fechamento em disputa metodológica.
+1c1a7bce-acb0-456a-bf4e-d316a2e61611,Lost in the Middle: efeito de posição no contexto — decide ordenação e tamanho do que o recuperador entrega ao gerador.
+79ceb118-2e56-415c-81c4-9194f1f5cdd0,M3-Embedding: contrato do espaço vetorial multilíngue e multi-granular — insumo direto da escolha do embedder de produção.
+ffec908b-1e0f-44b3-801e-d904429550a4,HyDE: expansão de consulta sem rótulo; opção a medir contra a formulação de consulta atual.
+d699cba8-10c9-42d8-b71f-4a7c1ea317f6,Ranking com transformers: fundamenta o gate cross-encoder de abstenção que roda em produção.
+b993e5f3-501a-43fb-b7c8-e1e380f1c04d,Ragas: método de avaliação de RAG ponta a ponta; comparação obrigatória ao desenhar o gold set.
+f6fd616e-c71e-438c-ad9c-25711ed54f05,RRF: é a fusão de ranking que o buscador usa hoje; define o peso dos braços vetorial e identificador.
+2997aaea-ee11-4f47-a530-4723dda7e922,Artigo fundador do RAG: fixa o que é a arquitetura que a firma opera.
+8d7a7e9c-75a7-4bc4-9211-d5b67403f398,Survey de RAG: mapa de variantes usado para situar decisão de desenho antes de propor mudança.
+6e576741-e34e-4d80-b279-0bef50b25788,Recuperação sensível a tempo: régua para decidir tratamento de versão e obsolescência no índice.
+4cc8eae8-ef0b-4dc7-aedf-9c8af341da86,Contextual retrieval: estratégia de chunking com contexto — decide o desenho do chunker antes de qualquer rechunk.
+845f6353-b837-42e1-b04b-5b684776cf02,Guia operacional de RAG: referência de conferência das pernas de indexação e consulta.
+4ee0543d-3537-4867-a80b-e61aaea6d2ef,Fichamento próprio: comparação dos embedders candidatos que sustentou a escolha do modelo em produção.
+24cedc0d-21e7-4930-b274-7187afc46505,Fichamento próprio: o contrato do espaço vetorial — regra de que índice e consulta compartilham modelo e instrução.
+62dd84a0-d85a-458a-9c39-e85eadd1fb5b,Fichamento próprio da perna de indexação — desenho corrente do pipeline de ingestão.
+36843503-ebf1-45ae-bd99-6611a7518ea7,Critério de suficiência de corpus: decide quando parar de expandir a coleção para efeito de cobertura de recuperação.
+c9454977-0e7c-490c-90ae-8b1f84f982bb,Contra o dominio_atual (engenharia-software/engenharia-dados): a fidelidade da extração de PDF é o teto do que o índice consegue recuperar — parâmetro da perna de indexação do RAG.
+fda870d9-c4ae-41c0-9f60-310b39801880,Tesseract: parâmetro de OCR define a qualidade do texto que entra no índice; decisão da ingestão.
+318e8dd2-f0d8-4cca-ad0d-d8c894c06aeb,Longformer: atenção esparsa — base para julgar promessa de janela longa contra custo real.
+162d8f4c-0636-4a22-b1d1-2d322812bfe9,RoPE: como a posição entra no modelo; explica degradação em extrapolação de contexto.
+00234ba7-81e1-4dff-bcc9-a59d666c109c,"Constrói o transformer peça a peça — fundamento de modelo, que é saber da head."
+919dc1ca-2510-48a9-9f0a-04b5c0691181,Fichamento próprio: modelos e estruturas de raciocínio — base para decidir formato de prompt e controle de loop.
+54b45e4b-4d81-4de7-ab48-cef80dec8679,Mede queda de capacidade agêntica sob compressão — régua para quantizar gerador local sem perder tool use.
+7b2be448-a27f-4e93-a47e-be74221e3183,Evidência empírica do efeito da quantização em geração de código; entra no orçamento de VRAM da máquina.
+e242b321-dc28-4416-bc9a-633bff593190,GGUF e níveis de quantização: referência operacional do serving local.
+2c83db6a-7c2c-4d3a-8aa6-78a9f5f1019f,Ruído de infraestrutura em eval agêntica: fixa quanto da variação é do ambiente e não do modelo — pré-condição de baseline.
+4dbdb24e-b0dc-476b-a6e3-6ea77993d5bc,Degradação atribuída ao modelo que era de serving — régua de diagnóstico entre modelo e infraestrutura.
+119f1289-e99c-410d-9320-29bf3cd1ea06,Régua de quando usar workflow e quando usar agente — decisão de topologia do loop.
+f56aba50-8ded-412a-b3e0-3394de24c711,Sistema multiagente de pesquisa: desenho de orquestrador e subagente com orçamento de contexto separado.
+419bd72a-544c-423b-a77e-bd5c470e3715,Execução paralela de agentes em tarefa longa — evidência de coordenação que sustenta o spike de multiagente.
+42804aeb-ad42-40cc-b55b-febc38f7f037,Desacoplar decisão de execução em agentes gerenciados — desenho de referência da topologia multiagente.
+98b8c45d-ae28-4dea-9bec-be28166112e4,Fichamento próprio de multiagente — estado da minha leitura sobre coordenação entre personas.
+f9c6ec45-a218-48bf-8cc3-a7d869cc2621,Fichamento próprio: orquestrador como painel de política — desenho corrente da integração das cadeiras.
+a126fdde-38f6-446a-bd56-24e548a58b36,Fichamento próprio: o leito de rocha dos agentes — base conceitual do loop agêntico.
+53623fd3-8767-48ae-9734-c31fe4c944a3,Especificação do MCP: contrato de tool que todo conector da firma implementa; norma do meu remit de tools.
+08c18181-e019-4593-a37d-35ee7515aedd,Execução de código como forma de chamar tool — decide custo de contexto por chamada.
+8db57e83-9d62-454d-9183-ef65dc4ab3c0,Uso avançado de tool na plataforma: recursos que definem o desenho do tool manifest.
+77d9fec7-8b99-4dfc-a3ff-3f3a556a002e,Como escrever tool para agente — régua de desenho e avaliação das tools que a firma expõe.
+a4c84c36-b425-4ede-a2ea-7ac66a989ea4,Agent Skills: carga de instrução sob demanda; decide o que é skill e o que é contexto fixo.
+0606ef5d-59a2-4bda-a3eb-56703382242e,Fichamento próprio de Skills — critério corrente de recorte entre skill e persona.
+48d5ca5b-993c-49d4-b8d7-f4945e07e55d,Empacotamento e instalação de servidor MCP — decisão de distribuição do ferramental das cadeiras.
+680b1e1d-ae7c-4570-a18a-9da45b30d568,Sandbox como forma de dar autonomia ao loop sem abrir o host — parâmetro de controle de loop.
+a3c90b5b-b359-4216-b6a3-a36c06ad22a9,Modo automático e política de permissão: desenho do ponto de parada do loop agêntico.
+6df09f95-b28d-4eb2-bcf8-d8086ae1794b,Tool de pensar: intervenção barata no loop com efeito medido; referência de desenho de passo de reflexão.
+79351cb2-400e-4732-bcc2-d69dfffd8c7c,"AI Engineering: tratado de referência da engenharia ao redor do modelo — avaliação, contexto e seleção de modelo."
+5060852e-4f9e-40fc-8712-61c567e4651a,"Manual de engenharia de LLM: pipeline de aplicação ponta a ponta, do serving à avaliação."
+c517ca62-5d1d-4ac8-840a-8dc0bfecfb2a,Engenharia de prompt: régua do que entra no contexto e em que forma.
+8e799dcc-8566-4f40-9ade-d6acd9b63341,Engenharia de contexto: política de orçamento de contexto — núcleo do meu remit de head.
+408e220f-a200-4e1e-afa5-5175e7004af8,Snapshot datado da mesma matéria de engenharia de contexto — versão citável em decisão.
+4ee66aba-abb1-4f3b-a2ff-c4d0b0c4b773,Harness para agente de execução longa: desenho de compactação e retomada de estado.
+392edecc-5cd3-4e7a-a23e-63f584558171,Desenho de harness para desenvolvimento longo — referência direta do que a head decide.
+21a3489b-bad2-406c-92fd-99c697250220,Prática de uso do Claude Code: régua de configuração do harness que a firma opera.
+b34ed9f7-44e5-4067-b25e-08e63a62a3f2,Mede efeito de restrição de formato sobre desempenho — sustenta decisão sobre saída estruturada nas personas.
+da7f51e1-e050-47a9-bfe0-639471ca2185,"Eval de agente: método de avaliar tool use e trajetória, não só resposta final."
+e11777fd-72ac-4a0c-9353-bfe1db702d59,Panorama de eval de LLM: referência de método para o gold set e os arms de comparação.
+5ce2e5c0-959d-46ef-ae4e-e016429569a7,Snapshot datado da mesma matéria de eval — versão citável em decisão de desenho de avaliação.
+d9c7fd6a-549b-4010-9670-be4851831e29,Desempenho em SWE-Bench: leitura crítica de benchmark público como referência externa do meu arm de avaliação.
+7e7c0d3e-1fba-4e46-9c7e-4e7ccfdbd443,Consciência de avaliação pelo modelo: ameaça de validade que o desenho do gold set precisa cobrir.
+2ac49352-846e-403a-bdb4-1c783d86a5b9,Contra o dominio_atual (engenharia-software/gestao-engenharia): mede efeito de assistência de IA sobre o trabalho — insumo do meu remit de avaliação de harness.
