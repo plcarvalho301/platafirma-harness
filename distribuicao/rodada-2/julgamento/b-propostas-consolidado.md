@@ -405,7 +405,7 @@
       * Model Context Protocol — Specification 2026-07-28
 
 * **confundimento-de-ambiente-em-avaliacao** — Confundimento de ambiente em avaliação `[claudinho-IA]`
-   * definição: Parte da variação de um escore de avaliação de sistema com modelo é atribuível ao ambiente de execução — serving, latência, concorrência, harness — e não ao modelo. Um escore único não separa as duas fontes; atribuir delta ao modelo exige controlar ou medir o ambiente. Decide quando um delta autoriza conclusão sobre o modelo.
+   * definição: Quando se testa de ponta a ponta um sistema que usa IA, o número que sai não mede só o modelo. Mede também a máquina, a rede, a fila do servidor e a versão do programa que orquestra tudo — e essas coisas variam sozinhas, a ponto de o mesmo teste dar resultado diferente conforme a hora do dia. Daí a consequência: diferença entre dois testes não autoriza, sozinha, a frase "o modelo piorou". Para dizer isso é preciso ter rodado os dois no mesmo ambiente, ou ter medido antes quanto o ambiente sozinho faz o número oscilar. Sem isso, culpar o modelo é palpite — e é o palpite mais fácil, porque o modelo é a única peça que se anuncia.
    * natureza: fenomeno
    * estatuto: natural
    * âncoras:
@@ -413,7 +413,7 @@
       * An update on recent Claude Code quality reports [snapshot 2026-08-01]
 
 * **degradacao-diferencial-sob-compressao** — Degradação diferencial sob compressão `[claudinho-IA]`
-   * definição: A perda de capacidade causada por compressão de modelo (quantização, esparsificação) não é uniforme: concentra-se em capacidades compostas de múltiplos turnos — uso de ferramenta, fluxo de trabalho agêntico — e pode ser invisível em benchmark de turno único. O efeito da compressão se mede na capacidade-alvo, não no benchmark genérico.
+   * definição: Modelos são encolhidos para caber em máquina menor, por exemplo guardando cada número com menos casas. O encolhimento tem preço, e o preço não se distribui por igual: responder uma pergunta isolada quase não piora, enquanto tarefa de muitos passos encadeados — chamar uma ferramenta, ler o retorno, decidir o passo seguinte — piora bastante. O erro comum é medir a versão encolhida por um teste de pergunta única, ver empate com a original e concluir que o encolhimento saiu de graça. Saiu de graça naquilo que foi medido. O efeito aparece na tarefa longa, e cada modelo degrada de um jeito próprio, o que impede transportar a medida de um para outro.
    * natureza: fenomeno
    * estatuto: natural
    * âncoras:
@@ -430,7 +430,7 @@
       * The OAuth 2.1 Authorization Framework (draft-ietf-oauth-v2-1-15) _(ocorre em seguranca-privacidade)_
 
 * **interacao-tardia** — Interação tardia `[claudinho-IA]`
-   * definição: Variante da recuperação densa em que cada lado é representado por múltiplos vetores no nível do token e o casamento é adiado para o escore (soma de máximas similaridades), preservando a codificação independente. Compra granularidade de casamento ao preço de uma ordem de grandeza a mais de índice.
+   * definição: Uma pergunta com dois assuntos — "multa de trânsito em veículo de aluguel" — vira um ponto só quando é comprimida em uma lista de números, e esse ponto cai na média entre os dois assuntos, um lugar onde não existe documento nenhum. A interação tardia evita a média: cada palavra da pergunta e cada palavra do documento vira o seu próprio ponto, e o encontro entre os dois é deixado para o fim. Cada palavra da pergunta procura a palavra do documento mais próxima dela, e o documento fica com a soma desses melhores encontros. Assim "multa" casa com "multa" e "aluguel" com "locação" ao mesmo tempo, sem um borrar o outro; os pontos do documento continuam calculados de antemão, então a busca segue rápida. O custo é espaço: guardar um ponto por palavra ocupa cerca de dez vezes mais que guardar um por documento.
    * natureza: modelo
    * estatuto: doutrinario
    * âncoras:
@@ -438,7 +438,7 @@
       * ColBERTv2: Effective and Efficient Retrieval via Lightweight Late Interaction
 
 * **isolamento-de-contexto-por-delegacao** — Isolamento de contexto por delegação `[claudinho-IA]`
-   * definição: Delegação a subagente cuja função é separar orçamentos de contexto: a exploração queima tokens na janela do subagente e só o destilado volta ao orquestrador, que preserva a própria janela para síntese. Decide contra a delegação por especialização — aqui o motivo é a contabilidade de contexto, não a competência.
+   * definição: Todo modelo tem um limite de quanto texto cabe numa conversa, e uma investigação longa — abrir vinte arquivos para responder uma pergunta — enche esse limite com material que não é a resposta. A saída é entregar a investigação a uma segunda instância, que gasta o próprio limite lendo tudo e devolve só o que achou. O motivo é contabilidade, não competência: quem recebe a tarefa não precisa saber mais que quem delegou, precisa ter espaço próprio para queimar. A conta só fecha se o que volta for muito menor do que foi lido. Quando quase tudo que se leu importa na resposta, dividir custa mais do que rende, porque o material acaba voltando inteiro.
    * natureza: processo
    * estatuto: doutrinario
    * âncoras:
@@ -447,7 +447,7 @@
       * Scaling Managed Agents: Decoupling the brain from the hands [snapshot 2026-08-01]
 
 * **mediacao-do-loop-agentico** — Mediação do loop agêntico `[claudinho-IA]`
-   * definição: Desenho do ponto em que a ação do agente é liberada: aprovação humana por ação, revisão automática por política, ou execução livre dentro de fronteira de isolamento previamente definida. A régua troca custo de mediação (fadiga de aprovação, latência, configuração) por raio de dano da ação não revisada — e prevê que mediação por ação degrada a própria vigilância que a justifica.
+   * definição: Um programa que executa ações sozinho — mexer em arquivo, rodar comando, chamar serviço — precisa de algum ponto em que alguém, ou alguma coisa, diga "pode". Há três formas: pedir aprovação humana a cada ação; deixar uma regra automática revisar cada ação e barrar o que sai do combinado; ou dar liberdade dentro de uma cerca fechada de antemão, em que só existe o que ele tem direito de tocar. A escolha troca incômodo por estrago possível, e traz uma armadilha. Pedir aprovação a cada passo parece a opção mais segura, mas na décima janela a pessoa aprova sem ler: a frequência do pedido destrói a vigilância que o justificava. Quem escolhe essa forma tem que contar com aprovação distraída, não com atenção constante.
    * natureza: modelo
    * estatuto: doutrinario
    * âncoras:
@@ -456,7 +456,7 @@
       * Best practices for Claude Code - Claude Code Docs [snapshot 2026-08-01]
 
 * **ranqueamento-multiestagio** — Ranqueamento multiestágio `[claudinho-IA]`
-   * definição: Pipeline de recuperação em que estágios sucessivos trocam volume de candidatos por custo de escore: um primeiro estágio barato e de alto recall gera o pool, estágios caros e precisos reordenam. O recall do primeiro estágio é teto do resultado — estágio tardio não recupera o que não entrou no pool.
+   * definição: Busca feita em etapas, como peneira: a primeira passa por todo o acervo e é barata e grosseira, separando algumas centenas de candidatos; só sobre esses roda a etapa cara, que ordena com cuidado. O custo alto é pago por poucos itens em vez de por milhões. A consequência decide projeto: o que a primeira etapa não pescou está perdido. Nenhuma etapa seguinte inventa um documento que não recebeu — melhorar o reordenador não conserta o que ficou fora da peneira. Por isso a primeira etapa se ajusta para não deixar escapar, e não para acertar em cheio; acertar em cheio é serviço da última.
    * natureza: modelo
    * estatuto: doutrinario
    * âncoras:
@@ -465,7 +465,7 @@
       * LLM Engineer’s Handbook
 
 * **recuperacao-densa** — Recuperação densa `[claudinho-IA]`
-   * definição: Recuperação em que consulta e documento são codificados independentemente em vetores densos, e a relevância é uma operação barata sobre vetores — o que permite pré-computar o índice e buscar por vizinhança. Decide contra o codificador cruzado, que lê o par junto e por isso não indexa: ganha expressividade, perde a pré-computação.
+   * definição: Busca por significado em vez de por palavra: a pergunta e cada documento viram uma lista de números que funciona como coordenada, e devolve-se o que caiu perto da pergunta. Como cada documento é convertido sozinho, sem saber que pergunta virá, dá para converter tudo de antemão e guardar — na hora da busca só se procura o vizinho mais próximo, o que é rápido mesmo com milhões de itens. O preço é a comparação grosseira, feita entre dois pontos já fechados. Existe a alternativa de ler pergunta e documento juntos, que casa muito melhor e é inviável como busca, porque exigiria reler o acervo inteiro a cada pergunta. Por isso a leitura conjunta costuma entrar depois, sobre os poucos candidatos que a busca por vizinhança trouxe.
    * natureza: modelo
    * estatuto: doutrinario
    * âncoras:
@@ -474,7 +474,7 @@
       * Pretrained Transformers for Text Ranking: BERT and Beyond
 
 * **relevancia-graduada** — Relevância graduada `[claudinho-IA]`
-   * definição: Relevância tratada como grau, não como binário: cada documento contribui ganho proporcional ao seu grau, acumulado ao longo do ranking com desconto por posição e normalizado pelo ranking ideal. Decide contra métrica binária (precisão@k) e contra métrica de primeiro acerto (MRR), que não distinguem o altamente relevante do marginal.
+   * definição: Nem todo acerto vale igual: num resultado de busca, o documento que responde a pergunta inteira vale mais que o que tangencia o assunto. A relevância graduada mede um sistema de busca tratando isso como grau — cada resultado entra com um valor conforme quanto responde, e esse valor pesa menos quanto mais embaixo ele aparece na lista. A soma desses valores, dividida pela soma da melhor ordem possível, dá uma nota entre 0 e 1. Contar apenas acerto e erro esconde duas coisas que essa nota mostra: quem põe o resultado excelente em quinto perde para quem o põe em primeiro, e quem enche as primeiras posições de resultados apenas aceitáveis não empata com quem acertou em cheio.
    * natureza: modelo
    * estatuto: doutrinario
    * âncoras:
@@ -482,7 +482,7 @@
       * IR evaluation methods for retrieving highly relevant documents
 
 * **transporte-de-estado-entre-sessoes** — Transporte de estado entre sessões `[claudinho-IA]`
-   * definição: Trabalho que excede uma janela de contexto se divide em sessões sem memória compartilhada; artefatos duráveis fora da janela (nota, lista de tarefas, log, arquivo), escritos por uma sessão e lidos pela seguinte, carregam o estado. O que não foi inscrito em artefato não existe para a sessão seguinte — inclusive o que a compactação descartou.
+   * definição: Um trabalho que não cabe numa conversa só precisa continuar em outra, e a seguinte começa sem lembrar nada da anterior. É uma obra tocada por turnos em que nenhum turno conversa com o próximo: chega adiante apenas o que ficou escrito em lugar durável — lista de pendências, diário de bordo, o próprio código já salvo. A regra prática é dura: o que não foi escrito não existe para quem vem depois. Isso inclui o que se perdeu quando a conversa foi resumida para caber. Decisão tomada e não anotada volta a ser tomada, às vezes ao contrário da primeira vez — por isso escrever o estado é parte da tarefa, e não relatório dela.
    * natureza: processo
    * estatuto: doutrinario
    * âncoras:
@@ -490,8 +490,8 @@
       * Harness design for long-running application development [snapshot 2026-08-01]
       * Code execution with MCP: building more efficient AI agents [snapshot 2026-08-01]
 
-* **workflow-vs-agente** — Workflow vs. agente `[claudinho-IA]`
-   * definição: A previsibilidade dos subpassos decide a topologia de execução: quando as subtarefas são conhecidas a priori, fluxo fixo composto (mais barato, auditável, otimizável por etapa); quando dependem do que se observa no caminho, loop aberto com orçamento. Régua de decisão, não taxonomia de sistemas.
+* **quando-cabe-um-agente** — Quando cabe um agente `[claudinho-IA]`
+   * definição: Antes de montar um sistema com IA, uma pergunta decide a forma dele: dá para escrever de antemão os passos que ele vai dar? Se dá — ler a nota fiscal, conferir contra a tabela, emitir o aviso —, o certo é um roteiro fixo, em que cada passo é um pedaço testável e barato. Se não dá, porque o passo seguinte depende do que aparecer no anterior, entra o agente, que decide o próximo passo a cada volta. O agente custa mais por tarefa, erra de formas que o roteiro não erra e é mais difícil de investigar, porque cada execução segue um caminho diferente. Em troca, aguenta o caso que ninguém mapeou. Escolher agente onde o roteiro daria conta é pagar essa conta sem precisar.
    * natureza: modelo
    * estatuto: doutrinario
    * âncoras:
@@ -782,7 +782,7 @@
       * CIS Critical Security Controls, Version 8.1
 
 * **mediacao-do-loop-agentico** — Mediação do loop agêntico `[claudinho-IA]`
-   * definição: Desenho do ponto em que a ação do agente é liberada: aprovação humana por ação, revisão automática por política, ou execução livre dentro de fronteira de isolamento previamente definida. A régua troca custo de mediação (fadiga de aprovação, latência, configuração) por raio de dano da ação não revisada — e prevê que mediação por ação degrada a própria vigilância que a justifica.
+   * definição: Um programa que executa ações sozinho — mexer em arquivo, rodar comando, chamar serviço — precisa de algum ponto em que alguém, ou alguma coisa, diga "pode". Há três formas: pedir aprovação humana a cada ação; deixar uma regra automática revisar cada ação e barrar o que sai do combinado; ou dar liberdade dentro de uma cerca fechada de antemão, em que só existe o que ele tem direito de tocar. A escolha troca incômodo por estrago possível, e traz uma armadilha. Pedir aprovação a cada passo parece a opção mais segura, mas na décima janela a pessoa aprova sem ler: a frequência do pedido destrói a vigilância que o justificava. Quem escolhe essa forma tem que contar com aprovação distraída, não com atenção constante.
    * natureza: modelo
    * estatuto: doutrinario
    * âncoras:
