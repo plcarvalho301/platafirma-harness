@@ -1,0 +1,61 @@
+obra_id,nota
+81d6664e-1172-4da8-b611-14181782c6a9,Ontologia de fundamento adotada pela plataforma; decide se uma entidade é continuante ou ocorrente antes de qualquer classe nova.
+5915ca87-80d9-4358-8ac6-54c33cd58b47,Método de construção de ontologia de domínio sobre BFO; é o manual de procedimento que eu sigo ao lavrar classe nova.
+d9e308e6-34b6-4c78-9a9f-7aae88349d29,Semântica formal de DL; decide o que é expressável em OWL e o que quebra decidibilidade antes de eu escrever axioma.
+02d24cf3-de18-45de-88a1-1bd5e247211d,Define o perfil OWL em que a TBox roda; régua para escolher entre EL/QL/RL ao fechar um axioma.
+c86ee1f8-6e5b-4982-975a-685190a7d75d,Norma do esquema de vocabulário controlado; decide broader/narrower/related e o que pode ser Concept vs Collection.
+26c83d82-e0e6-4896-8d61-322e69b1e22d,Ontologia de fundamento rival; usada para testar se uma distinção minha é artefato de BFO ou sustenta em outra tradição.
+3b074f31-8cc9-4fc3-81c0-328bf1000f43,Camada mid-level sobre BFO; decide se um termo já existe upstream antes de eu criar termo local.
+f67a33d9-2412-4d0a-a782-ea14792d59f2,Especificação das CCO; fonte de reuso de classe e relação antes de lavratura própria.
+3e4564fb-726b-425c-8fc3-2c9575758b7a,Biblioteca comparada de ontologias de fundamento; base para justificar a escolha de tradição em ADR.
+9ae06d4e-883b-40a1-a1cb-8f195f1cab59,UFO de Guizzardi; fonte de kind/sortal/relator e critério de identidade — a régua que eu cito para decidir se algo é atributo ou relator.
+21244247-1891-436f-a74b-00ae91e4dbd9,Catálogo de anti-padrões ontológicos; usado como checklist de revisão do modelo antes de fechar versão.
+0e8da498-1e6b-4565-a74a-49e6d92bfcd3,OntoClean; método formal para avaliar se uma subsunção declarada se sustenta (rigidez, identidade, unidade).
+89fa2571-7887-4225-bf27-67971febac65,Trata evento como entidade de primeira classe; régua para modelar ato de catalogação e sucessão sem virar atributo.
+8d32d598-b87c-4d8b-aa5b-bb3f6dcdb691,Fundamentação de eventos em modelagem conceitual; par teórico da decisão de modelar processo como ocorrente.
+b645d025-5467-43c2-a1a3-71b7b81b4eb9,Caso completo de aterramento de ontologia de domínio em UFO; molde do procedimento que aplico ao domínio da plataforma.
+7789de64-cc71-43b0-98f5-34475efc2624,Alinhamento entre ontologias; régua para decidir mapeamento vs. duplicação quando dois vocabulários colidem.
+937af706-a6f2-4a8a-98e8-a3c660bfac0a,Usa ontologia para derivar fronteira de domínio; insumo direto do recorte de subdomínio da rodada 2.
+678ea005-b065-486e-8046-e850567b291f,Ponte explícita entre ontologia de fundamento e DDD; sustenta que linguagem ubíqua e vocabulário canônico são o mesmo problema.
+64f0c65b-cfe0-4dcc-aa28-033d42532586,Perfil UML para DDD; notação de modelo conceitual que eu uso para publicar decisão de modelagem legível fora da ontologia.
+4fc02482-bcfc-43cb-8c24-336dd6520a63,Levantamento comparado de modelos existentes; insumo de decisão entre reuso e construção própria.
+70f81706-ef82-4655-83aa-bade4319dab4,Ontologia de decisão arquitetural; modelo conceitual de decisão como entidade — base para o que o registro de ADR tem de guardar.
+acef84ce-9ddc-4b46-af9b-c5fe4d2596ed,Norma de construção e manutenção de vocabulário controlado monolíngue; régua direta do vocabulário canônico.
+133ec5c2-d3c9-4c79-b8fb-bda4fb18453b,Fundamento teórico da organização da informação; sustenta por que descrição e classificação são decisões e não descobertas.
+7417496f-a949-4862-8398-f252caf58ae9,Arquitetura de informação como disciplina; régua de rotulagem, navegação e esquema de organização do registro.
+6b74e179-f3ea-47bf-9d90-1443bb701dc5,Vocabulário controlado de governo; reivindico contra sistemas-apf porque a obra é artefato de vocabulário — o que ela ensina é forma de vocabulário, não funcionamento de sistema da APF.
+c1fc1d3a-71f7-492f-8dd6-83b4efbef9db,Perfil de metadados de catálogo (DCAT-BR); régua do esquema descritivo de item de acervo e de sua interoperabilidade.
+8a6d157a-8531-4167-a15a-55614b3b8469,ISAD(G); régua de descrição multinível e de identidade de unidade documental. Reivindico contra gestao-organizacional: é norma de descrição, não de gestão.
+fae2391b-bc6b-4f69-8c58-1660d924f6e0,Edição PT do ISAD(G); versão citável em português para as decisões de descrição. Mesmo motivo do original contra gestao-organizacional.
+aa385a7e-b92e-4f20-a693-665356ab8187,NOBRADE; adaptação brasileira do ISAD(G) e régua local de níveis de descrição. Reivindico contra gestao-organizacional pelo mesmo critério.
+0d9fc4f8-c022-44e3-9979-d66e0ccbdbc0,e-ARQ Brasil; requisitos de gestão arquivística e fonte que a ontologia cita nas famílias documentais — a base tem que estar sob quem responde pelo dc:source.
+e6cb866c-f0ba-442d-8b0e-d4764b114346,Define documento de arquivo e gestão de documentos em lei. Reivindico contra governo-digital: o que uso dela é o critério de identidade documental, não a política de governo.
+3e5d32f6-aaee-4525-ba42-0e8d7ac1b1fb,Regulamenta a política de arquivos; traz classificação, temporalidade e destinação — régua de ciclo de vida do registro.
+69bcfac2-af6c-4f52-b60c-f23470aaa10b,Formato Nygard de ADR; a forma canônica em que o decidido é lavrado na plataforma.
+1cfaaec6-f92e-429a-a647-2062bbbcc489,Framework de documentação de decisão; régua de o que um registro precisa conter para ser recuperável depois.
+3cd24cc4-ad43-4bb0-b492-e9254689faa0,Linguagem ubíqua e bounded context. Reivindico contra arquiteturas: o que cito dela é o critério de fronteira semântica de vocabulário — a fatia arquitetural não me interessa.
+778bfb3f-ba6e-42bd-b3c5-5fc193fea4f0,Tratamento operacional de subdomínio e recorte. Reivindico contra arquiteturas: é o insumo direto do recorte de subdomínio que abre a rodada 2.
+392cc039-ba43-4f0f-b955-08d9a42514da,Parnas; critério de decomposição por ocultação de informação — régua de por que uma fronteira se traça onde se traça.
+520e656f-9d2e-4915-8c22-eb01089ba714,DMBOK. Reivindico contra arquitetura-dados: cito seus capítulos de metadados e modelagem para decidir significado do dado; a fatia de infraestrutura fica com quem a implementa.
+0da8836b-3d22-483d-89c3-45a3b3af3f27,ISO 25012; define o vocabulário de qualidade de dado (acurácia, completude, consistência). Reivindico contra engenharia-dados: é modelo conceitual de qualidade, não técnica de pipeline.
+36843503-ebf1-45ae-bd99-6611a7518ea7,Critério de quando parar de crescer uma coleção. Reivindico contra ia-rag: a decisão é de fronteira de acervo e curadoria, não de recuperação.
+8fc1db93-f373-41aa-8bcd-b2c02d7a2c44,Memória organizacional; base conceitual do que a wiki é como sistema de registro.
+03d7c6a4-4517-44f5-834a-f6fba59a4935,Distingue memória de expectativas de memória procedural. Reivindico contra capacidade-estatal: é régua do que o registro guarda e do que ele não consegue guardar.
+ecef7137-7c9a-492b-823e-7d4abec7e656,Memória transativa; sustenta por que quem sabe o quê tem que ser endereçável no registro.
+3a0967a6-b9eb-4759-b9c1-3fe17ea59f91,Nonaka; conversão tácito-explícito — base do que a escola consegue formalizar e do que não consegue.
+c45238d2-88ea-406c-8d2e-e8e4f86dab41,Desenvolvimento em livro da teoria de criação de conhecimento; par do artigo para material de capacitação.
+e741e2cc-1020-4fe8-b8c1-ea73bce7669d,Objeto de fronteira; régua para decidir quando um termo precisa ser único entre cadeiras e quando pode ser plástico.
+cff22595-99f8-4ab2-a6d5-4d4e69b6dbbf,Taxonomia de Bloom revisada; régua de nível cognitivo alvo de cada trilha de formação.
+270fcf49-4ad8-4743-b50c-b602acacd9f8,Base empírica de como aprendizado funciona; sustenta escolha de sequência e prática nas trilhas.
+9ac96d9b-f77f-4bce-9bd6-6ce78f65dded,Prática espaçada e recuperação; régua de desenho de exercício da escola.
+09bb00ad-cf1a-4412-875a-1f087c4fef07,Desenho instrucional aplicado; molde de material de capacitação.
+68b15353-7641-4d05-8cf3-f0e1027e288b,Schön; conhecimento na prática e reflexão-em-ação — base da progressão de aprendizado por caso.
+0b886b51-c8e6-4c4f-bb2d-48c4fdbef1d6,Dewey; método de pensamento reflexivo — fundamento didático da escola.
+1d55baf2-307f-40dd-8cc6-bbc21c69496a,Dewey; lógica como teoria da investigação — fundamento do método de inquérito que ensino.
+a21de67c-34c5-4bb3-b098-a4b760dc0f95,Polya; heurística de resolução de problema — material canônico de progressão da escola.
+89347284-ab88-4f88-8fbe-fc343701776e,Página de método da wiki; artefato do registro do conhecimento sob minha gerência.
+94f7a45f-9752-4efa-b9ff-584f5d171e9a,Página de método da wiki; artefato do registro do conhecimento sob minha gerência.
+978316a8-2597-4f6b-aacd-ec75b1885ede,Fichamento de casos OntoUML no setor público; evidência de aplicação que eu cito ao propor forma.
+f44b120a-84a8-4e77-8190-124dacb2d64c,Fichamento de verificação de genealogia conceitual; procedimento próprio de lavratura.
+dc4fda3a-fa7f-4c83-9c26-b6b33538bbad,Nota de pesquisa da conciliação de tradições ontológicas; base da escolha de fundamento.
+bab2e4d5-7537-4f31-ac07-762a6fec3f75,Nota de pesquisa do fechamento do mapeamento acadêmico; delimita o que já foi varrido na literatura.
