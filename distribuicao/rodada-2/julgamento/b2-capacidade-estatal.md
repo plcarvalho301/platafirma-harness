@@ -223,10 +223,10 @@ ponta; entregar só a exigência o rebaixa.
 - pai proposto: `responsabilidade-de-traduzir`
 - substitui: —
 
-### procedencia-vs-corretude
+### autenticidade-vs-veracidade
 
 ```
-rotulo: Procedência vs. corretude
+rotulo: Autenticidade vs. veracidade
 natureza: fenomeno
 estatuto: doutrinario
 ```
@@ -250,6 +250,9 @@ duas é atribuir ao selo uma garantia que ninguém deu.
   por construção, a correção do conteúdo atestado.
 - pai proposto: —
 - substitui: `procedencia-vs-corretude` (base)
+
+Slug proposto no lugar do da base: o rótulo antigo não diz nada a quem chega de
+fora. Alternativa se preferir substantivo único: `garantia-de-origem`.
 
 ### cegueira-relacional
 
@@ -280,6 +283,169 @@ vizinho.
 - pai proposto: —
 - substitui: `cegueira-relacional` (base)
 
+## Réguas reescritas — conceitos que já existiam no domínio
+
+Definição apenas. Natureza, estatuto, âncoras e falseador dessas entradas não
+são tocados aqui.
+
+### capacidade-absortiva
+Uma organização só enxerga o que já tem repertório para enxergar. Conhecimento
+novo que chega — um relatório, uma tecnologia, um modelo publicado — não é
+rejeitado por quem não tem base para entendê-lo: passa despercebido, como
+ruído. Por isso aprender coisa nova depende de já saber coisa próxima, e quem
+parou de acuminar repertório perde primeiro a capacidade de notar que está
+perdendo alguma coisa.
+
+### retencao-estrutural
+O conhecimento caro pode ficar em dois lugares: na cabeça de quem o produziu ou
+inscrito em algo que outra pessoa consegue consultar sozinha — um modelo
+publicado, um contrato de interface, uma ferramenta distribuída. Quando fica
+inscrito, quem chega depois não precisa reconstruí-lo do zero nem achar quem o
+construiu. Reter na estrutura não é o mesmo que ter instituição que sustente: o
+artefato pode estar de pé enquanto a equipe que o mantinha se esvazia.
+
+### dependencia-de-fornecedor
+Chega um ponto em que trocar de fornecedor custa mais do que aguentar o
+fornecedor que se tem, e a partir daí o preço e o prazo deixam de ser
+negociados. A dependência não nasce do contrato, e sim do que ficou só do lado
+de lá: o formato dos dados, o conhecimento de como o sistema funciona, a
+capacidade de operá-lo. Contratar não cria dependência; contratar sem reter
+nada, sim.
+
+### soberania-tecnologica
+Poder decidir sozinho sobre a tecnologia que sustenta funções públicas — onde o
+dado fica, quem opera a infraestrutura, quem pode mudar as regras do sistema —
+sem depender da permissão ou da continuidade de um ator que responde a outro
+país ou a outro dono. Não é fazer tudo em casa: é ter alternativa real quando o
+fornecedor atual sai, sobe o preço ou é impedido de operar.
+
+### adaptacao-iterativa
+Um jeito de construir capacidade que começa por um problema que as pessoas ali
+sentem de verdade, e avança em ciclos curtos com a solução sendo desenhada por
+quem vai conviver com ela. O contrário é chegar com a solução pronta de fora e
+pedir que a organização se molde a ela: aí a forma é adotada, ninguém aprendeu
+nada, e o problema original continua onde estava.
+
+### avaliacao-politicas-publicas
+Perguntar, com método, se uma ação do governo fez o que prometia — e responder
+com evidência, não com relatório de atividade. Cobre desde saber se o problema
+foi bem identificado até medir o que mudou na vida de quem devia ser atendido,
+passando por quanto custou e se a execução aconteceu como desenhada. O que
+distingue avaliação de prestação de contas é a pergunta: uma quer saber se
+funcionou, a outra se foi executado.
+
+### governanca-federada
+Uma regra só, escrita e mantida no centro, com vários entes operando a execução
+sob a própria autoridade — e um fórum onde o vocabulário comum é negociado, não
+imposto. Quem não tem estrutura para operar recebe do centro a capacidade de
+execução emprestada, sem entregar a titularidade. O SPED funciona assim: a
+Receita e as secretarias estaduais mantêm o leiaute em colegiado, e a Sefaz
+Virtual autoriza documento para o estado que não opera ambiente próprio.
+
+### independencia-gerencial
+Cada sistema de um conjunto é comprado, financiado e operado por um dono
+diferente, e continuaria funcionando se fosse desligado do conjunto. É essa
+independência de cada peça que torna o todo interdependente sem ser
+hierárquico — e é por isso que a costura entre elas fica órfã quando ninguém é
+nomeado para fazê-la: não existe chefe comum a quem endereçar o pedido.
+
+### sistema-de-sistemas
+Um conjunto cujas peças têm donos diferentes, evoluem em ritmos próprios e
+produzem, juntas, um comportamento que não é de nenhuma delas. Não é a mesma
+coisa que sistema distribuído: lá os pedaços estão espalhados e o dono é um só;
+aqui os donos são vários, e é essa a fonte da dificuldade. O ecossistema do
+Cadastro Único é o exemplo: ministério, empresa pública de tecnologia e banco
+operam peças da mesma jornada sem superior comum.
+
+### topologia-de-integracao
+O desenho dos caminhos por onde os sistemas se alcançam — todos passando por um
+ponto central, cada um falando com cada um, ou algo entre os dois. A escolha
+decide três coisas de uma vez: o quanto um depende do outro para funcionar, se
+existe um ponto cuja queda derruba tudo, e quanto custa acrescentar mais um
+participante depois que já está tudo montado.
+
+### contratos-de-interface
+O acordo escrito sobre o que uma fronteira aceita, o que ela devolve quando
+recusa e quem paga a conta quando o acordo muda depois de já estar em uso.
+Recusar sem dizer o motivo, ou mudar o formato sem avisar, transfere o trabalho
+inteiro para o outro lado — que descobre o problema em produção. O diretório de
+chaves do Pix é o oposto disso: cada operação tem nome, e o erro volta dizendo
+o que faltou.
+
+### consistencia-de-dados
+Quando a mesma informação existe em mais de um lugar, alguém tem que decidir o
+que fazer no intervalo em que as cópias discordam. A escolha aparece no ritmo
+da atualização: por evento, no instante em que o fato acontece, ou por lote, uma
+vez por mês. O Cadastro Único mostra o preço do segundo caminho: quando o lote
+mensal atrasou, a folha de pagamento foi gerada sobre uma fotografia vencida.
+
+### dado-mestre
+A base que diz quem é quem, e serve de referência para os outros sistemas sem
+executar nada. O Cadastro Único identifica e caracteriza famílias; não concede
+benefício nem paga ninguém — isso acontece depois, em sistema de outro dono, que
+consome a base. Confundir os dois é atribuir a um cadastro as decisões que
+foram tomadas em outro lugar.
+
+### interoperabilidade
+Dois sistemas de donos diferentes trocarem informação e entenderem a mesma coisa
+com ela, sem precisar de um acordo novo a cada par que se conecta. A parte
+difícil raramente é técnica: é ter um padrão comum, alguém encarregado de
+mantê-lo vivo e uma razão para os outros aderirem. Sem essas três, o que se
+chama de integração é uma coleção de conexões feitas uma a uma.
+
+### atestacao-confianca
+Um componente produz evidência verificável sobre o que está de fato executando,
+e quem recebe decide, por critério próprio, se aquilo basta. As duas metades são
+separadas e devem ser lidas separadas: a evidência é técnica, o critério de
+aceitação é político. Na urna eletrônica, o hash é a evidência; o partido que o
+confere com ferramenta própria é quem aplica o critério.
+
+### escrituracao-eletronica
+Prestar informação fiscal, contábil ou trabalhista ao Estado em arquivo digital
+com valor jurídico, em leiaute definido e assinado. Substitui o livro e a nota
+em papel, e desloca o trabalho: em vez de guardar documento, o obrigado passa a
+manter seus sistemas capazes de gerar o arquivo exatamente como o leiaute pede.
+SPED e eSocial são os dois casos federais.
+
+### meta-governanca-normativa
+Escolher, para cada caso, sob que lógica a coisa vai ser governada — hierarquia
+e comando, contrato e mercado, ou rede e negociação entre pares — e combinar as
+três sem fingir que só existe uma. É governança da governança: o objeto da
+decisão não é o resultado, é o arranjo que vai decidir sobre o resultado.
+
+### gradiente-de-isomorfismo-na-importacao
+Quando uma organização importa um modelo de fora, o que chega varia entre dois
+extremos: a cópia da forma, que rende legitimidade sem mudar nada do trabalho,
+e a adaptação real, que muda o trabalho e por isso custa caro. Quase toda
+adoção fica em algum ponto entre os dois, e o ponto exato é medível — pelo que
+mudou na prática, não pelo que foi anunciado.
+
+### cadastro-territorial
+Registro sistemático de quem ocupa e o que existe em cada pedaço do território,
+com a geometria junto. Serve de base para planejamento, cobrança e controle
+ambiental — e é onde a qualidade do dado depende inteiramente de quem desenhou
+o limite, porque o limite de um é o limite do outro.
+
+### governanca-corporativa
+O conjunto de instâncias que dirigem, avaliam e monitoram uma organização em
+nome de quem tem interesse legítimo nela, e a quem a direção presta contas.
+Cobre conduta, integridade e conformidade com as regras a que a organização se
+submete. Não é gestão: gestão executa, governança decide o que se espera de
+quem executa e verifica se veio.
+
+### prevencao-a-fraude
+Impedir, detectar e responder a quem obtém vantagem indevida por engano ou
+falsidade. A parte que costuma ser esquecida é a primeira: prevenir é desenhar o
+processo de modo que a mentira não passe, e não apenas caçar depois quem passou.
+
+### servico-compartilhado-generico-cross
+Serviço que várias áreas usam e nenhuma delas produz de forma diferente — folha,
+protocolo, login, compras — reunido num lugar só em vez de refeito em cada
+canto. É a fronteira do que se delega sem perda: como não carrega regra
+exclusiva de ninguém, entregá-lo ao mercado ou a um operador central é uso
+correto, não abdicação. O slug é ilegível e pede troca; `servico-comum` decide
+os mesmos casos.
+
 ## Candidatos sem lastro suficiente
 
 Não propostos — a cota do passo 5 exige duas âncoras do lote.
@@ -301,15 +467,6 @@ Não propostos — a cota do passo 5 exige duas âncoras do lote.
   sistema, o normal e o conformado a ela. Âncora: Estudo de caso: Estaleiro
   **[wiki]**, que é pergunta formulada sem resposta — responder exige relato de
   órgão contratante.
-- **`categoria-residual`** — o domínio que nenhum sistema representa vai parar
-  no sistema genérico de protocolo, e o volume acumulado ali mede o que nunca
-  foi modelado. Achei o material: `Frente:paper-capability-trap/case-sei`. Não
-  vira âncora — a obra não está no lote.
-- **`capacidade-de-avaliar`** — o órgão não terceiriza só o sistema, terceiriza
-  o juízo sobre o sistema: elimina alternativas sem dispor do vocabulário para
-  compará-las, e o instrumento da decisão registra a eliminação como se fosse
-  análise. Achei o material: `Frente:paper-capability-trap/case-petrvs`. Não
-  vira âncora — a obra não está no lote.
 
 ## Homônimo fora do acervo
 
