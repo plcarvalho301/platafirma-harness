@@ -126,6 +126,70 @@ sinalizar a fronteira.
 - pai proposto: —
 - substitui: `legibilidade-do-sistema` (base)
 
+### carga-prematura
+
+```
+rotulo: Carga prematura
+natureza: fenomeno
+estatuto: doutrinario
+```
+
+**definição.** A obrigação chega antes do meio de cumpri-la. Liga-se o prazo, a
+sanção ou a escala enquanto o instrumento que tornaria o cumprimento possível
+ainda está sendo inventado — e quem tem que cumprir descobre isso sozinho. O
+estrago não é só a regra descumprida: a estrutura que já funcionava é posta a
+carregar peso que não aguenta, e cede.
+
+O sinal costuma estar legível no próprio papel, num instante só: a norma que
+obriga e, no mesmo texto, remete a ato futuro o que faria a obrigação
+funcionar. Na Rede Nacional de Dados em Saúde o envio virou obrigatório antes
+de existir a regulamentação da consequência do descumprimento, e o modelo de
+dados seguia sendo corrigido a partir dos erros que apareciam em produção.
+
+- obras-âncora: `84ee87ce-3cb8-4807-8c6e-33171aa8ed6e` (Building State
+  Capability), `c66f85c1-d731-4c61-b17b-0f3bf590563e` (Estudo de caso: RNDS)
+  **[wiki]**
+- caso falseador: uma obrigação ligada antes do instrumento cujo cumprimento se
+  dê na mesma taxa e no mesmo prazo que o de obrigação ligada depois — a
+  antecipação não faria diferença.
+- pai proposto: `armadilha-de-capacidade`
+- substitui: `carga-prematura` (base)
+
+### lado-da-traducao
+
+```
+rotulo: Lado da tradução
+natureza: modelo
+estatuto: doutrinario
+```
+
+**definição.** Quando dois sistemas com vocabulários diferentes precisam
+conversar, alguém tem que traduzir — e muda tudo de que lado a tradução mora.
+No destino, um time só faz o trabalho uma vez, confere o que entra e devolve
+erro dizendo o que faltou. Na origem, cada um dos muitos remetentes traduz por
+conta própria, e o mais fraco deles define a qualidade do conjunto.
+
+Essa escolha raramente é tomada: o centro publica o vocabulário canônico,
+obriga seu uso e o ônus de falar essa língua cai por omissão em quem tem menos
+capacidade. Na Rede Nacional de Dados em Saúde o indicador da falha se chama
+taxa de rejeição — nome que localiza o erro em quem enviou, quando quem o
+produz é a configuração de quem recebe. No Pix e no login gov.br a tradução
+está do outro lado: o centro recebe, confere e responde com erro nomeado.
+
+- obras-âncora: `c66f85c1-d731-4c61-b17b-0f3bf590563e` (Estudo de caso: RNDS)
+  **[wiki]**, `49b89d8c-a8d0-478b-b803-b3819aad0ed1` (Estudo de caso: gov.br)
+  **[wiki]**, `ef1f162c-5ad3-4235-a12a-cf81ae9f2ef4` (Estudo de caso: Pix)
+  **[wiki]**
+- caso falseador: um arranjo em que cada remetente traduz por conta própria e a
+  qualidade do dado recebido seja igual à de um arranjo em que o destino traduz
+  e valida.
+- pai proposto: —
+- substitui: `direcao-da-autoridade-semantica` (base)
+
+Slug proposto no lugar do da base: o rótulo antigo não diz de que trata e o
+novato não o chuta. Decisão do dono. A entrada é linkada na wiki sob
+`Ontologias/`, e a fronteira com `estudos-ontologias` também é dele.
+
 ## Candidatos com uma âncora só
 
 Não propostos — a cota do passo 5 exige duas.
@@ -133,8 +197,14 @@ Não propostos — a cota do passo 5 exige duas.
 - **`congelamento-por-criticidade`** — o sistema que não pode parar também não
   pode ser reorganizado, então a desordem deixa de ser corrigível e passa a ser
   apenas documentada; documentação abundante vira sintoma da imobilidade, não
-  sinal de ordem. Âncora: Estudo de caso: SIGEPE **[wiki]**. Segunda âncora a
-  procurar em SPED, Urna ou Estaleiro.
+  sinal de ordem. Âncora: Estudo de caso: SIGEPE **[wiki]**. Sem segunda
+  âncora no corpus da frente.
+
+- **`fronteira-de-versionamento`** — quem muda o contrato de interface e quem
+  arca com o custo de acompanhar a mudança é decisão separada de quem executa a
+  tradução: o login gov.br acerta a execução e transfere por escrito o
+  acompanhamento às pontas. Âncora: Estudo de caso: gov.br **[wiki]**. O próprio
+  case rebaixa o eixo a higiene de API; entra como candidato, não como proposta.
 
 ## Homônimo fora do acervo
 
