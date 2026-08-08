@@ -1,0 +1,74 @@
+obra_id,nota
+3e21b59a-37ed-4d7c-99b3-dec688c96995,Relatório DORA de transformação — evidência de referência para calibrar prática de entrega.
+d4d60417-3306-4bbd-87fd-71f68fa83225,Série DORA: linha de base para comparar o desempenho de entrega da fábrica.
+c88796df-1090-46c0-abb1-e2df40135ef5,Série DORA: linha de base para comparar o desempenho de entrega da fábrica.
+17bfb8b0-e04a-4a9f-be01-c3bcabe8c7e0,Série DORA: linha de base para comparar o desempenho de entrega da fábrica.
+f36f4767-21c4-4825-94be-9d783c9a1563,Série DORA: linha de base para comparar o desempenho de entrega da fábrica.
+01920ab1-11cf-4501-8678-d318f848fe2e,Série DORA: linha de base para comparar o desempenho de entrega da fábrica.
+d87cf7a6-2e2c-4df6-a468-bad132a2cdc9,Série DORA: linha de base para comparar o desempenho de entrega da fábrica.
+ac6ffd6c-935f-4f68-b22e-7585f87bdf1b,Régua de desempenho de entrega: as quatro métricas DORA e o que as move.
+b09fa7ff-6536-40f6-871a-bdf04b2f6b40,Comparação de desempenho entre implementações de servidor — insumo direto de decisão de troca de runtime.
+1cfaaec6-f92e-429a-a647-2062bbbcc489,Framework de documentação de decisão de arquitetura — formato do registro que exijo na construção.
+27880d0e-c12c-4b74-a22b-2924e1d266bb,Analisa modelo e contrato de desenvolvimento de software no governo — régua para decidir modelo de fabricação.
+76356989-ff41-4497-9097-6da1152e16ef,Régua de complexidade e profundidade de módulo na revisão de construção.
+47d4d047-25cb-47c4-bf25-53718bcb35a6,Régua de modernização incremental de sistema existente — decide ordem e corte da obra.
+67c4ae45-a40c-4754-8c00-847e817dd370,Padrões arquiteturais aplicados no stack Python — régua de construção do que se escreve aqui.
+eae6db01-442c-4635-9cd7-0b5ad7a92f59,"Pilares de excelência operacional, confiabilidade e custo — régua de operação de plataforma; contra o dominio_atual 'arquiteturas', porque o uso é operacional, não de desenho de domínio."
+c2d7efe8-2057-48d6-803a-b4cd5f99dbef,"Régua de construção orientada a evento: contrato de evento, esquema e entrega."
+8780a2a8-018b-408a-898a-21d3b93cb86c,Régua de corte e integração de serviço na topologia de construção.
+f4c2960f-5d85-4324-b7ed-ab1a79c483e0,Captura de conhecimento arquitetural para desenvolvimento — régua do que fica registrado no repo.
+f7563ebc-191c-43ce-bbef-434ed84f8ca3,Régua de fronteira e dependência no desenho de construção.
+c6307afa-7aa3-478a-b9bb-b8cc419df385,Régua de legibilidade e forma do código aceito na entrega da fábrica.
+6c1a90ff-97e5-4971-84c2-3f139388cb17,Modelo de maturidade de processo de desenvolvimento — referência ao definir o que a fábrica deve garantir.
+94d1793e-30b2-416a-bb79-48579d6e77ff,Objetivos de governança e gestão de TI (BAI/DSS) — régua para decidir quais processos de TI existem e o que cada um entrega.
+ccc19c82-6204-4c1c-a8f2-c8a76a093b2c,Framework COBIT 5 — modelo de referência de processo de TI usado como contraprova ao desenho FitSM/ITIL.
+d47bad12-585f-4acf-924d-4d62395b749c,"Processos habilitadores COBIT 5 — detalhamento de entrada, saída e atividade por processo de TI."
+6b8c4d0a-5daf-4ec2-b730-a4c4dd541b7e,Arquitetura como fluxo contínuo de decisão — casa com mudança controlada e release.
+d1700fc7-f115-485a-84ab-7a5de5065ff7,Desenho de pipeline de entrega — régua da gerência de configuração e release.
+6894f2ba-d36a-4422-ab20-4c26a629dee2,Régua de análise de incidente: como sistema complexo falha e por que causa raiz única é ilusão.
+73eaf549-b429-4d23-853a-c5eaf22b54d2,"Régua de escolha de armazenamento, replicação e consistência na definição de stack."
+7b08a419-c231-4a28-9050-0599132c4092,Vocabulário de solução recorrente — base comum na revisão de desenho.
+69bcfac2-af6c-4f52-b60c-f23470aaa10b,ADR — régua do registro de decisão de construção no repositório.
+23d50d2d-007f-4523-a82b-348309d861f9,Catálogo de padrão de integração — régua de decisão de acoplamento entre componentes.
+41520dc1-adb9-4229-b72a-122fdd08cd2a,"Régua de fluxo de trabalho: WIP, política explícita e puxada — governa a fila da fábrica."
+c2432cd7-0e0a-406b-ad6e-8cbca85db3ee,Atividades de processo ITSM em nível implementável — é o que eu cito ao desenhar processo de mudança e incidente sem carregar ITIL inteiro.
+cb5b14ee-34d2-4d78-9914-56bf550a0beb,Modelo de papéis de ITSM: define quem responde por cada processo de serviço na operação.
+0934a1d3-3449-4deb-8280-8499200c960b,Identificação de serviço — base para dizer o que é serviço na PlataFirma e o que é só componente.
+3034a632-9b42-4fe0-94f9-37079aa060e2,Especificação de serviço para portfólio e catálogo — régua do catálogo de serviços da operação.
+9e64a8d5-3b1d-47ac-a1b6-cc7384870aef,Checklist de documentação ITSM — define o conjunto mínimo de documento que um processo de serviço precisa ter.
+eb62b2c7-4bac-444a-8f80-2720248da7f9,"Vocabulário ITSM: fixa os termos de serviço, incidente, mudança e ativo que uso para decidir."
+83a28c1e-fee6-408b-9340-1681c41b314a,Requisitos FitSM — a régua de conformidade contra a qual avalio o processo de serviço da casa.
+9f2aee17-f4bc-46ca-a928-4e5545c3c5b1,"Desenho de pipeline de dados e escolha de ferramenta — construção, não plano diretor de dados."
+ea6739f1-d054-48b1-8558-2fde8c25429e,Base para decidir característica arquitetural e trade-off na escolha de stack.
+f445a084-f568-4cf9-9a02-4adcc20abe5c,Fábrica de software sob demanda cascata versus fluxo ágil — evidência para decidir o arranjo da fábrica.
+7ce9bb38-53a3-4903-bec8-e930d87843ed,Mapeia FitSM para ISO/IEC 20000-1 — decide o quanto de formalismo ITSM a operação assume.
+8ab6b294-3113-40a0-9b30-bfef4932199d,Lei de Conway — régua para decidir topologia de repositório e de time em conjunto.
+1e06d3ee-cdf2-439a-a8a3-8599df02e926,"Régua da minha head: define o modelo de serviço, mudança, incidente e ativo que a operação segue; contra o dominio_atual 'engenharia-software' — ITIL não é prática de construção, é gerenciamento de serviço."
+2de2a59a-0087-4d41-9314-aeb67948e930,Régua operacional e de desenho do Kafka como escolha de stack de mensageria.
+b34d5fa6-ce67-48b9-949a-293bb67e3fea,Régua para decidir consistência e transação em sistema distribuído.
+176f8130-6c77-4357-bcfe-7327cf27f028,"Gestão de patch como processo de mudança controlada; contra o dominio_atual 'seguranca-privacidade' — quem executa janela, teste e rollback é a operação."
+dcdcdb8f-07fb-4a88-abf7-e68a39036c07,Régua para avaliar promessa de ganho de produtividade em ferramenta nova.
+2d8ad6b2-344f-42bf-b982-c04051129efa,"Define o que é sinal observável (evento estruturado, cardinalidade, trace) — régua da instrumentação dos serviços."
+392cc039-ba43-4f0f-b955-08d9a42514da,Critério de decomposição em módulos — régua de topologia de repositório e de limite de componente.
+a05a56b4-d5e6-4854-ad8e-9b3a633fa8f6,"Internals do Postgres — régua para decidir vacuum, plano, índice e operação do banco em produção."
+909016ea-adef-4401-8893-6dda164599d5,Régua de refatoração segura: define o que é dívida tratável e como tratar sem parar a entrega.
+02359e1c-e2d4-4461-965c-32eb7b3afbf8,"Padrões de estabilidade em produção (timeout, bulkhead, circuit breaker) — régua de aceite do que vai ao ar."
+8601b38b-29bb-4498-81f3-568f1414095b,Régua de design de API REST exigido nas entregas.
+c40aee12-0586-4733-a2bc-a966e918a51c,Régua de atributo de qualidade e tática arquitetural na avaliação de uma construção.
+d4ca606e-d882-474a-8425-638a9a1ab144,Gestão do conhecimento arquitetural: como decisão de construção se registra e se recupera.
+2ac49352-846e-403a-bdb4-1c783d86a5b9,Evidência sobre produtividade e qualidade com assistência de IA — régua de expectativa para a fábrica.
+05609895-5818-4241-aa63-8b3513f78c62,Série DORA histórica: evolução das métricas de entrega que uso como régua.
+d6f912b7-8813-476d-9fd1-445926b57143,Série DORA histórica: evolução das métricas de entrega que uso como régua.
+6537c387-b04c-44f8-a77d-bf8cbe0165c4,Série DORA histórica: evolução das métricas de entrega que uso como régua.
+1981a388-709f-427c-8fa2-5fbe3a8986f7,Série DORA histórica: evolução das métricas de entrega que uso como régua.
+32198e7c-9015-4f37-bb60-af093cc883d7,"Integra controle de cadeia de suprimento no CI/CD; contra 'seguranca-privacidade' — o pipeline é meu, o controle entra dentro dele."
+cfab5ca2-c232-4833-a10a-75a38f5e1150,"Régua do runtime de host: unit, dependência, cgroup e serviço de usuário — é como o processo roda aqui."
+2216a203-568e-485b-b822-094fc3552cb5,Tipos de time e modo de interação — régua de topologia de construção e do fluxo de mudança entre times.
+f497a2e3-f236-4ef1-ac97-4b2a35d388b1,Régua de disciplina de teste exigida na entrega da fábrica.
+356094cd-262c-4f71-96d2-3d08d64b7d51,"Elementos mínimos de SBOM — inventário do que compõe o que está no ar; contra 'seguranca-privacidade', porque é gestão de ativo e configuração."
+faebd9ea-58e8-4580-aeb1-215c67cb9690,Régua de estimativa e de efeito de adicionar gente a obra atrasada.
+ab18b892-c418-48ce-a48a-6d7382d9338d,"Teoria de fila e tamanho de lote aplicada a desenvolvimento; contra 'produtos-digitais' — o que ela decide é o fluxo da fábrica, não o produto."
+6287cfc2-2638-4665-8d7f-0fa1425886f8,"Régua de operação de serviço: SLO, orçamento de erro, alerta e postmortem — base da gerência de observabilidade."
+ef949ef2-da4d-49a2-a760-4a8d5af605fa,Ordenação de evento e relógio lógico — régua de decisão em sistema distribuído.
+fcad6c92-b0c6-4170-b46a-da14a0fd1a00,Formato e granularidade de história — régua do card que escrevo para a fábrica.
+78fa1de3-e516-4f3d-b883-ba1f5851b24e,Régua de intervenção em código sem teste — decide estratégia de costura antes de mudar legado.
