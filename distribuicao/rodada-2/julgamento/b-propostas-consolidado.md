@@ -171,7 +171,7 @@
       * Continuous Delivery Pipelines: How To Build Better Software Faster
 
 * **janela-de-exposicao** — Janela de exposição `[claudinho-seguranca]` `balde B`
-   * definição: Entre o momento em que um defeito conhecido passa a ser explorável e o momento em que a correção está em produção, o risco corre. Todo controle de processo interposto nesse intervalo — teste, aprovação, janela de mudança — reduz o risco de a correção quebrar a operação e aumenta o risco de o defeito ser explorado; a decisão não é entre seguro e inseguro, é a escolha de qual dos dois riscos se prefere pagar.
+   * definição: Entre o dia em que uma falha vira conhecida e o dia em que a correção está no ar, o sistema fica aberto — e quem ataca sabe disso, porque a falha foi anunciada em público junto com o remendo. Tudo que se coloca dentro desse intervalo para reduzir o risco de quebrar a operação — testar em homologação, esperar a janela de manutenção do fim de semana, colher aprovação — é pago em tempo de exposição. Não existe escolha entre seguro e inseguro: existe escolher qual dos dois riscos se prefere correr, o de a correção derrubar o serviço ou o de alguém entrar antes de ela chegar.
    * natureza: fenomeno
    * estatuto: doutrinario
    * âncoras:
@@ -215,7 +215,7 @@
       * FitSM-5 Guide: Specifying Services for Portfolios and Catalogues v1.0
 
 * **transparencia-de-composicao** — Transparência de composição `[claudinho-seguranca]` `balde B`
-   * definição: Propriedade de um artefato entregue cuja árvore de constituintes — fornecedor, nome, versão, identificador e relação de dependência, inclusive as transitivas — é declarada pelo produtor em forma legível por máquina, de modo que quem apenas opera o artefato responda "isto contém o componente X na versão Y?" sem consultar o produtor. O que a declaração não alcança é declarado como tal, em vez de omitido.
+   * definição: Um software é montado com centenas de pedaços escritos por outras pessoas, e cada pedaço traz outros dentro. Transparência de composição é o produtor entregar, junto com o produto, a lista do que tem lá dentro — fornecedor, nome, versão e quem depende de quem — num formato que um programa consiga ler. No mundo do software essa lista tem nome próprio: SBOM. Ela existe para a pergunta que aparece de madrugada: saiu uma falha grave numa biblioteca, a gente usa? Sem a lista, a resposta depende de perguntar ao fornecedor e esperar. Com ela, quem só opera responde sozinho, em minutos. O que o produtor não conseguiu mapear entra declarado como desconhecido — buraco anunciado se procura, buraco omitido vira surpresa.
    * natureza: disposicao
    * estatuto: doutrinario
    * âncoras:
@@ -396,7 +396,7 @@
 ## ia
 
 * **acesso-delegado** — Acesso delegado `[claudinho-seguranca]` `balde A`
-   * definição: Arranjo em que um terceiro obtém acesso limitado a um recurso em nome do dono sem receber a credencial do dono: uma autoridade separada media a aprovação e emite ao terceiro uma autorização própria, restrita em alcance e em prazo, revogável sem tocar na credencial original.
+   * definição: Você quer que um aplicativo de notas fiscais leia seu e-mail, mas não quer entregar sua senha — com ela, o aplicativo lê tudo, para sempre, e você só corta trocando a senha. Acesso delegado é o arranjo que resolve isso: um terceiro serviço confirma com você o que será permitido e entrega ao aplicativo uma autorização própria, limitada ao que você aprovou e com prazo. O ganho está na revogação. Cancelar aquela autorização derruba aquele aplicativo e não afeta mais nada que você tenha autorizado, porque cada um recebeu a sua — impossível quando todos usam a mesma senha.
    * natureza: modelo
    * estatuto: doutrinario
    * âncoras:
@@ -420,8 +420,8 @@
       * Can Compressed LLMs Truly Act? An Empirical Evaluation of Agentic Capabilities in LLM Compression
       * Quantize with Confidence? An Empirical Study of Quantization for Code Generation
 
-* **delegado-confuso** — Delegado confuso `[claudinho-seguranca]` `balde B`
-   * definição: Um intermediário autorizado a agir em nome de terceiros exerce a autoridade que ele próprio detém a pedido de quem não a detém, e o alvo não distingue as duas origens porque só vê a credencial do intermediário. A correção é vincular cada ato à parte pretendida — destinatário declarado na credencial, consentimento por ato, e proibição de repassar adiante a credencial recebida.
+* **autoridade-do-intermediario** — Autoridade do intermediário `[claudinho-seguranca]` `balde B`
+   * definição: Um programa que atende várias pessoas costuma ter mais poder do que qualquer uma delas: o sistema de folha pode ler o salário de todo mundo, e cada funcionário só pode ler o seu. Quando alguém faz um pedido a esse programa, quem aparece do outro lado é o programa, com o poder dele — não a pessoa, com o poder dela. É o problema que a literatura chama de delegado confuso. A correção não é confiar menos no intermediário, é amarrar cada pedido a quem o originou: a credencial declara para qual destino foi emitida e é recusada em qualquer outro, o consentimento é dado por ato e não uma vez para sempre, e a credencial recebida de um lado nunca é repassada adiante para o outro.
    * natureza: fenomeno
    * estatuto: doutrinario
    * âncoras:
@@ -648,7 +648,7 @@
 ## seguranca-privacidade
 
 * **acesso-delegado** — Acesso delegado `[claudinho-seguranca]` `balde A`
-   * definição: Arranjo em que um terceiro obtém acesso limitado a um recurso em nome do dono sem receber a credencial do dono: uma autoridade separada media a aprovação e emite ao terceiro uma autorização própria, restrita em alcance e em prazo, revogável sem tocar na credencial original.
+   * definição: Você quer que um aplicativo de notas fiscais leia seu e-mail, mas não quer entregar sua senha — com ela, o aplicativo lê tudo, para sempre, e você só corta trocando a senha. Acesso delegado é o arranjo que resolve isso: um terceiro serviço confirma com você o que será permitido e entrega ao aplicativo uma autorização própria, limitada ao que você aprovou e com prazo. O ganho está na revogação. Cancelar aquela autorização derruba aquele aplicativo e não afeta mais nada que você tenha autorizado, porque cada um recebeu a sua — impossível quando todos usam a mesma senha.
    * natureza: modelo
    * estatuto: doutrinario
    * âncoras:
@@ -657,7 +657,7 @@
       * Model Context Protocol — Specification 2026-07-28 _(ocorre em ia)_
 
 * **avaliacao-de-conformidade** — Avaliação de conformidade `[claudinho-seguranca]` `balde B`
-   * definição: Regime em que três papéis são separados por desenho — o fornecedor declara e produz evidência, um laboratório acreditado ensaia contra requisito escrito de antemão, e uma autoridade emite ou nega a validação. O que o selo cobre é o objeto na configuração ensaiada contra aquele conjunto de requisitos, e nada além disso; a garantia não se estende ao produto que embute o objeto nem a versões posteriores.
+   * definição: Três papéis separados de propósito: quem fabrica declara o que o produto faz, um laboratório credenciado testa contra requisitos escritos de antemão, e uma autoridade decide se emite o certificado. A separação é o mecanismo — se quem fabrica também testasse e certificasse, o selo não diria nada que a propaganda já não dissesse. O que costuma se perder na leitura é o alcance. O selo cobre aquele objeto, naquela configuração testada, contra aquela lista de requisitos. Um cofre certificado dentro de um sistema não certifica o sistema, e a versão seguinte do produto não herda o certificado da anterior.
    * natureza: processo
    * estatuto: instituido
    * âncoras:
@@ -666,7 +666,7 @@
       * CMVP Documentation Requirements: CMVP Validation Authority Updates to ISO/IEC 24759
 
 * **avaliacao-de-impacto-a-privacidade** — Avaliação de impacto à privacidade `[claudinho-seguranca]` `balde A`
-   * definição: Exame prévio de um tratamento novo ou alterado que descreve a operação, identifica os riscos que ela gera para os titulares e registra as medidas de mitigação adotadas. É obrigatório em hipóteses tipificadas — decisão automatizada com efeito jurídico, larga escala de dado sensível — e sua função é produzir o registro da decisão antes da operação, não depois.
+   * definição: Exame feito antes de ligar um tratamento novo, ou de mudar um que já roda, que descreve a operação, lista os riscos que ela cria para as pessoas e registra o que foi feito para reduzi-los. Em algumas situações a lei o exige: decisão automatizada com efeito jurídico sobre alguém, uso em larga escala de dado sensível. A palavra que carrega o peso é antes. Com o sistema no ar, mudar o desenho custa caro e a conclusão tende a acompanhar o que já foi construído. O documento serve para que a decisão exista por escrito enquanto ainda dá para decidir diferente.
    * natureza: processo
    * estatuto: instituido
    * âncoras:
@@ -675,7 +675,7 @@
       * DPO Guide
 
 * **base-legal-de-tratamento** — Base legal de tratamento `[claudinho-seguranca]` `balde B`
-   * definição: A licitude de uma operação sobre dado pessoal não deriva da utilidade dela nem do cuidado técnico com que é feita: deriva de o agente enquadrá-la, antes de operar, em uma das hipóteses taxativas previstas para a categoria do dado. As hipóteses não são intercambiáveis depois do fato, e a que serve para um dado comum pode não servir para um dado sensível.
+   * definição: Usar dado de pessoas exige uma permissão prevista em lei, escolhida antes de começar. Não basta o uso ser útil nem o dado estar bem guardado: a lei lista as situações em que se pode tratar dado pessoal — cumprir obrigação legal, executar contrato, consentimento, entre outras — e o uso precisa caber em uma delas. Duas consequências práticas. A permissão não se troca depois que o problema aparece, porque foi ela que justificou coletar aquele dado daquele jeito. E a lista muda conforme o dado: o que autoriza tratar um endereço não autoriza tratar um diagnóstico médico, que a lei protege à parte.
    * natureza: modelo
    * estatuto: instituido
    * âncoras:
@@ -685,7 +685,7 @@
       * Tratamento de dados pessoais para fins acadêmicos e para a realização de estudos e pesquisas — guia orientativo
 
 * **comunicacao-de-incidente-ao-titular** — Comunicação de incidente ao titular `[claudinho-seguranca]` `balde A`
-   * definição: Dever de comunicar à autoridade e às pessoas afetadas o incidente com dado pessoal que possa acarretar-lhes risco ou dano relevante, em prazo fixado e com conteúdo mínimo: natureza dos dados, titulares envolvidos, riscos, medidas de proteção existentes e medidas de reversão. O gatilho é o risco à pessoa, não a gravidade técnica do evento nem o sucesso da contenção.
+   * definição: Incidente com dado pessoal que possa trazer risco relevante às pessoas tem que ser avisado. A organização comunica a autoridade e as pessoas atingidas, em prazo definido, dizendo quais dados foram afetados, quem foi afetado, quais os riscos, o que os protegia e o que está sendo feito. O gatilho é o risco para a pessoa, não o tamanho técnico do estrago. Um incidente contido em dez minutos, sem prova de cópia, que expôs dados de saúde de mil pacientes, dispara o dever; uma invasão espetacular em servidor sem dado pessoal não dispara. É quem foi avisado que decide o que fazer com o aviso — trocar senha, vigiar a fatura —, e por isso segurar a informação é dano somado ao dano.
    * natureza: processo
    * estatuto: instituido
    * âncoras:
@@ -694,7 +694,7 @@
       * DPO Guide
 
 * **controlador-e-operador** — Controlador e operador `[claudinho-seguranca]` `balde A`
-   * definição: Responde pelo tratamento quem determina a finalidade e os meios, não quem executa. Executar em nome de outro sob instrução documentada não transfere a responsabilidade; usar o dado para finalidade própria, fora da instrução, converte o executor em responsável por aquele tratamento.
+   * definição: Responde pelo tratamento de dados quem decide para que servem e como serão usados, não quem opera os sistemas. A empresa que contrata um serviço de disparo de e-mail responde pela campanha; o fornecedor executa o contratado e responde por seguir a instrução. A regra tem uma virada importante. Se o fornecedor usa aqueles dados para finalidade própria — treinar um produto dele, montar uma base para vender — deixa de ser executor naquele ponto e passa a responder como quem decidiu. A responsabilidade acompanha quem escolheu a finalidade, e escolher sem contrato não isenta ninguém.
    * natureza: modelo
    * estatuto: instituido
    * âncoras:
@@ -703,7 +703,7 @@
       * Tratamento de dados pessoais pelo Poder Público: guia orientativo
 
 * **credenciamento-de-seguranca** — Credenciamento de segurança `[claudinho-seguranca]` `balde A`
-   * definição: Habilitação prévia e formal — de pessoa, órgão ou entidade privada — para tratar informação classificada em determinado grau, concedida por autoridade competente mediante requisitos verificados de idoneidade, qualificação técnica e designação de responsável nomeado. Sem a habilitação vigente não há tratamento lícito, ainda que haja necessidade e meio técnico.
+   * definição: Para lidar com informação sigilosa do Estado não basta ter o cargo e a necessidade. A pessoa — e também o órgão ou a empresa contratada — precisa ter sido habilitada antes, por autoridade competente, mediante verificação de idoneidade, qualificação técnica e indicação de um responsável nomeado. A habilitação vale por grau: quem está habilitado num grau não trata os acima dele. O ponto que surpreende quem vem da iniciativa privada é que, sem essa habilitação vigente, o acesso é ilícito ainda que a pessoa precise da informação para trabalhar e o sistema técnico permita.
    * natureza: processo
    * estatuto: instituido
    * âncoras:
@@ -712,7 +712,7 @@
       * Norma Complementar 01/IN02/NSC/GSI/PR — disciplina o credenciamento de segurança de pessoas naturais, órgãos e entidades públicas e privadas para o tratamento de informações classificadas
 
 * **criptoperiodo** — Criptoperíodo `[claudinho-seguranca]` `balde A`
-   * definição: Intervalo durante o qual uma chave permanece autorizada para uso legítimo. É limitado para reduzir o material disponível à criptanálise, conter o alcance do comprometimento de uma única chave e não ultrapassar a vida útil estimada do algoritmo — e é ele, não a conveniência operacional, que fixa a cadência de rotação.
+   * definição: Toda chave tem prazo de validade, curto por três razões concretas. Quanto mais tempo a mesma chave cifra coisas, mais material acumulado alguém tem para tentar quebrá-la. Quanto mais tempo ela vale, maior o estrago se vazar — tudo que protegeu, do começo ao fim. E nenhuma chave deve durar mais que o algoritmo que a usa, que envelhece por conta própria. É esse prazo que manda na rotação. Trocar chave dá trabalho e costuma ser adiado pela agenda da operação; adiar é decidir correr o risco, não evitá-lo.
    * natureza: modelo
    * estatuto: doutrinario
    * âncoras:
@@ -728,8 +728,8 @@
       * Decreto nº 8.777/2016 — Política de Dados Abertos do Poder Executivo federal _(ocorre em arquiteturas)_
       * Decreto nº 10.046/2019 — Governança no compartilhamento de dados na administração pública federal
 
-* **dano-de-privacidade-sem-incidente** — Dano de privacidade sem incidente de segurança `[claudinho-seguranca]` `balde B`
-   * definição: O prejuízo ao indivíduo pode nascer de operação plenamente autorizada e conforme os controles de confidencialidade — agregação de fontes lícitas, identificação a partir de dado indireto, uso para finalidade diversa, exclusão do próprio titular da decisão que o afeta. Logo a ausência de acesso não autorizado não é evidência de ausência de dano, e o inventário de ameaças de segurança não enumera estas.
+* **dano-sem-vazamento** — Dano sem vazamento `[claudinho-seguranca]` `balde B`
+   * definição: Nem todo prejuízo a uma pessoa vem de alguém invadindo alguma coisa. Cruzar três cadastros públicos e descobrir quem mora com quem; deduzir uma gravidez pelo histórico de compras; usar para reajustar um seguro o dado que foi coletado para marcar consulta. Em todos esses casos ninguém arrombou nada, todo mundo tinha acesso legítimo, e a pessoa saiu pior. Por isso não houve incidente de segurança não responde a houve dano. A lista de ameaças que serve para proteger sistema — invasão, adulteração, indisponibilidade — não enumera essas, e quem olha só por ela conclui que está tudo bem.
    * natureza: fenomeno
    * estatuto: doutrinario
    * âncoras:
@@ -737,8 +737,8 @@
       * NIST Privacy Framework: A Tool for Improving Privacy Through Enterprise Risk Management, Version 1.0
       * Understanding Privacy
 
-* **delegado-confuso** — Delegado confuso `[claudinho-seguranca]` `balde B`
-   * definição: Um intermediário autorizado a agir em nome de terceiros exerce a autoridade que ele próprio detém a pedido de quem não a detém, e o alvo não distingue as duas origens porque só vê a credencial do intermediário. A correção é vincular cada ato à parte pretendida — destinatário declarado na credencial, consentimento por ato, e proibição de repassar adiante a credencial recebida.
+* **autoridade-do-intermediario** — Autoridade do intermediário `[claudinho-seguranca]` `balde B`
+   * definição: Um programa que atende várias pessoas costuma ter mais poder do que qualquer uma delas: o sistema de folha pode ler o salário de todo mundo, e cada funcionário só pode ler o seu. Quando alguém faz um pedido a esse programa, quem aparece do outro lado é o programa, com o poder dele — não a pessoa, com o poder dela. É o problema que a literatura chama de delegado confuso. A correção não é confiar menos no intermediário, é amarrar cada pedido a quem o originou: a credencial declara para qual destino foi emitida e é recusada em qualquer outro, o consentimento é dado por ato e não uma vez para sempre, e a credencial recebida de um lado nunca é repassada adiante para o outro.
    * natureza: fenomeno
    * estatuto: doutrinario
    * âncoras:
@@ -747,7 +747,7 @@
       * The OAuth 2.1 Authorization Framework (draft-ietf-oauth-v2-1-15)
 
 * **exercicio-adversarial** — Exercício adversarial `[claudinho-seguranca]` `balde A`
-   * definição: Exercício em que uma equipe age como adversário contra defensores que podem não saber do exercício, para medir a capacidade de detectar, escalar e responder. Distingue-se do teste de intrusão pelo objeto medido: lá se estabelece se a falha existe e é explorável; aqui se estabelece o que a defesa percebeu e o que fez a respeito.
+   * definição: Um grupo é contratado para agir como o inimigo — invadir, enganar funcionários, entrar no prédio — enquanto quem defende segue a rotina, muitas vezes sem saber que há exercício em curso. O que se mede é a defesa, não o alvo. Um teste de invasão comum responde se a falha existe e dá para explorar. Aqui a pergunta é outra: alguém percebeu, em quanto tempo, avisou quem, e o que fez depois. O resultado mais comum e mais desconfortável é a invasão ter dado certo por um caminho já conhecido e o alerta ter aparecido sem que ninguém olhasse.
    * natureza: processo
    * estatuto: doutrinario
    * âncoras:
@@ -755,7 +755,7 @@
       * CompTIA CySA+ Cybersecurity Analyst Certification All-in-One Exam Guide (Exam CS0-002)
 
 * **exercicio-de-plano** — Exercício de plano `[claudinho-seguranca]` `balde A`
-   * definição: Simulação conduzida por cenário em que as pessoas com papel num plano discutem ou executam as ações que tomariam, para validar a viabilidade do plano. O objeto medido é o plano e o preparo de quem o executa — a saída útil é a lacuna descoberta —, e não a operabilidade do sistema, que é objeto de teste.
+   * definição: Reunir quem tem papel num plano — de crise, de recuperação, de continuidade — e apresentar um cenário: pegou fogo no datacenter às três da manhã de domingo, o que cada um faz? Pode ser conversa em volta da mesa ou pode chegar a executar as ações de verdade. O que se mede é o plano e o preparo de quem o executa, não o equipamento. A saída útil é a lacuna descoberta: o telefone do fornecedor que mudou, o passo que dependia de alguém que saiu, a decisão que ninguém sabe de quem é. Testar se o servidor reserva liga é outra coisa, e não substitui esta.
    * natureza: processo
    * estatuto: doutrinario
    * âncoras:
@@ -763,7 +763,7 @@
       * CompTIA Security+ Certification Study Guide: Network Security Essentials
 
 * **janela-de-exposicao** — Janela de exposição `[claudinho-seguranca]` `balde B`
-   * definição: Entre o momento em que um defeito conhecido passa a ser explorável e o momento em que a correção está em produção, o risco corre. Todo controle de processo interposto nesse intervalo — teste, aprovação, janela de mudança — reduz o risco de a correção quebrar a operação e aumenta o risco de o defeito ser explorado; a decisão não é entre seguro e inseguro, é a escolha de qual dos dois riscos se prefere pagar.
+   * definição: Entre o dia em que uma falha vira conhecida e o dia em que a correção está no ar, o sistema fica aberto — e quem ataca sabe disso, porque a falha foi anunciada em público junto com o remendo. Tudo que se coloca dentro desse intervalo para reduzir o risco de quebrar a operação — testar em homologação, esperar a janela de manutenção do fim de semana, colher aprovação — é pago em tempo de exposição. Não existe escolha entre seguro e inseguro: existe escolher qual dos dois riscos se prefere correr, o de a correção derrubar o serviço ou o de alguém entrar antes de ela chegar.
    * natureza: fenomeno
    * estatuto: doutrinario
    * âncoras:
@@ -772,7 +772,7 @@
       * ISC2 CISSP Certified Information Systems Security Professional Official Study Guide
 
 * **linha-de-base-de-controles** — Linha de base de controles `[claudinho-seguranca]` `balde A`
-   * definição: Conjunto de controles pré-selecionado para uma classe de sistema, que vigora por padrão sem escolha item a item. A adequação ao caso concreto se faz por ações de ajuste declaradas, e cada exceção exige motivo registrado, revisão e plano de eliminação — de modo que o desvio permaneça rastreável e a linha continue servindo de referência de auditoria.
+   * definição: Em vez de cada equipe escolher controle por controle, parte-se de um conjunto pronto para aquele tipo de sistema — servidor web, banco de dados, estação de trabalho — que passa a valer por padrão. O ajuste ao caso concreto se faz por decisões declaradas sobre essa base, e cada item de que se abre mão exige motivo escrito, revisão e plano para voltar a cumprir. O valor está em inverter o esforço. Sem a base, quem audita precisa reconstruir o que deveria estar configurado em cada máquina. Com ela, compara com a referência e discute a lista curta de desvios, que já vem com o motivo ao lado.
    * natureza: modelo
    * estatuto: doutrinario
    * âncoras:
@@ -791,7 +791,7 @@
       * Best practices for Claude Code - Claude Code Docs [snapshot 2026-08-01] _(ocorre em ia)_
 
 * **modulo-criptografico** — Módulo criptográfico `[claudinho-seguranca]` `balde A`
-   * definição: Conjunto de hardware, software ou firmware delimitado por uma fronteira declarada, dentro da qual residem as funções criptográficas aprovadas e os parâmetros críticos de segurança, e cujas interfaces, papéis, serviços, autotestes e proteções físicas são especificados por nível. A garantia se aplica ao que está dentro da fronteira, não ao produto que o contém.
+   * definição: É a caixa onde as operações com chaves acontecem, com uma fronteira desenhada e declarada: um cartão, um chip, uma biblioteca, um equipamento de rede. Dentro dela ficam as chaves e as funções que as usam; fora circula só o resultado. Os padrões definem níveis crescentes de exigência para essa caixa, incluindo o que ela deve fazer ao ser aberta à força — apagar as chaves. A distinção que importa na hora de comprar: a garantia vale para o que está dentro da fronteira. Um equipamento com módulo certificado embutido não é um equipamento certificado. O certificado descreve a caixa, não a casa.
    * natureza: modelo
    * estatuto: instituido
    * âncoras:
@@ -800,7 +800,7 @@
       * Instrução Normativa ITI nº 22, de 23 de março de 2022 — Padrões e algoritmos criptográficos da ICP-Brasil (DOC-ICP-01.01)
 
 * **necessidade-de-conhecer** — Necessidade de conhecer `[claudinho-seguranca]` `balde A`
-   * definição: Dois requisitos independentes governam o acesso a informação restrita: a habilitação, que fixa o teto do grau acessível, e a necessidade inerente ao exercício concreto de cargo, função ou atividade, que fixa o que dentro desse teto de fato se acessa. Ter o grau não confere acesso; a necessidade sem o grau tampouco.
+   * definição: Dois requisitos independentes decidem quem vê um documento sigiloso, e é preciso passar nos dois. A habilitação prévia fixa o teto — até que grau aquela pessoa pode ir. A necessidade decorrente do que ela de fato faz no cargo fixa o que, dentro do teto, ela vê. Por isso um diretor habilitado no grau mais alto não tem direito a ler tudo daquele grau: falta a segunda condição, e ela não é dispensada por hierarquia. O inverso também vale — precisar muito não substitui a habilitação que não se tem. Cada requisito é concedido por autoridade diferente, e é essa separação que impede que um deles saia por conveniência.
    * natureza: modelo
    * estatuto: instituido
    * âncoras:
@@ -809,7 +809,7 @@
       * Decreto nº 7.845, de 14 de novembro de 2012 — Credenciamento de segurança e tratamento de informação classificada
 
 * **negar-por-padrao** — Negar por padrão `[claudinho-seguranca]` `balde A`
-   * definição: Postura em que o sistema recusa tudo o que não estiver explicitamente permitido, de modo que a lista mantida é a de exceções autorizadas e o esquecimento produz recusa em vez de permissão. Distingue-se de menor privilégio: lá se decide o tamanho da permissão concedida; aqui se decide o que acontece quando não há decisão nenhuma.
+   * definição: O sistema recusa tudo que não estiver expressamente liberado. A lista que alguém mantém é a das exceções autorizadas, e o caso que ninguém previu cai na recusa — a instalação nova nasce fechada e vai abrindo conforme se justifica. A diferença em relação a conceder pouco é sutil e decide muito. Lá se discute o tamanho da permissão de quem já foi considerado; aqui se decide o que acontece com quem ninguém considerou. Como esquecer é a regra e não a exceção, a postura de recusa transforma o esquecimento em chamado de suporte, e a postura oposta transforma o mesmo esquecimento em porta aberta que ninguém vai procurar.
    * natureza: modelo
    * estatuto: doutrinario
    * âncoras:
@@ -817,8 +817,8 @@
       * Guidelines on Firewalls and Firewall Policy
       * CIS Linux Mint 22 Benchmark v1.0.0
 
-* **padrao-como-politica** — Padrão como decisão de política `[claudinho-seguranca]` `balde B`
-   * definição: Em sistema configurável, o valor pré-selecionado é o que vigora para a maioria dos afetados, porque a maioria não intervém. Logo a escolha do valor de fábrica é a política efetiva do sistema, e oferecer a opção contrária não a corrige — só transfere ao afetado o ônus de descobrir e exercer a opção.
+* **valor-de-fabrica** — Valor de fábrica `[claudinho-seguranca]` `balde B`
+   * definição: Quase ninguém abre as configurações. O valor que já vem marcado é o que vale para a maioria esmagadora das pessoas, e por isso ele não é detalhe técnico: é a política real do sistema. Um aplicativo que nasce com o perfil aberto e oferece o botão de fechar tem, na prática, perfil aberto. Daí a consequência incômoda para quem projeta: oferecer a opção contrária não corrige nada, apenas transfere ao usuário o trabalho de descobrir que ela existe. Quem escolhe o valor inicial está decidindo pelos outros, e o honesto é tratar isso como decisão, não como herança do fornecedor.
    * natureza: fenomeno
    * estatuto: doutrinario
    * âncoras:
@@ -827,7 +827,7 @@
       * CISSP All-in-One Exam Guide
 
 * **politica-de-seguranca-institucional** — Política de segurança institucional `[claudinho-seguranca]` `balde A`
-   * definição: Instrumento formal aprovado pela autoridade máxima da organização que fixa diretrizes, nomeia os papéis responsáveis — gestor, comitê, equipe de tratamento de incidentes — e obriga a organização inteira. Medida declarada obrigatória de que se abre mão exige motivação registrada em análise de risco, e é esse registro que a distingue de declaração de intenção.
+   * definição: Documento aprovado pelo dirigente máximo que diz o que a organização faz em segurança da informação e nomeia quem responde por cada parte: o gestor, o comitê, a equipe que atende incidentes. Vale para a organização inteira, inclusive para quem não gostou. O que separa isso de uma carta de intenções é o tratamento da exceção. Quando se decide não implementar uma medida declarada obrigatória, a justificativa e a análise de risco ficam registradas. Sem esse registro não há política — há um texto que todos contornam sem deixar rastro, e ninguém consegue dizer depois quem decidiu contornar.
    * natureza: modelo
    * estatuto: instituido
    * âncoras:
@@ -836,7 +836,7 @@
       * Política de Segurança da Informação e Comunicação do Laboratório Nacional de Computação Científica
 
 * **prova-de-identidade** — Prova de identidade `[claudinho-seguranca]` `balde A`
-   * definição: Ato anterior ao cadastro em que se coleta evidência sobre uma identidade do mundo real, se valida a autenticidade dessa evidência e se verifica que o requerente é a pessoa a quem ela se refere. Distingue-se da autenticação: aqui se estabelece o vínculo pela primeira vez; lá se reconhece um vínculo já estabelecido.
+   * definição: Antes de existir login, alguém precisa estabelecer que aquela conta corresponde a uma pessoa real, e a essa pessoa. É o que o banco faz na abertura da conta: recebe documentos, confere junto a quem os emitiu se são autênticos, e verifica se quem está ali é a pessoa retratada neles. Não se confunde com o login de todo dia. Ali se reconhece um vínculo que já existe; aqui ele é criado. Um sistema pode ter senha forte e segundo fator impecáveis e ainda assim estar dando acesso a quem se cadastrou com o documento dos outros — são problemas diferentes, resolvidos em momentos diferentes.
    * natureza: processo
    * estatuto: doutrinario
    * âncoras:
@@ -845,7 +845,7 @@
       * Digital Identity Guidelines
 
 * **regras-de-engajamento** — Regras de engajamento `[claudinho-seguranca]` `balde A`
-   * definição: Autorização escrita, anterior à atividade intrusiva, que delimita alvos incluídos e explicitamente excluídos, período, técnicas permitidas e proibidas, e quem aprova o desvio. É ela que separa o teste do ataque: fora do que ela cobre, a mesma ação técnica deixa de ser autorizada.
+   * definição: Documento assinado antes de qualquer teste que mexa em sistema de verdade. Ele fixa o que pode ser atacado, o que fica expressamente de fora, em que período, com quais técnicas, o que é proibido — derrubar serviço, tocar em dado real de cliente — e quem autoriza sair do combinado. É ele que separa o teste do crime. A mesma ação técnica, sem esse papel, é acesso não autorizado, e a boa intenção de quem executou não serve de defesa. Vale também para dentro de casa: sem escopo escrito, alguém varre uma faixa de rede que era de outra empresa e a conversa seguinte é com o jurídico.
    * natureza: modelo
    * estatuto: doutrinario
    * âncoras:
@@ -853,7 +853,7 @@
       * The Red Team Guide by Peerlyst
 
 * **requisito-verificavel** — Requisito verificável `[claudinho-seguranca]` `balde B`
-   * definição: Um enunciado prescritivo só governa quando vem acompanhado de (a) um procedimento de verificação que produz veredito binário sobre um objeto concreto e (b) um procedimento de correção do objeto que reprovou. Sem os dois, o enunciado é intenção declarada: não distingue quem cumpre de quem não cumpre, e por isso não se audita nem se delega.
+   * definição: Um requisito só governa se vier com duas coisas junto: como conferir se um caso concreto cumpre, e o que fazer quando não cumpre. O servidor deve ser seguro não separa quem cumpre de quem não cumpre — duas pessoas competentes olham a mesma máquina e discordam. O acesso remoto deve recusar senha e aceitar só chave, confira com tal comando, corrija em tal arquivo decide sozinho. Sem os dois procedimentos o texto é intenção declarada: não se audita, porque não há veredito; e não se delega, porque quem recebe a tarefa precisa adivinhar o que o autor queria.
    * natureza: modelo
    * estatuto: doutrinario
    * âncoras:
@@ -862,7 +862,7 @@
       * OWASP SAMM v2.2.0
 
 * **token-portador** — Token portador `[claudinho-seguranca]` `balde A`
-   * definição: Credencial cuja simples apresentação basta para o uso: quem a detém exerce tudo o que qualquer outro detentor exerceria, sem provar posse de chave associada. Toda a proteção colapsa no sigilo do armazenamento e do transporte, e o contraste é a credencial de prova de posse, que exige demonstrar controle de uma chave a cada uso.
+   * definição: Uma credencial de portador funciona como dinheiro em espécie: quem está com ela, gasta. O sistema que a recebe não pergunta se quem apresentou é o dono, porque não tem como perguntar — a posse é a prova. Isso torna tudo dependente do sigilo. Se ela aparece num registro de log, num histórico de navegação ou numa mensagem de erro, quem leu passa a poder o que o dono podia, até ela expirar. O arranjo alternativo exige que a cada uso o portador demonstre ter uma chave secreta que não trafega junto: mais caro de implementar, e imune ao roubo por cópia.
    * natureza: modelo
    * estatuto: doutrinario
    * âncoras:
@@ -871,7 +871,7 @@
       * Resource Indicators for OAuth 2.0
 
 * **transparencia-de-composicao** — Transparência de composição `[claudinho-seguranca]` `balde B`
-   * definição: Propriedade de um artefato entregue cuja árvore de constituintes — fornecedor, nome, versão, identificador e relação de dependência, inclusive as transitivas — é declarada pelo produtor em forma legível por máquina, de modo que quem apenas opera o artefato responda "isto contém o componente X na versão Y?" sem consultar o produtor. O que a declaração não alcança é declarado como tal, em vez de omitido.
+   * definição: Um software é montado com centenas de pedaços escritos por outras pessoas, e cada pedaço traz outros dentro. Transparência de composição é o produtor entregar, junto com o produto, a lista do que tem lá dentro — fornecedor, nome, versão e quem depende de quem — num formato que um programa consiga ler. No mundo do software essa lista tem nome próprio: SBOM. Ela existe para a pergunta que aparece de madrugada: saiu uma falha grave numa biblioteca, a gente usa? Sem a lista, a resposta depende de perguntar ao fornecedor e esperar. Com ela, quem só opera responde sozinho, em minutos. O que o produtor não conseguiu mapear entra declarado como desconhecido — buraco anunciado se procura, buraco omitido vira surpresa.
    * natureza: disposicao
    * estatuto: doutrinario
    * âncoras:
@@ -880,7 +880,7 @@
       * Software Supply Chain Security
 
 * **vida-util-do-sigilo** — Vida útil do sigilo `[claudinho-seguranca]` `balde B`
-   * definição: Toda informação protegida tem um prazo pelo qual precisa permanecer inacessível ao adversário. Somado ao tempo de migrar a proteção, esse prazo se compara ao tempo estimado até a quebra do mecanismo em uso: se a soma o excede, o dado já está comprometido no instante em que é transmitido ou armazenado, ainda que a proteção de hoje seja íntegra e o adversário só o abra depois.
+   * definição: Todo segredo tem prazo. Uma senha precisa durar até a próxima troca; um plano de defesa precisa durar trinta anos. Some a esse prazo o tempo que a organização levaria para trocar a proteção que usa hoje e compare com o tempo estimado até essa proteção ser quebrada. Se a soma passa, o dado já está perdido no momento em que trafega — ainda que a proteção esteja intacta e a quebra só aconteça daqui a uma década. É esse cálculo que explica adversários guardarem hoje tráfego cifrado que não conseguem abrir. Não precisam abrir agora; precisam que o conteúdo ainda importe quando abrirem.
    * natureza: fenomeno
    * estatuto: doutrinario
    * âncoras:
