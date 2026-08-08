@@ -122,13 +122,7 @@ Hierarquia por afinidade temática não vale — deixe vazio.
 `conceitos-existentes.csv`, nos artefatos da rodada 1 nem no arquivo de outra
 cadeira.
 
-## Passo 8 — resposta na conversa, completa
-
-Depois do commit, **cole na conversa o conteúdo inteiro do seu
-`propostas/<sua-persona>.md`** — todo bloco, todo campo. O Pedro lê aqui, não no
-repo; arquivo sem cópia na conversa não foi entregue.
-
-Junto, no máximo:
+## Passo 8 — resposta na conversa, no máximo
 
 - quantos conceitos propôs, e quantas obras do lote você consultou no RAG;
 - as obras **não recuperáveis** (consultadas e ausentes do acervo);
