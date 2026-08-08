@@ -174,3 +174,9 @@ e00da3b6-7d7a-434e-b661-56e4e84c4c3e,NC 09/IN01/DSIC: norma complementar do arca
 8bd68f1d-30a8-4f33-870d-d1a9c7329bb2,Resolucao Anatel 740/2020: regulamento setorial de seguranca cibernetica — referencia de exigencia por setor.
 78b1788f-20d7-422e-8fca-2afe312e106a,Resolucao CMN 4.893: politica de seguranca cibernetica e requisito de contratacao de nuvem — regua setorial madura.
 d8592aa6-b28a-41f9-9a99-ab22ae62d205,Resolucao CMN 5.274/2025: altera a 4.893 e atualiza o requisito vigente de seguranca cibernetica e nuvem.
+89cff7b4-3dff-4c88-bd07-3af200efd55d,"Decreto 10.046: fixa nivel de compartilhamento (amplo, restrito, especifico) de dado entre orgaos — regra de autorizacao de acesso a dado pessoal."
+89c5a30c-9759-451b-a261-7cb6f0c2ea9c,Marco Civil: guarda de registro de conexao e de acesso a aplicacao e sigilo de comunicacao — regua de retencao de log e de quebra autorizada.
+77df47b0-b67d-497d-b39a-86e8491e5a52,Nota tecnica de adocao da libharpia: criterio de aceite de biblioteca criptografica em plataforma de producao.
+680b1e1d-ae7c-4570-a18a-9da45b30d568,Sandbox de agente: mecanismo de confinamento e de limite de privilegio de processo autonomo — privilegio elevado e meu head.
+53623fd3-8767-48ae-9734-c31fe4c944a3,Spec do MCP: define o modelo de autorizacao e o escopo de token do servidor MCP — a credencial mais poderosa da frente.
+a3c90b5b-b359-4216-b6a3-a36c06ad22a9,"Auto mode e supressao de prompt de permissao: desenho de elevacao de privilegio de agente — decisao de autorizacao, nao de produto de IA."
