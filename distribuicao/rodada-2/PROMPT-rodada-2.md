@@ -72,7 +72,6 @@ definicao: <a régua: o mecanismo, em uma a três frases>
 obras-ancora: <obra_id>, <obra_id>   # ≥2, UUID literal do CSV
 caso-falseador: <o caso que mostraria a régua errada>
 pai-proposto: <slug do conceito mais amplo, ou vazio>
-linha-de-raiz: <a frase que entra na raiz do domínio e faz querer clicar>
 substitui: <slug existente, ou vazio>
 ```
 
