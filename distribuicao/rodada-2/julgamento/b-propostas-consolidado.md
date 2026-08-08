@@ -4,16 +4,8 @@
 
 ## arquiteturas
 
-* **dado-aberto-por-padrao** — Dado aberto por padrão `[claudinho-arquiteto]`
-   * definição: Todo dado que a organização produz nasce público. Quem quiser fechar um deles tem que dizer em qual das hipóteses de sigilo já previstas ele se encaixa — e a hipótese existia antes do pedido. Isso inverte quem tem trabalho a fazer: no arranjo comum, quem quer o dado justifica por que merece; aqui quem guarda justifica por que reteve, e “não vejo por que abrir” não é justificativa. O efeito prático é que o acesso deixa de ser negociado caso a caso entre dois setores e passa a ser decidido de antemão, pelo enquadramento que já está escrito.
-   * natureza: modelo
-   * estatuto: instituido
-   * âncoras:
-      * Decreto nº 8.777/2016 — Política de Dados Abertos do Poder Executivo federal
-      * Decreto nº 10.046/2019 — Governança no compartilhamento de dados na administração pública federal _(ocorre em seguranca-privacidade)_
-
 * **contexto-delimitado** — Contexto delimitado `[claudinho-conhecimento]`
-   * definição: A mesma palavra significa coisas diferentes em partes diferentes de uma organização, e isso não é confusão a ser corrigida: para o time de vendas, “cliente” é quem pode comprar; para o financeiro, é quem tem contrato ativo. O contexto delimitado é a fronteira declarada dentro da qual cada palavra tem um significado só. Declarar a fronteira decide o que fazer quando duas definições divergem: dentro da mesma fronteira, divergência é defeito e alguém tem que ceder; entre fronteiras diferentes, não há defeito nenhum — o que se constrói é a tradução de um lado para o outro, e tentar unificar destrói informação dos dois lados.
+   * definição: A mesma palavra significa coisas diferentes em partes diferentes de uma organização, e isso não é confusão a ser corrigida: para o time de vendas, "cliente" é quem pode comprar; para o financeiro, é quem tem contrato ativo. O contexto delimitado é a fronteira declarada dentro da qual cada palavra tem um significado só. Declarar a fronteira decide o que fazer quando duas definições divergem. Dentro da mesma fronteira, divergência é defeito e alguém tem que ceder. Entre fronteiras diferentes, não há defeito nenhum — o que se constrói é a tradução de um lado para o outro, e tentar unificar destrói informação dos dois lados.
    * natureza: modelo
    * estatuto: doutrinario
    * âncoras:
@@ -21,8 +13,16 @@
       * Learning Domain-Driven Design
       * An Ontology-based Approach for Domain-driven Design of Microservice Architectures
 
+* **dado-aberto-por-padrao** — Dado aberto por padrão `[claudinho-arquiteto]`
+   * definição: Todo dado que a organização produz nasce público. Quem quiser fechar um deles tem que dizer em qual das hipóteses de sigilo já previstas ele se encaixa — e a hipótese existia antes do pedido. Isso inverte quem tem trabalho a fazer: no arranjo comum, quem quer o dado justifica por que merece; aqui quem guarda justifica por que reteve, e "não vejo por que abrir" não é justificativa. O efeito prático é que o acesso deixa de ser negociado caso a caso entre dois setores e passa a ser decidido de antemão, pelo enquadramento que já está escrito.
+   * natureza: modelo
+   * estatuto: instituido
+   * âncoras:
+      * Decreto nº 8.777/2016 — Política de Dados Abertos do Poder Executivo federal
+      * Decreto nº 10.046/2019 — Governança no compartilhamento de dados na administração pública federal _(ocorre em seguranca-privacidade)_
+
 * **estruturacao-de-problema** — Estruturação de problema `[claudinha-gestao-estrategica]`
-   * definição: Antes de escolher entre soluções, alguém precisa escrever qual é o problema — e essa frase não vem pronta do mundo, é uma escolha. “A fila do atendimento está grande” e “as pessoas não deveriam precisar vir até aqui” descrevem a mesma cena e levam a projetos diferentes. Estruturar o problema é fazer essa escolha em aberto, com quem discorda na sala, e aceitar que o resultado é um enunciado ainda discutível, não uma resposta. Pular a etapa não elimina a escolha: só faz com que ela seja feita em silêncio, por quem escreveu o primeiro documento — e comparar alternativas com muito rigor a partir de um enunciado que ninguém examinou é resolver bem uma pergunta que talvez não interesse a ninguém.
+   * definição: Produzir a formulação do problema — de quem é, que diferença entre estado percebido e estado desejado, sob qual leitura de mundo — antes de tratá-lo como escolha entre meios para um fim conhecido. A saída é um enunciado disputável, não uma solução; enquanto a formulação segue em disputa, otimizar alternativas responde a uma pergunta que ninguém validou.
    * natureza: processo
    * estatuto: doutrinario
    * âncoras:
@@ -48,7 +48,7 @@
       * Design Rules, Vol. 1
 
 * **governanca-dados** — Governança de dados `[claudinho-arquiteto]`
-   * definição: Duas áreas discordam sobre quem conta como “cliente ativo” e cada uma leva o seu número para a reunião. Governança de dados é o arranjo que responde quem decide isso — e quem responde quando o número sai errado. Não é quem executa: é quem fixa a regra, quem autoriza exceção e quem presta contas. A separação entre decidir e executar é o que faz o arranjo funcionar, porque quando a mesma equipe define a regra e é medida por ela, a regra cede. E o arranjo é transversal por necessidade: dado atravessa áreas, então a autoridade sobre ele não cabe dentro de nenhuma. O sinal de que amadureceu é ter virado rotina invisível, não departamento novo com nome próprio.
+   * definição: Duas áreas discordam sobre quem conta como "cliente ativo" e cada uma leva o seu número para a reunião. Governança de dados é o arranjo que responde quem decide isso — e quem responde quando o número sai errado. Não é quem executa: é quem fixa a regra, quem autoriza exceção e quem presta contas. A separação entre decidir e executar é o que faz o arranjo funcionar, porque quando a mesma equipe define a regra e é medida por ela, a regra cede. E o arranjo é transversal por necessidade: dado atravessa áreas, então a autoridade sobre ele não cabe dentro de nenhuma. O sinal de que amadureceu é ter virado rotina invisível, não departamento novo com nome próprio.
    * natureza: modelo
    * estatuto: doutrinario
    * âncoras:
@@ -56,7 +56,7 @@
       * Cartilha de Governança de Dados — Volume III: Papéis e Responsabilidades de Governança de Dados no Poder Executivo Federal
 
 * **implantabilidade-independente** — Implantabilidade independente `[claudinho-TI]`
-   * definição: Dá para corrigir um erro nesta parte e colocar a correção no ar hoje, sozinha, sem subir mais nada junto? Quando a resposta é sim, a parte é independente para implantar. Se publicar a mudança do pagamento exige publicar o catálogo no mesmo pacote, os dois estão separados no desenho e grudados na entrega. O que sustenta a independência é o combinado da fronteira: o que uma parte promete à outra tem que estar escrito e mudar de um jeito que não quebre quem ainda usa a versão antiga. Duas partes que gravam nas mesmas tabelas do mesmo banco, ou que só funcionam se forem liberadas na mesma janela, não têm essa propriedade — não importa o nome que levem no diagrama.
+   * definição: Propriedade de uma parte do sistema que pode ir ao ar sozinha: muda-se ali, publica-se ali, e nada mais precisa ser publicado junto. Para isso a fronteira precisa de um contrato explícito e estável — o que ela aceita e o que devolve — e cada mudança tem que continuar honrando o que os vizinhos já usam. Partes que dividem o mesmo banco de dados ou que só sobem em bloco coordenado não têm essa propriedade, ainda que se chamem serviços ou microsserviços.
    * natureza: disposicao
    * estatuto: doutrinario
    * âncoras:
@@ -65,7 +65,7 @@
       * Continuous Delivery Pipelines: How To Build Better Software Faster _(ocorre em engenharia-software)_
 
 * **ordenacao-causal** — Ordenação causal de eventos `[claudinho-TI]`
-   * definição: Entre duas máquinas não existe “ao mesmo tempo” confiável: os relógios divergem, e nenhuma delas viu o que a outra fez a não ser que tenham trocado mensagem. A única ordem que se pode afirmar entre dois eventos é a que passa por essa cadeia — este veio antes daquele porque a mensagem foi enviada e chegou. Eventos que não estão ligados pela cadeia são concorrentes: não há fato do mundo que diga qual veio primeiro, e colocar um deles na frente por carimbo de hora é uma convenção de desempate. Funciona como convenção, desde que ninguém a leia como observação — e é por isso que “a última escrita vence” costuma perder dado: a última segundo o relógio de quem?
+   * definição: Em um sistema espalhado por várias máquinas, não há relógio comum confiável. A única ordem real entre acontecimentos é a que a causalidade dá: A veio antes de B se os dois ocorreram em sequência na mesma máquina, ou se A enviou uma mensagem que B recebeu. Acontecimentos sem esse elo são simultâneos de verdade — não existe resposta para qual veio primeiro. Qualquer ordem total que o sistema exiba entre eles foi imposta por uma regra de desempate, e tratar essa convenção como fato é fonte clássica de erro em sistema distribuído.
    * natureza: fenomeno
    * estatuto: natural
    * âncoras:
@@ -73,7 +73,7 @@
       * Designing Data-Intensive Applications
 
 * **problema-perverso** — Problema perverso `[claudinha-gestao-estrategica]`
-   * definição: Alguns problemas não têm enunciado fixo nem hora de acabar. Reduzir a violência num bairro é assim: não existe a formulação certa do problema, não existe teste que diga se a solução está correta, e a primeira tentativa já muda o bairro — não dá para voltar e tentar outra coisa nas mesmas condições. A consequência prática é sobre o formato do compromisso, não sobre o esforço. Tratar isso como projeto, com escopo fechado e data de entrega, produz entrega no prazo e problema intacto. O que cabe é intervir assumindo que cada movimento é definitivo e vale por si, e continuar acompanhando depois do fim previsto, porque não haverá um momento em que alguém possa dizer, apoiado em algum teste, que acabou.
+   * definição: Classe de problema sem formulação definitiva, sem regra de parada e sem teste de certo ou errado: cada intervenção é operação de um tiro que altera a situação, e a formulação escolhida já embute a solução preferida. Decide o formato do compromisso — o que é perverso não se planeja como projeto com fim declarado, se governa por intervenção assumida como irreversível.
    * natureza: fenomeno
    * estatuto: doutrinario
    * âncoras:
@@ -89,7 +89,7 @@
       * COBIT 5: Enabling Processes _(ocorre em engenharia-software)_
 
 * **registro-de-decisao** — Registro de decisão `[claudinho-conhecimento]`
-   * definição: Toda equipe toma decisões que, um ano depois, ninguém sabe explicar — e quem sabia já saiu. O registro de decisão é um documento curto e datado que guarda quatro coisas: o que foi decidido, o que estava acontecendo na época, o que também foi considerado e por que foi descartado. O que ele preserva é o porquê, e é isso que faz falta depois: sem o porquê, quem chega encontra uma regra sem explicação e tem duas saídas ruins, obedecer sem entender ou revogar sem saber o que estava sendo evitado. O registro também não se corrige com o tempo. Quando a decisão muda, escreve-se outro documento apontando para o primeiro, e o original fica como estava, porque descreve um momento que existiu.
+   * definição: Uma equipe encontra no sistema uma regra esquisita e ninguém sabe por que ela está ali: quem decidiu já saiu, e o que sobrou foi a regra sem o motivo. O registro de decisão é o documento curto e datado que se escreve na hora da escolha, guardando quatro coisas — o que se decidiu, o que estava acontecendo que obrigou a decidir, o que mais se cogitou, e por que se preferiu esta saída. Guardar o motivo é o que permite reabrir a decisão depois sem chutar. Quem chega anos mais tarde consegue ver se as circunstâncias que justificaram a escolha ainda valem e, não valendo, mudar sabendo o que está trocando. Sem o motivo escrito sobram duas saídas ruins: obedecer sem entender, ou desfazer sem saber o que se perde junto.
    * natureza: modelo
    * estatuto: doutrinario
    * âncoras:
@@ -98,7 +98,7 @@
       * Ontology of architectural design decisions in software-intensive systems
 
 * **registro-de-decisao-arquitetural** — Registro de decisão arquitetural `[claudinho-TI]`
-   * definição: Documento curto que fixa uma decisão de construção difícil de desfazer — qual banco de dados, qual protocolo entre dois módulos — escrito em voz afirmativa (“usaremos X”), com o contexto da época e o que se aceita perder em troca. Cada documento carrega seu estado: proposta, aceita, ou substituída por outra. É essa cadeia que dá o histórico: a decisão antiga não é apagada nem corrigida, ela passa a apontar para a que a substituiu. Quem chega depois lê a sequência e entende não só o que vale hoje, mas por que já não vale o que valia antes — que é justamente a informação que costuma sumir.
+   * definição: Documento de uma página que fixa uma decisão técnica importante: qual era a situação, o que se decidiu e o que isso custa daqui para frente. Escreve-se no momento da decisão e não se edita depois — mudou a decisão, escreve-se um registro novo que declara substituir o antigo, e o antigo fica. O que ele protege é o porquê: sem o registro, quem chega meses depois vê só a escolha, desfaz sem conhecer o motivo e paga o problema que a escolha original evitava.
    * natureza: modelo
    * estatuto: doutrinario
    * âncoras:
@@ -162,7 +162,7 @@
       * The Site Reliability Workbook
 
 * **implantabilidade-independente** — Implantabilidade independente `[claudinho-TI]`
-   * definição: Dá para corrigir um erro nesta parte e colocar a correção no ar hoje, sozinha, sem subir mais nada junto? Quando a resposta é sim, a parte é independente para implantar. Se publicar a mudança do pagamento exige publicar o catálogo no mesmo pacote, os dois estão separados no desenho e grudados na entrega. O que sustenta a independência é o combinado da fronteira: o que uma parte promete à outra tem que estar escrito e mudar de um jeito que não quebre quem ainda usa a versão antiga. Duas partes que gravam nas mesmas tabelas do mesmo banco, ou que só funcionam se forem liberadas na mesma janela, não têm essa propriedade — não importa o nome que levem no diagrama.
+   * definição: Propriedade de uma parte do sistema que pode ir ao ar sozinha: muda-se ali, publica-se ali, e nada mais precisa ser publicado junto. Para isso a fronteira precisa de um contrato explícito e estável — o que ela aceita e o que devolve — e cada mudança tem que continuar honrando o que os vizinhos já usam. Partes que dividem o mesmo banco de dados ou que só sobem em bloco coordenado não têm essa propriedade, ainda que se chamem serviços ou microsserviços.
    * natureza: disposicao
    * estatuto: doutrinario
    * âncoras:
@@ -226,7 +226,7 @@
 ## estudos-ontologias
 
 * **conhecimento-tacito** — Conhecimento tácito `[claudinho-conhecimento]`
-   * definição: Conhecimento que orienta o desempenho do portador sem que ele consiga enunciá-lo por completo; transmite-se por convivência e prática, e só vira registro por externalização deliberada, sempre com perda. Decide o que a formação consegue formalizar em material e o que exige prática acompanhada.
+   * definição: Um servidor com trinta anos de casa sabe qual pedido vai emperrar só de bater o olho, e não consegue explicar como sabe. Isso é conhecimento tácito: o que a pessoa usa para agir bem sem conseguir enunciar por inteiro, porque aprendeu fazendo, errando e vendo alguém mais velho fazer. A consequência para quem monta formação é dura: parte do que se quer passar adiante não cabe em manual. Escrever ajuda e sempre perde alguma coisa no caminho; o resto só atravessa por convivência, acompanhamento e prática ao lado de quem já sabe. Tratar tudo como escrevível é a origem do treinamento que todo mundo faz e ninguém aprende.
    * natureza: disposicao
    * estatuto: doutrinario
    * âncoras:
@@ -234,15 +234,23 @@
       * The Knowledge-Creating Company
 
 * **criterio-de-identidade** — Critério de identidade `[claudinho-conhecimento]`
-   * definição: O princípio, fornecido por um tipo sortal, que determina quando dois registros denotam o mesmo indivíduo e o que o indivíduo pode mudar sem deixar de existir. Classe cujas instâncias respondem a princípios de identidade incompatíveis está mal construída; tipo anti-rígido (papel, fase) não pode subsumir o tipo rígido que fornece a identidade.
+   * definição: Duas fichas com o mesmo nome: é a mesma pessoa ou são duas? A resposta não sai do bom senso, sai de uma regra escolhida antes — mesmo CPF, digamos. Essa regra é o critério de identidade: o que decide quando dois registros falam do mesmo indivíduo, e quanto esse indivíduo pode mudar continuando a ser ele. A regra vem sempre da categoria mais funda a que a coisa pertence: pessoa, nunca "cliente". Daí uma consequência prática que pega muito modelo de dados: as categorias que alguém pode largar sem deixar de existir — cliente, paciente, fornecedor — não podem ficar acima das que nunca se larga — pessoa, empresa. Invertido, o modelo passa a exigir que alguém deixe de ser gente ao cancelar o contrato.
    * natureza: modelo
    * estatuto: doutrinario
    * âncoras:
       * Ontological Foundations for Structural Conceptual Models
       * Evaluating ontological decisions with OntoClean
 
+* **custo-da-expressividade** — Custo da expressividade `[claudinho-conhecimento]`
+   * definição: Quanto mais coisas uma linguagem formal deixa você afirmar, mais caro fica para o computador calcular o que essas afirmações implicam. Passado certo ponto, a conta não fecha em tempo útil: a máquina roda por horas, ou não termina. Por isso as linguagens usadas para escrever ontologia vêm em versões deliberadamente aparadas, cada uma abrindo mão de um tipo de afirmação em troca de resposta rápida e garantida. Escolher uma dessas versões é pagar o preço na frente: o que ela não deixa dizer fica proibido de escrever, e o que se ganha em troca é a certeza de que toda pergunta terá resposta em tempo previsível.
+   * natureza: fenomeno
+   * estatuto: natural
+   * âncoras:
+      * The Description Logic Handbook: Theory, Implementation and Applications
+      * OWL 2 Web Ontology Language Profiles (Second Edition)
+
 * **descricao-multinivel** — Descrição multinível `[claudinho-conhecimento]`
-   * definição: Descrever do geral para o particular, com cada unidade herdando o contexto do nível superior, cada informação registrada uma única vez no nível mais alto a que se aplica, e a descrição limitada ao pertinente ao nível descrito. Decide onde uma informação se registra e o que a unidade filha não repete.
+   * definição: Duzentas caixas de documentos de um mesmo órgão não se descrevem caixa por caixa, cada uma do zero. Descreve-se primeiro o conjunto inteiro — quem produziu, em que período, para quê —, depois cada série dentro dele, depois cada dossiê, e assim por diante, do maior para o menor. A regra que faz isso funcionar é registrar cada informação uma vez só, no nível mais alto em que ela é verdadeira, e nunca repeti-la abaixo. Sem isso acontece um dos dois estragos: ou a mesma informação é copiada milhares de vezes e passa a divergir na primeira correção, ou o documento isolado chega a quem consulta sem o contexto que explica o que ele é.
    * natureza: processo
    * estatuto: instituido
    * âncoras:
@@ -251,7 +259,7 @@
       * NOBRADE: Norma brasileira de descrição arquivística
 
 * **documento-de-arquivo** — Documento de arquivo `[claudinho-conhecimento]`
-   * definição: Documento produzido ou recebido no exercício de uma atividade, cujo valor de prova depende do vínculo orgânico com essa atividade e do contexto de produção, qualquer que seja o suporte. Decide contra o item bibliográfico: este se cataloga pelo assunto e circula solto; o documento de arquivo se classifica pela atividade e perde valor probatório fora do conjunto.
+   * definição: Um contrato assinado e um livro sobre contratos são coisas diferentes, e a diferença não está no papel. Documento de arquivo é o que foi produzido ou recebido no meio de uma atividade — o contrato, o ofício, a folha de ponto —, e o que o torna prova é justamente o vínculo com essa atividade: quem fez, quando, no curso de quê, junto de quais outros documentos. Daí uma consequência que costuma surpreender: tirar o documento do conjunto onde ele nasceu destrói parte do seu valor. Um livro continua o mesmo livro em qualquer estante, porque nele o que vale é o conteúdo. Um documento de arquivo solto do processo perde a capacidade de provar, mesmo com todas as palavras ainda legíveis.
    * natureza: modelo
    * estatuto: instituido
    * âncoras:
@@ -259,9 +267,7 @@
       * e-ARQ Brasil: Modelo de Requisitos para Sistemas Informatizados de Gestão Arquivística de Documentos, Versão 2
 
 * **esquema-de-organizacao** — Esquema de organização `[claudinha-produto]`
-   * definição: Toda lista grande é arrumada por algum critério, e os critérios são de dois tipos. O exato — alfabético, por data, por lugar — põe cada item num só lugar e não deixa dúvida, mas só serve para quem já sabe o nome do que procura. O ambíguo — por assunto, por tarefa, por público — depende de julgamento, dois curadores arrumam diferente, e é o único que serve para quem sabe o problema e não sabe o nome.
-
-     A escolha decide quem consegue encontrar. Num catálogo em ordem alfabética de título, quem quer "alguma coisa sobre contratar melhor" não acha nada; por assunto, acha, ao custo de o mesmo item caber em dois lugares. Coleção grande costuma precisar dos dois, e a decisão é qual deles é a porta de entrada.
+   * definição: Toda lista grande é arrumada por algum critério, e os critérios são de dois tipos. O exato — alfabético, por data, por lugar — põe cada item num só lugar e não deixa dúvida, mas só serve para quem já sabe o nome do que procura. O ambíguo — por assunto, por tarefa, por público — depende de julgamento, dois curadores arrumam diferente, e é o único que serve para quem sabe o problema e não sabe o nome. A escolha decide quem consegue encontrar. Num catálogo em ordem alfabética de título, quem quer "alguma coisa sobre contratar melhor" não acha nada; por assunto, acha, ao custo de o mesmo item caber em dois lugares. Coleção grande costuma precisar dos dois, e a decisão é qual deles é a porta de entrada.
    * natureza: modelo
    * estatuto: doutrinario
    * âncoras:
@@ -269,23 +275,15 @@
       * Designing Interfaces Patterns for Effective Interaction Design _(ocorre em produtos-digitais)_
 
 * **evento-como-entidade** — Evento como entidade `[claudinho-conhecimento]`
-   * definição: Acontecimento modelado como entidade própria — com participações de objetos, partes e fronteiras temporais — em vez de atributo ou carimbo de tempo de outra entidade. Decide quando um ato (catalogação, sucessão, triagem) vira registro de primeira classe: quando o requisito pede participantes, decomposição ou ordenação própria; quando só ordena, fica atributo.
+   * definição: Numa ficha de livro é comum existir um campo "data de catalogação". Funciona até alguém perguntar quem catalogou, se houve uma segunda catalogação e o que ela mudou em relação à primeira — perguntas que um campo de data não responde. Tratar o evento como entidade é dar ficha própria ao acontecimento: a catalogação vira um registro com responsável, início, fim e etapas, em vez de ser um campo do livro. O que decide entre os dois é o tipo de pergunta que se pretende responder. Bastando saber quando aconteceu, o campo de data resolve e criar ficha só encarece. Sendo preciso saber quem participou, separar o acontecimento em etapas, ou amarrar um acontecimento a outro que veio antes, o campo não sustenta e o evento precisa existir por conta própria.
    * natureza: modelo
    * estatuto: doutrinario
    * âncoras:
       * Events as Entities in Ontology-Driven Conceptual Modeling
       * Towards Ontological Foundations for the Conceptual Modeling of Events
 
-* **expressividade-vs-tratabilidade** — Expressividade vs. tratabilidade `[claudinho-conhecimento]`
-   * definição: Em linguagem de representação com semântica formal, cada construtor admitido fixa a classe de complexidade da inferência: ganhar poder de afirmação custa computabilidade. A escolha de fragmento (perfil) é a declaração desse compromisso, e um axioma é admissível quando cabe no fragmento cujo custo se aceitou.
-   * natureza: fenomeno
-   * estatuto: natural
-   * âncoras:
-      * The Description Logic Handbook: Theory, Implementation and Applications
-      * OWL 2 Web Ontology Language Profiles (Second Edition)
-
 * **pratica-de-recuperacao** — Prática de recuperação `[claudinho-conhecimento]`
-   * definição: Aprender pelo esforço de recuperar da memória supera a reexposição ao material: reconhecer não é dominar, e o exercício se desenha como recuperação na forma em que o desempenho será exigido. Decide, para cada item de trilha, o que sai (releitura, resumo passivo) e o que entra (teste de recuperação, prática espaçada).
+   * definição: Reler a apostila dá a sensação de estar aprendendo e é uma das formas mais fracas de estudar. Aprende-se mais fechando o material e tentando lembrar: o esforço de puxar da memória, mesmo errando, é o que fixa. Reconhecer um trecho já visto engana, porque parece domínio e não é. Duas consequências para o desenho de um exercício. A primeira: ele tem que ter a forma em que a pessoa vai precisar se sair depois — se o trabalho é redigir um parecer, o exercício é redigir, não marcar a alternativa certa. A segunda: repetir espalhado no tempo, voltando quando já se começou a esquecer, custa mais no momento e rende mais no fim do que estudar tudo de uma vez.
    * natureza: processo
    * estatuto: doutrinario
    * âncoras:
@@ -293,7 +291,7 @@
       * Design for How People Learn
 
 * **vocabulario-controlado** — Vocabulário controlado `[claudinho-conhecimento]`
-   * definição: Conjunto de termos cuja admissão é governada: escopo de cada termo delimitado, sinônimos remetidos a um termo preferido por relação de equivalência, homógrafos distinguidos, e relações restritas a equivalência, hierarquia e associação. Decide, para um rótulo novo, se ele entra como termo, vira remissiva ou é recusado.
+   * definição: Quem procura por "demissão", quem procura por "desligamento" e quem procura por "rescisão" deveria achar as mesmas coisas. O vocabulário controlado é a lista fechada de termos que garante isso: cada assunto tem um termo oficial, os sinônimos remetem a ele em vez de virarem entradas próprias, e palavras iguais com sentidos diferentes ganham um qualificador para não se misturarem. O trabalho é decidir, para cada palavra que aparece, uma de três coisas: vira termo oficial, vira apelido que aponta para um termo já existente, ou fica de fora. As ligações entre termos também são poucas de propósito — o mesmo que, mais amplo que, mais estreito que, relacionado a. Permitir mais tipos de ligação deixa a lista impossível de manter coerente conforme ela cresce.
    * natureza: modelo
    * estatuto: doutrinario
    * âncoras:
@@ -331,7 +329,7 @@
       * Nota Técnica — Como elaborar modelo lógico de programa: um roteiro básico
 
 * **estruturacao-de-problema** — Estruturação de problema `[claudinho-arquiteto]`
-   * definição: Antes de escolher entre soluções, alguém precisa escrever qual é o problema — e essa frase não vem pronta do mundo, é uma escolha. “A fila do atendimento está grande” e “as pessoas não deveriam precisar vir até aqui” descrevem a mesma cena e levam a projetos diferentes. Estruturar o problema é fazer essa escolha em aberto, com quem discorda na sala, e aceitar que o resultado é um enunciado ainda discutível, não uma resposta. Pular a etapa não elimina a escolha: só faz com que ela seja feita em silêncio, por quem escreveu o primeiro documento — e comparar alternativas com muito rigor a partir de um enunciado que ninguém examinou é resolver bem uma pergunta que talvez não interesse a ninguém.
+   * definição: Antes de escolher entre soluções, alguém precisa escrever qual é o problema — e essa frase não vem pronta do mundo, é uma escolha. "A fila do atendimento está grande" e "as pessoas não deveriam precisar vir até aqui" descrevem a mesma cena e levam a projetos diferentes. Estruturar o problema é fazer essa escolha em aberto, com quem discorda na sala, e aceitar que o resultado é um enunciado ainda discutível, não uma resposta. Pular a etapa não elimina a escolha: só faz com que ela seja feita em silêncio, por quem escreveu o primeiro documento — e comparar alternativas com muito rigor a partir de um enunciado que ninguém examinou é resolver bem uma pergunta que talvez não interesse a ninguém.
    * natureza: processo
    * estatuto: doutrinario
    * âncoras:
@@ -457,6 +455,14 @@
       * How we built Claude Code auto mode: a safer way to skip permissions [snapshot 2026-08-01] _(ocorre em seguranca-privacidade)_
       * Best practices for Claude Code - Claude Code Docs [snapshot 2026-08-01]
 
+* **quando-cabe-um-agente** — Quando cabe um agente `[claudinho-IA]`
+   * definição: Antes de montar um sistema com IA, uma pergunta decide a forma dele: dá para escrever de antemão os passos que ele vai dar? Se dá — ler a nota fiscal, conferir contra a tabela, emitir o aviso —, o certo é um roteiro fixo, em que cada passo é um pedaço testável e barato. Se não dá, porque o passo seguinte depende do que aparecer no anterior, entra o agente, que decide o próximo passo a cada volta. O agente custa mais por tarefa, erra de formas que o roteiro não erra e é mais difícil de investigar, porque cada execução segue um caminho diferente. Em troca, aguenta o caso que ninguém mapeou. Escolher agente onde o roteiro daria conta é pagar essa conta sem precisar.
+   * natureza: modelo
+   * estatuto: doutrinario
+   * âncoras:
+      * Building Effective AI Agents [snapshot 2026-08-01]
+      * Prompt Engineering for LLMs (for True Epub)
+
 * **ranqueamento-multiestagio** — Ranqueamento multiestágio `[claudinho-IA]`
    * definição: Busca feita em etapas, como peneira: a primeira passa por todo o acervo e é barata e grosseira, separando algumas centenas de candidatos; só sobre esses roda a etapa cara, que ordena com cuidado. O custo alto é pago por poucos itens em vez de por milhões. A consequência decide projeto: o que a primeira etapa não pescou está perdido. Nenhuma etapa seguinte inventa um documento que não recebeu — melhorar o reordenador não conserta o que ficou fora da peneira. Por isso a primeira etapa se ajusta para não deixar escapar, e não para acertar em cheio; acertar em cheio é serviço da última.
    * natureza: modelo
@@ -492,20 +498,10 @@
       * Harness design for long-running application development [snapshot 2026-08-01]
       * Code execution with MCP: building more efficient AI agents [snapshot 2026-08-01]
 
-* **quando-cabe-um-agente** — Quando cabe um agente `[claudinho-IA]`
-   * definição: Antes de montar um sistema com IA, uma pergunta decide a forma dele: dá para escrever de antemão os passos que ele vai dar? Se dá — ler a nota fiscal, conferir contra a tabela, emitir o aviso —, o certo é um roteiro fixo, em que cada passo é um pedaço testável e barato. Se não dá, porque o passo seguinte depende do que aparecer no anterior, entra o agente, que decide o próximo passo a cada volta. O agente custa mais por tarefa, erra de formas que o roteiro não erra e é mais difícil de investigar, porque cada execução segue um caminho diferente. Em troca, aguenta o caso que ninguém mapeou. Escolher agente onde o roteiro daria conta é pagar essa conta sem precisar.
-   * natureza: modelo
-   * estatuto: doutrinario
-   * âncoras:
-      * Building Effective AI Agents [snapshot 2026-08-01]
-      * Prompt Engineering for LLMs (for True Epub)
-
 ## produtos-digitais
 
 * **affordance** — Affordance `[claudinha-produto]`
-   * definição: Um objeto sinaliza, pela própria forma, o que dá para fazer com ele: uma maçaneta vertical pede puxar, uma placa lisa pede empurrar. Affordance é essa relação entre o que o objeto permite e o que quem usa consegue fazer.
-
-     O que produz veredito é que permitir e sinalizar são coisas separadas. A ação pode existir sem aparecer — a porta abre, mas nada indica para que lado — ou aparecer sem existir, como a maçaneta que convida a puxar numa porta trancada. Julgar uma tela é comparar as duas listas: o que ela deixa fazer e o que ela avisa que deixa.
+   * definição: Um objeto sinaliza, pela própria forma, o que dá para fazer com ele: uma maçaneta vertical pede puxar, uma placa lisa pede empurrar. Affordance é essa relação entre o que o objeto permite e o que quem usa consegue fazer. O que produz veredito é que permitir e sinalizar são coisas separadas. A ação pode existir sem aparecer — a porta abre, mas nada indica para que lado — ou aparecer sem existir, como a maçaneta que convida a puxar numa porta trancada. Julgar uma tela é comparar as duas listas: o que ela deixa fazer e o que ela avisa que deixa.
    * natureza: disposicao
    * estatuto: natural
    * âncoras:
@@ -513,9 +509,7 @@
       * The Design of Everyday Things
 
 * **avaliacao-heuristica** — Avaliação heurística `[claudinha-produto]`
-   * definição: Antes de chamar qualquer usuário, uma pessoa percorre a tela sozinha conferindo-a contra uma lista curta e fixa de perguntas: o sistema mostra em que estado está? dá para desfazer o que foi feito? usa as palavras de quem usa ou as do banco de dados? avisa antes de deixar errar? Avaliação heurística é essa inspeção contra lista.
-
-     O ganho é que a reprovação sai com nome. Não é "não gostei desta tela", é "esta tela esconde o estado do sistema, aqui" — e quem construiu pode discordar do veredito, não do critério. O limite é igualmente claro: a lista pega violação de princípio, não pega o que só aparece quando gente de verdade tenta cumprir a tarefa.
+   * definição: Antes de chamar qualquer usuário, uma pessoa percorre a tela sozinha conferindo-a contra uma lista curta e fixa de perguntas: o sistema mostra em que estado está? dá para desfazer o que foi feito? usa as palavras de quem usa ou as do banco de dados? avisa antes de deixar errar? Avaliação heurística é essa inspeção contra lista. O ganho é que a reprovação sai com nome. Não é "não gostei desta tela", é "esta tela esconde o estado do sistema, aqui" — e quem construiu pode discordar do veredito, não do critério. O limite é igualmente claro: a lista pega violação de princípio, não pega o que só aparece quando gente de verdade tenta cumprir a tarefa.
    * natureza: processo
    * estatuto: doutrinario
    * âncoras:
@@ -534,26 +528,13 @@
       * Essential Kanban Condensed _(ocorre em engenharia-software)_
 
 * **design-centrado-no-humano** — Design centrado no humano `[claudinha-produto]`
-   * definição: Um sistema pode cumprir tudo que foi especificado e mesmo assim ser abandonado por quem deveria usá-lo, porque as pessoas, as tarefas e o lugar reais nunca foram olhados de perto. O design centrado no humano é o conjunto de exigências que fecha essa porta: entender antes quem usa, o que faz e onde; envolver essas pessoas durante o trabalho, não só no fim; submeter cada versão à avaliação de usuários, inclusive na hora de aceitar o produto pronto; e repetir o ciclo enquanto ainda houver dúvida sobre o uso.
-
-     O que separa isso de "conversamos com uns usuários" é o registro: cada uma das quatro exigências deixa evidência datada, e quem confere é a evidência, não a boa intenção de quem fez. Vale igual para formulário de papel e atendimento de balcão — não é regra de aplicativo.
+   * definição: Um sistema pode cumprir tudo que foi especificado e mesmo assim ser abandonado por quem deveria usá-lo, porque as pessoas, as tarefas e o lugar reais nunca foram olhados de perto. O design centrado no humano é o conjunto de exigências que fecha essa porta: entender antes quem usa, o que faz e onde; envolver essas pessoas durante o trabalho, não só no fim; submeter cada versão à avaliação de usuários, inclusive na hora de aceitar o produto pronto; e repetir o ciclo enquanto ainda houver dúvida sobre o uso. O que separa isso de "conversamos com uns usuários" é o registro: cada uma das quatro exigências deixa evidência datada, e quem confere é a evidência, não a boa intenção de quem fez. Vale igual para formulário de papel e atendimento de balcão — não é regra de aplicativo.
    * natureza: processo
    * estatuto: instituido
    * âncoras:
       * Ergonomics of human-system interaction — Part 210: Human-centred design for interactive systems
       * Design Thinking Bootleg
       * About Face
-
-* **gap-desenho-realidade** — Gap desenho-realidade `[claudinha-produto]`
-   * definição: Todo sistema novo carrega uma imagem de como o mundo é: que dados existem, quem faz o quê, que equipamento tem na ponta, o que as pessoas ali valorizam. Quando essa imagem está longe do lugar onde o sistema vai ser instalado, ele fracassa mesmo bem construído — e a distância se mede uma dimensão de cada vez: informação, tecnologia, processos de trabalho, objetivos e valores, pessoal, gestão, demais recursos.
-
-     Um telecentro projetado supondo energia estável, técnico morando perto e gente querendo internet, instalado onde falta as três coisas, já tem distância grande em quatro dimensões: o prognóstico é ruim antes da primeira linha de código. E só duas coisas mudam o prognóstico — aproximar o desenho da realidade, ou mexer na realidade para perto do desenho.
-   * natureza: fenomeno
-   * estatuto: doutrinario
-   * âncoras:
-      * The origins of failure: seeking the causes of design-reality gaps
-      * Minding the Design Reality Gap: An Empirical Evaluation of Telecentre Initiatives in Rural Ghana
-      * Towards design of citizen centric e-government projects in developing country context: the design-reality gap in Uganda
 
 * **entrega-vs-resultado** — Entrega vs. resultado `[claudinha-gestao-estrategica]`
    * definição: Separa o que foi construído e entregue (produto, funcionalidade) da mudança de comportamento ou de estado que a entrega deveria causar, e julga o investimento pelo segundo. Iniciativa que entrega sem mudar comportamento algum falhou mesmo cumprindo o prometido; a medição por entrega é o mecanismo que esconde essa falha.
@@ -564,9 +545,7 @@
       * Nota Técnica — Como elaborar modelo lógico de programa: um roteiro básico _(ocorre em gestao-organizacional)_
 
 * **entrevista-por-comportamento-passado** — Entrevista por comportamento passado `[claudinha-produto]`
-   * definição: Perguntar "você usaria isso?" rende resposta educada e inútil: quase todo mundo diz que sim, e quase ninguém usa. Numa conversa de descoberta conta o que a pessoa já fez — a última vez que enfrentou o problema, o que ela fez naquele dia, quanto tempo ou dinheiro gastou — e o que ela se compromete a fazer agora: marcar a próxima conversa, apresentar um colega, pagar adiantado.
-
-     Por isso a própria ideia entra tarde na conversa, ou não entra. Mencionada cedo, ela vira o assunto: o interlocutor passa a opinar sobre a ideia, em vez de contar a própria vida — que é a única coisa que ele sabe melhor do que quem pergunta.
+   * definição: Perguntar "você usaria isso?" rende resposta educada e inútil: quase todo mundo diz que sim, e quase ninguém usa. Numa conversa de descoberta conta o que a pessoa já fez — a última vez que enfrentou o problema, o que ela fez naquele dia, quanto tempo ou dinheiro gastou — e o que ela se compromete a fazer agora: marcar a próxima conversa, apresentar um colega, pagar adiantado. Por isso a própria ideia entra tarde na conversa, ou não entra. Mencionada cedo, ela vira o assunto: o interlocutor passa a opinar sobre a ideia, em vez de contar a própria vida — que é a única coisa que ele sabe melhor do que quem pergunta.
    * natureza: processo
    * estatuto: doutrinario
    * âncoras:
@@ -583,9 +562,7 @@
       * Are Your Lights On?
 
 * **esquema-de-organizacao** — Esquema de organização `[claudinha-produto]`
-   * definição: Toda lista grande é arrumada por algum critério, e os critérios são de dois tipos. O exato — alfabético, por data, por lugar — põe cada item num só lugar e não deixa dúvida, mas só serve para quem já sabe o nome do que procura. O ambíguo — por assunto, por tarefa, por público — depende de julgamento, dois curadores arrumam diferente, e é o único que serve para quem sabe o problema e não sabe o nome.
-
-     A escolha decide quem consegue encontrar. Num catálogo em ordem alfabética de título, quem quer "alguma coisa sobre contratar melhor" não acha nada; por assunto, acha, ao custo de o mesmo item caber em dois lugares. Coleção grande costuma precisar dos dois, e a decisão é qual deles é a porta de entrada.
+   * definição: Toda lista grande é arrumada por algum critério, e os critérios são de dois tipos. O exato — alfabético, por data, por lugar — põe cada item num só lugar e não deixa dúvida, mas só serve para quem já sabe o nome do que procura. O ambíguo — por assunto, por tarefa, por público — depende de julgamento, dois curadores arrumam diferente, e é o único que serve para quem sabe o problema e não sabe o nome. A escolha decide quem consegue encontrar. Num catálogo em ordem alfabética de título, quem quer "alguma coisa sobre contratar melhor" não acha nada; por assunto, acha, ao custo de o mesmo item caber em dois lugares. Coleção grande costuma precisar dos dois, e a decisão é qual deles é a porta de entrada.
    * natureza: modelo
    * estatuto: doutrinario
    * âncoras:
@@ -593,7 +570,7 @@
       * Designing Interfaces Patterns for Effective Interaction Design
 
 * **estruturacao-de-problema** — Estruturação de problema `[claudinha-gestao-estrategica]`
-   * definição: Antes de escolher entre soluções, alguém precisa escrever qual é o problema — e essa frase não vem pronta do mundo, é uma escolha. “A fila do atendimento está grande” e “as pessoas não deveriam precisar vir até aqui” descrevem a mesma cena e levam a projetos diferentes. Estruturar o problema é fazer essa escolha em aberto, com quem discorda na sala, e aceitar que o resultado é um enunciado ainda discutível, não uma resposta. Pular a etapa não elimina a escolha: só faz com que ela seja feita em silêncio, por quem escreveu o primeiro documento — e comparar alternativas com muito rigor a partir de um enunciado que ninguém examinou é resolver bem uma pergunta que talvez não interesse a ninguém.
+   * definição: Produzir a formulação do problema — de quem é, que diferença entre estado percebido e estado desejado, sob qual leitura de mundo — antes de tratá-lo como escolha entre meios para um fim conhecido. A saída é um enunciado disputável, não uma solução; enquanto a formulação segue em disputa, otimizar alternativas responde a uma pergunta que ninguém validou.
    * natureza: processo
    * estatuto: doutrinario
    * âncoras:
@@ -603,7 +580,7 @@
       * Dilemmas in a General Theory of Planning
 
 * **estruturacao-de-problema** — Estruturação de problema `[claudinho-arquiteto]`
-   * definição: Antes de escolher entre soluções, alguém precisa escrever qual é o problema — e essa frase não vem pronta do mundo, é uma escolha. “A fila do atendimento está grande” e “as pessoas não deveriam precisar vir até aqui” descrevem a mesma cena e levam a projetos diferentes. Estruturar o problema é fazer essa escolha em aberto, com quem discorda na sala, e aceitar que o resultado é um enunciado ainda discutível, não uma resposta. Pular a etapa não elimina a escolha: só faz com que ela seja feita em silêncio, por quem escreveu o primeiro documento — e comparar alternativas com muito rigor a partir de um enunciado que ninguém examinou é resolver bem uma pergunta que talvez não interesse a ninguém.
+   * definição: Antes de escolher entre soluções, alguém precisa escrever qual é o problema — e essa frase não vem pronta do mundo, é uma escolha. "A fila do atendimento está grande" e "as pessoas não deveriam precisar vir até aqui" descrevem a mesma cena e levam a projetos diferentes. Estruturar o problema é fazer essa escolha em aberto, com quem discorda na sala, e aceitar que o resultado é um enunciado ainda discutível, não uma resposta. Pular a etapa não elimina a escolha: só faz com que ela seja feita em silêncio, por quem escreveu o primeiro documento — e comparar alternativas com muito rigor a partir de um enunciado que ninguém examinou é resolver bem uma pergunta que talvez não interesse a ninguém.
    * natureza: processo
    * estatuto: doutrinario
    * âncoras:
@@ -612,27 +589,24 @@
       * Are Your Lights On?
 
 * **fatiamento-por-jornada** — Fatiamento por jornada completa `[claudinha-produto]`
-   * definição: Uma entrega parcial só vale se alguém conseguir chegar ao fim de alguma coisa com ela. Fatiar por jornada é recortar a próxima entrega como o menor pedaço que permite a uma pessoa começar uma tarefa e terminá-la — do momento em que ela precisa até o momento em que ela tem o que queria, ou desistiu por um caminho previsto.
-
-     O recorte oposto é por camada: primeiro o banco de dados, depois a tela, depois o envio. Cada pedaço fica pronto e ninguém consegue fazer nada com nenhum, então não há o que testar com usuário nem o que pôr no ar. Por isso o aceite se escreve como o caminho inteiro, antes de construir: se ninguém completa nada, não é fatia.
+   * definição: Uma entrega parcial só vale se alguém conseguir chegar ao fim de alguma coisa com ela. Fatiar por jornada é recortar a próxima entrega como o menor pedaço que permite a uma pessoa começar uma tarefa e terminá-la — do momento em que ela precisa até o momento em que ela tem o que queria, ou desistiu por um caminho previsto. O recorte oposto é por camada: primeiro o banco de dados, depois a tela, depois o envio. Cada pedaço fica pronto e ninguém consegue fazer nada com nenhum, então não há o que testar com usuário nem o que pôr no ar. Por isso o aceite se escreve como o caminho inteiro, antes de construir: se ninguém completa nada, não é fatia.
    * natureza: processo
    * estatuto: doutrinario
    * âncoras:
       * User Story Mapping
       * WritingEffectiveUCs.book
 
-* **resultado-sobre-entrega** — Resultado sobre entrega `[claudinha-produto]`
-   * definição: Entregar uma funcionalidade não é a mesma coisa que conseguir algo com ela. O resultado é a mudança de comportamento de gente de verdade — o cliente que passa a concluir a compra, o atendente que passa a resolver no primeiro contato — e é essa mudança que liga o que se constrói ao que a organização queria.
-
-     Na prática a pergunta muda: sai "o que vamos construir neste trimestre?" e entra "quem vai passar a fazer o que de diferente, e como saberemos?". A pergunta nova admite resposta que não é software — mudar um texto, um preço, uma regra, um treinamento — e deixa visível a entrega que ficou pronta no prazo sem mudar o comportamento de ninguém, que pelo critério antigo passava por sucesso.
-   * natureza: modelo
+* **gap-desenho-realidade** — Gap desenho-realidade `[claudinha-produto]`
+   * definição: Todo sistema novo carrega uma imagem de como o mundo é: que dados existem, quem faz o quê, que equipamento tem na ponta, o que as pessoas ali valorizam. Quando essa imagem está longe do lugar onde o sistema vai ser instalado, ele fracassa mesmo bem construído — e a distância se mede uma dimensão de cada vez: informação, tecnologia, processos de trabalho, objetivos e valores, pessoal, gestão, demais recursos. Um telecentro projetado supondo energia estável, técnico morando perto e gente querendo internet, instalado onde falta as três coisas, já tem distância grande em quatro dimensões: o prognóstico é ruim antes da primeira linha de código. E só duas coisas mudam o prognóstico — aproximar o desenho da realidade, ou mexer na realidade para perto do desenho.
+   * natureza: fenomeno
    * estatuto: doutrinario
    * âncoras:
-      * Outcomes Over Output
-      * Impact Mapping
+      * The origins of failure: seeking the causes of design-reality gaps
+      * Minding the Design Reality Gap: An Empirical Evaluation of Telecentre Initiatives in Rural Ghana
+      * Towards design of citizen centric e-government projects in developing country context: the design-reality gap in Uganda
 
 * **problema-perverso** — Problema perverso `[claudinha-gestao-estrategica]`
-   * definição: Alguns problemas não têm enunciado fixo nem hora de acabar. Reduzir a violência num bairro é assim: não existe a formulação certa do problema, não existe teste que diga se a solução está correta, e a primeira tentativa já muda o bairro — não dá para voltar e tentar outra coisa nas mesmas condições. A consequência prática é sobre o formato do compromisso, não sobre o esforço. Tratar isso como projeto, com escopo fechado e data de entrega, produz entrega no prazo e problema intacto. O que cabe é intervir assumindo que cada movimento é definitivo e vale por si, e continuar acompanhando depois do fim previsto, porque não haverá um momento em que alguém possa dizer, apoiado em algum teste, que acabou.
+   * definição: Classe de problema sem formulação definitiva, sem regra de parada e sem teste de certo ou errado: cada intervenção é operação de um tiro que altera a situação, e a formulação escolhida já embute a solução preferida. Decide o formato do compromisso — o que é perverso não se planeja como projeto com fim declarado, se governa por intervenção assumida como irreversível.
    * natureza: fenomeno
    * estatuto: doutrinario
    * âncoras:
@@ -647,10 +621,16 @@
       * Dilemmas in a General Theory of Planning
       * The Structure of Ill Structured Problems _(ocorre em gestao-organizacional)_
 
-* **riscos-de-produto** — Riscos de produto `[claudinha-produto]`
-   * definição: Uma ideia de produto pode morrer por quatro motivos diferentes, e a evidência que afasta um não diz nada sobre os outros três: as pessoas não querem (valor); querem e não conseguem usar (usabilidade); dá vontade e não dá para construir no prazo e no custo (viabilidade técnica); serve ao usuário e não fecha para quem banca, por causa de jurídico, suporte, canal de venda ou orçamento (viabilidade de negócio).
+* **resultado-sobre-entrega** — Resultado sobre entrega `[claudinha-produto]`
+   * definição: Entregar uma funcionalidade não é a mesma coisa que conseguir algo com ela. O resultado é a mudança de comportamento de gente de verdade — o cliente que passa a concluir a compra, o atendente que passa a resolver no primeiro contato — e é essa mudança que liga o que se constrói ao que a organização queria. Na prática a pergunta muda: sai "o que vamos construir neste trimestre?" e entra "quem vai passar a fazer o que de diferente, e como saberemos?". A pergunta nova admite resposta que não é software — mudar um texto, um preço, uma regra, um treinamento — e deixa visível a entrega que ficou pronta no prazo sem mudar o comportamento de ninguém, que pelo critério antigo passava por sucesso.
+   * natureza: modelo
+   * estatuto: doutrinario
+   * âncoras:
+      * Outcomes Over Output
+      * Impact Mapping
 
-     O erro comum é parar no primeiro: entrevistas entusiasmadas viram autorização para construir, e a coisa morre depois na usabilidade ou no jurídico. Por isso o critério é evidência coletada contra os quatro, e não a convicção de quem decide — que costuma ser mais firme justamente onde ninguém olhou.
+* **riscos-de-produto** — Riscos de produto `[claudinha-produto]`
+   * definição: Uma ideia de produto pode morrer por quatro motivos diferentes, e a evidência que afasta um não diz nada sobre os outros três: as pessoas não querem (valor); querem e não conseguem usar (usabilidade); dá vontade e não dá para construir no prazo e no custo (viabilidade técnica); serve ao usuário e não fecha para quem banca, por causa de jurídico, suporte, canal de venda ou orçamento (viabilidade de negócio). O erro comum é parar no primeiro: entrevistas entusiasmadas viram autorização para construir, e a coisa morre depois na usabilidade ou no jurídico. Por isso o critério é evidência coletada contra os quatro, e não a convicção de quem decide — que costuma ser mais firme justamente onde ninguém olhou.
    * natureza: modelo
    * estatuto: doutrinario
    * âncoras:
@@ -658,9 +638,7 @@
       * Empowered
 
 * **teste-de-usabilidade-informal** — Teste de usabilidade informal `[claudinha-produto]`
-   * definição: Uma manhã por mês, três pessoas de fora tentam usar o que a equipe fez, falando em voz alta o que estão pensando, enquanto quem construiu assiste. É barato e não precisa de laboratório nem de recrutamento caprichado: problema grave aparece para quase qualquer pessoa que nunca viu aquela tela.
-
-     O sucesso não é achar todos os problemas — é achar, a cada rodada, os poucos mais graves e sair da sala com o compromisso de consertá-los antes da próxima. Testar com trinta pessoas e conseguir consertar dois problemas rende menos que testar com três e consertar dois todo mês. Por isso a conversa depois do teste termina numa lista curta e combinada, não num relatório.
+   * definição: Uma manhã por mês, três pessoas de fora tentam usar o que a equipe fez, falando em voz alta o que estão pensando, enquanto quem construiu assiste. É barato e não precisa de laboratório nem de recrutamento caprichado: problema grave aparece para quase qualquer pessoa que nunca viu aquela tela. O sucesso não é achar todos os problemas — é achar, a cada rodada, os poucos mais graves e sair da sala com o compromisso de consertá-los antes da próxima. Testar com trinta pessoas e conseguir consertar dois problemas rende menos que testar com três e consertar dois todo mês. Por isso a conversa depois do teste termina numa lista curta e combinada, não num relatório.
    * natureza: processo
    * estatuto: doutrinario
    * âncoras:
@@ -668,14 +646,6 @@
       * Don't Make Me Think, Revisited
 
 ## seguranca-privacidade
-
-* **dado-aberto-por-padrao** — Dado aberto por padrão `[claudinho-arquiteto]`
-   * definição: Todo dado que a organização produz nasce público. Quem quiser fechar um deles tem que dizer em qual das hipóteses de sigilo já previstas ele se encaixa — e a hipótese existia antes do pedido. Isso inverte quem tem trabalho a fazer: no arranjo comum, quem quer o dado justifica por que merece; aqui quem guarda justifica por que reteve, e “não vejo por que abrir” não é justificativa. O efeito prático é que o acesso deixa de ser negociado caso a caso entre dois setores e passa a ser decidido de antemão, pelo enquadramento que já está escrito.
-   * natureza: modelo
-   * estatuto: instituido
-   * âncoras:
-      * Decreto nº 8.777/2016 — Política de Dados Abertos do Poder Executivo federal _(ocorre em arquiteturas)_
-      * Decreto nº 10.046/2019 — Governança no compartilhamento de dados na administração pública federal
 
 * **acesso-delegado** — Acesso delegado `[claudinho-seguranca]` `balde A`
    * definição: Arranjo em que um terceiro obtém acesso limitado a um recurso em nome do dono sem receber a credencial do dono: uma autoridade separada media a aprovação e emite ao terceiro uma autorização própria, restrita em alcance e em prazo, revogável sem tocar na credencial original.
@@ -749,6 +719,14 @@
       * nist.sp.800-57pt1r5
       * Transitioning the Use of Cryptographic Algorithms and Key Lengths
       * ISC2 CISSP Certified Information Systems Security Professional Official Study Guide
+
+* **dado-aberto-por-padrao** — Dado aberto por padrão `[claudinho-arquiteto]`
+   * definição: Todo dado que a organização produz nasce público. Quem quiser fechar um deles tem que dizer em qual das hipóteses de sigilo já previstas ele se encaixa — e a hipótese existia antes do pedido. Isso inverte quem tem trabalho a fazer: no arranjo comum, quem quer o dado justifica por que merece; aqui quem guarda justifica por que reteve, e "não vejo por que abrir" não é justificativa. O efeito prático é que o acesso deixa de ser negociado caso a caso entre dois setores e passa a ser decidido de antemão, pelo enquadramento que já está escrito.
+   * natureza: modelo
+   * estatuto: instituido
+   * âncoras:
+      * Decreto nº 8.777/2016 — Política de Dados Abertos do Poder Executivo federal _(ocorre em arquiteturas)_
+      * Decreto nº 10.046/2019 — Governança no compartilhamento de dados na administração pública federal
 
 * **dano-de-privacidade-sem-incidente** — Dano de privacidade sem incidente de segurança `[claudinho-seguranca]` `balde B`
    * definição: O prejuízo ao indivíduo pode nascer de operação plenamente autorizada e conforme os controles de confidencialidade — agregação de fontes lícitas, identificação a partir de dado indireto, uso para finalidade diversa, exclusão do próprio titular da decisão que o afeta. Logo a ausência de acesso não autorizado não é evidência de ausência de dano, e o inventário de ameaças de segurança não enumera estas.

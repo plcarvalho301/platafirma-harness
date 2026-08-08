@@ -4,13 +4,13 @@
 
 ## arquiteturas
 
-* **abertura-por-padrao** `[claudinho-arquiteto]`
-   * origem: proprio (0/1 âncoras de derrota)
-   * falseador: Dentro do regime, uma restrição de acesso sem enquadramento em exceção categorizada sustentada como válida.
-   * pai proposto: —
 * **contexto-delimitado** `[claudinho-conhecimento]`
    * origem: derivado (3/3 âncoras de derrota)
    * falseador: Dois modelos com termos homônimos de réguas incompatíveis convivendo no mesmo contexto sem produzir inconsistência.
+   * pai proposto: —
+* **dado-aberto-por-padrao** `[claudinho-arquiteto]`
+   * origem: proprio (0/1 âncoras de derrota)
+   * falseador: Dentro do regime, uma restrição de acesso sem enquadramento em exceção categorizada sustentada como válida.
    * pai proposto: —
 * **estruturacao-de-problema** `[claudinha-gestao-estrategica]`
    * origem: derivado (1/1 âncoras de derrota)
@@ -118,6 +118,10 @@
    * origem: proprio (0/2 âncoras de derrota)
    * falseador: Uma classe sem critério de identidade próprio cujas instâncias ainda assim pudessem ser contadas e re-identificadas de modo determinado.
    * pai proposto: —
+* **custo-da-expressividade** `[claudinho-conhecimento]`
+   * origem: proprio (0/2 âncoras de derrota)
+   * falseador: Um construtor que aumentasse estritamente o poder expressivo da linguagem sem alterar a complexidade do raciocínio em caso algum.
+   * pai proposto: —
 * **descricao-multinivel** `[claudinho-conhecimento]`
    * origem: proprio (0/3 âncoras de derrota)
    * falseador: Um conjunto documental cuja recuperação e prova de contexto nada perdessem com descrição plana e redundante.
@@ -133,10 +137,6 @@
 * **evento-como-entidade** `[claudinho-conhecimento]`
    * origem: proprio (0/2 âncoras de derrota)
    * falseador: Um domínio em que todo requisito sobre atos — agentes, tempo, partes — fosse expressável por atributos das entidades permanentes sem perda.
-   * pai proposto: —
-* **expressividade-vs-tratabilidade** `[claudinho-conhecimento]`
-   * origem: proprio (0/2 âncoras de derrota)
-   * falseador: Um construtor que aumentasse estritamente o poder expressivo da linguagem sem alterar a complexidade do raciocínio em caso algum.
    * pai proposto: —
 * **pratica-de-recuperacao** `[claudinho-conhecimento]`
    * origem: proprio (0/2 âncoras de derrota)
@@ -224,6 +224,10 @@
    * origem: proprio (0/1 âncoras de derrota)
    * falseador: aprovação humana por ação mantendo vigilância efetiva constante ao longo de sessões longas — a fadiga de aprovação não existiria e o trade-off colapsaria.
    * pai proposto: —
+* **quando-cabe-um-agente** `[claudinho-IA]`
+   * origem: proprio (0/2 âncoras de derrota)
+   * falseador: tarefa de subpassos imprevisíveis resolvida consistentemente melhor por fluxo fixo do que por loop, a custo comparável.
+   * pai proposto: —
 * **ranqueamento-multiestagio** `[claudinho-IA]`
    * origem: proprio (0/3 âncoras de derrota)
    * falseador: pipeline em que aumentar a precisão dos estágios tardios compense, no resultado final, relevância ausente do pool do primeiro estágio.
@@ -239,10 +243,6 @@
 * **transporte-de-estado-entre-sessoes** `[claudinho-IA]`
    * origem: proprio (0/3 âncoras de derrota)
    * falseador: sessão sucessora recuperando consistentemente estado que nenhuma sessão anterior inscreveu em artefato acessível.
-   * pai proposto: —
-* **workflow-vs-agente** `[claudinho-IA]`
-   * origem: proprio (0/2 âncoras de derrota)
-   * falseador: tarefa de subpassos imprevisíveis resolvida consistentemente melhor por fluxo fixo do que por loop, a custo comparável.
    * pai proposto: —
 
 ## produtos-digitais
@@ -262,10 +262,6 @@
 * **design-centrado-no-humano** `[claudinha-produto]`
    * origem: proprio (0/3 âncoras de derrota)
    * falseador: Processos que satisfazem as quatro condições produzindo sistemas rejeitados pelos usuários na mesma taxa que processos que as ignoram.
-   * pai proposto: —
-* **design-reality-gap** `[claudinha-produto]`
-   * origem: proprio (0/3 âncoras de derrota)
-   * falseador: Projetos com gaps grandes e não reduzidos em várias dimensões sucedendo na mesma taxa que projetos com gaps pequenos.
    * pai proposto: —
 * **entrega-vs-resultado** `[claudinha-gestao-estrategica]`
    * origem: derivado (1/1 âncoras de derrota)
@@ -295,9 +291,9 @@
    * origem: proprio (0/2 âncoras de derrota)
    * falseador: Releases fatiados por camada técnica entregando valor verificável por usuário na mesma taxa que fatias de jornada completa.
    * pai proposto: —
-* **outcome-sobre-output** `[claudinha-produto]`
-   * origem: proprio (0/2 âncoras de derrota)
-   * falseador: Entregas sem qualquer mudança de comportamento mensurável produzindo sistematicamente o resultado de negócio pretendido.
+* **gap-desenho-realidade** `[claudinha-produto]`
+   * origem: proprio (0/3 âncoras de derrota)
+   * falseador: Projetos com gaps grandes e não reduzidos em várias dimensões sucedendo na mesma taxa que projetos com gaps pequenos.
    * pai proposto: —
 * **problema-perverso** `[claudinha-gestao-estrategica]`
    * origem: derivado (1/1 âncoras de derrota)
@@ -307,21 +303,21 @@
    * origem: derivado (1/1 âncoras de derrota)
    * falseador: Um problema social ou de projeto cujo enunciado permaneceu estável e cuja solução foi verificada contra teste fixado antes do trabalho e aceito por todos os atores.
    * pai proposto: —
-* **quatro-riscos-de-produto** `[claudinha-produto]`
+* **resultado-sobre-entrega** `[claudinha-produto]`
+   * origem: proprio (0/2 âncoras de derrota)
+   * falseador: Entregas sem qualquer mudança de comportamento mensurável produzindo sistematicamente o resultado de negócio pretendido.
+   * pai proposto: —
+* **riscos-de-produto** `[claudinha-produto]`
    * origem: proprio (0/2 âncoras de derrota)
    * falseador: Produtos construídos sem evidência contra um dos quatro riscos falhando na mesma taxa dos que a coletaram.
    * pai proposto: product-discovery
-* **teste-de-usabilidade-diy** `[claudinha-produto]`
+* **teste-de-usabilidade-informal** `[claudinha-produto]`
    * origem: proprio (0/2 âncoras de derrota)
    * falseador: Rodadas recorrentes de três participantes deixando sistematicamente de revelar os problemas mais graves que amostras grandes revelam.
    * pai proposto: —
 
 ## seguranca-privacidade
 
-* **abertura-por-padrao** `[claudinho-arquiteto]`
-   * origem: derivado (1/1 âncoras de derrota)
-   * falseador: Dentro do regime, uma restrição de acesso sem enquadramento em exceção categorizada sustentada como válida.
-   * pai proposto: —
 * **acesso-delegado** `[claudinho-seguranca]`
    * origem: proprio (0/2 âncoras de derrota)
    * falseador: Arranjo que entrega ao terceiro a credencial do dono e ainda assim permite revogar só aquele terceiro, sem afetar os demais acessos do dono.
@@ -353,6 +349,10 @@
 * **criptoperiodo** `[claudinho-seguranca]`
    * origem: proprio (0/3 âncoras de derrota)
    * falseador: Chave cujo uso indefinido não aumente nem o material de criptanálise disponível nem o alcance do dano em caso de comprometimento.
+   * pai proposto: —
+* **dado-aberto-por-padrao** `[claudinho-arquiteto]`
+   * origem: derivado (1/1 âncoras de derrota)
+   * falseador: Dentro do regime, uma restrição de acesso sem enquadramento em exceção categorizada sustentada como válida.
    * pai proposto: —
 * **dano-de-privacidade-sem-incidente** `[claudinho-seguranca]`
    * origem: proprio (0/3 âncoras de derrota)
