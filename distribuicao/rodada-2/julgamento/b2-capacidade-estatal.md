@@ -155,26 +155,27 @@ dados seguia sendo corrigido a partir dos erros que apareciam em produção.
 - pai proposto: `armadilha-de-capacidade`
 - substitui: `carga-prematura` (base)
 
-### lado-da-traducao
+### responsabilidade-de-traduzir
 
 ```
-rotulo: Lado da tradução
+rotulo: Responsabilidade de traduzir
 natureza: modelo
 estatuto: doutrinario
 ```
 
 **definição.** Quando dois sistemas com vocabulários diferentes precisam
-conversar, alguém tem que traduzir — e muda tudo de que lado a tradução mora.
-No destino, um time só faz o trabalho uma vez, confere o que entra e devolve
-erro dizendo o que faltou. Na origem, cada um dos muitos remetentes traduz por
-conta própria, e o mais fraco deles define a qualidade do conjunto.
+conversar, alguém tem que traduzir — e o que decide o resultado é de quem é
+esse trabalho. No destino, um time só o faz uma vez, confere o que entra e
+devolve erro dizendo o que faltou. Na origem, cada um dos muitos remetentes
+traduz por conta própria, e o mais fraco deles define a qualidade do conjunto.
 
-Essa escolha raramente é tomada: o centro publica o vocabulário canônico,
-obriga seu uso e o ônus de falar essa língua cai por omissão em quem tem menos
-capacidade. Na Rede Nacional de Dados em Saúde o indicador da falha se chama
-taxa de rejeição — nome que localiza o erro em quem enviou, quando quem o
-produz é a configuração de quem recebe. No Pix e no login gov.br a tradução
-está do outro lado: o centro recebe, confere e responde com erro nomeado.
+Não se trata de culpa, e sim de onde o trabalho fica — e ele quase sempre é
+atribuído por omissão: o centro publica o vocabulário canônico, obriga seu uso
+e não diz quem converte. Na Rede Nacional de Dados em Saúde a integração ficou
+escrita como responsabilidade do gestor de cada ente, e o indicador da falha se
+chama taxa de rejeição, nome que localiza o erro em quem enviou. No Pix e no
+login gov.br o trabalho está do outro lado: o centro recebe, confere e responde
+com erro nomeado.
 
 - obras-âncora: `c66f85c1-d731-4c61-b17b-0f3bf590563e` (Estudo de caso: RNDS)
   **[wiki]**, `49b89d8c-a8d0-478b-b803-b3819aad0ed1` (Estudo de caso: gov.br)
@@ -187,7 +188,7 @@ está do outro lado: o centro recebe, confere e responde com erro nomeado.
 - substitui: `direcao-da-autoridade-semantica` (base)
 
 Slug proposto no lugar do da base: o rótulo antigo não diz de que trata e o
-novato não o chuta. Decisão do dono. A entrada é linkada na wiki sob
+novato não o chuta. A entrada é linkada na wiki sob
 `Ontologias/`, e a fronteira com `estudos-ontologias` também é dele.
 
 ## Candidatos com uma âncora só
