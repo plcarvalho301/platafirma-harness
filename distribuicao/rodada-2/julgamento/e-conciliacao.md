@@ -124,7 +124,21 @@ b registra o que cada cadeira propôs e não se reescreve; a régua vigente dest
 * caso falseador: Uma troca integral das atividades que altere o ganho percebido pelo solicitante em cada etapa sem alterar nada no fluxo — o corte não separaria os dois.
 * conciliação: renomeia `fluxo-de-valor` [c-arquiteto], cuja régua já se dava inteira por contraste. `processo-de-negocio` permanece entrada autônoma.
 
+## Hierarquia declarada
+
+As sete relações `pai-proposto` escritas pelas cadeiras nas propostas. Nenhuma relação foi acrescentada na conciliação.
+
+| filho | pai | pai vem de | declarou |
+|---|---|---|---|
+| `acesso-delegado` | `autorizacao` | base | c-seguranca |
+| `governanca-dados` | `governanca` | base | c-arquiteto |
+| `governanca-publica` | `governanca` | base | c-gestao-estrategica |
+| `interacao-tardia` | `recuperacao-densa` | rodada 2 — lavrar o pai antes do filho | c-IA |
+| `isolamento-de-contexto-por-delegacao` | `orquestracao-multi-agente` | base | c-IA |
+| `recuperacao-densa` | `recuperacao-semantica` | base | c-IA |
+| `riscos-de-produto` | `product-discovery` | base | c-produto |
+
 ## Aberto
 
 * `governanca` é pai proposto de `governanca-dados` e `governanca-publica` e não ocorre em obra nenhuma. Sem régua própria, os dois ficam sem pai.
-* `c-propostas-ficha.md` e `d-extrato-produto.md` carregam slugs anteriores à reescrita; regerar por `gera.py` antes de citar slug a partir deles.
+* `c-propostas-ficha.md` e `d-extrato-produto.md` carregam slugs anteriores à reescrita e não têm gerador vigente: só o caso-falseador de c continua válido, casado por conteúdo, não por slug.
