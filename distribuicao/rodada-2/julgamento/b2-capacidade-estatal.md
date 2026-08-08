@@ -191,9 +191,98 @@ Slug proposto no lugar do da base: o rótulo antigo não diz de que trata e o
 novato não o chuta. A entrada é linkada na wiki sob
 `Ontologias/`, e a fronteira com `estudos-ontologias` também é dele.
 
-## Candidatos com uma âncora só
+### exigencia-sem-instrumento
 
-Não propostos — a cota do passo 5 exige duas.
+```
+rotulo: Exigência sem instrumento
+natureza: fenomeno
+estatuto: doutrinario
+```
+
+**definição.** Mandar alguém entregar num formato exige entregar também a
+ferramenta que produz aquele formato — e é essa segunda metade que costuma
+faltar. Sem ela, a norma diz "valide antes de enviar" para quem não tem como
+validar, e o trabalho simplesmente não acontece.
+
+A diferença é visível em dois sistemas do mesmo Estado. Na escrituração fiscal
+digital, a Receita distribui de graça um programa que confere o arquivo do
+contribuinte antes do envio: a régua vai junto com a obrigação, executável. Na
+Rede Nacional de Dados em Saúde, a orientação é conferir a conformidade ao
+modelo antes de enviar, sem que exista programa equivalente — e no Cadastro
+Ambiental Rural o ajuste fino do polígono volta para um agricultor que não tem
+como fazê-lo. Entregar o dicionário executável eleva o piso de quem está na
+ponta; entregar só a exigência o rebaixa.
+
+- obras-âncora: `cb45fef0-4e88-4abb-8f17-e8f8648d5afc` (Estudo de caso: SPED)
+  **[wiki]**, `c66f85c1-d731-4c61-b17b-0f3bf590563e` (Estudo de caso: RNDS)
+  **[wiki]**, `f051def6-1fd0-4c2b-8246-0d669ae66e2e` (Estudo de caso: CAR/SICAR)
+  **[wiki]**
+- caso falseador: pontas de baixa capacidade entregando com a mesma qualidade
+  quando recebem só a norma e quando recebem norma mais ferramenta — o
+  instrumento não faria trabalho.
+- pai proposto: `responsabilidade-de-traduzir`
+- substitui: —
+
+### procedencia-vs-corretude
+
+```
+rotulo: Procedência vs. corretude
+natureza: fenomeno
+estatuto: doutrinario
+```
+
+**definição.** Uma garantia pode cobrir duas coisas muito diferentes: que o
+objeto é mesmo o que foi selado e veio de quem diz ter vindo, ou que o que ele
+afirma está certo. Quase todo mecanismo de confiança entrega a primeira, e é
+lido como se entregasse a segunda.
+
+Na urna eletrônica, conferir o resumo digital prova que o programa em execução
+é o que foi lacrado na cerimônia pública — não prova que o programa lacrado faz
+o que diz fazer. Na nota fiscal eletrônica, a autorização de uso devolvida pela
+Secretaria da Fazenda confere assinatura, leiaute e numeração; o mérito do que
+está declarado continua sendo responsabilidade de quem emitiu. Confundir as
+duas é atribuir ao selo uma garantia que ninguém deu.
+
+- obras-âncora: `700724ce-589a-430f-8800-31dab21b3cbb` (Estudo de caso: Urna)
+  **[wiki]**, `cb45fef0-4e88-4abb-8f17-e8f8648d5afc` (Estudo de caso: SPED)
+  **[wiki]**
+- caso falseador: um mecanismo de atestação cuja verificação de origem implique,
+  por construção, a correção do conteúdo atestado.
+- pai proposto: —
+- substitui: `procedencia-vs-corretude` (base)
+
+### cegueira-relacional
+
+```
+rotulo: Cegueira relacional
+natureza: fenomeno
+estatuto: doutrinario
+```
+
+**definição.** A ferramenta deixa a pessoa produzir um registro perfeitamente
+válido sozinho, sem nunca mostrar o que já está registrado e vai colidir com
+ele. Cada um acerta a sua parte e o conjunto sai errado — e o erro só aparece
+muito depois, na conferência.
+
+No Cadastro Ambiental Rural o programa oficial baixa a foto aérea e deixa o
+técnico desenhar o limite da propriedade orientado pelo terreno, sem trazer os
+limites dos vizinhos já cadastrados. O polígono fica fechado e válido, e invade
+o do lado. Não é fraude nem incompetência de quem desenha: é desenhar limite de
+vizinhança no escuro, porque a ferramenta foi construída sem enxergar o
+vizinho.
+
+- obras-âncora: `f051def6-1fd0-4c2b-8246-0d669ae66e2e` (Estudo de caso:
+  CAR/SICAR) **[wiki]**, `d17c8ab4-a0e2-4e3e-ac6c-6494f33895c3` (Estudo de caso:
+  CadÚnico) **[wiki]**
+- caso falseador: uma ferramenta que não expõe o estado já registrado e cujos
+  artefatos colidem entre si na mesma taxa de uma que o expõe no momento da
+  produção.
+- pai proposto: —
+- substitui: `cegueira-relacional` (base)
+
+## Candidatos sem lastro suficiente
+
+Não propostos — a cota do passo 5 exige duas âncoras do lote.
 
 - **`congelamento-por-criticidade`** — o sistema que não pode parar também não
   pode ser reorganizado, então a desordem deixa de ser corrigível e passa a ser
@@ -206,6 +295,21 @@ Não propostos — a cota do passo 5 exige duas.
   tradução: o login gov.br acerta a execução e transfere por escrito o
   acompanhamento às pontas. Âncora: Estudo de caso: gov.br **[wiki]**. O próprio
   case rebaixa o eixo a higiene de API; entra como candidato, não como proposta.
+
+- **`bifurcacao-arquitetural`** — a plataforma central absorve a heterogeneidade
+  de quem a consome, ou obriga o órgão a manter dois jeitos de construir
+  sistema, o normal e o conformado a ela. Âncora: Estudo de caso: Estaleiro
+  **[wiki]**, que é pergunta formulada sem resposta — responder exige relato de
+  órgão contratante.
+- **`categoria-residual`** — o domínio que nenhum sistema representa vai parar
+  no sistema genérico de protocolo, e o volume acumulado ali mede o que nunca
+  foi modelado. Achei o material: `Frente:paper-capability-trap/case-sei`. Não
+  vira âncora — a obra não está no lote.
+- **`capacidade-de-avaliar`** — o órgão não terceiriza só o sistema, terceiriza
+  o juízo sobre o sistema: elimina alternativas sem dispor do vocabulário para
+  compará-las, e o instrumento da decisão registra a eliminação como se fosse
+  análise. Achei o material: `Frente:paper-capability-trap/case-petrvs`. Não
+  vira âncora — a obra não está no lote.
 
 ## Homônimo fora do acervo
 
