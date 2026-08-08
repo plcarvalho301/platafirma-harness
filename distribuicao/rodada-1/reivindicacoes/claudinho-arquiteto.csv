@@ -1,0 +1,57 @@
+obra_id,nota
+3c66afe9-b83f-4b6b-aafd-b4ea658d446d,"Corpo de conhecimento canônico de arquitetura de negócios: mapa de capacidades, fluxo de valor e organização — é a régua para definir capacidade na PlataFirma."
+5d4556a3-9715-4988-b801-e819ad48f47d,"Método de arquitetura corporativa (ADM) e ligação entre camada de negócio, dados, aplicação e tecnologia — referência de estrutura de decisão arquitetural."
+def17e8f-95c1-431f-b64a-ef110235030e,Fundamenta metodologicamente o que é arquitetura de negócios como disciplina; uso para defender o recorte da head contra a leitura de que arquitetura é só software.
+acd7590d-e3f9-4282-a023-5c8c0f698bd4,Régua de definição de problema antes de arquitetar: de quem é o problema e qual é o problema real — usada em todo reenquadramento que faço.
+94d1793e-30b2-416a-bb79-48579d6e77ff,Cascata de objetivos corporativos para objetivos de TI: é o instrumento que uso para justificar alinhamento entre objetivo de negócio e decisão técnica.
+ccc19c82-6204-4c1c-a8f2-c8a76a093b2c,Framework de governança que separa governar de gerenciar — distinção que sustento em toda decisão de responsabilidade entre cadeiras.
+d47bad12-585f-4acf-924d-4d62395b749c,Catálogo de processos habilitadores; base para modelar processo do negócio sem inventar taxonomia própria.
+9c23b902-9501-48f3-add0-75bfaeec4978,Referência de modelagem e gestão de processos do negócio no setor público — processo é objeto direto da head.
+bdeb0143-35c4-4c74-8f4f-18ba2dfc21bd,Soft Systems Methodology: método para modelar sistema de atividade humana quando o problema não está estruturado — arquitetura de negócios antes do desenho.
+a640b765-42e6-4463-bd4f-5f4a28ad2d9a,Planejamento interativo de Ackoff: régua para decidir o que projetar de trás pra frente a partir do fim desejado.
+ad68ae5e-2f64-4ba4-bf2d-74735f723fb7,Métodos de estruturação de problema (PSM) para situação com conflito e incerteza — ferramenta de análise antes de fixar arquitetura.
+c70e4339-4aff-4607-ac0e-abf2a95142e0,Wicked problems: a razão pela qual decisão de arquitetura de negócios não tem critério de parada objetivo — cito em ADR de escopo.
+dc3404fc-d73f-4ead-83e4-1812a83ae109,Simon sobre problema mal estruturado: base para decidir quando parar de refinar e fixar uma decisão difícil de reverter.
+49689a0b-bdb6-4707-8f51-b7d742642eaa,Configurações organizacionais de Mintzberg: régua para casar estrutura organizacional com capacidade que ela precisa sustentar.
+8ab6b294-3113-40a0-9b30-bfef4932199d,Lei de Conway na fonte: estrutura de comunicação determina forma do sistema — argumento que uso ao desenhar fronteira de componente.
+2216a203-568e-485b-b822-094fc3552cb5,Fronteira de time como força de arquitetura e carga cognitiva como limite de contexto delimitado — decisão de topologia é decisão arquitetural.
+be47cca3-dbb6-4024-8ea2-d781cda1dcf7,"Fronteira da firma e custo de transação: régua para decidir o que é capacidade interna e o que se contrata. Reivindico contra capacidade-estatal — o uso aqui é desenhar fronteira do negócio, não medir Estado."
+f7563ebc-191c-43ce-bbef-434ed84f8ca3,Regra de dependência e separação de política e detalhe — critério direto de organização de componentes.
+ea6739f1-d054-48b1-8558-2fde8c25429e,Características arquiteturais e trade-off explícito; vocabulário de estilo arquitetural que uso em ADR.
+c40aee12-0586-4733-a2bc-a966e918a51c,Atributos de qualidade e táticas: método para transformar requisito de negócio em decisão estrutural.
+6b8c4d0a-5daf-4ec2-b730-a4c4dd541b7e,Arquitetura como fluxo contínuo de decisão em vez de fase — sustenta o formato incremental dos ADRs.
+47d4d047-25cb-47c4-bf25-53718bcb35a6,Método de modernização por fronteira de domínio; régua para decidir ordem de quebra de sistema existente.
+d4ca606e-d882-474a-8425-638a9a1ab144,Trata decisão arquitetural como conhecimento gerenciável — fundamento do próprio registro de ADR da PlataFirma.
+76356989-ff41-4497-9097-6da1152e16ef,Profundidade de módulo e ocultação de complexidade: critério de decomposição que aplico a componente e substrato.
+392cc039-ba43-4f0f-b955-08d9a42514da,Parnas na fonte: critério de decomposição por ocultação de decisão de projeto — a régua original de módulo.
+dcdcdb8f-07fb-4a88-abf7-e68a39036c07,Complexidade essencial versus acidental: uso para recusar promessa de ganho estrutural onde o ganho é acidental.
+67c4ae45-a40c-4754-8c00-847e817dd370,"Materializa contexto delimitado, ports and adapters e unidade de trabalho em código — ponte entre decisão de arquitetura e forma de implementação."
+23d50d2d-007f-4523-a82b-348309d861f9,"Vocabulário canônico de comunicação entre componentes (mensageria, roteamento, transformação) — régua da malha de mensageria."
+8780a2a8-018b-408a-898a-21d3b93cb86c,"Decomposição em serviços e acoplamento entre eles é decisão difícil de reverter. Reivindico contra engenharia-software: aqui é escolha de fronteira, não prática de construção."
+c2d7efe8-2057-48d6-803a-b4cd5f99dbef,"Evento como contrato entre contextos e propriedade do esquema. Reivindico contra engenharia-software pelo mesmo motivo: define fronteira, não pipeline."
+73eaf549-b429-4d23-853a-c5eaf22b54d2,"Trade-off de armazenamento, replicação e consistência — plano diretor de guarda e acesso de dados no nível de decisão."
+02359e1c-e2d4-4461-965c-32eb7b3afbf8,Padrões de estabilidade e antipadrões de falha: critério estrutural para desenhar limite entre componentes que se chamam.
+b34d5fa6-ce67-48b9-949a-293bb67e3fea,Entidade como limite de transação — liga agregado de DDD à realidade distribuída; base do agregado que escolho.
+ef949ef2-da4d-49a2-a760-4a8d5af605fa,Ordenação causal e relógio lógico: fundamento para decidir consistência e ordem de evento entre componentes.
+fdda4108-8a68-4599-b2ae-9dcdc8ce4738,Modularidade como opção econômica: formaliza por que fronteira bem posta vale dinheiro — argumento de custo em ADR.
+1cfaaec6-f92e-429a-a647-2062bbbcc489,Estrutura de documentação de decisão arquitetural — formato do artefato central da minha cadeira.
+69bcfac2-af6c-4f52-b60c-f23470aaa10b,Origem do ADR como gênero de documento; régua do que entra e do que não entra no registro.
+70f81706-ef82-4655-83aa-bade4319dab4,"Modela decisão de arquitetura como entidade com relações (supersede, depende) — base conceitual do meu índice de ADRs."
+f4c2960f-5d85-4324-b7ed-ab1a79c483e0,Captura e reuso de conhecimento arquitetural ao longo do desenvolvimento — sustenta a exigência de rastro de decisão.
+eae6db01-442c-4635-9cd7-0b5ad7a92f59,Pilares e perguntas de revisão arquitetural: checklist de trade-off que aplico mesmo fora da AWS.
+520e656f-9d2e-4915-8c22-eb01089ba714,Corpo de conhecimento de gestão de dados: define as áreas do plano diretor de dados que a arquitetura de dados precisa cobrir.
+0fde1528-69b7-4742-a517-dc7ae81bed1c,"Modelo operacional de governança de dados (papéis, autoridade, política) — régua de quem decide sobre dado."
+0e7870fd-dc2a-46de-aa16-4097dc9b2263,Dado como produto e propriedade por domínio: alternativa arquitetural que avalio contra o modelo centralizado.
+0da8836b-3d22-483d-89c3-45a3b3af3f27,"Modelo de qualidade de dados (ISO 25012). Reivindico contra engenharia-software: qualidade de dado é padrão de governança, não etapa de pipeline."
+a41d1cb6-899d-4c2c-8aab-d2c31cc2ad20,Instrumento de avaliação de maturidade de dados; usado para diagnosticar lacuna antes de propor plano diretor.
+129fbd44-6695-4885-9078-cd7ab0cf996f,Define papéis e responsabilidades de governança de dados — modelo de autoridade que espelho na divisão entre cadeiras.
+c1fc1d3a-71f7-492f-8dd6-83b4efbef9db,Padrão de descrição de conjunto de dados: régua de metadado para catálogo e acesso.
+89cff7b4-3dff-4c88-bd07-3af200efd55d,Governança de compartilhamento de dados e níveis de acesso — norma de referência para desenho de acesso entre domínios.
+b340e6db-53c6-4d4c-bb35-8f2dc8ef3d6f,Política de publicação e abertura de dado: define obrigação de acesso que a arquitetura de dados precisa acomodar.
+3cd24cc4-ad43-4bb0-b492-e9254689faa0,"Fonte de linguagem ubíqua, contexto delimitado e agregado — a régua central da gerência de design de domínios."
+49b1a703-38c8-476a-888f-b1beb4b0c357,Mapa de contexto e padrões de relação entre contextos; uso para decidir integração entre domínios.
+778bfb3f-ba6e-42bd-b3c5-5fc193fea4f0,"Heurística de escolha de subdomínio core, suporte e genérico — critério de onde investir modelagem."
+8ddb8db3-c72e-4b27-9de5-88370ec5b5fe,Revisão sistemática de adoção de DDD: evidência sobre o que falha na prática — freio empírico contra prescrição fácil.
+678ea005-b065-486e-8046-e850567b291f,"Liga fundamentação ontológica à decisão de modelo de domínio. Reivindico contra estudos-ontologias: o uso é desenhar agregado e contexto, não estudar ontologia."
+937af706-a6f2-4a8a-98e8-a3c660bfac0a,Deriva fronteira de serviço a partir do modelo de domínio. Reivindico contra estudos-ontologias pelo mesmo motivo: a saída é decomposição arquitetural.
+64f0c65b-cfe0-4dcc-aa28-033d42532586,"Notação para expressar entidade, agregado e serviço de domínio. Reivindico contra estudos-ontologias: é ferramenta de modelagem de domínio na engenharia."

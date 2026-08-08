@@ -26,8 +26,16 @@ for rot, ch in [
     ("embedding parcial", "embedding_parcial"),
     ("embedding_meta parcial", "embedding_meta_parcial"),
     ("objeto no store sem obra", "objeto_no_store_sem_obra"),
+    # arq:0027 — hoje 0 por construção (FK NOT NULL + CASCADE). Vigia, não descoberta.
+    ("documento sem obra (órfão)", "documento_sem_obra"),
+    ("chunk sem documento (órfão)", "chunk_sem_documento"),
 ]:
-    v = f[ch]
+    # `.get`, não indexação dura: chave nova no formatador sem contraparte no SQL levantava
+    # KeyError e derrubava a saída inteira por causa de uma linha.
+    v = f.get(ch)
+    if v is None:
+        print(f'  ? {rot:.<34} {"ausente":>5}')
+        continue
     print(f'  {"!" if v else " "} {rot:.<34} {v:>5}')
 print()
 print(f'  chunks: {k["total"]}  =  {k["textuais"]} textuais + {k["nao_textuais"]} não-textuais')
