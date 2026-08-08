@@ -4,9 +4,10 @@ Texto único e genérico — cola igual em toda sessão, sem editar nada. Cada
 cadeira se identifica sozinha pela própria persona ativa.
 
 Cadeiras que respondem: `claudinho-arquiteto`, `claudinho-conhecimento`,
-`claudinho-IA`, `claudinha-produto`, `claudinho-TI`, `claudinho-seguranca`,
+`claudinho-IA`, `claudinha-produto`, `claudinho-TI`,
 `claudinha-gestao-estrategica`. `claudinha-fabrica` e `claudinha-osint` não
-participam — não são cadeiras.
+participam — não são cadeiras. `claudinho-seguranca` usa
+`PROMPT-rodada-2-seguranca.md`.
 
 ---
 
