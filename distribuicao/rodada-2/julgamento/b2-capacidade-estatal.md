@@ -15,22 +15,23 @@ derrota de arbitragem, logo sem réplica.
 
 | bloco | obras | uso |
 |---|---|---|
-| estudos de caso de sistemas da APF | 10 | não recuperáveis — ver abaixo |
-| manuais operacionais SIAPE / eSocial / SIASS | 10 | lastro principal |
+| estudos de caso de sistemas da APF | 10 | lastro principal — lidos na wiki |
+| manuais operacionais SIAPE / eSocial / SIASS | 10 | lastro de modelo publicado |
 | compliance e controle interno (COSO, ISO 31000) | 9 | provável colisão externa |
 | normativos (LAI, 8.112, 8.159, 14.063, INs) | 8 | lastro de forma normativa |
 | teoria (APW, Cohen & Levinthal, Scott, Coase, Walsh & Ungson) | 6 | lastro de mecanismo |
 | demais | 11 | a triar |
 
-### Obras não recuperáveis
+### Instrumento de leitura dos estudos de caso
 
-Os 10 `Estudo de caso: <sistema>` — CadÚnico, Caixa Tem, CAR/SICAR, Estaleiro,
-gov.br, Pix, RNDS, SIGEPE, SPED, Urna. Catalogados em `obras.csv`, ausentes do
-índice: três consultas em ângulos distintos (arranjo de pagamentos; por que o
-Pix funcionou; cadastro único) não retornaram nenhum deles, e trouxeram no lugar
-o Manual de Padrões do Pix, o Decreto 10.046/2019 e o Manual do eSocial.
+Os 10 `Estudo de caso: <sistema>` não estão no índice vetorial: três consultas
+em ângulos distintos não retornaram nenhum deles. Eles moram na wiki, em
+`Frente:paper-capability-trap/case-<sistema>`, e são lidos por `get_page`. As
+âncoras marcadas **[wiki]** abaixo foram lidas ali, não no RAG.
 
-Não servem de âncora enquanto não forem ingeridos.
+A frente tem 14 páginas — as 10 catalogadas mais `case-petrvs`,
+`case-reforma-administrativa`, `case-sei` e `referencias`, que não constam de
+`obras.csv`.
 
 ## Conceitos
 
@@ -82,18 +83,58 @@ quando outro a executa.
 Delegar a execução do que é comum não custa nada. O que quebra é entregar a
 parte exclusiva sob contrato de escopo fechado: as regras dela ninguém de fora
 conhece de antemão, elas se descobrem enquanto o sistema é construído, e quem
-descobre é quem fica sabendo. O eSocial mostra a separação de pé — o leiaute
-dos eventos e as regras de vínculo são dos órgãos que o compõem, e o Serpro
-opera o ambiente que os recebe.
+descobre é quem fica sabendo. No Pix a separação está de pé — o Banco Central
+opera ele mesmo o diretório de chaves e a liquidação, e terceiriza transporte e
+execução periférica.
 
 - obras-âncora: `0d146df8-af09-4c5b-8c41-f983b481b407` (Manual do eSocial),
   `2b4a31fd-447a-4a32-a417-33c3ce00cdb4` (Manual de Padrões para Iniciação do
-  Pix v2.6.2)
+  Pix v2.6.2), `ef1f162c-5ad3-4235-a12a-cf81ae9f2ef4` (Estudo de caso: Pix)
+  **[wiki]**
 - caso falseador: um órgão que entregue a regra exclusiva sob escopo fechado e,
   encerrado o contrato, saiba especificar e evoluir essa regra tão bem quanto
   quem a construiu.
 - pai proposto: `armadilha-de-capacidade`
 - substitui: `titularidade-do-core` (base)
+
+### legibilidade-do-sistema
+
+```
+rotulo: Legibilidade do sistema
+natureza: disposicao
+estatuto: doutrinario
+```
+
+**definição.** Documentar tudo não é o mesmo que deixar navegável. Um sistema é
+legível quando a própria superfície mostra onde uma parte termina e a outra
+começa: qual porta dá no mesmo dado que qual outra, o que é tela e o que é base
+por baixo. Sem isso, a resposta está lá e ninguém acha — e quem procura conclui
+que o problema é ele.
+
+Quem consome um sistema ilegível não extrai o modelo dele por mais que leia.
+SIAPE, Sigepe e SouGov são três nomes de camadas de acesso sobre a mesma base
+de dados, e nem servidor nem integrador consegue dizer com segurança se são um
+ou três: a informação existe e está escrita, o que falta é a superfície
+sinalizar a fronteira.
+
+- obras-âncora: `60b18ee3-b1e9-400f-8119-98dbe14560b4` (Estudo de caso: SIGEPE)
+  **[wiki]**, `ef1f162c-5ad3-4235-a12a-cf81ae9f2ef4` (Estudo de caso: Pix)
+  **[wiki]**
+- caso falseador: consumidores que reconstroem o modelo de um sistema cuja
+  superfície não sinaliza fronteira nenhuma, na mesma taxa e no mesmo tempo em
+  que reconstroem o de um sistema que sinaliza.
+- pai proposto: —
+- substitui: `legibilidade-do-sistema` (base)
+
+## Candidatos com uma âncora só
+
+Não propostos — a cota do passo 5 exige duas.
+
+- **`congelamento-por-criticidade`** — o sistema que não pode parar também não
+  pode ser reorganizado, então a desordem deixa de ser corrigível e passa a ser
+  apenas documentada; documentação abundante vira sintoma da imobilidade, não
+  sinal de ordem. Âncora: Estudo de caso: SIGEPE **[wiki]**. Segunda âncora a
+  procurar em SPED, Urna ou Estaleiro.
 
 ## Homônimo fora do acervo
 
