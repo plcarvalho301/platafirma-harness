@@ -438,6 +438,16 @@ nome dos donos, dos que fiscalizam e de quem depende da organização. Não se
 confunde com gestão: gestão é fazer, governança é dizer o que se espera de quem
 faz e conferir depois se veio.
 
+### plano-de-gabinete
+Substitui `alto-modernismo` (base): rótulo que não diz nada fora da academia.
+
+A crença de que um plano bem desenhado no gabinete vale mais que o jeito que as
+pessoas já achavam de fazer no lugar — e que, por isso, dá para reorganizar
+cidade, lavoura ou repartição segundo o desenho, ignorando o que estava lá. Não
+é a técnica que define, é a fé de que a técnica basta. O sinal é a solução que
+chega pronta, idêntica para contextos diferentes, com o saber local tratado
+como atraso a corrigir.
+
 ### prevencao-a-fraude
 Impedir, detectar e responder a quem obtém vantagem indevida por engano ou
 falsidade. A parte que costuma ser esquecida é a primeira: prevenir é desenhar o
