@@ -22,7 +22,7 @@ substitui:
 rotulo: Interação tardia
 natureza: modelo
 estatuto: doutrinario
-definicao: Variante da recuperação densa em que cada lado é representado por múltiplos vetores no nível do token e o casamento é adiado para o escore (soma de máximas similaridades), preservando a codificação independente. Compra granularidade de casamento ao preço de uma ordem de grandeza a mais de índice.
+definicao: Consulta com mais de um conceito, comprimida em vetor único, colapsa num ponto médio que não corresponde a documento nenhum — o casamento fino se perde na média. A interação tardia responde a isso: cada lado vira múltiplos vetores no nível do token, a codificação segue independente (o índice segue pré-computável) e o casamento é adiado para o escore, como soma de máximas similaridades. Compra a granularidade que o vetor único borra, ao preço de uma ordem de grandeza a mais de índice.
 obras-ancora: 8488499a-032f-45e9-aa57-cc00062bf04a, 0abce3d7-d52a-4857-98e1-55f740854336
 caso-falseador: modelo de vetor único que iguale a qualidade do casamento termo-a-termo fino sem o custo adicional de índice — o trade-off que define a variante desapareceria.
 pai-proposto: recuperacao-densa
