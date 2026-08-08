@@ -35,6 +35,11 @@ A frente tem 14 páginas — as 10 catalogadas mais `case-petrvs`,
 
 ## Conceitos
 
+`outros-rotulos` corresponde a `acervo.conceito.outros_rotulos` (`text[]`), que
+existe no schema e não no template da rodada. Carrega o slug anterior e o termo
+estrangeiro, para que a troca de rótulo não perca a busca.
+
+
 ### armadilha-de-capacidade
 
 ```
@@ -184,6 +189,7 @@ com erro nomeado.
 - caso falseador: um arranjo em que cada remetente traduz por conta própria e a
   qualidade do dado recebido seja igual à de um arranjo em que o destino traduz
   e valida.
+- outros-rótulos: `direcao-da-autoridade-semantica`, `lado-da-traducao`
 - pai proposto: —
 - substitui: `direcao-da-autoridade-semantica` (base)
 
@@ -248,11 +254,11 @@ duas é atribuir ao selo uma garantia que ninguém deu.
   **[wiki]**
 - caso falseador: um mecanismo de atestação cuja verificação de origem implique,
   por construção, a correção do conteúdo atestado.
+- outros-rótulos: `procedencia-vs-corretude`, `garantia-de-origem`
 - pai proposto: —
 - substitui: `procedencia-vs-corretude` (base)
 
-Slug proposto no lugar do da base: o rótulo antigo não diz nada a quem chega de
-fora. Alternativa se preferir substantivo único: `garantia-de-origem`.
+
 
 ### cegueira-relacional
 
@@ -287,6 +293,17 @@ vizinho.
 
 Definição apenas. Natureza, estatuto, âncoras e falseador dessas entradas não
 são tocados aqui.
+
+### plano-de-gabinete
+Substitui o slug `alto-modernismo`. Outros rótulos: `alto-modernismo`,
+`high modernism`.
+
+A crença de que um plano bem desenhado no gabinete vale mais que o jeito que as
+pessoas já achavam de fazer no lugar — e que, por isso, dá para reorganizar
+cidade, lavoura ou repartição segundo o desenho, ignorando o que estava lá. Não
+é a técnica que define, é a fé de que a técnica basta. O sinal é a solução que
+chega pronta, idêntica para contextos diferentes, com o saber local tratado
+como atraso a corrigir.
 
 ### capacidade-absortiva
 Uma organização só enxerga o que já tem repertório para enxergar. Conhecimento
@@ -343,7 +360,7 @@ Receita e as secretarias estaduais mantêm o leiaute em colegiado, e a Sefaz
 Virtual autoriza documento para o estado que não opera ambiente próprio.
 
 ### independencia-gerencial
-Slug que não diz de que trata; `donos-independentes` decide os mesmos casos.
+Slug proposto: `donos-independentes`; outros rótulos: `independencia-gerencial`.
 
 Cada sistema de um conjunto é comprado, financiado e operado por um dono
 diferente, e continuaria funcionando se fosse desligado do conjunto. É essa
@@ -458,8 +475,8 @@ Serviço que várias áreas usam e nenhuma delas produz de forma diferente — f
 protocolo, login, compras — reunido num lugar só em vez de refeito em cada
 canto. É a fronteira do que se delega sem perda: como não carrega regra
 exclusiva de ninguém, entregá-lo ao mercado ou a um operador central é uso
-correto, não abdicação. O slug é ilegível e pede troca; `servico-comum` decide
-os mesmos casos.
+correto, não abdicação. Slug proposto: `servico-comum`; outros rótulos:
+`servico-compartilhado-generico-cross`.
 
 ## Candidatos sem lastro suficiente
 
