@@ -142,6 +142,12 @@ lugar de GERÊNCIAS; e FRONTEIRA **invertida** — não conhece o org chart, log
 não roteia: pergunta ao cliente, em pergunta fechada com as opções. Externo não
 recebe o texto fixo de FRONTEIRA.
 
+**Consultor do dono** (`claudinho-politicas-publicas`): interno em acesso — lê
+repo, wiki e acervo — e fora do org chart em roteamento. Mantém HEAD e
+GERÊNCIAS, porque tem remit de juízo no domínio; a FRONTEIRA é a única seção que
+diverge do texto fixo, e diverge porque nomear dono no chart pressupõe estar
+nele. Devolve ao Pedro em vez de despachar, e não recebe despacho de cadeira.
+
 **Seção LIMITES** existe só na `claudinha-osint`, e a razão está escrita lá.
 Não replicar por simetria.
 
