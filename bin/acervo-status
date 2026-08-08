@@ -24,15 +24,41 @@ for a in "$@"; do
 done
 
 # 1. store: a verdade sobre "armazenada" mora no MinIO, não no catálogo.
+#
+# Três buracos fechados aqui, todos do mesmo tipo — a lista encolhe e ninguém vê:
+#   (a) o `2>/dev/null` engolia o diagnóstico do `mc`. Quando ele falha o script morre pelo
+#       `pipefail`, mas morria MUDO, e o operador não via por quê.
+#   (b) o filtro descartava em silêncio: `except: continue` e `type != file`. `mc ls` NÃO é
+#       recursivo e reporta prefixo como `folder` — objeto que ganhe prefixo some da lista
+#       com o `mc` saindo 0. Agora prefixo e linha ilegível são CONTADOS e abortam.
+#   (c) não havia guarda de não-vazio, e `\copy` de arquivo vazio é sucesso no Postgres.
+#       Store vazio faz "armazenadas" ir a 0 e `catalogo_aponta_pro_vazio` explodir para o
+#       catálogo inteiro — alarme que parece descoberta e é defeito de coleta.
 for b in $BUCKETS; do
-  mc ls --json "$MC_ALIAS/$b" 2>/dev/null | python3 -c "
+  mc ls --json "$MC_ALIAS/$b" | python3 -c "
 import sys,json
+pastas=ilegiveis=0
 for l in sys.stdin:
+    if not l.strip(): continue
     try: o=json.loads(l)
-    except Exception: continue
-    if o.get('type')=='file': print('$b/'+o['key'])
+    except Exception:
+        ilegiveis+=1; continue
+    t=o.get('type')
+    if t=='file': print('$b/'+o['key'])
+    elif t=='folder': pastas+=1
+if pastas or ilegiveis:
+    print(f'bucket $b: {pastas} prefixo(s) e {ilegiveis} linha(s) ilegivel(is) -- '
+          'a listagem nao e recursiva, entao a lista esta INCOMPLETA', file=sys.stderr)
+    sys.exit(3)
 "
 done > "$TMP/store.txt"
+
+if [ ! -s "$TMP/store.txt" ]; then
+  echo "acervo-status: a listagem do store saiu VAZIA — abortando antes de medir." >&2
+  echo "  Sem isto, 'armazenadas' iria a 0 e o alarme apontaria para o catálogo inteiro." >&2
+  echo "  Confira o alias: mc ls $MC_ALIAS/acervo | head" >&2
+  exit 3
+fi
 docker cp "$TMP/store.txt" "$PG:/tmp/acervo-status-store.txt" >/dev/null
 
 # 2. a escada, medida degrau a degrau contra o store carregado.
@@ -51,7 +77,13 @@ SELECT o.id, o.titulo, o.objeto, o.endereco,
        COALESCE(c.n_emb,0)   AS n_emb,
        COALESCE(c.n_meta,0)  AS n_meta
 FROM acervo.obra o
-LEFT JOIN documents d ON d.id = o.objeto_id
+-- A ponte é `documents.obra_id`, a FK que a migração 027 criou — não `d.id = o.objeto_id`.
+-- `documents.id` é o sha do arquivo INGERIDO e `obra.objeto_id` é o sha do objeto da obra;
+-- eles divergem em 44 das 667 obras com moradia no MinIO (medido 08/08/2026), e a ponte
+-- antiga simplesmente não casava nessas. Efeito: o instrumento declarado como ÚNICA fonte
+-- de número do acervo dizia 625 obras com documento onde há 667, e 624 ingeridas onde há
+-- 666. Subcontava 42 — e a fuga `objeto_sem_documento` acusava obras que estão no índice.
+LEFT JOIN documents d ON d.obra_id = o.id
 LEFT JOIN (
   SELECT document_id,
          count(*)                                                                            AS n_chunk,
@@ -81,7 +113,19 @@ SELECT json_build_object(
     'embedding_parcial',         (SELECT count(*) FROM e WHERE n_texto > 0 AND n_emb  < n_texto),
     'embedding_meta_parcial',    (SELECT count(*) FROM e WHERE n_texto > 0 AND n_meta < n_texto),
     'objeto_no_store_sem_obra',  (SELECT count(*) FROM store_obj s
-                                    WHERE NOT EXISTS (SELECT 1 FROM acervo.obra o WHERE o.objeto = s.objeto))
+                                    WHERE NOT EXISTS (SELECT 1 FROM acervo.obra o WHERE o.objeto = s.objeto)),
+    -- O derivado órfão, invariante da arq:0027: 'a permanência de um derivado depende da
+    -- existência da obra, e de nada mais'. Entra como FUGA e não como sexto degrau porque a
+    -- escada é POR OBRA, e órfão por definição não tem obra — além de 'cinco degraus' estar
+    -- cravado no tool-manifest.
+    -- Hoje a regra se cumpre POR CONSTRUÇÃO: `documents.obra_id` é NOT NULL com FK ON DELETE
+    -- CASCADE, e `chunks.document_id` cascateia de `documents`. Estas duas linhas leem 0 e
+    -- DEVEM ler 0. Existem para o dia em que a construção sair — a arq:0027 admite varredura
+    -- periódica como forma, e até agora essa varredura era feita à mão, não pelo instrumento.
+    'documento_sem_obra',        (SELECT count(*) FROM documents d
+                                    WHERE NOT EXISTS (SELECT 1 FROM acervo.obra o WHERE o.id = d.obra_id)),
+    'chunk_sem_documento',       (SELECT count(*) FROM chunks c
+                                    WHERE NOT EXISTS (SELECT 1 FROM documents d WHERE d.id = c.document_id))
   ),
   'chunks', json_build_object(
     'total',      (SELECT count(*) FROM chunks),
@@ -115,10 +159,13 @@ SELECT o.titulo, o.objeto FROM acervo.obra o
  WHERE o.objeto IS NOT NULL AND NOT EXISTS (SELECT 1 FROM store_obj s WHERE s.objeto=o.objeto);
 \echo '-- obra com objeto no store e sem documento no índice'
 SELECT o.titulo, o.objeto FROM acervo.obra o JOIN store_obj s USING (objeto)
- WHERE NOT EXISTS (SELECT 1 FROM documents d WHERE d.id = o.objeto_id);
+ WHERE NOT EXISTS (SELECT 1 FROM documents d WHERE d.obra_id = o.id);
 \echo '-- obra com documento e zero chunk (skip_stub / needs_ocr / sem extrator)'
-SELECT o.titulo, d.perfil, d.needs_ocr FROM acervo.obra o JOIN documents d ON d.id = o.objeto_id
+SELECT o.titulo, d.perfil, d.needs_ocr FROM acervo.obra o JOIN documents d ON d.obra_id = o.id
  WHERE NOT EXISTS (SELECT 1 FROM chunks c WHERE c.document_id = d.id) ORDER BY d.needs_ocr DESC, o.titulo;
+\echo '-- derivado órfão: documento sem obra (invariante arq:0027; 0 por construção hoje)'
+SELECT d.id, d.arquivo FROM documents d
+ WHERE NOT EXISTS (SELECT 1 FROM acervo.obra o WHERE o.id = d.obra_id);
 \echo '-- objeto no store sem obra no catálogo'
 SELECT s.objeto FROM store_obj s WHERE NOT EXISTS (SELECT 1 FROM acervo.obra o WHERE o.objeto=s.objeto);
 EOSQL
