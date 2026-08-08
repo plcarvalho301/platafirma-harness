@@ -8,12 +8,6 @@ cafaba4e-0db9-4139-bf5e-0b9517ce0298,"Rational Analysis for a Problematic World 
 fb5705a1-f598-4f51-9d18-deb738c190ea,"The Art of Problem Solving, Volume 1: The Basics",,(claudinha-produto),
 8faad734-b28f-465e-8e0f-6433666958c1,Designing AI resistant technical evaluations [snapshot 2026-08-01],,(claudinho-IA),
 a88e7493-9ce7-4e11-b032-5117dde68c96,ISO/IEC 42001:2023 — AI Management System,ia,(claudinho-IA),
-c0a2eaed-0890-4f75-8a20-c73a7d8c2fec,Expanded Data Architecture Cheat Sheet,,(claudinho-arquiteto — consultado),
-24c410ef-3831-4845-babd-bc9a0f6bae9e,Graph Theory and Complex Networks: An Introduction,estudos-ontologias,(claudinho-arquiteto — consultado),
-ee393d21-5c43-4df0-b251-895740d105a3,Information and documentation — WARC file format (BS ISO 28500:2009),engenharia-software,(claudinho-arquiteto — consultado),
-f3bce70a-4d4d-4e68-914a-625e569a77be,Networks: An Introduction,estudos-ontologias,(claudinho-arquiteto — consultado),
-067294af-e21b-4892-88ca-23be59b8bf9f,Robots Exclusion Protocol,seguranca-privacidade,(claudinho-arquiteto — consultado),
-9a99648f-eeee-43d2-ba78-869d44feb9b6,The State of Dark Data,,(claudinho-arquiteto — consultado),
 8eaa66ef-678b-4250-a90f-3b5fd4a47429,EDPB-EDPS Joint Opinion 1/2026 on the Proposal for a Regulation as regards the simplification of the implementation of harmonised rules on artificial intelligence (Digital Omnibus on AI),,(claudinho-seguranca),
 8527133d-af44-434f-b9cb-0f513d7ffc49,Simple Sabotage Manual — Strategic Services Field Manual No. 3,,(gestao-estrategica),
 7fbf6747-a898-4c54-af9a-7157385fcaf8,Apresentação do PowerPoint,,DESCARTE: exemplar-defeituoso,
@@ -149,6 +143,8 @@ bda147a5-088b-4690-814a-813072965e52,Internal Control Audit and Compliance: Docu
 37c819ff-7d58-48d5-9aa3-6034ed691908,Pilares do Compliance - CGU,capacidade-estatal,capacidade-estatal,ce-prescritivo
 46ec2bca-2c0e-4177-a8a3-96e3cf06b625,Transparência e uso de dados em gestão de pessoas no setor público: guia de referência — sumário executivo,capacidade-estatal,capacidade-estatal,ce-prescritivo
 17cf7752-18c9-405e-bef5-476f72935796,manual de procedimento do extrator de dados DW SIASS,capacidade-estatal,capacidade-estatal,ce-prescritivo
+24c410ef-3831-4845-babd-bc9a0f6bae9e,Graph Theory and Complex Networks: An Introduction,estudos-ontologias,estudos-ontologias,onto-engenharia
+f3bce70a-4d4d-4e68-914a-625e569a77be,Networks: An Introduction,estudos-ontologias,estudos-ontologias,onto-engenharia
 29d11a54-fca4-47db-b84a-89a08fd3c384,A Cooperative Approach between Intelligence and Policymakers at the National Level: Does it Have a Chance?,,inteligencia,
 092a5338-91d1-491b-804a-5fd92e22653b,Application of Future Studies by Intelligence Service to Optimize Public Policies,,inteligencia,
 d2ca0dda-5076-4dfc-883d-efcd273385e8,Artificial Intelligence Risk Management Framework (AI RMF 1.0),ia,inteligencia,
@@ -198,3 +194,7 @@ f3efe3d3-7c72-4370-a18b-41e0e2321860,"Spies, Lies, and Algorithms: The History a
 09862f70-8161-481f-a139-2292242db5a3,Structured Analytic Techniques for Intelligence Analysis,,inteligencia,
 ceddbfac-9c14-4bb4-bf35-6d6733894d00,Structured Analytic Techniques: Taxonomy and Technique Selection for Information and Intelligence Analysis Practitioners,,inteligencia,
 283867d3-e8db-4d60-ba50-8565814f2b86,"Technical Specifications for Construction and Management of Sensitive Compartmented Information Facilities (IC Tech Spec for ICD/ICS 705), Version 1.5",,inteligencia,
+c0a2eaed-0890-4f75-8a20-c73a7d8c2fec,Expanded Data Architecture Cheat Sheet,,platafirma,acervo (NOVO)
+ee393d21-5c43-4df0-b251-895740d105a3,Information and documentation — WARC file format (BS ISO 28500:2009),engenharia-software,platafirma,acervo (NOVO)
+067294af-e21b-4892-88ca-23be59b8bf9f,Robots Exclusion Protocol,seguranca-privacidade,platafirma,acervo (NOVO)
+9a99648f-eeee-43d2-ba78-869d44feb9b6,The State of Dark Data,,platafirma,acervo (NOVO)
