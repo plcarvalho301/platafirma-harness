@@ -1,0 +1,44 @@
+obra_id,nota
+be3803d2-2f8d-4c9f-89c2-9b4523edbc7e,"Régua de design de interação: define comportamento de tela a partir do objetivo do usuário, antes de qualquer decisão de forma."
+79351cb2-400e-4732-bcc2-d69dfffd8c7c,"Régua de concepção de produto baseado em modelo: build-vs-buy, recorte de feature e critério de aceite sobre saída de modelo."
+acd7590d-e3f9-4282-a023-5c8c0f698bd4,"Régua de definição de problema — de quem é o problema e se é o real. Contra o dominio_atual arquiteturas: não é arquitetura de negócio, é o passo anterior a qualquer desenho."
+567e3b24-9241-46de-a441-4ecc61f6246f,Régua de descoberta contínua: cadência de contato com usuário e árvore de oportunidade que sustenta priorização.
+6c39dde2-5020-4688-b848-9e33119a6906,"Régua de escopo da função de produto: o que a cadeira decide, o que delega e em que nível de senioridade."
+30f215b8-ced5-45f6-8102-1f42270ac289,"Catálogo de padrão de interface: escolha de componente e de estrutura de tela por tarefa, não por gosto."
+79e6c38d-168a-4e71-a301-a45f22f8f91f,Régua de método de pesquisa e de enquadramento de problema na fase de descoberta.
+c70e4339-4aff-4607-ac0e-abf2a95142e0,Régua de problema perverso: define quando o problema não admite solução final e a entrega tem de ser iterativa.
+24042d42-cd44-40ef-ad86-03dad2e9db8a,Régua do erro tipo III — resolver bem o problema errado. Uso para recusar feature bem especificada sobre problema mal enquadrado.
+6cb845f0-7b24-4618-9531-39442e41588b,Régua de usabilidade de navegação e rótulo: o teste mínimo que toda tela nossa tem de passar.
+39b473eb-0c70-4a66-a371-d9258970541b,Régua de time de produto empoderado: como se distribui decisão entre produto e construção.
+010e40c5-9911-4bb3-bf23-e771eea8bb70,Norma de processo de design centrado no humano: define as atividades obrigatórias do ciclo e o que conta como evidência de uso.
+2ff030d0-d84d-4076-8dbd-bb2a11e4bc08,Régua de output-versus-outcome: sustenta o fatiamento de release por valor entregue em vez de dependência técnica.
+c27df742-67d0-4a09-a487-6ad57158471c,"Arquétipo de produto de IA — extração/estruturação como forma de produto. Contra o dominio_atual ia: o registro é sobre concepção de produto, não sobre mecanismo de modelo; o próprio subdomínio herdado é ia-produto, que é minha gerência."
+1fa86223-ae21-4a83-aa37-11b7f720a83a,Régua de estratégia: separa estratégia de produto de lista de desejos com rótulo de estratégia.
+52c6dbe4-41f1-445c-8c82-e2978b5b2c1a,"Régua de ligar entrega a impacto: amarra objetivo, ator e comportamento antes de existir backlog."
+7417496f-a949-4862-8398-f252caf58ae9,"Régua de arquitetura de informação: estrutura, rótulo e navegação de acervo exposto em tela."
+df1b01d4-a2c9-4350-8a1d-488538ab00e1,Régua de risco de produto: os quatro riscos que a cadeira tem de derrubar antes de mandar construir.
+34b52e04-32e3-467b-9b5d-bbb557f32c1f,Régua de heurística de usabilidade: o instrumento de avaliação de tela com que reprovo entrega.
+d9536034-7a6c-4ad0-b2f8-1ca6360ac21c,Régua de necessidade: define a unidade de demanda do usuário que a feature tem de servir.
+a5f2a7cc-8e90-400e-84f6-f4d6522aa4dc,Régua de kickoff de produto: sequência de oficinas que fecha escopo de MVP com o time.
+88d3ad64-a684-4523-b5ac-f9904310ca06,"Régua legal do usuário de serviço público: obriga carta de serviços, avaliação de satisfação e canal de manifestação — o campo Continuidade do nosso card nasce daqui."
+01b7a7f5-a172-40cf-a714-a1bcaa7e0887,Régua do gap desenho-realidade: modelo de falha de produto público pela distância entre a premissa do projetista e a prática do usuário.
+4403c907-0ee8-4994-b70c-810d45d111c7,Régua operacional de descoberta: protocolo de pesquisa e de decisão aplicado em produto de mídia.
+8ffa85ab-f234-4990-87e8-0b9a34032755,Régua de posicionamento: define para quem o produto é e contra o que ele é comparado.
+c441aacc-2f04-4eed-b836-d5975a74d5c9,Régua de medida de sucesso por resultado observável em comportamento do usuário.
+1c3653e0-e1f5-42a2-8271-531ae9b223ae,Régua de modelo de plataforma multi-lado: quando o produto é interação entre lados e não funcionalidade.
+4b38d773-8d01-4e47-b8d5-4e277892feb6,Régua de segmentação e recorte de público para estratégia de produto.
+c5e911b6-337a-4870-b241-51527584d899,Régua de teste de usabilidade barato e recorrente: como rodar e o que conta como achado.
+b4b6cad9-8311-4e15-8b13-2ac2712447b9,"Régua de ciclo de entrega orientado a apetite: fixa tempo e negocia escopo, que é como fatio release aqui."
+282e3564-800f-48e7-9a59-d3a4127fda17,Régua de affordance em desenho de interface: o que a tela sinaliza como ação possível e o que ela esconde.
+e4eb5dc4-70e2-4239-99eb-b52786ccbf6f,"Régua fundacional de affordance, mapeamento e sinalização — base do vocabulário de crítica de tela."
+ba17c889-ec3e-45f0-ad04-7bd22caf99d3,Régua de validação de hipótese de cliente antes de investir em construção.
+44b3ad71-96bf-41ca-b166-5450d90079a2,Régua de ajuste problema-solução e de definição de MVP com critério de saída.
+eabfd878-771f-40d2-b32a-1ceb7868fad2,Régua de entrevista de descoberta: como perguntar sem induzir e o que descartar da resposta.
+055bb041-99b4-438e-9ef3-c47b9f57f3bb,Régua de causa de falha de produto público: onde o gap desenho-realidade se origina e como instrumentar contra ele.
+ab18b892-c418-48ce-a48a-6d7382d9338d,"Régua de fluxo de desenvolvimento de produto: fila, lote e custo de atraso aplicados ao sequenciamento de release."
+68b15353-7641-4d05-8cf3-f0e1027e288b,Régua epistêmica do ofício de design: reflexão-na-ação como método de decidir com problema mal estruturado.
+69a02423-aeff-488e-8484-95d13428f821,Régua de desenho de serviço público digital centrado no cidadão a partir do gap desenho-realidade.
+d93f656c-c736-48fd-980d-989fb23993e5,"Régua de transformação do modelo operacional de produto: papéis, decisão e cadência."
+fcad6c92-b0c6-4170-b46a-da14a0fd1a00,"Régua de escrita de história e de critério de aceite. Contra o dominio_atual engenharia-software: a história é a especificação do comportamento que o usuário completa do começo ao fim, escrita antes da construção — é critério de aceite, não gestão de engenharia."
+a8cf6e26-abfe-40cf-9838-167e1f00460f,Régua de mapeamento de jornada em backlog: fatia release por tarefa que alguém completa do começo ao fim.
+17af4452-44d9-46ab-b187-72b2349b7b3c,Régua de especificação de caso de uso: forma de escrever o comportamento esperado antes do aceite.
