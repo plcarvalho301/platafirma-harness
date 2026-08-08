@@ -29,7 +29,9 @@ Pareado, mesma cadeira, mesmo domínio, duas direções.
 | controle (oferta) | `distribuicao/rodada-2/propostas/claudinho-arquiteto.md` — 9 slugs |
 | tratamento (demanda) | saída de `prompts/PROMPT-<cadeira>.md` |
 
-Roda nas sete cadeiras, cada uma sobre as capabilities do próprio domínio — capability
+Roda em seis cadeiras — todas exceto segurança, que fica fora por decisão do dono:
+o vocabulário dela já é o baseline do experimento, pedir de novo não mede nada novo.
+Cada uma sobre as capabilities do próprio domínio — capability
 de negócio, no sentido do BIZBOK, não os seis diretórios técnicos de
 `macro-global/capabilities/`. Cada cadeira sabe as suas; o prompt não as enumera.
 
@@ -37,6 +39,26 @@ Com sete cadeiras isto não é mais um pareamento de variável única: é uma ro
 resultado carrega as diferenças entre cadeiras junto com o efeito da direção da
 pergunta. A comparação com a rodada 2 segue possível cadeira a cadeira, como leitura
 retrospectiva.
+
+## Cota
+
+20 conceitos por cadeira, calibrada pela contagem canônica de conceitos com obra por
+domínio (`obra.dominio_id` → `obra_trata_de`, deduplicado):
+
+| domínio | conceitos com obra |
+|---|---|
+| seguranca-privacidade | 77 (fora do experimento) |
+| capacidade-estatal | 42 |
+| ia | 37 |
+| engenharia-software | 31 |
+| arquiteturas | 27 |
+| produtos-digitais | 27 |
+| gestao-organizacional | 22 |
+| estudos-ontologias | 17 |
+| inteligencia | 2 |
+
+Domínio não mapeia 1:1 com cadeira — várias cadeiras cruzam mais de um domínio, e a
+tabela serve de baliza de escala, não de teto por cadeira.
 
 ## Critérios de comparação
 

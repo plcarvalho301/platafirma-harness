@@ -94,5 +94,6 @@ Sem preâmbulo, sem fecho, sem relatório do que você fez. A lista é a entrega
 
 ## Cota
 
-Quantos forem necessários para fechar as capabilities, e nenhum a mais. Conceito que
-não muda decisão nenhuma é ornamento — não o proponha só para engordar a lista.
+20 conceitos. Nem mais — conceito que não muda decisão nenhuma é ornamento, não o
+proponha só para bater o número — nem menos: se parar antes de 20, releia as
+capabilities procurando o que ficou de fora antes de fechar.
