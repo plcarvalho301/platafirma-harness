@@ -178,7 +178,7 @@ natureza: modelo
 estatuto: instituido
 definicao: Dois requisitos independentes governam o acesso a informação restrita: a habilitação, que fixa o teto do grau acessível, e a necessidade inerente ao exercício concreto de cargo, função ou atividade, que fixa o que dentro desse teto de fato se acessa. Ter o grau não confere acesso; a necessidade sem o grau tampouco.
 obras-ancora: a4e8fd93-e0ea-4421-94e0-4ea2394f55d3, 6be72be3-f054-4a17-9eee-e6153752b168, 54830b16-c29b-46ad-b593-cb433223d68a
-caso-falseador: Pessoa credenciada em grau superior a quem se concede acesso a documento daquele grau sem exercício de função que o demande, e isso ser tido por correto.
+caso-falseador: Qualquer dos dois eixos decidindo sozinho e isso ser tido por correto — pessoa credenciada em grau superior recebendo documento daquele grau sem função que o demande, ou pessoa cuja função exige o documento recebendo acesso sem credencial no grau. Se um dos casos for decidido pelo mínimo necessário à tarefa, a régua da conjunção não delimita nada.
 pai-proposto:
 substitui:
 
