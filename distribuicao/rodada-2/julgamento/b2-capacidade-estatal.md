@@ -500,18 +500,47 @@ Não propostos — a cota do passo 5 exige duas âncoras do lote.
   **[wiki]**, que é pergunta formulada sem resposta — responder exige relato de
   órgão contratante.
 
-## Homônimo fora do acervo
+## Aguardando ingestão
 
-`armadilha-de-competencias` — o *capability trap* de Repenning e Sterman (ASQ
-47, 2002): a pressão por resultado de curto prazo consome o esforço que iria
-para melhoria e manutenção, a capacidade erode, e a queda de desempenho
-aumenta a pressão. Mecanismo distinto do de Andrews, Pritchett e Woolcock, sob
-o mesmo nome em inglês. Traduzido na literatura brasileira de gestão de
-operações como *armadilha de competências*.
+Repenning & Sterman (2001/2002) está no Project do dono e fora do índice: a fila
+de ingestão está segurada até o fim da reclassificação. As duas entradas abaixo
+foram lidas em primária pelo texto, e recebem `obras-ancora` quando a obra tiver
+UUID no acervo.
 
-Sem obra no acervo: não cumpre a cota de duas âncoras do passo 5. Slug
-reservado, entrada não proposta. Aquisição de Repenning & Sterman (2002)
-resolve.
+### armadilha-de-competencias
+
+Uma equipe fecha o buraco de desempenho de dois jeitos: trabalhando mais ou
+melhorando o jeito de trabalhar. O primeiro entrega hoje, o segundo só depois —
+então, sob pressão, todo mundo escolhe o primeiro e corta o tempo da melhoria.
+A capacidade não cai na hora, o que faz parecer que deu certo; quando cai, o
+buraco fica maior, a pressão sobe e corta-se mais melhoria ainda.
+
+Não é a mesma coisa que a armadilha de capacidade, embora as duas tenham o
+mesmo nome em inglês: aqui a competência existia e definha por falta de
+investimento; lá ela nunca existiu, e é a tentativa de adquiri-la que falha por
+faltar o que ela pressupõe. Um órgão pode estar preso numa sem estar na outra.
+
+- outros-rótulos: `armadilha-de-competencias`, `capability trap`
+- caso falseador: uma organização sob pressão sustentada de entrega cujo
+  desempenho não degrade apesar de anos sem tempo dedicado a melhoria — o
+  estoque de capacidade não se consumiria.
+
+### erro-de-atribuicao-autoconfirmante
+
+O chefe conclui que o problema é falta de empenho, aperta, e o número sobe — o
+que parece dar razão a ele. Só que parte da subida veio do que ele não vê: as
+pessoas pararam de fazer manutenção, treinamento e melhoria para dar conta.
+O ganho é real e imediato; o estrago é lento, difuso e chega meses depois, longe
+demais para ser ligado ao aperto que o causou.
+
+Por isso o erro se confirma sozinho, e cada rodada o reforça: a conclusão de que
+o pessoal não se esforça produz a evidência de que o pessoal não se esforçava. O
+mesmo desenho aparece quando o indicador de uma falha de sistema é batizado com
+o nome de quem está na ponta.
+
+- caso falseador: um aperto de cobrança cujo ganho de curto prazo seja
+  integralmente rastreável a mais esforço, sem redução mensurável de manutenção,
+  treinamento ou melhoria.
 
 ## Colisões vigiadas
 
