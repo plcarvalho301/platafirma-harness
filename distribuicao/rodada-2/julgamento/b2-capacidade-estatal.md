@@ -343,6 +343,8 @@ Receita e as secretarias estaduais mantêm o leiaute em colegiado, e a Sefaz
 Virtual autoriza documento para o estado que não opera ambiente próprio.
 
 ### independencia-gerencial
+Slug que não diz de que trata; `donos-independentes` decide os mesmos casos.
+
 Cada sistema de um conjunto é comprado, financiado e operado por um dono
 diferente, e continuaria funcionando se fosse desligado do conjunto. É essa
 independência de cada peça que torna o todo interdependente sem ser
@@ -408,10 +410,13 @@ manter seus sistemas capazes de gerar o arquivo exatamente como o leiaute pede.
 SPED e eSocial são os dois casos federais.
 
 ### meta-governanca-normativa
-Escolher, para cada caso, sob que lógica a coisa vai ser governada — hierarquia
-e comando, contrato e mercado, ou rede e negociação entre pares — e combinar as
-três sem fingir que só existe uma. É governança da governança: o objeto da
-decisão não é o resultado, é o arranjo que vai decidir sobre o resultado.
+Antes de decidir o que fazer, alguém decide como se vai decidir: por ordem de
+quem manda, por contrato com quem entrega, ou por acordo entre iguais que não
+mandam uns nos outros. Cada um desses caminhos serve a um tipo de problema, e a
+maioria das organizações usa os três ao mesmo tempo fingindo que usa só o
+primeiro. Uma norma que manda os órgãos "pactuarem" um plano está escolhendo o
+terceiro caminho; se depois cobra o resultado como se tivesse mandado, misturou
+os dois e o comando não pega.
 
 ### gradiente-de-isomorfismo-na-importacao
 Quando uma organização importa um modelo de fora, o que chega varia entre dois
@@ -427,11 +432,11 @@ ambiental — e é onde a qualidade do dado depende inteiramente de quem desenho
 o limite, porque o limite de um é o limite do outro.
 
 ### governanca-corporativa
-O conjunto de instâncias que dirigem, avaliam e monitoram uma organização em
-nome de quem tem interesse legítimo nela, e a quem a direção presta contas.
-Cobre conduta, integridade e conformidade com as regras a que a organização se
-submete. Não é gestão: gestão executa, governança decide o que se espera de
-quem executa e verifica se veio.
+Quem manda na diretoria, e para quem a diretoria tem que explicar o que fez. É
+o conselho que aprova o rumo, cobra resultado e troca quem não entrega — em
+nome dos donos, dos que fiscalizam e de quem depende da organização. Não se
+confunde com gestão: gestão é fazer, governança é dizer o que se espera de quem
+faz e conferir depois se veio.
 
 ### prevencao-a-fraude
 Impedir, detectar e responder a quem obtém vantagem indevida por engano ou
@@ -489,3 +494,9 @@ cadeira. Não são propostos nem editados aqui:
 `governanca-dados` · `lei-de-conway` · `sistemas-distribuidos` ·
 `gestao-de-risco` · `gestao-pessoas` · `escalabilidade-sistemas` ·
 `extracao-dados`
+
+`federacao-de-identidade` e `garantia-de-identidade` ocorrem neste domínio e
+seguem a régua de segurança, sob `iam` e `autenticacao`. Vizinhas de
+`prova-de-identidade`, proposta por `claudinho-seguranca` na rodada 2: aquela é
+o ato de estabelecer que a conta corresponde a uma pessoa real; `garantia-de-
+identidade` é o grau de confiança que esse ato produz.
