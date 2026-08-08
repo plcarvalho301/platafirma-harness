@@ -1,0 +1,169 @@
+obra_id,nota
+c854f649-4949-4d8a-9bb3-1b5efe5657fa,Modelo de referencia de controle de acesso zero trust em aplicacao cloud-native - regua do desenho de autorizacao da plataforma.
+26489992-4238-4238-b989-1a68dcb507a9,Especificacao da camada de identidade sobre OAuth - regua da federacao e do conteudo do ID token.
+b403825c-4192-415a-9044-3624da56e3a2,Praticas obrigatorias de seguranca de OAuth - regua para aceitar ou recusar um fluxo de autorizacao.
+26a4deeb-bc53-4515-a2de-f3bbaaa82ec6,Regras de validacao e de algoritmo de JWT - regua contra token forjado ou com alg confuso.
+aa6b13e8-5992-40ff-848e-3239cc15f81b,Perfil do access token JWT - regua do que o resource server tem de validar antes de liberar escopo.
+d2f456aa-560c-4b52-b316-3f021aa027bf,Framework de autorizacao vigente - regua do modelo de concessao e de escopo da plataforma.
+6834144d-a0aa-4ed9-a3b4-163821f7ef44,Vinculacao de token a audiencia - regua da decisao de filtro duplo entre gateway e servico.
+4acba478-4a57-4757-bf62-b6d3a8a25e87,Modelo de garantia de identidade IAL/AAL/FAL - regua do nivel exigido por servico.
+32d348ee-d5e3-4976-8fbc-7b39990d4093,Comprovacao de identidade - regua do que exigir no cadastro antes de emitir credencial.
+e56bf53a-d50b-4f34-b01a-9b495d885edc,Autenticadores e ciclo de vida - regua da politica de MFA e de senha.
+1fbf83c8-6d98-4e78-a32e-724b517b8865,Federacao e asserção - regua da confianca entre IdP e RP no Keycloak.
+2aa19800-fbfa-4696-849c-30f294e9555d,Versao consolidada do guia de identidade digital - regua de nivel de garantia.
+4e165bf2-d024-4708-b319-8377c803cea3,ABAC - regua para decidir entre papel e atributo no modelo de autorizacao.
+af21eda8-1ff1-499a-bb7d-795d53fc5b89,Modelo canonico de RBAC - regua da definicao de papel e separacao de funcao.
+b0bfd121-9afe-46fd-a5d9-bbd192428d8a,SP 800-207 - regua da arquitetura de acesso sem perimetro implicito.
+88fc170f-fe4c-45cf-bb8f-e082a976f34f,Manual do IdP em producao - regua operacional de realm cliente escopo e mapeamento.
+9407f882-4077-4f61-a7c0-405e28720398,Padroes de identidade em aplicacao moderna - regua de decisao entre sessao token e delegacao.
+1fba1bc9-8893-4f2d-a408-d92a0393a243,Autenticacao e autorizacao na borda de API - regua do ponto onde o escopo e validado.
+53623fd3-8767-48ae-9734-c31fe4c944a3,Secao de autorizacao do MCP define o servidor como resource server OAuth - regua do endurecimento do bearer token da plataforma.
+680b1e1d-ae7c-4570-a18a-9da45b30d568,Modelo de sandbox e permissao de agente - regua do privilegio elevado concedido a sessao.
+a3c90b5b-b359-4216-b6a3-a36c06ad22a9,Racional de pular permissao com seguranca - regua da decisao sobre privilegio automatico de agente.
+49fdb44d-224b-4218-9bb9-ef6e317e96d8,Relatorio executivo da ameaca quantica - regua do argumento de urgencia da transicao PQC.
+43246b57-fb85-4288-b822-5c6f3b56a8de,Requisito de autenticacao para modulo criptografico validado - regua de aceitacao de modulo.
+d6165285-f87f-481c-a0b4-6eb70a0bb7b4,Metrica de ensaio de ataque nao invasivo - regua de aceitacao de modulo criptografico.
+a24ab830-046b-4a72-b47c-f9faee40d9d1,Documentacao exigida na validacao de modulo - regua do dossie de certificacao.
+0209d7f8-a9d8-4f67-8095-7898e2613d9b,Lista de funcoes de seguranca aprovadas - regua do que pode ser usado em modulo validado.
+09c8dc8a-95a3-41a8-828c-af2299af70a2,Metodos aprovados de geracao e estabelecimento de chave - regua do ciclo de vida da chave.
+e6820da1-9d67-4222-922b-6952adfce2d1,Requisitos derivados de ensaio - regua do que o laboratorio cobra do modulo.
+4b4dd238-f9f4-4095-b3f6-636f2141a826,Producao cripto do Estado brasileiro - regua da leitura nacional de recurso criptografico.
+b5cdaa3e-7d55-4061-aa5a-532677d74312,Consolidado normativo x algoritmo - regua interna de conformidade cripto.
+b21abaf2-0896-4cbe-8170-9f23672bae9c,Consolidado de algoritmo pos-quantico - regua interna da transicao.
+04aadb64-dd42-48b3-a829-abcd51b296e1,Engenharia de protocolo criptografico - regua de escolha de primitiva e de modo.
+c594fb8b-60fe-4ea5-b781-910c464dbda2,Fundamento de primitiva moderna - regua para decidir cifra modo e KDF.
+222274c7-2cdc-4fc6-bbb5-cb482a1ab653,Parametros minimos de recurso criptografico de Estado - regua normativa brasileira em vigor.
+aa8e9400-4191-47ab-841c-1abb2d9fc391,Padroes e algoritmos da ICP-Brasil - regua do que assina e com que chave no Brasil.
+8d2864b1-f3f0-431a-87d7-8f93372f8f43,Atualizacao normativa da ICP-Brasil - regua vigente de algoritmo admitido.
+a36de400-f562-430a-b1a8-ccf87afd2fb2,Mapa normativo cripto brasileiro - regua de fonte antes de qualquer parecer.
+4ff459f2-1084-46d4-9e5f-72407c57b395,Ensaios de conformidade de software de AC e AR - regua de avaliacao tecnica na ICP-Brasil.
+6f6c4e3a-1d35-4871-bafe-c4f5c4f4768f,Requisitos de homologacao de software de AC e AR - regua de exigencia tecnica.
+26fc12ce-3ed9-447d-aca4-6e90fff53a77,Cruzamento requisito x norma cripto - regua de lacuna de conformidade.
+6c84efb5-4b1d-42ef-98c8-573aea47b19b,Cruzamento produto x requisito normativo - regua de aceitacao de produto cripto.
+cebe7c4b-f0f7-4a48-a9a3-7b2ab2c1bcf0,FIPS 204 ML-DSA - regua da assinatura pos-quantica ja rodando no oqs-provider.
+528bba97-d27b-447a-8fee-1c0badce02f7,FIPS 203 ML-KEM - regua do encapsulamento de chave pos-quantico.
+a0865cb4-4f80-4cd3-bf64-75655e4d9696,FIPS 205 SLH-DSA - regua da assinatura hash-based de longo prazo.
+876bbcde-0773-4542-a476-6831b656e805,Cifra de armazenamento - regua da protecao de dado em repouso.
+e0b892df-8ff4-4980-a2e3-cf34dc4b1652,Gestao de chave e periodo de uso - regua do ciclo de vida e da custodia.
+77df47b0-b67d-497d-b39a-86e8491e5a52,Requisitos de adocao de biblioteca cripto de Estado - regua de decisao sobre dependencia criptografica.
+a47c27f5-27c8-45a0-b33c-0c51855778ad,Analise de transicao PQC em infraestrutura critica - regua do faseamento.
+f7f3152d-5f2a-44f2-af64-a1f629d2031b,Estrategia de transicao PQC - regua da priorizacao de ativo a migrar.
+50337d04-5bf5-406d-9847-14fd742c5762,Diagnostico nacional de prontidao PQC - regua do estado da arte brasileiro.
+179a4f48-3857-496c-a595-652da85a3bd6,ISO/IEC 19790 e FIPS 140-3 - regua do nivel de seguranca exigido do modulo.
+345317ba-f37f-4806-8d54-796a33ecfbaa,SP 800-131A - regua de depreciacao de algoritmo e tamanho de chave.
+b264afef-acc3-484e-9292-f9d9c42bce1d,SP 800-52 - regua da configuracao de TLS na borda exposta.
+af7d333f-5b2c-4b93-bc60-aa505af7d688,Avaliacao experimental de KEM hibrido em protocolo real - regua do custo de adotar hibrido.
+01a2399d-5ea0-4312-bb5f-cdbeabd27229,Reivindico contra capacidade-estatal: define nivel de assinatura eletronica e vinculo com ICP-Brasil - e regua de escolha de assinatura nao de politica de governo digital.
+3fb3470b-2b47-4f8b-9a42-48dd0fe5e6e6,Catalogo de controle base da frente casco - regua da regua de maturidade IG1.
+5d4a5862-9b1c-42d0-a8f7-b10ac3b98ea7,Revisao do catalogo de controle - regua vigente de salvaguarda por grupo de implementacao.
+decf5337-c365-4b51-9a5d-1ce052bd266b,Catalogo amplo de controle de seguranca e privacidade - regua de referencia cruzada do catalogo interno.
+084bbaa3-0c8c-41de-a3dc-d7bf76ba20ef,Funcoes de governo a recuperacao - regua da estrutura do programa de seguranca.
+ca08bba4-7e8b-4fd6-a681-b7c8f6b75735,ISO 27001 - regua dos requisitos de sistema de gestao que a frente espelha.
+8db0629c-213e-44d0-981d-0d8a28fc6523,Codigo de pratica de controle - regua do enunciado de cada controle.
+7287e399-b310-405d-95da-6c59c311fca5,Versao brasileira do codigo de pratica - regua em portugues para redacao de politica.
+29fa477e-049e-4bbc-a627-5e187d84b1f6,Processo de gestao de risco - regua do tratamento e do apetite declarado.
+2cfc981b-29dc-4c5a-8c4e-8e9c0266236c,Texto de diretriz do processo de risco - regua do vocabulario de risco aceito.
+2bd0cf75-de00-41ee-bdaf-c731ea657bbe,Reivindico contra capacidade-estatal: e o companheiro operacional da ISO 31000 que ja e regua declarada do meu tratamento de risco.
+1957b21a-6a8d-468e-bdf6-d93660efd453,FAIR - regua de quantificacao quando risco qualitativo nao decide.
+2cbc244f-9e3b-4313-bf95-77a8a5e22ca3,Reivindico contra ia: e taxonomia de ataque e mitigacao ou seja catalogo de ameaca e controle sobre superficie de IA - entra no meu catalogo de controles.
+3c22a926-1240-47fb-acac-9334c73fdaa9,Modelagem de ameaca - regua do levantamento de ameaca antes do controle.
+ded222ae-1d8e-41e8-81d0-24f3120233ae,STRIDE e metodo de modelagem - regua do procedimento de ameaca por ativo.
+e9c95cb4-93e0-41e2-a8b2-1a86ced0c85a,Tratado de engenharia de seguranca - regua de decisao quando o controle de catalogo nao cobre o caso.
+10f8374b-230d-4d63-aa9c-c760ec03b87e,Politica Nacional de Seguranca da Informacao - regua normativa superior do programa.
+83a95e94-38bd-4c84-8896-839162b2aaf6,Estrategia Nacional de Ciberseguranca - regua de alinhamento estrategico do programa.
+84b18391-a10b-4675-93ab-9e998eb22872,Estrutura de gestao de SI na APF - regua de papel e de instancia de governanca.
+1f737904-a895-45ca-b0d3-dc3525812760,Credenciamento de seguranca para informacao classificada - regua de habilitacao de pessoa e orgao.
+cd4a6d2c-33c7-4eba-8c3e-f52907749a47,Requisitos minimos de seguranca cibernetica - regua de piso tecnico normativo.
+54830b16-c29b-46ad-b593-cb433223d68a,Tratamento de informacao classificada e credenciamento - regua legal do sigilo e do acesso.
+a4e8fd93-e0ea-4421-94e0-4ea2394f55d3,Disciplina o credenciamento de seguranca - regua de quem pode tratar informacao classificada.
+e00da3b6-7d7a-434e-b661-56e4e84c4c3e,Norma complementar DSIC/GSI - piso de SIC na APF que a politica interna tem de espelhar.
+25921bd4-36cb-4f4b-a238-cb656abe2804,Norma complementar DSIC/GSI - piso de SIC na APF que a politica interna tem de espelhar.
+5c05f3b5-d7e0-44c7-82d6-2c24b3f800cc,Norma complementar DSIC/GSI - piso de SIC na APF que a politica interna tem de espelhar.
+5ba5a4c2-c317-4faf-bc45-4ce8e1065ba2,Norma complementar DSIC/GSI - piso de SIC na APF que a politica interna tem de espelhar.
+01d573bd-c576-46b5-983d-9a063e4ee840,Diretriz de tratamento da informacao - regua do ciclo de vida da informacao classificada.
+6be72be3-f054-4a17-9eee-e6153752b168,Compendio normativo de informacao classificada - regua de fonte para decisao de sigilo.
+512719fb-b958-4624-bcf9-934035a6e165,Programa de Privacidade e Seguranca da Informacao - regua federal de controle exigido do orgao.
+0e153a8f-3a33-41e6-9b7a-c9d92ef8218d,PoSIC real de orgao federal - regua de forma e escopo para a politica da plataforma.
+d2e36d65-8274-40bd-b92a-1802b78f3d02,Piso de controle da ANPD para agente de pequeno porte - regua dimensionada ao tamanho da plataforma.
+b8f017f6-7055-447d-ae15-0f3e48cabc27,Atribuicao de dono de risco cibernetico na instancia superior - regua de quem responde pelo risco aceito.
+052709aa-ca4f-480a-8c25-5bf65cb2a942,Normatizacao de tecnologia emergente em ciberseguranca - regua do estado regulatorio de tema novo.
+8731fa58-b20e-4920-a8b8-754bf72f89cd,Reivindico contra capacidade-estatal: e o regulamento que fixa grau e prazo de classificacao da informacao - classificacao e minha gerencia de dados nao governo digital.
+299b4992-4b56-488f-9265-c745119d14d4,Reivindico contra capacidade-estatal: a LAI e a regua legal do que pode virar sigiloso e por quanto tempo - decisao de classificacao antes de transparencia.
+78b1788f-20d7-422e-8fca-2afe312e106a,Politica de seguranca cibernetica e requisito de contratacao de nuvem - regua setorial de conteudo minimo de politica.
+d8592aa6-b28a-41f9-9a99-ab22ae62d205,Altera a 4.893 - regua vigente do requisito setorial de seguranca cibernetica.
+8bd68f1d-30a8-4f33-870d-d1a9c7329bb2,Regulamento de seguranca cibernetica setorial - regua comparativa de exigencia por regulador.
+05411aff-7f04-4514-83a8-c4d6a953a12c,Rede Federal de Gestao de Incidentes - regua do dever de notificar e articular incidente.
+c75528d7-c41d-45c3-8cce-915c6bb28708,Pacote de exercicio de mesa - regua do teste do plano de resposta.
+c0ff6f00-34a2-48a8-a991-1a3b7cda0dc7,Extensao de privacidade do SGSI - regua do controle de privacidade sobre o catalogo existente.
+ac2f61ae-427b-42d5-a9f9-d24773318324,LGPD - regua legal do tratamento de dado pessoal na plataforma.
+1c749492-bda0-4e40-a957-d203df55b406,Comparacao de regime - regua para importar interpretacao europeia sem erro de transposicao.
+dac57d8b-c3aa-482b-b7e0-1e227f2ce49f,Guia pratico do GDPR - regua de implementacao de direito do titular.
+2fdb66e9-7619-4b1d-bde3-5c8645c8cf98,Guia de atuacao do encarregado - regua do papel de DPO na plataforma.
+654a17f6-ecd1-4000-94cd-81422e1c4664,Formacao de encarregado - regua de escopo do papel e do programa de privacidade.
+18b4da03-0c6b-42bc-8393-b685065bd4f0,Material de formacao de encarregado - regua de estrutura do programa de privacidade.
+b81e117d-ee09-4961-85ab-86e4f55f58ce,Material de formacao de encarregado - regua de estrutura do programa de privacidade.
+fc0191c0-8b8e-43a9-84ff-808840313e55,Tratamento de incidente sob otica de dado pessoal - regua da comunicacao a ANPD e ao titular.
+f99d3c51-ca63-4743-9088-518573ba6014,Descoberta e classificacao de dado pessoal - regua da operacao de inventario de dado.
+5207b129-bfb6-4e2a-8c83-4c944b993477,Operacao de ferramenta de privacidade - regua de registro de tratamento e de requisicao de titular.
+367218db-819f-4e8c-9126-6bd43cff751f,Arvore de ameaca de vinculacao - regua da modelagem de ameaca de privacidade.
+82543925-a930-49ac-bbd0-4dd4843a5707,Conjunto completo LINDDUN - regua da modelagem de ameaca de privacidade por categoria.
+3ac98f67-b89b-444f-8a23-b5222c0ebf9f,Framework de risco de privacidade - regua da estrutura do programa de privacidade.
+e4390c76-8721-4909-aad9-97b1451c3223,Sanitizacao de midia - regua do descarte seguro de dado.
+9044a684-bcca-427f-bee9-e2f5af3c0150,Protecao de PII - regua do controle proporcional a criticidade do dado pessoal.
+d5f56d68-49c1-4f05-954b-6d9c27ab7db1,Desidentificacao em dado de governo - regua da decisao de anonimizar ou pseudonimizar.
+089fc2c6-7f30-497b-8738-8db3b9f82f1a,Fundamento formal de privacidade diferencial - regua do limite do que anonimizacao garante.
+c610bf79-cb67-437a-8e95-b19002ad5843,Taxonomia de privacidade de Solove - regua conceitual do que conta como dano de privacidade.
+500db063-f003-4c6a-a476-ced8693be546,Pratica de engenharia de privacidade - regua de implementacao de controle sobre dado pessoal.
+2884c650-4ee4-448e-b57e-77baa3334db5,ENISA - regua tecnica de privacidade por design em componente real.
+655219ad-ded9-4df7-99dc-e9a67451b73e,ENISA - regua da escolha de tecnica de pseudonimizacao e do seu limite.
+c2fa96fc-bf25-4c08-a79d-32ed80a8a5ee,Exemplos de notificacao de violacao - regua da decisao de notificar e do prazo.
+5a856819-ab5c-48ea-9097-211a50851e07,Direito de acesso do titular - regua do atendimento a requisicao.
+337ce58e-eded-4470-a937-026fa5b9c059,Controlador e operador - regua da definicao de papel no tratamento.
+91a4fcbe-5c13-4a93-9aaa-f978b158c92d,Legitimo interesse - regua do teste de balanceamento.
+d346fdb2-d5fa-4516-a09d-3f6b42879b85,Privacy by design e by default - regua do requisito de privacidade no desenho.
+bf28004e-9a60-4d74-8427-c7f4de6951ed,Base legal de legitimo interesse - regua nacional do teste de balanceamento.
+584148dc-1402-4852-b676-7c1a4ae85967,Guia ANPD - regua do tratamento para pesquisa e do acervo derivado.
+d1d43914-fe4a-40ae-90b1-8aef3f36250a,Guia ANPD - regua da base legal aplicavel a ente publico.
+fcc6e4c0-540e-4c7c-8164-4a8ce802d620,Dado sensivel de saude - regua do tratamento de categoria especial.
+3c46866a-face-406f-8a28-487fb0cbb4b7,Analise do arranjo brasileiro de protecao de dados - regua da leitura institucional da LGPD.
+83dd69e2-aa5f-4be4-b366-52153274718d,Estados do dado e controle por estado - regua direta da minha gerencia de dados.
+4d989467-d653-47d6-9a7a-015aac661d6c,Risco de privacidade em LLM - regua do tratamento de dado pessoal por modelo.
+f62e6396-2195-45e9-9ac0-81b0331f5690,Parecer sobre dado pessoal em modelo de IA - regua da decisao de treinar ou nao com dado pessoal.
+89cff7b4-3dff-4c88-bd07-3af200efd55d,Governanca do compartilhamento de dado na APF - regua do nivel de sigilo e da condicao de compartilhamento.
+89c5a30c-9759-451b-a261-7cb6f0c2ea9c,Marco Civil - regua legal da guarda de registro de conexao e de acesso e do seu prazo.
+47c71860-7de5-47db-b814-6bae278e8a3f,Pratica de codigo seguro - regua do requisito de desenvolvimento seguro.
+1945b71e-2f0c-486a-9d6f-8641ef098d00,ASVS - regua do nivel de verificacao exigido da aplicacao.
+c8e53981-7b8c-4faa-bab4-3b5d42db3dcd,Modelo de maturidade de seguranca em software - regua da evolucao do desenvolvimento seguro.
+a1628f35-332e-4c8c-ba07-30ad66fc0b1a,Riscos de aplicacao LLM - regua da ameaca na superficie de agente e MCP.
+6e79b55a-cf98-4310-ada8-22b9e00263e1,Seguranca de conteiner - regua do endurecimento do runtime da plataforma.
+d7409119-d0be-4274-b027-5570c3d4e96f,SSDF - regua das praticas exigidas do ciclo de desenvolvimento.
+176f8130-6c77-4357-bcfe-7327cf27f028,Gestao de patch - regua da politica de correcao de vulnerabilidade.
+1f4de27e-8baf-4d07-b39a-a2f7d57edeb3,Protecao de maquina virtual e rede virtual - regua de segmentacao do host.
+247cf797-b082-47fb-9293-17fc4690e5c2,Programacao defensiva em sistema Unix - regua de requisito de codigo em servico exposto.
+05346de7-dbd7-4dff-a671-fb7f1b9347d7,Cadeia de suprimento de software - regua da procedencia de dependencia e artefato.
+32198e7c-9015-4f37-bb60-af093cc883d7,Integracao de controle de cadeia em pipeline - regua do onde colocar o controle no CI/CD.
+356094cd-262c-4f71-96d2-3d08d64b7d51,Elementos minimos de SBOM - regua do que exigir de um inventario de dependencia.
+5370abf1-d240-4a8c-99bf-aa255b66ae81,Teste de seguranca e avaliacao tecnica - regua de escopo e metodo de teste.
+96228dff-a139-4006-9403-5ac46a1c8b29,Guia CSA de nuvem - regua da divisao de responsabilidade com provedor.
+307b8ba5-1af8-41b6-932d-ce5cafd40953,Politica de firewall - regua da regra de borda e da segmentacao.
+032e14d8-747c-4222-83e2-eeb5ba282532,Acesso remoto e teletrabalho - regua do acesso administrativo de fora.
+44ee1efb-0b30-49ca-b1d6-df827480fce2,Benchmark de endurecimento de conteiner - regua de configuracao segura do runtime em uso.
+be8ef329-d1ea-4927-8f79-b1d9f2088ad7,Benchmark do sistema operacional em uso - regua da linha de base do host.
+eae941f3-148c-425c-9fff-e4ab83acd798,Benchmark do servidor web da borda - regua da configuracao do proxy exposto.
+42c65fe4-c9ac-424c-8de4-3886e6e20109,Benchmark do banco em uso - regua da configuracao segura de dado em repouso.
+64b42d13-3188-4738-990c-0db26b1b6d41,Benchmark de banco - regua de configuracao segura quando o ativo entrar no inventario.
+ba8bde5d-b9d8-4500-b996-2222f5d721ed,Benchmark de servidor web - regua de configuracao segura do ativo correspondente.
+99a68281-5310-4c9d-89c3-ed8e88f57e69,Benchmark de navegador - regua do endurecimento de estacao de trabalho.
+5e2f8416-73a2-4901-b6de-831624472c54,Benchmark de nuvem - regua da linha de base de conta e IAM em GCP.
+9690adc2-3644-4ea3-be0c-87b52cc18ac0,Benchmark de SO de conteiner - regua da linha de base do no.
+4f7b84d4-8099-410f-9d4f-803b4a4803e6,Benchmark de dispositivo movel - regua do endurecimento de endpoint.
+514d9c80-98e9-402f-be23-350542b3537d,Benchmark de hipervisor - regua da linha de base de virtualizacao.
+1fb4ac92-b4a9-46f6-b074-ef19ff280ad1,SP 800-92 - regua do controle de log que segue como lacuna aberta na Raia 1.
+09c3461f-b893-4e7d-b4d4-4f66e2d85680,Tratamento de incidente - regua do processo de resposta.
+47cb0edc-b902-4a40-9d67-924b3b6402ed,Teste e exercicio de plano - regua da validacao do plano de resposta.
+48bb01eb-552c-4adc-9454-48a732c08ccd,Planejamento de contingencia - regua do controle de recuperacao.
+9f342b42-bd5f-4a7a-ae40-62c7a8a1e2e6,Continuidade de negocio - regua do requisito de continuidade no catalogo.
+e9827249-c515-437f-9558-66909e9269fb,Taxonomia oficial de incidente - regua da classificacao ao notificar.
+ab7eb885-ffec-4eaa-9b78-f0feaff42a34,Taxonomia de tecnica adversaria - regua da cobertura de deteccao por tecnica.
+ea7add9b-08ae-4e2a-81b1-5d7b7476fbce,Casos de uso de deteccao - regua do que monitorar quando o SIEM entrar.
+dd512f8f-90a1-48d8-88da-76cf5003ee57,Capacidade de CSIRT - regua do dimensionamento da funcao de resposta.
