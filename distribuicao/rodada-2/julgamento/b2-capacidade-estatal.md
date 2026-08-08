@@ -229,10 +229,10 @@ ponta; entregar só a exigência o rebaixa.
 - pai proposto: `responsabilidade-de-traduzir`
 - substitui: —
 
-### autenticidade-vs-veracidade
+### garantia-de-proveniencia
 
 ```
-rotulo: Autenticidade vs. veracidade
+rotulo: Garantia de proveniência
 natureza: fenomeno
 estatuto: doutrinario
 ```
@@ -254,7 +254,7 @@ duas é atribuir ao selo uma garantia que ninguém deu.
   **[wiki]**
 - caso falseador: um mecanismo de atestação cuja verificação de origem implique,
   por construção, a correção do conteúdo atestado.
-- outros-rótulos: `procedencia-vs-corretude`, `garantia-de-origem`
+- outros-rótulos: `autenticidade-vs-veracidade`, `procedencia-vs-corretude`
 - pai proposto: —
 - substitui: `procedencia-vs-corretude` (base)
 
@@ -360,8 +360,6 @@ Receita e as secretarias estaduais mantêm o leiaute em colegiado, e a Sefaz
 Virtual autoriza documento para o estado que não opera ambiente próprio.
 
 ### independencia-gerencial
-Slug proposto: `donos-independentes`; outros rótulos: `independencia-gerencial`.
-
 Cada sistema de um conjunto é comprado, financiado e operado por um dono
 diferente, e continuaria funcionando se fosse desligado do conjunto. É essa
 independência de cada peça que torna o todo interdependente sem ser
@@ -470,13 +468,15 @@ Impedir, detectar e responder a quem obtém vantagem indevida por engano ou
 falsidade. A parte que costuma ser esquecida é a primeira: prevenir é desenhar o
 processo de modo que a mentira não passe, e não apenas caçar depois quem passou.
 
-### servico-compartilhado-generico-cross
+### servicos-compartilhados
+Substitui o slug `servico-compartilhado-generico-cross`. Outros rótulos:
+`servicos-cross`, `servico-compartilhado-generico-cross`.
+
 Serviço que várias áreas usam e nenhuma delas produz de forma diferente — folha,
 protocolo, login, compras — reunido num lugar só em vez de refeito em cada
 canto. É a fronteira do que se delega sem perda: como não carrega regra
 exclusiva de ninguém, entregá-lo ao mercado ou a um operador central é uso
-correto, não abdicação. Slug proposto: `servico-comum`; outros rótulos:
-`servico-compartilhado-generico-cross`.
+correto, não abdicação. 
 
 ## Candidatos sem lastro suficiente
 
