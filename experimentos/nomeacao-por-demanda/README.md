@@ -27,11 +27,16 @@ Pareado, mesma cadeira, mesmo domínio, duas direções.
 | | conjunto |
 |---|---|
 | controle (oferta) | `distribuicao/rodada-2/propostas/claudinho-arquiteto.md` — 9 slugs |
-| tratamento (demanda) | saída de `PROMPT-arquitetura-resiliencia.md` |
+| tratamento (demanda) | saída de `prompts/PROMPT-<cadeira>.md` |
 
-Cadeira escolhida: **arquitetura**. A capability `resiliencia` é compromisso próprio,
-escrito, no domínio da cadeira, e visivelmente incompleto — o README aponta para três
-diretórios que não existem. Sem essa lacuna na superfície, a pergunta não tem alvo.
+Roda nas sete cadeiras, cada uma sobre as capabilities do próprio domínio — capability
+de negócio, no sentido do BIZBOK, não os seis diretórios técnicos de
+`macro-global/capabilities/`. Cada cadeira sabe as suas; o prompt não as enumera.
+
+Com sete cadeiras isto não é mais um pareamento de variável única: é uma rodada, e o
+resultado carrega as diferenças entre cadeiras junto com o efeito da direção da
+pergunta. A comparação com a rodada 2 segue possível cadeira a cadeira, como leitura
+retrospectiva.
 
 ## Critérios de comparação
 
@@ -56,8 +61,10 @@ Aplicados aos dois conjuntos depois da coleta, nunca antes:
 O prompt **não** carrega linha de persona: a sessão roda dentro do Project da cadeira,
 que já a fornece.
 
-Os 9 slugs do conjunto de controle entram no prompt **nomeados um a um, como
-proibição**. Bloqueio genérico não segura: a cadeira defaulta para o que acabou de
+Os slugs que a **própria cadeira** propôs na rodada 2 entram no prompt dela nomeados
+um a um, como proibição — 10 para cada cadeira, 9 para arquitetura, 25 para segurança.
+Lista de outra cadeira não serve: seria ancoragem em conceito alheio, o oposto do que
+a restrição existe para fazer. Bloqueio genérico não segura: a cadeira defaulta para o que acabou de
 formular, e o resultado seria a rodada 2 reescrita. Nomeá-los tem custo de ancoragem
 conhecido — mas o custo do default é maior, e a lista nominal é o que permite auditar
 a violação na saída.
