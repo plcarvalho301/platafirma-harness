@@ -1,1 +1,22 @@
 obra_id,reivindicantes,vencedor,motivo
+d47bad12-585f-4acf-924d-4d62395b749c,claudinho-TI|claudinho-arquiteto,claudinho-TI,"Catalogo de processo habilitador de TI: entrada, saida e atividade."
+eae6db01-442c-4635-9cd7-0b5ad7a92f59,claudinho-TI|claudinho-arquiteto,claudinho-TI,"Defesa operacional explicita (excelencia operacional, confiabilidade, custo), contra o dominio_atual `arquiteturas`."
+02359e1c-e2d4-4461-965c-32eb7b3afbf8,claudinho-TI|claudinho-arquiteto,claudinho-TI,"Mecanismo e de quem instrumenta: capability resiliencia da a TI definicao, instrumentacao e resposta a degradacao."
+ccc19c82-6204-4c1c-a8f2-c8a76a093b2c,claudinho-TI|claudinho-arquiteto,claudinho-TI,Modelo de referencia de processo de TI.
+94d1793e-30b2-416a-bb79-48579d6e77ff,claudinho-TI|claudinho-arquiteto,claudinho-TI,Objetivos de governanca e gestao de processo de TI (BAI/DSS).
+67c4ae45-a40c-4754-8c00-847e817dd370,claudinho-TI|claudinho-arquiteto,claudinho-TI,Stack e biblioteca sao remit nomeado de TI (construcao e fabrica).
+6b8c4d0a-5daf-4ec2-b730-a4c4dd541b7e,claudinho-TI|claudinho-arquiteto,claudinho-arquiteto,Arquitetura como fluxo continuo de decisao.
+c40aee12-0586-4733-a2bc-a966e918a51c,claudinho-TI|claudinho-arquiteto,claudinho-arquiteto,Atributo de qualidade e tatica: requisito de negocio vira decisao estrutural.
+ea6739f1-d054-48b1-8558-2fde8c25429e,claudinho-TI|claudinho-arquiteto,claudinho-arquiteto,Caracteristica arquitetural e trade-off explicito.
+dcdcdb8f-07fb-4a88-abf7-e68a39036c07,claudinho-TI|claudinho-arquiteto,claudinho-arquiteto,"Complexidade essencial versus acidental; decisao apertada, o uso de TI (avaliar ferramenta) e legitimo mas secundario."
+f4c2960f-5d85-4324-b7ed-ab1a79c483e0,claudinho-TI|claudinho-arquiteto,claudinho-arquiteto,Conhecimento arquitetural como insumo de decisao de forma.
+d4ca606e-d882-474a-8425-638a9a1ab144,claudinho-TI|claudinho-arquiteto,claudinho-arquiteto,Decisao arquitetural como conhecimento gerenciavel.
+8780a2a8-018b-408a-898a-21d3b93cb86c,claudinho-TI|claudinho-arquiteto,claudinho-arquiteto,Decomposicao em servico e acoplamento: decisao dificil de reverter.
+b34d5fa6-ce67-48b9-949a-293bb67e3fea,claudinho-TI|claudinho-arquiteto,claudinho-arquiteto,Entidade como limite de transacao: agregado e fronteira.
+c2d7efe8-2057-48d6-803a-b4cd5f99dbef,claudinho-TI|claudinho-arquiteto,claudinho-arquiteto,"Evento como contrato entre contextos: fronteira, nao pipeline."
+47d4d047-25cb-47c4-bf25-53718bcb35a6,claudinho-TI|claudinho-arquiteto,claudinho-arquiteto,"Metodo de modernizacao por fronteira de dominio; a defesa de TI foi sequenciamento, que e execucao."
+76356989-ff41-4497-9097-6da1152e16ef,claudinho-TI|claudinho-arquiteto,claudinho-arquiteto,"Ocultacao e profundidade de modulo: criterio de decomposicao, nao revisao de construcao."
+ef949ef2-da4d-49a2-a760-4a8d5af605fa,claudinho-TI|claudinho-arquiteto,claudinho-arquiteto,Ordenacao causal e relogio logico como propriedade estrutural.
+73eaf549-b429-4d23-853a-c5eaf22b54d2,claudinho-TI|claudinho-arquiteto,claudinho-arquiteto,Plano diretor de dados; capability `dados` e repartida com o arquiteto no plano diretor.
+f7563ebc-191c-43ce-bbef-434ed84f8ca3,claudinho-TI|claudinho-arquiteto,claudinho-arquiteto,Regra de dependencia e separacao politica/detalhe: organizacao de componente.
+23d50d2d-007f-4523-a82b-348309d861f9,claudinho-TI|claudinho-arquiteto,claudinho-arquiteto,Topologia de integracao e nomeada do arquiteto no org-template-canonico.
