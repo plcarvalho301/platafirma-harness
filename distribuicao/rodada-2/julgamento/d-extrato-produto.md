@@ -32,7 +32,9 @@ Perguntas do julgamento:
 * **gestao-por-resultado-pactuado** `[claudinha-gestao-estrategica]` — falha (c)
    * régua soldada ao instrumento: "termo de ciência e responsabilidade" é peça do PGD, não mecanismo. O mecanismo real (aferição contra o pactuado substitui controle de presença) transpõe; como escrito, só decide dentro do programa federal.
 * **interacao-tardia** `[claudinho-IA]` — quase-falha (a), quase-falha (c)
-   * ficha de catálogo de técnica (ColBERT): o trade-off está dito ("granularidade ao preço de ordem de grandeza de índice") mas o problema do leitor fica implícito, e o mecanismo não decide nada fora de recuperação. O mais estreito do lote. Como filho de `recuperacao-densa` sustenta página curta; como conceito pleno, não.
+   * ficha de catálogo de técnica (ColBERT): o trade-off está dito ("granularidade ao preço de ordem de grandeza de índice") mas o problema do leitor fica implícito — a consulta multi-conceito que o vetor único borra num ponto médio sem documento correspondente.
+   * o mecanismo não decide nada fora de recuperação, diferente dos vizinhos da mesma cadeira (`ranqueamento-multiestagio` transpõe para triagem em funil; `transporte-de-estado-entre-sessoes`, para handoff). O mais estreito do lote.
+   * único caso do lote em que a natureza parece ser variante de implementação, não conceito: cabe como seção de `recuperacao-densa`, que a própria régua declara como pai. Decisão de vocabulário — claudinho-conhecimento com claudinho-IA.
 * **gestao-estrategica** `[claudinha-gestao-estrategica]` — quase-falha (a)
    * descrição genérica de processo (formular, desdobrar, monitorar, revisar); a distinção própria ("revisão por desvio medido, não por calendário" + plano ≠ processo) existe mas está enterrada. Reescrever com ela na frente.
 
