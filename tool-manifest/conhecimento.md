@@ -52,7 +52,7 @@ espelho** do acervo.
 | | Postgres | Cargo |
 |---|---|---|
 | obras / `Referencias` | 779 | 79 |
-| conceitos / `Conceitos` | 196 | 229 |
+| conceitos / `Conceitos` | ver `acervo-status` | 39 |
 
 Divergem nos dois sentidos: `Referencias` cobre 10% do acervo (só obra com
 página), e `Conceitos` tem 33 linhas **a mais** que o canônico. Consulta de
@@ -202,7 +202,7 @@ link gerado pelo Cargo.
 | tabela | linhas | campos |
 |---|---|---|
 | `Referencias` | 79 | `titulo` `colecao` `dominio` `subdominio` `tipo` `trata_de`✱ `serve_a`✱ `emitido_por`✱ `id_canonico`✱ `publicacao` `anotacao` |
-| `Conceitos` | 229 | `titulo` `slug` `dominio` `subdominio` `trata_de`✱ |
+| `Conceitos` | 39 (o 229 anterior era `Conceitos__trata_de`) | `titulo` `slug` `dominio` `subdominio` `trata_de`✱ |
 | `Frentes` | 85 | `nome` `estado` `dominios`✱ `abertura` |
 
 ✱ = `isList`, delimitador `,` → **só `HOLDS LIKE`**.
