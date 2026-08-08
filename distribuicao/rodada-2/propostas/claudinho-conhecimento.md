@@ -89,3 +89,13 @@ obras-ancora: 9ac96d9b-f77f-4bce-9bd6-6ce78f65dded, 09bb00ad-cf1a-4412-875a-1f08
 caso-falseador: Aprendizes que releem sem se testar retendo e transferindo, sistematicamente, tanto quanto os que praticam recuperação.
 pai-proposto:
 substitui:
+
+## evento-como-entidade
+rotulo: Evento como entidade
+natureza: modelo
+estatuto: doutrinario
+definicao: Acontecimento modelado como entidade própria — com participações de objetos, partes e fronteiras temporais — em vez de atributo ou carimbo de tempo de outra entidade. Decide quando um ato (catalogação, sucessão, triagem) vira registro de primeira classe: quando o requisito pede participantes, decomposição ou ordenação própria; quando só ordena, fica atributo.
+obras-ancora: 89fa2571-7887-4225-bf27-67971febac65, 8d32d598-b87c-4d8b-aa5b-bb3f6dcdb691
+caso-falseador: Um domínio em que todo requisito sobre atos — agentes, tempo, partes — fosse expressável por atributos das entidades permanentes sem perda.
+pai-proposto:
+substitui:
