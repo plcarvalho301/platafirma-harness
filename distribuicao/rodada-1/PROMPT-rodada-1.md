@@ -32,9 +32,10 @@ base (UUID). `nota` é uma linha: o que a obra faz pelo *seu* domínio.
   linha sem `nota` perde por ausência de defesa.
 - Obra que serve a duas cadeiras: reivindique assim mesmo. Conflito é o
   mecanismo da rodada, não a falha dela.
-- **Não reivindique para tapar buraco.** Obra sem reivindicante tem tratamento
-  próprio; cobrir vazio com reivindicação fraca contamina a rodada 2, que é
-  onde os conceitos nascem.
+- **Não reivindique para tapar buraco.** Obra sem reivindicante não sai do
+  corpus nem vira pendência de ninguém: fica com o `dominio_atual` e o dono
+  classifica ao fim do ciclo. Cobrir vazio com reivindicação fraca contamina a
+  rodada 2, que é onde os conceitos nascem.
 - Reivindicando contra o `dominio_atual`, diga na nota por quê.
 
 **Escrita.** `git pull --rebase`, commit e push **só do seu arquivo**. Não toque
