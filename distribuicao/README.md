@@ -6,14 +6,17 @@ o banco (`acervo.obra.dominio_id`) só recebe o resultado depois de fechado.
 
 ## Base
 
-`rodada-1/obras-305.csv` — as 305 obras que têm `dominio_id` preenchido,
-medidas em 2026-08-08. Colunas: `obra_id`, `titulo`, `dominio_atual`,
-`subdominio_atual`, `especie`, `colecao`.
+`rodada-1/obras.csv` — as 644 obras da coleção `firma`, medidas em 2026-08-08.
+Colunas: `obra_id`, `titulo`, `dominio_atual`, `subdominio_atual`, `especie`,
+`colecao`. Coleção `pessoal` (49 obras, biblioteca particular do Pedro) fica
+fora — não é corpus de trabalho da org.
 
-O `dominio_atual` é palpite herdado da triagem, não cerca: qualquer cadeira
-pode reivindicar qualquer obra da base, inclusive contra o domínio de hoje.
-
-As 388 obras sem domínio ficam fora desta rodada.
+**Bolo único, sem partição.** 305 dessas 644 já têm `dominio_atual`
+preenchido (palpite herdado da triagem, não cerca); 339 estão em branco. A
+rodada não separa as duas: toda cadeira reivindica sobre o arquivo inteiro, no
+mesmo prompt, na mesma passada. A proximidade semântica entre obra já
+classificada e obra em branco é o que deve gerar conflito — é onde a fronteira
+entre domínios aparece; separar as duas listas mataria esse sinal.
 
 ## Como cada cadeira responde
 
@@ -23,16 +26,17 @@ Um arquivo por cadeira em `rodada-1/reivindicacoes/<persona>.csv`, com cabeçalh
 obra_id,nota
 ```
 
-`nota` é uma linha de defesa, opcional — o que a obra faz pelo domínio de quem
-reivindica. Sem teto de quantidade: o freio é ter que defender a reivindicação
-na arbitragem.
+`<persona>` é o nome da própria cadeira que está respondendo — cada sessão se
+identifica sozinha, não há edição de arquivo por fora. `nota` é uma linha de
+defesa, opcional — o que a obra faz pelo domínio de quem reivindica. Sem teto
+de quantidade: o freio é ter que defender a reivindicação na arbitragem.
 
 ## Consolidação
 
 Contagem de reivindicações por obra:
 
-- **zero** — órfã. Fica no corpus com o `dominio_atual` que já tem; o dono
-  classifica a mão, fora desta rodada.
+- **zero** — órfã. Fica no corpus com o `dominio_atual` que já tem (ou em
+  branco, se nunca teve); o dono classifica a mão, fora desta rodada.
 - **uma** — fecha ali, sem arbitragem, ainda que contrarie o `dominio_atual`.
 - **duas ou mais** — conflito. Arbitragem por claudinho-conhecimento e pelo
   dono; a decisão fica em `rodada-1/conflitos.csv`
@@ -54,6 +58,7 @@ depois, na leitura do reasoner e do Pedro.
 Aberto, a decidir antes de abrir a rodada 2:
 
 - Quantos conceitos por cadeira, e se a cota é fixa ou proporcional ao tamanho
-  do domínio (`seguranca-privacidade` tem 120 obras na base; `inteligencia`, 1).
+  do domínio (`seguranca-privacidade` tem 120 obras já classificadas na base;
+  `inteligencia`, 1).
 - O que fazer com os 205 conceitos que já existem em `acervo.conceito`, 62
   deles já com pai.
