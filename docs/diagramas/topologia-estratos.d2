@@ -1,0 +1,80 @@
+grid-rows: 3
+grid-gap: 24
+
+vars: {
+  d2-config: {
+    layout-engine: elk
+    theme-id: 0
+    pad: 20
+  }
+}
+
+classes: {
+  estrato-modulos: {
+    style: { fill: "#EEF3F9"; stroke: "#C9D8E9"; stroke-width: 2; font-color: "#1F3A5F"; font-size: 19; border-radius: 8 }
+  }
+  estrato-core: {
+    style: { fill: "#EAF2EE"; stroke: "#C2DACE"; stroke-width: 2; font-color: "#1F5040"; font-size: 19; border-radius: 8 }
+  }
+  estrato-conhecimento: {
+    style: { fill: "#F3EEF7"; stroke: "#D8CBE4"; stroke-width: 2; font-color: "#4A2F63"; font-size: 19; border-radius: 8 }
+  }
+  cartao: {
+    style: { fill: "#FFFFFF"; stroke: "#DCE2EA"; stroke-width: 2; font-color: "#222429"; font-size: 15; border-radius: 6 }
+  }
+  cliente: {
+    style: { fill: "#F1F4F8"; stroke: "#DCE2EA"; stroke-width: 2; font-color: "#5C6875"; font-size: 15; border-radius: 6 }
+  }
+  identidade: {
+    style: { stroke: "#1F3A5F"; stroke-width: 2; font-color: "#1F3A5F"; font-size: 13 }
+  }
+  semantica: {
+    style: { stroke: "#8F3312"; stroke-width: 2; font-color: "#8F3312"; font-size: 13 }
+  }
+  ilustrativa: {
+    style: { stroke: "#93A0AE"; stroke-width: 2; stroke-dash: 4; font-color: "#5C6875"; font-size: 13 }
+  }
+}
+
+mod: MÓDULOS — conformam ao método e ao core {
+  class: estrato-modulos
+  grid-columns: 4
+  interno: platafirma-<modulo> { class: cartao }
+  externo: modulo-* — stakeholder externo { class: cartao }
+  user: usuários { class: cliente }
+  harness: harness — superfície das personas { class: cliente }
+}
+
+core: CORE — integração e execução {
+  class: estrato-core
+  grid-columns: 2
+  cp: control-plane · platafirma-core\nIAM · borda · política { class: cartao }
+  motor: motor — platafirma-motor {
+    class: estrato-core
+    grid-columns: 3
+    rag: RAG { class: cartao }
+    msg: malha msg — Valkey/Streams { class: cartao }
+    onto: onto-ref { class: cartao }
+  }
+}
+
+con: CONHECIMENTO — platafirma-conhecimento {
+  class: estrato-conhecimento
+  grid-columns: 3
+  api: rag-api — API interna { class: cartao }
+  acervo: acervo + modelo ontológico { class: cartao }
+  idx: Postgres + pgvector\nloopback { class: cartao }
+}
+
+mod.interno -> core.cp: identidade desce — OIDC { class: identidade }
+mod.harness -> core.cp { class: identidade }
+mod.user -> core.cp { class: identidade }
+mod.harness -> core.motor.msg: cliente da malha { class: ilustrativa }
+
+core.cp -> core.motor.rag: borda, não tráfego { class: identidade }
+core.motor.rag -> con.api: a pergunta desce { class: semantica }
+con.api -> core.motor.rag: o trecho sobe — com proveniência { class: semantica }
+
+con.acervo -> con.api { class: ilustrativa }
+con.api -> con.idx: índice não viaja { class: ilustrativa }
+core.motor.onto -> con.acervo: referência publica { class: ilustrativa }

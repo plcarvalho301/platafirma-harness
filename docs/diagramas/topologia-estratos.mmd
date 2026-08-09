@@ -1,0 +1,57 @@
+---
+title: Topologia da PlataFirma em estratos — três estratos, duas línguas na costura
+---
+flowchart TB
+    subgraph CLI["CLIENTES"]
+        harness["harness<br/>superfície das personas"]
+        user["usuários"]
+    end
+
+    subgraph MOD["MÓDULOS"]
+        interno["platafirma-&lt;modulo&gt;<br/>coração"]
+        externo["modulo-*<br/>stakeholder externo"]
+    end
+
+    subgraph CORE["CORE — integração e execução"]
+        cp["control-plane · platafirma-core<br/>IAM · borda · política"]
+        subgraph MOTOR["motor — platafirma-motor"]
+            rag["RAG"]
+            msg["malha msg<br/>Valkey/Streams"]
+            onto["onto-ref"]
+        end
+    end
+
+    subgraph CON["CONHECIMENTO — platafirma-conhecimento"]
+        api["rag-api<br/>API interna"]
+        idx["Postgres + pgvector<br/>loopback"]
+        acervo["acervo + modelo ontológico"]
+    end
+
+    harness -->|OIDC| cp
+    user -->|OIDC| cp
+    interno -->|"identidade desce<br/>Open-Host / OIDC"| cp
+    externo --> cp
+
+    cp -->|"borda, não tráfego"| rag
+    harness -.->|cliente da malha| msg
+
+    rag -->|a pergunta desce| api
+    api -->|"o trecho sobe<br/>com proveniência"| rag
+    api -.-> idx
+    acervo -.->|"ingestão · embedding<br/>índice não viaja"| idx
+    onto -.->|referência publica| acervo
+
+    classDef cartao fill:#FFFFFF,stroke:#DCE2EA,stroke-width:2px,color:#222429
+    classDef cliente fill:#F1F4F8,stroke:#DCE2EA,stroke-width:2px,color:#5C6875
+    class interno,externo,cp,rag,msg,onto,api,idx,acervo cartao
+    class harness,user cliente
+
+    style MOD fill:#EEF3F9,stroke:#C9D8E9,stroke-width:2px,color:#1F3A5F
+    style CORE fill:#EAF2EE,stroke:#C2DACE,stroke-width:2px,color:#1F5040
+    style MOTOR fill:#EAF2EE,stroke:#C2DACE,stroke-width:2px,color:#1F5040
+    style CON fill:#F3EEF7,stroke:#D8CBE4,stroke-width:2px,color:#4A2F63
+    style CLI fill:#F1F4F8,stroke:#DCE2EA,stroke-width:2px,color:#5C6875
+
+    linkStyle 0,1,2,3,4 stroke:#1F3A5F,stroke-width:2px,color:#1F3A5F
+    linkStyle 6,7 stroke:#8F3312,stroke-width:2px,color:#8F3312
+    linkStyle 5,8,9,10 stroke:#93A0AE,stroke-width:2px,color:#5C6875
