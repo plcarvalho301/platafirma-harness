@@ -1,0 +1,68 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1020" height="700" viewBox="0 0 1020 700" font-family="DejaVu Sans, Helvetica, Arial, sans-serif">
+  <rect width="1020" height="700" fill="#ffffff"/>
+  <text x="510" y="34" text-anchor="middle" font-size="19" font-weight="bold" fill="#111">Posse de mensagem — o token nasce na leitura, no servidor</text>
+  <text x="510" y="56" text-anchor="middle" font-size="12" fill="#555">malha msg (Valkey/Streams) · duas sessoes da mesma cadeira, disparo duplo</text>
+
+  <!-- atores -->
+  <rect x="60" y="78" width="200" height="34" rx="5" fill="#eef3fa" stroke="#4a6f9e"/>
+  <text x="160" y="100" text-anchor="middle" font-size="13" fill="#111">sessao A (claudinho-IA)</text>
+  <rect x="400" y="78" width="220" height="34" rx="5" fill="#f2eef8" stroke="#6e4a9e"/>
+  <text x="510" y="100" text-anchor="middle" font-size="13">malha msg — servidor</text>
+  <rect x="760" y="78" width="200" height="34" rx="5" fill="#eef3fa" stroke="#4a6f9e"/>
+  <text x="860" y="100" text-anchor="middle" font-size="13">sessao B (claudinho-IA)</text>
+
+  <line x1="160" y1="112" x2="160" y2="660" stroke="#99a" stroke-dasharray="4,4"/>
+  <line x1="510" y1="112" x2="510" y2="660" stroke="#99a" stroke-dasharray="4,4"/>
+  <line x1="860" y1="112" x2="860" y2="660" stroke="#99a" stroke-dasharray="4,4"/>
+
+  <defs>
+    <marker id="a" markerWidth="9" markerHeight="9" refX="8" refY="3" orient="auto">
+      <path d="M0,0 L0,6 L8,3 z" fill="#333"/>
+    </marker>
+    <marker id="ar" markerWidth="9" markerHeight="9" refX="8" refY="3" orient="auto">
+      <path d="M0,0 L0,6 L8,3 z" fill="#b03030"/>
+    </marker>
+    <marker id="ag" markerWidth="9" markerHeight="9" refX="8" refY="3" orient="auto">
+      <path d="M0,0 L0,6 L8,3 z" fill="#2f7a3f"/>
+    </marker>
+  </defs>
+
+  <!-- 1 A le -->
+  <line x1="160" y1="150" x2="504" y2="150" stroke="#333" marker-end="url(#a)"/>
+  <text x="332" y="144" text-anchor="middle" font-size="12">1. fila ler</text>
+  <rect x="530" y="160" width="330" height="34" rx="4" fill="#f7f4ec" stroke="#b9a97a"/>
+  <text x="545" y="181" font-size="11.5" fill="#4a4028">SET NX posse:&lt;caixa&gt;:&lt;msgid&gt; = tokA  EX 3600</text>
+  <line x1="504" y1="212" x2="164" y2="212" stroke="#2f7a3f" marker-end="url(#ag)"/>
+  <text x="332" y="206" text-anchor="middle" font-size="12" fill="#2f7a3f">2. msg #42 + posse=tokA</text>
+
+  <!-- 3 B le -->
+  <line x1="860" y1="258" x2="516" y2="258" stroke="#333" marker-end="url(#a)"/>
+  <text x="688" y="252" text-anchor="middle" font-size="12">3. fila ler (disparo duplo)</text>
+  <rect x="160" y="268" width="330" height="34" rx="4" fill="#f7f4ec" stroke="#b9a97a"/>
+  <text x="175" y="289" font-size="11.5" fill="#4a4028">SET NX falha — chave viva, token de outrem</text>
+  <line x1="516" y1="320" x2="856" y2="320" stroke="#c07a20" marker-end="url(#a)"/>
+  <text x="688" y="314" text-anchor="middle" font-size="12" fill="#a5651a">4. msg #42 [POSSE VIVA ha 2 min] — sem token</text>
+
+  <!-- 5 B tenta responder -->
+  <line x1="860" y1="372" x2="516" y2="372" stroke="#333" marker-end="url(#a)"/>
+  <text x="688" y="366" text-anchor="middle" font-size="12">5. enviar --responde #42 (sem posse)</text>
+  <line x1="516" y1="404" x2="856" y2="404" stroke="#b03030" marker-end="url(#ar)"/>
+  <text x="688" y="398" text-anchor="middle" font-size="12" fill="#b03030" font-weight="bold">6. RECUSADO — posse de outra leitura</text>
+
+  <!-- 7 A responde -->
+  <line x1="160" y1="456" x2="504" y2="456" stroke="#333" marker-end="url(#a)"/>
+  <text x="332" y="450" text-anchor="middle" font-size="12">7. enviar --responde #42 --posse tokA</text>
+  <line x1="504" y1="488" x2="164" y2="488" stroke="#2f7a3f" marker-end="url(#ag)"/>
+  <text x="332" y="482" text-anchor="middle" font-size="12" fill="#2f7a3f">8. aceito</text>
+
+  <!-- 9 A consome -->
+  <line x1="160" y1="534" x2="504" y2="534" stroke="#333" marker-end="url(#a)"/>
+  <text x="332" y="528" text-anchor="middle" font-size="12">9. consumir #42 --posse tokA</text>
+  <rect x="530" y="544" width="330" height="34" rx="4" fill="#f7f4ec" stroke="#b9a97a"/>
+  <text x="545" y="565" font-size="11.5" fill="#4a4028">XACK + DEL posse:&lt;caixa&gt;:&lt;msgid&gt;</text>
+
+  <!-- expiracao -->
+  <rect x="160" y="606" width="700" height="52" rx="5" fill="#eef6ee" stroke="#5f8f68"/>
+  <text x="175" y="626" font-size="12" fill="#25502e">Sem consumir dentro do TTL (60 min, arq:0024): a chave de posse expira e XAUTOCLAIM</text>
+  <text x="175" y="645" font-size="12" fill="#25502e">(idle &gt; TTL) devolve a entrada ao grupo — a sessao nao precisa se reconhecer.</text>
+</svg>
