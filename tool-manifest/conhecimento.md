@@ -232,9 +232,13 @@ contradiz ont:0062 (conceito não declara prateleira; a ocorrência é composta 
 ## E. Camada RAG — o que eu leio, o que não é meu `[exec]`
 
 Facetas com corpus vazio hoje (filtrar por elas devolve zero **legitimamente**):
-`inteligencia`, `platafirma`, `capacidade-estatal`, `onto-modelos`,
-`padroes-integracao`, `seg-operacional`, seis dos sete subdomínios de `ia`,
-e as frentes `casco-platafirma`, `paper-capability-trap`, `wiki`.
+os domínios `curadoria-acervo` e `platafirma`; os quatro subdomínios de
+`inteligencia` — o domínio tem obra, nenhuma designada; `front-end`,
+`avaliacao-e-governanca`, `produto-baseado-em-modelo`, `produto-publico-digital`,
+`organizacao-do-conhecimento`, `cognicao-e-aprendizagem`, `estrategia-e-resultado`,
+`estrutura-e-topologia`, `governanca-institucional`; e as frentes
+`paper-capability-trap` e `wiki`. Lista derivada de `rag_facets` — conferir lá
+antes de filtrar, não copiar daqui.
 
 Índice: modelo `Qwen/Qwen3-Embedding-0.6B`, modo `hybrid`, RRF k=60. **Tamanho e
 composição não se escrevem aqui** — rodar `acervo-status`. Número copiado pra dentro
