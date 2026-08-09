@@ -52,7 +52,7 @@ espelho** do acervo.
 | | Postgres | Cargo |
 |---|---|---|
 | obras / `Referencias` | 779 | 79 |
-| conceitos / `Conceitos` | ver `acervo-status` | 39 |
+| conceitos / `Conceitos` | ver `acervo status` | 39 |
 
 Divergem nos dois sentidos: `Referencias` cobre 10% do acervo (só obra com
 página), e `Conceitos` tem 33 linhas **a mais** que o canônico. Consulta de
@@ -241,7 +241,7 @@ os domínios `curadoria-acervo` e `platafirma`; os quatro subdomínios de
 antes de filtrar, não copiar daqui.
 
 Índice: modelo `Qwen/Qwen3-Embedding-0.6B`, modo `hybrid`, RRF k=60. **Tamanho e
-composição não se escrevem aqui** — rodar `acervo-status`. Número copiado pra dentro
+composição não se escrevem aqui** — rodar `acervo status`. Número copiado pra dentro
 de manifesto vira segunda fonte que ninguém atualiza.
 
 **Fronteira:** quais facetas existem e o que os valores significam é meu; quais
@@ -274,10 +274,10 @@ pdftotext · tesseract · 7z · unzip · rsync · gh`. **`php` não** — só no
 
 ### `~/AI/bin` — binários próprios, fora do apt
 
-`acervo-get` `acervo-pacote` `exporta-acervo-xlsx.py` `ops-log-prune` `longjob` ·
+`acervo` (despachante: status, get, pacote, extrato) `ops-log-prune` `longjob` ·
 `age` `age-keygen` `sops` `minisign` `cosign` `gitleaks` · `grype` `dockle`
-`hadolint` `osv-scanner` `lynis` `oscap-casco` · `ctop` `dive` `lnav` `restic` ·
-`fd` `rg` `hurl` `jwt` `kcadm` `oauth2c` `opa` `openssl-pqc`
+`hadolint` `osv-scanner` `lynis` `seg` · `ctop` `dive` `lnav` `restic` ·
+`fd` `rg` `hurl` `jwt` `oauth2c` `opa`
 
 Os três primeiros são de acervo e me interessam direto. `[inst]` — não executei
 nenhum nesta verificação.

@@ -132,11 +132,10 @@ diretamente em 04/08/2026.
   mediana com pool de 40 candidatos — otimização de latência é o item 1 do card
   `tarefas.platafirma.org/tasks/299`.
 
-**`acervo-status`** — `[exec]`. Monitor do acervo: estado corrente por **obra** nos cinco
+**`acervo status`** — `[exec]`. Monitor do acervo: estado corrente por **obra** nos cinco
 degraus do fluxo — catalogada, armazenada, ingerida (chunkada), embedded (vetor de texto),
 vetorizada (vetor de metadado) — e a **fuga por degrau**: quantas obras vazam entre dois
-degraus e por qual causa. Binário próprio em `~/AI/bin/acervo-status` (formatador em
-`_acervo-status-fmt.py`); `--json` para máquina, `--detalhe` nomeia quem está fora do lugar.
+degraus e por qual causa. Sub-ato do despachante `acervo` (arq:0040; formatador em `_acervo-status-fmt.py`); `--json` para máquina, `--detalhe` nomeia quem está fora do lugar.
 
 - Lê o substrato, não o discurso: `armazenada` confere objeto a objeto no MinIO (`mc ls`
   nos buckets `acervo` e `pessoal`) em vez de acreditar em `acervo.obra.objeto`. Foi assim

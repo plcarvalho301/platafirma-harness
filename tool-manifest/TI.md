@@ -40,19 +40,21 @@ Em `tool-manifest/GERAL.md`, comum a todas as cadeiras. Não se replica aqui.
 ## Por domínio — ponteiro, não manual
 
 ```
-acervo, estado por obra         : acervo-status [--json] [--detalhe]
+acervo, estado por obra         : acervo status [--json] [--detalhe]
 pôr arquivo na fila do acervo   : acervo-drop [--pessoal|--copiar|-n] <arquivo>
 carregar planilha de ingestão   : acervo-ingerir [--apply]        dry-run por default
 SQL no acervo                   : docker exec -i rag-extractor-pg psql -U rag -d rag_extractor -At -F ' :: ' -c "<sql>"
 objeto no MinIO                 : mc rm --versions --force pf/<bucket>/<sha256>
-declarado x servido             : conferir-servido        exit 1 = ha divergencia
+declarado x servido             : conferir servico [nome]  exit 1 = ha divergencia
+verbo x arq:0037                : conferir verbo [nome]    origem, cabecalho e a conta
+promover release de stack       : deploy <stack> up -d     stack obrigatoria, sem default
 inferência local                : curl 127.0.0.1:11434/... · nvitop · nvcc (CUDA 13.2)
 
 segredo em repo                 : gitleaks · trufflehog · detect-secrets
 código                          : semgrep · bandit · pip-audit
 imagem e SBOM                   : trivy · grype · syft · dive · dockle · hadolint
-identidade e política           : kcadm · jwt · oauth2c · step · opa
-TLS e host                      : testssl.sh · sslyze · ssh-audit · lynis · oscap-casco
+identidade e política           : seg keycloak -- · jwt · oauth2c · step · opa
+TLS e host                      : testssl.sh · sslyze · ssh-audit · lynis · seg oscap avaliar
 
 cifrar, assinar, copiar         : age · sops · minisign · cosign · restic · rsync
 ```
@@ -65,10 +67,11 @@ de outras cadeiras: ler, não escrever.
 
 - **`repo_read`/`repo_grep`/`repo_tree` leem o espelho do ref remoto.** Depois
   de `git push`, chamar `repo_sync` ou as três servem o SHA velho, em silêncio.
-- **`infra compose` ignora o `cwd`**: o `-f` e fixo em
-  `platafirma-core/docker-compose.yml`, entao `up -d` de dentro de outro repo
-  promove o core inteiro e recria a borda. Outro projeto exige
-  `INFRA_COMPOSE=<caminho> infra compose ...`.
+- **`infra compose` nao existe mais.** Promover release saiu para `deploy <stack>`
+  (capacidade `mudanca`). O antigo tinha `-f` fixo no core e ignorava o `cwd`:
+  chamado de outro repo, promovia o control-plane inteiro. No `deploy` a stack e
+  argumento obrigatorio, lido de `registro/stacks.json`; nao ha default nem "todas",
+  e `down` em stack critica exige `PF_SIM=1`.
 - **`&&` encadeado no `run_command`**: passo intermediário não-zero derruba o
   resto sem erro visível. Usar `;` ou chamadas separadas.
 - **Restart do ops-mcp mata a chamada em curso.** `infra restart` já despacha

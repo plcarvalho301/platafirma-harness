@@ -24,17 +24,26 @@ fechar                          : tarefas fechar <id>
 amarrar subtarefa               : tarefas sub <pai> <filho>
 o que o verbo não cobre         : tarefas api <MÉTODO> <caminho> | tarefas api-corpo (JSON em stdin)
 
-estado do acervo (5 degraus)    : acervo-status            [--json | --detalhe]
+estado do acervo (5 degraus)    : acervo status           [--json | --detalhe]
                                   ÚNICA fonte de número do acervo — ver regra abaixo
+demais atos do acervo           : acervo                  sem argumento, lista os sub-atos
+consulta ao RAG pela linha      : ragq "<pergunta>"       mesmo contrato do rag_search do MCP
 
-o que está no ar                : infra estado
-está tudo saudável?             : infra saude
+o que está no ar                : infra estado [alvo]
+está tudo saudável?             : infra saude  [alvo]
 log de contêiner ou unit        : infra logs <alvo> [n]     descobre qual dos dois é
-reiniciar sem se matar          : infra restart <unit>      destacado por systemd-run
-mexer no compose do core        : infra compose <args...>
+reiniciar sem se matar          : infra restart <alvo>      destacado; exige alvo explícito
+
+promover release de uma stack   : deploy <stack> up -d      stack obrigatória, sem default
+ver o declarado de uma stack    : deploy <stack>            não toca em nada
+quais stacks existem            : deploy                    lista o registro
+
+declarado x servido             : conferir servico [nome]   exit 1 = há divergência
+verbo x arq:0037                : conferir verbo [nome]     origem, cabeçalho e a conta
+toolkit de segurança            : seg                       despachante (arq:0040)
 
 estado do repo                  : git -C ~/AI/<repo> status --short
-publicar                        : git -C ~/AI/<repo> add -A && git ... commit -m "..." && git ... push
+publicar                        : git -C ~/AI/<repo> add -A ; git ... commit -m "..." ; git ... push
 job > 2 min                     : longjob run <nome> <cmd...>   | list, logs, status, log, stop
 
 venv reprodutível               : uv venv / uv pip install / uvx <pkg>
@@ -47,7 +56,20 @@ histórico de carga              : sar                  (única que responde "h�
 espaço                          : df -h · du -sh · ncdu
 ```
 
-> **Número do acervo sai de `acervo-status`, nunca de SQL na mão.** Contagem crua
+## O verbo declara a capacidade que serve
+
+Todo verbo da plataforma carrega, nas primeiras linhas do arquivo: uma linha de
+propósito, `capacidade:` (uma das do mapa da mesa), `dono:` e, quando ajuda,
+`componente:`. Capacidade não se inventa no cabeçalho — nome fora do mapa reprova.
+
+`conferir verbo` mede isso e a conta de `arq:0037` — um verbo por capacidade — e
+sai 1 enquanto houver divergência. Catálogo completo, com origem de cada verbo:
+`Ajuda:Catálogo de verbos` na wiki e `docs/catalogo-de-verbos.md` no harness.
+
+Verbo que é despachante de toolkit (`acervo`, `seg`) é o par binário+subcomando,
+por `arq:0040`: o binário agrupa, o subcomando é o ato.
+
+> **Número do acervo sai de `acervo status`, nunca de SQL na mão.** Contagem crua
 > `WHERE embedding IS NULL` inclui os chunks não-textuais (tabela, figura, layout),
 > que nunca recebem vetor por contrato do embedder (`NOT is_not_text AND length(text)>0`)
 > — subtrair total menos vetorizados fabrica uma pendência que não existe. Pendência

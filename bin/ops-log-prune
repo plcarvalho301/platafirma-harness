@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Poda de log de operação por idade. Chamado pelo cron do claudinho, diariamente.
 # capacidade: orfa
+# orfa por design: entra em gerenciamento de memoria (F3d)
 # dono: claudinho-TI
 # Retenção declarada em RETENCAO_DIAS; alvos em ALVOS.
 # Não roda dentro do ops-mcp de propósito: processo que se auto-poda perde o log
