@@ -5,6 +5,33 @@ de negócio que serve (`docs/arquitetura-negocio-operacao.md`, `arq:0037`).
 
 Espelho de leitura humana: `Ajuda:Catálogo de verbos` na wiki.
 
+## Mandato: um verbo por capacidade de negócio
+
+`arq:0037` é a régua e vale como mandato do dono: **capacidade instanciada no
+harness tem um verbo, e o verbo serve uma capacidade.** Verbo que executa atos de
+duas capacidades se parte; dois verbos para a mesma capacidade se resolvem de um
+dos dois modos declarados na ADR — consolidar num só, ou partir a capacidade em
+filhas, cada uma com o seu verbo.
+
+Cabeçalho e origem única não substituem isto. São como o verbo se declara e de
+onde ele vem; o mandato é **quantos** podem existir.
+
+Conta atual, por capacidade:
+
+| Capacidade | Verbos hoje | Conforme | Saída |
+|---|---|---|---|
+| `trabalho` | 1 — `tarefas` | sim | — |
+| `mensagem` | 1 — `fila` | sim | — |
+| `expediente` | 1 — `monta-sessao` | sim | — |
+| `conhecimento` | 6 | **não** | consolidar em `acervo <ato>`; `rag.py` e `ragq` decidem-se com claudinho-IA |
+| `verificacao` | 4 | **não** | consolidar em `conferir <classe>`; `ssg-deriva` é preparo de insumo, candidato a sair da capacidade |
+| `acesso` | 2 | **não** | `kcadm` e `openssl-pqc` são invólucros de ferramenta de terceiro; candidatos a sair da espinha |
+| `infra` | 2 | **não** | `longjob` já está pendurado, fora de `infra` |
+
+Três das sete capacidades instanciadas estão conformes. As outras quatro têm
+verbo demais, e a escolha entre consolidar e partir é do dono da capacidade, com
+o recorte cabendo à mesa de arquitetura.
+
 ## Contrato de cabeçalho
 
 Todo verbo da plataforma carrega, nas primeiras linhas do arquivo:

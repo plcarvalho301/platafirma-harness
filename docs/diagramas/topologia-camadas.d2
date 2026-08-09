@@ -1,0 +1,91 @@
+grid-rows: 4
+grid-gap: 26
+
+vars: {
+  d2-config: {
+    layout-engine: elk
+    theme-id: 0
+    pad: 24
+  }
+}
+
+classes: {
+  faixa-con: {
+    style: { fill: "#F3EEF7"; stroke: "#D8CBE4"; stroke-width: 2; font-color: "#4A2F63"; font-size: 19; border-radius: 8 }
+  }
+  faixa-core: {
+    style: { fill: "#EAF2EE"; stroke: "#C2DACE"; stroke-width: 2; font-color: "#1F5040"; font-size: 19; border-radius: 8 }
+  }
+  faixa-mod: {
+    style: { fill: "#EEF3F9"; stroke: "#C9D8E9"; stroke-width: 2; font-color: "#1F3A5F"; font-size: 19; border-radius: 8 }
+  }
+  faixa-ator: {
+    style: { fill: "#F1F4F8"; stroke: "#DCE2EA"; stroke-width: 2; font-color: "#5C6875"; font-size: 19; border-radius: 8 }
+  }
+  cartao: {
+    style: { fill: "#FFFFFF"; stroke: "#DCE2EA"; stroke-width: 2; font-color: "#222429"; font-size: 15; border-radius: 6 }
+  }
+  fluxo: {
+    style: { stroke: "#1F3A5F"; stroke-width: 2; font-color: "#1F3A5F"; font-size: 13 }
+  }
+  semantica: {
+    style: { stroke: "#8F3312"; stroke-width: 2; font-color: "#8F3312"; font-size: 13 }
+  }
+  direta: {
+    style: { stroke: "#93A0AE"; stroke-width: 2; stroke-dash: 4; font-color: "#5C6875"; font-size: 13 }
+  }
+}
+
+ator: ATORES E CLIENTES {
+  class: faixa-ator
+  grid-columns: 3
+  user: usuários { class: cartao }
+  harness: harness — platafirma-harness { class: cartao }
+  tarefas: tarefas { class: cartao }
+}
+
+mod: MÓDULOS — modulo-* {
+  class: faixa-mod
+  grid-columns: 3
+  f1: firma 1 { class: cartao }
+  f2: firma 2 { class: cartao }
+  f3: firma 3 { class: cartao }
+}
+
+core: CORE {
+  class: faixa-core
+  grid-columns: 2
+  cp: control-plane — platafirma-core\nIAM · borda · política { class: cartao }
+  motor: MOTOR — platafirma-motor {
+    class: faixa-core
+    grid-columns: 3
+    rag: RAG { class: cartao }
+    msg: msg { class: cartao }
+    onto: onto-ref { class: cartao }
+  }
+}
+
+con: CONHECIMENTO — platafirma-conhecimento {
+  class: faixa-con
+  grid-columns: 3
+  acervo: Acervo { class: cartao }
+  cat: Catálogo { class: cartao }
+  dom: onto-domínios { class: cartao }
+}
+
+ator.user -> core.cp: borda { class: fluxo }
+ator.harness -> core.cp: borda { class: fluxo }
+ator.harness -> core.motor.msg: cliente da malha { class: direta }
+ator.tarefas -> core.motor.msg { class: direta }
+
+mod.f1 -> core.cp: consumo { class: fluxo }
+mod.f2 -> core.cp { class: fluxo }
+mod.f3 -> core.cp { class: fluxo }
+
+core.cp -> core.motor.rag: borda, não tráfego { class: fluxo }
+core.motor.rag -> con.cat: publica { class: semantica }
+con.cat -> core.motor.rag: ocorrência { class: semantica }
+core.motor.onto -> con.dom: referencia { class: semantica }
+con.acervo -> con.cat { class: direta }
+con.dom -> con.cat { class: direta }
+ator.user -> con.acervo: acesso direto — governado pela borda { class: direta }
