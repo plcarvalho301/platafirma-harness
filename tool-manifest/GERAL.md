@@ -62,6 +62,9 @@ Todo verbo da plataforma carrega, nas primeiras linhas do arquivo: uma linha de
 propósito, `capacidade:` (uma das do mapa da mesa), `dono:` e, quando ajuda,
 `componente:`. Capacidade não se inventa no cabeçalho — nome fora do mapa reprova.
 
+Forma extensa do BizBOK e contração valem as duas: `gestao-de-motores` e `motor`
+são o mesmo termo, e a conferência as trata como equivalentes.
+
 `conferir verbo` mede isso e a conta de `arq:0037` — um verbo por capacidade — e
 sai 1 enquanto houver divergência. Catálogo completo, com origem de cada verbo:
 `Ajuda:Catálogo de verbos` na wiki e `docs/catalogo-de-verbos.md` no harness.

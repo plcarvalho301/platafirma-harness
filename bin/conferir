@@ -226,6 +226,34 @@ def capacidades_do_mapa():
     return set(re.findall(r"^\| `([a-z/-]+)` \|", texto, re.M))
 
 
+def normaliza(cap):
+    """Formas equivalentes do mesmo termo. BizBOK nomeia a capacidade por extenso
+    (`gestao-de-motores`); o mapa da mesa lavra a contracao (`motor`). As duas valem,
+    e nenhuma das duas e erro — o dicionario nao e do verificador."""
+    c = (cap or "").strip().lower()
+    for prefixo in ("gestao-de-", "gestao-do-", "gestao-da-", "gestao-dos-", "gestao-das-"):
+        if c.startswith(prefixo):
+            c = c[len(prefixo):]
+            break
+    formas = {c}
+    if c.endswith("es"):
+        formas.add(c[:-2])
+    if c.endswith("s"):
+        formas.add(c[:-1])
+    return formas
+
+
+def canonica(cap, validas):
+    """Devolve o termo como o mapa o lavrou, ou None se nenhuma forma bater."""
+    if validas is None or not cap:
+        return None
+    minhas = normaliza(cap)
+    for v in validas:
+        if normaliza(v) & minhas:
+            return v
+    return None
+
+
 def conferir_verbo(alvo):
     houve = False
     validas = capacidades_do_mapa()
@@ -264,13 +292,18 @@ def conferir_verbo(alvo):
             comp = f" componente={cab['componente']}" if cab["componente"] else ""
             print(f"    cabecal : capacidade={cab['capacidade']} dono={cab['dono']}{comp}")
         cap = cab["capacidade"]
+        canon = None
         if cap and cap != "orfa":
             if validas is None:
                 print("    aviso   : mapa de capacidades ilegivel — nao validei o nome")
-            elif cap not in validas:
-                houve = True
-                print(f"    CAPACID : {cap!r} nao esta no mapa da mesa — capacidade nao se inventa no cabecalho")
-        porcapacidade.setdefault(cab["capacidade"] or "(nao declarada)", []).append(nome)
+            else:
+                canon = canonica(cap, validas)
+                if canon is None:
+                    houve = True
+                    print(f"    CAPACID : {cap!r} nao esta no mapa da mesa — capacidade nao se inventa no cabecalho")
+                elif canon != cap:
+                    print(f"    termo   : {cap!r} = {canon!r} no mapa (forma extensa e contracao valem)")
+        porcapacidade.setdefault(canon or cab["capacidade"] or "(nao declarada)", []).append(nome)
 
     if alvo and vistos == 0:
         print(f"\n{alvo!r} nao e verbo da plataforma em {BIN} — ou nao existe, ou e ferramenta de terceiro")
@@ -280,7 +313,8 @@ def conferir_verbo(alvo):
         print("\n## arq:0037 — um verbo por capacidade")
         for cap, verbos in sorted(porcapacidade.items()):
             # `orfa` e capacidade declarada como ausente: conta como nao conforme, sempre.
-            fora_do_mapa = validas is not None and cap not in validas and cap not in ("(nao declarada)", "orfa")
+            fora_do_mapa = (validas is not None and cap not in ("(nao declarada)", "orfa")
+                            and canonica(cap, validas) is None)
             conforme = len(verbos) == 1 and cap not in ("(nao declarada)", "orfa") and not fora_do_mapa
             marca = "ok " if conforme else "NAO"
             if marca == "NAO":
