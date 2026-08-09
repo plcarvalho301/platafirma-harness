@@ -2,6 +2,7 @@
 # conferir — compara o que esta DECLARADO com o que esta SERVIDO, por classe de alvo.
 # capacidade: verificacao
 # dono: claudinho-TI
+# componente: docker, git
 """Classes:
 
   servico [nome]   container gerido por compose: de onde sobe, SHA e sujeira do ref,
@@ -170,7 +171,7 @@ def e_script(caminho):
 
 def cabecalho(caminho):
     """Le as tres linhas declaradas do contrato. Ausencia se reporta, nao se adivinha."""
-    campos = {"proposito": None, "capacidade": None, "dono": None}
+    campos = {"proposito": None, "capacidade": None, "dono": None, "componente": None}
     try:
         with open(caminho, "r", errors="replace") as f:
             linhas = [next(f, "") for _ in range(8)]
@@ -184,6 +185,8 @@ def cabecalho(caminho):
         low = s.lower()
         if low.startswith("capacidade:"):
             campos["capacidade"] = s.split(":", 1)[1].strip()
+        elif low.startswith("componente:"):
+            campos["componente"] = s.split(":", 1)[1].strip()
         elif low.startswith("dono:"):
             campos["dono"] = s.split(":", 1)[1].strip()
         elif i == 1 and ("—" in s or " - " in s):
@@ -245,7 +248,7 @@ def conferir_verbo(alvo):
             continue
         vistos += 1
         cab = cabecalho(caminho)
-        faltando = [k for k, v in cab.items() if not v]
+        faltando = [k for k in ("proposito", "capacidade", "dono") if not cab[k]]
         print(f"\n### {nome}")
         print(f"    origem  : {classe} — {onde}")
         if classe in ("so-no-host", "divergente"):
@@ -258,7 +261,8 @@ def conferir_verbo(alvo):
             houve = True
             print(f"    CABECAL : faltam {', '.join(faltando)}")
         else:
-            print(f"    cabecal : capacidade={cab['capacidade']} dono={cab['dono']}")
+            comp = f" componente={cab['componente']}" if cab["componente"] else ""
+            print(f"    cabecal : capacidade={cab['capacidade']} dono={cab['dono']}{comp}")
         cap = cab["capacidade"]
         if cap and cap != "orfa":
             if validas is None:
