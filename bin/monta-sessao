@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
 # monta-sessao <cadeira> — imprime numa volta o contexto de abertura da cadeira:
+# capacidade: expediente
+# dono: claudinho-IA
 # persona, manifesto declarado por ela, org canônico e a fila dela.
 #
 # As duas variáveis saem do texto da persona, não do nome do arquivo:

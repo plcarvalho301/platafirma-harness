@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
 # fila — caixa de mensagens entre personas da PlataFirma.
+# capacidade: msg
+# dono: claudinho-IA
 # Uma caixa = um arquivo: fila/<persona>.md. Escrita é append sob flock.
 # Leitura sai da mais nova para a mais antiga. Consumo remove o bloco e
 # não deixa resto: caixa vazia é removida do disco.

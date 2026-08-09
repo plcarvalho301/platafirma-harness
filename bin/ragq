@@ -1,0 +1,28 @@
+#!/usr/bin/env bash
+# ragq — consulta o rag-api (127.0.0.1:8100), mesmo contrato do rag_search do MCP.
+# capacidade: gestao-de-motores
+# dono: claudinho-IA
+# INTERINO: absorvido por `motor rag buscar` quando o verbo motor subir
+#           (spec: wiki Frente:harness/motor).
+# uso: ragq '<json do corpo>'   |   ragq --pergunta "..." [--k N] [--texto secao|trecho|nenhum] [--dominio X]
+set -euo pipefail
+TOK=$(grep -m1 '^RAG_API_TOKEN=' "$HOME/AI/platafirma-conhecimento/rag/.env" | cut -d= -f2- | tr -d '"'"'"'')
+if [ "${1:-}" = "--json" ]; then BODY="$2"; else
+  BODY=$(python3 - "$@" <<'PY'
+import json,sys
+a=sys.argv[1:]; o={}
+i=0
+while i < len(a):
+    k=a[i].lstrip('-'); v=a[i+1]; i+=2
+    if k=='k': v=int(v)
+    if k in o:
+        o[k]=(o[k] if isinstance(o[k],list) else [o[k]])+[v]
+    else:
+        o[k]=v
+print(json.dumps(o))
+PY
+)
+fi
+curl -s -m 300 -X POST http://127.0.0.1:8100/search \
+  -H "Authorization: Bearer $TOK" -H 'Content-Type: application/json' \
+  -d "$BODY"
