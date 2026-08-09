@@ -90,4 +90,3 @@ de outras cadeiras: ler, não escrever.
   `platafirma-core` (keycloak, vikunja, oauth2-proxy, landing, cloudflared e os dois
   bancos) e o par `rag-extractor-api`/`-pg`. Medido por `conferir-servido` em 09/08.
 - `ops-server` roda fora do compose; migração prevista para a janela 4b.
-- `docs/tunnel-oauth-runbook.md` referencia `docs/deploy.md`, inexistente.
