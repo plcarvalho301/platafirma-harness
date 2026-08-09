@@ -1,0 +1,145 @@
+#!/usr/bin/env bash
+# persona — escrita compartimentada das personas da PlataFirma.
+# capacidade: expediente (parte de persona)
+# dono: claudinha-gestao-estrategica
+# Leitura serve do clone sem rede (monta_sessao); a sincronização mora aqui,
+# do lado da escrita: pull antes, confere, commit e push depois. Só toca
+# personas/ — mudança fora dela aborta o salvar em vez de entrar de carona.
+set -euo pipefail
+
+REPO="${PERSONA_REPO:-$HOME/AI/platafirma-harness}"
+ALVO="personas"
+
+uso() {
+  cat >&2 <<'EOF'
+uso:
+  persona abrir              pull --ff-only antes de editar; diz o sha e a idade
+  persona idade              sha, data do último commit e idade do clone
+  persona conferir           roda os checks sem escrever nada
+  persona salvar -m "<msg>"  pull, confere, commit só de personas/ e push
+
+  Checks que BLOQUEIAM: texto fixo divergente do TEMPLATE, bloco repetido
+  dentro do mesmo arquivo, seção declarada vazia ("SEÇÃO: —") com conteúdo
+  embaixo, linha acima de 88 colunas.
+  Checks que AVISAM: teto de 650 palavras.
+EOF
+  exit 2
+}
+
+cd "$REPO"
+
+idade() {
+  local sha data seg
+  sha=$(git rev-parse --short HEAD)
+  data=$(git log -1 --format=%cI)
+  seg=$(( $(date +%s) - $(git log -1 --format=%ct) ))
+  printf '%s · último commit %s · clone com %dh%02dm\n' \
+    "$sha" "$data" $((seg/3600)) $(( (seg%3600)/60 ))
+}
+
+conferir() {
+  python3 - "$REPO/$ALVO" <<'PY'
+import pathlib, re, sys, collections
+
+raiz = pathlib.Path(sys.argv[1])
+tpl = (raiz / "TEMPLATE-persona.md").read_text(encoding="utf-8")
+
+INTERNAS = {"IA", "TI", "arquiteto", "conhecimento", "gestao-estrategica",
+            "produto", "seguranca"}
+CONSULTOR = {"politicas-publicas"}
+CONTRATADAS = {"fabrica", "osint"}
+TETO = 650
+
+def norm(s):
+    return re.sub(r"\s+", " ", s).strip()
+
+def fixo(rotulo):
+    m = re.search(rf"^{rotulo}:.*?(?=\n\n|\n\{{|\n>)", tpl, re.S | re.M)
+    return norm(m.group(0)) if m else None
+
+ATIV = fixo("ATIVAÇÃO")
+FRONT = fixo("FRONTEIRA")
+# a parte entre parênteses é variável por cadeira
+ATIV_PRE = norm(ATIV.split("(")[0]) if ATIV else None
+ATIV_POS = norm(ATIV.split(")")[-1]) if ATIV else None
+
+erros, avisos = [], []
+
+for f in sorted(raiz.glob("persona-*.md")):
+    cad = f.stem.replace("persona-", "")
+    txt = f.read_text(encoding="utf-8")
+    n = norm(txt)
+
+    # 1. texto fixo
+    if cad in INTERNAS | CONSULTOR:
+        if ATIV_PRE and ATIV_PRE not in n:
+            erros.append(f"{f.name}: ATIVAÇÃO divergente do TEMPLATE")
+        elif ATIV_POS and ATIV_POS not in n:
+            erros.append(f"{f.name}: ATIVAÇÃO truncada (falta o fecho do TEMPLATE)")
+    if cad in INTERNAS and FRONT and FRONT not in n:
+        erros.append(f"{f.name}: FRONTEIRA divergente do TEMPLATE")
+
+    # 2. bloco repetido no mesmo arquivo (o defeito que passou meses na IA)
+    linhas = [l.rstrip() for l in txt.splitlines()]
+    c = collections.Counter(l for l in linhas if len(l.strip()) > 40)
+    rep = [l for l, k in c.items() if k > 1]
+    for l in rep:
+        erros.append(f"{f.name}: linha repetida — {l[:60]}…")
+
+    # 3. seção declarada vazia com conteúdo embaixo
+    for m in re.finditer(r"^([A-ZÇÃÉÍÓÚ][A-ZÇÃÉÍÓÚ ]+):\s*—\s*$", txt, re.M):
+        resto = txt[m.end():].lstrip("\n")
+        if resto and not resto[:1].isupper():
+            erros.append(f"{f.name}: {m.group(1)} declara vazio e tem conteúdo abaixo")
+
+    # 4. wrap quebrado
+    for i, l in enumerate(linhas, 1):
+        if len(l) > 88 and "http" not in l:
+            erros.append(f"{f.name}:{i}: linha com {len(l)} colunas")
+
+    # 5. teto
+    p = len(txt.split())
+    if p > TETO:
+        avisos.append(f"{f.name}: {p} palavras (teto {TETO})")
+
+for a in avisos:
+    print(f"aviso  {a}")
+for e in erros:
+    print(f"ERRO   {e}")
+print(f"--- {len(erros)} erro(s), {len(avisos)} aviso(s)")
+sys.exit(1 if erros else 0)
+PY
+}
+
+case "${1:-}" in
+  abrir)
+    git pull --ff-only -q origin HEAD && echo "clone em dia · $(idade)"
+    ;;
+  idade)
+    idade
+    ;;
+  conferir)
+    conferir
+    ;;
+  salvar)
+    shift
+    [ "${1:-}" = "-m" ] && [ -n "${2:-}" ] || uso
+    msg="$2"
+    sujo=$(git status --porcelain | grep -v "^.. $ALVO/" || true)
+    if [ -n "$sujo" ]; then
+      echo "abortado: há mudança fora de $ALVO/ — commite ou guarde antes." >&2
+      echo "$sujo" >&2
+      exit 1
+    fi
+    git pull --ff-only -q origin HEAD
+    conferir
+    git add "$ALVO"
+    git diff --cached --quiet && { echo "nada a salvar"; exit 0; }
+    git commit -q -m "$msg"
+    git push -q origin HEAD
+    echo "salvo · $(idade)"
+    ;;
+  *)
+    uso
+    ;;
+esac
