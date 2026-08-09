@@ -48,9 +48,20 @@ def git_estado(caminho):
     if rc != 0:
         return None
     _, sha, _ = sh(["git", "-C", topo, "rev-parse", "--short", "HEAD"])
-    _, sujo, _ = sh(["git", "-C", topo, "status", "--porcelain"])
+    _, porcelain, _ = sh(["git", "-C", topo, "status", "--porcelain"])
+    linhas = [l for l in porcelain.splitlines() if l.strip()]
+    # nao-rastreado e lixo de runtime; rastreado modificado e edicao que so existe aqui.
+    modificado = [l for l in linhas if not l.startswith("??")]
     _, ref, _ = sh(["git", "-C", topo, "rev-parse", "--abbrev-ref", "HEAD"])
-    return {"topo": topo, "sha": sha, "ref": ref, "sujo": bool(sujo)}
+    _, atras, _ = sh(["git", "-C", topo, "rev-list", "--count", "HEAD..origin/main"])
+    return {
+        "topo": topo,
+        "sha": sha,
+        "ref": ref,
+        "modificado": modificado,
+        "nao_rastreado": len(linhas) - len(modificado),
+        "atras": int(atras) if atras.isdigit() else None,
+    }
 
 
 def env_declarado(c):
@@ -86,10 +97,16 @@ def main():
             houve = True
             print("    DERIVA  : nao e worktree de deploy — producao sobe de clone de trabalho")
         if g:
-            estado = f"{g['ref']}@{g['sha']}" + ("  ARVORE SUJA" if g["sujo"] else "")
-            if g["sujo"]:
+            print(f"    ref     : {g['ref']}@{g['sha']}")
+            if g["atras"]:
+                print(f"    ATRAS   : {g['atras']} commits atras de origin/main")
+            if g["modificado"]:
                 houve = True
-            print(f"    ref     : {estado}")
+                print(f"    EDITADO : {len(g['modificado'])} arquivo(s) rastreado(s) so existem aqui")
+                for l in g["modificado"][:5]:
+                    print(f"              {l}")
+            if g["nao_rastreado"]:
+                print(f"    lixo    : {g['nao_rastreado']} caminho(s) nao rastreado(s)")
 
         decl, erro = env_declarado(c)
         if decl is None:
