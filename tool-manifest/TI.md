@@ -45,6 +45,7 @@ pôr arquivo na fila do acervo   : acervo-drop [--pessoal|--copiar|-n] <arquivo>
 carregar planilha de ingestão   : acervo-ingerir [--apply]        dry-run por default
 SQL no acervo                   : docker exec -i rag-extractor-pg psql -U rag -d rag_extractor -At -F ' :: ' -c "<sql>"
 objeto no MinIO                 : mc rm --versions --force pf/<bucket>/<sha256>
+declarado x servido             : conferir-servido        exit 1 = ha divergencia
 inferência local                : curl 127.0.0.1:11434/... · nvitop · nvcc (CUDA 13.2)
 
 segredo em repo                 : gitleaks · trufflehog · detect-secrets
@@ -85,5 +86,8 @@ de outras cadeiras: ler, não escrever.
   privilégio, presos à decisão de branching.
 - `restic` presente e **sem repositório configurado**; `deploy/backup-cofre.timer`
   existe no repo e não está `enabled` no user.
+- **9 dos 16 contêineres sobem de clone de trabalho, não de worktree de deploy** — todo o
+  `platafirma-core` (keycloak, vikunja, oauth2-proxy, landing, cloudflared e os dois
+  bancos) e o par `rag-extractor-api`/`-pg`. Medido por `conferir-servido` em 09/08.
 - `ops-server` roda fora do compose; migração prevista para a janela 4b.
 - `docs/tunnel-oauth-runbook.md` referencia `docs/deploy.md`, inexistente.
