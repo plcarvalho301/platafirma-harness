@@ -81,10 +81,10 @@ substitui: gestao-estrategica
 rotulo: Governança pública
 natureza: modelo
 estatuto: instituido
-definicao: O arranjo que decide quem manda, para onde se vai e quem cobra dentro de uma organização pública. São três peças: liderança, que é quem responde por quê; estratégia, que é o rumo declarado; e controle, que é quem verifica se o rumo está sendo seguido. Juntas, servem para avaliar, direcionar e monitorar a gestão.
- O que se cobra desse arranjo é valor público: serviço e efeito que a sociedade reconhece como resposta a uma necessidade dela. Aí está a diferença para o arranjo de uma empresa, que responde a quem é dono e pode ser trocado por quem não gosta. Aqui responde-se a quem não escolheu ser cliente e não tem para onde levar sua preferência.
+definicao: Na empresa, quem discorda de quem dirige vende a participação ou troca de fornecedor, e é a ameaça de saída que corrige o rumo. No serviço público não há sócio que capture o excedente nem cliente que possa levar a preferência para outro lugar: a correção que vem do mercado não existe, e por isso ela precisa estar instituída — alguém de fora de quem executa, com poder de direcionar, avaliar e monitorar, e obrigação de fazê-lo em público.
+ O que esse arranjo cobra é valor público: serviço e efeito que a sociedade reconhece como resposta a uma necessidade dela, e não retorno a quem investiu. A régua decide os casos difíceis pela pergunta de quem tem saída — estatal em mercado concorrencial, consórcio público, ONG contratada para prestar serviço público. Órgão cuja direção só responde a instância interna não tem governança pública, ainda que publique relatório e mantenha comitê.
 obras-ancora: b90b5aea-d3fa-42de-b76a-9e88ca207592, 8cbc028a-4783-4d19-b75e-4f6a849d991e
-caso-falseador: Um órgão sem instância alguma que avalie, direcione e monitore a gestão e que ainda assim entregue valor público de forma sustentada e prestável de contas.
+caso-falseador: Um órgão público cuja direção responda apenas a instância interna a quem executa e que ainda assim sustente correção de rumo equivalente à que a saída de sócio ou de cliente produz no setor privado.
 pai-proposto: governanca
 substitui:
 
