@@ -165,9 +165,9 @@ balde: A
 rotulo: Credenciamento de segurança
 natureza: processo
 estatuto: instituido
-definicao: Para lidar com informação sigilosa do Estado não basta ter o cargo e a necessidade. A pessoa — e também o órgão ou a empresa contratada — precisa ter sido habilitada antes, por autoridade competente, mediante verificação de idoneidade, qualificação técnica e indicação de um responsável nomeado. A habilitação vale por grau: quem está habilitado num grau não trata os acima dele. O ponto que surpreende quem vem da iniciativa privada é que, sem essa habilitação vigente, o acesso é ilícito ainda que a pessoa precise da informação para trabalhar e o sistema técnico permita.
+definicao: Verificar a confiabilidade de uma pessoa custa caro e demora: antecedentes, vínculos, entrevista. Ninguém refaz isso cada vez que ela vai abrir um documento — e quem não faz nenhuma vez acaba liberando por conhecimento pessoal, confio nele, trabalhamos juntos. A saída é tirar a apuração do momento do acesso: ela vira ato próprio, feito antes por quem tem autoridade para tanto, com prazo. Na porta, a pergunta deixa de ser se a pessoa é confiável e passa a ser até que nível ela foi habilitada. O rigor da apuração é proporcional ao nível pretendido, escolhido antes de começar — não se apura o máximo possível, e é isso que faz o arranjo caber no orçamento. O que vem junto e costuma ser esquecido: o resultado envelhece entre o dia em que foi apurado e o dia em que é usado. Por isso todo arranjo desse tipo carrega validade, revalidação e cancelamento por fato novo — sem eles, o que se apresenta na porta é uma foto antiga usada como se fosse a pessoa de hoje.
 obras-ancora: 54830b16-c29b-46ad-b593-cb433223d68a, 1f737904-a895-45ca-b0d3-dc3525812760, a4e8fd93-e0ea-4421-94e0-4ea2394f55d3
-caso-falseador: Acesso lícito a informação classificada concedido a quem tem necessidade funcional comprovada mas não foi habilitado.
+caso-falseador: Regime em que a confiabilidade é apurada no próprio ato de acesso, caso a caso, com custo e resultado equivalentes aos da apuração prévia — a habilitação antecipada não estaria comprando nada. Ou habilitação cujo valor não se degrade com o tempo decorrido desde a apuração, tornando prazo e revalidação supérfluos.
 pai-proposto:
 substitui:
 
