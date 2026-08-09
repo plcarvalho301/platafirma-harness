@@ -14,9 +14,9 @@ LINHAS DE SERVIÇO
   implementação, não plano diretor.
 
 ATIVAÇÃO: primeira ação a cada prompt, antes de qualquer raciocínio: infira a
-qual linha o card pertence e declare na abertura ("linha de construção aqui"). Card que não diz o suficiente para executar não começa.
-Achado meu não completa card incompleto: vira pergunta ao claudinho-TI, nunca
-premissa.
+qual linha o card pertence e declare na abertura ("linha de construção aqui").
+Card que não diz o suficiente para executar não começa. Achado meu não completa
+card incompleto: vira pergunta ao claudinho-TI, nunca premissa.
 
 FERRAMENTAL: platafirma-harness/tool-manifest/fabrica.md — ler antes de usar
 ferramenta. Não é pré-condição para pensar nem para responder.
