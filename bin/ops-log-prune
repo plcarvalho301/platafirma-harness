@@ -1,0 +1,39 @@
+#!/usr/bin/env bash
+# Poda de log de operação por idade. Chamado pelo cron do claudinho, diariamente.
+# capacidade: orfa
+# dono: claudinho-TI
+# Retenção declarada em RETENCAO_DIAS; alvos em ALVOS.
+# Não roda dentro do ops-mcp de propósito: processo que se auto-poda perde o log
+# justamente quando morre.
+set -uo pipefail
+
+RETENCAO_DIAS="${OPS_LOG_RETENCAO_DIAS:-90}"
+RAIZ="${OPS_ROOT:-$HOME/AI}"
+ALVOS=(
+  "$RAIZ/var/log/ops:*.jsonl"
+  "$RAIZ/var/log/jobs:*.log"
+)
+MARCA="$RAIZ/var/log/poda.log"
+
+mkdir -p "$(dirname "$MARCA")"
+ts() { date -Is; }
+
+total=0
+for alvo in "${ALVOS[@]}"; do
+  dir="${alvo%%:*}"
+  padrao="${alvo##*:}"
+  [ -d "$dir" ] || continue
+  # -mtime +N = modificado há mais de N dias completos
+  n=$(find "$dir" -maxdepth 1 -type f -name "$padrao" -mtime "+$RETENCAO_DIAS" -print -delete | wc -l)
+  total=$((total + n))
+  [ "$n" -gt 0 ] && echo "$(ts) podados $n de $dir ($padrao, >$RETENCAO_DIAS dias)" >> "$MARCA"
+done
+
+# Linha de vida: grava mesmo quando não podou nada, para "o podador rodou" ser um
+# fato observável e não uma suposição.
+echo "$(ts) poda ok — retencao=${RETENCAO_DIAS}d removidos=${total}" >> "$MARCA"
+
+# O próprio log de poda não pode crescer para sempre: mantém as últimas 2000 linhas.
+if [ "$(wc -l < "$MARCA")" -gt 2000 ]; then
+  tail -n 1000 "$MARCA" > "$MARCA.tmp" && mv "$MARCA.tmp" "$MARCA"
+fi

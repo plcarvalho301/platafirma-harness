@@ -221,6 +221,14 @@ def conferir_verbo(alvo):
         classe, onde = origem(nome, caminho)
         if classe == "terceiro":
             continue
+        # symlink cujo destino tem outro nome e ALIAS de um verbo ja contado: aparece
+        # declarado, mas nao entra na conta de arq:0037 — senao a deprecacao de um verbo
+        # o faz reprovar por existir duas vezes.
+        if classe == "symlink" and os.path.basename(onde) != nome:
+            vistos += 1
+            print(f"\n### {nome}")
+            print(f"    alias   : de {os.path.basename(onde)} — nao conta na capacidade")
+            continue
         vistos += 1
         cab = cabecalho(caminho)
         faltando = [k for k, v in cab.items() if not v]
@@ -246,7 +254,9 @@ def conferir_verbo(alvo):
     if not alvo:
         print("\n## arq:0037 — um verbo por capacidade")
         for cap, verbos in sorted(porcapacidade.items()):
-            marca = "ok " if len(verbos) == 1 and cap != "(nao declarada)" else "NAO"
+            # `orfa` e capacidade declarada como ausente: conta como nao conforme, sempre.
+            conforme = len(verbos) == 1 and cap not in ("(nao declarada)", "orfa")
+            marca = "ok " if conforme else "NAO"
             if marca == "NAO":
                 houve = True
             print(f"    {marca}  {cap:<16} {len(verbos)}  {' '.join(verbos)}")

@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
 # tarefas — cliente do rastreador de tarefas da PlataFirma.
+# capacidade: trabalho
+# dono: claudinho-TI
 # Verbo genérico de propósito: hoje o backend é Vikunja; o nome não o cita para
 # que a troca de backend não obrigue a reescrever chamada em persona nenhuma.
 #
