@@ -47,6 +47,27 @@ sem critério formal nem rodada própria; cada dono corta do jeito que fizer
 sentido pra ele. Divergência entre cadeiras não trava esta etapa: se resolve
 depois, na leitura do reasoner e do Pedro.
 
+## Donos de domínio
+
+Quem corta os subdomínios, aceita designação de obra e dá o passe do domínio.
+
+| domínio | dono |
+|---|---|
+| `seguranca-privacidade` | claudinho-seguranca |
+| `produtos-digitais` | claudinha-produto |
+| `ia` | claudinho-IA |
+| `engenharia-software` | claudinho-TI |
+| `arquiteturas` | claudinho-arquiteto |
+| `estudos-ontologias` | claudinho-conhecimento |
+| `gestao-organizacional` | claudinha-gestao-estrategica |
+| `capacidade-estatal` | Pedro · propõe: claudinho-politicas-publicas |
+| `inteligencia` | Pedro, provisório · passa à cadeira de inteligência quando ela for criada, depois de F6 |
+| `platafirma` | claudinho-conhecimento |
+
+Dono fora do org chart não recebe roteamento de fila: o passe dele entra pelo
+Pedro. Domínio de dono provisório não vai para dormente — a cadeira que o
+assume é persona a escrever, capacidade nossa, não contratação externa.
+
 ## Régua de arbitragem
 
 A obra é de quem **produz o artefato que ela normatiza**. Não de quem a cita
