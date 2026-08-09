@@ -23,10 +23,16 @@ Conta atual, por capacidade:
 | `trabalho` | 1 — `tarefas` | sim | — |
 | `mensagem` | 1 — `fila` | sim | — |
 | `expediente` | 1 — `monta-sessao` | sim | — |
+| `verificacao` | 1 — `conferir` | sim | `oscap-*` e `ssg-deriva` migram para `seguranca` ou saem da capacidade |
 | `conhecimento` | 6 | **não** | consolidar em `acervo <ato>`; `rag.py` e `ragq` decidem-se com claudinho-IA |
-| `verificacao` | 4 | **não** | consolidar em `conferir <classe>`; `ssg-deriva` é preparo de insumo, candidato a sair da capacidade |
 | `acesso` | 2 | **não** | `kcadm` e `openssl-pqc` são invólucros de ferramenta de terceiro; candidatos a sair da espinha |
-| `infra` | 2 | **não** | `longjob` já está pendurado, fora de `infra` |
+| `infra` | 1 — `infra` | sim | `longjob` declarado órfão no mapa; `compose` sai para `deploy` |
+| `mudanca` | 0 — `deploy` a construir | não instanciada | absorve `infra compose` |
+| `incidente` | 0 | não instanciada | sem verbo e sem registro |
+| `ativo` | 0 — `config` a construir | não instanciada | filha `ativo-versao` fica em git, sem verbo |
+
+A conferência dessa tabela é mecânica: `conferir verbo` a reproduz do próprio PATH e
+sai 1 enquanto houver capacidade com verbo demais ou verbo sem capacidade declarada.
 
 Três das sete capacidades instanciadas estão conformes. As outras quatro têm
 verbo demais, e a escolha entre consolidar e partir é do dono da capacidade, com
@@ -69,7 +75,7 @@ Regras verificáveis, na ordem em que `conferir verbo` as aplica:
 | `exporta-acervo-xlsx.py` | `conhecimento` | claudinho-conhecimento | sem cabeçalho — propósito não declarado | só no host |
 | `infra` | `infra` | claudinho-TI | estado e operação da infra local | harness |
 | `longjob` | pendurado | claudinho-TI | dispara trabalho longo como unit transiente | core |
-| `conferir-servido` | `verificacao` | claudinho-TI | compara declarado com servido em contêiner | harness |
+| `conferir` | `verificacao` | claudinho-TI | compara declarado com servido, por classe de alvo | harness |
 | `oscap-casco` | `verificacao` | claudinho-seguranca | avaliação CIS via OpenSCAP | cópia |
 | `oscap-casco-falhas` | `verificacao` | claudinho-seguranca | lista as regras que falharam num log | cópia |
 | `ssg-deriva` | `verificacao` | claudinho-seguranca | regenera o datastream derivado do OpenSCAP | cópia |
