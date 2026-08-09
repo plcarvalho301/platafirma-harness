@@ -176,7 +176,7 @@ Vale para qualquer cadeira. Existindo instrumento para a pergunta, o número sai
 dele — consulta na mão contra o banco só quando o instrumento não responde, e aí
 declarando que foi na mão.
 
-- acervo (obras, chunks, vetores, fuga por degrau): `acervo status`
+- acervo (obras, chunks, vetores, fuga por degrau): `acervo escada`
 - facetas e população do índice: `rag_facets`
 - catálogo dos verbos: `tool-manifest/GERAL.md`
 
@@ -204,7 +204,7 @@ persona — a instrução aponta para cá.
 4. Bullet de PDF vira heading às vezes: confira o campo `obra` antes de tratar
    como obra própria.
 5. Nada no retorno declara idioma. Confira que a obra é legível antes de citar.
-6. Tamanho e composição do acervo se consultam em `acervo status`; faceta e
+6. Tamanho e composição do acervo se consultam em `acervo escada`; faceta e
    população, em `rag_facets`. Número copiado para dentro de prompt vira segunda
    fonte que ninguém atualiza.
 7. Corpus ausente não é razão para não responder; é razão para declarar

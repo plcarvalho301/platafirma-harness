@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Formatador humano do acervo status. Lê o JSON do monitor em stdin."""
+"""Formatador humano do acervo escada. Lê o JSON do monitor em stdin."""
 import sys, json
 
 d = json.load(sys.stdin)

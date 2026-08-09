@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
-# acervo status — estado corrente do acervo por OBRA, nos cinco degraus do fluxo.
+# acervo escada — estado corrente do acervo por OBRA, nos cinco degraus do fluxo.
 # Leitura direta do substrato: MinIO (store) + Postgres (catálogo e índice).
 # Read-only: não cria objeto no schema do rag, não escreve em tabela nenhuma.
 #
-# uso:  acervo status [--json] [--detalhe]
+# uso:  acervo escada [--json] [--detalhe]
 set -euo pipefail
 
 export DOCKER_HOST=${DOCKER_HOST:-unix:///run/user/1001/docker.sock}
@@ -19,7 +19,7 @@ for a in "$@"; do
   case "$a" in
     --json) JSON=1 ;;
     --detalhe) DETALHE=1 ;;
-    *) echo "uso: acervo status [--json] [--detalhe]" >&2; exit 2 ;;
+    *) echo "uso: acervo escada [--json] [--detalhe]" >&2; exit 2 ;;
   esac
 done
 
@@ -54,17 +54,17 @@ if pastas or ilegiveis:
 done > "$TMP/store.txt"
 
 if [ ! -s "$TMP/store.txt" ]; then
-  echo "acervo status: a listagem do store saiu VAZIA — abortando antes de medir." >&2
+  echo "acervo escada: a listagem do store saiu VAZIA — abortando antes de medir." >&2
   echo "  Sem isto, 'armazenadas' iria a 0 e o alarme apontaria para o catálogo inteiro." >&2
   echo "  Confira o alias: mc ls $MC_ALIAS/acervo | head" >&2
   exit 3
 fi
-docker cp "$TMP/store.txt" "$PG:/tmp/acervo-status-store.txt" >/dev/null
+docker cp "$TMP/store.txt" "$PG:/tmp/acervo-escada-store.txt" >/dev/null
 
 # 2. a escada, medida degrau a degrau contra o store carregado.
 SQL=$(cat <<'EOSQL'
 CREATE TEMP TABLE store_obj (objeto text PRIMARY KEY);
-\copy store_obj FROM '/tmp/acervo-status-store.txt'
+\copy store_obj FROM '/tmp/acervo-escada-store.txt'
 
 CREATE TEMP VIEW e AS
 SELECT o.id, o.titulo, o.objeto, o.endereco,
@@ -153,7 +153,7 @@ if [ "$DETALHE" = 1 ]; then
   echo "=== quem está fora do lugar ==="
   docker exec -i "$PG" psql -U "$USR" -d "$DB" <<'EOSQL'
 CREATE TEMP TABLE store_obj (objeto text PRIMARY KEY);
-\copy store_obj FROM '/tmp/acervo-status-store.txt'
+\copy store_obj FROM '/tmp/acervo-escada-store.txt'
 \echo '-- obra cujo objeto não existe no store'
 SELECT o.titulo, o.objeto FROM acervo.obra o
  WHERE o.objeto IS NOT NULL AND NOT EXISTS (SELECT 1 FROM store_obj s WHERE s.objeto=o.objeto);

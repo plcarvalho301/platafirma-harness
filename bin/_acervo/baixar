@@ -1,12 +1,12 @@
 #!/bin/bash
 # Baixa uma obra do acervo pelo título (busca parcial, sem acento sensível).
-# Uso:  acervo get "philosophy of software"        -> baixa para o diretório atual
-#       acervo get "meditations" /caminho/destino  -> baixa para outro diretório
+# Uso:  acervo baixar "philosophy of software"        -> baixa para o diretório atual
+#       acervo baixar "meditations" /caminho/destino  -> baixa para outro diretório
 set -euo pipefail
 
 TERMO="${1:-}"
 DESTINO="${2:-.}"
-[ -z "$TERMO" ] && { echo "uso: acervo get \"<trecho do titulo>\" [destino]"; exit 1; }
+[ -z "$TERMO" ] && { echo "uso: acervo baixar \"<trecho do titulo>\" [destino]"; exit 1; }
 
 PG=rag-extractor-pg
 PGUSER=$(docker inspect $PG --format '{{range .Config.Env}}{{println .}}{{end}}' | sed -n 's/^POSTGRES_USER=//p')

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# acervo — opera o acervo: estado por obra, download, pacote de classificação e foto do schema.
+# acervo — opera o acervo: escada, obra, bancada de classificação e extrato.
 # capacidade: conhecimento
 # dono: claudinho-conhecimento
 #
@@ -12,10 +12,13 @@ ATOS="$(dirname "$(readlink -f "$0")")/_acervo"
 uso() {
   cat >&2 <<'FIM'
 uso:
-  acervo status [--json] [--detalhe]        estado por obra nos cinco degraus do fluxo
-  acervo get "<trecho do titulo>" [destino] baixa a obra do store pelo título
-  acervo pacote [destino]                   monta o pacote de classificação externa
-  acervo exportar [destino]                 foto do schema acervo em .xlsx
+  acervo escada  [--json] [--detalhe]        onde cada obra parou nos cinco degraus
+  acervo baixar  "<trecho do titulo>" [dest] tira uma cópia da obra do store
+  acervo bancada [destino]                   monta o lote do que falta classificar
+  acervo extrato [destino]                   foto do acervo para ler fora da bancada
+
+Os cinco degraus da escada: catalogada, armazenada, ingerida, embedded,
+vetorizada. `escada` mede; os outros três produzem artefato.
 
 Leitura em todos os quatro; nenhum escreve no schema do rag. Ato desconhecido
 recusa em vez de adivinhar. Ingestão e embedding não são daqui: CLI do
@@ -28,10 +31,10 @@ FIM
 ATO="$1"; shift
 
 case "$ATO" in
-  status)          exec "$ATOS/status"   "$@" ;;
-  get)             exec "$ATOS/get"      "$@" ;;
-  pacote)          exec "$ATOS/pacote"   "$@" ;;
-  exportar)        exec "$ATOS/exportar" "$@" ;;
+  escada)          exec "$ATOS/escada"  "$@" ;;
+  baixar)          exec "$ATOS/baixar"  "$@" ;;
+  bancada)         exec "$ATOS/bancada" "$@" ;;
+  extrato)         exec "$ATOS/extrato" "$@" ;;
   -h|--help|ajuda) uso ;;
   *) echo "acervo: ato desconhecido '$ATO'" >&2; uso ;;
 esac

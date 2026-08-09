@@ -13,7 +13,7 @@ Módulo do harness (`arq:0019`): a superfície de contato entre as personas
 - **MCP do harness** — predicado do mapa de entrypoints e `identity_check(persona)`.
 - **Verbos de operação** (`bin/`) — o que toda cadeira chama por `run_command`:
   `fila`, `monta-sessao`, `tarefas` (rastreador), `infra` (contêiner, unit,
-  timer), `acervo status`. Fonte única: `~/AI/bin` e `~/.local/bin` são symlink.
+  timer), `acervo escada`. Fonte única: `~/AI/bin` e `~/.local/bin` são symlink.
 
 ## Não entra
 
