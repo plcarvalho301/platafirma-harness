@@ -1,0 +1,52 @@
+{
+  "_doc": "AUC e par de taxas do gate de abstencao. Protocolo: valor por pergunta = top1 (max do top-k), positivos = semanticas do gold.json, negativos = distante/proximo/emergente do calibra_cobertura.py. Fonte: sims_rotuladas.json e ce_pipeline_final.json.",
+  "_data": "2026-08-09",
+  "_carimbo": {
+    "embed_model": "Qwen/Qwen3-Embedding-0.6B",
+    "modo": "hybrid",
+    "lexical": false,
+    "rerank": null
+  },
+  "similaridade": {
+    "auc_geral": 0.778,
+    "auc_por_grupo": {
+      "distante": 0.97,
+      "proximo": 0.324,
+      "emergente": 0.809
+    },
+    "n": {
+      "positivo": 47,
+      "distante": 5,
+      "proximo": 4,
+      "emergente": 27
+    },
+    "taxas": {
+      "piso": 0.55,
+      "mudez": 0.021,
+      "mudez_n": "1/47",
+      "resposta_sem_lastro": 0.806,
+      "resposta_sem_lastro_n": "29/36"
+    }
+  },
+  "cross_encoder": {
+    "auc_geral": 0.874,
+    "auc_por_grupo": {
+      "distante": 0.979,
+      "proximo": 0.503,
+      "emergente": 0.911
+    },
+    "n": {
+      "positivo": 47,
+      "distante": 5,
+      "proximo": 4,
+      "emergente": 26
+    },
+    "taxas": {
+      "piso": 0.79,
+      "mudez": 0.149,
+      "mudez_n": "7/47",
+      "resposta_sem_lastro": 0.171,
+      "resposta_sem_lastro_n": "6/35"
+    }
+  }
+}
