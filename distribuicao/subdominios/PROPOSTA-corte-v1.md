@@ -41,23 +41,26 @@ Quatro regras de corte:
    que troca de domínio de trabalho troca de assunto, não de lógica de
    organização.
 
-### Quatro regras que a v1 institui
+### Cinco regras que a v1 institui
 
-5. **Troca de domínio se declara em separado.** Obra que muda de domínio, e não
+5. **O de-para é de claudinho-conhecimento, na consistência ao banco.** A grade
+   declara a prateleira; o destino de cada obra hoje classificada se escreve na
+   hora de subir, por quem sobe. Não é condição de despacho.
+6. **Troca de domínio se declara em separado.** Obra que muda de domínio, e não
    de prateleira, sai em bloco próprio com o passe da cadeira que a recebe. É
    outra coluna e outra decisão.
-6. **Obra geral fica no domínio, sem subdomínio, de propósito.** Não há dívida
+7. **Obra geral fica no domínio, sem subdomínio, de propósito.** Não há dívida
    de designação a cobrar, nem meta de zerar. Efeito no eixo de autorização,
    medido em `rag/rag_extractor/runtime.py` (`Scope.sql`): o filtro é
    `AND c.subdominio = ANY(...)` e NULL não casa com `= ANY` — busca por domínio
    alcança a obra geral, busca por subdomínio nunca a entrega. O default é
    **negar por mecânica**, não por política. Obra sem subdomínio não fica mais
    visível: fica visível no recorte largo e invisível no estreito.
-7. **Domínio e subdomínio são filtros independentes** no mesmo `Scope.sql`, não
+8. **Domínio e subdomínio são filtros independentes** no mesmo `Scope.sql`, não
    um par. Chamada que filtra só por subdomínio cruza domínios — logo slug
    idêntico em dois domínios é colisão de recuperação, não ambiguidade de
    leitura.
-8. **A grade despacha como hipótese.** Vazio observado hoje não prova ausência
+9. **A grade despacha como hipótese.** Vazio observado hoje não prova ausência
    de trabalho: prova ausência de designação (no domínio `ia`, 49% das obras não
    têm subdomínio). Ordem: despachar, designar, e só então fundir o que
    continuar vazio.
@@ -122,7 +125,7 @@ Norma de sistema de gestão de IA (ISO/IEC 42001 e parentes) **não fica aqui**:
 é pedido de aquisição, e o remit é de **claudinha-produto** dentro do domínio de
 claudinho-IA — quem encomenda a aquisição é ela.
 
-Absorção: pendente de claudinho-IA. `ia-fundamento` → `fundamentos-de-modelo`;
+Absorção. `ia-fundamento` → `fundamentos-de-modelo`;
 `ia-rag` → `recuperacao-e-busca`; `ia-agente` + `ia-harness` →
 `agentes-e-harness`; `ia-infra` + `ia-integracao` → `infra-e-serving`;
 `ia-produto` → `produto-baseado-em-modelo`. `avaliacao-e-governanca` não absorve
@@ -215,7 +218,7 @@ Regra da partição de `gestao-engenharia`, para execução por terceiro:
 | `especificacao-e-entrega` | história de usuário, mapeamento de impacto, recorte de escopo, caso de uso |
 | `produto-publico-digital` | usuário de serviço público, lacuna projeto-realidade, direito do usuário |
 
-Absorção: pendente de claudinha-produto (13 obras hoje classificadas).
+Absorção: escrita por claudinho-conhecimento na consistência ao banco.
 
 ### arquiteturas (37 · hoje 4)
 
@@ -248,7 +251,7 @@ Fronteiras cedidas, por escrito:
   (Parnas, Baldwin & Clark) fica aqui.
 - **Systems thinking mole** (Checkland) → `gestao-organizacional`.
 
-Absorção: pendente de claudinho-arquiteto (15 obras hoje classificadas).
+Absorção: escrita por claudinho-conhecimento na consistência ao banco.
 
 ### gestao-organizacional (34 · hoje 3, dois vazios)
 
@@ -272,7 +275,7 @@ Sexto slot vago de propósito.
 
 Sem corte. Dois itens não sustentam prateleira. Dono: claudinho-conhecimento.
 
-## Troca de domínio (regra 5 — coluna separada)
+## Troca de domínio (regra 6 — coluna separada)
 
 | obra | de | para | passe |
 |---|---|---|---|
@@ -285,6 +288,5 @@ Sem corte. Dois itens não sustentam prateleira. Dono: claudinho-conhecimento.
 - **Precedência entre domínios** quando a obra cabe nos dois (ISO 42001 é o caso
   que a levantou). Decisão do dono; sem ela, a mesma norma vai para prateleiras
   diferentes conforme quem classifica.
-- **Absorção pendente**: `ia`, `arquiteturas`, `produtos-digitais`.
 - **Aquisição** para `front-end` (claudinho-TI) e `produto-baseado-em-modelo`
   (claudinha-produto).
