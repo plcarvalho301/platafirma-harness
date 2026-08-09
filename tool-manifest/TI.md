@@ -65,6 +65,10 @@ de outras cadeiras: ler, não escrever.
 
 - **`repo_read`/`repo_grep`/`repo_tree` leem o espelho do ref remoto.** Depois
   de `git push`, chamar `repo_sync` ou as três servem o SHA velho, em silêncio.
+- **`infra compose` ignora o `cwd`**: o `-f` e fixo em
+  `platafirma-core/docker-compose.yml`, entao `up -d` de dentro de outro repo
+  promove o core inteiro e recria a borda. Outro projeto exige
+  `INFRA_COMPOSE=<caminho> infra compose ...`.
 - **`&&` encadeado no `run_command`**: passo intermediário não-zero derruba o
   resto sem erro visível. Usar `;` ou chamadas separadas.
 - **Restart do ops-mcp mata a chamada em curso.** `infra restart` já despacha
