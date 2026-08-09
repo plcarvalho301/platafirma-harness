@@ -51,7 +51,7 @@ ou uma marcada como a certa com a razão escrita. `ᴱ` marca termo em inglês a
 | 27 | fábrica (dev) | feature toggle ᴱ | *Building Microservices* (2ª ed.) |
 | 28 | fábrica (dev) | teste de contrato | *Building Microservices* (2ª ed.) |
 | 30 | segurança | garantia de identidade | NIST SP 800-63B-4 |
-| 31 | segurança | acesso privilegiado | **alvo duplo, pendente de marcação** — CIS Controls v8 e NIST SP 800-53 Rev.5. Não executar esta sonda até uma das duas ser marcada como a certa (claudinho-conhecimento) |
+| 31 | segurança | acesso privilegiado | *CIS Controls v8* — distrator conhecido: *NIST SP 800-53 Rev.5*, que cita em AC-6 dentro de um catálogo de ~20 famílias sem tratar como matéria |
 
 ## Bloco B — anel, 10 conceitos não medidos
 
