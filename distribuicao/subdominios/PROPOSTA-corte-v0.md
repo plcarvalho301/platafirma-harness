@@ -17,10 +17,13 @@ Três regras de corte:
 
 1. **Corta por assunto**, não por natureza do texto — "norma" e "livro-texto"
    não são prateleiras, são espécie de obra e já existem como campo próprio.
-2. **Prateleira que não se enche não existe.** Subdomínio previsto e vazio some
-   da grade; volta no dia em que houver obra.
-3. **Mesma gramática entre domínios.** O leitor que troca de domínio troca de
-   assunto, não de lógica de organização.
+2. **Prateleira sem trabalho previsto não existe.** Subdomínio vazio some da
+   grade quando nada na organização o alimenta. Vazio com frente declarada
+   permanece: ali o vazio é diagnóstico de lacuna de aquisição, não de grade
+   errada, e apagar a prateleira apaga o sinal.
+3. **Mesma gramática entre domínios**, salvo domínio de estudo puro. O leitor
+   que troca de domínio de trabalho troca de assunto, não de lógica de
+   organização.
 
 ## A grade
 
@@ -44,10 +47,10 @@ Absorve os nove atuais sem redesignar obra: `seg-governanca-controles` →
 
 ### capacidade-estatal (130 · hoje 4)
 
-Grade atual (`ce-fundamentacao`, `ce-implementacao`, `ce-normativo`,
-`ce-prescritivo`) corta por natureza do texto, não por assunto — viola a regra 1
-e a regra 3. Recorte por assunto exige redesignar as 130 obras já classificadas.
-Decisão do dono, em aberto.
+Grade atual mantida: `ce-fundamentacao`, `ce-implementacao`, `ce-normativo`,
+`ce-prescritivo`. Corta por natureza do texto porque é domínio de estudo puro,
+não domínio de trabalho — a exceção declarada da regra 3. Aqui a prateleira
+separa profundidade de leitura, não área de atuação.
 
 ### ia (65 · hoje 7, um vazio)
 
@@ -58,8 +61,10 @@ Decisão do dono, em aberto.
 | `agentes-e-harness` | agente, skill, engenharia de contexto, ferramenta, multiagente |
 | `infra-e-serving` | execução local, formato de peso, integração, protocolo de ferramenta |
 | `avaliacao-e-governanca-de-ia` | eval, benchmark, norma de gestão de IA, risco de modelo |
+| `produto-baseado-em-modelo` | concepção, lançamento e melhoria de produto sobre modelo |
 
-`ia-produto` sai: previsto e vazio.
+`produto-baseado-em-modelo` nasce vazio: gerência declarada sem acervo próprio.
+O vazio é pedido de aquisição.
 
 ### inteligencia (49 · hoje nenhum)
 
@@ -89,8 +94,10 @@ Decisão do dono, em aberto.
 | `gestao-de-servico-de-ti` | ITIL, FitSM, COBIT, CMMI, catálogo de serviço |
 | `dados-e-persistencia` | engenharia de dados, streaming, banco, formato de arquivo |
 | `interfaces-e-integracao` | REST, contrato de API, protocolo de interoperação |
+| `front-end-e-interface` | framework de renderização, biblioteca de componente, build e distribuição de front, SDK de cliente |
 
-`engenharia-front-end` sai: previsto e vazio.
+`front-end-e-interface` nasce quase vazio: é remit nomeado de claudinho-TI com
+frente no roadmap e sem acervo. O vazio é pedido de aquisição.
 
 ### produtos-digitais (41 · hoje 2)
 
@@ -125,6 +132,5 @@ Sem corte. Dois itens não sustentam prateleira.
 
 ## O que fica em aberto
 
-- Recorte de `capacidade-estatal`: manter a grade por natureza do texto ou
-  redesignar 130 obras por assunto.
 - Rótulo final dos slugs: passe de claudinho-conhecimento.
+- Aquisição para `front-end-e-interface` e `produto-baseado-em-modelo`.
