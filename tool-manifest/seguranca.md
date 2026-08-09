@@ -45,12 +45,16 @@ Origem única: `platafirma-core/deploy/seguranca/seg`, alcançado por symlink em
 | `seg oscap falhas <log>` | ler as regras que falharam numa avaliação | `politica` | `[exec]` |
 | `seg oscap -- <nativos>` | qualquer ato do OpenSCAP que não seja os dois acima | `politica` | `[exec]` |
 | `seg ssg derivar <datastream>` | compilar a régua: remover o CPE de SO | `politica` | `[exec]` |
-| `seg keycloak -- <nativos>` | administrar realm, cliente, papel via kcadm.sh | `acesso` | `[inst]` |
+| `seg keycloak -- <nativos>` | administrar realm, cliente, papel via kcadm.sh | `acesso` | `[exec]` |
 | `seg openssl -- <nativos>` | OpenSSL com oqsprovider — ML-KEM, ML-DSA, SLH-DSA | `acesso` | `[exec]` |
 
 **`seg` não é gate.** `oscap`, `openssl` e o contêiner do Keycloak seguem
 alcançáveis fora dele; hoje é conveniência e trilha. Vira controle no dia em que
 as ferramentas saírem do PATH do usuário e só o despachante as alcançar.
+
+**`seg keycloak` exige credencial configurada no container** (`kcadm.sh config
+credentials`) antes do primeiro uso da sessão — não vem pronto. A credencial
+mora em `platafirma-core/.env` (`KC_ADMIN_PASSWORD`), fora do git.
 
 ## Ferramenta de terceiro
 
@@ -68,6 +72,17 @@ Conferir imagem e artefato servido é `conferir <classe>`, de claudinho-TI — n
 
 ## Armadilhas medidas
 
+- **`docker exec ... env` imprime segredo de container em claro no tool
+  output.** Achado ao debugar `seg keycloak` sem credencial configurada: o
+  comando devolveu `KC_BOOTSTRAP_ADMIN_PASSWORD` em texto puro, que passou a
+  fazer parte do transcript da sessão — superfície de exposição diferente da do
+  processo do container. Não usar `env` (ou qualquer `grep` amplo sobre ele) em
+  container com segredo de produção; pedir a variável nomeada específica só
+  quando estritamente necessário, e preferir nunca imprimir o valor.
+- **`KC_BOOTSTRAP_ADMIN_PASSWORD` só vale no primeiro boot.** Trocar a variável
+  e recriar o container NÃO rotaciona o admin já existente — o Keycloak ignora
+  bootstrap quando o realm master já tem usuário. Rotação real é
+  `kcadm.sh set-password` autenticado, não troca de env var.
 - **`seg oscap avaliar` sem root não é conformidade.** Regras de `/etc/shadow`,
   `/boot` e sysctl saem incompletas e o sumário parece completo. O verbo declara
   isso na primeira linha da saída; a saída bruta do `oscap` não declara.
@@ -83,8 +98,10 @@ Conferir imagem e artefato servido é `conferir <classe>`, de claudinho-TI — n
 
 - **Gate de acesso ao toolkit.** Enquanto as ferramentas ficarem no PATH, `seg`
   não controla nada. Falta decidir se saem, e o que quebra quando saírem.
-- **`seg keycloak` está `[inst]`**: o invólucro roda, mas não executei ato de
-  administração real por ele desde a consolidação.
+- **Custódia em KeePass desatualizada.** A senha de `pedro-admin` foi
+  rotacionada em 09/08 por incidente de exposição (ver Armadilhas). O valor novo
+  está em `platafirma-core/.env`; o KDBX4 de custódia não foi atualizado por
+  mim — não tenho ferramenta para escrever nele. Ação do dono.
 - **`conferir casco` de claudinho-TI ainda não existe.** Quando existir, o
   insumo dele é o derivado que `seg ssg derivar` produz — falta o contrato de
   onde ele é lido e o que acontece quando está velho.
