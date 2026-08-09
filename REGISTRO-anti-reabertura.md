@@ -18,7 +18,7 @@ Decisão do dono, 09/08/2026. Alcance:
   e só então.
 - Vale para conferência ad-hoc também: contagem crua de `documents.trata_de` ou de
   `acervo.obra.objeto` que não exclua `wiki://` produz furo fantasma. O predicado canônico
-  é o de `scripts/deriva-acervo.py`; `bin/acervo-status` já segrega as `wiki://` como
+  é o de `scripts/deriva-acervo.py`; `bin/_acervo/status` já segrega as `wiki://` como
   "fora da escada".
 
 Reabre quem: o dono, por ordem expressa.

@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
-# acervo-status — estado corrente do acervo por OBRA, nos cinco degraus do fluxo.
+# acervo status — estado corrente do acervo por OBRA, nos cinco degraus do fluxo.
 # Leitura direta do substrato: MinIO (store) + Postgres (catálogo e índice).
 # Read-only: não cria objeto no schema do rag, não escreve em tabela nenhuma.
 #
-# uso:  acervo-status [--json] [--detalhe]
+# uso:  acervo status [--json] [--detalhe]
 set -euo pipefail
 
 export DOCKER_HOST=${DOCKER_HOST:-unix:///run/user/1001/docker.sock}
@@ -19,7 +19,7 @@ for a in "$@"; do
   case "$a" in
     --json) JSON=1 ;;
     --detalhe) DETALHE=1 ;;
-    *) echo "uso: acervo-status [--json] [--detalhe]" >&2; exit 2 ;;
+    *) echo "uso: acervo status [--json] [--detalhe]" >&2; exit 2 ;;
   esac
 done
 
@@ -54,7 +54,7 @@ if pastas or ilegiveis:
 done > "$TMP/store.txt"
 
 if [ ! -s "$TMP/store.txt" ]; then
-  echo "acervo-status: a listagem do store saiu VAZIA — abortando antes de medir." >&2
+  echo "acervo status: a listagem do store saiu VAZIA — abortando antes de medir." >&2
   echo "  Sem isto, 'armazenadas' iria a 0 e o alarme apontaria para o catálogo inteiro." >&2
   echo "  Confira o alias: mc ls $MC_ALIAS/acervo | head" >&2
   exit 3
@@ -145,7 +145,7 @@ OUT=$(docker exec -i "$PG" psql -U "$USR" -d "$DB" -At <<< "$SQL" | tail -n 1)
 if [ "$JSON" = 1 ]; then
   echo "$OUT" | python3 -m json.tool
 else
-  echo "$OUT" | python3 "$(dirname "$(readlink -f "$0")")/_acervo-status-fmt.py"
+  echo "$OUT" | python3 "$(dirname "$(readlink -f "$0")")/_fmt.py"
 fi
 
 if [ "$DETALHE" = 1 ]; then

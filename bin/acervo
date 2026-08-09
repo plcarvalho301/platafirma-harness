@@ -1,0 +1,37 @@
+#!/usr/bin/env bash
+# acervo — opera o acervo: estado por obra, download, pacote de classificação e foto do schema.
+# capacidade: conhecimento
+# dono: claudinho-conhecimento
+#
+# Despachante (arq:0040): o verbo é o par binário+subcomando. Os sub-atos moram
+# em bin/_acervo/ e não entram no PATH; a porta é esta.
+set -euo pipefail
+
+ATOS="$(dirname "$(readlink -f "$0")")/_acervo"
+
+uso() {
+  cat >&2 <<'FIM'
+uso:
+  acervo status [--json] [--detalhe]        estado por obra nos cinco degraus do fluxo
+  acervo get "<trecho do titulo>" [destino] baixa a obra do store pelo título
+  acervo pacote [destino]                   monta o pacote de classificação externa
+  acervo exportar [destino]                 foto do schema acervo em .xlsx
+
+Leitura em todos os quatro; nenhum escreve no schema do rag. Ato desconhecido
+recusa em vez de adivinhar. Ingestão e embedding não são daqui: CLI do
+rag_extractor, no repo platafirma-conhecimento.
+FIM
+  exit 2
+}
+
+[ $# -eq 0 ] && uso
+ATO="$1"; shift
+
+case "$ATO" in
+  status)          exec "$ATOS/status"   "$@" ;;
+  get)             exec "$ATOS/get"      "$@" ;;
+  pacote)          exec "$ATOS/pacote"   "$@" ;;
+  exportar)        exec "$ATOS/exportar" "$@" ;;
+  -h|--help|ajuda) uso ;;
+  *) echo "acervo: ato desconhecido '$ATO'" >&2; uso ;;
+esac

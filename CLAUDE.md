@@ -50,7 +50,7 @@ Três coisas que não vêm no pacote, de propósito, e como buscar cada uma:
 | `tarefas` | rastreador (`tarefas projetos`, e o que o `--help` listar) |
 | `infra` | contêiner, unit, timer |
 | `monta-sessao` | o mesmo pacote de abertura, em texto, quando não há conector |
-| `acervo-status` | tamanho e composição do acervo |
+| `acervo status` | tamanho e composição do acervo |
 
 Antes de escrever `curl`, `python` ou `docker` à mão, veja se o verbo existe. Quem
 ignorou isso perdeu sessão brigando com autenticação que o verbo já resolve.

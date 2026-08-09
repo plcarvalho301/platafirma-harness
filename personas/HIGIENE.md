@@ -20,7 +20,7 @@ Sai de persona e de manifesto: contagem de obra, de chunk ou de card;
 versão de dependência; qualquer número que uma ferramenta responde.
 
 Entra no lugar: o nome da ferramenta que responde. Tamanho e composição do
-acervo → `acervo-status`. Faceta e população → `rag_facets`. Estado de card →
+acervo → `acervo status`. Faceta e população → `rag_facets`. Estado de card →
 o rastreador.
 
 > Caso: a instruction do claudinho-TI declarava o acervo sem artesania de
