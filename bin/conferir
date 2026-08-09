@@ -1,0 +1,279 @@
+#!/usr/bin/env python3
+# conferir — compara o que esta DECLARADO com o que esta SERVIDO, por classe de alvo.
+# capacidade: verificacao
+# dono: claudinho-TI
+"""Classes:
+
+  servico [nome]   container gerido por compose: de onde sobe, SHA e sujeira do ref,
+                   paridade entre o `environment` declarado e o ambiente do processo.
+  verbo   [nome]   verbo do PATH da plataforma: origem (symlink de repo, copia, so no
+                   host, divergente), cabecalho de tres linhas, e a conta de
+                   arq:0037 — um verbo por capacidade.
+
+Classes conhecidas e ainda sem implementacao sao listadas como tais: ausencia se
+declara, nunca se omite.
+
+Sai 0 quando nao ha divergencia, 1 quando ha, 2 quando a chamada esta errada.
+Nao muda nada: so olha.
+"""
+import json
+import os
+import subprocess
+import sys
+
+RAIZ = os.path.expanduser("~/AI")
+DEPLOY = os.path.join(RAIZ, "deploy")
+BIN = os.path.join(RAIZ, "bin")
+
+CLASSES_ABERTAS = {
+    "canal": "regua do design system e de claudinha-produto e ainda nao existe",
+    "casco": "avaliacao CIS ja tem verbo proprio (oscap-casco), de claudinho-seguranca",
+}
+
+
+def uso(erro=None):
+    if erro:
+        print(f"erro: {erro}\n", file=sys.stderr)
+    print(__doc__.strip(), file=sys.stderr)
+    print("\nuso: conferir <classe> [alvo]", file=sys.stderr)
+    print("     classes implementadas : servico . verbo", file=sys.stderr)
+    for c, motivo in CLASSES_ABERTAS.items():
+        print(f"     classe declarada, sem implementacao : {c} — {motivo}", file=sys.stderr)
+    sys.exit(2)
+
+
+def sh(args, cwd=None):
+    p = subprocess.run(args, capture_output=True, text=True, cwd=cwd)
+    return p.returncode, p.stdout.strip(), p.stderr.strip()
+
+
+# --- classe: servico --------------------------------------------------------
+
+def containers(filtro=None):
+    _, out, _ = sh(["docker", "ps", "--format", "{{.Names}}"])
+    for nome in out.splitlines():
+        if filtro and filtro != nome:
+            continue
+        _, j, _ = sh(["docker", "inspect", nome])
+        try:
+            d = json.loads(j)[0]
+        except Exception:
+            continue
+        lab = d["Config"].get("Labels") or {}
+        wd = lab.get("com.docker.compose.project.working_dir")
+        if not wd:
+            continue
+        yield {
+            "nome": nome,
+            "servico": lab.get("com.docker.compose.service", "?"),
+            "working_dir": wd,
+            "config_files": lab.get("com.docker.compose.project.config_files", ""),
+            "env": {l.split("=", 1)[0]: l.split("=", 1)[1] for l in d["Config"]["Env"] if "=" in l},
+        }
+
+
+def git_estado(caminho):
+    rc, topo, _ = sh(["git", "-C", caminho, "rev-parse", "--show-toplevel"])
+    if rc != 0:
+        return None
+    _, sha, _ = sh(["git", "-C", topo, "rev-parse", "--short", "HEAD"])
+    _, porcelain, _ = sh(["git", "-C", topo, "status", "--porcelain"])
+    linhas = [l for l in porcelain.splitlines() if l.strip()]
+    # nao-rastreado e lixo de runtime; rastreado modificado e edicao que so existe aqui.
+    modificado = [l for l in linhas if not l.startswith("??")]
+    _, ref, _ = sh(["git", "-C", topo, "rev-parse", "--abbrev-ref", "HEAD"])
+    _, atras, _ = sh(["git", "-C", topo, "rev-list", "--count", "HEAD..origin/main"])
+    return {"topo": topo, "sha": sha, "ref": ref, "modificado": modificado,
+            "nao_rastreado": len(linhas) - len(modificado),
+            "atras": int(atras) if atras.isdigit() else None}
+
+
+def env_declarado(c):
+    arquivos = [f for f in c["config_files"].split(",") if f]
+    base = ["docker", "compose"]
+    for f in arquivos:
+        base += ["-f", f]
+    # `--profile "*"`: sem isso, servico sob profile (o rag-api esta em `serving`) some do
+    # config renderizado e a conferencia acusa ausencia que nao existe.
+    rc, out, err = sh(base + ["--profile", "*", "config", "--format", "json"], cwd=c["working_dir"])
+    if rc != 0:
+        rc, out, err = sh(base + ["config", "--format", "json"], cwd=c["working_dir"])
+    if rc != 0:
+        return None, err.splitlines()[-1] if err else "docker compose config falhou"
+    try:
+        cfg = json.loads(out)
+    except Exception as e:
+        return None, str(e)
+    svc = (cfg.get("services") or {}).get(c["servico"])
+    if svc is None:
+        return None, f"servico {c['servico']} ausente no config renderizado"
+    return {k: ("" if v is None else str(v)) for k, v in (svc.get("environment") or {}).items()}, None
+
+
+def conferir_servico(alvo):
+    houve = False
+    vistos = 0
+    for c in containers(alvo):
+        vistos += 1
+        dentro_de_deploy = os.path.realpath(c["working_dir"]).startswith(os.path.realpath(DEPLOY))
+        g = git_estado(c["working_dir"])
+        print(f"\n### {c['nome']}  (servico {c['servico']})")
+        print(f"    sobe de : {c['working_dir']}")
+        if not dentro_de_deploy:
+            houve = True
+            print("    DERIVA  : nao e worktree de deploy — producao sobe de clone de trabalho")
+        if g:
+            print(f"    ref     : {g['ref']}@{g['sha']}")
+            if g["atras"]:
+                print(f"    ATRAS   : {g['atras']} commits atras de origin/main")
+            if g["modificado"]:
+                houve = True
+                print(f"    EDITADO : {len(g['modificado'])} arquivo(s) rastreado(s) so existem aqui")
+                for l in g["modificado"][:5]:
+                    print(f"              {l}")
+            if g["nao_rastreado"]:
+                print(f"    lixo    : {g['nao_rastreado']} caminho(s) nao rastreado(s)")
+
+        decl, erro = env_declarado(c)
+        if decl is None:
+            houve = True
+            print(f"    ENV     : nao consegui renderizar o compose — {erro}")
+            continue
+        servido = c["env"]
+        for k in sorted(decl):
+            if k not in servido:
+                houve = True
+                print(f"    AUSENTE : {k} declarado e nao servido (declarado={decl[k]!r})")
+            elif servido[k] != decl[k]:
+                houve = True
+                print(f"    DIFERE  : {k} declarado={decl[k]!r} servido={servido[k]!r}")
+        if not any(k not in servido or servido[k] != decl[k] for k in decl):
+            print(f"    env     : {len(decl)} variaveis, todas conferem")
+    if alvo and vistos == 0:
+        print(f"\nnenhum container em execucao com o nome {alvo!r} — nao confundir com conferido")
+        return 1
+    print()
+    return 1 if houve else 0
+
+
+# --- classe: verbo ----------------------------------------------------------
+
+def e_script(caminho):
+    try:
+        with open(caminho, "rb") as f:
+            return f.read(2) == b"#!"
+    except OSError:
+        return False
+
+
+def cabecalho(caminho):
+    """Le as tres linhas declaradas do contrato. Ausencia se reporta, nao se adivinha."""
+    campos = {"proposito": None, "capacidade": None, "dono": None}
+    try:
+        with open(caminho, "r", errors="replace") as f:
+            linhas = [next(f, "") for _ in range(8)]
+    except OSError:
+        return campos
+    for i, l in enumerate(linhas):
+        s = l.strip()
+        if not s.startswith("#"):
+            continue
+        s = s.lstrip("#").strip()
+        low = s.lower()
+        if low.startswith("capacidade:"):
+            campos["capacidade"] = s.split(":", 1)[1].strip()
+        elif low.startswith("dono:"):
+            campos["dono"] = s.split(":", 1)[1].strip()
+        elif i == 1 and ("—" in s or " - " in s):
+            campos["proposito"] = s
+    return campos
+
+
+def origem(nome, caminho):
+    """Classifica de onde o verbo vem. Copia identica continua sendo copia."""
+    if os.path.islink(caminho):
+        destino = os.path.realpath(caminho)
+        if destino.startswith(os.path.realpath(RAIZ)) and "/opt/" not in destino:
+            return "symlink", destino
+        return "terceiro", destino
+    if not e_script(caminho):
+        return "terceiro", "binario instalado"
+    achados = []
+    for base, _, arquivos in os.walk(RAIZ):
+        if "/.git" in base or base.startswith(os.path.join(RAIZ, "opt")) or base == BIN:
+            continue
+        if nome in arquivos:
+            achados.append(os.path.join(base, nome))
+    if not achados:
+        return "so-no-host", "sem contraparte em repo"
+    rc, _, _ = sh(["diff", "-q", caminho, achados[0]])
+    return ("copia" if rc == 0 else "divergente"), achados[0]
+
+
+def conferir_verbo(alvo):
+    houve = False
+    porcapacidade = {}
+    vistos = 0
+    for nome in sorted(os.listdir(BIN)):
+        caminho = os.path.join(BIN, nome)
+        if alvo and alvo != nome:
+            continue
+        classe, onde = origem(nome, caminho)
+        if classe == "terceiro":
+            continue
+        vistos += 1
+        cab = cabecalho(caminho)
+        faltando = [k for k, v in cab.items() if not v]
+        print(f"\n### {nome}")
+        print(f"    origem  : {classe} — {onde}")
+        if classe in ("so-no-host", "divergente"):
+            houve = True
+            print("    ORIGEM  : sem origem unica — copia nao e forma valida de instalacao")
+        elif classe == "copia":
+            houve = True
+            print("    ORIGEM  : copia identica por sorte, nao por mecanismo — trocar por symlink")
+        if faltando:
+            houve = True
+            print(f"    CABECAL : faltam {', '.join(faltando)}")
+        else:
+            print(f"    cabecal : capacidade={cab['capacidade']} dono={cab['dono']}")
+        porcapacidade.setdefault(cab["capacidade"] or "(nao declarada)", []).append(nome)
+
+    if alvo and vistos == 0:
+        print(f"\n{alvo!r} nao e verbo da plataforma em {BIN} — ou nao existe, ou e ferramenta de terceiro")
+        return 1
+
+    if not alvo:
+        print("\n## arq:0037 — um verbo por capacidade")
+        for cap, verbos in sorted(porcapacidade.items()):
+            marca = "ok " if len(verbos) == 1 and cap != "(nao declarada)" else "NAO"
+            if marca == "NAO":
+                houve = True
+            print(f"    {marca}  {cap:<16} {len(verbos)}  {' '.join(verbos)}")
+    print()
+    return 1 if houve else 0
+
+
+# --- despacho ---------------------------------------------------------------
+
+def main(argv):
+    if len(argv) < 2:
+        uso()
+    classe, alvo = argv[1], (argv[2] if len(argv) > 2 else None)
+    if classe in CLASSES_ABERTAS:
+        print(f"classe {classe!r} e conhecida e ainda nao tem implementacao: {CLASSES_ABERTAS[classe]}")
+        print("nao confundir ausencia de implementacao com conformidade.")
+        return 2
+    if classe == "servico":
+        return conferir_servico(alvo)
+    if classe == "verbo":
+        return conferir_verbo(alvo)
+    uso(f"classe desconhecida: {classe}")
+
+
+if __name__ == "__main__":
+    if os.path.basename(sys.argv[0]) == "conferir-servido":
+        print("aviso: `conferir-servido` foi absorvido por `conferir servico` e sai do PATH "
+              "no proximo ciclo.\n", file=sys.stderr)
+        sys.exit(conferir_servico(sys.argv[1] if len(sys.argv) > 1 else None))
+    sys.exit(main(sys.argv))
