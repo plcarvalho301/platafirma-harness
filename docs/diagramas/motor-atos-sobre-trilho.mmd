@@ -1,0 +1,19 @@
+flowchart LR
+  subgraph CUR["curadoria — conhecimento (fase 1, fora do verbo)"]
+    F1[selecao de corpus]
+  end
+  subgraph IDX["motor <inst> indexar — fases 2-5"]
+    F2[extracao] --> F3[chunking] --> F4[embedding] --> F5[store + indice]
+  end
+  subgraph BUS["motor <inst> buscar — fases 6-9"]
+    F6[preparo da query] --> F7[recuperacao] --> F8[reranking] --> F9[montagem da fita]
+  end
+  ONTO[["onto-ref: parametrizacao declarada\n(expansao deterministica, SQL)"]] -.-> F6
+  F1 --> F2
+  F5 -. "mesmo f (trava 4↔7)" .-> F7
+  F9 -->|--vista trecho| AG["flow de agente:\nfita com proveniencia + cobertura"]
+  F9 -->|--vista obra| HU["flow humano:\nobras + similares + ponteiro ao PDF"]
+  AG --> F10[sintese — do chamador, fora do verbo]
+  MED["motor <inst> medir — fase 11\nmede 2-5 e 6-9 separado"] -.-> IDX
+  MED -.-> BUS
+  EST["motor <inst> estado\nindex_meta: contrato do indice"] -.-> F5
