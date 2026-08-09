@@ -1,0 +1,133 @@
+#!/usr/bin/env bash
+# acervo ingerir — leva a obra da entrada até a vetorização, os cinco degraus numa chamada.
+#
+# Encadeia o que já existe; não reimplementa nada. O RAG é FERRAMENTA: quem manda
+# na sequência é este script, e o `rag_extractor` é chamado como ferramenta em
+# cada degrau.
+#
+#   entrada (arquivo na raiz)
+#     └─ inventário            scripts/inventario-acervo.py   -> manifest.jsonl
+#     └─ armazenamento         scripts/ingerir-acervo.py      -> objeto no MinIO   [degrau b]
+#     └─ fila                  scripts/fila-acervo.py         -> fila-ingestao.*
+#     └─ catalogação           cli carregar-acervo            -> acervo.obra       [degrau a]
+#     └─ materialização        cli materializar-acervo        -> PDF + sidecar em disco
+#     └─ chunking              cli ingest                     -> documents/chunks  [degrau c]
+#     └─ vetor de texto        cli embed                      -> embedding         [degrau d]
+#     └─ propagação de faceta  cli sincronizar-acervo
+#     └─ vetor de metadado     cli embed-meta                 -> embedding_meta    [degrau e]
+#
+# DRY-RUN por default. `--apply` escreve. Mutação exige a raiz explícita.
+set -euo pipefail
+
+AQUI="$(dirname "$(readlink -f "$0")")"
+RAG="${RAG_DIR:-$HOME/AI/platafirma-conhecimento/rag}"
+DESTINO="${CORPUS_DIR:-$RAG/corpus}"
+
+uso() {
+  cat >&2 <<'FIM'
+uso:
+  acervo ingerir <raiz>              dry-run: mostra o que entraria, não escreve
+  acervo ingerir <raiz> --apply      executa os nove passos até a vetorização
+  acervo ingerir --apply             RECUSADO: mutação exige a raiz explícita
+
+<raiz> é a árvore de arquivos da entrada (ex.: ~/AI/Books). O objeto é endereçado
+pelo sha256 do conteúdo, então reexecutar é idempotente: o que já subiu é pulado.
+
+Mede a escada antes e depois e imprime o delta por degrau. Interrompido no meio,
+basta reexecutar — cada passo retoma de onde parou.
+FIM
+  exit 2
+}
+
+python_do_rag() {
+  for c in "${RAG_PYTHON:-}" "$HOME/AI/.venv/bin/python" "$RAG/.venv/bin/python" \
+           "$HOME/AI/.venv-testes/bin/python"; do
+    [ -n "$c" ] && [ -x "$c" ] && { echo "$c"; return 0; }
+  done
+  echo "acervo ingerir: nenhum python com rag_extractor executável por este usuário." >&2
+  echo "  aponte um com:  RAG_PYTHON=/caminho/para/python acervo ingerir ..." >&2
+  exit 1
+}
+
+RAIZ=""; APPLY=0
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --apply)         APPLY=1; shift ;;
+    -h|--help|ajuda) uso ;;
+    -*)              echo "acervo ingerir: opção desconhecida '$1'" >&2; uso ;;
+    *)               RAIZ="$1"; shift ;;
+  esac
+done
+
+[ -z "$RAIZ" ] && [ "$APPLY" -eq 1 ] && {
+  echo "acervo ingerir: --apply sem raiz. Mutação não adivinha alvo." >&2; uso; }
+[ -z "$RAIZ" ] && uso
+[ -d "$RAIZ" ] || { echo "acervo ingerir: não é diretório: $RAIZ" >&2; exit 1; }
+
+PY="$(python_do_rag)"
+export PYTHONPATH="$RAG"
+cd "$RAG"
+
+passo() { printf '\n\033[1m== %s\033[0m\n' "$*"; }
+seco()  { [ "$APPLY" -eq 1 ] || { echo "   (dry-run) rodaria: $*"; return 1; }; return 0; }
+
+passo "0/9  escada antes"
+"$AQUI/escada" | sed -n '/catalogadas/,/vetorizadas/p'
+
+passo "1/9  inventário da raiz — $RAIZ"
+if [ "$APPLY" -eq 1 ]; then
+  # O manifest liga sha256 ao nome legível, e perdê-lo é irreversível. Raiz parcial
+  # ou vazia geraria inventário menor e apagaria o resto do índice em silêncio.
+  NOVO="$(mktemp)"; trap 'rm -f "$NOVO"' EXIT
+  python3 scripts/inventario-acervo.py "$RAIZ" > "$NOVO"
+  ANTES=$(wc -l < acervo/manifest.jsonl 2>/dev/null || echo 0)
+  AGORA=$(wc -l < "$NOVO")
+  if [ "$AGORA" -lt "$ANTES" ]; then
+    echo "   RECUSADO: inventário de $RAIZ tem $AGORA linha(s); o manifest atual tem $ANTES." >&2
+    echo "   Sobrescrever apagaria o índice do que está fora desta raiz. Aponte a raiz inteira." >&2
+    exit 1
+  fi
+  mv "$NOVO" acervo/manifest.jsonl
+  echo "   manifest: $AGORA linha(s)  (antes: $ANTES)"
+else
+  python3 scripts/inventario-acervo.py "$RAIZ" | wc -l | xargs echo "   (dry-run) manifest teria" "linha(s)"
+fi
+
+passo "2/9  armazenamento — objeto por sha256 no MinIO  [degrau b]"
+if [ "$APPLY" -eq 1 ]; then
+  python3 scripts/ingerir-acervo.py "$RAIZ" acervo/manifest.jsonl
+else
+  python3 scripts/ingerir-acervo.py "$RAIZ" acervo/manifest.jsonl --dry-run
+fi
+
+passo "3/9  filas — read-only, determinístico"
+python3 scripts/fila-acervo.py
+
+passo "4/9  catalogação — cria a obra dos objetos sem obra  [degrau a]"
+if seco "cli carregar-acervo --apply"; then "$PY" -m rag_extractor.cli carregar-acervo --apply
+else "$PY" -m rag_extractor.cli carregar-acervo; fi
+
+passo "5/9  materialização — PDF e sidecar em $DESTINO"
+mkdir -p "$DESTINO"
+if seco "cli materializar-acervo $DESTINO --apply"; then
+  "$PY" -m rag_extractor.cli materializar-acervo "$DESTINO" --apply
+else "$PY" -m rag_extractor.cli materializar-acervo "$DESTINO"; fi
+
+passo "6/9  chunking  [degrau c]"
+seco "cli ingest $DESTINO" && "$PY" -m rag_extractor.cli ingest "$DESTINO"
+
+passo "7/9  vetor de texto  [degrau d]"
+seco "cli embed" && "$PY" -m rag_extractor.cli embed
+
+passo "8/9  propagação de faceta para documents/chunks"
+if seco "cli sincronizar-acervo --apply"; then "$PY" -m rag_extractor.cli sincronizar-acervo --apply
+else "$PY" -m rag_extractor.cli sincronizar-acervo; fi
+
+passo "9/9  vetor de metadado  [degrau e]"
+seco "cli embed-meta" && "$PY" -m rag_extractor.cli embed-meta
+
+passo "escada depois"
+"$AQUI/escada" | sed -n '/catalogadas/,/vetorizadas/p'
+
+[ "$APPLY" -eq 1 ] || echo "
+DRY-RUN — nada foi escrito. Para valer:  acervo ingerir $RAIZ --apply"

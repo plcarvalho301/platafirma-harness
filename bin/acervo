@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# acervo — opera o acervo: escada, obra, bancada de classificação e extrato.
+# acervo — opera o acervo: ingestão ponta a ponta, escada, obra, bancada e extrato.
 # capacidade: conhecimento
 # dono: claudinho-conhecimento
 #
@@ -12,6 +12,7 @@ ATOS="$(dirname "$(readlink -f "$0")")/_acervo"
 uso() {
   cat >&2 <<'FIM'
 uso:
+  acervo ingerir <raiz> [--apply]            leva a obra da entrada até a vetorização
   acervo escada  [--json] [--detalhe]        onde cada obra parou nos cinco degraus
   acervo baixar  "<trecho do titulo>" [dest] tira uma cópia da obra do store
   acervo bancada [destino]                   monta o lote do que falta classificar
@@ -20,9 +21,8 @@ uso:
 Os cinco degraus da escada: catalogada, armazenada, ingerida, embedded,
 vetorizada. `escada` mede; os outros três produzem artefato.
 
-Leitura em todos os quatro; nenhum escreve no schema do rag. Ato desconhecido
-recusa em vez de adivinhar. Ingestão e embedding não são daqui: CLI do
-rag_extractor, no repo platafirma-conhecimento.
+`ingerir` é o único que escreve, e é dry-run sem `--apply`. Os outros quatro só
+leem. Ato desconhecido recusa em vez de adivinhar.
 FIM
   exit 2
 }
@@ -31,6 +31,7 @@ FIM
 ATO="$1"; shift
 
 case "$ATO" in
+  ingerir)         exec "$ATOS/ingerir" "$@" ;;
   escada)          exec "$ATOS/escada"  "$@" ;;
   baixar)          exec "$ATOS/baixar"  "$@" ;;
   bancada)         exec "$ATOS/bancada" "$@" ;;
