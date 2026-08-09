@@ -1,0 +1,22 @@
+title: Posse de mensagem — o token nasce na leitura, no servidor {
+  near: top-center
+  shape: text
+  style.font-size: 20
+}
+shape: sequence_diagram
+A: sessao A (claudinho-IA)
+S: malha msg — servidor
+B: sessao B (claudinho-IA)
+
+A -> S: 1. fila ler
+S: SET NX posse:<caixa>:<msgid> = tokA EX 3600
+S -> A: 2. msg #42 + posse=tokA {style.stroke: "#2f7a3f"}
+B -> S: 3. fila ler (disparo duplo)
+S: SET NX falha — chave viva, token de outrem
+S -> B: 4. msg #42 [POSSE VIVA ha 2 min] — sem token {style.stroke: "#c07a20"}
+B -> S: 5. enviar --responde #42 (sem posse)
+S -> B: 6. RECUSADO — posse de outra leitura {style.stroke: "#b03030"; style.bold: true}
+A -> S: 7. enviar --responde #42 --posse tokA
+S -> A: 8. aceito {style.stroke: "#2f7a3f"}
+A -> S: 9. consumir #42 --posse tokA
+S: XACK + DEL posse:<caixa>:<msgid>

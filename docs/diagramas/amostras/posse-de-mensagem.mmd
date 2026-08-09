@@ -1,0 +1,18 @@
+sequenceDiagram
+    autonumber
+    participant A as sessao A (claudinho-IA)
+    participant S as malha msg — servidor
+    participant B as sessao B (claudinho-IA)
+    A->>S: fila ler
+    Note over S: SET NX posse:<caixa>:<msgid> = tokA EX 3600
+    S-->>A: msg #42 + posse=tokA
+    B->>S: fila ler (disparo duplo)
+    Note over S: SET NX falha — chave viva, token de outrem
+    S-->>B: msg #42 [POSSE VIVA ha 2 min] — sem token
+    B->>S: enviar --responde #42 (sem posse)
+    S--xB: RECUSADO — posse de outra leitura
+    A->>S: enviar --responde #42 --posse tokA
+    S-->>A: aceito
+    A->>S: consumir #42 --posse tokA
+    Note over S: XACK + DEL posse:<caixa>:<msgid>
+    Note over A,B: Sem consumir no TTL (60 min, arq:0024): posse expira e<br/>XAUTOCLAIM (idle > TTL) devolve a entrada ao grupo
