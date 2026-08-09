@@ -149,8 +149,8 @@ miolo é cobrada em todo giro de toda cadeira; a mesma economia fora dele não �
 cobrada de ninguém.
 
 - **Gira, logo escova-se**: nome de chave e de stream, nome de verbo e de
-  sub-ato, campo de envelope da fila, tool-manifest, persona e instruction,
-  descrição de tool, saída default de verbo chamado por sessão.
+  sub-ato, campo de envelope da fila, tool-manifest, descrição de tool, saída
+  default de verbo chamado por sessão.
 - **Não gira, logo não se escova**: ADR, wiki, README, comentário de config,
   mensagem de commit, log, ajuda extensa de verbo, carta da fila.
 
