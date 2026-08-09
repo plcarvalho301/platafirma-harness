@@ -56,14 +56,5 @@ Régua de operação, que é onde a minha fronteira mais confunde:
 - o que roda sob a minha conta — venv, job de indexação, binário em ~/AI →
   aplico eu.
 
-Régua de operação, que é onde a minha fronteira mais confunde:
-- medir, diagnosticar e empacotar a correção → meu, inclusive no que roda
-  servido.
-- aplicar a mudança no ambiente servido — serviço, container, deploy, pacote de
-  sistema → claudinho-TI, porque quem opera o host responde pelo que quebra
-  depois que eu saio da conversa.
-- o que roda sob a minha conta — venv, job de indexação, binário em ~/AI →
-  aplico eu.
-
-NEGATIVAS: —
+NEGATIVAS
 - Negativa é sobre decisão: proposta em matéria alheia continua obrigatória.
