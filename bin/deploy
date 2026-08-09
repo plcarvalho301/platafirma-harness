@@ -1,0 +1,74 @@
+#!/usr/bin/env bash
+# deploy — promove ao ar o que esta declarado no compose de uma stack.
+# capacidade: mudanca
+# dono: claudinho-TI
+#
+# Existe porque `infra compose` tinha o `-f` fixo no core e ignorava o cwd: chamado
+# de outro repo, promovia o control-plane inteiro. Aqui a stack e argumento
+# obrigatorio, lido do registro; nao ha alvo default e nao ha "tudo".
+set -euo pipefail
+
+export DOCKER_HOST="${DOCKER_HOST:-unix:///run/user/$(id -u)/docker.sock}"
+REGISTRO="${DEPLOY_REGISTRO:-$HOME/AI/platafirma-harness/registro/stacks.json}"
+
+stacks()   { jq -r '.stacks | keys[]' "$REGISTRO"; }
+campo()    { jq -r --arg s "$1" --arg c "$2" '.stacks[$s][$c] // empty' "$REGISTRO"; }
+expandir() { printf '%s\n' "${1/#\~/$HOME}"; }
+
+uso() {
+  cat >&2 <<FIM
+uso:
+  deploy <stack> <acao> [args...]   acao = up | down | ps | logs | config | pull | build
+  deploy <stack>                    mostra o declarado da stack, sem tocar em nada
+  deploy                            lista as stacks do registro
+
+stacks registradas:
+FIM
+  while read -r s; do
+    printf '  %-14s %s\n' "$s" "$(campo "$s" papel)" >&2
+  done < <(stacks)
+  cat >&2 <<FIM
+
+Nao existe alvo default e nao existe "todas": stack e argumento obrigatorio.
+Registro: $REGISTRO
+FIM
+  exit 2
+}
+
+[ -r "$REGISTRO" ] || { echo "registro nao legivel: $REGISTRO" >&2; exit 1; }
+command -v jq >/dev/null || { echo "jq ausente — o registro e JSON e nao se le na mao" >&2; exit 1; }
+
+[ $# -ge 1 ] || uso
+STACK="$1"; shift || true
+
+COMPOSE="$(campo "$STACK" compose)"
+if [ -z "$COMPOSE" ]; then
+  echo "erro: stack \"$STACK\" nao esta no registro — nao invento caminho de compose." >&2
+  echo "      registradas: $(stacks | tr '\n' ' ')" >&2
+  exit 2
+fi
+COMPOSE="$(expandir "$COMPOSE")"
+[ -r "$COMPOSE" ] || { echo "erro: compose declarado e ilegivel: $COMPOSE" >&2; exit 1; }
+
+# Sem acao: mostra o declarado. Ver nao muda nada, entao nao precisa de confirmacao.
+if [ $# -eq 0 ]; then
+  printf 'stack   : %s\n' "$STACK"
+  printf 'papel   : %s\n' "$(campo "$STACK" papel)"
+  printf 'repo    : %s\n' "$(campo "$STACK" repo)"
+  printf 'compose : %s\n' "$COMPOSE"
+  printf 'critico : %s\n' "$(campo "$STACK" critico)"
+  printf 'servicos: %s\n' "$(docker compose -f "$COMPOSE" config --services 2>/dev/null | tr '\n' ' ')"
+  exit 0
+fi
+
+ACAO="$1"
+# Acao que derruba ou recria stack critica pede confirmacao explicita: foi assim que o
+# control-plane caiu em 09/08. `PF_SIM=1` e a forma nao-interativa de confirmar.
+if [ "$(campo "$STACK" critico)" = "true" ] && [ "$ACAO" = "down" ] && [ "${PF_SIM:-}" != "1" ]; then
+  echo "recusa: \"$STACK\" e critica e \"down\" derruba a borda junto." >&2
+  echo "        confirme com: PF_SIM=1 deploy $STACK down" >&2
+  exit 1
+fi
+
+cd "$(dirname "$COMPOSE")"
+exec docker compose -f "$COMPOSE" "$@"

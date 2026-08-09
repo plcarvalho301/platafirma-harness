@@ -7,17 +7,18 @@
 set -euo pipefail
 
 export DOCKER_HOST="${DOCKER_HOST:-unix:///run/user/$(id -u)/docker.sock}"
-COMPOSE="${INFRA_COMPOSE:-$HOME/AI/platafirma-core/docker-compose.yml}"
 OPS_HEALTH="${INFRA_OPS_HEALTH:-http://127.0.0.1:8010/health}"
 
 uso() {
   cat >&2 <<'FIM'
 uso:
-  infra estado                   contêineres, units de usuário e timers, uma tela
-  infra saude                    /health do ops, contêiner não-saudável, disco, RAM
-  infra logs <alvo> [n]          alvo = nome de contêiner OU unit --user (default 50)
-  infra restart <unit>           destacado: sobrevive ao fim desta chamada
-  infra compose <args...>        docker compose com o -f do platafirma-core
+  infra estado [alvo]            contêineres, units de usuário e timers, uma tela
+  infra saude  [alvo]            /health do ops, contêiner não-saudável, disco, RAM
+  infra logs   <alvo> [n]        alvo = nome de contêiner OU unit --user (default 50)
+  infra restart <alvo>           destacado: sobrevive ao fim desta chamada
+
+Leitura aceita alvo opcional; sem alvo, olha tudo. Mutação exige alvo explícito e
+recusa sem ele. Promover release não é daqui: `deploy <stack>`.
 FIM
   exit 2
 }
@@ -40,6 +41,12 @@ e_conteiner()      { docker ps -a --format '{{.Names}}' | grep -qx "$1"; }
 # --- verbos -----------------------------------------------------------------
 
 estado() {
+  local alvo="${1:-}"
+  if [ -n "$alvo" ]; then
+    e_conteiner "$alvo" && { docker ps -a --format '{{.Names}}\t{{.Status}}' | grep -E "^$alvo\\s" || echo "$alvo: não está em execução"; return; }
+    systemctl --user status "$alvo" --no-pager -n 0 || true
+    return
+  fi
   echo "== contêineres";                        conteineres
   echo; echo "== units de usuário (ativas e falhadas)"; units_vivas
   echo; echo "== timers";                       timers
@@ -71,20 +78,18 @@ restart() {
   echo "restart de $1 despachado destacado; conferir com: infra estado"
 }
 
-compose() {
-  [ -r "$COMPOSE" ] || { echo "compose não legível: $COMPOSE" >&2; exit 1; }
-  docker compose -f "$COMPOSE" "$@"
-}
-
 # --- despacho ---------------------------------------------------------------
 
 cmd="${1:-}"; shift || uso
 
 case "$cmd" in
-  estado)  estado ;;
+  estado)  estado "${1:-}" ;;
   saude)   saude ;;
   logs)    logs "${1:?uso: infra logs <alvo> [n]}" "${2:-50}" ;;
-  restart) restart "${1:?uso: infra restart <unit>}" ;;
-  compose) compose "$@" ;;
+  restart) [ $# -ge 1 ] || { echo "erro: restart exige alvo explícito — não reinicia tudo." >&2; exit 2; }
+           restart "$1" ;;
+  compose) echo "erro: promover release saiu do \`infra\` — capacidade \`mudanca\`, verbo \`deploy\`." >&2
+           echo "       use: deploy <stack> up -d   (stack e obrigatoria; nao ha alvo default)" >&2
+           exit 2 ;;
   *)       uso ;;
 esac

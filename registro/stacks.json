@@ -1,0 +1,42 @@
+{
+  "_leia": "Registro de stacks da PlataFirma — o DECLARADO, nao o servido. Fonte do verbo `deploy` e da classe `servico` do `conferir`. Nao se deriva do daemon: docker ps lista o que subiu, este arquivo lista o que deveria existir e de onde.",
+  "_capacidade": "ativo",
+  "_dono": "claudinho-TI",
+  "stacks": {
+    "core": {
+      "compose": "~/AI/platafirma-core/docker-compose.yml",
+      "repo": "platafirma-core",
+      "papel": "control-plane: IAM, borda, politica de seguranca",
+      "critico": true
+    },
+    "motor": {
+      "compose": "~/AI/platafirma-motor/docker-compose.yml",
+      "repo": "platafirma-motor",
+      "papel": "motor: malha de mensageria (msg)",
+      "critico": true
+    },
+    "rag": {
+      "compose": "~/AI/platafirma-conhecimento/rag/docker-compose.yml",
+      "repo": "platafirma-conhecimento",
+      "papel": "recuperacao: extrator, indice e API do acervo",
+      "critico": false
+    },
+    "acervo-api": {
+      "compose": "~/AI/platafirma-conhecimento/acervo-api/docker-compose.yml",
+      "repo": "platafirma-conhecimento",
+      "papel": "API do acervo",
+      "critico": false
+    },
+    "conhecimento": {
+      "compose": "~/AI/platafirma-conhecimento/docker-compose.yml",
+      "repo": "platafirma-conhecimento",
+      "papel": "wiki e MCP de conhecimento",
+      "critico": true
+    }
+  },
+  "_fora_do_registro": {
+    "~/AI/deploy/core/docker-compose.yml": "worktree de deploy do core — alvo da migracao, nao stack propria",
+    "~/AI/deploy/conhecimento/docker-compose.yml": "worktree de deploy do conhecimento — idem",
+    "~/AI/opt/docker-bench-security/docker-compose.yml": "ferramenta de terceiro, nao e stack da plataforma"
+  }
+}

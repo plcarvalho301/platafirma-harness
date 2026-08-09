@@ -25,6 +25,8 @@ RAIZ = os.path.expanduser("~/AI")
 DEPLOY = os.path.join(RAIZ, "deploy")
 BIN = os.path.join(RAIZ, "bin")
 
+MAPA = os.path.join(RAIZ, "platafirma-arquitetura", "docs", "arquitetura-negocio-operacao.md")
+
 CLASSES_ABERTAS = {
     "canal": "regua do design system e de claudinha-produto e ainda nao existe",
     "casco": "avaliacao CIS ja tem verbo proprio (oscap-casco), de claudinho-seguranca",
@@ -210,8 +212,20 @@ def origem(nome, caminho):
     return ("copia" if rc == 0 else "divergente"), achados[0]
 
 
+def capacidades_do_mapa():
+    """Le os nomes de capacidade da tabela do mapa da mesa. Fonte e o repo de
+    arquitetura; nao ha copia local — capacidade so existe se a mesa a lavrou."""
+    import re
+    try:
+        texto = open(MAPA, errors="replace").read()
+    except OSError:
+        return None
+    return set(re.findall(r"^\| `([a-z/-]+)` \|", texto, re.M))
+
+
 def conferir_verbo(alvo):
     houve = False
+    validas = capacidades_do_mapa()
     porcapacidade = {}
     vistos = 0
     for nome in sorted(os.listdir(BIN)):
@@ -245,6 +259,13 @@ def conferir_verbo(alvo):
             print(f"    CABECAL : faltam {', '.join(faltando)}")
         else:
             print(f"    cabecal : capacidade={cab['capacidade']} dono={cab['dono']}")
+        cap = cab["capacidade"]
+        if cap and cap != "orfa":
+            if validas is None:
+                print("    aviso   : mapa de capacidades ilegivel — nao validei o nome")
+            elif cap not in validas:
+                houve = True
+                print(f"    CAPACID : {cap!r} nao esta no mapa da mesa — capacidade nao se inventa no cabecalho")
         porcapacidade.setdefault(cab["capacidade"] or "(nao declarada)", []).append(nome)
 
     if alvo and vistos == 0:
@@ -255,7 +276,8 @@ def conferir_verbo(alvo):
         print("\n## arq:0037 — um verbo por capacidade")
         for cap, verbos in sorted(porcapacidade.items()):
             # `orfa` e capacidade declarada como ausente: conta como nao conforme, sempre.
-            conforme = len(verbos) == 1 and cap not in ("(nao declarada)", "orfa")
+            fora_do_mapa = validas is not None and cap not in validas and cap not in ("(nao declarada)", "orfa")
+            conforme = len(verbos) == 1 and cap not in ("(nao declarada)", "orfa") and not fora_do_mapa
             marca = "ok " if conforme else "NAO"
             if marca == "NAO":
                 houve = True
