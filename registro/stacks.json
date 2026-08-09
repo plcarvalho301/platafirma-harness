@@ -10,7 +10,7 @@
       "critico": true
     },
     "motor": {
-      "compose": "~/AI/platafirma-motor/docker-compose.yml",
+      "compose": "~/AI/deploy/motor/docker-compose.yml",
       "repo": "platafirma-motor",
       "papel": "motor: malha de mensageria (msg)",
       "critico": true
