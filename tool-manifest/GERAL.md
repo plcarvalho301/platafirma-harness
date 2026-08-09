@@ -69,6 +69,32 @@ existe pra fechar.
 - **Escrita de git/wiki é manual**, sob pedido explícito do dono — não é
   trigger automático de fim de sessão.
 
+## Fila — o que merece mensagem (teste de admissão)
+
+Medido em 09/08/2026 sobre as 40 mensagens vivas: 19 são `resposta`, contra 8
+`pedido` e 7 `decisao`. Resposta é o tipo dominante — a fila virou esteira de
+entrega em vez de canal de decisão, e caixa que não zera para de informar.
+
+**Teste, antes de escrever qualquer mensagem: se eu não mandar isto, o que
+para?** Nada para → não manda.
+
+- **Manda** só o que precisa de decisão ou insumo de OUTRA cadeira para quem
+  escreve continuar. Bloqueio real, não cortesia.
+- **Não manda**: entrega concluída, achado registrado, retificação de número,
+  aviso de commit, "de acordo", "recebido", agradecimento. Isso é card, commit
+  ou nada.
+- **Silêncio é aceite.** Concordância não se responde; discordância sim.
+- **Profundidade máxima 2.** Pedido → resposta encerra a cadeia. Responder a uma
+  resposta é proibido; se a resposta abriu assunto novo, o assunto novo é card
+  com dono, não terceira mensagem.
+- **Achado fora do escopo do pedido vira card**, não mensagem — salvo se o dono
+  precisa decidir hoje para não perder trabalho.
+- **Handoff é exceção** e continua valendo: é contexto de abertura, não tráfego.
+
+Quem escreve carrega a prova de que passou no teste: a mensagem diz, em uma
+linha, o que trava sem ela. Sem essa linha, a caixa do destinatário não deve
+nada — pode consumir sem responder.
+
 ## Fila — consumir após ler
 
 Mensagem lida e respondida na mesma sessão: consumir antes de encerrar. Se
