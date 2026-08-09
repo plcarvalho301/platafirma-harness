@@ -139,3 +139,21 @@ Projetos do rastreador: `46 Cards` · `1 Inbox` são projetos reais; id negativo
 
 Clones de trabalho: `platafirma-{core,conhecimento,arquitetura,harness,motor,posto}`
 e `modulo-osint`, todos em `~/AI`.
+
+## Escovação de bit — o que gira a cada fita
+
+Régua do dono: escova-se o que é executado dez milhões de vezes. Aqui isso tem
+escopo estreito e nomeável — o miolo do loop de inferência, ou seja tudo que
+sobe no contexto a **cada giro de fita**. Meia dúzia de token economizada nesse
+miolo é cobrada em todo giro de toda cadeira; a mesma economia fora dele não é
+cobrada de ninguém.
+
+- **Gira, logo escova-se**: nome de chave e de stream, nome de verbo e de
+  sub-ato, campo de envelope da fila, tool-manifest, persona e instruction,
+  descrição de tool, saída default de verbo chamado por sessão.
+- **Não gira, logo não se escova**: ADR, wiki, README, comentário de config,
+  mensagem de commit, log, ajuda extensa de verbo, carta da fila.
+
+A régua corta nos dois sentidos: fora do miolo, verbosidade é barata e a
+clareza vence a contração. A pergunta que decide é uma só — *isto sobe no
+contexto a cada giro?*
