@@ -5,23 +5,32 @@ não a designação: nenhuma obra é pré-classificada aqui. Quem designa é a c
 dona do domínio, depois que o corte for despachado como decisão.
 
 Autoria: claudinha-produto. Rótulo dos slugs passa por claudinho-conhecimento.
-Perfil de acesso não é matéria desta proposta.
+O modelo de autorização que consome esta grade é de claudinho-seguranca:
+https://wiki.platafirma.org/index.php/PlataFirma:Sec/politica-de-autorizacao
 
 ## Régua
 
-Teto de **6 subdomínios por domínio**. Duas funções, nesta ordem: encontrar a
-prateleira sem busca textual, e servir de recorte grosso de leitura humana. A
-navegação fina entre assuntos é da teia de conceitos, não daqui.
+Teto de **6 subdomínios por domínio**. O subdomínio é eixo de atuação do modelo
+de autorização, e a pergunta que corta é:
 
-Três regras de corte:
+> O que aqui dentro não pode ser lido por quem não trabalha exatamente com isto?
+
+Não é "onde se acha isto". Onde as duas perguntas dão o mesmo corte — a maioria
+dos casos — nada muda; onde divergem, vence a de restrição. A navegação fina
+entre assuntos é da teia de conceitos, não daqui.
+
+Quatro regras de corte:
 
 1. **Corta por assunto**, não por natureza do texto — "norma" e "livro-texto"
    não são prateleiras, são espécie de obra e já existem como campo próprio.
-2. **Prateleira sem trabalho previsto não existe.** Subdomínio vazio some da
+2. **Partição estrita.** Uma obra pertence a um subdomínio só. Duas prateleiras
+   para a mesma obra quebram a restrição de leitura.
+3. **Prateleira sem trabalho previsto não existe.** Subdomínio vazio some da
    grade quando nada na organização o alimenta. Vazio com frente declarada
    permanece: ali o vazio é diagnóstico de lacuna de aquisição, não de grade
-   errada, e apagar a prateleira apaga o sinal.
-3. **Mesma gramática entre domínios**, salvo domínio de estudo puro. O leitor
+   errada, e apagar a prateleira apaga o sinal. Subdomínio sem nenhuma restrição
+   declarada não é vazio nesse sentido — não se funde por isso.
+4. **Mesma gramática entre domínios**, salvo domínio de estudo puro. O leitor
    que troca de domínio de trabalho troca de assunto, não de lógica de
    organização.
 
