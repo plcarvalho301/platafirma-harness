@@ -86,7 +86,4 @@ de outras cadeiras: ler, não escrever.
   privilégio, presos à decisão de branching.
 - `restic` presente e **sem repositório configurado**; `deploy/backup-cofre.timer`
   existe no repo e não está `enabled` no user.
-- **9 dos 16 contêineres sobem de clone de trabalho, não de worktree de deploy** — todo o
-  `platafirma-core` (keycloak, vikunja, oauth2-proxy, landing, cloudflared e os dois
-  bancos) e o par `rag-extractor-api`/`-pg`. Medido por `conferir-servido` em 09/08.
 - `ops-server` roda fora do compose; migração prevista para a janela 4b.
