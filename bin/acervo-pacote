@@ -1,0 +1,238 @@
+#!/home/claudinho/AI/.venv-acervo/bin/python
+"""Monta o pacote de classificação externa do acervo (card 258).
+
+Saída: <out>/pacote-acervo-<data>.zip contendo planilha.csv, capas.zip e,
+quando existir, INSTRUCOES.md.
+
+Fonte do universo: acervo.obra com especie_id IS NULL e objeto IS NOT NULL.
+Fonte do binário: MinIO (objeto = "<bucket>/<sha256>"). Nenhum caminho de
+sistema de arquivos entra no processo.
+
+Chave de casamento planilha<->capa: sha256.
+"""
+import argparse
+import csv
+import io
+import json
+import os
+import re
+import subprocess
+import sys
+import tempfile
+import zipfile
+from datetime import date
+from pathlib import Path
+
+import boto3
+
+PG_CONTAINER = "rag-extractor-pg"
+MINIO_CONTAINER = "rag-extractor-minio"
+MINIO_ENDPOINT = "http://127.0.0.1:9000"
+LIMITE_TEXTO = 6000
+MIN_CHARS_CAMADA_TEXTO = 80
+
+COLUNAS = [
+    "obra_id", "arquivo", "sha256", "colecao", "titulo_atual",
+    "titulo_canonico", "emitido_por", "especie", "ano", "idioma",
+    "confianca", "observacao",
+]
+
+SQL = """
+select o.id::text, coalesce(o.arquivo,''), o.objeto, coalesce(o.titulo,'')
+from acervo.obra o
+where o.especie_id is null and o.objeto is not null
+order by o.arquivo
+"""
+
+
+def env_do_container(nome, chaves):
+    fmt = "{{range .Config.Env}}{{println .}}{{end}}"
+    saida = subprocess.run(
+        ["docker", "inspect", nome, "--format", fmt],
+        capture_output=True, text=True, check=True).stdout
+    achado = {}
+    for linha in saida.splitlines():
+        if "=" in linha:
+            k, v = linha.split("=", 1)
+            if k in chaves:
+                achado[k] = v
+    faltando = set(chaves) - set(achado)
+    if faltando:
+        sys.exit(f"credencial ausente em {nome}: {sorted(faltando)}")
+    return achado
+
+
+def universo():
+    cred = env_do_container(PG_CONTAINER, {"POSTGRES_USER", "POSTGRES_DB"})
+    saida = subprocess.run(
+        ["docker", "exec", PG_CONTAINER, "psql",
+         "-U", cred["POSTGRES_USER"], "-d", cred["POSTGRES_DB"],
+         "-At", "-F", "\t", "-c", SQL],
+        capture_output=True, text=True, check=True).stdout
+    linhas = []
+    for l in saida.splitlines():
+        if not l.strip():
+            continue
+        obra_id, arquivo, objeto, titulo = l.split("\t")
+        bucket, sha = objeto.split("/", 1)
+        linhas.append(dict(obra_id=obra_id, arquivo=arquivo, sha256=sha,
+                           bucket=bucket, titulo_atual=titulo))
+    return linhas
+
+
+def cliente_s3():
+    cred = env_do_container(
+        MINIO_CONTAINER, {"MINIO_ROOT_USER", "MINIO_ROOT_PASSWORD"})
+    return boto3.client(
+        "s3", endpoint_url=MINIO_ENDPOINT,
+        aws_access_key_id=cred["MINIO_ROOT_USER"],
+        aws_secret_access_key=cred["MINIO_ROOT_PASSWORD"])
+
+
+def limpa(txt):
+    txt = re.sub(r"<[^>]+>", " ", txt)
+    txt = re.sub(r"[ \t\r\f\v]+", " ", txt)
+    txt = re.sub(r"\n{3,}", "\n\n", txt)
+    return txt.strip()[:LIMITE_TEXTO]
+
+
+def do_zip(caminho, alvos, limite=LIMITE_TEXTO):
+    """Concatena o texto dos primeiros membros que casam com os padrões."""
+    partes = []
+    try:
+        with zipfile.ZipFile(caminho) as z:
+            nomes = z.namelist()
+            for padrao, quantos in alvos:
+                casam = [n for n in nomes if re.search(padrao, n, re.I)][:quantos]
+                for n in sorted(casam):
+                    try:
+                        partes.append(z.read(n).decode("utf-8", "ignore"))
+                    except Exception:
+                        pass
+                    if sum(map(len, partes)) > limite * 3:
+                        break
+    except Exception as e:
+        return f"[falha ao abrir container zip: {e}]"
+    return limpa("\n".join(partes))
+
+
+def extrai(caminho, ext, sha, destino, dpi):
+    """Devolve lista de (nome_arquivo, bytes) da capa. Texto vira .txt."""
+    def txt(conteudo):
+        return [(f"{sha}.txt", conteudo.encode("utf-8"))]
+
+    if ext == "pdf":
+        r = subprocess.run(["pdftotext", "-l", "4", str(caminho), "-"],
+                           capture_output=True, text=True, errors="ignore")
+        conteudo = limpa(r.stdout or "")
+        if len(conteudo) >= MIN_CHARS_CAMADA_TEXTO:
+            return txt(conteudo)
+        prefixo = destino / sha
+        subprocess.run(["pdftoppm", "-jpeg", "-jpegopt", "quality=60",
+                        "-r", str(dpi), "-f", "1", "-l", "3",
+                        str(caminho), str(prefixo)],
+                       capture_output=True)
+        imagens = sorted(destino.glob(f"{sha}-*.jpg"))
+        if imagens:
+            return [(p.name, p.read_bytes()) for p in imagens]
+        return txt("[pdf sem camada de texto e sem render]")
+
+    if ext == "epub":
+        return txt(do_zip(caminho, [(r"\.opf$", 1), (r"\.x?html?$", 6)]))
+    if ext == "docx":
+        return txt(do_zip(caminho, [(r"^word/document\.xml$", 1)]))
+    if ext == "pptx":
+        return txt(do_zip(caminho, [(r"^docProps/core\.xml$", 1),
+                                    (r"^ppt/slides/slide[1-3]\.xml$", 3)]))
+    if ext == "xlsx":
+        return txt(do_zip(caminho, [(r"^docProps/core\.xml$", 1),
+                                    (r"^xl/sharedStrings\.xml$", 1)]))
+    if ext == "ods":
+        return txt(do_zip(caminho, [(r"^meta\.xml$", 1), (r"^content\.xml$", 1)]))
+    if ext in ("md", "txt", "html", "htm", "csv", "json"):
+        return txt(limpa(caminho.read_text("utf-8", "ignore")))
+    return txt(f"[extensao {ext} sem extrator; so o nome do arquivo serve de pista]")
+
+
+def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--out", default=str(Path.home() / "AI" / "var" / "pacotes"))
+    ap.add_argument("--dpi", type=int, default=100)
+    ap.add_argument("--instrucoes", default=str(
+        Path.home() / "AI" / "var" / "pacotes" / "INSTRUCOES.md"))
+    ap.add_argument("--limite-mb", type=float, default=20.0)
+    ap.add_argument("--amostra", type=int, default=0)
+    args = ap.parse_args()
+
+    out = Path(args.out)
+    out.mkdir(parents=True, exist_ok=True)
+    obras = universo()
+    if args.amostra:
+        obras = obras[::max(1, len(obras)//args.amostra)][:args.amostra]
+    print(f"universo: {len(obras)} obras", flush=True)
+    s3 = cliente_s3()
+
+    tmp = Path(tempfile.mkdtemp(prefix="pacote-"))
+    capas_dir = tmp / "capas"
+    capas_dir.mkdir()
+    linhas, falhas, digitalizados = [], [], 0
+
+    for i, o in enumerate(obras, 1):
+        ext = o["arquivo"].rsplit(".", 1)[-1].lower() if "." in o["arquivo"] else ""
+        binario = tmp / f"obj.{ext or 'bin'}"
+        try:
+            s3.download_file(o["bucket"], o["sha256"], str(binario))
+            capas = extrai(binario, ext, o["sha256"], capas_dir, args.dpi)
+            for nome, dados in capas:
+                (capas_dir / nome).write_bytes(dados)
+            if len(capas) > 1 or capas[0][0].endswith(".jpg"):
+                digitalizados += 1
+        except Exception as e:
+            falhas.append((o["sha256"], repr(e)[:120]))
+            (capas_dir / f"{o['sha256']}.txt").write_bytes(
+                f"[falha na extracao: {e}]".encode())
+        finally:
+            binario.unlink(missing_ok=True)
+        linhas.append({
+            "obra_id": o["obra_id"], "arquivo": o["arquivo"],
+            "sha256": o["sha256"], "colecao": o["bucket"],
+            "titulo_atual": o["titulo_atual"],
+            **{c: "" for c in COLUNAS[5:]},
+        })
+        if i % 50 == 0:
+            print(f"  {i}/{len(obras)}", flush=True)
+
+    planilha = tmp / "planilha.csv"
+    with planilha.open("w", encoding="utf-8-sig", newline="") as fh:
+        w = csv.DictWriter(fh, fieldnames=COLUNAS)
+        w.writeheader()
+        w.writerows(linhas)
+
+    capas_zip = tmp / "capas.zip"
+    with zipfile.ZipFile(capas_zip, "w", zipfile.ZIP_DEFLATED, compresslevel=9) as z:
+        for p in sorted(capas_dir.iterdir()):
+            z.write(p, p.name)
+
+    alvo = out / f"pacote-acervo-{date.today():%Y%m%d}.zip"
+    with zipfile.ZipFile(alvo, "w", zipfile.ZIP_DEFLATED, compresslevel=9) as z:
+        z.write(planilha, "planilha.csv")
+        z.write(capas_zip, "capas.zip")
+        inst = Path(args.instrucoes)
+        if inst.is_file():
+            z.write(inst, "INSTRUCOES.md")
+
+    mb = alvo.stat().st_size / 2**20
+    print(json.dumps({
+        "pacote": str(alvo), "mb": round(mb, 2), "obras": len(linhas),
+        "capas": len(list(capas_dir.iterdir())),
+        "digitalizados": digitalizados, "falhas": len(falhas),
+        "instrucoes_incluidas": Path(args.instrucoes).is_file(),
+        "dentro_do_limite": mb <= args.limite_mb,
+    }, ensure_ascii=False, indent=1), flush=True)
+    for sha, err in falhas[:20]:
+        print(f"  falha {sha}: {err}", flush=True)
+    subprocess.run(["rm", "-rf", str(tmp)])
+
+
+if __name__ == "__main__":
+    main()

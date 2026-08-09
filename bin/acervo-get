@@ -1,0 +1,58 @@
+#!/bin/bash
+# Baixa uma obra do acervo pelo título (busca parcial, sem acento sensível).
+# Uso:  acervo-get "philosophy of software"        -> baixa para o diretório atual
+#       acervo-get "meditations" /caminho/destino  -> baixa para outro diretório
+set -euo pipefail
+
+TERMO="${1:-}"
+DESTINO="${2:-.}"
+[ -z "$TERMO" ] && { echo "uso: acervo-get \"<trecho do titulo>\" [destino]"; exit 1; }
+
+PG=rag-extractor-pg
+PGUSER=$(docker inspect $PG --format '{{range .Config.Env}}{{println .}}{{end}}' | sed -n 's/^POSTGRES_USER=//p')
+PGDB=$(docker inspect $PG --format '{{range .Config.Env}}{{println .}}{{end}}' | sed -n 's/^POSTGRES_DB=//p')
+
+SQL="select coalesce(titulo,arquivo), arquivo, objeto
+     from acervo.obra
+     where objeto is not null
+       and (unaccent(lower(coalesce(titulo,''))) like unaccent(lower('%$TERMO%'))
+            or unaccent(lower(arquivo)) like unaccent(lower('%$TERMO%')))
+     order by length(arquivo) limit 20"
+
+# unaccent pode não existir; cai para busca simples se falhar
+RES=$(docker exec $PG psql -U "$PGUSER" -d "$PGDB" -At -F$'\t' -c "$SQL" 2>/dev/null) || \
+RES=$(docker exec $PG psql -U "$PGUSER" -d "$PGDB" -At -F$'\t' -c \
+  "select coalesce(titulo,arquivo), arquivo, objeto from acervo.obra
+   where objeto is not null and (lower(coalesce(titulo,'')) like lower('%$TERMO%')
+   or lower(arquivo) like lower('%$TERMO%')) order by length(arquivo) limit 20")
+
+[ -z "$RES" ] && { echo "nada encontrado para: $TERMO"; exit 1; }
+
+N=$(echo "$RES" | wc -l)
+if [ "$N" -gt 1 ]; then
+  echo "$N resultados — refine o termo ou escolha:"
+  echo "$RES" | nl -w2 -s') ' | cut -c1-120
+  read -rp "número (enter cancela): " ESCOLHA
+  [ -z "$ESCOLHA" ] && exit 0
+  RES=$(echo "$RES" | sed -n "${ESCOLHA}p")
+fi
+
+ARQUIVO=$(echo "$RES" | cut -f2)
+OBJETO=$(echo "$RES" | cut -f3)
+BUCKET="${OBJETO%%/*}"
+SHA="${OBJETO#*/}"
+
+mkdir -p "$DESTINO"
+~/AI/.venv-acervo/bin/python - "$BUCKET" "$SHA" "$DESTINO/$ARQUIVO" <<'EOF'
+import sys, subprocess, boto3
+bucket, sha, destino = sys.argv[1], sys.argv[2], sys.argv[3]
+fmt = "{{range .Config.Env}}{{println .}}{{end}}"
+env = dict(l.split("=", 1) for l in subprocess.run(
+    ["docker", "inspect", "rag-extractor-minio", "--format", fmt],
+    capture_output=True, text=True).stdout.splitlines() if "=" in l)
+boto3.client("s3", endpoint_url="http://127.0.0.1:9000",
+             aws_access_key_id=env["MINIO_ROOT_USER"],
+             aws_secret_access_key=env["MINIO_ROOT_PASSWORD"]
+             ).download_file(bucket, sha, destino)
+print(destino)
+EOF
