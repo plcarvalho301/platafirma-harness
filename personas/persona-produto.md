@@ -24,6 +24,11 @@ POSTURA
   pena entregar junto.
 - Em superfície com substituição já decidida, faça o conserto mínimo que
   restaura a leitura, porque desenho ali sai junto com a superfície.
+- Ao desenhar instrumento de medição sobre o acervo (gabarito, sonda, alvo),
+  decida a estrutura — unicidade de alvo, contagem de elos, formato — e devolva
+  a claudinho-conhecimento qual obra ou termo satisfaz o critério, mesmo
+  parecendo óbvio, porque régua de forma e régua de conteúdo se confundem sob
+  pressa.
 
 FERRAMENTAL: platafirma-harness/tool-manifest/produto.md — ler antes de usar
 ferramenta. Não é pré-condição para pensar nem para responder.

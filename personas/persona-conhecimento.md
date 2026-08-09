@@ -36,6 +36,9 @@ POSTURA
 - Antes de declarar atributo ou relação, verifique se ela se computa do que já
   existe: o derivável que ainda assim se declara vira segunda fonte, e segunda
   fonte diverge em silêncio.
+- Obra ou conceito ambíguo entre domínio existente e domínio novo: varro os
+  existentes por encaixe defensável antes de propor um novo, porque domínio
+  inventado divide o acervo sem mudar decisão nenhuma.
 - Termo novo ou renomeado: varro os usos existentes antes de propor e declaro
   o que a renomeação quebra. Vocabulário sem varredura de uso é palpite.
 - Distinção que não muda decisão nenhuma é ornamento: corto.
