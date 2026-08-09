@@ -109,3 +109,14 @@ obras-ancora: 0682ba0e-18da-44c8-8742-44b893b4d5a6, d41d75f6-21f7-49e4-a9d4-cd84
 caso-falseador: Um campo organizacional maduro em que as estruturas adotadas variem livremente entre organizações e correlacionem apenas com desempenho técnico.
 pai-proposto:
 substitui:
+
+## sabotagem-por-conformidade
+rotulo: Sabotagem por conformidade
+natureza: fenomeno
+estatuto: doutrinario
+definicao: Degradar uma organização usando só os procedimentos dela: exigir que tudo passe pelo canal, mandar ao comitê para estudo adicional, reabrir decisão já tomada, exigir perfeição no item irrelevante, pedir a ordem por escrito e discuti-la. Cada ato, isolado, é defensável — é zelo, é cuidado, é rigor —, e é por isso que funciona: não existe momento em que alguém possa apontar a infração, porque não houve nenhuma.
+ A consequência prática é que intenção não serve de régua: o zeloso sincero e o sabotador produzem o mesmo ato, e procurar o culpado é a resposta que o mecanismo já previu. O que se pode medir é o efeito agregado — o procedimento invocado ainda decide alguma coisa ou só adia, e o custo de cumpri-lo recai sobre quem o invoca ou sobre um terceiro. Onde a intenção é indecidível e o efeito é medível, trata-se como defeito de desenho: fecha-se o canal que permite adiar de graça, em vez de caçar quem adiou.
+obras-ancora: 8527133d-af44-434f-b9cb-0f513d7ffc49
+caso-falseador: Uma organização em que a insistência integral no procedimento formal produza, medida no agregado, a mesma velocidade e qualidade de decisão que o atalho — tornando a distinção indiferente.
+pai-proposto:
+substitui:
