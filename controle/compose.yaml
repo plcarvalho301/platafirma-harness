@@ -1,45 +1,19 @@
-# Sobe agregador + tela (card #390, LOTE 3). Entrega da fábrica: serviço em
-# loopback, porta por env var — mesma convenção de porta-publicada de
-# platafirma-core/docker-compose.yml (127.0.0.1:<porta>:<porta>). Não abre
-# porta publicada, não toca cloudflared/oauth2-proxy.
+# Só a TELA roda em container. O agregador roda no host (systemd --user,
+# controle/systemd/), e os dois se falam por um arquivo de estado.
 #
-# BORDA (claudinho-TI, não a fábrica — ver card): rede pra encaixar no
-# ingress existente (ex.: entrar em `conhecimento`, como os outros serviços
-# do compose de platafirma-core, pra oauth2-proxy alcançar por nome), a
-# unidade/systemd que sobe isto, e os dois pontos abaixo, que dependem de
-# como o host roda docker (rootless, per platafirma-core/CLAUDE.md) e
-# systemd --user na máquina real:
-#   - DOCKER_SOCK: caminho do socket rootless (bin/infra usa
-#     unix:///run/user/$(id -u)/docker.sock por default) — o bind mount
-#     abaixo assume host uid 1000; ajustar se claudinho for outro uid.
-#   - systemctl --user (usado por `infra restart`, chamado pela ação
-#     "reiniciar"): precisa de XDG_RUNTIME_DIR e do bus de sessão do
-#     usuário montados — não deu pra validar isto fora do host real, então
-#     o bind mount de /run/user/1001 abaixo é proposta, não fato testado.
-#   - FILA_REDIS_HOST/FILA_REDIS_PORT (usado por `fila enviar`, ação
-#     "despachar recado"): default de fila_streams.py é 127.0.0.1:6379, que
-#     de dentro do container NÃO é o host — precisa apontar pro endereço de
-#     rede real da malha `msg` (Valkey), e a `tela` provavelmente precisa
-#     entrar na network daquele compose pra alcançar por nome. Não validado
-#     aqui — endereço exato é decisão de quem já sabe onde o `msg` mora.
+# A divisão não é gosto, é o que os dois lados exigem:
+# - o agregador chama os verbos, e verbo assume o host inteiro — systemctl, free,
+#   git, docker CLI e o venv com shebang absoluto. Em container isso vira uma
+#   caçada a dependência sem fim: medido, 5 dos 8 blocos ficavam indisponíveis.
+# - a tela precisa estar na rede do gate, porque em docker rootless o host NÃO é
+#   alcançável de dentro do container (host-gateway, 10.0.2.2 e o gateway da
+#   bridge: os três medidos, os três mudos). Tela no host = 502 no oauth2-proxy.
+#
+# A tela só lê o arquivo, e o monta somente-leitura: ela não chama verbo para
+# renderizar — isso já era exigência 4 da spec, agora é também topologia.
 name: harness-controle
 
 services:
-  agregador:
-    build: .
-    restart: unless-stopped
-    command: ["python", "-m", "harness_controle.agregador"]
-    environment:
-      PF_RAIZ: /home/claudinho/AI
-      AGREGADOR_ESTADO_PATH: /estado/estado.json
-      DOCKER_HOST: unix:///run/user/1001/docker.sock
-    volumes:
-      - /home/claudinho/AI:/home/claudinho/AI:ro
-      - /run/user/1001/docker.sock:/run/user/1001/docker.sock
-      - /usr/bin/docker:/usr/local/bin/docker:ro
-      - /run/user/1001:/run/user/1001
-      - estado:/estado
-
   tela:
     build: .
     restart: unless-stopped
@@ -57,15 +31,11 @@ services:
       - /run/user/1001/docker.sock:/run/user/1001/docker.sock
       - /usr/bin/docker:/usr/local/bin/docker:ro
       - /run/user/1001:/run/user/1001
-      - estado:/estado
+      - /home/claudinho/AI/var/run/harness-controle:/estado:ro
     ports:
       - "127.0.0.1:${HARNESS_CONTROLE_PORTA:-8091}:8000"
-    depends_on:
-      - agregador
     networks: [conhecimento, msg]
 
-volumes:
-  estado:
 
 networks:
   # Onde o oauth2-proxy-harness vive: o gate alcanca "tela:8000" por nome.
