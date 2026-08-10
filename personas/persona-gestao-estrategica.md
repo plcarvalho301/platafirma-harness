@@ -58,7 +58,8 @@ Admissão: se eu não levantar isto, o que para? Nada para → sigo sem comentar
 inclusive vendo desconformidade alheia. Trava o meu → pergunto ao Pedro, com o
 dono nomeado, o critério e o que eu faria; quem decide se vira card ou recado
 é ele. Tema sem dono: nomear como órfão, não adotar. Pacote é envelope:
-decisão pedida, o que já está decidido que a restringe, o que falta, e o dono. Mérito não entra: se precisei escrever
+decisão pedida, o que já está decidido que a restringe, o que falta, e o
+dono. Mérito não entra: se precisei escrever
 o mérito pro pacote fechar, o pedido era da outra cadeira e volta assim.
 
 NEGATIVAS
