@@ -20,7 +20,7 @@ anotar antes de a fita morrer   : mesa anota <chapeu>            corpo em stdin;
 esquecer um chapeu              : mesa limpa <chapeu>            alvo obrigatorio
 indice dos cadernos duraveis    : mesa caderno                   idade e tamanho, sem corpo
 abrir o caderno de um chapeu    : mesa caderno <chapeu>          corpo sob demanda
-fechar a fita                   : descansar fita                 memoria conferida + fatos volateis
+fechar a fita                   : descansar fita                 memoria + fatos volateis + triagem do Project
 so o estado da memoria          : descansar fita --so-memoria    sem o dossie, mais rapido
 achar slot fora do remit        : descansar varredura            todas as cadeiras; timer diario ja roda
 

@@ -17,6 +17,11 @@
 #   3. carimbo            — `mem:<cadeira>` (sem slot: fora do padrao que `mesa
 #      ver` varre) guarda quando a cadeira descansou pela ultima vez.
 #
+# O ultimo passo — triagem da memoria do Project — o verbo EMITE, nao executa: o
+# host nao le nem escreve esse bloco, e quem chama `memory_user_edits` e a sessao.
+# Sai aqui porque o fim de fita e o unico instante em que a sessao ja tem o
+# dossie medido do lado, que e o gabarito contra o qual o edit se julga fossil.
+#
 # NAO APAGA MEMORIA. Poda automatica de mesa seria robo decidindo o que a cadeira
 # esquece; o TTL de 14 dias ja e a poda, e ela e declarada. Orfao vira linha de
 # relatorio, e quem limpa e a sessao, com `mesa limpa <slot>`.
@@ -163,9 +168,29 @@ def ato_fita(args):
             roda(rotulo, cmd)
 
     rc.set(f"mem:{alvo.lower()}", int(time.time()))
-    print(f"\n== proximo passo ==\nescreva a mesa antes de a fita morrer: "
-          f"`mesa anota <chapeu>` (hipotese viva, beco descartado, proxima jogada,\n"
-          f"premissa volatil a reconferir).")
+    print("\n== proximo passo ==\n"
+          "1. escreva a mesa antes de a fita morrer: `mesa anota <chapeu>`\n"
+          "   (hipotese viva, beco descartado, proxima jogada, premissa a reconferir).\n"
+          "\n"
+          "2. triagem da memoria do Project — o host nao a alcanca; a tool e da sessao:\n"
+          "   a) memory_user_edits view\n"
+          "   b) uma linha por edit, so um destes tres rotulos:\n"
+          "      SUBSTRATO  monta_sessao, mesa, caderno, wiki ou rastreador ja serve\n"
+          "                 — nomeie qual\n"
+          "      FOSSIL     contradiz o dossie medido acima\n"
+          "      TRATO      preferencia do Pedro sobre como trabalhar; nao e fato\n"
+          "                 da plataforma, fica\n"
+          "   c) remova SUBSTRATO e FOSSIL, do maior indice para o menor — remover\n"
+          "      renumera a lista\n"
+          "   d) confirme que existe o edit da regra negativa; crie se faltar:\n"
+          "      \"Memoria do Project nao guarda estado da PlataFirma. Persona,\n"
+          "       remit, org, manifesto, verbo, numero do acervo, card, estado de\n"
+          "       trabalho e classificacao saem de monta_sessao, mesa, caderno,\n"
+          "       wiki e rastreador, em runtime. Substrato que serve nao se repete\n"
+          "       aqui — nem como resumo.\"\n"
+          "   e) reporte o que saiu, o que ficou e o que nao deu para conferir.\n"
+          "   Nao remova o que voce so SUSPEITA estar velho: sem tool que confirme,\n"
+          "   o edit fica e a duvida vai no relatorio.")
     return 0
 
 
