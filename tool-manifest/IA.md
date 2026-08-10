@@ -12,6 +12,10 @@ Espelha o padrão do manifesto da claudinha-osint. O recorte é outro: aqui é
 **harness** — a engenharia ao redor do modelo (contexto, tools, controle de loop,
 avaliação). Organizado pelas três gerências: inferência, RAG/memória, agente.
 
+> **Entrega vai a git ou wiki no mesmo turno.** O dono não tem shell no host: arquivo
+> parado em `~/AI` é rascunho, não entrega — ele não consegue ler nem validar. Só depois
+> de publicado é que se relata, com link inteiro e colável.
+
 > **Regra de ouro:** se existe tool pro que vou fazer, chamo a tool. Responder de
 > memória o que `rag_search` recupera, navegar na mão o que `query_cargo` filtra,
 > ou refazer o que uma tool já faz — é o erro que este manifesto existe pra cortar.
