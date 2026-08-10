@@ -14,6 +14,9 @@ REGISTRO="${DEPLOY_REGISTRO:-$HOME/AI/platafirma-harness/registro/stacks.json}"
 stacks()   { jq -r '.stacks | keys[]' "$REGISTRO"; }
 campo()    { jq -r --arg s "$1" --arg c "$2" '.stacks[$s][$c] // empty' "$REGISTRO"; }
 expandir() { printf '%s\n' "${1/#\~/$HOME}"; }
+# `compose` e `profiles` aceitam string ou lista: uma linha por item, sempre.
+lista()    { jq -r --arg s "$1" --arg c "$2" \
+               '.stacks[$s][$c] // empty | if type=="array" then .[] else . end' "$REGISTRO"; }
 
 uso() {
   cat >&2 <<FIM
@@ -42,23 +45,42 @@ command -v jq >/dev/null || { echo "jq ausente — o registro e JSON e nao se le
 [ $# -ge 1 ] || uso
 STACK="$1"; shift || true
 
-COMPOSE="$(campo "$STACK" compose)"
-if [ -z "$COMPOSE" ]; then
+# Uma stack pode precisar de mais de um arquivo (base + overlay de GPU) e de perfil
+# declarado: servico sob `profiles:` no compose e INVISIVEL sem --profile, e o verbo
+# nao acusa nada — foi assim que `rag-api` ficou fora de `deploy rag up`, com o
+# comando saindo 0 e sem subir a API.
+COMPOSE_ARGS=(); COMPOSE_PRIMEIRO=""
+while read -r c; do
+  [ -n "$c" ] || continue
+  c="$(expandir "$c")"
+  [ -r "$c" ] || { echo "erro: compose declarado e ilegivel: $c" >&2; exit 1; }
+  [ -n "$COMPOSE_PRIMEIRO" ] || COMPOSE_PRIMEIRO="$c"
+  COMPOSE_ARGS+=(-f "$c")
+done < <(lista "$STACK" compose)
+
+if [ ${#COMPOSE_ARGS[@]} -eq 0 ]; then
   echo "erro: stack \"$STACK\" nao esta no registro — nao invento caminho de compose." >&2
   echo "      registradas: $(stacks | tr '\n' ' ')" >&2
   exit 2
 fi
-COMPOSE="$(expandir "$COMPOSE")"
-[ -r "$COMPOSE" ] || { echo "erro: compose declarado e ilegivel: $COMPOSE" >&2; exit 1; }
+
+PERFIL_ARGS=()
+while read -r pf; do
+  [ -n "$pf" ] || continue
+  PERFIL_ARGS+=(--profile "$pf")
+done < <(lista "$STACK" profiles)
+
+COMPOSE="$COMPOSE_PRIMEIRO"   # o primeiro manda no cwd e no que se imprime
 
 # Sem acao: mostra o declarado. Ver nao muda nada, entao nao precisa de confirmacao.
 if [ $# -eq 0 ]; then
   printf 'stack   : %s\n' "$STACK"
   printf 'papel   : %s\n' "$(campo "$STACK" papel)"
   printf 'repo    : %s\n' "$(campo "$STACK" repo)"
-  printf 'compose : %s\n' "$COMPOSE"
+  printf 'compose : %s\n' "$(lista "$STACK" compose | tr '\n' ' ')"
+  printf 'perfis  : %s\n' "$(lista "$STACK" profiles | tr '\n' ' ')"
   printf 'critico : %s\n' "$(campo "$STACK" critico)"
-  printf 'servicos: %s\n' "$(docker compose -f "$COMPOSE" config --services 2>/dev/null | tr '\n' ' ')"
+  printf 'servicos: %s\n' "$(docker compose "${COMPOSE_ARGS[@]}" "${PERFIL_ARGS[@]+"${PERFIL_ARGS[@]}"}" config --services 2>/dev/null | tr '\n' ' ')"
   exit 0
 fi
 
@@ -98,8 +120,8 @@ if [ "$ACAO" = "promover" ]; then
   DEPOIS="$(git -C "$DIR" rev-parse --short HEAD)"
   printf 'worktree: %s\n  %s -> %s (%s)\n' "$DIR" "$ANTES" "$DEPOIS" "$REF"
   cd "$DIR"
-  exec docker compose -f "$COMPOSE" up -d --force-recreate "$@"
+  exec docker compose "${COMPOSE_ARGS[@]}" "${PERFIL_ARGS[@]+"${PERFIL_ARGS[@]}"}" up -d --force-recreate "$@"
 fi
 
 cd "$(dirname "$COMPOSE")"
-exec docker compose -f "$COMPOSE" "$@"
+exec docker compose "${COMPOSE_ARGS[@]}" "${PERFIL_ARGS[@]+"${PERFIL_ARGS[@]}"}" "$@"

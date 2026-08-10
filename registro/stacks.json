@@ -1,5 +1,5 @@
 {
-  "_leia": "Registro de stacks da PlataFirma — o DECLARADO, nao o servido. Fonte do verbo `deploy` e da classe `servico` do `conferir`. Nao se deriva do daemon: docker ps lista o que subiu, este arquivo lista o que deveria existir e de onde.",
+  "_leia": "Registro de stacks da PlataFirma — o DECLARADO, nao o servido. Fonte do verbo `deploy` e da classe `servico` do `conferir`. Nao se deriva do daemon: docker ps lista o que subiu, este arquivo lista o que deveria existir e de onde. `compose` aceita string ou lista: lista vira varios -f, na ordem. `profiles` e opcional e vira --profile; servico sob profile nao declarado aqui e invisivel ao verbo, e foi assim que rag-api ficou fora.",
   "_capacidade": "ativo",
   "_dono": "claudinho-TI",
   "stacks": {
@@ -16,7 +16,13 @@
       "critico": true
     },
     "rag": {
-      "compose": "~/AI/platafirma-conhecimento/rag/docker-compose.yml",
+      "compose": [
+        "~/AI/deploy/conhecimento/rag/docker-compose.yml",
+        "~/AI/deploy/conhecimento/rag/docker-compose.gpu.yml"
+      ],
+      "profiles": [
+        "serving"
+      ],
       "repo": "platafirma-conhecimento",
       "papel": "recuperacao: extrator, indice e API do acervo",
       "critico": false
