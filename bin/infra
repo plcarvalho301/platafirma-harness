@@ -16,6 +16,7 @@ uso:
   infra saude  [alvo]            /health do ops, contêiner não-saudável, disco, RAM
   infra logs   <alvo> [n]        alvo = nome de contêiner OU unit --user (default 50)
   infra restart <alvo>           destacado: sobrevive ao fim desta chamada
+  infra exclusivo [--] <cmd...>  fila de carga GPU-bound: espera a vez, entao executa
 
 Leitura aceita alvo opcional; sem alvo, olha tudo. Mutação exige alvo explícito e
 recusa sem ele. Promover release não é daqui: `deploy <stack>`.
@@ -71,6 +72,26 @@ logs() {
   fi
 }
 
+# Fila de carga GPU-bound (card #256). Serializa bancada; `rag-extractor-api`
+# fica fora da fila por decisao: serve rag_search ao vivo as outras cadeiras.
+exclusivo() {
+  [ "${1:-}" = "--" ] && shift
+  [ $# -ge 1 ] || { echo "uso: infra exclusivo [--] <comando...>" >&2; exit 2; }
+  local lock="${PF_GPU_LOCK:-/run/user/$(id -u)/pf-gpu.lock}"
+  local dono="$lock.dono" espera="${PF_GPU_ESPERA:-3600}" rc=0
+  exec 9>"$lock"
+  if ! flock -n 9; then
+    echo "gpu ocupada por: $(cat "$dono" 2>/dev/null || echo '(sem registro)')" >&2
+    echo "aguardando ate ${espera}s (PF_GPU_ESPERA ajusta)" >&2
+    flock -w "$espera" 9 || {
+      echo "erro: a fila nao liberou em ${espera}s - nada foi executado." >&2; exit 75; }
+  fi
+  printf 'pid=%s desde=%s cmd=%s\n' "$$" "$(date -Is)" "$*" >"$dono"
+  trap "rm -f -- '$dono'" EXIT
+  "$@" || rc=$?
+  return $rc
+}
+
 # Restart direto do ops-mcp mata a chamada em curso: despachar destacado.
 restart() {
   systemd-run --user --collect --unit="infra-restart-$$" \
@@ -86,6 +107,7 @@ case "$cmd" in
   estado)  estado "${1:-}" ;;
   saude)   saude ;;
   logs)    logs "${1:?uso: infra logs <alvo> [n]}" "${2:-50}" ;;
+  exclusivo) exclusivo "$@" ;;
   restart) [ $# -ge 1 ] || { echo "erro: restart exige alvo explícito — não reinicia tudo." >&2; exit 2; }
            restart "$1" ;;
   compose) echo "erro: promover release saiu do \`infra\` — capacidade \`mudanca\`, verbo \`deploy\`." >&2
