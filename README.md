@@ -32,6 +32,7 @@ Declarados por `arq:0042`; `conferir repo platafirma-harness` mede contra esta l
 | Diretório | O que é |
 |---|---|
 | `bin/` | verbos de operação chamados por toda cadeira; fonte única, `~/AI/bin` é symlink |
+| `hooks/` | gate de commit da `arq:0042` (`pre-commit`); instala-se com `git config core.hooksPath` |
 | `personas/` | texto canônico de cada cadeira, mais template e higiene de redação |
 | `tool-manifest/` | manifesto de ferramental por cadeira, mais o `GERAL.md` comum |
 | `skills/` | fontes das skills entregues ao claude.ai |
@@ -41,7 +42,7 @@ Declarados por `arq:0042`; `conferir repo platafirma-harness` mede contra esta l
 | `experimentos/` | experimento com hipótese declarada e resultado, um diretório cada |
 | `registro/` | o declarado que os verbos leem — hoje `stacks.json`, fonte do `deploy` |
 | `docs/` | documentação do módulo |
-| `diagramas/` | figuras do módulo: fonte `.mmd`/`.d2` e render de mesmo nome-base |
+| `diagramas/` | figuras do módulo: fonte `.mmd`/`.d2` e render `<fonte>.svg` |
 | `mcp/` | MCP do harness, previsto por `arq:0019`, ainda sem implementação |
 | `.claude/` | configuração do Claude Code na estação emprestada |
 
