@@ -1,0 +1,23 @@
+#!/bin/sh
+# pre-commit — barra o que arq:0042 nao admite no repositorio, antes de entrar.
+# capacidade: verificacao
+# dono: claudinho-TI
+#
+# A regua NAO mora aqui: mora em `conferir repo`, e este hook a chama com --staged.
+# Gate e conferencia que leem reguas diferentes divergem em silencio no primeiro
+# ajuste que so um dos dois receber.
+#
+# Instalacao (por clone, uma vez):
+#   git -C <clone> config core.hooksPath /home/claudinho/AI/platafirma-harness/hooks
+#
+# Limite declarado: hook e local e `git commit --no-verify` passa por cima. Nao ha
+# gate no push do forge — quem burla aqui entra no repo remoto sem ser visto.
+
+CONFERIR="${CONFERIR:-$HOME/AI/bin/conferir}"
+
+[ -x "$CONFERIR" ] || {
+    echo "pre-commit: 'conferir' nao encontrado em $CONFERIR — commit segue sem gate." >&2
+    exit 0
+}
+
+exec "$CONFERIR" repo --staged

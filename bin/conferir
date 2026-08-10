@@ -11,6 +11,9 @@
                    host, divergente), cabecalho de tres linhas, e a conta de
                    arq:0037 — um verbo por capacidade.
   repo    [nome]   clone de trabalho em ~/AI: o que esta rastreado contra a regua de
+                   arq:0042. Com `--staged`, julga so o que o commit em curso
+                   acrescenta, no repo do diretorio corrente — e o que o pre-commit
+                   chama, para que gate e conferencia leiam a mesma regua.
                    arq:0042 — materia de acervo, estado extraivel, blob que nao e fonte
                    editada a mao, render sem fonte irma e diretorio de topo nao
                    declarado no README.
@@ -354,6 +357,16 @@ MARCA_EDITAVEL = (b"mxfile", b"mxGraphModel")
 FORA = {"archi_base", "i-have-adhd", "ollama-orchestrator"}   # outro dono: dubious ownership
 
 
+def alvos_de_repo(alvo, staged=False):
+    # No hook o alvo e o repo de onde o commit sai, e o cwd ja e a raiz dele.
+    if staged:
+        _, raiz, _ = sh(["git", "rev-parse", "--show-toplevel"])
+        if not raiz:
+            return []
+        return [(os.path.basename(raiz), raiz)]
+    return list(repos_de_trabalho(alvo))
+
+
 def repos_de_trabalho(alvo=None):
     for nome in sorted(os.listdir(RAIZ)):
         if (alvo and nome != alvo) or nome in FORA:
@@ -389,14 +402,22 @@ def gerado_por_ferramenta(caminho):
     return any(m in cabeca for m in MARCA_GERADOR)
 
 
-def conferir_repo(alvo):
+def conferir_repo(alvo, staged=False):
     houve = False
     vistos = 0
-    for nome, raiz in repos_de_trabalho(alvo):
+    for nome, raiz in alvos_de_repo(alvo, staged):
         vistos += 1
         divergiu = False
         _, out, _ = sh(["git", "ls-files", "-z"], cwd=raiz)
         arquivos = [p for p in out.split("\0") if p]
+        if staged:
+            # Julga so o que este commit acrescenta ou muda. Divergencia preexistente
+            # do repo e assunto de `conferir repo`, nao motivo para barrar commit alheio.
+            _, st, _ = sh(["git", "diff", "--cached", "--name-only",
+                           "--diff-filter=ACMR", "-z"], cwd=raiz)
+            sob_juizo = [p for p in st.split("\0") if p]
+        else:
+            sob_juizo = arquivos
         bases = {os.path.splitext(a)[0]: os.path.splitext(a)[1].lower() for a in arquivos}
         fontes = {b for b, e in bases.items() if e in EXT_FONTE_RENDER}
         regras = excecoes(raiz)
@@ -406,17 +427,16 @@ def conferir_repo(alvo):
         except OSError:
             readme = None
 
-        peso, topos = 0, set()
+        peso = 0
+        topos = {a.split("/", 1)[0] + "/" for a in arquivos if "/" in a}
         achados = {"GERADO": [], "ACERVO": [], "GRANEL": [], "GORDO": [], "RENDER": []}
-        for rel in arquivos:
+        for rel in sob_juizo:
             caminho = os.path.join(raiz, rel)
             try:
                 tam = os.path.getsize(caminho)
             except OSError:
                 continue
             peso += tam
-            if "/" in rel:
-                topos.add(rel.split("/", 1)[0] + "/")
             if any(rel.startswith(r) for r in regras):
                 continue
             ext = os.path.splitext(rel)[1].lower()
@@ -445,7 +465,10 @@ def conferir_repo(alvo):
                         achados["RENDER"].append((rel, tam))
 
         print(f"\n### {nome}")
-        print(f"    peso    : {peso / 1048576:.1f} MB rastreados em {len(arquivos)} arquivos")
+        if staged:
+            print(f"    commit  : {len(sob_juizo)} arquivo(s) sob juizo")
+        else:
+            print(f"    peso    : {peso / 1048576:.1f} MB rastreados em {len(arquivos)} arquivos")
         for rotulo in ("GERADO", "ACERVO", "GRANEL", "GORDO", "RENDER"):
             itens = achados[rotulo]
             if not itens:
@@ -456,6 +479,13 @@ def conferir_repo(alvo):
             if len(itens) > 8:
                 soma = sum(t for _, t in itens[8:]) / 1048576
                 print(f"    {rotulo:<8}: + {len(itens) - 8} outros, {soma:.1f} MB")
+        if staged:
+            if divergiu:
+                print("\n    arq:0042 — isto nao e fonte editada a mao. Ou o arquivo tem morada")
+                print("    fora do git, ou a excecao se declara em `.conferir-repo` na raiz:")
+                print("        permite: <prefixo-de-caminho>   # motivo")
+                print("    Passar por cima: git commit --no-verify (fica so no teu terminal).")
+            continue
         if readme is None:
             houve = divergiu = True
             print("    README  : ausente — e nele que o conjunto dos diretorios de topo se declara")
@@ -489,6 +519,8 @@ def main(argv):
     if classe == "verbo":
         return conferir_verbo(alvo)
     if classe == "repo":
+        if alvo == "--staged":
+            return conferir_repo(None, staged=True)
         return conferir_repo(alvo)
     uso(f"classe desconhecida: {classe}")
 
