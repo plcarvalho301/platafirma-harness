@@ -69,7 +69,7 @@ publicar                        : git -C ~/AI/<repo> add -A ; git ... commit -m 
 job > 2 min                     : longjob run <nome> <cmd...>   | list, logs, status, log, stop
 
 venv reprodutível               : uv venv / uv pip install / uvx <pkg>
-rodar script solto              : python3 (3.12.3, sem shim de pip — usar uv pip)
+rodar script solto              : python3 (sem shim de pip — usar uv pip)
 
 buscar em ~/AI                  : rg <padrão>          (~16 ms; grep -r aposentado)
 achar arquivo                   : fd <nome>
