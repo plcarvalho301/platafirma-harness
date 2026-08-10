@@ -1,0 +1,218 @@
+#!/home/claudinho/AI/.venv-harness/bin/python
+# descansar — fim de fita: confere a memoria e mede os fatos volateis contra os
+# quais a sessao confere o que "lembra"
+# capacidade: encerramento
+# dono: claudinho-IA
+#
+# Par do `mesa`: `mesa` guarda, `descansar` fecha. O encerramento de fita nao pode
+# depender de a sessao saber que vai morrer — ela nao sabe. O que este verbo faz e
+# tornar barato o unico momento em que ela SABE que esta fechando.
+#
+# TRES ATOS, um so proposito — separar o que a sessao mediu do que ela supoe:
+#   1. estado da memoria  — slot escrito x slug declarado na persona; slot orfao
+#      (typo, chapeu extinto) aparece nomeado, nunca some calado.
+#   2. dossie volatil     — os numeros e o estado que envelhecem entre fitas,
+#      medidos AGORA pelo verbo canonico de cada um. E contra esta lista que a
+#      sessao confere afirmacao vinda de memoria de conversa (classe C).
+#   3. carimbo            — `mem:<cadeira>` (sem slot: fora do padrao que `mesa
+#      ver` varre) guarda quando a cadeira descansou pela ultima vez.
+#
+# NAO APAGA MEMORIA. Poda automatica de mesa seria robo decidindo o que a cadeira
+# esquece; o TTL de 14 dias ja e a poda, e ela e declarada. Orfao vira linha de
+# relatorio, e quem limpa e a sessao, com `mesa limpa <slot>`.
+import argparse
+import json
+import os
+import re
+import subprocess
+import sys
+import time
+
+try:
+    import redis
+except ImportError:
+    sys.exit("erro: modulo 'redis' nao instalado neste venv (uv pip install redis)")
+
+RAIZ = os.environ.get("PF_RAIZ", os.path.expanduser("~/AI"))
+PERSONAS = os.path.join(RAIZ, "platafirma-harness", "personas")
+HOST = os.environ.get("MEM_REDIS_HOST", "127.0.0.1")
+PORTA = int(os.environ.get("MEM_REDIS_PORT", "6380"))
+RE_SLUG = re.compile(r"^- ([a-z0-9][a-z0-9-]*)(?: ·|—)")
+RE_HEAD = re.compile(r"roda no slug `([a-z0-9-]+)`")
+
+# Fatos volateis comuns a toda cadeira. Cada linha e (rotulo, comando) — o verbo
+# canonico de cada materia, nunca uma segunda medicao propria.
+COMUM = [
+    ("repos (sha e idade do que a sessao leu)",
+     "for r in platafirma-harness platafirma-arquitetura platafirma-core; do "
+     "printf '  %-24s %s  %s\\n' \"$r\" \"$(git -C ~/AI/$r rev-parse --short HEAD)\" "
+     "\"$(git -C ~/AI/$r log -1 --format=%cr)\"; done"),
+    ("declarado x servido", "conferir servico 2>&1 | tail -12"),
+]
+# Por cadeira: o que envelhece na materia dela. Lista curta e revisavel de proposito
+# — dossie que mede tudo para todo mundo custa minuto e ninguem le.
+POR_CADEIRA = {
+    "ia": [("acervo — escada por obra", "acervo escada 2>&1 | tail -14")],
+    "conhecimento": [("acervo — escada por obra", "acervo escada 2>&1 | tail -14")],
+    "ti": [("o que esta no ar", "infra estado 2>&1 | tail -15")],
+}
+
+
+def conn():
+    return redis.Redis(host=HOST, port=PORTA, decode_responses=True)
+
+
+def cadeira():
+    c = os.environ.get("PF_CADEIRA", "").strip()
+    if not c:
+        sys.exit("erro: PF_CADEIRA nao definida — nao ha fita a fechar sem cadeira")
+    return c
+
+
+def slugs_declarados(alvo):
+    """Os chapeus que a persona declara. Fonte e o texto da persona, nunca o que
+    esta escrito no substrato: a memoria seguir o remit e o ponto da conferencia."""
+    p = os.path.join(PERSONAS, f"persona-{alvo}.md")
+    if not os.path.isfile(p):
+        for f in os.listdir(PERSONAS):
+            if f.lower() == f"persona-{alvo.lower()}.md":
+                p = os.path.join(PERSONAS, f)
+                break
+        else:
+            return None, f"persona nao encontrada em {PERSONAS}"
+    texto = open(p, errors="replace").read()
+    slugs = {m.group(1) for m in (RE_SLUG.match(l) for l in texto.splitlines()) if m}
+    head = RE_HEAD.search(texto)
+    if head:
+        slugs.add(head.group(1))
+    return slugs, None
+
+
+def idade(seg):
+    seg = max(0, int(seg))
+    if seg < 3600:
+        return f"{seg // 60} min"
+    if seg < 86400:
+        return f"{seg // 3600} h"
+    return f"{seg // 86400} d"
+
+
+def estado_memoria(alvo, rc):
+    """Slots escritos x slugs declarados. Devolve (linhas, orfaos)."""
+    linhas, orfaos = [], []
+    declarados, erro = slugs_declarados(alvo)
+    chaves = sorted(rc.keys(f"mem:{alvo.lower()}:*"))
+    if not chaves:
+        linhas.append("  mesa vazia — nada retido da fita anterior")
+    for k in chaves:
+        slot = k.split(":", 2)[2]
+        try:
+            d = json.loads(rc.get(k))
+            ts, n = d.get("t", 0), len(d.get("x", "").splitlines())
+        except (ValueError, TypeError, AttributeError):
+            ts, n = 0, 0
+        ttl = rc.ttl(k)
+        marca = ""
+        if declarados is not None and slot not in declarados:
+            marca = "  ÓRFÃO — slug não declarado na persona"
+            orfaos.append(slot)
+        linhas.append(f"  {slot:<16} {n:>3} linhas  escrito ha {idade(time.time() - ts)}"
+                      f"  vence em {idade(ttl) if ttl and ttl > 0 else '—'}{marca}")
+    if erro:
+        linhas.append(f"  (aviso: {erro} — sem conferencia contra o remit)")
+    cad = os.path.join(RAIZ, "platafirma-harness", "caderno", alvo.lower())
+    if os.path.isdir(cad):
+        for f in sorted(x for x in os.listdir(cad) if x.endswith(".md")):
+            slot = f[:-3]
+            if declarados is not None and slot not in declarados:
+                orfaos.append(slot)
+                linhas.append(f"  caderno/{slot:<8} ÓRFÃO — slug não declarado na persona")
+    return linhas, orfaos
+
+
+def roda(rotulo, cmd, timeout=60):
+    print(f"\n-- {rotulo}")
+    try:
+        p = subprocess.run(["bash", "-lc", cmd], capture_output=True, text=True,
+                           timeout=timeout, cwd=RAIZ)
+        saida = (p.stdout or p.stderr).rstrip()
+        print(saida if saida else "  (sem saida)")
+    except subprocess.SubprocessError as e:
+        # Fato que nao pode ser medido nao vira fato suposto: declara e segue.
+        print(f"  NAO MEDIDO — {type(e).__name__}: {e}")
+
+
+def ato_fita(args):
+    alvo = cadeira()
+    rc = conn()
+    print(f"== descanso de {alvo} ==")
+    ultimo = rc.get(f"mem:{alvo.lower()}")
+    print(f"ultimo descanso: {idade(time.time() - int(ultimo)) + ' atras' if ultimo else 'nunca'}")
+
+    print("\n== memoria retida ==")
+    linhas, orfaos = estado_memoria(alvo, rc)
+    print("\n".join(linhas))
+    if orfaos:
+        print(f"\n  {len(orfaos)} orfao(s): {', '.join(sorted(set(orfaos)))}")
+        print("  limpe com `mesa limpa <slot>` ou peca o slug ao RH — o verbo nao apaga.")
+
+    if not args.so_memoria:
+        print("\n== fatos volateis, medidos agora ==")
+        print("Confira contra isto o que a fita afirmou de memoria de conversa.")
+        for rotulo, cmd in COMUM + POR_CADEIRA.get(alvo.lower(), []):
+            roda(rotulo, cmd)
+
+    rc.set(f"mem:{alvo.lower()}", int(time.time()))
+    print(f"\n== proximo passo ==\nescreva a mesa antes de a fita morrer: "
+          f"`mesa anota <chapeu>` (hipotese viva, beco descartado, proxima jogada,\n"
+          f"premissa volatil a reconferir).")
+    return 0
+
+
+def ato_varredura(args):
+    """Modo timer: uma passada por todas as cadeiras, so o que esta fora do lugar.
+    Nao apaga e nao carimba — varredura que muda estado esconde o proprio efeito."""
+    rc = conn()
+    achados = 0
+    for f in sorted(os.listdir(PERSONAS)):
+        if not f.startswith("persona-") or not f.endswith(".md"):
+            continue
+        alvo = f[len("persona-"):-3]
+        declarados, _ = slugs_declarados(alvo)
+        if declarados is None:
+            continue
+        for k in rc.keys(f"mem:{alvo.lower()}:*"):
+            slot = k.split(":", 2)[2]
+            if slot not in declarados:
+                print(f"orfao  {alvo}: mem:{alvo.lower()}:{slot} — slug fora da persona")
+                achados += 1
+        ultimo = rc.get(f"mem:{alvo.lower()}")
+        if ultimo and time.time() - int(ultimo) > 30 * 86400:
+            print(f"parada {alvo}: sem descanso ha {idade(time.time() - int(ultimo))}")
+            achados += 1
+    print(f"varredura: {achados} achado(s)" if achados else "varredura: nada fora do lugar")
+    return 1 if achados else 0
+
+
+def main():
+    p = argparse.ArgumentParser(prog="descansar",
+                                description="fim de fita: memoria conferida e fatos volateis medidos")
+    sub = p.add_subparsers(dest="ato")
+
+    f = sub.add_parser("fita", help="o descanso da cadeira corrente (PF_CADEIRA)")
+    f.add_argument("--so-memoria", action="store_true",
+                   help="pula o dossie volatil; so o estado da memoria")
+    f.set_defaults(func=ato_fita)
+
+    v = sub.add_parser("varredura", help="passada por todas as cadeiras; so o que esta fora do lugar")
+    v.set_defaults(func=ato_varredura)
+
+    args = p.parse_args()
+    if not args.ato:
+        p.print_help()
+        return 2
+    return args.func(args)
+
+
+if __name__ == "__main__":
+    sys.exit(main())

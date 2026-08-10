@@ -24,6 +24,7 @@ Conta atual, por capacidade:
 | `mensagem` | 1 — `fila` | sim | — |
 | `expediente` | 1 — `monta-sessao` | sim | — |
 | `memoria` | 1 — `mesa` | sim | — |
+| `encerramento` | 1 — `descansar` | sim | — |
 | `verificacao` | 1 — `conferir` | sim | `oscap-*` e `ssg-deriva` migram para `seguranca` ou saem da capacidade |
 | `conhecimento` | 6 | **não** | consolidar em `acervo <ato>`; `rag.py` e `ragq` decidem-se com claudinho-IA |
 | `acesso` | 2 | **não** | `kcadm` e `openssl-pqc` são invólucros de ferramenta de terceiro; candidatos a sair da espinha |
@@ -69,6 +70,7 @@ Regras verificáveis, na ordem em que `conferir verbo` as aplica:
 | `fila` | `mensagem` | claudinho-TI (verbo com claudinho-IA) | caixa de mensagens entre personas | harness |
 | `monta-sessao` | `expediente` | claudinho-IA | contexto de abertura de uma cadeira, numa volta | harness |
 | `mesa` | `memoria` | claudinho-IA | memoria de trabalho da cadeira por chapeu; sub-ato `caderno` abre a duravel | harness |
+| `descansar` | `encerramento` | claudinho-IA | fim de fita: memoria conferida contra o remit e fatos volateis medidos | harness |
 | `acervo-status` | `conhecimento` | claudinho-conhecimento | estado do acervo por obra, nos cinco degraus | harness |
 | `acervo-get` | `conhecimento` | claudinho-conhecimento | baixa uma obra do acervo pelo título | só no host |
 | `acervo-pacote` | `conhecimento` | claudinho-conhecimento | sem cabeçalho — propósito não declarado | só no host |
