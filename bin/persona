@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # persona — escrita compartimentada das personas da PlataFirma.
-# capacidade: expediente (parte de persona)
+# capacidade: organizacao
 # dono: claudinha-gestao-estrategica
 # Leitura serve do clone sem rede (monta_sessao); a sincronização mora aqui,
 # do lado da escrita: pull antes, confere, commit e push depois. Só toca

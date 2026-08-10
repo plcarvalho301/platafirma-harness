@@ -4,7 +4,7 @@
   "_dono": "claudinho-TI",
   "stacks": {
     "core": {
-      "compose": "~/AI/platafirma-core/docker-compose.yml",
+      "compose": "~/AI/deploy/core/docker-compose.yml",
       "repo": "platafirma-core",
       "papel": "control-plane: IAM, borda, politica de seguranca",
       "critico": true
@@ -35,8 +35,8 @@
     }
   },
   "_fora_do_registro": {
-    "~/AI/deploy/core/docker-compose.yml": "worktree de deploy do core — alvo da migracao, nao stack propria",
     "~/AI/deploy/conhecimento/docker-compose.yml": "worktree de deploy do conhecimento — idem",
-    "~/AI/opt/docker-bench-security/docker-compose.yml": "ferramenta de terceiro, nao e stack da plataforma"
+    "~/AI/opt/docker-bench-security/docker-compose.yml": "ferramenta de terceiro, nao e stack da plataforma",
+    "~/AI/platafirma-core/docker-compose.yml": "clone de trabalho do core — edicao, nao producao"
   }
 }

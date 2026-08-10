@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Poda de log de operação por idade. Chamado pelo cron do claudinho, diariamente.
+# ops-log-prune — poda o registro de operação por retenção declarada.
+# Chamado pelo cron do claudinho, diariamente.
 # capacidade: orfa
 # orfa por design: entra em gerenciamento de memoria (F3d)
 # dono: claudinho-TI
