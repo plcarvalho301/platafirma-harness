@@ -52,16 +52,21 @@ alcança nenhuma das obras novas. Não serve.
 
 Três estratos:
 
-- **T1, determinístico (~50 perguntas).** Pergunta com identificador exato: "cláusula 6.1.3 da
+- **T1, determinístico (118 perguntas).** Pergunta com identificador exato: "cláusula 6.1.3 da
   ISO 27001", "controle AC-2", "art. 4º da Lei 14.063". A resposta certa é o trecho que contém
   aquele identificador, então o gabarito se rotula sozinho, por código. Sem custo humano —
   claudinho-IA extrai.
-- **T2, de domínio (70 perguntas).** Coleta nas cadeiras.
-- **T3, negativo (~15 perguntas).** Perguntas que o acervo deliberadamente NÃO responde,
-  incluindo armadilhas de vizinhança. Mede se o sistema sabe dizer "não sei" em vez de inventar.
-  Sem este estrato, o modo de falha mais perigoso fica invisível.
+- **T2, de domínio (80 perguntas).** Coleta nas cadeiras, validada pelo dono. Carrega dentro de
+  si o estrato negativo: 27 perguntas que o acervo deliberadamente NÃO responde, com armadilha
+  de vizinhança, marcadas `relevancia: negativa` e sem alvo. Medem se o sistema sabe dizer "não
+  sei" em vez de inventar; sem elas, o modo de falha mais perigoso fica invisível.
+- **T3, multi-step (30 perguntas).** Pergunta que só se responde atravessando mais de uma obra,
+  ou saindo de artefato interno (ADR, `.ttl`, schema) para o acervo. Alvo é a âncora conferida
+  por casamento de título, em 22 itens; nos outros 8 a âncora é artefato interno e alvo de obra
+  não se aplica. O par automático fica fora do alvo e vem declarado na `nota` do item — não
+  serve de denominador de recall sem revisão item a item.
 
-Tamanho final ~135 perguntas, suficiente para o teste estatístico ter potência. O gabarito é
+Tamanho final 228 perguntas, suficiente para o teste estatístico ter potência. O gabarito é
 carimbado com a versão do acervo: obra descartada mais adiante invalida as perguntas dela
 explicitamente, nunca em silêncio.
 
