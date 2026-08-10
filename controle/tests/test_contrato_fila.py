@@ -4,7 +4,6 @@
 # devolve respostas canonicas de XLEN/XINFO GROUPS/XRANGE/XINFO CONSUMERS,
 # injetado no lugar de `fila_streams.r_conn`. O verbo roda de ponta a ponta
 # (main() -> cmd_status -> conta_novas) como rodaria com Redis de verdade.
-import argparse
 import json
 import sys
 from pathlib import Path
@@ -71,35 +70,6 @@ def _rodar_cli(monkeypatch, capsys, argv, eu, rc):
     return exit_code, capsys.readouterr()
 
 
-def _rodar_status_direto(monkeypatch, capsys, persona_arg, json_flag, eu, rc):
-    """Chama cmd_status() direto, contornando argparse.
-
-    Achado ao escrever este teste: a posicional `persona` do subparser
-    "status" (`p_status.add_argument("persona")`) hoje NAO aceita o literal
-    "--todas" vindo da linha de comando de verdade — argparse classifica
-    qualquer token comecando com "--" como optional-like e recusa preencher
-    uma posicional simples com ele, mesmo via parse_known_args:
-    `fila status --todas` ja falha hoje com "the following arguments are
-    required: persona" (exit 2), ANTES de chegar em cmd_status — reproduzi
-    isso tambem contra o fila_streams.py do HEAD, sem nenhuma das mudancas
-    desta fatia, entao nao e regressao introduzida aqui. Como o card pede
-    so "nao mude esse controle de acesso, so garanta que --json funciona
-    tambem nesse caminho", o parser fica intocado (fora de escopo desta
-    fatia) e o teste exercita cmd_status()/so_espia() diretamente, com o
-    Namespace que argparse teria produzido se a posicional aceitasse o
-    valor. Ver relatorio final para o desvio."""
-    monkeypatch.setenv("PF_CADEIRA", eu)
-    monkeypatch.delenv("FILA_RAIZ", raising=False)
-    args = argparse.Namespace(eu=None, verbo="status", persona=persona_arg, json=json_flag)
-    eu_resolvido = fila_streams.resolve_eu(args)
-    try:
-        fila_streams.cmd_status(rc, eu_resolvido, args)
-        exit_code = 0
-    except SystemExit as e:
-        exit_code = e.code
-    return exit_code, capsys.readouterr()
-
-
 # ---------- formato --json, caminho feliz ----------
 
 def test_status_json_persona_unica_com_pendente(monkeypatch, capsys):
@@ -159,8 +129,8 @@ def test_status_json_todas_mistura_vazia_e_parada(monkeypatch, capsys):
         },
     })
 
-    code, cap = _rodar_status_direto(
-        monkeypatch, capsys, "--todas", True, "claudinha-gestao-estrategica", rc
+    code, cap = _rodar_cli(
+        monkeypatch, capsys, ["status", "--todas", "--json"], "claudinha-gestao-estrategica", rc
     )
 
     assert code == 0
@@ -280,7 +250,7 @@ def test_status_json_todas_sem_espia_vira_objeto_erro(monkeypatch, capsys):
     monkeypatch.setattr(fila_streams, "personas_validas", lambda: {"claudinho-TI"})
     rc = FakeRC({})
 
-    code, cap = _rodar_status_direto(monkeypatch, capsys, "--todas", True, "claudinho-TI", rc)
+    code, cap = _rodar_cli(monkeypatch, capsys, ["status", "--todas", "--json"], "claudinho-TI", rc)
 
     assert code == 1
     assert cap.err == ""
@@ -288,22 +258,54 @@ def test_status_json_todas_sem_espia_vira_objeto_erro(monkeypatch, capsys):
     assert set(saida.keys()) == {"erro"}
 
 
-def test_status_todas_via_cli_e_bug_preexistente_fora_de_escopo(monkeypatch, capsys):
-    """Documenta o achado (nao introduzido por esta fatia, nao consertado por
-    ela): `fila status --todas` invocado de verdade via argv ja falha no
-    argparse — a posicional simples `persona` nao aceita um token "--todas"
-    (motivo tecnico completo na docstring de _rodar_status_direto). Reproduzi
-    o mesmo contra o fila_streams.py do HEAD, sem nenhuma mudanca desta
-    fatia — ver relatorio final para o desvio registrado."""
+def test_status_todas_via_cli_de_verdade(monkeypatch, capsys):
+    """Achado no LOTE 1: `fila status --todas` invocado de verdade via argv
+    falhava no argparse antes desta mudança — a posicional simples `persona`
+    não aceitava um token "--todas" ("the following arguments are required:
+    persona", exit 2), mesmo reproduzido contra o HEAD sem nenhuma mudança
+    desta fatia. Bloqueava o agregador do LOTE 2, que precisa exatamente
+    desta chamada pro Bloco 2 (Caixas) — corrigido aqui: "persona" virou
+    posicional opcional e "--todas" virou flag de verdade (`--todas` deixa
+    de ser comparado como valor de "persona"). Este teste passa pela CLI
+    real (main() + argparse), não por um Namespace montado à mão."""
     monkeypatch.setattr(fila_streams, "personas_validas", lambda: {"claudinho-TI"})
-    rc = FakeRC({})
+    rc = FakeRC({
+        "claudinho-TI": {"xlen": 0, "groups": [], "xrange": [], "consumers": []},
+    })
 
     code, cap = _rodar_cli(
         monkeypatch, capsys, ["status", "--todas", "--json"], "claudinha-gestao-estrategica", rc
     )
 
+    assert code == 0
+    assert cap.err == ""
+    saida = json.loads(cap.out)
+    assert saida == [{
+        "persona": "claudinho-TI",
+        "pendentes": 0,
+        "total_historico": 0,
+        "estado": "vazia",
+        "idade_mais_antiga_seg": None,
+        "ultima_leitura_seg": None,
+    }]
+
+
+def test_status_sem_persona_e_sem_todas_vira_uso_incorreto(monkeypatch, capsys):
+    """Nem persona nem --todas: antes o argparse pegava sozinho (persona
+    obrigatória); com persona opcional, cmd_status precisa do próprio
+    guard — confere que ele cobre o buraco que abriu."""
+    monkeypatch.setattr(fila_streams, "personas_validas", lambda: {"claudinho-TI"})
+    rc = FakeRC({})
+
+    code, cap = _rodar_cli(monkeypatch, capsys, ["status", "--json"], "claudinho-TI", rc)
     assert code == 2
-    assert "persona" in cap.err
+    saida = json.loads(cap.out)
+    assert saida.get("erro")
+
+    code, cap = _rodar_cli(monkeypatch, capsys, ["status"], "claudinho-TI", rc)
+    assert code == 2
+    assert cap.out == ""
+    assert "uso" in cap.err
 
 
 def test_status_json_sem_identidade_vira_objeto_erro(monkeypatch, capsys):

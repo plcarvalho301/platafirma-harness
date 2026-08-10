@@ -305,13 +305,25 @@ def detalhe_status(rc, persona: str) -> dict:
 def cmd_status(rc, eu: str, args):
     json_mode = getattr(args, "json", False)
 
-    if args.persona == "--todas":
+    if args.todas:
         so_espia(eu, json_mode=json_mode)
         personas = sorted(personas_validas() or set())
-    else:
+    elif args.persona:
         valida_persona(args.persona, json_mode=json_mode)
         so_minha(eu, args.persona, json_mode=json_mode)
         personas = [args.persona]
+    else:
+        # Achado no LOTE 1 (card #390): argparse recusa "--todas" como valor do
+        # positional "persona" (parece opção, não é aceito por padrão) — a régua
+        # `args.persona == "--todas"` nunca era alcançável pela CLI de verdade.
+        # "persona" virou opcional e "--todas" virou flag de verdade; este ramo
+        # cobre "nem um nem outro" (uso incorreto), que antes o argparse pegava
+        # sozinho por "persona" ser obrigatório.
+        msg = "uso: fila status <persona> | --todas"
+        if json_mode:
+            _falha_json(msg, 2)
+        sys.stderr.write(f"erro: {msg}\n")
+        sys.exit(2)
 
     if json_mode:
         print(json.dumps([detalhe_status(rc, p) for p in personas], ensure_ascii=False))
@@ -402,7 +414,8 @@ def build_parser():
     sub = ap.add_subparsers(dest="verbo")
 
     p_status = sub.add_parser("status", add_help=False)
-    p_status.add_argument("persona")
+    p_status.add_argument("persona", nargs="?", default=None)
+    p_status.add_argument("--todas", action="store_true")
     p_status.add_argument("--json", action="store_true")
 
     p_ler = sub.add_parser("ler", add_help=False)
