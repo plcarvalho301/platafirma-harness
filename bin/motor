@@ -2,7 +2,7 @@
 # motor — gestao de motores de decisao: o que um motor serve e mede.
 # capacidade: gestao-de-motores
 # (arq:0043 — a capacidade e do subcomando; aqui os tres servem a mesma:
-#  motor listar · motor <inst> buscar · motor <inst> botao)
+#  motor listar · motor <inst> buscar · motor <inst> ajuste)
 # dono: claudinho-IA
 # componente: platafirma-motor
 # O verbo e `motor`; a instancia e argumento (arq:0037; veto do verbo `rag`).
@@ -27,9 +27,9 @@ def uso(cod=2):
     print("""motor — o que cada motor serve e mede
 
   motor listar                          instancias declaradas e estado
-  motor <inst> botao                    todos os botoes, com o valor de hoje
-  motor <inst> botao <slug>             o que esse botao troca por que
-  motor <inst> botao <slug> <valor>     mexe, promove e confere o servido
+  motor <inst> ajuste                    todos os ajustes, com o valor de hoje
+  motor <inst> ajuste <slug>             o que esse ajuste troca por que
+  motor <inst> ajuste <slug> <valor>     mexe, promove e confere o servido
   motor <inst> buscar "<pergunta>" [--k N] [--texto secao|trecho|nenhum]
 
 instancias: """ + ", ".join(reg().keys()))
@@ -52,27 +52,27 @@ def cmd_listar(d):
         print(f"{nome:12} {i['estado']:10} {i.get('container') or '-'}")
 
 
-def cmd_botao(nome, inst, argv):
+def cmd_ajuste(nome, inst, argv):
     env, err = servido(inst)
-    botoes = {b["slug"]: b for b in inst["botoes"]}
+    ajustes = {b["slug"]: b for b in inst["ajustes"]}
 
     if not argv:
         if err:
             print(f"[{err} — valores abaixo sao o DECLARADO, nao o servido]\n")
-        larg = max(len(s) for s in botoes)
-        for b in inst["botoes"]:
+        larg = max(len(s) for s in ajustes)
+        for b in inst["ajustes"]:
             v = (env or {}).get(b["var"])
             onde = "compose" if v is not None else "default do codigo"
             print(f"  {b['slug']:<{larg}}  {v or b['codigo']:>10}   fase {b['fase']:<16} ({onde})")
-        print(f"\n  detalhe de um: motor {nome} botao <nome-do-botao>")
-        print(f"  fora da lista, e por que: {', '.join(inst['nao_e_botao'])}")
+        print(f"\n  detalhe de um: motor {nome} ajuste <nome-do-ajuste>")
+        print(f"  fora da lista, e por que: {', '.join(inst['nao_e_ajuste'])}")
         return
 
     slug = argv[0]
-    if slug not in botoes:
-        print(f"nao existe botao '{slug}'. Ha: {', '.join(botoes)}", file=sys.stderr)
+    if slug not in ajustes:
+        print(f"nao existe ajuste '{slug}'. Ha: {', '.join(ajustes)}", file=sys.stderr)
         sys.exit(1)
-    b = botoes[slug]
+    b = ajustes[slug]
     v = (env or {}).get(b["var"], b["codigo"])
 
     if len(argv) == 1:
@@ -109,7 +109,7 @@ def cmd_botao(nome, inst, argv):
     print(f"{slug}: {v} -> {novo}  ({b['var']} em {inst['compose']})")
 
     repo = os.path.join(RAIZ, inst["compose"].split("/")[0])
-    r = sh(f'git -C {repo} add -A && git -C {repo} commit -q -m "motor rag botao: {slug} {v} -> {novo}" && git -C {repo} push -q')
+    r = sh(f'git -C {repo} add -A && git -C {repo} commit -q -m "motor rag ajuste: {slug} {v} -> {novo}" && git -C {repo} push -q')
     if r.returncode != 0:
         print(f"git falhou, nao promovo: {r.stderr.strip()[-300:]}", file=sys.stderr)
         sys.exit(1)
@@ -162,11 +162,11 @@ def main():
         sys.exit(1)
     if len(a) < 2:
         uso()
-    if a[1] == "botao":
-        return cmd_botao(a[0], inst, a[2:])
+    if a[1] == "ajuste":
+        return cmd_ajuste(a[0], inst, a[2:])
     if a[1] == "buscar":
         return cmd_buscar(inst, a[2:])
-    print(f"ato desconhecido '{a[1]}'. {a[0]} aceita: botao, buscar", file=sys.stderr)
+    print(f"ato desconhecido '{a[1]}'. {a[0]} aceita: ajuste, buscar", file=sys.stderr)
     sys.exit(1)
 
 

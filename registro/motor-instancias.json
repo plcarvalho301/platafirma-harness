@@ -7,61 +7,139 @@
     "stack": "rag",
     "endpoint": "http://127.0.0.1:8100/search",
     "token_em": "platafirma-conhecimento/rag/.env",
-    "botoes": [
-      {"slug": "peso-do-catalogo", "var": "EMBED_META_BETA", "fase": "7 recuperacao", "faixa": "0 a 1", "codigo": "0.15",
-       "sobe": "titulo, emissor e classificacao da obra passam a puxar o resultado, nao so o texto do trecho",
-       "custa": "obra bem classificada sobe mesmo quando o trecho nao responde; alto vira busca por catalogo",
-       "medir": "as duas familias de pergunta separadas, mesmo gold set. Medido 10/08: acima de 0,45 o acerto na 1a posicao sobe e o acerto em 5 desce"},
-      {"slug": "candidatos-por-significado", "var": "HYBRID_VEC_POOL", "fase": "7 recuperacao", "faixa": "10 a 500", "codigo": "50",
-       "sobe": "mais chance de o trecho certo entrar no funil; o que nao entra aqui esta perdido",
-       "custa": "cada candidato a mais e trabalho na fusao e no revisor; passado o ponto, so entra ruido",
-       "medir": "Recall@k. Medido 10/08: 50 da recall igual ou melhor que 150 e corta 42 ms"},
-      {"slug": "candidatos-por-codigo", "var": "HYBRID_ID_POOL", "fase": "7 recuperacao", "faixa": "5 a 100", "codigo": "20",
-       "sobe": "pergunta que cita clausula, controle ou artigo acha a secao exata, que o significado sozinho erra",
-       "custa": "quase nada: e braco barato; pool grande so empurra ruido para a fusao",
-       "medir": "acerto na 1a posicao SO nas perguntas que citam codigo"},
-      {"slug": "candidatos-por-palavra-exata", "var": "HYBRID_LEX_POOL", "fase": "7 recuperacao", "faixa": "0 a 200", "codigo": "50",
-       "sobe": "termo raro, nome proprio e sigla que o significado nao captura passam a ser achados",
-       "custa": "uma lista a mais para fundir; palavra exata promove trecho que so menciona o termo de passagem",
-       "medir": "acerto nas perguntas de termo raro, medido a parte"},
-      {"slug": "peso-do-braco-significado", "var": "RRF_W_VEC", "fase": "7 fusao", "faixa": "0 a 3", "codigo": "1.0",
-       "sobe": "o que casa por sentido manda mais na ordem final",
-       "custa": "favorecer um braco e rebaixar os outros na mesma proporcao",
-       "medir": "as duas familias separadas; nota unica esconde qual metade quebrou"},
-      {"slug": "peso-do-braco-codigo", "var": "RRF_W_ID", "fase": "7 fusao", "faixa": "0 a 3", "codigo": "2.0",
-       "sobe": "pergunta com clausula ou artigo citado ganha a frente",
-       "custa": "peso alto deixa a busca literal: pergunta sem codigo piora",
-       "medir": "as duas familias separadas"},
-      {"slug": "peso-do-braco-palavra-exata", "var": "RRF_W_LEX", "fase": "7 fusao", "faixa": "0 a 3", "codigo": "0.5",
-       "sobe": "sigla e nome proprio sobem na ordem final",
-       "custa": "promove trecho que so cita o termo de passagem",
-       "medir": "acerto nas perguntas de termo raro"},
-      {"slug": "revisor-quantos-le", "var": "RERANK_POOL", "fase": "8 reranking", "faixa": "5 a 50", "codigo": "10",
-       "sobe": "o revisor alcanca trecho que estava mais embaixo na lista",
-       "custa": "custo quase linear: dobrar o numero quase dobra o tempo. Medido 08/08: 40 -> 10 cortou a mediana de 1.015 ms para 369 ms E subiu o acerto",
-       "medir": "acerto na 1a posicao contra tempo, os dois na mesma tabela"},
-      {"slug": "revisor-quanto-manda", "var": "RERANK_BLEND", "fase": "8 reranking", "faixa": "0 a 1", "codigo": "0.5",
-       "sobe": "o julgamento do revisor manda mais na ordem final que a ordem da busca",
-       "custa": "revisor mandando derruba o resultado por sentido: ele promove introducao e resumo, que PARECEM responder. Em 0 ele ainda devolve a nota, que e o que sustenta a abstencao",
-       "medir": "as duas familias separadas. Medido 10/08: 0,3 sobe codigo +0,025 e derruba sentido -0,038"},
-      {"slug": "corte-de-repetido", "var": "DEDUP_JACCARD", "fase": "9 montagem", "faixa": "0 a 1", "codigo": "0",
-       "sobe": "tira o mesmo conteudo ocupando duas vagas do funil",
-       "custa": "corte agressivo apaga trecho parecido mas nao identico, que as vezes e o que responde",
-       "medir": "quantas vagas do funil ficaram com conteudo distinto"},
-      {"slug": "trecho-do-pai", "var": "CONTEXT_PARENT", "fase": "9 montagem", "faixa": "true ou false", "codigo": "true",
-       "sobe": "subclausula solta ganha a moldura de onde veio e para de ser lida fora de contexto",
-       "custa": "gasta orcamento da fita com texto que nao responde diretamente",
-       "medir": "resposta que cita a subclausula certa sem inverter o sentido dela"},
-      {"slug": "orcamento-da-fita", "var": "CONTEXT_BUDGET_CHARS", "fase": "9 montagem", "faixa": "2000 a 40000", "codigo": "12000",
-       "sobe": "cabe mais fonte por resposta",
-       "custa": "custo e tempo de geracao sobem, e o gerador presta menos atencao no meio de fita longa",
-       "medir": "fidelidade e citacao corretas, nao a quantidade de fonte que coube"},
-      {"slug": "modo-de-busca", "var": "RETRIEVAL_MODE", "fase": "7 recuperacao", "faixa": "hybrid ou vector", "codigo": "hybrid",
-       "sobe": "hybrid soma os bracos de codigo e palavra exata ao de significado",
-       "custa": "vector puro e mais simples de medir e mais barato, e perde toda pergunta que cita codigo",
-       "medir": "as duas familias separadas"}
+    "ajustes": [
+      {
+        "slug": "peso-do-catalogo",
+        "var": "EMBED_META_BETA",
+        "fase": "7 recuperacao",
+        "faixa": "0 a 1",
+        "codigo": "0.15",
+        "sobe": "titulo, emissor e classificacao da obra passam a puxar o resultado, nao so o texto do trecho",
+        "custa": "obra bem classificada sobe mesmo quando o trecho nao responde; alto vira busca por catalogo",
+        "medir": "as duas familias de pergunta separadas, mesmo gold set. Medido 10/08: acima de 0,45 o acerto na 1a posicao sobe e o acerto em 5 desce"
+      },
+      {
+        "slug": "candidatos-por-significado",
+        "var": "HYBRID_VEC_POOL",
+        "fase": "7 recuperacao",
+        "faixa": "10 a 500",
+        "codigo": "50",
+        "sobe": "mais chance de o trecho certo entrar no funil; o que nao entra aqui esta perdido",
+        "custa": "cada candidato a mais e trabalho na fusao e no revisor; passado o ponto, so entra ruido",
+        "medir": "Recall@k. Medido 10/08: 50 da recall igual ou melhor que 150 e corta 42 ms"
+      },
+      {
+        "slug": "candidatos-por-codigo",
+        "var": "HYBRID_ID_POOL",
+        "fase": "7 recuperacao",
+        "faixa": "5 a 100",
+        "codigo": "20",
+        "sobe": "pergunta que cita clausula, controle ou artigo acha a secao exata, que o significado sozinho erra",
+        "custa": "quase nada: e braco barato; pool grande so empurra ruido para a fusao",
+        "medir": "acerto na 1a posicao SO nas perguntas que citam codigo"
+      },
+      {
+        "slug": "candidatos-por-palavra-exata",
+        "var": "HYBRID_LEX_POOL",
+        "fase": "7 recuperacao",
+        "faixa": "0 a 200",
+        "codigo": "50",
+        "sobe": "termo raro, nome proprio e sigla que o significado nao captura passam a ser achados",
+        "custa": "uma lista a mais para fundir; palavra exata promove trecho que so menciona o termo de passagem",
+        "medir": "acerto nas perguntas de termo raro, medido a parte"
+      },
+      {
+        "slug": "peso-do-braco-significado",
+        "var": "RRF_W_VEC",
+        "fase": "7 fusao",
+        "faixa": "0 a 3",
+        "codigo": "1.0",
+        "sobe": "o que casa por sentido manda mais na ordem final",
+        "custa": "favorecer um braco e rebaixar os outros na mesma proporcao",
+        "medir": "as duas familias separadas; nota unica esconde qual metade quebrou"
+      },
+      {
+        "slug": "peso-do-braco-codigo",
+        "var": "RRF_W_ID",
+        "fase": "7 fusao",
+        "faixa": "0 a 3",
+        "codigo": "2.0",
+        "sobe": "pergunta com clausula ou artigo citado ganha a frente",
+        "custa": "peso alto deixa a busca literal: pergunta sem codigo piora",
+        "medir": "as duas familias separadas"
+      },
+      {
+        "slug": "peso-do-braco-palavra-exata",
+        "var": "RRF_W_LEX",
+        "fase": "7 fusao",
+        "faixa": "0 a 3",
+        "codigo": "0.5",
+        "sobe": "sigla e nome proprio sobem na ordem final",
+        "custa": "promove trecho que so cita o termo de passagem",
+        "medir": "acerto nas perguntas de termo raro"
+      },
+      {
+        "slug": "revisor-quantos-le",
+        "var": "RERANK_POOL",
+        "fase": "8 reranking",
+        "faixa": "5 a 50",
+        "codigo": "10",
+        "sobe": "o revisor alcanca trecho que estava mais embaixo na lista",
+        "custa": "custo quase linear: dobrar o numero quase dobra o tempo. Medido 08/08: 40 -> 10 cortou a mediana de 1.015 ms para 369 ms E subiu o acerto",
+        "medir": "acerto na 1a posicao contra tempo, os dois na mesma tabela"
+      },
+      {
+        "slug": "revisor-quanto-manda",
+        "var": "RERANK_BLEND",
+        "fase": "8 reranking",
+        "faixa": "0 a 1",
+        "codigo": "0.5",
+        "sobe": "o julgamento do revisor manda mais na ordem final que a ordem da busca",
+        "custa": "revisor mandando derruba o resultado por sentido: ele promove introducao e resumo, que PARECEM responder. Em 0 ele ainda devolve a nota, que e o que sustenta a abstencao",
+        "medir": "as duas familias separadas. Medido 10/08: 0,3 sobe codigo +0,025 e derruba sentido -0,038"
+      },
+      {
+        "slug": "corte-de-repetido",
+        "var": "DEDUP_JACCARD",
+        "fase": "9 montagem",
+        "faixa": "0 a 1",
+        "codigo": "0",
+        "sobe": "tira o mesmo conteudo ocupando duas vagas do funil",
+        "custa": "corte agressivo apaga trecho parecido mas nao identico, que as vezes e o que responde",
+        "medir": "quantas vagas do funil ficaram com conteudo distinto"
+      },
+      {
+        "slug": "trecho-do-pai",
+        "var": "CONTEXT_PARENT",
+        "fase": "9 montagem",
+        "faixa": "true ou false",
+        "codigo": "true",
+        "sobe": "subclausula solta ganha a moldura de onde veio e para de ser lida fora de contexto",
+        "custa": "gasta orcamento da fita com texto que nao responde diretamente",
+        "medir": "resposta que cita a subclausula certa sem inverter o sentido dela"
+      },
+      {
+        "slug": "orcamento-da-fita",
+        "var": "CONTEXT_BUDGET_CHARS",
+        "fase": "9 montagem",
+        "faixa": "2000 a 40000",
+        "codigo": "12000",
+        "sobe": "cabe mais fonte por resposta",
+        "custa": "custo e tempo de geracao sobem, e o gerador presta menos atencao no meio de fita longa",
+        "medir": "fidelidade e citacao corretas, nao a quantidade de fonte que coube"
+      },
+      {
+        "slug": "modo-de-busca",
+        "var": "RETRIEVAL_MODE",
+        "fase": "7 recuperacao",
+        "faixa": "hybrid ou vector",
+        "codigo": "hybrid",
+        "sobe": "hybrid soma os bracos de codigo e palavra exata ao de significado",
+        "custa": "vector puro e mais simples de medir e mais barato, e perde toda pergunta que cita codigo",
+        "medir": "as duas familias separadas"
+      }
     ],
-    "nao_e_botao": {
+    "nao_e_ajuste": {
       "EMBED_MODEL": "parametrizacao de instancia: trocar exige recarregar o acervo inteiro. Trocar sem re-embed nao da erro, devolve lixo com cara de certo",
       "EMBED_BACKEND": "idem: faz parte do contrato do espaco vetorial",
       "EMBED_DEVICE": "instalacao (cuda so com a imagem CUDA e o dispositivo exposto)",
@@ -70,5 +148,9 @@
       "corte-do-trecho": "CHUMBADO EM CODIGO (teto 512 tokens, 4 char/token, minimo 80 char). Nao ha variavel: mexer exige editar codigo e reprocessar o acervo"
     }
   },
-  "reasoner": {"estado": "planejada", "container": null, "botoes": []}
+  "reasoner": {
+    "estado": "planejada",
+    "container": null,
+    "ajustes": []
+  }
 }

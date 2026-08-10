@@ -42,7 +42,7 @@ estado do acervo (5 degraus)    : acervo escada          [--json | --detalhe]
                                   ÚNICA fonte de número do acervo — ver regra abaixo
 demais atos do acervo           : acervo                  sem argumento, lista os sub-atos
 consulta ao RAG pela linha      : motor rag buscar "<pergunta>"  mesmo contrato do rag_search
-botoes do motor, com trade-off  : motor rag botao [<botao> [<valor>]]  ver, entender e mexer
+ajustes do motor, com trade-off : motor rag ajuste [<ajuste> [<valor>]]  ver, entender e mexer
 instancias de motor declaradas  : motor listar
 
 o que está no ar                : infra estado [alvo]

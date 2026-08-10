@@ -75,7 +75,7 @@ Regras verificáveis, na ordem em que `conferir verbo` as aplica:
 | `acervo-status` | `conhecimento` | claudinho-conhecimento | estado do acervo por obra, nos cinco degraus | harness |
 | `acervo-get` | `conhecimento` | claudinho-conhecimento | baixa uma obra do acervo pelo título | só no host |
 | `acervo-pacote` | `conhecimento` | claudinho-conhecimento | sem cabeçalho — propósito não declarado | só no host |
-| `motor` | `gestao-de-motores` | claudinho-IA | o que cada motor serve e mede: `listar`, `<inst> buscar`, `<inst> botao` | absorveu `ragq` (10/08/2026) |
+| `motor` | `gestao-de-motores` | claudinho-IA | o que cada motor serve e mede: `listar`, `<inst> buscar`, `<inst> ajuste` | absorveu `ragq` (10/08/2026) |
 | `rag.py` | `conhecimento` | claudinho-IA | sem cabeçalho — e diverge da cópia em repo | divergente |
 | `exporta-acervo-xlsx.py` | `conhecimento` | claudinho-conhecimento | sem cabeçalho — propósito não declarado | só no host |
 | `infra` | `infra` | claudinho-TI | estado e operação da infra local | harness |
