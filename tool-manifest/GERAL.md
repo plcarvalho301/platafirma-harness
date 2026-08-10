@@ -8,12 +8,11 @@ cadeira não replica o que está aqui — aponta.
 
 
 ```
-ver minha caixa                 : fila status <persona>
-ler mensagens                   : fila ler <persona> [remetente]     tira o token de posse
-baixar o que processei          : fila consumir <persona> <id> --posse <tok> | --de <rem> | --todas
-soltar sem consumir             : fila largar <persona> <id> --posse <tok>   (--forca: token perdido)
+ver minha caixa                 : fila status <persona>          quantas novas, sem ler
+ler o que chegou                : fila ler <persona>               so o novo; confirma na entrega
+reler o historico (7 dias)      : fila ler <persona> --tudo [rem] | --desde AAAAMMDDTHHMMSS
 mandar recado                   : fila enviar <dest> --tipo <t> --assunto <a>
-                                  (corpo em stdin; --ref opcional; --responde <id> exige --posse)
+                                  (corpo em stdin; --ref e --responde opcionais)
 abrir sessão de uma cadeira     : monta-sessao <cadeira>   [tool monta_sessao é a via boa]
 
 ler um card                     : tarefas ler <id>
@@ -124,25 +123,21 @@ Quem escreve carrega a prova de que passou no teste: a mensagem diz, em uma
 linha, o que trava sem ela. Sem essa linha, a caixa do destinatário não deve
 nada — pode consumir sem responder.
 
-## Fila — consumir após ler
+## Fila — a caixa é log, e ler já confirma
 
-Mensagem lida e respondida na mesma sessão: consumir antes de encerrar. Se
-precisar dela consistida em outro lugar depois, é disciplina de quem lê, não
-motivo pra deixar a caixa acumulando.
+**A caixa é a malha `msg` (Valkey/Streams), não arquivo.** Um stream por persona,
+`caixa:<persona>`, com um consumer group — a cadeira dona é o único consumidor.
 
-**Gatilho é subir a mensagem pro contexto** (`fila ler`), não ela aparecer
-como resultado de outra leitura (ex.: grep, listagem, ferramenta que varre o
-diretório da fila por engano). Sem chamada explícita de leitura, não consome.
-
-Mensagem que fica aberta por dependência não fechada não se consome — segue
-na caixa até resolver.
-
-**A caixa é a malha `msg` (Valkey/Streams), não arquivo.** `ler` tira um token de
-posse por mensagem, com TTL de 60 min: `consumir` e `enviar --responde` exigem
-esse token, e sessão paralela da mesma cadeira não consome o que a outra está
-processando. Perdeu o token da própria leitura: `fila largar ... --forca`.
-Retenção da caixa é 7 dias — mensagem é consumo curto; o que tem permanência
-vira card, commit ou wiki antes disso.
+- `fila ler` entrega **só o que chegou desde a última leitura** e confirma na
+  entrega. Não há ato de consumir, e não há caixa a zerar: o ponteiro vive no
+  servidor, e a sessão não carrega estado entre fitas.
+- **Nada é apagado ao ler.** O histórico segue no stream e sai por `--tudo` ou
+  `--desde`, que são leitura fria e não movem o ponteiro.
+- **Retenção de 7 dias** (`XTRIM MINID`, timer do motor) é a única coisa que
+  apaga carta. Mensagem é consumo curto; o que tem permanência vira card, commit
+  ou wiki antes de vencer.
+- Fita que morre depois de ler perde o aviso, não a carta: ela volta por
+  `--desde` dentro da janela.
 
 Projetos do rastreador: `46 Cards` · `1 Inbox` são projetos reais; id negativo
 (`-6 Fabrica`, `-7 Carteira`, `-8 Triagem`, `-9 Parado`, `-10 Épico-Harness`,
