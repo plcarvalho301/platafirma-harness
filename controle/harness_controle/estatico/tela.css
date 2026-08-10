@@ -65,6 +65,7 @@ code, .mono { font-family: var(--platafirma-font-code); }
 .folha {
   padding: var(--platafirma-space-5) var(--platafirma-space-6) var(--platafirma-space-7);
 }
+.folha > :last-child { margin-bottom: 0; }
 
 /* --- /cadeira/<slug>: grade de três colunas --- */
 .grade {
@@ -245,8 +246,9 @@ form#despachar button { justify-self: start; }
 }
 .pred .valor.mal { color: var(--platafirma-alert-fg); }
 
-/* --- rodapé: as três saídas --- */
+/* --- as três saídas: abrem a folha (ordem invertida, 10/08) --- */
 .saidas {
+  margin-bottom: var(--platafirma-space-5);
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(232px, 1fr));
   gap: var(--platafirma-space-4);

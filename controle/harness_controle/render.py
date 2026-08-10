@@ -413,10 +413,10 @@ def bloco_procedencia(servico: dict, verbo: dict, skills: dict, repo: dict) -> s
     )
 
 
-# --- rodapé e recepção ------------------------------------------------------
+# --- saídas e recepção ------------------------------------------------------
 
 
-def rodape() -> str:
+def saidas_bloco() -> str:
     saidas = [
         ("Wiki", "O que vale hoje?", "https://wiki.platafirma.org"),
         ("Git do harness", "Como chegou a ser?", "https://github.com/plcarvalho301/platafirma-harness"),
@@ -433,15 +433,18 @@ def rodape() -> str:
 def render_recepcao(estado: dict) -> str:
     direita = '<a href="/">Atualizar</a>'
     corpo = (
+        # Ordem invertida por decisão do dono (10/08): saídas, procedência e
+        # cadeiras primeiro. Sinal é lista longa de leitura sob demanda e desce
+        # para o fim. Reorganização de fato fica para depois do engine (F5).
         '<div class="folha">'
-        + bloco_sinal(estado.get("infra_estado", {}), estado.get("infra_saude", {}))
-        + bloco_caixas(estado.get("fila_status", {}))
-        + bloco_cadeiras(estado.get("cadeiras", {}))
+        + saidas_bloco()
         + bloco_procedencia(
             estado.get("conferir_servico", {}), estado.get("conferir_verbo", {}),
             estado.get("skills", {}), estado.get("conferir_repo", {}),
         )
-        + rodape()
+        + bloco_cadeiras(estado.get("cadeiras", {}))
+        + bloco_caixas(estado.get("fila_status", {}))
+        + bloco_sinal(estado.get("infra_estado", {}), estado.get("infra_saude", {}))
         + "</div>"
     )
     return pagina("harness.platafirma.org — recepção", "recepcao", direita, corpo)
