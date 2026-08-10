@@ -9,10 +9,11 @@ cadeira não replica o que está aqui — aponta.
 
 ```
 ver minha caixa                 : fila status <persona>
-ler mensagens                   : fila ler <persona> [remetente]
-baixar o que processei          : fila consumir <persona> <id>... | --de <rem> | --todas
-mandar recado                   : fila enviar <dest> --de <rem> --tipo <t> --assunto <a>
-                                  (corpo em stdin; --ref, --responde opcionais)
+ler mensagens                   : fila ler <persona> [remetente]     tira o token de posse
+baixar o que processei          : fila consumir <persona> <id> --posse <tok> | --de <rem> | --todas
+soltar sem consumir             : fila largar <persona> <id> --posse <tok>   (--forca: token perdido)
+mandar recado                   : fila enviar <dest> --tipo <t> --assunto <a>
+                                  (corpo em stdin; --ref opcional; --responde <id> exige --posse)
 abrir sessão de uma cadeira     : monta-sessao <cadeira>   [tool monta_sessao é a via boa]
 
 ler um card                     : tarefas ler <id>
@@ -135,6 +136,13 @@ diretório da fila por engano). Sem chamada explícita de leitura, não consome.
 
 Mensagem que fica aberta por dependência não fechada não se consome — segue
 na caixa até resolver.
+
+**A caixa é a malha `msg` (Valkey/Streams), não arquivo.** `ler` tira um token de
+posse por mensagem, com TTL de 60 min: `consumir` e `enviar --responde` exigem
+esse token, e sessão paralela da mesma cadeira não consome o que a outra está
+processando. Perdeu o token da própria leitura: `fila largar ... --forca`.
+Retenção da caixa é 7 dias — mensagem é consumo curto; o que tem permanência
+vira card, commit ou wiki antes disso.
 
 Projetos do rastreador: `46 Cards` · `1 Inbox` são projetos reais; id negativo
 (`-6 Fabrica`, `-7 Carteira`, `-8 Triagem`, `-9 Parado`, `-10 Épico-Harness`,

@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/home/claudinho/AI/.venv-harness/bin/python
 # fila — caixa de mensagens entre personas da PlataFirma, sobre a malha msg (Valkey/Streams).
 # capacidade: msg
 # dono: claudinho-IA
@@ -293,8 +293,13 @@ def cmd_largar(rc, eu: str, args):
         print(f"{args.msgid}: sem posse viva (ja livre)")
         return
     if token_atual != args.posse:
-        sys.stderr.write(f"erro: token nao bate com a posse viva de {args.msgid}\n")
-        sys.exit(1)
+        if not args.forca:
+            sys.stderr.write(
+                f"erro: token nao bate com a posse viva de {args.msgid}.\n"
+                f"  perdeu o token da propria leitura: 'fila largar {p} {args.msgid} --forca'\n"
+            )
+            sys.exit(1)
+        sys.stderr.write(f"aviso: posse de {args.msgid} liberada A FORCA — outra sessao pode estar com ela\n")
     rc.delete(pk)
     print(f"{args.msgid}: posse liberada")
 
@@ -371,7 +376,8 @@ def build_parser():
     p_largar = sub.add_parser("largar", add_help=False)
     p_largar.add_argument("persona")
     p_largar.add_argument("msgid")
-    p_largar.add_argument("--posse", required=True)
+    p_largar.add_argument("--posse", default=None)
+    p_largar.add_argument("--forca", action="store_true")
 
     p_enviar = sub.add_parser("enviar", add_help=False)
     p_enviar.add_argument("destinatario")
