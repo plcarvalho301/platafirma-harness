@@ -80,9 +80,36 @@ def _falha_json(msg: str, code: int):
     sys.exit(code)
 
 
+def canoniza_persona(p: str):
+    """Devolve o nome como esta em .personas, ou None. Case-insensitive: o
+    humano digita "Claudinho-TI" e a caixa e "claudinho-TI" — sao a mesma
+    pessoa, e divergencia de caixa alta nao pode virar caixa nova."""
+    validas = personas_validas()
+    if not validas:
+        return None
+    if p in validas:
+        return p
+    baixo = p.lower()
+    for v in validas:
+        if v.lower() == baixo:
+            return v
+    return None
+
+
 def valida_persona(p: str, json_mode: bool = False):
     validas = personas_validas()
-    if validas is None or p in validas:
+    # Lista ilegivel NAO e passe livre. Antes, arquivo ausente devolvia None e
+    # esta funcao retornava calada: dentro de container HOME nao e /home/claudinho,
+    # ~/AI/fila/.personas nao existia, e a validacao ficava DESLIGADA — destinatario
+    # com erro de digitacao virava caixa nova, com o remetente vendo sucesso.
+    if validas is None:
+        msg = (f"nao consegui ler a lista de personas ({PERSONAS_FILE}) — "
+               "sem ela nao ha destinatario valido. Aponte FILA_RAIZ.")
+        if json_mode:
+            _falha_json(msg, 2)
+        sys.stderr.write(f"erro: {msg}\n")
+        sys.exit(2)
+    if canoniza_persona(p):
         return
     if json_mode:
         _falha_json(f"persona desconhecida: {p} (validas: {', '.join(sorted(validas))})", 1)
@@ -407,6 +434,10 @@ def cmd_enviar(rc, eu: str, args):
         sys.exit(1)
     valida_persona(args.destinatario)
     valida_persona(de)
+    # Grava sempre o nome canonico: a caixa e uma so, qualquer que seja a caixa
+    # alta que o chamador digitou.
+    args.destinatario = canoniza_persona(args.destinatario)
+    de = canoniza_persona(de)
 
     corpo = sys.stdin.read()
     if not corpo.strip():

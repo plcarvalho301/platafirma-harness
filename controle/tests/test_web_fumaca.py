@@ -338,3 +338,42 @@ def test_paginas_nao_tem_javascript_nem_storage(cliente):
         assert "onclick" not in corpo
         assert "localstorage" not in corpo
         assert "sessionstorage" not in corpo
+
+
+# ---------- seletor fechado: a tela nao oferece o que o verbo nao aceita ----------
+#
+# "Claudinho-TI" digitado no campo livre criou uma caixa nova em producao. Duas
+# causas, e as duas viraram teste: a validacao do verbo estava desligada quando
+# .personas nao era legivel, e a tela oferecia texto livre onde o verbo tem
+# lista fechada. Fluxo humano e fluxo de maquina sao o mesmo fluxo: se o verbo
+# enumera, a tela enumera.
+
+
+def test_destinatario_e_select_nao_texto_livre():
+    from harness_controle import render
+    bloco = {"estado": "ok", "lido_em": 0, "dados": [
+        {"persona": "claudinho-TI", "pendentes": 0, "estado": "vazia"},
+        {"persona": "claudinha-produto", "pendentes": 2, "estado": "parada"},
+    ]}
+    html = render.bloco_caixas(bloco)
+    assert '<input type="text" name="destinatario"' not in html
+    assert '<select name="destinatario"' in html
+    assert 'value="claudinho-TI"' in html
+    assert 'value="claudinha-produto"' in html
+
+
+def test_sem_leitura_de_caixa_nao_ha_formulario():
+    """Sem lista nao se despacha: a acao some, nao vira campo aberto."""
+    from harness_controle import render
+    html = render.bloco_caixas({"estado": "indisponivel", "motivo": "verbo morto"})
+    assert "despachar-recado" not in html
+    assert "verbo morto" in html
+
+
+def test_tipo_continua_fechado():
+    from harness_controle import render
+    bloco = {"estado": "ok", "lido_em": 0, "dados": [{"persona": "claudinho-TI", "pendentes": 0, "estado": "vazia"}]}
+    html = render.bloco_caixas(bloco)
+    assert '<select name="tipo"' in html
+    for t in ("decisao", "resposta", "pedido", "minuta", "demanda", "handoff"):
+        assert f'value="{t}"' in html

@@ -244,10 +244,26 @@ def bloco_caixas(bloco: dict, limiar_alert_seg: int = 3600) -> str:
             "<th>Estado</th></tr></thead><tbody>" + "".join(linhas) + "</tbody></table>"
         ) if linhas else '<p class="indisponivel">Nenhuma caixa encontrada.</p>'
 
-    form = (
+    # Seletor fechado, e a fonte e a mesma que o verbo le: as caixas que o
+    # proprio bloco acabou de listar. Texto livre aqui daria a tela uma
+    # superficie que "fila enviar" nao tem — e um destinatario que so existe na
+    # tela nao existe em lugar nenhum. Foi assim que "Claudinho-TI" virou caixa.
+    destinos = [i.get("persona") for i in (bloco.get("dados") or []) if i.get("persona")]
+    if destinos:
+        campo_destino = (
+            '<label>Destinatário <select name="destinatario" required>'
+            + "".join(f'<option value="{_esc(d)}">{_esc(d)}</option>' for d in destinos)
+            + "</select></label>"
+        )
+    else:
+        # Sem leitura de caixa nao ha lista, e sem lista nao se despacha: a acao
+        # some declarada, nao vira campo aberto "por enquanto".
+        campo_destino = ""
+
+    form = "" if not destinos else (
         '<form method="post" action="/acoes/despachar-recado" id="despachar">'
-        '<label>Destinatário <input type="text" name="destinatario" required></label>'
-        '<label>Tipo <select name="tipo" required>'
+        + campo_destino
+        + '<label>Tipo <select name="tipo" required>'
         + "".join(f'<option value="{t}">{t}</option>' for t in
                    ("decisao", "resposta", "pedido", "minuta", "demanda", "handoff"))
         + "</select></label>"
