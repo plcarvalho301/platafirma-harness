@@ -26,7 +26,7 @@ Conta atual, por capacidade:
 | `memoria` | 1 — `mesa` | sim | — |
 | `encerramento` | 1 — `encerrar` (alias: `descansar`) | sim | — |
 | `verificacao` | 1 — `conferir` | sim | `oscap-*` e `ssg-deriva` migram para `seguranca` ou saem da capacidade |
-| `conhecimento` | 6 | **não** | consolidar em `acervo <ato>`; `rag.py` e `ragq` decidem-se com claudinho-IA |
+| `conhecimento` | 6 | **não** | consolidar em `acervo <ato>`; `ragq` absorvido por `motor rag buscar` |
 | `acesso` | 2 | **não** | `kcadm` e `openssl-pqc` são invólucros de ferramenta de terceiro; candidatos a sair da espinha |
 | `infra` | 1 — `infra` | sim | `longjob` declarado órfão no mapa; `compose` sai para `deploy` |
 | `mudanca` | 0 — `deploy` a construir | não instanciada | absorve `infra compose` |
@@ -75,7 +75,7 @@ Regras verificáveis, na ordem em que `conferir verbo` as aplica:
 | `acervo-status` | `conhecimento` | claudinho-conhecimento | estado do acervo por obra, nos cinco degraus | harness |
 | `acervo-get` | `conhecimento` | claudinho-conhecimento | baixa uma obra do acervo pelo título | só no host |
 | `acervo-pacote` | `conhecimento` | claudinho-conhecimento | sem cabeçalho — propósito não declarado | só no host |
-| `ragq` | `conhecimento` | claudinho-IA | consulta direta ao rag-api, contrato do `rag_search` | só no host |
+| `motor` | `gestao-de-motores` | claudinho-IA | o que cada motor serve e mede: `listar`, `<inst> buscar`, `<inst> botao` | absorveu `ragq` (10/08/2026) |
 | `rag.py` | `conhecimento` | claudinho-IA | sem cabeçalho — e diverge da cópia em repo | divergente |
 | `exporta-acervo-xlsx.py` | `conhecimento` | claudinho-conhecimento | sem cabeçalho — propósito não declarado | só no host |
 | `infra` | `infra` | claudinho-TI | estado e operação da infra local | harness |

@@ -1,0 +1,173 @@
+#!/usr/bin/env python3
+# motor — gestao de motores de decisao: o que um motor serve e mede.
+# capacidade: gestao-de-motores
+# (arq:0043 — a capacidade e do subcomando; aqui os tres servem a mesma:
+#  motor listar · motor <inst> buscar · motor <inst> botao)
+# dono: claudinho-IA
+# componente: platafirma-motor
+# O verbo e `motor`; a instancia e argumento (arq:0037; veto do verbo `rag`).
+import json, os, re, subprocess, sys, urllib.request
+
+RAIZ = os.path.expanduser("~/AI")
+REG = os.path.join(RAIZ, "platafirma-harness/registro/motor-instancias.json")
+DOCKER = {"DOCKER_HOST": "unix:///run/user/1001/docker.sock"}
+
+
+def sh(cmd, **kw):
+    env = dict(os.environ, **DOCKER)
+    return subprocess.run(cmd, shell=True, capture_output=True, text=True, env=env, **kw)
+
+
+def reg():
+    with open(REG) as f:
+        return json.load(f)
+
+
+def uso(cod=2):
+    print("""motor — o que cada motor serve e mede
+
+  motor listar                          instancias declaradas e estado
+  motor <inst> botao                    todos os botoes, com o valor de hoje
+  motor <inst> botao <slug>             o que esse botao troca por que
+  motor <inst> botao <slug> <valor>     mexe, promove e confere o servido
+  motor <inst> buscar "<pergunta>" [--k N] [--texto secao|trecho|nenhum]
+
+instancias: """ + ", ".join(reg().keys()))
+    sys.exit(cod)
+
+
+def servido(inst):
+    """env efetivo do container; ausente = default do codigo."""
+    c = inst.get("container")
+    if not c:
+        return {}, "instancia sem container"
+    r = sh(f"docker inspect {c} --format '{{{{range .Config.Env}}}}{{{{println .}}}}{{{{end}}}}'")
+    if r.returncode != 0:
+        return None, f"container {c} fora do ar"
+    return dict(l.split("=", 1) for l in r.stdout.splitlines() if "=" in l), None
+
+
+def cmd_listar(d):
+    for nome, i in d.items():
+        print(f"{nome:12} {i['estado']:10} {i.get('container') or '-'}")
+
+
+def cmd_botao(nome, inst, argv):
+    env, err = servido(inst)
+    botoes = {b["slug"]: b for b in inst["botoes"]}
+
+    if not argv:
+        if err:
+            print(f"[{err} — valores abaixo sao o DECLARADO, nao o servido]\n")
+        larg = max(len(s) for s in botoes)
+        for b in inst["botoes"]:
+            v = (env or {}).get(b["var"])
+            onde = "compose" if v is not None else "default do codigo"
+            print(f"  {b['slug']:<{larg}}  {v or b['codigo']:>10}   fase {b['fase']:<16} ({onde})")
+        print(f"\n  detalhe de um: motor {nome} botao <nome-do-botao>")
+        print(f"  fora da lista, e por que: {', '.join(inst['nao_e_botao'])}")
+        return
+
+    slug = argv[0]
+    if slug not in botoes:
+        print(f"nao existe botao '{slug}'. Ha: {', '.join(botoes)}", file=sys.stderr)
+        sys.exit(1)
+    b = botoes[slug]
+    v = (env or {}).get(b["var"], b["codigo"])
+
+    if len(argv) == 1:
+        print(f"{b['slug']}   hoje: {v}   faixa: {b['faixa']}   fase {b['fase']}")
+        print(f"  subir da  : {b['sobe']}")
+        print(f"  e custa   : {b['custa']}")
+        print(f"  como sei  : {b['medir']}")
+        print(f"  (variavel {b['var']}, no {inst['compose']})")
+        return
+
+    novo = argv[1]
+    tem_porta = (env or {}).get(b["var"]) is not None
+    if tem_porta and v == novo:
+        print(f"{slug} ja esta em {novo} no servido. Nada a fazer.")
+        return
+    caminho = os.path.join(RAIZ, inst["compose"])
+    with open(caminho) as f:
+        texto = f.read()
+    pad = re.compile(rf"^(\s+){b['var']}:.*$", re.M)
+    achou = pad.findall(texto)
+    if len(achou) == 1:
+        texto = pad.sub(lambda m: f"{m.group(1)}{b['var']}: {novo}", texto, count=1)
+    elif len(achou) == 0:
+        anc = re.compile(r"^(\s+)RAG_API_TOKEN:.*$", re.M)
+        if not anc.search(texto):
+            print(f"nao achei onde declarar {b['var']} em {inst['compose']}", file=sys.stderr)
+            sys.exit(1)
+        texto = anc.sub(lambda m: f"{m.group(1)}{b['var']}: {novo}\n{m.group(0)}", texto, count=1)
+    else:
+        print(f"{b['var']} aparece {len(achou)}x no compose — nao mexo as cegas", file=sys.stderr)
+        sys.exit(1)
+    with open(caminho, "w") as f:
+        f.write(texto)
+    print(f"{slug}: {v} -> {novo}  ({b['var']} em {inst['compose']})")
+
+    repo = os.path.join(RAIZ, inst["compose"].split("/")[0])
+    r = sh(f'git -C {repo} add -A && git -C {repo} commit -q -m "motor rag botao: {slug} {v} -> {novo}" && git -C {repo} push -q')
+    if r.returncode != 0:
+        print(f"git falhou, nao promovo: {r.stderr.strip()[-300:]}", file=sys.stderr)
+        sys.exit(1)
+    r = sh(f"{RAIZ}/bin/deploy {inst['stack']} promover")
+    print(r.stdout.strip()[-300:] or r.stderr.strip()[-300:])
+
+    env2, err2 = servido(inst)
+    agora = (env2 or {}).get(b["var"], "?")
+    if agora == novo:
+        print(f"\nCONFERIDO no servido: {b['var']}={agora}")
+    else:
+        print(f"\nNAO CONFERE: pedi {novo}, o container serve {agora}", file=sys.stderr)
+        sys.exit(1)
+
+
+def cmd_buscar(inst, argv):
+    if not argv:
+        print('motor <inst> buscar "<pergunta>" [--k N] [--texto secao|trecho|nenhum]', file=sys.stderr)
+        sys.exit(2)
+    corpo = {"pergunta": argv[0]}
+    resto = argv[1:]
+    for k, v in zip(resto[::2], resto[1::2]):
+        k = k.lstrip("-")
+        corpo[k] = int(v) if k == "k" else v
+    tok = ""
+    with open(os.path.join(RAIZ, inst["token_em"])) as f:
+        for l in f:
+            if l.startswith("RAG_API_TOKEN="):
+                tok = l.split("=", 1)[1].strip().strip("\"'")
+    req = urllib.request.Request(
+        inst["endpoint"], data=json.dumps(corpo).encode(),
+        headers={"Authorization": f"Bearer {tok}", "Content-Type": "application/json"})
+    with urllib.request.urlopen(req, timeout=300) as r:
+        print(r.read().decode())
+
+
+def main():
+    d = reg()
+    a = sys.argv[1:]
+    if not a:
+        uso()
+    if a[0] == "listar":
+        return cmd_listar(d)
+    if a[0] not in d:
+        print(f"nao conheco a instancia '{a[0]}'. Ha: {', '.join(d)}", file=sys.stderr)
+        sys.exit(1)
+    inst = d[a[0]]
+    if inst["estado"] != "ativa":
+        print(f"instancia '{a[0]}' esta {inst['estado']} — nenhum ato aceito", file=sys.stderr)
+        sys.exit(1)
+    if len(a) < 2:
+        uso()
+    if a[1] == "botao":
+        return cmd_botao(a[0], inst, a[2:])
+    if a[1] == "buscar":
+        return cmd_buscar(inst, a[2:])
+    print(f"ato desconhecido '{a[1]}'. {a[0]} aceita: botao, buscar", file=sys.stderr)
+    sys.exit(1)
+
+
+main()
