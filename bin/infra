@@ -16,7 +16,8 @@ uso:
   infra saude  [alvo]            /health do ops, contêiner não-saudável, disco, RAM
   infra logs   <alvo> [n]        alvo = nome de contêiner OU unit --user (default 50)
   infra restart <alvo>           destacado: sobrevive ao fim desta chamada
-  infra exclusivo [--] <cmd...>  fila de carga GPU-bound: espera a vez, entao executa
+  infra exclusivo [--] <cmd...>  fila de carga GPU-bound + cota de CPU/RAM
+  infra cache [ver|vram|disco]   ver o que ocupa VRAM e disco; liberar e explicito
 
 Leitura aceita alvo opcional; sem alvo, olha tudo. Mutação exige alvo explícito e
 recusa sem ele. Promover release não é daqui: `deploy <stack>`.
@@ -88,8 +89,47 @@ exclusivo() {
   fi
   printf 'pid=%s desde=%s cmd=%s\n' "$$" "$(date -Is)" "$*" >"$dono"
   trap "rm -f -- '$dono'" EXIT
-  "$@" || rc=$?
+  # Cota de CPU e RAM: scope transiente irmao do ops-mcp. cgroup v2 nao controla GPU,
+  # mas controla estes dois - e bancada pesada e quem estrangula o serving na CPU.
+  systemd-run --user --scope --quiet --collect \
+    --unit="pf-exclusivo-$$" \
+    -p CPUQuota="${PF_CPU_QUOTA:-800%}" \
+    -p CPUWeight="${PF_CPU_PESO:-50}" \
+    -p MemoryHigh="${PF_MEM_ALTA:-10G}" \
+    -p MemoryMax="${PF_MEM_MAX:-12G}" \
+    -- "$@" || rc=$?
   return $rc
+}
+
+# Cache: o que ocupa VRAM e o que ocupa disco. Leitura por default; liberar e explicito.
+cache() {
+  local ato="${1:-ver}"
+  case "$ato" in
+    ver)
+      echo "== modelo residente em VRAM (ollama)"
+      curl -sf --max-time 5 127.0.0.1:11434/api/ps \
+        | jq -r '.models[]? | "  \(.name)  vram=\(.size_vram/1073741824*100|round/100)GiB  ate=\(.expires_at[0:19])"' \
+        | grep . || echo "  (nenhum)"
+      echo; echo "== VRAM total"
+      nvidia-smi --query-gpu=memory.used,memory.total --format=csv,noheader
+      echo; echo "== cache em disco"
+      du -sh "$HOME/.cache/huggingface" "$HOME/.cache/uv" 2>/dev/null
+      docker system df 2>/dev/null | sed -n '1,5p'
+      ;;
+    vram)
+      curl -sf --max-time 5 127.0.0.1:11434/api/ps | jq -r '.models[]?.name' \
+        | while read -r m; do
+            curl -sf 127.0.0.1:11434/api/generate -d "{\"model\":\"$m\",\"keep_alive\":0}" >/dev/null
+            echo "descarregado: $m"
+          done
+      ;;
+    disco)
+      docker builder prune -f
+      uv cache prune 2>/dev/null || true
+      echo "cache de modelo (huggingface, ollama) nao e apagado aqui: rebaixar custa GiB de re-download."
+      ;;
+    *) echo "uso: infra cache [ver|vram|disco]" >&2; exit 2 ;;
+  esac
 }
 
 # Restart direto do ops-mcp mata a chamada em curso: despachar destacado.
@@ -108,6 +148,7 @@ case "$cmd" in
   saude)   saude ;;
   logs)    logs "${1:?uso: infra logs <alvo> [n]}" "${2:-50}" ;;
   exclusivo) exclusivo "$@" ;;
+  cache)     cache "${1:-ver}" ;;
   restart) [ $# -ge 1 ] || { echo "erro: restart exige alvo explícito — não reinicia tudo." >&2; exit 2; }
            restart "$1" ;;
   compose) echo "erro: promover release saiu do \`infra\` — capacidade \`mudanca\`, verbo \`deploy\`." >&2
