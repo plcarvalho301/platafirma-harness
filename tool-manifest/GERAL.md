@@ -6,6 +6,10 @@ cadeira não replica o que está aqui — aponta.
 > **Verbo novo em `bin/`, mesmo commit:** linha aqui antes do push. Ferramenta
 > existente e não indexada é ferramenta inexistente.
 
+> **Entrega vai a git ou wiki no mesmo turno.** O dono não tem shell no host: arquivo
+> parado em `~/AI` é rascunho, não entrega — ele não consegue abrir nem validar. Publica,
+> e só então relata, com link inteiro e colável.
+
 
 ```
 ver minha caixa                 : fila status <persona>          quantas novas, sem ler
