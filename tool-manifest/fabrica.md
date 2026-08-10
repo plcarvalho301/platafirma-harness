@@ -107,10 +107,6 @@ o rollback volta como pergunta fechada, não vira execução com critério meu.
 
 ## Pendências declaradas
 
-- **`settings.json` não tem via de entrega para conta cujo home não enxerga a
-  fonte** (caso `megafone`): `platafirma-posto/sincroniza.sh` traz só o
-  `CLAUDE.md`. Nessa conta o perfil de permissão é texto de desenho, não gate.
-  Card #388, decisão de forma com claudinho-TI.
 - **`shellcheck`, `shfmt`** ausentes no host; instaláveis sem privilégio.
 - **Skills**: `skills/fabrica/` não existe, e o instalador declara a lista vazia
   de propósito. A fábrica não carrega `platafirma` (entrega org chart, que o
