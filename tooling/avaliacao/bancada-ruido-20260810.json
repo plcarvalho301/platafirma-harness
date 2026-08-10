@@ -1,245 +1,73 @@
 {
-  "medido_em": "2026-08-10T15:31:12",
+  "medido_em": "2026-08-10T15:54:36",
   "k": 10,
   "gold": {
-    "det": 118,
-    "t2": 52
+    "det": 2,
+    "t2": 2
   },
   "eixos": {
-    "blend": [
-      {
-        "config": "servido (sem revisor)",
-        "det": {
-          "n": 118,
-          "recall@1": 0.517,
-          "recall@3": 0.593,
-          "recall@5": 0.636,
-          "recall@10": 0.661,
-          "mrr": 0.565,
-          "ms_mediana": 120.9
-        },
-        "t2": {
-          "n": 52,
-          "recall@1": 0.423,
-          "recall@3": 0.5,
-          "recall@5": 0.635,
-          "recall@10": 0.731,
-          "mrr": 0.499,
-          "ms_mediana": 136.8
-        }
-      },
-      {
-        "config": "revisor blend=0.0",
-        "det": {
-          "n": 118,
-          "recall@1": 0.517,
-          "recall@3": 0.593,
-          "recall@5": 0.636,
-          "recall@10": 0.661,
-          "mrr": 0.565,
-          "ms_mediana": 446.8
-        },
-        "t2": {
-          "n": 52,
-          "recall@1": 0.423,
-          "recall@3": 0.5,
-          "recall@5": 0.635,
-          "recall@10": 0.731,
-          "mrr": 0.499,
-          "ms_mediana": 489.0
-        }
-      },
-      {
-        "config": "revisor blend=0.3",
-        "det": {
-          "n": 118,
-          "recall@1": 0.542,
-          "recall@3": 0.61,
-          "recall@5": 0.636,
-          "recall@10": 0.661,
-          "mrr": 0.583,
-          "ms_mediana": 442.8
-        },
-        "t2": {
-          "n": 52,
-          "recall@1": 0.385,
-          "recall@3": 0.538,
-          "recall@5": 0.654,
-          "recall@10": 0.731,
-          "mrr": 0.492,
-          "ms_mediana": 453.2
-        }
-      },
-      {
-        "config": "revisor blend=0.5",
-        "det": {
-          "n": 118,
-          "recall@1": 0.517,
-          "recall@3": 0.593,
-          "recall@5": 0.644,
-          "recall@10": 0.661,
-          "mrr": 0.567,
-          "ms_mediana": 453.4
-        },
-        "t2": {
-          "n": 52,
-          "recall@1": 0.385,
-          "recall@3": 0.558,
-          "recall@5": 0.635,
-          "recall@10": 0.731,
-          "mrr": 0.494,
-          "ms_mediana": 447.8
-        }
-      },
-      {
-        "config": "revisor blend=1.0",
-        "det": {
-          "n": 118,
-          "recall@1": 0.5,
-          "recall@3": 0.568,
-          "recall@5": 0.619,
-          "recall@10": 0.661,
-          "mrr": 0.548,
-          "ms_mediana": 444.2
-        },
-        "t2": {
-          "n": 52,
-          "recall@1": 0.327,
-          "recall@3": 0.519,
-          "recall@5": 0.596,
-          "recall@10": 0.731,
-          "mrr": 0.456,
-          "ms_mediana": 448.5
-        }
-      }
-    ],
-    "pool": [
-      {
-        "config": "pool=25 (sem revisor)",
-        "det": {
-          "n": 118,
-          "recall@1": 0.508,
-          "recall@3": 0.568,
-          "recall@5": 0.619,
-          "recall@10": 0.644,
-          "mrr": 0.55,
-          "ms_mediana": 76.4
-        },
-        "t2": {
-          "n": 52,
-          "recall@1": 0.423,
-          "recall@3": 0.5,
-          "recall@5": 0.615,
-          "recall@10": 0.712,
-          "mrr": 0.494,
-          "ms_mediana": 27.9
-        }
-      },
-      {
-        "config": "pool=50 (sem revisor)",
-        "det": {
-          "n": 118,
-          "recall@1": 0.525,
-          "recall@3": 0.585,
-          "recall@5": 0.627,
-          "recall@10": 0.653,
-          "mrr": 0.567,
-          "ms_mediana": 79.5
-        },
-        "t2": {
-          "n": 52,
-          "recall@1": 0.423,
-          "recall@3": 0.5,
-          "recall@5": 0.615,
-          "recall@10": 0.712,
-          "mrr": 0.494,
-          "ms_mediana": 38.7
-        }
-      },
-      {
-        "config": "pool=100 (sem revisor)",
-        "det": {
-          "n": 118,
-          "recall@1": 0.525,
-          "recall@3": 0.593,
-          "recall@5": 0.636,
-          "recall@10": 0.661,
-          "mrr": 0.571,
-          "ms_mediana": 94.6
-        },
-        "t2": {
-          "n": 52,
-          "recall@1": 0.423,
-          "recall@3": 0.5,
-          "recall@5": 0.615,
-          "recall@10": 0.712,
-          "mrr": 0.494,
-          "ms_mediana": 72.5
-        }
-      },
-      {
-        "config": "pool=150 (sem revisor)",
-        "det": {
-          "n": 118,
-          "recall@1": 0.517,
-          "recall@3": 0.593,
-          "recall@5": 0.636,
-          "recall@10": 0.661,
-          "mrr": 0.565,
-          "ms_mediana": 122.0
-        },
-        "t2": {
-          "n": 52,
-          "recall@1": 0.423,
-          "recall@3": 0.5,
-          "recall@5": 0.635,
-          "recall@10": 0.731,
-          "mrr": 0.499,
-          "ms_mediana": 119.5
-        }
-      }
-    ],
     "beta": [
       {
         "config": "beta_meta=0.0",
         "det": {
-          "n": 118,
+          "n": 2,
           "recall@1": 0.5,
-          "recall@3": 0.559,
-          "recall@5": 0.61,
-          "recall@10": 0.636,
-          "mrr": 0.544,
-          "ms_mediana": 85.4
+          "recall@3": 0.5,
+          "recall@5": 0.5,
+          "recall@10": 0.5,
+          "mrr": 0.5,
+          "ms_mediana": 4201.6
         },
         "t2": {
-          "n": 52,
-          "recall@1": 0.385,
-          "recall@3": 0.558,
-          "recall@5": 0.615,
-          "recall@10": 0.712,
-          "mrr": 0.483,
-          "ms_mediana": 56.4
+          "n": 2,
+          "recall@1": 0.5,
+          "recall@3": 1.0,
+          "recall@5": 1.0,
+          "recall@10": 1.0,
+          "mrr": 0.667,
+          "ms_mediana": 47.7
         }
       },
       {
         "config": "beta_meta=0.15",
         "det": {
-          "n": 118,
-          "recall@1": 0.517,
-          "recall@3": 0.593,
-          "recall@5": 0.636,
-          "recall@10": 0.661,
-          "mrr": 0.565,
-          "ms_mediana": 121.7
+          "n": 2,
+          "recall@1": 0.5,
+          "recall@3": 0.5,
+          "recall@5": 0.5,
+          "recall@10": 1.0,
+          "mrr": 0.55,
+          "ms_mediana": 76.6
         },
         "t2": {
-          "n": 52,
-          "recall@1": 0.423,
+          "n": 2,
+          "recall@1": 0.5,
           "recall@3": 0.5,
-          "recall@5": 0.635,
-          "recall@10": 0.731,
-          "mrr": 0.499,
-          "ms_mediana": 119.9
+          "recall@5": 1.0,
+          "recall@10": 1.0,
+          "mrr": 0.6,
+          "ms_mediana": 59.0
+        }
+      },
+      {
+        "config": "beta_meta=0.3",
+        "det": {
+          "n": 2,
+          "recall@1": 0.5,
+          "recall@3": 0.5,
+          "recall@5": 0.5,
+          "recall@10": 1.0,
+          "mrr": 0.55,
+          "ms_mediana": 72.0
+        },
+        "t2": {
+          "n": 2,
+          "recall@1": 0.5,
+          "recall@3": 0.5,
+          "recall@5": 0.5,
+          "recall@10": 1.0,
+          "mrr": 0.556,
+          "ms_mediana": 55.0
         }
       }
     ]

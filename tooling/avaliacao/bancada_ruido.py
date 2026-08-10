@@ -9,6 +9,7 @@ Uma variavel por rodada, mesmo gold set, duas familias medidas SEPARADAS:
 O base de Settings espelha o que esta SERVIDO no container rag-extractor-api, medido em
 10/08/2026 — nao o default do codigo. Toda config e um override declarado sobre esse base.
 
+  gabarito: avaliacao/gabarito.jsonl (unico, desde o expurgo de 10/08)
   venv: ~/AI/.venv-embed  (torch, sentence-transformers, psycopg, pgvector)
   uso : ~/AI/.venv-embed/bin/python bancada_ruido.py --eixo blend|pool|beta|todos
 """
@@ -23,8 +24,8 @@ from dataclasses import replace
 from pathlib import Path
 
 RAG = Path.home() / "AI/platafirma-conhecimento/rag"
-GOLD = Path.home() / "AI/platafirma-harness/avaliacao/gold-set"
-SAIDA = Path.home() / "AI/platafirma-harness/avaliacao/rag-medicao"
+GABARITO = Path.home() / "AI/platafirma-harness/avaliacao/gabarito.jsonl"
+SAIDA = Path(__file__).resolve().parent
 
 sys.path.insert(0, str(RAG))
 
@@ -59,19 +60,22 @@ def _env_do_servido() -> None:
 
 
 def carregar_gold():
+    """Le o gabarito unico. `det` = quem tem section_id alvo; `t2` = quem tem obra alvo.
+
+    Nao pontuavel fica de fora dos dois: item marcado assim existe para nao sumir do
+    registro, nao para entrar em conta de recall.
+    """
     det, t2 = [], []
-    for l in (GOLD / "gold-deterministico.jsonl").read_text().splitlines():
+    for l in GABARITO.read_text().splitlines():
         if not l.strip():
             continue
         d = json.loads(l)
-        if d.get("pontuavel") and d.get("alvo_section_id"):
+        if not d.get("pontuavel"):
+            continue
+        if d.get("alvo_section_id"):
             det.append({"pergunta": d["pergunta"], "alvo": d["alvo_section_id"], "id": d["id"]})
-    for l in (GOLD / "gold-t2-obraid-20260805.jsonl").read_text().splitlines():
-        if not l.strip():
-            continue
-        d = json.loads(l)
-        if d.get("pontuavel") and d.get("relevancia") == "positiva" and d.get("obra_ids"):
-            t2.append({"pergunta": d["pergunta"], "alvo": set(d["obra_ids"]), "id": d["id"]})
+        elif d.get("alvo_obra_ids"):
+            t2.append({"pergunta": d["pergunta"], "alvo": set(d["alvo_obra_ids"]), "id": d["id"]})
     return det, t2
 
 
@@ -127,7 +131,7 @@ def configs(eixo, base):
         for p in (25, 50, 100, 150):
             yield f"pool={p} (sem revisor)", replace(base, rerank_model="", hybrid_vec_pool=p)
     elif eixo == "beta":
-        for b in (0.0, 0.15):
+        for b in (0.0, 0.15, 0.30):
             yield f"beta_meta={b}", replace(base, rerank_model="", embed_meta_beta=b)
 
 
