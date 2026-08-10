@@ -42,6 +42,7 @@ quais stacks existem            : deploy                    lista o registro
 
 declarado x servido             : conferir servico [nome]   exit 1 = há divergência
 verbo x arq:0037                : conferir verbo [nome]     origem, cabeçalho e a conta
+skill servida x fonte           : conferir skill <nome> --servido <blob do carimbo>
 repo x arq:0042                 : conferir repo  [nome]     o que esta rastreado x a regua
 gate de commit (arq:0042)       : conferir repo --staged    o que o pre-commit chama
 instalar o gate num clone       : git -C <clone> config core.hooksPath ~/AI/platafirma-harness/hooks

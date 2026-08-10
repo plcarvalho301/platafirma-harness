@@ -10,6 +10,9 @@
   verbo   [nome]   verbo do PATH da plataforma: origem (symlink de repo, copia, so no
                    host, divergente), cabecalho de tres linhas, e a conta de
                    arq:0037 — um verbo por capacidade.
+  skill   [nome]   skill servida no claude.ai: o blob que o carimbo do arquivo montado
+                   declara, contra o blob da fonte no harness. O servido vive do outro
+                   lado da fronteira — a sessao le o carimbo e passa em --servido.
   repo    [nome]   clone de trabalho em ~/AI: o que esta rastreado contra a regua de
                    arq:0042. Com `--staged`, julga so o que o commit em curso
                    acrescenta, no repo do diretorio corrente — e o que o pre-commit
@@ -46,7 +49,7 @@ def uso(erro=None):
         print(f"erro: {erro}\n", file=sys.stderr)
     print(__doc__.strip(), file=sys.stderr)
     print("\nuso: conferir <classe> [alvo]", file=sys.stderr)
-    print("     classes implementadas : servico . verbo . repo", file=sys.stderr)
+    print("     classes implementadas : servico . verbo . repo . skill", file=sys.stderr)
     for c, motivo in CLASSES_ABERTAS.items():
         print(f"     classe declarada, sem implementacao : {c} — {motivo}", file=sys.stderr)
     sys.exit(2)
@@ -506,6 +509,70 @@ def conferir_repo(alvo, staged=False):
 
 # --- despacho ---------------------------------------------------------------
 
+
+# --- classe: skill ----------------------------------------------------------
+
+HARNESS = os.path.expanduser("~/AI/platafirma-harness")
+
+
+def conferir_skill(nome, servido=None):
+    """Compara o blob carimbado no arquivo servido com o blob da fonte.
+
+    A travessia ate o claude.ai e manual e nao deixa registro do lado do host: o
+    carimbo prova de onde a copia veio, nao que ela subiu. Sem --servido, imprime
+    o blob da fonte e onde ler o carimbo — ausencia de dado, nao conformidade.
+    """
+    if not nome:
+        rc, out, _ = sh(["ls", os.path.join(HARNESS, "skills")])
+        print("skills na fonte:", " ".join(out.split()) if rc == 0 else "(nenhuma)")
+        print("uso: conferir skill <nome> [--servido <blob>]")
+        return 2
+
+    caminho = f"skills/{nome}/SKILL.md"
+    rc, fonte, err = sh(["git", "-C", HARNESS, "rev-parse", f"HEAD:{caminho}"])
+    if rc != 0:
+        print(f"skill {nome!r} nao existe na fonte ({caminho}): {err}")
+        return 1
+
+    print(f"skill: {nome}")
+    print(f"  fonte   : {fonte}  ({caminho} em HEAD do harness)")
+    if not servido:
+        print("  servido : NAO INFORMADO — ler o campo `origem:` do front-matter em")
+        print("            /mnt/skills/user/<nome>/SKILL.md e repassar em --servido.")
+        print("  veredito: indeterminado (nao confundir com em dia)")
+        return 2
+
+    servido = servido.strip()
+    curto = servido[:12]
+    if fonte.startswith(servido) or servido.startswith(fonte[:12]):
+        print(f"  servido : {curto}")
+        print("  veredito: em dia")
+        return 0
+
+    print(f"  servido : {curto}")
+    # O carimbo grava o hash do BLOB, nao o do commit: `git log a..b` nao se aplica.
+    # O atraso se mede achando o commit mais recente em que o blob ainda era o servido.
+    rc, hist, _ = sh(["git", "-C", HARNESS, "log", "--format=%H %h %ci %s", "--", caminho])
+    desde = None
+    depois = []
+    for linha in hist.splitlines():
+        sha, curto_c, resto = linha.split(" ", 2)
+        rc2, blob, _ = sh(["git", "-C", HARNESS, "rev-parse", f"{sha}:{caminho}"])
+        if rc2 == 0 and blob.startswith(servido[:12]):
+            desde = f"{curto_c} {resto}"
+            break
+        depois.append(f"{curto_c} {resto}")
+    if desde:
+        print(f"  veredito: DIVERGENTE — {len(depois)} commit(s) desde que o servido subiu")
+        print(f"            servido corresponde a: {desde}")
+        for linha in depois[:6]:
+            print(f"            + {linha}")
+    else:
+        print("  veredito: DIVERGENTE — o blob servido nao existe na historia da fonte")
+        print("            (copia editada a mao, ou historia reescrita)")
+    return 1
+
+
 def main(argv):
     if len(argv) < 2:
         uso()
@@ -522,6 +589,14 @@ def main(argv):
         if alvo == "--staged":
             return conferir_repo(None, staged=True)
         return conferir_repo(alvo)
+    if classe == "skill":
+        servido = None
+        if "--servido" in argv:
+            i = argv.index("--servido")
+            servido = argv[i + 1] if len(argv) > i + 1 else None
+            if alvo == "--servido":
+                alvo = None
+        return conferir_skill(alvo, servido)
     uso(f"classe desconhecida: {classe}")
 
 
