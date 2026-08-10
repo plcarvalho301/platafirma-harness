@@ -38,6 +38,13 @@
       "repo": "platafirma-conhecimento",
       "papel": "wiki e MCP de conhecimento",
       "critico": true
+    },
+    "harness-controle": {
+      "compose": "~/AI/deploy/harness/controle/compose.yaml",
+      "repo": "platafirma-harness",
+      "papel": "plano de controle do harness: agregador e tela",
+      "critico": false,
+      "_nota": "compose existe mas NAO e o que roda: agregador e tela sao units systemd --user (deploy/harness/systemd/), porque os verbos do host nao sobrevivem a containerizacao."
     }
   },
   "_fora_do_registro": {

@@ -1,0 +1,16 @@
+[Unit]
+Description=Plano de controle do harness — agregador de estado
+After=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/home/claudinho/AI/deploy/harness/controle
+Environment=PF_RAIZ=/home/claudinho/AI
+Environment=AGREGADOR_ESTADO_PATH=/home/claudinho/AI/var/run/harness-controle/estado.json
+ExecStartPre=/bin/mkdir -p /home/claudinho/AI/var/run/harness-controle
+ExecStart=/home/claudinho/.local/bin/uv run python -m harness_controle.agregador
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=default.target
