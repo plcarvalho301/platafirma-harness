@@ -1,48 +1,58 @@
 #!/usr/bin/env bash
-# acervo ingerir — leva a obra da entrada até a vetorização, numa chamada.
+# acervo ingerir — leva a obra da entrada até o índice, numa chamada.
 #
-# Duas portas, uma cadeia. Por arquivo (default) e por planilha (`--planilha`, a
-# classificação digitada num .ods). As duas terminam nos mesmos degraus finais.
+# UMA porta. Os arquivos e a classificação entram juntos; a classificação pode ser
+# .ods (multi-aba) ou .csv (a aba Classificacao, plana). Antes de escrever qualquer
+# coisa, a conferência cruzada casa os dois lados e RECUSA nomeando a linha.
 #
-# Encadeia o que já existe; não reimplementa nada. O RAG é FERRAMENTA: quem manda
-# na sequência é este verbo, e o `rag_extractor` é chamado em cada degrau.
+# A cadeia tem duas metades, e só a de baixo é por motor:
 #
-#   por arquivo                            por planilha
-#     inventário                             carga da planilha  (classificação)
-#     armazenamento (MinIO)   [degrau b]     └────────┐
-#     filas                                           │
-#     catalogação             [degrau a]              │
-#     └──────────────────┬─────────────────────────────
-#     materialização     │  PDF + sidecar em disco
-#     chunking           │  [degrau c]
-#     vetor de texto     │  [degrau d]
-#     propagação de faceta
-#     vetor de metadado     [degrau e]
+#   entrada          inventário · armazenamento (MinIO) [b] · filas · catalogação [a]
+#                    + carga da classificação            ← a obra é UMA, motor nenhum
+#   ────────────────────────────────────────────────────────────────────────────────
+#   índice           materialização · chunking [c] · vetor de texto [d]
+#   (--motor <inst>) · propagação de faceta · vetor de metadado [e]
 #
-# DRY-RUN por default. `--apply` escreve. Mutação por arquivo exige a raiz explícita.
+# SEM `--motor`, a obra entra no acervo e PARA no degrau b: nada é indexado. Outro
+# embedder é outro espaço vetorial, e indexar sem dizer em qual é o erro que não dá
+# erro. As instâncias saem de registro/motor-instancias.json — `rag2` é entrada nova
+# na declaração, não código novo aqui.
+#
+# Encadeia o que já existe; não reimplementa nada. DRY-RUN por default; `--apply`
+# escreve. Mutação por arquivo exige a raiz explícita.
 set -euo pipefail
 
 AQUI="$(dirname "$(readlink -f "$0")")"
 RAG="${RAG_DIR:-$HOME/AI/platafirma-conhecimento/rag}"
 DESTINO="${CORPUS_DIR:-$RAG/corpus}"
+REGISTRO="${MOTOR_REGISTRO:-$HOME/AI/platafirma-harness/registro/motor-instancias.json}"
 
 uso() {
   cat >&2 <<'FIM'
 uso:
-  acervo ingerir <raiz>                     dry-run: mostra o que entraria
-  acervo ingerir <raiz> --apply             arquivo: da entrada até a vetorização
-  acervo ingerir --planilha [x.ods]         dry-run da carga de classificação
-  acervo ingerir --planilha [x.ods] --apply planilha: carga e depois a vetorização
-  acervo ingerir --apply                    RECUSADO: mutação exige a raiz explícita
+  acervo ingerir <raiz> [--classificacao <arq>] [--motor <inst>] [--apply]
+  acervo ingerir --classificacao <arq.csv|arq.ods> [--motor <inst>] [--apply]
+  acervo ingerir <raiz> --apply                 entra no acervo, NÃO indexa
+  acervo ingerir <raiz> --motor rag --apply     entra e indexa, numa chamada
+  acervo ingerir --apply                        RECUSADO: mutação exige alvo explícito
 
 <raiz> é a árvore de arquivos da entrada (ex.: ~/AI/entrada). O objeto é endereçado
 pelo sha256 do conteúdo, então reexecutar é idempotente: o que já subiu é pulado.
 
-Sem o .ods explícito, `--planilha` usa a única que estiver na fila de entrada e
-recusa se houver mais de uma — não escolhe por você. Ponha uma lá com `acervo-drop`.
+--classificacao aceita .csv (uma tabela: a aba Classificacao) e .ods (multi-aba,
+com ServeA e o vocabulário). Sem valor, usa a única .ods da fila de entrada e recusa
+se houver mais de uma. Ponha uma lá com `acervo-drop`.
+--serve-a <arq.csv> acompanha o CSV quando houver par frente×obra a declarar.
 
-Mede a escada antes e depois e imprime os dois retratos. Interrompido no meio,
-basta reexecutar: cada passo retoma de onde parou.
+--motor governa só a metade de baixo. Sem ele, nada é indexado e a chamada diz o que
+ficou pendente. Instâncias declaradas: `motor listar`. Reindexar o que já entrou é
+`motor <inst> indexar`.
+
+CONFERÊNCIA: havendo raiz e classificação juntas, arquivo sem linha e linha sem
+arquivo abortam ANTES de escrever, nomeando cada um. Nunca ingere pela metade.
+
+Mede a escada antes e depois. Interrompido no meio, basta reexecutar: cada passo
+retoma de onde parou.
 FIM
   exit 2
 }
@@ -57,29 +67,52 @@ python_do_rag() {
   exit 1
 }
 
-RAIZ=""; APPLY=0; PLANILHA=0; ODS=""
+RAIZ=""; APPLY=0; CLASSIF=""; TEM_CLASSIF=0; SERVE_A=""; MOTOR=""
 while [ $# -gt 0 ]; do
   case "$1" in
-    --apply)         APPLY=1; shift ;;
-    --planilha)      PLANILHA=1; shift ;;
-    -h|--help|ajuda) uso ;;
-    -*)              echo "acervo ingerir: opção desconhecida '$1'" >&2; uso ;;
-    *)               if [ "$PLANILHA" -eq 1 ] && [ -z "$ODS" ]; then ODS="$1"; else RAIZ="$1"; fi; shift ;;
+    --apply)                 APPLY=1; shift ;;
+    --planilha|--classificacao) TEM_CLASSIF=1; shift
+                             case "${1:-}" in ""|-*) ;; *) CLASSIF="$1"; shift ;; esac ;;
+    --serve-a)               SERVE_A="${2:-}"; shift 2 ;;
+    --motor)                 MOTOR="${2:-}"; shift 2 ;;
+    -h|--help|ajuda)         uso ;;
+    -*)                      echo "acervo ingerir: opção desconhecida '$1'" >&2; uso ;;
+    *)                       RAIZ="$1"; shift ;;
   esac
 done
 
-if [ "$PLANILHA" -eq 0 ]; then
-  [ -z "$RAIZ" ] && [ "$APPLY" -eq 1 ] && {
-    echo "acervo ingerir: --apply sem raiz. Mutação não adivinha alvo." >&2; uso; }
-  [ -z "$RAIZ" ] && uso
-  [ -d "$RAIZ" ] || { echo "acervo ingerir: não é diretório: $RAIZ" >&2; exit 1; }
+[ -z "$RAIZ" ] && [ "$TEM_CLASSIF" -eq 0 ] && uso
+[ -z "$RAIZ" ] && [ "$TEM_CLASSIF" -eq 0 ] && [ "$APPLY" -eq 1 ] && {
+  echo "acervo ingerir: --apply sem alvo. Mutação não adivinha." >&2; uso; }
+[ -n "$RAIZ" ] && [ ! -d "$RAIZ" ] && { echo "acervo ingerir: não é diretório: $RAIZ" >&2; exit 1; }
+[ -n "$CLASSIF" ] && [ ! -f "$CLASSIF" ] && { echo "acervo ingerir: não achei: $CLASSIF" >&2; exit 1; }
+
+# --- a instância, antes de qualquer escrita ---------------------------------
+if [ -n "$MOTOR" ]; then
+  ESTADO=$(python3 - "$REGISTRO" "$MOTOR" <<'PY'
+import json,sys
+try: d=json.load(open(sys.argv[1]))
+except Exception as e: print(f"ERRO registro ilegível: {e}"); raise SystemExit(0)
+i=d.get(sys.argv[2])
+print("AUSENTE " + " ".join(d) if i is None else i.get("estado","?"))
+PY
+)
+  case "$ESTADO" in
+    ativa) ;;
+    AUSENTE*) echo "acervo ingerir: não conheço o motor '$MOTOR'. Declarados: ${ESTADO#AUSENTE }" >&2; exit 1 ;;
+    *) echo "acervo ingerir: o motor '$MOTOR' está '$ESTADO' — não indexo em instância que não está ativa." >&2; exit 1 ;;
+  esac
 fi
+
+CSV=0
+case "$CLASSIF" in *.csv|*.CSV) CSV=1 ;; esac
 
 PY="$(python_do_rag)"
 export PYTHONPATH="$RAG"
 cd "$RAG"
 
-N=$([ "$PLANILHA" -eq 1 ] && echo 6 || echo 10)
+N=3; [ -n "$RAIZ" ] && N=$((N+4)); [ "$TEM_CLASSIF" -eq 1 ] && N=$((N+1))
+[ -n "$MOTOR" ] && N=$((N+5))
 K=0
 passo() { K=$((K+1)); printf '\n\033[1m== %s/%s  %s\033[0m\n' "$K" "$N" "$*"; }
 seco()  { [ "$APPLY" -eq 1 ] || { echo "   (dry-run) rodaria: $*"; return 1; }; return 0; }
@@ -87,11 +120,83 @@ seco()  { [ "$APPLY" -eq 1 ] || { echo "   (dry-run) rodaria: $*"; return 1; }; 
 passo "escada antes"
 "$AQUI/escada" | sed -n '/catalogadas/,/vetorizadas/p'
 
-if [ "$PLANILHA" -eq 1 ]; then
-  passo "carga da planilha — classificação digitada vira acervo.obra"
-  if [ "$APPLY" -eq 1 ]; then python3 scripts/carga-planilha.py ${ODS:+"$ODS"} --apply
-  else python3 scripts/carga-planilha.py ${ODS:+"$ODS"}; fi
+# --- conferência cruzada: falha ANTES de escrever ---------------------------
+passo "conferência — os arquivos e a classificação casam?"
+if [ -n "$RAIZ" ] && [ -n "$CLASSIF" ]; then
+  python3 - "$RAIZ" "$CLASSIF" <<'PY' || exit 1
+import csv, sys, zipfile
+from pathlib import Path
+from xml.etree import ElementTree as ET
+
+raiz, classif = Path(sys.argv[1]), Path(sys.argv[2])
+EXT = {".pdf", ".epub", ".docx", ".txt", ".md", ".html", ".pptx", ".xlsx"}
+no_disco = {p.name for p in raiz.rglob("*") if p.is_file() and p.suffix.lower() in EXT}
+
+def linhas_csv(p):
+    with open(p, newline="", encoding="utf-8-sig") as f:
+        r = list(csv.reader(f))
+    return r
+
+def linhas_ods(p):
+    NS = "{urn:oasis:names:tc:opendocument:xmlns:table:1.0}"
+    TX = "{urn:oasis:names:tc:opendocument:xmlns:text:1.0}"
+    with zipfile.ZipFile(p) as z:
+        raiz_ = ET.fromstring(z.read("content.xml"))
+    for t in raiz_.iter(f"{NS}table"):
+        if t.get(f"{NS}name") != "Classificacao":
+            continue
+        out = []
+        for row in t.iter(f"{NS}table-row"):
+            cel = []
+            for c in row.iter(f"{NS}table-cell"):
+                rep = int(c.get(f"{NS}number-columns-repeated", "1"))
+                if rep > 200: break
+                txt = "".join("".join(x.itertext()) for x in c.iter(f"{TX}p"))
+                cel.extend([txt] * rep)
+            out.append(cel)
+        return out
+    return []
+
+linhas = linhas_csv(classif) if classif.suffix.lower() == ".csv" else linhas_ods(classif)
+linhas = [l for l in linhas if any(str(c).strip() for c in l)]
+if not linhas:
+    print(f"   RECUSADO: {classif.name} não tem linha de dados.", file=sys.stderr); raise SystemExit(1)
+
+cab = [str(c).strip().lower() for c in linhas[0]]
+if "arquivo" not in cab:
+    print(f"   RECUSADO: {classif.name} não tem coluna 'arquivo' — sem ela não dá para casar "
+          f"linha com arquivo. Colunas vistas: {', '.join(c for c in cab if c)}", file=sys.stderr)
+    raise SystemExit(1)
+ia = cab.index("arquivo")
+
+declarados, orfas = {}, []
+for n, l in enumerate(linhas[1:], start=2):
+    nome = (l[ia] if ia < len(l) else "").strip()
+    (orfas.append(n) if not nome else declarados.setdefault(nome, n))
+
+falta_arquivo = {n: ln for n, ln in declarados.items() if n not in no_disco}
+falta_linha = sorted(no_disco - set(declarados))
+
+if orfas or falta_arquivo or falta_linha:
+    print(f"   RECUSADO — {classif.name} e {raiz} não casam. Nada foi escrito.", file=sys.stderr)
+    for n in orfas:
+        print(f"     linha {n}: coluna 'arquivo' vazia", file=sys.stderr)
+    for nome, ln in sorted(falta_arquivo.items(), key=lambda kv: kv[1]):
+        print(f"     linha {ln}: declara '{nome}', que não existe em {raiz}", file=sys.stderr)
+    for nome in falta_linha:
+        print(f"     arquivo sem linha na classificação: {nome}", file=sys.stderr)
+    raise SystemExit(1)
+
+print(f"   {len(declarados)} arquivo(s) e {len(declarados)} linha(s), casados um a um.")
+PY
+elif [ -n "$RAIZ" ]; then
+  echo "   sem classificação nesta chamada: os arquivos entram sem faceta declarada."
 else
+  echo "   sem raiz nesta chamada: a classificação entra sobre o que já está no acervo."
+fi
+
+# --- metade de cima: a obra, que é uma só ------------------------------------
+if [ -n "$RAIZ" ]; then
   passo "inventário da raiz — $RAIZ"
   if [ "$APPLY" -eq 1 ]; then
     # O manifest liga sha256 ao nome legível, e perdê-lo é irreversível. Raiz parcial
@@ -123,34 +228,70 @@ else
   else "$PY" -m rag_extractor.cli carregar-acervo; fi
 fi
 
-passo "materialização — PDF e sidecar em $DESTINO"
-mkdir -p "$DESTINO"
-if seco "cli materializar-acervo $DESTINO --apply"; then
-  "$PY" -m rag_extractor.cli materializar-acervo "$DESTINO" --apply
-else "$PY" -m rag_extractor.cli materializar-acervo "$DESTINO"; fi
+if [ "$TEM_CLASSIF" -eq 1 ]; then
+  passo "carga da classificação — a faceta digitada vira acervo.obra"
+  if [ "$CSV" -eq 1 ]; then
+    ABAS="$(mktemp)"; trap 'rm -f "$ABAS"' EXIT
+    python3 - "$CLASSIF" "${SERVE_A:-}" "$ABAS" <<'PY'
+import csv, json, sys
+def ler(p):
+    if not p: return []
+    with open(p, newline="", encoding="utf-8-sig") as f:
+        return [l for l in csv.reader(f) if any(str(c).strip() for c in l)]
+json.dump({"Classificacao": ler(sys.argv[1]), "ServeA": ler(sys.argv[2])},
+          open(sys.argv[3], "w"), ensure_ascii=False)
+PY
+    # CSV é plano: entra pela mesma porta do .ods, como abas-json. Quem valida
+    # vocabulário e escreve continua sendo `rag_extractor.acervo`.
+    if seco "cli migrar-acervo --abas-json <csv> --apply"; then
+      "$PY" -m rag_extractor.cli migrar-acervo --abas-json "$ABAS" --apply
+    else "$PY" -m rag_extractor.cli migrar-acervo --abas-json "$ABAS"; fi
+  else
+    if [ "$APPLY" -eq 1 ]; then python3 scripts/carga-planilha.py ${CLASSIF:+"$CLASSIF"} --apply
+    else python3 scripts/carga-planilha.py ${CLASSIF:+"$CLASSIF"}; fi
+  fi
+fi
 
-passo "chunking  [degrau c]"
-seco "cli ingest $DESTINO" && "$PY" -m rag_extractor.cli ingest "$DESTINO"
+# --- metade de baixo: o índice, que é por instância --------------------------
+if [ -n "$MOTOR" ]; then
+  passo "materialização — PDF e sidecar em $DESTINO  [motor $MOTOR]"
+  mkdir -p "$DESTINO"
+  if seco "cli materializar-acervo $DESTINO --apply"; then
+    "$PY" -m rag_extractor.cli materializar-acervo "$DESTINO" --apply
+  else "$PY" -m rag_extractor.cli materializar-acervo "$DESTINO"; fi
 
-passo "vetor de texto  [degrau d]"
-seco "cli embed" && "$PY" -m rag_extractor.cli embed
+  passo "chunking  [degrau c]"
+  seco "cli ingest $DESTINO" && "$PY" -m rag_extractor.cli ingest "$DESTINO"
 
-passo "propagação de faceta para documents/chunks"
-if seco "cli sincronizar-acervo --apply"; then "$PY" -m rag_extractor.cli sincronizar-acervo --apply
-else "$PY" -m rag_extractor.cli sincronizar-acervo; fi
+  passo "vetor de texto  [degrau d]"
+  seco "cli embed" && "$PY" -m rag_extractor.cli embed
 
-passo "vetor de metadado  [degrau e]"
-seco "cli embed-meta" && "$PY" -m rag_extractor.cli embed-meta
+  passo "propagação de faceta para documents/chunks"
+  if seco "cli sincronizar-acervo --apply"; then "$PY" -m rag_extractor.cli sincronizar-acervo --apply
+  else "$PY" -m rag_extractor.cli sincronizar-acervo; fi
+
+  passo "vetor de metadado  [degrau e]"
+  seco "cli embed-meta" && "$PY" -m rag_extractor.cli embed-meta
+fi
 
 passo "escada depois"
 "$AQUI/escada" | sed -n '/catalogadas/,/vetorizadas/p'
 
+ALVO=""; [ -n "$RAIZ" ] && ALVO=" $RAIZ"
+[ "$TEM_CLASSIF" -eq 1 ] && ALVO="$ALVO --classificacao ${CLASSIF:-}"
 if [ "$APPLY" -eq 1 ]; then
+  if [ -z "$MOTOR" ]; then
+    echo "
+Nada foi indexado: esta chamada não nomeou motor. A obra está no acervo, parada no degrau b.
+  indexar agora:   acervo ingerir$ALVO --motor <inst> --apply
+  ou o que já entrou:  motor <inst> indexar --apply"
+  fi
   echo "
 Falta publicar: o export e as chamadas Cargo não são ingestão.
   PlataFirma:Ops/sincronizar-o-acervo, passos 3 e 6"
 else
-  ALVO=$([ "$PLANILHA" -eq 1 ] && echo "--planilha ${ODS:-}" || echo "$RAIZ")
+  [ -z "$MOTOR" ] && echo "
+Esta chamada não nomeou motor: entraria no acervo e pararia no degrau b, sem indexar."
   echo "
-DRY-RUN — nada foi escrito. Para valer:  acervo ingerir $ALVO --apply"
+DRY-RUN — nada foi escrito. Para valer:  acervo ingerir$ALVO${MOTOR:+ --motor $MOTOR} --apply"
 fi
