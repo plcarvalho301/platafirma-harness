@@ -32,7 +32,7 @@ uso:
   tarefas projetos                        id e nome de cada projeto
   tarefas listar <projeto>                cards abertos
   tarefas listar-tudo <projeto>           inclui os fechados
-  tarefas ler <id>                        card em texto, com labels e descrição
+  tarefas ler <id>|#<index>               card em texto, com labels e descrição
   tarefas criar <projeto> "<título>" [--desc "<txt>"|--desc-stdin] [--prio N]
   tarefas comentar <id> ["<txt>"]         sem texto, lê de stdin
   tarefas fechar <id>                     marca done (GET, muta, POST inteiro)
@@ -75,14 +75,33 @@ linhas_de_card() { # filtra o JSON de uma lista de cards em id / marca / título
   jq -r "$1"' | "\(.id)\t\(if .done then "x" else " " end)\t\(.title)"'
 }
 
-cards_do_projeto() { busca GET "/projects/$1/tasks?per_page=200"; }
+# per_page tem teto de 50 no servidor: pedir 200 devolve 50 em silêncio. Toda
+# listagem pagina até x-pagination-total-pages, ou some com card sem avisar.
+paginas() { # paginas /caminho?query — concatena todas as páginas num só array
+  local caminho="$1" pag=1 total=1 corpo hdr
+  while [ "$pag" -le "$total" ]; do
+    hdr=$(mktemp); corpo=$(curl -sfS -D "$hdr" "$BASE$caminho&per_page=50&page=$pag" \
+            -H "Authorization: Bearer $VIKUNJA_API_TOKEN")
+    [ "$pag" = 1 ] && total=$(awk -F': *' 'tolower($1)=="x-pagination-total-pages"{gsub(/\r/,"",$2);print $2}' "$hdr")
+    total="${total:-1}"; rm -f "$hdr"; printf '%s\n' "$corpo"; pag=$((pag+1))
+  done | jq -s 'add // []'
+}
 
-projetos()     { busca GET /projects | jq -r '.[] | "\(.id)\t\(.title)"'; }
-listar()       { cards_do_projeto "$1" | linhas_de_card '.[] | select(.done == false)'; }
-listar_tudo()  { cards_do_projeto "$1" | linhas_de_card '.[]'; }
+# id negativo é filtro salvo, não projeto: /projects/-8/tasks devolve 404.
+projetos()     { busca GET /projects | jq -r '.[] | select(.id > 0) | "\(.id)\t\(.title)"'; }
+listar()       { paginas "/projects/$1/tasks?filter=done%20%3D%20false" | linhas_de_card '.[]'; }
+listar_tudo()  { paginas "/projects/$1/tasks?" | linhas_de_card '.[]'; }
+
+# "#267" é o index dentro do projeto (o que a fila cita); "360" é o id (a chave).
+# Os dois números convivem no mesmo card — sem esta distinção a busca vira caça.
+por_index() { paginas "/projects/${PROJETO_PADRAO:-46}/tasks?filter=index%20%3D%20$1" \
+                | jq -r '.[0].id // empty'; }
 
 ler() {
-  busca GET "/tasks/$1" | jq -r '
+  local alvo="$1"
+  case "$alvo" in \#*) alvo=$(por_index "${alvo#\#}") ;; esac
+  [ -n "$alvo" ] || { echo "não achei card com esse #index" >&2; exit 1; }
+  busca GET "/tasks/$alvo" | jq -r '
     "# \(.title)\n\(.identifier) · projeto=\(.project_id) · done=\(.done) · labels: \([.labels[]?.title]|join(", "))\n\n\(.description // "")"' \
     | para_texto
 }

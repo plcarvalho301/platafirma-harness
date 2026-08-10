@@ -24,7 +24,7 @@ fechar a fita                   : descansar fita                 memoria conferi
 so o estado da memoria          : descansar fita --so-memoria    sem o dossie, mais rapido
 achar slot fora do remit        : descansar varredura            todas as cadeiras; timer diario ja roda
 
-ler um card                     : tarefas ler <id>
+ler um card                     : tarefas ler <id>|#<index>   #N e o da fila; <id> e a chave
 listar projetos                 : tarefas projetos
 listar cards abertos            : tarefas listar <projeto>        (listar-tudo inclui fechados)
 abrir card                      : tarefas criar <projeto> "<título>" [--desc "<txt>"|--desc-stdin] [--prio N]
@@ -151,9 +151,8 @@ nada — pode consumir sem responder.
 - Fita que morre depois de ler perde o aviso, não a carta: ela volta por
   `--desde` dentro da janela.
 
-Projetos do rastreador: `46 Cards` · `1 Inbox` são projetos reais; id negativo
-(`-6 Fabrica`, `-7 Carteira`, `-8 Triagem`, `-9 Parado`, `-10 Épico-Harness`,
-`-11 Carteira pessoal`, `-12 Refino`) é **filtro salvo** — lê, não recebe card.
+Projetos do rastreador: `46 Cards` e `1 Inbox`, só. Filtro salvo (id negativo)
+não é projeto e devolve 404 em `/tasks` — `tarefas projetos` já os omite.
 
 Clones de trabalho: `platafirma-{core,conhecimento,arquitetura,harness,motor,posto}`
 e `modulo-osint`, todos em `~/AI`.
