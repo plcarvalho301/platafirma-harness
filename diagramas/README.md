@@ -8,10 +8,13 @@ publica. Não há figura em `docs/` nem em subpasta de assunto.
 - **Um diretório, sem subpasta.** Recorte vai no nome do arquivo, não em pasta.
 - **Nome:** `<assunto>[-<recorte>].<ext>`, kebab-case, sem prefixo de repositório
   e sem data.
-- **Render e fonte no mesmo nome-base** (`arq:0042`): `posse-de-mensagem.svg` +
-  `posse-de-mensagem.d2`.
-- **Sufixo de ferramenta** (`-d2`, `-mmd`) só existe enquanto dois renders do
-  mesmo assunto disputam. Escolhido um, o sufixo sai.
+- **Render leva o nome completo da fonte mais `.svg`** (`arq:0042`, norma do
+  arquiteto de 09/08/2026): `topologia-estratos.d2` rende
+  `topologia-estratos.d2.svg`. O nome-base do render deriva do arquivo-fonte
+  inteiro, não do radical — colisão impossível com qualquer número de geradores.
+- **Regeneração**, chamada de dentro de `diagramas/`:
+  - `d2 <fonte>.d2 <fonte>.d2.svg`
+  - `npx -y @mermaid-js/mermaid-cli -i <fonte>.mmd -o <fonte>.mmd.svg`
 - **Índice obrigatório:** diagrama novo entra na tabela abaixo no mesmo commit.
 - **Instrumento não mora aqui**: `tooling/diagramas/`.
 
@@ -22,7 +25,7 @@ Régua de forma: `platafirma-arquitetura/design/diagramas.md`.
 | Diagrama | Mostra | Fonte |
 |---|---|---|
 | `posse-de-mensagem.svg` | Posse e leitura de mensagem na fila | `.d2`, `.mmd` |
-| `topologia-camadas-d2.svg` | Camadas da plataforma | `topologia-camadas.d2` |
-| `topologia-estratos-d2.svg` | Estratos da plataforma | `topologia-estratos.d2` |
-| `topologia-estratos-mmd.svg` | Estratos da plataforma (render Mermaid) | `topologia-estratos.mmd` |
+| `topologia-camadas.d2.svg` | Camadas da plataforma | `topologia-camadas.d2` |
+| `topologia-estratos.d2.svg` | Estratos da plataforma | `topologia-estratos.d2` |
+| `topologia-estratos.mmd.svg` | Estratos da plataforma (render Mermaid) | `topologia-estratos.mmd` |
 | — | Atos do motor sobre trilho (sem render) | `motor-atos-sobre-trilho.mmd` |
