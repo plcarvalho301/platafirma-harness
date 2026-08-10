@@ -20,9 +20,10 @@ anotar antes de a fita morrer   : mesa anota <chapeu>            corpo em stdin;
 esquecer um chapeu              : mesa limpa <chapeu>            alvo obrigatorio
 indice dos cadernos duraveis    : mesa caderno                   idade e tamanho, sem corpo
 abrir o caderno de um chapeu    : mesa caderno <chapeu>          corpo sob demanda
-fechar a fita                   : descansar fita                 memoria + fatos volateis + triagem do Project
-so o estado da memoria          : descansar fita --so-memoria    sem o dossie, mais rapido
-achar slot fora do remit        : descansar varredura            todas as cadeiras; timer diario ja roda
+fechar a fita                   : encerrar fita                  memoria + fatos volateis + triagem do Project
+                                  (`descansar` e o mesmo verbo, outro nome)
+so o estado da memoria          : encerrar fita --so-memoria     sem o dossie, mais rapido
+achar slot fora do remit        : encerrar varredura             todas as cadeiras; timer diario ja roda
 
 ler um card                     : tarefas ler <id>|#<index>   #N e o da fila; <id> e a chave
 listar projetos                 : tarefas projetos
@@ -108,6 +109,13 @@ existe pra fechar.
   automaticamente quando aplicável.
 - **Escrita de git/wiki é manual**, sob pedido explícito do dono — não é
   trigger automático de fim de sessão.
+- **Fechou marco, encerra a fita.** `encerrar fita` roda por marco fechado —
+  entrega commitada, card fechável, assunto encerrado — e não por hora do dia.
+  Esperar o fim do expediente tem o defeito que o verbo existe para corrigir: a
+  sessão não sabe quando morre. Quem chama é a cadeira, sem o dono pedir.
+- **O dono também dispara por fala.** "encerra", "fecha o dia", "descansa", "vai
+  dormir" e afins são a chamada do verbo, não conversa — quem interpreta é a
+  sessão, e o binário não tem como ouvir isso.
 
 ## Fila — o que merece mensagem (teste de admissão)
 

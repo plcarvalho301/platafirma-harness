@@ -226,7 +226,9 @@ def ato_varredura(args):
 
 
 def main():
-    p = argparse.ArgumentParser(prog="descansar",
+    # Chamado por dois nomes (`encerrar` e `descansar` sao o mesmo verbo): o uso
+    # tem de sair com o nome que a pessoa digitou, ou o texto contradiz o comando.
+    p = argparse.ArgumentParser(prog=os.path.basename(sys.argv[0]),
                                 description="fim de fita: memoria conferida e fatos volateis medidos")
     sub = p.add_subparsers(dest="ato")
 
