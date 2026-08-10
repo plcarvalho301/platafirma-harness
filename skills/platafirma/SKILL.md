@@ -39,19 +39,17 @@ topologia de memória.
 
 ## Fila de mensagens entre personas
 Transporte assíncrono entre as cadeiras, no ambiente do usuário `claudinho`.
-**Uma caixa é um arquivo**, `fila/<persona>.md`, e cada mensagem é um bloco
-dentro dele. Operada só pelo comando `fila` (`~/AI/bin/fila`, já no PATH do
-`run_command`).
+**A caixa é o stream `caixa:<persona>`** na malha `msg` (Valkey, arq:0018),
+operada só pelo comando `fila` (`~/AI/bin/fila`, já no PATH do `run_command`).
 
-**`write_file` contra `fila/<persona>.md` destrói a caixa**: a tool substitui o
-arquivo inteiro, sem erro. O comando anexa sob `flock`, e não há outra porta.
-Criar `fila/<persona>/` como diretório é o formato antigo, aposentado — comando
-nenhum lê, e a mensagem some de vista sem sumir do disco.
+**Não existe caixa no sistema de arquivos.** `fila/*.md` é vestígio do transporte
+antigo: ninguém escreve lá, e ler de lá devolve estado congelado sem erro nenhum.
+Toda leitura passa pelo comando — inclusive a de quem só quer espiar.
 
-Abertura de sessão, uma chamada e sem conteúdo:
+Todo ato declara quem opera, senão o comando recusa em vez de adivinhar:
 
 ```
-fila status <minha-persona>
+PF_CADEIRA=<minha-persona> fila status <minha-persona>
 ```
 
 **Limiar de menção — regra dura, sem exceção por bom senso.** Menos de 10
@@ -72,20 +70,26 @@ defeito da persona, não zelo.
 corpo: saber que chegou e ler o que diz são atos separados, e só o segundo custa
 contexto.
 
-### Ler e consumir
+### Ler
 ```
-fila ler <minha-persona> [remetente]
-fila consumir <minha-persona> <id>...
+fila ler <minha-persona>                     só o que chegou desde a última leitura
+fila ler <minha-persona> --tudo [remetente]  histórico de 7 dias, não move o ponteiro
+fila ler <minha-persona> --desde AAAAMMDDTHHMMSS [remetente]
 ```
 
-`consumir` só depois de processar a mensagem. Ler em lote e consumir tudo antes de
-agir perde o que ainda não foi feito, e não há como recuperar. Mensagem que gera
-resposta vira envio novo, com `--responde <id>`.
+**Ler já confirma.** Não há ato de consumir e não há caixa a zerar: o ponteiro
+vive no servidor, e `ler` entrega uma vez só. Chamar `ler` para "dar uma olhada"
+no meio de outra tarefa gasta a entrega — quem não vai processar agora usa
+`status`, ou `--tudo`, que é leitura fria.
+
+A caixa retém **7 dias**. Mensagem é consumo curto: o que tem permanência vira
+card, commit ou wiki antes de vencer, e o que não virou some com o prazo.
+Mensagem que gera resposta vira envio novo, com `--responde <id>`.
 
 ### Escrever
 ```
-fila enviar <destinatario> --de <minha-persona> --tipo <tipo> --assunto <assunto> \
-     [--ref <ref>] [--responde <id>]        # corpo em stdin
+PF_CADEIRA=<minha-persona> fila enviar <destinatario> --tipo <tipo> \
+     --assunto <assunto> [--ref <ref>] [--responde <id>]    # corpo em stdin
 ```
 
 Destinatário fora de `fila/.personas` é recusado, e caixa encerrada devolve o aviso
