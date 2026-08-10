@@ -34,7 +34,7 @@ from .agregador import ESTADO_PATH
 from .estado_leitura import carregar_estado
 from .verbos import BIN
 
-REPO_HARNESS = Path(__file__).resolve().parents[3]
+REPO_HARNESS = Path(__file__).resolve().parents[2]
 TOKENS_PATH = Path(
     os.environ.get(
         "TOKENS_CSS_PATH",
@@ -66,7 +66,7 @@ def _commits_por_dia(limite_dias: int = 14) -> dict[str, list[dict]]:
         r = subprocess.run(
             ["git", "-C", str(REPO_HARNESS), "log", f"--since={limite_dias} days ago",
              "--date=short", "--format=%ad%x09%h%x09%s"],
-            capture_output=True, text=True, timeout=10, check=False,
+            capture_output=True, text=True, encoding="utf-8", timeout=10, check=False,
         )
     except OSError:
         return {}
@@ -86,7 +86,7 @@ def _tarefas_texto(argv: list[str], timeout: float = 20) -> list[str]:
     caminho = BIN / argv[0]
     try:
         r = subprocess.run([str(caminho), *argv[1:]], capture_output=True, text=True,
-                            timeout=timeout, check=False)
+                            encoding="utf-8", timeout=timeout, check=False)
     except (OSError, subprocess.TimeoutExpired):
         return []
     if r.returncode != 0:
@@ -146,7 +146,7 @@ def _run_fila_enviar(destinatario: str, tipo: str, assunto: str, corpo: str):
     caminho = BIN / "fila_streams.py"
     return subprocess.run(
         [str(caminho), "enviar", destinatario, "--tipo", tipo, "--assunto", assunto],
-        input=corpo, capture_output=True, text=True, env=env, timeout=15, check=False,
+        input=corpo, capture_output=True, text=True, encoding="utf-8", env=env, timeout=15, check=False,
     )
 
 
@@ -180,7 +180,7 @@ ALVOS_EXCLUIDOS_RESTART = {"cloudflared", "oauth2-proxy"}
 def _run_infra_restart(alvo: str):
     caminho = BIN / "infra"
     return subprocess.run([str(caminho), "restart", alvo], capture_output=True, text=True,
-                           timeout=15, check=False)
+                           encoding="utf-8", timeout=15, check=False)
 
 
 async def reiniciar(request):

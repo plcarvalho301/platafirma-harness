@@ -106,16 +106,37 @@ def pagina(titulo: str, ativo: str, direita_html: str, corpo_html: str) -> str:
 # --- bloco 1: Sinal ------------------------------------------------------
 
 
-def _estado_container(nome: str, saude_doentes: dict[str, str], saude_falhadas: set[str]) -> tuple[str, str]:
-    """(rotulo, papel) — três níveis: no ar (calmo) / degradado (caveat) /
-    fora (alert). Container sem sonda própria (trilha C/#254 fora de escopo
-    deste card) usa só o que `infra estado`/`infra saude` já dão."""
-    if nome in saude_doentes:
-        status = saude_doentes[nome].lower()
-        if any(p in status for p in ("exited", "dead")):
-            return "fora", "alert"
-        return "degradado", "caveat"
-    return "no ar", "calmo"
+def _estado_container(estado_docker: str | None, saude_nativa: str | None) -> tuple[str, str, str]:
+    """(rotulo, papel, caminho_exercitado) — três níveis: no ar (calmo) /
+    degradado (caveat) / fora (alert), mais "sem sinal" (caveat) quando não
+    há dado nenhum pra confiar.
+
+    Dois sinais DISTINTOS, não um substituindo o outro:
+    - `estado_docker` (docker inspect .State): "running" ou não — isto o
+      Docker já garante HOJE, não depende de trilha C/#254. Container
+      parado/morto é "fora", sempre, mesmo sem healthcheck configurado —
+      é exatamente o que o aceite 2 do card verifica ("derrubando o
+      rag-extractor-api").
+    - `saude` (o healthcheck NATIVO do container, quando existe — parte do
+      Status entre parênteses): só existe pra container com HEALTHCHECK
+      declarado na imagem/compose. Refina "running" em healthy/unhealthy/
+      starting; ausência dele não é "sem confiança nenhuma", é "sem
+      diagnóstico de aplicação" — sonda externa por serviço é trilha C,
+      ainda não construída, e É nesse caso (rodando, sem healthcheck
+      próprio) que "sem sinal" se aplica de verdade.
+    """
+    estado_docker = (estado_docker or "").lower()
+    if estado_docker and estado_docker != "running":
+        return "fora", "alert", f"docker: {estado_docker}"
+    if saude_nativa == "unhealthy":
+        return "degradado", "caveat", "healthcheck: unhealthy"
+    if saude_nativa == "healthy":
+        return "no ar", "calmo", "healthcheck: healthy"
+    if saude_nativa:
+        return "degradado", "caveat", f"healthcheck: {saude_nativa}"
+    if estado_docker == "running":
+        return "sem sinal", "caveat", "sem sonda"
+    return "sem sinal", "caveat", "sem sonda (estado do container indisponível)"
 
 
 def bloco_sinal(bloco_estado: dict, bloco_saude: dict) -> str:
@@ -128,19 +149,11 @@ def bloco_sinal(bloco_estado: dict, bloco_saude: dict) -> str:
     else:
         dados = bloco_estado.get("dados") or {}
         saude = bloco_saude.get("dados") or {}
-        doentes = {d["nome"]: d["status"] for d in saude.get("doentes", []) if d.get("nome")}
-        falhadas = {u["nome"] for u in saude.get("falhadas", []) if u.get("nome")}
 
         for c in dados.get("conteineres", []):
             nome = c.get("nome") or "?"
             excluido = nome in CLOUDFLARED_OAUTH2PROXY
-            if c.get("saude") == "unhealthy":
-                estado_txt, papel = "degradado", "caveat"
-            else:
-                estado_txt, papel = _estado_container(nome, doentes, falhadas)
-            caminho = c.get("saude") or "sem sonda"
-            papel_final = papel if c.get("saude") else "caveat"
-            estado_final = estado_txt if c.get("saude") else "sem sinal"
+            estado_final, papel_final, caminho = _estado_container(c.get("estado_docker"), c.get("saude"))
             acao = (
                 '<span class="motivo">sustenta esta tela</span>' if excluido
                 else f'<form method="post" action="/acoes/reiniciar" class="inline">'
@@ -153,6 +166,7 @@ def bloco_sinal(bloco_estado: dict, bloco_saude: dict) -> str:
                 f"<td class='dir'>{_esc(c.get('desde') or '—')}</td><td>{acao}</td></tr>"
             )
 
+        falhadas = {u["nome"] for u in saude.get("falhadas", []) if u.get("nome")}
         for u in dados.get("units", []):
             nome = u.get("nome") or "?"
             fora = nome in falhadas

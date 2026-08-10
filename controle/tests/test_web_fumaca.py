@@ -89,6 +89,34 @@ def test_feito_responde(cliente, monkeypatch):
     assert r.status_code == 200
 
 
+def test_repo_harness_aponta_pro_repo_de_verdade():
+    """REPO_HARNESS precisa ser a raiz do clone (onde `git log` funciona), nao
+    um nivel a mais/a menos por engano no numero de .parents — achado ao
+    testar /feito manualmente contra um servidor real: `.parents[3]` (errado)
+    apontava pro pai do clone (D:\\, no dev), onde `git log` falha silencioso
+    e /feito sempre mostrava "nada a mostrar", mascarado pelos outros testes
+    porque todos mockam `_monta_feito` inteiro."""
+    import subprocess
+
+    r = subprocess.run(
+        ["git", "-C", str(web.REPO_HARNESS), "rev-parse", "--is-inside-work-tree"],
+        capture_output=True, text=True, check=False,
+    )
+    assert r.returncode == 0
+    assert r.stdout.strip() == "true"
+    assert (web.REPO_HARNESS / "bin").is_dir()
+
+
+def test_commits_por_dia_encontra_commits_reais():
+    """Nao mocka nada — roda contra o proprio clone da branch, que tem
+    commits de verdade (os dos LOTEs deste card). Prova que _commits_por_dia
+    esta de fato lendo o repo certo, nao um caminho vazio/errado."""
+    commits = web._commits_por_dia(limite_dias=365)
+    assert commits
+    todas_mensagens = [c["mensagem"] for dia in commits.values() for c in dia]
+    assert any("card #390" in m or "#390" in m for m in todas_mensagens)
+
+
 def test_tokens_css_responde(cliente, tmp_path, monkeypatch):
     tokens = tmp_path / "tokens.css"
     tokens.write_text(":root { --platafirma-gray-100: #fff; }", encoding="utf-8")
@@ -125,6 +153,77 @@ def test_verbo_morto_nao_pinta_linha_saudavel(cliente, tmp_path, monkeypatch):
     assert "chip calmo" not in corpo.split('id="sinal"')[1].split("</section>")[0]
     assert "indisponivel" in corpo.lower() or "sem leitura" in corpo.lower()
     assert "timeout" in corpo
+
+
+def test_caixa_parada_acima_do_limiar_vira_alert(cliente, tmp_path, monkeypatch):
+    """Aceite 3 do card: "caixa com carta parada aparece sem ninguém
+    consultar" — acima do limiar de idade (1h default), a linha e alert, nao
+    so caveat, senao "parada" nao se distingue visualmente de "recem-parada"."""
+    estado = dict(ESTADO_OK)
+    estado["fila_status"] = {
+        "lido_em": 1000.0, "estado": "ok", "motivo": None,
+        "dados": [
+            {"persona": "claudinho-TI", "pendentes": 3, "total_historico": 10, "estado": "parada",
+             "idade_mais_antiga_seg": 7200, "ultima_leitura_seg": 7200},
+        ],
+    }
+    caminho = tmp_path / "estado_parada.json"
+    caminho.write_text(json.dumps(estado), encoding="utf-8")
+    monkeypatch.setattr(web, "ESTADO_PATH", caminho)
+
+    r = cliente.get("/")
+    trecho = r.text.split('id="caixas"')[1].split("</section>")[0]
+    assert "chip alert" in trecho
+    assert "claudinho-TI" in trecho
+
+
+def test_container_exited_sem_healthcheck_vira_fora_nao_sem_sinal(cliente, tmp_path, monkeypatch):
+    """Cenario literal do aceite 2: rag-extractor-api derrubado de proposito.
+    docker inspect da um estado_docker="exited" MESMO sem HEALTHCHECK nativo
+    configurado (saude=None) -- isto tem que virar "fora"/alert, nunca "sem
+    sinal"/caveat (que e reservado pra container RODANDO sem sonda, nao pra
+    container confirmadamente parado). Achado ao testar manualmente contra um
+    servidor real antes deste teste existir."""
+    estado = dict(ESTADO_OK)
+    estado["infra_estado"] = {
+        "lido_em": 1000.0, "estado": "ok", "motivo": None,
+        "dados": {"conteineres": [
+            {"nome": "rag-extractor-api", "estado_docker": "exited", "saude": None, "desde": "2 minutes"},
+        ], "units": [], "timers": []},
+    }
+    caminho = tmp_path / "estado_derrubado.json"
+    caminho.write_text(json.dumps(estado), encoding="utf-8")
+    monkeypatch.setattr(web, "ESTADO_PATH", caminho)
+
+    r = cliente.get("/")
+    assert r.status_code == 200
+    trecho_sinal = r.text.split('id="sinal"')[1].split("</section>")[0]
+    assert "chip alert" in trecho_sinal
+    assert "fora" in trecho_sinal
+    assert "sem sinal" not in trecho_sinal
+    assert "rag-extractor-api" in trecho_sinal
+
+
+def test_container_rodando_sem_healthcheck_e_sem_sinal_de_verdade(cliente, tmp_path, monkeypatch):
+    """O caso oposto: container RUNNING sem HEALTHCHECK nativo (nem sonda
+    externa, trilha C fora de escopo) -- este SIM e "sem sinal" honesto, nao
+    "fora" nem "no ar" fingido."""
+    estado = dict(ESTADO_OK)
+    estado["infra_estado"] = {
+        "lido_em": 1000.0, "estado": "ok", "motivo": None,
+        "dados": {"conteineres": [
+            {"nome": "keycloak-db", "estado_docker": "running", "saude": None, "desde": "10 days"},
+        ], "units": [], "timers": []},
+    }
+    caminho = tmp_path / "estado_sem_sonda.json"
+    caminho.write_text(json.dumps(estado), encoding="utf-8")
+    monkeypatch.setattr(web, "ESTADO_PATH", caminho)
+
+    r = cliente.get("/")
+    trecho_sinal = r.text.split('id="sinal"')[1].split("</section>")[0]
+    assert "sem sinal" in trecho_sinal
+    assert "chip caveat" in trecho_sinal
+    assert "chip alert" not in trecho_sinal
 
 
 def test_bloco_ausente_do_estado_vira_indisponivel_nao_bloco_sumido(cliente, tmp_path, monkeypatch):

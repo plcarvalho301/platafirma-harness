@@ -49,6 +49,7 @@ def chamar(
             [str(caminho), *argv[1:]],
             capture_output=True,
             text=True,
+            encoding="utf-8",
             timeout=timeout,
             env=env,
             cwd=cwd,
