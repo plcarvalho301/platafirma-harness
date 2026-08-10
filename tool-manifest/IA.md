@@ -64,12 +64,12 @@ conectores Google/Figma/Canva — fora do uso frequente do harness; não detalho
 
 | | o que | nota |
 |---|---|---|
-| GPU | RTX 5060 Ti 16 GB (Blackwell, sm_120) | driver 595.84; teto de runtime CUDA **13.2** |
+| GPU | RTX 5060 Ti 16 GB (Blackwell, sm_120) | driver série 595; teto de runtime CUDA **13.2** |
 | CPU / RAM | 12 threads / 30 GB | — |
 | disco | 1,5 TB livres em `/` | — |
-| Python | 3.12.3 | venvs geridos por `uv`, **sem `pip` shim** — usar `uv pip` |
-| `uv` | 0.12.1 | instalador/gestor de venv e `uv tool` |
-| `node` / `npm` | 24.18.1 / 11.16 | tooling JS (`npx`) |
+| Python | `python3` | venvs geridos por `uv`, **sem `pip` shim** — usar `uv pip` |
+| `uv` | — | instalador/gestor de venv e `uv tool` |
+| `node` / `npm` | — | tooling JS (`npx`) |
 | Docker | rootless, uid 1001 | `export DOCKER_HOST=unix:///run/user/1001/docker.sock` |
 | build | gcc/g++/make/cmake/pkg-config + python3.12-dev | wheels binários dispensam libs `-dev` |
 
@@ -98,7 +98,7 @@ exposto em `~/AI/bin/nvcc`. `CUDA_HOME=/usr/local/cuda`.
   llama.cpp-CUDA from source). Para **rodar** GPU, torch/sentence-transformers trazem
   runtime próprio no wheel — o toolkit é só pra compilar.
 
-**`nvitop` 1.7.1** — `[exec]`. Monitor de GPU/VRAM ao vivo (NVML), process-level. CLI
+**`nvitop`** — `[exec]`. Monitor de GPU/VRAM ao vivo (NVML), process-level. CLI
 global via `uv tool` (`~/.local/bin/nvitop`, `nvisel`). Orçamento de VRAM durante
 indexação/bench. TUI exige TTY; a API `from nvitop import Device` serve leitura
 programática (não instrumentada ainda).
@@ -114,7 +114,7 @@ consome o endpoint do rag, não vive dentro dele.
 lacuna de Recall@k real do rag. Prova: `ndcg@3=0.9197`, `recall@3=1.0` em par
 qrels/run mínimo. Warnings de Numba/LaTeX no import são cosméticos.
 
-**`tokenizers` 0.23.1** — `[func]`. Contagem de token pré-voo pra política de contexto.
+**`tokenizers`** — `[func]`. Contagem de token pré-voo pra política de contexto.
 Tokenizer do qwen2.5 em `~/AI/opt/tokenizers/qwen2.5.json` (7 MB). Prova: frase-teste →
 13 tokens. `tiktoken` não serve (tokeniza qwen errado). Para gemma2, baixar o
 `tokenizer.json` correspondente sob demanda.

@@ -55,7 +55,7 @@ não chamo.
 | `Bash`/`Write`/`Edit` nativos | tudo dentro do clone local do card | [exec] |
 | `git -C <clone> …` | branch, commit e push da `fabrica/<card>-<slug>` | [exec] |
 | `uv venv` · `uv pip` · `uvx` | venv reprodutível; nunca `pip` de sistema | [exec] |
-| `python3` | 3.12.3 no host; na máquina local, o que houver | [exec] |
+| `python3` | o do host; na máquina local, o que houver | [exec] |
 | `rg` · `fd` · `jq` · `yq` | busca e leitura de config — regex em YAML não | [exec] |
 | `pytest` · `ruff` | teste e lint quando o repo os declarar | [inst] |
 | `tarefas ler <id>` | ler o card antes de começar; comentar o andamento | [exec] |
