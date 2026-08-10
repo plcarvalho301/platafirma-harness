@@ -17,10 +17,19 @@ import json
 import subprocess
 import time
 from dataclasses import dataclass
+import os
 from pathlib import Path
 from typing import Any
 
-BIN = Path(__file__).resolve().parents[2] / "bin"
+# parents[2] resolve pro repo quando se roda do clone, mas em container o pacote
+# mora em /app e parents[2] vira "/" — dai o "/bin/conferir" que nao existe.
+# PF_RAIZ e a mesma ancora que o agregador ja usa; o default preserva o clone.
+_PF_RAIZ = os.environ.get("PF_RAIZ")
+BIN = (
+    Path(_PF_RAIZ) / "platafirma-harness" / "bin"
+    if _PF_RAIZ
+    else Path(__file__).resolve().parents[2] / "bin"
+)
 
 
 @dataclass(frozen=True)
