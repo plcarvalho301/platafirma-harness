@@ -339,6 +339,11 @@ EXT_ACERVO = {".epub", ".pdf", ".docx", ".doc", ".pptx", ".ppt", ".xlsx", ".xls"
               ".mobi", ".azw3", ".djvu", ".mp3", ".mp4", ".zip", ".tar", ".gz", ".7z"}
 EXT_GRANEL = {".jsonl", ".tsv", ".csv", ".dump", ".parquet", ".sqlite", ".db"}
 EXT_RENDER = {".svg", ".png"}
+# Artefato regeneravel a partir do proprio fonte versionado: nunca e fonte, e nao tem
+# piso de tamanho — 1 KB de bytecode versionado ja e a classe errada de arquivo.
+EXT_GERADO = {".pyc", ".pyo", ".class", ".o", ".so", ".egg-info"}
+DIR_GERADO = ("__pycache__/", "node_modules/", ".venv/", "dist/", "build/",
+              ".pytest_cache/", ".mypy_cache/", ".ruff_cache/", ".tox/")
 EXT_FONTE_RENDER = {".mmd", ".mermaid", ".d2", ".drawio", ".dot", ".puml", ".xml"}
 PISO_ARQUIVO = 1024 * 1024   # acima disto nao e fonte editada a mao
 PISO_GRANEL = 256 * 1024     # dump, manifesto e indice: estado extraivel, mora no banco
@@ -402,7 +407,7 @@ def conferir_repo(alvo):
             readme = None
 
         peso, topos = 0, set()
-        achados = {"ACERVO": [], "GRANEL": [], "GORDO": [], "RENDER": []}
+        achados = {"GERADO": [], "ACERVO": [], "GRANEL": [], "GORDO": [], "RENDER": []}
         for rel in arquivos:
             caminho = os.path.join(raiz, rel)
             try:
@@ -415,7 +420,9 @@ def conferir_repo(alvo):
             if any(rel.startswith(r) for r in regras):
                 continue
             ext = os.path.splitext(rel)[1].lower()
-            if ext in EXT_ACERVO:
+            if ext in EXT_GERADO or any(d in rel + "/" for d in DIR_GERADO):
+                achados["GERADO"].append((rel, tam))
+            elif ext in EXT_ACERVO:
                 achados["ACERVO"].append((rel, tam))
             elif ext in EXT_GRANEL and tam > PISO_GRANEL:
                 achados["GRANEL"].append((rel, tam))
@@ -439,7 +446,7 @@ def conferir_repo(alvo):
 
         print(f"\n### {nome}")
         print(f"    peso    : {peso / 1048576:.1f} MB rastreados em {len(arquivos)} arquivos")
-        for rotulo in ("ACERVO", "GRANEL", "GORDO", "RENDER"):
+        for rotulo in ("GERADO", "ACERVO", "GRANEL", "GORDO", "RENDER"):
             itens = achados[rotulo]
             if not itens:
                 continue
