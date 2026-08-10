@@ -1,4 +1,5 @@
-"""Contrato de `bin/tarefas listar --json` (card #390, LOTE 1).
+"""Contrato de `bin/tarefas listar --json` (card #390, LOTE 1) e
+`bin/tarefas listar-tudo --json` (card #394, data de fechamento pro /feito).
 
 Isola `bin/tarefas` (bash) sem jq real e sem rede — esta máquina de
 desenvolvimento não tem nenhum dos dois. `curl`/`jq` são sombreados por
@@ -68,11 +69,25 @@ TAREFAS_FIXAS = [
     {"id": 103, "done": False, "title": 'título com "aspas" e acento: nível'},
 ]
 
-# Só os dois usos que paginas()/linhas_de_card() fazem: -s 'add // []' (funde
-# páginas num array só) e -r '.[] | "\(.id)\t..."' (formata linha tabulada).
-# Fica em Python (mais simples que reimplementar jq em bash); é um arquivo
-# de dados comum, sem exigência de bit de execução — a função bash "jq"
-# chama o interpretador real (PYTHON_REAL) explicitamente sobre ele.
+# done_at real do Vikunja: ISO quando fechado, e o zero-value do Go
+# ("0001-01-01T00:00:00Z") quando aberto — NUNCA JSON null. É esse zero-value
+# que listar_tudo --json precisa normalizar pra null de verdade (card #394).
+TAREFAS_TUDO_FIXAS = [
+    {"id": 201, "done": False, "title": "aberto, sem data de fechamento",
+     "done_at": "0001-01-01T00:00:00Z"},
+    {"id": 202, "done": True, "title": "fechado ontem",
+     "done_at": "2026-08-09T18:53:12-03:00"},
+    {"id": 203, "done": True, "title": "fechado hoje, mesmo dia de outro",
+     "done_at": "2026-08-10T09:12:00-03:00"},
+]
+
+# Só os usos que paginas()/linhas_de_card()/listar_tudo() de fato fazem:
+# -s 'add // []' (funde páginas num array só), -r '.[] | "\(.id)\t..."'
+# (formata linha tabulada), e -c '[.[] | {id, titulo, fechado, fechado_em}]'
+# (listar_tudo --json). Fica em Python (mais simples que reimplementar jq em
+# bash); é um arquivo de dados comum, sem exigência de bit de execução — a
+# função bash "jq" chama o interpretador real (PYTHON_REAL) explicitamente
+# sobre ele.
 JQ_STUB_PY = r"""import json
 import sys
 
@@ -95,6 +110,20 @@ if "-s" in argv:
     for v in vals:
         if isinstance(v, list):
             out.extend(v)
+    sys.stdout.write(json.dumps(out))
+    sys.exit(0)
+
+if "-c" in argv:
+    arr = json.loads(data) if data.strip() else []
+    out = []
+    for item in arr:
+        done_at = item.get("done_at")
+        out.append({
+            "id": item.get("id"),
+            "titulo": item.get("title"),
+            "fechado": item.get("done"),
+            "fechado_em": None if done_at == "0001-01-01T00:00:00Z" else done_at,
+        })
     sys.stdout.write(json.dumps(out))
     sys.exit(0)
 
@@ -227,6 +256,55 @@ def test_listar_uso_sem_projeto_inalterado(tmp_path):
     assert proc.returncode == 1
     assert "uso: tarefas listar <projeto>" in proc.stderr
     assert proc.stdout == ""
+
+
+# --- listar-tudo --json (card #394) -----------------------------------
+
+
+def test_listar_tudo_json_formato_com_fechado_em(tmp_path):
+    """Card #394: titulo/fechado/fechado_em por card, fechado_em como ISO
+    quando fechou de verdade."""
+    proc = _run(["listar-tudo", "46", "--json"], tmp_path, body=TAREFAS_TUDO_FIXAS)
+    assert proc.returncode == 0, proc.stderr
+    dados = json.loads(proc.stdout)
+    por_id = {d["id"]: d for d in dados}
+    assert por_id[202] == {
+        "id": 202, "titulo": "fechado ontem", "fechado": True,
+        "fechado_em": "2026-08-09T18:53:12-03:00",
+    }
+    assert por_id[203]["fechado_em"] == "2026-08-10T09:12:00-03:00"
+
+
+def test_listar_tudo_json_card_aberto_fechado_em_e_null_nao_ausente(tmp_path):
+    """A régua do card #394: campo presente e null — nunca a data zero do Go
+    (0001-01-01) disfarçada de data real, nunca a chave ausente."""
+    proc = _run(["listar-tudo", "46", "--json"], tmp_path, body=TAREFAS_TUDO_FIXAS)
+    dados = json.loads(proc.stdout)
+    aberto = next(d for d in dados if d["id"] == 201)
+    assert "fechado_em" in aberto
+    assert aberto["fechado_em"] is None
+    assert aberto["fechado"] is False
+    assert "0001" not in json.dumps(aberto)
+
+
+def test_listar_tudo_sem_json_mantem_texto_tabulado_atual(tmp_path):
+    """Regra dura: saída sem --json não muda uma linha (inclusive fechados,
+    que listar_tudo já trazia antes de --json existir)."""
+    proc = _run(["listar-tudo", "46"], tmp_path, body=TAREFAS_TUDO_FIXAS)
+    assert proc.returncode == 0, proc.stderr
+    esperado = [
+        f"{t['id']}\t{'x' if t['done'] else ' '}\t{t['title']}" for t in TAREFAS_TUDO_FIXAS
+    ]
+    assert proc.stdout.splitlines() == esperado
+
+
+def test_listar_tudo_json_falha_de_rede_nao_finge_sucesso(tmp_path):
+    """Mesmo caminho de paginas() que listar --json — falha vira objeto com
+    erro, nunca "[]" nem stdout vazio."""
+    proc = _run(["listar-tudo", "46", "--json"], tmp_path, falhar=True)
+    assert proc.returncode != 0
+    dados = json.loads(proc.stdout)
+    assert dados.get("erro")
 
 
 # --- falha ---------------------------------------------------------------

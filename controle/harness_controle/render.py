@@ -509,21 +509,33 @@ def render_cadeira(estado: dict, slug: str) -> str:
 
 
 def render_feito(dias: list[dict]) -> str:
-    """`dias`: [{"data": "10/08", "cards": [...], "commits": [...]}], mais
-    recente primeiro — leitura derivada, sem estado próprio (spec)."""
+    """`dias`: [{"data": "2026-08-10",
+    "cards": [{"id","titulo","commits": [{"sha","mensagem"}, ...]}],
+    "commits": [{"sha","mensagem"}, ...]}] — o segundo "commits" é só os
+    ÓRFÃOS (sem card associado); o commit ligado a um card aparece aninhado
+    nele, não duas vezes. Mais recente primeiro — leitura derivada, sem
+    estado próprio (spec)."""
     if not dias:
         corpo = '<div class="folha"><p class="indisponivel">Nada a mostrar ainda.</p></div>'
         return pagina("harness.platafirma.org — feito", "feito", "", corpo)
 
+    def _commit_li(cm: dict) -> str:
+        return f"<li><code>{_esc(cm.get('sha'))}</code> {_esc(cm.get('mensagem'))}</li>"
+
     blocos = []
     for dia in dias:
-        cards = "".join(f"<li>#{_esc(c.get('id'))} {_esc(c.get('titulo'))}</li>" for c in dia.get("cards", []))
-        commits = "".join(f"<li><code>{_esc(c.get('sha'))}</code> {_esc(c.get('mensagem'))}</li>"
-                           for c in dia.get("commits", []))
+        itens_card = []
+        for c in dia.get("cards", []):
+            ligados = c.get("commits") or []
+            sub = "".join(_commit_li(cm) for cm in ligados) or "<li class='motivo'>sem commit associado</li>"
+            itens_card.append(f"<li>#{_esc(c.get('id'))} {_esc(c.get('titulo'))}<ul>{sub}</ul></li>")
+        cards_html = "".join(itens_card) or "<li>—</li>"
+        orfaos = dia.get("commits") or []
+        orfaos_html = "".join(_commit_li(cm) for cm in orfaos) or "<li>—</li>"
         blocos.append(
             f'<section class="cartao"><h2>{_esc(dia.get("data"))}</h2>'
-            f"<h3>Cards fechados</h3><ul>{cards or '<li>—</li>'}</ul>"
-            f"<h3>Commits</h3><ul>{commits or '<li>—</li>'}</ul></section>"
+            f"<h3>Cards fechados</h3><ul>{cards_html}</ul>"
+            f"<h3>Commits sem card associado</h3><ul>{orfaos_html}</ul></section>"
         )
     corpo = '<div class="folha">' + "".join(blocos) + "</div>"
     return pagina("harness.platafirma.org — feito", "feito", "", corpo)

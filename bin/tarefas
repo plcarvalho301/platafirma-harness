@@ -149,7 +149,31 @@ listar() { # listar <projeto> [--json]
   fi
 }
 
-listar_tudo()  { paginas "/projects/$1/tasks?" | linhas_de_card '.[]'; }
+# --json: card carrega titulo/fechado/fechado_em. Vikunja nao usa JSON null
+# pra "nao fechado" -- done_at vem como o zero-value do Go, "0001-01-01T00:
+# 00:00Z", que normalizamos pra null de verdade (a regua do card #394: campo
+# presente e nulo, nunca ausente, nunca a data zero disfarcada de data real).
+listar_tudo() { # listar_tudo <projeto> [--json]
+  local proj="$1"; shift || true
+  local json=""
+  local a
+  for a in "$@"; do [ "$a" = "--json" ] && json=1; done
+  if [ -n "$json" ]; then
+    local saida rc
+    saida=$(paginas "/projects/$proj/tasks?") && rc=0 || rc=$?
+    if [ "$rc" -eq 0 ]; then
+      printf '%s\n' "$saida" | jq -c '[.[] | {
+        id, titulo: .title, fechado: .done,
+        fechado_em: (if .done_at == "0001-01-01T00:00:00Z" then null else .done_at end)
+      }]'
+    else
+      printf '{"erro": "busca ao rastreador falhou (paginas saiu %s) — ver stderr"}\n' "$rc"
+      return "$rc"
+    fi
+  else
+    paginas "/projects/$proj/tasks?" | linhas_de_card '.[]'
+  fi
+}
 
 # "#267" é o index dentro do projeto (o que a fila cita); "360" é o id (a chave).
 # Os dois números convivem no mesmo card — sem esta distinção a busca vira caça.
@@ -210,7 +234,7 @@ cmd="${1:-}"; shift || uso
 case "$cmd" in
   projetos)    projetos ;;
   listar)      listar      "${1:?uso: tarefas listar <projeto>}" "${@:2}" ;;
-  listar-tudo) listar_tudo "${1:?uso: tarefas listar-tudo <projeto>}" ;;
+  listar-tudo) listar_tudo "${1:?uso: tarefas listar-tudo <projeto>}" "${@:2}" ;;
   ler)         ler         "${1:?uso: tarefas ler <id>}" ;;
   criar)       criar "${1:?projeto}" "${2:?título}" "${@:3}" ;;
   comentar)    comentar "${1:?uso: tarefas comentar <id> [\"<txt>\"]}" "${2:-$(cat)}" ;;

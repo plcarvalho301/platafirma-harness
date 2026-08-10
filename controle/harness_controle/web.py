@@ -14,14 +14,17 @@ Exclusao dura: cloudflared e oauth2-proxy nunca sao alvo aceito por
 `git log` direto — nao ha verbo em bin/ pra isso hoje, e e leitura pura,
 sem escrita e sem side effect, entao e a excecao deliberada e estreita a
 regra "verbo por tras" (que existe pra nao duplicar ACAO, nao pra proibir
-todo `git log`). Cards fechados vem de `tarefas listar-tudo` (verbo
-existente, sem --json — fora do LOTE 1 — entao le o texto tabulado mesmo).
+todo `git log`). Cards fechados vem de `tarefas listar-tudo --json` (card
+#394 — data de fechamento por card, pra agrupar por dia e ligar a commits
+que se referenciam, conforme a spec).
 """
 
 from __future__ import annotations
 
 import os
+import re
 import subprocess
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 from starlette.applications import Starlette
@@ -32,7 +35,7 @@ from starlette.routing import Route
 from . import render
 from .agregador import ESTADO_PATH
 from .estado_leitura import carregar_estado
-from .verbos import BIN
+from .verbos import BIN, chamar
 
 REPO_HARNESS = Path(__file__).resolve().parents[2]
 TOKENS_PATH = Path(
@@ -61,7 +64,13 @@ async def cadeira(request):
     return HTMLResponse(render.render_cadeira(estado, slug))
 
 
+_CARD_REF_RE = re.compile(r"#(\d+)")
+
+
 def _commits_por_dia(limite_dias: int = 14) -> dict[str, list[dict]]:
+    """{"AAAA-MM-DD": [{"sha","mensagem","card_ref"}, ...]} — card_ref e o
+    id do card citado como "#<id>" na mensagem (nossa própria convenção de
+    commit, ex. "LOTE 3 (#390): ..."), ou None se a mensagem não cita nada."""
     try:
         r = subprocess.run(
             ["git", "-C", str(REPO_HARNESS), "log", f"--since={limite_dias} days ago",
@@ -78,44 +87,65 @@ def _commits_por_dia(limite_dias: int = 14) -> dict[str, list[dict]]:
         if len(partes) != 3:
             continue
         data, sha, msg = partes
-        por_dia.setdefault(data, []).append({"sha": sha, "mensagem": msg})
+        m = _CARD_REF_RE.search(msg)
+        por_dia.setdefault(data, []).append(
+            {"sha": sha, "mensagem": msg, "card_ref": int(m.group(1)) if m else None}
+        )
     return por_dia
 
 
-def _tarefas_texto(argv: list[str], timeout: float = 20) -> list[str]:
-    caminho = BIN / argv[0]
-    try:
-        r = subprocess.run([str(caminho), *argv[1:]], capture_output=True, text=True,
-                            encoding="utf-8", timeout=timeout, check=False)
-    except (OSError, subprocess.TimeoutExpired):
-        return []
-    if r.returncode != 0:
-        return []
-    return r.stdout.splitlines()
+def _cards_fechados_por_dia(limite_dias: int = 14) -> dict[str, list[dict]]:
+    """{"AAAA-MM-DD": [{"id","titulo"}, ...]}, so cards fechados dentro da
+    janela — lido de `tarefas listar-tudo --json` (card #394), que já
+    normaliza a data-zero do Go em null pra card aberto."""
+    r = chamar(["tarefas", "listar-tudo", TAREFAS_PROJETO_PADRAO, "--json"], timeout=20)
+    if not r.ok or not isinstance(r.dados, list):
+        return {}
+    corte = datetime.now(UTC) - timedelta(days=limite_dias)
+    por_dia: dict[str, list[dict]] = {}
+    for card in r.dados:
+        if not card.get("fechado") or not card.get("fechado_em"):
+            continue
+        try:
+            fechado_em = datetime.fromisoformat(card["fechado_em"])
+        except ValueError:
+            continue
+        if fechado_em < corte:
+            continue
+        dia = fechado_em.strftime("%Y-%m-%d")
+        por_dia.setdefault(dia, []).append({"id": card["id"], "titulo": card.get("titulo") or ""})
+    return por_dia
 
 
 def _monta_feito(limite_dias: int = 14) -> list[dict]:
+    """Agrupa por dia (data de fechamento pro card, data do commit pro
+    commit) e liga card a commit por referência "#<id>" na mensagem — ligado
+    aparece aninhado sob o card, nunca duplicado na lista de órfãos. Commit
+    sem referência, ou que referencia um card fora da janela/não encontrado,
+    é órfão de verdade."""
     commits_por_dia = _commits_por_dia(limite_dias)
-    cards_fechados = []
-    for linha in _tarefas_texto(["tarefas", "listar-tudo", TAREFAS_PROJETO_PADRAO]):
-        partes = linha.split("\t", 2)
-        if len(partes) != 3:
-            continue
-        id_, marca, titulo = partes
-        if marca.strip() == "x":
-            cards_fechados.append({"id": id_, "titulo": titulo})
+    cards_por_dia = _cards_fechados_por_dia(limite_dias)
 
-    dias = sorted(commits_por_dia, reverse=True)
-    resultado = [
-        {"data": d, "commits": commits_por_dia[d], "cards": []}
-        for d in dias
-    ]
-    # Cards fechados nao tem data na saida atual de `tarefas` (sem --json,
-    # sem campo de data) — aparecem soltos, nao agrupados por dia, ate um
-    # follow-up dar --json a `listar-tudo` com a data de fechamento.
-    if cards_fechados:
-        resultado.append({"data": "cards fechados (sem data disponível hoje)",
-                           "commits": [], "cards": cards_fechados})
+    todos_commits = [c for lista in commits_por_dia.values() for c in lista]
+    ids_conhecidos = {c["id"] for lista in cards_por_dia.values() for c in lista}
+
+    dias = sorted(set(commits_por_dia) | set(cards_por_dia), reverse=True)
+    resultado = []
+    for dia in dias:
+        cards_dia = []
+        for card in cards_por_dia.get(dia, []):
+            ligados = [c for c in todos_commits if c["card_ref"] == card["id"]]
+            cards_dia.append({
+                "id": card["id"], "titulo": card["titulo"],
+                "commits": [{"sha": c["sha"], "mensagem": c["mensagem"]} for c in ligados],
+            })
+        orfaos = [
+            {"sha": c["sha"], "mensagem": c["mensagem"]}
+            for c in commits_por_dia.get(dia, [])
+            if c["card_ref"] is None or c["card_ref"] not in ids_conhecidos
+        ]
+        if cards_dia or orfaos:
+            resultado.append({"data": dia, "cards": cards_dia, "commits": orfaos})
     return resultado
 
 
