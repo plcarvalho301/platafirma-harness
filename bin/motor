@@ -31,6 +31,8 @@ def uso(cod=2):
   motor <inst> ajuste <slug>             o que esse ajuste troca por que
   motor <inst> ajuste <slug> <valor>     mexe, promove e confere o servido
   motor <inst> buscar "<pergunta>" [--k N] [--texto secao|trecho|nenhum]
+  motor <inst> indexar [--apply]        fases 2-5: materializa, chunka, embedda
+                                        (o que ENTRA no corpus e `acervo ingerir`)
 
 instancias: """ + ", ".join(reg().keys()))
     sys.exit(cod)
@@ -125,6 +127,53 @@ def cmd_ajuste(nome, inst, argv):
         sys.exit(1)
 
 
+def python_do_rag():
+    for c in [os.environ.get("RAG_PYTHON", ""),
+              os.path.expanduser("~/AI/.venv/bin/python"),
+              os.path.join(RAIZ, "platafirma-conhecimento/rag/.venv/bin/python"),
+              os.path.expanduser("~/AI/.venv-testes/bin/python")]:
+        if c and os.access(c, os.X_OK):
+            return c
+    print("motor rag indexar: nenhum python com rag_extractor executavel por este usuario.\n"
+          "  aponte um com:  RAG_PYTHON=/caminho/para/python motor rag indexar ...", file=sys.stderr)
+    sys.exit(1)
+
+
+def cmd_indexar(inst, argv):
+    """Fases 2-5 do trilho: materializa, chunka, embedda, propaga faceta, embedda meta.
+    Fase 1 (o que entra no corpus) e curadoria: fica em `acervo ingerir`."""
+    apply_ = "--apply" in argv
+    rag = os.path.join(RAIZ, "platafirma-conhecimento/rag")
+    py = python_do_rag()
+    destino = os.environ.get("CORPUS_DIR", os.path.join(rag, "corpus"))
+    passos = [
+        ("materializacao — PDF e sidecar em " + destino,
+         f"{py} -m rag_extractor.cli materializar-acervo {destino}" + (" --apply" if apply_ else "")),
+        ("chunking  [degrau c]", f"{py} -m rag_extractor.cli ingest {destino}"),
+        ("vetor de texto  [degrau d]", f"{py} -m rag_extractor.cli embed"),
+        ("propagacao de faceta para documents/chunks",
+         f"{py} -m rag_extractor.cli sincronizar-acervo" + (" --apply" if apply_ else "")),
+        ("vetor de metadado  [degrau e]", f"{py} -m rag_extractor.cli embed-meta"),
+    ]
+    escada = os.path.join(RAIZ, "bin/acervo")
+    print("\n== escada antes")
+    print(sh(f"{escada} escada").stdout)
+    for i, (titulo, cmd) in enumerate(passos, 1):
+        print(f"\n== {i}/{len(passos)}  {titulo}")
+        if not apply_ and (" embed" in cmd or " ingest " in cmd or "--apply" not in cmd):
+            print(f"   (dry-run) rodaria: {cmd.split('cli ',1)[1]}")
+            continue
+        r = sh(f"cd {rag} && PYTHONPATH={rag} {cmd}")
+        print((r.stdout or r.stderr).strip()[-1200:])
+        if r.returncode != 0:
+            print(f"\nPAROU no passo {i}: {titulo}", file=sys.stderr)
+            sys.exit(1)
+    print("\n== escada depois")
+    print(sh(f"{escada} escada").stdout)
+    if not apply_:
+        print("DRY-RUN — nada foi escrito. Para valer:  motor rag indexar --apply")
+
+
 def cmd_buscar(inst, argv):
     if not argv:
         print('motor <inst> buscar "<pergunta>" [--k N] [--texto secao|trecho|nenhum]', file=sys.stderr)
@@ -166,7 +215,9 @@ def main():
         return cmd_ajuste(a[0], inst, a[2:])
     if a[1] == "buscar":
         return cmd_buscar(inst, a[2:])
-    print(f"ato desconhecido '{a[1]}'. {a[0]} aceita: ajuste, buscar", file=sys.stderr)
+    if a[1] == "indexar":
+        return cmd_indexar(inst, a[2:])
+    print(f"ato desconhecido '{a[1]}'. {a[0]} aceita: ajuste, buscar, indexar", file=sys.stderr)
     sys.exit(1)
 
 
