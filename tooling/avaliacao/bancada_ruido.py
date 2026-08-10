@@ -131,7 +131,7 @@ def configs(eixo, base):
         for p in (25, 50, 100, 150):
             yield f"pool={p} (sem revisor)", replace(base, rerank_model="", hybrid_vec_pool=p)
     elif eixo == "beta":
-        for b in (0.0, 0.15, 0.30):
+        for b in (0.0, 0.15, 0.30, 0.45, 0.60, 0.80, 1.00):
             yield f"beta_meta={b}", replace(base, rerank_model="", embed_meta_beta=b)
 
 
