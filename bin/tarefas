@@ -11,7 +11,25 @@ set -euo pipefail
 
 BASE="${TAREFAS_BASE:-https://tarefas.platafirma.org/api/v1}"
 
-carrega_credencial() {
+_argv_tem_json() { # varre "$@" por --json — usado só pra decidir o FORMATO da falha
+  local a
+  for a in "$@"; do [ "$a" = "--json" ] && return 0; done
+  return 1
+}
+
+# Escaping mínimo à mão (mesmo padrão de bin/monta-sessao) em vez de "jq -Rs ." —
+# este caminho é justamente o de falha, e depender de jq pra reportar uma falha
+# (que pode ser a própria causa da falha, ou simplesmente não estar disponível
+# no ambiente) é frágil. String de entrada aqui é sempre estática, sem controle
+# de caractere, mas escapamos mesmo assim por hábito de não confiar em input.
+_json_esc() {
+  local s=$1
+  s=${s//\\/\\\\}
+  s=${s//\"/\\\"}
+  printf '%s' "$s"
+}
+
+carrega_credencial() { # carrega_credencial "$@" — argv só pra saber se --json foi pedido
   [ -n "${VIKUNJA_API_TOKEN:-}" ] && return 0
   local f
   for f in "${TAREFAS_ENV:-}" "$HOME/AI/platafirma-core/.env" "$HOME/.claude/vikunja.env"; do
@@ -21,8 +39,13 @@ carrega_credencial() {
     VIKUNJA_API_TOKEN="${VIKUNJA_API_TOKEN:-${VIKUNJA_TOKEN:-}}"
     [ -n "$VIKUNJA_API_TOKEN" ] && { BASE="${VIKUNJA_BASE:-$BASE}"; return 0; }
   done
-  echo "sem credencial: nenhum de \$TAREFAS_ENV, ~/AI/platafirma-core/.env," >&2
-  echo "~/.claude/vikunja.env traz token (ou exporte VIKUNJA_API_TOKEN)." >&2
+  local msg="sem credencial: nenhum de \$TAREFAS_ENV, ~/AI/platafirma-core/.env, ~/.claude/vikunja.env traz token (ou exporte VIKUNJA_API_TOKEN)."
+  # --json: stdout nunca fica vazio numa falha — mesma regra do LOTE 1 nos outros verbos.
+  # Sem --json, comportamento intocado: só a mensagem solta em stderr, como sempre foi.
+  if _argv_tem_json "$@"; then
+    printf '{"erro": "%s"}\n' "$(_json_esc "$msg")"
+  fi
+  echo "$msg" >&2
   exit 1
 }
 
@@ -78,10 +101,19 @@ linhas_de_card() { # filtra o JSON de uma lista de cards em id / marca / título
 # per_page tem teto de 50 no servidor: pedir 200 devolve 50 em silêncio. Toda
 # listagem pagina até x-pagination-total-pages, ou some com card sem avisar.
 paginas() { # paginas /caminho?query — concatena todas as páginas num só array
-  local caminho="$1" pag=1 total=1 corpo hdr
+  local caminho="$1" pag=1 total=1 corpo hdr rc
   while [ "$pag" -le "$total" ]; do
-    hdr=$(mktemp); corpo=$(curl -sfS -D "$hdr" "$BASE$caminho&per_page=50&page=$pag" \
+    hdr=$(mktemp)
+    corpo=$(curl -sfS -D "$hdr" "$BASE$caminho&per_page=50&page=$pag" \
             -H "Authorization: Bearer $VIKUNJA_API_TOKEN")
+    rc=$?
+    # Checagem explícita, não "set -e" implícito: esta função é chamada de dentro de
+    # contextos testados (ex.: "saida=$(paginas ...) && ... || ...", em listar()), e
+    # bash suspende errexit pra toda a árvore de chamadas nesse caso — sem o "$rc"
+    # explícito, um curl falho no meio da paginação passaria batido, o loop terminaria
+    # "normal" (total já resolvido, pag>total) e "jq -s 'add // []'" transformaria a
+    # ausência de dado em "[]", indistinguível de projeto genuinamente vazio.
+    if [ "$rc" -ne 0 ]; then rm -f "$hdr"; return "$rc"; fi
     [ "$pag" = 1 ] && total=$(awk -F': *' 'tolower($1)=="x-pagination-total-pages"{gsub(/\r/,"",$2);print $2}' "$hdr")
     total="${total:-1}"; rm -f "$hdr"; printf '%s\n' "$corpo"; pag=$((pag+1))
   done | jq -s 'add // []'
@@ -89,8 +121,59 @@ paginas() { # paginas /caminho?query — concatena todas as páginas num só arr
 
 # id negativo é filtro salvo, não projeto: /projects/-8/tasks devolve 404.
 projetos()     { busca GET /projects | jq -r '.[] | select(.id > 0) | "\(.id)\t\(.title)"'; }
-listar()       { paginas "/projects/$1/tasks?filter=done%20%3D%20false" | linhas_de_card '.[]'; }
-listar_tudo()  { paginas "/projects/$1/tasks?" | linhas_de_card '.[]'; }
+
+# --json: "paginas" já devolve o array JSON pronto — sem --json, o mesmo array
+# passa por linhas_de_card pra virar texto tabulado (comportamento inalterado).
+listar() { # listar <projeto> [--json]
+  local proj="$1"; shift || true
+  local json=""
+  local a
+  for a in "$@"; do [ "$a" = "--json" ] && json=1; done
+  if [ -n "$json" ]; then
+    # "paginas" pode falhar no meio da paginação (curl de uma página não-primeira) e,
+    # por causa de "jq -s 'add // []'" no fim do pipe, ainda assim deixar ALGO em stdout
+    # (array vazio, ou só as páginas que deram certo antes de falhar) — indistinguível de
+    # sucesso pra quem só olha stdout. O exit code de "paginas" (pipefail) já é o certo;
+    # aqui só garantimos que a FALHA também aparece em stdout como objeto, nunca como um
+    # "[]" que passa por sucesso vazio.
+    local saida rc
+    saida=$(paginas "/projects/$proj/tasks?filter=done%20%3D%20false") && rc=0 || rc=$?
+    if [ "$rc" -eq 0 ]; then
+      printf '%s\n' "$saida"
+    else
+      printf '{"erro": "busca ao rastreador falhou (paginas saiu %s) — ver stderr"}\n' "$rc"
+      return "$rc"
+    fi
+  else
+    paginas "/projects/$proj/tasks?filter=done%20%3D%20false" | linhas_de_card '.[]'
+  fi
+}
+
+# --json: card carrega titulo/fechado/fechado_em. Vikunja nao usa JSON null
+# pra "nao fechado" -- done_at vem como o zero-value do Go, "0001-01-01T00:
+# 00:00Z", que normalizamos pra null de verdade (a regua do card #394: campo
+# presente e nulo, nunca ausente, nunca a data zero disfarcada de data real).
+listar_tudo() { # listar_tudo <projeto> [--json]
+  local proj="$1"; shift || true
+  local json=""
+  local a
+  for a in "$@"; do [ "$a" = "--json" ] && json=1; done
+  if [ -n "$json" ]; then
+    local saida rc
+    saida=$(paginas "/projects/$proj/tasks?") && rc=0 || rc=$?
+    if [ "$rc" -eq 0 ]; then
+      printf '%s\n' "$saida" | jq -c '[.[] | {
+        id, titulo: .title, fechado: .done,
+        fechado_em: (if .done_at == "0001-01-01T00:00:00Z" then null else .done_at end)
+      }]'
+    else
+      printf '{"erro": "busca ao rastreador falhou (paginas saiu %s) — ver stderr"}\n' "$rc"
+      return "$rc"
+    fi
+  else
+    paginas "/projects/$proj/tasks?" | linhas_de_card '.[]'
+  fi
+}
 
 # "#267" é o index dentro do projeto (o que a fila cita); "360" é o id (a chave).
 # Os dois números convivem no mesmo card — sem esta distinção a busca vira caça.
@@ -145,13 +228,13 @@ subtarefa() {
 
 # --- despacho ---------------------------------------------------------------
 
-carrega_credencial
+carrega_credencial "$@"
 cmd="${1:-}"; shift || uso
 
 case "$cmd" in
   projetos)    projetos ;;
-  listar)      listar      "${1:?uso: tarefas listar <projeto>}" ;;
-  listar-tudo) listar_tudo "${1:?uso: tarefas listar-tudo <projeto>}" ;;
+  listar)      listar      "${1:?uso: tarefas listar <projeto>}" "${@:2}" ;;
+  listar-tudo) listar_tudo "${1:?uso: tarefas listar-tudo <projeto>}" "${@:2}" ;;
   ler)         ler         "${1:?uso: tarefas ler <id>}" ;;
   criar)       criar "${1:?projeto}" "${2:?título}" "${@:3}" ;;
   comentar)    comentar "${1:?uso: tarefas comentar <id> [\"<txt>\"]}" "${2:-$(cat)}" ;;

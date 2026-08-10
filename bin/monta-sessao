@@ -13,8 +13,49 @@ set -euo pipefail
 RAIZ="${PF_RAIZ:-$HOME/AI}"
 cd "$RAIZ"
 
-C="${1:-}"
+# --json: escaping mínimo pra montar o objeto na mão (backslash, aspas,
+# tab/CR/LF) — sem depender de jq/python3 no host que roda o verbo.
+json_esc() {
+  local s=$1
+  s=${s//\\/\\\\}
+  s=${s//\"/\\\"}
+  s=${s//$'\t'/\\t}
+  s=${s//$'\r'/\\r}
+  s=${s//$'\n'/\\n}
+  printf '%s' "$s"
+}
+
+cadeiras_validas_json() {
+  local arr="[" first=1 c
+  while IFS= read -r c; do
+    [ -z "$c" ] && continue
+    [ "$first" -eq 1 ] && first=0 || arr+=","
+    arr+="\"$(json_esc "$c")\""
+  done < <(ls -1 platafirma-harness/personas/persona-*.md 2>/dev/null | sed 's#.*/persona-##; s/\.md$//')
+  arr+="]"
+  printf '%s' "$arr"
+}
+
+erro_json() { # erro_json <mensagem> — stdout vira só o objeto; exit fica com quem chamou
+  printf '{"erro":"%s","cadeiras_validas":%s}\n' "$(json_esc "$1")" "$(cadeiras_validas_json)"
+}
+
+JSON=0
+SEM_ATUALIZAR=0
+C=""
+for a in "$@"; do
+  case "$a" in
+    --json) JSON=1 ;;
+    --sem-atualizar) SEM_ATUALIZAR=1 ;;
+    *) [ -z "$C" ] && C="$a" ;;
+  esac
+done
+
 if [ -z "$C" ]; then
+  if [ "$JSON" -eq 1 ]; then
+    erro_json "uso: monta-sessao <cadeira>"
+    exit 2
+  fi
   echo "uso: monta-sessao <cadeira>" >&2
   echo "cadeiras:" >&2
   ls -1 platafirma-harness/personas/persona-*.md | sed 's#.*/persona-##; s/\.md$//' >&2
@@ -23,14 +64,20 @@ fi
 
 P="platafirma-harness/personas/persona-$C.md"
 if [ ! -f "$P" ]; then
+  if [ "$JSON" -eq 1 ]; then
+    erro_json "não existe $P"
+    exit 1
+  fi
   echo "não existe $P" >&2
   ls -1 platafirma-harness/personas/persona-*.md | sed 's#.*/persona-##; s/\.md$//' >&2
   exit 1
 fi
 
-for r in platafirma-harness platafirma-arquitetura; do
-  git -C "$r" pull --ff-only -q 2>/dev/null || echo "(aviso: $r não atualizou — conteúdo abaixo é o do clone)" >&2
-done
+if [ "$SEM_ATUALIZAR" -eq 0 ]; then
+  for r in platafirma-harness platafirma-arquitetura; do
+    git -C "$r" pull --ff-only -q 2>/dev/null || echo "(aviso: $r não atualizou — conteúdo abaixo é o do clone)" >&2
+  done
+fi
 
 N=$(sed -n '1s/^Você é \([A-Za-z-]*\).*/\1/p' "$P")
 M=$(sed -n 's/^FERRAMENTAL: *\([^ ]*\.md\).*/\1/p' "$P" | head -1)
@@ -41,40 +88,110 @@ M=$(sed -n 's/^FERRAMENTAL: *\([^ ]*\.md\).*/\1/p' "$P" | head -1)
 G="${PF_MANIFESTO_GERAL:-platafirma-harness/tool-manifest/GERAL.md}"
 [ "$G" = "$M" ] && G=""
 
-echo "== cadeira: ${N:-<nome não resolvido na linha 1 de $P>} =="
+if [ "$JSON" -eq 0 ]; then
+  echo "== cadeira: ${N:-<nome não resolvido na linha 1 de $P>} =="
 
-for f in "$P" ${M:-} ${G:-} platafirma-arquitetura/docs/org-template-canonico.md; do
-  if [ -f "$f" ]; then
-    echo "===== $f ====="
-    cat "$f"
-  else
-    echo "===== $f ===== (AUSENTE)"
+  for f in "$P" ${M:-} ${G:-} platafirma-arquitetura/docs/org-template-canonico.md; do
+    if [ -f "$f" ]; then
+      echo "===== $f ====="
+      cat "$f"
+    else
+      echo "===== $f ===== (AUSENTE)"
+    fi
+  done
+
+  if [ -z "$M" ]; then
+    echo "(aviso: $P não declara linha FERRAMENTAL: — manifesto não entrou)"
   fi
-done
 
-if [ -z "$M" ]; then
-  echo "(aviso: $P não declara linha FERRAMENTAL: — manifesto não entrou)"
+  # Memória da cadeira, pelo verbo `mesa` — mesma razão de delegar da fila. A mesa
+  # entra inteira (é o resíduo da fita anterior, curto por construção); do caderno
+  # entra só o ÍNDICE, e o corpo sai por `mesa caderno <chapéu>` na fita que o quiser.
+  if [ -n "$C" ]; then
+    echo "===== mesa: $C ====="
+    PF_CADEIRA="$C" mesa ver 2>&1 || echo "(mesa indisponível — msg-mem fora do ar)"
+    echo "===== cadernos: $C ====="
+    PF_CADEIRA="$C" mesa caderno 2>&1 || true
+  fi
+
+  # Fila lida sempre pelo comando `fila`, nunca pelo sistema de arquivos: reimplementar
+  # aqui o parser do formato de caixa criaria segunda fonte da mesma regra, e a
+  # divergência entre as duas apareceria como mensagem sumida.
+  if [ -z "$N" ]; then
+    echo "===== fila ===== (nome não resolvido — sem persona não há como saber a caixa)"
+  elif out=$(PF_CADEIRA="$C" fila status "$N" 2>&1); then
+    echo "===== fila: $N ====="
+    echo "$out"
+  else
+    echo "===== fila: $N (FECHADA — porteiro) ====="
+    echo "$out"
+  fi
+  exit 0
 fi
 
-# Memória da cadeira, pelo verbo `mesa` — mesma razão de delegar da fila. A mesa
-# entra inteira (é o resíduo da fita anterior, curto por construção); do caderno
-# entra só o ÍNDICE, e o corpo sai por `mesa caderno <chapéu>` na fita que o quiser.
-if [ -n "$C" ]; then
-  echo "===== mesa: $C ====="
-  PF_CADEIRA="$C" mesa ver 2>&1 || echo "(mesa indisponível — msg-mem fora do ar)"
-  echo "===== cadernos: $C ====="
-  PF_CADEIRA="$C" mesa caderno 2>&1 || true
+# --json: metadado/ponteiro por trás do mesmo levantamento — nunca o corpo dos
+# documentos (isso continua sendo o modo texto, com os marcadores "===== <arquivo> =====").
+ORG="platafirma-arquitetura/docs/org-template-canonico.md"
+
+persona_presente=false
+[ -f "$P" ] && persona_presente=true
+persona_nome_json="null"
+[ -n "$N" ] && persona_nome_json="\"$(json_esc "$N")\""
+
+manifesto_presente=false
+manifesto_caminho_json="null"
+if [ -n "$M" ]; then
+  manifesto_caminho_json="\"$(json_esc "$M")\""
+  [ -f "$M" ] && manifesto_presente=true
 fi
 
-# Fila lida sempre pelo comando `fila`, nunca pelo sistema de arquivos: reimplementar
-# aqui o parser do formato de caixa criaria segunda fonte da mesma regra, e a
-# divergência entre as duas apareceria como mensagem sumida.
+org_presente=false
+[ -f "$ORG" ] && org_presente=true
+
+mesa_disp=false
+mesa_out=""
+if mesa_out=$(PF_CADEIRA="$C" mesa ver 2>&1); then
+  mesa_disp=true
+fi
+mesa_resumo_json="null"
+mesa_resumo_linha=$(printf '%s\n' "$mesa_out" | head -n1)
+[ -n "$mesa_resumo_linha" ] && mesa_resumo_json="\"$(json_esc "$mesa_resumo_linha")\""
+
+# Cadernos: mesmo verbo do modo texto (`mesa caderno`, sem chapéu — devolve o ÍNDICE, não
+# o corpo). É a listagem que o bloco 3/"/cadeira/<slug>" precisa pra saber quais cadernos
+# existem; o corpo de um caderno específico continua sob demanda (`mesa caderno <chapéu>`).
+cadernos_disp=false
+cadernos_out=""
+if cadernos_out=$(PF_CADEIRA="$C" mesa caderno 2>&1); then
+  cadernos_disp=true
+fi
+cadernos_resumo_json="null"
+cadernos_resumo_linha=$(printf '%s\n' "$cadernos_out" | head -n1)
+[ -n "$cadernos_resumo_linha" ] && cadernos_resumo_json="\"$(json_esc "$cadernos_resumo_linha")\""
+
+fila_disp=false
+fila_resumo_json="null"
 if [ -z "$N" ]; then
-  echo "===== fila ===== (nome não resolvido — sem persona não há como saber a caixa)"
-elif out=$(PF_CADEIRA="$C" fila status "$N" 2>&1); then
-  echo "===== fila: $N ====="
-  echo "$out"
+  fila_resumo_json="\"$(json_esc "nome não resolvido — sem persona não há como saber a caixa")\""
 else
-  echo "===== fila: $N (FECHADA — porteiro) ====="
-  echo "$out"
+  fila_out=""
+  if fila_out=$(PF_CADEIRA="$C" fila status "$N" 2>&1); then
+    fila_disp=true
+  fi
+  fila_resumo_linha=$(printf '%s\n' "$fila_out" | head -n1)
+  [ -n "$fila_resumo_linha" ] && fila_resumo_json="\"$(json_esc "$fila_resumo_linha")\""
 fi
+
+atualizado_json=true
+[ "$SEM_ATUALIZAR" -eq 1 ] && atualizado_json=false
+
+printf '{"cadeira":"%s","persona":{"presente":%s,"caminho":"%s","nome_resolvido":%s},"manifesto":{"presente":%s,"caminho":%s},"org":{"caminho":"%s","presente":%s},"mesa":{"disponivel":%s,"resumo":%s},"cadernos":{"disponivel":%s,"resumo":%s},"fila":{"disponivel":%s,"resumo":%s},"atualizado":%s}\n' \
+  "$(json_esc "$C")" \
+  "$persona_presente" "$(json_esc "$P")" "$persona_nome_json" \
+  "$manifesto_presente" "$manifesto_caminho_json" \
+  "$(json_esc "$ORG")" "$org_presente" \
+  "$mesa_disp" "$mesa_resumo_json" \
+  "$cadernos_disp" "$cadernos_resumo_json" \
+  "$fila_disp" "$fila_resumo_json" \
+  "$atualizado_json"
+exit 0

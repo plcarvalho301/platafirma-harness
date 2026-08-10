@@ -44,6 +44,8 @@ Declarados por `arq:0042`; `conferir repo platafirma-harness` mede contra esta l
 | `docs/` | documentação do módulo |
 | `diagramas/` | figuras do módulo: fonte `.mmd`/`.d2` e render `<fonte>.svg` |
 | `mcp/` | MCP do harness, previsto por `arq:0019`, ainda sem implementação |
+| `controle/` | plano de controle do harness: agregador de estado e tela de leitura |
+| `caderno/` | caderno durável por cadeira, particionado por chapéu |
 | `.claude/` | configuração do Claude Code na estação emprestada |
 
 Spec de referência: [PlataFirma:Produto/harness/spec](https://wiki.platafirma.org/index.php/PlataFirma:Produto/harness/spec).

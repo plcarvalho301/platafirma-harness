@@ -12,8 +12,8 @@ OPS_HEALTH="${INFRA_OPS_HEALTH:-http://127.0.0.1:8010/health}"
 uso() {
   cat >&2 <<'FIM'
 uso:
-  infra estado [alvo]            contêineres, units de usuário e timers, uma tela
-  infra saude  [alvo]            /health do ops, contêiner não-saudável, disco, RAM
+  infra estado [alvo] [--json]   contêineres, units de usuário e timers, uma tela
+  infra saude  [alvo] [--json]   /health do ops, contêiner não-saudável, disco, RAM
   infra logs   <alvo> [n]        alvo = nome de contêiner OU unit --user (default 50)
   infra restart <alvo>           destacado: sobrevive ao fim desta chamada
   infra exclusivo [--] <cmd...>  fila de carga GPU-bound + cota de CPU/RAM
@@ -40,9 +40,201 @@ units_falhadas()   { systemctl --user list-units --state=failed --no-pager --no-
 timers()           { systemctl --user list-timers --no-pager --no-legend | awk '{print $NF"\t"$1,$2,$3}'; }
 e_conteiner()      { docker ps -a --format '{{.Names}}' | grep -qx "$1"; }
 
+# --- apoio a --json -----------------------------------------------------
+#
+# card #390 lote 1: `estado`/`saude` ganham --json sem mudar a saida de texto.
+# Regra: stdout so leva o JSON quando --json esta presente, diagnostico vai
+# para stderr, e falha de coleta vira {"erro": motivo} em vez de estourar --
+# a chamada preserva o exit code que a coleta ja tinha (nunca stdout vazio,
+# nunca sucesso com zero fake). Escolha deliberada: systemctl e lido sempre
+# pela saida tabular (a mesma fonte que o modo texto ja usa e ja confere) --
+# nao tentamos `--output=json` do systemd aqui porque esta maquina de
+# desenvolvimento nao tem systemd nenhum para validar o esquema de campos, e
+# arriscar um nome de campo errado sem forma de testar e pior que a saida
+# tabular, que ja e o dado provado. Fica registrado como fallback declarado,
+# nao omissao (ver NOTAS-390.md, secao "ambiente de desenvolvimento local").
+
+# Roda $1 (uma das funcoes _*_json abaixo) capturando o stdout dela (que ja
+# e o JSON pronto) e o stderr (diagnostico, sempre repassado). Se a funcao
+# falhar de verdade (docker/systemctl fora do ar, saida ilegivel mesmo depois
+# do fallback tabular) imprime {"erro": motivo} em vez de deixar o script
+# estourar, com o mesmo exit code que a coleta teria dado.
+_json_ou_erro() {
+  local fn="$1"; shift
+  local tmp_err saida rc=0
+  tmp_err=$(mktemp)
+  if saida=$("$fn" "$@" 2>"$tmp_err"); then
+    rc=0
+  else
+    rc=$?
+  fi
+  cat "$tmp_err" >&2
+  if [ "$rc" -ne 0 ]; then
+    local motivo
+    motivo=$(tail -n 1 "$tmp_err")
+    [ -n "$motivo" ] || motivo="$fn falhou (exit $rc)"
+    rm -f "$tmp_err"
+    python3 -c 'import json, sys; print(json.dumps({"erro": sys.argv[1]}))' "$motivo"
+    return "$rc"
+  fi
+  rm -f "$tmp_err"
+  printf '%s\n' "$saida"
+}
+
+# Contêineres estruturados a partir de `docker ps -a --format {{json .}}`
+# (uma linha JSON por contêiner) — separa o campo Status do docker em
+# "desde" (o "Up 3 days"/"Exited (0) 2 hours ago") e "saude" (o parêntese
+# final, só quando ele é mesmo saúde — "Exited (0) ..." não tem parêntese no
+# fim da string, então não vira saude por engano). $1 opcional filtra por nome.
+_conteineres_json() {
+  local alvo="${1:-}"
+  docker ps -a --format '{{json .}}' | python3 -c '
+import json, re, sys
+
+alvo = sys.argv[1]
+
+def separa(status):
+    status = status or ""
+    m = re.search(r"\(([^()]*)\)\s*$", status)
+    if not m:
+        return (status.strip() or None), None
+    return (status[:m.start()].strip() or None), m.group(1)
+
+itens = []
+for linha in sys.stdin:
+    linha = linha.strip()
+    if not linha:
+        continue
+    d = json.loads(linha)
+    nome = d.get("Names")
+    if alvo and nome != alvo:
+        continue
+    desde, saude = separa(d.get("Status"))
+    itens.append({"nome": nome, "estado_docker": d.get("State"), "saude": saude, "desde": desde})
+print(json.dumps(itens))
+' "$alvo"
+}
+
+# Contêiner parado ou não-saudável — mesmo critério textual de
+# conteineres_doentes() (exited/unhealthy/restarting no Status), estruturado.
+# Lista vazia é o "nenhum" honesto (nunca a sentinela de texto "(nenhum)").
+_doentes_json() {
+  docker ps -a --format '{{json .}}' | python3 -c '
+import json, sys
+
+itens = []
+for linha in sys.stdin:
+    linha = linha.strip()
+    if not linha:
+        continue
+    d = json.loads(linha)
+    status = d.get("Status") or ""
+    if any(p in status.lower() for p in ("exited", "unhealthy", "restarting")):
+        itens.append({"nome": d.get("Names"), "status": status})
+print(json.dumps(itens))
+'
+}
+
+# units_vivas() já devolve "nome\testado" (UNIT / SUB de systemctl list-units);
+# aqui só embrulha em JSON. $1 opcional filtra por nome.
+_units_json() {
+  local alvo="${1:-}"
+  units_vivas | python3 -c '
+import json, sys
+
+alvo = sys.argv[1]
+itens = []
+for l in sys.stdin:
+    l = l.rstrip("\n")
+    if not l:
+        continue
+    p = l.split("\t")
+    nome = p[0] if p else None
+    if alvo and nome != alvo:
+        continue
+    itens.append({"nome": nome, "estado": p[1] if len(p) > 1 else None})
+print(json.dumps(itens))
+' "$alvo"
+}
+
+# units_falhadas() é tabular "cru" (UNIT LOAD ACTIVE SUB DESCRIPTION) e já
+# engole falha do systemctl com `|| true` — herdado, não é desta mudança.
+_falhadas_json() {
+  units_falhadas | python3 -c '
+import json, sys
+
+itens = []
+for l in sys.stdin:
+    l = l.rstrip("\n")
+    if not l.strip():
+        continue
+    p = l.split()
+    itens.append({"nome": p[0] if len(p) > 0 else None, "estado": p[3] if len(p) > 3 else None})
+print(json.dumps(itens))
+'
+}
+
+# timers() já devolve "nome\tproxima_execucao" (ACTIVATES / NEXT de systemctl
+# list-timers); aqui só embrulha em JSON. $1 opcional filtra por nome.
+_timers_json() {
+  local alvo="${1:-}"
+  timers | python3 -c '
+import json, sys
+
+alvo = sys.argv[1]
+itens = []
+for l in sys.stdin:
+    l = l.rstrip("\n")
+    if not l:
+        continue
+    p = l.split("\t")
+    nome = p[0] if p else None
+    if alvo and nome != alvo:
+        continue
+    itens.append({"nome": nome, "proxima_execucao": p[1] if len(p) > 1 else None})
+print(json.dumps(itens))
+' "$alvo"
+}
+
+# /health do ops: indisponibilidade é dado (motivo preenchido), não erro de
+# execução do infra — por isso curl que falha aqui NÃO vira {"erro":...}.
+_ops_health_json() {
+  local rc=0
+  curl -sf --max-time 5 "$OPS_HEALTH" >/dev/null 2>&1 || rc=$?
+  if [ "$rc" -eq 0 ]; then
+    python3 -c 'import json; print(json.dumps({"ok": True, "motivo": None}))'
+  else
+    python3 -c 'import json, sys; print(json.dumps({"ok": False, "motivo": "sem resposta de " + sys.argv[1]}))' "$OPS_HEALTH"
+  fi
+}
+
+# `df -h /` tem 6 colunas na linha de dado (Mounted on conta como uma só,
+# o caminho não tem espaço). Estrutura crua — sem converter unidade humana.
+_disco_json() {
+  df -h / | tail -1 | python3 -c '
+import json, sys
+
+chaves = ["sistema_arquivos", "tamanho", "usado", "disponivel", "uso_pct", "montado_em"]
+partes = sys.stdin.read().split()
+print(json.dumps(dict(zip(chaves, partes))))
+'
+}
+
+# `free -h` linha 2 é "Mem:" + 6 valores — descarta o rótulo, mantém a
+# unidade humana (a mesma fonte que o texto já usa, só estruturada).
+_memoria_json() {
+  free -h | sed -n 2p | python3 -c '
+import json, sys
+
+chaves = ["total", "usado", "livre", "compartilhado", "buffer_cache", "disponivel"]
+partes = sys.stdin.read().split()[1:]
+print(json.dumps(dict(zip(chaves, partes))))
+'
+}
+
 # --- verbos -----------------------------------------------------------------
 
-estado() {
+_estado_texto() {
   local alvo="${1:-}"
   if [ -n "$alvo" ]; then
     e_conteiner "$alvo" && { docker ps -a --format '{{.Names}}\t{{.Status}}' | grep -E "^$alvo\\s" || echo "$alvo: não está em execução"; return; }
@@ -54,7 +246,53 @@ estado() {
   echo; echo "== timers";                       timers
 }
 
-saude() {
+# {"conteineres":[...], "units":[...], "timers":[...]} — mesmas três seções
+# do texto, só estruturadas. Com alvo, filtra as três listas por nome (0 ou 1
+# item cada); é uma forma diferente do alvo em modo texto (que faz uma
+# consulta pontual via `docker ps`/`systemctl status`), mas o card não define
+# um formato próprio para essa combinação e o agregador (lote 2) só chama
+# `infra estado --json` sem alvo — suposição registrada no relatório da tarefa.
+#
+# Nota sobre o `|| return $?` em cada passo: `_json_ou_erro` testa esta função
+# num `if saida=$(...); then` — e bash suspende `errexit` para toda a árvore
+# de chamadas dentro do comando testado por `if`/`&&`/`||`, não só para o
+# comando testado em si (é comportamento documentado do bash, não bug desta
+# implementação). Sem o `|| return $?` explícito aqui, uma falha do docker no
+# primeiro passo passaria despercebida e a função terminaria "com sucesso"
+# no último passo, escondendo a falha real — por isso cada passo se checa na
+# mão em vez de confiar em `set -e` propagar sozinho por este caminho.
+_estado_json_corpo() {
+  local alvo="${1:-}"
+  local c u t
+  c=$(_conteineres_json "$alvo") || return $?
+  u=$(_units_json "$alvo") || return $?
+  t=$(_timers_json "$alvo") || return $?
+  python3 -c '
+import json, sys
+
+c, u, t = (json.loads(a) for a in sys.argv[1:4])
+print(json.dumps({"conteineres": c, "units": u, "timers": t}))
+' "$c" "$u" "$t" || return $?
+}
+
+_estado_json() { _json_ou_erro _estado_json_corpo "${1:-}"; }
+
+estado() {
+  local alvo="" json=0 a
+  for a in "$@"; do
+    case "$a" in
+      --json) json=1 ;;
+      *) [ -z "$alvo" ] && alvo="$a" ;;
+    esac
+  done
+  if [ "$json" = 1 ]; then
+    _estado_json "$alvo"
+  else
+    _estado_texto "$alvo"
+  fi
+}
+
+_saude_texto() {
   echo -n "ops-mcp /health: "
   curl -sf --max-time 5 "$OPS_HEALTH" || echo "SEM RESPOSTA"
   echo; echo "== contêiner parado ou não-saudável"; conteineres_doentes
@@ -62,6 +300,38 @@ saude() {
   echo; echo "== disco e memória"
   df -h / | tail -1
   free -h | sed -n 2p
+}
+
+# {"ops_health":{"ok","motivo"}, "doentes":[...], "falhadas":[...],
+#  "disco":{...}, "memoria":{...}} — mesmas cinco seções do texto. `|| return
+# $?` em cada passo pelo mesmo motivo do comentário em _estado_json_corpo.
+_saude_json_corpo() {
+  local oh do_ fa di me
+  oh=$(_ops_health_json) || return $?
+  do_=$(_doentes_json) || return $?
+  fa=$(_falhadas_json) || return $?
+  di=$(_disco_json) || return $?
+  me=$(_memoria_json) || return $?
+  python3 -c '
+import json, sys
+
+oh, do_, fa, di, me = (json.loads(a) for a in sys.argv[1:6])
+print(json.dumps({"ops_health": oh, "doentes": do_, "falhadas": fa, "disco": di, "memoria": me}))
+' "$oh" "$do_" "$fa" "$di" "$me" || return $?
+}
+
+_saude_json() { _json_ou_erro _saude_json_corpo; }
+
+saude() {
+  local json=0 a
+  for a in "$@"; do
+    [ "$a" = "--json" ] && json=1
+  done
+  if [ "$json" = 1 ]; then
+    _saude_json
+  else
+    _saude_texto
+  fi
 }
 
 logs() {
@@ -144,8 +414,8 @@ restart() {
 cmd="${1:-}"; shift || uso
 
 case "$cmd" in
-  estado)  estado "${1:-}" ;;
-  saude)   saude ;;
+  estado)  estado "$@" ;;
+  saude)   saude "$@" ;;
   logs)    logs "${1:?uso: infra logs <alvo> [n]}" "${2:-50}" ;;
   exclusivo) exclusivo "$@" ;;
   cache)     cache "${1:-ver}" ;;

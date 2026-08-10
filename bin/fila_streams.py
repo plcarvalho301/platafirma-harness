@@ -20,6 +20,7 @@
 # E a unica coisa que apaga carta. Mensagem e consumo curto; o que tem permanencia
 # vira card, commit ou wiki antes de vencer.
 import argparse
+import json
 import os
 import sys
 from datetime import datetime
@@ -32,6 +33,10 @@ except ImportError:
 RAIZ = os.environ.get("FILA_RAIZ", os.path.expanduser("~/AI/fila"))
 PERSONAS_FILE = os.path.join(RAIZ, ".personas")
 ESPIA = "claudinha-gestao-estrategica"
+# Identidade de leitura automatica: processo sem sessao, sem caixa e sem mesa.
+# Nao entra em .personas de proposito — assim nunca e destinatario valido.
+# Pode so medir profundidade (status); qualquer outro verbo e negado em so_leitura().
+LEITOR = "sonda"
 GRUPO = "cadeira"
 TIPOS_VALIDOS = {"decisao", "resposta", "pedido", "minuta", "demanda", "handoff"}
 
@@ -63,10 +68,24 @@ def personas_validas():
         return {ln.strip() for ln in f if ln.strip()}
 
 
-def valida_persona(p: str):
+def _json_mode(args) -> bool:
+    """So o subcomando 'status' ganhou --json — os demais nem tem o atributo."""
+    return getattr(args, "verbo", None) == "status" and bool(getattr(args, "json", False))
+
+
+def _falha_json(msg: str, code: int):
+    """Regra dura do --json: falha e {'erro': ...} em stdout, nunca stdout vazio
+    nem mensagem solta em stderr. Exit code preservado pelo chamador."""
+    print(json.dumps({"erro": msg}, ensure_ascii=False))
+    sys.exit(code)
+
+
+def valida_persona(p: str, json_mode: bool = False):
     validas = personas_validas()
     if validas is None or p in validas:
         return
+    if json_mode:
+        _falha_json(f"persona desconhecida: {p} (validas: {', '.join(sorted(validas))})", 1)
     sys.stderr.write(f"erro: persona desconhecida: {p}\n  validas: {', '.join(sorted(validas))}\n")
     sys.exit(1)
 
@@ -74,6 +93,12 @@ def valida_persona(p: str):
 def resolve_eu(args) -> str:
     eu = args.eu or os.environ.get("PF_CADEIRA", "")
     if not eu:
+        if _json_mode(args):
+            _falha_json(
+                "nao sei quem esta operando a fila — exporte PF_CADEIRA=<cadeira> "
+                "(ex.: PF_CADEIRA=IA) ou passe --eu <persona>.",
+                2,
+            )
         sys.stderr.write(
             "erro: nao sei quem esta operando a fila.\n"
             "  exporte PF_CADEIRA=<cadeira>  (ex.: PF_CADEIRA=IA)  ou passe --eu <persona>.\n"
@@ -88,15 +113,30 @@ def resolve_eu(args) -> str:
     return eu
 
 
-def so_minha(eu: str, alvo: str):
+def so_minha(eu: str, alvo: str, json_mode: bool = False):
     if eu != alvo and eu != ESPIA:
+        if json_mode:
+            _falha_json(f"{eu} nao opera a caixa de {alvo} — caixa alheia nao se le nem se confirma.", 1)
         sys.stderr.write(f"erro: {eu} nao opera a caixa de {alvo} — caixa alheia nao se le nem se confirma.\n")
         sys.exit(1)
 
 
-def so_espia(eu: str):
-    if eu != ESPIA:
-        sys.stderr.write(f"erro: --todas e de {ESPIA}, nao de {eu}.\n")
+def so_espia(eu: str, json_mode: bool = False):
+    if eu not in (ESPIA, LEITOR):
+        if json_mode:
+            _falha_json(f"--todas e de {ESPIA} ou {LEITOR}, nao de {eu}.", 1)
+        sys.stderr.write(f"erro: --todas e de {ESPIA} ou {LEITOR}, nao de {eu}.\n")
+        sys.exit(1)
+
+
+def so_leitura(eu: str, verbo: str, json_mode: bool = False):
+    """LEITOR mede profundidade e nada mais. Ler consome (XACK) e enviar escreve —
+    os dois movem estado, e leitura automatica nao move estado de ninguem."""
+    if eu == LEITOR and verbo != "status":
+        msg = f"{LEITOR} so faz status — {verbo} move estado e nao e de leitura automatica."
+        if json_mode:
+            _falha_json(msg, 1)
+        sys.stderr.write(f"erro: {msg}\n")
         sys.exit(1)
 
 
@@ -150,27 +190,94 @@ def novas(rc, persona: str, quantas: int = 500):
     return saida
 
 
-def conta_novas(rc, persona: str) -> tuple:
+def _idade_seg_do_msgid(msgid: str):
+    """Idade em segundos a partir do carimbo embutido no msgid (formato
+    AAAAMMDDTHHMMSS-<de>, ver gerar_msgid). Mesma leitura de fuso que `frias()`
+    ja faz para --desde: strptime devolve naive e .timestamp() reinterpreta como
+    hora local — e assim que o carimbo foi escrito. None se o msgid nao bater
+    com o formato esperado (defensivo, nunca derruba o verbo por causa disso)."""
+    try:
+        ts = datetime.strptime(msgid[:15], "%Y%m%dT%H%M%S").timestamp()
+    except (ValueError, TypeError):
+        return None
+    return max(0, int(datetime.now().timestamp() - ts))
+
+
+def _parse_xinfo_consumers(bruto):
+    """Fallback para redis-py sem xinfo_consumers pronto: RESP2 devolve lista de
+    listas achatadas [campo, valor, campo, valor, ...] por consumer."""
+    saida = []
+    for item in bruto:
+        if isinstance(item, dict):
+            saida.append(item)
+            continue
+        it = iter(item)
+        saida.append(dict(zip(it, it)))
+    return saida
+
+
+def _idle_consumer_seg(rc, chave: str, persona: str):
+    """Idle time (segundos) do consumer da cadeira, via XINFO CONSUMERS. O nome
+    do consumer e a propria persona (novas() chama XREADGROUP(GRUPO, persona,
+    ...)). None se a persona nunca apareceu como consumer — nunca leu a caixa."""
+    try:
+        consumidores = rc.xinfo_consumers(chave, GRUPO)
+    except AttributeError:
+        bruto = rc.execute_command("XINFO", "CONSUMERS", chave, GRUPO)
+        consumidores = _parse_xinfo_consumers(bruto)
+    except redis.exceptions.ResponseError:
+        return None
+    for c in consumidores:
+        if c.get("name") == persona:
+            idle_ms = c.get("idle")
+            return None if idle_ms is None else int(idle_ms) // 1000
+    return None
+
+
+def conta_novas(rc, persona: str, detalhado: bool = False):
     """(novas, total no historico) sem mover o ponteiro.
 
     `lag` do XINFO vem NULO quando o stream ja sofreu XDEL — o servidor perde a
     conta de entradas e devolve indefinido em vez de zero. Contar zero ali diria
     "caixa em dia" com carta nova dentro, entao o caminho seguro e contar por
     XRANGE exclusivo a partir do ponteiro, que nao depende de entries-read.
+
+    Com detalhado=True devolve uma 4-tupla, acrescida de:
+    - idade_mais_antiga_seg: idade da carta pendente mais antiga (None se nao
+      houver pendente).
+    - ultima_leitura_seg: idle do consumer da cadeira (None se nunca leu).
+    Usado pelo bloco 2 (Caixas) via `fila status --json`; o caminho sem
+    detalhado e o que a saida de texto sempre usou, byte a byte igual.
     """
     garante_grupo(rc, persona)
     chave = stream_key(persona)
     total = rc.xlen(chave)
+    n = total
+    ponteiro = "0-0"
     for g in rc.xinfo_groups(chave):
         if g["name"] != GRUPO:
             continue
         pendentes = g.get("pending", 0)
-        if g.get("lag") is not None:
-            return g["lag"] + pendentes, total
         ponteiro = g.get("last-delivered-id", "0-0")
-        depois = rc.xrange(chave, min=f"({ponteiro}", max="+")
-        return len(depois) + pendentes, total
-    return total, total
+        if g.get("lag") is not None:
+            n = g["lag"] + pendentes
+        else:
+            depois = rc.xrange(chave, min=f"({ponteiro}", max="+")
+            n = len(depois) + pendentes
+        break
+
+    if not detalhado:
+        return n, total
+
+    idade_mais_antiga_seg = None
+    if n:
+        entradas = rc.xrange(chave, min=f"({ponteiro}", max="+", count=1)
+        if entradas:
+            _tecnico, campos = entradas[0]
+            idade_mais_antiga_seg = _idade_seg_do_msgid(campos.get("id", ""))
+
+    ultima_leitura_seg = _idle_consumer_seg(rc, chave, persona)
+    return n, total, idade_mais_antiga_seg, ultima_leitura_seg
 
 
 def imprime(m: dict):
@@ -188,14 +295,54 @@ def imprime(m: dict):
 
 
 # ---------- status ----------
-def cmd_status(rc, eu: str, args):
-    if args.persona == "--todas":
-        so_espia(eu)
-        personas = sorted(personas_validas() or set())
+def detalhe_status(rc, persona: str) -> dict:
+    """Um objeto por persona para `fila status --json` — bloco 2 (Caixas) da
+    spec. Estado e so tres valores aqui: 'vazia'/'em_dia'/'parada' — o quarto
+    valor do mapa do card ('fechada', porteiro) nao existe nesta versao
+    Streams (sem conceito de caixa encerrada neste arquivo; ver relatorio)."""
+    n, total, idade_mais_antiga_seg, ultima_leitura_seg = conta_novas(rc, persona, detalhado=True)
+    if n:
+        estado = "parada"
+    elif total:
+        estado = "em_dia"
     else:
-        valida_persona(args.persona)
-        so_minha(eu, args.persona)
+        estado = "vazia"
+    return {
+        "persona": persona,
+        "pendentes": n,
+        "total_historico": total,
+        "estado": estado,
+        "idade_mais_antiga_seg": idade_mais_antiga_seg,
+        "ultima_leitura_seg": ultima_leitura_seg,
+    }
+
+
+def cmd_status(rc, eu: str, args):
+    json_mode = getattr(args, "json", False)
+
+    if args.todas:
+        so_espia(eu, json_mode=json_mode)
+        personas = sorted(personas_validas() or set())
+    elif args.persona:
+        valida_persona(args.persona, json_mode=json_mode)
+        so_minha(eu, args.persona, json_mode=json_mode)
         personas = [args.persona]
+    else:
+        # Achado no LOTE 1 (card #390): argparse recusa "--todas" como valor do
+        # positional "persona" (parece opção, não é aceito por padrão) — a régua
+        # `args.persona == "--todas"` nunca era alcançável pela CLI de verdade.
+        # "persona" virou opcional e "--todas" virou flag de verdade; este ramo
+        # cobre "nem um nem outro" (uso incorreto), que antes o argparse pegava
+        # sozinho por "persona" ser obrigatório.
+        msg = "uso: fila status <persona> | --todas"
+        if json_mode:
+            _falha_json(msg, 2)
+        sys.stderr.write(f"erro: {msg}\n")
+        sys.exit(2)
+
+    if json_mode:
+        print(json.dumps([detalhe_status(rc, p) for p in personas], ensure_ascii=False))
+        return
 
     for p in personas:
         n, total = conta_novas(rc, p)
@@ -282,7 +429,9 @@ def build_parser():
     sub = ap.add_subparsers(dest="verbo")
 
     p_status = sub.add_parser("status", add_help=False)
-    p_status.add_argument("persona")
+    p_status.add_argument("persona", nargs="?", default=None)
+    p_status.add_argument("--todas", action="store_true")
+    p_status.add_argument("--json", action="store_true")
 
     p_ler = sub.add_parser("ler", add_help=False)
     p_ler.add_argument("persona")
@@ -324,8 +473,13 @@ def main():
     try:
         rc.ping()
     except redis.exceptions.RedisError as e:
-        sys.stderr.write(f"erro: nao alcancei a malha msg ({REDIS_HOST}:{REDIS_PORT}): {e}\n")
+        msg = f"nao alcancei a malha msg ({REDIS_HOST}:{REDIS_PORT}): {e}"
+        if _json_mode(args):
+            _falha_json(msg, 1)
+        sys.stderr.write(f"erro: {msg}\n")
         sys.exit(1)
+
+    so_leitura(eu, args.verbo, _json_mode(args))
 
     if args.verbo == "status":
         cmd_status(rc, eu, args)

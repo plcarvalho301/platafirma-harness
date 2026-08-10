@@ -1,0 +1,65 @@
+# Sobe agregador + tela (card #390, LOTE 3). Entrega da fábrica: serviço em
+# loopback, porta por env var — mesma convenção de porta-publicada de
+# platafirma-core/docker-compose.yml (127.0.0.1:<porta>:<porta>). Não abre
+# porta publicada, não toca cloudflared/oauth2-proxy.
+#
+# BORDA (claudinho-TI, não a fábrica — ver card): rede pra encaixar no
+# ingress existente (ex.: entrar em `conhecimento`, como os outros serviços
+# do compose de platafirma-core, pra oauth2-proxy alcançar por nome), a
+# unidade/systemd que sobe isto, e os dois pontos abaixo, que dependem de
+# como o host roda docker (rootless, per platafirma-core/CLAUDE.md) e
+# systemd --user na máquina real:
+#   - DOCKER_SOCK: caminho do socket rootless (bin/infra usa
+#     unix:///run/user/$(id -u)/docker.sock por default) — o bind mount
+#     abaixo assume host uid 1000; ajustar se claudinho for outro uid.
+#   - systemctl --user (usado por `infra restart`, chamado pela ação
+#     "reiniciar"): precisa de XDG_RUNTIME_DIR e do bus de sessão do
+#     usuário montados — não deu pra validar isto fora do host real, então
+#     o bind mount de /run/user/1000 abaixo é proposta, não fato testado.
+#   - FILA_REDIS_HOST/FILA_REDIS_PORT (usado por `fila enviar`, ação
+#     "despachar recado"): default de fila_streams.py é 127.0.0.1:6379, que
+#     de dentro do container NÃO é o host — precisa apontar pro endereço de
+#     rede real da malha `msg` (Valkey), e a `tela` provavelmente precisa
+#     entrar na network daquele compose pra alcançar por nome. Não validado
+#     aqui — endereço exato é decisão de quem já sabe onde o `msg` mora.
+name: harness-controle
+
+services:
+  agregador:
+    build: .
+    restart: unless-stopped
+    command: ["python", "-m", "harness_controle.agregador"]
+    environment:
+      PF_RAIZ: /home/claudinho/AI
+      AGREGADOR_ESTADO_PATH: /estado/estado.json
+      DOCKER_HOST: unix:///run/user/1000/docker.sock
+    volumes:
+      - /home/claudinho/AI:/home/claudinho/AI:ro
+      - /run/user/1000/docker.sock:/run/user/1000/docker.sock
+      - /run/user/1000:/run/user/1000
+      - estado:/estado
+
+  tela:
+    build: .
+    restart: unless-stopped
+    command: ["uvicorn", "harness_controle.web:app", "--host", "0.0.0.0", "--port", "8000"]
+    environment:
+      PF_RAIZ: /home/claudinho/AI
+      AGREGADOR_ESTADO_PATH: /estado/estado.json
+      TOKENS_CSS_PATH: /home/claudinho/AI/platafirma-arquitetura/design/tokens.css
+      PF_CADEIRA_TELA: claudinho-TI
+      DOCKER_HOST: unix:///run/user/1000/docker.sock
+      FILA_REDIS_HOST: ${FILA_REDIS_HOST:-127.0.0.1}
+      FILA_REDIS_PORT: ${FILA_REDIS_PORT:-6379}
+    volumes:
+      - /home/claudinho/AI:/home/claudinho/AI:ro
+      - /run/user/1000/docker.sock:/run/user/1000/docker.sock
+      - /run/user/1000:/run/user/1000
+      - estado:/estado
+    ports:
+      - "127.0.0.1:${HARNESS_CONTROLE_PORTA:-8091}:8000"
+    depends_on:
+      - agregador
+
+volumes:
+  estado:
