@@ -19,6 +19,7 @@ uso() {
   cat >&2 <<FIM
 uso:
   deploy <stack> <acao> [args...]   acao = up | down | ps | logs | config | pull | build
+  deploy <stack> promover [ref]     worktree de deploy: fetch + checkout + recreate
   deploy <stack>                    mostra o declarado da stack, sem tocar em nada
   deploy                            lista as stacks do registro
 
@@ -68,6 +69,36 @@ if [ "$(campo "$STACK" critico)" = "true" ] && [ "$ACAO" = "down" ] && [ "${PF_S
   echo "recusa: \"$STACK\" e critica e \"down\" derruba a borda junto." >&2
   echo "        confirme com: PF_SIM=1 deploy $STACK down" >&2
   exit 1
+fi
+
+# `promover` fecha o caminho inteiro do worktree de deploy num ato so. Existe porque
+# cada passo isolado PASSA e o conjunto falha calado: config em bind mount de arquivo
+# unico troca de inode no checkout, o mount fica preso ao inode velho, e `reload` rele
+# o arquivo antigo sem erro nenhum — sintaxe valida, teste ok, comportamento inalterado.
+if [ "$ACAO" = "promover" ]; then
+  shift
+  DIR="$(dirname "$COMPOSE")"
+  git -C "$DIR" rev-parse --git-dir >/dev/null 2>&1 || {
+    echo "recusa: $DIR nao e checkout git — nao ha o que promover." >&2; exit 1; }
+  if git -C "$DIR" symbolic-ref -q HEAD >/dev/null; then
+    echo "recusa: $DIR esta num branch — e clone de trabalho, nao worktree de deploy." >&2
+    echo "        checkout ali trocaria o branch debaixo de quem edita." >&2
+    exit 1
+  fi
+  if [ "$(campo "$STACK" critico)" = "true" ] && [ "${PF_SIM:-}" != "1" ]; then
+    echo "recusa: \"$STACK\" e critica e promover recria os conteineres." >&2
+    echo "        confirme com: PF_SIM=1 deploy $STACK promover" >&2
+    exit 1
+  fi
+  REF="origin/main"
+  if [ $# -gt 0 ] && [[ "$1" != -* ]]; then REF="$1"; shift; fi
+  ANTES="$(git -C "$DIR" rev-parse --short HEAD)"
+  git -C "$DIR" fetch -q origin
+  git -C "$DIR" checkout -q --detach "$REF"
+  DEPOIS="$(git -C "$DIR" rev-parse --short HEAD)"
+  printf 'worktree: %s\n  %s -> %s (%s)\n' "$DIR" "$ANTES" "$DEPOIS" "$REF"
+  cd "$DIR"
+  exec docker compose -f "$COMPOSE" up -d --force-recreate "$@"
 fi
 
 cd "$(dirname "$COMPOSE")"
