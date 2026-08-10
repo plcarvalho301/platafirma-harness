@@ -33,6 +33,10 @@ except ImportError:
 RAIZ = os.environ.get("FILA_RAIZ", os.path.expanduser("~/AI/fila"))
 PERSONAS_FILE = os.path.join(RAIZ, ".personas")
 ESPIA = "claudinha-gestao-estrategica"
+# Identidade de leitura automatica: processo sem sessao, sem caixa e sem mesa.
+# Nao entra em .personas de proposito — assim nunca e destinatario valido.
+# Pode so medir profundidade (status); qualquer outro verbo e negado em so_leitura().
+LEITOR = "sonda"
 GRUPO = "cadeira"
 TIPOS_VALIDOS = {"decisao", "resposta", "pedido", "minuta", "demanda", "handoff"}
 
@@ -118,10 +122,21 @@ def so_minha(eu: str, alvo: str, json_mode: bool = False):
 
 
 def so_espia(eu: str, json_mode: bool = False):
-    if eu != ESPIA:
+    if eu not in (ESPIA, LEITOR):
         if json_mode:
-            _falha_json(f"--todas e de {ESPIA}, nao de {eu}.", 1)
-        sys.stderr.write(f"erro: --todas e de {ESPIA}, nao de {eu}.\n")
+            _falha_json(f"--todas e de {ESPIA} ou {LEITOR}, nao de {eu}.", 1)
+        sys.stderr.write(f"erro: --todas e de {ESPIA} ou {LEITOR}, nao de {eu}.\n")
+        sys.exit(1)
+
+
+def so_leitura(eu: str, verbo: str, json_mode: bool = False):
+    """LEITOR mede profundidade e nada mais. Ler consome (XACK) e enviar escreve —
+    os dois movem estado, e leitura automatica nao move estado de ninguem."""
+    if eu == LEITOR and verbo != "status":
+        msg = f"{LEITOR} so faz status — {verbo} move estado e nao e de leitura automatica."
+        if json_mode:
+            _falha_json(msg, 1)
+        sys.stderr.write(f"erro: {msg}\n")
         sys.exit(1)
 
 
@@ -463,6 +478,8 @@ def main():
             _falha_json(msg, 1)
         sys.stderr.write(f"erro: {msg}\n")
         sys.exit(1)
+
+    so_leitura(eu, args.verbo, _json_mode(args))
 
     if args.verbo == "status":
         cmd_status(rc, eu, args)

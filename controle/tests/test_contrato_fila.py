@@ -354,3 +354,106 @@ def test_conta_novas_nao_detalhado_e_tupla_de_dois():
     })
     resultado = fila_streams.conta_novas(rc, "claudinho-TI")
     assert resultado == (0, 2)
+
+
+# ---------- identidade "sonda": leitura automatica, escopo minimo ----------
+#
+# O agregador nao e sessao de cadeira nenhuma. Antes ele vestia
+# PF_CADEIRA=claudinha-gestao-estrategica pra passar no so_espia(), o que
+# transformava o controle de acesso em algo que se contorna com variavel de
+# ambiente. Agora ha identidade propria (LEITOR = "sonda"), e o que a define
+# e o que ela NAO pode fazer.
+
+
+def _rc_uma_caixa():
+    return FakeRC({
+        "claudinho-TI": {
+            "xlen": 1,
+            "groups": [{"name": "cadeira", "pending": 0, "lag": None, "last-delivered-id": "100-0"}],
+            "xrange": [("100-1", {"id": "20260810T120000-claudinho-IA", "de": "claudinho-IA",
+                                   "tipo": "pedido", "assunto": "a", "ref": "", "responde": "",
+                                   "corpo": "x"})],
+            "consumers": [{"name": "claudinho-TI", "idle": 1000, "pending": 0}],
+        },
+    })
+
+
+def test_sonda_faz_status_todas(monkeypatch, capsys):
+    """O caso de uso legitimo: medir profundidade de todas as caixas."""
+    monkeypatch.setattr(fila_streams, "personas_validas", lambda: {"claudinho-TI"})
+    rc = _rc_uma_caixa()
+    code, cap = _rodar_cli(
+        monkeypatch, capsys, ["status", "--todas", "--json"], "sonda", rc
+    )
+    assert code == 0
+    dados = json.loads(cap.out)
+    assert isinstance(dados, (list, dict))
+    assert "erro" not in (dados if isinstance(dados, dict) else {})
+
+
+def test_sonda_nao_le(monkeypatch, capsys):
+    """ler consome (XACK): move ponteiro, entrega mensagem. Negado."""
+    rc = FakeRC({})
+    code, cap = _rodar_cli(
+        monkeypatch, capsys, ["ler", "claudinho-TI"], "sonda", rc
+    )
+    assert code == 1
+    assert "sonda" in (cap.out + cap.err)
+
+
+def test_sonda_nao_le_todas(monkeypatch, capsys):
+    """--todas nao abre excecao pro ler. Aqui o argparse recusa antes (exit 2,
+    "--todas" como valor do positional "persona" — mesma limitacao que o status
+    teve de resolver com flag propria), entao o gate de so_leitura() nem chega a
+    rodar. O que este teste garante e o resultado: nao passa. O caminho do gate
+    em si esta coberto por test_sonda_nao_le."""
+    rc = FakeRC({})
+    code, _ = _rodar_cli(monkeypatch, capsys, ["ler", "--todas"], "sonda", rc)
+    assert code != 0
+
+
+def test_sonda_nao_envia(monkeypatch, capsys):
+    """enviar escreve na caixa de outro. Negado."""
+    rc = FakeRC({})
+    code, _ = _rodar_cli(
+        monkeypatch,
+        capsys,
+        ["enviar", "claudinho-TI", "--tipo", "pedido", "--assunto", "x"],
+        "sonda",
+        rc,
+    )
+    assert code == 1
+
+
+def test_sonda_nao_e_destinataria(monkeypatch, capsys):
+    """Fora de .personas de proposito: ninguem consegue escrever pra sonda."""
+    monkeypatch.setattr(fila_streams, "personas_validas", lambda: {"claudinho-TI"})
+    rc = FakeRC({})
+    code, _ = _rodar_cli(
+        monkeypatch,
+        capsys,
+        ["enviar", "sonda", "--tipo", "pedido", "--assunto", "x"],
+        "claudinho-TI",
+        rc,
+    )
+    assert code == 1
+
+
+def test_espia_continua_valendo(monkeypatch, capsys):
+    """A politica antiga nao mudou: sonda soma, nao substitui."""
+    monkeypatch.setattr(fila_streams, "personas_validas", lambda: {"claudinho-TI"})
+    rc = _rc_uma_caixa()
+    code, _ = _rodar_cli(
+        monkeypatch, capsys, ["status", "--todas", "--json"],
+        "claudinha-gestao-estrategica", rc,
+    )
+    assert code == 0
+
+
+def test_cadeira_comum_continua_barrada_em_todas(monkeypatch, capsys):
+    """Nem sonda nem espia: cadeira comum segue sem --todas."""
+    rc = FakeRC({})
+    code, _ = _rodar_cli(
+        monkeypatch, capsys, ["status", "--todas", "--json"], "claudinho-TI", rc
+    )
+    assert code == 1

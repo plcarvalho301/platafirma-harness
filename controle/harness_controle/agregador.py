@@ -91,13 +91,13 @@ def _skills_disponiveis() -> list[str]:
     return sorted(p.name for p in d.iterdir() if p.is_dir())
 
 
-def _env_espia() -> dict[str, str]:
-    """Leitura fria de TODAS as caixas (Bloco 2) so e permitida pra identidade
-    claudinha-gestao-estrategica (so_espia() em fila_streams.py) — o agregador
-    nao e sessao de cadeira nenhuma, entao assume essa identidade so pra esta
-    chamada especifica. Decisao comentada no card #390 antes de construir."""
+def _env_sonda() -> dict[str, str]:
+    """O agregador nao e sessao de cadeira nenhuma: le como "sonda", identidade
+    propria de leitura automatica (LEITOR em fila_streams.py). Sonda mede
+    profundidade de caixa e nada mais — ler e enviar sao negados no proprio
+    verbo, e ela nao esta em .personas, entao nem destinataria e."""
     e = dict(os.environ)
-    e["PF_CADEIRA"] = "claudinha-gestao-estrategica"
+    e["PF_CADEIRA"] = "sonda"
     return e
 
 
@@ -145,7 +145,7 @@ SONDAS: list[Sonda] = [
     Sonda("infra_saude", _intervalo("INFRA", 30), _timeout("INFRA", 15),
           lambda: ["infra", "saude", "--json"]),
     Sonda("fila_status", _intervalo("FILA", 30), _timeout("FILA", 15),
-          lambda: ["fila_streams.py", "status", "--todas", "--json"], _env_espia),
+          lambda: ["fila_streams.py", "status", "--todas", "--json"], _env_sonda),
     Sonda("conferir_servico", _intervalo("CONFERIR", 90), _timeout("CONFERIR", 60),
           lambda: ["conferir", "servico", "--json"]),
     Sonda("conferir_verbo", _intervalo("CONFERIR", 90), _timeout("CONFERIR", 30),
