@@ -56,12 +56,22 @@ if [ -z "$M" ]; then
   echo "(aviso: $P não declara linha FERRAMENTAL: — manifesto não entrou)"
 fi
 
+# Memória da cadeira, pelo verbo `mesa` — mesma razão de delegar da fila. A mesa
+# entra inteira (é o resíduo da fita anterior, curto por construção); do caderno
+# entra só o ÍNDICE, e o corpo sai por `mesa caderno <chapéu>` na fita que o quiser.
+if [ -n "$C" ]; then
+  echo "===== mesa: $C ====="
+  PF_CADEIRA="$C" mesa ver 2>&1 || echo "(mesa indisponível — msg-mem fora do ar)"
+  echo "===== cadernos: $C ====="
+  PF_CADEIRA="$C" mesa caderno 2>&1 || true
+fi
+
 # Fila lida sempre pelo comando `fila`, nunca pelo sistema de arquivos: reimplementar
 # aqui o parser do formato de caixa criaria segunda fonte da mesma regra, e a
 # divergência entre as duas apareceria como mensagem sumida.
 if [ -z "$N" ]; then
   echo "===== fila ===== (nome não resolvido — sem persona não há como saber a caixa)"
-elif out=$(fila status "$N" 2>&1); then
+elif out=$(PF_CADEIRA="$C" fila status "$N" 2>&1); then
   echo "===== fila: $N ====="
   echo "$out"
 else

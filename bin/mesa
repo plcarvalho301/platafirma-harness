@@ -1,0 +1,197 @@
+#!/home/claudinho/AI/.venv-harness/bin/python
+# mesa — memoria de trabalho da cadeira entre fitas, por chapeu
+# capacidade: memoria
+# dono: claudinho-IA
+#
+# Despachante (arq:0040): o binario agrupa a memoria da cadeira, o sub-ato e o
+# ato. Dois substratos, um eixo — o chapeu (slot) e o mesmo nos dois:
+#
+#   mesa  (efemera)  classe `mem` de arq:0041, instancia msg-mem, chave
+#                    `mem:<cadeira>:<slot>`. Sobrescrita, TTL, sem durabilidade.
+#                    O que a fita de hoje precisa entregar a fita de amanha.
+#   caderno (duravel) arquivo `caderno/<cadeira>/<slot>.md` no repo do harness.
+#                    Versionado, com diff e revisao. O que a cadeira aprendeu do
+#                    proprio oficio e vale alem de um expediente.
+#
+# NAO E A FILA. Protocolo inteiro distinto: sem envelope, sem destinatario, sem
+# ack, sem consumer group, sem trim de arq:0024. A fila e dirigida a outro e
+# imutavel; a memoria e para si mesma e mutavel. Fato que interessa a outra
+# cadeira desce ao canal proprio (card, commit, wiki) — nunca mora aqui.
+#
+# ESTATUTO DA MESA (arq:0041): memoria de trabalho, nao substrato. Perda se paga
+# em re-derivacao na fita seguinte, nao em restauracao. Ausencia de chave e
+# resposta valida, nao erro.
+#
+# NAO HA CONSUMO. `monta_sessao` le sem apagar: com um chapeu por slot, ler-e-
+# apagar apagaria o paragrafo do chapeu vizinho. Sobrescrita e o unico jeito de
+# esquecer, e `limpa` exige alvo explicito.
+#
+# CADERNO E CORPO SOB DEMANDA. A abertura entrega o INDICE (nome, idade, bytes);
+# o corpo so entra na fita que o pediu — mesma regra da fila (envelope, nunca
+# corpo) e da skill (descritor no contexto, corpo por ato). Carregar os tres
+# chapeus a cada giro anula a razao de ter partido por chapeu.
+import argparse
+import json
+import os
+import re
+import subprocess
+import sys
+import time
+
+try:
+    import redis
+except ImportError:
+    sys.exit("erro: modulo 'redis' nao instalado neste venv (uv pip install redis)")
+
+HOST = os.environ.get("MEM_REDIS_HOST", "127.0.0.1")
+PORTA = int(os.environ.get("MEM_REDIS_PORT", "6380"))  # instancia msg-mem, nao a malha
+TTL_PADRAO = int(os.environ.get("MEM_TTL_DIAS", "14")) * 86400
+TETO_AVISO = 4000  # bytes; acima disto e sintoma de fato nao despachado
+RAIZ = os.environ.get("PF_RAIZ", os.path.expanduser("~/AI"))
+CADERNOS = os.path.join(RAIZ, "platafirma-harness", "caderno")
+SLOT_RE = re.compile(r"^[a-z0-9][a-z0-9-]{0,23}$")
+
+
+def conn():
+    return redis.Redis(host=HOST, port=PORTA, decode_responses=True)
+
+
+def cadeira():
+    c = os.environ.get("PF_CADEIRA", "").strip().lower()
+    if not c:
+        sys.exit("erro: PF_CADEIRA nao definida — a memoria e privada da cadeira (arq:0041)")
+    return c
+
+
+def chave(slot):
+    return f"mem:{cadeira()}:{slot}"
+
+
+def valida_slot(slot):
+    if not SLOT_RE.match(slot or ""):
+        sys.exit(f"erro: slot invalido {slot!r} — minusculas, digitos e hifen, ate 24 chars")
+    return slot
+
+
+def idade(seg):
+    seg = max(0, int(seg))
+    if seg < 3600:
+        return f"{seg // 60} min"
+    if seg < 86400:
+        return f"{seg // 3600} h"
+    return f"{seg // 86400} d"
+
+
+def ato_ver(args):
+    rc = conn()
+    alvo = f"mem:{cadeira()}:{args.slot}" if args.slot else f"mem:{cadeira()}:*"
+    chaves = sorted(rc.keys(alvo))
+    if not chaves:
+        print("mesa vazia" if not args.slot else f"slot {args.slot}: vazio")
+        return 0
+    for k in chaves:
+        bruto = rc.get(k)
+        slot = k.split(":", 2)[2]
+        try:
+            d = json.loads(bruto)
+            texto, ts = d.get("x", ""), d.get("t", 0)
+        except (ValueError, AttributeError):
+            texto, ts = bruto or "", 0
+        print(f"[{slot}] escrito ha {idade(time.time() - ts)}")
+        print(texto.rstrip())
+        print()
+    return 0
+
+
+def ato_anota(args):
+    slot = valida_slot(args.slot)
+    texto = sys.stdin.read().strip()
+    if not texto:
+        sys.exit("erro: corpo vazio — para esquecer um slot use `mesa limpa <slot>`")
+    if len(texto.encode()) > TETO_AVISO:
+        print(
+            f"aviso: {len(texto.encode())} bytes no slot {slot} — mesa grande e sintoma "
+            "de fato que devia ter descido a card, commit ou wiki",
+            file=sys.stderr,
+        )
+    rc = conn()
+    rc.set(chave(slot), json.dumps({"t": int(time.time()), "x": texto}), ex=TTL_PADRAO)
+    print(f"mesa: slot {slot} reescrito ({len(texto.splitlines())} linhas)")
+    return 0
+
+
+def ato_limpa(args):
+    slot = valida_slot(args.slot)  # mutacao exige alvo explicito
+    rc = conn()
+    print(f"mesa: slot {slot} {'limpo' if rc.delete(chave(slot)) else 'ja estava vazio'}")
+    return 0
+
+
+def dir_caderno():
+    return os.path.join(CADERNOS, cadeira())
+
+
+def ato_caderno(args):
+    """Sem slot: indice (o que entra na abertura). Com slot: corpo, sob demanda."""
+    d = dir_caderno()
+    if args.slot:
+        slot = valida_slot(args.slot)
+        caminho = os.path.join(d, f"{slot}.md")
+        if not os.path.isfile(caminho):
+            # Ausencia se declara: o verbo diz onde olhou (regra 4 do cabecalho).
+            print(f"caderno {slot}: nao existe ({caminho})")
+            return 0
+        print(f"===== caderno/{cadeira()}/{slot}.md =====")
+        sys.stdout.write(open(caminho, errors="replace").read())
+        return 0
+    if not os.path.isdir(d):
+        print(f"cadernos: nenhum ({d} nao existe)")
+        return 0
+    achados = sorted(f for f in os.listdir(d) if f.endswith(".md"))
+    if not achados:
+        print(f"cadernos: nenhum em {d}")
+        return 0
+    for f in achados:
+        caminho = os.path.join(d, f)
+        st = os.stat(caminho)
+        # Idade e a do ultimo commit, nao a do mtime: clone recem-puxado tem mtime de hoje.
+        try:
+            ts = int(subprocess.run(
+                ["git", "-C", os.path.dirname(CADERNOS), "log", "-1", "--format=%ct", "--", caminho],
+                capture_output=True, text=True, timeout=10).stdout.strip() or st.st_mtime)
+        except (OSError, ValueError, subprocess.SubprocessError):
+            ts = int(st.st_mtime)
+        print(f"  {f[:-3]:<16} {st.st_size:>6} B   ultima escrita ha {idade(time.time() - ts)}")
+    print(f"  (corpo sob demanda: `mesa caderno <chapeu>`)")
+    return 0
+
+
+def main():
+    p = argparse.ArgumentParser(prog="mesa", description="memoria de trabalho da cadeira, por chapeu")
+    sub = p.add_subparsers(dest="ato")
+
+    v = sub.add_parser("ver", help="imprime a mesa (ou um slot), com a idade de cada anotacao")
+    v.add_argument("slot", nargs="?")
+    v.set_defaults(func=ato_ver)
+
+    a = sub.add_parser("anota", help="reescreve um slot da mesa; corpo em stdin")
+    a.add_argument("slot")
+    a.set_defaults(func=ato_anota)
+
+    l = sub.add_parser("limpa", help="esquece um slot da mesa; alvo obrigatorio")
+    l.add_argument("slot")
+    l.set_defaults(func=ato_limpa)
+
+    c = sub.add_parser("caderno", help="sem slot, o indice; com slot, o corpo do caderno duravel")
+    c.add_argument("slot", nargs="?")
+    c.set_defaults(func=ato_caderno)
+
+    args = p.parse_args()
+    if not args.ato:
+        p.print_help()
+        return 2
+    return args.func(args)
+
+
+if __name__ == "__main__":
+    sys.exit(main())
