@@ -61,10 +61,10 @@ Três estratos:
   de vizinhança, marcadas `relevancia: negativa` e sem alvo. Medem se o sistema sabe dizer "não
   sei" em vez de inventar; sem elas, o modo de falha mais perigoso fica invisível.
 - **T3, multi-step (30 perguntas).** Pergunta que só se responde atravessando mais de uma obra,
-  ou saindo de artefato interno (ADR, `.ttl`, schema) para o acervo. Alvo é a âncora conferida
-  por casamento de título, em 22 itens; nos outros 8 a âncora é artefato interno e alvo de obra
-  não se aplica. O par automático fica fora do alvo e vem declarado na `nota` do item — não
-  serve de denominador de recall sem revisão item a item.
+  ou saindo de artefato interno (ADR, `.ttl`, schema) para o acervo. Mede para onde o raciocínio
+  se desdobra, nas arestas do acervo e fora dele. **Não tem alvo de obra e não pontua por hit:**
+  o documento de partida é ponto de partida, não resposta, e as obras do outro lado do salto
+  nunca foram conferidas item a item. Enquanto isso não mudar, T3 se lê por julgamento.
 
 Tamanho final 228 perguntas, suficiente para o teste estatístico ter potência. O gabarito é
 carimbado com a versão do acervo: obra descartada mais adiante invalida as perguntas dela
