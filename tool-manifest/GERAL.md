@@ -30,7 +30,7 @@ fechar                          : tarefas fechar <id>
 amarrar subtarefa               : tarefas sub <pai> <filho>
 o que o verbo não cobre         : tarefas api <MÉTODO> <caminho> | tarefas api-corpo (JSON em stdin)
 
-estado do acervo (5 degraus)    : acervo status           [--json | --detalhe]
+estado do acervo (5 degraus)    : acervo escada          [--json | --detalhe]
                                   ÚNICA fonte de número do acervo — ver regra abaixo
 demais atos do acervo           : acervo                  sem argumento, lista os sub-atos
 consulta ao RAG pela linha      : ragq "<pergunta>"       mesmo contrato do rag_search do MCP
@@ -84,7 +84,7 @@ sai 1 enquanto houver divergência. Catálogo completo, com origem de cada verbo
 Verbo que é despachante de toolkit (`acervo`, `seg`) é o par binário+subcomando,
 por `arq:0040`: o binário agrupa, o subcomando é o ato.
 
-> **Número do acervo sai de `acervo status`, nunca de SQL na mão.** Contagem crua
+> **Número do acervo sai de `acervo escada`, nunca de SQL na mão.** Contagem crua
 > `WHERE embedding IS NULL` inclui os chunks não-textuais (tabela, figura, layout),
 > que nunca recebem vetor por contrato do embedder (`NOT is_not_text AND length(text)>0`)
 > — subtrair total menos vetorizados fabrica uma pendência que não existe. Pendência

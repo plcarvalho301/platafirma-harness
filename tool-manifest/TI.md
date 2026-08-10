@@ -40,9 +40,10 @@ Em `tool-manifest/GERAL.md`, comum a todas as cadeiras. Não se replica aqui.
 ## Por domínio — ponteiro, não manual
 
 ```
-acervo, estado por obra         : acervo status [--json] [--detalhe]
-pôr arquivo na fila do acervo   : acervo-drop [--pessoal|--copiar|-n] <arquivo>
-carregar planilha de ingestão   : acervo-ingerir [--apply]        dry-run por default
+acervo, estado por obra         : acervo escada [--json] [--detalhe]
+pôr arquivo na fila do acervo   : platafirma-conhecimento/rag/scripts/acervo-drop
+                                  degrau 0, fora do PATH; dono declarado: claudinho-TI
+entrada por arquivo / planilha  : acervo ingerir <raiz> | --planilha [x.ods]  [--apply]
 SQL no acervo                   : docker exec -i rag-extractor-pg psql -U rag -d rag_extractor -At -F ' :: ' -c "<sql>"
 objeto no MinIO                 : mc rm --versions --force pf/<bucket>/<sha256>
 declarado x servido             : conferir servico [nome]  exit 1 = ha divergencia
