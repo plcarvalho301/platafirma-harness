@@ -425,7 +425,8 @@ def conferir_repo(alvo):
                 base = os.path.splitext(rel)[0]
                 if gerado_por_ferramenta(caminho) and base not in fontes:
                     achados["RENDER"].append((rel, tam))
-                elif base not in fontes and not gerado_por_ferramenta(caminho):
+                elif rel.endswith(".drawio.svg"):
+                    # Fonte e render no mesmo arquivo: o drawio reabre o proprio SVG.
                     pass
                 elif base not in fontes:
                     # Fonte no mesmo diretorio com nome-base que so difere de sufixo:
