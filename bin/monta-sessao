@@ -2,7 +2,7 @@
 # monta-sessao <cadeira> — imprime numa volta o contexto de abertura da cadeira:
 # capacidade: expediente
 # dono: claudinho-IA
-# persona, manifesto declarado por ela, org canônico e a fila dela.
+# persona, manifesto declarado por ela + o GERAL, org canônico e a fila dela.
 #
 # As duas variáveis saem do texto da persona, não do nome do arquivo:
 #   linha 1        "Você é <nome>,"        -> nome canônico, que é o diretório da fila
@@ -35,9 +35,15 @@ done
 N=$(sed -n '1s/^Você é \([A-Za-z-]*\).*/\1/p' "$P")
 M=$(sed -n 's/^FERRAMENTAL: *\([^ ]*\.md\).*/\1/p' "$P" | head -1)
 
+# O manifesto da cadeira APONTA para o geral em vez de repetir o operacional comum
+# (fila, tarefas, infra, git, venv). Servir só o declarado abre cadeira sem essa
+# metade — e a tool `monta_sessao` já entrega os dois. Mesmo default, mesma env.
+G="${PF_MANIFESTO_GERAL:-platafirma-harness/tool-manifest/GERAL.md}"
+[ "$G" = "$M" ] && G=""
+
 echo "== cadeira: ${N:-<nome não resolvido na linha 1 de $P>} =="
 
-for f in "$P" ${M:-} platafirma-arquitetura/docs/org-template-canonico.md; do
+for f in "$P" ${M:-} ${G:-} platafirma-arquitetura/docs/org-template-canonico.md; do
   if [ -f "$f" ]; then
     echo "===== $f ====="
     cat "$f"
