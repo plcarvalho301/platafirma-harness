@@ -1,7 +1,0 @@
-Feature flag (também chamado feature toggle) é um mecanismo que permite esconder funcionalidade já implantada, ligando ou desligando o acesso a ela sem novo deploy [1]. É usado principalmente em trunk-based development, permitindo que código incompleto seja versionado e implantado mas mantido oculto dos usuários finais [1].
-
-Além de ligar/desligar por completo, o flag pode ter granularidade fina, variando o estado conforme o usuário que faz a requisição — por exemplo, liberar a feature para um grupo de beta testers enquanto o restante ainda vê a feature desligada, o que ajuda a implementar um canary rollout [1]. Existem soluções gerenciadas como LaunchDarkly e Split, mas é possível começar com algo simples, como um arquivo de configuração, e evoluir depois [1].
-
-No contexto de decomposição de monolito, o feature toggle também serve para alternar entre duas implementações de uma mesma funcionalidade — por exemplo, entre a versão que ainda vive no monolito e a nova versão extraída para um microsserviço, podendo ser implementado na camada de proxy do padrão strangler fig [2].
-
-As demais fontes fornecidas não tratam do conceito de feature flag/toggle: [3] trata de cultura organizacional e patrocínio executivo, [4] trata de plataformas internas de desenvolvedor e golden paths, [5] trata de campos de texto rico em PDF, [6] define "feature" no sentido de funcionalidade de produto (não de flag), [7] trata de "trace flag" de banco de dados SQL Server, e [8] trata de fundamentos de SRE — nenhum cobre o conceito exato perguntado.

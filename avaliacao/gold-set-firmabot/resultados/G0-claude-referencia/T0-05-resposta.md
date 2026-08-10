@@ -1,5 +1,0 @@
-O acervo não traz uma definição direta e explícita do conceito "governança de dados" [2]. As fontes disponíveis tratam de aspectos correlatos — estrutura organizacional [3], papéis e responsabilidades [5], riscos da não implementação [4], regulação de compartilhamento [7][8] — mas não uma definição conceitual do termo em si.
-
-O que mais se aproxima é a apresentação da Cartilha vol. III, que descreve o papel da governança e gestão de dados como algo que "desempenha um papel basilar na implementação da estratégia de transformação digital do Estado para melhoria dos serviços e das políticas públicas, em que as organizações buscam extrair valor e evidências de seus ativos de dados, garantir a conformidade e segurança, facilitar a tomada de decisões embasadas, promover a cultura de dados, estabelecer responsabilidade e prestação de contas" [2]. Isso caracteriza a função da governança de dados, não uma definição formal do termo.
-
-Se você quer uma definição formal e fechada do conceito, o acervo não cobre esse ponto exato.
