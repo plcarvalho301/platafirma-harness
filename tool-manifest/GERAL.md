@@ -15,6 +15,12 @@ mandar recado                   : fila enviar <dest> --tipo <t> --assunto <a>
                                   (corpo em stdin; --ref e --responde opcionais)
 abrir sessão de uma cadeira     : monta-sessao <cadeira>   [tool monta_sessao é a via boa]
 
+ver minha memoria de trabalho   : mesa ver [chapeu]              ja vem no monta_sessao
+anotar antes de a fita morrer   : mesa anota <chapeu>            corpo em stdin; sobrescreve
+esquecer um chapeu              : mesa limpa <chapeu>            alvo obrigatorio
+indice dos cadernos duraveis    : mesa caderno                   idade e tamanho, sem corpo
+abrir o caderno de um chapeu    : mesa caderno <chapeu>          corpo sob demanda
+
 ler um card                     : tarefas ler <id>
 listar projetos                 : tarefas projetos
 listar cards abertos            : tarefas listar <projeto>        (listar-tudo inclui fechados)
