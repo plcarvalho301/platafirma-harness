@@ -161,6 +161,15 @@ async def feito(request):
 # --- estatico ------------------------------------------------------------
 
 
+TELA_CSS_PATH = Path(__file__).resolve().parent / "estatico" / "tela.css"
+
+
+async def tela_css(request):
+    if not TELA_CSS_PATH.is_file():
+        return PlainTextResponse("tela.css nao encontrado nesta instancia", status_code=404)
+    return PlainTextResponse(TELA_CSS_PATH.read_text(encoding="utf-8"), media_type="text/css")
+
+
 async def tokens_css(request):
     if not TOKENS_PATH.is_file():
         return PlainTextResponse("tokens.css nao encontrado nesta instancia", status_code=404)
@@ -240,6 +249,7 @@ def cria_app() -> Starlette:
         Route("/cadeira/{slug}", cadeira),
         Route("/feito", feito),
         Route("/estatico/tokens.css", tokens_css),
+        Route("/estatico/tela.css", tela_css),
         Route("/acoes/despachar-recado", despachar_recado, methods=["POST"]),
         Route("/acoes/reiniciar", reiniciar, methods=["POST"]),
     ]

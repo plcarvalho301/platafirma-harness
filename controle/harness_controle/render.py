@@ -19,6 +19,8 @@ import time
 from typing import Any
 
 TOKENS_HREF = "/estatico/tokens.css"
+# Camada 2: tokens.css nao conhece classe de superficie; sozinho, renderiza HTML nu.
+TELA_HREF = "/estatico/tela.css"
 
 CLOUDFLARED_OAUTH2PROXY = {"cloudflared", "oauth2-proxy"}
 
@@ -94,6 +96,7 @@ def pagina(titulo: str, ativo: str, direita_html: str, corpo_html: str) -> str:
 <meta http-equiv="refresh" content="60">
 <title>{_esc(titulo)}</title>
 <link rel="stylesheet" href="{TOKENS_HREF}">
+<link rel="stylesheet" href="{TELA_HREF}">
 </head>
 <body>
 {_topo(ativo, direita_html)}

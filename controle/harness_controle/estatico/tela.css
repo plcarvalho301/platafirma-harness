@@ -1,0 +1,382 @@
+/* ============================================================
+   Folha de aplicação da tela do harness — camada 2.
+   Camada 1 é design/tokens.css (variáveis + reset tipográfico);
+   ela não conhece classe de superfície nenhuma, e por isso
+   sozinha renderiza HTML nu.
+
+   Fonte: o <style> dos wireframes aprovados em
+   platafirma-arquitetura/design/wireframes/harness-{recepcao,cadeira}.html,
+   fundido e estendido para o que a tela real emite (formulário de
+   despacho, form inline em célula, barra de saídas).
+
+   Nenhum valor cru: cor, tipo, espaço e forma vêm de tokens.css.
+   dono: claudinha-produto
+   ============================================================ */
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  font-family: var(--platafirma-font-ui);
+  font-size: var(--platafirma-text-body);
+  line-height: var(--platafirma-leading-normal);
+  color: var(--platafirma-fg-default);
+  background: var(--platafirma-bg-sunken);
+}
+
+code, .mono { font-family: var(--platafirma-font-code); }
+.num { font-variant-numeric: tabular-nums; }
+
+/* --- barra de topo --- */
+.topo {
+  display: flex; align-items: center; flex-wrap: wrap;
+  gap: var(--platafirma-space-6);
+  padding: var(--platafirma-space-3) var(--platafirma-space-6);
+  background: var(--platafirma-bg-inverse);
+  color: var(--platafirma-fg-inverse);
+}
+.topo .marca { font-weight: var(--platafirma-weight-semibold); }
+.topo nav { display: flex; gap: var(--platafirma-space-5); }
+.topo nav a {
+  color: var(--platafirma-fg-inverse-body); text-decoration: none;
+  font-size: var(--platafirma-text-meta);
+}
+.topo nav a[aria-current] {
+  color: var(--platafirma-fg-inverse);
+  border-bottom: var(--platafirma-line-strong) solid var(--platafirma-fg-accent-inverse);
+}
+.topo .dir, .topo .revalida {
+  margin-left: auto; display: flex; align-items: center;
+  gap: var(--platafirma-space-4);
+  font-size: var(--platafirma-text-meta);
+  color: var(--platafirma-fg-inverse-muted);
+}
+.topo .dir a { color: var(--platafirma-fg-inverse-body); }
+.topo button {
+  font: inherit; font-size: var(--platafirma-text-meta);
+  min-height: var(--platafirma-target-min);
+  padding: var(--platafirma-space-1) var(--platafirma-space-4);
+  border: var(--platafirma-border-width) solid var(--platafirma-border-inverse);
+  border-radius: var(--platafirma-radius-sm);
+  background: transparent; color: var(--platafirma-fg-inverse); cursor: pointer;
+}
+
+/* --- recepção: coluna única --- */
+.folha {
+  padding: var(--platafirma-space-5) var(--platafirma-space-6) var(--platafirma-space-7);
+}
+
+/* --- /cadeira/<slug>: grade de três colunas --- */
+.grade {
+  display: grid;
+  grid-template-columns: 232px minmax(0, 1fr) 272px;
+  gap: var(--platafirma-space-5);
+  padding: var(--platafirma-space-5) var(--platafirma-space-6);
+  align-items: start;
+}
+
+/* --- cartão --- */
+.cartao {
+  background: var(--platafirma-bg-surface);
+  border: var(--platafirma-border-width) solid var(--platafirma-border-default);
+  border-radius: var(--platafirma-radius-md);
+  padding: var(--platafirma-card-padding);
+  margin-bottom: var(--platafirma-space-5);
+}
+/* rótulo de coluna na rota de cadeira — só o h2/h3 solto no cartão. O h2 de
+   bloco da recepção mora dentro de .cab-bloco e é título de seção, não rótulo. */
+.cartao > h2, .cartao > h3 {
+  margin: 0 0 var(--platafirma-space-3);
+  font-size: var(--platafirma-text-label);
+  font-weight: var(--platafirma-weight-semibold);
+  letter-spacing: var(--platafirma-tracking-wide);
+  text-transform: uppercase;
+  color: var(--platafirma-fg-muted);
+}
+
+.cab-bloco {
+  display: flex; align-items: baseline; flex-wrap: wrap;
+  gap: var(--platafirma-space-3);
+  margin-bottom: var(--platafirma-space-4);
+}
+.cab-bloco h2 {
+  margin: 0; font-size: var(--platafirma-text-section);
+  line-height: var(--platafirma-leading-tight);
+  letter-spacing: var(--platafirma-tracking-tight);
+  text-transform: none;
+}
+.cab-bloco .pergunta { color: var(--platafirma-fg-muted); font-size: var(--platafirma-text-meta); }
+.cab-bloco .idade, .cab-bloco .acao {
+  margin-left: auto; font-size: var(--platafirma-text-meta);
+  color: var(--platafirma-fg-muted);
+}
+.cab-bloco .acao ~ .acao, .cab-bloco .idade ~ .idade { margin-left: 0; }
+/* a idade solta fora do cabeçalho (bloco Caixas) ainda é metadado */
+.cartao > .idade {
+  display: block; margin-bottom: var(--platafirma-space-3);
+  font-size: var(--platafirma-text-meta); color: var(--platafirma-fg-muted);
+}
+
+/* --- chip de estado: cor SEMPRE acompanhada de palavra --- */
+.chip {
+  display: inline-block;
+  padding: 1px var(--platafirma-space-2);
+  border-radius: var(--platafirma-radius-pill);
+  background: var(--platafirma-bg-chip);
+  color: var(--platafirma-fg-accent);
+  font-size: var(--platafirma-text-label);
+  font-weight: var(--platafirma-weight-medium);
+  white-space: nowrap;
+}
+.chip.alert  { background: var(--platafirma-alert-bg);  color: var(--platafirma-alert-fg);  }
+.chip.caveat { background: var(--platafirma-caveat-bg); color: var(--platafirma-caveat-fg); }
+.chip.calmo  { background: var(--platafirma-bg-sunken); color: var(--platafirma-fg-muted); }
+
+/* --- tabela --- */
+table { width: 100%; border-collapse: collapse; }
+th {
+  text-align: left; font-size: var(--platafirma-text-label);
+  font-weight: var(--platafirma-weight-semibold);
+  letter-spacing: var(--platafirma-tracking-wide); text-transform: uppercase;
+  color: var(--platafirma-fg-muted);
+  padding: 0 var(--platafirma-space-3) var(--platafirma-space-2) 0;
+  border-bottom: var(--platafirma-border-width) solid var(--platafirma-border-default);
+}
+td {
+  padding: var(--platafirma-row-padding-y) var(--platafirma-space-3) var(--platafirma-row-padding-y) 0;
+  border-bottom: var(--platafirma-border-width) solid var(--platafirma-border-default);
+  line-height: var(--platafirma-leading-snug);
+  vertical-align: baseline;
+}
+tr:last-child td { border-bottom: 0; }
+td.dir, th.dir { text-align: right; padding-right: 0; }
+/* nome de contêiner e de unit é longo: quebra na célula em vez de empurrar a
+   página inteira para fora do viewport. */
+td:first-child { overflow-wrap: anywhere; }
+td .alvo { font-weight: var(--platafirma-weight-medium); }
+td .caminho, .caminho {
+  display: block; font-size: var(--platafirma-text-meta);
+  color: var(--platafirma-fg-muted);
+}
+
+/* --- ações --- */
+.acao {
+  display: inline-block;
+  font: inherit; font-size: var(--platafirma-text-meta);
+  min-height: var(--platafirma-target-min);
+  padding: var(--platafirma-space-1) var(--platafirma-space-4);
+  border: var(--platafirma-border-width) solid var(--platafirma-border-default);
+  border-radius: var(--platafirma-radius-sm);
+  background: var(--platafirma-bg-surface);
+  color: var(--platafirma-fg-default);
+  text-decoration: none; cursor: pointer; white-space: nowrap;
+}
+.acao.primaria {
+  background: var(--platafirma-fg-accent); border-color: var(--platafirma-fg-accent);
+  color: var(--platafirma-fg-inverse); font-weight: var(--platafirma-weight-medium);
+}
+.acao[disabled] {
+  color: var(--platafirma-fg-muted); background: var(--platafirma-bg-sunken); cursor: not-allowed;
+}
+form.inline { display: inline; margin: 0; }
+.motivo { display: block; font-size: var(--platafirma-text-label); color: var(--platafirma-fg-muted); }
+
+/* --- formulário de despacho --- */
+form#despachar {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(196px, 1fr));
+  gap: var(--platafirma-space-4);
+  align-items: end;
+  margin-top: var(--platafirma-space-5);
+  padding-top: var(--platafirma-space-4);
+  border-top: var(--platafirma-border-width) solid var(--platafirma-border-default);
+}
+form#despachar label {
+  display: flex; flex-direction: column; gap: var(--platafirma-space-1);
+  font-size: var(--platafirma-text-label);
+  font-weight: var(--platafirma-weight-semibold);
+  letter-spacing: var(--platafirma-tracking-wide); text-transform: uppercase;
+  color: var(--platafirma-fg-muted);
+}
+form#despachar label:nth-of-type(3),
+form#despachar label:nth-of-type(4) { grid-column: 1 / -1; }
+form#despachar input,
+form#despachar select,
+form#despachar textarea {
+  font: inherit; font-size: var(--platafirma-text-body);
+  font-weight: var(--platafirma-weight-regular);
+  letter-spacing: normal; text-transform: none;
+  color: var(--platafirma-fg-default);
+  min-height: var(--platafirma-target-min);
+  padding: var(--platafirma-space-2) var(--platafirma-space-3);
+  border: var(--platafirma-border-width) solid var(--platafirma-border-strong);
+  border-radius: var(--platafirma-radius-sm);
+  background: var(--platafirma-bg-surface);
+  width: 100%;
+}
+form#despachar textarea { min-height: 7lh; resize: vertical; }
+form#despachar button { justify-self: start; }
+
+/* --- ausência desenhada como ausência --- */
+.indisponivel {
+  margin: 0; padding: var(--platafirma-space-4);
+  border: var(--platafirma-border-width) dashed var(--platafirma-caveat-bd);
+  border-radius: var(--platafirma-radius-sm);
+  background: var(--platafirma-caveat-bg);
+  color: var(--platafirma-caveat-fg);
+  font-size: var(--platafirma-text-meta);
+}
+
+/* --- procedência: os predicados --- */
+.predicados {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(184px, 1fr));
+  gap: var(--platafirma-space-4);
+}
+.pred {
+  border: var(--platafirma-border-width) solid var(--platafirma-border-default);
+  border-radius: var(--platafirma-radius-sm);
+  padding: var(--platafirma-space-4);
+}
+.pred .verbo { display: block; font-size: var(--platafirma-text-meta); color: var(--platafirma-fg-muted); }
+.pred .valor {
+  display: block; margin: var(--platafirma-space-2) 0;
+  font-size: var(--platafirma-text-view); line-height: var(--platafirma-leading-tight);
+}
+.pred .valor.mal { color: var(--platafirma-alert-fg); }
+
+/* --- rodapé: as três saídas --- */
+.saidas {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(232px, 1fr));
+  gap: var(--platafirma-space-4);
+}
+.saida {
+  display: block; text-decoration: none; color: var(--platafirma-fg-default);
+  border: var(--platafirma-border-width) solid var(--platafirma-border-default);
+  border-radius: var(--platafirma-radius-md);
+  background: var(--platafirma-bg-surface);
+  padding: var(--platafirma-card-padding);
+}
+.saida b { display: block; }
+.saida .pergunta { font-size: var(--platafirma-text-meta); color: var(--platafirma-fg-muted); }
+.saida .url {
+  display: block; margin-top: var(--platafirma-space-2);
+  overflow-wrap: anywhere;
+  font-family: var(--platafirma-font-code); font-size: var(--platafirma-text-label);
+  color: var(--platafirma-fg-accent); text-decoration: underline;
+}
+
+/* --- rota /cadeira: coluna 1, lista de cadeiras --- */
+.cadeiras { list-style: none; margin: 0; padding: 0; }
+.cadeiras li { border-bottom: var(--platafirma-border-width) solid var(--platafirma-border-default); }
+.cadeiras li:last-child { border-bottom: 0; }
+.cadeiras a {
+  display: flex; align-items: baseline; gap: var(--platafirma-space-2);
+  padding: var(--platafirma-row-padding-y) var(--platafirma-space-1);
+  min-height: var(--platafirma-target-min);
+  color: var(--platafirma-fg-default); text-decoration: none;
+  line-height: var(--platafirma-leading-snug);
+}
+.cadeiras a[aria-current] { font-weight: var(--platafirma-weight-semibold); }
+.cadeiras .est {
+  margin-left: auto; font-size: var(--platafirma-text-label);
+  color: var(--platafirma-fg-muted);
+}
+
+/* --- rota /cadeira: cabeçalho --- */
+.cab h1 {
+  margin: 0 0 var(--platafirma-space-1);
+  font-size: var(--platafirma-text-view);
+  line-height: var(--platafirma-leading-tight);
+  letter-spacing: var(--platafirma-tracking-tight);
+}
+.cab .head { color: var(--platafirma-fg-body); margin: 0 0 var(--platafirma-space-3); }
+.cab .gerencias { display: flex; flex-wrap: wrap; gap: var(--platafirma-space-2); }
+
+.proc {
+  display: flex; flex-wrap: wrap; gap: var(--platafirma-space-5);
+  margin-top: var(--platafirma-space-4);
+  padding-top: var(--platafirma-space-3);
+  border-top: var(--platafirma-border-width) solid var(--platafirma-border-default);
+  font-size: var(--platafirma-text-meta);
+  color: var(--platafirma-fg-muted);
+}
+.proc b { font-weight: var(--platafirma-weight-medium); color: var(--platafirma-fg-body); }
+
+.docs {
+  display: flex; flex-wrap: wrap; gap: var(--platafirma-space-2);
+  margin-bottom: var(--platafirma-space-4);
+}
+.docs a, .docs button {
+  font: inherit; font-size: var(--platafirma-text-meta);
+  padding: var(--platafirma-space-2) var(--platafirma-space-4);
+  min-height: var(--platafirma-target-min);
+  border: var(--platafirma-border-width) solid var(--platafirma-border-default);
+  border-radius: var(--platafirma-radius-sm);
+  background: var(--platafirma-bg-surface);
+  color: var(--platafirma-fg-default);
+  text-decoration: none; cursor: pointer;
+}
+.docs a[aria-current], .docs button[aria-pressed="true"] {
+  background: var(--platafirma-fg-accent);
+  border-color: var(--platafirma-fg-accent);
+  color: var(--platafirma-fg-inverse);
+  font-weight: var(--platafirma-weight-medium);
+}
+
+.leitura .carimbo {
+  display: flex; flex-wrap: wrap; gap: var(--platafirma-space-4);
+  margin: 0 0 var(--platafirma-space-4);
+  padding: var(--platafirma-space-3) var(--platafirma-space-4);
+  background: var(--platafirma-bg-sunken);
+  border-radius: var(--platafirma-radius-sm);
+  font-size: var(--platafirma-text-meta);
+  color: var(--platafirma-fg-muted);
+}
+.leitura .corpo {
+  max-width: var(--platafirma-measure-max);
+  color: var(--platafirma-fg-body);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.leitura .corpo h4 {
+  margin: var(--platafirma-space-5) 0 var(--platafirma-space-2);
+  font-size: var(--platafirma-text-body);
+  color: var(--platafirma-fg-default);
+}
+
+dl { margin: 0; }
+.par {
+  display: flex; justify-content: space-between; gap: var(--platafirma-space-3);
+  padding: var(--platafirma-space-2) 0;
+  border-bottom: var(--platafirma-border-width) solid var(--platafirma-border-default);
+  font-size: var(--platafirma-text-meta);
+}
+.par:last-child { border-bottom: 0; }
+.par dt { color: var(--platafirma-fg-muted); }
+.par dd { margin: 0; text-align: right; color: var(--platafirma-fg-default); }
+
+/* --- foco: nunca removido --- */
+:focus-visible {
+  outline: var(--platafirma-focus-ring) solid var(--platafirma-fg-accent);
+  outline-offset: var(--platafirma-focus-offset);
+}
+
+.nota {
+  max-width: var(--platafirma-measure-max);
+  margin: var(--platafirma-space-6) 0 0;
+  font-size: var(--platafirma-text-meta);
+  color: var(--platafirma-fg-muted);
+}
+.nota li { margin-bottom: var(--platafirma-space-2); }
+
+/* --- estreito: a grade de três colunas empilha --- */
+@media (max-width: 900px) {
+  .grade { grid-template-columns: minmax(0, 1fr); }
+  .folha, .grade { padding-left: var(--platafirma-space-4); padding-right: var(--platafirma-space-4); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
+}
