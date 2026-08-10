@@ -17,10 +17,16 @@
 #   3. carimbo            — `mem:<cadeira>` (sem slot: fora do padrao que `mesa
 #      ver` varre) guarda quando a cadeira descansou pela ultima vez.
 #
-# O ultimo passo — triagem da memoria do Project — o verbo EMITE, nao executa: o
-# host nao le nem escreve esse bloco, e quem chama `memory_user_edits` e a sessao.
-# Sai aqui porque o fim de fita e o unico instante em que a sessao ja tem o
-# dossie medido do lado, que e o gabarito contra o qual o edit se julga fossil.
+# O ultimo passo — triagem da memoria do Project — o verbo EMITE, nao executa, e
+# a razao nao e que a tool seja "da sessao" (`run_command` tambem e). E que a
+# memoria de Project do claude.ai tem DUAS portas e nenhuma e automatizavel: a UI
+# do dono e a fita corrente. Nao ha endpoint que liste ou edite Project por API —
+# so a ZIP de conta inteira, que nao serve. Sem segundo caminho, roteiro impresso
+# no fim de fita e o mecanismo mais forte disponivel; nao ha versao com timer.
+# Sai aqui, e nao no ato `varredura`, por duas razoes que se somam: a varredura
+# roda por timer, sem sessao do outro lado que possa executar o roteiro; e o fim
+# de fita e o unico instante em que o dossie medido ja esta impresso acima — que
+# e o gabarito contra o qual um edit se julga fossil em vez de suspeito.
 #
 # NAO APAGA MEMORIA. Poda automatica de mesa seria robo decidindo o que a cadeira
 # esquece; o TTL de 14 dias ja e a poda, e ela e declarada. Orfao vira linha de
