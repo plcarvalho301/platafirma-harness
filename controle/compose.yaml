@@ -15,7 +15,7 @@
 #   - systemctl --user (usado por `infra restart`, chamado pela ação
 #     "reiniciar"): precisa de XDG_RUNTIME_DIR e do bus de sessão do
 #     usuário montados — não deu pra validar isto fora do host real, então
-#     o bind mount de /run/user/1000 abaixo é proposta, não fato testado.
+#     o bind mount de /run/user/1001 abaixo é proposta, não fato testado.
 #   - FILA_REDIS_HOST/FILA_REDIS_PORT (usado por `fila enviar`, ação
 #     "despachar recado"): default de fila_streams.py é 127.0.0.1:6379, que
 #     de dentro do container NÃO é o host — precisa apontar pro endereço de
@@ -32,11 +32,12 @@ services:
     environment:
       PF_RAIZ: /home/claudinho/AI
       AGREGADOR_ESTADO_PATH: /estado/estado.json
-      DOCKER_HOST: unix:///run/user/1000/docker.sock
+      DOCKER_HOST: unix:///run/user/1001/docker.sock
     volumes:
       - /home/claudinho/AI:/home/claudinho/AI:ro
-      - /run/user/1000/docker.sock:/run/user/1000/docker.sock
-      - /run/user/1000:/run/user/1000
+      - /run/user/1001/docker.sock:/run/user/1001/docker.sock
+      - /usr/bin/docker:/usr/local/bin/docker:ro
+      - /run/user/1001:/run/user/1001
       - estado:/estado
 
   tela:
@@ -48,18 +49,33 @@ services:
       AGREGADOR_ESTADO_PATH: /estado/estado.json
       TOKENS_CSS_PATH: /home/claudinho/AI/platafirma-arquitetura/design/tokens.css
       PF_CADEIRA_TELA: claudinho-TI
-      DOCKER_HOST: unix:///run/user/1000/docker.sock
-      FILA_REDIS_HOST: ${FILA_REDIS_HOST:-127.0.0.1}
+      DOCKER_HOST: unix:///run/user/1001/docker.sock
+      FILA_REDIS_HOST: ${FILA_REDIS_HOST:-motor-msg}
       FILA_REDIS_PORT: ${FILA_REDIS_PORT:-6379}
     volumes:
       - /home/claudinho/AI:/home/claudinho/AI:ro
-      - /run/user/1000/docker.sock:/run/user/1000/docker.sock
-      - /run/user/1000:/run/user/1000
+      - /run/user/1001/docker.sock:/run/user/1001/docker.sock
+      - /usr/bin/docker:/usr/local/bin/docker:ro
+      - /run/user/1001:/run/user/1001
       - estado:/estado
     ports:
       - "127.0.0.1:${HARNESS_CONTROLE_PORTA:-8091}:8000"
     depends_on:
       - agregador
+    networks: [conhecimento, msg]
 
 volumes:
   estado:
+
+networks:
+  # Onde o oauth2-proxy-harness vive: o gate alcanca "tela:8000" por nome.
+  # Em docker rootless o host NAO e alcancavel de dentro do container
+  # (host-gateway, 10.0.2.2 e o gateway da bridge, todos medidos, todos mudos),
+  # entao a tela precisa estar na mesma rede do gate — nao ha atalho pelo host.
+  conhecimento:
+    external: true
+    name: plataforma-wiki_default
+  # Malha do Valkey: "fila enviar" da acao "despachar recado" alcanca motor-msg por nome.
+  msg:
+    external: true
+    name: motor_malha

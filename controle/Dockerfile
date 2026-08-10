@@ -5,10 +5,18 @@ FROM python:3.12-slim
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
       git \
-      docker.io \
       && rm -rf /var/lib/apt/lists/*
-# git: monta-sessao/conferir chamam `git` de verdade. docker.io: só o cliente
-# — o socket vem por bind mount (compose.yaml), o daemon é o do host.
+# git: monta-sessao/conferir chamam `git` de verdade.
+#
+# docker CLI NAO vem por apt: o docker.io do slim nao deixou binario nenhum e o
+# build passou em silencio. Vem por bind mount do CLI do host (compose.yaml),
+# junto com o socket — mesma versao que o daemon, por construcao.
+#
+# Os verbos do host tem shebang /home/claudinho/AI/.venv-harness/bin/python, que
+# e symlink para /usr/bin/python3. A imagem oficial instala em /usr/local/bin,
+# entao sem este link todo verbo Python morre com "No such file or directory" —
+# erro que aponta para o interpretador, nao para o script, e custa caro de ler.
+RUN ln -sf /usr/local/bin/python3 /usr/bin/python3
 
 RUN pip install --no-cache-dir uv
 
