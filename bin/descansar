@@ -13,7 +13,13 @@
 #      (typo, chapeu extinto) aparece nomeado, nunca some calado.
 #   2. dossie volatil     — os numeros e o estado que envelhecem entre fitas,
 #      medidos AGORA pelo verbo canonico de cada um. E contra esta lista que a
-#      sessao confere afirmacao vinda de memoria de conversa (classe C).
+#      sessao confere afirmacao vinda de memoria de conversa (classe C). Fecha
+#      com o historico frio da fila (7 dias, XRANGE): decisao de outra cadeira
+#      envelhece como numero envelhece, e a carta que chegou DEPOIS da abertura
+#      nunca passou por esta fita. Frio de proposito — `fila ler` normal
+#      confirmaria a entrega a uma fita que esta morrendo, e a carta some do
+#      novo sem ninguem ter tratado. Janela e a retencao inteira, nao a da fita:
+#      o que se quer reter e a decisao mais atual, nao de qual sessao ela saiu.
 #   3. carimbo            — `mem:<cadeira>` (sem slot: fora do padrao que `mesa
 #      ver` varre) guarda quando a cadeira descansou pela ultima vez.
 #
@@ -50,6 +56,7 @@ HOST = os.environ.get("MEM_REDIS_HOST", "127.0.0.1")
 PORTA = int(os.environ.get("MEM_REDIS_PORT", "6380"))
 RE_SLUG = re.compile(r"^- ([a-z0-9][a-z0-9-]*)(?: ·|—)")
 RE_HEAD = re.compile(r"roda no slug `([a-z0-9-]+)`")
+RE_CANON = re.compile(r"\b(claudinh[oa]-[A-Za-z0-9-]+)")
 
 # Fatos volateis comuns a toda cadeira. Cada linha e (rotulo, comando) — o verbo
 # canonico de cada materia, nunca uma segunda medicao propria.
@@ -97,6 +104,22 @@ def slugs_declarados(alvo):
     if head:
         slugs.add(head.group(1))
     return slugs, None
+
+
+def nome_canonico(alvo):
+    """Nome de caixa da cadeira, extraido da linha 1 da persona — mesma fonte que
+    o monta_sessao usa. Nunca o nome do arquivo: `persona-IA.md` nao diz se a
+    caixa e claudinho- ou claudinha-."""
+    p = os.path.join(PERSONAS, f"persona-{alvo}.md")
+    if not os.path.isfile(p):
+        for f in os.listdir(PERSONAS):
+            if f.lower() == f"persona-{alvo.lower()}.md":
+                p = os.path.join(PERSONAS, f)
+                break
+        else:
+            return None
+    m = RE_CANON.search(open(p, errors="replace").readline())
+    return m.group(1) if m else None
 
 
 def idade(seg):
@@ -172,11 +195,20 @@ def ato_fita(args):
         print("Confira contra isto o que a fita afirmou de memoria de conversa.")
         for rotulo, cmd in COMUM + POR_CADEIRA.get(alvo.lower(), []):
             roda(rotulo, cmd)
+        canon = nome_canonico(alvo)
+        if canon:
+            roda(f"fila — historico frio dos 7 dias ({canon}); nao move o ponteiro",
+                 f"fila ler {canon} --tudo", timeout=90)
+        else:
+            print("\n-- fila\n  NAO MEDIDO — nome canonico nao sai da linha 1 da persona")
 
     rc.set(f"mem:{alvo.lower()}", int(time.time()))
     print("\n== proximo passo ==\n"
           "1. escreva a mesa antes de a fita morrer: `mesa anota <chapeu>`\n"
           "   (hipotese viva, beco descartado, proxima jogada, premissa a reconferir).\n"
+          "   Sintetize tambem o historico da fila impresso acima: o que ficou\n"
+          "   DECIDIDO por outra cadeira, nao o tramite. Uma linha por decisao,\n"
+          "   com quem decidiu. Carta ja superada pelo dossie nao entra.\n"
           "\n"
           "2. triagem da memoria do Project — o host nao a alcanca; a tool e da sessao:\n"
           "   a) memory_user_edits view\n"
