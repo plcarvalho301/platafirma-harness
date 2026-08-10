@@ -25,9 +25,25 @@ Módulo do harness (`arq:0019`): a superfície de contato entre as personas
 
 O harness é **cliente** da malha de mensageria (`platafirma-motor`, `arq:0017`/`arq:0018`).
 
-## Layout interno
+## Diretórios de topo
 
-A definir pelo dono da execução — este README fixa o charter, não a estrutura.
+Declarados por `arq:0042`; `conferir repo platafirma-harness` mede contra esta lista.
+
+| Diretório | O que é |
+|---|---|
+| `bin/` | verbos de operação chamados por toda cadeira; fonte única, `~/AI/bin` é symlink |
+| `personas/` | texto canônico de cada cadeira, mais template e higiene de redação |
+| `tool-manifest/` | manifesto de ferramental por cadeira, mais o `GERAL.md` comum |
+| `skills/` | fontes das skills entregues ao claude.ai |
+| `tooling/` | script de export e carimbo, e o preparo de lote de avaliação |
+| `avaliacao/` | instrumentos e conjunto rotulado de avaliação do harness |
+| `distribuicao/` | deliberação que reparte o acervo entre as cadeiras, por rodada |
+| `experimentos/` | experimento com hipótese declarada e resultado, um diretório cada |
+| `registro/` | o declarado que os verbos leem — hoje `stacks.json`, fonte do `deploy` |
+| `docs/` | documentação do módulo, incluindo `diagramas/` (fonte e render juntos) |
+| `mcp/` | MCP do harness, previsto por `arq:0019`, ainda sem implementação |
+| `.claude/` | configuração do Claude Code na estação emprestada |
+
 Spec de referência: [PlataFirma:Produto/harness/spec](https://wiki.platafirma.org/index.php/PlataFirma:Produto/harness/spec).
 
 - Abrir a PlataFirma de uma estação emprestada: `docs/estacao-emprestada.md`
