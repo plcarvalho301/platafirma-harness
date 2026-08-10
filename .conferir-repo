@@ -1,0 +1,4 @@
+# Exceções declaradas a arq:0042 neste repositório.
+# forma: permite: <prefixo-de-caminho>   # motivo
+
+permite: diagramas/   # render de diagrama: GitHub e wiki nao renderizam .d2 nem .mmd; render e fonte moram no mesmo nome-base (arq:0042, "Derivado de leitura"). Regenera: d2 diagramas/<nome>.d2 diagramas/<nome>.svg
