@@ -34,7 +34,10 @@
       "critico": false
     },
     "conhecimento": {
-      "compose": "~/AI/platafirma-conhecimento/docker-compose.yml",
+      "compose": [
+        "~/AI/deploy/conhecimento/docker-compose.yml",
+        "~/AI/deploy/conhecimento/docker-compose.override.yml"
+      ],
       "repo": "platafirma-conhecimento",
       "papel": "wiki e MCP de conhecimento",
       "critico": true

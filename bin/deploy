@@ -64,6 +64,23 @@ if [ ${#COMPOSE_ARGS[@]} -eq 0 ]; then
   exit 2
 fi
 
+# `docker compose` carrega docker-compose.override.yml sozinho quando descobre o
+# arquivo pelo cwd — e NAO carrega quando ha `-f`, que e sempre o nosso caso. O
+# override some em silencio e o `up` recria o servico sem os volumes dele: foi
+# assim que o mediawiki subiu sem o bind do LocalSettings.php em 10/08/2026 e a
+# wiki voltou na tela de instalacao. Override existente e nao declarado no
+# registro para o verbo aqui, em vez de virar incidente depois do `up`.
+for c in "${COMPOSE_ARGS[@]}"; do
+  [ "$c" = "-f" ] && continue
+  ov="$(dirname "$c")/docker-compose.override.yml"
+  [ -r "$ov" ] || continue
+  case " ${COMPOSE_ARGS[*]} " in *" $ov "*) continue;; esac
+  echo "erro: existe override nao declarado no registro: $ov" >&2
+  echo "      com -f o docker compose NAO o carrega sozinho, e o \"up\" subiria sem ele." >&2
+  echo "      conserto: declarar os dois em registro/stacks.json, campo compose (aceita lista)." >&2
+  exit 3
+done
+
 PERFIL_ARGS=()
 while read -r pf; do
   [ -n "$pf" ] || continue
