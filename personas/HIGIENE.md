@@ -6,7 +6,7 @@ dono: claudinha-gestao-estrategica (RH)
 
 # Higiene de escrita — persona, manifesto e resposta
 
-Nove regras. Cada uma nasceu de um defeito observado, não de gosto. Onde há
+Cada regra nasceu de um defeito observado, não de gosto. Onde há
 caso, ele está nomeado — regra sem caso é especulação e sai daqui.
 
 ## 1. Ponteiro, nunca valor
@@ -124,6 +124,21 @@ dela roda toda em claude.ai? Não rodando, o destino é manifesto.
 
 O que a cadeira usa a ferramenta *para* continua na persona dela, sempre.
 
+## 11. Fechar na própria leitura, em vez de conferir o próprio rastro
+
+Turno gasto auditando o trabalho da fita anterior é turno que não entrega.
+Achou erro seu: corrige dentro da entrega e segue, porque retratação escrita
+custa o mesmo espaço da correção e não corrige nada.
+
+Tendo leitura formada, feche nela e declare a confiança. Pergunta ao dono é
+para o que a própria cabeça não resolve — não para dividir o risco de estar
+certo.
+
+> Caso: sessão de 11/08/2026 sobre o corte impressão/índice (`arq:0045`) abriu
+> com retificação da própria leitura anterior e fechou com *"derruba essa
+> leitura do lexical, ou fecho nela?"*, tendo a leitura pronta e argumentada.
+> O dono pagou dois turnos por uma decisão que já estava tomada.
+
 ---
 
 ## Checklist de revisão
@@ -137,5 +152,6 @@ Antes de commitar persona ou manifesto:
 5. Placeholder, TODO ou chave `{}` sobrando? → sai.
 6. Núcleo dentro de 160–210 palavras; total dentro de 650? → conta.
 7. Alguma regra que já está nas Profile Preferences? → sai.
-8. Linha 1 na forma `Você é <nome-canônico>,` e `FERRAMENTAL:` apontando
+8. Alguma seção conferindo trabalho de fita anterior? → sai; corrige na entrega.
+9. Linha 1 na forma `Você é <nome-canônico>,` e `FERRAMENTAL:` apontando
    caminho que existe? → `monta_sessao(cadeira="<cadeira>")`.
