@@ -89,3 +89,10 @@ prazo — prazo é card no rastreador.>
 - **Tutorial.** Manifesto é mapa de chamada, não manual. Uso extenso vira skill
   ou página de wiki, com ponteiro daqui.
 - **Log de mudança.** Estado atual mora no Git.
+- **Verbo comum re-listado.** Está no `GERAL.md`, não se repete aqui. O teste:
+  removendo a glosa da cadeira, sobra a linha do GERAL? → sai. Sobra recorte
+  próprio — schema, credencial, guarda, quando ESTA cadeira chama → fica.
+- **Armadilha que morde toda cadeira.** Espelho de repo servindo SHA velho,
+  `&&` encadeado, faceta despovoada: sobe uma vez para o `GERAL.md`. Armadilha
+  de matéria alheia fica no manifesto do dono da matéria, não no de quem
+  esbarrou nela.
