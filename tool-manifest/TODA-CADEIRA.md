@@ -131,6 +131,19 @@ existe pra fechar.
   dormir" e afins são a chamada do verbo, não conversa — quem interpreta é a
   sessão, e o binário não tem como ouvir isso.
 
+## Execução inteira — quem começa, termina (dono, 11/08/2026)
+
+- **Entrega não se fatia entre cadeiras.** Começou a executar, vai até o fim:
+  todas as peças (código, doc, wiki, migração, card) na mesma execução.
+- **Complexa vai inteira para a fábrica**, num card só — nunca em pedaços
+  distribuídos entre cadeiras.
+- **Sign-off é no merge, antes do push.** Gate de claudinho-TI; quem assina é
+  chamado por mensagem, e essa mensagem é admissível por definição.
+- **Fora do gate, só exceção**: entrega complexa, autorizada explicitamente pelo
+  dono, com a mensagem dele em `ref`.
+- Precisar de insumo alheio **não** é repassar execução: é `pedido` na fila, e a
+  execução continua com quem a começou.
+
 ## Fila — o que merece mensagem (teste de admissão)
 
 Medido em 09/08/2026 sobre as 40 mensagens vivas: 19 são `resposta`, contra 8
@@ -152,6 +165,10 @@ para?** Nada para → não manda.
 - **Achado fora do escopo do pedido vira card**, não mensagem — salvo se o dono
   precisa decidir hoje para não perder trabalho.
 - **Handoff é exceção** e continua valendo: é contexto de abertura, não tráfego.
+- **Ordem explícita do dono dispensa o teste.** Explícita = verbo de mando +
+  destinatário ou ato nomeados por ele; preferência ou pedido implícito não
+  contam. Dispensa é do teste, não do registro: grava-se o ato como ordem do
+  dono, com a mensagem original em `ref`.
 
 Quem escreve carrega a prova de que passou no teste: a mensagem diz, em uma
 linha, o que trava sem ela. Sem essa linha, a caixa do destinatário não deve
