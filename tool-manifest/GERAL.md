@@ -71,6 +71,11 @@ estado do repo                  : git -C ~/AI/<repo> status --short
 publicar                        : git -C ~/AI/<repo> add -A ; git ... commit -m "..." ; git ... push
 job > 2 min                     : longjob run <nome> <cmd...>   | list, logs, status, log, stop
 
+instrumentar ambiente novo      : platafirma-harness/deploy-harness/instalar
+                                  sem argumento converge . --check so mede (exit 1 = divergente)
+                                  --prefixo <dir> troca o alvo do symlink farm
+                                  nao instala terceiro, nao clona repo, nao fala com rede
+
 venv reprodutível               : uv venv / uv pip install / uvx <pkg>
 rodar script solto              : python3 (sem shim de pip — usar uv pip)
 

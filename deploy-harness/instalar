@@ -1,0 +1,231 @@
+#!/usr/bin/env bash
+# instalar — converge um ambiente para o que o harness declara: verbo no PATH e gate de commit.
+# capacidade: infra
+# dono: claudinho-TI
+#
+# Nao entra na conta de arq:0037 (um verbo por capacidade): nao mora em `bin/` e
+# nao e chamado por cadeira nenhuma. E ato de preparo de ambiente, rodado pelo
+# caminho — uma vez na maquina nova, e de novo sempre que algo divergir.
+#
+# ESTRATEGIA: sincronizacao, nao infraestrutura imutavel. Roda N vezes, corrige o
+# que divergiu, sobrescreve mudanca manual no que e nosso. Nao recria ambiente do
+# zero e nao apaga o que nao reconhece: arquivo comum com nome de verbo e
+# RELATADO, nunca sobrescrito — quem o pos ali decide, nao este script.
+#
+# BASH PURO, SEM MAKEFILE: o publico e a estacao emprestada, que nao instala
+# pacote. `make` e pacote; bash e o unico runtime garantido nos dois ambientes.
+#
+# NAO instala terceiro, NAO clona repo, NAO escreve credencial, NAO fala com a
+# rede. Opera sobre o que ja esta em disco. O que exige privilegio que a estacao
+# nao tem, ele mede e nomeia — clone e credencial sao de quem prepara a maquina.
+#
+# SAIDA: uma linha por item, tres estados — conforme, corrigido, impossivel (com
+# motivo). Silencio nao conta como sucesso. Em `--check` nada e escrito, entao o
+# que seria `corrigido` aparece como `divergente`: o rotulo diz o que aconteceu,
+# nao o que aconteceria.
+#
+# EXIT: pesa so o que ESTE script pode mudar — link e hook. Terceiro ausente e
+# clone ausente sao MEDICAO, nao divergencia: nao derrubam a execucao nem o exit
+# code. Sem essa separacao, maquina sem trivy nunca converge e `--check` deixa de
+# servir de teste.
+set -uo pipefail
+
+AQUI="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+HARNESS="$(cd "$AQUI/.." && pwd)"
+RAIZ="${PF_RAIZ:-$HOME/AI}"
+
+MODO=converge
+PREFIXO="$RAIZ/bin"
+PREFIXO_DECLARADO=0
+
+uso() {
+  cat <<FIM
+uso: deploy-harness/instalar [--check] [--prefixo <dir>]
+
+  (sem argumento)   converge: cria e corrige o que divergiu
+  --check           so mede; nao escreve nada e sai 1 se houver divergencia
+  --prefixo <dir>   alvo do symlink farm (default: $RAIZ/bin)
+
+O que faz: um link por verbo do harness no prefixo, e core.hooksPath apontando
+para $HARNESS/hooks nos clones que existirem. Mede terceiro ausente e nomeia o
+efeito. Nao instala pacote, nao clona repo, nao toca em credencial nem em rede.
+FIM
+  exit 2
+}
+
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --check)    MODO=check; shift;;
+    --prefixo)  [ $# -ge 2 ] || uso; PREFIXO="$2"; PREFIXO_DECLARADO=1; shift 2;;
+    -h|--help)  uso;;
+    *)          echo "argumento desconhecido: $1" >&2; uso;;
+  esac
+done
+
+# Alias: nome no PATH diferente do nome do arquivo. Declarado aqui porque a
+# plataforma nao tem registro de alias; no dia em que tiver, este bloco migra.
+declare -A ALIAS=( [fila]=fila_streams.py [encerrar]=descansar )
+# Aposentado: existe em bin/ e NAO se instala. `conferir-servido` foi absorvido
+# por `conferir servico` e sai do PATH — instalar de novo seria desfazer decisao.
+APOSENTADOS=" conferir-servido "
+
+conformes=0; corrigidos=0; impossiveis=0; divergentes=0; medidos=0
+
+relata() { printf '  %-11s %-18s %s\n' "$1" "$2" "${3:-}"; }
+
+conforme()   { conformes=$((conformes+1));     relata conforme   "$1" "${2:-}"; }
+medido()     { medidos=$((medidos+1));         relata "$1"       "$2" "${3:-}"; }
+impossivel() { impossiveis=$((impossiveis+1)); relata impossivel "$1" "$2"; }
+# Divergencia: em converge vira escrita; em check vira so relato.
+corrigir() {  # nome detalhe
+  if [ "$MODO" = check ]; then
+    divergentes=$((divergentes+1)); relata divergente "$1" "$2"
+  else
+    corrigidos=$((corrigidos+1)); relata corrigido "$1" "$2"
+  fi
+}
+
+# --- verbos declarados pelo harness -----------------------------------------
+# Verbo e arquivo executavel em bin/. Fora: diretorio (__pycache__, _acervo),
+# nome com `_` (interno do harness) e `.py` sem alias — este ultimo NAO se
+# ignora em silencio: aparece no relatorio, porque verbo invisivel e verbo que
+# ninguem instala e ninguem sente falta.
+alvos_de_alias=" "
+for n in "${!ALIAS[@]}"; do alvos_de_alias+="${ALIAS[$n]} "; done
+
+declare -A FONTE=()
+for f in "$HARNESS"/bin/*; do
+  [ -f "$f" ] || continue
+  [ -x "$f" ] || continue
+  nome="$(basename "$f")"
+  case "$nome" in _*) continue;; esac
+  case "$APOSENTADOS" in *" $nome "*) continue;; esac
+  case "$nome" in
+    *.py)
+      case "$alvos_de_alias" in
+        *" $nome "*) : ;;   # entra pelo alias, com o nome do verbo
+        *) medido impossivel "$nome" "arquivo .py executavel em bin/ sem alias declarado — nao instalado";;
+      esac
+      continue;;
+  esac
+  FONTE["$nome"]="$f"
+done
+for nome in "${!ALIAS[@]}"; do
+  destino="$HARNESS/bin/${ALIAS[$nome]}"
+  if [ -x "$destino" ]; then
+    FONTE["$nome"]="$destino"
+  else
+    medido impossivel "$nome" "alias declarado para ${ALIAS[$nome]}, que nao existe em bin/"
+  fi
+done
+
+echo
+echo "== verbos em $PREFIXO"
+if [ "$MODO" = check ]; then
+  [ -d "$PREFIXO" ] || relata divergente "(prefixo)" "$PREFIXO nao existe"
+elif ! mkdir -p "$PREFIXO" 2>/dev/null; then
+  impossivel "(prefixo)" "nao consegui criar $PREFIXO"
+  echo; echo "sem prefixo nao ha o que convergir."; exit 1
+fi
+
+for nome in $(printf '%s\n' "${!FONTE[@]}" | sort); do
+  fonte="${FONTE[$nome]}"
+  alvo="$PREFIXO/$nome"
+  if [ -L "$alvo" ]; then
+    atual="$(readlink -f "$alvo" 2>/dev/null || true)"
+    if [ "$atual" = "$(readlink -f "$fonte")" ]; then
+      conforme "$nome"
+    else
+      [ "$MODO" = check ] || ln -sfn "$fonte" "$alvo"
+      corrigir "$nome" "apontava para ${atual:-(destino inexistente)}"
+    fi
+  elif [ -e "$alvo" ]; then
+    impossivel "$nome" "arquivo comum ocupa o nome — nao sobrescrevo; mover ou apagar e decisao de quem o pos ali"
+  else
+    [ "$MODO" = check ] || ln -sfn "$fonte" "$alvo"
+    corrigir "$nome" "ausente"
+  fi
+done
+
+# Link orfao NOSSO: aponta para bin/ do harness, mas a fonte nao existe mais.
+# Apagar isso nao destroi nada — e sobra da farm anterior, nao arquivo de alguem.
+if [ -d "$PREFIXO" ]; then
+  for alvo in "$PREFIXO"/*; do
+    [ -L "$alvo" ] || continue
+    nome="$(basename "$alvo")"
+    [ -n "${FONTE[$nome]+x}" ] && continue
+    destino="$(readlink "$alvo")"
+    case "$destino" in
+      "$HARNESS"/bin/*)
+        if [ ! -e "$alvo" ]; then
+          [ "$MODO" = check ] || rm -f "$alvo"
+          corrigir "$nome" "link orfao do harness (fonte removida) — retirado da farm"
+        else
+          medido conforme "$nome" "link para bin/ do harness fora da lista de verbos — deixado em paz"
+        fi;;
+    esac
+  done
+fi
+
+# --- gate de commit ---------------------------------------------------------
+echo
+echo "== gate de commit (core.hooksPath -> $HARNESS/hooks)"
+if [ "$PREFIXO_DECLARADO" = 1 ]; then
+  medido impossivel "(hooks)" "prefixo declarado: alvo de teste, clones do ambiente nao sao tocados"
+else
+  CLONES="platafirma-harness platafirma-core platafirma-conhecimento platafirma-arquitetura platafirma-motor platafirma-posto modulo-osint"
+  for c in $CLONES; do
+    if [ ! -d "$RAIZ/$c/.git" ]; then
+      medido impossivel "$c" "clone ausente em $RAIZ — clonar e ato de quem prepara a maquina"
+      continue
+    fi
+    atual="$(git -C "$RAIZ/$c" config core.hooksPath 2>/dev/null || true)"
+    if [ "$atual" = "$HARNESS/hooks" ]; then
+      conforme "$c"
+    else
+      [ "$MODO" = check ] || git -C "$RAIZ/$c" config core.hooksPath "$HARNESS/hooks"
+      corrigir "$c" "apontava para ${atual:-(nao configurado)}"
+    fi
+  done
+fi
+
+# --- terceiro: mede e nomeia o efeito, nunca instala -------------------------
+# Efeito medido contra bin/ nesta data. Verbo que ganhar dependencia nova
+# acrescenta linha aqui no mesmo commit — tabela que envelhece mente com
+# confianca, que e pior do que nao existir.
+echo
+echo "== ferramenta de terceiro (o instalador mede; instalar exige privilegio que ele nao tem)"
+TERCEIROS=(
+  "python3|conferir, tarefas, sinal, motor, persona e monta-sessao param: e o interpretador da maior parte dos verbos"
+  "git|conferir repo e conferir verbo, deploy, persona, mesa e descansar param de ler o declarado dos clones"
+  "docker|conferir servico, infra estado, deploy e motor param: e por docker que o servido se le"
+  "systemctl|longjob nao dispara unit transiente e infra nao le unit nem timer"
+  "curl|tarefas nao fala com o rastreador; infra saude e sinal nao alcancam o healthcheck do ops"
+  "jq|seg para de gravar trilha e infra cache para de ler o estado do ollama"
+  "rg|busca em ~/AI cai para grep -r, ordens de grandeza mais lenta"
+  "fd|procura de arquivo por nome cai para find"
+  "uv|venv reprodutivel e o modulo redis de que a fila depende ficam sem como ser instalados"
+  "trivy|varredura de imagem sai do arsenal de claudinho-seguranca"
+)
+for linha in "${TERCEIROS[@]}"; do
+  ferramenta="${linha%%|*}"; efeito="${linha#*|}"
+  if command -v "$ferramenta" >/dev/null 2>&1; then
+    medido conforme "$ferramenta" "$(command -v "$ferramenta")"
+  else
+    medido impossivel "$ferramenta" "ausente — sem ela: $efeito"
+  fi
+done
+
+echo
+echo "resumo: $conformes conforme . $corrigidos corrigido . $divergentes divergente . $impossiveis impossivel . $medidos medido (fora do alcance do instalador)"
+if [ "$MODO" = check ]; then
+  if [ "$divergentes" -gt 0 ] || [ "$impossiveis" -gt 0 ]; then
+    echo "divergente: rodar sem --check corrige o que e link e hook; o resto pede decisao humana."
+    exit 1
+  fi
+  echo "convergido: nada a fazer."
+  exit 0
+fi
+[ "$impossiveis" -gt 0 ] && { echo "convergiu o que era do instalador; o que sobrou esta acima, com motivo."; exit 1; }
+echo "convergido."
+exit 0
