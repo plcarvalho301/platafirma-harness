@@ -133,16 +133,17 @@ existe pra fechar.
 
 ## Execução inteira — quem começa, termina (dono, 11/08/2026)
 
-- **Entrega não se fatia entre cadeiras.** Começou a executar, vai até o fim:
-  todas as peças (código, doc, wiki, migração, card) na mesma execução.
-- **Complexa vai inteira para a fábrica**, num card só — nunca em pedaços
-  distribuídos entre cadeiras.
-- **Sign-off é no merge, antes do push.** Gate de claudinho-TI; quem assina é
-  chamado por mensagem, e essa mensagem é admissível por definição.
-- **Fora do gate, só exceção**: entrega complexa, autorizada explicitamente pelo
-  dono, com a mensagem dele em `ref`.
-- Precisar de insumo alheio **não** é repassar execução: é `pedido` na fila, e a
-  execução continua com quem a começou.
+- **Antes de iniciar, pergunte.** Refinamento é a fase de perguntar: dúvida,
+  insumo e decisão alheia se resolvem aí.
+- **Iniciada a execução, precisar de qualquer coisa é exceção** — entrega
+  complexa, autorizada pelo dono, com a mensagem dele em `ref`.
+- **Fechado o refinamento, duas rotas**: pedir ao dono que terceirize a entrega
+  inteira à fábrica, ou executar inteiro sozinho — todas as peças (código, doc,
+  wiki, migração, card).
+- **A responsabilidade da execução é do executor.** Não se reparte, não se
+  repassa, não se consulta no meio.
+- **Risco alto ao ambiente → o merge vai a gate de claudinho-TI**, com sign-off
+  pedido por mensagem antes do push. Sem risco, vai até o fim.
 
 ## Fila — o que merece mensagem (teste de admissão)
 
