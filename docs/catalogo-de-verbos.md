@@ -79,7 +79,8 @@ Regras verificáveis, na ordem em que `conferir verbo` as aplica:
 | `rag.py` | `conhecimento` | claudinho-IA | sem cabeçalho — e diverge da cópia em repo | divergente |
 | `exporta-acervo-xlsx.py` | `conhecimento` | claudinho-conhecimento | sem cabeçalho — propósito não declarado | só no host |
 | `infra` | `infra` | claudinho-TI | estado e operação da infra local | harness |
-| `longjob` | pendurado | claudinho-TI | dispara trabalho longo como unit transiente | core |
+| `longjob` | pendurado | claudinho-TI | dispara trabalho longo como unit transiente | harness |
+| `seg` | `politica` | claudinho-seguranca | despachante do toolkit de segurança (`arq:0040`) | harness |
 | `conferir` | `verificacao` | claudinho-TI | compara declarado com servido, por classe de alvo | harness |
 | `oscap-casco` | `verificacao` | claudinho-seguranca | avaliação CIS via OpenSCAP | cópia |
 | `oscap-casco-falhas` | `verificacao` | claudinho-seguranca | lista as regras que falharam num log | cópia |
@@ -89,9 +90,10 @@ Regras verificáveis, na ordem em que `conferir verbo` as aplica:
 | `ops-log-prune` | órfão | claudinho-TI | poda o log de operação por idade; cron diário | só no host |
 
 Legenda de origem: **harness** = symlink para `platafirma-harness/bin`, versionado ·
-**core** = symlink para `platafirma-core/deploy/ops` · **cópia** = arquivo duplicado
-no host, idêntico ao repo por sorte, não por mecanismo · **só no host** = sem
-contraparte em repo nenhum · **divergente** = host e repo diferem.
+**cópia** = arquivo duplicado no host, idêntico ao repo por sorte, não por
+mecanismo · **só no host** = sem contraparte em repo nenhum · **divergente** =
+host e repo diferem. A origem **core** deixou de existir no #396: nenhum verbo
+resolve mais para `platafirma-core`, e `conferir procedencia` reprova se voltar.
 
 ## Ferramenta de terceiro
 

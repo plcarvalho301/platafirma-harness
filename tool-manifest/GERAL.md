@@ -62,6 +62,8 @@ verbo x arq:0037                : conferir verbo [nome]     origem, cabeçalho e
 skill servida x fonte           : conferir skill <nome> --servido <blob do carimbo>
 repo x arq:0042                 : conferir repo  [nome]     o que esta rastreado x a regua
 gate de commit (arq:0042)       : conferir repo --staged    o que o pre-commit chama
+caminho de execucao x harness   : conferir procedencia      exit 1 = ~/AI/bin resolve pra fora
+                                  excecao se declara em harness/docs/procedencia-do-harness.md
 instalar o gate num clone       : git -C <clone> config core.hooksPath ~/AI/platafirma-harness/hooks
 toolkit de segurança            : seg                       despachante (arq:0040)
 

@@ -57,7 +57,7 @@ Configurar só em dois casos:
   o clone do harness com os dois tokens em variável de ambiente —
   `docs/estacao-emprestada.md`.
 - **Conta nova, ou pacote de conta desatualizado**: reexecutar
-  `platafirma-core/deploy/agente/instala.sh`.
+  `platafirma-harness/agente/instala.sh`.
 
 Régua de veículo: **Code é a fábrica; cadeira que conversa é claude.ai.**
 
@@ -75,7 +75,7 @@ Escopo de usuário, na conta que roda a fábrica:
 Fonte canônica da persona: `platafirma-harness/personas/persona-fabrica.md`. O
 arquivo instalado é build dessa fonte; reexecutar o instalador atualiza.
 
-Instalador: `platafirma-core/deploy/agente/instala.sh` — symlink onde o destino
+Instalador: `platafirma-harness/agente/instala.sh` — symlink onde o destino
 enxerga a fonte, cópia onde não enxerga. Ele liga `tarefas` a partir de
 `~/AI/platafirma-harness/bin/tarefas`; sem o clone do harness a conta fica sem
 verbo de rastreador, e o instalador diz isso em voz alta. O token continua sendo
@@ -88,8 +88,8 @@ não é legível de fora e o Code cai no default sem reclamar. O `cp` como
 o destino tem que ser megafone:
 
 ```
-sudo cat /home/claudinho/AI/platafirma-core/deploy/agente/CLAUDE.md > /home/megafone/.claude/CLAUDE.md
-sudo cat /home/claudinho/AI/platafirma-core/deploy/agente/settings.json > /home/megafone/.claude/settings.json
+sudo cat /home/claudinho/AI/platafirma-harness/agente/CLAUDE.md > /home/megafone/.claude/CLAUDE.md
+sudo cat /home/claudinho/AI/platafirma-harness/agente/settings.json > /home/megafone/.claude/settings.json
 head -3 /home/megafone/.claude/CLAUDE.md
 ```
 

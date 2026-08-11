@@ -1,0 +1,129 @@
+#!/usr/bin/env bash
+# seg — opera o toolkit de seguranca da PlataFirma: avalia, deriva regua e despacha ferramenta.
+# capacidade: politica
+# componente: openscap, keycloak, openssl+oqsprovider
+# dono: claudinho-seguranca
+#
+# subcomando          capacidade          origem do ato
+#   oscap avaliar     politica            era oscap-casco
+#   oscap falhas      politica            era oscap-casco-falhas
+#   oscap --          politica            passthrough openscap
+#   ssg derivar       politica            era ssg-deriva
+#   keycloak --       acesso              passthrough kcadm.sh (era kcadm)
+#   openssl --        acesso              passthrough openssl+oqsprovider (era openssl-pqc)
+#
+# NAO E GATE. Enquanto oscap, kcadm.sh e openssl seguirem alcancaveis fora deste
+# binario, ele e conveniencia e trilha: quem quiser desviar chama a ferramenta
+# direto. Vira controle no dia em que as ferramentas sairem do PATH do usuario.
+set -euo pipefail
+
+LOG_DIR="$HOME/AI/var/log/seg"
+DS_DIR="$HOME/AI/opt/ssg"
+OUT="$HOME/AI/var/oscap"
+
+registra() {
+  mkdir -p "$LOG_DIR"
+  printf '{"em":"%s","quem":"%s","sub":"%s","args":%s}\n' \
+    "$(date -Is)" "$(id -un)" "${1:-}" "$(printf '%s\n' "${*:2}" | jq -Rsc . 2>/dev/null || echo '""')" \
+    >> "$LOG_DIR/seg-$(date +%F).jsonl"
+}
+
+uso() {
+  cat <<'FIM'
+seg — toolkit de seguranca da PlataFirma
+
+  seg oscap avaliar <perfil>      avalia o casco contra o datastream derivado
+  seg oscap falhas <log>          lista as regras que falharam num log de avaliacao
+  seg oscap -- <nativos>          repassa cru ao openscap
+  seg ssg derivar <datastream>    compila a regua: remove o CPE de SO do datastream
+  seg keycloak -- <nativos>       repassa cru ao kcadm.sh, no conteiner
+  seg openssl -- <nativos>        repassa cru ao openssl com oqsprovider
+
+Perfis de avaliacao:
+  cis_level1_server  cis_level1_workstation  cis_level2_server
+  cis_level2_workstation  stig
+
+Tudo a direita de `--` e da ferramenta e vai repassado sem interpretacao.
+Nao e gate: as ferramentas seguem alcancaveis fora deste binario. Ver cabecalho.
+FIM
+  exit 2
+}
+
+# --- separa o que e nosso do que e repasse ---------------------------------
+ARGS=(); NATIVOS=(); TEM_BARREIRA=0
+for a in "$@"; do
+  if [ "$TEM_BARREIRA" -eq 1 ]; then NATIVOS+=("$a")
+  elif [ "$a" = "--" ];        then TEM_BARREIRA=1
+  else ARGS+=("$a"); fi
+done
+[ "${#ARGS[@]}" -ge 1 ] || uso
+
+SUB="${ARGS[0]}"; ATO="${ARGS[1]:-}"; ALVO="${ARGS[2]:-}"
+registra "$SUB" "${ARGS[@]:1}" "${NATIVOS[@]:-}"
+
+case "$SUB" in
+
+  oscap)
+    if [ "$TEM_BARREIRA" -eq 1 ]; then
+      [ "${#NATIVOS[@]}" -ge 1 ] || { echo "seg oscap -- exige comando nativo" >&2; uso; }
+      exec oscap "${NATIVOS[@]}"
+    fi
+    case "$ATO" in
+      avaliar)
+        [ -n "$ALVO" ] || { echo "seg oscap avaliar exige perfil explicito — sem default" >&2; uso; }
+        DS="$DS_DIR/ssg-ubuntu2404-ds-sem-cpe.xml"
+        [ -f "$DS" ] || { echo "datastream derivado ausente em $DS — rode: seg ssg derivar ssg-ubuntu2404-ds.xml" >&2; exit 1; }
+        STAMP="$(date +%Y%m%dT%H%M)"; mkdir -p "$OUT"
+        oscap xccdf eval \
+          --profile "xccdf_org.ssgproject.content_profile_${ALVO}" \
+          --results-arf "$OUT/arf-${ALVO}-${STAMP}.xml" \
+          --report "$OUT/relatorio-${ALVO}-${STAMP}.html" \
+          "$DS" > "$OUT/eval-${ALVO}-${STAMP}.log" 2>&1 || true
+        echo "perfil: $ALVO   (usuario $(id -un), $([ "$(id -u)" -eq 0 ] && echo root || echo 'SEM root — regras de /etc/shadow, /boot e sysctl NAO foram avaliadas: resultado incompleto, nao e conformidade'))"
+        tr -d '\r' < "$OUT/eval-${ALVO}-${STAMP}.log" \
+          | awk -F'\t' '/^Result/{c[$2]++} END{for(k in c) printf "%-14s %d\n", k, c[k]}' | sort -k2 -rn
+        echo
+        echo "relatorio: $OUT/relatorio-${ALVO}-${STAMP}.html"
+        echo "falhas:    seg oscap falhas $OUT/eval-${ALVO}-${STAMP}.log"
+        ;;
+      falhas)
+        [ -n "$ALVO" ] || { echo "seg oscap falhas exige o log a ler" >&2; uso; }
+        [ -f "$ALVO" ] || { echo "log inexistente: $ALVO" >&2; exit 1; }
+        N="$(tr -d '\r' < "$ALVO" | awk -F'\t' '/^Title/{t=$2} /^Rule/{r=$2} /^Result/{if($2=="fail"){printf "%s\n    %s\n", t, r; c++}} END{exit (c?0:1)}')" \
+          && printf '%s\n' "$N" \
+          || echo "nenhuma regra 'fail' NESTE log ($ALVO) — nao afirma nada sobre o que o log nao avaliou"
+        ;;
+      *) uso ;;
+    esac
+    ;;
+
+  ssg)
+    case "$ATO" in
+      derivar)
+        [ -n "$ALVO" ] || { echo "seg ssg derivar exige o datastream de origem — mutacao nao opera sem alvo" >&2; uso; }
+        cd "$DS_DIR"
+        [ -f "$ALVO" ] || { echo "datastream de origem ausente em $DS_DIR/$ALVO" >&2; exit 1; }
+        DEST="${ALVO%.xml}-sem-cpe.xml"
+        sed -E 's|<[A-Za-z0-9.:_-]+:platform idref="cpe:/o:[^"]*"[[:space:]]*/>||g' "$ALVO" > "$DEST"
+        echo "derivado: $DS_DIR/$DEST"
+        echo "cpe de SO removidos, applicability de regra preservada: $(grep -c 'platform idref="#' "$DEST")"
+        ;;
+      *) uso ;;
+    esac
+    ;;
+
+  keycloak)
+    [ "$TEM_BARREIRA" -eq 1 ] && [ "${#NATIVOS[@]}" -ge 1 ] || { echo "seg keycloak exige -- seguido do comando nativo do kcadm.sh" >&2; uso; }
+    export DOCKER_HOST=unix:///run/user/1001/docker.sock XDG_RUNTIME_DIR=/run/user/1001
+    exec docker exec -i platafirma-core-keycloak-1 /opt/keycloak/bin/kcadm.sh "${NATIVOS[@]}"
+    ;;
+
+  openssl)
+    [ "$TEM_BARREIRA" -eq 1 ] && [ "${#NATIVOS[@]}" -ge 1 ] || { echo "seg openssl exige -- seguido do comando nativo do openssl" >&2; uso; }
+    export OPENSSL_CONF="$HOME/AI/opt/oqs/openssl-oqs.cnf"
+    export LD_LIBRARY_PATH="$HOME/AI/opt/oqs/lib:${LD_LIBRARY_PATH:-}"
+    exec /usr/bin/openssl "${NATIVOS[@]}"
+    ;;
+
+  *) uso ;;
+esac

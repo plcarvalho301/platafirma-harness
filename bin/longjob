@@ -1,0 +1,86 @@
+#!/usr/bin/env bash
+# longjob — dispara trabalho longo como unit transiente do systemd --user.
+# capacidade: orfa
+# orfa por design: entra em gerenciamento de memoria (F3d)
+# dono: claudinho-TI
+#
+# A unit nasce IRMÃ do ops-mcp.service dentro do app.slice, não filha: fica fora
+# do process group do run_command (imune ao os.killpg do timeout) e fora do
+# cgroup do serviço (imune a `systemctl --user restart ops-mcp`).
+#
+# Cota: CPUWeight rebaixa o job contra o serving sob disputa (nao corta teto) e
+# MemoryHigh poe pressao de reclaim antes de qualquer OOM. Sem MemoryMax por
+# default: job longo legitimo nao pode passar a morrer por causa desta linha.
+#
+# Log vai para arquivo desde o primeiro byte: PYTHONUNBUFFERED=1 no ambiente da
+# unit e StandardOutput/StandardError em append no mesmo arquivo. Job que morre
+# no meio deixa o que já escreveu.
+set -euo pipefail
+
+LOGDIR="${LONGJOB_LOGDIR:-$HOME/AI/var/log/jobs}"
+mkdir -p "$LOGDIR"
+
+uso() {
+  cat >&2 <<'FIM'
+uso:
+  longjob run <nome> <comando> [args...]   dispara; devolve nome da unit e caminho do log
+  longjob list                             units platafirma-job-* ativas e falhadas
+  longjob logs                             arquivos de log mais recentes
+  longjob status <unit>                    estado da unit + últimas linhas do log
+  longjob log <unit> [n]                   últimas n linhas do log (default 40)
+  longjob stop <unit>                      encerra a unit
+FIM
+  exit 2
+}
+
+cmd="${1:-}"; shift || uso
+
+case "$cmd" in
+  run)
+    [ $# -ge 2 ] || uso
+    nome="$1"; shift
+    unit="platafirma-job-${nome}-$(date +%Y%m%dT%H%M%S)"
+    log="$LOGDIR/${unit}.log"
+    : > "$log"
+    printf '# unit=%s\n# inicio=%s\n# cwd=%s\n# comando=%s\n' \
+      "$unit" "$(date -Is)" "$PWD" "$*" >> "$log"
+    systemd-run --user --unit="$unit" --quiet \
+      --property=WorkingDirectory="$PWD" \
+      --property=StandardOutput="append:$log" \
+      --property=StandardError="append:$log" \
+      --property=SyslogIdentifier="$unit" \
+      --property=CPUWeight="${LONGJOB_CPU_PESO:-50}" \
+      --property=MemoryHigh="${LONGJOB_MEM_ALTA:-16G}" \
+      --setenv=PYTHONUNBUFFERED=1 \
+      -- "$@"
+    echo "unit: $unit"
+    echo "log:  $log"
+    ;;
+  list)
+    # só units, uma por linha, 1ª coluna = nome parseável.
+    # systemctl prefixa unit falhada com '●'; tira, senão a 1ª coluna não é nome de unit.
+    systemctl --user list-units 'platafirma-job-*' --all --no-legend --no-pager \
+      | sed 's/^[^[:alnum:]]*//' || true
+    ;;
+  logs)
+    ls -1t "$LOGDIR" 2>/dev/null | head -20 || true
+    ;;
+  status)
+    [ $# -ge 1 ] || uso
+    unit="$1"
+    systemctl --user show "$unit" \
+      -p Id -p SubState -p Result -p ExecMainPID -p ExecMainStatus \
+      -p ActiveEnterTimestamp -p ControlGroup 2>&1 || true
+    echo "--- log ---"
+    tail -n 20 "$LOGDIR/${unit}.log" 2>/dev/null || echo "(sem log)"
+    ;;
+  log)
+    [ $# -ge 1 ] || uso
+    tail -n "${2:-40}" "$LOGDIR/${1}.log"
+    ;;
+  stop)
+    [ $# -ge 1 ] || uso
+    systemctl --user stop "$1"
+    ;;
+  *) uso ;;
+esac

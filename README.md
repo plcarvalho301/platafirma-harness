@@ -13,11 +13,18 @@ Módulo do harness (`arq:0019`): a superfície de contato entre as personas
 - **MCP do harness** — predicado do mapa de entrypoints e `identity_check(persona)`.
 - **Verbos de operação** (`bin/`) — o que toda cadeira chama por `run_command`:
   `fila`, `monta-sessao`, `tarefas` (rastreador), `infra` (contêiner, unit,
-  timer), `acervo escada`. Fonte única: `~/AI/bin` e `~/.local/bin` são symlink.
+  timer), `acervo escada`, `longjob`, `seg`. Fonte única: `~/AI/bin` e
+  `~/.local/bin` são symlink, e `conferir procedencia` reprova quando deixa de
+  ser verdade.
+- **Identidade e plano de controle** (`agente/`, `ops-server/`) — o pacote de
+  conta da fábrica e o fonte do MCP de operação, trazidos do `platafirma-core`
+  no #396: quem serve a plataforma às personas mora no módulo do harness.
 
 ## Não entra
 
-- MCP de outro serviço — mora no repo que roda o serviço.
+- MCP de outro serviço — mora no repo que roda o serviço. O `ops-server` não é
+  exceção a isso e sim aplicação: o serviço que ele serve é o próprio harness,
+  a superfície de contato. Quem o **sobe** segue no core (`deploy/setup-ops.sh`).
 - `CLAUDE.md`/`AGENTS.md` de outros repos — voz de cada repo.
 - Fila v0 (`fila/`) — runtime, sem repo por design.
 
@@ -46,6 +53,9 @@ Declarados por `arq:0042`; `conferir repo platafirma-harness` mede contra esta l
 | `mcp/` | MCP do harness, previsto por `arq:0019`, ainda sem implementação |
 | `controle/` | plano de controle do harness: agregador de estado e tela de leitura |
 | `caderno/` | caderno durável por cadeira, particionado por chapéu |
+| `deploy-harness/` | o que instala o próprio harness num ambiente: units do `sinal` e o instalador |
+| `agente/` | pacote de conta da fábrica: `CLAUDE.md`, `settings.json` e o instalador; `~/.claude/*` é symlink daqui |
+| `ops-server/` | fonte do MCP de operação (`platafirma-ops`); sobe por `platafirma-core:deploy/setup-ops.sh`, fora do compose |
 | `.claude/` | configuração do Claude Code na estação emprestada |
 
 Spec de referência: [PlataFirma:Produto/harness/spec](https://wiki.platafirma.org/index.php/PlataFirma:Produto/harness/spec).
