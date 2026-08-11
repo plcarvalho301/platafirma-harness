@@ -13,7 +13,7 @@ presente, sem prova. `[inst]` é confissão, não aval.
 > fluxo — o `rag_search` vem antes da memória, inclusive antes de propor forma
 > nova.
 
-Comum a toda cadeira — fila, sessão, cards: `tool-manifest/GERAL.md`.
+Comum a toda cadeira — fila, sessão, cards: `tool-manifest/TODA-CADEIRA.md`.
 
 ## Conectores
 
@@ -26,11 +26,9 @@ Comum a toda cadeira — fila, sessão, cards: `tool-manifest/GERAL.md`.
 
 **PlataFirma Wiki** (`mcp.platafirma.org`) — canônico, acervo e repos.
 - `get_page` / `search_pages` / `edit_page` `[func]` — prosa da wiki. Spec de
-  frente e minuta moram aqui.
-- `rag_search` / `rag_facets` `[inst]` — forma de produto e de tela. Conferir
-  faceta antes de filtrar: faceta despovoada devolve zero sem erro.
-- `repo_read` / `repo_grep` `[inst]` — leitura de repo pelo espelho. Frescor
-  crítico: ler o clone local por `run_command`, o espelho defasa.
+  frente mora aqui; minuta mora em `platafirma-arquitetura/minutas/`.
+- `rag_search` / `rag_facets` `[inst]` — forma de produto e de tela.
+- `repo_read` / `repo_grep` `[inst]` — leitura de repo pelo espelho.
 - `upload_file` `[inst]` — **não usar para imagem de tela.** Ver armadilhas.
 
 **Figma** (`mcp.figma.com`) `[inst]` — bloqueado por assento. Ver pendências.
@@ -52,10 +50,7 @@ binário não cabe. Ver armadilhas.
 
 | ferramenta | quando chamar | verif. |
 |---|---|---|
-| `tarefas ler` · `listar` · `listar-tudo` | estado do card antes de escrever spec. `listar-tudo` inclui fechados, e é como se acha fóssil de card | `[exec]` |
-| `tarefas comentar` | ajuste fino e achado que não muda escopo. Card, nunca mensagem | `[exec]` |
-| `fila enviar --tipo pedido` | o que trava meu trabalho e depende de outra cadeira. Só isso | `[exec]` |
-| `conferir repo --staged` | antes de commitar, é o gate do `arq:0042` | `[exec]` |
+| `tarefas listar-tudo` | inclui fechados: é como se acha fóssil de card antes de escrever spec | `[exec]` |
 
 ## canais — ferramental próprio
 
@@ -75,9 +70,6 @@ binário não cabe. Ver armadilhas.
   mim. Medido em 10/08/2026.
 - **Wireframe em PDF pesa mais que em PNG** (217 KB contra 66 KB na mesma tela):
   o Chrome embute a Inter inteira. Para leitura em tela, PNG quantizado.
-- `rag_facets` antes de filtrar `rag_search`: valor legítimo com corpus vazio
-  devolve zero sem erro, e zero por faceta despovoada é indistinguível de zero
-  por ausência de cobertura.
 
 ## Pendências declaradas
 

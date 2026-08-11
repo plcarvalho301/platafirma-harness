@@ -1,8 +1,8 @@
 # tool-manifest — claudinho-conhecimento
 
-Comum a toda cadeira — fila, sessão, cards, escovação: `tool-manifest/GERAL.md`.
+Comum a toda cadeira — fila, sessão, cards, escovação: `tool-manifest/TODA-CADEIRA.md`.
 Este arquivo traz só o que é próprio da cadeira. Forma:
-`TEMPLATE-tool-manifest.md`.
+`TEMPLATE.md`.
 
 Verificação: `[exec]` executado · `[func]` usado em trabalho real ·
 `[inst]` presente, sem prova.
@@ -115,8 +115,6 @@ MediaWiki com `Cargo` e `CategoryTree`. URL humana:
 | `search_pages` | busca full-text **não é detector de existência**. Para "existe X?" é `query_cargo` |
 | `query_cargo` | campo `isList` exige `HOLDS LIKE '%termo%'`. `LIKE` puro em campo de lista devolve vazio sem erro |
 | `rag_search` | acervo bibliográfico apenas. Conteúdo da wiki é `search_pages`/`query_cargo` |
-| `rag_facets` | chamar **antes** de filtrar `rag_search`: valor válido com corpus vazio devolve zero sem erro |
-| `repo_read/grep/tree` | leem o **espelho** do ref remoto. Depois de `git push`, chamar `repo_sync` |
 | `repo_grep` | um padrão por chamada; volta vazio em silêncio se o SHA indexado rodou. Fallback: `rg` no clone local |
 | `upload_file` | teto de 2 MB. Acima disso é `importImages.php` pelo ops. `[inst]` — não usei |
 
@@ -173,17 +171,13 @@ da saída. Se a teia virar rotina, instalar `psycopg`.
 Sistema: `git · docker · psql · jq · curl · wget · pandoc · sqlite3 · exiftool ·
 pdftotext · tesseract · 7z · unzip · rsync · gh`. **`php` não** — só no container.
 
-`~/AI/bin`: catálogo e regra de uso em `GERAL.md`. Os meus de todo dia: `acervo`
+`~/AI/bin`: catálogo e regra de uso em `TODA-CADEIRA.md`. Os meus de todo dia: `acervo`
 (despachante — `ingerir · escada · baixar · bancada · extrato`), `fila`,
 `tarefas`, `mesa`, `conferir`.
 
 ### Repos e ADRs
 
-Clones em `~/AI`: `platafirma-{conhecimento,arquitetura,core,motor,harness}` e
-`modulo-osint`. Estado de qualquer um: `git -C ~/AI/<repo> status --short`.
-
-Escrita: `write_file → git add -A → git commit → git push → repo_sync`. Sem o
-`repo_sync` final, `repo_read`/`repo_grep` continuam vendo o SHA velho.
+Escrita: `write_file → git add -A → git commit → git push → repo_sync`.
 
 ADRs: `platafirma-conhecimento/ontologia/adr/` (`ont:NNNN`) ·
 `platafirma-arquitetura/macro-global/decisions/` (`arq:NNNN`).
@@ -192,8 +186,7 @@ prestes a reabrir algo; abrir "por garantia" é o desperdício que ele evita.
 
 ### Serviços
 
-O que está no ar e se está saudável: `infra estado` / `infra saude`. Os que me
-tocam: `rag-extractor-pg · rag-extractor-minio · rag-extractor-nocodb ·
+Os que me tocam (estado por `infra`, em `TODA-CADEIRA.md`): `rag-extractor-pg · rag-extractor-minio · rag-extractor-nocodb ·
 rag-extractor-api · acervo-api · plataforma-wiki-*`.
 
 ## G. Container Claude — `/home/claude`, `bash_tool`

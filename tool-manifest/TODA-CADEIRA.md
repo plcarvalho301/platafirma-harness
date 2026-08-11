@@ -179,6 +179,22 @@ não é projeto e devolve 404 em `/tasks` — `tarefas projetos` já os omite.
 Clones de trabalho: `platafirma-{core,conhecimento,arquitetura,harness,motor,posto}`
 e `modulo-osint`, todos em `~/AI`.
 
+## Armadilhas que mordem toda cadeira
+
+Estas estavam repetidas em quatro manifestos, com quatro redações. Uma fonte:
+
+- **O espelho de repo serve o SHA velho depois do push.** `repo_read`,
+  `repo_grep` e `repo_tree` leem o ref remoto por espelho; sem `repo_sync`
+  depois de `git push`, servem a versão anterior em silêncio. Frescor crítico:
+  ler o clone local por `run_command`.
+- **`&&` encadeado no `run_command` some com o erro.** Passo intermediário
+  não-zero derruba o resto sem sinal visível. Usar `;` ou chamadas separadas.
+- **Faceta válida e despovoada devolve zero sem erro.** `rag_facets` antes de
+  filtrar `rag_search`: zero por faceta vazia é indistinguível de zero por
+  ausência de cobertura.
+- **`edit_page` substitui a página inteira.** Não há patch nem append: `get_page`
+  antes, sempre, e devolver `basetimestamp` para detectar conflito.
+
 ## Escovação de bit — o que gira a cada fita
 
 Régua do dono: escova-se o que é executado dez milhões de vezes. Aqui isso tem

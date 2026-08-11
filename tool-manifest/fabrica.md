@@ -23,7 +23,7 @@ funcionamento. `[inst]` é confissão, não aval.
 > Montar `docker exec` na mão, reimplementar cliente REST ou repetir credencial
 > em script de sessão é o erro que este manifesto existe para cortar.
 
-Comum a toda cadeira — fila, sessão, cards: `tool-manifest/GERAL.md`. O que está
+Comum a toda cadeira — fila, sessão, cards: `tool-manifest/TODA-CADEIRA.md`. O que está
 lá não se repete aqui.
 
 ## Conectores
@@ -70,18 +70,8 @@ alcança o host, e o que não passa por `run_command` não deixa trilha. As
 negativas de `docker`, `systemctl`, `psql` e `mc` no `settings.json` são disso:
 não barram a linha `ops`, barram `ops` sem auditoria.
 
-| ferramenta | quando chamar | verif. |
-|---|---|---|
-| `infra estado [alvo]` · `infra saude` | o que está no ar, antes de mexer | [exec] |
-| `infra logs <alvo> [n]` | log de contêiner ou unit; descobre qual dos dois | [exec] |
-| `infra restart <alvo>` | reiniciar destacado; alvo explícito obrigatório | [exec] |
-| `infra exclusivo -- <cmd>` | carga de GPU: espera a vez e a cota | [exec] |
-| `deploy <stack> up -d` | promover release; stack obrigatória, sem default | [exec] |
-| `deploy <stack>` | ver o declarado, sem tocar em nada | [exec] |
-| `conferir servico [nome]` | declarado x servido; exit 1 = há divergência | [exec] |
-| `longjob run <nome> <cmd…>` | qualquer coisa acima de 2 min: build, migração | [exec] |
-| `acervo ingerir/escada/…` | degrau do acervo, quando o card declarar | [exec] |
-| `docker exec -i rag-extractor-pg psql -U rag -d rag_extractor -At -c "<sql>"` | SQL no acervo | [exec] |
+`infra`, `deploy`, `conferir`, `longjob`, `acervo` e o `psql` do acervo estão em
+`TODA-CADEIRA.md`, com a mesma glosa. O que é próprio daqui é o parágrafo abaixo.
 
 O que sobe, quando e com que rollback **não é meu**: é decisão de claudinho-TI,
 escrita no card. Acesso remoto não é autoridade. Card que manda operar sem dizer
@@ -92,10 +82,6 @@ o rollback volta como pergunta fechada, não vira execução com critério meu.
 - **Bind mount de arquivo único não acompanha `git checkout`.** O checkout troca
   o inode; o mount fica preso ao velho. `nginx -t` passa, `reload` não acusa, e a
   mudança não aparece. Só `up -d --force-recreate <serviço>` refaz o mount.
-- **`repo_read`/`repo_grep`/`repo_tree` servem o SHA velho depois de um push**,
-  em silêncio — são espelho do remoto. Chamar `repo_sync` antes.
-- **`&&` encadeado no `run_command`**: passo intermediário não-zero derruba o
-  resto sem erro visível. Usar `;` ou chamadas separadas.
 - **`~/AI/deploy/*` são worktrees detached**: `git pull` ali falha com "You are
   not currently on a branch". O caminho é `git fetch origin main` +
   `git checkout --detach <sha>` — ou o verbo `deploy`.

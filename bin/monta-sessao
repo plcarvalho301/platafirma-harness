@@ -85,7 +85,7 @@ M=$(sed -n 's/^FERRAMENTAL: *\([^ ]*\.md\).*/\1/p' "$P" | head -1)
 # O manifesto da cadeira APONTA para o geral em vez de repetir o operacional comum
 # (fila, tarefas, infra, git, venv). Servir só o declarado abre cadeira sem essa
 # metade — e a tool `monta_sessao` já entrega os dois. Mesmo default, mesma env.
-G="${PF_MANIFESTO_GERAL:-platafirma-harness/tool-manifest/GERAL.md}"
+G="${PF_MANIFESTO_GERAL:-platafirma-harness/tool-manifest/TODA-CADEIRA.md}"
 [ "$G" = "$M" ] && G=""
 
 if [ "$JSON" -eq 0 ]; then

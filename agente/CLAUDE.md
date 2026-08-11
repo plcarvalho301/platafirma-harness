@@ -103,7 +103,7 @@ card. Card que manda operar sem dizer o rollback volta como pergunta fechada.
   processos no timeout. Build, indexação e migração vão por `longjob`.
 - **Branch por item de trabalho: `fabrica/<card>-<slug>`,** a partir de `main`.
   Push da branch e para aí — merge e push em `main` são de claudinho-TI.
-- **Ferramental: `platafirma-harness/tool-manifest/`.** `GERAL.md` vale para
+- **Ferramental: `platafirma-harness/tool-manifest/`.** `TODA-CADEIRA.md` vale para
   toda cadeira; `fabrica.md` é o meu, preenchido, e o que eu medir em sessão
   entra nele.
 - **Fila: não recebe demanda.** Escrevo para responder ou perguntar a

@@ -12,7 +12,7 @@ Verificação: cada linha declara **como** — `[exec]` binário executado ·
 > filtro resolve, é o erro que este manifesto existe para cortar.
 
 Comum a toda cadeira — fila, sessão, cards, git, acervo, infra, deploy,
-`conferir`: `tool-manifest/GERAL.md`. Aqui só o que é próprio de arquitetura.
+`conferir`: `tool-manifest/TODA-CADEIRA.md`. Aqui só o que é próprio de arquitetura.
 
 ## Conectores
 
@@ -29,14 +29,12 @@ Comum a toda cadeira — fila, sessão, cards, git, acervo, infra, deploy,
 repos e acervo bibliográfico. Escrita em repo NÃO passa por aqui.
 - `platafirma_index` — mapa de entrada: que repos existem e o que cada um é.
   Uma chamada por sessão, antes de afirmar endereço. `[func]`
-- `repo_tree` / `repo_read` / `repo_grep` — leitura do ref remoto por espelho;
-  a resposta traz o SHA lido, logo é citável. `repo_grep` é regex ERE. `[func]`
+- `repo_tree` / `repo_read` / `repo_grep` — a resposta traz o SHA lido, logo é
+  citável. `repo_grep` é regex ERE. `[func]`
 - `get_page` / `edit_page` — wikitext. `edit_page` substitui a página inteira;
   passar `basetimestamp` do `get_page` para detectar conflito. `[inst]`
 - `search_pages` — prosa livre. `query_cargo` — faceta declarada (`dominio`,
   `tipo`, `tema`). Critério de escolha é esse, não preferência. `[inst]`
-- `rag_facets` antes de `rag_search` com filtro: faceta válida e despovoada
-  devolve zero sem erro. `[inst]`
 
 Fronteira: `Figma`, `Canva` e `Google Drive` aparecem na sessão e não são desta
 cadeira.
@@ -47,14 +45,12 @@ cadeira.
 |---|---|---|
 | `npx -y @mermaid-js/mermaid-cli -i <n>.mmd -o <n>.svg -b transparent` | render de diagrama; fonte `.mmd` versionada junto (`arq:0042`) | `[exec]` 11.16.0 |
 | `d2` (`~/.local/bin/d2`) | fonte alternativa quando o layout do Mermaid não fecha | `[inst]` |
-| `conferir repo [nome]` | antes de commitar estrutura nova: mede o topo declarado no README | `[exec]` |
 | `python3 -c "import xml.dom.minidom; xml.dom.minidom.parse('f.svg')"` | well-formedness de SVG escrito à mão | `[func]` |
 
 ## negocio — arquitetura de negócio
 
 | ferramenta | quando chamar | verif. |
 |---|---|---|
-| `conferir verbo [nome]` | régua de `arq:0037` — um verbo por capacidade; a conta e a origem de cada verbo | `[exec]` |
 | mermaid-cli / `d2` | mapa de capacidades, cadeia de valor, BPMN | `[exec]` |
 
 ## dados — arquitetura de dados
@@ -62,7 +58,6 @@ cadeira.
 | ferramenta | quando chamar | verif. |
 |---|---|---|
 | `docker exec <container> psql` | estado real do schema antes de reportar; nenhum verbo expõe detalhe de tabela | `[func]` |
-| `acervo escada` | ÚNICA fonte de número do acervo — SQL cru fabrica pendência que não existe (ver GERAL) | `[inst]` |
 
 ## dominio — design de domínios
 

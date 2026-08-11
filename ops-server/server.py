@@ -269,7 +269,7 @@ ORG_CANONICO = Path(os.environ.get(
 FILA = Path(os.environ.get("PF_FILA", RAIZ / "fila"))
 REPOS_SESSAO = ("platafirma-harness", "platafirma-arquitetura")
 MANIFESTO_GERAL = Path(os.environ.get(
-    "PF_MANIFESTO_GERAL", RAIZ / "platafirma-harness/tool-manifest/GERAL.md"))
+    "PF_MANIFESTO_GERAL", RAIZ / "platafirma-harness/tool-manifest/TODA-CADEIRA.md"))
 FM_CAMPOS = ("de", "para", "em", "tipo", "assunto", "ref", "responde")
 MSG_HOST = os.environ.get("PF_MSG_HOST", "127.0.0.1")
 MSG_PORT = int(os.environ.get("PF_MSG_PORT", "6379"))
@@ -636,7 +636,7 @@ async def monta_sessao(cadeira: str = "", atualizar: bool = True) -> dict:
     seguro quando a idade vem declarada.
 
     O pacote traz DOIS manifestos: `manifesto` (o que a persona declara em
-    FERRAMENTAL:) e `manifesto_geral` (tool-manifest/GERAL.md, operacional comum
+    FERRAMENTAL:) e `manifesto_geral` (tool-manifest/TODA-CADEIRA.md, operacional comum
     a toda cadeira). O manifesto da cadeira remete ao geral e não repete o que
     está lá — entregar só um obrigava a sessão a uma segunda leitura para
     qualquer verbo comum.

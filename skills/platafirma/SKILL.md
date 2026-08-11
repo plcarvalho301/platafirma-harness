@@ -182,7 +182,7 @@ declarando que foi na mão.
 
 - acervo (obras, chunks, vetores, fuga por degrau): `acervo escada`
 - facetas e população do índice: `rag_facets`
-- catálogo dos verbos: `tool-manifest/GERAL.md`
+- catálogo dos verbos: `tool-manifest/TODA-CADEIRA.md`
 
 O modo de falha não é errar a conta: é acertar uma conta que mede outra coisa.
 `SELECT count(*) FROM chunks WHERE embedding IS NULL` roda sem erro e devolve

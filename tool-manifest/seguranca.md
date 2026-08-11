@@ -12,7 +12,7 @@ funcionamento. `[inst]` é confissão, não aval.
 > Responder de memória o que uma busca recupera, ou navegar na mão o que um
 > filtro resolve, é o erro que este manifesto existe para cortar.
 
-Comum a toda cadeira — fila, sessão, cards: `tool-manifest/GERAL.md`.
+Comum a toda cadeira — fila, sessão, cards: `tool-manifest/TODA-CADEIRA.md`.
 
 ## Conectores
 
@@ -29,8 +29,6 @@ Comum a toda cadeira — fila, sessão, cards: `tool-manifest/GERAL.md`.
   código, o código exato entra na pergunta.
 - `query_cargo` — faceta declarada do acervo. Predicado determinístico; não
   serve para assunto em prosa livre.
-- `get_page` antes de `edit_page` — sempre. `edit_page` substitui a página
-  inteira e sobrescreve em silêncio.
 - `repo_read` / `repo_grep` — leitura de repo. Escrita é `run_command`.
 
 ## Verbo próprio — `seg`

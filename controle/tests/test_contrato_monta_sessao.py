@@ -122,7 +122,7 @@ def bin_stub(tmp_path: Path) -> Path:
 # o script espera, nunca o ~/AI real.
 
 MANIFESTO_REL = "platafirma-harness/tool-manifest/manifesto-teste.md"
-GERAL_REL = "platafirma-harness/tool-manifest/GERAL.md"
+GERAL_REL = "platafirma-harness/tool-manifest/TODA-CADEIRA.md"
 ORG_REL = "platafirma-arquitetura/docs/org-template-canonico.md"
 
 

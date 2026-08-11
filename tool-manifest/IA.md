@@ -19,7 +19,7 @@ avaliação). Organizado pelas três gerências: inferência, RAG/memória, agen
 ---
 
 Operacional comum a toda cadeira (fila, tarefas, infra, git, venv, busca) não
-repete aqui — está em `tool-manifest/GERAL.md`.
+repete aqui — está em `tool-manifest/TODA-CADEIRA.md`.
 
 ---
 
@@ -132,20 +132,9 @@ diretamente em 04/08/2026.
   mediana com pool de 40 candidatos — otimização de latência é o item 1 do card
   `tarefas.platafirma.org/tasks/299`.
 
-**`acervo escada`** — `[exec]`. Monitor do acervo: estado corrente por **obra** nos cinco
-degraus do fluxo — catalogada, armazenada, ingerida (chunkada), embedded (vetor de texto),
-vetorizada (vetor de metadado) — e a **fuga por degrau**: quantas obras vazam entre dois
-degraus e por qual causa. Sub-ato do despachante `acervo` (arq:0040; formatador em `_acervo-status-fmt.py`); `--json` para máquina, `--detalhe` nomeia quem está fora do lugar.
-
-- Lê o substrato, não o discurso: `armazenada` confere objeto a objeto no MinIO (`mc ls`
-  nos buckets `acervo` e `pessoal`) em vez de acreditar em `acervo.obra.objeto`. Foi assim
-  que apareceu obra catalogada com 189 chunks vivos e bruto inexistente.
-- Read-only e fora do repo do rag: temp table, nenhuma view criada, nenhuma escrita. Roda
-  a qualquer tempo, inclusive durante carga.
-- Imprime o contrato do índice (`index_meta`) no cabeçalho — número de vetor sem o par
-  (modelo, backend) que o gerou não quer dizer nada.
-- **Chamar antes de afirmar qualquer número do acervo.** Contagem de obra dita de memória
-  ou de mensagem de outra persona é exatamente o que este binário existe para aposentar.
+**`acervo escada`** — contrato do índice (`index_meta`) no cabeçalho: número de
+vetor sem o par (modelo, backend) que o gerou não quer dizer nada. O resto do
+verbo está em `TODA-CADEIRA.md`.
 
 ---
 

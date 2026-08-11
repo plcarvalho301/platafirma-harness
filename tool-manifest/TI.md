@@ -35,20 +35,14 @@ Formato: necessidade : chamada. Opção detalhada sai de `<comando>` sem argumen
 
 ## Geral — toda cadeira
 
-Em `tool-manifest/GERAL.md`, comum a todas as cadeiras. Não se replica aqui.
+Em `tool-manifest/TODA-CADEIRA.md`, comum a todas as cadeiras. Não se replica aqui.
 
 ## Por domínio — ponteiro, não manual
 
 ```
-acervo, estado por obra         : acervo escada [--json] [--detalhe]
 pôr arquivo na fila do acervo   : platafirma-conhecimento/rag/scripts/acervo-drop
                                   degrau 0, fora do PATH; dono declarado: claudinho-TI
 entrada por arquivo / planilha  : acervo ingerir <raiz> | --planilha [x.ods]  [--apply]
-SQL no acervo                   : docker exec -i rag-extractor-pg psql -U rag -d rag_extractor -At -F ' :: ' -c "<sql>"
-objeto no MinIO                 : mc rm --versions --force pf/<bucket>/<sha256>
-declarado x servido             : conferir servico [nome]  exit 1 = ha divergencia
-verbo x arq:0037                : conferir verbo [nome]    origem, cabecalho e a conta
-promover release de stack       : deploy <stack> up -d     stack obrigatoria, sem default
 inferência local                : curl 127.0.0.1:11434/... · nvitop · nvcc (CUDA 13.2)
 
 segredo em repo                 : gitleaks · trufflehog · detect-secrets
@@ -66,15 +60,11 @@ de outras cadeiras: ler, não escrever.
 
 ## Armadilhas medidas
 
-- **`repo_read`/`repo_grep`/`repo_tree` leem o espelho do ref remoto.** Depois
-  de `git push`, chamar `repo_sync` ou as três servem o SHA velho, em silêncio.
 - **`infra compose` nao existe mais.** Promover release saiu para `deploy <stack>`
   (capacidade `mudanca`). O antigo tinha `-f` fixo no core e ignorava o `cwd`:
   chamado de outro repo, promovia o control-plane inteiro. No `deploy` a stack e
   argumento obrigatorio, lido de `registro/stacks.json`; nao ha default nem "todas",
   e `down` em stack critica exige `PF_SIM=1`.
-- **`&&` encadeado no `run_command`**: passo intermediário não-zero derruba o
-  resto sem erro visível. Usar `;` ou chamadas separadas.
 - **Restart do ops-mcp mata a chamada em curso.** `infra restart` já despacha
   destacado; `systemctl --user restart ops-mcp` direto, não.
 - **Unit alterada no disco exige `systemctl --user daemon-reload` ANTES do
@@ -87,10 +77,6 @@ de outras cadeiras: ler, não escrever.
   comportamento do ops-mcp é no código, nunca na unit.
 - **Comando longo direto no `run_command`** morre no timeout e leva o process
   group junto. Acima de 2 minutos é `longjob`.
-- **`mc rm` sem `--versions`** deixa delete marker: o objeto some da listagem,
-  continua ocupando espaço e continua contando no console.
-- **UPDATE de classificação no acervo** leva sempre `AND especie_id IS NULL` —
-  o dono classifica em paralelo pelo NocoDB (`127.0.0.1:8081`).
 - **`~/AI/{archi_base,i-have-adhd,ollama-orchestrator}`** dão "dubious
   ownership" no git: são de outro dono, não são repo de trabalho. Ignorar.
 
