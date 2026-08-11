@@ -145,6 +145,13 @@ if [ -n "$M" ]; then
   [ -f "$M" ] && manifesto_presente=true
 fi
 
+geral_presente=false
+geral_caminho_json="null"
+if [ -n "$G" ]; then
+  geral_caminho_json="\"$(json_esc "$G")\""
+  [ -f "$G" ] && geral_presente=true
+fi
+
 org_presente=false
 [ -f "$ORG" ] && org_presente=true
 
@@ -185,10 +192,11 @@ fi
 atualizado_json=true
 [ "$SEM_ATUALIZAR" -eq 1 ] && atualizado_json=false
 
-printf '{"cadeira":"%s","persona":{"presente":%s,"caminho":"%s","nome_resolvido":%s},"manifesto":{"presente":%s,"caminho":%s},"org":{"caminho":"%s","presente":%s},"mesa":{"disponivel":%s,"resumo":%s},"cadernos":{"disponivel":%s,"resumo":%s},"fila":{"disponivel":%s,"resumo":%s},"atualizado":%s}\n' \
+printf '{"cadeira":"%s","persona":{"presente":%s,"caminho":"%s","nome_resolvido":%s},"manifesto":{"presente":%s,"caminho":%s},"manifesto_geral":{"presente":%s,"caminho":%s},"org":{"caminho":"%s","presente":%s},"mesa":{"disponivel":%s,"resumo":%s},"cadernos":{"disponivel":%s,"resumo":%s},"fila":{"disponivel":%s,"resumo":%s},"atualizado":%s}\n' \
   "$(json_esc "$C")" \
   "$persona_presente" "$(json_esc "$P")" "$persona_nome_json" \
   "$manifesto_presente" "$manifesto_caminho_json" \
+  "$geral_presente" "$geral_caminho_json" \
   "$(json_esc "$ORG")" "$org_presente" \
   "$mesa_disp" "$mesa_resumo_json" \
   "$cadernos_disp" "$cadernos_resumo_json" \

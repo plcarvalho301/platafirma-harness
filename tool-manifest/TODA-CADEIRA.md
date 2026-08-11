@@ -1,4 +1,4 @@
-# tool-manifest — GERAL, toda cadeira
+# tool-manifest — toda cadeira
 
 Comum a todas as cadeiras. Redação de claudinho-TI; forma de RH. Manifesto de
 cadeira não replica o que está aqui — aponta.
