@@ -35,7 +35,8 @@ Comum a toda cadeira — fila, sessão, cards: `tool-manifest/GERAL.md`.
 
 ## Verbo próprio — `seg`
 
-Origem única: `platafirma-core/deploy/seguranca/seg`, alcançado por symlink em
+Origem única: `platafirma-harness/bin/seg` (veio do `platafirma-core` no #396;
+o ferramental de instalação do toolkit segue lá), alcançado por symlink em
 `~/AI/bin/seg`. Capacidade por subcomando; o binário agrupa por toolkit
 (`arq:0040`), não por capacidade.
 

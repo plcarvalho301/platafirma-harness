@@ -13,6 +13,11 @@
   skill   [nome]   skill servida no claude.ai: o blob que o carimbo do arquivo montado
                    declara, contra o blob da fonte no harness. O servido vive do outro
                    lado da fronteira — a sessao le o carimbo e passa em --servido.
+  procedencia [nome]
+                   caminho de execucao alcancavel por ~/AI/bin: resolve para dentro do
+                   harness, ou consta como excecao em docs/procedencia-do-harness.md,
+                   com dono e motivo. Nao julga cabecalho nem capacidade — so onde o
+                   arquivo executado mora.
   repo    [nome]   clone de trabalho em ~/AI: o que esta rastreado contra a regua de
                    arq:0042. Com `--staged`, julga so o que o commit em curso
                    acrescenta, no repo do diretorio corrente — e o que o pre-commit
@@ -49,7 +54,7 @@ def uso(erro=None):
         print(f"erro: {erro}\n", file=sys.stderr)
     print(__doc__.strip(), file=sys.stderr)
     print("\nuso: conferir <classe> [alvo]", file=sys.stderr)
-    print("     classes implementadas : servico . verbo . repo . skill", file=sys.stderr)
+    print("     classes implementadas : servico . verbo . repo . skill . procedencia", file=sys.stderr)
     for c, motivo in CLASSES_ABERTAS.items():
         print(f"     classe declarada, sem implementacao : {c} — {motivo}", file=sys.stderr)
     sys.exit(2)
@@ -698,6 +703,135 @@ def conferir_skill(nome, servido=None, como_json=False):
     return 1
 
 
+# --- classe: procedencia ----------------------------------------------------
+# Mede uma coisa so: onde para cada caminho de execucao de ~/AI/bin. Nao e arq:0037
+# (cabecalho e conta de capacidade sao de `conferir verbo`) e nao e arq:0042.
+#
+# A lista de excecoes NAO mora aqui: mora em docs/procedencia-do-harness.md. Excecao
+# no codigo vira detalhe de implementacao, e o que ela cala e decisao de dono —
+# tem que estar escrita onde alguem revise, com nome ao lado.
+
+DOC_PROCEDENCIA = os.path.join(HARNESS, "docs", "procedencia-do-harness.md")
+CLASSES_DE_EXCECAO = {"binario-de-terceiro"}
+
+
+def _dono_e_motivo(comentario):
+    """Extrai `dono:` e `motivo:` do comentario da linha. Falta de um dos dois
+    invalida a excecao — meia excecao cala o alarme sem dizer de quem e a decisao."""
+    baixo = comentario.lower()
+    i, j = baixo.find("dono:"), baixo.find("motivo:")
+    if i < 0 or j < 0 or j < i:
+        return None, None
+    dono = comentario[i + len("dono:"):j].strip().strip("·-—|,;").strip()
+    motivo = comentario[j + len("motivo:"):].strip()
+    return (dono or None), (motivo or None)
+
+
+def excecoes_de_procedencia(caminho=DOC_PROCEDENCIA):
+    """Le o documento de excecoes: (por_nome, por_classe, erros).
+
+    Ausencia do arquivo nao e ausencia de excecao — e ausencia de lista, e reprova.
+    """
+    por_nome, por_classe, erros = {}, {}, []
+    try:
+        texto = open(caminho, errors="replace").read()
+    except OSError:
+        return por_nome, por_classe, [
+            f"lista de excecoes ausente em {caminho} — ela e parte do predicado, nao anexo dele"]
+    for n, linha in enumerate(texto.splitlines(), 1):
+        s = linha.strip()
+        for marca, destino in (("permite-classe:", por_classe), ("permite:", por_nome)):
+            if not s.startswith(marca):
+                continue
+            corpo = s[len(marca):]
+            nome, _, comentario = corpo.partition("#")
+            nome = nome.strip()
+            dono, motivo = _dono_e_motivo(comentario)
+            if nome.startswith("<") or nome.endswith(">"):
+                break            # ilustracao de forma no proprio documento, nao excecao
+            if not nome:
+                erros.append(f"linha {n}: `{marca}` sem nome")
+            elif not dono or not motivo:
+                erros.append(f"linha {n}: excecao {nome!r} sem dono e/ou motivo declarados")
+            elif destino is por_classe and nome not in CLASSES_DE_EXCECAO:
+                erros.append(f"linha {n}: classe {nome!r} nao existe — conhecidas: "
+                             + ", ".join(sorted(CLASSES_DE_EXCECAO)))
+            else:
+                destino[nome] = (dono, motivo)
+            break
+    return por_nome, por_classe, erros
+
+
+def conferir_procedencia(alvo, como_json=False):
+    por_nome, por_classe, erros = excecoes_de_procedencia()
+    houve = bool(erros)
+    raiz = os.path.realpath(HARNESS)
+    dentro = fora = coberto = 0
+    entradas = []
+    vistos = 0
+
+    for nome in sorted(os.listdir(BIN)):
+        if alvo and alvo != nome:
+            continue
+        vistos += 1
+        caminho = os.path.join(BIN, nome)
+        destino = os.path.realpath(caminho)
+        e_link = os.path.islink(caminho)
+        if not os.path.exists(caminho):
+            veredito, detalhe = "quebrado", f"symlink sem destino: {destino}"
+        elif destino == raiz or destino.startswith(raiz + os.sep):
+            veredito, detalhe = "harness", destino
+        elif nome in por_nome:
+            veredito, detalhe = "excecao", "%s — %s (dono: %s)" % (destino, por_nome[nome][1], por_nome[nome][0])
+        elif not e_link and not e_script(caminho) and "binario-de-terceiro" in por_classe:
+            veredito, detalhe = "excecao-classe", "binario-de-terceiro (dono: %s)" % por_classe["binario-de-terceiro"][0]
+        elif not e_link:
+            veredito, detalhe = "fora", "arquivo comum em ~/AI/bin — copia nao e forma valida de instalacao"
+        else:
+            veredito, detalhe = "fora", destino
+
+        if veredito == "harness":
+            dentro += 1
+        elif veredito in ("excecao", "excecao-classe"):
+            coberto += 1
+        else:
+            fora += 1
+            houve = True
+        entradas.append({"nome": nome, "veredito": veredito, "destino": destino, "detalhe": detalhe})
+
+    if alvo and vistos == 0:
+        msg = f"{alvo!r} nao e entrada de {BIN}"
+        print(json.dumps({"erro": msg}) if como_json else f"\n{msg}")
+        return 1
+
+    if como_json:
+        print(json.dumps({
+            "resultado": "divergente" if houve else "ok",
+            "lista_de_excecoes": DOC_PROCEDENCIA,
+            "erros_da_lista": erros,
+            "entradas": entradas,
+            "conta": {"harness": dentro, "excecao": coberto, "fora": fora},
+        }))
+        return 1 if houve else 0
+
+    print(f"\n## procedencia dos caminhos de execucao em {BIN}")
+    print(f"    lista de excecoes: {DOC_PROCEDENCIA}")
+    for e in erros:
+        print(f"    LISTA   : {e}")
+    for e in entradas:
+        if e["veredito"] == "harness" and not alvo:
+            continue
+        marca = {"harness": "ok      ", "excecao": "excecao ", "excecao-classe": "excecao ",
+                 "quebrado": "QUEBRADO", "fora": "FORA    "}[e["veredito"]]
+        print(f"    {marca}: {e['nome']:<16} {e['detalhe']}")
+    print(f"\n    {dentro} dentro do harness . {coberto} excecao declarada . {fora} fora")
+    if fora:
+        print("    Caminho de execucao fora do harness sem linha em docs/procedencia-do-harness.md.")
+        print("    Ou o arquivo se muda para o harness, ou a excecao se declara la — com dono e motivo.")
+    print()
+    return 1 if houve else 0
+
+
 def main(argv):
     como_json = "--json" in argv
     if como_json:
@@ -720,6 +854,8 @@ def main(argv):
         return conferir_servico(alvo, como_json=como_json)
     if classe == "verbo":
         return conferir_verbo(alvo, como_json=como_json)
+    if classe == "procedencia":
+        return conferir_procedencia(alvo, como_json=como_json)
     if classe == "repo":
         if alvo == "--staged":
             return conferir_repo(None, staged=True, como_json=como_json)
