@@ -218,25 +218,25 @@
     "onde": "compose"
    },
    {
-    "slug": "piso-de-abstencao",
+    "slug": "aviso-de-cobertura-fraca",
     "var": "MIN_SIM",
     "fase": "9 montagem",
     "onde": "compose",
     "faixa": "0 a 1",
     "codigo": "0.55",
-    "sobe": "a busca passa a dizer 'cobertura fraca' com mais frequencia, e responde menos coisa que o acervo nao cobre",
-    "custa": "piso alto rotula de fraca pergunta que o acervo cobre. E ha limite: 4 dos 9 negativos medidos sao vizinhos tematicos (LGPD, PCI DSS, SOC 2, GDPR) e batem ate 0,766, acima de 40 dos 47 positivos — nenhum valor separa isso",
-    "medir": "erro total (coberta rotulada fraca + nao coberta rotulada boa) numa bateria com os dois lados. O corte relativo por gap foi medido e REPROVADO em 01/08"
+    "sobe": "a busca marca 'cobertura fraca' com mais frequencia, avisando que o acervo provavelmente nao cobre a pergunta. Nao filtra trecho nenhum: os mesmos trechos voltam, com outro rotulo",
+    "custa": "piso alto marca de fraca pergunta que o acervo cobre, e quem le passa a desconfiar de resposta boa. E ha limite: 4 dos 9 negativos medidos sao vizinhos tematicos (LGPD, PCI DSS, SOC 2, GDPR) e batem ate 0,766, acima de 40 dos 47 positivos — nenhum valor separa isso",
+    "medir": "erro total (coberta marcada fraca + nao coberta marcada boa) numa bateria com os dois lados. O corte relativo por gap foi medido e REPROVADO em 01/08"
    },
    {
-    "slug": "piso-do-revisor",
+    "slug": "aviso-com-revisor",
     "var": "MIN_CE",
     "fase": "9 montagem",
     "onde": "compose",
     "faixa": "0 a 1",
     "codigo": "0.79",
-    "sobe": "idem, quando o revisor esta ligado — e a nota dele que decide, nao a similaridade",
-    "custa": "outra escala que o piso de abstencao: comparar os dois por numero e erro de unidade",
+    "sobe": "o mesmo aviso, quando o revisor esta ligado — quem decide o rotulo passa a ser a nota dele, nao a similaridade",
+    "custa": "outra escala que o aviso de cobertura fraca: comparar os dois por numero e erro de unidade",
     "medir": "mesma bateria, so que com o revisor ligado"
    },
    {
