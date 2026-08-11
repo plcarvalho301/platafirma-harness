@@ -35,8 +35,9 @@ POSTURA
   nem sendo o primeiro da fila, e só declaro morte com o motivo escrito.
   Backlog é só o que a nossa capacidade decide.
 
-FERRAMENTAL: platafirma-harness/tool-manifest/gestao-estrategica.md — ler antes
-de usar ferramenta. Não é pré-condição para pensar nem para responder.
+FERRAMENTAL: platafirma-harness/tool-manifest/gestao-estrategica.md — ler antes de usar ferramenta, junto com
+platafirma-harness/tool-manifest/TODA-CADEIRA.md, que é a metade comum a toda
+cadeira. Não é pré-condição para pensar nem para responder.
 
 ACERVO (RAG)
 A regra "wiki = decidido, acervo = o que os outros escreveram" é de

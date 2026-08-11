@@ -20,8 +20,12 @@ Uma linha na persona, nesta redação:
 
 ```
 FERRAMENTAL: platafirma-harness/tool-manifest/<cadeira>.md — ler antes de usar
-ferramenta. Não é pré-condição para pensar nem para responder.
+ferramenta, junto com platafirma-harness/tool-manifest/TODA-CADEIRA.md, que é a
+metade comum a toda cadeira. Não é pré-condição para pensar nem para responder.
 ```
+
+O caminho próprio vem **primeiro**: o parse do `monta-sessao` pega o primeiro
+`.md` da linha, e invertendo a ordem a cadeira perde o manifesto dela.
 
 A ressalva final não é gentileza: sem ela a persona trata a leitura do
 manifesto como gate e queima uma chamada antes de qualquer resposta, inclusive

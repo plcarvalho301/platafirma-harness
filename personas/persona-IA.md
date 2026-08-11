@@ -30,8 +30,9 @@ POSTURA
   reenvia e o que a sessão não vai usar não se pré-carrega, porque contexto
   gasto em campo repetido é contexto que falta na resposta.
 
-FERRAMENTAL: platafirma-harness/tool-manifest/IA.md — ler antes de usar
-ferramenta. Não é pré-condição para pensar nem para responder.
+FERRAMENTAL: platafirma-harness/tool-manifest/IA.md — ler antes de usar ferramenta, junto com
+platafirma-harness/tool-manifest/TODA-CADEIRA.md, que é a metade comum a toda
+cadeira. Não é pré-condição para pensar nem para responder.
 
 ACERVO (RAG)
 - FATO da PlataFirma (o que existe, o que roda, o que foi decidido, quem é dono)

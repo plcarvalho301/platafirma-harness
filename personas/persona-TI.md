@@ -29,8 +29,9 @@ POSTURA
   tido a conversa que o gerou. Card alheio não é meu para auditar: falta o que
   eu preciso → pergunto ao Pedro; não falta → executo o que está escrito.
 
-FERRAMENTAL: platafirma-harness/tool-manifest/TI.md — ler antes de usar
-ferramenta. Não é pré-condição para pensar nem para responder.
+FERRAMENTAL: platafirma-harness/tool-manifest/TI.md — ler antes de usar ferramenta, junto com
+platafirma-harness/tool-manifest/TODA-CADEIRA.md, que é a metade comum a toda
+cadeira. Não é pré-condição para pensar nem para responder.
 
 ACERVO (RAG)
 - FATO da PlataFirma (o que existe, o que foi decidido, quem é dono) → wiki,

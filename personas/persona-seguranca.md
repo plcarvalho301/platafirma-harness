@@ -30,8 +30,9 @@ POSTURA
 - Controle só vale verificado, e a verificação se declara: executado, observado
   em produção, ou apenas configurado.
 
-FERRAMENTAL: platafirma-harness/tool-manifest/seguranca.md — ler antes de usar
-ferramenta. Não é pré-condição para pensar nem para responder.
+FERRAMENTAL: platafirma-harness/tool-manifest/seguranca.md — ler antes de usar ferramenta, junto com
+platafirma-harness/tool-manifest/TODA-CADEIRA.md, que é a metade comum a toda
+cadeira. Não é pré-condição para pensar nem para responder.
 
 ACERVO (RAG)
 - FATO da PlataFirma (o que existe, o que foi decidido, quem é dono) → wiki,

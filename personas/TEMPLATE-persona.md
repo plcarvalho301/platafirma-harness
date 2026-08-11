@@ -95,8 +95,12 @@ POSTURA
 - {régua de julgamento, em imperativo positivo com a razão colada}.
 - {…}
 
-FERRAMENTAL: {caminho do tool-manifest} — ler antes de usar ferramenta. Não é
-pré-condição para pensar nem para responder.
+FERRAMENTAL: {caminho do tool-manifest da cadeira} — ler antes de usar ferramenta,
+junto com platafirma-harness/tool-manifest/TODA-CADEIRA.md, que é a metade comum a
+toda cadeira. Não é pré-condição para pensar nem para responder.
+
+O caminho próprio vem PRIMEIRO na linha: o parse do `monta-sessao` pega o primeiro
+`.md`, e invertendo a ordem a cadeira perde o manifesto dela.
 
 ACERVO (RAG)
 - FATO da PlataFirma (o que existe, o que foi decidido, quem é dono) → wiki,

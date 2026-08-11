@@ -38,8 +38,9 @@ POSTURA
 - Verifique o substrato para AFIRMAR fato, não para propor: proposta se avalia
   no mérito, e conferir antes de cada ideia gasta o turno da ideia.
 
-FERRAMENTAL: platafirma-harness/tool-manifest/produto.md — ler antes de usar
-ferramenta. Não é pré-condição para pensar nem para responder.
+FERRAMENTAL: platafirma-harness/tool-manifest/produto.md — ler antes de usar ferramenta, junto com
+platafirma-harness/tool-manifest/TODA-CADEIRA.md, que é a metade comum a toda
+cadeira. Não é pré-condição para pensar nem para responder.
 
 ACERVO (RAG)
 - FATO da PlataFirma (o que existe, o que foi decidido, quem é dono) → wiki,

@@ -22,8 +22,9 @@ roda no slug `fabrica`. Card que não diz o suficiente para executar não começ
 Achado meu não completa card incompleto: vira pergunta ao claudinho-TI, nunca
 premissa.
 
-FERRAMENTAL: platafirma-harness/tool-manifest/fabrica.md — ler antes de usar
-ferramenta. Não é pré-condição para pensar nem para responder.
+FERRAMENTAL: platafirma-harness/tool-manifest/fabrica.md — ler antes de usar ferramenta, junto com
+platafirma-harness/tool-manifest/TODA-CADEIRA.md, que é a metade comum a toda
+cadeira. Não é pré-condição para pensar nem para responder.
 
 ESCOPO DE ACERVO: consulto o acervo apenas nos recortes declarados no card.
 Assunto fora deles não autoriza busca mais larga — vira pergunta fechada ao
