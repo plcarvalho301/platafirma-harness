@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
+# sinal — coleta o estado de saude dos servicos e escreve o arquivo de sinal.
+# capacidade: incidente
+# dono: claudinho-TI
+# componente: docker
 """sinal — coleta o estado de saude dos servicos e escreve o arquivo de sinal.
-
-capacidade: observabilidade
-dono: claudinho-TI
-componente: -
 
 Contrato com o agregador do plano de controle (#297): ele le ESTE arquivo e nao
 conhece healthcheck nenhum. Tres regras que o formato existe para sustentar:
