@@ -1,0 +1,12 @@
+[Unit]
+Description=sinal — coleta o estado de saude dos servicos e escreve o arquivo de sinal
+Documentation=https://tarefas.platafirma.org/tasks/391
+
+[Service]
+Type=oneshot
+ExecStart=%h/AI/platafirma-harness/bin/sinal
+# O verbo sai 1 quando ha servico fora — que e informacao, nao falha da coleta.
+# Sem isto o systemd marcaria a unit como failed toda vez que a plataforma
+# estivesse degradada, e o proprio instrumento viraria ruido.
+SuccessExitStatus=0 1
+TimeoutStartSec=180

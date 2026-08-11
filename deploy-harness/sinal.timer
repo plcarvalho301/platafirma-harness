@@ -1,0 +1,13 @@
+[Unit]
+Description=coleta o arquivo de sinal a cada minuto
+
+[Timer]
+# Um minuto: o aceite do #391 exige que a mudanca de estado apareca em menos de
+# dois minutos, e o ciclo tem que caber com folga dentro da janela.
+OnBootSec=2min
+OnUnitActiveSec=1min
+AccuracySec=10s
+Unit=sinal.service
+
+[Install]
+WantedBy=timers.target

@@ -47,6 +47,7 @@ instancias de motor declaradas  : motor listar
 
 o que está no ar                : infra estado [alvo]
 está tudo saudável?             : infra saude  [alvo]
+sinal de saude, arquivo unico   : sinal                  coleta e escreve; --ver so mostra
 log de contêiner ou unit        : infra logs <alvo> [n]     descobre qual dos dois é
 reiniciar sem se matar          : infra restart <alvo>      destacado; exige alvo explícito
 serializar carga de GPU         : infra exclusivo [--] <cmd...>  espera a vez + cota de CPU/RAM

@@ -1,0 +1,179 @@
+#!/usr/bin/env python3
+"""sinal — coleta o estado de saude dos servicos e escreve o arquivo de sinal.
+
+capacidade: observabilidade
+dono: claudinho-TI
+componente: -
+
+Contrato com o agregador do plano de controle (#297): ele le ESTE arquivo e nao
+conhece healthcheck nenhum. Tres regras que o formato existe para sustentar:
+
+  - servico sem sonda entra na lista como `sem-sinal`, nunca some dela;
+  - `ausente` (nao houve leitura) e distinto de qualquer valor lido;
+  - toda entrada que nao esta `no-ar` carrega `motivo`.
+
+Duas fontes, por necessidade: quem tem shell na imagem traz o veredito do
+proprio healthcheck do Docker; quem nao tem (oauth2-proxy, vikunja, cloudflared)
+e sondado daqui, de fora, por um contendor-posto que esta na mesma rede.
+"""
+
+import json
+import os
+import subprocess
+import sys
+import time
+from datetime import datetime, timezone
+
+SAIDA = os.path.expanduser("~/AI/var/sinal/servicos.json")
+POSTO = "platafirma-core-vikunja-proxy-1"   # nginx com curl, na rede do conhecimento
+
+# Servico -> contendor. Quem tem healthcheck proprio le do Docker.
+POR_HEALTHCHECK = {
+    "keycloak": "platafirma-core-keycloak-1",
+    "keycloak-db": "platafirma-core-keycloak-db-1",
+    "vikunja-db": "platafirma-core-vikunja-db-1",
+    "vikunja-proxy": "platafirma-core-vikunja-proxy-1",
+    "landing": "platafirma-core-landing-1",
+    "mediawiki": "plataforma-wiki-mediawiki-1",
+    "rag-extractor-api": "rag-extractor-api",
+    "acervo-api": "acervo-api",
+}
+
+# Imagem sem shell: sonda de fora, pelo posto.
+# (nome, posto, url, exige-no-corpo, reprova-se-contem)
+POR_SONDA_EXTERNA = [
+    ("oauth2-proxy", POSTO, "http://oauth2-proxy:4180/ping", None, None),
+    ("oauth2-proxy-harness", POSTO, "http://oauth2-proxy-harness:4180/ping", None, None),
+    ("vikunja", POSTO, "http://vikunja:3456/api/v1/info", '"version"', None),
+    # readyConnections e o que distingue tunel de pe de tunel sem conexao com a
+    # borda da Cloudflare: o processo fica vivo nos dois casos.
+    ("cloudflared", POSTO, "http://cloudflared:20241/ready", None, '"readyConnections":0'),
+]
+
+# Declarado e sem sonda. Aparece na lista como sem-sinal, de proposito.
+SEM_SONDA = {
+    "mcp": "sem rota de saude propria; sonda fica para quando houver",
+}
+
+
+def agora():
+    return datetime.now(timezone.utc).isoformat(timespec="seconds")
+
+
+def roda(cmd, timeout=20):
+    try:
+        p = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
+        return p.returncode, p.stdout.strip(), p.stderr.strip()
+    except subprocess.TimeoutExpired:
+        return 124, "", f"timeout de {timeout}s"
+    except Exception as e:                      # daemon fora, binario ausente
+        return 125, "", f"{type(e).__name__}: {e}"
+
+
+def do_healthcheck(nome, contendor):
+    fmt = "{{.State.Status}}|{{if .State.Health}}{{.State.Health.Status}}{{else}}sem-healthcheck{{end}}"
+    rc, out, err = roda(["docker", "inspect", "-f", fmt, contendor])
+    if rc != 0:
+        return {"estado": "fora", "exercitado": "docker inspect",
+                "motivo": err.splitlines()[0] if err else f"contendor {contendor} nao existe"}
+    status, saude = (out.split("|") + ["", ""])[:2]
+    if status != "running":
+        return {"estado": "fora", "exercitado": "docker inspect",
+                "motivo": f"contendor {status}"}
+    if saude == "healthy":
+        return {"estado": "no-ar", "exercitado": "healthcheck do contendor"}
+    if saude == "sem-healthcheck":
+        return {"estado": "sem-sinal", "exercitado": None,
+                "motivo": "contendor rodando, sem healthcheck declarado"}
+    if saude == "starting":
+        return {"estado": "degradado", "exercitado": "healthcheck do contendor",
+                "motivo": "em start_period, ainda sem veredito"}
+    rc2, log, _ = roda(["docker", "inspect", "-f",
+                        "{{if .State.Health}}{{range .State.Health.Log}}{{.Output}}{{end}}{{end}}",
+                        contendor])
+    motivo = (log or "healthcheck reprovou").strip().replace("\n", " ")[:300]
+    return {"estado": "fora", "exercitado": "healthcheck do contendor", "motivo": motivo}
+
+
+def do_sonda_externa(nome, posto, url, exige, proibido):
+    onde = f"GET {url} (de {posto})"
+    rc, out, err = roda(["docker", "exec", posto, "curl", "-fsS", "--max-time", "6", url])
+    if rc != 0:
+        motivo = (err or out or f"curl saiu {rc}").splitlines()[0][:300]
+        return {"estado": "fora", "exercitado": onde, "motivo": motivo}
+    if exige and exige not in out:
+        return {"estado": "degradado", "exercitado": onde,
+                "motivo": f"respondeu sem {exige} no corpo"}
+    if proibido and proibido in out:
+        return {"estado": "degradado", "exercitado": onde,
+                "motivo": f"respondeu, mas contem {proibido}"}
+    return {"estado": "no-ar", "exercitado": onde}
+
+
+def do_runtime():
+    """A classe de falha que healthcheck de servico nenhum pega: pacote de sistema
+    atualizado com o processo vivo. Nada quebra ate alguem tentar CRIAR contendor —
+    e ai nenhum servico volta de um restart, inclusive os de unless-stopped."""
+    rc, out, err = roda(["docker", "run", "--rm", "alpine:3", "true"], timeout=90)
+    if rc == 0:
+        return {"estado": "no-ar", "exercitado": "docker run --rm alpine:3 true"}
+    motivo = (err or out or f"saiu {rc}").splitlines()[0][:300]
+    return {"estado": "fora", "exercitado": "docker run --rm alpine:3 true",
+            "motivo": motivo or "criacao de contendor falhou"}
+
+
+def coleta():
+    servicos = {}
+    for nome, contendor in POR_HEALTHCHECK.items():
+        e = do_healthcheck(nome, contendor)
+        e["lido_em"] = agora()
+        servicos[nome] = e
+    for nome, posto, url, exige, proibido in POR_SONDA_EXTERNA:
+        e = do_sonda_externa(nome, posto, url, exige, proibido)
+        e["lido_em"] = agora()
+        servicos[nome] = e
+    for nome, motivo in SEM_SONDA.items():
+        servicos[nome] = {"estado": "sem-sinal", "exercitado": None,
+                          "motivo": motivo, "lido_em": agora()}
+    runtime = do_runtime()
+    runtime["lido_em"] = agora()
+    return {"gerado_em": agora(), "runtime": runtime, "servicos": servicos}
+
+
+def main():
+    argv = sys.argv[1:]
+    if argv and argv[0] in ("-h", "--ajuda", "ajuda"):
+        print(__doc__.strip())
+        print("\nuso: sinal [--ver]")
+        print("  sem argumento : coleta e escreve " + SAIDA)
+        print("  --ver         : mostra o arquivo atual, sem coletar")
+        return 0
+    if argv and argv[0] == "--ver":
+        if not os.path.exists(SAIDA):
+            print(json.dumps({"estado": "ausente",
+                              "motivo": f"{SAIDA} nao existe: nenhuma coleta ate agora"},
+                             ensure_ascii=False, indent=2))
+            return 1
+        print(open(SAIDA).read())
+        return 0
+
+    dados = coleta()
+    os.makedirs(os.path.dirname(SAIDA), exist_ok=True)
+    tmp = SAIDA + ".tmp"
+    with open(tmp, "w") as f:                   # escrita atomica: quem le nunca ve meia coleta
+        json.dump(dados, f, ensure_ascii=False, indent=2)
+        f.write("\n")
+    os.replace(tmp, SAIDA)
+
+    fora = [n for n, e in dados["servicos"].items() if e["estado"] == "fora"]
+    if dados["runtime"]["estado"] == "fora":
+        fora.append("RUNTIME")
+    for nome, e in sorted(dados["servicos"].items()):
+        print(f"{e['estado']:10} {nome}" + (f"  — {e.get('motivo')}" if e.get("motivo") else ""))
+    r = dados["runtime"]
+    print(f"{r['estado']:10} (runtime)" + (f"  — {r.get('motivo')}" if r.get("motivo") else ""))
+    return 1 if fora else 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
