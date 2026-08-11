@@ -77,6 +77,12 @@ de outras cadeiras: ler, não escrever.
   resto sem erro visível. Usar `;` ou chamadas separadas.
 - **Restart do ops-mcp mata a chamada em curso.** `infra restart` já despacha
   destacado; `systemctl --user restart ops-mcp` direto, não.
+- **Unit alterada no disco exige `systemctl --user daemon-reload` ANTES do
+  restart** — `infra restart` não recarrega. Sem isso o systemd executa a versão
+  em memória: em 10/08 o `WorkingDirectory` velho já não existia e o ops-mcp
+  entrou em `200/CHDIR`, 105 tentativas, conector fora para todas as cadeiras.
+  Loop de restart ainda queima o `StartLimit`: depois do conserto, `reset-failed`
+  antes do restart legítimo.
 - **`~/.config/systemd/user/ops-mcp.service` é root-owned**: mudança de
   comportamento do ops-mcp é no código, nunca na unit.
 - **Comando longo direto no `run_command`** morre no timeout e leva o process
