@@ -1,35 +1,33 @@
 # tool-manifest — claudinho-dados
 
-Comum a toda cadeira — fila, sessão, cards, escovação: `tool-manifest/TODA-CADEIRA.md`.
-Este arquivo traz só o que é próprio da cadeira. Forma:
-`TEMPLATE.md`.
-
-Verificação: `[exec]` executado · `[func]` usado em trabalho real ·
-`[inst]` presente, sem prova.
-
-> **Número do acervo sai de `acervo escada`, sempre que a pergunta aparecer.**
-> População, cobertura, degrau e fuga são estado: vivem no instrumento, não neste
-> arquivo. Faceta e população do índice → `rag_facets`. Que página existe com tal
-> faceta → `query_cargo`. Contagem escrita em manifesto é segunda fonte, e segunda
-> fonte diverge em silêncio — foi assim que este documento passou uma semana
-> ensinando um acervo que não existia mais.
-
-**Três ambientes, com tooling diferente. Confundir os dois primeiros é a falha
-mais cara desta lista.**
+Ambiente: **três**, com tooling diferente. Confundir os dois primeiros é a falha mais
+cara desta lista.
 
 | | onde | o que é |
 |---|---|---|
-| **máquina do dono** | conector `platafirma-ops` | onde eu trabalho: Postgres do acervo, repos git, Docker, venv. §A–§F |
-| **wiki** | conector `PlataFirma Wiki` | o registro: ler, escrever, consultar Cargo e o RAG. §C–§E |
-| **container Claude** | `bash_tool`, `/home/claude` | rascunho e arquivo para download. **Sem rede.** §G |
-| **`modulo-osint`** | conector `osint.platafirma.org` | **não é meu.** Ambiente da claudinha-osint. §I |
+| **máquina do dono** | conector `platafirma-ops` | onde eu trabalho: Postgres do acervo, MinIO, repos git, Docker, venv |
+| **wiki** | conector `PlataFirma Wiki` | o registro: ler, escrever, consultar Cargo e o RAG |
+| **container Claude** | `bash_tool`, `/home/claude` | rascunho e arquivo para download. **Sem rede**, e o FS zera entre tarefas |
 
-`platafirma_index` uma vez por sessão sobre a PlataFirma, antes de responder — é
-ele que dá endereço de repo, regra de fechados e o protocolo da fila.
+`modulo-osint` (`osint.platafirma.org`) **não é meu** — ambiente da claudinha-osint,
+sem canal comigo. "Pegar o tooling dela" nunca é mover arquivo: é reinstalar aqui.
 
----
+Verificação: `[exec]` binário executado · `[func]` usado em trabalho real ·
+`[inst]` presente, sem prova. `[inst]` é confissão, não aval.
 
-## A. Onde a verdade mora — precedência, não preferência `[exec]`
+> **Regra de ouro:** existindo tool para o que vou fazer, chamo a tool. Responder de
+> memória o que uma busca recupera é o erro que este manifesto existe para cortar.
+
+> **Nenhum número mora aqui.** População, cobertura, degrau, contagem de tabela e sha
+> de índice são estado: saem de `acervo escada`, `rag_facets`, `query_cargo` e do
+> banco, na hora. Contagem escrita em manifesto é segunda fonte, e segunda fonte
+> diverge em silêncio — foi assim que este documento passou uma semana ensinando um
+> acervo que não existia mais.
+
+Comum a toda cadeira — fila, sessão, cards, escovação: `tool-manifest/TODA-CADEIRA.md`.
+Armadilha que morde toda cadeira mora lá e não se repete aqui.
+
+## Onde a verdade mora — precedência, não preferência `[exec]`
 
 ```
 acervo.* no Postgres   →  canônico. O que existe e sob que compromisso.
@@ -38,187 +36,136 @@ prosa da wiki          →  o decidido e o porquê. Não é fonte de dado.
 git (platafirma-*)     →  fonte do desenho. Em divergência com a wiki, o git vence.
 ```
 
-A wiki **não é espelho** do acervo, e a defasagem varia nos dois sentidos. Daí a
-regra de leitura: Cargo responde *que páginas existem com tal faceta*; quantas
-obras existem responde `acervo escada`.
+A wiki **não é espelho** do acervo, e a defasagem varia nos dois sentidos. Daí a régua:
+Cargo responde *que páginas existem com tal faceta*; *quantas obras existem* é
+`acervo escada`.
 
-## B. Postgres do acervo — `[exec]`
+## Conectores
+
+**platafirma-ops** (`ops.platafirma.org`) — a máquina do dono.
+- `monta_sessao` — abertura da cadeira numa chamada: persona, este manifesto, org e
+  fila. Chamar em vez de encadear leitura. Sob demanda, não gate de entrada.
+- `run_command` — verbo único: git, docker, psql, venv, os binários de `~/AI/bin`.
+- `read_file` · `write_file` — arquivo sob `~/AI`. Escrita segue para git no mesmo turno.
+
+**PlataFirma Wiki** (`mcp.platafirma.org`) — o registro.
+- `platafirma_index` — uma vez por sessão sobre a PlataFirma, antes de responder.
+- `get_page` · `edit_page` · `search_pages` · `query_cargo` · `rag_search` · `rag_facets`
+  · `repo_read` · `repo_grep` · `repo_tree` · `upload_file`.
+
+## ontologia — ferramental próprio
+
+| ferramenta | quando chamar | verif. |
+|---|---|---|
+| `psql` no schema `acervo` | canônico do vocabulário: `conceito · dominio · subdominio · especie_tipo · familia_tipo` | `[exec]` |
+| views `conf_*` | antes de qualquer consolidação: `conf_conceito_ciclo · conf_familia_sem_especie · conf_conceito_sem_obra · conf_obra_sem_ancora` — já existem no banco, não é script solto | `[exec]` |
+| `query_cargo` | "existe página com tal faceta?" — é isto, nunca `search_pages` | `[exec]` |
+| `rapidfuzz` (`~/AI/.venv`) | rótulo quase-duplicado: `process.extract` sobre `acervo.conceito` | `[func]` |
+| `rdflib` | projeção SKOS publicável: `ConceptScheme`, `prefLabel`, `broader` | `[func]` |
+| `networkx` + `numpy`/`scipy` | a teia: projeção bipartida, `configuration_model`, assortatividade | `[func]` |
+| ADRs `ont:NNNN` | `platafirma-conhecimento/ontologia/adr/`. Fechados: `ontologia/REGISTRO-anti-reabertura.md` | `[exec]` |
+
+Nome que já escrevi errado: é `acervo.obra_trata_de` (não `trata_de`) e
+`acervo.especie_tipo` (não `especie`).
+
+`networkx` **não declara** numpy/scipy como dependência — assortatividade quebra sem numpy.
+
+## conhecimento — ferramental próprio
+
+| ferramenta | quando chamar | verif. |
+|---|---|---|
+| `acervo escada` | ÚNICA fonte de número do acervo. `--json`, `--detalhe` | `[exec]` |
+| `acervo` (despachante) | `ingerir · escada · baixar · bancada · extrato` — sem argumento, lista os atos | `[exec]` |
+| `psql` no schema `acervo` | classificação. **Todo UPDATE leva `AND especie_id IS NULL`**: o dono classifica em paralelo pelo NocoDB | `[exec]` |
+| `mc` (MinIO) | buckets `acervo` e `pessoal`; alias por `rag/.env`. Chave do objeto **é o sha256 do conteúdo** | `[exec]` |
+| `cargoRecreateData.php` | depois de aprovar valor novo de vocabulário — `allowedValues` é cópia congelada | `[inst]` |
+| `edit_page` + `get_page` | publicar o decidido. Edição grande: `docker cp` + `maintenance/run.php edit` | `[exec]` |
+| `ftfy` · `langdetect` | mojibake de título vindo de PDF; idioma da obra antes de citar | `[func]` |
+| `pdftotext` · `exiftool` · `pandoc` · `tesseract` | triagem de obra antes de ingerir | `[exec]` |
+
+Conexão ao banco:
 
 ```bash
 docker exec -i rag-extractor-pg psql -U rag -d rag_extractor -At -F ' :: ' -c "<sql>"
 ```
 
-`-At -F ' :: '` para saída parseável. Script por `-f -` com stdin redirect.
-Credenciais em `platafirma-conhecimento/rag/.env` — único lugar.
-Imagem `pgvector/pgvector:pg16`.
+Credenciais em `platafirma-conhecimento/rag/.env`, único lugar. Sem driver de Postgres
+no venv: leitura é parse da saída. Virando rotina, instalar `psycopg`.
 
-Schema `acervo` (meu): `obra · conceito · obra_trata_de · obra_serve_a ·
-dominio · subdominio · especie_tipo · familia_tipo · frente · colecao · curador`.
-Schema `public` (camada RAG, **não é minha**): `documents · chunks · index_meta`.
-
-Nome que já escrevi errado: é `acervo.obra_trata_de` (não `trata_de`) e
-`acervo.especie_tipo` (não `especie`).
-
-### Guarda obrigatória
-
-Todo UPDATE de classificação leva `AND especie_id IS NULL`. O dono classifica em
-paralelo pelo NocoDB — sem a guarda, eu sobrescrevo o trabalho dele.
-
-### Views de conferência — já existem no banco, não é script solto
-
-`conf_conceito_ciclo · conf_familia_sem_especie · conf_obra_triada_sem_ancora ·
-conf_documento_sem_obra · conf_conceito_sem_obra · conf_objeto_sem_documento ·
-conf_obra_sem_ancora`.
-
-Rodar antes de qualquer consolidação de vocabulário; o achado de cada uma é
-estado e se lê na hora. `conf_conceito_sem_obra` é a régua barata de qualidade de
-conceito enquanto a teia não roda. `conf_documento_sem_obra` casa por `objeto_id`
-e dá falso positivo em obra-que-É-página.
-
-### Exclusão de obra — FK com CASCADE `[exec]`
-
-`public.documents.obra_id` → `acervo.obra(id)` `ON DELETE CASCADE`.
-
-- `DELETE FROM acervo.obra` derruba `documents` e, por cascata, `chunks`.
-- Sobra **só o objeto no MinIO**, que a FK não alcança. Expurgo de bytes é mão minha.
-- DELETE acidental de linha no NocoDB propaga ao índice. Custo: re-ingest + re-embed.
-- **Não renomear `arquivo` de obra no NocoDB** enquanto `carga_acervo` casar os dois
-  schemas por string. A FK protege o índice, não a junção do sincronizador.
-
-### MinIO — buckets `acervo` e `pessoal` `[exec]`
+Recriação de tabela Cargo (`php` só existe **dentro** do container):
 
 ```bash
-cd ~/AI/platafirma-conhecimento/rag && set -a && . ./.env && set +a
-mc alias set pf "http://127.0.0.1:${MINIO_API_PORT}" "$MINIO_ROOT_USER" "$MINIO_ROOT_PASSWORD"
-```
-
-Chave do objeto **é o sha256 do conteúdo**; não há nome legível no store.
-
-**Versionamento está ligado nos dois buckets, e isso morde.** `mc rm` deixa delete
-marker: o objeto some da listagem mas a versão fica, ocupa espaço e continua
-contando na estatística do console, que soma todas as versões — foi essa contagem
-que já produziu um falso achado de objeto órfão. Expurgo real:
-
-```bash
-mc rm --versions --force pf/<bucket>/<sha256>
-```
-
-## C. Wiki MCP — tools e pegadinhas `[exec]`
-
-MediaWiki com `Cargo` e `CategoryTree`. URL humana:
-`https://wiki.platafirma.org/index.php/<Título>` (sem short URL).
-
-| tool | pegadinha que custa caro |
-|---|---|
-| `get_page` | devolve `timestamp`/`starttimestamp` — **passar de volta no `edit_page`** ou a detecção de conflito não existe |
-| `edit_page` | substitui a **página inteira**. Não há patch nem append. Ler antes, sempre |
-| `search_pages` | busca full-text **não é detector de existência**. Para "existe X?" é `query_cargo` |
-| `query_cargo` | campo `isList` exige `HOLDS LIKE '%termo%'`. `LIKE` puro em campo de lista devolve vazio sem erro |
-| `rag_search` | acervo bibliográfico apenas. Conteúdo da wiki é `search_pages`/`query_cargo` |
-| `repo_grep` | um padrão por chamada; volta vazio em silêncio se o SHA indexado rodou. Fallback: `rg` no clone local |
-| `upload_file` | teto de 2 MB. Acima disso é `importImages.php` pelo ops. `[inst]` — não usei |
-
-Namespaces customizados: `Frente` (3000) e `Arquitetura` (3002). `Frente` roda com
-`wgCapitalLinkOverrides = false` porque o primeiro segmento do título é o **slug**:
-com capitalização default, `Frente:mdm-rh` viraria `Frente:Mdm-rh` e quebraria o
-link gerado pelo Cargo.
-
-## D. Cargo — o congelamento que morde `[exec]`
-
-Tabelas: `Referencias · Conceitos · Frentes`. Campos `isList` (delimitador `,`)
-só respondem a `HOLDS LIKE`. Quantas linhas cada uma tem é estado: `query_cargo`.
-
-**A pegadinha:** `allowedValues` é uma **cópia congelada** do vocabulário,
-serializada dentro da declaração da tabela. Valor novo aprovado no Postgres não
-aparece — a tabela precisa ser redeclarada e recriada:
-
-```bash
-docker exec plataforma-wiki-mediawiki-1 \
-  php /var/www/html/maintenance/run.php \
+docker exec plataforma-wiki-mediawiki-1 php /var/www/html/maintenance/run.php \
   /var/www/html/extensions/Cargo/maintenance/cargoRecreateData.php --table=Referencias
 ```
 
-`php` existe **dentro do container**, não no host.
+## modelagem — ferramental próprio
 
-## E. Camada RAG — o que eu leio, o que não é meu `[exec]`
+Gerência nova (dono, 12/08/2026). Ferramental herdado do TI, **artefato meu ainda não
+escrito** — ver pendências.
 
-**Fronteira:** quais facetas existem e o que os valores significam é meu; quais
-descem ao índice, com que modelo e com que peso é de claudinho-IA. Contrato do
-índice em vigor sai de `acervo escada` (cabeçalho) e de `public.index_meta`;
-leitura minha, matéria dela.
+| ferramenta | quando chamar | verif. |
+|---|---|---|
+| `bin/fila_streams.py` (leitura) | fonte do envelope em vigor: `de · tipo · assunto · ref · responde` + corpo; tipos `decisao\|resposta\|pedido\|minuta\|demanda\|handoff` | `[exec]` |
+| `platafirma-motor/docs/msg-implantado.md` | estado implantado da malha — **defasado**, ver armadilhas | `[exec]` |
+| ADRs `arq:0018 · 0024 · 0036` | malha, retenção e assinatura. `arq:0045`/`0046`: cadeia obra→impressão→trecho→índice→vetor | `[exec]` |
+| `psql` (DDL de leitura) | conferir schema servido contra o modelo declarado: `\d+ acervo.*` | `[exec]` |
 
-Faceta com corpus vazio devolve zero **legitimamente**. A lista de quais estão
-vazias hoje é estado: `rag_facets`, na hora.
+Fronteira, que é onde esta gerência mais confunde: conceitual, lógico, schema e contrato
+são meus; **tipo concreto, índice, partição, DDL, migração e o transporte da malha são de
+claudinho-TI**. Eu modelo, ele implementa.
 
-## F. Ferramental na máquina do dono
+## produtos — ferramental próprio
 
-### venv `~/AI/.venv` — `[func]`, todos provados por uso
+| ferramenta | quando chamar | verif. |
+|---|---|---|
+| `rag_facets` | ANTES de filtrar `rag_search`: diz faceta válida e população real | `[exec]` |
+| `rag_search` | acervo bibliográfico apenas — FORMALISMO, nunca fato da PlataFirma | `[exec]` |
+| `motor rag buscar` | mesma consulta pela linha de comando, mesmo contrato | `[exec]` |
+| `motor rag ajuste` | ver os ajustes do motor e o trade-off de cada — **ver é meu, mexer é de claudinho-IA** | `[exec]` |
+| `public.index_meta` | contrato do índice em vigor. Leitura minha, matéria dela | `[exec]` |
+| `avaliacao/gabarito.jsonl` (harness) | gabarito canônico único, 228 itens. Autor: claudinho-IA | `[exec]` |
+| scripts de bench (`platafirma-conhecimento`) | `eval_retrieval · estratifica_gold · _teste_continuo_z · calibra_cobertura`; leem o gabarito por `PF_GABARITO` | `[exec]` |
 
-| | uso |
-|---|---|
-| `networkx` | a teia: projeção bipartida ponderada, `configuration_model` (null degree-preserving), assortatividade numérica |
-| `numpy` · `scipy` | **`networkx` não os declara como dependência** e a assortatividade quebra sem numpy |
-| `rdflib` | SKOS: `ConceptScheme`, `prefLabel`, `broader`. Projeção publicável do vocabulário |
-| `rapidfuzz` | rótulo quase-duplicado no canônico (`process.extract` sobre `acervo.conceito`) |
-| `ftfy` | mojibake em título vindo de PDF (`ConcepÃ§Ã£o` → `Concepção`) |
-| `langdetect` | idioma da obra antes de citar |
+Contrato com o consumidor: claudinho-IA tuna assertividade (embedder, chunking, pesos,
+rerank, avaliação). Defeito que o tuning não conserta — obra ausente, classificação errada,
+faceta despovoada, chunk mal recortado na origem — volta para mim com a medição junto.
 
-**Sem driver de Postgres.** Leitura é `docker exec … psql -At -F ' :: '` e parse
-da saída. Se a teia virar rotina, instalar `psycopg`.
+## Armadilhas medidas
 
-### Binários
+- **FK com CASCADE derruba o índice.** `public.documents.obra_id → acervo.obra(id)`
+  `ON DELETE CASCADE`: `DELETE FROM acervo.obra` leva `documents` e, por cascata,
+  `chunks`. DELETE acidental de linha no NocoDB propaga. Custo: re-ingest + re-embed.
+- **A FK não alcança o MinIO.** Sobra o objeto no store; expurgo de bytes é mão minha.
+- **Versionamento ligado nos dois buckets.** `mc rm` deixa delete marker: o objeto some
+  da listagem, a versão fica e continua contando na estatística do console — já produziu
+  falso achado de objeto órfão. Expurgo real é `mc rm --versions --force pf/<bucket>/<sha>`.
+- **Não renomear `arquivo` de obra no NocoDB** enquanto `carga_acervo` casar os dois
+  schemas por string. A FK protege o índice, não a junção do sincronizador.
+- **`query_cargo` em campo `isList` exige `HOLDS LIKE '%termo%'`.** `LIKE` puro devolve
+  vazio sem erro.
+- **`search_pages` não é detector de existência.** É full-text. Para "existe X?" é `query_cargo`.
+- **`Cargo.allowedValues` é cópia congelada** do vocabulário, serializada na declaração da
+  tabela: valor aprovado no Postgres não aparece até recriar a tabela.
+- **`conf_documento_sem_obra` casa por `objeto_id`** e dá falso positivo em obra-que-É-página.
+- **`msg-implantado.md` afirma que a caixa ainda roda em arquivo.** É falso: já roda na
+  malha. Doc de outra cadeira (TI/motor), nomeado aqui para não me enganar de novo.
+- **`repo_grep` da wiki aceita um padrão por chamada** e volta vazio em silêncio se o SHA
+  indexado rodou. Fallback: `rg` no clone local.
 
-Sistema: `git · docker · psql · jq · curl · wget · pandoc · sqlite3 · exiftool ·
-pdftotext · tesseract · 7z · unzip · rsync · gh`. **`php` não** — só no container.
+## Pendências declaradas
 
-`~/AI/bin`: catálogo e regra de uso em `TODA-CADEIRA.md`. Os meus de todo dia: `acervo`
-(despachante — `ingerir · escada · baixar · bancada · extrato`), `fila`,
-`tarefas`, `mesa`, `conferir`.
-
-### Repos e ADRs
-
-Escrita: `write_file → git add -A → git commit → git push → repo_sync`.
-
-ADRs: `platafirma-conhecimento/ontologia/adr/` (`ont:NNNN`) ·
-`platafirma-arquitetura/macro-global/decisions/` (`arq:NNNN`).
-Fechados: `ontologia/REGISTRO-anti-reabertura.md` — abrir só quando estiver
-prestes a reabrir algo; abrir "por garantia" é o desperdício que ele evita.
-
-### Serviços
-
-Os que me tocam (estado por `infra`, em `TODA-CADEIRA.md`): `rag-extractor-pg · rag-extractor-minio · rag-extractor-nocodb ·
-rag-extractor-api · acervo-api · plataforma-wiki-*`.
-
-## G. Container Claude — `/home/claude`, `bash_tool`
-
-**Sem rede.** Serve para rascunho e para produzir arquivo em
-`/mnt/user-data/outputs` que o dono baixa. Não alcança o Postgres, a wiki nem os
-repos: tudo isso é pelos conectores. Sistema de arquivos zera entre tarefas.
-
-## H. Pendências — `[inst]`
-
-- `upload_file` da wiki nunca usado; teto de 2 MB não testado na prática.
+- **Contrato do envelope `msg` não existe como documento meu** — só no código do cliente.
+  Enquanto for assim, compatibilidade é o que o parser aceita, não o que a plataforma
+  promete. Falta: ADR ou página de wiki com campo, tipo, obrigatoriedade e regra de evolução.
+- **`bin/fila_streams.py` declara `dono: claudinho-IA`** no cabeçalho, e o contrato do
+  envelope migrou para mim em 12/08. Cabeçalho de verbo alheio: nomeio, não conserto.
+- `upload_file` da wiki nunca usado; teto de 2 MB não testado. Acima disso é
+  `importImages.php` pelo ops.
 - `cargoRecreateData.php` conferido no caminho, não na execução.
-- `Conceitos.dominio`/`subdominio` ainda existem como campo declarado, contra
-  `ont:0062` (conceito não declara prateleira). Propagação pendente, não decisão
-  a rever.
-- Teia contra o corpus real: **segurada por decisão do dono** até a curadoria
-  chegar perto de 3 conceitos por obra. Onde está hoje: `acervo escada` e
-  `conf_conceito_sem_obra`.
-
-## I. O que é da claudinha-osint, e continua sendo
-
-O `modulo-osint` não alcança `/home/claudinho` e eu não alcanço o dele. "Pegar o
-tooling dela" nunca é mover arquivo — é reinstalar aqui, ou encaminhar demanda.
-
-Fica com ela, por recorte: coleta com prova (`wget --warc-file`, `warcio`,
-`browsertrix-crawler`), extração de página (`extruct`, `trafilatura`, `parsel`),
-crawling (`scrapy`, `protego`), PDF hostil e OCR (`pymupdf`, `ocrmypdf`,
-`tesseract`, `qpdf`, `gs`), supply-chain de imagem (`trivy`, `syft`).
-
-Atravessou para cá: `networkx`, `rdflib`, `rapidfuzz`, `langdetect`, `ftfy` (§F)
-— e o formato deste documento.
-
-O que vale copiar dela não é conteúdo, é forma: índice `problema → obra → página`,
-com o custo declarado. A wiki recupera por faceta e por busca, não por problema.
-Lacuna aberta de registro do conhecimento.
+- `Conceitos.dominio`/`subdominio` ainda existem como campo declarado, contra `ont:0062`.
+  Propagação pendente, não decisão a rever.
+- Sem driver de Postgres no venv (`psycopg`), o que torna todo trabalho de grafo um
+  parse de texto.
+- Índice `problema → obra → página`, com custo declarado: a wiki recupera por faceta e por
+  busca, não por problema. Lacuna de registro conhecida — a superfície é de claudinha-produto.
