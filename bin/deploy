@@ -22,7 +22,7 @@ uso() {
   cat >&2 <<FIM
 uso:
   deploy <stack> <acao> [args...]   acao = up | down | ps | logs | config | pull | build
-  deploy <stack> promover [ref]     worktree de deploy: fetch + checkout + recreate
+  deploy <stack> promover [ref]     worktree de deploy: fetch + checkout + build + recreate
   deploy <stack> rotas              qual hostname do tunel entra em qual servico
   deploy <stack> acessos            quem pode entrar em cada superficie gateada
   deploy <stack> segredos           arquivos fora do git que a stack exige, e se estao ali
@@ -248,7 +248,11 @@ if [ "$ACAO" = "promover" ]; then
   DEPOIS="$(git -C "$DIR" rev-parse --short HEAD)"
   printf 'worktree: %s\n  %s -> %s (%s)\n' "$DIR" "$ANTES" "$DEPOIS" "$REF"
   cd "$DIR"
-  exec docker compose "${COMPOSE_ARGS[@]}" "${PERFIL_ARGS[@]+"${PERFIL_ARGS[@]}"}" up -d --force-recreate "$@"
+  # `--build` porque recriar contêiner NAO reconstroi imagem: quando o commit
+  # promovido muda algo que entra por COPY no Dockerfile, o contêiner novo sobe
+  # com a imagem velha e o servico quebra sem o verbo acusar nada. Custa o tempo
+  # de um build com cache nas stacks que declaram `build:`, e nada nas outras.
+  exec docker compose "${COMPOSE_ARGS[@]}" "${PERFIL_ARGS[@]+"${PERFIL_ARGS[@]}"}" up -d --build --force-recreate "$@"
 fi
 
 cd "$(dirname "$COMPOSE")"
