@@ -3,7 +3,7 @@
 Tudo que é executável pelo nome no host da plataforma, agrupado pela capacidade
 de negócio que serve (`docs/arquitetura-negocio-operacao.md`, `arq:0037`).
 
-Espelho de leitura humana: `Ajuda:Catálogo de verbos` na wiki.
+Espelho de leitura humana: `Operar:catalogo-de-verbos` na wiki.
 
 ## Mandato: um verbo por capacidade de negócio
 

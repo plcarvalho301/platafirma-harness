@@ -103,7 +103,7 @@ são o mesmo termo, e a conferência as trata como equivalentes.
 
 `conferir verbo` mede isso e a conta de `arq:0037` — um verbo por capacidade — e
 sai 1 enquanto houver divergência. Catálogo completo, com origem de cada verbo:
-`Ajuda:Catálogo de verbos` na wiki e `docs/catalogo-de-verbos.md` no harness.
+`Operar:catalogo-de-verbos` na wiki e `docs/catalogo-de-verbos.md` no harness.
 
 Verbo que é despachante de toolkit (`acervo`, `seg`) é o par binário+subcomando,
 por `arq:0040`: o binário agrupa, o subcomando é o ato.

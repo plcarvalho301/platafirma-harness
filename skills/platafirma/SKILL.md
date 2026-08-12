@@ -109,7 +109,7 @@ Nunca instruir o Pedro a colar comando — o transporte é decisão dele, não p
 do claudinho.
 
 Sentido de cada tipo, os tipos de trabalho e os dois cruzamentos com card: guia
-`Ajuda:Despachar um expediente`. O instrumento, com as armadilhas medidas:
+`Operar:despachar-um-expediente`. O instrumento, com as armadilhas medidas:
 `PlataFirma:Mensageria`. As duas são fonte; divergindo, esta instrução encolhe.
 
 ### Bastão de turno (carta para si mesmo)

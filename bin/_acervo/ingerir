@@ -288,7 +288,7 @@ Nada foi indexado: esta chamada não nomeou motor. A obra está no acervo, parad
   fi
   echo "
 Falta publicar: o export e as chamadas Cargo não são ingestão.
-  PlataFirma:Ops/sincronizar-o-acervo, passos 3 e 6"
+  Operar:sincronizar-o-acervo, passos 3 e 6"
 else
   [ -z "$MOTOR" ] && echo "
 Esta chamada não nomeou motor: entraria no acervo e pararia no degrau b, sem indexar."
