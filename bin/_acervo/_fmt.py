@@ -22,13 +22,13 @@ print("FUGA POR DEGRAU (0 em tudo = escada sem vazamento)")
 for rot, ch in [
     ("catálogo aponta pro vazio", "catalogo_aponta_pro_vazio"),
     ("objeto sem documento", "objeto_sem_documento"),
-    ("documento sem chunk", "documento_sem_chunk"),
+    ("impressão sem trecho", "impressao_sem_trecho"),
     ("embedding parcial", "embedding_parcial"),
-    ("embedding_meta parcial", "embedding_meta_parcial"),
+    ("sem vetor de faceta", "sem_vetor_de_faceta"),
     ("objeto no store sem obra", "objeto_no_store_sem_obra"),
     # arq:0027 — hoje 0 por construção (FK NOT NULL + CASCADE). Vigia, não descoberta.
-    ("documento sem obra (órfão)", "documento_sem_obra"),
-    ("chunk sem documento (órfão)", "chunk_sem_documento"),
+    ("impressão sem obra (órfão)", "impressao_sem_obra"),
+    ("vetor sem impressão (órfão)", "vetor_sem_impressao"),
 ]:
     # `.get`, não indexação dura: chave nova no formatador sem contraparte no SQL levantava
     # KeyError e derrubava a saída inteira por causa de uma linha.

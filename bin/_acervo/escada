@@ -61,47 +61,63 @@ if [ ! -s "$TMP/store.txt" ]; then
 fi
 docker cp "$TMP/store.txt" "$PG:/tmp/acervo-escada-store.txt" >/dev/null
 
-# 2. a escada, medida degrau a degrau contra o store carregado.
-SQL=$(cat <<'EOSQL'
+# 2. o vetor mora noutra instância (motor-pg) desde a partição do RAG em 11/08/2026: contagem
+# por impressão sai de lá e entra como VALUES no SQL do acervo. Duas instâncias não fazem JOIN,
+# e trazer 623 linhas é mais barato que qualquer ponte permanente entre os dois bancos.
+MOTOR=motor-pg
+VET=$(docker exec -i "$MOTOR" psql -U motor -d motor -At -c "
+  SELECT COALESCE(string_agg(format('(%L::uuid,%s,%s)', impressao_id, n_emb, n_meta), ','), '')
+    FROM (SELECT i.impressao_id,
+                 count(*) FILTER (WHERE i.granularidade = 'trecho')    AS n_emb,
+                 count(*) FILTER (WHERE i.granularidade = 'impressao') AS n_meta
+            FROM motor.vetor v JOIN motor.indice i ON i.id = v.indice_id
+           WHERE i.estado = 'servindo' GROUP BY 1) x;")
+[ -z "$VET" ] && VET="(NULL::uuid,0,0)"
+
+# 3. a escada, medida degrau a degrau contra o store carregado.
+SQL=$(cat <<EOSQL
 CREATE TEMP TABLE store_obj (objeto text PRIMARY KEY);
 \copy store_obj FROM '/tmp/acervo-escada-store.txt'
+
+CREATE TEMP TABLE vet (impressao_id uuid, n_emb int, n_meta int);
+INSERT INTO vet VALUES $VET;
 
 CREATE TEMP VIEW e AS
 SELECT o.id, o.titulo, o.objeto, o.endereco,
        (o.endereco LIKE 'wiki://%')                     AS e_pagina,
        (o.objeto IS NOT NULL)                           AS tem_objeto,
        EXISTS (SELECT 1 FROM store_obj s WHERE s.objeto = o.objeto) AS no_store,
-       (d.id IS NOT NULL)                               AS tem_doc,
+       (i.id IS NOT NULL)                               AS tem_doc,
        COALESCE(c.n_chunk,0) AS n_chunk,
        COALESCE(c.n_texto,0) AS n_texto,
-       COALESCE(c.n_emb,0)   AS n_emb,
-       COALESCE(c.n_meta,0)  AS n_meta
+       COALESCE(v.n_emb,0)   AS n_emb,
+       COALESCE(v.n_meta,0)  AS n_meta
 FROM acervo.obra o
--- A ponte é `documents.obra_id`, a FK que a migração 027 criou — não `d.id = o.objeto_id`.
--- `documents.id` é o sha do arquivo INGERIDO e `obra.objeto_id` é o sha do objeto da obra;
--- eles divergem em 44 das 667 obras com moradia no MinIO (medido 08/08/2026), e a ponte
--- antiga simplesmente não casava nessas. Efeito: o instrumento declarado como ÚNICA fonte
--- de número do acervo dizia 625 obras com documento onde há 667, e 624 ingeridas onde há
--- 666. Subcontava 42 — e a fuga `objeto_sem_documento` acusava obras que estão no índice.
-LEFT JOIN documents d ON d.obra_id = o.id
+-- A ponte agora é a IMPRESSÃO servindo: uma por obra, garantida pelo índice parcial
+-- impressao_uma_servindo_por_obra. \`documents\` não existe mais (dropada em 11/08/2026).
+LEFT JOIN acervo.impressao i ON i.obra_id = o.id AND i.estado = 'servindo'
 LEFT JOIN (
-  SELECT document_id,
-         count(*)                                                                            AS n_chunk,
-         count(*) FILTER (WHERE NOT is_not_text AND length(text)>0)                           AS n_texto,
-         count(*) FILTER (WHERE NOT is_not_text AND length(text)>0 AND embedding      IS NOT NULL) AS n_emb,
-         count(*) FILTER (WHERE NOT is_not_text AND length(text)>0 AND embedding_meta IS NOT NULL) AS n_meta
-  FROM chunks GROUP BY 1
-) c ON c.document_id = d.id;
+  SELECT impressao_id,
+         count(*)                                        AS n_chunk,
+         count(*) FILTER (WHERE elegivel)                AS n_texto
+  FROM acervo.trecho GROUP BY 1
+) c ON c.impressao_id = i.id
+LEFT JOIN vet v ON v.impressao_id = i.id;
 
 SELECT json_build_object(
   'medido_em', now(),
-  'contrato_do_indice', (SELECT json_object_agg(chave, valor) FROM index_meta),
+  -- O contrato do índice deixou de ser tabela do rag: mora em motor.indice.metodo, e o par
+  -- (modelo, backend) que autoriza a leitura vem de lá, por índice servindo.
+  'contrato_do_indice', (SELECT json_object_agg(k, n) FROM (
+      SELECT 'impressoes_com_indice_servindo' AS k, count(DISTINCT impressao_id)::text AS n FROM vet) z),
   'degraus', json_build_object(
     'a_catalogadas',  (SELECT count(*) FROM e),
     'b_armazenadas',  (SELECT count(*) FROM e WHERE no_store),
     'c_ingeridas',    (SELECT count(*) FROM e WHERE n_chunk > 0),
     'd_embedded',     (SELECT count(*) FROM e WHERE n_texto > 0 AND n_emb  = n_texto),
-    'e_vetor_meta',   (SELECT count(*) FROM e WHERE n_texto > 0 AND n_meta = n_texto)
+    -- O vetor de faceta virou UM ponto por obra em 11/08/2026 (era replicado em cada trecho,
+    -- 198x). O degrau é ter o ponto, não ter tantos pontos quanto trechos.
+    'e_vetor_meta',   (SELECT count(*) FROM e WHERE n_texto > 0 AND n_meta >= 1)
   ),
   'fora_da_escada', json_build_object(
     'paginas_wiki',           (SELECT count(*) FROM e WHERE e_pagina)
@@ -109,9 +125,9 @@ SELECT json_build_object(
   'fuga_por_degrau', json_build_object(
     'catalogo_aponta_pro_vazio', (SELECT count(*) FROM e WHERE tem_objeto AND NOT no_store),
     'objeto_sem_documento',      (SELECT count(*) FROM e WHERE no_store AND NOT tem_doc),
-    'documento_sem_chunk',       (SELECT count(*) FROM e WHERE tem_doc AND n_chunk = 0),
+    'impressao_sem_trecho',      (SELECT count(*) FROM e WHERE tem_doc AND n_chunk = 0),
     'embedding_parcial',         (SELECT count(*) FROM e WHERE n_texto > 0 AND n_emb  < n_texto),
-    'embedding_meta_parcial',    (SELECT count(*) FROM e WHERE n_texto > 0 AND n_meta < n_texto),
+    'sem_vetor_de_faceta',       (SELECT count(*) FROM e WHERE n_texto > 0 AND n_meta = 0),
     'objeto_no_store_sem_obra',  (SELECT count(*) FROM store_obj s
                                     WHERE NOT EXISTS (SELECT 1 FROM acervo.obra o WHERE o.objeto = s.objeto)),
     -- O derivado órfão, invariante da arq:0027: 'a permanência de um derivado depende da
@@ -122,19 +138,19 @@ SELECT json_build_object(
     -- CASCADE, e `chunks.document_id` cascateia de `documents`. Estas duas linhas leem 0 e
     -- DEVEM ler 0. Existem para o dia em que a construção sair — a arq:0027 admite varredura
     -- periódica como forma, e até agora essa varredura era feita à mão, não pelo instrumento.
-    'documento_sem_obra',        (SELECT count(*) FROM documents d
-                                    WHERE NOT EXISTS (SELECT 1 FROM acervo.obra o WHERE o.id = d.obra_id)),
-    'chunk_sem_documento',       (SELECT count(*) FROM chunks c
-                                    WHERE NOT EXISTS (SELECT 1 FROM documents d WHERE d.id = c.document_id))
+    'impressao_sem_obra',        (SELECT count(*) FROM acervo.impressao i
+                                    WHERE NOT EXISTS (SELECT 1 FROM acervo.obra o WHERE o.id = i.obra_id)),
+    'vetor_sem_impressao',       (SELECT count(*) FROM vet v
+                                    WHERE v.impressao_id IS NOT NULL
+                                      AND NOT EXISTS (SELECT 1 FROM acervo.impressao i
+                                                       WHERE i.id = v.impressao_id))
   ),
   'chunks', json_build_object(
-    'total',      (SELECT count(*) FROM chunks),
-    'textuais',   (SELECT count(*) FROM chunks WHERE NOT is_not_text AND length(text) > 0),
-    'nao_textuais', (SELECT count(*) FROM chunks WHERE is_not_text OR length(text) = 0),
-    'com_vetor',  (SELECT count(*) FROM chunks
-                     WHERE NOT is_not_text AND length(text) > 0 AND embedding IS NOT NULL),
-    'com_vetor_meta', (SELECT count(*) FROM chunks
-                     WHERE NOT is_not_text AND length(text) > 0 AND embedding_meta IS NOT NULL)
+    'total',      (SELECT count(*) FROM acervo.trecho),
+    'textuais',   (SELECT count(*) FROM acervo.trecho WHERE elegivel),
+    'nao_textuais', (SELECT count(*) FROM acervo.trecho WHERE NOT elegivel),
+    'com_vetor',  (SELECT COALESCE(sum(n_emb),0) FROM vet),
+    'com_vetor_meta', (SELECT COALESCE(sum(n_meta),0) FROM vet)
   )
 );
 EOSQL
