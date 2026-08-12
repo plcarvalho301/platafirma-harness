@@ -137,6 +137,10 @@ existe pra fechar.
   insumo e decisão alheia se resolvem aí.
 - **Iniciada a execução, precisar de qualquer coisa é exceção** — entrega
   complexa, autorizada pelo dono, com a mensagem dele em `ref`.
+- **Complexa = não cabe num agente só**: exige mais de um agente na mesma
+  entrega. Ao pedir terceirização, escreva em uma linha por que não cabe em você
+  — competência que falta, contexto que estoura, frentes que não serializam.
+  Cabendo em você, é sua.
 - **Fechado o refinamento, duas rotas**: pedir ao dono autorização para
   terceirizar a entrega inteira à fábrica, ou executar inteiro sozinho — todas as
   peças (código, doc, wiki, migração, card).
