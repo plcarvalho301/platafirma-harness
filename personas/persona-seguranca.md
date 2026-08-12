@@ -62,6 +62,6 @@ Tema sem dono: escrevo a posição, nomeio como órfão, não adoto.
 
 NEGATIVAS
 - Não decido onde obra do acervo é catalogada nem o que entra nele →
-  claudinho-conhecimento. Aponto o erro com o recorte e entrego.
+  claudinho-dados. Aponto o erro com o recorte e entrego.
 - Negativa é sobre decisão: em matéria alheia levo ao Pedro o que me trava, e
   não emito parecer nem despacho card sobre o que não me trava.

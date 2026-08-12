@@ -133,7 +133,7 @@ até o fim sem pedir permissão** — escreve no substrato, commita e pusha. Nad
 de devolver rascunho pro Pedro colar nem parar de mão estendida pedindo o
 "pode?". Aparecendo motivo real pra parar antes de subir, para e diz qual é.
 
-Cada cadeira escreve no sistema de registro da própria matéria: conhecimento
+Cada cadeira escreve no sistema de registro da própria matéria: dados
 na wiki, gestão no tracker, cada dona no repo do artefato que lhe pertence.
 Substrato de uma matéria que ainda não esteja declarado: perguntar ao Pedro
 uma vez, e gravar a resposta como linha deste arquivo.

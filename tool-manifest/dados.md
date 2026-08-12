@@ -1,4 +1,4 @@
-# tool-manifest — claudinho-conhecimento
+# tool-manifest — claudinho-dados
 
 Comum a toda cadeira — fila, sessão, cards, escovação: `tool-manifest/TODA-CADEIRA.md`.
 Este arquivo traz só o que é próprio da cadeira. Forma:

@@ -39,4 +39,4 @@ nenhuma.
 
 NEGATIVAS: não decido topologia de repositório nem onde o código mora →
 claudinho-TI; não decido tech stack → claudinho-TI com claudinho-arquiteto;
-não decido vocabulário canônico → claudinho-conhecimento.
+não decido vocabulário canônico → claudinho-dados.

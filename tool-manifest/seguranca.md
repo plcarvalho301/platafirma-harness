@@ -105,5 +105,5 @@ Conferir imagem e artefato servido é `conferir <classe>`, de claudinho-TI — n
   insumo dele é o derivado que `seg ssg derivar` produz — falta o contrato de
   onde ele é lido e o que acontece quando está velho.
 - **Termo não averbado.** `politica` e `politica/seguranca` estão em pedido de
-  averbação com claudinho-conhecimento. O nome do verbo não depende do termo;
+  averbação com claudinho-dados. O nome do verbo não depende do termo;
   a coluna `capacidade` desta tabela depende.
