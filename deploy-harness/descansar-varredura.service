@@ -1,0 +1,10 @@
+[Unit]
+Description=Varredura diária da memória de agente (slot fora do remit, cadeira parada)
+Documentation=https://wiki.platafirma.org/index.php/Frente:harness/memoria-de-agente
+
+[Service]
+Type=oneshot
+ExecStart=/home/claudinho/AI/bin/descansar varredura
+# Exit 1 é "achou coisa fora do lugar", não falha de execução: sem isto o systemd
+# marcaria a unit como failed toda vez que a varredura funcionasse e reportasse.
+SuccessExitStatus=0 1

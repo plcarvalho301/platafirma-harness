@@ -1,0 +1,11 @@
+[Unit]
+Description=Descanso diário da plataforma — varre a memória de agente
+
+[Timer]
+OnCalendar=*-*-* 04:30:00
+# Pega a execução perdida quando a máquina estava desligada na hora marcada.
+Persistent=true
+RandomizedDelaySec=5m
+
+[Install]
+WantedBy=timers.target
