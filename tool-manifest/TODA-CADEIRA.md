@@ -142,6 +142,8 @@ existe pra fechar.
   peças (código, doc, wiki, migração, card).
 - **Rota da fábrica**: dono autoriza (análise de risco é dele) → claudinho-TI
   revisa e despacha o card. A porta da fábrica continua sendo o card do TI.
+- **TI revisa nas duas pontas**: entrada (corta o card) e saída (recebe da
+  fábrica, revisa e conserta antes do merge). Do card ao push, a entrega é dele.
 - **A responsabilidade da execução é do executor.** Não se reparte, não se
   repassa, não se consulta no meio.
 - **Risco alto ao ambiente → o merge vai a gate de claudinho-TI**, com sign-off
