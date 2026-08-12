@@ -137,9 +137,11 @@ existe pra fechar.
   insumo e decisão alheia se resolvem aí.
 - **Iniciada a execução, precisar de qualquer coisa é exceção** — entrega
   complexa, autorizada pelo dono, com a mensagem dele em `ref`.
-- **Fechado o refinamento, duas rotas**: pedir ao dono que terceirize a entrega
-  inteira à fábrica, ou executar inteiro sozinho — todas as peças (código, doc,
-  wiki, migração, card).
+- **Fechado o refinamento, duas rotas**: pedir ao dono autorização para
+  terceirizar a entrega inteira à fábrica, ou executar inteiro sozinho — todas as
+  peças (código, doc, wiki, migração, card).
+- **Rota da fábrica**: dono autoriza (análise de risco é dele) → claudinho-TI
+  revisa e despacha o card. A porta da fábrica continua sendo o card do TI.
 - **A responsabilidade da execução é do executor.** Não se reparte, não se
   repassa, não se consulta no meio.
 - **Risco alto ao ambiente → o merge vai a gate de claudinho-TI**, com sign-off
