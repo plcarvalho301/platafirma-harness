@@ -52,15 +52,21 @@ log de contêiner ou unit        : infra logs <alvo> [n]     descobre qual dos d
 reiniciar sem se matar          : infra restart <alvo>      destacado; exige alvo explícito
 serializar carga de GPU         : infra exclusivo [--] <cmd...>  espera a vez + cota de CPU/RAM
 ver e liberar cache             : infra cache [ver|vram|disco]   liberar e sempre explicito
+estado dos backups declarados   : infra backup [--json]      idade, geracoes; alvo sem cobertura fica na lista
 
 promover release de uma stack   : deploy <stack> up -d      stack obrigatória, sem default
-ver o declarado de uma stack    : deploy <stack>            não toca em nada
+ver o declarado de uma stack    : deploy <stack>            não toca em nada; inclui o SHA servido
+rotas do túnel de uma stack     : deploy <stack> rotas      hostname -> serviço, do ingress declarado
+quem entra em cada superfície   : deploy <stack> acessos    allowlist e gate próprio, por serviço
+segredos que a stack exige      : deploy <stack> segredos   nome e presença, nunca valor
 quais stacks existem            : deploy                    lista o registro
 
 declarado x servido             : conferir servico [nome]   exit 1 = há divergência
 verbo x arq:0037                : conferir verbo [nome]     origem, cabeçalho e a conta
 skill servida x fonte           : conferir skill <nome> --servido <blob do carimbo>
 repo x arq:0042                 : conferir repo  [nome]     o que esta rastreado x a regua
+                                  mede tambem o cabecalho de genero e publico (arq:0049),
+                                  nos arquivos que o repo declara em docs/.operacao
 gate de commit (arq:0042)       : conferir repo --staged    o que o pre-commit chama
 caminho de execucao x harness   : conferir procedencia      exit 1 = ~/AI/bin resolve pra fora
                                   excecao se declara em harness/docs/procedencia-do-harness.md

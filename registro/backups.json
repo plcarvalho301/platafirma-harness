@@ -1,0 +1,48 @@
+{
+  "_leia": "Registro de backup da PlataFirma — o DECLARADO, nao o servido. Fonte do sub-ato `infra backup`, que mede presenca, idade e numero de geracoes; nao roda backup e nao propoe rotina. Alvo com \"cobertura\": \"nenhuma\" fica na lista de proposito: alvo que some da lista deixa de ser medido e vira surpresa. `padrao` e glob dentro de `diretorio`; `alcance: fora` marca alvo cujo backup roda em conta que o claudinho nao alcanca — nesse caso o verbo declara que nao consegue medir, em vez de reportar zero. `log` opcional: havendo, a IDADE sai do log (prova de execucao) e o glob so conta o volume — espelho com --remove nao muda mtime quando nada mudou, e medir idade pelo arquivo diria 'atrasado' num backup que rodou hoje.",
+  "_capacidade": "ativo",
+  "_dono": "claudinho-TI",
+  "alvos": {
+    "conhecimento-db": {
+      "o_que": "MariaDB da wiki",
+      "cobertura": "cron do claudinho, 03:00",
+      "diretorio": "~/AI/deploy/conhecimento/backups",
+      "padrao": "*.sql.gz",
+      "alcance": "aqui"
+    },
+    "rag-db": {
+      "o_que": "Postgres do acervo (schema acervo + vetores)",
+      "cobertura": "cron do claudinho, 03:30",
+      "diretorio": "~/AI/deploy/conhecimento/rag/backups",
+      "padrao": "acervo-*.sql.gz",
+      "alcance": "aqui"
+    },
+    "rag-minio": {
+      "o_que": "object storage do acervo",
+      "cobertura": "cron do claudinho, 03:45",
+      "diretorio": "~/backups/minio",
+      "padrao": "*",
+      "alcance": "aqui",
+      "_nota": "mirror, nao geracao: o backup-minio.sh espelha os buckets com --remove, entao 'geracoes' aqui e o numero de buckets espelhados, nao de copias no tempo.",
+      "log": "~/AI/deploy/conhecimento/rag/backups/backup.log"
+    },
+    "cofre-keepass": {
+      "o_que": "cofre de credenciais, em geracoes datadas",
+      "cobertura": "cron da conta megafone, diario",
+      "alcance": "fora",
+      "_nota": "platafirma-core:deploy/backup-cofre.sh roda como megafone; o claudinho nao alcanca /home/megafone e nao mede isto."
+    },
+    "keycloak-db": {
+      "o_que": "banco do IdP",
+      "cobertura": "nenhuma",
+      "alcance": "aqui",
+      "_nota": "postura aceita pelo dono: o backup e o git, o risco esta assumido. Debito no card #176. Nao propor rotina."
+    },
+    "vikunja-db": {
+      "o_que": "banco do rastreador",
+      "cobertura": "nenhuma",
+      "alcance": "aqui",
+      "_nota": "mesma postura do keycloak-db. Card #176."
+    }
+  }
+}

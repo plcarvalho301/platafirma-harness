@@ -469,6 +469,43 @@ def excecoes(raiz):
     return regras
 
 
+GENEROS = ("procedimento", "referencia", "referência", "explicacao", "explicação")
+CAMPOS = ("**Gênero:**", "**Público:**", "**Derivada na wiki:**")
+
+
+def documentos_de_operacao(raiz):
+    """Os que o repo DECLARA como documento de operacao, em `docs/.operacao`.
+
+    Declarado, nunca inferido: heuristica sobre `docs/*.md` reprovaria handoff, spec e
+    ADR, que nao sao operacao e nao levam cabecalho. Repo sem o arquivo nao e medido —
+    ausencia de declaracao nao vira reprovacao em massa.
+    """
+    alvo = os.path.join(raiz, "docs", ".operacao")
+    try:
+        with open(alvo, encoding="utf-8") as f:
+            linhas = [l.split("#", 1)[0].strip() for l in f]
+    except OSError:
+        return []
+    return [l for l in linhas if l]
+
+
+def cabecalho_de_operacao(caminho):
+    """Devolve o motivo da reprova, ou None quando o cabecalho esta la e completo."""
+    try:
+        with open(caminho, encoding="utf-8", errors="replace") as f:
+            cabeca = "".join(f.readline() for _ in range(12))
+    except OSError:
+        return "arquivo declarado em docs/.operacao e nao existe"
+    faltam = [c for c in CAMPOS if c not in cabeca]
+    if faltam:
+        return "sem " + ", ".join(faltam)
+    linha = next((l for l in cabeca.splitlines() if "**Gênero:**" in l), "")
+    valor = linha.split("**Gênero:**", 1)[1].split("·")[0].strip().lower()
+    if valor not in GENEROS:
+        return f"genero {valor!r} fora de procedimento|referencia|explicacao"
+    return None
+
+
 def gerado_por_ferramenta(caminho):
     try:
         with open(caminho, "rb") as f:
@@ -509,6 +546,13 @@ def conferir_repo(alvo, staged=False, como_json=False):
         peso = 0
         topos = {a.split("/", 1)[0] + "/" for a in arquivos if "/" in a}
         achados = {"GERADO": [], "ACERVO": [], "GRANEL": [], "GORDO": [], "RENDER": []}
+        sem_cabecalho = []
+        for rel in documentos_de_operacao(raiz):
+            if staged and rel not in sob_juizo:
+                continue
+            motivo = cabecalho_de_operacao(os.path.join(raiz, rel))
+            if motivo:
+                sem_cabecalho.append((rel, motivo))
         for rel in sob_juizo:
             caminho = os.path.join(raiz, rel)
             try:
@@ -560,6 +604,13 @@ def conferir_repo(alvo, staged=False, como_json=False):
                 if len(itens) > 8:
                     soma = sum(t for _, t in itens[8:]) / 1048576
                     print(f"    {rotulo:<8}: + {len(itens) - 8} outros, {soma:.1f} MB")
+        if sem_cabecalho:
+            houve = divergiu = True
+            if not como_json:
+                for rel, motivo in sorted(sem_cabecalho):
+                    print(f"    CABECALHO: {rel} — {motivo}")
+                print("    arq:0049 — documento de operacao abre declarando genero e publico,")
+                print("    e nomeia a pagina de Operar: que deriva dele (ou declara que nao ha).")
         readme_ok = None
         if staged:
             if not como_json and divergiu:
@@ -588,6 +639,7 @@ def conferir_repo(alvo, staged=False, como_json=False):
             repos_json.append({
                 "nome": nome,
                 "achados": {k: [{"caminho": r, "bytes": t} for r, t in v] for k, v in achados.items()},
+                "sem_cabecalho": [{"caminho": r, "motivo": m} for r, m in sem_cabecalho],
                 "readme_ok": readme_ok,
             })
 

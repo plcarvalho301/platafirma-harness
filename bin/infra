@@ -18,6 +18,7 @@ uso:
   infra restart <alvo>           destacado: sobrevive ao fim desta chamada
   infra exclusivo [--] <cmd...>  fila de carga GPU-bound + cota de CPU/RAM
   infra cache [ver|vram|disco]   ver o que ocupa VRAM e disco; liberar e explicito
+  infra backup [--json]          por alvo declarado: quando rodou, se saiu bem, quantas geracoes
 
 Leitura aceita alvo opcional; sem alvo, olha tudo. Mutação exige alvo explícito e
 recusa sem ele. Promover release não é daqui: `deploy <stack>`.
@@ -409,6 +410,16 @@ restart() {
   echo "restart de $1 despachado destacado; conferir com: infra estado"
 }
 
+# Mede backup, nao faz backup e nao propoe rotina. Le o DECLARADO em
+# registro/backups.json: alvo sem cobertura fica na lista de proposito, porque alvo que
+# some da lista deixa de ser medido e reaparece como surpresa. Alvo cujo backup roda em
+# conta que o claudinho nao alcanca sai como `nao medivel daqui`, nunca como zero.
+backup() {
+  local reg="${INFRA_BACKUPS:-$HOME/AI/platafirma-harness/registro/backups.json}"
+  [ -r "$reg" ] || { echo "registro nao legivel: $reg" >&2; exit 1; }
+  INFRA_BACKUPS_REG="$reg" python3 "$HOME/AI/platafirma-harness/bin/_infra-backup.py" "$@"
+}
+
 # --- despacho ---------------------------------------------------------------
 
 cmd="${1:-}"; shift || uso
@@ -419,6 +430,7 @@ case "$cmd" in
   logs)    logs "${1:?uso: infra logs <alvo> [n]}" "${2:-50}" ;;
   exclusivo) exclusivo "$@" ;;
   cache)     cache "${1:-ver}" ;;
+  backup)    backup "$@" ;;
   restart) [ $# -ge 1 ] || { echo "erro: restart exige alvo explícito — não reinicia tudo." >&2; exit 2; }
            restart "$1" ;;
   compose) echo "erro: promover release saiu do \`infra\` — capacidade \`mudanca\`, verbo \`deploy\`." >&2

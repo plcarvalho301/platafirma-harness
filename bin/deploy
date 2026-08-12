@@ -23,6 +23,9 @@ uso() {
 uso:
   deploy <stack> <acao> [args...]   acao = up | down | ps | logs | config | pull | build
   deploy <stack> promover [ref]     worktree de deploy: fetch + checkout + recreate
+  deploy <stack> rotas              qual hostname do tunel entra em qual servico
+  deploy <stack> acessos            quem pode entrar em cada superficie gateada
+  deploy <stack> segredos           arquivos fora do git que a stack exige, e se estao ali
   deploy <stack>                    mostra o declarado da stack, sem tocar em nada
   deploy                            lista as stacks do registro
 
@@ -37,6 +40,31 @@ Nao existe alvo default e nao existe "todas": stack e argumento obrigatorio.
 Registro: $REGISTRO
 FIM
   exit 2
+}
+
+# De qual commit a stack esta servindo. O worktree de deploy e detached por construcao,
+# entao a pergunta "esta atras de main?" nao tem resposta no branch: e contagem de
+# revisao. Diretorio que nao e git nao vira erro — vira resposta declarada.
+servido() {
+  local dir="$1" sha atras
+  git -C "$dir" rev-parse --git-dir >/dev/null 2>&1 || { echo "nao e checkout git: $dir"; return; }
+  sha="$(git -C "$dir" rev-parse --short HEAD)"
+  if git -C "$dir" rev-parse --verify -q origin/main >/dev/null; then
+    atras="$(git -C "$dir" rev-list --count "HEAD..origin/main" 2>/dev/null || echo '?')"
+    if [ "$atras" = "0" ]; then echo "$sha (no head de origin/main)"
+    else echo "$sha ($atras commit(s) atras de origin/main)"; fi
+  else
+    echo "$sha (sem origin/main no worktree)"
+  fi
+}
+
+# Caminho declarado no registro: `~` e absoluto expandem; o resto e relativo ao
+# diretorio do compose, que e a raiz do worktree de deploy.
+resolve() {
+  case "$1" in
+    "~"*|/*) expandir "$1" ;;
+    *) printf '%s\n' "$(dirname "$COMPOSE")/$1" ;;
+  esac
 }
 
 [ -r "$REGISTRO" ] || { echo "registro nao legivel: $REGISTRO" >&2; exit 1; }
@@ -98,6 +126,7 @@ if [ $# -eq 0 ]; then
   printf 'perfis  : %s\n' "$(lista "$STACK" profiles | tr '\n' ' ')"
   printf 'critico : %s\n' "$(campo "$STACK" critico)"
   printf 'servicos: %s\n' "$(docker compose "${COMPOSE_ARGS[@]}" "${PERFIL_ARGS[@]+"${PERFIL_ARGS[@]}"}" config --services 2>/dev/null | tr '\n' ' ')"
+  printf 'servido : %s\n' "$(servido "$(dirname "$COMPOSE")")"
   exit 0
 fi
 
@@ -108,6 +137,88 @@ if [ "$(campo "$STACK" critico)" = "true" ] && [ "$ACAO" = "down" ] && [ "${PF_S
   echo "recusa: \"$STACK\" e critica e \"down\" derruba a borda junto." >&2
   echo "        confirme com: PF_SIM=1 deploy $STACK down" >&2
   exit 1
+fi
+
+# Ler o declarado nao muda nada e nao pede confirmacao. Os tres sub-atos abaixo
+# existem porque o procedimento derivado da wiki nao pode publicar estes dados como
+# valor: sem verbo que os devolva, o texto desincroniza no primeiro deploy.
+if [ "$ACAO" = "rotas" ]; then
+  ING="$(campo "$STACK" rotas)"
+  [ -n "$ING" ] || { echo "stack \"$STACK\" nao declara ingress no registro (campo rotas)."; exit 0; }
+  ING="$(resolve "$ING")"
+  [ -r "$ING" ] || { echo "erro: ingress declarado e ilegivel: $ING" >&2; exit 1; }
+  printf 'ingress : %s\n' "$ING"
+  yq -r '.ingress[] | [(.hostname // "(catch-all)"), (.path // "-"), .service] | @tsv' "$ING" \
+    | while IFS=$'\t' read -r h p sv; do printf '  %-32s %-10s %s\n' "$h" "$p" "$sv"; done
+  echo
+  echo "Rota fora deste arquivo nao aparece aqui: o tunel do ops-mcp e configurado no"
+  echo "dashboard da Cloudflare, e nenhum arquivo do repositorio o descreve."
+  exit 0
+fi
+
+if [ "$ACAO" = "acessos" ]; then
+  # O compose resolvido normaliza volume para objeto (source/target), nao string, e o
+  # `yq` daqui e o de Go: sem --arg e sem env.VAR. Ler isso em shell rendeu falha muda,
+  # entao a leitura e em python, que ja tem o YAML.
+  docker compose "${COMPOSE_ARGS[@]}" "${PERFIL_ARGS[@]+"${PERFIL_ARGS[@]}"}" config 2>/dev/null \
+  | python3 -c '
+import sys, yaml
+cfg = yaml.safe_load(sys.stdin) or {}
+achou = False
+for nome, sv in (cfg.get("services") or {}).items():
+    alvo = next((a.split("=", 1)[1] for a in (sv.get("command") or [])
+                 if isinstance(a, str) and "authenticated-emails-file" in a), None)
+    if not alvo:
+        continue
+    achou = True
+    host = next((v.get("source") for v in (sv.get("volumes") or [])
+                 if isinstance(v, dict) and v.get("target") == alvo), None)
+    print(f"superficie: {nome}  (allowlist)")
+    print(f"  arquivo : {host or alvo}")
+    try:
+        with open(host, encoding="utf-8") as f:
+            entra = [l.strip() for l in f if l.strip() and not l.startswith("#")]
+        for e in entra:
+            print(f"  entra   : {e}")
+        if not entra:
+            print("  entra   : (arquivo vazio — o gate recusa todo mundo)")
+    except (OSError, TypeError):
+        print("  entra   : (arquivo nao legivel daqui)")
+for nome, sv in (cfg.get("services") or {}).items():
+    env = sv.get("environment") or {}
+    texto = " ".join(f"{k}={v}" for k, v in env.items()) if isinstance(env, dict) else " ".join(map(str, env))
+    if "OIDC" in texto.upper() or "OPENID" in texto.upper():
+        achou = True
+        print(f"superficie: {nome}  (gate proprio: OIDC contra o realm)")
+        print("  entra   : quem o realm autorizar. Enumerar exige credencial de admin do")
+        print("            Keycloak, que este verbo nao usa — e a allowlist nao cobre esta.")
+if not achou:
+    print("nenhuma superficie gateada declarada no compose desta stack.")
+'
+  exit 0
+fi
+
+if [ "$ACAO" = "segredos" ]; then
+  if ! jq -e --arg s "$STACK" '.stacks[$s] | has("segredos")' "$REGISTRO" >/dev/null; then
+    echo "stack \"$STACK\" nao declara segredos no registro — ausencia de declaracao, nao"
+    echo "ausencia de segredo: ninguem mediu esta stack ainda."
+    exit 2
+  fi
+  falta=0; n=0
+  while read -r item; do
+    [ -n "$item" ] || continue
+    n=$((n+1)); alvo="$(resolve "$item")"
+    if [ -e "$alvo" ]; then
+      printf '  ok      : %-58s %s\n' "$item" "$(stat -c '%A %U:%G' "$alvo")"
+    else
+      printf '  AUSENTE : %s\n' "$item"; falta=$((falta+1))
+    fi
+  done < <(lista "$STACK" segredos)
+  [ "$n" -gt 0 ] || echo "  (declarado: esta stack nao exige arquivo fora do git)"
+  echo
+  echo "Nome e presenca, nunca valor: nenhuma linha deste verbo le o conteudo."
+  [ "$falta" -eq 0 ] || { echo "faltam $falta arquivo(s) — a stack nao sobe inteira assim." >&2; exit 1; }
+  exit 0
 fi
 
 # `promover` fecha o caminho inteiro do worktree de deploy num ato so. Existe porque

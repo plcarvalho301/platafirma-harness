@@ -1,5 +1,5 @@
 {
-  "_leia": "Registro de stacks da PlataFirma — o DECLARADO, nao o servido. Fonte do verbo `deploy` e da classe `servico` do `conferir`. Nao se deriva do daemon: docker ps lista o que subiu, este arquivo lista o que deveria existir e de onde. `compose` aceita string ou lista: lista vira varios -f, na ordem. `profiles` e opcional e vira --profile; servico sob profile nao declarado aqui e invisivel ao verbo, e foi assim que rag-api ficou fora.",
+  "_leia": "Registro de stacks da PlataFirma — o DECLARADO, nao o servido. Fonte do verbo `deploy` e da classe `servico` do `conferir`. Nao se deriva do daemon: docker ps lista o que subiu, este arquivo lista o que deveria existir e de onde. `compose` aceita string ou lista: lista vira varios -f, na ordem. `profiles` e opcional e vira --profile; servico sob profile nao declarado aqui e invisivel ao verbo, e foi assim que rag-api ficou fora. `rotas` e o ingress do tunel, relativo ao dir do compose; `segredos` lista os arquivos fora do git que a stack exige (nome e presenca, nunca valor) — lista vazia declara que a stack nao exige nenhum, ausencia declara que ninguem mediu.",
   "_capacidade": "ativo",
   "_dono": "claudinho-TI",
   "stacks": {
@@ -7,13 +7,22 @@
       "compose": "~/AI/deploy/core/docker-compose.yml",
       "repo": "platafirma-core",
       "papel": "control-plane: IAM, borda, politica de seguranca",
-      "critico": true
+      "critico": true,
+      "rotas": "deploy/cloudflared-config.yml",
+      "segredos": [
+        ".env",
+        "secrets/cloudflared/01452d04-7dd9-40ea-be5a-f8bcaa7bed8f.json",
+        "~/.config/ops/env"
+      ]
     },
     "motor": {
       "compose": "~/AI/deploy/motor/docker-compose.yml",
       "repo": "platafirma-motor",
       "papel": "motor: malha de mensageria (msg)",
-      "critico": true
+      "critico": true,
+      "segredos": [
+        ".env"
+      ]
     },
     "rag": {
       "compose": [
@@ -25,13 +34,19 @@
       ],
       "repo": "platafirma-conhecimento",
       "papel": "recuperacao: extrator, indice e API do acervo",
-      "critico": false
+      "critico": false,
+      "segredos": [
+        ".env"
+      ]
     },
     "acervo-api": {
       "compose": "~/AI/platafirma-conhecimento/acervo-api/docker-compose.yml",
       "repo": "platafirma-conhecimento",
       "papel": "API do acervo",
-      "critico": false
+      "critico": false,
+      "segredos": [
+        ".env"
+      ]
     },
     "conhecimento": {
       "compose": [
@@ -40,14 +55,18 @@
       ],
       "repo": "platafirma-conhecimento",
       "papel": "wiki e MCP de conhecimento",
-      "critico": true
+      "critico": true,
+      "segredos": [
+        ".env"
+      ]
     },
     "harness-controle": {
       "compose": "~/AI/deploy/harness/controle/compose.yaml",
       "repo": "platafirma-harness",
       "papel": "plano de controle do harness: agregador e tela",
       "critico": false,
-      "_nota": "compose existe mas NAO e o que roda: agregador e tela sao units systemd --user (deploy/harness/systemd/), porque os verbos do host nao sobrevivem a containerizacao."
+      "_nota": "compose existe mas NAO e o que roda: agregador e tela sao units systemd --user (deploy/harness/systemd/), porque os verbos do host nao sobrevivem a containerizacao.",
+      "segredos": []
     }
   },
   "_fora_do_registro": {
