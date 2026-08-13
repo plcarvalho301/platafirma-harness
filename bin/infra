@@ -15,7 +15,7 @@ uso:
   infra estado [alvo] [--json]   contêineres, units de usuário e timers, uma tela
   infra saude  [alvo] [--json]   /health do ops, contêiner não-saudável, disco, RAM
   infra logs   <alvo> [n]        alvo = nome de contêiner OU unit --user (default 50)
-  infra restart <alvo>           destacado: sobrevive ao fim desta chamada
+  infra restart <alvo> [--nao-esperar]  contêiner ou unit --user; confere antes de dizer ok
   infra exclusivo [--] <cmd...>  fila de carga GPU-bound + cota de CPU/RAM
   infra cache [ver|vram|disco]   ver o que ocupa VRAM e disco; liberar e explicito
   infra backup [--json]          por alvo declarado: quando rodou, se saiu bem, quantas geracoes
@@ -40,6 +40,7 @@ units_vivas() {
 units_falhadas()   { systemctl --user list-units --state=failed --no-pager --no-legend || true; }
 timers()           { systemctl --user list-timers --no-pager --no-legend | awk '{print $NF"\t"$1,$2,$3}'; }
 e_conteiner()      { docker ps -a --format '{{.Names}}' | grep -qx "$1"; }
+e_unit()           { systemctl --user cat -- "$1" >/dev/null 2>&1; }
 
 # --- apoio a --json -----------------------------------------------------
 #
@@ -403,11 +404,56 @@ cache() {
   esac
 }
 
-# Restart direto do ops-mcp mata a chamada em curso: despachar destacado.
+# Alvo pode ser contêiner OU unit --user, e o ato ramifica: nome de contêiner
+# passado a `systemctl --user restart` falha DENTRO da unit destacada, o
+# --collect recolhe a falha e o echo de sucesso já saiu no processo de fora,
+# que nunca vê o código de saída (medido em 12/08 por claudinha-produto, #339).
+# Por isso: síncrono e conferido por padrão; destacado só onde o restart mata a
+# própria chamada — o ops-mcp — ou sob --nao-esperar explícito.
+INFRA_UNIT_AUTO="${INFRA_UNIT_AUTO:-ops-mcp}"
+
 restart() {
-  systemd-run --user --collect --unit="infra-restart-$$" \
-    systemctl --user restart "$1"
-  echo "restart de $1 despachado destacado; conferir com: infra estado"
+  local esperar=1 alvo=""
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --nao-esperar) esperar=0 ;;
+      --) shift; alvo="${1:-}" ;;
+      -*) echo "erro: opção desconhecida em restart: $1" >&2; exit 2 ;;
+      *)  alvo="$1" ;;
+    esac
+    shift
+  done
+  [ -n "$alvo" ] || { echo "erro: restart exige alvo explícito — não reinicia tudo." >&2; exit 2; }
+
+  if e_conteiner "$alvo"; then
+    if [ "$esperar" = 1 ]; then
+      docker restart "$alvo" >/dev/null \
+        || { echo "erro: docker restart falhou em $alvo — nada garantido." >&2; exit 1; }
+      echo "contêiner $alvo reiniciado: $(docker ps -a --format '{{.Names}}\t{{.Status}}' | grep -P "^$alvo\t" | cut -f2)"
+    else
+      systemd-run --user --collect --quiet --unit="infra-restart-$$" docker restart "$alvo" \
+        || { echo "erro: não consegui despachar o restart de $alvo." >&2; exit 1; }
+      echo "restart do contêiner $alvo despachado destacado; conferir com: infra estado $alvo"
+    fi
+    return
+  fi
+
+  if e_unit "$alvo"; then
+    if [ "$esperar" = 1 ] && [ "${alvo%.service}" != "${INFRA_UNIT_AUTO%.service}" ]; then
+      systemctl --user restart "$alvo" \
+        || { echo "erro: systemctl --user restart falhou em $alvo — ver: infra logs $alvo" >&2; exit 1; }
+      echo "unit $alvo reiniciada: $(systemctl --user is-active -- "$alvo" || true)"
+    else
+      systemd-run --user --collect --quiet --unit="infra-restart-$$" systemctl --user restart "$alvo" \
+        || { echo "erro: não consegui despachar o restart de $alvo." >&2; exit 1; }
+      echo "restart da unit $alvo despachado destacado (a chamada não sobrevive a ele); conferir com: infra estado $alvo"
+    fi
+    return
+  fi
+
+  echo "erro: '$alvo' não é contêiner conhecido (docker ps -a) nem unit --user (systemctl --user cat)." >&2
+  echo "       nada foi reiniciado; conferir o nome com: infra estado" >&2
+  exit 2
 }
 
 # Mede backup, nao faz backup e nao propoe rotina. Le o DECLARADO em
@@ -432,7 +478,7 @@ case "$cmd" in
   cache)     cache "${1:-ver}" ;;
   backup)    backup "$@" ;;
   restart) [ $# -ge 1 ] || { echo "erro: restart exige alvo explícito — não reinicia tudo." >&2; exit 2; }
-           restart "$1" ;;
+           restart "$@" ;;
   compose) echo "erro: promover release saiu do \`infra\` — capacidade \`mudanca\`, verbo \`deploy\`." >&2
            echo "       use: deploy <stack> up -d   (stack e obrigatoria; nao ha alvo default)" >&2
            exit 2 ;;

@@ -65,8 +65,11 @@ de outras cadeiras: ler, não escrever.
   chamado de outro repo, promovia o control-plane inteiro. No `deploy` a stack e
   argumento obrigatorio, lido de `registro/stacks.json`; nao ha default nem "todas",
   e `down` em stack critica exige `PF_SIM=1`.
-- **Restart do ops-mcp mata a chamada em curso.** `infra restart` já despacha
-  destacado; `systemctl --user restart ops-mcp` direto, não.
+- **Restart do ops-mcp mata a chamada em curso.** `infra restart ops-mcp` despacha
+  destacado por isso; `systemctl --user restart ops-mcp` direto, não. Todo outro
+  alvo é síncrono e conferido: `infra restart` ramifica por `e_conteiner`
+  (contêiner → `docker restart`, unit → `systemctl --user restart`) e sai 2 em
+  alvo desconhecido, sem imprimir despacho. `--nao-esperar` força o destacado.
 - **Unit alterada no disco exige `systemctl --user daemon-reload` ANTES do
   restart** — `infra restart` não recarrega. Sem isso o systemd executa a versão
   em memória: em 10/08 o `WorkingDirectory` velho já não existia e o ops-mcp
