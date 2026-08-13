@@ -51,7 +51,7 @@ from mcp.server.fastmcp import FastMCP
 from mcp.server.transport_security import TransportSecuritySettings
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
-from starlette.responses import JSONResponse, PlainTextResponse
+from starlette.responses import JSONResponse, PlainTextResponse, RedirectResponse
 from starlette.routing import Route
 
 OPS_NAME = os.environ.get("OPS_NAME", "platafirma-ops")
@@ -773,13 +773,15 @@ for _nome in ("uvicorn.access", "uvicorn.error", "uvicorn"):
     logging.getLogger(_nome).addFilter(RedigeToken())
 
 
-ABERTAS = ("/health", "/.well-known/oauth-protected-resource")
+# Nada sob /.well-known é segredo, e negar ali quebra a descoberta do cliente MCP
+# antes de qualquer login. /authorize e /token só encaminham para o realm.
+ABERTAS = ("/health", "/authorize", "/token")
 
 
 class BearerAuth(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
         caminho = request.url.path.rstrip("/")
-        if caminho in ABERTAS or caminho.startswith(ABERTAS[1] + "/"):
+        if caminho in ABERTAS or caminho.startswith("/.well-known/"):
             return await call_next(request)
 
         header = request.headers.get("authorization", "")
@@ -818,8 +820,51 @@ async def _prm(_req):
     })
 
 
+async def _as_metadata(_req):
+    """Authorization server metadata (RFC 8414) espelhada.
+
+    O cliente MCP procura isto no próprio servidor de recurso antes de olhar o PRM.
+    Os endpoints apontam para o realm: quem lê esta resposta fala direto com o
+    Keycloak, sem passar por aqui."""
+    oi = OIDC_ISSUER
+    return JSONResponse({
+        "issuer": oi,
+        "authorization_endpoint": f"{oi}/protocol/openid-connect/auth",
+        "token_endpoint": f"{oi}/protocol/openid-connect/token",
+        "jwks_uri": f"{oi}/protocol/openid-connect/certs",
+        "userinfo_endpoint": f"{oi}/protocol/openid-connect/userinfo",
+        "revocation_endpoint": f"{oi}/protocol/openid-connect/revoke",
+        "response_types_supported": ["code"],
+        "grant_types_supported": ["authorization_code", "refresh_token"],
+        "code_challenge_methods_supported": ["S256"],
+        "token_endpoint_auth_methods_supported": ["none", "client_secret_post",
+                                                  "client_secret_basic"],
+        "scopes_supported": ["openid", "profile", "email", "offline_access"],
+    })
+
+
+async def _authorize(req):
+    """Fallback legado: cliente que não leu a metadata bate aqui. 302 para o realm,
+    query preservada — o PKCE e o state seguem intactos."""
+    q = req.url.query
+    destino = f"{OIDC_ISSUER}/protocol/openid-connect/auth" + (f"?{q}" if q else "")
+    return RedirectResponse(destino, status_code=302)
+
+
+async def _token(req):
+    """307 e não 302: o método e o corpo do POST precisam sobreviver ao redirecionamento."""
+    q = req.url.query
+    destino = f"{OIDC_ISSUER}/protocol/openid-connect/token" + (f"?{q}" if q else "")
+    return RedirectResponse(destino, status_code=307)
+
+
 app = mcp.streamable_http_app()
 app.router.routes.append(Route("/health", _health))
+app.router.routes.append(Route("/.well-known/oauth-authorization-server", _as_metadata))
+app.router.routes.append(Route("/.well-known/oauth-authorization-server/mcp", _as_metadata))
+app.router.routes.append(Route("/.well-known/openid-configuration", _as_metadata))
+app.router.routes.append(Route("/authorize", _authorize))
+app.router.routes.append(Route("/token", _token, methods=["POST", "GET"]))
 app.router.routes.append(Route("/.well-known/oauth-protected-resource", _prm))
 app.router.routes.append(Route("/.well-known/oauth-protected-resource/mcp", _prm))
 app.add_middleware(BearerAuth)
