@@ -42,6 +42,9 @@ estado do acervo (5 degraus)    : acervo escada          [--json | --detalhe]
                                   ÚNICA fonte de número do acervo — ver regra abaixo
 demais atos do acervo           : acervo                  sem argumento, lista os sub-atos
 consulta ao RAG pela linha      : motor rag buscar "<pergunta>"  mesmo contrato do rag_search
+medir a recuperacao servida     : motor rag medir [--k N] [--rerank] [--rotulo <nome>]
+                                  gold canonico pela porta servida; as duas familias
+                                  separadas e o delta contra a rodada anterior
 ajustes do motor, com trade-off : motor rag ajuste [<ajuste> [<valor>]]  ver, entender e mexer
 instancias de motor declaradas  : motor listar
 

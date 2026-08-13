@@ -6,7 +6,7 @@
 # dono: claudinho-IA
 # componente: platafirma-motor
 # O verbo e `motor`; a instancia e argumento (arq:0037; veto do verbo `rag`).
-import json, os, re, subprocess, sys, urllib.request
+import json, os, re, subprocess, sys, time, urllib.request
 
 RAIZ = os.path.expanduser("~/AI")
 REG = os.path.join(RAIZ, "platafirma-harness/registro/motor-instancias.json")
@@ -31,6 +31,9 @@ def uso(cod=2):
   motor <inst> ajuste <slug>             o que esse ajuste troca por que
   motor <inst> ajuste <slug> <valor>     mexe, promove e confere o servido
   motor <inst> buscar "<pergunta>" [--k N] [--texto secao|trecho|nenhum]
+  motor <inst> medir [--k N] [--rerank] [--rotulo <nome>]
+                                        bateria no gold canonico, pela porta servida:
+                                        as duas familias separadas + delta contra a ultima
   motor <inst> indexar [--apply]        fases 2-5: materializa, chunka, embedda
                                         (o que ENTRA no corpus e `acervo ingerir`)
 
@@ -262,6 +265,218 @@ def cmd_buscar(inst, argv):
         print(r.read().decode())
 
 
+# ---------------------------------------------------------------- medir
+# A bateria mede o SERVIDO, pela porta que o cliente usa — nao um retrieve() reconstruido no
+# host. E deliberado: reconstruir o caminho no host exige o venv com o embedder, mede uma copia
+# do trilho e passa silenciosamente por deploy velho. Aqui, o que responde e o que esta no ar.
+
+def token_da(inst):
+    with open(os.path.join(RAIZ, inst["token_em"])) as f:
+        for l in f:
+            if l.startswith("RAG_API_TOKEN="):
+                return l.split("=", 1)[1].strip().strip("\"'")
+    return ""
+
+
+def http(url, tok, corpo=None, timeout=300):
+    req = urllib.request.Request(
+        url, data=json.dumps(corpo).encode() if corpo is not None else None,
+        headers={"Authorization": f"Bearer {tok}", "Content-Type": "application/json"})
+    with urllib.request.urlopen(req, timeout=timeout) as r:
+        return json.loads(r.read().decode())
+
+
+def _base(sid):
+    """`secao~2` e a mesma secao que `secao`: a reparticao e nossa, nao do documento."""
+    return re.sub(r"~\d+$", "", sid or "")
+
+
+def titulos_do_banco(inst):
+    """slug do documento -> titulo da obra, e id da obra -> titulo.
+
+    Sai do banco e nao do repo porque o alvo do gabarito e o que ESTA indexado; obra
+    catalogada e nao ingerida nao pode contar como alvo alcancavel.
+    """
+    b = inst.get("banco") or {}
+    if not b:
+        return {}, {}
+    sql = ("SELECT DISTINCT split_part(t.section_id,'#',1), o.id::text, o.titulo "
+           "FROM acervo.trecho t JOIN acervo.impressao i ON i.id = t.impressao_id "
+           "JOIN acervo.obra o ON o.id = i.obra_id WHERE i.estado = 'servindo'")
+    r = sh(f"docker exec -i {b['container']} psql -U {b['user']} -d {b['db']} -At -F '\t' -c \"{sql}\"")
+    if r.returncode != 0:
+        print(f"nao consegui ler o banco ({b['container']}): {r.stderr.strip()[-200:]}", file=sys.stderr)
+        sys.exit(1)
+    por_slug, por_obra = {}, {}
+    for linha in r.stdout.splitlines():
+        if not linha.strip():
+            continue
+        slug, oid, titulo = linha.split("\t")
+        por_slug[slug] = titulo
+        por_obra.setdefault(oid, set()).add(titulo)
+    return por_slug, por_obra
+
+
+def monta_gold(inst):
+    """Duas familias, e elas nunca se somam numa nota so: nota unica esconde qual metade quebrou.
+
+    - `codigo`  : o gabarito declara a secao exata (`alvo_section_id`). Acerto = a secao.
+    - `sentido` : o gabarito declara a obra (`alvo_obra_ids`). Acerto = qualquer trecho dela.
+
+    Fica de fora, contado e nunca escondido: negativa e multi-step (sem alvo), e alvo cuja
+    obra nao esta indexada — gold que encolhe em silencio e baseline que mente.
+    """
+    caminho = os.path.join(RAIZ, inst.get("gabarito", ""))
+    if not os.path.exists(caminho):
+        print(f"gabarito canonico nao encontrado em {caminho}", file=sys.stderr)
+        sys.exit(1)
+    itens = [json.loads(l) for l in open(caminho, encoding="utf-8") if l.strip()]
+    por_slug, por_obra = titulos_do_banco(inst)
+    gold, sem_alvo, fora_do_indice = [], 0, 0
+    for e in itens:
+        if not e.get("pontuavel", True):
+            continue
+        alvo = e.get("alvo_section_id")
+        if alvo:
+            titulo = por_slug.get(_base(alvo).split("#", 1)[0])
+            if not titulo:
+                fora_do_indice += 1
+                continue
+            gold.append({"q": e["pergunta"], "familia": "codigo", "obras": {titulo},
+                         "anchor": _base(alvo).split("#", 1)[1] if "#" in alvo else None})
+            continue
+        obras = {t for o in (e.get("alvo_obra_ids") or []) for t in por_obra.get(o, ())}
+        if obras:
+            gold.append({"q": e["pergunta"], "familia": "sentido", "obras": obras, "anchor": None})
+        elif e.get("alvo_obra_ids"):
+            fora_do_indice += 1
+        else:
+            sem_alvo += 1
+    return gold, {"itens": len(itens), "sem_alvo": sem_alvo, "fora_do_indice": fora_do_indice}
+
+
+def _rank(fontes, item):
+    for i, f in enumerate(fontes, 1):
+        if f.get("obra") not in item["obras"]:
+            continue
+        if item["anchor"] is None:
+            return i
+        sid = _base(f.get("section_id") or "")
+        if "#" in sid and sid.split("#", 1)[1] == item["anchor"]:
+            return i
+    return None
+
+
+def _agrega(ranks):
+    n = len(ranks) or 1
+    return {"n": len(ranks),
+            "hit@1": round(sum(1 for r in ranks if r == 1) / n, 3),
+            "hit@3": round(sum(1 for r in ranks if r and r <= 3) / n, 3),
+            "hit@5": round(sum(1 for r in ranks if r and r <= 5) / n, 3),
+            "mrr": round(sum((1.0 / r) if r else 0.0 for r in ranks) / n, 3)}
+
+
+def _p(vals, q):
+    if not vals:
+        return 0.0
+    s = sorted(vals)
+    return s[min(len(s) - 1, int(round(q * (len(s) - 1))))]
+
+
+def dir_medicoes(inst):
+    d = os.path.join(RAIZ, inst.get("medicoes_em", "var/medicoes"))
+    os.makedirs(d, exist_ok=True)
+    return d
+
+
+def ultima_medicao(inst, exceto=None):
+    d = dir_medicoes(inst)
+    arqs = sorted(f for f in os.listdir(d) if f.endswith(".json") and f != exceto)
+    if not arqs:
+        return None
+    with open(os.path.join(d, arqs[-1])) as f:
+        return json.load(f)
+
+
+def cmd_medir(nome, inst, argv):
+    k = 5
+    rerank = "--rerank" in argv
+    if "--k" in argv:
+        k = int(argv[argv.index("--k") + 1])
+    rotulo = argv[argv.index("--rotulo") + 1] if "--rotulo" in argv else ""
+    tok = token_da(inst)
+
+    carimbo = http(inst["facets"], tok).get("indice", {})
+    gold, conta = monta_gold(inst)
+    if not gold:
+        print("gold vazio — nada a medir", file=sys.stderr)
+        sys.exit(1)
+    print(f"gabarito: {conta['itens']} itens | {len(gold)} pontuaveis "
+          f"({sum(1 for g in gold if g['familia']=='codigo')} por codigo, "
+          f"{sum(1 for g in gold if g['familia']=='sentido')} por sentido) | "
+          f"{conta['sem_alvo']} sem alvo (negativas e multi-step) | "
+          f"{conta['fora_do_indice']} com alvo fora do indice")
+    print(f"indice: acervo_sha={carimbo.get('acervo_sha','?')[:12]} "
+          f"{carimbo.get('embed_model')} ({carimbo.get('embed_backend')}) | "
+          f"revisor {'LIGADO nesta rodada' if rerank else 'desligado'} | k={k}\n")
+
+    ranks = {"codigo": [], "sentido": []}
+    lat, t0 = [], time.time()
+    for i, g in enumerate(gold, 1):
+        corpo = {"pergunta": g["q"], "k": k, "texto": "nenhum"}
+        if rerank:
+            corpo["rerank"] = True
+        r = http(inst["endpoint"], tok, corpo)
+        lat.append((r.get("tempos_ms") or {}).get("total", 0.0))
+        ranks[g["familia"]].append(_rank(r.get("fontes") or [], g))
+        if i % 25 == 0:
+            print(f"  ... {i}/{len(gold)}")
+
+    m = {"geral": _agrega(ranks["codigo"] + ranks["sentido"]),
+         "codigo": _agrega(ranks["codigo"]), "sentido": _agrega(ranks["sentido"])}
+    med = {"em": time.strftime("%Y-%m-%dT%H:%M:%S%z"), "rotulo": rotulo, "k": k,
+           "rerank": rerank, "indice": carimbo, "gold": conta, "metricas": m,
+           "latencia_ms": {"mediana": round(_p(lat, 0.5), 1), "p90": round(_p(lat, 0.9), 1)},
+           "elapsed_s": round(time.time() - t0, 1)}
+
+    print(f"\n  {'familia':<9} {'n':>4} {'hit@1':>7} {'hit@3':>7} {'hit@5':>7} {'mrr':>7}")
+    for fam in ("codigo", "sentido", "geral"):
+        a = m[fam]
+        print(f"  {fam:<9} {a['n']:>4} {a['hit@1']:>7} {a['hit@3']:>7} {a['hit@5']:>7} {a['mrr']:>7}")
+    print(f"\n  latencia servida: mediana {med['latencia_ms']['mediana']} ms | "
+          f"p90 {med['latencia_ms']['p90']} ms | rodada {med['elapsed_s']}s")
+
+    anterior = ultima_medicao(inst)
+    arq = os.path.join(dir_medicoes(inst),
+                       time.strftime("%Y%m%dT%H%M%S") + (f"-{rotulo}" if rotulo else "") + ".json")
+    with open(arq, "w") as f:
+        json.dump(med, f, ensure_ascii=False, indent=1)
+
+    if anterior:
+        # O delta so quer dizer alguma coisa junto do que MUDOU no indice entre as duas
+        # rodadas: numero que subiu com o corpus outro nao e melhora, e ninguem percebe.
+        print(f"\n  contra {anterior['em']}"
+              + (f" [{anterior['rotulo']}]" if anterior.get("rotulo") else ""))
+        for fam in ("codigo", "sentido", "geral"):
+            d1 = m[fam]["hit@1"] - anterior["metricas"][fam]["hit@1"]
+            dm = m[fam]["mrr"] - anterior["metricas"][fam]["mrr"]
+            print(f"  {fam:<9} hit@1 {d1:+.3f}   mrr {dm:+.3f}")
+        mudou = [c for c in set(carimbo) | set(anterior.get("indice", {}))
+                 if carimbo.get(c) != anterior.get("indice", {}).get(c)
+                 and c != "sha_calculado_em"]
+        if mudou:
+            print("  mudou no indice: " + ", ".join(
+                f"{c} {anterior.get('indice', {}).get(c)} -> {carimbo.get(c)}"
+                for c in sorted(mudou)))
+        else:
+            print("  indice identico — o delta e do que voce mexeu, nao do corpus")
+        if anterior.get("rerank") != rerank or anterior.get("k") != k:
+            print("  ATENCAO: rodadas com k ou revisor diferentes nao se comparam direto")
+    else:
+        print("\n  primeira medicao: nao ha baseline. Meca de novo depois de mexer.")
+    print(f"\n  salvo em {arq}")
+
+
 def main():
     d = reg()
     a = sys.argv[1:]
@@ -284,7 +499,9 @@ def main():
         return cmd_buscar(inst, a[2:])
     if a[1] == "indexar":
         return cmd_indexar(inst, a[2:])
-    print(f"ato desconhecido '{a[1]}'. {a[0]} aceita: ajuste, buscar, indexar", file=sys.stderr)
+    if a[1] == "medir":
+        return cmd_medir(a[0], inst, a[2:])
+    print(f"ato desconhecido '{a[1]}'. {a[0]} aceita: ajuste, buscar, indexar, medir", file=sys.stderr)
     sys.exit(1)
 
 

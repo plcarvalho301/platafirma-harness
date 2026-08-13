@@ -7,6 +7,14 @@
   "stack": "rag",
   "endpoint": "http://127.0.0.1:8100/search",
   "token_em": "platafirma-conhecimento/rag/.env",
+  "facets": "http://127.0.0.1:8100/facets",
+  "gabarito": "platafirma-harness/avaliacao/gabarito.jsonl",
+  "medicoes_em": "var/medicoes/rag",
+  "banco": {
+   "container": "rag-extractor-pg",
+   "db": "rag_extractor",
+   "user": "rag"
+  },
   "ajustes": [
    {
     "slug": "char-por-token",
