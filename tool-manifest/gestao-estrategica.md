@@ -8,6 +8,24 @@ Verificação: `[exec]` executado · `[func]` usado em trabalho real ·
 
 Comum a toda cadeira — fila, sessão, cards: `tool-manifest/TODA-CADEIRA.md`.
 
+## Verbos próprios
+
+```
+escrita das personas            : persona abrir | conferir | salvar -m "<msg>"
+abrir cadeira                   : persona prover <cadeira> [--alias "<Nome>"]
+dar/tirar gerência              : persona designar | dispensar <cadeira> <gerência>
+migrar competência              : persona remover <gerência> <de> <para>
+suspender / reabrir             : persona afastar <cadeira> --gatilho "<cond>" | reverter <cadeira>
+encerrar cadeira                : persona desligar <cadeira> --motivo "<txt>"
+estado atual, por replay        : persona foto
+a série datada                  : persona filme [cadeira]
+```
+
+Vocabulário emprestado do `dom_tipo_evento` do mdm-rh: a cadeira é o vínculo, a gerência
+é a função. Ledger append-only em `personas/eventos-org.jsonl` — **não se edita**: erro
+se corrige com evento novo, como no golden source de RH. `--em AAAA-MM-DD` é a data do
+FATO, não a da digitação; `--autor` responde quem decidiu.
+
 ## Conectores
 
 ## Armadilhas medidas

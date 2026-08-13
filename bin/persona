@@ -18,6 +18,18 @@ uso:
   persona conferir           roda os checks sem escrever nada
   persona salvar -m "<msg>"  pull, confere, commit só de personas/ e push
 
+  atos de organização — ledger append-only em personas/eventos-org.jsonl:
+  persona prover <cadeira> [--alias "<Nome>"]     abre cadeira
+  persona designar <cadeira> <gerência>            dá gerência
+  persona dispensar <cadeira> <gerência>           tira gerência, cadeira fica
+  persona remover <gerência> <de> <para>           migra competência entre cadeiras
+  persona afastar <cadeira> --gatilho "<cond>"     suspende; gatilho é obrigatório
+  persona reverter <cadeira>                       reabre a suspensa
+  persona desligar <cadeira> --motivo "<txt>"      encerra
+  persona foto                                     estado atual, por replay
+  persona filme [cadeira]                          a série datada
+  Comuns: --em AAAA-MM-DD (data do fato) · --nota "<txt>" · --autor <quem>
+
   Checks que BLOQUEIAM: texto fixo divergente do TEMPLATE, bloco repetido
   dentro do mesmo arquivo, seção declarada vazia ("SEÇÃO: —") com conteúdo
   embaixo, linha acima de 88 colunas.
@@ -138,6 +150,9 @@ case "${1:-}" in
     git commit -q -m "$msg"
     git push -q origin HEAD
     echo "salvo · $(idade)"
+    ;;
+  prover|designar|dispensar|remover|afastar|reverter|desligar|foto|filme)
+    exec python3 "$REPO/bin/_persona-org.py" "$@"
     ;;
   *)
     uso
