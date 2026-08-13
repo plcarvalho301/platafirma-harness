@@ -301,6 +301,50 @@
     "sobe": "resposta longa cabe inteira, sem parar no meio",
     "custa": "custo por resposta no gerador pago; e teto alto nao melhora resposta curta",
     "medir": "quantas respostas terminaram por teto em vez de por fim de raciocinio"
+   },
+   {
+    "slug": "expansao-por-conceito",
+    "var": "EXPANSAO_POR_CONCEITO",
+    "fase": "7 recuperacao",
+    "onde": "compose",
+    "faixa": "true ou false",
+    "codigo": "false",
+    "sobe": "pergunta por um conceito estreito passa a recuperar tambem o que foi escrito sobre o conceito que o contem: uma consulta a mais, pelo rotulo do pai, fundida no RRF",
+    "custa": "e o unico ajuste desta familia que pode PIORAR o resultado — substituir o especifico pelo genérico afasta a resposta da pergunta. Custa tambem um encode por conceito expandido (teto de 2). Sobe so pelas tres familias hierarquicas da ont:0080; associativa nunca",
+    "medir": "as duas familias separadas NAO arbitram isto: das 228 perguntas do gabarito, 38 casam conceito e so 14 tem pai hierarquico, zero no T1-deterministico. Exige estrato de gabarito proprio, com perguntas que a expansao toque e alvo declarado"
+   },
+   {
+    "slug": "peso-do-braco-conceito",
+    "var": "RRF_W_CONCEPT",
+    "fase": "7 fusao",
+    "onde": "compose",
+    "faixa": "0 a 3",
+    "codigo": "0.7",
+    "sobe": "a consulta expandida manda mais na ordem final",
+    "custa": "peso alto deixa o generico ganhar do especifico que a pergunta literalmente disse; so tem efeito com expansao-por-conceito ligado",
+    "medir": "mesmo estrato da expansao, variando so este numero. 0,7 e palpite declarado ate a primeira medicao"
+   },
+   {
+    "slug": "veredito-por-conceito",
+    "var": "VEREDITO_POR_CONCEITO",
+    "fase": "9 montagem",
+    "onde": "compose",
+    "faixa": "true ou false",
+    "codigo": "false",
+    "sobe": "a abstencao ganha um predicado deterministico ao lado do sinal continuo: conceito declarado no acervo e sem nenhuma obra servindo passa a sair como cobertura 'ausente', em vez de devolver o vizinho mais proximo com cara de resposta",
+    "custa": "casamento lexico do rotulo do conceito na pergunta: quem cita o termo sem querer o assunto recebe a ausencia. So reescreve o rotulo num sentido — nunca declara cobertura onde o sinal diz que nao ha",
+    "medir": "erro total numa bateria com os dois lados, como no aviso-de-cobertura-fraca, e a parte: quantas negativas do gabarito passam a ser nomeadas em vez de marcadas fracas"
+   },
+   {
+    "slug": "vizinhanca-dirigida",
+    "var": "VIZINHANCA_DIRIGIDA",
+    "fase": "9 montagem",
+    "onde": "compose",
+    "faixa": "0 a 20; 0 desliga",
+    "codigo": "0",
+    "sobe": "a resposta leva um bloco lateral com os conceitos vizinhos e o motivo lavrado de cada aresta (com o que se faz, o que precisa vir antes, o que costuma dar errado, como se mede, quanto custa)",
+    "custa": "uma consulta indexada por conceito e mais campo no corpo da resposta. NAO entra no ranking, nao desloca candidato e nao paga revisor — o risco e de ruido na leitura, nao de recuperacao",
+    "medir": "nao se mede por hit@k: nao toca no ranking. Mede-se por uso — quantas vezes o vizinho oferecido virou a pergunta seguinte"
    }
   ],
   "nao_e_ajuste": {
