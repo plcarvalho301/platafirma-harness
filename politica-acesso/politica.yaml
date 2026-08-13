@@ -27,6 +27,9 @@ eixos:
     plataforma-identidade:
       rotulo: "Identidade, concessão e segredo"
       pai: plataforma
+    plataforma-acervo:
+      rotulo: "Acervo bibliográfico e índice de recuperação"
+      pai: plataforma
 
   papel:
     reino:
@@ -35,6 +38,8 @@ eixos:
       rotulo: "Fábrica e colaboração externa — executa card, não administra"
     operador:
       rotulo: "Humano com credencial própria"
+    pesquisador-externo:
+      rotulo: "Colaboração externa que lê o acervo por concessão — não executa comando, não administra"
 
   tema: {}   # vazio por decisão: designação temática é entrega do domínio, ainda não feita
 
@@ -84,5 +89,47 @@ regras:
     efeito: permite
     motivo: "humano com credencial propria responde pelo que faz"
     quando: {papel: operador, dominio: plataforma}
+    acoes: ["*"]
+    sobre: ["*"]
+
+  # --- Colaboracao externa que le o acervo (seg:0009) --------------------------
+  # Papel separado de `fornecedor` de proposito: a fabrica executa card e nao le
+  # acervo; o externo le acervo e nao executa nada. Um papel so daria a uniao dos
+  # dois alcances, que e o oposto de necessidade de conhecer.
+  #
+  # Recurso do acervo tem id `acervo:<colecao>/<dominio>/<obra>` e tipo `acervo`.
+  # NAO existe regra de permissao aqui por decisao: sem concessao escrita, o default
+  # do PDP nega. Conceder e merge request neste arquivo, com o fundamento no Git.
+  #
+  # Forma da regra de concessao, para quem for conceder (claudinho-IA em F8):
+  #
+  #   - id: <sujeito>-le-<recorte>
+  #     efeito: permite
+  #     motivo: "<atividade que exige conhecer> · concedido por <quem> · vence AAAA-MM-DD"
+  #     quando: {papel: pesquisador-externo, dominio: plataforma-acervo, tipo: acervo}
+  #     acoes: [rag_buscar]
+  #     sobre: ["acervo:firma/<dominio-do-acervo>/*"]
+  #
+  # `sobre` NUNCA fica vazio nem recebe "*": lista vazia vira "*" no PDP, e "*"
+  # entrega o corpus inteiro. Vencida a data do `motivo`, a regra sai por merge.
+
+  - id: externo-nunca-alcanca-acervo-pessoal
+    efeito: nega
+    motivo: "colecao pessoal e do titular, nao e acervo de trabalho: fora de qualquer concessao a externo"
+    quando: {papel: pesquisador-externo}
+    acoes: ["*"]
+    sobre: ["acervo:pessoal/*"]
+
+  - id: externo-nao-executa-comando
+    efeito: nega
+    motivo: "colaboracao externa le acervo, nao opera o host: nenhum comando, nenhuma shell"
+    quando: {papel: pesquisador-externo, tipo: comando}
+    acoes: ["*"]
+    sobre: ["*"]
+
+  - id: externo-nao-toca-identidade
+    efeito: nega
+    motivo: "dominio de identidade e segredo nao se concede a externo"
+    quando: {papel: pesquisador-externo, dominio: plataforma-identidade}
     acoes: ["*"]
     sobre: ["*"]
