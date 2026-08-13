@@ -72,6 +72,14 @@ caminho de execucao x harness   : conferir procedencia      exit 1 = ~/AI/bin re
                                   excecao se declara em harness/docs/procedencia-do-harness.md
 instalar o gate num clone       : git -C <clone> config core.hooksPath ~/AI/platafirma-harness/hooks
 toolkit de segurança            : seg                       despachante (arq:0040)
+quem alcança o quê              : acesso listar [sujeito]    concessões vigentes; sem arg, todas
+conceder / revogar acesso       : acesso conceder --sujeito <c> --eixo <e> --valor <v>
+                                    --fundamento "<por quê>" --por <quem pratica o ato>
+                                  acesso revogar <id-do-ato> --fundamento ... --por ...
+                                  fundamento e --por são obrigatórios; nada aqui se apaga
+isto seria permitido?           : acesso decidir --papel <p> --dominio <d> --acao <a>
+                                    --recurso "<alvo>"       avalia sem tocar em banco
+o PAP (política em arquivo)     : acesso politica [conferir|importar]   seg:0008
 
 estado do repo                  : git -C ~/AI/<repo> status --short
 publicar                        : git -C ~/AI/<repo> add -A ; git ... commit -m "..." ; git ... push

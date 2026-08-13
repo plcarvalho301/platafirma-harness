@@ -1,0 +1,257 @@
+#!/usr/bin/env bash
+# acesso — opera o controle de acesso: concede, revoga, consulta e decide.
+# capacidade: acesso
+# componente: identidade-db (concessao.*), politica-acesso (PDP)
+# dono: claudinho-seguranca
+#
+# subcomando        capacidade   o que faz
+#   conceder        acesso       grava ato de concessao ou veto (append-only)
+#   revogar         acesso       grava ato de revogacao apontando o ato revogado
+#   listar          acesso       le concessao.vigente — o que vale AGORA
+#   historico       acesso       le concessao.ato — o que valeu, inclusive revogado
+#   vocabulario     acesso       valores validos dos tres eixos
+#   politica        acesso       confere e importa o PAP (politica.yaml)
+#   decidir         acesso       avalia um caso contra a politica, sem tocar em banco
+#
+# SEPARADO DE `seg` DE PROPOSITO (decisao do dono, 13/08/2026): `seg` e o toolkit da
+# cadeira de seguranca; `acesso` e chamado por qualquer um que precise verificar o que
+# pode. Ferramenta de verificacao aberta nao mora em toolkit de time.
+#
+# NAO E GATE. Enquanto o ops-server nao consultar o PDP, este verbo registra e explica
+# o acesso; quem executa segue sem consultar ninguem. O enxerto no ops-server esta
+# declarado em seg:0008 como pendente de gate de claudinho-TI.
+set -euo pipefail
+
+RAIZ="${HOME}/AI/platafirma-harness/politica-acesso"
+POLITICA="${ACESSO_POLITICA:-${RAIZ}/politica.yaml}"
+DB_CONTAINER="${ACESSO_DB_CONTAINER:-platafirma-core-identidade-db-1}"
+DB_USER="${ACESSO_DB_USER:-identidade}"
+DB_NAME="${ACESSO_DB_NAME:-identidade}"
+
+morre() { printf 'acesso: %s\n' "$*" >&2; exit 1; }
+
+psql_() { docker exec -i "$DB_CONTAINER" psql -U "$DB_USER" -d "$DB_NAME" "$@"; }
+
+# Resolve contracao (G48UFN) ou uuid para o uuid interno. Falha se nao achar: sujeito
+# inexistente tem de parar o ato, nao virar NULL.
+resolve() {
+  local chave="$1" papel="$2" id
+  id="$(psql_ -tAq -v k="$chave" <<'SQL'
+select id from identidade.identidade where id::text = :'k' or contracao = upper(:'k');
+SQL
+)" || morre "falha ao consultar identidade"
+  [ -n "$id" ] || morre "$papel nao encontrado: $chave"
+  printf '%s' "$id"
+}
+
+uso() {
+  sed -n '2,20p' "$0" | sed 's/^# \{0,1\}//'
+  cat <<'FIM'
+
+exemplos
+  acesso conceder --sujeito G48UFN --eixo dominio --valor plataforma \
+      --fundamento "cadeira de seguranca, card #250" --por AURELI
+  acesso conceder --sujeito G48UFN --eixo tema --valor licitacoes \
+      --fundamento "designacao da portaria 14/2026" --por AURELI --ate 2026-12-31
+  acesso revogar <uuid-do-ato> --fundamento "fim da designacao" --por AURELI
+  acesso listar G48UFN
+  acesso politica conferir
+  acesso decidir --papel fornecedor --dominio plataforma --acao run_command \
+      --recurso "docker restart keycloak"
+FIM
+}
+
+# ---------------------------------------------------------------------------
+cmd_conceder() {
+  local sujeito="" eixo="" valor="" fundamento="" por="" ate="" especie="concessao"
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --sujeito) sujeito="$2"; shift 2;;
+      --eixo) eixo="$2"; shift 2;;
+      --valor) valor="$2"; shift 2;;
+      --fundamento) fundamento="$2"; shift 2;;
+      --por) por="$2"; shift 2;;
+      --ate) ate="$2"; shift 2;;
+      --veto) especie="veto"; shift;;
+      *) morre "opcao desconhecida em conceder: $1";;
+    esac
+  done
+  [ -n "$sujeito" ] || morre "--sujeito e obrigatorio"
+  [ -n "$eixo" ] || morre "--eixo e obrigatorio (dominio|papel|tema)"
+  [ -n "$valor" ] || morre "--valor e obrigatorio"
+  [ ${#fundamento} -ge 10 ] || morre "--fundamento e obrigatorio e nao-trivial (>= 10 caracteres)"
+  # `--por` e obrigatorio por decisao do dono (13/08/2026): ter acesso a tudo nao dispensa
+  # dizer quem praticou o ato. O banco exige registrado_por; aqui nao ha default.
+  [ -n "$por" ] || morre "--por e obrigatorio: todo ato tem autor, inclusive o seu"
+
+  local sid pid
+  sid="$(resolve "$sujeito" sujeito)"
+  pid="$(resolve "$por" 'autor do ato (--por)')"
+
+  psql_ -v ON_ERROR_STOP=1 -v s="$sid" -v p="$pid" -v e="$eixo" -v v="$valor" \
+        -v f="$fundamento" -v ate="${ate:-}" -v esp="$especie" <<'SQL'
+insert into concessao.ato
+  (sujeito_id, especie, eixo, valor, fundamento, registrado_por, vigencia_fim)
+values (:'s'::uuid, :'esp', :'e', :'v', :'f', :'p'::uuid, nullif(:'ate','')::timestamptz)
+returning id, especie, eixo, valor, vigencia_fim;
+SQL
+}
+
+cmd_revogar() {
+  local ato="${1:-}" fundamento="" por=""
+  [ -n "$ato" ] || morre "uso: acesso revogar <uuid-do-ato> --fundamento ... --por ..."
+  shift
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --fundamento) fundamento="$2"; shift 2;;
+      --por) por="$2"; shift 2;;
+      *) morre "opcao desconhecida em revogar: $1";;
+    esac
+  done
+  [ ${#fundamento} -ge 10 ] || morre "--fundamento e obrigatorio e nao-trivial (>= 10 caracteres)"
+  [ -n "$por" ] || morre "--por e obrigatorio: todo ato tem autor"
+
+  local pid
+  pid="$(resolve "$por" 'autor do ato (--por)')"
+
+  # Revogar e ACRESCENTAR: o ato original permanece, e a auditoria le os dois. O sujeito,
+  # o eixo e o valor sao copiados do ato revogado — nao se digita de novo o que ja existe.
+  psql_ -v ON_ERROR_STOP=1 -v a="$ato" -v p="$pid" -v f="$fundamento" <<'SQL'
+insert into concessao.ato
+  (sujeito_id, especie, eixo, valor, fundamento, registrado_por, ato_referido)
+select o.sujeito_id, 'revogacao', o.eixo, o.valor, :'f', :'p'::uuid, o.id
+  from concessao.ato o where o.id = :'a'::uuid
+returning id, ato_referido, eixo, valor;
+SQL
+}
+
+cmd_listar() {
+  local quem="${1:-}"
+  if [ -n "$quem" ]; then
+    local sid; sid="$(resolve "$quem" sujeito)"
+    psql_ -v s="$sid" <<'SQL'
+select i.contracao, v.eixo, v.valor, v.especie, v.vigencia_fim, v.ato_id
+  from concessao.vigente v join identidade.identidade i on i.id = v.sujeito_id
+ where v.sujeito_id = :'s'::uuid order by v.eixo, v.valor;
+SQL
+  else
+    psql_ -c \
+      "select i.contracao, i.natureza, v.eixo, v.valor, v.especie, v.vigencia_fim
+         from concessao.vigente v join identidade.identidade i on i.id = v.sujeito_id
+        order by i.contracao, v.eixo, v.valor;"
+  fi
+}
+
+cmd_historico() {
+  local quem="${1:-}"
+  [ -n "$quem" ] || morre "uso: acesso historico <sujeito>"
+  local sid; sid="$(resolve "$quem" sujeito)"
+  psql_ -v s="$sid" <<'SQL'
+select a.registrado_em, a.especie, a.eixo, a.valor, a.vigencia_fim,
+       left(a.fundamento, 48) as fundamento, a.ato_referido, a.id
+  from concessao.ato a where a.sujeito_id = :'s'::uuid order by a.registrado_em;
+SQL
+}
+
+cmd_vocabulario() {
+  psql_ -c "select eixo, valor, estado, coalesce(pai,'') as pai, rotulo
+              from concessao.eixo_valor order by eixo, valor;"
+}
+
+# ---------------------------------------------------------------------------
+cmd_politica() {
+  case "${1:-conferir}" in
+    conferir)
+      python3 -c "
+import sys; sys.path.insert(0, '${RAIZ}')
+from pdp import Politica
+p = Politica.de_arquivo('${POLITICA}')
+print(f'politica valida: {len(p.dominios)} dominios, {len(p.papeis)} papeis, {len(p.regras)} regras')
+for r in p.regras:
+    print(f\"  {r['efeito']:8} {r['id']}\")
+"
+      ;;
+    importar)
+      # O importador e o unico caminho do PAP para o banco. Idempotente: valor ja
+      # existente nao vira erro, e nada aqui APAGA — retirar valor do vocabulario e ato
+      # de extincao (seg:0007), nao delete.
+      python3 -c "
+import sys; sys.path.insert(0, '${RAIZ}')
+from pdp import Politica
+p = Politica.de_arquivo('${POLITICA}')
+import yaml, pathlib
+d = yaml.safe_load(pathlib.Path('${POLITICA}').read_text())
+for eixo, itens in (d.get('eixos') or {}).items():
+    for valor, corpo in (itens or {}).items():
+        corpo = corpo or {}
+        rot = (corpo.get('rotulo') or valor).replace(chr(39), chr(39)*2)
+        pai = corpo.get('pai')
+        pai_sql = \"'\" + pai + \"'\" if pai else 'null'
+        print(f\"insert into concessao.eixo_valor (eixo, valor, rotulo, pai) values \"
+              f\"('{eixo}', '{valor}', '{rot}', {pai_sql}) on conflict (eixo, valor) \"
+              f\"do update set rotulo = excluded.rotulo, pai = excluded.pai;\")
+" | psql_ -v ON_ERROR_STOP=1
+      printf 'vocabulario importado de %s\n' "$POLITICA"
+      cmd_vocabulario
+      ;;
+    *) morre "uso: acesso politica [conferir|importar]";;
+  esac
+}
+
+cmd_decidir() {
+  local papel="" dominio="" tema="-" habilitacao="publico" acao="" recurso="" tipo="comando"
+  local sigilo="publico" veto="" dominio_recurso=""
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --papel) papel="$2"; shift 2;;
+      --dominio) dominio="$2"; shift 2;;
+      --dominio-recurso) dominio_recurso="$2"; shift 2;;
+      --tema) tema="$2"; shift 2;;
+      --habilitacao) habilitacao="$2"; shift 2;;
+      --veto) veto="$2"; shift 2;;
+      --acao) acao="$2"; shift 2;;
+      --recurso) recurso="$2"; shift 2;;
+      --tipo) tipo="$2"; shift 2;;
+      --sigilo) sigilo="$2"; shift 2;;
+      *) morre "opcao desconhecida em decidir: $1";;
+    esac
+  done
+  [ -n "$acao" ] || morre "--acao e obrigatorio"
+  [ -n "$recurso" ] || morre "--recurso e obrigatorio"
+  PF_PAPEL="$papel" PF_DOMINIO="$dominio" PF_DOMINIO_RECURSO="${dominio_recurso:-$dominio}" \
+  PF_TEMA="$tema" PF_HAB="$habilitacao" PF_VETO="$veto" PF_ACAO="$acao" \
+  PF_RECURSO="$recurso" PF_TIPO="$tipo" PF_SIGILO="$sigilo" \
+  python3 -c "
+import os, sys; sys.path.insert(0, '${RAIZ}')
+from pdp import Politica, Sujeito, Recurso, decide
+def lista(v): return tuple(x for x in v.split(',') if x)
+p = Politica.de_arquivo('${POLITICA}')
+s = Sujeito(id='(hipotetico)', natureza='cadeira',
+            papeis=lista(os.environ['PF_PAPEL']),
+            dominios=lista(os.environ['PF_DOMINIO']),
+            temas=lista(os.environ['PF_TEMA'].replace('-','')),
+            vetos=lista(os.environ['PF_VETO']),
+            habilitacao=os.environ['PF_HAB'])
+r = Recurso(tipo=os.environ['PF_TIPO'], id=os.environ['PF_RECURSO'],
+            dominio=os.environ['PF_DOMINIO_RECURSO'] or None,
+            tema=os.environ['PF_TEMA'], sigilo=os.environ['PF_SIGILO'])
+d = decide(s, os.environ['PF_ACAO'], r, p)
+print(('PERMITIDO' if d.permitido else 'NEGADO') + f'  regra={d.regra}')
+print('motivo: ' + d.motivo)
+if d.faltou: print('faltou: ' + ', '.join(d.faltou) + '  <- defeito de projecao, nao decisao de politica')
+sys.exit(0 if d.permitido else 3)
+"
+}
+
+# ---------------------------------------------------------------------------
+case "${1:-}" in
+  conceder)    shift; cmd_conceder "$@";;
+  revogar)     shift; cmd_revogar "$@";;
+  listar)      shift; cmd_listar "$@";;
+  historico)   shift; cmd_historico "$@";;
+  vocabulario) shift; cmd_vocabulario "$@";;
+  politica)    shift; cmd_politica "$@";;
+  decidir)     shift; cmd_decidir "$@";;
+  -h|--help|"") uso;;
+  *) morre "subcomando desconhecido: $1 (rode 'acesso' sem argumento)";;
+esac

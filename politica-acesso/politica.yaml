@@ -1,0 +1,88 @@
+# Política de acesso da PlataFirma — o PAP (Policy Administration Point).
+#
+# Este arquivo é a FONTE das regras. Muda por merge request, e o fundamento de cada
+# alteração fica no histórico do Git — é essa trilha que o auditor pede.
+# `acesso politica importar` carrega o vocabulário daqui para concessao.eixo_valor;
+# `acesso decidir` avalia um caso contra estas regras sem tocar em banco nenhum.
+#
+# O que este arquivo NÃO contém: quem tem o quê. Isso é concessão, é instância, e mora
+# no registro append-only. Política é tipo; concessão é instância.
+
+versao: 1
+
+# ---------------------------------------------------------------------------
+# Vocabulário dos eixos — o contrato entre esta política e a tela de concessão
+# ---------------------------------------------------------------------------
+eixos:
+
+  # Só o domínio tem hierarquia: concessão no pai alcança o filho, nunca o contrário.
+  dominio:
+    plataforma:
+      rotulo: "Administração da instância — fora de qualquer frente"
+      # Sem `instrumento`: plataforma não espelha Iniciativa (seg:0007), é o valor
+      # reservado da operação da própria plataforma.
+    plataforma-runtime:
+      rotulo: "Serviços em execução: contêiner, unit, deploy"
+      pai: plataforma
+    plataforma-identidade:
+      rotulo: "Identidade, concessão e segredo"
+      pai: plataforma
+
+  papel:
+    reino:
+      rotulo: "Cadeira do reino — alcance amplo, aceito em seg:0006"
+    fornecedor:
+      rotulo: "Fábrica e colaboração externa — executa card, não administra"
+    operador:
+      rotulo: "Humano com credencial própria"
+
+  tema: {}   # vazio por decisão: designação temática é entrega do domínio, ainda não feita
+
+# ---------------------------------------------------------------------------
+# Matriz — que papel faz que ação sobre que recurso
+# ---------------------------------------------------------------------------
+# Negativa vence permissão, qualquer que seja a ordem aqui. Nada fora desta lista é
+# permitido: o default do PDP é negar.
+regras:
+
+  # --- Reino ------------------------------------------------------------------
+  # Estado de 13/08/2026: as 7 cadeiras seguem com o alcance que já têm. Isto não é
+  # ausência de regra, é regra escrita — e é ela que se estreita quando as cadeiras
+  # novas nascerem segregadas (seg:0006).
+  - id: reino-plataforma-tudo
+    efeito: permite
+    motivo: "cadeira do reino, alcance amplo declarado em seg:0006"
+    quando: {papel: reino, dominio: plataforma}
+    acoes: ["*"]
+    sobre: ["*"]
+
+  # --- Fornecedor: fábrica, OSINT, e o que vier contratado ---------------------
+  # A porta é o card; o alcance é o repo. Estado do host não é do fornecedor.
+  - id: fornecedor-le-repo
+    efeito: permite
+    motivo: "fornecedor executa card sobre repositorio"
+    quando: {papel: fornecedor, tipo: comando}
+    acoes: [run_command]
+    sobre: ["git *", "rg *", "fd *", "cat *", "python3 *", "uv *", "pytest*", "ls *"]
+
+  - id: fornecedor-sem-estado-do-host
+    efeito: nega
+    motivo: "estado do host nao e do fornecedor: docker, systemctl, psql e deploy fora do alcance"
+    quando: {papel: fornecedor}
+    acoes: ["*"]
+    sobre: ["docker*", "systemctl*", "psql*", "deploy*", "infra*", "*.env*", "seg *", "acesso *"]
+
+  - id: fornecedor-nao-toca-identidade
+    efeito: nega
+    motivo: "dominio de identidade e segredo nao se terceiriza"
+    quando: {papel: fornecedor, dominio: plataforma-identidade}
+    acoes: ["*"]
+    sobre: ["*"]
+
+  # --- Operador humano --------------------------------------------------------
+  - id: operador-plataforma
+    efeito: permite
+    motivo: "humano com credencial propria responde pelo que faz"
+    quando: {papel: operador, dominio: plataforma}
+    acoes: ["*"]
+    sobre: ["*"]
