@@ -5,10 +5,14 @@ de volta — não pode morar dentro do raio de explosão. A fronteira dura é o 
 processo (rootless docker, sem alcance a /home de terceiro); a raiz declarada de arquivo
 é ergonomia, não fronteira — decisão do épico (run_command genérico).
 
-Auth: OPS_AUTH_TOKEN próprio, independente do token da wiki — credencial que vale
-shell é revogável sem perder a de wiki. Aceita header `Authorization: Bearer` e, como
-fallback, query string `?token=`. Prefira o header: query string entra no access log do
-uvicorn, e o access log vai para o journal — por isso o filtro de redação abaixo.
+Auth: token OIDC do realm `platafirma`, validado por assinatura (JWKS) na borda —
+`Authorization: Bearer <jwt>`. O servidor publica protected resource metadata (RFC 9728)
+e responde 401 com `WWW-Authenticate`, que é o que faz o cliente MCP descobrir o
+authorization server sozinho e rodar authorization_code + PKCE.
+ROTA DE EMERGÊNCIA: OPS_AUTH_TOKEN estático continua aceito até OPS_TOKEN_ESTATICO_ATE
+(prazo declarado, não indefinido) — é a mão que volta quando o realm cai, já que o dono
+não tem shell no host. Vencido o prazo, só JWT entra. Query string `?token=` só vale por
+essa rota; prefira sempre o header.
 
 MULTI-INSTÂNCIA: o mesmo arquivo serve mais de uma instância, uma por usuário do host.
 OPS_NAME, OPS_USER, OPS_ROOT e OPS_AUTH_TOKEN separam as instâncias; o default é a
@@ -18,10 +22,10 @@ o usuário e a raiz da instância velha, e o cliente age sobre um caminho que n�
 
 AUDITORIA: toda invocação de tool grava uma linha JSONL em OPS_ROOT/var/log/ops/, com
 retenção declarada (OPS_LOG_RETENCAO_DIAS, podada por cron, não por este processo). O
-campo `sessao` vem do header Mcp-Session-Id e agrupa chamadas de uma mesma sessão de
-cliente — NÃO identifica persona: todas as personas compartilham a mesma conta Anthropic
-e o mesmo token por instância, então o log registra o quê e o quando, nunca o quem.
-Atribuição de persona exige token por superfície e está declarada como dívida.
+campo `sessao` agrupa chamadas de uma mesma sessão de cliente; `sujeito` e `azp` vêm
+do JWT e registram QUEM chamou e por qual cliente OAuth. Atribuição de PERSONA segue
+dívida: as cadeiras compartilham um client (`claudinho-mcp`), então o log identifica o
+humano e o cliente, não a cadeira — projetar a cadeira no token é o card #436.
 
 PATH DO SUBPROCESSO: montado explicitamente, porque `bash -c` não-login não lê .bashrc
 nem .profile — sem isto, tudo que vive em OPS_ROOT/bin e ~/.local/bin existe no disco e
@@ -54,6 +58,16 @@ OPS_NAME = os.environ.get("OPS_NAME", "platafirma-ops")
 OPS_USER = os.environ.get("OPS_USER", "claudinho")
 RAIZ = Path(os.environ.get("OPS_ROOT", "/home/claudinho/AI"))
 OPS_AUTH_TOKEN = os.environ.get("OPS_AUTH_TOKEN", "")
+
+# --- OIDC (card #435) ---
+OIDC_ISSUER = os.environ.get("OIDC_ISSUER", "https://auth.platafirma.org/realms/platafirma")
+OIDC_JWKS_URL = os.environ.get(
+    "OIDC_JWKS_URL",
+    "http://127.0.0.1:8180/realms/platafirma/protocol/openid-connect/certs")
+OIDC_AUDIENCE = os.environ.get("OIDC_AUDIENCE", "ops-mcp")
+OPS_RESOURCE = os.environ.get("OPS_RESOURCE", "https://ops.platafirma.org")
+# Prazo da rota de emergência. Vencido, o token estático deixa de ser aceito.
+OPS_TOKEN_ESTATICO_ATE = os.environ.get("OPS_TOKEN_ESTATICO_ATE", "2026-09-30")
 CAP = 50_000   # teto de bytes de stdout/stderr devolvidos (truncagem sempre declarada)
 
 LOG_DIR = Path(os.environ.get("OPS_LOG_DIR", RAIZ / "var/log/ops"))
@@ -119,6 +133,8 @@ def _audit(**campos) -> None:
         reg = {"ts": datetime.now().astimezone().isoformat(timespec="milliseconds"),
                "instancia": OPS_NAME, "usuario": OPS_USER,
                "sessao": _sessao_atual(), **campos}
+        if "sujeito" not in reg and campos.get("tool", "-") != "-":
+            reg.update(_quem())
         linha = (json.dumps(reg, ensure_ascii=False)[:LINHA_CAP] + "\n").encode()
         alvo = LOG_DIR / f"ops-{date.today().isoformat()}.jsonl"
         fd = os.open(alvo, os.O_WRONLY | os.O_APPEND | os.O_CREAT, 0o600)
@@ -128,6 +144,64 @@ def _audit(**campos) -> None:
             os.close(fd)
     except Exception as e:                                  # noqa: BLE001
         print(f"[audit] FALHOU: {e!r}", file=sys.stderr, flush=True)
+
+
+_jwks_cli = None
+
+
+def _jwks():
+    """Cliente JWKS com cache — a chave do realm só se busca quando o `kid` muda."""
+    global _jwks_cli
+    if _jwks_cli is None:
+        from jwt import PyJWKClient
+        _jwks_cli = PyJWKClient(OIDC_JWKS_URL, cache_keys=True, lifespan=3600)
+    return _jwks_cli
+
+
+def _sujeito_do_jwt(header: str) -> dict:
+    """Valida o Bearer como JWT do realm e devolve a identidade. {} = não é JWT válido.
+
+    Devolver {} em vez de levantar é deliberado: quem chama decide se cai na rota de
+    emergência ou nega. A negativa loga o motivo, nunca o token."""
+    if not header.startswith("Bearer "):
+        return {}
+    tok = header[len("Bearer "):].strip()
+    if tok.count(".") != 2:                 # token estático não é JWT — nem tenta
+        return {}
+    try:
+        import jwt
+        claims = jwt.decode(
+            tok, _jwks().get_signing_key_from_jwt(tok).key,
+            algorithms=["RS256", "ES256"], audience=OIDC_AUDIENCE, issuer=OIDC_ISSUER,
+            options={"require": ["exp", "iat", "sub"]})
+        return {"sujeito": claims.get("preferred_username") or claims.get("sub"),
+                "sub": claims.get("sub"), "azp": claims.get("azp", "-")}
+    except Exception as e:                                  # noqa: BLE001
+        _audit(tool="-", evento="jwt_recusado", motivo=type(e).__name__)
+        return {}
+
+
+def _estatico_vigente() -> bool:
+    try:
+        return date.today() <= date.fromisoformat(OPS_TOKEN_ESTATICO_ATE)
+    except ValueError:
+        return False
+
+
+def _quem() -> dict:
+    """Identidade de quem chamou, do ponto de vista de DENTRO da tool.
+
+    O contextvar setado no middleware não propaga até aqui (mesma razão de
+    `_sessao_atual`), então o caminho honesto é reler o header do request que o FastMCP
+    carrega no seu próprio contexto e revalidar. O JWKS está em cache: custa uma
+    verificação de assinatura, não uma ida à rede."""
+    try:
+        req = getattr(mcp.get_context().request_context, "request", None)
+        if req is not None:
+            return _sujeito_do_jwt(req.headers.get("authorization", ""))
+    except Exception:                                       # noqa: BLE001
+        pass
+    return {}
 
 
 mcp = FastMCP(
@@ -699,17 +773,32 @@ for _nome in ("uvicorn.access", "uvicorn.error", "uvicorn"):
     logging.getLogger(_nome).addFilter(RedigeToken())
 
 
+ABERTAS = ("/health", "/.well-known/oauth-protected-resource")
+
+
 class BearerAuth(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
-        if request.url.path.rstrip("/") == "/health":
+        caminho = request.url.path.rstrip("/")
+        if caminho in ABERTAS or caminho.startswith(ABERTAS[1] + "/"):
             return await call_next(request)
-        if not _token_ok(request.headers.get("authorization", ""),
-                         request.query_params.get("token", ""), OPS_AUTH_TOKEN):
+
+        header = request.headers.get("authorization", "")
+        ident, via = _sujeito_do_jwt(header), "oidc"
+        if not ident and _estatico_vigente() and _token_ok(
+                header, request.query_params.get("token", ""), OPS_AUTH_TOKEN):
+            ident, via = {"sujeito": OPS_USER, "sub": "-", "azp": "token-estatico"}, "estatico"
+        if not ident:
             _audit(tool="-", evento="auth_negada", path=request.url.path,
                    cliente=request.client.host if request.client else "-")
-            return JSONResponse({"error": "unauthorized"}, status_code=401)
+            # Sem este header o cliente MCP não descobre o authorization server e o
+            # fluxo morre antes da tela de login (RFC 9728).
+            return JSONResponse(
+                {"error": "unauthorized"}, status_code=401,
+                headers={"WWW-Authenticate": 'Bearer resource_metadata='
+                         f'"{OPS_RESOURCE}/.well-known/oauth-protected-resource"'})
+
         _sessao.set(request.headers.get("mcp-session-id", "-"))
-        _audit(tool="-", evento="http_req", path=request.url.path,
+        _audit(tool="-", evento="http_req", path=request.url.path, via=via, **ident,
                mcp_session=request.headers.get("mcp-session-id", "-"))
         return await call_next(request)
 
@@ -718,6 +807,19 @@ async def _health(_req):
     return PlainTextResponse("ok")
 
 
+async def _prm(_req):
+    """Protected resource metadata (RFC 9728) — é por aqui que o cliente MCP descobre
+    contra qual realm autenticar. `resource` tem de bater com a URL do MCP."""
+    return JSONResponse({
+        "resource": f"{OPS_RESOURCE}/mcp",
+        "authorization_servers": [OIDC_ISSUER],
+        "bearer_methods_supported": ["header"],
+        "scopes_supported": ["openid", "profile", "offline_access"],
+    })
+
+
 app = mcp.streamable_http_app()
 app.router.routes.append(Route("/health", _health))
+app.router.routes.append(Route("/.well-known/oauth-protected-resource", _prm))
+app.router.routes.append(Route("/.well-known/oauth-protected-resource/mcp", _prm))
 app.add_middleware(BearerAuth)
