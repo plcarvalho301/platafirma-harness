@@ -214,6 +214,14 @@ def _quem() -> dict:
 # caminho de volta e a instancia anterior do ops, nao um servidor que libera tudo
 # porque nao conseguiu ler a regra.
 PF_HARNESS = Path(os.environ.get("PF_HARNESS", RAIZ / "platafirma-harness"))
+# Dominio como constante, nunca literal na chamada: `plataforma` e `platafirma`
+# diferem por uma letra, e o typo nao aparece como typo. No recurso ele negaria com
+# `faltou: recurso.dominio` e derrubaria a tool para todos; no sujeito negaria por
+# intersecao, indistinguivel de politica funcionando. Nome errado aqui e NameError
+# no import, que e a hora certa de descobrir.
+DOM_PLATAFORMA = "plataforma"
+DOM_RUNTIME = "plataforma-runtime"
+DOM_MENSAGERIA = "mensageria"     # fora do prefixo por ordem do dono, 13/08/2026
 PDP_DIR = PF_HARNESS / "politica-acesso"
 _pdp: dict = {"carimbo": None, "politica": None, "sujeitos": None, "erro": "nao carregada"}
 
@@ -240,6 +248,19 @@ def _carrega_politica() -> dict:
         pol = Politica.de_arquivo(pol_f)
         suj = (yaml.safe_load(suj_f.read_text(encoding="utf-8")) or {}).get("sujeitos") or {}
         _pdp.update(carimbo=carimbo, politica=pol, sujeitos=suj, erro=None)
+        # Divergencia de vocabulario NAO derruba o servidor: o PDP ja nega sozinho.
+        # O que faltava era o typo aparecer COMO typo, em vez de virar negativa
+        # silenciosa por intersecao.
+        vocab = set(pol.dominios)
+        for d in (DOM_PLATAFORMA, DOM_RUNTIME, DOM_MENSAGERIA):
+            if d not in vocab:
+                _audit(tool="-", evento="pep_vocabulario_divergente", onde="server",
+                       dominio=d)
+        for nome, atrib in (suj or {}).items():
+            for d in (atrib or {}).get("dominios") or ():
+                if d not in vocab:
+                    _audit(tool="-", evento="pep_vocabulario_divergente",
+                           onde="sujeitos.yaml", sujeito=nome, dominio=d)
     except Exception as e:                                  # noqa: BLE001
         _pdp.update(carimbo=carimbo, politica=None, sujeitos=None,
                     erro=f"{type(e).__name__}: {e}")
@@ -335,7 +356,7 @@ async def run_command(command: str, cwd: str = "", timeout: int = 120) -> dict:
     communicate() driblando o timeout declarado.
     """
     negado = _autoriza("run_command", "run_command", "comando", command,
-                       "plataforma-runtime")
+                       DOM_RUNTIME)
     if negado:
         return negado
     d = (RAIZ / cwd) if cwd else RAIZ
@@ -377,7 +398,7 @@ def read_file(path: str, offset: int = 0, max_bytes: int = 40000) -> dict:
     Truncagem sempre declarada: truncated/bytes_total/next_offset para paginar.
     Inexistente volta com erro preenchido, nunca exceção.
     """
-    negado = _autoriza("read_file", "read_file", "documento", path, "plataforma")
+    negado = _autoriza("read_file", "read_file", "documento", path, DOM_PLATAFORMA)
     if negado:
         return negado
     p = RAIZ / path
@@ -401,7 +422,7 @@ def read_file(path: str, offset: int = 0, max_bytes: int = 40000) -> dict:
 def write_file(path: str, content: str) -> dict:
     """Cria ou substitui um arquivo sob @ROOT@ (path relativo à raiz),
     criando diretórios intermediários. Conteúdo é o arquivo INTEIRO."""
-    negado = _autoriza("write_file", "write_file", "documento", path, "plataforma")
+    negado = _autoriza("write_file", "write_file", "documento", path, DOM_PLATAFORMA)
     if negado:
         return negado
     p = RAIZ / path
@@ -812,7 +833,7 @@ async def monta_sessao(cadeira: str = "", atualizar: bool = True) -> dict:
     — hoje é o caso de claudinha-osint. Ausência declarada, nunca omissão silenciosa.
     """
     negado = _autoriza("monta_sessao", "monta_sessao", "documento",
-                       f"sessao:{cadeira or '-'}", "plataforma")
+                       f"sessao:{cadeira or '-'}", DOM_PLATAFORMA)
     if negado:
         return negado
     t0 = time.monotonic()
@@ -985,7 +1006,7 @@ async def _msg_enviar(req):
             {"erro": "campos obrigatorios: para, tipo, assunto, corpo"}, status_code=400)
 
     negado = _autoriza("msg_enviar", "msg_enviar", "mensagem", f"caixa:{para}",
-                       "plataforma-mensageria", ident=ident)
+                       DOM_MENSAGERIA, ident=ident)
     if negado:
         return JSONResponse(negado, status_code=403)
 
@@ -1012,7 +1033,7 @@ async def _msg_ler(req):
     ident = _ident_req(req)
     quem = ident.get("sujeito", "-")
     negado = _autoriza("msg_ler", "msg_ler", "mensagem", f"caixa:{quem}",
-                       "plataforma-mensageria", ident=ident)
+                       DOM_MENSAGERIA, ident=ident)
     if negado:
         return JSONResponse(negado, status_code=403)
     f = _fila_mod()

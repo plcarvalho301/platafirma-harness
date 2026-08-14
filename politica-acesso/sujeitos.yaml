@@ -38,4 +38,4 @@ sujeitos:
   jaiminho:
     natureza: servico
     papeis: [pesquisador-externo]
-    dominios: [plataforma-acervo, plataforma-mensageria]
+    dominios: [plataforma-acervo, mensageria]

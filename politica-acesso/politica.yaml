@@ -30,7 +30,11 @@ eixos:
     plataforma-acervo:
       rotulo: "Acervo bibliográfico e índice de recuperação"
       pai: plataforma
-    plataforma-mensageria:
+    mensageria:
+      # Fora do prefixo `plataforma-` de proposito (ordem do dono, 13/08/2026): uma
+      # letra separa `plataforma` de `platafirma`, e typo no eixo do sujeito nega por
+      # intersecao, indistinguivel de politica funcionando. A heranca e pelo campo
+      # `pai`, nao pelo nome — nada se perde ao sair do prefixo.
       rotulo: "Malha msg: caixa de mensagem entre persona e colaboração externa"
       pai: plataforma
 
@@ -142,7 +146,7 @@ regras:
   - id: jaiminho-canal-exclusivo-com-IA
     efeito: permite
     motivo: "canal unico do colaborador externo com a cadeira que o contrata (card 344) · concedido por claudinho-TI com autorizacao do dono em 13/08/2026 · vence 2026-11-11"
-    quando: {papel: pesquisador-externo, dominio: plataforma-mensageria, tipo: mensagem}
+    quando: {papel: pesquisador-externo, dominio: mensageria, tipo: mensagem}
     acoes: [msg_enviar, msg_ler]
     sobre: ["caixa:jaiminho", "caixa:claudinho-IA"]
 
