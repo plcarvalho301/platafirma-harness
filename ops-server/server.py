@@ -993,6 +993,118 @@ def _ident_req(req) -> dict:
     return ident
 
 
+# Catalogo de atos candidatos do externo. Nao e a lista do que ele PODE: e a lista
+# do que existe para ser perguntado ao PDP. O que entra no pacote sai da decisao,
+# sujeito a sujeito, na hora — por isso conceder por merge no PAP muda o manifesto
+# sem tocar em documentacao.
+ATOS_EXTERNOS = (
+    ("msg_ler", "mensagem", DOM_MENSAGERIA, "caixa:{eu}",
+     "GET /msg", "le a propria caixa; so o que chegou desde a ultima leitura"),
+    ("msg_enviar", "mensagem", DOM_MENSAGERIA, "caixa:claudinho-IA",
+     "POST /msg", "manda recado para claudinho-IA (Elias Elefante)"),
+    ("rag_buscar", "acervo", "plataforma-acervo", "acervo:firma/*",
+     "-", "leitura do acervo de trabalho — concessao nomeada, ainda nao concedida"),
+)
+
+
+def _acoes_permitidas(quem: str, est: dict) -> list:
+    from pdp import Recurso, Sujeito, decide
+    atrib = (est["sujeitos"] or {}).get(quem) or {}
+    s = Sujeito(id=quem, natureza=atrib.get("natureza"),
+                papeis=tuple(atrib.get("papeis") or ()),
+                dominios=tuple(atrib.get("dominios") or ()),
+                habilitacao=atrib.get("habilitacao", "publico"))
+    fora = []
+    for acao, tipo, dom, molde, como, oque in ATOS_EXTERNOS:
+        alvo = molde.format(eu=quem)
+        d = decide(s, acao, Recurso(tipo=tipo, id=alvo, dominio=dom), est["politica"])
+        if d.permitido:
+            fora.append({"acao": acao, "como": como, "sobre": alvo, "o_que_faz": oque})
+    return fora
+
+
+async def _sessao_abrir(req):
+    """Abertura de sessao de quem nao e cadeira. O equivalente de `monta_sessao`,
+    pela superficie que o externo alcanca — e com o catalogo de acoes resolvido do
+    token, nao escrito a mao (docs/fronteira-do-harness.md)."""
+    ident = _ident_req(req)
+    quem = ident.get("sujeito", "-")
+    est = _carrega_politica()
+    if est.get("erro"):
+        return JSONResponse({"erro": "politica de acesso indisponivel",
+                             "detalhe": est["erro"]}, status_code=503)
+    if not (est["sujeitos"] or {}).get(quem):
+        _audit(tool="sessao", evento="pep_negou", regra="projecao", sujeito=quem)
+        return JSONResponse(
+            {"erro": f"sujeito {quem!r} nao tem atributos declarados — nao abre sessao",
+             "regra": "projecao"}, status_code=403)
+
+    pac = {"sujeito": quem, "acoes": _acoes_permitidas(quem, est)}
+
+    pf = PERSONAS / f"persona-{quem}.md"
+    if pf.is_file():
+        pac["persona"] = {"path": str(pf), "content": pf.read_text(encoding="utf-8")}
+    else:
+        pac["persona"] = {"ausente": True, "path": str(pf),
+                          "aviso": "persona ainda nao escrita (RH). Ausencia declarada, "
+                                   "nao omissao: opere pelo que o manifesto e a caixa dizem."}
+
+    mf = PF_HARNESS / "tool-manifest/EXTERNO.md"
+    pac["manifesto"] = ({"path": str(mf), "content": mf.read_text(encoding="utf-8")}
+                        if mf.is_file() else {"ausente": True, "path": str(mf)})
+
+    pac["memoria"] = _memoria(quem)
+    try:
+        f = _fila_mod()
+        rc = f.r_conn()
+        f.garante_grupo(rc, quem)
+        novas, no_historico = f.conta_novas(rc, quem)
+        pac["fila"] = {"caixa": f"caixa:{quem}", "novas": novas,
+                       "no_historico": no_historico,
+                       "nota": "corpo por GET /msg — abrir sessao nao consome a caixa"}
+    except Exception as e:                                  # noqa: BLE001
+        pac["fila"] = {"indisponivel": True, "erro": f"{type(e).__name__}: {e}"}
+
+    _audit(tool="sessao", evento="sessao_aberta", sujeito=quem,
+           acoes=len(pac["acoes"]), persona_ausente=pac["persona"].get("ausente", False))
+    return JSONResponse(pac)
+
+
+async def _sessao_encerrar(req):
+    """Fechamento da fita: a nota que a proxima precisa saber. Substitui, nao acumula
+    — mesma classe `mem` da mesa das cadeiras (arq:0041)."""
+    ident = _ident_req(req)
+    quem = ident.get("sujeito", "-")
+    est = _carrega_politica()
+    if est.get("erro") or not (est["sujeitos"] or {}).get(quem):
+        return JSONResponse({"erro": "sujeito sem atributos declarados"}, status_code=403)
+    try:
+        corpo = json.loads(await req.body() or b"{}")
+    except ValueError:
+        return JSONResponse({"erro": "corpo nao e JSON"}, status_code=400)
+    nota = (corpo.get("nota") or "").strip()
+    if not nota:
+        return JSONResponse({"erro": "campo obrigatorio: nota"}, status_code=400)
+    r = await anyio.to_thread.run_sync(_anota_mesa, quem, nota)
+    _audit(tool="sessao", evento="fita_encerrada", sujeito=quem, bytes_nota=len(nota),
+           ok=r.get("ok"))
+    return JSONResponse(r, status_code=200 if r.get("ok") else 500)
+
+
+def _anota_mesa(quem: str, nota: str) -> dict:
+    """Pelo verbo `mesa`, nunca por cliente redis proprio: segunda implementacao da
+    mesma regra diverge em silencio (mesma razao de `_memoria`)."""
+    try:
+        proc = subprocess.run([str(RAIZ / "bin" / "mesa"), "anota", quem],
+                              input=nota, capture_output=True, text=True, timeout=15,
+                              env={**os.environ, "PF_CADEIRA": quem})
+        if proc.returncode == 0:
+            return {"ok": True, "slot": quem, "saida": proc.stdout.strip()}
+        return {"ok": False, "erro": (proc.stderr or proc.stdout).strip()[:300]}
+    except (OSError, subprocess.SubprocessError) as e:
+        return {"ok": False, "erro": f"{type(e).__name__}: {e}"}
+
+
 async def _msg_enviar(req):
     ident = _ident_req(req)
     try:
@@ -1054,6 +1166,8 @@ app.router.routes.append(Route("/authorize", _authorize))
 app.router.routes.append(Route("/token", _token, methods=["POST", "GET"]))
 app.router.routes.append(Route("/.well-known/oauth-protected-resource", _prm))
 app.router.routes.append(Route("/.well-known/oauth-protected-resource/mcp", _prm))
+app.router.routes.append(Route("/sessao", _sessao_abrir))
+app.router.routes.append(Route("/sessao/encerrar", _sessao_encerrar, methods=["POST"]))
 app.router.routes.append(Route("/msg", _msg_enviar, methods=["POST"]))
 app.router.routes.append(Route("/msg", _msg_ler, methods=["GET"]))
 app.add_middleware(BearerAuth)
