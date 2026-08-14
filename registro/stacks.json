@@ -67,6 +67,16 @@
       "critico": false,
       "_nota": "compose existe mas NAO e o que roda: agregador e tela sao units systemd --user (deploy/harness/systemd/), porque os verbos do host nao sobrevivem a containerizacao.",
       "segredos": []
+    },
+    "jaiminho": {
+      "compose": "~/AI/platafirma-harness/jaiminho/docker-compose.yml",
+      "repo": "platafirma-harness",
+      "papel": "corpo do colaborador externo Jaiminho: fala com a API do Google e com o ops-server pelo client proprio no realm",
+      "critico": false,
+      "_nota": "rede bridge propria, sem alcance ao loopback do host — o Valkey da malha e inalcancavel de dentro (medido em 14/08/2026). Sem rota no tunel: nao e superficie publica.",
+      "segredos": [
+        ".env"
+      ]
     }
   },
   "_fora_do_registro": {
