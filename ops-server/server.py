@@ -204,6 +204,80 @@ def _quem() -> dict:
     return {}
 
 
+# --- PEP: ponto de obediencia da politica de acesso (seg:0008, seg:0009) -----
+# Ate 13/08/2026 este servidor validava a ASSINATURA do token e nada mais: quem
+# tivesse JWT do realm chamava run_command como @USER@, porque `_quem()` so
+# alimentava a auditoria. O PDP e biblioteca embarcada — entra pedido, sai decisao,
+# sem rede e sem estado; obedecer e trabalho daqui.
+#
+# FALHA DE CARGA NEGA. Politica ilegivel e defeito nosso, nao autorizacao: o
+# caminho de volta e a instancia anterior do ops, nao um servidor que libera tudo
+# porque nao conseguiu ler a regra.
+PF_HARNESS = Path(os.environ.get("PF_HARNESS", RAIZ / "platafirma-harness"))
+PDP_DIR = PF_HARNESS / "politica-acesso"
+_pdp: dict = {"carimbo": None, "politica": None, "sujeitos": None, "erro": "nao carregada"}
+
+
+def _carrega_politica() -> dict:
+    """PAP e projecao de sujeito, relidos quando o mtime de um dos dois muda.
+
+    Merge no PAP passa a valer sem restart — e o que torna `acesso conceder` um ato
+    de deploy leve em vez de janela de manutencao."""
+    pol_f, suj_f = PDP_DIR / "politica.yaml", PDP_DIR / "sujeitos.yaml"
+    try:
+        carimbo = (pol_f.stat().st_mtime_ns, suj_f.stat().st_mtime_ns)
+    except OSError as e:
+        _pdp.update(carimbo=None, politica=None, sujeitos=None,
+                    erro=f"politica ilegivel: {e}")
+        return _pdp
+    if _pdp["carimbo"] == carimbo:
+        return _pdp
+    try:
+        if str(PDP_DIR) not in sys.path:
+            sys.path.insert(0, str(PDP_DIR))
+        import yaml
+        from pdp import Politica
+        pol = Politica.de_arquivo(pol_f)
+        suj = (yaml.safe_load(suj_f.read_text(encoding="utf-8")) or {}).get("sujeitos") or {}
+        _pdp.update(carimbo=carimbo, politica=pol, sujeitos=suj, erro=None)
+    except Exception as e:                                  # noqa: BLE001
+        _pdp.update(carimbo=carimbo, politica=None, sujeitos=None,
+                    erro=f"{type(e).__name__}: {e}")
+    return _pdp
+
+
+def _autoriza(tool: str, acao: str, tipo: str, alvo: str, dominio: str,
+              ident: dict | None = None) -> dict | None:
+    """None = pode seguir. dict = negativa, ja auditada, pronta para devolver.
+
+    `ident` so se passa nas rotas HTTP: dentro de tool o contexto do FastMCP e a
+    unica fonte honesta (mesma razao de `_quem`)."""
+    est = _carrega_politica()
+    quem = (ident or _quem()).get("sujeito") or "-"
+    if est.get("erro"):
+        _audit(tool=tool, evento="pep_indisponivel", motivo=est["erro"], sujeito=quem)
+        return {"erro": "politica de acesso indisponivel — nego por default",
+                "detalhe": est["erro"]}
+    from pdp import Recurso, Sujeito, decide
+    atrib = (est["sujeitos"] or {}).get(quem)
+    if not atrib:
+        _audit(tool=tool, evento="pep_negou", regra="projecao", sujeito=quem,
+               motivo="sujeito sem atributos declarados")
+        return {"erro": f"sujeito {quem!r} nao tem atributos em "
+                        "politica-acesso/sujeitos.yaml — o PDP nega por atributo ausente",
+                "regra": "projecao"}
+    s = Sujeito(id=quem, natureza=atrib.get("natureza"),
+                papeis=tuple(atrib.get("papeis") or ()),
+                dominios=tuple(atrib.get("dominios") or ()),
+                habilitacao=atrib.get("habilitacao", "publico"))
+    d = decide(s, acao, Recurso(tipo=tipo, id=alvo, dominio=dominio), est["politica"])
+    if d.permitido:
+        return None
+    _audit(tool=tool, evento="pep_negou", regra=d.regra, motivo=d.motivo, sujeito=quem,
+           por_atributo_ausente=d.por_atributo_ausente, alvo=alvo[:CMD_CAP])
+    return {"erro": f"negado pela politica de acesso: {d.motivo}", "regra": d.regra}
+
+
 mcp = FastMCP(
     OPS_NAME,
     transport_security=TransportSecuritySettings(enable_dns_rebinding_protection=False),
@@ -260,6 +334,10 @@ async def run_command(command: str, cwd: str = "", timeout: int = 120) -> dict:
     ao run_command que o criou, e se herdou o fd do pipe de stdout/stderr, trava o
     communicate() driblando o timeout declarado.
     """
+    negado = _autoriza("run_command", "run_command", "comando", command,
+                       "plataforma-runtime")
+    if negado:
+        return negado
     d = (RAIZ / cwd) if cwd else RAIZ
     timeout = max(1, min(timeout, 600))
     t0 = time.monotonic()
@@ -299,6 +377,9 @@ def read_file(path: str, offset: int = 0, max_bytes: int = 40000) -> dict:
     Truncagem sempre declarada: truncated/bytes_total/next_offset para paginar.
     Inexistente volta com erro preenchido, nunca exceção.
     """
+    negado = _autoriza("read_file", "read_file", "documento", path, "plataforma")
+    if negado:
+        return negado
     p = RAIZ / path
     bloqueio = _nega_fila(p, "read_file")
     if bloqueio:
@@ -320,6 +401,9 @@ def read_file(path: str, offset: int = 0, max_bytes: int = 40000) -> dict:
 def write_file(path: str, content: str) -> dict:
     """Cria ou substitui um arquivo sob @ROOT@ (path relativo à raiz),
     criando diretórios intermediários. Conteúdo é o arquivo INTEIRO."""
+    negado = _autoriza("write_file", "write_file", "documento", path, "plataforma")
+    if negado:
+        return negado
     p = RAIZ / path
     bloqueio = _nega_fila(p, "write_file")
     if bloqueio:
@@ -727,6 +811,10 @@ async def monta_sessao(cadeira: str = "", atualizar: bool = True) -> dict:
     Persona sem linha `FERRAMENTAL:` devolve `manifesto.ausente` com aviso explícito
     — hoje é o caso de claudinha-osint. Ausência declarada, nunca omissão silenciosa.
     """
+    negado = _autoriza("monta_sessao", "monta_sessao", "documento",
+                       f"sessao:{cadeira or '-'}", "plataforma")
+    if negado:
+        return negado
     t0 = time.monotonic()
     r = await anyio.to_thread.run_sync(_montar, cadeira, atualizar)
     _audit(tool="monta_sessao", cadeira=cadeira, atualizar=atualizar,
@@ -858,6 +946,84 @@ async def _token(req):
     return RedirectResponse(destino, status_code=307)
 
 
+# --- Canal mediado da colaboracao externa (card 344, seg:0009) ---------------
+# O Jaiminho fala com claudinho-IA DENTRO da malha msg — mesmo broker, mesmo
+# envelope, mesma retencao —, mas nao recebe credencial do Valkey e nao alcanca
+# tool nenhuma. Estas duas rotas sao a superficie inteira dele: o PEP valida o JWT,
+# consulta o PDP e escreve na caixa EM NOME dele. Quem obedece e este servidor;
+# o broker nunca ve o externo.
+FILA_BIN = PF_HARNESS / "bin"
+
+
+def _fila_mod():
+    if str(FILA_BIN) not in sys.path:
+        sys.path.insert(0, str(FILA_BIN))
+    import fila_streams
+    return fila_streams
+
+
+def _ident_req(req) -> dict:
+    """Mesma cadeia do middleware: JWT do realm, ou rota de emergencia enquanto vigente."""
+    header = req.headers.get("authorization", "")
+    ident = _sujeito_do_jwt(header)
+    if not ident and _estatico_vigente() and _token_ok(
+            header, req.query_params.get("token", ""), OPS_AUTH_TOKEN):
+        ident = {"sujeito": OPS_USER, "sub": "-", "azp": "token-estatico"}
+    return ident
+
+
+async def _msg_enviar(req):
+    ident = _ident_req(req)
+    try:
+        corpo = json.loads(await req.body() or b"{}")
+    except ValueError:
+        return JSONResponse({"erro": "corpo nao e JSON"}, status_code=400)
+    para = (corpo.get("para") or "").strip()
+    tipo = (corpo.get("tipo") or "").strip()
+    if not para or not tipo or not (corpo.get("corpo") or "").strip():
+        return JSONResponse(
+            {"erro": "campos obrigatorios: para, tipo, assunto, corpo"}, status_code=400)
+
+    negado = _autoriza("msg_enviar", "msg_enviar", "mensagem", f"caixa:{para}",
+                       "plataforma-mensageria", ident=ident)
+    if negado:
+        return JSONResponse(negado, status_code=403)
+
+    f = _fila_mod()
+    if tipo not in f.TIPOS_VALIDOS:
+        return JSONResponse({"erro": f"tipo invalido: {tipo}",
+                             "validos": sorted(f.TIPOS_VALIDOS)}, status_code=400)
+    de = ident.get("sujeito", "-")
+    rc = f.r_conn()
+    msgid = f.gerar_msgid(de, {m["msgid"] for m in f.frias(rc, para)})
+    rc.xadd(f.stream_key(para), {
+        "id": msgid, "de": de, "tipo": tipo,
+        "assunto": corpo.get("assunto", ""), "ref": corpo.get("ref", ""),
+        "responde": corpo.get("responde", ""), "corpo": corpo["corpo"],
+    })
+    _audit(tool="msg_enviar", evento="msg_enviada", sujeito=de, para=para,
+           tipo=tipo, msgid=msgid)
+    return JSONResponse({"ok": True, "msgid": msgid, "caixa": f"caixa:{para}"})
+
+
+async def _msg_ler(req):
+    """Le a PROPRIA caixa do chamador. Nao ha parametro de caixa por desenho: caixa
+    alheia nao se le por engano de query string."""
+    ident = _ident_req(req)
+    quem = ident.get("sujeito", "-")
+    negado = _autoriza("msg_ler", "msg_ler", "mensagem", f"caixa:{quem}",
+                       "plataforma-mensageria", ident=ident)
+    if negado:
+        return JSONResponse(negado, status_code=403)
+    f = _fila_mod()
+    rc = f.r_conn()
+    f.garante_grupo(rc, quem)
+    msgs = f.novas(rc, quem)
+    _audit(tool="msg_ler", evento="msg_lida", sujeito=quem, quantas=len(msgs))
+    return JSONResponse({"caixa": f"caixa:{quem}", "novas": len(msgs),
+                         "mensagens": msgs})
+
+
 app = mcp.streamable_http_app()
 app.router.routes.append(Route("/health", _health))
 app.router.routes.append(Route("/.well-known/oauth-authorization-server", _as_metadata))
@@ -867,4 +1033,6 @@ app.router.routes.append(Route("/authorize", _authorize))
 app.router.routes.append(Route("/token", _token, methods=["POST", "GET"]))
 app.router.routes.append(Route("/.well-known/oauth-protected-resource", _prm))
 app.router.routes.append(Route("/.well-known/oauth-protected-resource/mcp", _prm))
+app.router.routes.append(Route("/msg", _msg_enviar, methods=["POST"]))
+app.router.routes.append(Route("/msg", _msg_ler, methods=["GET"]))
 app.add_middleware(BearerAuth)

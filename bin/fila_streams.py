@@ -40,6 +40,24 @@ LEITOR = "sonda"
 GRUPO = "cadeira"
 TIPOS_VALIDOS = {"decisao", "resposta", "pedido", "minuta", "demanda", "handoff"}
 
+# Persona de classe externa (DMZ): tem caixa na malha, mas nao tem par livre. O
+# Jaiminho existe em .personas para ser destinatario VALIDO do Elias — sem isso o
+# `fila enviar` dele falharia na validacao —, e a allowlist e o que impede que estar
+# na lista signifique estar aberto as sete. Vale nos dois sentidos.
+PARES_EXCLUSIVOS = {"jaiminho": {"claudinho-IA"}}
+
+
+def so_par_permitido(de: str, para: str, json_mode: bool = False):
+    for a, b in ((para, de), (de, para)):
+        permitidos = PARES_EXCLUSIVOS.get(a)
+        if permitidos is not None and b not in permitidos:
+            msg = (f"{a} e colaboracao externa e so troca mensagem com "
+                   f"{', '.join(sorted(permitidos))} — canal exclusivo (card 344).")
+            if json_mode:
+                _falha_json(msg, 1)
+            sys.stderr.write(f"erro: {msg}\n")
+            sys.exit(1)
+
 REDIS_HOST = os.environ.get("FILA_REDIS_HOST", "127.0.0.1")
 REDIS_PORT = int(os.environ.get("FILA_REDIS_PORT", "6379"))
 
@@ -438,6 +456,7 @@ def cmd_enviar(rc, eu: str, args):
     # alta que o chamador digitou.
     args.destinatario = canoniza_persona(args.destinatario)
     de = canoniza_persona(de)
+    so_par_permitido(de, args.destinatario, _json_mode(args))
 
     corpo = sys.stdin.read()
     if not corpo.strip():

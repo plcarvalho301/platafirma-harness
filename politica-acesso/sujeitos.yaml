@@ -1,0 +1,41 @@
+# Projeção de sujeito — de quem o token diz ser, para o que o PDP precisa saber.
+#
+# INTERINO POR DESENHO. O lugar certo destes atributos é o token: o realm projeta
+# papel e domínio em claim, e o serviço lê. Enquanto o client é um só e compartilhado
+# pelas sete cadeiras (card 436), o token não carrega isso — e sem esta tabela o PEP
+# não teria como montar o Sujeito, logo negaria tudo por atributo ausente.
+#
+# CHAVE: `preferred_username` do JWT, ou o `sub` quando não há username. O que está
+# aqui foi medido no log de auditoria (~/AI/var/log/ops/), não suposto: em 13/08/2026
+# só dois sujeitos aparecem — `g48ufn` (OIDC, azp claudinho-mcp) e `claudinho` (rota
+# de emergência por token estático).
+#
+# DEFAULT: sujeito ausente desta tabela NÃO tem papel, e o PDP nega por atributo
+# ausente. Fail-closed é o ponto — acrescentar linha aqui é ato de concessão e passa
+# por merge, como qualquer regra do PAP.
+
+versao: 1
+
+sujeitos:
+
+  # O dono, por credencial própria no realm. `operador` porque é humano que responde
+  # pelo que faz (regra operador-plataforma), não cadeira.
+  g48ufn:
+    natureza: pessoa
+    papeis: [operador]
+    dominios: [plataforma]
+
+  # Rota de emergência: token estático, prazo declarado no server. Mesmo alcance do
+  # anterior porque é a mesma mão — é o dono quando o realm cai.
+  claudinho:
+    natureza: pessoa
+    papeis: [operador]
+    dominios: [plataforma]
+
+  # Colaboração externa em modelo DMZ (card 344, seg:0009). Lê acervo por concessão
+  # nomeada e fala pelo canal exclusivo com claudinho-IA. Não executa comando, não
+  # toca identidade — as três negativas duras do PAP pegam este papel.
+  jaiminho:
+    natureza: servico
+    papeis: [pesquisador-externo]
+    dominios: [plataforma-acervo, plataforma-mensageria]
