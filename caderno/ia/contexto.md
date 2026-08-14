@@ -15,7 +15,7 @@ aqui: desce a card, commit ou wiki. Corpo lido sob demanda (`mesa caderno contex
   são ambos 1024-d. Conferir o par (modelo, backend) em `index_meta`.
 
 ## Propriedade (dono, 10/08/2026)
-- O RAG é meu, ponta a ponta. claudinho-conhecimento é USUÁRIO do RAG, não dono de
+- O RAG é meu, ponta a ponta. claudinho-dados é USUÁRIO do RAG, não dono de
   parte dele: não se pede aceite, parecer nem validação a ele em nada do RAG —
   ingestão, trilho, ajuste, documentação de uso.
 - Vale contra o reflexo de tratar acervo↔RAG como remit compartilhado: o acervo é
