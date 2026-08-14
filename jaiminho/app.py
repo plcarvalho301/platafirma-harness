@@ -22,7 +22,7 @@ OPS = os.environ.get("OPS_URL", "https://ops.platafirma.org")
 CLIENT_ID = os.environ.get("JAIMINHO_CLIENT_ID", "")
 CLIENT_SECRET = os.environ.get("JAIMINHO_CLIENT_SECRET", "")
 GEMINI_KEY = os.environ.get("GEMINI_API_KEY", "")
-MODELO = os.environ.get("JAIMINHO_MODELO", "gemini-2.5-pro")
+MODELO = os.environ.get("JAIMINHO_MODELO", "gemini-3.1-pro-preview")
 GOOGLE = "https://generativelanguage.googleapis.com/v1beta"
 
 _tok = {"valor": None, "expira": 0}
