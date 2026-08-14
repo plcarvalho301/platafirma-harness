@@ -198,7 +198,16 @@ def _quem() -> dict:
     try:
         req = getattr(mcp.get_context().request_context, "request", None)
         if req is not None:
-            return _sujeito_do_jwt(req.headers.get("authorization", ""))
+            header = req.headers.get("authorization", "")
+            ident = _sujeito_do_jwt(header)
+            # A rota de emergencia tem de resolver AQUI tambem, e nao so no
+            # middleware: com o PEP ligado, sujeito vazio nega por atributo ausente,
+            # e a mao que volta quando o realm cai ficaria sem nenhuma tool. Medido
+            # no ensaio de 13/08/2026, antes de o realm precisar cair.
+            if not ident and _estatico_vigente() and _token_ok(
+                    header, req.query_params.get("token", ""), OPS_AUTH_TOKEN):
+                ident = {"sujeito": OPS_USER, "sub": "-", "azp": "token-estatico"}
+            return ident
     except Exception:                                       # noqa: BLE001
         pass
     return {}
@@ -973,13 +982,22 @@ async def _token(req):
 # tool nenhuma. Estas duas rotas sao a superficie inteira dele: o PEP valida o JWT,
 # consulta o PDP e escreve na caixa EM NOME dele. Quem obedece e este servidor;
 # o broker nunca ve o externo.
-FILA_BIN = PF_HARNESS / "bin"
+# Caminho proprio, nao derivado de PF_HARNESS: uma instancia que aponte PF_HARNESS
+# para um recorte do repo (persona e politica, sem `bin`) ficava sem o modulo da
+# fila e devolvia 500 sem dizer por que. Medido no ensaio de 13/08/2026.
+FILA_BIN = Path(os.environ.get("PF_BIN", RAIZ / "platafirma-harness/bin"))
 
 
 def _fila_mod():
+    """Levanta ModuleNotFoundError com o caminho tentado — quem chama devolve 503
+    nomeando o defeito, em vez de 500 nomeando nada."""
     if str(FILA_BIN) not in sys.path:
         sys.path.insert(0, str(FILA_BIN))
-    import fila_streams
+    try:
+        import fila_streams
+    except ImportError as e:
+        raise ModuleNotFoundError(
+            f"modulo da fila nao encontrado em {FILA_BIN} — aponte PF_BIN") from e
     return fila_streams
 
 
@@ -1122,7 +1140,12 @@ async def _msg_enviar(req):
     if negado:
         return JSONResponse(negado, status_code=403)
 
-    f = _fila_mod()
+    try:
+        f = _fila_mod()
+    except ModuleNotFoundError as e:
+        _audit(tool="msg_enviar", evento="malha_indisponivel", motivo=str(e))
+        return JSONResponse({"erro": "malha msg indisponivel", "detalhe": str(e)},
+                            status_code=503)
     if tipo not in f.TIPOS_VALIDOS:
         return JSONResponse({"erro": f"tipo invalido: {tipo}",
                              "validos": sorted(f.TIPOS_VALIDOS)}, status_code=400)
@@ -1148,7 +1171,12 @@ async def _msg_ler(req):
                        DOM_MENSAGERIA, ident=ident)
     if negado:
         return JSONResponse(negado, status_code=403)
-    f = _fila_mod()
+    try:
+        f = _fila_mod()
+    except ModuleNotFoundError as e:
+        _audit(tool="msg_ler", evento="malha_indisponivel", motivo=str(e))
+        return JSONResponse({"erro": "malha msg indisponivel", "detalhe": str(e)},
+                            status_code=503)
     rc = f.r_conn()
     f.garante_grupo(rc, quem)
     msgs = f.novas(rc, quem)
