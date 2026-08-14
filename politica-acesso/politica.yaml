@@ -101,7 +101,12 @@ regras:
   # NAO existe regra de permissao aqui por decisao: sem concessao escrita, o default
   # do PDP nega. Conceder e merge request neste arquivo, com o fundamento no Git.
   #
-  # Forma da regra de concessao, para quem for conceder (claudinho-IA em F8):
+  # QUEM CONCEDE: claudinho-TI, com autorizacao do dono no ato (decisao do dono,
+  # 13/08/2026). O ato de conceder e este merge request; quem faz merge e deploy do
+  # servico e quem o pratica. O fundamento escrito e o controle — nao o cracha de
+  # quem assina.
+  #
+  # Forma da regra de concessao:
   #
   #   - id: <sujeito>-le-<recorte>
   #     efeito: permite
