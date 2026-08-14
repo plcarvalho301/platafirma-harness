@@ -16,29 +16,34 @@ filhas, cada uma com o seu verbo.
 Cabeçalho e origem única não substituem isto. São como o verbo se declara e de
 onde ele vem; o mandato é **quantos** podem existir.
 
-Conta atual, por capacidade:
+Conta atual, reproduzida por `conferir verbo` a partir do próprio PATH:
 
-| Capacidade | Verbos hoje | Conforme | Saída |
-|---|---|---|---|
-| `trabalho` | 1 — `tarefas` | sim | — |
-| `mensagem` | 2 — `fila` (alias de `fila_streams.py`, não conta na régua) e `jaiminho` | sim | `jaiminho` serve a interlocução com colaborador externo; se a capacidade se partir, ele vai para a filha |
-| `expediente` | 1 — `monta-sessao` | sim | — |
-| `memoria` | 1 — `mesa` | sim | — |
-| `encerramento` | 1 — `encerrar` (alias: `descansar`) | sim | — |
-| `verificacao` | 1 — `conferir` | sim | `oscap-*` e `ssg-deriva` migram para `seguranca` ou saem da capacidade |
-| `conhecimento` | 6 | **não** | consolidar em `acervo <ato>`; `ragq` absorvido por `motor rag buscar` |
-| `acesso` | 2 | **não** | `kcadm` e `openssl-pqc` são invólucros de ferramenta de terceiro; candidatos a sair da espinha |
-| `infra` | 1 — `infra` | sim | `longjob` declarado órfão no mapa; `compose` sai para `deploy` |
-| `mudanca` | 0 — `deploy` a construir | não instanciada | absorve `infra compose` |
-| `incidente` | 0 | não instanciada | sem verbo e sem registro |
-| `ativo` | 0 — `config` a construir | não instanciada | filha `ativo-versao` fica em git, sem verbo |
+| Capacidade | Verbo | Conforme |
+|---|---|---|
+| `acesso` | `acesso` | sim |
+| `conhecimento` | `acervo` | sim |
+| `encerramento` | `descansar` (alias: `encerrar`) | sim |
+| `expediente` | `monta-sessao` | sim |
+| `incidente` | `sinal` | sim |
+| `infra` | `infra` | sim |
+| `memoria` | `mesa` | sim |
+| `mensagem` | `jaiminho` | sim |
+| `motor` | `motor` | sim |
+| `mudanca` | `deploy` | sim |
+| `organizacao` | `persona` | sim |
+| `politica` | `seg` | sim |
+| `trabalho` | `tarefas` | sim |
+| `verificacao` | `conferir` (alias: `conferir-servido`) | sim |
+| órfã | `longjob` e `ops-log-prune` | **não** |
 
-A conferência dessa tabela é mecânica: `conferir verbo` a reproduz do próprio PATH e
-sai 1 enquanto houver capacidade com verbo demais ou verbo sem capacidade declarada.
+`conferir verbo` sai 1 enquanto houver capacidade com verbo demais ou verbo sem
+capacidade declarada. Hoje a única divergência é a dupla órfã: `longjob` e
+`ops-log-prune` não têm capacidade no mapa, e o recorte cabe à mesa de
+arquitetura.
 
-Três das sete capacidades instanciadas estão conformes. As outras quatro têm
-verbo demais, e a escolha entre consolidar e partir é do dono da capacidade, com
-o recorte cabendo à mesa de arquitetura.
+`fila` é alias de `fila_streams.py` e não conta na régua — a capacidade
+`mensagem` é servida pelo verbo `jaiminho`, que fala com o colaborador externo.
+Partida a capacidade em filhas, cada verbo vai para a sua.
 
 ## Contrato de cabeçalho
 
@@ -46,7 +51,7 @@ Todo verbo da plataforma carrega, nas primeiras linhas do arquivo:
 
 ```
 # <nome> — <uma linha de propósito, em verbo ativo>
-# capacidade: <uma das 13 do mapa>
+# capacidade: <uma das do mapa da mesa>
 # dono: <cadeira>
 ```
 
@@ -62,39 +67,35 @@ Regras verificáveis, na ordem em que `conferir verbo` as aplica:
 5. Origem única: o arquivo mora no repo dono e chega ao host por symlink. Cópia
    não é forma válida de instalação.
 
+Forma extensa do BizBOK e contração valem as duas: `gestao-de-motores` e `motor`
+são o mesmo termo para a conferência.
+
 ## Verbos da plataforma
 
-| Verbo | Capacidade | Dono | Propósito | Origem |
-|---|---|---|---|---|
-| `tarefas` | `trabalho` | claudinho-TI | cliente do rastreador de tarefas | harness |
-| `fila` | `mensagem` | claudinho-TI (verbo com claudinho-IA) | caixa de mensagens entre personas | harness |
-| `jaiminho` | `mensagem` | claudinho-TI | fala com o colaborador externo Jaiminho, no container próprio dele | harness |
-| `monta-sessao` | `expediente` | claudinho-IA | contexto de abertura de uma cadeira, numa volta | harness |
-| `mesa` | `memoria` | claudinho-IA | memoria de trabalho da cadeira por chapeu; sub-ato `caderno` abre a duravel | harness |
-| `encerrar` | `encerramento` | claudinho-IA | fim de fita: memoria conferida contra o remit e fatos volateis medidos | harness |
-| `descansar` | `encerramento` | claudinho-IA | alias de `encerrar` — mesmo arquivo, um so verbo pela conta de arq:0037 | harness |
-| `acervo-status` | `conhecimento` | claudinho-conhecimento | estado do acervo por obra, nos cinco degraus | harness |
-| `acervo-get` | `conhecimento` | claudinho-conhecimento | baixa uma obra do acervo pelo título | só no host |
-| `acervo-pacote` | `conhecimento` | claudinho-conhecimento | sem cabeçalho — propósito não declarado | só no host |
-| `motor` | `gestao-de-motores` | claudinho-IA | o que cada motor serve e mede: `listar`, `<inst> buscar`, `<inst> ajuste` | absorveu `ragq` (10/08/2026) |
-| `rag.py` | `conhecimento` | claudinho-IA | sem cabeçalho — e diverge da cópia em repo | divergente |
-| `exporta-acervo-xlsx.py` | `conhecimento` | claudinho-conhecimento | sem cabeçalho — propósito não declarado | só no host |
-| `infra` | `infra` | claudinho-TI | estado e operação da infra local | harness |
-| `longjob` | pendurado | claudinho-TI | dispara trabalho longo como unit transiente | harness |
-| `seg` | `politica` | claudinho-seguranca | despachante do toolkit de segurança (`arq:0040`) | harness |
-| `conferir` | `verificacao` | claudinho-TI | compara declarado com servido, por classe de alvo | harness |
-| `oscap-casco` | `verificacao` | claudinho-seguranca | avaliação CIS via OpenSCAP | cópia |
-| `oscap-casco-falhas` | `verificacao` | claudinho-seguranca | lista as regras que falharam num log | cópia |
-| `ssg-deriva` | `verificacao` | claudinho-seguranca | regenera o datastream derivado do OpenSCAP | cópia |
-| `kcadm` | `acesso` | claudinho-seguranca | `kcadm.sh` do Keycloak, via contêiner | cópia |
-| `openssl-pqc` | `acesso` | claudinho-seguranca | openssl com oqsprovider (ML-KEM, ML-DSA, SLH-DSA) | cópia |
-| `ops-log-prune` | órfão | claudinho-TI | poda o log de operação por idade; cron diário | só no host |
+Todos com origem **harness** — symlink para `platafirma-harness/bin`, versionado.
+Medido por `conferir verbo` e `conferir procedencia` em 14/08/2026.
 
-Legenda de origem: **harness** = symlink para `platafirma-harness/bin`, versionado ·
-**cópia** = arquivo duplicado no host, idêntico ao repo por sorte, não por
-mecanismo · **só no host** = sem contraparte em repo nenhum · **divergente** =
-host e repo diferem. A origem **core** deixou de existir no #396: nenhum verbo
-resolve mais para `platafirma-core`, e `conferir procedencia` reprova se voltar.
+| Verbo | Capacidade | Dono | Propósito |
+|---|---|---|---|
+| `acervo` | `conhecimento` | claudinho-dados | opera o acervo: ingestão ponta a ponta, escada, obra, bancada e extrato |
+| `acesso` | `acesso` | claudinho-seguranca | opera o controle de acesso: concede, revoga, consulta e decide |
+| `conferir` | `verificacao` | claudinho-TI | compara o declarado com o servido, por classe de alvo |
+| `deploy` | `mudanca` | claudinho-TI | promove ao ar o que está declarado no compose de uma stack |
+| `descansar` | `encerramento` | claudinho-IA | fim de fita: confere a memória e mede os fatos voláteis |
+| `infra` | `infra` | claudinho-TI | estado e operação da infraestrutura local (contêiner, unit, timer) |
+| `jaiminho` | `mensagem` | claudinho-TI | fala com o colaborador externo Jaiminho, no container próprio dele |
+| `longjob` | órfã | claudinho-TI | dispara trabalho longo como unit transiente do systemd --user |
+| `mesa` | `memoria` | claudinho-IA | memória de trabalho da cadeira entre fitas, por chapéu; `caderno` abre a durável |
+| `monta-sessao` | `expediente` | claudinho-IA | contexto de abertura de uma cadeira, numa volta |
+| `motor` | `motor` | claudinho-IA | gestão de motores de decisão: o que um motor serve e mede |
+| `ops-log-prune` | órfã | claudinho-TI | poda o registro de operação por retenção declarada |
+| `persona` | `organizacao` | claudinha-gestao-estrategica | escrita compartimentada das personas da PlataFirma |
+| `seg` | `politica` | claudinho-seguranca | despachante do toolkit de segurança: avalia, deriva régua e repassa ferramenta |
+| `sinal` | `incidente` | claudinho-TI | coleta o estado de saúde dos serviços e escreve o arquivo de sinal |
+| `tarefas` | `trabalho` | claudinho-TI | cliente do rastreador de tarefas da PlataFirma |
+
+Aliases, que não contam na régua de `arq:0037`: `encerrar` (de `descansar`),
+`conferir-servido` (de `conferir`) e `fila` (de `fila_streams.py`).
 
 ## Ferramenta de terceiro
 
@@ -103,9 +104,9 @@ contrato de cabeçalho.
 
 ```
 age · age-keygen · cosign · ctop · dive · dockle · fd · gitleaks · grype
-hadolint · hurl · jwt · lnav · minisign · nvcc · oauth2c · opa · osv-scanner
-restic · rg · sops · step · syft · testssl.sh · trivy · trufflehog · uv · uvx · yq
-lynis
+hadolint · hurl · jwt · lnav · lynis · minisign · nvcc · oauth2c · opa
+osv-scanner · restic · rg · sops · step · syft · testssl.sh · trivy
+trufflehog · uv · uvx · yq
 ```
 
 ## Capacidades sem verbo
@@ -118,9 +119,16 @@ Do mapa de capacidades, seguem sem instância executável:
   hoje vaza pela fila.
 - `decisao` — sem verbo de lavrar nem de consultar.
 - `canal` — design system em git, sem verbo que o distribua aos canais.
+- `ativo` — item de configuração e seu estado declarado; `config` proposto, não
+  construído.
 
-## Pendências de origem
+## Pendências
 
-Doze dos dezoito verbos não têm origem declarada em repo: cinco existem só no
-host, cinco são cópia, um diverge e um mora em repo alheio à espinha. Perdida a
-máquina, perdem-se os cinco primeiros.
+- **Duas capacidades órfãs no PATH**: `longjob` e `ops-log-prune` declaram
+  `capacidade: orfa`, e é a única divergência que faz `conferir verbo` sair 1.
+- **Cabeçalho de `acervo` defasado**: declara `dono: claudinho-conhecimento`, cadeira
+  renomeada para `claudinho-dados` em 12/08/2026. A tabela acima traz o dono atual;
+  corrigir o arquivo é do dono da matéria.
+- **`oscap-casco`, `oscap-casco-falhas`, `ssg-deriva`, `kcadm` e `openssl-pqc`
+  saíram do PATH**, absorvidos pelo despachante `seg` (`arq:0040`). Não há mais
+  verbo por cópia nem por origem `core`: `conferir procedencia` reprova se voltar.
