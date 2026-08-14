@@ -131,6 +131,9 @@ def idade(seg):
     return f"{seg // 86400} d"
 
 
+TETO_CADERNO = 100
+
+
 def estado_memoria(alvo, rc):
     """Slots escritos x slugs declarados. Devolve (linhas, orfaos)."""
     linhas, orfaos = [], []
@@ -155,12 +158,20 @@ def estado_memoria(alvo, rc):
     if erro:
         linhas.append(f"  (aviso: {erro} — sem conferencia contra o remit)")
     cad = os.path.join(RAIZ, "platafirma-harness", "caderno", alvo.lower())
+    achou_caderno = False
     if os.path.isdir(cad):
         for f in sorted(x for x in os.listdir(cad) if x.endswith(".md")):
             slot = f[:-3]
+            achou_caderno = True
+            n = len(open(os.path.join(cad, f), errors="replace").read().splitlines())
+            marca = "  ÓRFÃO — slug não declarado na persona" if (
+                declarados is not None and slot not in declarados) else (
+                "  ACIMA DO TETO (100) — pode antes de acrescentar" if n > TETO_CADERNO else "")
             if declarados is not None and slot not in declarados:
                 orfaos.append(slot)
-                linhas.append(f"  caderno/{slot:<8} ÓRFÃO — slug não declarado na persona")
+            linhas.append(f"  caderno/{slot:<8} {n:>3} linhas{marca}")
+    if not achou_caderno:
+        linhas.append("  caderno vazio — nasce no primeiro delta, nunca de memoria")
     return linhas, orfaos
 
 
@@ -210,7 +221,19 @@ def ato_fita(args):
           "   DECIDIDO por outra cadeira, nao o tramite. Uma linha por decisao,\n"
           "   com quem decidiu. Carta ja superada pelo dossie nao entra.\n"
           "\n"
-          "2. triagem da memoria do Project — o host nao a alcanca; a tool e da sessao:\n"
+          "2. delta de caderno, por chapeu tocado nesta fita — OBRIGATORIO:\n"
+          "   `mesa caderno <chapeu>` e decida o delta. \"sem delta\" e resposta\n"
+          "   valida, mas tem de ser dita; silencio nao e.\n"
+          "   ENTRA so o que passa nos dois: continua verdadeiro depois que o\n"
+          "   assunto morrer, E a proxima fita pagaria para re-derivar.\n"
+          "   NAO ENTRA: fato de negocio (card/commit/wiki), estado de runtime\n"
+          "   (o instrumento mede), decisao de outra cadeira ou remit (canonico),\n"
+          "   o que vale para toda cadeira (TODA-CADEIRA/RH), conhecimento com\n"
+          "   validade (mesa, que expira junto).\n"
+          "   Entrada nova SUBSTITUI a que contradiz — o historico e o git.\n"
+          "   Acima de 100 linhas: pode antes de acrescentar.\n"
+          "\n"
+          "3. triagem da memoria do Project — o host nao a alcanca; a tool e da sessao:\n"
           "   a) memory_user_edits view\n"
           "   b) uma linha por edit, so um destes tres rotulos:\n"
           "      SUBSTRATO  monta_sessao, mesa, caderno, wiki ou rastreador ja serve\n"
