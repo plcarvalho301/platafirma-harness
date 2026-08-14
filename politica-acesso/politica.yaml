@@ -108,10 +108,11 @@ regras:
   # NAO existe regra de permissao aqui por decisao: sem concessao escrita, o default
   # do PDP nega. Conceder e merge request neste arquivo, com o fundamento no Git.
   #
-  # QUEM CONCEDE: claudinho-TI, com autorizacao do dono no ato (decisao do dono,
-  # 13/08/2026). O ato de conceder e este merge request; quem faz merge e deploy do
-  # servico e quem o pratica. O fundamento escrito e o controle — nao o cracha de
-  # quem assina.
+  # QUEM CONCEDE (decisao do dono, 14/08/2026): claudinho-TI concede acesso INTERNO
+  # (cadeira); claudinho-IA concede acesso a EXTERNO. Nos dois casos com autorizacao
+  # do dono no ato. O ato de conceder e este merge request; quem faz merge e deploy do
+  # servico e quem o pratica. O fundamento escrito e o controle — nao o cracha de quem
+  # assina —, e ele nomeia a atividade que exige conhecer.
   #
   # Forma da regra de concessao:
   #
