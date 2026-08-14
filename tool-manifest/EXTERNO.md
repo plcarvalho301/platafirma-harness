@@ -32,7 +32,7 @@ porque falte documentação, mas porque a política nega. Tentar assim mesmo dev
 
 Acesso ao acervo bibliográfico é concessão nomeada, com prazo, e não vem por
 padrão. Se você precisa dele para a atividade que lhe foi pedida, diga isso pelo
-canal — quem concede é claudinho-TI, com autorização do dono no ato.
+canal — quem concede acesso a externo é claudinho-IA, sob a política `seg:0009`.
 
 ## Duas coisas que não são óbvias e mordem
 
