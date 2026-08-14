@@ -40,6 +40,10 @@ Em `tool-manifest/TODA-CADEIRA.md`, comum a todas as cadeiras. Não se replica a
 ## Por domínio — ponteiro, não manual
 
 ```
+falar com o Jaiminho            : jaiminho perguntar "<texto>"   | continuar, estado, login, logs
+                                  colaborador externo no container proprio; Antigravity CLI
+                                  com a assinatura do dono, sem API paga. O que ele alcanca
+                                  e decisao do PEP, nunca flag do verbo
 pôr arquivo na fila do acervo   : platafirma-conhecimento/rag/scripts/acervo-drop
                                   degrau 0, fora do PATH; dono declarado: claudinho-TI
 entrada por arquivo / planilha  : acervo ingerir <raiz> | --planilha [x.ods]  [--apply]

@@ -1,0 +1,159 @@
+#!/usr/bin/env python3
+# jaiminho — fala com o colaborador externo Jaiminho, no container proprio dele.
+# capacidade: mensagem
+# dono: claudinho-TI
+# componente: jaiminho (Antigravity CLI + ponte MCP)
+"""jaiminho — interlocucao com o colaborador externo (card 344, seg:0009).
+
+O Jaiminho e um modelo do Google que roda DENTRO do container `jaiminho`:
+Antigravity CLI (`agy`) autenticado pela assinatura do dono — sem API paga — e
+uma ponte MCP local que injeta o token do realm do client L0R8OJ. Este verbo e
+so a mao que alcanca aquele container; nenhuma decisao de acesso mora aqui.
+
+O que o Jaiminho alcanca da plataforma nao se decide neste arquivo e sim no PEP
+do ops-server, que responde a cada chamada MCP dele. Aumentar o alcance dele e
+ato de concessao no PAP, nunca flag deste verbo.
+
+Atos:
+  perguntar "<texto>"   uma pergunta, sessao nova (corpo tambem por stdin)
+  continuar "<texto>"   retoma a ultima conversa dele
+  estado                conta autenticada, modelo, ponte e sessao na plataforma
+  login                 reabre o fluxo OAuth e imprime a URL para o dono
+  logs [n]              ultimas linhas do container
+
+Sem argumento, imprime isto.
+"""
+import json
+import re
+import subprocess
+import sys
+
+CONTAINER = "jaiminho"
+TRABALHO = "/home/jaiminho/trabalho"
+# Dentro do container ele e root do proprio mundo: sem shell no host, sem rede da
+# malha, sem credencial de cadeira. Por isso a aprovacao interativa de ferramenta
+# nao acrescenta seguranca aqui — ela custaria um TTY que este verbo nao tem.
+BASE = "cd {t}; agy --dangerously-skip-permissions".format(t=TRABALHO)
+
+
+def sh(cmd, timeout=600, entrada=None):
+    return subprocess.run(["docker", "exec", "-i", CONTAINER, "bash", "-lc", cmd],
+                          capture_output=True, text=True, timeout=timeout, input=entrada)
+
+
+def vivo():
+    r = subprocess.run(["docker", "inspect", "-f", "{{.State.Running}}", CONTAINER],
+                       capture_output=True, text=True)
+    return r.returncode == 0 and r.stdout.strip() == "true"
+
+
+def exige_container():
+    if not vivo():
+        sys.exit("jaiminho: container fora do ar — `deploy jaiminho up -d` "
+                 "(compose em platafirma-harness/jaiminho)")
+
+
+def texto_do_argumento(args):
+    junto = " ".join(args).strip()
+    if junto:
+        return junto
+    if not sys.stdin.isatty():
+        return sys.stdin.read().strip()
+    return ""
+
+
+def falar(args, continuar=False):
+    exige_container()
+    pergunta = texto_do_argumento(args)
+    if not pergunta:
+        sys.exit("jaiminho: sem pergunta — passe o texto como argumento ou por stdin")
+    flag = " -c" if continuar else ""
+    r = sh(f"{BASE}{flag} -p {json.dumps(pergunta)}")
+    saida = (r.stdout or "").strip()
+    if saida:
+        print(saida)
+    if r.returncode != 0:
+        erro = (r.stderr or "").strip()
+        if "Authentication required" in erro + saida:
+            sys.exit("jaiminho: sessao do Google expirou — rode `jaiminho login`")
+        sys.exit(f"jaiminho: agy saiu {r.returncode}\n{erro[:600]}")
+
+
+def estado():
+    exige_container()
+    ponte = sh("curl -s --max-time 20 127.0.0.1:8022/estado", timeout=60).stdout.strip()
+    try:
+        ponte = json.loads(ponte)
+    except ValueError:
+        ponte = {"erro": ponte[:200] or "ponte nao respondeu"}
+    conta = sh("agy -p 'responda apenas: pronto' 2>&1 | tail -3", timeout=180).stdout.strip()
+    autenticado = "Authentication required" not in conta
+    print(json.dumps({
+        "container": "no ar",
+        "autenticado_no_google": autenticado,
+        "ponte_mcp": ponte,
+        "resposta_de_prova": conta[:200] if autenticado else None,
+    }, ensure_ascii=False, indent=2))
+
+
+def login():
+    """Conduz o OAuth por tmux dentro do container: sem TTY o `agy` recusa
+    autenticar, e o prompt do codigo expira em 60 s se ninguem o segurar."""
+    exige_container()
+    sh("tmux kill-session -t login 2>/dev/null; "
+       f"tmux new-session -d -s login -x 200 -y 50 'cd {TRABALHO}; agy'", timeout=60)
+    sh("sleep 10; tmux send-keys -t login Enter", timeout=60)
+    tela = sh("sleep 8; tmux capture-pane -p -J -t login", timeout=60).stdout
+    url = re.search(r"https://accounts\.google\.com/o/oauth2/auth\?\S*?state=[A-Za-z0-9_-]+",
+                    tela.replace("\n", "").replace(" ", ""))
+    if not url:
+        sys.exit("jaiminho: nao achei a URL de autorizacao. Tela:\n" + tela[-800:])
+    print("Abra no navegador, autorize, e devolva o codigo com:\n"
+          "  jaiminho login-codigo <codigo>\n")
+    print(url.group(0))
+
+
+def login_codigo(args):
+    exige_container()
+    codigo = texto_do_argumento(args)
+    if not codigo:
+        sys.exit("jaiminho: passe o codigo devolvido pela pagina de autorizacao")
+    sh(f"tmux send-keys -t login {json.dumps(codigo)}; sleep 1; tmux send-keys -t login Enter",
+       timeout=60)
+    # Primeiro acesso ainda passa por tema, termos e confianca na pasta; Enter os
+    # atravessa com o default, e o default do consentimento de dados e NAO.
+    sh("for i in 1 2 3 4 5; do tmux send-keys -t login Enter; sleep 4; done", timeout=120)
+    tela = sh("tmux capture-pane -p -t login", timeout=60).stdout
+    print("\n".join(l for l in tela.splitlines() if l.strip())[:900])
+
+
+def logs(args):
+    n = args[0] if args else "40"
+    r = subprocess.run(["docker", "logs", "--tail", str(n), CONTAINER],
+                       capture_output=True, text=True)
+    print((r.stdout or "") + (r.stderr or ""))
+
+
+def main():
+    if len(sys.argv) < 2:
+        print(__doc__.strip())
+        return
+    ato, args = sys.argv[1], sys.argv[2:]
+    if ato == "perguntar":
+        falar(args)
+    elif ato == "continuar":
+        falar(args, continuar=True)
+    elif ato == "estado":
+        estado()
+    elif ato == "login":
+        login()
+    elif ato == "login-codigo":
+        login_codigo(args)
+    elif ato == "logs":
+        logs(args)
+    else:
+        sys.exit(f"jaiminho: ato desconhecido {ato!r}\n\n{__doc__.strip()}")
+
+
+if __name__ == "__main__":
+    main()

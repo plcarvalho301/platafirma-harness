@@ -21,7 +21,7 @@ Conta atual, por capacidade:
 | Capacidade | Verbos hoje | Conforme | Saída |
 |---|---|---|---|
 | `trabalho` | 1 — `tarefas` | sim | — |
-| `mensagem` | 1 — `fila` | sim | — |
+| `mensagem` | 2 — `fila` (alias de `fila_streams.py`, não conta na régua) e `jaiminho` | sim | `jaiminho` serve a interlocução com colaborador externo; se a capacidade se partir, ele vai para a filha |
 | `expediente` | 1 — `monta-sessao` | sim | — |
 | `memoria` | 1 — `mesa` | sim | — |
 | `encerramento` | 1 — `encerrar` (alias: `descansar`) | sim | — |
@@ -68,6 +68,7 @@ Regras verificáveis, na ordem em que `conferir verbo` as aplica:
 |---|---|---|---|---|
 | `tarefas` | `trabalho` | claudinho-TI | cliente do rastreador de tarefas | harness |
 | `fila` | `mensagem` | claudinho-TI (verbo com claudinho-IA) | caixa de mensagens entre personas | harness |
+| `jaiminho` | `mensagem` | claudinho-TI | fala com o colaborador externo Jaiminho, no container próprio dele | harness |
 | `monta-sessao` | `expediente` | claudinho-IA | contexto de abertura de uma cadeira, numa volta | harness |
 | `mesa` | `memoria` | claudinho-IA | memoria de trabalho da cadeira por chapeu; sub-ato `caderno` abre a duravel | harness |
 | `encerrar` | `encerramento` | claudinho-IA | fim de fita: memoria conferida contra o remit e fatos volateis medidos | harness |
