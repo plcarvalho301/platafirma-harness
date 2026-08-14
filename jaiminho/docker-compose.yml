@@ -9,16 +9,16 @@ services:
     env_file: [.env]
     # Porta so no loopback do host: quem chama e claudinho-TI ou, adiante, a ponte
     # Matrix. Nao ha rota no tunel — o Jaiminho nao e superficie publica.
-    ports: ["127.0.0.1:8021:8021"]
+    # A ponte MCP escuta so DENTRO do container (127.0.0.1:8022): quem a usa e o
+    # `agy` que roda aqui. Nao ha porta publicada — chamada vem por docker exec.
+    volumes: ["credenciais:/home/jaiminho/.antigravity", "trabalho:/home/jaiminho/trabalho"]
     # Rede default (bridge): alcanca a internet — auth/ops pela porta publica e a
     # API do Google. NAO alcanca 127.0.0.1 do host, logo nao alcanca o Valkey da
     # malha msg. Esse isolamento e o desenho, nao acidente (card 437).
     networks: [saida]
     security_opt: ["no-new-privileges:true"]
-    read_only: true
-    tmpfs: ["/tmp"]
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request;urllib.request.urlopen('http://127.0.0.1:8021/estado',timeout=5)"]
+      test: ["CMD", "python3", "-c", "import urllib.request;urllib.request.urlopen('http://127.0.0.1:8022/estado',timeout=8)"]
       interval: 60s
       timeout: 10s
       retries: 3
@@ -26,3 +26,7 @@ services:
 networks:
   saida:
     driver: bridge
+
+volumes:
+  credenciais:
+  trabalho:
