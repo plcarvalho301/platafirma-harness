@@ -1,0 +1,81 @@
+{
+  "_leia": "Registro de severidade de incidente da PlataFirma. Fonte do campo `severidade` do rastreador (prd_rastreador.md 4.2) e do alvo de tempo por grau. Grau se decide por PORTA FECHADA, nunca por adjetivo: a pergunta e sempre 'quem deixou de alcancar o que, e existe rota alternativa'. Quem classifica le so este arquivo. Nenhum relogio aqui e campo: os carimbos sao `detectado`, `em_mitigacao`, `mitigado`, `resolvido`, e todo tempo sai de subtracao na projecao. Alvo e compromisso de operacao, nao promessa contratual — estourar o alvo nao muda o grau, so aparece na medicao.",
+  "_capacidade": "incidente",
+  "_dono": "claudinho-TI",
+  "_delegacao": {
+    "seguranca": "Incidente com classe `seguranca` NAO usa esta escala. O conteudo daquela classe e de claudinho-seguranca; aqui fica so o mecanismo. Enquanto ele nao escrever, incidente de seguranca classifica-se por esta escala com a nota `escala-provisoria` no card."
+  },
+  "graus": {
+    "S1": {
+      "criterio": "O dono perde a porta, sem rota alternativa: nenhuma cadeira responde, ou a superficie pela qual ele fala com a plataforma esta fora.",
+      "teste": "O dono tenta usar e nao consegue por caminho nenhum.",
+      "exemplos_observaveis": [
+        "ops-mcp fora do ar — toda cadeira fica sem shell, arquivo e monta-sessao",
+        "tunel cloudflared caido — nenhuma superficie publicada responde",
+        "perda de dado sem ponto de retorno verificado"
+      ],
+      "alvo_deteccao_min": 5,
+      "alvo_mitigacao_min": 30,
+      "alvo_resolucao_h": 24
+    },
+    "S2": {
+      "criterio": "Uma superficie de trabalho esta fora ou degradada, e existe rota alternativa conhecida — o trabalho continua mais caro, nao para.",
+      "teste": "Quem usava consegue seguir por outro caminho, sem pedir decisao a ninguem.",
+      "exemplos_observaveis": [
+        "wiki fora — a cadeira ainda alcanca o repo por repo_read e clone local",
+        "rastreador fora — o card existe, so nao se edita pela tela",
+        "acervo sem recuperacao — a cadeira responde de fonte canonica, sem RAG"
+      ],
+      "alvo_deteccao_min": 15,
+      "alvo_mitigacao_min": 120,
+      "alvo_resolucao_h": 72
+    },
+    "S3": {
+      "criterio": "Funcao interna quebrada sem porta fechada: nenhuma pessoa nem cadeira perdeu acesso, mas algo declarado deixou de funcionar.",
+      "teste": "Ninguem descobriria pelo uso; so o instrumento acusa.",
+      "exemplos_observaveis": [
+        "verbo saindo diferente de zero por defeito proprio",
+        "timer ou job falhando em silencio",
+        "medicao inoperante — o instrumento existe e nao mede"
+      ],
+      "alvo_deteccao_h": 24,
+      "alvo_mitigacao_h": 72,
+      "alvo_resolucao_dias": 14
+    },
+    "S4": {
+      "criterio": "Defeito sem perda de servico: divergencia entre declarado e servido, ruido, ou risco que ainda nao virou efeito.",
+      "teste": "Nada deixou de funcionar; o que existe e uma diferenca medida.",
+      "exemplos_observaveis": [
+        "`conferir servico` acusando divergencia sem impacto de uso",
+        "unit em estado failed que ja nao serve nada",
+        "aviso repetido em log sem consequencia observavel"
+      ],
+      "alvo_deteccao_dias": 7,
+      "alvo_mitigacao_dias": 30,
+      "alvo_resolucao_dias": 90,
+      "_nota": "S4 e a fronteira com o balde de debito tecnico (card 434): nao virando efeito em 30 dias, sai de incidente e vira debito."
+    }
+  },
+  "regras_de_classificacao": [
+    "Grau se atribui na DETECCAO e nao se reescreve para caber no tempo gasto. Mudou o efeito, reclassifica com carimbo novo e o motivo escrito.",
+    "Na duvida entre dois graus, vale o MAIS GRAVE ate a mitigacao; depois dela, reclassifica com o que se soube.",
+    "Rota alternativa so conta se quem esta preso a conhece sem perguntar. Alternativa que exige decisao de terceiro nao e alternativa: e S1.",
+    "Duracao nao promove grau. Um S3 de tres dias segue S3 — o que ele estoura e o alvo, e e isso que a medicao mostra.",
+    "Incidente que fecha a porta de UMA cadeira e S2, nao S1: o dono ainda alcanca a plataforma pelas outras."
+  ],
+  "aceite_do_registro": {
+    "_leia": "Os dois casos reais que calibram a escala. Um terceiro que leia so este arquivo tem de chegar nestes graus.",
+    "casos": [
+      {
+        "caso": "Wiki fora do ar por 13 min (13/08/2026)",
+        "grau": "S2",
+        "porque": "Superficie fora com rota alternativa conhecida: repo_read e o clone local seguem servindo o mesmo conteudo canonico."
+      },
+      {
+        "caso": "Control-plane recriado do diretorio errado — ops-mcp em 200/CHDIR, 105 tentativas (10/08/2026)",
+        "grau": "S1",
+        "porque": "O conector caiu para TODAS as cadeiras ao mesmo tempo; sem ops-mcp nao ha shell, arquivo nem monta-sessao, e nao existe segunda porta."
+      }
+    ]
+  }
+}
