@@ -127,6 +127,24 @@ def _():
         assert formata.custo(p) <= formata.ORCAMENTO
 
 
+@prova("criterio 5 — tabela maior que o orcamento parte sem estourar o orcamento")
+def _():
+    # Este ramo nao tinha prova, e passava 28% acima do orcamento: somar a moldura
+    # ao miolo subestima, porque cabecalho e linhas renderizados JUNTOS produzem
+    # <table>/<thead>/<tbody> e um <tr><td> por linha. Medido em 15/08: 52 501 B
+    # contra 40 960. Tabela mais larga passa do teto de evento, e ai o Synapse
+    # recusa com M_TOO_LARGE e a resposta some da sala.
+    linhas = ["| coluna a | coluna b | coluna c |", "|---|---|---|"]
+    linhas += [f"| valor {i} muito longo aqui | outro {i} | terceiro {i} |" for i in range(1100)]
+    partes = formata.fatia("\n".join(linhas))
+    assert len(partes) > 1, "tabela de 63 KB deveria partir"
+    for i, p in enumerate(partes):
+        c = formata.custo(p)
+        assert c <= formata.ORCAMENTO, f"parte {i} custou {c} bytes, orcamento {formata.ORCAMENTO}"
+        assert p.startswith("| coluna a |"), f"pedaco {i} sem cabecalho: {p[:40]!r}"
+        assert "|---|---|---|" in p.split("\n")[1], f"pedaco {i} sem a separadora"
+
+
 @prova("tabela e atomica: nao parte entre cabecalho e corpo")
 def _():
     linhas = ["| a | b |", "|---|---|"] + [f"| v{i} | w{i} |" for i in range(20)]

@@ -142,33 +142,46 @@ def _parte_unidade_gigante(unidade: str, orcamento: int) -> list[str]:
         if miolo and miolo[-1].strip().startswith(marca):
             miolo = miolo[:-1]
         abre, fecha = f"{marca}{lingua}", marca
-        moldura = custo(f"{abre}\n{fecha}")
     elif len(linhas) >= 2 and _SEPARADOR_TABELA.match(linhas[1]):
         cabecalho, miolo = linhas[:2], linhas[2:]
         abre, fecha = "\n".join(cabecalho), ""
-        moldura = custo(abre)
     else:
         # Linha unica maior que o orcamento: nao ha quebra de linha onde cortar.
         # Corta em bruto, e e o unico corte deste modulo que nao respeita limite
         # de linha — porque nao existe limite de linha dentro dela.
         return _parte_em_bruto(unidade, orcamento)
 
-    pedacos: list[str] = []
-    atual: list[str] = []
-    for linha in miolo:
-        cand = atual + [linha]
-        if atual and moldura + custo("\n".join(cand)) > orcamento:
-            pedacos.append(atual)
-            atual = [linha]
-        else:
-            atual = cand
-    if atual:
-        pedacos.append(atual)
+    def monta(linhas_do_pedaco: list[str]) -> str:
+        corpo = "\n".join(linhas_do_pedaco)
+        return f"{abre}\n{corpo}\n{fecha}" if fecha else f"{abre}\n{corpo}"
 
-    saida = []
-    for p in pedacos:
-        corpo = "\n".join(p)
-        saida.append(f"{abre}\n{corpo}\n{fecha}" if fecha else f"{abre}\n{corpo}")
+    # Mede a peca MONTADA, e nao a moldura somada ao miolo. Somar subestima, e
+    # muito: renderizar cabecalho e linhas JUNTOS produz um <table> com <thead>,
+    # <tbody> e um <tr><td> por linha, que e bem mais que a soma dos dois HTMLs
+    # medidos em separado. Medido em 15/08 no ramo de tabela: partes de 52 501 B
+    # contra orcamento de 40 960 — 28% acima, e uma tabela mais larga passa do
+    # teto de evento e o Synapse recusa com M_TOO_LARGE.
+    saida: list[str] = []
+    restante = list(miolo)
+    while restante:
+        if custo(monta(restante)) <= orcamento:
+            saida.append(monta(restante))
+            break
+        baixo, alto = 1, len(restante)
+        while baixo < alto:
+            meio = (baixo + alto + 1) // 2
+            if custo(monta(restante[:meio])) <= orcamento:
+                baixo = meio
+            else:
+                alto = meio - 1
+        if baixo == 1 and custo(monta(restante[:1])) > orcamento:
+            # Uma linha so, ja com a moldura, maior que o orcamento inteiro. Nao
+            # ha corte de linha possivel: parte em bruto, que estraga a
+            # renderizacao mas nao entrega evento que o homeserver recusa.
+            saida.extend(_parte_em_bruto(monta(restante[:1]), orcamento))
+        else:
+            saida.append(monta(restante[:baixo]))
+        restante = restante[baixo:]
     return saida
 
 

@@ -170,7 +170,9 @@ def _():
     assert "| criterio | o que prova |" in linha["texto"], "a resposta nao chegou inteira"
     fita = con.execute("SELECT id_fita FROM fitas WHERE sala = '!s1:x'").fetchone()
     assert fita["id_fita"] == "fita-de-TI", "o id de fita nao voltou ao journal"
-    assert linha["reiniciada"] == 1, "fita nova deveria vir marcada como reiniciada"
+    assert linha["reiniciada"] == 0, (
+        "fita nova NAO e fita reiniciada: no verbo real `reiniciada` nasce False e so "
+        "vira True na retentativa depois de a fita se perder (bin/chat:504,517-525)")
 
 
 @prova("worker + duble: a segunda mensagem reusa a fita devolvida")
@@ -183,6 +185,16 @@ def _():
     linha = con.execute("SELECT * FROM jobs WHERE id = ?", (segundo,)).fetchone()
     assert linha["estado"] == journal.OK
     assert linha["reiniciada"] == 0, "abriu fita nova quando havia fita"
+
+
+@prova("fita perdida e reaberta volta marcada como reiniciada")
+def _():
+    caminho, con = novo_journal()
+    job = chega(con, corpo="DUBLE:reinicio")
+    roda_worker(caminho)
+    linha = con.execute("SELECT * FROM jobs WHERE id = ?", (job,)).fetchone()
+    assert linha["estado"] == journal.OK, linha["estado"]
+    assert linha["reiniciada"] == 1, "o worker perdeu o campo que o card 449 vai ler"
 
 
 @prova("estados estruturados: cota, erro e ok-sem-texto chegam como campo")
@@ -239,6 +251,18 @@ def _():
     # stdout — e o worker tem de virar isso em estado, nunca em giro pendurado.
     assert linha["estado"] == journal.ERRO, f"{linha['estado']} / {linha['detalhe']}"
     assert "sem JSON valido" in linha["detalhe"], linha["detalhe"]
+    # So isso acima nao distingue "o verbo recusou a cadeira" de "o verbo esta
+    # quebrado" — renomeie o ato `despachar` e a assercao continua verde. Chama o
+    # verbo com a MESMA argv que worker.py monta e exige o que so o caminho da
+    # cadeira produz: a recusa nomeada, com a lista de cadeiras validas.
+    direto = subprocess.run(
+        [VERBO_REAL, "despachar", "--cadeira", "nao-existe", "--fita", ""],
+        input="oi", capture_output=True, text=True, timeout=60,
+        env={**os.environ, "PF_RAIZ": os.path.expanduser("~/AI")},
+    )
+    assert "nao-existe" in direto.stderr and "cadeiras:" in direto.stderr, (
+        f"o verbo nao chegou a conferir a cadeira — argv ou ato mudou: {direto.stderr[:200]!r}")
+    assert " TI" in direto.stderr, f"a lista de cadeiras validas nao veio: {direto.stderr[:200]!r}"
 
 
 @prova("watchdog do worker: stream mudo vira timeout e mata o grupo")

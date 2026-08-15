@@ -25,6 +25,7 @@ import asyncio
 import json
 import os
 import shutil
+import sqlite3
 import subprocess
 import sys
 import tempfile
@@ -75,7 +76,18 @@ class Homeserver:
         self.enviados: list[dict] = []
         self.typing: list[tuple[str, int]] = []
         self.pedidos: list[str] = []
+        self.membros_por_sala: dict[str, set[str]] = {}
         self._seq = 0
+
+    def provisiona(self, sala: str) -> None:
+        """A sala como a fatia B-3 a cria: a cadeira dentro, o dono convidado, e o
+        bot @_pf FORA. Conceder ao bot o que o Synapse nega foi o que deixou a
+        prova verde por cima de um caminho morto."""
+        self.membros_por_sala[sala] = {USUARIO, DONO}
+
+    def _quem(self, p) -> str:
+        # O AS se faz passar pelo usuario por ?user_id=. Ausente = o bot.
+        return p.rel_url.query.get("user_id", f"@{'_pf'}:{DOMINIO}")
 
     def app(self) -> web.Application:
         app = web.Application()
@@ -87,6 +99,7 @@ class Homeserver:
         app.router.add_get("/_matrix/client/v1/media/download/{srv}/{id}", self.midia)
         app.router.add_post("/_matrix/client/v3/join/{sala}", self.entra)
         app.router.add_post("/_matrix/client/v3/rooms/{sala}/join", self.entra)
+        app.router.add_get("/_matrix/client/v3/joined_rooms", self.salas_do_usuario)
         app.router.add_route("*", "/{cauda:.*}", self.qualquer)
         return app
 
@@ -108,7 +121,22 @@ class Homeserver:
         return web.json_response({"event_id": f"$enviado{self._seq}"})
 
     async def membros(self, p):
-        return web.json_response({"joined": {DONO: {}, USUARIO: {}}})
+        """`/joined_members` exige estar na sala — o Synapse devolve 403 a quem nao
+        esta. O bot @_pf nao esta nas salas das cadeiras, entao esta rota e caminho
+        MORTO para ele, e a prova tem de mostrar isso em vermelho."""
+        sala, quem = p.match_info["sala"], self._quem(p)
+        if quem not in self.membros_por_sala.get(sala, set()):
+            return web.json_response(
+                {"errcode": "M_FORBIDDEN", "error": "You aren't a member of the room"},
+                status=403)
+        return web.json_response({"joined": {m: {} for m in self.membros_por_sala[sala]}})
+
+    async def salas_do_usuario(self, p):
+        """`/joined_rooms` NAO exige estar em sala nenhuma — e por ele que a
+        recepcao reconstroi o mapa sala->cadeira sem depender do evento de entrada."""
+        quem = self._quem(p)
+        return web.json_response({"joined_rooms": sorted(
+            s for s, m in self.membros_por_sala.items() if quem in m)})
 
     async def estado(self, p):
         """Estado da sala. A mautrix le `m.room.power_levels` e `m.room.create`
@@ -136,10 +164,15 @@ class Homeserver:
         return web.Response(body=PNG, content_type=tipo)
 
     async def entra(self, p):
-        """`join` tem de devolver o room_id: a mautrix o le direto do corpo, e
-        duble que devolve {} rebenta com KeyError dentro do ensure_joined —
-        longe da chamada que o disparou."""
-        return web.json_response({"room_id": p.match_info["sala"]})
+        """`join` devolve o room_id (a mautrix o le direto do corpo), mas so para
+        quem tem convite. A sala da B-3 e trusted_private_chat e o bot nao foi
+        convidado: para ele o Synapse responde 403."""
+        sala, quem = p.match_info["sala"], self._quem(p)
+        if quem not in self.membros_por_sala.get(sala, set()):
+            return web.json_response(
+                {"errcode": "M_FORBIDDEN", "error": "You are not invited to this room"},
+                status=403)
+        return web.json_response({"room_id": sala})
 
     async def qualquer(self, p):
         self.pedidos.append(f"{p.method} {p.path}")
@@ -263,6 +296,7 @@ async def principal() -> int:
         "CHAT_INTERVALO_EXPEDIDOR": "0.5",
         "CHAT_INTERVALO_TYPING": "2",
         "CHAT_INTERVALO_VIGIA": "3",
+        "CHAT_INTERVALO_RECONCILIA": "2",
         "CHAT_ANEXO_TETO": str(4 * 1024),
         "PF_RAIZ": os.environ.get("PF_RAIZ", "/home/claudinho/AI"),
         "CHAT_VERBO": f"{CHAT}/testes/verbo-de-mentira.py",
@@ -275,7 +309,7 @@ async def principal() -> int:
     try:
         async with ClientSession() as sessao:
             await espera_de_pe(sessao)
-            await corpo_da_prova(sessao, hs, fitas, pecas)
+            await corpo_da_prova(sessao, hs, fitas, pecas, journal_db)
     finally:
         pecas.para_tudo()
         await runner.cleanup()
@@ -301,12 +335,34 @@ async def espera_de_pe(sessao: ClientSession) -> None:
     raise SystemExit("o receptor nao subiu")
 
 
+def jobs_no_journal(caminho: str) -> int:
+    """Le o journal de fora, somente leitura — e a unica testemunha independente de
+    QUANDO a persistencia aconteceu."""
+    con = sqlite3.connect(f"file:{caminho}?mode=ro", uri=True)
+    try:
+        return con.execute("SELECT COUNT(*) FROM jobs").fetchone()[0]
+    finally:
+        con.close()
+
+
 async def corpo_da_prova(sessao: ClientSession, hs: Homeserver, fitas: str,
-                         pecas: "Pecas") -> None:
+                         pecas: "Pecas", journal_db: str) -> None:
     # --- giro completo, com formatacao ---
+    for nome in ("um", "dois", "tres", "quatro", "cinco", "seis", "sete", "oito",
+                 "nove", "dez", "onze"):
+        hs.provisiona(f"!{nome}:chat.teste")
+
     sala = "!um:chat.teste"
+    antes = jobs_no_journal(journal_db)
     codigo = await empurra(sessao, "t1", [entrada(sala), texto(sala, "quem e voce?")])
-    prova("a transacao e confirmada (ack-then-work)", codigo == 200, f"status {codigo}")
+    depois = jobs_no_journal(journal_db)
+    # ISTO e o ack-then-work, e conferir so o status 200 nao e: 200 e verde nas duas
+    # semanticas. Com o default da mautrix (synchronous_handlers=False) o handler vai
+    # para background task e no instante do 200 ainda NAO ha job — e o homeserver nao
+    # reentrega o que ja confirmou, entao morrer nessa janela perde a mensagem calada.
+    prova("ack-then-work: no instante do 200 o giro JA esta persistido",
+          codigo == 200 and depois == antes + 1,
+          f"status {codigo}, jobs {antes} -> {depois}")
 
     chegou = await hs.espera(sala, 1)
     prova("criterio 1/3 — a mensagem do dono vira resposta na sala", len(chegou) == 1,
@@ -421,12 +477,19 @@ async def corpo_da_prova(sessao: ClientSession, hs: Homeserver, fitas: str,
     prova("mensagem da propria cadeira nao vira giro (guarda de laco)",
           hs.na_sala(sala9) == [], str(hs.na_sala(sala9)))
 
-    # --- sala sem evento de entrada: cai no /joined_members ---
+    # --- sala cujo evento de entrada a recepcao NUNCA viu ---
+    # E o caso real: o provisionamento da B-3 e idempotente e nao reemite join, o
+    # homeserver nao reentrega transacao ja confirmada, e o journal mora num bind
+    # mount que se pode recriar. O bot nao esta na sala, entao /joined_members lhe
+    # responde 403 — o mapa so volta por /joined_rooms, cadeira a cadeira.
     sala10 = "!dez:chat.teste"
+    await asyncio.sleep(2.5)  # solta a trava de reconciliacao
     await empurra(sessao, "t11", [texto(sala10, "e sem ter visto a entrada?")])
     tarde = await hs.espera(sala10, 1)
-    prova("sala desconhecida descobre a cadeira pelos membros", len(tarde) == 1,
-          f"{len(tarde)} respostas")
+    prova("sala sem join visto: a reconciliacao por /joined_rooms acha a cadeira",
+          len(tarde) == 1, f"{len(tarde)} respostas")
+    prova("e a recepcao nao depende de entrar na sala como bot",
+          not any("/join/" in x for x in hs.pedidos), str(hs.pedidos[:5]))
 
     # --- criterio 14, na leitura do comentario 310 ---
     # Derrubada QUALQUER uma das duas pecas no meio do giro, o dono recebe OU a

@@ -192,9 +192,12 @@ def registra_chegada(
     dedupe gravado depois do enfileiramento deixaria a janela em que a reentrega
     vira segundo giro. Gravado antes, a reentrega colide na PK e nao produz nada.
 
-    Roda no caminho da transacao HTTP, antes do 200 — a mautrix 0.21.1 aguarda o
-    handler para responder. E o ack-then-work do card: o que fica dentro do ack e
-    so isto (uma escrita), e o giro inteiro fica do lado de la da fronteira.
+    Roda no caminho da transacao HTTP, antes do 200 — mas SO porque o receptor liga
+    `synchronous_handlers` na mao (recepcao.py). No default da mautrix 0.21.1 o
+    handler vai para background task e o 200 sai antes desta escrita; como o
+    homeserver nao reentrega o que ja confirmou, morrer nessa janela perderia a
+    mensagem em silencio. E o ack-then-work do card: dentro do ack fica so isto
+    (uma escrita), e o giro inteiro fica do lado de la da fronteira.
     """
     agora = _agora()
     con.execute("BEGIN IMMEDIATE")
