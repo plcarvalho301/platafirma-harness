@@ -33,6 +33,7 @@ import uuid
 RAIZ = os.environ.get("PF_RAIZ", os.path.expanduser("~/AI"))
 PERSONAS = os.path.join(RAIZ, "platafirma-harness", "personas")
 FITAS = os.path.join(RAIZ, "fitas")
+SKILLS = os.path.join(RAIZ, "platafirma-harness", "skills")
 
 # A costura de identidade e de chat/comum/cadeiras.py, e nao se reimplementa:
 # duas traducoes divergem, e a que diverge produz cadeira errada.
@@ -287,6 +288,64 @@ def claude_md_da_fita(cadeira, anexos):
     )
 
 
+def destinos_da_skill(caminho):
+    """`cadeiras:` do frontmatter da skill. Devolve None quando o campo falta.
+
+    FAIL-CLOSED de proposito: skill sem destino declarado NAO e plantada. O
+    contrario faria arquivo novo no repo vazar para toda cadeira sem ninguem
+    decidir — e a `osint` ja e a prova de que "toda skill serve toda cadeira" e
+    falso: a propria descricao dela manda nao usar em cadeira interna.
+    """
+    try:
+        with open(caminho, encoding="utf-8") as f:
+            linhas = f.read().split("\n")
+    except OSError:
+        return None
+    if not linhas or linhas[0].strip() != "---":
+        return None
+    for linha in linhas[1:]:
+        if linha.strip() == "---":
+            break
+        if linha.startswith("cadeiras:"):
+            bruto = linha.split(":", 1)[1].strip().strip("[]")
+            return [x.strip().strip("'\"").lower() for x in bruto.split(",") if x.strip()]
+    return None
+
+
+def planta_skills(dot, cadeira):
+    """Copia as skills do repo para o `.claude/skills/` da fita.
+
+    Sem isto a cadeira tem DUAS cabecas: a mesma persona carrega a skill quando
+    o dono fala pelo claude.ai e nao carrega quando fala pela sala do Matrix.
+    Mesmo repo, conhecimento diferente, e nada na tela denuncia a diferenca.
+
+    Copia, nao symlink: o `.claude/` da fita e reescrito a cada giro por
+    construcao, e link para fora do cwd depende de o motor resolver symlink —
+    que nao esta medido. Copia e determinstica e barata (markdown).
+    """
+    destino = os.path.join(dot, "skills")
+    shutil.rmtree(destino, ignore_errors=True)
+    plantadas = []
+    if not os.path.isdir(SKILLS):
+        return plantadas
+    alvo = cadeira.strip().lower()
+    for nome in sorted(os.listdir(SKILLS)):
+        origem = os.path.join(SKILLS, nome)
+        cadeiras = destinos_da_skill(os.path.join(origem, "SKILL.md"))
+        if not cadeiras:
+            continue
+        if "nenhuma" in cadeiras:
+            # Desligamento explicito, e por isso vence qualquer outro valor na
+            # linha. `osint` usa este: vive em ambiente isolado e a propria
+            # descricao dela manda nao usar em cadeira interna.
+            continue
+        if "todas" not in cadeiras and alvo not in cadeiras:
+            continue
+        shutil.copytree(origem, os.path.join(destino, nome))
+        plantadas.append(nome)
+    return plantadas
+
+
 def prepara_cwd(cadeira, modelo=""):
     """~/AI/fitas/<cadeira>/ com allowlist e anexos/. Criado pelo verbo se faltar —
     a recepcao grava anexo ali e nao tem por que saber montar o diretorio.
@@ -304,6 +363,7 @@ def prepara_cwd(cadeira, modelo=""):
         f.write("\n")
     with open(os.path.join(base, "CLAUDE.md"), "w") as f:
         f.write(claude_md_da_fita(cadeira, anexos))
+    planta_skills(dot, cadeira)
     return base
 
 

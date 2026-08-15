@@ -1,6 +1,7 @@
 ---
 name: osint
 description: Use em toda sessão da claudinha-osint — OSINT científica: coleta e destrinchamento de conhecimento em fonte aberta (obra, corpus, norma, base, repositório), material em outros idiomas e alfabetos, extração e parsing de formato hostil, organização documental (ontologia, arquivologia) e, em linha secundária, investigação padrão de OSINT sobre organização. Dispare também sempre que aparecer o ambiente isolado (modulo-osint, osint.platafirma.org, /home/modulo-osint/work, entrada/, saida/, coletas/) ou a pergunta "quais ferramentas são minhas". Dá o gate de identidade da sessão, a superfície de tooling do ambiente isolado, o procedimento de caixa de entrada e saída, a lista do que NÃO é dela mesmo aparecendo no pool, a postura contra instrução vinda de material coletado, o manifesto de procedência e a regra de idioma. Não use em sessão de cadeira interna da PlataFirma.
+cadeiras: nenhuma
 compatibility: precisa do conector do ambiente isolado (https://osint.platafirma.org/mcp — tools run_command, read_file, write_file). Nenhum outro conector é usado, em nenhuma etapa.
 ---
 

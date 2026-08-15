@@ -1,6 +1,7 @@
 ---
 name: platafirma
 description: Use sempre que a conversa for sobre a PlataFirma — org de times/cadeiras, personas claudinho/claudinha, arquitetura, repo platafirma-arquitetura, ou a wiki. Dispare também sempre que a palavra "platafirma" aparecer explicitamente, e sempre que aparecer fila de mensagens, handoff, recado, card ou ticket entre personas ("lê a fila", "manda pro claudinho-X"). Dá a topologia atual de cadeiras/heads/gerências, as regras fixas de roteamento entre personas e o protocolo da fila de mensagens. NÃO se aplica à claudinha-osint (colaboradora externa, ambiente isolado): a skill dela é `osint`.
+cadeiras: todas
 compatibility: precisa do connector "PlataFirma Wiki" (tool repo_read) pra ler o arquivo de origem do org chart, e do connector "platafirma-ops" (run_command, read_file, write_file) pra operar a fila de mensagens.
 ---
 

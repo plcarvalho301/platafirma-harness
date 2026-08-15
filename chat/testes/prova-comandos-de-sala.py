@@ -120,6 +120,51 @@ def prova_argv():
     bate("--effort repassado", pedido[pedido.index("--effort") + 1], "ultracode")
 
 
+def prova_plantio_de_skills():
+    """Skill do repo tem de chegar na fita — e so a que declarou destino."""
+    import importlib.machinery
+    import importlib.util
+
+    spec = importlib.util.spec_from_loader(
+        "chatverbo2",
+        importlib.machinery.SourceFileLoader(
+            "chatverbo2", os.path.join(os.path.dirname(RAIZ), "bin", "chat")
+        ),
+    )
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+
+    with tempfile.TemporaryDirectory() as tmp:
+        origem = os.path.join(tmp, "skills")
+        for nome, cab in (
+            ("universal", "cadeiras: todas"),
+            ("so-ti", "cadeiras: [TI]"),
+            ("isolada", "cadeiras: nenhuma"),
+            ("sem-campo", None),
+        ):
+            os.makedirs(os.path.join(origem, nome))
+            corpo = "---\nname: %s\n%s\n---\ncorpo\n" % (
+                nome, cab if cab else "description: x"
+            )
+            with open(os.path.join(origem, nome, "SKILL.md"), "w") as f:
+                f.write(corpo)
+        antigo, mod.SKILLS = mod.SKILLS, origem
+        try:
+            dot = os.path.join(tmp, ".claude")
+            os.makedirs(dot)
+            bate("plantio em IA", sorted(mod.planta_skills(dot, "IA")), ["universal"])
+            bate("plantio em TI", sorted(mod.planta_skills(dot, "TI")), ["so-ti", "universal"])
+            # replantio nao acumula: o .claude/ e reescrito a cada giro
+            bate("replantio limpa", sorted(mod.planta_skills(dot, "IA")), ["universal"])
+            bate(
+                "so o plantado existe em disco",
+                sorted(os.listdir(os.path.join(dot, "skills"))),
+                ["universal"],
+            )
+        finally:
+            mod.SKILLS = antigo
+
+
 def main():
     with tempfile.TemporaryDirectory() as tmp:
         con = journal.abre(os.path.join(tmp, "j.sqlite3"))
@@ -127,6 +172,7 @@ def main():
         prova_enum(con)
         prova_morte_na_rotacao(con)
         prova_argv()
+        prova_plantio_de_skills()
 
     if falhas:
         print("FALHOU:")
