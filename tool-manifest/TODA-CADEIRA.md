@@ -126,29 +126,24 @@ histórico de carga              : sar                  (única que responde "h�
 espaço                          : df -h · du -sh · ncdu
 ```
 
-## Capacidade e a mesma; o meio muda por superficie
+## As tres superficies servem os mesmos conectores
 
-A cadeira nao roda num lugar so. Pelo claude.ai ela tem conectores MCP; pela sala
-do Matrix roda em fita headless, com shell e allowlist e **nenhum MCP**. A
-capacidade tem de ser identica nas duas — o meio nao.
+A cadeira nao roda num lugar so: claude.ai, fita do chat (sala do Matrix) e Code
+em worktree da fabrica. **O comportamento e o mesmo nas tres**, e a equalizacao e
+pelo MEIO — as tres servem `platafirma-ops` e `platafirma-wiki`. Texto de cadeira
+nao se reescreve para caber em superficie mais pobre.
 
-- **Registro**: `tool-manifest/superficies.json` — capacidade, meio por superficie,
-  e o motivo quando a diferenca e deliberada.
-- **Conferencia**: `conferir superficie` mede capacidade sem meio, verbo declarado
-  e sumido, e texto que a fita carrega nomeando tool que so existe no MCP.
-- **Gate**: o `pre-commit` chama `conferir superficie --staged` — incremental, so
-  o que o commit acrescenta.
-- **Regra de escrita**: em persona, manifesto e skill, nomeie a CAPACIDADE, nunca
-  a tool. Nome de tool de busca do acervo nao existe na fita; "buscar no acervo"
-  existe nas duas. O gate nao abre excecao nem para exemplo — esta linha ja foi
-  reprovada uma vez por citar o nome.
-- **Divergencia deliberada de hoje**: `operar-host`. O ops-mcp nao passa pela
-  allowlist do motor, e servi-lo na fita daria caminho em volta do `deny`.
-
-> Passivo medido em 15/08/2026: 159 referencias a tool em texto que a fita
-> carrega, espalhadas pelos manifestos das cadeiras. Cada cadeira limpa o seu —
-> `conferir superficie` lista por arquivo. O gate impede a deriva NOVA; o passivo
-> sai por quem e dono do texto.
+- **Registro**: `tool-manifest/superficies.json` — superficie, conectores, tools
+  que cada conector serve, e o risco aceito quando ha.
+- **Onde se declara**: `.mcp.json` no cwd. Na fita, `prepara_cwd` escreve; nas
+  worktrees, ja existia — foi de la que o padrao veio.
+- **Conferencia**: `conferir superficie` mede conector prometido e nao servido,
+  capacidade sem meio, e texto citando tool que conector nenhum serve.
+- **Gate**: o `pre-commit` chama `conferir superficie --staged` — incremental.
+- **Risco aceito (dono, 15/08/2026)**: `run_command` nao passa pela allowlist do
+  motor, entao na fita ele contorna o `deny` do settings. Aceito porque a
+  assimetria custava mais: sem ele a cadeira na sala nao operava, e o texto dela
+  mandava operar. O `deny` segue valendo para a tool `Bash`.
 
 ## O verbo declara a capacidade que serve
 

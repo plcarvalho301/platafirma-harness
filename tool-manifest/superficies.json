@@ -2,99 +2,85 @@
   "_": [
     "Registro das SUPERFICIES em que uma cadeira e servida, e de como cada",
     "capacidade chega em cada uma. Existe porque a cadeira nao e uma so instancia:",
-    "a mesma persona atende pelo claude.ai (tools MCP) e pela sala do Matrix (fita",
-    "headless, shell com allowlist). Capacidade tem de ser a mesma nas duas; o MEIO",
-    "e que muda, e quando nao pode ser igual isso se declara aqui, com motivo.",
+    "a mesma persona atende pelo claude.ai, pela fita do chat e pelo Code em",
+    "worktree da fabrica. O COMPORTAMENTO tem de ser o mesmo nas tres.",
     "",
-    "Quem le: `conferir superficie`. Ele reprova texto de cadeira que nomeia um",
-    "meio indisponivel na superficie onde aquele texto e carregado — e e isso que",
-    "impede a deriva de voltar depois de limpa."
+    "Decisao do dono em 15/08/2026: equalizar pelo MEIO, nao pelo texto. As tres",
+    "servem os mesmos dois conectores; nenhum texto de cadeira precisa ser",
+    "reescrito para caber numa superficie mais pobre.",
+    "",
+    "Quem le: `conferir superficie`, chamado tambem pelo pre-commit com --staged."
   ],
 
   "superficies": {
     "claude.ai": {
-      "papel": "sessao do dono no app; a cadeira chega por Project e skills servidas",
-      "meio": "mcp",
-      "carrega": ["skills/*/SKILL.md"],
+      "papel": "sessao do dono no app",
+      "conectores": ["platafirma-ops", "platafirma-wiki"],
+      "onde_declara": "configuracao do app",
       "verificavel_do_host": false,
-      "porque": "os conectores sao configurados do lado do app; o host nao ve a lista"
+      "porque": "os conectores vivem do lado do app; o host nao ve a lista"
     },
     "fita": {
       "papel": "giro headless do chat, disparado pelo worker; sala do Matrix",
-      "meio": "shell-allowlist",
-      "carrega": [
-        "personas/persona-*.md",
-        "tool-manifest/*.md",
-        "skills/*/SKILL.md (as plantadas por prepara_cwd)"
-      ],
+      "conectores": ["platafirma-ops", "platafirma-wiki"],
+      "onde_declara": "~/AI/fitas/<cadeira>/.mcp.json, escrito por prepara_cwd",
       "verificavel_do_host": true,
-      "porque": "roda no mesmo host: a allowlist e os verbos de ~/AI/bin sao lisiveis daqui"
+      "porque": "roda no mesmo host: o .mcp.json e o settings sao lisiveis daqui"
+    },
+    "fabrica": {
+      "papel": "Code em worktree wt-<card>, sob card de claudinho-TI",
+      "conectores": ["platafirma-ops", "platafirma-wiki"],
+      "onde_declara": "wt-<card>/.mcp.json",
+      "verificavel_do_host": true,
+      "porque": "as worktrees vivem em ~/AI; foi daqui que o padrao veio"
+    }
+  },
+
+  "conectores": {
+    "platafirma-ops": {
+      "url": "https://ops.platafirma.org/mcp",
+      "token_no_giro": "PF_OPS_TOKEN",
+      "serve": ["run_command", "read_file", "write_file", "monta_sessao"]
+    },
+    "platafirma-wiki": {
+      "url": "https://mcp.platafirma.org/mcp",
+      "token_no_giro": "PF_WIKI_TOKEN",
+      "serve": [
+        "repo_read", "repo_tree", "repo_grep", "repo_sync",
+        "rag_search", "rag_facets",
+        "get_page", "edit_page", "search_pages", "list_pages", "query_cargo",
+        "upload_file", "platafirma_index"
+      ]
     }
   },
 
   "capacidades": {
     "operar-host": {
-      "claude.ai": "run_command (ops-mcp)",
-      "fita": "Bash allowlisted",
-      "divergencia_deliberada": true,
-      "motivo": [
-        "O ops-mcp e irrestrito por desenho e NAO passa pela allowlist do motor.",
-        "Servi-lo na fita daria a sala um caminho em volta do deny (sudo, docker,",
-        "systemctl, git push). A diferenca de meio aqui e a protecao, nao um buraco."
+      "meio": "run_command (platafirma-ops)",
+      "nas_tres": true,
+      "risco_aceito": [
+        "O ops-mcp NAO passa pela allowlist do motor. Na fita isso significa um",
+        "caminho em volta do `deny` do settings (sudo, docker, git push).",
+        "Aceito pelo dono em 15/08/2026: a assimetria custava mais que o risco —",
+        "sem run_command a cadeira na sala nao operava, e o texto dela mandava",
+        "operar. O deny do settings segue valendo para a tool Bash."
       ]
     },
-    "ler-repo": {
-      "claude.ai": "repo_read / repo_tree / repo_grep",
-      "fita": "Bash(cat|rg|grep|find)",
-      "divergencia_deliberada": false
-    },
-    "operar-fila": {
-      "claude.ai": "run_command sobre o verbo `fila`",
-      "fita": "Bash(fila:*)",
-      "divergencia_deliberada": false
-    },
-    "operar-tarefas": {
-      "claude.ai": "run_command sobre o verbo `tarefas`",
-      "fita": "Bash(tarefas:*)",
-      "divergencia_deliberada": false
-    },
-    "ler-e-escrever-wiki": {
-      "claude.ai": "get_page / edit_page / search_pages / query_cargo",
-      "fita": null,
-      "divergencia_deliberada": false,
-      "buraco": [
-        "Nao ha verbo de wiki em ~/AI/bin e a fita nao serve MCP nenhum.",
-        "A cadeira na sala NAO le nem escreve na wiki. Medido em 15/08/2026:",
-        "`mcp_servers: []` no system/init da fita de IA.",
-        "Fechar por verbo (`wiki`, entrando na allowlist) ou por .mcp.json com o",
-        "conector de conhecimento — que, ao contrario do ops-mcp, nao contorna",
-        "allowlist de shell. Decisao do dono, ainda nao tomada."
-      ]
-    },
-    "buscar-no-acervo": {
-      "claude.ai": "rag_search / rag_facets",
-      "fita": null,
-      "divergencia_deliberada": false,
-      "buraco": [
-        "`acervo` mede a escada e baixa obra, mas nao faz busca semantica.",
-        "Mesma decisao pendente de `ler-e-escrever-wiki`: o conector e o mesmo."
-      ]
-    }
+    "ler-repo": {"meio": "repo_read / repo_tree / repo_grep", "nas_tres": true},
+    "operar-fila": {"meio": "run_command sobre o verbo `fila`", "nas_tres": true},
+    "operar-tarefas": {"meio": "run_command sobre o verbo `tarefas`", "nas_tres": true},
+    "ler-e-escrever-wiki": {"meio": "get_page / edit_page / search_pages / query_cargo", "nas_tres": true},
+    "buscar-no-acervo": {"meio": "rag_search / rag_facets", "nas_tres": true}
   },
 
-  "lexico": {
+  "aposentadas": {
     "_": [
-      "Nome de tool que so existe no meio MCP. Aparecer em texto que a FITA carrega",
-      "e referencia quebrada: la aquele nome nao resolve, e a cadeira ou tenta",
-      "chamar o que nao existe, ou — pior — recusa a tarefa por achar que nao tem",
-      "a capacidade, quando tem por outro meio."
+      "Tool que os conectores JA serviram e nao servem mais. O gate reprova",
+      "citacao delas em texto de cadeira — e o caso real de deriva: a tool sai do",
+      "servidor e o texto continua mandando chamar.",
+      "LIMITE DECLARADO: tool que nunca existiu nao e detectavel daqui. O gate",
+      "compara contra o que o registro conhece, nao contra o universo."
     ],
-    "so_mcp": [
-      "repo_read", "repo_tree", "repo_grep", "repo_sync",
-      "rag_search", "rag_facets",
-      "get_page", "edit_page", "search_pages", "list_pages", "query_cargo",
-      "upload_file", "platafirma_index",
-      "run_command", "read_file", "write_file", "monta_sessao"
-    ]
+    "nomes": []
   }
 }

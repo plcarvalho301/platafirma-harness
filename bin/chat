@@ -230,6 +230,10 @@ def settings_da_fita(modelo=""):
     e a lista de negativas, identica a da sessao da cadeira."""
     return {
         "model": modelo or os.environ.get("PF_CHAT_MODELO", "opus"),
+        # Sem isto o motor lista o servidor do `.mcp.json` como "pending approval"
+        # e nao conecta: a aprovacao e interativa, e no giro headless nao ha quem
+        # aprove. Ficaria conector declarado e mudo.
+        "enableAllProjectMcpServers": True,
         "permissions": {
             "defaultMode": "bypassPermissions",
             "allow": [
@@ -364,7 +368,45 @@ def prepara_cwd(cadeira, modelo=""):
     with open(os.path.join(base, "CLAUDE.md"), "w") as f:
         f.write(claude_md_da_fita(cadeira, anexos))
     planta_skills(dot, cadeira)
+    serve_conectores(base)
     return base
+
+
+# O MESMO arquivo que as worktrees da fabrica ja usam. A fita nao tinha nenhum, e
+# o texto que ela carrega nomeia `run_command`, `repo_read`, `rag_search` — tools
+# que so existem por aqui. Equalizar o meio e mais barato e menos frageis que
+# reescrever o texto de sete cadeiras.
+CONECTORES = {
+    "platafirma-ops": ("https://ops.platafirma.org/mcp", "PF_OPS_TOKEN"),
+    "platafirma-wiki": ("https://mcp.platafirma.org/mcp", "PF_WIKI_TOKEN"),
+}
+
+
+def serve_conectores(base):
+    """`.mcp.json` no cwd da fita, so com o conector cujo token existe.
+
+    Escrever a entrada sem o token faria o motor anunciar um servidor que nunca
+    responde — pior que ausencia, porque a cadeira tentaria e culparia a rede.
+    """
+    tem = segredos_dos_conectores()
+    servidores = {
+        nome: {
+            "type": "http",
+            "url": url,
+            "headers": {"Authorization": "Bearer ${%s}" % var},
+        }
+        for nome, (url, var) in CONECTORES.items()
+        if tem.get(var)
+    }
+    caminho = os.path.join(base, ".mcp.json")
+    if not servidores:
+        if os.path.exists(caminho):
+            os.remove(caminho)
+        return []
+    with open(caminho, "w") as f:
+        json.dump({"mcpServers": servidores}, f, indent=2)
+        f.write("\n")
+    return sorted(servidores)
 
 
 def ambiente_do_giro(cadeira):
@@ -394,7 +436,39 @@ def ambiente_do_giro(cadeira):
     env["PATH"] = ":".join(caminhos + [p for p in atual if p and p not in caminhos])
     env["PF_CADEIRA"] = slug
     env["PF_RAIZ"] = RAIZ
+    env.update(segredos_dos_conectores())
     return env
+
+
+# Onde os tokens dos conectores vivem no host. Le o VERBO, nunca a cadeira: a
+# allowlist da fita nega `Read(//home/claudinho/.config/**)` de proposito, e essa
+# negativa continua valendo — quem abre o arquivo e o processo que monta o giro,
+# nao o modelo.
+FONTES_DE_SEGREDO = (
+    (os.path.expanduser("~/.config/ops/env"), "OPS_AUTH_TOKEN", "PF_OPS_TOKEN"),
+    (os.path.join(RAIZ, "deploy", "conhecimento", ".env"), "MCP_AUTH_TOKEN", "PF_WIKI_TOKEN"),
+)
+
+
+def segredos_dos_conectores():
+    """Tokens de `platafirma-ops` e `platafirma-wiki`, com os nomes que o
+    `.mcp.json` da casa espera.
+
+    Token ausente NAO levanta: o giro segue sem aquele conector, e o motor
+    reporta o servidor como indisponivel. Derrubar o giro inteiro por causa de
+    um conector transformaria falha de credencial em sala muda.
+    """
+    fora = {}
+    for caminho, chave, destino in FONTES_DE_SEGREDO:
+        try:
+            with open(caminho, encoding="utf-8", errors="replace") as f:
+                for linha in f:
+                    if linha.startswith(chave + "="):
+                        fora[destino] = linha.split("=", 1)[1].strip().strip("'\"")
+                        break
+        except OSError:
+            continue
+    return fora
 
 
 def monta_pacote(cadeira, env):
