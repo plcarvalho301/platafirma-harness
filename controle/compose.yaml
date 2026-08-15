@@ -21,7 +21,6 @@ services:
     environment:
       PF_RAIZ: /home/claudinho/AI
       AGREGADOR_ESTADO_PATH: /estado/estado.json
-      TOKENS_CSS_PATH: /home/claudinho/AI/platafirma-arquitetura/design/tokens.css
       PF_CADEIRA_TELA: claudinho-TI
       # HOME no container nao e /home/claudinho: sem isto o verbo procura
       # .personas em ~/AI/fila e nao acha. Antes isso desligava a validacao
@@ -31,6 +30,12 @@ services:
       FILA_REDIS_HOST: ${FILA_REDIS_HOST:-motor-msg}
       FILA_REDIS_PORT: ${FILA_REDIS_PORT:-6379}
     volumes:
+      # Este mount NAO serve mais pro front (card #476: pf-ui.css, pf-ui.js e as
+      # fontes vem COPIADOS pra dentro da imagem, arq:0056, e TOKENS_CSS_PATH
+      # morreu junto). Ele continua porque o resto da tela ainda depende dele:
+      # PF_RAIZ e FILA_RAIZ apontam pra ca, os verbos que as duas acoes chamam
+      # sao ~/AI/platafirma-harness/bin/{fila_streams.py,infra}, e /feito roda
+      # `git log` no clone. Remover isto quebraria acao e leitura, nao estilo.
       - /home/claudinho/AI:/home/claudinho/AI:ro
       - /run/user/1001/docker.sock:/run/user/1001/docker.sock
       - /usr/bin/docker:/usr/local/bin/docker:ro

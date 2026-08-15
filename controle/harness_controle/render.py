@@ -1,12 +1,19 @@
 # render — HTML por bloco, fiel às classes CSS dos wireframes de
 # claudinha-produto (design/wireframes/harness-{recepcao,cadeira}.html),
-# consumindo só design/tokens.css.
+# consumindo o release platafirma/ui (que traz os tokens dentro).
 # capacidade: expediente
 # dono: claudinho-TI
-"""Sem framework de front, sem build, sem bundler, sem JavaScript — igual aos
-wireframes. Revalidação de 60s é `<meta http-equiv="refresh">`, não fetch/poll;
-"Atualizar" é um link comum pro próprio path. As duas ações (despachar recado,
-reiniciar) são `<form method="post">` puros, POST-redirect-GET.
+"""Sem framework de front, sem build, sem bundler. Revalidação de 60s é
+`<meta http-equiv="refresh">`, não fetch/poll; "Atualizar" é um link comum pro
+próprio path. As duas ações (despachar recado, reiniciar) são
+`<form method="post">` puros, POST-redirect-GET.
+
+O único JavaScript da página é o `pf-ui.js` do release, que registra os
+primitivos `pf-*` como custom elements. Nada aqui usa esses primitivos ainda:
+a tela segue em HTML nu com as classes de `tela.css`, e trocar widget por
+widget é outro card (#476 só manda CONSUMIR o release). Carregar o módulo agora
+custa um script e prova o caminho: ou o artefato veio na imagem, ou nada
+responde.
 
 Princípio que governa cada função de render (spec §3): ausência de dado se
 desenha como ausência, nunca como saúde. `0` e `—` nunca colapsam.
@@ -16,11 +23,37 @@ from __future__ import annotations
 
 import html
 import time
+from pathlib import Path
 from typing import Any
 
-TOKENS_HREF = "/estatico/tokens.css"
-# Camada 2: tokens.css nao conhece classe de superficie; sozinho, renderiza HTML nu.
+# Camada 1 — o front da PlataFirma, copiado do release platafirma/ui para
+# dentro da imagem em tempo de build (arq:0056, ver Dockerfile). pf-ui.css ja
+# traz os tokens inteiros: NAO ha mais tokens.css, e nada mais aqui aponta para
+# platafirma-arquitetura. O diretorio e servido inteiro sob PF_UI_BASE porque o
+# proprio CSS pede as fontes por caminho relativo (./fontes/...).
+PF_UI_DIR = Path(__file__).resolve().parent / "estatico" / "pf-ui"
+PF_UI_BASE = "/estatico/pf-ui"
+PF_UI_CSS_HREF = f"{PF_UI_BASE}/pf-ui.css"
+PF_UI_JS_SRC = f"{PF_UI_BASE}/pf-ui.js"
+# Camada 2: os tokens nao conhecem classe de superficie; sozinhos, renderizam
+# HTML nu. tela.css vem DEPOIS de pf-ui.css, e nao esta em @layer nenhum — ou
+# seja, continua ganhando do que o release traz em camada.
 TELA_HREF = "/estatico/tela.css"
+
+
+def _versao_ui() -> str:
+    """Versao do release que veio na imagem, lida do versao.txt que o proprio
+    release carrega. Uma vez, no import: o arquivo e imutavel dentro da imagem,
+    e ler por requisicao so gastaria syscall. Sem o arquivo (clone de
+    desenvolvimento, sem COPY --from) diz “desconhecida” em vez de mentir uma
+    versao."""
+    try:
+        return (PF_UI_DIR / "versao.txt").read_text(encoding="utf-8").strip()
+    except OSError:
+        return "desconhecida"
+
+
+VERSAO_UI = _versao_ui()
 
 CLOUDFLARED_OAUTH2PROXY = {"cloudflared", "oauth2-proxy"}
 
@@ -95,8 +128,10 @@ def pagina(titulo: str, ativo: str, direita_html: str, corpo_html: str) -> str:
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta http-equiv="refresh" content="60">
 <title>{_esc(titulo)}</title>
-<link rel="stylesheet" href="{TOKENS_HREF}">
+<meta name="platafirma-ui" content="{_esc(VERSAO_UI)}">
+<link rel="stylesheet" href="{PF_UI_CSS_HREF}">
 <link rel="stylesheet" href="{TELA_HREF}">
+<script type="module" src="{PF_UI_JS_SRC}"></script>
 </head>
 <body>
 {_topo(ativo, direita_html)}

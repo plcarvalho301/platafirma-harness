@@ -5,7 +5,8 @@
 # dono: claudinho-TI
 """LOTE 3 do card #390. Starlette + uvicorn (mesmo stack de ops-server/
 osint-server em platafirma-core — precedente local, nao stack novo). Sem
-framework de front, sem build, sem JavaScript — mesma regua dos wireframes.
+framework de front e sem build: o front vem pronto do release platafirma/ui,
+copiado para dentro da imagem (arq:0056) e servido por /estatico/pf-ui/.
 
 Exclusao dura: cloudflared e oauth2-proxy nunca sao alvo aceito por
 /acoes/reiniciar, mesmo se alguem forjar o POST direto sem passar pela tela.
@@ -30,7 +31,8 @@ from pathlib import Path
 from starlette.applications import Starlette
 from starlette.concurrency import run_in_threadpool
 from starlette.responses import HTMLResponse, PlainTextResponse, RedirectResponse
-from starlette.routing import Route
+from starlette.routing import Mount, Route
+from starlette.staticfiles import StaticFiles
 
 from . import render
 from .agregador import ESTADO_PATH
@@ -38,12 +40,6 @@ from .estado_leitura import carregar_estado
 from .verbos import BIN, chamar
 
 REPO_HARNESS = Path(__file__).resolve().parents[2]
-TOKENS_PATH = Path(
-    os.environ.get(
-        "TOKENS_CSS_PATH",
-        str(REPO_HARNESS.parent / "platafirma-arquitetura" / "design" / "tokens.css"),
-    )
-)
 
 TIPOS_VALIDOS = {"decisao", "resposta", "pedido", "minuta", "demanda", "handoff"}
 PF_CADEIRA_TELA = os.environ.get("PF_CADEIRA_TELA", "claudinho-TI")
@@ -170,10 +166,16 @@ async def tela_css(request):
     return PlainTextResponse(TELA_CSS_PATH.read_text(encoding="utf-8"), media_type="text/css")
 
 
-async def tokens_css(request):
-    if not TOKENS_PATH.is_file():
-        return PlainTextResponse("tokens.css nao encontrado nesta instancia", status_code=404)
-    return PlainTextResponse(TOKENS_PATH.read_text(encoding="utf-8"), media_type="text/css")
+# O front da PlataFirma (pf-ui.css, pf-ui.js, fontes/, versao.txt, origem.txt)
+# nao tem handler proprio: e diretorio servido inteiro, porque as fontes sao
+# referenciadas pelo proprio CSS por caminho relativo (./fontes/...) e precisam
+# responder sob a mesma base. StaticFiles e do proprio starlette — sem stack
+# novo, sem dependencia nova.
+#
+# check_dir=False de proposito: o diretorio so existe DENTRO da imagem (o
+# Dockerfile o preenche por COPY --from do release). No clone de
+# desenvolvimento ele nao existe, e a escolha e 404 na rota em vez de derrubar
+# o app inteiro no import — o resto da tela nao depende disto pra responder.
 
 
 # --- acoes (POST) — cada uma chama o verbo e nada alem dele -----------------
@@ -243,13 +245,23 @@ async def reiniciar(request):
 # --- app -------------------------------------------------------------------
 
 
-def cria_app() -> Starlette:
+def cria_app(pf_ui_dir: Path | None = None) -> Starlette:
+    """`pf_ui_dir` existe pro teste poder apontar um diretorio de mentira: o
+    StaticFiles resolve o diretorio no __init__, entao monkeypatch depois de
+    montado nao pega. Em producao fica no default, que e o que veio na imagem."""
     rotas = [
         Route("/", recepcao),
         Route("/cadeira/{slug}", cadeira),
         Route("/feito", feito),
-        Route("/estatico/tokens.css", tokens_css),
         Route("/estatico/tela.css", tela_css),
+        Mount(
+            render.PF_UI_BASE,
+            app=StaticFiles(
+                directory=render.PF_UI_DIR if pf_ui_dir is None else pf_ui_dir,
+                check_dir=False,
+            ),
+            name="pf-ui",
+        ),
         Route("/acoes/despachar-recado", despachar_recado, methods=["POST"]),
         Route("/acoes/reiniciar", reiniciar, methods=["POST"]),
     ]

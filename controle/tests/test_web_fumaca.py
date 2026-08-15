@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import json
+import re
 
 import pytest
 from starlette.testclient import TestClient
@@ -117,13 +118,64 @@ def test_commits_por_dia_encontra_commits_reais():
     assert any("card #390" in m or "#390" in m for m in todas_mensagens)
 
 
-def test_tokens_css_responde(cliente, tmp_path, monkeypatch):
-    tokens = tmp_path / "tokens.css"
-    tokens.write_text(":root { --platafirma-gray-100: #fff; }", encoding="utf-8")
-    monkeypatch.setattr(web, "TOKENS_PATH", tokens)
-    r = cliente.get("/estatico/tokens.css")
+def test_front_vem_do_diretorio_da_imagem_nao_do_host(tmp_path):
+    """Card #476: o front e servido do diretorio que o COPY --from do release
+    deixou DENTRO da imagem. Nao ha mais TOKENS_PATH nem leitura de
+    platafirma-arquitetura em tempo de requisicao — e essa ausencia e parte da
+    assercao, senao a rota nova conviveria com o caminho velho."""
+    assert not hasattr(web, "TOKENS_PATH")
+    assert not hasattr(web, "tokens_css")
+
+    d = tmp_path / "pf-ui"
+    (d / "fontes").mkdir(parents=True)
+    (d / "pf-ui.css").write_text(
+        '@font-face{src:url("./fontes/inter.woff2")}:root{--platafirma-gray-100:#fff}',
+        encoding="utf-8",
+    )
+    (d / "pf-ui.js").write_text("customElements.define('pf-botao', class extends HTMLElement{});",
+                                encoding="utf-8")
+    (d / "versao.txt").write_text("platafirma-ui 0.1.0\n", encoding="utf-8")
+    (d / "fontes" / "inter.woff2").write_bytes(b"wOF2")
+
+    c = TestClient(web.cria_app(pf_ui_dir=d))
+
+    r = c.get("/estatico/pf-ui/pf-ui.css")
     assert r.status_code == 200
     assert "platafirma-gray-100" in r.text
+    assert r.headers["content-type"].startswith("text/css")
+
+    r = c.get("/estatico/pf-ui/pf-ui.js")
+    assert r.status_code == 200
+    assert "pf-botao" in r.text
+
+    # o @font-face do release pede a fonte por caminho relativo: ela tem de
+    # responder sob a MESMA base do css, senao a tela cai pra fonte do sistema.
+    assert c.get("/estatico/pf-ui/fontes/inter.woff2").status_code == 200
+
+    # a versao do release fica legivel em runtime sem abrir a imagem
+    r = c.get("/estatico/pf-ui/versao.txt")
+    assert r.status_code == 200
+    assert r.text.strip() == "platafirma-ui 0.1.0"
+
+    # rota antiga nao sobrevive
+    assert c.get("/estatico/tokens.css").status_code == 404
+
+
+def test_head_aponta_para_o_release(cliente):
+    """A pagina carrega dois arquivos do release (css + modulo js) e nenhum
+    tokens.css. tela.css continua valendo — nao pode ter sumido junto."""
+    corpo = cliente.get("/").text
+    assert '<link rel="stylesheet" href="/estatico/pf-ui/pf-ui.css">' in corpo
+    assert '<script type="module" src="/estatico/pf-ui/pf-ui.js"></script>' in corpo
+    assert '<link rel="stylesheet" href="/estatico/tela.css">' in corpo
+    assert "tokens.css" not in corpo
+    assert "platafirma-arquitetura" not in corpo
+
+
+def test_tela_css_continua_respondendo(cliente):
+    """Rota de camada 2, que o #476 NAO substitui: mora no pacote e segue viva."""
+    r = cliente.get("/estatico/tela.css")
+    assert r.status_code == 200
     assert r.headers["content-type"].startswith("text/css")
 
 
@@ -328,16 +380,30 @@ def test_despachar_recado_campo_ausente_e_recusado(cliente):
     assert r.status_code == 400
 
 
-# --- zero JS, zero estado no cliente (aceite 6, medido tambem aqui) --------
+# --- zero JS PROPRIO, zero estado no cliente (aceite 6, medido tambem aqui) --
+#
+# O aceite 6 do card #390 dizia "zero JavaScript", e ate o #476 isso era
+# literal. O #476 manda consumir o release platafirma/ui, e o release e um
+# modulo: pf-ui.js registra os primitivos pf-* como custom elements. A regra que
+# o aceite protegia continua de pe e e esta — o que ela proibia era logica de
+# tela no cliente, nao um artefato versionado servido da propria imagem:
+#   - nenhum script INLINE (nada de logica escrita aqui dentro),
+#   - nenhum handler on*= no HTML,
+#   - nenhum estado no cliente (local/sessionStorage),
+#   - e o UNICO <script> da pagina e o do release, do nosso proprio /estatico.
+# Script de terceiro, ou script com corpo, reprova.
 
 
-def test_paginas_nao_tem_javascript_nem_storage(cliente):
+def test_paginas_nao_tem_javascript_proprio_nem_storage(cliente):
     for rota in ("/", "/cadeira/TI"):
         corpo = cliente.get(rota).text.lower()
-        assert "<script" not in corpo
         assert "onclick" not in corpo
         assert "localstorage" not in corpo
         assert "sessionstorage" not in corpo
+        scripts = re.findall(r"<script\b[^>]*>(.*?)</script>", corpo, re.DOTALL)
+        assert len(scripts) == 1, scripts
+        assert scripts[0].strip() == "", "script com corpo e logica de tela, nao artefato"
+        assert '<script type="module" src="/estatico/pf-ui/pf-ui.js"></script>' in corpo
 
 
 # ---------- seletor fechado: a tela nao oferece o que o verbo nao aceita ----------
