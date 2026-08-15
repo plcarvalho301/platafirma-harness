@@ -110,6 +110,18 @@ services:
       PF_RAIZ: /home/claudinho/AI
       CHAT_JOURNAL: /home/claudinho/AI/var/run/chat/journal.db
       CHAT_FITAS_RAIZ: /home/claudinho/AI/fitas
+      # Gatilho de idade DESARMADO, por decisao do dono em 15/08 (card 449): ele
+      # nao quer que a fita morra sozinha. Sala parada nao custa nada na maquina
+      # dele, e "isto aqui e de ontem" ele reconhece sem ajuda; o que a rotacao
+      # automatica ja custou, uma vez, foi abrir fita com a mesa pela metade.
+      # Fechamento segue existindo e segue sendo dele: a palavra `zerar`.
+      #
+      # `inf` e desarme, nao janela grande: `vencida()` compara com >=, e nada e
+      # >= infinito. NAO troque por 0 achando que desliga — 0 faz TODA mensagem
+      # rodar a sala, que e o oposto. O desligamento honesto (tirar o gatilho do
+      # codigo e o eco junto com ele) tem card proprio; isto aqui e o desarme de
+      # hoje, para a sala do dono nao rodar amanha as 11:37.
+      CHAT_ROTACAO_S: "inf"
     volumes:
       # Os dois montam no MESMO caminho absoluto de fora. Nao e desleixo: o
       # caminho do anexo atravessa a fronteira dentro do corpo da mensagem, e o
