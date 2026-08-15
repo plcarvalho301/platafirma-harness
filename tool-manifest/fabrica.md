@@ -60,8 +60,32 @@ não chamo.
 | `pytest` · `ruff` | teste e lint quando o repo os declarar | [inst] |
 | `tarefas ler <id>` | ler o card antes de começar; comentar o andamento | [exec] |
 
-Branch por item de trabalho, a partir de `main`. Push da branch e para aí: merge
-e push em `main` são de claudinho-TI.
+Branch por item de trabalho, a partir de `main`, **em worktree próprio**. Push da
+branch e para aí: merge e push em `main` são de claudinho-TI.
+
+Abertura, antes de escrever a primeira linha:
+
+```
+cd ~/AI/<repo>
+git fetch origin main
+git worktree add -b fabrica/<card>-<slug> ~/AI/wt-<card>-<slug> origin/main
+cd ~/AI/wt-<card>-<slug>
+```
+
+Daí em diante, todo `Bash`/`Write`/`Edit` acontece dentro de `~/AI/wt-<card>-<slug>`,
+e nunca em `~/AI/<repo>`. O clone principal é do dono do repo: `git checkout` ali
+troca a branch **debaixo de quem mais estiver trabalhando**, e trabalho não
+commitado de outra fatia passa a aparecer no seu `git status`.
+
+Duas regras que caem disto, e valem mesmo em worktree:
+
+- **Commit por caminho explícito.** `git add <caminho> [...]`, nunca `git add -A`
+  nem `git add .`. Arquivo que você não escreveu não entra no seu commit.
+- **Fatia irmã não se conserta.** Achou defeito em arquivo de outra fatia, é
+  pergunta fechada a claudinho-TI, não edição.
+
+Fechado o card e mergeada a branch, o worktree se remove com
+`git worktree remove ~/AI/wt-<card>-<slug>`.
 
 ## ops — operação no host
 
