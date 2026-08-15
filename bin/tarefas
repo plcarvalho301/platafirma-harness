@@ -9,7 +9,13 @@
 # ou ~/.claude/vikunja.env (conta da fabrica). Base: $TAREFAS_BASE.
 set -euo pipefail
 
-BASE="${TAREFAS_BASE:-https://tarefas.platafirma.org/api/v1}"
+# Loopback, e nao a rota publica, desde o card #469: `tarefas.platafirma.org` passou a
+# servir o rastreador proprio atras do gate do control-plane, e um Bearer de agente nao
+# atravessa oauth2-proxy — leva 302 para o Keycloak e o verbo quebraria para toda cadeira.
+# E tambem a doutrina do card, nao so o conserto de um efeito colateral: a borda gateia a
+# superficie HUMANA; o agente entra pelo loopback da maquina, que ja e a fronteira dele.
+# 8082 e o `vikunja-proxy` desta maquina. Enquanto o Vikunja for o backend, e por aqui.
+BASE="${TAREFAS_BASE:-http://127.0.0.1:8082/api/v1}"
 
 _argv_tem_json() { # varre "$@" por --json — usado só pra decidir o FORMATO da falha
   local a
