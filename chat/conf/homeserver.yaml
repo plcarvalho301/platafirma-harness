@@ -61,8 +61,11 @@ oidc_providers:
     user_mapping_provider:
       config:
         localpart_template: "{{ user.preferred_username }}"
-        display_name_template: "{{ user.name }}"
-        email_template: "{{ user.email }}"
+        # Nome de exibicao pelo username, e nao pelo nome civil: o dono declarou que o
+        # nome pessoal nao circula (14/08). `email_template` fica FORA por minimizacao
+        # (claudinho-seguranca, 14/08): instancia de um, sem federacao e sem servidor de
+        # e-mail — endereco pessoal replicado num segundo banco nao serve funcao nenhuma.
+        display_name_template: "{{ user.preferred_username }}"
 
 # O registration tambem sai do cofre: e ele que carrega as_token e hs_token.
 app_service_config_files:
