@@ -3,21 +3,6 @@
 O que este chapéu aprendeu e vale além de um expediente. Fato de negócio não mora
 aqui: desce a card, commit ou wiki. Corpo lido sob demanda (`mesa caderno construcao`).
 
-## Fora do board por ordem do dono
-
-### Evento de deploy no rastreador (ex-card 450, fechado em 14/08)
-- **O que é:** o pipeline empurra o deploy para a porta de ingestão do rastreador
-  como fato carimbado — sha, ambiente, timestamp, resultado —, sem ninguém digitar.
-- **Dono:** claudinho-TI sozinho. O empurrão sai do verbo `deploy`, não do rastreador.
-- **Aceite:** deploy registrado como fato: sem estado, sem dono e sem board.
-- **Bloqueado por:** a porta de ingestão não tem card. Declarada no PRD do
-  rastreador, seção 5.1 (linha 257), como capacidade do v1.
-- **Custo de não existir:** o rastreador entrega 2 das 4 do DORA. Frequência de
-  deploy e lead time de mudança dependem deste elo; taxa de falha e tempo de
-  restauração dependem do campo de mudança causadora apontar para o deploy.
-- **Gatilho de reabertura:** aberto o card da porta de ingestão, este volta como
-  subtarefa dele (`tarefas sub`).
-
 ## Custo por giro é medível fora do harness do Claude (medido 14/08)
 
 O `result` do `claude -p --output-format stream-json` traz `total_cost_usd`,
@@ -92,3 +77,36 @@ antes de a outra tocar os mesmos arquivos — timing, não desenho.
 Antes de editar arquivo compartilhado numa fita: `git log -3` e olhar o
 timestamp do topo. Commit com poucos minutos de idade é sinal de outra sessão
 viva na mesma árvore, não histórico frio.
+
+## Card para a fábrica: fronteira sim, passo a passo não (medido 15/08, F10)
+
+Régua do dono: dizer a ordem interna entre cards quebra a execução, porque o
+orquestrador multiagente do Code fatia melhor do que o card fatia. O que o card
+deve carregar é o que a fábrica NÃO pode descobrir sozinha:
+
+- **Dependência real entre cards**, e só ela — o que não pode começar antes do
+  quê. Paralelismo interno, ordem de ataque e uso de subagente são dela.
+- **Fronteira que não se atravessa**: worktree por card, `git add <caminho>`,
+  nenhuma edição de arquivo de outra fatia, push da branch e para.
+- **Documento superado nomeado pelo nome.** Card que aponta canônico novo sem
+  dizer qual documento morreu deixa a fábrica construir contra o morto — ele
+  continua no repo e lê bem.
+- **O que fazer quando a decisão faltar**: parar e perguntar ao dono, nunca
+  improvisar substituto. Vale sobretudo para "o componente que o card pede só
+  existe na versão paga".
+- **Prova de aceite colada em comentário**, com o SHA da branch. Card sem a saída
+  da régua colada é card não entregue.
+
+## `tarefas sub` é composição, não dependência (medido 15/08)
+
+`tarefas sub <pai> <filho>` cria relação `parenttask`/`subtask`. Usá-la para dizer
+"A precisa fechar antes de B" mente sobre a estrutura do trabalho e engana quem lê
+o board. Dependência se declara pela escotilha:
+
+```
+echo '{"other_task_id":<B>,"relation_kind":"precedes"}' | tarefas api-corpo PUT /tasks/<A>/relations
+tarefas api DELETE /tasks/<B>/relations/parenttask/<A>     # desfaz o sub errado
+```
+
+A relação inversa (`follows`) aparece sozinha no outro card; não se cria duas
+vezes.
