@@ -5,7 +5,11 @@ Sobe um homeserver de mentira, o receptor de verdade e o worker de verdade, e
 empurra transacao como o Synapse empurraria. O que se mede e o que chegou na
 sala — que e onde os criterios de aceite moram.
 
-    docker run --rm -v "$PWD:/chat:ro" --entrypoint python \\
+    docker run --rm --network none -e PYTHONUNBUFFERED=1 \\
+      -e PF_RAIZ=/home/claudinho/AI \\
+      -v "$PWD:/chat:ro" \\
+      -v "$PWD/../personas:/home/claudinho/AI/platafirma-harness/personas:ro" \\
+      --entrypoint python \\
       platafirma/chat-recepcao:local /chat/testes/prova-ponta-a-ponta.py
 
 De mentira e SO o homeserver e o verbo (o duble do card 459). Receptor, worker,
@@ -29,12 +33,21 @@ import time
 from aiohttp import ClientSession, web
 
 CHAT = "/chat"
+sys.path.insert(0, CHAT)
+
+from comum.cadeiras import mxid_da_cadeira  # noqa: E402
+
 PORTA_HS = 18099
 PORTA_AS = 18098
 DOMINIO = "chat.teste"
 AS_TOKEN, HS_TOKEN = "astok-de-teste", "hstok-de-teste"
 CADEIRA = "TI"
-USUARIO = f"@_pf{CADEIRA}:{DOMINIO}"
+# O MXID vem da MESMA costura que a recepcao usa (comum/cadeiras.py). Montado na
+# mao aqui — como estava, `@_pfTI` — o teste reproduzia a suposicao do codigo em
+# vez de medir a integracao com a fatia B-3, e ficava verde com o corte errado.
+# Foi assim que o defeito do comentario 318 passou por esta prova.
+USUARIO = mxid_da_cadeira(CADEIRA, DOMINIO)
+assert USUARIO == f"@_pf_{CADEIRA.lower()}:{DOMINIO}", f"convencao de MXID mudou: {USUARIO}"
 DONO = f"@pedro:{DOMINIO}"
 
 PNG = b"\x89PNG\r\n\x1a\n" + b"0" * 2048
@@ -251,7 +264,8 @@ async def principal() -> int:
         "CHAT_INTERVALO_TYPING": "2",
         "CHAT_INTERVALO_VIGIA": "3",
         "CHAT_ANEXO_TETO": str(4 * 1024),
-        "CHAT_VERBO": f"{CHAT}/worker/duble-despachar.py",
+        "PF_RAIZ": os.environ.get("PF_RAIZ", "/home/claudinho/AI"),
+        "CHAT_VERBO": f"{CHAT}/testes/verbo-de-mentira.py",
         "CHAT_INTERVALO_RONDA": "0.5",
     })
 

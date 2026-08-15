@@ -1,14 +1,15 @@
 #!/usr/bin/env python3
 """Prova do journal e do worker — a fronteira e o lado verbo (card 458).
 
-Roda NO HOST, so com stdlib, contra um journal descartavel em /tmp e o duble do
-verbo (o card 459 ainda nao mergeou):
+Roda NO HOST, so com stdlib, contra um journal descartavel em /tmp:
 
     python3 testes/prova-giro.py
 
 Cobre o criterio 14 pelas duas pontas que o comentario 302 acrescentou: dedupe
 que sobrevive a reentrega, e cada peca derrubada em separado sem produzir
-resposta duplicada. Sai 0 se tudo passou.
+resposta duplicada. Uma prova corre contra o verbo REAL (bin/chat, card 459); as
+demais usam o verbo de mentira, para encenar falha sem gastar inferencia.
+Sai 0 se tudo passou.
 """
 
 from __future__ import annotations
@@ -25,8 +26,10 @@ sys.path.insert(0, CHAT)
 
 from comum import journal  # noqa: E402
 
-DUBLE = os.path.join(CHAT, "worker", "duble-despachar.py")
+MENTIRA = os.path.join(AQUI, "verbo-de-mentira.py")
 WORKER = os.path.join(CHAT, "worker", "worker.py")
+# O verbo de verdade, do card 459, ja mergeado em main.
+VERBO_REAL = os.path.join(os.path.dirname(CHAT), "bin", "chat")
 
 falhas = []
 _n = 0
@@ -57,7 +60,7 @@ def roda_worker(caminho, *, mudo="240", espera=90):
     ambiente = dict(os.environ)
     ambiente.update({
         "CHAT_JOURNAL": caminho,
-        "CHAT_VERBO": DUBLE,
+        "CHAT_VERBO": MENTIRA,
         "CHAT_STREAM_MUDO_S": mudo,
         "CHAT_INTERVALO_RONDA": "0.2",
     })
@@ -220,6 +223,24 @@ def _():
     assert "PATH" in linha["detalhe"], linha["detalhe"]
 
 
+@prova("integracao com o verbo REAL: cadeira inexistente vira erro estruturado")
+def _():
+    assert os.access(VERBO_REAL, os.X_OK), f"o verbo real nao esta em {VERBO_REAL}"
+    caminho, con = novo_journal()
+    job = chega(con, cadeira="nao-existe")
+    ambiente = dict(os.environ)
+    ambiente.update({"CHAT_JOURNAL": caminho, "CHAT_VERBO": VERBO_REAL,
+                     "CHAT_INTERVALO_RONDA": "0.2",
+                     "PF_RAIZ": os.path.expanduser("~/AI")})
+    subprocess.run([sys.executable, WORKER, "--uma-volta"], env=ambiente,
+                   capture_output=True, text=True, timeout=120)
+    linha = con.execute("SELECT * FROM jobs WHERE id = ?", (job,)).fetchone()
+    # bin/chat recusa cadeira que nao existe com exit 2 e stderr, sem JSON no
+    # stdout — e o worker tem de virar isso em estado, nunca em giro pendurado.
+    assert linha["estado"] == journal.ERRO, f"{linha['estado']} / {linha['detalhe']}"
+    assert "sem JSON valido" in linha["detalhe"], linha["detalhe"]
+
+
 @prova("watchdog do worker: stream mudo vira timeout e mata o grupo")
 def _():
     caminho, con = novo_journal()
@@ -231,9 +252,9 @@ def _():
     assert linha["estado"] == journal.TIMEOUT, f"{linha['estado']} / {linha['detalhe']}"
     assert "stream do verbo" in linha["detalhe"], linha["detalhe"]
     assert gasto < 30, f"o watchdog demorou {gasto:.0f}s"
-    # O padrao inclui o verbo `despachar` de proposito: "duble-despachar.py"
+    # O padrao inclui o verbo `despachar` de proposito: o nome do arquivo
     # sozinho casa com a propria linha de comando de quem chamou este teste.
-    sobrou = subprocess.run(["pgrep", "-f", r"duble-despachar\.py despachar"],
+    sobrou = subprocess.run(["pgrep", "-f", r"verbo-de-mentira\.py despachar"],
                             capture_output=True, text=True).stdout.strip()
     assert not sobrou, f"processo do verbo sobreviveu ao kill: pid {sobrou}"
 
@@ -243,7 +264,7 @@ def _():
     caminho, con = novo_journal()
     job = chega(con, corpo="DUBLE:pendura")
     ambiente = dict(os.environ)
-    ambiente.update({"CHAT_JOURNAL": caminho, "CHAT_VERBO": DUBLE,
+    ambiente.update({"CHAT_JOURNAL": caminho, "CHAT_VERBO": MENTIRA,
                      "CHAT_STREAM_MUDO_S": "300", "CHAT_INTERVALO_RONDA": "0.2"})
     proc = subprocess.Popen([sys.executable, WORKER, "--uma-volta"], env=ambiente,
                             stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
@@ -285,7 +306,7 @@ def _():
 
 
 if __name__ == "__main__":
-    print("prova do journal e do worker (duble no lugar do verbo do card 459)")
+    print("prova do journal e do worker — verbo real na integracao, de mentira nas falhas")
     if falhas:
         print(f"\n{len(falhas)} falha(s): {', '.join(falhas)}")
         sys.exit(1)

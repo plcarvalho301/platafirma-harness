@@ -45,6 +45,7 @@ sys.path.insert(0, "/opt/chat")
 import anexo as anexos  # noqa: E402
 import formata  # noqa: E402
 from comum import journal  # noqa: E402
+from comum.cadeiras import cadeiras, eh_de_cadeira, mxid_da_cadeira, sufixo_canonico  # noqa: E402
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")
 log = logging.getLogger("chat-recepcao")
@@ -89,14 +90,14 @@ class Recepcao:
 
     # --- identidade: de que cadeira e esta sala ---------------------------
 
-    def cadeira_do_mxid(self, mxid: str) -> str | None:
-        """@_pfTI:chat.platafirma.org -> "TI". Devolve None para quem nao e nosso."""
-        if not mxid.startswith(f"@{self.prefixo}") or not mxid.endswith(f":{self.dominio}"):
-            return None
-        slug = mxid[1 + len(self.prefixo) : -(len(self.dominio) + 1)]
-        return slug or None
+    def eh_do_namespace(self, mxid: str) -> bool:
+        """Qualquer usuario do AS, INCLUSIVE o bot @_pf.
 
-    def eh_nosso(self, mxid: str) -> bool:
+        Guarda de laco, e de proposito mais larga que `eh_de_cadeira`: aquela
+        responde "e uma cadeira?" e exclui o bot, que e o certo para identidade;
+        esta responde "e nosso?", e o bot tambem e. Trocar uma pela outra faria
+        m.notice do bot — o que a rotacao do card 449 vai emitir — virar giro.
+        """
         return mxid.startswith(f"@{self.prefixo}") and mxid.endswith(f":{self.dominio}")
 
     def aprende_pelo_membro(self, evento) -> None:
@@ -112,7 +113,9 @@ class Recepcao:
         membro = getattr(getattr(evento, "content", None), "membership", None)
         if not alvo or membro is None or str(membro) != "join":
             return
-        cadeira = self.cadeira_do_mxid(alvo)
+        if not eh_de_cadeira(alvo, self.dominio, self.prefixo):
+            return
+        cadeira = sufixo_canonico(alvo)
         if cadeira:
             journal.grava_cadeira(self.con, evento.room_id, cadeira)
             log.info("sala %s e da cadeira %s", evento.room_id, cadeira)
@@ -132,7 +135,8 @@ class Recepcao:
             self.sem_cadeira += 1
             return None
         for mxid in membros:
-            achada = self.cadeira_do_mxid(mxid)
+            achada = sufixo_canonico(mxid) if eh_de_cadeira(
+                mxid, self.dominio, self.prefixo) else None
             if achada:
                 journal.grava_cadeira(self.con, sala, achada)
                 return achada
@@ -140,7 +144,17 @@ class Recepcao:
         return None
 
     def intent_da(self, cadeira: str):
-        return self.appserv.intent.api.intent(f"@{self.prefixo}{cadeira}:{self.dominio}")
+        """Intent do usuario da cadeira.
+
+        O MXID sai de `mxid_da_cadeira`, nunca de concatenacao: o localpart do
+        Matrix e minusculo com separador (`_pf_ti`) e o sufixo do harness nao
+        (`TI`). Montar na mao aqui foi o defeito que o comentario 318 pegou —
+        cada giro ia para uma cadeira que nao existe.
+        """
+        mxid = mxid_da_cadeira(cadeira, self.dominio, self.prefixo)
+        if mxid is None:
+            raise ValueError(f"cadeira sem persona: {cadeira!r}")
+        return self.appserv.intent.api.intent(mxid)
 
     # --- chegada ----------------------------------------------------------
 
@@ -152,7 +166,7 @@ class Recepcao:
             return
         # Guarda de laco: mensagem nossa nao vira giro. Sem isto a resposta da
         # cadeira volta como transacao e a sala entra em recursao.
-        if self.eh_nosso(evento.sender):
+        if self.eh_do_namespace(evento.sender):
             return
 
         sala, event_id = evento.room_id, evento.event_id
@@ -413,6 +427,12 @@ async def principal() -> None:
         })
 
     appserv.app.router.add_get("/estado", estado)
+
+    # Le as personas UMA vez na subida, de proposito: sem o bind mount de
+    # personas/ o modulo de cadeiras levanta FileNotFoundError, e e melhor que
+    # isso derrube a subida — visivel no healthcheck — do que apareca so no
+    # primeiro giro, engolido pelo handler de evento como sala sem cadeira.
+    log.info("cadeiras visiveis: %s", ", ".join(cadeiras()))
 
     condenados = recepcao.varre("varredura de subida")
     log.info("varredura de subida: %s giro(s) orfao(s) convertido(s) em erro", condenados)

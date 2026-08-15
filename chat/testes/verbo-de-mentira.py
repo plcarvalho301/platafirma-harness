@@ -1,9 +1,16 @@
 #!/usr/bin/env python3
-"""Duble do verbo `chat despachar` — existe so ate o card 459 mergear.
+"""Verbo de mentira — dubles dos estados que o verbo de verdade nao encena.
 
-O card 458 manda testar contra um duble que cumpra o contrato, porque as tres
-fatias do 448 correm em paralelo e o verbo de verdade e da fatia B-2. Este
-arquivo cumpre o contrato ao pe da letra e nada alem dele:
+O card 459 mergeou e `chat despachar` existe: este arquivo DEIXOU de ser
+substituto do verbo, e por isso saiu de worker/ (codigo de producao) para
+testes/. O que ele ainda faz, e que o verbo real nao faz sob comando, e produzir
+cota estourada, stream mudo e contrato quebrado — sem gastar um giro de
+inferencia e sem depender de o motor estar de humor.
+
+A integracao com o verbo REAL se prova em testes/prova-giro.py, na cadeira
+inexistente: exit 2 sem JSON no stdout, que o worker traduz em erro estruturado.
+
+Cumpre o contrato ao pe da letra e nada alem dele:
 
     chamada : <duble> despachar --cadeira <slug> --fita <id-ou-vazio> [--silencioso]
               corpo da mensagem em stdin
@@ -22,7 +29,6 @@ que quer sem variavel de ambiente:
     DUBLE:vazio     estado ok com texto vazio
     DUBLE:lixo      escreve ruido em stdout e nao cumpre o contrato
 
-Quando o 459 entrar, este arquivo sai junto com a linha de CHAT_VERBO dos testes.
 """
 
 from __future__ import annotations

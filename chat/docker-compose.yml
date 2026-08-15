@@ -104,6 +104,10 @@ services:
       AS_PORTA: "8080"
       AS_TOKEN: ${AS_TOKEN:?defina AS_TOKEN no .env — sai do cofre por ./prepara.sh}
       HS_TOKEN: ${HS_TOKEN:?defina HS_TOKEN no .env — sai do cofre por ./prepara.sh}
+      # comum/cadeiras.py le personas/persona-*.md para saber a caixa do sufixo
+      # de cada cadeira — ela nao se calcula (TI e IA sao maiusculas, produto e
+      # seguranca nao), so se le da fonte.
+      PF_RAIZ: /home/claudinho/AI
       CHAT_JOURNAL: /home/claudinho/AI/var/run/chat/journal.db
       CHAT_FITAS_RAIZ: /home/claudinho/AI/fitas
     volumes:
@@ -113,6 +117,10 @@ services:
       # traduzir de volta la, e a primeira divergencia seria silenciosa.
       - ${HOME}/AI/fitas:/home/claudinho/AI/fitas:rw
       - ${HOME}/AI/var/run/chat:/home/claudinho/AI/var/run/chat:rw
+      # Somente leitura: a recepcao le a lista de cadeiras, nunca escreve persona.
+      # Sem este mount ela nao sobe — e a ausencia se declara na subida, em vez de
+      # virar sala muda no primeiro giro.
+      - ${HOME}/AI/platafirma-harness/personas:/home/claudinho/AI/platafirma-harness/personas:ro
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request,sys;sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8080/estado',timeout=8).status==200 else 1)"]
       interval: 30s

@@ -11,9 +11,11 @@ RUN pip install --no-cache-dir "mautrix==0.21.1" "aiohttp==3.14.3" "Markdown==3.
 
 RUN useradd -u 10001 -m -s /bin/bash recepcao
 
-# O contexto de build e chat/, e nao chat/recepcao/, porque `comum/journal.py` e a
-# fronteira com o worker do host e nao pode ter duas copias: esquema com duas verdades
-# e corrida esperando data. Uma fonte, dois consumidores.
+# O contexto de build e chat/, e nao chat/recepcao/, por causa de comum/: `journal.py`
+# e a fronteira com o worker do host e nao pode ter duas copias (esquema com duas
+# verdades e corrida esperando data), e `cadeiras.py` e o modulo de costura de
+# claudinho-TI, que traduz slug do org, sufixo do harness e MXID — importado, nunca
+# reimplementado (comentario 311 do card 458). O COPY do diretorio leva os dois.
 WORKDIR /opt/chat
 COPY --chown=recepcao:recepcao comum/ /opt/chat/comum/
 COPY --chown=recepcao:recepcao recepcao/recepcao.py recepcao/formata.py recepcao/anexo.py /opt/chat/
