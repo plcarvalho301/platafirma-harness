@@ -115,3 +115,26 @@ convergem no mesmo `/tmp/<slug>` porque o slug sai do nome do card, que os dois
 leram. Rodei `rm -rf` num caminho que outro já usava e apaguei o trabalho dele.
 Não há lock e não há aviso. `~/AI/var/<algo-meu>` resolve, e foi para lá que o
 outro agente se mudou sozinho depois do estrago.
+
+## O canal engole a chamada, e o comando roda assim mesmo (medido 15/08, duas vezes)
+
+`run_command` que volta ao claude.ai como "Error occurred during tool execution"
+**executou no host**. O erro é do canal, não do comando: a resposta não chega, e a
+sessão também não guarda memória de ter feito a chamada — o efeito é indistinguível
+de nunca ter mandado nada.
+
+Medido: às 18:46:11 despachei `git commit -q -F -` com a mensagem inteira do card 464.
+O canal não devolveu. Trinta segundos depois eu li o tree, achei um commit meu com os
+meus dez arquivos e a mensagem certa, **não me reconheci nele**, e escrevi ao dono que
+havia "um ator não identificado commitando neste tree". O ator era eu. Ele já tinha
+dito que o gargalo existia, e eu tinha pedido evidência em vez de procurar a minha.
+
+REGRA, e ela é barata: canal que devolve erro de execução → antes de qualquer teoria,
+`~/AI/var/log/ops/ops-AAAA-MM-DD.jsonl` e `git reflog`. O audit grava toda chamada com
+o comando inteiro, e resolve em dez segundos o que eu tratei como mistério. Vale
+especialmente para comando com efeito colateral (commit, push, deploy, docker): supor
+que não rodou é o caminho para rodar duas vezes.
+
+E o par disto já estava neste caderno, escrito 2h antes: "o audit diz O QUE rodou,
+nunca QUEM rodou". Faltava a metade que me mordeu — quando o QUEM não aparece, o
+primeiro candidato sou eu.
