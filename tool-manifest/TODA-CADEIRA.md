@@ -35,6 +35,8 @@ despachar giro na sala do chat  : chat despachar --cadeira <slug> --fita <id-ou-
                                   corpo em stdin; UMA linha JSON no stdout (estado, texto,
                                   id_fita, detalhe, reiniciada) e um passo por linha no
                                   stderr. Quem chama e a recepcao do chat, nao a cadeira.
+                                  Rota sai do ator: cadeira -> Claude Code;
+                                  participante (jaiminho) -> o verbo dele.
                                   Fita vazia abre por monta-sessao; fita com id retoma e
                                   NAO reinjeta o pacote. --silencioso: giro cujo produto e
                                   escrita em mesa/caderno, sem texto para a sala.

@@ -81,9 +81,10 @@ comum, org, dir_avatares, palco, dominio = sys.argv[1:6]
 # a que diverge em identidade produz MXID errado, que e irreversivel.
 sys.path.insert(0, comum)
 from cadeiras import (          # noqa: E402
-    cadeiras,
+    atores,
     localpart_da_cadeira,
     mxid_da_cadeira,
+    participantes,
     sufixo_canonico,
     valida_localpart,
 )
@@ -93,9 +94,14 @@ TIPOS = {".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg",
          ".webp": "image/webp", ".gif": "image/gif"}
 
 # --- quem: o conjunto vem do harness -----------------------------------------
-# `cadeiras()` levanta FileNotFoundError se personas/ nao esta la — ausencia se declara,
-# e provisionar zero cadeira em silencio seria pior que parar.
-sufixos = cadeiras()
+# `atores()` levanta FileNotFoundError se personas/ nao esta la — ausencia se declara,
+# e provisionar zero ator em silencio seria pior que parar.
+#
+# ATORES, e nao cadeiras: participante (Jaiminho) tem porta com o dono pelo rito de
+# admissao e portanto tem usuario, perfil e sala direta. O que ele NAO ganha e
+# roteamento e voto, e isso nao mora aqui — mora em `cadeiras()`, que segue sem ele.
+sufixos = atores()
+sao_participante = set(participantes())
 
 # --- alias: a tabela do org, quando ela cobre a cadeira -----------------------
 # A tabela vive sob "## Ocupacao das cadeiras" e acaba no proximo cabecalho. Ler assim,
@@ -149,7 +155,14 @@ for sufixo in sufixos:
         # cadeira fora da tabela sobe com o identificador que existe, e o alias entra
         # numa corrida posterior — displayname e reversivel, MXID nao. Nenhum nome de
         # pessoa entra neste arquivo; a fonte e sempre o org.
-        "alias": alias_do_org.get(sufixo) or sufixo,
+        # Participante nao esta na tabela do org: «Os colaboradores externos respondem
+        # pelo proprio nome (Jaiminho)». O nome capitalizado e regra, nao tabela — pos
+        # tabela embutida aqui envelheceria em silencio, que e o defeito ja escrito no
+        # cabecalho deste arquivo.
+        "alias": alias_do_org.get(sufixo) or (
+            sufixo.capitalize() if sufixo in sao_participante else sufixo
+        ),
+        "participante": sufixo in sao_participante,
         "rotulo": slug_do_org.get(sufixo) or sufixo,   # so para mensagem ao operador
         "localpart": localpart,
         "mxid": mxid,
@@ -189,8 +202,10 @@ for cadeira in lista:
 with open(os.path.join(palco, "cadeiras.json"), "w", encoding="utf-8") as saida:
     json.dump(lista, saida, ensure_ascii=False, indent=2)
 
-print(f"cadeiras (personas/): {len(lista)} — {', '.join(c['sufixo'] for c in lista)}")
-sem_alias = [c["sufixo"] for c in lista if c["sufixo"] not in alias_do_org]
+print(f"atores (personas/): {len(lista)} — " + ", ".join(
+    c["sufixo"] + (" [participante]" if c["participante"] else "") for c in lista))
+sem_alias = [c["sufixo"] for c in lista
+             if c["sufixo"] not in alias_do_org and not c["participante"]]
 if sem_alias:
     print(f"alias do org: {len(alias_do_org)}; sem alias na tabela, sobe pelo sufixo: "
           f"{', '.join(sem_alias)}")

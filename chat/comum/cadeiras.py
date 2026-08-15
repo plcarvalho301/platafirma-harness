@@ -26,6 +26,17 @@ PREFIXO_BOT = "_pf"
 _PREFIXOS_DE_SLUG = ("claudinho-", "claudinha-")
 _NAO_SAO_CADEIRA = {"TEMPLATE", "jaiminho", "osint", "fabrica", "EXTERNO"}
 
+# PARTICIPANTE — quem tem porta com o dono sem ocupar cadeira (colaborador externo,
+# assessor, fornecedor). Rito e estatuto em platafirma-arquitetura/docs/
+# admissao-de-participante.md; quem declara o vinculo e RH, no org canonico.
+#
+# Esta lista NAO os promove a cadeira, e a diferenca e o card inteiro: cadeira tem
+# roteamento entre cadeiras e voto, participante nao. `cadeiras()` segue excluindo
+# jaiminho de proposito — quem pergunta "quem sao as cadeiras" continua recebendo a
+# resposta certa. O que muda e que a SUPERFICIE de conversa passa a ter um roster
+# proprio (`atores()`), maior que o do org: o dono fala com quem tem porta com ele.
+_SAO_PARTICIPANTE = {"jaiminho"}
+
 
 def _raiz_personas() -> Path:
     raiz = os.environ.get("PF_RAIZ", "/home/claudinho/AI")
@@ -51,8 +62,51 @@ def cadeiras() -> list[str]:
     return sorted(achados)
 
 
+def participantes() -> list[str]:
+    """Sufixos dos participantes que tem persona no harness.
+
+    Mesma fonte das cadeiras (personas/persona-*.md) e mesma regra de ausencia:
+    participante declarado em `_SAO_PARTICIPANTE` sem arquivo de persona NAO entra —
+    sem persona nao ha identidade a provisionar, e inventar uma aqui daria MXID a
+    quem o rito de admissao nao admitiu.
+    """
+    dir_personas = _raiz_personas()
+    if not dir_personas.is_dir():
+        raise FileNotFoundError(
+            f"diretorio de personas nao encontrado: {dir_personas} "
+            "(defina PF_RAIZ, ou monte personas/ no container)"
+        )
+    achados = [
+        nome for nome in _SAO_PARTICIPANTE
+        if (dir_personas / f"persona-{nome}.md").is_file()
+    ]
+    return sorted(achados)
+
+
+def atores() -> list[str]:
+    """O roster da SUPERFICIE de conversa: cadeiras + participantes.
+
+    E este o conjunto que ganha MXID, sala com o dono e giro — nao o do org. Quem
+    decide roteamento, voto ou remit continua chamando `cadeiras()`; quem opera a
+    conversa chama esta. Ter duas listas com nomes parecidos e o risco conhecido, e
+    o corte esta escrito no nome: cadeira e vinculo, ator e porta.
+    """
+    return sorted(cadeiras() + participantes())
+
+
+def eh_participante(nome: str) -> bool:
+    """O ator resolvido e participante, e nao cadeira? Fonte da rota de motor.
+
+    O verbo `chat` ramifica por aqui: cadeira gira por `monta-sessao` + Claude Code
+    no cwd dela, participante gira pelo verbo proprio dele. Sem esta pergunta a
+    escolha de motor seria implicita e unica, que e o estado que o card 464 corrige.
+    """
+    canonico = sufixo_canonico(nome)
+    return canonico is not None and canonico in _SAO_PARTICIPANTE
+
+
 def sufixo_canonico(nome: str) -> str | None:
-    """Qualquer forma da cadeira -> o sufixo na caixa canonica. None se nao existe.
+    """Qualquer forma do ator -> o sufixo na caixa canonica. None se nao existe.
 
     Aceita as tres entradas, e por isso quem chama nao prepara nada antes:
       "claudinho-TI"                -> "TI"    (slug do org, com prefixo)
@@ -78,7 +132,7 @@ def sufixo_canonico(nome: str) -> str | None:
     if not bruto:
         return None
     alvo = bruto.lower()
-    for canonico in cadeiras():
+    for canonico in atores():
         if canonico.lower() == alvo:
             return canonico
     return None
@@ -104,6 +158,12 @@ def slug_da_cadeira(nome: str) -> str | None:
     sufixo = sufixo_canonico(nome)
     if sufixo is None:
         return None
+    if sufixo in _SAO_PARTICIPANTE:
+        # Participante nao e claudinho: o proprio nome e o slug, e a linha 1 da
+        # persona dele nao carrega prefixo nenhum. Cair no regex abaixo devolveria
+        # None, e quem chama trataria isso como "ator sem slug" — que e ausencia,
+        # nao a resposta certa.
+        return sufixo
     arq = _raiz_personas() / f"persona-{sufixo}.md"
     try:
         primeira = arq.read_text(errors="replace").split("\n", 1)[0]
@@ -137,11 +197,28 @@ def mxid_da_cadeira(nome: str, dominio: str, prefixo: str = PREFIXO_BOT) -> str 
     return f"@{localpart}:{dominio}"
 
 
-def eh_de_cadeira(mxid: str, dominio: str, prefixo: str = PREFIXO_BOT) -> bool:
-    """O MXID e de uma cadeira NOSSA neste dominio? O bot da recepcao nao conta."""
+def eh_de_ator(mxid: str, dominio: str, prefixo: str = PREFIXO_BOT) -> bool:
+    """O MXID e de um ator NOSSO — cadeira ou participante? O bot nao conta.
+
+    E esta, e nao `eh_de_cadeira`, que a recepcao usa para aprender de quem e uma
+    sala: a sala do Jaiminho tem de ser aprendida como qualquer outra, senao ela
+    fica muda para sempre e o dono nao tem porta com ele.
+    """
     if not mxid.startswith(f"@{prefixo}") or not mxid.endswith(f":{dominio}"):
         return False
     return sufixo_canonico(mxid) is not None
+
+
+def eh_de_cadeira(mxid: str, dominio: str, prefixo: str = PREFIXO_BOT) -> bool:
+    """O MXID e de uma CADEIRA nossa? Participante responde False.
+
+    Sentido estrito de proposito: quem pergunta isto esta perguntando sobre vinculo
+    no org (roteamento, voto), e nesse plano participante nao e cadeira. Para a
+    mecanica da sala a pergunta certa e `eh_de_ator`.
+    """
+    if not eh_de_ator(mxid, dominio, prefixo):
+        return False
+    return sufixo_canonico(mxid) in cadeiras()
 
 
 _LOCALPART_VALIDO = re.compile(r"^[a-z0-9._=\-/+]+$")

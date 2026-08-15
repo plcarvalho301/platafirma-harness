@@ -43,7 +43,9 @@ Em `tool-manifest/TODA-CADEIRA.md`, comum a todas as cadeiras. Não se replica a
 falar com o Jaiminho            : jaiminho perguntar "<texto>"   | continuar, estado, login, logs
                                   colaborador externo no container proprio; Antigravity CLI
                                   com a assinatura do dono, sem API paga. O que ele alcanca
-                                  e decisao do PEP, nunca flag do verbo
+                                  e decisao do PEP, nunca flag do verbo. `perguntar`
+                                  abre com a persona, `continuar` nao reinjeta.
+                                  Doc: docs/jaiminho-pela-nossa-porta.md
 pôr arquivo na fila do acervo   : platafirma-conhecimento/rag/scripts/acervo-drop
                                   degrau 0, fora do PATH; dono declarado: claudinho-TI
 entrada por arquivo / planilha  : acervo ingerir <raiz> | --planilha [x.ods]  [--apply]

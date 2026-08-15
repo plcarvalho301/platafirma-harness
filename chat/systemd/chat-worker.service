@@ -13,6 +13,11 @@ Environment=PF_RAIZ=/home/claudinho/AI
 # morre com "verbo nao esta no PATH". Pegadinha ja paga pelo longjob.
 Environment=PATH=/home/claudinho/AI/bin:/home/claudinho/.local/bin:/usr/local/bin:/usr/bin:/bin
 Environment=CHAT_JOURNAL=/home/claudinho/AI/var/run/chat/journal.db
+# Rota de participante (card 464): o giro do Jaiminho passa por `jaiminho perguntar`,
+# que fala com o container dele por `docker exec`. Em docker ROOTLESS o socket mora no
+# runtime do usuario, e systemd --user nao herda o ambiente da sessao — sem esta linha
+# o CLI procura o socket do root e leva permissao negada. Mesma pegadinha do PATH acima.
+Environment=DOCKER_HOST=unix:///run/user/1001/docker.sock
 ExecStartPre=/bin/mkdir -p /home/claudinho/AI/var/run/chat /home/claudinho/AI/fitas
 ExecStart=/usr/bin/python3 /home/claudinho/AI/platafirma-harness/chat/worker/worker.py
 Restart=always

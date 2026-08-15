@@ -15,8 +15,9 @@ do ops-server, que responde a cada chamada MCP dele. Aumentar o alcance dele e
 ato de concessao no PAP, nunca flag deste verbo.
 
 Atos:
-  perguntar "<texto>"   uma pergunta, sessao nova (corpo tambem por stdin)
-  continuar "<texto>"   retoma a ultima conversa dele
+  perguntar "<texto>"   uma pergunta, sessao NOVA — abre com a persona dele
+                        (corpo tambem por stdin)
+  continuar "<texto>"   retoma a ultima conversa dele, sem reinjetar a persona
   estado                conta autenticada, modelo, ponte e sessao na plataforma
   login                 reabre o fluxo OAuth e imprime a URL para o dono
   logs [n]              ultimas linhas do container
@@ -24,11 +25,14 @@ Atos:
 Sem argumento, imprime isto.
 """
 import json
+import os
 import re
 import subprocess
 import sys
 
 CONTAINER = "jaiminho"
+RAIZ = os.environ.get("PF_RAIZ", os.path.expanduser("~/AI"))
+PERSONA = os.path.join(RAIZ, "platafirma-harness", "personas", "persona-jaiminho.md")
 TRABALHO = "/home/jaiminho/trabalho"
 # Dentro do container ele e root do proprio mundo: sem shell no host, sem rede da
 # malha, sem credencial de cadeira. Por isso a aprovacao interativa de ferramenta
@@ -53,6 +57,32 @@ def exige_container():
                  "(compose em platafirma-harness/jaiminho)")
 
 
+def abertura():
+    """A persona do Jaiminho, para prefixar a conversa NOVA.
+
+    Medido em 15/08/2026 contra o `agy` do container: ele nao le AGENTS.md nem
+    GEMINI.md do cwd, `agy agents` volta vazio e nao ha agent configuravel por
+    arquivo. Sem esta injecao o Jaiminho responde como Gemini generico — perguntado
+    sobre o proprio papel, disse ser \"assistente para desenvolvimento de software\",
+    que nao e nada do que a persona dele contrata.
+
+    Vai na ABERTURA, nunca no `continuar`: e a mesma economia que o verbo `chat`
+    faz com o pacote de cadeira (injeta na fita nova, nao reinjeta no resume). Uma
+    vez por conversa, e nao uma vez por giro.
+
+    Persona ausente NAO derruba a chamada: o giro segue sem ela e a linha de aviso
+    sai no stderr. Melhor resposta generica declarada que sala muda.
+    """
+    try:
+        with open(PERSONA, encoding="utf-8") as f:
+            texto = f.read().strip()
+    except OSError as e:
+        print(f"jaiminho: aviso — persona nao lida ({e}); a conversa abre generica",
+              file=sys.stderr)
+        return ""
+    return texto
+
+
 def texto_do_argumento(args):
     junto = " ".join(args).strip()
     if junto:
@@ -68,6 +98,15 @@ def falar(args, continuar=False):
     if not pergunta:
         sys.exit("jaiminho: sem pergunta — passe o texto como argumento ou por stdin")
     flag = " -c" if continuar else ""
+    if not continuar:
+        persona = abertura()
+        if persona:
+            pergunta = (
+                persona
+                + "\n\n---\nO texto acima e quem voce e; o que vem depois desta linha e a"
+                  " mensagem a responder.\n\n"
+                + pergunta
+            )
     r = sh(f"{BASE}{flag} -p {json.dumps(pergunta)}")
     saida = (r.stdout or "").strip()
     if saida:

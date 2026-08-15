@@ -53,7 +53,7 @@ import formata  # noqa: E402
 import comandos  # noqa: E402
 import rotacao  # noqa: E402
 from comum import journal  # noqa: E402
-from comum.cadeiras import cadeiras, eh_de_cadeira, mxid_da_cadeira, sufixo_canonico  # noqa: E402
+from comum.cadeiras import atores, eh_de_ator, mxid_da_cadeira, sufixo_canonico  # noqa: E402
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")
 log = logging.getLogger("chat-recepcao")
@@ -130,7 +130,9 @@ class Recepcao:
         membro = getattr(getattr(evento, "content", None), "membership", None)
         if not alvo or membro is None or str(membro) != "join":
             return
-        if not eh_de_cadeira(alvo, self.dominio, self.prefixo):
+        # `eh_de_ator`, e nao `eh_de_cadeira`: participante tambem tem sala com o
+        # dono, e aprender so as salas de cadeira deixaria a dele muda para sempre.
+        if not eh_de_ator(alvo, self.dominio, self.prefixo):
             return
         cadeira = sufixo_canonico(alvo)
         if cadeira:
@@ -156,7 +158,7 @@ class Recepcao:
         """
         self.reconciliado_em = time.monotonic()
         achadas = 0
-        for cadeira in cadeiras():
+        for cadeira in atores():
             try:
                 salas = await self.intent_da(cadeira).get_joined_rooms()
             except Exception:
@@ -626,7 +628,7 @@ async def principal() -> None:
     # personas/ o modulo de cadeiras levanta FileNotFoundError, e e melhor que
     # isso derrube a subida — visivel no healthcheck — do que apareca so no
     # primeiro giro, engolido pelo handler de evento como sala sem cadeira.
-    log.info("cadeiras visiveis: %s", ", ".join(cadeiras()))
+    log.info("atores visiveis (cadeiras + participantes): %s", ", ".join(atores()))
 
     condenados = recepcao.varre("varredura de subida")
     log.info("varredura de subida: %s giro(s) orfao(s) convertido(s) em erro", condenados)

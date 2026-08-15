@@ -38,7 +38,7 @@ SKILLS = os.path.join(RAIZ, "platafirma-harness", "skills")
 # A costura de identidade e de chat/comum/cadeiras.py, e nao se reimplementa:
 # duas traducoes divergem, e a que diverge produz cadeira errada.
 sys.path.insert(0, os.path.join(RAIZ, "platafirma-harness", "chat"))
-from comum.cadeiras import slug_da_cadeira  # noqa: E402
+from comum.cadeiras import atores, eh_participante, slug_da_cadeira  # noqa: E402
 
 # Watchdog de atividade, nao teto fixo (minuta 0002, posicao de claudinho-TI,
 # anel 2): o stream emite evento por passo, entao silencio prolongado e giro
@@ -59,7 +59,11 @@ def uso(codigo=2):
         "                                  [--modelo <alias>] [--esforco <nivel>]\n"
         "                                  corpo da mensagem em stdin\n"
         "  chat versao                     versao pinada do motor x a servida\n"
-        "  chat cadeiras                   slugs aceitos em --cadeira\n"
+        "  chat cadeiras                   slugs aceitos em --cadeira (cadeiras + participantes)\n"
+        "\n"
+        "rota do motor, escolhida pelo ator e nao por flag:\n"
+        "  cadeira      -> monta-sessao + Claude Code headless no cwd da fita\n"
+        "  participante -> o verbo proprio dele (jaiminho perguntar | continuar)\n"
         "\n"
         "saida de `despachar`: UMA linha JSON no stdout\n"
         '  {\"estado\":\"ok|erro|cota|timeout\",\"texto\":\"...\",\"id_fita\":\"...\",\n'
@@ -71,16 +75,17 @@ def uso(codigo=2):
     return codigo
 
 
+# A lista local que existia aqui listava o diretorio INTEIRO de personas e por isso
+# ja aceitava `--cadeira jaiminho`, enquanto a recepcao usava `cadeiras.py`, que nao
+# aceitava. Duas listas divergentes sobre identidade e o defeito que o card 464
+# nomeia: quem valida o argumento e quem resolve o MXID tem de ser a mesma fonte.
 def cadeiras():
+    """O roster da superficie: cadeiras + participantes. Nome mantido porque a
+    flag chama `--cadeira`; o conjunto e `atores()`."""
     try:
-        nomes = os.listdir(PERSONAS)
+        return atores()
     except OSError:
         return []
-    return sorted(
-        n[len("persona-"):-len(".md")]
-        for n in nomes
-        if n.startswith("persona-") and n.endswith(".md")
-    )
 
 
 def agora_iso():
@@ -214,6 +219,114 @@ class MotorClaudeCode:
 
 def id_fita_novo():
     return str(uuid.uuid4())
+
+
+# --- rota do participante ---------------------------------------------------
+#
+# A SEGUNDA rota de motor deste verbo, e a razao de a escolha ter deixado de ser
+# implicita (card 464, peca 1). Cadeira gira por `monta-sessao` + Claude Code no
+# cwd dela; participante gira pelo verbo proprio, que ja existe e ja e a porta
+# medida para o container dele. Regra de ouro do manifesto: havendo verbo, chamo o
+# verbo — reimplementar `docker exec` aqui duplicaria a fronteira do container em
+# dois arquivos, e o dia em que a de la mudasse esta ficaria mentindo calada.
+#
+# O contrato de saida NAO muda: uma linha JSON no stdout, um passo por linha no
+# stderr. A recepcao e o worker nao sabem que existe rota — e esse e o ponto.
+
+VERBO_DO_PARTICIPANTE = {"jaiminho": os.path.join(RAIZ, "bin", "jaiminho")}
+
+# `jaiminho perguntar` e sincrono e nao emite stream: ele volta quando o `agy`
+# terminou. O watchdog do worker mata por silencio de 300 s (e o daqui, por 240),
+# entao um giro legitimo de tres minutos morreria sem esta batida. Ela e sinal de
+# VIDA, nao de progresso — e o passo diz isso, para ninguem ler como andamento.
+BATIDA_S = int(os.environ.get("PF_CHAT_BATIDA_PARTICIPANTE", "20"))
+
+# O `agy -c` retoma a ULTIMA conversa do container, que e global — nao ha id de
+# sessao por sala do lado de la. Enquanto o participante tiver UMA sala com o dono
+# (que e o desenho do rito de admissao: sala direta, sem roteamento), isso basta.
+# Duas salas do mesmo participante compartilhariam a conversa, e o efeito seria uma
+# responder com o contexto da outra. Declarado aqui porque nao ha guarda: o dia em
+# que houver segunda sala, o id nosso deixa de descrever a fita real.
+SUMICO_DO_PARTICIPANTE = ("authentication required", "sessao do google expirou")
+
+
+def giro_de_participante(quem, id_fita, corpo, passo_out):
+    """Um giro pelo verbo do participante, no contrato deste verbo.
+
+    `id_fita` vazio abre conversa nova (`perguntar`); com id, retoma (`continuar`).
+    O id e NOSSO e serve so para o journal saber qual dos dois atos chamar — a fita
+    de verdade vive no container do participante, e nao tem nome que se leia daqui.
+    """
+    binario = VERBO_DO_PARTICIPANTE.get(quem)
+    if not binario:
+        return {"estado": "erro", "detalhe": f"participante {quem!r} sem verbo declarado"}
+
+    ato = "continuar" if id_fita else "perguntar"
+    nova = id_fita or id_fita_novo()
+    passo_out({"passo": "rota", "em": agora_iso(), "motor": quem, "ato": ato})
+
+    env = dict(os.environ)
+    caminhos = [os.path.join(RAIZ, "bin"), os.path.expanduser("~/.local/bin")]
+    atual = env.get("PATH", "").split(":")
+    env["PATH"] = ":".join(caminhos + [p for p in atual if p and p not in caminhos])
+    # O verbo do participante fala com o container por `docker exec`, e o worker
+    # roda sob systemd --user, que nao herda ambiente de sessao. Sem isto o docker
+    # CLI procura o socket do root e leva permissao negada — a mesma pegadinha de
+    # PATH que a unit ja paga, noutra variavel.
+    env.setdefault("DOCKER_HOST", f"unix:///run/user/{os.getuid()}/docker.sock")
+
+    try:
+        proc = subprocess.Popen(
+            [binario, ato], env=env, text=True,
+            stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+            start_new_session=True,
+        )
+    except OSError as e:
+        return {"estado": "erro", "detalhe": f"verbo {quem} nao executou: {e}"}
+
+    fora = {}
+
+    def coleta():
+        fora["saida"], fora["erro"] = proc.communicate(input=corpo)
+
+    t = threading.Thread(target=coleta, daemon=True)
+    t.start()
+
+    inicio = time.monotonic()
+    while t.is_alive():
+        t.join(timeout=BATIDA_S)
+        if not t.is_alive():
+            break
+        decorrido = int(time.monotonic() - inicio)
+        if decorrido > TETO_ABS_S:
+            mata_grupo(proc)
+            t.join(timeout=10)
+            return {"estado": "timeout", "id_fita": nova,
+                    "detalhe": f"teto absoluto de {TETO_ABS_S}s no giro de {quem}"}
+        passo_out({"passo": "aguardando", "em": agora_iso(), "motor": quem,
+                   "ha_s": decorrido})
+
+    texto = (fora.get("saida") or "").strip()
+    erro = (fora.get("erro") or "").strip()
+    passo_out({"passo": "result", "em": agora_iso(), "motor": quem,
+               "erro": proc.returncode != 0, "chars": len(texto)})
+
+    if proc.returncode != 0:
+        junto = (erro + " " + texto).lower()
+        if any(m in junto for m in SUMICO_DO_PARTICIPANTE):
+            return {"estado": "erro", "id_fita": "",
+                    "detalhe": f"a sessao do {quem} com o provedor caiu — "
+                               f"rode `{quem} login` no host"}
+        if any(m in junto for m in ("rate limit", "quota", "resource_exhausted")):
+            return {"estado": "cota", "id_fita": nova, "texto": texto,
+                    "detalhe": f"cota do provedor do {quem} estourada"}
+        return {"estado": "erro", "id_fita": nova, "texto": texto,
+                "detalhe": (erro or f"{quem} saiu {proc.returncode}")[:300]}
+
+    if not texto:
+        return {"estado": "erro", "id_fita": nova,
+                "detalhe": f"{quem} respondeu vazio"}
+    return {"estado": "ok", "id_fita": nova, "texto": texto, "detalhe": ""}
 
 
 # --- cwd da cadeira ---------------------------------------------------------
@@ -717,6 +830,27 @@ def despachar(argv):
         p["cadeira"] = cadeira
         sys.stderr.write(json.dumps(p, ensure_ascii=False) + "\n")
         sys.stderr.flush()
+
+    # --- bifurcacao de rota, e ela vem ANTES de qualquer coisa de Claude Code ---
+    # Participante nao tem cwd de fita, nao tem pacote de `monta-sessao`, nao tem
+    # slot de mesa e nao tem allowlist: nada disso e dele. Ramificar aqui, e nao la
+    # dentro, e o que impede o giro do participante de arrastar meia mecanica de
+    # cadeira que nao se aplica a ele.
+    if eh_participante(cadeira):
+        if modelo or esforco:
+            # `pf modelo`/`pf esforco` sao parametros do NOSSO motor. Ignorar calado
+            # faria o dono crer que mexeu em algo; dizer custa uma linha.
+            passo_out({"passo": "parametro-ignorado", "em": agora_iso(),
+                       "motivo": "modelo e esforco nao se aplicam a participante"})
+        r = giro_de_participante(cadeira, id_fita, corpo, passo_out)
+        print(json.dumps({
+            "estado": r["estado"],
+            "texto": "" if silencioso else r.get("texto", ""),
+            "id_fita": r.get("id_fita", "") or "",
+            "detalhe": (r.get("detalhe") or "")[:400],
+            "reiniciada": False,
+        }, ensure_ascii=False), flush=True)
+        return 0
 
     motor = MotorClaudeCode(modelo=modelo, esforco=esforco)
     servida = motor.versao_servida()
