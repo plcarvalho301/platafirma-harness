@@ -1,5 +1,5 @@
 {
-  "_leia": "Registro de stacks da PlataFirma — o DECLARADO, nao o servido. Fonte do verbo `deploy` e da classe `servico` do `conferir`. Nao se deriva do daemon: docker ps lista o que subiu, este arquivo lista o que deveria existir e de onde. `compose` aceita string ou lista: lista vira varios -f, na ordem. `profiles` e opcional e vira --profile; servico sob profile nao declarado aqui e invisivel ao verbo, e foi assim que rag-api ficou fora. `rotas` e o ingress do tunel, relativo ao dir do compose; `segredos` lista os arquivos fora do git que a stack exige (nome e presenca, nunca valor) — lista vazia declara que a stack nao exige nenhum, ausencia declara que ninguem mediu.",
+  "_leia": "Registro de stacks da PlataFirma — o DECLARADO, nao o servido. Fonte do verbo `deploy` e da classe `servico` do `conferir`. Nao se deriva do daemon: docker ps lista o que subiu, este arquivo lista o que deveria existir e de onde. `compose` aceita string ou lista: lista vira varios -f, na ordem. `profiles` e opcional e vira --profile; servico sob profile nao declarado aqui e invisivel ao verbo, e foi assim que rag-api ficou fora. `rotas` e o ingress do tunel, relativo ao dir do compose; `gate` aponta o compose onde mora o gate da stack, para o caso em que ele NAO mora no compose dela (o do rastreador e um oauth2-proxy que vive no core) — sem esse ponteiro `deploy <stack> acessos` responderia \"nenhuma superficie gateada\" sobre superficie gateada, que e verde vazio; `segredos` lista os arquivos fora do git que a stack exige (nome e presenca, nunca valor) — lista vazia declara que a stack nao exige nenhum, ausencia declara que ninguem mediu.",
   "_capacidade": "ativo",
   "_dono": "claudinho-TI",
   "stacks": {
@@ -98,7 +98,9 @@
       "repo": "platafirma-rastreador",
       "papel": "rastreador de trabalho: API e banco proprio do boneco",
       "critico": false,
-      "_nota": "Boneco do card #465, API-only por arq:0056 — o comentario 335 recortou a tela, que volta no #468. Aponta para o CLONE DE TRABALHO, nao para um worktree de deploy: ~/AI/deploy/rastreador nao existe, entao `promover` recusa e `conferir servico` marca DERIVA. E o mesmo padrao de acervo-api, chat e jaiminho. Nada em producao depende desta stack e nao ha rota no tunel; reverter e `deploy rastreador down` mais apagar o volume.",
+      "rotas": "~/AI/deploy/core/deploy/cloudflared-config.yml",
+      "gate": "~/AI/deploy/core/docker-compose.yml",
+      "_nota": "Boneco do card #465, API-only por arq:0056 — o comentario 335 recortou a tela, que volta no #468. Aponta para o CLONE DE TRABALHO, nao para um worktree de deploy: ~/AI/deploy/rastreador nao existe, entao `promover` recusa e `conferir servico` marca DERIVA. E o mesmo padrao de acervo-api, chat e jaiminho. DESDE O #469 a stack tem superficie publica: tarefas.platafirma.org entra no `oauth2-proxy-rastreador`, que vive na stack CORE e alcanca esta API pela rede `pf-borda-rastreador`. Por isso `rotas` e `gate` apontam os dois para fora deste repo — mesma razao do `chat`, cujo ingress tambem mora no core. Reverter continua sendo `deploy rastreador down` mais apagar o volume; a rota volta para vikunja-proxy numa linha.",
       "segredos": [
         ".env"
       ]

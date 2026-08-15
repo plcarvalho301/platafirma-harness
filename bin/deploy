@@ -157,15 +157,42 @@ if [ "$ACAO" = "rotas" ]; then
 fi
 
 if [ "$ACAO" = "acessos" ]; then
+  # O gate de uma stack nem sempre mora no compose dela, e ate o #469 este verbo supunha
+  # que sim. O do `rastreador` e uma instancia de oauth2-proxy que vive na stack CORE:
+  # sem o ponteiro abaixo, `deploy rastreador acessos` respondia "nenhuma superficie
+  # gateada declarada" sobre uma superficie que ESTA gateada — verde vazio, que e pior
+  # que erro, porque passa no aceite sem provar nada. Mesmo padrao do campo `rotas`, que
+  # ja aponta para fora do repo quando o ingress mora noutra stack.
+  #
+  # O filtro por nome do servico e o que impede a leitura de mentir na outra direcao:
+  # o compose do core tem TRES instancias de oauth2-proxy, e sem filtrar, `acessos` da
+  # stack rastreador listaria o gate da wiki e o do harness como se fossem dela. A
+  # convencao passa a ser carregada: o servico do gate leva o nome da stack no dele.
+  GATE="$(campo "$STACK" gate)"
+  ACESSOS_ARGS=("${COMPOSE_ARGS[@]}")
+  FILTRO=""
+  if [ -n "$GATE" ]; then
+    GATE="$(resolve "$GATE")"
+    [ -r "$GATE" ] || { echo "erro: gate declarado e ilegivel: $GATE" >&2; exit 1; }
+    printf 'gate    : %s\n' "$GATE"
+    printf '          (declarado no registro: o gate desta stack NAO mora no compose dela)\n\n'
+    ACESSOS_ARGS=(-f "$GATE")
+    FILTRO="$STACK"
+  fi
   # O compose resolvido normaliza volume para objeto (source/target), nao string, e o
   # `yq` daqui e o de Go: sem --arg e sem env.VAR. Ler isso em shell rendeu falha muda,
   # entao a leitura e em python, que ja tem o YAML.
-  docker compose "${COMPOSE_ARGS[@]}" "${PERFIL_ARGS[@]+"${PERFIL_ARGS[@]}"}" config 2>/dev/null \
+  docker compose "${ACESSOS_ARGS[@]}" "${PERFIL_ARGS[@]+"${PERFIL_ARGS[@]}"}" config 2>/dev/null \
   | python3 -c '
 import sys, yaml
 cfg = yaml.safe_load(sys.stdin) or {}
+# argv[1] so vem preenchido quando o registro declarou `gate`: e o nome da stack, e serve
+# para nao atribuir a ela o gate de uma superficie vizinha no mesmo compose.
+filtro = sys.argv[1] if len(sys.argv) > 1 else ""
 achou = False
 for nome, sv in (cfg.get("services") or {}).items():
+    if filtro and filtro not in nome:
+        continue
     alvo = next((a.split("=", 1)[1] for a in (sv.get("command") or [])
                  if isinstance(a, str) and "authenticated-emails-file" in a), None)
     if not alvo:
@@ -185,6 +212,8 @@ for nome, sv in (cfg.get("services") or {}).items():
     except (OSError, TypeError):
         print("  entra   : (arquivo nao legivel daqui)")
 for nome, sv in (cfg.get("services") or {}).items():
+    if filtro and filtro not in nome:
+        continue
     env = sv.get("environment") or {}
     texto = " ".join(f"{k}={v}" for k, v in env.items()) if isinstance(env, dict) else " ".join(map(str, env))
     if "OIDC" in texto.upper() or "OPENID" in texto.upper():
@@ -194,7 +223,7 @@ for nome, sv in (cfg.get("services") or {}).items():
         print("            Keycloak, que este verbo nao usa — e a allowlist nao cobre esta.")
 if not achou:
     print("nenhuma superficie gateada declarada no compose desta stack.")
-'
+' "$FILTRO"
   exit 0
 fi
 
