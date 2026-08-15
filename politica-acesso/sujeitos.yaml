@@ -7,7 +7,7 @@
 #
 # CHAVE: `preferred_username` do JWT, ou o `sub` quando não há username. O que está
 # aqui foi medido no log de auditoria (~/AI/var/log/ops/), não suposto: em 13/08/2026
-# só dois sujeitos aparecem — `g48ufn` (OIDC, azp claudinho-mcp) e `claudinho` (rota
+# só dois sujeitos aparecem — o dono (OIDC, azp claudinho-mcp) e `claudinho` (rota
 # de emergência por token estático).
 #
 # DEFAULT: sujeito ausente desta tabela NÃO tem papel, e o PDP nega por atributo
@@ -20,7 +20,7 @@ sujeitos:
 
   # O dono, por credencial própria no realm. `operador` porque é humano que responde
   # pelo que faz (regra operador-plataforma), não cadeira.
-  g48ufn:
+  megafone:
     natureza: pessoa
     papeis: [operador]
     dominios: [plataforma]
