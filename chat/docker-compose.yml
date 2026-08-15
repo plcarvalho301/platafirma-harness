@@ -70,14 +70,32 @@ services:
     # aqui. Ela tambem da o egresso que o OIDC precisa para falar com auth.platafirma.org.
     networks: [interna, conhecimento]
 
-  # Corpo minimo da recepcao (o Application Service). Em v0/A ela existe para estar REGISTRADO e de
-  # pe: aceita transacao, responde ping e loga. Handler de mensagem, sala por cadeira,
-  # alias, avatar e typing sao card 448, e entram aqui dentro.
+  # Receptor — o lado MATRIX do giro (card 458). Aceita a transacao, deduplica,
+  # enfileira no journal, liga o typing, baixa anexo, formata, fatia e envia a
+  # resposta. Ele NAO chama verbo: quem faz isso e o worker, no host, sob
+  # systemd --user (chat/systemd/chat-worker.service).
+  #
+  # A partida e por DIRECAO, decidida por claudinho-TI (comentario 302 do card
+  # 458), e as duas razoes sao medidas:
+  #   - em docker rootless o container NAO alcanca o host (host-gateway, 10.0.2.2
+  #     e o gateway da bridge, os tres mudos — ja pago em controle/compose.yaml);
+  #   - publicar a porta do Synapse no loopback para o worker falar com ele poria
+  #     a Admin API fora da rede interna, contra arq:0026.
+  # Partindo assim: nenhuma porta nova, nenhuma travessia, e a UNICA fronteira e
+  # o journal SQLite em WAL, no bind mount abaixo.
   chat-recepcao:
-    build: ./recepcao
+    build:
+      # Contexto e chat/, nao chat/recepcao/: `comum/journal.py` e compartilhado
+      # com o worker do host e entra na imagem sem virar segunda copia.
+      context: .
+      dockerfile: recepcao/Dockerfile
     image: platafirma/chat-recepcao:local
     container_name: chat-recepcao
     restart: unless-stopped
+    # rootless: root-do-container = claudinho no host, e e o unico uid que escreve
+    # nos bind mounts abaixo (~/AI e do claudinho). Mesmo motivo ja escrito para o
+    # chat-synapse. O uid 10001 da imagem cairia num subuid sem acesso a nada.
+    user: "0:0"
     environment:
       AS_ID: pf
       AS_SERVIDOR: http://chat-synapse:8008
@@ -86,6 +104,15 @@ services:
       AS_PORTA: "8080"
       AS_TOKEN: ${AS_TOKEN:?defina AS_TOKEN no .env — sai do cofre por ./prepara.sh}
       HS_TOKEN: ${HS_TOKEN:?defina HS_TOKEN no .env — sai do cofre por ./prepara.sh}
+      CHAT_JOURNAL: /home/claudinho/AI/var/run/chat/journal.db
+      CHAT_FITAS_RAIZ: /home/claudinho/AI/fitas
+    volumes:
+      # Os dois montam no MESMO caminho absoluto de fora. Nao e desleixo: o
+      # caminho do anexo atravessa a fronteira dentro do corpo da mensagem, e o
+      # worker abre esse caminho no host. Traduzir prefixo aqui obrigaria a
+      # traduzir de volta la, e a primeira divergencia seria silenciosa.
+      - ${HOME}/AI/fitas:/home/claudinho/AI/fitas:rw
+      - ${HOME}/AI/var/run/chat:/home/claudinho/AI/var/run/chat:rw
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request,sys;sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8080/estado',timeout=8).status==200 else 1)"]
       interval: 30s

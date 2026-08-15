@@ -1,0 +1,22 @@
+[Unit]
+# Lado verbo do giro da recepcao (card 458). O lado Matrix e o container
+# chat-recepcao, e as duas pecas so se falam pelo journal SQLite do bind mount.
+Description=Worker do chat — lado verbo do giro da recepcao
+After=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/home/claudinho/AI/platafirma-harness/chat
+Environment=PF_RAIZ=/home/claudinho/AI
+# systemd --user NAO le .bashrc nem .profile: sem esta linha o worker nao acha
+# nem o verbo (~/AI/bin) nem o `claude` que ele invoca (~/.local/bin), e o giro
+# morre com "verbo nao esta no PATH". Pegadinha ja paga pelo longjob.
+Environment=PATH=/home/claudinho/AI/bin:/home/claudinho/.local/bin:/usr/local/bin:/usr/bin:/bin
+Environment=CHAT_JOURNAL=/home/claudinho/AI/var/run/chat/journal.db
+ExecStartPre=/bin/mkdir -p /home/claudinho/AI/var/run/chat /home/claudinho/AI/fitas
+ExecStart=/usr/bin/python3 /home/claudinho/AI/platafirma-harness/chat/worker/worker.py
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=default.target
