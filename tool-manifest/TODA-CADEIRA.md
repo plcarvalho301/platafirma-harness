@@ -18,6 +18,14 @@ reler o historico (7 dias)      : fila ler <persona> --tudo [rem] | --desde AAAA
 mandar recado                   : fila enviar <dest> --tipo <t> --assunto <a>
                                   (corpo em stdin; --ref e --responde opcionais)
 abrir sessão de uma cadeira     : monta-sessao <cadeira>   [tool monta_sessao é a via boa]
+despachar giro na sala do chat  : chat despachar --cadeira <slug> --fita <id-ou-vazio>
+                                  corpo em stdin; UMA linha JSON no stdout (estado, texto,
+                                  id_fita, detalhe, reiniciada) e um passo por linha no
+                                  stderr. Quem chama e a recepcao do chat, nao a cadeira.
+                                  Fita vazia abre por monta-sessao; fita com id retoma e
+                                  NAO reinjeta o pacote. --silencioso: giro cujo produto e
+                                  escrita em mesa/caderno, sem texto para a sala.
+versao do motor x a pinada      : chat versao                    exit 1 = CLI derivou
 
 ver minha memoria de trabalho   : mesa ver [chapeu]              ja vem no monta_sessao
 anotar antes de a fita morrer   : mesa anota <chapeu>            corpo em stdin; sobrescreve
