@@ -65,7 +65,7 @@
       "repo": "platafirma-harness",
       "papel": "plano de controle do harness: agregador e tela",
       "critico": false,
-      "_nota": "compose existe mas NAO e o que roda: agregador e tela sao units systemd --user (deploy/harness/systemd/), porque os verbos do host nao sobrevivem a containerizacao.",
+      "_nota": "reparticao por direcao: a TELA e conteiner, servida por este compose (front vem da imagem, arq:0056); o AGREGADOR e unit systemd --user em deploy/harness/controle/systemd/, porque os verbos do host nao sobrevivem a containerizacao.",
       "segredos": []
     },
     "jaiminho": {
