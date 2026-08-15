@@ -11,18 +11,12 @@ instrumentação nossa. O `rate_limit_event` traz `resetsAt`.
 
 - **O custo não é novo — a visibilidade é.** Toda fita já paga a abertura de
   contexto hoje, em toda cadeira; dentro do harness do Claude ela some na
-  assinatura. Comparar contra zero é o erro (cometido nesta sessão, corrigido
-  pelo dono).
-- **Ganchos que isto abre**, sendo a sala a fita (`uuid5(room_id)`):
-  - custo por sala → por cadeira e por chapéu;
-  - custo por card, se a sala carregar o `#N`;
-  - contexto inútil de `monta_sessao` ganha preço em número, não em opinião;
-  - quantos giros cabem no que sobrou da janela (`resetsAt` + custo por giro).
-- **Onde isto vale mais do que aqui dentro:** no que NÃO é cadeira nossa — o
-  Jaiminho e qualquer harness entregue a terceiro. Medição por giro é o que
-  transforma "confia" em fatura, e é requisito de venda antes de ser conforto
-  operacional.
-- **Não é card.** Sai de graça do card 448, que já consome o `result` inteiro.
+  assinatura. Comparar contra zero é o erro.
+- **A chave de junção é a sala como fita** (`uuid5(room_id)`): é o que liga custo
+  a cadeira, a chapéu e a card. Sem ela, o número existe e não agrega.
+- **Onde vale mais do que aqui dentro:** no que NÃO é cadeira nossa — Jaiminho e
+  qualquer harness entregue a terceiro. Medição por giro transforma "confia" em
+  fatura, e é requisito de venda antes de ser conforto operacional.
 
 ## Cliente Matrix: Classic, não X (medido 14/08)
 
