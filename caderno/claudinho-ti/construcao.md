@@ -80,3 +80,15 @@ Tratei como regra geral e não é: é o padrão de UMA classe de tela.
   cara.** A primeira fica contida numa camada e a saída custa reescrever render. A
   segunda arrasta o design system inteiro do fornecedor — forma, elevação,
   movimento, densidade — e aí a decisão deixa de ser minha e vira de produto.
+
+## Fita própria contra fita própria, mesma árvore (medido 15/08, verbo `minuta`)
+
+A regra de worktree por fatia (`fabrica.md`, `ti/fluxo-worktree-por-fatia`) cobre
+fita de fábrica contra cadeira — não cobre fita minha contra fita minha. Duas
+sessões minhas (host/CLI e sala do chat) escreveram no mesmo `platafirma-harness`
+ao mesmo tempo, sem coordenação. Não deu conflito porque o commit de uma fechou
+antes de a outra tocar os mesmos arquivos — timing, não desenho.
+
+Antes de editar arquivo compartilhado numa fita: `git log -3` e olhar o
+timestamp do topo. Commit com poucos minutos de idade é sinal de outra sessão
+viva na mesma árvore, não histórico frio.
