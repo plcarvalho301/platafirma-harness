@@ -14,11 +14,15 @@ contra arq:0026. Partindo assim, nenhuma porta nova e nenhuma travessia.
 
 A UNICA fronteira e o journal SQLite em WAL, no bind mount (chat/comum/journal.py).
 
-ACK-THEN-WORK, ao pe da letra: a mautrix 0.21.1 aguarda o handler antes de
-responder 200 (medido em `AppServiceServerMixin.handle_transaction`), entao o
-que fica dentro do ack e exatamente o que o card manda persistir antes de
-qualquer giro — dedupe e job. O giro roda noutro PROCESSO, do outro lado do
-arquivo.
+ACK-THEN-WORK, e ele NAO vem de graca: a mautrix 0.21.1 fixa
+`synchronous_handlers = False` no __init__ e nao expoe kwarg
+(as_handler.py:69), e nesse modo `handle_matrix_event` despacha o handler por
+`background_task.create` e a transacao e confirmada ANTES de o handler rodar
+(as_handler.py:346-351, medido na imagem). Com isso o 200 sairia antes do dedupe
+e do job — e o homeserver nao reentrega o que ja confirmou, entao morte na
+janela perderia a mensagem em silencio. Por isso `principal` liga o flag na mao.
+Ligado, o que fica dentro do ack e exatamente o que o card manda persistir antes
+de qualquer giro — dedupe e job, uma escrita. O giro roda noutro PROCESSO.
 
 NUNCA SILENCIO, em tres aneis (posicao de claudinho-TI):
   1. status estruturado do verbo vira mensagem formatada na sala (expedidor);
@@ -35,6 +39,7 @@ import contextvars
 import logging
 import os
 import sys
+import time
 
 from aiohttp import web
 from mautrix.appservice import AppService
@@ -65,6 +70,12 @@ INTERVALO_EXPEDIDOR = float(os.environ.get("CHAT_INTERVALO_EXPEDIDOR", "2"))
 TYPING_MS = int(os.environ.get("CHAT_TYPING_MS", "30000"))
 INTERVALO_TYPING = float(os.environ.get("CHAT_INTERVALO_TYPING", "20"))
 ANEXO_TIMEOUT = float(os.environ.get("CHAT_ANEXO_TIMEOUT", "30"))
+# Piso entre duas reconciliacoes do mapa sala->cadeira. Sem ele, mensagem em sala
+# de fora do nosso namespace viraria uma varredura por evento.
+INTERVALO_RECONCILIA = float(os.environ.get("CHAT_INTERVALO_RECONCILIA", "60"))
+# Envio que falha sempre (sala apagada, cadeira expulsa) nao pode ser tentado para
+# sempre: depois disto o giro e dado por perdido, com log, e sai da fila.
+TENTATIVAS_DE_ENVIO = int(os.environ.get("CHAT_TENTATIVAS_ENVIO", "5"))
 
 TEXTOS = (MessageType.TEXT, MessageType.NOTICE, MessageType.EMOTE)
 MIDIAS = (MessageType.IMAGE, MessageType.FILE)
@@ -87,6 +98,8 @@ class Recepcao:
         self.prefixo = prefixo  # localpart do bot, ex. "_pf"
         self.em_voo: set[str] = set()
         self.sem_cadeira = 0
+        self.reconciliado_em = 0.0
+        self.falhas_de_envio: dict[int, int] = {}
 
     # --- identidade: de que cadeira e esta sala ---------------------------
 
@@ -120,27 +133,47 @@ class Recepcao:
             journal.grava_cadeira(self.con, evento.room_id, cadeira)
             log.info("sala %s e da cadeira %s", evento.room_id, cadeira)
 
+    async def reconcilia_salas(self) -> int:
+        """Refaz o mapa sala->cadeira perguntando a CADA cadeira em que salas ela esta.
+
+        Aprender pelo evento de entrada e mais barato, mas nao basta sozinho, e os
+        tres motivos sao medidos: a transacao que trouxe o join pode ter sido
+        confirmada com o receptor fora do ar (e o homeserver nao reentrega o que ja
+        confirmou); o journal mora num bind mount que se pode recriar; e o
+        provisionamento da fatia B-3 e idempotente por desenho, entao reexecuta-lo
+        NAO reemite join nenhum. Sem esta volta, sala cujo join se perdeu fica muda
+        para sempre — e mudez permanente e o oposto do contrato do card.
+
+        `get_joined_rooms` esta em ENSURE_REGISTERED_METHODS da mautrix (medido, nao
+        suposto): responde sem exigir entrar em nada. O caminho anterior —
+        `get_joined_members` pelo BOT — era morto por construcao: esse metodo esta
+        em ENSURE_JOINED, o bot @_pf nao e convidado para as salas das cadeiras, e o
+        wrapper tentava entrar e levava 403 antes de chegar a listagem.
+        """
+        self.reconciliado_em = time.monotonic()
+        achadas = 0
+        for cadeira in cadeiras():
+            try:
+                salas = await self.intent_da(cadeira).get_joined_rooms()
+            except Exception:
+                log.warning("nao consegui listar as salas de %s", cadeira, exc_info=True)
+                continue
+            for sala in salas:
+                journal.grava_cadeira(self.con, sala, cadeira)
+                achadas += 1
+        return achadas
+
     async def cadeira_da_sala(self, sala: str) -> str | None:
         cadeira = journal.cadeira_da_sala(self.con, sala)
         if cadeira:
             return cadeira
-        # Ultimo recurso: se o bot estiver na sala, ele enxerga os membros.
-        try:
-            membros = await self.appserv.intent.get_joined_members(sala)
-        except Exception:
-            # Falha esperada quando o bot nao esta na sala, que e o caso das
-            # sete: o alcance vem do evento de entrada. Logado com a causa
-            # mesmo assim — sala muda e sem motivo visivel e o pior estado.
-            log.warning("nao consegui listar os membros de %s", sala, exc_info=True)
-            self.sem_cadeira += 1
-            return None
-        for mxid in membros:
-            achada = sufixo_canonico(mxid) if eh_de_cadeira(
-                mxid, self.dominio, self.prefixo) else None
-            if achada:
-                journal.grava_cadeira(self.con, sala, achada)
-                return achada
+        if time.monotonic() - self.reconciliado_em > INTERVALO_RECONCILIA:
+            await self.reconcilia_salas()
+            cadeira = journal.cadeira_da_sala(self.con, sala)
+            if cadeira:
+                return cadeira
         self.sem_cadeira += 1
+        log.error("sala %s nao e de cadeira nenhuma que eu conheca", sala)
         return None
 
     def intent_da(self, cadeira: str):
@@ -332,7 +365,23 @@ class Recepcao:
         while True:
             try:
                 for job in journal.a_expedir(self.con):
-                    await self.expede(job)
+                    try:
+                        await self.expede(job)
+                        self.falhas_de_envio.pop(job["id"], None)
+                    except Exception:
+                        # Cerca POR JOB. Sala apagada ou cadeira expulsa faz o envio
+                        # falhar em toda volta; sem esta cerca esse job segura a fila
+                        # de TODAS as outras salas, e ninguem recebe mais nada — o
+                        # oposto exato do que o expedidor existe para garantir.
+                        n = self.falhas_de_envio.get(job["id"], 0) + 1
+                        self.falhas_de_envio[job["id"]] = n
+                        log.error("falha ao expedir o giro %s (sala %s), tentativa %s",
+                                  job["id"], job["sala"], n, exc_info=True)
+                        if n >= TENTATIVAS_DE_ENVIO:
+                            journal.marca_enviado(self.con, job["id"])
+                            self.falhas_de_envio.pop(job["id"], None)
+                            log.error("giro %s dado por perdido depois de %s tentativas"
+                                      " — a sala nao aceita mensagem nossa", job["id"], n)
             except Exception:
                 log.error("falha no expedidor", exc_info=True)
             await asyncio.sleep(INTERVALO_EXPEDIDOR)
@@ -407,6 +456,14 @@ async def principal() -> None:
 
     appserv.handle_transaction = com_txn
 
+    # SEM ESTA LINHA NAO HA ACK-THEN-WORK. A lib fixa o flag em False no __init__ e
+    # nao expoe kwarg (as_handler.py:69); nesse modo `handle_matrix_event` despacha
+    # o handler por `background_task.create` (as_handler.py:346-351) e o 200 sai
+    # antes de o dedupe e o job existirem. Como o homeserver NAO reentrega
+    # transacao ja confirmada, morrer nessa janela perde a mensagem em silencio.
+    # Ligado, o handler roda dentro do ack — e ele so persiste, nao gira.
+    appserv.synchronous_handlers = True
+
     @appserv.matrix_event_handler
     async def entrega(evento) -> None:
         try:
@@ -440,6 +497,11 @@ async def principal() -> None:
     await appserv.start("0.0.0.0", porta)
     appserv.ready = True
     log.info("recepcao de pe na porta %s", porta)
+
+    # Depois do start, porque a intent so existe com o AppService de pe. Refaz o
+    # mapa sala->cadeira sem depender de ter visto os eventos de entrada.
+    salas = await recepcao.reconcilia_salas()
+    log.info("reconciliacao de subida: %s sala(s) mapeada(s) por cadeira", salas)
 
     await asyncio.gather(
         recepcao.laco_expedidor(),

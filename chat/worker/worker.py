@@ -40,10 +40,17 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from comum import journal  # noqa: E402
 
-# Watchdog de PRIMEIRA ordem (posicao de claudinho-TI): o stream do verbo emite
-# evento por passo, e silencio maior que isto e giro pendurado — nao giro longo.
-# Teto fixo mataria trabalho legitimo; ausencia de sinal, nao.
-STREAM_MUDO_S = float(os.environ.get("CHAT_STREAM_MUDO_S", "240"))
+# Watchdog de SEGUNDA ordem sobre o silencio do stream. O de primeira ordem e do
+# proprio verbo: bin/chat tem `SILENCIO_S = 240` e, ao estourar, mata o grupo do
+# motor e AINDA IMPRIME o contrato — inclusive o `id_fita`, que na primeira
+# mensagem de uma sala e o unico registro da fita recem-aberta.
+#
+# Por isso 300 e nao 240: iguais, o worker SIGTERMa o verbo antes de ele imprimir,
+# e o id da fita nova se perde — a proxima mensagem abriria outra fita e o dono
+# perderia o contexto sem nada dizer. A margem e a mesma disciplina que o receptor
+# ja aplica sobre o worker (270 contra 240): anel de fora sempre depois do de
+# dentro. Medido em 15/08: PF_CHAT_SILENCIO=240 em bin/chat:41.
+STREAM_MUDO_S = float(os.environ.get("CHAT_STREAM_MUDO_S", "300"))
 # Vigia de ultima instancia, so para o caso de o verbo ignorar o SIGTERM e
 # continuar produzindo stream para sempre. Desligado por padrao.
 TETO_ABSOLUTO_S = float(os.environ.get("CHAT_TETO_ABSOLUTO_S", "0"))

@@ -27,6 +27,7 @@ que quer sem variavel de ambiente:
     DUBLE:demora    ~8 s batendo no stream, para o giro atravessar uma queda
     DUBLE:longo     resposta grande, para provar o fatiamento
     DUBLE:vazio     estado ok com texto vazio
+    DUBLE:reinicio  o motor perdeu a fita e o verbo reabriu (reiniciada=true)
     DUBLE:lixo      escreve ruido em stdout e nao cumpre o contrato
 
 """
@@ -74,7 +75,11 @@ def main() -> int:
     passo("init", cadeira=args.cadeira, fita=args.fita or None)
 
     id_fita = args.fita or f"fita-de-{args.cadeira}"
-    reiniciada = not args.fita
+    # `reiniciada` NAO se deriva de a fita estar vazia. No verbo real ela nasce
+    # False e so vira True na retentativa, depois de o --resume falhar por fita
+    # perdida (bin/chat:504 e 517-525): abrir a primeira fita de uma sala NAO e
+    # reinicio. Derivar aqui gravava no teste uma regra que o verbo nao tem.
+    reiniciada = "DUBLE:reinicio" in corpo
 
     if "DUBLE:pendura" in corpo:
         passo("assistant")
