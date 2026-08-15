@@ -1,0 +1,96 @@
+#!/usr/bin/env python3
+"""minuta ler — sem argumento, as minutas abertas em que PF_CADEIRA está
+convocada (número, título, quem abriu, idade em dias, seção vazia ou não);
+com argumento, o arquivo inteiro. Leitura fria: não muda estado, não marca
+nada como visto. Protocolo: platafirma-arquitetura/minutas/PROTOCOLO.md.
+"""
+import os
+import re
+import sys
+import glob
+import datetime
+
+REPO = os.environ.get("MINUTA_REPO") or os.path.expanduser("~/AI/platafirma-arquitetura")
+DIR = os.path.join(REPO, "minutas")
+PLACEHOLDER_CONV = "<a preencher pela própria cadeira>"
+PLACEHOLDER_ABRE = "<escreva aqui antes de circular>"
+
+
+def erro(msg, code=1):
+    print(f"minuta ler: {msg}", file=sys.stderr)
+    sys.exit(code)
+
+
+def parse_secoes(texto):
+    secoes = {}
+    for m in re.finditer(r"^## Posição — (.+?)\s*$\n(.*?)(?=^## |\Z)", texto, re.M | re.S):
+        secoes[m.group(1).strip()] = m.group(2).strip()
+    return secoes
+
+
+def listar_arquivos():
+    return sorted(glob.glob(os.path.join(DIR, "[0-9][0-9][0-9][0-9]-*.md")))
+
+
+def main():
+    args = sys.argv[1:]
+    if args:
+        alvo = args[0]
+        achado = None
+        if alvo.isdigit():
+            num = f"{int(alvo):04d}"
+            for a in listar_arquivos():
+                if os.path.basename(a).startswith(num + "-"):
+                    achado = a
+                    break
+        else:
+            for a in listar_arquivos():
+                if alvo in os.path.basename(a):
+                    achado = a
+                    break
+        if not achado:
+            erro(f"minuta '{alvo}' não encontrada")
+        sys.stdout.write(open(achado, encoding="utf-8").read())
+        return
+
+    cadeira = os.environ.get("PF_CADEIRA", "")
+    if not cadeira:
+        erro("exporte PF_CADEIRA=<cadeira>.")
+
+    hoje = datetime.date.today()
+    linhas = []
+    for caminho in listar_arquivos():
+        texto = open(caminho, encoding="utf-8").read()
+        m_conv = re.search(r"^Convocadas: (.+)$", texto, re.M)
+        convocadas = [c.strip() for c in m_conv.group(1).split(",")] if m_conv else []
+        m_titulo = re.match(r"^# (\d{4}) — (.+)$", texto, re.M)
+        num = m_titulo.group(1) if m_titulo else "????"
+        titulo = m_titulo.group(2).strip() if m_titulo else os.path.basename(caminho)
+        m_abre = re.search(r"^Aberta por: (.+?) · (\d{4}-\d{2}-\d{2})", texto, re.M)
+        abridora = m_abre.group(1).strip() if m_abre else "?"
+        # Quem abriu ve a propria minuta: a cobranca do 3o dia (protocolo §6) e dela.
+        if cadeira not in convocadas and cadeira != abridora:
+            continue
+        idade = "?"
+        if m_abre:
+            try:
+                d = datetime.date.fromisoformat(m_abre.group(2))
+                idade = str((hoje - d).days)
+            except ValueError:
+                pass
+        secoes = parse_secoes(texto)
+        body = secoes.get(cadeira, "")
+        vazia = (not body) or body in (PLACEHOLDER_CONV, PLACEHOLDER_ABRE)
+        papel = "abri" if cadeira == abridora else "convocada"
+        linhas.append(
+            f"{num}  {titulo}  aberta por {abridora}  {idade}d  {papel}  "
+            f"seção: {'vazia' if vazia else 'preenchida'}"
+        )
+
+    if not linhas:
+        sys.exit(1)
+    print("\n".join(linhas))
+
+
+if __name__ == "__main__":
+    main()

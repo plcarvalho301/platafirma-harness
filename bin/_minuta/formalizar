@@ -1,0 +1,156 @@
+#!/usr/bin/env python3
+"""minuta formalizar — fecha a minuta, exclusivamente. Cria o destino com o
+esqueleto do tipo (ADR ou spec), vazio de conteúdo, apaga minutas/NNNN-slug.md
+e commita a remoção junto, com o número da minuta na mensagem de commit — um
+ato só. Não redige o canônico: quem escreve é a cadeira, no prompt.
+Nada de texto fóssil: o destino não referencia o número da minuta removida.
+Protocolo: minutas/PROTOCOLO.md §5. Spec: docs/spec_verbo-minuta.md §5.
+"""
+import os
+import re
+import sys
+import glob
+import subprocess
+import datetime
+
+REPO = os.environ.get("MINUTA_REPO") or os.path.expanduser("~/AI/platafirma-arquitetura")
+DIR = os.path.join(REPO, "minutas")
+DECISIONS = os.path.join(REPO, "macro-global", "decisions")
+DOCS = os.path.join(REPO, "docs")
+PLACEHOLDER_CONV = "<a preencher pela própria cadeira>"
+
+
+def erro(msg, code=1):
+    print(f"minuta formalizar: {msg}", file=sys.stderr)
+    sys.exit(code)
+
+
+def git(*args, check=True):
+    return subprocess.run(
+        ["git", "-C", REPO, *args], capture_output=True, text=True, check=check
+    )
+
+
+def resolve(n):
+    if not n.isdigit():
+        erro(f"'{n}' não é um número de minuta")
+    num = f"{int(n):04d}"
+    achados = glob.glob(os.path.join(DIR, f"{num}-*.md"))
+    if not achados:
+        erro(f"minuta {num} não encontrada")
+    return num, achados[0]
+
+
+def parse_secoes(texto):
+    secoes = {}
+    for m in re.finditer(r"^## Posição — (.+?)\s*$\n(.*?)(?=^## |\Z)", texto, re.M | re.S):
+        secoes[m.group(1).strip()] = m.group(2).strip()
+    return secoes
+
+
+def slugify(s):
+    s = s.strip().lower()
+    s = re.sub(r"[^a-z0-9]+", "-", s)
+    return s.strip("-")
+
+
+def main():
+    args = sys.argv[1:]
+    if not args:
+        erro("uso: minuta formalizar <n> --como adr|spec [--destino <slug>] [--vencido]", 2)
+    n = args[0]
+    como = None
+    destino_arg = None
+    vencido = False
+    i = 1
+    while i < len(args):
+        a = args[i]
+        if a == "--como":
+            como = args[i + 1] if i + 1 < len(args) else None
+            i += 2
+        elif a == "--destino":
+            destino_arg = args[i + 1] if i + 1 < len(args) else None
+            i += 2
+        elif a == "--vencido":
+            vencido = True
+            i += 1
+        else:
+            erro(f"opção desconhecida: {a}", 2)
+    if como not in ("adr", "spec"):
+        erro("uso: minuta formalizar <n> --como adr|spec [--destino <slug>] [--vencido]", 2)
+
+    num, caminho = resolve(n)
+    relcaminho = os.path.relpath(caminho, REPO)
+
+    st = git("status", "--porcelain", "--", relcaminho).stdout.strip()
+    if st:
+        erro(f"minuta {num} tem mudança não commitada — commite antes de formalizar:\n{st}")
+
+    texto = open(caminho, encoding="utf-8").read()
+    m_titulo = re.match(r"^# \d{4} — (.+)$", texto, re.M)
+    titulo = m_titulo.group(1).strip() if m_titulo else f"minuta {num}"
+
+    m_conv = re.search(r"^Convocadas: (.+)$", texto, re.M)
+    convocadas = [c.strip() for c in m_conv.group(1).split(",") if c.strip()] if m_conv else []
+
+    secoes = parse_secoes(texto)
+    faltando = [c for c in convocadas if not secoes.get(c) or secoes.get(c) == PLACEHOLDER_CONV]
+    if faltando and not vencido:
+        erro(f"seção vazia de: {', '.join(faltando)} — use --vencido para fechar mesmo assim")
+
+    slug = slugify(destino_arg) if destino_arg else slugify(titulo)
+    if not slug:
+        erro("slug de destino ficou vazio depois de normalizar — use --destino")
+    hoje = datetime.date.today().isoformat()
+
+    git("pull", "--ff-only", "-q", "origin", "HEAD")
+
+    aberto = ""
+    if faltando:
+        aberto = "\n## Aberto\n\n" + "".join(
+            f"- {c} não se manifestou até o fechamento (--vencido).\n" for c in faltando
+        )
+
+    if como == "adr":
+        os.makedirs(DECISIONS, exist_ok=True)
+        ultimo = 0
+        for f in glob.glob(os.path.join(DECISIONS, "[0-9][0-9][0-9][0-9]-*.md")):
+            m = re.match(r"(\d{4})-", os.path.basename(f))
+            if m:
+                ultimo = max(ultimo, int(m.group(1)))
+        adr_num = f"{ultimo + 1:04d}"
+        destino = os.path.join(DECISIONS, f"{adr_num}-{slug}.md")
+        if os.path.exists(destino):
+            erro(f"{destino} já existe")
+        conteudo = (
+            f"# {adr_num} — {titulo}\n\n"
+            f"- **Status:** aceito ({hoje})\n"
+            f"- **Tipo:** <preencher>\n"
+            f"- **Alcance:** <preencher>\n\n"
+            f"## Contexto\n\n<preencher>\n\n"
+            f"## Decisão\n\n<preencher>\n\n"
+            f"## Consequências\n\n<preencher>\n"
+            f"{aberto}"
+        )
+    else:
+        os.makedirs(DOCS, exist_ok=True)
+        destino = os.path.join(DOCS, f"spec_{slug}.md")
+        if os.path.exists(destino):
+            erro(f"{destino} já existe")
+        conteudo = f"# {titulo}\n\n<preencher>\n{aberto}"
+
+    with open(destino, "w", encoding="utf-8") as f:
+        f.write(conteudo)
+
+    git("rm", "-q", relcaminho)
+    git("add", os.path.relpath(destino, REPO))
+    git("commit", "-q", "-m", f"minuta {num}: formalizada como {como} ({os.path.basename(destino)})")
+    git("push", "-q", "origin", "HEAD")
+
+    print(destino)
+    if faltando:
+        print(f"vencida — sem manifestação de: {', '.join(faltando)}", file=sys.stderr)
+
+
+if __name__ == "__main__":
+    main()

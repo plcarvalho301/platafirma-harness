@@ -1,0 +1,150 @@
+#!/usr/bin/env python3
+"""minuta circular — despacha o ping tipo:minuta às convocadas.
+Recusa: seção de quem abriu vazia (pauta vazia não circula); minuta com
+mudança não commitada (o ping aponta um ref que o destinatário precisa
+conseguir ler). Protocolo: platafirma-arquitetura/minutas/PROTOCOLO.md §4.
+"""
+import os
+import re
+import sys
+import glob
+import subprocess
+
+REPO = os.environ.get("MINUTA_REPO") or os.path.expanduser("~/AI/platafirma-arquitetura")
+DIR = os.path.join(REPO, "minutas")
+PLACEHOLDER_ABRE = "<escreva aqui antes de circular>"
+PLACEHOLDER_CONV = "<a preencher pela própria cadeira>"
+
+
+def erro(msg, code=1):
+    print(f"minuta circular: {msg}", file=sys.stderr)
+    sys.exit(code)
+
+
+def git(*args, check=True):
+    return subprocess.run(
+        ["git", "-C", REPO, *args], capture_output=True, text=True, check=check
+    )
+
+
+def resolve(n):
+    if not n.isdigit():
+        erro(f"'{n}' não é um número de minuta")
+    num = f"{int(n):04d}"
+    achados = glob.glob(os.path.join(DIR, f"{num}-*.md"))
+    if not achados:
+        erro(f"minuta {num} não encontrada em {DIR}")
+    if len(achados) > 1:
+        erro(f"mais de um arquivo casa com {num}: {achados}")
+    return num, achados[0]
+
+
+def parse_secoes(texto):
+    secoes = {}
+    for m in re.finditer(r"^## Posição — (.+?)\s*$\n(.*?)(?=^## |\Z)", texto, re.M | re.S):
+        secoes[m.group(1).strip()] = m.group(2).strip()
+    return secoes
+
+
+def main():
+    args = sys.argv[1:]
+    if not args:
+        erro("uso: minuta circular <n> [<cadeira>...]", 2)
+    n = args[0]
+    alvos_pedidos = args[1:]
+    num, caminho = resolve(n)
+    relcaminho = os.path.relpath(caminho, REPO)
+
+    st = git("status", "--porcelain", "--", relcaminho).stdout.strip()
+    if st:
+        erro(
+            f"minuta {num} tem mudança não commitada — commite antes de circular "
+            f"(o ping aponta um ref que o destinatário precisa conseguir ler):\n{st}"
+        )
+
+    texto = open(caminho, encoding="utf-8").read()
+
+    m_titulo = re.match(r"^# (\d{4}) — (.+)$", texto, re.M)
+    titulo = m_titulo.group(2).strip() if m_titulo else f"minuta {num}"
+
+    m_abre = re.search(r"^Aberta por: (.+?) ·", texto, re.M)
+    if not m_abre:
+        erro(f"minuta {num}: não achei 'Aberta por:' no cabeçalho")
+    abridora = m_abre.group(1).strip()
+
+    m_conv = re.search(r"^Convocadas: (.+)$", texto, re.M)
+    if not m_conv:
+        erro(f"minuta {num}: não achei 'Convocadas:' no cabeçalho")
+    convocadas = [c.strip() for c in m_conv.group(1).split(",") if c.strip()]
+
+    secoes = parse_secoes(texto)
+    body_abre = secoes.get(abridora, "")
+    if not body_abre or body_abre == PLACEHOLDER_ABRE:
+        erro(
+            f"minuta {num}: seção de quem abriu ({abridora}) está vazia — "
+            f"pauta vazia não circula (protocolo §2/§3)"
+        )
+
+    novas = [c for c in alvos_pedidos if c not in convocadas]
+    if novas:
+        git("pull", "--ff-only", "-q", "origin", "HEAD")
+        texto = open(caminho, encoding="utf-8").read()  # relê pós-pull
+        convocadas_novas = convocadas + novas
+        texto = re.sub(
+            r"^Convocadas: .+$",
+            "Convocadas: " + ", ".join(convocadas_novas),
+            texto,
+            count=1,
+            flags=re.M,
+        )
+        novas_secoes = "".join(
+            f"## Posição — {c}\n{PLACEHOLDER_CONV}\n\n" for c in novas
+        )
+        if "\n## Divergência" in texto:
+            texto = texto.replace("\n## Divergência", "\n" + novas_secoes + "## Divergência", 1)
+        else:
+            texto = texto.rstrip("\n") + "\n\n" + novas_secoes
+        with open(caminho, "w", encoding="utf-8") as f:
+            f.write(texto)
+        git("add", relcaminho)
+        diff = git("diff", "--cached", "--quiet", check=False)
+        if diff.returncode != 0:
+            git("commit", "-q", "-m", f"minuta {num}: convoca {', '.join(novas)}")
+            git("push", "-q", "origin", "HEAD")
+        convocadas = convocadas_novas
+
+    alvos = alvos_pedidos if alvos_pedidos else convocadas
+    if not alvos:
+        erro(f"minuta {num}: nenhuma convocada para circular")
+
+    cadeira = os.environ.get("PF_CADEIRA", "")
+    if not cadeira:
+        erro("exporte PF_CADEIRA=<cadeira>.")
+
+    linha_corpo = f"Minuta {num} circulada — manifeste sua posição em {relcaminho}."
+    enviados = []
+    for c in alvos:
+        r = subprocess.run(
+            [
+                "fila", "enviar",
+                "--tipo", "minuta",
+                "--assunto", f"Minuta {num} — {titulo}",
+                "--ref", relcaminho,
+                c,
+            ],
+            input=linha_corpo,
+            text=True,
+            capture_output=True,
+        )
+        if r.returncode != 0:
+            print(f"falhou {c}: {r.stderr.strip()}", file=sys.stderr)
+        else:
+            enviados.append(c)
+
+    print(f"circulado: minuta {num} para {', '.join(enviados) if enviados else '(ninguém — todas falharam)'}")
+    if len(enviados) != len(alvos):
+        sys.exit(1)
+
+
+if __name__ == "__main__":
+    main()

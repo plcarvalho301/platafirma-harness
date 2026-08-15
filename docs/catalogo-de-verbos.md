@@ -22,6 +22,7 @@ Conta atual, reproduzida por `conferir verbo` a partir do próprio PATH:
 |---|---|---|
 | `acesso` | `acesso` | sim |
 | `conhecimento` | `acervo` | sim |
+| `decisao` | `minuta` | sim |
 | `encerramento` | `descansar` (alias: `encerrar`) | sim |
 | `expediente` | `monta-sessao` | sim |
 | `incidente` | `sinal` | sim |
@@ -86,6 +87,7 @@ Medido por `conferir verbo` e `conferir procedencia` em 14/08/2026.
 | `jaiminho` | `mensagem` | claudinho-TI | fala com o colaborador externo Jaiminho, no container próprio dele |
 | `longjob` | órfã | claudinho-TI | dispara trabalho longo como unit transiente do systemd --user |
 | `mesa` | `memoria` | claudinho-IA | memória de trabalho da cadeira entre fitas, por chapéu; `caderno` abre a durável |
+| `minuta` | `decisao` | claudinho-TI | despachante do protocolo de deliberação entre cadeiras — escrever, circular, ler, formalizar |
 | `monta-sessao` | `expediente` | claudinho-IA | contexto de abertura de uma cadeira, numa volta |
 | `motor` | `motor` | claudinho-IA | gestão de motores de decisão: o que um motor serve e mede |
 | `ops-log-prune` | órfã | claudinho-TI | poda o registro de operação por retenção declarada |
@@ -117,7 +119,6 @@ Do mapa de capacidades, seguem sem instância executável:
   operador humano descubra o que a máquina faz sem perguntar a uma persona.
 - `comunicacao` — anúncio por difusão retida. Desenhado em `arq:0036`, sem verbo;
   hoje vaza pela fila.
-- `decisao` — sem verbo de lavrar nem de consultar.
 - `canal` — design system em git, sem verbo que o distribua aos canais.
 - `ativo` — item de configuração e seu estado declarado; `config` proposto, não
   construído.

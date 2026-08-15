@@ -1,0 +1,48 @@
+#!/usr/bin/env bash
+# minuta — despachante do protocolo de deliberação entre cadeiras.
+# capacidade: decisao
+# dono: claudinho-TI
+#
+# Externaliza platafirma-arquitetura/minutas/PROTOCOLO.md em verbo (spec:
+# platafirma-arquitetura/docs/spec_verbo-minuta.md). Ciclo de vida: escrever ->
+# (a cadeira escreve o mérito) -> circular -> (convocadas manifestam) ->
+# formalizar. Nunca é leitura automática — só roda chamada (ping tipo:minuta
+# na caixa, ou ordem do dono). Despachante (arq:0040): sub-atos em
+# bin/_minuta/, fora do PATH; a porta é esta.
+set -euo pipefail
+
+ATOS="$(dirname "$(readlink -f "$0")")/_minuta"
+
+uso() {
+  cat >&2 <<'FIM'
+uso:
+  minuta escrever <slug> --convoca <c1>[,<c2>...] [--fecha <cadeira|pedro>] [--card <#N>]
+  minuta circular <n> [<cadeira>...]
+  minuta ler [<n>|<slug>]
+  minuta formalizar <n> --como adr|spec [--destino <slug>] [--vencido]
+
+escrever   — numera e grava o esqueleto; não commita, não circula.
+circular   — despacha o ping tipo:minuta às convocadas; recusa pauta vazia ou
+             minuta não commitada.
+ler        — sem argumento, as abertas em que PF_CADEIRA está convocada; com
+             argumento, o arquivo inteiro. Leitura fria.
+formalizar — cria o canônico vazio (ADR ou spec), apaga a minuta, um commit só.
+             Recusa convocada com seção vazia, salvo --vencido.
+
+Protocolo: platafirma-arquitetura/minutas/PROTOCOLO.md
+Spec:      platafirma-arquitetura/docs/spec_verbo-minuta.md
+FIM
+  exit 2
+}
+
+[ $# -eq 0 ] && uso
+ATO="$1"; shift
+
+case "$ATO" in
+  escrever)        exec "$ATOS/escrever" "$@" ;;
+  circular)        exec "$ATOS/circular" "$@" ;;
+  ler)             exec "$ATOS/ler" "$@" ;;
+  formalizar)      exec "$ATOS/formalizar" "$@" ;;
+  -h|--help|ajuda) uso ;;
+  *) echo "minuta: ato desconhecido '$ATO'" >&2; uso ;;
+esac
