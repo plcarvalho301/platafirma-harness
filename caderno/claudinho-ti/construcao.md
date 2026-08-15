@@ -93,3 +93,25 @@ tarefas api DELETE /tasks/<B>/relations/parenttask/<A>     # desfaz o sub errado
 
 A relação inversa (`follows`) aparece sozinha no outro card; não se cria duas
 vezes.
+
+## O audit do ops diz O QUE rodou, nunca QUEM rodou (medido 15/08)
+
+`~/AI/var/log/ops/ops-AAAA-MM-DD.jsonl` grava todo `run_command` com o comando
+inteiro — é a melhor fonte para reconstruir o que aconteceu no host. Mas o campo
+`sessao` **não identifica a fita**: é a conexão do conector, e conversas
+diferentes do mesmo cliente saem com o mesmo id. Medido: minha fita e outra
+apareceram ambas como `s7675515b1c40`, intercaladas no mesmo segundo. `sujeito`
+também não separa — é sempre o token do dono.
+
+Consequência prática: dá para afirmar *que existe outro agente ativo* (comando
+que eu não emiti, no meu id de sessão) e **não** dá para dizer *qual cadeira é*.
+Atribuir cadeira a partir daí é chute, e custa a sessão inteira quando erra.
+Card 457 nomeia o defeito; enquanto ele não fechar, a leitura correta é essa.
+
+## Diretório de trabalho descartável vai em `~/AI/var/`, nunca em `/tmp` (medido 15/08)
+
+`/tmp` é terreno comum entre agentes que rodam com o mesmo uid. Dois agentes
+convergem no mesmo `/tmp/<slug>` porque o slug sai do nome do card, que os dois
+leram. Rodei `rm -rf` num caminho que outro já usava e apaguei o trabalho dele.
+Não há lock e não há aviso. `~/AI/var/<algo-meu>` resolve, e foi para lá que o
+outro agente se mudou sozinho depois do estrago.
