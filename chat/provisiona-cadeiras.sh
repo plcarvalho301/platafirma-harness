@@ -346,8 +346,14 @@ def garante_sala(cadeira, mxid):
         # que e o que ele aceita no celular. is_direct e o que faz o Element mostrar
         # conversa, e nao sala; sem nome nem topico de proposito, para a conversa se
         # chamar pelo displayname da cadeira (aceite 7) e nao por rotulo de sala.
+        # `private_chat`, e nao `trusted_private_chat`: o trusted da poder 100 ao
+        # convidado, e em Matrix ninguem expulsa quem tem poder igual ao seu — a
+        # rotacao do card 449 nao consegue descartar sala assim, e ela fica na
+        # lista do dono para sempre. Sala criada antes desta linha carrega o
+        # defeito: na primeira rotacao dela o kick falha, o leave e o forget da
+        # cadeira acontecem, e a sala nova ja nasce descartavel.
         codigo, resposta = chama("POST", "/_matrix/client/v3/createRoom", {
-            "preset": "trusted_private_chat",
+            "preset": "private_chat",
             "is_direct": True,
             "invite": [DONO],
         }, como=mxid)

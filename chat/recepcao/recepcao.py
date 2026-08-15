@@ -38,6 +38,7 @@ import sys
 
 from aiohttp import web
 from mautrix.appservice import AppService
+from mautrix.errors import MNotFound
 from mautrix.types import EventType, MessageType, RoomCreatePreset
 
 sys.path.insert(0, "/opt/chat")
@@ -170,22 +171,41 @@ class Recepcao:
 
         O `m.direct` do lado da cadeira e atualizado aqui; o do dono quem escreve
         e o cliente dele, ao aceitar o convite.
+
+        PRESET `private_chat`, e nao `trusted_private_chat` como no
+        provisionamento — medido em 15/08 contra o Synapse: `trusted` da poder 100
+        ao convidado, e em Matrix ninguem expulsa quem tem poder igual ao seu. Com
+        ele, o kick do criterio 12 falha e a sala descartada fica na lista do dono
+        para sempre. Numa conversa direta com a cadeira, o poder que o dono perde
+        nao serve para nada: quem convida, renomeia e descarta e a cadeira.
         """
         try:
             nova = await intent.create_room(
-                preset=RoomCreatePreset.TRUSTED_PRIVATE,
+                preset=RoomCreatePreset.PRIVATE,
                 is_direct=True,
                 invitees=[dono],
             )
         except Exception:
             log.error("createRoom falhou para o dono %s", dono, exc_info=True)
             return None
+        # Ausencia NAO e erro aqui, e a mautrix nao devolve None: conta sem
+        # `m.direct` levanta MNotFound (medido em 15/08 contra o Synapse real).
+        # Tratar isso como falha de leitura deixaria a cadeira sem m.direct para
+        # sempre — ela so ganharia o registro se ja o tivesse.
         try:
-            direto = await intent.get_account_data("m.direct") or {}
-            if not isinstance(direto, dict):
-                direto = {}
-            atuais = [s for s in direto.get(dono, []) if isinstance(s, str)]
-            direto[dono] = atuais + [nova]
+            direto = await intent.get_account_data("m.direct")
+        except MNotFound:
+            direto = {}
+        except Exception:
+            # Falha de LEITURA e outra coisa: o estado la e desconhecido, e
+            # escrever por cima apagaria as conversas ja registradas.
+            log.warning("nao consegui ler m.direct — deixo como esta", exc_info=True)
+            return nova
+        if not isinstance(direto, dict):
+            direto = {}
+        atuais = [s for s in direto.get(dono, []) if isinstance(s, str)]
+        direto[dono] = atuais + [nova]
+        try:
             await intent.set_account_data("m.direct", direto)
         except Exception:
             # m.direct desatualizado nao impede a conversa: o convite carrega
