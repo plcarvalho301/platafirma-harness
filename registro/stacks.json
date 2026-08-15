@@ -92,6 +92,16 @@
         "~/AI/var/secrets/matrix/segredos.yaml",
         "~/AI/var/secrets/matrix/registration.yaml"
       ]
+    },
+    "rastreador": {
+      "compose": "~/AI/platafirma-rastreador/docker-compose.yml",
+      "repo": "platafirma-rastreador",
+      "papel": "rastreador de trabalho: API e banco proprio do boneco",
+      "critico": false,
+      "_nota": "Boneco do card #465, API-only por arq:0056 — o comentario 335 recortou a tela, que volta no #468. Aponta para o CLONE DE TRABALHO, nao para um worktree de deploy: ~/AI/deploy/rastreador nao existe, entao `promover` recusa e `conferir servico` marca DERIVA. E o mesmo padrao de acervo-api, chat e jaiminho. Nada em producao depende desta stack e nao ha rota no tunel; reverter e `deploy rastreador down` mais apagar o volume.",
+      "segredos": [
+        ".env"
+      ]
     }
   },
   "_fora_do_registro": {
