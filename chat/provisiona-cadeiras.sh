@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# provisiona-cadeiras.sh <mxid-do-dono> — poe as cadeiras do org canonico de pe na
-# superficie de conversa: usuario no namespace da recepcao, alias como displayname,
-# avatar e sala direta com o dono.
+# provisiona-cadeiras.sh <mxid-do-dono> — poe as cadeiras de pe na superficie de
+# conversa: usuario no namespace da recepcao, alias como displayname, avatar e sala
+# direta com o dono.
 # capacidade: mudanca
 # dono: claudinha-fabrica (card 448, fatia B-3)
 #
@@ -15,17 +15,29 @@
 # identidade registrada (id: pf, sender_localpart: _pf) nao se toca: mexer nela
 # desregistra o servico.
 #
-# Por que o trabalho roda DENTRO do container: o Synapse nao publica porta e vive na
-# rede `interna` (arq:0026, federacao fechada). Do host nao se alcanca; de
-# `chat-recepcao`, que esta na mesma rede, sim. O token nao passa por argv (`ps` mostra
-# argv): entra por ambiente do exec, e o resto por arquivo copiado.
+# QUEM SAO AS CADEIRAS: `cadeiras()`, de chat/comum/cadeiras.py, que le
+# personas/persona-*.md. Nao e a tabela do org, e a diferenca importa: a tabela cobre
+# as heads, e `claudinho-politicas-publicas` e assessor do dono, tem sala por decisao
+# dele (card 460, comentario 315) e nao esta la. Roster pelo harness e o que faz cadeira
+# nova entrar sozinha — nao ha lista de excecao neste arquivo, e nao deve haver.
+#
+# Por que a traducao roda no HOST e nao dentro do container: `cadeiras()` le
+# personas/*.md, e a recepcao nao ve esse diretorio hoje — monta-lo e da fatia B-1, dona
+# do compose. Entao o host resolve slug -> sufixo -> localpart -> MXID e copia a lista
+# PRONTA para dentro; o lado de dentro so fala Matrix, e nao sabe traduzir cadeira
+# nenhuma. Esta fatia nao depende do compose da outra.
+#
+# Por que o trabalho fala com o Synapse de DENTRO do container: o Synapse nao publica
+# porta e vive na rede `interna` (arq:0026, federacao fechada). Do host nao se alcanca;
+# de `chat-recepcao`, que esta na mesma rede, sim. O token nao passa por argv (`ps`
+# mostra argv): entra por ambiente do exec, e o resto por arquivo copiado.
 #
 # Roda DEPOIS do primeiro login OIDC do dono: antes disso o MXID dele nao existe.
 #
 #   ./provisiona-cadeiras.sh @megafone:chat.platafirma.org
 #
 # Variaveis de escape (todas com padrao util): PF_DONO, PF_COFRE, PF_ORG, PF_AVATARES,
-# PF_RECEPCAO.
+# PF_RECEPCAO, PF_DOMINIO, PF_RAIZ.
 set -euo pipefail
 
 DONO="${1:-${PF_DONO:-}}"
@@ -36,6 +48,7 @@ AQUI="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 COFRE="${PF_COFRE:-$HOME/AI/var/secrets/matrix}"
 RECEPCAO="${PF_RECEPCAO:-chat-recepcao}"
 AVATARES="${PF_AVATARES:-$AQUI/avatares}"
+DOMINIO="${PF_DOMINIO:-chat.platafirma.org}"
 # O alias sai do org canonico e nao se fixa aqui: quem ocupa a cadeira e com que nome e
 # decisao de claudinha-gestao-estrategica, versionada no repo de arquitetura. Codigo com
 # a tabela dentro seria uma segunda fonte da verdade envelhecendo em silencio.
@@ -56,20 +69,35 @@ limpa() {
 trap limpa EXIT
 
 # ---------------------------------------------------------------------------
-# Lado do host: le o org canonico e as imagens, monta o palco que sera copiado.
+# Lado do host: traduz as cadeiras, le o org e as imagens, monta o palco copiado.
 # ---------------------------------------------------------------------------
-python3 - "$ORG" "$AVATARES" "$PALCO" <<'PYPALCO'
-import json, os, re, shutil, sys
+python3 - "$AQUI/comum" "$ORG" "$AVATARES" "$PALCO" "$DOMINIO" <<'PYPALCO'
+import json, os, shutil, sys
 
-org, dir_avatares, palco = sys.argv[1], sys.argv[2], sys.argv[3]
+comum, org, dir_avatares, palco, dominio = sys.argv[1:6]
 
-# Localpart Matrix so aceita [a-z0-9._=-/+]: o slug `claudinho-TI` do org NAO cabe cru.
-# Caixa baixa e conversao forcada pela spec, nao escolha de estilo.
-VALIDO = re.compile(r"^[a-z0-9._=/+-]+$")
+# A traducao entre slug do org, sufixo do harness e MXID e de chat/comum/cadeiras.py e
+# NAO se reimplementa aqui (card 460, comentario 305): duas implementacoes divergem, e
+# a que diverge em identidade produz MXID errado, que e irreversivel.
+sys.path.insert(0, comum)
+from cadeiras import (          # noqa: E402
+    cadeiras,
+    localpart_da_cadeira,
+    mxid_da_cadeira,
+    sufixo_canonico,
+    valida_localpart,
+)
+
 EXTENSOES = (".png", ".jpg", ".jpeg", ".webp", ".gif")
 TIPOS = {".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg",
          ".webp": "image/webp", ".gif": "image/gif"}
 
+# --- quem: o conjunto vem do harness -----------------------------------------
+# `cadeiras()` levanta FileNotFoundError se personas/ nao esta la — ausencia se declara,
+# e provisionar zero cadeira em silencio seria pior que parar.
+sufixos = cadeiras()
+
+# --- alias: a tabela do org, quando ela cobre a cadeira -----------------------
 # A tabela vive sob "## Ocupacao das cadeiras" e acaba no proximo cabecalho. Ler assim,
 # e nao o arquivo inteiro, evita colher linha de tabela de outra secao.
 linhas, dentro = [], False
@@ -82,7 +110,7 @@ for linha in open(org, encoding="utf-8"):
     if dentro and linha.lstrip().startswith("|"):
         linhas.append(linha.strip())
 
-cadeiras = []
+alias_do_org, slug_do_org, orfas = {}, {}, []
 for linha in linhas:
     colunas = [c.strip() for c in linha.strip("|").split("|")]
     if len(colunas) < 3:
@@ -93,19 +121,54 @@ for linha in linhas:
         continue          # cabecalho e linha separadora
     if not alias or alias == "—":
         continue
-    localpart = "_pf" + slug.lower()
-    if not VALIDO.match(localpart):
-        sys.exit(f"erro: slug '{slug}' nao vira localpart Matrix valido ('{localpart}')")
-    cadeiras.append({"slug": slug, "alias": alias, "localpart": localpart})
+    sufixo = sufixo_canonico(slug)
+    if sufixo is None:
+        # Linha do org sem persona correspondente: o alias nao tem onde pousar. Nao e
+        # erro desta fatia — mas some sem aviso se nao se disser, e o sintoma la na
+        # frente seria uma cadeira exibindo o sufixo sem ninguem saber por que.
+        orfas.append(slug)
+        continue
+    alias_do_org[sufixo] = alias
+    slug_do_org[sufixo] = slug
 
-if not cadeiras:
-    sys.exit(f"erro: nenhuma cadeira lida de {org} — a tabela mudou de forma?")
+if not alias_do_org:
+    sys.exit(f"erro: nenhum alias lido de {org} — a tabela mudou de forma?")
 
-# Imagem por cadeira. Ausencia NAO e erro: o card manda seguir e avisar qual faltou.
+# --- a lista pronta ----------------------------------------------------------
+lista = []
+for sufixo in sufixos:
+    localpart = localpart_da_cadeira(sufixo)
+    mxid = mxid_da_cadeira(sufixo, dominio)
+    if localpart is None or mxid is None:
+        sys.exit(f"erro: cadeiras() devolveu '{sufixo}', que nao traduz para MXID")
+    if not valida_localpart(localpart):
+        sys.exit(f"erro: '{sufixo}' nao vira localpart Matrix valido ('{localpart}')")
+    lista.append({
+        "sufixo": sufixo,
+        # Alias quando o org da; o sufixo quando nao da. Regra geral, nao caso especial:
+        # cadeira fora da tabela sobe com o identificador que existe, e o alias entra
+        # numa corrida posterior — displayname e reversivel, MXID nao. Nenhum nome de
+        # pessoa entra neste arquivo; a fonte e sempre o org.
+        "alias": alias_do_org.get(sufixo) or sufixo,
+        "rotulo": slug_do_org.get(sufixo) or sufixo,   # so para mensagem ao operador
+        "localpart": localpart,
+        "mxid": mxid,
+    })
+
+# --- imagem por cadeira ------------------------------------------------------
+# Ausencia NAO e erro: o card manda seguir e avisar qual faltou. As bases aceitas cobrem
+# o slug do org (como o README pede) e o sufixo, que e o unico nome que cadeira fora da
+# tabela tem.
 os.makedirs(os.path.join(palco, "avatares"), exist_ok=True)
-for cadeira in cadeiras:
+for cadeira in lista:
+    bases = []
+    for nome in (slug_do_org.get(cadeira["sufixo"]), cadeira["sufixo"], cadeira["localpart"]):
+        if nome and nome not in bases:
+            bases.append(nome)
+        if nome and nome.lower() not in bases:
+            bases.append(nome.lower())
     achada = None
-    for base in (cadeira["slug"], cadeira["slug"].lower()):
+    for base in bases:
         for ext in EXTENSOES:
             caminho = os.path.join(dir_avatares, base + ext)
             if os.path.isfile(caminho):
@@ -124,9 +187,16 @@ for cadeira in cadeiras:
         cadeira["avatar"] = None
 
 with open(os.path.join(palco, "cadeiras.json"), "w", encoding="utf-8") as saida:
-    json.dump(cadeiras, saida, ensure_ascii=False, indent=2)
+    json.dump(lista, saida, ensure_ascii=False, indent=2)
 
-print(f"org canonico: {len(cadeiras)} cadeira(s) lida(s) de {org}")
+print(f"cadeiras (personas/): {len(lista)} — {', '.join(c['sufixo'] for c in lista)}")
+sem_alias = [c["sufixo"] for c in lista if c["sufixo"] not in alias_do_org]
+if sem_alias:
+    print(f"alias do org: {len(alias_do_org)}; sem alias na tabela, sobe pelo sufixo: "
+          f"{', '.join(sem_alias)}")
+for slug in orfas:
+    print(f"aviso: '{slug}' esta na tabela do org e nao tem persona — alias ignorado",
+          file=sys.stderr)
 PYPALCO
 
 # mktemp -d nasce 700 e o container roda como uid 10001 (recepcao): sem isto o `docker
@@ -138,18 +208,17 @@ docker cp -q "$PALCO/." "$RECEPCAO:/tmp/pf-provisiona" 2>/dev/null \
 
 # ---------------------------------------------------------------------------
 # Lado da rede interna: fala com o Synapse pelo as_token, impersonando cada cadeira.
+# Nao traduz cadeira: o MXID ja veio resolvido do host, em cadeiras.json.
 # ---------------------------------------------------------------------------
 docker exec -i \
   -e DONO="$DONO" \
   -e AS_TOKEN="$(cat "$COFRE/as-token")" \
-  -e DOMINIO="${PF_DOMINIO:-chat.platafirma.org}" \
   "$RECEPCAO" python - <<'PYCADEIRA'
 import hashlib, json, os, sys, urllib.error, urllib.parse, urllib.request
 
 BASE = "http://chat-synapse:8008"
 TOKEN = os.environ["AS_TOKEN"]
 DONO = os.environ["DONO"]
-DOMINIO = os.environ["DOMINIO"]
 PALCO = "/tmp/pf-provisiona"
 
 cadeiras = json.load(open(os.path.join(PALCO, "cadeiras.json"), encoding="utf-8"))
@@ -196,7 +265,7 @@ def garante_usuario(cadeira, mxid):
         return "usuario criado"
     if resposta.get("errcode") == "M_USER_IN_USE":
         return "usuario ja havia"
-    erros.append(f"{cadeira['slug']}: registro falhou ({codigo} {resposta.get('errcode')} "
+    erros.append(f"{cadeira['rotulo']}: registro falhou ({codigo} {resposta.get('errcode')} "
                  f"{resposta.get('error')})")
     return None
 
@@ -208,14 +277,14 @@ def garante_alias(cadeira, mxid):
     codigo, resposta = chama("PUT", f"/_matrix/client/v3/profile/{esc(mxid)}/displayname",
                              {"displayname": cadeira["alias"]}, como=mxid)
     if codigo != 200:
-        erros.append(f"{cadeira['slug']}: displayname falhou ({codigo} {resposta.get('errcode')})")
+        erros.append(f"{cadeira['rotulo']}: displayname falhou ({codigo} {resposta.get('errcode')})")
         return None
     return "alias posto"
 
 
 def garante_avatar(cadeira, mxid):
     if not cadeira.get("avatar"):
-        avisos.append(f"{cadeira['slug']} ({cadeira['alias']}): sem imagem de avatar "
+        avisos.append(f"{cadeira['rotulo']} ({cadeira['alias']}): sem imagem de avatar "
                       f"em chat/avatares/ — a cadeira sobe sem retrato")
         return "sem imagem"
 
@@ -234,14 +303,14 @@ def garante_avatar(cadeira, mxid):
         "POST", "/_matrix/media/v3/upload?filename=" + esc(cadeira["avatar_nome"]),
         como=mxid, bruto=dados, tipo=cadeira["avatar_tipo"])
     if codigo != 200 or "content_uri" not in resposta:
-        erros.append(f"{cadeira['slug']}: upload do avatar falhou ({codigo} {resposta.get('errcode')})")
+        erros.append(f"{cadeira['rotulo']}: upload do avatar falhou ({codigo} {resposta.get('errcode')})")
         return None
     mxc = resposta["content_uri"]
 
     codigo, resposta = chama("PUT", f"/_matrix/client/v3/profile/{esc(mxid)}/avatar_url",
                              {"avatar_url": mxc}, como=mxid)
     if codigo != 200:
-        erros.append(f"{cadeira['slug']}: avatar_url falhou ({codigo} {resposta.get('errcode')})")
+        erros.append(f"{cadeira['rotulo']}: avatar_url falhou ({codigo} {resposta.get('errcode')})")
         return None
     chama("PUT", f"/_matrix/client/v3/user/{esc(mxid)}/account_data/org.platafirma.avatar",
           {"sha256": impressao, "mxc": mxc}, como=mxid)
@@ -283,7 +352,7 @@ def garante_sala(cadeira, mxid):
             "invite": [DONO],
         }, como=mxid)
         if codigo != 200 or "room_id" not in resposta:
-            erros.append(f"{cadeira['slug']}: createRoom falhou ({codigo} {resposta.get('errcode')} "
+            erros.append(f"{cadeira['rotulo']}: createRoom falhou ({codigo} {resposta.get('errcode')} "
                          f"{resposta.get('error')})")
             return None, None
         sala, nota = resposta["room_id"], "sala criada"
@@ -293,7 +362,7 @@ def garante_sala(cadeira, mxid):
     if membro(sala, mxid, mxid) == "invite":
         codigo, resposta = chama("POST", f"/_matrix/client/v3/rooms/{esc(sala)}/join", {}, como=mxid)
         if codigo != 200:
-            erros.append(f"{cadeira['slug']}: join falhou ({codigo} {resposta.get('errcode')})")
+            erros.append(f"{cadeira['rotulo']}: join falhou ({codigo} {resposta.get('errcode')})")
             return sala, nota
 
     if sala not in candidatas:
@@ -307,7 +376,7 @@ print(f"dono: {DONO}")
 print(f"cadeiras: {len(cadeiras)}\n")
 
 for cadeira in cadeiras:
-    mxid = f"@{cadeira['localpart']}:{DOMINIO}"
+    mxid = cadeira["mxid"]
     notas = [garante_usuario(cadeira, mxid)]
     if notas[0] is None:
         print(f"  {cadeira['alias']:<22} {mxid:<44} FALHOU no registro")
