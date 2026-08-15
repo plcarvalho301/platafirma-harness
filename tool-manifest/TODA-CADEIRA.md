@@ -237,6 +237,10 @@ Estas estavam repetidas em quatro manifestos, com quatro redações. Uma fonte:
 - **Faceta válida e despovoada devolve zero sem erro.** `rag_facets` antes de
   filtrar `rag_search`: zero por faceta vazia é indistinguível de zero por
   ausência de cobertura.
+- **`longjob` não herda o ambiente da sessão.** Variável exportada no `run_command`
+  (`PF_SIM`, `PF_CADEIRA`) não chega ao job, e `env VAR=x <verbo>` falha porque o
+  systemd-run também não traz o PATH do harness. Forma que funciona:
+  `longjob run <nome> bash -lc 'export VAR=x PATH=$HOME/AI/bin:$PATH; <verbo>'`.
 - **`edit_page` substitui a página inteira.** Não há patch nem append: `get_page`
   antes, sempre, e devolver `basetimestamp` para detectar conflito.
 

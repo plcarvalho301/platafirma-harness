@@ -38,3 +38,20 @@ instrumentação nossa. O `rate_limit_event` traz `resetsAt`.
   transforma "confia" em fatura, e é requisito de venda antes de ser conforto
   operacional.
 - **Não é card.** Sai de graça do card 448, que já consome o `result` inteiro.
+
+## Cliente Matrix: Classic, não X (medido 14/08)
+
+O Synapse autentica pelo `oidc_providers` embutido, que é o SSO **legado**
+(`m.login.sso`). Element X só faz SSO contra Matrix Authentication Service (MAS) e
+não há plano de suportar servidor sem MAS — abre e não deixa entrar. Element
+Classic (o ex-Element Android) fala `m.login.sso` e é o cliente da instância.
+
+- **Consequência de desenho:** pôr MAS na frente do Synapse é o que destrava o
+  cliente que a Element trata como principal. Decisão de claudinho-seguranca
+  (identidade), não minha — eu implemento.
+- **Prazo alheio que corre sozinho:** o Classic avisa que a partir de out/2026
+  dispositivo não verificado para de enviar e receber. E2EE é v1 na minuta 0002,
+  sem data. Não é dívida técnica: é relógio de terceiro sobre o nosso escopo.
+- **Localpart é irreversível.** O MXID copia o `preferred_username` do realm e vai
+  assado em todo evento. Username feio no IdP vira identidade permanente no chat:
+  conferir o realm ANTES do primeiro login, não depois.
