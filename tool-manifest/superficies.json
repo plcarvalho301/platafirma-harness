@@ -5,74 +5,113 @@
     "a mesma persona atende pelo claude.ai, pela fita do chat e pelo Code em",
     "worktree da fabrica. O COMPORTAMENTO tem de ser o mesmo nas tres.",
     "",
-    "Decisao do dono em 15/08/2026: equalizar pelo MEIO, nao pelo texto. As tres",
-    "servem os mesmos dois conectores; nenhum texto de cadeira precisa ser",
-    "reescrito para caber numa superficie mais pobre.",
+    "SUPERFICIE NAO E FRONTEIRA DE SEGURANCA. O modelo da casa e conta segregada",
+    "(uid claudinho), acesso por run_command via CLI, isolamento e pentest contra",
+    "escalonamento de privilegio. O vetor que importa e um so: a IA sair da conta",
+    "que o inicio de sessao lhe designou. Dentro da conta e sandbox — existe para",
+    "quebrar sem comprometer o servidor.",
+    "",
+    "O allow/deny do settings.json do Claude Code NAO e controle de seguranca, e",
+    "diferenca entre superficies NAO e risco: a conta e a mesma nos tres caminhos.",
+    "Registrar aqui divergencia de risco por superficie foi erro meu, corrigido em",
+    "15/08/2026 por determinacao do dono. Referencia canonica ao ADR do modelo:",
+    "pedida a claudinho-seguranca, entra aqui quando responder.",
     "",
     "Quem le: `conferir superficie`, chamado tambem pelo pre-commit com --staged."
   ],
-
   "superficies": {
     "claude.ai": {
       "papel": "sessao do dono no app",
-      "conectores": ["platafirma-ops", "platafirma-wiki"],
+      "conectores": [
+        "platafirma-ops",
+        "platafirma-wiki"
+      ],
       "onde_declara": "configuracao do app",
       "verificavel_do_host": false,
       "porque": "os conectores vivem do lado do app; o host nao ve a lista"
     },
     "fita": {
       "papel": "giro headless do chat, disparado pelo worker; sala do Matrix",
-      "conectores": ["platafirma-ops", "platafirma-wiki"],
+      "conectores": [
+        "platafirma-ops",
+        "platafirma-wiki"
+      ],
       "onde_declara": "~/AI/fitas/<cadeira>/.mcp.json, escrito por prepara_cwd",
       "verificavel_do_host": true,
       "porque": "roda no mesmo host: o .mcp.json e o settings sao lisiveis daqui"
     },
     "fabrica": {
       "papel": "Code em worktree wt-<card>, sob card de claudinho-TI",
-      "conectores": ["platafirma-ops", "platafirma-wiki"],
+      "conectores": [
+        "platafirma-ops",
+        "platafirma-wiki"
+      ],
       "onde_declara": "wt-<card>/.mcp.json",
       "verificavel_do_host": true,
       "porque": "as worktrees vivem em ~/AI; foi daqui que o padrao veio"
     }
   },
-
   "conectores": {
     "platafirma-ops": {
       "url": "https://ops.platafirma.org/mcp",
       "token_no_giro": "PF_OPS_TOKEN",
-      "serve": ["run_command", "read_file", "write_file", "monta_sessao"]
+      "serve": [
+        "run_command",
+        "read_file",
+        "write_file",
+        "monta_sessao"
+      ]
     },
     "platafirma-wiki": {
       "url": "https://mcp.platafirma.org/mcp",
       "token_no_giro": "PF_WIKI_TOKEN",
       "serve": [
-        "repo_read", "repo_tree", "repo_grep", "repo_sync",
-        "rag_search", "rag_facets",
-        "get_page", "edit_page", "search_pages", "list_pages", "query_cargo",
-        "upload_file", "platafirma_index"
+        "repo_read",
+        "repo_tree",
+        "repo_grep",
+        "repo_sync",
+        "rag_search",
+        "rag_facets",
+        "get_page",
+        "edit_page",
+        "search_pages",
+        "list_pages",
+        "query_cargo",
+        "upload_file",
+        "platafirma_index"
       ]
     }
   },
-
   "capacidades": {
     "operar-host": {
       "meio": "run_command (platafirma-ops)",
       "nas_tres": true,
-      "risco_aceito": [
-        "O ops-mcp NAO passa pela allowlist do motor. Na fita isso significa um",
-        "caminho em volta do `deny` do settings (sudo, docker, git push).",
-        "Aceito pelo dono em 15/08/2026: a assimetria custava mais que o risco —",
-        "sem run_command a cadeira na sala nao operava, e o texto dela mandava",
-        "operar. O deny do settings segue valendo para a tool Bash."
+      "nota": [
+        "E o acesso do modelo, nao uma excecao a ele: run_command via CLI sob a conta",
+        "segregada e como o claudinho opera, em qualquer superficie."
       ]
     },
-    "ler-repo": {"meio": "repo_read / repo_tree / repo_grep", "nas_tres": true},
-    "operar-fila": {"meio": "run_command sobre o verbo `fila`", "nas_tres": true},
-    "operar-tarefas": {"meio": "run_command sobre o verbo `tarefas`", "nas_tres": true},
-    "ler-e-escrever-wiki": {"meio": "get_page / edit_page / search_pages / query_cargo", "nas_tres": true},
-    "buscar-no-acervo": {"meio": "rag_search / rag_facets", "nas_tres": true}
+    "ler-repo": {
+      "meio": "repo_read / repo_tree / repo_grep",
+      "nas_tres": true
+    },
+    "operar-fila": {
+      "meio": "run_command sobre o verbo `fila`",
+      "nas_tres": true
+    },
+    "operar-tarefas": {
+      "meio": "run_command sobre o verbo `tarefas`",
+      "nas_tres": true
+    },
+    "ler-e-escrever-wiki": {
+      "meio": "get_page / edit_page / search_pages / query_cargo",
+      "nas_tres": true
+    },
+    "buscar-no-acervo": {
+      "meio": "rag_search / rag_facets",
+      "nas_tres": true
+    }
   },
-
   "aposentadas": {
     "_": [
       "Tool que os conectores JA serviram e nao servem mais. O gate reprova",

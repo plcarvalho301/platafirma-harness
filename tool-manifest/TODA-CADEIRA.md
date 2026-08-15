@@ -140,10 +140,12 @@ nao se reescreve para caber em superficie mais pobre.
 - **Conferencia**: `conferir superficie` mede conector prometido e nao servido,
   capacidade sem meio, e texto citando tool que conector nenhum serve.
 - **Gate**: o `pre-commit` chama `conferir superficie --staged` — incremental.
-- **Risco aceito (dono, 15/08/2026)**: `run_command` nao passa pela allowlist do
-  motor, entao na fita ele contorna o `deny` do settings. Aceito porque a
-  assimetria custava mais: sem ele a cadeira na sala nao operava, e o texto dela
-  mandava operar. O `deny` segue valendo para a tool `Bash`.
+- **Superficie nao e fronteira de seguranca.** O modelo e conta segregada (uid
+  `claudinho`), acesso por `run_command` via CLI, isolamento e pentest contra
+  escalonamento de privilegio. O vetor unico e a IA sair da conta que o inicio de
+  sessao lhe designou; dentro da conta e sandbox, feita para quebrar sem
+  comprometer o servidor. O allow/deny do settings do Code e higiene de sessao,
+  **nao** controle — nao o promova a controle e nao derive modelo de risco dele.
 
 ## O verbo declara a capacidade que serve
 
