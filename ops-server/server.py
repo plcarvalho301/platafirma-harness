@@ -1021,7 +1021,7 @@ ATOS_EXTERNOS = (
     ("msg_enviar", "mensagem", DOM_MENSAGERIA, "caixa:claudinho-IA",
      "POST /msg", "manda recado para claudinho-IA (Elias Elefante)"),
     ("rag_buscar", "acervo", "plataforma-acervo", "acervo:firma/*",
-     "-", "leitura do acervo de trabalho — concessao nomeada, ainda nao concedida"),
+     "-", "leitura do acervo de trabalho — concedida em 15/08/2026; sem rota que a sirva"),
 )
 
 

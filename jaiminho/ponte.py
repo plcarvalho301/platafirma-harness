@@ -1,12 +1,16 @@
-"""Ponte autenticada entre o Antigravity CLI e o ops-server.
+"""Ponte autenticada entre o Antigravity CLI e os conectores da PlataFirma.
 
-O `agy` fala MCP em http://127.0.0.1:8022/mcp, aqui dentro do container. Este
-processo repassa cada chamada para https://ops.platafirma.org/mcp com um Bearer
-do realm sempre fresco — o token do Jaiminho vive 600 s e o CLI nao sabe renovar
-credencial de client_credentials.
+O `agy` fala MCP em http://127.0.0.1:8022, aqui dentro do container:
+  /mcp   -> ops-server  (https://ops.platafirma.org/mcp)
+  /wiki  -> wiki-mcp    (https://mcp.platafirma.org/mcp)
 
-Nao ha decisao de acesso aqui: quem decide e o PEP do ops-server, do outro lado.
-Esta ponte so carrega credencial e repassa bytes.
+Este processo repassa cada chamada com um Bearer do realm sempre fresco — o
+token do Jaiminho vive 600 s e o CLI nao sabe renovar credencial de
+client_credentials.
+
+Nao ha decisao de acesso aqui: quem decide e o PEP de cada servidor, do outro
+lado. Esta ponte so carrega credencial e repassa bytes. Rota que o PEP negar
+devolve 403 com o id da regra — resposta legitima, nao defeito da ponte.
 """
 import os
 import time
@@ -19,6 +23,7 @@ from starlette.routing import Route
 
 REALM = os.environ.get("OIDC_ISSUER", "https://auth.platafirma.org/realms/platafirma")
 OPS = os.environ.get("OPS_URL", "https://ops.platafirma.org")
+WIKI = os.environ.get("WIKI_URL", "https://mcp.platafirma.org")
 CLIENT_ID = os.environ.get("JAIMINHO_CLIENT_ID", "")
 CLIENT_SECRET = os.environ.get("JAIMINHO_CLIENT_SECRET", "")
 
@@ -42,23 +47,22 @@ async def _token():
 
 async def estado(req):
     try:
-        await _token()
         h = {"Authorization": f"Bearer {await _token()}"}
         r = await _cli.get(f"{OPS}/sessao", headers=h)
         return JSONResponse({"token": "ok", "sessao_http": r.status_code,
                              "sujeito": r.json().get("sujeito") if r.status_code == 200 else None,
-                             "ops": OPS})
+                             "ops": OPS, "wiki": WIKI})
     except Exception as e:                                            # noqa: BLE001
         return JSONResponse({"erro": str(e)[:300]}, status_code=503)
 
 
-async def ponte(req):
-    """Repassa /mcp preservando streaming — MCP sobre HTTP e resposta longa."""
+async def _repassa(req, base):
+    """Repassa preservando streaming — MCP sobre HTTP e resposta longa."""
     corpo = await req.body()
     cabecalhos = {k: v for k, v in req.headers.items()
                   if k.lower() not in ("host", "authorization", "content-length")}
     cabecalhos["Authorization"] = f"Bearer {await _token()}"
-    pedido = _cli.build_request(req.method, f"{OPS}/mcp", headers=cabecalhos,
+    pedido = _cli.build_request(req.method, base, headers=cabecalhos,
                                 content=corpo, params=req.query_params)
     resposta = await _cli.send(pedido, stream=True)
     saida = {k: v for k, v in resposta.headers.items()
@@ -68,8 +72,20 @@ async def ponte(req):
                              background=BackgroundTask(resposta.aclose))
 
 
+async def ponte_ops(req):
+    return await _repassa(req, f"{OPS}/mcp")
+
+
+async def ponte_wiki(req):
+    return await _repassa(req, f"{WIKI}/mcp")
+
+
+_METODOS = ["GET", "POST", "DELETE"]
+
 app = Starlette(routes=[
     Route("/estado", estado),
-    Route("/mcp", ponte, methods=["GET", "POST", "DELETE"]),
-    Route("/mcp/{resto:path}", ponte, methods=["GET", "POST", "DELETE"]),
+    Route("/mcp", ponte_ops, methods=_METODOS),
+    Route("/mcp/{resto:path}", ponte_ops, methods=_METODOS),
+    Route("/wiki", ponte_wiki, methods=_METODOS),
+    Route("/wiki/{resto:path}", ponte_wiki, methods=_METODOS),
 ])
