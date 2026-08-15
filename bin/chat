@@ -16,7 +16,7 @@
 #   fita existente -> `--resume <id>`, sem reinjetar nada. O pacote ja esta na fita;
 #                     reinjetar cobra ~46 KB por giro (medido em 14/08 na cadeira IA).
 # Fonte unica: o pacote nao se replica no CLAUDE.md do cwd. O CLAUDE.md daqui fica
-# so com o que e do cwd (allowlist, caminho do inbox), nunca com identidade — duas
+# so com o que e do cwd (allowlist, caminho de anexos/), nunca com identidade — duas
 # fontes de persona divergem no dia em que uma delas nao for regenerada.
 
 import json
@@ -228,7 +228,7 @@ def settings_da_fita():
     }
 
 
-def claude_md_da_fita(cadeira, inbox):
+def claude_md_da_fita(cadeira, anexos):
     return (
         f"# fita de {cadeira} — o que e deste diretorio\n"
         "\n"
@@ -236,8 +236,12 @@ def claude_md_da_fita(cadeira, inbox):
         "entram pelo pacote de `monta-sessao`, injetado na abertura da fita — fonte\n"
         "unica, por decisao da minuta 0002. Este arquivo so declara o cwd.\n"
         "\n"
-        f"- **Anexo recebido** — o que o dono manda da sala chega em `{inbox}`.\n"
-        "  O caminho do arquivo vem no corpo da mensagem; ler de la, nao adivinhar.\n"
+        f"- **Anexo da sala** — arquivo que o dono manda do celular chega em `{anexos}`.\n"
+        f"  O caminho vem no corpo da mensagem; ler de la, nao adivinhar. Este diretorio\n"
+        f"  NAO e caixa de mensagem: nada de outra cadeira chega aqui.\n"
+        f"- **Caixa de mensagem** — recado de outra cadeira so se le com `fila ler <persona>`,\n"
+        f"  e o pacote de abertura ja diz quantas ha. Perguntado por 'a caixa', e esta,\n"
+        f"  nunca o diretorio acima.\n"
         "- **Permissao** — `.claude/settings.json` deste diretorio. Sem humano no\n"
         "  meio do giro: o que a lista nega, nega calado.\n"
         "- **Entrega** — resposta e conversa; o que tem permanencia vira card, commit\n"
@@ -248,18 +252,22 @@ def claude_md_da_fita(cadeira, inbox):
 
 
 def prepara_cwd(cadeira):
-    """~/AI/fitas/<cadeira>/ com allowlist e inbox. Criado pelo verbo se faltar —
-    a recepcao grava anexo no inbox e nao tem por que saber montar o diretorio."""
+    """~/AI/fitas/<cadeira>/ com allowlist e anexos/. Criado pelo verbo se faltar —
+    a recepcao grava anexo ali e nao tem por que saber montar o diretorio.
+
+    O diretorio se chama `anexos` por medicao de 15/08: com o nome de caixa de
+    mensagem, a cadeira perguntada sobre \"a caixa\" listou este diretorio, achou
+    vazio e desmentiu a fila, que tinha 1 nova."""
     base = os.path.join(FITAS, cadeira)
-    inbox = os.path.join(base, "inbox")
+    anexos = os.path.join(base, "anexos")
     dot = os.path.join(base, ".claude")
-    for d in (base, inbox, dot):
+    for d in (base, anexos, dot):
         os.makedirs(d, exist_ok=True)
     with open(os.path.join(dot, "settings.json"), "w") as f:
         json.dump(settings_da_fita(), f, indent=2, ensure_ascii=False)
         f.write("\n")
     with open(os.path.join(base, "CLAUDE.md"), "w") as f:
-        f.write(claude_md_da_fita(cadeira, inbox))
+        f.write(claude_md_da_fita(cadeira, anexos))
     return base
 
 

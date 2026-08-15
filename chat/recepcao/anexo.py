@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
-"""Anexo recebido: da midia do celular ao caminho no inbox da fita (criterio 19).
+"""Anexo recebido: da midia do celular ao caminho em anexos/ da fita (criterio 19).
 
 O caminho do dado e curto e so tem um sentido: o dono manda um print, o receptor
 baixa a midia pelo endpoint AUTENTICADO (spec >= v1.11) e grava em
-~/AI/fitas/<cadeira>/inbox/. O que vai ao verbo e o CAMINHO, nunca os bytes — o
-Claude Code le imagem do disco por `Read`, e o inbox esta na allowlist da cadeira.
+~/AI/fitas/<cadeira>/anexos/. O que vai ao verbo e o CAMINHO, nunca os bytes — o
+Claude Code le imagem do disco por `Read`, e anexos/ esta na allowlist da cadeira.
 
 Quem grava e o receptor, de dentro do container, porque o bind mount de
 ~/AI/fitas e dele: partida por direcao, o worker nunca fala Matrix e o receptor
@@ -28,7 +28,7 @@ import re
 from mautrix.types import SpecVersions
 
 TETO_PADRAO = 20 * 1024 * 1024  # 20 MiB, o numero da posicao de claudinho-TI
-INBOX_RAIZ = "/home/claudinho/AI/fitas"
+FITAS_RAIZ = "/home/claudinho/AI/fitas"
 
 MIME_PERMITIDOS = {
     "image/png": ".png",
@@ -95,13 +95,13 @@ def caminho_livre(diretorio: str, nome: str) -> str:
         alvo = os.path.join(diretorio, f"{raiz}-{n}{ext}")
         if not os.path.exists(alvo):
             return alvo
-    raise Recusado("o inbox desta fita ja tem arquivos demais com esse nome.")
+    raise Recusado("anexos/ desta fita ja tem arquivos demais com esse nome.")
 
 
-def inbox_da(cadeira: str) -> str:
-    """Cria o inbox da cadeira se faltar — o card poe a criacao do lado do
+def anexos_de(cadeira: str) -> str:
+    """Cria anexos/ da cadeira se faltar — o card poe a criacao do lado do
     receptor, que e quem tem o bind mount."""
-    caminho = os.path.join(os.environ.get("CHAT_FITAS_RAIZ", INBOX_RAIZ), cadeira, "inbox")
+    caminho = os.path.join(os.environ.get("CHAT_FITAS_RAIZ", FITAS_RAIZ), cadeira, "anexos")
     os.makedirs(caminho, exist_ok=True)
     return caminho
 
@@ -136,9 +136,9 @@ async def baixa(intent, *, mxc: str, nome: str, mime: str, tamanho_declarado: in
         if intent.api.as_user_id:
             params["user_id"] = intent.api.as_user_id
 
-    diretorio = inbox_da(cadeira)
+    diretorio = anexos_de(cadeira)
     alvo = caminho_livre(diretorio, nome_seguro(nome, mime))
-    # Parcial + rename: download cortado no meio nunca aparece no inbox como
+    # Parcial + rename: download cortado no meio nunca aparece em anexos/ como
     # arquivo bom. A cadeira leria um PNG truncado e o erro sairia longe daqui.
     parcial = os.path.join(diretorio, "." + os.path.basename(alvo) + ".parcial")
 

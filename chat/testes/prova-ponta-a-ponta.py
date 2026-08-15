@@ -382,11 +382,11 @@ async def corpo_da_prova(sessao: ClientSession, hs: Homeserver, fitas: str,
                                  midia(sala6, nome="print da tela.png", mime="image/png",
                                        tamanho=len(PNG))])
     await hs.espera(sala6, 1)
-    inbox = os.path.join(fitas, CADEIRA, "inbox")
-    arquivos = sorted(os.listdir(inbox)) if os.path.isdir(inbox) else []
-    prova("criterio 19 — o anexo e gravado no inbox da fita", len(arquivos) == 1, str(arquivos))
+    anexos = os.path.join(fitas, CADEIRA, "anexos")
+    arquivos = sorted(os.listdir(anexos)) if os.path.isdir(anexos) else []
+    prova("criterio 19 — o anexo e gravado em anexos/ da fita", len(arquivos) == 1, str(arquivos))
     if arquivos:
-        gravado = os.path.join(inbox, arquivos[0])
+        gravado = os.path.join(anexos, arquivos[0])
         prova("o arquivo chegou inteiro e com nome saneado",
               os.path.getsize(gravado) == len(PNG) and " " not in arquivos[0], arquivos[0])
     respondeu = hs.na_sala(sala6)

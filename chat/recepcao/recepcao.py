@@ -2,7 +2,7 @@
 """Recepcao da PlataFirma — o lado MATRIX do giro (card 458, fatia B-1).
 
 Esta peca faz tudo o que fala Matrix, e so isso: aceita a transacao, deduplica,
-enfileira no journal, liga o typing, baixa anexo para o inbox da fita, formata,
+enfileira no journal, liga o typing, baixa anexo para anexos/ da fita, formata,
 fatia e envia a resposta. Ela NAO chama verbo e nao sabe o que e Claude Code.
 
 Do outro lado da fronteira mora o worker (chat/worker/worker.py), no host, sob
@@ -249,7 +249,7 @@ class Recepcao:
         )
         if job is None:
             # Corrida com a reentrega: o outro lado ganhou. Se este ramo baixou
-            # um anexo, o arquivo sobra no inbox — apaga, para nao deixar copia
+            # um anexo, o arquivo sobra em anexos/ — apaga, para nao deixar copia
             # que ninguem citou.
             if tipo in MIDIAS and caminho:
                 try:
