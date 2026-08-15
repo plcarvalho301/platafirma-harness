@@ -55,17 +55,6 @@ Tratei como regra geral e não é: é o padrão de UMA classe de tela.
 - **Precedente da casa não vence régua posterior.** No F9 o padrão sem JS
   reproduziria exatamente o defeito que reprovou o Redmine na seleção. Quando o
   precedente é anterior ao requisito, ele é insumo, não veredito.
-- **Import map matou o reflexo "biblioteca = build".** Navegador resolve
-  especificador nu desde que o import map esteja na página; biblioteca de
-  componentes vendorizada roda sem bundler. A documentação de fornecedor costuma
-  estar atrasada nisso — o quick start do `@material/web` ainda diz que exige
-  ferramenta, e o exemplo dele mesmo é buildless. Conferir contra o navegador,
-  não contra o README.
-- **Adotar render layer é a decisão barata; adotar biblioteca de componentes é a
-  cara.** A primeira fica contida numa camada e a saída custa reescrever render. A
-  segunda arrasta o design system inteiro do fornecedor — forma, elevação,
-  movimento, densidade — e aí a decisão deixa de ser minha e vira de produto.
-
 ## Fita própria contra fita própria, mesma árvore (medido 15/08, verbo `minuta`)
 
 A regra de worktree por fatia (`fabrica.md`, `ti/fluxo-worktree-por-fatia`) cobre
