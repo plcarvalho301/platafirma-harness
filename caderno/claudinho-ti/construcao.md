@@ -55,3 +55,28 @@ Classic (o ex-Element Android) fala `m.login.sso` e é o cliente da instância.
 - **Localpart é irreversível.** O MXID copia o `preferred_username` do realm e vai
   assado em todo evento. Username feio no IdP vira identidade permanente no chat:
   conferir o realm ANTES do primeiro login, não depois.
+
+## O precedente de tela da casa tem fronteira (medido 15/08, no F9)
+
+A plataforma tinha um padrão só de tela — server-rendered em starlette, sem
+framework, sem build, sem JavaScript (`harness-controle`, `acervo-api/tela.html`).
+Tratei como regra geral e não é: é o padrão de UMA classe de tela.
+
+- **A fronteira:** tela de leitura e de operação pontual (POST-redirect-GET, meta
+  refresh) fica no padrão da casa. Tela de trabalho — edição concorrente, seleção
+  em lote, resultado visível antes da confirmação do servidor, erro no item e não
+  na página — exige estado local no cliente e reconciliação, e o padrão da casa
+  não alcança.
+- **Precedente da casa não vence régua posterior.** No F9 o padrão sem JS
+  reproduziria exatamente o defeito que reprovou o Redmine na seleção. Quando o
+  precedente é anterior ao requisito, ele é insumo, não veredito.
+- **Import map matou o reflexo "biblioteca = build".** Navegador resolve
+  especificador nu desde que o import map esteja na página; biblioteca de
+  componentes vendorizada roda sem bundler. A documentação de fornecedor costuma
+  estar atrasada nisso — o quick start do `@material/web` ainda diz que exige
+  ferramenta, e o exemplo dele mesmo é buildless. Conferir contra o navegador,
+  não contra o README.
+- **Adotar render layer é a decisão barata; adotar biblioteca de componentes é a
+  cara.** A primeira fica contida numa camada e a saída custa reescrever render. A
+  segunda arrasta o design system inteiro do fornecedor — forma, elevação,
+  movimento, densidade — e aí a decisão deixa de ser minha e vira de produto.
