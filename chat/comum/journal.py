@@ -81,15 +81,57 @@ CREATE INDEX IF NOT EXISTS jobs_por_sala   ON jobs (sala, estado, id);
 CREATE TABLE IF NOT EXISTS fitas (
     sala          TEXT PRIMARY KEY,
     id_fita       TEXT NOT NULL,
-    atualizado_em REAL NOT NULL
+    atualizado_em REAL NOT NULL,
+    giros         INTEGER NOT NULL DEFAULT 0
 );
 
 CREATE TABLE IF NOT EXISTS salas (
     sala          TEXT PRIMARY KEY,
     cadeira       TEXT NOT NULL,
-    atualizado_em REAL NOT NULL
+    atualizado_em REAL NOT NULL,
+    nascida_em    REAL NOT NULL DEFAULT 0
+);
+
+CREATE TABLE IF NOT EXISTS avisos (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    sala       TEXT NOT NULL,
+    texto      TEXT NOT NULL,
+    criado_em  REAL NOT NULL,
+    enviado_em REAL
+);
+
+CREATE INDEX IF NOT EXISTS avisos_por_enviar ON avisos (enviado_em, id);
+
+CREATE TABLE IF NOT EXISTS rotacoes (
+    sala_velha TEXT PRIMARY KEY,
+    sala_nova  TEXT NOT NULL,
+    cadeira    TEXT NOT NULL,
+    id_fita    TEXT NOT NULL DEFAULT '',
+    job_ritual INTEGER,
+    motivo     TEXT NOT NULL DEFAULT '',
+    em         REAL NOT NULL,
+    avisado_em REAL
 );
 """
+
+# Colunas que chegaram depois do primeiro esquema. `CREATE TABLE IF NOT EXISTS`
+# nao mexe em tabela existente: sem isto, banco ja criado sobe sem as colunas do
+# card 449 e o erro aparece no primeiro giro, nao na subida.
+MIGRACOES = (
+    ("fitas", "giros", "INTEGER NOT NULL DEFAULT 0"),
+    ("salas", "nascida_em", "REAL NOT NULL DEFAULT 0"),
+    ("jobs", "silencioso", "INTEGER NOT NULL DEFAULT 0"),
+)
+
+
+def _migra(con: sqlite3.Connection) -> None:
+    for tabela, coluna, tipo in MIGRACOES:
+        tem = any(
+            linha["name"] == coluna
+            for linha in con.execute(f"PRAGMA table_info({tabela})")
+        )
+        if not tem:
+            con.execute(f"ALTER TABLE {tabela} ADD COLUMN {coluna} {tipo}")
 
 
 def abre(caminho: str | None = None) -> sqlite3.Connection:
@@ -113,6 +155,7 @@ def abre(caminho: str | None = None) -> sqlite3.Connection:
     con.execute("PRAGMA busy_timeout=30000")
     con.execute("PRAGMA synchronous=NORMAL")
     con.executescript(ESQUEMA)
+    _migra(con)
     return con
 
 
@@ -186,6 +229,120 @@ def registra_recusa(con: sqlite3.Connection, *, event_id: str, txn_id: str, sala
     return cur.rowcount > 0
 
 
+def avisa(con: sqlite3.Connection, sala: str, texto: str) -> int:
+    """Uma linha do SISTEMA para a sala, atravessando a fronteira pelo journal.
+
+    O worker nao fala Matrix e a recepcao nao chama verbo — quem tem o que
+    dizer (morte de fita, compactacao, mesa que nao fechou a tempo) escreve
+    aqui, e o expedidor de avisos da recepcao poe na sala como `m.notice`.
+    Fila persistente de proposito: receptor derrubado no meio da rotacao volta e
+    entrega o aviso, em vez de a fita morrer calada.
+    """
+    cur = con.execute(
+        "INSERT INTO avisos (sala, texto, criado_em) VALUES (?, ?, ?)",
+        (sala, texto, _agora()),
+    )
+    return cur.lastrowid
+
+
+def avisos_pendentes(con: sqlite3.Connection) -> list[sqlite3.Row]:
+    return list(con.execute(
+        "SELECT * FROM avisos WHERE enviado_em IS NULL ORDER BY id"
+    ))
+
+
+def marca_aviso_enviado(con: sqlite3.Connection, aviso_id: int) -> None:
+    con.execute("UPDATE avisos SET enviado_em = ? WHERE id = ?", (_agora(), aviso_id))
+
+
+def registra_rotacao(
+    con: sqlite3.Connection,
+    *,
+    velha: str,
+    nova: str,
+    cadeira: str,
+    id_fita: str,
+    job_ritual: int | None,
+    motivo: str,
+) -> None:
+    """Guarda o par sala velha -> sala nova de uma rotacao.
+
+    Existe para uma pergunta so, que nenhuma outra tabela responde depois do
+    `troca_de_sala`: em que sala avisar quando o ritual da fita morta demora
+    demais. Sem o par gravado, a recepcao teria de adivinhar a sala nova pela
+    cadeira, e cadeira com duas rotacoes no mesmo dia daria o palpite errado.
+    """
+    con.execute(
+        "INSERT INTO rotacoes (sala_velha, sala_nova, cadeira, id_fita, job_ritual,"
+        " motivo, em) VALUES (?, ?, ?, ?, ?, ?, ?)"
+        " ON CONFLICT(sala_velha) DO UPDATE SET sala_nova = excluded.sala_nova,"
+        " id_fita = excluded.id_fita, job_ritual = excluded.job_ritual,"
+        " motivo = excluded.motivo, em = excluded.em, avisado_em = NULL",
+        (velha, nova, cadeira, id_fita, job_ritual, motivo, _agora()),
+    )
+
+
+def rituais_atrasados(con: sqlite3.Connection, teto_s: float) -> list[sqlite3.Row]:
+    """Rotacoes cujo ritual passou do teto e ainda esta vivo, sem aviso dado.
+
+    E o passo 4 da secao 2 da minuta: estourado o teto, a fita nova ja abriu com
+    a mesa como estava, e a degradacao se DECLARA na sala. Silencio aqui seria
+    memoria faltando sem ninguem saber.
+    """
+    corte = _agora() - teto_s
+    return list(con.execute(
+        "SELECT r.* FROM rotacoes r JOIN jobs j ON j.id = r.job_ritual"
+        " WHERE r.avisado_em IS NULL AND r.em < ? AND j.estado IN (?, ?)"
+        " ORDER BY r.em", (corte, PENDENTE, EM_CURSO),
+    ))
+
+
+def marca_rotacao_avisada(con: sqlite3.Connection, velha: str) -> None:
+    con.execute(
+        "UPDATE rotacoes SET avisado_em = ? WHERE sala_velha = ? AND avisado_em IS NULL",
+        (_agora(), velha),
+    )
+
+
+RITUAL = "encerramento"
+ANCORA = "ancora"
+
+
+def enfileira_silencioso(
+    con: sqlite3.Connection,
+    *,
+    sala: str,
+    cadeira: str,
+    id_fita: str,
+    corpo: str,
+    marca: str,
+) -> int | None:
+    """Giro cujo produto e escrita em mesa ou caderno, nunca texto para a sala.
+
+    Duas chamadas: o ritual de encerramento da fita que morre (criterio 8) e a
+    ancora de compactacao (criterio 17). Sao o mesmo mecanismo — um giro a mais
+    na fita, com `--silencioso` no verbo — e por isso nao ha duas rotas.
+
+    `id_fita` vem EXPLICITO e nao da tabela: o ritual roda na fita que ja morreu,
+    e no momento em que o worker o toma a tabela ja aponta para a fita nova. Ler
+    dali encerraria a fita errada.
+
+    O event_id e sintetico e carrega a marca e o relogio: ele existe so para a
+    UNIQUE do job, e colisao com event_id do Matrix e impossivel pelo prefixo.
+    """
+    agora = _agora()
+    event_id = f"pf!{marca}:{sala}:{agora:.6f}"
+    try:
+        cur = con.execute(
+            "INSERT INTO jobs (event_id, sala, cadeira, remetente, corpo, id_fita,"
+            " estado, silencioso, criado_em) VALUES (?, ?, ?, ?, ?, ?, ?, 1, ?)",
+            (event_id, sala, cadeira, "@pf:local", corpo, id_fita, PENDENTE, agora),
+        )
+    except sqlite3.IntegrityError:
+        return None
+    return cur.lastrowid
+
+
 # --- lado do worker: execucao --------------------------------------------
 
 
@@ -232,10 +389,13 @@ def reivindica(con: sqlite3.Connection, sala: str) -> sqlite3.Row | None:
         # A fita corrente e lida na tomada, nao na chegada: entre uma coisa e
         # outra o giro anterior da MESMA sala pode ter aberto fita nova, e o
         # id gravado na chegada estaria velho.
-        fita = con.execute("SELECT id_fita FROM fitas WHERE sala = ?", (sala,)).fetchone()
         job = dict(alvo)
         job["estado"] = EM_CURSO
-        job["id_fita"] = fita["id_fita"] if fita else ""
+        if not job.get("silencioso"):
+            fita = con.execute(
+                "SELECT id_fita FROM fitas WHERE sala = ?", (sala,)
+            ).fetchone()
+            job["id_fita"] = fita["id_fita"] if fita else ""
         con.execute("COMMIT")
         return job
     except Exception:
@@ -279,7 +439,14 @@ def conclui(
             (estado, texto, detalhe, 1 if reiniciada else 0, agora, agora, job_id, EM_CURSO),
         )
         venceu = cur.rowcount > 0
-        if venceu and id_fita:
+        silencioso = con.execute(
+            "SELECT silencioso FROM jobs WHERE id = ?", (job_id,)
+        ).fetchone()["silencioso"]
+        # Ritual e ancora rodam DENTRO de uma fita que ja tem endereco. Deixar o
+        # id deles reescrever a tabela faria o ritual da fita morta ressuscita-la
+        # como corrente da sala — o esmagamento que o criterio 18 proibe, so que
+        # do lado do journal em vez do lado da mesa.
+        if venceu and id_fita and not silencioso:
             sala = con.execute("SELECT sala FROM jobs WHERE id = ?", (job_id,)).fetchone()["sala"]
             con.execute(
                 "INSERT INTO fitas (sala, id_fita, atualizado_em) VALUES (?, ?, ?)"
@@ -346,10 +513,16 @@ def condena(con: sqlite3.Connection, job_id: int, *, estado: str, detalhe: str) 
 
 
 def a_expedir(con: sqlite3.Connection) -> list[sqlite3.Row]:
-    """Giros terminais que ainda nao chegaram inteiros a sala."""
+    """Giros terminais que ainda nao chegaram inteiros a sala.
+
+    Silencioso fica de fora: o produto dele e escrita em mesa ou caderno, e o
+    contrato do verbo ja devolve `texto` vazio. Sem este filtro o expedidor
+    poria na sala o "terminou sem escrever resposta" a cada ritual — que e
+    exatamente o ruido que o modo silencioso existe para nao produzir.
+    """
     return list(con.execute(
         "SELECT * FROM jobs WHERE estado IN (?, ?, ?, ?) AND enviado_em IS NULL"
-        " ORDER BY id", TERMINAIS,
+        " AND silencioso = 0 ORDER BY id", TERMINAIS,
     ))
 
 
@@ -376,9 +549,85 @@ def cadeira_da_sala(con: sqlite3.Connection, sala: str) -> str | None:
 
 
 def grava_cadeira(con: sqlite3.Connection, sala: str, cadeira: str) -> None:
+    """Cache sala -> cadeira, e o carimbo de nascimento da sala.
+
+    `nascida_em` NAO se reescreve no conflito: a idade e da sala, e o gatilho da
+    rotacao e a mensagem (minuta 0002). Reescrever aqui faria toda mensagem
+    rejuvenescer a sala, e a rotacao de 24h nunca dispararia.
+    """
+    agora = _agora()
     con.execute(
-        "INSERT INTO salas (sala, cadeira, atualizado_em) VALUES (?, ?, ?)"
+        "INSERT INTO salas (sala, cadeira, atualizado_em, nascida_em) VALUES (?, ?, ?, ?)"
         " ON CONFLICT(sala) DO UPDATE SET cadeira = excluded.cadeira,"
         " atualizado_em = excluded.atualizado_em",
-        (sala, cadeira, _agora()),
+        (sala, cadeira, agora, agora),
     )
+
+
+def nascimento_da_sala(con: sqlite3.Connection, sala: str) -> float | None:
+    """Epoch em que a sala entrou no journal. None quando ela e desconhecida;
+    0 quando veio de banco anterior a migracao — nos dois casos quem chama
+    decide, e nenhum deles e "idade zero"."""
+    linha = con.execute("SELECT nascida_em FROM salas WHERE sala = ?", (sala,)).fetchone()
+    if linha is None:
+        return None
+    return float(linha["nascida_em"] or 0.0)
+
+
+def adota_nascimento(con: sqlite3.Connection, sala: str, quando: float) -> None:
+    """Carimba a idade de sala que nasceu antes da migracao. So preenche o que
+    esta em zero — sala com carimbo nao se reescreve."""
+    con.execute(
+        "UPDATE salas SET nascida_em = ? WHERE sala = ? AND (nascida_em IS NULL OR nascida_em = 0)",
+        (quando, sala),
+    )
+
+
+def fita_da_sala(con: sqlite3.Connection, sala: str) -> str:
+    linha = con.execute("SELECT id_fita FROM fitas WHERE sala = ?", (sala,)).fetchone()
+    return linha["id_fita"] if linha else ""
+
+
+def conta_giro(con: sqlite3.Connection, sala: str) -> int:
+    """Incrementa e devolve o contador de giros da fita corrente da sala.
+
+    E o fallback determinstico do criterio 17: formato de stream de CLI muda
+    rapido, contador nao. Sala sem fita registrada conta zero — nao ha fita a
+    ancorar, e inventar linha aqui poria contador em sala que nunca girou.
+    """
+    cur = con.execute(
+        "UPDATE fitas SET giros = giros + 1, atualizado_em = ? WHERE sala = ?",
+        (_agora(), sala),
+    )
+    if cur.rowcount == 0:
+        return 0
+    linha = con.execute("SELECT giros FROM fitas WHERE sala = ?", (sala,)).fetchone()
+    return int(linha["giros"] or 0)
+
+
+def zera_giros(con: sqlite3.Connection, sala: str) -> None:
+    con.execute("UPDATE fitas SET giros = 0 WHERE sala = ?", (sala,))
+
+
+def troca_de_sala(con: sqlite3.Connection, velha: str, nova: str, cadeira: str) -> None:
+    """A cadeira mudou de endereco: a sala nova herda a cadeira e nasce agora,
+    a velha some do cache e leva a fita junto.
+
+    A fita NAO migra: sala nova e fita nova, que e o ponto inteiro da rotacao.
+    Migrar o id aqui faria a sala limpa acordar com a conversa anterior dentro.
+    """
+    agora = _agora()
+    con.execute("BEGIN IMMEDIATE")
+    try:
+        con.execute(
+            "INSERT INTO salas (sala, cadeira, atualizado_em, nascida_em) VALUES (?, ?, ?, ?)"
+            " ON CONFLICT(sala) DO UPDATE SET cadeira = excluded.cadeira,"
+            " atualizado_em = excluded.atualizado_em",
+            (nova, cadeira, agora, agora),
+        )
+        con.execute("DELETE FROM salas WHERE sala = ?", (velha,))
+        con.execute("DELETE FROM fitas WHERE sala = ?", (velha,))
+        con.execute("COMMIT")
+    except Exception:
+        con.execute("ROLLBACK")
+        raise

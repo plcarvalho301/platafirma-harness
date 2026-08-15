@@ -164,6 +164,23 @@ class MotorClaudeCode:
             p["saida"] = u.get("output_tokens") or 0
         return p
 
+    # Nomes que o Code ja usou para a fronteira de compactacao. A leitura e
+    # defensiva de proposito: quando o rotulo mudar, o fallback por contagem de
+    # giro (criterio 17) continua ancorando a mesa, e o unico prejuizo e o aviso
+    # na sala. Formato de saida de CLI muda rapido; o mecanismo nao pode depender
+    # so dele.
+    COMPACTACAO = ("compact_boundary", "compact", "compaction", "compacted")
+
+    def compactou(self, ev):
+        """True quando o evento e a fronteira de compactacao do motor."""
+        if ev.get("compact_metadata") is not None:
+            return True
+        tipo = str(ev.get("type") or "")
+        sub = str(ev.get("subtype") or "")
+        if tipo in self.COMPACTACAO or sub in self.COMPACTACAO:
+            return True
+        return tipo == "system" and sub.startswith("compact")
+
     def cota_barrada(self, ev):
         """Cota e evento proprio do stream, e o unico lugar onde o horario de
         liberacao existe. `allowed` passa; qualquer outro estado e barreira."""
@@ -215,6 +232,10 @@ def settings_da_fita():
                 "Bash(uv run:*)", "Bash(uv sync:*)", "Bash(uv venv:*)", "Bash(uv pip:*)",
                 "Bash(tarefas:*)", "Bash(fila:*)", "Bash(mesa:*)", "Bash(acervo:*)",
                 "Bash(monta-sessao:*)", "Bash(conferir:*)", "Bash(infra:*)",
+                # `encerrar` e o que o ritual de encerramento chama (card 449).
+                # Fora da allowlist, o giro silencioso da rotacao seria negado
+                # calado e a mesa morreria junto com a fita.
+                "Bash(encerrar:*)",
                 "Bash(motor:*)", "Bash(sinal:*)", "Bash(longjob:*)",
             ],
             "deny": [
@@ -332,6 +353,33 @@ def mata_grupo(proc):
             continue
 
 
+def abre_slot_de_fita(cadeira, id_fita, env, passo_out):
+    """Grava o slot de fita corrente (`mesa fita abre --id`) e devolve o id.
+
+    Contrato em docs/contrato_fita-corrente.md: o id do slot E o session_id do
+    Code, para nao haver segundo cadastro a reconciliar. A guarda do criterio 18
+    viaja depois no ambiente, como PF_FITA — nao na lembranca de passar flag.
+
+    Falha aqui NAO mata o giro: sem slot a guarda desliga e `mesa anota` volta ao
+    comportamento de sempre, que e o degradado aceitavel. Giro perdido por causa
+    do registro da memoria seria pior que memoria sem guarda.
+    """
+    argv = [os.path.join(RAIZ, "bin", "mesa"), "fita", "abre", "--id", id_fita]
+    ambiente = dict(env)
+    ambiente["PF_CADEIRA"] = cadeira
+    try:
+        r = subprocess.run(argv, capture_output=True, text=True, timeout=15, env=ambiente)
+    except (OSError, subprocess.SubprocessError) as e:
+        passo_out({"passo": "slot-de-fita", "em": agora_iso(), "erro": str(e)[:120]})
+        return ""
+    if r.returncode != 0:
+        detalhe = (r.stderr or "").strip().splitlines()
+        passo_out({"passo": "slot-de-fita", "em": agora_iso(),
+                   "erro": detalhe[-1][:120] if detalhe else f"exit {r.returncode}"})
+        return ""
+    return (r.stdout or "").strip() or id_fita
+
+
 def um_giro(motor, id_fita, pacote, corpo, cwd, env, passo_out):
     """Roda uma invocacao e devolve o dicionario cru do resultado. Nao decide
     estado final — quem decide e `despachar`, que tambem sabe se cabe reiniciar."""
@@ -339,6 +387,13 @@ def um_giro(motor, id_fita, pacote, corpo, cwd, env, passo_out):
     # O id que pedimos ao motor: para fita nova e o que volta no contrato mesmo que
     # o stream morra antes do primeiro evento.
     pedido = argv[argv.index("--session-id") + 1] if "--session-id" in argv else id_fita
+    # A guarda do criterio 18 viaja no AMBIENTE do giro: `mesa anota` chamada la
+    # dentro le PF_FITA e so escreve se este id ainda for o corrente da cadeira.
+    env = dict(env)
+    slot = abre_slot_de_fita(env.get("PF_CADEIRA", ""), pedido, env, passo_out)
+    if slot:
+        env["PF_FITA"] = slot
+
     try:
         proc = subprocess.Popen(
             argv, cwd=cwd, env=env, text=True, bufsize=1,
@@ -365,6 +420,7 @@ def um_giro(motor, id_fita, pacote, corpo, cwd, env, passo_out):
     r = {
         "id_fita": pedido, "texto": "", "resultado": None,
         "cota": "", "erro_motor": [], "timeout": "", "eventos": 0,
+        "compactou": False,
     }
 
     while abertos:
@@ -399,6 +455,13 @@ def um_giro(motor, id_fita, pacote, corpo, cwd, env, passo_out):
             continue
         r["eventos"] += 1
         passo_out(motor.passo(ev))
+        if motor.compactou(ev):
+            # Passo proprio, e nao so metadado: e a UNICA linha que o worker
+            # observa para saber que a janela virou. Criterio 17 — compactacao
+            # nao e silenciosa, e quem poe na sala e a recepcao, do outro lado.
+            r["compactou"] = True
+            passo_out({"passo": "compactou", "em": agora_iso(),
+                       "subtipo": ev.get("subtype") or ev.get("type")})
         if ev.get("session_id"):
             r["id_fita"] = ev["session_id"]
         cota = motor.cota_barrada(ev)

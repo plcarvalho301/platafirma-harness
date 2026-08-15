@@ -38,12 +38,13 @@ import sys
 
 from aiohttp import web
 from mautrix.appservice import AppService
-from mautrix.types import EventType, MessageType
+from mautrix.types import EventType, MessageType, RoomCreatePreset
 
 sys.path.insert(0, "/opt/chat")
 
 import anexo as anexos  # noqa: E402
 import formata  # noqa: E402
+import rotacao  # noqa: E402
 from comum import journal  # noqa: E402
 from comum.cadeiras import cadeiras, eh_de_cadeira, mxid_da_cadeira, sufixo_canonico  # noqa: E402
 
@@ -65,6 +66,7 @@ INTERVALO_EXPEDIDOR = float(os.environ.get("CHAT_INTERVALO_EXPEDIDOR", "2"))
 TYPING_MS = int(os.environ.get("CHAT_TYPING_MS", "30000"))
 INTERVALO_TYPING = float(os.environ.get("CHAT_INTERVALO_TYPING", "20"))
 ANEXO_TIMEOUT = float(os.environ.get("CHAT_ANEXO_TIMEOUT", "30"))
+INTERVALO_AVISOS = float(os.environ.get("CHAT_INTERVALO_AVISOS", "2"))
 
 TEXTOS = (MessageType.TEXT, MessageType.NOTICE, MessageType.EMOTE)
 MIDIAS = (MessageType.IMAGE, MessageType.FILE)
@@ -156,6 +158,65 @@ class Recepcao:
             raise ValueError(f"cadeira sem persona: {cadeira!r}")
         return self.appserv.intent.api.intent(mxid)
 
+    # --- ciclo de vida da sala (card 449) ---------------------------------
+
+    async def cria_sala_direta(self, intent, dono: str) -> str | None:
+        """Sala nova da cadeira com o dono, no mesmo molde do provisionamento.
+
+        `is_direct` e `trusted_private_chat` sao o que fazem o cliente mostrar
+        CONVERSA e nao sala, e o que faz a cadeira ser reencontravel pelo MXID
+        depois da rotacao. Sem nome nem topico, de proposito: a conversa se chama
+        pelo displayname da cadeira.
+
+        O `m.direct` do lado da cadeira e atualizado aqui; o do dono quem escreve
+        e o cliente dele, ao aceitar o convite.
+        """
+        try:
+            nova = await intent.create_room(
+                preset=RoomCreatePreset.TRUSTED_PRIVATE,
+                is_direct=True,
+                invitees=[dono],
+            )
+        except Exception:
+            log.error("createRoom falhou para o dono %s", dono, exc_info=True)
+            return None
+        try:
+            direto = await intent.get_account_data("m.direct") or {}
+            if not isinstance(direto, dict):
+                direto = {}
+            atuais = [s for s in direto.get(dono, []) if isinstance(s, str)]
+            direto[dono] = atuais + [nova]
+            await intent.set_account_data("m.direct", direto)
+        except Exception:
+            # m.direct desatualizado nao impede a conversa: o convite carrega
+            # is_direct e o cliente do dono ja mostra como conversa direta.
+            log.warning("nao consegui atualizar m.direct para %s", nova, exc_info=True)
+        return nova
+
+    async def descarta_sala(self, intent, sala: str, dono: str) -> None:
+        """Criterio 12 — sala descartada nao fica de corpo presente.
+
+        Kick ANTES do leave, e a ordem nao e escolha: quem tem poder de expulsar
+        e a criadora da sala, e depois de sair ela nao tem mais. Sem o kick, a
+        sala morta continua na lista do dono para sempre; com ele, some do
+        cliente e o Synapse purga o resto pela retencao de sala esquecida.
+        """
+        for gesto, chamada in (
+            ("kick do dono", intent.kick_user(sala, dono, reason="sala rodada")),
+            ("leave", intent.leave_room(sala)),
+            ("forget", intent.forget_room(sala)),
+        ):
+            try:
+                await chamada
+            except Exception:
+                # Cada gesto e independente: o dono ja ter saido sozinho nao pode
+                # impedir o leave, e o leave falhar nao pode impedir o forget.
+                log.warning("%s falhou na sala %s", gesto, sala, exc_info=True)
+
+    async def roda(self, sala: str, cadeira: str, dono: str, motivo: str,
+                   eco: str = "") -> str | None:
+        return await rotacao.gira(self, sala, cadeira, dono, motivo, eco)
+
     # --- chegada ----------------------------------------------------------
 
     async def recebe(self, evento) -> None:
@@ -238,11 +299,31 @@ class Recepcao:
                 )
             return
 
+        # --- ciclo de vida, antes de enfileirar (criterios 8, 10 e 11) ------
+        # A ordem e essa por uma razao so: o giro tem de nascer JA na sala nova.
+        # Enfileirar antes e rodar depois poria a resposta numa sala que acabou
+        # de ser descartada, e o dono nunca a leria.
+        if rotacao.eh_comando(corpo):
+            # Comando nao vira giro: o produto dele e a sala nova. Entra no
+            # dedupe assim mesmo, senao a reentrega do homeserver roda a sala
+            # duas vezes — e rodar sala nao tem desfazer.
+            if journal.registra_recusa(
+                self.con, event_id=evento.event_id, txn_id=txn, sala=sala
+            ):
+                await self.roda(sala, cadeira, evento.sender, "comando")
+            return
+
+        destino = sala
+        if rotacao.vencida(self.con, sala):
+            nova = await self.roda(sala, cadeira, evento.sender, "idade", eco=corpo)
+            if nova:
+                destino = nova
+
         job = journal.registra_chegada(
             self.con,
             event_id=evento.event_id,
             txn_id=txn,
-            sala=sala,
+            sala=destino,
             cadeira=cadeira,
             remetente=evento.sender,
             corpo=corpo,
@@ -258,8 +339,8 @@ class Recepcao:
                     pass
             return
 
-        log.info("giro %s enfileirado: sala=%s cadeira=%s", job, sala, cadeira)
-        await self.typing(intent, sala, True)
+        log.info("giro %s enfileirado: sala=%s cadeira=%s", job, destino, cadeira)
+        await self.typing(intent, destino, True)
 
     # --- fala na sala -----------------------------------------------------
 
@@ -369,6 +450,28 @@ class Recepcao:
                 log.warning("giro %s condenado na %s (sala %s)", job["id"], motivo, job["sala"])
         return quantos
 
+    async def laco_avisos(self) -> None:
+        """Expede a fila de avisos do sistema — morte de fita, compactacao, mesa
+        atrasada. Fila persistente: quem escreve (worker, rotacao) nao fala
+        Matrix, e receptor derrubado no meio volta e entrega em vez de a fita
+        morrer calada.
+        """
+        while True:
+            try:
+                await rotacao.declara_atraso(self)
+                for aviso in journal.avisos_pendentes(self.con):
+                    cadeira = journal.cadeira_da_sala(self.con, aviso["sala"])
+                    if cadeira is None:
+                        # Sala que saiu do cache: nao ha por quem falar. Marca
+                        # como entregue para a fila nao girar para sempre.
+                        journal.marca_aviso_enviado(self.con, aviso["id"])
+                        continue
+                    await self.diz(self.intent_da(cadeira), aviso["sala"], aviso["texto"])
+                    journal.marca_aviso_enviado(self.con, aviso["id"])
+            except Exception:
+                log.error("falha no expedidor de avisos", exc_info=True)
+            await asyncio.sleep(INTERVALO_AVISOS)
+
     async def laco_vigia(self) -> None:
         while True:
             try:
@@ -445,6 +548,7 @@ async def principal() -> None:
         recepcao.laco_expedidor(),
         recepcao.laco_typing(),
         recepcao.laco_vigia(),
+        recepcao.laco_avisos(),
     )
 
 

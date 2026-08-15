@@ -38,7 +38,7 @@ import time
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from comum import journal  # noqa: E402
+from comum import journal, rituais  # noqa: E402
 
 # Watchdog de PRIMEIRA ordem (posicao de claudinho-TI): o stream do verbo emite
 # evento por passo, e silencio maior que isto e giro pendurado — nao giro longo.
@@ -50,6 +50,11 @@ TETO_ABSOLUTO_S = float(os.environ.get("CHAT_TETO_ABSOLUTO_S", "0"))
 INTERVALO_RONDA = float(os.environ.get("CHAT_INTERVALO_RONDA", "2"))
 VERBO = os.environ.get("CHAT_VERBO", "chat")
 GRACA_KILL_S = 10.0
+# Fallback deterministico do criterio 17: a cada N giros a fita ancora a mesa,
+# tenha ou nao havido compactacao. Existe porque o rotulo do evento de
+# compactacao e formato de CLI, e formato de CLI muda; contador nao.
+GIROS_POR_ANCORA = int(os.environ.get("CHAT_GIROS_POR_ANCORA", "10"))
+MESA = os.path.expanduser("~/AI/bin/mesa")
 
 log_trava = threading.Lock()
 
@@ -68,6 +73,7 @@ class Giro:
         self.ultimo_sinal = time.monotonic()
         self.saida: list[str] = []
         self.passos = 0
+        self.compactou = False
         self.trava = threading.Lock()
 
     def _le_stdout(self, fluxo) -> None:
@@ -76,12 +82,27 @@ class Giro:
         fluxo.close()
 
     def _le_stderr(self, fluxo) -> None:
-        """Cada linha do stream e um sinal de vida. E so isso que ela e aqui: o
-        conteudo do passo e do verbo, e nao sobe a sala nem ao journal."""
-        for _ in fluxo:
+        """Cada linha do stream e um sinal de vida, e uma delas e a fronteira de
+        compactacao.
+
+        O conteudo do passo continua NAO subindo a sala: o unico campo lido aqui
+        e o rotulo `passo`, e o que ele produz e um aviso de uma linha do
+        sistema. Raciocinio intermediario nao atravessa por esta porta.
+        """
+        for linha in fluxo:
             with self.trava:
                 self.ultimo_sinal = time.monotonic()
                 self.passos += 1
+            texto = linha.strip()
+            if not texto.startswith("{") or "compactou" not in texto:
+                continue
+            try:
+                passo = json.loads(texto)
+            except json.JSONDecodeError:
+                continue
+            if isinstance(passo, dict) and passo.get("passo") == "compactou":
+                with self.trava:
+                    self.compactou = True
         fluxo.close()
 
     def executa(self) -> dict:
@@ -90,6 +111,8 @@ class Giro:
             "--cadeira", self.job["cadeira"],
             "--fita", self.job["id_fita"] or "",
         ]
+        if self.job.get("silencioso"):
+            cmd.append("--silencioso")
         try:
             # start_new_session: o verbo vira lider do proprio grupo de
             # processos. Sem isso, matar o pendurado deixa `claude` vivo — foi
@@ -195,6 +218,63 @@ class Giro:
                 "detalhe": f"o verbo saiu com codigo {codigo} e sem JSON valido em stdout."}
 
 
+def fecha_slot(cadeira: str, id_fita: str) -> None:
+    """`mesa fita fecha --id <id>` depois do ritual (contrato do slot, passo 4).
+
+    So limpa se o id ainda for o corrente — o proprio verbo faz o compare. Fita
+    ja substituida pela nova nao se fecha aqui, e isso e o desejado: fechar
+    apagaria o slot da fita VIVA.
+    """
+    if not id_fita:
+        return
+    try:
+        subprocess.run(
+            [MESA, "fita", "fecha", "--id", id_fita],
+            env={**os.environ, "PF_CADEIRA": cadeira},
+            capture_output=True, text=True, timeout=15,
+        )
+    except (OSError, subprocess.SubprocessError) as erro:
+        log(f"nao consegui fechar o slot da fita {id_fita}: {erro!r}")
+
+
+def depois_do_giro(con, job, giro) -> None:
+    """O que o giro deixa para tras: aviso na sala, ancora de mesa, slot fechado.
+
+    Roda DEPOIS de `conclui`, e de proposito fora dele: nada aqui pode derrubar o
+    fechamento do giro, que e o que o dono espera na sala.
+    """
+    sala, cadeira = job["sala"], job["cadeira"]
+
+    if job.get("silencioso"):
+        # Ritual de encerramento: a fita morreu, o slot dela sai. Ancora nao
+        # fecha slot nenhum — a fita dela continua viva.
+        if str(job["event_id"]).startswith(f"pf!{journal.RITUAL}:"):
+            fecha_slot(cadeira, job["id_fita"] or "")
+        return
+
+    if giro is not None and giro.compactou:
+        journal.avisa(con, sala, (
+            "**A janela de contexto foi compactada.** O comeco desta conversa saiu "
+            "da memoria do motor; o que estava na mesa continua valendo."
+        ))
+        journal.enfileira_silencioso(
+            con, sala=sala, cadeira=cadeira,
+            id_fita=journal.fita_da_sala(con, sala),
+            corpo=rituais.ANCORA, marca=journal.ANCORA,
+        )
+        journal.zera_giros(con, sala)
+        return
+
+    quantos = journal.conta_giro(con, sala)
+    if quantos and GIROS_POR_ANCORA and quantos % GIROS_POR_ANCORA == 0:
+        journal.enfileira_silencioso(
+            con, sala=sala, cadeira=cadeira,
+            id_fita=journal.fita_da_sala(con, sala),
+            corpo=rituais.ANCORA_POR_CONTAGEM, marca=journal.ANCORA,
+        )
+        log(f"sala {sala}: {quantos} giros — ancora de mesa enfileirada")
+
+
 def atende_sala(sala: str, vivas: set, trava: threading.Lock) -> None:
     con = journal.abre()
     try:
@@ -225,6 +305,11 @@ def atende_sala(sala: str, vivas: set, trava: threading.Lock) -> None:
             log(f"giro {job['id']} fechou como {fim['estado']} em "
                 f"{time.monotonic() - comeco:.1f}s ({giro.passos} passos)"
                 + ("" if venceu else " — descartado, o vigia chegou antes"))
+            if venceu:
+                try:
+                    depois_do_giro(con, job, giro)
+                except Exception as erro:
+                    log(f"giro {job['id']}: rastro pos-giro falhou: {erro!r}")
     finally:
         con.close()
         with trava:

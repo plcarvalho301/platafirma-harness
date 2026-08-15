@@ -18,7 +18,8 @@ RUN useradd -u 10001 -m -s /bin/bash recepcao
 # reimplementado (comentario 311 do card 458). O COPY do diretorio leva os dois.
 WORKDIR /opt/chat
 COPY --chown=recepcao:recepcao comum/ /opt/chat/comum/
-COPY --chown=recepcao:recepcao recepcao/recepcao.py recepcao/formata.py recepcao/anexo.py /opt/chat/
+COPY --chown=recepcao:recepcao recepcao/recepcao.py recepcao/formata.py recepcao/anexo.py \
+     recepcao/rotacao.py /opt/chat/
 
 USER recepcao
 EXPOSE 8080
