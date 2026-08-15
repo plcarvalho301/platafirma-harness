@@ -36,10 +36,21 @@ IDADE_S = float(os.environ.get("CHAT_ROTACAO_S", str(24 * 3600)))
 # Teto de espera do ritual antes de a degradacao ser declarada na sala nova.
 TETO_RITUAL_S = float(os.environ.get("CHAT_TETO_RITUAL_S", "20"))
 
-# `/zerar` e o do criterio 11; os outros dois sao a mesma coisa dita como o dono
-# fala. Comando so vale como mensagem INTEIRA — texto que comeca com a palavra
-# nao e comando, e apagar conversa por engano nao tem desfazer.
-COMANDOS = {"/zerar", "/limpar", "/nova"}
+# COM barra e SEM barra, e as duas listas sao diferentes de proposito.
+#
+# A barra nao chega: medido em 15/08 no celular do dono — o Element trata
+# `/qualquer-coisa` como slash-command DELE e recusa com "comando nao
+# reconhecido" antes de enviar. O evento nunca sai do cliente, e nenhuma linha
+# desta peca chega a rodar. Ou seja: a forma que FUNCIONA no celular e a palavra
+# nua, e a forma com barra so serve para cliente que a repasse como texto.
+#
+# Por isso a lista sem barra tem UMA palavra so. `limpar` e `nova` sozinhas sao
+# fala plausivel numa conversa, e apagar conversa por engano nao tem desfazer;
+# `zerar` como mensagem inteira, numa sala com uma cadeira so, nao e outra coisa.
+#
+# Comando so vale como mensagem INTEIRA: texto que COMECA com a palavra nao e
+# comando.
+COMANDOS = {"/zerar", "/limpar", "/nova", "zerar"}
 
 MORTE = (
     "**Fita encerrada — sala nova.** A conversa anterior saiu da tela e a memoria "

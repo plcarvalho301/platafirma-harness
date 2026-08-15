@@ -127,13 +127,22 @@ def _():
     assert journal.nascimento_da_sala(con, "!s:x") > 0, "nao adotou o carimbo"
 
 
-@prova("comando so vale como mensagem inteira")
+@prova("comando so vale como mensagem inteira, com barra e sem")
 def _():
     assert rotacao.eh_comando("/zerar")
     assert rotacao.eh_comando("  /ZERAR  ")
+    # Sem barra e a forma que chega do celular: o Element engole a barra e
+    # responde "comando nao reconhecido" sem enviar nada (medido em 15/08).
+    assert rotacao.eh_comando("zerar")
+    assert rotacao.eh_comando("Zerar")
     assert not rotacao.eh_comando("/zerar a conversa toda"), \
         "prefixo virou comando — apagar conversa por engano nao tem desfazer"
     assert not rotacao.eh_comando("me explica o /zerar")
+    assert not rotacao.eh_comando("pode zerar isso ai"), \
+        "a palavra no meio da frase virou comando"
+    for plausivel in ("limpar", "nova", "nao"):
+        assert not rotacao.eh_comando(plausivel), \
+            f"{plausivel!r} sem barra virou comando — e fala plausivel na conversa"
 
 
 # --- a rotacao em si -------------------------------------------------------
