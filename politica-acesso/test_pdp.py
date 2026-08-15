@@ -139,3 +139,83 @@ def test_politica_com_id_repetido_falha_no_carregamento():
 def test_versao_desconhecida_falha():
     with pytest.raises(PoliticaInvalida):
         Politica({"versao": 99})
+
+
+# 7. Unidade organizacional (card 452) ----------------------------------------
+
+ORG = Politica({
+    "versao": 1,
+    "eixos": {
+        "dominio": {"plataforma": {}},
+        "papel": {"head": {}, "executor": {}},
+        "unidade-organizacional": {"pf": {}, "orgao-x": {}},
+    },
+    "regras": [{
+        "id": "head-atribui-no-proprio-no",
+        "efeito": "permite",
+        "quando": {"papel": "head", "unidade-organizacional": "pf/*"},
+        "acoes": ["atribuir"],
+        "sobre": ["item:*"],
+    }],
+})
+
+
+def item(unidade, **kw) -> Recurso:
+    base = dict(tipo="item", id="item:1", dominio="plataforma", tema="-",
+                sigilo="publico", unidade=unidade)
+    base.update(kw)
+    return Recurso(**base)
+
+
+def org_sujeito(atribuicoes) -> Sujeito:
+    return sujeito(papeis=("reino",), atribuicoes=atribuicoes)
+
+
+def test_heranca_desce_do_no_para_o_descendente():
+    d = decide(org_sujeito((("head", "pf/claudinho-seguranca"),)), "atribuir",
+               item("pf/claudinho-seguranca/cripto"), ORG)
+    assert d.permitido and d.regra == "head-atribui-no-proprio-no"
+
+
+def test_heranca_nao_sobe_do_descendente_para_o_no():
+    d = decide(org_sujeito((("head", "pf/claudinho-seguranca/cripto"),)), "atribuir",
+               item("pf/claudinho-seguranca"), ORG)
+    assert not d.permitido and d.regra == "default"
+
+
+def test_o_par_papel_unidade_e_atomico():
+    # head num nó e executor em outro NÃO produzem head no segundo por interseção.
+    d = decide(org_sujeito((("head", "pf/claudinho-TI"),
+                            ("executor", "pf/claudinho-seguranca"))), "atribuir",
+               item("pf/claudinho-seguranca"), ORG)
+    assert not d.permitido and d.regra == "default"
+
+
+def test_nenhum_papel_atravessa_raiz():
+    d = decide(org_sujeito((("head", "pf"),)), "atribuir", item("orgao-x/setor"), ORG)
+    assert not d.permitido
+
+
+def test_recurso_sem_unidade_nega_nomeando_o_defeito_de_projecao():
+    d = decide(org_sujeito((("head", "pf"),)), "atribuir", item(None), ORG)
+    assert not d.permitido and d.faltou == ("recurso.unidade",)
+    assert d.por_atributo_ausente
+
+
+def test_unidade_com_raiz_fora_do_vocabulario_nega():
+    d = decide(org_sujeito((("head", "pf"),)), "atribuir", item("inventada/x"), ORG)
+    assert not d.permitido and "vocabulario" in d.motivo
+
+
+def test_glob_na_raiz_falha_no_carregamento():
+    with pytest.raises(PoliticaInvalida):
+        Politica({"versao": 1, "eixos": {"unidade-organizacional": {"pf": {}}},
+                  "regras": [{"id": "vaza", "efeito": "permite",
+                              "quando": {"unidade-organizacional": "*"}}]})
+
+
+def test_raiz_nao_declarada_falha_no_carregamento():
+    with pytest.raises(PoliticaInvalida):
+        Politica({"versao": 1, "eixos": {"unidade-organizacional": {"pf": {}}},
+                  "regras": [{"id": "fantasma", "efeito": "permite",
+                              "quando": {"unidade-organizacional": "orgao-y/*"}}]})

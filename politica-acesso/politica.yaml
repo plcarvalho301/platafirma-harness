@@ -47,6 +47,61 @@ eixos:
       rotulo: "Humano com credencial própria"
     pesquisador-externo:
       rotulo: "Colaboração externa que lê o acervo por concessão — não executa comando, não administra"
+    # --- Papéis da floresta de org (docs/escopos-e-papeis.md §3) ------------------
+    # Qualificados por `unidade-organizacional`: valem no par, nunca soltos.
+    executor:
+      rotulo: "Consome no nó — degrau 1 da escada de verbos do rastreador"
+    head:
+      rotulo: "Responde pelo nó e pelos descendentes — degraus 2 e 3"
+    portfolio:
+      rotulo: "Compõe e endereça na raiz — degrau 4; ocupação única"
+    # `responsavel-de-frente` NÃO é qualificado por unidade: frente é domínio
+    # temporário (seg:0005) e ocupa o eixo `dominio`. O papel fica aqui, o `F<n>` lá.
+    responsavel-de-frente:
+      rotulo: "Responde pelo conjunto de uma frente, enquanto ela corre"
+
+  # ---------------------------------------------------------------------------
+  # Unidade organizacional — o nó da floresta de org (card 452, 14/08/2026)
+  # ---------------------------------------------------------------------------
+  # Eixo separado do `dominio` de propósito: `dominio` diz QUE MATÉRIA é o recurso,
+  # a unidade diz DE QUEM ele é. São ortogonais, e `recurso.dominio` é campo único —
+  # fundir obrigaria um card de rotação de segredo a escolher entre
+  # `plataforma-identidade` e `pf/claudinho-seguranca/cripto`.
+  #
+  # Este arquivo declara só as RAÍZES. Os nós (`pf/<cadeira>/<gerência>`) nascem de
+  # evento de org (`personas/eventos-org.jsonl`), nunca de cadastro aqui — raiz não
+  # declarada é valor fora do vocabulário, e o default do PDP nega.
+  #
+  # Herança desce pelo prefixo do caminho, avaliada pelo PDP e não pelo consumidor:
+  # dois avaliadores da mesma regra divergem, e o vocabulário unificado existe para
+  # impedir dois mapas de quem-alcança-o-quê.
+  #
+  # O par (papel, unidade) é ATÔMICO no sujeito. Dois conjuntos independentes fariam
+  # `head@pf/claudinho-TI` mais `executor@pf/claudinho-seguranca` produzirem por
+  # interseção um `head@pf/claudinho-seguranca` que ninguém concedeu.
+  #
+  # Órgão cliente é raiz própria, no MESMO espaço de nomes: a linhagem de `orgaoX/...`
+  # nunca contém `pf`, não há ancestral comum, e separação dura acrescentaria mecanismo
+  # para o que a ausência de raiz comum já entrega. O que sustenta isso é uma regra só:
+  # glob SÓ DEPOIS DA RAIZ. `pf/*` vale; `*` e `*/cripto` são recusados no carregamento,
+  # e política inválida derruba o boot (seg:0008).
+  #
+  # Forma da regra que usa o eixo:
+  #
+  #   - id: <sujeito>-<o-que-faz>-no-no
+  #     efeito: permite
+  #     motivo: "<por quê> · concedido por <quem> · vence AAAA-MM-DD"
+  #     quando: {papel: head, unidade-organizacional: "pf/*"}
+  #     acoes: [atribuir]
+  #     sobre: ["item:*"]
+  #
+  # Nenhuma regra usa o eixo hoje, e é assim de propósito: o consumidor declarado
+  # (spec do rastreador, #342) escreve as suas com fundamento no Git, como qualquer
+  # concessão. Vocabulário não é permissão.
+  unidade-organizacional:
+    pf:
+      rotulo: "PlataFirma — raiz da organização própria"
+    # Órgão cliente entra aqui, uma linha por raiz, quando houver o primeiro.
 
   tema: {}   # vazio por decisão: designação temática é entrega do domínio, ainda não feita
 

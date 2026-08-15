@@ -167,6 +167,7 @@ import sys; sys.path.insert(0, '${RAIZ}')
 from pdp import Politica
 p = Politica.de_arquivo('${POLITICA}')
 print(f'politica valida: {len(p.dominios)} dominios, {len(p.papeis)} papeis, {len(p.regras)} regras')
+print(f'  raizes de unidade-organizacional: ' + (', '.join(p.raizes_org) or '(nenhuma)'))
 for r in p.regras:
     print(f\"  {r['efeito']:8} {r['id']}\")
 "

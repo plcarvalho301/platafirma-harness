@@ -36,6 +36,11 @@ GRAUS = ("publico", "reservado", "secreto", "ultrassecreto")
 # Valor reservado de ausência explícita no eixo de tema (mesmo valor do banco).
 SEM_TEMA = "-"
 
+# Chave do eixo organizacional, no PAP e no `quando` das regras. O nome não é `no`:
+# em YAML 1.1 a chave `no` é lida como booleano `false` e a regra viraria `False: pf/...`
+# sem erro nenhum.
+EIXO_ORG = "unidade-organizacional"
+
 
 class PoliticaInvalida(Exception):
     """Arquivo de política malformado. Falha no carregamento, nunca na decisão:
@@ -55,6 +60,13 @@ class Sujeito:
     vetos: tuple[str, ...] = ()           # domínios vetados (eixo negativo)
     habilitacao: str = "publico"          # grau máximo que o sujeito pode ver
 
+    # Eixo unidade-organizacional. Pares (papel, caminho) — o par é ATÔMICO por
+    # decisão: dois conjuntos independentes fariam `head@pf/TI` mais
+    # `executor@pf/seguranca` produzirem por interseção um `head@pf/seguranca` que
+    # ninguém concedeu. Vazio é o normal: recurso da plataforma não tem dono na
+    # floresta de org.
+    atribuicoes: tuple[tuple[str, str], ...] = ()
+
 
 @dataclass(frozen=True)
 class Recurso:
@@ -66,6 +78,7 @@ class Recurso:
     dominio: str | None = None
     tema: str = SEM_TEMA
     sigilo: str = "publico"
+    unidade: str | None = None             # nó da floresta de org que responde pelo recurso
 
 
 @dataclass(frozen=True)
@@ -105,6 +118,11 @@ class Politica:
             for valor, corpo in (eixos.get("dominio") or {}).items()
         }
         self.papeis: dict[str, dict] = dict(eixos.get("papel") or {})
+
+        # Eixo unidade-organizacional. O PAP declara só as RAÍZES da floresta; os nós
+        # (`pf/<cadeira>/<gerência>`) nascem de evento de org, nunca de cadastro aqui.
+        # Raiz não declarada é valor fora do vocabulário, e o default do PDP nega.
+        self.raizes_org: dict[str, dict] = dict(eixos.get(EIXO_ORG) or {})
         self.temas: dict[str, dict] = dict(eixos.get("tema") or {})
 
         for valor, pai in self.dominios.items():
@@ -122,6 +140,23 @@ class Politica:
             vistos.add(ident)
             if regra.get("efeito") not in ("permite", "nega"):
                 raise PoliticaInvalida(f"regra {ident!r}: efeito tem de ser permite ou nega")
+            self._valida_unidade(ident, (regra.get("quando") or {}).get(EIXO_ORG))
+
+    def _valida_unidade(self, ident: str, padrao) -> None:
+        """Glob só DEPOIS da raiz. `*` antes do primeiro `/` atravessaria a floresta e
+        um papel de atendimento a um órgão enxergaria outro — é o vazamento que a
+        floresta existe para impedir, e ele se corta no carregamento, não na decisão."""
+        if padrao is None:
+            return
+        if not isinstance(padrao, str) or not padrao:
+            raise PoliticaInvalida(f"regra {ident!r}: {EIXO_ORG} tem de ser caminho nao vazio")
+        raiz = _raiz(padrao)
+        if "*" in raiz or "?" in raiz or "[" in raiz:
+            raise PoliticaInvalida(
+                f"regra {ident!r}: {EIXO_ORG} {padrao!r} tem glob na raiz — nenhum papel atravessa raiz")
+        if raiz not in self.raizes_org:
+            raise PoliticaInvalida(
+                f"regra {ident!r}: raiz {raiz!r} fora do vocabulario de {EIXO_ORG}")
 
     @classmethod
     def de_arquivo(cls, caminho: str | Path) -> "Politica":
@@ -138,6 +173,25 @@ class Politica:
         return cadeia
 
 
+def _raiz(caminho: str) -> str:
+    return caminho.split("/", 1)[0]
+
+
+def _linhagem_org(caminho: str) -> list[str]:
+    """Do nó até a raiz, pelo prefixo do caminho: `pf/a/b` -> `pf/a` -> `pf`. A linhagem
+    nunca sai da própria raiz, e é isso que torna computável o "nenhum papel atravessa
+    raiz" — não há ancestral comum entre `pf` e a raiz de um órgão cliente."""
+    partes = caminho.split("/")
+    return ["/".join(partes[:i]) for i in range(len(partes), 0, -1)]
+
+
+def _alcanca_unidade(atribuicoes: tuple[tuple[str, str], ...], papel: str | None,
+                     alvo: str) -> bool:
+    """Par atômico: a MESMA atribuição tem de casar papel e ancestral-ou-igual do alvo."""
+    linhagem = set(_linhagem_org(alvo))
+    return any((papel is None or p == papel) and u in linhagem for p, u in atribuicoes)
+
+
 def _casa(padrao: str, valor: str) -> bool:
     """`*` casa qualquer coisa; o resto é glob. Padrão de comando é glob de propósito:
     a alternativa era regex, que ninguém revisa direito num merge request."""
@@ -151,12 +205,27 @@ def _alcanca_dominio(politica: Politica, concedidos: tuple[str, ...], alvo: str)
 
 
 def _regra_casa(regra: dict, sujeito: Sujeito, acao: str, recurso: Recurso,
-                politica: Politica) -> bool:
+                politica: Politica, faltas: set[str] | None = None) -> bool:
     quando = regra.get("quando") or {}
 
     papel = quando.get("papel")
-    if papel is not None and papel not in sujeito.papeis:
-        return False
+    unidade = quando.get(EIXO_ORG)
+
+    if unidade is None:
+        # Regra sem eixo organizacional: papel é atributo solto do sujeito, como sempre.
+        if papel is not None and papel not in sujeito.papeis:
+            return False
+    else:
+        # Com eixo organizacional, quem responde pelo papel é a ATRIBUIÇÃO, não a lista
+        # solta — exigir os dois duplicaria o mesmo fato em dois campos do token.
+        if recurso.unidade is None:
+            if faltas is not None:
+                faltas.add("recurso.unidade")
+            return False
+        if not _casa(unidade, recurso.unidade):
+            return False
+        if not _alcanca_unidade(sujeito.atribuicoes, papel, recurso.unidade):
+            return False
 
     dominio = quando.get("dominio")
     # Direcao da heranca: regra escrita no PAI alcanca recurso no FILHO. O inverso nao —
@@ -199,6 +268,11 @@ def decide(sujeito: Sujeito, acao: str, recurso: Recurso, politica: Politica) ->
         return Decisao(False, f"dominio {recurso.dominio!r} fora do vocabulario",
                        faltou=("recurso.dominio",))
 
+    if recurso.unidade is not None and _raiz(recurso.unidade) not in politica.raizes_org:
+        return Decisao(False,
+                       f"{EIXO_ORG} {recurso.unidade!r} fora do vocabulario",
+                       faltou=("recurso.unidade",))
+
     # 2. Teto de sigilo, antes da interseção: recurso classificado segue protegido ainda
     #    que os três eixos coincidam.
     if GRAUS.index(recurso.sigilo) > GRAUS.index(sujeito.habilitacao):
@@ -219,14 +293,21 @@ def decide(sujeito: Sujeito, acao: str, recurso: Recurso, politica: Politica) ->
                        regra="intersecao")
 
     # 5. Matriz. Negativa explícita vence permissão, independentemente da ordem no arquivo.
+    faltas: set[str] = set()
     for regra in politica.regras:
-        if regra.get("efeito") == "nega" and _regra_casa(regra, sujeito, acao, recurso, politica):
+        if regra.get("efeito") == "nega" and _regra_casa(regra, sujeito, acao, recurso,
+                                                        politica, faltas):
             return Decisao(False, regra.get("motivo") or "negado por regra", regra=regra["id"])
 
     for regra in politica.regras:
-        if regra.get("efeito") == "permite" and _regra_casa(regra, sujeito, acao, recurso, politica):
+        if regra.get("efeito") == "permite" and _regra_casa(regra, sujeito, acao, recurso,
+                                                            politica, faltas):
             return Decisao(True, regra.get("motivo") or "permitido por regra", regra=regra["id"])
 
-    # 6. Default.
+    # 6. Default. Regra descartada só por o recurso ter chegado sem unidade é defeito de
+    #    projeção, não política funcionando — a decisão nomeia isso em vez de dizer só "não".
+    if faltas:
+        return Decisao(False, "nenhuma regra decidiu e o recurso chegou sem unidade-organizacional",
+                       regra="default", faltou=tuple(sorted(faltas)))
     return Decisao(False, "nenhuma regra permite esta acao sobre este recurso",
                    regra="default")
