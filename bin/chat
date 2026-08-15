@@ -1,0 +1,584 @@
+#!/usr/bin/env python3
+# chat — despacha o giro do motor por cadeira e abre a fita da sala
+# capacidade: solicitacao
+# dono: claudinho-TI
+# componente: chat (recepcao + worker + Claude Code headless)
+#
+# Porta unica entre a superficie de conversa e o motor. Quem chama e a recepcao
+# (o Application Service); quem responde e um Claude Code headless rodando no cwd
+# da cadeira. O contrato de saida — UMA linha JSON no stdout, uma linha JSON por
+# passo no stderr — e a fronteira: a recepcao programa contra ele e nao sabe qual
+# motor esta atras.
+#
+# Abertura de fita (minuta 0002, posicao de claudinho-IA, secao 1):
+#   fita nova      -> `monta-sessao <cadeira>` injetado por --append-system-prompt,
+#                     ANTES do corpo do dono, na MESMA invocacao. Uma chamada.
+#   fita existente -> `--resume <id>`, sem reinjetar nada. O pacote ja esta na fita;
+#                     reinjetar cobra ~46 KB por giro (medido em 14/08 na cadeira IA).
+# Fonte unica: o pacote nao se replica no CLAUDE.md do cwd. O CLAUDE.md daqui fica
+# so com o que e do cwd (allowlist, caminho do inbox), nunca com identidade — duas
+# fontes de persona divergem no dia em que uma delas nao for regenerada.
+
+import json
+import os
+import queue
+import shutil
+import signal
+import subprocess
+import sys
+import threading
+import time
+import uuid
+
+RAIZ = os.environ.get("PF_RAIZ", os.path.expanduser("~/AI"))
+PERSONAS = os.path.join(RAIZ, "platafirma-harness", "personas")
+FITAS = os.path.join(RAIZ, "fitas")
+
+# Watchdog de atividade, nao teto fixo (minuta 0002, posicao de claudinho-TI,
+# anel 2): o stream emite evento por passo, entao silencio prolongado e giro
+# pendurado — nao giro longo legitimo. Teto absoluto fica de vigia: cobre o caso
+# em que o motor emite evento para sempre sem nunca concluir.
+SILENCIO_S = int(os.environ.get("PF_CHAT_SILENCIO", "240"))
+TETO_ABS_S = int(os.environ.get("PF_CHAT_TETO_ABS", "1800"))
+
+# Tempo do pacote de abertura. `monta-sessao` faz git pull de dois repos antes de
+# imprimir; sem teto proprio, a lentidao dele apareceria como silencio do motor.
+PACOTE_S = int(os.environ.get("PF_CHAT_PACOTE_TIMEOUT", "180"))
+
+
+def uso(codigo=2):
+    print(
+        "uso:\n"
+        "  chat despachar --cadeira <slug> --fita <id-ou-vazio> [--silencioso]\n"
+        "                                  corpo da mensagem em stdin\n"
+        "  chat versao                     versao pinada do motor x a servida\n"
+        "  chat cadeiras                   slugs aceitos em --cadeira\n"
+        "\n"
+        "saida de `despachar`: UMA linha JSON no stdout\n"
+        '  {\"estado\":\"ok|erro|cota|timeout\",\"texto\":\"...\",\"id_fita\":\"...\",\n'
+        '   \"detalhe\":\"...\",\"reiniciada\":true|false}\n'
+        "stderr: uma linha JSON por passo do stream (o que o watchdog observa)\n"
+        "exit  : 0 sempre que houver JSON valido no stdout; !=0 so em falha de invocacao\n",
+        file=sys.stderr,
+    )
+    return codigo
+
+
+def cadeiras():
+    try:
+        nomes = os.listdir(PERSONAS)
+    except OSError:
+        return []
+    return sorted(
+        n[len("persona-"):-len(".md")]
+        for n in nomes
+        if n.startswith("persona-") and n.endswith(".md")
+    )
+
+
+def agora_iso():
+    return time.strftime("%Y-%m-%dT%H:%M:%S%z")
+
+
+# --- adaptador do motor -----------------------------------------------------
+#
+# Tudo que sabe que o motor e o Claude Code mora aqui. Trocar de motor e escrever
+# outra classe com os mesmos quatro metodos; nem o contrato de saida nem a
+# recepcao mudam. Formato de saida de CLI muda rapido — e por isso que a leitura
+# do stream e defensiva: evento desconhecido vira passo e segue.
+
+class MotorClaudeCode:
+    # Versao pinada: o adaptador foi medido contra ela. Divergencia nao mata o
+    # giro (a sala calada seria pior que a sala com aviso), mas sai declarada no
+    # passo `versao` e no `detalhe` — deriva silenciosa de CLI e o que quebra
+    # leitura de stream sem ninguem perceber.
+    VERSAO_PINADA = "2.1.220"
+
+    def __init__(self):
+        self.bin = shutil.which("claude") or os.path.expanduser("~/.local/bin/claude")
+
+    def versao_servida(self):
+        try:
+            saida = subprocess.run(
+                [self.bin, "--version"], capture_output=True, text=True, timeout=30
+            ).stdout.strip()
+        except (OSError, subprocess.SubprocessError):
+            return None
+        # "2.1.220 (Claude Code)"
+        return saida.split()[0] if saida else None
+
+    def comando(self, id_fita, pacote, cwd):
+        """argv do giro. Fita nova leva o pacote; fita existente nao leva nada."""
+        argv = [
+            self.bin,
+            "--print",
+            "--output-format", "stream-json",
+            "--verbose",
+        ]
+        if id_fita:
+            argv += ["--resume", id_fita]
+        else:
+            # id proprio: a fita tem nome antes de o motor responder. Sem isso, giro
+            # que morre antes do primeiro evento volta sem id_fita e a proxima
+            # mensagem do dono abriria fita nova — perdendo a fita que existe.
+            argv += ["--session-id", id_fita_novo()]
+            if pacote:
+                argv += ["--append-system-prompt", pacote]
+        modelo = os.environ.get("PF_CHAT_MODELO")
+        if modelo:
+            argv += ["--model", modelo]
+        return argv
+
+    def passo(self, ev):
+        """Evento do stream -> passo para o stderr. Metadado, nunca conteudo: o
+        stderr e o que o watchdog da recepcao le, e raciocinio intermediario nao
+        pode vazar por porta nenhuma."""
+        tipo = ev.get("type", "?")
+        p = {"passo": tipo, "em": agora_iso()}
+        if tipo == "system":
+            p["subtipo"] = ev.get("subtype")
+        elif tipo == "assistant":
+            blocos = (ev.get("message") or {}).get("content") or []
+            p["blocos"] = [b.get("type") for b in blocos if isinstance(b, dict)]
+            p["chars"] = sum(
+                len(b.get("text", "")) for b in blocos if isinstance(b, dict)
+            )
+        elif tipo == "user":
+            p["subtipo"] = "retorno-de-tool"
+        elif tipo == "rate_limit_event":
+            info = ev.get("rate_limit_info") or {}
+            p["cota"] = info.get("status")
+            p["reseta"] = info.get("resetsAt")
+        elif tipo == "result":
+            p["subtipo"] = ev.get("subtype")
+            p["erro"] = bool(ev.get("is_error"))
+            p["turnos"] = ev.get("num_turns")
+            # Entrada nova do giro (o que foi lido de cache nao conta): e por esta
+            # contagem que se prova que fita retomada NAO reinjeta o pacote. Sem o
+            # numero no stream, o criterio vira afirmacao sem instrumento.
+            u = ev.get("usage") or {}
+            p["entrada"] = (u.get("input_tokens") or 0) + (
+                u.get("cache_creation_input_tokens") or 0
+            )
+            p["cache"] = u.get("cache_read_input_tokens") or 0
+            p["saida"] = u.get("output_tokens") or 0
+        return p
+
+    def cota_barrada(self, ev):
+        """Cota e evento proprio do stream, e o unico lugar onde o horario de
+        liberacao existe. `allowed` passa; qualquer outro estado e barreira."""
+        if ev.get("type") != "rate_limit_event":
+            return None
+        info = ev.get("rate_limit_info") or {}
+        if info.get("status") in (None, "allowed"):
+            return None
+        reseta = info.get("resetsAt")
+        quando = ""
+        if isinstance(reseta, (int, float)):
+            quando = " — libera " + time.strftime("%d/%m %H:%M", time.localtime(reseta))
+        return f"cota {info.get('status')}{quando}"
+
+
+def id_fita_novo():
+    return str(uuid.uuid4())
+
+
+# --- cwd da cadeira ---------------------------------------------------------
+
+# Reescrito a cada giro, de proposito: a fonte declarada destes dois arquivos e
+# este verbo, e arquivo de cwd que envelhece sozinho e a mesma armadilha que a
+# copia de persona. Ajuste local aqui e perdido no giro seguinte — o que se quer
+# permanente muda no verbo.
+
+def settings_da_fita():
+    """Allowlist do cwd. `bypassPermissions` nao e relaxamento: no giro headless
+    nao existe quem responda ao pedido de permissao, entao o modo `manual` viraria
+    giro pendurado ate o watchdog — erro na sala no lugar de resposta. A regua real
+    e a lista de negativas, identica a da sessao da cadeira."""
+    return {
+        "model": os.environ.get("PF_CHAT_MODELO", "opus"),
+        "permissions": {
+            "defaultMode": "bypassPermissions",
+            "allow": [
+                "Bash(ls:*)", "Bash(cat:*)", "Bash(head:*)", "Bash(tail:*)",
+                "Bash(wc:*)", "Bash(find:*)", "Bash(file:*)", "Bash(stat:*)",
+                "Bash(diff:*)", "Bash(rg:*)", "Bash(fd:*)", "Bash(grep:*)",
+                "Bash(jq:*)", "Bash(yq:*)", "Bash(sed -n:*)", "Bash(awk:*)",
+                "Bash(sort:*)", "Bash(uniq:*)", "Bash(mkdir:*)", "Bash(cp:*)",
+                "Bash(mv:*)", "Bash(touch:*)",
+                "Bash(git status:*)", "Bash(git diff:*)", "Bash(git log:*)",
+                "Bash(git show:*)", "Bash(git blame:*)", "Bash(git branch:*)",
+                "Bash(git checkout:*)", "Bash(git switch:*)", "Bash(git restore:*)",
+                "Bash(git stash:*)", "Bash(git fetch:*)", "Bash(git add:*)",
+                "Bash(git commit:*)",
+                "Bash(python3:*)", "Bash(python:*)", "Bash(pytest:*)", "Bash(ruff:*)",
+                "Bash(uv run:*)", "Bash(uv sync:*)", "Bash(uv venv:*)", "Bash(uv pip:*)",
+                "Bash(tarefas:*)", "Bash(fila:*)", "Bash(mesa:*)", "Bash(acervo:*)",
+                "Bash(monta-sessao:*)", "Bash(conferir:*)", "Bash(infra:*)",
+                "Bash(motor:*)", "Bash(sinal:*)", "Bash(longjob:*)",
+            ],
+            "deny": [
+                "Bash(sudo:*)", "Bash(docker:*)", "Bash(systemctl:*)",
+                "Bash(loginctl:*)", "Bash(psql:*)", "Bash(mc:*)",
+                "Bash(rm -rf /:*)", "Bash(git push:*)", "Bash(curl:*)",
+                "Read(//home/claudinho/.config/**)",
+                "Read(//home/claudinho/.claude/.credentials.json)",
+            ],
+        },
+    }
+
+
+def claude_md_da_fita(cadeira, inbox):
+    return (
+        f"# fita de {cadeira} — o que e deste diretorio\n"
+        "\n"
+        "Identidade nao mora aqui. Persona, manifesto, org, mesa e indice de caderno\n"
+        "entram pelo pacote de `monta-sessao`, injetado na abertura da fita — fonte\n"
+        "unica, por decisao da minuta 0002. Este arquivo so declara o cwd.\n"
+        "\n"
+        f"- **Anexo recebido** — o que o dono manda da sala chega em `{inbox}`.\n"
+        "  O caminho do arquivo vem no corpo da mensagem; ler de la, nao adivinhar.\n"
+        "- **Permissao** — `.claude/settings.json` deste diretorio. Sem humano no\n"
+        "  meio do giro: o que a lista nega, nega calado.\n"
+        "- **Entrega** — resposta e conversa; o que tem permanencia vira card, commit\n"
+        "  ou wiki. A sala expira, e este diretorio e limpo na rotacao.\n"
+        "\n"
+        "Este arquivo e reescrito pelo verbo `chat` a cada giro: editar aqui nao dura.\n"
+    )
+
+
+def prepara_cwd(cadeira):
+    """~/AI/fitas/<cadeira>/ com allowlist e inbox. Criado pelo verbo se faltar —
+    a recepcao grava anexo no inbox e nao tem por que saber montar o diretorio."""
+    base = os.path.join(FITAS, cadeira)
+    inbox = os.path.join(base, "inbox")
+    dot = os.path.join(base, ".claude")
+    for d in (base, inbox, dot):
+        os.makedirs(d, exist_ok=True)
+    with open(os.path.join(dot, "settings.json"), "w") as f:
+        json.dump(settings_da_fita(), f, indent=2, ensure_ascii=False)
+        f.write("\n")
+    with open(os.path.join(base, "CLAUDE.md"), "w") as f:
+        f.write(claude_md_da_fita(cadeira, inbox))
+    return base
+
+
+def ambiente_do_giro(cadeira):
+    """PATH do harness e PF_CADEIRA explicitos. Pegadinha ja medida no harness:
+    processo disparado por outro processo nao herda ambiente de sessao, e sem
+    PF_CADEIRA a `mesa` do giro abre na cadeira errada — ou em nenhuma."""
+    env = dict(os.environ)
+    caminhos = [os.path.join(RAIZ, "bin"), os.path.expanduser("~/.local/bin")]
+    atual = env.get("PATH", "").split(":")
+    env["PATH"] = ":".join(caminhos + [p for p in atual if p and p not in caminhos])
+    env["PF_CADEIRA"] = cadeira
+    env["PF_RAIZ"] = RAIZ
+    return env
+
+
+def monta_pacote(cadeira, env):
+    """Pacote de abertura. Falha aqui nao vira giro degradado: fita sem pacote e
+    um Claude Code generico com o nome da cadeira no avatar — exatamente o que a
+    secao 1 da minuta existe para impedir. Melhor erro visivel na sala."""
+    argv = [os.path.join(RAIZ, "bin", "monta-sessao"), cadeira]
+    if os.environ.get("PF_CHAT_SEM_ATUALIZAR") == "1":
+        argv.append("--sem-atualizar")
+    try:
+        r = subprocess.run(
+            argv, capture_output=True, text=True, timeout=PACOTE_S, env=env, cwd=RAIZ
+        )
+    except subprocess.TimeoutExpired:
+        return None, f"monta-sessao nao respondeu em {PACOTE_S}s"
+    except OSError as e:
+        return None, f"monta-sessao nao executou: {e}"
+    if r.returncode != 0 or not r.stdout.strip():
+        detalhe = (r.stderr or "").strip().splitlines()
+        return None, "monta-sessao falhou: " + (detalhe[-1] if detalhe else "sem saida")
+    return r.stdout, ""
+
+
+# --- giro -------------------------------------------------------------------
+
+def bombeia(pipe, fila, marca):
+    try:
+        for linha in pipe:
+            fila.put((marca, linha))
+    finally:
+        fila.put((marca, None))
+
+
+def mata_grupo(proc):
+    """Mata o grupo, nao so o filho: o Claude Code deixa descendente (tool em
+    background, subagente) que sobrevive ao pai e segura o pipe, driblando o
+    timeout que acabou de ser declarado."""
+    for sinal, espera in ((signal.SIGTERM, 5), (signal.SIGKILL, 2)):
+        if proc.poll() is not None:
+            return
+        try:
+            os.killpg(os.getpgid(proc.pid), sinal)
+        except (ProcessLookupError, PermissionError):
+            return
+        try:
+            proc.wait(timeout=espera)
+        except subprocess.TimeoutExpired:
+            continue
+
+
+def um_giro(motor, id_fita, pacote, corpo, cwd, env, passo_out):
+    """Roda uma invocacao e devolve o dicionario cru do resultado. Nao decide
+    estado final — quem decide e `despachar`, que tambem sabe se cabe reiniciar."""
+    argv = motor.comando(id_fita, pacote, cwd)
+    # O id que pedimos ao motor: para fita nova e o que volta no contrato mesmo que
+    # o stream morra antes do primeiro evento.
+    pedido = argv[argv.index("--session-id") + 1] if "--session-id" in argv else id_fita
+    try:
+        proc = subprocess.Popen(
+            argv, cwd=cwd, env=env, text=True, bufsize=1,
+            stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+            start_new_session=True,
+        )
+    except OSError as e:
+        return {"falha_invocacao": f"motor nao executou: {e}"}
+
+    try:
+        proc.stdin.write(corpo)
+        proc.stdin.close()
+    except (BrokenPipeError, OSError):
+        pass
+
+    fila = queue.Queue()
+    for marca, pipe in (("out", proc.stdout), ("err", proc.stderr)):
+        t = threading.Thread(target=bombeia, args=(pipe, fila, marca), daemon=True)
+        t.start()
+
+    abertos = {"out", "err"}
+    inicio = time.monotonic()
+    ultimo = inicio
+    r = {
+        "id_fita": pedido, "texto": "", "resultado": None,
+        "cota": "", "erro_motor": [], "timeout": "", "eventos": 0,
+    }
+
+    while abertos:
+        restante_abs = TETO_ABS_S - (time.monotonic() - inicio)
+        restante_sil = SILENCIO_S - (time.monotonic() - ultimo)
+        if restante_abs <= 0 or restante_sil <= 0:
+            r["timeout"] = (
+                f"teto absoluto de {TETO_ABS_S}s" if restante_abs <= 0
+                else f"silencio de {SILENCIO_S}s no stream — giro pendurado"
+            )
+            mata_grupo(proc)
+            break
+        try:
+            marca, linha = fila.get(timeout=min(restante_abs, restante_sil))
+        except queue.Empty:
+            continue
+        if linha is None:
+            abertos.discard(marca)
+            continue
+        ultimo = time.monotonic()
+        if marca == "err":
+            # stderr do motor: diagnostico de invocacao (sessao inexistente, auth).
+            # Nao e passo do stream e nao vai para a sala.
+            texto = linha.strip()
+            if texto:
+                r["erro_motor"].append(texto)
+                del r["erro_motor"][:-10]
+            continue
+        try:
+            ev = json.loads(linha)
+        except (ValueError, TypeError):
+            continue
+        r["eventos"] += 1
+        passo_out(motor.passo(ev))
+        if ev.get("session_id"):
+            r["id_fita"] = ev["session_id"]
+        cota = motor.cota_barrada(ev)
+        if cota:
+            r["cota"] = cota
+        if ev.get("type") == "result":
+            r["resultado"] = ev
+            texto = ev.get("result")
+            if isinstance(texto, str):
+                r["texto"] = texto
+
+    try:
+        r["exit"] = proc.wait(timeout=10)
+    except subprocess.TimeoutExpired:
+        mata_grupo(proc)
+        r["exit"] = proc.poll()
+    return r
+
+
+# Medido em 15/08/2026 no 2.1.220: sessao inexistente NAO sai por exit != 0 com o
+# recado so no stderr — sai como evento `result` de erro, com a frase tambem no
+# stderr. Guarda que exija ausencia de resultado nao pega o caso, e a fita morta
+# volta como erro seco na sala.
+SUMICO = ("no conversation found", "session not found", "no session found")
+
+
+def fita_sumiu(r):
+    """Fita que o motor nao acha mais. Acontece por construcao: `encerrar fita`
+    apaga o JSONL da sessao (minuta 0002, secao 2), e a rotacao limpa o cwd. A
+    recepcao guarda o id antigo e nao tem como saber — quem sabe e o motor."""
+    if r.get("timeout"):
+        return False
+    res = r.get("resultado")
+    if res is not None and not res.get("is_error") and res.get("subtype") == "success":
+        return False  # giro bom: nada a reiniciar, qualquer que seja o texto
+    partes = list(r.get("erro_motor", []))
+    if isinstance(res, dict) and isinstance(res.get("result"), str):
+        partes.append(res["result"])
+    junto = " ".join(partes).lower()
+    return any(m in junto for m in SUMICO)
+
+
+def despachar(argv):
+    cadeira = None
+    id_fita = ""
+    silencioso = False
+    i = 0
+    while i < len(argv):
+        a = argv[i]
+        if a == "--cadeira" and i + 1 < len(argv):
+            cadeira, i = argv[i + 1], i + 2
+        elif a == "--fita":
+            # --fita "" e a forma declarada de pedir fita nova; --fita no fim da
+            # linha, ou seguido de outra flag, vale o mesmo.
+            seguinte = argv[i + 1] if i + 1 < len(argv) else ""
+            if seguinte.startswith("--"):
+                id_fita, i = "", i + 1
+            else:
+                id_fita, i = seguinte, i + 2
+        elif a == "--silencioso":
+            silencioso, i = True, i + 1
+        else:
+            print(f"argumento desconhecido: {a}", file=sys.stderr)
+            return uso()
+    if not cadeira:
+        print("falta --cadeira", file=sys.stderr)
+        return uso()
+    if cadeira not in cadeiras():
+        print(
+            f"cadeira {cadeira!r} nao existe. cadeiras: {' '.join(cadeiras())}",
+            file=sys.stderr,
+        )
+        return 2
+
+    corpo = sys.stdin.read()
+    if not corpo.strip():
+        print("corpo da mensagem vazio no stdin", file=sys.stderr)
+        return 2
+
+    def passo_out(p):
+        p["cadeira"] = cadeira
+        sys.stderr.write(json.dumps(p, ensure_ascii=False) + "\n")
+        sys.stderr.flush()
+
+    motor = MotorClaudeCode()
+    servida = motor.versao_servida()
+    aviso_versao = ""
+    if servida != motor.VERSAO_PINADA:
+        aviso_versao = f"motor {servida or '?'} != pinado {motor.VERSAO_PINADA}"
+    passo_out({
+        "passo": "versao", "em": agora_iso(),
+        "pinada": motor.VERSAO_PINADA, "servida": servida,
+    })
+
+    cwd = prepara_cwd(cadeira)
+    env = ambiente_do_giro(cadeira)
+
+    def responde(estado, texto, id_f, detalhe, reiniciada):
+        if aviso_versao:
+            detalhe = f"{detalhe}; {aviso_versao}" if detalhe else aviso_versao
+        print(json.dumps({
+            "estado": estado,
+            "texto": "" if silencioso else texto,
+            "id_fita": id_f or "",
+            "detalhe": detalhe[:400],
+            "reiniciada": reiniciada,
+        }, ensure_ascii=False), flush=True)
+        return 0
+
+    pacote = None
+    reiniciada = False
+    if not id_fita:
+        pacote, erro = monta_pacote(cadeira, env)
+        if pacote is None:
+            return responde("erro", "", "", erro, False)
+        passo_out({"passo": "pacote", "em": agora_iso(), "bytes": len(pacote)})
+
+    r = um_giro(motor, id_fita, pacote, corpo, cwd, env, passo_out)
+    if r.get("falha_invocacao"):
+        print(r["falha_invocacao"], file=sys.stderr)
+        return 1
+
+    if fita_sumiu(r):
+        # Uma retentativa, como fita nova e com pacote. `reiniciada` existe no
+        # contrato para isto: a recepcao precisa saber que o id que ela guardava
+        # morreu, e o dono precisa saber que a cadeira perdeu o fio da conversa.
+        passo_out({"passo": "reinicio", "em": agora_iso(), "fita_velha": id_fita})
+        pacote, erro = monta_pacote(cadeira, env)
+        if pacote is None:
+            return responde("erro", "", "", erro, True)
+        passo_out({"passo": "pacote", "em": agora_iso(), "bytes": len(pacote)})
+        reiniciada = True
+        r = um_giro(motor, "", pacote, corpo, cwd, env, passo_out)
+        if r.get("falha_invocacao"):
+            print(r["falha_invocacao"], file=sys.stderr)
+            return 1
+
+    id_f = r.get("id_fita") or ""
+    ultimo_erro = (r.get("erro_motor") or [""])[-1]
+
+    if r.get("timeout"):
+        return responde("timeout", r.get("texto", ""), id_f, r["timeout"], reiniciada)
+    if r.get("cota"):
+        return responde("cota", r.get("texto", ""), id_f, r["cota"], reiniciada)
+
+    res = r.get("resultado")
+    if res is None:
+        detalhe = ultimo_erro or f"stream terminou sem resultado (exit {r.get('exit')})"
+        return responde("erro", "", id_f, detalhe, reiniciada)
+    if res.get("is_error") or res.get("subtype") != "success":
+        detalhe = (
+            f"{res.get('subtype') or 'erro'}"
+            + (f": {res.get('api_error_status')}" if res.get("api_error_status") else "")
+            + (f" — {ultimo_erro}" if ultimo_erro else "")
+        )
+        # Estouro de limite as vezes chega como erro de resultado, sem o evento de
+        # cota. Cota nao e erro: o dono precisa saber que e so esperar.
+        if any(m in detalhe.lower() for m in ("rate limit", "usage limit", "quota")):
+            return responde("cota", r.get("texto", ""), id_f, detalhe, reiniciada)
+        return responde("erro", r.get("texto", ""), id_f, detalhe, reiniciada)
+
+    return responde("ok", r.get("texto", ""), id_f, "", reiniciada)
+
+
+def main(argv):
+    if not argv:
+        return uso()
+    ato, resto = argv[0], argv[1:]
+    if ato == "despachar":
+        return despachar(resto)
+    if ato == "versao":
+        motor = MotorClaudeCode()
+        servida = motor.versao_servida()
+        print(f"motor    : Claude Code headless ({motor.bin})")
+        print(f"pinada   : {motor.VERSAO_PINADA}")
+        print(f"servida  : {servida or '(nao respondeu)'}")
+        print(f"silencio : {SILENCIO_S}s   teto absoluto: {TETO_ABS_S}s")
+        return 0 if servida == motor.VERSAO_PINADA else 1
+    if ato == "cadeiras":
+        for c in cadeiras():
+            print(c)
+        return 0
+    print(f"ato desconhecido: {ato}", file=sys.stderr)
+    return uso()
+
+
+if __name__ == "__main__":
+    try:
+        sys.exit(main(sys.argv[1:]))
+    except KeyboardInterrupt:
+        sys.exit(130)
