@@ -51,6 +51,25 @@ RAIZ = os.environ.get("PF_RAIZ", os.path.expanduser("~/AI"))
 CADERNOS = os.path.join(RAIZ, "platafirma-harness", "caderno")
 SLOT_RE = re.compile(r"^[a-z0-9][a-z0-9-]{0,23}$")
 
+# Slot de fita corrente (card 449). Fora do padrao `mem:<cadeira>:<slot>` de
+# proposito: `mesa ver` e a varredura de `descansar` varrem aquele padrao e
+# acusariam a fita como chapeu orfao. Mesma instancia msg-mem — nao e trafego
+# novo na malha `pf:msg` (criterio 13 da minuta 0002), que e outra instancia.
+# Valor e o id puro, nao JSON: o compare-and-swap e comparacao de string, e a
+# idade sai do TTL restante. Uma peca a menos que um decode em Lua.
+FITA_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$")
+
+# CAS: escreve KEYS[2] so se KEYS[1] (fita corrente) ainda for ARGV[1].
+LUA_ANOTA = """
+if redis.call('GET', KEYS[1]) ~= ARGV[1] then return 0 end
+redis.call('SET', KEYS[2], ARGV[2], 'EX', tonumber(ARGV[3]))
+return 1
+"""
+LUA_FECHA = """
+if redis.call('GET', KEYS[1]) ~= ARGV[1] then return 0 end
+return redis.call('DEL', KEYS[1])
+"""
+
 
 def conn():
     return redis.Redis(host=HOST, port=PORTA, decode_responses=True)
@@ -65,6 +84,23 @@ def cadeira():
 
 def chave(slot):
     return f"mem:{cadeira()}:{slot}"
+
+
+def chave_fita():
+    return f"fita:{cadeira()}"
+
+
+def fita_do_ambiente(explicito=None):
+    """Guarda por id e opt-in pelo ambiente: o adaptador exporta PF_FITA ao abrir
+    a fita, como ja exporta PF_CADEIRA. Sem PF_FITA, comportamento de sempre —
+    sessao de mao (claude.ai, terminal) nao tem fita registrada e nao deve travar."""
+    return (explicito or os.environ.get("PF_FITA", "")).strip() or None
+
+
+def valida_fita(fid):
+    if not FITA_RE.match(fid or ""):
+        sys.exit(f"erro: id de fita invalido {fid!r} — alfanumerico, ponto, hifen ou _, ate 64 chars")
+    return fid
 
 
 def valida_slot(slot):
@@ -115,8 +151,22 @@ def ato_anota(args):
             file=sys.stderr,
         )
     rc = conn()
-    rc.set(chave(slot), json.dumps({"t": int(time.time()), "x": texto}), ex=TTL_PADRAO)
-    print(f"mesa: slot {slot} reescrito ({len(texto.splitlines())} linhas)")
+    valor = json.dumps({"t": int(time.time()), "x": texto})
+    fid = fita_do_ambiente(args.se_fita)
+    if fid is None:
+        rc.set(chave(slot), valor, ex=TTL_PADRAO)
+        print(f"mesa: slot {slot} reescrito ({len(texto.splitlines())} linhas)")
+        return 0
+    # Criterio 18 da minuta 0002: ritual que termina depois de a fita nova ter
+    # anotado descarta a PROPRIA escrita. Compare-and-swap, nao confianca em ordem.
+    valida_fita(fid)
+    ok = rc.eval(LUA_ANOTA, 2, chave_fita(), chave(slot), fid, valor, TTL_PADRAO)
+    if not ok:
+        corrente = rc.get(chave_fita())
+        print(f"mesa: escrita DESCARTADA no slot {slot} — a fita {fid} ja nao e a corrente "
+              f"({corrente or 'nenhuma'}); a fita seguinte manda", file=sys.stderr)
+        return 3
+    print(f"mesa: slot {slot} reescrito ({len(texto.splitlines())} linhas, fita {fid})")
     return 0
 
 
@@ -124,6 +174,33 @@ def ato_limpa(args):
     slot = valida_slot(args.slot)  # mutacao exige alvo explicito
     rc = conn()
     print(f"mesa: slot {slot} {'limpo' if rc.delete(chave(slot)) else 'ja estava vazio'}")
+    return 0
+
+
+def ato_fita(args):
+    """Slot de fita corrente da cadeira: quem abriu, e contra quem o CAS compara.
+    Escrito pelo adaptador do chat na abertura; lido por toda escrita de mesa."""
+    rc = conn()
+    k = chave_fita()
+    if args.gesto == "abre":
+        fid = valida_fita(args.id or f"{int(time.time())}-{os.urandom(3).hex()}")
+        rc.set(k, fid, ex=TTL_PADRAO)
+        print(fid)  # stdout e o id, para `export PF_FITA=$(mesa fita abre)`
+        return 0
+    if args.gesto == "fecha":
+        fid = valida_fita(fita_do_ambiente(args.id) or "")
+        if rc.eval(LUA_FECHA, 1, k, fid):
+            print(f"fita {fid}: fechada")
+            return 0
+        print(f"fita {fid}: nao era a corrente ({rc.get(k) or 'nenhuma'}) — nada a fechar",
+              file=sys.stderr)
+        return 3
+    fid = rc.get(k)
+    if not fid:
+        print("fita: nenhuma aberta")  # ausencia e resposta valida (arq:0041)
+        return 0
+    ttl = rc.ttl(k)
+    print(f"fita {fid}: aberta ha {idade(TTL_PADRAO - ttl) if ttl and ttl > 0 else '?'}")
     return 0
 
 
@@ -176,7 +253,14 @@ def main():
 
     a = sub.add_parser("anota", help="reescreve um slot da mesa; corpo em stdin")
     a.add_argument("slot")
+    a.add_argument("--se-fita", metavar="ID",
+                   help="so escreve se esta ainda for a fita corrente; default PF_FITA")
     a.set_defaults(func=ato_anota)
+
+    ft = sub.add_parser("fita", help="slot de fita corrente: sem gesto, mostra; abre/fecha mudam")
+    ft.add_argument("gesto", nargs="?", choices=["abre", "fecha"])
+    ft.add_argument("--id", metavar="ID", help="id explicito; em `abre` sem --id, gera um")
+    ft.set_defaults(func=ato_fita)
 
     l = sub.add_parser("limpa", help="esquece um slot da mesa; alvo obrigatorio")
     l.add_argument("slot")
