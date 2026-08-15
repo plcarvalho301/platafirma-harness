@@ -84,6 +84,35 @@ def sufixo_canonico(nome: str) -> str | None:
     return None
 
 
+def slug_da_cadeira(nome: str) -> str | None:
+    """Sufixo do harness -> slug do org (`TI` -> `claudinho-TI`). None se nao ha.
+
+    A caixa da fila, `PF_CADEIRA`, o arquivo de persona e o Project sao chaveados
+    pelo SLUG; `monta-sessao` e `--cadeira` querem o SUFIXO. As duas formas nao se
+    calculam uma da outra — `persona-IA.md` nao diz se e claudinho- ou claudinha-,
+    e o prefixo nao segue regra de genero derivavel do sufixo.
+
+    A fonte e a linha 1 da persona, mesma de `bin/descansar` e do `monta-sessao`.
+    Nao e o nome do arquivo, e nao e tabela embutida aqui: cadeira nova entra
+    sozinha, e uma segunda tabela envelheceria em silencio.
+
+    Medido em 15/08, e a razao de esta funcao existir: o giro do chat exportava
+    `PF_CADEIRA=TI`, e `mesa`, `fila` e `tarefas` chaveiam pelo slug — tudo o que
+    a fita escrevia ia para `mem:TI:*`, uma memoria paralela que nenhuma outra
+    sessao da cadeira enxergava.
+    """
+    sufixo = sufixo_canonico(nome)
+    if sufixo is None:
+        return None
+    arq = _raiz_personas() / f"persona-{sufixo}.md"
+    try:
+        primeira = arq.read_text(errors="replace").split("\n", 1)[0]
+    except OSError:
+        return None
+    achado = re.search(r"\b(claudinh[oa]-[A-Za-z0-9-]+)", primeira)
+    return achado.group(1) if achado else None
+
+
 def localpart_da_cadeira(nome: str, prefixo: str = PREFIXO_BOT) -> str | None:
     """Qualquer forma da cadeira -> o localpart do Matrix. None se nao existe.
 

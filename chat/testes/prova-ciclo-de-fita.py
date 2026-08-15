@@ -306,6 +306,32 @@ def _():
         "ritual ja fechado gerou aviso de atraso"
 
 
+# --- identidade no ambiente do giro ----------------------------------------
+
+@prova("PF_CADEIRA do giro leva o SLUG, nao o sufixo")
+def _():
+    import importlib.util
+    from importlib.machinery import SourceFileLoader
+
+    cam = os.path.join(os.path.dirname(CHAT), "bin", "chat")
+    spec = importlib.util.spec_from_loader("chatverbo", SourceFileLoader("chatverbo", cam))
+    verbo = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(verbo)
+
+    # `mesa`, `fila` e `tarefas` chaveiam pelo slug. Exportar o sufixo manda a
+    # escrita para uma chave paralela que nenhuma outra sessao da cadeira le — e
+    # ninguem ve, porque escrita e leitura do giro concordam entre si.
+    assert verbo.ambiente_do_giro("TI")["PF_CADEIRA"] == "claudinho-TI"
+    assert verbo.ambiente_do_giro("produto")["PF_CADEIRA"] == "claudinha-produto", \
+        "o prefixo de genero nao se deriva do sufixo"
+    try:
+        verbo.ambiente_do_giro("jaiminho")
+    except ValueError:
+        pass
+    else:
+        assert False, "cadeira sem slug nao levantou — gravaria em lugar nenhum, calada"
+
+
 # --- migracao --------------------------------------------------------------
 
 @prova("migracao e idempotente sobre banco do esquema anterior")

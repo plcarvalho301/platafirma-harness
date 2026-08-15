@@ -34,6 +34,11 @@ RAIZ = os.environ.get("PF_RAIZ", os.path.expanduser("~/AI"))
 PERSONAS = os.path.join(RAIZ, "platafirma-harness", "personas")
 FITAS = os.path.join(RAIZ, "fitas")
 
+# A costura de identidade e de chat/comum/cadeiras.py, e nao se reimplementa:
+# duas traducoes divergem, e a que diverge produz cadeira errada.
+sys.path.insert(0, os.path.join(RAIZ, "platafirma-harness", "chat"))
+from comum.cadeiras import slug_da_cadeira  # noqa: E402
+
 # Watchdog de atividade, nao teto fixo (minuta 0002, posicao de claudinho-TI,
 # anel 2): o stream emite evento por passo, entao silencio prolongado e giro
 # pendurado — nao giro longo legitimo. Teto absoluto fica de vigia: cobre o caso
@@ -295,12 +300,29 @@ def prepara_cwd(cadeira):
 def ambiente_do_giro(cadeira):
     """PATH do harness e PF_CADEIRA explicitos. Pegadinha ja medida no harness:
     processo disparado por outro processo nao herda ambiente de sessao, e sem
-    PF_CADEIRA a `mesa` do giro abre na cadeira errada — ou em nenhuma."""
+    PF_CADEIRA a `mesa` do giro abre na cadeira errada — ou em nenhuma.
+
+    `PF_CADEIRA` leva o SLUG (`claudinho-TI`), nao o sufixo (`TI`), ainda que
+    todo o resto deste verbo trabalhe com o sufixo. `mesa`, `fila` e `tarefas`
+    chaveiam pelo slug; medido em 15/08, exportar o sufixo mandou tudo o que a
+    fita do chat escrevia para `mem:TI:*` — memoria paralela que nenhuma outra
+    sessao da cadeira enxergava, e que ninguem viu porque escrita e leitura
+    concordavam entre si.
+
+    Slug que nao resolve LEVANTA: giro com PF_CADEIRA errada grava em lugar
+    nenhum e volta a mentir calado, que e o defeito que esta linha corrige.
+    """
+    slug = slug_da_cadeira(cadeira)
+    if not slug:
+        raise ValueError(
+            f"cadeira {cadeira!r} sem slug canonico — a linha 1 de "
+            f"personas/persona-{cadeira}.md tem de nomear claudinho-/claudinha-"
+        )
     env = dict(os.environ)
     caminhos = [os.path.join(RAIZ, "bin"), os.path.expanduser("~/.local/bin")]
     atual = env.get("PATH", "").split(":")
     env["PATH"] = ":".join(caminhos + [p for p in atual if p and p not in caminhos])
-    env["PF_CADEIRA"] = cadeira
+    env["PF_CADEIRA"] = slug
     env["PF_RAIZ"] = RAIZ
     return env
 
