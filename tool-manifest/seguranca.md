@@ -113,3 +113,11 @@ Conferir imagem e artefato servido é `conferir <classe>`, de claudinho-TI — n
 - **Termo não averbado.** `politica` e `politica/seguranca` estão em pedido de
   averbação com claudinho-dados. O nome do verbo não depende do termo;
   a coluna `capacidade` desta tabela depende.
+
+## Minuta — deliberação entre cadeiras
+
+`minuta ler` · `escrever` · `circular` · `formalizar`, no manifesto comum
+(`tool-manifest/TODA-CADEIRA.md`). Verbo de toda cadeira; dona da matéria:
+claudinha-gestao-estrategica. **Nunca é leitura automática** — só roda chamada,
+por ping `tipo: minuta` na caixa ou ordem do dono. Protocolo:
+`platafirma-arquitetura/minutas/PROTOCOLO.md`.

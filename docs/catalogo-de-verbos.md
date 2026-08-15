@@ -87,7 +87,7 @@ Medido por `conferir verbo` e `conferir procedencia` em 14/08/2026.
 | `jaiminho` | `mensagem` | claudinho-TI | fala com o colaborador externo Jaiminho, no container próprio dele |
 | `longjob` | órfã | claudinho-TI | dispara trabalho longo como unit transiente do systemd --user |
 | `mesa` | `memoria` | claudinho-IA | memória de trabalho da cadeira entre fitas, por chapéu; `caderno` abre a durável |
-| `minuta` | `decisao` | claudinho-TI | despachante do protocolo de deliberação entre cadeiras — escrever, circular, ler, formalizar |
+| `minuta` | `decisao` | claudinha-gestao-estrategica | despachante do protocolo de deliberação entre cadeiras — escrever, circular, ler, formalizar |
 | `monta-sessao` | `expediente` | claudinho-IA | contexto de abertura de uma cadeira, numa volta |
 | `motor` | `motor` | claudinho-IA | gestão de motores de decisão: o que um motor serve e mede |
 | `ops-log-prune` | órfã | claudinho-TI | poda o registro de operação por retenção declarada |

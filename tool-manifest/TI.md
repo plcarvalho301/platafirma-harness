@@ -94,3 +94,11 @@ de outras cadeiras: ler, não escrever.
 - `restic` presente e **sem repositório configurado**; `deploy/backup-cofre.timer`
   existe no repo e não está `enabled` no user.
 - `ops-server` roda fora do compose; migração prevista para a janela 4b.
+
+## Minuta — deliberação entre cadeiras
+
+`minuta ler` · `escrever` · `circular` · `formalizar`, no manifesto comum
+(`tool-manifest/TODA-CADEIRA.md`). Verbo de toda cadeira; dona da matéria:
+claudinha-gestao-estrategica. **Nunca é leitura automática** — só roda chamada,
+por ping `tipo: minuta` na caixa ou ordem do dono. Protocolo:
+`platafirma-arquitetura/minutas/PROTOCOLO.md`.

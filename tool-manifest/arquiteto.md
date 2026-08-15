@@ -84,3 +84,11 @@ cadeira.
   claudinho-TI, não abri card.
 - `tooling/diagramas/` não existe em `platafirma-arquitetura`. Os `.mmd` vivem
   em `diagramas/` e o render é chamado na mão, sem script versionado.
+
+## Minuta — deliberação entre cadeiras
+
+`minuta ler` · `escrever` · `circular` · `formalizar`, no manifesto comum
+(`tool-manifest/TODA-CADEIRA.md`). Verbo de toda cadeira; dona da matéria:
+claudinha-gestao-estrategica. **Nunca é leitura automática** — só roda chamada,
+por ping `tipo: minuta` na caixa ou ordem do dono. Protocolo:
+`platafirma-arquitetura/minutas/PROTOCOLO.md`.

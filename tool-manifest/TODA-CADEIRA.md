@@ -17,6 +17,17 @@ ler o que chegou                : fila ler <persona>               so o novo; co
 reler o historico (7 dias)      : fila ler <persona> --tudo [rem] | --desde AAAAMMDDTHHMMSS
 mandar recado                   : fila enviar <dest> --tipo <t> --assunto <a>
                                   (corpo em stdin; --ref e --responde opcionais)
+minutas em que estou metido     : minuta ler                     abertas por mim ou que me convocam
+                                  exit 1 = nenhuma; leitura fria, nao marca visto
+ler uma minuta inteira          : minuta ler <n>|<slug>
+abrir deliberacao entre cadeiras: minuta escrever <slug> --convoca <c1>[,<c2>...]
+                                  [--fecha <cadeira|pedro>] [--card <#N>]
+                                  numera sozinho e nao recicla; NAO commita e NAO circula
+despachar o ping de abertura    : minuta circular <n> [<cadeira>...]
+                                  recusa pauta vazia e minuta nao commitada
+fechar minuta (unico jeito)     : minuta formalizar <n> --como adr|spec [--destino <slug>]
+                                  [--vencido]  cria o canonico vazio, APAGA a minuta,
+                                  um commit so. Minuta nao se arquiva.
 abrir sessão de uma cadeira     : monta-sessao <cadeira>   [tool monta_sessao é a via boa]
 despachar giro na sala do chat  : chat despachar --cadeira <slug> --fita <id-ou-vazio>
                                   [--modelo <alias>] [--esforco <nivel>] vem do

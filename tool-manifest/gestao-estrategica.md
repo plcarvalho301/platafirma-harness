@@ -55,3 +55,11 @@ FATO, não a da digitação; `--autor` responde quem decidiu.
 
 - Seção `## Conectores` ainda vazia: nenhuma tool de conector foi verificada por
   esta cadeira com prova de uso.
+
+## Minuta — deliberação entre cadeiras
+
+`minuta ler` · `escrever` · `circular` · `formalizar`, no manifesto comum
+(`tool-manifest/TODA-CADEIRA.md`). Verbo de toda cadeira; dona da matéria:
+claudinha-gestao-estrategica. **Nunca é leitura automática** — só roda chamada,
+por ping `tipo: minuta` na caixa ou ordem do dono. Protocolo:
+`platafirma-arquitetura/minutas/PROTOCOLO.md`.

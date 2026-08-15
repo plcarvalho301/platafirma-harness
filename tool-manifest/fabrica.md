@@ -121,3 +121,11 @@ o rollback volta como pergunta fechada, não vira execução com critério meu.
 - **Skills**: `skills/fabrica/` não existe, e o instalador declara a lista vazia
   de propósito. A fábrica não carrega `platafirma` (entrega org chart, que o
   contrato nega) nem `osint`.
+
+## Minuta — deliberação entre cadeiras
+
+`minuta ler` · `escrever` · `circular` · `formalizar`, no manifesto comum
+(`tool-manifest/TODA-CADEIRA.md`). Verbo de toda cadeira; dona da matéria:
+claudinha-gestao-estrategica. **Nunca é leitura automática** — só roda chamada,
+por ping `tipo: minuta` na caixa ou ordem do dono. Protocolo:
+`platafirma-arquitetura/minutas/PROTOCOLO.md`.

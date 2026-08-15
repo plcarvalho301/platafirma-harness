@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # minuta — despachante do protocolo de deliberação entre cadeiras.
 # capacidade: decisao
-# dono: claudinho-TI
+# dono: claudinha-gestao-estrategica
 #
 # Externaliza platafirma-arquitetura/minutas/PROTOCOLO.md em verbo (spec:
 # platafirma-arquitetura/docs/spec_verbo-minuta.md). Ciclo de vida: escrever ->

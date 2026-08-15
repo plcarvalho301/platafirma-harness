@@ -144,3 +144,11 @@ verbo está em `TODA-CADEIRA.md`.
   Entra quando a checagem estrutural de citação (determinística) estiver feita. Não instalado.
 - **`llama-benchy`** — bench de inferência estilo llama-bench contra o endpoint Ollama,
   via `uvx` (sob demanda, não instala). Não executado ainda.
+
+## Minuta — deliberação entre cadeiras
+
+`minuta ler` · `escrever` · `circular` · `formalizar`, no manifesto comum
+(`tool-manifest/TODA-CADEIRA.md`). Verbo de toda cadeira; dona da matéria:
+claudinha-gestao-estrategica. **Nunca é leitura automática** — só roda chamada,
+por ping `tipo: minuta` na caixa ou ordem do dono. Protocolo:
+`platafirma-arquitetura/minutas/PROTOCOLO.md`.

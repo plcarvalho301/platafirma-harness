@@ -13,3 +13,11 @@ Comum a toda cadeira — fila, sessão, cards: `tool-manifest/TODA-CADEIRA.md`.
 ## Armadilhas medidas
 
 ## Pendências declaradas
+
+## Minuta — deliberação entre cadeiras
+
+`minuta ler` · `escrever` · `circular` · `formalizar`, no manifesto comum
+(`tool-manifest/TODA-CADEIRA.md`). Verbo de toda cadeira; dona da matéria:
+claudinha-gestao-estrategica. **Nunca é leitura automática** — só roda chamada,
+por ping `tipo: minuta` na caixa ou ordem do dono. Protocolo:
+`platafirma-arquitetura/minutas/PROTOCOLO.md`.
