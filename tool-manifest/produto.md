@@ -49,7 +49,7 @@ binário não cabe. Ver armadilhas.
 
 | ferramenta | quando chamar | verif. |
 |---|---|---|
-| `design/tokens.css` | fonte de verdade de tipo, cor, espaço, forma, foco. Nenhuma superfície repete valor | `[func]` |
+| `design/montar-design` | monta a bancada de design a partir do release da `platafirma-ui` e carimba a versão. `tokens.css` é fonte de verdade de tipo, cor, espaço, forma e foco — mora na biblioteca, não neste repo. Nenhuma superfície repete valor | `[func]` |
 | `design/componentes.md` · `diagramas.md` | os sete componentes e a gramática vetorial, antes de inventar peça nova | `[func]` |
 | Chrome headless via `puppeteer-core` | renderizar wireframe HTML em PNG. Script e uso em `platafirma-arquitetura/design/wireframes/render.mjs`; acusa vazamento horizontal, que o screenshot esconde cortando | `[exec]` |
 | `python3 -c "from PIL import Image"` | quantizar o PNG antes de subir; wireframe tem poucas cores e cai a 1/5 | `[exec]` |
