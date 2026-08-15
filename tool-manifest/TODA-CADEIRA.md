@@ -22,6 +22,8 @@ abrir sess√£o de uma cadeira     : monta-sessao <cadeira>   [tool monta_sessao √
 ver minha memoria de trabalho   : mesa ver [chapeu]              ja vem no monta_sessao
 anotar antes de a fita morrer   : mesa anota <chapeu>            corpo em stdin; sobrescreve
 esquecer um chapeu              : mesa limpa <chapeu>            alvo obrigatorio
+fita corrente da cadeira        : mesa fita [abre|fecha --id <id>]  com PF_FITA no ambiente,
+                                  `mesa anota` so escreve se a fita ainda for a corrente
 indice dos cadernos duraveis    : mesa caderno                   idade e tamanho, sem corpo
 abrir o caderno de um chapeu    : mesa caderno <chapeu>          corpo sob demanda
 fechar a fita                   : encerrar fita                  memoria + fatos volateis + triagem do Project
