@@ -6,7 +6,7 @@
 # minuta depende dele — a rajada de N partes de uma resposta longa e exatamente o caso
 # em que o rate limit morde.
 id: pf
-url: http://chat-as:8080
+url: http://chat-recepcao:8080
 as_token: <32 bytes hex, do cofre>
 hs_token: <32 bytes hex, do cofre>
 sender_localpart: _pf

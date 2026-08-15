@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""Application Service da PlataFirma — corpo minimo do card 447 (fatia A).
+"""Recepcao da PlataFirma — o Application Service do Matrix, corpo minimo do card 447.
 
 O que ESTE arquivo faz: sobe, aceita a transacao que o homeserver empurra, responde a
-sonda de saude e loga. Nada mais. Ele existe para o AS estar registrado e de pe, que e
+sonda de saude e loga. Nada mais. Ela existe para a recepcao estar registrada e de pe, que e
 o aceite do card.
 
 O que ele NAO faz, e onde isso entra: sala por cadeira, alias, avatar, typing, anexo e
@@ -23,7 +23,7 @@ from aiohttp import web
 from mautrix.appservice import AppService
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")
-log = logging.getLogger("chat-as")
+log = logging.getLogger("chat-recepcao")
 
 
 def exigido(nome: str) -> str:

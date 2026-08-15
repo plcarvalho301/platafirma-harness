@@ -75,7 +75,7 @@ cat > "$COFRE/registration.yaml" <<FIM
 # GERADO por platafirma-harness/chat/prepara.sh — forma versionada em
 # platafirma-harness/chat/conf/registration.exemplo.yaml
 id: pf
-url: http://chat-as:8080
+url: http://chat-recepcao:8080
 as_token: $(le as-token)
 hs_token: $(le hs-token)
 sender_localpart: _pf

@@ -70,13 +70,13 @@ services:
     # aqui. Ela tambem da o egresso que o OIDC precisa para falar com auth.platafirma.org.
     networks: [interna, conhecimento]
 
-  # Corpo minimo do Application Service. Em v0/A ele existe para estar REGISTRADO e de
+  # Corpo minimo da recepcao (o Application Service). Em v0/A ela existe para estar REGISTRADO e de
   # pe: aceita transacao, responde ping e loga. Handler de mensagem, sala por cadeira,
   # alias, avatar e typing sao card 448, e entram aqui dentro.
-  chat-as:
-    build: ./as
-    image: platafirma/chat-as:local
-    container_name: chat-as
+  chat-recepcao:
+    build: ./recepcao
+    image: platafirma/chat-recepcao:local
+    container_name: chat-recepcao
     restart: unless-stopped
     environment:
       AS_ID: pf

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# sala-de-fumaca.sh <mxid-do-dono> — cria UMA sala pelo bot do AS e convida o dono.
+# sala-de-fumaca.sh <mxid-do-dono> — cria UMA sala pelo bot da recepcao e convida o dono.
 # capacidade: mudanca
 # dono: claudinha-fabrica (card 447)
 #
@@ -16,7 +16,7 @@ COFRE="${PF_COFRE:-$HOME/AI/var/secrets/matrix}"
 
 # O token nao passa por linha de comando (ps mostra argv): entra por variavel de
 # ambiente do exec, e o corpo do pedido por stdin.
-docker exec -i -e MXID="$MXID" -e AS_TOKEN="$(cat "$COFRE/as-token")" chat-as python - <<'PYSALA'
+docker exec -i -e MXID="$MXID" -e AS_TOKEN="$(cat "$COFRE/as-token")" chat-recepcao python - <<'PYSALA'
 import json, os, urllib.request
 
 pedido = urllib.request.Request(
