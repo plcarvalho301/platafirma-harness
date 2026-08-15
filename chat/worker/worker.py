@@ -11,6 +11,7 @@ e devolve o resultado ao journal. Quem poe qualquer coisa na sala e o receptor.
 
 Contrato do verbo (fixado por claudinho-TI, identico no card 459):
     chamada : chat despachar --cadeira <slug> --fita <id-ou-vazio> [--silencioso]
+              [--modelo <alias>] [--esforco <nivel>]
               corpo da mensagem em stdin
     stdout  : UMA linha JSON
               {"estado":"ok|erro|cota|timeout","texto":"...","id_fita":"...",
@@ -113,6 +114,14 @@ class Giro:
         ]
         if self.job.get("silencioso"):
             cmd.append("--silencioso")
+        # Parametro de giro que a sala pediu (comando `pf` da recepcao). Ausente,
+        # nao se passa flag nenhuma: o default e do verbo, e mandar o default
+        # explicito aqui esconderia no argv uma escolha que ninguem fez.
+        pref = journal.preferencias_da_sala(self.con, self.job["sala"])
+        if pref.get("modelo"):
+            cmd += ["--modelo", pref["modelo"]]
+        if pref.get("esforco"):
+            cmd += ["--esforco", pref["esforco"]]
         try:
             # start_new_session: o verbo vira lider do proprio grupo de
             # processos. Sem isso, matar o pendurado deixa `claude` vivo — foi

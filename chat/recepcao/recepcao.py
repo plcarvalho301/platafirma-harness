@@ -45,6 +45,7 @@ sys.path.insert(0, "/opt/chat")
 
 import anexo as anexos  # noqa: E402
 import formata  # noqa: E402
+import comandos  # noqa: E402
 import rotacao  # noqa: E402
 from comum import journal  # noqa: E402
 from comum.cadeiras import cadeiras, eh_de_cadeira, mxid_da_cadeira, sufixo_canonico  # noqa: E402
@@ -323,6 +324,19 @@ class Recepcao:
         # A ordem e essa por uma razao so: o giro tem de nascer JA na sala nova.
         # Enfileirar antes e rodar depois poria a resposta numa sala que acabou
         # de ser descartada, e o dono nunca a leria.
+        cmd = comandos.interpreta(corpo)
+        if cmd is not None:
+            # Parametro de giro nao vira giro: o produto e o efeito no PROXIMO
+            # giro, e chamar o modelo para gravar uma linha de banco gastaria um
+            # turno inteiro para nada. Entra no dedupe como a rotacao entra —
+            # reentrega do homeserver nao pode gravar duas vezes nem responder
+            # duas vezes.
+            if journal.registra_recusa(
+                self.con, event_id=evento.event_id, txn_id=txn, sala=sala
+            ):
+                await self.diz(intent, sala, comandos.executa(self.con, sala, cadeira, cmd))
+            return
+
         if rotacao.eh_comando(corpo):
             # Comando nao vira giro: o produto dele e a sala nova. Entra no
             # dedupe assim mesmo, senao a reentrega do homeserver roda a sala

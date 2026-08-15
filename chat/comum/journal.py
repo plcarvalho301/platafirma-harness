@@ -102,6 +102,14 @@ CREATE TABLE IF NOT EXISTS avisos (
 
 CREATE INDEX IF NOT EXISTS avisos_por_enviar ON avisos (enviado_em, id);
 
+CREATE TABLE IF NOT EXISTS preferencias (
+    sala          TEXT NOT NULL,
+    chave         TEXT NOT NULL,
+    valor         TEXT NOT NULL,
+    atualizado_em REAL NOT NULL,
+    PRIMARY KEY (sala, chave)
+);
+
 CREATE TABLE IF NOT EXISTS rotacoes (
     sala_velha TEXT PRIMARY KEY,
     sala_nova  TEXT NOT NULL,
@@ -605,13 +613,39 @@ def conta_giro(con: sqlite3.Connection, sala: str) -> int:
     return int(linha["giros"] or 0)
 
 
+def giros_da_sala(con: sqlite3.Connection, sala: str) -> int:
+    """Leitura pura do contador. `conta_giro` incrementa: quem so quer relatar
+    tem de vir por aqui, senao relatar o estado adianta a rotacao."""
+    linha = con.execute("SELECT giros FROM fitas WHERE sala = ?", (sala,)).fetchone()
+    return int(linha["giros"] or 0) if linha else 0
+
+
 def zera_giros(con: sqlite3.Connection, sala: str) -> None:
     con.execute("UPDATE fitas SET giros = 0 WHERE sala = ?", (sala,))
 
 
+def preferencias_da_sala(con: sqlite3.Connection, sala: str) -> dict[str, str]:
+    """Parametros de giro que a sala pediu (modelo, esforco). Sala sem pedido
+    devolve dicionario vazio, e quem chama cai no default do verbo — ausencia
+    aqui e "nao pediu", nunca "pediu o default"."""
+    linhas = con.execute(
+        "SELECT chave, valor FROM preferencias WHERE sala = ?", (sala,)
+    ).fetchall()
+    return {l["chave"]: l["valor"] for l in linhas}
+
+
+def grava_preferencia(con: sqlite3.Connection, sala: str, chave: str, valor: str) -> None:
+    con.execute(
+        "INSERT INTO preferencias (sala, chave, valor, atualizado_em) VALUES (?, ?, ?, ?)"
+        " ON CONFLICT(sala, chave) DO UPDATE SET valor = excluded.valor,"
+        " atualizado_em = excluded.atualizado_em",
+        (sala, chave, valor, _agora()),
+    )
+
+
 def troca_de_sala(con: sqlite3.Connection, velha: str, nova: str, cadeira: str) -> None:
     """A cadeira mudou de endereco: a sala nova herda a cadeira e nasce agora,
-    a velha some do cache e leva a fita junto.
+    a velha some do cache e leva a fita e as preferencias junto.
 
     A fita NAO migra: sala nova e fita nova, que e o ponto inteiro da rotacao.
     Migrar o id aqui faria a sala limpa acordar com a conversa anterior dentro.
@@ -627,6 +661,10 @@ def troca_de_sala(con: sqlite3.Connection, velha: str, nova: str, cadeira: str) 
         )
         con.execute("DELETE FROM salas WHERE sala = ?", (velha,))
         con.execute("DELETE FROM fitas WHERE sala = ?", (velha,))
+        # Preferencia e da SALA, e por isso morre com ela: sala nova volta ao
+        # default do verbo. Herdar aqui faria a rotacao — que existe para dar
+        # tela limpa — carregar um modelo caro que o dono nao pediu de novo.
+        con.execute("DELETE FROM preferencias WHERE sala = ?", (velha,))
         con.execute("COMMIT")
     except Exception:
         con.execute("ROLLBACK")

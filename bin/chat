@@ -55,6 +55,7 @@ def uso(codigo=2):
     print(
         "uso:\n"
         "  chat despachar --cadeira <slug> --fita <id-ou-vazio> [--silencioso]\n"
+        "                                  [--modelo <alias>] [--esforco <nivel>]\n"
         "                                  corpo da mensagem em stdin\n"
         "  chat versao                     versao pinada do motor x a servida\n"
         "  chat cadeiras                   slugs aceitos em --cadeira\n"
@@ -99,8 +100,11 @@ class MotorClaudeCode:
     # leitura de stream sem ninguem perceber.
     VERSAO_PINADA = "2.1.220"
 
-    def __init__(self):
+    def __init__(self, modelo="", esforco=""):
         self.bin = shutil.which("claude") or os.path.expanduser("~/.local/bin/claude")
+        # Pedido da SALA (comando `pf`), nao default. Vazio aqui nao vira flag.
+        self.modelo = modelo
+        self.esforco = esforco
 
     def versao_servida(self):
         try:
@@ -129,9 +133,15 @@ class MotorClaudeCode:
             argv += ["--session-id", id_fita_novo()]
             if pacote:
                 argv += ["--append-system-prompt", pacote]
-        modelo = os.environ.get("PF_CHAT_MODELO")
+        # Precedencia, lida no binario do motor 2.1.220: o `--effort` do CLI vence
+        # `settings.ultracode`, que vence `settings.effortLevel`. Flag de linha de
+        # comando ganha do settings.json — que e o que torna o comando de sala
+        # viavel, ja que o settings e reescrito a cada giro.
+        modelo = self.modelo or os.environ.get("PF_CHAT_MODELO")
         if modelo:
             argv += ["--model", modelo]
+        if self.esforco:
+            argv += ["--effort", self.esforco]
         return argv
 
     def passo(self, ev):
@@ -212,13 +222,13 @@ def id_fita_novo():
 # copia de persona. Ajuste local aqui e perdido no giro seguinte — o que se quer
 # permanente muda no verbo.
 
-def settings_da_fita():
+def settings_da_fita(modelo=""):
     """Allowlist do cwd. `bypassPermissions` nao e relaxamento: no giro headless
     nao existe quem responda ao pedido de permissao, entao o modo `manual` viraria
     giro pendurado ate o watchdog — erro na sala no lugar de resposta. A regua real
     e a lista de negativas, identica a da sessao da cadeira."""
     return {
-        "model": os.environ.get("PF_CHAT_MODELO", "opus"),
+        "model": modelo or os.environ.get("PF_CHAT_MODELO", "opus"),
         "permissions": {
             "defaultMode": "bypassPermissions",
             "allow": [
@@ -277,7 +287,7 @@ def claude_md_da_fita(cadeira, anexos):
     )
 
 
-def prepara_cwd(cadeira):
+def prepara_cwd(cadeira, modelo=""):
     """~/AI/fitas/<cadeira>/ com allowlist e anexos/. Criado pelo verbo se faltar —
     a recepcao grava anexo ali e nao tem por que saber montar o diretorio.
 
@@ -290,7 +300,7 @@ def prepara_cwd(cadeira):
     for d in (base, anexos, dot):
         os.makedirs(d, exist_ok=True)
     with open(os.path.join(dot, "settings.json"), "w") as f:
-        json.dump(settings_da_fita(), f, indent=2, ensure_ascii=False)
+        json.dump(settings_da_fita(modelo), f, indent=2, ensure_ascii=False)
         f.write("\n")
     with open(os.path.join(base, "CLAUDE.md"), "w") as f:
         f.write(claude_md_da_fita(cadeira, anexos))
@@ -530,6 +540,8 @@ def despachar(argv):
     cadeira = None
     id_fita = ""
     silencioso = False
+    modelo = ""
+    esforco = ""
     i = 0
     while i < len(argv):
         a = argv[i]
@@ -545,6 +557,10 @@ def despachar(argv):
                 id_fita, i = seguinte, i + 2
         elif a == "--silencioso":
             silencioso, i = True, i + 1
+        elif a == "--modelo" and i + 1 < len(argv):
+            modelo, i = argv[i + 1], i + 2
+        elif a == "--esforco" and i + 1 < len(argv):
+            esforco, i = argv[i + 1], i + 2
         else:
             print(f"argumento desconhecido: {a}", file=sys.stderr)
             return uso()
@@ -568,7 +584,7 @@ def despachar(argv):
         sys.stderr.write(json.dumps(p, ensure_ascii=False) + "\n")
         sys.stderr.flush()
 
-    motor = MotorClaudeCode()
+    motor = MotorClaudeCode(modelo=modelo, esforco=esforco)
     servida = motor.versao_servida()
     aviso_versao = ""
     if servida != motor.VERSAO_PINADA:
@@ -578,7 +594,7 @@ def despachar(argv):
         "pinada": motor.VERSAO_PINADA, "servida": servida,
     })
 
-    cwd = prepara_cwd(cadeira)
+    cwd = prepara_cwd(cadeira, modelo)
     env = ambiente_do_giro(cadeira)
 
     def responde(estado, texto, id_f, detalhe, reiniciada):

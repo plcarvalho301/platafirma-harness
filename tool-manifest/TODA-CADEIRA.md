@@ -19,6 +19,8 @@ mandar recado                   : fila enviar <dest> --tipo <t> --assunto <a>
                                   (corpo em stdin; --ref e --responde opcionais)
 abrir sessão de uma cadeira     : monta-sessao <cadeira>   [tool monta_sessao é a via boa]
 despachar giro na sala do chat  : chat despachar --cadeira <slug> --fita <id-ou-vazio>
+                                  [--modelo <alias>] [--esforco <nivel>] vem do
+                                  comando `pf` da sala, nunca do settings.json
                                   corpo em stdin; UMA linha JSON no stdout (estado, texto,
                                   id_fita, detalhe, reiniciada) e um passo por linha no
                                   stderr. Quem chama e a recepcao do chat, nao a cadeira.
