@@ -68,6 +68,16 @@ binário não cabe. Ver armadilhas.
   modelo — e um PNG de 66 KB vira ~88 mil caracteres, acima do teto de saída por
   giro. O caminho é `curl` da própria máquina, onde os bytes nunca passam por
   mim. Medido em 10/08/2026.
+- **PNG de wireframe acima de 12,5 MP sobe e não gera miniatura.** Teto do
+  MediaWiki (`$wgMaxImageArea`). A tira inteira de uma tela longa estoura fácil:
+  1200 CSS px a `deviceScaleFactor: 2` com 2739 px de altura dá 2400x5478 = 13,1 MP.
+  O `action=upload` responde `Success` e a página fica com `mw-broken-media` — o
+  erro só aparece em `prop=imageinfo&iiurlwidth=N`, no campo `thumberror`. Sai por
+  screenshot de ELEMENTO (`elementHandle.screenshot`), um painel por arquivo, que
+  também lê melhor no celular do que uma tira única. Medido em 15/08/2026.
+- **Conferir a miniatura, não o upload.** `curl .../api.php?action=query&titles=
+  Arquivo:X.png&prop=imageinfo&iiprop=url&iiurlwidth=900` — `thumburl` presente é a
+  prova de que a página vai renderizar; `result: Success` do upload não é.
 - **Wireframe em PDF pesa mais que em PNG** (217 KB contra 66 KB na mesma tela):
   o Chrome embute a Inter inteira. Para leitura em tela, PNG quantizado.
 
