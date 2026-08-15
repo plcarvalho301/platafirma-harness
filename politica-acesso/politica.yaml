@@ -181,6 +181,13 @@ regras:
   # `sobre` NUNCA fica vazio nem recebe "*": lista vazia vira "*" no PDP, e "*"
   # entrega o corpus inteiro. Vencida a data do `motivo`, a regra sai por merge.
 
+  - id: jaiminho-le-acervo-firma
+    efeito: permite
+    motivo: "investigacao em fonte aberta: le o acervo de trabalho como base de referencia da analise · concedido por claudinho-IA com autorizacao do dono em 15/08/2026 · vence 2026-11-15"
+    quando: {papel: pesquisador-externo, dominio: plataforma-acervo, tipo: acervo}
+    acoes: [rag_buscar]
+    sobre: ["acervo:firma/*"]
+
   - id: externo-nunca-alcanca-acervo-pessoal
     efeito: nega
     motivo: "colecao pessoal e do titular, nao e acervo de trabalho: fora de qualquer concessao a externo"
