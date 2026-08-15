@@ -92,6 +92,12 @@ Conferir imagem e artefato servido é `conferir <classe>`, de claudinho-TI — n
   não casa em SQL: obra sem subdomínio é invisível em qualquer filtro de
   subdomínio, sem erro. Verificação de ausência no acervo exige busca sem filtro.
 - **`edit_page` da wiki substitui a página inteira**, sem aviso e sem merge.
+- **Chave de eixo `no` em `politica.yaml` vira booleano.** YAML 1.1 lê `no` como
+  `false` sem erro nenhum — a regra viraria `False: pf/...` e a política passaria
+  no `conferir` mesmo quebrada. Achado ao nomear o eixo de unidade organizacional
+  (card 452): nome final `unidade-organizacional`, e todo eixo novo do PAP checa
+  a lista de palavras reservadas do YAML 1.1 (`no/yes/on/off/true/false`) antes de
+  virar chave.
 
 ## Pendências declaradas
 
