@@ -13,6 +13,11 @@
 # DEFAULT: sujeito ausente desta tabela NÃO tem papel, e o PDP nega por atributo
 # ausente. Fail-closed é o ponto — acrescentar linha aqui é ato de concessão e passa
 # por merge, como qualquer regra do PAP.
+#
+# DESLIGAMENTO: `client`, `conta` e `segredos` dizem ONDE o sujeito existe fora deste
+# arquivo, e são o que `acesso desligar` tem por alvo (seg:0011 item 7). Sujeito sem
+# nenhum dos três não se sabe desligar — `acesso orfaos` reprova por isso, e reprova
+# na admissão, não no dia da saída. O PDP ignora estes campos.
 
 versao: 1
 
@@ -24,6 +29,7 @@ sujeitos:
     natureza: pessoa
     papeis: [operador]
     dominios: [plataforma]
+    usuario: megafone
 
   # Rota de emergência: token estático, prazo declarado no server. Mesmo alcance do
   # anterior porque é a mesma mão — é o dono quando o realm cai.
@@ -31,6 +37,7 @@ sujeitos:
     natureza: pessoa
     papeis: [operador]
     dominios: [plataforma]
+    conta: claudinho
 
   # Colaboração externa em modelo DMZ (card 344, seg:0009). Lê acervo por concessão
   # nomeada e fala pelo canal exclusivo com claudinho-IA. Não executa comando, não
@@ -43,3 +50,5 @@ sujeitos:
     natureza: servico
     papeis: [pesquisador-externo]
     dominios: [plataforma-acervo, mensageria]
+    client: L0R8OJ
+    conta: jaiminho

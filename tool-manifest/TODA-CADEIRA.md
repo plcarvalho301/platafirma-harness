@@ -106,6 +106,11 @@ conceder / revogar acesso       : acesso conceder --sujeito <c> --eixo <e> --val
 isto seria permitido?           : acesso decidir --papel <p> --dominio <d> --acao <a>
                                     --recurso "<alvo>"       avalia sem tocar em banco
 o PAP (política em arquivo)     : acesso politica [conferir|importar]   seg:0008
+desligar sujeito de vez         : acesso desligar <sujeito> [--executar]  os quatro atos da
+                                  revogacao (seg:0011): realm, sujeitos.yaml, PAP, segredo.
+                                  Sem --executar so mede o plano; nunca commita
+residuo de acesso               : acesso orfaos              exit 1 = ha ato pendente:
+                                  concessao vencida, sujeito sem projecao, credencial dormente
 
 estado do repo                  : git -C ~/AI/<repo> status --short
 publicar                        : git -C ~/AI/<repo> add -A ; git ... commit -m "..." ; git ... push

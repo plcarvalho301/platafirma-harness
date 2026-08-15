@@ -12,6 +12,9 @@
 #   vocabulario     acesso       valores validos dos tres eixos
 #   politica        acesso       confere e importa o PAP (politica.yaml)
 #   decidir         acesso       avalia um caso contra a politica, sem tocar em banco
+#   desligar        acesso       encadeia os quatro atos da revogacao (seg:0011 item 7)
+#   orfaos          acesso       mede residuo: concessao vencida, regra sem titular,
+#                                sujeito sem alvo de desligamento, conta sem sujeito
 #
 # SEPARADO DE `seg` DE PROPOSITO (decisao do dono, 13/08/2026): `seg` e o toolkit da
 # cadeira de seguranca; `acesso` e chamado por qualquer um que precise verificar o que
@@ -58,6 +61,9 @@ exemplos
   acesso politica conferir
   acesso decidir --papel fornecedor --dominio plataforma --acao run_command \
       --recurso "docker restart keycloak"
+  acesso orfaos
+  acesso desligar jaiminho              # plano medido, nada executado
+  acesso desligar jaiminho --executar   # os quatro atos; o commit continua sendo seu
 FIM
 }
 
@@ -253,6 +259,8 @@ case "${1:-}" in
   vocabulario) shift; cmd_vocabulario "$@";;
   politica)    shift; cmd_politica "$@";;
   decidir)     shift; cmd_decidir "$@";;
+  desligar)    shift; exec python3 "$(dirname "$(readlink -f "$0")")/_acesso-desligar.py" desligar "$@";;
+  orfaos)      shift; exec python3 "$(dirname "$(readlink -f "$0")")/_acesso-desligar.py" orfaos "$@";;
   -h|--help|"") uso;;
   *) morre "subcomando desconhecido: $1 (rode 'acesso' sem argumento)";;
 esac
