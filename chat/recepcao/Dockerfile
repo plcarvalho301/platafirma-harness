@@ -19,7 +19,7 @@ RUN useradd -u 10001 -m -s /bin/bash recepcao
 WORKDIR /opt/chat
 COPY --chown=recepcao:recepcao comum/ /opt/chat/comum/
 COPY --chown=recepcao:recepcao recepcao/recepcao.py recepcao/formata.py recepcao/anexo.py \
-     recepcao/rotacao.py /opt/chat/
+     recepcao/rotacao.py recepcao/comandos.py /opt/chat/
 
 USER recepcao
 EXPOSE 8080
