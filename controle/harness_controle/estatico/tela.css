@@ -1,15 +1,18 @@
 /* ============================================================
    Folha de aplicação da tela do harness — camada 2.
-   Camada 1 é design/tokens.css (variáveis + reset tipográfico);
-   ela não conhece classe de superfície nenhuma, e por isso
-   sozinha renderiza HTML nu.
+   Camada 1 é o pf-ui.css do release platafirma/ui (as mesmas
+   variáveis + reset tipográfico que vinham de design/tokens.css,
+   agora dentro da imagem — card #476); ela não conhece classe de
+   superfície nenhuma, e por isso sozinha renderiza HTML nu.
 
    Fonte: o <style> dos wireframes aprovados em
    platafirma-arquitetura/design/wireframes/harness-{recepcao,cadeira}.html,
    fundido e estendido para o que a tela real emite (formulário de
    despacho, form inline em célula, barra de saídas).
 
-   Nenhum valor cru: cor, tipo, espaço e forma vêm de tokens.css.
+   Nenhum valor cru: cor, tipo, espaço e forma vêm das variáveis da
+   camada 1. Nenhuma declaração desta folha mudou no #476 — só de onde
+   a camada 1 chega.
    dono: claudinha-produto
    ============================================================ */
 
