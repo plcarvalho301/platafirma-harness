@@ -29,6 +29,8 @@ abrir o caderno de um chapeu    : mesa caderno <chapeu>          corpo sob deman
 fechar a fita                   : encerrar fita                  memoria + fatos volateis + triagem do Project
                                   (`descansar` e o mesmo verbo, outro nome)
 so o estado da memoria          : encerrar fita --so-memoria     sem o dossie, mais rapido
+rascunho do Code no cwd         : encerrar rascunho [--purga]    auto memory: ve, ou descarta o que
+                                  ja foi promovido ao caderno
 achar slot fora do remit        : encerrar varredura             todas as cadeiras; timer diario ja roda
 
 ler um card                     : tarefas ler <id>|#<index>   #N e o da fila; <id> e a chave

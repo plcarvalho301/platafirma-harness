@@ -187,6 +187,88 @@ def roda(rotulo, cmd, timeout=60):
         print(f"  NAO MEDIDO — {type(e).__name__}: {e}")
 
 
+def dir_rascunho(cwd=None):
+    """Onde o Claude Code grava a auto memory: um diretorio por cwd, com as barras
+    viradas em traco. O ritual roda DENTRO da fita, logo o cwd corrente ja e o da
+    fita — nao ha mapa cadeira->diretorio a manter, e o desenho do cwd pode mudar
+    no adaptador sem quebrar isto."""
+    cwd = os.path.abspath(cwd or os.getcwd())
+    return os.path.join(os.path.expanduser("~/.claude/projects"),
+                        cwd.replace("/", "-"), "memory")
+
+
+def rascunho_delta(desde=0, cwd=None):
+    """Memorias escritas pelo Code depois do ultimo descanso. Delta por mtime, nao
+    pelo campo `modified` do frontmatter: formato de saida do CLI muda rapido,
+    mtime nao. O frontmatter serve para exibir, nunca para decidir."""
+    d = dir_rascunho(cwd)
+    if not os.path.isdir(d):
+        return d, None
+    achados = []
+    for f in sorted(os.listdir(d)):
+        if not f.endswith(".md") or f == "MEMORY.md":
+            continue
+        caminho = os.path.join(d, f)
+        st = os.stat(caminho)
+        if st.st_mtime <= desde:
+            continue
+        texto = open(caminho, errors="replace").read()
+        desc = re.search(r"^description:\s*(.+)$", texto, re.M)
+        corpo = texto.split("---", 2)[-1].strip()
+        achados.append({"arquivo": caminho, "nome": f[:-3],
+                        "desc": (desc.group(1).strip().strip('"') if desc else ""),
+                        "corpo": corpo})
+    return d, achados
+
+
+def imprime_rascunho(desde):
+    """Etapa da peneira (card 454): a auto memory escreve sozinha e sem regua; o
+    caderno tem regua e depende de um ritual que so acontece aqui. O verbo NAO
+    julga — poe o delta debaixo do nariz da sessao, que e quem sabe aplicar os
+    dois testes de admissao. Medido em 15/08: das memorias que o Code grava
+    sozinho, parte e decisao de negocio, que reprova e tem casa em card ou ADR."""
+    print("\n== rascunho da fita (auto memory do Code) ==")
+    d, achados = rascunho_delta(desde)
+    if achados is None:
+        print(f"  sem rascunho neste cwd ({d} nao existe).")
+        return
+    if not achados:
+        print("  sem delta desde o ultimo descanso — declarado, nao silencioso.")
+        return
+    print(f"  {len(achados)} memoria(s) nova(s) em {d}:")
+    for m in achados:
+        print(f"\n  -- {m['nome']}")
+        if m["desc"]:
+            print(f"     {m['desc']}")
+        for linha in m["corpo"].splitlines()[:12]:
+            print(f"     | {linha}")
+    print("\n  Isto e RASCUNHO: nao e versionado e morre com o cwd. O que passar na\n"
+          "  regua do caderno se promove com `mesa caderno <chapeu>` + escrita; o\n"
+          "  resto se descarta com `encerrar rascunho --purga`.")
+
+
+def ato_rascunho(args):
+    """Ve ou descarta a auto memory do cwd corrente. Purga apaga o diretorio
+    inteiro: rascunho e transitorio por desenho, e meia purga deixa fossil."""
+    d, achados = rascunho_delta(0)
+    if achados is None:
+        print(f"sem rascunho neste cwd ({d} nao existe)")
+        return 0
+    if not args.purga:
+        print(f"{len(achados)} memoria(s) em {d}:")
+        for m in achados:
+            print(f"  {m['nome']}  {m['desc']}")
+        print("  descarte com `encerrar rascunho --purga`")
+        return 0
+    apagados = 0
+    for f in os.listdir(d):
+        if f.endswith(".md"):
+            os.remove(os.path.join(d, f))
+            apagados += 1
+    print(f"rascunho: {apagados} arquivo(s) apagado(s) em {d}")
+    return 0
+
+
 def ato_fita(args):
     alvo = cadeira()
     rc = conn()
@@ -213,6 +295,8 @@ def ato_fita(args):
         else:
             print("\n-- fila\n  NAO MEDIDO — nome canonico nao sai da linha 1 da persona")
 
+    imprime_rascunho(int(ultimo) if ultimo else 0)
+
     rc.set(f"mem:{alvo.lower()}", int(time.time()))
     print("\n== proximo passo ==\n"
           "1. escreva a mesa antes de a fita morrer: `mesa anota <chapeu>`\n"
@@ -232,6 +316,9 @@ def ato_fita(args):
           "   validade (mesa, que expira junto).\n"
           "   Entrada nova SUBSTITUI a que contradiz — o historico e o git.\n"
           "   Acima de 100 linhas: pode antes de acrescentar.\n"
+          "   O rascunho impresso acima entra nesta mesma peneira: promova o que\n"
+          "   passa REESCREVENDO com suas palavras (o Code inventa remissao entre\n"
+          "   memorias que nao se relacionam), e depois `encerrar rascunho --purga`.\n"
           "\n"
           "3. triagem da memoria do Project — o host nao a alcanca; a tool e da sessao:\n"
           "   a) memory_user_edits view\n"
@@ -291,6 +378,10 @@ def main():
     f.add_argument("--so-memoria", action="store_true",
                    help="pula o dossie volatil; so o estado da memoria")
     f.set_defaults(func=ato_fita)
+
+    r = sub.add_parser("rascunho", help="auto memory do Code no cwd corrente: ve ou descarta")
+    r.add_argument("--purga", action="store_true", help="apaga o rascunho inteiro deste cwd")
+    r.set_defaults(func=ato_rascunho)
 
     v = sub.add_parser("varredura", help="passada por todas as cadeiras; so o que esta fora do lugar")
     v.set_defaults(func=ato_varredura)
