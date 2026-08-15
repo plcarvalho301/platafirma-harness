@@ -7,14 +7,24 @@ services:
     container_name: jaiminho
     restart: unless-stopped
     env_file: [.env]
-    # Porta so no loopback do host: quem chama e claudinho-TI ou, adiante, a ponte
-    # Matrix. Nao ha rota no tunel — o Jaiminho nao e superficie publica.
     # A ponte MCP escuta so DENTRO do container (127.0.0.1:8022): quem a usa e o
-    # `agy` que roda aqui. Nao ha porta publicada — chamada vem por docker exec.
-    volumes: ["credenciais:/home/jaiminho/.antigravity", "trabalho:/home/jaiminho/trabalho"]
-    # Rede default (bridge): alcanca a internet — auth/ops pela porta publica e a
-    # API do Google. NAO alcanca 127.0.0.1 do host, logo nao alcanca o Valkey da
-    # malha msg. Esse isolamento e o desenho, nao acidente (card 437).
+    # `agy` que roda aqui. Nao ha porta publicada nem rota no tunel — o Jaiminho
+    # nao e superficie publica. Chamada vem por `docker exec`.
+    volumes:
+      # A casa dele: home inteiro persistente. Nada nosso mora aqui (codigo e
+      # `agy` vem de /opt/pf, da imagem), entao volume velho nunca mascara
+      # entrega nova. ~/bin e ~/lib sobrevivem a recreate — e o ponto.
+      - "casa:/home/jaiminho"
+      # Credencial do `agy` em volume proprio, aninhado: rebuild nao desloga.
+      - "credenciais:/home/jaiminho/.antigravity"
+      # UNICO ponto de escrita do container na arvore do host. Diretorio neutro:
+      # o que ele deixa aqui NAO entra no acervo sozinho — claudinho-TI confere e
+      # chama `acervo-drop`. Sem bind na arvore de Books: container nao escreve
+      # direto em fila de ingestao.
+      - "${HOME}/AI/var/entrada-jaiminho:/saida:rw"
+    # Rede default (bridge): alcanca a internet — auth/ops/wiki pela porta publica
+    # e a API do Google. NAO alcanca 127.0.0.1 do host, logo nao alcanca o Valkey
+    # da malha msg. Esse isolamento e o desenho, nao acidente (card 437).
     networks: [saida]
     security_opt: ["no-new-privileges:true"]
     healthcheck:
@@ -28,5 +38,5 @@ networks:
     driver: bridge
 
 volumes:
+  casa:
   credenciais:
-  trabalho:
