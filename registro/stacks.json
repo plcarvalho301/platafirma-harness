@@ -77,6 +77,21 @@
       "segredos": [
         ".env"
       ]
+    },
+    "chat": {
+      "compose": "~/AI/platafirma-harness/chat/docker-compose.yml",
+      "repo": "platafirma-harness",
+      "papel": "superficie de conversa: homeserver Matrix, banco proprio e Application Service",
+      "critico": false,
+      "rotas": "~/AI/deploy/core/deploy/cloudflared-config.yml",
+      "_nota": "O Synapse fica em duas redes: `interna` (internal, com banco e AS — e por ela que a Admin API responde, e so por ela) e a do conhecimento, que e onde o cloudflared vive. Em rootless o container nao alcanca o loopback do host, entao estar na rede do cloudflared e a unica forma de a borda chegar no homeserver. O ingress mora no core, e por isso `rotas` aponta para fora deste repo.",
+      "segredos": [
+        ".env",
+        "~/AI/var/secrets/matrix/oidc-client-secret",
+        "~/AI/var/secrets/matrix/signing.key",
+        "~/AI/var/secrets/matrix/segredos.yaml",
+        "~/AI/var/secrets/matrix/registration.yaml"
+      ]
     }
   },
   "_fora_do_registro": {

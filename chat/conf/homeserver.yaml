@@ -1,0 +1,74 @@
+# Homeserver Matrix — card 447, fatia A da minuta 0002.
+#
+# Este arquivo e VERSIONADO e nao contem segredo nenhum. O que e segredo entra por
+# caminho de arquivo do cofre (`/segredos/*`, montado :ro) ou pelo segundo `-c`,
+# gerado por ./prepara.sh. Ver o comentario do compose sobre o merge dos dois.
+
+server_name: chat.platafirma.org        # IRREVERSIVEL: vai assado em todo evento e MXID.
+public_baseurl: https://chat.platafirma.org/
+pid_file: /data/homeserver.pid
+log_config: /config/log.config
+media_store_path: /data/media_store
+report_stats: false
+enable_metrics: false
+
+# Identidade do servidor. Mora no cofre, e nao no volume, para sobreviver a um
+# `down -v`: chave nova = todo evento antigo com assinatura invalida.
+signing_key_path: /segredos/signing.key
+
+# Um listener, um recurso. `federation` NAO entra: e assim que a federacao fecha de
+# verdade (arq:0026) — o resto abaixo e cinto e suspensorio.
+listeners:
+  - port: 8008
+    type: http
+    bind_addresses: ['0.0.0.0']
+    x_forwarded: true      # TLS termina no Cloudflare; o IP real chega por header
+    resources:
+      - names: [client]
+        compress: false
+
+federation_domain_whitelist: []
+trusted_key_servers: []
+suppress_key_server_warning: true
+
+# --- Contrapartidas de borda (claudinho-seguranca, 14/08) --------------------------
+# Sem oauth2-proxy no caminho, o endpoint client fica publico: estas quatro linhas sao
+# o que impede o mundo de abrir conta aqui. Sobem JUNTAS com a stack, nunca depois.
+enable_registration: false
+password_config:
+  enabled: false           # login so por OIDC; nao existe senha local neste servidor
+rc_login:
+  address:
+    per_second: 0.003
+    burst_count: 5
+  account:
+    per_second: 0.003
+    burst_count: 5
+  failed_attempts:
+    per_second: 0.17
+    burst_count: 3
+
+# Identidade pelo realm, direto — mesma familia do tarefas.platafirma.org (servico com
+# autenticacao propria, sem gate na frente). O client confidencial ja existe no realm;
+# o secret e LIDO do cofre, nunca copiado para ca.
+oidc_providers:
+  - idp_id: platafirma
+    idp_name: PlataFirma
+    issuer: "https://auth.platafirma.org/realms/platafirma"
+    client_id: "FK81JZ"
+    client_secret_path: /segredos/oidc-client-secret
+    scopes: [openid, profile, email]
+    user_mapping_provider:
+      config:
+        localpart_template: "{{ user.preferred_username }}"
+        display_name_template: "{{ user.name }}"
+        email_template: "{{ user.email }}"
+
+# O registration tambem sai do cofre: e ele que carrega as_token e hs_token.
+app_service_config_files:
+  - /segredos/registration.yaml
+
+# Instancia de um, sete salas, sem federacao: presenca so custa CPU e nao aparece em
+# criterio de aceite nenhum.
+presence:
+  enabled: false

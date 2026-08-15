@@ -1,0 +1,110 @@
+name: chat
+
+# Superficie de conversa (minuta 0002, card 447 — fatia A): homeserver Matrix, banco
+# proprio e Application Service registrado. O que esta stack NAO faz e tao importante
+# quanto o que faz: nao fala com pf:msg (o chat e superficie, a malha continua sendo a
+# do motor — arq:0036) e nao tem comportamento de cadeira nenhum, que e o card 448.
+#
+# Segredo nao mora aqui. Os tres servicos leem do cofre (~/AI/var/secrets/matrix), por
+# arquivo montado :ro ou por .env fora do git, e quem cunha e o `prepara.sh` ao lado.
+
+services:
+  # Banco proprio da stack, padrao ja vigente no host (identidade, vikunja, keycloak,
+  # mdm-rh, motor e rag tem o seu). Sem porta publicada: quem fala com ele e o Synapse,
+  # pela rede interna, e a rotacao do card 449 entra pela Admin API — nunca por aqui.
+  chat-pg:
+    image: postgres:16
+    container_name: chat-pg
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: synapse
+      POSTGRES_USER: synapse
+      POSTGRES_PASSWORD: ${PG_PASSWORD:?defina PG_PASSWORD no .env — sai do cofre por ./prepara.sh}
+      # O Synapse RECUSA subir contra banco que nao seja C/C e manda usar
+      # `allow_unsafe_locale` para ignorar. O locale se decide no initdb e nao se muda
+      # depois sem dump/restore: errar aqui custa recriar o volume.
+      POSTGRES_INITDB_ARGS: "--encoding=UTF8 --lc-collate=C --lc-ctype=C"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U synapse -d synapse"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+    networks: [interna]
+
+  chat-synapse:
+    image: ghcr.io/element-hq/synapse:v1.157.2
+    container_name: chat-synapse
+    restart: unless-stopped
+    # Entrypoint proprio: o /start.py da imagem passa UM --config-path, e aqui a config
+    # vem em dois pedacos — o versionado (sem segredo) e o gerado no cofre. O `-c` do
+    # Synapse aceita repeticao, entao a divisao nao custa nada. Atencao ao merge: ele e
+    # `dict.update` de chave de topo, NAO fusao profunda — por isso o bloco `database`
+    # inteiro mora no gerado, e nao metade em cada arquivo.
+    entrypoint: ["python", "-m", "synapse.app.homeserver"]
+    command: ["-c", "/config/homeserver.yaml", "-c", "/segredos/segredos.yaml"]
+    # rootless: root-do-container = claudinho no host, e e o unico uid que le arquivo 600
+    # do cofre. Mesmo motivo ja escrito no core para o cloudflared (a imagem roda 991).
+    user: "0:0"
+    volumes:
+      # DIRETORIO, nao arquivo: bind de arquivo unico nao acompanha `git checkout` — o
+      # checkout troca o inode e o mount fica preso ao velho. Armadilha ja paga no host.
+      - ./conf:/config:ro
+      - ${HOME}/AI/var/secrets/matrix:/segredos:ro
+      - dados:/data
+    healthcheck:
+      # Exercita o caminho que a borda vai usar, nao a porta: Synapse de pe com o recurso
+      # client fora do ar reprova aqui. A imagem nao tem curl; python e o que ha.
+      test: ["CMD", "python", "-c", "import urllib.request,sys;sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8008/_matrix/client/versions',timeout=8).status==200 else 1)"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 45s
+    depends_on:
+      chat-pg:
+        condition: service_healthy
+    # `interna` e onde vivem banco e AS — e por onde a Admin API responde, que e o
+    # requisito do card. `conhecimento` e a rede do cloudflared: em rootless o container
+    # nao alcanca o loopback do host, entao estar nela e a UNICA forma de a borda chegar
+    # aqui. Ela tambem da o egresso que o OIDC precisa para falar com auth.platafirma.org.
+    networks: [interna, conhecimento]
+
+  # Corpo minimo do Application Service. Em v0/A ele existe para estar REGISTRADO e de
+  # pe: aceita transacao, responde ping e loga. Handler de mensagem, sala por cadeira,
+  # alias, avatar e typing sao card 448, e entram aqui dentro.
+  chat-as:
+    build: ./as
+    image: platafirma/chat-as:local
+    container_name: chat-as
+    restart: unless-stopped
+    environment:
+      AS_ID: pf
+      AS_SERVIDOR: http://chat-synapse:8008
+      AS_DOMINIO: chat.platafirma.org
+      AS_BOT: _pf
+      AS_PORTA: "8080"
+      AS_TOKEN: ${AS_TOKEN:?defina AS_TOKEN no .env — sai do cofre por ./prepara.sh}
+      HS_TOKEN: ${HS_TOKEN:?defina HS_TOKEN no .env — sai do cofre por ./prepara.sh}
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request,sys;sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8080/estado',timeout=8).status==200 else 1)"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+    depends_on:
+      chat-synapse:
+        condition: service_healthy
+    security_opt: ["no-new-privileges:true"]
+    networks: [interna]
+
+networks:
+  interna:
+    internal: true
+  conhecimento:
+    external: true
+    name: plataforma-wiki_default   # ancorado no `name:` pinado do compose do conhecimento
+
+volumes:
+  pgdata:
+  dados:

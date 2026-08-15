@@ -1,0 +1,17 @@
+# Forma do registration do Application Service. O REAL e gerado por ./prepara.sh em
+# ~/AI/var/secrets/matrix/registration.yaml (600) e montado :ro — nunca mora no git.
+#
+# `id`, `sender_localpart` e o namespace sao identidade do AS: mudar depois desregistra
+# o que ja existe. `rate_limited: false` e requisito do card 447 e o criterio 5 da
+# minuta depende dele — a rajada de N partes de uma resposta longa e exatamente o caso
+# em que o rate limit morde.
+id: pf
+url: http://chat-as:8080
+as_token: <32 bytes hex, do cofre>
+hs_token: <32 bytes hex, do cofre>
+sender_localpart: _pf
+rate_limited: false
+namespaces:
+  users:
+    - exclusive: true
+      regex: '@_pf.*:chat\.platafirma\.org'
