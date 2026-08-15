@@ -3,7 +3,8 @@
 # capacidade: verificacao
 # dono: claudinho-TI
 #
-# A regua NAO mora aqui: mora em `conferir repo`, e este hook a chama com --staged.
+# A regua NAO mora aqui: mora em `conferir repo` e `conferir superficie`, e este
+# hook as chama com --staged.
 # Gate e conferencia que leem reguas diferentes divergem em silencio no primeiro
 # ajuste que so um dos dois receber.
 #
@@ -20,4 +21,10 @@ CONFERIR="${CONFERIR:-$HOME/AI/bin/conferir}"
     exit 0
 }
 
-exec "$CONFERIR" repo --staged
+"$CONFERIR" repo --staged || exit 1
+
+# Equalizacao de superficie: texto que a fita carrega nao pode nomear tool que so
+# existe no meio MCP. INCREMENTAL de proposito — julga so o que o commit
+# acrescenta. O passivo herdado nao trava a casa; gate que reprova o que ja
+# estava la vira `--no-verify` por habito, e ai nao gateia mais nada.
+exec "$CONFERIR" superficie --staged

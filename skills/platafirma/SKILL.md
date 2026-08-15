@@ -2,7 +2,7 @@
 name: platafirma
 description: Use sempre que a conversa for sobre a PlataFirma — org de times/cadeiras, personas claudinho/claudinha, arquitetura, repo platafirma-arquitetura, ou a wiki. Dispare também sempre que a palavra "platafirma" aparecer explicitamente, e sempre que aparecer fila de mensagens, handoff, recado, card ou ticket entre personas ("lê a fila", "manda pro claudinho-X"). Dá a topologia atual de cadeiras/heads/gerências, as regras fixas de roteamento entre personas e o protocolo da fila de mensagens. NÃO se aplica à claudinha-osint (colaboradora externa, ambiente isolado): a skill dela é `osint`.
 cadeiras: todas
-compatibility: precisa do connector "PlataFirma Wiki" (tool repo_read) pra ler o arquivo de origem do org chart, e do connector "platafirma-ops" (run_command, read_file, write_file) pra operar a fila de mensagens.
+compatibility: exige as capacidades `ler-repo` e `operar-fila`. O MEIO muda por superficie e esta em tool-manifest/superficies.json — no claude.ai sao conectores, na fita do chat e shell com allowlist. Nao nomeie tool aqui: `conferir superficie` reprova.
 ---
 
 # PlataFirma — org e roteamento
@@ -20,17 +20,21 @@ mecânico de que a sessão não é desta skill: `id -un` responde `modulo-osint`
 ou o conector `platafirma-ops` não está na sessão.
 
 ## Times e cadeiras
-Ler `docs/org-template-canonico.md` no repo `platafirma-arquitetura` (via
-`repo_read`) no início de qualquer sessão sobre a PlataFirma — não repetir a
-tabela de memória, ela muda. O arquivo tem: cadeira, head, gerências,
-ocupação por Project.
+Ler `docs/org-template-canonico.md` no repo `platafirma-arquitetura` no início
+de qualquer sessão sobre a PlataFirma — não repetir a tabela de memória, ela
+muda. O arquivo tem: cadeira, head, gerências, ocupação por Project.
+
+Capacidade: `ler-repo`. Use o meio que a superfície oferecer — leitura de repo
+por conector, ou leitura direta do arquivo no host. Na fita do chat o org **já
+vem no pacote de abertura**, e aí não há o que buscar.
 
 O template de organização (o tipo, sem o particular) mora em
 `macro-global/organizacao/README.md`, mesmo repo. Descritivo pra leitura
 humana: página `Platafirma/org-template` na wiki.
 
-Sem o connector disponível na conversa: avisar o Pedro, não responder a
-topologia de memória.
+Sem nenhum dos meios disponível: avisar o Pedro, não responder a topologia de
+memória. Ausência de UM meio não é ausência da capacidade — procure o outro
+antes de recusar.
 
 ## Regras fixas de roteamento
 - Fora do meu recorte eu aponto, não decido: nomeio o dono no org chart e
@@ -41,7 +45,7 @@ topologia de memória.
 ## Fila de mensagens entre personas
 Transporte assíncrono entre as cadeiras, no ambiente do usuário `claudinho`.
 **A caixa é o stream `caixa:<persona>`** na malha `msg` (Valkey, arq:0018),
-operada só pelo comando `fila` (`~/AI/bin/fila`, já no PATH do `run_command`).
+operada só pelo comando `fila` (`~/AI/bin/fila`, no PATH em toda superfície).
 
 **Não existe caixa no sistema de arquivos.** `fila/*.md` é vestígio do transporte
 antigo: ninguém escreve lá, e ler de lá devolve estado congelado sem erro nenhum.
@@ -182,7 +186,7 @@ dele — consulta na mão contra o banco só quando o instrumento não responde,
 declarando que foi na mão.
 
 - acervo (obras, chunks, vetores, fuga por degrau): `acervo escada`
-- facetas e população do índice: `rag_facets`
+- facetas e população do índice: o instrumento de facetas do acervo
 - catálogo dos verbos: `tool-manifest/TODA-CADEIRA.md`
 
 O modo de falha não é errar a conta: é acertar uma conta que mede outra coisa.
@@ -195,12 +199,12 @@ Mesma regra para capacidade do código: o que o pipeline sabe fazer se lê no
 código (`EXTRATORES` em `rag_extractor/pipeline.py`, por exemplo), não em `docs/`.
 Doc é narrativa e envelhece sem avisar; código é o fato.
 
-## Ler o retorno do rag_search
+## Ler o retorno da busca no acervo
 Régua de leitura do acervo, dona: claudinho-IA (RAG e memória). Vale para
 qualquer persona com acesso ao acervo; não se replica dentro de instrução de
 persona — a instrução aponta para cá.
 
-1. `rag_facets` antes de qualquer filtro: faceta legítima com corpus vazio
+1. Facetas antes de qualquer filtro: faceta legítima com corpus vazio
    devolve zero sem erro. Na dúvida, sem filtro.
 2. `cobertura: "boa"` não significa que o corpus responde — dispara também com
    vizinho semântico. Decida por `sim` e pelo `breadcrumb`: breadcrumb que não
@@ -210,7 +214,7 @@ persona — a instrução aponta para cá.
    como obra própria.
 5. Nada no retorno declara idioma. Confira que a obra é legível antes de citar.
 6. Tamanho e composição do acervo se consultam em `acervo escada`; faceta e
-   população, em `rag_facets`. Número copiado para dentro de prompt vira segunda
+   população, no instrumento de facetas. Número copiado para dentro de prompt vira segunda
    fonte que ninguém atualiza.
 7. Corpus ausente não é razão para não responder; é razão para declarar
    confiança. Corpus e treino se distinguem por confiança declarada, não por

@@ -126,6 +126,30 @@ histórico de carga              : sar                  (única que responde "h�
 espaço                          : df -h · du -sh · ncdu
 ```
 
+## Capacidade e a mesma; o meio muda por superficie
+
+A cadeira nao roda num lugar so. Pelo claude.ai ela tem conectores MCP; pela sala
+do Matrix roda em fita headless, com shell e allowlist e **nenhum MCP**. A
+capacidade tem de ser identica nas duas — o meio nao.
+
+- **Registro**: `tool-manifest/superficies.json` — capacidade, meio por superficie,
+  e o motivo quando a diferenca e deliberada.
+- **Conferencia**: `conferir superficie` mede capacidade sem meio, verbo declarado
+  e sumido, e texto que a fita carrega nomeando tool que so existe no MCP.
+- **Gate**: o `pre-commit` chama `conferir superficie --staged` — incremental, so
+  o que o commit acrescenta.
+- **Regra de escrita**: em persona, manifesto e skill, nomeie a CAPACIDADE, nunca
+  a tool. Nome de tool de busca do acervo nao existe na fita; "buscar no acervo"
+  existe nas duas. O gate nao abre excecao nem para exemplo — esta linha ja foi
+  reprovada uma vez por citar o nome.
+- **Divergencia deliberada de hoje**: `operar-host`. O ops-mcp nao passa pela
+  allowlist do motor, e servi-lo na fita daria caminho em volta do `deny`.
+
+> Passivo medido em 15/08/2026: 159 referencias a tool em texto que a fita
+> carrega, espalhadas pelos manifestos das cadeiras. Cada cadeira limpa o seu —
+> `conferir superficie` lista por arquivo. O gate impede a deriva NOVA; o passivo
+> sai por quem e dono do texto.
+
 ## O verbo declara a capacidade que serve
 
 Todo verbo da plataforma carrega, nas primeiras linhas do arquivo: uma linha de

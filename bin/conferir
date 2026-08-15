@@ -33,6 +33,7 @@ Sai 0 quando nao ha divergencia, 1 quando ha, 2 quando a chamada esta errada.
 Nao muda nada: so olha.
 """
 import json
+import re
 import os
 import subprocess
 import sys
@@ -54,7 +55,7 @@ def uso(erro=None):
         print(f"erro: {erro}\n", file=sys.stderr)
     print(__doc__.strip(), file=sys.stderr)
     print("\nuso: conferir <classe> [alvo]", file=sys.stderr)
-    print("     classes implementadas : servico . verbo . repo . skill . procedencia", file=sys.stderr)
+    print("     classes implementadas : servico . verbo . repo . skill . procedencia . superficie", file=sys.stderr)
     for c, motivo in CLASSES_ABERTAS.items():
         print(f"     classe declarada, sem implementacao : {c} — {motivo}", file=sys.stderr)
     sys.exit(2)
@@ -665,6 +666,156 @@ def conferir_repo(alvo, staged=False, como_json=False):
 HARNESS = os.path.expanduser("~/AI/platafirma-harness")
 
 
+def _texto_da_fita():
+    """Arquivos que a FITA carrega: pacote de abertura mais skills plantadas.
+
+    Nao e a lista do que existe no harness — e a do que atravessa para o giro
+    headless. Texto que a fita nao carrega pode nomear tool MCP a vontade.
+    """
+    alvos = []
+    for sub in ("personas", "tool-manifest"):
+        d = os.path.join(HARNESS, sub)
+        if not os.path.isdir(d):
+            continue
+        for nome in sorted(os.listdir(d)):
+            if nome.endswith(".md"):
+                alvos.append(os.path.join(d, nome))
+    skills = os.path.join(HARNESS, "skills")
+    if os.path.isdir(skills):
+        for nome in sorted(os.listdir(skills)):
+            md = os.path.join(skills, nome, "SKILL.md")
+            if not os.path.isfile(md):
+                continue
+            with open(md, encoding="utf-8", errors="replace") as f:
+                cabeca = f.read(2000)
+            # So a skill plantada atravessa: `cadeiras:` ausente ou `nenhuma`
+            # significa que ela nunca chega na fita (bin/chat, planta_skills).
+            m = re.search(r"^cadeiras:\s*(.+)$", cabeca, re.M)
+            if m and "nenhuma" not in m.group(1).lower():
+                alvos.append(md)
+    return alvos
+
+
+def _quebradas_no_staged(padrao):
+    """Linhas ADICIONADAS pelo commit em curso, nos arquivos que a fita carrega."""
+    carregados = {os.path.relpath(c, HARNESS) for c in _texto_da_fita()}
+    rc, saida, _ = sh(["git", "-C", HARNESS, "diff", "--cached", "--unified=0"])
+    if rc != 0:
+        return []
+    achados, arquivo, linha_n = [], None, 0
+    for linha in saida.split("\n"):
+        if linha.startswith("+++ b/"):
+            arquivo = linha[6:].strip()
+            continue
+        if linha.startswith("@@"):
+            m = re.search(r"\+(\d+)", linha)
+            linha_n = int(m.group(1)) if m else 0
+            continue
+        if not linha.startswith("+") or linha.startswith("+++"):
+            continue
+        if arquivo in carregados:
+            for m in padrao.finditer(linha[1:]):
+                achados.append((arquivo, linha_n, m.group(1)))
+        linha_n += 1
+    return achados
+
+
+def conferir_superficie(alvo=None, staged=False, como_json=False):
+    """Equalizacao das superficies: capacidade igual, meio declarado por superficie.
+
+    Julga tres coisas, e nenhuma delas e opiniao:
+      1. capacidade sem meio em alguma superficie — buraco declarado no registro;
+      2. meio declarado para a fita que NAO existe no host (verbo sumido);
+      3. texto que a fita carrega nomeando tool que so existe no meio MCP.
+
+    O (3) e o que impede a deriva voltar: limpar uma vez sem gate so adia.
+    A superficie claude.ai nao e verificavel daqui, e isso sai declarado — nao
+    confundir "nao medido" com "em dia".
+    """
+    registro = os.path.join(HARNESS, "tool-manifest", "superficies.json")
+    try:
+        with open(registro, encoding="utf-8") as f:
+            reg = json.load(f)
+    except (OSError, ValueError) as e:
+        msg = f"registro de superficies ilegivel ({registro}): {e}"
+        print(json.dumps({"erro": msg}) if como_json else msg)
+        return 1
+
+    lexico = reg.get("lexico", {}).get("so_mcp", [])
+    padrao = re.compile(r"\b(" + "|".join(re.escape(t) for t in lexico) + r")\b")
+
+    buracos, sumidos, quebradas, deliberadas = [], [], [], []
+
+    for nome, cap in reg.get("capacidades", {}).items():
+        if alvo and alvo not in (nome, "fita", "claude.ai"):
+            continue
+        if cap.get("divergencia_deliberada"):
+            deliberadas.append(nome)
+            continue
+        for superficie in ("claude.ai", "fita"):
+            if not cap.get(superficie):
+                buracos.append((nome, superficie))
+        meio = cap.get("fita") or ""
+        verbo = re.match(r"Bash\((\w+)", meio)
+        if verbo and not os.path.exists(os.path.join(BIN, verbo.group(1))):
+            achou = sh(["bash", "-lc", f"command -v {verbo.group(1)}"])[0] == 0
+            if not achou:
+                sumidos.append((nome, verbo.group(1)))
+
+    if staged:
+        # So o que o commit ACRESCENTA. O passivo de hoje nao pode travar a casa
+        # inteira: gate que reprova o que ja estava la vira `--no-verify` por
+        # habito, e ai nao gateia mais nada. Incremental barra a deriva NOVA.
+        quebradas = _quebradas_no_staged(padrao)
+    else:
+        for caminho in _texto_da_fita():
+            try:
+                with open(caminho, encoding="utf-8", errors="replace") as f:
+                    linhas = f.read().split("\n")
+            except OSError:
+                continue
+            for n, linha in enumerate(linhas, 1):
+                for m in padrao.finditer(linha):
+                    quebradas.append((os.path.relpath(caminho, HARNESS), n, m.group(1)))
+
+    if staged:
+        # Buraco de capacidade e verbo sumido sao estado da casa, nao do commit:
+        # reprovar um commit de texto por causa deles seria culpar quem passou.
+        buracos, sumidos = [], []
+    ok = not (buracos or sumidos or quebradas)
+    if como_json:
+        print(json.dumps({
+            "veredito": "em dia" if ok else "divergente",
+            "buracos": [{"capacidade": c, "superficie": s} for c, s in buracos],
+            "verbos_sumidos": [{"capacidade": c, "verbo": v} for c, v in sumidos],
+            "referencias_quebradas": [
+                {"arquivo": a, "linha": n, "tool": t} for a, n, t in quebradas
+            ],
+            "divergencias_deliberadas": deliberadas,
+            "nao_medido": ["claude.ai — conectores vivem do lado do app"],
+        }, ensure_ascii=False, indent=2))
+        return 0 if ok else 1
+
+    print("superficies: claude.ai (mcp) . fita (shell-allowlist)")
+    print(f"  divergencia deliberada  : {', '.join(deliberadas) or '(nenhuma)'}")
+    print(f"  capacidade sem meio     : {len(buracos)}")
+    for c, s in buracos:
+        print(f"      {c} — sem meio em {s}")
+    print(f"  verbo declarado e sumido: {len(sumidos)}")
+    for c, v in sumidos:
+        print(f"      {c} — `{v}` nao esta no PATH")
+    print(f"  referencia quebrada     : {len(quebradas)} em texto que a fita carrega")
+    porarq = {}
+    for a, n, t in quebradas:
+        porarq.setdefault(a, []).append((n, t))
+    for a in sorted(porarq):
+        toks = sorted({t for _, t in porarq[a]})
+        print(f"      {a}: {len(porarq[a])}x — {', '.join(toks)}")
+    print("  claude.ai               : NAO MEDIDO daqui (conector vive no app)")
+    print(f"  veredito                : {'em dia' if ok else 'divergente'}")
+    return 0 if ok else 1
+
+
 def conferir_skill(nome, servido=None, como_json=False):
     """Compara o blob carimbado no arquivo servido com o blob da fonte.
 
@@ -912,6 +1063,10 @@ def main(argv):
         if alvo == "--staged":
             return conferir_repo(None, staged=True, como_json=como_json)
         return conferir_repo(alvo, como_json=como_json)
+    if classe == "superficie":
+        if alvo == "--staged":
+            return conferir_superficie(None, staged=True, como_json=como_json)
+        return conferir_superficie(alvo, como_json=como_json)
     if classe == "skill":
         servido = None
         if "--servido" in argv:
