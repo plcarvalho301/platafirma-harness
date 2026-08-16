@@ -44,3 +44,32 @@ esse token por uma ponte para dar *uma* capacidade a um externo entrega todas.
 - **Recorte se força no servidor, nunca no cliente.** Tool que não existe não é
   permissão negada — é superfície que não tem o que negar. E o segundo cadeado na
   política vale para o dia em que uma tool nova esquecer o corte do código.
+
+## Unit declarada no repo não é unit instalada (medido 15/08)
+
+Arquivo `.service` versionado prova só que alguém escreveu a unit. Quem a subiu
+pode tê-la subido como **transient** (`systemd-run --user`): roda igual, aparece
+em `systemctl status` igual, e no dia em que for parada **evapora** — sem arquivo
+em disco, sem `Restart`, sem volta. O sintoma no serviço é silêncio, não erro.
+
+- **O que delata:** `Failed to open /run/user/<uid>/systemd/transient/<unit>` no
+  journal logo depois do stop. Antes disso, nada distingue transient de instalada.
+- **Instalada é symlink para o repo, nunca cópia.** Cópia congela: `git pull`
+  deixa de chegar ao systemd e nasce uma segunda verdade.
+- **Convergência tem de medir isso.** Instrumento que só olha verbo e hook diz
+  "convergido" sobre máquina sem serviço nenhum. Unit não linkada, não habilitada
+  e não ativa são três divergências separadas — a segunda é a que não aparece.
+
+## `enable` não é o único jeito de habilitar, e falha com symlink (medido 15/08)
+
+Onde o config dir do usuário é root-owned, `systemctl --user enable` sai **Access
+denied** para unit que é symlink: o systemd quer escrever na *raiz* de
+`~/.config/systemd/user`, não só no `.wants`. Com cópia funciona; com symlink não.
+
+- **O ato do enable é um symlink em `<target>.wants`.** Feito à mão, `is-enabled`
+  responde `enabled` do mesmo jeito — é onde o systemd lê o estado.
+- **`.wants` dentro de `~/.local/share/systemd/user` NÃO conta.** É search path de
+  unit, não de configuração: unit linkada ali roda se startada e continua
+  `disabled`. Sobrevive a crash e morre no boot, calada.
+- **`is-active` não responde por `is-enabled`.** Serviço no ar há semanas pode
+  nunca ter voltado de um boot — ninguém reinicia a máquina para descobrir.
