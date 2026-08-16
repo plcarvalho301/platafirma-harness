@@ -12,12 +12,15 @@ compatibility: exige as capacidades `ler-repo` e `operar-fila`. O MEIO muda por 
 Cadeira interna da PlataFirma (claudinho/claudinha do org chart) e a
 claudinha-fabrica, que recebe card de claudinho-TI.
 
-**Não atende a claudinha-osint.** Ela é externa, roda em ambiente isolado
-(`modulo-osint`), não tem caixa na fila, não lê repo interno e fala só com o
-Pedro. A palavra "PlataFirma" aparece na instruction dela e vai disparar esta
-skill por engano: aparecendo, ignore-a e siga a skill `osint`. Sinal
-mecânico de que a sessão não é desta skill: `id -un` responde `modulo-osint`,
-ou o conector `platafirma-ops` não está na sessão.
+**Não atende o Jaiminho.** OSINT é dele desde 15/08/2026, quando a
+`claudinha-osint` foi desligada e ele ocupou o lugar (org:0002) — não existem
+duas personas de OSINT. Ele é colaborador externo de classe DMZ: ambiente e
+conta próprios, não lê repo interno, não alcança `run_command`, e tem **um**
+canal interno — a caixa `caixa:jaiminho`, exclusiva com claudinho-IA (F8,
+card 344). A palavra "PlataFirma" aparece na instruction dele e vai disparar
+esta skill por engano: aparecendo, ignore-a e siga a skill `osint`. Sinal
+mecânico de que a sessão não é desta skill: o conector `platafirma-ops` não
+está nela.
 
 ## Times e cadeiras
 Ler `docs/org-template-canonico.md` no repo `platafirma-arquitetura` no início

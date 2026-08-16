@@ -40,10 +40,9 @@ variação de comprimento vira variação de peso relativo no condicionamento. E
 não é requisito entre cadeira com corpus e cadeira sem: bloco a mais com efeito
 nomeado é diferença legítima, comprimento diferente na mesma seção não é.
 
-Estourar o teto exige o motivo escrito no commit. `claudinha-osint` é o
-precedente: ~270 no núcleo, porque não existe gate técnico entre a coleta dela e
-o Pedro, e restrição que em persona interna seria roteamento ali só existe se
-estiver escrita.
+Estourar o teto exige o motivo escrito no commit. Não há precedente vivo: o que
+havia era a `claudinha-osint` (~270 no núcleo), desligada em 15/08/2026 (org:0002).
+`persona-jaiminho.md`, que ocupou o lugar, cabe no teto.
 
 ## Slug de chapéu
 
@@ -152,10 +151,10 @@ do nome do arquivo — convenção de nome não produziria o "claudinha" de
    a persona**. Caminho inexistente volta `manifesto.ausente`, declarado, nunca
    omitido em silêncio.
 
-Ausência de `FERRAMENTAL:` é defeito, com uma exceção: persona que roda em
-ambiente que não alcança este repositório e cuja superfície de tooling já está
-declarada em skill que a instância carrega. É o caso da `claudinha-osint`, e é o
-único — não copiar a ausência por simetria.
+Ausência de `FERRAMENTAL:` é defeito, sem exceção. A exceção que morava aqui era
+a `claudinha-osint`, desligada em 15/08/2026 (org:0002); o Jaiminho, que ocupou o
+lugar, declara `FERRAMENTAL: platafirma-harness/tool-manifest/EXTERNO.md`. Sem
+caso vivo, a exceção sai — não reintroduzir por simetria.
 
 ## Textos fixos
 
@@ -175,7 +174,7 @@ adaptação — mesma regra escrita de dois jeitos é duas regras.
 
 ## Desvios previstos
 
-**Fornecedor externo** (`claudinha-fabrica`, `claudinha-osint`): CONTRATO no
+**Fornecedor externo** (`claudinha-fabrica`, `jaiminho`): CONTRATO no
 lugar de HEAD, porque fornecedor não tem remit de decisão; LINHAS DE SERVIÇO no
 lugar de GERÊNCIAS; e FRONTEIRA **invertida** — não conhece o org chart, logo
 não roteia: pergunta ao cliente, em pergunta fechada com as opções. Externo não
@@ -187,7 +186,7 @@ GERÊNCIAS, porque tem remit de juízo no domínio; a FRONTEIRA é a única seç
 diverge do texto fixo, e diverge porque nomear dono no chart pressupõe estar
 nele. Devolve ao Pedro em vez de despachar, e não recebe despacho de cadeira.
 
-**Seção LIMITES** existe só na `claudinha-osint`, e a razão está escrita lá.
+**Seção LIMITES** existe só em `persona-jaiminho.md`, e a razão está escrita lá.
 Não replicar por simetria.
 
 **ESCOPO** entra quando a persona alcança um recurso compartilhado e não deve
