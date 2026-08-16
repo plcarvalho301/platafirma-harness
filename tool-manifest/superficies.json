@@ -18,7 +18,13 @@
     "15/08/2026 por determinacao do dono. Referencia canonica ao ADR do modelo:",
     "pedida a claudinho-seguranca, entra aqui quando responder.",
     "",
-    "Quem le: `conferir superficie`, chamado tambem pelo pre-commit com --staged."
+    "Quem le: `conferir superficie`, chamado tambem pelo pre-commit com --staged.",
+    "",
+    "PRODUTOR, NAO INSTANCIA (16/08/2026). O gate mede quem ESCREVE o .mcp.json de",
+    "cada superficie, nao uma amostra dos cwd vivos. Instancia e efemera: worktree",
+    "some, fita rotaciona, e veredito que depende disso oscila sem nada ter mudado.",
+    "Zero instancia nao e conector faltando. Deriva entre produtor e instancia viva",
+    "sai como OBSERVACAO, com nome de arquivo, e nao reprova."
   ],
   "superficies": {
     "claude.ai": {
@@ -39,7 +45,13 @@
       ],
       "onde_declara": "~/AI/fitas/<cadeira>/.mcp.json, escrito por prepara_cwd",
       "verificavel_do_host": true,
-      "porque": "roda no mesmo host: o .mcp.json e o settings sao lisiveis daqui"
+      "porque": "roda no mesmo host: o .mcp.json e o settings sao lisiveis daqui",
+      "produtor": {
+        "tipo": "codigo",
+        "arquivo": "bin/chat",
+        "simbolo": "CONECTORES",
+        "_": "prepara_cwd/serve_conectores escreve o .mcp.json da fita a cada giro a partir deste dict. Medir o dict e medir o que TODA fita futura recebe; medir os cwd vivos e medir o passado."
+      }
     },
     "fabrica": {
       "papel": "Code na conta que roda a fabrica, em maquina qualquer; worktree wt-<card> sob card de claudinho-TI",
@@ -50,7 +62,12 @@
       "onde_declara": "wt-<card>/.mcp.json",
       "verificavel_do_host": true,
       "porque": "as worktrees vivem em ~/AI; foi daqui que o padrao veio",
-      "injecao_de_cadeira": "~/.claude/CLAUDE.md (symlink de agente/CLAUDE.md): slug dito na abertura vence; sem slug, default `fabrica`. PF_CADEIRA NAO serve — Bash negado na estacao, e run_command roda no ambiente do ops-server, nao no do terminal. Medido em 16/08/2026."
+      "injecao_de_cadeira": "~/.claude/CLAUDE.md (symlink de agente/CLAUDE.md): slug dito na abertura vence; sem slug, default `fabrica`. PF_CADEIRA NAO serve — Bash negado na estacao, e run_command roda no ambiente do ops-server, nao no do terminal. Medido em 16/08/2026.",
+      "produtor": {
+        "tipo": "arquivo-rastreado",
+        "caminho": ".mcp.json",
+        "_": "nao ha script que prepare a worktree: o .mcp.json e RASTREADO na raiz do repo, e a worktree o recebe do branch. O produtor e o git. Ler os wt-*/.mcp.json era ler N copias do mesmo arquivo — tautologia cujo veredito dependia de quantas worktrees existiam."
+      }
     },
     "code-seco": {
       "papel": "Claude Code em conta SEM o arranque do posto instalado: sem .mcp.json, sem conector, sem instrucao — sessao FORA da plataforma",

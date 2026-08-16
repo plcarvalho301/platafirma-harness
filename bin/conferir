@@ -1050,6 +1050,48 @@ def conferir_arranque(alvo=None, staged=False, como_json=False):
     return 0 if ok else 1
 
 
+def _conectores_do_produtor(prod):
+    """Nomes de conector que o PRODUTOR de uma superficie escreve. (nomes, erro).
+
+    Dois tipos, e nenhum depende de haver cwd vivo:
+      codigo            — dict literal no fonte (ex. CONECTORES em bin/chat), lido
+                          por AST. Sem importar o modulo: `bin/chat` tem efeito no
+                          import e o gate nao pode dispara-lo.
+      arquivo-rastreado — o proprio `.mcp.json` da raiz do repo, que o git replica
+                          para cada worktree. O produtor, aqui, e o git.
+    """
+    tipo = prod.get("tipo")
+    if tipo == "arquivo-rastreado":
+        caminho = os.path.join(HARNESS, prod.get("caminho", ".mcp.json"))
+        try:
+            with open(caminho, encoding="utf-8") as f:
+                return set(json.load(f).get("mcpServers", {})), None
+        except (OSError, ValueError) as e:
+            return set(), f"{prod.get('caminho')}: {e}"
+    if tipo == "codigo":
+        caminho = os.path.join(HARNESS, prod.get("arquivo", ""))
+        simbolo = prod.get("simbolo", "")
+        try:
+            import ast
+            arvore = ast.parse(open(caminho, encoding="utf-8").read())
+        except (OSError, SyntaxError) as e:
+            return set(), f"{prod.get('arquivo')}: {e}"
+        for no in ast.walk(arvore):
+            if not isinstance(no, ast.Assign):
+                continue
+            for alvo in no.targets:
+                if isinstance(alvo, ast.Name) and alvo.id == simbolo:
+                    if isinstance(no.value, ast.Dict):
+                        nomes = set()
+                        for k in no.value.keys:
+                            if isinstance(k, ast.Constant) and isinstance(k.value, str):
+                                nomes.add(k.value)
+                        return nomes, None
+                    return set(), f"{simbolo} nao e dict literal"
+        return set(), f"{simbolo} nao encontrado em {prod.get('arquivo')}"
+    return set(), f"tipo de produtor desconhecido: {tipo!r}"
+
+
 def conferir_superficie(alvo=None, staged=False, como_json=False):
     """Equalizacao das superficies: mesmo comportamento, mesmos conectores.
 
@@ -1095,24 +1137,37 @@ def conferir_superficie(alvo=None, staged=False, como_json=False):
     # travou claudinha-gestao-estrategica em 16/08/2026. Superficie sem instancia
     # viva sai como NAO MEDIDA, com o motivo, porque nao medido nao e em dia — e
     # tambem nao e defeito.
-    sem_instancia = []
+    # PRODUTOR, NAO INSTANCIA. Quem escreve o `.mcp.json` de cada superficie e o
+    # que se mede; cwd vivo e amostra do passado. Ler os wt-*/.mcp.json era ler N
+    # copias do MESMO arquivo rastreado no repo — tautologia cujo veredito
+    # dependia de quantas worktrees existiam no momento. Zero worktree fazia o
+    # gate acusar "falta platafirma-ops" e reprovar o commit de toda cadeira.
+    sem_produtor, deriva = [], []
     for nome, sup in reg.get("superficies", {}).items():
         if not sup.get("verificavel_do_host"):
             continue
         exigidos = set(sup.get("conectores", []))
-        caminhos = _mcp_jsons_da_superficie(nome)
-        if not caminhos:
-            sem_instancia.append(nome)
+        prod = sup.get("produtor")
+        if not prod:
+            sem_produtor.append(nome)
             continue
-        achados = set()
-        for caminho in caminhos:
+        produzidos, erro = _conectores_do_produtor(prod)
+        if erro:
+            nao_servidos.append((nome, f"produtor ilegivel: {erro}"))
+            continue
+        for falta in sorted(exigidos - produzidos):
+            nao_servidos.append((nome, falta))
+        # Instancia viva vira OBSERVACAO: deriva entre o que o produtor escreve
+        # hoje e o que um cwd de ontem carrega e informacao util, mas nao veredito.
+        for caminho in _mcp_jsons_da_superficie(nome):
             try:
                 with open(caminho, encoding="utf-8") as f:
-                    achados |= set(json.load(f).get("mcpServers", {}))
+                    tem = set(json.load(f).get("mcpServers", {}))
             except (OSError, ValueError):
                 continue
-        for falta in sorted(exigidos - achados):
-            nao_servidos.append((nome, falta))
+            if tem != produzidos:
+                deriva.append((os.path.relpath(caminho, os.path.expanduser("~/AI")),
+                               sorted(produzidos - tem), sorted(tem - produzidos)))
 
     # 2. capacidade cujo meio cita tool que conector nenhum serve
     for cap, dado in reg.get("capacidades", {}).items():
@@ -1146,16 +1201,17 @@ def conferir_superficie(alvo=None, staged=False, como_json=False):
     nao_medido = [f"{n} — {d.get('porque', 'sem motivo declarado')}"
                   for n, d in sorted(reg.get("superficies", {}).items())
                   if not d.get("verificavel_do_host")]
-    nao_medido += [f"{n} — verificavel, sem instancia viva no host agora (nenhum .mcp.json a ler)"
-                   for n in sorted(sem_instancia)]
 
-    ok = not (nao_servidos or sem_meio or quebradas)
+    ok = not (nao_servidos or sem_meio or quebradas or sem_produtor)
     if como_json:
         print(json.dumps({
             "veredito": "em dia" if ok else "divergente",
             "conector_prometido_nao_servido": [
                 {"superficie": s_, "conector": c} for s_, c in nao_servidos],
             "capacidade_sem_meio": sem_meio,
+            "superficie_sem_produtor_declarado": sem_produtor,
+            "deriva_em_instancia_viva": [
+                {"arquivo": a, "falta": f, "sobra": so} for a, f, so in deriva],
             "tool_fora_de_todo_conector": [
                 {"arquivo": a, "linha": n, "tool": t} for a, n, t in quebradas],
             "nao_medido": nao_medido,
@@ -1167,6 +1223,9 @@ def conferir_superficie(alvo=None, staged=False, como_json=False):
     print(f"  conector prometido e nao servido : {len(nao_servidos)}")
     for s_, c in nao_servidos:
         print(f"      {s_} — falta {c}")
+    print(f"  superficie sem produtor declarado: {len(sem_produtor)}")
+    for n_ in sem_produtor:
+        print(f"      {n_} — verificavel e ninguem declara quem escreve o .mcp.json")
     print(f"  capacidade sem meio              : {len(sem_meio)}")
     for c in sem_meio:
         print(f"      {c}")
@@ -1176,6 +1235,9 @@ def conferir_superficie(alvo=None, staged=False, como_json=False):
         porarq.setdefault(a, []).append(t)
     for a in sorted(porarq):
         print(f"      {a}: {', '.join(sorted(set(porarq[a])))}")
+    print(f"  deriva em instancia viva (obs.)  : {len(deriva)}")
+    for a, f_, so in deriva:
+        print(f"      {a} — falta {f_ or '-'} . sobra {so or '-'}")
     print(f"  NAO MEDIDO do host               : {len(nao_medido)}")
     for x in nao_medido:
         print(f"      {x.split(' — ')[0]} — {x.split(' — ', 1)[1][:96]}")
