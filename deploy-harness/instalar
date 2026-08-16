@@ -276,6 +276,62 @@ else
   [ "$recarregar" = 1 ] && systemctl --user daemon-reload
 fi
 
+# --- texto de arranque em cwd -----------------------------------------------
+# A REGUA nao mora aqui: mora em `conferir arranque`, que o pre-commit tambem
+# chama. Duas implementacoes da mesma regua divergem no primeiro ajuste que so
+# uma das duas receber — por isso este bloco CONSULTA o verbo em vez de reimplementar.
+#
+# Converge so onde da: arquivo NAO rastreado em git. Copia em arquivo rastreado
+# nao se conserta escrevendo no cwd — o proximo checkout desfaz, e o diff sujo
+# aparece no branch de outra pessoa. Ali o conserto e commit no branch, e o
+# instalador nomeia em vez de fingir que resolveu.
+#
+# Antes de sobrescrever, guarda o anterior em CLAUDE.md.antes-do-ponteiro: erro
+# reversivel e defeito, erro irreversivel e perda.
+echo
+echo "== texto de arranque em cwd (ponteiro para conduta/arranque.md)"
+CONFERIR_BIN="${CONFERIR:-$PREFIXO/conferir}"
+[ -x "$CONFERIR_BIN" ] || CONFERIR_BIN="$HARNESS/bin/conferir"
+if [ ! -x "$CONFERIR_BIN" ] || ! command -v python3 >/dev/null 2>&1; then
+  medido impossivel "(arranque)" "conferir/python3 fora de alcance — regua nao consultavel daqui"
+else
+  saida_arr="$("$CONFERIR_BIN" arranque --json 2>/dev/null || true)"
+  if [ -z "$saida_arr" ]; then
+    medido impossivel "(arranque)" "conferir arranque nao respondeu"
+  else
+    while IFS='|' read -r arq_rel arq_branch; do
+      [ -n "$arq_rel" ] || continue
+      caminho="$RAIZ/$arq_rel"
+      if [ -n "$arq_branch" ]; then
+        medido impossivel "$arq_rel" "copia rastreada em $arq_branch — conserto e commit no branch, nao escrita no cwd"
+      elif [ "$MODO" = check ]; then
+        divergentes=$((divergentes+1)); relata divergente "$arq_rel" "copia nao rastreada — converge para o ponteiro"
+      elif cp -f "$caminho" "$caminho.antes-do-ponteiro" 2>/dev/null &&
+           cp -f "$HARNESS/CLAUDE.md" "$caminho" 2>/dev/null; then
+        corrigir "$arq_rel" "copia trocada pelo ponteiro (anterior em CLAUDE.md.antes-do-ponteiro)"
+      else
+        impossivel "$arq_rel" "nao consegui escrever em $caminho"
+      fi
+    done <<EOF_ARR
+$(printf '%s' "$saida_arr" | python3 -c '
+import json, sys
+try:
+    d = json.load(sys.stdin)
+except ValueError:
+    sys.exit(0)
+for c in d.get("copias", []):
+    print(c["arquivo"] + "|" + (c.get("rastreado_em") or ""))
+')
+EOF_ARR
+    total_copias="$(printf '%s' "$saida_arr" | python3 -c '
+import json, sys
+try: print(len(json.load(sys.stdin).get("copias", [])))
+except ValueError: print(0)
+')"
+    [ "$total_copias" = 0 ] && conforme "(arranque)" "nenhuma copia: todo cwd aponta para a peca"
+  fi
+fi
+
 # --- terceiro: mede e nomeia o efeito, nunca instala -------------------------
 # Efeito medido contra bin/ nesta data. Verbo que ganhar dependencia nova
 # acrescenta linha aqui no mesmo commit — tabela que envelhece mente com

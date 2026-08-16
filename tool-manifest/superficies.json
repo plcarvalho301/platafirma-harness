@@ -2,8 +2,9 @@
   "_": [
     "Registro das SUPERFICIES em que uma cadeira e servida, e de como cada",
     "capacidade chega em cada uma. Existe porque a cadeira nao e uma so instancia:",
-    "a mesma persona atende pelo claude.ai, pela fita do chat e pelo Code em",
-    "worktree da fabrica. O COMPORTAMENTO tem de ser o mesmo nas tres.",
+    "a mesma persona atende pelo claude.ai, pela fita do chat, pelo Code em worktree",
+    "da fabrica — e, sem conector nenhum, pelo Code seco. O COMPORTAMENTO tem de ser",
+    "o mesmo onde ha meio; onde nao ha, a sessao diz que esta fora da plataforma.",
     "",
     "SUPERFICIE NAO E FRONTEIRA DE SEGURANCA. O modelo da casa e conta segregada",
     "(uid claudinho), acesso por run_command via CLI, isolamento e pentest contra",
@@ -49,6 +50,14 @@
       "onde_declara": "wt-<card>/.mcp.json",
       "verificavel_do_host": true,
       "porque": "as worktrees vivem em ~/AI; foi daqui que o padrao veio"
+    },
+    "code-seco": {
+      "papel": "Claude Code aberto em clone sem .mcp.json: sessao FORA da plataforma",
+      "conectores": [],
+      "onde_declara": "lugar nenhum — e a ausencia de declaracao que a define",
+      "verificavel_do_host": false,
+      "porque": "nao ha artefato que a identifique: qualquer clone sem .mcp.json e ela. Declarada aqui porque tres de quatro em registro fazia o gate sair 'em dia' ignorando a quarta — nao medido nao e em dia.",
+      "arranque": "nao ha injecao de cadeira e nao ha `monta_sessao` a chamar. A sessao declara que esta fora da plataforma em vez de agir como cadeira. Regua em conduta/arranque.md."
     }
   },
   "conectores": {

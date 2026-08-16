@@ -32,4 +32,11 @@ CONFERIR="${CONFERIR:-$HOME/AI/bin/conferir}"
 # existe no meio MCP. INCREMENTAL de proposito — julga so o que o commit
 # acrescenta. O passivo herdado nao trava a casa; gate que reprova o que ja
 # estava la vira `--no-verify` por habito, e ai nao gateia mais nada.
-exec "$CONFERIR" superficie --staged
+"$CONFERIR" superficie --staged || exit 1
+
+# Texto de arranque em cwd e PONTEIRO para conduta/arranque.md, nunca copia. Mesma
+# estrategia incremental: julga so o CLAUDE.md que ESTE commit acrescenta ou
+# altera. As 12 copias herdadas em worktree de branch aparecem em `conferir
+# arranque` (sem --staged) e se consertam por commit no branch de cada uma —
+# reprovar aqui o passivo alheio so ensinaria `--no-verify`.
+exec "$CONFERIR" arranque --staged

@@ -37,6 +37,10 @@
                    peca: tokens medidos com o tokenizador do harness, sha do
                    conteudo servido e frescor. Sem tokenizador, sai 2 — pacote de
                    abertura se mede, nao se estima.
+  arranque [nome]  texto de arranque em cwd (`CLAUDE.md` sob ~/AI): e PONTEIRO para
+                   `conduta/arranque.md`, ou copia com bloco proprio? Reprova so a
+                   copia; nao julga a redacao do arranque, que e da dona do texto.
+                   Com `--staged`, julga so o CLAUDE.md do commit em curso.
   commit  <arquivo> mensagem de commit em curso: os ids que ela CITA, contra o
                    rastreador. Recusa id inexistente e id de item fechado — os dois
                    predicados do PRD do rastreador, §5.1, e so eles. Ausencia de id
@@ -79,7 +83,7 @@ def uso(erro=None):
         print(f"erro: {erro}\n", file=sys.stderr)
     print(__doc__.strip(), file=sys.stderr)
     print("\nuso: conferir <classe> [alvo]", file=sys.stderr)
-    print("     classes implementadas : servico . verbo . repo . skill . procedencia . superficie . commit . peca", file=sys.stderr)
+    print("     classes implementadas : servico . verbo . repo . skill . procedencia . superficie . commit . peca . arranque", file=sys.stderr)
     for c, motivo in CLASSES_ABERTAS.items():
         print(f"     classe declarada, sem implementacao : {c} — {motivo}", file=sys.stderr)
     sys.exit(2)
@@ -914,6 +918,138 @@ def _quebradas_no_staged(padrao, servidas):
     return achados
 
 
+# --- arranque em cwd: ponteiro, nunca copia ---------------------------------
+# Regua de claudinha-gestao-estrategica, escrita em conduta/arranque.md. Aqui so
+# o mecanismo. Existe porque regua descritiva nao dispara: foi copia por habito
+# que produziu as 27 worktrees divergentes, e nada impedia a proxima de recomecar
+# a serie sem ninguem medir quando recomecou.
+PONTEIRO_ARRANQUE = "conduta/arranque.md"
+
+# Sinal de que o arquivo TEM bloco de arranque proprio, em vez de so apontar.
+# Dois sinais bastam: um sozinho aparece em texto que fala de arranque de
+# passagem, e reprovar por mencao unica transformaria o gate em ruido.
+SINAIS_ARRANQUE = (
+    re.compile(r"monta[_-]sessao", re.I),
+    re.compile(r"vasculh", re.I),
+    re.compile(r"de onde sai a cadeira", re.I),
+    re.compile(r"primeira a[cç][aã]o", re.I),
+    re.compile(r"improvis\w* cadeira", re.I),
+    re.compile(r"PF_CADEIRA.{0,30}export", re.I | re.S),
+)
+
+# Diretorios de ~/AI que NAO sao nossos: dono outro, git de outro, CLAUDE.md que
+# nao responde a esta regua. Ignorar em silencio seria pior — consta aqui com nome.
+FORA_DA_REGUA = ("archi_base", "ollama-orchestrator", "mdm_rh", "i-have-adhd")
+
+
+def _claude_mds(raiz=None):
+    """CLAUDE.md sob ~/AI, ate 2 niveis. Nao segue link e nao entra em .git."""
+    raiz = raiz or os.path.expanduser("~/AI")
+    achados = []
+    for topo in sorted(os.listdir(raiz)):
+        if topo.startswith(".") or topo in FORA_DA_REGUA:
+            continue
+        base = os.path.join(raiz, topo)
+        if not os.path.isdir(base) or os.path.islink(base):
+            continue
+        for cand in (os.path.join(base, "CLAUDE.md"),):
+            if os.path.isfile(cand):
+                achados.append(cand)
+        for sub in sorted(os.listdir(base)):
+            if sub.startswith("."):
+                continue
+            cand = os.path.join(base, sub, "CLAUDE.md")
+            if os.path.isfile(cand) and not os.path.islink(os.path.join(base, sub)):
+                achados.append(cand)
+    return achados
+
+
+def _julga_arranque(texto):
+    """`aponta` . `copia` . `sem-arranque`. Apontar vence: arquivo que aponta e
+    ainda explica algo do proprio cwd nao e copia — a copia e a que substitui."""
+    if PONTEIRO_ARRANQUE in texto:
+        return "aponta", 0
+    n = sum(1 for r in SINAIS_ARRANQUE if r.search(texto))
+    return ("copia" if n >= 2 else "sem-arranque"), n
+
+
+def _rastreado_em(caminho):
+    """Branch que rastreia o arquivo, ou None. Copia em arquivo rastreado nao se
+    conserta escrevendo no cwd: o proximo checkout desfaz. Conserta-se no branch."""
+    d, nome = os.path.dirname(caminho), os.path.basename(caminho)
+    rc, _, _ = sh(["git", "-C", d, "ls-files", "--error-unmatch", nome])
+    if rc != 0:
+        return None
+    rc, out, _ = sh(["git", "-C", d, "rev-parse", "--abbrev-ref", "HEAD"])
+    return (out.strip() or "?") if rc == 0 else "?"
+
+
+def conferir_arranque(alvo=None, staged=False, como_json=False):
+    """Texto de arranque em cwd: ponteiro para a peca, nunca copia dela.
+
+    Nao julga a REDACAO do arranque — isso e da dona do texto. Julga uma coisa
+    so: o cwd repete o bloco em redacao propria onde deveria haver o ponteiro.
+    """
+    if staged:
+        rc, saida, _ = sh(["git", "diff", "--cached", "--name-only", "--diff-filter=ACM"])
+        if rc != 0:
+            print(json.dumps({"erro": "git diff --cached falhou"}) if como_json
+                  else "git diff --cached falhou")
+            return 1
+        rc2, topo, _ = sh(["git", "rev-parse", "--show-toplevel"])
+        base = topo.strip() if rc2 == 0 else os.getcwd()
+        alvos = [os.path.join(base, n) for n in saida.split("\n")
+                 if n.strip().endswith("CLAUDE.md") and os.path.isfile(os.path.join(base, n))]
+    else:
+        alvos = _claude_mds()
+        if alvo:
+            alvos = [c for c in alvos if alvo in c]
+            if not alvos:
+                msg = f"nenhum CLAUDE.md sob ~/AI casa com {alvo!r}"
+                print(json.dumps({"erro": msg}, ensure_ascii=False) if como_json else msg)
+                return 2
+
+    linhas, copias = [], []
+    for c in alvos:
+        try:
+            with open(c, encoding="utf-8", errors="replace") as f:
+                texto = f.read()
+        except OSError:
+            continue
+        veredito, n = _julga_arranque(texto)
+        rel = os.path.relpath(c, os.path.expanduser("~/AI"))
+        item = {"arquivo": rel, "veredito": veredito, "sinais": n}
+        if veredito == "copia":
+            item["rastreado_em"] = _rastreado_em(c)
+            copias.append(item)
+        linhas.append(item)
+
+    ok = not copias
+    if como_json:
+        print(json.dumps({
+            "veredito": "em dia" if ok else "divergente",
+            "ponteiro": PONTEIRO_ARRANQUE,
+            "medidos": len(linhas),
+            "copias": copias,
+            "arquivos": linhas,
+        }, ensure_ascii=False, indent=2))
+        return 0 if ok else 1
+
+    print(f"arranque em cwd (ponteiro: {PONTEIRO_ARRANQUE})")
+    print(f"  medidos                          : {len(linhas)}")
+    for e in ("aponta", "sem-arranque"):
+        print(f"  {e:<33}: {sum(1 for x in linhas if x['veredito'] == e)}")
+    print(f"  COPIA (bloco proprio, sem apontar): {len(copias)}")
+    for x in copias:
+        onde = f"rastreado em {x['rastreado_em']}" if x["rastreado_em"] else "nao rastreado"
+        print(f"      {x['arquivo']} — {onde}")
+    if copias:
+        print("  conserto: trocar o bloco pelo ponteiro. Onde e rastreado, o conserto e")
+        print("            commit no branch — escrever no cwd o proximo checkout desfaz.")
+    print(f"  veredito                         : {'em dia' if ok else 'divergente'}")
+    return 0 if ok else 1
+
+
 def conferir_superficie(alvo=None, staged=False, como_json=False):
     """Equalizacao das superficies: mesmo comportamento, mesmos conectores.
 
@@ -991,6 +1127,13 @@ def conferir_superficie(alvo=None, staged=False, como_json=False):
                     if t not in servidas:
                         quebradas.append((os.path.relpath(caminho, HARNESS), n, t))
 
+    # Superficie que o host nao ve sai NOMEADA, do registro — nao hardcoded. Foi
+    # registro com tres de quatro que deixou `code-seco` fora da conta enquanto o
+    # veredito dizia "em dia": nao medido nao e em dia, e o que nao consta some.
+    nao_medido = [f"{n} — {d.get('porque', 'sem motivo declarado')}"
+                  for n, d in sorted(reg.get("superficies", {}).items())
+                  if not d.get("verificavel_do_host")]
+
     ok = not (nao_servidos or sem_meio or quebradas)
     if como_json:
         print(json.dumps({
@@ -1000,7 +1143,7 @@ def conferir_superficie(alvo=None, staged=False, como_json=False):
             "capacidade_sem_meio": sem_meio,
             "tool_fora_de_todo_conector": [
                 {"arquivo": a, "linha": n, "tool": t} for a, n, t in quebradas],
-            "nao_medido": ["claude.ai — conectores vivem do lado do app"],
+            "nao_medido": nao_medido,
         }, ensure_ascii=False, indent=2))
         return 0 if ok else 1
 
@@ -1018,7 +1161,9 @@ def conferir_superficie(alvo=None, staged=False, como_json=False):
         porarq.setdefault(a, []).append(t)
     for a in sorted(porarq):
         print(f"      {a}: {', '.join(sorted(set(porarq[a])))}")
-    print("  claude.ai                        : NAO MEDIDO (conector vive no app)")
+    print(f"  NAO MEDIDO do host               : {len(nao_medido)}")
+    for x in nao_medido:
+        print(f"      {x.split(' — ')[0]} — {x.split(' — ', 1)[1][:96]}")
     print(f"  veredito                         : {'em dia' if ok else 'divergente'}")
     return 0 if ok else 1
 
@@ -1729,6 +1874,10 @@ def main(argv):
                                teto_reprova="--teto-reprova" in argv)
     if classe == "commit":
         return conferir_commit(alvo, como_json=como_json)
+    if classe == "arranque":
+        if alvo == "--staged":
+            return conferir_arranque(None, staged=True, como_json=como_json)
+        return conferir_arranque(alvo, como_json=como_json)
     if classe == "superficie":
         if alvo == "--staged":
             return conferir_superficie(None, staged=True, como_json=como_json)

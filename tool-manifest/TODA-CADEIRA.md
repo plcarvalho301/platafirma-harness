@@ -106,6 +106,8 @@ repo x arq:0042                 : conferir repo  [nome]     o que esta rastreado
                                   mede tambem o cabecalho de genero e publico (arq:0049),
                                   nos arquivos que o repo declara em docs/.operacao
 gate de commit (arq:0042)       : conferir repo --staged    o que o pre-commit chama
+arranque em cwd x a peca        : conferir arranque [nome]  CLAUDE.md aponta pra
+                                  conduta/arranque.md ou copiou o bloco; --staged no gate
 catalogo de peca x schema       : conferir peca  [id]       montagem de sessao; --staged no gate
 pacote de abertura servido      : conferir sessao [cadeira]  tokens medidos por peca, contra o teto
                                   --registrar <id-da-fita> grava o pacote em harness-sessao
