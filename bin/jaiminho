@@ -38,7 +38,19 @@ TRABALHO = "/home/jaiminho/trabalho"
 # Dentro do container ele e root do proprio mundo: sem shell no host, sem rede da
 # malha, sem credencial de cadeira. Por isso a aprovacao interativa de ferramenta
 # nao acrescenta seguranca aqui — ela custaria um TTY que este verbo nao tem.
-BASE = "cd {t}; agy --dangerously-skip-permissions".format(t=TRABALHO)
+# --print-timeout: o default do agy e 5m0s e ele conta a REDACAO, nao so a busca.
+# Medido em 16/08: tres giros do mesmo pedido de 5340 chars morreram em 305 s com
+# os 17 passos ja fechados — o teto pegou na hora de escrever. 9m cabe dentro do
+# sh(timeout=600) com folga para o proprio agy imprimir o erro antes do SIGKILL.
+BASE = "cd {t}; agy --dangerously-skip-permissions --print-timeout 9m".format(t=TRABALHO)
+
+# A frase exata que o agy cospe no estouro do print mode. E o gatilho do resgate.
+ESTOUROU = "timeout waiting for response"
+RESGATE = (
+    "Seu giro anterior estourou o teto de tempo antes de terminar de escrever."
+    " Entregue AGORA o que voce ja apurou ate aqui, direto: sem reiniciar o"
+    " trabalho, sem introducao, sem pedir confirmacao."
+)
 
 
 def sh(cmd, timeout=600, entrada=None):
@@ -110,13 +122,32 @@ def falar(args, continuar=False):
             )
     r = sh(f"{BASE}{flag} -p {shlex.quote(pergunta)}")
     saida = (r.stdout or "").strip()
+    erro = (r.stderr or "").strip()
     if saida:
         print(saida)
-    if r.returncode != 0:
-        erro = (r.stderr or "").strip()
-        if "Authentication required" in erro + saida:
-            sys.exit("jaiminho: sessao do Google expirou — rode `jaiminho login`")
-        sys.exit(f"jaiminho: agy saiu {r.returncode}\n{erro[:600]}")
+    if r.returncode == 0:
+        return
+
+    if "Authentication required" in erro + saida:
+        sys.exit("jaiminho: sessao do Google expirou — rode `jaiminho login`")
+
+    if ESTOUROU in erro:
+        # O estouro do print mode NAO apaga a sessao: o trabalho fica do lado de la
+        # e sai por `-c`. Medido em 16/08 — giro morto em 305 s devolveu os 16 itens
+        # ja apurados em 21 s de retomada. Reportar "falhou" sem tentar isso mente
+        # sobre o que existe, e foi assim que o dono perdeu uma pesquisa inteira.
+        r2 = sh(f"{BASE} -c -p {shlex.quote(RESGATE)}")
+        resgatada = (r2.stdout or "").strip()
+        if r2.returncode == 0 and resgatada:
+            print(resgatada)
+            print("jaiminho: o giro estourou o teto; o texto acima veio da retomada"
+                  " automatica, e pode nao ser a entrega inteira.", file=sys.stderr)
+            return
+        sys.exit("jaiminho: o giro estourou o teto de tempo e a retomada automatica"
+                 " tambem nao veio — o trabalho segue na sessao dele. Mande"
+                 " `continuar` pedindo a entrega do que ja apurou.")
+
+    sys.exit(f"jaiminho: agy saiu {r.returncode}\n{erro[:600]}")
 
 
 def estado():
