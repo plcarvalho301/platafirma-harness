@@ -20,21 +20,15 @@ por papel no realm — dois mapas de quem-alcança-o-quê, que divergem em silê
 
 ## Token opaco não se valida na borda
 
-Validador de borda para token opaco exige o estado do emissor, e ter o estado do
-emissor é ser o emissor. Consequência: token exchange, gateway mediador e casca do
-serviço na borda colapsam todos, pelo mesmo motivo.
+Validar token opaco na borda exige o estado do emissor, e ter esse estado é ser o
+emissor. Token exchange, gateway mediador e casca do serviço colapsam todos por aí. A
+saída é MUDAR O EMISSOR para JWT assinado — com JWKS em memória nenhuma das três é
+necessária —, nunca construir tradutor no caminho.
 
-O requisito comum das três saídas é o mesmo: token auto-contido e do emissor que a
-borda conhece. Havendo JWT assinado, validação de borda é JWKS em memória e nenhuma
-das três é necessária. Quando o requisito de cliente nativo for real, a resposta é
-MUDAR O EMISSOR, não construir tradutor no caminho.
-
-Distinção que confunde porque as duas terminam em 401:
-- audiência incompatível  -> token exchange resolve
-- portador incompatível   -> nada resolve sem mudar cliente ou emissor
-
-Cliente nativo SEGUE redirect de browser para SSO (aba do sistema + deep link). O que
-ele não faz é carregar cookie de sessão nas chamadas de API.
+Distinção que confunde porque as duas terminam em 401: audiência incompatível, que o
+token exchange resolve; portador incompatível, que nada resolve sem mudar cliente ou
+emissor. Cliente nativo SEGUE redirect de browser para SSO; o que ele não faz é carregar
+cookie de sessão nas chamadas de API.
 
 Ensaio completo: wiki, PlataFirma:Sec/autenticacao-de-borda
 
