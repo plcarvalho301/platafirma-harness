@@ -109,6 +109,9 @@ case "$CLASSIF" in *.csv|*.CSV) CSV=1 ;; esac
 
 PY="$(python_do_rag)"
 export PYTHONPATH="$RAG"
+# O default de `ajustes_do_trilho.py` é MORADA=velha, e a morada velha fala com
+# documents/chunks, dropadas em 11/08/2026: sem isto a ingestão morre no degrau c.
+export MORADA="${MORADA:-nova}"
 cd "$RAG"
 
 N=3; [ -n "$RAIZ" ] && N=$((N+4)); [ "$TEM_CLASSIF" -eq 1 ] && N=$((N+1))

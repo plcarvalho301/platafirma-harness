@@ -134,8 +134,8 @@ SELECT json_build_object(
     -- existência da obra, e de nada mais'. Entra como FUGA e não como sexto degrau porque a
     -- escada é POR OBRA, e órfão por definição não tem obra — além de 'cinco degraus' estar
     -- cravado no tool-manifest.
-    -- Hoje a regra se cumpre POR CONSTRUÇÃO: `documents.obra_id` é NOT NULL com FK ON DELETE
-    -- CASCADE, e `chunks.document_id` cascateia de `documents`. Estas duas linhas leem 0 e
+    -- Hoje a regra se cumpre POR CONSTRUÇÃO: acervo.impressao.obra_id é NOT NULL com FK ON
+    -- DELETE CASCADE, e acervo.trecho.impressao_id cascateia dela. Estas duas linhas leem 0 e
     -- DEVEM ler 0. Existem para o dia em que a construção sair — a arq:0027 admite varredura
     -- periódica como forma, e até agora essa varredura era feita à mão, não pelo instrumento.
     'impressao_sem_obra',        (SELECT count(*) FROM acervo.impressao i
@@ -173,15 +173,15 @@ CREATE TEMP TABLE store_obj (objeto text PRIMARY KEY);
 \echo '-- obra cujo objeto não existe no store'
 SELECT o.titulo, o.objeto FROM acervo.obra o
  WHERE o.objeto IS NOT NULL AND NOT EXISTS (SELECT 1 FROM store_obj s WHERE s.objeto=o.objeto);
-\echo '-- obra com objeto no store e sem documento no índice'
+\echo '-- obra com objeto no store e sem impressão no índice'
 SELECT o.titulo, o.objeto FROM acervo.obra o JOIN store_obj s USING (objeto)
- WHERE NOT EXISTS (SELECT 1 FROM documents d WHERE d.obra_id = o.id);
-\echo '-- obra com documento e zero chunk (skip_stub / needs_ocr / sem extrator)'
-SELECT o.titulo, d.perfil, d.needs_ocr FROM acervo.obra o JOIN documents d ON d.obra_id = o.id
- WHERE NOT EXISTS (SELECT 1 FROM chunks c WHERE c.document_id = d.id) ORDER BY d.needs_ocr DESC, o.titulo;
-\echo '-- derivado órfão: documento sem obra (invariante arq:0027; 0 por construção hoje)'
-SELECT d.id, d.arquivo FROM documents d
- WHERE NOT EXISTS (SELECT 1 FROM acervo.obra o WHERE o.id = d.obra_id);
+ WHERE NOT EXISTS (SELECT 1 FROM acervo.impressao i WHERE i.obra_id = o.id);
+\echo '-- obra com impressão e zero trecho (skip_stub / needs_ocr / sem extrator)'
+SELECT o.titulo, i.estado, i.criada_em::date FROM acervo.obra o JOIN acervo.impressao i ON i.obra_id = o.id
+ WHERE NOT EXISTS (SELECT 1 FROM acervo.trecho t WHERE t.impressao_id = i.id) ORDER BY o.titulo;
+\echo '-- derivado órfão: impressão sem obra (invariante arq:0027; 0 por construção hoje)'
+SELECT i.id, i.fonte_versao FROM acervo.impressao i
+ WHERE NOT EXISTS (SELECT 1 FROM acervo.obra o WHERE o.id = i.obra_id);
 \echo '-- objeto no store sem obra no catálogo'
 SELECT s.objeto FROM store_obj s WHERE NOT EXISTS (SELECT 1 FROM acervo.obra o WHERE o.objeto=s.objeto);
 EOSQL
