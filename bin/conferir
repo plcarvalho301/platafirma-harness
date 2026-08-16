@@ -26,6 +26,16 @@
                    editada a mao, render sem fonte irma e diretorio de topo nao
                    declarado no README.
 
+  commit  <arquivo> mensagem de commit em curso: os ids que ela CITA, contra o
+                   rastreador. Recusa id inexistente e id de item fechado — os dois
+                   predicados do PRD do rastreador, §5.1, e so eles. Ausencia de id
+                   NAO recusa. E o que o hook `commit-msg` chama, com o caminho que o
+                   git lhe passa em $1 (use `-` para ler de stdin).
+                   Opt-in POR REPO: so julga onde houver `.conferir-commit` na raiz.
+                   Sem o arquivo, sai 0 sem dizer nada — `core.hooksPath` e um
+                   diretorio compartilhado por 20 clones, e hook novo la dentro liga
+                   em todos ao mesmo tempo. Rollout e ato declarado, nao efeito colateral.
+
 Classes conhecidas e ainda sem implementacao sao listadas como tais: ausencia se
 declara, nunca se omite.
 
@@ -37,6 +47,8 @@ import re
 import os
 import subprocess
 import sys
+import urllib.error
+import urllib.request
 
 RAIZ = os.path.expanduser("~/AI")
 DEPLOY = os.path.join(RAIZ, "deploy")
@@ -55,7 +67,7 @@ def uso(erro=None):
         print(f"erro: {erro}\n", file=sys.stderr)
     print(__doc__.strip(), file=sys.stderr)
     print("\nuso: conferir <classe> [alvo]", file=sys.stderr)
-    print("     classes implementadas : servico . verbo . repo . skill . procedencia . superficie", file=sys.stderr)
+    print("     classes implementadas : servico . verbo . repo . skill . procedencia . superficie . commit", file=sys.stderr)
     for c, motivo in CLASSES_ABERTAS.items():
         print(f"     classe declarada, sem implementacao : {c} — {motivo}", file=sys.stderr)
     sys.exit(2)
@@ -658,6 +670,175 @@ def conferir_repo(alvo, staged=False, como_json=False):
     return 1 if houve else 0
 
 
+# --- classe: commit ---------------------------------------------------------
+# O elo item<->commit do DORA (card #471, prd_rastreador.md §5.1).
+#
+# A REGUA NAO MORA AQUI, e nem no hook: mora no rastreador. Este codigo NAO tem copia do
+# formato da citacao nem da nocao de "item fechado" — ele manda a mensagem para
+# `POST /commits/conferir` e imprime o veredito. Gate e conferencia que leem reguas
+# diferentes divergem em silencio no primeiro ajuste que so um dos dois receber, e a
+# convencao de citacao e do produto, nao do harness.
+#
+# TRES LIMITES DECLARADOS, e cada um custou uma medicao:
+#
+#   1. OPT-IN POR REPO, por `.conferir-commit` na raiz — mesmo padrao do `.conferir-repo`.
+#      `core.hooksPath` aponta um DIRETORIO: um arquivo novo em `hooks/` liga o gate no
+#      mesmo instante em todos os clones e worktrees que apontam para la (20, medidos), sem
+#      aviso e sem rollout. Repo sem o arquivo sai 0 e calado.
+#
+#   2. FAIL-OPEN COM AVISO quando o rastreador nao responde, seguindo o precedente escrito
+#      no `pre-commit` para `conferir` ausente ("commit segue sem gate", exit 0). O motivo
+#      e medido: `deploy rastreador down` e ato de ROTINA declarado no registro de stacks
+#      (`"critico": false`), e fail-closed transformaria manutencao normal de qualquer
+#      cadeira em parada da casa — com `--no-verify` como saida obvia, que desligaria
+#      JUNTO o `conferir repo --staged` que hoje funciona.
+#      O custo do fail-open tambem e declarado: a serie do DORA fica com buracos nas
+#      janelas em que a API esteve fora, e buraco de serie nao se ve depois.
+#
+#   3. AUSENCIA DE ID NAO RECUSA. O PRD enumera dois predicados de recusa — id inexistente
+#      e id de item fechado — e nao ha terceiro. Medido: 332 dos 400 commits do harness
+#      desde 01/08 nao citam id nenhum. Gate que reprova o que ja estava la vira
+#      `--no-verify` por habito, e ai nao gateia mais nada.
+#
+# Limite que vale repetir, porque nenhuma metrica construida sobre este gate pode ignora-lo:
+# hook e local, `git commit --no-verify` passa por cima e nao ha gate no push do forge.
+# Isto mede quem nao burlou; nao mede a casa.
+
+DECLARACAO_DE_COMMIT = ".conferir-commit"
+BASE_RASTREADOR = "http://127.0.0.1:8120"
+TIMEOUT_RASTREADOR = 3.0
+
+
+def declaracao_de_commit(raiz):
+    """`.conferir-commit` na raiz do repo: opt-in do gate, e onde o rastreador responde.
+
+    Forma, igual a do `.conferir-repo` — chave, dois pontos, valor, `#` comenta:
+
+        base: http://127.0.0.1:8120   # onde o rastreador atende
+        timeout: 3                    # segundos
+
+    Devolve None quando o arquivo nao existe: nao e erro, e "este repo nao pediu gate".
+    """
+    caminho = os.path.join(raiz, DECLARACAO_DE_COMMIT)
+    if not os.path.exists(caminho):
+        return None
+    decl = {"base": BASE_RASTREADOR, "timeout": TIMEOUT_RASTREADOR}
+    try:
+        with open(caminho, encoding="utf-8") as f:
+            for linha in f:
+                linha = linha.split("#", 1)[0].strip()
+                if ":" not in linha:
+                    continue
+                chave, valor = linha.split(":", 1)
+                chave, valor = chave.strip(), valor.strip()
+                if chave == "base" and valor:
+                    decl["base"] = valor.rstrip("/")
+                elif chave == "timeout" and valor:
+                    try:
+                        decl["timeout"] = float(valor)
+                    except ValueError:
+                        pass
+    except OSError:
+        pass
+    return decl
+
+
+def pergunta_ao_rastreador(base, mensagem, timeout):
+    """Manda a mensagem e devolve (veredito, erro). Um dos dois e None, nunca os dois."""
+    corpo = json.dumps({"mensagem": mensagem}).encode("utf-8")
+    req = urllib.request.Request(
+        f"{base}/commits/conferir", data=corpo, method="POST",
+        headers={"content-type": "application/json"},
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as r:  # noqa: S310 — loopback declarado
+            return json.loads(r.read().decode("utf-8")), None
+    except urllib.error.HTTPError as e:
+        return None, f"{base} respondeu HTTP {e.code}"
+    except urllib.error.URLError as e:
+        return None, f"{base} nao respondeu ({e.reason})"
+    except (TimeoutError, OSError) as e:
+        return None, f"{base} nao respondeu ({type(e).__name__})"
+    except (ValueError, KeyError) as e:
+        return None, f"{base} respondeu o que nao e veredito ({type(e).__name__})"
+
+
+def conferir_commit(alvo, como_json=False):
+    if not alvo:
+        if como_json:
+            print(json.dumps({"erro": "uso: conferir commit <arquivo-da-mensagem>|-"}))
+            return 2
+        uso("commit exige o caminho do arquivo da mensagem (ou `-` para stdin)")
+
+    _, raiz, _ = sh(["git", "rev-parse", "--show-toplevel"])
+    if not raiz:
+        msg = "fora de um repositorio git: nao ha mensagem de commit para julgar"
+        if como_json:
+            print(json.dumps({"erro": msg}))
+        else:
+            print(f"erro: {msg}", file=sys.stderr)
+        return 2
+
+    decl = declaracao_de_commit(raiz)
+    if decl is None:
+        # Nao e conformidade: e ausencia de opt-in, e se declara como tal.
+        if como_json:
+            print(json.dumps({
+                "resultado": "nao-declarado",
+                "repo": os.path.basename(raiz),
+                "motivo": f"{DECLARACAO_DE_COMMIT} nao existe na raiz — este repo nao pediu o gate",
+            }))
+        return 0
+
+    try:
+        if alvo == "-":
+            mensagem = sys.stdin.read()
+        else:
+            with open(alvo, encoding="utf-8", errors="replace") as f:
+                mensagem = f.read()
+    except OSError as e:
+        msg = f"nao consegui ler a mensagem em {alvo!r}: {e}"
+        if como_json:
+            print(json.dumps({"erro": msg}))
+        else:
+            print(f"erro: {msg}", file=sys.stderr)
+        return 2
+
+    veredito, erro = pergunta_ao_rastreador(decl["base"], mensagem, decl["timeout"])
+    if veredito is None:
+        # FAIL-OPEN, com aviso. Ver o limite 2 no cabecalho desta classe.
+        if como_json:
+            print(json.dumps({"resultado": "sem-gate", "motivo": erro}))
+        else:
+            print(f"conferir commit: {erro} — commit segue sem gate de id.", file=sys.stderr)
+        return 0
+
+    recusas = veredito.get("recusas") or []
+    avisos = veredito.get("avisos") or []
+    if como_json:
+        print(json.dumps({
+            "resultado": "divergente" if recusas else "ok",
+            "repo": os.path.basename(raiz),
+            "base": decl["base"],
+            "ids": veredito.get("ids") or [],
+            "recusas": recusas,
+            "avisos": avisos,
+        }, ensure_ascii=False))
+    else:
+        for a in avisos:
+            print(f"conferir commit: aviso — {a.get('texto', a)}", file=sys.stderr)
+        if recusas:
+            print("\ncommit: a mensagem cita id que o rastreador recusa.\n", file=sys.stderr)
+            for r in recusas:
+                print(f"    RECUSA  item {r.get('id')} — {r.get('texto')}", file=sys.stderr)
+            print("\n    prd_rastreador.md §5.1 — a citacao no commit e o elo item<->deploy do", file=sys.stderr)
+            print("    DORA, e ela so vale se o id existir e o item estiver aberto. Ou corrija", file=sys.stderr)
+            print("    o trailer `Item: <id>` no rodape da mensagem, ou tire-o: mensagem sem", file=sys.stderr)
+            print("    citacao NAO e recusada.", file=sys.stderr)
+            print("    Passar por cima: git commit --no-verify (fica so no teu terminal).\n", file=sys.stderr)
+    return 1 if recusas else 0
+
+
 # --- despacho ---------------------------------------------------------------
 
 
@@ -1099,6 +1280,8 @@ def main(argv):
         if alvo == "--staged":
             return conferir_repo(None, staged=True, como_json=como_json)
         return conferir_repo(alvo, como_json=como_json)
+    if classe == "commit":
+        return conferir_commit(alvo, como_json=como_json)
     if classe == "superficie":
         if alvo == "--staged":
             return conferir_superficie(None, staged=True, como_json=como_json)

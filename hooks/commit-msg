@@ -1,0 +1,57 @@
+#!/bin/sh
+# commit-msg — gate do elo item<->commit do DORA: a mensagem cita id que existe e esta aberto.
+# capacidade: verificacao
+# dono: claudinho-TI
+#
+# A regua NAO mora aqui, e nem no `conferir`: mora no rastreador, atras de
+# `POST /commits/conferir`. Este hook so passa adiante o arquivo que o git lhe da em $1.
+# Mesma doutrina do `pre-commit` ao lado — gate e conferencia que leem reguas diferentes
+# divergem em silencio no primeiro ajuste que so um dos dois receber.
+#
+# POR QUE `commit-msg` E NAO `pre-commit`, contra a letra do PRD §5.1 e do card #471, que
+# dizem os dois "gate no pre-commit": porque o `pre-commit` NAO VE A MENSAGEM. Medido em
+# repo de prova com `core.hooksPath` ligado — o `pre-commit` roda com argv vazio; no
+# primeiro commit do repo `.git/COMMIT_EDITMSG` nem existe; e no segundo ele existe
+# contendo a mensagem do commit ANTERIOR (o hook do commit "segundo (#471)" leu
+# "prova: elos do DORA (card 471)"). Um gate de id escrito ali julga a mensagem errada:
+# fica verde citando id que o commit nem menciona, e reprova por id que ja foi commitado.
+# O `commit-msg` recebe o caminho da mensagem em $1, com o texto certo, e exit 1 aborta o
+# commit. Desobedecer a letra quando a letra esta medida errada e o certo nesta casa; a
+# medicao fica escrita aqui para quem vier conferir nao ter de refaze-la.
+#
+# Instalacao: nenhuma por hook. Este arquivo mora no mesmo `hooks/` que o `pre-commit` ja
+# usa, entao ele passa a rodar em todo clone que aponte `core.hooksPath` para ca.
+# LIGAR O GATE, POREM, E ATO POR REPO: `conferir commit` so julga onde houver
+# `.conferir-commit` na raiz do repositorio — onde nao houver, sai 0 sem dizer nada.
+# Isso e deliberado: `core.hooksPath` e um diretorio compartilhado por 20 clones e
+# worktrees medidos, e um arquivo novo aqui dentro ligaria o gate em todos ao mesmo tempo,
+# no meio do trabalho de cadeiras que nao foram avisadas. Rollout e ato de claudinho-TI.
+#
+# Forma do arquivo de opt-in (`.conferir-commit`, na raiz do repo):
+#     base: http://127.0.0.1:8120   # onde o rastreador atende
+#     timeout: 3                    # segundos
+# Arquivo vazio vale: significa "gate ligado, com o padrao".
+#
+# Convencao da citacao: trailer no rodape, `Item: <id>`, com o id do RASTREADOR (item.id,
+# a chave de rota da API). Mensagem SEM citacao nao e recusada — o PRD enumera dois
+# predicados de recusa, id inexistente e id de item fechado, e nao ha terceiro.
+#
+# Limite declarado: hook e local e `git commit --no-verify` passa por cima. Nao ha gate no
+# push do forge — quem burla aqui entra no repo remoto sem ser visto. Nenhuma metrica
+# construida sobre este gate mede a casa: mede quem nao burlou.
+#
+# Segundo limite declarado: com o rastreador fora do ar, o gate PASSA com aviso em stderr,
+# pelo precedente ja escrito no `pre-commit` ("commit segue sem gate"). `deploy rastreador
+# down` e ato de rotina declarado no registro de stacks; fail-closed pararia a casa inteira
+# numa manutencao normal, e a saida obvia seria `--no-verify`, que desligaria junto o
+# `conferir repo --staged` que hoje funciona. O custo do fail-open tambem esta escrito, em
+# `bin/conferir`: a serie do DORA fica com buracos nas janelas em que a API esteve fora.
+
+CONFERIR="${CONFERIR:-$HOME/AI/bin/conferir}"
+
+[ -x "$CONFERIR" ] || {
+    echo "commit-msg: 'conferir' nao encontrado em $CONFERIR — commit segue sem gate." >&2
+    exit 0
+}
+
+exec "$CONFERIR" commit "$1"
