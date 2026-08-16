@@ -343,12 +343,17 @@ def giro_de_participante(quem, id_fita, corpo, passo_out):
 # copia de persona. Ajuste local aqui e perdido no giro seguinte — o que se quer
 # permanente muda no verbo.
 
-def settings_da_fita(modelo=""):
+# Cadeira que responde pela propria entrega do commit ao ar, e por isso empurra
+# da fita. Endereco unico da excecao — crescer aqui, nao em copia de allowlist.
+EMPURRAM_DA_FITA = {"produto"}
+
+
+def settings_da_fita(modelo="", cadeira=""):
     """Allowlist do cwd. `bypassPermissions` nao e relaxamento: no giro headless
     nao existe quem responda ao pedido de permissao, entao o modo `manual` viraria
     giro pendurado ate o watchdog — erro na sala no lugar de resposta. A regua real
     e a lista de negativas, identica a da sessao da cadeira."""
-    return {
+    base = {
         "model": modelo or os.environ.get("PF_CHAT_MODELO", "opus"),
         # Sem isto o motor lista o servidor do `.mcp.json` como "pending approval"
         # e nao conecta: a aprovacao e interativa, e no giro headless nao ha quem
@@ -381,12 +386,21 @@ def settings_da_fita(modelo=""):
             "deny": [
                 "Bash(sudo:*)", "Bash(docker:*)", "Bash(systemctl:*)",
                 "Bash(loginctl:*)", "Bash(psql:*)", "Bash(mc:*)",
-                "Bash(rm -rf /:*)", "Bash(git push:*)", "Bash(curl:*)",
+                "Bash(rm -rf /:*)", "Bash(curl:*)",
                 "Read(//home/claudinho/.config/**)",
                 "Read(//home/claudinho/.claude/.credentials.json)",
             ],
         },
     }
+    # `git push` e negado por padrao e liberado por cadeira. Nao e controle — a
+    # mesma cadeira empurra por `run_command`, que nao tem allowlist. E atrito
+    # deliberado: quem nao responde do commit ao ar nao empurra da fita.
+    # claudinha-produto responde (arq:0057, ordem do dono 16/08/2026).
+    if cadeira.strip().lower() not in EMPURRAM_DA_FITA:
+        base["permissions"]["deny"].append("Bash(git push:*)")
+    else:
+        base["permissions"]["allow"].append("Bash(git push:*)")
+    return base
 
 
 def claude_md_da_fita(cadeira, anexos):
@@ -483,7 +497,7 @@ def prepara_cwd(cadeira, modelo=""):
     for d in (base, anexos, dot):
         os.makedirs(d, exist_ok=True)
     with open(os.path.join(dot, "settings.json"), "w") as f:
-        json.dump(settings_da_fita(modelo), f, indent=2, ensure_ascii=False)
+        json.dump(settings_da_fita(modelo, cadeira), f, indent=2, ensure_ascii=False)
         f.write("\n")
     with open(os.path.join(base, "CLAUDE.md"), "w") as f:
         f.write(claude_md_da_fita(cadeira, anexos))
