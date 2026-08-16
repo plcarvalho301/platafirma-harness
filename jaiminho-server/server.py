@@ -50,6 +50,25 @@ DOM_ACERVO = "plataforma-acervo"
 TIPO_ACERVO = "acervo"
 ACAO = "rag_buscar"
 
+# --- wiki ------------------------------------------------------------------
+# O wiki-mcp autentica por segredo estatico e NAO tem PEP: quem tem o token tem
+# edit_page e upload_file junto. Por isso o token nao atravessa a ponte e nao mora
+# no contêiner dele — mora aqui, e o externo so alcanca a wiki pelas duas tools de
+# leitura abaixo, que passam por este PEP como qualquer outra.
+WIKI_MCP_URL = os.environ.get("WIKI_MCP_URL", "http://mcp:8000/mcp")
+WIKI_MCP_TOKEN = os.environ.get("WIKI_MCP_TOKEN", "")
+WIKI_TIMEOUT = float(os.environ.get("WIKI_TIMEOUT", "60"))
+DOM_WIKI = "plataforma-wiki"
+TIPO_WIKI = "wiki"
+
+# Recorte forcado no servidor, do mesmo jeito que `COLECAO`: so o namespace
+# principal, que e o acervo de conceitos e obras. `PlataFirma:` (decisao, org,
+# metodo), `Operar:` (runbook) e `Frente:` (trabalho em curso) sao a camada
+# interna e nao se concedem a externo. No ns principal o titulo nao tem ":", e e
+# essa a regra — dura, e nao dependente de o cliente pedir direito.
+NS_INTERNOS = ("PlataFirma", "Operar", "Frente", "Category", "File", "Template",
+               "Help", "User", "MediaWiki", "Talk", "Special", "Property")
+
 _pdp: dict = {"carimbo": None, "politica": None, "sujeitos": None, "erro": "nao carregada"}
 _jwks_cli = None
 
@@ -140,13 +159,16 @@ def _lista(v) -> list:
     return [x for x in ([v] if isinstance(v, str) else list(v)) if x]
 
 
-def _autoriza(dominios: list) -> dict | None:
+def _autoriza(acao: str, tipo: str, dominio_pdp: str, alvos: list) -> dict | None:
     """None = pode seguir. dict = negativa auditada, pronta para devolver.
 
-    Um recurso por dominio pedido, e qualquer negativa nega o pedido inteiro: pedido
-    de tres dominios com concessao de dois nao vira busca em dois — vira negativa, e
-    o chamador sabe o que pedir de novo. Sem dominio, o alvo e o corpus da colecao,
-    que e o que ele esta de fato pedindo.
+    Um recurso por alvo pedido, e qualquer negativa nega o pedido inteiro: pedido de
+    tres dominios com concessao de dois nao vira busca em dois — vira negativa, e o
+    chamador sabe o que pedir de novo.
+
+    A acao, o tipo e o dominio entram por parametro porque a superficie tem duas
+    materias com concessoes separadas — acervo e wiki. Fundi-las num PEP so faria a
+    concessao de uma valer para a outra, que e exatamente o que seg:0009 nao quer.
     """
     est = _carrega_politica()
     if est["erro"]:
@@ -166,17 +188,22 @@ def _autoriza(dominios: list) -> dict | None:
                 dominios=tuple(atrib.get("dominios") or ()),
                 habilitacao=atrib.get("habilitacao", "publico"))
 
-    alvos = [f"acervo:{COLECAO}/{d}/*" for d in dominios] or [f"acervo:{COLECAO}/*"]
     for alvo in alvos:
-        d = decide(s, ACAO, Recurso(tipo=TIPO_ACERVO, id=alvo, dominio=DOM_ACERVO),
+        d = decide(s, acao, Recurso(tipo=tipo, id=alvo, dominio=dominio_pdp),
                    est["politica"])
         if not d.permitido:
-            _audit(evento="negado", sujeito=quem, sobre=alvo, regra=d.regra,
+            _audit(evento="negado", sujeito=quem, acao=acao, sobre=alvo, regra=d.regra,
                    motivo=d.motivo)
             return {"erro": "negado pela politica de acesso", "sobre": alvo,
                     "regra": d.regra, "motivo": d.motivo}
-    _audit(evento="permitido", sujeito=quem, sobre=alvos, regra=ACAO)
+    _audit(evento="permitido", sujeito=quem, acao=acao, sobre=alvos)
     return None
+
+
+def _autoriza_acervo(dominios: list) -> dict | None:
+    """Sem dominio, o alvo e o corpus da colecao — que e o que ele esta pedindo."""
+    alvos = [f"acervo:{COLECAO}/{d}/*" for d in dominios] or [f"acervo:{COLECAO}/*"]
+    return _autoriza(ACAO, TIPO_ACERVO, DOM_ACERVO, alvos)
 
 
 # --- motor -----------------------------------------------------------------
@@ -222,8 +249,9 @@ def rag_buscar(pergunta: str | list[str], dominio: str | list[str] = "",
     """Busca semantica no acervo bibliografico de trabalho da PlataFirma.
 
     E o TEXTO das obras curadas — livros, guias, frameworks e normas de terceiros —,
-    indexado trecho a trecho. NAO alcanca a wiki (o que a firma decidiu e o que ela
-    faz) nem a colecao pessoal do titular.
+    indexado trecho a trecho. NAO alcanca a colecao pessoal do titular, e nao alcanca
+    a wiki: o que a firma decidiu e como ela nomeia esta em `wiki_buscar`, que e outra
+    materia e outra concessao.
 
     `pergunta`: linguagem natural. Cite o codigo exato quando houver ("clausula
     6.1.3", "AC-2") — o braco de identificador crava o trecho certo e a fonte volta
@@ -245,7 +273,7 @@ def rag_buscar(pergunta: str | list[str], dominio: str | list[str] = "",
     EXATO perguntado. Cobertura "fraca" sem nenhuma fonte `codigo_exato` quer dizer
     que o corpus provavelmente nao cobre — diga isso, nao responda pelo vizinho.
     """
-    negativa = _autoriza(_lista(dominio))
+    negativa = _autoriza_acervo(_lista(dominio))
     if negativa:
         return negativa
     return _motor("/search", {
@@ -265,7 +293,7 @@ def rag_facetas() -> dict:
     quer dizer "valor valido, corpus vazio nele", diferente de "valor nao existe".
     A colecao nao entra: o alcance externo e a colecao de trabalho, e so ela.
     """
-    negativa = _autoriza([])
+    negativa = _autoriza_acervo([])
     if negativa:
         return negativa
     d = _motor("/facets", metodo="GET")
@@ -274,11 +302,145 @@ def rag_facetas() -> dict:
     return d
 
 
+# --- wiki: cliente MCP minimo ----------------------------------------------
+# O wiki-mcp e MCP COM sessao (nao stateless): initialize devolve `mcp-session-id`
+# no header, e todo POST seguinte tem de carrega-lo. Cliente MCP completo aqui seria
+# async dentro de tool sincrona; o handshake sao tres POSTs e cabe em httpx.
+_wiki_cli = httpx.Client(timeout=WIKI_TIMEOUT)
+_wiki_sessao: dict = {"id": None}
+_WIKI_CAB = {"Content-Type": "application/json",
+             "Accept": "application/json, text/event-stream"}
+
+
+def _wiki_sse(texto: str) -> dict:
+    """A resposta vem como SSE de um evento so: a carga esta na linha `data:`."""
+    for linha in texto.splitlines():
+        if linha.startswith("data:"):
+            return json.loads(linha[5:].strip())
+    return json.loads(texto) if texto.strip().startswith("{") else {}
+
+
+def _wiki_abre_sessao() -> str:
+    cab = {**_WIKI_CAB, "Authorization": f"Bearer {WIKI_MCP_TOKEN}"}
+    r = _wiki_cli.post(WIKI_MCP_URL, headers=cab, json={
+        "jsonrpc": "2.0", "id": 1, "method": "initialize",
+        "params": {"protocolVersion": "2024-11-05", "capabilities": {},
+                   "clientInfo": {"name": "jaiminho-server", "version": "1"}}})
+    r.raise_for_status()
+    sid = r.headers.get("mcp-session-id", "")
+    if not sid:
+        raise RuntimeError("wiki-mcp nao devolveu mcp-session-id")
+    _wiki_cli.post(WIKI_MCP_URL, headers={**cab, "mcp-session-id": sid},
+                   json={"jsonrpc": "2.0", "method": "notifications/initialized"})
+    _wiki_sessao["id"] = sid
+    return sid
+
+
+def _wiki(tool: str, args: dict, _renova: bool = True) -> dict:
+    """Erro vira CAMPO, nunca excecao — mesma regra de `_motor`."""
+    if not WIKI_MCP_TOKEN:
+        return {"erro": "WIKI_MCP_TOKEN ausente neste servidor: wiki indisponivel"}
+    try:
+        sid = _wiki_sessao["id"] or _wiki_abre_sessao()
+        cab = {**_WIKI_CAB, "Authorization": f"Bearer {WIKI_MCP_TOKEN}",
+               "mcp-session-id": sid}
+        r = _wiki_cli.post(WIKI_MCP_URL, headers=cab, json={
+            "jsonrpc": "2.0", "id": 2, "method": "tools/call",
+            "params": {"name": tool, "arguments": args}})
+    except Exception as e:                                   # noqa: BLE001
+        return {"erro": f"wiki inalcancavel: {type(e).__name__}", "detalhe": str(e)[:300]}
+    # Sessao expira do lado de la e volta 400/404: reabre UMA vez e repete. Sem isso,
+    # o primeiro giro depois do restart da wiki falharia para o chamador.
+    if r.status_code in (400, 404) and _renova:
+        _wiki_sessao["id"] = None
+        return _wiki(tool, args, _renova=False)
+    if r.status_code >= 400:
+        return {"erro": f"wiki devolveu {r.status_code}", "detalhe": r.text[:300]}
+    corpo = _wiki_sse(r.text)
+    if "error" in corpo:
+        return {"erro": "wiki recusou a chamada",
+                "detalhe": str(corpo["error"])[:300]}
+    res = corpo.get("result", {})
+    if "structuredContent" in res:
+        return res["structuredContent"]
+    # Sem `structuredContent`, a carga vem como texto JSON dentro de content[0].
+    # Repassar o envelope faria o Jaiminho receber JSON dentro de JSON dentro de
+    # content — desembrulhar aqui e o que mantem a tool com cara de tool.
+    conteudo = res.get("content") or []
+    if conteudo and isinstance(conteudo[0], dict) and "text" in conteudo[0]:
+        try:
+            return json.loads(conteudo[0]["text"])
+        except (ValueError, TypeError):
+            return {"texto": conteudo[0]["text"]}
+    return res
+
+
+def _interno(titulo: str) -> bool:
+    prefixo = str(titulo).split(":", 1)[0].strip()
+    return ":" in str(titulo) and prefixo in NS_INTERNOS
+
+
+@mcp.tool()
+def wiki_buscar(pergunta: str, k: int = 10) -> dict:
+    """Busca por texto livre nas paginas de CONCEITO da wiki da PlataFirma.
+
+    A wiki e o que a firma decidiu e como ela nomeia as coisas — distinta do acervo,
+    que e o texto de obra de terceiro. Use esta tool quando a pergunta for sobre o
+    vocabulario ou o conceito como a firma o define; use `rag_buscar` quando for
+    sobre o que a norma ou o autor dizem.
+
+    Alcance: o namespace principal, que e o acervo de conceitos, dominios e obras.
+    A camada interna — decisao, org, metodo, runbook, trabalho em curso — NAO entra,
+    e o corte e feito aqui no servidor: pagina interna nem aparece no resultado.
+
+    Devolve titulo e trecho. Para o texto da pagina, chame `wiki_ler` com o titulo.
+    """
+    negativa = _autoriza("wiki_ler", TIPO_WIKI, DOM_WIKI, ["wiki:principal/*"])
+    if negativa:
+        return negativa
+    # Pede folga na busca porque o filtro de namespace corta depois: pedir k e
+    # filtrar devolveria menos que k sem que o chamador entendesse por que.
+    d = _wiki("search_pages", {"query": pergunta, "limit": max(k * 3, 20)})
+    if "erro" in d:
+        return d
+    achados = d.get("result", d) if isinstance(d, dict) else d
+    if not isinstance(achados, list):
+        return {"erro": "wiki devolveu formato inesperado", "detalhe": str(d)[:300]}
+    abertos = [p for p in achados if not _interno(p.get("title", ""))]
+    return {"paginas": abertos[:k], "alcance": "namespace principal da wiki"}
+
+
+@mcp.tool()
+def wiki_ler(titulos: str | list[str]) -> dict:
+    """Texto de uma pagina de conceito da wiki, pelo titulo exato.
+
+    Titulo sai de `wiki_buscar`. Aceita lista. Pagina da camada interna
+    (`PlataFirma:`, `Operar:`, `Frente:`) volta recusada e nomeada — a recusa e
+    declarada, nao silencio, para voce saber que a pagina existe e nao e sua.
+    """
+    negativa = _autoriza("wiki_ler", TIPO_WIKI, DOM_WIKI, ["wiki:principal/*"])
+    if negativa:
+        return negativa
+    pedidos = _lista(titulos)
+    if not pedidos:
+        return {"erro": "sem titulo: passe o titulo exato devolvido por wiki_buscar"}
+    fora = [t for t in pedidos if _interno(t)]
+    abertos = [t for t in pedidos if not _interno(t)]
+    if not abertos:
+        return {"erro": "fora do alcance: camada interna da wiki", "recusados": fora}
+    d = _wiki("get_page", {"titles": abertos, "follow_redirects": True})
+    if "erro" in d:
+        return d
+    return {"paginas": d.get("result", d), "recusados": fora} if fora else \
+           {"paginas": d.get("result", d)}
+
+
 async def _health(_req):
     est = _carrega_politica()
     return JSONResponse({"ok": est["erro"] is None,
                          "politica": est["erro"] or "carregada",
                          "motor": RAG_API_URL, "colecao": COLECAO,
+                         "wiki": WIKI_MCP_URL if WIKI_MCP_TOKEN else "sem token",
                          "medido_em": int(time.time())})
 
 

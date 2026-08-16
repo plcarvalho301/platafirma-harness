@@ -55,6 +55,16 @@ services:
       OIDC_AUDIENCE: "ops-mcp"
       PDP_DIR: "/opt/pf/politica-acesso"
       JAIMINHO_LOG_DIR: "/var/log/jaiminho"
+      # Wiki: mesmo alias de rede que o `rag-api`, pela rede `wiki`. O segredo do
+      # wiki-mcp para AQUI — ele nao tem PEP, e quem o carrega tem edit_page e
+      # upload_file junto. O externo alcanca a wiki so pelas tools `wiki_*` deste
+      # servidor, que passam pelo PDP e recortam o namespace.
+      # O TOKEN nao entra aqui: `environment` vence `env_file`, e `${WIKI_MCP_TOKEN}`
+      # interpola do .env DO PROJETO (jaiminho/), nao do env_file do servico — a
+      # linha resolveria vazio e apagaria o valor que veio de jaiminho-server/.env.
+      # Medido: health saiu "sem token" com a linha presente. Segredo mora so no
+      # env_file; aqui fica o que nao e segredo.
+      WIKI_MCP_URL: "http://mcp:8000/mcp"
     volumes:
       # PAP e PDP por bind READ-ONLY: merge no PAP vale sem rebuild, e o processo
       # nao tem como reescrever a regra que o prende.

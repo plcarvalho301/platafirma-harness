@@ -30,6 +30,12 @@ eixos:
     plataforma-acervo:
       rotulo: "Acervo bibliográfico e índice de recuperação"
       pai: plataforma
+    plataforma-wiki:
+      rotulo: "Wiki: o que a firma decidiu, como nomeia e como opera"
+      # Separado de `plataforma-acervo` porque são matérias distintas com concessões
+      # distintas: o acervo é texto de terceiro, a wiki é a decisão da casa. Domínio
+      # único faria a concessão de ler norma valer para ler decisão interna.
+      pai: plataforma
     mensageria:
       # Fora do prefixo `plataforma-` de proposito (ordem do dono, 13/08/2026): uma
       # letra separa `plataforma` de `platafirma`, e typo no eixo do sujeito nega por
@@ -187,6 +193,25 @@ regras:
     quando: {papel: pesquisador-externo, dominio: plataforma-acervo, tipo: acervo}
     acoes: [rag_buscar]
     sobre: ["acervo:firma/*"]
+
+  - id: jaiminho-le-wiki-conceito
+    efeito: permite
+    motivo: "investigacao em fonte aberta precisa do vocabulario da casa, nao so do texto de terceiro: le as paginas de conceito da wiki · ordem direta do dono em 16/08/2026, sobre a concessao de acervo ja dada por claudinho-IA · vence 2026-11-15"
+    quando: {papel: pesquisador-externo, dominio: plataforma-wiki, tipo: wiki}
+    acoes: [wiki_ler]
+    sobre: ["wiki:principal/*"]
+
+  # A camada interna da wiki NAO e concedida, e a negativa fica escrita em vez de
+  # depender do default: `PlataFirma:` (decisao, org, metodo), `Operar:` (runbook) e
+  # `Frente:` (trabalho em curso) sao a casa por dentro. O jaiminho-server ja corta
+  # por namespace no codigo; esta regra e o segundo cadeado, para o dia em que uma
+  # tool nova esquecer o corte.
+  - id: externo-nao-le-wiki-interna
+    efeito: nega
+    motivo: "decisao, org, runbook e trabalho em curso sao a casa por dentro: fora de concessao a externo"
+    quando: {papel: pesquisador-externo}
+    acoes: ["*"]
+    sobre: ["wiki:PlataFirma/*", "wiki:Operar/*", "wiki:Frente/*"]
 
   - id: externo-nunca-alcanca-acervo-pessoal
     efeito: nega

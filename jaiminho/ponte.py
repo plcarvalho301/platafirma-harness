@@ -3,11 +3,18 @@
 O `agy` fala MCP em http://127.0.0.1:8022, aqui dentro do container:
   /mcp    -> ops-server      (https://ops.platafirma.org/mcp)
   /acervo -> jaiminho-server (http://jaiminho-server:8000/mcp)
-  /wiki   -> wiki-mcp        (https://mcp.platafirma.org/mcp)
 
 O `/acervo` e o MCP do proprio Jaiminho: nosso codigo, contêiner separado, na rede
-`saida`. E por ele que a busca no acervo entra — o ops-server e o MCP das cadeiras e
-nao serve externo.
+`saida`. E por ele que entram a busca no acervo E a leitura da wiki — o ops-server e
+o MCP das cadeiras e nao serve externo.
+
+NAO ha rota `/wiki` aqui, e a ausencia e o desenho. O `wiki-mcp` autentica por
+segredo estatico e nao tem PEP: um Bearer que abre `get_page` abre `edit_page` e
+`upload_file` no mesmo ato. Repassar esse segredo por esta ponte poria a caneta da
+wiki na mao do externo. A wiki entra pelo jaiminho-server, que valida o JWT, pergunta
+ao PDP e recorta o namespace — o segredo do wiki-mcp fica do nosso lado e nunca
+atravessa. (16/08/2026, ordem do dono para dar wiki ao Jaiminho; o que ele mandou foi
+o alcance, o mecanismo e nosso.)
 
 Este processo repassa cada chamada com um Bearer do realm sempre fresco — o
 token do Jaiminho vive 600 s e o CLI nao sabe renovar credencial de
@@ -28,7 +35,6 @@ from starlette.routing import Route
 
 REALM = os.environ.get("OIDC_ISSUER", "https://auth.platafirma.org/realms/platafirma")
 OPS = os.environ.get("OPS_URL", "https://ops.platafirma.org")
-WIKI = os.environ.get("WIKI_URL", "https://mcp.platafirma.org")
 ACERVO = os.environ.get("ACERVO_URL", "http://jaiminho-server:8000")
 CLIENT_ID = os.environ.get("JAIMINHO_CLIENT_ID", "")
 CLIENT_SECRET = os.environ.get("JAIMINHO_CLIENT_SECRET", "")
@@ -57,7 +63,7 @@ async def estado(req):
         r = await _cli.get(f"{OPS}/sessao", headers=h)
         return JSONResponse({"token": "ok", "sessao_http": r.status_code,
                              "sujeito": r.json().get("sujeito") if r.status_code == 200 else None,
-                             "ops": OPS, "wiki": WIKI})
+                             "ops": OPS, "acervo": ACERVO})
     except Exception as e:                                            # noqa: BLE001
         return JSONResponse({"erro": str(e)[:300]}, status_code=503)
 
@@ -82,10 +88,6 @@ async def ponte_ops(req):
     return await _repassa(req, f"{OPS}/mcp")
 
 
-async def ponte_wiki(req):
-    return await _repassa(req, f"{WIKI}/mcp")
-
-
 async def ponte_acervo(req):
     return await _repassa(req, f"{ACERVO}/mcp")
 
@@ -98,6 +100,4 @@ app = Starlette(routes=[
     Route("/mcp/{resto:path}", ponte_ops, methods=_METODOS),
     Route("/acervo", ponte_acervo, methods=_METODOS),
     Route("/acervo/{resto:path}", ponte_acervo, methods=_METODOS),
-    Route("/wiki", ponte_wiki, methods=_METODOS),
-    Route("/wiki/{resto:path}", ponte_wiki, methods=_METODOS),
 ])

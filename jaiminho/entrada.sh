@@ -31,12 +31,16 @@ done
 # ~/.gemini/antigravity-cli/builtin/skills/agy-customizations/docs/mcp_servers.md
 # `trust` tambem nao e do schema: o verbo chama `agy` com
 # --dangerously-skip-permissions, entao aprovacao de tool ja nao passa por aqui.
+#
+# Sao DOIS conectores, nao tres: `platafirma-wiki` saiu em 16/08/2026. A wiki nao
+# tem rota propria na ponte porque o wiki-mcp autentica por segredo estatico e sem
+# PEP — o mesmo Bearer que le tambem edita. Ela entra pelas tools `wiki_*` do
+# jaiminho-server, atras do PDP, no mesmo conector do acervo.
 cat > /home/jaiminho/.gemini/config/mcp_config.json <<JSON
 {
   "mcpServers": {
     "platafirma": { "serverUrl": "http://127.0.0.1:8022/mcp" },
-    "platafirma-wiki": { "serverUrl": "http://127.0.0.1:8022/wiki" },
-    "platafirma-acervo": { "serverUrl": "http://127.0.0.1:8022/acervo" }
+    "platafirma-conhecimento": { "serverUrl": "http://127.0.0.1:8022/acervo" }
   }
 }
 JSON

@@ -88,19 +88,48 @@ com `httpUrl` e nenhum jamais subiu. A rota `/acervo` da ponte, que tem servidor
 PEP próprios desde 42bb719, ainda por cima não estava declarada. Corrigido em
 7ab81fd; prova de aceite abaixo.
 
-Estado servido em 16/08/2026:
+Estado servido em 16/08/2026, depois de a wiki entrar:
 
-| conector | rota da ponte | estado |
+| conector | rota da ponte | tools |
 |---|---|---|
-| `platafirma` | `/mcp` → ops-server | conecta — `run_command`, `read_file`, `write_file`, `monta_sessao` |
-| `platafirma-acervo` | `/acervo` → jaiminho-server | conecta — `rag_buscar`, `rag_facetas` |
-| `platafirma-wiki` | `/wiki` → wiki-mcp | **não conecta**: 401 no Bearer do client dele |
+| `platafirma` | `/mcp` → ops-server | `run_command`, `read_file`, `write_file`, `monta_sessao` |
+| `platafirma-conhecimento` | `/acervo` → jaiminho-server | `rag_buscar`, `rag_facetas`, `wiki_buscar`, `wiki_ler` |
 
-O 401 da wiki é credencial, não rota: a ponte manda um token fresco do realm e o
-wiki-mcp o recusa. Dar ou não à conta dele uma credencial que a wiki aceite é
-decisão de claudinho-seguranca (escopo de token, `seg:0009`), não de quem opera o
-contêiner — por isso o conector fica declarado e falhando, em vez de sumir por
-conta própria.
+São **dois** conectores. Não há `/wiki` na ponte, e a ausência é o desenho — veja
+a seção seguinte.
+
+## Por que a wiki não tem rota própria na ponte
+
+O `wiki-mcp` autentica por **segredo estático** (`MCP_AUTH_TOKEN`) e não tem PEP:
+não resolve sujeito, não pergunta a PDP nenhum. Quem carrega aquele Bearer alcança
+`get_page` e `edit_page` e `upload_file` no mesmo ato. Repassá-lo pela ponte — que
+é o caminho de uma linha — poria a caneta da wiki na mão do colaborador externo.
+
+Então a wiki entra pelo `jaiminho-server`, que já é o lugar onde o externo é
+decidido: valida o JWT do realm, pergunta ao PDP contra o mesmo PAP e grava trilha.
+O segredo do wiki-mcp mora só no `jaiminho-server` e nunca atravessa a ponte.
+
+Dois recortes, e os dois no servidor, não no cliente:
+
+- **Só leitura.** As tools são `wiki_buscar` e `wiki_ler`. `edit_page`,
+  `upload_file`, `query_cargo` e `repo_*` não existem nesta superfície — não é
+  permissão negada, é tool que não está lá.
+- **Só o namespace principal**, que é o acervo de conceitos, domínios e obras.
+  `PlataFirma:` (decisão, org, método), `Operar:` (runbook) e `Frente:` (trabalho
+  em curso) são a casa por dentro: cortados no código e negados no PAP por
+  `externo-nao-le-wiki-interna`. Dois cadeados de propósito — o do código é o que
+  vale hoje, o do PAP é o que vale no dia em que uma tool nova esquecer o corte.
+
+Concessão: `jaiminho-le-wiki-conceito`, domínio `plataforma-wiki` (separado de
+`plataforma-acervo` porque são matérias distintas — texto de terceiro é uma coisa,
+decisão da casa é outra), por ordem direta do dono em 16/08/2026. Vence
+2026-11-15.
+
+Aceite medido, pela ponte e pela superfície dele: `wiki_buscar "capacidade
+estatal"` devolve páginas do namespace principal; `wiki_ler "Capacidade-estatal"`
+devolve o texto; `wiki_ler "Operar:catalogo-de-verbos"` volta
+`fora do alcance: camada interna da wiki`, nomeando o que recusou. A trilha em
+`~/AI/var/log/jaiminho/` registra sujeito e ação a cada chamada.
 
 **Como conferir que subiu de verdade.** Ler o JSON não prova nada — a config pode
 estar perfeita e o CLI ter descartado tudo. A prova é pela superfície dele:
