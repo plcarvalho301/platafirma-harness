@@ -59,6 +59,12 @@ services:
       # PAP e PDP por bind READ-ONLY: merge no PAP vale sem rebuild, e o processo
       # nao tem como reescrever a regra que o prende.
       - "${HOME}/AI/platafirma-harness/politica-acesso:/opt/pf/politica-acesso:ro"
+      # O bind nasce dono do root do namespace (= claudinho no host) e o processo
+      # roda como 10001: sem converter a posse, `_audit` cai no fallback de stderr
+      # e a trilha do externo so vive no `docker logs`. Converter, uma vez por
+      # ambiente, de DENTRO do namespace — no host o chown exigiria CAP_CHOWN:
+      #   docker run --rm -v "$HOME/AI/var/log/jaiminho:/x" --user 0:0 \
+      #     platafirma/jaiminho-server:local chown -R 10001:999 /x
       - "${HOME}/AI/var/log/jaiminho:/var/log/jaiminho:rw"
     networks:
       # `saida`: e por onde a ponte dele chega aqui.
