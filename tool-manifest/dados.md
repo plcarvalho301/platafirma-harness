@@ -9,8 +9,8 @@ cara desta lista.
 | **wiki** | conector `PlataFirma Wiki` | o registro: ler, escrever, consultar Cargo e o RAG |
 | **container Claude** | `bash_tool`, `/home/claude` | rascunho e arquivo para download. **Sem rede**, e o FS zera entre tarefas |
 
-`modulo-osint` (`osint.platafirma.org`) **não é meu** — ambiente da claudinha-osint,
-sem canal comigo. "Pegar o tooling dela" nunca é mover arquivo: é reinstalar aqui.
+`modulo-osint` (`osint.platafirma.org`) **não é meu** — ambiente externo isolado, sem
+canal comigo. "Pegar o tooling de lá" nunca é mover arquivo: é reinstalar aqui.
 
 Verificação: `[exec]` binário executado · `[func]` usado em trabalho real ·
 `[inst]` presente, sem prova. `[inst]` é confissão, não aval.

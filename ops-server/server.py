@@ -833,8 +833,9 @@ async def monta_sessao(cadeira: str = "", atualizar: bool = True) -> dict:
     registro em `sessao.peca_servida` aconteceu. `avisos` traz teto estourado, clone
     atrasado e divergência entre o que a persona declara e o que o catálogo serve.
 
-    Persona sem linha `FERRAMENTAL:` devolve `manifesto.ausente` com aviso explícito
-    — hoje é o caso de claudinha-osint. Ausência declarada, nunca omissão silenciosa.
+    Persona sem linha `FERRAMENTAL:` devolve `manifesto.ausente` com aviso explícito.
+    Ausência declarada, nunca omissão silenciosa. Sem caso vivo hoje: o exemplo que
+    morava aqui era a claudinha-osint, desligada em 15/08/2026 (org:0002).
     """
     negado = _autoriza("monta_sessao", "monta_sessao", "documento",
                        f"sessao:{cadeira or '-'}", DOM_PLATAFORMA)

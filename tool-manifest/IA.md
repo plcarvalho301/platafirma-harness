@@ -8,7 +8,7 @@ Verificado em 2026-08-03 e 2026-08-04 executando cada item. Cada linha declara *
 `[exec]` binário executado · `[func]` importado e testado em uso real · `[inst]`
 presente, sem prova de funcionamento.
 
-Espelha o padrão do manifesto da claudinha-osint. O recorte é outro: aqui é
+Espelha o padrão dos demais manifestos de cadeira. O recorte é outro: aqui é
 **harness** — a engenharia ao redor do modelo (contexto, tools, controle de loop,
 avaliação). Organizado pelas três gerências: inferência, RAG/memória, agente.
 
@@ -55,7 +55,7 @@ repete aqui — está em `tool-manifest/TODA-CADEIRA.md`.
 
 **Ollama** (via `ops:run_command` → `127.0.0.1:11434`) — serving local, embed/completion.
 
-Fronteira: tenho também o conector `modulo-osint` (ambiente da claudinha-osint) e os
+Fronteira: tenho também o conector `modulo-osint` (ambiente externo isolado) e os
 conectores Google/Figma/Canva — fora do uso frequente do harness; não detalho aqui.
 
 ---
