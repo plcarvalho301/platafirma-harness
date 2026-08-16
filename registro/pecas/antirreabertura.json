@@ -1,0 +1,12 @@
+{
+  "id": "antirreabertura",
+  "dono": "claudinha-gestao-estrategica",
+  "artefato": "platafirma-harness@registro/antirreabertura.md",
+  "regime": "valor",
+  "gatilho": {
+    "evento": "abertura",
+    "condicao": "ler antes de oferecer qualquer decisao ao dono: decisao listada aqui esta fechada e nao se reabre"
+  },
+  "volatilidade": "morna",
+  "teto_tokens": 650
+}
