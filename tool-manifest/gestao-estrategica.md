@@ -29,27 +29,23 @@ FATO, não a da digitação; `--autor` responde quem decidiu.
 
 ## Armadilhas medidas
 
-- **`tarefas api` resolve `/tasks/<n>` por `id`, não por `#index`.** `PUT
-  /tasks/<index>/labels` devolve 404; o id é a chave. Vale para a API crua — o
-  verbo `tarefas ler` aceita os dois (`<id>` e `#<index>`).
-- **Corpo errado em `PUT .../labels` devolve 200 sem aplicar nada.** Sem
-  `{"label_id":<n>}` no corpo, a resposta é `{"label_id":0}` e sai com sucesso.
-  Conferir com `tarefas ler` depois de rotular, sempre.
-- **Mover card entre colunas do Kanban não se confirma por leitura.** A coluna é
-  do view, não do card: `GET /tasks/<id>` devolve `bucket_id: 0` mesmo depois de
-  mover, e `GET /projects/<p>/views/<v>/buckets` devolve os buckets com `tasks`
-  vazio e `count: 0`. A única confirmação disponível é a resposta da escrita —
-  `POST /projects/<p>/views/<v>/buckets/<b>/tasks` com `{"task_id":<id>}` devolve
-  o objeto `bucket` com o `count` já incrementado. Movimento que não mudou nada
-  (card já naquela coluna) devolve `bucket: null` com o `task_id` ecoado: é no-op,
-  não falha. Medido em 12/08/2026 sobre o projeto 46; conferido no Kanban pelo dono.
-- **Os buckets do projeto 46 são do view 203** (Kanban): Backlog 174, Ready 206,
-  Doing 175, Completed (fábrica) 207, Done 176. Os outros três views (List 200,
-  Gantt 201, Table 202) não têm bucket e não aceitam esse POST.
-- **Reparentar card não remove o pai anterior.** `tarefas sub <novo-pai> <filho>`
-  acrescenta a relação; o pai velho continua, e o card aparece nos dois lugares.
-  Remover é chamada própria: `tarefas api DELETE /tasks/<filho>/relations/parenttask/<pai-velho>`.
-  Conferir com `jq '.related_tasks.parenttask'` depois, sempre.
+As quatro anteriores eram do Vikunja (bucket, label, projeto 46) e morreram com ele em
+16/08/2026. Estas são do rastreador próprio, medidas na mesma data:
+
+- **Leitura singular de item ENGLOBADO devolve o absorvedor, calado.** `GET /itens/173`,
+  englobado no 169, responde com `id: 169` e o título do 169; a listagem devolve 173 certo,
+  como `Englobada`. Testado em cinco ids não-englobados: singular e lista batem. Quem confere
+  englobamento pelo singular conclui que a escrita não pegou. Conferir pela lista.
+- **`nivel` não é campo patchável** (`CAMPOS_PATCH`, api/logica.py). Não há como promover task
+  a feature; item que perdeu o pai por violar "pai de nível estritamente menor" não é
+  restaurável por PATCH. `POST /itens/<id>/converter` só faz incidente → story.
+- **Escrita em lote é `PATCH /itens`** com `{"itens":[{"id":N,...}]}`, e a resposta é POR
+  ITEM: 200 mesmo com falha dentro. Ler `resultados[].resultado` — `falha` não sobe no código
+  da chamada.
+- **Sign-off não tem verbo.** Só por `tarefas api-corpo POST /itens/<id>/sign-offs`, com
+  `aprovador` e, opcionalmente, `decisao` — decisão AUSENTE é o aprovador pendente, que é a
+  forma de registrar quem ainda não assinou. `recusado` exige `texto`, senão a API recusa.
+  Sign-off NÃO move o item.
 
 ## Pendências declaradas
 
