@@ -189,6 +189,93 @@ else
   done
 fi
 
+# --- unit de systemd declarada pelo harness ----------------------------------
+# Mesma estrategia dos verbos: symlink para o arquivo NO REPO, nunca copia —
+# copia congela, e `git pull` deixa de chegar ao systemd sem ninguem notar.
+# Foi assim que o worker do chat viveu como unit TRANSIENT ate 15/08: declarado
+# no repo, nunca convergido, e evaporou junto com quem o parou.
+#
+# Alvo e ~/.local/share/systemd/user, nao ~/.config/systemd/user: no host o
+# segundo e root-owned e recusa escrita nossa. Os dois estao no UnitPath.
+#
+# `habilita` diz quem tem [Install] proprio. Service que so existe como alvo de
+# timer NAO se habilita: quem dispara e o timer, e habilitar os dois poe o job
+# para rodar tambem no boot, que nao e o contrato de nenhum deles.
+echo
+UNIT_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/systemd/user"
+echo "== unit de systemd em $UNIT_DIR"
+UNITS=(
+  "chat/systemd/chat-worker.service|habilita"
+  "controle/systemd/harness-agregador.service|habilita"
+  "deploy-harness/sinal.service|alvo-de-timer"
+  "deploy-harness/sinal.timer|habilita"
+  "deploy-harness/descansar-varredura.service|alvo-de-timer"
+  "deploy-harness/descansar-varredura.timer|habilita"
+)
+if [ "$PREFIXO_DECLARADO" = 1 ]; then
+  medido impossivel "(unit)" "prefixo declarado: alvo de teste, o systemd do ambiente nao e tocado"
+elif ! command -v systemctl >/dev/null 2>&1; then
+  medido impossivel "(unit)" "systemctl ausente — nenhuma unit do harness pode ser convergida aqui"
+else
+  recarregar=0
+  for linha in "${UNITS[@]}"; do
+    rel="${linha%%|*}"; papel="${linha#*|}"
+    nome="$(basename "$rel")"
+    fonte="$HARNESS/$rel"
+    alvo="$UNIT_DIR/$nome"
+    if [ ! -f "$fonte" ]; then
+      impossivel "$nome" "declarada na lista e ausente em $rel — lista e repo divergiram"
+      continue
+    fi
+    [ "$MODO" = check ] || mkdir -p "$UNIT_DIR"
+    if [ -L "$alvo" ] && [ "$(readlink -f "$alvo" 2>/dev/null || true)" = "$(readlink -f "$fonte")" ]; then
+      conforme "$nome"
+    elif [ -e "$alvo" ] && [ ! -L "$alvo" ]; then
+      # Copia no lugar do link: NOSSO caso conhecido, e sobrescrever e o conserto.
+      [ "$MODO" = check ] || { ln -sfn "$fonte" "$alvo"; recarregar=1; }
+      corrigir "$nome" "arquivo comum no lugar do link — trocado pelo symlink do repo"
+    else
+      [ "$MODO" = check ] || { ln -sfn "$fonte" "$alvo"; recarregar=1; }
+      corrigir "$nome" "ausente ou apontando para outro lugar"
+    fi
+    [ "$papel" = habilita ] || continue
+    [ "$MODO" = check ] || { [ "$recarregar" = 1 ] && { systemctl --user daemon-reload; recarregar=0; }; }
+
+    # HABILITAR SEM `systemctl enable`: nesta classe de host o diretorio de
+    # configuracao do usuario (~/.config/systemd/user) e root-owned, e o enable
+    # via D-Bus quer escrever NA RAIZ dele quando a unit e symlink — sai
+    # "Access denied" mesmo com o <target>.wants gravavel. Medido em 15/08.
+    # O ato do enable e um symlink no <target>.wants; fazemos esse symlink, e o
+    # systemd le o estado como `enabled` do mesmo jeito. Onde o .wants tambem e
+    # root-owned (timers.target.wants), nomeamos: exige o dono da maquina.
+    for alvo_t in $(sed -n 's/^WantedBy=//p' "$fonte" | tr ',' ' '); do
+      wants="$HOME/.config/systemd/user/${alvo_t}.wants"
+      link="$wants/$nome"
+      if [ -L "$link" ] && [ "$(readlink -f "$link" 2>/dev/null || true)" = "$(readlink -f "$alvo")" ]; then
+        conforme "$nome" "habilitada em $alvo_t"
+      elif [ "$MODO" = check ]; then
+        relata divergente "$nome" "nao habilitada em $alvo_t — nao sobe no boot"
+      elif mkdir -p "$wants" 2>/dev/null && ln -sfn "$alvo" "$link" 2>/dev/null; then
+        recarregar=1
+        corrigir "$nome" "habilitada em $alvo_t"
+      else
+        impossivel "$nome" "$wants nao aceita escrita (root-owned) — habilitar exige o dono da maquina"
+      fi
+    done
+
+    if [ "$(systemctl --user is-active "$nome" 2>/dev/null)" = active ]; then
+      conforme "$nome" "ativa"
+    elif [ "$MODO" = check ]; then
+      relata divergente "$nome" "nao ativa"
+    elif systemctl --user start "$nome" >/dev/null 2>&1; then
+      corrigir "$nome" "iniciada"
+    else
+      impossivel "$nome" "start falhou — ver: systemctl --user status $nome"
+    fi
+  done
+  [ "$recarregar" = 1 ] && systemctl --user daemon-reload
+fi
+
 # --- terceiro: mede e nomeia o efeito, nunca instala -------------------------
 # Efeito medido contra bin/ nesta data. Verbo que ganhar dependencia nova
 # acrescenta linha aqui no mesmo commit — tabela que envelhece mente com
