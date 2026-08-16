@@ -13,7 +13,13 @@
 # `x-auth-request-preferred-username`. Ausente, a escrita entra como anônima.
 set -euo pipefail
 
-BASE="${TAREFAS_BASE:-http://127.0.0.1:8120}"
+# `/api` desde o contract do #196: a tela do rastreador saiu de dentro da imagem da API
+# e virou servico proprio, e quem separa os dois e o gate da borda, que roteia por
+# prefixo de path. A arvore de dado deixou de responder na raiz — sem o prefixo aqui,
+# este verbo quebraria para toda cadeira no mesmo minuto.
+# O loopback continua sendo a porta do agente (card #469): a borda gateia a superficie
+# HUMANA, e um Bearer de agente nao atravessa oauth2-proxy.
+BASE="${TAREFAS_BASE:-http://127.0.0.1:8120/api}"
 QUEM="${PF_CADEIRA:-}"
 
 uso() {
