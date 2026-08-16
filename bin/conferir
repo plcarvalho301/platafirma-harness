@@ -53,6 +53,7 @@ declara, nunca se omite.
 Sai 0 quando nao ha divergencia, 1 quando ha, 2 quando a chamada esta errada.
 Nao muda nada: so olha.
 """
+import datetime
 import json
 import re
 import os
@@ -1474,6 +1475,214 @@ def conferir_peca(alvo=None, staged=False, como_json=False):
     return 0 if ok else 1
 
 
+
+# --- classe: sessao ---------------------------------------------------------
+
+VENV_HARNESS = os.path.join(RAIZ, ".venv-harness")
+TOKENIZADOR = os.path.join(RAIZ, "opt", "tokenizers", "qwen2.5.json")
+SESSAO_ENV = os.path.join(HARNESS, "sessao", ".env")
+
+
+def _venv_harness_no_path():
+    """`tokenizers` e `psycopg` moram no venv do harness, e este verbo roda no
+    python3 do sistema. Ler dali e permitido; escrever, nao."""
+    import glob as _glob
+    for d in _glob.glob(os.path.join(VENV_HARNESS, "lib", "python3.*", "site-packages")):
+        if d not in sys.path:
+            sys.path.append(d)
+
+
+def _tokenizador():
+    """(medir, motivo). Sem tokenizador nao ha medicao — e estimativa a olho erra
+    por ~40% (medido, caderno ia/contexto). Melhor sair 2 do que fabricar numero."""
+    try:
+        from tokenizers import Tokenizer
+    except ImportError:
+        _venv_harness_no_path()
+        try:
+            from tokenizers import Tokenizer
+        except ImportError:
+            return None, "modulo `tokenizers` ausente (mora em ~/AI/.venv-harness)"
+    if not os.path.isfile(TOKENIZADOR):
+        return None, f"tokenizador ausente: {TOKENIZADOR}"
+    tk = Tokenizer.from_file(TOKENIZADOR)
+    return (lambda s: len(tk.encode(s).ids)), None
+
+
+def _peca_servida(peca, cadeira):
+    """(texto, fonte, frescor, erro) — o que a peca SERVE agora.
+
+    Forma arquivo resolve no clone local; forma verbo EXECUTA, porque peca servida
+    por execucao nao tem arquivo a ler. Verbo que exige alvo posicional recebe a
+    cadeira na segunda tentativa: o catalogo declara o ato, nao a chamada.
+    """
+    ref = peca.get("artefato") or ""
+    if ref.startswith("verbo:"):
+        cmd = ref[len("verbo:"):].strip().split()
+        env = dict(os.environ, PF_CADEIRA=cadeira)
+        for tentativa in (cmd, cmd + [cadeira]):
+            p = subprocess.run(tentativa, capture_output=True, text=True, env=env)
+            if p.returncode == 0:
+                agora = datetime.datetime.now().astimezone().isoformat(timespec="seconds")
+                return p.stdout, " ".join(tentativa), agora, None
+        erro = (p.stderr or p.stdout or "").strip().splitlines()
+        return None, " ".join(cmd), None, (erro[0] if erro else f"exit {p.returncode}")
+    if "@" not in ref:
+        return None, ref, None, "forma invalida de artefato"
+    repo, _, path = ref.partition("@")
+    caminho = os.path.join(RAIZ, repo, path.replace("{cadeira}", cadeira))
+    if not os.path.isfile(caminho):
+        curto = cadeira.split("-", 1)[-1]
+        caminho = os.path.join(RAIZ, repo, path.replace("{cadeira}", curto))
+    if not os.path.isfile(caminho):
+        return None, f"{repo}@{path}", None, "artefato nao resolve no clone local"
+    with open(caminho, encoding="utf-8") as f:
+        texto = f.read()
+    mt = datetime.datetime.fromtimestamp(os.path.getmtime(caminho)).astimezone()
+    return texto, os.path.relpath(caminho, RAIZ), mt.isoformat(timespec="seconds"), None
+
+
+def _registrar_pacote(cadeira, fita, linhas):
+    """Contrato 6 da spec: pacote servido registrado com {peca, sha, tokens, frescor}.
+    Sem baseline gravado, orcamento de janela volta a ser declaracao.
+
+    `frescor` do DDL e enum, nao data: `fresco` quando a peca foi medida,
+    `indisponivel` quando o artefato nao resolveu. `defasado` fica sem emissor ate
+    haver criterio de defasagem — rotulo que ninguem sabe emitir seria ficcao.
+    """
+    _venv_harness_no_path()
+    try:
+        import psycopg
+    except ImportError:
+        return "modulo `psycopg` ausente (mora em ~/AI/.venv-harness)"
+    senha = ""
+    try:
+        for linha in open(SESSAO_ENV, encoding="utf-8"):
+            if linha.startswith("SESSAO_PG_PASSWORD="):
+                senha = linha.split("=", 1)[1].strip()
+    except OSError as e:
+        return f"sessao/.env ilegivel: {e}"
+    porta = os.environ.get("SESSAO_PG_PORT", "5437")
+    dsn = f"host=127.0.0.1 port={porta} dbname=sessao user=sessao password={senha}"
+    total = sum(l["tokens"] for l in linhas if l["tokens"] is not None)
+    try:
+        with psycopg.connect(dsn, connect_timeout=5) as con, con.cursor() as cur:
+            cur.execute("insert into sessao.fita (id, persona, superficie) values (%s, %s, %s) "
+                        "on conflict (id) do nothing",
+                        (fita, cadeira, os.environ.get("PF_SUPERFICIE", "desconhecida")))
+            cur.execute("insert into sessao.pacote (fita_id, tokens) values (%s, %s) "
+                        "on conflict (fita_id) do update set tokens = excluded.tokens, "
+                        "montado_em = now()", (fita, total))
+            for ordem, l in enumerate(linhas, start=1):
+                cur.execute(
+                    "insert into sessao.peca_servida "
+                    "(fita_id, peca, ordem, ref, sha, regime, tokens, frescor) "
+                    "values (%s, %s, %s, %s, %s, %s, %s, %s) "
+                    "on conflict (fita_id, peca) do update set "
+                    "ordem = excluded.ordem, ref = excluded.ref, sha = excluded.sha, "
+                    "tokens = excluded.tokens, frescor = excluded.frescor",
+                    (fita, l["peca"], ordem, l["ref"], l["sha"], l["regime"], l["tokens"],
+                     "indisponivel" if l["erro"] else "fresco"))
+    except Exception as e:                                   # noqa: BLE001 — o motivo importa mais que o tipo
+        return f"{type(e).__name__}: {e}"
+    return None
+
+
+def conferir_sessao(cadeira=None, como_json=False, registrar=None, teto_reprova=False):
+    """Pacote de abertura SERVIDO contra o teto declarado de cada peca.
+
+    `conferir peca` julga declarado contra declarado; esta classe e a unica que abre
+    o artefato, executa o verbo e conta token. Sem ela, orcamento de janela e
+    promessa — e o teto do catalogo nao tem como voltar a ser cap.
+
+    Teto estourado sai como OBSERVACAO por padrao: o baseline zero e justamente o
+    que este verbo produz, e reprovar antes de existir baseline repete o defeito que
+    tirou o hard cap de `conferir peca`. `--teto-reprova` liga o gate quando houver.
+    Exit 1 e para peca que NAO PODE ser medida: divergencia real entre o catalogo e
+    o que ele promete servir.
+    """
+    medir, motivo = _tokenizador()
+    if medir is None:
+        msg = f"sem tokenizador, nao ha medicao: {motivo}"
+        print(json.dumps({"erro": msg}, ensure_ascii=False) if como_json else msg)
+        return 2
+    cadeira = cadeira or os.environ.get("PF_CADEIRA")
+    if not cadeira:
+        msg = "uso: conferir sessao <cadeira>  (ou PF_CADEIRA no ambiente)"
+        print(json.dumps({"erro": msg}, ensure_ascii=False) if como_json else msg)
+        return 2
+    try:
+        with open(PECA_SCHEMA, encoding="utf-8") as f:
+            schema = json.load(f)
+    except (OSError, ValueError) as e:
+        msg = f"schema de peca ilegivel ({PECA_SCHEMA}): {e}"
+        print(json.dumps({"erro": msg}, ensure_ascii=False) if como_json else msg)
+        return 2
+
+    import hashlib
+    linhas, nao_medidas, acima = [], [], []
+    for nome in sorted(os.listdir(PECAS_DIR)):
+        if not nome.endswith(".json"):
+            continue
+        try:
+            with open(os.path.join(PECAS_DIR, nome), encoding="utf-8") as f:
+                peca = json.load(f)
+        except (OSError, ValueError):
+            continue
+        gat = peca.get("gatilho")
+        if not isinstance(gat, dict) or gat.get("evento") != "abertura":
+            continue
+        texto, fonte, frescor, erro = _peca_servida(peca, cadeira)
+        teto = peca.get("teto_tokens")
+        if erro:
+            nao_medidas.append((peca.get("id"), erro))
+            linhas.append({"peca": peca.get("id"), "fonte": fonte, "tokens": None,
+                           "teto": teto, "sha": None, "frescor": None, "erro": erro,
+                           "ref": peca.get("artefato"), "regime": peca.get("regime")})
+            continue
+        n = medir(texto)
+        sha = hashlib.sha256(texto.encode("utf-8")).hexdigest()[:12]
+        if isinstance(teto, int) and n > teto:
+            acima.append((peca.get("id"), n - teto))
+        linhas.append({"peca": peca.get("id"), "fonte": fonte, "tokens": n, "teto": teto,
+                       "sha": sha, "frescor": frescor, "erro": None,
+                       "ref": peca.get("artefato"), "regime": peca.get("regime")})
+
+    total = sum(l["tokens"] for l in linhas if l["tokens"] is not None)
+    orcamento = schema.get("orcamento_abertura_tokens")
+    erro_registro = None
+    if registrar:
+        erro_registro = _registrar_pacote(cadeira, registrar, linhas)
+
+    ok = not nao_medidas and (not acima or not teto_reprova)
+    if como_json:
+        print(json.dumps({
+            "cadeira": cadeira, "veredito": "medido" if not nao_medidas else "incompleto",
+            "total_tokens": total, "orcamento": orcamento,
+            "pecas": linhas, "acima_do_teto": [{"peca": p, "excesso": e} for p, e in acima],
+            "registrado_em": registrar if (registrar and not erro_registro) else None,
+            "erro_registro": erro_registro,
+        }, ensure_ascii=False, indent=2))
+        return 0 if ok else 1
+
+    print(f"pacote de abertura servido: {cadeira} — {len(linhas)} pecas")
+    for l in linhas:
+        if l["erro"]:
+            print(f"  {l['peca']:<28} {'—':>6}        NAO MEDIDA  {l['erro']}")
+            continue
+        marca = f"+{l['tokens'] - l['teto']}" if isinstance(l["teto"], int) and l["tokens"] > l["teto"] else "ok"
+        print(f"  {l['peca']:<28} {l['tokens']:>6} /{str(l['teto'] or '—'):>6}  {marca:<10} "
+              f"{l['sha']}  {l['frescor']}")
+    print(f"  {'TOTAL':<28} {total:>6} /{str(orcamento or '—'):>6}")
+    print(f"  nao medidas                  : {len(nao_medidas)}")
+    print(f"  acima do teto                : {len(acima)}"
+          + ("" if teto_reprova else "   (observacao: sem gate ate haver baseline)"))
+    if registrar:
+        print(f"  registrado                   : {'fita ' + registrar if not erro_registro else 'FALHOU — ' + erro_registro}")
+    print(f"  veredito                     : {'medido' if not nao_medidas else 'incompleto'}")
+    return 0 if ok else 1
+
+
 def main(argv):
     como_json = "--json" in argv
     if como_json:
@@ -1506,6 +1715,18 @@ def main(argv):
         if alvo == "--staged":
             return conferir_peca(None, staged=True, como_json=como_json)
         return conferir_peca(alvo, como_json=como_json)
+    if classe == "sessao":
+        registrar = None
+        if "--registrar" in argv:
+            i = argv.index("--registrar")
+            registrar = argv[i + 1] if len(argv) > i + 1 else None
+            if not registrar:
+                print("uso: conferir sessao [<cadeira>] --registrar <id-da-fita>")
+                return 2
+            if alvo == "--registrar":
+                alvo = None
+        return conferir_sessao(alvo, como_json=como_json, registrar=registrar,
+                               teto_reprova="--teto-reprova" in argv)
     if classe == "commit":
         return conferir_commit(alvo, como_json=como_json)
     if classe == "superficie":
