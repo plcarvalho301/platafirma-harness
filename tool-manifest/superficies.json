@@ -42,21 +42,22 @@
       "porque": "roda no mesmo host: o .mcp.json e o settings sao lisiveis daqui"
     },
     "fabrica": {
-      "papel": "Code em worktree wt-<card>, sob card de claudinho-TI",
+      "papel": "Code na conta que roda a fabrica, em maquina qualquer; worktree wt-<card> sob card de claudinho-TI",
       "conectores": [
         "platafirma-ops",
         "platafirma-wiki"
       ],
       "onde_declara": "wt-<card>/.mcp.json",
       "verificavel_do_host": true,
-      "porque": "as worktrees vivem em ~/AI; foi daqui que o padrao veio"
+      "porque": "as worktrees vivem em ~/AI; foi daqui que o padrao veio",
+      "injecao_de_cadeira": "~/.claude/CLAUDE.md (symlink de agente/CLAUDE.md): slug dito na abertura vence; sem slug, default `fabrica`. PF_CADEIRA NAO serve — Bash negado na estacao, e run_command roda no ambiente do ops-server, nao no do terminal. Medido em 16/08/2026."
     },
     "code-seco": {
-      "papel": "Claude Code aberto em clone sem .mcp.json: sessao FORA da plataforma",
+      "papel": "Claude Code em conta SEM o arranque do posto instalado: sem .mcp.json, sem conector, sem instrucao — sessao FORA da plataforma",
       "conectores": [],
       "onde_declara": "lugar nenhum — e a ausencia de declaracao que a define",
       "verificavel_do_host": false,
-      "porque": "nao ha artefato que a identifique: qualquer clone sem .mcp.json e ela. Declarada aqui porque tres de quatro em registro fazia o gate sair 'em dia' ignorando a quarta — nao medido nao e em dia.",
+      "porque": "nao ha artefato que a identifique: e a ausencia que a define. Declarada aqui porque tres de quatro em registro fazia o gate sair 'em dia' ignorando a quarta — nao medido nao e em dia. NA CONTA claudinho ela nao existe: ~/.claude/CLAUDE.md da default `fabrica` a qualquer diretorio.",
       "arranque": "nao ha injecao de cadeira e nao ha `monta_sessao` a chamar. A sessao declara que esta fora da plataforma em vez de agir como cadeira. Regua em conduta/arranque.md."
     }
   },

@@ -101,6 +101,26 @@ O que sobe, quando e com que rollback **não é meu**: é decisão de claudinho-
 escrita no card. Acesso remoto não é autoridade. Card que manda operar sem dizer
 o rollback volta como pergunta fechada, não vira execução com critério meu.
 
+## Onde abrir a sessão — decide o card, não o hábito
+
+Veio de `agente/CLAUDE.md` em 16/08/2026, quando o arquivo de conta deixou de
+carregar identidade e passou a ser só arranque. Procedimento completo:
+`docs/instanciacao-fabrica.md`.
+
+- **Card de um repositório só**: clone do repo do card, com `Bash`, `Write` e
+  `Edit` nativos; o push da branch sai do próprio clone.
+- **Card que toque mais de um repositório, ou o `platafirma-harness`**: estação
+  emprestada — o clone do harness, onde `.claude/settings.json` nega `Bash`,
+  `Write`, `Edit` e `NotebookEdit`, e toda escrita passa por `platafirma-ops`
+  contra as árvores em `~/AI/`. Dois repositórios viram dois caminhos na mesma sessão.
+- **No modo estação**: commit sai com a identidade de quem o `ops` executa
+  (`claudinho`); edição é `write_file`; push é `run_command` com
+  `git -C ~/AI/<repo> push`, com a credencial do dono.
+- **Roteiro do repo tocado**: `AGENTS.md` na raiz — vale para qualquer agente.
+  Persona não mora lá, e este manifesto não a substitui.
+
+Card sem repo declarado não começa: volta para claudinho-TI.
+
 ## Armadilhas medidas
 
 - **Bind mount de arquivo único não acompanha `git checkout`.** O checkout troca
