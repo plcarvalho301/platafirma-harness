@@ -29,9 +29,14 @@
   peca    [id]     catalogo de peca da montagem de sessao: cada arquivo de
                    `registro/pecas/` contra `registro/schema-peca.json` — campo,
                    vocabulario, `artefato` que nao resolve, `id` duplicado e a
-                   soma dos tetos de abertura contra o orcamento. Com `--staged`,
-                   julga so o que o commit acrescenta. O teto e alvo contratado,
-                   nao medicao do servido.
+                   soma dos tetos de abertura contra o orcamento, que sai como
+                   OBSERVACAO e nao muda o exit code. Com `--staged`, julga so o
+                   que o commit acrescenta. O teto e alvo contratado, nao medicao
+                   do servido — quem mede o servido e `conferir sessao`.
+  sessao  [cadeira] pacote de abertura SERVIDO contra o teto declarado de cada
+                   peca: tokens medidos com o tokenizador do harness, sha do
+                   conteudo servido e frescor. Sem tokenizador, sai 2 — pacote de
+                   abertura se mede, nao se estima.
   commit  <arquivo> mensagem de commit em curso: os ids que ela CITA, contra o
                    rastreador. Recusa id inexistente e id de item fechado — os dois
                    predicados do PRD do rastreador, §5.1, e so eles. Ausencia de id
@@ -1370,7 +1375,7 @@ def conferir_peca(alvo=None, staged=False, como_json=False):
             return 2
 
     campos = schema.get("campos", {})
-    defeitos, ids, abertura = [], {}, []
+    defeitos, observacoes, ids, abertura = [], [], {}, []
 
     for nome in arquivos:
         caminho = os.path.join(PECAS_DIR, nome)
@@ -1437,8 +1442,10 @@ def conferir_peca(alvo=None, staged=False, como_json=False):
 
     orcamento = schema.get("orcamento_abertura_tokens")
     soma = sum(t for _, _, t in abertura if isinstance(t, int))
-    if isinstance(orcamento, int) and soma > orcamento:
-        defeitos.append(("<catalogo>", f"soma dos tetos de abertura {soma} > orcamento {orcamento}"))
+    if isinstance(orcamento, int) and soma != orcamento:
+        lado = "acima do" if soma > orcamento else "abaixo do"
+        observacoes.append(("<catalogo>",
+                            f"soma dos tetos de abertura {soma} {lado} orcamento {orcamento}"))
 
     ok = not defeitos
     if como_json:
@@ -1448,6 +1455,7 @@ def conferir_peca(alvo=None, staged=False, como_json=False):
             "pecas_julgadas": len(julgados),
             "abertura": {"pecas": len(abertura), "soma_tetos": soma, "orcamento": orcamento},
             "defeitos": [{"peca": p, "defeito": d} for p, d in defeitos],
+            "observacoes": [{"peca": p, "observacao": o} for p, o in observacoes],
         }, ensure_ascii=False, indent=2))
         return 0 if ok else 1
 
@@ -1458,7 +1466,10 @@ def conferir_peca(alvo=None, staged=False, como_json=False):
     print(f"  defeito                          : {len(defeitos)}")
     for p, d in defeitos:
         print(f"      {p}: {d}")
-    print("  nao medido                       : tokens servidos (e `conferir sessao`, ainda inexistente)")
+    print(f"  observacao                       : {len(observacoes)}")
+    for p, o in observacoes:
+        print(f"      {p}: {o}")
+    print("  nao medido                       : tokens servidos (`conferir sessao` mede)")
     print(f"  veredito                         : {'em dia' if ok else 'divergente'}")
     return 0 if ok else 1
 

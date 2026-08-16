@@ -1,0 +1,12 @@
+{
+  "id": "tool-manifest-geral-detalhe",
+  "dono": "claudinho-TI",
+  "artefato": "platafirma-harness@tool-manifest/nucleo-detalhe.md",
+  "regime": "valor",
+  "gatilho": {
+    "evento": "ato",
+    "condicao": "antes de usar flag que o indice nao mostra, e antes de contar com comportamento de verbo que a abertura nao declara"
+  },
+  "volatilidade": "morna",
+  "emenda": "tool-manifest-geral"
+}

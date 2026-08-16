@@ -1,15 +1,14 @@
-# tool-manifest — toda cadeira
+# tool-manifest — núcleo, detalhe por ato
 
-Comum a todas as cadeiras. Redação de claudinho-TI; forma de RH. Manifesto de
-cadeira não replica o que está aqui — aponta.
+Peça de ATO, não de abertura. O índice está em `tool-manifest/nucleo.md`; aqui está o
+contrato de cada verbo e o porquê de cada regra. Ler quando o ato exigir: antes de usar
+uma flag que o índice não mostra, e antes de contar com um comportamento que ninguém
+mediu.
 
-> **Verbo novo em `bin/`, mesmo commit:** linha aqui antes do push. Ferramenta
-> existente e não indexada é ferramenta inexistente.
+Norma de card, execução inteira e teste de admissão da fila não moram aqui:
+`platafirma-arquitetura/docs/administrativo.md`.
 
-> **Entrega vai a git ou wiki no mesmo turno.** O dono não tem shell no host: arquivo
-> parado em `~/AI` é rascunho, não entrega — ele não consegue abrir nem validar. Publica,
-> e só então relata, com link inteiro e colável.
-
+## Contrato de chamada, verbo a verbo
 
 ```
 ver minha caixa                 : fila status <persona>          quantas novas, sem ler
@@ -43,16 +42,8 @@ despachar giro na sala do chat  : chat despachar --cadeira <slug> --fita <id-ou-
 versao do motor x a pinada      : chat versao                    exit 1 = CLI derivou
 
 ver minha memoria de trabalho   : mesa ver [chapeu]              ja vem no monta_sessao
-plantar item para a proxima fita: mesa item <chapeu> --ato "<o que FAZER>" --alvo "<sobre o que>"
-                                  ato e alvo obrigatorios: sem ato nao e mesa. Decisao fechada
-                                  e antirreabertura, aprendizado de oficio e caderno.
-                                  Corpo opcional em stdin. Substrato: harness-sessao (Postgres)
-executei, tira da mesa          : mesa fez <id>                  leitura nao esvazia, so o ato
-a mesa velha, e a triagem dela  : mesa legado [--corpo] [--triado <chapeu>]
-                                  prosa capturada do Valkey na fase 6 do #189
-anotar antes de a fita morrer   : mesa anota <chapeu>            FORMA VELHA: prosa, no Valkey.
-                                  Ainda serve `descansar` e os rituais do chat
-esquecer um chapeu              : mesa limpa <chapeu>            alvo obrigatorio; so a prosa
+anotar antes de a fita morrer   : mesa anota <chapeu>            corpo em stdin; sobrescreve
+esquecer um chapeu              : mesa limpa <chapeu>            alvo obrigatorio
 fita corrente da cadeira        : mesa fita [abre|fecha --id <id>]  com PF_FITA no ambiente,
                                   `mesa anota` so escreve se a fita ainda for a corrente
 indice dos cadernos duraveis    : mesa caderno                   idade e tamanho, sem corpo
@@ -187,82 +178,6 @@ por `arq:0040`: o binário agrupa, o subcomando é o ato.
 > — subtrair total menos vetorizados fabrica uma pendência que não existe. Pendência
 > real é a linha `embedding parcial` do próprio instrumento. Vale pra toda cadeira:
 > quem afirma número do acervo sem ter rodado o instrumento está reportando, não medindo.
-
-## Card por sessão — norma de conduta
-
-Card técnico não tem gatilho de aceite visual: sem isto, ninguém lembra que
-existe pra fechar.
-
-- **Início de sessão de execução**: puxar/confirmar o card com pergunta
-  binária (`card #N — <título> — é esse?`). Carregar como estado até trocar
-  ou encerrar.
-- **Fim de sessão**: perguntar fechamento por card do flag, um por um,
-  critério explícito — nunca inferência sobre o diff da sessão.
-- **Encaminhamento pra outra cadeira** (fila) cita `#N` do flag
-  automaticamente quando aplicável.
-- **Escrita de git/wiki é manual**, sob pedido explícito do dono — não é
-  trigger automático de fim de sessão.
-- **Fechou marco, encerra a fita.** `encerrar fita` roda por marco fechado —
-  entrega commitada, card fechável, assunto encerrado — e não por hora do dia.
-  Esperar o fim do expediente tem o defeito que o verbo existe para corrigir: a
-  sessão não sabe quando morre. Quem chama é a cadeira, sem o dono pedir.
-- **O dono também dispara por fala.** "encerra", "fecha o dia", "descansa", "vai
-  dormir" e afins são a chamada do verbo, não conversa — quem interpreta é a
-  sessão, e o binário não tem como ouvir isso.
-
-## Execução inteira — quem começa, termina (dono, 11/08/2026)
-
-- **Antes de iniciar, pergunte.** Refinamento é a fase de perguntar: dúvida,
-  insumo e decisão alheia se resolvem aí.
-- **Iniciada a execução, precisar de qualquer coisa é exceção** — entrega
-  complexa, autorizada pelo dono, com a mensagem dele em `ref`.
-- **Complexa = não cabe num agente só**: exige mais de um agente na mesma
-  entrega. Ao pedir terceirização, escreva em uma linha por que não cabe em você
-  — competência que falta, contexto que estoura, frentes que não serializam.
-  Cabendo em você, é sua.
-- **Fechado o refinamento, duas rotas**: pedir ao dono autorização para
-  terceirizar a entrega inteira à fábrica, ou executar inteiro sozinho — todas as
-  peças (código, doc, wiki, migração, card).
-- **Rota da fábrica**: dono autoriza (análise de risco é dele) → claudinho-TI
-  revisa e despacha o card. A porta da fábrica continua sendo o card do TI.
-- **A quebra é dentro da fábrica, não entre cadeiras**: TI fatia a entrega nos
-  cards que ela exigir e a fábrica distribui entre agentes.
-- **TI revisa nas duas pontas**: entrada (corta o card) e saída (recebe da
-  fábrica, revisa e conserta antes do merge). Do card ao push, a entrega é dele.
-- **A responsabilidade da execução é do executor.** Não se reparte, não se
-  repassa, não se consulta no meio.
-- **Risco alto ao ambiente → o merge vai a gate de claudinho-TI**, com sign-off
-  pedido por mensagem antes do push. Sem risco, vai até o fim.
-
-## Fila — o que merece mensagem (teste de admissão)
-
-Medido em 09/08/2026 sobre as 40 mensagens vivas: 19 são `resposta`, contra 8
-`pedido` e 7 `decisao`. Resposta é o tipo dominante — a fila virou esteira de
-entrega em vez de canal de decisão, e caixa que não zera para de informar.
-
-**Teste, antes de escrever qualquer mensagem: se eu não mandar isto, o que
-para?** Nada para → não manda.
-
-- **Manda** só o que precisa de decisão ou insumo de OUTRA cadeira para quem
-  escreve continuar. Bloqueio real, não cortesia.
-- **Não manda**: entrega concluída, achado registrado, retificação de número,
-  aviso de commit, "de acordo", "recebido", agradecimento. Isso é card, commit
-  ou nada.
-- **Silêncio é aceite.** Concordância não se responde; discordância sim.
-- **Profundidade máxima 2.** Pedido → resposta encerra a cadeia. Responder a uma
-  resposta é proibido; se a resposta abriu assunto novo, o assunto novo é card
-  com dono, não terceira mensagem.
-- **Achado fora do escopo do pedido vira card**, não mensagem — salvo se o dono
-  precisa decidir hoje para não perder trabalho.
-- **Handoff é exceção** e continua valendo: é contexto de abertura, não tráfego.
-- **Ordem explícita do dono dispensa o teste.** Explícita = verbo de mando +
-  destinatário ou ato nomeados por ele; preferência ou pedido implícito não
-  contam. Dispensa é do teste, não do registro: grava-se o ato como ordem do
-  dono, com a mensagem original em `ref`.
-
-Quem escreve carrega a prova de que passou no teste: a mensagem diz, em uma
-linha, o que trava sem ela. Sem essa linha, a caixa do destinatário não deve
-nada — pode consumir sem responder.
 
 ## Fila — a caixa é log, e ler já confirma
 

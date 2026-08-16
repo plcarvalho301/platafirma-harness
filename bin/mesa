@@ -1,35 +1,44 @@
 #!/home/claudinho/AI/.venv-harness/bin/python
 # mesa — memoria de trabalho da cadeira entre fitas, por chapeu
 # capacidade: memoria
-# dono: claudinho-IA
+# dono: claudinho-IA (conteudo e formato) · claudinho-TI (substrato)
 #
 # Despachante (arq:0040): o binario agrupa a memoria da cadeira, o sub-ato e o
-# ato. Dois substratos, um eixo — o chapeu (slot) e o mesmo nos dois:
+# ato. Dois substratos duraveis, um eixo — o chapeu (slot) e o mesmo nos dois:
 #
-#   mesa  (efemera)  classe `mem` de arq:0041, instancia msg-mem, chave
-#                    `mem:<cadeira>:<slot>`. Sobrescrita, TTL, sem durabilidade.
-#                    O que a fita de hoje precisa entregar a fita de amanha.
+#   mesa    (item)    tabela `sessao.mesa_item`, instancia harness-sessao. Item com
+#                     ATO e ALVO, que esvazia por execucao do ato. O que a fita de
+#                     hoje precisa que a fita de amanha FACA.
 #   caderno (duravel) arquivo `caderno/<cadeira>/<slot>.md` no repo do harness.
-#                    Versionado, com diff e revisao. O que a cadeira aprendeu do
-#                    proprio oficio e vale alem de um expediente.
+#                     Versionado, com diff e revisao. O que a cadeira aprendeu do
+#                     proprio oficio e vale alem de um expediente.
+#
+# SUBSTRATO DA MESA TROCOU (fase 6 do card #189, spec_montagem-de-sessao §3): era
+# texto livre na classe `mem` do Valkey, e agora e entidade em Postgres. O que
+# muda de verdade nao e o banco, e a REGUA DE ADMISSAO: mesa e o que tem ato
+# pendente. Prosa sem ato nao e mesa — decisao fechada e a peca `antirreabertura`,
+# aprendizado de oficio e caderno.
+#
+# O VALKEY AINDA SERVE, e nao e por indecisao: `descansar`, os rituais do chat e o
+# ops-server chamam `mesa anota <chapeu>` com prosa em stdin, e derrubar esse
+# contrato hoje quebraria o encerramento de fita de TODA cadeira. Enquanto eles
+# nao migram, `anota` continua escrevendo la, `ver` le os dois e marca qual e qual.
+# A mesa velha ja esta capturada em `sessao.mesa_legado` (sessao/migracao/).
 #
 # NAO E A FILA. Protocolo inteiro distinto: sem envelope, sem destinatario, sem
 # ack, sem consumer group, sem trim de arq:0024. A fila e dirigida a outro e
 # imutavel; a memoria e para si mesma e mutavel. Fato que interessa a outra
 # cadeira desce ao canal proprio (card, commit, wiki) — nunca mora aqui.
 #
-# ESTATUTO DA MESA (arq:0041): memoria de trabalho, nao substrato. Perda se paga
-# em re-derivacao na fita seguinte, nao em restauracao. Ausencia de chave e
-# resposta valida, nao erro.
+# NAO HA CONSUMO. `monta_sessao` le sem apagar. Item sai da mesa por `mesa fez
+# <id>`, que e a execucao do ato — nunca por leitura, e nunca por robo.
 #
-# NAO HA CONSUMO. `monta_sessao` le sem apagar: com um chapeu por slot, ler-e-
-# apagar apagaria o paragrafo do chapeu vizinho. Sobrescrita e o unico jeito de
-# esquecer, e `limpa` exige alvo explicito.
+# BANCO FORA DO AR SE DECLARA INDISPONIVEL, nunca como mesa vazia: ausencia de
+# item e resposta valida (arq:0041) e seria indistinguivel de substrato mudo.
 #
 # CADERNO E CORPO SOB DEMANDA. A abertura entrega o INDICE (nome, idade, bytes);
 # o corpo so entra na fita que o pediu — mesma regra da fila (envelope, nunca
-# corpo) e da skill (descritor no contexto, corpo por ato). Carregar os tres
-# chapeus a cada giro anula a razao de ter partido por chapeu.
+# corpo) e da skill (descritor no contexto, corpo por ato).
 import argparse
 import json
 import os
@@ -48,7 +57,10 @@ PORTA = int(os.environ.get("MEM_REDIS_PORT", "6380"))  # instancia msg-mem, nao 
 TTL_PADRAO = int(os.environ.get("MEM_TTL_DIAS", "14")) * 86400
 TETO_AVISO = 4000  # bytes; acima disto e sintoma de fato nao despachado
 RAIZ = os.environ.get("PF_RAIZ", os.path.expanduser("~/AI"))
-CADERNOS = os.path.join(RAIZ, "platafirma-harness", "caderno")
+HARNESS = os.path.join(RAIZ, "platafirma-harness")
+CADERNOS = os.path.join(HARNESS, "caderno")
+PERSONAS = os.path.join(HARNESS, "personas")
+SESSAO_ENV = os.path.join(HARNESS, "sessao", ".env")
 SLOT_RE = re.compile(r"^[a-z0-9][a-z0-9-]{0,23}$")
 
 # Slot de fita corrente (card 449). Fora do padrao `mem:<cadeira>:<slot>` de
@@ -57,6 +69,10 @@ SLOT_RE = re.compile(r"^[a-z0-9][a-z0-9-]{0,23}$")
 # novo na malha `pf:msg` (criterio 13 da minuta 0002), que e outra instancia.
 # Valor e o id puro, nao JSON: o compare-and-swap e comparacao de string, e a
 # idade sai do TTL restante. Uma peca a menos que um decode em Lua.
+#
+# O CAS FICA NO VALKEY, e nao migra junto: e comparacao de string em memoria no
+# caminho de toda escrita de mesa. `sessao.fita` recebe o REGISTRO da fita (para
+# giro, pacote e peca-servida terem raiz), nao a guarda.
 FITA_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$")
 
 # CAS: escreve KEYS[2] so se KEYS[1] (fita corrente) ainda for ARGV[1].
@@ -75,11 +91,71 @@ def conn():
     return redis.Redis(host=HOST, port=PORTA, decode_responses=True)
 
 
+def dsn():
+    """DSN do harness-sessao. Senha sai de `sessao/.env`, que e 600 e fora do git —
+    o verbo roda como `claudinho`, dono do arquivo, e nao ha segredo em codigo."""
+    d = os.environ.get("SESSAO_PG_DSN")
+    if d:
+        return d
+    senha = os.environ.get("SESSAO_PG_PASSWORD", "")
+    if not senha and os.path.isfile(SESSAO_ENV):
+        for linha in open(SESSAO_ENV, encoding="utf-8"):
+            if linha.startswith("SESSAO_PG_PASSWORD="):
+                senha = linha.split("=", 1)[1].strip()
+                break
+    porta = os.environ.get("SESSAO_PG_PORT", "5437")
+    return f"host=127.0.0.1 port={porta} dbname=sessao user=sessao password={senha}"
+
+
+def pg(silencioso=False):
+    """Conexao com o substrato de item. Devolve None em vez de morrer: mesa fora do
+    ar nao pode derrubar o verbo nem a abertura de sessao — se declara e segue."""
+    try:
+        import psycopg
+    except ImportError:
+        if not silencioso:
+            print("(itens de mesa indisponiveis: modulo 'psycopg' ausente neste venv)",
+                  file=sys.stderr)
+        return None
+    try:
+        return psycopg.connect(dsn(), connect_timeout=3)
+    except Exception as e:  # noqa: BLE001 — qualquer falha aqui e "substrato mudo"
+        if not silencioso:
+            print(f"(itens de mesa indisponiveis: sessao-db nao respondeu — {e.__class__.__name__})",
+                  file=sys.stderr)
+        return None
+
+
 def cadeira():
     c = os.environ.get("PF_CADEIRA", "").strip().lower()
     if not c:
         sys.exit("erro: PF_CADEIRA nao definida — a memoria e privada da cadeira (arq:0041)")
     return c
+
+
+def canonica():
+    """Slug canonico da cadeira, para o substrato NOVO.
+
+    `monta-sessao` exporta PF_CADEIRA com o argumento (`TI`) e o resto do ferramental
+    usa o slug (`claudinho-TI`): no Valkey isso partiu a mesa em duas metades que
+    divergem (medido em 16/08, cinco cadeiras com par). Aqui a chave e uma so.
+    O nome canonico ja esta na linha 1 de cada persona — tabela a parte diverge.
+    """
+    bruta = cadeira()
+    try:
+        arquivos = os.listdir(PERSONAS)
+    except OSError:
+        return bruta
+    for nome in sorted(arquivos):
+        if not (nome.startswith("persona-") and nome.endswith(".md")):
+            continue
+        curto = nome[len("persona-"):-len(".md")]
+        with open(os.path.join(PERSONAS, nome), encoding="utf-8", errors="replace") as fh:
+            achado = re.search(r"claudinh[oa]-[A-Za-z0-9-]+", fh.readline())
+        canon = achado.group(0) if achado else curto
+        if bruta in (curto.lower(), canon.lower()):
+            return canon
+    return bruta
 
 
 def chave(slot):
@@ -118,14 +194,49 @@ def idade(seg):
     return f"{seg // 86400} d"
 
 
+def registra_fita(con, fid):
+    """Raiz do agregado operacional. Superficie sai de PF_SUPERFICIE; quem nao
+    declara e registrado como 'desconhecida', nunca como um palpite plausivel."""
+    sup = os.environ.get("PF_SUPERFICIE", "").strip() or "desconhecida"
+    if sup not in ("claude.ai", "chat", "code", "desconhecida"):
+        sup = "desconhecida"
+    with con.cursor() as cur:
+        cur.execute(
+            "INSERT INTO sessao.fita (id, persona, superficie) VALUES (%s, %s, %s) "
+            "ON CONFLICT (id) DO NOTHING",
+            (fid, canonica(), sup),
+        )
+    con.commit()
+
+
 def ato_ver(args):
+    """Indice do que esta pendente. Item primeiro (substrato novo), prosa depois."""
+    achou = False
+    con = pg()
+    if con is not None:
+        with con, con.cursor() as cur:
+            cur.execute(
+                "SELECT id, chapeu, ato, alvo, texto, plantado_em FROM sessao.mesa_item "
+                "WHERE cadeira = %s AND esvaziado_em IS NULL "
+                + ("AND chapeu = %s " if args.slot else "")
+                + "ORDER BY chapeu, plantado_em",
+                (canonica(), args.slot) if args.slot else (canonica(),),
+            )
+            linhas = cur.fetchall()
+        for id_, chapeu, ato, alvo, texto, plantado in linhas:
+            achou = True
+            print(f"#{id_} [{chapeu}] {ato} → {alvo}   (plantado ha {idade(time.time() - plantado.timestamp())})")
+            if texto:
+                for l in texto.rstrip().splitlines():
+                    print(f"      {l}")
+        if linhas:
+            print("  (executou? `mesa fez <id>` — leitura nao esvazia)")
+            print()
+
     rc = conn()
     alvo = f"mem:{cadeira()}:{args.slot}" if args.slot else f"mem:{cadeira()}:*"
-    chaves = sorted(rc.keys(alvo))
-    if not chaves:
-        print("mesa vazia" if not args.slot else f"slot {args.slot}: vazio")
-        return 0
-    for k in chaves:
+    for k in sorted(rc.keys(alvo)):
+        achou = True
         bruto = rc.get(k)
         slot = k.split(":", 2)[2]
         try:
@@ -133,17 +244,112 @@ def ato_ver(args):
             texto, ts = d.get("x", ""), d.get("t", 0)
         except (ValueError, AttributeError):
             texto, ts = bruto or "", 0
-        print(f"[{slot}] escrito ha {idade(time.time() - ts)}")
+        print(f"[{slot}] (prosa, substrato velho) escrito ha {idade(time.time() - ts)}")
         print(texto.rstrip())
         print()
+
+    if not achou:
+        print("mesa vazia" if not args.slot else f"slot {args.slot}: vazio")
+    return 0
+
+
+def ato_item(args):
+    """Planta um item. Sem ato e sem alvo nao entra: a regua de admissao da mesa e
+    'se eu nao fizer nada, isso continua do jeito que esta?' — sem ato, nao continua
+    nada, e o lugar do texto e outro (antirreabertura, caderno, card)."""
+    slot = valida_slot(args.chapeu)
+    texto = "" if sys.stdin.isatty() else sys.stdin.read().strip()
+    con = pg()
+    if con is None:
+        return 3
+    with con, con.cursor() as cur:
+        cur.execute(
+            "INSERT INTO sessao.mesa_item (cadeira, chapeu, ato, alvo, texto, plantado_por_fita) "
+            "VALUES (%s, %s, %s, %s, %s, %s) RETURNING id",
+            (canonica(), slot, args.ato.strip(), args.alvo.strip(), texto or None,
+             fita_registrada(con)),
+        )
+        novo = cur.fetchone()[0]
+    print(f"mesa: item #{novo} plantado em [{slot}] — {args.ato.strip()} → {args.alvo.strip()}")
+    return 0
+
+
+def fita_registrada(con):
+    """Registra a fita corrente e devolve o id, ou None quando nao ha fita declarada
+    (sessao de mao). FK opcional de proposito: item plantado sem fita continua item."""
+    fid = fita_do_ambiente()
+    if not fid:
+        return None
+    valida_fita(fid)
+    registra_fita(con, fid)
+    return fid
+
+
+def ato_fez(args):
+    """Esvazia o item porque o ato foi executado. Nao apaga: o item fica com
+    `esvaziado_em`, que e o unico jeito de medir depois o que a mesa realmente moveu."""
+    con = pg()
+    if con is None:
+        return 3
+    with con, con.cursor() as cur:
+        fid = fita_registrada(con)
+        cur.execute(
+            "UPDATE sessao.mesa_item SET esvaziado_em = now(), esvaziado_por_fita = %s "
+            "WHERE id = %s AND cadeira = %s AND esvaziado_em IS NULL RETURNING chapeu, ato",
+            (fid, args.id, canonica()),
+        )
+        linha = cur.fetchone()
+    if not linha:
+        print(f"mesa: item #{args.id} nao esta pendente nesta cadeira — nada a esvaziar",
+              file=sys.stderr)
+        return 3
+    print(f"mesa: item #{args.id} esvaziado [{linha[0]}] — {linha[1]}")
+    return 0
+
+
+def ato_legado(args):
+    """A mesa velha, capturada do Valkey na migracao da fase 6. Leitura, e um gesto
+    de triagem: o que ainda tem ato vira `mesa item`, o resto morre com o registro."""
+    con = pg()
+    if con is None:
+        return 3
+    with con, con.cursor() as cur:
+        if args.triado:
+            cur.execute(
+                "UPDATE sessao.mesa_legado SET triado_em = now() "
+                "WHERE cadeira = %s AND chapeu = %s AND triado_em IS NULL RETURNING chave_origem",
+                (canonica(), args.triado),
+            )
+            achados = cur.fetchall()
+            print(f"mesa legada: {len(achados) or 'nenhuma'} entrada(s) de [{args.triado}] triada(s)")
+            return 0
+        cur.execute(
+            "SELECT chave_origem, chapeu, bytes, texto FROM sessao.mesa_legado "
+            "WHERE cadeira = %s AND triado_em IS NULL ORDER BY chapeu, chave_origem",
+            (canonica(),),
+        )
+        linhas = cur.fetchall()
+    if not linhas:
+        print("mesa legada: nada pendente de triagem")
+        return 0
+    for chave_origem, chapeu, bytes_, texto in linhas:
+        print(f"===== {chave_origem}  [{chapeu}] {bytes_} B =====")
+        print(texto.rstrip() if args.corpo else "  (corpo por `mesa legado --corpo`)")
+        print()
+    print("  (triado? `mesa legado --triado <chapeu>`; o que tinha ato vira `mesa item`)")
     return 0
 
 
 def ato_anota(args):
+    """FORMA VELHA, mantida porque `descansar`, os rituais do chat e o ops-server
+    ainda a chamam com prosa em stdin. Escreve no Valkey, nao no substrato de item."""
     slot = valida_slot(args.slot)
     texto = sys.stdin.read().strip()
     if not texto:
         sys.exit("erro: corpo vazio — para esquecer um slot use `mesa limpa <slot>`")
+    print("aviso: `mesa anota` escreve prosa no substrato velho. O que tem ATO pendente vai "
+          "em `mesa item <chapeu> --ato ... --alvo ...`, que e o que a abertura serve.",
+          file=sys.stderr)
     if len(texto.encode()) > TETO_AVISO:
         print(
             f"aviso: {len(texto.encode())} bytes no slot {slot} — mesa grande e sintoma "
@@ -179,17 +385,30 @@ def ato_limpa(args):
 
 def ato_fita(args):
     """Slot de fita corrente da cadeira: quem abriu, e contra quem o CAS compara.
-    Escrito pelo adaptador do chat na abertura; lido por toda escrita de mesa."""
+    Escrito pelo adaptador do chat na abertura; lido por toda escrita de mesa.
+    A guarda mora no Valkey; o REGISTRO da fita vai para `sessao.fita`, que e a raiz
+    de giro, pacote e peca-servida — falha no registro nao impede abrir a fita."""
     rc = conn()
     k = chave_fita()
     if args.gesto == "abre":
         fid = valida_fita(args.id or f"{int(time.time())}-{os.urandom(3).hex()}")
         rc.set(k, fid, ex=TTL_PADRAO)
+        con = pg(silencioso=True)
+        if con is not None:
+            with con:
+                registra_fita(con, fid)
         print(fid)  # stdout e o id, para `export PF_FITA=$(mesa fita abre)`
         return 0
     if args.gesto == "fecha":
         fid = valida_fita(fita_do_ambiente(args.id) or "")
         if rc.eval(LUA_FECHA, 1, k, fid):
+            con = pg(silencioso=True)
+            if con is not None:
+                with con, con.cursor() as cur:
+                    cur.execute(
+                        "UPDATE sessao.fita SET encerrada_em = now(), encerramento = 'zerar' "
+                        "WHERE id = %s AND encerrada_em IS NULL", (fid,))
+                con.commit()
             print(f"fita {fid}: fechada")
             return 0
         print(f"fita {fid}: nao era a corrente ({rc.get(k) or 'nenhuma'}) — nada a fechar",
@@ -247,11 +466,26 @@ def main():
     p = argparse.ArgumentParser(prog="mesa", description="memoria de trabalho da cadeira, por chapeu")
     sub = p.add_subparsers(dest="ato")
 
-    v = sub.add_parser("ver", help="imprime a mesa (ou um slot), com a idade de cada anotacao")
+    v = sub.add_parser("ver", help="o que esta pendente: item com ato, e a prosa que sobrou")
     v.add_argument("slot", nargs="?")
     v.set_defaults(func=ato_ver)
 
-    a = sub.add_parser("anota", help="reescreve um slot da mesa; corpo em stdin")
+    i = sub.add_parser("item", help="planta um item de mesa: ato e alvo obrigatorios")
+    i.add_argument("chapeu")
+    i.add_argument("--ato", required=True, help="o que a proxima fita tem de FAZER")
+    i.add_argument("--alvo", required=True, help="sobre o que: card, arquivo, servico, cadeira")
+    i.set_defaults(func=ato_item)
+
+    f = sub.add_parser("fez", help="esvazia o item porque o ato foi executado")
+    f.add_argument("id", type=int)
+    f.set_defaults(func=ato_fez)
+
+    g = sub.add_parser("legado", help="a mesa velha capturada do Valkey, e a triagem dela")
+    g.add_argument("--corpo", action="store_true", help="imprime o texto, nao so o cabecalho")
+    g.add_argument("--triado", metavar="CHAPEU", help="marca o chapeu como triado")
+    g.set_defaults(func=ato_legado)
+
+    a = sub.add_parser("anota", help="forma velha: reescreve prosa num slot; corpo em stdin")
     a.add_argument("slot")
     a.add_argument("--se-fita", metavar="ID",
                    help="so escreve se esta ainda for a fita corrente; default PF_FITA")
@@ -262,7 +496,7 @@ def main():
     ft.add_argument("--id", metavar="ID", help="id explicito; em `abre` sem --id, gera um")
     ft.set_defaults(func=ato_fita)
 
-    l = sub.add_parser("limpa", help="esquece um slot da mesa; alvo obrigatorio")
+    l = sub.add_parser("limpa", help="esquece um slot de prosa; alvo obrigatorio")
     l.add_argument("slot")
     l.set_defaults(func=ato_limpa)
 

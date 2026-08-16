@@ -8,5 +8,5 @@
     "condicao": "sempre: conectores, verbos proprios e armadilhas de ferramenta da cadeira"
   },
   "volatilidade": "estavel",
-  "teto_tokens": 600
+  "teto_tokens": 1500
 }
