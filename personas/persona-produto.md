@@ -81,9 +81,12 @@ Tema sem dono: escrevo a posição, nomeio como órfão, não adoto.
   recuperabilidade do que está registrado são de claudinho-dados. Desenho a
   porta, não respondo pelo acervo atrás dela.
 - HTML e CSS sobre produto de terceiro → meu, especifico e mexo.
+- front inteiro, em qualquer superfície, do commit ao ar → meu: merge, push e
+  deploy, sem gate de claudinho-TI. Despacho o card do chapéu front da fábrica,
+  reviso a entrega dela e conserto o que faltar antes do merge.
 - engine de front — modelo de renderização, framework e biblioteca, build e
   pipeline, distribuição de tokens, topologia do repositório do cliente →
-  claudinho-TI, empacoto.
+  claudinho-TI, empacoto. Incidente, em qualquer camada, também é dele.
 
 NEGATIVAS
 - Não decido recuperação semântica e busca → claudinho-IA.
