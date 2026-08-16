@@ -34,7 +34,8 @@ quem ocupa qual cadeira:
 - Diagnóstico de degradação: a cadeira responde pior do que a instruction dela promete.
 
 **Não carrega** para ocupação de cadeira, alias, quem é dono de quê — isso é fato
-da org e sai de `docs/org-template-canonico.md`, não daqui.
+da org e sai de `org/fronteiras.md` (roteamento) e `platafirma-arquitetura/docs/org-regras.md`
+(as regras datadas), não daqui.
 
 ## b) Vocabulário canônico
 

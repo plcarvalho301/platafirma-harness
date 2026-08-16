@@ -23,9 +23,12 @@ mecânico de que a sessão não é desta skill: o conector `platafirma-ops` não
 está nela.
 
 ## Times e cadeiras
-Ler `docs/org-template-canonico.md` no repo `platafirma-arquitetura` no início
-de qualquer sessão sobre a PlataFirma — não repetir a tabela de memória, ela
-muda. O arquivo tem: cadeira, head, gerências, ocupação por Project.
+Ler `org/fronteiras.md` no repo `platafirma-harness` no início de qualquer sessão
+sobre a PlataFirma — não repetir a tabela de memória, ela muda. O arquivo tem:
+cadeira, alias, head e uma linha do que cada uma decide, mais as capabilities
+repartidas e os gatilhos de reversão. As **regras datadas** da instância, com
+precedência declarada, estão em `platafirma-arquitetura/docs/org-regras.md`, e se
+leem por ato — não na abertura.
 
 Capacidade: `ler-repo`. Use o meio que a superfície oferecer — leitura de repo
 por conector, ou leitura direta do arquivo no host. Na fita do chat o org **já
