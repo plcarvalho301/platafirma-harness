@@ -162,11 +162,20 @@ def main():
         Path.home() / "AI" / "var" / "pacotes" / "INSTRUCOES.md"))
     ap.add_argument("--limite-mb", type=float, default=20.0)
     ap.add_argument("--amostra", type=int, default=0)
+    ap.add_argument("--sha", action="append", default=[],
+                    help="sha256 do objeto; repetível. Recorta o universo a estas obras — "
+                         "existe para o lote novo não esperar o passivo de classificação.")
     args = ap.parse_args()
 
     out = Path(args.out)
     out.mkdir(parents=True, exist_ok=True)
     obras = universo()
+    if args.sha:
+        alvo = set(args.sha)
+        obras = [o for o in obras if o["sha256"] in alvo]
+        faltou = alvo - {o["sha256"] for o in obras}
+        if faltou:
+            print("sem obra por classificar para: " + ", ".join(sorted(faltou))[:400], flush=True)
     if args.amostra:
         obras = obras[::max(1, len(obras)//args.amostra)][:args.amostra]
     print(f"universo: {len(obras)} obras", flush=True)
