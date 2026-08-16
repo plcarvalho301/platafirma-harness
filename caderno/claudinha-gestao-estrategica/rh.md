@@ -38,7 +38,7 @@ texto de arranque em cwd é PONTEIRO. E a lição de método é mais cara que a 
 escrevi a tabela de injeção das quatro superfícies de memória do fluxo, e duas estavam
 erradas: `PF_CADEIRA` não atravessa no Code (Bash negado na estação, `run_command` roda
 no ambiente do ops-server), e "Code seco sem injeção" era, na conta do dono, sessão com
-a cadeira ERRADA e calada. **Caminho de injeção se mede, não se lembra.**
+a cadeira ERRADA e calada. **Caminho de injeção se mede, não se lembra** — e vale para ACESSO também: nesta fita declarei bloqueada uma rodada inteira porque não havia verbo que listasse `acervo.conceito`, e a tabela se lia direto por psql. Ausência de ferramental próprio não é ausência de acesso.
 
 ## Duas armadilhas de leitura do próprio trabalho
 
@@ -64,6 +64,23 @@ medição mais fácil que está na mão.
 Teste que fica, antes de listar qualquer gerência como suspeita: a razão sobrevive se o
 acervo dobrar de tamanho amanhã? Não sobrevive → não é razão de desenho, é observação de
 curadoria, e vai ao dono do acervo em vez de entrar no quadro.
+
+## Fronteira escrita sobre execução produz repasse
+
+A cláusula "executar é só no meu recorte: mexer em artefato de outra cadeira eu não
+faço, nem com a proposta pronta e certa" estava em 7 personas e no gabarito, e era a
+fábrica do modo de falha do serviço público — cadeira devolvendo ao vizinho um `if` de
+código porque o arquivo não é dela. Fronteira útil é sobre o que se FECHA e sobre o que
+vira canônico, nunca sobre o que se toca.
+
+Corte que ficou escrito (07b94c4): reversível e cabe no meu turno → faço e aviso; vira
+canônico, ou outra cadeira herda o que deixei → decide o dono. Roteada, a mesma mudança
+custa duas transferências e volta pior. Falar em nome de outra cadeira segue vedado — a
+vedação é de VOZ, não de execução, e essa distinção é o eixo inteiro.
+
+Sign-off só compra o que custa onde o erro não volta atrás: superfície externa em
+produção. Assinatura sobre trabalho comum vira carimbo, e carimbo produz aparência de
+revisão — pior que a ausência dela.
 
 ## Mesa não é carteira
 

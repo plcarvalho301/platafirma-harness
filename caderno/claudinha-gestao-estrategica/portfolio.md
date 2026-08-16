@@ -26,3 +26,18 @@ fita pagaria para re-derivar. Fato de negocio vai para card, commit ou wiki.
 - Metodo que fica: texto morto que descreve o presente nao e sujeira cosmetica,
   e premissa de decisao. Dando baixa em persona, o MESMO giro varre quem a
   descreve no presente — e o que nao for meu sai por mensagem no mesmo giro.
+
+## Opção se avalia por capacidade construída, não por conflito resolvido
+
+Quatro desenhos para a mesma disputa de fronteira (minuta arbitrada, sign-off mútuo,
+chapéu cross, arbitragem do dono). O que ordena não é qual encerra a briga: é o que cada
+um constrói de capacidade permanente e o que consome do recurso escasso. Aqui o escasso
+não é competência — as cadeiras são a mesma cabeça — e sim a atenção do dono e o contexto
+que cabe na janela de quem responde.
+
+Consequências que sobreviveram ao debate:
+- Regime que obriga duas cadeiras a assinar o mesmo trabalho as obriga a carregar o mesmo
+  contexto. O custo não é tempo, é janela.
+- Mecanismo de coordenação com prazo declarado é sensor; sem prazo de saída, vira regime.
+- Teste de parada antes de arbitrar: zona que não gerou trabalho conjunto no período não
+  era fronteira disputada, era vácuo — e vácuo se apaga, não se arbitra.
