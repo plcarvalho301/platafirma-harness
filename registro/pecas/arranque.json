@@ -1,0 +1,11 @@
+{
+  "id": "arranque",
+  "dono": "claudinha-gestao-estrategica",
+  "artefato": "platafirma-harness@conduta/arranque.md",
+  "regime": "ponteiro",
+  "gatilho": {
+    "evento": "ato",
+    "condicao": "antes de escrever ou revisar texto de arranque em qualquer cwd — CLAUDE.md, casca de Project, append de fita: copiar em vez de apontar e o defeito que esta peca existe para impedir"
+  },
+  "volatilidade": "estavel"
+}
