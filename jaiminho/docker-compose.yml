@@ -33,9 +33,52 @@ services:
       timeout: 10s
       retries: 3
 
+  # O MCP DELE. Nosso codigo, contexto de build proprio, contêiner separado: o
+  # `ops-server` e o MCP das cadeiras e nao serve externo. Nao publica porta e nao
+  # entra no tunel — quem chama e a ponte do contêiner vizinho, por `saida`.
+  jaiminho-server:
+    build: ../jaiminho-server
+    image: platafirma/jaiminho-server:local
+    container_name: jaiminho-server
+    restart: unless-stopped
+    env_file: [../jaiminho-server/.env]
+    environment:
+      # Mesmo motor que o wiki-mcp chama, pelo mesmo alias de rede.
+      RAG_API_URL: "http://rag-api:8000"
+      OIDC_ISSUER: "https://auth.platafirma.org/realms/platafirma"
+      # JWKS pelo alias INTERNO do realm, na mesma rede: a borda do Cloudflare
+      # devolve 1010 para User-Agent de biblioteca, e PyJWKClient e urllib. O
+      # ops-server ja resolve isso indo em 127.0.0.1:8180; aqui o equivalente e
+      # o alias `keycloak`. `iss` do token continua sendo o publico, e por isso
+      # OIDC_ISSUER nao muda.
+      OIDC_JWKS_URL: "http://keycloak:8080/realms/platafirma/protocol/openid-connect/certs"
+      OIDC_AUDIENCE: "ops-mcp"
+      PDP_DIR: "/opt/pf/politica-acesso"
+      JAIMINHO_LOG_DIR: "/var/log/jaiminho"
+    volumes:
+      # PAP e PDP por bind READ-ONLY: merge no PAP vale sem rebuild, e o processo
+      # nao tem como reescrever a regra que o prende.
+      - "${HOME}/AI/platafirma-harness/politica-acesso:/opt/pf/politica-acesso:ro"
+      - "${HOME}/AI/var/log/jaiminho:/var/log/jaiminho:rw"
+    networks:
+      # `saida`: e por onde a ponte dele chega aqui.
+      # `wiki`: e onde o alias `rag-api` resolve — a mesma rede que o wiki-mcp usa
+      # para falar com o motor.
+      - saida
+      - wiki
+    security_opt: ["no-new-privileges:true"]
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request;urllib.request.urlopen('http://127.0.0.1:8000/health',timeout=8)"]
+      interval: 60s
+      timeout: 10s
+      retries: 3
+
 networks:
   saida:
     driver: bridge
+  wiki:
+    external: true
+    name: plataforma-wiki_default
 
 volumes:
   casa:
