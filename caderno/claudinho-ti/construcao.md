@@ -138,3 +138,41 @@ que não rodou é o caminho para rodar duas vezes.
 E o par disto já estava neste caderno, escrito 2h antes: "o audit diz O QUE rodou,
 nunca QUEM rodou". Faltava a metade que me mordeu — quando o QUEM não aparece, o
 primeiro candidato sou eu.
+
+## Instrumento mede o PRODUTOR, nunca a instância viva (medido 16/08, custou a sessão)
+
+`conferir superficie` julgava se cada superfície servia os conectores lendo os
+`.mcp.json` dos cwd vivos — `wt-*/`, `fitas/*/`. Três defeitos num desenho só, e
+o terceiro é o que generaliza:
+
+1. **Tautologia.** O `.mcp.json` é rastreado no repo: toda worktree o recebe do
+   branch. O gate lia N cópias do mesmo arquivo e chamava aquilo de medição.
+2. **Veredito oscilante.** Limpei as 27 worktrees por ordem do dono; a fábrica foi
+   a zero instância e o gate passou a acusar "falta platafirma-ops" — reprovando
+   commit de TODA cadeira, em todo repo com o hook. Nada tinha mudado no que ele
+   deveria julgar. Travou outra cadeira com trabalho pronto.
+3. **Media o passado.** Um cwd é amostra de quando foi criado. O que decide o que
+   toda sessão FUTURA recebe é quem escreve o arquivo.
+
+A régua, que vale para qualquer instrumento desta casa: **antes de escrever a
+medição, pergunte quem PRODUZ o que você vai medir.** Se a resposta for "o próprio
+disco", o instrumento vai reportar arqueologia. Se não houver produtor, isso é o
+achado — e declarar a ausência vale mais que medir a sobra.
+
+Forma que ficou: cada superfície declara `produtor` em `superficies.json` —
+`codigo` (dict no fonte, lido por AST, sem importar o módulo) ou
+`arquivo-rastreado` (o produtor é o git). Superfície verificável SEM produtor
+declarado reprova. Instância viva vira OBSERVAÇÃO de deriva, com nome de arquivo,
+e não muda veredito.
+
+Onde ainda dói: `conferir arranque` nasceu na forma velha, varrendo os `CLAUDE.md`
+que existem. Está na mesa.
+
+## Quem mede tem de perguntar com a chave que o verbo usa (medido 16/08)
+
+`conferir sessao` reportava a peça `fila-status` como NÃO MEDIDA. O pacote servido
+estava correto — o montador já passava o nome canônico. Quem media é que perguntava
+com o sufixo (`TI` em vez de `claudinho-TI`), e `fila` sai 2 com "persona
+desconhecida". Instrumento e coisa medida têm de resolver a chave pela MESMA fonte;
+aqui, a linha 1 da persona. Divergência entre as duas formas do nome já partiu a
+mesa em duas metades antes.
