@@ -54,13 +54,15 @@ fechar a fita                   : encerrar fita                  memoria + fatos
 so o estado da memoria          : encerrar fita --so-memoria     sem o dossie, mais rapido
 achar slot fora do remit        : encerrar varredura             todas as cadeiras; timer diario ja roda
 
-ler um card                     : tarefas ler <id>|#<index>   #N e o da fila; <id> e a chave
-listar projetos                 : tarefas projetos
-listar cards abertos            : tarefas listar <projeto>        (listar-tudo inclui fechados)
-abrir card                      : tarefas criar <projeto> "<título>" [--desc "<txt>"|--desc-stdin] [--prio N]
-comentar                        : tarefas comentar <id> ["<txt>"]  sem txt, lê stdin
-fechar                          : tarefas fechar <id>
-amarrar subtarefa               : tarefas sub <pai> <filho>
+ler um card                     : tarefas ler <id>      um numero so por item; `#N` e o mesmo N
+listar cards abertos            : tarefas listar [--cadeira <c>] [--estado <e>] [--nivel <n>]
+                                  aberto = fase nao-terminal (listar-tudo inclui os terminais)
+estados do registro             : tarefas estados                 estado, fase e nome
+abrir card                      : tarefas criar "<título>" [--desc "<txt>"|--desc-stdin]
+                                  [--nivel épico|feature|story|task] [--cadeira <c>] [--pai <id>]
+comentar                        : tarefas comentar <id> ["<txt>"]  anexa ao CORPO; sem txt, lê stdin
+fechar                          : tarefas fechar <id> [--como <estado terminal>]  default entregue
+amarrar subtarefa               : tarefas sub <pai> <filho>   pai de nivel estritamente menor
 o que o verbo não cobre         : tarefas api <MÉTODO> <caminho> | tarefas api-corpo (JSON em stdin)
 
 estado do acervo (5 degraus)    : acervo escada          [--json | --detalhe]
@@ -269,8 +271,13 @@ nada — pode consumir sem responder.
 - Fita que morre depois de ler perde o aviso, não a carta: ela volta por
   `--desde` dentro da janela.
 
-Projetos do rastreador: `46 Cards` e `1 Inbox`, só. Filtro salvo (id negativo)
-não é projeto e devolve 404 em `/tasks` — `tarefas projetos` já os omite.
+**Não há projeto**: `46 Cards` e `1 Inbox` eram do Vikunja, que saiu em 16/08/2026. O
+recorte agora é por eixo — cadeira, estado, nível —, e `PF_CADEIRA` vira o cabeçalho de
+sujeito que a transição carimba. Chamada antiga com o número do projeto no lugar do
+primeiro argumento segue funcionando: o número é ignorado, com aviso em stderr.
+**Comentário é texto dentro do corpo do item**, sob o marcador `--- comentário · <quem> ·
+<data> ---`, e não entidade própria: o modelo do rastreador não tem uma, e a migração do
+acervo já pôs os comentários velhos ali (ordem do dono, 16/08/2026).
 
 Clones de trabalho: `platafirma-{core,conhecimento,arquitetura,harness,motor,posto}`
 e `modulo-osint`, todos em `~/AI`.

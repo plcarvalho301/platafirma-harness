@@ -1,89 +1,66 @@
 #!/usr/bin/env bash
-# tarefas — cliente do rastreador de tarefas da PlataFirma.
+# tarefas — cliente do rastreador de trabalho da PlataFirma.
 # capacidade: trabalho
 # dono: claudinho-TI
-# Verbo genérico de propósito: hoje o backend é Vikunja; o nome não o cita para
-# que a troca de backend não obrigue a reescrever chamada em persona nenhuma.
+# Backend: `platafirma-rastreador` (API própria), desde 16/08/2026. O Vikunja saiu.
 #
-# Credencial: primeiro token achado em $TAREFAS_ENV, ~/AI/platafirma-core/.env
-# ou ~/.claude/vikunja.env (conta da fabrica). Base: $TAREFAS_BASE.
+# Loopback, e não a rota pública: `tarefas.platafirma.org` serve a superfície HUMANA
+# atrás do gate do control-plane, e agente não atravessa oauth2-proxy. O agente entra
+# pelo loopback da máquina, que já é a fronteira dele (card #469).
+#
+# SEM CREDENCIAL, por desenho: não há auth no código do módulo. Quem escreve declara o
+# nome no cabeçalho de sujeito, e é ele que a transição carimba — `PF_CADEIRA` vira
+# `x-auth-request-preferred-username`. Ausente, a escrita entra como anônima.
 set -euo pipefail
 
-# Loopback, e nao a rota publica, desde o card #469: `tarefas.platafirma.org` passou a
-# servir o rastreador proprio atras do gate do control-plane, e um Bearer de agente nao
-# atravessa oauth2-proxy — leva 302 para o Keycloak e o verbo quebraria para toda cadeira.
-# E tambem a doutrina do card, nao so o conserto de um efeito colateral: a borda gateia a
-# superficie HUMANA; o agente entra pelo loopback da maquina, que ja e a fronteira dele.
-# 8082 e o `vikunja-proxy` desta maquina. Enquanto o Vikunja for o backend, e por aqui.
-BASE="${TAREFAS_BASE:-http://127.0.0.1:8082/api/v1}"
-
-_argv_tem_json() { # varre "$@" por --json — usado só pra decidir o FORMATO da falha
-  local a
-  for a in "$@"; do [ "$a" = "--json" ] && return 0; done
-  return 1
-}
-
-# Escaping mínimo à mão (mesmo padrão de bin/monta-sessao) em vez de "jq -Rs ." —
-# este caminho é justamente o de falha, e depender de jq pra reportar uma falha
-# (que pode ser a própria causa da falha, ou simplesmente não estar disponível
-# no ambiente) é frágil. String de entrada aqui é sempre estática, sem controle
-# de caractere, mas escapamos mesmo assim por hábito de não confiar em input.
-_json_esc() {
-  local s=$1
-  s=${s//\\/\\\\}
-  s=${s//\"/\\\"}
-  printf '%s' "$s"
-}
-
-carrega_credencial() { # carrega_credencial "$@" — argv só pra saber se --json foi pedido
-  [ -n "${VIKUNJA_API_TOKEN:-}" ] && return 0
-  local f
-  for f in "${TAREFAS_ENV:-}" "$HOME/AI/platafirma-core/.env" "$HOME/.claude/vikunja.env"; do
-    [ -n "$f" ] && [ -r "$f" ] || continue
-    set -a; . "$f"; set +a
-    # ~/.claude/vikunja.env (conta da fabrica) nomeia a chave sem o infixo API.
-    VIKUNJA_API_TOKEN="${VIKUNJA_API_TOKEN:-${VIKUNJA_TOKEN:-}}"
-    [ -n "$VIKUNJA_API_TOKEN" ] && { BASE="${VIKUNJA_BASE:-$BASE}"; return 0; }
-  done
-  local msg="sem credencial: nenhum de \$TAREFAS_ENV, ~/AI/platafirma-core/.env, ~/.claude/vikunja.env traz token (ou exporte VIKUNJA_API_TOKEN)."
-  # --json: stdout nunca fica vazio numa falha — mesma regra do LOTE 1 nos outros verbos.
-  # Sem --json, comportamento intocado: só a mensagem solta em stderr, como sempre foi.
-  if _argv_tem_json "$@"; then
-    printf '{"erro": "%s"}\n' "$(_json_esc "$msg")"
-  fi
-  echo "$msg" >&2
-  exit 1
-}
+BASE="${TAREFAS_BASE:-http://127.0.0.1:8120}"
+QUEM="${PF_CADEIRA:-}"
 
 uso() {
   cat >&2 <<'FIM'
 uso:
-  tarefas projetos                        id e nome de cada projeto
-  tarefas listar <projeto>                cards abertos
-  tarefas listar-tudo <projeto>           inclui os fechados
-  tarefas ler <id>|#<index>               card em texto, com labels e descrição
-  tarefas criar <projeto> "<título>" [--desc "<txt>"|--desc-stdin] [--prio N]
-  tarefas comentar <id> ["<txt>"]         sem texto, lê de stdin
-  tarefas fechar <id>                     marca done (GET, muta, POST inteiro)
-  tarefas sub <pai> <filho>               declara <filho> subtarefa de <pai>
+  tarefas listar [--cadeira <c>] [--estado <e>] [--nivel <n>] [--json]
+                                          itens abertos (fase != terminal)
+  tarefas listar-tudo [mesmos filtros]    inclui os terminais
+  tarefas ler <id>                        item em texto, com ancestrais e corpo
+  tarefas criar "<título>" [--desc "<txt>"|--desc-stdin]
+                [--nivel épico|feature|story|task] [--cadeira <c>] [--pai <id>]
+  tarefas comentar <id> ["<txt>"]         anexa ao corpo do item; sem texto, lê stdin
+  tarefas fechar <id> [--como <estado>]   default: entregue
+  tarefas sub <pai> <filho>               declara <filho> filho de <pai>
+  tarefas estados                         os estados do registro, com fase
   tarefas api <MÉTODO> <caminho>          escotilha, sem corpo
   tarefas api-corpo <MÉTODO> <caminho>    escotilha, corpo JSON em stdin
+
+NÃO HÁ PROJETO neste modelo. `46` e `1` eram do Vikunja; o recorte agora é por eixo
+(cadeira, estado, nível). Chamada antiga com projeto no lugar do primeiro argumento
+segue funcionando: o número é ignorado, com aviso em stderr.
 FIM
   exit 2
 }
 
 # --- transporte -------------------------------------------------------------
 
+_hdr_sujeito() { [ -n "$QUEM" ] && printf '%s' "x-auth-request-preferred-username: $QUEM"; }
+
 busca() { # busca MÉTODO /caminho
-  curl -sfS -X "$1" "$BASE$2" -H "Authorization: Bearer $VIKUNJA_API_TOKEN"
+  if [ -n "$QUEM" ]; then
+    curl -sfS -X "$1" "$BASE$2" -H "x-auth-request-preferred-username: $QUEM"
+  else
+    curl -sfS -X "$1" "$BASE$2"
+  fi
 }
 
 envia() { # envia MÉTODO /caminho  (corpo JSON em stdin)
-  curl -sfS -X "$1" "$BASE$2" -H "Authorization: Bearer $VIKUNJA_API_TOKEN" \
-       -H 'Content-Type: application/json' -d @-
+  if [ -n "$QUEM" ]; then
+    curl -sfS -X "$1" "$BASE$2" -H 'Content-Type: application/json' \
+         -H "x-auth-request-preferred-username: $QUEM" -d @-
+  else
+    curl -sfS -X "$1" "$BASE$2" -H 'Content-Type: application/json' -d @-
+  fi
 }
 
-# --- descrição: o rastreador guarda em HTML ---------------------------------
+# --- corpo: o rastreador guarda HTML, como o Vikunja guardava ---------------
 
 para_html() {
   python3 -c 'import html,sys
@@ -95,157 +72,164 @@ para_texto() {
   sed -e 's#</p>#\n#g' -e 's#<br */\?>#\n#g' -e 's#</h[0-9]>#\n#g' \
       -e 's#<li>#  - #g' -e 's#</li>#\n#g' -e 's#</pre>#\n#g' \
       -e 's#<[^>]*>##g' \
-      -e 's#&lt;#<#g' -e 's#&gt;#>#g' -e 's#&quot;#"#g' -e 's#&amp;#\&#g' | cat -s
+      -e 's#&lt;#<#g' -e 's#&gt;#>#g' -e 's#&quot;#"#g' -e "s@&#39;@'@g" -e 's#&amp;#\&#g' | cat -s
 }
 
-# --- verbos -----------------------------------------------------------------
-
-linhas_de_card() { # filtra o JSON de uma lista de cards em id / marca / título
-  jq -r "$1"' | "\(.id)\t\(if .done then "x" else " " end)\t\(.title)"'
+# Argumento numérico solto na posição do antigo <projeto>: ignora e avisa. Existe para que
+# `tarefas listar 46` e `tarefas criar 46 "título"` — que estão escritos em manifesto, em
+# card e na cabeça de toda cadeira — não quebrem no dia da virada.
+descarta_projeto() {
+  case "${1:-}" in
+    ''|*[!0-9]*) return 1 ;;
+    *) echo "aviso: '$1' era projeto do Vikunja e não existe mais; ignorado." >&2; return 0 ;;
+  esac
 }
 
-# per_page tem teto de 50 no servidor: pedir 200 devolve 50 em silêncio. Toda
-# listagem pagina até x-pagination-total-pages, ou some com card sem avisar.
-paginas() { # paginas /caminho?query — concatena todas as páginas num só array
-  local caminho="$1" pag=1 total=1 corpo hdr rc
-  while [ "$pag" -le "$total" ]; do
-    hdr=$(mktemp)
-    corpo=$(curl -sfS -D "$hdr" "$BASE$caminho&per_page=50&page=$pag" \
-            -H "Authorization: Bearer $VIKUNJA_API_TOKEN")
-    rc=$?
-    # Checagem explícita, não "set -e" implícito: esta função é chamada de dentro de
-    # contextos testados (ex.: "saida=$(paginas ...) && ... || ...", em listar()), e
-    # bash suspende errexit pra toda a árvore de chamadas nesse caso — sem o "$rc"
-    # explícito, um curl falho no meio da paginação passaria batido, o loop terminaria
-    # "normal" (total já resolvido, pag>total) e "jq -s 'add // []'" transformaria a
-    # ausência de dado em "[]", indistinguível de projeto genuinamente vazio.
-    if [ "$rc" -ne 0 ]; then rm -f "$hdr"; return "$rc"; fi
-    [ "$pag" = 1 ] && total=$(awk -F': *' 'tolower($1)=="x-pagination-total-pages"{gsub(/\r/,"",$2);print $2}' "$hdr")
-    total="${total:-1}"; rm -f "$hdr"; printf '%s\n' "$corpo"; pag=$((pag+1))
-  done | jq -s 'add // []'
+# --- filtros ----------------------------------------------------------------
+
+# A API filtra por cadeira, estado e nível. "Aberto" NÃO é filtro dela: é a fase do estado,
+# que vem em cada item (`estado_fase`). Peneirar aqui e não lá é o certo — inventar um
+# filtro `aberto=` no servidor duplicaria a régua de fase em dois lugares.
+monta_query() { # monta_query "$@" -> ecoa a query string e devolve o resto em RESTO[]
+  local q="" a
+  RESTO=()
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --cadeira) q="$q&cadeira=$2"; shift 2 ;;
+      --estado)  q="$q&estado=$2";  shift 2 ;;
+      --nivel)   q="$q&nivel=$2";   shift 2 ;;
+      --json)    RESTO+=("--json"); shift ;;
+      *)         RESTO+=("$1"); shift ;;
+    esac
+  done
+  printf '%s' "${q:+${q:1}}"
 }
 
-# id negativo é filtro salvo, não projeto: /projects/-8/tasks devolve 404.
-projetos()     { busca GET /projects | jq -r '.[] | select(.id > 0) | "\(.id)\t\(.title)"'; }
+_tem_json() { local a; for a in "$@"; do [ "$a" = "--json" ] && return 0; done; return 1; }
 
-# --json: "paginas" já devolve o array JSON pronto — sem --json, o mesmo array
-# passa por linhas_de_card pra virar texto tabulado (comportamento inalterado).
-listar() { # listar <projeto> [--json]
-  local proj="$1"; shift || true
-  local json=""
-  local a
-  for a in "$@"; do [ "$a" = "--json" ] && json=1; done
-  if [ -n "$json" ]; then
-    # "paginas" pode falhar no meio da paginação (curl de uma página não-primeira) e,
-    # por causa de "jq -s 'add // []'" no fim do pipe, ainda assim deixar ALGO em stdout
-    # (array vazio, ou só as páginas que deram certo antes de falhar) — indistinguível de
-    # sucesso pra quem só olha stdout. O exit code de "paginas" (pipefail) já é o certo;
-    # aqui só garantimos que a FALHA também aparece em stdout como objeto, nunca como um
-    # "[]" que passa por sucesso vazio.
-    local saida rc
-    saida=$(paginas "/projects/$proj/tasks?filter=done%20%3D%20false") && rc=0 || rc=$?
-    if [ "$rc" -eq 0 ]; then
-      printf '%s\n' "$saida"
-    else
-      printf '{"erro": "busca ao rastreador falhou (paginas saiu %s) — ver stderr"}\n' "$rc"
-      return "$rc"
-    fi
-  else
-    paginas "/projects/$proj/tasks?filter=done%20%3D%20false" | linhas_de_card '.[]'
-  fi
+linhas() { # id, marca de terminal, título
+  jq -r '.itens[] | "\(.id)\t\(if .estado_fase == "terminal" then "x" else " " end)\t\(.titulo)"'
 }
 
-# --json: card carrega titulo/fechado/fechado_em. Vikunja nao usa JSON null
-# pra "nao fechado" -- done_at vem como o zero-value do Go, "0001-01-01T00:
-# 00:00Z", que normalizamos pra null de verdade (a regua do card #394: campo
-# presente e nulo, nunca ausente, nunca a data zero disfarcada de data real).
-listar_tudo() { # listar_tudo <projeto> [--json]
-  local proj="$1"; shift || true
-  local json=""
-  local a
-  for a in "$@"; do [ "$a" = "--json" ] && json=1; done
-  if [ -n "$json" ]; then
-    local saida rc
-    saida=$(paginas "/projects/$proj/tasks?") && rc=0 || rc=$?
-    if [ "$rc" -eq 0 ]; then
-      printf '%s\n' "$saida" | jq -c '[.[] | {
-        id, titulo: .title, fechado: .done,
-        fechado_em: (if .done_at == "0001-01-01T00:00:00Z" then null else .done_at end)
-      }]'
-    else
-      printf '{"erro": "busca ao rastreador falhou (paginas saiu %s) — ver stderr"}\n' "$rc"
-      return "$rc"
-    fi
-  else
-    paginas "/projects/$proj/tasks?" | linhas_de_card '.[]'
-  fi
+listar() { # listar [filtros] [--json]   — só os abertos
+  local q; q=$(monta_query "$@")
+  local corpo; corpo=$(busca GET "/itens${q:+?$q}")
+  corpo=$(printf '%s' "$corpo" | jq '{itens: [.itens[] | select(.estado_fase != "terminal")], estados, total} | .total = (.itens|length)')
+  if _tem_json "${RESTO[@]:-}"; then printf '%s\n' "$corpo"; else printf '%s' "$corpo" | linhas; fi
 }
 
-# "#267" é o index dentro do projeto (o que a fila cita); "360" é o id (a chave).
-# Os dois números convivem no mesmo card — sem esta distinção a busca vira caça.
-por_index() { paginas "/projects/${PROJETO_PADRAO:-46}/tasks?filter=index%20%3D%20$1" \
-                | jq -r '.[0].id // empty'; }
+listar_tudo() { # listar_tudo [filtros] [--json]
+  local q; q=$(monta_query "$@")
+  local corpo; corpo=$(busca GET "/itens${q:+?$q}")
+  if _tem_json "${RESTO[@]:-}"; then printf '%s\n' "$corpo"; else printf '%s' "$corpo" | linhas; fi
+}
+
+estados() {
+  busca GET /registro | jq -r '(.estados // .)[] | "\(.estado)\t\(.fase)\t\(.nome)"'
+}
+
+# --- item -------------------------------------------------------------------
+
+# `#N` e `N` são o MESMO número: o rastreador tem um identificador só por item, e é essa a
+# razão de o Vikunja ter saído. O `#` é aceito porque a fila e os cards o escrevem.
+so_id() { printf '%s' "${1#\#}"; }
 
 ler() {
-  local alvo="$1"
-  case "$alvo" in \#*) alvo=$(por_index "${alvo#\#}") ;; esac
-  [ -n "$alvo" ] || { echo "não achei card com esse #index" >&2; exit 1; }
-  busca GET "/tasks/$alvo" | jq -r '
-    "# \(.title)\n\(.identifier) · projeto=\(.project_id) · done=\(.done) · labels: \([.labels[]?.title]|join(", "))\n\n\(.description // "")"' \
-    | para_texto
+  local id; id=$(so_id "$1")
+  busca GET "/itens/$id" | jq -r '
+    "# \(.titulo)",
+    "#\(.id) · \(.nivel_nome) · \(.estado_nome) (\(.estado_fase)) · cadeira: \(.cadeira // "—")"
+    + (if (.ancestrais|length) > 0 then "\n  em: " + ([.ancestrais[] | "#\(.id) \(.titulo)"] | join(" > ")) else "" end),
+    "",
+    (.descricao // "")' | para_texto
 }
 
 criar() {
-  local proj="$1" titulo="$2"; shift 2
-  local desc="" prio=0
+  descarta_projeto "${1:-}" && shift
+  local titulo="${1:?uso: tarefas criar \"<título>\" [opções]}"; shift || true
+  local desc="" nivel="task" cadeira="$QUEM" pai="" classe="planejado"
   while [ $# -gt 0 ]; do
     case "$1" in
       --desc)       desc="$2"; shift 2 ;;
       --desc-stdin) desc="$(cat)"; shift ;;
-      --prio)       prio="$2"; shift 2 ;;
+      --nivel)      nivel="$2"; shift 2 ;;
+      --cadeira)    cadeira="$2"; shift 2 ;;
+      --pai)        pai=$(so_id "$2"); shift 2 ;;
+      --incidente)  classe="incidente"; shift ;;
+      --prio)       echo "aviso: --prio não existe neste modelo; ignorado." >&2; shift 2 ;;
       *) echo "opção desconhecida: $1" >&2; exit 2 ;;
     esac
   done
+  # A API quer o nível como INTEIRO — a camada é ordem, e é ela que a restrição de pai
+  # compara. O nome é o que a pessoa escreve; a tradução é aqui, num lugar só.
+  local n
+  case "$nivel" in
+    épico|epico|0)   n=0 ;;
+    feature|1)       n=1 ;;
+    story|2)         n=2 ;;
+    task|3)          n=3 ;;
+    *) echo "nível desconhecido: $nivel (épico, feature, story, task)" >&2; exit 2 ;;
+  esac
   local html=""
   [ -n "$desc" ] && html="$(printf '%s' "$desc" | para_html)"
-  jq -n --arg t "$titulo" --arg d "$html" --argjson p "$prio" \
-     '{title:$t, description:$d, priority:$p}' \
-    | envia PUT "/projects/$proj/tasks" \
-    | jq -r '"card \(.id) criado: \(.title)"'
+  # `estado` é obrigatório no POST: item nasce declarando onde entra no funil, e não há
+  # default do servidor. `captada` é a boca do funil para planejado; incidente entra em
+  # `aberto` se o registro o tiver, e a recusa da API nomeia o estado válido quando não.
+  local est="${PF_ESTADO_INICIAL:-captada}"
+  jq -n --arg t "$titulo" --arg d "$html" --argjson n "$n" --arg c "$cadeira" \
+        --arg p "$pai" --arg cl "$classe" --arg e "$est" \
+     '{titulo:$t, nivel:$n, classe:$cl, estado:$e}
+      + (if $d == "" then {} else {descricao:$d} end)
+      + (if $c == "" then {} else {cadeira:$c} end)
+      + (if $p == "" then {} else {pai:($p|tonumber)} end)' \
+    | envia POST /itens \
+    | jq -r '"item \(.id) criado: \(.titulo)"'
 }
 
+# COMENTÁRIO É TEXTO NO CORPO, por ordem do dono (16/08/2026). O modelo do rastreador não
+# tem entidade de comentário, e a migração do acervo já pôs os comentários velhos dentro de
+# `descricao` sob marcador. Escrever novo do mesmo jeito mantém uma forma só — e o dia em
+# que comentário virar entidade, há um marcador único para varrer.
 comentar() {
-  local id="$1" txt="${2:-$(cat)}"
-  jq -n --arg c "$(printf '%s' "$txt" | para_html)" '{comment:$c}' \
-    | envia PUT "/tasks/$id/comments" \
-    | jq -r --arg id "$id" '"comentário \(.id) publicado no card \($id)"'
+  local id; id=$(so_id "$1"); local txt="${2:-$(cat)}"
+  local atual novo
+  atual=$(busca GET "/itens/$id" | jq -r '.descricao // ""')
+  novo=$(printf '%s\n\n<p>--- comentário · %s · %s ---</p>\n%s' \
+         "$atual" "${QUEM:-anônimo}" "$(date -Iseconds)" "$(printf '%s' "$txt" | para_html)")
+  jq -n --arg d "$novo" '{descricao:$d}' | envia PATCH "/itens/$id" \
+    | jq -r '"comentário anexado ao item \(.id)"'
 }
 
 fechar() {
-  busca GET "/tasks/$1" | jq '.done = true' | envia POST "/tasks/$1" \
-    | jq -r '"card \(.id) fechado: \(.title)"'
+  local id; id=$(so_id "$1"); shift || true
+  local como="entregue"
+  [ "${1:-}" = "--como" ] && { como="$2"; shift 2; }
+  jq -n --arg e "$como" '{estado:$e}' | envia PATCH "/itens/$id" \
+    | jq -r '"item \(.id) → \(.estado_nome): \(.titulo)"'
 }
 
+# Filho declara o pai, e o pai tem de ser de nível estritamente MENOR — a restrição é do
+# banco (`pai_nivel`, escrito por subconsulta), não deste verbo. Recusa vem nomeada da API.
 subtarefa() {
-  jq -n --argjson o "$2" '{other_task_id:$o, relation_kind:"subtask"}' \
-    | envia PUT "/tasks/$1/relations" >/dev/null
-  echo "card $2 agora é subtarefa de $1"
+  local pai filho; pai=$(so_id "$1"); filho=$(so_id "$2")
+  jq -n --argjson p "$pai" '{pai:$p}' | envia PATCH "/itens/$filho" >/dev/null
+  echo "item $filho agora é filho de $pai"
 }
 
 # --- despacho ---------------------------------------------------------------
 
-carrega_credencial "$@"
 cmd="${1:-}"; shift || uso
 
 case "$cmd" in
-  projetos)    projetos ;;
-  listar)      listar      "${1:?uso: tarefas listar <projeto>}" "${@:2}" ;;
-  listar-tudo) listar_tudo "${1:?uso: tarefas listar-tudo <projeto>}" "${@:2}" ;;
-  ler)         ler         "${1:?uso: tarefas ler <id>}" ;;
-  criar)       criar "${1:?projeto}" "${2:?título}" "${@:3}" ;;
+  listar)      descarta_projeto "${1:-}" && shift; listar "$@" ;;
+  listar-tudo) descarta_projeto "${1:-}" && shift; listar_tudo "$@" ;;
+  ler)         ler "${1:?uso: tarefas ler <id>}" ;;
+  criar)       criar "$@" ;;
   comentar)    comentar "${1:?uso: tarefas comentar <id> [\"<txt>\"]}" "${2:-$(cat)}" ;;
-  fechar)      fechar      "${1:?uso: tarefas fechar <id>}" ;;
+  fechar)      fechar "${1:?uso: tarefas fechar <id>}" "${@:2}" ;;
   sub)         subtarefa "${1:?pai}" "${2:?filho}" ;;
+  estados)     estados ;;
+  projetos)    echo "não há projeto neste modelo: o recorte é por eixo (cadeira, estado, nível)." >&2; exit 2 ;;
   api)         busca "${1:?método}" "${2:?caminho}" ;;
   api-corpo)   envia "${1:?método}" "${2:?caminho}" ;;
   *)           uso ;;
