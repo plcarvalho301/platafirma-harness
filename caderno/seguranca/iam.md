@@ -78,9 +78,6 @@ Ordem do ato: primeiro o realm (apagar o client mata service account e secret ju
 depois o `.env`. Fechamento: `acesso orfaos` tem de perder o achado correspondente — é a
 única confirmação que não depende da minha narrativa.
 
-O que quase nunca alcanço e por isso vira ato de outrem: arquivo de credencial em conta
-que não é `claudinho`, e entrada de custódia no KDBX do dono.
-
 ## Padrões da casa, medidos
 
 - clientId de serviço no realm `platafirma`: opaco, 6 chars A-Z0-9 (L0R8OJ, SQ53VU).
