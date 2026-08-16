@@ -22,6 +22,7 @@ import json
 import os
 import sys
 import time
+from urllib.parse import quote as urllib_quote
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -435,12 +436,324 @@ def wiki_ler(titulos: str | list[str]) -> dict:
            {"paginas": d.get("result", d)}
 
 
+# --- google drive ----------------------------------------------------------
+# Por que existe: o externo nao tem wiki, nao tem git e nao tem rede com o dono.
+# A pasta do Drive e a area de transferencia de MAO UNICA — ele deposita, o dono le.
+#
+# Escopo: `drive.file`, que e o recorte do PROPRIO Google — o token so alcanca
+# arquivo criado por este app. Nao e promessa nossa: o que o dono guarda no resto
+# do Drive dele nao existe para esta credencial, e nenhum defeito de codigo aqui
+# muda isso. O segundo cadeado, esse sim nosso, e a ancestralidade em PASTA_RAIZ:
+# arquivo que o app criou e foi movido para fora da pasta deixa de ser alcancavel.
+#
+# O token NAO atravessa a ponte e nao mora no container dele — mora aqui, por bind
+# read-only, e a superficie dele sao as sete tools abaixo, todas pelo mesmo PEP.
+GOOGLE_TOKEN_F = Path(os.environ.get("GOOGLE_TOKEN", "/opt/pf/google/token.json"))
+PASTA_RAIZ = os.environ.get("GDRIVE_PASTA", "")
+DOM_DRIVE = "plataforma-drive"
+TIPO_DRIVE = "drive"
+DRIVE_TIMEOUT = float(os.environ.get("DRIVE_TIMEOUT", "60"))
+
+_MIMES = {
+    "doc": "application/vnd.google-apps.document",
+    "planilha": "application/vnd.google-apps.spreadsheet",
+    "pasta": "application/vnd.google-apps.folder",
+    "texto": "text/plain",
+    "markdown": "text/markdown",
+    "csv": "text/csv",
+}
+# Google Doc/Sheet nao tem bytes: sai por export. O resto baixa como esta.
+_EXPORTA = {"application/vnd.google-apps.document": "text/plain",
+            "application/vnd.google-apps.spreadsheet": "text/csv"}
+
+_gcli = httpx.Client(timeout=DRIVE_TIMEOUT)
+_gtok: dict = {"valor": None, "vence": 0}
+
+
+def _google_token() -> str | None:
+    """Access token renovado pelo refresh token. None = credencial ausente ou recusada."""
+    if _gtok["valor"] and time.time() < _gtok["vence"]:
+        return _gtok["valor"]
+    try:
+        t = json.loads(GOOGLE_TOKEN_F.read_text(encoding="utf-8"))
+    except OSError:
+        return None
+    try:
+        r = _gcli.post(t["token_uri"], data={
+            "client_id": t["client_id"], "client_secret": t["client_secret"],
+            "refresh_token": t["refresh_token"], "grant_type": "refresh_token"})
+        r.raise_for_status()
+        d = r.json()
+    except Exception as e:                                   # noqa: BLE001
+        _audit(evento="drive_sem_token", motivo=f"{type(e).__name__}: {e}"[:200])
+        return None
+    _gtok.update(valor=d["access_token"], vence=time.time() + d.get("expires_in", 3600) - 60)
+    return _gtok["valor"]
+
+
+def _g(metodo: str, url: str, **kw) -> dict:
+    """Erro de rede e de API viram CAMPO, nunca excecao — igual ao `_motor`."""
+    at = _google_token()
+    if not at:
+        return {"erro": "credencial do Drive indisponivel neste servidor"}
+    h = kw.pop("headers", {})
+    h["Authorization"] = f"Bearer {at}"
+    try:
+        r = _gcli.request(metodo, url, headers=h, **kw)
+    except Exception as e:                                   # noqa: BLE001
+        return {"erro": f"Drive inalcancavel: {type(e).__name__}", "detalhe": str(e)[:300]}
+    if r.status_code == 404:
+        return {"erro": "arquivo inexistente ou fora do alcance deste app"}
+    if r.status_code >= 400:
+        return {"erro": f"Drive devolveu {r.status_code}", "detalhe": r.text[:400]}
+    if not r.content:
+        return {}
+    try:
+        return r.json()
+    except ValueError:
+        return {"_texto": r.text}
+
+
+def _autoriza_drive(acao: str, alvos: list | None = None) -> dict | None:
+    return _autoriza(acao, TIPO_DRIVE, DOM_DRIVE, alvos or [f"drive:{PASTA_RAIZ}/*"])
+
+
+def _dentro(file_id: str) -> bool:
+    """Ancestralidade ate PASTA_RAIZ. Subida limitada: cadeia de parent nao e arvore
+    infinita aqui, e loop no Drive existe (atalho, pasta em dois pais)."""
+    if not PASTA_RAIZ or not file_id:
+        return False
+    atual, visto = file_id, set()
+    for _ in range(6):
+        if atual == PASTA_RAIZ:
+            return True
+        if atual in visto:
+            return False
+        visto.add(atual)
+        d = _g("GET", f"https://www.googleapis.com/drive/v3/files/{atual}",
+               params={"fields": "parents"})
+        pais = d.get("parents") or []
+        if not pais:
+            return False
+        atual = pais[0]
+    return False
+
+
+def _fora(file_id: str) -> dict:
+    _audit(evento="negado", acao="drive", sobre=file_id, motivo="fora da pasta concedida")
+    return {"erro": "fora da area de transferencia concedida",
+            "detalhe": "so alcanco o que EU criei dentro da pasta do dono"}
+
+
+@mcp.tool()
+def drive_listar(pasta_id: str = "", tipo: str = "") -> dict:
+    """Lista o que voce ja criou na area de transferencia com o dono.
+
+    Esta pasta e o unico jeito de ele LER o que voce produz: ele nao tem acesso a
+    sua rede, e voce nao tem wiki nem git. Documento, planilha e csv que voce
+    depositar aqui ele abre no navegador.
+
+    `pasta_id` vazio = a raiz da area. `tipo` filtra por `doc`, `planilha`, `pasta`,
+    `csv`, `texto`. Devolve id, nome, tipo e link — o id alimenta as demais tools.
+    """
+    negativa = _autoriza_drive("drive_ler")
+    if negativa:
+        return negativa
+    alvo = pasta_id or PASTA_RAIZ
+    if alvo != PASTA_RAIZ and not _dentro(alvo):
+        return _fora(alvo)
+    q = f"'{alvo}' in parents and trashed=false"
+    if tipo:
+        m = _MIMES.get(tipo)
+        if not m:
+            return {"erro": f"tipo desconhecido: {tipo}", "validos": sorted(_MIMES)}
+        q += f" and mimeType='{m}'"
+    d = _g("GET", "https://www.googleapis.com/drive/v3/files",
+           params={"q": q, "fields": "files(id,name,mimeType,modifiedTime,webViewLink)",
+                   "orderBy": "modifiedTime desc", "pageSize": 100})
+    if "erro" in d:
+        return d
+    return {"arquivos": d.get("files", []), "pasta": alvo}
+
+
+@mcp.tool()
+def drive_ler(arquivo_id: str) -> dict:
+    """Texto de um arquivo que voce criou. Documento sai como texto puro; planilha,
+    como csv (para celula por celula, use `sheets_ler`).
+
+    Serve para retomar trabalho de sessao anterior: o que voce escreveu ontem esta
+    la, e voce le antes de continuar.
+    """
+    negativa = _autoriza_drive("drive_ler", [f"drive:{PASTA_RAIZ}/{arquivo_id}"])
+    if negativa:
+        return negativa
+    if not _dentro(arquivo_id):
+        return _fora(arquivo_id)
+    meta = _g("GET", f"https://www.googleapis.com/drive/v3/files/{arquivo_id}",
+              params={"fields": "id,name,mimeType,webViewLink"})
+    if "erro" in meta:
+        return meta
+    mime = meta.get("mimeType", "")
+    if mime == _MIMES["pasta"]:
+        return {"erro": "isto e pasta, nao arquivo: use drive_listar"}
+    if mime in _EXPORTA:
+        d = _g("GET", f"https://www.googleapis.com/drive/v3/files/{arquivo_id}/export",
+               params={"mimeType": _EXPORTA[mime]})
+    elif mime.startswith("text/") or mime in ("application/json",):
+        d = _g("GET", f"https://www.googleapis.com/drive/v3/files/{arquivo_id}",
+               params={"alt": "media"})
+    else:
+        return {"erro": "arquivo binario: nao leio o conteudo aqui",
+                "nome": meta.get("name"), "link": meta.get("webViewLink")}
+    if "erro" in d:
+        return d
+    return {"nome": meta.get("name"), "tipo": mime,
+            "conteudo": d.get("_texto", json.dumps(d, ensure_ascii=False)),
+            "link": meta.get("webViewLink")}
+
+
+@mcp.tool()
+def drive_criar(nome: str, tipo: str = "doc", conteudo: str = "",
+                pasta_id: str = "") -> dict:
+    """Cria arquivo na area de transferencia, para o dono ler.
+
+    `tipo`: `doc` (documento formatado, o default para entregar texto), `planilha`
+    (grade editavel — o caso de lista de alvos, com uma linha por item), `csv`,
+    `texto`, `markdown`, `pasta`.
+
+    `conteudo` e o texto inicial; em `doc` ele entra e o Google converte. Para
+    planilha, crie vazia e preencha com `sheets_escrever`, que e onde voce controla
+    linha e coluna. Devolve id e link — mande o link ao dono pela mensagem.
+    """
+    negativa = _autoriza_drive("drive_escrever")
+    if negativa:
+        return negativa
+    m = _MIMES.get(tipo)
+    if not m:
+        return {"erro": f"tipo desconhecido: {tipo}", "validos": sorted(_MIMES)}
+    pai = pasta_id or PASTA_RAIZ
+    if pai != PASTA_RAIZ and not _dentro(pai):
+        return _fora(pai)
+    meta = {"name": nome, "mimeType": m, "parents": [pai]}
+    if m == _MIMES["pasta"] or not conteudo:
+        d = _g("POST", "https://www.googleapis.com/drive/v3/files", json=meta,
+               params={"fields": "id,name,webViewLink"})
+        return d if "erro" in d else {"criado": d}
+    # Upload multipart: metadado + bytes numa chamada. Doc/planilha convertem no
+    # servidor do Google a partir do texto enviado.
+    origem = "text/csv" if m == _MIMES["planilha"] else "text/plain"
+    lim = "==pf=="
+    corpo = (f"--{lim}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n"
+             f"{json.dumps(meta)}\r\n--{lim}\r\nContent-Type: {origem}\r\n\r\n"
+             f"{conteudo}\r\n--{lim}--")
+    d = _g("POST", "https://www.googleapis.com/upload/drive/v3/files",
+           params={"uploadType": "multipart", "fields": "id,name,webViewLink"},
+           content=corpo.encode("utf-8"),
+           headers={"Content-Type": f"multipart/related; boundary={lim}"})
+    return d if "erro" in d else {"criado": d}
+
+
+@mcp.tool()
+def drive_editar(arquivo_id: str, conteudo: str) -> dict:
+    """Substitui o conteudo INTEIRO de um arquivo seu. Nao ha append nem patch:
+    leia com `drive_ler`, monte o texto novo completo, escreva.
+
+    Para planilha, prefira `sheets_escrever`: ela mexe no intervalo pedido e deixa o
+    resto quieto, enquanto esta aqui refaz a grade inteira.
+    """
+    negativa = _autoriza_drive("drive_escrever", [f"drive:{PASTA_RAIZ}/{arquivo_id}"])
+    if negativa:
+        return negativa
+    if not _dentro(arquivo_id):
+        return _fora(arquivo_id)
+    meta = _g("GET", f"https://www.googleapis.com/drive/v3/files/{arquivo_id}",
+              params={"fields": "mimeType"})
+    if "erro" in meta:
+        return meta
+    mime = meta.get("mimeType", "")
+    if mime == _MIMES["pasta"]:
+        return {"erro": "isto e pasta, nao arquivo"}
+    origem = ("text/csv" if mime == _MIMES["planilha"]
+              else "text/plain" if mime in _EXPORTA or mime.startswith("text/")
+              else None)
+    if origem is None:
+        return {"erro": "arquivo binario: nao reescrevo aqui"}
+    d = _g("PATCH", f"https://www.googleapis.com/upload/drive/v3/files/{arquivo_id}",
+           params={"uploadType": "media", "fields": "id,name,webViewLink"},
+           content=conteudo.encode("utf-8"), headers={"Content-Type": origem})
+    return d if "erro" in d else {"editado": d}
+
+
+@mcp.tool()
+def drive_apagar(arquivo_id: str) -> dict:
+    """Manda para a LIXEIRA um arquivo que voce criou. Nao apaga de vez: o dono
+    recupera em 30 dias se voce errar o alvo.
+
+    Serve para limpar rascunho e versao vencida — area de transferencia entulhada
+    para de servir para transferir.
+    """
+    negativa = _autoriza_drive("drive_apagar", [f"drive:{PASTA_RAIZ}/{arquivo_id}"])
+    if negativa:
+        return negativa
+    if arquivo_id == PASTA_RAIZ:
+        return {"erro": "a pasta raiz e do dono, nao sua"}
+    if not _dentro(arquivo_id):
+        return _fora(arquivo_id)
+    d = _g("PATCH", f"https://www.googleapis.com/drive/v3/files/{arquivo_id}",
+           json={"trashed": True}, params={"fields": "id,name"})
+    return d if "erro" in d else {"na_lixeira": d}
+
+
+@mcp.tool()
+def sheets_ler(planilha_id: str, intervalo: str = "A1:Z200") -> dict:
+    """Le celulas de uma planilha sua, em notacao A1 (`A1:C50`, `Alvos!A:D`).
+
+    Devolve lista de linhas; linha curta vem curta, porque celula vazia no fim nao
+    volta como vazio — conte pelo indice, nao pelo tamanho da linha.
+    """
+    negativa = _autoriza_drive("drive_ler", [f"drive:{PASTA_RAIZ}/{planilha_id}"])
+    if negativa:
+        return negativa
+    if not _dentro(planilha_id):
+        return _fora(planilha_id)
+    d = _g("GET", f"https://sheets.googleapis.com/v4/spreadsheets/{planilha_id}"
+                  f"/values/{urllib_quote(intervalo)}")
+    if "erro" in d:
+        return d
+    return {"intervalo": d.get("range"), "linhas": d.get("values", [])}
+
+
+@mcp.tool()
+def sheets_escrever(planilha_id: str, intervalo: str, linhas: list) -> dict:
+    """Escreve celulas numa planilha sua. `linhas` e lista de listas, uma por linha:
+    `[["alvo","tipo","status"],["exemplo.com","dominio","pendente"]]`.
+
+    O intervalo tem de comportar o bloco (`A1:C3` para 3x3). Sobrescreve o que
+    estiver la e nao toca no resto da grade — para acrescentar linha, leia antes com
+    `sheets_ler`, veja onde acaba, e escreva a partir da proxima.
+    """
+    negativa = _autoriza_drive("drive_escrever", [f"drive:{PASTA_RAIZ}/{planilha_id}"])
+    if negativa:
+        return negativa
+    if not _dentro(planilha_id):
+        return _fora(planilha_id)
+    if not isinstance(linhas, list) or not all(isinstance(x, list) for x in linhas):
+        return {"erro": "linhas tem de ser lista de listas, uma lista por linha"}
+    d = _g("PUT", f"https://sheets.googleapis.com/v4/spreadsheets/{planilha_id}"
+                  f"/values/{urllib_quote(intervalo)}",
+           params={"valueInputOption": "USER_ENTERED"}, json={"values": linhas})
+    if "erro" in d:
+        return d
+    return {"escrito": d.get("updatedRange"), "celulas": d.get("updatedCells")}
+
+
 async def _health(_req):
     est = _carrega_politica()
     return JSONResponse({"ok": est["erro"] is None,
                          "politica": est["erro"] or "carregada",
                          "motor": RAG_API_URL, "colecao": COLECAO,
                          "wiki": WIKI_MCP_URL if WIKI_MCP_TOKEN else "sem token",
+                         "drive": PASTA_RAIZ if _google_token() else "sem credencial",
                          "medido_em": int(time.time())})
 
 

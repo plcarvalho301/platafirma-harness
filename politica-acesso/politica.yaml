@@ -36,6 +36,12 @@ eixos:
       # distintas: o acervo é texto de terceiro, a wiki é a decisão da casa. Domínio
       # único faria a concessão de ler norma valer para ler decisão interna.
       pai: plataforma
+    plataforma-drive:
+      rotulo: "Drive do dono: area de transferencia com colaboracao externa"
+      # Separado de `plataforma-wiki` pelo mesmo motivo que ela se separou do acervo:
+      # a wiki e o registro da casa, esta pasta e superficie de entrega para quem nao
+      # tem a casa. Dominio unico faria conceder uma valer pela outra.
+      pai: plataforma
     mensageria:
       # Fora do prefixo `plataforma-` de proposito (ordem do dono, 13/08/2026): uma
       # letra separa `plataforma` de `platafirma`, e typo no eixo do sujeito nega por
@@ -193,6 +199,27 @@ regras:
     quando: {papel: pesquisador-externo, dominio: plataforma-acervo, tipo: acervo}
     acoes: [rag_buscar]
     sobre: ["acervo:firma/*"]
+
+  # Drive: area de transferencia de MAO UNICA com o dono. Ele nao tem shell no host
+  # e o externo nao tem wiki nem git — sem esta pasta, entrega dele nao chega nele.
+  # `sobre` nomeia UMA pasta, nunca "*": o escopo `drive.file` do proprio Google ja
+  # limita a credencial ao que o app criou, e esta regra e o segundo cadeado, do
+  # nosso lado. `drive_apagar` manda para a lixeira, nao apaga — o dono recupera.
+  - id: jaiminho-usa-area-de-transferencia
+    efeito: permite
+    motivo: "colaborador externo sem wiki e sem git precisa de superficie onde o dono leia o que ele produz: le, escreve e limpa o que ELE criou dentro da pasta concedida · concedido por claudinho-IA com autorizacao do dono em 16/08/2026 · vence 2026-11-16"
+    quando: {papel: pesquisador-externo, dominio: plataforma-drive, tipo: drive}
+    acoes: [drive_ler, drive_escrever, drive_apagar]
+    sobre: ["drive:1oFQgrkpoVHikOlV6gJqH8nGgzDwAtqVz/*"]
+
+  # O resto do Drive do dono nao e concedido, e a negativa fica escrita em vez de
+  # depender do default — para o dia em que a credencial trocar de escopo.
+  - id: externo-nao-alcanca-resto-do-drive
+    efeito: nega
+    motivo: "o Drive do dono e dele: fora da pasta de transferencia, nada se concede a externo"
+    quando: {papel: pesquisador-externo, dominio: plataforma-drive}
+    acoes: ["*"]
+    sobre: ["drive:root/*", "drive:*/"]
 
   - id: jaiminho-le-wiki-conceito
     efeito: permite

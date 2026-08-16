@@ -65,6 +65,10 @@ services:
       # Medido: health saiu "sem token" com a linha presente. Segredo mora so no
       # env_file; aqui fica o que nao e segredo.
       WIKI_MCP_URL: "http://mcp:8000/mcp"
+      # Drive: area de transferencia de mao unica com o dono. O ID da pasta e
+      # config, nao segredo; o token e segredo e vem por bind read-only abaixo.
+      GDRIVE_PASTA: "1oFQgrkpoVHikOlV6gJqH8nGgzDwAtqVz"
+      GOOGLE_TOKEN: "/opt/pf/google/token.json"
     volumes:
       # PAP e PDP por bind READ-ONLY: merge no PAP vale sem rebuild, e o processo
       # nao tem como reescrever a regra que o prende.
@@ -75,6 +79,11 @@ services:
       # ambiente, de DENTRO do namespace — no host o chown exigiria CAP_CHOWN:
       #   docker run --rm -v "$HOME/AI/var/log/jaiminho:/x" --user 0:0 \
       #     platafirma/jaiminho-server:local chown -R 10001:999 /x
+      # Credencial do Google READ-ONLY e fora da imagem, pelo mesmo motivo do PAP:
+      # rotacionar o refresh token nao pode exigir rebuild, e o processo nao tem
+      # como reescrever a credencial que o prende. Modo 600 no host, uid 10001 le
+      # porque o bind entra como o dono do namespace.
+      - "${HOME}/AI/var/google/token.json:/opt/pf/google/token.json:ro"
       - "${HOME}/AI/var/log/jaiminho:/var/log/jaiminho:rw"
     networks:
       # `saida`: e por onde a ponte dele chega aqui.
