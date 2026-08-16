@@ -20,7 +20,7 @@ sem intermediário e sem concessão prévia.
 ## Como o dono usa
 
 Abrir o Element, aceitar o convite de **Jaiminho** e escrever. Nada mais.
-A sala é `!qWNoTUJkUdmsBsheZV:chat.platafirma.org`, MXID `@_pf_jaiminho:chat.platafirma.org`.
+A sala é `!qpothYUyzldxnVePVI:chat.platafirma.org`, MXID `@_pf_jaiminho:chat.platafirma.org`.
 
 Comandos de sala (`pf modelo`, `pf esforco`) **não se aplicam** a ele: são parâmetros
 do nosso motor, e ele roda noutro. O verbo declara o descarte no stream em vez de
