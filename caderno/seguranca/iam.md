@@ -10,10 +10,9 @@ Três perguntas, nesta ordem. A terceira anula as duas primeiras quando é sim.
 2. O cliente é exclusivamente navegador? (havendo app/CLI/webhook, o custo é quebrar cliente)
 3. O serviço é alcançável por outro caminho? (sendo, a borda é enfeite)
 
-Duas camadas que validam contra o MESMO IdP não são defesa em profundidade — falham
-juntas. O que a camada entrega é redução de superfície alcançável, não segunda
-autenticação. A pergunta certa nunca é "autenticar duas vezes?", é "quero que
-requisição não autorizada toque o código deste serviço?".
+Duas camadas contra o MESMO IdP não são defesa em profundidade — falham juntas. O que a
+camada entrega é redução de superfície alcançável, não segunda autenticação. A pergunta
+certa é "quero que requisição não autorizada toque o código deste serviço?".
 
 ## Token opaco não se valida na borda
 
@@ -37,16 +36,14 @@ Classificar na família errada é o erro que custou duas cartas retificadas em 1
 
 Na primeira família NÃO HÁ SUJEITO dentro do serviço: o proxy autentica e encaminha, e o
 serviço vê anônimo (medido 16/08 na wiki: grupo `*` com `read`, `edit`, `createpage`). A
-régua da borda é então binária — entra tudo ou não entra —, e por allowlist de e-mail, que
-não conhece papel nem domínio: é o segundo mapa de quem-alcança-o-quê, divergindo em
-silêncio do realm. Diferenciar acesso DENTRO do serviço (ler sim, escrever não) exige antes
-dar-lhe identidade — PluggableAuth+OIDC no MediaWiki, equivalente no resto. No MediaWiki,
-mesmo com sujeito, a ACL só reconhece NAMESPACE: domínio do acervo, categoria e prefixo de
-subpágina não se fecham.
+régua da borda é binária — entra tudo ou não entra —, e por allowlist de e-mail, que não
+conhece papel nem domínio: segundo mapa de quem-alcança-o-quê, divergindo em silêncio do
+realm. Diferenciar acesso DENTRO do serviço (ler sim, escrever não) exige antes dar-lhe
+identidade — PluggableAuth+OIDC no MediaWiki, equivalente no resto. E no MediaWiki, mesmo
+com sujeito, a ACL só reconhece NAMESPACE: domínio, categoria e subpágina não se fecham.
 
-Entrando sem gate de rede, quatro contrapartidas deixam de ser recomendação: registro
-desabilitado, login local por senha desabilitado, rate limit de login, painel admin só
-na rede interna.
+Entrando sem gate de rede, quatro contrapartidas deixam de ser recomendação: registro e
+login local por senha desabilitados, rate limit de login, painel admin só na rede interna.
 
 ## Ato sobre identidade se confere contra o caminho por onde eu opero
 
@@ -79,8 +76,8 @@ Antes de apagar, três passadas — nesta ordem, porque a segunda já salvou uma
    Permissão 600 se reaplica após o `os.replace`.
 
 Ordem do ato: primeiro o realm (apagar o client mata service account e secret juntos),
-depois o `.env`. Fechamento: `acesso orfaos` tem de perder o achado correspondente — é a
-única confirmação que não depende da minha narrativa.
+depois o `.env`. Fecha quando `acesso orfaos` perde o achado — a única confirmação que não
+depende da minha narrativa.
 
 ## Padrões da casa, medidos
 
@@ -101,5 +98,3 @@ depois o `.env`. Fechamento: `acesso orfaos` tem de perder o achado corresponden
 - `encerrar fita` marca o slot `iam` como "ÓRFÃO — slug não declarado na persona" e sugere
   `mesa limpa`. É FALSO POSITIVO: a persona declara `iam` como slug da head, mas fora do
   bloco GERÊNCIAS, que é o que o verbo lê. Não limpar.
-- `PF_CADEIRA` não desce para o `run_command` do ops (ambiente do serviço, não do
-  terminal): `encerrar` e `mesa` recusam sem ela. Prefixar a chamada — `PF_CADEIRA=seguranca <verbo>`.
