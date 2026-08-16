@@ -19,18 +19,24 @@ for f in .bashrc .profile; do
 done
 
 # Conectores MCP do CLI. Reescrito a cada boot de proposito — e contrato nosso,
-# nao arquivo dele.
+# nao arquivo dele. Rota que a ponte serve e este JSON nao declara e rota
+# inexistente para o `agy`: ele so sobe tool de servidor listado aqui.
+#
+# A chave e `serverUrl`, NAO `httpUrl`. O schema do Antigravity CLI tem dois
+# transportes so — stdio (`command`/`args`/`env`) e remoto (`serverUrl`) —, e
+# chave desconhecida ele descarta calado: nem sobe o servidor, nem loga erro.
+# Medido em 16/08/2026: com `httpUrl` o `agy` respondia "nenhum servidor MCP
+# conectado" para os TRES; trocada a chave, subiram na mesma casa e no mesmo
+# boot. Fonte do schema, dentro da propria imagem dele:
+# ~/.gemini/antigravity-cli/builtin/skills/agy-customizations/docs/mcp_servers.md
+# `trust` tambem nao e do schema: o verbo chama `agy` com
+# --dangerously-skip-permissions, entao aprovacao de tool ja nao passa por aqui.
 cat > /home/jaiminho/.gemini/config/mcp_config.json <<JSON
 {
   "mcpServers": {
-    "platafirma": {
-      "httpUrl": "http://127.0.0.1:8022/mcp",
-      "trust": true
-    },
-    "platafirma-wiki": {
-      "httpUrl": "http://127.0.0.1:8022/wiki",
-      "trust": true
-    }
+    "platafirma": { "serverUrl": "http://127.0.0.1:8022/mcp" },
+    "platafirma-wiki": { "serverUrl": "http://127.0.0.1:8022/wiki" },
+    "platafirma-acervo": { "serverUrl": "http://127.0.0.1:8022/acervo" }
   }
 }
 JSON
