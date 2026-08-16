@@ -79,6 +79,16 @@ if [ "$SEM_ATUALIZAR" -eq 0 ]; then
   done
 fi
 
+# Quem está FORA DO QUADRO não recebe o org chart: a persona da fábrica declara não
+# conhecê-lo, e o pacote entregava justamente o que ela nega (decisão do dono 16/08/2026,
+# opção A do #161). No lugar vai o mapa alias -> slug, que é endereço e não topologia.
+ORG_QUADRO="platafirma-arquitetura/docs/org-template-canonico.md"
+ORG_FORA="platafirma-harness/personas/alias-cadeiras.md"
+ORG="$ORG_QUADRO"
+case " ${PF_FORA_DO_QUADRO:-fabrica jaiminho} " in
+  *" $C "*) ORG="$ORG_FORA" ;;
+esac
+
 N=$(sed -n '1s/^Você é \([A-Za-z-]*\).*/\1/p' "$P")
 M=$(sed -n 's/^FERRAMENTAL: *\([^ ]*\.md\).*/\1/p' "$P" | head -1)
 
@@ -91,7 +101,7 @@ G="${PF_MANIFESTO_GERAL:-platafirma-harness/tool-manifest/TODA-CADEIRA.md}"
 if [ "$JSON" -eq 0 ]; then
   echo "== cadeira: ${N:-<nome não resolvido na linha 1 de $P>} =="
 
-  for f in "$P" ${M:-} ${G:-} platafirma-arquitetura/docs/org-template-canonico.md; do
+  for f in "$P" ${M:-} ${G:-} "$ORG"; do
     if [ -f "$f" ]; then
       echo "===== $f ====="
       cat "$f"
@@ -131,8 +141,6 @@ fi
 
 # --json: metadado/ponteiro por trás do mesmo levantamento — nunca o corpo dos
 # documentos (isso continua sendo o modo texto, com os marcadores "===== <arquivo> =====").
-ORG="platafirma-arquitetura/docs/org-template-canonico.md"
-
 persona_presente=false
 [ -f "$P" ] && persona_presente=true
 persona_nome_json="null"
