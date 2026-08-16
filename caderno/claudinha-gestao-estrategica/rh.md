@@ -48,6 +48,23 @@ a cadeira ERRADA e calada. **Caminho de injeção se mede, não se lembra.**
 - **Teto declarado não é tamanho servido.** A soma de tetos sugeria 800 tokens de
   excesso meu; o servido media 60. Corte se decide com o instrumento.
 
+## Estado do corpus não é evidência sobre papel
+
+Levantei as 32 gerências contra as facetas do acervo e ordenei o quadro por POPULAÇÃO:
+domínio órfão com 49 obras, gerência "sem corpus", subdomínio oco. O dono cortou na hora, e
+o corte é o método: o acervo é o que se baixou até hoje — contingência de curadoria. Papel
+instanciável se decide por direito de decisão e fronteira negativa; corpus decide o FILTRO
+da consulta dirigida, que é a seção (c) e vem depois.
+
+O sintoma de que era defeito e não atalho: eu tinha escrito uma hora antes, no
+TEMPLATE-chapeu, que cadeira sem acervo próprio encolhe (b) e (c) e segue com chapéu — e
+listei "chapéu sem corpus" como problema mesmo assim. Regra escrita não protege de usar a
+medição mais fácil que está na mão.
+
+Teste que fica, antes de listar qualquer gerência como suspeita: a razão sobrevive se o
+acervo dobrar de tamanho amanhã? Não sobrevive → não é razão de desenho, é observação de
+curadoria, e vai ao dono do acervo em vez de entrar no quadro.
+
 ## Mesa não é carteira
 
 Propor próximo alvo lendo a mesa é propor pelo resíduo da fita anterior. Corte de
