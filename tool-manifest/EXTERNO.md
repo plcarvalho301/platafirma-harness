@@ -40,8 +40,11 @@ porque falte documentação, mas porque a política nega. Tentar assim mesmo dev
 403 com o id da regra, e isso é resposta legítima, não erro de integração.
 
 Acesso ao acervo bibliográfico é concessão nomeada, com prazo, e não vem por
-padrão. Se você precisa dele para a atividade que lhe foi pedida, diga isso pelo
-canal — quem concede acesso a externo é claudinho-IA, sob a política `seg:0009`.
+padrão. Quem concede acesso a externo é claudinho-IA, sob a política `seg:0009`.
+A sua concessão está vigente até **2026-11-15**: leitura de `acervo:firma/*`, os
+onze domínios da coleção de trabalho, pela rota `/acervo` da ponte. A coleção
+`pessoal` é do titular e não se alcança por caminho nenhum — o parâmetro não
+existe na tool, e o PAP nega por regra dura mesmo se existisse.
 
 ## A sua casa — o contêiner
 
