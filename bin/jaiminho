@@ -27,6 +27,7 @@ Sem argumento, imprime isto.
 import json
 import os
 import re
+import shlex
 import subprocess
 import sys
 
@@ -107,7 +108,7 @@ def falar(args, continuar=False):
                   " mensagem a responder.\n\n"
                 + pergunta
             )
-    r = sh(f"{BASE}{flag} -p {json.dumps(pergunta)}")
+    r = sh(f"{BASE}{flag} -p {shlex.quote(pergunta)}")
     saida = (r.stdout or "").strip()
     if saida:
         print(saida)
@@ -157,7 +158,7 @@ def login_codigo(args):
     codigo = texto_do_argumento(args)
     if not codigo:
         sys.exit("jaiminho: passe o codigo devolvido pela pagina de autorizacao")
-    sh(f"tmux send-keys -t login {json.dumps(codigo)}; sleep 1; tmux send-keys -t login Enter",
+    sh(f"tmux send-keys -t login {shlex.quote(codigo)}; sleep 1; tmux send-keys -t login Enter",
        timeout=60)
     # Primeiro acesso ainda passa por tema, termos e confianca na pasta; Enter os
     # atravessa com o default, e o default do consentimento de dados e NAO.
