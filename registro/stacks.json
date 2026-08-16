@@ -94,7 +94,7 @@
       ]
     },
     "rastreador": {
-      "compose": "~/AI/platafirma-rastreador/docker-compose.yml",
+      "compose": "~/AI/deploy/rastreador/docker-compose.yml",
       "repo": "platafirma-rastreador",
       "papel": "rastreador de trabalho: API e banco proprio do boneco",
       "critico": false,
