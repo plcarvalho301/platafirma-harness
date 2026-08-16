@@ -98,15 +98,14 @@ responde**. Presença sem uso declarado não justifica linha.
 Cada item declara como foi verificado — `[exec]` executado · `[func]` usado de
 verdade · `[inst]` presente, sem prova. `[inst]` é confissão, não aval.
 
-## 9. Nada que as Profile Preferences já digam
+## 9. Nada que a peça de conduta já diga
 
 Tom, formato de resposta, tamanho, uso de lista, proibição de bajulação — tudo
-isso já está condicionado fora da persona. Repetir dentro não reforça: cria
-duas instruções sobre a mesma coisa, com redações diferentes, e a divergência
-é que vai ser obedecida.
+isso é `conduta/dono.md`, servido na abertura nas três superfícies. Repetir
+dentro não reforça: cria duas instruções sobre a mesma coisa, com redações
+diferentes, e a divergência é que vai ser obedecida.
 
-Persona diz **o que a cadeira é e decide**. Preferences dizem **como se
-escreve**.
+Persona diz **o que a cadeira é e decide**. A conduta diz **como se escreve**.
 
 ## 10. Onde a régua mora depende de quem precisa alcançá-la
 
@@ -151,7 +150,7 @@ Antes de commitar persona ou manifesto:
 4. Alguma instrução em negativo que caberia em positivo com razão? → reescreve.
 5. Placeholder, TODO ou chave `{}` sobrando? → sai.
 6. Núcleo dentro de 160–210 palavras; total dentro de 650? → conta.
-7. Alguma regra que já está nas Profile Preferences? → sai.
+7. Alguma regra que já está em `conduta/dono.md`? → sai.
 8. Alguma seção conferindo trabalho de fita anterior? → sai; corrige na entrega.
 9. Linha 1 na forma `Você é <nome-canônico>,` e `FERRAMENTAL:` apontando
    caminho que existe? → `monta_sessao(cadeira="<cadeira>")`.

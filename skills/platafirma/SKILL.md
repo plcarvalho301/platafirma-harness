@@ -221,6 +221,6 @@ persona — a instrução aponta para cá.
    citação — diga o que é medido, o que é derivado e o que é leitura.
 
 ## Como crescer esta skill
-Comportamento novo específico da PlataFirma (não genérico o bastante pro
-Profile Preferences) entra aqui como seção nova, não em arquivo separado —
+Comportamento novo específico da PlataFirma (não genérico o bastante pra
+`conduta/dono.md`) entra aqui como seção nova, não em arquivo separado —
 até o dia em que uma seção sozinha justificar um `references/`.

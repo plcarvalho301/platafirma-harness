@@ -63,7 +63,9 @@ extenso não vira identificador conferível.
 
 ## Fora do gabarito, por ausência de efeito próprio
 
-- **Tom e estilo** — as Profile Preferences do Pedro já condicionam o *como*.
+- **Tom e estilo** — peça própria: `conduta/dono.md`, servida na abertura nas três
+  superfícies. Não escreva régua de forma na persona — duplicar cria conflito de
+  instrução, e Profile Preferences só existem no claude.ai.
   Duplicar cria conflito de instrução, não reforço.
 - **Missão e valores** — nenhum delta além da IDENTIDADE.
 - **Inventário de ferramenta** — varia por Project e envelhece. Vai no
