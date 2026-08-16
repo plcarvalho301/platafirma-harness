@@ -37,6 +37,18 @@
                    peca: tokens medidos com o tokenizador do harness, sha do
                    conteudo servido e frescor. Sem tokenizador, sai 2 — pacote de
                    abertura se mede, nao se estima.
+  superficie [--staged]
+                   equalizacao das superficies. Mede o PRODUTOR do `.mcp.json` de
+                   cada uma — quem escreve o arquivo —, nunca os cwd vivos: cwd e
+                   efemero, e o `.mcp.json` e rastreado no repo, entao ler os
+                   wt-*/ e fitas/*/ era ler N copias do mesmo arquivo. Cada
+                   superficie declara `produtor` em superficies.json: `codigo`
+                   (dict no fonte, lido por AST) ou `arquivo-rastreado` (o
+                   .mcp.json da raiz; o produtor e o git). Superficie verificavel
+                   SEM produtor declarado reprova. Instancia viva sai como
+                   OBSERVACAO de deriva, com nome de arquivo, e nao muda veredito;
+                   zero instancia nao e conector faltando. Julga tambem capacidade
+                   sem meio e texto de cadeira citando tool fora de todo conector.
   arranque [nome]  texto de arranque em cwd (`CLAUDE.md` sob ~/AI): e PONTEIRO para
                    `conduta/arranque.md`, ou copia com bloco proprio? Reprova so a
                    copia; nao julga a redacao do arranque, que e da dona do texto.

@@ -138,20 +138,28 @@ histórico de carga              : sar                  (única que responde "h�
 espaço                          : df -h · du -sh · ncdu
 ```
 
-## As tres superficies servem os mesmos conectores
+## As QUATRO superficies, e o que a conferencia olha
 
-A cadeira nao roda num lugar so: claude.ai, fita do chat (sala do Matrix) e Code
-em worktree da fabrica. **O comportamento e o mesmo nas tres**, e a equalizacao e
-pelo MEIO — as tres servem `platafirma-ops` e `platafirma-wiki`. Texto de cadeira
-nao se reescreve para caber em superficie mais pobre.
+A cadeira nao roda num lugar so: claude.ai, fita do chat (sala do Matrix), Code em
+worktree da fabrica e Code seco (conta sem o arranque instalado). **O comportamento
+e o mesmo onde ha meio**, e a equalizacao e pelo MEIO — `platafirma-ops` e
+`platafirma-wiki`. Texto de cadeira nao se reescreve para caber em superficie mais
+pobre.
 
 - **Registro**: `tool-manifest/superficies.json` — superficie, conectores, tools
-  que cada conector serve, e o risco aceito quando ha.
-- **Onde se declara**: `.mcp.json` no cwd. Na fita, `prepara_cwd` escreve; nas
-  worktrees, ja existia — foi de la que o padrao veio.
-- **Conferencia**: `conferir superficie` mede conector prometido e nao servido,
-  capacidade sem meio, e texto citando tool que conector nenhum serve.
-- **Gate**: o `pre-commit` chama `conferir superficie --staged` — incremental.
+  servidas, e o `produtor` do `.mcp.json` de cada uma.
+- **Quem escreve o `.mcp.json`**: na fita, `serve_conectores` em `bin/chat`, a cada
+  giro; na fabrica, o git — o arquivo e RASTREADO na raiz do repo e a worktree o
+  recebe do branch. Nao ha script que prepare worktree, e isso e declaracao, nao
+  omissao.
+- **Conferencia**: `conferir superficie [--staged]`, chamado tambem pelo
+  `pre-commit`. Julga o PRODUTOR, nunca os cwd vivos. O que cada campo significa
+  esta na chamada `conferir` sem argumento — nao se repete aqui, e o codigo e a
+  unica fonte que nao envelhece sozinha.
+- **Zero instancia nao e defeito.** Ate 16/08/2026 o gate lia os `.mcp.json` dos
+  cwd; limpar as worktrees fez a fabrica ir a zero e o gate acusar conector
+  faltando, reprovando commit de toda cadeira. Veredito que oscila com diretorio
+  efemero mede o disco, nao o contrato.
 - **Superficie nao e fronteira de seguranca.** O modelo e conta segregada (uid
   `claudinho`), acesso por `run_command` via CLI, isolamento e pentest contra
   escalonamento de privilegio. O vetor unico e a IA sair da conta que o inicio de

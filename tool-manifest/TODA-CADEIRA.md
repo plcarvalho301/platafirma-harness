@@ -149,26 +149,20 @@ histórico de carga              : sar                  (única que responde "h�
 espaço                          : df -h · du -sh · ncdu
 ```
 
-## As tres superficies servem os mesmos conectores
+## As superficies, e o que a conferencia olha
 
-A cadeira nao roda num lugar so: claude.ai, fita do chat (sala do Matrix) e Code
-em worktree da fabrica. **O comportamento e o mesmo nas tres**, e a equalizacao e
-pelo MEIO — as tres servem `platafirma-ops` e `platafirma-wiki`. Texto de cadeira
-nao se reescreve para caber em superficie mais pobre.
+**Este arquivo esta em substituicao** por `tool-manifest/nucleo.md` (abertura) e
+`nucleo-detalhe.md` (por ato), que sao as pecas do catalogo (#189 fase 3). O bloco
+que ficava aqui era copia literal do que esta em `nucleo-detalhe.md` — duas fontes
+da mesma regra, que divergem no primeiro ajuste que so uma receber. Foi o que
+aconteceu em 16/08/2026.
 
-- **Registro**: `tool-manifest/superficies.json` — superficie, conectores, tools
-  que cada conector serve, e o risco aceito quando ha.
-- **Onde se declara**: `.mcp.json` no cwd. Na fita, `prepara_cwd` escreve; nas
-  worktrees, ja existia — foi de la que o padrao veio.
-- **Conferencia**: `conferir superficie` mede conector prometido e nao servido,
-  capacidade sem meio, e texto citando tool que conector nenhum serve.
-- **Gate**: o `pre-commit` chama `conferir superficie --staged` — incremental.
-- **Superficie nao e fronteira de seguranca.** O modelo e conta segregada (uid
-  `claudinho`), acesso por `run_command` via CLI, isolamento e pentest contra
-  escalonamento de privilegio. O vetor unico e a IA sair da conta que o inicio de
-  sessao lhe designou; dentro da conta e sandbox, feita para quebrar sem
-  comprometer o servidor. O allow/deny do settings do Code e higiene de sessao,
-  **nao** controle — nao o promova a controle e nao derive modelo de risco dele.
+- **Superficies, conectores e o produtor do `.mcp.json`**: `nucleo-detalhe.md`,
+  secao "As QUATRO superficies".
+- **O que cada classe de `conferir` julga**: a chamada `conferir` sem argumento. O
+  codigo e a unica fonte que nao envelhece sozinha; texto que a repete envelhece.
+- **Superficie nao e fronteira de seguranca**, e o allow/deny do settings do Code e
+  higiene de sessao, nao controle: `nucleo-detalhe.md`, mesma secao.
 
 ## O verbo declara a capacidade que serve
 
