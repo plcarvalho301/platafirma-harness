@@ -105,6 +105,16 @@
         ".env"
       ]
     },
+    "rastreador-tela": {
+      "compose": "~/AI/deploy/rastreador-tela/app/rastreador/docker-compose.yml",
+      "repo": "platafirma-ui",
+      "papel": "superficie de tela do rastreador: a tela servida por si, sem o back",
+      "critico": false,
+      "rotas": "~/AI/deploy/core/deploy/cloudflared-config.yml",
+      "gate": "~/AI/deploy/core/docker-compose.yml",
+      "_nota": "Segunda saida de release da platafirma-ui (arq:0057 emendando arq:0042): a biblioteca sai como imagem versionada, cada superficie de tela sai como SERVICO proprio. Alcancada pelo `oauth2-proxy-rastreador`, que vive na stack CORE, pela rede `pf-borda-rastreador` — por isso `rotas` e `gate` apontam para fora deste repo, mesma razao do `rastreador` e do `chat`. `segredos: []` DECLARA que a stack nao exige nenhum, e e aceite do #187, nao omissao: front que monta segredo de outra camada e o que o instrumento passa a reprovar. Deploy desta stack e de claudinha-produto a partir do fechamento do #187 (card #197).",
+      "segredos": []
+    },
     "harness-sessao": {
       "compose": "~/AI/platafirma-harness/sessao/compose.yaml",
       "repo": "platafirma-harness",
