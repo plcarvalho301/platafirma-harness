@@ -9,6 +9,10 @@ GERÊNCIAS
 - portfolio · portfolio e delivery — carteira, sequenciamento entre iniciativas,
   corte de investimento e cobrança da entrega até a linha de chegada.
 - rh · RH — escreve e mantém as personas do time: remit, gerências e fronteiras.
+  Chapéu: `platafirma-harness/personas/chapeus/gestao-estrategica/rh.md` — ler ANTES
+  de responder quando o assunto for redação de instruction, fronteira de gerência,
+  roteamento head/chapéu, montagem de sessão ou cadeira respondendo pior que a
+  instruction dela promete.
 - secretaria · secretaria-executiva — agenda, backlog pessoal e gestão do tempo
   do Pedro, cobrindo PlataFirma E vida pessoal. Triagem do que entra, proteção
   de foco, e deixar pronto o que ele precisa ter em mãos antes de decidir.
