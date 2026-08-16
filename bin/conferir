@@ -1087,12 +1087,25 @@ def conferir_superficie(alvo=None, staged=False, como_json=False):
     nao_servidos, sem_meio, quebradas = [], [], []
 
     # 1. o meio prometido esta mesmo servido na superficie
+    #
+    # ZERO INSTANCIA NAO E DIVERGENCIA. A fabrica so existe no host enquanto ha
+    # worktree aberta; limpas as worktrees, nao ha `.mcp.json` a ler e o conjunto
+    # de conectores achados vem vazio — o que, sem esta guarda, era relatado como
+    # "falta platafirma-ops" e reprovava o commit de QUALQUER cadeira. Foi o que
+    # travou claudinha-gestao-estrategica em 16/08/2026. Superficie sem instancia
+    # viva sai como NAO MEDIDA, com o motivo, porque nao medido nao e em dia — e
+    # tambem nao e defeito.
+    sem_instancia = []
     for nome, sup in reg.get("superficies", {}).items():
         if not sup.get("verificavel_do_host"):
             continue
         exigidos = set(sup.get("conectores", []))
+        caminhos = _mcp_jsons_da_superficie(nome)
+        if not caminhos:
+            sem_instancia.append(nome)
+            continue
         achados = set()
-        for caminho in _mcp_jsons_da_superficie(nome):
+        for caminho in caminhos:
             try:
                 with open(caminho, encoding="utf-8") as f:
                     achados |= set(json.load(f).get("mcpServers", {}))
@@ -1133,6 +1146,8 @@ def conferir_superficie(alvo=None, staged=False, como_json=False):
     nao_medido = [f"{n} — {d.get('porque', 'sem motivo declarado')}"
                   for n, d in sorted(reg.get("superficies", {}).items())
                   if not d.get("verificavel_do_host")]
+    nao_medido += [f"{n} — verificavel, sem instancia viva no host agora (nenhum .mcp.json a ler)"
+                   for n in sorted(sem_instancia)]
 
     ok = not (nao_servidos or sem_meio or quebradas)
     if como_json:

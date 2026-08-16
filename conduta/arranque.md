@@ -40,12 +40,22 @@ a resposta — ela faz a sessão falar em nome de quem não é e escrever na mes
 |---|---|---|
 | claude.ai | instruções do Project fixam a cadeira | o dono, na configuração do app |
 | fita | slug chumbado no cwd da fita | `bin/chat`, que já recebe `--cadeira` |
-| fábrica | `PF_CADEIRA` exportado no shell do despacho | quem despacha o card |
-| Code seco | não há injeção | ninguém — pergunte uma vez |
+| fábrica | slug dito na abertura; sem slug, `fabrica` por default | o arranque de conta, `agente/CLAUDE.md` |
+| Code seco | o mesmo arranque de conta: cai no default | escopo de usuário, em qualquer diretório |
 
 - **Worktree não injeta nada.** Ela isola branch, que é o que git worktree faz bem;
   identidade lida de dentro dela é a cópia congelada que este arquivo elimina.
-- **Code seco é a única em que o arranque pode legitimamente não existir**: clone sem
-  `.mcp.json` não tem conector, e sem conector não há `monta_sessao` a chamar. Ofereça
-  a lista uma vez (`monta_sessao()` sem argumento, quando houver conector) e, não
-  havendo, diga que a sessão está fora da plataforma em vez de agir como cadeira.
+- **`PF_CADEIRA` não atravessa no Code, e isto foi medido (TI, 16/08):** `Bash` está
+  negado na estação e `run_command` executa no ops-server, cujo ambiente não é o do
+  terminal onde o Code abriu. Variável exportada ali é ilegível de dentro da sessão.
+  O que atravessa é o slug dito na abertura. `PF_CADEIRA` segue valendo no host, para
+  verbo chamado por `run_command`.
+- **Não existe Code sem injeção.** O arranque de conta (`agente/CLAUDE.md`, escopo de
+  usuário) alcança qualquer diretório: com slug dito, vale o slug; sem slug, abre
+  `fabrica` por default, porque é o que a conta faz na maior parte do tempo e sessão
+  sem cadeira não é opção. O que eu chamava de "Code seco sem injeção" era, na medição
+  do TI, sessão com a cadeira ERRADA e calada — a persona da fábrica morava buildada
+  no arquivo de conta, já derivada da fonte. Pior que órfã.
+- **O que continua faltando no Code seco é conector, não cadeira**: clone sem
+  `.mcp.json` não tem `monta_sessao` a chamar. Aí vale a linha 2 — declare que o pacote
+  não chegou e não aja como cadeira.

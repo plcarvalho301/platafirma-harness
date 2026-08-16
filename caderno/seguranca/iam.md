@@ -15,9 +15,6 @@ juntas. O que a camada entrega é redução de superfície alcançável, não se
 autenticação. A pergunta certa nunca é "autenticar duas vezes?", é "quero que
 requisição não autorizada toque o código deste serviço?".
 
-Custo sempre subestimado: a borda autoriza por allowlist de e-mail, o serviço autoriza
-por papel no realm — dois mapas de quem-alcança-o-quê, que divergem em silêncio.
-
 ## Token opaco não se valida na borda
 
 Validar token opaco na borda exige o estado do emissor, e ter esse estado é ser o
@@ -35,8 +32,17 @@ Ensaio completo: wiki, PlataFirma:Sec/autenticacao-de-borda
 ## Duas famílias de superfície no core
 
 Serviço SEM auth própria -> atrás do oauth2-proxy (wiki, harness).
-Serviço COM auth própria -> direto, gate próprio contra o realm (vikunja, mcp, Synapse).
+Serviço COM auth própria -> direto, gate próprio contra o realm (mcp, Synapse, rastreador).
 Classificar na família errada é o erro que custou duas cartas retificadas em 14/08.
+
+Na primeira família NÃO HÁ SUJEITO dentro do serviço: o proxy autentica e encaminha, e o
+serviço vê anônimo (medido 16/08 na wiki: grupo `*` com `read`, `edit`, `createpage`). A
+régua da borda é então binária — entra tudo ou não entra —, e por allowlist de e-mail, que
+não conhece papel nem domínio: é o segundo mapa de quem-alcança-o-quê, divergindo em
+silêncio do realm. Diferenciar acesso DENTRO do serviço (ler sim, escrever não) exige antes
+dar-lhe identidade — PluggableAuth+OIDC no MediaWiki, equivalente no resto. No MediaWiki,
+mesmo com sujeito, a ACL só reconhece NAMESPACE: domínio do acervo, categoria e prefixo de
+subpágina não se fecham.
 
 Entrando sem gate de rede, quatro contrapartidas deixam de ser recomendação: registro
 desabilitado, login local por senha desabilitado, rate limit de login, painel admin só
@@ -48,15 +54,13 @@ Antes de renomear, desabilitar ou apagar sujeito, listar o que depende dele para
 continuar operando — não só o que depende dele em geral.
 
 Caso, 14/08/2026: renomeei o username do dono no realm depois de conferir vikunja, wiki,
-allowlist do proxy e token do mcp, todos intactos. O que não conferi foi o gate por onde
-eu opero: o PEP resolve sujeito por `preferred_username` contra `politica-acesso/sujeitos.yaml`,
-e o nome velho estava lá. O rename trancou TODAS as cadeiras fora do ops-mcp — `run_command`,
-`read_file`, `write_file` — de uma vez.
+allowlist do proxy e token do mcp — todos intactos. Não conferi o gate por onde eu opero:
+o PEP resolve sujeito por `preferred_username` contra `politica-acesso/sujeitos.yaml`, e o
+nome velho estava lá. O rename trancou TODAS as cadeiras fora do ops-mcp de uma vez.
 
-Por que a recuperação é cara: o admin console do Keycloak é loopback-only (`127.0.0.1:8180`;
-`/admin` dá 404 na borda), então não há rota de conserto pelo conector. Quem destrava é o
-dono, no terminal do host. Toda mudança de identidade que possa alcançar `sujeitos.yaml`
-precisa da correção preparada ANTES do ato, não depois.
+Recuperação é cara: o admin console do Keycloak é loopback-only (`127.0.0.1:8180`; `/admin`
+dá 404 na borda), e quem destrava é o dono no terminal do host. Toda mudança de identidade
+que possa alcançar `sujeitos.yaml` precisa da correção preparada ANTES do ato.
 
 ## Revogar credencial a partir de lista de terceiro
 
@@ -70,9 +74,9 @@ Antes de apagar, três passadas — nesta ordem, porque a segunda já salvou uma
 2. **Grep por nome de chave, nunca por menção.** Duplicata em `.env` é silenciosa: no mesmo
    arquivo, `VIKUNJA_DB_PASSWORD` e `VIKUNJA_SERVICE_SECRET` apareciam duas vezes cada,
    com valores distintos. Contar por chave devolve 5; contar por linha devolve 7.
-3. **Reescrever com verificação, não com `sed` no lugar.** Filtrar por chave, e afirmar
-   antes de gravar que as chaves restantes seguem byte a byte iguais e que o conjunto
-   removido é exatamente o esperado. Permissão 600 se reaplica após o `os.replace`.
+3. **Reescrever com verificação, não com `sed` no lugar.** Filtrar por chave e afirmar antes
+   de gravar que as demais seguem byte a byte iguais e que o removido é o esperado.
+   Permissão 600 se reaplica após o `os.replace`.
 
 Ordem do ato: primeiro o realm (apagar o client mata service account e secret juntos),
 depois o `.env`. Fechamento: `acesso orfaos` tem de perder o achado correspondente — é a
@@ -97,3 +101,5 @@ depois o `.env`. Fechamento: `acesso orfaos` tem de perder o achado corresponden
 - `encerrar fita` marca o slot `iam` como "ÓRFÃO — slug não declarado na persona" e sugere
   `mesa limpa`. É FALSO POSITIVO: a persona declara `iam` como slug da head, mas fora do
   bloco GERÊNCIAS, que é o que o verbo lê. Não limpar.
+- `PF_CADEIRA` não desce para o `run_command` do ops (ambiente do serviço, não do
+  terminal): `encerrar` e `mesa` recusam sem ela. Prefixar a chamada — `PF_CADEIRA=seguranca <verbo>`.
