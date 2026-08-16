@@ -720,43 +720,41 @@ def _memoria(cadeira: str) -> dict:
 
 
 def _montar(cadeira: str, atualizar: bool) -> dict:
+    """Delega ao verbo `bin/monta-sessao --json`, que monta por catálogo (#189 fase 5).
+
+    Aqui havia uma SEGUNDA implementação da montagem: este servidor lia persona, org e
+    manifestos por conta própria enquanto o verbo lia os seus. Duas fontes da mesma
+    regra divergem em silêncio — é a razão pela qual a mesa e a fila já eram lidas pelo
+    verbo, e agora vale para o pacote inteiro. A superfície não pode mudar o pacote:
+    `tool-manifest/superficies.json` manda que o comportamento seja o mesmo nas três.
+
+    O que continua sendo do servidor é só o ENVELOPE DA FILA (camada B), que a tool
+    serve com detalhe que o verbo não tem.
+    """
     alvo = cadeira.strip()
     for prefixo in ("claudinho-", "claudinha-"):
         if alvo.lower().startswith(prefixo):
             alvo = alvo[len(prefixo):]
-    p = PERSONAS / f"persona-{alvo}.md"
-    if not p.is_file():
-        return {"erro": f"não existe persona para '{cadeira}'",
-                "procurado": str(p), "cadeiras": _cadeiras()}
 
-    repos = _pull() if atualizar else _estado_repos()
-    texto = p.read_text(encoding="utf-8", errors="replace")
-    linha1 = texto.splitlines()[0] if texto else ""
-    m_nome = RE_NOME.match(linha1)
-    nome = m_nome.group(1) if m_nome else ""
+    argv = [str(RAIZ / "bin" / "monta-sessao"), alvo, "--json"]
+    if not atualizar:
+        argv.append("--sem-atualizar")
+    try:
+        proc = subprocess.run(argv, capture_output=True, text=True, timeout=90,
+                              env={**os.environ, "PF_SUPERFICIE": "claude.ai"})
+        r = json.loads(proc.stdout)
+    except (OSError, subprocess.SubprocessError, ValueError) as e:
+        # Montador mudo se declara: pacote vazio seria indistinguível de cadeira sem peça.
+        return {"erro": f"montador não respondeu: {type(e).__name__}: {e}",
+                "verbo": " ".join(argv), "cadeiras": _cadeiras()}
+    if "erro" in r:
+        r.setdefault("cadeiras", _cadeiras())
+        return r
 
-    manifesto = None
-    for linha in texto.splitlines():
-        m = RE_FERRAMENTAL.match(linha)
-        if m:
-            manifesto = m.group(1)
-            break
-
-    r = {"cadeira": alvo, "nome_canonico": nome or None, "repos": repos,
-         "persona": _ler(p), "org": _ler(ORG_CANONICO)}
-    if not nome:
-        r["aviso_nome"] = (f"linha 1 de {p} não casa 'Você é <nome>' — nome canônico "
-                           "não resolvido, fila não localizada")
-    r["manifesto_geral"] = _ler(MANIFESTO_GERAL)
-    if manifesto:
-        r["manifesto"] = _ler(RAIZ / manifesto)
-    else:
-        r["manifesto"] = {"ausente": True, "aviso": (
-            f"{p} não declara linha FERRAMENTAL: — manifesto não entrou no pacote. "
-            "Ausência declarada de propósito: omitir em silêncio faria a sessão "
-            "supor ferramental que a persona não declara.")}
-
-    r["memoria"] = _memoria(alvo)
+    nome = r.get("nome_canonico") or ""
+    r["nota_pecas"] = ("cada peça traz {peca, dono, ref, sha, regime, tokens, frescor} "
+                       "e o conteúdo servido; a ordem é a de injeção (estável → volátil) "
+                       "declarada no catálogo, não a de leitura")
 
     # A caixa VIVA é o stream `caixa:<nome>` na malha msg (arq:0018, arq:0036),
     # escrito e consumido pelo verbo `fila`. O arquivo `fila/<nome>.md` é o
@@ -823,20 +821,17 @@ async def monta_sessao(cadeira: str = "", atualizar: bool = True) -> dict:
     velho e clone no head são indistinguíveis sem isso, e servir do clone só é
     seguro quando a idade vem declarada.
 
-    O pacote traz DOIS manifestos: `manifesto` (o que a persona declara em
-    FERRAMENTAL:) e `manifesto_geral` (tool-manifest/TODA-CADEIRA.md, operacional comum
-    a toda cadeira). O manifesto da cadeira remete ao geral e não repete o que
-    está lá — entregar só um obrigava a sessão a uma segunda leitura para
-    qualquer verbo comum.
+    O pacote sai como CATÁLOGO DE PEÇAS (#189 fase 5): `pecas` é uma lista em ordem de
+    injeção, e cada item traz `{peca, dono, ref, sha, regime, tokens, frescor}` mais o
+    conteúdo servido. Persona, tool-manifest da cadeira, núcleo comum, org, antirreabertura,
+    mesa e índice de cadernos são peças — não há mais uma chave por artefato. Peça que falta
+    vem com `frescor: indisponivel` e o motivo, nunca omitida: pacote sem a peça e pacote
+    com peça vazia seriam indistinguíveis.
 
-    Traz também a MEMÓRIA da cadeira, particionada por chapéu (arq:0041): `memoria.mesa`
-    é a memória de trabalho da fita anterior, inteira; `memoria.cadernos` é só o ÍNDICE
-    dos cadernos duráveis — o corpo sai por `mesa caderno <chapéu>`, sob demanda.
-
-    O que NÃO vem: corpo das mensagens da fila (só o envelope — `read_file` traz o
-    corpo), o corpo dos cadernos (só o índice) e nada de acervo (faceta e população entram como ponteiro, nunca como
-    valor: `rag_facets` é a tool própria disso). Pré-carregar o que a sessão não vai
-    usar é o custo que esta tool existe para reduzir, não para reproduzir.
+    `pacote` traz a conta do que foi servido — número de peças, tokens medidos com o
+    tokenizador do harness, método da contagem e o SHA do clone do montador — e diz se o
+    registro em `sessao.peca_servida` aconteceu. `avisos` traz teto estourado, clone
+    atrasado e divergência entre o que a persona declara e o que o catálogo serve.
 
     Persona sem linha `FERRAMENTAL:` devolve `manifesto.ausente` com aviso explícito
     — hoje é o caso de claudinha-osint. Ausência declarada, nunca omissão silenciosa.

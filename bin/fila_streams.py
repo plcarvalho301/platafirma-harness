@@ -372,6 +372,14 @@ def cmd_status(rc, eu: str, args):
         valida_persona(args.persona, json_mode=json_mode)
         so_minha(eu, args.persona, json_mode=json_mode)
         personas = [args.persona]
+    elif os.environ.get("PF_CADEIRA", "").strip():
+        # Sem alvo, a caixa e a de quem opera. Peca de abertura servida por execucao
+        # (`verbo:fila status`, catalogo do #189) nao carrega argumento: o sujeito ja
+        # viaja em PF_CADEIRA, e exigi-lo de novo era a terceira forma da mesma coisa.
+        alvo = os.environ["PF_CADEIRA"].strip()
+        valida_persona(alvo, json_mode=json_mode)
+        so_minha(eu, alvo, json_mode=json_mode)
+        personas = [alvo]
     else:
         # Achado no LOTE 1 (card #390): argparse recusa "--todas" como valor do
         # positional "persona" (parece opção, não é aceito por padrão) — a régua
@@ -379,7 +387,7 @@ def cmd_status(rc, eu: str, args):
         # "persona" virou opcional e "--todas" virou flag de verdade; este ramo
         # cobre "nem um nem outro" (uso incorreto), que antes o argparse pegava
         # sozinho por "persona" ser obrigatório.
-        msg = "uso: fila status <persona> | --todas"
+        msg = "uso: fila status <persona> | --todas (ou PF_CADEIRA no ambiente)"
         if json_mode:
             _falha_json(msg, 2)
         sys.stderr.write(f"erro: {msg}\n")

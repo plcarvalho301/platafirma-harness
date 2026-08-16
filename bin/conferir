@@ -1062,6 +1062,23 @@ def conferir_arranque(alvo=None, staged=False, como_json=False):
     return 0 if ok else 1
 
 
+def _canonico_da_cadeira(cadeira):
+    """`TI` -> `claudinho-TI`. Fonte: a linha 1 da persona, a mesma que o montador
+    e o `descansar` leem. Sem persona legivel, devolve o que veio."""
+    if not cadeira:
+        return cadeira
+    if cadeira.startswith(("claudinho-", "claudinha-")):
+        return cadeira
+    caminho = os.path.join(HARNESS, "personas", f"persona-{cadeira}.md")
+    try:
+        with open(caminho, encoding="utf-8") as f:
+            primeira = f.readline()
+    except OSError:
+        return cadeira
+    m = re.search(r"\b(claudinh[oa]-[\w-]+)", primeira)
+    return m.group(1) if m else cadeira
+
+
 def _conectores_do_produtor(prod):
     """Nomes de conector que o PRODUTOR de uma superficie escreve. (nomes, erro).
 
@@ -1753,8 +1770,13 @@ def _peca_servida(peca, cadeira):
     ref = peca.get("artefato") or ""
     if ref.startswith("verbo:"):
         cmd = ref[len("verbo:"):].strip().split()
-        env = dict(os.environ, PF_CADEIRA=cadeira)
-        for tentativa in (cmd, cmd + [cadeira]):
+        # NOME CANONICO, nao o sufixo — mesma regra do montador. `fila` e `mesa`
+        # nomeiam caixa e chave por `claudinho-TI`; passar `TI` faz o verbo sair 2
+        # com "persona desconhecida", e a peca era reportada como NAO MEDIDA. O
+        # pacote servido estava certo; quem media e que perguntava errado.
+        canonico = _canonico_da_cadeira(cadeira)
+        env = dict(os.environ, PF_CADEIRA=canonico)
+        for tentativa in (cmd, cmd + [canonico], cmd + [cadeira]):
             p = subprocess.run(tentativa, capture_output=True, text=True, env=env)
             if p.returncode == 0:
                 agora = datetime.datetime.now().astimezone().isoformat(timespec="seconds")

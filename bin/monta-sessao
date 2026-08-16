@@ -1,213 +1,393 @@
-#!/usr/bin/env bash
-# monta-sessao <cadeira> — imprime numa volta o contexto de abertura da cadeira:
+#!/home/claudinho/AI/.venv-harness/bin/python
+# monta-sessao <cadeira> — monta o pacote de abertura A PARTIR DO CATALOGO.
 # capacidade: expediente
-# dono: claudinho-IA
-# persona, manifesto declarado por ela + o GERAL, org canônico e a fila dela.
+# dono: claudinho-IA (politica de sessao) · claudinho-TI (montador)
 #
-# As duas variáveis saem do texto da persona, não do nome do arquivo:
-#   linha 1        "Você é <nome>,"        -> nome canônico, que é o diretório da fila
-#   linha FERRAMENTAL:                     -> caminho do manifesto
-# Convenção de nome de arquivo não produz o "claudinha" de persona-fabrica.md.
-set -euo pipefail
+# Fase 5 do card #189 (spec_montagem-de-sessao §4 e §6). O que mudou: as pecas nao
+# estao mais escritas aqui dentro. O montador le `registro/pecas/*.json`, serve o que
+# tem `gatilho.evento: abertura`, e nao sabe de antemao quais sao — peca nova entra
+# no pacote por commit no catalogo, sem tocar neste arquivo.
+#
+# ENVELOPE UNIFORME (§6.2): toda peca sai como
+#   {peca, dono, ref, sha, regime, tokens, frescor}
+# Era um shape por peca — persona com path+content, memoria com nota, fila com outro.
+# Sem envelope uniforme nao ha o que `conferir sessao` meca, e o orcamento de janela
+# continua sendo declaracao.
+#
+# ORDEM: estavel -> morna -> volatil (§4). Persona e manifesto primeiro, carimbo e
+# memoria por ultimo. Custo zero, e ganha cache de prefixo em todo giro.
+#
+# DUAS FORMAS DE ARTEFATO, as duas do catalogo:
+#   <repo>@<path>   lido do CLONE LOCAL, nunca do espelho de repo_read (E3/arq:0058)
+#   verbo:<comando> peca servida por execucao — mesa, cadernos, fila
+#
+# AUSENCIA SE DECLARA. Artefato que falta ou verbo que falha viram `frescor:
+# indisponivel` com o motivo, nunca peca vazia: as duas seriam indistinguiveis, e a
+# sessao abriria cega sem saber que esta cega.
+#
+# SHEBANG NO VENV: `mesa`, `fila` e `tarefas` ja moram nele, entao a abertura ja
+# dependia dele de fato. O registro do pacote em Postgres e OPCIONAL — falta de
+# psycopg ou banco mudo nao impede montar, so deixa de registrar, e isso e dito.
+from __future__ import annotations
 
-RAIZ="${PF_RAIZ:-$HOME/AI}"
-cd "$RAIZ"
+import argparse
+import glob
+import json
+import os
+import re
+import subprocess
+import sys
+import time
 
-# --json: escaping mínimo pra montar o objeto na mão (backslash, aspas,
-# tab/CR/LF) — sem depender de jq/python3 no host que roda o verbo.
-json_esc() {
-  local s=$1
-  s=${s//\\/\\\\}
-  s=${s//\"/\\\"}
-  s=${s//$'\t'/\\t}
-  s=${s//$'\r'/\\r}
-  s=${s//$'\n'/\\n}
-  printf '%s' "$s"
-}
+RAIZ = os.environ.get("PF_RAIZ", os.path.expanduser("~/AI"))
+HARNESS = os.path.join(RAIZ, "platafirma-harness")
+PECAS = os.path.join(HARNESS, "registro", "pecas")
+PERSONAS = os.path.join(HARNESS, "personas")
+SESSAO_ENV = os.path.join(HARNESS, "sessao", ".env")
 
-cadeiras_validas_json() {
-  local arr="[" first=1 c
-  while IFS= read -r c; do
-    [ -z "$c" ] && continue
-    [ "$first" -eq 1 ] && first=0 || arr+=","
-    arr+="\"$(json_esc "$c")\""
-  done < <(ls -1 platafirma-harness/personas/persona-*.md 2>/dev/null | sed 's#.*/persona-##; s/\.md$//')
-  arr+="]"
-  printf '%s' "$arr"
-}
+# Clones que a abertura pode tocar. arq:0058 (E1) manda a abertura ler UM repositorio:
+# `platafirma-arquitetura` so aparece aqui se alguma peca ainda apontar para ele, e
+# quando nao aparecer mais o pull dele sai sozinho — nao ha lista a manter.
+ORDEM_VOLATILIDADE = {"estavel": 0, "morna": 1, "volatil": 2}
+FORA_DO_QUADRO = os.environ.get("PF_FORA_DO_QUADRO", "fabrica jaiminho").split()
 
-erro_json() { # erro_json <mensagem> — stdout vira só o objeto; exit fica com quem chamou
-  printf '{"erro":"%s","cadeiras_validas":%s}\n' "$(json_esc "$1")" "$(cadeiras_validas_json)"
-}
+RE_NOME = re.compile(r"^Você é ([A-Za-zÀ-ÿ-]+)")
+RE_FERRAMENTAL = re.compile(r"^FERRAMENTAL: *([^ ]*\.md)")
 
-JSON=0
-SEM_ATUALIZAR=0
-C=""
-for a in "$@"; do
-  case "$a" in
-    --json) JSON=1 ;;
-    --sem-atualizar) SEM_ATUALIZAR=1 ;;
-    *) [ -z "$C" ] && C="$a" ;;
-  esac
-done
 
-if [ -z "$C" ]; then
-  if [ "$JSON" -eq 1 ]; then
-    erro_json "uso: monta-sessao <cadeira>"
-    exit 2
-  fi
-  echo "uso: monta-sessao <cadeira>" >&2
-  echo "cadeiras:" >&2
-  ls -1 platafirma-harness/personas/persona-*.md | sed 's#.*/persona-##; s/\.md$//' >&2
-  exit 2
-fi
+# ------------------------------------------------------------------ catalogo
+def catalogo():
+    saida = []
+    for caminho in sorted(glob.glob(os.path.join(PECAS, "*.json"))):
+        try:
+            with open(caminho, encoding="utf-8") as fh:
+                saida.append(json.load(fh))
+        except (OSError, ValueError) as e:
+            print(f"(aviso: peca ilegivel {caminho}: {e})", file=sys.stderr)
+    return saida
 
-P="platafirma-harness/personas/persona-$C.md"
-if [ ! -f "$P" ]; then
-  if [ "$JSON" -eq 1 ]; then
-    erro_json "não existe $P"
-    exit 1
-  fi
-  echo "não existe $P" >&2
-  ls -1 platafirma-harness/personas/persona-*.md | sed 's#.*/persona-##; s/\.md$//' >&2
-  exit 1
-fi
 
-if [ "$SEM_ATUALIZAR" -eq 0 ]; then
-  for r in platafirma-harness platafirma-arquitetura; do
-    git -C "$r" pull --ff-only -q 2>/dev/null || echo "(aviso: $r não atualizou — conteúdo abaixo é o do clone)" >&2
-  done
-fi
+def de_abertura(pecas, cadeira):
+    """As pecas com gatilho de abertura, na ordem de injecao.
 
-# Quem está FORA DO QUADRO não recebe o org chart: a persona da fábrica declara não
-# conhecê-lo, e o pacote entregava justamente o que ela nega (decisão do dono 16/08/2026,
-# opção A do #161). No lugar vai o mapa alias -> slug, que é endereço e não topologia.
-ORG_QUADRO="platafirma-arquitetura/docs/org-template-canonico.md"
-ORG_FORA="platafirma-harness/personas/alias-cadeiras.md"
-ORG="$ORG_QUADRO"
-case " ${PF_FORA_DO_QUADRO:-fabrica jaiminho} " in
-  *" $C "*) ORG="$ORG_FORA" ;;
-esac
+    Excecao nominal do dono (#161, opcao A): quem esta FORA DO QUADRO nao recebe o org
+    chart — a persona da fabrica declara nao conhece-lo. No lugar entra o mapa
+    alias -> slug, que e endereco e nao topologia de decisao.
+    """
+    fora = cadeira.lower() in [f.lower() for f in FORA_DO_QUADRO]
+    por_id = {p.get("id"): p for p in pecas}
+    escolhidas = [p for p in pecas if (p.get("gatilho") or {}).get("evento") == "abertura"]
+    if fora:
+        escolhidas = [p for p in escolhidas if p.get("id") != "org"]
+        alias = por_id.get("alias-cadeiras")
+        if alias:
+            escolhidas.append(dict(alias, _forcada="fora do quadro: org trocado por endereço"))
+    return sorted(escolhidas, key=lambda p: (ORDEM_VOLATILIDADE.get(p.get("volatilidade"), 9),
+                                             p.get("id", "")))
 
-N=$(sed -n '1s/^Você é \([A-Za-z-]*\).*/\1/p' "$P")
-M=$(sed -n 's/^FERRAMENTAL: *\([^ ]*\.md\).*/\1/p' "$P" | head -1)
 
-# O manifesto da cadeira APONTA para o geral em vez de repetir o operacional comum
-# (fila, tarefas, infra, git, venv). Servir só o declarado abre cadeira sem essa
-# metade — e a tool `monta_sessao` já entrega os dois. Mesmo default, mesma env.
-G="${PF_MANIFESTO_GERAL:-platafirma-harness/tool-manifest/TODA-CADEIRA.md}"
-[ "$G" = "$M" ] && G=""
+# ------------------------------------------------------------------ repos
+def sha_e_frescor(repo):
+    """SHA curto do clone e como ele esta contra o remoto — sem ida a rede.
 
-if [ "$JSON" -eq 0 ]; then
-  echo "== cadeira: ${N:-<nome não resolvido na linha 1 de $P>} =="
+    Clone atrasado e clone no head sao indistinguiveis sem isto, e pacote montado de
+    clone atrasado serve texto velho sem sinal (arq:0058).
+    """
+    d = os.path.join(RAIZ, repo)
+    if not os.path.isdir(os.path.join(d, ".git")):
+        return None, "indisponivel", f"{repo} nao e clone git"
+    def git(*a):
+        p = subprocess.run(["git", "-C", d, *a], capture_output=True, text=True, timeout=10)
+        return p.stdout.strip() if p.returncode == 0 else None
+    sha = git("rev-parse", "--short", "HEAD")
+    atras = git("rev-list", "--count", "HEAD..@{upstream}")
+    if atras is None:
+        return sha, "fresco", "sem upstream conhecido"
+    return sha, ("fresco" if atras == "0" else "defasado"), (
+        None if atras == "0" else f"{atras} commit(s) atras do remoto")
 
-  for f in "$P" ${M:-} ${G:-} "$ORG"; do
-    if [ -f "$f" ]; then
-      echo "===== $f ====="
-      cat "$f"
-    else
-      echo "===== $f ===== (AUSENTE)"
-    fi
-  done
 
-  if [ -z "$M" ]; then
-    echo "(aviso: $P não declara linha FERRAMENTAL: — manifesto não entrou)"
-  fi
+def pull(repos):
+    estado = {}
+    for r in sorted(repos):
+        d = os.path.join(RAIZ, r)
+        if not os.path.isdir(os.path.join(d, ".git")):
+            estado[r] = {"atualizado": False, "erro": "nao e clone git"}
+            continue
+        try:
+            p = subprocess.run(["git", "-C", d, "pull", "--ff-only", "-q"],
+                               capture_output=True, text=True, timeout=25)
+            estado[r] = ({"atualizado": True} if p.returncode == 0 else
+                         {"atualizado": False, "erro": p.stderr.strip()[:200]})
+        except (OSError, subprocess.SubprocessError) as e:
+            estado[r] = {"atualizado": False, "erro": f"{type(e).__name__}: {e}"}
+    return estado
 
-  # Memória da cadeira, pelo verbo `mesa` — mesma razão de delegar da fila. A mesa
-  # entra inteira (é o resíduo da fita anterior, curto por construção); do caderno
-  # entra só o ÍNDICE, e o corpo sai por `mesa caderno <chapéu>` na fita que o quiser.
-  if [ -n "$C" ]; then
-    echo "===== mesa: $C ====="
-    PF_CADEIRA="$C" mesa ver 2>&1 || echo "(mesa indisponível — msg-mem fora do ar)"
-    echo "===== cadernos: $C ====="
-    PF_CADEIRA="$C" mesa caderno 2>&1 || true
-  fi
 
-  # Fila lida sempre pelo comando `fila`, nunca pelo sistema de arquivos: reimplementar
-  # aqui o parser do formato de caixa criaria segunda fonte da mesma regra, e a
-  # divergência entre as duas apareceria como mensagem sumida.
-  if [ -z "$N" ]; then
-    echo "===== fila ===== (nome não resolvido — sem persona não há como saber a caixa)"
-  elif out=$(PF_CADEIRA="$C" fila status "$N" 2>&1); then
-    echo "===== fila: $N ====="
-    echo "$out"
-  else
-    echo "===== fila: $N (FECHADA — porteiro) ====="
-    echo "$out"
-  fi
-  exit 0
-fi
+# ------------------------------------------------------------------ servir peca
+TOKENIZADOR = os.path.join(RAIZ, "opt", "tokenizers", "qwen2.5.json")
+_MEDIDOR = {"fn": None, "metodo": None}
 
-# --json: metadado/ponteiro por trás do mesmo levantamento — nunca o corpo dos
-# documentos (isso continua sendo o modo texto, com os marcadores "===== <arquivo> =====").
-persona_presente=false
-[ -f "$P" ] && persona_presente=true
-persona_nome_json="null"
-[ -n "$N" ] && persona_nome_json="\"$(json_esc "$N")\""
 
-manifesto_presente=false
-manifesto_caminho_json="null"
-if [ -n "$M" ]; then
-  manifesto_caminho_json="\"$(json_esc "$M")\""
-  [ -f "$M" ] && manifesto_presente=true
-fi
+def medidor():
+    """Mesmo tokenizador de `conferir sessao` (qwen2.5), para que o registrado aqui e o
+    medido la sejam o mesmo numero. Sem ele, estimativa por bytes/4 — que erra por ~40%
+    (medido, caderno ia/contexto) e por isso vai DECLARADA no pacote, nunca calada."""
+    if _MEDIDOR["fn"]:
+        return _MEDIDOR["fn"], _MEDIDOR["metodo"]
+    try:
+        from tokenizers import Tokenizer
+        if os.path.isfile(TOKENIZADOR):
+            tk = Tokenizer.from_file(TOKENIZADOR)
+            _MEDIDOR.update(fn=lambda s: len(tk.encode(s).ids), metodo="tokenizador qwen2.5")
+            return _MEDIDOR["fn"], _MEDIDOR["metodo"]
+        motivo = f"tokenizador ausente: {TOKENIZADOR}"
+    except ImportError:
+        motivo = "modulo `tokenizers` ausente"
+    _MEDIDOR.update(fn=lambda s: max(1, len(s.encode("utf-8")) // 4),
+                    metodo=f"ESTIMATIVA por bytes/4 ({motivo})")
+    return _MEDIDOR["fn"], _MEDIDOR["metodo"]
 
-geral_presente=false
-geral_caminho_json="null"
-if [ -n "$G" ]; then
-  geral_caminho_json="\"$(json_esc "$G")\""
-  [ -f "$G" ] && geral_presente=true
-fi
 
-org_presente=false
-[ -f "$ORG" ] && org_presente=true
+def conta_tokens(texto):
+    fn, _ = medidor()
+    return fn(texto)
 
-mesa_disp=false
-mesa_out=""
-if mesa_out=$(PF_CADEIRA="$C" mesa ver 2>&1); then
-  mesa_disp=true
-fi
-mesa_resumo_json="null"
-mesa_resumo_linha=$(printf '%s\n' "$mesa_out" | head -n1)
-[ -n "$mesa_resumo_linha" ] && mesa_resumo_json="\"$(json_esc "$mesa_resumo_linha")\""
 
-# Cadernos: mesmo verbo do modo texto (`mesa caderno`, sem chapéu — devolve o ÍNDICE, não
-# o corpo). É a listagem que o bloco 3/"/cadeira/<slug>" precisa pra saber quais cadernos
-# existem; o corpo de um caderno específico continua sob demanda (`mesa caderno <chapéu>`).
-cadernos_disp=false
-cadernos_out=""
-if cadernos_out=$(PF_CADEIRA="$C" mesa caderno 2>&1); then
-  cadernos_disp=true
-fi
-cadernos_resumo_json="null"
-cadernos_resumo_linha=$(printf '%s\n' "$cadernos_out" | head -n1)
-[ -n "$cadernos_resumo_linha" ] && cadernos_resumo_json="\"$(json_esc "$cadernos_resumo_linha")\""
+def sha_conteudo(texto):
+    """Hash do que foi SERVIDO, nao do commit: e o que `conferir sessao` compara, e o
+    que identifica peca servida por verbo, que nao tem blob nenhum."""
+    import hashlib
+    return hashlib.sha256(texto.encode("utf-8")).hexdigest()[:12]
 
-fila_disp=false
-fila_resumo_json="null"
-if [ -z "$N" ]; then
-  fila_resumo_json="\"$(json_esc "nome não resolvido — sem persona não há como saber a caixa")\""
-else
-  fila_out=""
-  if fila_out=$(PF_CADEIRA="$C" fila status "$N" 2>&1); then
-    fila_disp=true
-  fi
-  fila_resumo_linha=$(printf '%s\n' "$fila_out" | head -n1)
-  [ -n "$fila_resumo_linha" ] && fila_resumo_json="\"$(json_esc "$fila_resumo_linha")\""
-fi
 
-atualizado_json=true
-[ "$SEM_ATUALIZAR" -eq 1 ] && atualizado_json=false
+def serve(peca, cadeira, persona=None):
+    """Devolve (envelope, conteudo). Conteudo None quando indisponivel."""
+    art = peca.get("artefato", "")
+    env = {"peca": peca.get("id"), "dono": peca.get("dono"), "ref": art,
+           "regime": peca.get("regime"), "volatilidade": peca.get("volatilidade"),
+           "teto_tokens": peca.get("teto_tokens"), "sha": None,
+           "tokens": 0, "frescor": "indisponivel", "motivo": None}
+    if peca.get("_forcada"):
+        env["motivo"] = peca["_forcada"]
 
-printf '{"cadeira":"%s","persona":{"presente":%s,"caminho":"%s","nome_resolvido":%s},"manifesto":{"presente":%s,"caminho":%s},"manifesto_geral":{"presente":%s,"caminho":%s},"org":{"caminho":"%s","presente":%s},"mesa":{"disponivel":%s,"resumo":%s},"cadernos":{"disponivel":%s,"resumo":%s},"fila":{"disponivel":%s,"resumo":%s},"atualizado":%s}\n' \
-  "$(json_esc "$C")" \
-  "$persona_presente" "$(json_esc "$P")" "$persona_nome_json" \
-  "$manifesto_presente" "$manifesto_caminho_json" \
-  "$geral_presente" "$geral_caminho_json" \
-  "$(json_esc "$ORG")" "$org_presente" \
-  "$mesa_disp" "$mesa_resumo_json" \
-  "$cadernos_disp" "$cadernos_resumo_json" \
-  "$fila_disp" "$fila_resumo_json" \
-  "$atualizado_json"
-exit 0
+    if art.startswith("verbo:"):
+        cmd = art[len("verbo:"):].strip().replace("{cadeira}", cadeira)
+        try:
+            # PF_CADEIRA da peca-verbo e o NOME CANONICO, nao o sufixo: e ele que
+            # nomeia a caixa da fila e a chave da mesa. Foi a divergencia entre os dois
+            # que partiu a mesa em duas metades (medido em 16/08).
+            p = subprocess.run(cmd.split(), capture_output=True, text=True, timeout=20,
+                               env={**os.environ, "PF_CADEIRA": persona or cadeira})
+            texto = (p.stdout or "").strip()
+            if p.returncode != 0:
+                env["motivo"] = (p.stderr or p.stdout).strip()[:200] or f"exit {p.returncode}"
+                return env, None
+            env["frescor"] = "fresco"
+            env["tokens"] = conta_tokens(texto)
+            env["sha"] = sha_conteudo(texto)
+            return env, texto
+        except (OSError, subprocess.SubprocessError) as e:
+            env["motivo"] = f"{type(e).__name__}: {e}"
+            return env, None
+
+    if "@" not in art:
+        env["motivo"] = f"artefato em forma desconhecida: {art!r}"
+        return env, None
+
+    repo, path = art.split("@", 1)
+    path = path.replace("{cadeira}", cadeira)
+    env["ref"] = f"{repo}@{path}"
+    _, frescor, motivo = sha_e_frescor(repo)
+    env["motivo"] = motivo or env["motivo"]
+    caminho = os.path.join(RAIZ, repo, path)
+    if not os.path.isfile(caminho):
+        env["frescor"] = "indisponivel"
+        env["motivo"] = f"nao existe {caminho}"
+        return env, None
+    with open(caminho, encoding="utf-8", errors="replace") as fh:
+        texto = fh.read()
+    env["frescor"] = frescor
+    env["tokens"] = conta_tokens(texto)
+    env["sha"] = sha_conteudo(texto)
+    return env, texto
+
+
+# ------------------------------------------------------------------ registro do pacote
+def registra_pacote(cadeira, envelopes, montador_sha):
+    """Uma linha por peca servida (§6.6). Sem isto, orcamento de janela e declaracao.
+    Falha aqui NAO derruba a abertura: devolve o motivo, e o pacote sai mesmo assim."""
+    fid = (os.environ.get("PF_FITA") or "").strip()
+    if not fid:
+        return {"registrado": False, "motivo": "sem PF_FITA — sessao de mao nao tem fita"}
+    try:
+        import psycopg
+    except ImportError:
+        return {"registrado": False, "motivo": "psycopg ausente neste venv"}
+    senha = os.environ.get("SESSAO_PG_PASSWORD", "")
+    if not senha and os.path.isfile(SESSAO_ENV):
+        for linha in open(SESSAO_ENV, encoding="utf-8"):
+            if linha.startswith("SESSAO_PG_PASSWORD="):
+                senha = linha.split("=", 1)[1].strip()
+                break
+    porta = os.environ.get("SESSAO_PG_PORT", "5437")
+    dsn = f"host=127.0.0.1 port={porta} dbname=sessao user=sessao password={senha}"
+    sup = os.environ.get("PF_SUPERFICIE", "").strip() or "desconhecida"
+    if sup not in ("claude.ai", "chat", "code", "desconhecida"):
+        sup = "desconhecida"
+    try:
+        with psycopg.connect(dsn, connect_timeout=3) as con, con.cursor() as cur:
+            cur.execute("INSERT INTO sessao.fita (id, persona, superficie) VALUES (%s,%s,%s) "
+                        "ON CONFLICT (id) DO NOTHING", (fid, cadeira, sup))
+            cur.execute("INSERT INTO sessao.pacote (fita_id, montador_sha, tokens) "
+                        "VALUES (%s,%s,%s) ON CONFLICT (fita_id) DO UPDATE SET "
+                        "montado_em = now(), montador_sha = EXCLUDED.montador_sha, "
+                        "tokens = EXCLUDED.tokens",
+                        (fid, montador_sha, sum(e["tokens"] for e in envelopes)))
+            cur.executemany(
+                "INSERT INTO sessao.peca_servida (fita_id, peca, ordem, ref, sha, regime, "
+                "tokens, frescor) VALUES (%s,%s,%s,%s,%s,%s,%s,%s) "
+                "ON CONFLICT (fita_id, peca) DO UPDATE SET ordem = EXCLUDED.ordem, "
+                "ref = EXCLUDED.ref, sha = EXCLUDED.sha, tokens = EXCLUDED.tokens, "
+                "frescor = EXCLUDED.frescor",
+                [(fid, e["peca"], i, e["ref"], e["sha"], e["regime"], e["tokens"], e["frescor"])
+                 for i, e in enumerate(envelopes)])
+            con.commit()
+        return {"registrado": True, "fita": fid}
+    except Exception as e:  # noqa: BLE001 — banco mudo nao pode derrubar a abertura
+        return {"registrado": False, "motivo": f"{type(e).__name__}"}
+
+
+# ------------------------------------------------------------------ montagem
+def cadeiras_validas():
+    return sorted(n[len("persona-"):-len(".md")] for n in os.listdir(PERSONAS)
+                  if n.startswith("persona-") and n.endswith(".md"))
+
+
+def monta(cadeira, atualizar):
+    p_persona = os.path.join(PERSONAS, f"persona-{cadeira}.md")
+    if not os.path.isfile(p_persona):
+        return {"erro": f"nao existe persona para '{cadeira}'",
+                "procurado": p_persona, "cadeiras_validas": cadeiras_validas()}
+
+    pecas = de_abertura(catalogo(), cadeira)
+    repos = sorted({p["artefato"].split("@", 1)[0] for p in pecas
+                    if "@" in p.get("artefato", "")})
+    estado_repos = pull(repos) if atualizar else {
+        r: {"atualizado": False, "motivo": "sem pull nesta chamada"} for r in repos}
+    for r in repos:
+        sha, frescor, motivo = sha_e_frescor(r)
+        estado_repos.setdefault(r, {}).update({"sha": sha, "frescor": frescor})
+
+    texto_persona = open(p_persona, encoding="utf-8", errors="replace").read()
+    linha1 = texto_persona.splitlines()[0] if texto_persona else ""
+    m = RE_NOME.match(linha1)
+    nome = m.group(1) if m else None
+
+    servidas, avisos = [], []
+    for peca in pecas:
+        env, conteudo = serve(peca, cadeira, nome)
+        env["conteudo"] = conteudo
+        servidas.append(env)
+        if env["frescor"] == "indisponivel":
+            avisos.append(f"peça `{env['peca']}` indisponível: {env['motivo']}")
+        elif env["frescor"] == "defasado":
+            avisos.append(f"peça `{env['peca']}` servida de clone atrasado: {env['motivo']}")
+        if env["teto_tokens"] and env["tokens"] > env["teto_tokens"]:
+            avisos.append(f"peça `{env['peca']}` serviu {env['tokens']} tokens "
+                          f"contra teto declarado de {env['teto_tokens']}")
+
+    # Divergencia entre o que a persona declara e o que o catalogo resolve nao se
+    # escolhe em silencio: as duas fontes existem, e a que discorda vira aviso.
+    declarado = None
+    for linha in texto_persona.splitlines():
+        mm = RE_FERRAMENTAL.match(linha)
+        if mm:
+            declarado = mm.group(1)
+            break
+    refs = {e["ref"] for e in servidas} | {e["ref"].replace("@", "/") for e in servidas}
+    if declarado and not any(r.endswith(declarado.split("/", 1)[-1]) for r in refs):
+        avisos.append(f"persona declara FERRAMENTAL: {declarado}, que o catálogo não serve "
+                      "na abertura — uma das duas está velha")
+    if not declarado:
+        avisos.append(f"{p_persona} não declara linha FERRAMENTAL:")
+    if not nome:
+        avisos.append(f"linha 1 de {p_persona} não casa 'Você é <nome>' — nome canônico "
+                      "não resolvido, fila não localizada")
+
+    montador_sha = (estado_repos.get("platafirma-harness") or {}).get("sha")
+    return {
+        "cadeira": cadeira,
+        "nome_canonico": nome,
+        "repos": estado_repos,
+        "pacote": {
+            "pecas": len(servidas),
+            "tokens": sum(e["tokens"] for e in servidas),
+            "metodo_tokens": medidor()[1],
+            "montador_sha": montador_sha,
+            "montado_em": int(time.time()),
+            "registro": registra_pacote(cadeira, servidas, montador_sha),
+        },
+        "pecas": servidas,
+        "avisos": avisos,
+    }
+
+
+def imprime_texto(pac):
+    if "erro" in pac:
+        print(f"{pac['erro']} (procurado: {pac['procurado']})", file=sys.stderr)
+        print("cadeiras: " + " ".join(pac["cadeiras_validas"]), file=sys.stderr)
+        return 1
+    print(f"== cadeira: {pac['nome_canonico'] or '<nome não resolvido>'} ==")
+    for e in pac["pecas"]:
+        cab = f"===== {e['peca']}: {e['ref']}"
+        if e["sha"]:
+            cab += f" @{e['sha']}"
+        cab += f" ({e['frescor']}, {e['tokens']} tokens) ====="
+        print(cab)
+        if e["conteudo"] is None:
+            print(f"(INDISPONÍVEL — {e['motivo']})")
+        else:
+            print(e["conteudo"].rstrip())
+        print()
+    for a in pac["avisos"]:
+        print(f"(aviso: {a})")
+    reg = pac["pacote"]["registro"]
+    if not reg.get("registrado"):
+        print(f"(pacote não registrado: {reg.get('motivo')})")
+    return 0
+
+
+def main():
+    p = argparse.ArgumentParser(prog="monta-sessao",
+                                description="pacote de abertura da cadeira, montado por catálogo")
+    p.add_argument("cadeira", nargs="?")
+    p.add_argument("--json", action="store_true")
+    p.add_argument("--sem-atualizar", action="store_true")
+    args = p.parse_args()
+
+    if not args.cadeira:
+        if args.json:
+            print(json.dumps({"erro": "uso: monta-sessao <cadeira>",
+                              "cadeiras_validas": cadeiras_validas()}, ensure_ascii=False))
+            return 2
+        print("uso: monta-sessao <cadeira>", file=sys.stderr)
+        print("cadeiras: " + " ".join(cadeiras_validas()), file=sys.stderr)
+        return 2
+
+    # Prefixo aceito e descartado: `claudinho-TI` e `TI` sao a mesma cadeira, e o nome
+    # do arquivo de persona e o sufixo.
+    alvo = args.cadeira.strip()
+    for prefixo in ("claudinho-", "claudinha-"):
+        if alvo.lower().startswith(prefixo):
+            alvo = alvo[len(prefixo):]
+
+    pac = monta(alvo, atualizar=not args.sem_atualizar)
+    if args.json:
+        print(json.dumps(pac, ensure_ascii=False))
+        return 1 if "erro" in pac else 0
+    return imprime_texto(pac)
+
+
+if __name__ == "__main__":
+    sys.exit(main())
