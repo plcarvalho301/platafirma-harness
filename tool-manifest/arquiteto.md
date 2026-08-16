@@ -74,6 +74,10 @@ cadeira.
   `arq:0042` — a régua do par não tem instrumento; a conferência é manual.
 - `ragq` não existe mais em `~/AI/bin`. O equivalente de linha é
   `motor rag buscar`; o de tool, `rag_search`.
+- `minuta formalizar --vencido` injeta em `Aberto` uma linha "<cadeira> não se
+  manifestou" para cada seção vazia — inclusive quando a cadeira JÁ escreveu e a seção
+  vazia é convocação duplicada (medido na 0005, 16/08). Conferir e limpar o `Aberto` do
+  canônico depois de todo `--vencido`.
 - Nome de arquivo não diz função: ler o cabeçalho antes de inferir para que
   serve (caso medido: `ssg-deriva`, `rag.py`).
 
