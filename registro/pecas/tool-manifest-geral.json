@@ -1,0 +1,12 @@
+{
+  "id": "tool-manifest-geral",
+  "dono": "claudinho-TI",
+  "artefato": "platafirma-harness@tool-manifest/TODA-CADEIRA.md",
+  "regime": "valor",
+  "gatilho": {
+    "evento": "abertura",
+    "condicao": "sempre: metade comum que o manifesto da cadeira aponta e nao repete"
+  },
+  "volatilidade": "estavel",
+  "teto_tokens": 450
+}

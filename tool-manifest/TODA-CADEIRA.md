@@ -98,6 +98,7 @@ repo x arq:0042                 : conferir repo  [nome]     o que esta rastreado
                                   mede tambem o cabecalho de genero e publico (arq:0049),
                                   nos arquivos que o repo declara em docs/.operacao
 gate de commit (arq:0042)       : conferir repo --staged    o que o pre-commit chama
+catalogo de peca x schema       : conferir peca  [id]       montagem de sessao; --staged no gate
 caminho de execucao x harness   : conferir procedencia      exit 1 = ~/AI/bin resolve pra fora
                                   excecao se declara em harness/docs/procedencia-do-harness.md
 instalar o gate num clone       : git -C <clone> config core.hooksPath ~/AI/platafirma-harness/hooks

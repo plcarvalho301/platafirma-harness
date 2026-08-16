@@ -1,0 +1,12 @@
+{
+  "id": "org",
+  "dono": "claudinha-gestao-estrategica",
+  "artefato": "platafirma-arquitetura@docs/org-template-canonico.md",
+  "regime": "valor",
+  "gatilho": {
+    "evento": "abertura",
+    "condicao": "cadeira dentro do quadro: quem ocupa cada cadeira e onde corta a fronteira"
+  },
+  "volatilidade": "morna",
+  "teto_tokens": 300
+}

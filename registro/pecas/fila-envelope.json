@@ -1,0 +1,11 @@
+{
+  "id": "fila-envelope",
+  "dono": "claudinho-dados",
+  "artefato": "verbo:fila ler",
+  "regime": "indice",
+  "gatilho": {
+    "evento": "ato",
+    "condicao": "ao procurar trabalho na caixa; le e confirma na entrega"
+  },
+  "volatilidade": "volatil"
+}

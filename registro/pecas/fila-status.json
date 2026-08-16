@@ -1,0 +1,12 @@
+{
+  "id": "fila-status",
+  "dono": "claudinho-TI",
+  "artefato": "verbo:fila status",
+  "regime": "indice",
+  "gatilho": {
+    "evento": "abertura",
+    "condicao": "sempre: quantas novas, sem consumir o ponteiro"
+  },
+  "volatilidade": "volatil",
+  "teto_tokens": 100
+}

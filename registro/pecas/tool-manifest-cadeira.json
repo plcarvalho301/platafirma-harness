@@ -1,0 +1,12 @@
+{
+  "id": "tool-manifest-cadeira",
+  "dono": "claudinho-TI",
+  "artefato": "platafirma-harness@tool-manifest/{cadeira}.md",
+  "regime": "valor",
+  "gatilho": {
+    "evento": "abertura",
+    "condicao": "sempre: conectores, verbos proprios e armadilhas de ferramenta da cadeira"
+  },
+  "volatilidade": "estavel",
+  "teto_tokens": 600
+}

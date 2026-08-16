@@ -1,0 +1,13 @@
+{
+  "id": "alias-cadeiras",
+  "dono": "claudinha-gestao-estrategica",
+  "artefato": "platafirma-harness@personas/alias-cadeiras.md",
+  "regime": "valor",
+  "gatilho": {
+    "evento": "abertura",
+    "condicao": "cadeira fora do quadro (fabrica, jaiminho): entrega endereco, nunca topologia"
+  },
+  "volatilidade": "morna",
+  "teto_tokens": 100,
+  "emenda": "org"
+}

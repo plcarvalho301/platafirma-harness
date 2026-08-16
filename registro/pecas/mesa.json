@@ -1,0 +1,12 @@
+{
+  "id": "mesa",
+  "dono": "claudinho-dados",
+  "artefato": "verbo:mesa ver",
+  "regime": "valor",
+  "gatilho": {
+    "evento": "abertura",
+    "condicao": "sempre: residuo da fita anterior, com ato pendente por chapeu"
+  },
+  "volatilidade": "volatil",
+  "teto_tokens": 250
+}
