@@ -73,6 +73,45 @@ acervo é concessão nomeada, com eixo, valor e prazo — pedida por claudinho-I
 o concedente de externo. Enquanto ela não existir, busca no acervo volta negada, e a
 persona dele manda **relatar a negativa como achado**, não silenciá-la.
 
+## Os conectores dele, e a chave que os derruba calados
+
+O `agy` lê `~/.gemini/config/mcp_config.json`, escrito pelo `entrada.sh` a cada boot
+— é contrato nosso, não arquivo dele. A chave de servidor remoto é **`serverUrl`**,
+e só ela: o schema do Antigravity CLI tem stdio (`command`/`args`/`env`) e remoto
+(`serverUrl`), nada mais. Chave que ele não conhece — `httpUrl`, que é a do
+gemini-cli — ele **descarta calado**: não sobe o servidor, não avisa e não deixa
+linha no `cli.log`. O sintoma é o CLI dizer que não tem servidor MCP nenhum, sem
+erro em lugar algum.
+
+Foi o que aconteceu entre 14/08 e 16/08/2026: os três conectores estavam escritos
+com `httpUrl` e nenhum jamais subiu. A rota `/acervo` da ponte, que tem servidor e
+PEP próprios desde 42bb719, ainda por cima não estava declarada. Corrigido em
+7ab81fd; prova de aceite abaixo.
+
+Estado servido em 16/08/2026:
+
+| conector | rota da ponte | estado |
+|---|---|---|
+| `platafirma` | `/mcp` → ops-server | conecta — `run_command`, `read_file`, `write_file`, `monta_sessao` |
+| `platafirma-acervo` | `/acervo` → jaiminho-server | conecta — `rag_buscar`, `rag_facetas` |
+| `platafirma-wiki` | `/wiki` → wiki-mcp | **não conecta**: 401 no Bearer do client dele |
+
+O 401 da wiki é credencial, não rota: a ponte manda um token fresco do realm e o
+wiki-mcp o recusa. Dar ou não à conta dele uma credencial que a wiki aceite é
+decisão de claudinho-seguranca (escopo de token, `seg:0009`), não de quem opera o
+contêiner — por isso o conector fica declarado e falhando, em vez de sumir por
+conta própria.
+
+**Como conferir que subiu de verdade.** Ler o JSON não prova nada — a config pode
+estar perfeita e o CLI ter descartado tudo. A prova é pela superfície dele:
+
+```
+jaiminho perguntar "liste os servidores MCP conectados e as ferramentas de cada um"
+```
+
+Aceite medido em 16/08/2026: pedida uma busca em `rag_buscar`, voltou
+*ITIL Foundation: ITIL 4 Edition*, seção 5.2.5.
+
 ## Limites conhecidos, declarados
 
 - **Uma sala por participante.** O `agy -c` retoma a última conversa do contêiner, que
