@@ -50,8 +50,9 @@ a resposta — ela faz a sessão falar em nome de quem não é e escrever na mes
   terminal onde o Code abriu. Variável exportada ali é ilegível de dentro da sessão.
   O que atravessa é o slug dito na abertura. `PF_CADEIRA` segue valendo no host, para
   verbo chamado por `run_command`.
-- **Não existe Code sem injeção.** O arranque de conta (`agente/CLAUDE.md`, escopo de
-  usuário) alcança qualquer diretório: com slug dito, vale o slug; sem slug, abre
+- **Code sem injeção só existe em conta onde o arranque não foi instalado.** Rodado o
+  posto ou o instalador, o arranque de conta (`agente/CLAUDE.md`, escopo de usuário)
+  alcança qualquer diretório: com slug dito, vale o slug; sem slug, abre
   `fabrica` por default, porque é o que a conta faz na maior parte do tempo e sessão
   sem cadeira não é opção. O que eu chamava de "Code seco sem injeção" era, na medição
   do TI, sessão com a cadeira ERRADA e calada — a persona da fábrica morava buildada
