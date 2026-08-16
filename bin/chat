@@ -344,7 +344,8 @@ def giro_de_participante(quem, id_fita, corpo, passo_out):
 # permanente muda no verbo.
 
 # Cadeira que responde pela propria entrega do commit ao ar, e por isso empurra
-# da fita. Endereco unico da excecao — crescer aqui, nao em copia de allowlist.
+# E PROMOVE da fita. Endereco unico da excecao — crescer aqui, nao em copia de
+# allowlist.
 EMPURRAM_DA_FITA = {"produto"}
 
 
@@ -396,10 +397,22 @@ def settings_da_fita(modelo="", cadeira=""):
     # mesma cadeira empurra por `run_command`, que nao tem allowlist. E atrito
     # deliberado: quem nao responde do commit ao ar nao empurra da fita.
     # claudinha-produto responde (arq:0057, ordem do dono 16/08/2026).
+    #
+    # `deploy` entra pela MESMA porta desde o fechamento do #187, e a datacao e o
+    # ponto: antes dele a mesma permissao autorizaria recriar o conteiner do BACK,
+    # porque a tela morava dentro da imagem da API. Hoje a tela e stack propria
+    # (`rastreador-tela`), sem segredo montado e sem rota de API — promover front
+    # nao alcanca servico de outra cadeira (arq:0057, cards #194/#195/#196).
+    #
+    # O verbo recusa alvo que nao esteja no registro e nao tem default nem "todas":
+    # a stack e argumento obrigatorio. `docker` segue negado, e nao ha contradicao —
+    # o que se libera e o verbo, que ja carrega a regra da casa.
     if cadeira.strip().lower() not in EMPURRAM_DA_FITA:
         base["permissions"]["deny"].append("Bash(git push:*)")
+        base["permissions"]["deny"].append("Bash(deploy:*)")
     else:
         base["permissions"]["allow"].append("Bash(git push:*)")
+        base["permissions"]["allow"].append("Bash(deploy:*)")
     return base
 
 
