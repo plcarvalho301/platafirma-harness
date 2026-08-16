@@ -43,6 +43,12 @@
       "cobertura": "nenhuma",
       "alcance": "aqui",
       "_nota": "mesma postura do keycloak-db. Card #176."
+    },
+    "sessao-db": {
+      "o_que": "Postgres das entidades operacionais de sessao (schema sessao)",
+      "cobertura": "nenhuma",
+      "alcance": "aqui",
+      "_nota": "Entra na lista no dia em que nasce, sem rotina: alvo que nao esta na lista deixa de ser medido e vira surpresa. Fita, giro, pacote e peca-servida sao registro do que a sessao serviu — perda se paga em historico, nao em restauracao. `mesa_item` e o unico conteudo cuja perda custa re-derivacao, e o estatuto dela vem de arq:0041, que a declara memoria de trabalho SEM durabilidade — o substrato mudou de Valkey para Postgres na fase 6 do #189 e essa ADR ainda nao foi emendada. Ate ser, a postura aqui e a mesma do keycloak-db."
     }
   }
 }

@@ -104,6 +104,16 @@
       "segredos": [
         ".env"
       ]
+    },
+    "harness-sessao": {
+      "compose": "~/AI/platafirma-harness/sessao/compose.yaml",
+      "repo": "platafirma-harness",
+      "papel": "substrato das entidades operacionais de sessao: fita, giro, pacote, peca servida, mesa",
+      "critico": false,
+      "_nota": "Aponta para o CLONE DE TRABALHO, como chat e jaiminho: nao ha worktree ~/AI/deploy/harness/sessao, entao `promover` recusa e `conferir servico` marca DERIVA. Instancia propria, e nao servico do `harness-controle`, porque ali o ciclo de vida e o da TELA — `deploy harness-controle down` levaria a memoria de trabalho junto. Fase 6 do card #189; DDL em sessao/init/, versionada.",
+      "segredos": [
+        "sessao/.env"
+      ]
     }
   },
   "_fora_do_registro": {

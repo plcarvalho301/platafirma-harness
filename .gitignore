@@ -6,3 +6,4 @@ jaiminho-server/.env
 jaiminho-server/client_secret.json
 jaiminho-server/token.json
 jaiminho-server/.env
+sessao/.env

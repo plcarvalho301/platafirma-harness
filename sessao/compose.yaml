@@ -1,0 +1,44 @@
+# Substrato das entidades operacionais de sessão (spec_montagem-de-sessao §3, fase 6).
+#
+# Por que instância própria, e não o motor nem o identidade-db:
+# - `arq:0023` põe condução de sessão no HARNESS ("que contexto se carrega, quando se
+#   invoca, em que ordem"); recuperação é que é do motor. Fita, giro e pacote são condução.
+# - `arq:0025`: componentes separados, substratos separados — a mesma razão pela qual o
+#   `motor-pg` nasceu fora do `rag-extractor-pg` em 11/08.
+# - identidade-db é control-plane crítico do core: acoplar a abertura de sessão a ele faz
+#   o IAM virar dependência de abrir conversa, sem ganho nenhum — a referência
+#   `fita.persona` é lógica (arq:0046) e não pede JOIN.
+#
+# Stack própria, e não um serviço no compose de `harness-controle`, porque ali o ciclo de
+# vida é o da TELA: `deploy harness-controle down` levaria a memória de trabalho junto.
+#
+# Porta: 5432 é do acervo, 5433 do motor, 5434 do Postgres de sistema, 5435 do identidade
+# e 5436 do mdm-rh (medido, não presumido: o 5436 recusou o bind na primeira subida).
+# Esta fica em 5437. Loopback só, como todo banco da plataforma. Publicar porta não é
+# escolha: `bin/mesa` roda no HOST, e em docker rootless o container não é alcançável
+# de outro jeito.
+name: harness-sessao
+
+services:
+  sessao-db:
+    image: postgres:16
+    container_name: harness-sessao-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${SESSAO_PG_DB:-sessao}
+      POSTGRES_USER: ${SESSAO_PG_USER:-sessao}
+      POSTGRES_PASSWORD: ${SESSAO_PG_PASSWORD:?defina SESSAO_PG_PASSWORD em sessao/.env}
+    ports:
+      - "127.0.0.1:${SESSAO_PG_PORT:-5437}:5432"
+    volumes:
+      - sessao-data:/var/lib/postgresql/data
+      - ./init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${SESSAO_PG_USER:-sessao} -d ${SESSAO_PG_DB:-sessao}"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+volumes:
+  sessao-data:
