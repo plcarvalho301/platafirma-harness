@@ -129,6 +129,8 @@ MIGRACOES = (
     ("fitas", "giros", "INTEGER NOT NULL DEFAULT 0"),
     ("salas", "nascida_em", "REAL NOT NULL DEFAULT 0"),
     ("jobs", "silencioso", "INTEGER NOT NULL DEFAULT 0"),
+    ("jobs", "progresso", "TEXT NOT NULL DEFAULT ''"),
+    ("jobs", "progresso_evento", "TEXT NOT NULL DEFAULT ''"),
 )
 
 
@@ -414,14 +416,36 @@ def reivindica(con: sqlite3.Connection, sala: str) -> sqlite3.Row | None:
         raise
 
 
-def bate(con: sqlite3.Connection, job_id: int) -> bool:
+def bate(con: sqlite3.Connection, job_id: int, progresso: str = "") -> bool:
     """Heartbeat do giro. Devolve False se o job ja nao esta em curso — foi
-    condenado pelo vigia, e o worker deve parar de trabalhar nele."""
+    condenado pelo vigia, e o worker deve parar de trabalhar nele.
+
+    `progresso` viaja junto com a batida DE PROPOSITO: e o mesmo dado (o giro
+    esta vivo, e eis o que ele fez ate agora) e uma escrita so. Metadado do
+    stream, nunca conteudo — quem monta a frase e o receptor.
+    """
     cur = con.execute(
-        "UPDATE jobs SET batida_em = ? WHERE id = ? AND estado = ?",
-        (_agora(), job_id, EM_CURSO),
+        "UPDATE jobs SET batida_em = ?, progresso = ? WHERE id = ? AND estado = ?",
+        (_agora(), progresso, job_id, EM_CURSO),
     )
     return cur.rowcount > 0
+
+
+def marca_progresso_evento(con: sqlite3.Connection, job_id: int, evento: str) -> None:
+    """Guarda o event_id da nota efemera de progresso.
+
+    Vai a banco, e nao a memoria do receptor, por uma razao so: receptor
+    reiniciado no meio de um giro perde o mapa e deixa a nota pendurada na sala
+    para sempre. Com a coluna, a varredura de subida a redige."""
+    con.execute("UPDATE jobs SET progresso_evento = ? WHERE id = ?", (evento, job_id))
+
+
+def notas_de_progresso_orfas(con: sqlite3.Connection) -> list[sqlite3.Row]:
+    """Giros ja terminais cuja nota efemera continua na sala."""
+    return list(con.execute(
+        "SELECT id, sala, cadeira, progresso_evento FROM jobs"
+        " WHERE progresso_evento != '' AND estado NOT IN (?, ?)", VIVOS
+    ))
 
 
 def conclui(

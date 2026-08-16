@@ -161,6 +161,13 @@ class MotorClaudeCode:
         elif tipo == "assistant":
             blocos = (ev.get("message") or {}).get("content") or []
             p["blocos"] = [b.get("type") for b in blocos if isinstance(b, dict)]
+            # NOME da tool, nao argumento nem resultado: e o unico metadado que
+            # diz ao dono O QUE o giro esta fazendo, e continua do lado de ca da
+            # fronteira — `rag_search` e rotulo, o que ele buscou seria conteudo.
+            p["tools"] = [
+                b.get("name") for b in blocos
+                if isinstance(b, dict) and b.get("type") == "tool_use" and b.get("name")
+            ]
             p["chars"] = sum(
                 len(b.get("text", "")) for b in blocos if isinstance(b, dict)
             )

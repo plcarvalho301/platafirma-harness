@@ -57,6 +57,9 @@ STREAM_MUDO_S = float(os.environ.get("CHAT_STREAM_MUDO_S", "300"))
 TETO_ABSOLUTO_S = float(os.environ.get("CHAT_TETO_ABSOLUTO_S", "0"))
 INTERVALO_RONDA = float(os.environ.get("CHAT_INTERVALO_RONDA", "2"))
 VERBO = os.environ.get("CHAT_VERBO", "chat")
+# Quantos nomes de tool a nota de progresso lembra. Janela curta de proposito: a
+# nota diz o que o giro ESTA fazendo, nao o historico dele.
+TOOLS_LEMBRADAS = int(os.environ.get("CHAT_TOOLS_LEMBRADAS", "4"))
 GRACA_KILL_S = 10.0
 # Fallback deterministico do criterio 17: a cada N giros a fita ancora a mesa,
 # tenha ou nao havido compactacao. Existe porque o rotulo do evento de
@@ -81,6 +84,7 @@ class Giro:
         self.ultimo_sinal = time.monotonic()
         self.saida: list[str] = []
         self.passos = 0
+        self.tools: list[str] = []
         self.compactou = False
         self.trava = threading.Lock()
 
@@ -93,25 +97,42 @@ class Giro:
         """Cada linha do stream e um sinal de vida, e uma delas e a fronteira de
         compactacao.
 
-        O conteudo do passo continua NAO subindo a sala: o unico campo lido aqui
-        e o rotulo `passo`, e o que ele produz e um aviso de uma linha do
-        sistema. Raciocinio intermediario nao atravessa por esta porta.
+        O conteudo do passo continua NAO subindo a sala: o que se le aqui e
+        rotulo (`passo`) e NOME de tool, e o que isso produz e uma nota efemera
+        de uma linha. Raciocinio intermediario nao atravessa por esta porta —
+        texto do modelo, argumento de tool e retorno de tool ficam todos de fora.
         """
         for linha in fluxo:
             with self.trava:
                 self.ultimo_sinal = time.monotonic()
                 self.passos += 1
             texto = linha.strip()
-            if not texto.startswith("{") or "compactou" not in texto:
+            if not texto.startswith("{"):
                 continue
             try:
                 passo = json.loads(texto)
             except json.JSONDecodeError:
                 continue
-            if isinstance(passo, dict) and passo.get("passo") == "compactou":
+            if not isinstance(passo, dict):
+                continue
+            if passo.get("passo") == "compactou":
                 with self.trava:
                     self.compactou = True
+            nomes = [n for n in (passo.get("tools") or []) if isinstance(n, str)]
+            if nomes:
+                with self.trava:
+                    self.tools.extend(nomes)
+                    del self.tools[:-TOOLS_LEMBRADAS]
         fluxo.close()
+
+    def instantaneo(self) -> str:
+        """O que o receptor tem para mostrar. JSON, e nao frase pronta: quem
+        escreve para a sala e o lado que fala Matrix, e so ele."""
+        with self.trava:
+            return json.dumps(
+                {"passos": self.passos, "tools": list(self.tools)},
+                ensure_ascii=False,
+            )
 
     def executa(self) -> dict:
         cmd = [
@@ -183,7 +204,7 @@ class Giro:
             # Batida no journal: e o que o vigia do receptor observa. Se ela
             # falhar, este giro ja foi condenado la — parar de trabalhar nele e
             # o certo, porque o dono ja leu o erro na sala.
-            if not journal.bate(self.con, self.job["id"]):
+            if not journal.bate(self.con, self.job["id"], self.instantaneo()):
                 self._mata(proc)
                 return "condenado"
         return ""

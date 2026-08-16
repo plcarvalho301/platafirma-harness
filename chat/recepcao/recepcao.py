@@ -44,7 +44,7 @@ import time
 from aiohttp import web
 from mautrix.appservice import AppService
 from mautrix.errors import MNotFound
-from mautrix.types import EventType, MessageType, RoomCreatePreset
+from mautrix.types import EventType, MessageType, RoomCreatePreset, TextMessageEventContent
 
 sys.path.insert(0, "/opt/chat")
 
@@ -52,7 +52,7 @@ import anexo as anexos  # noqa: E402
 import formata  # noqa: E402
 import comandos  # noqa: E402
 import rotacao  # noqa: E402
-from comum import journal  # noqa: E402
+from comum import journal, progresso  # noqa: E402
 from comum.cadeiras import atores, eh_de_ator, mxid_da_cadeira, sufixo_canonico  # noqa: E402
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")
@@ -73,6 +73,11 @@ INTERVALO_EXPEDIDOR = float(os.environ.get("CHAT_INTERVALO_EXPEDIDOR", "2"))
 TYPING_MS = int(os.environ.get("CHAT_TYPING_MS", "30000"))
 INTERVALO_TYPING = float(os.environ.get("CHAT_INTERVALO_TYPING", "20"))
 ANEXO_TIMEOUT = float(os.environ.get("CHAT_ANEXO_TIMEOUT", "30"))
+# Nota efemera de progresso. So aparece depois deste tempo de giro: giro curto
+# nao precisa dela, e mostra-la em todo giro trocaria uma sala silenciosa por
+# uma sala ruidosa. Atualiza no mesmo passo do typing e e REDIGIDA ao fim — o
+# que fica na sala em giro bem-sucedido e a resposta, e mais nada.
+PROGRESSO_APOS_S = float(os.environ.get("CHAT_PROGRESSO_APOS_S", "90"))
 INTERVALO_AVISOS = float(os.environ.get("CHAT_INTERVALO_AVISOS", "2"))
 # Piso entre duas reconciliacoes do mapa sala->cadeira. Sem ele, mensagem em sala
 # de fora do nosso namespace viraria uma varredura por evento.
@@ -428,6 +433,47 @@ class Recepcao:
         except Exception:
             log.error("nao consegui falar na sala %s", sala, exc_info=True)
 
+    # --- nota efemera de progresso ---------------------------------------
+
+    async def nota_de_progresso(self, intent, job) -> None:
+        """Cria ou atualiza a nota do giro. Uma mensagem por giro, editada por
+        `m.replace`: empilhar uma linha nova a cada 20 s daria um mural de
+        progresso onde deveria haver uma conversa."""
+        if job["estado"] != journal.EM_CURSO or not job["iniciado_em"]:
+            return
+        if time.time() - job["iniciado_em"] < PROGRESSO_APOS_S:
+            return
+        frase = progresso.frase(job)
+        evento = job["progresso_evento"] or ""
+        try:
+            conteudo = TextMessageEventContent(msgtype=MessageType.NOTICE, body=frase)
+            if evento:
+                conteudo.set_edit(evento)
+                await intent.send_message(job["sala"], conteudo)
+            else:
+                novo = await intent.send_message(job["sala"], conteudo)
+                journal.marca_progresso_evento(self.con, job["id"], novo)
+        except Exception:
+            log.warning("nao consegui pintar o progresso do giro %s", job["id"], exc_info=True)
+
+    async def apaga_nota(self, intent, job_id: int, sala: str, evento: str) -> None:
+        """Redacao e o que torna a nota efemera. Falhar aqui nao pode segurar a
+        resposta: a nota vira ruido, o giro nao para."""
+        try:
+            await intent.redact(sala, evento, reason="progresso do giro")
+        except Exception:
+            log.warning("nao consegui redigir a nota de progresso %s", evento, exc_info=True)
+        journal.marca_progresso_evento(self.con, job_id, "")
+
+    async def varre_notas_orfas(self) -> int:
+        """Nota deixada para tras por receptor derrubado no meio do giro."""
+        orfas = journal.notas_de_progresso_orfas(self.con)
+        for nota in orfas:
+            await self.apaga_nota(
+                self.intent_da(nota["cadeira"]), nota["id"], nota["sala"], nota["progresso_evento"]
+            )
+        return len(orfas)
+
     # --- expedicao --------------------------------------------------------
 
     def mensagem_de(self, job) -> tuple[str, str]:
@@ -475,6 +521,11 @@ class Recepcao:
             # O typing cessa em TODO caminho de saida, inclusive no de erro —
             # e o que o criterio 2 cobra, e a razao de estar num finally.
             await self.typing(intent, sala, False)
+            # A nota de progresso morre junto, pelo mesmo motivo e no mesmo
+            # lugar. O que sobrevive a um giro que caiu e a mensagem de erro de
+            # `mensagem_de`, que e permanente de proposito — a nota nao duplica.
+            if job["progresso_evento"]:
+                await self.apaga_nota(intent, job["id"], sala, job["progresso_evento"])
 
     # --- lacos ------------------------------------------------------------
 
@@ -506,10 +557,12 @@ class Recepcao:
     async def laco_typing(self) -> None:
         while True:
             try:
-                for sala in {j["sala"]: j for j in journal.giros_vivos(self.con)}:
+                for sala, job in {j["sala"]: j for j in journal.giros_vivos(self.con)}.items():
                     cadeira = journal.cadeira_da_sala(self.con, sala)
                     if cadeira:
-                        await self.typing(self.intent_da(cadeira), sala, True)
+                        intent = self.intent_da(cadeira)
+                        await self.typing(intent, sala, True)
+                        await self.nota_de_progresso(intent, job)
             except Exception:
                 log.error("falha no laco de typing", exc_info=True)
             await asyncio.sleep(INTERVALO_TYPING)
@@ -641,6 +694,9 @@ async def principal() -> None:
     # mapa sala->cadeira sem depender de ter visto os eventos de entrada.
     salas = await recepcao.reconcilia_salas()
     log.info("reconciliacao de subida: %s sala(s) mapeada(s) por cadeira", salas)
+
+    orfas = await recepcao.varre_notas_orfas()
+    log.info("varredura de subida: %s nota(s) de progresso redigida(s)", orfas)
 
     await asyncio.gather(
         recepcao.laco_expedidor(),

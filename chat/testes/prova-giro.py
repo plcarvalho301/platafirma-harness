@@ -14,6 +14,7 @@ Sai 0 se tudo passou.
 
 from __future__ import annotations
 
+import json
 import os
 import subprocess
 import sys
@@ -24,7 +25,7 @@ AQUI = os.path.dirname(os.path.abspath(__file__))
 CHAT = os.path.dirname(AQUI)
 sys.path.insert(0, CHAT)
 
-from comum import journal  # noqa: E402
+from comum import journal, progresso  # noqa: E402
 
 MENTIRA = os.path.join(AQUI, "verbo-de-mentira.py")
 WORKER = os.path.join(CHAT, "worker", "worker.py")
@@ -327,6 +328,41 @@ def _():
     assert pendente[0]["partes_enviadas"] == 2, "religou sem lembrar o que ja mandou"
     journal.marca_enviado(con, job)
     assert journal.a_expedir(con) == [], "job enviado continuou na fila — reenviaria"
+
+
+@prova("progresso: a batida carrega o instantaneo, e a nota efemera se apaga")
+def _():
+    _, con = novo_journal()
+    job = chega(con)
+    journal.reivindica(con, "!s1:x")
+    # Sem instantaneo, o campo fica vazio — nao inventa numero.
+    journal.bate(con, job)
+    assert con.execute("SELECT progresso FROM jobs WHERE id = ?", (job,)).fetchone()[0] == ""
+    journal.bate(con, job, json.dumps({"passos": 23, "tools": ["rag_search", "edit_page"]}))
+    linha = con.execute("SELECT * FROM jobs WHERE id = ?", (job,)).fetchone()
+    assert json.loads(linha["progresso"])["passos"] == 23, linha["progresso"]
+    # A nota so vira orfa depois de o giro sair de vivo.
+    journal.marca_progresso_evento(con, job, "$nota:x")
+    assert journal.notas_de_progresso_orfas(con) == [], "condenou nota de giro em curso"
+    journal.conclui(con, job, estado=journal.OK, texto="pronto")
+    orfas = journal.notas_de_progresso_orfas(con)
+    assert [o["progresso_evento"] for o in orfas] == ["$nota:x"], orfas
+    journal.marca_progresso_evento(con, job, "")
+    assert journal.notas_de_progresso_orfas(con) == [], "nota redigida continuou na lista"
+
+
+@prova("progresso: a frase e metadado — relogio, passos e nome de tool, nada mais")
+def _():
+    frase = progresso.frase({
+        "iniciado_em": time.time() - 252,
+        "progresso": json.dumps({"passos": 23, "tools": ["rag_search", "rag_search", "edit_page"]}),
+    })
+    assert frase.startswith("⏳ 4m1"), frase
+    assert "23 passos" in frase, frase
+    # Repetida uma vez so, e na ordem em que aconteceu.
+    assert frase.endswith("rag_search, edit_page"), frase
+    vazia = progresso.frase({"iniciado_em": time.time(), "progresso": ""})
+    assert vazia.startswith("⏳ 0s") and "passos" not in vazia, vazia
 
 
 if __name__ == "__main__":
