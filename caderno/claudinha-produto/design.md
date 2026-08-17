@@ -230,3 +230,40 @@ volta `null` como se a skin estivesse quebrada. Com `/index.php/` no meio,
 resolve. Em script de medicao, montar a URL sempre com `/index.php/` — e fazer o
 script TOLERAR alvo nulo, para o erro dizer "nao achei a tabela" em vez de
 estourar um `TypeError` no meio da corrida.
+
+## A regua de travar ordem de tabela mudou depois de olhar os dados
+
+A hipotese ao ligar a ordenacao (17/08) era: tabela de procedimento tem ordem
+significativa, logo trava. A varredura das 336 `wikitable` da wiki desmontou isso
+e produziu uma regua melhor — '''a ordem esta escrita em alguma coluna?'''
+
+- **Escrita e numerica** (`#` com 1, 2, 3...) → NAO trava. O leitor reordena e
+  volta clicando no `#`, e o tablesorter reconhece coluna numerica, entao a volta
+  e exata. Foram 20 tabelas, e travar todas teria sido perda pura.
+- **Escrita em rotulo alfanumerico** (`E1`..`E16`, `P1`..`P12`) → trava se passar
+  de nove. A ordenacao e textual e `E10` vem antes de `E2`: clicar na coluna nao
+  devolve a sequencia, e a ordem so volta recarregando.
+- **Nao escrita em coluna nenhuma** — a sequencia mora na POSICAO das linhas →
+  trava sempre. Reordenar destroi informacao que a tabela nunca escreveu.
+
+Teste curto, e e o que ficou no guia: '''se o leitor reordenar e nao conseguir
+voltar, trava.''' O erro a evitar nao e deixar de travar — e travar por precaucao:
+catalogo e registro sao onde ordenar paga, e o cadeado devolve ao leitor a
+varredura linha a linha que a ordenacao existe para tirar.
+
+Resultado da varredura: 18 tabelas travadas em 4 paginas (checklists
+executaveis 7, mapa de camadas 5, projeto mdm-rh 5, ajustar-o-motor 1), de 336.
+Guarda acrescentada no mesmo passo: menos de tres linhas de dados nao ganha seta —
+30 tabelas cabiam nesse caso, e ali a seta promete controle sem efeito visivel.
+
+Onde a regra mora: `PlataFirma:Método/escrever-uma-pagina`, secao Tabela. O guia
+declarava escopo ns0, e a mesma edicao emendou o escopo — a regra vale em toda a
+wiki, porque a skin ordena a tabela onde quer que ela esteja, e as tabelas de
+procedimento que precisam travar moram justamente em `Operar:` e `Frente:`.
+
+## Medir ordenacao pede mais de um segundo de espera
+
+`mw.loader.using('jquery.tablesorter')` e assincrono. Script que mede 900 ms
+depois do `networkidle0` pega tabela ainda sem a classe `jquery-tablesorter` e
+reporta `ligou=false` — foi falso alarme em 17/08, com o codigo correto no ar.
+Esperar 1500 ms, ou melhor: esperar a classe aparecer, em vez de esperar tempo.
