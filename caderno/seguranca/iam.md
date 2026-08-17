@@ -50,8 +50,8 @@ destrava é o dono no terminal do host. Mudança de identidade que possa alcanç
 
 ## Revogar credencial a partir de lista de terceiro
 
-A lista que a outra cadeira manda descreve o que ela lembra, não o que o arquivo tem.
-Três passadas antes de apagar: **separar credencial de configuração** (conferir contra quem
+A lista que a outra cadeira manda descreve o que ela lembra, não o que o arquivo tem. Três
+passadas antes de apagar: **separar credencial de configuração** (conferir contra quem
 LÊ a chave hoje, não contra o nome); **grep por nome de chave, nunca por menção** (duplicata
 em `.env` é silenciosa: por chave deu 5, por linha 7); **reescrever com verificação, não
 `sed`** (afirmar antes de gravar que as demais seguem byte a byte, e reaplicar 600 depois).
