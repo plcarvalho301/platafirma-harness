@@ -35,6 +35,7 @@ documentar". Ordem fixa: o que restringe o espaço vem antes do que preenche.
 | c | Consulta dirigida | sim | 5–12 linhas | Filtro de tool + a armadilha de recorte da matéria. Consulta mal filtrada volta zero **sem erro**, e zero silencioso lê como "não há". |
 | d | Régua de resposta | sim | 8–15 linhas | Define o que é resposta boa e o que é resposta ruim NESTE escopo, com a escala de confiança. Sem ela o chapéu condiciona assunto e não julgamento. |
 | e | Armadilhas de ESCOPO | quando houver | 1 linha/item | Erro de julgamento medido na matéria — não erro de ferramenta. Casa declarada na spec §7. Vazio por padrão; item entra medido, não previsto. |
+| f | Ferramental do chapéu | **fora do quadro: sim** · quadro: não | 4–10 linhas | Quem está fora do quadro não recebe o índice operacional da casa: a lista é fechada e mora onde a matéria mora. Cadeira do quadro não repete — o manifesto dela cobre. |
 
 **Orçamento total: 2.500 tokens.** Medido, não estimado: o piloto
 `chapeus/gestao-estrategica/rh.md` serve **2.294** (tokenizador do harness,
@@ -131,6 +132,23 @@ trago citado, uso como insumo.}
 ## e) Armadilhas de ESCOPO
 - **{Erro de julgamento}** — {como se manifesta} · {como se evita}. Medido em {data}.
 ```
+
+## Ferramental por chapéu — quem está fora do quadro
+
+Decisão do dono, 17/08/2026. Cadeira fora do quadro (fábrica, jaiminho,
+políticas-públicas) não recebe `tool-manifest/nucleo.md` na abertura: o índice
+operacional da casa — fila, deploy, infra, cards — é de quem opera a casa.
+
+- **O manifesto dessas cadeiras é por chapéu.** A seção (f) lista o que aquele
+  chapéu chama, com a régua de quando chamar.
+- **`tool-manifest/<cadeira>.md` fica com o transversal**, e só: o que serve a
+  todos os chapéus. Tool na cadeira existe SE precisar, não por simetria.
+- **A lista é fechada, e isso se escreve na persona**, não aqui: ferramenta fora
+  dela não se chama, e o que faltar se relata ao dono nomeando a ferramenta e para
+  quê. Chapéu não pode abrir o que a base fechou — ele chega depois na janela.
+- Verificação por linha, como no `tool-manifest/TEMPLATE.md`: `[exec]` · `[func]`
+  · `[inst]`. Manifesto de chapéu com linha que ninguém verificou é o mesmo
+  defeito, no arquivo mais perto da resposta.
 
 ## Conferência antes do commit
 
