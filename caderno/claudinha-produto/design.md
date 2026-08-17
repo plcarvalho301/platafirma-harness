@@ -183,3 +183,50 @@ com header `Host:` não os reenvia — o login responde `WrongToken` e o upload 
 
 Continua valendo conferir a MINIATURA depois (`prop=imageinfo&iiurlwidth=900`), e não
 o resultado do upload: `Added: 2` não prova que a página renderiza.
+
+## Ordenacao de tabela: o core tem, e o opt-in por pagina e que nao acontece
+
+`jquery.tablesorter` esta no core do MediaWiki e nao custa nada ligar — mas ele so
+age em tabela que traga a classe `sortable` escrita no wikitexto. Em 17/08/2026,
+nenhuma tabela desta wiki trazia. O padrao do MediaWiki nao esta errado por
+principio; ele so aposta que o editor lembra, e a medida diz que nao lembra.
+
+Regra invertida, implementada na skin em 17/08: catalogo ordena por PADRAO, e a
+pagina desliga com `class="wikitable pf-ordem-fixa"` quando a ordem carrega
+significado — sequencia de passos e cronologia sao esse caso; catalogo e registro
+nao sao. Vale para toda tabela nova, sem ninguem precisar saber que existe.
+
+Tres guardas antes de ligar, e cada uma corresponde a um modo de falha real:
+
+- **so `.mw-parser-output`** — tabela de `Especial:` ja tem ordenacao e paginacao
+  do core, e duas ordenacoes na mesma tabela brigam;
+- **so tabela cuja primeira linha e inteira de `<th>`** — sem cabecalho o sorter
+  ordena PELA linha de dados e embaralha a tabela sem avisar;
+- **so com mais de uma coluna** — a seta prometeria um controle que nao muda nada.
+
+Dois pontos que o core NAO entrega, e que a skin precisou cobrir:
+
+- **`aria-sort` nao e emitido.** O core da `tabindex=0` e
+  `role="columnheader button"`, entao o teclado ordena de fabrica (Enter, tratado
+  em `keypress`). O que falta e dizer ao leitor de tela em que coluna e em que
+  sentido a tabela esta. `headerSortUp` e ascendente e `headerSortDown` e
+  descendente — sao `cssAsc`/`cssDesc` do proprio modulo, nao suposicao.
+- **A arte da seta inverte no escuro por classe do Vector.** O
+  `jquery.tablesorter.styles` troca para `*_inverted.svg` sob
+  `html.skin-theme-clientpref-night` e `-clientpref-os`, e esta skin nao emite
+  essas classes: herdar aquilo daria seta preta sobre fundo escuro, e o defeito so
+  apareceria para quem usa o tema escuro. A seta e nossa, em `currentColor`, pelo
+  mesmo mecanismo do chevron da dobra lateral. Vale para qualquer estilo do core
+  que dependa do vocabulario de tema do Vector: conferir antes de herdar.
+
+Medido em `Operar:catalogo-de-verbos`: clicar em Conforme traz a linha `nao` ao
+topo, `aria-sort` vai a `ascending`, zero erro de console.
+
+## `Operar:` nao resolve sem `/index.php/`
+
+`http://<host>/Operar:catalogo-de-verbos` nao entrega a pagina ao puppeteer, e o
+sintoma e enganoso: a pagina carrega, mas sem `.mw-parser-output`, e todo seletor
+volta `null` como se a skin estivesse quebrada. Com `/index.php/` no meio,
+resolve. Em script de medicao, montar a URL sempre com `/index.php/` — e fazer o
+script TOLERAR alvo nulo, para o erro dizer "nao achei a tabela" em vez de
+estourar um `TypeError` no meio da corrida.
