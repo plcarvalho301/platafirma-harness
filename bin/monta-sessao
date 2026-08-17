@@ -51,6 +51,22 @@ SESSAO_ENV = os.path.join(HARNESS, "sessao", ".env")
 ORDEM_VOLATILIDADE = {"estavel": 0, "morna": 1, "volatil": 2}
 FORA_DO_QUADRO = os.environ.get("PF_FORA_DO_QUADRO", "fabrica jaiminho").split()
 
+def env_verbo(persona_ou_cadeira):
+    """Env da peca-verbo: PF_CADEIRA canonico + PATH explicito.
+
+    O PATH herdado NAO serve: quando o montador e chamado por um servico (ops-mcp,
+    systemd --user), o ambiente do processo pai nao tem RAIZ/bin, e toda peca servida
+    por execucao morre com FileNotFoundError — mesa, cadernos e fila sairam vazias em
+    17/08 na superficie claude.ai, com a ausencia declarada e o pacote entregue mutilado.
+    Montar aqui, e nao no chamador, e o que faz o pacote ser o mesmo nas tres superficies.
+    """
+    casa = os.path.expanduser("~")
+    e = dict(os.environ)
+    e["PF_CADEIRA"] = persona_ou_cadeira
+    e["PATH"] = f"{RAIZ}/bin:{casa}/.local/bin:" + os.environ.get("PATH", "")
+    return e
+
+
 RE_NOME = re.compile(r"^Você é ([A-Za-zÀ-ÿ-]+)")
 RE_FERRAMENTAL = re.compile(r"^FERRAMENTAL: *([^ ]*\.md)")
 
@@ -178,7 +194,7 @@ def serve(peca, cadeira, persona=None):
             # nomeia a caixa da fila e a chave da mesa. Foi a divergencia entre os dois
             # que partiu a mesa em duas metades (medido em 16/08).
             p = subprocess.run(cmd.split(), capture_output=True, text=True, timeout=20,
-                               env={**os.environ, "PF_CADEIRA": persona or cadeira})
+                               env=env_verbo(persona or cadeira))
             texto = (p.stdout or "").strip()
             if p.returncode != 0:
                 env["motivo"] = (p.stderr or p.stdout).strip()[:200] or f"exit {p.returncode}"
