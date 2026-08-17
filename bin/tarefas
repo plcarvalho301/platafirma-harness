@@ -58,17 +58,20 @@ _hdr_sujeito() { [ -n "$QUEM" ] && printf '%s' "x-auth-request-preferred-usernam
 # carrega o texto da máquina — inclusive a lista de destinos que este card mandou escrever.
 _recusa() { # lê o corpo do erro em $1 e devolve a mensagem da API
   local erro; erro=$(printf '%s' "$1" | jq -r '.erro // empty' 2>/dev/null || true)
-  printf '%s\n' "${erro:-${1:-recusa sem corpo}}" >&2
+  # `-S` sai do curl porque a mensagem util e o CORPO, e a linha `curl: (22) ... 400` so
+  # empurrava o texto da maquina para fora da tela. Falha SEM corpo (rede, servico fora)
+  # nao fica muda: cai no ramo abaixo, com o endereco que nao respondeu.
+  printf '%s\n' "${erro:-falha ao falar com o rastreador em $BASE (sem corpo de erro)}" >&2
   return 1
 }
 
 busca() { # busca MÉTODO /caminho
   local saida
   if [ -n "$QUEM" ]; then
-    saida=$(curl -sS --fail-with-body -X "$1" "$BASE$2" \
+    saida=$(curl -s --fail-with-body -X "$1" "$BASE$2" \
                  -H "x-auth-request-preferred-username: $QUEM") || _recusa "$saida"
   else
-    saida=$(curl -sS --fail-with-body -X "$1" "$BASE$2") || _recusa "$saida"
+    saida=$(curl -s --fail-with-body -X "$1" "$BASE$2") || _recusa "$saida"
   fi
   printf '%s' "$saida"
 }
@@ -76,11 +79,11 @@ busca() { # busca MÉTODO /caminho
 envia() { # envia MÉTODO /caminho  (corpo JSON em stdin)
   local saida corpo; corpo=$(cat)
   if [ -n "$QUEM" ]; then
-    saida=$(printf '%s' "$corpo" | curl -sS --fail-with-body -X "$1" "$BASE$2" \
+    saida=$(printf '%s' "$corpo" | curl -s --fail-with-body -X "$1" "$BASE$2" \
                  -H 'Content-Type: application/json' \
                  -H "x-auth-request-preferred-username: $QUEM" -d @-) || _recusa "$saida"
   else
-    saida=$(printf '%s' "$corpo" | curl -sS --fail-with-body -X "$1" "$BASE$2" \
+    saida=$(printf '%s' "$corpo" | curl -s --fail-with-body -X "$1" "$BASE$2" \
                  -H 'Content-Type: application/json' -d @-) || _recusa "$saida"
   fi
   printf '%s' "$saida"
