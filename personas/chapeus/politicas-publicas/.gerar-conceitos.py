@@ -34,6 +34,13 @@ BLOCOS = {
                  "fronteira-por-custo-de-transacao", "soberania-tecnologica",
                  "dependencia-de-fornecedor", "titularidade-do-core",
                  "capacidade-estatal"],
+    "mentoria": ["validade-de-construto", "proveniencia-de-assercao",
+                 "garantia-de-proveniencia", "estruturacao-de-problema",
+                 "requisito-verificavel", "deriva-de-conceito",
+                 "alinhamento-de-ontologias", "ontologia-fundacional",
+                 "validacao-de-ontologias", "objetivo-de-aprendizagem-observavel",
+                 "avaliacao-criterial", "carga-cognitiva-extranea",
+                 "forrageamento-de-informacao", "capacitacao-continua"],
 }
 
 MEU_DOMINIO = "capacidade-estatal"
@@ -72,6 +79,9 @@ doc = {
         "politica: coalizao de defesa, ponto de veto, empreendedor de politica, captura "
         "regulatoria, accountability horizontal — o acervo e forte em Estado e fraco em "
         "processo politico (17/08/2026). Pedido de obra em aberto.",
+        "mentoria: desenho de pesquisa, inferencia causal, revisao sistematica de "
+        "literatura, vies de selecao, triangulacao, saturacao teorica, replicabilidade — "
+        "nao ha corpus de metodologia de pesquisa no acervo (17/08/2026).",
     ],
     "blocos": {},
 }

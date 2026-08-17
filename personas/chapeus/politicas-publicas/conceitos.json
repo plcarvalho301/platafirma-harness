@@ -7,7 +7,8 @@
   "nota": "sao 3 chapeus — tecnica, politica, mentoria. So `tecnica` esta escrito (17/08/2026); os outros dois entram aqui quando forem redigidos. Conceito usado por mais de um chapeu se declara em cada um: declara USO, nao particao.",
   "lacunas": [
     "tecnica: teoria de mudanca — usada na materia, sem conceito no acervo (17/08/2026)",
-    "politica: coalizao de defesa, ponto de veto, empreendedor de politica, captura regulatoria, accountability horizontal — o acervo e forte em Estado e fraco em processo politico (17/08/2026). Pedido de obra em aberto."
+    "politica: coalizao de defesa, ponto de veto, empreendedor de politica, captura regulatoria, accountability horizontal — o acervo e forte em Estado e fraco em processo politico (17/08/2026). Pedido de obra em aberto.",
+    "mentoria: desenho de pesquisa, inferencia causal, revisao sistematica de literatura, vies de selecao, triangulacao, saturacao teorica, replicabilidade — nao ha corpus de metodologia de pesquisa no acervo (17/08/2026)."
   ],
   "blocos": {
     "tecnica": [
@@ -494,6 +495,164 @@
         ],
         "cross": false,
         "outros_rotulos": "state capacity"
+      }
+    ],
+    "mentoria": [
+      {
+        "id": "6967c972-9365-4c35-91e5-60444ae1d9df",
+        "slug": "validade-de-construto",
+        "rotulo": "Validade de construto",
+        "obras_ancora": 5,
+        "origem": [
+          "estudos-ontologias",
+          "ia"
+        ],
+        "cross": true
+      },
+      {
+        "id": "674279b1-3920-494f-9e16-a52d7b9caca9",
+        "slug": "proveniencia-de-assercao",
+        "rotulo": "Proveniencia de assercao",
+        "obras_ancora": 1,
+        "origem": [
+          "estudos-ontologias"
+        ],
+        "cross": true,
+        "outros_rotulos": "procedencia-de-assercao"
+      },
+      {
+        "id": "02d85596-d30f-4353-a11e-96a1b767589a",
+        "slug": "garantia-de-proveniencia",
+        "rotulo": "Garantia de proveniência",
+        "obras_ancora": 2,
+        "origem": [
+          "capacidade-estatal"
+        ],
+        "cross": false,
+        "outros_rotulos": "atesta origem, não conteúdo / procedencia-vs-corretude / autenticidade-vs-veracidade / forma vs. mérito"
+      },
+      {
+        "id": "73f8dad0-6c14-4f58-a937-a543ec4ccb41",
+        "slug": "estruturacao-de-problema",
+        "rotulo": "Estruturação de problema",
+        "obras_ancora": 9,
+        "origem": [
+          "arquiteturas",
+          "capacidade-estatal",
+          "estudos-ontologias",
+          "gestao-organizacional",
+          "produtos-digitais"
+        ],
+        "cross": false
+      },
+      {
+        "id": "8c28a44d-0827-4b7c-ba0b-1f0bdecb0f47",
+        "slug": "requisito-verificavel",
+        "rotulo": "Requisito verificável",
+        "obras_ancora": 6,
+        "origem": [
+          "capacidade-estatal",
+          "seguranca-privacidade"
+        ],
+        "cross": false
+      },
+      {
+        "id": "6b6ac722-6f1e-4237-9a19-2c97ae3715e4",
+        "slug": "deriva-de-conceito",
+        "rotulo": "Deriva de conceito",
+        "obras_ancora": 5,
+        "origem": [
+          "estudos-ontologias",
+          "ia",
+          "inteligencia"
+        ],
+        "cross": true,
+        "outros_rotulos": "concept drift / semantic drift"
+      },
+      {
+        "id": "ed8ff63d-0d74-446d-a81f-9cb4a5d6d44f",
+        "slug": "alinhamento-de-ontologias",
+        "rotulo": "Alinhamento de ontologias",
+        "obras_ancora": 10,
+        "origem": [
+          "capacidade-estatal",
+          "estudos-ontologias"
+        ],
+        "cross": false
+      },
+      {
+        "id": "a20c5acc-59bc-4eec-af02-a34172dcfc85",
+        "slug": "ontologia-fundacional",
+        "rotulo": "Ontologia fundacional",
+        "obras_ancora": 7,
+        "origem": [
+          "estudos-ontologias"
+        ],
+        "cross": true
+      },
+      {
+        "id": "3a6b7274-6a83-4f29-ad96-c8517eda244b",
+        "slug": "validacao-de-ontologias",
+        "rotulo": "Validacao de ontologias",
+        "obras_ancora": 4,
+        "origem": [
+          "estudos-ontologias"
+        ],
+        "cross": true
+      },
+      {
+        "id": "7af8199d-01f6-4dba-b6b8-4cbae176f0f3",
+        "slug": "objetivo-de-aprendizagem-observavel",
+        "rotulo": "Objetivo de aprendizagem observavel",
+        "obras_ancora": 3,
+        "origem": [
+          "estudos-ontologias"
+        ],
+        "cross": true
+      },
+      {
+        "id": "cd15d799-4026-43aa-a873-7f5e734767a5",
+        "slug": "avaliacao-criterial",
+        "rotulo": "Avaliacao criterial",
+        "obras_ancora": 2,
+        "origem": [
+          "estudos-ontologias"
+        ],
+        "cross": true
+      },
+      {
+        "id": "b1cf1959-ebb7-4bae-a696-8deae1e542ce",
+        "slug": "carga-cognitiva-extranea",
+        "rotulo": "Carga cognitiva extranea",
+        "obras_ancora": 3,
+        "origem": [
+          "engenharia-software",
+          "estudos-ontologias"
+        ],
+        "cross": true
+      },
+      {
+        "id": "0b223777-83f2-459e-b51b-9d9e2f3dfaf2",
+        "slug": "forrageamento-de-informacao",
+        "rotulo": "Forrageamento de informacao",
+        "obras_ancora": 3,
+        "origem": [
+          "engenharia-software",
+          "estudos-ontologias"
+        ],
+        "cross": true
+      },
+      {
+        "id": "1441b5e5-f66e-432e-a810-0ae34ec3860f",
+        "slug": "capacitacao-continua",
+        "rotulo": "Capacitação contínua",
+        "obras_ancora": 4,
+        "origem": [
+          "capacidade-estatal",
+          "gestao-organizacional",
+          "seguranca-privacidade"
+        ],
+        "cross": false
       }
     ]
   }

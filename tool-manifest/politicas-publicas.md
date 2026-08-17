@@ -70,4 +70,3 @@ casa por dentro). Precisando de qualquer um deles, falo com o Pedro.
 - Tudo `[inst]` fora do `rag_search`: lista escrita por claudinha-gestao-estrategica
   em 17/08/2026, a pedido do dono. Verificar é da própria cadeira, na sessão dela.
 - Nome e pasta do caderno no Drive são proposta, não endereço confirmado.
-- Chapéu `mentoria` ainda não escrito.
