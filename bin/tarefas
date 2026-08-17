@@ -58,6 +58,12 @@ _hdr_sujeito() { [ -n "$QUEM" ] && printf '%s' "x-auth-request-preferred-usernam
 # carrega o texto da máquina — inclusive a lista de destinos que este card mandou escrever.
 _recusa() { # lê o corpo do erro em $1 e devolve a mensagem da API
   local erro; erro=$(printf '%s' "$1" | jq -r '.erro // empty' 2>/dev/null || true)
+  # A LISTA DE DESTINOS SAIU DE DENTRO DE `.erro` E VIROU CAMPO (card #245): no board ela
+  # empurrava a coluna, e a API passou a devolver causa e lista separadas. Aqui elas se
+  # recolam, porque quem lê terminal quer a frase inteira — o CLI não regride com a mudança
+  # de forma. Recusa sem o campo (nascimento, validação de corpo) segue imprimindo só a causa.
+  local frase; frase=$(printf '%s' "$1" | jq -r '.frase_destinos // empty' 2>/dev/null || true)
+  [ -n "$frase" ] && erro="$erro · $frase"
   # `-S` sai do curl porque a mensagem util e o CORPO, e a linha `curl: (22) ... 400` so
   # empurrava o texto da maquina para fora da tela. Falha SEM corpo (rede, servico fora)
   # nao fica muda: cai no ramo abaixo, com o endereco que nao respondeu.
