@@ -38,7 +38,6 @@ import logging
 import os
 import re
 import signal
-import socket
 import subprocess
 import sys
 import time
@@ -454,24 +453,13 @@ def write_file(path: str, content: str) -> dict:
 PERSONAS = Path(os.environ.get("PF_PERSONAS", RAIZ / "platafirma-harness/personas"))
 ORG_CANONICO = Path(os.environ.get(
     "PF_ORG", RAIZ / "platafirma-arquitetura/docs/org-template-canonico.md"))
-FILA = Path(os.environ.get("PF_FILA", RAIZ / "fila"))
 REPOS_SESSAO = ("platafirma-harness", "platafirma-arquitetura")
 MANIFESTO_GERAL = Path(os.environ.get(
     "PF_MANIFESTO_GERAL", RAIZ / "platafirma-harness/tool-manifest/TODA-CADEIRA.md"))
-FM_CAMPOS = ("de", "para", "em", "tipo", "assunto", "ref", "responde")
-MSG_HOST = os.environ.get("PF_MSG_HOST", "127.0.0.1")
-MSG_PORT = int(os.environ.get("PF_MSG_PORT", "6379"))
 
 
-def _personas_com_caixa() -> set:
-    """Quem tem caixa na malha: a lista `fila/.personas`, mesma fonte do verbo."""
-    lista = FILA / ".personas"
-    if not lista.is_file():
-        return set()
-    return {ln.strip() for ln in lista.read_text(encoding="utf-8").splitlines() if ln.strip()}
 RE_NOME = re.compile(r"^Você é ([A-Za-zÀ-ÿ][A-Za-zÀ-ÿ-]*)")
 RE_FERRAMENTAL = re.compile(r"^FERRAMENTAL:\s*(\S+\.md)")
-RE_MSG = re.compile(r"^===MSG\s+(.+?)\s*===\s*$", re.M)
 
 
 def _cadeiras() -> list:
@@ -483,156 +471,6 @@ def _ler(p: Path) -> dict:
     if not p.is_file():
         return {"path": str(p), "ausente": True}
     return {"path": str(p), "content": p.read_text(encoding="utf-8", errors="replace")}
-
-
-def _envelope(p: Path) -> dict:
-    """Campos do envelope da mensagem, SEM o corpo — o corpo sai por read_file.
-
-    Estado da fila é quem mandou, quando e sobre o quê; despejar corpo aqui é
-    pré-carregar contexto que a sessão pode não usar.
-    """
-    cab = {"arquivo": p.name, "bytes": p.stat().st_size}
-    linhas = p.read_text(encoding="utf-8", errors="replace").splitlines()
-    if not linhas or linhas[0].strip() != "---":
-        cab["aviso"] = "mensagem sem envelope YAML"
-        return cab
-    for linha in linhas[1:30]:
-        if linha.strip() == "---":
-            break
-        chave, sep, valor = linha.partition(":")
-        if sep and chave.strip() in FM_CAMPOS and valor.strip():
-            cab[chave.strip()] = valor.strip()
-    return cab
-
-
-class _Resp:
-    """Cliente RESP minimo para a malha msg. Socket puro de proposito: o servico
-    nao ganha dependencia nova por causa da leitura de uma caixa."""
-
-    def __init__(self, host="127.0.0.1", port=6379, timeout=3):
-        self.s = socket.create_connection((host, port), timeout)
-        self.s.settimeout(timeout)
-        self.buf = b""
-
-    def _linha(self):
-        while b"\r\n" not in self.buf:
-            pedaco = self.s.recv(65536)
-            if not pedaco:
-                raise ConnectionError("conexao fechada pelo servidor")
-            self.buf += pedaco
-        linha, self.buf = self.buf.split(b"\r\n", 1)
-        return linha
-
-    def _bytes(self, n):
-        while len(self.buf) < n + 2:
-            pedaco = self.s.recv(65536)
-            if not pedaco:
-                raise ConnectionError("conexao fechada pelo servidor")
-            self.buf += pedaco
-        dado, self.buf = self.buf[:n], self.buf[n + 2:]
-        return dado
-
-    def _ler(self):
-        linha = self._linha()
-        tag, corpo = linha[:1], linha[1:]
-        if tag == b"+":
-            return corpo.decode()
-        if tag == b"-":
-            raise RuntimeError(corpo.decode())
-        if tag == b":":
-            return int(corpo)
-        if tag == b"$":
-            n = int(corpo)
-            return None if n == -1 else self._bytes(n).decode("utf-8", "replace")
-        if tag == b"*":
-            n = int(corpo)
-            return None if n == -1 else [self._ler() for _ in range(n)]
-        raise RuntimeError(f"RESP inesperado: {linha!r}")
-
-    def cmd(self, *args):
-        saida = b"*%d\r\n" % len(args)
-        for a in args:
-            a = str(a).encode()
-            saida += b"$%d\r\n%s\r\n" % (len(a), a)
-        self.s.sendall(saida)
-        return self._ler()
-
-    def fecha(self):
-        try:
-            self.s.close()
-        except OSError:
-            pass
-
-
-def _envelopes_stream(nome: str) -> tuple:
-    """Envelopes NOVOS da caixa na malha msg, sem corpo.
-
-    Novo = depois do ponteiro do consumer group da cadeira. Devolve
-    (mensagens, bytes, total_no_historico, erro). Leitura FRIA por XRANGE: montar
-    sessao nao pode mover o ponteiro, senao abrir a sessao consumiria a caixa e o
-    `fila ler` seguinte viria vazio. Quem move o ponteiro e o verbo, ao entregar.
-
-    Erro preenchido significa malha inalcancavel: quem chama declara a falha,
-    nunca reporta caixa vazia por nao ter conseguido ler.
-    """
-    c = None
-    try:
-        c = _Resp(MSG_HOST, MSG_PORT)
-        chave = f"caixa:{nome}"
-        total = c.cmd("XLEN", chave)
-        ponteiro, pendentes = "0-0", 0
-        for g in c.cmd("XINFO", "GROUPS", chave) or []:
-            campos = dict(zip(g[::2], g[1::2]))
-            if campos.get("name") == "cadeira":
-                ponteiro = campos.get("last-delivered-id", "0-0")
-                pendentes = campos.get("pending", 0) or 0
-        entradas = c.cmd("XRANGE", chave, f"({ponteiro}", "+")
-    except (OSError, RuntimeError, ConnectionError) as e:
-        return [], 0, 0, f"malha msg inalcancavel em {MSG_HOST}:{MSG_PORT} — {e}"
-    finally:
-        if c:
-            c.fecha()
-    saida, tamanho = [], 0
-    for _tecnico, plano in entradas or []:
-        campos = dict(zip(plano[::2], plano[1::2]))
-        corpo = campos.get("corpo", "")
-        tamanho += len(corpo.encode())
-        ident = campos.get("id", "")
-        cab = {"id": ident, "bytes": len(corpo.encode()), "em": ident.partition("-")[0]}
-        for k in FM_CAMPOS:
-            if campos.get(k):
-                cab[k] = campos[k]
-        saida.append(cab)
-    return saida, tamanho, total, ""
-
-
-def _envelopes_caixa(texto: str) -> list:
-    """Envelopes da caixa-arquivo: um bloco por `===MSG <carimbo>-<remetente>===`.
-
-    Mesmo contrato do `_envelope`: cabeçalho, nunca corpo. Carimbo e remetente saem
-    do próprio marcador; linha explícita no cabeçalho sobrescreve o derivado.
-    """
-    saida = []
-    marcas = list(RE_MSG.finditer(texto))
-    for i, m in enumerate(marcas):
-        ident = m.group(1).strip()
-        fim = marcas[i + 1].start() if i + 1 < len(marcas) else len(texto)
-        corpo = texto[m.end():fim]
-        carimbo, _, remetente = ident.partition("-")
-        cab = {"id": ident, "bytes": len(corpo.encode()), "em": carimbo}
-        if remetente:
-            cab["de"] = remetente
-        linhas = corpo.splitlines()
-        while linhas and not linhas[0].strip():
-            linhas.pop(0)
-        for linha in linhas:
-            if not linha.strip():
-                break
-            chave, sep, valor = linha.partition(":")
-            if sep and chave.strip() in FM_CAMPOS and valor.strip():
-                cab[chave.strip()] = valor.strip()
-        saida.append(cab)
-    return saida
 
 
 def _idade(d: Path, estado: dict) -> None:
@@ -728,8 +566,8 @@ def _montar(cadeira: str, atualizar: bool) -> dict:
     verbo, e agora vale para o pacote inteiro. A superfície não pode mudar o pacote:
     `tool-manifest/superficies.json` manda que o comportamento seja o mesmo nas três.
 
-    O que continua sendo do servidor é só o ENVELOPE DA FILA (camada B), que a tool
-    serve com detalhe que o verbo não tem.
+    O servidor não acrescenta nada ao pacote: o envelope da fila saiu daqui em
+    17/08 (#189) e a camada B inteira é por ato, pelo verbo.
     """
     alvo = cadeira.strip()
     for prefixo in ("claudinho-", "claudinha-"):
@@ -756,55 +594,27 @@ def _montar(cadeira: str, atualizar: bool) -> dict:
                        "e o conteúdo servido; a ordem é a de injeção (estável → volátil) "
                        "declarada no catálogo, não a de leitura")
 
-    # A caixa VIVA é o stream `caixa:<nome>` na malha msg (arq:0018, arq:0036),
-    # escrito e consumido pelo verbo `fila`. O arquivo `fila/<nome>.md` é o
-    # transporte anterior e não recebe mais escrita — ler dele devolveria estado
-    # congelado sem erro, que é o modo de falha que esta troca fecha.
-    # Endereço encerrado (porteiro) mora em `fila/.encerradas/<nome>.md` e o texto
-    # dele É a resposta: diz por onde entra. O diretório `fila/<nome>/` é o formato
-    # anterior — enquanto tiver mensagem dentro entra como `legado`, porque
-    # re-apontar sem reportar troca uma omissão silenciosa por outra.
-    caixa = FILA / f"{nome}.md" if nome else None
-    encerrada = FILA / ".encerradas" / f"{nome}.md" if nome else None
-    legado = FILA / nome if nome else None
-
-    if nome and nome in _personas_com_caixa():
-        msgs, tamanho, total, erro = _envelopes_stream(nome)
-        r["fila"] = {"path": f"caixa:{nome}", "estado": "aberta",
-                     "novas": len(msgs), "no_historico": total,
-                     "bytes": tamanho,
-                     "mensagens": msgs,
-                     "nota": "só o que chegou desde a última leitura da cadeira; o "
-                             "resto do histórico (7 dias) sai por `fila ler <persona> "
-                             "--tudo`. Corpo sempre por `fila ler`, nunca por read_file"}
-        if erro:
-            r["fila"]["estado"] = "indisponivel"
-            r["fila"]["erro"] = erro
-    elif encerrada and encerrada.is_file():
-        r["fila"] = {"path": str(encerrada), "estado": "fechada", "total": 0,
-                     "porteiro": encerrada.read_text(encoding="utf-8", errors="replace"),
-                     "nota": "endereço fechado por decisão — o texto acima diz por onde entra"}
-    else:
-        r["fila"] = {"path": str(caixa) if caixa else None, "estado": "inexistente",
-                     "total": 0,
-                     "nota": "não há caixa neste endereço — demanda entra por outra porta"}
-
-    if legado and legado.is_dir():
-        antigas = sorted(legado.glob("*.md"))
-        if antigas:
-            r["fila"]["legado"] = {
-                "dir": str(legado), "total": len(antigas),
-                "mensagens": [_envelope(m) for m in antigas],
-                "nota": "formato anterior (um arquivo por mensagem), NÃO migrado: "
-                        "não estão na caixa viva, o verbo `fila` não as enxerga e "
-                        "read_file não abre caminho sob a fila — corpo só por "
-                        "run_command"}
+    # A FILA NAO ENTRA NA ABERTURA (#189, ordem do dono 17/08).
+    # Regra: a abertura carrega IMPEDIMENTO — o que, sem ato, deixa o estado como
+    # esta. Hoje so a mesa; incidente entra nessa classe quando existir. A caixa nao
+    # e impedimento: carta nao lida continua la, com retencao de 7 dias, e sai por
+    # `fila ler` --tudo/--desde (leitura fria, sem mover o ponteiro).
+    # Servir envelope aqui — ou so a contagem — devolve a fila ao lugar da mesa pela
+    # saliencia, que e o defeito que ja tinha sido corrigido uma vez e voltou. A
+    # conduta corta o ATO de abrir a caixa; enquanto o pacote injetava o texto da
+    # carta, a proibicao competia com o item mais concreto da janela.
+    # Fila e board sao verbos on-demand, chamados por ordem do dono como qualquer
+    # outro. Nao ha peca, nao ha envelope, nao ha contagem.
     return r
 
 
 async def monta_sessao(cadeira: str = "", atualizar: bool = True) -> dict:
     """Devolve, numa chamada, o contexto de abertura de uma cadeira da PlataFirma:
-    persona canônica, tool-manifest que ELA declara, org canônico e o estado da fila.
+    persona canônica, tool-manifest que ELA declara, org canônico e a mesa.
+
+    NÃO traz fila nem board. A abertura carrega só o que é impedimento — o que, sem
+    ato, deixa o estado como está —, e hoje isso é a mesa. Caixa e carteira saem por
+    `fila` e `tarefas`, verbos chamados por ordem do dono como qualquer outro.
 
     Chamar no lugar de encadear leituras na abertura de sessão — é o que esta tool
     existe para matar. Ler o manifesto NÃO é pré-condição para pensar nem para
@@ -845,7 +655,6 @@ async def monta_sessao(cadeira: str = "", atualizar: bool = True) -> dict:
     r = await anyio.to_thread.run_sync(_montar, cadeira, atualizar)
     _audit(tool="monta_sessao", cadeira=cadeira, atualizar=atualizar,
            resolvida=r.get("nome_canonico"), erro=r.get("erro"),
-           fila_total=r.get("fila", {}).get("total"),
            dur_ms=round((time.monotonic() - t0) * 1000))
     return r
 

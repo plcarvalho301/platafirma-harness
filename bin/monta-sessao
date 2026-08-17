@@ -93,6 +93,12 @@ def de_abertura(pecas, cadeira):
     Excecao nominal do dono (#161, opcao A): quem esta FORA DO QUADRO nao recebe o org
     chart — a persona da fabrica declara nao conhece-lo. No lugar entra o mapa
     alias -> slug, que e endereco e nao topologia de decisao.
+    
+    A abertura carrega IMPEDIMENTO: o que, sem ato, deixa o estado como esta. Hoje so
+    a mesa; incidente entra nessa classe quando existir. FILA E BOARD NAO ENTRAM —
+    sao verbos on-demand, chamados por ordem do dono como qualquer outro (#189, 17/08).
+    Peca com gatilho de abertura para caixa ou carteira e reincidencia: ja foi tirada
+    uma vez e voltou como contagem, que devolve a fila ao lugar da mesa pela saliencia.
     """
     fora = cadeira.lower() in [f.lower() for f in FORA_DO_QUADRO]
     por_id = {p.get("id"): p for p in pecas}
@@ -110,14 +116,6 @@ def de_abertura(pecas, cadeira):
         alias = por_id.get("alias-cadeiras")
         if alias:
             escolhidas.append(dict(alias, _forcada="fora do quadro: org trocado por endereço"))
-        # Fila: quem esta fora do quadro nao tem caixa, e o verbo devolve
-        # `persona desconhecida`. Erro le como defeito a consertar; ausencia por desenho
-        # le como desenho. A peca fica no pacote, declarada inaplicavel.
-        fila = por_id.get("fila-status")
-        if fila:
-            escolhidas = [p for p in escolhidas if p.get("id") != "fila-status"]
-            escolhidas.append(dict(fila, _inaplicavel=(
-                "fora do quadro: nao tem caixa na fila — nao recebe despacho de cadeira")))
     return sorted(escolhidas, key=lambda p: (ORDEM_VOLATILIDADE.get(p.get("volatilidade"), 9),
                                              p.get("id", "")))
 
