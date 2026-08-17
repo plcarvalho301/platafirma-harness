@@ -1,5 +1,5 @@
 {
-  "_leia": "Registro de severidade de incidente da PlataFirma. Fonte do campo `severidade` do rastreador (prd_rastreador.md 4.2) e do alvo de tempo por grau. Grau se decide por PORTA FECHADA, nunca por adjetivo: a pergunta e sempre 'quem deixou de alcancar o que, e existe rota alternativa'. Quem classifica le so este arquivo. Nenhum relogio aqui e campo: os carimbos sao `detectado`, `em_mitigacao`, `mitigado`, `resolvido`, e todo tempo sai de subtracao na projecao. Alvo e compromisso de operacao, nao promessa contratual — estourar o alvo nao muda o grau, so aparece na medicao.",
+  "_leia": "Registro de severidade de incidente da PlataFirma. Fonte do campo `severidade` do rastreador (card #466 §4.2) e do alvo de tempo por grau. Grau se decide por PORTA FECHADA, nunca por adjetivo: a pergunta e sempre 'quem deixou de alcancar o que, e existe rota alternativa'. Quem classifica le so este arquivo. Nenhum relogio aqui e campo: os carimbos sao `detectado`, `em_mitigacao`, `mitigado`, `resolvido`, e todo tempo sai de subtracao na projecao. Alvo e compromisso de operacao, nao promessa contratual — estourar o alvo nao muda o grau, so aparece na medicao.",
   "_capacidade": "incidente",
   "_dono": "claudinho-TI",
   "_delegacao": {

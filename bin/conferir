@@ -699,7 +699,7 @@ def conferir_repo(alvo, staged=False, como_json=False):
 
 
 # --- classe: commit ---------------------------------------------------------
-# O elo item<->commit do DORA (card #471, prd_rastreador.md §5.1).
+# O elo item<->commit do DORA (card #471).
 #
 # A REGUA NAO MORA AQUI, e nem no hook: mora no rastreador. Este codigo NAO tem copia do
 # formato da citacao nem da nocao de "item fechado" — ele manda a mensagem para
@@ -859,7 +859,7 @@ def conferir_commit(alvo, como_json=False):
             print("\ncommit: a mensagem cita id que o rastreador recusa.\n", file=sys.stderr)
             for r in recusas:
                 print(f"    RECUSA  item {r.get('id')} — {r.get('texto')}", file=sys.stderr)
-            print("\n    prd_rastreador.md §5.1 — a citacao no commit e o elo item<->deploy do", file=sys.stderr)
+            print("\n    card #471 — a citacao no commit e o elo item<->deploy do", file=sys.stderr)
             print("    DORA, e ela so vale se o id existir e o item estiver aberto. Ou corrija", file=sys.stderr)
             print("    o trailer `Item: <id>` no rodape da mensagem, ou tire-o: mensagem sem", file=sys.stderr)
             print("    citacao NAO e recusada.", file=sys.stderr)
