@@ -1,0 +1,303 @@
+{
+  "cadeira": "claudinho-politicas-publicas",
+  "gerado_por": "personas/chapeus/politicas-publicas/.gerar-conceitos.py",
+  "fonte": "acervo.conceito (rag-extractor-pg)",
+  "canonico": "id. rotulo e origem sao transcricao gerada, nao fonte",
+  "cross": "medido: true quando NENHUMA obra que sustenta o conceito e do dominio capacidade-estatal. null quando o conceito nao tem obra-ancora",
+  "nota": "sao 3 chapeus — tecnica, politica, mentoria. So `tecnica` esta escrito (17/08/2026); os outros dois entram aqui quando forem redigidos. Conceito usado por mais de um chapeu se declara em cada um: declara USO, nao particao.",
+  "lacunas": [
+    "teoria de mudanca — usada na materia, sem conceito no acervo (17/08/2026)"
+  ],
+  "blocos": {
+    "tecnica": [
+      {
+        "id": "73f8dad0-6c14-4f58-a937-a543ec4ccb41",
+        "slug": "estruturacao-de-problema",
+        "rotulo": "Estruturação de problema",
+        "obras_ancora": 9,
+        "origem": [
+          "arquiteturas",
+          "capacidade-estatal",
+          "estudos-ontologias",
+          "gestao-organizacional",
+          "produtos-digitais"
+        ],
+        "cross": false
+      },
+      {
+        "id": "335fd35a-d557-43b5-a56d-7450ffc90a69",
+        "slug": "politica-publica",
+        "rotulo": "Politica publica",
+        "obras_ancora": 11,
+        "origem": [
+          "capacidade-estatal",
+          "inteligencia",
+          "produtos-digitais",
+          "seguranca-privacidade"
+        ],
+        "cross": false
+      },
+      {
+        "id": "1bad7bce-4a48-4a0f-a797-ab74c01e768c",
+        "slug": "exigencia-sem-instrumento",
+        "rotulo": "Exigência sem instrumento",
+        "obras_ancora": 3,
+        "origem": [
+          "capacidade-estatal"
+        ],
+        "cross": false
+      },
+      {
+        "id": "070a4c3f-3912-48c0-9bf3-edd001a8d451",
+        "slug": "carga-prematura",
+        "rotulo": "Carga prematura",
+        "obras_ancora": 4,
+        "origem": [
+          "capacidade-estatal"
+        ],
+        "cross": false,
+        "outros_rotulos": "premature load bearing / mandato sem degrau / mandato sem escada / obrigação sem procedimento"
+      },
+      {
+        "id": "bcf7be7e-36ac-435e-b76b-8c9b76f3caf7",
+        "slug": "direcionamento-vs-implementabilidade",
+        "rotulo": "Direcionamento vs. implementabilidade",
+        "obras_ancora": 2,
+        "origem": [
+          "capacidade-estatal",
+          "gestao-organizacional"
+        ],
+        "cross": false
+      },
+      {
+        "id": "08d0c37f-d5d9-475b-a01d-19af76153e96",
+        "slug": "plano-de-gabinete",
+        "rotulo": "Plano de gabinete",
+        "obras_ancora": 1,
+        "origem": [
+          "capacidade-estatal"
+        ],
+        "cross": false,
+        "outros_rotulos": "alto-modernismo / high modernism / ideologia alto-modernista"
+      },
+      {
+        "id": "bbd10b23-7dd6-4b69-8743-8a2c9c04eb47",
+        "slug": "metis",
+        "rotulo": "Metis",
+        "obras_ancora": 2,
+        "origem": [
+          "capacidade-estatal"
+        ],
+        "cross": false,
+        "outros_rotulos": "manha / conhecimento-pratico-local"
+      },
+      {
+        "id": "0df02c98-bb01-40d6-bba6-f618851c8a69",
+        "slug": "gap-desenho-realidade",
+        "rotulo": "Gap desenho-realidade",
+        "obras_ancora": 4,
+        "origem": [
+          "gestao-organizacional",
+          "produtos-digitais"
+        ],
+        "cross": true
+      },
+      {
+        "id": "ef970a03-3817-4283-a7cf-345935a21bba",
+        "slug": "capacidade-estatal",
+        "rotulo": "Capacidade estatal",
+        "obras_ancora": 3,
+        "origem": [
+          "capacidade-estatal"
+        ],
+        "cross": false,
+        "outros_rotulos": "state capacity"
+      },
+      {
+        "id": "825f0211-1b51-4e37-b81b-28ee5f58868f",
+        "slug": "armadilha-de-capacidade",
+        "rotulo": "Armadilha de capacidade",
+        "obras_ancora": 13,
+        "origem": [
+          "capacidade-estatal"
+        ],
+        "cross": false
+      },
+      {
+        "id": "fb5f2233-dd61-4ca6-8281-3a8efe63a854",
+        "slug": "capacidade-absortiva",
+        "rotulo": "Capacidade absortiva",
+        "obras_ancora": 2,
+        "origem": [
+          "capacidade-estatal"
+        ],
+        "cross": false
+      },
+      {
+        "id": "9906cc73-0ba0-4814-b093-ebb7759e1804",
+        "slug": "adaptacao-iterativa",
+        "rotulo": "Adaptação iterativa orientada a problema",
+        "obras_ancora": 2,
+        "origem": [
+          "capacidade-estatal"
+        ],
+        "cross": false,
+        "outros_rotulos": "PDIA / problem driven iterative adaptation"
+      },
+      {
+        "id": "8006b9bb-c00c-4690-b43d-9e60fff5d4b2",
+        "slug": "retencao-estrutural",
+        "rotulo": "Retenção estrutural",
+        "obras_ancora": 1,
+        "origem": [
+          "capacidade-estatal"
+        ],
+        "cross": false,
+        "outros_rotulos": "conhecimento inscrito no artefato / arquitetura que retém / piso de capacidade"
+      },
+      {
+        "id": "80753f87-72a5-45c4-bc1f-e58f7d778387",
+        "slug": "responsabilidade-de-traduzir",
+        "rotulo": "Responsabilidade de traduzir",
+        "obras_ancora": 3,
+        "origem": [
+          "capacidade-estatal"
+        ],
+        "cross": false,
+        "outros_rotulos": "lado-da-traducao"
+      },
+      {
+        "id": "5642ab3d-3a0c-486d-b944-fc4ea5a988aa",
+        "slug": "legibilidade-do-sistema",
+        "rotulo": "Legibilidade do sistema",
+        "obras_ancora": 3,
+        "origem": [
+          "capacidade-estatal"
+        ],
+        "cross": false,
+        "outros_rotulos": "ilegibilidade / inscrito sem ordem / nomenclatura sobreposta"
+      },
+      {
+        "id": "2a04f8f9-b977-47a9-a8c6-37d75220519e",
+        "slug": "governanca-federada",
+        "rotulo": "Governança federada",
+        "obras_ancora": 1,
+        "origem": [
+          "capacidade-estatal"
+        ],
+        "cross": false,
+        "outros_rotulos": "core único com N executores / vocabulário em colegiado / autonomia com padrão comum"
+      },
+      {
+        "id": "ae655a4d-4ad0-4781-a7b4-3711a934d42e",
+        "slug": "antinomia-de-coordenacao",
+        "rotulo": "Antinomia de coordenação",
+        "obras_ancora": 1,
+        "origem": [
+          "capacidade-estatal"
+        ],
+        "cross": false
+      },
+      {
+        "id": "3b16a9dc-14cd-4e71-b847-759d864ab84b",
+        "slug": "meta-governanca-normativa",
+        "rotulo": "Meta-governança normativa",
+        "obras_ancora": 3,
+        "origem": [
+          "capacidade-estatal"
+        ],
+        "cross": false
+      },
+      {
+        "id": "b6c1b841-def4-43cb-b390-7d25139f3b96",
+        "slug": "isomorfismo-institucional",
+        "rotulo": "Isomorfismo institucional",
+        "obras_ancora": 3,
+        "origem": [
+          "capacidade-estatal",
+          "gestao-organizacional"
+        ],
+        "cross": false
+      },
+      {
+        "id": "739304ef-1ebf-4c66-b79c-20c5a51fafc0",
+        "slug": "gradiente-de-isomorfismo-na-importacao",
+        "rotulo": "Gradiente de isomorfismo na importação",
+        "obras_ancora": 1,
+        "origem": [
+          "capacidade-estatal"
+        ],
+        "cross": false
+      },
+      {
+        "id": "f57852f0-73bd-4bbb-b8cc-84a1c1f0c785",
+        "slug": "nova-gestao-publica",
+        "rotulo": "Nova gestao publica",
+        "obras_ancora": 2,
+        "origem": [
+          "capacidade-estatal"
+        ],
+        "cross": false,
+        "outros_rotulos": "new public management / modelo gerencial"
+      },
+      {
+        "id": "40b859f1-238a-40a8-a8ca-7947298666ab",
+        "slug": "avaliacao-de-politica-publica",
+        "rotulo": "Avaliacao de politica publica",
+        "obras_ancora": 2,
+        "origem": [
+          "capacidade-estatal",
+          "produtos-digitais"
+        ],
+        "cross": false,
+        "outros_rotulos": "avaliacao-politicas-publicas"
+      },
+      {
+        "id": "8c28a44d-0827-4b7c-ba0b-1f0bdecb0f47",
+        "slug": "requisito-verificavel",
+        "rotulo": "Requisito verificável",
+        "obras_ancora": 6,
+        "origem": [
+          "capacidade-estatal",
+          "seguranca-privacidade"
+        ],
+        "cross": false
+      },
+      {
+        "id": "a004785e-b42f-416b-b163-9c980539b328",
+        "slug": "gestao-por-metricas",
+        "rotulo": "Gestão por métricas",
+        "obras_ancora": 18,
+        "origem": [
+          "capacidade-estatal",
+          "engenharia-software",
+          "gestao-organizacional",
+          "ia"
+        ],
+        "cross": false
+      },
+      {
+        "id": "0f3e6bd3-2fdf-4b61-9ae2-bd95359d272b",
+        "slug": "mudanca-de-comportamento",
+        "rotulo": "Mudanca de comportamento",
+        "obras_ancora": 4,
+        "origem": [
+          "gestao-organizacional",
+          "produtos-digitais"
+        ],
+        "cross": true,
+        "outros_rotulos": "outcome / Entrega vs. resultado / mudanca-de-comportamento-como-criterio / Resultado sobre entrega"
+      },
+      {
+        "id": "f7c50beb-92eb-4f27-bde2-2128d9c78095",
+        "slug": "orcamento-publico",
+        "rotulo": "Orcamento publico",
+        "obras_ancora": 1,
+        "origem": [
+          "estudos-ontologias"
+        ],
+        "cross": true
+      }
+    ]
+  }
+}
