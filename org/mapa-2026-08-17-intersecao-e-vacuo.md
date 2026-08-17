@@ -48,7 +48,30 @@ tipo de coisa — uma gerência de organograma cuja régua era a POSTURA da base
 palavra. Nenhuma tinha ido derrubá-la antes porque nenhuma pergunta chegava endereçada a
 ela. Já é regra: `org:0017`, em `platafirma-arquitetura@docs/org-regras.md`.
 
-## 3. Sobreposições vivas
+## 3. Correção do dono, 17/08 — as três "sobreposições" não eram sobreposição
+
+**O papel do arquiteto foi lido errado por mim e pelas cadeiras.** Correção do dono, em
+sessão de chat, 17/08/2026:
+
+> Arquiteto **qualifica as decisões de todo mundo**, não decide nada. É literalmente o
+> papel do arquiteto corporativo na vida real.
+
+O que isso derruba, e derruba de uma vez S-1, S-2 e S-3: eu tratei `arq:0059` como regra
+de competência — quem pode criar unidade, quem manda no nome da entidade, quem detém a
+capacidade. Não é. É régua de qualificação, e régua de qualificação não disputa
+território com ninguém: ela melhora a decisão de quem já a tomava. Os três pares abaixo
+ficam no mapa porque a matéria é real, mas **nenhum deles é disputa de decisão**, e
+nenhum pede corte de fronteira.
+
+**O que o dono decidiu no lugar:** uma linha de lembrete antes de bater o martelo de
+capacidade nova. **Não é gate.** Hoje quem lembra é sempre ele, que olha e segue a
+arquitetura no dia a dia; a linha divide esse trabalho. Implementado no mesmo turno:
+`persona prover|designar|dispensar|remover` imprime o lembrete em stderr e **não
+bloqueia**.
+
+## 3.1 Os três pares, relidos
+
+
 
 ### S-1 · `arquiteto:dominio` × `dados:ontologia` — a mesma pergunta, dois donos
 
@@ -68,6 +91,10 @@ linha do arquiteto foi necessária. Isso é o corte:
   mesma entidade, e onde se põe a anticorrupção. É `arq:0012`, e é o caso que nenhuma
   cadeira sozinha decidia.
 
+**Não é disputa.** O arquiteto não decide o nome da entidade nem o do contexto: ele
+qualifica o corte que dados propõe. O caso de 17/08 é a prova — dados decidiu, e a
+qualificação não foi necessária porque não havia dois contextos disputando.
+
 **Por que não é urgente.** `dominio` é chapéu **latente**: o gatilho é a internalização do
 primeiro módulo, e nada de fora foi internalizado. O vazio é exógeno — não é medida da
 função, é medida de que a ocasião não chegou. Enquanto não disparar, a matéria roda em
@@ -86,10 +113,13 @@ capacidades**. O resultado provavelmente está certo — as cadeiras derrubaram 
 classe de questão, que é vizinha da régua de capacidade —, mas o ato correu sem a
 conferência que `arq:0059` tornou obrigatória no dia anterior.
 
-**Corte proposto.** A redação e o registro continuam de `rh`; a **existência** da unidade
-se confere contra o mapa antes do evento no ledger. Operacionalmente: `persona designar` e
-`persona dispensar` passam a exigir a capacidade nomeada na `--nota`. Quem decide se a
-capacidade existe é o arquiteto; quem escreve continua sendo eu.
+**Resolvido pelo dono, e não como eu propus.** Eu havia proposto exigir a capacidade
+nomeada na `--nota` — isto é, um gate. O dono recusou o gate: o lembrete basta, porque o
+arquiteto qualifica e não autoriza. Quem bate o martelo continua sendo o dono, e o ledger
+não espera parecer de ninguém. Implementado como duas linhas em stderr no verbo `persona`.
+
+Fica registrado o fato que originou o item, porque ele é meu: o ato de 17/08 correu sem
+eu ter olhado o mapa de capacidades uma única vez.
 
 ### S-3 · `produto:canais` × `arquiteto:negocio` — a capacidade e o mapa da capacidade
 
@@ -97,8 +127,9 @@ capacidade existe é o arquiteto; quem escreve continua sendo eu.
 capacidade de canais do BizBOK como razão declarada (registrado no próprio `arq:0059`), e
 `negocio` é o chapéu que detém o BizBOK.
 
-**Corte proposto, e resolve por si.** O arquiteto é dono **do mapa**, não das capacidades
-que o mapa nomeia. Uma capacidade existe uma vez e mora numa unidade; o mapa diz onde. Sem
+**Resolve por si, e a correção do dono confirma por outro caminho.** O arquiteto é dono
+**do mapa**, não das capacidades que o mapa nomeia — e não é dono das decisões que o mapa
+qualifica. Uma capacidade existe uma vez e mora numa unidade; o mapa diz onde. Sem
 essa linha, todo chapéu de negócio vira revisor de todo chapéu operacional das outras
 cadeiras — que é exatamente o padrão que `arq:0034` já derrubou uma vez, na partição
 interna de domínio.
@@ -140,19 +171,14 @@ morada do achado de campo do titular externo (card 205, dormente com gatilho).
   erro. Isso não é vácuo de dono — é dívida de acervo, dona claudinho-dados, e está na
   minha carteira como pedido de obra.
 
-## 6. Decisões do dono
+## 6. O que o dono decidiu em 17/08
 
-1. **S-1 · corte `dominio` × `ontologia`** — identidade e nome canônico da entidade em
-   `dados`; contexto que detém o significado em `arquiteto`. ✅ recomendado: é o corte que
-   o caso ocorrido de 17/08 já praticou sem ninguém decidir.
-2. **S-2 · `persona designar|dispensar` passa a exigir a capacidade nomeada** — a régua de
-   existência é `arq:0059`, do arquiteto; a redação continua de `rh`. ✅ recomendado, e é
-   contra o meu próprio conforto: acrescenta uma conferência ao meu ato.
-3. **S-3 · o arquiteto é dono do mapa de capacidades, não das capacidades** — vai a
-   `org-regras.md` como emenda a `arq:0059`. ✅ recomendado.
-4. **V-3 · classificador de superfície externa** — é régua de fronteira, e por isso do
-   arquiteto, não de quem sobe nem de quem audita. ⚪ hipótese: o arquiteto não foi ouvido
-   sobre isso, e o achado é de segurança. Confirma-se perguntando a ele.
-5. **V-1, V-2, V-4, V-5** — viram card com dono, ou ficam declarados como dívida sem prazo.
-   ✅ recomendo card para V-1 e V-4 (os dois têm consumidor esperando) e dívida declarada
-   para V-2 e V-5, que não têm.
+1. **S-1, S-2 e S-3 juntos** — o arquiteto qualifica, não decide. Não há corte de fronteira
+   a fazer, e o instrumento é **lembrete, não gate**: `persona prover|designar|dispensar|
+   remover` aponta o mapa de capacidades e segue em frente. Feito no mesmo turno.
+2. **Os sete vácuos viram card**, sem triagem prévia — o dono organiza depois que
+   claudinha-produto corrigir a UI do rastreador.
+3. **V-3 · classificador de superfície externa** — segue como o único cuja atribuição eu
+   marquei em hipótese, e a hipótese muda com a correção acima: se o arquiteto qualifica,
+   ele não é o classificador, é quem julga o critério de classificação. O card vai sem
+   dono cravado.

@@ -27,6 +27,14 @@ por execução, decisão fechada nunca esvazia. Spec `montagem-de-sessao` §2.
 - **A conduta não pode chegar pelo ambiente.** O que precisa ser igual nas três
   superfícies é servido por ato. 16/08/2026 · spec §8
 
+## Papéis (card #189)
+
+- **O arquiteto qualifica, não decide.** Ele melhora a decisão de quem já a tomava —
+  é o papel do arquiteto corporativo na vida real. `arq:0059` é régua de qualificação,
+  não regra de competência, e não disputa território com cadeira nenhuma. Consulta à
+  arquitetura antes de capacidade nova é **lembrete, nunca gate**. 17/08/2026 · correção
+  do dono em sessão de chat; implementado em `bin/persona`
+
 ## Prioridade
 
 - **Dívida do `persona conferir` está despriorizada** até a arquitetura de sessão

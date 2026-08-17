@@ -151,7 +151,17 @@ case "${1:-}" in
     git push -q origin HEAD
     echo "salvo · $(idade)"
     ;;
-  prover|designar|dispensar|remover|afastar|reverter|desligar|foto|filme)
+  prover|designar|dispensar|remover)
+    # LEMBRETE, NAO GATE (dono, 17/08/2026). Ato que cria ou move unidade organizacional
+    # tem uma pergunta de arquitetura do lado — capacidade nova, ou capacidade que ja
+    # existe noutra unidade. O arquiteto QUALIFICA a decisao, nao a toma: quem bate o
+    # martelo continua sendo o dono, e o ledger nao espera parecer de ninguem. Hoje quem
+    # lembra e sempre o dono; esta linha divide esse trabalho com ele.
+    echo "lembrete: passou pelo mapa de capacidades? platafirma-arquitetura@docs/arquitetura-negocio-operacao.md · arq:0059" >&2
+    echo "          claudinho-arquiteto qualifica; nao e gate e nao bloqueia este ato." >&2
+    exec python3 "$REPO/bin/_persona-org.py" "$@"
+    ;;
+  afastar|reverter|desligar|foto|filme)
     exec python3 "$REPO/bin/_persona-org.py" "$@"
     ;;
   *)
