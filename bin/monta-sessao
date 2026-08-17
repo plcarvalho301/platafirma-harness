@@ -98,11 +98,15 @@ def de_abertura(pecas, cadeira):
     por_id = {p.get("id"): p for p in pecas}
     escolhidas = [p for p in pecas if (p.get("gatilho") or {}).get("evento") == "abertura"]
     if fora:
-        # `antirreabertura` e mecanica interna da casa (montagem de sessao, spec, divida
-        # de verbo). Servida na abertura a quem esta fora do quadro, condiciona o primeiro
-        # turno com o de dentro — e para politicas-publicas a exogenia E o ativo (#189,
-        # decisao do dono em 17/08). Medido: 606 tokens de dentro da casa em 4.997.
-        escolhidas = [p for p in escolhidas if p.get("id") not in ("org", "antirreabertura")]
+        # Tres pecas sao a casa por dentro, e nenhuma delas se poda por inferencia:
+        # `org` (quem decide o que), `antirreabertura` (mecanica de montagem de sessao) e
+        # `tool-manifest-geral` (o indice operacional — fila, deploy, infra, cards). Quem
+        # esta fora do quadro recebe SO o manifesto da propria cadeira, e a regra de
+        # fechamento vive na linha FERRAMENTAL da persona: fora da lista, nao chama.
+        # Decisao do dono, 17/08 — o custo e manifesto de cadeira que comeca incompleto,
+        # e a falta aparece como falta, na cara, em vez de vazar como excesso.
+        escolhidas = [p for p in escolhidas
+                      if p.get("id") not in ("org", "antirreabertura", "tool-manifest-geral")]
         alias = por_id.get("alias-cadeiras")
         if alias:
             escolhidas.append(dict(alias, _forcada="fora do quadro: org trocado por endereço"))
