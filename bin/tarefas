@@ -32,7 +32,10 @@ uso:
   tarefas criar "<título>" [--desc "<txt>"|--desc-stdin]
                 [--nivel épico|feature|story|task] [--cadeira <c>] [--pai <id>]
   tarefas comentar <id> ["<txt>"]         anexa ao corpo do item; sem texto, lê stdin
-  tarefas fechar <id> [--como <estado>]   default: entregue
+  tarefas mover <id> <estado> [--motivo "<txt>"] [--englobado-em <id>]
+                                          move o card pelo fluxo; a recusa diz para onde
+                                          se PODE ir a partir do estado atual
+  tarefas fechar <id> [--como <estado>]   fecha; default: entregue. Para mover, `mover`.
   tarefas sub <pai> <filho>               declara <filho> filho de <pai>
   tarefas estados                         os estados do registro, com fase
   tarefas api <MÉTODO> <caminho>          escotilha, sem corpo
@@ -49,21 +52,38 @@ FIM
 
 _hdr_sujeito() { [ -n "$QUEM" ] && printf '%s' "x-auth-request-preferred-username: $QUEM"; }
 
+# RECUSA DA API NÃO É SILENCIOSA — card #224. Era `-sfS`, e `-f` DESCARTA O CORPO: toda
+# recusa de regra chegava à cadeira como `curl: (22) ... error: 400`, sem uma palavra sobre
+# o que a máquina disse. Com `--fail-with-body` (curl 8.5 no host) o corpo vem, e é ele que
+# carrega o texto da máquina — inclusive a lista de destinos que este card mandou escrever.
+_recusa() { # lê o corpo do erro em $1 e devolve a mensagem da API
+  local erro; erro=$(printf '%s' "$1" | jq -r '.erro // empty' 2>/dev/null || true)
+  printf '%s\n' "${erro:-${1:-recusa sem corpo}}" >&2
+  return 1
+}
+
 busca() { # busca MÉTODO /caminho
+  local saida
   if [ -n "$QUEM" ]; then
-    curl -sfS -X "$1" "$BASE$2" -H "x-auth-request-preferred-username: $QUEM"
+    saida=$(curl -sS --fail-with-body -X "$1" "$BASE$2" \
+                 -H "x-auth-request-preferred-username: $QUEM") || _recusa "$saida"
   else
-    curl -sfS -X "$1" "$BASE$2"
+    saida=$(curl -sS --fail-with-body -X "$1" "$BASE$2") || _recusa "$saida"
   fi
+  printf '%s' "$saida"
 }
 
 envia() { # envia MÉTODO /caminho  (corpo JSON em stdin)
+  local saida corpo; corpo=$(cat)
   if [ -n "$QUEM" ]; then
-    curl -sfS -X "$1" "$BASE$2" -H 'Content-Type: application/json' \
-         -H "x-auth-request-preferred-username: $QUEM" -d @-
+    saida=$(printf '%s' "$corpo" | curl -sS --fail-with-body -X "$1" "$BASE$2" \
+                 -H 'Content-Type: application/json' \
+                 -H "x-auth-request-preferred-username: $QUEM" -d @-) || _recusa "$saida"
   else
-    curl -sfS -X "$1" "$BASE$2" -H 'Content-Type: application/json' -d @-
+    saida=$(printf '%s' "$corpo" | curl -sS --fail-with-body -X "$1" "$BASE$2" \
+                 -H 'Content-Type: application/json' -d @-) || _recusa "$saida"
   fi
+  printf '%s' "$saida"
 }
 
 # --- corpo: o rastreador guarda HTML, como o Vikunja guardava ---------------
@@ -206,12 +226,50 @@ comentar() {
     | jq -r '"comentário anexado ao item \(.id)"'
 }
 
+# MOVER É O ATO, E O NOME É O ATO — card #224. A capacidade sempre existiu: o PATCH aceita
+# qualquer estado do registro, e quem valida é a máquina. O que não existia era um verbo com
+# o nome do que se faz, e o efeito observável disso foi medido no quadro de 17/08 — `Em
+# execução` com UM item e `Entregue` com 145. Ninguém procura `fechar` para mover um card
+# pelo fluxo, então ninguém operava fluxo pelo rastreador.
+#
+# `--motivo` é primeira classe porque a máquina o EXIGE em parte das transições (volta ao
+# funil, §4.1; `recusada`, §6.3) e porque, sem ele aqui, a cadeira descobria a exigência
+# levando erro. A lista de destinos válidos vem da API, derivada da própria máquina: este
+# verbo não guarda tabela de arestas, e é isso que o mantém correto quando um estado novo
+# entra no registro por INSERT.
+mover() {
+  local id; id=$(so_id "${1:?uso: tarefas mover <id> <estado> [--motivo \"...\"]}")
+  local destino="${2:?uso: tarefas mover <id> <estado> [--motivo \"...\"]}"; shift 2
+  local motivo="" elo=""
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --motivo)       motivo="${2:?--motivo pede texto}"; shift 2 ;;
+      --englobado-em) elo="${2:?--englobado-em pede o id que absorveu}"; shift 2 ;;
+      *) echo "opção desconhecida: $1" >&2; exit 2 ;;
+    esac
+  done
+  jq -n --arg e "$destino" --arg m "$motivo" --arg g "$elo" \
+     '{estado:$e}
+      + (if $m == "" then {} else {motivo:$m} end)
+      + (if $g == "" then {} else {englobado_em:($g|tonumber)} end)' \
+    | envia PATCH "/itens/$id" \
+    | jq -r '"item \(.id) → \(.estado_nome): \(.titulo)"'
+}
+
+# `fechar` CONTINUA EXISTINDO PARA FECHAR, e deixa de ser a porta de mover. Não morre: 145
+# itens do acervo e os scripts da fita chamam por ele, e matar um verbo em uso para corrigir
+# um nome é trocar um defeito de descoberta por uma quebra. `--como` com estado NÃO terminal
+# passa a avisar e a delegar — o aviso vai a stderr, então nada que consome a saída quebra.
 fechar() {
   local id; id=$(so_id "$1"); shift || true
   local como="entregue"
   [ "${1:-}" = "--como" ] && { como="$2"; shift 2; }
-  jq -n --arg e "$como" '{estado:$e}' | envia PATCH "/itens/$id" \
-    | jq -r '"item \(.id) → \(.estado_nome): \(.titulo)"'
+  if ! busca GET "/registro" \
+       | jq -e --arg e "$como" '.estados[]? | select(.estado==$e and .natureza=="terminal")' \
+       >/dev/null 2>&1; then
+    echo "aviso: \`$como\` não é estado terminal — \`fechar\` fecha; para mover pelo fluxo use \`tarefas mover $id $como\`" >&2
+  fi
+  mover "$id" "$como" "$@"
 }
 
 # Filho declara o pai, e o pai tem de ser de nível estritamente MENOR — a restrição é do
@@ -232,6 +290,7 @@ case "$cmd" in
   ler)         ler "${1:?uso: tarefas ler <id>}" ;;
   criar)       criar "$@" ;;
   comentar)    comentar "${1:?uso: tarefas comentar <id> [\"<txt>\"]}" "${2:-$(cat)}" ;;
+  mover)       mover "$@" ;;
   fechar)      fechar "${1:?uso: tarefas fechar <id>}" "${@:2}" ;;
   sub)         subtarefa "${1:?pai}" "${2:?filho}" ;;
   estados)     estados ;;
