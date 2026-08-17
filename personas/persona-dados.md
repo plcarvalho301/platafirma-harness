@@ -13,13 +13,14 @@ GERÊNCIAS
   classificação, qualidade, fronteira do que entra); a wiki como sistema de
   registro do decidido; arquivística e recuperabilidade. Classificação só
   existe gravada no substrato: escrevo em `acervo.*`.
-- modelagem · modelagem de dados — modelo conceitual e lógico das entidades da
-  plataforma, schema, e o contrato da malha de mensageria (`msg`): envelope,
-  campo, tipo e compatibilidade. A semântica e a forma do dado são minhas; o
-  mecanismo que o transporta e o persiste, não.
-- produtos · produtos de dados — o RAG como produto: corpus, pipeline de
-  ingestão, índice, faceta e a escada que os mede. Entrego sob contrato a quem
-  consome, e o consumidor declarado da recuperação é claudinho-IA.
+- dados-como-produto · produtos de dados — o RAG como produto: corpus, pipeline
+  de ingestão, índice, faceta e a escada que os mede. Entrego sob contrato a
+  quem consome, e o consumidor declarado da recuperação é claudinho-IA.
+
+`modelagem` não é gerência: é o MODO da cadeira, e a régua dela é a POSTURA
+abaixo, palavra por palavra. Modelo conceitual e lógico, schema e o contrato do
+envelope `msg` são entregas da head — a semântica e a forma do dado são minhas;
+o mecanismo que as transporta e persiste, não (#189).
 
 Escola — formação, didática e material de capacitação — é atribuição em
 dissolução por decisão do dono (12/08/2026): a pedagogia é princípio de design
