@@ -3,176 +3,113 @@
 O que este chapéu aprendeu e vale além de um expediente. Fato de negócio não mora
 aqui: desce a card, commit ou wiki. Corpo lido sob demanda (`mesa caderno construcao`).
 
-## Custo por giro é medível fora do harness do Claude (medido 14/08)
+## Entrega de tela se aceita USANDO, não medindo (medido 16/08, custou a onda 2)
 
-O `result` do `claude -p --output-format stream-json` traz `total_cost_usd`,
-`usage` (input, output, cache criado, cache lido) e `is_error` por giro, sem
-instrumentação nossa. O `rate_limit_event` traz `resetsAt`.
+Mergeei quatro fatias da onda 2 do rastreador, rodei seis suítes de aceite — todas verdes
+—, migrei o banco e promovi. O dono abriu no celular e em um minuto achou três defeitos,
+dois bloqueantes: a vista board (a PADRÃO do produto, PRD §6.2) não existia, e clicar no
+título editava o título em vez de abrir o item, deixando o corpo do card inalcançável.
 
-- **O custo não é novo — a visibilidade é.** Toda fita já paga a abertura de
-  contexto hoje, em toda cadeira; dentro do harness do Claude ela some na
-  assinatura. Comparar contra zero é o erro.
-- **A chave de junção é a sala como fita** (`uuid5(room_id)`): é o que liga custo
-  a cadeira, a chapéu e a card. Sem ela, o número existe e não agrega.
-- **Onde vale mais do que aqui dentro:** no que NÃO é cadeira nossa — Jaiminho e
-  qualquer harness entregue a terceiro. Medição por giro transforma "confia" em
-  fatura, e é requisito de venda antes de ser conforto operacional.
+- **Prova verde mede o que o card pediu; uso mede o que o produto é.** Antes de aceitar
+  tela, EXECUTE a tarefa do usuário no aparelho dele — abrir a lista, achar um card, ler o
+  texto —, não só rode a suíte e leia o diff.
+- **Card de tela se recorta contra as três fontes** (PRD, navegação, affordance). Recortei
+  o #468 só contra a de navegação, e a vista padrão do produto nunca entrou em card nenhum.
+  A fábrica entregou o card que recebeu; a lacuna foi do despacho.
+- **Defeito de layout que esconde o único caminho para o conteúdo é bloqueante**, não
+  cosmético: o estouro de largura em 360px era o que escondia o verbo `abrir`.
 
-## Cliente Matrix: Classic, não X (medido 14/08)
+## Merge de fatias paralelas: o self-check não enxerga SQL (medido 16/08)
 
-O Synapse autentica pelo `oidc_providers` embutido, que é o SSO **legado**
-(`m.login.sso`). Element X só faz SSO contra Matrix Authentication Service (MAS) e
-não há plano de suportar servidor sem MAS — abre e não deixa entrar. Element
-Classic (o ex-Element Android) fala `m.login.sso` e é o cliente da instância.
+Quatro fatias tocaram os mesmos três arquivos. Resolvendo conflito, uni os dois lados
+dentro de uma string de SQL — e ficaram DUAS consultas na mesma constante. `python3
+api/logica.py` passou (string válida é Python válido) e o Postgres recusou em runtime: 44
+provas caindo em `502 falha interna (SyntaxError)`.
 
-- **Consequência de desenho:** pôr MAS na frente do Synapse é o que destrava o
-  cliente que a Element trata como principal. Decisão de claudinho-seguranca
-  (identidade), não minha — eu implemento.
-- **Prazo alheio que corre sozinho:** o Classic avisa que a partir de out/2026
-  dispositivo não verificado para de enviar e receber. E2EE é v1 na minuta 0002,
-  sem data. Não é dívida técnica: é relógio de terceiro sobre o nosso escopo.
-- **Localpart é irreversível.** O MXID copia o `preferred_username` do realm e vai
-  assado em todo evento. Username feio no IdP vira identidade permanente no chat:
-  conferir o realm ANTES do primeiro login, não depois.
-
-## O precedente de tela da casa tem fronteira (medido 15/08, no F9)
-
-A plataforma tinha um padrão só de tela — server-rendered em starlette, sem
-framework, sem build, sem JavaScript (`harness-controle`, `acervo-api/tela.html`).
-Tratei como regra geral e não é: é o padrão de UMA classe de tela.
-
-- **A fronteira:** tela de leitura e de operação pontual (POST-redirect-GET, meta
-  refresh) fica no padrão da casa. Tela de trabalho — edição concorrente, seleção
-  em lote, resultado visível antes da confirmação do servidor, erro no item e não
-  na página — exige estado local no cliente e reconciliação, e o padrão da casa
-  não alcança.
-- **Precedente da casa não vence régua posterior.** No F9 o padrão sem JS
-  reproduziria exatamente o defeito que reprovou o Redmine na seleção. Quando o
-  precedente é anterior ao requisito, ele é insumo, não veredito.
-## Fita própria contra fita própria, mesma árvore (medido 15/08, verbo `minuta`)
-
-A regra de worktree por fatia (`fabrica.md`, `ti/fluxo-worktree-por-fatia`) cobre
-fita de fábrica contra cadeira — não cobre fita minha contra fita minha. Duas
-sessões minhas (host/CLI e sala do chat) escreveram no mesmo `platafirma-harness`
-ao mesmo tempo, sem coordenação. Não deu conflito porque o commit de uma fechou
-antes de a outra tocar os mesmos arquivos — timing, não desenho.
-
-Antes de editar arquivo compartilhado numa fita: `git log -3` e olhar o
-timestamp do topo. Commit com poucos minutos de idade é sinal de outra sessão
-viva na mesma árvore, não histórico frio.
+- **Conflito dentro de literal (SQL, HTML, template) não se resolve por união mecânica.**
+  Fora do literal, colar os dois lados costuma valer; dentro dele, o texto tem gramática
+  própria que nenhum self-check de módulo puro lê.
+- **Depois de qualquer resolução, bancada de pé e as suítes das fatias VIZINHAS**, não só
+  a da fatia que acabou de entrar. Foi a suíte do #466, alheia ao meu conflito, que
+  acusou.
+- **Bancada usa TAG DE IMAGEM própria.** A `:local` é compartilhada com a stack viva:
+  `docker compose build` numa bancada reescreve a imagem que produção sobe no próximo
+  `up -d`.
+- **Suíte do rastreador ESCREVE.** Rodada contra a instância viva, criou 31 itens e 70
+  transições no acervo real. A trilha é append-only por trigger — desfazer exige derrubar
+  a trigger DENTRO da transação e reerguê-la antes do commit.
 
 ## Card para a fábrica: fronteira sim, passo a passo não (medido 15/08, F10)
 
-Régua do dono: dizer a ordem interna entre cards quebra a execução, porque o
-orquestrador multiagente do Code fatia melhor do que o card fatia. O que o card
-deve carregar é o que a fábrica NÃO pode descobrir sozinha:
+Régua do dono: dizer a ordem interna entre cards quebra a execução — o orquestrador
+multiagente do Code fatia melhor do que o card fatia. O card carrega o que a fábrica NÃO
+pode descobrir sozinha: **dependência real entre cards** e só ela; **fronteira que não se
+atravessa** (worktree por card, `git add <caminho>`, nada de arquivo de outra fatia, push e
+para); **documento superado nomeado pelo nome**, porque o morto continua no repo e lê bem;
+**parar e perguntar quando a decisão faltar**, nunca improvisar substituto; e **prova de
+aceite colada em comentário, com o SHA da branch** — sem isso, card não entregue.
 
-- **Dependência real entre cards**, e só ela — o que não pode começar antes do
-  quê. Paralelismo interno, ordem de ataque e uso de subagente são dela.
-- **Fronteira que não se atravessa**: worktree por card, `git add <caminho>`,
-  nenhuma edição de arquivo de outra fatia, push da branch e para.
-- **Documento superado nomeado pelo nome.** Card que aponta canônico novo sem
-  dizer qual documento morreu deixa a fábrica construir contra o morto — ele
-  continua no repo e lê bem.
-- **O que fazer quando a decisão faltar**: parar e perguntar ao dono, nunca
-  improvisar substituto. Vale sobretudo para "o componente que o card pede só
-  existe na versão paga".
-- **Prova de aceite colada em comentário**, com o SHA da branch. Card sem a saída
-  da régua colada é card não entregue.
+**Card escrito e não despachado é papel.** Achado de uso vira card E despacho no mesmo
+giro; parar no card, no fim do ciclo, é burocracia com aparência de método.
+
+## O precedente de tela da casa tem fronteira (medido 15/08, no F9)
+
+A casa tinha um padrão só de tela — server-rendered em starlette, sem framework, sem
+build, sem JS. É o padrão de UMA classe de tela, não regra geral.
+
+- Tela de leitura e operação pontual fica no padrão da casa. Tela de trabalho — edição
+  concorrente, lote, resultado antes da confirmação, erro no item — exige estado local e
+  reconciliação, e o padrão não alcança.
+- **Precedente anterior ao requisito é insumo, não veredito.**
+
+## Instrumento mede o PRODUTOR, nunca a instância viva (medido 16/08, custou a sessão)
+
+`conferir superficie` julgava as superfícies lendo os `.mcp.json` dos cwd vivos. O arquivo
+é rastreado no repo: o gate lia N cópias do mesmo arquivo e chamava aquilo de medição. Ao
+limpar as worktrees, o veredito virou sozinho e passou a reprovar commit de toda cadeira.
+
+**Antes de escrever a medição, pergunte quem PRODUZ o que você vai medir.** Se a resposta
+for "o próprio disco", o instrumento reporta arqueologia. Não havendo produtor, ISSO é o
+achado — declarar a ausência vale mais que medir a sobra. Forma que ficou: cada superfície
+declara `produtor` em `superficies.json`; instância viva vira observação de deriva e não
+muda veredito.
+
+E o par: **quem mede tem de perguntar com a chave que o verbo usa.** `conferir sessao`
+dava "não medida" porque perguntava `TI` onde `fila` exige `claudinho-TI`. Instrumento e
+coisa medida resolvem a chave pela MESMA fonte.
+
+## O canal engole a chamada, e o comando roda assim mesmo (medido 15/08, duas vezes)
+
+`run_command` que volta como "Error occurred during tool execution" **executou no host**: o
+erro é do canal, a resposta não chega e a sessão não guarda memória da chamada. Cheguei a
+acusar "ator não identificado commitando neste tree"; o ator era eu.
+
+REGRA: erro de execução do canal → antes de qualquer teoria,
+`~/AI/var/log/ops/ops-AAAA-MM-DD.jsonl` e `git reflog`. Vale sobretudo para comando com
+efeito colateral, onde supor que não rodou leva a rodar duas vezes.
+
+E a metade que faltava: **o audit diz O QUE rodou, nunca QUEM rodou** — `sessao` é a conexão
+do conector, não a fita, e `sujeito` é sempre o token do dono. Quando o QUEM não aparece, o
+primeiro candidato sou eu.
+
+## Duas fitas minhas na mesma árvore não têm regra (medido 15/08)
+
+A regra de worktree por fatia cobre fábrica contra cadeira, não fita minha contra fita
+minha. Antes de editar arquivo compartilhado: `git log -3` e olhar o timestamp do topo.
+Commit com poucos minutos de idade é outra sessão viva, não histórico frio.
+
+## Diretório descartável vai em `~/AI/var/`, nunca em `/tmp` (medido 15/08)
+
+`/tmp` é terreno comum entre agentes com o mesmo uid, e o slug converge porque sai do nome
+do card que os dois leram. Rodei `rm -rf` num caminho que outro usava e apaguei o trabalho
+dele. Não há lock e não há aviso.
 
 ## `tarefas sub` é composição, não dependência (medido 15/08)
 
-`tarefas sub <pai> <filho>` cria relação `parenttask`/`subtask`. Usá-la para dizer
-"A precisa fechar antes de B" mente sobre a estrutura do trabalho e engana quem lê
-o board. Dependência se declara pela escotilha:
+`sub` cria `parenttask`/`subtask`. Usá-la para dizer "A fecha antes de B" mente sobre a
+estrutura e engana quem lê o board. Dependência é pela escotilha:
 
 ```
 echo '{"other_task_id":<B>,"relation_kind":"precedes"}' | tarefas api-corpo PUT /tasks/<A>/relations
 tarefas api DELETE /tasks/<B>/relations/parenttask/<A>     # desfaz o sub errado
 ```
-
-A relação inversa (`follows`) aparece sozinha no outro card; não se cria duas
-vezes.
-
-## O audit do ops diz O QUE rodou, nunca QUEM rodou (medido 15/08)
-
-`~/AI/var/log/ops/ops-AAAA-MM-DD.jsonl` grava todo `run_command` com o comando
-inteiro — é a melhor fonte para reconstruir o que aconteceu no host. Mas o campo
-`sessao` **não identifica a fita**: é a conexão do conector, e conversas
-diferentes do mesmo cliente saem com o mesmo id. Medido: minha fita e outra
-apareceram ambas como `s7675515b1c40`, intercaladas no mesmo segundo. `sujeito`
-também não separa — é sempre o token do dono.
-
-Consequência prática: dá para afirmar *que existe outro agente ativo* (comando
-que eu não emiti, no meu id de sessão) e **não** dá para dizer *qual cadeira é*.
-Atribuir cadeira a partir daí é chute, e custa a sessão inteira quando erra.
-Card 457 nomeia o defeito; enquanto ele não fechar, a leitura correta é essa.
-
-## Diretório de trabalho descartável vai em `~/AI/var/`, nunca em `/tmp` (medido 15/08)
-
-`/tmp` é terreno comum entre agentes que rodam com o mesmo uid. Dois agentes
-convergem no mesmo `/tmp/<slug>` porque o slug sai do nome do card, que os dois
-leram. Rodei `rm -rf` num caminho que outro já usava e apaguei o trabalho dele.
-Não há lock e não há aviso. `~/AI/var/<algo-meu>` resolve, e foi para lá que o
-outro agente se mudou sozinho depois do estrago.
-
-## O canal engole a chamada, e o comando roda assim mesmo (medido 15/08, duas vezes)
-
-`run_command` que volta ao claude.ai como "Error occurred during tool execution"
-**executou no host**. O erro é do canal, não do comando: a resposta não chega, e a
-sessão também não guarda memória de ter feito a chamada — o efeito é indistinguível
-de nunca ter mandado nada.
-
-Medido: às 18:46:11 despachei `git commit -q -F -` com a mensagem inteira do card 464.
-O canal não devolveu. Trinta segundos depois eu li o tree, achei um commit meu com os
-meus dez arquivos e a mensagem certa, **não me reconheci nele**, e escrevi ao dono que
-havia "um ator não identificado commitando neste tree". O ator era eu. Ele já tinha
-dito que o gargalo existia, e eu tinha pedido evidência em vez de procurar a minha.
-
-REGRA, e ela é barata: canal que devolve erro de execução → antes de qualquer teoria,
-`~/AI/var/log/ops/ops-AAAA-MM-DD.jsonl` e `git reflog`. O audit grava toda chamada com
-o comando inteiro, e resolve em dez segundos o que eu tratei como mistério. Vale
-especialmente para comando com efeito colateral (commit, push, deploy, docker): supor
-que não rodou é o caminho para rodar duas vezes.
-
-E o par disto já estava neste caderno, escrito 2h antes: "o audit diz O QUE rodou,
-nunca QUEM rodou". Faltava a metade que me mordeu — quando o QUEM não aparece, o
-primeiro candidato sou eu.
-
-## Instrumento mede o PRODUTOR, nunca a instância viva (medido 16/08, custou a sessão)
-
-`conferir superficie` julgava se cada superfície servia os conectores lendo os
-`.mcp.json` dos cwd vivos — `wt-*/`, `fitas/*/`. Três defeitos num desenho só, e
-o terceiro é o que generaliza:
-
-1. **Tautologia.** O `.mcp.json` é rastreado no repo: toda worktree o recebe do
-   branch. O gate lia N cópias do mesmo arquivo e chamava aquilo de medição.
-2. **Veredito oscilante.** Limpei as 27 worktrees por ordem do dono; a fábrica foi
-   a zero instância e o gate passou a acusar "falta platafirma-ops" — reprovando
-   commit de TODA cadeira, em todo repo com o hook. Nada tinha mudado no que ele
-   deveria julgar. Travou outra cadeira com trabalho pronto.
-3. **Media o passado.** Um cwd é amostra de quando foi criado. O que decide o que
-   toda sessão FUTURA recebe é quem escreve o arquivo.
-
-A régua, que vale para qualquer instrumento desta casa: **antes de escrever a
-medição, pergunte quem PRODUZ o que você vai medir.** Se a resposta for "o próprio
-disco", o instrumento vai reportar arqueologia. Se não houver produtor, isso é o
-achado — e declarar a ausência vale mais que medir a sobra.
-
-Forma que ficou: cada superfície declara `produtor` em `superficies.json` —
-`codigo` (dict no fonte, lido por AST, sem importar o módulo) ou
-`arquivo-rastreado` (o produtor é o git). Superfície verificável SEM produtor
-declarado reprova. Instância viva vira OBSERVAÇÃO de deriva, com nome de arquivo,
-e não muda veredito.
-
-Onde ainda dói: `conferir arranque` nasceu na forma velha, varrendo os `CLAUDE.md`
-que existem. Está na mesa.
-
-## Quem mede tem de perguntar com a chave que o verbo usa (medido 16/08)
-
-`conferir sessao` reportava a peça `fila-status` como NÃO MEDIDA. O pacote servido
-estava correto — o montador já passava o nome canônico. Quem media é que perguntava
-com o sufixo (`TI` em vez de `claudinho-TI`), e `fila` sai 2 com "persona
-desconhecida". Instrumento e coisa medida têm de resolver a chave pela MESMA fonte;
-aqui, a linha 1 da persona. Divergência entre as duas formas do nome já partiu a
-mesa em duas metades antes.

@@ -3,6 +3,21 @@
 O que este chapéu aprendeu e vale além de um expediente. Fato de negócio não mora
 aqui: desce a card, commit ou wiki. Corpo lido sob demanda (`mesa caderno plataforma`).
 
+## Schema migra antes do contêiner, e nem toda stack se promove (medido 16/08)
+
+Subir código que espera coluna nova contra banco que não a tem quebra no primeiro request,
+e o verbo não acusa. A ordem que não quebra é: aplicar a migração no banco VIVO, conferir
+que a coluna existe, e só então recriar o contêiner.
+
+- **Dois artefatos para o mesmo schema.** `sql/NNN_*.sql` roda em volume VAZIO
+  (`docker-entrypoint-initdb.d`); banco já vivo recebe o mesmo arquivo por
+  `docker exec -i <db> psql -v ON_ERROR_STOP=1 -q < sql/NNN.sql`. Por isso tudo lá é
+  idempotente — e por isso um buraco na numeração não quebra nada.
+- **`deploy <stack> promover` não serve a toda stack.** Ele exige worktree de deploy em
+  HEAD destacado; stack que aponta para o CLONE DE TRABALHO (rastreador, acervo-api, chat,
+  jaiminho) recusa por desenho, e a promoção dela é `docker compose up -d --build` no
+  próprio clone. Ver `registro/stacks.json`, campo `_nota`.
+
 ## Config de CLI de terceiro não se confere lendo o arquivo (medido 16/08)
 
 Superfície de agente que não é nosso — o `agy` do Jaiminho, e qualquer harness
