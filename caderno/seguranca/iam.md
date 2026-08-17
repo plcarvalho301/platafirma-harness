@@ -1,5 +1,4 @@
 # caderno — iam
-
 Durável: continua verdadeiro depois que o assunto morrer, e re-derivar custaria caro.
 
 ## Régua: gate de rede na frente de serviço que já autentica
