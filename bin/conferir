@@ -55,7 +55,7 @@
                    Com `--staged`, julga so o CLAUDE.md do commit em curso.
   commit  <arquivo> mensagem de commit em curso: os ids que ela CITA, contra o
                    rastreador. Recusa id inexistente e id de item fechado — os dois
-                   predicados do PRD do rastreador, §5.1, e so eles. Ausencia de id
+                   predicados da F9 do rastreador, §5.1, e so eles. Ausencia de id
                    NAO recusa. E o que o hook `commit-msg` chama, com o caminho que o
                    git lhe passa em $1 (use `-` para ler de stdin).
                    Opt-in POR REPO: so julga onde houver `.conferir-commit` na raiz.
@@ -723,7 +723,7 @@ def conferir_repo(alvo, staged=False, como_json=False):
 #      O custo do fail-open tambem e declarado: a serie do DORA fica com buracos nas
 #      janelas em que a API esteve fora, e buraco de serie nao se ve depois.
 #
-#   3. AUSENCIA DE ID NAO RECUSA. O PRD enumera dois predicados de recusa — id inexistente
+#   3. AUSENCIA DE ID NAO RECUSA. A F9 enumera dois predicados de recusa — id inexistente
 #      e id de item fechado — e nao ha terceiro. Medido: 332 dos 400 commits do harness
 #      desde 01/08 nao citam id nenhum. Gate que reprova o que ja estava la vira
 #      `--no-verify` por habito, e ai nao gateia mais nada.

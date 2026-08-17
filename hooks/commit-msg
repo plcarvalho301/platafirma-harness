@@ -8,7 +8,7 @@
 # Mesma doutrina do `pre-commit` ao lado — gate e conferencia que leem reguas diferentes
 # divergem em silencio no primeiro ajuste que so um dos dois receber.
 #
-# POR QUE `commit-msg` E NAO `pre-commit`, contra a letra do PRD §5.1 e do card #471, que
+# POR QUE `commit-msg` E NAO `pre-commit`, contra a letra da F9 e do card #471, que
 # dizem os dois "gate no pre-commit": porque o `pre-commit` NAO VE A MENSAGEM. Medido em
 # repo de prova com `core.hooksPath` ligado — o `pre-commit` roda com argv vazio; no
 # primeiro commit do repo `.git/COMMIT_EDITMSG` nem existe; e no segundo ele existe
@@ -33,7 +33,7 @@
 # Arquivo vazio vale: significa "gate ligado, com o padrao".
 #
 # Convencao da citacao: trailer no rodape, `Item: <id>`, com o id do RASTREADOR (item.id,
-# a chave de rota da API). Mensagem SEM citacao nao e recusada — o PRD enumera dois
+# a chave de rota da API). Mensagem SEM citacao nao e recusada — a F9 enumera dois
 # predicados de recusa, id inexistente e id de item fechado, e nao ha terceiro.
 #
 # Limite declarado: hook e local e `git commit --no-verify` passa por cima. Nao ha gate no
