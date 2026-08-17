@@ -85,3 +85,30 @@ Corolário para o caderno anterior: a regra "interface de skin não mora em cont
 wiki" continua valendo, mas o motivo é mais forte do que o registrado — não é só que
 `editinterface` apaga sem gate; é que enquanto as duas cópias existirem, a do conteúdo
 é a que decide, e o repositório da skin vira ficção.
+
+## O que fica e o que sai do `MediaWiki:Common.css` — critério e resultado da varredura
+
+Critério, do #242: `Common.css` é para o estilo que o **editor de conteúdo** precisa
+ajustar sem deploy, ou seja, as classes que a prosa escreve no wikitexto. O que a skin
+gera sozinha mora no repositório dela, onde passa por merge.
+
+Varredura de 17/08/2026, 292 linhas. **Saíram** (110 linhas):
+
+- ponte do vocabulário Codex (`--color-*`, `--background-color-*`, `--border-color-*`) —
+  estava em duas cópias; a da skin (`html.platafirma-tema-*`, 0-1-1) já vencia a daqui
+  (`:root`, 0-1-0), então a cópia só dava a impressão de que este arquivo mandava
+- `margin-top` fixo em `h2`/`h3`/`h4` — segunda fonte para o ritmo que o #242 tinha
+  passado a calcular por relação entre irmãos, na skin. O `font-size` ficou: escala
+  tipográfica da prosa é conteúdo
+- `.subpages` — gerada pela skin dentro do `html-subtitle`, nunca escrita por wikitexto
+
+**Ficaram:** prosa dentro de `.mw-parser-output` (corpo, `dl`, `pre`), tabela
+(`.wikitable` e variantes) e os componentes `platafirma-chip`, `-cartao`, `-linha`,
+`-nota`, `-grade`. Todos são classe que o editor escreve.
+
+Prova de que o corte foi mesmo redundância, e não mudança disfarçada: computed
+`margin-top` e `font-size` de `h2/h3/h4/p/ul/dl/pre/table` medidos em cinco páginas
+antes e depois, **zero diferença**; e `--color-base`, `--background-color-base`,
+`--border-color-base`, `--color-progressive` continuam resolvendo em `action=edit`,
+`Especial:` e artigo. Esse par de medidas é o teste de regressão para a próxima
+varredura.
