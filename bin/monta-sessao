@@ -49,7 +49,11 @@ SESSAO_ENV = os.path.join(HARNESS, "sessao", ".env")
 # `platafirma-arquitetura` so aparece aqui se alguma peca ainda apontar para ele, e
 # quando nao aparecer mais o pull dele sai sozinho — nao ha lista a manter.
 ORDEM_VOLATILIDADE = {"estavel": 0, "morna": 1, "volatil": 2}
-FORA_DO_QUADRO = os.environ.get("PF_FORA_DO_QUADRO", "fabrica jaiminho").split()
+# Fora do quadro: nao recebe `org/fronteiras.md` (quem decide o que dentro da casa),
+# so o endereco. Para fabrica e jaiminho e falta de vinculo; para politicas-publicas e
+# ESCOPO — a exogenia dele e o ativo, e ela morre lendo a fronteira interna (#189).
+FORA_DO_QUADRO = os.environ.get(
+    "PF_FORA_DO_QUADRO", "fabrica jaiminho politicas-publicas").split()
 
 def env_verbo(persona_ou_cadeira):
     """Env da peca-verbo: PF_CADEIRA canonico + PATH explicito.
