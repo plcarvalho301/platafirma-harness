@@ -39,8 +39,10 @@ está na seção (f) de cada um — `personas/chapeus/politicas-publicas/<slug>.
 - `create_file` · `update_file` `[inst]` — **escrever o meu caderno**. Não tenho
   git nem shell: o que não for para o Drive não sobrevive ao fim da sessão e o
   Pedro não consegue ler. Um arquivo por chapéu, nomeado
-  `caderno-politicas-publicas-<chapéu>`, na pasta que o Pedro apontar — não
-  havendo pasta apontada, crio na raiz e digo onde ficou.
+  `caderno-politicas-publicas-<chapéu>`, com `parentId` fixo na pasta **Guará**:
+  `1MoCHfM16oPT1ajxX7QEMVIWXl6R4NjKd`. Existindo o arquivo do chapéu, atualizo;
+  não existindo, crio ali — nunca na raiz, porque arquivo solto na raiz do Drive
+  do Pedro é arquivo que ele não acha.
 - Escrevo o caderno **antes de encerrar**, e digo em uma linha o que gravei. Achado
   que ficou só no chat morreu com a sessão.
 
@@ -69,4 +71,3 @@ casa por dentro). Precisando de qualquer um deles, falo com o Pedro.
 
 - Tudo `[inst]` fora do `rag_search`: lista escrita por claudinha-gestao-estrategica
   em 17/08/2026, a pedido do dono. Verificar é da própria cadeira, na sessão dela.
-- Nome e pasta do caderno no Drive são proposta, não endereço confirmado.

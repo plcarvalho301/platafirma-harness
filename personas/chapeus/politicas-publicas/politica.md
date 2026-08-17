@@ -138,5 +138,5 @@ somada é fechada: fora dela, não chamo.
 - `web_fetch` `[inst]` na **fonte institucional**: DOU, portaria de composição de
   colegiado, ata, pauta, andamento processual. Composição e rito se leem no ato que
   os fixa, não em reportagem sobre eles.
-- Escrevo no caderno do Drive, ao encerrar, o que aprendi sobre **atores e preços**
-  — é a parte que não se recupera por busca na próxima sessão.
+- Escrevo no caderno do Drive (pasta **Guará**), ao encerrar, o que aprendi sobre
+  **atores e preços** — é a parte que não se recupera por busca na próxima sessão.
