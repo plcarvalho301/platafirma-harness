@@ -36,3 +36,30 @@ o EDITOR de conteúdo precisa poder ajustar sem passar por deploy — classes qu
 usa (`.platafirma-chip`, `.platafirma-nota`), não elementos que a skin gera sozinha.
 O selo de regime de leitura (`.pf-marca`) tinha ficado do lado errado dessa linha; motivo
 descoberto em 17/08/2026 no #242, ao medir o aceite "selo não muda de degrau".
+
+## Três armadilhas do CSS da skin, medidas na rodada de estética de 17/08
+
+`outline: var(--platafirma-focus-ring)` **não desenha nada.** O token é a LARGURA
+(`2px`), não o anel: sem `solid <cor>` o `outline-style` fica no inicial `none` e o
+foco de teclado é invisível. Estava assim no `summary` da dobra lateral. Qualquer
+`outline:` que consuma esse token precisa da tríade completa.
+
+O bundle serve `summary` em **`content-box` com 16px de padding**. Dar
+`width: var(--platafirma-target-touch)` a um `<summary>` produz 76px de lado, não 44:
+o token vira a caixa de CONTEÚDO e o recuo entra por fora. Alvo de toque sobre
+`summary` exige `box-sizing: border-box` e `padding: 0` explícitos.
+
+`.pfs-menu-itens li a` (0,1,2) empata em especificidade com qualquer
+`.minha-classe li a` e vence pela ORDEM — o bloco da lateral mora no fim do arquivo.
+Menu que reusa o parcial `Menu.mustache` e quer outra medida precisa de duas classes
+no seletor (`.pfs-conta-painel .pfs-menu-itens li a`), não de uma.
+
+## Chave de template inexistente falha em SILÊNCIO no mustache
+
+`{{{form-data-search}}}` não é chave de `SkinMustache` — o contrato real é
+`data-search-box`, com `form-action`, `page-title` e `html-input`. O mustache resolve
+chave desconhecida em string vazia, sem erro e sem aviso: a busca do cabeçalho ficou
+morta desde que a skin nasceu, servindo `<div class="pfs-busca"></div>` como um
+espaçador de 917px. O template de referência é
+`includes/skins/templates/fallback/skin.mustache`, dentro do container — é ele que
+lista as chaves que o core realmente entrega. Conferir lá antes de inventar nome.
