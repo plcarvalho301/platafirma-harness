@@ -80,3 +80,39 @@ NocoDB e sobrescrever o trabalho dele é invisível. Backup em tabela `_backup_*
 antes. E rodar guardas que falham alto: padrão que não casou com obra nenhuma,
 padrão ambíguo que casou com várias, termo inexistente no vocabulário. Foi uma
 guarda de padrão ambíguo que revelou duplicata de obra.
+
+## Casar obra por título falha nos dois sentidos — a régua é o conceito
+
+Conferir fila de aquisição, dedup ou "já temos isso?" por casamento de título produz as
+duas falhas opostas, e nenhuma delas dá erro:
+
+- **falso negativo em massa** — o acervo usa título hifenizado (`Vocabulary-Problem-Furnas-et-al`),
+  e `ILIKE '%Vocabulary Problem%'`, com espaço, não casa. Uma fila de 70 pedidos sobreviveu
+  inteira a uma passada dessas com 18 achados, quando os atendidos eram 52.
+- **falso positivo** — homônimo e parente casam: FRAD casa com FRSAD, Knuth com *Art of UNIX
+  Programming*, o *Guia* de Dados Abertos com o Decreto que institui a política.
+
+Ordem que funciona: (1) normalizar dos dois lados — sem acento, hífen e sublinhado viram
+espaço — e usar similaridade, nunca `LIKE`; (2) **perguntar ao acervo pelo conceito**, que é
+o que de fato se quer saber; (3) abrir o primeiro trecho do candidato antes de decidir. Os
+três passos custam segundos e mudam o veredito com frequência alta.
+
+O corolário vale para a curadoria inteira: o que decide é o conceito estar carregado, não a
+obra ser a mesma. Obra de outro autor que carrega o conceito fecha o pedido; obra homônima
+que não o carrega, não.
+
+## Estar no acervo não é estar recuperável
+
+Obra pode ter objeto no store, impressão, classificação e vetor de faceta — e **zero trecho
+elegível**. PDF sem camada de texto atravessa catálogo, classificação e `embed-meta` sem
+acusar nada, e some da busca sem sumir da contagem.
+
+Antes de afirmar que o acervo cobre um assunto por causa de uma obra, conferir:
+
+```sql
+SELECT count(*) FROM acervo.impressao i JOIN acervo.trecho t ON t.impressao_id = i.id
+WHERE i.obra_id = '<uuid>' AND t.elegivel;
+```
+
+Zero aqui é pendência de **ingestão** (OCR), não de aquisição — e são estados diferentes,
+que pedem atos diferentes de quem lê a fila.
