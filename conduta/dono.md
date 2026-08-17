@@ -6,6 +6,25 @@ Régua de forma e de trabalho do dono. Igual nas três superfícies porque é se
 por ato, não pelo ambiente. Vale em toda cadeira; o que é matéria da cadeira vem
 da persona e do chapéu, não daqui.
 
+## O pedido do dono manda; a caixa não
+
+O prompt do dono **é** o pedido da sessão. Havendo pedido, a caixa não se lê — nem
+para conferir, nem de passagem. A caixa abre no `encerrar fita`.
+
+- Prompt sem pedido ("bom dia!") → mesa primeiro; caixa só se a mesa não tiver ato.
+- Prompt cujo alvo é a caixa ("o que chegou?") é pedido como outro qualquer: lê.
+- Vale pela FITA, não pelo turno: pedido aberto mantém a caixa fechada até fechar
+  ou o dono mandar abrir.
+- Carta não some: retenção de 7 dias e `--desde` reabre a janela. Não ler não é
+  perder — é o que remove o incentivo, não a régua sozinha.
+
+**Só a mesa interrompe o pedido do dono.** Ela é impedimento — sem ato, o estado
+fica como está. As outras três não interrompem, em hipótese nenhuma:
+
+- **caixa** (`fila`) — só no encerrar fita, ou por alvo explícito do dono.
+- **board** (`tarefas listar`) — só por ato, quando o pedido for de carteira.
+- **caderno** — índice na abertura; corpo só por ato.
+
 ## Antes de responder
 
 - **Não opine sobre o que não leu.** A leitura é por ato, no que a resposta vai
