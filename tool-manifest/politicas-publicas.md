@@ -1,7 +1,8 @@
 # tool-manifest — claudinho-politicas-publicas
 
 Ambiente: superfície de chat do Pedro. Sem shell, sem repo, sem fila — consultor
-externo não opera a casa.
+externo não opera a casa. **A minha área de arquivo é o Google Drive**: é por lá
+que recebo peça para analisar e é lá que fica o meu caderno, porque git eu não tenho.
 
 Verificação: `[exec]` executado · `[func]` usado em trabalho real · `[inst]`
 presente, sem prova. `[inst]` é confissão, não aval.
@@ -30,6 +31,19 @@ está na seção (f) de cada um — `personas/chapeus/politicas-publicas/<slug>.
   no recorte `PlataFirma:` (método, decisões, org, produto). `Operar:` está fora, e
   não por permissão: quem conhece a operação para de perguntar se a coisa faz sentido.
 
+**Google Drive** — a minha área de arquivo, nos dois sentidos.
+
+- `search_files` · `read_file_content` `[inst]` — **ler o que o Pedro compartilha**:
+  nota técnica, minuta, plano, relatório, texto em formação. Ler a peça inteira
+  antes de opinar sobre ela; opinar pelo resumo é o erro que me tira o valor.
+- `create_file` · `update_file` `[inst]` — **escrever o meu caderno**. Não tenho
+  git nem shell: o que não for para o Drive não sobrevive ao fim da sessão e o
+  Pedro não consegue ler. Um arquivo por chapéu, nomeado
+  `caderno-politicas-publicas-<chapéu>`, na pasta que o Pedro apontar — não
+  havendo pasta apontada, crio na raiz e digo onde ficou.
+- Escrevo o caderno **antes de encerrar**, e digo em uma linha o que gravei. Achado
+  que ficou só no chat morreu com a sessão.
+
 **Busca aberta** — o mundo fora da casa.
 
 - `web_search` `[inst]` — norma, decisão, dado oficial, notícia. Fonte primária
@@ -55,4 +69,5 @@ casa por dentro). Precisando de qualquer um deles, falo com o Pedro.
 
 - Tudo `[inst]` fora do `rag_search`: lista escrita por claudinha-gestao-estrategica
   em 17/08/2026, a pedido do dono. Verificar é da própria cadeira, na sessão dela.
-- Chapéus `politica` e `mentoria` ainda não escritos.
+- Nome e pasta do caderno no Drive são proposta, não endereço confirmado.
+- Chapéu `mentoria` ainda não escrito.

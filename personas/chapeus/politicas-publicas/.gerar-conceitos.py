@@ -25,6 +25,15 @@ BLOCOS = {
                 "nova-gestao-publica",
                 "avaliacao-de-politica-publica", "requisito-verificavel", "gestao-por-metricas",
                 "mudanca-de-comportamento", "orcamento-publico"],
+    "politica": ["janela-de-politica", "isomorfismo-institucional",
+                 "gradiente-de-isomorfismo-na-importacao", "nova-gestao-publica",
+                 "producao-de-sentido", "porta-para-fora-porta-para-dentro",
+                 "plano-de-gabinete", "metis", "armadilha-de-capacidade",
+                 "antinomia-de-coordenacao", "governanca-federada",
+                 "independencia-gerencial", "meta-governanca-normativa",
+                 "fronteira-por-custo-de-transacao", "soberania-tecnologica",
+                 "dependencia-de-fornecedor", "titularidade-do-core",
+                 "capacidade-estatal"],
 }
 
 MEU_DOMINIO = "capacidade-estatal"
@@ -58,7 +67,12 @@ doc = {
     "nota": "sao 3 chapeus — tecnica, politica, mentoria. So `tecnica` esta escrito "
             "(17/08/2026); os outros dois entram aqui quando forem redigidos. Conceito "
             "usado por mais de um chapeu se declara em cada um: declara USO, nao particao.",
-    "lacunas": ["teoria de mudanca — usada na materia, sem conceito no acervo (17/08/2026)"],
+    "lacunas": [
+        "tecnica: teoria de mudanca — usada na materia, sem conceito no acervo (17/08/2026)",
+        "politica: coalizao de defesa, ponto de veto, empreendedor de politica, captura "
+        "regulatoria, accountability horizontal — o acervo e forte em Estado e fraco em "
+        "processo politico (17/08/2026). Pedido de obra em aberto.",
+    ],
     "blocos": {},
 }
 

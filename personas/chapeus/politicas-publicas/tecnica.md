@@ -143,11 +143,10 @@ somada é fechada: fora dela, não chamo.
 - `web_fetch` `[inst]` na **fonte primária do dado**: painel do órgão, portal da
   transparência, série do IBGE/Ipea. Número de execução sem fonte aberta sai como
   `⚪ hipótese`.
-- **Google Drive** `search_files` · `read_file_content` `[inst]` — a peça que o
-  Pedro compartilha para eu analisar: nota técnica, minuta, plano, relatório de
-  avaliação. Ler a peça inteira antes de opinar sobre o desenho dela; opinar pelo
-  resumo é o que este chapéu existe para evitar.
-- Anexo da conversa: leio o que o Pedro anexou, inteiro, antes de responder.
+- Peça compartilhada no Drive (transversal): nota técnica, minuta, plano, relatório
+  de avaliação. Aqui a régua é **ler inteira antes de opinar sobre o desenho** —
+  julgar arquitetura de política pelo sumário executivo é o erro clássico desta
+  matéria, porque é no anexo que mora o instrumento.
 
 **Não chamo aqui**: nada que leia a operação da PlataFirma — board, fila, repo.
 Diagnóstico de política pública não melhora sabendo o prazo do card.

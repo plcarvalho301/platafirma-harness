@@ -6,7 +6,8 @@
   "cross": "medido: true quando NENHUMA obra que sustenta o conceito e do dominio capacidade-estatal. null quando o conceito nao tem obra-ancora",
   "nota": "sao 3 chapeus — tecnica, politica, mentoria. So `tecnica` esta escrito (17/08/2026); os outros dois entram aqui quando forem redigidos. Conceito usado por mais de um chapeu se declara em cada um: declara USO, nao particao.",
   "lacunas": [
-    "teoria de mudanca — usada na materia, sem conceito no acervo (17/08/2026)"
+    "tecnica: teoria de mudanca — usada na materia, sem conceito no acervo (17/08/2026)",
+    "politica: coalizao de defesa, ponto de veto, empreendedor de politica, captura regulatoria, accountability horizontal — o acervo e forte em Estado e fraco em processo politico (17/08/2026). Pedido de obra em aberto."
   ],
   "blocos": {
     "tecnica": [
@@ -297,6 +298,202 @@
           "estudos-ontologias"
         ],
         "cross": true
+      }
+    ],
+    "politica": [
+      {
+        "id": "7103004d-6ca5-48ec-bdb9-909020e36374",
+        "slug": "janela-de-politica",
+        "rotulo": "Janela de politica",
+        "obras_ancora": 1,
+        "origem": [
+          "capacidade-estatal"
+        ],
+        "cross": false,
+        "outros_rotulos": "policy window"
+      },
+      {
+        "id": "b6c1b841-def4-43cb-b390-7d25139f3b96",
+        "slug": "isomorfismo-institucional",
+        "rotulo": "Isomorfismo institucional",
+        "obras_ancora": 3,
+        "origem": [
+          "capacidade-estatal",
+          "gestao-organizacional"
+        ],
+        "cross": false
+      },
+      {
+        "id": "739304ef-1ebf-4c66-b79c-20c5a51fafc0",
+        "slug": "gradiente-de-isomorfismo-na-importacao",
+        "rotulo": "Gradiente de isomorfismo na importação",
+        "obras_ancora": 1,
+        "origem": [
+          "capacidade-estatal"
+        ],
+        "cross": false
+      },
+      {
+        "id": "f57852f0-73bd-4bbb-b8cc-84a1c1f0c785",
+        "slug": "nova-gestao-publica",
+        "rotulo": "Nova gestao publica",
+        "obras_ancora": 2,
+        "origem": [
+          "capacidade-estatal"
+        ],
+        "cross": false,
+        "outros_rotulos": "new public management / modelo gerencial"
+      },
+      {
+        "id": "d6c5d92c-bfa5-47f4-a2dc-92ef3b1b2c78",
+        "slug": "producao-de-sentido",
+        "rotulo": "Producao de sentido",
+        "obras_ancora": 3,
+        "origem": [
+          "capacidade-estatal"
+        ],
+        "cross": false,
+        "outros_rotulos": "sensemaking"
+      },
+      {
+        "id": "6b277933-d0f4-4e69-95e9-f97eb26dc610",
+        "slug": "porta-para-fora-porta-para-dentro",
+        "rotulo": "Porta-para-fora vs. porta-para-dentro",
+        "obras_ancora": 1,
+        "origem": [
+          "capacidade-estatal"
+        ],
+        "cross": false,
+        "outros_rotulos": "assimetria de visibilidade política / silêncio sobre a engenharia"
+      },
+      {
+        "id": "08d0c37f-d5d9-475b-a01d-19af76153e96",
+        "slug": "plano-de-gabinete",
+        "rotulo": "Plano de gabinete",
+        "obras_ancora": 1,
+        "origem": [
+          "capacidade-estatal"
+        ],
+        "cross": false,
+        "outros_rotulos": "alto-modernismo / high modernism / ideologia alto-modernista"
+      },
+      {
+        "id": "bbd10b23-7dd6-4b69-8743-8a2c9c04eb47",
+        "slug": "metis",
+        "rotulo": "Metis",
+        "obras_ancora": 2,
+        "origem": [
+          "capacidade-estatal"
+        ],
+        "cross": false,
+        "outros_rotulos": "manha / conhecimento-pratico-local"
+      },
+      {
+        "id": "825f0211-1b51-4e37-b81b-28ee5f58868f",
+        "slug": "armadilha-de-capacidade",
+        "rotulo": "Armadilha de capacidade",
+        "obras_ancora": 13,
+        "origem": [
+          "capacidade-estatal"
+        ],
+        "cross": false
+      },
+      {
+        "id": "ae655a4d-4ad0-4781-a7b4-3711a934d42e",
+        "slug": "antinomia-de-coordenacao",
+        "rotulo": "Antinomia de coordenação",
+        "obras_ancora": 1,
+        "origem": [
+          "capacidade-estatal"
+        ],
+        "cross": false
+      },
+      {
+        "id": "2a04f8f9-b977-47a9-a8c6-37d75220519e",
+        "slug": "governanca-federada",
+        "rotulo": "Governança federada",
+        "obras_ancora": 1,
+        "origem": [
+          "capacidade-estatal"
+        ],
+        "cross": false,
+        "outros_rotulos": "core único com N executores / vocabulário em colegiado / autonomia com padrão comum"
+      },
+      {
+        "id": "e49f8288-27f8-4fa9-bfb1-1f58b22c1f70",
+        "slug": "independencia-gerencial",
+        "rotulo": "Independência gerencial dos constituintes",
+        "obras_ancora": 1,
+        "origem": [
+          "capacidade-estatal"
+        ],
+        "cross": false,
+        "outros_rotulos": "managerial independence / ausência de autoridade comum / SoS dirigido, reconhecido, colaborativo, virtual"
+      },
+      {
+        "id": "3b16a9dc-14cd-4e71-b847-759d864ab84b",
+        "slug": "meta-governanca-normativa",
+        "rotulo": "Meta-governança normativa",
+        "obras_ancora": 3,
+        "origem": [
+          "capacidade-estatal"
+        ],
+        "cross": false
+      },
+      {
+        "id": "6d436e0f-f4f0-4048-9317-029b16a51c45",
+        "slug": "fronteira-por-custo-de-transacao",
+        "rotulo": "Fronteira por custo de transação",
+        "obras_ancora": 3,
+        "origem": [
+          "arquiteturas",
+          "capacidade-estatal",
+          "gestao-organizacional"
+        ],
+        "cross": false
+      },
+      {
+        "id": "d3dbd608-0015-4b5e-ae66-d0255e61f0d3",
+        "slug": "soberania-tecnologica",
+        "rotulo": "Soberania tecnológica",
+        "obras_ancora": 5,
+        "origem": [
+          "capacidade-estatal",
+          "inteligencia"
+        ],
+        "cross": false
+      },
+      {
+        "id": "876ca0b9-d457-4f04-8f33-5e3ab5985d1a",
+        "slug": "dependencia-de-fornecedor",
+        "rotulo": "Dependência de fornecedor",
+        "obras_ancora": 3,
+        "origem": [
+          "capacidade-estatal"
+        ],
+        "cross": false
+      },
+      {
+        "id": "11f0294f-0dc5-48d9-b244-e55e411a08dc",
+        "slug": "titularidade-do-core",
+        "rotulo": "Titularidade do core",
+        "obras_ancora": 3,
+        "origem": [
+          "capacidade-estatal"
+        ],
+        "cross": false,
+        "outros_rotulos": "core domain retido / terceirização do core / delegar o genérico"
+      },
+      {
+        "id": "ef970a03-3817-4283-a7cf-345935a21bba",
+        "slug": "capacidade-estatal",
+        "rotulo": "Capacidade estatal",
+        "obras_ancora": 3,
+        "origem": [
+          "capacidade-estatal"
+        ],
+        "cross": false,
+        "outros_rotulos": "state capacity"
       }
     ]
   }
