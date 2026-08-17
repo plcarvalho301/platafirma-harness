@@ -63,3 +63,25 @@ morta desde que a skin nasceu, servindo `<div class="pfs-busca"></div>` como um
 espaçador de 917px. O template de referência é
 `includes/skins/templates/fallback/skin.mustache`, dentro do container — é ele que
 lista as chaves que o core realmente entrega. Conferir lá antes de inventar nome.
+
+## `MediaWiki:Common.css` vence a skin, e o namespace é protegido
+
+Com o estilo em duas cópias — uma na skin, outra no `Common.css` —, **manda a do
+`Common.css`**: a folha de conteúdo do site carrega depois da folha da skin. Foi por
+isso que o selo de regime continuou em caixote depois do deploy da skin que o tirava:
+a skin dizia uma coisa e a página respondia com a outra. Sintoma para reconhecer sem
+reabrir: mexer na regra, servir, e o computed style vir com o valor ANTIGO — não é
+cache, é a outra cópia.
+
+E a remoção não sai pela conta de bot: `MediaWiki:` é namespace protegido e a API
+devolve `protectednamespace-interface`. O caminho é o script de manutenção dentro do
+container, que roda como o Admin da instância:
+
+    docker exec -i plataforma-wiki-mediawiki-1 sh -lc \
+      "cd /var/www/html && php maintenance/run.php edit.php --user=<admin> \
+       --summary='...' --nocreate MediaWiki:Common.css < /tmp/novo.css"
+
+Corolário para o caderno anterior: a regra "interface de skin não mora em conteúdo de
+wiki" continua valendo, mas o motivo é mais forte do que o registrado — não é só que
+`editinterface` apaga sem gate; é que enquanto as duas cópias existirem, a do conteúdo
+é a que decide, e o repositório da skin vira ficção.
