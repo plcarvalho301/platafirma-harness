@@ -15,14 +15,19 @@ presente, sem prova. `[inst]` é confissão, não aval.
 
 Comum a toda cadeira — fila, sessão, cards: `tool-manifest/TODA-CADEIRA.md`.
 
+O ferramental está partido por **chapéu** (carga sob demanda), não por gerência:
+`design` e `canais`. Produtização não tem seção própria — a régua dela é a
+POSTURA da base e roda em todo giro, então o que a serve está em "a cadeira
+toda", abaixo dos conectores. Decidido em 16/08/2026 (#189), validado pelo dono.
+
 ## Conectores
 
 **platafirma-ops** (`ops.platafirma.org`) — a máquina onde tudo executa.
 - `monta_sessao` `[func]` — contexto de abertura numa chamada. Chamar em vez de
   encadear leitura.
 - `run_command` `[exec]` — shell como claudinho. É por aqui que sai render,
-  upload e git.
-- `write_file` `[exec]` / `read_file` `[inst]` — arquivos sob `~/AI`.
+  upload, git e deploy.
+- `write_file` `[exec]` / `read_file` `[exec]` — arquivos sob `~/AI`.
 
 **PlataFirma Wiki** (`mcp.platafirma.org`) — canônico, acervo e repos.
 - `get_page` / `search_pages` / `edit_page` `[func]` — prosa da wiki. Spec de
@@ -36,7 +41,17 @@ Comum a toda cadeira — fila, sessão, cards: `tool-manifest/TODA-CADEIRA.md`.
 **Google Drive** `[inst]` — só conteúdo de texto passado como argumento;
 binário não cabe. Ver armadilhas.
 
-## design — ferramental próprio
+## a cadeira toda — o que produtização usa em todo giro
+
+| ferramenta | quando chamar | verif. |
+|---|---|---|
+| `tarefas listar-tudo` | inclui fechados: é como se acha fóssil de card antes de escrever spec | `[exec]` |
+| `tarefas comentar <id>` | a spec mora como comentário do card, não como documento à parte (#169, 16/08) | `[exec]` |
+
+## chapéu design — ferramental próprio
+
+Fecha: artefato pronto — tela, figura, página — contra forma medida (token
+semântico, piso tipográfico, alvo de toque, equivalente de teclado, contraste).
 
 > **Wireframe mora em `platafirma-arquitetura/design/wireframes/` e para aí.**
 > Decreto do dono, 15/08/2026: é instrumento de bancada de arquitetura — não vai
@@ -54,19 +69,20 @@ binário não cabe. Ver armadilhas.
 | Chrome headless via `puppeteer-core` | renderizar wireframe HTML em PNG. Script e uso em `platafirma-arquitetura/design/wireframes/render.mjs`; acusa vazamento horizontal, que o screenshot esconde cortando | `[exec]` |
 | `python3 -c "from PIL import Image"` | quantizar o PNG antes de subir; wireframe tem poucas cores e cai a 1/5 | `[exec]` |
 | `fc-list \| grep Inter` | conferir que a Inter existe no host antes de render — sem ela o wireframe sai em fonte genérica e a régua tipográfica não se prova | `[exec]` |
+| `deploy <stack> promover [sha]` | front do commit ao ar, sem gate: promove e reverte a tela. Entrou na fita em 16/08/2026 (arq:0057, harness a9a5a9a) | `[inst]` |
 
-## produtizacao — ferramental próprio
+## chapéu canais — ferramental próprio
 
-| ferramenta | quando chamar | verif. |
-|---|---|---|
-| `tarefas listar-tudo` | inclui fechados: é como se acha fóssil de card antes de escrever spec | `[exec]` |
-
-## canais — ferramental próprio
+Fecha: chegada. Quem entra pela superfície, o que a primeira tela diz que ela é,
+e o que o leitor completa sem intermediário. A mesma tela passa em design e
+falha aqui — a entrada do rastreador estava correta em token e contraste e abria
+na vista errada (2eae7cb, 15/08).
 
 | ferramenta | quando chamar | verif. |
 |---|---|---|
 | `curl` + Action API do MediaWiki (`~/AI/platafirma-conhecimento/.env`) | publicar imagem que o dono precisa abrir no celular | `[exec]` |
 | `python3` heredoc via `run_command` | substituição multi-ocorrência em markdown commitado | `[exec]` |
+| `get_page` antes de `edit_page` | conteúdo de página e navegação da wiki: entrada, procedência visível, marca de tipo | `[func]` |
 
 ## Armadilhas medidas
 
@@ -88,9 +104,16 @@ binário não cabe. Ver armadilhas.
   prova de que a página vai renderizar; `result: Success` do upload não é.
 - **Wireframe em PDF pesa mais que em PNG** (217 KB contra 66 KB na mesma tela):
   o Chrome embute a Inter inteira. Para leitura em tela, PNG quantizado.
+- **Heredoc de shell trunca corpo longo no `fila enviar`.** Escrever o corpo com
+  `write_file` e redirecionar o arquivo (`< arquivo.md`) entrega inteiro.
+  Medido em 16/08/2026.
 
 ## Pendências declaradas
 
+- **`conferir canal` não existe.** A régua é minha e o verbo não foi construído
+  (card 107, 09/08/2026). Chapéu de canais nasce com régua e sem instrumento: a
+  declaração exigida no #269 — toda superfície diz a qual capacidade serve — não
+  tem como reprovar ninguém hoje.
 - **Figma bloqueado.** `create_new_file` devolve `No approval received`;
   `whoami` mostra `seat: View` no plano starter. Serviria para entregar peça de
   apresentação; para wireframe o HTML sobre `tokens.css` é melhor, porque é o
