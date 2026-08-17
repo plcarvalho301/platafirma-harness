@@ -28,8 +28,9 @@ Carrega quando o objeto é **artefato que executa ou a configuração que o exp�
 - Modelagem de ameaça de sistema que outra cadeira constrói.
 - Detecção, correlação e o expediente do incidente de plataforma.
 
-**Não carrega** para o dever sobre o dado que o sistema guarda (`privacidade`)
-nem para o parâmetro do algoritmo que o protege (`cripto`). Também não carrega
+**Não carrega** para o dever sobre o dado que o sistema guarda (`privacidade`),
+para o parâmetro do algoritmo que o protege (`cripto`) nem para quem o serviço
+enxerga por dentro (`iam`). Também não carrega
 para disponibilidade, capacidade e desempenho: cair não é a minha pergunta.
 
 ## b) Vocabulário canônico

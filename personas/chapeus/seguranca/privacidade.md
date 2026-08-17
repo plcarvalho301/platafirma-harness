@@ -30,8 +30,8 @@ implementa?"**:
 - Avaliação de impacto antes de tratamento novo, não como laudo depois.
 
 **Não carrega** para o mecanismo que protege o dado — cifra, chave, contêiner,
-vulnerabilidade, gate. Isso é `cripto` e `blueteam`: lá a pergunta é como, aqui é
-se pode e até quando.
+vulnerabilidade, gate — nem para quem alcança o dado. Isso é `cripto`, `blueteam`
+e `iam`: lá a pergunta é como e quem, aqui é se pode e até quando.
 
 ## b) Vocabulário canônico
 

@@ -28,7 +28,7 @@ Carrega quando a resposta tem **parâmetro, identificador ou prazo dentro dela**
 - Transição pós-quântica e agilidade: trocar primitiva sem reescrever o sistema.
 - Token e sessão: o que o portador prova, e por quanto tempo.
 
-**Não carrega** para quem pode usar a credencial (é a head, `iam`), nem para o
+**Não carrega** para quem pode usar a credencial (`iam`), nem para o
 dever sobre o dado protegido (`privacidade`). Aqui a pergunta é o mecanismo e o
 parâmetro dele.
 

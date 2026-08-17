@@ -87,8 +87,10 @@ doc = {
              "seguranca-privacidade. null quando o conceito nao tem obra-ancora e a "
              "origem nao e medivel",
     "nota": "conceito usado por mais de um chapeu e declarado em cada um: isto declara "
-            "USO, nao particao. `iam` e a head e nao tem chapeu (a head e o modo default "
-            "da base); `risco` e gerencia sem chapeu por decisao do #189.",
+            "USO, nao particao. Sao 4 chapeus — iam, privacidade, blueteam, cripto. "
+            "`risco` nao e chapeu: e o MODO da cadeira e vive na POSTURA da base "
+            "(#189, 16/08/2026); o bloco fica como vocabulario declarado, sem chapeu "
+            "que o carregue.",
     "blocos": {},
 }
 
