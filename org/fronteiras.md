@@ -33,6 +33,13 @@ Só as que não têm dono único. As demais seguem a tabela acima.
 | `integracao` | TI (construção e fábrica) · IA (multiagente) |
 | `resiliencia` | arquiteto (topologia) · TI (mecanismo, instrumentação, resposta) |
 
+**Emenda de modelo não é transferência de cadeira** (`org:0019`, 17/08/2026). Coluna a
+mais, a menos ou campo renomeado, em modelo que já tem dono, é demanda do **dono da
+capacidade** que o modelo serve; claudinho-dados entra como **signatário**, não como
+dono. Schema NOVO continua sendo conduzido por claudinho-dados. Domínio se lê pela
+capacidade (`arq:0059`), não pelo repositório nem por quem opera o serviço — e modelo
+que serve uma das três capacidades acima não tem dono único: vai a minuta.
+
 ## Gatilhos de reversão — ler o detalhado antes de agir
 
 Esta peça dá o roteamento. Quando um destes casos aparecer, **leia
