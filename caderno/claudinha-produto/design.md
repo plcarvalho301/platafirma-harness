@@ -112,3 +112,74 @@ antes e depois, **zero diferença**; e `--color-base`, `--background-color-base`
 `--border-color-base`, `--color-progressive` continuam resolvendo em `action=edit`,
 `Especial:` e artigo. Esse par de medidas é o teste de regressão para a próxima
 varredura.
+
+## Três valores CRUS do SkinModule desenham a escada do corpo por cima da nossa
+
+A ponte de token no topo do `tela.css` cobre o vocabulário Codex (`--color-*`), e por
+isso é fácil supor que ela cobre tudo. Não cobre o corpo do artigo. As *features* do
+`SkinModule` ligadas no `skin.json` compilam LESS em valor fixo, e três desses valores
+mandavam na hierarquia da prosa sem passar por token nenhum. Medidos em 17/08/2026 com
+`platafirma-arquitetura/design/wireframes/medir-wiki.mjs`:
+
+- `elements` dá `border-bottom: 1px solid #aaa` ao `<h1>` **e** ao `<h2>`. Cinza morto
+  fora da paleta, e o MESMO marcador gráfico em dois níveis: título de página e seção
+  de artigo empatavam na única régua da tela. A mesma feature dá ao `<h1>` um recuo
+  assimétrico — 16px em cima, 5,44 embaixo.
+- `content-links` compila o wikilink em `#0645ad`, o azul do MediaWiki. Contra a
+  superfície branca mede **8,5:1** — o ponto mais saturado da página inteira, e ele
+  pertence ao nível MAIS BAIXO da hierarquia. O olho ia ao link antes do título da
+  seção. `--color-link` da ponte não alcança: quem pinta o link do corpo é a feature.
+- O bundle serve lista em `0.95em`, então `<li>` saía com 14,25px contra os 15px do
+  parágrafo — o rés-do-chão da escada invertido.
+
+Sintoma para reconhecer sem reabrir: computed style com cor ou medida que não bate com
+nenhum `--platafirma-*`, e nenhuma regra nossa casando com o seletor. Antes de culpar
+cascata, procurar a feature no `skin.json`.
+
+## O piso de percepção do fio, e o degrau que falta no design system
+
+`--platafirma-border-default` mede **1,30:1** contra a superfície branca, e
+`bg-sunken` contra `bg-page` mede **1,045:1** — os dois abaixo do limiar. É a causa
+mecânica do "a página inteira parece lavada": o fio que deveria dizer onde o cartão
+começa não existe, e a lateral flutua sobre uma página do mesmo cinza.
+
+Régua para não rediscutir: limite gráfico que transmite informação — e agrupar é
+informação — pede **3:1** (WCAG 1.4.11). O degrau seguinte, `border-strong`, mede 5:1
+e é traço duro demais para contornar cartão inteiro. **Não existe degrau entre os
+dois**, e é essa a lacuna do design system.
+
+Correção medida em detalhe importante do aceite 7 do #242: aquele aceite dizia que
+fundo recuado separava a lateral do conteúdo, e contra a SURFACE branca ele separa
+mesmo. O que não foi medido na época é que a lateral não flutua sobre a surface — ela
+flutua sobre a PÁGINA, e ali não separa nada. A régua §d manda parar no primeiro
+mecanismo que separa; quando o mecanismo escolhido não separa, ele não é o mecanismo.
+
+## Reproduzir defeito de skin: apagar a regra em runtime, não adivinhar a causa
+
+Quando o dono relata uma tela que a máquina não reproduz, `deleteRule` no puppeteer
+diz se a hipótese "falta a regra X" fecha, sem tocar em arquivo nem em deploy:
+
+    for (const f of document.styleSheets) { let rs; try { rs = f.cssRules } catch { continue }
+      for (let i = rs.length - 1; i >= 0; i--)
+        if (rs[i].type === 1 && /minha-classe/.test(rs[i].selectorText || '')) f.deleteRule(i) }
+
+Foi assim que o "ícone virou caixa branca" fechou em 17/08: sem as regras
+`.pfs-conta-botao`, o `<summary>` cai em 68x52 com `list-style-type: disclosure-open`
+— e é esse marcador nativo o "chevron" que aparecia no lugar da cabecinha. Como o CSS
+servido TINHA a regra e o `.pfs-conta-painel` da captura já era o novo, a conclusão é
+HTML antigo com CSS novo: cache de borda de página anônima, não a skin.
+
+## Upload por Action API falha em `WrongToken` quando o curl fala HTTP
+
+O manifesto manda subir imagem por `curl` + Action API da própria máquina, e a razão
+continua válida (os bytes não atravessam a saída do modelo). Mas com `$wgServer` em
+`https://` os cookies de sessão saem `Secure`, e o curl contra `http://127.0.0.1:8080`
+com header `Host:` não os reenvia — o login responde `WrongToken` e o upload responde
+`mustbeloggedin`. Rota que funciona sem sessão nenhuma:
+
+    docker cp /tmp/pfimg plataforma-wiki-mediawiki-1:/tmp/pfimg
+    docker exec plataforma-wiki-mediawiki-1 sh -lc "cd /var/www/html && \
+      php maintenance/run.php importImages.php --user='<admin>' --comment='...' --overwrite /tmp/pfimg"
+
+Continua valendo conferir a MINIATURA depois (`prop=imageinfo&iiurlwidth=900`), e não
+o resultado do upload: `Added: 2` não prova que a página renderiza.
