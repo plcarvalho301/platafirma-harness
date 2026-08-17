@@ -7,10 +7,9 @@ Durável: continua verdadeiro depois que o assunto morrer, e re-derivar custaria
 Três perguntas, nesta ordem; a terceira anula as duas primeiras quando é sim. (1) a
 superfície pré-auth é grande ou imatura? (2) o cliente é exclusivamente navegador? — havendo
 app/CLI/webhook, o custo é quebrar cliente; (3) o serviço é alcançável por outro caminho? —
-sendo, a borda é enfeite.
-
-Duas camadas contra o MESMO IdP não são defesa em profundidade: falham juntas. O que a
-camada entrega é redução de superfície alcançável, não segunda autenticação.
+sendo, a borda é enfeite. Duas camadas contra o MESMO IdP não são defesa em profundidade:
+falham juntas. O que a camada entrega é redução de superfície alcançável, não segunda
+autenticação.
 
 ## Token opaco não se valida na borda
 
@@ -19,24 +18,22 @@ token exchange, gateway mediador e casca do serviço colapsam todos aí. A saíd
 EMISSOR para JWT assinado, nunca construir tradutor no caminho. Distinção que confunde
 porque as duas dão 401: audiência incompatível o token exchange resolve; portador
 incompatível não se resolve sem mudar cliente ou emissor.
-
 Ensaio completo: wiki, PlataFirma:Sec/autenticacao-de-borda
 
 ## Duas famílias de superfície no core
 
-Serviço SEM auth própria -> atrás do oauth2-proxy (wiki, harness).
-Serviço COM auth própria -> direto, gate próprio contra o realm (mcp, Synapse, rastreador).
-Classificar na família errada é o erro que custou duas cartas retificadas em 14/08.
+Serviço SEM auth própria -> atrás do oauth2-proxy (wiki, harness). COM auth própria ->
+direto, gate próprio contra o realm (mcp, Synapse, rastreador). Classificar na família
+errada custou duas cartas retificadas em 14/08.
 
 Na primeira família NÃO HÁ SUJEITO dentro do serviço: o proxy autentica e encaminha, e o
 serviço vê anônimo (medido 16/08 na wiki: grupo `*` com `read`, `edit`, `createpage`). A
 régua da borda é binária e por allowlist de e-mail, que não conhece papel nem domínio —
 segundo mapa de quem-alcança-o-quê, divergindo em silêncio do realm. Diferenciar acesso
 DENTRO do serviço exige antes dar-lhe identidade (PluggableAuth+OIDC no MediaWiki), e mesmo
-com sujeito a ACL do MediaWiki só reconhece NAMESPACE.
-
-Entrando sem gate de rede, quatro contrapartidas deixam de ser recomendação: registro e
-login local por senha desabilitados, rate limit de login, painel admin só na rede interna.
+com sujeito a ACL do MediaWiki só reconhece NAMESPACE. Entrando sem gate de rede, três
+contrapartidas deixam de ser recomendação: registro e login local por senha desabilitados,
+rate limit de login, painel admin só na rede interna.
 
 ## Ato sobre identidade se confere contra o caminho por onde eu opero
 
@@ -47,9 +44,9 @@ não conferi o gate por onde eu opero — o PEP resolve por `preferred_username`
 `sujeitos.yaml`, o nome velho estava lá, e o rename trancou TODAS as cadeiras fora do
 ops-mcp de uma vez.
 
-Recuperação é cara: o admin console do Keycloak é loopback-only (`127.0.0.1:8180`; `/admin`
-dá 404 na borda), e quem destrava é o dono no terminal do host. Toda mudança de identidade
-que possa alcançar `sujeitos.yaml` precisa da correção preparada ANTES do ato.
+Recuperação é cara: o admin console é loopback-only (`/admin` dá 404 na borda) e quem
+destrava é o dono no terminal do host. Mudança de identidade que possa alcançar
+`sujeitos.yaml` precisa da correção preparada ANTES do ato.
 
 ## Revogar credencial a partir de lista de terceiro
 
@@ -58,42 +55,39 @@ Três passadas antes de apagar: **separar credencial de configuração** (confer
 LÊ a chave hoje, não contra o nome); **grep por nome de chave, nunca por menção** (duplicata
 em `.env` é silenciosa: por chave deu 5, por linha 7); **reescrever com verificação, não
 `sed`** (afirmar antes de gravar que as demais seguem byte a byte, e reaplicar 600 depois).
-
-Ordem do ato: primeiro o realm (apagar o client mata service account e secret juntos),
-depois o `.env`. Fecha quando `acesso orfaos` perde o achado — a única confirmação que não
-depende da minha narrativa.
+Ordem: primeiro o realm (apagar o client mata service account e secret juntos), depois o
+`.env`. Fecha quando `acesso orfaos` perde o achado — a única confirmação que não depende
+da minha narrativa.
 
 ## Gate de borda com mais de um upstream (oauth2-proxy v7)
 
 MÉTODO, que vale mais que o caso: subir instância DESCARTÁVEL da mesma imagem na mesma
-rede, com `--skip-auth-route='GET=^/'` e credencial falsa. Mede roteamento sem encostar em
+rede, com `--skip-auth-route='GET=^/'` e credencial falsa — mede roteamento sem encostar em
 produção. Medido 16/08:
 
-- O proxy DECLARA o mapa no boot (`mapping path "/api/" => ...`) — ler o log é a conferência.
-- **O path não é removido no repasse**: upstream `http://api:8000/api/` casa o prefixo e
-  encaminha o caminho inteiro, então quem serve tem de responder em `/api` de verdade. Mais
-  específico primeiro; `/api` SEM barra não casa e cai no upstream `/`.
+- O proxy DECLARA o mapa no boot (`mapping path "/api/" => ...`); ler o log é a conferência.
+- **O path não é removido no repasse**: upstream `.../api/` casa o prefixo e encaminha o
+  caminho inteiro, então quem serve tem de responder em `/api` de verdade. Mais específico
+  primeiro, e `/api` SEM barra não casa: cai no upstream `/`.
 - **Travessia não vira bypass**: `../`, `..%2f` e `%2e%2e` levam 301 de canonicalização no
-  próprio mux ANTES do repasse. Por isso skip-auth com regex não ancarada no fim não abre
-  buraco — mas é propriedade do mux, não do regex, e se reconfere a cada troca de versão.
-- Rota anônima aponta para o contêiner que a serve: tirá-la de dentro da imagem que monta o
-  `.env` encolhe a superfície de injeção de cabeçalho de sujeito, sem tocar na política.
+  próprio mux ANTES do repasse. Isso é propriedade do mux, não do regex de skip-auth, e se
+  reconfere a cada troca de versão.
+- Rota anônima aponta para o contêiner que a serve: tirá-la da imagem que monta o `.env`
+  encolhe a superfície de injeção de cabeçalho de sujeito, sem tocar na política.
 
 ## Forma da cadeira: três matérias e uma régua
 
 `risco` não é gerência ao lado das outras — é o MODO da cadeira. Descoberto escrevendo o
 chapéu dele (16/08): a régua que saiu era palavra por palavra a POSTURA da base. Por isso
-não pode morar em chapéu — chapéu carrega condicionalmente, e a régua tem de estar ligada
-justamente quando estou de outro chapéu.
-
-O escopo não anda sozinho: são quatro perguntas que só aparecem DENTRO do trabalho alheio.
-Agrega quando chega junto da mudança, descrevendo-a melhor do que quem a propôs, não quando
-autoriza; e chega tarde por desenho, porque o gatilho é o deploy e não o nascimento do card.
+não pode morar em chapéu, que carrega condicionalmente: a régua tem de estar ligada
+justamente quando estou de outro chapéu. O escopo também não anda sozinho — são quatro
+perguntas que só aparecem DENTRO do trabalho alheio. Agrega quando chega junto da mudança,
+descrevendo-a melhor do que quem a propôs, não quando autoriza; e chega tarde por desenho,
+porque o gatilho é o deploy e não o nascimento do card.
 
 ## Padrões da casa, medidos
 
-- Secret de stack: ~/AI/var/secrets/<stack>/, dir 700, arquivo 600. Nunca no compose,
-  nunca no git, nunca na fila.
+- Secret de stack: ~/AI/var/secrets/<stack>/, dir 700, arquivo 600 — nunca compose/git/fila.
 - Conta isolada nova: uid sequencial, home 700, faixa subuid/subgid disjunta de 65536,
   linger on, grupo único, sem sudo.
 - `conferir superficie` é HOMÔNIMO: julga superfície de SESSÃO (claude.ai, code-seco,
@@ -103,6 +97,5 @@ autoriza; e chega tarde por desenho, porque o gatilho é o deploy e não o nasci
 - Slug da cadeira MUDA por verbo, e errar não dá erro — devolve outro armazém. `mesa`,
   `encerrar` e `caderno` querem `seguranca`; `fila` e `tarefas --cadeira` querem
   `claudinho-seguranca`. O slug errado abre um segundo store, plausível e vazio.
-- `encerrar fita` marca o slot `iam` como "ÓRFÃO — slug não declarado na persona" e sugere
-  `mesa limpa`. É FALSO POSITIVO: a persona declara `iam` como slug da head, mas fora do
-  bloco GERÊNCIAS, que é o que o verbo lê. Não limpar.
+- `encerrar fita` marca o slot `iam` como ÓRFÃO e sugere `mesa limpa`: falso positivo — a
+  persona declara `iam` como slug da head, fora do bloco GERÊNCIAS, que é o que o verbo lê.
