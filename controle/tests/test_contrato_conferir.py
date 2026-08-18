@@ -13,6 +13,7 @@
 import importlib.machinery
 import importlib.util
 import json
+import os
 import subprocess
 from pathlib import Path
 
@@ -32,10 +33,23 @@ def _carregar_conferir():
 conferir = _carregar_conferir()
 
 
+# Variáveis que o PRÓPRIO git injeta quando este processo roda dentro de um hook seu
+# (pre-push, pre-commit): apontam pro repositório que disparou o hook, e um `git init`/
+# `git commit` de fixture aqui dentro herdaria isso por padrão (subprocess.run repassa o
+# ambiente do pai) — o "repo descartável" deixaria de ser descartável e a escrita cairia
+# no repositório REAL. Medido: suíte que passa limpa rodada à mão e falha, com commit
+# fantasma no branch de quem empurrou, rodada de dentro de `hooks/pre-push`.
+_GIT_ENV_A_LIMPAR = (
+    "GIT_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE",
+    "GIT_OBJECT_DIRECTORY", "GIT_COMMON_DIR", "GIT_CEILING_DIRECTORIES",
+)
+
+
 def _git(cwd, *args):
+    env = {k: v for k, v in os.environ.items() if k not in _GIT_ENV_A_LIMPAR}
     subprocess.run(
         ["git", "-c", "user.email=teste@local", "-c", "user.name=teste", *args],
-        cwd=cwd, check=True, capture_output=True, text=True,
+        cwd=cwd, check=True, capture_output=True, text=True, env=env,
     )
 
 
