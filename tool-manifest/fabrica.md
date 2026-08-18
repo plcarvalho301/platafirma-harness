@@ -32,6 +32,12 @@ mais caro daqui:
   nativos **não** alcançam arquivo do host; escrita no host é `write_file`.
 - `monta_sessao(cadeira="fabrica")` — persona, este manifesto e a mesa numa
   chamada. Sob demanda, não gate de entrada.
+- **Chapéu da linha** — `read_file("platafirma-harness/personas/chapeus/fabrica/<slug>.md")`.
+  Não vem no `monta_sessao` por desenho: chapéu carrega sob demanda, no giro em que a
+  linha ativa. Não há verbo para isto — a leitura do arquivo É a carga. Slug igual ao
+  que a base manda declarar na abertura; hoje existe `devsecops` (dev + ops, dono
+  claudinho-TI). Arquivo ausente não é permissão para inferir a régua: é pergunta
+  fechada ao cliente da linha.
 
 **PlataFirma Wiki** (`mcp.platafirma.org`) — leitura de repo e acervo.
 
