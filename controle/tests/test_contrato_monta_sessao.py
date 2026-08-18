@@ -206,6 +206,10 @@ def test_fila_nao_e_peca_de_abertura(raiz):
     dados = json.loads(_run(["teste", "--json"], raiz).stdout)
     assert "fila" not in dados
     assert "fila" not in {p["peca"] for p in dados["pecas"]}
+    # O PAR POSITIVO, que o guarda de regressão sozinho não dá: provar que a fila saiu
+    # não prova que a MESA ficou. A abertura carrega impedimento, e hoje o impedimento é
+    # ela — se a peça sumir do catálogo, o pacote continua válido e ninguém percebe.
+    assert "mesa" in {p["peca"] for p in dados["pecas"]}
 
 
 def test_atualizado_reflete_flag_sem_atualizar(raiz):

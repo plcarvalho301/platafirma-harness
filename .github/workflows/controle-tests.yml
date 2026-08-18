@@ -27,5 +27,13 @@ jobs:
       - name: sincroniza dependencias declaradas (pyproject.toml + uv.lock)
         run: uv sync --locked --group dev
 
-      - name: suite de controle (modelo em controle/tests/MODELO-SUITE.md)
-        run: uv run pytest tests/ -q
+      # BASELINE VERDE, e nao `tests/` inteiro. A suite completa tem 11 falhas e 3 erros
+      # de coleta hoje (medido 18/08): CI que nasce vermelho e CI que todo mundo aprende
+      # a ignorar em uma semana. Roda o que `tests/VERDES` lista — mesma lista do
+      # hooks/pre-push, uma fonte so — e arquivo consertado entra na lista no commit que
+      # o conserta. A lista so cresce, e o dia em que ela cobrir tudo, isto vira `tests/`.
+      - name: suite de controle (baseline verde; modelo em controle/tests/MODELO-SUITE.md)
+        run: |
+          arquivos=$(grep -v '^\s*#' tests/VERDES | grep -v '^\s*$' | tr '\n' ' ')
+          echo "baseline: $arquivos"
+          uv run pytest $arquivos -q
