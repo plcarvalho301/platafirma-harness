@@ -126,36 +126,76 @@ def pg(silencioso=False):
         return None
 
 
-def cadeira():
+def _bruta():
     c = os.environ.get("PF_CADEIRA", "").strip().lower()
     if not c:
         sys.exit("erro: PF_CADEIRA nao definida — a memoria e privada da cadeira (arq:0041)")
     return c
 
 
-def canonica():
-    """Slug canonico da cadeira, para o substrato NOVO.
+_RESOLVIDA = []
 
-    `monta-sessao` exporta PF_CADEIRA com o argumento (`TI`) e o resto do ferramental
-    usa o slug (`claudinho-TI`): no Valkey isso partiu a mesa em duas metades que
-    divergem (medido em 16/08, cinco cadeiras com par). Aqui a chave e uma so.
-    O nome canonico ja esta na linha 1 de cada persona — tabela a parte diverge.
+
+def _resolve():
+    """(curto, canonico) a partir de PF_CADEIRA, que chega nas DUAS formas.
+
+    O montador exporta o canonico (`claudinho-TI`, que nomeia a caixa da fila); o
+    terminal e a fabrica exportam o sufixo (`TI`). Quem recebe normaliza — trocar o
+    que se exporta so mudaria de lugar a divergencia, porque a fila PRECISA do
+    canonico e a chave do substrato nao. Fonte: linha 1 de cada persona; tabela a
+    parte diverge. Nao casando, devolve (bruta, None): nao inventa cadeira.
     """
-    bruta = cadeira()
+    if _RESOLVIDA:
+        return _RESOLVIDA[0]
+    bruta = _bruta()
+    par = (bruta, None)
     try:
-        arquivos = os.listdir(PERSONAS)
+        arquivos = sorted(os.listdir(PERSONAS))
     except OSError:
-        return bruta
-    for nome in sorted(arquivos):
+        arquivos = []
+    for nome in arquivos:
         if not (nome.startswith("persona-") and nome.endswith(".md")):
             continue
         curto = nome[len("persona-"):-len(".md")]
         with open(os.path.join(PERSONAS, nome), encoding="utf-8", errors="replace") as fh:
             achado = re.search(r"claudinh[oa]-[A-Za-z0-9-]+", fh.readline())
-        canon = achado.group(0) if achado else curto
-        if bruta in (curto.lower(), canon.lower()):
-            return canon
-    return bruta
+        canon = achado.group(0) if achado else None
+        if bruta in (curto.lower(), (canon or "").lower()):
+            par = (curto.lower(), canon)
+            break
+    _RESOLVIDA.append(par)
+    return par
+
+
+def cadeira():
+    """Chave do SUBSTRATO: o sufixo (`ia`, `ti`). Decisao do dono, 18/08/2026.
+
+    Vale para `mem:`, `fita:` e `caderno/`. A caixa da fila continua canonica —
+    sao endereços de coisas diferentes, e colapsar os dois foi o que partiu a mesa
+    em duas metades (medido em 16/08).
+    """
+    return _resolve()[0]
+
+
+def canonica():
+    """Slug canonico: caixa da fila e substrato NOVO (Postgres)."""
+    return _resolve()[1] or _bruta()
+
+
+def dir_legado():
+    """Diretorio de caderno na convencao velha, se ainda tiver arquivo.
+
+    Existe para DECLARAR o que a migracao de 18/08 nao pode mover sozinha: slot que
+    existe nas duas convencoes com conteudo diferente e conteudo de cadeira, e quem
+    reconcilia e a dona dele. Vazio quando nao ha legado.
+    """
+    canon = _resolve()[1]
+    if not canon or canon.lower() == cadeira():
+        return None
+    d = os.path.join(CADERNOS, canon.lower())
+    if os.path.isdir(d) and any(f.endswith(".md") for f in os.listdir(d)):
+        return d
+    return None
 
 
 def chave(slot):
@@ -435,7 +475,12 @@ def ato_caderno(args):
         caminho = os.path.join(d, f"{slot}.md")
         if not os.path.isfile(caminho):
             # Ausencia se declara: o verbo diz onde olhou (regra 4 do cabecalho).
-            print(f"caderno {slot}: nao existe ({caminho})")
+            leg = dir_legado()
+            alt = os.path.join(leg, f"{slot}.md") if leg else None
+            if alt and os.path.isfile(alt):
+                print(f"caderno {slot}: nao existe em {caminho} — ha LEGADO em {alt}")
+            else:
+                print(f"caderno {slot}: nao existe ({caminho})")
             return 0
         print(f"===== caderno/{cadeira()}/{slot}.md =====")
         sys.stdout.write(open(caminho, errors="replace").read())
@@ -458,6 +503,11 @@ def ato_caderno(args):
         except (OSError, ValueError, subprocess.SubprocessError):
             ts = int(st.st_mtime)
         print(f"  {f[:-3]:<16} {st.st_size:>6} B   ultima escrita ha {idade(time.time() - ts)}")
+    leg = dir_legado()
+    if leg:
+        for f in sorted(x for x in os.listdir(leg) if x.endswith(".md")):
+            print(f"  LEGADO {f[:-3]:<9} {leg}/{f} — nao migrado porque colide com o"
+                  f" slot curto; reconcilie os dois e apague o legado")
     print(f"  (corpo sob demanda: `mesa caderno <chapeu>`)")
     return 0
 

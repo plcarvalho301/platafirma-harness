@@ -161,13 +161,13 @@ def idade(seg):
 TETO_CADERNO = 100
 
 
-def estado_memoria(bruta, curto, rc):
+def estado_memoria(curto, canon, rc):
     """Slots escritos x slugs declarados. Devolve (linhas, orfaos).
 
-    Duas chaves de proposito: `bruta` e o que o `mesa` usou para ESCREVER (o valor
-    cru de PF_CADEIRA); `curto` e o nome do arquivo de persona. Colapsar as duas
-    mudaria a chave do substrato, que nao e defeito deste verbo consertar."""
-    alvo = bruta
+    A chave do substrato e o SUFIXO (decisao do dono, 18/08/2026) — a mesma que o
+    `mesa` escreve. O que sobrou na convencao velha sai marcado LEGADO, nunca
+    somado ao vivo: pacote menor em silencio e indistinguivel de pacote certo."""
+    alvo = curto
     linhas, orfaos = [], []
     declarados, erro = slugs_declarados(curto)
     chaves = sorted(rc.keys(f"mem:{alvo.lower()}:*"))
@@ -189,6 +189,14 @@ def estado_memoria(bruta, curto, rc):
                       f"  vence em {idade(ttl) if ttl and ttl > 0 else '—'}{marca}")
     if erro:
         linhas.append(f"  (aviso: {erro} — sem conferencia contra o remit)")
+    if canon and canon.lower() != alvo.lower():
+        legado = sorted(rc.keys(f"mem:{canon.lower()}:*"))
+        cad_leg = os.path.join(RAIZ, "platafirma-harness", "caderno", canon.lower())
+        if os.path.isdir(cad_leg):
+            legado += [f"caderno/{canon.lower()}/{f}"
+                       for f in sorted(os.listdir(cad_leg)) if f.endswith(".md")]
+        for k in legado:
+            linhas.append(f"  LEGADO {k} — convencao velha; reconcilie e apague")
     cad = os.path.join(RAIZ, "platafirma-harness", "caderno", alvo.lower())
     achou_caderno = False
     if os.path.isdir(cad):
@@ -220,15 +228,15 @@ def roda(rotulo, cmd, timeout=60):
 
 
 def ato_fita(args):
-    alvo = cadeira()
     curto, canon = resolve()
+    alvo = curto
     rc = conn()
     print(f"== descanso de {alvo} ==")
     ultimo = rc.get(f"mem:{alvo.lower()}")
     print(f"ultimo descanso: {idade(time.time() - int(ultimo)) + ' atras' if ultimo else 'nunca'}")
 
     print("\n== memoria retida ==")
-    linhas, orfaos = estado_memoria(alvo, curto, rc)
+    linhas, orfaos = estado_memoria(curto, canon, rc)
     print("\n".join(linhas))
     if orfaos:
         print(f"\n  {len(orfaos)} orfao(s): {', '.join(sorted(set(orfaos)))}")
