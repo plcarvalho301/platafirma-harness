@@ -87,6 +87,33 @@ def cadeira():
     return c
 
 
+def resolve():
+    """(curto, canonico) a partir de PF_CADEIRA, que chega nas DUAS formas.
+
+    `monta_sessao` aceita `IA` e `claudinho-IA` e descarta o prefixo; o adaptador
+    exporta ora um, ora outro. Sem esta resolucao o fecho procura
+    `persona-claudinho-IA.md`, nao acha, e sai sem conferir remit nem medir fila —
+    falha muda, porque o resto do verbo segue rodando. A fonte e a linha 1 de cada
+    persona, igual ao `mesa.canonica()`; tabela a parte diverge.
+    Devolve (bruta, None) quando nao casa: nao inventa cadeira.
+    """
+    bruta = cadeira()
+    try:
+        arquivos = sorted(os.listdir(PERSONAS))
+    except OSError:
+        return bruta, None
+    for nome in arquivos:
+        if not (nome.startswith("persona-") and nome.endswith(".md")):
+            continue
+        curto = nome[len("persona-"):-len(".md")]
+        m = RE_CANON.search(open(os.path.join(PERSONAS, nome),
+                                 errors="replace").readline())
+        canon = m.group(0) if m else None
+        if bruta.lower() in (curto.lower(), (canon or "").lower()):
+            return curto, canon
+    return bruta, None
+
+
 def slugs_declarados(alvo):
     """Os chapeus que a persona declara. Fonte e o texto da persona, nunca o que
     esta escrito no substrato: a memoria seguir o remit e o ponto da conferencia."""
@@ -134,10 +161,15 @@ def idade(seg):
 TETO_CADERNO = 100
 
 
-def estado_memoria(alvo, rc):
-    """Slots escritos x slugs declarados. Devolve (linhas, orfaos)."""
+def estado_memoria(bruta, curto, rc):
+    """Slots escritos x slugs declarados. Devolve (linhas, orfaos).
+
+    Duas chaves de proposito: `bruta` e o que o `mesa` usou para ESCREVER (o valor
+    cru de PF_CADEIRA); `curto` e o nome do arquivo de persona. Colapsar as duas
+    mudaria a chave do substrato, que nao e defeito deste verbo consertar."""
+    alvo = bruta
     linhas, orfaos = [], []
-    declarados, erro = slugs_declarados(alvo)
+    declarados, erro = slugs_declarados(curto)
     chaves = sorted(rc.keys(f"mem:{alvo.lower()}:*"))
     if not chaves:
         linhas.append("  mesa vazia — nada retido da fita anterior")
@@ -189,13 +221,14 @@ def roda(rotulo, cmd, timeout=60):
 
 def ato_fita(args):
     alvo = cadeira()
+    curto, canon = resolve()
     rc = conn()
     print(f"== descanso de {alvo} ==")
     ultimo = rc.get(f"mem:{alvo.lower()}")
     print(f"ultimo descanso: {idade(time.time() - int(ultimo)) + ' atras' if ultimo else 'nunca'}")
 
     print("\n== memoria retida ==")
-    linhas, orfaos = estado_memoria(alvo, rc)
+    linhas, orfaos = estado_memoria(alvo, curto, rc)
     print("\n".join(linhas))
     if orfaos:
         print(f"\n  {len(orfaos)} orfao(s): {', '.join(sorted(set(orfaos)))}")
@@ -204,14 +237,14 @@ def ato_fita(args):
     if not args.so_memoria:
         print("\n== fatos volateis, medidos agora ==")
         print("Confira contra isto o que a fita afirmou de memoria de conversa.")
-        for rotulo, cmd in COMUM + POR_CADEIRA.get(alvo.lower(), []):
+        for rotulo, cmd in COMUM + POR_CADEIRA.get(curto.lower(), []):
             roda(rotulo, cmd)
-        canon = nome_canonico(alvo)
         if canon:
             roda(f"fila — historico frio dos 7 dias ({canon}); nao move o ponteiro",
                  f"fila ler {canon} --tudo", timeout=90)
         else:
-            print("\n-- fila\n  NAO MEDIDO — nome canonico nao sai da linha 1 da persona")
+            print(f"\n-- fila\n  NAO MEDIDO — PF_CADEIRA={alvo!r} nao casa com"
+                  f" nenhuma persona em {PERSONAS}")
 
     rc.set(f"mem:{alvo.lower()}", int(time.time()))
     print("\n== proximo passo ==\n"
