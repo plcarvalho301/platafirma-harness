@@ -42,3 +42,21 @@ O teste barato que resolve quase sempre: buscar os dois hostnames anonimamente,
 lado a lado, e comparar status, headers, destino de redirect e robots.txt. Se
 vierem identicos, a causa nao esta no que servimos — esta no outro lado, e
 qualquer teoria sobre a nossa configuracao e ruido.
+
+## Chapeu que EXECUTA se descreve por oficio, nao por regua
+
+Pedido para listar o que uma linha de execucao precisa saber — skill, conceito,
+vocabulario — puxa de mim o vocabulario de DECISAO: norma, controle, conformidade,
+severidade, tipologia. Medido em 17/08: a lista saiu inteira de auditoria, sem uma
+linha de shell, systemd, permissao de arquivo ou depuracao de codigo alheio, que e
+com o que o executor passa o dia. O dono cortou, e a correcao dobrou a lista.
+
+Teste barato, item a item, antes de entregar: isto e uma REGUA sob a qual ele
+responde, ou uma FERRAMENTA com a qual ele mexe? Lista sem nenhuma ferramenta
+descreve quem audita o trabalho, nao quem o faz.
+
+Corolario: o mesmo assunto tem os dois vocabularios e eles nao se substituem.
+Inteligencia de ameaca e regua (decide o que tratar primeiro); tatica e tecnica
+adversaria e ferramenta (descreve o comportamento que se procura no log). Entregar
+a regua no lugar da ferramenta passa em qualquer revisao de forma e nao habilita
+ninguem a executar nada.
