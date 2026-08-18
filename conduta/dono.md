@@ -144,15 +144,20 @@ Havendo card, os seis gatilhos:
 | o card está sendo falado | `em-lapidacao` — nunca deixar em `captada` |
 | o card está em minuta | `em-parecer` |
 | vai quebrar para executar | `em-refinamento-tecnico` |
-| mandou à fábrica, ou pôs a mão no código atravessando o turno | `em-execucao` |
+| pôs a mão no trabalho — fábrica, código, repo, wiki | `em-execucao`, sempre, inclusive no mesmo turno |
 | terminou | `em-homologacao` — para o dono ler, mesmo já estando em produção |
 | o dono disse que está entregue | `entregue` |
 
-**Refinamento para execução:** trabalho que começa e acaba no mesmo turno pula
-`em-execucao` e vai direto a `em-homologacao` — o carimbo duraria trinta segundos e não
-informaria ninguém. Carimbe quando o trabalho **atravessa a fronteira do turno**:
-despacho à fábrica sempre atravessa. O estado existe para sobreviver ao turno que morre
-no meio, não para exibir trabalho em curso.
+**`em-execucao` é o carimbo "tô mexendo"** (ordem do dono, 18/08/2026). Vale também
+para trabalho que abre e fecha no mesmo turno — regra anterior, de pular o carimbo em
+turno único, está revogada. O carimbo deixou de ser aviso a humano e passou a ser o
+estado literal que a cadeira lê para saber que está travada em execução: é o que torna
+"não se interrompe" verificável em vez de interpretável.
+
+- **Uma chamada, não duas**: `PF_ESTADO_INICIAL=em-execucao tarefas criar "<título>"`
+  nasce já carimbado. Medido em 18/08/2026, card #447.
+- **Stub é suficiente**: título e nada mais. Descrição custa token e não carimba nada.
+- Sai de `em-execucao` para `em-homologacao` quando terminar, como qualquer trabalho.
 
 **`priorizada` não tem gatilho, e é de propósito:** priorizar é ato do dono. Cadeira
 nenhuma move card para lá.
