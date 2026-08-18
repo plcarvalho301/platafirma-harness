@@ -1,0 +1,20 @@
+# BASELINE VERDE da suite de contrato — o que o `hooks/pre-push` julga.
+#
+# Regra: so entra arquivo que passa INTEIRO. Arquivo consertado entra na lista no
+# mesmo commit que o conserta; a lista so cresce. Card #204 item 2.
+#
+# Medido em 18/08/2026 (`uvx --with redis pytest tests/ -q`):
+#   VERDES  test_contrato_conferir.py     8 passam
+#           test_contrato_infra.py        9 passam
+#           test_contrato_monta_sessao.py 8 passam (reescrito hoje contra o verbo Python)
+#   FORA    test_contrato_fila.py         19 passam, 1 falha
+#           test_contrato_tarefas.py      10 falham — contrato de `listar --json`
+#           test_agregador.py             ImportError na coleta
+#           test_feito_agrupamento.py     ImportError na coleta
+#           test_web_fumaca.py            ImportError na coleta
+#
+# Os cinco de fora nao sao divida silenciosa: estao nomeados aqui, com o que ha de
+# errado em cada um. Ficar de fora do gate e estado declarado, nao esquecimento.
+tests/test_contrato_conferir.py
+tests/test_contrato_infra.py
+tests/test_contrato_monta_sessao.py

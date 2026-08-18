@@ -1,0 +1,52 @@
+#!/usr/bin/env bash
+# pre-push — a suite de contrato ganha GATILHO.
+#
+# capacidade: orfa
+# dono: claudinho-TI
+#
+# POR QUE EXISTE (card #204 item 2): a suite so rodava se alguem digitasse, e sete
+# dos oito arquivos estavam parados desde 10-11/08. Nao ha CI neste repo. Teste sem
+# gatilho nao e rede de seguranca: e arquivo que apodrece ate virar ruido — foi
+# exatamente o que aconteceu com o contrato do monta-sessao, 17 vermelhos por dias.
+#
+# BASELINE VERDE, e nao a suite inteira. Gate que nasce vermelho por falha que ja
+# existia e gate que alguem desliga na primeira vez. Entao ele julga so o que esta
+# verde HOJE, listado em `controle/tests/VERDES`, e arquivo consertado ENTRA na lista
+# no mesmo commit que o conserta. A lista so cresce.
+#
+# NAO TRAVA POR AMBIENTE. Sem `uvx`, avisa e deixa passar: gate que bloqueia push por
+# falta de ferramenta na maquina e gate contornado com --no-verify na segunda vez.
+# Bloqueia so quando MEDIU e o teste falhou.
+set -uo pipefail
+
+RAIZ="$(git rev-parse --show-toplevel)"
+LISTA="$RAIZ/controle/tests/VERDES"
+
+[ -r "$LISTA" ] || exit 0
+
+if ! command -v uvx >/dev/null 2>&1; then
+  echo "pre-push: uvx ausente — suite de contrato NAO foi medida neste push." >&2
+  exit 0
+fi
+
+ARQUIVOS=""
+while IFS= read -r linha; do
+  case "$linha" in ''|'#'*) continue ;; esac
+  [ -f "$RAIZ/controle/$linha" ] && ARQUIVOS="$ARQUIVOS $linha"
+done < "$LISTA"
+
+[ -n "$ARQUIVOS" ] || exit 0
+
+cd "$RAIZ/controle" || exit 0
+# shellcheck disable=SC2086
+if ! timeout 300 uvx --with redis pytest $ARQUIVOS -q >/tmp/pre-push-contrato.txt 2>&1; then
+  echo >&2
+  echo "pre-push: BASELINE VERDE QUEBROU — push barrado." >&2
+  tail -n 15 /tmp/pre-push-contrato.txt >&2
+  echo >&2
+  echo "  saida inteira: /tmp/pre-push-contrato.txt" >&2
+  echo "  a lista do baseline: controle/tests/VERDES" >&2
+  exit 1
+fi
+
+echo "pre-push: baseline de contrato verde ($(tail -n 1 /tmp/pre-push-contrato.txt))"
