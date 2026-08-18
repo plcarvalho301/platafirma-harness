@@ -35,7 +35,10 @@ uso:
   tarefas mover <id> <estado> [--motivo "<txt>"] [--englobado-em <id>]
                                           move o card pelo fluxo; a recusa diz para onde
                                           se PODE ir a partir do estado atual
-  tarefas fechar <id> [--como <estado>]   fecha; default: entregue. Para mover, `mover`.
+  tarefas fechar <id> [--como <estado>] [--cascata]
+                                          fecha; default: entregue. Filha aberta na
+                                          subárvore? a recusa NOMEIA quem seria encerrado
+                                          junto, e `--cascata` confirma. Para mover, `mover`.
   tarefas apagar <id> [--cascata]        APAGA o item. Fora do miolo do fluxo (funil e
                                          terminal); `--cascata` leva a subárvore junto.
   tarefas assinar <id> --aprovador <c> [--decisao aprovado|recusado] [--motivo "<txt>"]
@@ -69,6 +72,11 @@ _recusa() { # lê o corpo do erro em $1 e devolve a mensagem da API
   # de forma. Recusa sem o campo (nascimento, validação de corpo) segue imprimindo só a causa.
   local frase; frase=$(printf '%s' "$1" | jq -r '.frase_destinos // empty' 2>/dev/null || true)
   [ -n "$frase" ] && erro="$erro · $frase"
+  # A API fala em `?cascata=1` porque é o parâmetro DELA; quem está no terminal digita
+  # `--cascata`. Traduzir na borda é o certo: a API não deve conhecer as flags dos seus
+  # clientes, e mandar alguém montar query string na mão para responder uma pergunta que o
+  # verbo já sabe fazer é devolver o trabalho que este verbo existe para tirar.
+  erro="${erro//\`?cascata=1\`/\`--cascata\`}"
   # `-S` sai do curl porque a mensagem util e o CORPO, e a linha `curl: (22) ... 400` so
   # empurrava o texto da maquina para fora da tela. Falha SEM corpo (rede, servico fora)
   # nao fica muda: cai no ramo abaixo, com o endereco que nao respondeu.
@@ -308,11 +316,16 @@ comentar() {
 mover() {
   local id; id=$(so_id "${1:?uso: tarefas mover <id> <estado> [--motivo \"...\"]}")
   local destino="${2:?uso: tarefas mover <id> <estado> [--motivo \"...\"]}"; shift 2
-  local motivo="" elo=""
+  local motivo="" elo="" q=""
   while [ $# -gt 0 ]; do
     case "$1" in
       --motivo)       motivo="${2:?--motivo pede texto}"; shift 2 ;;
       --englobado-em) elo="${2:?--englobado-em pede o id que absorveu}"; shift 2 ;;
+      # CONFIRMAÇÃO DA CASCATA (ordem do dono, 18/08/2026). O verbo não decide NADA aqui:
+      # ele só carrega a declaração até a API, que é quem sabe se há filha aberta e quem
+      # NOMEIA quais são na recusa. Repetir a regra do lado do CLI daria duas verdades, e a
+      # que o dono veria seria a que perdeu a corrida.
+      --cascata)      q="?cascata=1"; shift ;;
       *) echo "opção desconhecida: $1" >&2; exit 2 ;;
     esac
   done
@@ -320,8 +333,11 @@ mover() {
      '{estado:$e}
       + (if $m == "" then {} else {motivo:$m} end)
       + (if $g == "" then {} else {englobado_em:($g|tonumber)} end)' \
-    | envia PATCH "/itens/$id" \
-    | jq -r '"item \(.id) → \(.estado_nome): \(.titulo)"'
+    | envia PATCH "/itens/$id$q" \
+    | jq -r '"item \(.id) → \(.estado_nome): \(.titulo)"
+             + (if ((.propagacao.movidas // []) | length) > 0
+                then "\n  filhas movidas junto: " + ([.propagacao.movidas[] | "#\(.id)"] | join(", "))
+                else "" end)'
 }
 
 # `fechar` CONTINUA EXISTINDO PARA FECHAR, e deixa de ser a porta de mover. Não morre: 145
