@@ -19,6 +19,13 @@
 # Bloqueia so quando MEDIU e o teste falhou.
 set -uo pipefail
 
+# O PROPRIO GIT injeta GIT_DIR/GIT_WORK_TREE (e primos) no ambiente deste hook — apontam
+# pro repositorio que disparou o push. Sem limpar, qualquer `git init`/`git commit` de
+# fixture DENTRO da suite (repo descartavel em tmp_path) herda essas variaveis via
+# subprocess e a escrita "descartavel" cai no repositorio REAL — medido: suite verde
+# rodada a mao, commit fantasma no branch de quem empurrou rodada daqui de dentro.
+unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_OBJECT_DIRECTORY GIT_COMMON_DIR       GIT_CEILING_DIRECTORIES
+
 RAIZ="$(git rev-parse --show-toplevel)"
 LISTA="$RAIZ/controle/tests/VERDES"
 
