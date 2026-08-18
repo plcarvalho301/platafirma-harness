@@ -13,7 +13,7 @@ conhece healthcheck nenhum. Tres regras que o formato existe para sustentar:
   - toda entrada que nao esta `no-ar` carrega `motivo`.
 
 Duas fontes, por necessidade: quem tem shell na imagem traz o veredito do
-proprio healthcheck do Docker; quem nao tem (oauth2-proxy, vikunja, cloudflared)
+proprio healthcheck do Docker; quem nao tem (oauth2-proxy, cloudflared)
 e sondado daqui, de fora, por um contendor-posto que esta na mesma rede.
 """
 
@@ -31,8 +31,6 @@ POSTO = "platafirma-core-vikunja-proxy-1"   # nginx com curl, na rede do conheci
 POR_HEALTHCHECK = {
     "keycloak": "platafirma-core-keycloak-1",
     "keycloak-db": "platafirma-core-keycloak-db-1",
-    "vikunja-db": "platafirma-core-vikunja-db-1",
-    "vikunja-proxy": "platafirma-core-vikunja-proxy-1",
     "landing": "platafirma-core-landing-1",
     "mediawiki": "plataforma-wiki-mediawiki-1",
     "rag-extractor-api": "rag-extractor-api",
@@ -44,7 +42,6 @@ POR_HEALTHCHECK = {
 POR_SONDA_EXTERNA = [
     ("oauth2-proxy", POSTO, "http://oauth2-proxy:4180/ping", None, None),
     ("oauth2-proxy-harness", POSTO, "http://oauth2-proxy-harness:4180/ping", None, None),
-    ("vikunja", POSTO, "http://vikunja:3456/api/v1/info", '"version"', None),
     # readyConnections e o que distingue tunel de pe de tunel sem conexao com a
     # borda da Cloudflare: o processo fica vivo nos dois casos.
     ("cloudflared", POSTO, "http://cloudflared:20241/ready", None, '"readyConnections":0'),

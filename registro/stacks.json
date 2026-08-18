@@ -100,7 +100,7 @@
       "critico": false,
       "rotas": "~/AI/deploy/core/deploy/cloudflared-config.yml",
       "gate": "~/AI/deploy/core/docker-compose.yml",
-      "_nota": "Boneco do card #465, API-only por arq:0056 — o comentario 335 recortou a tela, que volta no #468. Aponta para o CLONE DE TRABALHO, nao para um worktree de deploy: ~/AI/deploy/rastreador nao existe, entao `promover` recusa e `conferir servico` marca DERIVA. E o mesmo padrao de acervo-api, chat e jaiminho. DESDE O #469 a stack tem superficie publica: tarefas.platafirma.org entra no `oauth2-proxy-rastreador`, que vive na stack CORE e alcanca esta API pela rede `pf-borda-rastreador`. Por isso `rotas` e `gate` apontam os dois para fora deste repo — mesma razao do `chat`, cujo ingress tambem mora no core. Reverter continua sendo `deploy rastreador down` mais apagar o volume; a rota volta para vikunja-proxy numa linha.",
+      "_nota": "Boneco do card #465, API-only por arq:0056 — o comentario 335 recortou a tela, que volta no #468. Aponta para o CLONE DE TRABALHO, nao para um worktree de deploy: ~/AI/deploy/rastreador nao existe, entao `promover` recusa e `conferir servico` marca DERIVA. E o mesmo padrao de acervo-api, chat e jaiminho. DESDE O #469 a stack tem superficie publica: tarefas.platafirma.org entra no `oauth2-proxy-rastreador`, que vive na stack CORE e alcanca esta API pela rede `pf-borda-rastreador`. Por isso `rotas` e `gate` apontam os dois para fora deste repo — mesma razao do `chat`, cujo ingress tambem mora no core. Reverter continua sendo `deploy rastreador down` mais apagar o volume.",
       "segredos": [
         ".env"
       ]

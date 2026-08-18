@@ -38,7 +38,7 @@
       "alcance": "aqui",
       "_nota": "postura aceita pelo dono: o backup e o git, o risco esta assumido. Debito no card #176. Nao propor rotina."
     },
-    "vikunja-db": {
+    "rastreador-db": {
       "o_que": "banco do rastreador",
       "cobertura": "nenhuma",
       "alcance": "aqui",
