@@ -4,60 +4,61 @@ A fábrica é a única cadeira que roda no Claude Code; as outras rodam em
 claude.ai. Skill não alcança o Code, então o veículo da identidade é arquivo de
 configuração de **conta**, nunca de repositório alvo.
 
-## Onde abrir a sessão — decide o card, não o hábito
+## Onde abrir a sessão — no posto, sempre
 
-O card diz quantos repositórios ele toca, e isso escolhe o procedimento.
-
-**Card de um repositório só** — clone do repo do card. `Bash`, `Write` e `Edit`
-nativos valem, o `AGENTS.md` da raiz é o roteiro, e o push da branch sai do
-próprio clone.
+`~/platafirma-posto`, na conta `megafone`. Não há segundo procedimento, e o
+número de repositórios que o card toca não escolhe nada: o clone que o runtime
+executa é o de `/home/claudinho/AI`, alcançado pelo connector `platafirma-ops`,
+e é o único que existe. Sete cards em três repositórios são sete caminhos na
+mesma sessão.
 
 ```
-git clone <repositório do card>
-cd <repositório do card>
+cd ~/platafirma-posto && git pull && bash ./sincroniza.sh
 claude
 ```
 
-**Card que toca mais de um repositório** — estação emprestada, isto é, o clone
-do `platafirma-harness`. É o caso do card cujo escopo cruza repos e do card que
-toca o próprio harness.
+`git pull` sozinho não sincroniza: ele traz o script; os arquivos de arranque
+vêm por `gh api` quando o script roda. Sessão viva não relê `~/.claude/` —
+sincronizou, reabre.
 
-```
-cd <clone do platafirma-harness>
-git pull --ff-only
-claude
-```
+Aceite do arranque: `head -1 ~/.claude/CLAUDE.md` sai
+`# Arranque — conta que roda o Claude Code da PlataFirma`.
 
-Por que a estação resolve multi-repo: o `.claude/settings.json` do harness nega
-`Bash`, `Write`, `Edit` e `NotebookEdit` **na estação**, então toda escrita e
-execução passam por `platafirma-ops`, na máquina do dono, contra as árvores em
-`~/AI/`. Dois repositórios viram dois caminhos na mesma sessão, não duas
-sessões. Procedimento completo e o que a configuração garante:
-`docs/estacao-emprestada.md`.
+**Não se clona repositório no posto.** Segundo working tree do mesmo repositório
+é como o que está no ar passa a divergir do canônico sem aviso — foi assim que a
+entrega do `docs.platafirma.org` ficou em produção e fora do git (#213, 18/08).
+Canônico do procedimento, com bootstrap e armadilhas: `Operar:acesso-por-code`
+na wiki, e `platafirma-posto/CLAUDE.md`.
 
-O que muda nesse modo, e é preciso saber antes de despachar:
+O que isso implica, e é preciso saber antes de despachar:
 
-- commit sai com a identidade de quem o `ops` executa (`claudinho`), não com a
-  da conta que roda a fábrica;
-- edição é `write_file` do `ops`; `Edit` e `str_replace` não alcançam arquivo do
-  host a partir do container;
-- push da branch é `run_command` com `git -C ~/AI/<repo> push`, e usa a
-  credencial do dono — não a da fábrica;
-- auditoria fica em `~/AI/var/log/ops/`.
+- `Bash`, `Write` e `Edit` nativos não alcançam o host: escrita é `write_file` do
+  `ops`, e mudança cirúrgica vai por `run_command` com `python3 - <<'PY'` —
+  heredoc com código dentro corrompe em aspas e escape;
+- git é `run_command` em `~/AI/<repo>`, e `AGENTS.md` da raiz de cada repo segue
+  sendo o roteiro daquele repo;
+- job acima de 600 s vai por `longjob`: `run_command` mata o grupo de processos
+  no timeout, e build ou indexação passa disso.
 
-Sem configurar ambiente nos dois casos. Os conectores vêm da conta claude.ai e
+**Exceção, e é a única:** máquina emprestada, ou sessão que não autentica pela
+conta claude.ai (API key, token de longa duração, provedor de terceiro). Aí não
+há posto, e o veículo é o clone do `platafirma-harness` como cliente, com os dois
+tokens em variável de ambiente: `docs/estacao-emprestada.md`.
+
+Duas consequências do canal, que valem no posto e na estação, e mordem quem
+espera o comportamento do Code nativo:
+
+- commit sai com a identidade de quem o `ops` executa (`claudinho`), não com a da
+  conta que roda a fábrica; push é `run_command` com `git -C ~/AI/<repo> push`, e
+  usa a credencial do dono;
+- auditoria de tudo que a fábrica executa fica em `~/AI/var/log/ops/`.
+
+Nada a configurar em nenhum dos dois: os conectores vêm da conta claude.ai e
 valem em qualquer diretório — `claude mcp list` mostra os servidores com o
-prefixo `claude.ai` fora de qualquer clone. A persona vem do pacote de conta, já
-instalado. Nada a exportar, nada a aprovar.
+prefixo `claude.ai` fora de qualquer clone. A persona vem do pacote de conta.
 
-Configurar só em dois casos:
-
-- **Sessão que não autentica pela conta claude.ai** (API key, token de longa
-  duração, provedor de terceiro): aí os conectores não vêm juntos, e o caminho é
-  o clone do harness com os dois tokens em variável de ambiente —
-  `docs/estacao-emprestada.md`.
-- **Conta nova, ou pacote de conta desatualizado**: reexecutar
-  `platafirma-harness/agente/instala.sh`.
+Reexecutar `platafirma-harness/agente/instala.sh` só em conta nova, ou quando o
+pacote de conta estiver atrasado.
 
 Régua de veículo: **Code é a fábrica; cadeira que conversa é claude.ai.**
 
@@ -81,17 +82,21 @@ enxerga a fonte, cópia onde não enxerga. Ele liga `tarefas` a partir de
 verbo de rastreador, e o instalador diz isso em voz alta. O token continua sendo
 o da conta (leitura e comentário; fechar card é aceite de claudinho-TI).
 
-A fábrica roda na conta `megafone`, e lá a instalação é por **cópia**:
-`/home/claudinho` é 750 com grupo vazio, então symlink apontando para a fonte
-não é legível de fora e o Code cai no default sem reclamar. O `cp` como
-`megafone` também não serve — quem lê a origem tem que ser root, e quem escreve
-o destino tem que ser megafone:
+A fábrica roda na conta `megafone`, e lá a instalação é por **cópia**, não por
+symlink: `/home/claudinho` é 750 com grupo vazio, então symlink apontando para a
+fonte não é legível de fora e o Code cai no default sem reclamar.
+
+Quem faz a cópia é o `sincroniza.sh` do posto, por `gh api` — não `cp`, não
+`sudo cat`, e sem precisar de root na máquina:
 
 ```
-sudo cat /home/claudinho/AI/platafirma-harness/agente/CLAUDE.md > /home/megafone/.claude/CLAUDE.md
-sudo cat /home/claudinho/AI/platafirma-harness/agente/settings.json > /home/megafone/.claude/settings.json
-head -3 /home/megafone/.claude/CLAUDE.md
+cd ~/platafirma-posto && git pull && bash ./sincroniza.sh
 ```
+
+Ele traz `agente/CLAUDE.md` e `agente/settings.json` deste repositório para
+`~/.claude/`. Persona não entra: desde 16/08/2026 ela sai por `monta_sessao`,
+como a de toda cadeira. É cópia, e cópia envelhece — nada no host detecta o
+atraso, porque o `claudinho` não alcança a home da `megafone`.
 
 Sessão do Code já aberta não recarrega o pacote — vale a partir da próxima.
 
