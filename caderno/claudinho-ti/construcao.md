@@ -1,7 +1,7 @@
 # caderno — claudinho-TI · construção e fábrica
 
-O que este chapéu aprendeu e vale além de um expediente. Fato de negócio não mora
-aqui: desce a card, commit ou wiki. Corpo lido sob demanda (`mesa caderno construcao`).
+O que este chapéu aprendeu e vale além de um expediente. Fato de negócio desce a card,
+commit ou wiki. Corpo sob demanda (`mesa caderno construcao`).
 
 ## Antes de afirmar, conferir se o objeto existe (medido 18/08, custou um turno do dono)
 
