@@ -53,3 +53,25 @@ Mesma familia do `<details>` acima: os dois sao um esconder que a folha desfez s
 Layer-2 para o que sai do fluxo; controle que permanece no fluxo NAO ganha fundo nem sombra,
 senao passa a competir com o conteudo — numa tela de cartoes, o cartao e o conteudo. Barra de
 controle separa do quadro por espaco e um fio, e so.
+
+## `pf-select` reconstroi o listbox por `MutationObserver`; mutar sem necessidade demole o
+## combobox no instante em que ele fecha
+
+O componente espelha o light DOM para dentro do shadow, e o espelhamento faz
+`interno.replaceChildren()` do listbox inteiro a cada mutacao — nao um patch. Redesenhar as
+`<pf-opcao>` a cada projecao (rotulo com contagem, por exemplo) sem checar se o CONTEUDO
+mudou faz o combobox nascer de novo bem no momento em que a escolha deveria fecha-lo: o
+sintoma na tela e "o seletor agarra, nao fecha nunca" — e nao e o `<details>` que agarra, e
+sim um elemento novo nascendo aberto a cada clique. Guardar uma assinatura do conteudo
+(`dataset.assinatura`) e so mutar quando ela muda resolve sem tocar no fornecedor.
+
+Vale para qualquer primitivo desta biblioteca que espelhe filhos por observer: o mesmo
+padrao pode repetir em `pf-combobox` e em qualquer outro que reuse `_composicao.js`.
+
+## `pf-dialogo` expõe `close-button` como `part`; escondê-lo é CSS, não prop nova
+
+Nao ha atributo para tirar so o X mantendo o titulo (`without-header` esconde os dois
+juntos). Como o embrulho e por HERANCA (nao composicao), a parte do fornecedor atravessa
+direto: `#meu-dialogo::part(close-button) { display: none; }` funciona sem escrever
+componente novo. Serve para todo dialogo cujo cancelamento tem consequencia e nao deve
+oferecer uma saida muda no canto.
