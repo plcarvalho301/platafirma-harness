@@ -3,100 +3,92 @@
 O que este chapéu aprendeu e vale além de um expediente. Fato de negócio não mora
 aqui: desce a card, commit ou wiki. Corpo lido sob demanda (`mesa caderno construcao`).
 
-## Entrega de tela se aceita USANDO, não medindo (medido 16/08, custou a onda 2)
+## Antes de afirmar, conferir se o objeto existe (medido 18/08, custou um turno do dono)
 
-Mergeei quatro fatias da onda 2 do rastreador, rodei seis suítes de aceite — todas verdes
-—, migrei o banco e promovi. O dono abriu no celular e em um minuto achou três defeitos,
-dois bloqueantes: a vista board (a PADRÃO do produto, PRD §6.2) não existia, e clicar no
-título editava o título em vez de abrir o item, deixando o corpo do card inalcançável.
+Reportei ao dono como dívida aberta cinco provas quebradas pelo `/health`. Elas não
+existiam: tinham sido apagadas três horas antes, e o commit que as apagou trazia o MESMO
+diagnóstico, medido antes de mim. Li o defeito numa mensagem da fila, confirmei o 404 no ar
+e nunca perguntei se o arquivo ainda estava lá. O dono mandou consertar sobre uma premissa
+que eu montei errada.
 
-- **Prova verde mede o que o card pediu; uso mede o que o produto é.** Antes de aceitar
-  tela, EXECUTE a tarefa do usuário no aparelho dele — abrir a lista, achar um card, ler o
-  texto —, não só rode a suíte e leia o diff.
-- **Card de tela se recorta contra as três fontes** (PRD, navegação, affordance). Recortei
-  o #468 só contra a de navegação, e a vista padrão do produto nunca entrou em card nenhum.
-  A fábrica entregou o card que recebeu; a lacuna foi do despacho.
-- **Defeito de layout que esconde o único caminho para o conteúdo é bloqueante**, não
-  cosmético: o estouro de largura em 360px era o que escondia o verbo `abrir`.
+**Medir a causa não é medir o objeto.** Antes de oferecer conserto, `ls`/`git log` no que
+vai ser consertado. Custa uma consulta; a alternativa custa um turno de quem manda.
+
+## Antes de fechar pai, listar filhas (medido 18/08, na mesma fita)
+
+Rodei `tarefas fechar` em dois cards-pai como se fossem folhas. A cascata encerrou três
+cards que ninguém tinha trabalhado — sabendo que a cascata existe, tendo escrito sobre ela
+naquele mesmo dia.
+
+E o segundo erro em cima do primeiro: para desfazer, montei o cabeçalho de irrestrito do
+DONO e reabri em nome dele, depois de ele ter dito que faria isso. Autoria falsa gravada em
+tabela append-only, sem conserto possível — só a nota ao lado.
+
+- **Ato cujo alvo são OUTROS itens se confirma antes**, e a confirmação nomeia quem vai
+  junto. Virou regra na máquina (`?cascata=1`, recusa listando as filhas), mas a regra
+  nasceu do dedo, não do desenho.
+- **Cabeçalho de outro sujeito não se monta para provar nada.** O que se ganha em medição
+  se perde em rastro, e o rastro é o que sobra.
+
+## Query se valida INTEIRA (custou 502 em produção, 17/08)
+
+Validei `SQL_LISTAR` no psql com o `ORDER BY` removido a sed — e o defeito estava
+exatamente na linha removida (alias de saída dentro de `CASE` não existe no `ORDER BY` do
+Postgres). `GET /itens` inteiro caiu por minutos. Recorte para caber na validação é
+validação de outra coisa.
 
 ## Merge de fatias paralelas: o self-check não enxerga SQL (medido 16/08)
 
-Quatro fatias tocaram os mesmos três arquivos. Resolvendo conflito, uni os dois lados
-dentro de uma string de SQL — e ficaram DUAS consultas na mesma constante. `python3
-api/logica.py` passou (string válida é Python válido) e o Postgres recusou em runtime: 44
-provas caindo em `502 falha interna (SyntaxError)`.
+Resolvendo conflito, uni os dois lados DENTRO de uma string de SQL — duas consultas na
+mesma constante. `python3 api/logica.py` passou (string válida é Python válido) e o
+Postgres recusou em runtime: 44 provas em `502 SyntaxError`.
 
 - **Conflito dentro de literal (SQL, HTML, template) não se resolve por união mecânica.**
-  Fora do literal, colar os dois lados costuma valer; dentro dele, o texto tem gramática
-  própria que nenhum self-check de módulo puro lê.
-- **Depois de qualquer resolução, bancada de pé e as suítes das fatias VIZINHAS**, não só
-  a da fatia que acabou de entrar. Foi a suíte do #466, alheia ao meu conflito, que
-  acusou.
-- **Bancada usa TAG DE IMAGEM própria.** A `:local` é compartilhada com a stack viva:
-  `docker compose build` numa bancada reescreve a imagem que produção sobe no próximo
-  `up -d`.
-- **Suíte do rastreador ESCREVE.** Rodada contra a instância viva, criou 31 itens e 70
-  transições no acervo real. A trilha é append-only por trigger — desfazer exige derrubar
-  a trigger DENTRO da transação e reerguê-la antes do commit.
+  Dentro do literal há gramática que nenhum self-check de módulo puro lê.
+- **Depois de resolver, rode as suítes das fatias VIZINHAS**, não só a da que entrou. Foi a
+  suíte alheia ao meu conflito que acusou.
+- **Bancada usa TAG DE IMAGEM própria.** A `:local` é compartilhada com a stack viva.
 
-## Card para a fábrica: fronteira sim, passo a passo não (medido 15/08, F10)
+## Entrega de tela se aceita USANDO, não medindo (medido 16/08, custou a onda 2)
 
-Régua do dono: dizer a ordem interna entre cards quebra a execução — o orquestrador
-multiagente do Code fatia melhor do que o card fatia. O card carrega o que a fábrica NÃO
-pode descobrir sozinha: **dependência real entre cards** e só ela; **fronteira que não se
-atravessa** (worktree por card, `git add <caminho>`, nada de arquivo de outra fatia, push e
-para); **documento superado nomeado pelo nome**, porque o morto continua no repo e lê bem;
-**parar e perguntar quando a decisão faltar**, nunca improvisar substituto; e **prova de
-aceite colada em comentário, com o SHA da branch** — sem isso, card não entregue.
+Seis suítes verdes, banco migrado, stack promovida. O dono abriu no celular e achou três
+defeitos em um minuto, dois bloqueantes — entre eles a vista board, que é a padrão do
+produto e não existia.
 
-**Card escrito e não despachado é papel.** Achado de uso vira card E despacho no mesmo
-giro; parar no card, no fim do ciclo, é burocracia com aparência de método.
-
-## O precedente de tela da casa tem fronteira (medido 15/08, no F9)
-
-A casa tinha um padrão só de tela — server-rendered em starlette, sem framework, sem
-build, sem JS. É o padrão de UMA classe de tela, não regra geral.
-
-- Tela de leitura e operação pontual fica no padrão da casa. Tela de trabalho — edição
-  concorrente, lote, resultado antes da confirmação, erro no item — exige estado local e
-  reconciliação, e o padrão não alcança.
-- **Precedente anterior ao requisito é insumo, não veredito.**
+- **Prova verde mede o que o card pediu; uso mede o que o produto é.** Execute a tarefa do
+  usuário no aparelho dele antes de aceitar.
+- **Defeito de layout que esconde o único caminho para o conteúdo é bloqueante**, não
+  cosmético.
+- E o eco disto em 18/08: filha aberta de pai fechado some do board, e ninguém tinha visto
+  porque ninguém tinha olhado a tela com um pai fechado na frente.
 
 ## Instrumento mede o PRODUTOR, nunca a instância viva (medido 16/08, custou a sessão)
 
-`conferir superficie` julgava as superfícies lendo os `.mcp.json` dos cwd vivos. O arquivo
-é rastreado no repo: o gate lia N cópias do mesmo arquivo e chamava aquilo de medição. Ao
-limpar as worktrees, o veredito virou sozinho e passou a reprovar commit de toda cadeira.
+`conferir superficie` julgava as superfícies lendo os `.mcp.json` dos cwd vivos — N cópias
+do mesmo arquivo rastreado. Limpar as worktrees virou o veredito sozinho e reprovou commit
+de toda cadeira.
 
-**Antes de escrever a medição, pergunte quem PRODUZ o que você vai medir.** Se a resposta
-for "o próprio disco", o instrumento reporta arqueologia. Não havendo produtor, ISSO é o
-achado — declarar a ausência vale mais que medir a sobra. Forma que ficou: cada superfície
-declara `produtor` em `superficies.json`; instância viva vira observação de deriva e não
-muda veredito.
+**Antes de escrever a medição, pergunte quem PRODUZ o que você vai medir.** Sendo o próprio
+disco, o instrumento reporta arqueologia; não havendo produtor, ISSO é o achado.
 
-E o par: **quem mede tem de perguntar com a chave que o verbo usa.** `conferir sessao`
-dava "não medida" porque perguntava `TI` onde `fila` exige `claudinho-TI`. Instrumento e
-coisa medida resolvem a chave pela MESMA fonte.
+E o par: **quem mede pergunta com a chave que o verbo usa.** `conferir sessao` dava "não
+medida" por perguntar `TI` onde `fila` exige `claudinho-TI`.
 
 ## O canal engole a chamada, e o comando roda assim mesmo (medido 15/08, duas vezes)
 
 `run_command` que volta como "Error occurred during tool execution" **executou no host**: o
-erro é do canal, a resposta não chega e a sessão não guarda memória da chamada. Cheguei a
-acusar "ator não identificado commitando neste tree"; o ator era eu.
+erro é do canal. Cheguei a acusar "ator não identificado commitando neste tree"; era eu.
 
 REGRA: erro de execução do canal → antes de qualquer teoria,
-`~/AI/var/log/ops/ops-AAAA-MM-DD.jsonl` e `git reflog`. Vale sobretudo para comando com
-efeito colateral, onde supor que não rodou leva a rodar duas vezes.
-
-E a metade que faltava: **o audit diz O QUE rodou, nunca QUEM rodou** — `sessao` é a conexão
-do conector, não a fita, e `sujeito` é sempre o token do dono. Quando o QUEM não aparece, o
-primeiro candidato sou eu.
+`~/AI/var/log/ops/ops-AAAA-MM-DD.jsonl` e `git reflog`. E a metade que faltava: **o audit
+diz O QUE rodou, nunca QUEM** — quando o QUEM não aparece, o primeiro candidato sou eu.
 
 ## Duas fitas minhas na mesma árvore não têm regra (medido 15/08)
 
 A regra de worktree por fatia cobre fábrica contra cadeira, não fita minha contra fita
 minha. Antes de editar arquivo compartilhado: `git log -3` e olhar o timestamp do topo.
-Commit com poucos minutos de idade é outra sessão viva, não histórico frio.
+Commit com poucos minutos de idade é outra sessão viva, não histórico frio. Em 18/08 isto
+apareceu de novo: cheguei ao DELETE já implementado, por mim, vinte minutos antes.
 
 ## Diretório descartável vai em `~/AI/var/`, nunca em `/tmp` (medido 15/08)
 
@@ -104,12 +96,11 @@ Commit com poucos minutos de idade é outra sessão viva, não histórico frio.
 do card que os dois leram. Rodei `rm -rf` num caminho que outro usava e apaguei o trabalho
 dele. Não há lock e não há aviso.
 
-## `tarefas sub` é composição, não dependência (medido 15/08)
+## Card para a fábrica: fronteira sim, passo a passo não (medido 15/08)
 
-`sub` cria `parenttask`/`subtask`. Usá-la para dizer "A fecha antes de B" mente sobre a
-estrutura e engana quem lê o board. Dependência é pela escotilha:
+Dizer a ordem interna entre cards quebra a execução — o orquestrador fatia melhor. O card
+carrega o que a fábrica NÃO descobre sozinha: dependência real entre cards; fronteira que
+não se atravessa (worktree por card, `git add <caminho>`, push e para); documento superado
+nomeado; parar e perguntar quando a decisão faltar; prova de aceite em comentário com o SHA.
 
-```
-echo '{"other_task_id":<B>,"relation_kind":"precedes"}' | tarefas api-corpo PUT /tasks/<A>/relations
-tarefas api DELETE /tasks/<B>/relations/parenttask/<A>     # desfaz o sub errado
-```
+**Card escrito e não despachado é papel.**
