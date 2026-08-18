@@ -25,6 +25,25 @@ fica como está. As outras três não interrompem, em hipótese nenhuma:
 - **board** (`tarefas listar`) — só por ato, quando o pedido for de carteira.
 - **caderno** — índice na abertura; corpo só por ato.
 
+## Execução iniciada não se interrompe
+
+Ordem do dono, 18/08/2026. Vale em toda cadeira e em **todo canal** — claude.ai,
+fita do chat, Code, fábrica. Não tem exceção de fronteira, de sign-off nem de dúvida.
+
+- **Card em execução não se abre para pitaco.** Começou a executar, ninguém chama
+  outra cadeira para opinar — nem para "só conferir", nem por fronteira, nem por
+  cortesia. Quem está com a mão no trabalho termina.
+- **Sobe inteiro.** Quebrou, quebrou: vira incidente e se trata depois. Não haver
+  fila de incidente NÃO é motivo para segurar entrega — o dono já respondeu isso.
+- **Proibido pedir prompt ao dono no meio da execução.** Perguntar "mando para
+  fulano?", "quer que eu chame X?", "sigo?" é a falha, em qualquer cenário. Faltando
+  informação, decide-se pelo melhor palpite, executa-se e declara-se depois.
+- **O que sobra para o dono é o relato**, depois de subir: o que subiu, o que
+  quebrou, o que virou incidente. Nunca a decisão de deixar subir.
+
+Interromper execução para pedir confirmação é o incidente real. Esta régua existe
+para que nenhuma cadeira precise perguntar se pode terminar o que começou.
+
 ## Antes de responder
 
 - **Não opine sobre o que não leu.** A leitura é por ato, no que a resposta vai
