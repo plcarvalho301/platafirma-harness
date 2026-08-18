@@ -59,8 +59,8 @@ produto e não existia.
   usuário no aparelho dele antes de aceitar.
 - **Defeito de layout que esconde o único caminho para o conteúdo é bloqueante**, não
   cosmético.
-- E o eco disto em 18/08: filha aberta de pai fechado some do board, e ninguém tinha visto
-  porque ninguém tinha olhado a tela com um pai fechado na frente.
+- Eco em 18/08: filha aberta de pai fechado some do board — ninguém tinha olhado a tela com
+  um pai fechado na frente.
 
 ## Instrumento mede o PRODUTOR, nunca a instância viva (medido 16/08, custou a sessão)
 
@@ -74,33 +74,28 @@ disco, o instrumento reporta arqueologia; não havendo produtor, ISSO é o achad
 E o par: **quem mede pergunta com a chave que o verbo usa.** `conferir sessao` dava "não
 medida" por perguntar `TI` onde `fila` exige `claudinho-TI`.
 
-## O canal engole a chamada, e o comando roda assim mesmo (medido 15/08, duas vezes)
+## Quando o QUEM não aparece, o primeiro candidato sou eu (medido 15 e 18/08)
 
-`run_command` que volta como "Error occurred during tool execution" **executou no host**: o
-erro é do canal. Cheguei a acusar "ator não identificado commitando neste tree"; era eu.
-
-REGRA: erro de execução do canal → antes de qualquer teoria,
-`~/AI/var/log/ops/ops-AAAA-MM-DD.jsonl` e `git reflog`. E a metade que faltava: **o audit
-diz O QUE rodou, nunca QUEM** — quando o QUEM não aparece, o primeiro candidato sou eu.
-
-## Duas fitas minhas na mesma árvore não têm regra (medido 15/08)
-
-A regra de worktree por fatia cobre fábrica contra cadeira, não fita minha contra fita
-minha. Antes de editar arquivo compartilhado: `git log -3` e olhar o timestamp do topo.
-Commit com poucos minutos de idade é outra sessão viva, não histórico frio. Em 18/08 isto
-apareceu de novo: cheguei ao DELETE já implementado, por mim, vinte minutos antes.
+- **O canal engole a chamada e o comando roda assim mesmo.** `run_command` que volta como
+  "Error occurred during tool execution" **executou no host**: o erro é do canal. Cheguei a
+  acusar "ator não identificado commitando neste tree"; era eu. Erro de canal → antes de
+  qualquer teoria, `~/AI/var/log/ops/ops-AAAA-MM-DD.jsonl` e `git reflog`.
+- **O audit diz O QUE rodou, nunca QUEM**: `sessao` é a conexão do conector, não a fita.
+- **Duas fitas minhas na mesma árvore não têm regra.** Worktree por fatia cobre fábrica
+  contra cadeira, não fita contra fita. Antes de editar arquivo compartilhado, `git log -3`
+  e o timestamp do topo: commit de minutos atrás é sessão viva, não histórico frio. Em
+  18/08 cheguei ao DELETE já implementado — por mim, vinte minutos antes.
 
 ## Diretório descartável vai em `~/AI/var/`, nunca em `/tmp` (medido 15/08)
 
-`/tmp` é terreno comum entre agentes com o mesmo uid, e o slug converge porque sai do nome
-do card que os dois leram. Rodei `rm -rf` num caminho que outro usava e apaguei o trabalho
+`/tmp` é terreno comum entre agentes do mesmo uid, e o slug converge porque sai do nome do
+card que os dois leram. Rodei `rm -rf` num caminho que outro usava e apaguei o trabalho
 dele. Não há lock e não há aviso.
 
 ## Card para a fábrica: fronteira sim, passo a passo não (medido 15/08)
 
-Dizer a ordem interna entre cards quebra a execução — o orquestrador fatia melhor. O card
-carrega o que a fábrica NÃO descobre sozinha: dependência real entre cards; fronteira que
-não se atravessa (worktree por card, `git add <caminho>`, push e para); documento superado
-nomeado; parar e perguntar quando a decisão faltar; prova de aceite em comentário com o SHA.
-
+Ordem interna entre cards quebra a execução — o orquestrador fatia melhor. O card carrega o
+que a fábrica NÃO descobre sozinha: dependência real entre cards; fronteira que não se
+atravessa (worktree por card, `git add <caminho>`, push e para); documento superado nomeado;
+parar e perguntar quando faltar decisão; prova de aceite em comentário, com o SHA.
 **Card escrito e não despachado é papel.**
