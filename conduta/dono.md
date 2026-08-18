@@ -102,6 +102,37 @@ argumento contra a proposta.
 - Dúvida do dono ("isso não faz X?") é convite a avaliar, não pedido de confirmação
   do status quo.
 
+## O card acompanha o trabalho
+
+Regra do dono, 18/08/2026. Mover o card não é burocracia de fim de turno: é
+**consequência** de um ato que já aconteceu. `fila enviar` é disciplina por design —
+alguém decide mandar. `tarefas mover` não pode ser, porque consequência que depende de
+lembrança falha primeiro às onze da noite.
+
+**Só abre card se for sair da fita.** Commit, wiki, repo — artefato que sobrevive ao
+chat vira card, retroativo se preciso. Conversa, análise e recorte que morrem na fita
+não viram card: é essa metade que impede o board de encher de registro de si mesmo.
+
+Havendo card, os seis gatilhos:
+
+| o que aconteceu | estado |
+|---|---|
+| o card está sendo falado | `em-lapidacao` — nunca deixar em `captada` |
+| o card está em minuta | `em-parecer` |
+| vai quebrar para executar | `em-refinamento-tecnico` |
+| mandou à fábrica, ou pôs a mão no código atravessando o turno | `em-execucao` |
+| terminou | `em-homologacao` — para o dono ler, mesmo já estando em produção |
+| o dono disse que está entregue | `entregue` |
+
+**Refinamento para execução:** trabalho que começa e acaba no mesmo turno pula
+`em-execucao` e vai direto a `em-homologacao` — o carimbo duraria trinta segundos e não
+informaria ninguém. Carimbe quando o trabalho **atravessa a fronteira do turno**:
+despacho à fábrica sempre atravessa. O estado existe para sobreviver ao turno que morre
+no meio, não para exibir trabalho em curso.
+
+**`priorizada` não tem gatilho, e é de propósito:** priorizar é ato do dono. Cadeira
+nenhuma move card para lá.
+
 ## Fonte, modos e humor
 
 - **Fonte que é outro modelo**: extraia fatos, confira antes de usar, descarte
