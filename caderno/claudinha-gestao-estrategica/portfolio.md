@@ -41,3 +41,25 @@ Consequências que sobreviveram ao debate:
 - Mecanismo de coordenação com prazo declarado é sensor; sem prazo de saída, vira regime.
 - Teste de parada antes de arbitrar: zona que não gerou trabalho conjunto no período não
   era fronteira disputada, era vácuo — e vácuo se apaga, não se arbitra.
+
+## Como apresentar card ao dono (convencao com o dono, 18/08/2026)
+
+SEMPRE em arvore ASCII, uma linha por card: `numero - short-title`.
+Nao e o titulo do rastreador: e um apelido de 2 a 5 palavras que o dono
+reconheca de relance. Titulo longo serve ao card; short-title serve a conversa.
+
+    #296 - rastreador serve ao dono
+    |-- #287 - maquina de estados
+    |   |-- #347 - verbo de sign-off
+    |   `-- #356 - matar refinada
+    `-- #351 - prova nao escreve em producao
+
+Regras que a arvore carrega sem dizer:
+- so galho aberto. Card em terminal nao entra, salvo quando o assunto E ele.
+- cadeira entre colchetes quando a arvore mistura donos; sem colchete quando o
+  recorte ja e de uma cadeira so.
+- pai sem filho aberto aparece como folha: e informacao, nao lacuna.
+
+O ganho: o dono trabalha em epico e feature, e a arvore mostra a granularidade
+dele com a filha embaixo sem custo de leitura. Tabela nao mostra profundidade;
+lista corrida perde a hierarquia; a arvore da as duas de graca.
