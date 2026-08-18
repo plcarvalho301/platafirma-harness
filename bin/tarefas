@@ -31,7 +31,9 @@ uso:
   tarefas ler <id>                        item em texto, com ancestrais e corpo
   tarefas criar "<título>" [--desc "<txt>"|--desc-stdin]
                 [--nivel épico|feature|story|task] [--cadeira <c>] [--pai <id>]
-  tarefas comentar <id> ["<txt>"]         anexa ao corpo do item; sem texto, lê stdin
+  tarefas comentar <id> ["<txt>"]         cria comentário (entidade própria — card #390,
+                                          não altera o corpo do item); sem texto, lê stdin
+  tarefas comentarios <id>                lista os comentários do item, em ordem
   tarefas mover <id> <estado> [--motivo "<txt>"] [--englobado-em <id>]
                                           move o card pelo fluxo; a recusa diz para onde
                                           se PODE ir a partir do estado atual
@@ -292,14 +294,25 @@ criar() {
 # tem entidade de comentário, e a migração do acervo já pôs os comentários velhos dentro de
 # `descricao` sob marcador. Escrever novo do mesmo jeito mantém uma forma só — e o dia em
 # que comentário virar entidade, há um marcador único para varrer.
+# CARD #390: comentário é entidade própria (api/app.py `POST /itens/{id}/comentarios`),
+# não mais texto colado em `descricao` — o PATCH que anexava ao corpo inflava a leitura
+# do item a cada comentário e não dava id/ordem a nada (#382 assinado "anônimo" sem como
+# provar, referências como "comentário 350" apontando pra NÚMERO DE LINHA, não objeto).
+# `autor` não vem daqui: o servidor lê do MESMO cabeçalho que `mover`/`fechar` já usam
+# (`x-auth-request-preferred-username`, via `$QUEM`) — `envia` já o manda quando presente.
 comentar() {
   local id; id=$(so_id "$1"); local txt="${2:-$(cat)}"
-  local atual novo
-  atual=$(busca GET "/itens/$id" | jq -r '.descricao // ""')
-  novo=$(printf '%s\n\n<p>--- comentário · %s · %s ---</p>\n%s' \
-         "$atual" "${QUEM:-anônimo}" "$(date -Iseconds)" "$(printf '%s' "$txt" | para_html)")
-  jq -n --arg d "$novo" '{descricao:$d}' | envia PATCH "/itens/$id" \
-    | jq -r '"comentário anexado ao item \(.id)"'
+  local html; html=$(printf '%s' "$txt" | para_html)
+  jq -n --arg c "$html" '{corpo:$c}' | envia POST "/itens/$id/comentarios" \
+    | jq -r '"comentário #\(.id) criado no item \(.item)"'
+}
+
+comentarios() {
+  local id; id=$(so_id "$1")
+  busca GET "/itens/$id/comentarios" | jq -r '
+    if (.comentarios | length) == 0 then "(sem comentários)" else
+      .comentarios[] | "--- #\(.id) · \(.autor // "anônimo") · \(.carimbo) ---\n\(.corpo)\n"
+    end' | para_texto
 }
 
 # MOVER É O ATO, E O NOME É O ATO — card #224. A capacidade sempre existiu: o PATCH aceita
@@ -384,6 +397,7 @@ case "$cmd" in
   ler)         ler "${1:?uso: tarefas ler <id>}" ;;
   criar)       criar "$@" ;;
   comentar)    comentar "${1:?uso: tarefas comentar <id> [\"<txt>\"]}" "${2:-$(cat)}" ;;
+  comentarios) comentarios "${1:?uso: tarefas comentarios <id>}" ;;
   mover)       mover "$@" ;;
   fechar)      fechar "${1:?uso: tarefas fechar <id>}" "${@:2}" ;;
   apagar)      apagar "${1:?uso: tarefas apagar <id> [--cascata]}" "${@:2}" ;;
