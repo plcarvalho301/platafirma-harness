@@ -47,7 +47,7 @@ Postgres recusou em runtime: 44 provas em `502 SyntaxError`.
   Dentro do literal há gramática que nenhum self-check de módulo puro lê.
 - **Depois de resolver, rode as suítes das fatias VIZINHAS**, não só a da que entrou. Foi a
   suíte alheia ao meu conflito que acusou.
-- **Bancada usa TAG DE IMAGEM própria.** A `:local` é compartilhada com a stack viva.
+- **Bancada usa TAG DE IMAGEM própria**: a `:local` é da stack viva.
 
 ## Entrega de tela se aceita USANDO, não medindo (medido 16/08, custou a onda 2)
 
@@ -56,9 +56,8 @@ defeitos em um minuto, dois bloqueantes — entre eles a vista board, que é a p
 produto e não existia.
 
 - **Prova verde mede o que o card pediu; uso mede o que o produto é.** Execute a tarefa do
-  usuário no aparelho dele antes de aceitar.
-- **Defeito de layout que esconde o único caminho para o conteúdo é bloqueante**, não
-  cosmético.
+  usuário no aparelho dele antes de aceitar tela.
+- **Layout que esconde o único caminho para o conteúdo é bloqueante**, não cosmético.
 - Eco em 18/08: filha aberta de pai fechado some do board — ninguém tinha olhado a tela com
   um pai fechado na frente.
 
@@ -68,11 +67,10 @@ produto e não existia.
 do mesmo arquivo rastreado. Limpar as worktrees virou o veredito sozinho e reprovou commit
 de toda cadeira.
 
-**Antes de escrever a medição, pergunte quem PRODUZ o que você vai medir.** Sendo o próprio
-disco, o instrumento reporta arqueologia; não havendo produtor, ISSO é o achado.
-
-E o par: **quem mede pergunta com a chave que o verbo usa.** `conferir sessao` dava "não
-medida" por perguntar `TI` onde `fila` exige `claudinho-TI`.
+**Antes de medir, pergunte quem PRODUZ o que você vai medir.** Sendo o próprio disco, o
+instrumento reporta arqueologia; não havendo produtor, ISSO é o achado. E o par: **quem mede
+pergunta com a chave que o verbo usa** — `conferir sessao` dava "não medida" por perguntar
+`TI` onde `fila` exige `claudinho-TI`.
 
 ## Quando o QUEM não aparece, o primeiro candidato sou eu (medido 15 e 18/08)
 
