@@ -1,33 +1,35 @@
-"""Contrato de `bin/monta-sessao --json` / `--sem-atualizar` (card #390, LOTE 1).
+"""Contrato de `bin/monta-sessao --json` / `--sem-atualizar` (card #204, item 2).
 
-`monta-sessao` é bash e fala com o mundo por três verbos externos (`git`,
-`mesa`, `fila`) além do sistema de arquivos. Isola com um PATH de teste:
-  - `git` real (já está no PATH do git-bash) — a raiz da fixture nunca é um
-    repositório git de verdade, então `git -C <repo> pull` falha rápido e sem
-    rede ("fatal: not a git repository"), exatamente o caminho de erro que o
-    script já trata com o aviso em stderr. Isso também serve pra provar
-    --sem-atualizar: com a flag, esse aviso não aparece porque o loop nem roda.
-  - `mesa`/`fila` — stubs escritos à mão (não existe `bin/fila` neste repo
-    ainda, só `fila_streams.py`; e não há Redis/msg-mem nesta máquina), cada
-    um com um "modo" selecionável por env var pra cobrir disponível/vazio/
-    indisponível sem precisar de infra viva.
-  - `PF_RAIZ` aponta pra uma fixture hermética com
-    platafirma-harness/personas/persona-<C>.md e
-    platafirma-arquitetura/docs/org-template-canonico.md — nunca contra
-    ~/AI real (não existe nesta máquina do jeito que o script presume).
+Este arquivo testava um `monta-sessao` que não existe mais: o script virou Python
+na fase 5 do #189 (catálogo em `registro/pecas/*.json`, envelope uniforme por peça),
+e a suíte antiga continuava chamando-o via bash e afirmando um shape com
+`persona`/`manifesto`/`mesa`/`fila` soltos no topo — 17 de 17 vermelhos, vermelhos
+antes de qualquer patch (medido em #204). Reescrito do zero contra o contrato real:
+`{cadeira, nome_canonico, repos, pacote, pecas, avisos}`, peças em envelope uniforme
+(peca/dono/ref/regime/volatilidade/teto_tokens/sha/tokens/frescor/motivo/conteudo).
 
-Camada 1 do modelo de teste do card (NOTAS-390.md): por verbo com --json, um
-teste de formato + um de falha. Regressão do texto sem --json também é
-coberta aqui porque é a mesma função que ganhou o desvio de --json.
+INSUMO que motivou boa parte da reescrita (#204): `dados["fila"]["disponivel"]` não
+existe em forma nenhuma desde harness@2ef6e19 — a fila saiu da abertura por ordem do
+dono (é verbo on-demand agora, não peça de abertura). O contrato novo mede o pacote
+de peças, não o pacote da fase 4; test_fila_nao_e_peca_de_abertura abaixo é o guarda
+de regressão desse ponto específico.
+
+Isolamento: catálogo, personas e repositório vivem sob um `PF_RAIZ` hermético (nunca
+~/AI real). O script chama `git` de verdade — contra um bare local, sem rede — e o
+verbo `mesa` (`mesa ver` / `mesa caderno`) por subprocess: `env_verbo()` do próprio
+script prepende `{PF_RAIZ}/bin` no PATH antes de chamar peça-verbo, então o stub
+mora em `<raiz>/bin/mesa` e nem precisa ser injetado por fora. `fila` não é mais
+chamado pela abertura e por isso não tem stub aqui — dar-lhe um seria testar
+comportamento que o script não tem.
 """
 
 from __future__ import annotations
 
 import json
 import os
-import shutil
 import stat
 import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -35,370 +37,260 @@ import pytest
 REPO_ROOT = Path(__file__).resolve().parents[2]
 SCRIPT = REPO_ROOT / "bin" / "monta-sessao"
 
-
-def _achar_bash() -> str:
-    """No Windows, "bash" no PATH pode resolver pro launcher do WSL
-    (C:\\WINDOWS\\system32\\bash.exe, sem distro instalada) em vez do
-    git-bash. Preferir o git-bash explicitamente."""
-    candidatos = [
-        r"C:\Program Files\Git\bin\bash.exe",
-        r"C:\Program Files\Git\usr\bin\bash.exe",
-    ]
-    for c in candidatos:
-        if Path(c).is_file():
-            return c
-    achado = shutil.which("bash")
-    if achado:
-        return achado
-    pytest.skip("nenhum bash (git-bash) encontrado")
-
-
-BASH = _achar_bash()
-
-# --- stubs de mesa/fila -------------------------------------------------
-# Só os subcomandos que monta-sessao de fato chama: `mesa ver`, `mesa
-# caderno` (sem slot) e `fila status <persona>`. Modo por env var pra cada
-# teste escolher disponível/vazio/indisponível sem precisar de infra viva.
-
-FAKE_MESA = r"""#!/usr/bin/env bash
-set -euo pipefail
+MESA_STUB = """#!/bin/sh
+set -eu
 sub="${1:-}"
 case "$sub" in
   ver)
     case "${MESA_STUB_MODO:-ok}" in
-      ok)    printf '[abertura] escrito ha 3 min\nresumo da fita anterior\n\n' ;;
-      vazia) printf 'mesa vazia\n' ;;
-      falha) echo "mesa: msg-mem fora do ar (stub)" >&2; exit 1 ;;
+      ok) printf '[abertura] escrito ha 3 min\\nresumo da fita anterior\\n' ;;
+      falha) echo "mesa: msg-mem fora do ar (stub)" 1>&2; exit 1 ;;
     esac
     ;;
   caderno)
     case "${CADERNO_STUB_MODO:-ok}" in
-      ok)    printf 'cadernos: nenhum (stub)\n' ;;
-      falha) echo "mesa: caderno fora do ar (stub)" >&2; exit 1 ;;
+      ok) printf 'cadernos: nenhum (stub)\\n' ;;
+      falha) echo "mesa: caderno fora do ar (stub)" 1>&2; exit 1 ;;
     esac
     ;;
   *)
-    echo "stub mesa: subcomando nao coberto: $sub" >&2
-    exit 2
-    ;;
-esac
-"""
-
-FAKE_FILA = r"""#!/usr/bin/env bash
-set -euo pipefail
-sub="${1:-}"; persona="${2:-}"
-case "$sub" in
-  status)
-    case "${FILA_STUB_MODO:-ok}" in
-      ok)      printf '%s: 2 nova(s) \xc2\xb7 5 no historico (7 dias)\n' "$persona" ;;
-      vazia)   printf '%s: caixa vazia\n' "$persona" ;;
-      fechada) echo "erro: caixa de $persona fechada pelo porteiro (stub)" >&2; exit 1 ;;
-    esac
-    ;;
-  *)
-    echo "stub fila: subcomando nao coberto: $sub" >&2
+    echo "stub mesa: subcomando nao coberto: $sub" 1>&2
     exit 2
     ;;
 esac
 """
 
 
-@pytest.fixture()
-def bin_stub(tmp_path: Path) -> Path:
-    d = tmp_path / "stubbin"
-    d.mkdir()
-    mesa = d / "mesa"
-    fila = d / "fila"
-    mesa.write_text(FAKE_MESA, encoding="utf-8", newline="\n")
-    fila.write_text(FAKE_FILA, encoding="utf-8", newline="\n")
-    for p in (mesa, fila):
-        p.chmod(p.stat().st_mode | stat.S_IEXEC | stat.S_IXGRP | stat.S_IXOTH)
-    return d
+def _git(cwd: Path, *args: str) -> None:
+    subprocess.run(["git", *args], cwd=str(cwd), capture_output=True, text=True, check=True)
 
 
-# --- fixture de RAIZ (PF_RAIZ) -------------------------------------------
-# platafirma-harness/personas/persona-<C>.md e
-# platafirma-arquitetura/docs/org-template-canonico.md — a forma mínima que
-# o script espera, nunca o ~/AI real.
-
-MANIFESTO_REL = "platafirma-harness/tool-manifest/manifesto-teste.md"
-GERAL_REL = "platafirma-harness/tool-manifest/TODA-CADEIRA.md"
-ORG_REL = "platafirma-arquitetura/docs/org-template-canonico.md"
-
-
-def _escreve(raiz: Path, rel: str, texto: str) -> Path:
-    caminho = raiz / rel
+def _escreve(base: Path, rel: str, texto: str) -> Path:
+    caminho = base / rel
     caminho.parent.mkdir(parents=True, exist_ok=True)
     caminho.write_text(texto, encoding="utf-8", newline="\n")
     return caminho
 
 
+def _peca(id_, artefato, *, evento="abertura", volatilidade="estavel", teto_tokens=2000, emenda=None):
+    obj = {
+        "id": id_,
+        "dono": "fixture",
+        "artefato": artefato,
+        "regime": "valor",
+        "gatilho": {"evento": evento, "condicao": "fixture"},
+        "volatilidade": volatilidade,
+    }
+    if teto_tokens is not None:
+        obj["teto_tokens"] = teto_tokens
+    if emenda:
+        obj["emenda"] = emenda
+    return obj
+
+
+def _monta_raiz(tmp_path: Path, *, teto_tool_manifest: int = 2000) -> Path:
+    """Constrói uma raiz hermética: catálogo + personas + repo git com upstream.
+
+    O repo git real (não só `git init`) é necessário porque `sha_e_frescor` chama
+    `git rev-list HEAD..@{upstream}` — sem upstream configurado, a idade do clone
+    não tem o que medir e o script cai no ramo "sem upstream conhecido"; COM
+    upstream e nada a puxar, cai em "fresco" sem aviso, que é o caminho feliz que a
+    maioria dos testes aqui quer, e o mesmo remoto local deixa `pull()` (com
+    --atualizar) e o skip de `pull()` (com --sem-atualizar) distinguíveis de fato.
+    """
+    raiz = tmp_path / "raiz"
+    harness = raiz / "platafirma-harness"
+    pecas_dir = harness / "registro" / "pecas"
+
+    catalogo = [
+        _peca("persona", "platafirma-harness@personas/persona-{cadeira}.md", teto_tokens=2000),
+        _peca("org", "platafirma-harness@org/fronteiras.md", volatilidade="morna", teto_tokens=900),
+        _peca("tool-manifest-geral", "platafirma-harness@tool-manifest/nucleo.md", teto_tokens=1200),
+        _peca("antirreabertura", "platafirma-harness@registro/antirreabertura.md",
+              volatilidade="morna", teto_tokens=800),
+        _peca("tool-manifest-cadeira", "platafirma-harness@tool-manifest/{cadeira}.md",
+              teto_tokens=teto_tool_manifest),
+        _peca("mesa", "verbo:mesa ver", volatilidade="volatil", teto_tokens=250),
+        _peca("cadernos-indice", "verbo:mesa caderno", volatilidade="volatil", teto_tokens=100),
+        _peca("alias-cadeiras", "platafirma-harness@personas/alias-cadeiras.md",
+              evento="ato", volatilidade="morna", teto_tokens=None, emenda="org"),
+    ]
+    for p in catalogo:
+        _escreve(pecas_dir, f"{p['id']}.json", json.dumps(p, ensure_ascii=False))
+
+    _escreve(harness, "personas/persona-teste.md",
+             "Você é ClaudinhoTeste, a persona fixture do contrato de monta-sessao.\n\n"
+             "FERRAMENTAL: platafirma-harness/tool-manifest/teste.md\n\n"
+             "Resto do corpo, irrelevante para o contrato --json.\n")
+    _escreve(harness, "personas/persona-fabrica.md",
+             "Você é ClaudinhoFabricaTeste, persona fixture fora do quadro.\n\n"
+             "FERRAMENTAL: platafirma-harness/tool-manifest/fabrica.md\n")
+    _escreve(harness, "personas/alias-cadeiras.md", "# Mapa de endereço\n\nfixture.\n")
+    _escreve(harness, "org/fronteiras.md", "# org canônico\n\nfixture.\n")
+    _escreve(harness, "tool-manifest/nucleo.md", "# núcleo comum\n\nfixture.\n")
+    _escreve(harness, "tool-manifest/teste.md", "# manifesto de teste\n\nferramental fixture.\n")
+    _escreve(harness, "tool-manifest/fabrica.md", "# manifesto da fábrica\n\nferramental fixture.\n")
+    _escreve(harness, "registro/antirreabertura.md", "# antirreabertura\n\nfixture.\n")
+
+    stub = _escreve(raiz, "bin/mesa", MESA_STUB)
+    stub.chmod(stub.stat().st_mode | stat.S_IEXEC | stat.S_IXGRP | stat.S_IXOTH)
+
+    origin = tmp_path / "origin.git"
+    subprocess.run(["git", "init", "--bare", "-q", str(origin)],
+                    check=True, capture_output=True, text=True)
+    _git(harness, "init", "-q", "-b", "main")
+    _git(harness, "config", "user.email", "fixture@test.local")
+    _git(harness, "config", "user.name", "fixture")
+    _git(harness, "add", "-A")
+    _git(harness, "commit", "-q", "-m", "fixture inicial")
+    _git(harness, "remote", "add", "origin", str(origin))
+    _git(harness, "push", "-q", "-u", "origin", "main")
+
+    return raiz
+
+
 @pytest.fixture()
 def raiz(tmp_path: Path) -> Path:
-    r = tmp_path / "raiz"
-    _escreve(
-        r,
-        "platafirma-harness/personas/persona-teste.md",
-        "Você é ClaudinhoTeste, a persona fixture do card #390.\n\n"
-        f"FERRAMENTAL: {MANIFESTO_REL}\n\n"
-        "Resto do corpo, irrelevante pro contrato --json.\n",
-    )
-    _escreve(r, MANIFESTO_REL, "# manifesto de teste\n\nferramental fixture.\n")
-    _escreve(r, GERAL_REL, "# GERAL\n\noperacional comum, fixture.\n")
-    _escreve(r, ORG_REL, "# org canônico\n\nfixture.\n")
-    return r
+    return _monta_raiz(tmp_path)
 
 
-def _run(
-    args,
-    raiz: Path,
-    bin_stub: Path,
-    tmp_path: Path,
-    *,
-    mesa_modo: str = "ok",
-    fila_modo: str = "ok",
-    caderno_modo: str = "ok",
-) -> subprocess.CompletedProcess:
+def _run(args, raiz: Path, *, mesa_modo: str = "ok",
+         caderno_modo: str = "ok") -> subprocess.CompletedProcess:
     env = dict(os.environ)
-    env["PATH"] = str(bin_stub) + os.pathsep + env.get("PATH", "")
     env["PF_RAIZ"] = str(raiz)
     env["MESA_STUB_MODO"] = mesa_modo
-    env["FILA_STUB_MODO"] = fila_modo
     env["CADERNO_STUB_MODO"] = caderno_modo
-    home_falso = tmp_path / "home-falso"
-    home_falso.mkdir(exist_ok=True)
-    env["HOME"] = str(home_falso)
-    cmd = [BASH, str(SCRIPT), *args]
-    return subprocess.run(
-        cmd, env=env, capture_output=True, text=True, encoding="utf-8", timeout=20,
-        check=False,
-    )
+    env.pop("PF_FITA", None)  # regra do teste de registro: sessão de mão, sem fita
+    env.pop("PF_FORA_DO_QUADRO", None)  # usa o default documentado do script
+    cmd = [sys.executable, str(SCRIPT), *args]
+    return subprocess.run(cmd, env=env, capture_output=True, text=True, timeout=20, check=False)
 
 
-# --- formato, caminho feliz ------------------------------------------------
+ENVELOPE_CHAVES = {"peca", "dono", "ref", "regime", "volatilidade", "teto_tokens",
+                    "sha", "tokens", "frescor", "motivo", "conteudo"}
 
 
-def test_json_e_objeto_unico_bem_formado(raiz, bin_stub, tmp_path):
-    """--json: stdout é só o objeto — nada de texto humano misturado (a régua
-    "nada de mistura" cai se sobrar qualquer coisa: json.loads reclamaria de
-    "Extra data")."""
-    proc = _run(["teste", "--json"], raiz, bin_stub, tmp_path)
+# --- formato e caminho feliz ------------------------------------------------
+
+
+def test_json_pacote_e_objeto_unico_com_envelope_uniforme(raiz):
+    proc = _run(["teste", "--json"], raiz)
     assert proc.returncode == 0
     assert proc.stdout.count("\n") == 1  # uma linha só, o objeto
     dados = json.loads(proc.stdout)
 
     assert dados["cadeira"] == "teste"
-    assert dados["persona"] == {
-        "presente": True,
-        "caminho": "platafirma-harness/personas/persona-teste.md",
-        "nome_resolvido": "ClaudinhoTeste",
-    }
-    assert dados["manifesto"] == {"presente": True, "caminho": MANIFESTO_REL}
-    assert dados["org"] == {"caminho": ORG_REL, "presente": True}
-    assert dados["mesa"]["disponivel"] is True
-    assert isinstance(dados["mesa"]["resumo"], str) and dados["mesa"]["resumo"]
-    assert dados["cadernos"]["disponivel"] is True
-    assert isinstance(dados["cadernos"]["resumo"], str) and dados["cadernos"]["resumo"]
-    assert dados["fila"]["disponivel"] is True
-    assert "ClaudinhoTeste" in dados["fila"]["resumo"]
-    assert dados["atualizado"] is True
+    assert dados["nome_canonico"] == "ClaudinhoTeste"
+    assert "fila" not in dados  # ver test_fila_nao_e_peca_de_abertura
+
+    por_id = {p["peca"]: p for p in dados["pecas"]}
+    assert ENVELOPE_CHAVES <= por_id["org"].keys()  # §6.2: toda peça no mesmo shape
+    assert por_id["org"]["frescor"] == "fresco"
+    assert por_id["org"]["conteudo"]
+    assert "alias-cadeiras" not in por_id  # gatilho "ato": dentro do quadro não entra
+
+    assert dados["pacote"]["pecas"] == len(dados["pecas"])
+    assert dados["pacote"]["tokens"] == sum(p["tokens"] for p in dados["pecas"])
+    assert dados["pacote"]["metodo_tokens"]
+    assert dados["pacote"]["registro"] == {
+        "registrado": False, "motivo": "sem PF_FITA — sessao de mao nao tem fita"}
+
+    assert dados["repos"]["platafirma-harness"]["atualizado"] is True
+    assert dados["repos"]["platafirma-harness"]["frescor"] == "fresco"
 
 
-def test_json_atualizado_reflete_sem_atualizar_e_pula_o_pull(raiz, bin_stub, tmp_path):
-    """--sem-atualizar: atualizado:false no objeto, e o loop de `git pull`
-    nem roda — sem ele, git falharia contra a fixture (não é repo) e
-    avisaria em stderr; com a flag, esse aviso não deve aparecer."""
-    proc_com = _run(["teste", "--json"], raiz, bin_stub, tmp_path)
-    proc_sem = _run(["teste", "--json", "--sem-atualizar"], raiz, bin_stub, tmp_path)
-
-    assert proc_com.returncode == 0 and proc_sem.returncode == 0
-    assert json.loads(proc_com.stdout)["atualizado"] is True
-    assert json.loads(proc_sem.stdout)["atualizado"] is False
-
-    assert "não atualizou" in proc_com.stderr
-    assert "não atualizou" not in proc_sem.stderr
+def test_fila_nao_e_peca_de_abertura(raiz):
+    """INSUMO do #204: `dados["fila"]["disponivel"]` não existe desde harness@2ef6e19
+    — a fila saiu da abertura por ordem do dono. Guarda de regressão: nem chave de
+    topo, nem peça na lista, em nenhum dos dois formatos que a suíte antiga media."""
+    dados = json.loads(_run(["teste", "--json"], raiz).stdout)
+    assert "fila" not in dados
+    assert "fila" not in {p["peca"] for p in dados["pecas"]}
 
 
-def test_sem_atualizar_sem_json_tambem_pula_o_pull(raiz, bin_stub, tmp_path):
-    """--sem-atualizar sozinha (sem --json) também deve funcionar: só pula o
-    pull, texto continua saindo."""
-    proc = _run(["teste", "--sem-atualizar"], raiz, bin_stub, tmp_path)
-    assert proc.returncode == 0
-    assert "não atualizou" not in proc.stderr
-    assert proc.stdout.startswith("== cadeira: ClaudinhoTeste ==")
+def test_atualizado_reflete_flag_sem_atualizar(raiz):
+    com = json.loads(_run(["teste", "--json"], raiz).stdout)
+    sem = json.loads(_run(["teste", "--json", "--sem-atualizar"], raiz).stdout)
+    assert com["repos"]["platafirma-harness"]["atualizado"] is True
+    assert sem["repos"]["platafirma-harness"]["atualizado"] is False
 
 
-@pytest.mark.parametrize(
-    "args",
-    [
-        ["teste", "--json", "--sem-atualizar"],
-        ["--json", "--sem-atualizar", "teste"],
-        ["--sem-atualizar", "--json", "teste"],
-        ["--json", "teste", "--sem-atualizar"],
-    ],
-    ids=["cadeira-primeiro", "flags-primeiro", "flags-invertidas", "cadeira-no-meio"],
-)
-def test_flags_juntas_ou_separadas_em_qualquer_ordem(raiz, bin_stub, tmp_path, args):
-    proc = _run(args, raiz, bin_stub, tmp_path)
-    assert proc.returncode == 0
-    dados = json.loads(proc.stdout)
+def test_fora_do_quadro_troca_org_por_alias_cadeiras(raiz):
+    """Cadeira fora do quadro (#161 opção A): org, antirreabertura e
+    tool-manifest-geral saem; alias-cadeiras entra forçado, mesmo tendo gatilho
+    `ato` (não `abertura`) — é a excepção nominal do dono, não inferência daqui."""
+    dados = json.loads(_run(["fabrica", "--json"], raiz).stdout)
+    por_id = {p["peca"]: p for p in dados["pecas"]}
+
+    assert "org" not in por_id
+    assert "antirreabertura" not in por_id
+    assert "tool-manifest-geral" not in por_id
+    assert "tool-manifest-cadeira" in por_id  # manifesto da própria cadeira continua
+
+    assert "alias-cadeiras" in por_id
+    assert por_id["alias-cadeiras"]["motivo"] == "fora do quadro: org trocado por endereço"
+
+
+def test_prefixo_claudinho_e_descartado(raiz):
+    """`claudinho-teste` e `teste` têm de resolver a mesma persona — o prefixo é
+    convenção de quem chama, não faz parte do nome do arquivo de persona."""
+    dados = json.loads(_run(["claudinho-teste", "--json"], raiz).stdout)
     assert dados["cadeira"] == "teste"
-    assert dados["atualizado"] is False
+    assert dados["nome_canonico"] == "ClaudinhoTeste"
 
 
-def test_json_nome_nao_resolvido_vira_null_e_fila_fica_indisponivel(
-    raiz, bin_stub, tmp_path
-):
-    """Linha 1 da persona não bate no padrão "Você é <nome>," -> nome_resolvido
-    é null (nunca string vazia camuflada) e fila nem tenta rodar — não tem
-    como saber a caixa sem o nome."""
-    _escreve(
-        raiz,
-        "platafirma-harness/personas/persona-semnome.md",
-        "Isto não segue \"Você é <nome>,\" -- nome não resolve.\n\n"
-        f"FERRAMENTAL: {MANIFESTO_REL}\n",
-    )
-    proc = _run(["semnome", "--json", "--sem-atualizar"], raiz, bin_stub, tmp_path)
-    assert proc.returncode == 0
-    dados = json.loads(proc.stdout)
-    assert dados["persona"]["nome_resolvido"] is None
-    assert dados["fila"]["disponivel"] is False
-    assert dados["fila"]["resumo"] is not None  # motivo curto, não silêncio
-
-
-def test_json_manifesto_ausente_quando_persona_nao_declara_ferramental(
-    raiz, bin_stub, tmp_path
-):
-    _escreve(
-        raiz,
-        "platafirma-harness/personas/persona-semmanifesto.md",
-        "Você é SemManifesto, persona sem linha FERRAMENTAL.\n",
-    )
-    proc = _run(["semmanifesto", "--json", "--sem-atualizar"], raiz, bin_stub, tmp_path)
-    assert proc.returncode == 0
-    dados = json.loads(proc.stdout)
-    assert dados["manifesto"] == {"presente": False, "caminho": None}
-
-
-def test_json_manifesto_declarado_mas_arquivo_sumiu(raiz, bin_stub, tmp_path):
-    """Declarado (caminho não é null) mas ausente em disco (presente:false) —
-    as duas informações não colapsam numa só, senão "sumiu" e "nunca
-    declarou" ficariam indistinguíveis."""
-    _escreve(
-        raiz,
-        "platafirma-harness/personas/persona-manifestosumido.md",
-        "Você é ManifestoSumido, aponta pra manifesto que não existe.\n\n"
-        "FERRAMENTAL: platafirma-harness/tool-manifest/nao-existe.md\n",
-    )
-    proc = _run(
-        ["manifestosumido", "--json", "--sem-atualizar"], raiz, bin_stub, tmp_path
-    )
-    assert proc.returncode == 0
-    dados = json.loads(proc.stdout)
-    assert dados["manifesto"]["presente"] is False
-    assert dados["manifesto"]["caminho"] == "platafirma-harness/tool-manifest/nao-existe.md"
-
-
-def test_json_mesa_indisponivel_nao_derruba_o_resto(raiz, bin_stub, tmp_path):
-    """mesa fora do ar (msg-mem indisponível): disponivel:false, mas o resto
-    do objeto (persona/manifesto/org/fila) continua saindo — indisponível
-    parcial nunca vira falha do verbo inteiro nem stdout vazio."""
-    proc = _run(
-        ["teste", "--json", "--sem-atualizar"],
-        raiz,
-        bin_stub,
-        tmp_path,
-        mesa_modo="falha",
-    )
-    assert proc.returncode == 0
-    dados = json.loads(proc.stdout)
-    assert dados["mesa"]["disponivel"] is False
-    assert dados["persona"]["presente"] is True
-    assert dados["fila"]["disponivel"] is True
-
-
-def test_json_cadernos_indisponivel_nao_derruba_o_resto(raiz, bin_stub, tmp_path):
-    """`mesa caderno` fora do ar: disponivel:false, motivo curto em resumo, e
-    o resto do objeto (persona/manifesto/org/mesa/fila) continua saindo —
-    mesma régua de indisponibilidade parcial que já vale pra mesa/fila."""
-    proc = _run(
-        ["teste", "--json", "--sem-atualizar"],
-        raiz,
-        bin_stub,
-        tmp_path,
-        caderno_modo="falha",
-    )
-    assert proc.returncode == 0
-    dados = json.loads(proc.stdout)
-    assert dados["cadernos"]["disponivel"] is False
-    assert dados["cadernos"]["resumo"] is not None
-    assert dados["mesa"]["disponivel"] is True
-    assert dados["persona"]["presente"] is True
-
-
-def test_json_fila_fechada_vira_disponivel_false_com_motivo(raiz, bin_stub, tmp_path):
-    proc = _run(
-        ["teste", "--json", "--sem-atualizar"],
-        raiz,
-        bin_stub,
-        tmp_path,
-        fila_modo="fechada",
-    )
-    assert proc.returncode == 0
-    dados = json.loads(proc.stdout)
-    assert dados["fila"]["disponivel"] is False
-    assert dados["fila"]["resumo"] is not None
-
-
-# --- falha -------------------------------------------------------------
-
-
-def test_json_cadeira_desconhecida_vira_objeto_de_erro(raiz, bin_stub, tmp_path):
-    """Regra dura: nunca stdout vazio em falha. Exit 1 preservado (o mesmo
-    que o modo texto já usava)."""
-    proc = _run(["fantasma", "--json"], raiz, bin_stub, tmp_path)
+def test_cadeira_desconhecida_vira_objeto_de_erro_nunca_stdout_vazio(raiz):
+    """Regra dura: nunca stdout vazio em falha. Exit 1 preservado."""
+    proc = _run(["fantasma", "--json"], raiz)
     assert proc.returncode == 1
     assert proc.stdout.count("\n") == 1
     dados = json.loads(proc.stdout)
-    assert dados.get("erro")
-    assert dados["cadeiras_validas"] == ["teste"]
+    assert dados["erro"]
+    assert "teste" in dados["cadeiras_validas"]
+    assert "fabrica" in dados["cadeiras_validas"]
 
 
-def test_json_sem_cadeira_vira_objeto_de_erro_exit_2(raiz, bin_stub, tmp_path):
-    """Uso incorreto (sem argumento nenhum): exit 2 preservado, mesma régua
-    de erro-nunca-vazio."""
-    proc = _run(["--json"], raiz, bin_stub, tmp_path)
+def test_sem_cadeira_e_uso_incorreto_exit_2(raiz):
+    proc = _run(["--json"], raiz)
     assert proc.returncode == 2
     dados = json.loads(proc.stdout)
-    assert dados.get("erro")
-    assert dados["cadeiras_validas"] == ["teste"]
+    assert dados["erro"]
 
 
-def test_sem_json_cadeira_desconhecida_mantem_texto_e_exit_1(raiz, bin_stub, tmp_path):
-    """Mesma falha, sem --json: confirma que o padrão de texto (stderr com a
-    lista de cadeiras válidas, stdout vazio) não mudou."""
-    proc = _run(["fantasma"], raiz, bin_stub, tmp_path)
-    assert proc.returncode == 1
-    assert proc.stdout == ""
-    assert "não existe" in proc.stderr
-    assert "teste" in proc.stderr
+# --- indisponibilidade parcial ----------------------------------------------
 
 
-# --- regressão do texto sem --json -----------------------------------------
+def test_peca_verbo_indisponivel_nao_derruba_o_pacote(raiz):
+    """Peça-verbo fora do ar: `frescor: indisponivel` com motivo, conteúdo None
+    — mas o resto do pacote (as outras peças) continua saindo. Indisponibilidade
+    parcial nunca é falha do pacote inteiro nem stdout vazio."""
+    dados = json.loads(_run(["teste", "--json"], raiz, mesa_modo="falha").stdout)
+    por_id = {p["peca"]: p for p in dados["pecas"]}
+    assert por_id["mesa"]["frescor"] == "indisponivel"
+    assert por_id["mesa"]["motivo"]
+    assert por_id["mesa"]["conteudo"] is None
+    assert por_id["org"]["frescor"] == "fresco"
+    assert dados["pacote"]["pecas"] == len(dados["pecas"])
+    assert any("mesa" in a and "indisponível" in a for a in dados["avisos"])
 
 
-def test_sem_json_mantem_saida_de_texto_atual(raiz, bin_stub, tmp_path):
-    """Regra dura: saída sem --json não muda uma linha. Confere os
-    marcadores "===== <arquivo> =====" e os blocos de mesa/fila que já
-    existiam antes desta mudança."""
-    proc = _run(["teste"], raiz, bin_stub, tmp_path)
+def test_peca_com_teto_excedido_gera_aviso(tmp_path):
+    raiz = _monta_raiz(tmp_path, teto_tool_manifest=1)
+    dados = json.loads(_run(["teste", "--json"], raiz).stdout)
+    assert any("tool-manifest-cadeira" in a and "teto declarado" in a
+               for a in dados["avisos"])
+
+
+# --- regressão do texto sem --json ------------------------------------------
+
+
+def test_sem_json_mantem_marcadores_de_texto(raiz):
+    """Regra dura: saída sem --json é o modo texto de sempre — confere os
+    marcadores `===== <peca>: <ref> ... =====` e ausência de JSON solto."""
+    proc = _run(["teste"], raiz)
     assert proc.returncode == 0
     linhas = proc.stdout.splitlines()
     assert linhas[0] == "== cadeira: ClaudinhoTeste =="
-    assert "===== platafirma-harness/personas/persona-teste.md =====" in linhas
-    assert f"===== {MANIFESTO_REL} =====" in linhas
-    assert f"===== {ORG_REL} =====" in linhas
-    assert "===== mesa: teste =====" in linhas
-    assert "===== fila: ClaudinhoTeste =====" in linhas
-    # nada de objeto JSON escapado por engano no texto solto
-    assert "{" not in proc.stdout
+    assert any(l.startswith("===== org: platafirma-harness@org/fronteiras.md")
+               for l in linhas)
+    assert "{" not in proc.stdout  # nada de JSON escapado por engano no texto solto
