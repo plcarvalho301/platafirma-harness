@@ -36,6 +36,8 @@ uso:
                                           move o card pelo fluxo; a recusa diz para onde
                                           se PODE ir a partir do estado atual
   tarefas fechar <id> [--como <estado>]   fecha; default: entregue. Para mover, `mover`.
+  tarefas apagar <id> [--cascata]        APAGA o item. Fora do miolo do fluxo (funil e
+                                         terminal); `--cascata` leva a subárvore junto.
   tarefas sub <pai> <filho>               declara <filho> filho de <pai>
   tarefas estados                         os estados do registro, com fase
   tarefas api <MÉTODO> <caminho>          escotilha, sem corpo
@@ -269,6 +271,16 @@ mover() {
 # itens do acervo e os scripts da fita chamam por ele, e matar um verbo em uso para corrigir
 # um nome é trocar um defeito de descoberta por uma quebra. `--como` com estado NÃO terminal
 # passa a avisar e a delegar — o aviso vai a stderr, então nada que consome a saída quebra.
+apagar() {
+  # Ordem do dono, 17/08/2026: apagar card é caso de uso comum, não escotilha. A única
+  # guarda é o miolo do fluxo, e quem a aplica é a API — este verbo não repete regra.
+  local id; id=$(so_id "$1"); shift || true
+  local q=""
+  [ "${1:-}" = "--cascata" ] && q="?cascata=1"
+  busca DELETE "/itens/$id$q" \
+    | jq -r '"apagado(s): \(.quantos)", (.apagados[]? | "  #\(.id) [\(.estado)] \(.titulo)")'
+}
+
 fechar() {
   local id; id=$(so_id "$1"); shift || true
   local como="entregue"
@@ -301,6 +313,7 @@ case "$cmd" in
   comentar)    comentar "${1:?uso: tarefas comentar <id> [\"<txt>\"]}" "${2:-$(cat)}" ;;
   mover)       mover "$@" ;;
   fechar)      fechar "${1:?uso: tarefas fechar <id>}" "${@:2}" ;;
+  apagar)      apagar "${1:?uso: tarefas apagar <id> [--cascata]}" "${@:2}" ;;
   sub)         subtarefa "${1:?pai}" "${2:?filho}" ;;
   estados)     estados ;;
   projetos)    echo "não há projeto neste modelo: o recorte é por eixo (cadeira, estado, nível)." >&2; exit 2 ;;
