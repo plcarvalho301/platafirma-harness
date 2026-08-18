@@ -24,7 +24,8 @@ mesa ver|item|fez|fita        memoria de trabalho por chapeu: item TEM ato e alv
 mesa legado|anota|limpa       prosa do substrato velho, e a triagem dela
 mesa caderno [chapeu]         indice na abertura; corpo so por ato
 encerrar fita|varredura       fecha por marco fechado, nao por hora do dia
-tarefas ler|listar|criar|comentar|mover|fechar|sub|api    cards; `mover` anda o fluxo, `fechar` fecha
+tarefas ler|listar|criar|comentar|mover|fechar|apagar|assinar|sub|api   cards; `mover` anda o
+                              fluxo, `fechar` fecha, `apagar` some (ordem do dono), `assinar` e sign-off
 acervo escada                 UNICA fonte de numero do acervo; nunca SQL na mao
 acervo | seg | motor          sem argumento, cada um lista os proprios sub-atos
 motor rag buscar|medir|ajuste

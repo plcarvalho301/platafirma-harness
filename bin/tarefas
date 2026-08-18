@@ -38,6 +38,9 @@ uso:
   tarefas fechar <id> [--como <estado>]   fecha; default: entregue. Para mover, `mover`.
   tarefas apagar <id> [--cascata]        APAGA o item. Fora do miolo do fluxo (funil e
                                          terminal); `--cascata` leva a subárvore junto.
+  tarefas assinar <id> --aprovador <c> [--decisao aprovado|recusado] [--motivo "<txt>"]
+                                          sign-off. Sem --decisao, inscreve o aprovador
+                                          como PENDENTE. `recusado` exige --motivo.
   tarefas sub <pai> <filho>               declara <filho> filho de <pai>
   tarefas estados                         os estados do registro, com fase
   tarefas api <MÉTODO> <caminho>          escotilha, sem corpo
@@ -171,6 +174,12 @@ estados() {
 # razão de o Vikunja ter saído. O `#` é aceito porque a fila e os cards o escrevem.
 so_id() { printf '%s' "${1#\#}"; }
 
+# CARD #347: a leitura mostra quem falta assinar, e SEM chamada extra — o detalhe do item
+# já devolve `sign_offs` desde o #466. Enquanto não estava aqui, a informação existia na API
+# e não existia para quem lê pelo terminal, que é a superfície que a cadeira tem.
+#
+# PENDENTE PRIMEIRO, e a ordem é o ponto: é ele que segura o item em `Em parecer`, e é a
+# única linha sobre a qual alguém pode agir agora. Respondido é registro; pendente é dívida.
 ler() {
   local id; id=$(so_id "$1")
   busca GET "/itens/$id" | jq -r '
@@ -178,7 +187,55 @@ ler() {
     "#\(.id) · \(.nivel_nome) · \(.estado_nome) (\(.estado_fase)) · cadeira: \(.cadeira // "—")"
     + (if (.ancestrais|length) > 0 then "\n  em: " + ([.ancestrais[] | "#\(.id) \(.titulo)"] | join(" > ")) else "" end),
     "",
+    (if ((.sign_offs // []) | length) > 0 then
+       (["sign-off:"]
+        + [.sign_offs[] | select(.decisao == null) | "  PENDENTE  \(.aprovador)"]
+        + [.sign_offs[] | select(.decisao != null)
+           | "  \(.decisao | ascii_upcase)  \(.aprovador)"
+             + (if .texto then " — \(.texto)" else "" end)]
+        + [""])
+       | join("\n")
+     else empty end),
     (.descricao // "")' | para_texto
+}
+
+# SIGN-OFF PELO VERBO — card #347. A rota existia desde o #466 e não tinha verbo, e a
+# consequência é a que o card nomeia: `org:0019` manda claudinho-dados ASSINAR emenda de
+# modelo, e assinar dependia de alguém lembrar de montar o JSON na mão. Regra que depende de
+# lembrança é regra morta — é o mesmo defeito que o dono apontou no #348 sobre `tarefas
+# mover`.
+#
+# PENDENTE É O CASO COMUM, e por isso `--decisao` é opcional: quem escreve o card INSCREVE
+# os aprovadores antes de qualquer um deles responder ("o item permanece enquanto houver
+# aprovador pendente", F9 §4.3). Verbo que exigisse decisão só saberia registrar o fim, e o
+# começo — que é o que trava o item — continuaria no JSON na mão.
+#
+# `--motivo` E NÃO `--texto`, e a divergência do nome de campo da API é deliberada: `motivo`
+# é a palavra que `mover`, `fechar` e `apagar` já usam neste verbo para "por que você fez
+# isso". Duas palavras para a mesma coisa em quatro subcomandos vizinhos é o tipo de atrito
+# que se paga em toda chamada.
+assinar() {
+  local id; id=$(so_id "$1"); shift
+  local aprovador="" decisao="" motivo=""
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --aprovador) aprovador="$2"; shift 2 ;;
+      --decisao)   decisao="$2";   shift 2 ;;
+      --motivo|--texto) motivo="$2"; shift 2 ;;
+      *) echo "opção desconhecida: $1" >&2; exit 2 ;;
+    esac
+  done
+  [ -n "$aprovador" ] || { echo "uso: tarefas assinar <id> --aprovador <cadeira> [--decisao aprovado|recusado] [--motivo \"<txt>\"]" >&2; exit 2; }
+  # A regra de "recusado exige motivo" (F9 §4.3, e CHECK no schema) mora na API e no banco.
+  # Aqui NÃO se duplica: uma cópia local divergiria no dia em que a regra mudasse, e a
+  # recusa da API já chega legível por `--fail-with-body`.
+  jq -n --arg a "$aprovador" --arg d "$decisao" --arg t "$motivo" \
+     '{aprovador:$a}
+      + (if $d == "" then {} else {decisao:$d} end)
+      + (if $t == "" then {} else {texto:$t} end)' \
+    | envia POST "/itens/$id/sign-offs" \
+    | jq -r '"sign-off de \(.aprovador) em #\(.item // '"$id"'): \(.decisao // "PENDENTE")"
+             + (if .texto then " — \(.texto)" else "" end)'
 }
 
 criar() {
@@ -314,6 +371,7 @@ case "$cmd" in
   mover)       mover "$@" ;;
   fechar)      fechar "${1:?uso: tarefas fechar <id>}" "${@:2}" ;;
   apagar)      apagar "${1:?uso: tarefas apagar <id> [--cascata]}" "${@:2}" ;;
+  assinar)     assinar "${1:?uso: tarefas assinar <id> --aprovador <cadeira> [--decisao aprovado|recusado] [--motivo \"<txt>\"]}" "${@:2}" ;;
   sub)         subtarefa "${1:?pai}" "${2:?filho}" ;;
   estados)     estados ;;
   projetos)    echo "não há projeto neste modelo: o recorte é por eixo (cadeira, estado, nível)." >&2; exit 2 ;;
