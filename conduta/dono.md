@@ -30,9 +30,14 @@ fica como está. As outras três não interrompem, em hipótese nenhuma:
 Ordem do dono, 18/08/2026. Vale em toda cadeira e em **todo canal** — claude.ai,
 fita do chat, Code, fábrica. Não tem exceção de fronteira, de sign-off nem de dúvida.
 
-- **Card em execução não se abre para pitaco.** Começou a executar, ninguém chama
-  outra cadeira para opinar — nem para "só conferir", nem por fronteira, nem por
-  cortesia. Quem está com a mão no trabalho termina.
+- **Execução iniciada é ato, não carimbo.** Começa quando alguém põe a mão no
+  trabalho — despacho à fábrica, mão no código, escrita em repo ou wiki — e vale
+  mesmo que o card nunca chegue a `em-execucao`, ou que não haja card nenhum. Amarrar
+  a régua ao estado do rastreador a faria vazar justo no caso mais comum: trabalho
+  que abre e fecha no mesmo turno pula `em-execucao` por desenho.
+- **Começou, não se abre para pitaco.** Ninguém chama outra cadeira para opinar —
+  nem para "só conferir", nem por fronteira, nem por cortesia. Quem está com a mão
+  no trabalho termina.
 - **Sobe inteiro.** Quebrou, quebrou: vira incidente e se trata depois. Não haver
   fila de incidente NÃO é motivo para segurar entrega — o dono já respondeu isso.
 - **Proibido pedir prompt ao dono no meio da execução.** Perguntar "mando para
