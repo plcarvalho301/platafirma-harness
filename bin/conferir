@@ -1097,6 +1097,39 @@ def _conectores_do_produtor(prod):
                 return set(json.load(f).get("mcpServers", {})), None
         except (OSError, ValueError) as e:
             return set(), f"{prod.get('caminho')}: {e}"
+    if tipo == "bash-heredoc-json":
+        # entrada.sh nao e Python: escreve o mcp_config.json do agy via heredoc bash
+        # (`cat > arquivo <<MARCADOR ... MARCADOR`), reescrito a cada boot. O parser
+        # aqui e do HEREDOC, nunca do mcp_config.json que ele produz dentro do
+        # conteiner — a distincao importa: medir o script e medir o que TODO boot
+        # futuro grava; ler o arquivo produzido seria medir uma instancia, e essa
+        # ja existe como o check de endpoint (#165), que prova mais (conecta de
+        # verdade) do que uma leitura de arquivo provaria.
+        caminho = os.path.join(HARNESS, prod.get("arquivo", ""))
+        marcador = prod.get("marcador", "JSON")
+        try:
+            texto = open(caminho, encoding="utf-8").read()
+        except OSError as e:
+            return set(), f"{prod.get('arquivo')}: {e}"
+        quebra = chr(10)
+        marca_abre = "<<" + marcador
+        pos = texto.find(marca_abre)
+        if pos == -1:
+            return set(), f"heredoc <<{marcador} nao encontrado em {prod.get('arquivo')}"
+        linhas_apos = texto[pos + len(marca_abre):].split(quebra)[1:]
+        corpo, fechou = [], False
+        for linha in linhas_apos:
+            if linha.strip() == marcador:
+                fechou = True
+                break
+            corpo.append(linha)
+        if not fechou:
+            return set(), f"heredoc <<{marcador} nao fechou em {prod.get('arquivo')}"
+        try:
+            dado = json.loads(quebra.join(corpo))
+        except ValueError as e:
+            return set(), f"heredoc de {prod.get('arquivo')} nao e JSON valido: {e}"
+        return set(dado.get("mcpServers", {})), None
     if tipo == "codigo":
         caminho = os.path.join(HARNESS, prod.get("arquivo", ""))
         simbolo = prod.get("simbolo", "")
@@ -1119,6 +1152,46 @@ def _conectores_do_produtor(prod):
                     return set(), f"{simbolo} nao e dict literal"
         return set(), f"{simbolo} nao encontrado em {prod.get('arquivo')}"
     return set(), f"tipo de produtor desconhecido: {tipo!r}"
+
+
+# CARD #165. `agy` (Jaiminho, Antigravity CLI) e a unica superficie cujo conector
+# escrevemos NOS e le um CLI de TERCEIRO — o schema dele nao e o nosso, e chave
+# desconhecida ele descarta CALADA (nem sobe o servidor, nem loga erro). O achado
+# que originou o card: `httpUrl` (chave do gemini-cli) no lugar de `serverUrl`
+# (schema do Antigravity CLI) ficou dois dias sem ninguem notar porque a checagem
+# estrutural — o conector EXISTE no dict, com o nome certo — nao prova que o
+# CLIENTE consegue le-lo. So bater no endpoint prova.
+#
+# POR ISSO A MEDIDA E `initialize`, NUNCA LER mcp_config.json: o arquivo bem
+# formado com a chave errada e EXATAMENTE o que passou calado da ultima vez. Um
+# `initialize` (handshake MCP, sem tocar tool nenhuma) DE DENTRO DO CONTEINER
+# distingue 200 (conectou) de 401/timeout/conexao recusada sem ambiguidade.
+_MCP_INITIALIZE = json.dumps({
+    "jsonrpc": "2.0", "id": 1, "method": "initialize",
+    "params": {"protocolVersion": "2025-06-18", "capabilities": {},
+               "clientInfo": {"name": "conferir", "version": "0"}},
+})
+
+
+def _verifica_endpoint_mcp(container, url):
+    """(codigo_http | None, erro | None). `docker exec` porque a porta da ponte
+    nao e publicada no host (`docker inspect` confirma: só existe na rede do
+    contêiner) — bater nela de fora nem é possível, teria de ser sempre daqui."""
+    try:
+        p = subprocess.run(
+            ["docker", "exec", container, "curl", "-s", "-o", "/dev/null",
+             "-w", "%{http_code}", "--max-time", "10", "-X", "POST", url,
+             "-H", "Content-Type: application/json",
+             "-H", "Accept: application/json, text/event-stream",
+             "-d", _MCP_INITIALIZE],
+            capture_output=True, text=True, timeout=20,
+        )
+    except (OSError, subprocess.SubprocessError) as e:
+        return None, f"{type(e).__name__}: {e}"
+    if p.returncode != 0:
+        return None, (p.stderr or p.stdout or f"docker exec saiu {p.returncode}").strip()[:200]
+    codigo = (p.stdout or "").strip()
+    return (codigo, None) if codigo else (None, "sem resposta")
 
 
 def conferir_superficie(alvo=None, staged=False, como_json=False):
@@ -1198,6 +1271,27 @@ def conferir_superficie(alvo=None, staged=False, como_json=False):
                 deriva.append((os.path.relpath(caminho, os.path.expanduser("~/AI")),
                                sorted(produzidos - tem), sorted(tem - produzidos)))
 
+    # 1b. ENDPOINT de verdade — so pra superficie que declara `verificacao.modo:
+    # endpoint` (hoje so `agy`, #165). As outras seguem so com a checagem
+    # estrutural do produtor: e um CLI nosso lendo arquivo nosso, e ai a checagem
+    # estrutural ja bastava antes do #165 e continua bastando.
+    endpoints_falhos = []
+    for nome, sup in reg.get("superficies", {}).items():
+        verif = sup.get("verificacao")
+        if not verif or verif.get("modo") != "endpoint":
+            continue
+        container = verif.get("via")
+        for cnome in sup.get("conectores", []):
+            url = conectores.get(cnome, {}).get("url")
+            if not url:
+                endpoints_falhos.append((nome, cnome, "sem url declarada em `conectores`"))
+                continue
+            codigo, erro = _verifica_endpoint_mcp(container, url)
+            if erro:
+                endpoints_falhos.append((nome, cnome, f"nao respondeu: {erro}"))
+            elif codigo != "200":
+                endpoints_falhos.append((nome, cnome, f"initialize devolveu {codigo}"))
+
     # 2. capacidade cujo meio cita tool que conector nenhum serve
     for cap, dado in reg.get("capacidades", {}).items():
         for m in re.finditer(r"\b(\w+)\b", dado.get("meio", "")):
@@ -1231,12 +1325,14 @@ def conferir_superficie(alvo=None, staged=False, como_json=False):
                   for n, d in sorted(reg.get("superficies", {}).items())
                   if not d.get("verificavel_do_host")]
 
-    ok = not (nao_servidos or sem_meio or quebradas or sem_produtor)
+    ok = not (nao_servidos or sem_meio or quebradas or sem_produtor or endpoints_falhos)
     if como_json:
         print(json.dumps({
             "veredito": "em dia" if ok else "divergente",
             "conector_prometido_nao_servido": [
                 {"superficie": s_, "conector": c} for s_, c in nao_servidos],
+            "endpoint_nao_conectou": [
+                {"superficie": s_, "conector": c, "motivo": m} for s_, c, m in endpoints_falhos],
             "capacidade_sem_meio": sem_meio,
             "superficie_sem_produtor_declarado": sem_produtor,
             "deriva_em_instancia_viva": [
@@ -1252,6 +1348,9 @@ def conferir_superficie(alvo=None, staged=False, como_json=False):
     print(f"  conector prometido e nao servido : {len(nao_servidos)}")
     for s_, c in nao_servidos:
         print(f"      {s_} — falta {c}")
+    print(f"  endpoint declarado e nao conectou : {len(endpoints_falhos)}")
+    for s_, c, m in endpoints_falhos:
+        print(f"      {s_}.{c} — {m}")
     print(f"  superficie sem produtor declarado: {len(sem_produtor)}")
     for n_ in sem_produtor:
         print(f"      {n_} — verificavel e ninguem declara quem escreve o .mcp.json")
