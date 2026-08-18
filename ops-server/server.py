@@ -107,17 +107,35 @@ def _env_subprocesso() -> dict:
 
 
 def _sessao_atual() -> str:
-    """Identidade da sessão MCP em curso.
+    """Identidade da sessão MCP em curso, em três degraus.
 
-    O header Mcp-Session-Id NÃO chega até aqui: o middleware roda numa task e o FastMCP
-    processa a tool noutra, iniciada pelo session manager no lifespan — contextvar setada
-    no meio do caminho não propaga. O que propaga é o contexto do próprio FastMCP, que
-    carrega o ServerSession, um por transporte. `id()` do objeto é estável enquanto a
-    sessão vive; recicla depois do GC, o que é aceitável porque o valor só precisa
-    agrupar chamadas dentro de uma janela, não identificar através do tempo.
+    1. `Mcp-Session-Id` DO REQUEST, que é o valor bom. O comentário anterior dizia que
+       ele não chegava aqui, e isso valia para o caminho tentado: contextvar setada no
+       middleware não propaga, porque middleware e tool rodam em tasks diferentes. Mas o
+       `RequestContext` do próprio FastMCP carrega o campo `request` — o Request do
+       Starlette, na MESMA task da tool. Lendo o header dali, sem contextvar no meio, o
+       valor chega.
+    2. `id()` do ServerSession, o degrau velho. Estável enquanto a sessão vive e
+       RECICLADO depois do GC: dois trabalhos distintos podem receber o mesmo `s<hex>`
+       em horas diferentes, e foi isso que quase produziu uma atribuição errada de
+       autoria em 18/08 (card #409).
+    3. O contextvar, para o caminho que não é HTTP.
+
+    O QUE ESTE VALOR NÃO É, e é preciso dizer para ninguém confiar demais: ele
+    identifica a CONEXÃO do cliente, não a conversa. Medido em 17-18/08 sobre 350
+    chamadas com cadeira declarada: 13 de 32 `mcp-session-id` aparecem com mais de uma
+    cadeira — uma conexão do app atende várias abas. Serve para agrupar e para perícia;
+    não serve para provar que duas ações são da mesma fita.
     """
     try:
-        s = getattr(mcp.get_context(), "session", None)
+        ctx = mcp.get_context()
+        req = getattr(getattr(ctx, "request_context", None), "request", None)
+        cab = getattr(req, "headers", None)
+        if cab is not None:
+            sid = cab.get("mcp-session-id")
+            if sid:
+                return sid
+        s = getattr(ctx, "session", None)
         return f"s{id(s):x}" if s is not None else _sessao.get()
     except Exception:                                       # noqa: BLE001
         return _sessao.get()
