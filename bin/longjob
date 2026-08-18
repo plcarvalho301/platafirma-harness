@@ -51,6 +51,7 @@ case "$cmd" in
       --property=SyslogIdentifier="$unit" \
       --property=CPUWeight="${LONGJOB_CPU_PESO:-50}" \
       --property=MemoryHigh="${LONGJOB_MEM_ALTA:-16G}" \
+      --setenv=PATH="$HOME/AI/bin:$HOME/.local/bin:$PATH" \
       --setenv=PYTHONUNBUFFERED=1 \
       -- "$@"
     echo "unit: $unit"

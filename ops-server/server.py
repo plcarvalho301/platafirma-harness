@@ -543,7 +543,7 @@ def _memoria(cadeira: str) -> dict:
     for chave, args in (("mesa", ["ver"]), ("cadernos", ["caderno"])):
         try:
             proc = subprocess.run([verbo, *args], capture_output=True, text=True,
-                                  timeout=15, env={**os.environ, "PF_CADEIRA": cadeira})
+                                  timeout=15, env={**_env_subprocesso(), "PF_CADEIRA": cadeira})
             if proc.returncode == 0:
                 out[chave] = {"texto": proc.stdout.strip()}
             else:
@@ -579,7 +579,7 @@ def _montar(cadeira: str, atualizar: bool) -> dict:
         argv.append("--sem-atualizar")
     try:
         proc = subprocess.run(argv, capture_output=True, text=True, timeout=90,
-                              env={**os.environ, "PF_SUPERFICIE": "claude.ai"})
+                              env={**_env_subprocesso(), "PF_SUPERFICIE": "claude.ai"})
         r = json.loads(proc.stdout)
     except (OSError, subprocess.SubprocessError, ValueError) as e:
         # Montador mudo se declara: pacote vazio seria indistinguível de cadeira sem peça.
@@ -920,7 +920,7 @@ def _anota_mesa(quem: str, nota: str) -> dict:
     try:
         proc = subprocess.run([str(RAIZ / "bin" / "mesa"), "anota", quem],
                               input=nota, capture_output=True, text=True, timeout=15,
-                              env={**os.environ, "PF_CADEIRA": quem})
+                              env={**_env_subprocesso(), "PF_CADEIRA": quem})
         if proc.returncode == 0:
             return {"ok": True, "slot": quem, "saida": proc.stdout.strip()}
         return {"ok": False, "erro": (proc.stderr or proc.stdout).strip()[:300]}
