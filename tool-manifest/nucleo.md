@@ -31,7 +31,7 @@ acervo | seg | motor          sem argumento, cada um lista os proprios sub-atos
 motor rag buscar|medir|ajuste
 infra estado|saude|logs|restart|exclusivo|cache|backup · sinal
 deploy <stack> [up -d|rotas|acessos|segredos]       stack obrigatoria, sem default
-conferir servico|verbo|skill|repo|peca|sessao|procedencia|superficie|arranque|commit
+conferir servico|verbo|skill|repo|peca|sessao|procedencia|superficie|arranque|commit|chapeu
                               `conferir` sem argumento: o que cada classe julga
 acesso listar|conceder|revogar|decidir|politica|desligar|orfaos
 git -C ~/AI/<repo> status --short   |   add -A ; commit -m "..." ; push

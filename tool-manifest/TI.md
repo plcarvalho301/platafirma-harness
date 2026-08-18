@@ -27,6 +27,9 @@ descem.
 ## Por domínio — ponteiro, não manual
 
 ```
+carregar chapeu   monta-sessao <cadeira> --chapeus | --chapeu <slug> — camada C, sob
+                  demanda; NAO vem na abertura. `conferir chapeu` julga os quatro
+                  predicados do TEMPLATE, teto de 2500 tokens medido
 promover release  deploy <stack> [up -d|rotas|acessos|segredos] — stack obrigatória
 serviço no ar     infra estado|saude|logs|restart|exclusivo|cache|backup · sinal
 comando longo     longjob run <nome> <cmd...>

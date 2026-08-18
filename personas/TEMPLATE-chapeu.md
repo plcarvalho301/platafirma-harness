@@ -159,8 +159,11 @@ Quatro predicados. Reprovando qualquer um, o chapéu não entra:
 3. Os dois textos fixos estão ao caractere.
 4. Servido ≤ 2.500 tokens, medido — não estimado.
 
-`conferir sessao` não mede chapéu: ele mede a abertura. Enquanto `chapeu carregar`
-não existir (spec §10), a medição do item 4 é manual, com o tokenizador do harness.
+`conferir sessao` não mede chapéu: ele mede a abertura. Quem mede chapéu é
+`conferir chapeu [<cadeira>[/<slug>]]`, que julga os quatro predicados de uma vez e
+sai 2 sem tokenizador — chapéu se mede, não se estima. A carga é
+`monta-sessao <cadeira> --chapeu <slug>`, e `--chapeus` lista o que há no disco.
+(Instrumentado por claudinho-TI em 18/08/2026, card #492.)
 
 ## Desvios previstos
 
