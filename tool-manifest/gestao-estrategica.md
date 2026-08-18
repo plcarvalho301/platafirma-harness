@@ -36,9 +36,15 @@ As quatro anteriores eram do Vikunja (bucket, label, projeto 46) e morreram com 
   englobado no 169, responde com `id: 169` e o título do 169; a listagem devolve 173 certo,
   como `Englobada`. Testado em cinco ids não-englobados: singular e lista batem. Quem confere
   englobamento pelo singular conclui que a escrita não pegou. Conferir pela lista.
-- **`nivel` não é campo patchável** (`CAMPOS_PATCH`, api/logica.py). Não há como promover task
-  a feature; item que perdeu o pai por violar "pai de nível estritamente menor" não é
-  restaurável por PATCH. `POST /itens/<id>/converter` só faz incidente → story.
+- **`nivel` É patchável, mas só como INTEIRO** — 0 épico, 1 feature, 2 story, 3 task
+  (`CAMPOS_PATCH`, api/logica.py:83; medido em 18/08/2026 com item descartável). `{"nivel":
+  "story"}` devolve erro de tipo, e a mensagem fala de tipo sem dar a escala: quem tenta a
+  string desiste achando o campo imutável. `POST /itens/<id>/converter` continua só fazendo
+  incidente → story.
+- **Promover item COM filhas é recusado**: o nível do pai é copiado em cada filha
+  (`pai_nivel`). Despendurar, promover, rependurar.
+- **`nivel` e `pai` no mesmo PATCH falham** quando os dois mudam: a validação de vínculo roda
+  contra o pai antigo. Dois patches.
 - **Escrita em lote é `PATCH /itens`** com `{"itens":[{"id":N,...}]}`, e a resposta é POR
   ITEM: 200 mesmo com falha dentro. Ler `resultados[].resultado` — `falha` não sobe no código
   da chamada.
