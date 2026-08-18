@@ -9,7 +9,7 @@ name: chat
 # arquivo montado :ro ou por .env fora do git, e quem cunha e o `prepara.sh` ao lado.
 
 services:
-  # Banco proprio da stack, padrao ja vigente no host (identidade, vikunja, keycloak,
+  # Banco proprio da stack, padrao ja vigente no host (identidade, keycloak,
   # mdm-rh, motor e rag tem o seu). Sem porta publicada: quem fala com ele e o Synapse,
   # pela rede interna, e a rotacao do card 449 entra pela Admin API — nunca por aqui.
   chat-pg:
