@@ -52,3 +52,30 @@ sujeitos:
     dominios: [plataforma-acervo, plataforma-wiki, plataforma-drive, mensageria]
     client: L0R8OJ
     conta: jaiminho
+
+  # Segunda conta da fábrica, motor `agy` (Antigravity, assinatura do dono, sem API
+  # paga). Vínculo e razão: `org:0020`. NÃO é o Jaiminho — contas, sujeitos e papéis
+  # distintos (`seg:0011`); o nome sugere um vínculo que a própria org:0020 nega.
+  #
+  # PAPEL `fornecedor`, não `pesquisador-externo`: o rótulo do papel em politica.yaml
+  # é literalmente «Fábrica e colaboração externa — executa card, não administra», e as
+  # três regras dele (le-repo, sem-estado-do-host, nao-toca-identidade) são o alcance
+  # que a fábrica já tem. Aplicar papel existente é implementação; papel NOVO segue
+  # pedido a claudinho-seguranca (org:0020, 18/08/2026) e não se inventa aqui.
+  #
+  # DOMÍNIO `plataforma-runtime` e só ele: é o domínio que o PEP carimba em
+  # `run_command` (ops-server, DOM_RUNTIME). O ancestral `plataforma` daria de brinde
+  # acervo, wiki, drive e identidade por herança de linhagem.
+  #
+  # PENDENTE, medido em 18/08/2026 e fora do alcance desta cadeira:
+  #   - `client` no realm: identidade é de claudinho-seguranca, e kcadm está sem
+  #     credencial nesta sessão. Enquanto não existir, esta linha não autentica
+  #     ninguém — o PEP resolve por `preferred_username` e nega o que não casa.
+  #   - conta de SO própria (`seg:0013`): exige root, não há uid `jaiminho-fabrica`.
+  #     Hoje `run_command` executaria sob uid 1001, o que a régua de segregação
+  #     (`seg:0011`) não aceita.
+  jaiminho-fabrica:
+    natureza: servico
+    papeis: [fornecedor]
+    dominios: [plataforma-runtime]
+    conta: jaiminho-fabrica
