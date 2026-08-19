@@ -1,0 +1,161 @@
+#!/home/claudinho/AI/.venv-harness/bin/python
+# trava — exclusao mutua entre cadeiras sobre recurso compartilhado (clone git, stack, indice).
+# capacidade: trava
+# dono: claudinho-TI
+#
+# POR QUE EXISTE (arq:0061, 19/08/2026)
+# O clone de `~/AI/<repo>` e compartilhado: varias cadeiras commitam na mesma branch em
+# paralelo. Hoje a corrida e contida por disciplina — "git pull --ff-only e o PRIMEIRO
+# comando de todo turn que escreve", escrito em manifesto e cumprido por lembranca. Esta e
+# a classe de falha que a conduta do dono ja nomeou: consequencia que depende de lembranca
+# falha primeiro as onze da noite.
+#
+# POR QUE EM VALKEY, E NAO EM ARQUIVO
+# Arquivo de lock nao expira. Sessao de chat morre no meio o tempo todo, e lock orfao em
+# disco trava o repo ate alguem notar e apagar na mao — troca uma corrida rara por um
+# bloqueio permanente. O TTL e a unica propriedade que o arquivo nao tem, e e ela que
+# justifica o substrato.
+#
+# INSTANCIA: motor-msg (6379), DB 1. NAO usar 6380/msg-mem: la a politica e `allkeys-lru`
+# (medido 19/08), que despeja chave sob pressao de memoria SEM olhar TTL — trava evictada em
+# silencio e trava quebrada, que e pior que trava nenhuma. DB separada da mensageria (DB 0,
+# `caixa:*`) para que `FLUSHDB` de um nunca alcance o outro.
+#
+# DONO DA TRAVA: `PF_CADEIRA` (ou --quem). Chamadas de run_command sao processos distintos,
+# entao o token nao pode ser o PID: e a cadeira. Consequencia deliberada: `pegar` e
+# REENTRANTE para a mesma cadeira (renova e devolve ok), senao o segundo turn da mesma
+# cadeira nao conseguiria escrever no repo que ela mesma travou.
+#
+# SOLTAR e compare-and-delete em Lua: apagar a chave sem conferir o dono deixaria uma
+# cadeira liberar a trava de outra logo depois de um TTL vencido — a corrida classica.
+import argparse
+import os
+import sys
+
+try:
+    import redis
+except ImportError:
+    sys.exit("erro: modulo 'redis' nao instalado neste venv (uv pip install redis)")
+
+HOST = os.environ.get("PF_TRAVA_HOST", "127.0.0.1")
+PORT = int(os.environ.get("PF_TRAVA_PORT", "6379"))
+DB = int(os.environ.get("PF_TRAVA_DB", "1"))
+TTL_PADRAO = 300
+PREFIXO = "trava:"
+
+SOLTAR_LUA = """
+if redis.call('get', KEYS[1]) == ARGV[1] then
+  return redis.call('del', KEYS[1])
+else
+  return 0
+end
+"""
+
+RENOVAR_LUA = """
+if redis.call('get', KEYS[1]) == ARGV[1] then
+  return redis.call('pexpire', KEYS[1], ARGV[2])
+else
+  return 0
+end
+"""
+
+
+def conectar():
+    return redis.Redis(host=HOST, port=PORT, db=DB, decode_responses=True,
+                       socket_connect_timeout=3)
+
+
+def quem(args):
+    q = args.quem or os.environ.get("PF_CADEIRA", "")
+    if not q:
+        sys.exit("erro: sem dono. exporte PF_CADEIRA=<cadeira> ou passe --quem")
+    return q
+
+
+def chave(recurso):
+    return PREFIXO + recurso
+
+
+def cmd_pegar(r, args):
+    dono, k, ttl_ms = quem(args), chave(args.recurso), args.ttl * 1000
+    if r.set(k, dono, nx=True, px=ttl_ms):
+        print(f"peguei {args.recurso} para {dono} (ttl {args.ttl}s)")
+        return 0
+    atual = r.get(k)
+    if atual == dono:
+        r.pexpire(k, ttl_ms)
+        print(f"ja era minha: {args.recurso} renovada para {dono} (ttl {args.ttl}s)")
+        return 0
+    resta = max(0, (r.pttl(k) or 0) // 1000)
+    print(f"ocupada: {args.recurso} esta com {atual}, restam ~{resta}s", file=sys.stderr)
+    return 3
+
+
+def cmd_soltar(r, args):
+    dono, k = quem(args), chave(args.recurso)
+    if r.eval(SOLTAR_LUA, 1, k, dono):
+        print(f"soltei {args.recurso}")
+        return 0
+    atual = r.get(k)
+    if atual is None:
+        print(f"nada a soltar: {args.recurso} ja estava livre (ttl venceu?)", file=sys.stderr)
+    else:
+        print(f"recusado: {args.recurso} e de {atual}, nao de {dono}", file=sys.stderr)
+    return 3
+
+
+def cmd_renovar(r, args):
+    dono, k = quem(args), chave(args.recurso)
+    if r.eval(RENOVAR_LUA, 1, k, dono, args.ttl * 1000):
+        print(f"renovei {args.recurso} por {args.ttl}s")
+        return 0
+    print(f"recusado: {args.recurso} nao e de {dono}", file=sys.stderr)
+    return 3
+
+
+def cmd_ver(r, args):
+    alvos = [chave(args.recurso)] if args.recurso else sorted(r.scan_iter(PREFIXO + "*"))
+    vivas = 0
+    for k in alvos:
+        dono = r.get(k)
+        if dono is None:
+            continue
+        vivas += 1
+        print(f"{k[len(PREFIXO):]:<40} {dono:<28} ~{max(0, (r.pttl(k) or 0) // 1000)}s")
+    if not vivas:
+        print("nenhuma trava viva")
+    return 0
+
+
+def main():
+    p = argparse.ArgumentParser(
+        prog="trava",
+        description="exclusao mutua entre cadeiras sobre recurso compartilhado")
+    sub = p.add_subparsers(dest="acao")
+    for nome, ajuda in (("pegar", "adquire (exit 3 se ocupada por outra)"),
+                        ("soltar", "libera, so se for sua"),
+                        ("renovar", "estende o TTL, so se for sua")):
+        s = sub.add_parser(nome, help=ajuda)
+        s.add_argument("recurso", help="ex.: repo:platafirma-arquitetura")
+        s.add_argument("--ttl", type=int, default=TTL_PADRAO, help=f"segundos (padrao {TTL_PADRAO})")
+        s.add_argument("--quem", default=None, help="dono (padrao: $PF_CADEIRA)")
+    s = sub.add_parser("ver", help="lista travas vivas")
+    s.add_argument("recurso", nargs="?", default=None)
+    s.add_argument("--quem", default=None)
+
+    args = p.parse_args()
+    if not args.acao:
+        p.print_help()
+        return 0
+    try:
+        r = conectar()
+        r.ping()
+    except Exception as e:
+        print(f"erro: nao alcancei a malha ({HOST}:{PORT}/{DB}): {e}", file=sys.stderr)
+        return 1
+    return {"pegar": cmd_pegar, "soltar": cmd_soltar,
+            "renovar": cmd_renovar, "ver": cmd_ver}[args.acao](r, args)
+
+
+if __name__ == "__main__":
+    sys.exit(main())

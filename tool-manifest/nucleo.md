@@ -36,6 +36,8 @@ conferir servico|verbo|skill|repo|peca|sessao|procedencia|superficie|arranque|co
 acesso listar|conceder|revogar|decidir|politica|desligar|orfaos
 git -C ~/AI/<repo> status --short   |   add -A ; commit -m "..." ; push
 longjob run <nome> <cmd...>   todo comando acima de 2 min
+trava pegar|soltar|renovar|ver   exclusao mutua entre cadeiras: clone git, stack, indice.
+                              TTL obrigatorio (arq:0061); `pegar` exit 3 se ocupada por outra
 deploy-harness/instalar       instrumenta ambiente novo
 uv venv|pip|uvx · python3 (sem shim de pip)
 rg · fd · jq · yq · lnav · sar · df -h · du -sh · ncdu
