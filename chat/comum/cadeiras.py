@@ -24,7 +24,7 @@ from pathlib import Path
 
 PREFIXO_BOT = "_pf"
 _PREFIXOS_DE_SLUG = ("claudinho-", "claudinha-")
-_NAO_SAO_CADEIRA = {"TEMPLATE", "jaiminho", "osint", "fabrica", "EXTERNO"}
+_NAO_SAO_CADEIRA = {"TEMPLATE", "jaiminho", "jaiminho-fabrica", "osint", "fabrica", "EXTERNO"}
 
 # PARTICIPANTE — quem tem porta com o dono sem ocupar cadeira (colaborador externo,
 # assessor, fornecedor). Rito e estatuto em platafirma-arquitetura/docs/
@@ -35,7 +35,7 @@ _NAO_SAO_CADEIRA = {"TEMPLATE", "jaiminho", "osint", "fabrica", "EXTERNO"}
 # jaiminho de proposito — quem pergunta "quem sao as cadeiras" continua recebendo a
 # resposta certa. O que muda e que a SUPERFICIE de conversa passa a ter um roster
 # proprio (`atores()`), maior que o do org: o dono fala com quem tem porta com ele.
-_SAO_PARTICIPANTE = {"jaiminho"}
+_SAO_PARTICIPANTE = {"jaiminho", "jaiminho-fabrica"}
 
 
 def _raiz_personas() -> Path:
