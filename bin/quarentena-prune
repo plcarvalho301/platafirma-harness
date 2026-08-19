@@ -1,0 +1,56 @@
+#!/usr/bin/env bash
+# quarentena-prune — apaga levas de quarentena que passaram da janela de arrependimento.
+# Chamado pelo cron do claudinho, sextas de madrugada.
+# capacidade: orfa
+# orfa por design: entra em gerenciamento de memoria (F3d), junto de ops-log-prune
+# dono: claudinho-TI
+#
+# A quarentena existe para que apagar seja reversivel: o que entra la foi movido,
+# nao removido, e volta com um mv enquanto a leva viver. Este verbo e o fim dessa
+# janela — sem ele a quarentena vira acumulo, que e o defeito oposto.
+#
+# Apaga LEVA (subdiretorio datado), nunca a raiz: leva quarentenada ontem sobrevive
+# a poda de amanha. Sem o corte de idade, rodar na sexta daria 1 dia de janela a
+# quem quarentenou na quinta, e a garantia deixaria de existir.
+set -uo pipefail
+
+RETENCAO_DIAS="${QUARENTENA_RETENCAO_DIAS:-7}"
+RAIZ="${OPS_ROOT:-$HOME/AI}"
+QUARENTENA="$RAIZ/var/quarentena"
+MARCA="$RAIZ/var/log/poda.log"
+TRAVA="$RAIZ/var/quarentena-prune.lock"
+
+ts() { date -Is; }
+mkdir -p "$(dirname "$MARCA")"
+
+# Trava: sessao concorrente nao pode apagar a mesma leva duas vezes.
+exec 9>"$TRAVA"
+if ! flock -n 9; then
+  echo "$(ts) quarentena-prune: outra execucao em curso, saindo" >> "$MARCA"
+  exit 0
+fi
+
+[ -d "$QUARENTENA" ] || { echo "$(ts) quarentena-prune: sem $QUARENTENA, nada a fazer" >> "$MARCA"; exit 0; }
+
+total=0
+bytes=0
+while IFS= read -r leva; do
+  [ -n "$leva" ] || continue
+  # Cinto de seguranca: so apaga o que resolve para dentro da quarentena.
+  real=$(readlink -f "$leva")
+  case "$real" in
+    "$QUARENTENA"/*) : ;;
+    *) echo "$(ts) quarentena-prune: RECUSADO fora da quarentena: $real" >> "$MARCA"; continue ;;
+  esac
+  b=$(du -sb "$real" 2>/dev/null | cut -f1)
+  b="${b:-0}"
+  if rm -rf -- "$real"; then
+    total=$((total + 1))
+    bytes=$((bytes + b))
+    echo "$(ts) quarentena-prune: apagada leva $(basename "$real") (${b} bytes)" >> "$MARCA"
+  else
+    echo "$(ts) quarentena-prune: FALHOU ao apagar $real" >> "$MARCA"
+  fi
+done < <(find "$QUARENTENA" -mindepth 1 -maxdepth 1 -type d -mtime "+$RETENCAO_DIAS" 2>/dev/null)
+
+echo "$(ts) quarentena-prune: $total leva(s), $bytes bytes, retencao ${RETENCAO_DIAS}d" >> "$MARCA"

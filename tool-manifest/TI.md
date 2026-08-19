@@ -33,6 +33,8 @@ carregar chapeu   monta-sessao <cadeira> --chapeus | --chapeu <slug> — camada 
 promover release  deploy <stack> [up -d|rotas|acessos|segredos] — stack obrigatória
 serviço no ar     infra estado|saude|logs|restart|exclusivo|cache|backup · sinal
 comando longo     longjob run <nome> <cmd...>
+poda de retencao  ops-log-prune (log de ops/jobs, 90d) · quarentena-prune (levas de
+                  var/quarentena, 7d) — os dois no cron do claudinho, nao no ops-mcp
 Jaiminho          jaiminho perguntar|continuar|estado|logs — externo em contêiner
                   próprio, alcance decidido pelo PEP e nunca por flag do verbo
 fábrica no agy    jaiminho-fabrica <mesmos sub-atos> — 2a conta da fábrica (org:0020);
