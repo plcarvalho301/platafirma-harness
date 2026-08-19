@@ -63,14 +63,12 @@ sujeitos:
   # que a fábrica já tem. Aplicar papel existente é implementação; papel NOVO segue
   # pedido a claudinho-seguranca (org:0020, 18/08/2026) e não se inventa aqui.
   #
-  # DOMÍNIO `plataforma-runtime` e só ele: é o domínio que o PEP carimba em
-  # `run_command` (ops-server, DOM_RUNTIME). O ancestral `plataforma` daria de brinde
-  # acervo, wiki, drive e identidade por herança de linhagem.
+  # CLIENT criado no realm em 18/08/2026 por claudinho-TI, com ordem do dono: service
+  # account, sem fluxo de navegador, `preferred_username` fixo em `jaiminho-fabrica`
+  # por hardcoded-claim-mapper e `aud` em `ops-mcp`. Token conferido contra o realm
+  # vivo antes desta linha entrar — id interno eccde9b9.
   #
-  # PENDENTE, medido em 18/08/2026 e fora do alcance desta cadeira:
-  #   - `client` no realm: identidade é de claudinho-seguranca, e kcadm está sem
-  #     credencial nesta sessão. Enquanto não existir, esta linha não autentica
-  #     ninguém — o PEP resolve por `preferred_username` e nega o que não casa.
+  # PENDENTE, e fora do alcance desta cadeira:
   #   - conta de SO própria (`seg:0013`): exige root, não há uid `jaiminho-fabrica`.
   #     Hoje `run_command` executaria sob uid 1001, o que a régua de segregação
   #     (`seg:0011`) não aceita.
@@ -83,4 +81,5 @@ sujeitos:
     # nao ha regra de acervo, wiki nem drive, e o default do PDP nega; identidade tem
     # negativa escrita.
     dominios: [plataforma]
+    client: jaiminho-fabrica
     conta: jaiminho-fabrica
