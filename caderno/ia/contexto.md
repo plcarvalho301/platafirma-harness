@@ -6,6 +6,13 @@ aqui: desce a card, commit ou wiki. Corpo lido sob demanda (`mesa caderno contex
 ## Régua de leitura do retorno
 - `cobertura` reflete `max(scores)` do top-k — não confirma que a obra-alvo entrou.
 - Fonte que não trate do conceito exato perguntado não serve, ainda que o rótulo diga "boa".
+- A recíproca também vale: `cobertura: fraca` **com as obras certas no topo** não é ausência
+  de obra, é defeito de recorte na origem. Medido em 19/08/2026: os quatro snapshots de
+  engenharia da Anthropic (`ia`) têm o miolo recortado sob o cabeçalho de boilerplate
+  `get-the-developer-newsletter`; seção com nome de lixo derruba o rerank (máx. 0,156 contra
+  piso 0,79) sem que o conteúdo esteja errado. Antes de declarar que o corpus não cobre,
+  olhar `obra` e `breadcrumb` das primeiras fontes — nome de boilerplate no breadcrumb é o
+  sinal. Achado assim é defeito de produto de dados: nomear com a medição e entregar, não tunar.
 
 ## Armadilhas medidas
 - Pergunta em inglês, sem número embutido, recupera melhor neste corpus: identificador
