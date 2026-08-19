@@ -158,20 +158,44 @@ monta_query() { # monta_query "$@" -> ecoa a query string e devolve o resto em R
 _tem_json() { local a; for a in "$@"; do [ "$a" = "--json" ] && return 0; done; return 1; }
 
 linhas() { # id, marca de terminal, título
-  jq -r '.itens[] | "\(.id)\t\(if .estado_fase == "terminal" then "x" else " " end)\t\(.titulo)"'
+  jq -r '
+    ([.estados[]? | select(.fase == "terminal" or .natureza == "terminal") | .estado]
+     + ["entregue", "recusada", "cancelada", "englobada", "encerrada", "resolvido"]
+     | unique) as $term
+    | .itens[]
+    | . as $it
+    | "\($it.id)\t\(if ($it.estado_derivado != null and ($term | index([$it.estado_derivado]) != null)) or ($it.estado_derivado == null and $it.estado_fase == "terminal") then "x" else " " end)\t\($it.titulo)"'
 }
 
 listar() { # listar [filtros] [--json]   — só os abertos
   local q; q=$(monta_query "$@")
   local corpo; corpo=$(busca GET "/itens${q:+?$q}")
-  corpo=$(printf '%s' "$corpo" | jq '{itens: [.itens[] | select(.estado_fase != "terminal")], estados, total} | .total = (.itens|length)')
-  if _tem_json "${RESTO[@]:-}"; then printf '%s\n' "$corpo"; else printf '%s' "$corpo" | linhas; fi
+  corpo=$(printf '%s' "$corpo" | jq '
+    ([.estados[]? | select(.fase == "terminal" or .natureza == "terminal") | .estado]
+     + ["entregue", "recusada", "cancelada", "englobada", "encerrada", "resolvido"]
+     | unique) as $term
+    | {
+        itens: [
+          .itens[]
+          | . as $it
+          | select(
+              if $it.estado_derivado != null
+              then ($term | index([$it.estado_derivado]) == null)
+              else ($it.estado_fase != "terminal")
+              end
+            )
+        ],
+        estados,
+        total
+      }
+    | .total = (.itens | length)')
+  if _tem_json "$@"; then printf '%s\n' "$corpo"; else printf '%s' "$corpo" | linhas; fi
 }
 
 listar_tudo() { # listar_tudo [filtros] [--json]
   local q; q=$(monta_query "$@")
   local corpo; corpo=$(busca GET "/itens${q:+?$q}")
-  if _tem_json "${RESTO[@]:-}"; then printf '%s\n' "$corpo"; else printf '%s' "$corpo" | linhas; fi
+  if _tem_json "$@"; then printf '%s\n' "$corpo"; else printf '%s' "$corpo" | linhas; fi
 }
 
 estados() {
@@ -194,7 +218,12 @@ ler() {
   local id; id=$(so_id "$1")
   busca GET "/itens/$id" | jq -r '
     "# \(.titulo)",
-    "#\(.id) · \(.nivel_nome) · \(.estado_nome) (\(.estado_fase)) · cadeira: \(.cadeira // "—")"
+    "#\(.id) · \(.nivel_nome) · "
+    + (if .estado_derivado != null
+       then "\(.estado_derivado) [derivado; cru: \(.estado_nome) (\(.estado_fase))]"
+       else "\(.estado_nome) (\(.estado_fase))"
+       end)
+    + " · cadeira: \(.cadeira // "—")"
     + (if (.ancestrais|length) > 0 then "\n  em: " + ([.ancestrais[] | "#\(.id) \(.titulo)"] | join(" > ")) else "" end),
     "",
     (if ((.sign_offs // []) | length) > 0 then
@@ -347,7 +376,12 @@ mover() {
       + (if $m == "" then {} else {motivo:$m} end)
       + (if $g == "" then {} else {englobado_em:($g|tonumber)} end)' \
     | envia PATCH "/itens/$id$q" \
-    | jq -r '"item \(.id) → \(.estado_nome): \(.titulo)"
+    | jq -r '"item \(.id) → "
+             + (if .estado_derivado != null
+                then "\(.estado_derivado) [derivado; cru: \(.estado_nome)]"
+                else .estado_nome
+                end)
+             + ": \(.titulo)"
              + (if ((.propagacao.movidas // []) | length) > 0
                 then "\n  filhas movidas junto: " + ([.propagacao.movidas[] | "#\(.id)"] | join(", "))
                 else "" end)'
