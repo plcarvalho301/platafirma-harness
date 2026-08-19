@@ -1,0 +1,17 @@
+#!/bin/bash
+# capacidade: mensagem
+# dono: claudinho-TI
+#
+# Segunda conta da fabrica, motor `agy` (org:0020). NAO e um verbo novo: e o mesmo
+# `bin/jaiminho`, apontado por env para o container, a persona e o volume desta conta.
+# Existe como arquivo proprio porque `chat` roteia participante por NOME do binario
+# (VERBO_DO_PARTICIPANTE), e porque `jaiminho-fabrica perguntar` e o que a recepcao
+# chama — ninguem deveria precisar lembrar de exportar tres variaveis para girar.
+#
+# Sub-atos: os mesmos de `jaiminho` — perguntar | continuar | estado | logs | login.
+set -euo pipefail
+RAIZ="${PF_RAIZ:-$HOME/AI}"
+export PF_JAIMINHO_CONTAINER="jaiminho-fabrica"
+export PF_JAIMINHO_PERSONA="$RAIZ/platafirma-harness/personas/persona-jaiminho-fabrica.md"
+export PF_JAIMINHO_TRABALHO="/home/jaiminho/trabalho"
+exec "$RAIZ/platafirma-harness/bin/jaiminho" "$@"

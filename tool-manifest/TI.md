@@ -35,6 +35,8 @@ serviço no ar     infra estado|saude|logs|restart|exclusivo|cache|backup · sin
 comando longo     longjob run <nome> <cmd...>
 Jaiminho          jaiminho perguntar|continuar|estado|logs — externo em contêiner
                   próprio, alcance decidido pelo PEP e nunca por flag do verbo
+fábrica no agy    jaiminho-fabrica <mesmos sub-atos> — 2a conta da fábrica (org:0020);
+                  mesmo verbo por env, container e client próprios, papel fornecedor
 acervo            acervo ingerir <raiz> [--planilha x.ods] [--apply]; a fila é
                   platafirma-conhecimento/rag/scripts/acervo-drop, fora do PATH
 inferência        curl 127.0.0.1:11434/... · nvitop · nvcc (CUDA 13.2)

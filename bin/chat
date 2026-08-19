@@ -240,7 +240,14 @@ def id_fita_novo():
 # O contrato de saida NAO muda: uma linha JSON no stdout, um passo por linha no
 # stderr. A recepcao e o worker nao sabem que existe rota — e esse e o ponto.
 
-VERBO_DO_PARTICIPANTE = {"jaiminho": os.path.join(RAIZ, "bin", "jaiminho")}
+# Um participante, um verbo. `jaiminho-fabrica` (org:0020) entra aqui porque a
+# recepcao roteia por NOME, e sem linha nesta tabela o giro morre em
+# "sem verbo declarado" — medido no chat em 18/08/2026, com o participante ja
+# admitido em cadeiras.py e sem rota nenhuma deste lado.
+VERBO_DO_PARTICIPANTE = {
+    "jaiminho": os.path.join(RAIZ, "bin", "jaiminho"),
+    "jaiminho-fabrica": os.path.join(RAIZ, "bin", "jaiminho-fabrica"),
+}
 
 # `jaiminho perguntar` e sincrono e nao emite stream: ele volta quando o `agy`
 # terminou. O watchdog do worker mata por silencio de 300 s (e o daqui, por 240),

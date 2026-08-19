@@ -1,0 +1,49 @@
+name: jaiminho-fabrica
+
+# Segunda conta da fabrica, motor `agy` (org:0020). MESMA IMAGEM do Jaiminho
+# (`platafirma/jaiminho:local`), volumes proprios: o que separa as duas contas nao e o
+# binario, e o volume, o client do realm e o papel no PAP. Construir imagem propria
+# para trocar credencial criaria uma segunda arvore de build envelhecendo sozinha.
+#
+# O QUE ESTA CONTA NAO TEM, e e de proposito:
+#   - `jaiminho-server`: aquele MCP serve `pesquisador-externo` (acervo e wiki). A
+#     fabrica e `fornecedor` — o PDP nega acervo e wiki para ela, entao servidor nao
+#     acrescentaria alcance, so superficie.
+#   - rede `wiki`: sem alias `rag-api` nem `mcp`, nao ha o que alcancar la.
+#   - bind em `/saida`: a entrega da fabrica e commit no repo, nao arquivo solto.
+
+services:
+  jaiminho-fabrica:
+    image: platafirma/jaiminho:local
+    container_name: jaiminho-fabrica
+    restart: unless-stopped
+    env_file: [.env]
+    environment:
+      # A ponte le estas duas: sem elas ela levanta RuntimeError no primeiro token.
+      # O client e `jaiminho-fabrica`, criado no realm em 18/08/2026 — o
+      # `preferred_username` sai fixo por mapper e e por ele que o PEP resolve o
+      # sujeito no PAP.
+      OPS_URL: "https://ops.platafirma.org"
+      # Rota `/acervo` existe no mcp_config.json que a imagem escreve no boot e NAO
+      # tem servidor deste lado. Aponta para lugar nenhum de proposito: o PDP ja
+      # negaria acervo a `fornecedor`, e a falha de conexao e mais honesta que um
+      # 403 que sugere que a rota faria sentido se a regra mudasse.
+      ACERVO_URL: "http://127.0.0.1:9"
+    volumes:
+      - "casa:/home/jaiminho"
+      - "credenciais:/home/jaiminho/.antigravity"
+    networks: [saida]
+    security_opt: ["no-new-privileges:true"]
+    healthcheck:
+      test: ["CMD", "python3", "-c", "import urllib.request;urllib.request.urlopen('http://127.0.0.1:8022/estado',timeout=8)"]
+      interval: 60s
+      timeout: 10s
+      retries: 3
+
+networks:
+  saida:
+    driver: bridge
+
+volumes:
+  casa:
+  credenciais:
