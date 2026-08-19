@@ -77,5 +77,10 @@ sujeitos:
   jaiminho-fabrica:
     natureza: servico
     papeis: [fornecedor]
-    dominios: [plataforma-runtime]
+    # `plataforma`, nao `plataforma-runtime`: monta_sessao, read_file e write_file sao
+    # carimbados com `plataforma` pelo PEP, e runtime e FILHO — heranca desce, nunca
+    # sobe. O que segura o alcance extra nao e o eixo, e a matriz: para `fornecedor`
+    # nao ha regra de acervo, wiki nem drive, e o default do PDP nega; identidade tem
+    # negativa escrita.
+    dominios: [plataforma]
     conta: jaiminho-fabrica

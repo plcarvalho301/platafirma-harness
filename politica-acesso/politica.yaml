@@ -271,3 +271,46 @@ regras:
     quando: {papel: pesquisador-externo, dominio: plataforma-identidade}
     acoes: ["*"]
     sobre: ["*"]
+
+  # --- Fabrica: a conta jaiminho-fabrica precisa ABRIR --------------------------
+  # Ordem direta do dono em 18/08/2026, contra o repasse a claudinho-seguranca que
+  # `org:0020` previa. Escritas por claudinho-TI, no papel `fornecedor` que ja existia:
+  # nenhum papel novo nasce aqui. O corte e o de sempre — a fabrica executa card sobre
+  # repositorio; estado do host, identidade e o proprio PAP seguem fora.
+
+  - id: fornecedor-monta-a-propria-sessao
+    efeito: permite
+    motivo: "a persona da conta manda montar a sessao da fabrica como PRIMEIRA acao de toda fita; sem isto a conta nao abre · ordem do dono em 18/08/2026 · vence 2026-11-18"
+    quando: {papel: fornecedor, dominio: plataforma, tipo: documento}
+    acoes: [monta_sessao]
+    sobre: ["sessao:fabrica"]
+
+  # `cat *` ja e permitido em fornecedor-le-repo, e `cat > arquivo` escreve. Negar
+  # write_file e permitir cat seria teatro: a regra nomeia o alcance de verdade, que
+  # sao os clones de trabalho, e deixa o resto ao default.
+  - id: fornecedor-le-e-escreve-no-clone
+    efeito: permite
+    motivo: "a fabrica constroi dentro do clone do card: le e escreve arquivo de repositorio, e nada fora dele · ordem do dono em 18/08/2026 · vence 2026-11-18"
+    quando: {papel: fornecedor, dominio: plataforma, tipo: documento}
+    acoes: [read_file, write_file]
+    sobre: ["platafirma-*/*", "modulo-osint/*", "var/tmp/*"]
+
+  # A porta da fabrica e o card no board (org:0003) — sem estes sub-atos ela recebe
+  # trabalho e nao tem como responder. `apagar` e `fechar` ficam de fora: sumir com
+  # card e mover para entregue sao atos do dono, nao de quem executa.
+  - id: fornecedor-opera-o-card
+    efeito: permite
+    motivo: "porta unica da fabrica e o card (org:0003): le, lista, comenta, move e quebra em sub · ordem do dono em 18/08/2026 · vence 2026-11-18"
+    quando: {papel: fornecedor, tipo: comando}
+    acoes: [run_command]
+    sobre: ["tarefas ler*", "tarefas listar*", "tarefas comentar*", "tarefas mover*", "tarefas sub*", "tarefas criar*"]
+
+  # Segundo cadeado, escrito em vez de deixado ao default: quem e julgado pela
+  # politica nao edita a politica, nem a persona que o define, nem a conduta.
+  - id: fornecedor-nao-edita-o-que-o-julga
+    efeito: nega
+    motivo: "PAP, persona e conduta nao se editam por quem e julgado por eles"
+    quando: {papel: fornecedor}
+    acoes: ["*"]
+    sobre: ["politica-acesso/*", "*/politica-acesso/*", "personas/*", "*/personas/*",
+            "conduta/*", "*/conduta/*", "*/tool-manifest/*", "tool-manifest/*"]
