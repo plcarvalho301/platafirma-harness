@@ -75,3 +75,14 @@ juntos). Como o embrulho e por HERANCA (nao composicao), a parte do fornecedor a
 direto: `#meu-dialogo::part(close-button) { display: none; }` funciona sem escrever
 componente novo. Serve para todo dialogo cujo cancelamento tem consequencia e nao deve
 oferecer uma saida muda no canto.
+
+## `pf-dialogo` reabrir logo apos fechar entrega caixa de altura zero
+
+O fornecimento tem animacao de fecho (`Dialogo`, herdado do fornecedor): `dialog.open = false`
+nao e instantaneo. Reabrir o MESMO `pf-dialogo` — ou disparar o gesto que o reabre — antes de o
+fecho terminar faz o campo interno nascer com `getBoundingClientRect()` de altura zero; qualquer
+automacao que clique nele (Puppeteer inclusive) recusa com "Node is either not clickable".
+Esperar `pf-dialogo-fechou` nao bastou sozinho: o corpo do dialogo ainda reconstroi depois do
+evento. Contornado esperando o evento E um atraso fixo depois dele, ou — mais robusto — usando
+uma pagina/instancia nova por abertura em vez de reabrir a mesma. Vale para qualquer script que
+dispare aberturas em sequencia rapida do mesmo `pf-dialogo`, nao so em prova.
