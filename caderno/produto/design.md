@@ -41,6 +41,11 @@ Nenhum token de espaco alcanca isso: e regra de terceiro, e se desfaz declarando
 espaco vertical que nenhuma folha da tela explica, ou dois irmaos identicos desalinhados,
 procurar aqui antes de procurar na propria folha.
 
+Reapareceu uma TERCEIRA vez no #241, agora em `justify-content`: `wa-native` veste
+`<summary>` com `space-between`, e declarar `display: flex` sem declarar o eixo cede a
+decisao a camada do bundle. E a primeira das quatro mordidas desta familia que chegou ate o
+dono como defeito visivel na tela — as tres anteriores foram achadas antes de subir.
+
 ## Esconder implicito nao e esconder
 
 `[hidden]` do user-agent e so `display: none`, e qualquer regra de autor com `display` o
@@ -86,3 +91,46 @@ Esperar `pf-dialogo-fechou` nao bastou sozinho: o corpo do dialogo ainda reconst
 evento. Contornado esperando o evento E um atraso fixo depois dele, ou — mais robusto — usando
 uma pagina/instancia nova por abertura em vez de reabrir a mesma. Vale para qualquer script que
 dispare aberturas em sequencia rapida do mesmo `pf-dialogo`, nao so em prova.
+
+
+## Recuo de árvore é relativo à ÂNCORA visual, não ao nível lógico
+
+Quando o pai de uma árvore de texto sobe para fora do bloco recuado (ex.: vira cabeçalho de
+uma caixa, e o corpo mostra só as filhas), o recuo das filhas tem de deslocar um nível para
+cima junto — senão elas ficam indentadas em relação a um pai que não está mais na mesma
+coluna de texto, e o olho lê "deslocado de nada". O recuo é sempre relativo a ONDE o pai
+está desenhado, não ao nível lógico dele na hierarquia de dados. Se a mesma estrutura de
+dados alimenta uma leitura em que o pai é a primeira linha (texto copiado, por exemplo), os
+dois recuos coexistem: um É a forma de dado (nível lógico), o outro é a forma de TELA
+(nível visual), e não dá para colapsar num só sem quebrar uma das duas leituras.
+
+## Poda em árvore de composição: pela folha, nunca pelo meio
+
+Escondendo item terminal (entregue, cancelado) de uma árvore de composição, a poda tem de
+subir da folha: um nó só desaparece se ele E toda a descendência forem podáveis. Podar pelo
+nó sozinho (sem olhar a descendência) reaparece o filho vivo como órfão solto — o mesmo
+defeito de achatamento que filtrar o CONJUNTO de dados por recorte externo produz. As duas
+armadilhas têm a mesma forma: cortar no meio de uma árvore sempre promove o que sobra
+embaixo do corte, e o sintoma na tela ("sumiu tudo", "virou raiz solta") não aponta pra
+causa sem medir onde a árvore foi cortada.
+
+## Filtro de listagem (recorte) e filtro de descida de árvore são DOIS filtros, não um
+
+Uma tela que mostra recorte (quadro, cadeira, estado) e também desenha hierarquia sob esse
+recorte precisa decidir separadamente: o que RECORTA decide quais raízes aparecem; o que
+DESCE decide o que aparece abaixo de cada raiz. Usar o mesmo conjunto filtrado para os dois
+papéis quebra sempre que o filtro corta no meio de uma árvore — filha fora do recorte some
+sem aviso, e intermediário fora do recorte promove o neto a raiz solta. O conserto é
+alimentar a descida com o conjunto INTEIRO carregado (não o recorte), e aplicar ao resultado
+da descida a MESMA regra de visibilidade que vale pra raiz (ex.: terminal não aparece) — sem
+isso, regras que só valiam "por acaso" (porque o recorte já escondia o caso) voltam a
+vazar assim que o filtro muda.
+
+## Medir antes de propor forma, na PRÓPRIA bancada — não só olhar o CSS
+
+Ler a folha e concluir "está certo" não basta quando a tela sofre efeito de camada de
+terceiro (`wa-native`, herança silenciosa de token). O padrão que resolveu, nesta casa: medir
+o `getComputedStyle` real na bancada (recuo em espaços, cor por elemento, `justify-content`
+resolvido) ANTES de escrever o conserto, e transformar cada medição em asserção de prova.
+Uma prova que mede o valor computado pega regra de terceiro que a leitura da folha não
+alcança; uma prova que só confere presença de classe ou token, não.
