@@ -200,9 +200,20 @@ def login_codigo(args):
         sys.exit("jaiminho: passe o codigo devolvido pela pagina de autorizacao")
     sh(f"tmux send-keys -t login {shlex.quote(codigo)}; sleep 1; tmux send-keys -t login Enter",
        timeout=60)
-    # Primeiro acesso ainda passa por tema, termos e confianca na pasta; Enter os
-    # atravessa com o default, e o default do consentimento de dados e NAO.
-    sh("for i in 1 2 3 4 5; do tmux send-keys -t login Enter; sleep 4; done", timeout=120)
+    # Primeiro acesso ainda passa por tema, termos e confianca na pasta. ENTER NAO
+    # ATRAVESSA A TELA DE TERMOS: la ele e `Toggle` do consentimento de dados, e o
+    # laco de Enter so ligava e desligava o checkbox para sempre. Medido em
+    # 18/08/2026, no primeiro login da conta jaiminho-fabrica. O caminho e navegar
+    # ate [Done] — Down sai do checkbox, Right vai do [Previous] ao [Done] — e so
+    # entao confirmar. O checkbox fica DESMARCADO: telemetria de interacao nao se
+    # concede por default.
+    sh("for i in 1 2 3; do tmux send-keys -t login Enter; sleep 4; done", timeout=120)
+    tela = sh("tmux capture-pane -p -t login", timeout=60).stdout
+    if "Done" in tela and "Toggle" in tela:
+        sh("tmux send-keys -t login Down; sleep 2; tmux send-keys -t login Right; "
+           "sleep 2; tmux send-keys -t login Enter; sleep 6", timeout=90)
+    # Confianca na pasta e as telas seguintes: ai sim Enter confirma o default.
+    sh("for i in 1 2 3; do tmux send-keys -t login Enter; sleep 4; done", timeout=120)
     tela = sh("tmux capture-pane -p -t login", timeout=60).stdout
     print("\n".join(l for l in tela.splitlines() if l.strip())[:900])
 
