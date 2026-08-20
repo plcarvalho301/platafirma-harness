@@ -118,3 +118,21 @@ a linha que diz "não conta": ela é a única cujo erro não tem sintoma.
 Corolário medido no mesmo turno: quando a isenção caiu, `mensagem` passou de 2 para 3 verbos
 e continuou reprovando. Veredito que piora depois do conserto do instrumento não é regressão
 — é a dívida que estava escondida atrás da isenção aparecendo pela primeira vez.
+
+## Cronometrar sem ler o status code publica latência de erro como desempenho (medido 20/08)
+
+Medi `/api/itens?limite=20` do rastreador em 0,7 ms e registrei como "board é barato". Era
+**400**. O endpoint é tudo-ou-nada: sem parâmetro responde 200 em 523 ms com 440 KB; com
+qualquer parâmetro recusa em menos de um milissegundo. A recusa é sempre a resposta mais
+rápida que um serviço sabe dar — então **toda medição de latência que não lê o código de
+retorno enviesa para o caminho quebrado**, e quanto mais quebrado, melhor o número. Eu já
+havia publicado esse número numa minuta antes de conferir.
+
+A régua que fica: **medição de tempo sem asserção de sucesso não é medição, é ruído com
+unidade.** Vale para o `curl -w` de uma sessão e vale para instrumentação que eu deixe no ar:
+`hit`/`miss` de cache, timeout por fonte, taxa de disparo. Se o número pode ser produzido por
+um caminho de falha, tem de vir acompanhado do que prova que não foi.
+
+Corolário para adaptador de fonte: a asserção de conformidade — o resultado bate com o do
+verbo humano sobre o mesmo estado — não é luxo de teste. É a única coisa que separa "a fonte
+respondeu rápido" de "a fonte recusou rápido".
