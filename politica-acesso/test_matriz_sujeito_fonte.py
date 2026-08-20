@@ -83,7 +83,11 @@ MATRIZ: list[tuple[str, str, str, bool, str]] = [
     (FABRICA, "registro", "adr:*", NEGA, "idem"),
     (FABRICA, "wiki", "wiki:principal/*", NEGA, "não há regra de wiki para fornecedor"),
     (FABRICA, "wiki", "wiki:PlataFirma/*", NEGA, "idem, e esta é a casa por dentro"),
-    (FABRICA, "acervo", "acervo:firma/*", NEGA, "não há regra de acervo para fornecedor"),
+    # DESATUALIZADO ATE 20/08/2026: a linha esperava NEGA, e a suite quebrou quando
+    # `fabrica-le-acervo-firma` entrou por ordem do dono na mesma data. Corrigida aqui,
+    # e a falha era do teste, não da política — o gabarito literal fez o trabalho dele.
+    (FABRICA, "acervo", "acervo:firma/*", PERMITE, "fabrica-le-acervo-firma, 20/08/2026"),
+    (FABRICA, "acervo", "acervo:pessoal/*", NEGA, "fornecedor-nunca-alcanca-acervo-pessoal"),
     (FABRICA, "fila", "caixa:jaiminho-fabrica", NEGA, "a fábrica fala por card, não por caixa"),
 
     # --- quem não está na projeção ---------------------------------------------------

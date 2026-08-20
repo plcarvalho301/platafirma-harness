@@ -137,12 +137,49 @@ regras:
 
   # --- Fornecedor: fábrica, OSINT, e o que vier contratado ---------------------
   # A porta é o card; o alcance é o repo. Estado do host não é do fornecedor.
+  # ESTREITADA EM 20/08/2026 (claudinho-seguranca, ordem do dono). Dois buracos
+  # MEDIDOS na versao anterior, e nenhum deles dependia de bug nenhum:
+  #   - `cat *` cobria `cat > arquivo`, que ESCREVE. O proprio PAP admitia isso por
+  #     escrito em `fornecedor-le-e-escreve-no-clone`. Saiu: `read_file` ja da a
+  #     leitura, com alvo declarado em vez de string.
+  #   - `git *` cobria `git -c core.pager=<qualquer coisa>` e `git -c alias.x=!<sh>`,
+  #     que executam comando arbitrario COM a permissao do fornecedor. Saiu o glob
+  #     aberto; entrou a lista de subcomandos, que nao casa `git -c`.
+  # O que sobra aberto por natureza — `python3` e `uv` — nao se fecha com glob: e a
+  # propria fabrica rodando teste e script. So verbo nomeado resolve, e e o que esta
+  # pedido a claudinho-TI (ver `fornecedor-usa-verbo-operacional`, abaixo).
+  # ALLOWLIST DE PREFIXO DE STRING E MITIGACAO, NAO CONTROLE. Fica escrito aqui para
+  # que ninguem a leia como se fosse.
   - id: fornecedor-le-repo
     efeito: permite
-    motivo: "fornecedor executa card sobre repositorio"
+    motivo: "fornecedor executa card sobre repositorio · estreitada em 20/08/2026: sai `cat *` (escreve) e o glob aberto de git (`git -c` executa arbitrario)"
     quando: {papel: fornecedor, tipo: comando}
     acoes: [run_command]
-    sobre: ["git *", "rg *", "fd *", "cat *", "python3 *", "uv *", "pytest*", "ls *"]
+    sobre: ["git status*", "git diff*", "git log*", "git show*", "git add *",
+            "git commit*", "git push*", "git pull*", "git fetch*", "git merge*",
+            "git rebase*", "git checkout*", "git switch*", "git restore*",
+            "git branch*", "git stash*", "git tag*", "git remote*", "git clone*",
+            "git worktree*", "git rev-parse*", "git ls-files*", "git blame*",
+            "rg *", "fd *", "python3 *", "uv *", "pytest*", "ls *"]
+
+  # --- Verbo operacional no lugar de run_command (ordem do dono, 20/08/2026) ---
+  # O dono: o braco do jaiminho no deploy tem de ser um conjunto de VERBOS
+  # OPERACIONAIS, nao `run_command`. A razao e a de cima: allowlist de prefixo julga
+  # o TEXTO do comando, e texto se contorna com uma flag. Verbo nomeado julga o ATO.
+  #
+  # As regras abaixo ja estao escritas e sao INERTES ate os verbos existirem — o
+  # default nega o que nao ha. Estao aqui para que o alcance pretendido seja lido no
+  # PAP, e nao inferido do codigo depois.
+  # CONSTRUCAO DOS VERBOS: claudinho-TI. REGRA: claudinho-seguranca.
+  # `run_command` para `fornecedor` SAI no dia em que os verbos subirem, e nao antes:
+  # tirar agora deixaria a fabrica sem braco nenhum.
+  - id: fornecedor-usa-verbo-operacional
+    efeito: permite
+    motivo: "o braco da fabrica no deploy e verbo nomeado, nao string de shell · ordem do dono em 20/08/2026 · vence 2026-11-20"
+    quando: {papel: fornecedor, dominio: plataforma, tipo: operacao}
+    acoes: [repo_clonar, repo_ramo, repo_commitar, repo_empurrar, repo_estado,
+            teste_rodar, lint_rodar]
+    sobre: ["platafirma-*/*", "modulo-osint/*", "var/tmp/*"]
 
   - id: fornecedor-sem-estado-do-host
     efeito: nega
@@ -225,7 +262,7 @@ regras:
     efeito: permite
     motivo: "investigacao em fonte aberta precisa do vocabulario da casa, nao so do texto de terceiro: le as paginas de conceito da wiki · ordem direta do dono em 16/08/2026, sobre a concessao de acervo ja dada por claudinho-IA · vence 2026-11-15"
     quando: {papel: pesquisador-externo, dominio: plataforma-wiki, tipo: wiki}
-    acoes: [wiki_ler]
+    acoes: [wiki_ler, wiki_buscar, wiki_listar, wiki_consultar]
     sobre: ["wiki:principal/*"]
 
   # A camada interna da wiki NAO e concedida, e a negativa fica escrita em vez de
@@ -345,3 +382,28 @@ regras:
     quando: {papel: fornecedor}
     acoes: ["*"]
     sobre: ["acervo:pessoal/*"]
+
+  # --- Wiki como superficie universal (ordem do dono, 20/08/2026) -------------
+  # A wiki e alcancavel por qualquer bot autenticado e autorizado AQUI, seja qual for
+  # o servidor por onde ele entra e a conta onde ele roda. Ate 20/08 a unica
+  # autorizacao por sujeito a wiki vivia DENTRO do jaiminho-server, feita para um bot
+  # so; o `wiki-mcp` tinha um segredo compartilhado e mais nada, e quem o portava
+  # tinha `edit_page` e `upload_file` junto. O PEP agora e o mesmo nos dois.
+  #
+  # LER e ESCREVER sao acoes separadas de proposito, e ENVIAR ARQUIVO e uma terceira:
+  # conceder edicao de texto nao pode conceder envio de binario, que e superficie de
+  # outra natureza (tipo de arquivo, tamanho, o que o servidor faz com ele depois).
+
+  - id: externo-nao-escreve-na-wiki
+    efeito: nega
+    motivo: "a wiki e o registro da casa: colaboracao externa le, nao escreve"
+    quando: {papel: pesquisador-externo, dominio: plataforma-wiki}
+    acoes: [wiki_editar, wiki_enviar_arquivo]
+    sobre: ["*"]
+
+  - id: fornecedor-nao-escreve-na-wiki
+    efeito: nega
+    motivo: "a entrega da fabrica e commit no repo, nao pagina de wiki"
+    quando: {papel: fornecedor, dominio: plataforma-wiki}
+    acoes: [wiki_editar, wiki_enviar_arquivo]
+    sobre: ["*"]
