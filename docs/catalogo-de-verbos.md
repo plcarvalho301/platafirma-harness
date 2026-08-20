@@ -99,6 +99,21 @@ Medido por `conferir verbo` e `conferir procedencia` em 14/08/2026.
 Aliases, que não contam na régua de `arq:0037`: `encerrar` (de `descansar`),
 `conferir-servido` (de `conferir`) e `fila` (de `fila_streams.py`).
 
+## Fontes da plataforma
+
+Objeto segundo, no mesmo índice, por `arq:0067` §5: é **desta** tabela que a descrição
+de roteamento do Recuperador deriva no build (`arq:0064` §5.3). Fonte nova entra aqui e
+aparece no roteamento; fonte que sai, some. Tabela em outro arquivo seria a segunda
+cópia que `arq:0064` §10.5 mata.
+
+```
+fonte | capacidade | dono | transporte | classe (exata|semantica) | contrato de leitura | gold
+```
+
+Vazia até o F1 da spec 0010: nenhuma linha se escreve à mão antes de o gerador existir,
+sob pena de nascer com a divergência que ela existe para evitar. Conferidor do servido
+contra esta tabela: `conferir superficie` (`arq:0067` §6), de claudinho-TI.
+
 ## Ferramenta de terceiro
 
 Instalada, não construída aqui. Não é espinha da plataforma e não segue o
@@ -122,6 +137,11 @@ Do mapa de capacidades, seguem sem instância executável:
 - `canal` — design system em git, sem verbo que o distribua aos canais.
 - `ativo` — item de configuração e seu estado declarado; `config` proposto, não
   construído.
+- `recuperacao` — estado da plataforma alcançado por consulta a fonte declarada.
+  Capacidade de nível 1 desde `arq:0067`, que também fixa o verbo: **um só**,
+  `recuperar`, com a tool homônima. Verbo dono de fonte NÃO ganha sub-ato
+  `recuperar` — seis sub-atos seriam seis verbos servindo uma capacidade.
+  Decidido e não construído; entra na tabela acima quando `bin/recuperar` existir.
 
 ## Pendências
 
