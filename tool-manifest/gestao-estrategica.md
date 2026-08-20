@@ -48,6 +48,20 @@ As quatro anteriores eram do Vikunja (bucket, label, projeto 46) e morreram com 
 - **Escrita em lote é `PATCH /itens`** com `{"itens":[{"id":N,...}]}`, e a resposta é POR
   ITEM: 200 mesmo com falha dentro. Ler `resultados[].resultado` — `falha` não sobe no código
   da chamada.
+- **`tarefas mover <pai>` propaga o carimbo à SUBÁRVORE INTEIRA, netas inclusive.** Medido em
+  20/08/2026: `tarefas mover 2284 em-execucao` respondeu `filhas movidas junto:` e levou onze
+  cards de F2, F3 e F4 para `em-execucao` — nenhum deles em execução. Pior, o pai NÃO muda de
+  estado próprio: ele exibe estado derivado (`[derivado; cru: Em parecer]`), e continuou em
+  `captada` no banco. Ou seja, mover o pai não faz o que o nome diz e faz o que ninguém pediu.
+  Carimbar fase é carimbar as filhas que estão sendo tocadas, uma a uma. Reversão para
+  `priorizada` é aceita e foi usada.
+- **`pessoa` não é patchável** — `{"pessoa": "..."}` devolve `campo não atualizável: pessoa (vem
+  do cabeçalho da borda)`. Transferir card entre cadeiras não se faz por escrita: acontece no
+  despacho pela fila. Medido em 20/08/2026 no #2343.
+- **`tarefas ler <id>` não mostra comentário nenhum**, e é onde o trabalho das cadeiras é
+  escrito. `tarefas comentarios <id>` é o verbo. Card com `tem_descricao: false` e o trabalho
+  todo em comentário é o caso comum, não a exceção — quem confere entrega pelo `ler` conclui
+  que ninguém fez nada. Nomeado a claudinho-TI pela claudinho-dados no #283 do #2313.
 - **Sign-off não tem verbo.** Só por `tarefas api-corpo POST /itens/<id>/sign-offs`, com
   `aprovador` e, opcionalmente, `decisao` — decisão AUSENTE é o aprovador pendente, que é a
   forma de registrar quem ainda não assinou. `recusado` exige `texto`, senão a API recusa.

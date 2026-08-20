@@ -38,6 +38,8 @@ uso:
 
 <raiz> é a árvore de arquivos da entrada (ex.: ~/AI/entrada). O objeto é endereçado
 pelo sha256 do conteúdo, então reexecutar é idempotente: o que já subiu é pulado.
+Raiz PARCIAL é aceita: o manifest é sempre união por sha256 contra o que já existe,
+nunca substituição — o que está fora da raiz apontada não é tocado.
 
 --classificacao aceita .csv (uma tabela: a aba Classificacao) e .ods (multi-aba,
 com ServeA e o vocabulário). Sem valor, usa a única .ods da fila de entrada e recusa
@@ -202,21 +204,52 @@ fi
 if [ -n "$RAIZ" ]; then
   passo "inventário da raiz — $RAIZ"
   if [ "$APPLY" -eq 1 ]; then
-    # O manifest liga sha256 ao nome legível, e perdê-lo é irreversível. Raiz parcial
-    # ou vazia geraria inventário menor e apagaria o resto do índice em silêncio.
+    # O manifest liga sha256 ao nome legível, e perdê-lo é irreversível. A escrita é
+    # SEMPRE união por sha256 contra o manifest existente, nunca substituição do
+    # arquivo inteiro — raiz parcial não apaga o histórico que está fora dela.
     NOVO="$(mktemp)"; trap 'rm -f "$NOVO"' EXIT
     python3 scripts/inventario-acervo.py "$RAIZ" > "$NOVO"
     ANTES=$(wc -l < acervo/manifest.jsonl 2>/dev/null || echo 0)
-    AGORA=$(wc -l < "$NOVO")
-    if [ "$AGORA" -lt "$ANTES" ]; then
-      echo "   RECUSADO: inventário de $RAIZ tem $AGORA linha(s); o manifest atual tem $ANTES." >&2
-      echo "   Sobrescrever apagaria o índice do que está fora desta raiz. Aponte a raiz inteira." >&2
-      exit 1
-    fi
-    mv "$NOVO" acervo/manifest.jsonl
-    echo "   manifest: $AGORA linha(s)  (antes: $ANTES)"
+    FRESCAS=$(wc -l < "$NOVO")
+    python3 - "$NOVO" acervo/manifest.jsonl <<'PY'
+import json, sys
+from pathlib import Path
+
+novo_path, manifest_path = Path(sys.argv[1]), Path(sys.argv[2])
+
+antigas = {}
+if manifest_path.exists():
+    for linha in manifest_path.read_text(encoding="utf-8").splitlines():
+        linha = linha.strip()
+        if not linha:
+            continue
+        r = json.loads(linha)
+        antigas[r["sha256"]] = r
+
+frescas = {}
+for linha in novo_path.read_text(encoding="utf-8").splitlines():
+    linha = linha.strip()
+    if not linha:
+        continue
+    r = json.loads(linha)
+    frescas[r["sha256"]] = r
+
+mesclado = dict(antigas)
+mesclado.update(frescas)  # fresca vence quando o sha coincide (path_origem atual)
+
+saida = novo_path.with_suffix(".mesclado")
+with saida.open("w", encoding="utf-8") as f:
+    for sha in sorted(mesclado):
+        f.write(json.dumps(mesclado[sha], ensure_ascii=False) + "\n")
+
+so_novas = set(frescas) - set(antigas)
+print(f"antigas={len(antigas)} frescas={len(frescas)} mescladas={len(mesclado)} novas={len(so_novas)}", file=sys.stderr)
+saida.replace(manifest_path)
+PY
+    AGORA=$(wc -l < acervo/manifest.jsonl)
+    echo "   manifest: $AGORA linha(s)  (antes: $ANTES · raiz trouxe $FRESCAS)"
   else
-    python3 scripts/inventario-acervo.py "$RAIZ" | wc -l | xargs echo "   (dry-run) manifest teria" "linha(s)"
+    python3 scripts/inventario-acervo.py "$RAIZ" | wc -l | xargs echo "   (dry-run) manifest teria pelo menos" "linha(s) novas/atualizadas (união, não substituição)"
   fi
 
   passo "armazenamento — objeto por sha256 no MinIO  [degrau b]"
