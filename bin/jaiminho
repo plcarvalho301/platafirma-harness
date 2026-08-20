@@ -44,6 +44,40 @@ PERSONA = os.environ.get("PF_JAIMINHO_PERSONA") or os.path.join(
 # mesma (uid 10001). O que separa as contas nao e o caminho: e o volume, o client
 # do realm e o papel no PAP.
 TRABALHO = os.environ.get("PF_JAIMINHO_TRABALHO", "/home/jaiminho/trabalho")
+
+# --- de qual DAEMON este verbo fala -------------------------------------------------
+# Em 20/08/2026 (#2286) os dois bracos do `agy` sairam do daemon do `claudinho` e
+# passaram ao daemon rootless da conta `jaiminho` (uid 1003). O verbo continuou
+# perguntando ao daemon errado — e, pior, MENTINDO: `estado` respondia "container fora
+# do ar — `deploy jaiminho up -d`", que e literalmente o ato que sobe um SEGUNDO braco
+# contra os volumes velhos (handoff 20260820T195257, item 2). Verbo que erra o alvo e
+# defeito; verbo que sugere o estrago e armadilha.
+#
+# `PF_JAIMINHO_DOCKER_HOST` aponta o daemon. O DEFAULT e o socket do uid 1003 porque os
+# DOIS bracos migraram — nao sobrou braco no daemon do `claudinho`. Manter o default
+# vazio faria o verbo perguntar ao daemon errado por omissao, que e o defeito corrigido
+# aqui. Vazio explicito ainda vale: `PF_JAIMINHO_DOCKER_HOST= jaiminho estado` mede a
+# conta corrente, que e o que se quer ao conferir se sobrou container orfao daqui.
+DOCKER_HOST_ALVO = os.environ.get("PF_JAIMINHO_DOCKER_HOST",
+                                  "unix:///run/user/1003/docker.sock")
+# Onde o braco foi parar, para a frase de recusa dizer o que fazer em vez de mandar
+# subir. Nao e caminho de execucao: e endereco para humano.
+DAEMON_DONO = os.environ.get("PF_JAIMINHO_DAEMON_DONO", "jaiminho (uid 1003)")
+
+
+def _ambiente():
+    """Ambiente do subprocesso, com DOCKER_HOST quando ha daemon declarado."""
+    env = dict(os.environ)
+    if DOCKER_HOST_ALVO:
+        env["DOCKER_HOST"] = DOCKER_HOST_ALVO
+    return env
+
+
+def _alcanca_daemon():
+    """O daemon alvo responde a esta conta? Distingue 'nao alcanco' de 'nao existe'."""
+    r = subprocess.run(["docker", "version", "--format", "{{.Server.Version}}"],
+                       capture_output=True, text=True, env=_ambiente())
+    return r.returncode == 0
 # Dentro do container ele e root do proprio mundo: sem shell no host, sem rede da
 # malha, sem credencial de cadeira. Por isso a aprovacao interativa de ferramenta
 # nao acrescenta seguranca aqui — ela custaria um TTY que este verbo nao tem.
@@ -64,19 +98,35 @@ RESGATE = (
 
 def sh(cmd, timeout=600, entrada=None):
     return subprocess.run(["docker", "exec", "-i", CONTAINER, "bash", "-lc", cmd],
-                          capture_output=True, text=True, timeout=timeout, input=entrada)
+                          capture_output=True, text=True, timeout=timeout, input=entrada,
+                          env=_ambiente())
 
 
 def vivo():
     r = subprocess.run(["docker", "inspect", "-f", "{{.State.Running}}", CONTAINER],
-                       capture_output=True, text=True)
+                       capture_output=True, text=True, env=_ambiente())
     return r.returncode == 0 and r.stdout.strip() == "true"
 
 
 def exige_container():
-    if not vivo():
-        sys.exit("jaiminho: container fora do ar — `deploy jaiminho up -d` "
-                 "(compose em platafirma-harness/jaiminho)")
+    if vivo():
+        return
+    # NUNCA sugerir `up -d` sem antes saber se o alvo apenas nao esta ao alcance:
+    # subir aqui um container que vive em outro daemon cria o segundo braco.
+    if not _alcanca_daemon():
+        sys.exit(
+            f"{CONTAINER}: fora do alcance desta conta — o daemon alvo nao responde.\n"
+            f"  O braco roda no daemon rootless da conta {DAEMON_DONO} desde o card #2286,\n"
+            f"  e `claudinho` nao tem sudo para alcanca-lo.\n"
+            f"  NAO rode `deploy jaiminho up -d`: isso sobe um SEGUNDO braco neste daemon,\n"
+            f"  contra os volumes velhos, com a mesma credencial.\n"
+            f"  Para operar, use a conta dona do daemon, ou declare o alcance:\n"
+            f"    sudo -u jaiminho XDG_RUNTIME_DIR=/run/user/1003 \\\n"
+            f"      DOCKER_HOST=unix:///run/user/1003/docker.sock docker ps")
+    sys.exit(f"{CONTAINER}: daemon alcancado, container fora do ar.\n"
+             f"  Suba pela conta dona do deploy ({DAEMON_DONO}), em /srv/pf/agy/{CONTAINER}.\n"
+             f"  A stack `platafirma-harness/jaiminho` NAO sobe mais este braco: o servico\n"
+             f"  saiu do compose de proposito (#2286), e um `up -d` la nao o traz de volta.")
 
 
 def abertura():
@@ -221,7 +271,7 @@ def login_codigo(args):
 def logs(args):
     n = args[0] if args else "40"
     r = subprocess.run(["docker", "logs", "--tail", str(n), CONTAINER],
-                       capture_output=True, text=True)
+                       capture_output=True, text=True, env=_ambiente())
     print((r.stdout or "") + (r.stderr or ""))
 
 

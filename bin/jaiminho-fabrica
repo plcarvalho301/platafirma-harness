@@ -12,6 +12,12 @@
 set -euo pipefail
 RAIZ="${PF_RAIZ:-$HOME/AI}"
 export PF_JAIMINHO_CONTAINER="jaiminho-fabrica"
+# Daemon do braco desde o #2286: rootless da conta `jaiminho` (uid 1003). Declarado e
+# nao adivinhado — sem isto o verbo pergunta ao daemon do `claudinho`, nao acha o
+# container e sugere `up -d`, que sobe um SEGUNDO braco. `claudinho` nao tem sudo, entao
+# hoje isto NAO da alcance: da a RECUSA CERTA, com o endereco de quem alcanca.
+export PF_JAIMINHO_DOCKER_HOST="${PF_JAIMINHO_DOCKER_HOST:-unix:///run/user/1003/docker.sock}"
+export PF_JAIMINHO_DAEMON_DONO="jaiminho (uid 1003), deploy em /srv/pf/agy/jaiminho-fabrica"
 export PF_JAIMINHO_PERSONA="$RAIZ/platafirma-harness/personas/persona-jaiminho-fabrica.md"
 export PF_JAIMINHO_TRABALHO="/home/jaiminho/trabalho"
 exec "$RAIZ/platafirma-harness/bin/jaiminho" "$@"
