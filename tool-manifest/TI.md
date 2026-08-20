@@ -48,6 +48,5 @@ Ferramental de segurança: catálogo em `tool-manifest/seguranca.md`, não se du
 Usar, sim; decidir, não. `~/AI/.venv` e `~/AI/.venv-harness` são de outras cadeiras: ler,
 não escrever.
 
-Clones de trabalho em `~/AI`: `platafirma-{core,conhecimento,arquitetura,harness,motor,posto}`
-e `modulo-osint`. Entrega só existe em git — `git push origin main`, e o branch se confere
+Clones de trabalho em `~/AI`: `platafirma-{core,conhecimento,arquitetura,harness,motor,posto}`. Entrega só existe em git — `git push origin main`, e o branch se confere
 antes de relatar.

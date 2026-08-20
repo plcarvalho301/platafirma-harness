@@ -173,7 +173,7 @@ echo "== gate de commit (core.hooksPath -> $HARNESS/hooks)"
 if [ "$PREFIXO_DECLARADO" = 1 ]; then
   medido impossivel "(hooks)" "prefixo declarado: alvo de teste, clones do ambiente nao sao tocados"
 else
-  CLONES="platafirma-harness platafirma-core platafirma-conhecimento platafirma-arquitetura platafirma-motor platafirma-posto modulo-osint"
+  CLONES="platafirma-harness platafirma-core platafirma-conhecimento platafirma-arquitetura platafirma-motor platafirma-posto"
   for c in $CLONES; do
     if [ ! -d "$RAIZ/$c/.git" ]; then
       medido impossivel "$c" "clone ausente em $RAIZ — clonar e ato de quem prepara a maquina"
