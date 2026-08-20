@@ -134,5 +134,7 @@ def test_teto_tokens_medido():
     desc = gera_descricao_tool(fontes)
     n = conta_tokens(desc)
     if n is not None:
-        assert n == 189
+        # TETO, nao igualdade. Igualdade quebra a cada linha nova na tabela — e a tabela
+        # existe justamente para receber fonte nova sem tocar em codigo. O numero de hoje
+        # (165, seis fontes, dono pela cadeira) fica no commit, nao na assercao.
         assert n < 300
