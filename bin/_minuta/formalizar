@@ -94,7 +94,8 @@ def main():
     convocadas = [c.strip() for c in m_conv.group(1).split(",") if c.strip()] if m_conv else []
 
     secoes = parse_secoes(texto)
-    faltando = [c for c in convocadas if not secoes.get(c) or secoes.get(c) == PLACEHOLDER_CONV]
+    faltando = [c for c in convocadas
+                if not secoes.get(c) or PLACEHOLDER_CONV in secoes.get(c)]
     if faltando and not vencido:
         erro(f"seção vazia de: {', '.join(faltando)} — use --vencido para fechar mesmo assim")
 

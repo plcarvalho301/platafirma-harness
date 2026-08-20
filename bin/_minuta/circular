@@ -16,6 +16,20 @@ PLACEHOLDER_ABRE = "<escreva aqui antes de circular>"
 PLACEHOLDER_CONV = "<a preencher pela própria cadeira>"
 
 
+def esqueleto_posicao(ph):
+    """Espelha bin/_minuta/escrever:posicao_esqueleto. Tres subsecoes, e nao um
+    campo so — diagnostico e proposta misturados sao o modo de falha nomeado
+    pelo dono em 19/08/2026 (PROTOCOLO §3)."""
+    return (
+        f"### Diagnóstico — o presente medido\n{ph}\n"
+        "A1. <achado verificável na data, com a fonte>\n\n"
+        f"### Proposta — o que fazer\n{ph}\n"
+        "B1. <o que fazer> (sustenta-se em A1)\n\n"
+        f"### O que não sei\n{ph}\n"
+        "C1. <lacuna, e o que a fecharia — vazio aqui afirma que não há>\n\n"
+    )
+
+
 def erro(msg, code=1):
     print(f"minuta circular: {msg}", file=sys.stderr)
     sys.exit(code)
@@ -79,7 +93,7 @@ def main():
 
     secoes = parse_secoes(texto)
     body_abre = secoes.get(abridora, "")
-    if not body_abre or body_abre == PLACEHOLDER_ABRE:
+    if not body_abre or PLACEHOLDER_ABRE in body_abre:
         erro(
             f"minuta {num}: seção de quem abriu ({abridora}) está vazia — "
             f"pauta vazia não circula (protocolo §2/§3)"
@@ -98,7 +112,7 @@ def main():
             flags=re.M,
         )
         novas_secoes = "".join(
-            f"## Posição — {c}\n{PLACEHOLDER_CONV}\n\n" for c in novas
+            f"## Posição — {c}\n\n{esqueleto_posicao(PLACEHOLDER_CONV)}" for c in novas
         )
         if "\n## Divergência" in texto:
             texto = texto.replace("\n## Divergência", "\n" + novas_secoes + "## Divergência", 1)

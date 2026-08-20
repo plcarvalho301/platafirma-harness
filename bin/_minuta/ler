@@ -80,7 +80,7 @@ def main():
                 pass
         secoes = parse_secoes(texto)
         body = secoes.get(cadeira, "")
-        vazia = (not body) or body in (PLACEHOLDER_CONV, PLACEHOLDER_ABRE)
+        vazia = (not body) or PLACEHOLDER_CONV in body or PLACEHOLDER_ABRE in body
         papel = "abri" if cadeira == abridora else "convocada"
         linhas.append(
             f"{num}  {titulo}  aberta por {abridora}  {idade}d  {papel}  "

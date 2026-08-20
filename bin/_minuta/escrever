@@ -61,6 +61,26 @@ for c in "${CADS[@]}"; do
   [ "$c" = "$CADEIRA" ] && { echo "minuta escrever: '${CADEIRA}' já tem seção própria por abrir a minuta — não se lista em --convoca." >&2; exit 2; }
 done
 
+# Esqueleto de uma posicao. Tres subsecoes, e nao um campo so: diagnostico e
+# proposta misturados sao o modo de falha nomeado pelo dono em 19/08/2026
+# (PROTOCOLO §3). O placeholder repete nas tres porque a checagem de pauta vazia
+# procura a string; apagar as tres e o ato de escrever a posicao.
+posicao_esqueleto() {
+  local ph="$1"
+  echo "### Diagnóstico — o presente medido"
+  echo "${ph}"
+  echo "A1. <achado verificável na data, com a fonte>"
+  echo
+  echo "### Proposta — o que fazer"
+  echo "${ph}"
+  echo "B1. <o que fazer> (sustenta-se em A1)"
+  echo
+  echo "### O que não sei"
+  echo "${ph}"
+  echo "C1. <lacuna, e o que a fecharia — vazio aqui afirma que não há>"
+  echo
+}
+
 TITULO="$(tr '-' ' ' <<<"$SLUG")"
 TITULO="$(tr '[:lower:]' '[:upper:]' <<<"${TITULO:0:1}")${TITULO:1}"
 
@@ -80,12 +100,12 @@ TITULO="$(tr '[:lower:]' '[:upper:]' <<<"${TITULO:0:1}")${TITULO:1}"
   echo "<uma frase: a decisão pedida>"
   echo
   echo "## Posição — ${CADEIRA}"
-  echo "<escreva aqui antes de circular>"
   echo
+  posicao_esqueleto "<escreva aqui antes de circular>"
   for c in "${CADS[@]}"; do
     echo "## Posição — ${c}"
-    echo "<a preencher pela própria cadeira>"
     echo
+    posicao_esqueleto "<a preencher pela própria cadeira>"
   done
   echo "## Divergência"
   echo "<só o que sobrou em conflito depois das posições>"
