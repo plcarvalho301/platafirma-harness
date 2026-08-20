@@ -15,12 +15,12 @@ adaptadores, no F1.
 | `envelope.py` | `Envelope`, `Item`, `Procedencia`, `Versao`, `Sinal`, `LinhaFonte` e os quatro enums fechados |
 | `fontes.py` | as seis fontes, classe de consulta, timeout por classe, prefixo de chave |
 | `disjuntor.py` | `Disjuntor` por fonte e `Painel`, com estado observável |
-| `adaptadores/` | núcleo do adaptador + registro, fila e mesa (F1, #2298) |
+| `adaptadores/` | núcleo + registro, fila, mesa (#2298), wiki (#2301) e acervo (#2302) |
 | `pep.py` | PEP por fonte: decide, nega o pedido inteiro, monta a recusa (F1, #2303) |
 | `test_contrato_*.py` | 85 testes; o gatilho é `.github/workflows/recuperacao-tests.yml` |
 
-Não entra aqui: roteamento e tabela `fonte` (#2304), cache (F2), gate (F3), e os
-adaptadores de board (#2300), wiki (#2301) e acervo (#2302).
+Não entra aqui: roteamento e tabela `fonte` (#2304), cache (F2), gate (F3) e o adaptador
+de board (#2300), que espera a projeção #2299 de claudinho-TI.
 
 ```
 # da raiz do repo; precisa de `tokenizers` e `pyyaml`
@@ -190,10 +190,109 @@ não tem regra de leitura de acervo, wiki nem fila, e `recuperar` não é verbo 
 fábrica fala por card. Está na matriz para que uma concessão futura apareça como
 mudança de linha, não como silêncio.
 
+## F1 · cards #2301 e #2302 — wiki e acervo
+
+Cinco das seis fontes alcançadas. Falta o board, e ele não depende de mim.
+
+| adaptador | contrato usado | chave | versão | carimbo |
+|---|---|---|---|---|
+| `wiki.py` | `api.php`: `prop=revisions`, `action=cargoquery`, `list=search` | `wiki:<page_id>[#seção]` | `rev_id` | `rc:<rc_id>` |
+| `acervo.py` | `POST /search` e `GET /facets` do rag | `acervo:<objeto>#<âncora>` | `digest` do índice ⚠ | `acervo:<acervo_sha>` |
+
+**Nem o wiki-mcp, nem o `rag_search`.** Os dois são outros consumidores da mesma API, com
+a mesma dignidade destes. Encadear um no outro acoplaria a recuperação à superfície de
+ferramenta de outra cadeira, e toda mudança de forma dela viraria quebra aqui.
+
+### wiki — três caminhos, e quem escolhe é o alvo
+
+| entrada | ato | por quê |
+|---|---|---|
+| `wiki:<Título>[#seção]` | `prop=revisions` | alvo nominal: uma página, com id e revid |
+| `filtros={"tabela": …}` | `action=cargoquery` | faceta DECLARADA — predicado, não varredura de prosa |
+| termo livre | `list=search` | significado na prosa, que é o que o Cargo não indexa |
+
+`page_id`, e não título, porque **título é volátil e id não é**: mover a página troca o
+título e preserva o id, e chave que muda em renomeação envelhece calada no artefato que a
+citou. `rc_id` é o carimbo da FONTE (o ledger inteiro), `rev_id` é a versão do ITEM — a
+spec pede os dois e eles não são a mesma coisa.
+
+### acervo — a única que gradua
+
+É a única fonte semântica, e por isso a única que carrega `sinal`. A régua viaja no
+envelope porque duas chamadas na mesma sessão podem sair com réguas distintas: sem
+`rerank`, `medida: "sim"` com piso `MIN_SIM`; com `rerank`, `medida: "rerank"` com piso
+`MIN_CE`.
+
+**`boa` do rag não vira `coberta` aqui** (§13): sem gold, `nao-calibrada`. O rótulo do rag
+mede distância contra piso; o gold mediria se o retorno responde à pergunta. Promover um
+ao outro é instrumento desligado fingindo medição — `cobertura_do_rag()` mantém o rótulo
+dele legível ao lado, sem confundir os dois.
+
+**`texto="secao"` desmembra a fita de `contexto`.** O rag não devolve a seção por fonte:
+`fontes[].texto` é nulo e a seção recolada mora numa fita única, numerada `[n]`. Sem
+partir, o envelope serviria rótulo onde a fonte serviu texto. O corte casa `[n]` com
+`fontes[n-1]` **e só vale quando a contagem bate** — bloco a menos, cai para `ref`, porque
+texto casado com a procedência errada é o pior defeito possível numa citação.
+
+### Medido na bancada, 20/08/2026
+
+| chamada | mediana | itens | envelope |
+|---|---|---|---|
+| wiki, alvo nominal | **12,8 ms** | 1 | 97 tok |
+| wiki, `cargoquery` por domínio | **16,5 ms** | 5 | 339 tok |
+| wiki, prosa (`list=search`) | **22,8 ms** | 3 | 196 tok |
+| wiki, um item com trecho de 800 chars | — | 1 | 321 tok |
+| acervo, `texto=nenhum` | **73 ms** | 3 | 330 tok |
+| acervo, `texto=trecho` | 75 ms | 3 | 825 tok |
+| acervo, `texto=secao` | 92 ms | 3 | **2.601 tok** |
+| acervo, primeira chamada (com `/facets` frio) | 925 ms | — | — |
+
+A wiki fica a 5% do timeout de 250 ms da classe exata. O acervo fica a **4% dos 2 s** da
+classe semântica — o palpite do §8 sobrevive ao primeiro contato com a única fonte que o
+justificava, e agora tem medição contra ele em vez de nenhuma.
+
+**O custo do acervo é token, não latência.** Três itens em `secao` custam 2.601 tokens —
+oito vezes o mesmo retorno em `nenhum`. O teto de 40 do envelope vazio não protege disto,
+e é exatamente o que o §16 chama de teto **em uso** não medido.
+
+### ⚠ Fail-closed na chave do acervo — achado de 20/08/2026
+
+`/search` devolve `section_id` em **`curto-v1`**: um prefixo determinístico do
+`document_id` (que é o sha256 do objeto), 8+ chars. O §4 é explícito — `curto-v1` é
+projeção de exibição, nenhuma chave gravada em artefato o carrega, e o gate do §10 compara
+o sha inteiro. **A API não expõe a forma completa por requisição**: o knob
+`section_id_curto` é da instância, e desligá-lo pioraria o `rag_search` de todo mundo.
+
+O adaptador não inventa a chave: sem forma completa, levanta `FonteIndisponivel` e a fonte
+sai `fonte-nao-indexada` com `sem-indice` (34 tokens, 71 ms). `PF_ACERVO_CHAVE_CURTA=1` é
+o escape de bancada, nomeado e desligado por default — escape que vira default é a forma
+mais rápida de a projeção virar chave sem ninguém decidir. Todos os números acima foram
+medidos com o escape ligado, para que existam quando a dependência fechar.
+
+Dois pedidos a claudinho-dados, dono do produto (junto de #2313):
+
+1. `section_id` completo por requisição — hoje só há knob de instância.
+2. `impressao.id` no retorno de cada fonte. Sem ele a versão sai como o `acervo_sha`, que
+   carimba o ÍNDICE e não a impressão da obra citada, e sai marcada `digest` justamente
+   para não ser lida como a versão que o §4 pede.
+
+Um teste de conformidade **falha no dia em que a API mudar de formato** — falhar ali é boa
+notícia e tem de ser visível, e é o sinal de que o fail-closed pode sair.
+
+### Achado na wiki: `Operar:` não é o ns 3000
+
+O `CONTENT_NS` do `search_pages` do wiki-mcp é `0|4|12|3000`, e a docstring da tool diz
+cobrir `Operar:`. No siteinfo, **3000 é `Frente:` e `Operar:` é o 3004** — nenhuma página
+de `Operar:` aparece naquela busca, sem erro nem aviso. Este adaptador usa
+`0|4|12|3000|3004` e passa a achar `Operar:fila`, que o verbo humano não acha. A
+divergência é deliberada e está declarada no código: replicar o engano faria o teste de
+conformidade passar por errar igual. Vai a claudinho-dados junto do resto.
+
 ## O que ainda não está medido
 
-- ⚪ hipótese — o timeout de 2 s da classe semântica segue sendo palpite: o acervo é o
-  único da classe e ainda não tem adaptador. O de 250 ms já tem três medições contra ele.
+- O timeout de 2 s da classe semântica **deixou de ser palpite**: o acervo mede 73 ms de
+  mediana e 925 ms na primeira chamada (com `/facets` frio). O de 250 ms tem agora cinco
+  medições contra ele, a mais lenta sendo a fila com 57 ms.
 - ⚪ hipótese — `LIMIAR_FALHAS=5`, `ESPERA_S=30`, uma sondagem. Ponto de partida
   conservador; o que os fecha é a taxa de falha por fonte, também depois do F2.
 - O teto do envelope **em uso**, contra o teto em teste (§16).
