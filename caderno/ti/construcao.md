@@ -97,3 +97,24 @@ que a fábrica NÃO descobre sozinha: dependência real entre cards; fronteira q
 atravessa (worktree por card, `git add <caminho>`, push e para); documento superado nomeado;
 parar e perguntar quando faltar decisão; prova de aceite em comentário, com o SHA.
 **Card escrito e não despachado é papel.**
+
+## Instrumento que isenta por forma do nome mede menos do que promete (medido 20/08)
+
+`conferir verbo` classificava como alias todo symlink cujo destino tem outro nome. A isenção
+existe por um motivo bom — deprecar um verbo não pode fazê-lo reprovar em `arq:0037` por
+existir duas vezes. Mas a condição escrita não era essa: era só "nome diferente", e
+`fila` → `fila_streams.py` casava por causa do sufixo `.py`. O verbo mais usado da casa saía
+do denominador de toda capacidade, e a saída dizia `conforme: true` — o veredito passava a
+medir o conjunto errado sem nunca acusar. Corrigido exigindo que o destino ESTEJA exposto em
+`bin/` sob o próprio nome: alias é nome que DUPLICA outro exposto, e é só esse caso que a
+regra precisa isentar.
+
+A régua que fica, e vale para todo verificador que eu escrever: **isenção se predica sobre a
+duplicidade que ela existe para tolerar, nunca sobre o formato do nome.** Predicado por forma
+de string é barato de escrever e falha em silêncio — o item isento não aparece como falha,
+aparece como conforme. Ao ler saída de instrumento meu, o que merece desconfiança primeiro é
+a linha que diz "não conta": ela é a única cujo erro não tem sintoma.
+
+Corolário medido no mesmo turno: quando a isenção caiu, `mensagem` passou de 2 para 3 verbos
+e continuou reprovando. Veredito que piora depois do conserto do instrumento não é regressão
+— é a dívida que estava escondida atrás da isenção aparecendo pela primeira vez.
