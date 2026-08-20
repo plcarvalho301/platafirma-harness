@@ -57,10 +57,15 @@ MATRIZ: list[tuple[str, str, str, bool, str]] = [
     (EMERGENCIA, "acervo", "acervo:firma/*", PERMITE, "idem"),
 
     # --- o externo: lê o que foi nomeado, e nada mais -------------------------------
-    (EXTERNO, "acervo", "acervo:firma/*", PERMITE, "jaiminho-le-acervo-firma"),
+    (EXTERNO, "acervo", "acervo:firma/*", PERMITE, "jaiminho-le-acervo-inteiro"),
     (EXTERNO, "acervo", "acervo:firma/ia/*", PERMITE, "recorte dentro da concessão"),
-    (EXTERNO, "acervo", "acervo:pessoal/*", NEGA, "externo-nunca-alcanca-acervo-pessoal"),
-    (EXTERNO, "acervo", "acervo:*", NEGA, "genérico não casa a concessão nominal"),
+    # DESATUALIZADO ATE 20/08/2026: as duas linhas abaixo esperavam NEGA. Ordem do dono
+    # nesta data concedeu o acervo INTEIRO ao externo (`jaiminho-le-acervo-inteiro`) e
+    # removeu `externo-nunca-alcanca-acervo-pessoal`. Fundamento dele: externo que coda
+    # contra a plataforma sem base sólida quebra o ambiente, e a coleção pessoal é do
+    # titular. Corrigidas à mão, como o gabarito literal exige.
+    (EXTERNO, "acervo", "acervo:pessoal/*", PERMITE, "jaiminho-le-acervo-inteiro, 20/08/2026"),
+    (EXTERNO, "acervo", "acervo:*", PERMITE, "a concessão é o corpus inteiro, por ordem do dono"),
     (EXTERNO, "wiki", "wiki:principal/*", PERMITE, "jaiminho-le-wiki-conceito"),
     (EXTERNO, "wiki", "wiki:PlataFirma/*", NEGA, "externo-nao-le-wiki-interna"),
     (EXTERNO, "wiki", "wiki:Operar/*", NEGA, "runbook é a casa por dentro"),
@@ -117,7 +122,10 @@ def test_matriz(pep, sujeito, fonte, alvo, esperado, porque):
 # Repetido de propósito: as duas linhas que a spec nomeia não podem depender de alguém
 # ler a matriz inteira para achá-las. Falha aqui é vazamento, não regressão de forma.
 
-VEDADO_AO_EXTERNO = [("wiki", "wiki:PlataFirma/*"), ("acervo", "acervo:pessoal/*")]
+# `acervo:pessoal/*` SAIU desta lista em 20/08/2026: deixou de ser vedado por ordem do
+# dono. O que resta vedado ao externo é a casa por dentro — decisão, runbook e trabalho
+# em curso —, que é outra matéria e não foi tocada.
+VEDADO_AO_EXTERNO = [("wiki", "wiki:PlataFirma/*"), ("wiki", "wiki:Operar/*")]
 
 
 @pytest.mark.parametrize("fonte,alvo", VEDADO_AO_EXTERNO)
@@ -129,9 +137,9 @@ def test_externo_nao_alcanca_a_casa_por_dentro_pelo_recuperar(pep, fonte, alvo):
 
 def test_vedado_nao_passa_nem_misturado_com_alvo_concedido(pep):
     """Negativa total: o alvo vedado no meio de um pedido legítimo derruba a fonte."""
-    n = pep.autoriza_fonte(EXTERNO, Fonte("acervo"),
-                           ["acervo:firma/ia/*", "acervo:pessoal/*"])
-    assert n is not None and n.alvo == "acervo:pessoal/*"
+    n = pep.autoriza_fonte(EXTERNO, Fonte("wiki"),
+                           ["wiki:principal/*", "wiki:PlataFirma/*"])
+    assert n is not None and n.alvo == "wiki:PlataFirma/*"
 
 
 # --- completude: fonte nova entra na matriz, ou o build para -------------------------

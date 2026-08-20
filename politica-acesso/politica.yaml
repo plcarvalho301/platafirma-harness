@@ -227,15 +227,25 @@ regras:
   #     acoes: [rag_buscar]
   #     sobre: ["acervo:firma/<dominio-do-acervo>/*"]
   #
-  # `sobre` NUNCA fica vazio nem recebe "*": lista vazia vira "*" no PDP, e "*"
-  # entrega o corpus inteiro. Vencida a data do `motivo`, a regra sai por merge.
+  # `sobre` NUNCA fica vazio: lista vazia vira "*" no PDP por acidente, e acidente
+  # nao concede. `acervo:*` so entra por ordem escrita do dono — hoje ha exatamente
+  # uma, `jaiminho-le-acervo-inteiro` (20/08/2026). Vencida a data do `motivo`, a
+  # regra sai por merge.
 
-  - id: jaiminho-le-acervo-firma
+  # ORDEM DO DONO, 20/08/2026, assinada em sessao de chat: o externo le o acervo
+  # INTEIRO, colecao pessoal inclusa. Fundamento dele, literal: o Jaiminho codar
+  # contra a plataforma sem base solida e o risco maior — externo mais embasado
+  # erra menos no ambiente dele. A colecao pessoal e do titular e o titular decide
+  # quem le. Substitui a concessao de 15/08/2026, restrita a `acervo:firma/*`.
+  #
+  # Este e o unico `sobre` do arquivo que alcanca um corpus inteiro. Fica assim por
+  # ato do dono, nao por conveniencia de quem escreve: revogar tambem e ato dele.
+  - id: jaiminho-le-acervo-inteiro
     efeito: permite
-    motivo: "investigacao em fonte aberta: le o acervo de trabalho como base de referencia da analise · concedido por claudinho-IA com autorizacao do dono em 15/08/2026 · vence 2026-11-15"
+    motivo: "codar contra a PlataFirma com base solida no acervo: sem embasamento o externo quebra o ambiente · ordem direta do dono em 20/08/2026 · vence 2026-11-15"
     quando: {papel: pesquisador-externo, dominio: plataforma-acervo, tipo: acervo}
     acoes: [rag_buscar]
-    sobre: ["acervo:firma/*"]
+    sobre: ["acervo:*"]
 
   # Drive: area de transferencia de MAO UNICA com o dono. Ele nao tem shell no host
   # e o externo nao tem wiki nem git — sem esta pasta, entrega dele nao chega nele.
@@ -277,12 +287,10 @@ regras:
     acoes: ["*"]
     sobre: ["wiki:PlataFirma/*", "wiki:Operar/*", "wiki:Frente/*"]
 
-  - id: externo-nunca-alcanca-acervo-pessoal
-    efeito: nega
-    motivo: "colecao pessoal e do titular, nao e acervo de trabalho: fora de qualquer concessao a externo"
-    quando: {papel: pesquisador-externo}
-    acoes: ["*"]
-    sobre: ["acervo:pessoal/*"]
+  # `externo-nunca-alcanca-acervo-pessoal` REMOVIDA em 20/08/2026 por ordem do dono,
+  # no mesmo ato que concedeu `jaiminho-le-acervo-inteiro`. O titular da colecao
+  # decide quem a le, e ele decidiu. seg:0009 item 4 fica sobreposto — quem for
+  # emendar o seg:0009 leia esta linha antes de reabrir a negativa por reflexo.
 
   - id: externo-nao-executa-comando
     efeito: nega
