@@ -680,30 +680,7 @@ async def monta_sessao(cadeira: str = "", atualizar: bool = True) -> dict:
 # Registro tardio: o __doc__ é a descrição que o cliente lê, e ela precisa nomear o
 # usuário e a raiz DESTA instância. Substituir depois de registrar não adianta — o
 # FastMCP copia a descrição no momento do mcp.tool().
-
-def _carrega_descricao_recuperar() -> str:
-    try:
-        from recuperacao.gerador import DESCRICAO_TOOL
-        return DESCRICAO_TOOL
-    except Exception:
-        p = Path(__file__).resolve().parent.parent / "recuperacao" / "descricao_tool.txt"
-        if p.is_file():
-            return p.read_text(encoding="utf-8").strip()
-        return "Recupera estado da plataforma consultando fontes declaradas."
-
-
-async def recuperar(alvo: str, fontes: list[str] | None = None, filtros: dict | None = None,
-                    k: int = 8, texto: str = "secao") -> dict:
-    """Recupera estado da plataforma consultando fontes declaradas."""
-    negado = _autoriza("recuperar", "recuperar", "documento", f"alvo:{alvo}", DOM_PLATAFORMA)
-    if negado:
-        return negado
-    return {"ok": True, "alvo": alvo, "fontes": fontes}
-
-
-recuperar.__doc__ = _carrega_descricao_recuperar()
-
-_TOOLS = [run_command, read_file, write_file, recuperar]
+_TOOLS = [run_command, read_file, write_file]
 # monta_sessao só existe onde há personas: numa instância com outra OPS_ROOT (osint)
 # a tool não teria o que montar, e tool inútil no catálogo é contexto desperdiçado.
 if PERSONAS.is_dir():
