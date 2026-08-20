@@ -25,7 +25,12 @@ import time
 from datetime import datetime, timezone
 
 SAIDA = os.path.expanduser("~/AI/var/sinal/servicos.json")
-POSTO = "platafirma-core-vikunja-proxy-1"   # nginx com curl, na rede do conhecimento
+# POSTO: contêiner COM curl e NA rede `conhecimento` (plataforma-wiki_default), que é
+# onde os oauth2-proxy vivem. Era `platafirma-core-vikunja-proxy-1`, desligado com o
+# Vikunja (#172): a sonda passou a devolver "No such container" e os dois proxies saíam
+# FORA com o serviço de pé — painel que acusa queda falsa treina todo mundo a ignorá-lo.
+# O landing NÃO serve: está só na rede `borda` e não enxerga os proxies.
+POSTO = "plataforma-wiki-mediawiki-1"
 
 # Servico -> contendor. Quem tem healthcheck proprio le do Docker.
 POR_HEALTHCHECK = {
