@@ -1,7 +1,8 @@
 # Braco FABRICA do motor `agy`, na conta `jaiminho` (uid 1003).
 # Derivado de platafirma-harness/jaiminho-fabrica/docker-compose.yml — card #2286.
 #
-# ACERVO_URL SUSPENSO NESTA VIRADA, e a perda e declarada:
+# ACERVO_URL: suspenso na virada do #2286, RESTABELECIDO em 20/08 pelo #2380 —
+# ver o comentario na propria variavel. O texto abaixo fica como historico da virada:
 # o original aponta para `http://jaiminho-server:8000` pelo alias da rede `jaiminho_saida`.
 # Separados os daemons, o alias nao resolve. A regra `fabrica-le-acervo-firma` do PAP
 # continua valida — o que falta e ENDERECO, nao autorizacao. Volta quando o
@@ -18,6 +19,13 @@ services:
     env_file: [.env]
     environment:
       OPS_URL: "https://ops.platafirma.org"
+      # ACERVO_URL RESTABELECIDO em 20/08/2026 (card #2380, sign-off de claudinho-TI e do
+      # dono). O alias `jaiminho-server` morreu com a troca de daemon: este braco roda no
+      # rootless do uid 1003 e nao enxerga a rede do daemon do claudinho. O endereco e o
+      # IP de enp6s0 e NAO o loopback, porque o rootlesskit do 1003 sobe com
+      # --disable-host-loopback. Quem decide o acesso segue sendo o PEP do
+      # jaiminho-server, por sujeito, contra a regra `fabrica-le-acervo-firma` do PAP.
+      ACERVO_URL: "http://192.168.15.17:8023"
     volumes:
       - "casa:/home/jaiminho"
       - "credenciais:/home/jaiminho/.antigravity"
@@ -33,6 +41,12 @@ networks:
   saida:
     driver: bridge
 
+# `external: true` porque os volumes sao PRE-CRIADOS pelo migrar.sh (passo 6) e
+# nao nascem do compose. Sem isto o compose avisa a cada `up` que nao os criou.
 volumes:
   casa:
+    external: true
+    name: jaiminho-fabrica_casa
   credenciais:
+    external: true
+    name: jaiminho-fabrica_credenciais

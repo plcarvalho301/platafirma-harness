@@ -1,37 +1,17 @@
 name: jaiminho
 
 services:
-  jaiminho:
-    build: .
-    image: platafirma/jaiminho:local
-    container_name: jaiminho
-    restart: unless-stopped
-    env_file: [.env]
-    # A ponte MCP escuta so DENTRO do container (127.0.0.1:8022): quem a usa e o
-    # `agy` que roda aqui. Nao ha porta publicada nem rota no tunel — o Jaiminho
-    # nao e superficie publica. Chamada vem por `docker exec`.
-    volumes:
-      # A casa dele: home inteiro persistente. Nada nosso mora aqui (codigo e
-      # `agy` vem de /opt/pf, da imagem), entao volume velho nunca mascara
-      # entrega nova. ~/bin e ~/lib sobrevivem a recreate — e o ponto.
-      - "casa:/home/jaiminho"
-      # Credencial do `agy` em volume proprio, aninhado: rebuild nao desloga.
-      - "credenciais:/home/jaiminho/.antigravity"
-      # UNICO ponto de escrita do container na arvore do host. Diretorio neutro:
-      # o que ele deixa aqui NAO entra no acervo sozinho — claudinho-TI confere e
-      # chama `acervo-drop`. Sem bind na arvore de Books: container nao escreve
-      # direto em fila de ingestao.
-      - "${HOME}/AI/var/entrada-jaiminho:/saida:rw"
-    # Rede default (bridge): alcanca a internet — auth/ops/wiki pela porta publica
-    # e a API do Google. NAO alcanca 127.0.0.1 do host, logo nao alcanca o Valkey
-    # da malha msg. Esse isolamento e o desenho, nao acidente (card 437).
-    networks: [saida]
-    security_opt: ["no-new-privileges:true"]
-    healthcheck:
-      test: ["CMD", "python3", "-c", "import urllib.request;urllib.request.urlopen('http://127.0.0.1:8022/estado',timeout=8)"]
-      interval: 60s
-      timeout: 10s
-      retries: 3
+  # O BRACO `jaiminho` SAIU DAQUI EM 20/08/2026 (card #2286). Ele roda no daemon
+  # rootless da conta `jaiminho` (uid 1003), com deploy em /srv/pf/agy/jaiminho e
+  # fonte versionada em `platafirma-harness/migracao-2286/jaiminho/`.
+  #
+  # O servico NAO fica aqui comentado por nostalgia: enquanto ele existisse neste
+  # arquivo, um `docker compose up -d` nesta pasta subiria um SEGUNDO braco no
+  # daemon do claudinho, contra os volumes velhos — dois bracos vivos com a mesma
+  # credencial e estados divergentes. Retirado por isso, a pedido de
+  # claudinho-seguranca (handoff 20260820T195257), e nao por arrumacao.
+  #
+  # O que sobra nesta stack e o MCP, que NAO migrou e segue no daemon do claudinho.
 
   # O MCP DELE. Nosso codigo, contexto de build proprio, contêiner separado: o
   # `ops-server` e o MCP das cadeiras e nao serve externo. Nao publica porta e nao
@@ -42,6 +22,21 @@ services:
     container_name: jaiminho-server
     restart: unless-stopped
     env_file: [../jaiminho-server/.env]
+    # PORTA PUBLICADA — NAO SUBIR SEM OS DOIS SIGN-OFFS (card #2380).
+    #
+    # Por que ela existe: com o card #2286 os dois bracos do `agy` passaram ao daemon
+    # rootless da conta `jaiminho` (uid 1003). O alias de rede `jaiminho-server`, que
+    # servia o acervo a fabrica, morreu com a mudanca de daemon — a regra
+    # `fabrica-le-acervo-firma` do PAP segue VALIDA: falta endereco, nao autorizacao.
+    #
+    # Por que no IP da LAN e nao em 127.0.0.1: o rootlesskit do 1003 sobe com
+    # `--disable-host-loopback`. Loopback do host NAO e alcancavel de dentro daqueles
+    # conteineres; interface real e. 192.168.15.17 e o endereco de `enp6s0`.
+    #
+    # O que protege a porta NAO e a rede, e o PEP: toda rota exige JWT do realm com
+    # `aud=ops-mcp` e decide por sujeito contra o PAP. Sem token, 401. Foi essa a base
+    # da posicao favoravel de claudinho-seguranca (handoff 20260820T195257, item 5).
+    ports: ["192.168.15.17:8023:8000"]
     environment:
       # Mesmo motor que o wiki-mcp chama, pelo mesmo alias de rede.
       RAG_API_URL: "http://rag-api:8000"
@@ -53,6 +48,13 @@ services:
       # OIDC_ISSUER nao muda.
       OIDC_JWKS_URL: "http://keycloak:8080/realms/platafirma/protocol/openid-connect/certs"
       OIDC_AUDIENCE: "ops-mcp"
+      # A protecao de DNS rebinding do MCP recusa Host fora desta lista com 421 —
+      # medido em 20/08/2026 batendo em 192.168.15.17:8023 com e sem token: 421 nos
+      # dois, antes de qualquer decisao de acesso. Publicar a porta sem nomear o host
+      # aqui entrega uma porta que responde `health` e recusa toda chamada de MCP.
+      # O endereco novo entra SEM tirar os antigos: o alias interno segue servindo o
+      # wiki-mcp e o braco osint, que nao migraram.
+      HOSTS_PERMITIDOS: "jaiminho-server:8000,jaiminho-server,127.0.0.1:8000,localhost:8000,192.168.15.17:8023,192.168.15.17"
       PDP_DIR: "/opt/pf/politica-acesso"
       JAIMINHO_LOG_DIR: "/var/log/jaiminho"
       # Wiki: mesmo alias de rede que o `rag-api`, pela rede `wiki`. O segredo do

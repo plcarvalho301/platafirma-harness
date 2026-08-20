@@ -84,19 +84,19 @@
         "platafirma-conhecimento"
       ],
       "onde_declara": "contêiner jaiminho, /home/jaiminho/.gemini/config/mcp_config.json — escrito do zero a cada boot por jaiminho/entrada.sh, nunca editado por fora",
-      "verificavel_do_host": true,
-      "porque": "de dentro do contêiner via `docker exec` — nunca lendo mcp_config.json (#165: chave errada nele passava calada, sem log; a medida bate no endpoint)",
+      "verificavel_do_host": false,
+      "porque": "DEIXOU de ser verificavel deste host em 20/08/2026 (#2286): os dois bracos do agy passaram ao daemon rootless da conta jaiminho (uid 1003) e `docker exec` do claudinho nao os enxerga — outro daemon, outro netns, outro uid, e claudinho nao tem sudo. Ate existir caminho de alcance, medir daqui devolve 'No such container' e reprova o gate por uma ausencia que nao e defeito de conector. O produtor (jaiminho/entrada.sh) segue conferivel estruturalmente.",
       "produtor": {
         "tipo": "bash-heredoc-json",
         "arquivo": "jaiminho/entrada.sh",
         "marcador": "JSON",
         "_": "reescrito a cada boot de propósito — contrato nosso, não arquivo dele. Medir o script é medir o que todo boot futuro grava, não uma amostra do contêiner vivo."
       },
-      "verificacao": {
-        "modo": "endpoint",
-        "via": "jaiminho",
-        "metodo_mcp": "initialize",
-        "_": "#165: agy é a única superfície cujo conector um CLI de TERCEIRO lê — chave desconhecida no schema dele é descartada calada, então a checagem estrutural do produtor (acima) não basta: aqui, além dela, `initialize` bate CADA conector de dentro do contêiner `jaiminho` e distingue 200 de 401/timeout sem tocar tool nenhuma."
+      "verificacao_suspensa": {
+        "motivo": "container fora do daemon do claudinho desde #2286",
+        "como_era": "initialize MCP de dentro do conteiner jaiminho, por docker exec",
+        "quem_pode_medir": "quem alcanca o daemon do uid 1003 (dono, ou sudoers pontual ainda inexistente)",
+        "reabre_com": "o card dos verbos que aceitam DOCKER_HOST por env"
       }
     }
   },

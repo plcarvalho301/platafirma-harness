@@ -36,6 +36,12 @@ networks:
   saida:
     driver: bridge
 
+# `external: true` porque os volumes sao PRE-CRIADOS pelo migrar.sh (passo 6) e
+# nao nascem do compose. Sem isto o compose avisa a cada `up` que nao os criou.
 volumes:
   casa:
+    external: true
+    name: jaiminho_casa
   credenciais:
+    external: true
+    name: jaiminho_credenciais
