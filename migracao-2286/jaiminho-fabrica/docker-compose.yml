@@ -1,0 +1,38 @@
+# Braco FABRICA do motor `agy`, na conta `jaiminho` (uid 1003).
+# Derivado de platafirma-harness/jaiminho-fabrica/docker-compose.yml — card #2286.
+#
+# ACERVO_URL SUSPENSO NESTA VIRADA, e a perda e declarada:
+# o original aponta para `http://jaiminho-server:8000` pelo alias da rede `jaiminho_saida`.
+# Separados os daemons, o alias nao resolve. A regra `fabrica-le-acervo-firma` do PAP
+# continua valida — o que falta e ENDERECO, nao autorizacao. Volta quando o
+# `jaiminho-server` tiver porta alcancavel (decisao de claudinho-TI, superficie externa,
+# pede sign-off).
+# O `OPS_URL` NAO sofre: vai pela borda publica, que independe de daemon.
+name: jaiminho-fabrica
+
+services:
+  jaiminho-fabrica:
+    image: platafirma/jaiminho:local
+    container_name: jaiminho-fabrica
+    restart: unless-stopped
+    env_file: [.env]
+    environment:
+      OPS_URL: "https://ops.platafirma.org"
+    volumes:
+      - "casa:/home/jaiminho"
+      - "credenciais:/home/jaiminho/.antigravity"
+    networks: [saida]
+    security_opt: ["no-new-privileges:true"]
+    healthcheck:
+      test: ["CMD", "python3", "-c", "import urllib.request;urllib.request.urlopen('http://127.0.0.1:8022/estado',timeout=8)"]
+      interval: 60s
+      timeout: 10s
+      retries: 3
+
+networks:
+  saida:
+    driver: bridge
+
+volumes:
+  casa:
+  credenciais:

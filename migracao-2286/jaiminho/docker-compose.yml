@@ -1,0 +1,41 @@
+# Braco OSINT do motor `agy`, na conta `jaiminho` (uid 1003).
+# Derivado de platafirma-harness/jaiminho/docker-compose.yml — card #2286.
+#
+# O QUE MUDOU em relacao ao original, e por que:
+#   - `jaiminho-server` SAIU deste arquivo. Ele nao roda `agy`: e codigo nosso, com o
+#     PEP embarcado, e depende dos aliases `keycloak`, `mcp` e `rag-api`, que vivem no
+#     daemon do `claudinho`. Segue la. O item (c) do dono — `agy` so na conta jaiminho —
+#     fica satisfeito sem move-lo.
+#   - a rede `wiki` saiu junto com ele.
+#   - `image:` em vez de `build:`: a imagem chega por `docker save | docker load`, sem
+#     segunda arvore de build envelhecendo nesta conta.
+#   - `/saida` aponta para /srv/pf/entrada-jaiminho: /home/claudinho e 0750 e o uid 1003
+#     nao atravessa. O diretorio novo e do jaiminho, com grupo claudinho, para o
+#     `acervo-drop` do claudinho-TI continuar lendo.
+name: jaiminho
+
+services:
+  jaiminho:
+    image: platafirma/jaiminho:local
+    container_name: jaiminho
+    restart: unless-stopped
+    env_file: [.env]
+    volumes:
+      - "casa:/home/jaiminho"
+      - "credenciais:/home/jaiminho/.antigravity"
+      - "/srv/pf/entrada-jaiminho:/saida:rw"
+    networks: [saida]
+    security_opt: ["no-new-privileges:true"]
+    healthcheck:
+      test: ["CMD", "python3", "-c", "import urllib.request;urllib.request.urlopen('http://127.0.0.1:8022/estado',timeout=8)"]
+      interval: 60s
+      timeout: 10s
+      retries: 3
+
+networks:
+  saida:
+    driver: bridge
+
+volumes:
+  casa:
+  credenciais:
