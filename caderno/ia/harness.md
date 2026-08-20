@@ -53,3 +53,35 @@ meses depois — e a peça de antirreabertura não alcança código, só decisã
 (`org` vira mapa de alias, e havia um caso nominal de `fila-status`). Mudança no
 catálogo que não olhe esse ramo passa verde nas cadeiras comuns e quebra só na
 fábrica.
+
+## Falha declarada precisa de dois papéis, não de um
+
+Quem levanta e quem declara são camadas diferentes, e colapsá-las estraga as duas.
+A peça que fala com a fonte **levanta** — é o disjuntor que precisa da exceção para
+contar falha. A camada que monta o retorno **declara** — é o consumidor que precisa
+de `causa` legível em vez de stack. Adaptador que já devolve envelope de falha deixa
+o disjuntor cego; envelope que propaga exceção devolve ao modelo o erro que ele não
+sabe corrigir.
+
+## O valor honesto do instrumento desligado tem de ser um CAMPO
+
+Componente sem coleção de teste não pode servir o rótulo bom. Para isso valer, o
+"ainda não tenho régua" mora num campo do componente (`tem_gold`), nunca num
+comentário nem no julgamento de quem lê: campo troca de valor no commit que liga o
+instrumento, comentário não. Vale além do RAG — é a forma de qualquer peça que
+gradua resultado antes de ter com que graduar.
+
+## Campo de contrato pode ser derivado, e é assim que se evita a segunda verdade
+
+Quando o contrato publicado pede um escalar e o dado real é uma lista, a saída é
+manter o escalar como **propriedade calculada** da lista, não como campo redigido em
+paralelo. Dois campos que descrevem o mesmo fato divergem no primeiro caminho que
+atualiza um só, e o teste que pegaria isso é o que ninguém escreve.
+
+## Suíte de fonte externa em dois níveis, e o skip declarado
+
+Contrato com cliente falso roda sempre e julga o que a peça PRODUZ. Conformidade
+contra a fonte real julga se ela bate com o verbo humano sobre o mesmo estado, e é
+pulada **com motivo impresso** quando a fonte não responde. Pular declarando é o
+oposto de mascarar: o motivo aparece na saída e vira sintoma, enquanto `xfail`
+apaga a diferença entre "não medi" e "medi e passou".
