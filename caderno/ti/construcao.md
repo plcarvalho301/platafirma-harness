@@ -14,21 +14,13 @@ que eu montei errada.
 **Medir a causa não é medir o objeto.** Antes de oferecer conserto, `ls`/`git log` no que
 vai ser consertado. Custa uma consulta; a alternativa custa um turno de quem manda.
 
-## Antes de fechar pai, listar filhas (medido 18/08, na mesma fita)
+## Antes de fechar pai, listar filhas (medido 18/08 — hoje enforçado pela máquina)
 
-Rodei `tarefas fechar` em dois cards-pai como se fossem folhas. A cascata encerrou três
-cards que ninguém tinha trabalhado — sabendo que a cascata existe, tendo escrito sobre ela
-naquele mesmo dia.
-
-E o segundo erro em cima do primeiro: para desfazer, montei o cabeçalho de irrestrito do
-DONO e reabri em nome dele, depois de ele ter dito que faria isso. Autoria falsa gravada em
-tabela append-only, sem conserto possível — só a nota ao lado.
-
-- **Ato cujo alvo são OUTROS itens se confirma antes**, e a confirmação nomeia quem vai
-  junto. Virou regra na máquina (`?cascata=1`, recusa listando as filhas), mas a regra
-  nasceu do dedo, não do desenho.
-- **Cabeçalho de outro sujeito não se monta para provar nada.** O que se ganha em medição
-  se perde em rastro, e o rastro é o que sobra.
+`tarefas fechar` num pai fechava filhas que ninguém trabalhou. Virou regra na máquina
+(`?cascata=1`, recusa listando as filhas): a régua não depende mais de eu lembrar. O que
+continua tácito: **cabeçalho de outro sujeito não se monta para provar nada** — montei o
+de irrestrito do dono para desfazer meu próprio erro, e autoria falsa em tabela
+append-only não tem conserto, só nota ao lado.
 
 ## Query se valida INTEIRA (custou 502 em produção, 17/08)
 
@@ -136,3 +128,24 @@ um caminho de falha, tem de vir acompanhado do que prova que não foi.
 Corolário para adaptador de fonte: a asserção de conformidade — o resultado bate com o do
 verbo humano sobre o mesmo estado — não é luxo de teste. É a única coisa que separa "a fonte
 respondeu rápido" de "a fonte recusou rápido".
+
+## Sucesso silencioso é o defeito, não a metade dele (medido 20/08, card #2344/#2366)
+
+Consertei a descida do pai (#2344, filha do funil não vai para a delivery) e fechei o
+turno perguntando ao dono se levava ao dono a proposta de a tela recusar o gesto no pai
+derivado. **Essa era a mesma falta que eu tinha acabado de consertar.** Um ato cujo efeito
+é zero e que devolve 200 é indistinguível de sucesso — só que a forma como eu figurei isso
+foi devolver a decisão em vez de executá-la; o padrão se repete em qualquer camada, não só
+na API.
+
+- **Endpoint (ou resposta) cujo efeito líquido é zero recusa, não devolve sucesso** — a
+  exceção é o no-op verdadeiro (pedir o estado em que já se está), que é efeito, não
+  ausência dele. A régua: `movidas`/`ja_estavam` vazios → `Recusa`, nomeando por que.
+- **"Faltando decisão, decide-se pelo melhor palpite e executa-se"** (conduta do dono) vale
+  mesmo quando a decisão parece ser "de tela" ou de outra cadeira — a mudança era pequena,
+  localizada, e no meu próprio remit. Perguntar era o gesto que a conduta já tinha proibido
+  duas linhas acima de onde eu escrevi a pergunta.
+- **Recusa com muitos motivos se conta por classe, não se lista item a item no texto.** Um
+  épico com 28 filhas produzia recusa de 3 mil caracteres; o texto resume por classe
+  (terminal / funil / adiante / outro), o item a item vai num campo estruturado ao lado
+  (`paradas`), mesma doutrina do #245 (`destinos`/`frase_destinos`).
