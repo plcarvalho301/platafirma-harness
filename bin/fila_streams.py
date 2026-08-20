@@ -1,6 +1,6 @@
 #!/home/claudinho/AI/.venv-harness/bin/python
 # fila — caixa de mensagens entre personas da PlataFirma, sobre a malha msg (Valkey/Streams).
-# capacidade: msg
+# capacidade: mensagem
 # dono: claudinho-IA
 #
 # Substrato: componente msg do motor (arq:0018, arq:0036). Stream por caixa,

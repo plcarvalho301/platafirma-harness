@@ -359,7 +359,17 @@ def conferir_verbo(alvo, como_json=False):
         # symlink cujo destino tem outro nome e ALIAS de um verbo ja contado: aparece
         # declarado, mas nao entra na conta de arq:0037 — senao a deprecacao de um verbo
         # o faz reprovar por existir duas vezes.
-        if classe == "symlink" and os.path.basename(onde) != nome:
+        #
+        # SO E ALIAS SE O DESTINO TAMBEM ESTIVER EXPOSTO EM BIN sob o proprio nome
+        # (20/08/2026). Sem esta segunda condicao, `fila` -> `fila_streams.py` caia como
+        # alias por causa do sufixo `.py` e nao entrava na conta de capacidade nenhuma —
+        # verbo unico do proprio ato, medido como se nao existisse. O nome de arquivo
+        # carrega o sufixo porque o modulo TAMBEM e importado (`ops-server/server.py` e
+        # `controle/tests/test_contrato_fila.py` fazem `import fila_streams`); o symlink
+        # e o verbo. Alias de verdade e nome que DUPLICA outro ja exposto, e e so esse
+        # caso que arq:0037 precisa isentar.
+        if (classe == "symlink" and os.path.basename(onde) != nome
+                and os.path.basename(onde) in os.listdir(BIN)):
             vistos += 1
             if not como_json:
                 print(f"\n### {nome}")
