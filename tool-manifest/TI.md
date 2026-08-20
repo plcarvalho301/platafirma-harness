@@ -42,6 +42,8 @@ fábrica no agy    jaiminho-fabrica <mesmos sub-atos> — 2a conta da fábrica (
 acervo            acervo ingerir <raiz> [--planilha x.ods] [--apply]; a fila é
                   platafirma-conhecimento/rag/scripts/acervo-drop, fora do PATH
 inferência        curl 127.0.0.1:11434/... · nvitop · nvcc (CUDA 13.2)
+conferência       conferir servico|verbo|skill|repo|peca|sessao|procedencia|superficie|arranque|commit|chapeu
+                  superficie [--caso conectores|descricao] mede meio (default) ou servido × catálogo
 ```
 
 Ferramental de segurança: catálogo em `tool-manifest/seguranca.md`, não se duplica aqui.
