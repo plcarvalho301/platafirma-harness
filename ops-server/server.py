@@ -11,8 +11,10 @@ e responde 401 com `WWW-Authenticate`, que é o que faz o cliente MCP descobrir 
 authorization server sozinho e rodar authorization_code + PKCE.
 ROTA DE EMERGÊNCIA: OPS_AUTH_TOKEN estático continua aceito até OPS_TOKEN_ESTATICO_ATE
 (prazo declarado, não indefinido) — é a mão que volta quando o realm cai, já que o dono
-não tem shell no host. Vencido o prazo, só JWT entra. Query string `?token=` só vale por
-essa rota; prefira sempre o header.
+não tem shell no host. Vencido o prazo, só JWT entra. O token vai SEMPRE no header:
+o aceite via `?token=` saiu em 20/08/2026, porque redigir o nosso access log não
+alcança o log do proxy, o Referer nem o histórico — e o que trafega ali é credencial
+de portador.
 
 MULTI-INSTÂNCIA: o mesmo arquivo serve mais de uma instância, uma por usuário do host.
 OPS_NAME, OPS_USER, OPS_ROOT e OPS_AUTH_TOKEN separam as instâncias; o default é a
@@ -80,12 +82,17 @@ _sessao: ContextVar[str] = ContextVar("sessao", default="-")
 
 
 # --- helpers puros ---
-def _token_ok(header: str, query: str, expected: str) -> bool:
-    if not expected:
+def _token_ok(header: str, expected: str) -> bool:
+    """So o header. `?token=` SAIU em 20/08/2026 (claudinho-seguranca).
+
+    O access log ja era redigido, mas redigir o NOSSO log nao alcanca o log do
+    proxy, o Referer nem o historico do navegador — e o que trafega ali e
+    credencial de portador, que vale enquanto durar. O token estatico continua,
+    com o prazo que ja tinha; o que morre e o transporte pela URL.
+    """
+    if not expected or not header.startswith("Bearer "):
         return False
-    if header.startswith("Bearer ") and hmac.compare_digest(header[len("Bearer "):], expected):
-        return True
-    return bool(query) and hmac.compare_digest(query, expected)
+    return hmac.compare_digest(header[len("Bearer "):].strip(), expected)
 
 
 def _cap(raw: bytes) -> dict:
@@ -221,8 +228,7 @@ def _quem() -> dict:
             # middleware: com o PEP ligado, sujeito vazio nega por atributo ausente,
             # e a mao que volta quando o realm cai ficaria sem nenhuma tool. Medido
             # no ensaio de 13/08/2026, antes de o realm precisar cair.
-            if not ident and _estatico_vigente() and _token_ok(
-                    header, req.query_params.get("token", ""), OPS_AUTH_TOKEN):
+            if not ident and _estatico_vigente() and _token_ok(header, OPS_AUTH_TOKEN):
                 ident = {"sujeito": OPS_USER, "sub": "-", "azp": "token-estatico"}
             return ident
     except Exception:                                       # noqa: BLE001
@@ -727,8 +733,7 @@ class BearerAuth(BaseHTTPMiddleware):
 
         header = request.headers.get("authorization", "")
         ident, via = _sujeito_do_jwt(header), "oidc"
-        if not ident and _estatico_vigente() and _token_ok(
-                header, request.query_params.get("token", ""), OPS_AUTH_TOKEN):
+        if not ident and _estatico_vigente() and _token_ok(header, OPS_AUTH_TOKEN):
             ident, via = {"sujeito": OPS_USER, "sub": "-", "azp": "token-estatico"}, "estatico"
         if not ident:
             _audit(tool="-", evento="auth_negada", path=request.url.path,
@@ -828,8 +833,7 @@ def _ident_req(req) -> dict:
     """Mesma cadeia do middleware: JWT do realm, ou rota de emergencia enquanto vigente."""
     header = req.headers.get("authorization", "")
     ident = _sujeito_do_jwt(header)
-    if not ident and _estatico_vigente() and _token_ok(
-            header, req.query_params.get("token", ""), OPS_AUTH_TOKEN):
+    if not ident and _estatico_vigente() and _token_ok(header, OPS_AUTH_TOKEN):
         ident = {"sujeito": OPS_USER, "sub": "-", "azp": "token-estatico"}
     return ident
 
