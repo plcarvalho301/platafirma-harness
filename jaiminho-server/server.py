@@ -14,9 +14,10 @@ PEP: identidade e o JWT do realm; a decisao e do PDP embarcado, lendo o mesmo PA
 (`politica-acesso/`) que o ops-server le. Falha de carga NEGA — politica ilegivel e
 defeito nosso, nao autorizacao.
 
-Colecao: `firma` e forcada aqui, no servidor. O parametro do cliente nao entra na
-chamada ao motor: `acervo:pessoal/*` e negativa dura de seg:0009 item 4, e negativa
-que depende do cliente nao pedir nao e negativa.
+Colecao: NAO ha filtro de colecao nesta superficie. Ordem do dono de 20/08/2026:
+qualquer recorte de acesso ao RAG e exclusivamente authz policy assinada por ele, no
+PAP, decidida pelo PDP — nao constante no servidor de recurso. O que o externo alcanca
+do acervo e o que a politica permitir, e nada mais e nada menos.
 """
 import json
 import os
@@ -46,7 +47,6 @@ RAG_API_URL = os.environ.get("RAG_API_URL", "http://rag-api:8000").rstrip("/")
 RAG_API_TOKEN = os.environ.get("RAG_API_TOKEN", "")
 RAG_TIMEOUT = float(os.environ.get("RAG_TIMEOUT", "120"))
 
-COLECAO = "firma"          # unica colecao alcancavel por externo (seg:0009 item 4)
 DOM_ACERVO = "plataforma-acervo"
 TIPO_ACERVO = "acervo"
 ACAO = "rag_buscar"
@@ -62,7 +62,7 @@ WIKI_TIMEOUT = float(os.environ.get("WIKI_TIMEOUT", "60"))
 DOM_WIKI = "plataforma-wiki"
 TIPO_WIKI = "wiki"
 
-# Recorte forcado no servidor, do mesmo jeito que `COLECAO`: so o namespace
+# Recorte de namespace da wiki, forcado no servidor: so o namespace
 # principal, que e o acervo de conceitos e obras. `PlataFirma:` (decisao, org,
 # metodo), `Operar:` (runbook) e `Frente:` (trabalho em curso) sao a camada
 # interna e nao se concedem a externo. No ns principal o titulo nao tem ":", e e
@@ -202,8 +202,8 @@ def _autoriza(acao: str, tipo: str, dominio_pdp: str, alvos: list) -> dict | Non
 
 
 def _autoriza_acervo(dominios: list) -> dict | None:
-    """Sem dominio, o alvo e o corpus da colecao — que e o que ele esta pedindo."""
-    alvos = [f"acervo:{COLECAO}/{d}/*" for d in dominios] or [f"acervo:{COLECAO}/*"]
+    """Sem dominio, o alvo e o corpus inteiro — que e o que ele esta pedindo."""
+    alvos = [f"acervo:{d}/*" for d in dominios] or ["acervo:*"]
     return _autoriza(ACAO, TIPO_ACERVO, DOM_ACERVO, alvos)
 
 
@@ -250,9 +250,9 @@ def rag_buscar(pergunta: str | list[str], dominio: str | list[str] = "",
     """Busca semantica no acervo bibliografico de trabalho da PlataFirma.
 
     E o TEXTO das obras curadas — livros, guias, frameworks e normas de terceiros —,
-    indexado trecho a trecho. NAO alcanca a colecao pessoal do titular, e nao alcanca
-    a wiki: o que a firma decidiu e como ela nomeia esta em `wiki_buscar`, que e outra
-    materia e outra concessao.
+    indexado trecho a trecho. Sem recorte de colecao: alcanca todo o acervo indexado
+    que a politica de acesso permitir. Nao alcanca a wiki: o que a firma decidiu e como
+    ela nomeia esta em `wiki_buscar`, que e outra materia e outra concessao.
 
     `pergunta`: linguagem natural. Cite o codigo exato quando houver ("clausula
     6.1.3", "AC-2") — o braco de identificador crava o trecho certo e a fonte volta
@@ -279,7 +279,7 @@ def rag_buscar(pergunta: str | list[str], dominio: str | list[str] = "",
         return negativa
     return _motor("/search", {
         "pergunta": pergunta, "dominio": dominio, "subdominio": subdominio,
-        "frente": frente, "colecao": COLECAO, "k": k, "texto": texto,
+        "frente": frente, "k": k, "texto": texto,
         "rerank": rerank,
     })
 
@@ -292,15 +292,11 @@ def rag_facetas() -> dict:
     Chame antes de filtrar `rag_buscar`: valor legitimo com corpus vazio devolve
     zero sem erro nenhum, e e esse modo de falha que esta tool corta. `obras: 0`
     quer dizer "valor valido, corpus vazio nele", diferente de "valor nao existe".
-    A colecao nao entra: o alcance externo e a colecao de trabalho, e so ela.
     """
     negativa = _autoriza_acervo([])
     if negativa:
         return negativa
-    d = _motor("/facets", metodo="GET")
-    if isinstance(d, dict):
-        d.pop("colecao", None)
-    return d
+    return _motor("/facets", metodo="GET")
 
 
 # --- wiki: cliente MCP minimo ----------------------------------------------
@@ -751,7 +747,7 @@ async def _health(_req):
     est = _carrega_politica()
     return JSONResponse({"ok": est["erro"] is None,
                          "politica": est["erro"] or "carregada",
-                         "motor": RAG_API_URL, "colecao": COLECAO,
+                         "motor": RAG_API_URL,
                          "wiki": WIKI_MCP_URL if WIKI_MCP_TOKEN else "sem token",
                          "drive": PASTA_RAIZ if _google_token() else "sem credencial",
                          "medido_em": int(time.time())})
