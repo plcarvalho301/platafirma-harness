@@ -1411,6 +1411,233 @@ def _tools_citadas(linha, padrao):
         yield m.group(1) or m.group(2)
 
 
+
+def _obtem_descricao_servida_mcp(url=None, token=None):
+    """(descricao_ou_none, erro_ou_none). Consulta o servidor MCP em runtime."""
+    url = url or os.environ.get("OPS_MCP_URL", "http://127.0.0.1:8010/mcp")
+    if not token:
+        token = os.environ.get("PF_OPS_TOKEN") or os.environ.get("OPS_AUTH_TOKEN")
+    if not token:
+        dir_conf = os.path.join(os.path.expanduser("~/.config"), "ops")
+        arq_conf = os.path.join(dir_conf, "env")
+        if os.path.isfile(arq_conf):
+            try:
+                with open(arq_conf, encoding="utf-8") as f:
+                    for linha in f:
+                        if linha.startswith("OPS_AUTH_TOKEN="):
+                            token = linha.split("=", 1)[1].strip().strip("'\"")
+                            break
+            except OSError:
+                pass
+
+    headers = {"Content-Type": "application/json", "Accept": "application/json, text/event-stream"}
+    if token:
+        headers["Authorization"] = f"Bearer {token}"
+
+    init_payload = {
+        "jsonrpc": "2.0",
+        "id": 1,
+        "method": "initialize",
+        "params": {
+            "protocolVersion": "2024-11-05",
+            "capabilities": {},
+            "clientInfo": {"name": "conferir", "version": "0"},
+        },
+    }
+    req = urllib.request.Request(url, data=json.dumps(init_payload).encode("utf-8"), headers=headers)
+    try:
+        with urllib.request.urlopen(req, timeout=5) as r:
+            sess_id = r.headers.get("mcp-session-id")
+    except urllib.error.HTTPError as e:
+        return None, f"MCP initialize devolveu HTTP {e.code}"
+    except (urllib.error.URLError, TimeoutError, OSError) as e:
+        return None, f"servidor MCP em {url} não respondeu ({e})"
+
+    if sess_id:
+        headers["mcp-session-id"] = sess_id
+
+    init_notif = {"jsonrpc": "2.0", "method": "notifications/initialized"}
+    try:
+        req_notif = urllib.request.Request(url, data=json.dumps(init_notif).encode("utf-8"), headers=headers)
+        with urllib.request.urlopen(req_notif, timeout=3):
+            pass
+    except Exception:
+        pass
+
+    list_payload = {"jsonrpc": "2.0", "id": 2, "method": "tools/list", "params": {}}
+    req_list = urllib.request.Request(url, data=json.dumps(list_payload).encode("utf-8"), headers=headers)
+    try:
+        with urllib.request.urlopen(req_list, timeout=5) as r:
+            corpo = r.read().decode("utf-8", errors="replace")
+    except urllib.error.HTTPError as e:
+        return None, f"tools/list devolveu HTTP {e.code}"
+    except Exception as e:
+        return None, f"falha ao listar tools no MCP: {e}"
+
+    dados_json = None
+    for linha in corpo.splitlines():
+        if linha.startswith("data:"):
+            try:
+                dados_json = json.loads(linha[5:].strip())
+                break
+            except ValueError:
+                pass
+    if dados_json is None:
+        try:
+            dados_json = json.loads(corpo)
+        except ValueError:
+            return None, f"resposta de tools/list não é JSON válido: {corpo[:100]}"
+
+    tools = dados_json.get("result", {}).get("tools", [])
+    for t in tools:
+        if t.get("name") == "recuperar":
+            return t.get("description", ""), None
+
+    return None, f"tool 'recuperar' não encontrada entre as tools servidas por {url}"
+
+
+def _extrai_slugs_de_descricao(texto: str) -> set[str]:
+    slugs = set()
+    for linha in texto.splitlines():
+        m = re.match(r"^\s*-\s*([a-z0-9_-]+)\s*(?:\((?:exata|semantica)\))?:", linha)
+        if m:
+            slugs.add(m.group(1).lower())
+    return slugs
+
+
+def _fontes_da_tabela_catalogo(caminho_catalogo=None):
+    if caminho_catalogo is None:
+        cand1 = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "docs", "catalogo-de-verbos.md")
+        cand2 = os.path.join(HARNESS, "docs", "catalogo-de-verbos.md")
+        caminho = cand1 if os.path.isfile(cand1) else cand2
+    else:
+        caminho = caminho_catalogo
+
+    if not os.path.isfile(caminho):
+        return set(), f"arquivo {caminho} não existe"
+    try:
+        texto = open(caminho, encoding="utf-8").read()
+    except OSError as e:
+        return set(), f"não consegui ler {caminho}: {e}"
+
+    linhas = texto.splitlines()
+    inicio = -1
+    for idx, l in enumerate(linhas):
+        if re.match(r"^##\s+Fontes da plataforma", l.strip()):
+            inicio = idx
+            break
+    if inicio == -1:
+        return set(), "seção '## Fontes da plataforma' não encontrada no catálogo"
+
+    tabela = []
+    for idx in range(inicio + 1, len(linhas)):
+        l = linhas[idx]
+        if l.startswith("## ") and not l.strip().startswith("## Fontes da plataforma"):
+            break
+        if l.strip().startswith("|"):
+            tabela.append(l.strip())
+
+    if not tabela or len(tabela) < 2:
+        return set(), "tabela de fontes no catálogo está vazia"
+
+    dados = []
+    for l in tabela[1:]:
+        celulas = [c.strip() for c in l.strip("|").split("|")]
+        if all(re.match(r"^:?-+:?$", c) for c in celulas if c):
+            continue
+        dados.append(celulas)
+
+    if not dados:
+        return set(), "tabela de fontes no catálogo está vazia"
+
+    slugs = set()
+    for celulas in dados:
+        if not celulas or not celulas[0]:
+            continue
+        raw = celulas[0]
+        slug = raw.split("·")[0].split("(")[0].split()[0].strip().lower().replace("`", "")
+        if slug:
+            slugs.add(slug)
+
+    if not slugs:
+        return set(), "tabela de fontes no catálogo está vazia"
+
+    return slugs, None
+
+
+def conferir_superficie_descricao(alvo=None, como_json=False, caminho_catalogo=None, mcp_url=None, descricao_fornecida=None):
+    """Caso 1 de conferir superficie: descrição de roteamento servida em runtime × tabela de fontes do índice."""
+    slugs_indice, motivo_tabela = _fontes_da_tabela_catalogo(caminho_catalogo)
+    if motivo_tabela:
+        if como_json:
+            print(json.dumps({
+                "caso": "descricao",
+                "veredito": "nao-medido",
+                "motivo": motivo_tabela,
+                "slugs_indice": [],
+                "slugs_servidos": [],
+                "so_no_indice": [],
+                "so_no_servido": [],
+            }, ensure_ascii=False, indent=2))
+        else:
+            print("superficie (caso descricao):")
+            print(f"  NAO MEDIDO: {motivo_tabela}")
+            print("  veredito  : nao-medido")
+        return 0
+
+    if descricao_fornecida is not None:
+        desc_servida, err_servido = descricao_fornecida, None
+    else:
+        desc_servida, err_servido = _obtem_descricao_servida_mcp(url=mcp_url)
+
+    if err_servido:
+        if como_json:
+            print(json.dumps({
+                "caso": "descricao",
+                "veredito": "nao-medido",
+                "motivo": err_servido,
+                "slugs_indice": sorted(slugs_indice),
+                "slugs_servidos": [],
+                "so_no_indice": [],
+                "so_no_servido": [],
+            }, ensure_ascii=False, indent=2))
+        else:
+            print("superficie (caso descricao):")
+            print(f"  NAO MEDIDO: {err_servido}")
+            print("  veredito  : nao-medido")
+        return 0
+
+    slugs_servidos = _extrai_slugs_de_descricao(desc_servida)
+    so_no_indice = sorted(slugs_indice - slugs_servidos)
+    so_no_servido = sorted(slugs_servidos - slugs_indice)
+    ok = (slugs_indice == slugs_servidos) and bool(slugs_indice)
+
+    if como_json:
+        print(json.dumps({
+            "caso": "descricao",
+            "veredito": "em dia" if ok else "divergente",
+            "slugs_indice": sorted(slugs_indice),
+            "slugs_servidos": sorted(slugs_servidos),
+            "so_no_indice": so_no_indice,
+            "so_no_servido": so_no_servido,
+        }, ensure_ascii=False, indent=2))
+        return 0 if ok else 1
+
+    print("superficie (caso descricao):")
+    print(f"  fontes no índice : {len(slugs_indice)} ({', '.join(sorted(slugs_indice))})")
+    print(f"  fontes no servido: {len(slugs_servidos)} ({', '.join(sorted(slugs_servidos))})")
+    if so_no_indice:
+        print(f"  SÓ NO ÍNDICE     : {len(so_no_indice)} ({', '.join(so_no_indice)})")
+    else:
+        print("  só no índice     : 0")
+    if so_no_servido:
+        print(f"  SÓ NO SERVIDO    : {len(so_no_servido)} ({', '.join(so_no_servido)})")
+    else:
+        print("  só no servido    : 0")
+    print(f"  veredito         : {'em dia' if ok else 'divergente'}")
+    return 0 if ok else 1
+
+
 def conferir_skill(nome, servido=None, como_json=False):
     """Compara o blob carimbado no arquivo servido com o blob da fonte.
 
@@ -2262,9 +2489,40 @@ def main(argv):
             return conferir_arranque(None, staged=True, como_json=como_json)
         return conferir_arranque(alvo, como_json=como_json)
     if classe == "superficie":
-        if alvo == "--staged":
-            return conferir_superficie(None, staged=True, como_json=como_json)
-        return conferir_superficie(alvo, como_json=como_json)
+        caso = "conectores"
+        if "--caso" in argv:
+            i = argv.index("--caso")
+            if len(argv) > i + 1:
+                caso = argv[i + 1]
+                argv = [a for idx, a in enumerate(argv) if idx not in (i, i + 1)]
+            else:
+                if como_json:
+                    print(json.dumps({"erro": "uso: conferir superficie [--caso <caso>]"}))
+                else:
+                    uso("uso: conferir superficie [--caso conectores|descricao]")
+                return 2
+
+        alvo_superficie = argv[2] if len(argv) > 2 else None
+        if caso == "conectores":
+            if alvo_superficie == "--staged" or "--staged" in argv:
+                return conferir_superficie(None, staged=True, como_json=como_json)
+            return conferir_superficie(alvo_superficie, como_json=como_json)
+        elif caso == "descricao":
+            return conferir_superficie_descricao(alvo_superficie, como_json=como_json)
+        elif caso == "credencial":
+            msg = "caso 'credencial' e conhecido e fica fora deste release (caso 2)"
+            if como_json:
+                print(json.dumps({"erro": msg}))
+            else:
+                print(msg, file=sys.stderr)
+            return 2
+        else:
+            msg = f"caso desconhecido para superficie: {caso!r} (esperado: conectores ou descricao)"
+            if como_json:
+                print(json.dumps({"erro": msg}))
+            else:
+                uso(msg)
+            return 2
     if classe == "skill":
         servido = None
         if "--servido" in argv:
