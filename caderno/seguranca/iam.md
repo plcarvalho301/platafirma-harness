@@ -96,7 +96,6 @@ porque o gatilho é o deploy e não o nascimento do card.
 - Slug da cadeira MUDA por verbo, e errar não dá erro — devolve outro armazém. `mesa`,
   `encerrar` e `caderno` querem `seguranca`; `fila` e `tarefas --cadeira` querem
   `claudinho-seguranca`. O slug errado abre um segundo store, plausível e vazio.
-- **Medir uma superfície e concluir sobre o arranjo**: serviço existe em host E em contêiner,
-  e `ss -ltnp` só vê o host. Dois erros meus na mesma fita (20/08) vieram daí — "falta conta"
-  lendo só `/etc/passwd`, e "não está no ar" lendo só loopback. Antes de afirmar perímetro,
-  medir as duas: `ps -eo uid`, `docker inspect -f '{{.Config.User}}'` e onde os volumes moram.
+- **Medir uma superfície e concluir sobre o arranjo**: serviço existe em host E em contêiner, e
+  `ss -ltnp` só vê o host — dois erros meus em 20/08 vieram daí. Perímetro se mede nas duas:
+  `ps -eo uid`, `docker inspect -f '{{.Config.User}}'`, e onde os volumes moram.
