@@ -1,11 +1,11 @@
 {
-  "descricao": "Recupera estado da plataforma consultando fontes declaradas.\nFontes disponíveis:\n- board (exata): capacidade trabalho, dono claudinho-TI — HTTP do rastreador + header de identidade\n- fila (exata): capacidade mensagem, dono claudinho-TI — XINFO STREAM · XRANGE no motor-msg\n- mesa (exata): capacidade memoria, dono claudinho-IA — mapa por chave (arq:0062)\n- registro (exata): capacidade decisao, dono claudinha-gestao-estrategica — decisions/INDICE.md, mantido na escrita\n- wiki (exata): capacidade conhecimento, dono claudinho-dados — API do MediaWiki\n- acervo (semantica): capacidade conhecimento, dono claudinho-dados — API do rag",
-  "tokens": 189,
+  "descricao": "Recupera estado da plataforma consultando fontes declaradas.\nFontes disponíveis:\n- board (exata): capacidade trabalho, dono TI — HTTP do rastreador + header de identidade\n- fila (exata): capacidade mensagem, dono TI — XINFO STREAM · XRANGE no motor-msg\n- mesa (exata): capacidade memoria, dono dados — mapa por chave (arq:0062)\n- registro (exata): capacidade decisao, dono gestao-estrategica — decisions/INDICE.md, mantido na escrita\n- wiki (exata): capacidade conhecimento, dono dados — API do MediaWiki\n- acervo (semantica): capacidade conhecimento, dono dados — API do rag",
+  "tokens": 165,
   "fontes": [
     {
       "slug": "board",
       "capacidade": "trabalho",
-      "dono": "claudinho-TI",
+      "dono": "TI",
       "transporte": "HTTP",
       "classe": "exata",
       "contrato_de_leitura": "HTTP do rastreador + header de identidade",
@@ -14,7 +14,7 @@
     {
       "slug": "fila",
       "capacidade": "mensagem",
-      "dono": "claudinho-TI",
+      "dono": "TI",
       "transporte": "stream",
       "classe": "exata",
       "contrato_de_leitura": "XINFO STREAM · XRANGE no motor-msg",
@@ -23,7 +23,7 @@
     {
       "slug": "mesa",
       "capacidade": "memoria",
-      "dono": "claudinho-IA",
+      "dono": "dados",
       "transporte": "postgres",
       "classe": "exata",
       "contrato_de_leitura": "mapa por chave (arq:0062)",
@@ -32,7 +32,7 @@
     {
       "slug": "registro",
       "capacidade": "decisao",
-      "dono": "claudinha-gestao-estrategica",
+      "dono": "gestao-estrategica",
       "transporte": "git",
       "classe": "exata",
       "contrato_de_leitura": "decisions/INDICE.md, mantido na escrita",
@@ -41,7 +41,7 @@
     {
       "slug": "wiki",
       "capacidade": "conhecimento",
-      "dono": "claudinho-dados",
+      "dono": "dados",
       "transporte": "HTTP",
       "classe": "exata",
       "contrato_de_leitura": "API do MediaWiki",
@@ -50,7 +50,7 @@
     {
       "slug": "acervo",
       "capacidade": "conhecimento",
-      "dono": "claudinho-dados",
+      "dono": "dados",
       "transporte": "HTTP",
       "classe": "semantica",
       "contrato_de_leitura": "API do rag",
