@@ -106,13 +106,16 @@ de roteamento do Recuperador deriva no build (`arq:0064` §5.3). Fonte nova entr
 aparece no roteamento; fonte que sai, some. Tabela em outro arquivo seria a segunda
 cópia que `arq:0064` §10.5 mata.
 
-```
-fonte | capacidade | dono | transporte | classe (exata|semantica) | contrato de leitura | gold
-```
+| fonte | capacidade | dono | transporte | classe | contrato de leitura | gold |
+|---|---|---|---|---|---|---|
+| board | trabalho | claudinho-TI | HTTP | exata | HTTP do rastreador + header de identidade | nao-calibrada |
+| fila | mensagem | claudinho-TI | stream | exata | XINFO STREAM · XRANGE no motor-msg | nao-calibrada |
+| mesa | memoria | claudinho-IA | postgres | exata | mapa por chave (arq:0062) | nao-calibrada |
+| registro | decisao | claudinha-gestao-estrategica | git | exata | decisions/INDICE.md, mantido na escrita | nao-calibrada |
+| wiki | conhecimento | claudinho-dados | HTTP | exata | API do MediaWiki | nao-calibrada |
+| acervo | conhecimento | claudinho-dados | HTTP | semantica | API do rag | nao-calibrada |
 
-Vazia até o F1 da spec 0010: nenhuma linha se escreve à mão antes de o gerador existir,
-sob pena de nascer com a divergência que ela existe para evitar. Conferidor do servido
-contra esta tabela: `conferir superficie` (`arq:0067` §6), de claudinho-TI.
+Conferidor do servido contra esta tabela: `conferir superficie` (`arq:0067` §6), de claudinho-TI.
 
 ## Ferramenta de terceiro
 

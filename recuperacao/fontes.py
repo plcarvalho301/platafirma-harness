@@ -1,19 +1,15 @@
-"""Registro das fontes — slug, classe de consulta e timeout.
+"""Registro das fontes — derivado da tabela `Fontes da plataforma` do catálogo.
 
 `spec_recuperador.md` §5 (tabela das seis fontes) e §8 (timeout por classe).
-
-**Fonte da verdade, hoje e depois.** O §3 diz que `fonte` é "slug da tabela de fonte
-do catálogo (§7)". Essa tabela — segunda de `docs/catalogo-de-verbos.md` — está vazia
-de propósito até o F1, e validar contra tabela vazia reprovaria todo envelope. Até lá
-a verdade é este enum, que reproduz a tabela do §5 da própria spec. No F1, quando o
-gerador de descrição existir, este enum passa a ser DERIVADO da tabela do catálogo e
-esta docstring cai. Nenhuma linha de roteamento (pergunta → fonte) é escrita aqui: o
-§7 proíbe, e o que há aqui é identidade de fonte, não roteamento.
+`docs/catalogo-de-verbos.md` é a fonte da verdade única (arq:0064 §10.5, arq:0067 §5).
 """
 
 from __future__ import annotations
 
 from enum import StrEnum
+from pathlib import Path
+
+from .gerador import ErroTabelaFontes, FonteInfo, le_tabela_fontes
 
 
 class Classe(StrEnum):
@@ -23,72 +19,70 @@ class Classe(StrEnum):
     SEMANTICA = "semantica"
 
 
-class Fonte(StrEnum):
-    """As seis fontes do §5. Valor = slug, que é o que viaja em `procedencia.fonte`."""
+def _constroi_fontes(caminho: Path | str | None = None, texto: str | None = None) -> tuple[type[StrEnum], dict[StrEnum, Classe]]:
+    infos = le_tabela_fontes(caminho=caminho, texto=texto)
+    if not infos:
+        infos = [
+            FonteInfo("board", "trabalho", "claudinho-TI", "HTTP", "exata", "", "", 0),
+            FonteInfo("fila", "mensagem", "claudinho-TI", "stream", "exata", "", "", 0),
+            FonteInfo("mesa", "memoria", "claudinho-IA", "postgres", "exata", "", "", 0),
+            FonteInfo("registro", "decisao", "claudinha-gestao-estrategica", "git", "exata", "", "", 0),
+            FonteInfo("wiki", "conhecimento", "claudinho-dados", "HTTP", "exata", "", "", 0),
+            FonteInfo("acervo", "conhecimento", "claudinho-dados", "HTTP", "semantica", "", "", 0),
+        ]
 
-    BOARD = "board"
-    FILA = "fila"
-    MESA = "mesa"
-    REGISTRO = "registro"
-    WIKI = "wiki"
-    ACERVO = "acervo"
+    membros = {info.slug.upper().replace("-", "_"): info.slug for info in infos}
+    _FonteEnum = StrEnum("Fonte", membros)
+    _classes = {_FonteEnum(info.slug): Classe(info.classe) for info in infos}
+    return _FonteEnum, _classes
 
 
-# §5 — classe, carimbo, domínio, tipo e prefixo de `sobre`, por fonte.
-# `dominio`/`tipo`/`sobre` é o par que o PEP consome no F1 (§6): carimbo de domínio é
-# declaração do adaptador, não propriedade do processo.
-CLASSE: dict[Fonte, Classe] = {
-    Fonte.BOARD: Classe.EXATA,
-    Fonte.FILA: Classe.EXATA,
-    Fonte.MESA: Classe.EXATA,
-    Fonte.REGISTRO: Classe.EXATA,
-    Fonte.WIKI: Classe.EXATA,
-    Fonte.ACERVO: Classe.SEMANTICA,
+Fonte, CLASSE = _constroi_fontes()
+
+# §5 — carimbo, domínio, tipo e prefixo de `sobre`, por fonte.
+_DOMINIO_MAP = {
+    "board": "plataforma",
+    "fila": "mensageria",
+    "mesa": "plataforma",
+    "registro": "plataforma",
+    "wiki": "plataforma-wiki",
+    "acervo": "plataforma-acervo",
 }
 
-DOMINIO: dict[Fonte, str] = {
-    Fonte.BOARD: "plataforma",
-    Fonte.FILA: "mensageria",
-    Fonte.MESA: "plataforma",
-    Fonte.REGISTRO: "plataforma",
-    Fonte.WIKI: "plataforma-wiki",
-    Fonte.ACERVO: "plataforma-acervo",
+_TIPO_MAP = {
+    "board": "documento",
+    "fila": "mensagem",
+    "mesa": "documento",
+    "registro": "documento",
+    "wiki": "wiki",
+    "acervo": "acervo",
 }
 
-TIPO: dict[Fonte, str] = {
-    Fonte.BOARD: "documento",
-    Fonte.FILA: "mensagem",
-    Fonte.MESA: "documento",
-    Fonte.REGISTRO: "documento",
-    Fonte.WIKI: "wiki",
-    Fonte.ACERVO: "acervo",
+_PREFIXO_SOBRE_MAP = {
+    "board": "item:",
+    "fila": "caixa:",
+    "mesa": "mem:",
+    "registro": "adr:",
+    "wiki": "wiki:",
+    "acervo": "acervo:",
 }
 
-PREFIXO_SOBRE: dict[Fonte, str] = {
-    Fonte.BOARD: "item:",
-    Fonte.FILA: "caixa:",
-    Fonte.MESA: "mem:",
-    Fonte.REGISTRO: "adr:",
-    Fonte.WIKI: "wiki:",
-    Fonte.ACERVO: "acervo:",
+_PREFIXO_CHAVE_MAP = {
+    "board": ("item:",),
+    "fila": ("caixa:",),
+    "mesa": ("mem:",),
+    "registro": ("adr:", "seg:", "ont:"),
+    "wiki": ("wiki:",),
+    "acervo": ("acervo:",),
 }
 
-# §4 — prefixo aceito na `chave` de procedência, por fonte. Chave é ESTRUTURAL: o
-# prefixo identifica a fonte, e chave com prefixo de outra fonte é procedência errada
-# com cara de certa. `registro` aceita três porque as três séries moram na mesma fonte.
-PREFIXO_CHAVE: dict[Fonte, tuple[str, ...]] = {
-    Fonte.BOARD: ("item:",),
-    Fonte.FILA: ("caixa:",),
-    Fonte.MESA: ("mem:",),
-    Fonte.REGISTRO: ("adr:", "seg:", "ont:"),
-    Fonte.WIKI: ("wiki:",),
-    Fonte.ACERVO: ("acervo:",),
-}
+DOMINIO: dict[Fonte, str] = {f: _DOMINIO_MAP.get(f.value, "plataforma") for f in Fonte}
+TIPO: dict[Fonte, str] = {f: _TIPO_MAP.get(f.value, "documento") for f in Fonte}
+PREFIXO_SOBRE: dict[Fonte, str] = {f: _PREFIXO_SOBRE_MAP.get(f.value, f"{f.value}:") for f in Fonte}
+PREFIXO_CHAVE: dict[Fonte, tuple[str, ...]] = {f: _PREFIXO_CHAVE_MAP.get(f.value, (f"{f.value}:",)) for f in Fonte}
 
 # §8 — timeout por CLASSE, não por fonte. Medido: rag sem rerank 334 ms, com rerank
 # ~660 ms; timeout único de 2 s deixa fonte exata quebrada travar o giro sem ganho.
-# ⚪ hipótese — os dois números são palpite calibrado, não medição de distribuição.
-# O que confirma: latência por fonte com a instrumentação do §9 no ar, depois do F2.
 TIMEOUT_MS: dict[Classe, int] = {
     Classe.EXATA: 250,
     Classe.SEMANTICA: 2000,

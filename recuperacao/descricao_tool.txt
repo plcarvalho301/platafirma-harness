@@ -1,0 +1,8 @@
+Recupera estado da plataforma consultando fontes declaradas.
+Fontes disponíveis:
+- board (exata): capacidade trabalho, dono claudinho-TI — HTTP do rastreador + header de identidade
+- fila (exata): capacidade mensagem, dono claudinho-TI — XINFO STREAM · XRANGE no motor-msg
+- mesa (exata): capacidade memoria, dono claudinho-IA — mapa por chave (arq:0062)
+- registro (exata): capacidade decisao, dono claudinha-gestao-estrategica — decisions/INDICE.md, mantido na escrita
+- wiki (exata): capacidade conhecimento, dono claudinho-dados — API do MediaWiki
+- acervo (semantica): capacidade conhecimento, dono claudinho-dados — API do rag
