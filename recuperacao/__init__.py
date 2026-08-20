@@ -4,11 +4,13 @@ Biblioteca importada, nunca subprocess (`arq:0064` §1). Vive no `ops-mcp` e em 
 outro consumidor (`arq:0067`, spec §2). O verbo `bin/recuperar` é fino e importa daqui.
 
 F0 (card #2291) entrega o núcleo: envelope, enums, disjuntor e os testes de contrato.
-Adaptador, PEP, roteamento, cache e gate são F1–F3 e não moram neste commit.
+F1 acrescenta os adaptadores (#2298 e seguintes) e o PEP por fonte (#2303). Roteamento
+derivado (#2304), cache (F2) e gate (F3) seguem fora.
 
     from recuperacao import Envelope, Item, Procedencia, Versao, LinhaFonte
     from recuperacao import Cobertura, Casamento, Causa, VersaoTipo, Fonte
     from recuperacao import Painel, Disjuntor
+    from recuperacao import PEP, Negativa, recusa_por_concessao
 """
 
 from .disjuntor import Disjuntor, EstadoDisjuntor, Painel
@@ -29,8 +31,10 @@ from .envelope import (
     linha_disjuntor_aberto,
 )
 from .fontes import CLASSE, PREFIXO_CHAVE, TIMEOUT_MS, Classe, Fonte, classe, timeout_ms
+from .pep import ACAO, PEP, Negativa, recusa_por_concessao
 
 __all__ = [
+    "ACAO",
     "CAMPOS_PROIBIDOS",
     "CLASSE",
     "PREFIXO_CHAVE",
@@ -47,6 +51,8 @@ __all__ = [
     "Fonte",
     "Item",
     "LinhaFonte",
+    "Negativa",
+    "PEP",
     "Painel",
     "Procedencia",
     "Sinal",
@@ -54,5 +60,6 @@ __all__ = [
     "VersaoTipo",
     "classe",
     "linha_disjuntor_aberto",
+    "recusa_por_concessao",
     "timeout_ms",
 ]

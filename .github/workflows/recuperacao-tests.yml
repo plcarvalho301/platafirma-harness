@@ -1,21 +1,29 @@
-name: recuperacao — contrato do envelope
+name: recuperacao — contrato do envelope e matriz de acesso
 
 on:
   push:
     paths:
       - "recuperacao/**"
+      - "politica-acesso/**"
       - ".github/workflows/recuperacao-tests.yml"
   pull_request:
     paths:
       - "recuperacao/**"
+      - "politica-acesso/**"
       - ".github/workflows/recuperacao-tests.yml"
 
 # POR QUE EXISTE: a spec §3 diz que as invariantes do envelope são conferidas em teste
 # de contrato e NÃO por leitura, e que o teto de 40 tokens do envelope vazio FALHA O
 # BUILD. Sem gatilho, "falha o build" é figura de linguagem.
 #
-# Nasce VERDE: 58 testes, medido em 20/08/2026 na bancada. Suíte que nasce vermelha é
-# suíte que todo mundo aprende a ignorar — a lição está escrita em controle/tests/MODELO-SUITE.md.
+# POR QUE `politica-acesso/**` DISPARA: o aceite de fase do F1 (§6) é uma matriz
+# sujeito × fonte que falha o build quando `pesquisador-externo` alcança a casa por
+# dentro. Vazamento entra por merge no PAP, não por commit em `recuperacao/` — sem este
+# gatilho, o teste existiria e não seria chamado no dia em que importa.
+#
+# Nasce VERDE: 58 testes no F0, 182 com adaptadores, PEP e matriz (medido em 20/08/2026 na
+# bancada). Suíte que nasce vermelha é suíte que todo mundo aprende a ignorar — a lição
+# está escrita em controle/tests/MODELO-SUITE.md.
 
 jobs:
   pytest:
@@ -48,7 +56,8 @@ jobs:
           print("tokenizador conferido:", n, "entradas")
           PY
 
-      - name: contrato do envelope e do disjuntor
+      - name: contrato do envelope, do disjuntor e do PEP + matriz sujeito × fonte
         run: |
           export PF_RAIZ="$HOME/pf-raiz"
-          uv run --with pytest --with tokenizers pytest recuperacao/ -q
+          uv run --with pytest --with tokenizers --with pyyaml \
+            pytest recuperacao/ politica-acesso/ -q

@@ -16,13 +16,15 @@ adaptadores, no F1.
 | `fontes.py` | as seis fontes, classe de consulta, timeout por classe, prefixo de chave |
 | `disjuntor.py` | `Disjuntor` por fonte e `Painel`, com estado observável |
 | `adaptadores/` | núcleo do adaptador + registro, fila e mesa (F1, #2298) |
+| `pep.py` | PEP por fonte: decide, nega o pedido inteiro, monta a recusa (F1, #2303) |
 | `test_contrato_*.py` | 85 testes; o gatilho é `.github/workflows/recuperacao-tests.yml` |
 
-Não entra aqui: PEP (#2303), roteamento e tabela `fonte` (#2304), cache (F2), gate (F3),
-e os adaptadores de board (#2300), wiki (#2301) e acervo (#2302).
+Não entra aqui: roteamento e tabela `fonte` (#2304), cache (F2), gate (F3), e os
+adaptadores de board (#2300), wiki (#2301) e acervo (#2302).
 
 ```
-python3 -m pytest recuperacao/ -q      # da raiz do repo; precisa de `tokenizers`
+# da raiz do repo; precisa de `tokenizers` e `pyyaml`
+python3 -m pytest recuperacao/ politica-acesso/ -q     # 182 testes, 20/08/2026
 ```
 
 ## Medição — 20/08/2026, tokenizador `qwen2.5.json` (vocab 151.643)
@@ -102,6 +104,92 @@ Medido em 20/08: `registro` bate arquivo a arquivo com o diretório, e `fila` ba
 carta a carta com `fila ler <caixa> --tudo` — mesmo conjunto de msgid. **Falta a
 conformidade de `mesa` contra `mesa ver`**, e ela está nomeada aqui em vez de suposta.
 
+## F1 · card #2303 — PEP por fonte e matriz sujeito × fonte
+
+`pep.py` é o ponto que IMPÕE a decisão; quem decide é `politica-acesso/pdp.py`. A divisão
+não é invenção da casa: PDP avalia, PEP impõe, PIP fornece atributo, PAP guarda a política
+— os quatro pontos funcionais do mecanismo de controle de acesso (NIST SP 800-162 §2.4.3;
+CSA Guidance v3.0 §12.7, que descreve o PEP como podendo ser tão simples quanto um `if`
+dentro do serviço).
+
+| peça | onde | papel |
+|---|---|---|
+| PDP | `politica-acesso/pdp.py` | avalia; biblioteca embarcada, sem rede (`seg:0008`) |
+| PAP | `politica-acesso/politica.yaml` | as regras; muda por merge |
+| PIP | `politica-acesso/sujeitos.yaml` | projeção interina, até o token carregar atributo |
+| **PEP** | **`recuperacao/pep.py`** | **impõe, uma vez por fonte, antes de qualquer adaptador** |
+
+### Cinco decisões, e o que cada uma evita
+
+1. **Uma decisão por fonte**, com o par `(dominio, sobre)` que `fontes.py` já declara do
+   §5. PEP único faria a concessão de uma matéria valer pela outra — que é o que
+   `seg:0009` separa ao distinguir `plataforma-acervo` de `plataforma-wiki`.
+2. **Negativa total** (§6): nem entre fontes, nem entre alvos da mesma fonte. Pedido de
+   dois recortes com concessão de um não vira busca em um.
+3. **Fail-closed em falha de mecanismo** — política ilegível, sujeito fora da projeção,
+   atributo ausente: nega, e a `regra` da negativa (`politica`, `projecao`, `identidade`)
+   diz que foi mecanismo, não regra do PAP. Negativa por regra é a política funcionando;
+   por atributo ausente é defeito de projeção, e as duas não podem sair iguais no log.
+4. **A ação é o verbo humano da matéria** — `rag_buscar`, `wiki_ler`, `msg_ler`; e
+   `recuperar` nas três fontes que não têm verbo de leitura no PAP. **O recuperador não
+   amplia o alcance de ninguém**: herda a concessão que já existe, e ampliar continua
+   sendo merge no PAP, não linha de código.
+5. **Alvo ausente vira `<prefixo>*`, nunca `*`.** `sobre` vazio vira `*` dentro do PDP e
+   entrega a matéria inteira — a própria `politica.yaml` avisa. Com o prefixo, o pedido
+   genérico bate na concessão nominal e é negado, como deve.
+
+A identidade NÃO mora aqui: o PEP recebe o sujeito já resolvido. Dentro de tool, o
+contexto do FastMCP é a única fonte honesta — biblioteca que adivinha identidade é
+biblioteca que autoriza a si mesma. A trilha do §11 também é do host: `auditor` é
+injetado, e sem ele o PEP decide igual e não registra.
+
+### A recusa é declarada, e instrui
+
+Recusa total mantém a invariante 4 — uma linha por fonte pedida, todas
+`fonte-nao-indexada` com `sem-concessao`, porque a unidade autorizada é o PEDIDO. `falta`
+nomeia o alvo e a regra que derrubaram; `proximo` diz o que pedir de novo e o que ainda
+está alcançável. `sujeito` não entra no envelope (§3, inv. 5) — vai à trilha.
+
+### Medido na bancada, 20/08/2026
+
+| medida | valor | método |
+|---|---|---|
+| uma decisão | **0,017 ms** | 2.000 chamadas, PAP quente |
+| pedido de 6 fontes (6 decisões) | **0,102 ms** | 200 pedidos, PAP quente |
+| primeira chamada (carrega PAP + PIP) | 11,1 ms | processo novo; uma vez por vida do `ops-mcp` |
+| recusa de 1 fonte | 71 tokens | `qwen2.5.json`, JSON compacto |
+| recusa de 2 fontes | 92 tokens | idem |
+| recusa das 6, pedido inteiro negado | 157 tokens | idem |
+
+O PEP custa **0,04% do timeout de 250 ms** da classe exata: autorizar por fonte não é o
+que vai decidir a latência do recuperador. O que custa é o envelope de recusa — 157
+tokens contra os 113 de seis fontes caídas —, e o que paga a diferença é `falta`/`proximo`,
+que evita a rodada seguinte.
+
+### A matriz — `politica-acesso/test_matriz_sujeito_fonte.py`
+
+41 casos literais, 5 sujeitos × 6 fontes. Mora junto do PAP porque quebra por merge no
+PAP, não por mudança de biblioteca — e o workflow agora dispara em `politica-acesso/**`
+por isso: vazamento entra por concessão, e o teste tem de ser chamado no dia em que ela
+entra.
+
+A expectativa é escrita à mão de propósito. Gerá-la da mesma política que ela confere
+seria escrever o gabarito com a prova aberta: regra nova viraria linha nova nos dois
+lados, sem alarme. Aqui, concessão nova só fica verde quando alguém declara que a quer.
+
+**Prova de que ela pega, e não é verde por não haver caminho** (20/08/2026): num PAP
+mutante, com as duas negativas explícitas removidas E as permissões nominais alargadas
+para `wiki:*` e `acervo:*`, a suíte quebra em **9 casos**, entre eles os dois aceites
+duros do §6. Só remover as negativas não vaza — o default deny e o recorte nominal
+seguram sozinhos; o segundo cadeado só aparece quando alguém também alarga a permissão,
+que é exatamente o cenário que `politica.yaml` descreve como "o dia em que uma tool nova
+esquecer o corte".
+
+**Achado, não defeito:** `jaiminho-fabrica` é negado nas seis fontes. O papel `fornecedor`
+não tem regra de leitura de acervo, wiki nem fila, e `recuperar` não é verbo dele — a
+fábrica fala por card. Está na matriz para que uma concessão futura apareça como
+mudança de linha, não como silêncio.
+
 ## O que ainda não está medido
 
 - ⚪ hipótese — o timeout de 2 s da classe semântica segue sendo palpite: o acervo é o
@@ -109,3 +197,7 @@ conformidade de `mesa` contra `mesa ver`**, e ela está nomeada aqui em vez de s
 - ⚪ hipótese — `LIMIAR_FALHAS=5`, `ESPERA_S=30`, uma sondagem. Ponto de partida
   conservador; o que os fecha é a taxa de falha por fonte, também depois do F2.
 - O teto do envelope **em uso**, contra o teto em teste (§16).
+- A trilha do §11 (uma linha por fonte, com as duas identidades) ainda não existe: o PEP
+  entrega o material pelo `auditor`, e quem grava é o `ops-mcp` — que ainda não passa um.
+  Enquanto não passar, negativa de acesso no recuperador não aparece em
+  `~/AI/var/log/ops/`.
