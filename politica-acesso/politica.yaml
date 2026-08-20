@@ -314,3 +314,34 @@ regras:
     acoes: ["*"]
     sobre: ["politica-acesso/*", "*/politica-acesso/*", "personas/*", "*/personas/*",
             "conduta/*", "*/conduta/*", "*/tool-manifest/*", "tool-manifest/*"]
+
+  # --- Fabrica: leitura do acervo de trabalho (ordem do dono, 20/08/2026) -------
+  # ORDEM DIRETA DO DONO nesta data, com dispensa expressa do repasse a
+  # claudinho-seguranca: "eu to autorizando, n precisa passar pelo leonardo". Escrita
+  # por claudinho-TI, no papel `fornecedor` que ja existia — nenhum papel novo nasce
+  # aqui, e a regua continua sendo `seg:0009` (default deny, permissao nomeada, prazo,
+  # `acervo:pessoal/*` negado sempre).
+  #
+  # ATIVIDADE QUE EXIGE CONHECER, que e a linha sem a qual seg:0009 nao admite merge:
+  # a fabrica constroi contra criterio de engenharia (padrao de adaptador, cache,
+  # resiliencia) e hoje responde de memoria de treino. Sem o acervo ela inventa a
+  # regua em vez de citar a da casa — foi por isso que o dono mandou conceder.
+  #
+  # ALCANCE: leitura do acervo de TRABALHO e so. Wiki, drive e caixa seguem fora
+  # (nao ha regra para `fornecedor` neles, e o default nega).
+  - id: fabrica-le-acervo-firma
+    efeito: permite
+    motivo: "a fabrica constroi contra criterio citavel do acervo de trabalho em vez de memoria de treino · ordem direta do dono em 20/08/2026, com dispensa expressa do repasse a claudinho-seguranca · vence 2026-11-20"
+    quando: {papel: fornecedor, dominio: plataforma-acervo, tipo: acervo}
+    acoes: [rag_buscar, rag_facetas]
+    sobre: ["acervo:firma/*"]
+
+  # Espelha `externo-nunca-alcanca-acervo-pessoal` para o papel da fabrica. Escrita, e
+  # nao deixada ao default: a regra acima abriu `acervo:*` para `fornecedor`, e
+  # titularidade nao se protege por ausencia de permissao — negativa vence permissao.
+  - id: fornecedor-nunca-alcanca-acervo-pessoal
+    efeito: nega
+    motivo: "colecao pessoal e do titular, nao e acervo de trabalho: fora de qualquer concessao a fornecedor"
+    quando: {papel: fornecedor}
+    acoes: ["*"]
+    sobre: ["acervo:pessoal/*"]

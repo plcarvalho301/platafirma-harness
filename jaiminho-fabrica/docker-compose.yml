@@ -6,10 +6,14 @@ name: jaiminho-fabrica
 # para trocar credencial criaria uma segunda arvore de build envelhecendo sozinha.
 #
 # O QUE ESTA CONTA NAO TEM, e e de proposito:
-#   - `jaiminho-server`: aquele MCP serve `pesquisador-externo` (acervo e wiki). A
-#     fabrica e `fornecedor` — o PDP nega acervo e wiki para ela, entao servidor nao
-#     acrescentaria alcance, so superficie.
-#   - rede `wiki`: sem alias `rag-api` nem `mcp`, nao ha o que alcancar la.
+#   - rede `wiki`: sem alias `rag-api` nem `mcp`, nao ha o que alcancar la. A fabrica
+#     alcanca o acervo pelo `jaiminho-server`, que ja esta nas duas redes — ela nao
+#     fala com `rag-api` nem com o `mcp` da wiki por dentro.
+#
+# MUDOU EM 20/08/2026 (ordem do dono): `jaiminho-server` DEIXOU de ser inutil para esta
+# conta. Ele serve `pesquisador-externo` E `fornecedor` — o alcance nao esta no servidor,
+# esta no PEP que ele consulta por chamada. Com a regra `fabrica-le-acervo-firma` no PAP,
+# `rag_buscar` e `rag_facetas` passam; `wiki_ler` e `drive_*` continuam negados.
 #   - bind em `/saida`: a entrega da fabrica e commit no repo, nao arquivo solto.
 
 services:
@@ -24,15 +28,19 @@ services:
       # `preferred_username` sai fixo por mapper e e por ele que o PEP resolve o
       # sujeito no PAP.
       OPS_URL: "https://ops.platafirma.org"
-      # Rota `/acervo` existe no mcp_config.json que a imagem escreve no boot e NAO
-      # tem servidor deste lado. Aponta para lugar nenhum de proposito: o PDP ja
-      # negaria acervo a `fornecedor`, e a falha de conexao e mais honesta que um
-      # 403 que sugere que a rota faria sentido se a regra mudasse.
-      ACERVO_URL: "http://127.0.0.1:9"
+      # Rota `/acervo` passou a ter servidor em 20/08/2026: o dono concedeu leitura do
+      # acervo de trabalho ao papel `fornecedor` (PAP, regra `fabrica-le-acervo-firma`).
+      # E o MESMO `jaiminho-server` da outra conta, e nao um segundo servidor: quem
+      # separa as duas contas e o PEP embarcado nele, que decide por sujeito a cada
+      # chamada — wiki e drive seguem negados a `fornecedor` pelo default.
+      ACERVO_URL: "http://jaiminho-server:8000"
     volumes:
       - "casa:/home/jaiminho"
       - "credenciais:/home/jaiminho/.antigravity"
-    networks: [saida]
+    # `acervo` e a rede da stack `jaiminho` (externa aqui), pela qual esta conta
+    # resolve o nome `jaiminho-server`. Nao da alcance ao conteiner `jaiminho`: a
+    # ponte dele escuta em 127.0.0.1 de dentro, sem porta publicada na rede.
+    networks: [saida, acervo]
     security_opt: ["no-new-privileges:true"]
     healthcheck:
       test: ["CMD", "python3", "-c", "import urllib.request;urllib.request.urlopen('http://127.0.0.1:8022/estado',timeout=8)"]
@@ -43,6 +51,9 @@ services:
 networks:
   saida:
     driver: bridge
+  acervo:
+    external: true
+    name: jaiminho_saida
 
 volumes:
   casa:
