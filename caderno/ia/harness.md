@@ -85,3 +85,34 @@ contra a fonte real julga se ela bate com o verbo humano sobre o mesmo estado, e
 pulada **com motivo impresso** quando a fonte não responde. Pular declarando é o
 oposto de mascarar: o motivo aparece na saída e vira sintoma, enquanto `xfail`
 apaga a diferença entre "não medi" e "medi e passou".
+
+## Carimbo que cobre uma metade da fonte é pior que carimbo ausente
+
+Fonte com dois substratos precisa de carimbo que some os dois. Carimbo que lê só um
+deles fica CONSTANTE quando o outro é o que muda — e constante é indistinguível de
+"nada mudou". Com o carimbo dentro da chave de cache, isso serve estado velho para
+sempre, sem sintoma. Metade que não responde declara `?`: não saber é informação, e
+fingir que não mudou não é.
+
+## Gabarito de gold não se carimba com uma segunda leitura
+
+A versão que congela o gold é a da busca que gerou os casos, não a de uma chamada
+posterior ao carimbo. As duas divergem por desenho quando o carimbo é por recorte
+(por stream, por caixa, por partição) e a segunda chamada vem sem o recorte. Gold com
+versão falsa faz duas coleções diferentes parecerem a mesma — e é exatamente a
+comparação que o gold existe para tornar possível.
+
+## Teste que mede a bancada passa por motivo errado
+
+Dois modos, e os dois se corrigem por injeção: depender da AUSÊNCIA de uma biblioteca
+para simular substrato caído (volta a falhar no dia em que alguém a instala), e ler
+variável de ambiente que o construtor usa como default (mede quem rodou, não a peça).
+O sintoma é o mesmo nos dois: verde que não prova nada e vermelho que não acusa nada.
+
+## Suíte vermelha por gabarito velho não é suíte vermelha por defeito
+
+Quando a política muda por ato, o teste que a codificava reprova sem que o mecanismo
+tenha mudado. Antes de tratar como risco, achar o commit que mudou a regra: se o
+mecanismo (fail-closed, negativa total, trilha) segue intacto, o que envelheceu foi o
+gabarito. A emenda mantém a régua e troca o PAR que a exercita — apagar o teste
+perderia a régua junto com o exemplo.
