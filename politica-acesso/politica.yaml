@@ -393,22 +393,25 @@ regras:
   #
   # ALCANCE: leitura do acervo de TRABALHO e so. Wiki, drive e caixa seguem fora
   # (nao ha regra para `fornecedor` neles, e o default nega).
-  - id: fabrica-le-acervo-firma
+  # Alargada em 20/08/2026, mesma ordem do dono que deu o acervo inteiro ao
+  # `pesquisador-externo`: as duas contas do mesmo motor tem de enxergar igual, ou o
+  # bracO que o dono usa no dia responde diferente do outro sem ninguem entender por
+  # que. O `sobre` acompanhou o alvo que o jaiminho-server passou a submeter depois
+  # do e5fd33a (`acervo:*`): concessao nominal a `acervo:firma/*` NAO casa o alvo
+  # generico, e sem esta emenda a conta da fabrica caía em negativa total.
+  - id: fabrica-le-acervo-inteiro
     efeito: permite
-    motivo: "a fabrica constroi contra criterio citavel do acervo de trabalho em vez de memoria de treino · ordem direta do dono em 20/08/2026, com dispensa expressa do repasse a claudinho-seguranca · vence 2026-11-20"
+    motivo: "a fabrica constroi contra criterio citavel do acervo em vez de memoria de treino · ordem do dono em 20/08/2026, alargada ao acervo inteiro na mesma data · vence 2026-11-20"
     quando: {papel: fornecedor, dominio: plataforma-acervo, tipo: acervo}
     acoes: [rag_buscar, rag_facetas]
-    sobre: ["acervo:firma/*"]
+    sobre: ["acervo:*"]
 
   # Espelha `externo-nunca-alcanca-acervo-pessoal` para o papel da fabrica. Escrita, e
   # nao deixada ao default: a regra acima abriu `acervo:*` para `fornecedor`, e
   # titularidade nao se protege por ausencia de permissao — negativa vence permissao.
-  - id: fornecedor-nunca-alcanca-acervo-pessoal
-    efeito: nega
-    motivo: "colecao pessoal e do titular, nao e acervo de trabalho: fora de qualquer concessao a fornecedor"
-    quando: {papel: fornecedor}
-    acoes: ["*"]
-    sobre: ["acervo:pessoal/*"]
+  # `fornecedor-nunca-alcanca-acervo-pessoal` REMOVIDA em 20/08/2026, pelo mesmo ato
+  # que removeu a negativa equivalente do `pesquisador-externo`. O titular decide quem
+  # le a colecao dele.
 
   # --- Wiki como superficie universal (ordem do dono, 20/08/2026) -------------
   # A wiki e alcancavel por qualquer bot autenticado e autorizado AQUI, seja qual for

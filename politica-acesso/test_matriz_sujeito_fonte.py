@@ -91,8 +91,9 @@ MATRIZ: list[tuple[str, str, str, bool, str]] = [
     # DESATUALIZADO ATE 20/08/2026: a linha esperava NEGA, e a suite quebrou quando
     # `fabrica-le-acervo-firma` entrou por ordem do dono na mesma data. Corrigida aqui,
     # e a falha era do teste, não da política — o gabarito literal fez o trabalho dele.
-    (FABRICA, "acervo", "acervo:firma/*", PERMITE, "fabrica-le-acervo-firma, 20/08/2026"),
-    (FABRICA, "acervo", "acervo:pessoal/*", NEGA, "fornecedor-nunca-alcanca-acervo-pessoal"),
+    (FABRICA, "acervo", "acervo:firma/*", PERMITE, "fabrica-le-acervo-inteiro, 20/08/2026"),
+    (FABRICA, "acervo", "acervo:*", PERMITE, "o alvo que o servidor submete hoje"),
+    (FABRICA, "acervo", "acervo:pessoal/*", PERMITE, "fabrica-le-acervo-inteiro, 20/08/2026"),
     (FABRICA, "fila", "caixa:jaiminho-fabrica", NEGA, "a fábrica fala por card, não por caixa"),
 
     # --- quem não está na projeção ---------------------------------------------------
