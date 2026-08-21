@@ -1,0 +1,12 @@
+{
+  "id": "catalogo-existencia",
+  "dono": "claudinho-IA",
+  "artefato": "platafirma-harness@recuperacao/catalogo.py",
+  "regime": "indice",
+  "gatilho": {
+    "evento": "abertura",
+    "condicao": "sempre: so o indice de existencia por fonte; conteudo sai por `recuperar` sob demanda"
+  },
+  "volatilidade": "volatil",
+  "teto_tokens": 250
+}

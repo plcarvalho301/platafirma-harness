@@ -16,6 +16,7 @@ cache por fonte e a instrumentação `rec:stat` (#2308). Roteamento derivado (#2
 """
 
 from .cache import Cache, SemCache, busca_com_cache
+from .catalogo import Catalogo, Custo, CustoProibido, Leitor, LinhaCatalogo, monta
 from .disjuntor import Disjuntor, EstadoDisjuntor, Painel
 from .envelope import (
     CAMPOS_PROIBIDOS,
@@ -45,11 +46,14 @@ __all__ = [
     "CLASSE",
     "Cache",
     "Casamento",
+    "Catalogo",
     "Causa",
     "Classe",
     "Cobertura",
     "ContratoViolado",
     "Coordenada",
+    "Custo",
+    "CustoProibido",
     "Degrau",
     "Disjuntor",
     "Envelope",
@@ -60,6 +64,8 @@ __all__ = [
     "Gate",
     "Item",
     "Julgamento",
+    "Leitor",
+    "LinhaCatalogo",
     "LinhaFonte",
     "LinhaVeredito",
     "NaoResolve",
@@ -86,6 +92,7 @@ __all__ = [
     "instrumenta",
     "le_chave",
     "linha_disjuntor_aberto",
+    "monta",
     "recusa_por_concessao",
     "serie",
     "timeout_ms",
