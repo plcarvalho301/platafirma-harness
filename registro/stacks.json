@@ -1,5 +1,5 @@
 {
-  "_leia": "Registro de stacks da PlataFirma — o DECLARADO, nao o servido. Fonte do verbo `deploy` e da classe `servico` do `conferir`. Nao se deriva do daemon: docker ps lista o que subiu, este arquivo lista o que deveria existir e de onde. `compose` aceita string ou lista: lista vira varios -f, na ordem. `profiles` e opcional e vira --profile; servico sob profile nao declarado aqui e invisivel ao verbo, e foi assim que rag-api ficou fora. `rotas` e o ingress do tunel, relativo ao dir do compose; `gate` aponta o compose onde mora o gate da stack, para o caso em que ele NAO mora no compose dela (o do rastreador e um oauth2-proxy que vive no core) — sem esse ponteiro `deploy <stack> acessos` responderia \"nenhuma superficie gateada\" sobre superficie gateada, que e verde vazio; `segredos` lista os arquivos fora do git que a stack exige (nome e presenca, nunca valor) — lista vazia declara que a stack nao exige nenhum, ausencia declara que ninguem mediu.",
+  "_leia": "Registro de stacks da PlataFirma — o DECLARADO, nao o servido. Fonte do verbo `deploy` e da classe `servico` do `conferir`. Nao se deriva do daemon: docker ps lista o que subiu, este arquivo lista o que deveria existir e de onde. `compose` aceita string ou lista: lista vira varios -f, na ordem. `profiles` e opcional e vira --profile; servico sob profile nao declarado aqui e invisivel ao verbo, e foi assim que rag-api ficou fora. `rotas` e o ingress do tunel, relativo ao dir do compose; `gate` aponta o compose onde mora o gate da stack, para o caso em que ele NAO mora no compose dela (o do rastreador e um oauth2-proxy que vive no core) — sem esse ponteiro `deploy <stack> acessos` responderia \"nenhuma superficie gateada\" sobre superficie gateada, que e verde vazio; `segredos` lista os arquivos fora do git que a stack exige (nome e presenca, nunca valor) — lista vazia declara que a stack nao exige nenhum, ausencia declara que ninguem mediu. `reversao` declara COMO se desfaz cada stack, em quanto tempo e por quem: `via` (`promover` = worktree detached, volta por ref; `up` = clone de trabalho, checkout na mao antes), `janela_min` (estimativa, nao medicao), `estado` (o que NAO volta com o codigo, que e a parte que morde), `quem` e `provado_em`. `provado_em: null` diz que a volta NUNCA foi ensaiada — ausencia declarada, nao promessa. Stack sem o campo faz `deploy <stack> reverter` recusar, do mesmo jeito que `segredos` ausente recusa.",
   "_capacidade": "ativo",
   "_dono": "claudinho-TI",
   "stacks": {
@@ -13,7 +13,15 @@
         ".env",
         "secrets/cloudflared/01452d04-7dd9-40ea-be5a-f8bcaa7bed8f.json",
         "~/.config/ops/env"
-      ]
+      ],
+      "reversao": {
+        "via": "promover",
+        "quem": "claudinho-TI",
+        "janela_min": 10,
+        "estado": "identidade-db, keycloak-db e mdm-rh-db em volume: NAO voltam com o codigo. Migracao de realm feita para frente e irreversivel por aqui.",
+        "nota": "Critica: derruba a borda e o IAM junto. Reverter e recriar, nao 'down'. Sessao aberta de todo mundo cai.",
+        "provado_em": null
+      }
     },
     "motor": {
       "compose": "~/AI/deploy/motor/docker-compose.yml",
@@ -22,7 +30,15 @@
       "critico": true,
       "segredos": [
         ".env"
-      ]
+      ],
+      "reversao": {
+        "via": "promover",
+        "quem": "claudinho-TI",
+        "janela_min": 5,
+        "estado": "motor-pg em volume; motor-msg-mem e cache allkeys-lru e pode ser perdido sem dano.",
+        "nota": "Critica: msg para enquanto recria. Consumidor com stream aberto reconecta sozinho.",
+        "provado_em": null
+      }
     },
     "rag": {
       "compose": [
@@ -37,7 +53,15 @@
       "critico": false,
       "segredos": [
         ".env"
-      ]
+      ],
+      "reversao": {
+        "via": "promover",
+        "quem": "claudinho-TI",
+        "janela_min": 15,
+        "estado": "indice vetorial em volume: nao volta com o codigo, e reindexar custa horas de GPU.",
+        "nota": "Overlay de GPU e perfil `serving` entram na volta; sem --profile o rag-api fica fora e o verbo nao acusa.",
+        "provado_em": null
+      }
     },
     "acervo-api": {
       "compose": "~/AI/platafirma-conhecimento/acervo-api/docker-compose.yml",
@@ -46,7 +70,15 @@
       "critico": false,
       "segredos": [
         ".env"
-      ]
+      ],
+      "reversao": {
+        "via": "up",
+        "quem": "claudinho-TI",
+        "janela_min": 5,
+        "estado": "le o Postgres do acervo, que nao e desta stack: nada a perder aqui.",
+        "nota": "Aponta clone de trabalho: `promover` recusa. A volta e checkout no clone + `deploy acervo-api up -d --build`.",
+        "provado_em": null
+      }
     },
     "conhecimento": {
       "compose": [
@@ -58,7 +90,15 @@
       "critico": true,
       "segredos": [
         ".env"
-      ]
+      ],
+      "reversao": {
+        "via": "promover",
+        "quem": "claudinho-TI",
+        "janela_min": 10,
+        "estado": "dbdata (MariaDB da wiki) e images em volume: conteudo NAO volta com o codigo. Edicao feita depois do commit ruim permanece, e e isso que se quer.",
+        "nota": "Critica. O override do LocalSettings.php e bind de arquivo unico: promover troca o inode e e por isso que a volta tambem tem de ser `promover`, nunca `restart`.",
+        "provado_em": null
+      }
     },
     "harness-controle": {
       "compose": "~/AI/deploy/harness/controle/compose.yaml",
@@ -66,7 +106,15 @@
       "papel": "plano de controle do harness: agregador e tela",
       "critico": false,
       "_nota": "reparticao por direcao: a TELA e conteiner, servida por este compose (front vem da imagem, arq:0056); o AGREGADOR e unit systemd --user em controle/systemd/ no repo, porque os verbos do host nao sobrevivem a containerizacao.",
-      "segredos": []
+      "segredos": [],
+      "reversao": {
+        "via": "promover",
+        "quem": "claudinho-TI",
+        "janela_min": 5,
+        "estado": "sem volume: a volta e integral.",
+        "nota": "O AGREGADOR e unit systemd --user, fora deste compose: reverter a tela nao reverte o agregador.",
+        "provado_em": "2026-08-21 — ida e volta executada pelo verbo (6fd9997 -> 9825a5a -> 6fd9997), conteiner recriado nos tres passos"
+      }
     },
     "jaiminho": {
       "compose": "~/AI/platafirma-harness/jaiminho/docker-compose.yml",
@@ -76,7 +124,15 @@
       "_nota": "rede bridge propria, sem alcance ao loopback do host — o Valkey da malha e inalcancavel de dentro (medido em 14/08/2026). Sem rota no tunel: nao e superficie publica.",
       "segredos": [
         ".env"
-      ]
+      ],
+      "reversao": {
+        "via": "up",
+        "quem": "claudinho-TI",
+        "janela_min": 5,
+        "estado": "volume `casa` guarda o login do agy: recriar sem cuidado desloga o braco.",
+        "nota": "Aponta clone de trabalho: `promover` recusa. Volta = checkout no clone + `deploy jaiminho up -d --build jaiminho-server`. Ver residuo do #2286 (mesa #221): quem serve a 8023 e o daemon uid 1001.",
+        "provado_em": null
+      }
     },
     "chat": {
       "compose": "~/AI/platafirma-harness/chat/docker-compose.yml",
@@ -91,7 +147,15 @@
         "~/AI/var/secrets/matrix/signing.key",
         "~/AI/var/secrets/matrix/segredos.yaml",
         "~/AI/var/secrets/matrix/registration.yaml"
-      ]
+      ],
+      "reversao": {
+        "via": "up",
+        "quem": "claudinho-TI",
+        "janela_min": 10,
+        "estado": "banco do Synapse em volume: mensagem nao volta, e nem deve.",
+        "nota": "Aponta clone de trabalho: `promover` recusa. signing.key fora do git — perde-la invalida o homeserver, e nenhuma volta de codigo a recupera.",
+        "provado_em": null
+      }
     },
     "rastreador": {
       "compose": "~/AI/deploy/rastreador/docker-compose.yml",
@@ -103,7 +167,15 @@
       "_nota": "Boneco do card #465, API-only por arq:0056 — o comentario 335 recortou a tela, que volta no #468. Aponta para o CLONE DE TRABALHO, nao para um worktree de deploy: ~/AI/deploy/rastreador nao existe, entao `promover` recusa e `conferir servico` marca DERIVA. E o mesmo padrao de acervo-api, chat e jaiminho. DESDE O #469 a stack tem superficie publica: tarefas.platafirma.org entra no `oauth2-proxy-rastreador`, que vive na stack CORE e alcanca esta API pela rede `pf-borda-rastreador`. Por isso `rotas` e `gate` apontam os dois para fora deste repo — mesma razao do `chat`, cujo ingress tambem mora no core. Reverter continua sendo `deploy rastreador down` mais apagar o volume.",
       "segredos": [
         ".env"
-      ]
+      ],
+      "reversao": {
+        "via": "promover",
+        "quem": "claudinho-TI",
+        "janela_min": 5,
+        "estado": "rastreador-db em volume: card criado depois do commit ruim SOBREVIVE a volta. Migracao de schema aplicada nao desfaz sozinha.",
+        "nota": "Superficie publica: a volta que muda contrato de API quebra a tela, que e de claudinha-produto. Avisar antes.",
+        "provado_em": null
+      }
     },
     "rastreador-tela": {
       "compose": "~/AI/deploy/rastreador-tela/app/rastreador/docker-compose.yml",
@@ -113,7 +185,15 @@
       "rotas": "~/AI/deploy/core/deploy/cloudflared-config.yml",
       "gate": "~/AI/deploy/core/docker-compose.yml",
       "_nota": "Segunda saida de release da platafirma-ui (arq:0057 emendando arq:0042): a biblioteca sai como imagem versionada, cada superficie de tela sai como SERVICO proprio. Alcancada pelo `oauth2-proxy-rastreador`, que vive na stack CORE, pela rede `pf-borda-rastreador` — por isso `rotas` e `gate` apontam para fora deste repo, mesma razao do `rastreador` e do `chat`. `segredos: []` DECLARA que a stack nao exige nenhum, e e aceite do #187, nao omissao: front que monta segredo de outra camada e o que o instrumento passa a reprovar. Deploy desta stack e de claudinha-produto a partir do fechamento do #187 (card #197).",
-      "segredos": []
+      "segredos": [],
+      "reversao": {
+        "via": "promover",
+        "quem": "claudinha-produto",
+        "janela_min": 5,
+        "estado": "sem volume e sem segredo: a volta e integral.",
+        "nota": "Deploy desta stack e de claudinha-produto desde o #197. claudinho-TI reverte so em incidente, e avisa.",
+        "provado_em": null
+      }
     },
     "harness-sessao": {
       "compose": "~/AI/platafirma-harness/sessao/compose.yaml",
@@ -123,7 +203,15 @@
       "_nota": "Aponta para o CLONE DE TRABALHO, como chat e jaiminho: nao ha worktree ~/AI/deploy/harness/sessao, entao `promover` recusa e `conferir servico` marca DERIVA. Instancia propria, e nao servico do `harness-controle`, porque ali o ciclo de vida e o da TELA — `deploy harness-controle down` levaria a memoria de trabalho junto. Fase 6 do card #189; DDL em sessao/init/, versionada.",
       "segredos": [
         "sessao/.env"
-      ]
+      ],
+      "reversao": {
+        "via": "up",
+        "quem": "claudinho-TI",
+        "janela_min": 5,
+        "estado": "sessao-db em volume: fita, giro e mesa NAO voltam com o codigo. DDL em sessao/init/ so roda em volume novo.",
+        "nota": "Aponta clone de trabalho: `promover` recusa. Volta de DDL ja aplicada exige migracao para frente, nunca `down -v`.",
+        "provado_em": null
+      }
     }
   },
   "_fora_do_registro": {

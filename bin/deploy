@@ -26,6 +26,7 @@ uso:
   deploy <stack> rotas              qual hostname do tunel entra em qual servico
   deploy <stack> acessos            quem pode entrar em cada superficie gateada
   deploy <stack> segredos           arquivos fora do git que a stack exige, e se estao ali
+  deploy <stack> reverter [--executar [ref]]  como se desfaz, em quanto tempo e por quem
   deploy <stack>                    mostra o declarado da stack, sem tocar em nada
   deploy                            lista as stacks do registro
 
@@ -65,6 +66,27 @@ resolve() {
     "~"*|/*) expandir "$1" ;;
     *) printf '%s\n' "$(dirname "$COMPOSE")/$1" ;;
   esac
+}
+
+# --- reversao (#184) -------------------------------------------------------
+# Aprovar mudanca sem saber desfaze-la e metade do controle: o gate antes do push
+# ja diz "pode subir", e ninguem declarava o caminho de volta. Fica no MESMO lugar
+# que ja declara rota, acesso e segredo, porque plano de reversao publicado como
+# texto na wiki desincroniza no primeiro deploy — o mesmo motivo dos outros tres.
+PONTOS="${DEPLOY_PONTOS:-$HOME/AI/var/deploy}"
+
+rev() { jq -r --arg s "$1" --arg c "$2" '.stacks[$s].reversao[$c] // empty' "$REGISTRO"; }
+
+ponto_anterior() {
+  local f="$PONTOS/$1.anterior"
+  [ -r "$f" ] && cat "$f" || echo ""
+}
+
+reversao_resumo() {
+  jq -e --arg s "$1" '.stacks[$s] | has("reversao")' "$REGISTRO" >/dev/null \
+    || { echo "NAO DECLARADA — ninguem mediu a volta desta stack"; return; }
+  printf '%s, ~%s min, %s (ensaiada: %s)' "$(rev "$1" via)" "$(rev "$1" janela_min)" \
+    "$(rev "$1" quem)" "$(rev "$1" provado_em | grep -q . && rev "$1" provado_em || echo nunca)"
 }
 
 [ -r "$REGISTRO" ] || { echo "registro nao legivel: $REGISTRO" >&2; exit 1; }
@@ -127,6 +149,7 @@ if [ $# -eq 0 ]; then
   printf 'critico : %s\n' "$(campo "$STACK" critico)"
   printf 'servicos: %s\n' "$(docker compose "${COMPOSE_ARGS[@]}" "${PERFIL_ARGS[@]+"${PERFIL_ARGS[@]}"}" config --services 2>/dev/null | tr '\n' ' ')"
   printf 'servido : %s\n' "$(servido "$(dirname "$COMPOSE")")"
+  printf 'reverter: %s\n' "$(reversao_resumo "$STACK")"
   exit 0
 fi
 
@@ -250,6 +273,70 @@ if [ "$ACAO" = "segredos" ]; then
   exit 0
 fi
 
+if [ "$ACAO" = "reverter" ]; then
+  shift
+  if ! jq -e --arg s "$STACK" '.stacks[$s] | has("reversao")' "$REGISTRO" >/dev/null; then
+    echo "stack \"$STACK\" nao declara reversao no registro — ausencia de DECLARACAO, nao"
+    echo "ausencia de caminho de volta: ninguem mediu esta stack ainda."
+    echo "conserto: campo reversao em $REGISTRO (via, janela_min, estado, quem, provado_em)."
+    exit 2
+  fi
+  DIR="$(dirname "$COMPOSE")"; VIA="$(rev "$STACK" via)"; ANTERIOR="$(ponto_anterior "$STACK")"
+  ATUAL="$(git -C "$DIR" rev-parse --short HEAD 2>/dev/null || echo '?')"
+
+  if [ "${1:-}" != "--executar" ]; then
+    printf 'stack       : %s\n' "$STACK"
+    printf 'via         : %s\n' "$VIA"
+    printf 'quem        : %s\n' "$(rev "$STACK" quem)"
+    printf 'janela      : ~%s min (estimativa declarada, NAO medicao)\n' "$(rev "$STACK" janela_min)"
+    printf 'ensaiada em : %s\n' "$(rev "$STACK" provado_em | grep -q . && rev "$STACK" provado_em || echo 'NUNCA — a volta desta stack nunca foi provada')"
+    printf 'servindo    : %s\n' "$ATUAL"
+    printf 'ponto de volta: %s\n' "${ANTERIOR:-nenhum gravado — so ha ponto depois do primeiro \`promover\` deste verbo}"
+    echo
+    echo "o que NAO volta com o codigo:"
+    printf '  %s\n' "$(rev "$STACK" estado)"
+    echo
+    echo "nota:"
+    printf '  %s\n' "$(rev "$STACK" nota)"
+    echo
+    if [ "$VIA" = "promover" ]; then
+      echo "executar: PF_SIM=1 deploy $STACK reverter --executar [ref]"
+      echo "          sem ref, volta ao ponto gravado acima."
+    else
+      echo "executar: NAO por este verbo. O compose aponta clone de trabalho, e checkout ali"
+      echo "          trocaria o branch debaixo de quem edita. Volte o clone na mao e rode"
+      echo "          deploy $STACK up -d --build."
+    fi
+    exit 0
+  fi
+
+  shift
+  [ "$VIA" = "promover" ] || {
+    echo "recusa: reversao de \"$STACK\" e via \"$VIA\", nao \"promover\"." >&2
+    echo "        este verbo nao mexe em clone de trabalho. Rode sem --executar para o plano." >&2
+    exit 1; }
+  ALVO="${1:-$ANTERIOR}"
+  [ -n "$ALVO" ] || {
+    echo "recusa: sem ref e sem ponto de volta gravado — nao invento para onde voltar." >&2
+    echo "        passe o commit: PF_SIM=1 deploy $STACK reverter --executar <ref>" >&2
+    exit 1; }
+  # Confirmacao SEMPRE, critica ou nao: reverter e o ato que se faz com o servico
+  # quebrado e a pressa alta, e e ai que o alvo errado passa despercebido.
+  [ "${PF_SIM:-}" = "1" ] || {
+    echo "recusa: reverter recria os conteineres de \"$STACK\" em $ALVO." >&2
+    echo "        confirme com: PF_SIM=1 deploy $STACK reverter --executar $ALVO" >&2
+    exit 1; }
+  git -C "$DIR" symbolic-ref -q HEAD >/dev/null && {
+    echo "recusa: $DIR esta num branch — e clone de trabalho, nao worktree de deploy." >&2; exit 1; }
+  mkdir -p "$PONTOS"; echo "$ATUAL" > "$PONTOS/$STACK.revertido-de"
+  git -C "$DIR" fetch -q origin || true
+  git -C "$DIR" checkout -q --detach "$ALVO"
+  printf 'revertido: %s\n  %s -> %s\n' "$DIR" "$ATUAL" "$(git -C "$DIR" rev-parse --short HEAD)"
+  echo "o que NAO voltou: $(rev "$STACK" estado)"
+  cd "$DIR"
+  exec docker compose "${COMPOSE_ARGS[@]}" "${PERFIL_ARGS[@]+"${PERFIL_ARGS[@]}"}" up -d --build --force-recreate
+fi
+
 # `promover` fecha o caminho inteiro do worktree de deploy num ato so. Existe porque
 # cada passo isolado PASSA e o conjunto falha calado: config em bind mount de arquivo
 # unico troca de inode no checkout, o mount fica preso ao inode velho, e `reload` rele
@@ -272,6 +359,10 @@ if [ "$ACAO" = "promover" ]; then
   REF="origin/main"
   if [ $# -gt 0 ] && [[ "$1" != -* ]]; then REF="$1"; shift; fi
   ANTES="$(git -C "$DIR" rev-parse --short HEAD)"
+  # Ponto de retorno ANTES de mexer: sem isto, `reverter` so funciona com o operador
+  # lembrando de cor o SHA de onde saiu — e ninguem lembra as onze da noite, com o
+  # servico fora. Erro reversivel e defeito; erro irreversivel e perda.
+  mkdir -p "$PONTOS"; echo "$ANTES" > "$PONTOS/$STACK.anterior"
   git -C "$DIR" fetch -q origin
   git -C "$DIR" checkout -q --detach "$REF"
   DEPOIS="$(git -C "$DIR" rev-parse --short HEAD)"
