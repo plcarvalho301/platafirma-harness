@@ -74,10 +74,10 @@
       "reversao": {
         "via": "up",
         "quem": "claudinho-TI",
-        "janela_min": 5,
+        "janela_min": 1,
         "estado": "le o Postgres do acervo, que nao e desta stack: nada a perder aqui.",
-        "nota": "Aponta clone de trabalho: `promover` recusa. A volta e checkout no clone + `deploy acervo-api up -d --build`.",
-        "provado_em": null
+        "nota": "Aponta clone de trabalho: `promover` recusa. A volta e checkout no clone + `deploy acervo-api up -d --build`. Ensaio de 21/08 usou `git checkout <ref> -- acervo-api/`, nao troca de branch: o clone e compartilhado e trocar branch quebraria quem edita.",
+        "provado_em": "2026-08-21 — ida e volta executada e MEDIDA: acervo-api/ voltado a 5f9a26a, rebuild, container Recreated e /health 200 em 4s; volta a f84def9, Recreated, /health 200 em 3s. Janela real ~7s, nao os ~5 min estimados. Clone limpo depois."
       }
     },
     "conhecimento": {
