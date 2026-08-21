@@ -14,13 +14,29 @@ que eu montei errada.
 **Medir a causa não é medir o objeto.** Antes de oferecer conserto, `ls`/`git log` no que
 vai ser consertado. Custa uma consulta; a alternativa custa um turno de quem manda.
 
-## Antes de fechar pai, listar filhas (medido 18/08 — hoje enforçado pela máquina)
+## Cabeçalho de outro sujeito não se monta para provar nada (18/08)
 
-`tarefas fechar` num pai fechava filhas que ninguém trabalhou. Virou regra na máquina
-(`?cascata=1`, recusa listando as filhas): a régua não depende mais de eu lembrar. O que
-continua tácito: **cabeçalho de outro sujeito não se monta para provar nada** — montei o
-de irrestrito do dono para desfazer meu próprio erro, e autoria falsa em tabela
-append-only não tem conserto, só nota ao lado.
+Montei o de irrestrito do dono para desfazer erro meu: autoria falsa em tabela
+append-only não tem conserto, só nota ao lado. (A cascata de filhas que originou o caso
+já é regra na máquina — `?cascata=1` — e saiu daqui por isso.)
+
+## O alarme não encerra o diagnóstico (medido 20/08, custou OITO rodadas do dono)
+
+Ordem simples do dono: apagar o filtro de coleção da consulta do externo. Medi UM elo,
+achei uma exposição plausível e emiti parecer três vezes sobre meio diagnóstico. As duas
+medições que fechariam o caso na primeira rodada — `--colecao pessoal` e o PDP — custavam
+uma chamada cada. A cadeia tinha quatro elos (índice, filtro no servidor, PEP/PDP, motor),
+e o filtro que eu defendia negava TUDO, inclusive o que ele deveria permitir.
+
+**A régua de incidente vale para ameaça, não só para causa.** A persona já diz que a
+primeira explicação plausível dispensa procurar a próxima; com ameaça no lugar de
+explicação a doença é a mesma e engana melhor, porque parar de medir parece prudência.
+Acesso se mede na cadeia inteira, sempre, ANTES do primeiro parecer.
+
+**Corolário que me custou uma regressão**: alvo de PEP e concessão do PAP casam por
+padrão nominal. Trocar o alvo (`acervo:firma/*` → `acervo:*`) sem reler TODAS as regras
+que o concedem derruba papéis que ninguém citou no pedido — a conta que o dono usava de
+verdade caiu em negativa total e só apareceu no log de auditoria, não no teste.
 
 ## Query se valida INTEIRA (custou 502 em produção, 17/08)
 
