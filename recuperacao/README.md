@@ -15,12 +15,11 @@ adaptadores, no F1.
 | `envelope.py` | `Envelope`, `Item`, `Procedencia`, `Versao`, `Sinal`, `LinhaFonte` e os quatro enums fechados |
 | `fontes.py` | as seis fontes, classe de consulta, timeout por classe, prefixo de chave |
 | `disjuntor.py` | `Disjuntor` por fonte e `Painel`, com estado observável |
-| `adaptadores/` | núcleo + registro, fila, mesa (#2298), wiki (#2301) e acervo (#2302) |
+| `adaptadores/` | núcleo + registro, fila, mesa (#2298), wiki (#2301), acervo (#2302) e board (#2300) |
 | `pep.py` | PEP por fonte: decide, nega o pedido inteiro, monta a recusa (F1, #2303) |
 | `test_contrato_*.py` | 85 testes; o gatilho é `.github/workflows/recuperacao-tests.yml` |
 
-Não entra aqui: roteamento e tabela `fonte` (#2304), cache (F2), gate (F3) e o adaptador
-de board (#2300), que espera a projeção #2299 de claudinho-TI.
+Não entra aqui: roteamento e tabela `fonte` (#2304), cache (F2) e gate (F3).
 
 ```
 # da raiz do repo; precisa de `tokenizers` e `pyyaml`
@@ -88,8 +87,13 @@ servem `nao-calibrada` (§13). O rótulo vira `coberta` quando o gold existir (#
 | `fila`, caixa própria, `XRANGE` inteiro | **56,9 ms** | 8 |
 | `mesa`, duas metades | **45,5 ms** | 1 |
 
-As três ficam bem abaixo do timeout de 250 ms da classe exata (§8) — o palpite calibrado
-sobrevive ao primeiro contato com as fontes baratas. Falta o board, a wiki e o acervo.
+| `board` por chave exata (`item:2300`) | **27,0 ms** | 1 |
+| `board` por eixo de linha, k=8 | **64,4 ms** | 8 |
+
+Todas ficam abaixo do timeout de 250 ms da classe exata (§8) — o palpite calibrado
+sobrevive ao contato com as cinco fontes exatas. A mais cara é a listagem do board, e o
+que ela paga é a versão por item: uma chamada a `/eventos` por item, para que a versão
+seja `max(evento.id)` DO ITEM como o §4 manda, e não o carimbo do board inteiro.
 
 **A procedência custa mais que o item.** Item de fila só-`ref`: 133 tokens, dos quais
 **60 são procedência** e 67 o texto da referência. Um envelope de 3 fontes com 5 itens
@@ -192,7 +196,7 @@ mudança de linha, não como silêncio.
 
 ## F1 · cards #2301 e #2302 — wiki e acervo
 
-Cinco das seis fontes alcançadas. Falta o board, e ele não depende de mim.
+Cinco das seis fontes alcançadas aqui; a sexta (board) está na seção seguinte.
 
 | adaptador | contrato usado | chave | versão | carimbo |
 |---|---|---|---|---|
@@ -300,3 +304,44 @@ conformidade passar por errar igual. Vai a claudinho-dados junto do resto.
   entrega o material pelo `auditor`, e quem grava é o `ops-mcp` — que ainda não passa um.
   Enquanto não passar, negativa de acesso no recuperador não aparece em
   `~/AI/var/log/ops/`.
+
+## F1 · card #2300 — board, a sexta fonte
+
+| adaptador | contrato usado | chave | versão | carimbo |
+|---|---|---|---|---|
+| `board.py` | HTTP do rastreador: `GET /api/itens?campos=`, `/api/itens/<id>`, `/api/itens/<id>/eventos`, `/api/carimbo` | `item:<id>` | `max(evento.id)` do item | `<max(evento.id)>/<contagem>` |
+
+**A versão é do ITEM, e isso deixou de ser aspiração.** `GET /api/itens/<id>/eventos`
+existe e devolve o ledger do item, então o `evento.id` máximo do §4 é computável — não foi
+preciso servir o carimbo global no lugar da versão, que é o desvio que estava no radar.
+Custo medido: 5 ms por item no loopback, ~40 ms para k=8, dentro dos 250 ms.
+
+**Item sem linha no ledger serve `0@<carimbo>`.** O ledger `evento` começou a ser escrito
+em #2307 — antes dele a tabela estava vazia com 385 itens no board. Item mais velho que a
+migração não tem `max(evento.id)`, e as três saídas eram: preencher com timestamp (o §5
+proíbe: falha em dois atos no mesmo instante e em apagar-e-criar), omitir (viola a
+invariante 1) ou declarar. Declara: `0@203` diz "ledger não cobre este item, e o board
+inteiro está no carimbo 203". Vira número puro sozinho, conforme o ledger alcança os itens.
+
+**Nunca `conteudo`, para nenhum valor de `texto`.** O §5 é literal — `id, título, fase,
+cadeira, nível, pai` na linha e o resto por `ref`. `texto=secao` não muda o que o board
+serve; a descrição do card mora atrás da `ref`. Servir corpo aqui transformaria leitura de
+estado em despejo de board no contexto: `GET /api/itens` sem projeção são 493.576 bytes.
+
+**A projeção do #2299 é o que torna o adaptador viável**, e é pedida sempre: 56.771 bytes
+contra 493.576, 8,7× menor. Medido por claudinho-TI em 20/08; não remedido aqui.
+
+**Filtro de linha vai à fonte; termo é recorte local.** `cadeira`, `estado`, `nivel` e
+`origem` são os eixos que a API aceita — filtro fora deles devolve 400 nomeando o campo
+(`?q=cache` reprova, medido). O adaptador não repassa o que a API recusaria: mandar assim
+mesmo derrubaria a fonte inteira por causa de um filtro que ele sabe recortar sozinho.
+Busca por termo no título é filtrada aqui, sobre o que a projeção já trouxe — o mesmo
+recorte que o `registro` faz sobre `listdir`, e nenhum estado novo é derivado.
+
+**Custo em token, medido com `qwen2.5.json`:** envelope de 1 item do board 115 tokens
+(item só-`ref`: 78); envelope de 8 itens 731 tokens. Fica na mesma ordem do item de fila
+(133) e confirma o que o F0 já dizia: a procedência custa mais que a referência.
+
+**Conformidade contra o rastreador vivo, e ela roda:** o conjunto de ids do adaptador bate
+com o de `tarefas listar --cadeira claudinho-IA --estado priorizada`, e dois `GET`
+seguidos não movem o carimbo — o aceite do #2307 conferido do lado do consumidor.
