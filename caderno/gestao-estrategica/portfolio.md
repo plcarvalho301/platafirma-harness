@@ -63,3 +63,26 @@ Regras que a arvore carrega sem dizer:
 O ganho: o dono trabalha em epico e feature, e a arvore mostra a granularidade
 dele com a filha embaixo sem custo de leitura. Tabela nao mostra profundidade;
 lista corrida perde a hierarquia; a arvore da as duas de graca.
+
+## O que a cadeira afirma se confere na fonte, antes de virar ato meu
+
+Medido caro em 20/08/2026, na fita do acervo cego. Tres afirmacoes de cadeira,
+todas de boa-fe, todas erradas no ponto que decidia:
+
+- FASE FECHADA. O IA reportou F1 e F2 fechados e o dono deu a fita por resolvida.
+  No board, os nove cards estavam em `em-homologacao` e o derivado das duas features
+  tambem. Entregue e um estado, nao um adjetivo: se confere em
+  `estado_derivado` do PAI, nao no cru e nao na carta.
+- CAUSA DO DEFEITO. Tres cartas atribuiram a cegueira da fabrica ao indice ancorado
+  em impressao aposentada. Era verdade e nao era a causa: o que zerava tudo era um
+  filtro carimbado em codigo. Quando duas superficies divergem, reproduzir a MESMA
+  consulta nas duas mudando UM argumento vale mais que qualquer diagnostico — aqui,
+  3 fontes contra zero, em 30 segundos.
+- FUNDAMENTO DA DECISAO. O codigo citava uma decisao de seguranca ao lado da linha,
+  como se a implementasse. A decisao mandava NEGAR uma colecao; a linha PERMITIA so
+  uma. Negativa e allowlist parecem a mesma frase e tem efeito oposto quando o
+  universo cresce. Numero de decisao citado em comentario de codigo nao e prova de
+  que o codigo a segue: ler a decisao.
+
+O que estas tres tem em comum e o que fica: a cadeira relata o que ela mediu, e o que
+ela mediu depende da porta que ela usa. O meu ato pede a fonte, nao o relato.
