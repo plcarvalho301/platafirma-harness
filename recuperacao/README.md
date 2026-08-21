@@ -19,6 +19,7 @@ adaptadores, no F1.
 | `pep.py` | PEP por fonte: decide, nega o pedido inteiro, monta a recusa (F1, #2303) |
 | `gold.py` | gerador de gold das fontes exatas, um só e parametrizado (F2, #2309) |
 | `cache.py` | chave por fonte, TTL por classe e `rec:stat:<fonte>` (F2, #2308) |
+| `gold.py` | gerador de gold das fontes exatas, parametrizado (F2, #2309) |
 | `test_contrato_*.py` | 85 testes; o gatilho é `.github/workflows/recuperacao-tests.yml` |
 
 Não entra aqui: roteamento e tabela `fonte` (#2304) e gate (F3).
@@ -450,3 +451,77 @@ gerável: é juízo sobre o corpus, e o §13 já o atribui a gabarito de autor.
   devolve `0-0` por desenho, e 41 casos da caixa viva saíram carimbados assim. O carimbo
   agora é o da busca que gerou os casos — o §13 exige congelar por versão, e versão falsa
   faz duas coleções diferentes parecerem a mesma.
+
+## F2 · card #2309 — gerador de gold das fontes exatas
+
+Um só, parametrizado, no schema do §13:
+`python -m recuperacao.gold --fonte board fila mesa registro wiki --saida-dir avaliacao`.
+Não virou verbo em `bin/`: é bancada de medição, roda por ato meu, e verbo novo pede
+linha no `tool-manifest` (dono claudinho-TI) no mesmo commit.
+
+### Três classes de caso, e elas NÃO valem o mesmo
+
+| classe | esperado vem de | `pontuavel` |
+|---|---|---|
+| `chave-exata` | do estado: a chave existe, logo resolvê-la devolve ela mesma | `true` |
+| `chave-inexistente` | do estado: a chave está fora dele, logo a resposta certa é `vazia` | `true` |
+| `termo` | do próprio mecanismo que será medido | **`false`** até revisão humana |
+
+**O caso `termo` sai despontuável de propósito.** Derivar o esperado do caminho que o gold
+vai julgar é escrever o gabarito com a prova aberta — mudança no recorte por termo viraria
+linha nova nos dois lados, sem alarme. É a mesma disciplina da matriz sujeito × fonte.
+Emite-se assim mesmo porque revisar candidato é barato e inventar caso do zero é caro, mas
+quem o torna pontuável é uma pessoa.
+
+**`resposta_certa: ausente` não é gerável, e é decisão, não lacuna.** `vazia` é «a fonte
+respondeu e não há o que casar»; `ausente` é «a fonte não cobre este assunto», que é juízo
+sobre o corpus. O §13 já o atribui a gabarito de autor.
+
+**A wiki é a única que precisa de semente** (`--semente`, default `PlataFirma`): o
+adaptador resolve título ou busca prosa, e não expõe `list=allpages`. A semente enviesa a
+AMOSTRA, nunca o gabarito — o esperado continua vindo do estado.
+
+**Fonte sem estado levanta em vez de emitir gold vazio**, e as outras continuam: gold vazio
+é pior que gold ausente, porque parece medido.
+
+### Rodado contra as cinco fontes exatas vivas, 20/08/2026
+
+| fonte | casos | pontuáveis | candidatos |
+|---|---|---|---|
+| board | 41 | 21 | 20 |
+| fila | 41 | 21 | 20 |
+| mesa | 15 | 8 | 7 |
+| registro | 41 | 21 | 20 |
+| wiki | 19 | 10 | 9 |
+
+### O gold achou defeito na primeira rodada, e é para isso que ele existe
+
+Rodando os casos **pontuáveis** contra as próprias fontes:
+
+| fonte | acerto | erro |
+|---|---|---|
+| `board` | **21** | 0 |
+| `registro` | **21** | 0 |
+| `fila` | 1 | **20** |
+| `mesa` | 1 | **7** |
+| `wiki` | 1 | **9** |
+
+**A chave de procedência não é alvo aceito em três das seis fontes.** `board` resolve
+`item:2300` e `registro` resolve `adr:0064`; `fila`, `mesa` e `wiki` esperam outra coisa
+como alvo (a caixa, o chapéu, o título) e devolvem vazio quando recebem a chave que elas
+mesmas emitiram. Não é defeito do gold: o §4 define a chave e o §10 vai pedir
+re-resolução por ela no gate, então a assimetria é do contrato de alvo, não do gabarito.
+**Fica nomeado, não consertado aqui** — uniformizar alvo mexe em três adaptadores
+entregues e é decisão do dono, não do card do gerador.
+
+### Achado corrigido no caminho: a mesa lia coluna que não existe
+
+`adaptadores/mesa.py` consultava `feito_em`; a coluna do esquema vivo é `esvaziado_em`
+(medido em `information_schema`, 20/08). O `UndefinedColumn` caía no `except` e virava
+`sem-rota`: **a mesa aparecia CAÍDA com o Postgres de pé**, e nada acusava. Consertado no
+mesmo commit — a fonte agora serve os itens que `mesa ver` mostra, e é por isso que o gold
+dela existe. Presença de rota não é prova de leitura, e foi o gold que produziu a prova.
+
+Dois testes de mesa também mediam a bancada em vez da peça: passavam porque `psycopg`
+não estava instalado no ambiente do gate e porque `PF_CADEIRA` estava exportada. Agora
+injetam uma metade muda e apagam a variável.

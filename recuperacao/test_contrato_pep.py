@@ -91,28 +91,43 @@ def test_alvo_ausente_vira_prefixo_da_materia_nunca_asterisco(pep):
         assert alvo != "*", "`sobre` vazio vira `*` no PDP e entrega a matéria inteira"
 
 
-def test_alvo_padrao_nao_atravessa_a_concessao_nominal(pep):
-    """`acervo:*` não é `acervo:firma/*`: o genérico tem de bater na regra nominal."""
-    assert pep.autoriza_fonte(EXTERNO, Fonte("acervo")) is not None
+def test_alvo_padrao_tem_de_bater_na_concessao_nominal(pep):
+    """O alvo padrão não atravessa: ele CASA, ou nega. Que ele passe hoje no acervo é
+    consequência de `jaiminho-le-acervo-inteiro` (`sobre: ["acervo:*"]`, `458178c`, ordem
+    do dono de 20/08) — e a wiki, que não teve concessão alargada, continua provando a
+    régra: alvo padrão sem regra que o cubra é negativa."""
+    assert pep.autoriza_fonte(EXTERNO, Fonte("acervo")) is None
     assert pep.autoriza_fonte(EXTERNO, Fonte("acervo"), ["acervo:firma/ia/*"]) is None
+    assert pep.autoriza_fonte(EXTERNO, Fonte("mesa")) is not None, (
+        "`mem:*` não é concedido ao externo: o alvo padrão não vira salvo-conduto"
+    )
 
 
 # 4. Negativa total — nem entre alvos, nem entre fontes -------------------------------
 
 def test_alvo_negado_nega_a_fonte_inteira(pep):
-    """Pedido de dois recortes com concessão de um não vira busca em um (§6)."""
-    n = pep.autoriza_fonte(EXTERNO, Fonte("acervo"),
-                           ["acervo:firma/ia/*", "acervo:pessoal/*"])
+    """Pedido de dois recortes com concessão de um não vira busca em um (§6).
+
+    O par usado aqui era `acervo:firma/*` + `acervo:pessoal/*`, que deixou de servir: o
+    `458178c` concedeu o acervo INTEIRO ao externo por ordem do dono, e a regra
+    `externo-nunca-alcanca-acervo-pessoal` saiu do PAP. A régra do §6 não mudou — mudou
+    qual par a exercita. A wiki é o par vivo: `principal` concedido, camada interna não.
+    """
+    n = pep.autoriza_fonte(EXTERNO, Fonte("wiki"),
+                           ["wiki:principal/*", "wiki:PlataFirma/*"])
     assert n is not None
-    assert n.alvo == "acervo:pessoal/*"
-    assert n.regra == "externo-nunca-alcanca-acervo-pessoal"
+    assert n.alvo == "wiki:PlataFirma/*"
+    assert n.regra == "externo-nao-le-wiki-interna"
 
 
 def test_autoriza_devolve_todas_as_negativas_nao_a_primeira(pep):
-    negs = pep.autoriza(EXTERNO, {Fonte("acervo"): ["acervo:pessoal/*"],
+    negs = pep.autoriza(EXTERNO, {Fonte("registro"): ["adr:*"],
                                   Fonte("wiki"): ["wiki:PlataFirma/*"],
                                   Fonte("mesa"): []})
-    assert {n.fonte for n in negs} == {Fonte("acervo"), Fonte("wiki"), Fonte("mesa")}
+    assert {n.fonte for n in negs} == {Fonte("registro"), Fonte("wiki"), Fonte("mesa")}
+    assert pep.autoriza_fonte(EXTERNO, Fonte("acervo"), ["acervo:pessoal/*"]) is None, (
+        "o acervo saiu deste conjunto por ato do dono (458178c), não por defeito do PEP"
+    )
 
 
 def test_uma_negativa_no_meio_do_pedido_nega_o_pedido_inteiro(pep):
@@ -159,15 +174,15 @@ def test_recusa_sem_fonte_nenhuma_levanta_em_vez_de_mentir():
 def test_negativa_e_permissao_saem_auditadas_por_fonte():
     ev = []
     p = PEP(POLITICA, auditor=ev.append)
-    p.autoriza_fonte(EXTERNO, Fonte("acervo"), ["acervo:firma/ia/*"])
-    p.autoriza_fonte(EXTERNO, Fonte("acervo"), ["acervo:pessoal/*"])
+    p.autoriza_fonte(EXTERNO, Fonte("wiki"), ["wiki:principal/*"])
+    p.autoriza_fonte(EXTERNO, Fonte("wiki"), ["wiki:PlataFirma/*"])
     assert [e["evento"] for e in ev] == ["pep_permitiu", "pep_negou"]
-    assert all(e["fonte"] == "acervo" and e["sujeito"] == EXTERNO for e in ev)
-    assert ev[1]["regra"] == "externo-nunca-alcanca-acervo-pessoal"
+    assert all(e["fonte"] == "wiki" and e["sujeito"] == EXTERNO for e in ev)
+    assert ev[1]["regra"] == "externo-nao-le-wiki-interna"
 
 
 def test_sem_auditor_o_pep_decide_igual(pep):
-    assert pep.autoriza_fonte(EXTERNO, Fonte("acervo"), ["acervo:pessoal/*"]) is not None
+    assert pep.autoriza_fonte(EXTERNO, Fonte("wiki"), ["wiki:PlataFirma/*"]) is not None
 
 
 # 7. Releitura do PAP sem restart ------------------------------------------------------
