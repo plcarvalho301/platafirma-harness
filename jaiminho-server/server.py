@@ -30,6 +30,7 @@ from pathlib import Path
 import httpx
 from mcp.server.fastmcp import FastMCP
 from mcp.server.transport_security import TransportSecuritySettings
+from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import JSONResponse
 from starlette.routing import Route
 
@@ -830,5 +831,60 @@ async def _health(_req):
                          "medido_em": int(time.time())})
 
 
+# --- auth de borda: negativa em 401, nao em 200 (#2382) --------------------
+# O PEP nega DENTRO da tool, e o transporte MCP embrulha essa negativa num 200 com
+# erro no corpo. Duas consequencias, medidas de fora por claudinho-seguranca em
+# 20/08/2026 contra a porta publicada pelo #2380:
+#
+#   1. `tools/list` sem credencial devolvia o catalogo inteiro. Enumeracao nao e
+#      vazamento de dado — o `tools/call` continua negando —, mas e superficie que
+#      nao precisa estar aberta, e some sozinha quando a borda exige identidade.
+#   2. Cliente MCP novo aprende ONDE autenticar pelo 401 com WWW-Authenticate
+#      (RFC 9728). Recebendo 200, ele nao aprende, e quem confere o controle por
+#      status code le 200 e conclui que passou. Controle so vale verificado.
+#
+# O sign-off que autorizou a porta (#2380) dizia «sem JWT do realm com aud=ops-mcp,
+# 401». Isto e o que faz a frase virar verdade.
+#
+# NAO ha rota de emergencia aqui, pela mesma razao de `_sujeito_do_jwt`: o token
+# estatico e a mao do dono quando o realm cai, e o dono nao entra por esta porta.
+RECURSO_URL = os.environ.get("JAIMINHO_RESOURCE", "")
+
+
+def _base_do_pedido(request) -> str:
+    """Endereco publico desta superficie. Env manda; sem ela, o que o cliente usou.
+
+    Derivar do pedido evita o metadata apontar para `localhost` quando o alcance
+    real e a LAN — que seria descoberta que nao descobre nada.
+    """
+    return (RECURSO_URL or str(request.base_url)).rstrip("/")
+
+
+LIVRES = ("/health", "/.well-known/oauth-protected-resource")
+
+
+async def _oauth_metadata(req):
+    """RFC 9728: onde este recurso manda o cliente autenticar."""
+    return JSONResponse({"resource": _base_do_pedido(req),
+                         "authorization_servers": [OIDC_ISSUER],
+                         "bearer_methods_supported": ["header"]})
+
+
+class ExigeJWT(BaseHTTPMiddleware):
+    async def dispatch(self, request, call_next):
+        if request.url.path.rstrip("/") in LIVRES:
+            return await call_next(request)
+        ident = _sujeito_do_jwt(request.headers.get("authorization", ""))
+        if not ident:
+            _audit(evento="auth_negada", path=request.url.path, status=401)
+            desafio = f'Bearer realm="{OIDC_ISSUER}", resource_metadata="{_base_do_pedido(request)}/.well-known/oauth-protected-resource"'
+            return JSONResponse({"erro": "nao autenticado"}, status_code=401,
+                                headers={"WWW-Authenticate": desafio})
+        request.state.sujeito = ident.get("sujeito")
+        return await call_next(request)
+
+
 app = mcp.streamable_http_app()
 app.router.routes.append(Route("/health", _health))
+app.router.routes.append(Route("/.well-known/oauth-protected-resource", _oauth_metadata))
+app.add_middleware(ExigeJWT)
