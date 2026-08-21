@@ -164,8 +164,13 @@ class AdaptadorMesa(Adaptador):
         if con is None:
             return [], True
         filtros = filtros or {}
+        # `esvaziado_em`, e não `feito_em`: a coluna do esquema vivo chama-se assim
+        # (medido em `information_schema` em 20/08/2026). A versão anterior levantava
+        # `UndefinedColumn`, que o `except` abaixo transformava em `sem-rota` — a fonte
+        # aparecia CAÍDA com o Postgres de pé, e nada acusava. Achado ao gerar o gold
+        # da mesa (#2309), que é para o que o gold serve.
         sql = ("SELECT id, chapeu, ato, alvo, texto FROM sessao.mesa_item "
-               "WHERE lower(cadeira) LIKE %s AND feito_em IS NULL")
+               "WHERE lower(cadeira) LIKE %s AND esvaziado_em IS NULL")
         args: list = [f"%{self.sufixo}"]
         if alvo:
             sql += " AND chapeu = %s"
