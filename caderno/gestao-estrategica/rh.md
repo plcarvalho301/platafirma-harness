@@ -87,3 +87,31 @@ revisão — pior que a ausência dela.
 Propor próximo alvo lendo a mesa é propor pelo resíduo da fita anterior. Corte de
 portfólio se faz sobre os itens abertos do rastreador, com critério escrito — a mesa
 diz o que ficou pendente de mim, não o que a plataforma deve fazer a seguir.
+
+## Régua escrita para o modelo se mede em degrau, não em elegância
+
+Texto de abertura que o modelo tem de MAPEAR para um nome de verbo é inferência, não
+instrução — e antes do pacote não há sujeito para inferir. Proposta de escrever a
+chamada de forma neutra, para caber nas quatro superfícies num arquivo só, sobe o
+degrau de D0 para D2 exatamente onde a spec declara "não há o que escolher".
+
+O corte que vale: **a variação de superfície se resolve por preenchimento, nunca por
+prosa que dê no mesmo**. Elegância de arquivo único é ganho de quem mantém; determinismo
+da chamada é ganho de quem executa, e é o que a abertura existe para comprar.
+
+## Consertar o arquivo, não matá-lo
+
+Ao achar que a peça ficou vazia, o reflexo foi propor matá-la. É o viés de entrega já
+marcado pelo dono: corte de escopo vestido de simplificação. A pergunta certa não é
+"sobra o quê?", e sim "o que esta peça tem de dizer que ninguém mais diz?" — a entrada
+tinha, e o que faltava era tirar dela a glosa de host.
+
+## Ferramenta é constitutiva da persona, não contexto de execução
+
+O §1 da spec proíbe "ferramental antes de chapéu" e eu li isso como valendo para todo
+manifesto. Não vale: o comum a toda cadeira — fila, mesa, tarefas, minuta — não enviesa
+escolha de linha nenhuma, porque serve as três igualmente. Quem enviesa é o manifesto
+RECORTADO por chapéu. Ferramenta de trabalho é ao ofício o que o login é ao emprego.
+
+Corolário operacional: manifesto servido depois do pacote precisa de recorte fino, ou
+carrega para dentro dele a linha que ensina a chegar até ele.
