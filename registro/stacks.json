@@ -17,10 +17,10 @@
       "reversao": {
         "via": "promover",
         "quem": "claudinho-TI",
-        "janela_min": 10,
+        "janela_min": 1,
         "estado": "identidade-db, keycloak-db e mdm-rh-db em volume: NAO voltam com o codigo. Migracao de realm feita para frente e irreversivel por aqui.",
         "nota": "Critica: derruba a borda e o IAM junto. Reverter e recriar, nao 'down'. Sessao aberta de todo mundo cai.",
-        "provado_em": null
+        "provado_em": "2026-08-21 — ida e volta pelo verbo (59bbdd6 -> f674555 -> 59bbdd6), 21s e 29s, keycloak, identidade-db, mdm-rh-db e landing recriados; cloudflared e o tunel voltaram sozinhos."
       }
     },
     "motor": {
@@ -34,10 +34,10 @@
       "reversao": {
         "via": "promover",
         "quem": "claudinho-TI",
-        "janela_min": 5,
+        "janela_min": 1,
         "estado": "motor-pg em volume; motor-msg-mem e cache allkeys-lru e pode ser perdido sem dano.",
         "nota": "Critica: msg para enquanto recria. Consumidor com stream aberto reconecta sozinho.",
-        "provado_em": null
+        "provado_em": "2026-08-21 — ida e volta pelo verbo (b92c528 -> b0225d8 -> b92c528), 8s cada, os quatro conteineres recriados. msg parou e voltou dentro da janela."
       }
     },
     "rag": {
@@ -57,10 +57,10 @@
       "reversao": {
         "via": "promover",
         "quem": "claudinho-TI",
-        "janela_min": 15,
+        "janela_min": 1,
         "estado": "indice vetorial em volume: nao volta com o codigo, e reindexar custa horas de GPU.",
         "nota": "Overlay de GPU e perfil `serving` entram na volta; sem --profile o rag-api fica fora e o verbo nao acusa.",
-        "provado_em": null
+        "provado_em": "2026-08-21 — ida e volta pelo verbo (f84def9 -> bda62dd -> f84def9), 26s e 25s, minio/pg/api recriados. Acervo conferido DEPOIS: 1639 arquivos e 4.150.556.269 bytes, identico ao de antes. Backup completo em ~/AI/backups/minio-obras-20260821T071055 (md5 de amostra confere) existia antes do ensaio."
       }
     },
     "acervo-api": {
@@ -94,10 +94,10 @@
       "reversao": {
         "via": "promover",
         "quem": "claudinho-TI",
-        "janela_min": 10,
+        "janela_min": 1,
         "estado": "dbdata (MariaDB da wiki) e images em volume: conteudo NAO volta com o codigo. Edicao feita depois do commit ruim permanece, e e isso que se quer.",
         "nota": "Critica. O override do LocalSettings.php e bind de arquivo unico: promover troca o inode e e por isso que a volta tambem tem de ser `promover`, nunca `restart`.",
-        "provado_em": null
+        "provado_em": "2026-08-21 — ida e volta pelo verbo (f84def9 -> bda62dd -> f84def9), 25s cada, wiki-db e mediawiki recriados, /health do wiki-mcp 200 no fim. dbdata intacto."
       }
     },
     "harness-controle": {
@@ -128,10 +128,10 @@
       "reversao": {
         "via": "up",
         "quem": "claudinho-TI",
-        "janela_min": 5,
+        "janela_min": 2,
         "estado": "volume `casa` guarda o login do agy: recriar sem cuidado desloga o braco.",
         "nota": "Aponta clone de trabalho: `promover` recusa. Volta = checkout no clone + `deploy jaiminho up -d --build jaiminho-server`. Ver residuo do #2286 (mesa #221): quem serve a 8023 e o daemon uid 1001.",
-        "provado_em": null
+        "provado_em": "2026-08-21 — ida e volta por checkout de caminho (jaiminho/ em 57de907 e de volta a c1bd0b5), 63s e 64s, jaiminho-server recriado e /health 200 na 8023. Volume `casa` intacto: o braco nao deslogou."
       }
     },
     "chat": {
@@ -151,10 +151,10 @@
       "reversao": {
         "via": "up",
         "quem": "claudinho-TI",
-        "janela_min": 10,
+        "janela_min": 1,
         "estado": "banco do Synapse em volume: mensagem nao volta, e nem deve.",
         "nota": "Aponta clone de trabalho: `promover` recusa. signing.key fora do git — perde-la invalida o homeserver, e nenhuma volta de codigo a recupera.",
-        "provado_em": null
+        "provado_em": "2026-08-21 — ida e volta por checkout de caminho (chat/ em 1f985b5 e de volta a c1bd0b5), 18s cada, chat-recepcao recriado. chat-pg e chat-synapse NAO foram recriados: o commit so tocava a recepcao, e reversao parcial e o caso real."
       }
     },
     "rastreador": {
@@ -171,10 +171,10 @@
       "reversao": {
         "via": "promover",
         "quem": "claudinho-TI",
-        "janela_min": 5,
+        "janela_min": 1,
         "estado": "rastreador-db em volume: card criado depois do commit ruim SOBREVIVE a volta. Migracao de schema aplicada nao desfaz sozinha.",
         "nota": "Superficie publica: a volta que muda contrato de API quebra a tela, que e de claudinha-produto. Avisar antes.",
-        "provado_em": null
+        "provado_em": "2026-08-21 — ida e volta pelo proprio verbo (0a14392 -> 2d8e414 -> 0a14392): rastreador-db e rastreador-api Recreated nos dois passos, /health 200 em 10s cada, e o card #184 lido antes e depois byte a byte igual (o volume nao se mexeu). Janela real ~20s."
       }
     },
     "rastreador-tela": {
@@ -191,7 +191,7 @@
         "quem": "claudinha-produto",
         "janela_min": 5,
         "estado": "sem volume e sem segredo: a volta e integral.",
-        "nota": "Deploy desta stack e de claudinha-produto desde o #197. claudinho-TI reverte so em incidente, e avisa.",
+        "nota": "Deploy desta stack e de claudinha-produto desde o #197. claudinho-TI reverte so em incidente, e avisa. NAO ensaiada em 21/08 por fronteira de cadeira: deploy desta stack e de claudinha-produto.",
         "provado_em": null
       }
     },
@@ -209,7 +209,7 @@
         "quem": "claudinho-TI",
         "janela_min": 5,
         "estado": "sessao-db em volume: fita, giro e mesa NAO voltam com o codigo. DDL em sessao/init/ so roda em volume novo.",
-        "nota": "Aponta clone de trabalho: `promover` recusa. Volta de DDL ja aplicada exige migracao para frente, nunca `down -v`.",
+        "nota": "Aponta clone de trabalho: `promover` recusa. Volta de DDL ja aplicada exige migracao para frente, nunca `down -v`. ENSAIO TENTADO E RECUSADO em 21/08: sessao-db e imagem postgres pura, sem build — `up -d --build` nao recria nada quando o conteudo nao muda, e o ensaio passaria verde sem ter revertido (prova falsa). Ensaio valido exige --force-recreate, que derruba o banco da fita em curso; fica para janela sem sessao viva.",
         "provado_em": null
       }
     }
