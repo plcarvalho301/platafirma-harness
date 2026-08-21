@@ -49,7 +49,7 @@ sujeitos:
   jaiminho:
     natureza: servico
     papeis: [pesquisador-externo]
-    dominios: [plataforma-acervo, plataforma-wiki, plataforma-drive, mensageria]
+    dominios: [plataforma-acervo, plataforma-wiki, plataforma-repo, plataforma-drive, mensageria]
     client: L0R8OJ
     conta: jaiminho
 

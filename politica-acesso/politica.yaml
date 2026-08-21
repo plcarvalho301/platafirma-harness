@@ -36,6 +36,13 @@ eixos:
       # distintas: o acervo é texto de terceiro, a wiki é a decisão da casa. Domínio
       # único faria a concessão de ler norma valer para ler decisão interna.
       pai: plataforma
+    plataforma-repo:
+      rotulo: "Repositorios da PlataFirma: LEITURA do codigo por espelho somente-leitura"
+      # Separado de `plataforma-wiki` pelo mesmo motivo que ela se separou do acervo:
+      # a wiki e a decisao redigida, o repo e o codigo em vigor. Conceder ler decisao
+      # nao pode valer por ler codigo, nem o contrario. Escrever no repo NAO passa por
+      # este dominio: e `run_command`, tipo `comando`, negado ao externo.
+      pai: plataforma
     plataforma-drive:
       rotulo: "Drive do dono: area de transferencia com colaboracao externa"
       # Separado de `plataforma-wiki` pelo mesmo motivo que ela se separou do acervo:
@@ -246,6 +253,18 @@ regras:
     quando: {papel: pesquisador-externo, dominio: plataforma-acervo, tipo: acervo}
     acoes: [rag_buscar]
     sobre: ["acervo:*"]
+
+  # ORDEM DO DONO, 20/08/2026: o externo escreve codigo PARA a PlataFirma e precisa
+  # LER o codigo dela para escrever bem. Livro de terceiro nao ensina a stack da casa.
+  # O alcance e somente-leitura por construcao: `repo_ler` bate no espelho do ref
+  # remoto pelo wiki-mcp; escrever, fazer push ou rodar git local e `run_command`,
+  # que segue negado a este papel por `externo-nao-executa-comando`.
+  - id: jaiminho-le-repo
+    efeito: permite
+    motivo: "escrever codigo para a PlataFirma exige ler o codigo dela: padrao da casa, contrato de verbo e teste em vigor · ordem direta do dono em 20/08/2026 · vence 2026-11-15"
+    quando: {papel: pesquisador-externo, dominio: plataforma-repo, tipo: repo}
+    acoes: [repo_ler]
+    sobre: ["repo:platafirma-*", "repo:modulo-*"]
 
   # Drive: area de transferencia de MAO UNICA com o dono. Ele nao tem shell no host
   # e o externo nao tem wiki nem git — sem esta pasta, entrega dele nao chega nele.

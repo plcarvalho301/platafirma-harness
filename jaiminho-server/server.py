@@ -62,6 +62,14 @@ WIKI_TIMEOUT = float(os.environ.get("WIKI_TIMEOUT", "60"))
 DOM_WIKI = "plataforma-wiki"
 TIPO_WIKI = "wiki"
 
+# Repo: o externo escreve codigo PARA a PlataFirma, e precisa LER o codigo dela para
+# escrever no padrao da casa (ordem do dono, 20/08/2026). Somente-leitura por
+# construcao: as tres tools abaixo batem no ESPELHO do ref remoto, pelo wiki-mcp.
+# Escrever, push e git local sao `run_command`, tipo `comando`, negado a este papel.
+DOM_REPO = "plataforma-repo"
+TIPO_REPO = "repo"
+ACAO_REPO = "repo_ler"
+
 # Recorte de namespace da wiki, forcado no servidor: so o namespace
 # principal, que e o acervo de conceitos e obras. `PlataFirma:` (decisao, org,
 # metodo), `Operar:` (runbook) e `Frente:` (trabalho em curso) sao a camada
@@ -430,6 +438,75 @@ def wiki_ler(titulos: str | list[str]) -> dict:
         return d
     return {"paginas": d.get("result", d), "recusados": fora} if fora else \
            {"paginas": d.get("result", d)}
+
+
+# --- repositorios ----------------------------------------------------------
+# Espelho somente-leitura do ref remoto, servido pelo mesmo wiki-mcp. O PEP decide
+# por repositorio: o alvo e `repo:<nome>`, e a concessao de hoje nomeia
+# `platafirma-*` e `modulo-*`. Repo fora disso volta negado e NOMEADO — recusa
+# declarada, para o chamador saber que existe e nao e dele.
+
+
+def _autoriza_repo(repo: str) -> dict | None:
+    return _autoriza(ACAO_REPO, TIPO_REPO, DOM_REPO, [f"repo:{repo}"])
+
+
+@mcp.tool()
+def repo_mapa(repo: str, ref: str = "main", path_prefix: str = "",
+              glob: str = "", limit: int = 500) -> dict:
+    """Mapa de arquivos de um repositorio da PlataFirma, num ref (branch, tag ou SHA).
+
+    Use ANTES de `repo_ler`: e daqui que sai o caminho exato. `path_prefix` restringe
+    a subarvore, `glob` filtra por padrao (ex. "*.py"). A resposta traz o SHA lido, e
+    e esse SHA que voce cita — ref movel muda debaixo de voce entre uma chamada e a
+    seguinte.
+
+    Alcance: leitura do espelho do ref REMOTO. Nao ha working tree, nao ha commit e
+    nao ha push por aqui; entrega de codigo continua saindo pelo card e pelo Drive.
+    """
+    negativa = _autoriza_repo(repo)
+    if negativa:
+        return negativa
+    return _wiki("repo_tree", {"repo": repo, "ref": ref, "path_prefix": path_prefix,
+                               "glob": glob, "limit": limit})
+
+
+@mcp.tool()
+def repo_ler(repo: str, paths: str | list[str], ref: str = "main",
+             offset: int = 0, max_bytes: int = 40000) -> dict:
+    """Conteudo de ate 20 arquivos de um repositorio, num ref.
+
+    Caminho sai de `repo_mapa` ou de `repo_buscar`. Arquivo inexistente ou binario
+    volta com o erro preenchido, nunca omitido — omitir faria "nao existe" e "nao
+    li" virarem a mesma resposta.
+
+    Truncagem sempre declarada (`truncated`, `bytes_total`, `next_offset`, em bytes).
+    Leia o teste junto com o codigo que ele julga: na PlataFirma o contrato de um
+    verbo esta no teste, e codigo novo que ignora o teste em vigor volta no review.
+    """
+    negativa = _autoriza_repo(repo)
+    if negativa:
+        return negativa
+    return _wiki("repo_read", {"repo": repo, "paths": paths, "ref": ref,
+                               "offset": offset, "max_bytes": max_bytes})
+
+
+@mcp.tool()
+def repo_buscar(repo: str, padrao: str, ref: str = "main", path_glob: str = "",
+                ignore_case: bool = False, context: int = 2, limit: int = 100) -> dict:
+    """Busca por regex no conteudo de um ref do repositorio (git grep de verdade).
+
+    E a tool para achar arquivo sem saber o nome: quem chama o verbo, onde a
+    constante nasce, que teste cobre a regra. `padrao` e regex POSIX ESTENDIDA
+    (ERE, `git grep -E`) — `a|b`, `(x)+`, `?`, `{n,m}` valem SEM escape, e escapar a
+    alternacao a torna caractere literal. Zero resultado nao e erro.
+    """
+    negativa = _autoriza_repo(repo)
+    if negativa:
+        return negativa
+    return _wiki("repo_grep", {"repo": repo, "pattern": padrao, "ref": ref,
+                               "path_glob": path_glob, "ignore_case": ignore_case,
+                               "context": context, "limit": limit})
 
 
 # --- google drive ----------------------------------------------------------
