@@ -35,6 +35,7 @@ from .envelope import (
 )
 from .fontes import CLASSE, PREFIXO_CHAVE, TIMEOUT_MS, Classe, Fonte, classe, timeout_ms
 from .gate import Gate, Julgamento, Parecer, Veredito, extrai_chaves, fontes_citadas
+from .veredito import LinhaVeredito, Serie, SerieFonte, instrumenta, serie
 from .resolvedor import Coordenada, Degrau, EstadoConceito, NaoResolve, Resolvedor, Secao, le_chave
 from .pep import ACAO, PEP, Negativa, recusa_por_concessao
 
@@ -60,6 +61,7 @@ __all__ = [
     "Item",
     "Julgamento",
     "LinhaFonte",
+    "LinhaVeredito",
     "NaoResolve",
     "Negativa",
     "PEP",
@@ -70,6 +72,8 @@ __all__ = [
     "Resolvedor",
     "Secao",
     "SemCache",
+    "Serie",
+    "SerieFonte",
     "Sinal",
     "TIMEOUT_MS",
     "Veredito",
@@ -79,8 +83,10 @@ __all__ = [
     "classe",
     "extrai_chaves",
     "fontes_citadas",
+    "instrumenta",
     "le_chave",
     "linha_disjuntor_aberto",
     "recusa_por_concessao",
+    "serie",
     "timeout_ms",
 ]
