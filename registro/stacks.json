@@ -191,7 +191,7 @@
         "quem": "claudinha-produto",
         "janela_min": 5,
         "estado": "sem volume e sem segredo: a volta e integral.",
-        "nota": "Deploy desta stack e de claudinha-produto desde o #197. claudinho-TI reverte so em incidente, e avisa. NAO ensaiada em 21/08 por fronteira de cadeira: deploy desta stack e de claudinha-produto.",
+        "nota": "Deploy desta stack e de claudinha-produto desde o #197. claudinho-TI reverte so em incidente, e avisa. NAO ensaiada em 21/08 por fronteira de cadeira: deploy desta stack e de claudinha-produto. FORA DO ESCOPO do #184 por ordem do dono em 21/08/2026: o card cobre as stacks de claudinho-TI, e o deploy desta e de claudinha-produto. Ensaio, quando houver, e dela.",
         "provado_em": "FORA DE ESCOPO por ordem do dono, 21/08/2026 — o deploy desta stack e de claudinha-produto desde o #197, e ensaio de reversao acompanha o dono do deploy. A declaracao (via, janela, quem, o que nao volta) segue valendo e nao precisa de ensaio meu."
       }
     },
