@@ -100,14 +100,44 @@ class AdaptadorMesa(Adaptador):
     # ---- carimbo --------------------------------------------------------------------
 
     def _carimbo(self) -> str:
-        """Digest das versões vivas. Sem `v` no substrato velho, o carimbo da fonte é o
-        que dá para carimbar: o resumo do estado lido."""
+        """As DUAS metades, e é o ponto: carimbo que cobre uma só mente sobre a outra.
+
+        Medido em 20/08/2026 ao gerar o gold (#2309): o Valkey msg-mem não tem hoje
+        nenhuma chave `mem:ia:*`, e os sete itens vivos da mesa estão no Postgres. O
+        carimbo anterior era só o digest das chaves do Valkey — logo, `e3b0c44298fc`, o
+        sha do vazio, CONSTANTE enquanto a mesa mudava. Com a chave de cache do §9
+        (`rec:<fonte>:<carimbo>:...`, #2308) isso serve mesa velha para sempre, que é o
+        modo de falha que o #2307 nomeia: carimbo que não anda é pior que carimbo ausente.
+
+        Forma: `<max(id)>/<contagem>` da metade de item, mais o digest das chaves de prosa.
+        Metade muda, carimbo muda. Metade caída vira `?`, e o carimbo diz que não sabe em
+        vez de fingir que não mudou.
+        """
+        return f"i:{self._carimbo_item()} p:{self._carimbo_prosa()}"
+
+    def _carimbo_item(self) -> str:
+        con = self.pg()
+        if con is None:
+            return "?"
+        try:
+            with con.cursor() as cur:
+                cur.execute(
+                    "SELECT COALESCE(max(id), 0), count(*) FROM sessao.mesa_item "
+                    "WHERE lower(cadeira) LIKE %s AND esvaziado_em IS NULL",
+                    [f"%{self.sufixo}"],
+                )
+                maior, quantos = cur.fetchone()
+            return f"{maior}/{quantos}"
+        except Exception:  # noqa: BLE001 — metade muda declara `?`, não derruba a fonte
+            return "?"
+
+    def _carimbo_prosa(self) -> str:
         try:
             rc = self.cliente()
             chaves = sorted(rc.keys(f"mem:{self.sufixo}:*"))
         except FonteIndisponivel:
-            chaves = []
-        return hashlib.sha256("|".join(chaves).encode()).hexdigest()[:12]
+            return "?"
+        return hashlib.sha256("|".join(str(c) for c in chaves).encode()).hexdigest()[:12]
 
     # ---- busca ----------------------------------------------------------------------
 

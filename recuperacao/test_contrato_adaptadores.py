@@ -219,6 +219,18 @@ class PgFalso:
         return self.linhas
 
 
+class PgMudo(PgFalso):
+    """A metade de item responde com erro. Injetado, e não simulado pela AUSÊNCIA de
+    `psycopg` no ambiente: teste que passa por falta de biblioteca instalada volta a
+    falhar no dia em que alguém instala a biblioteca, e mede a bancada, não a peça."""
+
+    def __init__(self) -> None:
+        super().__init__([])
+
+    def execute(self, sql, args):
+        raise RuntimeError("metade de item muda")
+
+
 PROSA = {"mem:ia:harness": '{"x":"o que fechou nesta fita","t":1787000000}'}
 ITEM = [(167, "harness", "emendar o verbo", "bin/_minuta/formalizar", None)]
 
@@ -241,15 +253,17 @@ def test_mesa_versao_por_metade():
 
 
 def test_mesa_metade_muda_declara_causa_e_serve_o_que_tem():
-    a = AdaptadorMesa(sufixo="ia", cliente=ValkeyFalso(PROSA), conexao_pg=None)
-    a._pg = None
+    a = AdaptadorMesa(sufixo="ia", cliente=ValkeyFalso(PROSA), conexao_pg=PgMudo())
     r = a.busca()
     assert r.itens, "Valkey de pé serve a prosa mesmo com a outra metade muda"
     assert r.linha.causa is Causa.SEM_ROTA, "degradação declarada, nunca pacote menor calado"
 
 
-def test_mesa_sem_cadeira_recusa():
-    a = AdaptadorMesa(sufixo="", cliente=ValkeyFalso(PROSA))
+def test_mesa_sem_cadeira_recusa(monkeypatch):
+    """`sufixo=""` cai no `PF_CADEIRA` do ambiente por desenho do construtor — sem
+    apagar a variável, este teste mede o ambiente da bancada em vez da recusa."""
+    monkeypatch.delenv("PF_CADEIRA", raising=False)
+    a = AdaptadorMesa(sufixo="", cliente=ValkeyFalso(PROSA), conexao_pg=PgMudo())
     r = a.busca_declarada()
     assert r.linha.causa is Causa.SEM_CONCESSAO
 

@@ -17,6 +17,7 @@ adaptadores, no F1.
 | `disjuntor.py` | `Disjuntor` por fonte e `Painel`, com estado observável |
 | `adaptadores/` | núcleo + registro, fila, mesa (#2298), wiki (#2301), acervo (#2302) e board (#2300) |
 | `pep.py` | PEP por fonte: decide, nega o pedido inteiro, monta a recusa (F1, #2303) |
+| `gold.py` | gerador de gold das fontes exatas, um só e parametrizado (F2, #2309) |
 | `cache.py` | chave por fonte, TTL por classe e `rec:stat:<fonte>` (F2, #2308) |
 | `test_contrato_*.py` | 85 testes; o gatilho é `.github/workflows/recuperacao-tests.yml` |
 
@@ -410,3 +411,42 @@ A medida nunca derruba a leitura — cache mudo perde o contador, não a respost
 registro isso empata com ler a fonte inteira. Não é defeito do cache: é a conta de onde
 ele paga, e o que decide se vale a pena por fonte é a série de `rec:stat`, que começa
 agora. Cachear o carimbo seria cachear o invalidador — e aí nada mais invalida.
+
+## F2 · card #2309 — gerador de gold das fontes exatas
+
+Um só, parametrizado, em `gold.py` (§13). Roda por fonte, lê o estado PELA fonte e emite o
+schema do §13. Cargo e acervo são de claudinho-dados e não saem daqui.
+
+```
+python -m recuperacao.gold --fonte board fila mesa registro wiki --saida-dir avaliacao/
+```
+
+| fonte | casos | pontuáveis | candidatos | carimbo da geração (20/08/2026) |
+|---|---|---|---|---|
+| `board` | 41 | 21 | 20 | `207/393` |
+| `fila` | 41 | 21 | 20 | `1787275126636-0` |
+| `mesa` | 15 | 8 | 7 | `i:169/7 p:e3b0c44298fc` |
+| `registro` | 41 | 21 | 20 | `arquitetura:a9b380b conhecimento:bda62dd` |
+| `wiki` | 19 | 10 | 9 | `rc:3015` |
+
+**`tem_gold` continua `False` nas seis, e é o certo.** O gerador produz CANDIDATO; quem
+torna a fonte calibrada é revisão humana do gabarito. Enquanto isso, `nao-calibrada` é o
+rótulo honesto do instrumento desligado (§13).
+
+**O caso `termo` sai despontuável de propósito.** Derivar o esperado do mesmo mecanismo que
+o gold vai julgar é escrever o gabarito com a prova aberta. `resposta_certa: ausente` não é
+gerável: é juízo sobre o corpus, e o §13 já o atribui a gabarito de autor.
+
+### Dois defeitos que o gold achou, e é para isso que ele serve
+
+- **Mesa lia coluna que não existe.** `feito_em` contra `esvaziado_em` no esquema vivo. O
+  `UndefinedColumn` virava `sem-rota`: a mesa aparecia **caída com o Postgres de pé**, e
+  nada acusava. Corrigido; os sete itens vivos voltaram.
+- **Carimbo da mesa cobria uma metade só.** Era o digest das chaves do Valkey, hoje vazias
+  — logo `e3b0c44298fc`, o sha do vazio, **constante** enquanto a mesa mudava. Com a chave
+  do §9 isso serve mesa velha para sempre. Agora `i:<max(id)>/<contagem> p:<digest>`: as
+  duas metades, e metade muda vira `?` em vez de fingir que não mudou.
+- **Origem do gold carimbava com uma segunda chamada.** `AdaptadorFila._carimbo()` sem alvo
+  devolve `0-0` por desenho, e 41 casos da caixa viva saíram carimbados assim. O carimbo
+  agora é o da busca que gerou os casos — o §13 exige congelar por versão, e versão falsa
+  faz duas coleções diferentes parecerem a mesma.
