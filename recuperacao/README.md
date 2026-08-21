@@ -26,7 +26,8 @@ Não entra aqui: roteamento e tabela `fonte` (#2304) e gate (F3).
 
 ```
 # da raiz do repo; precisa de `tokenizers` e `pyyaml`
-python3 -m pytest recuperacao/ politica-acesso/ -q     # 182 testes, 20/08/2026
+~/AI/.venv-testes/bin/python -m pytest recuperacao/ politica-acesso/ -q   # 349 passed, 2 skipped (21/08/2026)
+# `python3` do host NAO tem pytest, e `.venv-harness` nao existe: o interpretador com a suite e `.venv-testes`.
 ```
 
 ## Medição — 20/08/2026, tokenizador `qwen2.5.json` (vocab 151.643)
