@@ -17,9 +17,10 @@ adaptadores, no F1.
 | `disjuntor.py` | `Disjuntor` por fonte e `Painel`, com estado observável |
 | `adaptadores/` | núcleo + registro, fila, mesa (#2298), wiki (#2301), acervo (#2302) e board (#2300) |
 | `pep.py` | PEP por fonte: decide, nega o pedido inteiro, monta a recusa (F1, #2303) |
+| `cache.py` | chave por fonte, TTL por classe e `rec:stat:<fonte>` (F2, #2308) |
 | `test_contrato_*.py` | 85 testes; o gatilho é `.github/workflows/recuperacao-tests.yml` |
 
-Não entra aqui: roteamento e tabela `fonte` (#2304), cache (F2) e gate (F3).
+Não entra aqui: roteamento e tabela `fonte` (#2304) e gate (F3).
 
 ```
 # da raiz do repo; precisa de `tokenizers` e `pyyaml`
@@ -345,3 +346,67 @@ recorte que o `registro` faz sobre `listdir`, e nenhum estado novo é derivado.
 **Conformidade contra o rastreador vivo, e ela roda:** o conjunto de ids do adaptador bate
 com o de `tarefas listar --cadeira claudinho-IA --estado priorizada`, e dois `GET`
 seguidos não movem o carimbo — o aceite do #2307 conferido do lado do consumidor.
+
+## F2 · card #2308 — chave por fonte e `rec:stat`
+
+`rec:<fonte>:<carimbo>:<sha256(alvo NFC/trim · filtros canonizados · k · texto)[:16]>`, no
+`motor-cache` (`127.0.0.1:6381`, `allkeys-lru`, 1 GB, sem AOF — #2306). **Uma linha por
+FONTE:** o envelope é montado de N linhas, e board volátil não derruba cache de acervo
+estável. Cache por envelope teria taxa de acerto de envelope, que é o produto das taxas.
+
+**`sujeito` não entra na chave, e diverge da forma sugerida na carta de claudinho-TI**
+(`rec:<fonte>:<sujeito>:<carimbo>`, 20/08/2026). O §9 é explícito e a decisão é minha: o
+PEP roda por fonte ANTES do lookup, e o cache guarda resposta da fonte, nunca decisão de
+acesso. Sujeito na chave não é só espaço desperdiçado — é a forma de esquecer que o PEP
+precisa rodar antes, porque a chave passa a *parecer* segura sozinha.
+
+**`k` e `texto` entram no hash.** A mesma pergunta com `k=3` e com `k=8` devolve conteúdo
+diferente; servir um pelo outro seria o cache mentindo dentro do contrato.
+
+**A invalidação é chave nova mais LRU, sem varredura.** Carimbo novo produz chave nova, e
+a velha é despejada por pressão — `notify-keyspace-events` está desligado de propósito, e
+não há assinante de expiração neste desenho.
+
+### O que NÃO se cacheia, e por quê
+
+| caso | decisão |
+|---|---|
+| fonte caída (`fonte-nao-indexada`) | não grava — TTL transformaria 1 s de queda em 60 s de fonte morta |
+| resposta vazia | **grava** — vazia é resposta da fonte, e o carimbo já a protege |
+| carimbo indisponível | vai à fonte sem cache: chave com carimbo falso serviria board velho para sempre |
+| valor de contrato velho ou corrompido | apaga e trata como miss — o construtor vivo é quem julga a linha |
+
+### Acervo — desligado, e é o §9
+
+A pré-condição é a ordem `#167 → #283 → cache`, e os dois estão **em lapidação** com
+claudinho-dados (medido em 20/08/2026). Cache antes de `abrir_impressao` idempotente por
+sha mede o bug, não o produto. `PF_CACHE_ACERVO=1` liga na bancada, nomeado.
+
+A validação no hit já está escrita e liga junto: a chave do acervo não carrega carimbo — o
+que invalidaria o acervo inteiro a cada re-corte de uma obra —, e cada `impressao.id`
+citada é conferida contra `rec:aposentadas` (`SISMEMBER`, N ≈ 8 por hit). `SISMEMBER` que
+não responde **reprova o hit**: não saber se a impressão ainda serve é motivo para
+rebuscar, nunca para servir.
+
+### `rec:stat:<fonte>` — HASH, `HINCRBY`, quatro campos
+
+`hit`, `miss`, `bytes`, `idade`. `idade` é **soma em segundos**; a média por hit é
+`idade / hit`, e guardar a soma é o que o `HINCRBY` faz sem corrida. Fonte nunca
+consultada devolve os quatro campos zerados em vez de faltar: `{}` e "nenhum hit" são
+indistinguíveis, e é justamente o hit rate que decide o cache semântico depois.
+
+A medida nunca derruba a leitura — cache mudo perde o contador, não a resposta.
+
+### Medido no Valkey vivo, 20/08/2026
+
+| fonte | hit | leitura direta | o que isso diz |
+|---|---|---|---|
+| `board`, chave exata | **6,0 ms** | 23,7 ms | ~4× |
+| `registro`, chave exata | **2,9 ms** | 3,4 ms | empate |
+
+**O carimbo come o ganho nas fontes baratas, e o número mostra isso.** O hit ainda paga
+`_carimbo()` — `GET /api/carimbo` no board (~5 ms), dois `git rev-parse` no registro
+(~2,5 ms) —, porque o carimbo está NA chave e é ele que faz a invalidação existir. No
+registro isso empata com ler a fonte inteira. Não é defeito do cache: é a conta de onde
+ele paga, e o que decide se vale a pena por fonte é a série de `rec:stat`, que começa
+agora. Cachear o carimbo seria cachear o invalidador — e aí nada mais invalida.
