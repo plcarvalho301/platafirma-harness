@@ -1227,7 +1227,7 @@ def conferir_superficie(alvo=None, staged=False, como_json=False):
     claude.ai nao e verificavel daqui, e isso sai declarado — nao confundir
     "nao medido" com "em dia".
     """
-    registro = os.path.join(HARNESS, "registro", "superficies.json")  # arq:0073: dado saiu de tool-manifest/
+    registro = os.path.join(HARNESS, "registro", "superficies.json")  # arq:0073: dado agora em registro/
     try:
         with open(registro, encoding="utf-8") as f:
             reg = json.load(f)

@@ -1,0 +1,18 @@
+# CODEOWNERS — propriedade por GLOB DE NOME, não por diretório (arq:0073 §1).
+# Três donos convivem no mesmo diretório de chapéu porque a unidade de leitura é o
+# chapéu, não a pasta. O tombamento (arq:0073) unificou a morada em abertura/.
+
+# Ferramental (L2) — TI em toda cadeira; e o ofício comum.
+**/ferramental.md            @claudinho-TI
+abertura/oficio.md           @claudinho-TI
+
+# Persona e chapéu — gestão estratégica (redação de persona/RH).
+**/persona.md                @claudinha-gestao-estrategica
+**/chapeu.md                 @claudinha-gestao-estrategica
+abertura/dono.md             @claudinha-gestao-estrategica
+abertura/arranque.md         @claudinha-gestao-estrategica
+abertura/antirreabertura.md  @claudinha-gestao-estrategica
+
+# Caderno — a própria cadeira (memória de quem senta nela). O glob de nome não
+# expressa "a cadeira dona": a regra vale por leitura, não por reviewer fixo.
+**/caderno.md                # dono: a própria cadeira
