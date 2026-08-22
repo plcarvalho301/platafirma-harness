@@ -43,6 +43,13 @@ RAIZ = os.environ.get("PF_RAIZ", os.path.expanduser("~/AI"))
 HARNESS = os.path.join(RAIZ, "platafirma-harness")
 PECAS = os.path.join(HARNESS, "registro", "pecas")
 PERSONAS = os.path.join(HARNESS, "personas")
+CHAPEUS_DIR = os.path.join(PERSONAS, "chapeus")
+# O modulo de codigo `recuperacao` vem do REPO REAL (via __file__), nunca do PF_RAIZ:
+# o contrato monta o script sob um PF_RAIZ hermetico que nao tem este pacote.
+_REPO_REAL = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, _REPO_REAL)
+from recuperacao import roteador_chapeu as _rot
+
 SESSAO_ENV = os.path.join(HARNESS, "sessao", ".env")
 
 # Clones que a abertura pode tocar. arq:0058 (E1) manda a abertura ler UM repositorio:
@@ -302,7 +309,7 @@ def cadeiras_validas():
                   if n.startswith("persona-") and n.endswith(".md"))
 
 
-def monta(cadeira, atualizar):
+def monta(cadeira, atualizar, pergunta=None, forcado_chapeu=None):
     p_persona = os.path.join(PERSONAS, f"persona-{cadeira}.md")
     if not os.path.isfile(p_persona):
         return {"erro": f"nao existe persona para '{cadeira}'",
@@ -353,6 +360,26 @@ def monta(cadeira, atualizar):
         avisos.append(f"linha 1 de {p_persona} não casa 'Você é <nome>' — nome canônico "
                       "não resolvido, fila não localizada")
 
+    # ---- P2 passo 2: responde "qual chapeu?" DENTRO da montagem (recursao) ----
+    # (a) deterministico -> (b) semantico -> (c) fallback. So dobra o chapeu quando decide.
+    dec = _rot.escolhe(pergunta, cadeira, CHAPEUS_DIR, forcado=forcado_chapeu)
+    roteador = {"via": dec.via, "motivo": dec.motivo, "acertos": dec.acertos, "slug": dec.slug}
+    chapeu_env = None
+    if dec.slug:
+        env_c, texto_c = serve_chapeu(cadeira, dec.slug)
+        env_c["conteudo"] = texto_c
+        env_c["peca"] = f"chapeu:{dec.slug}"
+        servidas.append(env_c)
+        chapeu_env = env_c
+        if env_c.get("frescor") == "indisponivel":
+            avisos.append(f"chapeu `{dec.slug}` roteado mas indisponivel: {env_c.get('motivo')}")
+        elif env_c.get("motivo"):
+            avisos.append(f"chapeu `{dec.slug}`: {env_c['motivo']}")
+    else:
+        # (c): a sessao sobe SEM chapeu; a pergunta do P2 vai declarada, o modelo escolhe e
+        # reentra com --chapeu. Nao e erro: e o ramo minoritario que o P2 preve.
+        avisos.append(f"chapeu nao roteado (fallback): {dec.motivo} -- chapeus: {_rot and [r.slug for r in _rot.rotas_do_disco(cadeira, CHAPEUS_DIR)]}")
+
     montador_sha = (estado_repos.get("platafirma-harness") or {}).get("sha")
     return {
         "cadeira": cadeira,
@@ -367,6 +394,8 @@ def monta(cadeira, atualizar):
             "registro": registra_pacote(cadeira, servidas, montador_sha),
         },
         "pecas": servidas,
+        "chapeu": (chapeu_env["slug"] if chapeu_env else None),
+        "roteador": roteador,
         "avisos": avisos,
     }
 
@@ -481,6 +510,8 @@ def main():
     # aqui continua sendo `expediente`.
     p.add_argument("--chapeus", action="store_true",
                    help="lista os chapeus da cadeira, por descoberta no disco")
+    p.add_argument("--pergunta", metavar="TEXTO",
+                   help="o turno do dono; roteia o chapeu por (a)/(b), senao cai no fallback (c)")
     p.add_argument("--chapeu", metavar="SLUG",
                    help="serve UM chapeu da cadeira (sob demanda, fora da abertura)")
     args = p.parse_args()
@@ -504,7 +535,7 @@ def main():
     if args.chapeus or args.chapeu:
         return imprime_chapeu(alvo, args)
 
-    pac = monta(alvo, atualizar=not args.sem_atualizar)
+    pac = monta(alvo, atualizar=not args.sem_atualizar, pergunta=args.pergunta)
     if args.json:
         print(json.dumps(pac, ensure_ascii=False))
         return 1 if "erro" in pac else 0
