@@ -13,10 +13,9 @@ que a coluna existe, e só então recriar o contêiner.
   (`docker-entrypoint-initdb.d`); banco já vivo recebe o mesmo arquivo por
   `docker exec -i <db> psql -v ON_ERROR_STOP=1 -q < sql/NNN.sql`. Por isso tudo lá é
   idempotente — e por isso um buraco na numeração não quebra nada.
-- **`deploy <stack> promover` não serve a toda stack.** Ele exige worktree de deploy em
-  HEAD destacado; stack que aponta para o CLONE DE TRABALHO (rastreador, acervo-api, chat,
-  jaiminho) recusa por desenho, e a promoção dela é `docker compose up -d --build` no
-  próprio clone. Ver `registro/stacks.json`, campo `_nota`.
+- **`deploy <stack> promover` não serve a toda stack.** Exige worktree de deploy em HEAD
+  destacado; stack apontada para o clone de trabalho recusa por desenho — quais, e a
+  promoção alternativa, em `registro/stacks.json`, campo `_nota`.
 
 ## Config de CLI de terceiro não se confere lendo o arquivo (medido 16/08)
 
@@ -88,3 +87,30 @@ denied** para unit que é symlink: o systemd quer escrever na *raiz* de
   `disabled`. Sobrevive a crash e morre no boot, calada.
 - **`is-active` não responde por `is-enabled`.** Serviço no ar há semanas pode
   nunca ter voltado de um boot — ninguém reinicia a máquina para descobrir.
+
+## Rota isenta no gate remove o cadeado, não cria conteúdo (medido 17/08)
+
+Tudo aqui saiu de tentar tirar `wiki.platafirma.org` da categoria
+`insufficient-content` do PAN-DB, que bloqueia hostname servindo só redirect de login.
+
+- **O `robots.txt` dos gateados é do oauth2-proxy, não da aplicação.** Ele serve
+  `/robots.txt` embutido, sem autenticar, com `Disallow: /`. Não há arquivo a editar:
+  só se corrige interceptando antes do proxy.
+- **`--skip-auth-route` só remove o gate.** Se o upstream não tem o arquivo, o isento
+  expõe o erro dele: no MediaWiki, `/favicon.ico` liberado devolve 301 para a página
+  principal, que volta ao gate. Quem serve favicon de verdade é nginx com arquivo em
+  disco. Antes de isentar rota, conferir que o upstream tem o que servir.
+- **`deploy <stack> acessos` reporta pela stack onde o gate MORA**, não pela que ele
+  serve: os gates de wiki, harness, tarefas e docs moram todos no `core`. Perguntar à
+  stack servida devolve "nenhuma superficie gateada declarada", que parece ausência
+  de gate e não é.
+- **Não há wildcard DNS no domínio.** Hostname novo custa um CNAME para
+  `<tunnel-id>.cfargotunnel.com` no dashboard da Cloudflare — o host não tem cert nem
+  token de API para criá-lo, então esse passo é sempre do dono. O ingress do
+  cloudflared, esse sim, casa por path (regex), e é por ele que se roteia `/` para
+  outra origem sem tocar no gate.
+- **`deploy <stack> up` de stack grande estoura o timeout do connector e para no meio.**
+  Deixou o serviço novo de pé e o cloudflared não recriado — silenciosamente, porque o
+  erro que volta é o do connector, não o do deploy. Para mudança cirúrgica:
+  `docker compose up -d --no-deps <serviço>`, e conferir um a um o que precisava
+  reiniciar.
