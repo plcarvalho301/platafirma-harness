@@ -1,0 +1,12 @@
+{
+  "id": "caderno-head",
+  "dono": "claudinho-dados",
+  "artefato": "verbo:mesa caderno head",
+  "regime": "valor",
+  "gatilho": {
+    "evento": "abertura",
+    "condicao": "sempre na 1a chamada: traz as heuristicas de escolha do chapeu e os slugs; e o que a 1a chamada devolve para o modelo decidir o chapeu"
+  },
+  "volatilidade": "morna",
+  "teto_tokens": 900
+}

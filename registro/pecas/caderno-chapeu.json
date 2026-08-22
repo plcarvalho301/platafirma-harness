@@ -1,0 +1,12 @@
+{
+  "id": "caderno-chapeu",
+  "dono": "claudinho-dados",
+  "artefato": "verbo:mesa caderno {chapeu}",
+  "regime": "valor",
+  "gatilho": {
+    "evento": "chapeu",
+    "condicao": "sempre na 2a chamada: o caderno do chapeu ativo, onde o papel na org entra (P2 2a item c)"
+  },
+  "volatilidade": "volatil",
+  "teto_tokens": 1200
+}

@@ -4,7 +4,7 @@
   "artefato": "verbo:mesa ver",
   "regime": "valor",
   "gatilho": {
-    "evento": "abertura",
+    "evento": "chapeu",
     "condicao": "sempre: residuo da fita anterior, com ato pendente por chapeu"
   },
   "volatilidade": "volatil",

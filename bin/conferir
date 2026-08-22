@@ -1908,9 +1908,9 @@ def _peca_ref_resolve(ref):
         return "forma invalida: use '<repo>@<path>' ou 'verbo:<comando>'"
     repo, _, path = ref.partition("@")
     if "{" in path:
-        resto = re.sub(r"\{cadeira\}", "*", path)
+        resto = re.sub(r"\{cadeira\}|\{chapeu\}", "*", path)
         if "{" in resto:
-            return "placeholder desconhecido: so {cadeira} e admitido"
+            return "placeholder desconhecido: so {cadeira} e {chapeu} sao admitidos"
         import glob as _glob
         if not _glob.glob(os.path.join(RAIZ, repo, resto)):
             return f"nenhum arquivo casa {repo}@{path}"

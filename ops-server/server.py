@@ -581,7 +581,7 @@ def _memoria(cadeira: str) -> dict:
     return out
 
 
-def _montar(cadeira: str, atualizar: bool) -> dict:
+def _montar(cadeira: str, atualizar: bool, chapeu: str = "") -> dict:
     """Delega ao verbo `bin/monta-sessao --json`, que monta por catálogo (#189 fase 5).
 
     Aqui havia uma SEGUNDA implementação da montagem: este servidor lia persona, org e
@@ -601,6 +601,8 @@ def _montar(cadeira: str, atualizar: bool) -> dict:
     argv = [str(RAIZ / "bin" / "monta-sessao"), alvo, "--json"]
     if not atualizar:
         argv.append("--sem-atualizar")
+    if chapeu:
+        argv += ["--chapeu", chapeu.strip()]
     try:
         proc = subprocess.run(argv, capture_output=True, text=True, timeout=90,
                               env={**_env_subprocesso(), "PF_SUPERFICIE": "claude.ai"})
@@ -632,52 +634,49 @@ def _montar(cadeira: str, atualizar: bool) -> dict:
     return r
 
 
-async def monta_sessao(cadeira: str = "", atualizar: bool = True) -> dict:
-    """Devolve, numa chamada, o contexto de abertura de uma cadeira da PlataFirma:
-    persona canônica, tool-manifest que ELA declara, org canônico e a mesa.
+async def monta_sessao(cadeira: str = "", atualizar: bool = True, chapeu: str = "") -> dict:
+    """Contexto de abertura de uma cadeira da PlataFirma, em DUAS CHAMADAS
+    (refactor F5/#2386, docs/abertura-de-sessao/abertura-novo-pedro/P2). Substitui a
+    chamada única que despejava todas as peças de abertura de uma vez.
 
-    NÃO traz fila nem board. A abertura carrega só o que é impedimento — o que, sem
-    ato, deixa o estado como está —, e hoje isso é a mesa. Caixa e carteira saem por
-    `fila` e `tarefas`, verbos chamados por ordem do dono como qualquer outro.
+    1ª chamada — monta_sessao(cadeira): persona, ofício (núcleo comum), dono (conduta),
+    caderno-head, org, catálogo de existência, índice de cadernos. DEVOLVE OS SLUGS DE
+    CHAPÉU em `chapeus_disponiveis` e termina numa pergunta: qual chapéu vestir. Sem o
+    chapéu a sessão ainda não trabalha — faltam manifesto da cadeira, caderno do chapéu,
+    risco e mesa.
 
-    Chamar no lugar de encadear leituras na abertura de sessão — é o que esta tool
-    existe para matar. Ler o manifesto NÃO é pré-condição para pensar nem para
-    responder: a tool é chamável sob demanda, não obrigatória na entrada.
+    2ª chamada — monta_sessao(cadeira, chapeu=<slug>): chapéu, tool-manifest da cadeira,
+    caderno do chapéu, risco (matriz de risco — substitui a antiga antirreabertura) e a
+    mesa. DEVOLVE A FITA. A instrução de arranque manda responder a pergunta da 1ª antes
+    de qualquer outra coisa.
 
-    `cadeira`: sufixo da persona (`TI`, `IA`, `fabrica`) — o prefixo `claudinho-`/
-    `claudinha-` é aceito e descartado. Vazia ou desconhecida devolve `cadeiras`
-    com a lista válida, nunca erro mudo.
+    Por que duas: chapéu não se pré-carrega — só a 2ª chamada sabe qual foi escolhido, e
+    carregar os três seria contexto gasto em dois que a sessão não vai usar. A fase é
+    dirigida por `gatilho.evento` no catálogo (`abertura` / `chapeu`), não por lista fixa.
 
-    `atualizar` (default true): dá `git pull --ff-only` nos clones de persona e org
-    antes de ler. Falha de rede não interrompe — o pacote vem do clone com
-    `atualizado: false` declarado. Com ou sem pull, `repos` traz sempre `sha`,
-    `head_em` (data do commit servido) e `sincronizado_em` (último fetch): clone
-    velho e clone no head são indistinguíveis sem isso, e servir do clone só é
-    seguro quando a idade vem declarada.
+    `cadeira`: sufixo da persona (`TI`, `IA`) — prefixo `claudinho-`/`claudinha-` aceito
+    e descartado. Vazia ou desconhecida devolve `cadeiras`, nunca erro mudo.
 
-    O pacote sai como CATÁLOGO DE PEÇAS (#189 fase 5): `pecas` é uma lista em ordem de
-    injeção, e cada item traz `{peca, dono, ref, sha, regime, tokens, frescor}` mais o
-    conteúdo servido. Persona, tool-manifest da cadeira, núcleo comum, org, antirreabertura,
-    mesa e índice de cadernos são peças — não há mais uma chave por artefato. Peça que falta
-    vem com `frescor: indisponivel` e o motivo, nunca omitida: pacote sem a peça e pacote
-    com peça vazia seriam indistinguíveis.
+    `chapeu`: slug do chapéu para a 2ª chamada. Ausente ou desconhecido devolve
+    `chapeus_disponiveis`, nunca erro mudo. Só tem efeito na 2ª chamada.
 
-    `pacote` traz a conta do que foi servido — número de peças, tokens medidos com o
-    tokenizador do harness, método da contagem e o SHA do clone do montador — e diz se o
-    registro em `sessao.peca_servida` aconteceu. `avisos` traz teto estourado, clone
-    atrasado e divergência entre o que a persona declara e o que o catálogo serve.
+    `atualizar` (default true): `git pull --ff-only` nos clones antes de ler. Falha de
+    rede não interrompe — `repos` traz `sha` e `frescor` do clone servido.
 
-    Persona sem linha `FERRAMENTAL:` devolve `manifesto.ausente` com aviso explícito.
-    Ausência declarada, nunca omissão silenciosa. Sem caso vivo hoje: o exemplo que
-    morava aqui era a claudinha-osint, desligada em 15/08/2026 (org:0002).
+    O pacote sai como CATÁLOGO DE PEÇAS: `pecas` é lista em ordem de injeção
+    (estável→volátil dentro da fase), cada item com `{peca, dono, ref, sha, regime,
+    tokens, frescor}` mais o conteúdo. Peça que falta vem `frescor: indisponivel` com o
+    motivo, nunca omitida — pacote sem a peça e pacote com peça vazia seriam
+    indistinguíveis. `pacote` traz a conta do servido e o registro em `sessao`. `avisos`
+    traz teto estourado, clone atrasado e divergência persona×catálogo.
     """
     negado = _autoriza("monta_sessao", "monta_sessao", "documento",
                        f"sessao:{cadeira or '-'}", DOM_PLATAFORMA)
     if negado:
         return negado
     t0 = time.monotonic()
-    r = await anyio.to_thread.run_sync(_montar, cadeira, atualizar)
-    _audit(tool="monta_sessao", cadeira=cadeira, atualizar=atualizar,
+    r = await anyio.to_thread.run_sync(_montar, cadeira, atualizar, chapeu)
+    _audit(tool="monta_sessao", cadeira=cadeira, atualizar=atualizar, chapeu=chapeu,
            resolvida=r.get("nome_canonico"), erro=r.get("erro"),
            dur_ms=round((time.monotonic() - t0) * 1000))
     return r

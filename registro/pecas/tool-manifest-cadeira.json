@@ -4,7 +4,7 @@
   "artefato": "platafirma-harness@tool-manifest/{cadeira}.md",
   "regime": "valor",
   "gatilho": {
-    "evento": "abertura",
+    "evento": "chapeu",
     "condicao": "sempre: conectores, verbos proprios e armadilhas de ferramenta da cadeira. Cadeira FORA DO QUADRO nao recebe `tool-manifest-geral`, entao o manifesto dela absorve tambem o indice comum — o teto e a soma dos dois (900+1200)"
   },
   "volatilidade": "estavel",

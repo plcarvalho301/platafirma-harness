@@ -1,33 +1,47 @@
 #!/home/claudinho/AI/.venv-harness/bin/python
-# monta-sessao <cadeira> — monta o pacote de abertura A PARTIR DO CATALOGO.
+# monta-sessao <cadeira> [--chapeu <slug>] — monta o pacote de abertura A PARTIR DO CATALOGO.
 # capacidade: expediente
 # dono: claudinho-IA (politica de sessao) · claudinho-TI (montador)
 #
-# Fase 5 do card #189 (spec_montagem-de-sessao §4 e §6). O que mudou: as pecas nao
-# estao mais escritas aqui dentro. O montador le `registro/pecas/*.json`, serve o que
-# tem `gatilho.evento: abertura`, e nao sabe de antemao quais sao — peca nova entra
-# no pacote por commit no catalogo, sem tocar neste arquivo.
+# FLUXO DE DUAS CHAMADAS (docs/abertura-de-sessao/abertura-novo-pedro/P2 - monta-sessao.md,
+# refactor F5/#2386, card #2393). Substitui a chamada unica que despejava tudo de abertura.
+#
+#   1a  monta-sessao <cadeira>              serve gatilho.evento == "abertura"
+#       persona, oficio(tool-manifest-geral), dono(conduta-dono), caderno-head, e as demais
+#       de casa (org, catalogo-existencia, cadernos-indice). DEVOLVE OS SLUGS DE CHAPEU e
+#       termina numa pergunta: qual chapeu vestir. Sem chapeu a sessao ainda nao trabalha.
+#
+#   2a  monta-sessao <cadeira> --chapeu <slug>   serve gatilho.evento == "chapeu" + a mesa
+#       chapeu, tool-manifest-cadeira, caderno-chapeu, risco, catalogo-chapeu, `mesa ver`.
+#       DEVOLVE A FITA para o modelo.
+#
+# Por que a fase e dirigida por gatilho.evento, nao por lista hardcoded: peca nova entra
+# na fase certa por commit no catalogo (registro/pecas/*.json), sem tocar este arquivo. O
+# schema ja tinha o valor `chapeu` no enum de gatilho.evento — o refactor so passou a le-lo.
 #
 # ENVELOPE UNIFORME (§6.2): toda peca sai como
 #   {peca, dono, ref, sha, regime, tokens, frescor}
-# Era um shape por peca — persona com path+content, memoria com nota, fila com outro.
 # Sem envelope uniforme nao ha o que `conferir sessao` meca, e o orcamento de janela
 # continua sendo declaracao.
 #
-# ORDEM: estavel -> morna -> volatil (§4). Persona e manifesto primeiro, carimbo e
-# memoria por ultimo. Custo zero, e ganha cache de prefixo em todo giro.
+# ORDEM: estavel -> morna -> volatil (§4), DENTRO de cada fase. Custo zero, e ganha cache
+# de prefixo em todo giro. A ordem de negocio a-g do P2 e a ordem HUMANA de leitura do
+# desenho; a ordem SERVIDA continua por volatilidade, que e o que o cache premia. As duas
+# nao brigam: a de negocio agrupa por chamada (que a fase ja separa), a de volatilidade
+# ordena dentro da chamada.
 #
 # DUAS FORMAS DE ARTEFATO, as duas do catalogo:
 #   <repo>@<path>   lido do CLONE LOCAL, nunca do espelho de repo_read (E3/arq:0058)
 #   verbo:<comando> peca servida por execucao — mesa, cadernos, fila
+# Placeholders resolvidos no path e no comando: {cadeira} e {chapeu}.
 #
 # AUSENCIA SE DECLARA. Artefato que falta ou verbo que falha viram `frescor:
 # indisponivel` com o motivo, nunca peca vazia: as duas seriam indistinguiveis, e a
 # sessao abriria cega sem saber que esta cega.
 #
-# SHEBANG NO VENV: `mesa`, `fila` e `tarefas` ja moram nele, entao a abertura ja
-# dependia dele de fato. O registro do pacote em Postgres e OPCIONAL — falta de
-# psycopg ou banco mudo nao impede montar, so deixa de registrar, e isso e dito.
+# SHEBANG NO VENV: `mesa`, `fila` e `tarefas` ja moram nele. O registro do pacote em
+# Postgres e OPCIONAL — falta de psycopg ou banco mudo nao impede montar, so deixa de
+# registrar, e isso e dito.
 from __future__ import annotations
 
 import argparse
@@ -43,11 +57,10 @@ RAIZ = os.environ.get("PF_RAIZ", os.path.expanduser("~/AI"))
 HARNESS = os.path.join(RAIZ, "platafirma-harness")
 PECAS = os.path.join(HARNESS, "registro", "pecas")
 PERSONAS = os.path.join(HARNESS, "personas")
+CHAPEUS = os.path.join(PERSONAS, "chapeus")
 SESSAO_ENV = os.path.join(HARNESS, "sessao", ".env")
+TETO_CHAPEU = 2500  # personas/TEMPLATE-chapeu.md, medido no piloto rh.md
 
-# Clones que a abertura pode tocar. arq:0058 (E1) manda a abertura ler UM repositorio:
-# `platafirma-arquitetura` so aparece aqui se alguma peca ainda apontar para ele, e
-# quando nao aparecer mais o pull dele sai sozinho — nao ha lista a manter.
 ORDEM_VOLATILIDADE = {"estavel": 0, "morna": 1, "volatil": 2}
 # Fora do quadro: nao recebe `org/fronteiras.md` (quem decide o que dentro da casa),
 # so o endereco. Para fabrica e jaiminho e falta de vinculo; para politicas-publicas e
@@ -55,18 +68,21 @@ ORDEM_VOLATILIDADE = {"estavel": 0, "morna": 1, "volatil": 2}
 FORA_DO_QUADRO = os.environ.get(
     "PF_FORA_DO_QUADRO", "fabrica jaiminho politicas-publicas").split()
 
-def env_verbo(persona_ou_cadeira):
-    """Env da peca-verbo: PF_CADEIRA canonico + PATH explicito.
+
+def env_verbo(persona_ou_cadeira, chapeu=None):
+    """Env da peca-verbo: PF_CADEIRA canonico + PATH explicito (+ PF_CHAPEU na 2a fase).
 
     O PATH herdado NAO serve: quando o montador e chamado por um servico (ops-mcp,
     systemd --user), o ambiente do processo pai nao tem RAIZ/bin, e toda peca servida
-    por execucao morre com FileNotFoundError — mesa, cadernos e fila sairam vazias em
-    17/08 na superficie claude.ai, com a ausencia declarada e o pacote entregue mutilado.
+    por execucao morre com FileNotFoundError — mesa e cadernos sairam vazias em 17/08
+    na superficie claude.ai, com a ausencia declarada e o pacote entregue mutilado.
     Montar aqui, e nao no chamador, e o que faz o pacote ser o mesmo nas tres superficies.
     """
     casa = os.path.expanduser("~")
     e = dict(os.environ)
     e["PF_CADEIRA"] = persona_ou_cadeira
+    if chapeu:
+        e["PF_CHAPEU"] = chapeu
     e["PATH"] = f"{RAIZ}/bin:{casa}/.local/bin:" + os.environ.get("PATH", "")
     return e
 
@@ -87,32 +103,31 @@ def catalogo():
     return saida
 
 
-def de_abertura(pecas, cadeira):
-    """As pecas com gatilho de abertura, na ordem de injecao.
+def de_fase(pecas, cadeira, fase):
+    """As pecas de UMA fase (`abertura` ou `chapeu`), na ordem de injecao por volatilidade.
+
+    A fase le gatilho.evento diretamente: `abertura` na 1a chamada, `chapeu` na 2a.
+    A mesa e o unico caso especial — ela e IMPEDIMENTO e fecha a 2a chamada (P2 item f);
+    seu gatilho migrou para `chapeu` no catalogo, entao cai aqui naturalmente na 2a fase.
 
     Excecao nominal do dono (#161, opcao A): quem esta FORA DO QUADRO nao recebe o org
-    chart — a persona da fabrica declara nao conhece-lo. No lugar entra o mapa
+    chart na 1a fase — a persona da fabrica declara nao conhece-lo. No lugar entra o mapa
     alias -> slug, que e endereco e nao topologia de decisao.
-    
-    A abertura carrega IMPEDIMENTO: o que, sem ato, deixa o estado como esta. Hoje so
-    a mesa; incidente entra nessa classe quando existir. FILA E BOARD NAO ENTRAM —
-    sao verbos on-demand, chamados por ordem do dono como qualquer outro (#189, 17/08).
-    Peca com gatilho de abertura para caixa ou carteira e reincidencia: ja foi tirada
-    uma vez e voltou como contagem, que devolve a fila ao lugar da mesa pela saliencia.
+
+    A abertura carrega IMPEDIMENTO: o que, sem ato, deixa o estado como esta. FILA E BOARD
+    NAO ENTRAM — sao verbos on-demand, chamados por ordem do dono como qualquer outro
+    (#189, 17/08). Peca de abertura para caixa ou carteira e reincidencia.
     """
     fora = cadeira.lower() in [f.lower() for f in FORA_DO_QUADRO]
     por_id = {p.get("id"): p for p in pecas}
-    escolhidas = [p for p in pecas if (p.get("gatilho") or {}).get("evento") == "abertura"]
-    if fora:
-        # Tres pecas sao a casa por dentro, e nenhuma delas se poda por inferencia:
-        # `org` (quem decide o que), `antirreabertura` (mecanica de montagem de sessao) e
-        # `tool-manifest-geral` (o indice operacional — fila, deploy, infra, cards). Quem
-        # esta fora do quadro recebe SO o manifesto da propria cadeira, e a regra de
-        # fechamento vive na linha FERRAMENTAL da persona: fora da lista, nao chama.
-        # Decisao do dono, 17/08 — o custo e manifesto de cadeira que comeca incompleto,
-        # e a falta aparece como falta, na cara, em vez de vazar como excesso.
+    escolhidas = [p for p in pecas if (p.get("gatilho") or {}).get("evento") == fase]
+    if fora and fase == "abertura":
+        # `org` e `tool-manifest-geral` sao a casa por dentro; quem esta fora do quadro
+        # recebe SO o manifesto da propria cadeira (esse esta na 2a fase agora). A regra
+        # de fechamento vive na linha FERRAMENTAL da persona: fora da lista, nao chama.
+        # (antirreabertura saiu do catalogo — risco a substituiu, e vive na 2a fase.)
         escolhidas = [p for p in escolhidas
-                      if p.get("id") not in ("org", "antirreabertura", "tool-manifest-geral")]
+                      if p.get("id") not in ("org", "tool-manifest-geral")]
         alias = por_id.get("alias-cadeiras")
         if alias:
             escolhidas.append(dict(alias, _forcada="fora do quadro: org trocado por endereço"))
@@ -195,8 +210,13 @@ def sha_conteudo(texto):
     return hashlib.sha256(texto.encode("utf-8")).hexdigest()[:12]
 
 
-def serve(peca, cadeira, persona=None):
-    """Devolve (envelope, conteudo). Conteudo None quando indisponivel."""
+def serve(peca, cadeira, persona=None, chapeu=None):
+    """Devolve (envelope, conteudo). Conteudo None quando indisponivel.
+
+    Resolve os placeholders {cadeira} e {chapeu} tanto na forma arquivo quanto na verbo.
+    Peca da 2a fase que referencia {chapeu} sem chapeu dado e erro de chamada, nao de
+    catalogo — a 2a fase so roda com --chapeu, e o main garante isso.
+    """
     art = peca.get("artefato", "")
     env = {"peca": peca.get("id"), "dono": peca.get("dono"), "ref": art,
            "regime": peca.get("regime"), "volatilidade": peca.get("volatilidade"),
@@ -209,14 +229,17 @@ def serve(peca, cadeira, persona=None):
         env["motivo"] = peca["_inaplicavel"]
         return env, None
 
+    def resolve(s):
+        s = s.replace("{cadeira}", cadeira)
+        if chapeu:
+            s = s.replace("{chapeu}", chapeu)
+        return s
+
     if art.startswith("verbo:"):
-        cmd = art[len("verbo:"):].strip().replace("{cadeira}", cadeira)
+        cmd = resolve(art[len("verbo:"):].strip())
         try:
-            # PF_CADEIRA da peca-verbo e o NOME CANONICO, nao o sufixo: e ele que
-            # nomeia a caixa da fila e a chave da mesa. Foi a divergencia entre os dois
-            # que partiu a mesa em duas metades (medido em 16/08).
             p = subprocess.run(cmd.split(), capture_output=True, text=True, timeout=20,
-                               env=env_verbo(persona or cadeira))
+                               env=env_verbo(persona or cadeira, chapeu))
             texto = (p.stdout or "").strip()
             if p.returncode != 0:
                 env["motivo"] = (p.stderr or p.stdout).strip()[:200] or f"exit {p.returncode}"
@@ -234,7 +257,7 @@ def serve(peca, cadeira, persona=None):
         return env, None
 
     repo, path = art.split("@", 1)
-    path = path.replace("{cadeira}", cadeira)
+    path = resolve(path)
     env["ref"] = f"{repo}@{path}"
     _, frescor, motivo = sha_e_frescor(repo)
     env["motivo"] = motivo or env["motivo"]
@@ -252,9 +275,13 @@ def serve(peca, cadeira, persona=None):
 
 
 # ------------------------------------------------------------------ registro do pacote
-def registra_pacote(cadeira, envelopes, montador_sha):
+def registra_pacote(cadeira, envelopes, montador_sha, fase, chapeu=None):
     """Uma linha por peca servida (§6.6). Sem isto, orcamento de janela e declaracao.
-    Falha aqui NAO derruba a abertura: devolve o motivo, e o pacote sai mesmo assim."""
+    Falha aqui NAO derruba a abertura: devolve o motivo, e o pacote sai mesmo assim.
+
+    A fase entra na chave do pacote: as duas chamadas registram peca_servida separada,
+    para `conferir sessao` medir cada uma contra seu proprio orcamento-alvo.
+    """
     fid = (os.environ.get("PF_FITA") or "").strip()
     if not fid:
         return {"registrado": False, "motivo": "sem PF_FITA — sessao de mao nao tem fita"}
@@ -273,6 +300,9 @@ def registra_pacote(cadeira, envelopes, montador_sha):
     sup = os.environ.get("PF_SUPERFICIE", "").strip() or "desconhecida"
     if sup not in ("claude.ai", "chat", "code", "desconhecida"):
         sup = "desconhecida"
+    # A chave logica do pacote passa a ser (fita, fase): a 1a e a 2a chamada sao dois
+    # pacotes da mesma fita. `chave` distingue-as sem migrar o schema em si.
+    chave = f"{fid}:{fase}" + (f":{chapeu}" if chapeu else "")
     try:
         with psycopg.connect(dsn, connect_timeout=3) as con, con.cursor() as cur:
             cur.execute("INSERT INTO sessao.fita (id, persona, superficie) VALUES (%s,%s,%s) "
@@ -281,19 +311,32 @@ def registra_pacote(cadeira, envelopes, montador_sha):
                         "VALUES (%s,%s,%s) ON CONFLICT (fita_id) DO UPDATE SET "
                         "montado_em = now(), montador_sha = EXCLUDED.montador_sha, "
                         "tokens = EXCLUDED.tokens",
-                        (fid, montador_sha, sum(e["tokens"] for e in envelopes)))
+                        (chave, montador_sha, sum(e["tokens"] for e in envelopes)))
             cur.executemany(
                 "INSERT INTO sessao.peca_servida (fita_id, peca, ordem, ref, sha, regime, "
                 "tokens, frescor) VALUES (%s,%s,%s,%s,%s,%s,%s,%s) "
                 "ON CONFLICT (fita_id, peca) DO UPDATE SET ordem = EXCLUDED.ordem, "
                 "ref = EXCLUDED.ref, sha = EXCLUDED.sha, tokens = EXCLUDED.tokens, "
                 "frescor = EXCLUDED.frescor",
-                [(fid, e["peca"], i, e["ref"], e["sha"], e["regime"], e["tokens"], e["frescor"])
+                [(chave, e["peca"], i, e["ref"], e["sha"], e["regime"], e["tokens"], e["frescor"])
                  for i, e in enumerate(envelopes)])
             con.commit()
-        return {"registrado": True, "fita": fid}
+        return {"registrado": True, "fita": fid, "fase": fase}
     except Exception as e:  # noqa: BLE001 — banco mudo nao pode derrubar a abertura
         return {"registrado": False, "motivo": f"{type(e).__name__}"}
+
+
+# ------------------------------------------------------------------ chapeus
+def chapeus_de(cadeira):
+    """Slugs no disco, por descoberta. Nao ha lista fixa: chapeu escrito por outra
+    cadeira aparece sem ninguem emendar codigo. Diretorio ausente e lista vazia, nao erro.
+    Ignora os `catalogo-*.md` — sao peca de catalogo do chapeu, nao chapeu."""
+    d = os.path.join(CHAPEUS, cadeira)
+    if not os.path.isdir(d):
+        return []
+    return sorted(n[:-3] for n in os.listdir(d)
+                  if n.endswith(".md") and not n.startswith(".")
+                  and not n.startswith("catalogo-"))
 
 
 # ------------------------------------------------------------------ montagem
@@ -302,13 +345,27 @@ def cadeiras_validas():
                   if n.startswith("persona-") and n.endswith(".md"))
 
 
-def monta(cadeira, atualizar):
+def monta(cadeira, atualizar, fase="abertura", chapeu=None):
+    """Monta o pacote de UMA fase. `abertura` = 1a chamada; `chapeu` = 2a chamada.
+
+    A 1a fase devolve `chapeus_disponiveis` e termina numa pergunta (qual vestir). A 2a
+    exige `chapeu` e serve as pecas do chapeu + a mesa.
+    """
     p_persona = os.path.join(PERSONAS, f"persona-{cadeira}.md")
     if not os.path.isfile(p_persona):
         return {"erro": f"nao existe persona para '{cadeira}'",
                 "procurado": p_persona, "cadeiras_validas": cadeiras_validas()}
 
-    pecas = de_abertura(catalogo(), cadeira)
+    if fase == "chapeu":
+        disponiveis = chapeus_de(cadeira)
+        if not chapeu:
+            return {"erro": "2a chamada exige --chapeu <slug>",
+                    "cadeira": cadeira, "chapeus_disponiveis": disponiveis}
+        if chapeu not in disponiveis:
+            return {"erro": f"chapeu '{chapeu}' nao existe para '{cadeira}'",
+                    "cadeira": cadeira, "chapeus_disponiveis": disponiveis}
+
+    pecas = de_fase(catalogo(), cadeira, fase)
     repos = sorted({p["artefato"].split("@", 1)[0] for p in pecas
                     if "@" in p.get("artefato", "")})
     estado_repos = pull(repos) if atualizar else {
@@ -324,7 +381,7 @@ def monta(cadeira, atualizar):
 
     servidas, avisos = [], []
     for peca in pecas:
-        env, conteudo = serve(peca, cadeira, nome)
+        env, conteudo = serve(peca, cadeira, nome, chapeu)
         env["conteudo"] = conteudo
         servidas.append(env)
         if env["frescor"] == "indisponivel":
@@ -335,27 +392,24 @@ def monta(cadeira, atualizar):
             avisos.append(f"peça `{env['peca']}` serviu {env['tokens']} tokens "
                           f"contra teto declarado de {env['teto_tokens']}")
 
-    # Divergencia entre o que a persona declara e o que o catalogo resolve nao se
-    # escolhe em silencio: as duas fontes existem, e a que discorda vira aviso.
-    declarado = None
-    for linha in texto_persona.splitlines():
-        mm = RE_FERRAMENTAL.match(linha)
-        if mm:
-            declarado = mm.group(1)
-            break
-    refs = {e["ref"] for e in servidas} | {e["ref"].replace("@", "/") for e in servidas}
-    if declarado and not any(r.endswith(declarado.split("/", 1)[-1]) for r in refs):
-        avisos.append(f"persona declara FERRAMENTAL: {declarado}, que o catálogo não serve "
-                      "na abertura — uma das duas está velha")
-    if not declarado:
-        avisos.append(f"{p_persona} não declara linha FERRAMENTAL:")
-    if not nome:
-        avisos.append(f"linha 1 de {p_persona} não casa 'Você é <nome>' — nome canônico "
-                      "não resolvido, fila não localizada")
+    # Divergencia persona x catalogo so se checa na 1a fase (a persona e peca de abertura).
+    if fase == "abertura":
+        declarado = None
+        for linha in texto_persona.splitlines():
+            mm = RE_FERRAMENTAL.match(linha)
+            if mm:
+                declarado = mm.group(1)
+                break
+        if not declarado:
+            avisos.append(f"{p_persona} não declara linha FERRAMENTAL:")
+        if not nome:
+            avisos.append(f"linha 1 de {p_persona} não casa 'Você é <nome>' — nome canônico "
+                          "não resolvido, fila não localizada")
 
     montador_sha = (estado_repos.get("platafirma-harness") or {}).get("sha")
-    return {
+    resultado = {
         "cadeira": cadeira,
+        "fase": fase,
         "nome_canonico": nome,
         "repos": estado_repos,
         "pacote": {
@@ -364,147 +418,96 @@ def monta(cadeira, atualizar):
             "metodo_tokens": medidor()[1],
             "montador_sha": montador_sha,
             "montado_em": int(time.time()),
-            "registro": registra_pacote(cadeira, servidas, montador_sha),
+            "registro": registra_pacote(cadeira, servidas, montador_sha, fase, chapeu),
         },
         "pecas": servidas,
         "avisos": avisos,
     }
+    if fase == "abertura":
+        # A 1a chamada TERMINA numa pergunta: qual chapeu. Este campo e a pergunta,
+        # e a instrucao de arranque (P1) manda responde-la antes de qualquer outra coisa.
+        resultado["chapeus_disponiveis"] = chapeus_de(cadeira)
+        resultado["proxima_chamada"] = (
+            f"monta_sessao(cadeira=\"{cadeira}\", chapeu=\"<slug>\") — "
+            "sem o chapeu faltam manifesto, caderno do chapeu, risco e mesa")
+    else:
+        resultado["chapeu"] = chapeu
+    return resultado
 
 
 def imprime_texto(pac):
     if "erro" in pac:
-        print(f"{pac['erro']} (procurado: {pac['procurado']})", file=sys.stderr)
-        print("cadeiras: " + " ".join(pac["cadeiras_validas"]), file=sys.stderr)
+        print(pac["erro"], file=sys.stderr)
+        if pac.get("procurado"):
+            print(f"(procurado: {pac['procurado']})", file=sys.stderr)
+        if pac.get("cadeiras_validas"):
+            print("cadeiras: " + " ".join(pac["cadeiras_validas"]), file=sys.stderr)
+        if pac.get("chapeus_disponiveis") is not None:
+            print("chapeus: " + (" ".join(pac["chapeus_disponiveis"]) or "(nenhum)"),
+                  file=sys.stderr)
         return 1
-    print(f"== cadeira: {pac['nome_canonico'] or '<nome não resolvido>'} ==")
+    cab = f"== cadeira: {pac['nome_canonico'] or '<nome não resolvido>'} · fase: {pac['fase']}"
+    if pac.get("chapeu"):
+        cab += f" · chapeu: {pac['chapeu']}"
+    print(cab + " ==")
     for e in pac["pecas"]:
-        cab = f"===== {e['peca']}: {e['ref']}"
+        h = f"===== {e['peca']}: {e['ref']}"
         if e["sha"]:
-            cab += f" @{e['sha']}"
-        cab += f" ({e['frescor']}, {e['tokens']} tokens) ====="
-        print(cab)
-        if e["conteudo"] is None:
-            print(f"(INDISPONÍVEL — {e['motivo']})")
-        else:
-            print(e["conteudo"].rstrip())
+            h += f" @{e['sha']}"
+        h += f" ({e['frescor']}, {e['tokens']} tokens) ====="
+        print(h)
+        print("(INDISPONÍVEL — " + str(e["motivo"]) + ")" if e["conteudo"] is None
+              else e["conteudo"].rstrip())
         print()
     for a in pac["avisos"]:
         print(f"(aviso: {a})")
+    if pac["fase"] == "abertura":
+        print(f"\n>> próxima chamada: {pac['proxima_chamada']}")
+        print(">> chapeus: " + (" ".join(pac["chapeus_disponiveis"]) or "(nenhum)"))
     reg = pac["pacote"]["registro"]
     if not reg.get("registrado"):
         print(f"(pacote não registrado: {reg.get('motivo')})")
     return 0
 
 
-CHAPEUS = os.path.join(PERSONAS, "chapeus")
-TETO_CHAPEU = 2500  # personas/TEMPLATE-chapeu.md, medido no piloto rh.md
-
-
-def chapeus_de(cadeira):
-    """Slugs no disco, por descoberta. Nao ha lista fixa: chapeu escrito por outra
-    cadeira aparece sem ninguem emendar codigo — e foi para isso que este verbo
-    existe. Diretorio ausente e lista vazia, nao erro."""
-    d = os.path.join(CHAPEUS, cadeira)
-    if not os.path.isdir(d):
-        return []
-    return sorted(n[:-3] for n in os.listdir(d)
-                  if n.endswith(".md") and not n.startswith("."))
-
-
-def serve_chapeu(cadeira, slug):
-    """Envelope + conteudo de UM chapeu. Ausente vem declarado, nunca omitido:
-    pacote sem a peca e pacote com peca vazia seriam indistinguiveis."""
-    caminho = os.path.join(CHAPEUS, cadeira, f"{slug}.md")
-    env = {"peca": f"chapeu:{slug}", "cadeira": cadeira, "slug": slug,
-           "ref": f"platafirma-harness@personas/chapeus/{cadeira}/{slug}.md",
-           "regime": "valor", "carga": "sob demanda", "teto_tokens": TETO_CHAPEU,
-           "sha": None, "tokens": 0, "frescor": "indisponivel", "motivo": None}
-    if not os.path.isfile(caminho):
-        env["motivo"] = f"nao existe: {caminho}"
-        env["chapeus_do_disco"] = chapeus_de(cadeira)
-        return env, None
-    texto = open(caminho, encoding="utf-8").read()
-    env["frescor"] = "fresco"
-    env["tokens"] = conta_tokens(texto)
-    env["sha"] = sha_conteudo(texto)
-    _, env["metodo_tokens"] = medidor()
-    if env["tokens"] > TETO_CHAPEU:
-        env["motivo"] = f"estourou o teto: {env['tokens']} > {TETO_CHAPEU}"
-    return env, texto
-
-
-def imprime_chapeu(cadeira, args):
-    if args.chapeus:
-        slugs = chapeus_de(cadeira)
-        if args.json:
-            print(json.dumps({"cadeira": cadeira, "chapeus": slugs,
-                              "carga": "monta-sessao <cadeira> --chapeu <slug>"},
-                             ensure_ascii=False))
-            return 0
-        if not slugs:
-            print(f"nenhum chapeu escrito para '{cadeira}' "
-                  f"(procurado: {os.path.join(CHAPEUS, cadeira)})", file=sys.stderr)
-            return 1
-        for s in slugs:
-            env, _ = serve_chapeu(cadeira, s)
-            print(f"{s}\t{env['tokens']} tokens\t{env['sha']}"
-                  + (f"\t{env['motivo']}" if env["motivo"] else ""))
-        return 0
-
-    env, texto = serve_chapeu(cadeira, args.chapeu)
-    if args.json:
-        print(json.dumps({"envelope": env, "conteudo": texto}, ensure_ascii=False))
-        return 0 if texto else 1
-    if not texto:
-        print(f"chapeu indisponivel: {env['motivo']}", file=sys.stderr)
-        if env.get("chapeus_do_disco"):
-            print("chapeus desta cadeira: " + " ".join(env["chapeus_do_disco"]),
-                  file=sys.stderr)
-        return 1
-    print(f"===== chapeu {cadeira}/{args.chapeu} @{env['sha']} "
-          f"({env['tokens']}/{TETO_CHAPEU} tokens) =====")
-    print(texto)
-    if env["motivo"]:
-        print(f"\naviso: {env['motivo']}", file=sys.stderr)
-    return 0
-
-
 def main():
     p = argparse.ArgumentParser(prog="monta-sessao",
-                                description="pacote de abertura da cadeira, montado por catálogo")
+                                description="pacote de abertura da cadeira, em duas chamadas, por catálogo")
     p.add_argument("cadeira", nargs="?")
     p.add_argument("--json", action="store_true")
     p.add_argument("--sem-atualizar", action="store_true")
-    # Chapeu NAO entra na abertura (spec_montagem-de-sessao §7): carrega sob demanda,
-    # no giro em que a linha ativa. Estas duas flags sao essa demanda, e por isso saem
-    # do mesmo verbo — a conta e um verbo por capacidade (arq:0037), e a capacidade
-    # aqui continua sendo `expediente`.
+    # A 2a chamada e a demanda do chapeu. --chapeus so lista os slugs (atalho de conferencia).
+    p.add_argument("--chapeu", metavar="SLUG",
+                   help="2a chamada: serve o chapeu + manifesto + caderno-chapeu + risco + mesa")
     p.add_argument("--chapeus", action="store_true",
                    help="lista os chapeus da cadeira, por descoberta no disco")
-    p.add_argument("--chapeu", metavar="SLUG",
-                   help="serve UM chapeu da cadeira (sob demanda, fora da abertura)")
     args = p.parse_args()
 
     if not args.cadeira:
         if args.json:
-            print(json.dumps({"erro": "uso: monta-sessao <cadeira>",
+            print(json.dumps({"erro": "uso: monta-sessao <cadeira> [--chapeu <slug>]",
                               "cadeiras_validas": cadeiras_validas()}, ensure_ascii=False))
             return 2
-        print("uso: monta-sessao <cadeira>", file=sys.stderr)
+        print("uso: monta-sessao <cadeira> [--chapeu <slug>]", file=sys.stderr)
         print("cadeiras: " + " ".join(cadeiras_validas()), file=sys.stderr)
         return 2
 
-    # Prefixo aceito e descartado: `claudinho-TI` e `TI` sao a mesma cadeira, e o nome
-    # do arquivo de persona e o sufixo.
+    # Prefixo aceito e descartado: `claudinho-TI` e `TI` sao a mesma cadeira.
     alvo = args.cadeira.strip()
     for prefixo in ("claudinho-", "claudinha-"):
         if alvo.lower().startswith(prefixo):
             alvo = alvo[len(prefixo):]
 
-    if args.chapeus or args.chapeu:
-        return imprime_chapeu(alvo, args)
+    if args.chapeus:
+        slugs = chapeus_de(alvo)
+        if args.json:
+            print(json.dumps({"cadeira": alvo, "chapeus": slugs}, ensure_ascii=False))
+            return 0
+        print("chapeus de %s: %s" % (alvo, " ".join(slugs) or "(nenhum)"))
+        return 0
 
-    pac = monta(alvo, atualizar=not args.sem_atualizar)
+    fase = "chapeu" if args.chapeu else "abertura"
+    pac = monta(alvo, atualizar=not args.sem_atualizar, fase=fase, chapeu=args.chapeu)
     if args.json:
         print(json.dumps(pac, ensure_ascii=False))
         return 1 if "erro" in pac else 0

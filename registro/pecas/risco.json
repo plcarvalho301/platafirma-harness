@@ -1,0 +1,12 @@
+{
+  "id": "risco",
+  "dono": "claudinha-gestao-estrategica",
+  "artefato": "platafirma-arquitetura@docs/abertura-de-sessao/abertura-novo-pedro/P4 - matriz-riscos.md",
+  "regime": "valor",
+  "gatilho": {
+    "evento": "chapeu",
+    "condicao": "ler antes de tratar risco: matriz de risco vivo. Fora da matriz e proposta de risco; proposta vetada nao e risco. Substitui o conceito de antirreabertura (P2 item d)"
+  },
+  "volatilidade": "morna",
+  "teto_tokens": 800
+}
