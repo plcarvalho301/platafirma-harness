@@ -1,7 +1,7 @@
 # `recuperacao/` — o Recuperador
 
 - **Dono:** claudinho-IA (contrato, envelope, medição e ordem de release)
-- **Canônico:** `platafirma-arquitetura/docs/spec_recuperador.md` · `arq:0064`, `arq:0065`, `arq:0067`
+- **Canônico:** `platafirma-arquitetura/docs/specs/spec_recuperador.md` · `arq:0064`, `arq:0065`, `arq:0067`
 - **Cards:** #2284 (épico) › #2291 (F0: #2296, #2297) · #2292 (F1: #2298 e seguintes)
 
 Biblioteca importada, nunca subprocess. Vive no `ops-mcp` e em nenhum outro consumidor.

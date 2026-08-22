@@ -13,7 +13,7 @@ por execução, decisão fechada nunca esvazia. Spec `montagem-de-sessao` §2.
 ## Montagem de sessão (card #189)
 
 - **Chapéu não é agente.** Não há subagente nem multiagente: chapéu é arquivo
-  apartado, carregado sob demanda. 16/08/2026 · `docs/spec_montagem-de-sessao.md` §7
+  apartado, carregado sob demanda. 16/08/2026 · `docs/specs/spec_montagem-de-sessao.md` §7
 - **Sem modos de abertura.** Modo é seletor de pré-carga; com gatilho declarado por
   peça, não sobra o que selecionar — e o modo teria de ser escolhido antes de
   existir a informação que o decidiria. 16/08/2026 · spec §4
