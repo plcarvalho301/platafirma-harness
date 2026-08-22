@@ -1,8 +1,5 @@
 {
-  "model": "opus",
-  "theme": "dark",
   "permissions": {
-    "defaultMode": "bypassPermissions",
     "allow": [
       "Bash(ls:*)",
       "Bash(cat:*)",
@@ -68,6 +65,9 @@
       "Read(//home/claudinho/.config/**)",
       "Read(//home/claudinho/.claude/.credentials.json)",
       "Bash(curl:*)"
-    ]
-  }
+    ],
+    "defaultMode": "bypassPermissions"
+  },
+  "model": "opus",
+  "theme": "dark"
 }
