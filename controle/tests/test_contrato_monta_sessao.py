@@ -14,6 +14,13 @@ dono (é verbo on-demand agora, não peça de abertura). O contrato novo mede o 
 de peças, não o pacote da fase 4; test_fila_nao_e_peca_de_abertura abaixo é o guarda
 de regressão desse ponto específico.
 
+DUAS CHAMADAS (docs/abertura-de-sessao/abertura-novo-pedro/P2, #2393): a 1ª,
+`monta-sessao <cadeira>`, serve só `gatilho.evento: abertura` e termina em
+`chapeus_disponiveis` + `proxima_chamada`; a 2ª, `--chapeu <slug>`, serve
+`gatilho.evento: chapeu` — o chapéu, o manifesto da cadeira, o caderno do chapéu, o
+risco e a mesa. A fixture abaixo espelha essa partição; os testes de cada fase medem
+que a outra NÃO vazou nela.
+
 Isolamento: catálogo, personas e repositório vivem sob um `PF_RAIZ` hermético (nunca
 ~/AI real). O script chama `git` de verdade — contra um bare local, sem rede — e o
 verbo `mesa` (`mesa ver` / `mesa caderno`) por subprocess: `env_verbo()` do próprio
@@ -49,7 +56,7 @@ case "$sub" in
     ;;
   caderno)
     case "${CADERNO_STUB_MODO:-ok}" in
-      ok) printf 'cadernos: nenhum (stub)\\n' ;;
+      ok) printf 'caderno %s (stub)\\n' "${2:-indice}" ;;
       falha) echo "mesa: caderno fora do ar (stub)" 1>&2; exit 1 ;;
     esac
     ;;
@@ -106,12 +113,18 @@ def _monta_raiz(tmp_path: Path, *, teto_tool_manifest: int = 2000) -> Path:
         _peca("persona", "platafirma-harness@personas/persona-{cadeira}.md", teto_tokens=2000),
         _peca("org", "platafirma-harness@org/fronteiras.md", volatilidade="morna", teto_tokens=900),
         _peca("tool-manifest-geral", "platafirma-harness@tool-manifest/nucleo.md", teto_tokens=1200),
-        _peca("antirreabertura", "platafirma-harness@registro/antirreabertura.md",
-              volatilidade="morna", teto_tokens=800),
-        _peca("tool-manifest-cadeira", "platafirma-harness@tool-manifest/{cadeira}.md",
-              teto_tokens=teto_tool_manifest),
-        _peca("mesa", "verbo:mesa ver", volatilidade="volatil", teto_tokens=250),
+        _peca("caderno-head", "verbo:mesa caderno head", volatilidade="morna", teto_tokens=900),
         _peca("cadernos-indice", "verbo:mesa caderno", volatilidade="volatil", teto_tokens=100),
+        # 2ª chamada — gatilho.evento: chapeu
+        _peca("chapeu", "platafirma-harness@personas/chapeus/{cadeira}/{chapeu}.md",
+              evento="chapeu", teto_tokens=2500),
+        _peca("tool-manifest-cadeira", "platafirma-harness@tool-manifest/{cadeira}.md",
+              evento="chapeu", teto_tokens=teto_tool_manifest),
+        _peca("risco", "platafirma-harness@registro/risco.md",
+              evento="chapeu", volatilidade="morna", teto_tokens=800),
+        _peca("caderno-chapeu", "verbo:mesa caderno {chapeu}",
+              evento="chapeu", volatilidade="volatil", teto_tokens=1200),
+        _peca("mesa", "verbo:mesa ver", evento="chapeu", volatilidade="volatil", teto_tokens=250),
         _peca("alias-cadeiras", "platafirma-harness@personas/alias-cadeiras.md",
               evento="ato", volatilidade="morna", teto_tokens=None, emenda="org"),
     ]
@@ -130,7 +143,11 @@ def _monta_raiz(tmp_path: Path, *, teto_tool_manifest: int = 2000) -> Path:
     _escreve(harness, "tool-manifest/nucleo.md", "# núcleo comum\n\nfixture.\n")
     _escreve(harness, "tool-manifest/teste.md", "# manifesto de teste\n\nferramental fixture.\n")
     _escreve(harness, "tool-manifest/fabrica.md", "# manifesto da fábrica\n\nferramental fixture.\n")
-    _escreve(harness, "registro/antirreabertura.md", "# antirreabertura\n\nfixture.\n")
+    _escreve(harness, "registro/risco.md", "# matriz de risco\n\nfixture.\n")
+    _escreve(harness, "personas/chapeus/teste/alfa.md", "# chapéu alfa\n\nfixture.\n")
+    _escreve(harness, "personas/chapeus/teste/beta.md", "# chapéu beta\n\nfixture.\n")
+    _escreve(harness, "personas/chapeus/teste/catalogo-alfa.md", "# catálogo, não chapéu\n")
+    _escreve(harness, "personas/chapeus/fabrica/devsecops.md", "# chapéu devsecops\n\nfixture.\n")
 
     stub = _escreve(raiz, "bin/mesa", MESA_STUB)
     stub.chmod(stub.stat().st_mode | stat.S_IEXEC | stat.S_IXGRP | stat.S_IXOTH)
@@ -207,9 +224,11 @@ def test_fila_nao_e_peca_de_abertura(raiz):
     assert "fila" not in dados
     assert "fila" not in {p["peca"] for p in dados["pecas"]}
     # O PAR POSITIVO, que o guarda de regressão sozinho não dá: provar que a fila saiu
-    # não prova que a MESA ficou. A abertura carrega impedimento, e hoje o impedimento é
-    # ela — se a peça sumir do catálogo, o pacote continua válido e ninguém percebe.
-    assert "mesa" in {p["peca"] for p in dados["pecas"]}
+    # não prova que a MESA ficou. A mesa é impedimento e fecha a 2ª chamada (P2 item f)
+    # — se a peça sumir do catálogo, o pacote continua válido e ninguém percebe.
+    fase2 = json.loads(_run(["teste", "--json", "--chapeu", "alfa"], raiz).stdout)
+    assert "fila" not in {p["peca"] for p in fase2["pecas"]}
+    assert "mesa" in {p["peca"] for p in fase2["pecas"]}
 
 
 def test_atualizado_reflete_flag_sem_atualizar(raiz):
@@ -220,16 +239,18 @@ def test_atualizado_reflete_flag_sem_atualizar(raiz):
 
 
 def test_fora_do_quadro_troca_org_por_alias_cadeiras(raiz):
-    """Cadeira fora do quadro (#161 opção A): org, antirreabertura e
-    tool-manifest-geral saem; alias-cadeiras entra forçado, mesmo tendo gatilho
-    `ato` (não `abertura`) — é a excepção nominal do dono, não inferência daqui."""
+    """Cadeira fora do quadro (#161 opção A): org e tool-manifest-geral saem da 1ª
+    chamada; alias-cadeiras entra forçado, mesmo tendo gatilho `ato` (não `abertura`)
+    — é a excepção nominal do dono, não inferência daqui. O manifesto da própria
+    cadeira continua, mas na 2ª chamada, como para todo mundo."""
     dados = json.loads(_run(["fabrica", "--json"], raiz).stdout)
     por_id = {p["peca"]: p for p in dados["pecas"]}
 
     assert "org" not in por_id
-    assert "antirreabertura" not in por_id
     assert "tool-manifest-geral" not in por_id
-    assert "tool-manifest-cadeira" in por_id  # manifesto da própria cadeira continua
+    assert "tool-manifest-cadeira" not in por_id  # 2ª chamada, não 1ª
+    fase2 = json.loads(_run(["fabrica", "--json", "--chapeu", "devsecops"], raiz).stdout)
+    assert "tool-manifest-cadeira" in {p["peca"] for p in fase2["pecas"]}
 
     assert "alias-cadeiras" in por_id
     assert por_id["alias-cadeiras"]["motivo"] == "fora do quadro: org trocado por endereço"
@@ -268,19 +289,20 @@ def test_peca_verbo_indisponivel_nao_derruba_o_pacote(raiz):
     """Peça-verbo fora do ar: `frescor: indisponivel` com motivo, conteúdo None
     — mas o resto do pacote (as outras peças) continua saindo. Indisponibilidade
     parcial nunca é falha do pacote inteiro nem stdout vazio."""
-    dados = json.loads(_run(["teste", "--json"], raiz, mesa_modo="falha").stdout)
+    dados = json.loads(_run(["teste", "--json", "--chapeu", "alfa"], raiz,
+                            mesa_modo="falha").stdout)
     por_id = {p["peca"]: p for p in dados["pecas"]}
     assert por_id["mesa"]["frescor"] == "indisponivel"
     assert por_id["mesa"]["motivo"]
     assert por_id["mesa"]["conteudo"] is None
-    assert por_id["org"]["frescor"] == "fresco"
+    assert por_id["chapeu"]["frescor"] == "fresco"
     assert dados["pacote"]["pecas"] == len(dados["pecas"])
     assert any("mesa" in a and "indisponível" in a for a in dados["avisos"])
 
 
 def test_peca_com_teto_excedido_gera_aviso(tmp_path):
     raiz = _monta_raiz(tmp_path, teto_tool_manifest=1)
-    dados = json.loads(_run(["teste", "--json"], raiz).stdout)
+    dados = json.loads(_run(["teste", "--json", "--chapeu", "alfa"], raiz).stdout)
     assert any("tool-manifest-cadeira" in a and "teto declarado" in a
                for a in dados["avisos"])
 
@@ -294,7 +316,48 @@ def test_sem_json_mantem_marcadores_de_texto(raiz):
     proc = _run(["teste"], raiz)
     assert proc.returncode == 0
     linhas = proc.stdout.splitlines()
-    assert linhas[0] == "== cadeira: ClaudinhoTeste =="
+    assert linhas[0] == "== cadeira: ClaudinhoTeste · fase: abertura =="
+    assert any(l.startswith(">> chapeus: alfa beta") for l in linhas)
     assert any(l.startswith("===== org: platafirma-harness@org/fronteiras.md")
                for l in linhas)
     assert "{" not in proc.stdout  # nada de JSON escapado por engano no texto solto
+
+
+
+# --- as duas chamadas (P2) ------------------------------------------------------
+
+
+def test_primeira_chamada_so_abertura_e_termina_na_pergunta_do_chapeu(raiz):
+    """1ª chamada: só `gatilho.evento: abertura`; nada do chapéu vaza; termina nos
+    slugs descobertos no disco (sem `catalogo-*.md`) e na próxima chamada."""
+    dados = json.loads(_run(["teste", "--json"], raiz).stdout)
+    assert dados["fase"] == "abertura"
+    ids = {p["peca"] for p in dados["pecas"]}
+    assert {"persona", "org", "tool-manifest-geral", "caderno-head", "cadernos-indice"} <= ids
+    assert not ids & {"chapeu", "tool-manifest-cadeira", "risco", "caderno-chapeu", "mesa"}
+    assert dados["chapeus_disponiveis"] == ["alfa", "beta"]
+    assert "chapeu=" in dados["proxima_chamada"]
+
+
+def test_segunda_chamada_serve_o_chapeu_e_resolve_o_placeholder(raiz):
+    """2ª chamada: o chapéu escolhido É peça servida (é a razão do fluxo existir),
+    `{chapeu}` resolve na forma arquivo e na forma verbo, e nada da 1ª vaza."""
+    dados = json.loads(_run(["teste", "--json", "--chapeu", "alfa"], raiz).stdout)
+    assert dados["fase"] == "chapeu"
+    assert dados["chapeu"] == "alfa"
+    por_id = {p["peca"]: p for p in dados["pecas"]}
+    assert set(por_id) == {"chapeu", "tool-manifest-cadeira", "risco", "caderno-chapeu", "mesa"}
+    assert por_id["chapeu"]["ref"] == "platafirma-harness@personas/chapeus/teste/alfa.md"
+    assert por_id["chapeu"]["frescor"] == "fresco"
+    assert "chapéu alfa" in por_id["chapeu"]["conteudo"]
+    assert por_id["caderno-chapeu"]["ref"] == "verbo:mesa caderno alfa"
+    assert "caderno alfa" in por_id["caderno-chapeu"]["conteudo"]
+    assert "chapeus_disponiveis" not in dados
+
+
+def test_segunda_chamada_com_chapeu_desconhecido_devolve_os_slugs(raiz):
+    proc = _run(["teste", "--json", "--chapeu", "gama"], raiz)
+    assert proc.returncode == 1
+    dados = json.loads(proc.stdout)
+    assert "gama" in dados["erro"]
+    assert dados["chapeus_disponiveis"] == ["alfa", "beta"]
