@@ -59,58 +59,24 @@ esse token por uma ponte para dar *uma* capacidade a um externo entrega todas.
   permissão negada — é superfície que não tem o que negar. E o segundo cadeado na
   política vale para o dia em que uma tool nova esquecer o corte do código.
 
-## Unit declarada no repo não é unit instalada (medido 15/08)
+## Unit de usuário: declarada não é instalada, instalada não é habilitada (medido 15/08)
 
-Arquivo `.service` versionado prova só que alguém escreveu a unit. Quem a subiu
-pode tê-la subido como **transient** (`systemd-run --user`): roda igual, aparece
-em `systemctl status` igual, e no dia em que for parada **evapora** — sem arquivo
-em disco, sem `Restart`, sem volta. O sintoma no serviço é silêncio, não erro.
+Três estados independentes, e o instrumento que mede um diz "convergido" sobre os
+outros dois. O sintoma de todos é silêncio, não erro.
 
-- **O que delata:** `Failed to open /run/user/<uid>/systemd/transient/<unit>` no
-  journal logo depois do stop. Antes disso, nada distingue transient de instalada.
-- **Instalada é symlink para o repo, nunca cópia.** Cópia congela: `git pull`
-  deixa de chegar ao systemd e nasce uma segunda verdade.
-- **Convergência tem de medir isso.** Instrumento que só olha verbo e hook diz
-  "convergido" sobre máquina sem serviço nenhum. Unit não linkada, não habilitada
-  e não ativa são três divergências separadas — a segunda é a que não aparece.
-
-## `enable` não é o único jeito de habilitar, e falha com symlink (medido 15/08)
-
-Onde o config dir do usuário é root-owned, `systemctl --user enable` sai **Access
-denied** para unit que é symlink: o systemd quer escrever na *raiz* de
-`~/.config/systemd/user`, não só no `.wants`. Com cópia funciona; com symlink não.
-
-- **O ato do enable é um symlink em `<target>.wants`.** Feito à mão, `is-enabled`
-  responde `enabled` do mesmo jeito — é onde o systemd lê o estado.
-- **`.wants` dentro de `~/.local/share/systemd/user` NÃO conta.** É search path de
-  unit, não de configuração: unit linkada ali roda se startada e continua
-  `disabled`. Sobrevive a crash e morre no boot, calada.
-- **`is-active` não responde por `is-enabled`.** Serviço no ar há semanas pode
-  nunca ter voltado de um boot — ninguém reinicia a máquina para descobrir.
-
-## Rota isenta no gate remove o cadeado, não cria conteúdo (medido 17/08)
-
-Tudo aqui saiu de tentar tirar `wiki.platafirma.org` da categoria
-`insufficient-content` do PAN-DB, que bloqueia hostname servindo só redirect de login.
-
-- **O `robots.txt` dos gateados é do oauth2-proxy, não da aplicação.** Ele serve
-  `/robots.txt` embutido, sem autenticar, com `Disallow: /`. Não há arquivo a editar:
-  só se corrige interceptando antes do proxy.
-- **`--skip-auth-route` só remove o gate.** Se o upstream não tem o arquivo, o isento
-  expõe o erro dele: no MediaWiki, `/favicon.ico` liberado devolve 301 para a página
-  principal, que volta ao gate. Quem serve favicon de verdade é nginx com arquivo em
-  disco. Antes de isentar rota, conferir que o upstream tem o que servir.
-- **`deploy <stack> acessos` reporta pela stack onde o gate MORA**, não pela que ele
-  serve: os gates de wiki, harness, tarefas e docs moram todos no `core`. Perguntar à
-  stack servida devolve "nenhuma superficie gateada declarada", que parece ausência
-  de gate e não é.
-- **Não há wildcard DNS no domínio.** Hostname novo custa um CNAME para
-  `<tunnel-id>.cfargotunnel.com` no dashboard da Cloudflare — o host não tem cert nem
-  token de API para criá-lo, então esse passo é sempre do dono. O ingress do
-  cloudflared, esse sim, casa por path (regex), e é por ele que se roteia `/` para
-  outra origem sem tocar no gate.
-- **`deploy <stack> up` de stack grande estoura o timeout do connector e para no meio.**
-  Deixou o serviço novo de pé e o cloudflared não recriado — silenciosamente, porque o
-  erro que volta é o do connector, não o do deploy. Para mudança cirúrgica:
-  `docker compose up -d --no-deps <serviço>`, e conferir um a um o que precisava
-  reiniciar.
+- **Arquivo `.service` no repo prova só que alguém escreveu a unit.** Quem a subiu pode
+  tê-la subido **transient** (`systemd-run --user`): roda igual, aparece em `status`
+  igual, e ao ser parada evapora — sem arquivo, sem `Restart`, sem volta. O que delata
+  é `Failed to open /run/user/<uid>/systemd/transient/<unit>` no journal, depois do
+  stop; antes disso nada a distingue de instalada.
+- **Instalada é symlink para o repo, nunca cópia.** Cópia congela: `git pull` deixa de
+  chegar ao systemd e nasce uma segunda verdade.
+- **`enable` falha com symlink onde o config dir é root-owned** — Access denied, porque
+  o systemd quer escrever na raiz de `~/.config/systemd/user`, não só no `.wants`. Com
+  cópia funciona. Mas o ato do enable É um symlink em `<target>.wants`: feito à mão,
+  `is-enabled` responde `enabled`, que é onde o systemd lê o estado.
+- **`.wants` dentro de `~/.local/share/systemd/user` NÃO conta** — é search path de
+  unit, não de configuração. Unit linkada ali roda se startada e segue `disabled`:
+  sobrevive a crash e morre no boot, calada.
+- **`is-active` não responde por `is-enabled`.** Serviço no ar há semanas pode nunca ter
+  voltado de um boot, e ninguém reinicia a máquina para descobrir.
