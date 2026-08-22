@@ -46,7 +46,7 @@ PERSONAS = os.path.join(HARNESS, "personas")
 CHAPEUS_DIR = os.path.join(PERSONAS, "chapeus")
 # O modulo de codigo `recuperacao` vem do REPO REAL (via __file__), nunca do PF_RAIZ:
 # o contrato monta o script sob um PF_RAIZ hermetico que nao tem este pacote.
-_REPO_REAL = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+_REPO_REAL = os.path.dirname(os.path.dirname(os.path.realpath(__file__)))
 sys.path.insert(0, _REPO_REAL)
 from recuperacao import roteador_chapeu as _rot
 
