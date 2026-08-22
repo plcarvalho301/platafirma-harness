@@ -32,7 +32,7 @@ ESTADO_OK = {
             {"cadeira": "TI", "lido_em": 1000.0, "estado": "ok", "motivo": None, "dados": {
                 "cadeira": "TI",
                 "persona": {"presente": True, "caminho": "personas/persona-TI.md", "nome_resolvido": "claudinho-TI"},
-                "manifesto": {"presente": True, "caminho": "tool-manifest/TI.md"},
+                "manifesto": {"presente": True, "caminho": "abertura/ti/plataforma/ferramental.md"},
                 "org": {"presente": True, "caminho": "docs/org-template-canonico.md"},
                 "mesa": {"disponivel": True, "resumo": "resumo da fita"},
                 "cadernos": {"disponivel": True, "resumo": "nenhum"},

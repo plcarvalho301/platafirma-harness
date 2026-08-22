@@ -12,7 +12,7 @@ pergunta.
   Claude Code ou o app. Recebe repos, manifesto de cadeira e o manifesto comum.
 - **Externo** — colaboração em modelo DMZ: persona e conta próprias, sem cadeira,
   sem roteamento, sem shell. Abre por `GET /sessao`, HTTP puro, e o cliente é
-  qualquer modelo com um cliente HTTP. Recebe persona, `tool-manifest/EXTERNO.md`,
+  qualquer modelo com um cliente HTTP. Recebe persona e o ofício (`abertura/oficio.md`),
   memória, caixa e o catálogo de ações permitidas.
 
 A diferença não é de tamanho de pacote: é de **superfície**. A cadeira alcança o

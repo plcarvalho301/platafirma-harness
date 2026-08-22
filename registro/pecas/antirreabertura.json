@@ -1,7 +1,7 @@
 {
   "id": "antirreabertura",
   "dono": "claudinha-gestao-estrategica",
-  "artefato": "platafirma-harness@registro/antirreabertura.md",
+  "artefato": "platafirma-harness@abertura/antirreabertura.md",
   "regime": "valor",
   "gatilho": {
     "evento": "abertura",

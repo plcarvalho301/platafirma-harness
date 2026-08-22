@@ -1,7 +1,7 @@
 {
   "id": "conduta-dono",
   "dono": "claudinha-gestao-estrategica",
-  "artefato": "platafirma-harness@conduta/dono.md",
+  "artefato": "platafirma-harness@abertura/dono.md",
   "regime": "valor",
   "gatilho": {
     "evento": "abertura",

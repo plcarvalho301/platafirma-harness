@@ -1,0 +1,9 @@
+{
+  "id": "caderno-head",
+  "dono": "claudinho-dados",
+  "artefato": "platafirma-harness@abertura/{cadeira}/caderno.md",
+  "regime": "valor",
+  "gatilho": {"evento": "abertura", "condicao": "sempre na 1a chamada: memoria de direcao e heuristica de escolha de chapeu"},
+  "volatilidade": "volatil",
+  "teto_tokens": 900
+}

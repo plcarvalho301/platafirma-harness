@@ -89,7 +89,7 @@ Declarados por `arq:0042`; `conferir repo platafirma-harness` mede contra esta l
 | `bin/` | verbos de operação chamados por toda cadeira; fonte única, `~/AI/bin` é symlink |
 | `hooks/` | gate de commit da `arq:0042` (`pre-commit`); instala-se com `git config core.hooksPath` |
 | `personas/` | texto canônico de cada cadeira, mais template e higiene de redação |
-| `tool-manifest/` | manifesto de ferramental por cadeira, mais o `TODA-CADEIRA.md` comum |
+| `abertura/<cadeira>/<slug>/ferramental.md` | ferramental por chapéu (L2); o comum é `abertura/oficio.md` |
 | `skills/` | fontes das skills entregues ao claude.ai |
 | `tooling/` | script de export e carimbo, e o preparo de lote de avaliação |
 | `avaliacao/` | instrumentos e conjunto rotulado de avaliação do harness |

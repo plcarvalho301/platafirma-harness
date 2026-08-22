@@ -6,7 +6,7 @@ Aceite (executável por terceiro):
    que só está no índice; fonte servida e fora da tabela sai 1 nomeando o outro lado.
 3. Tabela vazia: exit 0, saída diz "não medido" e o motivo, e o --json traz o campo.
 4. `conferir superficie` sem --caso: veredito de hoje inalterado, incluindo o exit code.
-5. Linha no tool-manifest/TI.md no MESMO commit — verbo não indexado é verbo inexistente.
+5. Linha no abertura/ti/<chapeu>/ferramental.md no MESMO commit — verbo não indexado é verbo inexistente.
 """
 
 from __future__ import annotations

@@ -22,7 +22,7 @@
       "tipo": "ref",
       "obrigatorio": true,
       "formas": {
-        "arquivo": "<repo>@<path>, com {cadeira} como unico placeholder",
+        "arquivo": "<repo>@<path>, com {cadeira} e {chapeu} como placeholders",
         "verbo": "verbo:<comando>, para peca servida por execucao e nao por arquivo"
       },
       "nota": "referencia, nao realoca (spec E3). Forma arquivo resolve no clone local, nunca no espelho"

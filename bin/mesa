@@ -58,8 +58,8 @@ TTL_PADRAO = int(os.environ.get("MEM_TTL_DIAS", "14")) * 86400
 TETO_AVISO = 4000  # bytes; acima disto e sintoma de fato nao despachado
 RAIZ = os.environ.get("PF_RAIZ", os.path.expanduser("~/AI"))
 HARNESS = os.path.join(RAIZ, "platafirma-harness")
-CADERNOS = os.path.join(HARNESS, "caderno")
-PERSONAS = os.path.join(HARNESS, "personas")
+CADERNOS = os.path.join(HARNESS, "abertura")  # arq:0073: caderno mora em abertura/<cadeira>/<slug>/
+LEDGER = os.path.join(HARNESS, "registro", "eventos-org.jsonl")
 SESSAO_ENV = os.path.join(HARNESS, "sessao", ".env")
 SLOT_RE = re.compile(r"^[a-z0-9][a-z0-9-]{0,23}$")
 
@@ -139,30 +139,36 @@ _RESOLVIDA = []
 def _resolve():
     """(curto, canonico) a partir de PF_CADEIRA, que chega nas DUAS formas.
 
-    O montador exporta o canonico (`claudinho-TI`, que nomeia a caixa da fila); o
-    terminal e a fabrica exportam o sufixo (`TI`). Quem recebe normaliza — trocar o
-    que se exporta so mudaria de lugar a divergencia, porque a fila PRECISA do
-    canonico e a chave do substrato nao. Fonte: linha 1 de cada persona; tabela a
-    parte diverge. Nao casando, devolve (bruta, None): nao inventa cadeira.
+    Sufixo e deterministico: tira o prefixo claudinho-/claudinha- e baixa a caixa. O
+    canonico (chave da fila) vem do LEDGER de vinculo (arq:0073) — a persona do form
+    novo poe o ALIAS na linha 1, nao o slug, entao a linha 1 nao serve mais de fonte.
+    Nao achando no ledger, devolve (curto, None): nao inventa cadeira.
     """
     if _RESOLVIDA:
         return _RESOLVIDA[0]
     bruta = _bruta()
-    par = (bruta, None)
+    curto = bruta
+    for pref in ("claudinho-", "claudinha-"):
+        if curto.lower().startswith(pref):
+            curto = curto[len(pref):]
+    curto = curto.lower()
+    canon = None
     try:
-        arquivos = sorted(os.listdir(PERSONAS))
+        with open(LEDGER, encoding="utf-8", errors="replace") as fh:
+            for linha in fh:
+                try:
+                    cad = (json.loads(linha).get("cadeira") or "").strip()
+                except ValueError:
+                    continue
+                suf = cad
+                for pref in ("claudinho-", "claudinha-"):
+                    if suf.lower().startswith(pref):
+                        suf = suf[len(pref):]
+                if suf.lower() == curto:
+                    canon = cad
     except OSError:
-        arquivos = []
-    for nome in arquivos:
-        if not (nome.startswith("persona-") and nome.endswith(".md")):
-            continue
-        curto = nome[len("persona-"):-len(".md")]
-        with open(os.path.join(PERSONAS, nome), encoding="utf-8", errors="replace") as fh:
-            achado = re.search(r"claudinh[oa]-[A-Za-z0-9-]+", fh.readline())
-        canon = achado.group(0) if achado else None
-        if bruta in (curto.lower(), (canon or "").lower()):
-            par = (curto.lower(), canon)
-            break
+        pass
+    par = (curto, canon)
     _RESOLVIDA.append(par)
     return par
 
@@ -183,18 +189,7 @@ def canonica():
 
 
 def dir_legado():
-    """Diretorio de caderno na convencao velha, se ainda tiver arquivo.
-
-    Existe para DECLARAR o que a migracao de 18/08 nao pode mover sozinha: slot que
-    existe nas duas convencoes com conteudo diferente e conteudo de cadeira, e quem
-    reconcilia e a dona dele. Vazio quando nao ha legado.
-    """
-    canon = _resolve()[1]
-    if not canon or canon.lower() == cadeira():
-        return None
-    d = os.path.join(CADERNOS, canon.lower())
-    if os.path.isdir(d) and any(f.endswith(".md") for f in os.listdir(d)):
-        return d
+    """Sem legado sob abertura/: o tombamento (arq:0073) unificou a morada."""
     return None
 
 
@@ -468,32 +463,28 @@ def dir_caderno():
 
 
 def ato_caderno(args):
-    """Sem slot: indice (o que entra na abertura). Com slot: corpo, sob demanda."""
+    """Sem slot: indice (o que entra na abertura). Com slot: corpo, sob demanda.
+    Morada arq:0073: abertura/<cadeira>/<slot>/caderno.md."""
     d = dir_caderno()
     if args.slot:
         slot = valida_slot(args.slot)
-        caminho = os.path.join(d, f"{slot}.md")
+        caminho = os.path.join(d, slot, "caderno.md")
         if not os.path.isfile(caminho):
-            # Ausencia se declara: o verbo diz onde olhou (regra 4 do cabecalho).
-            leg = dir_legado()
-            alt = os.path.join(leg, f"{slot}.md") if leg else None
-            if alt and os.path.isfile(alt):
-                print(f"caderno {slot}: nao existe em {caminho} — ha LEGADO em {alt}")
-            else:
-                print(f"caderno {slot}: nao existe ({caminho})")
+            print(f"caderno {slot}: nao existe ({caminho})")
             return 0
-        print(f"===== caderno/{cadeira()}/{slot}.md =====")
+        print(f"===== abertura/{cadeira()}/{slot}/caderno.md =====")
         sys.stdout.write(open(caminho, errors="replace").read())
         return 0
     if not os.path.isdir(d):
         print(f"cadernos: nenhum ({d} nao existe)")
         return 0
-    achados = sorted(f for f in os.listdir(d) if f.endswith(".md"))
+    achados = sorted(x for x in os.listdir(d)
+                     if os.path.isfile(os.path.join(d, x, "caderno.md")))
     if not achados:
         print(f"cadernos: nenhum em {d}")
         return 0
-    for f in achados:
-        caminho = os.path.join(d, f)
+    for slot in achados:
+        caminho = os.path.join(d, slot, "caderno.md")
         st = os.stat(caminho)
         # Idade e a do ultimo commit, nao a do mtime: clone recem-puxado tem mtime de hoje.
         try:
@@ -502,12 +493,7 @@ def ato_caderno(args):
                 capture_output=True, text=True, timeout=10).stdout.strip() or st.st_mtime)
         except (OSError, ValueError, subprocess.SubprocessError):
             ts = int(st.st_mtime)
-        print(f"  {f[:-3]:<16} {st.st_size:>6} B   ultima escrita ha {idade(time.time() - ts)}")
-    leg = dir_legado()
-    if leg:
-        for f in sorted(x for x in os.listdir(leg) if x.endswith(".md")):
-            print(f"  LEGADO {f[:-3]:<9} {leg}/{f} — nao migrado porque colide com o"
-                  f" slot curto; reconcilie os dois e apague o legado")
+        print(f"  {slot:<16} {st.st_size:>6} B   ultima escrita ha {idade(time.time() - ts)}")
     print(f"  (corpo sob demanda: `mesa caderno <chapeu>`)")
     return 0
 

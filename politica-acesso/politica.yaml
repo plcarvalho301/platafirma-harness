@@ -88,7 +88,7 @@ eixos:
   # `plataforma-identidade` e `pf/claudinho-seguranca/cripto`.
   #
   # Este arquivo declara só as RAÍZES. Os nós (`pf/<cadeira>/<gerência>`) nascem de
-  # evento de org (`personas/eventos-org.jsonl`), nunca de cadastro aqui — raiz não
+  # evento de org (`registro/eventos-org.jsonl`), nunca de cadastro aqui — raiz não
   # declarada é valor fora do vocabulário, e o default do PDP nega.
   #
   # Herança desce pelo prefixo do caminho, avaliada pelo PDP e não pelo consumidor:
@@ -376,8 +376,7 @@ regras:
     motivo: "PAP, persona e conduta nao se editam por quem e julgado por eles"
     quando: {papel: fornecedor}
     acoes: ["*"]
-    sobre: ["politica-acesso/*", "*/politica-acesso/*", "personas/*", "*/personas/*",
-            "conduta/*", "*/conduta/*", "*/tool-manifest/*", "tool-manifest/*"]
+    sobre: ["politica-acesso/*", "*/politica-acesso/*", "abertura/*", "*/abertura/*"]
 
   # --- Fabrica: leitura do acervo de trabalho (ordem do dono, 20/08/2026) -------
   # ORDEM DIRETA DO DONO nesta data, com dispensa expressa do repasse a

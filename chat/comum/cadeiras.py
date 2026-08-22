@@ -4,7 +4,7 @@ Existe porque a mesma cadeira tem tres formas em uso, e nenhuma e derivavel das
 outras por regra fixa:
 
   slug do org        claudinho-TI, claudinha-gestao-estrategica
-  sufixo do harness  TI, gestao-estrategica   (personas/persona-<X>.md, tool-manifest/<X>.md)
+  sufixo do harness  TI, gestao-estrategica   (abertura/<X>/persona.md)
   localpart Matrix   _pf_ti, _pf_gestao-estrategica   (minusculo, exigencia do Synapse)
 
 A caixa do sufixo nao segue regra: `TI` e `IA` sao maiusculas, `produto` e
@@ -12,8 +12,8 @@ A caixa do sufixo nao segue regra: `TI` e `IA` sao maiusculas, `produto` e
 Por isso a caixa NAO se calcula — se le do nome do arquivo de persona, que e a fonte.
 Cadeira nova entra sozinha, sem editar este arquivo.
 
-Fonte: platafirma-harness/personas/persona-<sufixo>.md. A raiz sai de PF_RAIZ, ou do
-default do host. No container da recepcao, personas/ entra por bind mount ro.
+Fonte: platafirma-harness/abertura/<sufixo>/. A raiz sai de PF_RAIZ, ou do
+default do host. No container da recepcao, abertura/ entra por bind mount ro.
 """
 
 from __future__ import annotations
@@ -40,7 +40,7 @@ _SAO_PARTICIPANTE = {"jaiminho", "jaiminho-fabrica"}
 
 def _raiz_personas() -> Path:
     raiz = os.environ.get("PF_RAIZ", "/home/claudinho/AI")
-    return Path(raiz) / "platafirma-harness" / "personas"
+    return Path(raiz) / "platafirma-harness" / "abertura"
 
 
 def cadeiras() -> list[str]:
@@ -48,16 +48,15 @@ def cadeiras() -> list[str]:
 
     Ausencia se declara: diretorio inexistente e erro, nao lista vazia.
     """
-    dir_personas = _raiz_personas()
-    if not dir_personas.is_dir():
+    dir_abertura = _raiz_personas()
+    if not dir_abertura.is_dir():
         raise FileNotFoundError(
-            f"diretorio de personas nao encontrado: {dir_personas} "
-            "(defina PF_RAIZ, ou monte personas/ no container)"
+            f"diretorio de abertura nao encontrado: {dir_abertura} "
+            "(defina PF_RAIZ, ou monte abertura/ no container)"
         )
     achados = [
-        arq.stem[len("persona-"):]
-        for arq in dir_personas.glob("persona-*.md")
-        if arq.stem[len("persona-"):] and arq.stem[len("persona-"):] not in _NAO_SAO_CADEIRA
+        p.name for p in dir_abertura.iterdir()
+        if p.is_dir() and p.name not in _NAO_SAO_CADEIRA
     ]
     return sorted(achados)
 
@@ -65,7 +64,7 @@ def cadeiras() -> list[str]:
 def participantes() -> list[str]:
     """Sufixos dos participantes que tem persona no harness.
 
-    Mesma fonte das cadeiras (personas/persona-*.md) e mesma regra de ausencia:
+    Mesma fonte das cadeiras (abertura/<cadeira>/persona.md) e mesma regra de ausencia:
     participante declarado em `_SAO_PARTICIPANTE` sem arquivo de persona NAO entra —
     sem persona nao ha identidade a provisionar, e inventar uma aqui daria MXID a
     quem o rito de admissao nao admitiu.
@@ -78,7 +77,7 @@ def participantes() -> list[str]:
         )
     achados = [
         nome for nome in _SAO_PARTICIPANTE
-        if (dir_personas / f"persona-{nome}.md").is_file()
+        if (dir_personas / nome / "persona.md").is_file()
     ]
     return sorted(achados)
 
@@ -164,7 +163,7 @@ def slug_da_cadeira(nome: str) -> str | None:
         # None, e quem chama trataria isso como "ator sem slug" — que e ausencia,
         # nao a resposta certa.
         return sufixo
-    arq = _raiz_personas() / f"persona-{sufixo}.md"
+    arq = _raiz_personas() / sufixo / "persona.md"
     try:
         primeira = arq.read_text(errors="replace").split("\n", 1)[0]
     except OSError:

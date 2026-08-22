@@ -42,8 +42,11 @@ import time
 RAIZ = os.environ.get("PF_RAIZ", os.path.expanduser("~/AI"))
 HARNESS = os.path.join(RAIZ, "platafirma-harness")
 PECAS = os.path.join(HARNESS, "registro", "pecas")
-PERSONAS = os.path.join(HARNESS, "personas")
-CHAPEUS_DIR = os.path.join(PERSONAS, "chapeus")
+ABERTURA = os.path.join(HARNESS, "abertura")
+LEDGER = os.path.join(HARNESS, "registro", "eventos-org.jsonl")
+# arq:0073: morada unica em abertura/. O roteador procura abertura/<cadeira>/conceitos.json
+# (ausente hoje -> sempre cai no fallback (c), comportamento declarado).
+CHAPEUS_DIR = ABERTURA
 # O modulo de codigo `recuperacao` vem do REPO REAL (via __file__), nunca do PF_RAIZ:
 # o contrato monta o script sob um PF_RAIZ hermetico que nao tem este pacote.
 _REPO_REAL = os.path.dirname(os.path.dirname(os.path.realpath(__file__)))
@@ -119,12 +122,19 @@ def de_abertura(pecas, cadeira):
         # Decisao do dono, 17/08 — o custo e manifesto de cadeira que comeca incompleto,
         # e a falta aparece como falta, na cara, em vez de vazar como excesso.
         escolhidas = [p for p in escolhidas
-                      if p.get("id") not in ("org", "antirreabertura", "tool-manifest-geral")]
+                      if p.get("id") not in ("antirreabertura",)]
         alias = por_id.get("alias-cadeiras")
         if alias:
             escolhidas.append(dict(alias, _forcada="fora do quadro: org trocado por endereço"))
     return sorted(escolhidas, key=lambda p: (ORDEM_VOLATILIDADE.get(p.get("volatilidade"), 9),
                                              p.get("id", "")))
+
+
+def de_chapeu(pecas):
+    """Pecas com gatilho de chapeu (perna 2), na ordem de injecao."""
+    esc = [p for p in pecas if (p.get("gatilho") or {}).get("evento") == "chapeu"]
+    return sorted(esc, key=lambda p: (ORDEM_VOLATILIDADE.get(p.get("volatilidade"), 9),
+                                      p.get("id", "")))
 
 
 # ------------------------------------------------------------------ repos
@@ -202,7 +212,7 @@ def sha_conteudo(texto):
     return hashlib.sha256(texto.encode("utf-8")).hexdigest()[:12]
 
 
-def serve(peca, cadeira, persona=None):
+def serve(peca, cadeira, persona=None, chapeu=None):
     """Devolve (envelope, conteudo). Conteudo None quando indisponivel."""
     art = peca.get("artefato", "")
     env = {"peca": peca.get("id"), "dono": peca.get("dono"), "ref": art,
@@ -217,7 +227,8 @@ def serve(peca, cadeira, persona=None):
         return env, None
 
     if art.startswith("verbo:"):
-        cmd = art[len("verbo:"):].strip().replace("{cadeira}", cadeira)
+        cmd = (art[len("verbo:"):].strip().replace("{cadeira}", cadeira)
+               .replace("{chapeu}", chapeu or ""))
         try:
             # PF_CADEIRA da peca-verbo e o NOME CANONICO, nao o sufixo: e ele que
             # nomeia a caixa da fila e a chave da mesa. Foi a divergencia entre os dois
@@ -241,7 +252,7 @@ def serve(peca, cadeira, persona=None):
         return env, None
 
     repo, path = art.split("@", 1)
-    path = path.replace("{cadeira}", cadeira)
+    path = path.replace("{cadeira}", cadeira).replace("{chapeu}", chapeu or "")
     env["ref"] = f"{repo}@{path}"
     _, frescor, motivo = sha_e_frescor(repo)
     env["motivo"] = motivo or env["motivo"]
@@ -304,16 +315,63 @@ def registra_pacote(cadeira, envelopes, montador_sha):
 
 
 # ------------------------------------------------------------------ montagem
+def _canonico(sufixo):
+    """Nome canonico (claudinho-<x>/claudinha-<x>) a partir do sufixo, pelo ledger de
+    vinculo (arq:0073 §1) — a persona do form novo poe o ALIAS na linha 1, nao o slug,
+    entao a linha 1 nao serve mais de fonte. Nao casando, devolve None: nao inventa."""
+    try:
+        achado = None
+        with open(LEDGER, encoding="utf-8", errors="replace") as fh:
+            for linha in fh:
+                linha = linha.strip()
+                if not linha:
+                    continue
+                try:
+                    cad = (json.loads(linha).get("cadeira") or "").strip()
+                except ValueError:
+                    continue
+                suf = cad
+                for pref in ("claudinho-", "claudinha-"):
+                    if suf.lower().startswith(pref):
+                        suf = suf[len(pref):]
+                if suf.lower() == sufixo.lower():
+                    achado = cad
+        return achado
+    except OSError:
+        return None
+
+
 def cadeiras_validas():
-    return sorted(n[len("persona-"):-len(".md")] for n in os.listdir(PERSONAS)
-                  if n.startswith("persona-") and n.endswith(".md"))
+    """Sufixos do ledger de vinculo, uniao com subdirs ja escritos em abertura/. Cadeira
+    valida mas ainda nao redigida abre com pecas indisponiveis, nao com erro (0073 §7.5)."""
+    do_ledger = set()
+    try:
+        with open(LEDGER, encoding="utf-8", errors="replace") as fh:
+            for linha in fh:
+                try:
+                    cad = (json.loads(linha).get("cadeira") or "").strip()
+                except ValueError:
+                    continue
+                for pref in ("claudinho-", "claudinha-"):
+                    if cad.lower().startswith(pref):
+                        cad = cad[len(pref):]
+                if cad:
+                    do_ledger.add(cad.lower())
+    except OSError:
+        pass
+    try:
+        do_disco = {d for d in os.listdir(ABERTURA)
+                    if os.path.isdir(os.path.join(ABERTURA, d))}
+    except OSError:
+        do_disco = set()
+    return sorted(do_ledger | do_disco)
 
 
 def monta(cadeira, atualizar, pergunta=None, forcado_chapeu=None):
-    p_persona = os.path.join(PERSONAS, f"persona-{cadeira}.md")
-    if not os.path.isfile(p_persona):
-        return {"erro": f"nao existe persona para '{cadeira}'",
-                "procurado": p_persona, "cadeiras_validas": cadeiras_validas()}
+    if cadeira.lower() not in [c.lower() for c in cadeiras_validas()]:
+        return {"erro": f"cadeira desconhecida: '{cadeira}'",
+                "cadeiras_validas": cadeiras_validas()}
+    p_persona = os.path.join(ABERTURA, cadeira, "persona.md")
 
     pecas = de_abertura(catalogo(), cadeira)
     repos = sorted({p["artefato"].split("@", 1)[0] for p in pecas
@@ -324,10 +382,10 @@ def monta(cadeira, atualizar, pergunta=None, forcado_chapeu=None):
         sha, frescor, motivo = sha_e_frescor(r)
         estado_repos.setdefault(r, {}).update({"sha": sha, "frescor": frescor})
 
-    texto_persona = open(p_persona, encoding="utf-8", errors="replace").read()
-    linha1 = texto_persona.splitlines()[0] if texto_persona else ""
-    m = RE_NOME.match(linha1)
-    nome = m.group(1) if m else None
+    texto_persona = (open(p_persona, encoding="utf-8", errors="replace").read()
+                     if os.path.isfile(p_persona) else "")
+    # Canonico vem do ledger, nao da linha 1: o form novo poe o alias ali (arq:0073).
+    nome = _canonico(cadeira)
 
     servidas, avisos = [], []
     for peca in pecas:
@@ -344,21 +402,8 @@ def monta(cadeira, atualizar, pergunta=None, forcado_chapeu=None):
 
     # Divergencia entre o que a persona declara e o que o catalogo resolve nao se
     # escolhe em silencio: as duas fontes existem, e a que discorda vira aviso.
-    declarado = None
-    for linha in texto_persona.splitlines():
-        mm = RE_FERRAMENTAL.match(linha)
-        if mm:
-            declarado = mm.group(1)
-            break
-    refs = {e["ref"] for e in servidas} | {e["ref"].replace("@", "/") for e in servidas}
-    if declarado and not any(r.endswith(declarado.split("/", 1)[-1]) for r in refs):
-        avisos.append(f"persona declara FERRAMENTAL: {declarado}, que o catálogo não serve "
-                      "na abertura — uma das duas está velha")
-    if not declarado:
-        avisos.append(f"{p_persona} não declara linha FERRAMENTAL:")
     if not nome:
-        avisos.append(f"linha 1 de {p_persona} não casa 'Você é <nome>' — nome canônico "
-                      "não resolvido, fila não localizada")
+        avisos.append(f"cadeira '{cadeira}' sem canônico no ledger — fila não localizada")
 
     # ---- P2 passo 2: responde "qual chapeu?" DENTRO da montagem (recursao) ----
     # (a) deterministico -> (b) semantico -> (c) fallback. So dobra o chapeu quando decide.
@@ -366,19 +411,23 @@ def monta(cadeira, atualizar, pergunta=None, forcado_chapeu=None):
     roteador = {"via": dec.via, "motivo": dec.motivo, "acertos": dec.acertos, "slug": dec.slug}
     chapeu_env = None
     if dec.slug:
-        env_c, texto_c = serve_chapeu(cadeira, dec.slug)
-        env_c["conteudo"] = texto_c
-        env_c["peca"] = f"chapeu:{dec.slug}"
-        servidas.append(env_c)
-        chapeu_env = env_c
-        if env_c.get("frescor") == "indisponivel":
-            avisos.append(f"chapeu `{dec.slug}` roteado mas indisponivel: {env_c.get('motivo')}")
-        elif env_c.get("motivo"):
-            avisos.append(f"chapeu `{dec.slug}`: {env_c['motivo']}")
+        # Perna 2 (arq:0073): dobra o chapeu servindo TODAS as pecas com gatilho de chapeu
+        # (chapeu.md, ferramental.md, caderno do chapeu) pelo catalogo, {chapeu}=slug.
+        for pc in de_chapeu(catalogo()):
+            envc, cont = serve(pc, cadeira, nome, chapeu=dec.slug)
+            envc["conteudo"] = cont
+            envc["peca"] = f"{pc.get('id')}:{dec.slug}"
+            envc["slug"] = dec.slug
+            servidas.append(envc)
+            if chapeu_env is None:
+                chapeu_env = envc
+            if envc["frescor"] == "indisponivel":
+                avisos.append(f"peça `{envc['peca']}` indisponível: {envc['motivo']}")
+            elif envc["teto_tokens"] and envc["tokens"] > envc["teto_tokens"]:
+                avisos.append(f"peça `{envc['peca']}` serviu {envc['tokens']} tokens "
+                              f"contra teto de {envc['teto_tokens']}")
     else:
-        # (c): a sessao sobe SEM chapeu; a pergunta do P2 vai declarada, o modelo escolhe e
-        # reentra com --chapeu. Nao e erro: e o ramo minoritario que o P2 preve.
-        avisos.append(f"chapeu nao roteado (fallback): {dec.motivo} -- chapeus: {_rot and [r.slug for r in _rot.rotas_do_disco(cadeira, CHAPEUS_DIR)]}")
+        avisos.append(f"chapeu nao roteado (fallback): {dec.motivo}")
 
     montador_sha = (estado_repos.get("platafirma-harness") or {}).get("sha")
     return {
@@ -402,7 +451,7 @@ def monta(cadeira, atualizar, pergunta=None, forcado_chapeu=None):
 
 def imprime_texto(pac):
     if "erro" in pac:
-        print(f"{pac['erro']} (procurado: {pac['procurado']})", file=sys.stderr)
+        print(f"{pac['erro']}" + (f" (procurado: {pac['procurado']})" if pac.get('procurado') else ""), file=sys.stderr)
         print("cadeiras: " + " ".join(pac["cadeiras_validas"]), file=sys.stderr)
         return 1
     print(f"== cadeira: {pac['nome_canonico'] or '<nome não resolvido>'} ==")
@@ -425,7 +474,7 @@ def imprime_texto(pac):
     return 0
 
 
-CHAPEUS = os.path.join(PERSONAS, "chapeus")
+CHAPEUS = ABERTURA
 TETO_CHAPEU = 2500  # personas/TEMPLATE-chapeu.md, medido no piloto rh.md
 
 
@@ -436,16 +485,16 @@ def chapeus_de(cadeira):
     d = os.path.join(CHAPEUS, cadeira)
     if not os.path.isdir(d):
         return []
-    return sorted(n[:-3] for n in os.listdir(d)
-                  if n.endswith(".md") and not n.startswith("."))
+    return sorted(n for n in os.listdir(d)
+                  if os.path.isfile(os.path.join(d, n, "chapeu.md")))
 
 
 def serve_chapeu(cadeira, slug):
     """Envelope + conteudo de UM chapeu. Ausente vem declarado, nunca omitido:
     pacote sem a peca e pacote com peca vazia seriam indistinguiveis."""
-    caminho = os.path.join(CHAPEUS, cadeira, f"{slug}.md")
+    caminho = os.path.join(CHAPEUS, cadeira, slug, "chapeu.md")
     env = {"peca": f"chapeu:{slug}", "cadeira": cadeira, "slug": slug,
-           "ref": f"platafirma-harness@personas/chapeus/{cadeira}/{slug}.md",
+           "ref": f"platafirma-harness@abertura/{cadeira}/{slug}/chapeu.md",
            "regime": "valor", "carga": "sob demanda", "teto_tokens": TETO_CHAPEU,
            "sha": None, "tokens": 0, "frescor": "indisponivel", "motivo": None}
     if not os.path.isfile(caminho):
@@ -531,11 +580,13 @@ def main():
     for prefixo in ("claudinho-", "claudinha-"):
         if alvo.lower().startswith(prefixo):
             alvo = alvo[len(prefixo):]
+    alvo = alvo.lower()  # a morada arq:0073 e minuscula: abertura/ti, abertura/gestao-estrategica
 
-    if args.chapeus or args.chapeu:
+    if args.chapeus:
         return imprime_chapeu(alvo, args)
 
-    pac = monta(alvo, atualizar=not args.sem_atualizar, pergunta=args.pergunta)
+    pac = monta(alvo, atualizar=not args.sem_atualizar, pergunta=args.pergunta,
+                forcado_chapeu=args.chapeu)
     if args.json:
         print(json.dumps(pac, ensure_ascii=False))
         return 1 if "erro" in pac else 0

@@ -28,7 +28,7 @@ Falhando um, não entra.
 | fato de negócio, decisão registrada | card, commit, wiki |
 | estado de runtime (número, SHA, card aberto) | o instrumento que mede |
 | decisão de remit, fronteira, propriedade | canônico (org, ADR, persona) |
-| o que vale para toda cadeira | `tool-manifest/TODA-CADEIRA.md` ou RH |
+| o que vale para toda cadeira | o ofício (`abertura/oficio.md`) ou o chapéu |
 | conhecimento com validade ("X está aposentado", "por ora, carta") | mesa — expira junto |
 
 O último é o corte menos óbvio e o mais caro de errar: conhecimento verdadeiro

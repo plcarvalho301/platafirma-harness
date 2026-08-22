@@ -184,7 +184,7 @@ if __name__ == "__main__":  # bancada: rota isolada, sem montar sessao
     cad = sys.argv[1] if len(sys.argv) > 1 else "IA"
     perg = sys.argv[2] if len(sys.argv) > 2 else "orcamento de janela de contexto"
     raiz = os.path.join(os.environ.get("PF_RAIZ", os.path.expanduser("~/AI")),
-                        "platafirma-harness", "personas", "chapeus")
+                        "platafirma-harness", "abertura")
     dec = escolhe(perg, cad, raiz)
     print(json.dumps({"slug": dec.slug, "via": dec.via, "motivo": dec.motivo,
                       "acertos": dec.acertos}, ensure_ascii=False, indent=2))

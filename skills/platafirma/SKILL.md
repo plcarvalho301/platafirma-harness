@@ -2,7 +2,7 @@
 name: platafirma
 description: Use sempre que a conversa for sobre a PlataFirma — org de times/cadeiras, personas claudinho/claudinha, arquitetura, repo platafirma-arquitetura, ou a wiki. Dispare também sempre que a palavra "platafirma" aparecer explicitamente, e sempre que aparecer fila de mensagens, handoff, recado, card ou ticket entre personas ("lê a fila", "manda pro claudinho-X"). Dá a topologia atual de cadeiras/heads/gerências, as regras fixas de roteamento entre personas e o protocolo da fila de mensagens. NÃO se aplica à claudinha-osint (colaboradora externa, ambiente isolado): a skill dela é `osint`.
 cadeiras: todas
-compatibility: exige as capacidades `ler-repo` e `operar-fila`. O MEIO muda por superficie e esta em tool-manifest/superficies.json — no claude.ai sao conectores, na fita do chat e shell com allowlist. Nao nomeie tool aqui: `conferir superficie` reprova.
+compatibility: exige as capacidades `ler-repo` e `operar-fila`. O MEIO muda por superficie e esta em registro/superficies.json — no claude.ai sao conectores, na fita do chat e shell com allowlist. Nao nomeie tool aqui: `conferir superficie` reprova.
 ---
 
 # PlataFirma — org e roteamento
@@ -193,7 +193,7 @@ declarando que foi na mão.
 
 - acervo (obras, chunks, vetores, fuga por degrau): `acervo escada`
 - facetas e população do índice: o instrumento de facetas do acervo
-- catálogo dos verbos: `tool-manifest/TODA-CADEIRA.md`
+- catálogo dos verbos: `abertura/oficio.md`
 
 O modo de falha não é errar a conta: é acertar uma conta que mede outra coisa.
 `SELECT count(*) FROM chunks WHERE embedding IS NULL` roda sem erro e devolve

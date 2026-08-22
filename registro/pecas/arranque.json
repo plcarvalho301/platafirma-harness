@@ -1,7 +1,7 @@
 {
   "id": "arranque",
   "dono": "claudinha-gestao-estrategica",
-  "artefato": "platafirma-harness@conduta/arranque.md",
+  "artefato": "platafirma-harness@abertura/arranque.md",
   "regime": "ponteiro",
   "gatilho": {
     "evento": "ato",

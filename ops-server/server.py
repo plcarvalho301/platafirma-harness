@@ -474,12 +474,12 @@ def write_file(path: str, content: str) -> dict:
 # ("Você é <nome>,") dá o nome canônico — que é o diretório da fila — e a linha
 # FERRAMENTAL: dá o caminho do manifesto. Convenção de nome de arquivo não produz o
 # "claudinha" de persona-fabrica.md.
-PERSONAS = Path(os.environ.get("PF_PERSONAS", RAIZ / "platafirma-harness/personas"))
+PERSONAS = Path(os.environ.get("PF_PERSONAS", RAIZ / "platafirma-harness/abertura"))
 ORG_CANONICO = Path(os.environ.get(
     "PF_ORG", RAIZ / "platafirma-arquitetura/docs/org-template-canonico.md"))
 REPOS_SESSAO = ("platafirma-harness", "platafirma-arquitetura")
 MANIFESTO_GERAL = Path(os.environ.get(
-    "PF_MANIFESTO_GERAL", RAIZ / "platafirma-harness/tool-manifest/TODA-CADEIRA.md"))
+    "PF_MANIFESTO_GERAL", RAIZ / "platafirma-harness/abertura/oficio.md"))
 
 
 RE_NOME = re.compile(r"^Você é ([A-Za-zÀ-ÿ][A-Za-zÀ-ÿ-]*)")
@@ -487,8 +487,8 @@ RE_FERRAMENTAL = re.compile(r"^FERRAMENTAL:\s*(\S+\.md)")
 
 
 def _cadeiras() -> list:
-    return sorted(p.name[len("persona-"):-len(".md")]
-                  for p in PERSONAS.glob("persona-*.md"))
+    # arq:0073: a cadeira e um subdir de abertura/, nao mais persona-<x>.md.
+    return sorted(p.name for p in PERSONAS.iterdir() if p.is_dir())
 
 
 def _ler(p: Path) -> dict:
@@ -581,14 +581,14 @@ def _memoria(cadeira: str) -> dict:
     return out
 
 
-def _montar(cadeira: str, atualizar: bool) -> dict:
+def _montar(cadeira: str, atualizar: bool, chapeu: str = "", pergunta: str = "") -> dict:
     """Delega ao verbo `bin/monta-sessao --json`, que monta por catálogo (#189 fase 5).
 
     Aqui havia uma SEGUNDA implementação da montagem: este servidor lia persona, org e
     manifestos por conta própria enquanto o verbo lia os seus. Duas fontes da mesma
     regra divergem em silêncio — é a razão pela qual a mesa e a fila já eram lidas pelo
     verbo, e agora vale para o pacote inteiro. A superfície não pode mudar o pacote:
-    `tool-manifest/superficies.json` manda que o comportamento seja o mesmo nas três.
+    `registro/superficies.json` manda que o comportamento seja o mesmo nas três.
 
     O servidor não acrescenta nada ao pacote: o envelope da fila saiu daqui em
     17/08 (#189) e a camada B inteira é por ato, pelo verbo.
@@ -601,6 +601,10 @@ def _montar(cadeira: str, atualizar: bool) -> dict:
     argv = [str(RAIZ / "bin" / "monta-sessao"), alvo, "--json"]
     if not atualizar:
         argv.append("--sem-atualizar")
+    if chapeu:
+        argv += ["--chapeu", chapeu]
+    if pergunta:
+        argv += ["--pergunta", pergunta]
     try:
         proc = subprocess.run(argv, capture_output=True, text=True, timeout=90,
                               env={**_env_subprocesso(), "PF_SUPERFICIE": "claude.ai"})
@@ -632,7 +636,7 @@ def _montar(cadeira: str, atualizar: bool) -> dict:
     return r
 
 
-async def monta_sessao(cadeira: str = "", atualizar: bool = True) -> dict:
+async def monta_sessao(cadeira: str = "", atualizar: bool = True, chapeu: str = "", pergunta: str = "") -> dict:
     """Devolve, numa chamada, o contexto de abertura de uma cadeira da PlataFirma:
     persona canônica, tool-manifest que ELA declara, org canônico e a mesa.
 
@@ -676,7 +680,7 @@ async def monta_sessao(cadeira: str = "", atualizar: bool = True) -> dict:
     if negado:
         return negado
     t0 = time.monotonic()
-    r = await anyio.to_thread.run_sync(_montar, cadeira, atualizar)
+    r = await anyio.to_thread.run_sync(_montar, cadeira, atualizar, chapeu, pergunta)
     _audit(tool="monta_sessao", cadeira=cadeira, atualizar=atualizar,
            resolvida=r.get("nome_canonico"), erro=r.get("erro"),
            dur_ms=round((time.monotonic() - t0) * 1000))
@@ -886,7 +890,7 @@ async def _sessao_abrir(req):
 
     pac = {"sujeito": quem, "acoes": _acoes_permitidas(quem, est)}
 
-    pf = PERSONAS / f"persona-{quem}.md"
+    pf = PERSONAS / quem / "persona.md"
     if pf.is_file():
         pac["persona"] = {"path": str(pf), "content": pf.read_text(encoding="utf-8")}
     else:
@@ -894,7 +898,7 @@ async def _sessao_abrir(req):
                           "aviso": "persona ainda nao escrita (RH). Ausencia declarada, "
                                    "nao omissao: opere pelo que o manifesto e a caixa dizem."}
 
-    mf = PF_HARNESS / "tool-manifest/EXTERNO.md"
+    mf = PF_HARNESS / "abertura/oficio.md"
     pac["manifesto"] = ({"path": str(mf), "content": mf.read_text(encoding="utf-8")}
                         if mf.is_file() else {"ausente": True, "path": str(mf)})
 

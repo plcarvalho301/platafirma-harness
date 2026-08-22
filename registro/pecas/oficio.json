@@ -1,0 +1,9 @@
+{
+  "id": "oficio",
+  "dono": "claudinho-TI",
+  "artefato": "platafirma-harness@abertura/oficio.md",
+  "regime": "valor",
+  "gatilho": {"evento": "abertura", "condicao": "sempre na 1a chamada: o working set comum a toda cadeira — verbos da plataforma. Substitui tool-manifest-geral (arq:0071)"},
+  "volatilidade": "estavel",
+  "teto_tokens": 1200
+}

@@ -1,7 +1,7 @@
 {
   "id": "persona",
   "dono": "claudinha-gestao-estrategica",
-  "artefato": "platafirma-harness@personas/persona-{cadeira}.md",
+  "artefato": "platafirma-harness@abertura/{cadeira}/persona.md",
   "regime": "valor",
   "gatilho": {
     "evento": "abertura",

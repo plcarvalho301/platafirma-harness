@@ -54,7 +54,7 @@
                    copia; nao julga a redacao do arranque, que e da dona do texto.
                    Com `--staged`, julga so o CLAUDE.md do commit em curso.
   chapeu  [<cadeira>[/<slug>]]
-                   chapeu de camada C (`personas/chapeus/<cadeira>/<slug>.md`) contra
+                   chapeu de camada C (`abertura/<cadeira>/<slug>/chapeu.md`) contra
                    os quatro predicados de `personas/TEMPLATE-chapeu.md`: eco da base,
                    secoes obrigatorias com a terceira coluna de (b) preenchida, os dois
                    textos fixos, e o teto de 2500 tokens MEDIDO. Sem tokenizador sai 2 —
@@ -1227,7 +1227,7 @@ def conferir_superficie(alvo=None, staged=False, como_json=False):
     claude.ai nao e verificavel daqui, e isso sai declarado — nao confundir
     "nao medido" com "em dia".
     """
-    registro = os.path.join(HARNESS, "tool-manifest", "superficies.json")
+    registro = os.path.join(HARNESS, "registro", "superficies.json")  # arq:0073: dado saiu de tool-manifest/
     try:
         with open(registro, encoding="utf-8") as f:
             reg = json.load(f)
@@ -1908,12 +1908,13 @@ def _peca_ref_resolve(ref):
         return "forma invalida: use '<repo>@<path>' ou 'verbo:<comando>'"
     repo, _, path = ref.partition("@")
     if "{" in path:
-        resto = re.sub(r"\{cadeira\}", "*", path)
+        resto = re.sub(r"\{(cadeira|chapeu)\}", "*", path)
         if "{" in resto:
-            return "placeholder desconhecido: so {cadeira} e admitido"
-        import glob as _glob
-        if not _glob.glob(os.path.join(RAIZ, repo, resto)):
-            return f"nenhum arquivo casa {repo}@{path}"
+            return "placeholder desconhecido: so {cadeira} e {chapeu} sao admitidos"
+        # Ref templada e um PADRAO, nao um arquivo: as instancias se autoram ao longo
+        # da vida da org (backfill de persona, caderno-head ainda por escrever). A
+        # integridade do catalogo aqui e o placeholder admitido; a existencia por
+        # cadeira e frescor de `monta_sessao` (indisponivel-declarado), nao defeito.
         return None
     return None if os.path.isfile(os.path.join(RAIZ, repo, path)) else f"nao existe {repo}@{path}"
 
