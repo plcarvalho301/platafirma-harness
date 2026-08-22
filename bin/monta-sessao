@@ -12,7 +12,8 @@
 #       termina numa pergunta: qual chapeu vestir. Sem chapeu a sessao ainda nao trabalha.
 #
 #   2a  monta-sessao <cadeira> --chapeu <slug>   serve gatilho.evento == "chapeu" + a mesa
-#       chapeu, tool-manifest-cadeira, caderno-chapeu, risco, catalogo-chapeu, `mesa ver`.
+#       chapeu, tool-manifest-cadeira, caderno-chapeu, risco, `mesa ver`. (catalogo-<chapeu>
+#       e decisao aberta no P2 — candidato a subsumir no chapeu; sem peca ate decidir.)
 #       DEVOLVE A FITA para o modelo.
 #
 # Por que a fase e dirigida por gatilho.evento, nao por lista hardcoded: peca nova entra
@@ -59,7 +60,6 @@ PECAS = os.path.join(HARNESS, "registro", "pecas")
 PERSONAS = os.path.join(HARNESS, "personas")
 CHAPEUS = os.path.join(PERSONAS, "chapeus")
 SESSAO_ENV = os.path.join(HARNESS, "sessao", ".env")
-TETO_CHAPEU = 2500  # personas/TEMPLATE-chapeu.md, medido no piloto rh.md
 
 ORDEM_VOLATILIDADE = {"estavel": 0, "morna": 1, "volatil": 2}
 # Fora do quadro: nao recebe `org/fronteiras.md` (quem decide o que dentro da casa),
@@ -237,6 +237,7 @@ def serve(peca, cadeira, persona=None, chapeu=None):
 
     if art.startswith("verbo:"):
         cmd = resolve(art[len("verbo:"):].strip())
+        env["ref"] = f"verbo:{cmd}"  # o registro guarda o comando servido, nao o molde
         try:
             p = subprocess.run(cmd.split(), capture_output=True, text=True, timeout=20,
                                env=env_verbo(persona or cadeira, chapeu))

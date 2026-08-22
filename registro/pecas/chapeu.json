@@ -1,0 +1,12 @@
+{
+  "id": "chapeu",
+  "dono": "claudinha-gestao-estrategica",
+  "artefato": "platafirma-harness@personas/chapeus/{cadeira}/{chapeu}.md",
+  "regime": "valor",
+  "gatilho": {
+    "evento": "chapeu",
+    "condicao": "sempre na 2a chamada: o texto do chapeu escolhido (P2 2a item a). E a peca que o fluxo de duas chamadas existe para nao pre-carregar — so entra depois de escolhido"
+  },
+  "volatilidade": "estavel",
+  "teto_tokens": 2500
+}
