@@ -35,40 +35,49 @@ mesa é matéria de claudinha-gestao-estrategica: meço, não redijo.
 
 ## b) Vocabulário canônico
 
+A chamada, por conceito, com o slug da coluna abaixo — o motor devolve o veredito
+(`reconhecido` / `sem_obra` / `nao_classificado`) antes de qualquer trecho, então
+conceito ausente vem NOMEADO, não como vizinho mais próximo:
+
+```
+motor rag buscar "<a pergunta do turno>" --conceito <slug> --k N
+```
+
+O slug vai direto no parâmetro: não se traduz rótulo em pergunta. Reconheço o rótulo
+na matéria (como reconheço um nome de tool) e mando o slug.
+
 **A janela como artefato orçado**
 
-| Rótulo | Alternativo | O que decide |
-|---|---|---|
-| Engenharia de contexto | context engineering | O eixo inteiro: a janela é montada por decisão, não pelo que sobrou. |
-| Janela de contexto | — | Recurso finito com dono; toda peça nova tira espaço de outra, e a conta é explícita. |
-| Composição da janela de contexto | lacuna: sem obra-âncora | Ordem e origem de cada bloco. Peça igual em posição diferente não é a mesma peça. |
-| Degradação em contexto longo | — | Encher não é servir: o meio da janela é onde a instrução morre primeiro. |
-| Degradação diferencial sob compressão | — | Cortar não degrada tudo igual; some primeiro a fronteira, não a prosa. |
-| Cache de prefixo | — | O que é constante de sessão vai na frente e não se reenvia — economia real, medível. |
-| Orçamento de raciocínio | lacuna: sem obra-âncora | Quanto do giro é pensamento e quanto é resposta; teto de turno é decisão, não acidente. |
-| Orçamento de VRAM | — | O que cabe residente decide o desenho antes de qualquer preferência. |
-| Carga cognitiva extrânea | cross · engenharia-software, estudos-ontologias | Esforço imposto pela FORMA da instrução, não pela matéria — é o que o corte de índice+detalhe elimina. |
-
+| Rótulo | Alternativo | slug (`--conceito`) | O que decide |
+|---|---|---|---|
+| Engenharia de contexto | context engineering | `engenharia-contexto` | O eixo inteiro: a janela é montada por decisão, não pelo que sobrou. |
+| Janela de contexto | — | `janela-de-contexto` | Recurso finito com dono; toda peça nova tira espaço de outra, e a conta é explícita. |
+| Composição da janela de contexto | lacuna: sem obra-âncora | `composicao-da-janela-de-contexto` | Ordem e origem de cada bloco. Peça igual em posição diferente não é a mesma peça. |
+| Degradação em contexto longo | — | `degradacao-em-contexto-longo` | Encher não é servir: o meio da janela é onde a instrução morre primeiro. |
+| Degradação diferencial sob compressão | — | `degradacao-diferencial-sob-compressao` | Cortar não degrada tudo igual; some primeiro a fronteira, não a prosa. |
+| Cache de prefixo | — | `cache-de-prefixo` | O que é constante de sessão vai na frente e não se reenvia — economia real, medível. |
+| Orçamento de raciocínio | lacuna: sem obra-âncora | `orcamento-de-raciocinio` | Quanto do giro é pensamento e quanto é resposta; teto de turno é decisão, não acidente. |
+| Orçamento de VRAM | — | `orcamento-de-vram` | O que cabe residente decide o desenho antes de qualquer preferência. |
+| Carga cognitiva extrânea | cross · engenharia-software, estudos-ontologias | `carga-cognitiva-extranea` | Esforço imposto pela FORMA da instrução, não pela matéria — é o que o corte de índice+detalhe elimina. |
 **A instrução como interface**
 
-| Rótulo | Alternativo | O que decide |
-|---|---|---|
-| Descrição como interface | — | A descrição é o que dispara: régua não lida não existe, e ambígua dispara errado. |
-| Restrição de formato | — | Formato imposto muda o conteúdo produzido, não só a aparência dele. |
-| Erro legível por modelo | lacuna: sem obra-âncora | Falha que o modelo consegue corrigir sozinho vale mais que falha exata e muda. |
-| Degradação declarada | lacuna: sem obra-âncora | Peça ausente vem nomeada com o motivo; pacote menor em silêncio é indistinguível de pacote certo. |
-| Skill | capacidade empacotada | Capacidade carregada por gatilho declarado — o que a torna instrumento e não aula. |
-| Paridade de superfície | lacuna: sem obra-âncora | Mesmo comportamento nas três superfícies; equaliza-se pelo meio, nunca pela mais pobre. |
-| Quantização · Degradação por quantização | — | Onde o corte de precisão paga e onde ele cobra em qualidade de saída. |
-
+| Rótulo | Alternativo | slug (`--conceito`) | O que decide |
+|---|---|---|---|
+| Descrição como interface | — | `descricao-como-interface` | A descrição é o que dispara: régua não lida não existe, e ambígua dispara errado. |
+| Restrição de formato | — | `restricao-de-formato` | Formato imposto muda o conteúdo produzido, não só a aparência dele. |
+| Erro legível por modelo | lacuna: sem obra-âncora | `erro-legivel-por-modelo` | Falha que o modelo consegue corrigir sozinho vale mais que falha exata e muda. |
+| Degradação declarada | lacuna: sem obra-âncora | `degradacao-declarada` | Peça ausente vem nomeada com o motivo; pacote menor em silêncio é indistinguível de pacote certo. |
+| Skill | capacidade empacotada | `skills` | Capacidade carregada por gatilho declarado — o que a torna instrumento e não aula. |
+| Paridade de superfície | lacuna: sem obra-âncora | `paridade-de-superficie` | Mesmo comportamento nas três superfícies; equaliza-se pelo meio, nunca pela mais pobre. |
+| Quantização · Degradação por quantização | — | `quantizacao` / `degradacao-por-quantizacao` | Onde o corte de precisão paga e onde ele cobra em qualidade de saída. |
 **A prova**
 
-| Rótulo | Alternativo | O que decide |
-|---|---|---|
-| Validade de construto | cross · estudos-ontologias, ia | A métrica mede o alvo ou mede a régua? É a objeção que precede qualquer número. |
-| Juiz-modelo | LLM-as-judge | Só vale calibrado contra rótulo humano em conjunto retido; sem isso é opinião com aparência de número. |
-| Consciência de avaliação | eval awareness | O avaliado que percebe a prova muda de comportamento — mede-se o teatro, não a conduta. |
-| Confundimento de ambiente em avaliação | — | Persona certa mal servida lê como persona ruim: defeito de montagem não é defeito de remit. |
+| Rótulo | Alternativo | slug (`--conceito`) | O que decide |
+|---|---|---|---|
+| Validade de construto | cross · estudos-ontologias, ia | `validade-de-construto` | A métrica mede o alvo ou mede a régua? É a objeção que precede qualquer número. |
+| Juiz-modelo | LLM-as-judge | `juiz-modelo` | Só vale calibrado contra rótulo humano em conjunto retido; sem isso é opinião com aparência de número. |
+| Consciência de avaliação | eval awareness | `consciencia-de-avaliacao` | O avaliado que percebe a prova muda de comportamento — mede-se o teatro, não a conduta. |
+| Confundimento de ambiente em avaliação | — | `confundimento-de-ambiente-em-avaliacao` | Persona certa mal servida lê como persona ruim: defeito de montagem não é defeito de remit. |
 
 ## c) Consulta dirigida
 

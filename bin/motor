@@ -30,7 +30,7 @@ def uso(cod=2):
   motor <inst> ajuste                    todos os ajustes, com o valor de hoje
   motor <inst> ajuste <slug>             o que esse ajuste troca por que
   motor <inst> ajuste <slug> <valor>     mexe, promove e confere o servido
-  motor <inst> buscar "<pergunta>" [--k N] [--texto secao|trecho|nenhum]
+  motor <inst> buscar "<pergunta>" [--k N] [--texto secao|trecho|nenhum] [--conceito <slug>]
   motor <inst> medir [--k N] [--rerank] [--rotulo <nome>] [--gabarito <arq>]
                      [--expansao [--peso-conceito X]]
                                         bateria no gold canonico, pela porta servida:
@@ -251,9 +251,15 @@ def cmd_buscar(inst, argv):
         sys.exit(2)
     corpo = {"pergunta": argv[0]}
     resto = argv[1:]
+    conceitos = []
     for k, v in zip(resto[::2], resto[1::2]):
         k = k.lstrip("-")
-        corpo[k] = int(v) if k == "k" else v
+        if k == "conceito":            # repetivel: cada --conceito <slug> acrescenta um
+            conceitos.append(v)
+        else:
+            corpo[k] = int(v) if k == "k" else v
+    if conceitos:
+        corpo["conceitos"] = conceitos
     tok = ""
     with open(os.path.join(RAIZ, inst["token_em"])) as f:
         for l in f:
