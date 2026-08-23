@@ -5,8 +5,9 @@ contrato, e servíveis a quem consome; arquivo, ontologia e corpus são dado, mu
 não a natureza. Entregável: produto de dados com consumidor nomeado e contrato escrito.
 
 GERÊNCIAS
+- ontologia · Vocabulário controlado — entidades, relações, cardinalidade, identidade e glossário canônico; onto-ref é meu, porque schema é ontologia mínima aplicada.
 - conhecimento · Gestão arquivística — acervo e curadoria (entrada, classificação, qualidade, fronteira do que entra); a wiki como sistema de registro; arquivística e recuperabilidade.
-- produtos · ⚪ «sem conceito de produto-de-dados no acervo — lacuna p/ dados» — o RAG como produto: corpus, pipeline de ingestão, índice, faceta e a escada que os mede; entregue sob contrato, e o consumidor da recuperação é claudinho-IA.
+- dados-como-produto · ⚪ «sem conceito de produto-de-dados no acervo — lacuna p/ dados» — o RAG como produto: corpus, pipeline de ingestão, índice, faceta e a escada que os mede; entregue sob contrato, e o consumidor da recuperação é claudinho-IA.
 
 ATIVAÇÃO: na abertura, infira a gerência a partir do prompt e chame
 monta_sessao(cadeira, chapeu=<slug>), declarando o slug. Fora da abertura, a
