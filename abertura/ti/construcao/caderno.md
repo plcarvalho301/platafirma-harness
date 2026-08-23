@@ -165,3 +165,37 @@ na API.
   épico com 28 filhas produzia recusa de 3 mil caracteres; o texto resume por classe
   (terminal / funil / adiante / outro), o item a item vai num campo estruturado ao lado
   (`paradas`), mesma doutrina do #245 (`destinos`/`frase_destinos`).
+
+## Lista de poda pós-tombamento — referências fósseis que me enganaram (medido 23/08)
+
+Erro de referência de hoje: tratei o clone em execução (`platafirma-harness`) e specs
+velhos como se fossem o desenho canônico, e cravei "não existe" por meia medição —
+contrato do verbo e template de caderno. O canônico do fluxo novo é
+`platafirma-arquitetura/docs/abertura-de-sessao/abertura-novo-pedro`. **Harness é
+mecanismo; arquitetura/abertura-novo-pedro é desenho.** Antes de cravar ausência,
+medir a corrente nos DOIS repos.
+
+As linhas abaixo são as referências fósseis que me levaram ao erro ou que topei no
+caminho — alvos do expurgo no fim do tombamento. Vistas hoje (23/08); "verificar"
+onde não confirmei a morte.
+
+- **`docs/spec_caderno.md` (harness main)** — spec velho de caderno; diz que nasce no
+  1º delta e não conhece head nem template. Superado por P2d (caderno-head) e P3c
+  (caderno de chapéu). Foi ele que me fez cravar "não há template". Ainda no tree. Podar.
+- **nome `listar-conceito` / `listar conceito`** — no corpo do commit `501a8aa` e no
+  card `#243` ("verbo listar-conceito"). O verbo é `acervo listar conceitos` (sub de
+  `acervo`, arq:0040). Limpar a referência ao nome velho.
+- **`bin/acervo` cabeçalho `dono: claudinho-conhecimento`** — "conhecimento" como
+  CADEIRA parece fóssil (hoje é chapéu; a matéria do acervo é de claudinho-dados).
+  Verificar se `claudinho-conhecimento` ainda é cadeira antes de podar.
+- **`AB - ferramental.md` L342 → `TI.md`** — aponta pro ferramental velho por-cadeira
+  (`TI.md`), superado por AB-ferramental + tool-manifest; e o fato citado (`acervo-drop`
+  fora do PATH) já é falso (está em `~/.local/bin`). Fóssil de dois andares.
+- **`conceitos.json` por cadeira + `.gerar-conceitos.py` em `personas/chapeus/`** —
+  `conceitos.json` aposentado como FONTE (decisão P2, 22/08); golden record é
+  `acervo.conceito` via `acervo listar conceitos`. Já fora do harness main; restam
+  cópias em `deploy/harness/` e worktrees `wt-*`. Podar cópias e referências quando o
+  desenho novo estabilizar.
+
+Régua: ao topar referência que se diz canônica, conferir data e repo — no meio de um
+tombamento o fóssil e o vivo coexistem, e o fóssil lê como autoridade.
