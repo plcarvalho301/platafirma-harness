@@ -9,8 +9,9 @@ do dono é sobre o fluxo, e fluxo que não se testa isolado não se confia. `cas
 
 - **(a) determinístico** — `decide()`: o rótulo canônico aparece inteiro na pergunta ->
   conta acertos por bloco -> um bloco vence com margem -> o slug dele. É curto-circuito: casou
-  com folga, nem chama (b). Fonte da tabela: `conceitos.json` por cadeira, que deixa de ser
-  texto servido (morto hoje) e vira a TABELA DE ROTAS do roteador.
+  com folga, nem chama (b). Fonte dos conceitos: o golden record `acervo.conceito`
+  (verbo `acervo listar conceitos`); a tabela de rotas por cadeira e GERADA dele.
+  `conceitos.json` foi aposentado como fonte (decisao P2, 22/08) e nao existe em disco.
 - **(b) semantico** — `roteia_semantico()`: embedding da pergunta x banco de cenarios (a
   secao (a) de cada chapeu), maximo-sobre-exemplos, limiar + margem. HOJE devolve `None` com
   motivo declarado: nao ha `/embed` no motor servido, e carregar o embedder (~2,4 GB, ~25 s
@@ -47,7 +48,7 @@ MARGEM_SEMANTICA = 0.05   # 1o e 2o colados -> None: ambiguidade e sinal, nao mo
 
 @dataclass(frozen=True, slots=True)
 class Rota:
-    """Um chapeu candidato: o slug e os rotulos que o disparam (bloco do conceitos.json)."""
+    """Um chapeu candidato: o slug e os rotulos que o disparam (gerados do golden record `acervo.conceito`)."""
 
     slug: str
     rotulos: tuple[str, ...]
@@ -74,14 +75,16 @@ def _normaliza(texto: str) -> str:
 
 
 def rotas_do_disco(cadeira: str, raiz_chapeus: str) -> list[Rota]:
-    """As rotas da cadeira: um bloco do `conceitos.json` POR chapeu que existe no disco.
+    """As rotas da cadeira: um bloco POR chapeu que existe no disco, gerado do golden record `acervo.conceito`.
 
     Bloco sem chapeu correspondente (ex.: `inferencia`, que e MODO e nao tem `.md`) NAO vira
     rota — rotear para um chapeu inexistente e o erro que `serve_chapeu` pegaria tarde. Cadeira
-    sem `conceitos.json` devolve lista vazia: o roteador cai em (c) inteiro, declarado.
+    sem tabela gerada devolve lista vazia: o roteador cai em (c) inteiro, declarado.
+    `conceitos.json` foi aposentado (P2, 22/08); o leitor abaixo ainda procura o caminho
+    aposentado, e a troca pela tabela gerada e a retirada rastreada em tombamento.
     """
     base = os.path.join(raiz_chapeus, cadeira)
-    caminho = os.path.join(base, "conceitos.json")
+    caminho = os.path.join(base, "conceitos.json")  # aposentado (P2); ausente -> [] -> (c)
     if not os.path.isfile(caminho):
         return []
     try:
@@ -167,7 +170,7 @@ def escolhe(pergunta: str | None, cadeira: str, raiz_chapeus: str,
         return Decisao(slug=None, via="fallback", motivo="sem pergunta: nada para rotear")
     if not rotas:
         return Decisao(slug=None, via="fallback",
-                       motivo=f"cadeira '{cadeira}' sem tabela de rotas (conceitos.json)")
+                       motivo=f"cadeira '{cadeira}' sem tabela de rotas gerada (golden record acervo.conceito)")
 
     d = decide(pergunta, rotas)
     if d.slug:
