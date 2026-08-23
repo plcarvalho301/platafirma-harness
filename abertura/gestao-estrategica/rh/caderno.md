@@ -122,10 +122,9 @@ já respondia. Custou meia fita do dono.
 
 ## Campo `dono` de peça: proveniência, não fronteira de escrita (medido 23/08)
 
-- No catálogo velho (`registro/pecas/*.json`) o campo `dono` de peça de chapéu
-  (chapeu, ferramental, caderno-chapeu) grava um dono FIXO, mas o schema define
-  `dono` como "responsável pelo CONTEÚDO" — e o conteúdo de peça de chapéu é da
-  cadeira instanciada, que varia. O campo mente contra o próprio schema.
+- Proveniência de uma peça (quem a desenhou, de onde veio um campo) não é
+  fronteira de quem escreve o conteúdo. Conteúdo de peça de chapéu é da cadeira
+  instanciada. Ler o valor de um campo como barreira é o defeito.
 - Erro recorrente meu nesta fita (4x): ler proveniência/fronteira como IMPEDIMENTO.
   Subdomínio, "deve"≠"pode", dono do json lido como barreira, ofício confundido com
   ferramental de chapéu. Raiz: supor a arquitetura em vez de ler o canônico dela.

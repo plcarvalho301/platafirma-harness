@@ -116,7 +116,5 @@ sequenciamento de chapéu:
   dá não se repete. Canônico: `AB - ferramental.md` §3; molde `P3b`.
 - O **catálogo de ferramentas** é um `.md` GERADO (L3 espelho humano; L4 catálogo
   de existência, contadores), análogo ao `acervo listar conceitos`. NÃO é json.
-- `registro/pecas/*.json` + `schema-peca.json` são resquício do modelo anterior;
-  o montador ainda os lê (glob em monta-sessao:92). Tombamento despachado a
-  claudinho-TI/construcao (handoff 20260823T165816), card filho de #2387 pendente
-  (rastreador estava fora). Zero fóssil no modelo novo — ordem do dono.
+- O montador lê o catálogo da árvore `abertura/**/*.md` (peças-arquivo) + lista
+  embutida (peças-verbo). Não há json de peça no fluxo — o modelo é `.md`.
