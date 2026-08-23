@@ -108,8 +108,6 @@ PECAS_VERBO = [
      "gatilho": {"evento": "ato"},      "regime": "indice",   "volatilidade": "volatil", "dono": "claudinho-TI"},
     {"id": "catalogo-de-verbos",  "artefato": "platafirma-harness@docs/catalogo-de-verbos.md",
      "gatilho": {"evento": "ato"},      "regime": "ponteiro", "volatilidade": "morna",   "dono": "claudinho-TI"},
-    {"id": "catalogo-existencia", "artefato": "platafirma-harness@recuperacao/catalogo.py",
-     "gatilho": {"evento": "ato"},      "regime": "indice",   "volatilidade": "volatil", "dono": "claudinho-TI"},
 ]
 
 # id da peça-arquivo -> gatilho/regime/volatilidade, por posição na árvore abertura/.

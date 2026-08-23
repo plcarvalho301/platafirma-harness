@@ -4,7 +4,7 @@
 # dono: claudinho-TI
 #
 # A regua NAO mora aqui: mora em `conferir repo`, `conferir superficie` e
-# `conferir peca`, e este hook as chama com --staged.
+# `conferir arranque`, e este hook as chama com --staged.
 # Gate e conferencia que leem reguas diferentes divergem em silencio no primeiro
 # ajuste que so um dos dois receber.
 #
