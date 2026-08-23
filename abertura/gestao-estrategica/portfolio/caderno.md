@@ -86,3 +86,12 @@ todas de boa-fe, todas erradas no ponto que decidia:
 
 O que estas tres tem em comum e o que fica: a cadeira relata o que ela mediu, e o que
 ela mediu depende da porta que ela usa. O meu ato pede a fonte, nao o relato.
+
+## Janela de push direto no rewrite dos chapeus (ordem do dono, 23/08/2026)
+
+- Enquanto durar o rewrite dos chapeus (F5), mudanca de ESTRUTURA de persona e de
+  diretorio de chapeu vai direto a main, SEM nova aprovacao por item. Criar/renomear
+  dir de chapeu, mexer em persona.md: push na hora, relato depois.
+- Fora dessa janela, estrutura volta a exigir sign-off do dono (push do dono).
+- Primeiro caso sob a regra: dir `abertura/dados/ontologia` criado e empurrado sem
+  sign-off (commit 23/08). Fecha o pre-requisito que travava a sessao de chapeus de dados.
