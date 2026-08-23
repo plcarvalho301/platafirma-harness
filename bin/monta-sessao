@@ -387,15 +387,21 @@ def monta(cadeira, atualizar, pergunta=None, forcado_chapeu=None):
     # Canonico vem do ledger, nao da linha 1: o form novo poe o alias ali (arq:0073).
     nome = _canonico(cadeira)
 
+    # Perna 1 × perna 2 (arq:0073, fluxo de duas chamadas): a 1ª chamada (sem
+    # pergunta nem chapéu) devolve a abertura; a 2ª (com pergunta ou chapéu) devolve
+    # SÓ o chapéu roteado — a abertura já chegou na 1ª, reenviá-la é o defeito.
+    perna_dois = bool((pergunta or "").strip()) or bool((forcado_chapeu or "").strip())
+
     servidas, avisos = [], []
-    for peca in pecas:
-        env, conteudo = serve(peca, cadeira, nome)
-        env["conteudo"] = conteudo
-        servidas.append(env)
-        if env["frescor"] == "indisponivel":
-            avisos.append(f"peça `{env['peca']}` indisponível: {env['motivo']}")
-        elif env["frescor"] == "defasado":
-            avisos.append(f"peça `{env['peca']}` servida de clone atrasado: {env['motivo']}")
+    if not perna_dois:
+        for peca in pecas:
+            env, conteudo = serve(peca, cadeira, nome)
+            env["conteudo"] = conteudo
+            servidas.append(env)
+            if env["frescor"] == "indisponivel":
+                avisos.append(f"peça `{env['peca']}` indisponível: {env['motivo']}")
+            elif env["frescor"] == "defasado":
+                avisos.append(f"peça `{env['peca']}` servida de clone atrasado: {env['motivo']}")
 
     # Divergencia entre o que a persona declara e o que o catalogo resolve nao se
     # escolhe em silencio: as duas fontes existem, e a que discorda vira aviso.

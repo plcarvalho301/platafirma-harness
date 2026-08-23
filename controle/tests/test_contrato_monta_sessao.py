@@ -295,3 +295,13 @@ def test_sem_json_mantem_marcadores_de_texto(raiz):
     assert any(l.startswith("===== oficio: platafirma-harness@abertura/oficio.md")
                for l in linhas)
     assert "{" not in proc.stdout
+
+
+def test_perna_dois_nao_reenvia_abertura(raiz):
+    """Regressão (defeito reportado pela Carla): a 2ª chamada devolve SÓ o chapéu.
+    A abertura já chegou na 1ª; reenviá-la é o defeito. Guarda que o pacote da 2ª
+    perna contenha exatamente as peças de chapéu, e nenhuma de abertura."""
+    dados = json.loads(_run(["teste", "--chapeu", "rh", "--json"], raiz).stdout)
+    ids = {p["peca"].split(":", 1)[0] for p in dados["pecas"]}
+    assert ids == {"chapeu", "ferramental", "caderno-chapeu"}, f"perna 2 vazou/omitiu: {ids}"
+    assert dados["pacote"]["pecas"] == len(dados["pecas"])
