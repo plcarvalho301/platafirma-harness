@@ -8,16 +8,20 @@ outras por regra fixa:
   localpart Matrix   _pf_ti, _pf_gestao-estrategica   (minusculo, exigencia do Synapse)
 
 A caixa do sufixo nao segue regra: `TI` e `IA` sao maiusculas, `produto` e
-`seguranca` nao. Medido em 15/08: `monta-sessao ti` falha, `monta-sessao TI` passa.
-Por isso a caixa NAO se calcula — se le do nome do arquivo de persona, que e a fonte.
-Cadeira nova entra sozinha, sem editar este arquivo.
+`seguranca` nao. Por isso o case NAO se calcula — se le do LEDGER DE VINCULO
+(arq:0073), que carrega o slug canonico (`claudinho-TI`). A persona do form novo poe
+o alias na linha 1, entao ela nao serve mais de fonte do prefixo. Cadeira nova entra
+sozinha, sem editar este arquivo.
 
-Fonte: platafirma-harness/abertura/<sufixo>/. A raiz sai de PF_RAIZ, ou do
-default do host. No container da recepcao, abertura/ entra por bind mount ro.
+Fonte do case e do prefixo: platafirma-harness/registro/eventos-org.jsonl.
+Fonte da persona de participante: platafirma-harness/abertura/<sufixo>/persona.md.
+A raiz sai de PF_RAIZ, ou do default do host; no container da recepcao ambos entram
+por bind mount ro.
 """
 
 from __future__ import annotations
 
+import json
 import os
 import re
 from pathlib import Path
@@ -43,22 +47,47 @@ def _raiz_personas() -> Path:
     return Path(raiz) / "platafirma-harness" / "abertura"
 
 
-def cadeiras() -> list[str]:
-    """Sufixos canonicos, na caixa em que os arquivos de persona os escrevem.
+def _ledger() -> Path:
+    raiz = os.environ.get("PF_RAIZ", "/home/claudinho/AI")
+    return Path(raiz) / "platafirma-harness" / "registro" / "eventos-org.jsonl"
 
-    Ausencia se declara: diretorio inexistente e erro, nao lista vazia.
-    """
-    dir_abertura = _raiz_personas()
-    if not dir_abertura.is_dir():
+
+def _sem_prefixo(slug: str) -> str:
+    for pref in _PREFIXOS_DE_SLUG:
+        if slug.startswith(pref):
+            return slug[len(pref):]
+    return slug
+
+
+def _cadeiras_do_ledger() -> dict:
+    """{sufixo_minusculo: slug_canonico} do ledger de vinculo. Fonte do case e do
+    prefixo (arq:0073). Ausencia se declara: ledger ausente e erro, nao dict vazio."""
+    p = _ledger()
+    if not p.is_file():
         raise FileNotFoundError(
-            f"diretorio de abertura nao encontrado: {dir_abertura} "
-            "(defina PF_RAIZ, ou monte abertura/ no container)"
-        )
-    achados = [
-        p.name for p in dir_abertura.iterdir()
-        if p.is_dir() and p.name not in _NAO_SAO_CADEIRA
-    ]
-    return sorted(achados)
+            f"ledger de vinculo nao encontrado: {p} (defina PF_RAIZ, ou monte registro/)")
+    mapa: dict = {}
+    with p.open(encoding="utf-8", errors="replace") as fh:
+        for linha in fh:
+            linha = linha.strip()
+            if not linha:
+                continue
+            try:
+                slug = (json.loads(linha).get("cadeira") or "").strip()
+            except ValueError:
+                continue
+            if slug:
+                mapa[_sem_prefixo(slug).lower()] = slug
+    return mapa
+
+
+def cadeiras() -> list[str]:
+    """Sufixos canonicos, no case do ledger de vinculo (`TI`/`IA` maiusculos), sem
+    participantes nem nao-cadeiras. Ausencia se declara: ledger ausente e erro.
+    """
+    fora = _NAO_SAO_CADEIRA | _SAO_PARTICIPANTE
+    sufs = [_sem_prefixo(slug) for slug in _cadeiras_do_ledger().values()]
+    return sorted(s for s in sufs if s not in fora)
 
 
 def participantes() -> list[str]:
@@ -158,18 +187,10 @@ def slug_da_cadeira(nome: str) -> str | None:
     if sufixo is None:
         return None
     if sufixo in _SAO_PARTICIPANTE:
-        # Participante nao e claudinho: o proprio nome e o slug, e a linha 1 da
-        # persona dele nao carrega prefixo nenhum. Cair no regex abaixo devolveria
-        # None, e quem chama trataria isso como "ator sem slug" — que e ausencia,
-        # nao a resposta certa.
+        # Participante nao e claudinho: o proprio nome e o slug.
         return sufixo
-    arq = _raiz_personas() / sufixo / "persona.md"
-    try:
-        primeira = arq.read_text(errors="replace").split("\n", 1)[0]
-    except OSError:
-        return None
-    achado = re.search(r"\b(claudinh[oa]-[A-Za-z0-9-]+)", primeira)
-    return achado.group(1) if achado else None
+    # Fonte do prefixo e o LEDGER, nao a linha 1 da persona (form novo poe alias la).
+    return _cadeiras_do_ledger().get(sufixo.lower())
 
 
 def localpart_da_cadeira(nome: str, prefixo: str = PREFIXO_BOT) -> str | None:
