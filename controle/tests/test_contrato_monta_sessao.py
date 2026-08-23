@@ -287,12 +287,6 @@ def test_peca_verbo_indisponivel_nao_derruba_o_pacote(raiz):
     assert any("mesa" in a and "indisponível" in a for a in dados["avisos"])
 
 
-def test_peca_com_teto_excedido_gera_aviso(tmp_path):
-    raiz = _monta_raiz(tmp_path, teto_oficio=1)
-    dados = json.loads(_run(["teste", "--json"], raiz).stdout)
-    assert any("oficio" in a and "teto declarado" in a for a in dados["avisos"])
-
-
 # --- regressão do texto sem --json ------------------------------------------
 
 

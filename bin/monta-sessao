@@ -396,9 +396,6 @@ def monta(cadeira, atualizar, pergunta=None, forcado_chapeu=None):
             avisos.append(f"peça `{env['peca']}` indisponível: {env['motivo']}")
         elif env["frescor"] == "defasado":
             avisos.append(f"peça `{env['peca']}` servida de clone atrasado: {env['motivo']}")
-        if env["teto_tokens"] and env["tokens"] > env["teto_tokens"]:
-            avisos.append(f"peça `{env['peca']}` serviu {env['tokens']} tokens "
-                          f"contra teto declarado de {env['teto_tokens']}")
 
     # Divergencia entre o que a persona declara e o que o catalogo resolve nao se
     # escolhe em silencio: as duas fontes existem, e a que discorda vira aviso.
@@ -423,9 +420,6 @@ def monta(cadeira, atualizar, pergunta=None, forcado_chapeu=None):
                 chapeu_env = envc
             if envc["frescor"] == "indisponivel":
                 avisos.append(f"peça `{envc['peca']}` indisponível: {envc['motivo']}")
-            elif envc["teto_tokens"] and envc["tokens"] > envc["teto_tokens"]:
-                avisos.append(f"peça `{envc['peca']}` serviu {envc['tokens']} tokens "
-                              f"contra teto de {envc['teto_tokens']}")
     else:
         avisos.append(f"chapeu nao roteado (fallback): {dec.motivo}")
 
