@@ -27,6 +27,7 @@ encerrar fita|varredura       fecha por marco fechado, nao por hora do dia
 tarefas ler|listar|criar|comentar|mover|fechar|apagar|assinar|sub|api   cards; `mover` anda o
                               fluxo, `fechar` fecha, `apagar` some (ordem do dono), `assinar` e sign-off
 acervo escada                 UNICA fonte de numero do acervo; nunca SQL na mao
+acervo listar conceitos       golden record de conceito; a lista (b) do chapeu sai daqui (#262)
 acervo | seg | motor          sem argumento, cada um lista os proprios sub-atos
 motor rag buscar|medir|ajuste
 infra estado|saude|logs|restart|exclusivo|cache|backup · sinal

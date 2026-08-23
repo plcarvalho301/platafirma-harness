@@ -7,7 +7,7 @@
 --
 -- Referência que cruza fronteira de componente é LÓGICA, sem FK, por arq:0046:
 --   fita.persona        -> identidade.identidade (instância do core, 5435)
---   peca_servida.peca   -> platafirma-harness@registro/pecas/<id>.json
+--   peca_servida.peca   -> arvore abertura/**/*.md + PECAS_VERBO no montador (#262)
 --   mesa_item.chapeu    -> abertura/<cadeira>/<slug>/chapeu.md
 -- Sem FK possível entre instâncias, e é por isso que não há JOIN acidental a lembrar.
 

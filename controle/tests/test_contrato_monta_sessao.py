@@ -79,27 +79,7 @@ def _monta_raiz(tmp_path: Path) -> Path:
     """Raiz hermética no modelo abertura/: catálogo + árvore abertura + ledger + git."""
     raiz = tmp_path / "raiz"
     harness = raiz / "platafirma-harness"
-    pecas_dir = harness / "registro" / "pecas"
 
-    catalogo = [
-        _peca("persona", "platafirma-harness@abertura/{cadeira}/persona.md"),
-        _peca("oficio", "platafirma-harness@abertura/oficio.md"),
-        _peca("conduta-dono", "platafirma-harness@abertura/dono.md"),
-        _peca("antirreabertura", "platafirma-harness@abertura/antirreabertura.md",
-              volatilidade="morna"),
-        _peca("caderno-head", "platafirma-harness@abertura/{cadeira}/caderno.md",
-              volatilidade="volatil"),
-        _peca("mesa", "verbo:mesa ver", volatilidade="volatil"),
-        _peca("cadernos-indice", "verbo:mesa caderno", volatilidade="volatil"),
-        _peca("chapeu", "platafirma-harness@abertura/{cadeira}/{chapeu}/chapeu.md",
-              evento="chapeu"),
-        _peca("ferramental", "platafirma-harness@abertura/{cadeira}/{chapeu}/ferramental.md",
-              evento="chapeu"),
-        _peca("caderno-chapeu", "verbo:mesa caderno {chapeu}",
-              evento="chapeu", volatilidade="volatil"),
-    ]
-    for p in catalogo:
-        _escreve(pecas_dir, f"{p['id']}.json", json.dumps(p, ensure_ascii=False))
 
     # persona NOVA: alias na linha 1, sem FERRAMENTAL. O canônico sai do ledger.
     _escreve(harness, "abertura/teste/persona.md",
@@ -110,6 +90,7 @@ def _monta_raiz(tmp_path: Path) -> Path:
     _escreve(harness, "abertura/oficio.md", "# ofício comum\n\nfixture.\n")
     _escreve(harness, "abertura/dono.md", "# conduta do dono\n\nfixture.\n")
     _escreve(harness, "abertura/antirreabertura.md", "# antirreabertura\n\nfixture.\n")
+    _escreve(harness, "abertura/teste/caderno.md", "# caderno head\n\nfixture.\n")
     # perna 2 (chapéu rh da cadeira teste)
     _escreve(harness, "abertura/teste/rh/chapeu.md", "# chapéu rh\n\nfixture.\n")
     _escreve(harness, "abertura/teste/rh/ferramental.md", "# ferramental rh\n\nfixture.\n")

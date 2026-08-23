@@ -4,9 +4,10 @@
 # dono: claudinho-IA (politica de sessao) · claudinho-TI (montador)
 #
 # Fase 5 do card #189 (spec_montagem-de-sessao §4 e §6). O que mudou: as pecas nao
-# estao mais escritas aqui dentro. O montador le `registro/pecas/*.json`, serve o que
+# estao mais escritas aqui dentro. O montador le a arvore abertura/**/*.md e a lista
 # tem `gatilho.evento: abertura`, e nao sabe de antemao quais sao — peca nova entra
-# no pacote por commit no catalogo, sem tocar neste arquivo.
+# PECAS_VERBO deste arquivo, serve o que tem gatilho.evento abertura, e os .json foram
+# arrancados (#262) — a arvore e a fonte, o indice velho morreu.
 #
 # ENVELOPE UNIFORME (§6.2): toda peca sai como
 #   {peca, dono, ref, sha, regime, tokens, frescor}
@@ -41,7 +42,6 @@ import time
 
 RAIZ = os.environ.get("PF_RAIZ", os.path.expanduser("~/AI"))
 HARNESS = os.path.join(RAIZ, "platafirma-harness")
-PECAS = os.path.join(HARNESS, "registro", "pecas")
 ABERTURA = os.path.join(HARNESS, "abertura")
 LEDGER = os.path.join(HARNESS, "registro", "eventos-org.jsonl")
 # arq:0073: morada unica em abertura/. Fonte de conceito e o golden record acervo.conceito
@@ -87,15 +87,70 @@ RE_FERRAMENTAL = re.compile(r"^FERRAMENTAL: *([^ ]*\.md)")
 
 
 # ------------------------------------------------------------------ catalogo
+# Peças-verbo/ponteiro: não têm .md na árvore. Ficam aqui, no montador — é ele que
+# declara o que sempre serve, não um índice externo. Os registro/pecas/*.json foram
+# arrancados (#262): a árvore abertura/ é a fonte das peças-arquivo, esta lista é a das
+# de verbo. O que era `artefato/regime/gatilho/volatilidade` no .json e nada ramificava
+# virou o que ramifica: gatilho (perna 1 x 2) e volatilidade (ordem de injeção).
+PECAS_VERBO = [
+    {"id": "arranque",        "artefato": "platafirma-harness@abertura/arranque.md",
+     "gatilho": {"evento": "ato"},      "regime": "ponteiro", "volatilidade": "estavel", "dono": "claudinho-IA"},
+    {"id": "mesa",            "artefato": "verbo:mesa ver",
+     "gatilho": {"evento": "abertura"}, "regime": "valor",    "volatilidade": "volatil", "dono": "claudinho-dados"},
+    {"id": "cadernos-indice", "artefato": "verbo:mesa caderno",
+     "gatilho": {"evento": "abertura"}, "regime": "indice",   "volatilidade": "volatil", "dono": "claudinho-dados"},
+    {"id": "caderno-chapeu",  "artefato": "verbo:mesa caderno {chapeu}",
+     "gatilho": {"evento": "chapeu"},   "regime": "valor",    "volatilidade": "volatil", "dono": "claudinho-dados"},
+    {"id": "fila-envelope",   "artefato": "verbo:fila ler",
+     "gatilho": {"evento": "ato"},      "regime": "indice",   "volatilidade": "volatil", "dono": "claudinho-IA"},
+    {"id": "minutas",         "artefato": "verbo:minuta ler",
+     "gatilho": {"evento": "ato"},      "regime": "indice",   "volatilidade": "volatil", "dono": "claudinha-gestao-estrategica"},
+    {"id": "tarefas-abertas", "artefato": "verbo:tarefas listar",
+     "gatilho": {"evento": "ato"},      "regime": "indice",   "volatilidade": "volatil", "dono": "claudinho-TI"},
+    {"id": "catalogo-de-verbos",  "artefato": "platafirma-harness@docs/catalogo-de-verbos.md",
+     "gatilho": {"evento": "ato"},      "regime": "ponteiro", "volatilidade": "morna",   "dono": "claudinho-TI"},
+    {"id": "catalogo-existencia", "artefato": "platafirma-harness@recuperacao/catalogo.py",
+     "gatilho": {"evento": "ato"},      "regime": "indice",   "volatilidade": "volatil", "dono": "claudinho-TI"},
+]
+
+# id da peça-arquivo -> gatilho/regime/volatilidade, por posição na árvore abertura/.
+# raiz de abertura/ e nível de cadeira = perna 1 (abertura); nível de chapéu = perna 2.
+_ARQ_META = {
+    "dono.md":            ("conduta-dono",   "abertura", "valor", "estavel"),
+    "oficio.md":          ("oficio",         "abertura", "valor", "estavel"),
+    "antirreabertura.md": ("antirreabertura","abertura", "valor", "morna"),
+    "persona.md":         ("persona",        "abertura", "valor", "estavel"),
+    "caderno.md":         ("caderno-head",   "abertura", "valor", "volatil"),
+    "chapeu.md":          ("chapeu",         "chapeu",   "valor", "estavel"),
+    "ferramental.md":     ("ferramental",    "chapeu",   "valor", "estavel"),
+}
+
+
 def catalogo():
-    saida = []
-    for caminho in sorted(glob.glob(os.path.join(PECAS, "*.json"))):
-        try:
-            with open(caminho, encoding="utf-8") as fh:
-                saida.append(json.load(fh))
-        except (OSError, ValueError) as e:
-            print(f"(aviso: peca ilegivel {caminho}: {e})", file=sys.stderr)
-    return saida
+    """Fonte do catálogo (#262): árvore abertura/ para peça-arquivo + PECAS_VERBO para o
+    resto. NÃO há mais registro/pecas/*.json. Cada peça-arquivo é UMA no catálogo mesmo
+    aparecendo em vários .md reais (persona de cada cadeira etc.): dedup por id, o path
+    volta a template ({cadeira}/{chapeu}) por posição."""
+    vistos, saida = {}, []
+    for caminho in sorted(glob.glob(os.path.join(ABERTURA, "**", "*.md"), recursive=True)):
+        nome = os.path.basename(caminho)
+        meta = _ARQ_META.get(nome)
+        if not meta:
+            continue
+        pid, evento, regime, volat = meta
+        if pid in vistos:
+            continue
+        vistos[pid] = True
+        rel = os.path.relpath(caminho, ABERTURA).replace(os.sep, "/")
+        if evento == "chapeu":
+            art = f"platafirma-harness@abertura/{{cadeira}}/{{chapeu}}/{nome}"
+        elif rel.count("/") >= 1:
+            art = f"platafirma-harness@abertura/{{cadeira}}/{nome}"
+        else:
+            art = f"platafirma-harness@abertura/{nome}"
+        saida.append({"id": pid, "dono": None, "artefato": art, "regime": regime,
+                      "gatilho": {"evento": evento}, "volatilidade": volat})
+    return saida + PECAS_VERBO
 
 
 def de_abertura(pecas, cadeira):
