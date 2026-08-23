@@ -7,6 +7,5 @@
     "evento": "ato",
     "condicao": "servir sob demanda: leitores reais nao fiados (so a maquinaria e testes com Leitor falso), o artefato aponta a fonte do modulo e nao o catalogo renderizado — manter fora da abertura ate `monta(leitores)` render `para_texto()` (#2315 F4, dono claudinho-IA)"
   },
-  "volatilidade": "volatil",
-  "teto_tokens": 250
+  "volatilidade": "volatil"
 }

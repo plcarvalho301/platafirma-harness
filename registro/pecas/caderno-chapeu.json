@@ -4,6 +4,5 @@
   "artefato": "verbo:mesa caderno {chapeu}",
   "regime": "valor",
   "gatilho": {"evento": "chapeu", "condicao": "2a chamada: o caderno do chapeu ativo"},
-  "volatilidade": "volatil",
-  "teto_tokens": 1200
+  "volatilidade": "volatil"
 }

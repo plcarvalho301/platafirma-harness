@@ -3,7 +3,6 @@
   "o_que_e": "Schema canonico do arquivo de peca do catalogo de montagem de sessao. Fonte unica: `conferir peca` le daqui, nao reimplementa. spec_montagem-de-sessao.md secao 3 e 6.",
   "dono": "claudinho-dados",
   "diretorio": "registro/pecas",
-  "orcamento_abertura_tokens": 6300,
   "derivados_que_nao_se_declaram": {
     "camada": "A|B|C|D sai de gatilho.evento + regime; campo declarado seria segunda fonte"
   },
@@ -66,13 +65,6 @@
       ],
       "nota": "ordena a injecao: estavel primeiro, volatil por ultimo"
     },
-    "teto_tokens": {
-      "tipo": "inteiro",
-      "obrigatorio_se": {
-        "gatilho.evento": "abertura"
-      },
-      "nota": "alvo contratado, nao medicao do servido. A soma dos tetos de abertura contra o orcamento sai como observacao, nao como defeito"
-    },
     "emenda": {
       "tipo": "ref_peca",
       "obrigatorio": false,
@@ -80,9 +72,6 @@
     }
   },
   "o_que_o_gate_nao_mede": [
-    "tokens servidos: teto e declaracao; medir servido contra teto e `conferir sessao`",
     "completude do catalogo contra o que o montador le: so e verificavel depois da fase 5"
-  ],
-  "orcamento_e_gate": false,
-  "nota_orcamento": "alvo observado, nao hard cap: `conferir peca` reporta a diferenca e nao muda o exit code. Volta a reprovar quando houver baseline zero medido do modelo novo (`conferir sessao`). Invariante: orcamento >= soma dos tetos de abertura, e a particao-alvo os faz iguais. Orcamento e POR SUPERFICIE — em claude.ai ha ~1.000 tokens de prompt da propria superficie, fora do catalogo."
+  ]
 }

@@ -7,6 +7,5 @@
     "evento": "abertura",
     "condicao": "sempre: so o indice; corpo sai por `mesa caderno <chapeu>` sob demanda"
   },
-  "volatilidade": "volatil",
-  "teto_tokens": 100
+  "volatilidade": "volatil"
 }

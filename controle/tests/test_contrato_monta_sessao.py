@@ -64,8 +64,8 @@ def _escreve(base: Path, rel: str, texto: str) -> Path:
     return caminho
 
 
-def _peca(id_, artefato, *, evento="abertura", volatilidade="estavel", teto_tokens=2000):
-    obj = {
+def _peca(id_, artefato, *, evento="abertura", volatilidade="estavel"):
+    return {
         "id": id_,
         "dono": "fixture",
         "artefato": artefato,
@@ -73,33 +73,30 @@ def _peca(id_, artefato, *, evento="abertura", volatilidade="estavel", teto_toke
         "gatilho": {"evento": evento, "condicao": "fixture"},
         "volatilidade": volatilidade,
     }
-    if teto_tokens is not None:
-        obj["teto_tokens"] = teto_tokens
-    return obj
 
 
-def _monta_raiz(tmp_path: Path, *, teto_oficio: int = 2000) -> Path:
+def _monta_raiz(tmp_path: Path) -> Path:
     """Raiz hermética no modelo abertura/: catálogo + árvore abertura + ledger + git."""
     raiz = tmp_path / "raiz"
     harness = raiz / "platafirma-harness"
     pecas_dir = harness / "registro" / "pecas"
 
     catalogo = [
-        _peca("persona", "platafirma-harness@abertura/{cadeira}/persona.md", teto_tokens=2000),
-        _peca("oficio", "platafirma-harness@abertura/oficio.md", teto_tokens=teto_oficio),
-        _peca("conduta-dono", "platafirma-harness@abertura/dono.md", teto_tokens=1500),
+        _peca("persona", "platafirma-harness@abertura/{cadeira}/persona.md"),
+        _peca("oficio", "platafirma-harness@abertura/oficio.md"),
+        _peca("conduta-dono", "platafirma-harness@abertura/dono.md"),
         _peca("antirreabertura", "platafirma-harness@abertura/antirreabertura.md",
-              volatilidade="morna", teto_tokens=800),
+              volatilidade="morna"),
         _peca("caderno-head", "platafirma-harness@abertura/{cadeira}/caderno.md",
-              volatilidade="volatil", teto_tokens=900),
-        _peca("mesa", "verbo:mesa ver", volatilidade="volatil", teto_tokens=250),
-        _peca("cadernos-indice", "verbo:mesa caderno", volatilidade="volatil", teto_tokens=100),
+              volatilidade="volatil"),
+        _peca("mesa", "verbo:mesa ver", volatilidade="volatil"),
+        _peca("cadernos-indice", "verbo:mesa caderno", volatilidade="volatil"),
         _peca("chapeu", "platafirma-harness@abertura/{cadeira}/{chapeu}/chapeu.md",
-              evento="chapeu", teto_tokens=2500),
+              evento="chapeu"),
         _peca("ferramental", "platafirma-harness@abertura/{cadeira}/{chapeu}/ferramental.md",
-              evento="chapeu", teto_tokens=2100),
+              evento="chapeu"),
         _peca("caderno-chapeu", "verbo:mesa caderno {chapeu}",
-              evento="chapeu", volatilidade="volatil", teto_tokens=1200),
+              evento="chapeu", volatilidade="volatil"),
     ]
     for p in catalogo:
         _escreve(pecas_dir, f"{p['id']}.json", json.dumps(p, ensure_ascii=False))
@@ -156,7 +153,7 @@ def _run(args, raiz: Path, *, mesa_modo: str = "ok",
     return subprocess.run(cmd, env=env, capture_output=True, text=True, timeout=20, check=False)
 
 
-ENVELOPE_CHAVES = {"peca", "dono", "ref", "regime", "volatilidade", "teto_tokens",
+ENVELOPE_CHAVES = {"peca", "dono", "ref", "regime", "volatilidade",
                    "sha", "tokens", "frescor", "motivo", "conteudo"}
 
 

@@ -1,8 +1,10 @@
 """Contrato do catálogo de existência (#2315). Spec §12.
 
-Duas invariantes que este arquivo existe para travar:
-1. leitor de custo `varredura` não entra na abertura;
-2. a peça servida cabe no teto, **medida** com o tokenizador do modelo servido.
+Uma invariante que este arquivo existe para travar:
+1. leitor de custo `varredura` não entra na abertura.
+
+(#2404: a comparação contra alvo saiu do catálogo — o que resta aqui é a
+medição em si, com o tokenizador do modelo servido.)
 """
 
 from __future__ import annotations
@@ -10,7 +12,6 @@ from __future__ import annotations
 import pytest
 
 from .catalogo import (
-    TETO_TOKENS,
     Catalogo,
     Custo,
     CustoProibido,
@@ -87,22 +88,7 @@ def test_fonte_sem_leitor_sai_nomeada():
     assert fontes_sem_leitor(_todos()) == ()
 
 
-# --------------------------------------------------------- o teto, MEDIDO
-
-def test_a_peca_servida_cabe_no_teto_medida_no_tokenizador_do_modelo():
-    """§12: alvo ⚪ ≤ 250 tokens, fechado na medição — não na estimativa."""
-    texto = monta(_todos()).para_texto()
-    assert conta_tokens(texto) <= TETO_TOKENS
-
-
-def test_o_teto_vale_com_as_seis_indisponiveis():
-    """O pior caso é o de todas caídas: o motivo é texto e é ele que estoura."""
-    def quebrado():
-        raise ConnectionError("socket recusado no host, sem rota para o loopback")
-
-    c = monta([Leitor(fonte=f, ler=quebrado) for f in Fonte])
-    assert conta_tokens(c.para_texto()) <= TETO_TOKENS
-
+# ------------------------------------------------------- a medição, EXATA
 
 def test_estimativa_por_bytes_nao_substitui_a_medicao():
     """Guarda contra alguém trocar a régua: bytes/4 e o tokenizador divergem."""

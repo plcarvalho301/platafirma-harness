@@ -217,7 +217,7 @@ def serve(peca, cadeira, persona=None, chapeu=None):
     art = peca.get("artefato", "")
     env = {"peca": peca.get("id"), "dono": peca.get("dono"), "ref": art,
            "regime": peca.get("regime"), "volatilidade": peca.get("volatilidade"),
-           "teto_tokens": peca.get("teto_tokens"), "sha": None,
+           "sha": None,
            "tokens": 0, "frescor": "indisponivel", "motivo": None}
     if peca.get("_forcada"):
         env["motivo"] = peca["_forcada"]
@@ -469,7 +469,6 @@ def imprime_texto(pac):
 
 
 CHAPEUS = ABERTURA
-TETO_CHAPEU = 2500  # personas/TEMPLATE-chapeu.md, medido no piloto rh.md
 
 
 def chapeus_de(cadeira):
@@ -489,7 +488,7 @@ def serve_chapeu(cadeira, slug):
     caminho = os.path.join(CHAPEUS, cadeira, slug, "chapeu.md")
     env = {"peca": f"chapeu:{slug}", "cadeira": cadeira, "slug": slug,
            "ref": f"platafirma-harness@abertura/{cadeira}/{slug}/chapeu.md",
-           "regime": "valor", "carga": "sob demanda", "teto_tokens": TETO_CHAPEU,
+           "regime": "valor", "carga": "sob demanda",
            "sha": None, "tokens": 0, "frescor": "indisponivel", "motivo": None}
     if not os.path.isfile(caminho):
         env["motivo"] = f"nao existe: {caminho}"
@@ -500,8 +499,6 @@ def serve_chapeu(cadeira, slug):
     env["tokens"] = conta_tokens(texto)
     env["sha"] = sha_conteudo(texto)
     _, env["metodo_tokens"] = medidor()
-    if env["tokens"] > TETO_CHAPEU:
-        env["motivo"] = f"estourou o teto: {env['tokens']} > {TETO_CHAPEU}"
     return env, texto
 
 
@@ -534,7 +531,7 @@ def imprime_chapeu(cadeira, args):
                   file=sys.stderr)
         return 1
     print(f"===== chapeu {cadeira}/{args.chapeu} @{env['sha']} "
-          f"({env['tokens']}/{TETO_CHAPEU} tokens) =====")
+          f"({env['tokens']} tokens) =====")
     print(texto)
     if env["motivo"]:
         print(f"\naviso: {env['motivo']}", file=sys.stderr)

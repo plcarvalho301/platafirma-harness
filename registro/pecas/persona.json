@@ -7,6 +7,5 @@
     "evento": "abertura",
     "condicao": "sempre: e a identidade da cadeira, sem ela nao ha sujeito"
   },
-  "volatilidade": "estavel",
-  "teto_tokens": 2000
+  "volatilidade": "estavel"
 }

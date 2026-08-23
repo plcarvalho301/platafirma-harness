@@ -1,7 +1,7 @@
 """Catálogo de existência — a peça de abertura (#2315, F4).
 
 `spec_recuperador.md` §12 e `arq:0064` item 3. Peça `catalogo-existencia`, regime
-`indice`, gatilho `abertura`, teto ⚪ 250 tokens.
+`indice`, servida sob demanda (#2404: sem orçamento declarado por peça).
 
 ## O que a peça responde, e o que ela não responde
 
@@ -39,7 +39,6 @@ from enum import StrEnum
 
 from .fontes import Fonte
 
-TETO_TOKENS = 250
 RAIZ = os.environ.get("PF_RAIZ", os.path.expanduser("~/AI"))
 TOKENIZADOR = os.path.join(RAIZ, "opt", "tokenizers", "qwen2.5.json")
 
@@ -142,7 +141,7 @@ def monta(leitores) -> Catalogo:
 
 def conta_tokens(texto: str) -> int:
     """Tokenizador do modelo servido. `tiktoken` tokeniza qwen errado, e estimativa por
-    bytes/4 erra ~40% — teto medido com a régua errada é teto declarado."""
+    bytes/4 erra ~40% — medir com a régua errada é o mesmo que não medir."""
     from tokenizers import Tokenizer
 
     if not os.path.isfile(TOKENIZADOR):
@@ -156,7 +155,7 @@ def fontes_sem_leitor(leitores) -> tuple[str, ...]:
     return tuple(sorted({str(f) for f in Fonte} - cobertas))
 
 
-if __name__ == "__main__":  # bancada: mede a peça contra o teto, não estima
+if __name__ == "__main__":  # bancada: mede a peça de fato, não estima
     # Números de ORDEM DE GRANDEZA, para medir a forma — não são medição de fonte
     # nenhuma, e por isso não se atribuem a fonte nenhuma no relato. O que se mede
     # aqui é quantos tokens a PEÇA custa, não quanto cada fonte tem.
@@ -166,5 +165,5 @@ if __name__ == "__main__":  # bancada: mede a peça contra o teto, não estima
     ))
     texto = exemplo.para_texto()
     print(texto)
-    print(f"\n{conta_tokens(texto)} tokens (qwen2.5) · teto {TETO_TOKENS}")
+    print(f"\n{conta_tokens(texto)} tokens (qwen2.5)")
     print(json.dumps(exemplo.para_json(), ensure_ascii=False))

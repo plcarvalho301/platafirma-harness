@@ -4,6 +4,5 @@
   "artefato": "platafirma-harness@abertura/{cadeira}/{chapeu}/ferramental.md",
   "regime": "valor",
   "gatilho": {"evento": "chapeu", "condicao": "2a chamada: o ferramental proprio do chapeu (L2), alem do oficio"},
-  "volatilidade": "estavel",
-  "teto_tokens": 2100
+  "volatilidade": "estavel"
 }

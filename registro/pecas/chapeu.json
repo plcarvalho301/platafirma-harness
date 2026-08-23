@@ -4,6 +4,5 @@
   "artefato": "platafirma-harness@abertura/{cadeira}/{chapeu}/chapeu.md",
   "regime": "valor",
   "gatilho": {"evento": "chapeu", "condicao": "2a chamada: o texto do chapeu escolhido — so entra depois de escolhido"},
-  "volatilidade": "estavel",
-  "teto_tokens": 2500
+  "volatilidade": "estavel"
 }
