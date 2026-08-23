@@ -51,7 +51,34 @@ except ImportError:
     sys.exit("erro: modulo 'redis' nao instalado neste venv (uv pip install redis)")
 
 RAIZ = os.environ.get("PF_RAIZ", os.path.expanduser("~/AI"))
-PERSONAS = os.path.join(RAIZ, "platafirma-harness", "personas")
+ABERTURA = os.path.join(RAIZ, "platafirma-harness", "abertura")
+LEDGER = os.path.join(RAIZ, "platafirma-harness", "registro", "eventos-org.jsonl")
+
+
+def _ledger_map():
+    """{sufixo_minusculo: slug_canonico} do ledger de vinculo (arq:0073). Fonte do
+    canonico e do case; a persona do form novo poe alias na linha 1, nao serve mais."""
+    mapa = {}
+    try:
+        with open(LEDGER, encoding="utf-8", errors="replace") as fh:
+            for linha in fh:
+                linha = linha.strip()
+                if not linha:
+                    continue
+                try:
+                    slug = (json.loads(linha).get("cadeira") or "").strip()
+                except ValueError:
+                    continue
+                suf = slug
+                for pref in ("claudinho-", "claudinha-"):
+                    if suf.startswith(pref):
+                        suf = suf[len(pref):]
+                        break
+                if suf:
+                    mapa[suf.lower()] = slug
+    except OSError:
+        pass
+    return mapa
 HOST = os.environ.get("MEM_REDIS_HOST", "127.0.0.1")
 PORTA = int(os.environ.get("MEM_REDIS_PORT", "6380"))
 RE_SLUG = re.compile(r"^- ([a-z0-9][a-z0-9-]*)(?: ·|—)")
@@ -98,38 +125,24 @@ def resolve():
     Devolve (bruta, None) quando nao casa: nao inventa cadeira.
     """
     bruta = cadeira()
-    try:
-        arquivos = sorted(os.listdir(PERSONAS))
-    except OSError:
-        return bruta, None
-    for nome in arquivos:
-        if not (nome.startswith("persona-") and nome.endswith(".md")):
-            continue
-        curto = nome[len("persona-"):-len(".md")]
-        m = RE_CANON.search(open(os.path.join(PERSONAS, nome),
-                                 errors="replace").readline())
-        canon = m.group(0) if m else None
-        if bruta.lower() in (curto.lower(), (canon or "").lower()):
-            return curto, canon
-    return bruta, None
+    suf = bruta
+    for pref in ("claudinho-", "claudinha-"):
+        if suf.lower().startswith(pref):
+            suf = suf[len(pref):]
+            break
+    suf = suf.lower()
+    return suf, _ledger_map().get(suf)
 
 
 def slugs_declarados(alvo):
     """Os chapeus que a persona declara. Fonte e o texto da persona, nunca o que
     esta escrito no substrato: a memoria seguir o remit e o ponto da conferencia."""
-    p = os.path.join(PERSONAS, f"persona-{alvo}.md")
-    if not os.path.isfile(p):
-        for f in os.listdir(PERSONAS):
-            if f.lower() == f"persona-{alvo.lower()}.md":
-                p = os.path.join(PERSONAS, f)
-                break
-        else:
-            return None, f"persona nao encontrada em {PERSONAS}"
-    texto = open(p, errors="replace").read()
-    slugs = {m.group(1) for m in (RE_SLUG.match(l) for l in texto.splitlines()) if m}
-    head = RE_HEAD.search(texto)
-    if head:
-        slugs.add(head.group(1))
+    base = os.path.join(ABERTURA, alvo.lower())
+    if not os.path.isdir(base):
+        return None, f"abertura da cadeira nao encontrada em {base}"
+    # Um slug e um SUBDIR de chapeu (plataforma, rh...), tenha ele chapeu.md,
+    # ferramental.md ou so caderno.md — a guarda ainda esta com chapeu.md em backfill.
+    slugs = {n for n in os.listdir(base) if os.path.isdir(os.path.join(base, n))}
     return slugs, None
 
 
@@ -137,16 +150,7 @@ def nome_canonico(alvo):
     """Nome de caixa da cadeira, extraido da linha 1 da persona — mesma fonte que
     o monta_sessao usa. Nunca o nome do arquivo: `persona-IA.md` nao diz se a
     caixa e claudinho- ou claudinha-."""
-    p = os.path.join(PERSONAS, f"persona-{alvo}.md")
-    if not os.path.isfile(p):
-        for f in os.listdir(PERSONAS):
-            if f.lower() == f"persona-{alvo.lower()}.md":
-                p = os.path.join(PERSONAS, f)
-                break
-        else:
-            return None
-    m = RE_CANON.search(open(p, errors="replace").readline())
-    return m.group(1) if m else None
+    return _ledger_map().get(alvo.lower())
 
 
 def idade(seg):
@@ -189,21 +193,14 @@ def estado_memoria(curto, canon, rc):
                       f"  vence em {idade(ttl) if ttl and ttl > 0 else '—'}{marca}")
     if erro:
         linhas.append(f"  (aviso: {erro} — sem conferencia contra o remit)")
-    if canon and canon.lower() != alvo.lower():
-        legado = sorted(rc.keys(f"mem:{canon.lower()}:*"))
-        cad_leg = os.path.join(RAIZ, "platafirma-harness", "caderno", canon.lower())
-        if os.path.isdir(cad_leg):
-            legado += [f"caderno/{canon.lower()}/{f}"
-                       for f in sorted(os.listdir(cad_leg)) if f.endswith(".md")]
-        for k in legado:
-            linhas.append(f"  LEGADO {k} — convencao velha; reconcilie e apague")
-    cad = os.path.join(RAIZ, "platafirma-harness", "caderno", alvo.lower())
+    cad = os.path.join(ABERTURA, alvo.lower())
     achou_caderno = False
     if os.path.isdir(cad):
-        for f in sorted(x for x in os.listdir(cad) if x.endswith(".md")):
-            slot = f[:-3]
+        for slot in sorted(x for x in os.listdir(cad)
+                           if os.path.isfile(os.path.join(cad, x, "caderno.md"))):
             achou_caderno = True
-            n = len(open(os.path.join(cad, f), errors="replace").read().splitlines())
+            corpo = os.path.join(cad, slot, "caderno.md")
+            n = len(open(corpo, errors="replace").read().splitlines())
             marca = "  ÓRFÃO — slug não declarado na persona" if (
                 declarados is not None and slot not in declarados) else (
                 "  ACIMA DO TETO (100) — pode antes de acrescentar" if n > TETO_CADERNO else "")
@@ -301,10 +298,7 @@ def ato_varredura(args):
     Nao apaga e nao carimba — varredura que muda estado esconde o proprio efeito."""
     rc = conn()
     achados = 0
-    for f in sorted(os.listdir(PERSONAS)):
-        if not f.startswith("persona-") or not f.endswith(".md"):
-            continue
-        alvo = f[len("persona-"):-3]
+    for alvo in sorted(_ledger_map().keys()):
         declarados, _ = slugs_declarados(alvo)
         if declarados is None:
             continue
