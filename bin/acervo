@@ -17,11 +17,12 @@ uso:
   acervo baixar  "<trecho do titulo>" [dest] tira uma cópia da obra do store
   acervo bancada [destino]                   monta o lote do que falta classificar
   acervo extrato [destino]                   foto do acervo para ler fora da bancada
+  acervo listar  conceitos [--json]          golden record acervo.conceito (referência)
 
 Os cinco degraus da escada: catalogada, armazenada, ingerida, embedded,
 vetorizada. `escada` mede; os outros três produzem artefato.
 
-`ingerir` é o único que escreve, e é dry-run sem `--apply`. Os outros quatro só
+`ingerir` é o único que escreve, e é dry-run sem `--apply`. Os outros cinco só
 leem. Ato desconhecido recusa em vez de adivinhar.
 FIM
   exit 2
@@ -36,6 +37,7 @@ case "$ATO" in
   baixar)          exec "$ATOS/baixar"  "$@" ;;
   bancada)         exec "$ATOS/bancada" "$@" ;;
   extrato)         exec "$ATOS/extrato" "$@" ;;
+  listar)          exec "$ATOS/listar"  "$@" ;;
   -h|--help|ajuda) uso ;;
   *) echo "acervo: ato desconhecido '$ATO'" >&2; uso ;;
 esac

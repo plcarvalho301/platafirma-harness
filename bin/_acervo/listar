@@ -1,0 +1,126 @@
+#!/usr/bin/env python3
+# acervo listar — referências do acervo. Hoje: conceitos (golden record).
+# capacidade: conhecimento
+# dono: claudinho-conhecimento
+#   (mecanismo/harness: claudinho-TI · construcao; matéria/semântica: claudinho-dados)
+#
+# `acervo listar conceitos [--json]` — expõe o golden record acervo.conceito
+# (rag-extractor-pg). Read-only. NÃO é servido na montagem de sessão: é referência,
+# fallback (RAG offline) e consulta rara cross-cadeira via run_command. A lista (b)
+# de conceitos do chapéu é GERADA disto, não editada à mão.
+#
+# Contrato: platafirma-arquitetura/docs/abertura-de-sessao/abertura-novo-pedro/
+#           P2 - monta-sessao.md, "índice de conceito" (22/08/2026).
+# SQL espelha .gerar-conceitos.py (mesmo join/colunas => slugs idênticos por
+# construção), sem o whitelist por chapéu: o golden record é a tabela inteira.
+# `origem` (domínios das obras-âncora) é servida crua; `cross` é derivado por
+# chapéu na geração (matéria de dados) e não se calcula aqui, que é cadeira-agnóstico.
+import json
+import os
+import signal
+import subprocess
+import sys
+
+# Sai limpo quando o consumidor fecha o cano (| head, | jq -e). Sem isto, o print
+# num stdout já fechado estoura BrokenPipeError com traceback (medido no teste).
+try:
+    signal.signal(signal.SIGPIPE, signal.SIG_DFL)
+except (AttributeError, ValueError):
+    pass
+
+PG = "rag-extractor-pg"
+DB = "rag_extractor"
+USR = "rag"
+
+SQL = """
+select c.slug, c.id, c.rotulo,
+       coalesce(array_to_string(c.outros_rotulos, ' / '), ''),
+       coalesce(string_agg(distinct d.slug, ','), ''),
+       count(distinct t.obra_id)
+from acervo.conceito c
+left join acervo.obra_trata_de t on t.conceito_id = c.id
+left join acervo.obra o on o.id = t.obra_id
+left join acervo.dominio d on d.id = o.dominio_id
+group by c.slug, c.id, c.rotulo, c.outros_rotulos
+order by c.slug;
+"""
+
+USO = """uso:
+  acervo listar conceitos [--json]   golden record acervo.conceito:
+                                     slug . rotulo . outros rotulos . origem . obras-ancora
+
+Read-only. E o golden record: a lista (b) do chapeu e GERADA disto, nao editada a mao.
+"""
+
+
+def morre(msg, code=2):
+    sys.stderr.write(msg.rstrip("\n") + "\n")
+    sys.exit(code)
+
+
+def main(argv):
+    if not argv or argv[0] in ("-h", "--help", "ajuda"):
+        morre(USO)
+
+    alvo, resto = argv[0], argv[1:]
+    if alvo != "conceitos":
+        morre("acervo listar: alvo desconhecido %r (hoje so 'conceitos')\n\n%s" % (alvo, USO))
+
+    quero_json = False
+    for a in resto:
+        if a == "--json":
+            quero_json = True
+        else:
+            morre("acervo listar: opcao desconhecida %r\n\n%s" % (a, USO))
+
+    env = dict(os.environ)
+    env.setdefault("DOCKER_HOST", "unix:///run/user/1001/docker.sock")
+
+    try:
+        saida = subprocess.run(
+            ["docker", "exec", "-i", PG, "psql", "-U", USR, "-d", DB, "-tAF|", "-c", SQL],
+            capture_output=True, text=True, check=True, env=env).stdout
+    except FileNotFoundError:
+        morre("acervo listar conceitos: 'docker' nao encontrado no PATH.", 3)
+    except subprocess.CalledProcessError as e:
+        morre("acervo listar conceitos: psql falhou (rc=%s):\n%s"
+              % (e.returncode, (e.stderr or "").strip()), 3)
+
+    linhas = [l for l in saida.splitlines() if l.strip()]
+    if not linhas:
+        morre("acervo listar conceitos: acervo.conceito nao devolveu linha nenhuma.\n"
+              "  Confira: docker exec -i %s psql -U %s -d %s -c "
+              "'select count(*) from acervo.conceito'" % (PG, USR, DB), 3)
+
+    conceitos = []
+    for l in linhas:
+        campos = l.split("|")
+        if len(campos) != 6:
+            morre("acervo listar conceitos: linha com formato inesperado (%d campos):\n  %s"
+                  % (len(campos), l), 3)
+        slug, cid, rotulo, alt, doms, obras = campos
+        origem = [d for d in doms.split(",") if d]
+        conceitos.append({
+            "slug": slug,
+            "id": cid,
+            "rotulo": rotulo,
+            "outros_rotulos": alt or None,
+            "origem": origem or None,
+            "obras_ancora": int(obras),
+        })
+
+    if quero_json:
+        print(json.dumps(conceitos, ensure_ascii=False, indent=2))
+        return
+
+    w = max((len(c["slug"]) for c in conceitos), default=4)
+    print("%-*s  %5s  %-20s  %s" % (w, "slug", "obras", "origem", "rotulo"))
+    print("%s  %5s  %-20s  %s" % ("-" * w, "-----", "-" * 20, "-" * 6))
+    for c in conceitos:
+        org = ",".join(c["origem"]) if c["origem"] else "-"
+        print("%-*s  %5d  %-20s  %s" % (w, c["slug"], c["obras_ancora"], org, c["rotulo"]))
+    sys.stderr.write("\n%d conceito(s) no golden record (acervo.conceito).\n" % len(conceitos))
+
+
+if __name__ == "__main__":
+    main(sys.argv[1:])
