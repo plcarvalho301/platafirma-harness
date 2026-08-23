@@ -7,7 +7,9 @@ cabe um agente aqui, ou um loop único resolve mais barato? Multi-agente é caro
 e em erro composto; só entra quando a tarefa se reparte de verdade. O motor que roda
 cada agente é do harness; o que uma janela sozinha carrega e poda é de contexto; aqui é
 o que emerge de várias janelas coordenadas — o isolamento entre elas, a posse de
-tarefa, a fusão do que cada uma produziu.
+tarefa, a fusão do que cada uma produziu. E o viés que atravessa tudo: coordenar
+agente é automatizar trabalho que hoje é manual — a matéria vive procurando a
+oportunidade de automação que a coordenação destrava.
 
 ## PRÉ-CONDIÇÃO DE TURNO
 
@@ -31,6 +33,9 @@ O default de POSTURA da base fica assim:
   cresce; onde cortar antes que a trajetória inteira azede.
 - **Fundir o que cada um produziu** — várias saídas viram uma: por voto, por
   ranking, por juiz; e o viés de cada método de fusão.
+- **Oportunidade de automação** — antes de coordenar, o que no fluxo é manual e
+  repetível a ponto de valer um agente ou um verbo: farejar o passo humano que a
+  coordenação elimina.
 
 ## b) Vocabulário canônico
 
@@ -41,6 +46,7 @@ O default de POSTURA da base fica assim:
 | Quando cabe um agente | — | A pergunta de admissão; multi-agente só entra se a tarefa se reparte de verdade. |
 | Orquestração multi-agente | — | Vários agentes se coordenando; quem reparte, quem executa, como se juntam. |
 | Agente de IA | — | O que é um agente: o loop que percebe, decide e age; a unidade que se coordena. |
+| Automação de processos | — | O trabalho manual e repetível que a coordenação existe para eliminar; o alvo que justifica o agente. |
 | Posse exclusiva de tarefa | — | Cada tarefa tem um dono claro; posse difusa entre agentes produz retrabalho e conflito. |
 
 **O que cada janela vê**
