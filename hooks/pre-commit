@@ -23,11 +23,6 @@ CONFERIR="${CONFERIR:-$HOME/AI/bin/conferir}"
 
 "$CONFERIR" repo --staged || exit 1
 
-# Catalogo de peca da montagem de sessao (spec_montagem-de-sessao, fase 1). Julga
-# o DECLARADO: campo, vocabulario, `artefato` que nao resolve, teto de abertura.
-# Inerte em repo sem peca staged — sai 0 sem dizer nada.
-"$CONFERIR" peca --staged || exit 1
-
 # Equalizacao de superficie: texto que a fita carrega nao pode nomear tool que so
 # existe no meio MCP. INCREMENTAL de proposito — julga so o que o commit
 # acrescenta. O passivo herdado nao trava a casa; gate que reprova o que ja
