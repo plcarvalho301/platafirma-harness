@@ -11,7 +11,6 @@ do dono é sobre o fluxo, e fluxo que não se testa isolado não se confia. `cas
   conta acertos por bloco -> um bloco vence com margem -> o slug dele. É curto-circuito: casou
   com folga, nem chama (b). Fonte dos conceitos: o golden record `acervo.conceito`
   (verbo `acervo listar conceitos`); a tabela de rotas por cadeira e GERADA dele.
-  `conceitos.json` foi aposentado como fonte (decisao P2, 22/08) e nao existe em disco.
 - **(b) semantico** — `roteia_semantico()`: embedding da pergunta x banco de cenarios (a
   secao (a) de cada chapeu), maximo-sobre-exemplos, limiar + margem. HOJE devolve `None` com
   motivo declarado: nao ha `/embed` no motor servido, e carregar o embedder (~2,4 GB, ~25 s
@@ -75,34 +74,20 @@ def _normaliza(texto: str) -> str:
 
 
 def rotas_do_disco(cadeira: str, raiz_chapeus: str) -> list[Rota]:
-    """As rotas da cadeira: um bloco POR chapeu que existe no disco, gerado do golden record `acervo.conceito`.
+    """Os chapeus da cadeira que existem no disco: um Rota por subdir de
+    `<raiz>/<cadeira>/`. Da o conjunto de slugs VALIDOS (para validar `--chapeu` e nao
+    inventar chapeu inexistente), com `rotulos` vazio.
 
-    Bloco sem chapeu correspondente (ex.: `inferencia`, que e MODO e nao tem `.md`) NAO vira
-    rota — rotear para um chapeu inexistente e o erro que `serve_chapeu` pegaria tarde. Cadeira
-    sem tabela gerada devolve lista vazia: o roteador cai em (c) inteiro, declarado.
-    `conceitos.json` foi aposentado (P2, 22/08); o leitor abaixo ainda procura o caminho
-    aposentado, e a troca pela tabela gerada e a retirada rastreada em tombamento.
+    A tabela rotulo->chapeu do (a) deterministico e GERADA do golden record
+    `acervo.conceito` (verbo `acervo listar conceitos`) e ainda nao e cabeada aqui;
+    enquanto nao for, `casa()` nao acha rotulo -> (a) dorme -> fallback (c), declarado.
     """
     base = os.path.join(raiz_chapeus, cadeira)
-    caminho = os.path.join(base, "conceitos.json")  # aposentado (P2); ausente -> [] -> (c)
-    if not os.path.isfile(caminho):
+    if not os.path.isdir(base):
         return []
-    try:
-        blocos = json.load(open(caminho, encoding="utf-8")).get("blocos", {})
-    except (OSError, json.JSONDecodeError):
-        return []
-    no_disco = {n[:-3] for n in os.listdir(base) if n.endswith(".md")}
-    rotas: list[Rota] = []
-    for slug, verbetes in blocos.items():
-        if slug not in no_disco:
-            continue
-        rotulos: list[str] = []
-        for v in verbetes:
-            rotulos.append(v.get("rotulo", ""))
-            alt = v.get("outros_rotulos") or ""
-            # `outros_rotulos` vem como string separada por "/" no gerador atual
-            rotulos.extend(p.strip() for p in re.split(r"[/;]", alt) if p.strip())
-        rotas.append(Rota(slug=slug, rotulos=tuple(r for r in rotulos if r)))
+    rotas = [Rota(slug=nome, rotulos=())
+             for nome in sorted(os.listdir(base))
+             if os.path.isdir(os.path.join(base, nome))]
     return rotas
 
 

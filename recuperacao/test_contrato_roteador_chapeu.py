@@ -1,6 +1,6 @@
 """Contrato do roteador de chapeu (recursao do P2). Testa o modulo ISOLADO — a desconfianca
 do dono e sobre o fluxo, entao o fluxo tem prova propria, sem montar sessao nem tocar disco
-(exceto os dois testes marcados, que leem o conceitos.json real da cadeira IA)."""
+(exceto o teste que le os chapeus reais da cadeira ia no disco, em abertura/)."""
 
 from __future__ import annotations
 
@@ -9,7 +9,7 @@ import os
 from recuperacao import roteador_chapeu as rot
 
 RAIZ_CHAPEUS = os.path.join(os.environ.get("PF_RAIZ", os.path.expanduser("~/AI")),
-                            "platafirma-harness", "personas", "chapeus")
+                            "platafirma-harness", "abertura")
 
 R = [
     rot.Rota(slug="harness", rotulos=("Janela de contexto", "Degradacao em contexto longo")),
@@ -46,25 +46,28 @@ def test_sem_casamento_e_fallback():
 
 
 def test_escolhe_sem_pergunta_e_fallback():
-    d = rot.escolhe("", "IA", RAIZ_CHAPEUS)
+    d = rot.escolhe("", "ia", RAIZ_CHAPEUS)
     assert d.slug is None and d.via == "fallback"
 
 
 def test_escolhe_forcado_vence_tudo():
-    d = rot.escolhe("qualquer coisa", "IA", RAIZ_CHAPEUS, forcado="contexto")
+    d = rot.escolhe("qualquer coisa", "ia", RAIZ_CHAPEUS, forcado="contexto")
     assert d.slug == "contexto" and d.via == "comando"
 
 
 def test_forcado_inexistente_nao_inventa_chapeu():
-    d = rot.escolhe("x", "IA", RAIZ_CHAPEUS, forcado="nao-existe")
+    d = rot.escolhe("x", "ia", RAIZ_CHAPEUS, forcado="nao-existe")
     assert d.slug is None and d.via == "fallback"
 
 
-def test_rotas_do_disco_so_traz_bloco_com_chapeu_no_disco():
-    # `inferencia` e bloco do conceitos.json mas NAO tem .md -> nao vira rota
-    slugs = {r.slug for r in rot.rotas_do_disco("IA", RAIZ_CHAPEUS)}
-    assert "inferencia" not in slugs
-    assert {"harness", "contexto", "agente"} <= slugs
+def test_rotas_do_disco_traz_um_slug_por_subdir_de_chapeu():
+    # so subdir vira rota; persona.md (arquivo) nao. Rotulo (golden record) nao cabeado
+    # aqui -> rotulos vazio -> (a) determinístico dorme.
+    rotas = rot.rotas_do_disco("ia", RAIZ_CHAPEUS)
+    slugs = {r.slug for r in rotas}
+    assert "persona" not in slugs
+    assert {"agente", "contexto", "engenharia-de-harness"} <= slugs
+    assert all(r.rotulos == () for r in rotas)
 
 
 def test_semantico_declara_inatividade_nao_finge():
