@@ -3,11 +3,10 @@
 # capacidade: expediente
 # dono: claudinho-IA (politica de sessao) · claudinho-TI (montador)
 #
-# Fase 5 do card #189 (spec_montagem-de-sessao §4 e §6). O que mudou: as pecas nao
-# estao mais escritas aqui dentro. O montador le a arvore abertura/**/*.md e a lista
-# tem `gatilho.evento: abertura`, e nao sabe de antemao quais sao — peca nova entra
-# PECAS_VERBO deste arquivo, serve o que tem gatilho.evento abertura, e os .json foram
-# arrancados (#262) — a arvore e a fonte, o indice velho morreu.
+# Fase 5 do card #189 (spec_montagem-de-sessao §4 e §6). As pecas nao estao escritas
+# aqui dentro: o montador le a arvore abertura/**/*.md para as pecas-arquivo e a lista
+# PECAS_VERBO deste arquivo para as de verbo, servindo o que tem gatilho.evento abertura.
+# Peca-arquivo nova entra so por commit do .md na arvore, sem tocar neste arquivo.
 #
 # ENVELOPE UNIFORME (§6.2): toda peca sai como
 #   {peca, dono, ref, sha, regime, tokens, frescor}
@@ -88,9 +87,9 @@ RE_FERRAMENTAL = re.compile(r"^FERRAMENTAL: *([^ ]*\.md)")
 
 # ------------------------------------------------------------------ catalogo
 # Peças-verbo/ponteiro: não têm .md na árvore. Ficam aqui, no montador — é ele que
-# declara o que sempre serve, não um índice externo. Os registro/pecas/*.json foram
-# arrancados (#262): a árvore abertura/ é a fonte das peças-arquivo, esta lista é a das
-# de verbo. O que era `artefato/regime/gatilho/volatilidade` no .json e nada ramificava
+# declara o que sempre serve, não um índice externo. A árvore abertura/ é a fonte das
+# peças-arquivo; esta lista é a das de verbo. Gatilho (perna 1 x 2) e volatilidade (ordem
+# de injeção) saem da posição na árvore
 # virou o que ramifica: gatilho (perna 1 x 2) e volatilidade (ordem de injeção).
 PECAS_VERBO = [
     {"id": "arranque",        "artefato": "platafirma-harness@abertura/arranque.md",
@@ -127,10 +126,10 @@ _ARQ_META = {
 
 
 def catalogo():
-    """Fonte do catálogo (#262): árvore abertura/ para peça-arquivo + PECAS_VERBO para o
-    resto. NÃO há mais registro/pecas/*.json. Cada peça-arquivo é UMA no catálogo mesmo
-    aparecendo em vários .md reais (persona de cada cadeira etc.): dedup por id, o path
-    volta a template ({cadeira}/{chapeu}) por posição."""
+    """Fonte do catálogo: árvore abertura/ para peça-arquivo + PECAS_VERBO para o resto.
+    Cada peça-arquivo é UMA no catálogo mesmo aparecendo em vários .md reais (persona de
+    cada cadeira etc.): dedup por id, o path volta a template ({cadeira}/{chapeu}) por
+    posição."""
     vistos, saida = {}, []
     for caminho in sorted(glob.glob(os.path.join(ABERTURA, "**", "*.md"), recursive=True)):
         nome = os.path.basename(caminho)

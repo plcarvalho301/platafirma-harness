@@ -26,12 +26,6 @@
                    editada a mao, render sem fonte irma e diretorio de topo nao
                    declarado no README.
 
-  peca    [id]     catalogo de peca da montagem de sessao: cada arquivo de
-                   o catalogo (arvore abertura/ + PECAS_VERBO) — #262: gate por reescrever — campo,
-                   vocabulario, `artefato` que nao resolve, `id` duplicado e
-                   `emenda` apontando peca inexistente. Com `--staged`, julga so
-                   o que o commit acrescenta. Nao mede tamanho — quem mede o
-                   servido e `conferir sessao`.
   sessao  [cadeira] pacote de abertura SERVIDO: tokens medidos com o tokenizador
                    do harness, sha do conteudo servido e frescor, por peca. Sem
                    card #2404 tirou a comparacao automatica — medicao, nao
@@ -101,7 +95,7 @@ def uso(erro=None):
         print(f"erro: {erro}\n", file=sys.stderr)
     print(__doc__.strip(), file=sys.stderr)
     print("\nuso: conferir <classe> [alvo]", file=sys.stderr)
-    print("     classes implementadas : servico . verbo . repo . skill . procedencia . superficie . commit . peca . arranque . chapeu", file=sys.stderr)
+    print("     classes implementadas : servico . verbo . repo . skill . procedencia . superficie . commit . arranque . chapeu", file=sys.stderr)
     for c, motivo in CLASSES_ABERTAS.items():
         print(f"     classe declarada, sem implementacao : {c} — {motivo}", file=sys.stderr)
     sys.exit(2)
@@ -1857,24 +1851,6 @@ def conferir_procedencia(alvo, como_json=False):
     return 1 if houve else 0
 
 
-# --- classe: peca ---------------------------------------------------------
-# TOMBAMENTO #262: registro/pecas/*.json e schema-peca.json arrancados. O gate validava
-# aquele modelo; a validacao do catalogo novo (arvore abertura/ + PECAS_VERBO no montador)
-# e trabalho proprio, por escrever. Ate la DECLARA nao_se_aplica — nunca verde falso.
-
-
-def conferir_peca(alvo=None, staged=False, como_json=False):
-    """Gate do catalogo suspenso (#262): o modelo velho nao existe mais, o validador do
-    novo ainda nao foi escrito. Devolve nao_se_aplica declarado."""
-    motivo = "catalogo migrado para arvore abertura/ + PECAS_VERBO (#262); gate por reescrever"
-    if como_json:
-        import json as _j
-        print(_j.dumps({"classe":"peca","veredito":"nao_se_aplica","motivo":motivo}, ensure_ascii=False))
-    else:
-        print(f"peca: nao se aplica — {motivo}")
-    return 0
-
-
 def _norm(texto):
     return " ".join(texto.split())
 
@@ -2025,10 +2001,6 @@ def main(argv):
         if alvo == "--staged":
             return conferir_repo(None, staged=True, como_json=como_json)
         return conferir_repo(alvo, como_json=como_json)
-    if classe == "peca":
-        if alvo == "--staged":
-            return conferir_peca(None, staged=True, como_json=como_json)
-        return conferir_peca(alvo, como_json=como_json)
     if classe == "sessao":
         registrar = None
         if "--registrar" in argv:
