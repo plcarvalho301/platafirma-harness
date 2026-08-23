@@ -95,3 +95,28 @@ ela mediu depende da porta que ela usa. O meu ato pede a fonte, nao o relato.
 - Fora dessa janela, estrutura volta a exigir sign-off do dono (push do dono).
 - Primeiro caso sob a regra: dir `abertura/dados/ontologia` criado e empurrado sem
   sign-off (commit 23/08). Fecha o pre-requisito que travava a sessao de chapeus de dados.
+
+## O acervo espelha o org: domínio = cadeira, subdomínio = chapéu (medido 23/08)
+
+Correspondência declarada pelo dono nesta fita, matéria de RH mas orienta todo
+sequenciamento de chapéu:
+
+- **Todo domínio do acervo ↔ uma head/cadeira.** O domínio da Olga (dados) é
+  exatamente `estudos-ontologias`.
+- **Subdomínio ↔ chapéu**, quando houver. Head pode não ter subdomínio.
+- **Redistribuir subdomínios para casar com os chapéus é desejável, não
+  obrigatório.** É norte, não pré-requisito. Não travar escrita de chapéu à espera
+  da taxonomia fechar — foi o erro que o dono cortou ("pode e é desejável ≠ deve").
+
+## Modelo novo de ferramental não tem json (medido 23/08)
+
+- A fonte das ferramentas de **início de sessão** é o **ofício** (L1, chamada 1,
+  dono TI). Ferramental de **chapéu** é o working set do especialista (L2, chamada
+  2, instância da cadeira), e só entra o que tem recorte próprio — o que o ofício
+  dá não se repete. Canônico: `AB - ferramental.md` §3; molde `P3b`.
+- O **catálogo de ferramentas** é um `.md` GERADO (L3 espelho humano; L4 catálogo
+  de existência, contadores), análogo ao `acervo listar conceitos`. NÃO é json.
+- `registro/pecas/*.json` + `schema-peca.json` são resquício do modelo anterior;
+  o montador ainda os lê (glob em monta-sessao:92). Tombamento despachado a
+  claudinho-TI/construcao (handoff 20260823T165816), card filho de #2387 pendente
+  (rastreador estava fora). Zero fóssil no modelo novo — ordem do dono.

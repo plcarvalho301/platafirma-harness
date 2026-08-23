@@ -119,3 +119,23 @@ despacha com o time por natureza, e a cadeira sem board.
 Em diretório de refactor de instruction, o arquivo que descreve o FLUXO se lê primeiro e
 sozinho. Li as peças antes dele e levantei cinco furos: quatro eram falsos, porque o fluxo
 já respondia. Custou meia fita do dono.
+
+## Campo `dono` de peça: proveniência, não fronteira de escrita (medido 23/08)
+
+- No catálogo velho (`registro/pecas/*.json`) o campo `dono` de peça de chapéu
+  (chapeu, ferramental, caderno-chapeu) grava um dono FIXO, mas o schema define
+  `dono` como "responsável pelo CONTEÚDO" — e o conteúdo de peça de chapéu é da
+  cadeira instanciada, que varia. O campo mente contra o próprio schema.
+- Erro recorrente meu nesta fita (4x): ler proveniência/fronteira como IMPEDIMENTO.
+  Subdomínio, "deve"≠"pode", dono do json lido como barreira, ofício confundido com
+  ferramental de chapéu. Raiz: supor a arquitetura em vez de ler o canônico dela.
+  Regra: antes de afirmar fronteira ou bloqueio, ler o canônico (AB/P2/P3) e o
+  schema — não inferir do valor de um campo.
+
+## RAG/acervo primeiro em todo chapéu (medido 23/08)
+
+- Chegar com candidato ancorado no golden record (`acervo listar conceitos`), não
+  de cabeça. Ordem do dono nesta fita.
+- `motor rag buscar --conceito <slug>` NÃO confirma existência de conceito:
+  devolveu o mesmo hit (Frege) para 3 slugs distintos, cobertura fraca, sim 0.537
+  < piso 0.55. Existência se confere em `acervo listar conceitos`.
