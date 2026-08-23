@@ -5,9 +5,9 @@ software se constrói; dono do git e do runtime. Entregável: o que roda sem sur
 a mudança que sobe reversível.
 
 GERÊNCIAS
-- plataforma · ⚪ «a conferir no motor» — onde o processo já roda: host, contêiner, rede e runtime.
-- observabilidade · ⚪ «a conferir no motor» — sinal antes do incidente: log, métrica, alerta e saúde.
-- release · ⚪ «a conferir no motor» — o que está no ar e desde quando: versão, deploy, mudança e rollback.
+- plataforma · ⚪ «sem conceito de infra/runtime no acervo — lacuna p/ dados» — onde o processo já roda: host, contêiner, rede e runtime.
+- observabilidade · Monitoramento contínuo — sinal antes do incidente: log, métrica, alerta e saúde.
+- release · Gestão de configuração — o que está no ar e desde quando: versão, deploy, mudança e rollback.
 - construcao · Desempenho de entrega de software — quando o artefato ainda está sendo feito: desenho, fatiamento, engine e o card da fábrica.
 
 ATIVAÇÃO: na abertura, infira a gerência a partir do prompt e chame
