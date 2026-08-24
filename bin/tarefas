@@ -308,10 +308,14 @@ criar() {
   # `estado` é obrigatório no POST: item nasce declarando onde entra no funil, e não há
   # default do servidor. `captada` é a boca do funil para planejado; incidente entra em
   # `aberto` se o registro o tiver, e a recusa da API nomeia o estado válido quando não.
-  local est="${PF_ESTADO_INICIAL:-captada}"
+  # incidente entra no funil de incidente (`detectado`), planejado na boca do funil
+  # comum (`captada`). PF_ESTADO_INICIAL, se dado, vence o default da classe (#259).
+  local est_default="captada"; [ "$classe" = "incidente" ] && est_default="detectado"
+  local est="${PF_ESTADO_INICIAL:-$est_default}"
   jq -n --arg t "$titulo" --arg d "$html" --argjson n "$n" --arg c "$cadeira" \
         --arg p "$pai" --arg cl "$classe" --arg e "$est" \
-     '{titulo:$t, nivel:$n, classe:$cl, estado:$e}
+     '{titulo:$t, classe:$cl, estado:$e}
+      + (if $cl == "incidente" then {} else {nivel:$n} end)
       + (if $d == "" then {} else {descricao:$d} end)
       + (if $c == "" then {} else {cadeira:$c} end)
       + (if $p == "" then {} else {pai:($p|tonumber)} end)' \
