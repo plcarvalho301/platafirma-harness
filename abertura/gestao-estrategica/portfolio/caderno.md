@@ -117,3 +117,49 @@ sequenciamento de chapéu:
   de existência, contadores), análogo ao `acervo listar conceitos`. NÃO é json.
 - O montador lê o catálogo da árvore `abertura/**/*.md` (peças-arquivo) + lista
   embutida (peças-verbo). Não há json de peça no fluxo — o modelo é `.md`.
+
+## Push a main nao e entregue: o clone de deploy roda separado (medido caro 24/08)
+
+Custou tres turnos numa fita so, o mesmo erro tres vezes: tratei o deploy
+(migration + rebuild de imagem) como passo de fabrica quando era ato meu de
+entrega. Empurrar pra main fecha metade; a outra metade e por o codigo no ar,
+e no ar ele nao chega sozinho.
+
+Cadeia de armadilhas, na ordem em que morde:
+
+- **Commit local nao e push.** `git commit` deixa o card `ahead 1` de origin. So
+  o push bota em main. Trivial, mas foi o primeiro degrau.
+- **Push a main nao e deploy.** O que a fabrica edita e o que o container roda
+  sao clones DIFERENTES. `platafirma-rastreador`/`platafirma-ui` e a fonte;
+  `deploy/rastreador` e `deploy/rastreador-tela` sao os clones que o compose
+  builda — e ficam parados no commit velho, em HEAD destacado, ate alguem dar
+  `pull`. Conferir em qual clone o container nasceu: `docker inspect <c>
+  --format '{{index .Config.Labels "com.docker.compose.project.working_dir"}}'`.
+- **Codigo novo no clone nao e imagem nova.** Sem bind mount do fonte (so
+  `politica-acesso` e montado), o container serve o que esta na IMAGEM. Editar
+  arquivo no host nao recarrega nada. Precisa `docker compose build` + `up -d`
+  do diretorio do config_files (nao do repo raiz — o compose pode morar fundo,
+  ex. `deploy/rastreador-tela/app/rastreador/`).
+- **Migration em .sql nao e migration aplicada.** `sql/` monta em
+  `/docker-entrypoint-initdb.d`, que o Postgres SO roda com volume de dados
+  VAZIO (primeira criacao). Banco populado ignora o sql novo no up. O
+  `ALTER TABLE ... DROP/ADD CONSTRAINT` tem de ir a mao:
+  `docker exec -i <db> psql -U <u> -d <d> <<'SQL' ... SQL`.
+
+Teste de pronto que fecha cada degrau, no AR e nao no relato:
+- FK/schema: `SELECT confdeltype FROM pg_constraint WHERE conname='...'` (c=cascade).
+- rota/codigo: bater o endpoint real pelo caminho que o cliente usa (o proxy,
+  nao a porta interna via `docker exec` — o 404 que me assustou era artefato de
+  bater direto na 8000, a rota estava registrada).
+- comportamento: o caso de uso fim a fim (apagar card COM comentario), nao o
+  unit verde. Suite unit passa testando logica Python isolada; nao ve banco nem
+  container.
+
+Regra que fica: **entrega de codigo de app e minha ate rodar no ar.** Deploy
+(pull do clone de deploy + build + up + migration a mao) NAO e passo de fabrica
+nem recado pro head de TI — e a segunda metade do mesmo ato que o push comecou.
+"Entregue" so depois do teste de fumaca no ar passar.
+
+Nota lateral, mesma fita: `tarefas comentar` cria comentario que, ate o cascade
+subir, era vinculo indeletavel — nao usar comentario pra anotar card em
+apuracao. Anotar por `PATCH descricao` (api-corpo), que nao cria entidade filha.
