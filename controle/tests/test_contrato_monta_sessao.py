@@ -95,10 +95,12 @@ def _monta_raiz(tmp_path: Path) -> Path:
     _escreve(harness, "abertura/teste/rh/chapeu.md", "# chapéu rh\n\nfixture.\n")
     _escreve(harness, "abertura/teste/rh/ferramental.md", "# ferramental rh\n\nfixture.\n")
 
-    # ledger de vínculo: golden do canônico (arq:0073 §1)
+    # ledger de vínculo: golden do canônico (arq:0073 §1). Schema real tem "tipo"
+    # (nao "evento") e "alias" — #2438 deriva o mapa alias-cadeiras destes campos.
     _escreve(harness, "registro/eventos-org.jsonl",
-             json.dumps({"cadeira": "claudinho-teste", "evento": "PROVIMENTO"}) + "\n" +
-             json.dumps({"cadeira": "claudinho-fabrica", "evento": "PROVIMENTO"}) + "\n")
+             json.dumps({"cadeira": "claudinho-teste", "tipo": "PROVIMENTO",
+                        "alias": "Testildo Testonildo"}) + "\n" +
+             json.dumps({"cadeira": "claudinho-engenharia", "tipo": "PROVIMENTO"}) + "\n")
 
     stub = _escreve(raiz, "bin/mesa", MESA_STUB)
     stub.chmod(stub.stat().st_mode | stat.S_IEXEC | stat.S_IXGRP | stat.S_IXOTH)
@@ -286,3 +288,44 @@ def test_perna_dois_nao_reenvia_abertura(raiz):
     ids = {p["peca"].split(":", 1)[0] for p in dados["pecas"]}
     assert ids == {"chapeu", "ferramental", "caderno-chapeu"}, f"perna 2 vazou/omitiu: {ids}"
     assert dados["pacote"]["pecas"] == len(dados["pecas"])
+
+
+# --- alias-cadeiras (card #2438) ---------------------------------------------
+
+
+def test_alias_cadeiras_serve_toda_cadeira_nao_so_fora_do_quadro(raiz):
+    """Regressão do bug original: `por_id.get("alias-cadeiras")` nunca casava porque
+    a peça não existia no catálogo (#189 partiu o catálogo, fase 5 não rodou). Agora
+    é peça de catálogo com gatilho abertura — entra para QUALQUER cadeira, dentro ou
+    fora do quadro (comentário #379: decisão do dono, servir a TODA cadeira)."""
+    for alvo in ("teste", "fabrica"):
+        dados = json.loads(_run([alvo, "--json"], raiz).stdout)
+        por_id = {p["peca"]: p for p in dados["pecas"]}
+        assert "alias-cadeiras" in por_id, alvo
+        env = por_id["alias-cadeiras"]
+        assert env["frescor"] == "fresco", (alvo, env)
+        assert "Testildo Testonildo -> teste" in env["conteudo"]
+
+
+def test_alias_cadeiras_so_endereco_sem_prefixo_e_omissao_declarada(raiz):
+    """Conteúdo é 'Nome -> slug', slug sem claudinho-/claudinha- (mesma forma do
+    diretório em abertura/), e PROVIMENTO sem alias (aqui: engenharia) sai como nota
+    de omissão declarada — nunca silenciosamente ausente."""
+    dados = json.loads(_run(["teste", "--json"], raiz).stdout)
+    env = {p["peca"]: p for p in dados["pecas"]}["alias-cadeiras"]
+    assert "claudinho-" not in env["conteudo"]
+    assert "claudinha-" not in env["conteudo"]
+    assert "-> engenharia" not in env["conteudo"]  # sem alias, nao vira linha do mapa
+    assert "omitido" in env["conteudo"] and "engenharia" in env["conteudo"]
+    assert "engenharia" in (env["motivo"] or "")
+
+
+def test_alias_cadeiras_indisponivel_sem_ledger_nao_derruba_pacote(tmp_path):
+    """Ledger ausente é indisponibilidade declarada, não crash do montador."""
+    raiz = _monta_raiz(tmp_path)
+    (raiz / "platafirma-harness" / "registro" / "eventos-org.jsonl").unlink()
+    dados = json.loads(_run(["teste", "--json"], raiz).stdout)
+    env = {p["peca"]: p for p in dados["pecas"]}["alias-cadeiras"]
+    assert env["frescor"] == "indisponivel"
+    assert env["conteudo"] is None
+    assert any("alias-cadeiras" in a for a in dados["avisos"])

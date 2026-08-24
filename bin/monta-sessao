@@ -4,8 +4,9 @@
 # dono: claudinho-IA (politica de sessao) · claudinho-TI (montador)
 #
 # Fase 5 do card #189 (spec_montagem-de-sessao §4 e §6). As pecas nao estao escritas
-# aqui dentro: o montador le a arvore abertura/**/*.md para as pecas-arquivo e a lista
-# PECAS_VERBO deste arquivo para as de verbo, servindo o que tem gatilho.evento abertura.
+# aqui dentro: o montador le a arvore abertura/**/*.md para as pecas-arquivo, a lista
+# PECAS_VERBO deste arquivo para as de verbo e PECAS_CALCULADAS para as computadas em
+# Python, servindo o que tem gatilho.evento abertura.
 # Peca-arquivo nova entra so por commit do .md na arvore, sem tocar neste arquivo.
 #
 # ENVELOPE UNIFORME (§6.2): toda peca sai como
@@ -85,6 +86,22 @@ RE_NOME = re.compile(r"^Você é ([A-Za-zÀ-ÿ-]+)")
 RE_FERRAMENTAL = re.compile(r"^FERRAMENTAL: *([^ ]*\.md)")
 
 
+PREFIXOS_CADEIRA = ("claudinho-", "claudinha-")
+
+
+def _sufixo_sem_prefixo(cadeira):
+    """Sufixo em minusculas sem o prefixo claudinho-/claudinha-: a mesma forma que
+    nomeia o diretorio em abertura/ (arq:0073 §1). UNICA implementacao do strip
+    neste arquivo — `_canonico`, `cadeiras_validas` e `main` chamam esta em vez de
+    repetir o loop (card #2438, comentario #380 do #2431: as duas normalizacoes nao
+    podem divergir)."""
+    cad = (cadeira or "").strip()
+    for pref in PREFIXOS_CADEIRA:
+        if cad.lower().startswith(pref):
+            return cad[len(pref):].lower()
+    return cad.lower()
+
+
 # ------------------------------------------------------------------ catalogo
 # Peças-verbo/ponteiro: não têm .md na árvore. Ficam aqui, no montador — é ele que
 # declara o que sempre serve, não um índice externo. A árvore abertura/ é a fonte das
@@ -108,6 +125,61 @@ PECAS_VERBO = [
      "gatilho": {"evento": "ato"},      "regime": "indice",   "volatilidade": "volatil", "dono": "claudinho-TI"},
     {"id": "catalogo-de-verbos",  "artefato": "platafirma-harness@docs/catalogo-de-verbos.md",
      "gatilho": {"evento": "ato"},      "regime": "ponteiro", "volatilidade": "morna",   "dono": "claudinho-TI"},
+]
+
+
+def _mapa_alias_cadeiras():
+    """'Nome Humano -> slug' por PROVIMENTO com alias no ledger de vinculo — so
+    endereco, sem 'head de', gerencia ou fronteira (decisao do dono, card #2438,
+    comentario #379: servir o organograma inteiro faz as instancias levantarem muro).
+    Zero arquivo novo: deriva do MESMO ledger que `_canonico` ja le. PROVIMENTO sem
+    alias (hoje so 'engenharia') sai OMITIDO com nota declarada — nao trava o
+    conserto. Cadeira ausente do ledger (hoje a fabrica, que nao tem nome) nao
+    aparece nem no mapa nem na nota: fabrica-como-destino-de-roteamento e materia da
+    persona dela, nao desta peca."""
+    por_slug, sem_alias = {}, set()
+    try:
+        with open(LEDGER, encoding="utf-8", errors="replace") as fh:
+            for linha in fh:
+                linha = linha.strip()
+                if not linha:
+                    continue
+                try:
+                    ev = json.loads(linha)
+                except ValueError:
+                    continue
+                if ev.get("tipo") != "PROVIMENTO":
+                    continue
+                cad = (ev.get("cadeira") or "").strip()
+                if not cad:
+                    continue
+                slug = _sufixo_sem_prefixo(cad)
+                alias = (ev.get("alias") or "").strip()
+                if alias:
+                    por_slug[slug] = alias
+                    sem_alias.discard(slug)
+                elif slug not in por_slug:
+                    sem_alias.add(slug)
+    except OSError as e:
+        return None, f"{type(e).__name__}: {e}"
+    if not por_slug:
+        return None, "ledger sem nenhum PROVIMENTO com alias"
+    linhas = [f"{alias} -> {slug}"
+              for slug, alias in sorted(por_slug.items(), key=lambda kv: kv[1])]
+    texto = "\n".join(linhas) + "\n"
+    motivo = None
+    if sem_alias:
+        faltantes = ", ".join(sorted(sem_alias))
+        texto += f"\n(sem alias no ledger, omitido: {faltantes})\n"
+        motivo = f"omitido por falta de alias no ledger: {faltantes}"
+    return texto, motivo
+
+
+PECAS_CALCULADAS_FN = {"alias-cadeiras": _mapa_alias_cadeiras}
+PECAS_CALCULADAS = [
+    {"id": "alias-cadeiras",  "artefato": "calc:alias-cadeiras",
+     "gatilho": {"evento": "abertura"}, "regime": "valor", "volatilidade": "morna",
+     "dono": "claudinha-gestao-estrategica"},
 ]
 
 # id da peça-arquivo -> gatilho/regime/volatilidade, por posição na árvore abertura/.
@@ -147,16 +219,20 @@ def catalogo():
             art = f"platafirma-harness@abertura/{nome}"
         saida.append({"id": pid, "dono": None, "artefato": art, "regime": regime,
                       "gatilho": {"evento": evento}, "volatilidade": volat})
-    return saida + PECAS_VERBO
+    return saida + PECAS_VERBO + PECAS_CALCULADAS
 
 
 def de_abertura(pecas, cadeira):
     """As pecas com gatilho de abertura, na ordem de injecao.
 
-    Excecao nominal do dono (#161, opcao A): quem esta FORA DO QUADRO nao recebe o org
-    chart — a persona da fabrica declara nao conhece-lo. No lugar entra o mapa
-    alias -> slug, que e endereco e nao topologia de decisao.
-    
+    alias-cadeiras (#2438) e peca normal de gatilho abertura: entra para TODA cadeira
+    pelo filtro abaixo, sem excecao nominal — o `por_id.get("alias-cadeiras")` que so
+    injetava fora do quadro ficou morto quando o #189 partiu o catalogo (a peca nunca
+    existia nele) e saiu daqui.
+
+    Excecao que continua nominal do dono (#161, opcao A): quem esta FORA DO QUADRO nao
+    recebe `antirreabertura` — mecanica de montagem de quem esta dentro da casa.
+
     A abertura carrega IMPEDIMENTO: o que, sem ato, deixa o estado como esta. Hoje so
     a mesa; incidente entra nessa classe quando existir. FILA E BOARD NAO ENTRAM —
     sao verbos on-demand, chamados por ordem do dono como qualquer outro (#189, 17/08).
@@ -164,21 +240,9 @@ def de_abertura(pecas, cadeira):
     uma vez e voltou como contagem, que devolve a fila ao lugar da mesa pela saliencia.
     """
     fora = cadeira.lower() in [f.lower() for f in FORA_DO_QUADRO]
-    por_id = {p.get("id"): p for p in pecas}
     escolhidas = [p for p in pecas if (p.get("gatilho") or {}).get("evento") == "abertura"]
     if fora:
-        # Tres pecas sao a casa por dentro, e nenhuma delas se poda por inferencia:
-        # `org` (quem decide o que), `antirreabertura` (mecanica de montagem de sessao) e
-        # `tool-manifest-geral` (o indice operacional — fila, deploy, infra, cards). Quem
-        # esta fora do quadro recebe SO o manifesto da propria cadeira, e a regra de
-        # fechamento vive na linha FERRAMENTAL da persona: fora da lista, nao chama.
-        # Decisao do dono, 17/08 — o custo e manifesto de cadeira que comeca incompleto,
-        # e a falta aparece como falta, na cara, em vez de vazar como excesso.
-        escolhidas = [p for p in escolhidas
-                      if p.get("id") not in ("antirreabertura",)]
-        alias = por_id.get("alias-cadeiras")
-        if alias:
-            escolhidas.append(dict(alias, _forcada="fora do quadro: org trocado por endereço"))
+        escolhidas = [p for p in escolhidas if p.get("id") not in ("antirreabertura",)]
     return sorted(escolhidas, key=lambda p: (ORDEM_VOLATILIDADE.get(p.get("volatilidade"), 9),
                                              p.get("id", "")))
 
@@ -300,6 +364,27 @@ def serve(peca, cadeira, persona=None, chapeu=None):
             env["motivo"] = f"{type(e).__name__}: {e}"
             return env, None
 
+    if art.startswith("calc:"):
+        calc_id = art[len("calc:"):].strip()
+        fn = PECAS_CALCULADAS_FN.get(calc_id)
+        if not fn:
+            env["motivo"] = f"calculo desconhecido: {calc_id!r}"
+            return env, None
+        try:
+            texto, motivo = fn()
+        except OSError as e:
+            env["motivo"] = f"{type(e).__name__}: {e}"
+            return env, None
+        if texto is None:
+            env["motivo"] = motivo or "sem dado para calcular"
+            return env, None
+        env["frescor"] = "fresco"
+        env["tokens"] = conta_tokens(texto)
+        env["sha"] = sha_conteudo(texto)
+        if motivo:
+            env["motivo"] = motivo
+        return env, texto
+
     if "@" not in art:
         env["motivo"] = f"artefato em forma desconhecida: {art!r}"
         return env, None
@@ -383,11 +468,7 @@ def _canonico(sufixo):
                     cad = (json.loads(linha).get("cadeira") or "").strip()
                 except ValueError:
                     continue
-                suf = cad
-                for pref in ("claudinho-", "claudinha-"):
-                    if suf.lower().startswith(pref):
-                        suf = suf[len(pref):]
-                if suf.lower() == sufixo.lower():
+                if _sufixo_sem_prefixo(cad) == sufixo.lower():
                     achado = cad
         return achado
     except OSError:
@@ -405,11 +486,8 @@ def cadeiras_validas():
                     cad = (json.loads(linha).get("cadeira") or "").strip()
                 except ValueError:
                     continue
-                for pref in ("claudinho-", "claudinha-"):
-                    if cad.lower().startswith(pref):
-                        cad = cad[len(pref):]
                 if cad:
-                    do_ledger.add(cad.lower())
+                    do_ledger.add(_sufixo_sem_prefixo(cad))
     except OSError:
         pass
     try:
@@ -625,12 +703,9 @@ def main():
         return 2
 
     # Prefixo aceito e descartado: `claudinho-TI` e `TI` sao a mesma cadeira, e o nome
-    # do arquivo de persona e o sufixo.
-    alvo = args.cadeira.strip()
-    for prefixo in ("claudinho-", "claudinha-"):
-        if alvo.lower().startswith(prefixo):
-            alvo = alvo[len(prefixo):]
-    alvo = alvo.lower()  # a morada arq:0073 e minuscula: abertura/ti, abertura/gestao-estrategica
+    # do arquivo de persona e o sufixo. Mesma regra de `_sufixo_sem_prefixo` (unica
+    # implementacao do strip no arquivo — card #2438, comentario #380 do #2431).
+    alvo = _sufixo_sem_prefixo(args.cadeira.strip())
 
     if args.chapeus:
         return imprime_chapeu(alvo, args)
