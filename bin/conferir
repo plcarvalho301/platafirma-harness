@@ -43,6 +43,12 @@
                    OBSERVACAO de deriva, com nome de arquivo, e nao muda veredito;
                    zero instancia nao e conector faltando. Julga tambem capacidade
                    sem meio e texto de cadeira citando tool fora de todo conector.
+  front   [nome]   conformidade de deploy de front por arq:0057, alem do que
+                   arq:0056 ja mede: (1) tela de aplicacao (index.html+Dockerfile)
+                   FORA de `platafirma-ui`; (2) artefato de front que monte segredo
+                   de outra camada (env_file/environment/volume de segredo no compose
+                   da tela) OU sirva rota de API (`proxy_pass` no nginx da tela). Nao
+                   e a classe `superficie`, que mede produtor de `.mcp.json`.
   arranque [nome]  texto de arranque em cwd (`CLAUDE.md` sob ~/AI): e PONTEIRO para
                    `conduta/arranque.md`, ou copia com bloco proprio? Reprova so a
                    copia; nao julga a redacao do arranque, que e da dona do texto.
@@ -103,7 +109,7 @@ def uso(erro=None):
         print(f"erro: {erro}\n", file=sys.stderr)
     print(__doc__.strip(), file=sys.stderr)
     print("\nuso: conferir <classe> [alvo]", file=sys.stderr)
-    print("     classes implementadas : servico . verbo . repo . skill . procedencia . superficie . commit . arranque . chapeu . ferramental", file=sys.stderr)
+    print("     classes implementadas : servico . verbo . repo . skill . procedencia . superficie . commit . arranque . chapeu . ferramental . front", file=sys.stderr)
     for c, motivo in CLASSES_ABERTAS.items():
         print(f"     classe declarada, sem implementacao : {c} — {motivo}", file=sys.stderr)
     sys.exit(2)
@@ -1774,6 +1780,208 @@ def conferir_skill(nome, servido=None, como_json=False):
     return 1
 
 
+# --- classe: front ----------------------------------------------------------
+# arq:0057, secao "Conformidade": o instrumento reprova, ALEM do que arq:0056 ja mede,
+# duas coisas — e sao as duas que esta classe mede, nenhuma a mais:
+#
+#   (1) tela de aplicacao FORA de `platafirma-ui`;
+#   (2) artefato de front que MONTE SEGREDO de outra camada OU SIRVA ROTA DE API.
+#
+# NAO e a classe `superficie`: aquela mede o PRODUTOR do `.mcp.json` de cada superficie
+# de conector (dominio MCP). Esta mede o LAYOUT do deploy de front — onde a tela mora e o
+# que o artefato de front monta. Homonimos, dominios distintos; juntar os dois num verbo
+# so era colidir dois sentidos de "superficie".
+#
+# O QUE E "TELA DE APLICACAO", medido pela arvore viva (arq:0057, "Aplicacao ao front"):
+# `platafirma-ui/app/<superficie>/` sai como SERVICO por superficie. Uma tela e um
+# diretorio com `index.html` E um `Dockerfile` que serve estatico (nginx) — nao a
+# biblioteca (`src/`+`dist/`, que e a imagem versionada, nao uma superficie de aplicacao).
+# A regra (1) reprova esse par onde ele more FORA de `platafirma-ui` — que e o caso que a
+# migracao #187/#194/#196 desfez ao tirar `tela/` de `platafirma-rastreador` e faria
+# reaparecer se alguem recriasse tela dentro de um repo de back.
+#
+# A regra (2) le, por tela em `platafirma-ui/app/<superficie>/`, o docker-compose e o
+# nginx.conf da superficie:
+#   - SEGREDO DE OUTRA CAMADA: `env_file`, `environment`, ou volume que monte `.env`/segredo
+#     no compose da tela. O aceite do #195 e explicito: a stack de front "sem env_file, sem
+#     .env, sem volume de segredo". O worktree de deploy do back copia o `.env` inteiro; a
+#     tela nao tem `.env` para copiar, e e por construcao.
+#   - ROTA DE API: `proxy_pass` no nginx da tela (encaminhar para um upstream de API). Quem
+#     separa `/` de `/api` e o gate, no core — a casca da tela nao roteia dado. `try_files`
+#     servindo `index.html` numa rota de VISAO (`/itens/{id}/ver`) NAO e servir API: e a
+#     mesma casca noutro endereco. `proxy_pass` e o que reprova.
+#
+# So olha: le arvore e arquivo, nao sobe nada. Sai 0 sem divergencia, 1 com, 2 na chamada
+# errada — como toda classe deste verbo.
+
+UI_REPO = "platafirma-ui"
+# `deploy/` sao WORKTREES de deploy (clones detached de outro repo, git worktree). Uma
+# tela ali e a MESMA tela do repo de origem, servida para promover — nao uma segunda
+# morada. Le-la como layout de origem e ler o clone de deploy como se fosse o repo, e
+# foi o falso positivo medido ao instrumentar (deploy/rastreador-tela). Fora da varredura.
+FRONT_FORA_DA_VARREDURA = ("deploy",)
+# arq:0057, secao "Aberto", NOMINALMENTE: "Morada de `platafirma-core-landing` e de
+# `harness-controle-tela`: superficies de front FORA do rastreador, NAO INVENTARIADAS
+# contra este criterio." O #197, item 3, remata: vira card proprio, inventariar antes
+# de ter o mecanismo e garimpo. Logo estas telas saem do VEREDITO deste card e entram
+# como OBSERVACAO — reprova-las aqui seria julgar o que a decisao deixou aberto.
+FRONT_ABERTAS = ("platafirma-core",)
+
+# Sinais de "monta segredo de outra camada" num docker-compose de tela. `environment` e
+# `env_file` sao as duas portas declaradas do compose; volume de `.env`/segredo e a terceira,
+# por bind. A regra e por construcao (arq:0057, "a regua e por construcao, nao por frequencia").
+_RE_ENV_FILE = re.compile(r"^[^#\n]*\benv_file\s*:", re.M)
+_RE_ENVIRON = re.compile(r"^[^#\n]*\benvironment\s*:", re.M)
+_RE_VOL_SEGREDO = re.compile(r"^[^#\n]*-\s*[^#\n]*(?:\.env|/run/secrets|secrets?/)", re.M | re.I)
+# `proxy_pass` no nginx: encaminhar para upstream e servir rota de outra camada. E o unico
+# sinal de "serve rota de API" — a casca por `try_files` nao encaminha nada.
+_RE_PROXY_PASS = re.compile(r"^[^#\n]*\bproxy_pass\b\s+\S", re.M)
+
+
+def _telas_de_front(raiz=None):
+    """Diretorios de tela de aplicacao sob ~/AI: (dir_rel, repo, tem_index, tem_dockerfile).
+
+    Uma tela e um diretorio que tem `index.html` E um `Dockerfile` que serve estatico. Varre
+    os repos de topo ate 3 niveis (repo/app/<superficie>), sem seguir link nem entrar em
+    .git/node_modules. A biblioteca (`dist/` da raiz do UI) tem index.html mas nao Dockerfile
+    proprio de superficie no mesmo diretorio — nao casa, e e o certo: nao e tela de aplicacao.
+    """
+    raiz = raiz or os.path.expanduser("~/AI")
+    achados = []
+    for topo in sorted(os.listdir(raiz)):
+        if topo.startswith(".") or topo in FORA_DA_REGUA:
+            continue
+        if topo in FRONT_FORA_DA_VARREDURA:  # worktrees de deploy: mesma tela do repo de origem
+            continue
+        base = os.path.join(raiz, topo)
+        if not os.path.isdir(base) or os.path.islink(base):
+            continue
+        for dirpath, dirnames, filenames in os.walk(base):
+            dirnames[:] = [d for d in dirnames
+                           if not d.startswith(".") and d not in ("node_modules", "provas")]
+            if dirpath.replace(base, "").count(os.sep) > 3:
+                dirnames[:] = []
+                continue
+            tem_index = "index.html" in filenames
+            tem_docker = "Dockerfile" in filenames
+            if tem_index and tem_docker:
+                achados.append((
+                    os.path.relpath(dirpath, raiz), topo, tem_index, tem_docker,
+                ))
+    return achados
+
+
+def _le(caminho):
+    try:
+        with open(caminho, encoding="utf-8", errors="replace") as f:
+            return f.read()
+    except OSError:
+        return ""
+
+
+def _viola_segredo_ou_api(dir_abs):
+    """(monta_segredo, serve_api, detalhe) para uma tela em dir_abs.
+
+    monta_segredo: compose da tela com env_file/environment/volume de segredo.
+    serve_api    : nginx da tela com proxy_pass.
+    """
+    detalhe = []
+    monta_segredo = False
+    serve_api = False
+    for nome in sorted(os.listdir(dir_abs)):
+        p = os.path.join(dir_abs, nome)
+        if not os.path.isfile(p):
+            continue
+        low = nome.lower()
+        if low.endswith((".yml", ".yaml")) or low.startswith("docker-compose"):
+            t = _le(p)
+            if _RE_ENV_FILE.search(t):
+                monta_segredo = True
+                detalhe.append(f"{nome}: env_file")
+            if _RE_ENVIRON.search(t):
+                monta_segredo = True
+                detalhe.append(f"{nome}: environment")
+            if _RE_VOL_SEGREDO.search(t):
+                monta_segredo = True
+                detalhe.append(f"{nome}: volume de segredo (.env/secrets)")
+        if low.endswith(".conf") or "nginx" in low:
+            t = _le(p)
+            if _RE_PROXY_PASS.search(t):
+                serve_api = True
+                detalhe.append(f"{nome}: proxy_pass")
+    return monta_segredo, serve_api, detalhe
+
+
+def conferir_front(alvo=None, como_json=False):
+    """Conformidade de front do arq:0057, alem do que arq:0056 ja mede.
+
+    (1) tela de aplicacao fora de `platafirma-ui`;
+    (2) artefato de front que monte segredo de outra camada ou sirva rota de API.
+
+    Nao julga o contrato de arq:0056 (custom element `pf-*`, token) — isso e de outra
+    regua. Julga o LAYOUT do deploy de front, e so ele.
+    """
+    telas = _telas_de_front()
+    if alvo:
+        telas = [t for t in telas if alvo in t[0]]
+
+    raiz = os.path.expanduser("~/AI")
+    fora = []       # regra 1: tela fora de platafirma-ui (e NAO declarada aberta pela 0057)
+    montam = []     # regra 2a: monta segredo de outra camada
+    servem = []     # regra 2b: serve rota de API
+    conformes = []
+    abertas = []    # superficies que a 0057 declara ABERTAS: observacao, nao veredito
+    for dir_rel, repo, _i, _d in telas:
+        dir_abs = os.path.join(raiz, dir_rel)
+        monta_segredo, serve_api, detalhe = _viola_segredo_ou_api(dir_abs)
+        if repo in FRONT_ABERTAS:
+            abertas.append({"tela": dir_rel, "repo": repo})
+            continue  # arq:0057 "Aberto": nao inventariada contra este criterio
+        if repo != UI_REPO:
+            fora.append({"tela": dir_rel, "repo": repo})
+            # tela fora do UI ja reprova por (1); ainda assim medimos (2) para o relato.
+        if monta_segredo:
+            montam.append({"tela": dir_rel, "repo": repo, "detalhe": detalhe})
+        if serve_api:
+            servem.append({"tela": dir_rel, "repo": repo, "detalhe": detalhe})
+        if repo == UI_REPO and not monta_segredo and not serve_api:
+            conformes.append(dir_rel)
+
+    ok = not (fora or montam or servem)
+    if como_json:
+        print(json.dumps({
+            "veredito": "em dia" if ok else "divergente",
+            "regra_1_tela_fora_do_ui": fora,
+            "regra_2_monta_segredo": montam,
+            "regra_2_serve_rota_api": servem,
+            "telas_conformes": conformes,
+            "superficies_abertas_0057": abertas,
+            "medidas": len(telas),
+            "ui_repo": UI_REPO,
+        }, ensure_ascii=False, indent=2))
+        return 0 if ok else 1
+
+    print(f"front — conformidade de deploy (arq:0057), alem de arq:0056")
+    print(f"  telas de aplicacao medidas       : {len(telas)}")
+    print(f"  (1) TELA FORA de {UI_REPO:<16}: {len(fora)}")
+    for x in fora:
+        print(f"      {x['tela']} — mora em {x['repo']}, nao em {UI_REPO}")
+    print(f"  (2) MONTA SEGREDO de outra camada: {len(montam)}")
+    for x in montam:
+        print(f"      {x['tela']} — {', '.join(x['detalhe'])}")
+    print(f"  (2) SERVE ROTA DE API            : {len(servem)}")
+    for x in servem:
+        print(f"      {x['tela']} — {', '.join(x['detalhe'])}")
+    print(f"  conformes (em {UI_REPO}, sem segredo, sem proxy): {len(conformes)}")
+    print(f"  veredito                         : {'em dia' if ok else 'divergente'}")
+    if abertas:
+        print("  --- observacao (nao entra no veredito; arq:0057 secao Aberto) ---")
+        print(f"  superficies declaradas ABERTAS   : {len(abertas)} (vira card proprio, #197 item 3)")
+        for x in abertas:
+            print(f"      {x['tela']} — {x['repo']}")
+    return 0 if ok else 1
+
+
 # --- classe: procedencia ----------------------------------------------------
 # Mede uma coisa so: onde para cada caminho de execucao de ~/AI/bin. Nao e arq:0037
 # (cabecalho e conta de capacidade sao de `conferir verbo`) e nao e arq:0042.
@@ -2213,6 +2421,8 @@ def main(argv):
             else:
                 uso(msg)
             return 2
+    if classe == "front":
+        return conferir_front(alvo, como_json=como_json)
     if classe == "skill":
         servido = None
         if "--servido" in argv:
