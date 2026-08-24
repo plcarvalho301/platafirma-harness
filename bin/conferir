@@ -53,6 +53,16 @@
                    secoes obrigatorias com a terceira coluna de (b) preenchida e os
                    dois textos fixos. Sem tokenizador sai 2 — chapeu se mede, nao
                    se estima. Sem alvo, julga todos os do disco.
+  ferramental [--json]
+                   golden record acervo.ferramental (3 niveis) contra o host:
+                   (a) cada verbo declarado resolve em ~/AI/bin (arq:0037, 1:1
+                   capacidade<->verbo integro); (b) cada instancia declarada tem
+                   contraparte viva (container/stack conhecido); (c) DERIVA: stack
+                   do registro/stacks.json sem instancia na tabela sai como
+                   OBSERVACAO, nao reprova — a entidade stack-de-deploy esta no ok
+                   de claudinho-dados (schema dela), fora deste release. Reconcilia
+                   host contra a TABELA (a tabela e a fonte; stacks.json morre
+                   quando a paridade fechar, nao antes). So olha.
   commit  <arquivo> mensagem de commit em curso: os ids que ela CITA, contra o
                    rastreador. Recusa id inexistente e id de item fechado — os dois
                    predicados da F9 do rastreador, §5.1, e so eles. Ausencia de id
@@ -95,7 +105,7 @@ def uso(erro=None):
         print(f"erro: {erro}\n", file=sys.stderr)
     print(__doc__.strip(), file=sys.stderr)
     print("\nuso: conferir <classe> [alvo]", file=sys.stderr)
-    print("     classes implementadas : servico . verbo . repo . skill . procedencia . superficie . commit . arranque . chapeu", file=sys.stderr)
+    print("     classes implementadas : servico . verbo . repo . skill . procedencia . superficie . commit . arranque . chapeu . ferramental", file=sys.stderr)
     for c, motivo in CLASSES_ABERTAS.items():
         print(f"     classe declarada, sem implementacao : {c} — {motivo}", file=sys.stderr)
     sys.exit(2)
@@ -1973,6 +1983,131 @@ def conferir_chapeu(alvo=None, como_json=False):
     return 1 if reprovados else 0
 
 
+# --- classe: ferramental ----------------------------------------------------
+# Reconcilia a ESPINHA (capacidade->verbo->instancia) do golden record
+# acervo.ferramental contra o host. A tabela e a fonte; o host obedece. NAO julga
+# stack-de-deploy: essa entidade esta no ok de claudinho-dados (schema dela).
+# So olha. 0 sem divergencia, 1 com, 2 chamada errada.
+
+FERRAMENTAL_PG = "rag-extractor-pg"
+FERRAMENTAL_DB = "rag_extractor"
+FERRAMENTAL_USR = "rag"
+STACKS_JSON = os.path.join(RAIZ, "platafirma-harness", "registro", "stacks.json")
+
+
+def _ferramental_psql(sql):
+    """(linhas|None, erro|None). Le a tabela via docker exec, como o resto do verbo."""
+    env = dict(os.environ)
+    env.setdefault("DOCKER_HOST", "unix:///run/user/1001/docker.sock")
+    p = subprocess.run(
+        ["docker", "exec", "-i", FERRAMENTAL_PG, "psql", "-U", FERRAMENTAL_USR,
+         "-d", FERRAMENTAL_DB, "-tAF|", "-c", sql],
+        capture_output=True, text=True, env=env)
+    if p.returncode != 0:
+        return None, (p.stderr or p.stdout or f"psql saiu {p.returncode}").strip()[:200]
+    return [l for l in p.stdout.splitlines() if l.strip()], None
+
+
+def conferir_ferramental(alvo, como_json=False):
+    achados = []  # (severidade, texto): 'FALHA' muda veredito; 'DERIVA' so observa.
+
+    # (0) 1:1 capacidade<->verbo integro (invariante de schema, arq:0037).
+    linhas, erro = _ferramental_psql(
+        "select c.slug, v.slug from acervo.ferramental_capacidade c "
+        "full outer join acervo.ferramental_verbo v on v.capacidade_id=c.id "
+        "where c.id is null or v.id is null")
+    if erro:
+        msg = f"nao consegui ler acervo.ferramental: {erro}"
+        if como_json:
+            print(json.dumps({"classe": "ferramental", "erro": msg}, ensure_ascii=False))
+        else:
+            print(f"conferir ferramental: {msg}", file=sys.stderr)
+        return 2
+    for l in linhas:
+        cap, vb = (l.split("|") + [""])[:2]
+        if not vb:
+            achados.append(("FALHA", f"capacidade {cap!r} sem verbo (quebra 1:1)"))
+        elif not cap:
+            achados.append(("FALHA", f"verbo {vb!r} sem capacidade (quebra 1:1)"))
+
+    # (a) cada verbo declarado resolve em ~/AI/bin.
+    verbos, erro = _ferramental_psql(
+        "select slug, coalesce(sot,'') from acervo.ferramental_verbo order by slug")
+    if erro:
+        return 2
+    for l in verbos:
+        slug, sot = (l.split("|") + [""])[:2]
+        # so cobra PATH de verbo cujo sot aponta bin/ (ollama/matrix tem sot em stacks.json).
+        if not sot.startswith("bin/"):
+            continue
+        if not os.path.exists(os.path.join(BIN, slug)):
+            achados.append(("FALHA", f"verbo {slug!r} declarado (sot={sot}) nao existe em ~/AI/bin"))
+
+    # (b) cada instancia declarada tem contraparte viva (container OU stack conhecido).
+    instancias, erro = _ferramental_psql(
+        "select i.slug, v.slug from acervo.ferramental_instancia i "
+        "join acervo.ferramental_verbo v on v.id=i.verbo_id order by i.slug")
+    if erro:
+        return 2
+    env = dict(os.environ); env.setdefault("DOCKER_HOST", "unix:///run/user/1001/docker.sock")
+    pc = subprocess.run(["docker", "ps", "--format", "{{.Names}}"],
+                        capture_output=True, text=True, env=env)
+    vivos = pc.stdout if pc.returncode == 0 else ""
+    # instancia pode ser processo do HOST (ollama serve), nao so container.
+    pg = subprocess.run(["bash", "-lc", "ps -eo comm= 2>/dev/null"],
+                        capture_output=True, text=True)
+    procs_host = pg.stdout if pg.returncode == 0 else ""
+    stacks_declarados = set()
+    try:
+        with open(STACKS_JSON) as f:
+            stacks_declarados = set(json.load(f).get("stacks", {}).keys())
+    except (OSError, ValueError):
+        achados.append(("DERIVA", f"nao li {STACKS_JSON} para cruzar deriva de stack"))
+    for l in instancias:
+        inst, vb = (l.split("|") + [""])[:2]
+        # contraparte viva: container, processo do host, ou stack homonimo declarado.
+        viva = (inst in vivos or any(inst in n for n in vivos.split())
+                or inst in stacks_declarados
+                or any(inst in p for p in procs_host.split()))
+        if viva:
+            continue
+        # DERIVA, nao FALHA: sem o vinculo instancia<->stack (ok de claudinho-dados)
+        # nao da para afirmar "deveria rodar aqui e nao roda". So observo o gap.
+        achados.append(("DERIVA", f"instancia {inst!r} (verbo {vb}) sem contraparte viva "
+                        f"detectavel (container/processo/stack) — verificacao plena "
+                        f"depende do vinculo-stack, no ok de claudinho-dados"))
+
+    # (c) DERIVA: stack no arquivo sem instancia na tabela. NAO reprova — a entidade
+    #     stack-de-deploy esta no ok de claudinho-dados. So observa o gap.
+    if stacks_declarados:
+        slugs_inst = {(l.split("|") + [""])[0] for l in instancias}
+        orfaos = sorted(s for s in stacks_declarados if s not in slugs_inst)
+        if orfaos:
+            achados.append(("DERIVA",
+                f"{len(orfaos)} stack(s) de deploy sem instancia na tabela: {', '.join(orfaos)} "
+                f"(entidade stack no ok de claudinho-dados; stacks.json nao morre ate fechar)"))
+
+    falhas = [t for sev, t in achados if sev == "FALHA"]
+    derivas = [t for sev, t in achados if sev == "DERIVA"]
+
+    if como_json:
+        print(json.dumps({
+            "classe": "ferramental",
+            "veredito": "em dia" if not falhas else "divergente",
+            "falhas": falhas, "observacoes_deriva": derivas,
+        }, ensure_ascii=False, indent=2))
+    else:
+        if falhas:
+            print("conferir ferramental: DIVERGENTE")
+            for t in falhas:
+                print(f"  FALHA  {t}")
+        else:
+            print("conferir ferramental: em dia (espinha capacidade->verbo->instancia integra)")
+        for t in derivas:
+            print(f"  deriva {t}")
+    return 1 if falhas else 0
+
+
 def main(argv):
     como_json = "--json" in argv
     if como_json:
@@ -2014,6 +2149,8 @@ def main(argv):
         return conferir_sessao(alvo, como_json=como_json, registrar=registrar)
     if classe == "chapeu":
         return conferir_chapeu(alvo, como_json=como_json)
+    if classe == "ferramental":
+        return conferir_ferramental(alvo, como_json=como_json)
     if classe == "commit":
         return conferir_commit(alvo, como_json=como_json)
     if classe == "arranque":

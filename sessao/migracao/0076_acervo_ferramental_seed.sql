@@ -11,6 +11,10 @@
 --   - terceiros/scripts (habilitador): FORA do seed inicial. São meio, não espinha;
 --     entram como inventário de nível 3 quando os atributos operacionais de TI forem povoados.
 --
+--   - recurso/gestao-de-recurso: REMOVIDO do seed (24/08). O catalogo-global.md
+--     plano listava o verbo, mas ele NAO existe em ~/AI/bin (conferir ferramental
+--     pegou). Capacidade de espinha nao se inventa: se 'gestao-de-recurso' deve
+--     existir, e decisao de arquiteto/dados, nao correcao de TI no seed.
 -- Idempotente por slug (ON CONFLICT DO NOTHING). Roda depois da DDL 0076.
 
 begin;
@@ -28,7 +32,6 @@ insert into acervo.ferramental_capacidade (slug, rotulo) values
   ('politica','política'),
   ('incidente','incidente'),
   ('trabalho','trabalho'),
-  ('gestao-de-recurso','gestão de recurso'),
   ('memoria','memória'),
   ('expediente','expediente'),
   ('solicitacao','solicitação'),
@@ -52,7 +55,6 @@ select v.slug, c.id, v.sot from (values
   ('seg','politica','bin/seg'),
   ('sinal','incidente','bin/sinal'),
   ('tarefas','trabalho','bin/tarefas'),
-  ('recurso','gestao-de-recurso','bin/recurso'),
   ('mesa','memoria','bin/mesa'),
   ('monta-sessao','expediente','bin/monta-sessao'),
   ('chat','solicitacao','bin/chat'),
