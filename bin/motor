@@ -246,18 +246,48 @@ def cmd_indexar(inst, argv):
 
 
 def cmd_buscar(inst, argv):
+    uso = 'motor <inst> buscar "<pergunta>" [--k N] [--texto secao|trecho|nenhum] [--conceito <slug>]'
     if not argv:
-        print('motor <inst> buscar "<pergunta>" [--k N] [--texto secao|trecho|nenhum]', file=sys.stderr)
+        print(uso, file=sys.stderr)
+        sys.exit(2)
+    # #2457: o posicional (pergunta) vem na frente; flag na frente virava a pergunta em silencio.
+    if argv[0].startswith("-"):
+        print("buscar: a pergunta (posicional) vem antes das flags; recebi a flag "
+              + repr(argv[0]) + " na frente.\n  " + uso, file=sys.stderr)
         sys.exit(2)
     corpo = {"pergunta": argv[0]}
-    resto = argv[1:]
     conceitos = []
-    for k, v in zip(resto[::2], resto[1::2]):
-        k = k.lstrip("-")
-        if k == "conceito":            # repetivel: cada --conceito <slug> acrescenta um
+    resto = argv[1:]
+    i = 0
+    while i < len(resto):
+        a = resto[i]
+        if not a.startswith("--"):
+            print("buscar: esperava uma flag --nome, recebi " + repr(a)
+                  + " (posicional solto?).\n  " + uso, file=sys.stderr)
+            sys.exit(2)
+        nome = a[2:]
+        if nome not in ("k", "texto", "conceito"):
+            print("buscar: flag desconhecida " + repr(a)
+                  + ". conhecidas: --k, --texto, --conceito.\n  " + uso, file=sys.stderr)
+            sys.exit(2)
+        if i + 1 >= len(resto) or resto[i + 1].startswith("--"):
+            print("buscar: a flag " + repr(a) + " exige um valor.\n  " + uso, file=sys.stderr)
+            sys.exit(2)
+        v = resto[i + 1]
+        if nome == "conceito":            # repetivel: cada --conceito <slug> acrescenta um
             conceitos.append(v)
-        else:
-            corpo[k] = int(v) if k == "k" else v
+        elif nome == "k":
+            try:
+                corpo["k"] = int(v)
+            except ValueError:
+                print("buscar: --k exige inteiro, recebi " + repr(v) + ".", file=sys.stderr)
+                sys.exit(2)
+        else:  # texto
+            if v not in ("secao", "trecho", "nenhum"):
+                print("buscar: --texto aceita secao|trecho|nenhum, recebi " + repr(v) + ".", file=sys.stderr)
+                sys.exit(2)
+            corpo["texto"] = v
+        i += 2
     if conceitos:
         corpo["conceitos"] = conceitos
     tok = ""
