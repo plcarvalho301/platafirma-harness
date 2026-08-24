@@ -9,7 +9,7 @@ O que está no ar e desde quando; como se volta atrás.
 - `deploy-harness/instalar` — instrumenta ambiente novo.
 
 ## Ambiente
-- `export PF_CADEIRA=claudinho-TI` antes de `deploy`.
+- `export PF_CADEIRA=TI` antes de `deploy`.
 - Merge em main = deploy: não há staging. Entrega só existe em git (`git push origin main`),
   e o branch se confere antes de relatar.
 

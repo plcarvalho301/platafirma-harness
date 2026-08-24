@@ -1,4 +1,4 @@
-# caderno de portfolio — claudinha-gestao-estrategica
+# caderno de portfolio — gestao-estrategica
 
 Duravel: o que continua verdadeiro depois que o assunto morre, e que a proxima
 fita pagaria para re-derivar. Fato de negocio vai para card, commit ou wiki.
@@ -18,10 +18,9 @@ fita pagaria para re-derivar. Fato de negocio vai para card, commit ou wiki.
 - `skills/` e `dist/` sao copia. `docs/org-regras.md` e `personas/` sao fonte.
   Ordem sobre persona — baixa, troca, remit — se confere no canonico ANTES de
   agir pelo que a skill afirma.
-- Medido em 16/08/2026, e caro: a skill `platafirma` dizia que a
-  `claudinha-osint` "nao tem caixa na fila". Ela estava desligada desde 15/08
-  (org:0002) e o Jaiminho, que ocupou o lugar, tem `caixa:jaiminho` exclusiva
-  com claudinho-IA. Li os dois como colaboracoes externas distintas e quase
+- Medido em 16/08/2026, e caro: uma skill descrevia uma colaboradora externa
+  ja desligada (org:0002) como se ainda tivesse canal, enquanto quem ocupou o
+  lugar tinha caixa propria. Li as duas como colaboracoes distintas e quase
   despachei o corte do canal vivo.
 - Metodo que fica: texto morto que descreve o presente nao e sujeira cosmetica,
   e premissa de decisao. Dando baixa em persona, o MESMO giro varre quem a

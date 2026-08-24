@@ -1,4 +1,4 @@
-# caderno · claudinho-TI · head
+# caderno · TI · head
 
 ## Heurísticas de escolha do chapéu
 

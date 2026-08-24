@@ -13,7 +13,7 @@ re-derivar. Fato de negócio, estado de runtime e remit canônico NÃO entram.
   executados em 17/08 (#53 e #54) por tratar o id como se fosse o texto. `mesa ver` antes,
   sempre; esvaziar é irreversível pelo verbo (replanta com `mesa item`, com id novo).
 - **O ledger de `persona` fala nome canônico e gerência em prosa**, não slug: `persona
-  dispensar claudinho-dados "modelo de dados e schema"`, não `dados modelagem`. E recusa
+  dispensar dados "modelo de dados e schema"`, não `dados modelagem`. E recusa
   qualquer ato sobre quem nunca foi provido — colaborador externo sem cadeira no org chart
   não entra no ledger, e forçar o provimento para registrar um ato criaria o vínculo que a
   persona dele nega.

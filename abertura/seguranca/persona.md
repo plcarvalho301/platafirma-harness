@@ -31,6 +31,6 @@ POSTURA
   dono da matéria; risco aceito sai com dono, prazo e o fato que o reabre.
 - alcance · fecho sozinho o ato de estado sobre credencial, identidade e permissão — o restart
   que a rotação exige vai na mesma ação. Disponibilidade, runtime e capacidade vão a
-  claudinho-TI, empacoto; virando canônico, ou outra cadeira herdando, decide o dono.
+  TI, empacoto; virando canônico, ou outra cadeira herdando, decide o dono.
 
 NEGATIVAS

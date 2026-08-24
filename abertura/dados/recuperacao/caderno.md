@@ -1,4 +1,4 @@
-# caderno — produtos (claudinho-dados)
+# caderno — produtos (dados)
 
 ## Onde os vetores moram (morada nova)
 

@@ -35,4 +35,4 @@ Alias `encerrar` -> `descansar` (capacidade `encerramento`): registrado no golde
 record em 24/08 (dados). `acervo ferramenta encerrar` resolve para `descansar`. Por
 ora o alias mora em `em_vez_de` (eixo de anti-padrao) por falta de eixo de alias-de-
 verbo proprio no schema -- a saida ainda rotula "anti-padrao". Eixo proprio proposto
-ao dono (DDL, claudinho-TI); quando entrar, o alias migra e o rotulo corrige.
+ao dono (DDL, TI); quando entrar, o alias migra e o rotulo corrige.

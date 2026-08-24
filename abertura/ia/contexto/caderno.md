@@ -1,4 +1,4 @@
-# caderno — claudinho-IA · contexto, RAG e memória
+# caderno — IA · contexto, RAG e memória
 
 O que este chapéu aprendeu e vale além de um expediente. Fato de negócio não mora
 aqui: desce a card, commit ou wiki. Corpo lido sob demanda (`mesa caderno contexto`).

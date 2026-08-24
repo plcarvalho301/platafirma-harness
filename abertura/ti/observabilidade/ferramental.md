@@ -9,7 +9,7 @@ Sinal antes do incidente: log, métrica, saúde de serviço.
 - `nvitop` — GPU (a inferência mora no host).
 
 ## Ambiente
-- `export PF_CADEIRA=claudinho-TI` antes de `infra`.
+- `export PF_CADEIRA=TI` antes de `infra`.
 
 ## Armadilhas de uso
 - Consumidor de JSONL de log deve pular linha inválida com parse tolerante e contar as

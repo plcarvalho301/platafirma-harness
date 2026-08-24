@@ -12,7 +12,7 @@ Working set do chapéu além do ofício: o que roda, onde roda, o que se reinici
 - `git-filter-repo` — reescrita de história, irreversível: exige clone descartável.
 
 ## Ambiente
-- `export PF_CADEIRA=claudinho-TI` antes de `infra`, `deploy`, `longjob`.
+- `export PF_CADEIRA=TI` antes de `infra`, `deploy`, `longjob`.
 - Segredos não descem para o subprocesso do ops-mcp.
 
 ## Armadilhas de uso

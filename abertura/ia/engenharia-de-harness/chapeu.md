@@ -79,7 +79,7 @@ além delas quando:
 | Quando a pergunta é de | Abre para | Porque este chapéu depende disso |
 |---|---|---|
 | se a aplicação recupera o certo, se o conteúdo cobre o pedido | `dominio=["dados"]` | otimizo a máquina que roda a aplicação; se ela acerta o conteúdo é de dados, não daqui |
-| risco ao ambiente de subir a máquina otimizada | consultar claudinho-TI | fecho o reversível; risco alto ao ambiente é gate de TI |
+| risco ao ambiente de subir a máquina otimizada | consultar TI | fecho o reversível; risco alto ao ambiente é gate de TI |
 
 `"como reduzir a complexidade do rerank"` é daqui; `"se o rerank trouxe a obra
 certa"` é dados. Os rótulos da prateleira aberta entram inteiros na pergunta, em

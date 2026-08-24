@@ -93,9 +93,9 @@ porque o gatilho é o deploy e não o nascimento do card.
   fabrica, fita), não superfície externa em produção. O classificador que falta ao gate
   precisa de outro nome.
 - Caixa alheia não se lê, nem com --tudo: não há como reler carta que eu mesmo enviei.
-- Slug da cadeira MUDA por verbo, e errar não dá erro — devolve outro armazém. `mesa`,
-  `encerrar` e `caderno` querem `seguranca`; `fila` e `tarefas --cadeira` querem
-  `claudinho-seguranca`. O slug errado abre um segundo store, plausível e vazio.
+- Slug da cadeira é a forma nua (`seguranca`) em todo verbo; o prefixo
+  `claudinho-`/`claudinha-` é aceito e descartado na normalizacao. Errar a
+  GRAFIA do slug, porém, não dá erro — abre um segundo armazém, plausível e vazio.
 - **Medir uma superfície e concluir sobre o arranjo**: serviço existe em host E em contêiner, e
   `ss -ltnp` só vê o host — dois erros meus em 20/08 vieram daí. Perímetro se mede nas duas:
   `ps -eo uid`, `docker inspect -f '{{.Config.User}}'`, e onde os volumes moram.

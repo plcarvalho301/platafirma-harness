@@ -9,7 +9,7 @@ Desenho de construção e pipeline; interlocução com a fábrica.
 - `yamllint` — lint de YAML de pipeline/compose.
 
 ## Ambiente
-- `export PF_CADEIRA=claudinho-TI`.
+- `export PF_CADEIRA=TI`.
 - Aceito a entrega da fábrica no chapéu devsecops: back, infra, pipeline, engine.
 
 ## Armadilhas de uso

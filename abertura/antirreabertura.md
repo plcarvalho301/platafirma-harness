@@ -2,7 +2,7 @@ Substitui: nada. Peça nova (2026-08-16)
 
 # Antirreabertura — decisões fechadas que não voltam como pergunta
 
-Peça de abertura, dona: claudinha-gestao-estrategica. Uma linha por decisão: o que
+Peça de abertura, dona: gestao-estrategica. Uma linha por decisão: o que
 ficou decidido, a data, onde está o canônico. Racional e alternativa descartada
 moram no canônico apontado, não aqui.
 

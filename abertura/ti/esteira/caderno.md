@@ -1,4 +1,4 @@
-# caderno — claudinho-TI · construção e fábrica
+# caderno — TI · construção e fábrica
 
 O que este chapéu aprendeu e vale além de um expediente. Fato de negócio desce a card,
 commit ou wiki. Corpo sob demanda (`mesa caderno construcao`).
@@ -78,7 +78,8 @@ de toda cadeira.
 **Antes de medir, pergunte quem PRODUZ o que você vai medir.** Sendo o próprio disco, o
 instrumento reporta arqueologia; não havendo produtor, ISSO é o achado. E o par: **quem mede
 pergunta com a chave que o verbo usa** — `conferir sessao` dava "não medida" por perguntar
-`TI` onde `fila` exige `claudinho-TI`.
+`TI` numa chave que nao casava com a do verbo. Hoje os verbos normalizam as
+duas formas (strip do prefixo); a chave canonica e a cadeira nua.
 
 ## Quando o QUEM não aparece, o primeiro candidato sou eu (medido 15 e 18/08)
 
@@ -185,9 +186,9 @@ onde não confirmei a morte.
 - **nome `listar-conceito` / `listar conceito`** — no corpo do commit `501a8aa` e no
   card `#243` ("verbo listar-conceito"). O verbo é `acervo listar conceitos` (sub de
   `acervo`, arq:0040). Limpar a referência ao nome velho.
-- **`bin/acervo` cabeçalho `dono: claudinho-conhecimento`** — "conhecimento" como
-  CADEIRA parece fóssil (hoje é chapéu; a matéria do acervo é de claudinho-dados).
-  Verificar se `claudinho-conhecimento` ainda é cadeira antes de podar.
+- **`bin/acervo` cabeçalho `dono: conhecimento` como CADEIRA é fóssil** — hoje
+  `conhecimento` é chapéu; a matéria do acervo é de `dados`. Corrigir o cabeçalho
+  para `dono: dados`.
 - **`AB - ferramental.md` L342 → `TI.md`** — aponta pro ferramental velho por-cadeira
   (`TI.md`), superado por AB-ferramental + tool-manifest; e o fato citado (`acervo-drop`
   fora do PATH) já é falso (está em `~/.local/bin`). Fóssil de dois andares.
