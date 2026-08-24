@@ -57,11 +57,26 @@ group by cap.slug, vb.slug, vb.sot
 order by cap.slug;
 """
 
+# topologia: uma linha por stack, com as instancias que nela rodam agregadas (M:N).
+# stack sem instancia e estado normal (recorte de deploy e arbitrario, ADR 0076),
+# por isso LEFT join -- nao se esconde a stack avulsa.
+SQL_TOPOLOGIA = """
+select stk.slug, coalesce(stk.papel,\'\'), coalesce(stk.critico,false),
+       coalesce(string_agg(distinct ins.slug, \',\' order by ins.slug), \'\')
+from acervo.stack stk
+left join acervo.instancia_roda_em_stack m on m.stack_id = stk.id
+left join acervo.ferramental_instancia ins on ins.id = m.instancia_id
+group by stk.slug, stk.papel, stk.critico
+order by stk.slug;
+"""
+
 USO = """uso:
   acervo listar conceitos [--json]     golden record acervo.conceito:
                                        slug . rotulo . outros rotulos . origem . obras-ancora
   acervo listar ferramental [--json]   golden record acervo.ferramental:
                                        capacidade . verbo . sot . instancias
+  acervo listar topologia [--json]     topologia de deploy acervo.stack (eixo irmao):
+                                       stack . critico . instancias . papel
 
 Read-only. E o golden record: a lista (b) do chapeu e GERADA disto, nao editada a mao.
 """
@@ -145,13 +160,36 @@ def listar_ferramental(quero_json):
     sys.stderr.write("\n%d capacidade(s) no golden record (acervo.ferramental).\n" % len(itens))
 
 
+def listar_topologia(quero_json):
+    stacks = []
+    for slug, papel, critico, inst in _linhas(SQL_TOPOLOGIA, "topologia", 4):
+        instancias = [i for i in inst.split(",") if i]
+        stacks.append({
+            "slug": slug,
+            "papel": papel or None,
+            "critico": critico == "t",
+            "instancias": instancias or None,
+        })
+    if quero_json:
+        print(json.dumps(stacks, ensure_ascii=False, indent=2))
+        return
+    ws = max((len(s["slug"]) for s in stacks), default=5)
+    print("%-*s  %-4s  %-14s  %s" % (ws, "stack", "crit", "instancias", "papel"))
+    print("%s  %-4s  %-14s  %s" % ("-" * ws, "----", "-" * 14, "-" * 5))
+    for st in stacks:
+        ins = ",".join(st["instancias"]) if st["instancias"] else "-"
+        crit = "sim" if st["critico"] else "-"
+        print("%-*s  %-4s  %-14s  %s" % (ws, st["slug"], crit, ins, st["papel"] or ""))
+    sys.stderr.write("\n%d stack(s) na topologia (acervo.stack); vinculo M:N em instancia_roda_em_stack.\n" % len(stacks))
+
+
 def main(argv):
     if not argv or argv[0] in ("-h", "--help", "ajuda"):
         morre(USO, 0 if argv else 2)
 
     alvo, resto = argv[0], argv[1:]
-    if alvo not in ("conceitos", "ferramental"):
-        morre("acervo listar: alvo desconhecido %r (hoje 'conceitos' e 'ferramental')\n\n%s"
+    if alvo not in ("conceitos", "ferramental", "topologia"):
+        morre("acervo listar: alvo desconhecido %r (hoje 'conceitos', 'ferramental' e 'topologia')\n\n%s"
               % (alvo, USO))
 
     quero_json = False
@@ -163,6 +201,8 @@ def main(argv):
 
     if alvo == "conceitos":
         listar_conceitos(quero_json)
+    elif alvo == "topologia":
+        listar_topologia(quero_json)
     else:
         listar_ferramental(quero_json)
 
