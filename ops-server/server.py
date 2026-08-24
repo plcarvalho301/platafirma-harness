@@ -645,8 +645,7 @@ async def monta_sessao(cadeira: str = "", atualizar: bool = True, chapeu: str = 
     `fila` e `tarefas`, verbos chamados por ordem do dono como qualquer outro.
 
     Chamar no lugar de encadear leituras na abertura de sessão — é o que esta tool
-    existe para matar. Ler o manifesto NÃO é pré-condição para pensar nem para
-    responder: a tool é chamável sob demanda, não obrigatória na entrada.
+    existe para matar.
 
     `cadeira`: sufixo da persona (`TI`, `IA`, `fabrica`) — o prefixo `claudinho-`/
     `claudinha-` é aceito e descartado. Vazia ou desconhecida devolve `cadeiras`
