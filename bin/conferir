@@ -2043,49 +2043,61 @@ def conferir_ferramental(alvo, como_json=False):
         if not os.path.exists(os.path.join(BIN, slug)):
             achados.append(("FALHA", f"verbo {slug!r} declarado (sot={sot}) nao existe em ~/AI/bin"))
 
-    # (b) cada instancia declarada tem contraparte viva (container OU stack conhecido).
+    # (b) cada instancia declarada: roda? Reconcilia contra a TABELA (acervo.stack +
+    #     instancia_roda_em_stack), que agora e a FONTE — nao contra stacks.json.
+    #     Regra (Olga): instancia com vinculo a stack -> ok; instancia SEM vinculo E
+    #     sem processo vivo -> FALHA (o vinculo existe e esta vazio pra ela: posso
+    #     afirmar). ollama e o caso: instancia orfa de stack. "Nao deixa passar."
     instancias, erro = _ferramental_psql(
-        "select i.slug, v.slug from acervo.ferramental_instancia i "
-        "join acervo.ferramental_verbo v on v.id=i.verbo_id order by i.slug")
+        "select i.slug, v.slug, coalesce(string_agg(s.slug,',' order by s.slug),'') "
+        "from acervo.ferramental_instancia i "
+        "join acervo.ferramental_verbo v on v.id=i.verbo_id "
+        "left join acervo.instancia_roda_em_stack r on r.instancia_id=i.id "
+        "left join acervo.stack s on s.id=r.stack_id "
+        "group by i.slug, v.slug order by i.slug")
     if erro:
         return 2
     env = dict(os.environ); env.setdefault("DOCKER_HOST", "unix:///run/user/1001/docker.sock")
     pc = subprocess.run(["docker", "ps", "--format", "{{.Names}}"],
                         capture_output=True, text=True, env=env)
     vivos = pc.stdout if pc.returncode == 0 else ""
-    # instancia pode ser processo do HOST (ollama serve), nao so container.
     pg = subprocess.run(["bash", "-lc", "ps -eo comm= 2>/dev/null"],
                         capture_output=True, text=True)
     procs_host = pg.stdout if pg.returncode == 0 else ""
-    stacks_declarados = set()
+    for l in instancias:
+        inst, vb, stacks_da_inst = (l.split("|") + ["", ""])[:3]
+        if stacks_da_inst:            # tem vinculo a stack -> declarada onde roda, ok.
+            continue
+        vivo = (inst in vivos or any(inst in n for n in vivos.split())
+                or any(inst in p for p in procs_host.split()))
+        if vivo:
+            # roda, mas nao esta vinculada a stack nenhum: e o caso ollama (processo
+            # do host, fora de compose). FALHA branda: ou ganha stack, ou sai da
+            # tabela de instancia (Olga, passo 3). Nao passa como detalhe.
+            achados.append(("FALHA", f"instancia {inst!r} (verbo {vb}) roda mas nao esta "
+                            f"vinculada a stack nenhum — resolver: ganha stack ou sai da "
+                            f"tabela de instancia (ex.: ollama e processo do host, fora de compose)"))
+        else:
+            achados.append(("FALHA", f"instancia {inst!r} (verbo {vb}) sem stack e sem "
+                            f"processo/container vivo — declarada mas ausente"))
+
+    # (c) Paridade de TRANSICAO: stack no stacks.json que a tabela acervo.stack ainda
+    #     nao absorveu. E a pre-condicao de morte do arquivo — enquanto houver falta
+    #     aqui, stacks.json NAO morre. Some quando o seed cobrir os 11.
     try:
         with open(STACKS_JSON) as f:
-            stacks_declarados = set(json.load(f).get("stacks", {}).keys())
+            no_arquivo = set(json.load(f).get("stacks", {}).keys())
     except (OSError, ValueError):
-        achados.append(("DERIVA", f"nao li {STACKS_JSON} para cruzar deriva de stack"))
-    for l in instancias:
-        inst, vb = (l.split("|") + [""])[:2]
-        # contraparte viva: container, processo do host, ou stack homonimo declarado.
-        viva = (inst in vivos or any(inst in n for n in vivos.split())
-                or inst in stacks_declarados
-                or any(inst in p for p in procs_host.split()))
-        if viva:
-            continue
-        # DERIVA, nao FALHA: sem o vinculo instancia<->stack (ok de claudinho-dados)
-        # nao da para afirmar "deveria rodar aqui e nao roda". So observo o gap.
-        achados.append(("DERIVA", f"instancia {inst!r} (verbo {vb}) sem contraparte viva "
-                        f"detectavel (container/processo/stack) — verificacao plena "
-                        f"depende do vinculo-stack, no ok de claudinho-dados"))
-
-    # (c) DERIVA: stack no arquivo sem instancia na tabela. NAO reprova — a entidade
-    #     stack-de-deploy esta no ok de claudinho-dados. So observa o gap.
-    if stacks_declarados:
-        slugs_inst = {(l.split("|") + [""])[0] for l in instancias}
-        orfaos = sorted(s for s in stacks_declarados if s not in slugs_inst)
-        if orfaos:
-            achados.append(("DERIVA",
-                f"{len(orfaos)} stack(s) de deploy sem instancia na tabela: {', '.join(orfaos)} "
-                f"(entidade stack no ok de claudinho-dados; stacks.json nao morre ate fechar)"))
+        no_arquivo = set()
+        achados.append(("DERIVA", f"nao li {STACKS_JSON} para conferir paridade de transicao"))
+    if no_arquivo:
+        na_tabela, erro = _ferramental_psql("select slug from acervo.stack")
+        se_tab = set(x.strip() for x in (na_tabela or []))
+        faltam = sorted(no_arquivo - se_tab)
+        if faltam:
+            achados.append(("FALHA",
+                f"{len(faltam)} stack(s) no stacks.json ausente(s) em acervo.stack: "
+                f"{', '.join(faltam)} — stacks.json nao morre ate a tabela absorver todos"))
 
     falhas = [t for sev, t in achados if sev == "FALHA"]
     derivas = [t for sev, t in achados if sev == "DERIVA"]
