@@ -14,7 +14,8 @@ o alias na linha 1, entao ela nao serve mais de fonte do prefixo. Cadeira nova e
 sozinha, sem editar este arquivo.
 
 Fonte do case e do prefixo: platafirma-harness/registro/eventos-org.jsonl.
-Fonte da persona de participante: platafirma-harness/abertura/<sufixo>/persona.md.
+Fonte da persona do ator: abertura/<persona>/persona.md, onde a persona
+sai de _PERSONA_DO_ATOR (ator != persona: jaiminho monta `fabrica`).
 A raiz sai de PF_RAIZ, ou do default do host; no container da recepcao ambos entram
 por bind mount ro.
 """
@@ -40,6 +41,25 @@ _NAO_SAO_CADEIRA = {"TEMPLATE", "jaiminho", "jaiminho-fabrica", "osint", "fabric
 # resposta certa. O que muda e que a SUPERFICIE de conversa passa a ter um roster
 # proprio (`atores()`), maior que o do org: o dono fala com quem tem porta com ele.
 _SAO_PARTICIPANTE = {"jaiminho", "jaiminho-fabrica"}
+
+# ATOR de superficie -> PERSONA que a sessao dele monta.
+#
+# Tres eixos independentes, e este mapa e a unica ponte entre dois deles:
+#   conta    o usuario do SO onde o ator roda — o PERIMETRO de segregacao, canonico
+#            (conta != persona; regra de conta como segregacao vale em todo lugar serio).
+#   provider a entidade por tras da conta, e o nome AFETIVO do ator: claudinho e o
+#            Claude, jaiminho e o Antigravity, gepeto sera o ChatGPT. E o que o dono
+#            ve na sala e o que o MXID (_pf_<ator>) carrega — identidade permanente.
+#   persona  o que monta_sessao carrega — abertura/<persona>/persona.md.
+#
+# O ator jaiminho monta a persona `fabrica` (roteador de linha: devops/blueteam/
+# front-end). NAO ha mais "persona jaiminho": o provider e uma fabrica com outro
+# provider em outra conta. Ator sem entrada aqui monta a persona homonima (o caso
+# das cadeiras claudinho-*, onde ator e persona coincidem).
+_PERSONA_DO_ATOR = {
+    "jaiminho": "fabrica",
+    "jaiminho-fabrica": "fabrica",
+}
 
 
 def _raiz_personas() -> Path:
@@ -106,7 +126,7 @@ def participantes() -> list[str]:
         )
     achados = [
         nome for nome in _SAO_PARTICIPANTE
-        if (dir_personas / nome / "persona.md").is_file()
+        if (dir_personas / _PERSONA_DO_ATOR.get(nome, nome) / "persona.md").is_file()
     ]
     return sorted(achados)
 
@@ -187,8 +207,11 @@ def slug_da_cadeira(nome: str) -> str | None:
     if sufixo is None:
         return None
     if sufixo in _SAO_PARTICIPANTE:
-        # Participante nao e claudinho: o proprio nome e o slug.
-        return sufixo
+        # Participante nao e claudinho: o slug e o da PERSONA que ele monta
+        # (jaiminho -> fabrica), nao o nome do ator. PF_CADEIRA, o arquivo de
+        # persona e o Project sao chaveados pela persona; chavear pelo ator daria
+        # a mem:jaiminho:* paralela que esta funcao existe para evitar.
+        return _PERSONA_DO_ATOR.get(sufixo, sufixo)
     # Fonte do prefixo e o LEDGER, nao a linha 1 da persona (form novo poe alias la).
     return _cadeiras_do_ledger().get(sufixo.lower())
 
