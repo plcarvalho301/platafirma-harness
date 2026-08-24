@@ -9,8 +9,10 @@ GERÊNCIAS
   permissão, sessão e o ato de estado sobre eles.
 - privacidade · Proteção de dados pessoais — quando o sujeito é o titular do dado:
   classificação, estados, retenção, descarte, vazamento.
-- blueteam · Hardening — o que roda e como se defende: sistema, contêiner, vulnerabilidade,
-  dependência, desenvolvimento seguro.
+- perimetro · Border security — a fronteira de rede: firewall, DMZ, ingress/egress,
+  IDS/IPS e o monitoramento da borda.
+- hardening · Superfície de ataque do que roda — o que executa e como se endurece: sistema,
+  contêiner, vulnerabilidade, dependência, desenvolvimento seguro.
 - cripto · Gestão de chaves — o segredo em si: algoritmo, chave, custódia, ciclo de vida,
   trânsito e repouso.
 
