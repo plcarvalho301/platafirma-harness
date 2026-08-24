@@ -18,6 +18,7 @@ uso:
   acervo bancada [destino]                   monta o lote do que falta classificar
   acervo extrato [destino]                   foto do acervo para ler fora da bancada
   acervo listar  conceitos [--json]          golden record acervo.conceito (referência)
+  acervo listar  ferramental [--json]        golden record acervo.ferramental (3 níveis)
 
 Os cinco degraus da escada: catalogada, armazenada, ingerida, embedded,
 vetorizada. `escada` mede; os outros três produzem artefato.
