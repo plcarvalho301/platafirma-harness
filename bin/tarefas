@@ -145,9 +145,42 @@ monta_query() { # monta_query "$@" -> ecoa a query string e devolve o resto em R
   RESTO=()
   while [ $# -gt 0 ]; do
     case "$1" in
-      --cadeira) q="$q&cadeira=$2"; shift 2 ;;
-      --estado)  q="$q&estado=$2";  shift 2 ;;
-      --nivel)   q="$q&nivel=$2";   shift 2 ;;
+      --cadeira)
+        local cad="$2"
+        case "$cad" in
+          claudinho-arquiteto|arquiteto|\
+          claudinho-dados|dados|\
+          claudinho-IA|claudinho-ia|ia|IA|\
+          claudinha-produto|produto|\
+          claudinho-TI|claudinho-ti|ti|TI|\
+          claudinho-seguranca|seguranca|\
+          claudinha-gestao-estrategica|gestao-estrategica|\
+          claudinha-fabrica|fabrica|\
+          claudinha-osint|osint|\
+          claudinho-politicas-publicas|politicas-publicas|\
+          claudinho-conhecimento|conhecimento) ;;
+          *) echo "cadeira desconhecida: $cad" >&2; exit 2 ;;
+        esac
+        q="$q&cadeira=$cad"; shift 2 ;;
+      --estado)
+        local est="$2"
+        case "$est" in
+          captada|em-lapidacao|em-parecer|priorizada|em-refinamento-tecnico|refinada|\
+          em-execucao|em-homologacao|entregue|recusada|cancelada|englobada|encerrada|\
+          descartada|detectado|em-mitigacao|mitigado|resolvido) ;;
+          *) echo "estado desconhecido: $est" >&2; exit 2 ;;
+        esac
+        q="$q&estado=$est"; shift 2 ;;
+      --nivel)
+        local n
+        case "$2" in
+          épico|epico|0) n=0 ;;
+          feature|1)     n=1 ;;
+          story|2)       n=2 ;;
+          task|3)        n=3 ;;
+          *) echo "nível desconhecido: $2 (épico, feature, story, task)" >&2; exit 2 ;;
+        esac
+        q="$q&nivel=$n"; shift 2 ;;
       --json)    RESTO+=("--json"); shift ;;
       *)         RESTO+=("$1"); shift ;;
     esac
@@ -285,8 +318,6 @@ criar() {
     case "$1" in
       --desc)       desc="$2"; shift 2 ;;
       --desc-stdin) desc="$(cat)"; shift ;;
-      --nivel)      nivel="$2"; shift 2 ;;
-      --cadeira)    cadeira="$2"; shift 2 ;;
       --pai)        pai=$(so_id "$2"); shift 2 ;;
       --incidente)  classe="incidente"; shift ;;
       --prio)       echo "aviso: --prio não existe neste modelo; ignorado." >&2; shift 2 ;;
@@ -420,9 +451,16 @@ fechar() {
 # Filho declara o pai, e o pai tem de ser de nível estritamente MENOR — a restrição é do
 # banco (`pai_nivel`, escrito por subconsulta), não deste verbo. Recusa vem nomeada da API.
 subtarefa() {
-  local pai filho; pai=$(so_id "$1"); filho=$(so_id "$2")
+  local pai filho; pai=$(so_id "${1:?uso: tarefas sub <pai> <filho>}"); filho=$(so_id "${2:?uso: tarefas sub <pai> <filho>}")
   jq -n --argjson p "$pai" '{pai:$p}' | envia PATCH "/itens/$filho" >/dev/null
   echo "item $filho agora é filho de $pai"
+}
+
+apagar_comentario() {
+  local id cid
+  id=$(so_id "${1:?uso: tarefas apagar-comentario <id> <cid>}")
+  cid=$(so_id "${2:?uso: tarefas apagar-comentario <id> <cid>}")
+  busca DELETE "/itens/$id/comentarios/$cid" | jq -r '"comentário #\(.apagado) apagado do item \(.item)"'
 }
 
 # --- despacho ---------------------------------------------------------------
@@ -439,6 +477,7 @@ case "$cmd" in
   mover)       mover "$@" ;;
   fechar)      fechar "${1:?uso: tarefas fechar <id>}" "${@:2}" ;;
   apagar)      apagar "${1:?uso: tarefas apagar <id> [--cascata]}" "${@:2}" ;;
+  apagar-comentario) apagar_comentario "${1:?uso: tarefas apagar-comentario <id> <cid>}" "${2:?cid}" ;;
   assinar)     assinar "${1:?uso: tarefas assinar <id> --aprovador <cadeira> [--decisao aprovado|recusado] [--motivo \"<txt>\"]}" "${@:2}" ;;
   sub)         subtarefa "${1:?pai}" "${2:?filho}" ;;
   estados)     estados ;;
