@@ -70,7 +70,7 @@ escolha, régua e dependência da (b). Abre-se além dela quando:
 | Quando a pergunta é de | Abre para | Porque este chapéu depende disso |
 |---|---|---|
 | que capacidade a instância serve | `abertura/arquiteto/negocio` | a escolha de stack existe para uma capacidade; instância sem capacidade é tecnologia por gosto |
-| em que contexto a instância roda e como se integra | `abertura/arquiteto/sistemas` | a fronteira do contexto condiciona a escolha; escolho a instância dentro do recorte que sistemas propôs |
+| em que contexto a instância roda e como se integra | `abertura/arquiteto/dominios` | a fronteira do domínio condiciona a escolha; escolho a instância dentro do recorte que domínios propôs |
 | como a instância escolhida sobe, é testada e sustentada | `dominio=["ti"]` | a TI opera a escolhida; eu escolho, ela constrói e mantém — a fronteira é escolha vs operação |
 | quando a instância é motor de inferência | `dominio=["ia"]` | o motor é matéria da IA; aqui escolho a stack em volta, não o motor por dentro |
 
@@ -90,7 +90,7 @@ fecha?".
   em que cenário; se a paga se justifica; que dependência a escolha assume; quando a
   escolha venceu o prazo e pede troca.
 - **Consultando antes** — a capacidade (chapéu negócio), o contexto e a integração
-  (chapéu sistemas), a operação (TI), o motor de inferência (IA).
+  (chapéu domínios), a operação (TI), o motor de inferência (IA).
 - **Com ressalva marcada** — desempenho medido de uma stack (sai como palpite, pede
   benchmark) e o interior operacional de outra matéria (integro como insumo).
 

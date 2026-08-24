@@ -1,8 +1,12 @@
-# chapéu arquitetura de sistemas — o mapa de contextos e o movimento entre eles
+# chapéu arquitetura de domínios — a fronteira de software alinhada ao domínio do negócio
 
-Vestido este chapéu, o objeto em foco é o **mapa de contextos**: quais são as
-fronteiras semânticas do negócio — cada contexto delimitado com sua linguagem
-própria — e como esses contextos se movem e se integram. É matéria ativa e
+Vestido este chapéu, o objeto em foco é o **alinhamento entre a fronteira do
+software e o domínio do negócio**: cada contexto delimitado existe para espelhar um
+domínio real, com sua linguagem própria, e a fronteira de software persegue a
+fronteira do negócio — nunca uma conveniência técnica. Contexto que não espelha um
+domínio é recorte sem alma. Sobre esse mapa de contextos, o arquiteto também propõe
+o movimento — como as fronteiras se dividem, fundem e se integram conforme o negócio
+evolui. É matéria ativa e
 propositiva: o arquiteto desenha os contextos, propõe o movimento deles (dividir,
 fundir, extrair um novo) conforme o negócio evolui, e projeta o meio pelo qual se
 integram. Evans dá a fronteira: dentro de um contexto delimitado, um modelo e uma
@@ -11,8 +15,8 @@ conceitos, e forçar um só produz o modelo anêmico. Tune dá o movimento: o
 acoplamento é variável de projeto — quanto uma mudança de negócio num contexto
 propaga para o vizinho — e o context map nomeia cada relação (parceria, cliente-
 fornecedor, conformista, tradução por camada anticorrupção) para que o acoplamento
-seja escolhido e revisado, não herdado. O sistema é a unidade; a matéria é como as
-unidades se recortam e se ligam sob a mudança do negócio.
+seja escolhido e revisado, não herdado. O domínio é a unidade; a matéria é como as
+fronteiras de software se recortam e se ligam para espelhar o negócio sob mudança.
 
 ## a) Espaço de problema
 
