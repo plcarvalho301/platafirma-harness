@@ -630,13 +630,20 @@ def segredos_dos_conectores():
     return fora
 
 
-def monta_pacote(cadeira, env):
+def monta_pacote(cadeira, env, corpo=""):
     """Pacote de abertura. Falha aqui nao vira giro degradado: fita sem pacote e
     um Claude Code generico com o nome da cadeira no avatar — exatamente o que a
-    secao 1 da minuta existe para impedir. Melhor erro visivel na sala."""
+    secao 1 da minuta existe para impedir. Melhor erro visivel na sala.
+
+    `corpo` e o turno do dono. Passa-lo como --pergunta e o que acorda o roteador
+    de chapeu (a) determinístico (#249): sem ele, monta-sessao roda escolhe() com
+    pergunta vazia -> fallback (c) sempre, e o chapeu nunca e inferido nesta
+    superficie. Corpo vazio nao anexa a flag: cai no fallback declarado, como antes."""
     argv = [os.path.join(RAIZ, "bin", "monta-sessao"), cadeira]
     if os.environ.get("PF_CHAT_SEM_ATUALIZAR") == "1":
         argv.append("--sem-atualizar")
+    if (corpo or "").strip():
+        argv += ["--pergunta", corpo]
     try:
         r = subprocess.run(
             argv, capture_output=True, text=True, timeout=PACOTE_S, env=env, cwd=RAIZ
@@ -926,7 +933,7 @@ def despachar(argv):
     pacote = None
     reiniciada = False
     if not id_fita:
-        pacote, erro = monta_pacote(cadeira, env)
+        pacote, erro = monta_pacote(cadeira, env, corpo)
         if pacote is None:
             return responde("erro", "", "", erro, False)
         passo_out({"passo": "pacote", "em": agora_iso(), "bytes": len(pacote)})
@@ -941,7 +948,7 @@ def despachar(argv):
         # contrato para isto: a recepcao precisa saber que o id que ela guardava
         # morreu, e o dono precisa saber que a cadeira perdeu o fio da conversa.
         passo_out({"passo": "reinicio", "em": agora_iso(), "fita_velha": id_fita})
-        pacote, erro = monta_pacote(cadeira, env)
+        pacote, erro = monta_pacote(cadeira, env, corpo)
         if pacote is None:
             return responde("erro", "", "", erro, True)
         passo_out({"passo": "pacote", "em": agora_iso(), "bytes": len(pacote)})
