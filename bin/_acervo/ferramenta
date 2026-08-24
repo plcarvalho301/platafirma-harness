@@ -1,0 +1,130 @@
+#!/usr/bin/env python3
+# acervo ferramenta <nome> — lookup por nome no golden record de ferramental.
+# capacidade: conhecimento
+# dono: claudinho-conhecimento
+#   (mecanismo/harness: claudinho-TI · construcao)
+#
+# Responde "o que e este nome, e qual o verbo certo?". Casa <nome> contra os tres
+# niveis (capacidade, verbo, instancia) E contra em_vez_de (anti-padrao -> verbo),
+# nesta ordem de especificidade. E a metade CONSULTAVEL da defesa contra os dois
+# erros que o catalogo mapeou (card 24/08/2026):
+#   1. chamar uma INSTANCIA como verbo   (rastreador -> tarefas)  [tambem coberto por symlink]
+#   2. usar COMANDO CRU no lugar do verbo (psql   -> acervo)      [so aqui: comando cru nao vira symlink]
+# Symlink so cobre (1), porque so instancia tem nome interceptavel. (2) e comando
+# legitimo (psql, docker, curl) que nao se sequestra — a defesa dele e consulta.
+#
+# Read-only. `acervo ferramenta psql` e `acervo ferramenta rastreador` sao os dois
+# casos de uso canonicos.
+import json
+import os
+import signal
+import subprocess
+import sys
+
+try:
+    signal.signal(signal.SIGPIPE, signal.SIG_DFL)
+except (AttributeError, ValueError):
+    pass
+
+PG = "rag-extractor-pg"; DB = "rag_extractor"; USR = "rag"
+
+USO = """uso:
+  acervo ferramenta <nome> [--json]   o que e <nome> no golden record e qual o verbo certo
+
+Casa <nome> contra capacidade, verbo, instancia e em_vez_de (anti-padrao). Ex.:
+  acervo ferramenta rastreador   -> instancia de 'tarefas'; chame 'tarefas'
+  acervo ferramenta psql         -> anti-padrao; o verbo e 'acervo' (e outros)
+Read-only."""
+
+
+def morre(msg, code=2):
+    sys.stderr.write(msg.rstrip("\n") + "\n")
+    sys.exit(code)
+
+
+def _lit(nome):
+    # Literal SQL seguro: dobra aspas simples. O nome vem de argv (a cadeira), nao
+    # de rede, mas escapar e barato e fecha o buraco.
+    return "'" + nome.replace("'", "''") + "'"
+
+
+def _psql(sql):
+    env = dict(os.environ)
+    env.setdefault("DOCKER_HOST", "unix:///run/user/1001/docker.sock")
+    try:
+        return subprocess.run(
+            ["docker", "exec", "-i", PG, "psql", "-U", USR, "-d", DB, "-tAF|", "-c", sql],
+            capture_output=True, text=True, check=True, env=env).stdout
+    except FileNotFoundError:
+        morre("acervo ferramenta: 'docker' nao encontrado no PATH.", 3)
+    except subprocess.CalledProcessError as e:
+        morre("acervo ferramenta: psql falhou (rc=%s):\n%s"
+              % (e.returncode, (e.stderr or "").strip()), 3)
+
+
+def _rows(sql):
+    return [l.split("|") for l in _psql(sql).splitlines() if l.strip()]
+
+
+def lookup(nome):
+    achados = []
+
+    # 1. verbo exato — o proprio nome canonico
+    for (v, cap, sot) in _rows(
+        "select slug, (select slug from acervo.ferramental_capacidade c where c.id=v.capacidade_id), "
+        "coalesce(sot,'') from acervo.ferramental_verbo v where slug = " + _lit(nome) + ";"):
+        achados.append({"tipo": "verbo", "nome": nome, "verbo_certo": v,
+                        "nota": "'%s' JA e o verbo canonico (capacidade '%s')." % (v, cap),
+                        "sot": sot or None})
+
+    # 2. instancia — nome de servico/banco/motor; verbo certo e o que ela serve
+    for (i, v) in _rows(
+        "select ins.slug, vb.slug from acervo.ferramental_instancia ins "
+        "join acervo.ferramental_verbo vb on vb.id=ins.verbo_id where ins.slug = " + _lit(nome) + ";"):
+        achados.append({"tipo": "instancia", "nome": i, "verbo_certo": v,
+                        "nota": "'%s' e uma INSTANCIA (servico/banco/motor), nao um verbo. "
+                                "O verbo e '%s'." % (i, v)})
+
+    # 3. capacidade — o "o que a firma sabe fazer"; verbo certo e o 1:1 dela
+    for (cap, v) in _rows(
+        "select c.slug, v.slug from acervo.ferramental_capacidade c "
+        "join acervo.ferramental_verbo v on v.capacidade_id=c.id where c.slug = " + _lit(nome) + ";"):
+        achados.append({"tipo": "capacidade", "nome": cap, "verbo_certo": v,
+                        "nota": "'%s' e uma capacidade; o verbo que a realiza e '%s'." % (cap, v)})
+
+    # 4. em_vez_de — <nome> aparece num anti-padrao declarado? (match por substring)
+    for (v, regra) in _rows(
+        "select slug, em_vez_de from acervo.ferramental_verbo "
+        "where em_vez_de is not null and em_vez_de <> '' and position(" + _lit(nome) + " in em_vez_de) > 0 "
+        "order by slug;"):
+        achados.append({"tipo": "anti-padrao", "nome": nome, "verbo_certo": v,
+                        "nota": "usar '%s' na mao e anti-padrao: o verbo '%s' faz isso "
+                                "(em_vez_de: %s)." % (nome, v, regra), "em_vez_de": regra})
+    return achados
+
+
+def main(argv):
+    if not argv or argv[0] in ("-h", "--help", "ajuda"):
+        morre(USO, 0 if argv else 2)
+    nome = argv[0]
+    quero_json = "--json" in argv[1:]
+    for a in argv[1:]:
+        if a != "--json":
+            morre("acervo ferramenta: opcao desconhecida %r\n\n%s" % (a, USO))
+
+    achados = lookup(nome)
+    if quero_json:
+        print(json.dumps(achados, ensure_ascii=False, indent=2))
+        return 0 if achados else 1
+
+    if not achados:
+        sys.stderr.write("acervo ferramenta: '%s' nao aparece no golden record "
+                         "(nem como verbo, instancia, capacidade ou anti-padrao).\n" % nome)
+        return 1
+    for a in achados:
+        print("%-12s %s" % ("[%s]" % a["tipo"], a["nota"]))
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))

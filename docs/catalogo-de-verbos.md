@@ -46,6 +46,46 @@ arquitetura.
 `mensagem` é servida pelo verbo `jaiminho`, que fala com o colaborador externo.
 Partida a capacidade em filhas, cada verbo vai para a sua.
 
+## Instância e anti-padrão — o que empurra ao verbo certo
+
+O golden record tem três níveis: **capacidade → verbo → instância**. O verbo é o
+nome canônico da CLI (`bin/<verbo>`); a instância é o realizador concreto (o
+serviço, o banco, o motor). Dois erros recorrentes nascem daí, e cada um tem um
+mecanismo de defesa próprio — pela natureza do erro, não por gosto.
+
+**Erro 1 — chamar a INSTÂNCIA como se fosse verbo.** A cadeira alcança o board
+pelo nome que ouve o dia inteiro (`rastreador`) e digita `rastreador ...`, quando
+o verbo é `tarefas`. `keycloak ...` no lugar de `acesso`, idem. O nome existe como
+conceito, então é interceptável.
+
+- **Defesa: symlink gerado do acervo.** `bin/_shims-instancia` lê
+  `acervo.ferramental_instancia`, e para cada par cujo nome da instância difere do
+  verbo, materializa `~/.local/bin/<instancia>` que avisa a causa e delega ao
+  verbo. Roda no `instala.sh`. Instância nova cadastrada no golden record ganha o
+  shim na próxima instalação, sem editar código.
+- Prova: `rastreador listar` hoje avisa e serve `tarefas listar`.
+
+**Erro 2 — usar COMANDO CRU no lugar do verbo.** `psql` direto no schema,
+`docker compose` fora do fluxo, `curl` na API do rastreador — quando um verbo já
+faz isso com carimbo e invariante. Aqui **não há symlink possível**: `psql`,
+`docker` e `curl` são comandos legítimos em mil outros usos; sequestrá-los
+quebraria o host. O nome não é interceptável.
+
+- **Defesa: consulta ao acervo.** A coluna `acervo.ferramental_verbo.em_vez_de`
+  guarda o anti-padrão em prosa (ex.: verbo `acervo`, `em_vez_de = "psql direto no
+  schema acervo"`). `acervo ferramenta <nome>` casa um nome contra os três níveis
+  E contra `em_vez_de`, e responde qual verbo faz aquilo.
+- Prova: `acervo ferramenta psql` lista `acervo`, `conferir`, `motor`, `tarefas` —
+  todos os verbos que substituem `psql` cru.
+
+**Resumo da assimetria:** instância tem nome fantasma → symlink o intercepta;
+comando cru tem nome real → consulta te reorienta. Os dois lêem a MESMA fonte, o
+golden record, e por isso não divergem nem envelhecem por conta própria.
+
+Fonte única de verdade: `acervo.ferramental_*`. A norma está gravada no próprio
+banco (`comment on table acervo.ferramental_instancia`, migração `0076d`) e o
+mecanismo é consequência do modelo de 3 níveis da **ADR 0076**.
+
 ## Contrato de cabeçalho
 
 Todo verbo da plataforma carrega, nas primeiras linhas do arquivo:
