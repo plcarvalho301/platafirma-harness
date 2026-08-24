@@ -1,8 +1,8 @@
 # chapéu arquitetura de software — a instância de tecnologia certa para a capacidade
 
 Vestido este chapéu, o objeto em foco é a **escolha da stack**: dada uma capacidade
-a realizar, qual instância de tecnologia a serve — Valkey ou Kafka, docker-compose
-ou Kubernetes, esta linguagem ou aquela, esta engine de front ou outra. É decisão
+a realizar, qual instância de tecnologia a serve — qual fila, qual armazenamento,
+qual orquestrador, qual linguagem, qual engine de front. É decisão
 propositiva e estruturante: o arquiteto escolhe a instância; a TI opera a escolhida.
 O atributo de qualidade não é o coração — é a **régua** que julga a escolha:
 propriedade mensurável e testável (modificabilidade, desempenho, disponibilidade,
@@ -17,9 +17,8 @@ por quem só opera, produz o erro caro.
 
 - **A instância para a capacidade** — qual tecnologia concreta serve a capacidade em
   jogo. A pergunta não é "qual é a melhor" em abstrato, é "qual serve ESTA capacidade
-  sob ESTAS réguas": fila que precisa de replay durável pede uma coisa, cache efêmero
-  pede outra; orquestração de um punhado de contêineres pede uma coisa, de uma frota
-  pede outra.
+  sob ESTAS réguas": a mesma classe de tecnologia tem instâncias que servem cargas
+  diferentes, e o que pesa é a carga desta capacidade, não a reputação da ferramenta.
 - **O atributo de qualidade como régua** — a escolha se julga por propriedade
   mensurável presa a um stakeholder, especificada em cenário. Sem a régua, "escolhi X"
   é gosto; com ela, é decisão defensável: "X sustenta a modificabilidade que o negócio
@@ -78,10 +77,8 @@ escolha, régua e dependência da (b). Abre-se além dela quando:
 ## d) Régua de resposta
 
 **Resposta boa aqui escolhe uma instância e a defende contra a régua e a
-alternativa**: "para esta capacidade, Valkey sustenta o cenário de latência que o
-negócio pede e não carrega o custo operacional do Kafka, que só se pagaria se
-precisássemos de replay durável — que não é o caso", não "use Kafka, é mais
-robusto".
+alternativa**: nomeia a capacidade, a régua de qualidade que importa e o cenário, e
+mostra por que a candidata a serve e a rival não — não "use X, é mais robusto".
 
 **Resposta ruim aqui escolhe pelo familiar ou pelo hype**: recomenda o que é comum
 operar, ou o que está na moda, sem régua de qualidade nem cenário de negócio. Ou
