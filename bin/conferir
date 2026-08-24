@@ -971,13 +971,29 @@ SINAIS_ARRANQUE = (
 # nao responde a esta regua. Ignorar em silencio seria pior — consta aqui com nome.
 FORA_DA_REGUA = ("archi_base", "ollama-orchestrator", "mdm_rh", "i-have-adhd")
 
+# INSTANCIA EFEMERA, nao produtor (#23, espelho do 708cb3d que curou `conferir superficie`).
+# `fitas/*/CLAUDE.md` e reescrito por `bin/chat:claude_md_da_fita` a cada giro, nao e
+# rastreado, e o veredito dele oscilava com quantas fitas existiam no disco — media o
+# passado (um cwd de ontem), nao quem decide o texto de toda fita futura. Sai do veredito
+# e vira OBSERVACAO de deriva. O produtor e medido a parte, por nome.
+INSTANCIA_EFEMERA = ("fitas",)
+# O produtor das fitas: funcao que gera o CLAUDE.md. Nao se le por AST (e f-string, nao
+# dict literal); declara-se por nome, como superficie declara `codigo`/`arquivo-rastreado`.
+PRODUTOR_FITA = "platafirma-harness/bin/chat:claude_md_da_fita"
 
-def _claude_mds(raiz=None):
-    """CLAUDE.md sob ~/AI, ate 2 niveis. Nao segue link e nao entra em .git."""
+
+def _claude_mds(raiz=None, incluir_efemero=False):
+    """CLAUDE.md sob ~/AI, ate 2 niveis. Nao segue link e nao entra em .git.
+
+    Por padrao devolve so o PRODUTOR — o CLAUDE.md rastreado, um por repo (#23). A
+    instancia efemera (`fitas/*`) so entra com `incluir_efemero=True`, e ai como
+    observacao de deriva, nunca como veredito."""
     raiz = raiz or os.path.expanduser("~/AI")
     achados = []
     for topo in sorted(os.listdir(raiz)):
         if topo.startswith(".") or topo in FORA_DA_REGUA:
+            continue
+        if topo in INSTANCIA_EFEMERA and not incluir_efemero:
             continue
         base = os.path.join(raiz, topo)
         if not os.path.isdir(base) or os.path.islink(base):
@@ -1054,6 +1070,23 @@ def conferir_arranque(alvo=None, staged=False, como_json=False):
             copias.append(item)
         linhas.append(item)
 
+    # OBSERVACAO de deriva (nao veredito): a instancia efemera das fitas. So no passe amplo
+    # (sem alvo, sem --staged). Fita cujo CLAUDE.md nao aponta e sinal de que o produtor
+    # `bin/chat:claude_md_da_fita` derivou, ou de um cwd de giro antigo — nao muda veredito.
+    deriva = []
+    if not staged and not alvo:
+        for c2 in _claude_mds(incluir_efemero=True):
+            rel2 = os.path.relpath(c2, os.path.expanduser("~/AI"))
+            if rel2.split(os.sep)[0] not in INSTANCIA_EFEMERA:
+                continue
+            try:
+                with open(c2, encoding="utf-8", errors="replace") as f:
+                    v2, n2 = _julga_arranque(f.read())
+            except OSError:
+                continue
+            if v2 != "aponta":
+                deriva.append({"arquivo": rel2, "veredito": v2, "sinais": n2})
+
     ok = not copias
     if como_json:
         print(json.dumps({
@@ -1062,6 +1095,8 @@ def conferir_arranque(alvo=None, staged=False, como_json=False):
             "medidos": len(linhas),
             "copias": copias,
             "arquivos": linhas,
+            "produtor_fita": PRODUTOR_FITA,
+            "deriva_efemera": deriva,
         }, ensure_ascii=False, indent=2))
         return 0 if ok else 1
 
@@ -1077,6 +1112,15 @@ def conferir_arranque(alvo=None, staged=False, como_json=False):
         print("  conserto: trocar o bloco pelo ponteiro. Onde e rastreado, o conserto e")
         print("            commit no branch — escrever no cwd o proximo checkout desfaz.")
     print(f"  veredito                         : {'em dia' if ok else 'divergente'}")
+    if not staged and not alvo:
+        print("  --- observacao (nao entra no veredito) ---")
+        print(f"  produtor das fitas               : {PRODUTOR_FITA}")
+        if deriva:
+            print(f"  fitas DERIVADAS do produtor      : {len(deriva)}")
+            for x in deriva:
+                print(f"      {x['arquivo']} — {x['veredito']} ({x['sinais']} sinais)")
+        else:
+            print("  fitas derivadas do produtor      : 0 (todas apontam)")
     return 0 if ok else 1
 
 
