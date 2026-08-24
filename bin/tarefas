@@ -318,6 +318,8 @@ criar() {
     case "$1" in
       --desc)       desc="$2"; shift 2 ;;
       --desc-stdin) desc="$(cat)"; shift ;;
+      --nivel)      nivel="$2"; shift 2 ;;
+      --cadeira)    cadeira="$2"; shift 2 ;;
       --pai)        pai=$(so_id "$2"); shift 2 ;;
       --incidente)  classe="incidente"; shift ;;
       --prio)       echo "aviso: --prio não existe neste modelo; ignorado." >&2; shift 2 ;;
