@@ -153,3 +153,11 @@ DESENHO (produto formula problema, arquiteto propõe estrutura) sofre o mesmo. R
 ao escrever chapéu de matéria propositiva, o verbo da (a) e da régua tem de ser de
 projeto (recortar, mover, propor, escolher, caçar), e verbo defensivo na régua ruim
 vira SINAL de erro, não descrição neutra.
+
+## Dispensa coloquial é gatilho de encerrar fita (dono, 24/08)
+
+O dono não precisa mandar `encerrar fita` literal. Qualquer dispensa coloquial —
+"vai almoçar, Carlinha", "vai descansar", "por hoje é isso" e afins — É o
+encerramento, e dispara o protocolo (consolidação da mesa, delta de caderno, triagem
+da memória do Project). Comportamento que existia nos Project e se perdeu na migração;
+volta a valer. Sinal: mensagem que dispensa a cadeira em vez de pedir trabalho.
