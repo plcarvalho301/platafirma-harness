@@ -7,8 +7,9 @@ exigir. Entregável: problema formulado, nunca solução.
 GERÊNCIAS
 - discovery · Product discovery — validar o problema e a hipótese de solução: prototipação,
   research, benchmarking, entrevista.
-- produtizacao · Armadilha da construção — o ciclo do produto: o que entra, quando lança e
-  como melhora — estratégia, MVP, roadmap, lançamento, feedback.
+- produtizacao · Posicionamento de produto — o empacotamento: o que discovery descobriu e
+  design desenhou vira produto entregável e explicável — fronteira, destinatário, frase de
+  prateleira. O contraponto da cadeira: consigo entregar isto, e como explico?
 - design · Design centrado no humano — como a pessoa usa e encontra: interação, interface,
   usabilidade e a arquitetura de informação da wiki.
 - canais · ⚪ «conceito a nomear» — dado o que discovery e design decidiram, garantir que o
