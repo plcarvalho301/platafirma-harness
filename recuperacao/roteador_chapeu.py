@@ -10,7 +10,8 @@ do dono é sobre o fluxo, e fluxo que não se testa isolado não se confia. `cas
 - **(a) determinístico** — `decide()`: o rótulo canônico aparece inteiro na pergunta ->
   conta acertos por bloco -> um bloco vence com margem -> o slug dele. É curto-circuito: casou
   com folga, nem chama (b). Fonte dos conceitos: o golden record `acervo.conceito`
-  (verbo `acervo listar conceitos`); a tabela de rotas por cadeira e GERADA dele.
+  (verbo `acervo listar conceitos`); a tabela de rotas por cadeira e GERADA dele
+  (`gerar_rotas_chapeu.py` -> `abertura/rotas-chapeu.json`), lida por `rotas_do_disco`.
 - **(b) semantico** — `roteia_semantico()`: embedding da pergunta x banco de cenarios (a
   secao (a) de cada chapeu), maximo-sobre-exemplos, limiar + margem. HOJE devolve `None` com
   motivo declarado: nao ha `/embed` no motor servido, e carregar o embedder (~2,4 GB, ~25 s
@@ -73,19 +74,40 @@ def _normaliza(texto: str) -> str:
     return re.sub(r"\b(\w{3,}?)s\b", r"\1", limpo)
 
 
+def _carrega_gatilhos(raiz_chapeus: str, cadeira: str) -> dict[str, tuple[str, ...]]:
+    """Os gatilhos por chapeu da cadeira, do artefato gerado `rotas-chapeu.json`.
+
+    O artefato e materializado por `gerar_rotas_chapeu.py` FORA da montagem (o golden
+    record vem de `docker exec psql`, custo proibido por montagem) e apenas LIDO aqui —
+    barato, sem docker. Ausente ou ilegivel -> dict vazio: `casa()` nao acha rotulo ->
+    (a) dorme -> fallback (c), declarado. Nunca quebra a montagem por falta do gerado.
+    """
+    caminho = os.path.join(raiz_chapeus, "rotas-chapeu.json")
+    try:
+        with open(caminho, encoding="utf-8") as f:
+            tabela = json.load(f)
+    except (OSError, ValueError):
+        return {}
+    da_cadeira = tabela.get(cadeira, {})
+    return {slug: tuple(gatilhos) for slug, gatilhos in da_cadeira.items()}
+
+
 def rotas_do_disco(cadeira: str, raiz_chapeus: str) -> list[Rota]:
     """Os chapeus da cadeira que existem no disco: um Rota por subdir de
     `<raiz>/<cadeira>/`. Da o conjunto de slugs VALIDOS (para validar `--chapeu` e nao
-    inventar chapeu inexistente), com `rotulos` vazio.
+    inventar chapeu inexistente) e, para cada um, os `rotulos` que o disparam.
 
-    A tabela rotulo->chapeu do (a) deterministico e GERADA do golden record
-    `acervo.conceito` (verbo `acervo listar conceitos`) e ainda nao e cabeada aqui;
-    enquanto nao for, `casa()` nao acha rotulo -> (a) dorme -> fallback (c), declarado.
+    Os rotulos vem do artefato `rotas-chapeu.json`, GERADO do golden record
+    `acervo.conceito` cruzado com a secao (b) de cada `chapeu.md` (ver
+    `gerar_rotas_chapeu.py`). O disco fixa o universo de slugs; o artefato enriquece com
+    gatilhos. Slug no disco sem entrada no artefato fica com `rotulos` vazio: valido para
+    `--chapeu`, mudo para o (a) — o comportamento certo ate a (b) do chapeu ser preenchida.
     """
     base = os.path.join(raiz_chapeus, cadeira)
     if not os.path.isdir(base):
         return []
-    rotas = [Rota(slug=nome, rotulos=())
+    gatilhos = _carrega_gatilhos(raiz_chapeus, cadeira)
+    rotas = [Rota(slug=nome, rotulos=gatilhos.get(nome, ()))
              for nome in sorted(os.listdir(base))
              if os.path.isdir(os.path.join(base, nome))]
     return rotas
