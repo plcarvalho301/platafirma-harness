@@ -1,0 +1,61 @@
+#!/usr/bin/env bash
+# _shims-instancia — materializa um shim por INSTÂNCIA cujo nome ≠ o verbo que serve.
+# capacidade: expediente
+# dono: claudinho-TI
+#
+# O PORQUÊ (card do catálogo de ferramental, 24/08/2026):
+#   O golden record tem 3 níveis — capacidade → verbo → instância. A instância é o
+#   realizador concreto (o serviço, o banco, o motor); o verbo é o nome canônico da
+#   CLI. Quando os dois têm o mesmo nome (ollama→ollama) ninguém erra. Quando diferem
+#   (rastreador→tarefas, keycloak→acesso), a cadeira alcança pelo nome que ouve o dia
+#   inteiro — o da INSTÂNCIA — e digita `rastreador ...`, recebe `command not found`
+#   (exit 127) e perde o turno sem descobrir o verbo. Erro mudo.
+#
+# A CORREÇÃO É DIRIGIDA PELO DADO, não por lista hardcoded: para cada par
+# (instancia ≠ verbo) do acervo, gera ~/.local/bin/<instancia> que avisa a
+# causa+correção e delega ao verbo. Instância nova cadastrada no golden record ganha
+# o shim na próxima instalação, sem ninguém lembrar de nada. Fonte única de verdade:
+# acervo.ferramental_instancia. Ver docs/administrativo.md §shims-de-instancia.
+set -euo pipefail
+
+BINDIR="$HOME/.local/bin"
+mkdir -p "$BINDIR"
+
+# Consulta o golden record. Padrão de conexão: o mesmo de bin/_acervo/listar.
+PG="rag-extractor-pg"; DB="rag_extractor"; USR="rag"
+SQL="select ins.slug, vb.slug
+     from acervo.ferramental_instancia ins
+     join acervo.ferramental_verbo vb on vb.id = ins.verbo_id
+     where ins.slug <> vb.slug order by ins.slug;"
+
+pares=""
+if pares=$(docker exec -i "$PG" psql -d "$DB" -U "$USR" -tAF'|' -c "$SQL" 2>/dev/null) && [ -n "$pares" ]; then
+  origem="acervo"
+else
+  # FAIL-SOFT: acervo fora do ar não pode apagar os shims conhecidos. Os dois casos
+  # medidos em 24/08/2026 ficam de piso; o acervo, quando volta, é a fonte que manda.
+  pares=$'rastreador|tarefas\nkeycloak|acesso'
+  origem="fallback (acervo indisponível)"
+fi
+
+gerar_shim() {
+  local inst="$1" verbo="$2" alvo="$BINDIR/$1"
+  cat > "$alvo" <<SHIM
+#!/usr/bin/env bash
+# GERADO por _shims-instancia a partir do acervo. Não editar à mão.
+# '$inst' é o nome da INSTÂNCIA (serviço/banco/motor), não um verbo. O verbo é '$verbo'.
+set -euo pipefail
+printf '%s\n' \\
+  "aviso: '$inst' não é verbo — é o nome da instância. O verbo é '$verbo'." \\
+  "       redirecionando: $verbo \$*" >&2
+exec "$verbo" "\$@"
+SHIM
+  chmod +x "$alvo"
+  echo "shim: $inst -> $verbo"
+}
+
+echo "materializando shims de instância (fonte: $origem)"
+while IFS='|' read -r inst verbo; do
+  [ -n "$inst" ] || continue
+  gerar_shim "$inst" "$verbo"
+done <<< "$pares"

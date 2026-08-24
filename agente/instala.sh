@@ -39,11 +39,13 @@ else
   echo "       git clone git@github.com:plcarvalho301/platafirma-harness.git ~/AI/platafirma-harness"
 fi
 
-# Shim do rastreador: intercepta a chamada errada `rastreador ...` (nome do
-# servico, nao verbo) e redireciona para `tarefas`. Mesma fonte no harness.
-RASTREADOR="$HOME/AI/platafirma-harness/bin/rastreador"
-if [ -x "$RASTREADOR" ]; then
-  liga "$RASTREADOR" "$HOME/.local/bin/rastreador"
+# Shims de instancia: para toda INSTANCIA cujo nome != o verbo que serve
+# (rastreador->tarefas, keycloak->acesso), materializa um redirecionador que
+# avisa e delega. Dirigido pelo acervo, nao por lista fixa: instancia nova no
+# golden record ganha shim aqui, sem editar este script. Ver docs/administrativo.md.
+GERADOR="$HOME/AI/platafirma-harness/bin/_shims-instancia"
+if [ -x "$GERADOR" ]; then
+  bash "$GERADOR" || echo "aviso: gerador de shims de instancia falhou (segue sem)"
 fi
 
 # Skills — lista explícita, nunca "tudo que houver no harness".
