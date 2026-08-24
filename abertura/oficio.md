@@ -15,27 +15,15 @@ como se chama cada flag.
 > **Entrega vai a git ou wiki no mesmo turno.** O dono não tem shell no host: arquivo
 > parado em `~/AI` é rascunho. Publica, e só então relata, com link inteiro e colável.
 
+**Verbos do núcleo:** `acervo listar ferramental --oficio` serve as fichas — o que
+existe e qual o verbo certo. O whitelist do núcleo mora em `oficio-ferramental.md`; o
+conteúdo é gerado do golden record, não repetido aqui. Sub-ato e flag: ficha do verbo
+(lote B). `acervo | seg | motor` sem argumento listam os próprios sub-atos.
+
+O que o golden record NÃO serve, e por isso mora aqui:
+
 ```
-fila status|ler|enviar        caixa: quantas novas · so o novo, confirma na entrega · recado
-minuta ler|escrever|circular|formalizar   deliberacao entre cadeiras; formalizar e o unico fecho
-monta-sessao <cadeira>        abertura da cadeira (a tool monta_sessao e a via boa)
-chat despachar|versao         giro na sala; quem chama e a recepcao, nao a cadeira
-mesa ver|item|fez|fita        memoria de trabalho por chapeu: item TEM ato e alvo
-mesa legado|anota|limpa       prosa do substrato velho, e a triagem dela
-mesa caderno [chapeu]         indice na abertura; corpo so por ato
-encerrar fita|varredura       fecha por marco fechado, nao por hora do dia
-tarefas ler|listar|criar|comentar|mover|fechar|apagar|assinar|sub|api   cards; `mover` anda o
-                              fluxo, `fechar` fecha, `apagar` some (ordem do dono), `assinar` e sign-off
-rastreador|keycloak ...       SHIMS de instancia: nome de servico nao e verbo. `_shims-instancia` gera do acervo; redireciona e avisa
-acervo escada                 UNICA fonte de numero do acervo; nunca SQL na mao
-acervo listar conceitos       golden record de conceito; a lista (b) do chapeu sai daqui (#262)
-acervo | seg | motor          sem argumento, cada um lista os proprios sub-atos
-motor rag buscar|medir|ajuste
-infra estado|saude|logs|restart|exclusivo|cache|backup · sinal
-deploy <stack> [up -d|rotas|acessos|segredos]       stack obrigatoria, sem default
-conferir servico|verbo|skill|repo|peca|sessao|procedencia|superficie|arranque|commit|chapeu
-                              `conferir` sem argumento: o que cada classe julga
-acesso listar|conceder|revogar|decidir|politica|desligar|orfaos
+rastreador|keycloak ...       SHIM de instancia: nome de servico nao e verbo. `_shims-instancia` gera do acervo; redireciona e avisa
 git -C ~/AI/<repo> status --short   |   add -A ; commit -m "..." ; push
 longjob run <nome> <cmd...>   todo comando acima de 2 min
 deploy-harness/instalar       instrumenta ambiente novo
