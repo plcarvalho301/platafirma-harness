@@ -34,6 +34,8 @@ no humano é o campo em que ele opera.
 | Affordance | — | se a ação possível se lê na forma do objeto; o princípio que rege interface, hierarquia e arquitetura de informação. O que design detém de próprio. |
 | Design centrado no humano | HCD | o campo em que affordance opera: princípio de toda a firma (negócio o aplica a processo, cada cadeira à sua matéria), aqui especializado na forma da tela. Nomeado para marcar que é compartilhado, e que affordance é o recorte próprio de design. |
 | Teste de usabilidade informal | — | como se sabe que a affordance funcionou: a pessoa achou e agiu sem instrução. A verificação da forma diante de gente real. |
+| Design system | DS | onde a affordance vira sistema: a decisão de forma que se repete resolvida uma vez e escrita para ser reusada. Design escreve o DS; servi-lo em cada superfície é outra matéria. |
+| Design token | — | o valor de forma nomeado (cor, espaço, tipo) que faz a mesma decisão valer em toda parte sem ser redecidida a cada tela. |
 
 ## c) Consulta dirigida
 

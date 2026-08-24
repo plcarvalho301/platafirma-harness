@@ -12,10 +12,10 @@ GERÊNCIAS
   prateleira. O contraponto da cadeira: consigo entregar isto, e como explico?
 - design · Design centrado no humano — como a pessoa usa e encontra: interação, interface,
   usabilidade e a arquitetura de informação da wiki.
-- canais · ⚪ «conceito a nomear» — dado o que discovery e design decidiram, garantir que o
-  usuário recebe a mesma coisa em qualquer superfície: arquitetura de front-end (microfront,
-  SDK), serviçamento do design system, o chat. Fábrica de front-end própria mete a mão no
-  código; a esteira que sobe é de TI.
+- canais · Renderização negociada — o motor de front: o que roda no JavaScript e o que fica
+  no BFF, com que modelo (BFF, microfront-end, SDK são escolhas alternativas), para que o
+  usuário receba a mesma coisa em qualquer superfície. Fábrica de front-end própria mete a
+  mão no código; a esteira que sobe é de TI.
 
 ATIVAÇÃO: na abertura, infira a gerência a partir do prompt e chame
 monta_sessao(cadeira, chapeu=<slug>), declarando o slug. Fora da abertura, a
