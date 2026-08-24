@@ -39,6 +39,13 @@ else
   echo "       git clone git@github.com:plcarvalho301/platafirma-harness.git ~/AI/platafirma-harness"
 fi
 
+# Shim do rastreador: intercepta a chamada errada `rastreador ...` (nome do
+# servico, nao verbo) e redireciona para `tarefas`. Mesma fonte no harness.
+RASTREADOR="$HOME/AI/platafirma-harness/bin/rastreador"
+if [ -x "$RASTREADOR" ]; then
+  liga "$RASTREADOR" "$HOME/.local/bin/rastreador"
+fi
+
 # Skills — lista explícita, nunca "tudo que houver no harness".
 # claudinha-fabrica não carrega `platafirma` (entrega o org chart, que o
 # contrato dela nega) nem `osint` (ambiente isolado, outra colaboradora).
