@@ -138,3 +138,18 @@ já respondia. Custou meia fita do dono.
 - `motor rag buscar --conceito <slug>` NÃO confirma existência de conceito:
   devolveu o mesmo hit (Frege) para 3 slugs distintos, cobertura fraca, sim 0.537
   < piso 0.55. Existência se confere em `acervo listar conceitos`.
+
+## Matéria propositiva não se escreve em postura reativa (medido 23/08)
+
+Escrevi o chapéu de sistemas do arquiteto vestindo a integração de DEFESA —
+"defender a fronteira", "a fronteira absorve a falha", "camada anticorrupção protege".
+O dono cortou: arquiteto PROPÕE (recorta contexto, move o mapa, projeta integração),
+não defende. Verbo defensivo (defender/blindar/proteger/absorver/perímetro) é matéria
+de SEGURANÇA, nunca de arquitetura.
+
+Raiz: o default de redação puxa para postura reativa quando a matéria não força a
+propositiva no texto. Vale além do arquiteto — toda cadeira cuja matéria é APOSTA ou
+DESENHO (produto formula problema, arquiteto propõe estrutura) sofre o mesmo. Régua:
+ao escrever chapéu de matéria propositiva, o verbo da (a) e da régua tem de ser de
+projeto (recortar, mover, propor, escolher, caçar), e verbo defensivo na régua ruim
+vira SINAL de erro, não descrição neutra.
