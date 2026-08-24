@@ -1,12 +1,14 @@
 #!/usr/bin/env python3
 # acervo listar — referências do acervo. Hoje: conceitos e ferramental (golden records).
 # capacidade: conhecimento
-# dono: claudinho-conhecimento
-#   (mecanismo/harness: claudinho-TI · construcao; matéria/semântica: claudinho-dados)
+# dono: claudinho-dados
+#   (matéria/semântica: claudinho-dados · dono; mecanismo/harness: claudinho-TI · construcao)
 #
 # `acervo listar conceitos [--json]`   — golden record acervo.conceito (rag-extractor-pg).
-# `acervo listar ferramental [--json]` — golden record acervo.ferramental (3 níveis:
-#     capacidade → verbo → instância). Fatia física da minuta 0012 / ADR 0076.
+# `acervo listar ferramental [--json] [--oficio]` — golden record acervo.ferramental
+#     (3 níveis: capacidade → verbo → instância). Fatia física da minuta 0012 / ADR 0076.
+#     Com --oficio, filtra pelos verbos do NÚCLEO de abertura (whitelist em
+#     abertura/oficio-ferramental.md), pra o oficio.md não duplicar a lista à mão.
 # Read-only. NÃO servido na montagem: é referência e fallback (D4 do ADR 0076).
 #
 # Contrato: platafirma-arquitetura/docs/abertura-de-sessao/abertura-novo-pedro/
@@ -31,6 +33,14 @@ except (AttributeError, ValueError):
 PG = "rag-extractor-pg"
 DB = "rag_extractor"
 USR = "rag"
+
+# Whitelist do núcleo de abertura. A fonte é abertura/oficio-ferramental.md, um slug
+# de verbo por linha dentro do bloco cercado (```); comentários e texto fora do bloco
+# são ignorados. Resolvido relativo à raiz do harness (dois níveis acima de bin/).
+OFICIO_WHITELIST = os.path.join(
+    os.path.dirname(os.path.dirname(os.path.dirname(os.path.realpath(__file__)))),
+    "abertura", "oficio-ferramental.md",
+)
 
 SQL_CONCEITOS = """
 select c.slug, c.id, c.rotulo,
@@ -71,12 +81,13 @@ order by stk.slug;
 """
 
 USO = """uso:
-  acervo listar conceitos [--json]     golden record acervo.conceito:
-                                       slug . rotulo . outros rotulos . origem . obras-ancora
-  acervo listar ferramental [--json]   golden record acervo.ferramental:
-                                       capacidade . verbo . sot . instancias
-  acervo listar topologia [--json]     topologia de deploy acervo.stack (eixo irmao):
-                                       stack . critico . instancias . papel
+  acervo listar conceitos [--json]              golden record acervo.conceito:
+                                                slug . rotulo . outros rotulos . origem . obras-ancora
+  acervo listar ferramental [--json] [--oficio] golden record acervo.ferramental:
+                                                capacidade . verbo . sot . instancias
+                                                --oficio: so os verbos do nucleo de abertura
+  acervo listar topologia [--json]              topologia de deploy acervo.stack (eixo irmao):
+                                                stack . critico . instancias . papel
 
 Read-only. E o golden record: a lista (b) do chapeu e GERADA disto, nao editada a mao.
 """
@@ -85,6 +96,39 @@ Read-only. E o golden record: a lista (b) do chapeu e GERADA disto, nao editada 
 def morre(msg, code=2):
     sys.stderr.write(msg.rstrip("\n") + "\n")
     sys.exit(code)
+
+
+def _le_whitelist_oficio():
+    """Slugs de verbo do núcleo, do bloco cercado de oficio-ferramental.md.
+
+    Só as linhas dentro do primeiro par de cercas ``` contam; fora delas é prosa.
+    Linha vazia e comentário (#) são ignorados. Ausência do arquivo ou bloco vazio
+    é erro duro: --oficio sem whitelist serviria a lista inteira e mentiria sobre
+    ser 'só o núcleo'.
+    """
+    try:
+        with open(OFICIO_WHITELIST, encoding="utf-8") as fh:
+            linhas = fh.read().splitlines()
+    except FileNotFoundError:
+        morre("acervo listar ferramental --oficio: whitelist nao encontrado em\n  %s"
+              % OFICIO_WHITELIST, 3)
+    dentro = False
+    slugs = []
+    for l in linhas:
+        s = l.strip()
+        if s.startswith("```"):
+            if dentro:
+                break            # fecha no primeiro bloco
+            dentro = True
+            continue
+        if not dentro or not s or s.startswith("#"):
+            continue
+        slugs.append(s)
+    if not slugs:
+        morre("acervo listar ferramental --oficio: whitelist vazio em\n  %s\n"
+              "  (esperado um bloco cercado com um slug de verbo por linha)"
+              % OFICIO_WHITELIST, 3)
+    return set(slugs)
 
 
 def _psql(sql):
@@ -138,7 +182,7 @@ def listar_conceitos(quero_json):
     sys.stderr.write("\n%d conceito(s) no golden record (acervo.conceito).\n" % len(conceitos))
 
 
-def listar_ferramental(quero_json):
+def listar_ferramental(quero_json, so_oficio=False):
     itens = []
     for cap, verbo, sot, inst in _linhas(SQL_FERRAMENTAL, "ferramental", 4):
         instancias = [i for i in inst.split(",") if i]
@@ -147,6 +191,14 @@ def listar_ferramental(quero_json):
             "sot": sot or None,
             "instancias": instancias or None,
         })
+    if so_oficio:
+        whitelist = _le_whitelist_oficio()
+        itens = [i for i in itens if i["verbo"] in whitelist]
+        # Whitelist aponta verbo que o golden record nao tem: nucleo mente. Denuncia.
+        faltam = whitelist - {i["verbo"] for i in itens}
+        if faltam:
+            morre("acervo listar ferramental --oficio: whitelist cita verbo(s) "
+                  "ausente(s) no golden record: %s" % ", ".join(sorted(faltam)), 3)
     if quero_json:
         print(json.dumps(itens, ensure_ascii=False, indent=2))
         return
@@ -157,7 +209,8 @@ def listar_ferramental(quero_json):
     for i in itens:
         ins = ",".join(i["instancias"]) if i["instancias"] else "-"
         print("%-*s  %-*s  %s" % (wc, i["capacidade"], wv, i["verbo"], ins))
-    sys.stderr.write("\n%d capacidade(s) no golden record (acervo.ferramental).\n" % len(itens))
+    rotulo = "acervo.ferramental, nucleo de abertura" if so_oficio else "acervo.ferramental"
+    sys.stderr.write("\n%d capacidade(s) no golden record (%s).\n" % (len(itens), rotulo))
 
 
 def listar_topologia(quero_json):
@@ -193,9 +246,12 @@ def main(argv):
               % (alvo, USO))
 
     quero_json = False
+    so_oficio = False
     for a in resto:
         if a == "--json":
             quero_json = True
+        elif a == "--oficio" and alvo == "ferramental":
+            so_oficio = True
         else:
             morre("acervo listar: opcao desconhecida %r\n\n%s" % (a, USO))
 
@@ -204,7 +260,7 @@ def main(argv):
     elif alvo == "topologia":
         listar_topologia(quero_json)
     else:
-        listar_ferramental(quero_json)
+        listar_ferramental(quero_json, so_oficio)
 
 
 if __name__ == "__main__":
