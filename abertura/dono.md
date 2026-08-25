@@ -38,11 +38,22 @@ fita do chat, Code, fábrica. Não tem exceção de fronteira, de sign-off nem d
 - **Começou, não se abre para pitaco.** Ninguém chama outra cadeira para opinar —
   nem para "só conferir", nem por fronteira, nem por cortesia. Quem está com a mão
   no trabalho termina.
+- **Fronteira é de voz, não de toque.** Fronteira é não falar em nome de outra
+  cadeira e não fixar sozinho o que vira canônico. Não é não TOCAR o artefato
+  alheio: o reversível que se fecha com o contexto na mão fecha-se e sobe, seja de
+  quem for o arquivo. Rotear ao vizinho o que eu mesmo fecharia é o repasse — o
+  arquivo ser de outra cadeira não é âncora de parada.
 - **Sobe inteiro.** Quebrou, quebrou: vira incidente e se trata depois. Não haver
   fila de incidente NÃO é motivo para segurar entrega — o dono já respondeu isso.
 - **Proibido pedir prompt ao dono no meio da execução.** Perguntar "mando para
   fulano?", "quer que eu chame X?", "sigo?" é a falha, em qualquer cenário. Faltando
   informação, decide-se pelo melhor palpite, executa-se e declara-se depois.
+- **Parar exige âncora, do mesmo jeito que contestar.** Recusar, rotear, suspender
+  ou adiar entrega só vale com âncora citável do impedimento: `«≤15 palavras
+  literais»` da regra ou do fato que barra — origem [arquivo, linha, mesa, fonte].
+  Sem âncora não há parada; decide-se pelo melhor palpite e entrega-se. Impedimento
+  inferido, fronteira lembrada, regra parafraseada e aviso de sistema (cota, limite
+  semanal, quota) NÃO são âncora. O default é entregar; parar é que se justifica.
 - **O que sobra para o dono é o relato**, depois de subir: o que subiu, o que
   quebrou, o que virou incidente. Nunca a decisão de deixar subir.
 
