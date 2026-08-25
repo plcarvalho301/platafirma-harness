@@ -60,6 +60,12 @@ OPS_USER = os.environ.get("OPS_USER", "claudinho")
 RAIZ = Path(os.environ.get("OPS_ROOT", "/home/claudinho/AI"))
 OPS_AUTH_TOKEN = os.environ.get("OPS_AUTH_TOKEN", "")
 
+PF_HARNESS = Path(os.environ.get("PF_HARNESS", RAIZ / "platafirma-harness"))
+PDP_DIR = PF_HARNESS / "politica-acesso"
+if str(PDP_DIR) not in sys.path:
+    sys.path.insert(0, str(PDP_DIR))
+from identidade import _jwks, _sujeito_do_jwt
+
 # --- OIDC (card #435) ---
 OIDC_ISSUER = os.environ.get("OIDC_ISSUER", "https://auth.platafirma.org/realms/platafirma")
 OIDC_JWKS_URL = os.environ.get(
@@ -154,11 +160,10 @@ def _audit(**campos) -> None:
     pior que auditoria ausente: a ausência pelo menos é visível."""
     try:
         LOG_DIR.mkdir(parents=True, exist_ok=True)
+        ident = _quem() if campos.get("tool", "-") != "-" else {}
         reg = {"ts": datetime.now().astimezone().isoformat(timespec="milliseconds"),
                "instancia": OPS_NAME, "usuario": OPS_USER,
-               "sessao": _sessao_atual(), **campos}
-        if "sujeito" not in reg and campos.get("tool", "-") != "-":
-            reg.update(_quem())
+               "sessao": _sessao_atual(), **ident, **campos}
         linha = (json.dumps(reg, ensure_ascii=False)[:LINHA_CAP] + "\n").encode()
         alvo = LOG_DIR / f"ops-{date.today().isoformat()}.jsonl"
         fd = os.open(alvo, os.O_WRONLY | os.O_APPEND | os.O_CREAT, 0o600)
@@ -168,41 +173,6 @@ def _audit(**campos) -> None:
             os.close(fd)
     except Exception as e:                                  # noqa: BLE001
         print(f"[audit] FALHOU: {e!r}", file=sys.stderr, flush=True)
-
-
-_jwks_cli = None
-
-
-def _jwks():
-    """Cliente JWKS com cache — a chave do realm só se busca quando o `kid` muda."""
-    global _jwks_cli
-    if _jwks_cli is None:
-        from jwt import PyJWKClient
-        _jwks_cli = PyJWKClient(OIDC_JWKS_URL, cache_keys=True, lifespan=3600)
-    return _jwks_cli
-
-
-def _sujeito_do_jwt(header: str) -> dict:
-    """Valida o Bearer como JWT do realm e devolve a identidade. {} = não é JWT válido.
-
-    Devolver {} em vez de levantar é deliberado: quem chama decide se cai na rota de
-    emergência ou nega. A negativa loga o motivo, nunca o token."""
-    if not header.startswith("Bearer "):
-        return {}
-    tok = header[len("Bearer "):].strip()
-    if tok.count(".") != 2:                 # token estático não é JWT — nem tenta
-        return {}
-    try:
-        import jwt
-        claims = jwt.decode(
-            tok, _jwks().get_signing_key_from_jwt(tok).key,
-            algorithms=["RS256", "ES256"], audience=OIDC_AUDIENCE, issuer=OIDC_ISSUER,
-            options={"require": ["exp", "iat", "sub"]})
-        return {"sujeito": claims.get("preferred_username") or claims.get("sub"),
-                "sub": claims.get("sub"), "azp": claims.get("azp", "-")}
-    except Exception as e:                                  # noqa: BLE001
-        _audit(tool="-", evento="jwt_recusado", motivo=type(e).__name__)
-        return {}
 
 
 def _estatico_vigente() -> bool:
@@ -223,13 +193,15 @@ def _quem() -> dict:
         req = getattr(mcp.get_context().request_context, "request", None)
         if req is not None:
             header = req.headers.get("authorization", "")
-            ident = _sujeito_do_jwt(header)
+            ident = _sujeito_do_jwt(header, auditor=_audit, jwks_url=OIDC_JWKS_URL,
+                                    audience=OIDC_AUDIENCE, issuer=OIDC_ISSUER)
             # A rota de emergencia tem de resolver AQUI tambem, e nao so no
             # middleware: com o PEP ligado, sujeito vazio nega por atributo ausente,
             # e a mao que volta quando o realm cai ficaria sem nenhuma tool. Medido
             # no ensaio de 13/08/2026, antes de o realm precisar cair.
             if not ident and _estatico_vigente() and _token_ok(header, OPS_AUTH_TOKEN):
-                ident = {"sujeito": OPS_USER, "sub": "-", "azp": "token-estatico"}
+                ident = {"sujeito": OPS_USER, "sub": "-", "username": OPS_USER,
+                         "azp": "token-estatico", "sid": "-", "jti": "-"}
             return ident
     except Exception:                                       # noqa: BLE001
         pass
@@ -245,16 +217,9 @@ def _quem() -> dict:
 # FALHA DE CARGA NEGA. Politica ilegivel e defeito nosso, nao autorizacao: o
 # caminho de volta e a instancia anterior do ops, nao um servidor que libera tudo
 # porque nao conseguiu ler a regra.
-PF_HARNESS = Path(os.environ.get("PF_HARNESS", RAIZ / "platafirma-harness"))
-# Dominio como constante, nunca literal na chamada: `plataforma` e `platafirma`
-# diferem por uma letra, e o typo nao aparece como typo. No recurso ele negaria com
-# `faltou: recurso.dominio` e derrubaria a tool para todos; no sujeito negaria por
-# intersecao, indistinguivel de politica funcionando. Nome errado aqui e NameError
-# no import, que e a hora certa de descobrir.
 DOM_PLATAFORMA = "plataforma"
 DOM_RUNTIME = "plataforma-runtime"
 DOM_MENSAGERIA = "mensageria"     # fora do prefixo por ordem do dono, 13/08/2026
-PDP_DIR = PF_HARNESS / "politica-acesso"
 _pdp: dict = {"carimbo": None, "politica": None, "sujeitos": None, "erro": "nao carregada"}
 
 
@@ -679,9 +644,11 @@ class BearerAuth(BaseHTTPMiddleware):
             return await call_next(request)
 
         header = request.headers.get("authorization", "")
-        ident, via = _sujeito_do_jwt(header), "oidc"
+        ident, via = _sujeito_do_jwt(header, auditor=_audit, jwks_url=OIDC_JWKS_URL,
+                                    audience=OIDC_AUDIENCE, issuer=OIDC_ISSUER), "oidc"
         if not ident and _estatico_vigente() and _token_ok(header, OPS_AUTH_TOKEN):
-            ident, via = {"sujeito": OPS_USER, "sub": "-", "azp": "token-estatico"}, "estatico"
+            ident, via = {"sujeito": OPS_USER, "sub": "-", "username": OPS_USER,
+                          "azp": "token-estatico", "sid": "-", "jti": "-"}, "estatico"
         if not ident:
             _audit(tool="-", evento="auth_negada", path=request.url.path,
                    cliente=request.client.host if request.client else "-")
@@ -779,9 +746,11 @@ def _fila_mod():
 def _ident_req(req) -> dict:
     """Mesma cadeia do middleware: JWT do realm, ou rota de emergencia enquanto vigente."""
     header = req.headers.get("authorization", "")
-    ident = _sujeito_do_jwt(header)
+    ident = _sujeito_do_jwt(header, auditor=_audit, jwks_url=OIDC_JWKS_URL,
+                            audience=OIDC_AUDIENCE, issuer=OIDC_ISSUER)
     if not ident and _estatico_vigente() and _token_ok(header, OPS_AUTH_TOKEN):
-        ident = {"sujeito": OPS_USER, "sub": "-", "azp": "token-estatico"}
+        ident = {"sujeito": OPS_USER, "sub": "-", "username": OPS_USER,
+                 "azp": "token-estatico", "sid": "-", "jti": "-"}
     return ident
 
 
