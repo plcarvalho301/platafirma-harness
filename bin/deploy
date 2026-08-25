@@ -9,18 +9,19 @@
 set -euo pipefail
 
 export DOCKER_HOST="${DOCKER_HOST:-unix:///run/user/$(id -u)/docker.sock}"
-REGISTRO="${DEPLOY_REGISTRO:-$HOME/AI/platafirma-harness/registro/stacks.json}"
 
 # A topologia se le UMA vez e mora em memoria; nenhuma funcao abaixo toca disco de novo.
-# Origem unica: para consumir o verbo em vez do arquivo, trocar SO a linha de captura de
-# TOPO_JSON abaixo por: TOPO_JSON="$(acervo listar topologia --completo --json)"
-# O shape (.stacks[slug]) e o mesmo nos dois; o resto do arquivo nao muda.
-if [ -n "${DEPLOY_TOPO_VERBO:-}" ]; then
+# FONTE-VERDADE: a tabela acervo.stack, servida por `acervo listar topologia --completo`
+# (arq:0076/#6). O stacks.json foi aposentado; a edicao humana agora e `acervo stack
+# import|def|rm`. DEPLOY_TOPO_ARQUIVO=<caminho> ainda le de um JSON, so para diagnostico.
+if [ -n "${DEPLOY_TOPO_ARQUIVO:-}" ]; then
+  [ -r "$DEPLOY_TOPO_ARQUIVO" ] || { echo "arquivo de topologia ilegivel: $DEPLOY_TOPO_ARQUIVO" >&2; exit 1; }
+  TOPO_JSON="$(cat "$DEPLOY_TOPO_ARQUIVO")"
+else
   TOPO_JSON="$(acervo listar topologia --completo --json \
     | jq '{stacks: (map({key: .slug, value: .}) | from_entries)}')"
-else
-  [ -r "$REGISTRO" ] || { echo "registro nao legivel: $REGISTRO" >&2; exit 1; }
-  TOPO_JSON="$(cat "$REGISTRO")"
+  [ -n "$TOPO_JSON" ] && [ "$(jq -r '.stacks | length' <<<"$TOPO_JSON" 2>/dev/null)" -gt 0 ] \
+    || { echo "topologia vazia do verbo — acervo listar topologia --completo falhou" >&2; exit 1; }
 fi
 
 stacks()   { jq -r '.stacks | keys[]' <<<"$TOPO_JSON"; }
@@ -50,7 +51,7 @@ FIM
   cat >&2 <<FIM
 
 Nao existe alvo default e nao existe "todas": stack e argumento obrigatorio.
-Registro: $REGISTRO
+Fonte: acervo.stack (verbo topologia --completo); edicao: acervo stack import|def|rm
 FIM
   exit 2
 }
@@ -289,7 +290,7 @@ if [ "$ACAO" = "reverter" ]; then
   if ! jq -e --arg s "$STACK" '.stacks[$s] | has("reversao")' <<<"$TOPO_JSON" >/dev/null; then
     echo "stack \"$STACK\" nao declara reversao no registro — ausencia de DECLARACAO, nao"
     echo "ausencia de caminho de volta: ninguem mediu esta stack ainda."
-    echo "conserto: campo reversao em $REGISTRO (via, janela_min, estado, quem, provado_em)."
+    echo "conserto: declarar reversao via acervo stack (via, janela_min, estado, quem, provado_em)."
     exit 2
   fi
   DIR="$(dirname "$COMPOSE")"; VIA="$(rev "$STACK" via)"; ANTERIOR="$(ponto_anterior "$STACK")"
