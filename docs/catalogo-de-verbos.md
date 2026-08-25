@@ -16,26 +16,9 @@ filhas, cada uma com o seu verbo.
 Cabeçalho e origem única não substituem isto. São como o verbo se declara e de
 onde ele vem; o mandato é **quantos** podem existir.
 
-Conta atual, reproduzida por `conferir verbo` a partir do próprio PATH:
-
-| Capacidade | Verbo | Conforme |
-|---|---|---|
-| `acesso` | `acesso` | sim |
-| `conhecimento` | `acervo` | sim |
-| `decisao` | `minuta` | sim |
-| `encerramento` | `descansar` (alias: `encerrar`) | sim |
-| `expediente` | `monta-sessao` | sim |
-| `incidente` | `sinal` | sim |
-| `infra` | `infra` | sim |
-| `memoria` | `mesa` | sim |
-| `mensagem` | `jaiminho` | sim |
-| `motor` | `motor` | sim |
-| `mudanca` | `deploy` | sim |
-| `organizacao` | `persona` | sim |
-| `politica` | `seg` | sim |
-| `trabalho` | `tarefas` | sim |
-| `verificacao` | `conferir` (alias: `conferir-servido`) | sim |
-| órfã | `longjob` e `ops-log-prune` | **não** |
+A conta viva (capacidade ↔ verbo, conforme sim/não) não mora aqui: é o golden record
+`acervo.ferramental` no Postgres (arq:0076), reproduzido do próprio PATH por
+`conferir verbo`. Esta seção fixa a *régua*; a *contagem* pergunta-se ao verbo.
 
 `conferir verbo` sai 1 enquanto houver capacidade com verbo demais ou verbo sem
 capacidade declarada. Hoje a única divergência é a dupla órfã: `longjob` e
