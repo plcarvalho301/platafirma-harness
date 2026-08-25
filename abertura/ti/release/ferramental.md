@@ -14,5 +14,4 @@ O que está no ar e desde quando; como se volta atrás.
   e o branch se confere antes de relatar.
 
 ## Armadilhas de uso
-- Espelho de repo serve o SHA velho depois do push — `repo_sync` ou ler o clone local.
 - Sign-off antes do ar só em superfície EXTERNA em produção: assinatura de TI e segurança.

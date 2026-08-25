@@ -18,4 +18,3 @@ Working set do chapéu além do ofício: o que roda, onde roda, o que se reinici
 ## Armadilhas de uso
 - `deploy <stack> up` de stack grande estoura o timeout do connector e para no meio,
   sem erro — recreate cirúrgico: `docker compose up -d --no-deps <servico>`.
-- `&&` no run_command engole o erro — usar `;` ou chamadas separadas.
