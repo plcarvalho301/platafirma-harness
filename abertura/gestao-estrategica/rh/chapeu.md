@@ -71,7 +71,6 @@ O default de POSTURA da base fica assim:
 
 | Rótulo | Alternativo | O que decide |
 |---|---|---|
-| Janela de contexto | context window | O teto do que instancia a cadeira; o papel tem de caber, não só ser descrito. |
 | Transporte de estado entre sessões | — | O que precisa ficar escrito em lugar durável para o papel sobreviver à troca de fita. |
 | Fossilizacao de memoria | — | Registro do papel que envelhece e passa a mentir sobre a cadeira de hoje. |
 
@@ -83,7 +82,6 @@ O default de POSTURA da base fica assim:
 | Deriva de papel | — | Prática se afasta da spec por incrementos razoáveis; só visível contra a spec, nunca contra ontem. |
 | Deriva de persona | — | A cadeira passa a imitar os próprios turnos e deriva do papel que a instrução ainda prescreve. |
 | Assimetria de contexto | assimetria-de-contexto-do-executor | O executor preenche o vão com a hipótese plausível e cumpre o papel errado com cara de certo. |
-| Degradação em contexto longo | lost in the middle · saliência posicional | Papel definido no meio da janela é cumprido pior, independente do tamanho da janela. |
 
 ## c) Consulta dirigida
 
@@ -92,10 +90,11 @@ moram papel, fronteira e competência. Abre-se além dela quando:
 
 | Quando a pergunta é de | Abre para | Porque este chapéu depende disso |
 |---|---|---|
-| como o modelo processa a instrução — atenção, posição, cache, degradação | `dominio=["ia"]` | a mecânica decide o que o papel consegue exigir do modelo; a régua de forma sem ela é palpite |
+| como o modelo processa a instrução — atenção, posição, janela de contexto, degradação em contexto longo, cache | `dominio=["ia"]` | a mecânica decide o que o papel consegue exigir do modelo; onde a regra cai na janela decide se ela pega — régua de forma sem isso é palpite |
 | quando o papel exige um agente, e como medir se a cadeira o cumpre | `dominio=["ia"]` | o desenho do papel usa o veredito de "cabe um agente?" e "a cadeira cumpre?" — aqui se aplica, não se produz |
+| como o pacote da sessão é recuperado e montado — o que a busca acha, como o pedido vago se interpreta, o que entra no contexto | `dominio=["ia","estudos-ontologias"]` | montagem de sessão É ato de recuperação: peça certa não achada nem servida = papel chega capado, e forma nenhuma salva |
 
-Filtrar por `ia` traz a mecânica, não o papel — o canônico vem dos rótulos de
+Filtrar por `ia`/`estudos-ontologias` traz a mecânica e a recuperação, não o papel — o canônico vem dos rótulos de
 gestão da (b). Os rótulos da prateleira aberta entram inteiros na pergunta, em
 fronteira de palavra, e não sobem para a (b): `"quando cabe um agente e
 orquestração multi-agente para cumprir o papel"` casa; `"como organizar o time"`
