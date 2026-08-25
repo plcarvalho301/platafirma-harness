@@ -87,8 +87,26 @@ _pdp: dict = {"carimbo": None, "politica": None, "sujeitos": None, "erro": "nao 
 
 
 # --- auditoria -------------------------------------------------------------
+# GUARDA DE REENTRANCIA, e nao e zelo: sem ela a porta CAI em todo token invalido.
+# O ciclo e `_audit` -> `_quem` -> `_sujeito_do_jwt` -> (recusa chama) `auditor=_audit`
+# -> `_quem` -> ... Reproduzido em 25/08/2026 na revisao do #2287: RecursionError
+# depois de 67 voltas, em `ExigeJWT.dispatch` com Bearer malformado. O ops-server nao
+# tem o defeito porque la `_audit` so resolve identidade quando `tool != "-"`, e a
+# linha de recusa sai com `tool="-"` — a guarda existe por acidente de formato. Aqui
+# ela e explicita, porque acidente nao e controle.
+_em_audit = False
+
+
 def _audit(**campos):
-    ident = _quem()
+    global _em_audit
+    if _em_audit:
+        ident = {}
+    else:
+        _em_audit = True
+        try:
+            ident = _quem()
+        finally:
+            _em_audit = False
     linha = {"em": datetime.now(timezone.utc).isoformat(timespec="seconds"),
              **ident, **campos}
     try:
