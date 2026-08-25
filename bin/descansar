@@ -162,7 +162,6 @@ def idade(seg):
     return f"{seg // 86400} d"
 
 
-TETO_CADERNO = 100
 
 
 def estado_memoria(curto, canon, rc):
@@ -202,8 +201,7 @@ def estado_memoria(curto, canon, rc):
             corpo = os.path.join(cad, slot, "caderno.md")
             n = len(open(corpo, errors="replace").read().splitlines())
             marca = "  ÓRFÃO — slug não declarado na persona" if (
-                declarados is not None and slot not in declarados) else (
-                "  ACIMA DO TETO (100) — pode antes de acrescentar" if n > TETO_CADERNO else "")
+                declarados is not None and slot not in declarados) else ""
             if declarados is not None and slot not in declarados:
                 orfaos.append(slot)
             linhas.append(f"  caderno/{slot:<8} {n:>3} linhas{marca}")
@@ -269,7 +267,12 @@ def ato_fita(args):
           "   o que vale para toda cadeira (TODA-CADEIRA/RH), conhecimento com\n"
           "   validade (mesa, que expira junto).\n"
           "   Entrada nova SUBSTITUI a que contradiz — o historico e o git.\n"
-          "   Acima de 100 linhas: pode antes de acrescentar.\n"
+          "   Admissao e julgamento contra as seis heuristicas da 0072, NAO numero de\n"
+          "   linha: durabilidade, aprendizado (nao fato), do chapeu (nao da cadeira),\n"
+          "   principio (nao ato de ferramenta), nao-conceito-canonico, preferencia\n"
+          "   granular do dono. Caderno grande demais para ler de vez e sintoma de\n"
+          "   FALTA DE SUBSTITUICAO (entrada velha que devia ter saido quando a nova\n"
+          "   entrou), nao motivo para podar conteudo que ainda passa nas seis.\n"
           "\n"
           "3. triagem da memoria do Project — o host nao a alcanca; a tool e da sessao:\n"
           "   a) memory_user_edits view\n"
