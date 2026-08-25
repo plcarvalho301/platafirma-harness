@@ -45,8 +45,9 @@ HARNESS = os.path.join(RAIZ, "platafirma-harness")
 ABERTURA = os.path.join(HARNESS, "abertura")
 LEDGER = os.path.join(HARNESS, "registro", "eventos-org.jsonl")
 # arq:0073: morada unica em abertura/. Fonte de conceito e o golden record acervo.conceito
-# (verbo `acervo listar conceitos`); a tabela de rotas por cadeira e gerada dele. O leitor
-# ainda procura o caminho aposentado conceitos.json (ausente -> fallback (c), declarado).
+# (verbo `acervo listar conceitos`); a tabela de rotas por cadeira e gerada dele para
+# `abertura/rotas-chapeu.json`, lido pelo roteador. O caminho conceitos.json foi aposentado
+# no tombamento (arq:0073) e nao e mais procurado por codigo nenhum.
 CHAPEUS_DIR = ABERTURA
 # O modulo de codigo `recuperacao` vem do REPO REAL (via __file__), nunca do PF_RAIZ:
 # o contrato monta o script sob um PF_RAIZ hermetico que nao tem este pacote.
