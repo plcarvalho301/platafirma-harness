@@ -30,8 +30,16 @@
 # imutavel; a memoria e para si mesma e mutavel. Fato que interessa a outra
 # cadeira desce ao canal proprio (card, commit, wiki) — nunca mora aqui.
 #
-# NAO HA CONSUMO. `monta_sessao` le sem apagar. Item sai da mesa por `mesa fez
-# <id>`, que e a execucao do ato — nunca por leitura, e nunca por robo.
+# ITEM SAI POR ATO OU POR TTL. `monta_sessao` le sem apagar; item sai por `mesa fez
+# <n>`, a execucao do ato — nunca por leitura. A UNICA escrita de maquina e o expurgo
+# de TTL (48h, `MEM_MESA_TTL_HORAS`): item pendente que passou do prazo e DELETADO no
+# ato de servir (`mesa ver`), sem robo nem timer. Fisico, nao tombstone — o log de
+# fita mora em sessao.fita. Autorizado pela clausula de TTL em spec_montagem §2; sem
+# ela, nasceria contra esta propria linha. Fez'd fica: e a medicao do que a mesa moveu.
+#
+# NUMERO EXIBIDO != id. O id (PK) cresce invisivel; o `#N` que `mesa ver` mostra e o
+# `num`, contador por (cadeira, ciclo semanal) que reinicia toda segunda. Mantem a
+# mesa na faixa #1..~20, longe de card (#4xx) e issue (#2xxx). `mesa fez` toma o #N.
 #
 # BANCO FORA DO AR SE DECLARA INDISPONIVEL, nunca como mesa vazia: ausencia de
 # item e resposta valida (arq:0041) e seria indistinguivel de substrato mudo.
@@ -54,7 +62,8 @@ except ImportError:
 
 HOST = os.environ.get("MEM_REDIS_HOST", "127.0.0.1")
 PORTA = int(os.environ.get("MEM_REDIS_PORT", "6380"))  # instancia msg-mem, nao a malha
-TTL_PADRAO = int(os.environ.get("MEM_TTL_DIAS", "14")) * 86400
+TTL_PADRAO = int(os.environ.get("MEM_TTL_DIAS", "14")) * 86400  # so a PROSA velha do Valkey
+TTL_MESA_H = int(os.environ.get("MEM_MESA_TTL_HORAS", "48"))  # item; expurgo fisico no serve
 TETO_AVISO = 4000  # bytes; acima disto e sintoma de fato nao despachado
 RAIZ = os.environ.get("PF_RAIZ", os.path.expanduser("~/AI"))
 HARNESS = os.path.join(RAIZ, "platafirma-harness")
@@ -244,28 +253,52 @@ def registra_fita(con, fid):
     con.commit()
 
 
+def _expurga(cur):
+    """Expurgo fisico do fossil: item pendente da cadeira com mais que TTL_MESA_H.
+    DELETE, nao tombstone (ordem do dono, 25/08) — o log de fita mora em sessao.fita,
+    e reter cadaver de mesa para medir seria a patologia da propria cadeira. Roda no
+    ATO DE SERVIR (mesa ver, que a abertura chama): o fossil so machuca quando servido,
+    entao expira no ponto de servico, sem robo nem timer. Devolve quantos sairam.
+
+    Isto e escrita de maquina na mesa, e o cabecalho diz "nunca por robo". A clausula
+    de TTL na spec_montagem-de-sessao §2 e o que a autoriza: a escrita e do VERBO no
+    ato de servir, nao de um consumidor externo. Sem a cláusula, nasceria contra a letra.
+    """
+    cur.execute(
+        "DELETE FROM sessao.mesa_item WHERE cadeira = %s AND esvaziado_em IS NULL "
+        "AND plantado_em < now() - make_interval(hours => %s)",
+        (canonica(), TTL_MESA_H),
+    )
+    return cur.rowcount
+
+
 def ato_ver(args):
     """Indice do que esta pendente. Item primeiro (substrato novo), prosa depois."""
     achou = False
     con = pg()
     if con is not None:
         with con, con.cursor() as cur:
+            expurgados = _expurga(cur)
+            if expurgados:
+                # stderr: nao polui a peca `mesa` que a abertura captura de stdout.
+                print(f"(mesa: {expurgados} item(ns) expurgado(s) por TTL de {TTL_MESA_H}h)",
+                      file=sys.stderr)
             cur.execute(
-                "SELECT id, chapeu, ato, alvo, texto, plantado_em FROM sessao.mesa_item "
+                "SELECT num, chapeu, ato, alvo, texto, plantado_em FROM sessao.mesa_item "
                 "WHERE cadeira = %s AND esvaziado_em IS NULL "
                 + ("AND chapeu = %s " if args.slot else "")
                 + "ORDER BY chapeu, plantado_em",
                 (canonica(), args.slot) if args.slot else (canonica(),),
             )
             linhas = cur.fetchall()
-        for id_, chapeu, ato, alvo, texto, plantado in linhas:
+        for num, chapeu, ato, alvo, texto, plantado in linhas:
             achou = True
-            print(f"#{id_} [{chapeu}] {ato} → {alvo}   (plantado ha {idade(time.time() - plantado.timestamp())})")
+            print(f"#{num} [{chapeu}] {ato} → {alvo}   (plantado ha {idade(time.time() - plantado.timestamp())})")
             if texto:
                 for l in texto.rstrip().splitlines():
                     print(f"      {l}")
         if linhas:
-            print("  (executou? `mesa fez <id>` — leitura nao esvazia)")
+            print("  (executou? `mesa fez <n>` — leitura nao esvazia)")
             print()
 
     rc = conn()
@@ -298,11 +331,17 @@ def ato_item(args):
     if con is None:
         return 3
     with con, con.cursor() as cur:
+        # num: contador por (cadeira, ciclo) que reinicia toda segunda. ciclo vem do
+        # DEFAULT da coluna. Escritor unico por cadeira; o indice unico (cadeira,
+        # ciclo, num) e a rede contra corrida, nao a confianca na ausencia dela.
         cur.execute(
-            "INSERT INTO sessao.mesa_item (cadeira, chapeu, ato, alvo, texto, plantado_por_fita) "
-            "VALUES (%s, %s, %s, %s, %s, %s) RETURNING id",
+            "INSERT INTO sessao.mesa_item (cadeira, chapeu, ato, alvo, texto, plantado_por_fita, num) "
+            "VALUES (%s, %s, %s, %s, %s, %s, "
+            "  (SELECT coalesce(max(num), 0) + 1 FROM sessao.mesa_item "
+            "   WHERE cadeira = %s AND ciclo = date_trunc('week', now())::date)) "
+            "RETURNING num",
             (canonica(), slot, args.ato.strip(), args.alvo.strip(), texto or None,
-             fita_registrada(con)),
+             fita_registrada(con), canonica()),
         )
         novo = cur.fetchone()[0]
     print(f"mesa: item #{novo} plantado em [{slot}] — {args.ato.strip()} → {args.alvo.strip()}")
@@ -328,17 +367,34 @@ def ato_fez(args):
         return 3
     with con, con.cursor() as cur:
         fid = fita_registrada(con)
+        # num pode colidir entre dois ciclos vivos so na virada de semana (survivor de
+        # sabado/domingo vs. #1 da segunda), corner que o TTL de 48h quase zera. Resolve
+        # o do ciclo mais recente; se houver empate real, para e mostra — nao chuta.
+        cur.execute(
+            "SELECT id, ciclo FROM sessao.mesa_item "
+            "WHERE cadeira = %s AND num = %s AND esvaziado_em IS NULL ORDER BY ciclo DESC",
+            (canonica(), args.n),
+        )
+        vivos = cur.fetchall()
+        if not vivos:
+            print(f"mesa: item #{args.n} nao esta pendente nesta cadeira — nada a esvaziar",
+                  file=sys.stderr)
+            return 3
+        if len(vivos) > 1 and vivos[0][1] == vivos[1][1]:
+            print(f"mesa: #{args.n} ambiguo (mais de um vivo no mesmo ciclo) — caso "
+                  f"impossivel sob o indice unico; investigar", file=sys.stderr)
+            return 3
+        alvo_id = vivos[0][0]
         cur.execute(
             "UPDATE sessao.mesa_item SET esvaziado_em = now(), esvaziado_por_fita = %s "
-            "WHERE id = %s AND cadeira = %s AND esvaziado_em IS NULL RETURNING chapeu, ato",
-            (fid, args.id, canonica()),
+            "WHERE id = %s RETURNING chapeu, ato",
+            (fid, alvo_id),
         )
         linha = cur.fetchone()
-    if not linha:
-        print(f"mesa: item #{args.id} nao esta pendente nesta cadeira — nada a esvaziar",
-              file=sys.stderr)
-        return 3
-    print(f"mesa: item #{args.id} esvaziado [{linha[0]}] — {linha[1]}")
+        if len(vivos) > 1:
+            print(f"(#{args.n} existia em {len(vivos)} ciclos vivos; esvaziei o mais "
+                  f"recente — o outro expira por TTL)", file=sys.stderr)
+    print(f"mesa: item #{args.n} esvaziado [{linha[0]}] — {linha[1]}")
     return 0
 
 
@@ -512,8 +568,8 @@ def main():
     i.add_argument("--alvo", required=True, help="sobre o que: card, arquivo, servico, cadeira")
     i.set_defaults(func=ato_item)
 
-    f = sub.add_parser("fez", help="esvazia o item porque o ato foi executado")
-    f.add_argument("id", type=int)
+    f = sub.add_parser("fez", help="esvazia o item (pelo numero exibido) porque o ato foi executado")
+    f.add_argument("n", type=int, help="o numero exibido em `mesa ver` (#N), nao o id interno")
     f.set_defaults(func=ato_fez)
 
     g = sub.add_parser("legado", help="a mesa velha capturada do Valkey, e a triagem dela")
