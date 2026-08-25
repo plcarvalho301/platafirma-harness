@@ -271,8 +271,17 @@ def sha_e_frescor(repo):
         return p.stdout.strip() if p.returncode == 0 else None
     sha = git("rev-parse", "--short", "HEAD")
     atras = git("rev-list", "--count", "HEAD..@{upstream}")
+    adiante = git("rev-list", "--count", "@{upstream}..HEAD")
+    # Falso-verde fechado: sem upstream NAO e fresco — e nao-verificavel. `fresco`
+    # exige prova de paridade com o remoto; sem upstream nao ha contra o que provar.
     if atras is None:
-        return sha, "fresco", "sem upstream conhecido"
+        return sha, "indeterminado", "sem upstream conhecido"
+    # Divergencia (commit local ausente no remoto) e classe propria: nao e "atras" e
+    # nao se cura com ff. reset --hard curaria destruindo trabalho — nunca em silencio.
+    if adiante and adiante != "0":
+        return sha, "divergente", f"{adiante} commit(s) local(is) ausente(s) no remoto"
+    # `fresco` aqui = HEAD == @{upstream} CACHEADO. So e honesto se houve fetch nesta
+    # corrida; o gate de valor (monta) faz esse fetch antes de confiar neste verde.
     return sha, ("fresco" if atras == "0" else "defasado"), (
         None if atras == "0" else f"{atras} commit(s) atras do remoto")
 
@@ -292,6 +301,36 @@ def pull(repos):
         except (OSError, subprocess.SubprocessError) as e:
             estado[r] = {"atualizado": False, "erro": f"{type(e).__name__}: {e}"}
     return estado
+
+
+def _fetch(repo):
+    """Atualiza o remote-tracking do clone SEM integrar. E o que torna o `fresco` do
+    frescor honesto: `sha_e_frescor` compara com `@{upstream}` cacheado, e sem este
+    fetch o cache pode estar atras do origin real — o falso-verde que servia conduta
+    velha marcada `fresco`. Falha de rede volta declarada, nunca como sucesso."""
+    d = os.path.join(RAIZ, repo)
+    try:
+        p = subprocess.run(["git", "-C", d, "fetch", "-q"], capture_output=True,
+                           text=True, timeout=25)
+    except (OSError, subprocess.SubprocessError) as e:
+        return False, f"{type(e).__name__}: {e}"
+    return (p.returncode == 0, (p.stderr or "").strip()[:160] or None)
+
+
+def reconciliar(repo):
+    """Uma tentativa de trazer o clone ao head do remoto SEM destruir historico local:
+    fetch + merge --ff-only. Diverge (ff impossivel) ou offline -> NAO reconcilia e
+    devolve o motivo. Nunca `reset --hard`: o clone e compartilhado e pode ter trabalho
+    nao empurrado — apagar isso em silencio troca um defeito por outro pior (mesa #3)."""
+    ok, motivo = _fetch(repo)
+    if not ok:
+        return False, f"fetch falhou: {motivo}"
+    d = os.path.join(RAIZ, repo)
+    m = subprocess.run(["git", "-C", d, "merge", "--ff-only", "-q", "@{upstream}"],
+                       capture_output=True, text=True, timeout=25)
+    if m.returncode != 0:
+        return False, f"ff impossivel (divergencia): {(m.stderr or '').strip()[:160]}"
+    return True, None
 
 
 # ------------------------------------------------------------------ servir peca
@@ -514,6 +553,39 @@ def monta(cadeira, atualizar, pergunta=None, forcado_chapeu=None, so_chapeu=Fals
     for r in repos:
         sha, frescor, motivo = sha_e_frescor(r)
         estado_repos.setdefault(r, {}).update({"sha": sha, "frescor": frescor})
+
+    # ---- GATE DE VALOR (arq:0058; ordem do dono 25/08) ----------------------
+    # Peca de VALOR nao-volatil (conduta, persona, oficio, chapeu, ferramental,
+    # antirreabertura) NUNCA se serve defasada em silencio. Volatil (mesa, caderno)
+    # pode degradar com aviso — por isso o filtro e por volatilidade, nao so por regime.
+    # Para cada repo que respalda peca assim: (1) fetch, para `fresco` deixar de comparar
+    # com cache velho; (2) nao ficando fresco, UMA tentativa de reconciliar por ff (nunca
+    # reset --hard); (3) persistindo nao-fresco -> a sessao NAO abre: devolve `erro`, sem
+    # servir o conteudo de valor. Sem prova de paridade, recusa alto.
+    repos_valor = sorted({
+        p["artefato"].split("@", 1)[0] for p in pecas
+        if "@" in p.get("artefato", "")
+        and p.get("regime") == "valor" and p.get("volatilidade") != "volatil"})
+    bloqueio = []
+    for r in repos_valor:
+        _fetch(r)  # torna o `fresco` honesto antes de julgar
+        sha, frescor, motivo = sha_e_frescor(r)
+        if frescor != "fresco":
+            ok, m2 = reconciliar(r)
+            sha, frescor, motivo = sha_e_frescor(r)
+            if not ok or frescor != "fresco":
+                bloqueio.append({"repo": r, "frescor": frescor,
+                                 "motivo": m2 or motivo or "nao verificavel"})
+        estado_repos.setdefault(r, {}).update({"sha": sha, "frescor": frescor})
+    if bloqueio:
+        return {
+            "erro": "sessao nao aberta: peca de valor nao pode ser servida fresca "
+                    "(reconciliacao por ff falhou; reset --hard nao e automatico)",
+            "cadeira": cadeira, "nome_canonico": _canonico(cadeira),
+            "bloqueio": bloqueio, "repos": estado_repos,
+            "avisos": [f"repo `{b['repo']}` {b['frescor']}: {b['motivo']}"
+                       for b in bloqueio],
+        }
 
     texto_persona = (open(p_persona, encoding="utf-8", errors="replace").read()
                      if os.path.isfile(p_persona) else "")
