@@ -106,9 +106,9 @@ def _sufixo_sem_prefixo(cadeira):
 # ------------------------------------------------------------------ catalogo
 # Peças-verbo/ponteiro: não têm .md na árvore. Ficam aqui, no montador — é ele que
 # declara o que sempre serve, não um índice externo. A árvore abertura/ é a fonte das
-# peças-arquivo; esta lista é a das de verbo. Gatilho (perna 1 x 2) e volatilidade (ordem
+# peças-arquivo; esta lista é a das de verbo. Gatilho (camada abertura×chapéu) e volatilidade (ordem
 # de injeção) saem da posição na árvore
-# virou o que ramifica: gatilho (perna 1 x 2) e volatilidade (ordem de injeção).
+# virou o que ramifica: gatilho (camada abertura×chapéu) e volatilidade (ordem de injeção).
 PECAS_VERBO = [
     {"id": "arranque",        "artefato": "platafirma-harness@abertura/arranque.md",
      "gatilho": {"evento": "ato"},      "regime": "ponteiro", "volatilidade": "estavel", "dono": "claudinho-IA"},
@@ -184,7 +184,7 @@ PECAS_CALCULADAS = [
 ]
 
 # id da peça-arquivo -> gatilho/regime/volatilidade, por posição na árvore abertura/.
-# raiz de abertura/ e nível de cadeira = perna 1 (abertura); nível de chapéu = perna 2.
+# raiz de abertura/ e nível de cadeira = camada abertura; nível de chapéu = camada chapéu.
 _ARQ_META = {
     "dono.md":            ("conduta-dono",   "abertura", "valor", "estavel"),
     "oficio.md":          ("oficio",         "abertura", "valor", "estavel"),
@@ -249,7 +249,8 @@ def de_abertura(pecas, cadeira):
 
 
 def de_chapeu(pecas):
-    """Pecas com gatilho de chapeu (perna 2), na ordem de injecao."""
+    """Pecas da camada de chapeu (gatilho evento=chapeu), na ordem de injecao.
+    Aditivas a abertura quando ha chapeu roteado; nao substituem a abertura."""
     esc = [p for p in pecas if (p.get("gatilho") or {}).get("evento") == "chapeu"]
     return sorted(esc, key=lambda p: (ORDEM_VOLATILIDADE.get(p.get("volatilidade"), 9),
                                       p.get("id", "")))
@@ -519,21 +520,25 @@ def monta(cadeira, atualizar, pergunta=None, forcado_chapeu=None):
     # Canonico vem do ledger, nao da linha 1: o form novo poe o alias ali (arq:0073).
     nome = _canonico(cadeira)
 
-    # Perna 1 × perna 2 (arq:0073, fluxo de duas chamadas): a 1ª chamada (sem
-    # pergunta nem chapéu) devolve a abertura; a 2ª (com pergunta ou chapéu) devolve
-    # SÓ o chapéu roteado — a abertura já chegou na 1ª, reenviá-la é o defeito.
-    perna_dois = bool((pergunta or "").strip()) or bool((forcado_chapeu or "").strip())
-
+    # A abertura-base serve SEMPRE. Pergunta e chapéu apenas ROTEIAM o chapéu, que é
+    # ADITIVO (servido abaixo, por cima da abertura). O antigo `perna_dois` (arq:0073,
+    # "chamada com pergunta devolve só o chapéu") pressupunha uma rechamada de troca de
+    # chapéu mid-sessão que nunca teve call-site: os três consumidores — ops-server,
+    # bin/chat (fita nova e reinício) e conta-abertura — são todos abertura ou medição.
+    # Combinado com #249 (a borda/fita sempre manda o corpo do turno como --pergunta),
+    # aquele guard pulava a abertura e, quando o roteador caía em fallback, devolvia
+    # `pecas: []` sem `erro` — a exata ambiguidade "peça vazia × cadeira sem peça" que o
+    # contrato jura nunca produzir. Troca mid-sessão que queira SÓ o chapéu, no dia em
+    # que existir, pede flag própria e explícita — não se infere de "tem pergunta".
     servidas, avisos = [], []
-    if not perna_dois:
-        for peca in pecas:
-            env, conteudo = serve(peca, cadeira, nome)
-            env["conteudo"] = conteudo
-            servidas.append(env)
-            if env["frescor"] == "indisponivel":
-                avisos.append(f"peça `{env['peca']}` indisponível: {env['motivo']}")
-            elif env["frescor"] == "defasado":
-                avisos.append(f"peça `{env['peca']}` servida de clone atrasado: {env['motivo']}")
+    for peca in pecas:
+        env, conteudo = serve(peca, cadeira, nome)
+        env["conteudo"] = conteudo
+        servidas.append(env)
+        if env["frescor"] == "indisponivel":
+            avisos.append(f"peça `{env['peca']}` indisponível: {env['motivo']}")
+        elif env["frescor"] == "defasado":
+            avisos.append(f"peça `{env['peca']}` servida de clone atrasado: {env['motivo']}")
 
     # Divergencia entre o que a persona declara e o que o catalogo resolve nao se
     # escolhe em silencio: as duas fontes existem, e a que discorda vira aviso.

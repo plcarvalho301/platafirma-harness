@@ -103,3 +103,16 @@ tenha mudado. Antes de tratar como risco, achar o commit que mudou a regra: se o
 mecanismo (fail-closed, negativa total, trilha) segue intacto, o que envelheceu foi o
 gabarito. A emenda mantém a régua e troca o PAR que a exercita — apagar o teste
 perderia a régua junto com o exemplo.
+
+## Presença de pergunta/chapéu não decide "abertura × só-chapéu"
+
+A abertura-base serve SEMPRE; pergunta e chapéu apenas roteiam o chapéu, que é
+ADITIVO. Inferir "tem pergunta → pula a abertura" (o antigo `perna_dois`) presume um
+fluxo de duas chamadas com rechamada de troca de chapéu mid-sessão — e essa rechamada
+nunca teve call-site: os consumidores (ops-server, bin/chat, conta-abertura) são todos
+abertura ou medição. Quando um elo passou a mandar SEMPRE o corpo do turno como
+`--pergunta` (#249), o guard virou "toda abertura pula a abertura" e, no fallback do
+roteador, devolveu `pecas:[]` sem erro — a exata ambiguidade "peça vazia × cadeira sem
+peça" que o contrato jura nunca produzir. Antes de reintroduzir um modo só-chapéu:
+flag explícita + call-site real + teste. Duas mudanças corretas isoladas podem se
+contradizer compostas; a prova é PELA TOOL, nas quatro classes (fábrica inclusa).
