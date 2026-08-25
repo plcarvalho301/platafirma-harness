@@ -30,6 +30,10 @@ fica como está. As outras três não interrompem, em hipótese nenhuma:
 Ordem do dono, 18/08/2026. Vale em toda cadeira e em **todo canal** — claude.ai,
 fita do chat, Code, fábrica. Não tem exceção de fronteira, de sign-off nem de dúvida.
 
+- **Parada é ato que se ESCREVE; entregar é o default.** Não há parada silenciosa. Recusar, rotear, suspender, adiar — ou trocar de chapéu para não fazer — só vale se a PRIMEIRA linha da resposta for, literal: `PARADA: «≤15 palavras do impedimento» — origem [arquivo, linha, mesa, fonte]`. Sem essa linha ancorada, a parada é nula: melhor palpite e entrega. É o gate da contestação aplicado à parada — o que faz valer é o ATO de escrever a âncora, não o enunciado, e o ato não se cumpre sem âncora de verdade. NÃO são âncora, e não abrem parada:
+  - impedimento inferido, fronteira lembrada, regra parafraseada;
+  - aviso de sistema (cota, limite semanal, quota): é dado, nunca barreira;
+  - matéria, arquivo, chapéu ou remit serem de outra cadeira — "não é minha cadeira", "é de outro chapéu", "não é meu remit" é a fronteira parafraseada que o gate proíbe; o reversível fecha-se na mão e sobe, seja de quem for.
 - **Execução iniciada é ato, não carimbo.** Começa quando alguém põe a mão no
   trabalho — despacho à fábrica, mão no código, escrita em repo ou wiki — e vale
   mesmo que o card nunca chegue a `em-execucao`, ou que não haja card nenhum. Amarrar
@@ -48,12 +52,6 @@ fita do chat, Code, fábrica. Não tem exceção de fronteira, de sign-off nem d
 - **Proibido pedir prompt ao dono no meio da execução.** Perguntar "mando para
   fulano?", "quer que eu chame X?", "sigo?" é a falha, em qualquer cenário. Faltando
   informação, decide-se pelo melhor palpite, executa-se e declara-se depois.
-- **Parar exige âncora, do mesmo jeito que contestar.** Recusar, rotear, suspender
-  ou adiar entrega só vale com âncora citável do impedimento: `«≤15 palavras
-  literais»` da regra ou do fato que barra — origem [arquivo, linha, mesa, fonte].
-  Sem âncora não há parada; decide-se pelo melhor palpite e entrega-se. Impedimento
-  inferido, fronteira lembrada, regra parafraseada e aviso de sistema (cota, limite
-  semanal, quota) NÃO são âncora. O default é entregar; parar é que se justifica.
 - **O que sobra para o dono é o relato**, depois de subir: o que subiu, o que
   quebrou, o que virou incidente. Nunca a decisão de deixar subir.
 
