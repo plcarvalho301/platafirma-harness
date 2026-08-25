@@ -100,13 +100,18 @@ def cmd_orfaos(argv: list[str]) -> int:
         achados.append(("nao medido", f"contas de SO: {e}"))
 
     # 5. Realm: client habilitado para sujeito que saiu do PAP.
+    #    Realm nao alcancado NAO e "nada encontrado": e medicao incompleta, e reprova
+    #    duro no fim (exit 2). #163/#418: contagem parcial fechou card falso.
+    realm_medido = True
     if "--sem-realm" in argv:
+        realm_medido = False
         print("realm: NAO MEDIDO (--sem-realm)")
     else:
         rc, saida = kcadm("get", "clients", "-r", "platafirma",
                           "--fields", "clientId,serviceAccountsEnabled")
         if rc != 0:
-            print("realm: NAO MEDIDO — kcadm sem credencial configurada nesta sessao")
+            realm_medido = False
+            print("realm: NAO MEDIDO — kcadm nao alcancou o realm nesta sessao")
         else:
             # So service account e ATOR, logo sujeito. Client de aplicacao e relying
             # party — o usuario atua atraves dele, e quem responde e o usuario.
@@ -148,13 +153,19 @@ def cmd_orfaos(argv: list[str]) -> int:
             achados.append(("credencial dormente",
                             f"client {cid} ({nome}) nao atuou nos ultimos {len(logs)} dia(s)"))
 
+    if achados:
+        largura = max(len(c) for c, _ in achados)
+        for classe, texto in achados:
+            print(f"{classe.ljust(largura)}  {texto}")
+        print(f"\n{len(achados)} achado(s) — cada um e ato pendente, nao aviso")
+    # Veredito no EXIT, nao no meio do relatorio: realm nao medido reprova duro.
+    if not realm_medido:
+        print("\nREPROVADO: realm NAO medido — resultado INCOMPLETO, nao vale como "
+              "'sem orfaos'. exit 2 (medicao incompleta), distinto de 0/1.")
+        return 2
     if not achados:
         print("nenhum residuo: sujeito, regra, segredo e conta em dia")
         return 0
-    largura = max(len(c) for c, _ in achados)
-    for classe, texto in achados:
-        print(f"{classe.ljust(largura)}  {texto}")
-    print(f"\n{len(achados)} achado(s) — cada um e ato pendente, nao aviso")
     return 1
 
 
