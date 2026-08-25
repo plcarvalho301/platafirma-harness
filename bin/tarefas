@@ -274,10 +274,21 @@ ler() {
   # ler um épico/feature e não enxergar a subárvore era o furo. Puxa os filhos
   # diretos por `?pai=`, um por linha (id · estado · cadeira · título).
   # A API não filtra por pai (eixos: cadeira, estado, nível, origem). Puxa a lista
-  # e peneira client-side por `.pai == id` — mesma peneira que `listar` faz para fase.
+  # e peneira client-side por `.pai == id`. SÓ ABERTAS: terminal (entregue, englobada,
+  # etc.) fica fora — a mesma régua de fase que `listar` aplica, pela mesma razão.
+  # Filha entregue é auditoria, e auditoria é `listar-tudo`, não leitura de card.
   local filhas; filhas=$(busca GET "/itens" | jq -r --argjson id "$id" '
-    .itens[]? | select(.pai == $id) | "  #\(.id)\t\(.estado)\t\(.cadeira // "—")\t\(.titulo)"')
-  [ -n "$filhas" ] && printf '\nfilhas:\n%s\n' "$filhas"
+    ([.estados[]? | select(.fase == "terminal" or .natureza == "terminal") | .estado]
+     + ["entregue","recusada","cancelada","englobada","encerrada","resolvido"]
+     | unique) as $term
+    | .itens[]?
+    | . as $it
+    | select($it.pai == $id)
+    | select(if $it.estado_derivado != null
+             then ($term | index([$it.estado_derivado]) == null)
+             else ($it.estado_fase != "terminal") end)
+    | "  #\($it.id)\t\($it.estado)\t\($it.cadeira // "—")\t\($it.titulo)"')
+  [ -n "$filhas" ] && printf '\nfilhas (abertas):\n%s\n' "$filhas"
 }
 
 # SIGN-OFF PELO VERBO — card #347. A rota existia desde o #466 e não tinha verbo, e a
