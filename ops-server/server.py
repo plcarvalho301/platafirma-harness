@@ -154,13 +154,30 @@ def _sessao_atual() -> str:
         return _sessao.get()
 
 
+# GUARDA DE REENTRANCIA explicita (#2481, Onda 2). O ciclo `_audit`->`_quem`->
+# `_sujeito_do_jwt`->(recusa) `auditor=_audit` derrubava o jaiminho-server em todo
+# Bearer malformado (RecursionError, 25/08). Aqui `tool=="-"` ja evita resolver
+# identidade na recusa, mas 'acidente de formato nao e controle' (caderno iam 25/08):
+# a guarda torna o ciclo impossivel mesmo que um chamador futuro audite a recusa com
+# tool real. Par explicito do que o jaiminho-server ja tem.
+_em_audit = False
+
+
 def _audit(**campos) -> None:
     """Grava uma linha JSONL de auditoria. Nunca derruba a operação — mas falha de
     auditoria vai para o stderr (journal), porque auditoria que falha em silêncio é
     pior que auditoria ausente: a ausência pelo menos é visível."""
     try:
         LOG_DIR.mkdir(parents=True, exist_ok=True)
-        ident = _quem() if campos.get("tool", "-") != "-" else {}
+        global _em_audit
+        if campos.get("tool", "-") != "-" and not _em_audit:
+            _em_audit = True
+            try:
+                ident = _quem()
+            finally:
+                _em_audit = False
+        else:
+            ident = {}
         reg = {"ts": datetime.now().astimezone().isoformat(timespec="milliseconds"),
                "instancia": OPS_NAME, "usuario": OPS_USER,
                "sessao": _sessao_atual(), **ident, **campos}
