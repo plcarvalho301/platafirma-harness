@@ -28,7 +28,8 @@ uso:
   tarefas listar [--cadeira <c>] [--estado <e>] [--nivel <n>] [--json]
                                           itens abertos (fase != terminal)
   tarefas listar-tudo [mesmos filtros]    inclui os terminais
-  tarefas ler <id>                        item em texto, com ancestrais e corpo
+  tarefas ler <id>                        item em texto: cabeçalho, ancestrais,
+                                          corpo e filhas diretas
   tarefas criar "<título>" [--desc "<txt>"|--desc-stdin]
                 [--nivel épico|feature|story|task] [--cadeira <c>] [--pai <id>]
   tarefas comentar <id> ["<txt>"]         cria comentário (entidade própria — card #390,
@@ -269,6 +270,14 @@ ler() {
        | join("\n")
      else empty end),
     (.descricao // "")' | para_texto
+  # FILHAS — card lido sem ver o que pende embaixo não serve para repriorizar:
+  # ler um épico/feature e não enxergar a subárvore era o furo. Puxa os filhos
+  # diretos por `?pai=`, um por linha (id · estado · cadeira · título).
+  # A API não filtra por pai (eixos: cadeira, estado, nível, origem). Puxa a lista
+  # e peneira client-side por `.pai == id` — mesma peneira que `listar` faz para fase.
+  local filhas; filhas=$(busca GET "/itens" | jq -r --argjson id "$id" '
+    .itens[]? | select(.pai == $id) | "  #\(.id)\t\(.estado)\t\(.cadeira // "—")\t\(.titulo)"')
+  [ -n "$filhas" ] && printf '\nfilhas:\n%s\n' "$filhas"
 }
 
 # SIGN-OFF PELO VERBO — card #347. A rota existia desde o #466 e não tinha verbo, e a
