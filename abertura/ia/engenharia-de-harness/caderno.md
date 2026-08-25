@@ -104,15 +104,18 @@ mecanismo (fail-closed, negativa total, trilha) segue intacto, o que envelheceu 
 gabarito. A emenda mantém a régua e troca o PAR que a exercita — apagar o teste
 perderia a régua junto com o exemplo.
 
-## Presença de pergunta/chapéu não decide "abertura × só-chapéu"
+## A distinção "abertura × só-chapéu" precisa de sinal EXPLÍCITO, não inferido
 
-A abertura-base serve SEMPRE; pergunta e chapéu apenas roteiam o chapéu, que é
-ADITIVO. Inferir "tem pergunta → pula a abertura" (o antigo `perna_dois`) presume um
-fluxo de duas chamadas com rechamada de troca de chapéu mid-sessão — e essa rechamada
-nunca teve call-site: os consumidores (ops-server, bin/chat, conta-abertura) são todos
-abertura ou medição. Quando um elo passou a mandar SEMPRE o corpo do turno como
-`--pergunta` (#249), o guard virou "toda abertura pula a abertura" e, no fallback do
-roteador, devolveu `pecas:[]` sem erro — a exata ambiguidade "peça vazia × cadeira sem
-peça" que o contrato jura nunca produzir. Antes de reintroduzir um modo só-chapéu:
-flag explícita + call-site real + teste. Duas mudanças corretas isoladas podem se
-contradizer compostas; a prova é PELA TOOL, nas quatro classes (fábrica inclusa).
+A abertura-base serve SEMPRE, salvo pedido explícito de só-chapéu (`--so-chapeu`).
+Pergunta e chapéu apenas roteiam o chapéu, que é ADITIVO. Inferir "tem pergunta/chapéu
+→ é só-chapéu, pula a abertura" (o antigo `perna_dois`) é proxy errado por dois lados:
+quebra a abertura quando um elo passa a mandar SEMPRE o corpo como `--pergunta` (#249)
+— toda abertura vira só-chapéu e, no fallback do roteador, devolve `pecas:[]` sem erro,
+a ambiguidade "peça vazia × cadeira sem peça" que o contrato proíbe; e confunde o modo
+só-chapéu com abrir-com-chapéu, que a persona faz na abertura e quer abertura+chapéu.
+A troca de chapéu mid-sessão é caso REAL (a Carla reportou: reenviar a abertura já
+servida é desperdício) — por isso o modo existe, mas se pede por FLAG, não por
+heurística. Régua geral: quando dois usos legítimos compartilham o mesmo argumento
+(`--chapeu` serve tanto abrir-com-chapéu quanto trocar-de-chapéu), a intenção precisa
+de sinal próprio; espremê-la num proxy faz duas mudanças corretas se contradizerem
+quando compostas. Prova PELA TOOL, nas quatro classes (fábrica inclusa).

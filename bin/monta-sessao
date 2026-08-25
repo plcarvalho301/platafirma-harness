@@ -500,7 +500,7 @@ def cadeiras_validas():
     return sorted(do_ledger | do_disco)
 
 
-def monta(cadeira, atualizar, pergunta=None, forcado_chapeu=None):
+def monta(cadeira, atualizar, pergunta=None, forcado_chapeu=None, so_chapeu=False):
     if cadeira.lower() not in [c.lower() for c in cadeiras_validas()]:
         return {"erro": f"cadeira desconhecida: '{cadeira}'",
                 "cadeiras_validas": cadeiras_validas()}
@@ -520,25 +520,26 @@ def monta(cadeira, atualizar, pergunta=None, forcado_chapeu=None):
     # Canonico vem do ledger, nao da linha 1: o form novo poe o alias ali (arq:0073).
     nome = _canonico(cadeira)
 
-    # A abertura-base serve SEMPRE. Pergunta e chapéu apenas ROTEIAM o chapéu, que é
-    # ADITIVO (servido abaixo, por cima da abertura). O antigo `perna_dois` (arq:0073,
-    # "chamada com pergunta devolve só o chapéu") pressupunha uma rechamada de troca de
-    # chapéu mid-sessão que nunca teve call-site: os três consumidores — ops-server,
-    # bin/chat (fita nova e reinício) e conta-abertura — são todos abertura ou medição.
-    # Combinado com #249 (a borda/fita sempre manda o corpo do turno como --pergunta),
-    # aquele guard pulava a abertura e, quando o roteador caía em fallback, devolvia
-    # `pecas: []` sem `erro` — a exata ambiguidade "peça vazia × cadeira sem peça" que o
-    # contrato jura nunca produzir. Troca mid-sessão que queira SÓ o chapéu, no dia em
-    # que existir, pede flag própria e explícita — não se infere de "tem pergunta".
+    # A abertura-base serve SEMPRE, salvo pedido explícito de SÓ-chapéu (`so_chapeu`).
+    # Pergunta e chapéu apenas ROTEIAM o chapéu, que é ADITIVO (servido abaixo, por cima
+    # da abertura). O antigo `perna_dois` INFERIA "só-chapéu" de "tem pergunta ou chapéu"
+    # — proxy errado: com #249 (a borda/fita passou a mandar SEMPRE o corpo do turno como
+    # --pergunta), toda abertura virava só-chapéu e, no fallback do roteador, devolvia
+    # `pecas: []` sem `erro` — a ambiguidade "peça vazia × cadeira sem peça" que o contrato
+    # jura nunca produzir. A troca de chapéu mid-sessão (o defeito que a Carla reportou:
+    # reenviar a abertura já servida é desperdício) é caso real — mas agora se pede por
+    # FLAG explícita `--so-chapeu`, nunca por inferência. Default serve abertura: esquecer
+    # a flag falha para o lado seguro (nunca abre vazio), honrando o contrato acima.
     servidas, avisos = [], []
-    for peca in pecas:
-        env, conteudo = serve(peca, cadeira, nome)
-        env["conteudo"] = conteudo
-        servidas.append(env)
-        if env["frescor"] == "indisponivel":
-            avisos.append(f"peça `{env['peca']}` indisponível: {env['motivo']}")
-        elif env["frescor"] == "defasado":
-            avisos.append(f"peça `{env['peca']}` servida de clone atrasado: {env['motivo']}")
+    if not so_chapeu:
+        for peca in pecas:
+            env, conteudo = serve(peca, cadeira, nome)
+            env["conteudo"] = conteudo
+            servidas.append(env)
+            if env["frescor"] == "indisponivel":
+                avisos.append(f"peça `{env['peca']}` indisponível: {env['motivo']}")
+            elif env["frescor"] == "defasado":
+                avisos.append(f"peça `{env['peca']}` servida de clone atrasado: {env['motivo']}")
 
     # Divergencia entre o que a persona declara e o que o catalogo resolve nao se
     # escolhe em silencio: as duas fontes existem, e a que discorda vira aviso.
@@ -695,6 +696,10 @@ def main():
                    help="lista os chapeus da cadeira, por descoberta no disco")
     p.add_argument("--pergunta", metavar="TEXTO",
                    help="o turno do dono; roteia o chapeu por (a)/(b), senao cai no fallback (c)")
+    p.add_argument("--so-chapeu", action="store_true",
+                   help="troca de chapeu mid-sessao: serve SO o chapeu, sem a abertura "
+                        "(a abertura ja veio na 1a chamada; reenvia-la e desperdicio). "
+                        "Default: serve abertura + chapeu roteado.")
     p.add_argument("--chapeu", metavar="SLUG",
                    help="serve UM chapeu da cadeira (sob demanda, fora da abertura)")
     args = p.parse_args()
@@ -717,7 +722,7 @@ def main():
         return imprime_chapeu(alvo, args)
 
     pac = monta(alvo, atualizar=not args.sem_atualizar, pergunta=args.pergunta,
-                forcado_chapeu=args.chapeu)
+                forcado_chapeu=args.chapeu, so_chapeu=args.so_chapeu)
     if args.json:
         print(json.dumps(pac, ensure_ascii=False))
         return 1 if "erro" in pac else 0

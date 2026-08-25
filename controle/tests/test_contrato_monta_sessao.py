@@ -186,7 +186,8 @@ def test_fila_nao_e_peca_de_abertura(raiz):
 
 def test_segunda_chamada_serve_pecas_do_chapeu(raiz):
     """`--chapeu rh` roteia por comando e traz chapeu + ferramental + caderno-chapeu,
-    todas frescas e com conteúdo — a 2ª chamada do fluxo de duas pernas (arq:0073)."""
+    todas frescas e com conteúdo. Convivem com a abertura; a ausência da abertura é o
+    caso `--so-chapeu`, coberto em test_so_chapeu_nao_reenvia_abertura."""
     dados = json.loads(_run(["teste", "--chapeu", "rh", "--json"], raiz).stdout)
     assert dados["chapeu"] == "rh"
     assert dados["roteador"]["slug"] == "rh"
@@ -280,14 +281,39 @@ def test_sem_json_mantem_marcadores_de_texto(raiz):
     assert "{" not in proc.stdout
 
 
-def test_perna_dois_nao_reenvia_abertura(raiz):
-    """Regressão (defeito reportado pela Carla): a 2ª chamada devolve SÓ o chapéu.
-    A abertura já chegou na 1ª; reenviá-la é o defeito. Guarda que o pacote da 2ª
-    perna contenha exatamente as peças de chapéu, e nenhuma de abertura."""
+def test_so_chapeu_nao_reenvia_abertura(raiz):
+    """Régua da Carla: na troca de chapéu mid-sessão, reenviar a abertura já servida é
+    desperdício, então `--so-chapeu` devolve SÓ o chapéu, nenhuma peça de abertura.
+    Antes acionado por inferência ('tem pergunta/chapéu'); agora por flag explícita —
+    a inferência quebrava a abertura no fallback do #249 (ver os dois testes abaixo)."""
+    dados = json.loads(_run(["teste", "--chapeu", "rh", "--so-chapeu", "--json"], raiz).stdout)
+    ids = {p["peca"].split(":", 1)[0] for p in dados["pecas"]}
+    assert ids == {"chapeu", "ferramental", "caderno-chapeu"}, f"so-chapeu vazou/omitiu: {ids}"
+    assert dados["pacote"]["pecas"] == len(dados["pecas"])
+
+
+def test_abertura_com_pergunta_que_nao_casa_serve_abertura(raiz):
+    """Regressão #402 (colisão perna_dois × #249): pergunta que NÃO casa nenhum chapéu
+    cai no fallback do roteador, mas a abertura-base tem de vir mesmo assim. O defeito
+    era `pecas: []` sem `erro` — abertura pulada por inferência e chapéu ausente por
+    fallback, a ambiguidade 'peça vazia × cadeira sem peça' que o contrato proíbe."""
+    dados = json.loads(_run(
+        ["teste", "--pergunta", "xyzzy nao casa nenhum rotulo", "--json"], raiz).stdout)
+    assert dados["roteador"]["slug"] is None
+    ids = {p["peca"] for p in dados["pecas"]}
+    assert {"persona", "oficio", "conduta-dono"} <= ids, f"abertura sumiu no fallback: {ids}"
+    assert dados["pacote"]["pecas"] > 0
+
+
+def test_abertura_com_chapeu_serve_abertura_mais_chapeu(raiz):
+    """Abrir com chapéu (sem --so-chapeu) é ADITIVO: abertura + chapéu, não só chapéu.
+    É o que a persona faz na abertura (monta_sessao(cadeira, chapeu=slug)). Guarda que a
+    persona (abertura) E as peças de chapéu convivam no mesmo pacote."""
     dados = json.loads(_run(["teste", "--chapeu", "rh", "--json"], raiz).stdout)
     ids = {p["peca"].split(":", 1)[0] for p in dados["pecas"]}
-    assert ids == {"chapeu", "ferramental", "caderno-chapeu"}, f"perna 2 vazou/omitiu: {ids}"
-    assert dados["pacote"]["pecas"] == len(dados["pecas"])
+    assert "persona" in ids, f"abertura sumiu: {ids}"
+    assert {"chapeu", "ferramental", "caderno-chapeu"} <= ids, f"chapeu sumiu: {ids}"
+    assert dados["chapeu"] == "rh"
 
 
 # --- alias-cadeiras (card #2438) ---------------------------------------------
