@@ -23,7 +23,9 @@
 # ops-server chamam `mesa anota <chapeu>` com prosa em stdin, e derrubar esse
 # contrato hoje quebraria o encerramento de fita de TODA cadeira. Enquanto eles
 # nao migram, `anota` continua escrevendo la, `ver` le os dois e marca qual e qual.
-# A mesa velha ja esta capturada em `sessao.mesa_legado` (sessao/migracao/).
+# A mesa velha ja esta capturada em `sessao.mesa_legado` (sessao/migracao/). A prosa
+# do Valkey obedece ao MESMO TTL de fossil do item (48h): escrita self-expira, e
+# `ver` expurga a que passou do prazo. Fossil e fossil, o substrato nao muda a regra.
 #
 # NAO E A FILA. Protocolo inteiro distinto: sem envelope, sem destinatario, sem
 # ack, sem consumer group, sem trim de arq:0024. A fila e dirigida a outro e
@@ -62,8 +64,9 @@ except ImportError:
 
 HOST = os.environ.get("MEM_REDIS_HOST", "127.0.0.1")
 PORTA = int(os.environ.get("MEM_REDIS_PORT", "6380"))  # instancia msg-mem, nao a malha
-TTL_PADRAO = int(os.environ.get("MEM_TTL_DIAS", "14")) * 86400  # so a PROSA velha do Valkey
-TTL_MESA_H = int(os.environ.get("MEM_MESA_TTL_HORAS", "48"))  # item; expurgo fisico no serve
+TTL_MESA_H = int(os.environ.get("MEM_MESA_TTL_HORAS", "48"))  # TTL do FOSSIL: item e prosa
+TTL_MESA_S = TTL_MESA_H * 3600
+TTL_FITA = int(os.environ.get("MEM_FITA_TTL_DIAS", "14")) * 86400  # guarda de fita corrente, outro eixo
 TETO_AVISO = 4000  # bytes; acima disto e sintoma de fato nao despachado
 RAIZ = os.environ.get("PF_RAIZ", os.path.expanduser("~/AI"))
 HARNESS = os.path.join(RAIZ, "platafirma-harness")
@@ -303,8 +306,8 @@ def ato_ver(args):
 
     rc = conn()
     alvo = f"mem:{cadeira()}:{args.slot}" if args.slot else f"mem:{cadeira()}:*"
+    prosa_expurgada = 0
     for k in sorted(rc.keys(alvo)):
-        achou = True
         bruto = rc.get(k)
         slot = k.split(":", 2)[2]
         try:
@@ -312,9 +315,19 @@ def ato_ver(args):
             texto, ts = d.get("x", ""), d.get("t", 0)
         except (ValueError, AttributeError):
             texto, ts = bruto or "", 0
+        # Prosa velha e fossil pela mesma regua do item: passou de TTL_MESA_H, sai.
+        # Fisico (DEL), no ato de servir — igual ao item, so que no substrato Valkey.
+        if ts and (time.time() - ts) > TTL_MESA_S:
+            rc.delete(k)
+            prosa_expurgada += 1
+            continue
+        achou = True
         print(f"[{slot}] (prosa, substrato velho) escrito ha {idade(time.time() - ts)}")
         print(texto.rstrip())
         print()
+    if prosa_expurgada:
+        print(f"(mesa: {prosa_expurgada} slot(s) de prosa velha expurgado(s) por TTL de {TTL_MESA_H}h)",
+              file=sys.stderr)
 
     if not achou:
         print("mesa vazia" if not args.slot else f"slot {args.slot}: vazio")
@@ -451,13 +464,13 @@ def ato_anota(args):
     valor = json.dumps({"t": int(time.time()), "x": texto})
     fid = fita_do_ambiente(args.se_fita)
     if fid is None:
-        rc.set(chave(slot), valor, ex=TTL_PADRAO)
+        rc.set(chave(slot), valor, ex=TTL_MESA_S)
         print(f"mesa: slot {slot} reescrito ({len(texto.splitlines())} linhas)")
         return 0
     # Criterio 18 da minuta 0002: ritual que termina depois de a fita nova ter
     # anotado descarta a PROPRIA escrita. Compare-and-swap, nao confianca em ordem.
     valida_fita(fid)
-    ok = rc.eval(LUA_ANOTA, 2, chave_fita(), chave(slot), fid, valor, TTL_PADRAO)
+    ok = rc.eval(LUA_ANOTA, 2, chave_fita(), chave(slot), fid, valor, TTL_MESA_S)
     if not ok:
         corrente = rc.get(chave_fita())
         print(f"mesa: escrita DESCARTADA no slot {slot} — a fita {fid} ja nao e a corrente "
@@ -483,7 +496,7 @@ def ato_fita(args):
     k = chave_fita()
     if args.gesto == "abre":
         fid = valida_fita(args.id or f"{int(time.time())}-{os.urandom(3).hex()}")
-        rc.set(k, fid, ex=TTL_PADRAO)
+        rc.set(k, fid, ex=TTL_FITA)
         con = pg(silencioso=True)
         if con is not None:
             with con:
@@ -495,11 +508,12 @@ def ato_fita(args):
         if rc.eval(LUA_FECHA, 1, k, fid):
             con = pg(silencioso=True)
             if con is not None:
+                # `with con` ja commita e fecha a conexao no psycopg3; commit apos o
+                # bloco estourava "connection is closed". Bug pre-existente, medido 25/08.
                 with con, con.cursor() as cur:
                     cur.execute(
                         "UPDATE sessao.fita SET encerrada_em = now(), encerramento = 'zerar' "
                         "WHERE id = %s AND encerrada_em IS NULL", (fid,))
-                con.commit()
             print(f"fita {fid}: fechada")
             return 0
         print(f"fita {fid}: nao era a corrente ({rc.get(k) or 'nenhuma'}) — nada a fechar",
@@ -510,7 +524,7 @@ def ato_fita(args):
         print("fita: nenhuma aberta")  # ausencia e resposta valida (arq:0041)
         return 0
     ttl = rc.ttl(k)
-    print(f"fita {fid}: aberta ha {idade(TTL_PADRAO - ttl) if ttl and ttl > 0 else '?'}")
+    print(f"fita {fid}: aberta ha {idade(TTL_FITA - ttl) if ttl and ttl > 0 else '?'}")
     return 0
 
 
