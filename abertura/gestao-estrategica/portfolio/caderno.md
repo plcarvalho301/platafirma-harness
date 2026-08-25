@@ -163,3 +163,33 @@ nem recado pro head de TI — e a segunda metade do mesmo ato que o push comecou
 Nota lateral, mesma fita: `tarefas comentar` cria comentario que, ate o cascade
 subir, era vinculo indeletavel — nao usar comentario pra anotar card em
 apuracao. Anotar por `PATCH descricao` (api-corpo), que nao cria entidade filha.
+
+## Mapa F9 do board: o que a head pode e nao pode (fita 24/08)
+
+Faxina de board de ponta a ponta (em-lapidacao 44->1, 8 feitos presos fechados,
+34 orfaos alojados). O que a proxima faxina nao precisa re-derivar:
+
+- **A head parqueia e agrupa a vontade, cross-cadeira.** `tarefas mover` dentro
+  do funil e `tarefas sub <pai> <filho>` para alojar NAO sao F9-gated: rodam em
+  card de qualquer cadeira (testado em seguranca, TI, IA). Sequenciar e
+  organizar o funil e ato de portfolio, nao do dono do card.
+- **Chegar a terminal e do dono do card.** `fechar`, `descartar`, `englobar`
+  batem em F9 "chefe nao fecha item alheio". Card alheio feito/lixo/duplicado ->
+  despacha por `fila enviar <persona> --tipo pedido` (tipos validos: decisao,
+  demanda, handoff, minuta, pedido, resposta).
+- **Dono do card != `.cadeira`.** O `.cadeira` e a materia; o F9 checa o
+  ATRIBUIDO. Os cards do envelope F0-F5 tinham `.cadeira`=IA/TI mas eram meus; so
+  fecharam com PF_CADEIRA=`claudinha-gestao-estrategica` (nome canonico, com
+  prefixo), nao com o slug `gestao-estrategica`. Vale ate o #2431 passar.
+- **Read-side atrasa; write-side e verdade.** `tarefas listar` (abertos),
+  histograma e `fila status` servem espelho velho logo apos escrita (a contagem
+  de abertos deu -1 depois de 7 fechados; a fila deu "vazia" depois de um enviar
+  que devolveu id). Confere no `tarefas listar-tudo --json`, no cru do card, ou
+  no id que o `enviar` devolve -- nunca no relatorio de abertos.
+- **Criterio do parque:** em-lapidacao = "em pauta agora". Sem movimento ha ~5
+  dias -> captada (reversivel, nao cancela nada); sozinho drenou o paredao. Feito
+  preso (subarvore `derivado=entregue`, card ainda no funil) -> fecha como
+  entregue, que e reconciliar o pai as filhas ja assinadas.
+
+Regra que fica: **na board, a head move e agrupa; o dono fecha.** Meu corte e
+proposta ate onde toca card alheio; o carimbo terminal e sempre do dono.
