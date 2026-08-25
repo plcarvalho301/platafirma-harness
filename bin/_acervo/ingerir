@@ -277,9 +277,17 @@ def ler(p):
 json.dump({"Classificacao": ler(sys.argv[1]), "ServeA": ler(sys.argv[2])},
           open(sys.argv[3], "w"), ensure_ascii=False)
 PY
-    # CSV é plano: entra pela mesma porta do .ods, como abas-json. Quem valida
-    # vocabulário e escreve continua sendo `rag_extractor.acervo`.
-    if seco "cli migrar-acervo --abas-json <csv> --apply"; then
+    # CSV é plano: entra pela mesma porta do .ods, como abas-json. #2477: em schema
+    # POPULADO a obra já existe (catalogação criou o stub) e a classificação é UPDATE
+    # incremental — o migrador full reconstrói tudo e recusa base populada por design.
+    # Só schema VAZIO (primeira carga) usa `migrar-acervo`.
+    POPULADO=$(docker exec -i rag-extractor-pg psql -U rag -d rag_extractor -tAc \
+      "select count(*) from acervo.dominio" 2>/dev/null | tr -d '[:space:]')
+    if [ "${POPULADO:-0}" -gt 0 ]; then
+      if seco "carga_incremental (UPDATE obra por sha/nome, FK do schema vivo)"; then
+        python3 "$AQUI/carga_incremental.py" "$CLASSIF" --apply
+      else python3 "$AQUI/carga_incremental.py" "$CLASSIF"; fi
+    elif seco "cli migrar-acervo --abas-json <csv> --apply"; then
       "$PY" -m rag_extractor.cli migrar-acervo --abas-json "$ABAS" --apply
     else "$PY" -m rag_extractor.cli migrar-acervo --abas-json "$ABAS"; fi
   else
