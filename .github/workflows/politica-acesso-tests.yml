@@ -1,0 +1,54 @@
+name: politica-acesso — matriz sujeito × fonte
+
+on:
+  push:
+    paths:
+      - "politica-acesso/**"
+      - ".github/workflows/politica-acesso-tests.yml"
+  pull_request:
+    paths:
+      - "politica-acesso/**"
+      - ".github/workflows/politica-acesso-tests.yml"
+
+# POR QUE EXISTE: o aceite de fase do F1 (§6) é uma matriz sujeito × fonte que falha o
+# build quando `pesquisador-externo` alcança a casa por dentro. Vazamento entra por
+# merge no PAP, não por commit — sem este gatilho, o teste existiria e não seria
+# chamado no dia em que importa.
+#
+# SEPARADO de recuperacao-tests.yml em 25/08/2026 (card #317): antes as duas pastas
+# compartilhavam um gate e o venv de recuperacao/ rodava estes testes. Cada pasta com
+# seu gate — venv de uma nao roda teste de outra.
+#
+# DIVIDA DECLARADA: politica-acesso/ ainda nao tem pyproject.toml proprio; as deps
+# (pytest, pyyaml, tokenizers) seguem adivinhadas com `--with` abaixo, como era antes.
+# Fechar isso é card proprio, no molde do que recuperacao/ ganhou no #317.
+
+jobs:
+  pytest:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: instala uv
+        uses: astral-sh/setup-uv@v3
+        with:
+          enable-cache: true
+
+      - name: tokenizador do modelo servido (qwen2.5)
+        run: |
+          mkdir -p "$HOME/pf-raiz/opt/tokenizers"
+          curl -fsSL -o "$HOME/pf-raiz/opt/tokenizers/qwen2.5.json" \
+            https://huggingface.co/Qwen/Qwen2.5-7B-Instruct/resolve/main/tokenizer.json
+          python3 - "$HOME/pf-raiz/opt/tokenizers/qwen2.5.json" <<'PY'
+          import json, sys
+          d = json.load(open(sys.argv[1]))
+          n = len(d["model"]["vocab"])
+          assert n == 151643, f"vocab {n} != 151643: tokenizador diferente do servido"
+          print("tokenizador conferido:", n, "entradas")
+          PY
+
+      - name: matriz sujeito × fonte
+        run: |
+          export PF_RAIZ="$HOME/pf-raiz"
+          uv run --with pytest --with tokenizers --with pyyaml \
+            pytest politica-acesso/ -q

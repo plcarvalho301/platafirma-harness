@@ -1,33 +1,32 @@
-name: recuperacao — contrato do envelope e matriz de acesso
+name: recuperacao — testes
 
 on:
   push:
     paths:
       - "recuperacao/**"
-      - "politica-acesso/**"
       - ".github/workflows/recuperacao-tests.yml"
   pull_request:
     paths:
       - "recuperacao/**"
-      - "politica-acesso/**"
       - ".github/workflows/recuperacao-tests.yml"
 
 # POR QUE EXISTE: a spec §3 diz que as invariantes do envelope são conferidas em teste
 # de contrato e NÃO por leitura, e que o teto de 40 tokens do envelope vazio FALHA O
 # BUILD. Sem gatilho, "falha o build" é figura de linguagem.
 #
-# POR QUE `politica-acesso/**` DISPARA: o aceite de fase do F1 (§6) é uma matriz
-# sujeito × fonte que falha o build quando `pesquisador-externo` alcança a casa por
-# dentro. Vazamento entra por merge no PAP, não por commit em `recuperacao/` — sem este
-# gatilho, o teste existiria e não seria chamado no dia em que importa.
+# Nasce VERDE: 315 passed, 5 skipped medido em 25/08/2026 (uv run pytest, recuperacao/).
+# Suíte que nasce vermelha é suíte que todo mundo aprende a ignorar — a lição está
+# escrita em controle/tests/MODELO-SUITE.md.
 #
-# Nasce VERDE: 58 testes no F0, 182 com adaptadores, PEP e matriz (medido em 20/08/2026 na
-# bancada). Suíte que nasce vermelha é suíte que todo mundo aprende a ignorar — a lição
-# está escrita em controle/tests/MODELO-SUITE.md.
+# ESCOPO: so recuperacao/. A matriz sujeito × fonte de politica-acesso/ tem gate proprio
+# (politica-acesso-tests.yml) — venv de uma pasta nao roda teste de outra.
 
 jobs:
   pytest:
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: recuperacao
     steps:
       - uses: actions/checkout@v4
 
@@ -36,10 +35,11 @@ jobs:
         with:
           enable-cache: true
 
-      # O tokenizador não mora no repo (7 MB de artefato de terceiro) e mora na bancada
-      # em ~/AI/opt/tokenizers/. Aqui ele é baixado da origem e CONFERIDO: contagem de
-      # token com o tokenizador errado não é medição ruim, é outro número — `tiktoken`
-      # tokeniza qwen errado, e é por isso que o teste exige este arquivo e não estima.
+      # O engine `tokenizers` vem do pip (declarado em recuperacao/pyproject.toml). O
+      # MODELO de tokenização é outro artefato: 7 MB que não moram no repo. Aqui ele é
+      # baixado e CONFERIDO pelo vocab — contagem de token com o tokenizador errado não
+      # é medição ruim, é outro número. `tiktoken` tokeniza qwen errado; por isso o
+      # teste exige este arquivo e não estima.
       - name: tokenizador do modelo servido (qwen2.5)
         run: |
           mkdir -p "$HOME/pf-raiz/opt/tokenizers"
@@ -49,15 +49,20 @@ jobs:
           import json, sys
           d = json.load(open(sys.argv[1]))
           n = len(d["model"]["vocab"])
-          # prova de MESMO espaço de tokenização que o da bancada (sha256
-          # c0382117ea32…, vocab 151643). Divergiu, o número do teto não é comparável
-          # com o medido em 20/08 — e isso tem de aparecer, não ser absorvido.
+          # prova de MESMO espaço de tokenização que o da bancada (vocab 151643).
+          # Divergiu, o número do teto não é comparável com o medido — e isso tem de
+          # aparecer, não ser absorvido.
           assert n == 151643, f"vocab {n} != 151643: tokenizador diferente do servido"
           print("tokenizador conferido:", n, "entradas")
           PY
 
-      - name: contrato do envelope, do disjuntor e do PEP + matriz sujeito × fonte
-        run: |
-          export PF_RAIZ="$HOME/pf-raiz"
-          uv run --with pytest --with tokenizers --with pyyaml \
-            pytest recuperacao/ politica-acesso/ -q
+      # Dependências RESOLVIDAS de pyproject.toml + uv.lock — declaradas, não mais
+      # adivinhadas na linha com `--with`. É o buraco que o card #317 fechou.
+      - name: sincroniza dependencias declaradas
+        run: uv sync --locked --group dev
+
+      # Sem export de PF_RAIZ: a suite usa tempfile/fixtures quando a var nao aponta
+      # pra uma arvore real. Setar PF_RAIZ pra um caminho meio-montado faz o registro.py
+      # procurar macro-global/decisions inexistente e quebra 16 testes — pior que nao setar.
+      - name: suite de recuperacao (contrato do envelope, disjuntor, PEP, catalogo)
+        run: uv run --group dev pytest . -q

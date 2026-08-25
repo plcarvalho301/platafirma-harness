@@ -25,9 +25,10 @@ adaptadores, no F1.
 Não entra aqui: roteamento e tabela `fonte` (#2304) e gate (F3).
 
 ```
-# da raiz do repo; precisa de `tokenizers` e `pyyaml`
-~/AI/.venv-testes/bin/python -m pytest recuperacao/ politica-acesso/ -q   # 349 passed, 2 skipped (21/08/2026)
-# `python3` do host NAO tem pytest, e `.venv-harness` nao existe: o interpretador com a suite e `.venv-testes`.
+# desta pasta; ambiente resolvido de pyproject.toml + uv.lock, nao adivinhado
+uv run --group dev pytest . -q   # 315 passed, 5 skipped (25/08/2026)
+# deps de runtime (pyyaml, tokenizers) estao em pyproject.toml; `uv` monta o venv sozinho.
+# gate: .github/workflows/recuperacao-tests.yml roda isto em push que toca recuperacao/**.
 ```
 
 ## Medição — 20/08/2026, tokenizador `qwen2.5.json` (vocab 151.643)
