@@ -113,3 +113,31 @@ porque o gatilho é o deploy e não o nascimento do card.
 - **Medir uma superfície e concluir sobre o arranjo**: serviço existe em host E em contêiner, e
   `ss -ltnp` só vê o host — dois erros meus em 20/08 vieram daí. Perímetro se mede nas duas:
   `ps -eo uid`, `docker inspect -f '{{.Config.User}}'`, e onde os volumes moram.
+
+## Comando de conta precisa do principal E do env — a sessão não se presume
+
+Runbook que entrega comando escopado a usuário (`systemctl --user`, docker rootless, path com
+`~`) para um operador que loga como OUTRA conta falha em três pontos — todos vividos em 25/08
+passando a Onda 5 (#2678) do dono (conta `megafone`, uid 1000) para os serviços (conta
+`claudinho`, uid 1001):
+
+- **`~` mente.** `~/AI/...` vira `/home/megafone/AI` na mão do dono, não `/home/claudinho/AI`.
+  Runbook cross-conta usa caminho ABSOLUTO, sempre.
+- **`docker` sem contexto bate no daemon errado.** megafone está no grupo `docker`, então
+  `docker compose ... --build` foi para o daemon de SISTEMA, não para o rootless do claudinho
+  onde a prod vive. Build que "rodou" e não tocou nada. Rootless é POR conta: o socket é
+  `/run/user/<uid>/docker.sock` — o do claudinho é `/run/user/1001/docker.sock`.
+- **`sudo -iu claudinho systemctl --user` dá `Failed to connect to bus: No medium found`.**
+  O login-shell troca de usuário mas NÃO anexa ao bus do user-manager que já roda (lingering).
+  Precisa do env do runtime: `XDG_RUNTIME_DIR=/run/user/1001` e
+  `DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1001/bus`. Formas que funcionam:
+  `sudo -u claudinho env XDG_RUNTIME_DIR=... DBUS_SESSION_BUS_ADDRESS=... systemctl --user ...`,
+  `sudo machinectl shell claudinho@`, ou `sudo systemctl -M claudinho@ --user ...` (systemd 255).
+
+Regra: comando de conta declara o principal E carrega o env (runtime dir, bus, socket do
+docker, caminho absoluto). "Roda como claudinho" em prosa não basta — o mecanismo de VIRAR
+claudinho tem que montar o ambiente, senão o comando cai num contexto plausível e vazio, que
+é o pior modo de falhar: não erra alto, erra quieto (mesma família do slug com grafia errada
+que abre um segundo armazém vazio). Corolário: o ops-server não se reinicia de dentro de si
+(mata a própria tool call), então o restart dele é sempre ato de terminal DE FORA — e por isso
+cai justamente na conta do operador, que é onde este bug mora.
