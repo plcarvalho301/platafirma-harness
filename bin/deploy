@@ -11,12 +11,24 @@ set -euo pipefail
 export DOCKER_HOST="${DOCKER_HOST:-unix:///run/user/$(id -u)/docker.sock}"
 REGISTRO="${DEPLOY_REGISTRO:-$HOME/AI/platafirma-harness/registro/stacks.json}"
 
-stacks()   { jq -r '.stacks | keys[]' "$REGISTRO"; }
-campo()    { jq -r --arg s "$1" --arg c "$2" '.stacks[$s][$c] // empty' "$REGISTRO"; }
+# A topologia se le UMA vez e mora em memoria; nenhuma funcao abaixo toca disco de novo.
+# Origem unica: para consumir o verbo em vez do arquivo, trocar SO a linha de captura de
+# TOPO_JSON abaixo por: TOPO_JSON="$(acervo listar topologia --completo --json)"
+# O shape (.stacks[slug]) e o mesmo nos dois; o resto do arquivo nao muda.
+if [ -n "${DEPLOY_TOPO_VERBO:-}" ]; then
+  TOPO_JSON="$(acervo listar topologia --completo --json \
+    | jq '{stacks: (map({key: .slug, value: .}) | from_entries)}')"
+else
+  [ -r "$REGISTRO" ] || { echo "registro nao legivel: $REGISTRO" >&2; exit 1; }
+  TOPO_JSON="$(cat "$REGISTRO")"
+fi
+
+stacks()   { jq -r '.stacks | keys[]' <<<"$TOPO_JSON"; }
+campo()    { jq -r --arg s "$1" --arg c "$2" '.stacks[$s][$c] // empty' <<<"$TOPO_JSON"; }
 expandir() { printf '%s\n' "${1/#\~/$HOME}"; }
 # `compose` e `profiles` aceitam string ou lista: uma linha por item, sempre.
 lista()    { jq -r --arg s "$1" --arg c "$2" \
-               '.stacks[$s][$c] // empty | if type=="array" then .[] else . end' "$REGISTRO"; }
+               '.stacks[$s][$c] // empty | if type=="array" then .[] else . end' <<<"$TOPO_JSON"; }
 
 uso() {
   cat >&2 <<FIM
@@ -75,7 +87,7 @@ resolve() {
 # texto na wiki desincroniza no primeiro deploy — o mesmo motivo dos outros tres.
 PONTOS="${DEPLOY_PONTOS:-$HOME/AI/var/deploy}"
 
-rev() { jq -r --arg s "$1" --arg c "$2" '.stacks[$s].reversao[$c] // empty' "$REGISTRO"; }
+rev() { jq -r --arg s "$1" --arg c "$2" '.stacks[$s].reversao[$c] // empty' <<<"$TOPO_JSON"; }
 
 ponto_anterior() {
   local f="$PONTOS/$1.anterior"
@@ -83,13 +95,12 @@ ponto_anterior() {
 }
 
 reversao_resumo() {
-  jq -e --arg s "$1" '.stacks[$s] | has("reversao")' "$REGISTRO" >/dev/null \
+  jq -e --arg s "$1" '.stacks[$s] | has("reversao")' <<<"$TOPO_JSON" >/dev/null \
     || { echo "NAO DECLARADA — ninguem mediu a volta desta stack"; return; }
   printf '%s, ~%s min, %s (ensaiada: %s)' "$(rev "$1" via)" "$(rev "$1" janela_min)" \
     "$(rev "$1" quem)" "$(rev "$1" provado_em | grep -q . && rev "$1" provado_em || echo nunca)"
 }
 
-[ -r "$REGISTRO" ] || { echo "registro nao legivel: $REGISTRO" >&2; exit 1; }
 command -v jq >/dev/null || { echo "jq ausente — o registro e JSON e nao se le na mao" >&2; exit 1; }
 
 [ $# -ge 1 ] || uso
@@ -251,7 +262,7 @@ if not achou:
 fi
 
 if [ "$ACAO" = "segredos" ]; then
-  if ! jq -e --arg s "$STACK" '.stacks[$s] | has("segredos")' "$REGISTRO" >/dev/null; then
+  if ! jq -e --arg s "$STACK" '.stacks[$s] | has("segredos")' <<<"$TOPO_JSON" >/dev/null; then
     echo "stack \"$STACK\" nao declara segredos no registro — ausencia de declaracao, nao"
     echo "ausencia de segredo: ninguem mediu esta stack ainda."
     exit 2
@@ -275,7 +286,7 @@ fi
 
 if [ "$ACAO" = "reverter" ]; then
   shift
-  if ! jq -e --arg s "$STACK" '.stacks[$s] | has("reversao")' "$REGISTRO" >/dev/null; then
+  if ! jq -e --arg s "$STACK" '.stacks[$s] | has("reversao")' <<<"$TOPO_JSON" >/dev/null; then
     echo "stack \"$STACK\" nao declara reversao no registro — ausencia de DECLARACAO, nao"
     echo "ausencia de caminho de volta: ninguem mediu esta stack ainda."
     echo "conserto: campo reversao em $REGISTRO (via, janela_min, estado, quem, provado_em)."
