@@ -39,3 +39,16 @@ compiladores. ACL por binário (seg:0010 item 2) é negar caminho: frágil, apod
 em update de pacote. Container é ausência real. Mas o alvo da ausência é docker/
 nsenter/mount, e docker só entra na imagem de cadeira que declara orquestração —
 para essas, o escopo do socket é decisão de segurança, não de build.
+
+## "Verified: true" do scanner de segredo não é prova, é sinal a cruzar
+
+O detector `Lob` do trufflehog aceita qualquer alfanumérico de 40 caracteres como chave
+válida — e nome de função de teste (`test_cargo_vira_titulos_e_depois_page_id`, 40 chars)
+cai nesse formato por coincidência. Medido em 25/08: 26 achados `Verified: true`, todos
+nomes de função, confirmados cruzando cada valor contra `def <valor>(` no código-fonte.
+
+A régua que fica: `Verified` é o sinal mais forte que a ferramenta dá, e ainda assim pode
+ser sistemicamente falso para um detector específico. Não fechar sozinho com base só no
+selo é certo (abrir incidente foi a decisão certa de quem rodou a varredura antes); o que
+faltava era o cruzamento contra o código, que a ferramenta não faz por si. Não desligar o
+detector depois do achado — desligar mascara a próxima chave real do mesmo tipo.

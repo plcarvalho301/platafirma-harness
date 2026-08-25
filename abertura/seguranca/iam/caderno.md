@@ -58,21 +58,19 @@ Ordem: primeiro o realm (apagar o client mata service account e secret juntos), 
 `.env`. Fecha quando `acesso orfaos` perde o achado — a única confirmação que não depende
 da minha narrativa.
 
-## Gate de borda com mais de um upstream (oauth2-proxy v7)
+## Auditoria que resolve identidade dentro de si mesma fecha ciclo em token ruim
 
-MÉTODO, que vale mais que o caso: subir instância DESCARTÁVEL da mesma imagem na mesma
-rede, com `--skip-auth-route='GET=^/'` e credencial falsa — mede roteamento sem encostar em
-produção. Medido 16/08:
+Extrair `_sujeito_do_jwt` para módulo comum e fazer `_audit` chamar `_quem()` parece
+inofensivo até o token ser inválido: a recusa dentro de `_sujeito_do_jwt` chama de volta
+`auditor=_audit`, que chama `_quem()`, que chama `_sujeito_do_jwt` de novo. Sem guarda de
+reentrância, todo Bearer malformado derruba a porta — medido em 25/08, RecursionError
+depois de 67 voltas. Não é bug raro: é o CAMINHO DE RECUSA, o mais chamado de todos.
 
-- O proxy DECLARA o mapa no boot (`mapping path "/api/" => ...`); ler o log é a conferência.
-- **O path não é removido no repasse**: upstream `.../api/` casa o prefixo e encaminha o
-  caminho inteiro, então quem serve tem de responder em `/api` de verdade. Mais específico
-  primeiro, e `/api` SEM barra não casa: cai no upstream `/`.
-- **Travessia não vira bypass**: `../`, `..%2f` e `%2e%2e` levam 301 de canonicalização no
-  próprio mux ANTES do repasse. Isso é propriedade do mux, não do regex de skip-auth, e se
-  reconfere a cada troca de versão.
-- Rota anônima aponta para o contêiner que a serve: tirá-la da imagem que monta o `.env`
-  encolhe a superfície de injeção de cabeçalho de sujeito, sem tocar na política.
+Um servidor pode escapar do mesmo ciclo por acidente de formato (ex.: `_audit` só resolvia
+identidade quando `tool != "-"`, e a recusa saía com `tool="-"`) — isso não prova que o
+desenho está certo, prova que ninguém bateu no caso ainda. Ao revisar código que unifica
+resolução de identidade com auditoria, achar o ciclo é o primeiro teste, não o último:
+simular a recusa (token malformado) contra a versão nova ANTES de olhar o resto do diff.
 
 ## Forma da cadeira: três matérias e uma régua
 
