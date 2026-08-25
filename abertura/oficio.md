@@ -26,6 +26,7 @@ O que o golden record NÃO serve, e por isso mora aqui:
 rastreador|keycloak ...       SHIM de instancia: nome de servico nao e verbo. `_shims-instancia` gera do acervo; redireciona e avisa
 git -C ~/AI/<repo> status --short   |   add -A ; commit -m "..." ; push
 longjob run <nome> <cmd...>   todo comando acima de 2 min
+conta-abertura [cadeira]      tokens do pacote de abertura por cadeira/peca (qwen2.5); --tudo --json --chapeu
 deploy-harness/instalar       instrumenta ambiente novo
 uv venv|pip|uvx · python3 (sem shim de pip)
 rg · fd · jq · yq · lnav · sar · df -h · du -sh · ncdu

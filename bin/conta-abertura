@@ -1,0 +1,18 @@
+#!/usr/bin/env bash
+# capacidade: contar tokens servidos na abertura por cadeira e por peca/arquivo
+# dono: claudinho-IA
+#
+# Wrapper: garante o ambiente com `tokenizers` para o numero bater com a mesa e
+# `conferir sessao` (qwen2.5). O host base nao tem o modulo — sem ele o Python cai
+# em estimativa bytes/4, que erra ~30% (medido: ia deu 6512 vs 8400 reais). Por isso
+# o miolo NUNCA roda no python nu; re-exec via uvx --with tokenizers, sempre.
+#
+# uso (ver bin/_conta/conta-abertura.py para as flags):
+#   conta-abertura                 tokens por cadeira, uma linha cada
+#   conta-abertura <cadeira>       quebra por peca/arquivo
+#   conta-abertura --tudo          quebra por peca de todas
+#   conta-abertura [...] --json | --chapeu <slug>
+set -euo pipefail
+AQUI="$(cd "$(dirname "$0")" && pwd)"
+MIOLO="$AQUI/_conta/conta-abertura.py"
+exec uvx --quiet --with tokenizers python3 "$MIOLO" "$@"
