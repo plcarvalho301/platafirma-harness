@@ -10,7 +10,10 @@
 >
 >     sudo machinectl shell claudinho@        # abre sessão como claudinho e roda tudo lá
 >
-> ou prefixe cada comando com `sudo -iu claudinho ...`. E use SEMPRE caminho ABSOLUTO
+> ou, sem shell interativo, prefixe com o env do user-manager (senao `systemctl --user`
+> da 'Failed to connect to bus: No medium found'):
+>
+>     sudo -u claudinho env XDG_RUNTIME_DIR=/run/user/1001 DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1001/bus <comando> E use SEMPRE caminho ABSOLUTO
 > `/home/claudinho/AI` — nunca `~/AI`, que como megafone vira `/home/megafone/AI`.
 
 **O que este restart põe no ar:** rechaveio do PEP por `sub` (#137), `sid`/`jti` na
@@ -46,8 +49,11 @@ velho segue no ar até este restart.
 
 Se preferir não abrir a sessão, os dois como one-liner de fora:
 
-    sudo -iu claudinho systemctl --user restart ops-mcp
-    sudo -iu claudinho docker compose -f /home/claudinho/AI/platafirma-harness/jaiminho/docker-compose.yml up -d --build jaiminho-server
+    # `sudo -iu` NAO anexa ao bus do user-manager -> da 'Failed to connect to bus: No medium found'.
+    # Setar o env explicitamente (paths medidos: XDG_RUNTIME_DIR=/run/user/1001, bus em /run/user/1001/bus):
+    sudo -u claudinho env XDG_RUNTIME_DIR=/run/user/1001 DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1001/bus systemctl --user restart ops-mcp
+    # alternativa (systemd 255): sudo systemctl -M claudinho@ --user restart ops-mcp
+    # jaiminho ja rebuildado em 25/08; se precisar refazer, entre com `sudo machinectl shell claudinho@` e rode o compose la dentro.
 
 ## Verificação — o restart valeu?
 
@@ -60,7 +66,7 @@ Se preferir não abrir a sessão, os dois como one-liner de fora:
 ## Rollback (se travar auth)
 1. **Imediato, sem reverter nada:** chamar o ops-mcp com o token estático —
    `Authorization: Bearer $OPS_AUTH_TOKEN` resolve para `claudinho`/operador (vale até 30/09).
-2. **Reverter código:** `sudo -iu claudinho bash -lc 'cd /home/claudinho/AI/platafirma-harness && git revert --no-edit <sha> && systemctl --user restart ops-mcp'` (e rebuild do jaiminho se o problema for lá). Para desfazer a unificação inteira, voltar a `fc4f28d`.
+2. **Reverter código:** `sudo -u claudinho env XDG_RUNTIME_DIR=/run/user/1001 DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1001/bus bash -lc 'cd /home/claudinho/AI/platafirma-harness && git revert --no-edit <sha> && systemctl --user restart ops-mcp'` (e rebuild do jaiminho se o problema for lá). Para desfazer a unificação inteira, voltar a `fc4f28d`.
 3. **NÃO** editar `sujeitos.yaml` no susto: o dual-key já cobre username e sub. O destravador é o token estático, não o yaml.
 
 ## Se você já rodou como megafone (limpeza)
