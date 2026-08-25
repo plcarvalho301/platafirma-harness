@@ -1559,8 +1559,8 @@ def _extrai_slugs_de_descricao(texto: str) -> set[str]:
 
 def _fontes_da_tabela_catalogo(caminho_catalogo=None):
     if caminho_catalogo is None:
-        cand1 = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "docs", "catalogo-de-verbos.md")
-        cand2 = os.path.join(HARNESS, "docs", "catalogo-de-verbos.md")
+        cand1 = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "docs", "catalogo-de-fontes.md")
+        cand2 = os.path.join(HARNESS, "docs", "catalogo-de-fontes.md")
         caminho = cand1 if os.path.isfile(cand1) else cand2
     else:
         caminho = caminho_catalogo

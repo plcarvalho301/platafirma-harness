@@ -33,17 +33,17 @@ class FonteInfo:
 
 def _acha_catalogo_padrao() -> Path:
     raiz = Path(__file__).resolve().parent.parent
-    cand = raiz / "docs" / "catalogo-de-verbos.md"
+    cand = raiz / "docs" / "catalogo-de-fontes.md"
     if cand.is_file():
         return cand
-    cand_ai = Path(os.path.expanduser("~/AI/platafirma-harness/docs/catalogo-de-verbos.md"))
+    cand_ai = Path(os.path.expanduser("~/AI/platafirma-harness/docs/catalogo-de-fontes.md"))
     if cand_ai.is_file():
         return cand_ai
     return cand
 
 
 def le_tabela_fontes(caminho: Path | str | None = None, texto: str | None = None) -> list[FonteInfo]:
-    """Lê e valida estritamente a tabela `Fontes da plataforma` de docs/catalogo-de-verbos.md.
+    """Lê e valida estritamente a tabela `Fontes da plataforma` de docs/catalogo-de-fontes.md.
 
     Parser estrito: linha malformada, coluna a mais/menos, classe fora de exata|semantica
     falham levantando ErroTabelaFontes com o número da linha e o defeito identificado.

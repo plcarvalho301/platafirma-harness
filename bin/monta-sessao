@@ -119,7 +119,7 @@ PECAS_VERBO = [
      "gatilho": {"evento": "ato"},      "regime": "indice",   "volatilidade": "volatil", "dono": "claudinha-gestao-estrategica"},
     {"id": "tarefas-abertas", "artefato": "verbo:tarefas listar",
      "gatilho": {"evento": "ato"},      "regime": "indice",   "volatilidade": "volatil", "dono": "claudinho-TI"},
-    {"id": "catalogo-de-verbos",  "artefato": "platafirma-harness@docs/catalogo-de-verbos.md",
+    {"id": "catalogo-de-fontes",  "artefato": "platafirma-harness@docs/catalogo-de-fontes.md",
      "gatilho": {"evento": "ato"},      "regime": "ponteiro", "volatilidade": "morna",   "dono": "claudinho-TI"},
 ]
 

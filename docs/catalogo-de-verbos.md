@@ -139,24 +139,6 @@ Medido por `conferir verbo` e `conferir procedencia` em 14/08/2026.
 Aliases, que não contam na régua de `arq:0037`: `encerrar` (de `descansar`),
 `conferir-servido` (de `conferir`) e `fila` (de `fila_streams.py`).
 
-## Fontes da plataforma
-
-Objeto segundo, no mesmo índice, por `arq:0067` §5: é **desta** tabela que a descrição
-de roteamento do Recuperador deriva no build (`arq:0064` §5.3). Fonte nova entra aqui e
-aparece no roteamento; fonte que sai, some. Tabela em outro arquivo seria a segunda
-cópia que `arq:0064` §10.5 mata.
-
-| fonte | capacidade | dono | transporte | classe | contrato de leitura | gold |
-|---|---|---|---|---|---|---|
-| board | trabalho | TI | HTTP | exata | HTTP do rastreador + header de identidade | nao-calibrada |
-| fila | mensagem | TI | stream | exata | XINFO STREAM · XRANGE no motor-msg | nao-calibrada |
-| mesa | memoria | dados | postgres | exata | mapa por chave (arq:0062) | nao-calibrada |
-| registro | decisao | gestao-estrategica | git | exata | decisions/INDICE.md, mantido na escrita | nao-calibrada |
-| wiki | conhecimento | dados | HTTP | exata | API do MediaWiki | nao-calibrada |
-| acervo | conhecimento | dados | HTTP | semantica | API do rag | nao-calibrada |
-
-Conferidor do servido contra esta tabela: `conferir superficie` (`arq:0067` §6), de claudinho-TI.
-
 ## Ferramenta de terceiro
 
 Instalada, não construída aqui. Não é espinha da plataforma e não segue o

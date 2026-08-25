@@ -1,7 +1,7 @@
 """Registro das fontes — derivado da tabela `Fontes da plataforma` do catálogo.
 
 `spec_recuperador.md` §5 (tabela das seis fontes) e §8 (timeout por classe).
-`docs/catalogo-de-verbos.md` é a fonte da verdade única (arq:0064 §10.5, arq:0067 §5).
+`docs/catalogo-de-fontes.md` é a fonte da verdade única (arq:0064 §10.5, arq:0067 §5).
 """
 
 from __future__ import annotations
