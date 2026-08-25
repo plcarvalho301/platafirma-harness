@@ -83,3 +83,45 @@ sujeitos:
     dominios: [plataforma]
     client: jaiminho-fabrica
     conta: jaiminho-fabrica
+
+  # --- Transição para chave por `sub` (#137, 25/08/2026) -----------------------
+  # As entradas abaixo repetem as de cima chaveadas pelo `sub` do realm. É ADITIVO
+  # de propósito: o código em produção hoje resolve o sujeito por
+  # `preferred_username`, e o código do #2287 passa a resolver por `sub`. Com as duas
+  # chaves presentes, os dois casam — a troca do servidor deixa de ter janela em que
+  # todo sujeito fica sem papel e o PDP nega tudo por atributo ausente. Foi esse
+  # exato fail-closed que trancou as cadeiras em 14/08 (incidente do #137).
+  #
+  # MEDIDO em ~/AI/var/log/ops/ (25/08/2026), não suposto — e a medida sozinha já
+  # prova a tese do card: `megafone` (11.288 linhas) e `g48ufn` (3.464 linhas) são
+  # DOIS usernames com o MESMO sub b6986be0. O rename trocou a chave; a identidade
+  # nunca mudou.
+  #
+  # SAEM daqui quando o #2287 estiver em produção e medido: aí as chaves por username
+  # viram lixo, e lixo em PAP é superfície. Enquanto o servidor velho puder voltar,
+  # ficam.
+
+  # o dono — mesmo sub de `megafone` e do antigo `g48ufn`
+  b6986be0-c5b6-4693-839f-73c90b79b25a:
+    natureza: pessoa
+    papeis: [operador]
+    dominios: [plataforma]
+    usuario: megafone
+
+  # colaboração externa — mesmo sujeito de `jaiminho`, client L0R8OJ
+  cc897004-7afd-4a53-9a16-c568220d524c:
+    natureza: servico
+    papeis: [pesquisador-externo]
+    dominios: [plataforma-acervo, plataforma-wiki, plataforma-repo, plataforma-drive, mensageria]
+    client: L0R8OJ
+    conta: jaiminho
+
+  # `claudinho` (rota de emergência) e `jaiminho-fabrica` NÃO ganham entrada por sub,
+  # e cada um por uma razão diferente:
+  #   - a rota de emergência é token estático, que não é JWT e não tem `sub` — o log
+  #     mostra 2.136 linhas com sub `-`. Se o servidor novo fizer `sujeito = sub` sem
+  #     fallback explícito, o sujeito vira `-`, não casa com entrada nenhuma, e a mão
+  #     que existe para quando o realm cai morre junto com o realm. É o primeiro item
+  #     da revisão do #2287.
+  #   - `jaiminho-fabrica` nunca atuou: zero linha no log de auditoria. Sem uso não há
+  #     `sub` medido, e sub suposto em PAP é pior que ausente.
