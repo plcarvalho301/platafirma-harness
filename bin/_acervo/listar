@@ -80,14 +80,37 @@ group by stk.slug, stk.papel, stk.critico
 order by stk.slug;
 """
 
+# topologia --completo: TODAS as colunas que `deploy` le de stacks.json, servidas da
+# tabela (acervo.stack e projecao fiel do registro apos o seed corrigido do #2703).
+# repo/compose/nota sao text; rotas/segredos/reversao/gate/profiles sao jsonb e saem
+# como json cru pra o consumidor parsear. E o contrato que permite `deploy` reapontar
+# o REGISTRO do stacks.json para este verbo sem perder campo.
+SQL_TOPOLOGIA_COMPLETA = """
+select stk.slug, coalesce(stk.papel,''), coalesce(stk.critico,false),
+       coalesce(stk.repo,''), coalesce(stk.compose,''),
+       coalesce(stk.rotas::text,'null'), coalesce(stk.segredos::text,'null'),
+       coalesce(stk.reversao::text,'null'), coalesce(stk.gate::text,'null'),
+       coalesce(stk.profiles::text,'null'), coalesce(stk.nota,''),
+       coalesce(string_agg(distinct ins.slug, ',' order by ins.slug), '')
+from acervo.stack stk
+left join acervo.instancia_roda_em_stack m on m.stack_id = stk.id
+left join acervo.ferramental_instancia ins on ins.id = m.instancia_id
+group by stk.slug, stk.papel, stk.critico, stk.repo, stk.compose, stk.rotas,
+         stk.segredos, stk.reversao, stk.gate, stk.profiles, stk.nota
+order by stk.slug;
+"""
+
 USO = """uso:
   acervo listar conceitos [--json]              golden record acervo.conceito:
                                                 slug . rotulo . outros rotulos . origem . obras-ancora
   acervo listar ferramental [--json] [--oficio] golden record acervo.ferramental:
                                                 capacidade . verbo . sot . instancias
                                                 --oficio: so os verbos do nucleo de abertura
-  acervo listar topologia [--json]              topologia de deploy acervo.stack (eixo irmao):
+  acervo listar topologia [--json] [--completo] topologia de deploy acervo.stack (eixo irmao):
                                                 stack . critico . instancias . papel
+                                                --completo: + repo, compose, rotas, gate,
+                                                segredos, reversao, profiles, nota (o que
+                                                `deploy` le do stacks.json)
 
 Read-only. E o golden record: a lista (b) do chapeu e GERADA disto, nao editada a mao.
 """
@@ -213,27 +236,88 @@ def listar_ferramental(quero_json, so_oficio=False):
     sys.stderr.write("\n%d capacidade(s) no golden record (%s).\n" % (len(itens), rotulo))
 
 
-def listar_topologia(quero_json):
+def _jsonb_ou_none(txt):
+    """Campo jsonb servido como texto pelo psql: 'null' -> None, resto -> parse."""
+    if txt == "null" or txt == "":
+        return None
+    try:
+        return json.loads(txt)
+    except (ValueError, TypeError):
+        return txt  # nao deveria acontecer com jsonb valido; nao mascara silenciosamente
+
+
+def listar_topologia(quero_json, completo=False):
+    if not completo:
+        stacks = []
+        for slug, papel, critico, inst in _linhas(SQL_TOPOLOGIA, "topologia", 4):
+            instancias = [i for i in inst.split(",") if i]
+            stacks.append({
+                "slug": slug,
+                "papel": papel or None,
+                "critico": critico == "t",
+                "instancias": instancias or None,
+            })
+        if quero_json:
+            print(json.dumps(stacks, ensure_ascii=False, indent=2))
+            return
+        ws = max((len(s["slug"]) for s in stacks), default=5)
+        print("%-*s  %-4s  %-14s  %s" % (ws, "stack", "crit", "instancias", "papel"))
+        print("%s  %-4s  %-14s  %s" % ("-" * ws, "----", "-" * 14, "-" * 5))
+        for st in stacks:
+            ins = ",".join(st["instancias"]) if st["instancias"] else "-"
+            crit = "sim" if st["critico"] else "-"
+            print("%-*s  %-4s  %-14s  %s" % (ws, st["slug"], crit, ins, st["papel"] or ""))
+        sys.stderr.write("\n%d stack(s) na topologia (acervo.stack); vinculo M:N em instancia_roda_em_stack.\n" % len(stacks))
+        return
+
+    # --completo: todas as colunas que `deploy` le. compose sai como string OU lista
+    # (o registro aceita os dois; lista chega serializada em json e e reidratada aqui).
     stacks = []
-    for slug, papel, critico, inst in _linhas(SQL_TOPOLOGIA, "topologia", 4):
-        instancias = [i for i in inst.split(",") if i]
+    for row in _linhas(SQL_TOPOLOGIA_COMPLETA, "topologia --completo", 12):
+        slug, papel, critico, repo, compose, rotas, segredos, reversao, gate, profiles, nota, inst = row
+        compose_val = compose
+        if compose.startswith("["):  # lista serializada
+            try:
+                compose_val = json.loads(compose)
+            except ValueError:
+                pass
         stacks.append({
             "slug": slug,
             "papel": papel or None,
             "critico": critico == "t",
-            "instancias": instancias or None,
+            "repo": repo or None,
+            "compose": compose_val or None,
+            "rotas": _jsonb_ou_none(rotas),
+            "segredos": _jsonb_ou_none(segredos),
+            "reversao": _jsonb_ou_none(reversao),
+            "gate": _jsonb_ou_none(gate),
+            "profiles": _jsonb_ou_none(profiles),
+            "nota": nota or None,
+            "instancias": [i for i in inst.split(",") if i] or None,
         })
     if quero_json:
         print(json.dumps(stacks, ensure_ascii=False, indent=2))
         return
-    ws = max((len(s["slug"]) for s in stacks), default=5)
-    print("%-*s  %-4s  %-14s  %s" % (ws, "stack", "crit", "instancias", "papel"))
-    print("%s  %-4s  %-14s  %s" % ("-" * ws, "----", "-" * 14, "-" * 5))
+    # forma-texto de --completo: uma stack por bloco (largura nao cabe em colunas).
     for st in stacks:
-        ins = ",".join(st["instancias"]) if st["instancias"] else "-"
-        crit = "sim" if st["critico"] else "-"
-        print("%-*s  %-4s  %-14s  %s" % (ws, st["slug"], crit, ins, st["papel"] or ""))
-    sys.stderr.write("\n%d stack(s) na topologia (acervo.stack); vinculo M:N em instancia_roda_em_stack.\n" % len(stacks))
+        print("== %s%s ==" % (st["slug"], "  [critico]" if st["critico"] else ""))
+        print("  papel   : %s" % (st["papel"] or "-"))
+        print("  repo    : %s" % (st["repo"] or "-"))
+        comp = st["compose"]
+        print("  compose : %s" % (", ".join(comp) if isinstance(comp, list) else (comp or "-")))
+        print("  rotas   : %s" % (st["rotas"] if st["rotas"] is not None else "-"))
+        print("  gate    : %s" % (st["gate"] if st["gate"] is not None else "-"))
+        print("  profiles: %s" % (",".join(st["profiles"]) if st["profiles"] else "-"))
+        seg = st["segredos"]
+        print("  segredos: %s" % (", ".join(seg) if seg else "(nenhum declarado)" if seg == [] else "-"))
+        rev = st["reversao"]
+        if rev:
+            print("  reversao: via=%s janela_min=%s quem=%s provado_em=%s" % (
+                rev.get("via"), rev.get("janela_min"), rev.get("quem"), rev.get("provado_em")))
+            if rev.get("estado"):
+                print("            estado: %s" % rev["estado"])
+        print("  instancias: %s" % (",".join(st["instancias"]) if st["instancias"] else "-"))
+    sys.stderr.write("\n%d stack(s) na topologia completa (acervo.stack) — todos os campos que `deploy` le.\n" % len(stacks))
 
 
 def main(argv):
@@ -247,18 +331,21 @@ def main(argv):
 
     quero_json = False
     so_oficio = False
+    completo = False
     for a in resto:
         if a == "--json":
             quero_json = True
         elif a == "--oficio" and alvo == "ferramental":
             so_oficio = True
+        elif a == "--completo" and alvo == "topologia":
+            completo = True
         else:
             morre("acervo listar: opcao desconhecida %r\n\n%s" % (a, USO))
 
     if alvo == "conceitos":
         listar_conceitos(quero_json)
     elif alvo == "topologia":
-        listar_topologia(quero_json)
+        listar_topologia(quero_json, completo)
     else:
         listar_ferramental(quero_json, so_oficio)
 
