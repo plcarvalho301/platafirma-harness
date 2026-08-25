@@ -2,7 +2,7 @@
 #
 # INTERINO POR DESENHO. O lugar certo destes atributos é o token: o realm projeta
 # papel e domínio em claim, e o serviço lê. Enquanto o client é um só e compartilhado
-# pelas sete cadeiras (card 436), o token não carrega isso — e sem esta tabela o PEP
+# pelas sete cadeiras (card 436; os 7 clients-por-cadeira que divergiam disso no realm foram extintos em 25/08/2026, card 163), o token não carrega isso — e sem esta tabela o PEP
 # não teria como montar o Sujeito, logo negaria tudo por atributo ausente.
 #
 # CHAVE: `preferred_username` do JWT, ou o `sub` quando não há username. O que está
