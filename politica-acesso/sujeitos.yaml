@@ -84,6 +84,16 @@ sujeitos:
     client: jaiminho-fabrica
     conta: jaiminho-fabrica
 
+  # DUAL-KEY Onda 5 (#2678/#137): o PEP passa a chavear por `sub`. Esta entrada traduz o
+  # MESMO grant de fornecedor para o restart nao trancar a fabrica (jaiminho-fabrica faz
+  # ~9k tool calls/dia, medido no log 25/08). A chave username fica ate o restart validar.
+  e57eadb1-ec5d-41b5-a1be-e6d62196cff5:
+    natureza: servico
+    papeis: [fornecedor]
+    dominios: [plataforma]
+    client: jaiminho-fabrica
+    conta: jaiminho-fabrica
+
   # --- Transição para chave por `sub` (#137, 25/08/2026) -----------------------
   # As entradas abaixo repetem as de cima chaveadas pelo `sub` do realm. É ADITIVO
   # de propósito: o código em produção hoje resolve o sujeito por
