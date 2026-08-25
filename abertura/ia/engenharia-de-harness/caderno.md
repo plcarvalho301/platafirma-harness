@@ -33,7 +33,7 @@ que é a superfície que precisa provar.
 
 Ao tirar uma peça do pacote, o helper que a produzia vai junto. Mecanismo vivo e
 não chamado é o que permite que a mesma decisão volte como "só a contagem" seis
-meses depois — e a peça de antirreabertura não alcança código, só decisão.
+meses depois — e uma peça de decisão não alcança código, só decisão.
 
 ## Onde o montador esconde ramo
 

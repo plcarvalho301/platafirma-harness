@@ -16,8 +16,8 @@
 # SUBSTRATO DA MESA TROCOU (fase 6 do card #189, spec_montagem-de-sessao §3): era
 # texto livre na classe `mem` do Valkey, e agora e entidade em Postgres. O que
 # muda de verdade nao e o banco, e a REGUA DE ADMISSAO: mesa e o que tem ato
-# pendente. Prosa sem ato nao e mesa — decisao fechada e a peca `antirreabertura`,
-# aprendizado de oficio e caderno.
+# pendente. Prosa sem ato nao e mesa — aprendizado de oficio e caderno, e o resto
+# desce a card, commit ou wiki.
 #
 # O VALKEY AINDA SERVE, e nao e por indecisao: `descansar`, os rituais do chat e o
 # ops-server chamam `mesa anota <chapeu>` com prosa em stdin, e derrubar esse
@@ -28,16 +28,17 @@
 # `ver` expurga a que passou do prazo. Fossil e fossil, o substrato nao muda a regra.
 #
 # NAO E A FILA. Protocolo inteiro distinto: sem envelope, sem destinatario, sem
-# ack, sem consumer group, sem trim de arq:0024. A fila e dirigida a outro e
-# imutavel; a memoria e para si mesma e mutavel. Fato que interessa a outra
-# cadeira desce ao canal proprio (card, commit, wiki) — nunca mora aqui.
+# ack, sem consumer group, sem trim de arq:0024. Outro EIXO, nao a negativa da mesa:
+# a fila e dirigida a outro e imutavel; a mesa e ato do chapeu e mutavel. Mesa e
+# privada da cadeira, mas fato que N cadeiras precisam AGIR entra na mesa de CADA
+# uma — incidente com 3 interessados vira 3 itens, um por mesa. Isso nao e a fila.
 #
 # ITEM SAI POR ATO OU POR TTL. `monta_sessao` le sem apagar; item sai por `mesa fez
 # <n>`, a execucao do ato — nunca por leitura. A UNICA escrita de maquina e o expurgo
 # de TTL (48h, `MEM_MESA_TTL_HORAS`): item pendente que passou do prazo e DELETADO no
-# ato de servir (`mesa ver`), sem robo nem timer. Fisico, nao tombstone — o log de
-# fita mora em sessao.fita. Autorizado pela clausula de TTL em spec_montagem §2; sem
-# ela, nasceria contra esta propria linha. Fez'd fica: e a medicao do que a mesa moveu.
+# ato de servir (`mesa ver`), sem robo nem timer. Fisico, nao tombstone. NADA FICA: `mesa fez` APAGA a linha, TTL apaga a
+# linha. Mesa e cache efemera (arq:0062 §4); reter item esvaziado seria o cadaver
+# que arq:0074 proibe. A medicao do que a mesa moveu vive fora dela (sessao.fita).
 #
 # NUMERO EXIBIDO != id. O id (PK) cresce invisivel; o `#N` que `mesa ver` mostra e o
 # `num`, contador por (cadeira, ciclo semanal) que reinicia toda segunda. Mantem a
@@ -263,12 +264,12 @@ def _expurga(cur):
     ATO DE SERVIR (mesa ver, que a abertura chama): o fossil so machuca quando servido,
     entao expira no ponto de servico, sem robo nem timer. Devolve quantos sairam.
 
-    Isto e escrita de maquina na mesa, e o cabecalho diz "nunca por robo". A clausula
-    de TTL na spec_montagem-de-sessao §2 e o que a autoriza: a escrita e do VERBO no
-    ato de servir, nao de um consumidor externo. Sem a cláusula, nasceria contra a letra.
+    Isto e a UNICA escrita de maquina que a mesa admite: expurgo de fossil no ato de
+    servir (arq:0074). A escrita e do VERBO servindo, nao de consumidor externo — por
+    isso nao viola "nao ha consumo por leitura".
     """
     cur.execute(
-        "DELETE FROM sessao.mesa_item WHERE cadeira = %s AND esvaziado_em IS NULL "
+        "DELETE FROM sessao.mesa_item WHERE cadeira = %s "
         "AND plantado_em < now() - make_interval(hours => %s)",
         (canonica(), TTL_MESA_H),
     )
@@ -288,7 +289,7 @@ def ato_ver(args):
                       file=sys.stderr)
             cur.execute(
                 "SELECT num, chapeu, ato, alvo, texto, plantado_em FROM sessao.mesa_item "
-                "WHERE cadeira = %s AND esvaziado_em IS NULL "
+                "WHERE cadeira = %s "
                 + ("AND chapeu = %s " if args.slot else "")
                 + "ORDER BY chapeu, plantado_em",
                 (canonica(), args.slot) if args.slot else (canonica(),),
@@ -337,7 +338,7 @@ def ato_ver(args):
 def ato_item(args):
     """Planta um item. Sem ato e sem alvo nao entra: a regua de admissao da mesa e
     'se eu nao fizer nada, isso continua do jeito que esta?' — sem ato, nao continua
-    nada, e o lugar do texto e outro (antirreabertura, caderno, card)."""
+    nada, e o lugar do texto e outro (caderno, card)."""
     slot = valida_slot(args.chapeu)
     texto = "" if sys.stdin.isatty() else sys.stdin.read().strip()
     con = pg()
@@ -373,41 +374,38 @@ def fita_registrada(con):
 
 
 def ato_fez(args):
-    """Esvazia o item porque o ato foi executado. Nao apaga: o item fica com
-    `esvaziado_em`, que e o unico jeito de medir depois o que a mesa realmente moveu."""
+    """Apaga o item porque o ato foi executado. Fisico, sem retencao: mesa e cache
+    efemera (arq:0062 §4), nao guarda cadaver; a medicao do que a mesa moveu vive fora
+    dela (log em sessao.fita)."""
     con = pg()
     if con is None:
         return 3
     with con, con.cursor() as cur:
-        fid = fita_registrada(con)
         # num pode colidir entre dois ciclos vivos so na virada de semana (survivor de
         # sabado/domingo vs. #1 da segunda), corner que o TTL de 48h quase zera. Resolve
         # o do ciclo mais recente; se houver empate real, para e mostra — nao chuta.
         cur.execute(
             "SELECT id, ciclo FROM sessao.mesa_item "
-            "WHERE cadeira = %s AND num = %s AND esvaziado_em IS NULL ORDER BY ciclo DESC",
+            "WHERE cadeira = %s AND num = %s ORDER BY ciclo DESC",
             (canonica(), args.n),
         )
         vivos = cur.fetchall()
         if not vivos:
-            print(f"mesa: item #{args.n} nao esta pendente nesta cadeira — nada a esvaziar",
+            print(f"mesa: item #{args.n} nao existe nesta cadeira — nada a fazer",
                   file=sys.stderr)
             return 3
         if len(vivos) > 1 and vivos[0][1] == vivos[1][1]:
-            print(f"mesa: #{args.n} ambiguo (mais de um vivo no mesmo ciclo) — caso "
+            print(f"mesa: #{args.n} ambiguo (mais de um no mesmo ciclo) — caso "
                   f"impossivel sob o indice unico; investigar", file=sys.stderr)
             return 3
         alvo_id = vivos[0][0]
-        cur.execute(
-            "UPDATE sessao.mesa_item SET esvaziado_em = now(), esvaziado_por_fita = %s "
-            "WHERE id = %s RETURNING chapeu, ato",
-            (fid, alvo_id),
-        )
+        cur.execute("DELETE FROM sessao.mesa_item WHERE id = %s RETURNING chapeu, ato",
+                    (alvo_id,))
         linha = cur.fetchone()
         if len(vivos) > 1:
-            print(f"(#{args.n} existia em {len(vivos)} ciclos vivos; esvaziei o mais "
-                  f"recente — o outro expira por TTL)", file=sys.stderr)
-    print(f"mesa: item #{args.n} esvaziado [{linha[0]}] — {linha[1]}")
+            print(f"(#{args.n} existia em {len(vivos)} ciclos; apaguei o mais recente "
+                  f"— o outro expira por TTL)", file=sys.stderr)
+    print(f"mesa: item #{args.n} feito e apagado [{linha[0]}] — {linha[1]}")
     return 0
 
 
