@@ -477,7 +477,6 @@ def write_file(path: str, content: str) -> dict:
 PERSONAS = Path(os.environ.get("PF_PERSONAS", RAIZ / "platafirma-harness/abertura"))
 ORG_CANONICO = Path(os.environ.get(
     "PF_ORG", RAIZ / "platafirma-arquitetura/docs/org-template-canonico.md"))
-REPOS_SESSAO = ("platafirma-harness", "platafirma-arquitetura")
 MANIFESTO_GERAL = Path(os.environ.get(
     "PF_MANIFESTO_GERAL", RAIZ / "platafirma-harness/abertura/oficio.md"))
 
@@ -495,61 +494,6 @@ def _ler(p: Path) -> dict:
     if not p.is_file():
         return {"path": str(p), "ausente": True}
     return {"path": str(p), "content": p.read_text(encoding="utf-8", errors="replace")}
-
-
-def _idade(d: Path, estado: dict) -> None:
-    """Carimba sha, data do HEAD e data do ultimo fetch. Sem rede."""
-    try:
-        sha = subprocess.run(["git", "-C", str(d), "rev-parse", "--short", "HEAD"],
-                             capture_output=True, timeout=10)
-        if sha.returncode == 0:
-            estado["sha"] = sha.stdout.decode().strip()
-        dt = subprocess.run(["git", "-C", str(d), "log", "-1", "--format=%cI"],
-                            capture_output=True, timeout=10)
-        if dt.returncode == 0:
-            estado["head_em"] = dt.stdout.decode().strip()
-    except (subprocess.TimeoutExpired, OSError):
-        pass
-    fh = d / ".git" / "FETCH_HEAD"
-    estado["sincronizado_em"] = (
-        datetime.fromtimestamp(fh.stat().st_mtime).astimezone().isoformat(timespec="seconds")
-        if fh.exists() else None)
-
-
-def _estado_repos() -> dict:
-    """Estado dos clones sem ida a rede: e o que torna 'servir do clone' auditavel.
-    Sem isto, clone velho e clone no head sao indistinguiveis para a sessao."""
-    estado = {}
-    for r in REPOS_SESSAO:
-        d = RAIZ / r
-        if not (d / ".git").is_dir():
-            estado[r] = {"atualizado": False, "erro": "nao e clone git"}
-            continue
-        estado[r] = {"atualizado": False, "motivo": "sem pull nesta chamada"}
-        _idade(d, estado[r])
-    return estado
-
-
-def _pull(timeout: int = 25) -> dict:
-    """Traz os clones ao dia. Falha de rede não é exceção: vira estado declarado —
-    o pacote continua servindo do clone, com `atualizado: false` no repo que falhou.
-    """
-    estado = {}
-    for r in REPOS_SESSAO:
-        d = RAIZ / r
-        if not (d / ".git").is_dir():
-            estado[r] = {"atualizado": False, "erro": "não é clone git"}
-            continue
-        try:
-            p = subprocess.run(["git", "-C", str(d), "pull", "--ff-only", "-q"],
-                               capture_output=True, timeout=timeout)
-            estado[r] = ({"atualizado": True} if p.returncode == 0 else
-                         {"atualizado": False,
-                          "erro": p.stderr.decode("utf-8", "replace").strip()[:200]})
-        except (subprocess.TimeoutExpired, OSError) as e:
-            estado[r] = {"atualizado": False, "erro": f"{e.__class__.__name__}: {e}"}
-        _idade(d, estado[r])
-    return estado
 
 
 def _memoria(cadeira: str) -> dict:
