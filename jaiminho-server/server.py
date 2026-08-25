@@ -35,6 +35,10 @@ from starlette.responses import JSONResponse
 from starlette.routing import Route
 
 PDP_DIR = Path(os.environ.get("PDP_DIR", "/opt/pf/politica-acesso"))
+if str(PDP_DIR) not in sys.path:
+    sys.path.insert(0, str(PDP_DIR))
+from identidade import _jwks, _sujeito_do_jwt
+
 LOG_DIR = Path(os.environ.get("JAIMINHO_LOG_DIR", "/var/log/jaiminho"))
 OIDC_ISSUER = os.environ.get("OIDC_ISSUER", "https://auth.platafirma.org/realms/platafirma")
 OIDC_JWKS_URL = os.environ.get(
@@ -80,12 +84,13 @@ NS_INTERNOS = ("PlataFirma", "Operar", "Frente", "Category", "File", "Template",
                "Help", "User", "MediaWiki", "Talk", "Special", "Property")
 
 _pdp: dict = {"carimbo": None, "politica": None, "sujeitos": None, "erro": "nao carregada"}
-_jwks_cli = None
 
 
 # --- auditoria -------------------------------------------------------------
 def _audit(**campos):
-    linha = {"em": datetime.now(timezone.utc).isoformat(timespec="seconds"), **campos}
+    ident = _quem()
+    linha = {"em": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+             **ident, **campos}
     try:
         LOG_DIR.mkdir(parents=True, exist_ok=True)
         alvo = LOG_DIR / f"{datetime.now(timezone.utc):%Y-%m}.jsonl"
@@ -96,41 +101,14 @@ def _audit(**campos):
 
 
 # --- identidade ------------------------------------------------------------
-def _jwks():
-    global _jwks_cli
-    if _jwks_cli is None:
-        from jwt import PyJWKClient
-        _jwks_cli = PyJWKClient(OIDC_JWKS_URL, cache_keys=True, lifespan=3600)
-    return _jwks_cli
-
-
-def _sujeito_do_jwt(header: str) -> dict:
-    """{} = nao e JWT valido do realm. Nao ha rota de emergencia aqui: o token
-    estatico e a mao do dono quando o realm cai, e o dono nao entra por esta porta."""
-    if not header.startswith("Bearer "):
-        return {}
-    tok = header[len("Bearer "):].strip()
-    if tok.count(".") != 2:
-        return {}
-    try:
-        import jwt
-        claims = jwt.decode(
-            tok, _jwks().get_signing_key_from_jwt(tok).key,
-            algorithms=["RS256", "ES256"], audience=OIDC_AUDIENCE, issuer=OIDC_ISSUER,
-            options={"require": ["exp", "iat", "sub"]})
-        return {"sujeito": claims.get("preferred_username") or claims.get("sub"),
-                "sub": claims.get("sub"), "azp": claims.get("azp", "-")}
-    except Exception as e:                                   # noqa: BLE001
-        _audit(evento="jwt_recusado", motivo=type(e).__name__)
-        return {}
-
-
 def _quem() -> dict:
     """Identidade de dentro da tool: o contexto do FastMCP e a unica fonte honesta."""
     try:
         req = getattr(mcp.get_context().request_context, "request", None)
         if req is not None:
-            return _sujeito_do_jwt(req.headers.get("authorization", ""))
+            return _sujeito_do_jwt(req.headers.get("authorization", ""),
+                                   auditor=_audit, jwks_url=OIDC_JWKS_URL,
+                                   audience=OIDC_AUDIENCE, issuer=OIDC_ISSUER)
     except Exception:                                        # noqa: BLE001
         pass
     return {}
@@ -157,6 +135,18 @@ def _carrega_politica() -> dict:
         pol = Politica.de_arquivo(pol_f)
         suj = (yaml.safe_load(suj_f.read_text(encoding="utf-8")) or {}).get("sujeitos") or {}
         _pdp.update(carimbo=carimbo, politica=pol, sujeitos=suj, erro=None)
+        # Divergencia de vocabulario NAO derruba o servidor: o PDP ja nega sozinho.
+        # O que faltava era o typo aparecer COMO typo, em vez de virar negativa
+        # silenciosa por intersecao.
+        vocab = set(pol.dominios)
+        for d in (DOM_ACERVO, DOM_WIKI, DOM_REPO, DOM_DRIVE):
+            if d not in vocab:
+                _audit(evento="pep_vocabulario_divergente", onde="server", dominio=d)
+        for nome, atrib in (suj or {}).items():
+            for d in (atrib or {}).get("dominios") or ():
+                if d not in vocab:
+                    _audit(evento="pep_vocabulario_divergente",
+                           onde="sujeitos.yaml", sujeito=nome, dominio=d)
     except Exception as e:                                   # noqa: BLE001
         _pdp.update(carimbo=carimbo, politica=None, sujeitos=None,
                     erro=f"{type(e).__name__}: {e}")
@@ -874,7 +864,9 @@ class ExigeJWT(BaseHTTPMiddleware):
     async def dispatch(self, request, call_next):
         if request.url.path.rstrip("/") in LIVRES:
             return await call_next(request)
-        ident = _sujeito_do_jwt(request.headers.get("authorization", ""))
+        ident = _sujeito_do_jwt(request.headers.get("authorization", ""),
+                                auditor=_audit, jwks_url=OIDC_JWKS_URL,
+                                audience=OIDC_AUDIENCE, issuer=OIDC_ISSUER)
         if not ident:
             _audit(evento="auth_negada", path=request.url.path, status=401)
             desafio = f'Bearer realm="{OIDC_ISSUER}", resource_metadata="{_base_do_pedido(request)}/.well-known/oauth-protected-resource"'
