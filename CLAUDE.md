@@ -1,7 +1,7 @@
 # Sessão da PlataFirma a partir deste clone
 
 Esta pasta é **cliente**. Nada da plataforma roda aqui: todo trabalho executa na
-máquina do dono, por tool call contra `platafirma-ops` e `platafirma-wiki`. O clone
+máquina do dono, por tool call contra `claudinho-mcp` e `platafirma-wiki`. O clone
 existe para carregar configuração — não para ser explorado.
 
 ## Arranque
@@ -22,7 +22,7 @@ bem; identidade lida de dentro dela é a cópia congelada que a peça elimina.
 
 `Bash`, `Write`, `Edit` e `NotebookEdit` estão negados em `.claude/settings.json`, e
 `deny` vence `allow` em qualquer modo. Escrita e execução acontecem **só** por
-`platafirma-ops`, na máquina do dono, com auditoria em `~/AI/var/log/ops/`.
+`claudinho-mcp`, na máquina do dono, com auditoria em `~/AI/var/log/ops/`.
 
 Ler o clone segue liberado. Editar o clone, não: mudança em persona, manifesto ou
 skill se faz na máquina do dono, pelo caminho da cadeira dona daquele artefato.

@@ -18,7 +18,7 @@ de portador.
 
 MULTI-INSTÂNCIA: o mesmo arquivo serve mais de uma instância, uma por usuário do host.
 OPS_NAME, OPS_USER, OPS_ROOT e OPS_AUTH_TOKEN separam as instâncias; o default é a
-instância histórica (platafirma-ops sob claudinho). OPS_USER e OPS_ROOT entram nas
+instância histórica (claudinho-mcp sob claudinho). OPS_USER e OPS_ROOT entram nas
 descrições das tools em tempo de registro — sem isso a instância nova se descreve com
 o usuário e a raiz da instância velha, e o cliente age sobre um caminho que não existe.
 
@@ -55,7 +55,7 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse, PlainTextResponse, RedirectResponse
 from starlette.routing import Route
 
-OPS_NAME = os.environ.get("OPS_NAME", "platafirma-ops")
+OPS_NAME = os.environ.get("OPS_NAME", "claudinho-mcp")
 OPS_USER = os.environ.get("OPS_USER", "claudinho")
 RAIZ = Path(os.environ.get("OPS_ROOT", "/home/claudinho/AI"))
 OPS_AUTH_TOKEN = os.environ.get("OPS_AUTH_TOKEN", "")

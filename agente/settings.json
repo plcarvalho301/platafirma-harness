@@ -46,12 +46,12 @@
       "Bash(uv venv:*)",
       "Bash(uv pip:*)",
       "Bash(tarefas:*)",
-      "mcp__platafirma-ops__read_file",
-      "mcp__platafirma-ops__write_file",
-      "mcp__platafirma-ops__run_command",
-      "mcp__claude_ai_platafirma-ops__read_file",
-      "mcp__claude_ai_platafirma-ops__write_file",
-      "mcp__claude_ai_platafirma-ops__run_command"
+      "mcp__claudinho-mcp__read_file",
+      "mcp__claudinho-mcp__write_file",
+      "mcp__claudinho-mcp__run_command",
+      "mcp__claude_ai_claudinho-mcp__read_file",
+      "mcp__claude_ai_claudinho-mcp__write_file",
+      "mcp__claude_ai_claudinho-mcp__run_command"
     ],
     "deny": [
       "Bash(sudo:*)",

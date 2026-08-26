@@ -36,7 +36,7 @@ responda só o que não depende de remit. Não improvise cadeira.
 - **local** — o clone na máquina onde o Code abriu. `Bash`, `Write` e `Edit`
   nativos valem aqui e só aqui.
 - **host da plataforma** — `~/AI`, uid `claudinho`. Nunca alcançável por Bash
-  nativo, em máquina nenhuma. Só pelo connector `platafirma-ops`. É onde vivem
+  nativo, em máquina nenhuma. Só pelo connector `claudinho-mcp`. É onde vivem
   contêineres, units, banco e os verbos.
 
 O connector vem da conta e vale em qualquer diretório e em qualquer máquina.

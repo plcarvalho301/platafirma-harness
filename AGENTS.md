@@ -3,4 +3,4 @@
 Arranque de sessão: `CLAUDE.md` (primeira ação, de onde sai a cadeira, o que não
 fazer). Charter do módulo e o que entra/não entra: `README.md`.
 
-Clone é cliente: execução e escrita só por `platafirma-ops`, na máquina do dono.
+Clone é cliente: execução e escrita só por `claudinho-mcp`, na máquina do dono.

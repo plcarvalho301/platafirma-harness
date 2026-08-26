@@ -8,7 +8,7 @@ configuração de **conta**, nunca de repositório alvo.
 
 `~/platafirma-posto`, na conta `megafone`. Não há segundo procedimento, e o
 número de repositórios que o card toca não escolhe nada: o clone que o runtime
-executa é o de `/home/claudinho/AI`, alcançado pelo connector `platafirma-ops`,
+executa é o de `/home/claudinho/AI`, alcançado pelo connector `claudinho-mcp`,
 e é o único que existe. Sete cards em três repositórios são sete caminhos na
 mesma sessão.
 
@@ -117,5 +117,5 @@ a que envelhecer diferente é a que vai ser obedecida.
 - Conexão de MCP se resolve na conta, não no repo alvo, porque o alvo do card
   muda e a conta não.
 - A fábrica não edita o clone do harness em nenhum modo. Card que toque
-  `platafirma-harness` executa por `platafirma-ops` contra
+  `platafirma-harness` executa por `claudinho-mcp` contra
   `~/AI/platafirma-harness`.

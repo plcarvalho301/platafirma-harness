@@ -54,7 +54,7 @@ disco.
 O modo é `bypassPermissions`, e é o que torna a estação usável: sem ele, cada tool call
 pede aprovação, uma por uma. O modo não amplia poder nenhum — o que ele dispensa é o
 clique, e o que sobra depois dos quatro `deny` são as tools MCP, que já executam na
-máquina do dono com auditoria. O `allow` nominal (`mcp__platafirma-ops`,
+máquina do dono com auditoria. O `allow` nominal (`mcp__claudinho-mcp`,
 `mcp__platafirma-wiki`) vale quando os servidores vêm deste `.mcp.json`; numa sessão
 logada pela conta claude.ai o nome do servidor é o UUID do conector, e aí só o modo
 resolve.
@@ -62,7 +62,7 @@ resolve.
 Regra de precedência do Claude Code: `deny` vence `allow` em qualquer nível, e vale em
 todos os modos de permissão. Consequência prática e desejada: da estação emprestada não
 se commita, não se edita arquivo e não se roda comando local. Escrita e execução passam
-por `platafirma-ops` — isto é, pela máquina do dono, com auditoria em
+por `claudinho-mcp` — isto é, pela máquina do dono, com auditoria em
 `~/AI/var/log/ops/`.
 
 ## Duas coisas que costumam surpreender

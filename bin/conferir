@@ -1319,7 +1319,7 @@ def conferir_superficie(alvo=None, staged=False, como_json=False):
     # ZERO INSTANCIA NAO E DIVERGENCIA. A fabrica so existe no host enquanto ha
     # worktree aberta; limpas as worktrees, nao ha `.mcp.json` a ler e o conjunto
     # de conectores achados vem vazio — o que, sem esta guarda, era relatado como
-    # "falta platafirma-ops" e reprovava o commit de QUALQUER cadeira. Foi o que
+    # "falta claudinho-mcp" e reprovava o commit de QUALQUER cadeira. Foi o que
     # travou claudinha-gestao-estrategica em 16/08/2026. Superficie sem instancia
     # viva sai como NAO MEDIDA, com o motivo, porque nao medido nao e em dia — e
     # tambem nao e defeito.
@@ -1327,7 +1327,7 @@ def conferir_superficie(alvo=None, staged=False, como_json=False):
     # que se mede; cwd vivo e amostra do passado. Ler os wt-*/.mcp.json era ler N
     # copias do MESMO arquivo rastreado no repo — tautologia cujo veredito
     # dependia de quantas worktrees existiam no momento. Zero worktree fazia o
-    # gate acusar "falta platafirma-ops" e reprovar o commit de toda cadeira.
+    # gate acusar "falta claudinho-mcp" e reprovar o commit de toda cadeira.
     sem_produtor, deriva = [], []
     for nome, sup in reg.get("superficies", {}).items():
         if not sup.get("verificavel_do_host"):

@@ -103,7 +103,7 @@ Declarados por `arq:0042`; `conferir repo platafirma-harness` mede contra esta l
 | `caderno/` | caderno durável por cadeira, particionado por chapéu |
 | `deploy-harness/` | o que instala o próprio harness num ambiente: units do `sinal` e o instalador |
 | `agente/` | pacote de conta da fábrica: `CLAUDE.md`, `settings.json` e o instalador; `~/.claude/*` é symlink daqui |
-| `ops-server/` | fonte do MCP de operação (`platafirma-ops`); sobe por `platafirma-core:deploy/setup-ops.sh`, fora do compose |
+| `ops-server/` | fonte do MCP de operação (`claudinho-mcp`); sobe por `platafirma-core:deploy/setup-ops.sh`, fora do compose |
 | `.claude/` | configuração do Claude Code na estação emprestada |
 
 Spec de referência: [PlataFirma:Produto/harness/spec](https://wiki.platafirma.org/index.php/PlataFirma:Produto/harness/spec).

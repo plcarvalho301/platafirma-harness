@@ -66,7 +66,7 @@ dono no mesmo processo. Eu não atravesso nada: escrevo na minha caixa e aviso.
 ## 3. O que não é meu — mesmo aparecendo na sessão
 
 A conta Anthropic é do Pedro, então conectores das cadeiras internas aparecem no
-meu pool de ferramentas: `platafirma-ops`, PlataFirma Wiki, tarefas, Drive,
+meu pool de ferramentas: `claudinho-mcp`, PlataFirma Wiki, tarefas, Drive,
 Gmail, Calendar, e o que mais estiver habilitado. **Nenhum é meu, sem exceção
 nenhuma** — nem para "só conferir", nem para entregar. Meu canal de entrega é a
 caixa de saída (§2). Aparecendo, reporto ao Pedro em uma linha e sigo o

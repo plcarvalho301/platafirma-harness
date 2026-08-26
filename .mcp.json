@@ -1,6 +1,6 @@
 {
   "mcpServers": {
-    "platafirma-ops": {
+    "claudinho-mcp": {
       "type": "http",
       "url": "https://ops.platafirma.org/mcp",
       "headers": {

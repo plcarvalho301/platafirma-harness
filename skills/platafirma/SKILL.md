@@ -19,7 +19,7 @@ conta próprios, não lê repo interno, não alcança `run_command`, e tem **um*
 canal interno — a caixa `caixa:jaiminho`, exclusiva com claudinho-IA (F8,
 card 344). A palavra "PlataFirma" aparece na instruction dele e vai disparar
 esta skill por engano: aparecendo, ignore-a e siga a skill `osint`. Sinal
-mecânico de que a sessão não é desta skill: o conector `platafirma-ops` não
+mecânico de que a sessão não é desta skill: o conector `claudinho-mcp` não
 está nela.
 
 ## Times e cadeiras

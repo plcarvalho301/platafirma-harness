@@ -536,7 +536,7 @@ def prepara_cwd(cadeira, modelo=""):
 # que so existem por aqui. Equalizar o meio e mais barato e menos frageis que
 # reescrever o texto de sete cadeiras.
 CONECTORES = {
-    "platafirma-ops": ("https://ops.platafirma.org/mcp", "PF_OPS_TOKEN"),
+    "claudinho-mcp": ("https://ops.platafirma.org/mcp", "PF_OPS_TOKEN"),
     "platafirma-wiki": ("https://mcp.platafirma.org/mcp", "PF_WIKI_TOKEN"),
 }
 
@@ -610,7 +610,7 @@ FONTES_DE_SEGREDO = (
 
 
 def segredos_dos_conectores():
-    """Tokens de `platafirma-ops` e `platafirma-wiki`, com os nomes que o
+    """Tokens de `claudinho-mcp` e `platafirma-wiki`, com os nomes que o
     `.mcp.json` da casa espera.
 
     Token ausente NAO levanta: o giro segue sem aquele conector, e o motor

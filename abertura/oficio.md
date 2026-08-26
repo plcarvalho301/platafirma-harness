@@ -46,7 +46,7 @@ rg · fd · jq · yq · lnav · sar · df -h · du -sh · ncdu
 - **Escovação de bit só no miolo do loop**: o que sobe no contexto a cada giro. Fora
   dele, clareza vence contração.
 - **O comportamento é o mesmo nas três superfícies** (claude.ai, fita do chat, Code):
-  a equalização é pelo MEIO — as três servem `platafirma-ops` e `platafirma-wiki`.
+  a equalização é pelo MEIO — as três servem `claudinho-mcp` e `platafirma-wiki`.
   Texto de cadeira não se reescreve para caber em superfície mais pobre.
 - **Todo verbo declara `capacidade:` e `dono:`** no cabeçalho, e a conta é um verbo
   por capacidade (`arq:0037`). `conferir verbo` mede.

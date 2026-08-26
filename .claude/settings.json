@@ -3,7 +3,7 @@
   "permissions": {
     "defaultMode": "bypassPermissions",
     "allow": [
-      "mcp__platafirma-ops",
+      "mcp__claudinho-mcp",
       "mcp__platafirma-wiki"
     ],
     "deny": [
