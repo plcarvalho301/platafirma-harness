@@ -113,6 +113,10 @@ MAPA = os.path.join(RAIZ, "platafirma-arquitetura", "docs", "arquitetura-negocio
 CLASSES_ABERTAS = {
     "canal": "regua do design system e de claudinha-produto e ainda nao existe",
     "casco": "avaliacao CIS ja tem verbo proprio (oscap-casco), de claudinho-seguranca",
+    "alcance": ("mede a cadeia de acesso sujeito->fonte em 5 saltos (identidade, "
+                "PDP, credencial, rede, ACL do alvo); os 5 sao desenho de "
+                "claudinho-seguranca ainda nao fixado (card #2452 sob #191) — "
+                "o instrumento e de TI, a fonte-de-verdade de cada salto e dele"),
 }
 
 
