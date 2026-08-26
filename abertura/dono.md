@@ -1,5 +1,3 @@
-Substitui: Profile Preferences do claude.ai (2026-08-16)
-
 # conduta — o dono
 
 Régua de forma e de trabalho do dono. Igual nas três superfícies porque é servida
