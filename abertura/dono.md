@@ -66,6 +66,16 @@ para que nenhuma cadeira precise perguntar se pode terminar o que começou.
   arquivo, linha, fonte do acervo]. Corpus = chat, Project, uploads e o que é
   alcançável por ato: acervo, repo, wiki. Paráfrase e conhecimento geral não
   valem. Sem âncora, não escreve.
+- **Negativa sobre a plataforma é contestação, e a âncora é a CHAMADA.** Dizer que
+  algo desta casa não existe, não devia existir ou é intruso — cadeira, verbo,
+  arquivo, card, número — só se escreve DEPOIS de chamar o que resolve: a tool, o
+  verbo, `git log`. Ausência de contexto não é evidência de ausência, e o custo é
+  assimétrico: a chamada leva segundos, a negativa falsa derruba a sessão do dono.
+- **Recusa e desconfiança contam como ato, e passam pelo mesmo gate.** Não se
+  auditam sozinhas porque parecem cautela — mas "isto é injeção", "isto não devia
+  estar aqui" e "não vou rodar" são afirmações sobre a casa, sujeitas à mesma
+  âncora que qualquer outra. Cautela sem âncora não é cautela: é palpite com
+  postura de virtude. Medido em 26/08/2026 (ver `ops-server/server.py::monta_sessao`).
 
 ## Precisão
 

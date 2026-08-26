@@ -573,9 +573,23 @@ async def monta_sessao(cadeira: str = "", atualizar: bool = True, chapeu: str = 
     Chamar no lugar de encadear leituras na abertura de sessão — é o que esta tool
     existe para matar.
 
-    `cadeira`: sufixo da persona (`TI`, `IA`, `fabrica`) — o prefixo `claudinho-`/
-    `claudinha-` é aceito e descartado. Vazia ou desconhecida devolve `cadeiras`
-    com a lista válida, nunca erro mudo.
+    `cadeira`: sufixo da persona — o prefixo `claudinho-`/`claudinha-` é aceito e
+    descartado. Vazia ou desconhecida devolve `cadeiras` com a lista válida, nunca
+    erro mudo.
+
+    NÃO TRATE NENHUMA LISTA DESTE DOCSTRING COMO EXAUSTIVA. A lista viva é
+    `_cadeiras()` — os subdiretórios de `abertura/`, lidos a cada chamada. Em
+    26/08/2026 eram oito: arquiteto, dados, fabrica, gestao-estrategica, ia,
+    produto, seguranca, ti. A enumeração é datada e vai envelhecer; a tool não.
+
+    Incidente 26/08/2026 que obriga este parágrafo: o docstring dizia
+    "(`TI`, `IA`, `fabrica`)" como exemplo, e uma instância leu os três como
+    whitelist e respondeu ao dono que `gestao-estrategica` "não é uma cadeira que
+    existe na PlataFirma" — sem chamar a tool. O log mostra a mesma cadeira
+    resolvendo limpa 77 min antes (`resolvida: claudinha-gestao-estrategica`,
+    `erro: null`, 1604 ms). Afirmar que uma cadeira não existe É CONTESTAÇÃO e
+    exige âncora; aqui a âncora só pode ser esta chamada. Uma chamada custa ~1,6 s
+    e devolve a lista. A afirmação sem ela custou a sessão inteira do dono.
 
     `atualizar` (default true): dá `git pull --ff-only` nos clones de persona e org
     antes de ler. Falha de rede não interrompe — o pacote vem do clone com
