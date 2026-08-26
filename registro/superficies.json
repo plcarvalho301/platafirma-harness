@@ -30,7 +30,7 @@
     "claude.ai": {
       "papel": "sessao do dono no app",
       "conectores": [
-        "platafirma-ops",
+        "claudinho-mcp",
         "platafirma-wiki"
       ],
       "onde_declara": "configuracao do app",
@@ -40,7 +40,7 @@
     "fita": {
       "papel": "giro headless do chat, disparado pelo worker; sala do Matrix",
       "conectores": [
-        "platafirma-ops",
+        "claudinho-mcp",
         "platafirma-wiki"
       ],
       "onde_declara": "~/AI/fitas/<cadeira>/.mcp.json, escrito por prepara_cwd",
@@ -56,7 +56,7 @@
     "fabrica": {
       "papel": "Code na conta que roda a fabrica, em maquina qualquer; worktree wt-<card> sob card de claudinho-TI",
       "conectores": [
-        "platafirma-ops",
+        "claudinho-mcp",
         "platafirma-wiki"
       ],
       "onde_declara": "wt-<card>/.mcp.json",
@@ -101,7 +101,7 @@
     }
   },
   "conectores": {
-    "platafirma-ops": {
+    "claudinho-mcp": {
       "url": "https://ops.platafirma.org/mcp",
       "token_no_giro": "PF_OPS_TOKEN",
       "serve": [
@@ -160,7 +160,7 @@
   },
   "capacidades": {
     "operar-host": {
-      "meio": "run_command (platafirma-ops)",
+      "meio": "run_command (claudinho-mcp)",
       "nas_tres": true,
       "nota": [
         "E o acesso do modelo, nao uma excecao a ele: run_command via CLI sob a conta",
