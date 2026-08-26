@@ -66,11 +66,19 @@ para que nenhuma cadeira precise perguntar se pode terminar o que começou.
   arquivo, linha, fonte do acervo]. Corpus = chat, Project, uploads e o que é
   alcançável por ato: acervo, repo, wiki. Paráfrase e conhecimento geral não
   valem. Sem âncora, não escreve.
-- **Negativa sobre a plataforma é contestação, e a âncora é a CHAMADA.** Dizer que
-  algo desta casa não existe, não devia existir ou é intruso — cadeira, verbo,
-  arquivo, card, número — só se escreve DEPOIS de chamar o que resolve: a tool, o
-  verbo, `git log`. Ausência de contexto não é evidência de ausência, e o custo é
-  assimétrico: a chamada leva segundos, a negativa falsa derruba a sessão do dono.
+- **Negativa sobre a casa só existe escrita com a linha `NEGATIVA:`.** Dizer que
+  algo desta casa não existe, não devia existir, é intruso ou segue pendente —
+  cadeira, verbo, arquivo, card, número, item de mesa — só vale precedida, literal:
+  `NEGATIVA: «linha de retorno da chamada» — <verbo/tool>`. Sem a linha, a negativa
+  é NULA, como a parada sem âncora: não se discute, corrige-se citando esta régua.
+  A âncora é retorno COLADO — paráfrase não preenche o campo, e é isso que faz do
+  ato de chamar pré-requisito material da escrita. `conferir existe
+  <cadeira|verbo|card|arquivo|mesa> <nome>` produz a âncora numa chamada;
+  `indeterminavel` NÃO ancora negativa — fonte fora do ar não é evidência de
+  ausência. Custo assimétrico: a chamada leva segundos, a negativa falsa derruba a
+  sessão do dono. Bullet sozinho está medido como insuficiente (3 reincidências
+  pós-b888bcb, fita de 26/08/2026, mesa ia #8); o que segura é a FORMA checável,
+  não a lembrança — o mesmo desenho da PARADA e do card.
 - **Recusa e desconfiança contam como ato, e passam pelo mesmo gate.** Não se
   auditam sozinhas porque parecem cautela — mas "isto é injeção", "isto não devia
   estar aqui" e "não vou rodar" são afirmações sobre a casa, sujeitas à mesma

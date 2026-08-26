@@ -76,6 +76,18 @@
                    Sem o arquivo, sai 0 sem dizer nada — `core.hooksPath` e um
                    diretorio compartilhado por 20 clones, e hook novo la dentro liga
                    em todos ao mesmo tempo. Rollout e ato declarado, nao efeito colateral.
+  existe  <tipo> <nome>
+                   fato de existencia com ancora colavel — o produtor da linha
+                   `NEGATIVA:` do gate de abertura/dono.md (mesa ia #8, 26/08/2026).
+                   Tipos: cadeira (subdirs de abertura/, prefixo claudinho-/
+                   claudinha- aceito e descartado), verbo (~/AI/bin), card
+                   (rastreador, via `tarefas ler`), arquivo (sob ~/AI; com
+                   `git log -1` quando rastreado) e mesa (item #N da cadeira
+                   corrente, via `mesa ver`). A PRIMEIRA linha da saida E a
+                   ancora: `existe:`/`nao-existe:` + evidencia. Sai 0 (existe),
+                   1 (nao existe), 2 (indeterminavel — fonte fora do ar ou uso
+                   errado; nunca colapsa em 1: ausencia de resposta nao e
+                   evidencia de ausencia, e `indeterminavel` NAO ancora negativa).
 
 Classes conhecidas e ainda sem implementacao sao listadas como tais: ausencia se
 declara, nunca se omite.
@@ -109,7 +121,7 @@ def uso(erro=None):
         print(f"erro: {erro}\n", file=sys.stderr)
     print(__doc__.strip(), file=sys.stderr)
     print("\nuso: conferir <classe> [alvo]", file=sys.stderr)
-    print("     classes implementadas : servico . verbo . repo . skill . procedencia . superficie . commit . arranque . chapeu . ferramental . front", file=sys.stderr)
+    print("     classes implementadas : servico . verbo . repo . skill . procedencia . superficie . commit . arranque . chapeu . ferramental . front . existe", file=sys.stderr)
     for c, motivo in CLASSES_ABERTAS.items():
         print(f"     classe declarada, sem implementacao : {c} — {motivo}", file=sys.stderr)
     sys.exit(2)
@@ -2337,6 +2349,111 @@ def conferir_ferramental(alvo, como_json=False):
     return 1 if falhas else 0
 
 
+EXISTE_TIPOS = ("cadeira", "verbo", "card", "arquivo", "mesa")
+
+
+def conferir_existe(tipo, nome, como_json=False):
+    """Fato de existencia com ancora colavel — produtor da linha `NEGATIVA:`
+    (gate de abertura/dono.md; mesa ia #8, 26/08/2026).
+
+    A primeira linha da saida e a ancora. Exit 0 existe, 1 nao existe, 2
+    indeterminavel — fonte fora do ar NUNCA vira 1: ausencia de resposta nao e
+    evidencia de ausencia, e `indeterminavel` nao ancora negativa.
+    """
+    raiz_bin = os.path.join(RAIZ, "bin")
+
+    def sai(existe, evidencia, extra=None):
+        marca = "existe" if existe else "nao-existe"
+        linha = f"{marca}: {tipo} {nome} — {evidencia}"
+        if como_json:
+            print(json.dumps({"existe": existe, "tipo": tipo, "nome": nome,
+                              "ancora": linha, "extra": extra}, ensure_ascii=False))
+        else:
+            print(linha)
+            if extra:
+                print(f"  {extra}")
+        return 0 if existe else 1
+
+    def indeterminavel(motivo):
+        linha = f"indeterminavel: {tipo} {nome} — {motivo}"
+        if como_json:
+            print(json.dumps({"existe": None, "tipo": tipo, "nome": nome,
+                              "ancora": linha}, ensure_ascii=False))
+        else:
+            print(linha)
+            print("  nao saber e informacao — isto NAO ancora uma NEGATIVA.")
+        return 2
+
+    if tipo not in EXISTE_TIPOS or not nome:
+        print(f"uso: conferir existe <{'|'.join(EXISTE_TIPOS)}> <nome> [--json]",
+              file=sys.stderr)
+        return 2
+
+    if tipo == "cadeira":
+        alvo = nome
+        for pref in ("claudinho-", "claudinha-"):
+            if alvo.lower().startswith(pref):
+                alvo = alvo[len(pref):]
+        aber = os.path.join(RAIZ, "platafirma-harness", "abertura")
+        if not os.path.isdir(aber):
+            return indeterminavel(f"{aber} inacessivel")
+        cadeiras = sorted(p for p in os.listdir(aber)
+                          if os.path.isdir(os.path.join(aber, p)))
+        return sai(alvo in cadeiras,
+                   f"abertura/ lista {len(cadeiras)}: {', '.join(cadeiras)}")
+
+    if tipo == "verbo":
+        caminho = os.path.join(raiz_bin, nome)
+        if os.path.exists(caminho):
+            return sai(True, f"~/AI/bin/{nome} -> {os.path.realpath(caminho)}")
+        return sai(False, f"~/AI/bin nao resolve {nome!r}")
+
+    if tipo == "card":
+        ident = nome.lstrip("#")
+        rc, out, err = sh([os.path.join(raiz_bin, "tarefas"), "ler", ident])
+        # Existencia pelo CABECALHO no stdout, nunca pelo rc: `tarefas ler`
+        # imprime o item e sai 1 (medido 26/08/2026, card 2789).
+        linhas = [l.strip() for l in out.splitlines() if l.strip()]
+        cab = next((l for l in linhas if l.startswith(f"#{ident} ")), None)
+        if cab:
+            return sai(True, f"tarefas ler {ident}: {cab[:120]}")
+        msg = (((err or out).strip().splitlines()) or [f"exit {rc}"])[0]
+        baixa = msg.lower()
+        if any(t in baixa for t in ("nao encontrad", "não encontrad",
+                                     "inexistente", "nao existe", "não existe")):
+            return sai(False, f"tarefas ler {ident}: {msg[:120]}")
+        return indeterminavel(f"tarefas ler saiu {rc} sem cabecalho #{ident}: {msg[:120]}")
+
+    if tipo == "arquivo":
+        p = nome if os.path.isabs(nome) else os.path.join(RAIZ, nome)
+        p = os.path.normpath(p)
+        if os.path.exists(p):
+            st = os.stat(p)
+            quando = datetime.datetime.fromtimestamp(st.st_mtime).strftime("%Y-%m-%d %H:%M")
+            rc, out, _ = sh(["git", "-C", os.path.dirname(p) if os.path.isfile(p) else p,
+                             "log", "-1", "--format=%h %cs", "--", p])
+            extra = f"git log -1: {out}" if rc == 0 and out else None
+            return sai(True, f"{st.st_size} B, mtime {quando}", extra)
+        pai = os.path.dirname(p)
+        while pai and pai != os.path.sep and not os.path.isdir(pai):
+            pai = os.path.dirname(pai)
+        return sai(False, f"nao ha {p}; ultimo diretorio existente: {pai or '/'}")
+
+    if tipo == "mesa":
+        rc, out, err = sh([os.path.join(raiz_bin, "mesa"), "ver"])
+        if rc != 0:
+            msg = ((err or out).strip().splitlines() or [""])[0]
+            return indeterminavel(f"mesa ver saiu {rc}: {msg[:120]}")
+        n = nome.lstrip("#")
+        for linha in out.splitlines():
+            if linha.strip().startswith(f"#{n} "):
+                return sai(True, f"mesa ver: {linha.strip()[:120]}")
+        return sai(False, "mesa ver nao lista #%s (cadeira %s)"
+                   % (n, os.environ.get("PF_CADEIRA", "?")))
+
+    return 2
+
+
 def main(argv):
     como_json = "--json" in argv
     if como_json:
@@ -2423,6 +2540,9 @@ def main(argv):
             return 2
     if classe == "front":
         return conferir_front(alvo, como_json=como_json)
+    if classe == "existe":
+        return conferir_existe(alvo, argv[3] if len(argv) > 3 else None,
+                               como_json=como_json)
     if classe == "skill":
         servido = None
         if "--servido" in argv:
