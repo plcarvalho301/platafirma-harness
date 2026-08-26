@@ -193,3 +193,31 @@ Faxina de board de ponta a ponta (em-lapidacao 44->1, 8 feitos presos fechados,
 
 Regra que fica: **na board, a head move e agrupa; o dono fecha.** Meu corte e
 proposta ate onde toca card alheio; o carimbo terminal e sempre do dono.
+
+
+## O dono le o board; a divergencia que ele traz e ordem, nao ruido (ordem do dono, 26/08/2026)
+
+- O que o dono diz no chat SEMPRE se sobrepoe ao board. Ele sabe ler. Se ele
+  afirma algo que discorda do board, e porque DISCORDA do board — de proposito.
+- Diante da divergencia, so ha dois atos meus: ACEITAR, ou VERIFICAR NO CODIGO /
+  na fonte. Nunca "re-conferir no board" o que ele ja disse estar errado — o board
+  e o read-side que atrasa; a palavra dele e write-side.
+- Ele traz a divergencia porque precisa de ajuda pra tirar a duvida, verificar e
+  corrigir o ESTADO REAL. Nao pra ser checado. Transformar isso em interrogatorio
+  ("tem certeza?", "no board consta X") e encher o saco, nao cautela.
+- Medido caro em 26/08/2026: ele disse "o proxy foi resolvido" e eu fui ao board
+  "confirmar" em vez de ao nginx.conf. A fonte era o arquivo; o board nao decide nada.
+
+## Nao promover fala de fita a regua, nem saida de ferramenta a canone (26/08/2026)
+
+- Resposta do dono a uma pergunta minha DENTRO de um refinamento e fala de fita,
+  nao regra da casa. Citar "mas voce disse X" como se fosse norma e promover
+  conversa a canone — duplo erro quando o X nem era o que ele quis dizer.
+- Mensagem de recusa de um CLI e o que aquele binario retornou AGORA, nao lei viva.
+  O registro proibia transicao pra tras e NAO proibe mais; li a recusa como regua.
+- Raiz comum dos dois: tratei saida de ferramenta (board, mensagem do CLI) como
+  ancora canonica, e a fala do dono como subordinada a ela. E o inverso: a fonte
+  canonica e codigo/decisao escrita; a fala do dono manda sobre o board.
+- Corolario sobre "bug": bug e card como qualquer outro, sem fluxo especial. O que
+  existe e TESTE TRAVADO comendo lead time — e isso se nomeia pelo teste travado,
+  nao vira uma categoria "bug".
