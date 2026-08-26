@@ -1409,10 +1409,24 @@ def conferir_superficie(alvo=None, staged=False, como_json=False):
                   for n, d in sorted(reg.get("superficies", {}).items())
                   if not d.get("verificavel_do_host")]
 
-    ok = not (nao_servidos or sem_meio or quebradas or sem_produtor or endpoints_falhos)
+    # GATE DE COMMIT vs SAUDE DE HOST (card #2823). So `quebradas` e incremental:
+    # linhas ADICIONADAS pelo commit em curso. `nao_servidos/sem_meio/sem_produtor/
+    # endpoints_falhos` sao sempre recalculados sobre o host vivo — passivo herdado,
+    # alheio ao commit. Sob --staged o gate julga SO o que o commit acrescenta; a
+    # saude de host segue computada e exibida, como OBSERVACAO, mas nao trava. Sem
+    # --staged (rodado avulso), tudo trava como antes. Cumpre a promessa do hook
+    # ("passivo herdado nao trava a casa") sem cegar `conferir superficie` avulso.
+    saude_host = bool(nao_servidos or sem_meio or sem_produtor or endpoints_falhos)
+    if staged:
+        ok = not quebradas
+    else:
+        ok = not (quebradas or saude_host)
     if como_json:
         print(json.dumps({
             "veredito": "em dia" if ok else "divergente",
+            "modo_gate": "incremental (--staged): saude de host nao trava" if staged
+                         else "completo: saude de host trava",
+            "saude_host_ok": not saude_host,
             "conector_prometido_nao_servido": [
                 {"superficie": s_, "conector": c} for s_, c in nao_servidos],
             "endpoint_nao_conectou": [
@@ -1428,17 +1442,20 @@ def conferir_superficie(alvo=None, staged=False, como_json=False):
         return 0 if ok else 1
 
     sups = " . ".join(sorted(reg.get("superficies", {})))
+    obs = " (obs.)" if staged else ""
     print(f"superficies: {sups}")
-    print(f"  conector prometido e nao servido : {len(nao_servidos)}")
+    if staged:
+        print("  modo: --staged — gate julga so o commit; saude de host nao trava")
+    print(f"  conector prometido e nao servido{obs}: {len(nao_servidos)}")
     for s_, c in nao_servidos:
         print(f"      {s_} — falta {c}")
-    print(f"  endpoint declarado e nao conectou : {len(endpoints_falhos)}")
+    print(f"  endpoint declarado e nao conectou{obs}: {len(endpoints_falhos)}")
     for s_, c, m in endpoints_falhos:
         print(f"      {s_}.{c} — {m}")
-    print(f"  superficie sem produtor declarado: {len(sem_produtor)}")
+    print(f"  superficie sem produtor declarado{obs}: {len(sem_produtor)}")
     for n_ in sem_produtor:
         print(f"      {n_} — verificavel e ninguem declara quem escreve o .mcp.json")
-    print(f"  capacidade sem meio              : {len(sem_meio)}")
+    print(f"  capacidade sem meio{obs}              : {len(sem_meio)}")
     for c in sem_meio:
         print(f"      {c}")
     print(f"  tool fora de todo conector       : {len(quebradas)}")
