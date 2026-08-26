@@ -12,19 +12,53 @@ PG=rag-extractor-pg
 PGUSER=$(docker inspect $PG --format '{{range .Config.Env}}{{println .}}{{end}}' | sed -n 's/^POSTGRES_USER=//p')
 PGDB=$(docker inspect $PG --format '{{range .Config.Env}}{{println .}}{{end}}' | sed -n 's/^POSTGRES_DB=//p')
 
-SQL="select coalesce(titulo,arquivo), arquivo, objeto
+# Normaliza o termo no Postgres (unaccent + hífen/espaço equivalentes) para o
+# filtro grosso; o casamento fino hífen<->espaço acontece no Python abaixo, que o
+# SQL sozinho não faz. unaccent é pré-requisito instalado no rag-extractor-pg.
+# Ordenação por id_canonico (uuid estável), NUNCA por nome de arquivo (ont:0072).
+SQL="select coalesce(titulo,arquivo), arquivo, objeto, id
      from acervo.obra
      where objeto is not null
-       and (unaccent(lower(coalesce(titulo,''))) like unaccent(lower('%$TERMO%'))
-            or unaccent(lower(arquivo)) like unaccent(lower('%$TERMO%')))
-     order by length(arquivo) limit 20"
+       and (translate(unaccent(lower(coalesce(titulo,''))),'-',' ')
+              like translate(unaccent(lower('%$TERMO%')),'-',' ')
+            or translate(unaccent(lower(arquivo)),'-',' ')
+              like translate(unaccent(lower('%$TERMO%')),'-',' '))
+     order by id limit 200"
 
-# unaccent pode não existir; cai para busca simples se falhar
-RES=$(docker exec $PG psql -U "$PGUSER" -d "$PGDB" -At -F$'\t' -c "$SQL" 2>/dev/null) || \
-RES=$(docker exec $PG psql -U "$PGUSER" -d "$PGDB" -At -F$'\t' -c \
-  "select coalesce(titulo,arquivo), arquivo, objeto from acervo.obra
-   where objeto is not null and (lower(coalesce(titulo,'')) like lower('%$TERMO%')
-   or lower(arquivo) like lower('%$TERMO%')) order by length(arquivo) limit 20")
+CANDIDATOS=$(docker exec "$PG" psql -U "$PGUSER" -d "$PGDB" -At -F$'\t' -c "$SQL")
+
+# Casamento fino: colapsa qualquer run de hífen/espaço para um espaço só, dos dois
+# lados, e confere a contenção. Fecha "Fluent-Python" vs "Fluent Python".
+RES=$(printf '%s\n' "$CANDIDATOS" | TERMO="$TERMO" python3 -c '
+import sys, os, re, unicodedata
+
+def norm(t):
+    if not t:
+        return ""
+    nfkd = unicodedata.normalize("NFKD", str(t))
+    sem = "".join(c for c in nfkd if not unicodedata.combining(c))
+    return re.sub(r"[-\s]+", " ", sem.lower()).strip()
+
+alvo = norm(os.environ.get("TERMO", ""))
+if not alvo:
+    sys.exit(0)
+
+hits = []
+for linha in sys.stdin:
+    linha = linha.rstrip("\r\n")
+    if not linha:
+        continue
+    campos = linha.split("\t")
+    if len(campos) < 4:
+        continue
+    titulo, arquivo, objeto, _id = campos[0], campos[1], campos[2], campos[3]
+    if alvo in norm(titulo) or alvo in norm(arquivo):
+        hits.append((len(norm(titulo)), _id, titulo, arquivo, objeto))
+
+hits.sort(key=lambda x: (x[0], x[1]))
+for _, _id, titulo, arquivo, objeto in hits[:20]:
+    print(titulo + "\t" + arquivo + "\t" + objeto)
+')
 
 [ -z "$RES" ] && { echo "nada encontrado para: $TERMO"; exit 1; }
 
