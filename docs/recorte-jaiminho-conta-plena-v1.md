@@ -13,9 +13,11 @@
 - Corolário: não há duas contas por provider. O split `jaiminho` (papel
   `pesquisador-externo`, read-only) **/** `jaiminho-fabrica` (papel `fornecedor`, executa
   card) é **fóssil** sob este modelo — dois sujeitos para um provider.
-- **Generaliza — é princípio, não um fato sobre o Jaiminho:** *um provider de inferência =
-  uma conta = um ambiente*. O próximo provider (chatgpt, kimi…) entra com um ambiente só,
-  pela mesma régua. Remover o split não é limpar um caso ocioso; é aplicar a regra.
+- **Regra fechada (dono, 27/08/2026): `dev` é papel, o provider não entra nele.** Existe um
+  papel `dev` — trabalha em branch, faz tudo menos publicar — e quem faz dev o carrega:
+  cadeira, fábrica, Jaiminho ou o próximo provider, todos o mesmo papel. Provider é só a
+  conta/`sub` (blast radius), nunca o papel. O split some porque há **um** papel de dev, não
+  um por provider.
 
 ## O envelope "dev até o MR" já está desenhado — está só preso ao sujeito errado
 
@@ -81,12 +83,13 @@ conta.
 
 ## PAP — forma do colapso (para claudinho-seguranca)
 
-Um só sujeito ativo por provider, um só papel de trabalho. Esboço, a regra é da cadeira dela:
+A regra está fechada — `dev` é papel, provider-agnóstico. O que segue é a forma no PAP; a caneta é da cadeira de segurança:
 
-- **Fundir** o alcance de `fornecedor` no papel do sujeito `jaiminho` (ou renomear o papel
-  para algo como `colaborador-dev` que una: lê acervo/wiki/repo **e** executa git/build em
-  branch), preservando as leituras já concedidas (`jaiminho-le-acervo-inteiro`,
-  `jaiminho-le-repo`, `jaiminho-le-wiki-conceito`, `jaiminho-usa-area-de-transferencia`).
+- **Um papel `dev`, não um papel por provider.** Fundir `fornecedor` + `pesquisador-externo`
+  num papel `dev` único, provider-agnóstico: lê acervo/wiki/repo **e** executa git/build em
+  branch. O sujeito `jaiminho` passa a carregar `dev` como qualquer conta que faça dev; as
+  leituras já concedidas (`jaiminho-le-acervo-inteiro`, `jaiminho-le-repo`,
+  `jaiminho-le-wiki-conceito`, `jaiminho-usa-area-de-transferencia`) migram para o papel `dev`.
 - **Derrubar** `externo-nao-executa-comando` (a negativa que hoje tira o braço).
 - **Manter** `fornecedor-sem-estado-do-host` e `fornecedor-nao-toca-identidade` como o
   limite "publicar/host" — renomeados para o papel unificado.
