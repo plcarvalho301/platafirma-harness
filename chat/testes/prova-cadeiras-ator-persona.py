@@ -65,6 +65,29 @@ alvo = os.path.join(raiz, "platafirma-harness", "abertura", "fabrica", "persona.
 prova("abertura/fabrica/persona.md existe (destino do mapa)",
       os.path.isfile(alvo))
 
+
+# --- #2431 Fase 1: nome humano (alias) resolve para o sufixo canonico -----------
+# O bug que fixa: o dono digita o nome do ator ("Oswaldo", "joão") e a resolucao
+# de cadeira devolvia None, entao a fila procurava caixa inexistente.
+prova("alias inteiro: 'Oswaldo Aranha' -> TI",
+      c.sufixo_canonico("Oswaldo Aranha") == "TI")
+prova("primeiro nome: 'Oswaldo' -> TI",
+      c.sufixo_canonico("Oswaldo") == "TI")
+prova("acento dobrado: 'joao' -> arquiteto",
+      c.sufixo_canonico("joao") == "arquiteto")
+prova("acento + hifen: 'João-de-Barro' -> arquiteto",
+      c.sufixo_canonico("João-de-Barro") == "arquiteto")
+prova("primeiro nome com til: 'joão' -> arquiteto",
+      c.sufixo_canonico("joão") == "arquiteto")
+# O alias e a ULTIMA tentativa: sufixo/slug reais continuam vencendo.
+prova("sufixo real vence alias: 'TI' -> TI",
+      c.sufixo_canonico("TI") == "TI")
+prova("slug com prefixo intacto: 'claudinho-TI' -> TI",
+      c.sufixo_canonico("claudinho-TI") == "TI")
+# Nome que nao e alias de ninguem nao inventa cadeira.
+prova("nome desconhecido -> None",
+      c.sufixo_canonico("Fulano de Tal") is None)
+
 print("prova do modelo ator/provider/persona em cadeiras.py")
 print()
 if falhas:

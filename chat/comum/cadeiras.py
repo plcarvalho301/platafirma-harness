@@ -25,6 +25,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import unicodedata
 from pathlib import Path
 
 PREFIXO_BOT = "_pf"
@@ -99,6 +100,63 @@ def _cadeiras_do_ledger() -> dict:
             if slug:
                 mapa[_sem_prefixo(slug).lower()] = slug
     return mapa
+
+
+def _dobra(txt: str) -> str:
+    """minusculas sem acento: 'Joao' e 'João' sao a mesma pessoa digitada de dois
+    jeitos, e a resolucao de nome humano nao pode depender de o dono acertar o til."""
+    n = unicodedata.normalize("NFKD", txt)
+    return "".join(c for c in n if not unicodedata.combining(c)).lower().strip()
+
+
+def _alias_do_ledger() -> dict:
+    """{forma_dobrada_do_nome_humano: sufixo_canonico} do ledger de vinculo.
+
+    A entrada que faltava a `sufixo_canonico`: o nome AFETIVO do ator
+    ('Oswaldo Aranha' -> 'TI'), que ate aqui so o organograma de display (#2438,
+    `_mapa_alias_cadeiras`) conhecia. Mesma fonte, mesmo PROVIMENTO.alias — aqui a
+    leitura e invertida (nome -> sufixo) porque quem RESOLVE parte do nome.
+
+    Casa duas formas por alias: o nome inteiro ('oswaldo aranha') e o primeiro token
+    ('oswaldo'). O primeiro token SO entra se for unico entre todos os aliases:
+    homonimo de primeiro nome exige o nome inteiro, porque casar a cadeira errada e
+    pior que nao casar. Alias ausente (engenharia) nao entra. Ledger ausente devolve
+    {} em vez de erro: alias e a ULTIMA tentativa de `sufixo_canonico`, e sua falta
+    nao pode derrubar a resolucao das formas que nao dependem dela.
+    """
+    p = _ledger()
+    if not p.is_file():
+        return {}
+    inteiros: dict = {}
+    primeiros: dict = {}
+    ambiguos: set = set()
+    with p.open(encoding="utf-8", errors="replace") as fh:
+        for linha in fh:
+            linha = linha.strip()
+            if not linha:
+                continue
+            try:
+                ev = json.loads(linha)
+            except ValueError:
+                continue
+            if ev.get("tipo") != "PROVIMENTO":
+                continue
+            slug = (ev.get("cadeira") or "").strip()
+            alias = (ev.get("alias") or "").strip()
+            if not slug or not alias:
+                continue
+            suf = _sem_prefixo(slug)
+            inteiros[_dobra(alias)] = suf
+            partes = [t for t in re.split(r"[\s-]+", alias) if t]
+            if partes:
+                tok = _dobra(partes[0])
+                if tok in primeiros and primeiros[tok] != suf:
+                    ambiguos.add(tok)
+                primeiros[tok] = suf
+    for tok in ambiguos:
+        primeiros.pop(tok, None)
+    # inteiro vence primeiro-token quando as duas formas coincidem.
+    return {**primeiros, **inteiros}
 
 
 def cadeiras() -> list[str]:
@@ -183,6 +241,12 @@ def sufixo_canonico(nome: str) -> str | None:
     for canonico in atores():
         if canonico.lower() == alvo:
             return canonico
+    # Ultima forma: nome humano (alias do ledger). 'Oswaldo'/'Oswaldo Aranha' -> 'TI'.
+    # So chega aqui quem nao casou como sufixo/slug/MXID, entao um sufixo real sempre
+    # vence o alias — o fallback nunca sequestra uma forma ja valida.
+    suf = _alias_do_ledger().get(_dobra(bruto))
+    if suf:
+        return suf
     return None
 
 
