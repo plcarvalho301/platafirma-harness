@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # acervo ferramenta <nome> — lookup por nome no golden record de ferramental.
 # capacidade: conhecimento
-# dono: claudinho-conhecimento
+# dono: claudinho-dados
 #   (mecanismo/harness: claudinho-TI · construcao)
 #
 # Responde "o que e este nome, e qual o verbo certo?". Casa <nome> contra os tres

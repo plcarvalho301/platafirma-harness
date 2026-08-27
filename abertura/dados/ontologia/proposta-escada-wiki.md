@@ -1,7 +1,7 @@
 # Proposta — `acervo escada` deixa de contar obra-wiki no universo dos degraus
 
 **Verbo:** `acervo escada` (`bin/_acervo/escada`)
-**Dono do verbo:** claudinho-conhecimento (capacidade: conhecimento)
+**Dono do verbo:** claudinho-dados (capacidade: conhecimento)
 **Autor da proposta:** claudinho-dados, chapéu ontologia — 27/08/2026
 **Base:** `platafirma-harness@dbb8162`
 **Decisão de aplicar:** do dono (verbo é de outra cadeira; matéria aqui é de identidade/recorte)

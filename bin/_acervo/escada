@@ -84,7 +84,7 @@ INSERT INTO vet VALUES $VET;
 
 CREATE TEMP VIEW e AS
 SELECT o.id, o.titulo, o.objeto, o.endereco,
-       (o.endereco LIKE 'wiki://%')                     AS e_pagina,
+       (o.endereco IS NOT NULL AND o.endereco LIKE 'wiki://%') AS e_pagina,
        (o.objeto IS NOT NULL)                           AS tem_objeto,
        EXISTS (SELECT 1 FROM store_obj s WHERE s.objeto = o.objeto) AS no_store,
        (i.id IS NOT NULL)                               AS tem_doc,
@@ -111,23 +111,25 @@ SELECT json_build_object(
   'contrato_do_indice', (SELECT json_object_agg(k, n) FROM (
       SELECT 'impressoes_com_indice_servindo' AS k, count(DISTINCT impressao_id)::text AS n FROM vet) z),
   'degraus', json_build_object(
-    'a_catalogadas',  (SELECT count(*) FROM e),
-    'b_armazenadas',  (SELECT count(*) FROM e WHERE no_store),
-    'c_ingeridas',    (SELECT count(*) FROM e WHERE n_chunk > 0),
-    'd_embedded',     (SELECT count(*) FROM e WHERE n_texto > 0 AND n_emb  = n_texto),
+    -- a escada mede só o que PODE subir degrau; a obra-wiki (a obra é a página,
+    -- objeto IS NULL por desenho) sai em fora_da_escada.paginas_wiki e não aqui.
+    'a_catalogadas',  (SELECT count(*) FROM e WHERE e_pagina IS NOT TRUE),
+    'b_armazenadas',  (SELECT count(*) FROM e WHERE e_pagina IS NOT TRUE AND no_store),
+    'c_ingeridas',    (SELECT count(*) FROM e WHERE e_pagina IS NOT TRUE AND n_chunk > 0),
+    'd_embedded',     (SELECT count(*) FROM e WHERE e_pagina IS NOT TRUE AND n_texto > 0 AND n_emb  = n_texto),
     -- O vetor de faceta virou UM ponto por obra em 11/08/2026 (era replicado em cada trecho,
     -- 198x). O degrau é ter o ponto, não ter tantos pontos quanto trechos.
-    'e_vetor_meta',   (SELECT count(*) FROM e WHERE n_texto > 0 AND n_meta >= 1)
+    'e_vetor_meta',   (SELECT count(*) FROM e WHERE e_pagina IS NOT TRUE AND n_texto > 0 AND n_meta >= 1)
   ),
   'fora_da_escada', json_build_object(
     'paginas_wiki',           (SELECT count(*) FROM e WHERE e_pagina)
   ),
   'fuga_por_degrau', json_build_object(
-    'catalogo_aponta_pro_vazio', (SELECT count(*) FROM e WHERE tem_objeto AND NOT no_store),
-    'objeto_sem_documento',      (SELECT count(*) FROM e WHERE no_store AND NOT tem_doc),
-    'impressao_sem_trecho',      (SELECT count(*) FROM e WHERE tem_doc AND n_chunk = 0),
-    'embedding_parcial',         (SELECT count(*) FROM e WHERE n_texto > 0 AND n_emb  < n_texto),
-    'sem_vetor_de_faceta',       (SELECT count(*) FROM e WHERE n_texto > 0 AND n_meta = 0),
+    'catalogo_aponta_pro_vazio', (SELECT count(*) FROM e WHERE e_pagina IS NOT TRUE AND tem_objeto AND NOT no_store),
+    'objeto_sem_documento',      (SELECT count(*) FROM e WHERE e_pagina IS NOT TRUE AND no_store AND NOT tem_doc),
+    'impressao_sem_trecho',      (SELECT count(*) FROM e WHERE e_pagina IS NOT TRUE AND tem_doc AND n_chunk = 0),
+    'embedding_parcial',         (SELECT count(*) FROM e WHERE e_pagina IS NOT TRUE AND n_texto > 0 AND n_emb  < n_texto),
+    'sem_vetor_de_faceta',       (SELECT count(*) FROM e WHERE e_pagina IS NOT TRUE AND n_texto > 0 AND n_meta = 0),
     'objeto_no_store_sem_obra',  (SELECT count(*) FROM store_obj s
                                     WHERE NOT EXISTS (SELECT 1 FROM acervo.obra o WHERE o.objeto = s.objeto)),
     -- O derivado órfão, invariante da arq:0027: 'a permanência de um derivado depende da
