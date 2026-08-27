@@ -13,6 +13,9 @@
 - Corolário: não há duas contas por provider. O split `jaiminho` (papel
   `pesquisador-externo`, read-only) **/** `jaiminho-fabrica` (papel `fornecedor`, executa
   card) é **fóssil** sob este modelo — dois sujeitos para um provider.
+- **Generaliza — é princípio, não um fato sobre o Jaiminho:** *um provider de inferência =
+  uma conta = um ambiente*. O próximo provider (chatgpt, kimi…) entra com um ambiente só,
+  pela mesma régua. Remover o split não é limpar um caso ocioso; é aplicar a regra.
 
 ## O envelope "dev até o MR" já está desenhado — está só preso ao sujeito errado
 
@@ -25,11 +28,11 @@ O alcance que o dono descreve não é novo: é literalmente o papel `fornecedor`
   `*.env*`/`seg *`/`acesso *`. É, quase inteiro, o limite **"não publicar em produção"**.
 - `fornecedor-nao-toca-identidade` nega o domínio de identidade.
 
-O problema: esse envelope está amarrado ao sujeito **`jaiminho-fabrica`**, que **nunca
-atuou** — zero linha de auditoria (medido no PAP, sujeitos.yaml). Enquanto o `jaiminho` real
-(o que atua) carrega o papel `pesquisador-externo`, que tem a negativa dura
-`externo-nao-executa-comando`. Colapsar os dois é dar ao sujeito que atua o envelope que já
-foi desenhado para o que nunca atuou.
+O problema não é o quanto o `jaiminho-fabrica` atuou — é que **ele não devia existir**: um
+provider não tem dois ambientes. Enquanto isso, o `jaiminho` que atua carrega o papel
+`pesquisador-externo` com a negativa dura `externo-nao-executa-comando`. Colapsar é dar ao
+único sujeito do provider o envelope inteiro — não porque o segundo ficou ocioso, mas porque
+o segundo é o que a arquitetura de segurança nova (dec 0068 + #2488) removeu.
 
 ## Onde o Jaiminho está sem braço (o gap, quatro itens)
 
@@ -88,7 +91,8 @@ Um só sujeito ativo por provider, um só papel de trabalho. Esboço, a regra é
 - **Manter** `fornecedor-sem-estado-do-host` e `fornecedor-nao-toca-identidade` como o
   limite "publicar/host" — renomeados para o papel unificado.
 - **Remover** o sujeito `jaiminho-fabrica` e suas entradas por `sub`/username em
-  sujeitos.yaml (nunca atuou; sub suposto em PAP é pior que ausente).
+  sujeitos.yaml — um provider não carrega dois sujeitos. (O `sub` suposto some junto, mas o
+  motivo é o princípio, não a falta de uso.)
 - **Nota de `run_command`:** o próprio PAP já avisa que allowlist de prefixo de string é
   mitigação, não controle. Se o alcance é "quase tudo menos publicar", a regra limpa é
   **permitir `run_command` amplo e negar por alvo** (`docker`/`systemctl`/`psql`/`deploy`/
