@@ -47,3 +47,12 @@ nome humano (alias). Qualquer outro resolvedor é candidato a divergir.
   refatorar é unificar a FONTE: todo resolvedor lê o ledger (feito na fila, #2431).
 - Corolário: participante (jaiminho) não é cadeira e não está no ledger de vínculo;
   fica em constante local do consumidor até a lib compartilhada existir.
+
+## Fronteira instância-individual × instância-de-órgão vive no plano de acesso, não no de conhecimento
+
+Medido na fita 27/08/2026 (produtização #180). Registro canônico: `platafirma-arquitetura/docs/kernel-platafirma-rascunho.md` + `docs/fronteira-tecnica-produtizacao.md`.
+
+- O módulo `conhecimento` (wiki+RAG+acervo+ontologia) e o MOTOR do harness são **invariantes** entre a instância-de-um e a de-órgão. O delta de órgão é inteiro no **plano de identidade/acesso**: Keycloak passa de emissor de token de cadeira a **IdP de gente**, a grade concessão/PDP acorda (hoje vazia por decisão — falha fechada), e entra o namespace/lockdown da F5.
+- O harness se parte **motor × personas** na MESMA linha MIREOT da ontologia (product-spec §4.2): motor (`ops-server`, `bin`, `mcp`, `sessao`, `politica-acesso`, `tooling`, `deploy-harness`) = plataforma; `abertura/<cadeira>`, `chat`, `registro` (ledger), `distribuicao`, `jaiminho` = instância. O corte às vezes passa POR DENTRO de um componente: `cadeiras.py` é motor, o ledger que ele lê é instância — produtizar o harness exige extrair o motor e tratar `abertura/`+`registro/` como pacote de instância.
+- Keycloak no compose do core hoje só provisiona service accounts de cadeira (`client_credentials`, `provisiona-realm.sh`); o papel de IdP humano é o que o órgão exige. README do core chama IAM de "próximo épico" — scaffoldado, não vivo. Individual sobrevive sem Keycloak "de gente" (token de agente é até substituível por estático, product-spec §8).
+- Régua de produto da casa (dono, 27/08): **não há venda** (dono é servidor público estável); norte é **adoção como valor público, foco APF**. Consequência arquitetural: `canal` é adoção/distribuição, nunca funil comercial; a fronteira produto×vendas da gap-de-estrategia (16/08) se dissolve.
