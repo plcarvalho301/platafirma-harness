@@ -31,17 +31,27 @@ except ImportError:
     sys.exit("erro: modulo 'redis' nao instalado neste venv (uv pip install redis)")
 
 RAIZ = os.environ.get("FILA_RAIZ", os.path.expanduser("~/AI/fila"))
-PERSONAS_FILE = os.path.join(RAIZ, ".personas")
+# Fonte UNICA de quem e destinatario valido: o LEDGER DE VINCULO (arq:0073), o mesmo
+# que monta-sessao e comum/cadeiras.py leem. Antes era o arquivo ~/AI/fila/.personas,
+# mantido a mao — divergia do ledger (faltavam engenharia e politicas-publicas) e a
+# divergencia virava caixa fantasma (card #2431, decisao do dono: unificar a fonte).
+LEDGER = os.path.join(os.environ.get("PF_RAIZ", os.path.expanduser("~/AI")),
+                      "platafirma-harness", "registro", "eventos-org.jsonl")
+# Participantes (DMZ): tem caixa na malha mas NAO sao cadeira no ledger de vinculo,
+# entao nao saem dele. jaiminho e destinatario valido do Elias (ver PARES_EXCLUSIVOS).
+# Unificar TAMBEM esta lista com comum/cadeiras.py::_SAO_PARTICIPANTE exige a lib
+# compartilhada (colapso 3->1, adiado pelo dono); ate la fica esta constante local.
+PERSONAS_PARTICIPANTES = ("jaiminho",)
 ESPIA = "claudinha-gestao-estrategica"
 # Identidade de leitura automatica: processo sem sessao, sem caixa e sem mesa.
-# Nao entra em .personas de proposito — assim nunca e destinatario valido.
+# Nao entra no roster do ledger de proposito — assim nunca e destinatario valido.
 # Pode so medir profundidade (status); qualquer outro verbo e negado em so_leitura().
 LEITOR = "sonda"
 GRUPO = "cadeira"
 TIPOS_VALIDOS = {"decisao", "resposta", "pedido", "minuta", "demanda", "handoff"}
 
 # Persona de classe externa (DMZ): tem caixa na malha, mas nao tem par livre. O
-# Jaiminho existe em .personas para ser destinatario VALIDO do Elias — sem isso o
+# Jaiminho existe em PERSONAS_PARTICIPANTES para ser destinatario VALIDO do Elias — sem isso o
 # `fila enviar` dele falharia na validacao —, e a allowlist e o que impede que estar
 # na lista signifique estar aberto as sete. Vale nos dois sentidos.
 PARES_EXCLUSIVOS = {"jaiminho": {"claudinho-IA"}}
@@ -80,10 +90,34 @@ def garante_grupo(rc, persona: str):
 
 
 def personas_validas():
-    if not os.path.isfile(PERSONAS_FILE):
+    """Slugs canonicos de destinatario, do LEDGER DE VINCULO (mesma fonte que
+    monta-sessao e comum/cadeiras.py) mais os participantes de PERSONAS_PARTICIPANTES.
+    Nao le mais o arquivo .personas (card #2431: fonte unica).
+
+    Ledger ausente/ilegivel devolve None — a lista ilegivel NAO e passe livre, e
+    valida_persona ja a trata como recusa alta. Ledger presente mas sem nenhuma
+    cadeira tambem devolve None pela mesma razao: fonte vazia nao valida ninguem."""
+    try:
+        cadeiras = set()
+        with open(LEDGER, encoding="utf-8", errors="replace") as fh:
+            for linha in fh:
+                linha = linha.strip()
+                if not linha:
+                    continue
+                try:
+                    ev = json.loads(linha)
+                except ValueError:
+                    continue
+                if ev.get("tipo") != "PROVIMENTO":
+                    continue
+                slug = (ev.get("cadeira") or "").strip()
+                if slug:
+                    cadeiras.add(slug)
+    except OSError:
         return None
-    with open(PERSONAS_FILE) as f:
-        return {ln.strip() for ln in f if ln.strip()}
+    if not cadeiras:
+        return None
+    return cadeiras | set(PERSONAS_PARTICIPANTES)
 
 
 def _json_mode(args) -> bool:
@@ -121,8 +155,8 @@ def valida_persona(p: str, json_mode: bool = False):
     # ~/AI/fila/.personas nao existia, e a validacao ficava DESLIGADA — destinatario
     # com erro de digitacao virava caixa nova, com o remetente vendo sucesso.
     if validas is None:
-        msg = (f"nao consegui ler a lista de personas ({PERSONAS_FILE}) — "
-               "sem ela nao ha destinatario valido. Aponte FILA_RAIZ.")
+        msg = (f"nao consegui ler o ledger de vinculo ({LEDGER}) — "
+               "sem ele nao ha destinatario valido. Aponte PF_RAIZ.")
         if json_mode:
             _falha_json(msg, 2)
         sys.stderr.write(f"erro: {msg}\n")
