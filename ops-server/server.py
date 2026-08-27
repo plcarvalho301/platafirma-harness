@@ -34,6 +34,7 @@ nem .profile — sem isto, tudo que vive em OPS_ROOT/bin e ~/.local/bin existe n
 é invisível para quem chama a tool. O env do subprocesso também é depurado dos segredos
 da instância: um comando qualquer não deve conseguir ecoar o token que o autorizou.
 """
+import hashlib
 import hmac
 import json
 import logging
@@ -80,6 +81,11 @@ CAP = 50_000   # teto de bytes de stdout/stderr devolvidos (truncagem sempre dec
 LOG_DIR = Path(os.environ.get("OPS_LOG_DIR", RAIZ / "var/log/ops"))
 CMD_CAP = 2_000        # teto do comando gravado na auditoria
 LINHA_CAP = 8_000      # teto da linha JSONL
+# Teto do texto da ordem gravado na auditoria (#2894). Abaixo do LINHA_CAP de
+# propósito: a ordem é o campo mais longo da linha e não pode empurrar os campos de
+# identidade para fora do corte. `pergunta_bytes` declara o tamanho original, para
+# que truncada e curta não fiquem indistinguíveis.
+PERGUNTA_CAP = 2_000
 
 # Segredos da instância não descem para o subprocesso.
 ENV_OCULTO = ("OPS_AUTH_TOKEN", "TUNNEL_TOKEN")
@@ -611,6 +617,12 @@ async def monta_sessao(cadeira: str = "", atualizar: bool = True, chapeu: str = 
     registro em `sessao.peca_servida` aconteceu. `avisos` traz teto estourado, clone
     atrasado e divergência entre o que a persona declara e o que o catálogo serve.
 
+    `pergunta` é GRAVADA na auditoria (`pergunta`, `pergunta_bytes`) junto de um
+    `ordem_id` estável, devolvido também em `pacote.ordem_id`. É o que torna medível o
+    disparo: as buscas da sessão casam com esta abertura pelo campo `sessao`, e sem o
+    texto da ordem não há como dizer se havia corpus aplicável que ninguém foi buscar.
+    Uma ordem por sessão — a da abertura; nenhum outro verbo registra ordem.
+
     Persona sem linha `FERRAMENTAL:` devolve `manifesto.ausente` com aviso explícito.
     Ausência declarada, nunca omissão silenciosa. Sem caso vivo hoje: o exemplo que
     morava aqui era a claudinha-osint, desligada em 15/08/2026 (org:0002).
@@ -621,7 +633,20 @@ async def monta_sessao(cadeira: str = "", atualizar: bool = True, chapeu: str = 
         return negado
     t0 = time.monotonic()
     r = await anyio.to_thread.run_sync(_montar, cadeira, atualizar, chapeu, pergunta)
-    _audit(tool="monta_sessao", cadeira=cadeira, atualizar=atualizar,
+    # Correlação da ORDEM (#2894): sem o texto da ordem gravado, o log mede recall
+    # condicionado a ter havido consulta e chama isso de qualidade de recuperação. O
+    # que falta medir é o DISPARO — a ordem tinha corpus aplicável e nenhuma busca
+    # saiu. `sessao` (Mcp-Session-Id) já casa as buscas seguintes com esta abertura;
+    # o que não existia era a ordem em si. Uma ordem por sessão, por decisão do dono
+    # (27/08/2026): a medição fica no `monta_sessao` e em nenhum outro verbo.
+    ordem = (pergunta or "").strip()
+    ordem_id = (hashlib.sha1(f"{_sessao_atual()}\x00{ordem}".encode()).hexdigest()[:12]
+                if ordem else None)
+    if isinstance(r, dict) and isinstance(r.get("pacote"), dict):
+        r["pacote"]["ordem_id"] = ordem_id
+    _audit(tool="monta_sessao", cadeira=cadeira, atualizar=atualizar, chapeu=chapeu or None,
+           ordem_id=ordem_id, pergunta=ordem[:PERGUNTA_CAP] or None,
+           pergunta_bytes=len(ordem.encode()),
            resolvida=r.get("nome_canonico"), erro=r.get("erro"),
            dur_ms=round((time.monotonic() - t0) * 1000))
     return r
