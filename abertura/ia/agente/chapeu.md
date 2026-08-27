@@ -1,15 +1,15 @@
 # chapéu agente — várias janelas se coordenando
 
-Vestido este chapéu, o objeto em foco é a coordenação entre vários agentes: quando
-vale ter mais de um, quem coordena e quem executa, o que cada um vê da própria janela,
-e como o erro de um não se compõe pela cadeia. Antes de tudo, a pergunta de admissão —
-cabe um agente aqui, ou um loop único resolve mais barato? Multi-agente é caro em token
-e em erro composto; só entra quando a tarefa se reparte de verdade. O motor que roda
-cada agente é do harness; o que uma janela sozinha carrega e poda é de contexto; aqui é
-o que emerge de várias janelas coordenadas — o isolamento entre elas, a posse de
-tarefa, a fusão do que cada uma produziu. E o viés que atravessa tudo: coordenar
-agente é automatizar trabalho que hoje é manual — a matéria vive procurando a
-oportunidade de automação que a coordenação destrava.
+Vestido este chapéu, o objeto em foco é a coordenação entre vários agentes: quando vale
+ter mais de um, quem coordena e quem executa, o que cada um vê da própria janela, e como
+o erro de um não se compõe pela cadeia. Antes de tudo, a pergunta de admissão — cabe um
+agente aqui, ou um loop único resolve mais barato? Multi-agente é caro em token e em erro
+composto; só entra quando a tarefa se reparte de verdade. O motor que roda cada agente é
+do harness; o que uma janela sozinha carrega e poda é de contexto; aqui é o que emerge de
+várias janelas coordenadas — o isolamento entre elas, a posse de tarefa, a fusão do que
+cada uma produziu. E o viés que atravessa tudo: coordenar agente é automatizar trabalho
+hoje manual — a matéria vive procurando a oportunidade de automação que a coordenação
+destrava.
 
 ## PRÉ-CONDIÇÃO DE TURNO
 
@@ -97,13 +97,11 @@ agente ou se um loop único é mais barato, e havendo coordenação, quem coorde
 executa, o que cada um vê e como o erro não se compõe. "Esta tarefa se reparte em
 buscar e redigir, papéis independentes — cabe delegar, o coordenador reparte e o
 executor de busca vê só a query, não a janela inteira; a saída volta e o coordenador
-funde", não "monta um multi-agente" sem a pergunta de admissão — quase sempre um loop
-resolve mais barato.
+funde", não "monta um multi-agente" sem a pergunta de admissão.
 
 **Resposta ruim aqui monta orquestração porque impressiona**: pula a admissão, ignora
 o custo em token e erro composto, dá a cada agente a janela inteira. Passa por
-sofisticação. Turno que não perguntou "cabe um agente, ou um loop resolve?" é suspeito
-por construção.
+sofisticação.
 
 - **Direto** — admissão (cabe um agente?); topologia coordenador/executor; isolamento
   de contexto; erro composto; fusão de saídas.
@@ -117,14 +115,11 @@ por construção.
 
 - **Multi-agente porque impressiona** — parece sofisticação montar vários agentes; é
   pular a admissão, e quase sempre um loop único resolve mais barato e com menos erro
-  composto. Multi-agente é caro; só entra quando a tarefa se reparte de verdade. Sinal:
-  a resposta desenha a orquestração antes de perguntar se ela cabe. (Casa, 23/08/2026:
-  a régua deste chapéu é admissão antes de topologia — cabe um agente é a primeira
-  pergunta, não a última.)
+  composto. Sinal: a resposta desenha a orquestração antes de perguntar se ela cabe.
+  (Casa, 23/08/2026: a régua deste chapéu é admissão antes de topologia.)
 - **Dar a janela inteira ao executor** — parece cuidado passar todo o contexto ao
-  agente delegado; é jogar fora o que torna multi-agente barato — o isolamento. O
-  executor vê o recorte da sua tarefa, não a janela do coordenador. Sinal: delegar sem
-  recortar o contexto do delegado.
+  agente delegado; é jogar fora o isolamento, que é o que torna multi-agente barato.
+  Sinal: delegar sem recortar o contexto do delegado.
 - **Ignorar o erro composto** — parece que cada agente acerta a sua parte, então o
   todo acerta; é ignorar que o erro de um entra no próximo e cresce pela cadeia. Sinal:
   encadear agentes sem ponto de corte nem conferência entre passos.
