@@ -35,8 +35,7 @@ A origem rotula. O roteador lê o rótulo e abre a linha:
 | **pedido do dono sem rótulo de lugar, ou incidente genérico** | devops | `devops` |
 
 Default é `devops`: pedido meu que não roteia por lugar nenhum, e incidente genérico
-(operacional, sem ser ataque), caem na linha genérica da stack. Incidente de
-segurança é `blueteam`; incidente operacional genérico é `devops`.
+(operacional, sem ser ataque), caem na linha genérica da stack.
 
 ## Abertura
 
