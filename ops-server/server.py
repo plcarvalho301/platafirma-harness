@@ -551,9 +551,8 @@ def _montar(cadeira: str, atualizar: bool, chapeu: str = "", pergunta: str = "")
         return r
 
     nome = r.get("nome_canonico") or ""
-    r["nota_pecas"] = ("cada peça traz {peca, dono, ref, sha, regime, tokens, frescor} "
-                       "e o conteúdo servido; a ordem é a de injeção (estável → volátil) "
-                       "declarada no catálogo, não a de leitura")
+    r["nota_pecas"] = ("ordem das peças = a de injeção (estável → volátil) declarada no "
+                       "catálogo, não a de leitura")
 
     # A FILA NAO ENTRA NA ABERTURA (#189, ordem do dono 17/08).
     # Regra: a abertura carrega IMPEDIMENTO — o que, sem ato, deixa o estado como
@@ -570,47 +569,40 @@ def _montar(cadeira: str, atualizar: bool, chapeu: str = "", pergunta: str = "")
 
 
 async def monta_sessao(cadeira: str = "", atualizar: bool = True, chapeu: str = "", pergunta: str = "") -> dict:
-    """Devolve, numa chamada, o contexto de abertura de uma cadeira da PlataFirma:
-    persona canônica, tool-manifest que ELA declara, org canônico e a mesa.
+    """Contexto de abertura de uma cadeira da PlataFirma numa chamada: persona canônica,
+    tool-manifest que ELA declara, org canônico e a mesa. Chamar no lugar de encadear
+    leituras na abertura de sessão — é para isso que existe.
 
-    NÃO traz fila nem board. A abertura carrega só o que é impedimento — o que, sem
-    ato, deixa o estado como está —, e hoje isso é a mesa. Caixa e carteira saem por
-    `fila` e `tarefas`, verbos chamados por ordem do dono como qualquer outro.
-
-    Chamar no lugar de encadear leituras na abertura de sessão — é o que esta tool
-    existe para matar.
+    NÃO traz fila nem board. A abertura carrega só o que é impedimento — o que, sem ato,
+    deixa o estado como está —, e hoje isso é a mesa. Caixa e carteira saem por `fila` e
+    `tarefas`, chamados por ordem do dono como qualquer verbo.
 
     `cadeira`: sufixo da persona — o prefixo `claudinho-`/`claudinha-` é aceito e
-    descartado. Vazia ou desconhecida devolve `cadeiras` com a lista válida, nunca
-    erro mudo.
+    descartado. Vazia ou desconhecida devolve `cadeiras` com a lista válida, nunca erro
+    mudo.
 
-    NÃO TRATE NENHUMA LISTA DESTE DOCSTRING COMO EXAUSTIVA. A lista viva é
-    `_cadeiras()` — os subdiretórios de `abertura/`, lidos a cada chamada. Em
-    26/08/2026 eram oito: arquiteto, dados, fabrica, gestao-estrategica, ia,
-    produto, seguranca, ti. A enumeração é datada e vai envelhecer; a tool não.
+    NENHUMA LISTA DESTE DOCSTRING É EXAUSTIVA. A lista viva é `_cadeiras()` — os
+    subdiretórios de `abertura/`, lidos a cada chamada; em 26/08/2026 eram oito
+    (arquiteto, dados, fabrica, gestao-estrategica, ia, produto, seguranca, ti), e essa
+    enumeração vai envelhecer. Afirmar que uma cadeira não existe É CONTESTAÇÃO e exige
+    âncora; aqui a âncora só pode ser esta chamada, que custa ~1,6 s. Incidente de
+    26/08/2026: uma instância leu como whitelist três cadeiras que o docstring citava
+    como exemplo e negou ao dono a existência de `gestao-estrategica` — que o log mostra
+    resolvendo limpa (`erro: null`) 77 min antes. A negativa sem a chamada custou a
+    sessão inteira.
 
-    Incidente 26/08/2026 que obriga este parágrafo: o docstring dizia
-    "(`TI`, `IA`, `fabrica`)" como exemplo, e uma instância leu os três como
-    whitelist e respondeu ao dono que `gestao-estrategica` "não é uma cadeira que
-    existe na PlataFirma" — sem chamar a tool. O log mostra a mesma cadeira
-    resolvendo limpa 77 min antes (`resolvida: claudinha-gestao-estrategica`,
-    `erro: null`, 1604 ms). Afirmar que uma cadeira não existe É CONTESTAÇÃO e
-    exige âncora; aqui a âncora só pode ser esta chamada. Uma chamada custa ~1,6 s
-    e devolve a lista. A afirmação sem ela custou a sessão inteira do dono.
-
-    `atualizar` (default true): dá `git pull --ff-only` nos clones de persona e org
-    antes de ler. Falha de rede não interrompe — o pacote vem do clone com
-    `atualizado: false` declarado. Com ou sem pull, `repos` traz sempre `sha`,
-    `head_em` (data do commit servido) e `sincronizado_em` (último fetch): clone
-    velho e clone no head são indistinguíveis sem isso, e servir do clone só é
-    seguro quando a idade vem declarada.
+    `atualizar` (default true): `git pull --ff-only` nos clones de persona e org antes de
+    ler. Falha de rede não interrompe — o pacote vem do clone com `atualizado: false`
+    declarado. Com ou sem pull, `repos` traz sempre `sha`, `head_em` (data do commit
+    servido) e `sincronizado_em` (último fetch): sem isso, clone velho e clone no head
+    são indistinguíveis, e servir do clone só é seguro com a idade declarada.
 
     O pacote sai como CATÁLOGO DE PEÇAS (#189 fase 5): `pecas` é uma lista em ordem de
-    injeção, e cada item traz `{peca, dono, ref, sha, regime, tokens, frescor}` mais o
-    conteúdo servido. Persona, tool-manifest da cadeira, núcleo comum, org, antirreabertura,
-    mesa e índice de cadernos são peças — não há mais uma chave por artefato. Peça que falta
-    vem com `frescor: indisponivel` e o motivo, nunca omitida: pacote sem a peça e pacote
-    com peça vazia seriam indistinguíveis.
+    injeção, cada item com `{peca, dono, ref, sha, regime, tokens, frescor}` mais o
+    conteúdo servido. Persona, tool-manifest da cadeira, núcleo comum, org,
+    antirreabertura, mesa e índice de cadernos são peças — não há chave por artefato.
+    Peça que falta vem com `frescor: indisponivel` e o motivo, nunca omitida: pacote sem
+    a peça e pacote com peça vazia seriam indistinguíveis.
 
     `pacote` traz a conta do que foi servido — número de peças, tokens medidos com o
     tokenizador do harness, método da contagem e o SHA do clone do montador — e diz se o
@@ -623,9 +615,8 @@ async def monta_sessao(cadeira: str = "", atualizar: bool = True, chapeu: str = 
     texto da ordem não há como dizer se havia corpus aplicável que ninguém foi buscar.
     Uma ordem por sessão — a da abertura; nenhum outro verbo registra ordem.
 
-    Persona sem linha `FERRAMENTAL:` devolve `manifesto.ausente` com aviso explícito.
-    Ausência declarada, nunca omissão silenciosa. Sem caso vivo hoje: o exemplo que
-    morava aqui era a claudinha-osint, desligada em 15/08/2026 (org:0002).
+    Persona sem linha `FERRAMENTAL:` devolve `manifesto.ausente` com aviso explícito:
+    ausência declarada, nunca omissão silenciosa.
     """
     negado = _autoriza("monta_sessao", "monta_sessao", "documento",
                        f"sessao:{cadeira or '-'}", DOM_PLATAFORMA)
