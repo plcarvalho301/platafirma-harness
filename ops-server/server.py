@@ -316,6 +316,7 @@ def _autoriza(tool: str, acao: str, tipo: str, alvo: str, dominio: str,
 mcp = FastMCP(
     OPS_NAME,
     transport_security=TransportSecuritySettings(enable_dns_rebinding_protection=False),
+    stateless_http=True,  # incidente #2890 (27/08): sessao stateful expira em fita ociosa -> 400 -> some a lista inteira de verbos. ops-mcp e request/resposta puro (sem notificacao server->client), entao stateless nao custa funcao e mata o modo de falha.
 )
 
 
