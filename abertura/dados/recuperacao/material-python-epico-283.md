@@ -1,5 +1,13 @@
 # regra do épico #283 — não refatore de cabeça
 
+> COMO ESTA RÉGUA CHEGA ÀS SESSÕES: este `.md` NÃO carrega no frontload. O montador
+> (`bin/monta-sessao`) só injeta arquivos com nome whitelistado em `_ARQ_META`
+> (dono/oficio/persona/caderno/chapeu/ferramental); qualquer outro `.md` é ignorado.
+> A régua chega às sessões de TI, IA e dados pelo **comentário #481 do card #2796**
+> (pai do eixo), que é a superfície que cruza cadeiras. Este arquivo é o texto
+> estável e versionado que o comentário resume — cite-o pelo path, não espere que ele
+> apareça sozinho na sua janela.
+
 Orientação EXPRESSA para toda sessão do épico #283 (refatoração do código Python do
 pipeline de recuperação). O épico é quase todo refatoração de um código grande e ruim;
 a recuperação hoje está tóxica em parte porque as sessões afirmam sobre o código e
@@ -67,3 +75,7 @@ O QUE tem de valer (consultar antes de afirmar; o código é fonte, a norma é f
 conduta desta cadeira para o épico. O COMO o código refatorado fica escrito — estilo,
 tipagem, estrutura de erro no toque do CLI — é TI/IA. Esta régua obriga a leitura, não
 dita o estilo do diff.
+
+Escalonar a régua para carregar no frontload de TI/IA (id de catálogo novo em
+`_ARQ_META`) é mudança de contrato do montador — dono TI (montador) + IA (política de
+sessão), decisão do dono. Fora do reversível-na-mão; não feito aqui de propósito.
