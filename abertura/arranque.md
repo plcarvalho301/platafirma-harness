@@ -3,13 +3,12 @@ Substitui: o bloco de arranque repetido em CLAUDE.md por cwd (2026-08-16)
 # arranque — as duas linhas que abrem qualquer sessão
 
 Fonte única do arranque, para as quatro superfícies. Quem serve identidade é o
-pacote de `monta_sessao`; este arquivo só diz como chamá-lo e o que fazer se ele
-não vier.
+pacote de `monta_sessao`; aqui só está como chamá-lo e o que fazer se ele não vier.
 
 **Todo texto de arranque em cwd — `CLAUDE.md`, casca de Project, append de fita —
 é PONTEIRO para cá, nunca cópia.** Cópia congela no commit em que o diretório
 nasceu: hoje há 27 worktrees, cada uma num branch, cada uma com sua versão do
-mesmo parágrafo. Divergência entre elas não é visível de lugar nenhum.
+mesmo parágrafo, e a divergência não é visível de lugar nenhum.
 
 ## As duas linhas
 
@@ -23,8 +22,8 @@ mesmo parágrafo. Divergência entre elas não é visível de lugar nenhum.
 
 O retorno é a instrução da sessão — persona, conduta do dono, tool-manifest,
 fronteiras da org, memória e fila — e vence este arquivo em qualquer conflito de
-conteúdo. Não vasculhe repositório, wiki ou disco para descobrir o que fazer no
-arranque: leitura de descoberta é contexto gasto para chegar ao mesmo lugar.
+conteúdo. Não vasculhe repositório, wiki ou disco no arranque: leitura de descoberta
+é contexto gasto para chegar ao mesmo lugar.
 
 **A conduta não se chama.** `conduta/dono.md` é peça de abertura do catálogo e vem
 dentro do pacote (medido: 1.460 tokens). Linha mandando lê-la seria segunda fonte
@@ -52,11 +51,11 @@ a resposta — ela faz a sessão falar em nome de quem não é e escrever na mes
   verbo chamado por `run_command`.
 - **Code sem injeção só existe em conta onde o arranque não foi instalado.** Rodado o
   posto ou o instalador, o arranque de conta (`agente/CLAUDE.md`, escopo de usuário)
-  alcança qualquer diretório: com slug dito, vale o slug; sem slug, abre
-  `fabrica` por default, porque é o que a conta faz na maior parte do tempo e sessão
-  sem cadeira não é opção. O que eu chamava de "Code seco sem injeção" era, na medição
-  do TI, sessão com a cadeira ERRADA e calada — a persona da fábrica morava buildada
-  no arquivo de conta, já derivada da fonte. Pior que órfã.
+  alcança qualquer diretório: com slug dito, vale o slug; sem slug, abre `fabrica` por
+  default, porque é o que a conta faz na maior parte do tempo e sessão sem cadeira não é
+  opção. O que eu chamava de "Code seco sem injeção" era, na medição do TI, sessão com a
+  cadeira ERRADA e calada — a persona da fábrica morava buildada no arquivo de conta, já
+  derivada da fonte. Pior que órfã.
 - **O que continua faltando no Code seco é conector, não cadeira**: clone sem
   `.mcp.json` não tem `monta_sessao` a chamar. Aí vale a linha 2 — declare que o pacote
   não chegou e não aja como cadeira.

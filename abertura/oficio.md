@@ -15,10 +15,9 @@ como se chama cada flag.
 > **Entrega vai a git ou wiki no mesmo turno.** O dono não tem shell no host: arquivo
 > parado em `~/AI` é rascunho. Publica, e só então relata, com link inteiro e colável.
 
-**Verbos do núcleo:** `acervo listar ferramental --oficio` serve as fichas — o que
-existe e qual o verbo certo. O whitelist do núcleo mora em `oficio-ferramental.md`; o
-conteúdo é gerado do golden record, não repetido aqui. Sub-ato e flag: ficha do verbo
-(lote B). `acervo | seg | motor` sem argumento listam os próprios sub-atos.
+**Verbos do núcleo:** `acervo listar ferramental --oficio` serve as fichas. O whitelist
+do núcleo mora em `oficio-ferramental.md`, gerado do golden record. Sub-ato e flag: ficha
+do verbo (lote B). `acervo | seg | motor` sem argumento listam os próprios sub-atos.
 
 O que o golden record NÃO serve, e por isso mora aqui:
 
