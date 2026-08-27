@@ -30,11 +30,10 @@ try:
 except ImportError:
     sys.exit("erro: modulo 'redis' nao instalado neste venv (uv pip install redis)")
 
-RAIZ = os.environ.get("FILA_RAIZ", os.path.expanduser("~/AI/fila"))
 # Fonte UNICA de quem e destinatario valido: o LEDGER DE VINCULO (arq:0073), o mesmo
-# que monta-sessao e comum/cadeiras.py leem. Antes era o arquivo ~/AI/fila/.personas,
-# mantido a mao — divergia do ledger (faltavam engenharia e politicas-publicas) e a
-# divergencia virava caixa fantasma (card #2431, decisao do dono: unificar a fonte).
+# que monta-sessao e comum/cadeiras.py leem. Antes um roster mantido a mao divergia
+# do ledger (faltavam engenharia e politicas-publicas) e a divergencia virava caixa
+# fantasma (card #2431, decisao do dono: unificar a fonte).
 LEDGER = os.path.join(os.environ.get("PF_RAIZ", os.path.expanduser("~/AI")),
                       "platafirma-harness", "registro", "eventos-org.jsonl")
 # Participantes (DMZ): tem caixa na malha mas NAO sao cadeira no ledger de vinculo,
@@ -92,7 +91,7 @@ def garante_grupo(rc, persona: str):
 def personas_validas():
     """Slugs canonicos de destinatario, do LEDGER DE VINCULO (mesma fonte que
     monta-sessao e comum/cadeiras.py) mais os participantes de PERSONAS_PARTICIPANTES.
-    Nao le mais o arquivo .personas (card #2431: fonte unica).
+    Deriva do ledger (card #2431: fonte unica), nao mais de um roster proprio.
 
     Ledger ausente/ilegivel devolve None — a lista ilegivel NAO e passe livre, e
     valida_persona ja a trata como recusa alta. Ledger presente mas sem nenhuma
@@ -133,7 +132,7 @@ def _falha_json(msg: str, code: int):
 
 
 def canoniza_persona(p: str):
-    """Devolve o nome como esta em .personas, ou None. Case-insensitive: o
+    """Devolve o nome como esta no roster do ledger, ou None. Case-insensitive: o
     humano digita "Claudinho-TI" e a caixa e "claudinho-TI" — sao a mesma
     pessoa, e divergencia de caixa alta nao pode virar caixa nova."""
     validas = personas_validas()
@@ -150,10 +149,10 @@ def canoniza_persona(p: str):
 
 def valida_persona(p: str, json_mode: bool = False):
     validas = personas_validas()
-    # Lista ilegivel NAO e passe livre. Antes, arquivo ausente devolvia None e
-    # esta funcao retornava calada: dentro de container HOME nao e /home/claudinho,
-    # ~/AI/fila/.personas nao existia, e a validacao ficava DESLIGADA — destinatario
-    # com erro de digitacao virava caixa nova, com o remetente vendo sucesso.
+    # Lista ilegivel NAO e passe livre. Antes, fonte ausente devolvia None e esta
+    # funcao retornava calada: dentro de container HOME nao e /home/claudinho, o
+    # ledger nao era alcancado, e a validacao ficava DESLIGADA — destinatario com
+    # erro de digitacao virava caixa nova, com o remetente vendo sucesso.
     if validas is None:
         msg = (f"nao consegui ler o ledger de vinculo ({LEDGER}) — "
                "sem ele nao ha destinatario valido. Aponte PF_RAIZ.")

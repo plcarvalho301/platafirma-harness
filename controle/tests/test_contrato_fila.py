@@ -426,7 +426,7 @@ def test_sonda_nao_envia(monkeypatch, capsys):
 
 
 def test_sonda_nao_e_destinataria(monkeypatch, capsys):
-    """Fora de .personas de proposito: ninguem consegue escrever pra sonda."""
+    """Fora do roster do ledger de proposito: ninguem consegue escrever pra sonda."""
     monkeypatch.setattr(fila_streams, "personas_validas", lambda: {"claudinho-TI"})
     rc = FakeRC({})
     code, _ = _rodar_cli(

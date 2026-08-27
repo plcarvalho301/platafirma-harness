@@ -410,7 +410,7 @@ def test_paginas_nao_tem_javascript_proprio_nem_storage(cliente):
 #
 # "Claudinho-TI" digitado no campo livre criou uma caixa nova em producao. Duas
 # causas, e as duas viraram teste: a validacao do verbo estava desligada quando
-# .personas nao era legivel, e a tela oferecia texto livre onde o verbo tem
+# o roster do ledger nao era legivel, e a tela oferecia texto livre onde o verbo tem
 # lista fechada. Fluxo humano e fluxo de maquina sao o mesmo fluxo: se o verbo
 # enumera, a tela enumera.
 

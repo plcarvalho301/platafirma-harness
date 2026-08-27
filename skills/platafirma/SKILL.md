@@ -103,7 +103,7 @@ PF_CADEIRA=<minha-persona> fila enviar <destinatario> --tipo <tipo> \
      --assunto <assunto> [--ref <ref>] [--responde <id>]    # corpo em stdin
 ```
 
-Destinatário fora de `fila/.personas` é recusado, e caixa encerrada devolve o aviso
+Destinatário fora do roster do ledger de vínculo é recusado, e caixa encerrada devolve o aviso
 de para onde ir — nenhum dos dois some em silêncio. O envelope tem só `tipo`,
 `assunto`, `ref` e `responde`: `de`, `em` e `para` saíram, porque o id do bloco
 carrega remetente e data, e a caixa é o destinatário. `ref` é obrigatório em

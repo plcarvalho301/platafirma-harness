@@ -95,7 +95,7 @@ def _env_sonda() -> dict[str, str]:
     """O agregador nao e sessao de cadeira nenhuma: le como "sonda", identidade
     propria de leitura automatica (LEITOR em fila_streams.py). Sonda mede
     profundidade de caixa e nada mais — ler e enviar sao negados no proprio
-    verbo, e ela nao esta em .personas, entao nem destinataria e."""
+    verbo, e ela nao esta no roster do ledger, entao nem destinataria e."""
     e = dict(os.environ)
     e["PF_CADEIRA"] = "sonda"
     return e

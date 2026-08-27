@@ -22,9 +22,9 @@ services:
       PF_RAIZ: /home/claudinho/AI
       AGREGADOR_ESTADO_PATH: /estado/estado.json
       PF_CADEIRA_TELA: claudinho-TI
-      # HOME no container nao e /home/claudinho: sem isto o verbo procura
-      # .personas em ~/AI/fila e nao acha. Antes isso desligava a validacao
-      # em silencio; hoje e erro duro, mas o caminho certo e apontar.
+      # HOME no container nao e /home/claudinho: sem PF_RAIZ o verbo procura o
+      # ledger de vinculo pelo default do host e nao acha. Antes isso desligava a
+      # validacao em silencio; hoje e erro duro, mas o caminho certo e apontar.
       FILA_RAIZ: /home/claudinho/AI/fila
       DOCKER_HOST: unix:///run/user/1001/docker.sock
       FILA_REDIS_HOST: ${FILA_REDIS_HOST:-motor-msg}
