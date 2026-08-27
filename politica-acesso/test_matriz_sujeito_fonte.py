@@ -56,31 +56,26 @@ MATRIZ: list[tuple[str, str, str, bool, str]] = [
     (EMERGENCIA, "wiki", "wiki:PlataFirma/*", PERMITE, "mesma mão, quando o realm cai"),
     (EMERGENCIA, "acervo", "acervo:firma/*", PERMITE, "idem"),
 
-    # --- o externo: lê o que foi nomeado, e nada mais -------------------------------
-    (EXTERNO, "acervo", "acervo:firma/*", PERMITE, "jaiminho-le-acervo-inteiro"),
-    (EXTERNO, "acervo", "acervo:firma/ia/*", PERMITE, "recorte dentro da concessão"),
-    # DESATUALIZADO ATE 20/08/2026: as duas linhas abaixo esperavam NEGA. Ordem do dono
-    # nesta data concedeu o acervo INTEIRO ao externo (`jaiminho-le-acervo-inteiro`) e
-    # removeu `externo-nunca-alcanca-acervo-pessoal`. Fundamento dele: externo que coda
-    # contra a plataforma sem base sólida quebra o ambiente, e a coleção pessoal é do
-    # titular. Corrigidas à mão, como o gabarito literal exige.
-    (EXTERNO, "acervo", "acervo:pessoal/*", PERMITE, "jaiminho-le-acervo-inteiro, 20/08/2026"),
-    (EXTERNO, "acervo", "acervo:*", PERMITE, "a concessão é o corpus inteiro, por ordem do dono"),
-    (EXTERNO, "wiki", "wiki:principal/*", PERMITE, "jaiminho-le-wiki-conceito"),
-    (EXTERNO, "wiki", "wiki:PlataFirma/*", NEGA, "externo-nao-le-wiki-interna"),
-    (EXTERNO, "wiki", "wiki:Operar/*", NEGA, "runbook é a casa por dentro"),
-    (EXTERNO, "wiki", "wiki:Frente/*", NEGA, "trabalho em curso idem"),
-    (EXTERNO, "wiki", "wiki:*", NEGA, "genérico não casa a concessão nominal"),
-    (EXTERNO, "fila", "caixa:jaiminho", PERMITE, "jaiminho-canal-exclusivo-com-IA"),
-    (EXTERNO, "fila", "caixa:claudinho-IA", PERMITE, "a outra ponta do mesmo canal"),
-    (EXTERNO, "fila", "caixa:claudinho-TI", NEGA, "canal é exclusivo, não é malha"),
-    (EXTERNO, "fila", "caixa:*", NEGA, "as outras seis caixas não são alcançáveis"),
-    (EXTERNO, "board", "item:*", NEGA, "sem regra: o default nega"),
-    (EXTERNO, "board", "item:2303", NEGA, "idem, e nominal não muda nada"),
-    (EXTERNO, "mesa", "mem:*", NEGA, "memória de cadeira não é de externo"),
-    (EXTERNO, "mesa", "mem:ia:harness", NEGA, "idem"),
-    (EXTERNO, "registro", "adr:*", NEGA, "decisão da casa não é de externo"),
-    (EXTERNO, "registro", "seg:0009", NEGA, "idem — inclusive a que o concede"),
+    # --- jaiminho, agora papel `dev` (card #2899): le tudo que a cadeira le --------
+    # O modelo DMZ do externo (read-only, canal exclusivo, casa-por-dentro vedada) foi
+    # SUBSTITUIDO por conta segregada + PAP paridade-menos-publicar. Por isso varias
+    # linhas viraram PERMITE — escritas a mao, como exige o gabarito literal.
+    (EXTERNO, "acervo", "acervo:firma/*", PERMITE, "dev-faz-tudo-menos-publicar"),
+    (EXTERNO, "acervo", "acervo:firma/ia/*", PERMITE, "recorte dentro do alcance"),
+    (EXTERNO, "acervo", "acervo:pessoal/*", PERMITE, "dev le o acervo inteiro (o dono ja o abrira em 20/08)"),
+    (EXTERNO, "acervo", "acervo:*", PERMITE, "idem"),
+    (EXTERNO, "wiki", "wiki:principal/*", PERMITE, "dev le a wiki"),
+    (EXTERNO, "wiki", "wiki:PlataFirma/*", PERMITE, "dev le a casa por dentro; contencao e a conta segregada, nao o PAP"),
+    (EXTERNO, "wiki", "wiki:Operar/*", PERMITE, "idem: runbook"),
+    (EXTERNO, "wiki", "wiki:Frente/*", PERMITE, "idem: trabalho em curso"),
+    (EXTERNO, "fila", "caixa:claudinho-IA", PERMITE, "dev fala com qualquer cadeira (paridade)"),
+    (EXTERNO, "fila", "caixa:claudinho-TI", PERMITE, "idem: o canal deixou de ser exclusivo"),
+    (EXTERNO, "board", "item:*", PERMITE, "dev le o board"),
+    (EXTERNO, "board", "item:2303", PERMITE, "idem, nominal nao muda"),
+    (EXTERNO, "mesa", "mem:*", PERMITE, "dev le a mesa das cadeiras"),
+    (EXTERNO, "mesa", "mem:ia:harness", PERMITE, "idem"),
+    (EXTERNO, "registro", "adr:*", PERMITE, "dev le o registro"),
+    (EXTERNO, "registro", "seg:0009", PERMITE, "idem — inclusive a que o concedia"),
 
     # --- a fábrica: executa card sobre repositório, e o recuperador não a amplia ----
     (FABRICA, "board", "item:2303", NEGA, "`recuperar` não é verbo do fornecedor"),
@@ -119,29 +114,13 @@ def test_matriz(pep, sujeito, fonte, alvo, esperado, porque):
     )
 
 
-# --- o aceite duro do §6, escrito uma vez mais e sozinho -----------------------------
-# Repetido de propósito: as duas linhas que a spec nomeia não podem depender de alguém
-# ler a matriz inteira para achá-las. Falha aqui é vazamento, não regressão de forma.
-
-# `acervo:pessoal/*` SAIU desta lista em 20/08/2026: deixou de ser vedado por ordem do
-# dono. O que resta vedado ao externo é a casa por dentro — decisão, runbook e trabalho
-# em curso —, que é outra matéria e não foi tocada.
-VEDADO_AO_EXTERNO = [("wiki", "wiki:PlataFirma/*"), ("wiki", "wiki:Operar/*")]
-
-
-@pytest.mark.parametrize("fonte,alvo", VEDADO_AO_EXTERNO)
-def test_externo_nao_alcanca_a_casa_por_dentro_pelo_recuperar(pep, fonte, alvo):
-    assert pep.autoriza_fonte(EXTERNO, Fonte(fonte), [alvo]) is not None, (
-        f"VAZAMENTO: pesquisador-externo alcançou {alvo} por dentro do recuperar (§6)"
-    )
-
-
-def test_vedado_nao_passa_nem_misturado_com_alvo_concedido(pep):
-    """Negativa total: o alvo vedado no meio de um pedido legítimo derruba a fonte."""
-    n = pep.autoriza_fonte(EXTERNO, Fonte("wiki"),
-                           ["wiki:principal/*", "wiki:PlataFirma/*"])
-    assert n is not None and n.alvo == "wiki:PlataFirma/*"
-
+# --- §6: aceite de contencao do externo REMOVIDO (card #2899, 27/08/2026) -----------
+# A matriz §6 (VEDADO_AO_EXTERNO + os testes de vazamento) existia para provar que o
+# `pesquisador-externo` nao alcancava a casa por dentro. jaiminho passou a `dev` e nao
+# ha mais sujeito `pesquisador-externo`: o aceite ficou vacuo. A contencao do provider
+# agora e a CONTA SEGREGADA, nao o PAP. SE um novo sujeito contido (DMZ read-only)
+# nascer, este aceite tem de ser RESTAURADO para ELE — a prova nao pode morrer com o
+# sujeito que a motivou.
 
 # --- completude: fonte nova entra na matriz, ou o build para -------------------------
 

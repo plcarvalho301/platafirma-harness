@@ -39,17 +39,19 @@ sujeitos:
     dominios: [plataforma]
     conta: claudinho
 
-  # Colaboração externa em modelo DMZ (card 344, seg:0009). Lê acervo por concessão
-  # nomeada e fala pelo canal exclusivo com claudinho-IA. Não executa comando, não
-  # toca identidade — as três negativas duras do PAP pegam este papel.
+  # PROMOVIDO A `dev` em 27/08/2026 (card #2899, ordem do dono): faz tudo que a
+  # cadeira faz, menos publicar em producao. O modelo DMZ (read-only, canal exclusivo
+  # com claudinho-IA) FOI SUBSTITUIDO — a contencao agora e a CONTA SEGREGADA
+  # (uid 1003, container proprio, credencial de push escopada), nao mais o PAP.
+  # Regras `dev-*` em politica.yaml; as `pesquisador-externo` viram inertes.
   # Token real: client L0R8OJ (service account), criado em 13/08/2026 por claudinho-TI
   # com autorizacao do dono. sub do realm cc897004-7afd-4a53-9a16-c568220d524c; o
   # `preferred_username` sai como `jaiminho` por mapper hardcoded no client, e e por
   # ele que o PEP resolve o sujeito e monta `caixa:jaiminho`.
   jaiminho:
     natureza: servico
-    papeis: [pesquisador-externo]
-    dominios: [plataforma-acervo, plataforma-wiki, plataforma-repo, plataforma-drive, mensageria]
+    papeis: [dev]
+    dominios: [plataforma]
     client: L0R8OJ
     conta: jaiminho
 
@@ -121,8 +123,8 @@ sujeitos:
   # colaboração externa — mesmo sujeito de `jaiminho`, client L0R8OJ
   cc897004-7afd-4a53-9a16-c568220d524c:
     natureza: servico
-    papeis: [pesquisador-externo]
-    dominios: [plataforma-acervo, plataforma-wiki, plataforma-repo, plataforma-drive, mensageria]
+    papeis: [dev]
+    dominios: [plataforma]
     client: L0R8OJ
     conta: jaiminho
 

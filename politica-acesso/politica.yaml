@@ -62,6 +62,8 @@ eixos:
       rotulo: "Cadeira do reino — alcance amplo, aceito em seg:0006"
     fornecedor:
       rotulo: "Fábrica e colaboração externa — executa card, não administra"
+    dev:
+      rotulo: "Provider que desenvolve — faz tudo que a cadeira faz, menos publicar em produção (card #2899, ordem do dono 27/08/2026)"
     operador:
       rotulo: "Humano com credencial própria"
     pesquisador-externo:
@@ -139,6 +141,60 @@ regras:
     efeito: permite
     motivo: "cadeira do reino, alcance amplo declarado em seg:0006"
     quando: {papel: reino, dominio: plataforma}
+    acoes: ["*"]
+    sobre: ["*"]
+
+  # --- dev: o provider que desenvolve (card #2899, ordem do dono 27/08/2026) ----
+  # A UNICA diferenca de autorizacao entre a cadeira (reino) e a fabrica e NAO
+  # PUBLICAR EM PRODUCAO. O resto da contencao do jaiminho e a CONTA SEGREGADA
+  # (uid 1003, container proprio, credencial de push escopada), nao o PAP — ordem
+  # direta do dono, 27/08/2026. Por isso `dev` espelha `reino-plataforma-tudo` e
+  # recorta so o que e "publicar" e a integridade dessa restricao.
+  #
+  # ATENCAO, e esta e a razao que nao pode virar so comentario: "nao publicar" no
+  # lado do GIT (push/merge no branch default) NAO e controle do PAP. O PAP libera
+  # `git push*` de proposito — `fornecedor-le-repo` ja permite `git push origin main`,
+  # e o proprio arquivo diz que allowlist de prefixo de string e mitigacao, nao
+  # controle. Quem trava merge no default e a CREDENCIAL escopada da conta jaiminho
+  # (mao do dono, pendente). O que o PAP trava aqui e o RUNTIME de producao — subir
+  # container, unit, deploy, banco, segredo — que e a outra metade de "publicar".
+  #
+  # jaiminho (client L0R8OJ) passou de `pesquisador-externo` para `dev` em
+  # sujeitos.yaml. As regras de `pesquisador-externo` abaixo ficam INERTES (nenhum
+  # sujeito as carrega) ate o expurgo do split, que e mao de claudinho-TI e vem
+  # junto do teardown do container jaiminho-fabrica.
+  - id: dev-faz-tudo-menos-publicar
+    efeito: permite
+    motivo: "dev faz tudo que a cadeira faz; o recorte vem das negativas abaixo · card #2899, ordem do dono 27/08/2026 · vence 2027-02-27"
+    quando: {papel: dev, dominio: plataforma}
+    acoes: ["*"]
+    sobre: ["*"]
+
+  - id: dev-nao-publica-em-producao
+    efeito: nega
+    motivo: "publicar em producao e a unica diferenca dev x cadeira: runtime de prod fora do alcance — deploy, container, unit, banco, segredo de ambiente, e os verbos de administracao de acesso"
+    quando: {papel: dev}
+    acoes: ["*"]
+    sobre: ["docker*", "systemctl*", "psql*", "deploy*", "infra*", "*.env*", "seg *", "acesso *"]
+
+  - id: dev-nao-toca-identidade
+    efeito: nega
+    motivo: "integridade da restricao de publicar: quem cunha credencial ou gira segredo escala ate prod · identidade e segredo nao sao do dev"
+    quando: {papel: dev, dominio: plataforma-identidade}
+    acoes: ["*"]
+    sobre: ["*"]
+
+  - id: dev-nao-edita-o-que-o-julga
+    efeito: nega
+    motivo: "integridade da restricao: quem edita o PAP concede a si mesmo o push que a regra nega · PAP, persona e conduta nao se editam por quem e julgado por eles"
+    quando: {papel: dev}
+    acoes: ["*"]
+    sobre: ["politica-acesso/*", "*/politica-acesso/*", "abertura/*", "*/abertura/*"]
+
+  - id: dev-nao-alcanca-drive-do-dono
+    efeito: nega
+    motivo: "o Drive do dono e dado pessoal, nao codigo de plataforma, e nao tem relacao com publicar: fora do alcance do dev · dev entrega por repo/wiki, nao precisa da area de transferencia"
+    quando: {papel: dev, dominio: plataforma-drive}
     acoes: ["*"]
     sobre: ["*"]
 

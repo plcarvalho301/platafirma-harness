@@ -25,6 +25,62 @@ POLITICA = RAIZ / "politica-acesso"
 OPERADOR = "megafone"          # papel `operador`, dominio `plataforma`
 EXTERNO = "jaiminho"           # papel `pesquisador-externo`
 
+# jaiminho virou papel `dev` (card #2899, 27/08/2026) e le tudo: nao ha mais sujeito
+# VIVO com leitura de wiki PARCIAL (um namespace concedido, outro negado por regra
+# nomeada). O que os testes de MECANISMO abaixo julgam — negativa por alvo, negativa
+# total, trilha — independe de QUEM, e o proprio cabecalho deste arquivo diz isso. Por
+# isso eles rodam contra uma POLITICA SINTETICA, com um sujeito contido `s-contido`,
+# em vez de tomar emprestado um sujeito do PAP vivo.
+CONTIDO = "s-contido"
+
+_POL_DMZ = """versao: 1
+eixos:
+  dominio:
+    plataforma: {rotulo: p}
+    plataforma-wiki: {rotulo: w, pai: plataforma}
+    plataforma-acervo: {rotulo: a, pai: plataforma}
+  papel:
+    contido: {rotulo: c}
+  tema: {}
+regras:
+  - id: contido-le-acervo
+    efeito: permite
+    motivo: le o acervo inteiro
+    quando: {papel: contido, dominio: plataforma-acervo}
+    acoes: ['*']
+    sobre: ['acervo:*']
+  - id: contido-le-wiki-principal
+    efeito: permite
+    motivo: le a camada de conceito da wiki
+    quando: {papel: contido, dominio: plataforma-wiki}
+    acoes: ['*']
+    sobre: ['wiki:principal/*']
+  - id: contido-nao-le-wiki-interna
+    efeito: nega
+    motivo: a casa por dentro nao e do contido
+    quando: {papel: contido, dominio: plataforma-wiki}
+    acoes: ['*']
+    sobre: ['wiki:PlataFirma/*', 'wiki:Operar/*', 'wiki:Frente/*']
+"""
+_SUJ_DMZ = """sujeitos:
+  s-contido:
+    natureza: servico
+    papeis: [contido]
+    dominios: [plataforma-acervo, plataforma-wiki]
+"""
+
+
+@pytest.fixture
+def dmz_dir(tmp_path):
+    (tmp_path / "politica.yaml").write_text(_POL_DMZ)
+    (tmp_path / "sujeitos.yaml").write_text(_SUJ_DMZ)
+    return tmp_path
+
+
+@pytest.fixture
+def pep_dmz(dmz_dir):
+    return PEP(dmz_dir)
+
 
 @pytest.fixture
 def pep() -> PEP:
@@ -91,21 +147,20 @@ def test_alvo_ausente_vira_prefixo_da_materia_nunca_asterisco(pep):
         assert alvo != "*", "`sobre` vazio vira `*` no PDP e entrega a matéria inteira"
 
 
-def test_alvo_padrao_tem_de_bater_na_concessao_nominal(pep):
-    """O alvo padrão não atravessa: ele CASA, ou nega. Que ele passe hoje no acervo é
-    consequência de `jaiminho-le-acervo-inteiro` (`sobre: ["acervo:*"]`, `458178c`, ordem
-    do dono de 20/08) — e a wiki, que não teve concessão alargada, continua provando a
-    régra: alvo padrão sem regra que o cubra é negativa."""
-    assert pep.autoriza_fonte(EXTERNO, Fonte("acervo")) is None
-    assert pep.autoriza_fonte(EXTERNO, Fonte("acervo"), ["acervo:firma/ia/*"]) is None
-    assert pep.autoriza_fonte(EXTERNO, Fonte("mesa")) is not None, (
-        "`mem:*` não é concedido ao externo: o alvo padrão não vira salvo-conduto"
+def test_alvo_padrao_tem_de_bater_na_concessao_nominal(pep_dmz):
+    """O alvo padrão não atravessa: ele CASA, ou nega. O acervo passa porque o sujeito
+    contido tem `sobre: ["acervo:*"]`; a mesa, que ele não alcança, prova a régra: alvo
+    padrão sem regra que o cubra é negativa."""
+    assert pep_dmz.autoriza_fonte(CONTIDO, Fonte("acervo")) is None
+    assert pep_dmz.autoriza_fonte(CONTIDO, Fonte("acervo"), ["acervo:firma/ia/*"]) is None
+    assert pep_dmz.autoriza_fonte(CONTIDO, Fonte("mesa")) is not None, (
+        "`mem:*` não é concedido ao contido: o alvo padrão não vira salvo-conduto"
     )
 
 
 # 4. Negativa total — nem entre alvos, nem entre fontes -------------------------------
 
-def test_alvo_negado_nega_a_fonte_inteira(pep):
+def test_alvo_negado_nega_a_fonte_inteira(pep_dmz):
     """Pedido de dois recortes com concessão de um não vira busca em um (§6).
 
     O par usado aqui era `acervo:firma/*` + `acervo:pessoal/*`, que deixou de servir: o
@@ -113,27 +168,27 @@ def test_alvo_negado_nega_a_fonte_inteira(pep):
     `externo-nunca-alcanca-acervo-pessoal` saiu do PAP. A régra do §6 não mudou — mudou
     qual par a exercita. A wiki é o par vivo: `principal` concedido, camada interna não.
     """
-    n = pep.autoriza_fonte(EXTERNO, Fonte("wiki"),
+    n = pep_dmz.autoriza_fonte(CONTIDO, Fonte("wiki"),
                            ["wiki:principal/*", "wiki:PlataFirma/*"])
     assert n is not None
     assert n.alvo == "wiki:PlataFirma/*"
-    assert n.regra == "externo-nao-le-wiki-interna"
+    assert n.regra == "contido-nao-le-wiki-interna"
 
 
-def test_autoriza_devolve_todas_as_negativas_nao_a_primeira(pep):
-    negs = pep.autoriza(EXTERNO, {Fonte("registro"): ["adr:*"],
+def test_autoriza_devolve_todas_as_negativas_nao_a_primeira(pep_dmz):
+    negs = pep_dmz.autoriza(CONTIDO, {Fonte("registro"): ["adr:*"],
                                   Fonte("wiki"): ["wiki:PlataFirma/*"],
                                   Fonte("mesa"): []})
     assert {n.fonte for n in negs} == {Fonte("registro"), Fonte("wiki"), Fonte("mesa")}
-    assert pep.autoriza_fonte(EXTERNO, Fonte("acervo"), ["acervo:pessoal/*"]) is None, (
-        "o acervo saiu deste conjunto por ato do dono (458178c), não por defeito do PEP"
+    assert pep_dmz.autoriza_fonte(CONTIDO, Fonte("acervo"), ["acervo:pessoal/*"]) is None, (
+        "o acervo do contido cobre `acervo:*`, então este alvo passa"
     )
 
 
-def test_uma_negativa_no_meio_do_pedido_nega_o_pedido_inteiro(pep):
+def test_uma_negativa_no_meio_do_pedido_nega_o_pedido_inteiro(pep_dmz):
     pedido = {Fonte("acervo"): ["acervo:firma/ia/*"],   # concedido
               Fonte("wiki"): ["wiki:PlataFirma/*"]}     # negado
-    negs = pep.autoriza(EXTERNO, pedido)
+    negs = pep_dmz.autoriza(CONTIDO, pedido)
     env = recusa_por_concessao(pedido, negs)
     assert env.itens == []
     assert {l.fonte for l in env.linhas} == set(pedido), "invariante 4: N linhas"
@@ -144,22 +199,22 @@ def test_uma_negativa_no_meio_do_pedido_nega_o_pedido_inteiro(pep):
 
 # 5. A recusa instrui ------------------------------------------------------------------
 
-def test_recusa_nomeia_o_alvo_a_regra_e_o_proximo_pedido(pep):
+def test_recusa_nomeia_o_alvo_a_regra_e_o_proximo_pedido(pep_dmz):
     pedido = {Fonte("acervo"): ["acervo:firma/ia/*"], Fonte("wiki"): ["wiki:PlataFirma/*"]}
-    env = recusa_por_concessao(pedido, pep.autoriza(EXTERNO, pedido))
+    env = recusa_por_concessao(pedido, pep_dmz.autoriza(CONTIDO, pedido))
     assert "wiki:PlataFirma/*" in env.falta
-    assert "externo-nao-le-wiki-interna" in env.falta
+    assert "contido-nao-le-wiki-interna" in env.falta
     assert "repetir sem wiki" in env.proximo
     assert "acervo segue alcancavel" in env.proximo
 
 
-def test_recusa_sai_no_json_como_aviso_por_fonte(pep):
+def test_recusa_sai_no_json_como_aviso_por_fonte(pep_dmz):
     pedido = {Fonte("acervo"): ["acervo:pessoal/*"], Fonte("wiki"): ["wiki:PlataFirma/*"]}
-    j = recusa_por_concessao(pedido, pep.autoriza(EXTERNO, pedido)).para_json()
+    j = recusa_por_concessao(pedido, pep_dmz.autoriza(CONTIDO, pedido)).para_json()
     assert {a["fonte"] for a in j["aviso"]} == {"acervo", "wiki"}
     assert {a["causa"] for a in j["aviso"]} == {"sem-concessao"}
     assert j["cobertura"] == "fonte-nao-indexada"
-    assert "sujeito" not in j and EXTERNO not in str(j), (
+    assert "sujeito" not in j and CONTIDO not in str(j), (
         "§3 inv. 5 — `sujeito` não entra no envelope, entra na trilha"
     )
 
@@ -171,18 +226,18 @@ def test_recusa_sem_fonte_nenhuma_levanta_em_vez_de_mentir():
 
 # 6. Trilha — o §11 é do host, e o PEP entrega o material ------------------------------
 
-def test_negativa_e_permissao_saem_auditadas_por_fonte():
+def test_negativa_e_permissao_saem_auditadas_por_fonte(dmz_dir):
     ev = []
-    p = PEP(POLITICA, auditor=ev.append)
-    p.autoriza_fonte(EXTERNO, Fonte("wiki"), ["wiki:principal/*"])
-    p.autoriza_fonte(EXTERNO, Fonte("wiki"), ["wiki:PlataFirma/*"])
+    p = PEP(dmz_dir, auditor=ev.append)
+    p.autoriza_fonte(CONTIDO, Fonte("wiki"), ["wiki:principal/*"])
+    p.autoriza_fonte(CONTIDO, Fonte("wiki"), ["wiki:PlataFirma/*"])
     assert [e["evento"] for e in ev] == ["pep_permitiu", "pep_negou"]
-    assert all(e["fonte"] == "wiki" and e["sujeito"] == EXTERNO for e in ev)
-    assert ev[1]["regra"] == "externo-nao-le-wiki-interna"
+    assert all(e["fonte"] == "wiki" and e["sujeito"] == CONTIDO for e in ev)
+    assert ev[1]["regra"] == "contido-nao-le-wiki-interna"
 
 
-def test_sem_auditor_o_pep_decide_igual(pep):
-    assert pep.autoriza_fonte(EXTERNO, Fonte("wiki"), ["wiki:PlataFirma/*"]) is not None
+def test_sem_auditor_o_pep_decide_igual(pep_dmz):
+    assert pep_dmz.autoriza_fonte(CONTIDO, Fonte("wiki"), ["wiki:PlataFirma/*"]) is not None
 
 
 # 7. Releitura do PAP sem restart ------------------------------------------------------

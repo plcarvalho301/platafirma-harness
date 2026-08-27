@@ -37,23 +37,28 @@ ESTRANHO = "cadeira-que-nao-existe"
 
 # (sujeito, acao, tipo, dominio, alvo, esperado, por que)
 CASOS = [
-    # --- (e) wiki: leitura por sujeito, de qualquer servidor -------------------
+    # jaiminho carrega agora o papel `dev` (card #2899, ordem do dono 27/08/2026): faz
+    # tudo que a cadeira faz, menos publicar em producao. Varias linhas de EXTERNO que
+    # eram NEGA no modelo DMZ viraram PERMITE — escritas A MAO, como o gabarito literal
+    # exige. jaiminho-fabrica (FABRICA) segue `fornecedor` ate o teardown do split.
+
+    # --- (e) wiki: dev le e escreve como cadeira -------------------------------
     (EXTERNO, "wiki_ler", "wiki", "plataforma-wiki", "wiki:principal/Ontologia",
-     PERMITE, "jaiminho-le-wiki-conceito"),
+     PERMITE, "dev-faz-tudo-menos-publicar"),
     (EXTERNO, "wiki_buscar", "wiki", "plataforma-wiki", "wiki:principal/*",
-     PERMITE, "busca entrou na mesma concessao em 20/08"),
+     PERMITE, "idem"),
     (EXTERNO, "wiki_listar", "wiki", "plataforma-wiki", "wiki:principal/*",
      PERMITE, "idem"),
     (EXTERNO, "wiki_consultar", "wiki", "plataforma-wiki", "wiki:principal/*",
-     PERMITE, "idem — cargo le o mesmo namespace"),
+     PERMITE, "idem"),
     (EXTERNO, "wiki_buscar", "wiki", "plataforma-wiki", "wiki:PlataFirma/*",
-     NEGA, "externo-nao-le-wiki-interna, e buscar nao contorna"),
-
-    # --- (e) wiki: escrita nao se concede por portar token ---------------------
+     PERMITE, "dev le a casa por dentro; a contencao e a conta segregada, nao o PAP"),
     (EXTERNO, "wiki_editar", "wiki", "plataforma-wiki", "wiki:principal/Ontologia",
-     NEGA, "externo-nao-escreve-na-wiki"),
+     PERMITE, "dev escreve wiki como cadeira"),
     (EXTERNO, "wiki_enviar_arquivo", "wiki", "plataforma-wiki", "wiki:File/x.png",
-     NEGA, "envio de binario e superficie de outra natureza"),
+     PERMITE, "idem"),
+
+    # --- (e) FABRICA/fornecedor segue como antes ------------------------------
     (FABRICA, "wiki_editar", "wiki", "plataforma-wiki", "wiki:principal/Ontologia",
      NEGA, "fornecedor-nao-escreve-na-wiki: a entrega da fabrica e commit"),
     (FABRICA, "wiki_ler", "wiki", "plataforma-wiki", "wiki:principal/Ontologia",
@@ -63,7 +68,7 @@ CASOS = [
     (ESTRANHO, "wiki_ler", "wiki", "plataforma-wiki", "wiki:principal/Ontologia",
      NEGA, "atributo ausente nega"),
 
-    # --- (d) os dois buracos medidos, agora fechados ---------------------------
+    # --- (d) FABRICA/fornecedor: os dois buracos medidos seguem fechados -------
     (FABRICA, "run_command", "comando", "plataforma", "git -c core.pager=sh log",
      NEGA, "BURACO 1: `git -c` executa comando arbitrario; o glob `git *` o cobria"),
     (FABRICA, "run_command", "comando", "plataforma", "git -c alias.z=!sh z",
@@ -72,23 +77,39 @@ CASOS = [
      NEGA, "BURACO 2: `cat *` ESCREVIA; leitura agora e `read_file`, com alvo"),
     (FABRICA, "run_command", "comando", "plataforma", "cat /etc/passwd",
      NEGA, "`cat *` saiu inteiro: nao ha meio-termo por glob"),
-
-    # --- (d) o que a fabrica precisa continua passando -------------------------
     (FABRICA, "run_command", "comando", "plataforma", "git status --short",
      PERMITE, "fornecedor-le-repo, subcomando nomeado"),
-    (FABRICA, "run_command", "comando", "plataforma", "git commit -m x",
-     PERMITE, "idem"),
     (FABRICA, "run_command", "comando", "plataforma", "git push origin main",
-     PERMITE, "idem"),
-    (FABRICA, "run_command", "comando", "plataforma", "pytest -q",
-     PERMITE, "idem"),
-    (FABRICA, "run_command", "comando", "plataforma", "tarefas comentar 2286 x",
-     PERMITE, "fornecedor-opera-o-card"),
-
-    # --- (d) o que continua fora, e e o ponto da regra ------------------------
+     PERMITE, "fornecedor tambem: o PAP nao trava push; a credencial trava"),
     (FABRICA, "run_command", "comando", "plataforma", "docker ps",
      NEGA, "fornecedor-sem-estado-do-host"),
-    (FABRICA, "run_command", "comando", "plataforma", "systemctl --user restart docker",
+
+    # --- (d) dev (jaiminho): run_command AMPLO, publicar-em-prod recortado -----
+    # O recorte do dev e por ALVO, nao por allowlist de git subcomando a subcomando:
+    # o proprio PAP diz que prefixo de string e mitigacao, nao controle. A contencao
+    # do dev e a CONTA segregada; por isso o mesmo `git -c ...` que a fabrica nega,
+    # o dev permite — a diferenca de modelo esta escrita aqui de proposito.
+    (EXTERNO, "run_command", "comando", "plataforma", "git status --short",
+     PERMITE, "dev-faz-tudo-menos-publicar"),
+    (EXTERNO, "run_command", "comando", "plataforma", "pytest -q",
+     PERMITE, "dev roda teste e build"),
+    (EXTERNO, "run_command", "comando", "plataforma", "git -c alias.z=!sh z",
+     PERMITE, "dev tem run_command amplo por desenho; o vetor de contencao do dev e a conta, nao o filtro de string"),
+    # PONTO CRITICO: o PAP NAO impede o dev de dar push no branch default.
+    (EXTERNO, "run_command", "comando", "plataforma", "git push origin main",
+     PERMITE, "o PAP libera push; a trava de publicar-no-git e a credencial escopada da conta, nao o PAP"),
+    # O que o PAP TRAVA e o RUNTIME de producao (a outra metade de publicar):
+    (EXTERNO, "run_command", "comando", "plataforma", "docker compose up -d",
+     NEGA, "dev-nao-publica-em-producao"),
+    (EXTERNO, "run_command", "comando", "plataforma", "systemctl --user restart ops",
+     NEGA, "idem: runtime de prod"),
+    (EXTERNO, "run_command", "comando", "plataforma", "deploy prod",
+     NEGA, "idem"),
+    (EXTERNO, "run_command", "comando", "plataforma", "cat prod.env",
+     NEGA, "idem: `*.env*` e segredo de ambiente"),
+    (EXTERNO, "run_command", "comando", "plataforma", "seg conceder x",
+     NEGA, "idem: administracao de acesso nao e do dev"),
+    (EXTERNO, "run_command", "comando", "plataforma", "acesso desligar x",
      NEGA, "idem"),
 ]
 
