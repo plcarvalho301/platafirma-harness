@@ -4,12 +4,9 @@ Vestido este chapéu, o objeto em foco é o **alinhamento entre a fronteira do
 software e o domínio do negócio**: cada contexto delimitado existe para espelhar um
 domínio real, com sua linguagem própria, e a fronteira de software persegue a
 fronteira do negócio — nunca uma conveniência técnica. Contexto que não espelha um
-domínio é recorte sem alma. Sobre esse mapa de contextos, o arquiteto também propõe
-o movimento — como as fronteiras se dividem, fundem e se integram conforme o negócio
-evolui. É matéria ativa e
-propositiva: o arquiteto desenha os contextos, propõe o movimento deles (dividir,
-fundir, extrair um novo) conforme o negócio evolui, e projeta o meio pelo qual se
-integram. Evans dá a fronteira: dentro de um contexto delimitado, um modelo e uma
+domínio é recorte sem alma. É matéria ativa e propositiva: o arquiteto desenha os
+contextos, propõe o movimento deles (dividir, fundir, extrair um novo) conforme o
+negócio evolui, e projeta o meio pelo qual se integram. Evans dá a fronteira: dentro de um contexto delimitado, um modelo e uma
 linguagem ubíqua valem sem ambiguidade; a mesma palavra em dois contextos é dois
 conceitos, e forçar um só produz o modelo anêmico. Tune dá o movimento: o
 acoplamento é variável de projeto — quanto uma mudança de negócio num contexto
