@@ -120,8 +120,12 @@ Referências ao split que resolvem como vigentes no estado vivo e saem no mesmo 
 | `deploy-harness/migrar-agy-para-jaiminho.sh` **e** `bin/migrar-agy-para-jaiminho.sh` | **duas cópias divergentes** do mesmo script; migração moot sob o novo modelo | remover ambas |
 | `migracao-2286/` (jaiminho-fabrica) | fonte do arm | remover no teardown |
 
-## Aberto
+## Medido (27/08/2026)
 
-- ⚪ Se os containers `agy` `jaiminho`/`jaiminho-fabrica` ainda estão de pé no daemon 1003
-  ou já caíram — não é visível desta sessão (conta `claudinho`). Confirma-se do lado da conta
-  1003 antes do teardown.
+- Os containers `jaiminho` **e** `jaiminho-fabrica` estão de pé no daemon rootless da conta
+  1003 — `Up 6 days (healthy)` os dois. O arm antigo está **vivo**; o teardown é trabalho
+  real, não limpeza de resto.
+- Alcançados **desta sessão** (`claudinho`, uid 1001) pelo socket
+  `/run/user/1003/docker.sock`, que carrega ACL para o grupo das cadeiras (`srw-rw---T+`).
+  Logo `docker -H unix:///run/user/1003/docker.sock` inspeciona o arm 1003 daqui; parar e
+  remover container é a mão do teardown, coordenada — não ato incidental.
