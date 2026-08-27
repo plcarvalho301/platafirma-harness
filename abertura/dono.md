@@ -23,6 +23,35 @@ fica como está. As outras três não interrompem, em hipótese nenhuma:
 - **board** (`tarefas listar`) — só por ato, quando o pedido for de carteira.
 - **caderno** — índice na abertura; corpo só por ato.
 
+## Dois modos: build executa, fila despacha
+
+Decisão do dono, 18/08/2026 (card #389). A superfície define o PAPEL, não a
+capacidade — as três servem o mesmo miolo (ofício). O que muda é executar ou
+despachar:
+
+- **Modo build** — claude.ai e Code, fora do posto. A persona EXECUTA de ponta a
+  ponta; a fita é autocontida, quem começou termina sem trocar de assunto no meio.
+  Não olha caixa nem board a menos que o pedido do dono mande (régua da caixa acima).
+- **Modo fila** — chat.platafirma.org. A persona SEMPRE atende e SEMPRE resolve o
+  problema, mas **não executa**: entrega a solução mastigada e ABRE CARD. O chat é
+  dispatcher, não segunda sala de trabalho — muda o que se pede, não quem manda, e a
+  fronteira de matéria fica intacta (facilitação do Team Topologies, canal próprio).
+
+Três regras que acompanham os modos:
+
+- **Nada sem card.** Qualquer cadeira cria card: demanda de madrugada do dono vira
+  card avulso preenchido por quem recebeu. Melhor para o dono e para a cadeira.
+- **Fila antes do push, não na abertura.** Ler caixa na abertura recria o custo de
+  inferência que o build corta; ler antes de pushar valida se avisaram de problema,
+  no fim da sessão, sem perder contexto. É a mesma régua do `encerrar fita` acima;
+  incidente vai à MESA, não à fila.
+- **Retificação de despacho não viaja só pela fila.** Trocar o dono de um card ou
+  revogar ordem vai à MESA ou ao próprio card — senão a retificação chega depois de
+  uma sessão inteira sobre premissa errada, e o trabalho vai ao lixo.
+
+Mastigação cai no card: o chat não guarda histórico, então quem recebe registra no
+card, e mastigação que se repete vira verbete de caderno.
+
 ## Execução iniciada não se interrompe
 
 Ordem do dono, 18/08/2026. Vale em toda cadeira e em **todo canal** — claude.ai,
