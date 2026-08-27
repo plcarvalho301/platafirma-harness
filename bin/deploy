@@ -104,6 +104,11 @@ reversao_resumo() {
 
 command -v jq >/dev/null || { echo "jq ausente — o registro e JSON e nao se le na mao" >&2; exit 1; }
 
+# --ajuda UNIVERSAL, sem efeito colateral (card #2868, ex-#2274 defeito 4). So o
+# PRIMEIRO argumento: o resto e repassado cru ao `docker compose`, que tem seu
+# proprio --help. Sem isto, `deploy --ajuda` tratava "--ajuda" como nome de stack.
+case "${1:-}" in --ajuda|--help|-h) uso ;; esac
+
 [ $# -ge 1 ] || uso
 STACK="$1"; shift || true
 

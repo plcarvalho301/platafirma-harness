@@ -468,6 +468,15 @@ backup() {
 
 # --- despacho ---------------------------------------------------------------
 
+# --ajuda UNIVERSAL, sem efeito colateral (card #2868, ex-#2274 defeito 4). ANTES do
+# despacho, varrendo TODOS os argumentos: cobre `infra --ajuda` e `infra <sub> --ajuda`.
+# `uso` ja sai 2.
+for _a in "$@"; do
+  case "$_a" in
+    --ajuda|--help|-h) uso ;;
+  esac
+done
+
 cmd="${1:-}"; shift || uso
 
 case "$cmd" in

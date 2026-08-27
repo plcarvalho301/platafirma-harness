@@ -986,6 +986,10 @@ def despachar(argv):
 
 
 def main(argv):
+    # --ajuda UNIVERSAL, sem efeito colateral (card #2868, ex-#2274 defeito 4): varre
+    # todos os argumentos antes do despacho; nenhum ato chega a rodar. uso() sai 2.
+    if any(x in ("--ajuda", "--help", "-h") for x in argv):
+        return uso()
     if not argv:
         return uso()
     ato, resto = argv[0], argv[1:]

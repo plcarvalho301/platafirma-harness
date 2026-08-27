@@ -319,6 +319,10 @@ def ato_varredura(args):
 
 
 def main():
+    # --ajuda UNIVERSAL (card #2868, ex-#2274 defeito 4): argparse ja da -h/--help;
+    # aqui so mapeamos o alias PT --ajuda -> --help antes do parse, sem colidir com
+    # os subparsers. Sem efeito colateral: nenhum ato roda.
+    sys.argv = [("--help" if a == "--ajuda" else a) for a in sys.argv]
     # Chamado por dois nomes (`encerrar` e `descansar` sao o mesmo verbo): o uso
     # tem de sair com o nome que a pessoa digitou, ou o texto contradiz o comando.
     p = argparse.ArgumentParser(prog=os.path.basename(sys.argv[0]),

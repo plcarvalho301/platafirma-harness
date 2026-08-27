@@ -35,6 +35,15 @@ FIM
   exit 2
 }
 
+# --ajuda UNIVERSAL, sem efeito colateral (card #2868, ex-#2274 defeito 4). ANTES do
+# despacho e varrendo TODOS os argumentos: cobre `minuta --ajuda` e `minuta <sub> --ajuda`;
+# nenhum sub-ato (exec do $ATOS/*) chega a rodar. `uso` ja sai 2.
+for _a in "$@"; do
+  case "$_a" in
+    --ajuda|--help|-h) uso ;;
+  esac
+done
+
 [ $# -eq 0 ] && uso
 ATO="$1"; shift
 

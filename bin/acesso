@@ -251,6 +251,14 @@ sys.exit(0 if d.permitido else 3)
 }
 
 # ---------------------------------------------------------------------------
+# --ajuda UNIVERSAL, sem efeito colateral (card #2868, ex-#2274 defeito 4). ANTES do
+# despacho, varrendo TODOS os argumentos: cobre `acesso --ajuda` e `acesso <sub> --ajuda`.
+for _a in "$@"; do
+  case "$_a" in
+    --ajuda|--help|-h) uso ;;
+  esac
+done
+
 case "${1:-}" in
   conceder)    shift; cmd_conceder "$@";;
   revogar)     shift; cmd_revogar "$@";;

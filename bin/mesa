@@ -567,6 +567,10 @@ def ato_caderno(args):
 
 
 def main():
+    # --ajuda UNIVERSAL (card #2868, ex-#2274 defeito 4): argparse ja da -h/--help;
+    # aqui so mapeamos o alias PT --ajuda -> --help antes do parse, sem colidir com
+    # os subparsers. Sem efeito colateral: nenhum ato roda.
+    sys.argv = [("--help" if a == "--ajuda" else a) for a in sys.argv]
     p = argparse.ArgumentParser(prog="mesa", description="memoria de trabalho da cadeira, por chapeu")
     sub = p.add_subparsers(dest="ato")
 

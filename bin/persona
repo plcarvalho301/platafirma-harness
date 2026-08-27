@@ -123,6 +123,15 @@ sys.exit(1 if erros else 0)
 PY
 }
 
+# --ajuda UNIVERSAL, sem efeito colateral (card #2868, ex-#2274 defeito 4). ANTES do
+# despacho, varrendo TODOS os argumentos: cobre `persona --ajuda` e `persona <sub> --ajuda`
+# — sem isto, `persona abrir --ajuda` dispararia o git pull de `abrir` e ignoraria a flag.
+for _a in "$@"; do
+  case "$_a" in
+    --ajuda|--help|-h) uso ;;
+  esac
+done
+
 case "${1:-}" in
   abrir)
     git pull --ff-only -q origin HEAD && echo "clone em dia · $(idade)"

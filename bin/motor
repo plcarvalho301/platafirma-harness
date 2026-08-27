@@ -539,6 +539,10 @@ def cmd_medir(nome, inst, argv):
 def main():
     d = reg()
     a = sys.argv[1:]
+    # --ajuda UNIVERSAL, sem efeito colateral (card #2868, ex-#2274 defeito 4): varre
+    # todos os argumentos antes do despacho; nenhum sub-ato chega a rodar. uso() sai 2.
+    if any(x in ("--ajuda", "--help", "-h") for x in a):
+        uso()
     if not a:
         uso()
     if a[0] == "listar":

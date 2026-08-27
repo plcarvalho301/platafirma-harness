@@ -56,6 +56,14 @@ for a in "$@"; do
   elif [ "$a" = "--" ];        then TEM_BARREIRA=1
   else ARGS+=("$a"); fi
 done
+# --ajuda UNIVERSAL, sem efeito colateral (card #2868, ex-#2274 defeito 4). Varre so
+# ARGS (o que e nosso), nao os NATIVOS apos `--`: `seg openssl -- x509 --help` leva o
+# --help ao comando nativo; `seg --ajuda` e `seg <sub> --ajuda` dao ajuda do seg.
+for _a in "${ARGS[@]}"; do
+  case "$_a" in
+    --ajuda|--help|-h) uso ;;
+  esac
+done
 [ "${#ARGS[@]}" -ge 1 ] || uso
 
 SUB="${ARGS[0]}"; ATO="${ARGS[1]:-}"; ALVO="${ARGS[2]:-}"
