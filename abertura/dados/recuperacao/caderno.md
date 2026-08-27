@@ -91,3 +91,77 @@ Três fatos medidos que valem régua (detalhe nos cards #2886-2888 e na wiki
   teste on/off antes de acreditar em braço novo.
 - **obra_trata_de não participa da busca**: recall do declarado ~0.31, 50% zero no top-8.
 - **RERANK_BLEND=0 no env do container**: `rerank=true` per-request paga o CE e não reordena.
+
+## Disparo é métrica, e o gabarito não o media (#2894, 27/08)
+
+O número que o harness reporta hoje é **recall condicionado a ter havido consulta**.
+Falta o elo anterior: a ordem tinha corpus aplicável e nenhuma busca saiu. Para quem
+recebe a resposta errada não faz diferença se a cadeira não perguntou ou perguntou e
+não achou — as duas contam igual.
+
+```
+E2E = D x R x U
+  D  disparo   das ordens com corpus aplicável, quantas geraram ao menos uma consulta
+  R  recall    das que consultaram, quantas trouxeram a obra alvo no top-k
+  U  uso       das que trouxeram, quantas a resposta de fato aplicou
+```
+
+Consequência para leitura de resultado passado: o ganho do #2886 (recall do declarado
+0,25 → 0,89) é ganho de **R**. Com D desconhecido, o E2E real é desconhecido. Não
+reapresentar número de R como qualidade de recuperação.
+
+**T1 fica fora de D**: obra ou conceito citado na query já é o disparo dado. D só se
+aplica onde a cadeira precisa INFERIR que devia buscar — T2, T3 e ordem operacional.
+
+### Como D é medido (harness@9bcef5c)
+
+`monta_sessao` grava na auditoria: `pergunta` (cap 2.000), `pergunta_bytes`, `chapeu`,
+`ordem_id` (sha1[:12] de `sessao` + ordem). `ordem_id` também volta em
+`pacote.ordem_id`. As buscas seguintes casam pelo campo `sessao` (Mcp-Session-Id), que
+já era gravado e vem 100% preenchido.
+
+- **Uma ordem por fita** — decisão do dono, 27/08. Fita é um assunto; turno é ruído.
+  "Executa", "Zerar" não têm corpus aplicável e só inflariam o denominador.
+- **Nenhum outro verbo registra ordem.** Fora da abertura a fita já poluiu.
+- **Sem série histórica**: o campo nasce em 27/08. Ordem anterior a isso só entra no
+  gabarito por casamento manual de timestamp.
+
+### Reabrir sessão é falha, não deriva
+
+Medido nos 8 dias de log: 39% das sessões MCP têm mais de uma abertura (182 com uma,
+64 com duas ou três, 52 com quatro ou mais; cauda de 12).
+
+Erro que cometi e fica registrado para não voltar: li isso como troca legítima de
+assunto e cheguei a propor um `so_ordem` barato para permitir reabrir. **O dono
+corrigiu**: reabertura é (a) abertura que quebrou e teve de ser puxada lá dentro, ou
+(b) remontagem por irritação com a cadeira. Nenhum dos dois é assunto novo — os dois
+são defeito. A meta é o número CAIR, e a proposta de baratear a reabertura empurrava
+para o lado errado. `so_ordem` não foi implementado, por isso.
+
+### Ordem operacional é o corpus, não a pergunta de enciclopédia
+
+O acervo é quase todo meta — como fazer plataforma, de organização a linha de código.
+O defeito que interessa é a cadeira executar de memória tendo obra no acervo. Cinco
+ordens reais medidas em 27/08, todas com cobertura `boa` e nenhuma consulta feita:
+
+| ordem real | obra que devia ter aparecido |
+|---|---|
+| "Passo 1 — migration da FK" | DDIA; Fundamentals of Data Engineering (expand/contract) |
+| "instrumento de verificação para 2 regras de front (arq:0057)" | Continuous Architecture in Practice (fitness function) |
+| "verbo `conferir alcance` … medir a cadeia de acesso INTEIRA" | Zero Trust Architecture (NIST) |
+| "Roda o reasonet antes … se não cagou relação com seus conceitos" | WonderWeb D18 (OntoClean) |
+| "no contador de delivery, não soma as entregues" | Essential Kanban Condensed; Principles of Product Development Flow |
+
+### Onde a ordem do dono existe gravada (levantado em 27/08)
+
+- `var/log/ops/*.jsonl` — comando, tool, cadeira. **Prompt só a partir de 9bcef5c.**
+- `~/.claude/projects/**/*.jsonl` — 56 arquivos das fitas. 2.660 `type=user`, das quais
+  2.425 são `tool_result`; sobram 235 de texto e só 29 com `promptSource: "typed"`
+  (teclado do dono, todas de 01/08, CLI do core). O resto é `sdk` — harness injetando.
+- Synapse (`chat-pg`) — 1.538 mensagens; 260 de `@megafone`. Mistura ordem curta do
+  dono com despacho longo redigido por cadeira e enviado pela conta dele; o Matrix não
+  distingue quem redigiu.
+
+Armadilha que me pegou: escrevi dez prompts "realistas" de cabeça e apresentei como
+prompt real. Nenhum tinha sido digitado. Prompt real se COLHE da fonte; texto que soa
+humano é ficção com cara de dado.
