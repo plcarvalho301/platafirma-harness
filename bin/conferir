@@ -107,16 +107,15 @@ import urllib.request
 RAIZ = os.path.expanduser("~/AI")
 DEPLOY = os.path.join(RAIZ, "deploy")
 BIN = os.path.join(RAIZ, "bin")
+HARNESS = os.path.join(RAIZ, "platafirma-harness")
+POLITICA_DIR = os.path.join(HARNESS, "politica-acesso")
+SUPERFICIES = os.path.join(POLITICA_DIR, "superficies.yaml")
 
 MAPA = os.path.join(RAIZ, "platafirma-arquitetura", "docs", "arquitetura-negocio-operacao.md")
 
 CLASSES_ABERTAS = {
     "canal": "regua do design system e de claudinha-produto e ainda nao existe",
     "casco": "avaliacao CIS ja tem verbo proprio (oscap-casco), de claudinho-seguranca",
-    "alcance": ("mede a cadeia de acesso sujeito->fonte em 5 saltos (identidade, "
-                "PDP, credencial, rede, ACL do alvo); os 5 sao desenho de "
-                "claudinho-seguranca ainda nao fixado (card #2452 sob #191) — "
-                "o instrumento e de TI, a fonte-de-verdade de cada salto e dele"),
 }
 
 
@@ -125,7 +124,7 @@ def uso(erro=None):
         print(f"erro: {erro}\n", file=sys.stderr)
     print(__doc__.strip(), file=sys.stderr)
     print("\nuso: conferir <classe> [alvo]", file=sys.stderr)
-    print("     classes implementadas : servico . verbo . repo . skill . procedencia . superficie . commit . arranque . chapeu . ferramental . front . existe", file=sys.stderr)
+    print("     classes implementadas : servico . verbo . repo . skill . procedencia . superficie . commit . arranque . chapeu . ferramental . front . existe . alcance", file=sys.stderr)
     for c, motivo in CLASSES_ABERTAS.items():
         print(f"     classe declarada, sem implementacao : {c} — {motivo}", file=sys.stderr)
     sys.exit(2)
@@ -2475,6 +2474,195 @@ def conferir_existe(tipo, nome, como_json=False):
     return 2
 
 
+
+def _carrega_yaml(caminho):
+    try:
+        import yaml
+    except Exception as e:                                       # noqa: BLE001
+        return None, f"pyyaml ausente: {e}"
+    try:
+        with open(caminho, encoding="utf-8") as fh:
+            return (yaml.safe_load(fh) or {}), None
+    except OSError as e:
+        return None, str(e)
+
+
+def conferir_alcance(sujeito, fonte, como_json=False):
+    """5 saltos da cadeia de acesso sujeito->fonte numa chamada: identidade,
+    credencial, PDP, rede, ACL do alvo. So olha; nao muda nada.
+
+    MEDIDOR, nao validador: onde o alvo nao tem ACL canonica (portao paralelo que
+    nao conhece papel nem dominio), DECLARA — nao presume um canon inexistente. As
+    5 fontes-de-verdade (claudinho-seguranca, card #2452 sob #191):
+      identidade -> politica-acesso/sujeitos.yaml
+      credencial -> politica-acesso/sujeitos.yaml (client/conta/usuario/segredos) [+ realm]
+      PDP        -> politica-acesso/politica.yaml
+      rede       -> politica-acesso/superficies.yaml::ingress
+      ACL        -> politica-acesso/superficies.yaml::portao
+
+    Exit 0 cadeia inteira; 1 elo modelado quebra; 2 indeterminavel (fonte/catalogo).
+    """
+    if not sujeito or not fonte:
+        print("uso: conferir alcance <sujeito> <fonte>", file=sys.stderr)
+        print("     fontes: board, fila, mesa, registro, wiki, acervo", file=sys.stderr)
+        return 2
+    for p in (HARNESS, POLITICA_DIR):
+        if p not in sys.path:
+            sys.path.insert(0, p)
+    try:
+        from recuperacao.pep import PEP
+        from recuperacao.fontes import Fonte
+    except Exception as e:                                       # noqa: BLE001
+        msg = f"indeterminavel: maquinario de acesso ilegivel — {type(e).__name__}: {e}"
+        print(json.dumps({"erro": msg}, ensure_ascii=False) if como_json else msg)
+        return 2
+    try:
+        f = Fonte(fonte)
+    except ValueError:
+        validas = ", ".join(x.value for x in Fonte)
+        msg = f"indeterminavel: fonte {fonte!r} nao existe — validas: {validas}"
+        print(json.dumps({"erro": msg}, ensure_ascii=False) if como_json else msg)
+        return 2
+
+    suj_doc, _ = _carrega_yaml(os.path.join(POLITICA_DIR, "sujeitos.yaml"))
+    atrib = ((suj_doc or {}).get("sujeitos") or {}).get(sujeito) or {}
+    cat_doc, _ = _carrega_yaml(SUPERFICIES)
+    sup = ((cat_doc or {}).get("superficies") or {}).get(fonte)
+
+    pep = PEP()
+    neg = pep.autoriza_fonte(sujeito, f)
+    acao = pep.acao(f)
+
+    saltos = []
+
+    # 1 identidade
+    if atrib:
+        papeis = ",".join(atrib.get("papeis") or ()) or "(sem papel)"
+        saltos.append(("identidade", "PASSA",
+                       f"projetado em sujeitos.yaml (natureza={atrib.get('natureza', '?')}, papeis={papeis})",
+                       "politica-acesso/sujeitos.yaml"))
+        id_ok = True
+    else:
+        saltos.append(("identidade", "QUEBRA",
+                       f"sujeito {sujeito!r} ausente da projecao — fail-closed; o PDP nega por atributo ausente",
+                       "politica-acesso/sujeitos.yaml"))
+        id_ok = False
+
+    # 2 credencial
+    locus = [f"{k}={atrib[k]}" for k in ("client", "conta", "usuario", "segredos") if atrib.get(k)]
+    if not atrib:
+        saltos.append(("credencial", "n/a", "sujeito nao projetado — nada onde ancorar credencial",
+                       "politica-acesso/sujeitos.yaml (+ realm keycloak)"))
+        cred_ok = False
+    elif locus:
+        saltos.append(("credencial", "PASSA",
+                       "locus: " + ", ".join(locus) + " [realm keycloak: declarado, nao medido aqui]",
+                       "politica-acesso/sujeitos.yaml (+ realm keycloak)"))
+        cred_ok = True
+    else:
+        saltos.append(("credencial", "QUEBRA",
+                       "projetado sem client/conta/usuario/segredos — sem credencial para autenticar",
+                       "politica-acesso/sujeitos.yaml (+ realm keycloak)"))
+        cred_ok = False
+
+    # 3 PDP
+    if neg is None:
+        saltos.append(("PDP", "PERMITE", f"a regra permite; acao={acao}", "politica-acesso/politica.yaml"))
+        pdp_estado = "PERMITE"
+    elif neg.regra in ("projecao", "identidade"):
+        saltos.append(("PDP", "nao avaliado",
+                       f"sujeito ausente da projecao ({neg.regra}) — a decisao nem chega ao PDP",
+                       "politica-acesso/politica.yaml"))
+        pdp_estado = "nao avaliado"
+    else:
+        saltos.append(("PDP", "NEGA", f"regra={neg.regra}, acao={acao} — {neg.motivo}",
+                       "politica-acesso/politica.yaml"))
+        pdp_estado = "NEGA"
+
+    # 4 rede + 5 ACL do alvo
+    if sup is None:
+        saltos.append(("rede", "indeterminavel", f"fonte {fonte!r} ausente de superficies.yaml — a medir",
+                       "politica-acesso/superficies.yaml"))
+        saltos.append(("ACL do alvo", "indeterminavel", "sem entrada no catalogo de superficies",
+                       "politica-acesso/superficies.yaml"))
+        rede_ok = None
+        acl = "faltando"
+    else:
+        alc = sup.get("alcancavel")
+        detalhe_rede = f"{sup.get('ingress', '?')} — {sup.get('rede', '')}"
+        if alc is True or alc == "loopback":
+            marca = "ALCANCA (loopback)" if alc == "loopback" else "ALCANCA"
+            saltos.append(("rede", marca, detalhe_rede, "politica-acesso/superficies.yaml::ingress"))
+            rede_ok = True
+        else:
+            saltos.append(("rede", "BLOQUEIA", detalhe_rede, "politica-acesso/superficies.yaml::ingress"))
+            rede_ok = False
+        acl = sup.get("acl_canonica")
+        portao = sup.get("portao", "")
+        if acl is True:
+            saltos.append(("ACL do alvo", "CANONICA", portao, "politica-acesso/superficies.yaml::portao"))
+        elif acl is False:
+            saltos.append(("ACL do alvo", "FRACA", "portao paralelo, NAO impoe o PDP — " + portao,
+                           "politica-acesso/superficies.yaml::portao"))
+        else:
+            saltos.append(("ACL do alvo", "A MEDIR", portao, "politica-acesso/superficies.yaml::portao"))
+
+    # elo mais fraco da cadeia modelada: identidade -> credencial -> PDP -> rede
+    elo = None
+    if not id_ok:
+        elo = ("identidade", "sujeito ausente da projecao")
+    elif not cred_ok:
+        elo = ("credencial", "sem credencial declarada")
+    elif pdp_estado == "NEGA":
+        elo = ("PDP", f"regra {neg.regra} nega")
+    elif rede_ok is False:
+        elo = ("rede", "fonte nao alcancavel")
+
+    if rede_ok is None:
+        exit_code = 2
+    elif elo is None:
+        exit_code = 0
+    else:
+        exit_code = 1
+
+    # nota de imposicao: divergencia entre o veredito do PDP e o que o portao impoe
+    nota = None
+    if acl is False:
+        if pdp_estado == "NEGA":
+            nota = ("[RISCO] o PDP NEGA mas a ACL do alvo e FRACA (portao paralelo): a negativa "
+                    "pode NAO ser imposta no alvo — possivel bypass. Achado do #191.")
+        else:
+            nota = ("[AVISO] ACL do alvo FRACA: o portao nao impoe o PDP; o veredito acima nao e "
+                    "garantido pelo alvo. Achado do #191.")
+    elif acl is None:
+        nota = "[AVISO] ACL do alvo A MEDIR: o gate do alvo existe mas nao foi lido (#191)."
+
+    if como_json:
+        print(json.dumps({
+            "sujeito": sujeito, "fonte": fonte,
+            "saltos": [{"salto": s, "veredito": v, "detalhe": d, "fonte_de_verdade": fv}
+                       for s, v, d, fv in saltos],
+            "elo_mais_fraco": elo[0] if elo else None,
+            "cadeia_inteira": exit_code == 0,
+            "nota": nota, "exit": exit_code,
+        }, ensure_ascii=False))
+        return exit_code
+
+    print(f"alcance: {sujeito} -> {fonte}")
+    for i, (s, v, d, fv) in enumerate(saltos, 1):
+        print(f"  {i} {s:12}: {v} — {d}")
+        print(f"       fonte-de-verdade: {fv}")
+    if exit_code == 2:
+        print(f"  => indeterminavel: {fonte!r} nao esta no catalogo de superficies; a cadeia nao fecha.")
+    elif elo is None:
+        print(f"  => cadeia INTEIRA: {sujeito} alcanca {fonte} pela cadeia modelada.")
+    else:
+        print(f"  => elo mais fraco: {elo[0]} — {elo[1]}. {sujeito} NAO alcanca {fonte} pela cadeia modelada.")
+    if nota:
+        print(f"  {nota}")
+    return exit_code
+
+
 def main(argv):
     # --ajuda UNIVERSAL, sem efeito colateral (card #2868, ex-#2274 defeito 4): varre
     # todos os argumentos antes do despacho; nenhuma classe chega a rodar. uso() sai 2.
@@ -2568,6 +2756,9 @@ def main(argv):
     if classe == "existe":
         return conferir_existe(alvo, argv[3] if len(argv) > 3 else None,
                                como_json=como_json)
+    if classe == "alcance":
+        return conferir_alcance(alvo, argv[3] if len(argv) > 3 else None,
+                                como_json=como_json)
     if classe == "skill":
         servido = None
         if "--servido" in argv:

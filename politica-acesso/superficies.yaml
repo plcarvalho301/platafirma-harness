@@ -1,0 +1,78 @@
+# superficies.yaml — fonte-de-verdade dos saltos REDE e ACL do `conferir alcance`.
+#
+# dono: claudinho-seguranca (card #2452, sob o epico #191).
+#
+# POR QUE ESTE ARQUIVO EXISTE. `conferir alcance <sujeito> <fonte>` mede a cadeia de
+# acesso em 5 saltos. Tres ja tinham fonte-de-verdade unica e consultavel:
+#   identidade -> sujeitos.yaml   (projecao PIP; quem o sujeito e)
+#   PDP        -> politica.yaml   (o PAP; o que a regra permite)
+#   credencial -> sujeitos.yaml   (campos client/conta/usuario/segredos; ONDE a credencial mora)
+# Os outros dois — REDE (a fonte e alcancavel pela borda?) e ACL DO ALVO (o portao do
+# alvo impoe o PDP, ou e um PEP paralelo?) — estavam medidos a mao no corpo do #191.
+# Este arquivo os fixa, por fonte, num lugar versionado e legivel.
+#
+# ESCOPO: MEDIDOR, nao validador. Onde o alvo NAO tem ACL canonica (portao paralelo que
+# nao conhece papel nem dominio), isto se DECLARA — nao se omite e nao se conserta aqui.
+# Consertar a superficie e o #191 inteiro. Doutrina do proprio `conferir`:
+# "ausencia se declara, nunca se omite".
+#
+# acl_canonica:
+#   true  = o portao do alvo consulta o PDP. O veredito do salto PDP vale no alvo.
+#   false = portao PARALELO: admite por outro criterio (e-mail, Bearer estatico, loopback,
+#           conta Matrix). O veredito do PDP NAO e imposto ali — achado que orienta o #191.
+#   null  = a medir: o gate existe mas nao foi lido (nao e ausencia de gate).
+#
+# ancora: card #191, inventario medido em 16/08/2026 por claudinho-seguranca.
+
+versao: 1
+superficies:
+  board:
+    servico: rastreador-api
+    ingress: tarefas.platafirma.org
+    alcancavel: true
+    rede: oauth2-proxy-rastreador na frente; borda exposta
+    pep: true
+    portao: oauth2-proxy + rastreador-api, que importa politica-acesso e consulta o PDP
+    acl_canonica: true
+  fila:
+    servico: jaiminho-server
+    ingress: canal da colaboracao externa (mensageria)
+    alcancavel: true
+    rede: canal exclusivo colaboracao<->claudinho-IA
+    pep: true
+    portao: jaiminho-server, PEP proprio consultando o PDP
+    acl_canonica: true
+  wiki:
+    servico: wiki (mediawiki) + wiki-mcp
+    ingress: wiki.platafirma.org (HTTP); mcp.platafirma.org (MCP)
+    alcancavel: true
+    rede: dois ingress; o HTTP por oauth2-proxy, o MCP por Bearer
+    pep: parcial
+    portao: HTTP por oauth2-proxy + authenticated-emails.txt (PEP paralelo, e-mail nao papel; anonimo
+      com edit la dentro); MCP por Bearer estatico ou ?token= na URL, conta de bot unica comum as 7 cadeiras;
+      wiki-mcp ganhou PEP em 20/08
+    acl_canonica: false
+  acervo:
+    servico: acervo-api
+    ingress: loopback :8110
+    alcancavel: loopback
+    rede: so loopback; nao exposto na borda
+    pep: false
+    portao: 'gate proprio NAO medido pelo #191 (a medir)'
+    acl_canonica: null
+  mesa:
+    servico: identidade-db / mesa (postgres)
+    ingress: loopback
+    alcancavel: loopback
+    rede: so loopback, sem ingress na borda
+    pep: false
+    portao: loopback + grants de role do banco; sem imposicao por sujeito do PAP
+    acl_canonica: false
+  registro:
+    servico: git (platafirma-arquitetura)
+    ingress: git remoto + filesystem local
+    alcancavel: true
+    rede: acesso por git/ssh e clone local
+    pep: false
+    portao: permissoes do remoto git + filesystem; sem imposicao por sujeito do PAP
+    acl_canonica: false
