@@ -137,7 +137,8 @@ SELECT json_build_object(
     -- escada é POR OBRA, e órfão por definição não tem obra — além de 'cinco degraus' estar
     -- cravado no tool-manifest.
     -- Hoje a regra se cumpre POR CONSTRUÇÃO: acervo.impressao.obra_id é NOT NULL com FK ON
-    -- DELETE CASCADE, e acervo.trecho.impressao_id cascateia dela. Estas duas linhas leem 0 e
+    -- DELETE CASCADE (migração 034, 27/08/2026 — antes era RESTRICT e a baixa da obra era
+    -- BLOQUEADA, não cascateada), e acervo.trecho.impressao_id cascateia dela. Estas duas linhas leem 0 e
     -- DEVEM ler 0. Existem para o dia em que a construção sair — a arq:0027 admite varredura
     -- periódica como forma, e até agora essa varredura era feita à mão, não pelo instrumento.
     'impressao_sem_obra',        (SELECT count(*) FROM acervo.impressao i
