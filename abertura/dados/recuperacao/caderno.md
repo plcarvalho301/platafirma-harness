@@ -67,3 +67,27 @@ sugere — em 26/08, ~134 impressões (9 zero + 125 parciais) contra o "d=4" por
 Antes de orçar repassagem de embed, reconciliar impressões (uma servindo por obra e
 método) para o escopo não sair inflado. Obra servível = exatamente uma impressão
 servindo por método.
+
+## Medir a busca servida: o runner que funciona (fita 27/08)
+
+O caminho servido mede-se pelo próprio `/search`, de DENTRO do container (o host não
+alcança o motor):
+
+```
+docker exec -w /app -e PYTHONPATH=/app rag-extractor-api python /tmp/<script>.py
+# API: localhost:8000, token em $RAG_API_TOKEN do container; docker cp p/ levar script+gabarito
+```
+
+Scripts prontos (baseline 27/08 do #2882): `~/AI/var/tmp/x2882_m1_compreensao.py`
+(casar/veredito/expandir offline), `x2882_m2d_direto.py` (recall do declarado, 419 conceitos),
+`x2882_m23_recuperacao.py` (T4 travessia, expansao on/off). Gabarito canônico:
+`platafirma-harness/avaliacao/gabarito.jsonl` + `estrato-expansao.jsonl` — o estrato é GERADO
+do acervo (`gerar-estrato-expansao.py`): regenerar a cada mudança de corpus antes de comparar.
+
+Três fatos medidos que valem régua (detalhe nos cards #2886-2888 e na wiki
+`IA/recuperacao-e-busca/tuning-de-recuperacao`):
+
+- **Braço de peso < 1.0 no RRF é cosmético**: candidato exclusivo dele entra ~26º com w=0.7;
+  teste on/off antes de acreditar em braço novo.
+- **obra_trata_de não participa da busca**: recall do declarado ~0.31, 50% zero no top-8.
+- **RERANK_BLEND=0 no env do container**: `rerank=true` per-request paga o CE e não reordena.
