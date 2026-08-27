@@ -497,6 +497,11 @@ def build_parser():
     p_ler.add_argument("--tudo", action="store_true")
     p_ler.add_argument("--desde", default=None)
 
+    # `tipos` — card #2274, defeito 5: a lista de tipos validos so aparecia na mensagem de
+    # erro do `enviar`. Sem verbo que a liste, descobri-la exigia errar de proposito. Agora
+    # ha um ato que a imprime, e ele NAO toca a malha (info estatica: TIPOS_VALIDOS).
+    sub.add_parser("tipos", add_help=False)
+
     p_enviar = sub.add_parser("enviar", add_help=False)
     p_enviar.add_argument("destinatario")
     p_enviar.add_argument("--de", default=None)
@@ -517,6 +522,7 @@ def uso():
         "  fila ler <persona> --desde AAAAMMDDTHHMMSS [remetente]\n"
         "  fila enviar <destinatario> --tipo <t> --assunto <a> [--ref <r>] [--responde <id>]\n"
         "              (corpo em stdin)\n"
+        "  fila tipos                             lista os tipos validos de --tipo\n"
     )
     sys.exit(2)
 
@@ -526,6 +532,10 @@ def main():
     args, _resto = ap.parse_known_args()
     if not args.verbo:
         uso()
+    # `tipos` responde ANTES de tocar a malha: e info estatica e deve funcionar offline.
+    if args.verbo == "tipos":
+        sys.stdout.write("\n".join(sorted(TIPOS_VALIDOS)) + "\n")
+        sys.exit(0)
     eu = resolve_eu(args)
     rc = r_conn()
     try:

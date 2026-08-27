@@ -632,6 +632,16 @@ FIM
 
 # --- despacho ---------------------------------------------------------------
 
+# --ajuda UNIVERSAL, sem efeito colateral (card #2274, defeito 4). ANTES do despacho e
+# varrendo TODOS os argumentos: `tarefas criar --ajuda` criava um card chamado "--ajuda"
+# porque `--ajuda` caía como título posicional. Interceptar aqui cobre tanto `tarefas
+# --ajuda` quanto `tarefas <sub> --ajuda`, e nenhum sub-ato chega a rodar. `uso` já sai 2.
+for _a in "$@"; do
+  case "$_a" in
+    --ajuda|--help|-h) uso ;;
+  esac
+done
+
 cmd="${1:-}"; shift || uso
 
 case "$cmd" in
