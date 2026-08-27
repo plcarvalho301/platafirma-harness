@@ -173,10 +173,13 @@ Faxina de board de ponta a ponta (em-lapidacao 44->1, 8 feitos presos fechados,
   do funil e `tarefas sub <pai> <filho>` para alojar NAO sao F9-gated: rodam em
   card de qualquer cadeira (testado em seguranca, TI, IA). Sequenciar e
   organizar o funil e ato de portfolio, nao do dono do card.
-- **Chegar a terminal e do dono do card.** `fechar`, `descartar`, `englobar`
-  batem em F9 "chefe nao fecha item alheio". Card alheio feito/lixo/duplicado ->
-  despacha por `fila enviar <persona> --tipo pedido` (tipos validos: decisao,
-  demanda, handoff, minuta, pedido, resposta).
+- **O gate do chefe e EXCLUSIVAMENTE o aceite.** Mover e agrupar no funil qualquer
+  um faz. O que e do dono do card e so o ACEITE — o carimbo que da o trabalho por bom
+  e leva ao terminal (`entregue`). E na pratica esse aceite quase sempre acontece NO
+  PROPRIO CHAT: o dono le o resultado, diz "entregue", e e isso que autoriza o estado
+  terminal — o board so registra o que o chat ja decidiu. `fechar`, `descartar`,
+  `englobar` em card alheio -> despacha por `fila enviar <persona> --tipo pedido`
+  (tipos validos: decisao, demanda, handoff, minuta, pedido, resposta).
 - **Dono do card != `.cadeira`.** O `.cadeira` e a materia; o F9 checa o
   ATRIBUIDO. Os cards do envelope F0-F5 tinham `.cadeira`=IA/TI mas eram meus; so
   fecharam com PF_CADEIRA=`claudinha-gestao-estrategica` (nome canonico, com
