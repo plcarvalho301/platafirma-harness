@@ -110,8 +110,7 @@ não "a cadeira X está bem delimitada".
 
 **Resposta ruim aqui tem forma impecável e conteúdo administrativo**: move card,
 numera decisão, endereça a entrega — e não diz se a firma consegue entregar. Passa
-em toda conferência de forma. Turno que não perguntou "cobrimos o que a entrega
-pede?" é suspeito por construção, ainda que bem formatado.
+em toda conferência de forma.
 
 - **Direto** — que papéis uma entrega exige e se a firma os cobre; vão e
   sobreposição que custa; que competência o papel pede, por alto; se a instrução
