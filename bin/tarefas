@@ -48,6 +48,8 @@ uso:
                                           sign-off. Sem --decisao, inscreve o aprovador
                                           como PENDENTE. `recusado` exige --motivo.
   tarefas sub <pai> <filho>               declara <filho> filho de <pai>
+  tarefas dt <listar|admitir|vencidos>    balde de débito técnico (rito §4); `dt` sem
+                                          sub lista os atos
   tarefas estados                         os estados do registro, com fase
   tarefas api <MÉTODO> <caminho>          escotilha, sem corpo
   tarefas api-corpo <MÉTODO> <caminho>    escotilha, corpo JSON em stdin
@@ -485,6 +487,149 @@ apagar_comentario() {
   busca DELETE "/itens/$id/comentarios/$cid" | jq -r '"comentário #\(.apagado) apagado do item \(.item)"'
 }
 
+# --- débito técnico ---------------------------------------------------------
+
+# RITO DO DÉBITO TÉCNICO — platafirma-arquitetura/docs/rito-debito-tecnico.md, assinado
+# pelo dono em 26/08/2026 (card #179, sucedido em execução pelo #2854). DT é defeito ou
+# dívida MEDIDA que não bloqueia ninguém hoje. O balde é um card task-pai FIXO (decisão 1
+# do dono): cada filho dele é um item de DT. Este verbo opera sobre os filhos desse pai —
+# não inventa campo de schema, não guarda tabela de estado. O pai é o único dado fixo aqui.
+DT_PAI="${TAREFAS_DT_PAI:-2856}"
+
+# Idade em dias a partir de `criado_em` (a API devolve ISO com tz). Puro cálculo de data:
+# a régua de "vencido" (>30d) é do rito, e mora aqui porque é forma de apresentação da
+# pauta, não regra de máquina — a API não conhece o conceito de DT.
+_dt_dias() { # _dt_dias <iso8601> -> inteiro de dias desde então
+  python3 -c 'import sys,datetime
+try:
+    s=sys.argv[1].replace(" ","T",1)
+    d=datetime.datetime.fromisoformat(s)
+    now=datetime.datetime.now(datetime.timezone.utc)
+    print(int((now-d).total_seconds()//86400))
+except Exception:
+    print(-1)' "$1"
+}
+
+# Filhos abertos do pai fixo, com idade e marca de medição. "Medido" = a primeira linha
+# obrigatória do rito está no corpo (marcador `MEDIDO`). Sem verbo de medição estruturado,
+# o marcador é a evidência que o próprio `admitir` grava — ver `dt_admitir`.
+# O balde é pequeno por desenho, mas a LISTA `/itens` NÃO devolve `descricao` (só o
+# detalhe `/itens/<id>` devolve) — medido em 27/08 ao construir o verbo. Então o marcador
+# MEDIDO do rito só é legível pelo detalhe. `_dt_filhos` resolve os ids abertos do pai pela
+# lista (uma chamada) e busca o detalhe de cada um (o balde é curto), emitindo @tsv com
+# id, criado_em, medido, cadeira, titulo. É a única forma de ler o marcador sem duplicá-lo
+# num campo que a lista exponha.
+_dt_filhos() { # emite @tsv: id \t criado_em \t medido \t cadeira \t titulo
+  local corpo; corpo=$(busca GET "/itens")
+  local ids; ids=$(printf '%s' "$corpo" | jq -r --argjson p "$DT_PAI" '
+    ([.estados[]? | select(.fase=="terminal" or .natureza=="terminal") | .estado]
+     + ["entregue","recusada","cancelada","englobada","encerrada","resolvido"] | unique) as $term
+    | .itens[]
+    | select(.pai==$p)
+    | select(if .estado_derivado!=null then ($term|index([.estado_derivado])==null)
+             else (.estado_fase!="terminal") end)
+    | .id')
+  [ -z "$ids" ] && return 0
+  local id
+  for id in $ids; do
+    busca GET "/itens/$id" | jq -r '
+      [ (.id|tostring),
+        .criado_em,
+        (if ((.descricao // "") | test("MEDIDO"; "i")) then "sim" else "não" end),
+        (.cadeira // "—"),
+        .titulo ] | @tsv'
+  done
+}
+
+dt_listar() {
+  local hoje; hoje=$(_dt_filhos)
+  if [ -z "$hoje" ]; then echo "(balde vazio — nenhum DT aberto sob #$DT_PAI)"; return 0; fi
+  printf 'id\tidade\tmedido\tcadeira\ttítulo\n'
+  printf '%s\n' "$hoje" | while IFS=$'\t' read -r id criado med cad tit; do
+    local dias; dias=$(_dt_dias "$criado")
+    printf '#%s\t%sd\t%s\t%s\t%s\n' "$id" "$dias" "$med" "$cad" "$tit"
+  done
+}
+
+# `admitir` É O TESTE DE ADMISSÃO VIRANDO CÓDIGO (rito §4): sem --evidencia, RECUSA. Não é
+# lembrança de encarregado — é o verbo que se nega a criar DT não medido. A evidência
+# (verbo | arquivo:linha) e a data entram no corpo como a primeira linha obrigatória do
+# rito, e é essa linha que `listar` lê para marcar "medido: sim".
+dt_admitir() {
+  local titulo="${1:?uso: tarefas dt admitir \"<txt>\" --medido-em <data> --evidencia <verbo|arquivo:linha> [--cadeira <c>]}"; shift || true
+  local medido_em="" evidencia="" cadeira="$QUEM"
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --medido-em) medido_em="$2"; shift 2 ;;
+      --evidencia) evidencia="$2"; shift 2 ;;
+      --cadeira)   cadeira="$2";   shift 2 ;;
+      *) echo "opção desconhecida: $1" >&2; exit 2 ;;
+    esac
+  done
+  # A RECUSA É O PONTO DO VERBO. Sem evidência não há DT: suspeita vira medição ou morre
+  # (rito §1). Data também é obrigatória — "medido quando" é parte da linha do rito.
+  if [ -z "$evidencia" ]; then
+    echo "recusado: DT sem --evidencia não entra. Suspeita não é DT — meça (repro, retorno colado, arquivo:linha) ou não abra. (rito §1)" >&2
+    exit 2
+  fi
+  if [ -z "$medido_em" ]; then
+    echo "recusado: DT sem --medido-em não entra. A linha obrigatória do rito é o que foi medido, QUANDO e onde. (rito §1)" >&2
+    exit 2
+  fi
+  local desc; desc="MEDIDO ${medido_em} — evidência: ${evidencia}
+
+${titulo}"
+  PF_ESTADO_INICIAL="${PF_ESTADO_INICIAL:-captada}" \
+    criar "$titulo" --nivel task --cadeira "$cadeira" --pai "$DT_PAI" --desc "$desc"
+}
+
+# `vencidos` É A PAUTA DA REVISÃO, GERADA (rito §2/§4): itens acima de 30 dias, itens sem
+# medição, itens cuja cadeira mudou. Sem montagem à mão. Nada de alerta automático: o verbo
+# mede quando chamado, a revisão quinzenal decide. Idade > 30d OU medido=não entram na pauta.
+dt_vencidos() {
+  local linhas; linhas=$(_dt_filhos)
+  local pauta=""
+  if [ -n "$linhas" ]; then
+    pauta=$(printf '%s\n' "$linhas" | while IFS=$'\t' read -r id criado med cad tit; do
+      local dias; dias=$(_dt_dias "$criado")
+      local motivos=""
+      [ "$dias" -gt 30 ] 2>/dev/null && motivos="idade ${dias}d>30"
+      [ "$med" = "não" ] && motivos="${motivos:+$motivos; }sem medição"
+      [ -n "$motivos" ] && printf '#%s\t%s\t%s\t%s\n' "$id" "$motivos" "$cad" "$tit"
+    done) || true
+  fi
+  if [ -z "$pauta" ]; then
+    echo "pauta vazia — nenhum DT vencido (>30d) nem sem medição sob #$DT_PAI."
+  else
+    echo "PAUTA DA REVISÃO — DT vencido ou sem medição (rito §2):"
+    printf 'id\tmotivo\tcadeira\ttítulo\n'
+    printf '%s\n' "$pauta"
+  fi
+}
+
+dt() {
+  local sub="${1:-}"; shift || true
+  case "$sub" in
+    listar)   dt_listar "$@" ;;
+    admitir)  dt_admitir "$@" ;;
+    vencidos) dt_vencidos "$@" ;;
+    ''|*)
+      cat >&2 <<'FIM'
+uso:
+  tarefas dt listar                       balde: filhos abertos do pai fixo, com idade e
+                                          marca de medição
+  tarefas dt admitir "<txt>" --medido-em <data> --evidencia <verbo|arquivo:linha> [--cadeira <c>]
+                                          admite DT; SEM --evidencia (ou sem --medido-em),
+                                          RECUSA — teste de admissão em código (rito §1)
+  tarefas dt vencidos                     pauta da revisão: itens >30d ou sem medição (rito §2)
+
+O balde é o card task-pai #{TAREFAS_DT_PAI:-2856}; cada filho é um item de débito técnico.
+Rito: platafirma-arquitetura/docs/rito-debito-tecnico.md
+FIM
+      exit 2 ;;
+  esac
+}
+
 # --- despacho ---------------------------------------------------------------
 
 cmd="${1:-}"; shift || uso
@@ -503,6 +648,7 @@ case "$cmd" in
   assinar)     assinar "${1:?uso: tarefas assinar <id> --aprovador <cadeira> [--decisao aprovado|recusado] [--motivo \"<txt>\"]}" "${@:2}" ;;
   sub)         subtarefa "${1:?pai}" "${2:?filho}" ;;
   estados)     estados ;;
+  dt)          dt "$@" ;;
   projetos)    echo "não há projeto neste modelo: o recorte é por eixo (cadeira, estado, nível)." >&2; exit 2 ;;
   api)         busca "${1:?método}" "${2:?caminho}" ;;
   api-corpo)   envia "${1:?método}" "${2:?caminho}" ;;
