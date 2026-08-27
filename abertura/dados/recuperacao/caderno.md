@@ -52,3 +52,18 @@ fila, subindo bem acima disso em obras pequenas. 92.189 trechos levaram cerca de
 minutos. Serve para orçar antes de disparar, e para saber quando o número denuncia
 escopo errado: se a fila do `embed` é muito maior que os trechos do lote, o `ingest`
 pegou obra alheia.
+
+## A escada mede por obra; a unidade servível é a impressão
+
+`acervo escada` conta degraus por OBRA, mas o motor serve por IMPRESSÃO, e uma obra
+pode ter várias impressões `servindo` ao mesmo tempo — o aposentar-e-criar só aposenta
+dentro da mesma impressão, nunca entre impressões distintas da mesma obra. Medido em
+26/08: 758 de 763 obras com mais de uma impressão servindo (até 6).
+
+Consequência para diagnóstico: degrau `d` baixo (ex.: d=4) é quase sempre
+MULTIPLICIDADE, não buraco de embed. A escada soma impressões por obra; o buraco real
+se mede POR IMPRESSÃO (n_emb vs n_texto), e costuma ser uma fração do que a escada
+sugere — em 26/08, ~134 impressões (9 zero + 125 parciais) contra o "d=4" por obra.
+Antes de orçar repassagem de embed, reconciliar impressões (uma servindo por obra e
+método) para o escopo não sair inflado. Obra servível = exatamente uma impressão
+servindo por método.
