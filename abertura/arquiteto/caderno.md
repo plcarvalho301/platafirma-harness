@@ -25,3 +25,25 @@ O termo "capacidade" da lógica `capacidade : verbo : ferramenta` SEMPRE foi a
   artefato de front são INSTÂNCIA que serve uma capability existente — não capability
   nova. (Ex.: jaiminho serve `mensagem-externa`; toda "tela" é `canal/exposicao` sobre
   o objeto de outra capacidade.)
+
+## Resolução de identidade de cadeira: um ponto canônico, uma fonte (o ledger)
+
+A tradução "nome do ator → cadeira" tem UM ponto canônico correto:
+`chat/comum/cadeiras.py::sufixo_canonico`. É o único resolvedor que lê a fonte
+canônica (ledger de vínculo, `registro/eventos-org.jsonl`, arq:0073) e aceita todas
+as formas de entrada — sufixo, slug com prefixo, MXID/localpart e, desde #2431, o
+nome humano (alias). Qualquer outro resolvedor é candidato a divergir.
+
+- Fonte única de "quem é cadeira" é o LEDGER DE VÍNCULO, nunca um arquivo de roster
+  mantido à mão. Hazard medido (fita 27/08/2026): existiam 3 resolvedores divergentes
+  (`monta-sessao::_sufixo_sem_prefixo`, `fila::canoniza_persona`, `comum::sufixo_canonico`)
+  e 2 fontes (ledger vs `fila/.personas`). A fonte paralela envelhece em silêncio e a
+  divergência vira caixa fantasma — destinatário aceito que ninguém lê.
+- Nome humano (alias) é a ÚLTIMA forma tentada, atrás de sufixo/slug/MXID reais, para
+  que uma forma já válida nunca seja sequestrada. Primeiro-nome só resolve se único
+  entre os aliases; homônimo exige o nome inteiro. Acento e caixa se dobram.
+- Colapsar os 3 resolvedores em 1 lib compartilhada cruza venv (empacotamento) e é
+  decisão canônica → do dono; adiado. Até lá, o mínimo que mata a divergência sem
+  refatorar é unificar a FONTE: todo resolvedor lê o ledger (feito na fila, #2431).
+- Corolário: participante (jaiminho) não é cadeira e não está no ledger de vínculo;
+  fica em constante local do consumidor até a lib compartilhada existir.
