@@ -245,7 +245,60 @@ def cmd_indexar(inst, argv):
         print("DRY-RUN — nada foi escrito. Para valer:  motor rag indexar --apply")
 
 
-def cmd_buscar(inst, argv):
+# ---------------------------------------------------------------- evento 'consulta'
+# Emitido no choke point de `motor <inst> buscar`, DENTRO do motor Python (card #2911,
+# contrato B1). Todo caminho de busca — claude.ai, fita e Code — passa por cmd_buscar
+# (C1 confirmado 27/08: cmd_buscar e o unico emissor de http para o endpoint de busca),
+# entao emitir aqui cobre as tres superficies sem parsear o campo 'comando' do audit.
+#
+# NOME: 'consulta', nao 'disparo' (dono vetou na fita 27/08: 'disparo' confunde o evento
+# — a busca aconteceu — com o veredito — foi bom disparar). O evento afirma so o fato.
+#
+# sessao/ordem_id: lidos do env (PF_SESSAO/PF_ORDEM_ID). bin/motor roda como NETO do
+# server (server -> run_command -> bash -> motor) e NAO enxerga o ContextVar de sessao
+# do server, so o env herdado. Enquanto o server nao injetar PF_SESSAO/PF_ORDEM_ID no
+# _env_subprocesso do run_command, os campos saem '-' — declarado, nao inferido. O JOIN
+# de D (card #2908) se ancora em 'sessao'; a propagacao e o proximo elo (anotado no card).
+LOG_OPS = os.path.join(RAIZ, "var/log/ops")
+
+def _emite_consulta(nome, inst, corpo, resp, dur_ms):
+    """Grava uma linha JSONL {evento:'consulta', ...} em var/log/ops. Best-effort:
+    falha de log NUNCA derruba a busca — o resultado ja saiu para o cliente."""
+    try:
+        from datetime import datetime, date
+        n_hits = None
+        if isinstance(resp, dict):
+            for chave in ("fontes", "hits", "resultados", "itens"):
+                v = resp.get(chave)
+                if isinstance(v, list):
+                    n_hits = len(v)
+                    break
+        linha = {
+            "ts": datetime.now().astimezone().isoformat(timespec="milliseconds"),
+            "instancia": os.environ.get("OPS_NAME", "-"),
+            "usuario": os.environ.get("USER", "claudinho"),
+            "sessao": os.environ.get("PF_SESSAO", "-"),
+            "ordem_id": os.environ.get("PF_ORDEM_ID", "-"),
+            "tool": "motor",
+            "evento": "consulta",
+            "motor": nome,
+            "cadeira": os.environ.get("PF_CADEIRA", "-"),
+            "chapeu": os.environ.get("PF_CHAPEU", "-"),
+            "query": (corpo.get("pergunta") or "")[:2000],
+            "k": corpo.get("k"),
+            "conceito": corpo.get("conceitos"),
+            "n_hits": n_hits,
+            "dur_ms": dur_ms,
+        }
+        os.makedirs(LOG_OPS, exist_ok=True)
+        alvo = os.path.join(LOG_OPS, f"ops-{date.today().isoformat()}.jsonl")
+        with open(alvo, "a") as f:
+            f.write(json.dumps(linha, ensure_ascii=False) + "\n")
+    except Exception:
+        pass  # log e instrumento, nunca barreira: a busca ja respondeu.
+
+
+def cmd_buscar(nome_inst, inst, argv):
     uso = 'motor <inst> buscar "<pergunta>" [--k N] [--texto secao|trecho|nenhum] [--conceito <slug>]'
     if not argv:
         print(uso, file=sys.stderr)
@@ -298,8 +351,19 @@ def cmd_buscar(inst, argv):
     req = urllib.request.Request(
         inst["endpoint"], data=json.dumps(corpo).encode(),
         headers={"Authorization": f"Bearer {tok}", "Content-Type": "application/json"})
+    t0 = time.monotonic()
     with urllib.request.urlopen(req, timeout=300) as r:
-        print(r.read().decode())
+        bruto = r.read().decode()
+    dur_ms = int((time.monotonic() - t0) * 1000)
+    # choke point (#2911): parse best-effort so para instrumentar; a saida ao cliente
+    # continua sendo o corpo cru, byte a byte, para nao alterar contrato de nenhuma
+    # superficie que consome esta stdout.
+    try:
+        resp = json.loads(bruto)
+    except Exception:
+        resp = None
+    _emite_consulta(nome_inst, inst, corpo, resp, dur_ms)
+    print(bruto)
 
 
 # ---------------------------------------------------------------- medir
@@ -559,7 +623,7 @@ def main():
     if a[1] == "ajuste":
         return cmd_ajuste(a[0], inst, a[2:])
     if a[1] == "buscar":
-        return cmd_buscar(inst, a[2:])
+        return cmd_buscar(a[0], inst, a[2:])
     if a[1] == "indexar":
         return cmd_indexar(inst, a[2:])
     if a[1] == "medir":
