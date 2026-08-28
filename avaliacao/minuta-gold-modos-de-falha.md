@@ -207,3 +207,21 @@ acertar o alvo mede outra coisa.
   coleta T2/T3 do meu domínio como sequência, sem travar esta minuta.
 
 Sign-off formal também registrado via `tarefas assinar 2904` (aprovado, condições resumidas).
+
+### Refino — piso de cobertura por cadeira (ordem do dono, 27/08)
+
+Condição de cobertura, não de significância (20/degrau não sustenta taxa por cadeira — ver
+análise acima). Objetivo: nenhuma cadeira invisível no espelho.
+
+1. **Piso: ≥1 item por cadeira em cada modo coletável (d, e, f).** Frame = 8 cadeiras de
+   abertura (arquiteto, dados, fábrica, gestão-estratégica, ia, produto, segurança, ti).
+2. **a/b/c ficam com a cobertura do material real** — são ordens e queries reais; NÃO se
+   fabrica item para bater piso (reintroduz o lixo). Gap de cadeira em a/b/c fecha pela coleta
+   dirigida já roteada, não por curadoria de texto.
+3. **Custo: ~14 itens autorados** para zerar os buracos, dentro dos 60 slots de d/e/f,
+   deslocando o excesso de TI (16 hoje). Buracos atuais: fábrica/produto/segurança (faltam os
+   três modos); arquiteto/ia (falta d); dados/gestão/ti (falta e autorado — o e de hoje é
+   query de log sem cadeira, casa com a condição de re-parear e).
+
+Produto autora o próprio recorte (d/e/f de produto — matéria minha). O restante é insumo de
+cada cadeira / coleta dirigida; produto não escreve parecer de matéria alheia.
