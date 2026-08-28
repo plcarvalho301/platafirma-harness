@@ -320,12 +320,12 @@ mcp = FastMCP(
 )
 
 
-def _run_blocking(command: str, d: Path, timeout: int) -> dict:
+def _run_blocking(command: str, d: Path, timeout: int, sid: str = "-") -> dict:
     """Parte síncrona de run_command — roda em thread do anyio, nunca no event loop
     (ver docstring de run_command pra motivo)."""
     try:
         p = subprocess.Popen(["bash", "-c", command], cwd=d,
-                              env=_env_subprocesso(),
+                              env={**_env_subprocesso(), "PF_SESSAO": sid},
                               stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                               start_new_session=True)
     except OSError as e:
@@ -376,8 +376,10 @@ async def run_command(command: str, cwd: str = "", timeout: int = 120) -> dict:
         return negado
     d = (RAIZ / cwd) if cwd else RAIZ
     timeout = max(1, min(timeout, 600))
+    sid = _sessao_atual()  # capturado AQUI: dentro da thread do anyio,
+    # mcp.get_context() nao acha o RequestContext e cairia no fallback '-' (#2911)
     t0 = time.monotonic()
-    r = await anyio.to_thread.run_sync(_run_blocking, command, d, timeout)
+    r = await anyio.to_thread.run_sync(_run_blocking, command, d, timeout, sid)
     _audit(tool="run_command", comando=command[:CMD_CAP],
            comando_truncado=len(command) > CMD_CAP, cwd=str(d),
            exit_code=r.get("exit_code"), erro=r.get("erro"),
