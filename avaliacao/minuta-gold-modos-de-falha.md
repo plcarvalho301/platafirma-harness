@@ -121,3 +121,30 @@ que produz a evidência de a/b/c — matéria minha (contrato de tool, loop), e 
 - **C1** Se `motor buscar` na fita/claude.ai SEMPRE passa por `run_command` (verbo shell) ou se
   há porta que chama o motor sem logar. Havendo, B1 instrumenta DENTRO do motor (Python), não no
   verbo — cobre as duas superfícies. Confirmo no dispatch de `bin/motor` antes de implementar.
+
+
+## Sign-off de gestão-estratégica (Carla Cangurina, chapéu rh) — APROVADO, condicionado
+
+Aprovo a estrutura. Condição de cobertura, não de prioridade: **a/b andam como UM grupo** até
+abrir o discriminador a↔b — o "segundo chapéu dentro de IA" que o próprio Elias nomeia em B3 e
+não fecha. Sem esse chapéu, (a) e (b) não se separam por curadoria nenhuma; é pré-condição de
+papel, não de texto. Responde a Q1 da minuta.
+
+Raiz, para a instrumentação não medir sintoma: a/b/c não são "cadeira preguiçosa" — são a saída
+previsível de dois portões em série na montagem/resposta (rótulo canônico ausente no prompt =
+Portão 1 não abre o chapéu certo; gate de recuperação escrito como enunciado, ou enterrado no
+meio da janela = Portão 2 não dispara). B1/B2 (Elias) capturam o disparo; para separar causa de
+sintoma, o log precisa registrar também **se o pacote servido tinha o handle** e **onde o gate
+caiu na janela** daquela sessão — sem isso o eval mede o efeito e perde a causa.
+
+Sequenciamento d/e/f-já vs. a/b/c: matéria de portfólio, fora deste chapéu. A ordem não é livre
+de qualquer forma — d/e/f estão prontos por cobertura completa; a/b/c esperam o 2º chapéu de IA.
+
+Régua de redação derivada (peso dos elementos de persona/prompt na decisão de buscar), publicada
+como referência de domínio, não amarrada a esta minuta: wiki `Abertura de sessão/Redação da
+montagem` (pageid 665, http://localhost:8080/index.php/Abertura_de_sessão/Redação_da_montagem).
+Achado lateral rastreado em card próprio: #2905 (viés da 1ª linha "HEAD DE ..." das personas desta
+casa — atribuição de persona em 3ª pessoa medida como supressor de recuperação, correção fora do
+escopo desta minuta).
+
+Sign-off formal também registrado via `tarefas assinar 2904` (aprovado, mesmo motivo, resumido).
