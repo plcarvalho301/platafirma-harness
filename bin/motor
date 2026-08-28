@@ -405,8 +405,8 @@ def titulos_do_banco(inst):
     b = inst.get("banco") or {}
     if not b:
         return {}, {}
-    sql = ("SELECT DISTINCT split_part(t.section_id,'#',1), o.id::text, o.titulo "
-           "FROM acervo.trecho t JOIN acervo.impressao i ON i.id = t.impressao_id "
+    sql = ("SELECT DISTINCT split_part(s.ancora,'#',1), o.id::text, o.titulo "
+           "FROM acervo.secao s JOIN acervo.impressao i ON i.id = s.impressao_id "
            "JOIN acervo.obra o ON o.id = i.obra_id WHERE i.estado = 'servindo'")
     r = sh(f"docker exec -i {b['container']} psql -U {b['user']} -d {b['db']} -At -F '\t' -c \"{sql}\"")
     if r.returncode != 0:
