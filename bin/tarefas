@@ -28,7 +28,7 @@ uso:
   tarefas listar [--cadeira <c>] [--estado <e>] [--nivel <n>] [--json]
                                           itens abertos (fase != terminal)
   tarefas listar-tudo [mesmos filtros]    inclui os terminais
-  tarefas ler <id>                        item em texto: cabeçalho, ancestrais,
+  tarefas ler|ver <id>                    item em texto: cabeçalho, ancestrais,
                                           corpo e filhas diretas
   tarefas criar "<título>" [--desc "<txt>"|--desc-stdin]
                 [--nivel épico|feature|story|task] [--cadeira <c>] [--pai <id>]
@@ -646,7 +646,7 @@ cmd="${1:-}"; shift || uso
 case "$cmd" in
   listar)      descarta_projeto "${1:-}" && shift; listar "$@" ;;
   listar-tudo) descarta_projeto "${1:-}" && shift; listar_tudo "$@" ;;
-  ler)         ler "${1:?uso: tarefas ler <id>}" ;;
+  ler|ver)     ler "${1:?uso: tarefas ler <id>}" ;;
   criar)       criar "$@" ;;
   comentar)    comentar "${1:?uso: tarefas comentar <id> [\"<txt>\"]}" "${2:-$(cat)}" ;;
   comentarios) comentarios "${1:?uso: tarefas comentarios <id>}" ;;
