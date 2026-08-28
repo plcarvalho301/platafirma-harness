@@ -225,3 +225,22 @@ análise acima). Objetivo: nenhuma cadeira invisível no espelho.
 
 Produto autora o próprio recorte (d/e/f de produto — matéria minha). O restante é insumo de
 cada cadeira / coleta dirigida; produto não escreve parecer de matéria alheia.
+
+#### Estado após autoria (card 2906, 27/08)
+
+14 itens autorados anexados ao `gold-proposto-modos.jsonl`, `proveniencia: autorado-piso`
+(distinguíveis do material real — não são ordem coletada, são autoria para fechar o piso;
+dono revisa item a item). Contagem nova: a9 · c8 · **d25 · e26 · f23**. Piso atingido: as 8
+cadeiras têm ≥1 item em cada modo coletável (d/e/f).
+
+- **d** ancorado em obra real do acervo (`alvo_section_id` verdadeiro, colhido por `motor rag
+  buscar`); `alvo_obra_ids` fica vazio para o dono validar o UUID — regra da própria minuta
+  (recall só vale com alvo validado). Register evita entregar o termo de indexação no enunciado.
+- **e** escrito como pergunta rica que o treino também responde (é o caso em que ignorar o
+  contexto é mais provável — onde o modo e tem sinal).
+- **f** como vinheta situada com aposta ("você assina?"), sub-perguntas binárias.
+
+Pendências que **não** foram feitas (fora do pedido / dependem de decisão sua):
+- itens d/e/f pré-existentes não têm campo `cadeira` — o piso está atingido, mas só é
+  **checável a olho** (origem "coleta em X"), não por máquina, até backfillar `cadeira`.
+- normalização dados↔conhecimento (o frame das 8) segue pendente; não travou o piso.
