@@ -36,7 +36,8 @@ def carrega(padrao="/home/claudinho/AI/var/log/ops/ops-2026-08-*.jsonl"):
             except Exception:
                 continue
             ev = e.get("evento")
-            s = e.get("sessao")
+            # CHAVE = ordem_id (contrato-ordem-id.md). sessao e volatil, nao serve.
+            s = e.get("ordem_id")
             if ev == "sessao_aberta":
                 abertas[s].append(e)
             elif ev == "consulta":
@@ -58,7 +59,7 @@ def mede_d(abertas, consultas):
         "consulta_valida_sessoes": len(sessoes_com_consulta),
         "sessoes_com_disparo": num,
         "D": (num / denom) if denom else None,
-        "nota": "D=None => lado ordem sem sessao real; join immensuravel ate propagar (ver cabecalho)",
+        "nota": "chave=ordem_id (contrato-ordem-id.md). D=None => lados ainda gravam ordem_id=-/None; join mede quando server popular PF_ORDEM_ID. mede_d() isola a chave numa linha.",
     }
 
 if __name__ == "__main__":
