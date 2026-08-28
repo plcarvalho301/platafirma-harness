@@ -148,3 +148,62 @@ casa — atribuição de persona em 3ª pessoa medida como supressor de recupera
 escopo desta minuta).
 
 Sign-off formal também registrado via `tarefas assinar 2904` (aprovado, mesmo motivo, resumido).
+
+
+## Sign-off de produto (Lygia Bem-te-vi, chapéu discovery) — APROVADO, com três condições de instrumento
+
+Aprovo a estrutura: seis modos, seis evidências distintas, d/f rodam já. As condições são de
+validade de instrumento — o que cada conjunto de perguntas de fato mede — lidas com a régua de
+entrevista: pergunta boa aqui reproduz a ordem real (comportamento); pergunta escrita para
+acertar o alvo mede outra coisa.
+
+### Respostas às perguntas da minuta
+
+- **Q1 (a/b):** UM grupo, dois testes — concordo com IA e gestão. Condição: o discriminador
+  "insumo cobria" não sai só de medição. B3 diz o que foi SERVIDO; dizer que o servido COBRIA
+  o tema da ordem exige anotação por item (campo `insumo_aplicavel`: conceito/peça que cobria,
+  ou vazio explícito). O gold hoje não tem esse campo (todos os a-* com alvo nulo) — sem ele o
+  teste de (a) marca como falha toda ordem sem disparo, inclusive as em que o acervo não tinha
+  nada a dizer, e o detector afoga em falso positivo.
+- **Q-produto (falta cenário?):** falta UM com evidência mecânica própria: **recuperou
+  plausível-mas-errado e USOU** — busca razoável, hit errado, resposta ancorada no ruído. Não é
+  c (a query estava certa), não é d (recall), não é e (o contexto FOI usado). Hoje cai no
+  catch-all de f, mas é detectável por máquina (afirmação da resposta × sustentação no trecho
+  citado), e o princípio desta minuta é: evidência distinta = modo distinto. Proponho (g), no
+  mesmo runner de e.
+- Sobre-uso (disparo em ordem que não pedia acervo) também é falha de uso para quem consome a
+  resposta — latência e poluição de janela — mas não bloqueia a minuta; fica registrado para a
+  fila de instrumentação.
+
+### Análise de instrumento por modo (endereça o modo? é prompt que humano escreveria?)
+
+- **a (9):** os melhores itens do conjunto — ordens literais do dono, com typo e tudo.
+  Naturalidade máxima; evidência de comportamento, não de opinião. Ressalvas: (1) sem
+  `insumo_aplicavel`, ver Q1; (2) a-06/a-07 são turnos do MEIO de conversa ("deleta as linhas
+  da aba") — em replay avulso perdem o contexto que os tornava inteligíveis; marcar quais itens
+  são auto-contidos.
+- **c (8):** como está, NÃO roda — e a própria minuta diz por quê: c se detecta pelo par
+  prompt→query, e os 8 itens têm só a query. "governança de dados" no campo `pergunta` é a
+  evidência-metade rotulada como pergunta. Reclassificar como SEMENTE (a origem file:line
+  permite reconstruir o par via join de `ordem_id` quando B1 existir), não como gold executável.
+- **d (20):** endereça recall com alvo conhecido; cobertura ok. Ressalva de sensibilidade:
+  parte dos itens carrega no enunciado o vocabulário do alvo ("BT/NT/RT, notas de escopo") — a
+  pergunta entrega os termos de indexação e o recall medido vira sobreposição de string. O
+  registro é o oposto da ordem real (compare com os a-*: curto, torto, contextual). Serve para
+  recall; não prediz recuperação sob prompt humano — ler os dois números separados.
+- **e (18 ops + 2 T2):** elo certo (resposta × contexto), insumo errado. 18 itens são strings
+  de busca, não tarefas: "quality documentation teams more likely…" não tem resposta certa
+  definível, e prompt-sopa-de-palavras dá ao modelo NADA além do contexto — o caso em que
+  ignorar contexto é MENOS provável. O modo e existe para pegar o modelo preferindo treino a
+  contexto, e isso acontece na pergunta rica que o treino sabe responder: sensibilidade baixa
+  por construção. Condição: re-parear os itens ops com a ordem que os gerou (mesma coleta de c)
+  ou migrar o conjunto para o registro de e-06/e-07/e-19/e-20 (pergunta respondível).
+- **f (20):** endereça — cenário situado com aposta em jogo ("você assina?") é a técnica certa
+  para julgamento humano; vinheta, não entrevista, e aqui é o instrumento adequado. Ninguém
+  escreve (a)(b)(c)(d) num pedido real: o scaffolding serve à comparabilidade do juiz e afasta
+  do prompt humano — aceitável em f, não exportar o formato para os outros modos.
+- **Cobertura de cadeira:** zero itens do domínio de produto (discovery/design/canais) em
+  d/e/f. Se o gold detecta falha "das cadeiras", as minhas não aparecem no espelho. Ofereço
+  coleta T2/T3 do meu domínio como sequência, sem travar esta minuta.
+
+Sign-off formal também registrado via `tarefas assinar 2904` (aprovado, condições resumidas).
