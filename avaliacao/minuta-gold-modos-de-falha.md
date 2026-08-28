@@ -244,3 +244,58 @@ Pendências que **não** foram feitas (fora do pedido / dependem de decisão sua
 - itens d/e/f pré-existentes não têm campo `cadeira` — o piso está atingido, mas só é
   **checável a olho** (origem "coleta em X"), não por máquina, até backfillar `cadeira`.
 - normalização dados↔conhecimento (o frame das 8) segue pendente; não travou o piso.
+
+
+## Sign-off de dados (Olga Corujeira, chapéu recuperacao) — APROVADO, com reclassificação e baseline medido
+
+Aprovo a estrutura e fecho o parecer que faltava. Antes de assinar, VALIDEI os alvos de (d)
+contra o acervo servido (regra da própria minuta: recall só vale com alvo real) — não carimbei
+no escuro. Método e resultado abaixo; o JSONL já reflete as correções neste commit.
+
+### Validação de (d) — recall@8 medido, não presumido
+
+Resolvi os 23 UUIDs de `alvo_obra_ids` contra `acervo.obra` (23/23 batem o tema, zero lixo) e
+rodei os 25 enunciados por `motor rag buscar --k 8`. Baseline bruto: **16/25 no top-8**. Os 9
+miss se dividem em dois tratamentos opostos — é essa distinção que separa "gold ruim" de "sinal
+verdadeiro", e é o que o gold anterior não fazia.
+
+- **4 alvos frouxos, CORRIGIDOS na mão (reversível, meu):**
+  - **d-15** apontava só *Accelerate* (livro); a pergunta é change failure rate, reinterpretado
+    ano a ano — alvo passa à família DORA (7 relatórios). Reverificado: **hit@1**.
+  - **d-19** apontava *Building Ontologies with BFO*; o critério continuant/occurrent mora na
+    *BFO 2.0 Specification*. Alvo primário passa à Specification, secundário mantém o livro.
+    Reverificado: **hit@1**.
+  - **d-21, d-25** (autorado-piso) sem obra real casável → reclassificados `semente-autorado`,
+    `executavel:false`. Não são recall executável hoje; entram quando houver alvo validado.
+- **5 miss são recall VERDADEIRO ruim, alvo MANTIDO:** d-02, d-03, d-12, d-14, d-22. Marcados
+  `recall_baseline: miss@8`. São exatamente o que o modo (d) existe para flagrar (alvo correto,
+  não subiu) — apagar seria esconder o defeito. d-12 é o caso limpo: pergunta mistura
+  back-pressure + embedding, a busca puxou o segundo termo.
+
+**Recall executável de (d) após correção: 18/23** (2 sementes fora do denominador). Este é o
+baseline honesto do modo d contra o acervo de 27/08 — a série de D acumula a partir daqui.
+
+### Respostas às perguntas da minuta (as que são de dados)
+
+- **Q3 (validação humana do alvo de d):** FEITA nesta rodada para os 25. Os 20 T2 resolvem e o
+  tema bate; alvos confirmados. Os 5 autorados: 3 viram baseline/miss, 2 viram semente.
+- **Concordo com produto:** (c) é semente (falta o par prompt→query), não gold executável;
+  itens ops de (e) precisam re-parear com a ordem de origem. Não são matéria minha de fechar
+  (dependem do `rag_disparo` da IA), mas ratifico o diagnóstico.
+- **Modo (g) proposto por produto** (recuperou-plausível-errado-e-usou): concordo que é
+  evidência distinta (afirmação × sustentação no trecho citado) e cabe no runner de (e). Não
+  está no JSONL ainda — entra por instrumentação/runner, não por curadoria de texto.
+
+### O que fica NOMEADO como pendência (não é lixo escondido; é trabalho roteado)
+
+- **b=0 e g=0 no anexo por DESENHO:** não faltam perguntas — falta o `rag_disparo` (IA/B1) que
+  produz a evidência. Não se fabrica item de b/g por curadoria.
+- **c=8 são SEMENTE**, não executável, até o par prompt→query existir.
+- **campo `cadeira` só em 14/91:** piso de cobertura checável a olho, não por máquina, até
+  backfill. Não bloqueia; sobe como dívida.
+- **normalização dados↔conhecimento** no frame das 8: pendente, não travou nada.
+
+**Veredito:** estrutura aprovada; d/e/f rodam já, com d medido e corrigido. b/c/g e backfill de
+`cadeira` ficam como pendência-de-instrumento nomeada, não como cobertura faltando por preguiça.
+O gold NÃO é "d e chama de recuperação": os seis modos e suas seis evidências estão no corpo, e
+o que não roda hoje está marcado como semente, não como gold.
