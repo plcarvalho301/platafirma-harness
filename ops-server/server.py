@@ -38,6 +38,7 @@ import hmac
 import json
 import logging
 import os
+import uuid
 import re
 import signal
 import subprocess
@@ -85,6 +86,13 @@ LINHA_CAP = 8_000      # teto da linha JSONL
 ENV_OCULTO = ("OPS_AUTH_TOKEN", "TUNNEL_TOKEN")
 
 _sessao: ContextVar[str] = ContextVar("sessao", default="-")
+
+# ordem_id: identidade de UMA fita (uma ordem do dono), estavel do inicio ao fim,
+# gravada identica em sessao_aberta e em consulta -> chave do join de D (#2902).
+# sid (_sessao_atual) e por-conexao e reciclavel (#409); nao serve. monta_sessao
+# gera o ordem_id na abertura e mapeia sid->ordem_id; run_command le esse mapa e
+# injeta PF_ORDEM_ID no subprocesso, onde o motor ja o consome (bin/motor:281).
+_ordem_por_sid: dict[str, str] = {}
 
 
 # --- helpers puros ---
@@ -320,12 +328,13 @@ mcp = FastMCP(
 )
 
 
-def _run_blocking(command: str, d: Path, timeout: int, sid: str = "-") -> dict:
+def _run_blocking(command: str, d: Path, timeout: int, sid: str = "-", oid: str = "-") -> dict:
     """Parte síncrona de run_command — roda em thread do anyio, nunca no event loop
     (ver docstring de run_command pra motivo)."""
     try:
         p = subprocess.Popen(["bash", "-c", command], cwd=d,
-                              env={**_env_subprocesso(), "PF_SESSAO": sid},
+                              env={**_env_subprocesso(), "PF_SESSAO": sid,
+                                   "PF_ORDEM_ID": oid},
                               stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                               start_new_session=True)
     except OSError as e:
@@ -379,7 +388,8 @@ async def run_command(command: str, cwd: str = "", timeout: int = 120) -> dict:
     sid = _sessao_atual()  # capturado AQUI: dentro da thread do anyio,
     # mcp.get_context() nao acha o RequestContext e cairia no fallback '-' (#2911)
     t0 = time.monotonic()
-    r = await anyio.to_thread.run_sync(_run_blocking, command, d, timeout, sid)
+    oid = _ordem_por_sid.get(sid, "-")
+    r = await anyio.to_thread.run_sync(_run_blocking, command, d, timeout, sid, oid)
     _audit(tool="run_command", comando=command[:CMD_CAP],
            comando_truncado=len(command) > CMD_CAP, cwd=str(d),
            exit_code=r.get("exit_code"), erro=r.get("erro"),
@@ -860,7 +870,14 @@ async def _sessao_abrir(req):
     except Exception as e:                                  # noqa: BLE001
         pac["fila"] = {"indisponivel": True, "erro": f"{type(e).__name__}: {e}"}
 
-    _audit(tool="sessao", evento="sessao_aberta", sujeito=quem,
+    _sid = _sessao_atual()
+    _oid = "o" + datetime.now().astimezone().strftime("%Y%m%dT%H%M%S") + "-" + uuid.uuid4().hex[:6]
+    _ordem_por_sid[_sid] = _oid
+    if len(_ordem_por_sid) > 4096:            # nao vazar memoria: guarda so as fitas recentes
+        for _k in list(_ordem_por_sid)[:-2048]:
+            _ordem_por_sid.pop(_k, None)
+    pac["ordem_id"] = _oid
+    _audit(tool="sessao", evento="sessao_aberta", sujeito=quem, ordem_id=_oid,
            acoes=len(pac["acoes"]), persona_ausente=pac["persona"].get("ausente", False))
     return JSONResponse(pac)
 
