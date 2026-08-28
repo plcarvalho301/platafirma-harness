@@ -636,6 +636,20 @@ async def monta_sessao(cadeira: str = "", atualizar: bool = True, chapeu: str = 
     _audit(tool="monta_sessao", cadeira=cadeira, atualizar=atualizar,
            resolvida=r.get("nome_canonico"), erro=r.get("erro"),
            dur_ms=round((time.monotonic() - t0) * 1000))
+    # emite sessao_aberta AQUI (contexto MCP da tool), ancorado no MESMO
+    # id(session) que run_command usa -> chave do join de D casa por construcao
+    # dentro da conexao (#2902). A rota /sessao (externa) nao serve: cai em
+    # sessao='-' e nao e o caminho que a fita usa.
+    if not r.get("erro"):
+        _sid = _sessao_atual()
+        _oid = "o" + datetime.now().astimezone().strftime("%Y%m%dT%H%M%S") + "-" + uuid.uuid4().hex[:6]
+        _ordem_por_sid[_sid] = _oid
+        if len(_ordem_por_sid) > 4096:
+            for _k in list(_ordem_por_sid)[:-2048]:
+                _ordem_por_sid.pop(_k, None)
+        r["ordem_id"] = _oid
+        _audit(tool="sessao", evento="sessao_aberta",
+               sujeito=r.get("nome_canonico", "-"), ordem_id=_oid, via="tool")
     return r
 
 
