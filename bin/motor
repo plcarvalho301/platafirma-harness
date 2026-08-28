@@ -30,7 +30,7 @@ def uso(cod=2):
   motor <inst> ajuste                    todos os ajustes, com o valor de hoje
   motor <inst> ajuste <slug>             o que esse ajuste troca por que
   motor <inst> ajuste <slug> <valor>     mexe, promove e confere o servido
-  motor <inst> buscar "<pergunta>" [--k N] [--texto secao|trecho|nenhum] [--conceito <slug>]
+  motor <inst> buscar "<pergunta>" [--k N] [--texto secao|trecho|nenhum] [--conceito <slug>] [--ordem-id <id>]
   motor <inst> medir [--k N] [--rerank] [--rotulo <nome>] [--gabarito <arq>]
                      [--expansao [--peso-conceito X]]
                                         bateria no gold canonico, pela porta servida:
@@ -278,7 +278,7 @@ def _emite_consulta(nome, inst, corpo, resp, dur_ms):
             "instancia": os.environ.get("OPS_NAME", "-"),
             "usuario": os.environ.get("USER", "claudinho"),
             "sessao": os.environ.get("PF_SESSAO", "-"),
-            "ordem_id": os.environ.get("PF_ORDEM_ID", "-"),
+            "ordem_id": corpo.get("ordem_id") or os.environ.get("PF_ORDEM_ID", "-"),
             "tool": "motor",
             "evento": "consulta",
             "motor": nome,
@@ -299,7 +299,7 @@ def _emite_consulta(nome, inst, corpo, resp, dur_ms):
 
 
 def cmd_buscar(nome_inst, inst, argv):
-    uso = 'motor <inst> buscar "<pergunta>" [--k N] [--texto secao|trecho|nenhum] [--conceito <slug>]'
+    uso = 'motor <inst> buscar "<pergunta>" [--k N] [--texto secao|trecho|nenhum] [--conceito <slug>] [--ordem-id <id>]'
     if not argv:
         print(uso, file=sys.stderr)
         sys.exit(2)
@@ -319,9 +319,9 @@ def cmd_buscar(nome_inst, inst, argv):
                   + " (posicional solto?).\n  " + uso, file=sys.stderr)
             sys.exit(2)
         nome = a[2:]
-        if nome not in ("k", "texto", "conceito"):
+        if nome not in ("k", "texto", "conceito", "ordem-id"):
             print("buscar: flag desconhecida " + repr(a)
-                  + ". conhecidas: --k, --texto, --conceito.\n  " + uso, file=sys.stderr)
+                  + ". conhecidas: --k, --texto, --conceito, --ordem-id.\n  " + uso, file=sys.stderr)
             sys.exit(2)
         if i + 1 >= len(resto) or resto[i + 1].startswith("--"):
             print("buscar: a flag " + repr(a) + " exige um valor.\n  " + uso, file=sys.stderr)
@@ -329,6 +329,10 @@ def cmd_buscar(nome_inst, inst, argv):
         v = resto[i + 1]
         if nome == "conceito":            # repetivel: cada --conceito <slug> acrescenta um
             conceitos.append(v)
+        elif nome == "ordem-id":          # id da fita, passado pelo cliente (unica entidade
+            corpo["ordem_id"] = v         # que sabe que abertura e buscas sao a mesma fita:
+                                          # no claude.ai cada tool call e sessao MCP distinta,
+                                          # entao nao ha id compartilhado no servidor (#2902).
         elif nome == "k":
             try:
                 corpo["k"] = int(v)

@@ -59,7 +59,7 @@ def mede_d(abertas, consultas):
         "consulta_valida_sessoes": len(sessoes_com_consulta),
         "sessoes_com_disparo": num,
         "D": (num / denom) if denom else None,
-        "nota": "chave=ordem_id (contrato-ordem-id.md). D=None => lados ainda gravam ordem_id=-/None; join mede quando server popular PF_ORDEM_ID. mede_d() isola a chave numa linha.",
+        "nota": "chave=ordem_id. mede quando a fita nasce pela tool monta_sessao (gera+devolve ordem_id) e busca com --ordem-id. D baixo enquanto ha fitas pre-correcao no denominador; sobe conforme as fitas usam o mecanismo.",
     }
 
 if __name__ == "__main__":
