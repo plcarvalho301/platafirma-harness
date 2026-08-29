@@ -34,7 +34,51 @@ a identidade git é trilha e blast-radius, não o cadeado do prod.
 - Só uma **conta não-admin (machine user)** ou um **GitHub App** escopa de verdade, porque só
   eles não têm a autoridade do dono.
 
-## Passos — machine user (repetível por provider)
+## Caminho A — GitHub App  (RECOMENDADO: sem e-mail, sem conta, token curto-vivo)
+
+### O que é um GitHub App, em uma frase
+Um "bot" de primeira classe, **dono da sua própria conta** — não é um usuário: não tem login,
+e-mail nem 2FA. Tem nome próprio (os commits/PRs saem como `jaiminho-platafirma[bot]`), um conjunto
+de **permissões** que você concede (Contents, Pull requests — nunca Administration) e é **instalado**
+em repos específicos. Autentica por uma **chave privada** (`.pem`): com ela o container assina e pega
+um **token de instalação** que vale ~1h e expira sozinho. Ganho sobre o PAT: nada de conta/e-mail para
+gerir, e um token vazado morre em uma hora, não em 90 dias.
+
+### Mão do dono (criar + instalar — web UI, uma vez por provider)
+1. **Settings → Developer settings → GitHub Apps → New GitHub App.**
+   - *GitHub App name:* `jaiminho-platafirma` (é o que aparece como `[bot]`).
+   - *Homepage URL:* qualquer coisa (a URL do repo serve).
+   - *Webhook:* **desmarca "Active"** (não usamos).
+   - *Permissions → Repository:* **Contents = Read and write**; **Pull requests = Read and write**.
+     Nada mais — **sem Administration** (Administration = admin = bypassa a proteção; é o erro a evitar).
+   - *Where can this app be installed?:* **Only on this account** → **Create GitHub App**.
+2. Na página do App: **Private keys → Generate a private key** → baixa um `.pem`. **Esse é o segredo.**
+   Anota o **App ID** (no topo da página).
+3. **Install App** → sua conta → **Only select repositories** → os `platafirma-*`. Anota o
+   **Installation ID** (aparece na URL: `.../installations/<ID>`).
+4. Me passa **App ID + Installation ID**; o `.pem` vai para o cofre do container (mão do TI), nunca fila/git.
+
+### Mão da segurança (eu faço)
+5. Confiro a instalação: repos certos, permissões certas, **sem** Administration.
+6. **Verifico executando** (a régua que pegou a deploy key): gero um token de instalação da chave,
+   empurro branch `card-*` (tem que PASSAR), empurro `main` (tem que BARRAR — App não é bypass actor),
+   abro PR (tem que PASSAR). Se o `main` passar, ponho o App fora de qualquer bypass e re-testo.
+7. Registro no inventário: App ID, onde vive a chave, prazo de rotação da chave.
+
+### Mão do TI (container)
+8. `.pem` + App ID + Installation ID no cofre do container (uid do provider). O tooling mint o token:
+   - JWT curto (~10 min) assinado com o `.pem` (autentica como o App) →
+   - `POST /app/installations/<installation_id>/access_tokens` → token de ~1h →
+   - `git remote` HTTPS com `x-access-token:<token>@github.com/...`. Re-minta quando expirar.
+   Bibliotecas prontas fazem os três passos: `ghinstallation` (Go), `PyJWT`+`requests` ou `ghapi` (Python).
+
+### Revogar
+- Desinstala o App do repo (**Settings → Installed GitHub Apps → uninstall**), **ou** rotaciona/deleta
+  a chave privada na página do App. Os tokens de instalação vivos morrem sozinhos em ~1h.
+
+---
+
+## Caminho B — machine user (fallback; N contas para gerir)
 
 ### Mão do dono (signup e segredo — não automatizável por mim)
 
@@ -74,10 +118,3 @@ gh api -X DELETE repos/plcarvalho301/<repo>/collaborators/<bot-username>   # tir
 ```
 Depois: revoga o PAT na conta do bot. `acesso orfaos` não pode achar o sujeito depois — se achar,
 sobrou credencial.
-
-## Alternativa: GitHub App (mais limpo para provider permanente)
-
-Um App instalado nos repos com *Contents* + *Pull requests* write dá **tokens de instalação
-curtos-vivos** (sem senha nem 2FA de conta para gerir, rotação automática). Setup também é mão do
-dono (criar + instalar o App), mas a operação depois é menos frágil. Recomendado quando o provider
-deixa de ser experimento e vira permanente.
