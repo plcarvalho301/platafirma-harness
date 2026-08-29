@@ -1,0 +1,140 @@
+#!/usr/bin/env python3
+"""Runner resumível do juiz estrutural (piso <40 toks).
+
+Produtiza tmp/judge_smoke.py -> tmp/juiz_piso.py em runner de banda inteira.
+Le a banda de tmp/banda_lt40.jsonl, julga cada secao (real|so-titulo|ancora-ruido)
+via ollama local, e faz CHECKPOINT linha-a-linha em OUT. NAO escreve no banco:
+secao.qualidade so e tocada por juiz_aplica.py, depois da banda inteira julgada.
+
+Resumivel: ao subir, carrega os ids ja julgados (classe != erro) de OUT e pula.
+Erro fica no checkpoint marcado e e RE-tentado no proximo lancamento.
+
+Kill-safe: cada resultado e escrito e flushado antes do proximo item; matar no
+meio perde no maximo o item em voo.
+
+env:
+  JUIZ_MODELO   modelo ollama            (default qwen3.5:9b)
+  JUIZ_BANDA    entrada jsonl            (default tmp/banda_lt40.jsonl)
+  JUIZ_OUT      checkpoint jsonl         (default tmp/juiz_banda.out.jsonl)
+  JUIZ_LIMIT    teto de itens NOVOS      (default 0 = banda inteira)
+  JUIZ_LOG_A_CADA  cadencia de progresso (default 200)
+"""
+import json, os, sys, time, urllib.request
+from collections import Counter
+
+MODEL     = os.environ.get("JUIZ_MODELO", "qwen3.5:9b")
+OLLAMA    = "http://127.0.0.1:11434/api/generate"
+BANDA     = os.environ.get("JUIZ_BANDA", "/home/claudinho/AI/tmp/banda_lt40.jsonl")
+OUT       = os.environ.get("JUIZ_OUT", "/home/claudinho/AI/tmp/juiz_banda.out.jsonl")
+LIMIT     = int(os.environ.get("JUIZ_LIMIT", "0"))
+LOG_CADA  = int(os.environ.get("JUIZ_LOG_A_CADA", "200"))
+
+PROMPT = """Você classifica se um trecho de seção de um acervo é conteúdo REAL ou LIXO ESTRUTURAL.
+Não julgue qualidade nem profundidade — só a estrutura.
+Classes:
+- real: conteúdo genuíno, mesmo curto (um passo, uma definição, um resumo executivo, uma lista com sentido próprio).
+- so-titulo: praticamente só um cabeçalho, sem conteúdo real embaixo.
+- ancora-ruido: ruído estrutural (cabeçalho/rodapé corrido, número de página, entrada de sumário/índice, fragmento sem sentido próprio).
+Responda SÓ JSON: {{"classe":"real|so-titulo|ancora-ruido","motivo":"ate 8 palavras"}}.
+TÍTULO: {titulo}
+CORPO: {corpo}"""
+
+
+def judge(titulo, corpo):
+    body = {
+        "model": MODEL,
+        "prompt": PROMPT.format(titulo=titulo, corpo=corpo),
+        "stream": False, "format": "json", "think": False,
+        "options": {"temperature": 0, "num_predict": 100, "num_ctx": 2048},
+    }
+    req = urllib.request.Request(OLLAMA, data=json.dumps(body).encode(),
+                                headers={"Content-Type": "application/json"})
+    with urllib.request.urlopen(req, timeout=90) as r:
+        resp = json.load(r)
+    return json.loads(resp["response"])
+
+
+def norm(cl):
+    cl = (cl or "?").strip().lower().replace("ancara", "ancora")
+    if cl in ("real", "so-titulo", "ancora-ruido"):
+        return cl
+    if "ancor" in cl or "ruid" in cl: return "ancora-ruido"
+    if "titul" in cl: return "so-titulo"
+    if "real" in cl: return "real"
+    return "?"
+
+
+def carrega_feitos(path):
+    """ids ja julgados com classe valida (erro NAO conta -> sera re-tentado)."""
+    feitos = set()
+    if not os.path.exists(path):
+        return feitos
+    with open(path) as f:
+        for l in f:
+            l = l.strip()
+            if not l:
+                continue
+            try:
+                d = json.loads(l)
+            except Exception:
+                continue
+            if d.get("classe") and d["classe"] != "erro":
+                feitos.add(d["id"])
+    return feitos
+
+
+def main():
+    banda = []
+    with open(BANDA) as f:
+        for l in f:
+            l = l.strip()
+            if l:
+                banda.append(json.loads(l))
+    total = len(banda)
+
+    feitos = carrega_feitos(OUT)
+    pend = [r for r in banda if r["id"] not in feitos]
+    if LIMIT > 0:
+        pend = pend[:LIMIT]
+
+    print(f"MODELO={MODEL} banda={total} ja_feitos={len(feitos)} "
+          f"pendentes={len(pend)}{' (teto '+str(LIMIT)+')' if LIMIT else ''}",
+          flush=True)
+    if not pend:
+        print("nada pendente — banda completa.", flush=True)
+        return
+
+    c = Counter(); erros = 0; t0 = time.time()
+    with open(OUT, "a") as out:
+        for i, row in enumerate(pend, 1):
+            corpo = (row.get("corpo") or "").replace("\\n", " ").strip()
+            try:
+                res = judge(row.get("titulo", ""), corpo)
+                cl = norm(res.get("classe"))
+                motivo = (res.get("motivo") or "")[:60]
+            except Exception as e:
+                cl = "erro"; motivo = str(e)[:60]; erros += 1
+            c[cl] += 1
+            out.write(json.dumps({"id": row["id"], "classe": cl,
+                                  "motivo": motivo, "toks": row.get("toks")},
+                                 ensure_ascii=False) + "\n")
+            out.flush(); os.fsync(out.fileno())
+            if i % LOG_CADA == 0 or i == len(pend):
+                dt = time.time() - t0
+                ips = i / max(dt, 1e-9)
+                falta = (len(pend) - i) / max(ips, 1e-9)
+                print(f"[{i}/{len(pend)}] {ips:.2f} it/s | "
+                      f"falta ~{falta/60:.0f} min | erros={erros} | "
+                      f"parcial={dict(c)}", flush=True)
+
+    dt = time.time() - t0
+    print(f"FIM lote: {len(pend)} itens em {dt/60:.1f} min | "
+          f"dist_lote={dict(c)} | erros={erros}", flush=True)
+    feitos_agora = len(carrega_feitos(OUT))
+    print(f"CHECKPOINT: {feitos_agora}/{total} julgados "
+          f"({'COMPLETO' if feitos_agora >= total else 'parcial — relancar p/ retomar'})",
+          flush=True)
+
+
+if __name__ == "__main__":
+    main()
