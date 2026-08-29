@@ -626,6 +626,15 @@ async def monta_sessao(cadeira: str = "", atualizar: bool = True, chapeu: str = 
     Persona sem linha `FERRAMENTAL:` devolve `manifesto.ausente` com aviso explícito.
     Ausência declarada, nunca omissão silenciosa. Sem caso vivo hoje: o exemplo que
     morava aqui era a claudinha-osint, desligada em 15/08/2026 (org:0002).
+
+    `pergunta`: PASSE SEMPRE o corpo do turno do dono aqui — o pedido literal que
+    abriu a sessão, sem parafrasear. NÃO é opcional e NÃO é o `--chapeu`: é o SINAL
+    a partir do qual a cadeira roteia o próprio chapéu (determinístico -> semântico).
+    Omitir `pergunta` mata o roteamento na origem: sem ela, a abertura cai direto no
+    fallback e serve `chapeu=null`, e o dono passa a ter de dizer o chapéu na mão —
+    exatamente o que esta tool existe para evitar. Só se abre sem `pergunta` quando
+    não há turno ainda (ex.: claude.ai antes do 1º prompt). Medido: 243/249 aberturas
+    em 7 dias vieram sem pergunta e portanto sem roteamento (#2919).
     """
     negado = _autoriza("monta_sessao", "monta_sessao", "documento",
                        f"sessao:{cadeira or '-'}", DOM_PLATAFORMA)
@@ -633,8 +642,12 @@ async def monta_sessao(cadeira: str = "", atualizar: bool = True, chapeu: str = 
         return negado
     t0 = time.monotonic()
     r = await anyio.to_thread.run_sync(_montar, cadeira, atualizar, chapeu, pergunta)
+    _rot = (r.get("roteador") or {})
     _audit(tool="monta_sessao", cadeira=cadeira, atualizar=atualizar,
            resolvida=r.get("nome_canonico"), erro=r.get("erro"),
+           chapeu=(r.get("chapeu") or None),
+           pergunta=(pergunta or None),
+           roteador_via=_rot.get("via"), roteador_slug=_rot.get("slug"),
            dur_ms=round((time.monotonic() - t0) * 1000))
     # emite sessao_aberta AQUI (contexto MCP da tool), ancorado no MESMO
     # id(session) que run_command usa -> chave do join de D casa por construcao
