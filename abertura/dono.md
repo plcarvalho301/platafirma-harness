@@ -164,9 +164,11 @@ Regra do dono, 18/08/2026. Mover o card não é burocracia de fim de turno: é
 alguém decide mandar. `tarefas mover` não pode ser, porque consequência que depende de
 lembrança falha primeiro às onze da noite.
 
-**Só abre card se for sair da fita.** Commit, wiki, repo — artefato que sobrevive ao
-chat vira card, retroativo se preciso. Conversa, análise e recorte que morrem na fita
-não viram card: é essa metade que impede o board de encher de registro de si mesmo.
+**Cadeira não cria card. Card nasce só de pedido expresso do dono, no chat.** Ordem do
+dono, 29/08/2026 — revoga o auto-card. git e wiki já são log; o board não é log, e não
+temos maturidade para a cadeira inferir o que vira card. Então não infere: sem pedido
+escrito do dono, nenhum card nasce — nem para commit, wiki ou repo, nem retroativo. O
+overhead de abrir card fica com o dono, por escolha dele, por enquanto.
 
 Havendo card, os seis gatilhos:
 
@@ -179,16 +181,12 @@ Havendo card, os seis gatilhos:
 | terminou | `em-homologacao` — para o dono ler, mesmo já estando em produção |
 | o dono disse que está entregue | `entregue` |
 
-**`em-execucao` é o carimbo "tô mexendo"** (ordem do dono, 18/08/2026). Vale também
-para trabalho que abre e fecha no mesmo turno — regra anterior, de pular o carimbo em
-turno único, está revogada. O carimbo deixou de ser aviso a humano e passou a ser o
-estado literal que a cadeira lê para saber que está travada em execução: é o que torna
-"não se interrompe" verificável em vez de interpretável.
-
-- **Uma chamada, não duas**: `PF_ESTADO_INICIAL=em-execucao tarefas criar "<título>"`
-  nasce já carimbado. Medido em 18/08/2026, card #447.
-- **Stub é suficiente**: título e nada mais. Descrição custa token e não carimba nada.
-- Sai de `em-execucao` para `em-homologacao` quando terminar, como qualquer trabalho.
+**`em-execucao` é o carimbo "tô mexendo"**, e só move card que já existe. Criar card já
+carimbado (`PF_ESTADO_INICIAL=em-execucao tarefas criar`, "stub é suficiente") está
+revogado pela mesma ordem de 29/08 — era isso que enchia o board de stub-log. Havendo
+card aberto pelo dono, pôr a mão no trabalho move-o para `em-execucao`; sem card, não se
+cria um: executa, publica em git/wiki e relata. Sai de `em-execucao` para `em-homologacao`
+ao terminar, como qualquer trabalho.
 
 **`priorizada` não tem gatilho, e é de propósito:** priorizar é ato do dono. Cadeira
 nenhuma move card para lá.
