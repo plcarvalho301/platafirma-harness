@@ -200,3 +200,9 @@ onde não confirmei a morte.
 
 Régua: ao topar referência que se diz canônica, conferir data e repo — no meio de um
 tombamento o fóssil e o vivo coexistem, e o fóssil lê como autoridade.
+
+## Superfícies de acesso à fábrica (mapa) — 29/08/2026
+- A fábrica (claudinha-fabrica / Jaiminho) opera em QUATRO superfícies, não três. Além das três Code (Desktop megafone, conta claudinho, Code trabalho), existe **chat.platafirma.org** — Element/Matrix, uma sala por cadeira (Jaiminho, Leonardo, Oswaldo, Carla...).
+- Stack no host: `chat-synapse` (8008/8448), `chat-recepcao` (8080), `chat-pg`. Tunnel Cloudflare roteia direto pro `chat-synapse:8008`; auth por OIDC/realm (família `tarefas.*`); Admin API fechada na borda (card 449). Origem: cards 447/449, minuta 0002.
+- Verificar viva: `docker ps | grep chat` no host.
+- Erro a não repetir (Pedro apontou, 29/08/2026): tratei "sala no chat" como conceito inexistente e neguei ancorado só no acervo-texto, sem medir a stack chat viva nem lembrar do Element. "Sala" = sala Matrix. Superfície de conversa mede-se no `docker ps`, não só no `rg` do acervo.
