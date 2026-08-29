@@ -1,0 +1,73 @@
+From 12c23afa18fc6ecc7a9a7defc4b293fe1b48037c Mon Sep 17 00:00:00 2001
+From: claudinho-fabrica <claudinho-fabrica@platafirma.org>
+Date: Wed, 26 Aug 2026 21:24:31 +0000
+Subject: [PATCH] acervo baixar: normalizador em Python com unaccent e
+ equivalencia hifen/espaco
+
+Trata hifen e espaco como equivalentes nos dois sentidos (query e chaves do catalogo) e aplica unaccent deterministico em Python, eliminando a dependencia da extensao unaccent no rag-pg e falhas de casamento no fallback.
+---
+ bin/_acervo/baixar | 48 +++++++++++++++++++++++++++++++++-------------
+ 1 file changed, 35 insertions(+), 13 deletions(-)
+
+diff --git a/bin/_acervo/baixar b/bin/_acervo/baixar
+index 5872a33..58784c2 100755
+--- a/bin/_acervo/baixar
++++ b/bin/_acervo/baixar
+@@ -12,19 +12,41 @@ PG=rag-extractor-pg
+ PGUSER=$(docker inspect $PG --format '{{range .Config.Env}}{{println .}}{{end}}' | sed -n 's/^POSTGRES_USER=//p')
+ PGDB=$(docker inspect $PG --format '{{range .Config.Env}}{{println .}}{{end}}' | sed -n 's/^POSTGRES_DB=//p')
+ 
+-SQL="select coalesce(titulo,arquivo), arquivo, objeto
+-     from acervo.obra
+-     where objeto is not null
+-       and (unaccent(lower(coalesce(titulo,''))) like unaccent(lower('%$TERMO%'))
+-            or unaccent(lower(arquivo)) like unaccent(lower('%$TERMO%')))
+-     order by length(arquivo) limit 20"
+-
+-# unaccent pode não existir; cai para busca simples se falhar
+-RES=$(docker exec $PG psql -U "$PGUSER" -d "$PGDB" -At -F$'\t' -c "$SQL" 2>/dev/null) || \
+-RES=$(docker exec $PG psql -U "$PGUSER" -d "$PGDB" -At -F$'\t' -c \
+-  "select coalesce(titulo,arquivo), arquivo, objeto from acervo.obra
+-   where objeto is not null and (lower(coalesce(titulo,'')) like lower('%$TERMO%')
+-   or lower(arquivo) like lower('%$TERMO%')) order by length(arquivo) limit 20")
++RES=$(docker exec -i "$PG" psql -U "$PGUSER" -d "$PGDB" -At -F$'\t' -c \
++  "select coalesce(titulo, arquivo), arquivo, objeto from acervo.obra where objeto is not null" \
++  | python3 - "$TERMO" <<'PY'
++import sys, re, unicodedata
++
++def normalizar(texto: str) -> str:
++    if not texto:
++        return ""
++    nfkd = unicodedata.normalize("NFKD", str(texto))
++    sem_acento = "".join(c for c in nfkd if not unicodedata.combining(c))
++    return re.sub(r"[-\s]+", " ", sem_acento.lower()).strip()
++
++termo_raw = sys.argv[1] if len(sys.argv) > 1 else ""
++termo_norm = normalizar(termo_raw)
++if not termo_norm:
++    sys.exit(0)
++
++candidatos = []
++for linha in sys.stdin:
++    linha = linha.rstrip("\r\n")
++    if not linha:
++        continue
++    partes = linha.split("\t")
++    if len(partes) < 3:
++        continue
++    titulo, arquivo, objeto = partes[0], partes[1], partes[2]
++    if termo_norm in normalizar(titulo) or termo_norm in normalizar(arquivo):
++        candidatos.append((titulo, arquivo, objeto))
++
++# Ordena pelo tamanho do nome do arquivo (mesmo critério original) e limita a 20
++candidatos.sort(key=lambda x: len(x[1]))
++for t, a, o in candidatos[:20]:
++    print(f"{t}\t{a}\t{o}")
++PY
++)
+ 
+ [ -z "$RES" ] && { echo "nada encontrado para: $TERMO"; exit 1; }
+ 
+-- 
+2.39.5
+

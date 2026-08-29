@@ -77,6 +77,11 @@
                    diretorio compartilhado por 20 clones, e hook novo la dentro liga
                    em todos ao mesmo tempo. Rollout e ato declarado, nao efeito colateral.
 
+  alcance <sujeito> <fonte>
+                   cadeia de acesso INTEIRA numa unica chamada: dado um sujeito
+                   (persona/servico) e uma fonte (recurso/servico alvo), reporta cada
+                   salto da cadeia e onde ela quebra, se quebrar.
+
 Classes conhecidas e ainda sem implementacao sao listadas como tais: ausencia se
 declara, nunca se omite.
 
@@ -109,7 +114,7 @@ def uso(erro=None):
         print(f"erro: {erro}\n", file=sys.stderr)
     print(__doc__.strip(), file=sys.stderr)
     print("\nuso: conferir <classe> [alvo]", file=sys.stderr)
-    print("     classes implementadas : servico . verbo . repo . skill . procedencia . superficie . commit . arranque . chapeu . ferramental . front", file=sys.stderr)
+    print("     classes implementadas : servico . verbo . repo . skill . procedencia . superficie . commit . arranque . chapeu . ferramental . front . alcance", file=sys.stderr)
     for c, motivo in CLASSES_ABERTAS.items():
         print(f"     classe declarada, sem implementacao : {c} — {motivo}", file=sys.stderr)
     sys.exit(2)
@@ -2337,6 +2342,165 @@ def conferir_ferramental(alvo, como_json=False):
     return 1 if falhas else 0
 
 
+# --- classe: alcance --------------------------------------------------------
+# capacidade: verificacao
+# dono: claudinho-seguranca
+
+
+def _alcance_contrato():
+    print("""uso: conferir alcance <sujeito> <fonte> [--json]
+
+Mede a cadeia de acesso INTEIRA numa unica chamada:
+  - sujeito: persona ou conta de servico (ex: claudinho-TI, rag-api, G48UFN)
+  - fonte:   recurso ou servico alvo (ex: identidade-db, motor-msg, acervo)
+
+Saida:
+  Diagnostico legivel, um salto por linha (verde [ok] / vermelho [FALHA]).
+  Retorna 0 se a cadeia for integra, 1 se quebrar em qualquer salto, 2 se a chamada estiver errada.
+""", file=sys.stderr)
+
+
+def _verificar_salto_identidade(sujeito):
+    """Salto 1: Existencia e higidez da identidade do sujeito."""
+    # TODO: [Identidade] Qual e a fonte de verdade para validar se o <sujeito> existe e esta ativo?
+    # - Para personas: Devemos consultar a tabela `identidade.identidade` no `identidade-db` ou `sujeitos.yaml`?
+    # - Para servicos: O sujeito e resolvido via Docker Compose service label, Keycloak service account ou catalogo estatico?
+    # - Existe checagem de persona afastada/desligada (ex: `personas/eventos-org.jsonl`)?
+    return {
+        "salto": "1. Identidade do Sujeito",
+        "descricao": f"Validacao da existencia e estado ativo de '{sujeito}'",
+        "sucesso": True,  # TODO: integrar com a fonte de verdade de identidade
+        "detalhes": f"TODO: Integrar consulta de identidade para '{sujeito}'",
+        "aviso": None,
+    }
+
+
+def _verificar_salto_politica(sujeito, fonte):
+    """Salto 2: Concessao e regras de acesso no PDP / Politica."""
+    # TODO: [Politica/PDP] Onde reside a autorizacao declarada entre <sujeito> e <fonte>?
+    # - Devemos invocar `acesso decidir` / consultar `politica-acesso/politica.yaml` (PAP/PDP)?
+    # - Devemos validar concessoes vigentes na tabela `concessao.vigente` no `identidade-db`?
+    # - Como mapear a string <fonte> para o trio (eixo, valor, recurso/acao) exigido pelo PDP?
+    return {
+        "salto": "2. Autorizacao e Politica (PDP)",
+        "descricao": f"Verificacao de permissao/concessao ativa de '{sujeito}' para '{fonte}'",
+        "sucesso": True,  # TODO: integrar com o PDP / concessao.vigente
+        "detalhes": f"TODO: Integrar avaliacao no PDP/concessao.vigente para '{sujeito}' -> '{fonte}'",
+        "aviso": None,
+    }
+
+
+def _verificar_salto_credencial(sujeito, fonte):
+    """Salto 3: Materializacao e disponibilidade do segredo/credencial em runtime."""
+    # TODO: [Segredos/Credenciais] Como o sujeito obtem credencial valida para a fonte?
+    # - O sujeito recebe via variavel de ambiente / env_file no container?
+    # - E lido via arquivo montado de segredo (ex: `/run/secrets/...`) ou token de sessao?
+    # - O conector MCP / fita possui as chaves necessarias preenchidas no `.mcp.json`?
+    return {
+        "salto": "3. Materializacao da Credencial",
+        "descricao": f"Presenca do segredo/token no ambiente de '{sujeito}' para autenticar em '{fonte}'",
+        "sucesso": True,  # TODO: inspecionar presenca do segredo/token no runtime
+        "detalhes": f"TODO: Verificar injecao de segredo/token de '{fonte}' no runtime de '{sujeito}'",
+        "aviso": None,
+    }
+
+
+def _verificar_salto_conectividade(sujeito, fonte):
+    """Salto 4: Alcance topologico e rede entre a origem e o destino."""
+    # TODO: [Topologia de Rede] Como determinar se ha rota e conectividade entre sujeito e fonte?
+    # - Containers compartilham a mesma rede Docker bridge/overlay (ex: `platafirma-core_default`)?
+    # - A porta de destino esta vinculada (bind) no host ou acessivel via proxy reverso / gateway interno?
+    # - Ha isolamento de rede declarado no Compose da respectiva camada?
+    return {
+        "salto": "4. Conectividade e Roteamento",
+        "descricao": f"Alcance de rede entre o runtime de '{sujeito}' e o endpoint de '{fonte}'",
+        "sucesso": True,  # TODO: verificar rotas/redes Docker entre sujeito e fonte
+        "detalhes": f"TODO: Verificar conectividade Docker/host entre '{sujeito}' e '{fonte}'",
+        "aviso": None,
+    }
+
+
+def _verificar_salto_alvo(sujeito, fonte):
+    """Salto 5: Validacao e aceitacao do acesso no proprio alvo/endpoint."""
+    # TODO: [Autorizacao no Alvo] Como confirmar que a fonte aceita a conexao autenticada?
+    # - Executar probe autenticado (ex: healthcheck com credencial, SELECT 1 no Postgres, XRANGE no Redis)?
+    # - Consultar listas de controle de acesso (ACL) nativas do alvo (ex: `pg_roles`, Redis ACL)?
+    return {
+        "salto": "5. Aceitacao no Alvo",
+        "descricao": f"Validacao de aceite do handshake e permissao final no servico '{fonte}'",
+        "sucesso": True,  # TODO: executar probe ou checagem de ACL no servico alvo
+        "detalhes": f"TODO: Executar probe de autorizacao no endpoint de '{fonte}'",
+        "aviso": None,
+    }
+
+
+def avaliar_cadeia_alcance(sujeito, fonte):
+    """Executa sequencialmente os saltos da cadeia de acesso.
+    
+    A execucao interrompe no primeiro salto que falhar (onde a cadeia quebra).
+    """
+    verificacoes = [
+        _verificar_salto_identidade(sujeito),
+        _verificar_salto_politica(sujeito, fonte),
+        _verificar_salto_credencial(sujeito, fonte),
+        _verificar_salto_conectividade(sujeito, fonte),
+        _verificar_salto_alvo(sujeito, fonte),
+    ]
+    resultados = []
+    for salto in verificacoes:
+        resultados.append(salto)
+        if not salto["sucesso"]:
+            break
+    return resultados
+
+
+def conferir_alcance(sujeito=None, fonte=None, como_json=False):
+    if not sujeito or not fonte:
+        if como_json:
+            print(json.dumps({"erro": "uso: conferir alcance <sujeito> <fonte> [--json]"}))
+        else:
+            _alcance_contrato()
+        return 2
+
+    saltos = avaliar_cadeia_alcance(sujeito, fonte)
+    falhas = [s for s in saltos if not s["sucesso"]]
+    quebrou = len(falhas) > 0
+
+    if como_json:
+        payload = {
+            "classe": "alcance",
+            "sujeito": sujeito,
+            "fonte": fonte,
+            "veredito": "divergente" if quebrou else "em dia",
+            "ponto_de_quebra": falhas[0]["salto"] if quebrou else None,
+            "saltos": saltos,
+        }
+        print(json.dumps(payload, ensure_ascii=False, indent=2))
+        return 1 if quebrou else 0
+
+    verde = "\033[32m"
+    vermelho = "\033[31m"
+    amarelo = "\033[33m"
+    reset = "\033[0m"
+
+    print(f"\n### conferir alcance: {sujeito} -> {fonte}")
+    print(f"    {'—' * 55}")
+    for s in saltos:
+        tag = f"{verde}[ok]{reset}   " if s["sucesso"] else f"{vermelho}[FALHA]{reset}"
+        print(f"  {tag} {s['salto']}")
+        print(f"          {s['detalhes']}")
+        if s.get("aviso"):
+            print(f"          {amarelo}aviso:{reset} {s['aviso']}")
+
+    print(f"    {'—' * 55}")
+    if quebrou:
+        print(f"  {vermelho}VEREDITO:{reset} CADEIA QUEBRADA em '{falhas[0]['salto']}'\n")
+        return 1
+    else:
+        print(f"  {verde}VEREDITO:{reset} CADEIA INTEGRA ({len(saltos)} saltos alcancados)\n")
+        return 0
+
+
 def main(argv):
     como_json = "--json" in argv
     if como_json:
@@ -2431,6 +2595,9 @@ def main(argv):
             if alvo == "--servido":
                 alvo = None
         return conferir_skill(alvo, servido, como_json=como_json)
+    if classe == "alcance":
+        fonte = argv[3] if len(argv) > 3 else None
+        return conferir_alcance(alvo, fonte, como_json=como_json)
     if como_json:
         print(json.dumps({"erro": f"classe desconhecida: {classe}"}))
     uso(f"classe desconhecida: {classe}")

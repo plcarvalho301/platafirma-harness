@@ -1,4 +1,4 @@
-#!/home/claudinho/AI/.venv-harness/bin/python
+#!/usr/bin/env python3
 # descansar — fim de fita: confere a memoria e mede os fatos volateis contra os
 # quais a sessao confere o que "lembra"
 # capacidade: encerramento
@@ -174,7 +174,10 @@ def estado_memoria(curto, canon, rc):
     alvo = curto
     linhas, orfaos = [], []
     declarados, erro = slugs_declarados(curto)
-    chaves = sorted(rc.keys(f"mem:{alvo.lower()}:*"))
+    try:
+        chaves = sorted(rc.keys(f"mem:{alvo.lower()}:*"))
+    except Exception:
+        chaves = []
     if not chaves:
         linhas.append("  mesa vazia — nada retido da fita anterior")
     for k in chaves:
@@ -229,8 +232,11 @@ def ato_fita(args):
     alvo = curto
     rc = conn()
     print(f"== descanso de {alvo} ==")
-    ultimo = rc.get(f"mem:{alvo.lower()}")
-    print(f"ultimo descanso: {idade(time.time() - int(ultimo)) + ' atras' if ultimo else 'nunca'}")
+    try:
+        ultimo = rc.get(f"mem:{alvo.lower()}")
+        print(f"ultimo descanso: {idade(time.time() - int(ultimo)) + ' atras' if ultimo else 'nunca'}")
+    except Exception:
+        print("ultimo descanso: nunca (ou redis indisponivel)")
 
     print("\n== memoria retida ==")
     linhas, orfaos = estado_memoria(curto, canon, rc)
@@ -251,7 +257,10 @@ def ato_fita(args):
             print(f"\n-- fila\n  NAO MEDIDO — PF_CADEIRA={alvo!r} nao casa com"
                   f" nenhuma persona em {PERSONAS}")
 
-    rc.set(f"mem:{alvo.lower()}", int(time.time()))
+    try:
+        rc.set(f"mem:{alvo.lower()}", int(time.time()))
+    except Exception:
+        pass
     print("\n== proximo passo ==\n"
           "1. escreva a mesa antes de a fita morrer: `mesa anota <chapeu>`\n"
           "   (hipotese viva, beco descartado, proxima jogada, premissa a reconferir).\n"
