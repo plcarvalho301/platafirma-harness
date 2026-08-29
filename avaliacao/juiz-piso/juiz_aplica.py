@@ -5,8 +5,12 @@ Passo "ai gravo qualidade" — roda DEPOIS da banda inteira julgada por juiz_ban
 Gate: recusa escrever se o checkpoint nao cobre a banda inteira, salvo --parcial.
 Ate rodar isto, NADA e escrito no campo (secao.qualidade fica 'nao-julgada').
 
-Mapeia classe do juiz -> valor de secao.qualidade, 1:1:
-  real | so-titulo | ancora-ruido    (fora da banda / nao julgado = 'nao-julgada')
+Mapeia a classe do juiz -> vocabulario do CHECK secao_qualidade_check:
+  real + tem titulo  -> titulada
+  real + sem titulo  -> sem-titulo
+  so-titulo          -> so-titulo
+  ancora-ruido       -> ancora-ruido
+(o schema distingue conteudo real por ter titulo; 'real' e binario do juiz.)
 
 uso:
   python3 juiz_aplica.py            # so escreve se banda completa; imprime dist
@@ -20,7 +24,8 @@ BANDA = os.environ.get("JUIZ_BANDA", "/home/claudinho/AI/tmp/banda_lt40.jsonl")
 OUT   = os.environ.get("JUIZ_OUT", "/home/claudinho/AI/tmp/juiz_banda.out.jsonl")
 PGC   = ["docker", "exec", "-i", "rag-extractor-pg",
          "psql", "-U", "rag", "-d", "rag_extractor", "-v", "ON_ERROR_STOP=1"]
-VALIDAS = {"real", "so-titulo", "ancora-ruido"}
+CLASSES_JUIZ = {"real", "so-titulo", "ancora-ruido"}
+PERMITIDOS   = {"titulada", "so-titulo", "ancora-ruido", "sem-titulo", "nao-julgada"}
 
 
 def psql(sql, stdin=None):
@@ -32,13 +37,14 @@ def psql(sql, stdin=None):
 
 
 def carrega():
-    banda_ids = set()
+    banda_titulo = {}   # id -> tem_titulo(bool)
     with open(BANDA) as f:
         for l in f:
             l = l.strip()
             if l:
-                banda_ids.add(json.loads(l)["id"])
-    veredito = {}   # id -> classe (ultimo valido vence)
+                d = json.loads(l)
+                banda_titulo[d["id"]] = bool((d.get("titulo") or "").strip())
+    veredito = {}       # id -> classe juiz (ultimo valido vence)
     with open(OUT) as f:
         for l in f:
             l = l.strip()
@@ -48,19 +54,30 @@ def carrega():
                 d = json.loads(l)
             except Exception:
                 continue
-            if d.get("classe") in VALIDAS:
+            if d.get("classe") in CLASSES_JUIZ:
                 veredito[d["id"]] = d["classe"]
-    return banda_ids, veredito
+    return banda_titulo, veredito
+
+
+def mapeia(classe, tem_titulo):
+    if classe == "real":
+        return "titulada" if tem_titulo else "sem-titulo"
+    return classe  # so-titulo, ancora-ruido ja sao do vocabulario
 
 
 def main():
     dry = "--dry" in sys.argv
     parcial = "--parcial" in sys.argv
-    banda_ids, veredito = carrega()
-    julgados = {k: v for k, v in veredito.items() if k in banda_ids}
-    faltam = len(banda_ids) - len(julgados)
+    banda_titulo, veredito = carrega()
+    julgados = {k: mapeia(v, banda_titulo.get(k, True))
+                for k, v in veredito.items() if k in banda_titulo}
+    faltam = len(banda_titulo) - len(julgados)
 
-    print(f"banda={len(banda_ids)} julgados_validos={len(julgados)} faltam={faltam}")
+    ruins = {v for v in julgados.values()} - PERMITIDOS
+    if ruins:
+        sys.exit(f"ABORTA: valores fora do CHECK: {ruins}")
+
+    print(f"banda={len(banda_titulo)} julgados_validos={len(julgados)} faltam={faltam}")
     print("dist_checkpoint:", dict(Counter(julgados.values())))
     if dry:
         print("--dry: nada escrito.")
