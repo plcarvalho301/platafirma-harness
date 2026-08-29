@@ -30,7 +30,7 @@ from pathlib import Path
 
 PREFIXO_BOT = "_pf"
 _PREFIXOS_DE_SLUG = ("claudinho-", "claudinha-")
-_NAO_SAO_CADEIRA = {"TEMPLATE", "jaiminho", "jaiminho-fabrica", "osint", "fabrica", "EXTERNO"}
+_NAO_SAO_CADEIRA = {"TEMPLATE", "jaiminho", "jaiminho-fabrica", "osint", "EXTERNO"}
 
 # PARTICIPANTE — quem tem porta com o dono sem ocupar cadeira (colaborador externo,
 # assessor, fornecedor). Rito e estatuto em platafirma-arquitetura/docs/
@@ -42,6 +42,20 @@ _NAO_SAO_CADEIRA = {"TEMPLATE", "jaiminho", "jaiminho-fabrica", "osint", "fabric
 # resposta certa. O que muda e que a SUPERFICIE de conversa passa a ter um roster
 # proprio (`atores()`), maior que o do org: o dono fala com quem tem porta com ele.
 _SAO_PARTICIPANTE = {"jaiminho", "jaiminho-fabrica"}
+
+# ATOR INTERNO nao-cadeira — ganha MXID, sala com o dono e giro, mas NAO e cadeira
+# do org (nao vota, nao tem head, nao entra em roteamento) e NAO e participante de
+# motor externo. O motor dele e o mesmo das cadeiras: Claude Code no cwd, conta
+# claudinho. E este terceiro balde que o modelo N-provider da fabrica exige: a
+# `fabrica` e uma PERSONA fungivel, encarnada uma vez por conta/provider. Esta e a
+# encarnacao `claude`/conta-claudinho; a encarnacao `agy` ja existe como o
+# participante `jaiminho-fabrica`. Generalizar provider->client e o card aberto
+# junto com esta fatia — aqui ha UMA encarnacao, sem a tabela generica ainda.
+#
+# Fora de _SAO_PARTICIPANTE de proposito: `eh_participante('fabrica')` e False, e
+# por isso o giro cai no ramo MotorClaudeCode do bin/chat, nao no ramo do verbo
+# externo. Monta a persona homonima (abertura/fabrica/persona.md), que ja existe.
+_ATORES_INTERNOS = {"fabrica"}
 
 # ATOR de superficie -> PERSONA que a sessao dele monta.
 #
@@ -189,6 +203,23 @@ def participantes() -> list[str]:
     return sorted(achados)
 
 
+def atores_internos() -> list[str]:
+    """Sufixos dos atores internos nao-cadeira que tem persona no harness.
+
+    Mesma regra de ausencia das outras duas listas: declarado sem persona NAO entra.
+    """
+    dir_personas = _raiz_personas()
+    if not dir_personas.is_dir():
+        raise FileNotFoundError(
+            f"diretorio de personas nao encontrado: {dir_personas} "
+            "(defina PF_RAIZ, ou monte personas/ no container)"
+        )
+    return sorted(
+        nome for nome in _ATORES_INTERNOS
+        if (dir_personas / nome / "persona.md").is_file()
+    )
+
+
 def atores() -> list[str]:
     """O roster da SUPERFICIE de conversa: cadeiras + participantes.
 
@@ -197,7 +228,7 @@ def atores() -> list[str]:
     conversa chama esta. Ter duas listas com nomes parecidos e o risco conhecido, e
     o corte esta escrito no nome: cadeira e vinculo, ator e porta.
     """
-    return sorted(cadeiras() + participantes())
+    return sorted(cadeiras() + participantes() + atores_internos())
 
 
 def eh_participante(nome: str) -> bool:
@@ -276,6 +307,13 @@ def slug_da_cadeira(nome: str) -> str | None:
         # persona e o Project sao chaveados pela persona; chavear pelo ator daria
         # a mem:jaiminho:* paralela que esta funcao existe para evitar.
         return _PERSONA_DO_ATOR.get(sufixo, sufixo)
+    if sufixo in _ATORES_INTERNOS:
+        # Ator interno nao esta no ledger de vinculo (nao e cadeira do org), entao
+        # o slug NAO sai de _cadeiras_do_ledger — sairia None e o giro do bin/chat
+        # nao teria cwd/PF_CADEIRA. O slug e a propria persona homonima que ele
+        # monta (fabrica -> fabrica): mesma chave de mesa/fila/Project das cadeiras,
+        # sem prefixo claudinho-, porque fabrica e persona fungivel, nao vinculo.
+        return sufixo
     # Fonte do prefixo e o LEDGER, nao a linha 1 da persona (form novo poe alias la).
     return _cadeiras_do_ledger().get(sufixo.lower())
 
