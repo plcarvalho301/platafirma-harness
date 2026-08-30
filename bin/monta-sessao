@@ -35,6 +35,7 @@ import argparse
 import glob
 import json
 import os
+from pathlib import Path
 import re
 import subprocess
 import sys
@@ -54,6 +55,7 @@ CHAPEUS_DIR = ABERTURA
 _REPO_REAL = os.path.dirname(os.path.dirname(os.path.realpath(__file__)))
 sys.path.insert(0, _REPO_REAL)
 from recuperacao import roteador_chapeu as _rot
+from recuperacao.adaptadores.acervo import AdaptadorAcervo
 
 SESSAO_ENV = os.path.join(HARNESS, "sessao", ".env")
 
@@ -530,6 +532,86 @@ def cadeiras_validas():
     return sorted(do_ledger | do_disco)
 
 
+# Trilha de LEITURA que o eixo-2 (disparo.py, #2317) le para medir D. Uma linha por
+# fonte alcancada: {ts, tool, sujeito, sessao, fonte, cobertura, carimbo, hit|miss,
+# disjuntor}. E esta escrita que faz D subir de 0,043 - sem ela o disparo nao conta.
+_TRILHA_LEITURA = os.environ.get(
+    "PF_REC_TRILHA_LEITURA",
+    str(Path.home() / "AI" / "var" / "log" / "recuperacao" / "leitura.jsonl"))
+
+
+def dispara_acervo(cadeira, sujeito, pergunta):
+    """Consulta o acervo na montagem (#2947) e serve o resultado como peca.
+
+    O 'gate' que o card 2947 remove e COMPORTAMENTAL: as personas nao chamavam o RAG,
+    entao o log nascia vazio. Aqui a montagem dispara em TODA abertura com pergunta.
+    Porta 2 (biblioteca in-package): AdaptadorAcervo fala /search por urllib com
+    disjuntor proprio. Motor frio (503) vira peca `indisponivel` DECLARADA, nunca
+    excecao que trava a sessao.
+    """
+    env = {"peca": "acervo-consultado", "dono": "claudinho-dados",
+           "ref": "verbo:rag_buscar(pergunta)", "regime": "valor",
+           "volatilidade": "volatil", "sha": None, "tokens": 0}
+    if not (pergunta or "").strip():
+        env.update(frescor="nao_se_aplica", motivo="abertura sem pergunta", conteudo=None)
+        return env, None
+
+    sessao = os.environ.get("PF_FITA", "-")
+    t0 = time.monotonic()
+    hit, cobertura, carimbo, disjuntor = False, "ausente", "-", "fechado"
+    try:
+        ad = AdaptadorAcervo()
+        itens = ad._busca(pergunta.strip(), filtros={}, k=6, texto="secao")
+        cob = ad.cobertura_do_rag()
+        cobertura = str(cob.value) if cob is not None else "ausente"
+        carimbo = (ad._carimbo_cache or "-").removeprefix("acervo:") or "-"
+        hit = bool(itens)
+        env["conteudo"] = _formata_acervo(itens, pergunta)
+        env["frescor"] = "fresco"
+        env["tokens"] = conta_tokens(env["conteudo"]) if env.get("conteudo") else 0
+    except Exception as e:  # noqa: BLE001
+        causa = getattr(getattr(e, "causa", None), "value", type(e).__name__)
+        disjuntor = "aberto" if causa in ("fora-do-ar", "timeout", "sem-rota") else "fechado"
+        env.update(frescor="indisponivel",
+                   motivo=f"acervo nao respondeu ({causa}): disparo como miss", conteudo=None)
+    dur_ms = round((time.monotonic() - t0) * 1000)
+
+    linha = {"ts": _agora_iso(), "tool": "monta-sessao", "sujeito": sujeito or cadeira,
+             "sessao": sessao, "fonte": "acervo", "cobertura": cobertura,
+             "carimbo": carimbo, "hit": hit, "disjuntor": disjuntor, "dur_ms": dur_ms}
+    _grava_trilha(linha)
+    return env, dur_ms
+
+
+def _formata_acervo(itens, pergunta):
+    if not itens:
+        return ("CONSULTA AO ACERVO - " + pergunta[:80] + "\n"
+                "Sem cobertura no acervo para esta ordem. Nao responda pelo vizinho: "
+                "se o acervo nao cobre, diga que nao cobre.")
+    linhas = ["CONSULTA AO ACERVO - " + pergunta[:80] + " (" + str(len(itens)) + " trechos)"]
+    for i, it in enumerate(itens, 1):
+        corpo = (getattr(it, "conteudo", None) or getattr(it, "ref", "") or "").strip()
+        chave = getattr(getattr(it, "procedencia", None), "chave", "?")
+        linhas.append("[" + str(i) + "] " + str(chave) + "\n" + corpo[:600])
+    linhas.append("(consultar nao e usar - cite [n] so onde a resposta aplicar; #2947)")
+    return "\n\n".join(linhas)
+
+
+def _grava_trilha(linha):
+    try:
+        import pathlib
+        p = pathlib.Path(_TRILHA_LEITURA)
+        p.parent.mkdir(parents=True, exist_ok=True)
+        with open(p, "a", encoding="utf-8") as f:
+            f.write(json.dumps(linha, ensure_ascii=False) + "\n")
+    except OSError:
+        pass
+
+
+def _agora_iso():
+    return time.strftime("%Y-%m-%dT%H:%M:%S+00:00", time.gmtime())
+
+
 def monta(cadeira, atualizar, pergunta=None, forcado_chapeu=None, so_chapeu=False):
     if cadeira.lower() not in [c.lower() for c in cadeiras_validas()]:
         return {"erro": f"cadeira desconhecida: '{cadeira}'",
@@ -629,6 +711,15 @@ def monta(cadeira, atualizar, pergunta=None, forcado_chapeu=None, so_chapeu=Fals
                 avisos.append(f"peça `{envc['peca']}` indisponível: {envc['motivo']}")
     else:
         avisos.append(f"chapeu nao roteado (fallback): {dec.motivo}")
+
+    # #2947 - disparo do acervo na montagem. Serve o RAG ja consultado sobre a
+    # pergunta que abriu a fita e escreve a linha que o eixo-2 mede (D). So na
+    # abertura: so_chapeu reenvia chapeu, nao redispara mid-sessao.
+    if not so_chapeu and pergunta:
+        env_ac, _dur = dispara_acervo(cadeira, nome, pergunta)
+        servidas.append(env_ac)
+        if env_ac["frescor"] == "indisponivel":
+            avisos.append(f"peca `acervo-consultado` indisponivel: {env_ac['motivo']}")
 
     montador_sha = (estado_repos.get("platafirma-harness") or {}).get("sha")
     return {
