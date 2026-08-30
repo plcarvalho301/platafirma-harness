@@ -1,5 +1,37 @@
 # caderno — produtos (dados)
 
+## Corpus multilíngue: ingerir no ORIGINAL, wiring cross-lingual (decisão 30/08)
+
+Vem literatura em chinês (e possivelmente árabe/alemão/turco). Decisão de arquitetura
+de acervo — NÃO traduzir na ingestão:
+
+- **Original + embedding cross-lingual, nunca traduzir-na-ingestão.** Tradução no
+  trecho indexado é lossy e IRREVERSÍVEL: congela uma interpretação, colapsa termo
+  técnico/ambiguidade/nome próprio. O trecho vira a tradução, não a obra. Trocar
+  embedder depois NÃO recupera o que a tradução destruiu — esse é o lock-in real.
+- **O embedder atual já é cross-lingual, então o wiring é grátis.** `EMBED_MODEL=
+  Qwen/Qwen3-Embedding-0.6B` (medido no container 30/08), multilíngue 100+ línguas:
+  query PT casa trecho ZH no mesmo espaço vetorial, sem tradutor no meio. `bge-m3` (a
+  outra janela mapeada) também é multilíngue. Reavaliação de ferramental (pós-rerefactor)
+  fica livre: os candidatos já estão em território cross-lingual.
+- **Original é re-embeddável; a troca de embedder é `re-embed --all`.** cache-key
+  carrega `model|backend|device`; aposentar-e-criar já previsto. Guardar original =
+  reavaliar embedder sem perder nada.
+- **Tradução só na BORDA, nunca no acervo:** query-side (traduz a query, 1 frase, se o
+  embedder for fraco cross-lingual) e answer-side (trecho ZH vira PT na vitrine, exibição).
+  A fonte no índice fica original.
+
+🟠 ARMADILHA que morde CJK/árabe — `CHUNK_CHARS_PER_TOKEN = 4` é PROXY, e o próprio
+comentário admite "medir com o tokenizer do embedder derruba isto". Chinês tem ~1-2
+char/token, não 4: o proxy superestima brutalmente o token count em ZH → orçamento de
+fronteiras `ceil(tokens/400)` corta fronteira errada SÓ nesses idiomas. Antes de
+ingerir a 1ª obra ZH/AR, o chunking tem de medir token real via tokenizer do embedder
+montado (robusto à troca: "usar o tokenizer de quem estiver no ar", não assumir Qwen).
+Latinos (alemão, turco) sofrem pouco; CJK e árabe sofrem muito. NÃO é tarefa de agora
+— entra quando o 1º lote alienígena for pra ingestão, depois do rerefactor em PT (#48/#49).
+Teto invariante de 4k cabe na janela dos dois embedders (Qwen3=32k, bge-m3=8k): a troca
+não quebra o rerefactor.
+
 ## Onde os vetores moram (morada nova)
 
 Dois bancos, e confundi-los custa um diagnóstico errado:
