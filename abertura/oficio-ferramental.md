@@ -23,9 +23,11 @@ deploy
 conferir
 acesso
 descansar
+descobrir
 persona
 seg
 sinal
+situacao
 ```
 
 Fora do núcleo, de propósito: `ollama` (inferência-local) e `matrix` (mensagem-externa)

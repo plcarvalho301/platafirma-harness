@@ -1,0 +1,81 @@
+#!/usr/bin/env python3
+# descobrir — descobre o que o acervo tem sobre um assunto por varredura multi-eixo
+# capacidade: descoberta
+# dono: claudinho-dados
+#
+# Verbo fino de leitura (arq:0085 §2, §5; card #2952):
+# Varre os tres eixos (titulo, conceito, subdominio) e devolve a uniao (OR),
+# marcando por quais eixos cada obra entrou no envelope.
+# Deduplica por digest e entrega procedencia completa.
+import argparse
+import json
+import os
+import sys
+
+# Permite importar a biblioteca local recuperacao
+RAIZ_HARNESS = os.path.dirname(os.path.dirname(os.path.realpath(__file__)))
+if RAIZ_HARNESS not in sys.path:
+    sys.path.insert(0, RAIZ_HARNESS)
+
+from recuperacao import ContratoViolado, descobrir
+
+
+def uso():
+    sys.stderr.write("""uso:
+  descobrir <assunto> [--eixos titulo,conceito,subdominio] [-k 8] [--json] [--sujeito <id>]
+
+Varre os eixos do acervo e devolve a uniao com procedencia e marcacao de expansao.
+""")
+    sys.exit(2)
+
+
+def main(argv: list[str]) -> int:
+    if len(argv) < 2:
+        uso()
+
+    parser = argparse.ArgumentParser(
+        prog="descobrir",
+        description="Descobre o que o acervo tem sobre um assunto por varredura multi-eixo.",
+        add_help=False,
+    )
+    parser.add_argument("assunto", nargs="?", default="", help="Termo ou assunto a descobrir")
+    parser.add_argument(
+        "--eixos",
+        default="titulo,conceito,subdominio",
+        help="Eixos a consultar separados por virgula (default: titulo,conceito,subdominio)",
+    )
+    parser.add_argument("-k", type=int, default=8, help="Numero maximo de itens (default: 8)")
+    parser.add_argument("--json", action="store_true", help="Saida em JSON estruturado (envelope)")
+    parser.add_argument("--sujeito", default=os.environ.get("PF_CADEIRA", ""), help="Identidade do chamador para PEP")
+    parser.add_argument("-h", "--help", "--ajuda", action="store_true", help="Imprime ajuda")
+
+    args, desconhecidos = parser.parse_known_args(argv[1:])
+    if args.help or not args.assunto:
+        uso()
+
+    eixos_lista = [e.strip() for e in args.eixos.split(",") if e.strip()]
+
+    try:
+        env = descobrir(
+            assunto=args.assunto,
+            eixos=eixos_lista,
+            k=args.k,
+            sujeito=args.sujeito,
+        )
+    except ContratoViolado as e:
+        sys.stderr.write(f"descobrir: contrato violado: {e}\n")
+        return 1
+    except Exception as e:
+        sys.stderr.write(f"descobrir: erro: {e}\n")
+        return 1
+
+    if args.json:
+        print(json.dumps(env.para_json(), ensure_ascii=False, indent=2))
+    else:
+        print(env.para_texto())
+
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv))

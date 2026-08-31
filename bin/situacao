@@ -1,0 +1,71 @@
+#!/usr/bin/env python3
+# situacao — consulta o estado vivo de servico de uma obra na escada do acervo
+# capacidade: situacao
+# dono: claudinho-dados
+#
+# Verbo fino de leitura (arq:0085 §2, §4; card #2953):
+# Le a cadeia viva (impressao -> estado de servico) e devolve o envelope
+# com payload {servivel, desde, impressao_id, degrau}.
+# Fonte inalcancavel responde indeterminavel (fonte-nao-indexada), nunca zero.
+import argparse
+import json
+import os
+import sys
+
+# Permite importar a biblioteca local recuperacao
+RAIZ_HARNESS = os.path.dirname(os.path.dirname(os.path.realpath(__file__)))
+if RAIZ_HARNESS not in sys.path:
+    sys.path.insert(0, RAIZ_HARNESS)
+
+from recuperacao import ContratoViolado, situacao
+
+
+def uso():
+    sys.stderr.write("""uso:
+  situacao <obra> [--json] [--sujeito <id>]
+
+Consulta a situacao de uma obra na cadeia viva (servivel, desde, impressao, degrau).
+""")
+    sys.exit(2)
+
+
+def main(argv: list[str]) -> int:
+    if len(argv) < 2:
+        uso()
+
+    parser = argparse.ArgumentParser(
+        prog="situacao",
+        description="Consulta o estado vivo de uma obra no acervo.",
+        add_help=False,
+    )
+    parser.add_argument("obra", nargs="?", default="", help="Titulo, slug, arquivo ou ID da obra")
+    parser.add_argument("--json", action="store_true", help="Saida em JSON estruturado (envelope)")
+    parser.add_argument("--sujeito", default=os.environ.get("PF_CADEIRA", ""), help="Identidade do chamador para PEP")
+    parser.add_argument("-h", "--help", "--ajuda", action="store_true", help="Imprime ajuda")
+
+    args, desconhecidos = parser.parse_known_args(argv[1:])
+    if args.help or not args.obra:
+        uso()
+
+    try:
+        env = situacao(
+            obra=args.obra,
+            sujeito=args.sujeito,
+        )
+    except ContratoViolado as e:
+        sys.stderr.write(f"situacao: contrato violado: {e}\n")
+        return 1
+    except Exception as e:
+        sys.stderr.write(f"situacao: erro: {e}\n")
+        return 1
+
+    if args.json:
+        print(json.dumps(env.para_json(), ensure_ascii=False, indent=2))
+    else:
+        print(env.para_texto())
+
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv))
