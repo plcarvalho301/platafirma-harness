@@ -106,6 +106,7 @@ Medido por `conferir verbo` e `conferir procedencia` em 14/08/2026.
 | `conferir` | `verificacao` | claudinho-TI | compara o declarado com o servido, por classe de alvo |
 | `deploy` | `mudanca` | claudinho-TI | promove ao ar o que está declarado no compose de uma stack |
 | `descansar` | `encerramento` | claudinho-IA | fim de fita: confere a memória e mede os fatos voláteis |
+| `descobrir` | `descoberta` | claudinho-dados | descobre o que o acervo tem sobre um assunto por varredura multi-eixo (obras, facetas, vínculos) |
 | `infra` | `infra` | claudinho-TI | estado e operação da infraestrutura local (contêiner, unit, timer) |
 | `jaiminho` | `mensagem` | claudinho-TI | fala com o colaborador externo Jaiminho, no container próprio dele |
 | `longjob` | órfã | claudinho-TI | dispara trabalho longo como unit transiente do systemd --user |
@@ -117,6 +118,7 @@ Medido por `conferir verbo` e `conferir procedencia` em 14/08/2026.
 | `persona` | `organizacao` | claudinha-gestao-estrategica | escrita compartimentada das personas da PlataFirma |
 | `seg` | `politica` | claudinho-seguranca | despachante do toolkit de segurança: avalia, deriva régua e repassa ferramenta |
 | `sinal` | `incidente` | claudinho-TI | coleta o estado de saúde dos serviços e escreve o arquivo de sinal |
+| `situacao` | `situacao` | claudinho-dados | consulta o estado vivo de serviço de uma obra na escada do acervo |
 | `tarefas` | `trabalho` | claudinho-TI | cliente do rastreador de tarefas da PlataFirma |
 
 Aliases, que não contam na régua de `arq:0037`: `encerrar` (de `descansar`),
