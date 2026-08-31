@@ -100,3 +100,14 @@ forma do dado, a inadequação é o argumento, direto.
   a exceção revisável — jamais fundamento para forçar conformidade.
 - Salvaguarda ≠ fundamento: o read-model declarado (acoplamento visível no schema) segue
   como proteção operacional, sem carregar a justificativa da exceção.
+
+## ADR tombada é atemporal — estado de fluxo fica na minuta
+
+Regra do dono, 31/08/2026 (tombamento do 0090). O texto em `decisions/` não referencia
+estado de fluxo: atribuição de parecer ("B1-segurança"), "pedido de fulano", cedências e
+rodadas ficam na minuta, que é a história; o ADR grava a decisão como se sempre tivesse
+sido assim. Procedência no cabeçalho (quem decidiu, quando, sobre proposta de quem) é
+registro de decisão, não fluxo — fica. Corolário do 0090: toda exceção declarada carrega
+quarto campo obrigatório — ONDE MORA O CONTRATO da solução excepcionada (schema/read-model,
+convenção pública, contrato próprio, formato de pacote): a exceção tira a solução do
+estilo, nunca do regime de contrato.
