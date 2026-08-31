@@ -55,7 +55,6 @@ CHAPEUS_DIR = ABERTURA
 _REPO_REAL = os.path.dirname(os.path.dirname(os.path.realpath(__file__)))
 sys.path.insert(0, _REPO_REAL)
 from recuperacao import roteador_chapeu as _rot
-from recuperacao.adaptadores.acervo import AdaptadorAcervo
 
 SESSAO_ENV = os.path.join(HARNESS, "sessao", ".env")
 
@@ -545,9 +544,9 @@ def dispara_acervo(cadeira, sujeito, pergunta):
 
     O 'gate' que o card 2947 remove e COMPORTAMENTAL: as personas nao chamavam o RAG,
     entao o log nascia vazio. Aqui a montagem dispara em TODA abertura com pergunta.
-    Porta 2 (biblioteca in-package): AdaptadorAcervo fala /search por urllib com
-    disjuntor proprio. Motor frio (503) vira peca `indisponivel` DECLARADA, nunca
-    excecao que trava a sessao.
+    PORTA CANONICA: chama o verbo `motor rag buscar` (golden record), nao HTTP cru.
+    Reimplementar /search no adaptador foi o vacilo que este patch corrige. Motor frio
+    ou fora do ar viram peca `indisponivel` DECLARADA, nunca excecao que trava a sessao.
     """
     env = {"peca": "acervo-consultado", "dono": "claudinho-dados",
            "ref": "verbo:rag_buscar(pergunta)", "regime": "valor",
@@ -557,23 +556,35 @@ def dispara_acervo(cadeira, sujeito, pergunta):
         return env, None
 
     sessao = os.environ.get("PF_FITA", "-")
+    ordem_id = os.environ.get("PF_ORDEM_ID", "")
     t0 = time.monotonic()
     hit, cobertura, carimbo, disjuntor = False, "ausente", "-", "fechado"
+    # PORTA CANONICA: o verbo `motor rag buscar`, nao HTTP cru. Uma porta so pro indice.
+    argv = [os.path.join(str(RAIZ), "bin", "motor"), "rag", "buscar", pergunta.strip(),
+            "--k", "6", "--texto", "secao"]
+    if ordem_id:
+        argv += ["--ordem-id", ordem_id]
     try:
-        ad = AdaptadorAcervo()
-        itens = ad._busca(pergunta.strip(), filtros={}, k=6, texto="secao")
-        cob = ad.cobertura_do_rag()
-        cobertura = str(cob.value) if cob is not None else "ausente"
-        carimbo = (ad._carimbo_cache or "-").removeprefix("acervo:") or "-"
-        hit = bool(itens)
-        env["conteudo"] = _formata_acervo(itens, pergunta)
+        proc = subprocess.run(argv, capture_output=True, text=True, timeout=30,
+                              env=os.environ.copy())
+        if proc.returncode != 0 or not proc.stdout.strip():
+            raise RuntimeError((proc.stderr or "verbo motor sem stdout")[:160])
+        d = json.loads(proc.stdout)
+        if d.get("erro"):
+            raise RuntimeError(str(d["erro"])[:160])
+        fontes = d.get("fontes") or []
+        cobertura = str(d.get("cobertura") or "ausente")
+        carimbo = str(d.get("formato_section_id") or "-")
+        hit = bool(fontes)
+        env["conteudo"] = _formata_acervo(d, pergunta)
         env["frescor"] = "fresco"
         env["tokens"] = conta_tokens(env["conteudo"]) if env.get("conteudo") else 0
     except Exception as e:  # noqa: BLE001
-        causa = getattr(getattr(e, "causa", None), "value", type(e).__name__)
-        disjuntor = "aberto" if causa in ("fora-do-ar", "timeout", "sem-rota") else "fechado"
+        motivo = str(e)
+        disjuntor = "aberto" if any(t in motivo.lower()
+                                    for t in ("timeout", "inalcanc", "conex", "refused")) else "fechado"
         env.update(frescor="indisponivel",
-                   motivo=f"acervo nao respondeu ({causa}): disparo como miss", conteudo=None)
+                   motivo=f"verbo motor rag buscar falhou: {motivo}", conteudo=None)
     dur_ms = round((time.monotonic() - t0) * 1000)
 
     linha = {"ts": _agora_iso(), "tool": "monta-sessao", "sujeito": sujeito or cadeira,
@@ -583,18 +594,27 @@ def dispara_acervo(cadeira, sujeito, pergunta):
     return env, dur_ms
 
 
-def _formata_acervo(itens, pergunta):
-    if not itens:
+def _formata_acervo(d, pergunta):
+    """Recebe o dict que o verbo `motor rag buscar` devolve. A fita ja vem montada em
+    `contexto` (numerada [n] arquivo/section_id), a recuperacao contextual do rag.
+    Serve ela direto; sem contexto, cai para o cabecalho das fontes."""
+    fontes = d.get("fontes") or []
+    if not fontes:
         return ("CONSULTA AO ACERVO - " + pergunta[:80] + "\n"
                 "Sem cobertura no acervo para esta ordem. Nao responda pelo vizinho: "
                 "se o acervo nao cobre, diga que nao cobre.")
-    linhas = ["CONSULTA AO ACERVO - " + pergunta[:80] + " (" + str(len(itens)) + " trechos)"]
-    for i, it in enumerate(itens, 1):
-        corpo = (getattr(it, "conteudo", None) or getattr(it, "ref", "") or "").strip()
-        chave = getattr(getattr(it, "procedencia", None), "chave", "?")
-        linhas.append("[" + str(i) + "] " + str(chave) + "\n" + corpo[:600])
-    linhas.append("(consultar nao e usar - cite [n] so onde a resposta aplicar; #2947)")
-    return "\n\n".join(linhas)
+    cab = ("CONSULTA AO ACERVO - " + pergunta[:80] + " (" + str(len(fontes))
+           + " trechos, cobertura " + str(d.get("cobertura") or "?") + ")")
+    fita = (d.get("contexto") or "").strip()
+    rodape = "(consultar nao e usar - cite [n] so onde a resposta aplicar; #2947)"
+    if fita:
+        return cab + "\n\n" + fita + "\n\n" + rodape
+    linhas = [cab]
+    for f in fontes:
+        linhas.append("[" + str(f.get("n", "?")) + "] " + str(f.get("obra", "?"))
+                       + " (" + str(f.get("section_id", "?")) + ")")
+    linhas.append(rodape)
+    return "\n".join(linhas)
 
 
 def _grava_trilha(linha):
