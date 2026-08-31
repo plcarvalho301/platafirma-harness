@@ -56,3 +56,29 @@ Medido na fita 27/08/2026 (produtização #180). Registro canônico: `platafirma
 - O harness se parte **motor × personas** na MESMA linha MIREOT da ontologia (product-spec §4.2): motor (`ops-server`, `bin`, `mcp`, `sessao`, `politica-acesso`, `tooling`, `deploy-harness`) = plataforma; `abertura/<cadeira>`, `chat`, `registro` (ledger), `distribuicao`, `jaiminho` = instância. O corte às vezes passa POR DENTRO de um componente: `cadeiras.py` é motor, o ledger que ele lê é instância — produtizar o harness exige extrair o motor e tratar `abertura/`+`registro/` como pacote de instância.
 - Keycloak no compose do core hoje só provisiona service accounts de cadeira (`client_credentials`, `provisiona-realm.sh`); o papel de IdP humano é o que o órgão exige. README do core chama IAM de "próximo épico" — scaffoldado, não vivo. Individual sobrevive sem Keycloak "de gente" (token de agente é até substituível por estático, product-spec §8).
 - Régua de produto da casa (dono, 27/08): **não há venda** (dono é servidor público estável); norte é **adoção como valor público, foco APF**. Consequência arquitetural: `canal` é adoção/distribuição, nunca funil comercial; a fronteira produto×vendas da gap-de-estrategia (16/08) se dissolve.
+
+## Conformidade de fóssil e alarme falso são a fábrica de Frankenstein
+
+Lição do dono, fita 31/08/2026 — a maior de um mês e meio de vibecoding, nas palavras
+dele. A causa raiz da degradação da codebase NÃO foi falta de check; foi check demais,
+aplicado errado. Duas patologias, uma raiz:
+
+- **Conformidade de fóssil** — rodar gate de conformidade retroativo sobre código legado
+  intocado e "consertar" para passar. Cada conserto forçado sem alguém tocando aquele
+  código por necessidade real adiciona camada que ninguém pediu. O Frankenstein nasce daí.
+- **Alarme falso** — check que dispara sobre o que está de fato certo, e a "correção" do
+  falso positivo estraga o que funcionava.
+
+Regra que sai disso, e que reenquadra o gate do `arq:0089`:
+
+- Gate só vale a pena quando **estrangula no contato** — reprova o que se está tocando
+  agora, por trabalho real. Ligado como **varredura retroativa** sobre o parado, o mesmo
+  gate vira a fábrica de Frankenstein que deveria evitar.
+- **Fóssil intocado espera.** Não se refatora o que ninguém encostou só para satisfazer
+  uma regra nova. A dívida fica visível (medida), não consertada à força.
+- **Hiperfoco em check é modo de falha da cadeira**, observado pelo dono. Antes de propor
+  ou implementar qualquer verificação automática, o ônus é provar que ela morde no
+  contato e não vira varredura de fóssil nem alarme sobre o são.
+- Corolário para o `conferir`: implementar a checagem do `arq:0089` foi **segurado de
+  propósito** pelo dono. Check decidido não é check para já — a implementação espera o
+  caso vivo, não a ansiedade de conformidade.
