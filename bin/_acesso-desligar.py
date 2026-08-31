@@ -18,10 +18,13 @@ from pathlib import Path
 
 import yaml
 
-RAIZ = Path(os.environ.get("ACESSO_PDP_DIR", Path.home() / "AI/platafirma-harness/politica-acesso"))
+# dados de identidade fora do working tree de fabrica (#2956, minuta arq 0015 perna 1)
+RAIZ = Path(os.environ.get("ACESSO_PDP_DIR",
+    os.environ.get("PDP_DIR", Path.home() / "AI/var/politica-acesso")))
 SUJEITOS = RAIZ / "sujeitos.yaml"
 POLITICA = RAIZ / "politica.yaml"
-HARNESS = RAIZ.parent
+# HARNESS/PERSONAS derivam do repo, nao de RAIZ (que agora e a morada de dados)
+HARNESS = Path(os.environ.get("PF_HARNESS", Path.home() / "AI/platafirma-harness"))
 PERSONAS = HARNESS / "personas"
 SEG = Path.home() / "AI/bin/seg"
 VENCE = re.compile(r"vence\s+(\d{4}-\d{2}-\d{2})")

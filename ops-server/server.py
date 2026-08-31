@@ -62,9 +62,14 @@ RAIZ = Path(os.environ.get("OPS_ROOT", "/home/claudinho/AI"))
 OPS_AUTH_TOKEN = os.environ.get("OPS_AUTH_TOKEN", "")
 
 PF_HARNESS = Path(os.environ.get("PF_HARNESS", RAIZ / "platafirma-harness"))
-PDP_DIR = PF_HARNESS / "politica-acesso"
-if str(PDP_DIR) not in sys.path:
-    sys.path.insert(0, str(PDP_DIR))
+# CODIGO do PDP (pdp.py, identidade.py, pep.py) mora no repo — versionado, importavel.
+PDP_CODE_DIR = PF_HARNESS / "politica-acesso"
+if str(PDP_CODE_DIR) not in sys.path:
+    sys.path.insert(0, str(PDP_CODE_DIR))
+# DADOS de identidade (politica/sujeitos/superficies.yaml) moram FORA do working tree
+# de fabrica (incidente #2956, minuta arq 0015 perna 1): nenhum ato de git de fabrica
+# no harness reprojeta mais a identidade da plataforma. Override por PDP_DIR.
+PDP_DIR = Path(os.environ.get("PDP_DIR", RAIZ / "var" / "politica-acesso"))
 from identidade import _jwks, _sujeito_do_jwt
 
 # --- OIDC (card #435) ---
@@ -311,8 +316,8 @@ def _carrega_politica() -> dict:
     if _pdp["carimbo"] == carimbo:
         return _pdp
     try:
-        if str(PDP_DIR) not in sys.path:
-            sys.path.insert(0, str(PDP_DIR))
+        if str(PDP_CODE_DIR) not in sys.path:
+            sys.path.insert(0, str(PDP_CODE_DIR))
         import yaml
         from pdp import Politica
         pol = Politica.de_arquivo(pol_f)

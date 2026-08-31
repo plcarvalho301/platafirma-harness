@@ -1,0 +1,28 @@
+#!/usr/bin/env bash
+# politica-sync — publica os dados de identidade do repo para a morada servida.
+#
+# capacidade: sincroniza politica/sujeitos/superficies.yaml do working tree do
+#             harness para PDP_DIR (default ~/AI/var/politica-acesso), a morada que
+#             o PEP le e que nenhum ato de git de FABRICA move (incidente #2956,
+#             minuta arq 0015 perna 1).
+# dono: ti
+#
+# O repo e a FONTE editavel (com historico auditavel). var/ e a COPIA servida.
+# Um checkout/rebase/stash casual no harness NAO reprojeta mais a identidade,
+# porque o PEP nunca le do working tree — so desta copia, atualizada por este ato
+# explicito e deliberado, no deploy controlado.
+set -euo pipefail
+RAIZ="${OPS_ROOT:-$HOME/AI}"
+FONTE="${PF_HARNESS:-$RAIZ/platafirma-harness}/politica-acesso"
+DESTINO="${PDP_DIR:-$RAIZ/var/politica-acesso}"
+mkdir -p "$DESTINO"
+mudou=0
+for y in politica.yaml sujeitos.yaml superficies.yaml; do
+  if ! cmp -s "$FONTE/$y" "$DESTINO/$y" 2>/dev/null; then
+    cp -p "$FONTE/$y" "$DESTINO/$y"
+    echo "sync: $y atualizado"
+    mudou=1
+  fi
+done
+[ "$mudou" = 0 ] && echo "sync: nada a fazer (destino ja em dia)"
+echo "servido em: $DESTINO"

@@ -108,7 +108,8 @@ RAIZ = os.path.expanduser("~/AI")
 DEPLOY = os.path.join(RAIZ, "deploy")
 BIN = os.path.join(RAIZ, "bin")
 HARNESS = os.path.join(RAIZ, "platafirma-harness")
-POLITICA_DIR = os.path.join(HARNESS, "politica-acesso")
+POLITICA_DIR = os.environ.get("PDP_DIR",
+    os.path.join(RAIZ, "var", "politica-acesso"))  # dados fora do WT de fabrica (#2956)
 SUPERFICIES = os.path.join(POLITICA_DIR, "superficies.yaml")
 
 MAPA = os.path.join(RAIZ, "platafirma-arquitetura", "docs", "arquitetura-negocio-operacao.md")
