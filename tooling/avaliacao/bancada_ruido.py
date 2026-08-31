@@ -29,9 +29,9 @@ SAIDA = Path(__file__).resolve().parent
 
 sys.path.insert(0, str(RAG))
 
-from rag_extractor.config import RECOMMENDED_RERANKER, load_settings  # noqa: E402
-from rag_extractor.runtime import retrieve  # noqa: E402
-from rag_extractor.store.db import get_conn  # noqa: E402
+from motor_acervo.config import RECOMMENDED_RERANKER, load_settings  # noqa: E402
+from motor_acervo.runtime import retrieve  # noqa: E402
+from motor_acervo.store.db import get_conn  # noqa: E402
 
 K = 10  # recupera 10 e mede recall@1/3/5/10 sobre o mesmo run
 
