@@ -248,11 +248,59 @@ DOM_MENSAGERIA = "mensageria"     # fora do prefixo por ordem do dono, 13/08/202
 _pdp: dict = {"carimbo": None, "politica": None, "sujeitos": None, "erro": "nao carregada"}
 
 
+# --- gate de ref canonico da fonte de identidade (incidente #2956) ---
+# O PEP le sujeitos.yaml do WORKING TREE do harness. Um `git checkout`/rebase/stash
+# nesse repo (sessao de fabrica) troca a arvore em vigor e reprojeta a identidade de
+# TODA a plataforma. Antes de projetar, exigimos que a fonte esteja no ref canonico.
+# Recusa por estado (diagnostico verdadeiro) em vez de negar por atributo ausente
+# (diagnostico enganoso do #2956). Minuta arq 0015, perna (2).
+#
+# INDISPONIBILIDADE NAO E NAO-CANONICO. Se .git for ilegivel por causa transitoria
+# (nao um checkout), tratamos como "nao consegui verificar" e NAO bloqueamos por isso
+# sozinho — a falha de leitura do proprio sujeitos.yaml adiante ja nega fail-closed.
+# O gate so morde o caso que ele existe para pegar: ref presente e != canonico.
+_REF_IDENT_CANONICO = os.environ.get("PF_REF_IDENTIDADE", "refs/heads/main")
+
+
+def _head_do_harness() -> tuple[str | None, str]:
+    """(ref_ou_None, diagnostico). ref e a string 'refs/heads/...' quando em branch;
+    None quando nao deu para determinar OU detached. diagnostico descreve o estado.
+
+    Le .git/HEAD por arquivo — sem subprocess, sem rede. .git normal e diretorio;
+    em worktree e um gitfile 'gitdir: <path>'."""
+    git = PF_HARNESS / ".git"
+    try:
+        if git.is_dir():
+            head = (git / "HEAD").read_text(encoding="utf-8").strip()
+        elif git.is_file():
+            real = git.read_text(encoding="utf-8").strip()
+            gd = real.split(":", 1)[1].strip() if real.startswith("gitdir:") else real
+            head = (Path(gd) / "HEAD").read_text(encoding="utf-8").strip()
+        else:
+            return (None, f".git ausente em {git}")
+    except OSError as e:
+        return (None, f"HEAD ilegivel: {e}")
+    if head.startswith("ref:"):
+        return (head.split(":", 1)[1].strip(), "branch")
+    return (None, f"detached@{head[:12]}")
+
+
 def _carrega_politica() -> dict:
     """PAP e projecao de sujeito, relidos quando o mtime de um dos dois muda.
 
     Merge no PAP passa a valer sem restart — e o que torna `acesso conceder` um ato
     de deploy leve em vez de janela de manutencao."""
+    ref, diag = _head_do_harness()
+    if ref is not None and ref != _REF_IDENT_CANONICO:
+        _pdp.update(carimbo=None, politica=None, sujeitos=None,
+                    erro=f"fonte de identidade em estado nao-canonico: harness em {ref!r} "
+                         f"(esperado {_REF_IDENT_CANONICO!r}) — recuso projetar #2956")
+        return _pdp
+    if ref is None and diag.startswith("detached"):
+        _pdp.update(carimbo=None, politica=None, sujeitos=None,
+                    erro=f"fonte de identidade em estado nao-canonico: harness {diag} "
+                         f"(esperado {_REF_IDENT_CANONICO!r}) — recuso projetar #2956")
+        return _pdp
     pol_f, suj_f = PDP_DIR / "politica.yaml", PDP_DIR / "sujeitos.yaml"
     try:
         carimbo = (pol_f.stat().st_mtime_ns, suj_f.stat().st_mtime_ns)
