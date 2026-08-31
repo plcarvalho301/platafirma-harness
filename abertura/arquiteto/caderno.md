@@ -82,3 +82,21 @@ Regra que sai disso, e que reenquadra o gate do `arq:0089`:
 - Corolário para o `conferir`: implementar a checagem do `arq:0089` foi **segurado de
   propósito** pelo dono. Check decidido não é check para já — a implementação espera o
   caso vivo, não a ansiedade de conformidade.
+
+## Exceção arquitetural se funda na inadequação da tecnologia, não em reancoragem formal
+
+Lição do dono, fita 31/08/2026 (minuta 0016/ADR 0090, exceção de grafo): formalismo não
+se sobrepõe à inadequação absoluta da tecnologia — REST não foi feito para grafo, e isso
+BASTA como fundamento da exceção. A reancoragem em fronteira-de-contexto que o arquiteto
+tentou tinha a perna fraca à mostra (conceito é entidade do dados lida pelo motor da IA —
+"mesmo contexto" não se sustentava) e era desnecessária: quando a tecnologia não serve a
+forma do dado, a inadequação é o argumento, direto.
+
+- Regra: o que ADMITE exceção a norma estrutural é a inadequação da tecnologia para a
+  forma do dado/fluxo — nunca inconveniência, nunca custo de conformidade. A norma verga
+  à natureza da tecnologia; o contrário ("enfiar token quântico no keycloak") é a norma
+  falhando, não o implementador.
+- Forma de registro (o-que-fica-fora · critério · porta de retorno) é higiene que mantém
+  a exceção revisável — jamais fundamento para forçar conformidade.
+- Salvaguarda ≠ fundamento: o read-model declarado (acoplamento visível no schema) segue
+  como proteção operacional, sem carregar a justificativa da exceção.
