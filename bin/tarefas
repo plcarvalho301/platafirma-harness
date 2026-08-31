@@ -20,6 +20,18 @@ set -euo pipefail
 # O loopback continua sendo a porta do agente (card #469): a borda gateia a superficie
 # HUMANA, e um Bearer de agente nao atravessa oauth2-proxy.
 BASE="${TAREFAS_BASE:-http://127.0.0.1:8120/api}"
+
+# ESCOTILHA: BASE ja termina em /api. O caminho natural (rota real, ex. /api/itens/2930)
+# duplicava o prefixo -> /api/api/... -> 404 mudo ("falha ao falar"). Card do 8120.
+# Normaliza na BORDA: aceita com ou sem /api; chamadores internos (que passam /itens/...)
+# nao passam por aqui, nao regridem.
+_apipath() {
+  case "$1" in
+    /api)   printf '/' ;;
+    /api/*) printf '%s' "${1#/api}" ;;
+    *)      printf '%s' "$1" ;;
+  esac
+}
 QUEM="${PF_CADEIRA:-}"
 
 uso() {
@@ -659,7 +671,7 @@ case "$cmd" in
   estados)     estados ;;
   dt)          dt "$@" ;;
   projetos)    echo "não há projeto neste modelo: o recorte é por eixo (cadeira, estado, nível)." >&2; exit 2 ;;
-  api)         busca "${1:?método}" "${2:?caminho}" ;;
-  api-corpo)   envia "${1:?método}" "${2:?caminho}" ;;
+  api)         busca "${1:?método}" "$(_apipath "${2:?caminho}")" ;;
+  api-corpo)   envia "${1:?método}" "$(_apipath "${2:?caminho}")" ;;
   *)           uso ;;
 esac
