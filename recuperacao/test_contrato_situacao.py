@@ -1,4 +1,4 @@
-"""Testes de contrato e conformidade de `situacao` (#2953, arq:0085 §4, §2).
+"""Testes de contrato e conformidade de `situacao` (#2953, arq:0085 §4, §2; refatorado #2957).
 
 Invariantes conferidas:
 1. Lê a cadeia viva (impressão -> estado de serviço) e reporta payload {servivel, desde, impressao_id, degrau}.
@@ -10,6 +10,14 @@ Invariantes conferidas:
 7. Fonte indisponível responde `fonte-nao-indexada` declarada, nunca zero (§4).
 8. PEP nega por concessão quando sujeito sem acesso.
 9. CLI `bin/situacao` obedece contrato de chamada e saída.
+
+Desde #2957, a fonte é `GET /acervo/obras/{obra_id}/situacao` no `motor_acervo`, não mais
+JSONL local (arq:0089 §2) — a escada de degraus e o casamento de obra migraram para o
+outro lado do HTTP (`motor_acervo/acervo_consulta.py`). Os testes de CONTRATO injetam
+`http=` (cliente falso, sempre rodam, julgam o que `situacao()` produz a partir de um
+payload já resolvido); o de CLI (nível 2) exercita o subprocess de verdade contra o
+serviço real, e é PULADO com motivo quando o serviço não serve as rotas novas ainda —
+mesmo padrão de `test_contrato_wiki_acervo.py` (`rag_no_ar`/`wiki_no_ar`).
 """
 
 from __future__ import annotations
@@ -18,94 +26,55 @@ import json
 import os
 import subprocess
 import sys
+import urllib.error
+import urllib.request
 from pathlib import Path
 
 import pytest
 
-from recuperacao.acervo_leitor import (
-    CatalogoAcervo,
-    ImpressaoInfo,
-    ObraInfo,
-)
 from recuperacao.adaptadores.base import FonteIndisponivel
-from recuperacao.disjuntor import Disjuntor, EstadoDisjuntor, Painel
-from recuperacao.envelope import (
-    Casamento,
-    Causa,
-    Cobertura,
-    ContratoViolado,
-    Fonte,
-    VersaoTipo,
-)
+from recuperacao.disjuntor import EstadoDisjuntor, Painel
+from recuperacao.envelope import Causa, Cobertura, Fonte
 from recuperacao.pep import PEP
-from recuperacao.resolvedor import EstadoConceito
 from recuperacao.situacao import situacao
 
 RAIZ = os.environ.get("PF_RAIZ", os.path.expanduser("~/AI"))
 TOKENIZADOR = os.path.join(RAIZ, "opt", "tokenizers", "qwen2.5.json")
 BIN_SITUACAO = Path(__file__).resolve().parents[1] / "bin" / "situacao"
+MOTOR_ACERVO_URL = os.environ.get(
+    "MOTOR_ACERVO_URL", os.environ.get("RAG_API_URL", "http://127.0.0.1:8100")).rstrip("/")
+RAG_API_TOKEN = os.environ.get("RAG_API_TOKEN", "")
 
 
-def catalogo_situacao_mock() -> CatalogoAcervo:
-    """Catálogo determinístico para testes de situação."""
-    cat = CatalogoAcervo()
+# =============================================================================
+# payloads determinísticos — o que `GET /acervo/obras/{id}/situacao` devolveria
+# =============================================================================
 
-    # Obra 1: Ancorada (classificada com impressão servindo)
-    cat.obras["o1"] = ObraInfo(
-        id="o1",
-        titulo="Clean Architecture",
-        objeto="acervo/1111111111111111111111111111111111111111111111111111111111111111",
-        dominio="engenharia-software",
-        subdominio="artesania-e-design-de-codigo",
-    )
-    cat.impressoes_por_obra["o1"] = [
-        ImpressaoInfo(
-            id="imp-001",
-            obra_id="o1",
-            estado="servindo",
-            criada_em="2026-08-15T10:00:00Z",
-        )
-    ]
+PAYLOAD_ANCORADO = {
+    "obra_id": "o1", "titulo": "Clean Architecture",
+    "objeto": "acervo/1111111111111111111111111111111111111111111111111111111111111111",
+    "servivel": True, "desde": "2026-08-15T10:00:00Z", "impressao_id": "imp-001",
+    "degrau": "ancorado", "carimbo": "carimbo-o1", "casamento": "exato",
+}
+PAYLOAD_DECLARADO_NAO_SERVINDO = {
+    "obra_id": "o2", "titulo": "Legacy Code",
+    "objeto": "acervo/2222222222222222222222222222222222222222222222222222222222222222",
+    "servivel": False, "desde": None, "impressao_id": "imp-002",
+    "degrau": "declarado-nao-servindo", "carimbo": "carimbo-o2", "casamento": "exato",
+}
+PAYLOAD_ORFAO = {
+    "obra_id": "o3", "titulo": "Documento Avulso Sem Metadados",
+    "objeto": "acervo/3333333333333333333333333333333333333333333333333333333333333333",
+    "servivel": True, "desde": "2026-08-01T10:00:00Z", "impressao_id": "imp-003",
+    "degrau": "orfao", "carimbo": "carimbo-o3", "casamento": "exato",
+}
 
-    # Obra 2: Declarada não servindo (classificada, mas sem impressão ativa/servindo)
-    cat.obras["o2"] = ObraInfo(
-        id="o2",
-        titulo="Legacy Code",
-        objeto="acervo/2222222222222222222222222222222222222222222222222222222222222222",
-        dominio="engenharia-software",
-        subdominio="artesania-e-design-de-codigo",
-    )
-    cat.impressoes_por_obra["o2"] = [
-        ImpressaoInfo(
-            id="imp-002",
-            obra_id="o2",
-            estado="em_construcao",
-            criada_em="2026-08-20T10:00:00Z",
-        )
-    ]
 
-    # Obra 3: Órfã (sem classificação)
-    cat.obras["o3"] = ObraInfo(
-        id="o3",
-        titulo="Documento Avulso Sem Metadados",
-        objeto="acervo/3333333333333333333333333333333333333333333333333333333333333333",
-        dominio=None,
-        subdominio=None,
-    )
-    cat.impressoes_por_obra["o3"] = [
-        ImpressaoInfo(
-            id="imp-003",
-            obra_id="o3",
-            estado="servindo",
-            criada_em="2026-08-01T10:00:00Z",
-        )
-    ]
-
-    for o in cat.obras.values():
-        cat.obras_por_titulo.setdefault(o.titulo.lower(), []).append(o)
-
-    cat.carimbo = "acervo:mock-sit"
-    return cat
+def http_fixo(payload):
+    """Cliente falso que devolve sempre o mesmo payload (ou `None` = 404)."""
+    def _http(rota, aceita_ausente=False):
+        return payload
+    return _http
 
 
 # =============================================================================
@@ -115,8 +84,7 @@ def catalogo_situacao_mock() -> CatalogoAcervo:
 
 def test_situacao_ancorado():
     """Obra classificada e com impressão servindo reporta degrau ancorado e servivel True."""
-    cat = catalogo_situacao_mock()
-    env = situacao("Clean Architecture", catalogo=cat)
+    env = situacao("Clean Architecture", http=http_fixo(PAYLOAD_ANCORADO))
 
     assert len(env.linhas) == 1
     assert env.linhas[0].fonte == Fonte.ACERVO
@@ -130,43 +98,39 @@ def test_situacao_ancorado():
     assert payload["servivel"] is True
     assert payload["desde"] == "2026-08-15T10:00:00Z"
     assert payload["impressao_id"] == "imp-001"
-    assert payload["degrau"] == str(EstadoConceito.ANCORADO)
+    assert payload["degrau"] == "ancorado"
 
 
 def test_situacao_declarado_nao_servindo():
     """Obra sem impressão em estado 'servindo' reporta declarado-nao-servindo e servivel False."""
-    cat = catalogo_situacao_mock()
-    env = situacao("Legacy Code", catalogo=cat)
+    env = situacao("Legacy Code", http=http_fixo(PAYLOAD_DECLARADO_NAO_SERVINDO))
 
     assert len(env.itens) == 1
     payload = json.loads(env.itens[0].conteudo)
     assert payload["servivel"] is False
     assert payload["desde"] is None
-    assert payload["degrau"] == str(EstadoConceito.DECLARADO_NAO_SERVINDO)
+    assert payload["degrau"] == "declarado-nao-servindo"
 
 
 def test_situacao_orfao():
     """Obra sem classificação (sem domínio/subdomínio/conceito) reporta degrau orfao."""
-    cat = catalogo_situacao_mock()
-    env = situacao("Documento Avulso Sem Metadados", catalogo=cat)
+    env = situacao("Documento Avulso Sem Metadados", http=http_fixo(PAYLOAD_ORFAO))
 
     assert len(env.itens) == 1
     payload = json.loads(env.itens[0].conteudo)
-    assert payload["degrau"] == str(EstadoConceito.ORFAO)
+    assert payload["degrau"] == "orfao"
 
 
 def test_situacao_obra_inexistente_retorna_vazio():
-    """Obra que não existe no acervo vivo retorna envelope vazio."""
-    cat = catalogo_situacao_mock()
-    env = situacao("Obra Inexistente Fantasma XYZ", catalogo=cat)
+    """A API responde 404 (o cliente devolve `None`) -> envelope vazio."""
+    env = situacao("Obra Inexistente Fantasma XYZ", http=http_fixo(None))
     assert env.cobertura == Cobertura.VAZIA
     assert env.itens == []
 
 
 def test_situacao_sujeito_nao_entra_no_envelope():
     """Invariante 5: o sujeito nunca aparece no envelope."""
-    cat = catalogo_situacao_mock()
-    env = situacao("Clean Architecture", sujeito="claudinho-dados", catalogo=cat)
+    env = situacao("Clean Architecture", sujeito="claudinho-dados", http=http_fixo(PAYLOAD_ANCORADO))
     d = env.para_json()
     assert "sujeito" not in d
     assert "sujeito" not in json.dumps(d)
@@ -174,8 +138,7 @@ def test_situacao_sujeito_nao_entra_no_envelope():
 
 def test_situacao_vazio_cabe_no_teto_40_tokens():
     """Invariante 3: envelope vazio ≤ 40 tokens no tokenizador."""
-    cat = catalogo_situacao_mock()
-    env = situacao("Inexistente", catalogo=cat)
+    env = situacao("Inexistente", http=http_fixo(None))
     texto = env.para_texto()
 
     if os.path.isfile(TOKENIZADOR):
@@ -190,9 +153,12 @@ def test_situacao_vazio_cabe_no_teto_40_tokens():
 
 def test_situacao_fonte_indisponivel_responde_nao_indexada_nunca_zero():
     """Regra dura arq:0085 §4: fonte que não alcança o vivo responde indeterminavel, nunca zero."""
-    env = situacao("Clean Architecture", raiz="/caminho/inexistente")
+    def http_caido(rota, aceita_ausente=False):
+        raise FonteIndisponivel(Causa.SEM_ROTA, "conexão recusada")
+
+    env = situacao("Clean Architecture", http=http_caido)
     assert env.cobertura == Cobertura.FONTE_NAO_INDEXADA
-    assert env.linhas[0].causa in (Causa.SEM_ROTA, Causa.FORA_DO_AR)
+    assert env.linhas[0].causa == Causa.SEM_ROTA
     assert env.itens == []
 
 
@@ -203,7 +169,7 @@ def test_situacao_pep_negativo():
             from recuperacao.pep import Negativa
             return [Negativa(fonte=Fonte.ACERVO, alvo="acervo:*", regra="padrao", motivo="negado")]
 
-    env = situacao("Clean Architecture", catalogo=catalogo_situacao_mock(), pep=PEPMudo())
+    env = situacao("Clean Architecture", pep=PEPMudo(), http=http_fixo(PAYLOAD_ANCORADO))
     assert env.cobertura == Cobertura.FONTE_NAO_INDEXADA
     assert env.linhas[0].causa == Causa.SEM_CONCESSAO
 
@@ -214,32 +180,55 @@ def test_situacao_disjuntor_aberto():
     painel[Fonte.ACERVO]._estado = EstadoDisjuntor.ABERTO
     painel[Fonte.ACERVO]._aberto_em = 10000000000.0
 
-    env = situacao("Clean Architecture", catalogo=catalogo_situacao_mock(), painel=painel)
+    env = situacao("Clean Architecture", painel=painel, http=http_fixo(PAYLOAD_ANCORADO))
     assert env.linhas[0].causa == Causa.DISJUNTOR_ABERTO
     assert env.cobertura == Cobertura.FONTE_NAO_INDEXADA
 
 
 # =============================================================================
-# 2. Testes de Execução CLI de bin/situacao
+# 2. Testes de Execução CLI de bin/situacao — os dois primeiros não tocam a rede;
+#    o terceiro exercita o subprocess de verdade contra o motor_acervo real.
 # =============================================================================
 
 
+def _motor_acervo_com_rotas_novas() -> bool:
+    """`/health` respondendo não basta: o serviço velho (pré-#2957) também responde.
+    Confere se a rota `/acervo/*` já existe (serviço redeployado)."""
+    try:
+        req = urllib.request.Request(
+            f"{MOTOR_ACERVO_URL}/acervo/conceitos",
+            headers={"authorization": f"Bearer {RAG_API_TOKEN}"} if RAG_API_TOKEN else {})
+        with urllib.request.urlopen(req, timeout=3) as r:  # noqa: S310
+            return r.status < 500
+    except urllib.error.HTTPError as e:
+        return e.code != 404
+    except Exception:  # noqa: BLE001
+        return False
+
+
+motor_acervo_no_ar = pytest.mark.skipif(
+    not _motor_acervo_com_rotas_novas(),
+    reason=f"motor_acervo em {MOTOR_ACERVO_URL} sem as rotas /acervo/* (não redeployado "
+          "com #2957, ou fora do ar) — CLI pulado, não mascarado")
+
+
 def test_bin_situacao_sem_argumento_sai_2():
-    """Chamada sem argumentos imprime o uso e sai com código 2."""
+    """Chamada sem argumentos imprime o uso e sai com código 2. Não toca a rede."""
     p = subprocess.run([sys.executable, str(BIN_SITUACAO)], capture_output=True, text=True)
     assert p.returncode == 2
     assert "uso:" in p.stderr
 
 
 def test_bin_situacao_ajuda_sai_2():
-    """-h/--help sai com código 2."""
+    """-h/--help sai com código 2. Não toca a rede."""
     p = subprocess.run([sys.executable, str(BIN_SITUACAO), "-h"], capture_output=True, text=True)
     assert p.returncode == 2
     assert "uso:" in p.stderr
 
 
+@motor_acervo_no_ar
 def test_bin_situacao_executa_e_emite_payload():
-    """Execução com obra retorna envelope com payload formatado."""
+    """Execução com obra retorna envelope com payload formatado, contra o serviço real."""
     p = subprocess.run(
         [sys.executable, str(BIN_SITUACAO), "2020-devops-transformation-google-cloud-dora", "--json"],
         capture_output=True,
@@ -283,7 +272,7 @@ def test_situacao_miss_usa_api_real_do_cache():
     from recuperacao.adaptadores.base import Resultado
 
     cache = _CacheFalsoSit(retorno=None)
-    env = situacao("Clean Architecture", catalogo=catalogo_situacao_mock(), cache=cache)
+    env = situacao("Clean Architecture", cache=cache, http=http_fixo(PAYLOAD_ANCORADO))
     assert env is not None
     assert cache.leu, "situacao deve consultar cache.le no miss"
     assert cache.gravou, "situacao deve gravar o resultado no miss"
@@ -295,8 +284,8 @@ def test_situacao_hit_de_cache_retorna_sem_reler_acervo():
     """Hit: `cache.le` devolve Resultado e situacao devolve-o sem regravar."""
     from recuperacao.adaptadores.base import Resultado
 
-    semente = situacao("Clean Architecture", catalogo=catalogo_situacao_mock())
+    semente = situacao("Clean Architecture", http=http_fixo(PAYLOAD_ANCORADO))
     cache = _CacheFalsoSit(retorno=Resultado(linha=semente.linhas[0], itens=semente.itens))
-    env = situacao("Clean Architecture", catalogo=catalogo_situacao_mock(), cache=cache)
+    env = situacao("Clean Architecture", cache=cache, http=http_fixo(PAYLOAD_ANCORADO))
     assert env.linhas[0].fonte == Fonte.ACERVO
     assert not cache.gravou, "hit não deve regravar"

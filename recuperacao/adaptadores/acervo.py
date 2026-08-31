@@ -123,7 +123,7 @@ class AdaptadorAcervo(Adaptador):
         """
         if self._carimbo_cache:
             return self._carimbo_cache
-        d = self._http("/facets")
+        d = self._http("/acervo/facetas")
         sha = ((d.get("indice") or {}).get("acervo_sha") or "").strip()
         if not sha:
             raise FonteIndisponivel(Causa.SEM_INDICE, "/facets sem acervo_sha")
@@ -143,7 +143,7 @@ class AdaptadorAcervo(Adaptador):
                 corpo[eixo] = filtros[eixo]
         if filtros.get("rerank"):
             corpo["rerank"] = True
-        d = self._http("/search", corpo)
+        d = self._http("/acervo/trechos/consulta", corpo)
         if d.get("erro"):
             raise FonteIndisponivel(Causa.FORA_DO_AR, str(d["erro"])[:120])
         self._ultimo = d

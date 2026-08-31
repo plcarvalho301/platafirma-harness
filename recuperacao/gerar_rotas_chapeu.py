@@ -37,28 +37,26 @@ import argparse
 import json
 import os
 import re
-import subprocess
 import sys
 
 # Fonte ÚNICA da régua de normalização: o próprio roteador. Importar em vez de recopiar
 # garante que gerar e casar usem o mesmo _normaliza — recópia diverge no primeiro ajuste.
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from roteador_chapeu import _normaliza  # noqa: E402
-
+# Import qualificado pelo pacote (não `sys.path` na própria `recuperacao/`): o cliente REST
+# usa import relativo (`..envelope`) e só resolve dentro do pacote `recuperacao`.
 RAIZ = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, RAIZ)
+from recuperacao.roteador_chapeu import _normaliza  # noqa: E402
+from recuperacao.adaptadores.motor_acervo_rest import conceitos as _conceitos_http  # noqa: E402
+
 ABERTURA = os.path.join(RAIZ, "abertura")
 SAIDA = os.path.join(ABERTURA, "rotas-chapeu.json")
-ACERVO = os.path.join(RAIZ, "bin", "acervo")
 
 
 def golden_record() -> list[dict]:
-    """O golden record inteiro, via `acervo listar conceitos --json`. Único ponto que
-    toca o docker; roda uma vez, fora da montagem."""
-    saida = subprocess.run(
-        [ACERVO, "listar", "conceitos", "--json"],
-        check=True, capture_output=True, text=True,
-    ).stdout
-    return json.loads(saida)
+    """O golden record inteiro, via `GET /acervo/conceitos` (#2957, arq:0089 §2). Único
+    ponto que toca a rede; roda uma vez, fora da montagem."""
+    payload = _conceitos_http()
+    return payload.get("itens", [])
 
 
 def indice_por_rotulo(golden: list[dict]) -> dict[str, dict]:

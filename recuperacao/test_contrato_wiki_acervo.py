@@ -179,7 +179,7 @@ FACETS = {"indice": {"acervo_sha": "443d4c309f75376f615ec5"}}
 
 def acervo_falso(busca: dict, facets: dict = FACETS, **kw) -> AdaptadorAcervo:
     def http(rota, corpo=None):
-        return busca if rota == "/search" else facets
+        return busca if rota == "/acervo/trechos/consulta" else facets
     return AdaptadorAcervo(http=http, **kw)
 
 
@@ -252,11 +252,11 @@ def test_carimbo_e_constante_de_sessao_lido_uma_vez():
 
     def http(rota, corpo=None):
         chamadas.append(rota)
-        return BUSCA_COMPLETA if rota == "/search" else FACETS
+        return BUSCA_COMPLETA if rota == "/acervo/trechos/consulta" else FACETS
     a = AdaptadorAcervo(http=http)
     a.busca("p", texto="nenhum")
     a.busca("outra", texto="nenhum")
-    assert chamadas.count("/facets") == 1, "reenviar o que não muda é contexto gasto"
+    assert chamadas.count("/acervo/facetas") == 1, "reenviar o que não muda é contexto gasto"
 
 
 def test_alvo_vazio_nao_vira_busca():
@@ -299,13 +299,29 @@ def _vivo(url: str, headers: dict | None = None) -> bool:
         return False
 
 
+def _rag_com_rotas_novas() -> bool:
+    """`/health` respondendo não basta: o serviço pré-#2957 também responde nele — e
+    ainda serve `/search`, não `/acervo/trechos/consulta`. Confere a rota nova."""
+    try:
+        req = urllib.request.Request(
+            f"{RAG}/acervo/facetas",
+            headers={"authorization": f"Bearer {RAG_TOKEN}"} if RAG_TOKEN else {})
+        with urllib.request.urlopen(req, timeout=3):  # noqa: S310
+            return True
+    except urllib.error.HTTPError as e:
+        return e.code not in (404,)
+    except Exception:  # noqa: BLE001
+        return False
+
+
 wiki_no_ar = pytest.mark.skipif(
     not _vivo(f"{MW}?action=query&meta=siteinfo&format=json"),
     reason=f"MediaWiki não responde em {MW} — conformidade pulada, não mascarada")
 
 rag_no_ar = pytest.mark.skipif(
-    not _vivo(f"{RAG}/health"),
-    reason=f"rag-api não responde em {RAG} — conformidade pulada, não mascarada")
+    not _rag_com_rotas_novas(),
+    reason=f"rag-api em {RAG} sem as rotas /acervo/* (não redeployado com #2957, ou fora "
+          "do ar) — conformidade pulada, não mascarada")
 
 
 @wiki_no_ar
@@ -336,7 +352,7 @@ def test_conformidade_acervo_section_id_bate_com_a_api_nua():
     a = AdaptadorAcervo(chave_curta=True)
     pergunta = "fusao reciproca de rankings"
     itens = a.busca(pergunta, {"dominio": ["ia"]}, k=3, texto="nenhum").itens
-    d = a._chama("/search", {"pergunta": pergunta, "dominio": ["ia"], "k": 3,
+    d = a._chama("/acervo/trechos/consulta", {"pergunta": pergunta, "dominio": ["ia"], "k": 3,
                              "texto": "nenhum"})
     esperado = [f["section_id"] for f in d["fontes"]]
     obtido = [i.procedencia.chave.removeprefix("acervo:") for i in itens]

@@ -15,6 +15,12 @@ Regras duras (arq:0085 §5 + §3):
    os 2 eixos marcados.
 4. Saída = payload único com procedência completa; a âncora citável é projeção.
 5. Fonte que não alcança o vivo responde indeterminavel/fonte-nao-indexada, nunca zero (§4).
+
+Verbo fino desde #2957 (arq:0089 §2, arq:0090): a varredura multi-eixo (normalização,
+radicais, união, dedupe, marcação de casamento) migrou para `motor_acervo/acervo_consulta.py`,
+do outro lado de `GET /acervo/descoberta`. Este módulo só chama a rota (via
+`adaptadores.motor_acervo_rest`) e empacota cada item no Envelope — o contrato de dado
+do verbo não mudou (F9), mudou de onde o dado vem. `acervo_leitor.py` foi removido.
 """
 
 from __future__ import annotations
@@ -23,14 +29,8 @@ import hashlib
 import os
 from typing import Sequence
 
-from .acervo_leitor import (
-    CatalogoAcervo,
-    ObraInfo,
-    carrega_catalogo,
-    normaliza_termo,
-    radicais_de,
-)
 from .adaptadores.base import FonteIndisponivel
+from .adaptadores.motor_acervo_rest import descoberta as _descoberta_http
 from .cache import Cache, SemCache, digest_consulta
 from .disjuntor import Painel
 from .envelope import (
@@ -50,9 +50,12 @@ from .envelope import (
 from .fontes import Fonte
 from .pep import PEP, recusa_por_concessao
 
-RAIZ = os.environ.get("PF_RAIZ", os.path.expanduser("~/AI"))
 EIXOS_VALIDOS = ("titulo", "conceito", "subdominio")
 EIXOS_PADRAO = list(EIXOS_VALIDOS)
+
+
+def _objeto_id(objeto: str | None) -> str:
+    return str(objeto or "").removeprefix("acervo/").removeprefix("pessoal/")
 
 
 def descobrir(
@@ -60,15 +63,15 @@ def descobrir(
     eixos: Sequence[str] | None = None,
     k: int = 8,
     sujeito: str | None = None,
-    catalogo: CatalogoAcervo | None = None,
     pep: PEP | None = None,
     cache: Cache | None = None,
     painel: Painel | None = None,
-    raiz: str = RAIZ,
+    http=None,
 ) -> Envelope:
     """Descobre o que o acervo tem sobre um assunto por varredura multi-eixo.
 
     Devolve a UNIÃO (OR) dos eixos consultados, marcando por quais eixos cada obra entrou.
+    `http` é o ponto de injeção do transporte (mesmo desenho de `AdaptadorAcervo`).
     """
     assunto = (assunto or "").strip()
     if not assunto:
@@ -110,142 +113,32 @@ def descobrir(
         except SemCache:
             pass
 
-    # 4. Leitura do acervo
+    # 4. Chamada à rota REST do motor_acervo
     try:
-        cat = catalogo if catalogo is not None else carrega_catalogo(raiz)
+        payload = _descoberta_http(assunto, eixos_consultados, k, http=http)
     except FonteIndisponivel as e:
         if painel is not None:
             painel[Fonte.ACERVO].registra_falha()
         return Envelope(
-            linhas=[
-                LinhaFonte(
-                    fonte=Fonte.ACERVO,
-                    cobertura=Cobertura.FONTE_NAO_INDEXADA,
-                    causa=e.causa,
-                )
-            ]
+            linhas=[LinhaFonte(fonte=Fonte.ACERVO, cobertura=Cobertura.FONTE_NAO_INDEXADA,
+                               causa=e.causa)]
         )
     except Exception:
         if painel is not None:
             painel[Fonte.ACERVO].registra_falha()
         return Envelope(
-            linhas=[
-                LinhaFonte(
-                    fonte=Fonte.ACERVO,
-                    cobertura=Cobertura.FONTE_NAO_INDEXADA,
-                    causa=Causa.FORA_DO_AR,
-                )
-            ]
+            linhas=[LinhaFonte(fonte=Fonte.ACERVO, cobertura=Cobertura.FONTE_NAO_INDEXADA,
+                               causa=Causa.FORA_DO_AR)]
         )
 
     if painel is not None:
         painel[Fonte.ACERVO].registra_sucesso()
 
-    # 5. Varredura multi-eixo
-    assunto_norm = normaliza_termo(assunto)
-    termos = [t for t in assunto_norm.split() if t]
-    rads_assunto = radicais_de(assunto)
+    itens_payload = (payload or {}).get("itens") or []
 
-    # obra_id -> set of axis names
-    obras_encontradas: dict[str, set[str]] = {}
-    casamento_exato: dict[str, bool] = {}
-
-    # Eixo: titulo
-    if "titulo" in eixos_consultados:
-        for oid, obra in cat.obras.items():
-            tit_norm = normaliza_termo(obra.titulo)
-            arq_norm = normaliza_termo(obra.arquivo or "")
-            pub_norm = normaliza_termo(obra.publicacao or "")
-            rads_tit = radicais_de(obra.titulo)
-            if assunto_norm == tit_norm or (obra.arquivo and assunto_norm == arq_norm):
-                obras_encontradas.setdefault(oid, set()).add("titulo")
-                casamento_exato[oid] = True
-            elif assunto_norm in tit_norm or assunto_norm in arq_norm or assunto_norm in pub_norm:
-                obras_encontradas.setdefault(oid, set()).add("titulo")
-                casamento_exato.setdefault(oid, False)
-            elif termos and all(t in tit_norm for t in termos):
-                obras_encontradas.setdefault(oid, set()).add("titulo")
-                casamento_exato.setdefault(oid, False)
-            elif rads_assunto and all(r in rads_tit for r in rads_assunto):
-                obras_encontradas.setdefault(oid, set()).add("titulo")
-                casamento_exato.setdefault(oid, False)
-
-    # Eixo: conceito
-    if "conceito" in eixos_consultados:
-        conceitos_casados = set()
-        for slug, conc in cat.conceitos.items():
-            rot_norm = normaliza_termo(conc.rotulo)
-            slug_norm = normaliza_termo(conc.slug)
-            outros = [normaliza_termo(o) for o in conc.outros_rotulos]
-            rads_rot = radicais_de(conc.rotulo)
-            rads_def = radicais_de(conc.definicao)
-
-            if (
-                assunto_norm == rot_norm
-                or assunto_norm == slug_norm
-                or any(assunto_norm == o for o in outros)
-            ):
-                conceitos_casados.add((slug, True))
-            elif (
-                assunto_norm in rot_norm
-                or assunto_norm in slug_norm
-                or any(assunto_norm in o for o in outros)
-                or (termos and all(t in rot_norm for t in termos))
-                or (rads_assunto and all(r in rads_rot for r in rads_assunto))
-                or (termos and all(t in normaliza_termo(conc.definicao) for t in termos))
-                or (rads_assunto and all(r in rads_def for r in rads_assunto))
-            ):
-                conceitos_casados.add((slug, False))
-
-        for c_slug, exato in conceitos_casados:
-            for oid in cat.conceito_obras.get(c_slug, ()):
-                obras_encontradas.setdefault(oid, set()).add("conceito")
-                if exato:
-                    casamento_exato[oid] = True
-                else:
-                    casamento_exato.setdefault(oid, False)
-
-    # Eixo: subdominio
-    if "subdominio" in eixos_consultados:
-        subdominios_casados = set()
-        for slug, sub in cat.subdominios.items():
-            rot_norm = normaliza_termo(sub.rotulo)
-            slug_norm = normaliza_termo(sub.slug)
-            rec_norm = normaliza_termo(sub.recorte)
-            rads_rot = radicais_de(sub.rotulo)
-            rads_rec = radicais_de(sub.recorte)
-
-            if assunto_norm == rot_norm or assunto_norm == slug_norm:
-                subdominios_casados.add((slug, True))
-            elif (
-                assunto_norm in rot_norm
-                or assunto_norm in slug_norm
-                or assunto_norm in rec_norm
-                or (termos and all(t in rot_norm for t in termos))
-                or (rads_assunto and all(r in rads_rot for r in rads_assunto))
-                or (termos and all(t in rec_norm for t in termos))
-                or (rads_assunto and all(r in rads_rec for r in rads_assunto))
-            ):
-                subdominios_casados.add((slug, False))
-
-        for s_slug, exato in subdominios_casados:
-            for oid in cat.subdominio_obras.get(s_slug, ()):
-                obras_encontradas.setdefault(oid, set()).add("subdominio")
-                if exato:
-                    casamento_exato[oid] = True
-                else:
-                    casamento_exato.setdefault(oid, False)
-
-    if not obras_encontradas:
-        env_vazio = Envelope(
-            linhas=[
-                LinhaFonte(
-                    fonte=Fonte.ACERVO,
-                    cobertura=Cobertura.VAZIA,
-                    carimbo=cat.carimbo,
-                )
-            ]
-        )
+    # 5. Nenhum item -> envelope vazio
+    if not itens_payload:
+        env_vazio = Envelope(linhas=[LinhaFonte(fonte=Fonte.ACERVO, cobertura=Cobertura.VAZIA)])
         if cache is not None and chave_cache:
             try:
                 from .adaptadores.base import Resultado
@@ -255,58 +148,28 @@ def descobrir(
                 pass
         return env_vazio
 
-    # 6. Montagem de itens com deduplicação e marcação de eixos
+    # 6. Empacota os itens já resolvidos e ordenados no Envelope
     itens: list[Item] = []
-    ordenados = sorted(
-        obras_encontradas.keys(),
-        key=lambda oid: (
-            -len(obras_encontradas[oid]),
-            not casamento_exato.get(oid, False),
-            cat.obras[oid].titulo,
-        ),
-    )
-
-    carimbo_versao = cat.carimbo.removeprefix("acervo:")[:12] if cat.carimbo else "v1"
-
-    for oid in ordenados[:k]:
-        obra = cat.obras[oid]
-        eixos_marcados = sorted(obras_encontradas[oid])
-        aresta = ", ".join(eixos_marcados)
-        expansao = Expansao(
-            conceito_origem=assunto,
-            aresta=aresta,
-            familia="descoberta",
-        )
-        chave = f"acervo:{obra.objeto_id}"
-        versao = Versao(tipo=VersaoTipo.DIGEST, valor=carimbo_versao)
-        digest = hashlib.sha256(f"{obra.id}:{obra.titulo}".encode()).hexdigest()[:16]
-        casamento = Casamento.EXATO if casamento_exato.get(oid, False) else Casamento.APROXIMADO
-
-        trilha = f"{obra.dominio}/{obra.subdominio}" if obra.dominio and obra.subdominio else (obra.dominio or "")
-        ref = f"{obra.titulo}" + (f" — {trilha}" if trilha else "")
-
+    for it in itens_payload[:k]:
+        chave = f"acervo:{_objeto_id(it.get('objeto'))}"
+        digest = hashlib.sha256(f"{it['obra_id']}:{it['titulo']}".encode()).hexdigest()[:16]
+        versao = Versao(tipo=VersaoTipo.DIGEST, valor=digest[:12])
+        exp = it.get("expansao") or {}
+        trilha = (f"{it['dominio']}/{it['subdominio']}" if it.get("dominio") and it.get("subdominio")
+                 else (it.get("dominio") or ""))
+        ref = it["titulo"] + (f" — {trilha}" if trilha else "")
         itens.append(
             Item(
-                procedencia=Procedencia(
-                    fonte=Fonte.ACERVO,
-                    chave=chave,
-                    versao=versao,
-                    digest=digest,
-                ),
+                procedencia=Procedencia(fonte=Fonte.ACERVO, chave=chave, versao=versao, digest=digest),
                 ref=ref,
-                casamento=casamento,
-                expansao=expansao,
+                casamento=Casamento.EXATO if it.get("casamento") == "exato" else Casamento.APROXIMADO,
+                expansao=Expansao(conceito_origem=exp.get("conceito_origem", assunto),
+                                  aresta=exp.get("aresta", ""), familia=exp.get("familia", "descoberta")),
             )
         )
 
     env = Envelope(
-        linhas=[
-            LinhaFonte(
-                fonte=Fonte.ACERVO,
-                cobertura=Cobertura.NAO_CALIBRADA,
-                carimbo=cat.carimbo,
-            )
-        ],
+        linhas=[LinhaFonte(fonte=Fonte.ACERVO, cobertura=Cobertura.NAO_CALIBRADA)],
         itens=itens,
     )
 

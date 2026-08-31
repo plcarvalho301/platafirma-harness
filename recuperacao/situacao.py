@@ -11,6 +11,13 @@ Regras duras (arq:0085 §4 + §2):
 3. degrau mapeia na tabela de estados do conceito (spec §10.6: ancorado ·
    declarado-não-servindo · sem-obra-não-julgado · órfão).
 4. Mais leve que descobrir; mesma biblioteca, mesmo envelope.
+
+Verbo fino desde #2957 (arq:0089 §2, arq:0090): a escada de degraus e o casamento de
+obra por título/arquivo migraram para `motor_acervo/acervo_consulta.py`, do outro lado
+de `GET /acervo/obras/{obra_id}/situacao`. Este módulo só chama a rota (via
+`adaptadores.motor_acervo_rest`) e empacota a resposta no Envelope — o contrato de dado
+do verbo não mudou (F9), mudou de onde o dado vem. `acervo_leitor.py` foi removido: não
+sobra leitor de disco no módulo.
 """
 
 from __future__ import annotations
@@ -18,8 +25,8 @@ from __future__ import annotations
 import json
 import os
 
-from .acervo_leitor import CatalogoAcervo, ObraInfo, carrega_catalogo, normaliza_termo
 from .adaptadores.base import FonteIndisponivel
+from .adaptadores.motor_acervo_rest import situacao_obra as _situacao_obra_http
 from .cache import Cache, SemCache, digest_consulta
 from .disjuntor import Painel
 from .envelope import (
@@ -36,21 +43,25 @@ from .envelope import (
 )
 from .fontes import Fonte
 from .pep import PEP, recusa_por_concessao
-from .resolvedor import Degrau, EstadoConceito
 
-RAIZ = os.environ.get("PF_RAIZ", os.path.expanduser("~/AI"))
+
+def _objeto_id(objeto: str | None) -> str:
+    return str(objeto or "").removeprefix("acervo/").removeprefix("pessoal/")
 
 
 def situacao(
     obra: str,
     sujeito: str | None = None,
-    catalogo: CatalogoAcervo | None = None,
     pep: PEP | None = None,
     cache: Cache | None = None,
     painel: Painel | None = None,
-    raiz: str = RAIZ,
+    http=None,
 ) -> Envelope:
-    """Verifica a situação viva de uma obra na escada do acervo."""
+    """Verifica a situação viva de uma obra na escada do acervo.
+
+    `http` é o ponto de injeção do transporte (mesmo desenho de `AdaptadorAcervo`) —
+    os testes de contrato passam um cliente falso em vez de sair à rede.
+    """
     obra_query = (obra or "").strip()
     if not obra_query:
         return Envelope(linhas=[LinhaFonte(fonte=Fonte.ACERVO, cobertura=Cobertura.VAZIA)])
@@ -77,69 +88,30 @@ def situacao(
         except SemCache:
             pass
 
-    # 4. Leitura do acervo
+    # 4. Chamada à rota REST do motor_acervo
     try:
-        cat = catalogo if catalogo is not None else carrega_catalogo(raiz)
+        payload = _situacao_obra_http(obra_query, http=http)
     except FonteIndisponivel as e:
         if painel is not None:
             painel[Fonte.ACERVO].registra_falha()
         return Envelope(
-            linhas=[
-                LinhaFonte(
-                    fonte=Fonte.ACERVO,
-                    cobertura=Cobertura.FONTE_NAO_INDEXADA,
-                    causa=e.causa,
-                )
-            ]
+            linhas=[LinhaFonte(fonte=Fonte.ACERVO, cobertura=Cobertura.FONTE_NAO_INDEXADA,
+                               causa=e.causa)]
         )
     except Exception:
         if painel is not None:
             painel[Fonte.ACERVO].registra_falha()
         return Envelope(
-            linhas=[
-                LinhaFonte(
-                    fonte=Fonte.ACERVO,
-                    cobertura=Cobertura.FONTE_NAO_INDEXADA,
-                    causa=Causa.FORA_DO_AR,
-                )
-            ]
+            linhas=[LinhaFonte(fonte=Fonte.ACERVO, cobertura=Cobertura.FONTE_NAO_INDEXADA,
+                               causa=Causa.FORA_DO_AR)]
         )
 
     if painel is not None:
         painel[Fonte.ACERVO].registra_sucesso()
 
-    # 5. Localização da obra na cadeia viva
-    obra_achada: ObraInfo | None = None
-    query_norm = normaliza_termo(obra_query)
-
-    # Busca exata por ID
-    if obra_query in cat.obras:
-        obra_achada = cat.obras[obra_query]
-    elif query_norm in cat.obras_por_titulo:
-        obra_achada = cat.obras_por_titulo[query_norm][0]
-    else:
-        # Busca aproximada por título ou arquivo
-        for o in cat.obras.values():
-            tit_norm = normaliza_termo(o.titulo)
-            arq_norm = normaliza_termo(o.arquivo or "")
-            if query_norm == tit_norm or (o.arquivo and query_norm == arq_norm):
-                obra_achada = o
-                break
-            if query_norm in tit_norm or (o.arquivo and query_norm in arq_norm):
-                obra_achada = o
-                break
-
-    if obra_achada is None:
-        # Obra não encontrada no vivo -> resposta vazia
-        env_vazio = Envelope(
-            linhas=[
-                LinhaFonte(
-                    fonte=Fonte.ACERVO,
-                    cobertura=Cobertura.VAZIA,
-                    carimbo=cat.carimbo,
-                )
-            ]
-        )
+    # 5. Obra não encontrada -> envelope vazio (a API respondeu 404)
+    if payload is None:
+        env_vazio = Envelope(linhas=[LinhaFonte(fonte=Fonte.ACERVO, cobertura=Cobertura.VAZIA)])
         if cache is not None and chave_cache:
             try:
                 from .adaptadores.base import Resultado
@@ -149,67 +121,27 @@ def situacao(
                 pass
         return env_vazio
 
-    # 6. Avaliação de estado da cadeia viva
-    # Classificação
-    classificado = bool(
-        obra_achada.dominio or obra_achada.subdominio or cat.obra_trata_de.get(obra_achada.id)
-    )
-
-    impressoes = cat.impressoes_por_obra.get(obra_achada.id, [])
-    impressao_servindo = next((imp for imp in impressoes if imp.estado == "servindo"), None)
-
-    if not classificado:
-        degrau = str(EstadoConceito.ORFAO)
-        servivel = impressao_servindo is not None
-        desde = impressao_servindo.criada_em if impressao_servindo else None
-        impressao_id = impressao_servindo.id if impressao_servindo else None
-    elif impressao_servindo is not None:
-        degrau = str(EstadoConceito.ANCORADO)
-        servivel = True
-        desde = impressao_servindo.criada_em
-        impressao_id = impressao_servindo.id
-    elif impressoes:
-        degrau = str(EstadoConceito.DECLARADO_NAO_SERVINDO)
-        servivel = False
-        desde = None
-        impressao_id = impressoes[0].id
-    else:
-        degrau = str(EstadoConceito.SEM_OBRA_NAO_JULGADO)
-        servivel = False
-        desde = None
-        impressao_id = None
-
-    payload = {
-        "servivel": servivel,
-        "desde": desde,
-        "impressao_id": impressao_id,
-        "degrau": degrau,
+    # 6. Empacota o payload já resolvido no Envelope
+    conteudo = {
+        "servivel": payload["servivel"],
+        "desde": payload["desde"],
+        "impressao_id": payload["impressao_id"],
+        "degrau": payload["degrau"],
     }
+    conteudo_json = json.dumps(conteudo, ensure_ascii=False)
 
-    versao_val = (impressao_id or cat.carimbo.removeprefix("acervo:") or "sem-versao")[:12]
-    proc = Procedencia(
-        fonte=Fonte.ACERVO,
-        chave=f"acervo:{obra_achada.objeto_id}",
-        versao=Versao(tipo=VersaoTipo.DIGEST, valor=versao_val),
-    )
+    chave = f"acervo:{_objeto_id(payload.get('objeto'))}"
+    versao_val = (payload.get("impressao_id") or payload.get("carimbo") or "sem-versao")[:12]
+    proc = Procedencia(fonte=Fonte.ACERVO, chave=chave,
+                       versao=Versao(tipo=VersaoTipo.DIGEST, valor=versao_val))
+    casamento = (Casamento.EXATO if payload.get("casamento") == "exato"
+                else Casamento.APROXIMADO)
 
-    conteudo_json = json.dumps(payload, ensure_ascii=False)
-    ref = f"{obra_achada.titulo} — {degrau} (servivel={servivel})"
-
-    item = Item(
-        procedencia=proc,
-        conteudo=conteudo_json,
-        casamento=Casamento.EXATO if query_norm == normaliza_termo(obra_achada.titulo) else Casamento.APROXIMADO,
-    )
+    item = Item(procedencia=proc, conteudo=conteudo_json, casamento=casamento)
 
     env = Envelope(
-        linhas=[
-            LinhaFonte(
-                fonte=Fonte.ACERVO,
-                cobertura=Cobertura.NAO_CALIBRADA,
-                carimbo=cat.carimbo,
-            )
-        ],
+        linhas=[LinhaFonte(fonte=Fonte.ACERVO, cobertura=Cobertura.NAO_CALIBRADA,
+                           carimbo=payload.get("carimbo"))],
         itens=[item],
     )
 
