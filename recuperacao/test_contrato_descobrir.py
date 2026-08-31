@@ -289,3 +289,52 @@ def test_bin_descobrir_executa_e_emite_envelope():
     assert p.returncode == 0
     d = json.loads(p.stdout)
     assert "cobertura" in d
+
+
+# =============================================================================
+# Regressão: ramo `cache is not None` chama a API real do Cache (le/grava).
+# Bug corrigido: descobrir chamava cache.obtem (inexistente -> AttributeError)
+# e cache.grava com 4 args (assinatura é 3 -> TypeError); ambos escapavam do
+# except SemCache. Nenhum teste exercia o ramo, por isso passou. arq:0085.
+# =============================================================================
+
+
+class _CacheFalso:
+    """Cache mínimo que honra a API real (`le`/`grava`) — fake, não mock."""
+
+    def __init__(self, retorno=None):
+        self.retorno = retorno
+        self.leu: list = []
+        self.gravou: list = []
+
+    def le(self, fonte, ch):
+        self.leu.append((fonte, ch))
+        return self.retorno
+
+    def grava(self, fonte, ch, r):
+        self.gravou.append((fonte, ch, r))
+        return True
+
+
+def test_descobrir_miss_usa_api_real_do_cache():
+    """Miss: consulta `cache.le` e grava `(fonte, ch, Resultado)` — 3 args, sem estourar."""
+    from recuperacao.adaptadores.base import Resultado
+
+    cache = _CacheFalso(retorno=None)
+    env = descobrir(assunto="padrao", catalogo=catalogo_mock(), cache=cache)
+    assert env is not None
+    assert cache.leu, "descobrir deve consultar cache.le no miss"
+    assert cache.gravou, "descobrir deve gravar o resultado no miss"
+    for _fonte, _ch, r in cache.gravou:
+        assert isinstance(r, Resultado)
+
+
+def test_descobrir_hit_de_cache_retorna_sem_reler_acervo():
+    """Hit: `cache.le` devolve Resultado e descobrir devolve-o sem regravar."""
+    from recuperacao.adaptadores.base import Resultado
+
+    semente = descobrir(assunto="padrao", catalogo=catalogo_mock())
+    cache = _CacheFalso(retorno=Resultado(linha=semente.linhas[0], itens=semente.itens))
+    env = descobrir(assunto="padrao", catalogo=catalogo_mock(), cache=cache)
+    assert env.linhas[0].fonte == Fonte.ACERVO
+    assert not cache.gravou, "hit não deve regravar"

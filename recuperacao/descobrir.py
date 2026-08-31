@@ -104,7 +104,7 @@ def descobrir(
     if cache is not None:
         try:
             chave_cache = digest_consulta(assunto, filtros_canon, k, "nenhum")
-            hit = cache.obtem(Fonte.ACERVO, chave_cache)
+            hit = cache.le(Fonte.ACERVO, chave_cache)
             if hit is not None:
                 return Envelope(linhas=[hit.linha], itens=hit.itens)
         except SemCache:
@@ -250,7 +250,7 @@ def descobrir(
             try:
                 from .adaptadores.base import Resultado
 
-                cache.grava(Fonte.ACERVO, cat.carimbo, chave_cache, Resultado(linha=env_vazio.linhas[0]))
+                cache.grava(Fonte.ACERVO, chave_cache, Resultado(linha=env_vazio.linhas[0]))
             except SemCache:
                 pass
         return env_vazio
@@ -314,7 +314,7 @@ def descobrir(
         try:
             from .adaptadores.base import Resultado
 
-            cache.grava(Fonte.ACERVO, cat.carimbo, chave_cache, Resultado(linha=env.linhas[0], itens=env.itens))
+            cache.grava(Fonte.ACERVO, chave_cache, Resultado(linha=env.linhas[0], itens=env.itens))
         except SemCache:
             pass
 

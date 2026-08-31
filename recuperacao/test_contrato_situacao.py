@@ -252,3 +252,51 @@ def test_bin_situacao_executa_e_emite_payload():
     conteudo = json.loads(d["itens"][0]["conteudo"])
     assert "degrau" in conteudo
     assert "servivel" in conteudo
+
+
+# =============================================================================
+# Regressão: ramo `cache is not None` chama a API real do Cache (le/grava).
+# Mesmo bug de `descobrir` — cache.obtem/grava-4-args escapavam do except
+# SemCache. Trava o contrato de chamada. arq:0085.
+# =============================================================================
+
+
+class _CacheFalsoSit:
+    """Cache mínimo que honra a API real (`le`/`grava`)."""
+
+    def __init__(self, retorno=None):
+        self.retorno = retorno
+        self.leu: list = []
+        self.gravou: list = []
+
+    def le(self, fonte, ch):
+        self.leu.append((fonte, ch))
+        return self.retorno
+
+    def grava(self, fonte, ch, r):
+        self.gravou.append((fonte, ch, r))
+        return True
+
+
+def test_situacao_miss_usa_api_real_do_cache():
+    """Miss: consulta `cache.le` e grava `(fonte, ch, Resultado)` — 3 args, sem estourar."""
+    from recuperacao.adaptadores.base import Resultado
+
+    cache = _CacheFalsoSit(retorno=None)
+    env = situacao("Clean Architecture", catalogo=catalogo_situacao_mock(), cache=cache)
+    assert env is not None
+    assert cache.leu, "situacao deve consultar cache.le no miss"
+    assert cache.gravou, "situacao deve gravar o resultado no miss"
+    for _fonte, _ch, r in cache.gravou:
+        assert isinstance(r, Resultado)
+
+
+def test_situacao_hit_de_cache_retorna_sem_reler_acervo():
+    """Hit: `cache.le` devolve Resultado e situacao devolve-o sem regravar."""
+    from recuperacao.adaptadores.base import Resultado
+
+    semente = situacao("Clean Architecture", catalogo=catalogo_situacao_mock())
+    cache = _CacheFalsoSit(retorno=Resultado(linha=semente.linhas[0], itens=semente.itens))
+    env = situacao("Clean Architecture", catalogo=catalogo_situacao_mock(), cache=cache)
+    assert env.linhas[0].fonte == Fonte.ACERVO
+    assert not cache.gravou, "hit não deve regravar"
