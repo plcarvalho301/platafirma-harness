@@ -119,3 +119,27 @@ heurística. Régua geral: quando dois usos legítimos compartilham o mesmo argu
 (`--chapeu` serve tanto abrir-com-chapéu quanto trocar-de-chapéu), a intenção precisa
 de sinal próprio; espremê-la num proxy faz duas mudanças corretas se contradizerem
 quando compostas. Prova PELA TOOL, nas quatro classes (fábrica inclusa).
+
+## Verbo de leitura é a costura que troca substrato sem tocar consumidor (rota de máquina)
+
+Expor uma leitura interna in-process como VERBO não é conveniência de digitação: o verbo é o
+ponto de extensão (`descrição-como-interface`). O consumidor chama `motor <inst> conceito X` e
+não sabe se por baixo é SQL in-process hoje ou contrato de grafo (`motor_ontologia`) amanhã —
+troca-se a implementação num arquivo, consumidor intocado. É o Strangler na ordem certa: mantém
+o in-process vivo sob exceção declarada (ADR 0090, PIA2) até a peça substituta nascer.
+
+Rota de máquina é o DEFAULT do verbo de agente, não o `--json` opcional: JSON estável e
+determinístico, chave opaca, propriedade safe/idempotente declarada, erro como causa legível por
+modelo (não stack). O que compra a economia de token e para o agente de montar chamada errada é a
+`descrição`/manifest do verbo (o skill-ificável), não o SQL de dentro — o dono cravou isso na fita
+de 31/08. Ancoragem no acervo: Higginbotham «Offering CLIs for APIs» (CLI é consumidor de API +
+ferramenta de automação); Google AIP «Client».
+
+Guardrail que já mordeu: o verbo embrulha a MESMA função in-process (`conceitos.rede`/`veredito`),
+nunca uma SQL paralela — duas portas para o mesmo índice divergem (adaptador `acervo.py`, #2947). E
+é SEGUNDA porta: não reroteia o hot path do `/search` (subprocesso por inferência é imposto de
+latência).
+
+RETOMAR: construir `motor <inst> conceito <slug>` (payload v1 node-local:
+slug/existe/rotulo/outros_rotulos/obras_servindo/mais_amplo). Espec no card #2931; objeção no ADR
+0090 (arquitetura@45e0d3c). Execução "muito em breve", junto do rerefactor da recuperação (#2930).
