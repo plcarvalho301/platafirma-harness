@@ -26,27 +26,34 @@ O termo "capacidade" da lógica `capacidade : verbo : ferramenta` SEMPRE foi a
   nova. (Ex.: jaiminho serve `mensagem-externa`; toda "tela" é `canal/exposicao` sobre
   o objeto de outra capacidade.)
 
-## Resolução de identidade de cadeira: um ponto canônico, uma fonte (o ledger)
+## Resolução de identidade de cadeira: a fonte VIVA é a árvore, o ledger é histórico
 
-A tradução "nome do ator → cadeira" tem UM ponto canônico correto:
-`chat/comum/cadeiras.py::sufixo_canonico`. É o único resolvedor que lê a fonte
-canônica (ledger de vínculo, `registro/eventos-org.jsonl`, arq:0073) e aceita todas
-as formas de entrada — sufixo, slug com prefixo, MXID/localpart e, desde #2431, o
-nome humano (alias). Qualquer outro resolvedor é candidato a divergir.
+A tradução "nome do ator → cadeira" resolve por `chat/comum/cadeiras.py::sufixo_canonico`,
+e a fonte VIVA é a árvore `abertura/<cadeira>/` (arq:0073 §1), NUNCA o ledger de vínculo.
+O slug é o nome do diretório: PURO, minúsculo, sem prefixo `claudinho-`/`claudinha-`
+(arq:0073 §2). Prefixo e caixa alta na ENTRADA são tolerados e descartados; nunca
+produzidos de volta. Nome humano (alias) sai de `abertura/aliases.json` (dado vivo).
 
-- Fonte única de "quem é cadeira" é o LEDGER DE VÍNCULO, nunca um arquivo de roster
-  mantido à mão. Hazard medido (fita 27/08/2026): existiam 3 resolvedores divergentes
-  (`monta-sessao::_sufixo_sem_prefixo`, `fila::canoniza_persona`, `comum::sufixo_canonico`)
-  e 2 fontes (ledger vs `fila/.personas`). A fonte paralela envelhece em silêncio e a
-  divergência vira caixa fantasma — destinatário aceito que ninguém lê.
-- Nome humano (alias) é a ÚLTIMA forma tentada, atrás de sufixo/slug/MXID reais, para
-  que uma forma já válida nunca seja sequestrada. Primeiro-nome só resolve se único
-  entre os aliases; homônimo exige o nome inteiro. Acento e caixa se dobram.
-- Colapsar os 3 resolvedores em 1 lib compartilhada cruza venv (empacotamento) e é
-  decisão canônica → do dono; adiado. Até lá, o mínimo que mata a divergência sem
-  refatorar é unificar a FONTE: todo resolvedor lê o ledger (feito na fila, #2431).
-- Corolário: participante (jaiminho) não é cadeira e não está no ledger de vínculo;
-  fica em constante local do consumidor até a lib compartilhada existir.
+- **O ledger (`registro/eventos-org.jsonl`) é HISTÓRICO append-only — código vivo NÃO o
+  lê para resolver identidade.** Incidente medido (fita 01/09/2026, ordem do dono): 4
+  pontos vivos liam o ledger (`cadeiras.py`, `monta-sessao`, `fila_streams.py`,
+  `_persona-org.py`), e como o ledger guardava a forma antiga do slug (`claudinho-IA`),
+  o fóssil resolvia como vigente (arq:0074). Sintoma em produção: caixas de fila
+  DUPLICADAS na malha — `caixa:claudinho-TI` (com carta) ao lado de `caixa:ti` (vazia).
+  Regra durável: **event-sourcing tem o log e a projeção; o vivo lê a projeção (aqui, a
+  árvore), jamais o log.** Ler o log append-only para estado vivo carrega toda forma
+  velha que ele já gravou.
+- Existência da cadeira é o DIRETÓRIO em `abertura/`, não o `persona.md` (arq:0073 §7.5:
+  cadeira criada mas não redigida abre com peças indisponíveis, não some do roster). O
+  `persona.md` é o sinal da PEÇA persona, não da cadeira.
+- Nome humano (alias) é a ÚLTIMA forma tentada, atrás de slug/MXID/localpart reais, para
+  que uma forma já válida nunca seja sequestrada. Primeiro-nome só resolve se único entre
+  os aliases; homônimo exige o nome inteiro. Acento e caixa se dobram.
+- O ESCRITOR do ledger (`_persona-org.py`, verbo `persona`) e o leitor de consulta
+  histórica (`persona filme|foto`) continuam legítimos: o ledger é a história dos atos de
+  org. O que se proibiu é lê-lo para resolver o estado VIVO.
+- Corolário: participante (jaiminho) e ator interno (fabrica) não são cadeira; entram por
+  constante local (`_SAO_PARTICIPANTE`/`_ATORES_INTERNOS`) até a lib compartilhada existir.
 
 ## Fronteira instância-individual × instância-de-órgão vive no plano de acesso, não no de conhecimento
 
