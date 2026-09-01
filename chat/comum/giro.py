@@ -62,7 +62,13 @@ def grava_giro(
     Degradado: falha de conexão ou módulo ausente gera log em stderr e segue,
     sem levantar exceção.
     """
-    fid = (fita_id or os.environ.get("PF_FITA") or os.environ.get("PF_SESSAO") or "").strip()
+    # fita_id explicito manda: "" passado pelo chamador e recusa, nao gatilho de
+    # fallback. So None (argumento omitido) cai no env — senao um "" explicito
+    # gravaria giro ancorado no PF_SESSAO do ambiente, na fita errada.
+    if fita_id is None:
+        fid = (os.environ.get("PF_FITA") or os.environ.get("PF_SESSAO") or "").strip()
+    else:
+        fid = fita_id.strip()
     if not fid:
         return {"gravado": False, "motivo": "sem fita_id"}
     if prompt_texto is None and resposta_texto is None:
