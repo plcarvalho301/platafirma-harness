@@ -132,18 +132,38 @@ def _falha_json(msg: str, code: int):
 
 
 def canoniza_persona(p: str):
-    """Devolve o nome como esta no roster do ledger, ou None. Case-insensitive: o
-    humano digita "Claudinho-TI" e a caixa e "claudinho-TI" — sao a mesma
-    pessoa, e divergencia de caixa alta nao pode virar caixa nova."""
+    """Devolve o nome como esta no roster do ledger, ou None.
+
+    Resolve DUAS fossilizacoes de digitacao contra o mesmo roster canonico:
+    - case: "Claudinho-TI" -> "claudinho-TI" (divergencia de caixa alta nao vira
+      caixa nova);
+    - prefixo ausente: "ia" -> "claudinho-IA", "arquiteto" -> "claudinho-arquiteto".
+      Depois da conformacao que tirou "claudinho-*"/"claudinha-*" das referencias
+      (ordem do dono), o slug curto e a forma que as cadeiras e os verbos passam
+      (minuta --convoca, fila enviar). resolve_eu ja desfossilizava o REMETENTE;
+      esta funcao passa a desfossilizar tambem o DESTINATARIO, com a mesma regra,
+      para os dois lados baterem. Sem isto, "circular ia" caia em "persona
+      desconhecida: ia" mesmo com claudinho-IA vivo no ledger.
+
+    Match e sempre contra o ledger (nunca inventa nome): so retorna valor que
+    esta em personas_validas().
+    """
     validas = personas_validas()
     if not validas:
         return None
     if p in validas:
         return p
     baixo = p.lower()
-    for v in validas:
-        if v.lower() == baixo:
-            return v
+    # candidatos: o proprio, e o proprio com cada prefixo canonico. Todos
+    # comparados case-insensitive contra o roster, para cobrir case + prefixo
+    # de uma vez ("ia" -> "claudinho-IA", que difere em ambos).
+    candidatos = [baixo]
+    if not baixo.startswith(("claudinho-", "claudinha-")):
+        candidatos += ["claudinho-" + baixo, "claudinha-" + baixo]
+    for cand in candidatos:
+        for v in validas:
+            if v.lower() == cand:
+                return v
     return None
 
 
