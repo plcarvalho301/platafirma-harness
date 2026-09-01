@@ -102,6 +102,14 @@ def _monta_raiz(tmp_path: Path) -> Path:
                         "alias": "Testildo Testonildo"}) + "\n" +
              json.dumps({"cadeira": "claudinho-engenharia", "tipo": "PROVIMENTO"}) + "\n")
 
+    # Fonte VIVA de identidade (arq:0073 §1, incidente/ordem do dono): a árvore
+    # abertura/ e o aliases.json. O ledger acima permanece como HISTÓRICO (consulta),
+    # NÃO é lido para resolver identidade. `teste` tem alias; `engenharia` é cadeira
+    # viva sem alias, para exercitar a nota de omissão declarada.
+    _escreve(harness, "abertura/engenharia/persona.md", "# engenharia\n\nfixture.\n")
+    _escreve(harness, "abertura/aliases.json",
+             json.dumps({"teste": "Testildo Testonildo"}, ensure_ascii=False) + "\n")
+
     stub = _escreve(raiz, "bin/mesa", MESA_STUB)
     stub.chmod(stub.stat().st_mode | stat.S_IEXEC | stat.S_IXGRP | stat.S_IXOTH)
 
@@ -150,7 +158,7 @@ def test_json_pacote_e_objeto_unico_com_envelope_uniforme(raiz):
     dados = json.loads(proc.stdout)
 
     assert dados["cadeira"] == "teste"
-    assert dados["nome_canonico"] == "claudinho-teste"  # do ledger, não do alias da linha 1
+    assert dados["nome_canonico"] == "teste"  # slug puro da árvore (incidente/expurgo do prefixo)
     assert "fila" not in dados
 
     por_id = {p["peca"]: p for p in dados["pecas"]}
@@ -169,12 +177,14 @@ def test_json_pacote_e_objeto_unico_com_envelope_uniforme(raiz):
     assert dados["repos"]["platafirma-harness"]["frescor"] == "fresco"
 
 
-def test_nome_canonico_vem_do_ledger_nao_da_persona(raiz):
-    """A persona nova põe o ALIAS na linha 1 ('Você é Testildo...'); o canônico
-    ('claudinho-teste') só existe no ledger. Guarda do arq:0073 §1."""
+def test_nome_canonico_e_o_slug_puro_da_arvore(raiz):
+    """O nome canônico é o SLUG PURO minúsculo (arq:0073 §2, expurgo do prefixo/
+    incidente ordem do dono) — o próprio nome do diretório em abertura/, sem
+    claudinho-/claudinha- e sem o alias da linha 1."""
     dados = json.loads(_run(["teste", "--json"], raiz).stdout)
-    assert dados["nome_canonico"] == "claudinho-teste"
+    assert dados["nome_canonico"] == "teste"
     assert "Testildo" not in (dados["nome_canonico"] or "")
+    assert "claudinho-" not in (dados["nome_canonico"] or "")
 
 
 def test_fila_nao_e_peca_de_abertura(raiz):
@@ -218,9 +228,11 @@ def test_fora_do_quadro_nao_recebe_antirreabertura(raiz):
 
 
 def test_prefixo_claudinho_e_descartado(raiz):
+    """Prefixo fóssil na ENTRADA é tolerado e descartado; o canônico servido nunca
+    volta com prefixo — é o slug puro."""
     dados = json.loads(_run(["claudinho-teste", "--json"], raiz).stdout)
     assert dados["cadeira"] == "teste"
-    assert dados["nome_canonico"] == "claudinho-teste"
+    assert dados["nome_canonico"] == "teste"
 
 
 def test_cadeira_desconhecida_vira_objeto_de_erro_nunca_stdout_vazio(raiz):
@@ -241,10 +253,13 @@ def test_sem_cadeira_e_uso_incorreto_exit_2(raiz):
 
 
 def test_persona_ausente_nao_derruba_o_pacote(tmp_path):
-    """Cadeira válida no ledger mas sem persona.md redigida (backfill pendente):
-    persona sai indisponível-declarada, o pacote continua válido — nunca erro."""
+    """Cadeira cujo diretório existe em abertura/ mas cujo persona.md ainda não foi
+    redigido (backfill pendente): persona sai indisponível-declarada, o pacote
+    continua válido — nunca erro. O diretório é o que mantém a cadeira pedível."""
     raiz = _monta_raiz(tmp_path)
-    (raiz / "platafirma-harness" / "abertura" / "teste" / "persona.md").unlink()
+    persona = raiz / "platafirma-harness" / "abertura" / "teste" / "persona.md"
+    persona.unlink()
+    # o diretório permanece: a cadeira segue pedível, só a peça persona fica ausente.
     proc = _run(["teste", "--json"], raiz)
     assert proc.returncode == 0
     dados = json.loads(proc.stdout)
@@ -275,7 +290,7 @@ def test_sem_json_mantem_marcadores_de_texto(raiz):
     proc = _run(["teste"], raiz)
     assert proc.returncode == 0
     linhas = proc.stdout.splitlines()
-    assert linhas[0] == "== cadeira: claudinho-teste =="
+    assert linhas[0] == "== cadeira: teste =="
     assert any(l.startswith("===== oficio: platafirma-harness@abertura/oficio.md")
                for l in linhas)
     assert "{" not in proc.stdout
@@ -346,10 +361,11 @@ def test_alias_cadeiras_so_endereco_sem_prefixo_e_omissao_declarada(raiz):
     assert "engenharia" in (env["motivo"] or "")
 
 
-def test_alias_cadeiras_indisponivel_sem_ledger_nao_derruba_pacote(tmp_path):
-    """Ledger ausente é indisponibilidade declarada, não crash do montador."""
+def test_alias_cadeiras_indisponivel_sem_aliases_nao_derruba_pacote(tmp_path):
+    """aliases.json ausente é indisponibilidade declarada, não crash do montador.
+    (O ledger de vínculo não é mais lido para isto — incidente/ordem do dono.)"""
     raiz = _monta_raiz(tmp_path)
-    (raiz / "platafirma-harness" / "registro" / "eventos-org.jsonl").unlink()
+    (raiz / "platafirma-harness" / "abertura" / "aliases.json").unlink()
     dados = json.loads(_run(["teste", "--json"], raiz).stdout)
     env = {p["peca"]: p for p in dados["pecas"]}["alias-cadeiras"]
     assert env["frescor"] == "indisponivel"

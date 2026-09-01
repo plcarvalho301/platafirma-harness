@@ -73,22 +73,22 @@ def _rodar_cli(monkeypatch, capsys, argv, eu, rc):
 # ---------- formato --json, caminho feliz ----------
 
 def test_status_json_persona_unica_com_pendente(monkeypatch, capsys):
-    monkeypatch.setattr(fila_streams, "personas_validas", lambda: {"claudinho-TI"})
+    monkeypatch.setattr(fila_streams, "personas_validas", lambda: {"ti"})
     rc = FakeRC({
-        "claudinho-TI": {
+        "ti": {
             "xlen": 5,
             "groups": [{"name": "cadeira", "pending": 0, "lag": None, "last-delivered-id": "100-0"}],
             "xrange": [
-                ("100-1", {"id": "20260809T120000-claudinho-IA", "de": "claudinho-IA", "tipo": "pedido",
+                ("100-1", {"id": "20260809T120000-ia", "de": "ia", "tipo": "pedido",
                             "assunto": "a", "ref": "", "responde": "", "corpo": "x"}),
-                ("100-2", {"id": "20260809T130000-claudinho-IA", "de": "claudinho-IA", "tipo": "pedido",
+                ("100-2", {"id": "20260809T130000-ia", "de": "ia", "tipo": "pedido",
                             "assunto": "b", "ref": "", "responde": "", "corpo": "y"}),
             ],
-            "consumers": [{"name": "claudinho-TI", "idle": 45000, "pending": 0}],
+            "consumers": [{"name": "ti", "idle": 45000, "pending": 0}],
         },
     })
 
-    code, cap = _rodar_cli(monkeypatch, capsys, ["status", "claudinho-TI", "--json"], "claudinho-TI", rc)
+    code, cap = _rodar_cli(monkeypatch, capsys, ["status", "ti", "--json"], "ti", rc)
 
     assert code == 0
     assert cap.err == ""
@@ -97,7 +97,7 @@ def test_status_json_persona_unica_com_pendente(monkeypatch, capsys):
     item = saida[0]
     idade = item.pop("idade_mais_antiga_seg")
     assert item == {
-        "persona": "claudinho-TI",
+        "persona": "ti",
         "pendentes": 2,
         "total_historico": 5,
         "estado": "parada",
@@ -110,18 +110,18 @@ def test_status_json_persona_unica_com_pendente(monkeypatch, capsys):
 
 def test_status_json_todas_mistura_vazia_e_parada(monkeypatch, capsys):
     monkeypatch.setattr(fila_streams, "personas_validas",
-                         lambda: {"claudinho-TI", "claudinha-produto"})
+                         lambda: {"ti", "produto"})
     rc = FakeRC({
-        "claudinho-TI": {
+        "ti": {
             "xlen": 5,
             "groups": [{"name": "cadeira", "pending": 0, "lag": None, "last-delivered-id": "100-0"}],
             "xrange": [
-                ("100-1", {"id": "20260809T120000-claudinho-IA", "de": "claudinho-IA", "tipo": "pedido",
+                ("100-1", {"id": "20260809T120000-ia", "de": "ia", "tipo": "pedido",
                             "assunto": "a", "ref": "", "responde": "", "corpo": "x"}),
             ],
-            "consumers": [{"name": "claudinho-TI", "idle": 1000, "pending": 0}],
+            "consumers": [{"name": "ti", "idle": 1000, "pending": 0}],
         },
-        "claudinha-produto": {
+        "produto": {
             "xlen": 0,
             "groups": [],
             "xrange": [],
@@ -130,7 +130,7 @@ def test_status_json_todas_mistura_vazia_e_parada(monkeypatch, capsys):
     })
 
     code, cap = _rodar_cli(
-        monkeypatch, capsys, ["status", "--todas", "--json"], "claudinha-gestao-estrategica", rc
+        monkeypatch, capsys, ["status", "--todas", "--json"], "gestao-estrategica", rc
     )
 
     assert code == 0
@@ -138,24 +138,24 @@ def test_status_json_todas_mistura_vazia_e_parada(monkeypatch, capsys):
     saida = json.loads(cap.out)
     por_persona = {item["persona"]: item for item in saida}
 
-    assert por_persona["claudinha-produto"] == {
-        "persona": "claudinha-produto",
+    assert por_persona["produto"] == {
+        "persona": "produto",
         "pendentes": 0,
         "total_historico": 0,
         "estado": "vazia",
         "idade_mais_antiga_seg": None,
         "ultima_leitura_seg": None,
     }
-    assert por_persona["claudinho-TI"]["estado"] == "parada"
-    assert por_persona["claudinho-TI"]["pendentes"] == 1
-    assert por_persona["claudinho-TI"]["ultima_leitura_seg"] == 1
+    assert por_persona["ti"]["estado"] == "parada"
+    assert por_persona["ti"]["pendentes"] == 1
+    assert por_persona["ti"]["ultima_leitura_seg"] == 1
 
 
 def test_status_json_caixa_em_dia_sem_pendente(monkeypatch, capsys):
     """total > 0 mas pendentes == 0 -> em_dia; nunca leu -> ultima_leitura None."""
-    monkeypatch.setattr(fila_streams, "personas_validas", lambda: {"claudinho-TI"})
+    monkeypatch.setattr(fila_streams, "personas_validas", lambda: {"ti"})
     rc = FakeRC({
-        "claudinho-TI": {
+        "ti": {
             "xlen": 3,
             "groups": [{"name": "cadeira", "pending": 0, "lag": 0, "last-delivered-id": "100-0"}],
             "xrange": [],
@@ -163,12 +163,12 @@ def test_status_json_caixa_em_dia_sem_pendente(monkeypatch, capsys):
         },
     })
 
-    code, cap = _rodar_cli(monkeypatch, capsys, ["status", "claudinho-TI", "--json"], "claudinho-TI", rc)
+    code, cap = _rodar_cli(monkeypatch, capsys, ["status", "ti", "--json"], "ti", rc)
 
     assert code == 0
     saida = json.loads(cap.out)
     assert saida == [{
-        "persona": "claudinho-TI",
+        "persona": "ti",
         "pendentes": 0,
         "total_historico": 3,
         "estado": "em_dia",
@@ -180,35 +180,35 @@ def test_status_json_caixa_em_dia_sem_pendente(monkeypatch, capsys):
 # ---------- texto sem --json: nao muda nem uma linha ----------
 
 def test_status_texto_sem_json_inalterado(monkeypatch, capsys):
-    monkeypatch.setattr(fila_streams, "personas_validas", lambda: {"claudinho-TI"})
+    monkeypatch.setattr(fila_streams, "personas_validas", lambda: {"ti"})
     rc = FakeRC({
-        "claudinho-TI": {
+        "ti": {
             "xlen": 5,
             "groups": [{"name": "cadeira", "pending": 0, "lag": None, "last-delivered-id": "100-0"}],
             "xrange": [
-                ("100-1", {"id": "20260809T120000-claudinho-IA", "de": "claudinho-IA", "tipo": "pedido",
+                ("100-1", {"id": "20260809T120000-ia", "de": "ia", "tipo": "pedido",
                             "assunto": "a", "ref": "", "responde": "", "corpo": "x"}),
-                ("100-2", {"id": "20260809T130000-claudinho-IA", "de": "claudinho-IA", "tipo": "pedido",
+                ("100-2", {"id": "20260809T130000-ia", "de": "ia", "tipo": "pedido",
                             "assunto": "b", "ref": "", "responde": "", "corpo": "y"}),
             ],
-            "consumers": [{"name": "claudinho-TI", "idle": 45000, "pending": 0}],
+            "consumers": [{"name": "ti", "idle": 45000, "pending": 0}],
         },
     })
 
-    code, cap = _rodar_cli(monkeypatch, capsys, ["status", "claudinho-TI"], "claudinho-TI", rc)
+    code, cap = _rodar_cli(monkeypatch, capsys, ["status", "ti"], "ti", rc)
 
     assert code == 0
-    assert cap.out == "claudinho-TI: 2 nova(s) · 5 no historico (7 dias)\n"
+    assert cap.out == "ti: 2 nova(s) · 5 no historico (7 dias)\n"
     assert cap.err == ""
 
 
 # ---------- falha: objeto com "erro", nunca stdout vazio ----------
 
 def test_status_json_conexao_falha_vira_objeto_erro(monkeypatch, capsys):
-    monkeypatch.setattr(fila_streams, "personas_validas", lambda: {"claudinho-TI"})
+    monkeypatch.setattr(fila_streams, "personas_validas", lambda: {"ti"})
     rc = FakeRC({}, ping_ok=False)
 
-    code, cap = _rodar_cli(monkeypatch, capsys, ["status", "claudinho-TI", "--json"], "claudinho-TI", rc)
+    code, cap = _rodar_cli(monkeypatch, capsys, ["status", "ti", "--json"], "ti", rc)
 
     assert code == 1
     assert cap.err == ""
@@ -219,10 +219,10 @@ def test_status_json_conexao_falha_vira_objeto_erro(monkeypatch, capsys):
 
 def test_status_texto_conexao_falha_mensagem_solta_em_stderr(monkeypatch, capsys):
     """Sem --json o comportamento de hoje continua: mensagem em stderr, stdout vazio."""
-    monkeypatch.setattr(fila_streams, "personas_validas", lambda: {"claudinho-TI"})
+    monkeypatch.setattr(fila_streams, "personas_validas", lambda: {"ti"})
     rc = FakeRC({}, ping_ok=False)
 
-    code, cap = _rodar_cli(monkeypatch, capsys, ["status", "claudinho-TI"], "claudinho-TI", rc)
+    code, cap = _rodar_cli(monkeypatch, capsys, ["status", "ti"], "ti", rc)
 
     assert code == 1
     assert cap.out == ""
@@ -230,11 +230,11 @@ def test_status_texto_conexao_falha_mensagem_solta_em_stderr(monkeypatch, capsys
 
 
 def test_status_json_persona_desconhecida_vira_objeto_erro(monkeypatch, capsys):
-    monkeypatch.setattr(fila_streams, "personas_validas", lambda: {"claudinho-TI"})
+    monkeypatch.setattr(fila_streams, "personas_validas", lambda: {"ti"})
     rc = FakeRC({})
 
     code, cap = _rodar_cli(
-        monkeypatch, capsys, ["status", "claudinha-fantasma", "--json"], "claudinho-TI", rc
+        monkeypatch, capsys, ["status", "claudinha-fantasma", "--json"], "ti", rc
     )
 
     assert code == 1
@@ -247,10 +247,10 @@ def test_status_json_persona_desconhecida_vira_objeto_erro(monkeypatch, capsys):
 def test_status_json_todas_sem_espia_vira_objeto_erro(monkeypatch, capsys):
     """--todas continua so de claudinha-gestao-estrategica; com --json o
     controle de acesso nao muda, so o formato da falha."""
-    monkeypatch.setattr(fila_streams, "personas_validas", lambda: {"claudinho-TI"})
+    monkeypatch.setattr(fila_streams, "personas_validas", lambda: {"ti"})
     rc = FakeRC({})
 
-    code, cap = _rodar_cli(monkeypatch, capsys, ["status", "--todas", "--json"], "claudinho-TI", rc)
+    code, cap = _rodar_cli(monkeypatch, capsys, ["status", "--todas", "--json"], "ti", rc)
 
     assert code == 1
     assert cap.err == ""
@@ -268,20 +268,20 @@ def test_status_todas_via_cli_de_verdade(monkeypatch, capsys):
     posicional opcional e "--todas" virou flag de verdade (`--todas` deixa
     de ser comparado como valor de "persona"). Este teste passa pela CLI
     real (main() + argparse), não por um Namespace montado à mão."""
-    monkeypatch.setattr(fila_streams, "personas_validas", lambda: {"claudinho-TI"})
+    monkeypatch.setattr(fila_streams, "personas_validas", lambda: {"ti"})
     rc = FakeRC({
-        "claudinho-TI": {"xlen": 0, "groups": [], "xrange": [], "consumers": []},
+        "ti": {"xlen": 0, "groups": [], "xrange": [], "consumers": []},
     })
 
     code, cap = _rodar_cli(
-        monkeypatch, capsys, ["status", "--todas", "--json"], "claudinha-gestao-estrategica", rc
+        monkeypatch, capsys, ["status", "--todas", "--json"], "gestao-estrategica", rc
     )
 
     assert code == 0
     assert cap.err == ""
     saida = json.loads(cap.out)
     assert saida == [{
-        "persona": "claudinho-TI",
+        "persona": "ti",
         "pendentes": 0,
         "total_historico": 0,
         "estado": "vazia",
@@ -294,15 +294,15 @@ def test_status_sem_persona_e_sem_todas_vira_uso_incorreto(monkeypatch, capsys):
     """Nem persona nem --todas: antes o argparse pegava sozinho (persona
     obrigatória); com persona opcional, cmd_status precisa do próprio
     guard — confere que ele cobre o buraco que abriu."""
-    monkeypatch.setattr(fila_streams, "personas_validas", lambda: {"claudinho-TI"})
+    monkeypatch.setattr(fila_streams, "personas_validas", lambda: {"ti"})
     rc = FakeRC({})
 
-    code, cap = _rodar_cli(monkeypatch, capsys, ["status", "--json"], "claudinho-TI", rc)
+    code, cap = _rodar_cli(monkeypatch, capsys, ["status", "--json"], "ti", rc)
     assert code == 2
     saida = json.loads(cap.out)
     assert saida.get("erro")
 
-    code, cap = _rodar_cli(monkeypatch, capsys, ["status"], "claudinho-TI", rc)
+    code, cap = _rodar_cli(monkeypatch, capsys, ["status"], "ti", rc)
     assert code == 2
     assert cap.out == ""
     assert "uso" in cap.err
@@ -310,10 +310,10 @@ def test_status_sem_persona_e_sem_todas_vira_uso_incorreto(monkeypatch, capsys):
 
 def test_status_json_sem_identidade_vira_objeto_erro(monkeypatch, capsys):
     """PF_CADEIRA ausente e sem --eu: falha antes mesmo de tocar o Redis."""
-    monkeypatch.setattr(fila_streams, "personas_validas", lambda: {"claudinho-TI"})
+    monkeypatch.setattr(fila_streams, "personas_validas", lambda: {"ti"})
     rc = FakeRC({})
 
-    monkeypatch.setattr(sys, "argv", ["fila", "status", "claudinho-TI", "--json"])
+    monkeypatch.setattr(sys, "argv", ["fila", "status", "ti", "--json"])
     monkeypatch.delenv("PF_CADEIRA", raising=False)
     monkeypatch.delenv("FILA_RAIZ", raising=False)
     monkeypatch.setattr(fila_streams, "r_conn", lambda: rc)
@@ -332,27 +332,27 @@ def test_status_json_sem_identidade_vira_objeto_erro(monkeypatch, capsys):
 
 def test_conta_novas_detalhado_sem_pendente_idade_none():
     rc = FakeRC({
-        "claudinho-TI": {
+        "ti": {
             "xlen": 2,
             "groups": [{"name": "cadeira", "pending": 0, "lag": 0, "last-delivered-id": "100-0"}],
             "xrange": [],
-            "consumers": [{"name": "claudinho-TI", "idle": 5000, "pending": 0}],
+            "consumers": [{"name": "ti", "idle": 5000, "pending": 0}],
         },
     })
-    n, total, idade, ultima = fila_streams.conta_novas(rc, "claudinho-TI", detalhado=True)
+    n, total, idade, ultima = fila_streams.conta_novas(rc, "ti", detalhado=True)
     assert (n, total, idade, ultima) == (0, 2, None, 5)
 
 
 def test_conta_novas_nao_detalhado_e_tupla_de_dois():
     rc = FakeRC({
-        "claudinho-TI": {
+        "ti": {
             "xlen": 2,
             "groups": [{"name": "cadeira", "pending": 0, "lag": 0, "last-delivered-id": "100-0"}],
             "xrange": [],
             "consumers": [],
         },
     })
-    resultado = fila_streams.conta_novas(rc, "claudinho-TI")
+    resultado = fila_streams.conta_novas(rc, "ti")
     assert resultado == (0, 2)
 
 
@@ -367,20 +367,20 @@ def test_conta_novas_nao_detalhado_e_tupla_de_dois():
 
 def _rc_uma_caixa():
     return FakeRC({
-        "claudinho-TI": {
+        "ti": {
             "xlen": 1,
             "groups": [{"name": "cadeira", "pending": 0, "lag": None, "last-delivered-id": "100-0"}],
-            "xrange": [("100-1", {"id": "20260810T120000-claudinho-IA", "de": "claudinho-IA",
+            "xrange": [("100-1", {"id": "20260810T120000-claudinho-IA", "de": "ia",
                                    "tipo": "pedido", "assunto": "a", "ref": "", "responde": "",
                                    "corpo": "x"})],
-            "consumers": [{"name": "claudinho-TI", "idle": 1000, "pending": 0}],
+            "consumers": [{"name": "ti", "idle": 1000, "pending": 0}],
         },
     })
 
 
 def test_sonda_faz_status_todas(monkeypatch, capsys):
     """O caso de uso legitimo: medir profundidade de todas as caixas."""
-    monkeypatch.setattr(fila_streams, "personas_validas", lambda: {"claudinho-TI"})
+    monkeypatch.setattr(fila_streams, "personas_validas", lambda: {"ti"})
     rc = _rc_uma_caixa()
     code, cap = _rodar_cli(
         monkeypatch, capsys, ["status", "--todas", "--json"], "sonda", rc
@@ -395,7 +395,7 @@ def test_sonda_nao_le(monkeypatch, capsys):
     """ler consome (XACK): move ponteiro, entrega mensagem. Negado."""
     rc = FakeRC({})
     code, cap = _rodar_cli(
-        monkeypatch, capsys, ["ler", "claudinho-TI"], "sonda", rc
+        monkeypatch, capsys, ["ler", "ti"], "sonda", rc
     )
     assert code == 1
     assert "sonda" in (cap.out + cap.err)
@@ -418,7 +418,7 @@ def test_sonda_nao_envia(monkeypatch, capsys):
     code, _ = _rodar_cli(
         monkeypatch,
         capsys,
-        ["enviar", "claudinho-TI", "--tipo", "pedido", "--assunto", "x"],
+        ["enviar", "ti", "--tipo", "pedido", "--assunto", "x"],
         "sonda",
         rc,
     )
@@ -427,13 +427,13 @@ def test_sonda_nao_envia(monkeypatch, capsys):
 
 def test_sonda_nao_e_destinataria(monkeypatch, capsys):
     """Fora do roster do ledger de proposito: ninguem consegue escrever pra sonda."""
-    monkeypatch.setattr(fila_streams, "personas_validas", lambda: {"claudinho-TI"})
+    monkeypatch.setattr(fila_streams, "personas_validas", lambda: {"ti"})
     rc = FakeRC({})
     code, _ = _rodar_cli(
         monkeypatch,
         capsys,
         ["enviar", "sonda", "--tipo", "pedido", "--assunto", "x"],
-        "claudinho-TI",
+        "ti",
         rc,
     )
     assert code == 1
@@ -441,11 +441,11 @@ def test_sonda_nao_e_destinataria(monkeypatch, capsys):
 
 def test_espia_continua_valendo(monkeypatch, capsys):
     """A politica antiga nao mudou: sonda soma, nao substitui."""
-    monkeypatch.setattr(fila_streams, "personas_validas", lambda: {"claudinho-TI"})
+    monkeypatch.setattr(fila_streams, "personas_validas", lambda: {"ti"})
     rc = _rc_uma_caixa()
     code, _ = _rodar_cli(
         monkeypatch, capsys, ["status", "--todas", "--json"],
-        "claudinha-gestao-estrategica", rc,
+        "gestao-estrategica", rc,
     )
     assert code == 0
 
@@ -454,6 +454,6 @@ def test_cadeira_comum_continua_barrada_em_todas(monkeypatch, capsys):
     """Nem sonda nem espia: cadeira comum segue sem --todas."""
     rc = FakeRC({})
     code, _ = _rodar_cli(
-        monkeypatch, capsys, ["status", "--todas", "--json"], "claudinho-TI", rc
+        monkeypatch, capsys, ["status", "--todas", "--json"], "ti", rc
     )
     assert code == 1

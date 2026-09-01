@@ -1,13 +1,17 @@
 #!/usr/bin/env python3
 # _persona-org.py — ledger append-only dos atos de organização (interno de `persona`).
 # capacidade: organizacao
-# dono: claudinha-gestao-estrategica
+# dono: gestao-estrategica
 # Vocabulário emprestado do mdm-rh (dom_tipo_evento): a cadeira é o vínculo,
 # a gerência é a função. FOTO se reconstrói por replay; o ledger nunca se edita.
 import json, os, pathlib, sys, datetime as dt
 
 RAIZ = pathlib.Path(os.environ.get("PERSONA_REPO", pathlib.Path.home() / "AI/platafirma-harness"))
-LEDGER = RAIZ / "personas" / "eventos-org.jsonl"
+# registro/, nao personas/: a arvore personas/ foi tombada (arq:0073 §7). Este e o
+# ESCRITOR do ledger (ato de org) e o leitor de `filme`/`foto` (consulta historica);
+# resolucao de identidade VIVA nao passa por aqui — le a arvore abertura/ (incidente,
+# ordem do dono).
+LEDGER = RAIZ / "registro" / "eventos-org.jsonl"
 
 ATO_EVENTO = {
     "prover":    "PROVIMENTO",

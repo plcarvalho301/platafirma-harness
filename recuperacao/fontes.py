@@ -23,12 +23,12 @@ def _constroi_fontes(caminho: Path | str | None = None, texto: str | None = None
     infos = le_tabela_fontes(caminho=caminho, texto=texto)
     if not infos:
         infos = [
-            FonteInfo("board", "trabalho", "claudinho-TI", "HTTP", "exata", "", "", 0),
-            FonteInfo("fila", "mensagem", "claudinho-TI", "stream", "exata", "", "", 0),
-            FonteInfo("mesa", "memoria", "claudinho-IA", "postgres", "exata", "", "", 0),
-            FonteInfo("registro", "decisao", "claudinha-gestao-estrategica", "git", "exata", "", "", 0),
-            FonteInfo("wiki", "conhecimento", "claudinho-dados", "HTTP", "exata", "", "", 0),
-            FonteInfo("acervo", "conhecimento", "claudinho-dados", "HTTP", "semantica", "", "", 0),
+            FonteInfo("board", "trabalho", "ti", "HTTP", "exata", "", "", 0),
+            FonteInfo("fila", "mensagem", "ti", "stream", "exata", "", "", 0),
+            FonteInfo("mesa", "memoria", "ia", "postgres", "exata", "", "", 0),
+            FonteInfo("registro", "decisao", "gestao-estrategica", "git", "exata", "", "", 0),
+            FonteInfo("wiki", "conhecimento", "dados", "HTTP", "exata", "", "", 0),
+            FonteInfo("acervo", "conhecimento", "dados", "HTTP", "semantica", "", "", 0),
         ]
 
     membros = {info.slug.upper().replace("-", "_"): info.slug for info in infos}

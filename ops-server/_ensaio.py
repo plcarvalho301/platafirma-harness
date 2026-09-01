@@ -41,15 +41,15 @@ passo(1, "abrir sessao", c.get("/sessao", headers=H), lambda d: {
 passo(2, "ler a propria caixa", c.get("/msg", headers=H))
 
 r = passo(3, "mandar recado ao Elias (permitido)", c.post("/msg", headers=H, json={
-    "para": "claudinho-IA", "tipo": "handoff", "assunto": "ENSAIO — sera apagado",
+    "para": "ia", "tipo": "handoff", "assunto": "ENSAIO — sera apagado",
     "corpo": "ensaio fim a fim do canal mediado, 13/08. Mensagem de teste."}))
 msgid = r.json().get("msgid")
 
-passo(4, "mandar para claudinho-TI (deve NEGAR)", c.post("/msg", headers=H, json={
-    "para": "claudinho-TI", "tipo": "pedido", "assunto": "nao devia passar", "corpo": "x"}))
+passo(4, "mandar para ti (deve NEGAR)", c.post("/msg", headers=H, json={
+    "para": "ti", "tipo": "pedido", "assunto": "nao devia passar", "corpo": "x"}))
 
 passo(5, "ler caixa alheia por query string (nao ha parametro de caixa)",
-      c.get("/msg?caixa=claudinho-TI", headers=H), lambda d: {"caixa_lida": d.get("caixa")})
+      c.get("/msg?caixa=ti", headers=H), lambda d: {"caixa_lida": d.get("caixa")})
 
 print("\n[6] tool run_command pelo PEP (deve NEGAR)")
 print(json.dumps(s._autoriza("run_command", "run_command", "comando", "id",
@@ -65,9 +65,9 @@ passo(8, "sem token (deve dar 401)", c.get("/sessao"))
 f = s._fila_mod()
 rc = f.r_conn()
 apagadas = 0
-for mid, campos in rc.xrange("caixa:claudinho-IA"):
+for mid, campos in rc.xrange("caixa:ia"):
     if campos.get("id") == msgid:
-        rc.xdel("caixa:claudinho-IA", mid)
+        rc.xdel("caixa:ia", mid)
         apagadas += 1
 print(f"\n[limpeza] mensagem de ensaio removida da caixa do Elias: {apagadas}")
 p = subprocess.run([str(s.RAIZ / "bin" / "mesa"), "limpa", "jaiminho"],

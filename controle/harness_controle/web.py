@@ -42,7 +42,7 @@ from .verbos import BIN, chamar
 REPO_HARNESS = Path(__file__).resolve().parents[2]
 
 TIPOS_VALIDOS = {"decisao", "resposta", "pedido", "minuta", "demanda", "handoff"}
-PF_CADEIRA_TELA = os.environ.get("PF_CADEIRA_TELA", "claudinho-TI")
+PF_CADEIRA_TELA = os.environ.get("PF_CADEIRA_TELA", "ti")
 TAREFAS_PROJETO_PADRAO = os.environ.get("TAREFAS_PROJETO_PADRAO", "46")
 
 

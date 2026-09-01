@@ -906,8 +906,8 @@ def _ident_req(req) -> dict:
 ATOS_EXTERNOS = (
     ("msg_ler", "mensagem", DOM_MENSAGERIA, "caixa:{eu}",
      "GET /msg", "le a propria caixa; so o que chegou desde a ultima leitura"),
-    ("msg_enviar", "mensagem", DOM_MENSAGERIA, "caixa:claudinho-IA",
-     "POST /msg", "manda recado para claudinho-IA (Elias Elefante)"),
+    ("msg_enviar", "mensagem", DOM_MENSAGERIA, "caixa:ia",
+     "POST /msg", "manda recado para ia (Elias Elefante)"),
     ("rag_buscar", "acervo", "plataforma-acervo", "acervo:firma/*",
      "-", "leitura do acervo de trabalho — concedida em 15/08/2026; sem rota que a sirva"),
 )

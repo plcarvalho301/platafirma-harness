@@ -1,7 +1,7 @@
 #!/home/claudinho/AI/.venv-harness/bin/python
 # monta-sessao <cadeira> — monta o pacote de abertura A PARTIR DO CATALOGO.
 # capacidade: expediente
-# dono: claudinho-IA (politica de sessao) · claudinho-TI (montador)
+# dono: ia (politica de sessao) · ti (montador)
 #
 # Fase 5 do card #189 (spec_montagem-de-sessao §4 e §6). As pecas nao estao escritas
 # aqui dentro: o montador le a arvore abertura/**/*.md para as pecas-arquivo, a lista
@@ -44,7 +44,8 @@ import time
 RAIZ = os.environ.get("PF_RAIZ", os.path.expanduser("~/AI"))
 HARNESS = os.path.join(RAIZ, "platafirma-harness")
 ABERTURA = os.path.join(HARNESS, "abertura")
-LEDGER = os.path.join(HARNESS, "registro", "eventos-org.jsonl")
+# (ledger de vinculo NAO se le mais aqui — incidente/ordem do dono; identidade viva
+#  sai da arvore abertura/. `persona filme|foto` ainda o le, mas e outro verbo.)
 # arq:0073: morada unica em abertura/. Fonte de conceito e o golden record acervo.conceito
 # (verbo `acervo listar conceitos`); a tabela de rotas por cadeira e gerada dele para
 # `abertura/rotas-chapeu.json`, lido pelo roteador. O caminho conceitos.json foi aposentado
@@ -107,68 +108,52 @@ def _sufixo_sem_prefixo(cadeira):
 # virou o que ramifica: gatilho (camada abertura×chapéu) e volatilidade (ordem de injeção).
 PECAS_VERBO = [
     {"id": "arranque",        "artefato": "platafirma-harness@abertura/arranque.md",
-     "gatilho": {"evento": "ato"},      "regime": "ponteiro", "volatilidade": "estavel", "dono": "claudinho-IA"},
+     "gatilho": {"evento": "ato"},      "regime": "ponteiro", "volatilidade": "estavel", "dono": "ia"},
     {"id": "mesa",            "artefato": "verbo:mesa ver",
-     "gatilho": {"evento": "abertura"}, "regime": "valor",    "volatilidade": "volatil", "dono": "claudinho-dados"},
+     "gatilho": {"evento": "abertura"}, "regime": "valor",    "volatilidade": "volatil", "dono": "dados"},
     {"id": "cadernos-indice", "artefato": "verbo:mesa caderno",
-     "gatilho": {"evento": "abertura"}, "regime": "indice",   "volatilidade": "volatil", "dono": "claudinho-dados"},
+     "gatilho": {"evento": "abertura"}, "regime": "indice",   "volatilidade": "volatil", "dono": "dados"},
     {"id": "caderno-chapeu",  "artefato": "verbo:mesa caderno {chapeu}",
-     "gatilho": {"evento": "chapeu"},   "regime": "valor",    "volatilidade": "volatil", "dono": "claudinho-dados"},
+     "gatilho": {"evento": "chapeu"},   "regime": "valor",    "volatilidade": "volatil", "dono": "dados"},
     {"id": "fila-envelope",   "artefato": "verbo:fila ler",
-     "gatilho": {"evento": "ato"},      "regime": "indice",   "volatilidade": "volatil", "dono": "claudinho-IA"},
+     "gatilho": {"evento": "ato"},      "regime": "indice",   "volatilidade": "volatil", "dono": "ia"},
     {"id": "minutas",         "artefato": "verbo:minuta ler",
-     "gatilho": {"evento": "ato"},      "regime": "indice",   "volatilidade": "volatil", "dono": "claudinha-gestao-estrategica"},
+     "gatilho": {"evento": "ato"},      "regime": "indice",   "volatilidade": "volatil", "dono": "gestao-estrategica"},
     {"id": "tarefas-abertas", "artefato": "verbo:tarefas listar",
-     "gatilho": {"evento": "ato"},      "regime": "indice",   "volatilidade": "volatil", "dono": "claudinho-TI"},
+     "gatilho": {"evento": "ato"},      "regime": "indice",   "volatilidade": "volatil", "dono": "ti"},
     {"id": "catalogo-de-fontes",  "artefato": "platafirma-harness@docs/catalogo-de-fontes.md",
-     "gatilho": {"evento": "ato"},      "regime": "ponteiro", "volatilidade": "morna",   "dono": "claudinho-TI"},
+     "gatilho": {"evento": "ato"},      "regime": "ponteiro", "volatilidade": "morna",   "dono": "ti"},
 ]
 
 
 def _mapa_alias_cadeiras():
-    """'Nome Humano -> slug' por PROVIMENTO com alias no ledger de vinculo — so
-    endereco, sem 'head de', gerencia ou fronteira (decisao do dono, card #2438,
-    comentario #379: servir o organograma inteiro faz as instancias levantarem muro).
-    Zero arquivo novo: deriva do MESMO ledger que `_canonico` ja le. PROVIMENTO sem
-    alias (hoje so 'engenharia') sai OMITIDO com nota declarada — nao trava o
-    conserto. Cadeira ausente do ledger (hoje a fabrica, que nao tem nome) nao
-    aparece nem no mapa nem na nota: fabrica-como-destino-de-roteamento e materia da
-    persona dela, nao desta peca."""
-    por_slug, sem_alias = {}, set()
+    """'Nome Humano -> slug' do dado vivo abertura/aliases.json — so endereco, sem
+    'head de', gerencia ou fronteira (decisao do dono, card #2438, comentario #379:
+    servir o organograma inteiro faz as instancias levantarem muro). O ledger de
+    vinculo NAO se le (incidente/ordem do dono): o alias afetivo migrou para a arvore
+    viva. Cadeira viva (abertura/<slug>/persona.md) sem alias no mapa sai OMITIDA com
+    nota declarada — nao trava o conserto. fabrica e atores internos nao entram: nome
+    afetivo de destino de roteamento e materia da persona deles, nao desta peca."""
+    caminho = os.path.join(ABERTURA, "aliases.json")
     try:
-        with open(LEDGER, encoding="utf-8", errors="replace") as fh:
-            for linha in fh:
-                linha = linha.strip()
-                if not linha:
-                    continue
-                try:
-                    ev = json.loads(linha)
-                except ValueError:
-                    continue
-                if ev.get("tipo") != "PROVIMENTO":
-                    continue
-                cad = (ev.get("cadeira") or "").strip()
-                if not cad:
-                    continue
-                slug = _sufixo_sem_prefixo(cad)
-                alias = (ev.get("alias") or "").strip()
-                if alias:
-                    por_slug[slug] = alias
-                    sem_alias.discard(slug)
-                elif slug not in por_slug:
-                    sem_alias.add(slug)
-    except OSError as e:
+        with open(caminho, encoding="utf-8") as fh:
+            mapa = json.load(fh)
+    except (OSError, ValueError) as e:
         return None, f"{type(e).__name__}: {e}"
+    por_slug = {slug: alias for slug, alias in mapa.items() if slug and alias}
+    # cadeiras vivas sem alias no mapa: declara a omissao (mesma nota de antes).
+    vivas = {d for d in cadeiras_validas() if d not in ("fabrica",)}
+    sem_alias = vivas - set(por_slug)
     if not por_slug:
-        return None, "ledger sem nenhum PROVIMENTO com alias"
+        return None, "aliases.json sem nenhum alias"
     linhas = [f"{alias} -> {slug}"
               for slug, alias in sorted(por_slug.items(), key=lambda kv: kv[1])]
     texto = "\n".join(linhas) + "\n"
     motivo = None
     if sem_alias:
         faltantes = ", ".join(sorted(sem_alias))
-        texto += f"\n(sem alias no ledger, omitido: {faltantes})\n"
-        motivo = f"omitido por falta de alias no ledger: {faltantes}"
+        texto += f"\n(sem alias, omitido: {faltantes})\n"
+        motivo = f"omitido por falta de alias: {faltantes}"
     return texto, motivo
 
 
@@ -176,7 +161,7 @@ PECAS_CALCULADAS_FN = {"alias-cadeiras": _mapa_alias_cadeiras}
 PECAS_CALCULADAS = [
     {"id": "alias-cadeiras",  "artefato": "calc:alias-cadeiras",
      "gatilho": {"evento": "abertura"}, "regime": "valor", "volatilidade": "morna",
-     "dono": "claudinha-gestao-estrategica"},
+     "dono": "gestao-estrategica"},
 ]
 
 # id da peça-arquivo -> gatilho/regime/volatilidade, por posição na árvore abertura/.
@@ -487,48 +472,30 @@ def registra_pacote(cadeira, envelopes, montador_sha):
 
 # ------------------------------------------------------------------ montagem
 def _canonico(sufixo):
-    """Nome canonico (claudinho-<x>/claudinha-<x>) a partir do sufixo, pelo ledger de
-    vinculo (arq:0073 §1) — a persona do form novo poe o ALIAS na linha 1, nao o slug,
-    entao a linha 1 nao serve mais de fonte. Nao casando, devolve None: nao inventa."""
-    try:
-        achado = None
-        with open(LEDGER, encoding="utf-8", errors="replace") as fh:
-            for linha in fh:
-                linha = linha.strip()
-                if not linha:
-                    continue
-                try:
-                    cad = (json.loads(linha).get("cadeira") or "").strip()
-                except ValueError:
-                    continue
-                if _sufixo_sem_prefixo(cad) == sufixo.lower():
-                    achado = cad
-        return achado
-    except OSError:
-        return None
+    """Nome canonico da cadeira: o SLUG PURO minusculo (arq:0073 §2, incidente/ordem
+    do dono). O prefixo `claudinho-`/`claudinha-` foi expurgado do slug — nao ha mais
+    nome canonico distinto do sufixo. Vale se a cadeira existe na arvore viva
+    (abertura/<sufixo>/persona.md); nao existindo, devolve None: nao inventa.
+    O ledger de vinculo NAO se le aqui."""
+    suf = _sufixo_sem_prefixo(sufixo)
+    # Existência da cadeira é o DIRETÓRIO em abertura/ (arq:0073 §7.5: cadeira criada
+    # mas ainda não redigida abre com peças indisponíveis, não com erro). A peça
+    # persona é quem fica indisponível quando falta persona.md — não a cadeira.
+    if os.path.isdir(os.path.join(ABERTURA, suf)):
+        return suf
+    return None
 
 
 def cadeiras_validas():
-    """Sufixos do ledger de vinculo, uniao com subdirs ja escritos em abertura/. Cadeira
-    valida mas ainda nao redigida abre com pecas indisponiveis, nao com erro (0073 §7.5)."""
-    do_ledger = set()
-    try:
-        with open(LEDGER, encoding="utf-8", errors="replace") as fh:
-            for linha in fh:
-                try:
-                    cad = (json.loads(linha).get("cadeira") or "").strip()
-                except ValueError:
-                    continue
-                if cad:
-                    do_ledger.add(_sufixo_sem_prefixo(cad))
-    except OSError:
-        pass
+    """Sufixos vivos: subdirs de abertura/ que tem persona.md (arq:0073 §1). O ledger de
+    vinculo NAO se le (incidente/ordem do dono). Cadeira sem persona.md redigida nao
+    entra — mesma regra de ausencia de comum/cadeiras.py."""
     try:
         do_disco = {d for d in os.listdir(ABERTURA)
                     if os.path.isdir(os.path.join(ABERTURA, d))}
     except OSError:
         do_disco = set()
-    return sorted(do_ledger | do_disco)
+    return sorted(do_disco)
 
 
 # Trilha de LEITURA que o eixo-2 (disparo.py, #2317) le para medir D. Uma linha por
@@ -548,7 +515,7 @@ def dispara_acervo(cadeira, sujeito, pergunta):
     Reimplementar /search no adaptador foi o vacilo que este patch corrige. Motor frio
     ou fora do ar viram peca `indisponivel` DECLARADA, nunca excecao que trava a sessao.
     """
-    env = {"peca": "acervo-consultado", "dono": "claudinho-dados",
+    env = {"peca": "acervo-consultado", "dono": "dados",
            "ref": "verbo:rag_buscar(pergunta)", "regime": "valor",
            "volatilidade": "volatil", "sha": None, "tokens": 0}
     if not (pergunta or "").strip():

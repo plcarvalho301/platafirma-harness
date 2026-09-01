@@ -91,7 +91,7 @@ ADAPTADORES: dict[str, type[Adaptador]] = {
 # isso que o viés é aceitável e fica declarado aqui em vez de escondido no default.
 ALVO_LISTAGEM: dict[str, tuple[str, dict]] = {
     "board": ("", {}),
-    "fila": (os.environ.get("PF_CADEIRA", "claudinho-IA"), {}),
+    "fila": (os.environ.get("PF_CADEIRA", "ia"), {}),
     "mesa": ("", {}),
     "registro": ("", {}),
     "wiki": ("PlataFirma", {}),
@@ -101,7 +101,7 @@ ALVO_LISTAGEM: dict[str, tuple[str, dict]] = {
 # mediria o parser de alvo em vez de medir a resolução.
 CHAVE_FORA: dict[str, str] = {
     "board": "item:99999999",
-    "fila": "caixa:claudinho-IA/1-0",
+    "fila": "caixa:ia/1-0",
     "mesa": "mem:ia:inexistente#0",
     "registro": "adr:9999",
     "wiki": "wiki:PáginaQueNãoExiste_9999",

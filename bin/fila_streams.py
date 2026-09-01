@@ -1,7 +1,7 @@
 #!/home/claudinho/AI/.venv-harness/bin/python
 # fila — caixa de mensagens entre personas da PlataFirma, sobre a malha msg (Valkey/Streams).
 # capacidade: mensagem
-# dono: claudinho-IA
+# dono: ia
 #
 # Substrato: componente msg do motor (arq:0018, arq:0036). Stream por caixa,
 # "caixa:<persona>", com consumer group unico "cadeira" — a cadeira dona e o unico
@@ -16,7 +16,7 @@
 # `--tudo` e `--desde` sao leitura FRIA (XRANGE): nao movem o ponteiro, entao
 # reler historico nunca queima carta nova.
 #
-# RETENCAO: 7 dias, por XTRIM MINID no timer do motor (claudinho-TI, arq:0024).
+# RETENCAO: 7 dias, por XTRIM MINID no timer do motor (ti, arq:0024).
 # E a unica coisa que apaga carta. Mensagem e consumo curto; o que tem permanencia
 # vira card, commit ou wiki antes de vencer.
 import argparse
@@ -30,18 +30,21 @@ try:
 except ImportError:
     sys.exit("erro: modulo 'redis' nao instalado neste venv (uv pip install redis)")
 
-# Fonte UNICA de quem e destinatario valido: o LEDGER DE VINCULO (arq:0073), o mesmo
-# que monta-sessao e comum/cadeiras.py leem. Antes um roster mantido a mao divergia
-# do ledger (faltavam engenharia e politicas-publicas) e a divergencia virava caixa
-# fantasma (card #2431, decisao do dono: unificar a fonte).
-LEDGER = os.path.join(os.environ.get("PF_RAIZ", os.path.expanduser("~/AI")),
-                      "platafirma-harness", "registro", "eventos-org.jsonl")
-# Participantes (DMZ): tem caixa na malha mas NAO sao cadeira no ledger de vinculo,
-# entao nao saem dele. jaiminho e destinatario valido do Elias (ver PARES_EXCLUSIVOS).
-# Unificar TAMBEM esta lista com comum/cadeiras.py::_SAO_PARTICIPANTE exige a lib
-# compartilhada (colapso 3->1, adiado pelo dono); ate la fica esta constante local.
+# Fonte UNICA de quem e destinatario valido: a ARVORE VIVA `abertura/<cadeira>/`
+# (arq:0073 §1, estado vivo arq:0074), o mesmo que comum/cadeiras.py le. O ledger de
+# vinculo e HISTORICO append-only, para consulta — NENHUM codigo vivo o le para
+# resolver identidade (incidente, ordem do dono): o slug fossil `claudinho-<cadeira>`
+# do ledger resolvia como vigente. Antes um roster mantido a mao divergia da fonte
+# (faltavam engenharia e politicas-publicas), caixa fantasma (#2431); a arvore nao
+# diverge porque e a propria morada da persona.
+ABERTURA = os.path.join(os.environ.get("PF_RAIZ", os.path.expanduser("~/AI")),
+                        "platafirma-harness", "abertura")
+# Participantes (DMZ): tem caixa na malha mas NAO sao cadeira. jaiminho e destinatario
+# valido do Elias (ver PARES_EXCLUSIVOS). Unificar TAMBEM esta lista com
+# comum/cadeiras.py::_SAO_PARTICIPANTE exige a lib compartilhada (colapso 3->1, adiado
+# pelo dono); ate la fica esta constante local.
 PERSONAS_PARTICIPANTES = ("jaiminho",)
-ESPIA = "claudinha-gestao-estrategica"
+ESPIA = "gestao-estrategica"
 # Identidade de leitura automatica: processo sem sessao, sem caixa e sem mesa.
 # Nao entra no roster do ledger de proposito — assim nunca e destinatario valido.
 # Pode so medir profundidade (status); qualquer outro verbo e negado em so_leitura().
@@ -53,7 +56,7 @@ TIPOS_VALIDOS = {"decisao", "resposta", "pedido", "minuta", "demanda", "handoff"
 # Jaiminho existe em PERSONAS_PARTICIPANTES para ser destinatario VALIDO do Elias — sem isso o
 # `fila enviar` dele falharia na validacao —, e a allowlist e o que impede que estar
 # na lista signifique estar aberto as sete. Vale nos dois sentidos.
-PARES_EXCLUSIVOS = {"jaiminho": {"claudinho-IA"}}
+PARES_EXCLUSIVOS = {"jaiminho": {"ia"}}
 
 
 def so_par_permitido(de: str, para: str, json_mode: bool = False):
@@ -89,31 +92,24 @@ def garante_grupo(rc, persona: str):
 
 
 def personas_validas():
-    """Slugs canonicos de destinatario, do LEDGER DE VINCULO (mesma fonte que
-    monta-sessao e comum/cadeiras.py) mais os participantes de PERSONAS_PARTICIPANTES.
-    Deriva do ledger (card #2431: fonte unica), nao mais de um roster proprio.
+    """Slugs vivos de destinatario (minusculo puro), da ARVORE `abertura/<cadeira>/`
+    mais os participantes de PERSONAS_PARTICIPANTES. Mesma fonte que comum/cadeiras.py
+    (arq:0073 §1) — o ledger de vinculo NAO se le aqui (incidente, ordem do dono).
 
-    Ledger ausente/ilegivel devolve None — a lista ilegivel NAO e passe livre, e
-    valida_persona ja a trata como recusa alta. Ledger presente mas sem nenhuma
-    cadeira tambem devolve None pela mesma razao: fonte vazia nao valida ninguem."""
+    Arvore ausente/ilegivel devolve None — a lista ilegivel NAO e passe livre, e
+    valida_persona ja a trata como recusa alta. Arvore presente mas sem nenhuma
+    persona tambem devolve None pela mesma razao: fonte vazia nao valida ninguem."""
     try:
-        cadeiras = set()
-        with open(LEDGER, encoding="utf-8", errors="replace") as fh:
-            for linha in fh:
-                linha = linha.strip()
-                if not linha:
-                    continue
-                try:
-                    ev = json.loads(linha)
-                except ValueError:
-                    continue
-                if ev.get("tipo") != "PROVIMENTO":
-                    continue
-                slug = (ev.get("cadeira") or "").strip()
-                if slug:
-                    cadeiras.add(slug)
+        cadeiras = {
+            d.name
+            for d in os.scandir(ABERTURA)
+            if d.is_dir() and os.path.isfile(os.path.join(d.path, "persona.md"))
+        }
     except OSError:
         return None
+    # atores internos nao-cadeira (fabrica) tem persona.md mas nao sao destinatario
+    # de fila entre cadeiras; participantes entram por PERSONAS_PARTICIPANTES.
+    cadeiras.discard("fabrica")
     if not cadeiras:
         return None
     return cadeiras | set(PERSONAS_PARTICIPANTES)
@@ -132,21 +128,18 @@ def _falha_json(msg: str, code: int):
 
 
 def canoniza_persona(p: str):
-    """Devolve o nome como esta no roster do ledger, ou None.
+    """Devolve o slug vivo (minusculo puro) do roster, ou None.
 
-    Resolve DUAS fossilizacoes de digitacao contra o mesmo roster canonico:
-    - case: "Claudinho-TI" -> "claudinho-TI" (divergencia de caixa alta nao vira
-      caixa nova);
-    - prefixo ausente: "ia" -> "claudinho-IA", "arquiteto" -> "claudinho-arquiteto".
-      Depois da conformacao que tirou "claudinho-*"/"claudinha-*" das referencias
-      (ordem do dono), o slug curto e a forma que as cadeiras e os verbos passam
-      (minuta --convoca, fila enviar). resolve_eu ja desfossilizava o REMETENTE;
-      esta funcao passa a desfossilizar tambem o DESTINATARIO, com a mesma regra,
-      para os dois lados baterem. Sem isto, "circular ia" caia em "persona
-      desconhecida: ia" mesmo com claudinho-IA vivo no ledger.
+    Resolve duas fossilizacoes de digitacao contra o roster vivo (`personas_validas`,
+    da arvore `abertura/`):
+    - case: "TI"/"Ti" -> "ti" (divergencia de caixa nao vira caixa nova);
+    - prefixo fossil na ENTRADA: "claudinho-ia" -> "ia". O prefixo ainda em transito
+      (formas antigas guardadas por ai) e descartado; nunca e produzido de volta.
+      O slug puro e a forma que as cadeiras e os verbos passam (minuta --convoca,
+      fila enviar).
 
-    Match e sempre contra o ledger (nunca inventa nome): so retorna valor que
-    esta em personas_validas().
+    Match e sempre contra o roster (nunca inventa nome): so retorna valor que esta
+    em personas_validas().
     """
     validas = personas_validas()
     if not validas:
@@ -154,16 +147,13 @@ def canoniza_persona(p: str):
     if p in validas:
         return p
     baixo = p.lower()
-    # candidatos: o proprio, e o proprio com cada prefixo canonico. Todos
-    # comparados case-insensitive contra o roster, para cobrir case + prefixo
-    # de uma vez ("ia" -> "claudinho-IA", que difere em ambos).
-    candidatos = [baixo]
-    if not baixo.startswith(("claudinho-", "claudinha-")):
-        candidatos += ["claudinho-" + baixo, "claudinha-" + baixo]
-    for cand in candidatos:
-        for v in validas:
-            if v.lower() == cand:
-                return v
+    for pref in ("claudinho-", "claudinha-"):
+        if baixo.startswith(pref):
+            baixo = baixo[len(pref):]
+            break
+    for v in validas:
+        if v.lower() == baixo:
+            return v
     return None
 
 
@@ -199,16 +189,14 @@ def resolve_eu(args) -> str:
             )
         sys.stderr.write(
             "erro: nao sei quem esta operando a fila.\n"
-            "  exporte PF_CADEIRA=<cadeira>  (ex.: PF_CADEIRA=IA)  ou passe --eu <persona>.\n"
+            "  exporte PF_CADEIRA=<cadeira>  (ex.: PF_CADEIRA=ia)  ou passe --eu <persona>.\n"
             "  sem isso a fila nao abre caixa nenhuma — foi assim que uma caixa alheia ja foi\n"
             "  sobrescrita.\n"
         )
         sys.exit(2)
-    if not eu.startswith(("claudinho-", "claudinha-")):
-        for prefixo in ("claudinho-", "claudinha-"):
-            if prefixo + eu in (personas_validas() or set()):
-                return prefixo + eu
-    return eu
+    # Case/prefixo fossil na entrada (PF_CADEIRA legado, --eu digitado) -> slug puro.
+    canon = canoniza_persona(eu)
+    return canon if canon else eu
 
 
 def so_minha(eu: str, alvo: str, json_mode: bool = False):
