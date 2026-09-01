@@ -49,6 +49,7 @@ from datetime import date, datetime
 from pathlib import Path
 
 import anyio
+import redis
 from mcp.server.fastmcp import FastMCP
 from mcp.server.transport_security import TransportSecuritySettings
 from starlette.middleware.base import BaseHTTPMiddleware
@@ -60,6 +61,8 @@ OPS_NAME = os.environ.get("OPS_NAME", "claudinho-mcp")
 OPS_USER = os.environ.get("OPS_USER", "claudinho")
 RAIZ = Path(os.environ.get("OPS_ROOT", "/home/claudinho/AI"))
 OPS_AUTH_TOKEN = os.environ.get("OPS_AUTH_TOKEN", "")
+MEM_REDIS_HOST = os.environ.get("MEM_REDIS_HOST", "127.0.0.1")
+MEM_REDIS_PORT = int(os.environ.get("MEM_REDIS_PORT", "6380"))
 
 PF_HARNESS = Path(os.environ.get("PF_HARNESS", RAIZ / "platafirma-harness"))
 # CODIGO do PDP (pdp.py, identidade.py, pep.py) mora no repo — versionado, importavel.
@@ -98,6 +101,7 @@ _sessao: ContextVar[str] = ContextVar("sessao", default="-")
 # gera o ordem_id na abertura e mapeia sid->ordem_id; run_command le esse mapa e
 # injeta PF_ORDEM_ID no subprocesso, onde o motor ja o consome (bin/motor:281).
 _ordem_por_sid: dict[str, str] = {}
+_sessao_por_sid: dict[str, str] = {}
 
 
 # --- helpers puros ---
@@ -381,12 +385,12 @@ mcp = FastMCP(
 )
 
 
-def _run_blocking(command: str, d: Path, timeout: int, sid: str = "-", oid: str = "-") -> dict:
+def _run_blocking(command: str, d: Path, timeout: int, sessao_id: str = "-", oid: str = "-") -> dict:
     """Parte síncrona de run_command — roda em thread do anyio, nunca no event loop
     (ver docstring de run_command pra motivo)."""
     try:
         p = subprocess.Popen(["bash", "-c", command], cwd=d,
-                              env={**_env_subprocesso(), "PF_SESSAO": sid,
+                              env={**_env_subprocesso(), "PF_SESSAO": sessao_id,
                                    "PF_ORDEM_ID": oid},
                               stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                               start_new_session=True)
@@ -442,7 +446,8 @@ async def run_command(command: str, cwd: str = "", timeout: int = 120) -> dict:
     # mcp.get_context() nao acha o RequestContext e cairia no fallback '-' (#2911)
     t0 = time.monotonic()
     oid = _ordem_por_sid.get(sid, "-")
-    r = await anyio.to_thread.run_sync(_run_blocking, command, d, timeout, sid, oid)
+    sessao_id = _sessao_por_sid.get(sid, "-")
+    r = await anyio.to_thread.run_sync(_run_blocking, command, d, timeout, sessao_id, oid)
     _audit(tool="run_command", comando=command[:CMD_CAP],
            comando_truncado=len(command) > CMD_CAP, cwd=str(d),
            exit_code=r.get("exit_code"), erro=r.get("erro"),
@@ -696,12 +701,7 @@ async def monta_sessao(cadeira: str = "", atualizar: bool = True, chapeu: str = 
     t0 = time.monotonic()
     r = await anyio.to_thread.run_sync(_montar, cadeira, atualizar, chapeu, pergunta)
     _rot = (r.get("roteador") or {})
-    _audit(tool="monta_sessao", cadeira=cadeira, atualizar=atualizar,
-           resolvida=r.get("nome_canonico"), erro=r.get("erro"),
-           chapeu=(r.get("chapeu") or None),
-           pergunta=(pergunta or None),
-           roteador_via=_rot.get("via"), roteador_slug=_rot.get("slug"),
-           dur_ms=round((time.monotonic() - t0) * 1000))
+    _sessao_id = None
     # emite sessao_aberta AQUI (contexto MCP da tool), ancorado no MESMO
     # id(session) que run_command usa -> chave do join de D casa por construcao
     # dentro da conexao (#2902). A rota /sessao (externa) nao serve: cai em
@@ -709,13 +709,34 @@ async def monta_sessao(cadeira: str = "", atualizar: bool = True, chapeu: str = 
     if not r.get("erro"):
         _sid = _sessao_atual()
         _oid = "o" + datetime.now().astimezone().strftime("%Y%m%dT%H%M%S") + "-" + uuid.uuid4().hex[:6]
+        _sessao_id = uuid.uuid4().hex
         _ordem_por_sid[_sid] = _oid
         if len(_ordem_por_sid) > 4096:
             for _k in list(_ordem_por_sid)[:-2048]:
                 _ordem_por_sid.pop(_k, None)
+        _sessao_por_sid[_sid] = _sessao_id
+        if len(_sessao_por_sid) > 4096:
+            for _k in list(_sessao_por_sid)[:-2048]:
+                _sessao_por_sid.pop(_k, None)
+        _aberto_em = datetime.now().astimezone().isoformat(timespec="milliseconds")
+        try:
+            _cad = r.get("cadeira") or cadeira or r.get("nome_canonico", "-")
+            _rc = redis.Redis(host=MEM_REDIS_HOST, port=MEM_REDIS_PORT, decode_responses=True)
+            _val = json.dumps({"cadeira": _cad, "ordem_id": _oid, "aberto_em": _aberto_em}, ensure_ascii=False)
+            _rc.set(f"sessao:{_sessao_id}", _val, ex=172800)
+        except Exception as e:  # noqa: BLE001
+            print(f"[valkey] FALHOU persistir sessao:{_sessao_id}: {e!r}", file=sys.stderr, flush=True)
         r["ordem_id"] = _oid
+        r["sessao_id"] = _sessao_id
         _audit(tool="sessao", evento="sessao_aberta",
-               sujeito=r.get("nome_canonico", "-"), ordem_id=_oid, via="tool")
+               sujeito=r.get("nome_canonico", "-"), ordem_id=_oid, sessao_id=_sessao_id, via="tool")
+    _audit(tool="monta_sessao", cadeira=cadeira, atualizar=atualizar,
+           resolvida=r.get("nome_canonico"), erro=r.get("erro"),
+           chapeu=(r.get("chapeu") or None),
+           pergunta=(pergunta or None),
+           roteador_via=_rot.get("via"), roteador_slug=_rot.get("slug"),
+           dur_ms=round((time.monotonic() - t0) * 1000),
+           sessao_id=_sessao_id)
     return r
 
 
