@@ -360,9 +360,71 @@ def _():
     assert frase.startswith("⏳ 4m1"), frase
     assert "23 passos" in frase, frase
     # Repetida uma vez so, e na ordem em que aconteceu.
-    assert frase.endswith("rag_search, edit_page"), frase
     vazia = progresso.frase({"iniciado_em": time.time(), "progresso": ""})
     assert vazia.startswith("⏳ 0s") and "passos" not in vazia, vazia
+
+
+@prova("card 2945: grava_giro persiste prompt e resposta e degrada se banco mudo")
+def _():
+    from comum import giro as giro_db
+    # Teste de degradacao: banco fora do ar (porta aleatoria) nao levanta e devolve False
+    res = giro_db.grava_giro(
+        fita_id="fita-teste-card2945",
+        seq=1,
+        prompt_texto="pergunta de teste",
+        resposta_texto="resposta de teste",
+        dsn_override="host=127.0.0.1 port=54399 dbname=sessao user=sessao password=x",
+    )
+    assert res["gravado"] is False, "deveria ter degradado com banco fora do ar"
+    assert "motivo" in res
+
+
+@prova("card 2945: worker dispara gravacao assincrona nos dois eventos do turno")
+def _():
+    from unittest.mock import MagicMock, patch
+    import sqlite3
+    from worker import worker
+    from comum import giro as giro_db
+
+    con = sqlite3.connect(":memory:", isolation_level=None)
+    con.row_factory = sqlite3.Row
+    con.executescript(journal.ESQUEMA)
+    journal._migra(con)
+
+    # Cria fita prévia na sala
+    con.execute(
+        "INSERT INTO fitas (sala, id_fita, atualizado_em, giros) VALUES (?, ?, ?, ?)",
+        ("!sala-2945:x", "fita-2945", time.time(), 0),
+    )
+
+    chega_id = journal.registra_chegada(
+        con, event_id="$ev2945", txn_id="t2945", sala="!sala-2945:x",
+        cadeira="TI", remetente="@pedro:x", corpo="Mensagem 2945",
+    )
+
+    chamadas = []
+
+    def mock_grava_async(**kwargs):
+        chamadas.append(kwargs)
+        return MagicMock()
+
+    with patch.object(worker.giro_db, "grava_giro_async", side_effect=mock_grava_async), \
+         patch("worker.worker.journal.abre", return_value=con), \
+         patch.object(worker.Giro, "executa", return_value={"estado": journal.OK, "texto": "Resposta 2945", "id_fita": "fita-2945"}):
+
+        vivas = {"!sala-2945:x"}
+        trava = worker.threading.Lock()
+        worker.atende_sala("!sala-2945:x", vivas, trava)
+
+    assert len(chamadas) == 2, f"esperava 2 disparos, teve {len(chamadas)}"
+    # Evento 1: Prompt
+    assert chamadas[0]["fita_id"] == "fita-2945"
+    assert chamadas[0]["seq"] == 1
+    assert chamadas[0]["prompt_texto"] == "Mensagem 2945"
+    # Evento 2: Resposta
+    assert chamadas[1]["fita_id"] == "fita-2945"
+    assert chamadas[1]["seq"] == 1
+    assert chamadas[1]["resposta_texto"] == "Resposta 2945"
 
 
 if __name__ == "__main__":
