@@ -39,7 +39,7 @@ import time
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from comum import journal, rituais  # noqa: E402
+from comum import giro as giro_db, journal, rituais  # noqa: E402
 
 # Watchdog de SEGUNDA ordem sobre o silencio do stream. O de primeira ordem e do
 # proprio verbo: bin/chat tem `SILENCIO_S = 240` e, ao estourar, mata o grupo do
@@ -322,6 +322,20 @@ def atende_sala(sala: str, vivas: set, trava: threading.Lock) -> None:
             log(f"giro {job['id']} tomado: sala={sala} cadeira={job['cadeira']}")
             comeco = time.monotonic()
             giro = Giro(con, job)
+
+            silencioso = bool(job.get("silencioso"))
+            fita_previa = (job.get("id_fita") or journal.fita_da_sala(con, sala) or "").strip()
+            seq = journal.giros_da_sala(con, sala) + 1
+
+            # Evento 1: Prompt do dono — gravado assim que o giro e tomado (se fita ja conhecida)
+            if not silencioso and fita_previa:
+                giro_db.grava_giro_async(
+                    fita_id=fita_previa,
+                    seq=seq,
+                    prompt_texto=job["corpo"],
+                    cadeira=job["cadeira"],
+                )
+
             try:
                 fim = giro.executa()
             except Exception as erro:  # nunca deixa o job preso em curso
@@ -343,6 +357,26 @@ def atende_sala(sala: str, vivas: set, trava: threading.Lock) -> None:
                 f"{time.monotonic() - comeco:.1f}s ({giro.passos} passos)"
                 + ("" if venceu else " — descartado, o vigia chegou antes"))
             if venceu:
+                fita_final = (fim.get("id_fita") or fita_previa).strip()
+                if not silencioso and fita_final:
+                    # Se a fita nao era conhecida antes (giro 1), grava prompt + resposta juntos;
+                    # se ja era conhecida, grava a resposta (o prompt ja foi disparado no inicio).
+                    if not fita_previa:
+                        giro_db.grava_giro_async(
+                            fita_id=fita_final,
+                            seq=seq,
+                            prompt_texto=job["corpo"],
+                            resposta_texto=fim.get("texto", ""),
+                            cadeira=job["cadeira"],
+                        )
+                    else:
+                        giro_db.grava_giro_async(
+                            fita_id=fita_final,
+                            seq=seq,
+                            resposta_texto=fim.get("texto", ""),
+                            cadeira=job["cadeira"],
+                        )
+
                 try:
                     depois_do_giro(con, job, giro)
                 except Exception as erro:
