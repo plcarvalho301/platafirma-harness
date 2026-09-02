@@ -58,7 +58,12 @@ ESFORCOS = ("low", "medium", "high", "xhigh", "max", "ultracode")
 # Apelidos que o help declara ("an alias for the latest model"). Nome completo
 # (`claude-fable-5`) fica de fora de proposito: alias segue o modelo novo, nome
 # completo envelhece pinado numa versao que um dia sai do ar.
-MODELOS = ("opus", "sonnet", "haiku", "fable")
+MODELOS = ("opus", "sonnet", "haiku", "fable", "quinzinho", "qwen", "pandinha")
+
+# Aliases que rodam no motor LOCAL (ollama), nao no Claude. O worker escolhe o
+# motor por este mesmo alias (bin/chat: escolhe_motor). Aqui e so para verbalizar
+# na sala QUAL cerebro passou a responder — o dono pediu saber, 01/09/2026.
+MODELOS_LOCAIS = {"quinzinho": "qwen3.5:9b", "qwen": "qwen3.5:9b", "pandinha": "qwen3.5:9b"}
 
 # Chaves gravadas no journal. Sao o contrato com o worker: mudar o nome aqui
 # quebra o repasse, e o giro seguinte volta calado ao default.
@@ -120,9 +125,17 @@ def _fixa(con, sala: str, cmd: Comando, chave: str, enum: tuple[str, ...], rotul
             "Nada foi mudado."
         )
     journal.grava_preferencia(con, sala, chave, cmd.arg)
+    # Verbaliza o cerebro: modelo local (ollama) vs Claude, para o dono saber quem
+    # responde a partir de agora. So se aplica a `modelo`; esforco nao troca motor.
+    cerebro = ""
+    if chave == K_MODELO:
+        if cmd.arg in MODELOS_LOCAIS:
+            cerebro = f" — a partir de agora quem responde e o modelo LOCAL 🖥️ (`{MODELOS_LOCAIS[cmd.arg]}` no ollama), nao o Claude."
+        else:
+            cerebro = " — quem responde e o Claude ☁️ (modelo remoto)."
     return (
-        f"**{rotulo.capitalize()} desta sala: `{cmd.arg}`.** Vale do proximo giro "
-        "em diante, e volta ao default quando a sala rotacionar."
+        f"**{rotulo.capitalize()} desta sala: `{cmd.arg}`.**{cerebro} Vale do proximo "
+        "giro em diante, e volta ao default quando a sala rotacionar."
     )
 
 

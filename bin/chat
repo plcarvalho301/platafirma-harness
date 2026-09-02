@@ -712,6 +712,29 @@ def abre_slot_de_fita(cadeira, id_fita, env, passo_out):
     return (r.stdout or "").strip() or id_fita
 
 
+# --- selecao de motor por alias de modelo -----------------------------------
+# Modelo local (ollama) vs Claude Code, escolhido pelo alias que a sala pede em
+# `--modelo`. Sem alias local, o motor e o Code, como sempre. quinzinho = qwen
+# local; o alias amigavel resolve para a tag de ollama.
+ALIAS_LOCAL = {
+    "quinzinho": "qwen3.5:9b",
+    "qwen": "qwen3.5:9b",
+    "qwen3.5": "qwen3.5:9b",
+    "qwen3.5:9b": "qwen3.5:9b",
+    "pandinha": "qwen3.5:9b",  # apelido do dono; mesma familia por ora
+}
+
+
+def escolhe_motor(modelo, esforco):
+    """Motor local se o alias for de modelo ollama; Claude Code caso contrario."""
+    chave = (modelo or "").strip().lower()
+    if chave in ALIAS_LOCAL:
+        sys.path.insert(0, os.path.join(RAIZ, "platafirma-harness", "chat"))
+        from motores.ollama import MotorOllama
+        return MotorOllama(modelo=ALIAS_LOCAL[chave], esforco=esforco)
+    return MotorClaudeCode(modelo=modelo, esforco=esforco)
+
+
 def um_giro(motor, id_fita, pacote, corpo, cwd, env, passo_out):
     """Roda uma invocacao e devolve o dicionario cru do resultado. Nao decide
     estado final — quem decide e `despachar`, que tambem sabe se cabe reiniciar."""
@@ -905,7 +928,7 @@ def despachar(argv):
         }, ensure_ascii=False), flush=True)
         return 0
 
-    motor = MotorClaudeCode(modelo=modelo, esforco=esforco)
+    motor = escolhe_motor(modelo, esforco)
     servida = motor.versao_servida()
     aviso_versao = ""
     if servida != motor.VERSAO_PINADA:
