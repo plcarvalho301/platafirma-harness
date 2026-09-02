@@ -31,6 +31,12 @@ e não dispara. O que faz valer é o ato exigido: contestação só sai com ânc
 e quem não achou âncora não contesta. Mesma família: `N` da linha de estado só
 incrementa com algo concreto fechado.
 
+Corolário medido em 02/09: a âncora do gate tem de sair de UMA chamada, e quando o
+verbo não a serve, a régua e o verbo mudam JUNTOS — régua nova sobre retorno velho
+reincide (o caderno portfolio já dizia "entregue é estado, não adjetivo" 6 dias antes
+de a mesma falha voltar). E antes de propor regra, conferir se o substrato já a modela:
+o board já derivava entrega do pai; o vazamento era no relato, não no modelo.
+
 ## Caminho de injeção se mede, não se lembra
 
 Escrevi de memória a tabela de injeção das quatro superfícies e duas linhas estavam
