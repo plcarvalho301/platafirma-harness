@@ -68,6 +68,14 @@ class MotorOllama:
         except Exception:  # noqa: BLE001
             return None
 
+    def precisa_pacote(self, id_fita):
+        """True se o pacote de persona precisa ser montado. Fita nova sempre;
+        fita de resume que o ollama nunca viu tambem (senao responde generico)."""
+        if not id_fita:
+            return True
+        hist = os.path.join(RAIZ, "fitas", "ollama", f"{id_fita}.json")
+        return not os.path.exists(hist)
+
     def comando(self, id_fita, pacote, cwd):
         """argv do giro: chama o runner, que fala com o ollama e emite stream-json.
         Mesma logica de fita do Code — id proprio na fita nova, resume na existente."""
@@ -75,11 +83,23 @@ class MotorOllama:
                 "--modelo", self.modelo,
                 "--base-url", self.BASE_URL,
                 "--cwd", cwd]
-        if id_fita:
+        # Fita que o ollama JA conhece: resume puro, historico tem a persona.
+        # Fita que o Code abriu (ou 1o giro no ollama): o historico ollama nao
+        # existe, entao o --resume cairia SEM system e o modelo responderia
+        # generico ("Olga"). Nesse caso tratamos como abertura: passamos o pacote
+        # como --sistema mesmo em resume, mantendo o id da fita. Bug medido
+        # 01/09/2026 na transicao de motor no meio da sala.
+        import os as _os
+        hist = _os.path.join(RAIZ, "fitas", "ollama", f"{id_fita}.json") if id_fita else ""
+        if id_fita and _os.path.exists(hist):
             argv += ["--resume", id_fita]
+        elif id_fita:
+            # fita existe pro Code mas nao pro ollama: abre no ollama COM persona,
+            # preservando o id para a sala nao perder o fio.
+            argv += ["--session-id", id_fita]
+            if pacote:
+                argv += ["--sistema", pacote]
         else:
-            from importlib import import_module
-            # id_fita_novo mora em bin/chat; o runner tambem sabe gerar um se vazio.
             argv += ["--session-id", _novo_id()]
             if pacote:
                 argv += ["--sistema", pacote]

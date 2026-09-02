@@ -122,6 +122,10 @@ class MotorClaudeCode:
         # "2.1.220 (Claude Code)"
         return saida.split()[0] if saida else None
 
+    def precisa_pacote(self, id_fita):
+        """Code reinjeta pacote so na fita nova; resume usa --resume sem reinjetar."""
+        return not id_fita
+
     def comando(self, id_fita, pacote, cwd):
         """argv do giro. Fita nova leva o pacote; fita existente nao leva nada."""
         argv = [
@@ -955,7 +959,7 @@ def despachar(argv):
 
     pacote = None
     reiniciada = False
-    if not id_fita:
+    if motor.precisa_pacote(id_fita):
         pacote, erro = monta_pacote(cadeira, env, corpo)
         if pacote is None:
             return responde("erro", "", "", erro, False)
