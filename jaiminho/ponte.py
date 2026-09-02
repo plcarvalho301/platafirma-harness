@@ -33,6 +33,14 @@ from starlette.background import BackgroundTask
 from starlette.responses import JSONResponse, StreamingResponse
 from starlette.routing import Route
 
+# Borda publica (ops.platafirma.org) atras de Cloudflare bane User-Agent de
+# biblioteca com erro 1010 (browser_signature_banned) ANTES de qualquer decisao de
+# acesso — medido 02/09/2026. httpx manda UA proprio; a borda o recusa. Um UA de
+# browser passa o WAF, e o PEP do outro lado segue decidindo por JWT. Mitigacao ate
+# a rota interna host-to-host do ops-server existir (espelha o #2380 do jaiminho-server).
+_UA = ("Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
+       "(KHTML, like Gecko) Chrome/128.0 Safari/537.36")
+
 REALM = os.environ.get("OIDC_ISSUER", "https://auth.platafirma.org/realms/platafirma")
 OPS = os.environ.get("OPS_URL", "https://ops.platafirma.org")
 ACERVO = os.environ.get("ACERVO_URL", "http://jaiminho-server:8000")
@@ -40,7 +48,8 @@ CLIENT_ID = os.environ.get("JAIMINHO_CLIENT_ID", "")
 CLIENT_SECRET = os.environ.get("JAIMINHO_CLIENT_SECRET", "")
 
 _tok = {"valor": None, "expira": 0}
-_cli = httpx.AsyncClient(timeout=httpx.Timeout(600.0, connect=15.0))
+_cli = httpx.AsyncClient(timeout=httpx.Timeout(600.0, connect=15.0),
+                        headers={"User-Agent": _UA})
 
 
 async def _token():
@@ -74,6 +83,7 @@ async def _repassa(req, base):
     cabecalhos = {k: v for k, v in req.headers.items()
                   if k.lower() not in ("host", "authorization", "content-length")}
     cabecalhos["Authorization"] = f"Bearer {await _token()}"
+    cabecalhos["User-Agent"] = _UA
     pedido = _cli.build_request(req.method, base, headers=cabecalhos,
                                 content=corpo, params=req.query_params)
     resposta = await _cli.send(pedido, stream=True)
