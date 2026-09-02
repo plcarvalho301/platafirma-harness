@@ -19,6 +19,7 @@ uso:
   acervo extrato [destino]                   foto do acervo para ler fora da bancada
   acervo listar  conceitos [--json]          golden record acervo.conceito (referência)
   acervo listar  ferramental [--json]        golden record acervo.ferramental (3 níveis)
+  acervo registrar <verbo>|--todos           ESCREVE verbo no golden record (do cabeçalho)
   acervo stack   ver|import|rm               topologia de deploy: lê e ESCREVE acervo.stack
   acervo ferramenta <nome> [--json]          o que e <nome> e qual o verbo certo
   acervo adr <lista|<codigo>|--<entidade>>   consulta registro de decisões de arquitetura (ADR)
@@ -51,6 +52,7 @@ case "$ATO" in
   bancada)         exec "$ATOS/bancada" "$@" ;;
   extrato)         exec "$ATOS/extrato" "$@" ;;
   listar)          exec "$ATOS/listar"  "$@" ;;
+  registrar)       exec "$ATOS/registrar" "$@" ;;
   stack)           exec "$ATOS/stack"   "$@" ;;
   ferramenta)      exec "$ATOS/ferramenta" "$@" ;;
   adr)             exec "$ATOS/adr"     "$@" ;;
