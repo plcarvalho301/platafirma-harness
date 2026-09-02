@@ -43,7 +43,12 @@ uso:
   tarefas ler|ver <id>                    item em texto: cabeçalho, ancestrais,
                                           corpo e filhas diretas
   tarefas criar "<título>" [--desc "<txt>"|--desc-stdin]
-                [--nivel épico|feature|story|task] [--cadeira <c>] [--pai <id>]
+                [--nivel épico|feature|story] [--cadeira <c>] [--pai <id>]
+                                          default: story. task só por `dt admitir`.
+                                          Nascer fora de `captada`, ou sair dela, exige o
+                                          corpo no padrão do nível (arq:0096)
+  tarefas modelo <épico|feature|story|task>
+                                          esqueleto do corpo, com os rótulos que a API exige
   tarefas comentar <id> ["<txt>"]         cria comentário (entidade própria — card #390,
                                           não altera o corpo do item); sem texto, lê stdin
   tarefas comentarios <id>                lista os comentários do item, em ordem
@@ -63,7 +68,8 @@ uso:
                                           como PENDENTE. `recusado` exige --motivo.
   tarefas sub <pai> <filho>               declara <filho> filho de <pai>
   tarefas dt <listar|admitir|vencidos>    balde de débito técnico (rito §4); `dt` sem
-                                          sub lista os atos
+                                          sub lista os atos. admitir: "<problema>" --solucao
+                                          "<txt>" --medido-em <data> --evidencia <...>
   tarefas estados                         os estados do registro, com fase
   tarefas api <MÉTODO> <caminho>          escotilha, sem corpo
   tarefas api-corpo <MÉTODO> <caminho>    escotilha, corpo JSON em stdin
@@ -375,7 +381,10 @@ assinar() {
 criar() {
   descarta_projeto "${1:-}" && shift
   local titulo="${1:?uso: tarefas criar \"<título>\" [opções]}"; shift || true
-  local desc="" nivel="task" cadeira="$QUEM" pai="" classe="planejado"
+  # DEFAULT É STORY (arq:0096, dono 02/09/2026): task é débito técnico e nasce só por
+  # `tarefas dt admitir`. Medido antes da virada: 390 tasks, 156 órfãs, 13 stories com
+  # filha task — o default `task` fazia da task uma "story sem nome".
+  local desc="" nivel="story" cadeira="$QUEM" pai="" classe="planejado" via_dt="${TAREFAS_VIA_DT:-}"
   while [ $# -gt 0 ]; do
     case "$1" in
       --desc)       desc="$2"; shift 2 ;;
@@ -395,7 +404,11 @@ criar() {
     épico|epico|0)   n=0 ;;
     feature|1)       n=1 ;;
     story|2)         n=2 ;;
-    task|3)          n=3 ;;
+    task|3)          n=3
+                     if [ -z "$via_dt" ]; then
+                       echo "recusado: task é débito técnico e nasce por \`tarefas dt admitir \"<problema>\" --solucao \"<txt>\" --medido-em <data> --evidencia <...>\`. Trabalho de execução é story (arq:0096)." >&2
+                       exit 2
+                     fi ;;
     *) echo "nível desconhecido: $nivel (épico, feature, story, task)" >&2; exit 2 ;;
   esac
   local html=""
@@ -517,6 +530,48 @@ fechar() {
   mover "$id" "$como" "$@"
 }
 
+# ESQUELETO DO CORPO POR NÍVEL — arq:0096. É o que a recusa da API manda imprimir
+# (`tarefas modelo <nível>`). Os rótulos aqui e em `logica.CAMPOS_DO_CORPO` são os
+# mesmos: a API é quem recusa; este verbo só evita que a cadeira adivinhe a grafia.
+modelo() {
+  case "${1:-}" in
+    épico|epico) cat <<'M'
+Problema: como é hoje — o fato, sem número (o número vai em Medida)
+Resultado: quem passa a conseguir o quê (público, não usuário); outcome marcado "não fecha card"
+Medida: escala · medidor · valor hoje · mínimo aceitável — UMA linha
+Fora: o que NÃO entra neste épico
+Quebra: <data> — features #a #b #c (referência datada, não contrato)
+M
+    ;;
+    feature) cat <<'M'
+Problema: como é hoje — o fato, sem número (o número vai em Medida)
+Resultado: quem passa a conseguir o quê (público, não usuário); outcome marcado "não fecha card"
+Medida: escala · medidor · valor hoje · mínimo aceitável — UMA linha
+Fora: o que NÃO entra nesta feature
+Sai quando: predicado ponta a ponta — o comando/consulta que prova a capacidade INTEIRA, verdadeiro/falso
+Continuidade: o mecanismo que sustenta (quem passa a depender) — não fecha card
+Quebra: <data> — stories #a #b #c (referência datada, não contrato)
+M
+    ;;
+    story) cat <<'M'
+Negócio: #<feature> — só o ponteiro; nada de contexto de negócio aqui
+Ambiente: repo absoluto · como instalar · o que está de pé e não se derruba · credenciais (nunca impressas)
+Onde: arquivo, função, linha aproximada · peça análoga a imitar, se existir
+Passos: numerados, um por ação, comando literal
+Aceite: o comando que prova + o número que tem de dar
+Travas: imperativo + motivo — o que não decidir, onde parar e comentar no card
+Entrega: branch fabrica/<card>-<slug> de main · SHA + saída do aceite no comentário · sem merge em main
+M
+    ;;
+    task) cat <<'M'
+Problema encontrado: o fato medido (verbo | arquivo:linha, data)
+Solução proposta: o que fazer — palpite serve, desde que escrito
+M
+    ;;
+    *) echo "uso: tarefas modelo <épico|feature|story|task>" >&2; exit 2 ;;
+  esac
+}
+
 # Filho declara o pai, e o pai tem de ser de nível estritamente MENOR — a restrição é do
 # banco (`pai_nivel`, escrito por subconsulta), não deste verbo. Recusa vem nomeada da API.
 subtarefa() {
@@ -602,15 +657,22 @@ dt_listar() {
 # rito, e é essa linha que `listar` lê para marcar "medido: sim".
 dt_admitir() {
   local titulo="${1:?uso: tarefas dt admitir \"<txt>\" --medido-em <data> --evidencia <verbo|arquivo:linha> [--cadeira <c>]}"; shift || true
-  local medido_em="" evidencia="" cadeira="$QUEM"
+  local medido_em="" evidencia="" cadeira="$QUEM" solucao=""
   while [ $# -gt 0 ]; do
     case "$1" in
       --medido-em) medido_em="$2"; shift 2 ;;
       --evidencia) evidencia="$2"; shift 2 ;;
+      --solucao)   solucao="$2";   shift 2 ;;
       --cadeira)   cadeira="$2";   shift 2 ;;
       *) echo "opção desconhecida: $1" >&2; exit 2 ;;
     esac
   done
+  # arq:0096: a forma da task é "Problema encontrado > Solução proposta", e nada mais. A
+  # API recusa task sem os dois rótulos; a recusa aqui só chega antes e diz a flag.
+  if [ -z "$solucao" ]; then
+    echo "recusado: DT sem --solucao não entra. A forma da task é 'Problema encontrado > Solução proposta' (arq:0096); a solução pode ser um palpite, mas tem de estar escrita." >&2
+    exit 2
+  fi
   # A RECUSA É O PONTO DO VERBO. Sem evidência não há DT: suspeita vira medição ou morre
   # (rito §1). Data também é obrigatória — "medido quando" é parte da linha do rito.
   if [ -z "$evidencia" ]; then
@@ -623,8 +685,10 @@ dt_admitir() {
   fi
   local desc; desc="MEDIDO ${medido_em} — evidência: ${evidencia}
 
-${titulo}"
-  PF_ESTADO_INICIAL="${PF_ESTADO_INICIAL:-captada}" \
+Problema encontrado: ${titulo}
+
+Solução proposta: ${solucao}"
+  PF_ESTADO_INICIAL="${PF_ESTADO_INICIAL:-captada}" TAREFAS_VIA_DT=1 \
     criar "$titulo" --nivel task --cadeira "$cadeira" --pai "$DT_PAI" --desc "$desc"
 }
 
@@ -702,6 +766,7 @@ case "$cmd" in
   apagar-comentario) apagar_comentario "${1:?uso: tarefas apagar-comentario <id> <cid>}" "${2:?cid}" ;;
   assinar)     assinar "${1:?uso: tarefas assinar <id> --aprovador <cadeira> [--decisao aprovado|recusado] [--motivo \"<txt>\"]}" "${@:2}" ;;
   sub)         subtarefa "${1:?pai}" "${2:?filho}" ;;
+  modelo)      modelo "${1:-}" ;;
   estados)     estados ;;
   dt)          dt "$@" ;;
   projetos)    echo "não há projeto neste modelo: o recorte é por eixo (cadeira, estado, nível)." >&2; exit 2 ;;
