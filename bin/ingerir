@@ -1,0 +1,484 @@
+#!/usr/bin/env python3
+# ingerir — cliente fino da API de lote do acervo
+# capacidade: incorporacao
+# dono: claudinho-dados
+# use para: ingestão em lote de obras e páginas wiki datadas
+# atos: ato=<pasta> (via --lote); flags --apply, --motor, --ate, --ocr, --autor, --colecao, --json
+import argparse
+import csv
+import hashlib
+import json
+import mimetypes
+import os
+import re
+import sys
+import time
+import urllib.parse
+import xml.etree.ElementTree as ET
+import zipfile
+
+import requests
+
+HARNESS_DIR = os.path.dirname(os.path.dirname(os.path.realpath(__file__)))
+if HARNESS_DIR not in sys.path:
+    sys.path.insert(0, HARNESS_DIR)
+
+try:
+    from recuperacao.adaptadores.motor_acervo_rest import BASE as DEFAULT_BASE, TOKEN as DEFAULT_TOKEN
+except ImportError:
+    DEFAULT_BASE = "http://127.0.0.1:8100"
+    DEFAULT_TOKEN = ""
+
+BASE = (os.environ.get("RAG_API_BASE") or DEFAULT_BASE).rstrip("/")
+TOKEN = os.environ.get("RAG_API_TOKEN") or DEFAULT_TOKEN
+
+_FANTASMA_EXTS = (
+    ".sidecar.json", ".sidecar.yaml", ".sidecar.yml",
+    ".manifest", ".csv", ".jsonl", ".ods",
+)
+_FANTASMA_NAMES = {
+    "manifest.json", "manifest.yaml", "inventario.csv", "fila-lote.jsonl",
+}
+_RE_WIKI_DATADO = re.compile(r"^(?:wiki/)?(.+?)@(\d{4}-\d{2}-\d{2})\.md$", re.IGNORECASE)
+
+USO = """uso:
+  ingerir --lote <pasta> --motor <inst> [opções]
+
+opções obrigatórias:
+  --lote <pasta>         pasta com arquivos do lote a ingerir
+  --motor <inst>         instância do motor (ex: --motor rag)
+
+opções adicionais:
+  --apply                aplica o lote (default: falso, dry-run do plano)
+  --ate <degrau>         degrau alvo: catalogar | chunk | embed | vetor (default: vetor)
+  --ocr                  autoriza extração OCR em arquivos escaneados (default: false)
+  --autor <slug>         curador do lote (default: cadeira da sessão ou 'dados')
+  --colecao <slug>       coleção do acervo: firma | pessoal (default: firma)
+  --json                 emite resultado em formato JSON bruto
+"""
+
+
+def falha_indeterminavel(erro_ou_resp):
+    print("indeterminavel")
+    if isinstance(erro_ou_resp, requests.Response):
+        try:
+            pj = erro_ou_resp.json()
+            print(json.dumps(pj, indent=2, ensure_ascii=False))
+        except Exception:
+            print(json.dumps({
+                "type": "about:blank",
+                "title": "FonteIndisponivel",
+                "status": erro_ou_resp.status_code,
+                "detail": erro_ou_resp.text,
+            }, indent=2, ensure_ascii=False))
+    else:
+        print(json.dumps({
+            "type": "about:blank",
+            "title": "FonteIndisponivel",
+            "status": 503,
+            "detail": f"Motor acervo indisponível em {BASE}: {erro_ou_resp}",
+        }, indent=2, ensure_ascii=False))
+    sys.exit(1)
+
+
+def e_arquivo_fantasma(nome_ou_caminho: str) -> bool:
+    nome = os.path.basename(nome_ou_caminho).lower()
+    if nome in _FANTASMA_NAMES:
+        return True
+    return any(nome.endswith(ext) for ext in _FANTASMA_EXTS)
+
+
+def extrair_classificacao_de_dict(r: dict) -> dict:
+    c = {}
+    if r.get("titulo"):
+        c["titulo"] = r["titulo"]
+    if r.get("dominio"):
+        c["dominio"] = r["dominio"]
+    if r.get("subdominio"):
+        c["subdominio"] = r["subdominio"]
+    if r.get("especie"):
+        c["especie"] = r["especie"]
+    concs_raw = r.get("conceitos") or r.get("conceito") or r.get("trata_de")
+    if concs_raw:
+        concs = [x.strip() for x in re.split(r"[,;]", concs_raw) if x.strip()]
+        if concs:
+            c["conceitos"] = concs
+    if r.get("emitido_por"):
+        em = [x.strip() for x in re.split(r"[,;]", r["emitido_por"]) if x.strip()]
+        if em:
+            c["emitido_por"] = em
+    if r.get("publicacao"):
+        c["publicacao"] = r["publicacao"]
+    if r.get("id_canonico"):
+        c["id_canonico"] = r["id_canonico"]
+    if r.get("forca"):
+        fo = [x.strip() for x in re.split(r"[,;]", r["forca"]) if x.strip()]
+        if fo:
+            c["forca"] = fo
+    return c
+
+
+def ler_sidecar_csv(caminho: str) -> dict[str, dict]:
+    resultado = {}
+    try:
+        with open(caminho, newline="", encoding="utf-8-sig") as f:
+            reader = csv.DictReader(f)
+            for row in reader:
+                r = {k.strip().lower(): (v.strip() if v else "") for k, v in row.items() if k}
+                arq = r.get("arquivo")
+                if not arq:
+                    continue
+                classif = extrair_classificacao_de_dict(r)
+                resultado[arq] = classif
+                resultado[os.path.basename(arq)] = classif
+    except Exception as e:
+        sys.stderr.write(f"ingerir: aviso: falha ao ler sidecar CSV {caminho}: {e}\n")
+    return resultado
+
+
+def ler_sidecar_ods(caminho: str) -> dict[str, dict]:
+    resultado = {}
+    NS = "{urn:oasis:names:tc:opendocument:xmlns:table:1.0}"
+    TX = "{urn:oasis:names:tc:opendocument:xmlns:text:1.0}"
+    try:
+        with zipfile.ZipFile(caminho) as z:
+            raiz = ET.fromstring(z.read("content.xml"))
+        linhas = []
+        for t in raiz.iter(f"{NS}table"):
+            if t.get(f"{NS}name") != "Classificacao":
+                continue
+            for row in t.iter(f"{NS}table-row"):
+                cel = []
+                for c in row.iter(f"{NS}table-cell"):
+                    rep = int(c.get(f"{NS}number-columns-repeated", "1"))
+                    if rep > 200:
+                        break
+                    txt = "".join("".join(x.itertext()) for x in c.iter(f"{TX}p"))
+                    cel.extend([txt] * rep)
+                linhas.append(cel)
+            break
+        if len(linhas) >= 2:
+            cab = [str(c).strip().lower() for c in linhas[0]]
+            for cel in linhas[1:]:
+                if not any(cel):
+                    continue
+                r = {cab[i]: (cel[i].strip() if i < len(cel) else "") for i in range(len(cab)) if cab[i]}
+                arq = r.get("arquivo")
+                if not arq:
+                    continue
+                classif = extrair_classificacao_de_dict(r)
+                resultado[arq] = classif
+                resultado[os.path.basename(arq)] = classif
+    except Exception as e:
+        sys.stderr.write(f"ingerir: aviso: falha ao ler sidecar ODS {caminho}: {e}\n")
+    return resultado
+
+
+def escanear_pasta(pasta: str) -> tuple[list[tuple[str, str]], dict[str, dict]]:
+    sidecars = {}
+    arquivos_conteudo = []
+
+    for raiz, _, arqs in os.walk(pasta):
+        for a in sorted(arqs):
+            if a.startswith("."):
+                continue
+            fp = os.path.join(raiz, a)
+            low = a.lower()
+            if low.endswith(".csv"):
+                sidecars.update(ler_sidecar_csv(fp))
+            elif low.endswith(".ods"):
+                sidecars.update(ler_sidecar_ods(fp))
+
+    for raiz, dirs, arqs in os.walk(pasta):
+        dirs[:] = [d for d in dirs if not d.startswith(".")]
+        for a in sorted(arqs):
+            if a.startswith("."):
+                continue
+            if e_arquivo_fantasma(a):
+                continue
+            fp = os.path.join(raiz, a)
+            rel = os.path.relpath(fp, pasta).replace(os.sep, "/")
+            arquivos_conteudo.append((rel, fp))
+
+    return arquivos_conteudo, sidecars
+
+
+def extrair_titulo_de_md(caminho: str) -> str | None:
+    try:
+        with open(caminho, "r", encoding="utf-8", errors="replace") as f:
+            for _ in range(15):
+                linha = f.readline()
+                if not linha:
+                    break
+                s = linha.strip()
+                if s.startswith("# ") and not s.startswith("##"):
+                    t = s.lstrip("#").strip()
+                    if t:
+                        return t
+    except Exception:
+        pass
+    return None
+
+
+def subir_objeto(caminho: str, sha256: str, colecao: str, headers: dict) -> None:
+    tam = os.path.getsize(caminho)
+    ct = mimetypes.guess_type(caminho)[0]
+    if caminho.lower().endswith(".md"):
+        ct = "text/markdown"
+    elif caminho.lower().endswith(".pdf"):
+        ct = "application/pdf"
+    if not ct:
+        ct = "application/octet-stream"
+
+    h = {
+        **headers,
+        "Content-Length": str(tam),
+        "Content-Type": ct,
+    }
+    url = f"{BASE}/acervo/objetos/{sha256}?colecao={urllib.parse.quote(colecao)}"
+    try:
+        with open(caminho, "rb") as f:
+            resp = requests.put(url, data=f, headers=h)
+    except requests.exceptions.RequestException as e:
+        falha_indeterminavel(e)
+
+    if resp.status_code not in (201, 204):
+        if resp.status_code >= 500:
+            falha_indeterminavel(resp)
+        sys.stderr.write(f"ingerir: erro ao subir objeto {sha256} ({resp.status_code}): {resp.text}\n")
+        sys.exit(1)
+
+
+def formatar_tabela_plano(lote: dict) -> str:
+    linhas = []
+    resumo = lote.get("resumo", {})
+    total = len(lote.get("itens", []))
+    linhas.append(f"Plano de Ingestão: lote {lote.get('id')} (dry-run)")
+    linhas.append(f"Autor: {lote.get('autor')} · Motor: {lote.get('motor')} · Até: {lote.get('ate')} · OCR: {lote.get('ocr')} · Coleção: {lote.get('colecao')}")
+    linhas.append(f"Resumo: total={total} | criar={resumo.get('criar', 0)} | edicao={resumo.get('edicao', 0)} | ja_ingerido={resumo.get('ja_ingerido', 0)} | bloqueada={resumo.get('bloqueada', 0)} | reprovado={resumo.get('reprovado', 0)}")
+    linhas.append("")
+    linhas.append(f"{'#':<3} {'Arquivo':<40} {'Título':<45} {'Veredito':<14} {'Portões / Detalhe'}")
+    linhas.append("-" * 130)
+    for it in lote.get("itens", []):
+        pos = str(it.get("posicao", 0))
+        arq = it.get("arquivo") or "-"
+        if len(arq) > 38:
+            arq = arq[:35] + "..."
+        tit = it.get("titulo") or "-"
+        if len(tit) > 43:
+            tit = tit[:40] + "..."
+        ver = it.get("veredito") or "-"
+        detalhes = []
+        for p in it.get("portoes", []):
+            if p.get("resultado") != "aprovado":
+                detalhes.append(f"{p.get('portao')}:{p.get('title', p.get('resultado'))}")
+        det = ", ".join(detalhes) if detalhes else "todos aprovados"
+        linhas.append(f"{pos:<3} {arq:<40} {tit:<45} {ver:<14} {det}")
+    return "\n".join(linhas)
+
+
+def formatar_tabela_aplicado(lote: dict) -> str:
+    linhas = []
+    resumo = lote.get("resumo", {})
+    total = len(lote.get("itens", []))
+    feito = resumo.get("feito", 0)
+    falhou = resumo.get("falhou", 0)
+    bloqueada = resumo.get("bloqueada", 0)
+    edicao = resumo.get("edicao", 0)
+    pulado = sum(1 for it in lote.get("itens", []) if it.get("estado") in ("pulado", "parado"))
+    linhas.append(f"Execução de Ingestão: lote {lote.get('id')}")
+    linhas.append(f"Estado: {lote.get('estado')} · Autor: {lote.get('autor')} · Motor: {lote.get('motor')} · Até: {lote.get('ate')}")
+    linhas.append(f"Resumo: total={total} | feito={feito} | edicao={edicao} | bloqueada={bloqueada} | pulado={pulado} | falhou={falhou}")
+    linhas.append("")
+    linhas.append(f"{'#':<3} {'Arquivo':<40} {'Título':<45} {'Veredito':<12} {'Estado':<12} {'Degrau':<12} {'Detalhe'}")
+    linhas.append("-" * 145)
+    for it in lote.get("itens", []):
+        pos = str(it.get("posicao", 0))
+        arq = it.get("arquivo") or "-"
+        if len(arq) > 38:
+            arq = arq[:35] + "..."
+        tit = it.get("titulo") or "-"
+        if len(tit) > 43:
+            tit = tit[:40] + "..."
+        ver = it.get("veredito") or "-"
+        est = it.get("estado") or "-"
+        deg = it.get("degrau_alcancado") or "-"
+        det = ""
+        if it.get("problem"):
+            det = it["problem"].get("detail") or it["problem"].get("title") or str(it["problem"])
+        elif it.get("portoes"):
+            for p in it["portoes"]:
+                if p.get("resultado") != "aprovado":
+                    det = f"{p.get('title', p.get('portao'))}: {p.get('detail', '')}"
+                    break
+        linhas.append(f"{pos:<3} {arq:<40} {tit:<45} {ver:<12} {est:<12} {deg:<12} {det}")
+    return "\n".join(linhas)
+
+
+def main():
+    parser = argparse.ArgumentParser(add_help=False)
+    parser.add_argument("--lote", dest="lote", default=None)
+    parser.add_argument("--motor", dest="motor", default=None)
+    parser.add_argument("--apply", dest="apply", action="store_true", default=False)
+    parser.add_argument("--ate", dest="ate", default="vetor")
+    parser.add_argument("--ocr", dest="ocr", action="store_true", default=False)
+    parser.add_argument("--autor", dest="autor", default=None)
+    parser.add_argument("--colecao", dest="colecao", default="firma")
+    parser.add_argument("--json", dest="como_json", action="store_true", default=False)
+    parser.add_argument("-h", "--help", "--ajuda", dest="ajuda", action="store_true", default=False)
+
+    args, desconhecidos = parser.parse_known_args()
+
+    if args.ajuda or not args.lote:
+        sys.stderr.write(USO + "\n")
+        if not args.lote and not args.ajuda:
+            sys.stderr.write("ingerir: erro: --lote <pasta> é obrigatório\n")
+        sys.exit(2)
+
+    if not args.motor:
+        sys.stderr.write(USO + "\n")
+        sys.stderr.write("ingerir: erro: --motor <inst> é obrigatório (ex: --motor rag)\n")
+        sys.exit(2)
+
+    if not os.path.isdir(args.lote):
+        sys.stderr.write(f"ingerir: erro: pasta de lote não encontrada: {args.lote}\n")
+        sys.exit(1)
+
+    if args.ate not in ("catalogar", "chunk", "embed", "vetor"):
+        sys.stderr.write(f"ingerir: erro: degrau --ate inválido: {args.ate}\n")
+        sys.exit(2)
+
+    autor = args.autor
+    if not autor:
+        cad = os.environ.get("PF_CADEIRA", "").strip().lower()
+        if cad:
+            cad = cad.removeprefix("claudinho-").removeprefix("claudinha-")
+            autor = cad
+        else:
+            autor = "dados"
+
+    headers = {}
+    if TOKEN:
+        headers["authorization"] = f"Bearer {TOKEN}"
+
+    arquivos, sidecars = escanear_pasta(args.lote)
+    if not arquivos:
+        sys.stderr.write(f"ingerir: erro: nenhum arquivo de conteúdo encontrado em {args.lote}\n")
+        sys.exit(1)
+
+    itens = []
+    for rel, fp in arquivos:
+        with open(fp, "rb") as f:
+            corpo = f.read()
+        sha256 = hashlib.sha256(corpo).hexdigest()
+
+        subir_objeto(fp, sha256, args.colecao, headers)
+
+        classif = sidecars.get(rel) or sidecars.get(os.path.basename(rel)) or {}
+        classif = dict(classif)
+        titulo = classif.pop("titulo", None)
+        if not titulo and fp.lower().endswith(".md"):
+            titulo = extrair_titulo_de_md(fp)
+        if not titulo:
+            titulo = os.path.splitext(os.path.basename(rel))[0]
+
+        m_wiki = _RE_WIKI_DATADO.match(rel)
+        if m_wiki:
+            pagina = m_wiki.group(1)
+            edicao = m_wiki.group(2)
+            origem = {
+                "tipo": "pagina",
+                "endereco": f"wiki://{pagina}",
+                "objeto": f"acervo/{sha256}",
+                "edicao": edicao,
+            }
+        else:
+            origem = {
+                "tipo": "objeto",
+                "objeto": f"acervo/{sha256}",
+            }
+
+        item = {
+            "titulo": titulo,
+            "arquivo": rel,
+            "origem": origem,
+        }
+        if classif:
+            item["classificacao"] = classif
+        itens.append(item)
+
+    payload = {
+        "autor": autor,
+        "motor": args.motor,
+        "ate": args.ate,
+        "ocr": args.ocr,
+        "colecao": args.colecao,
+        "itens": itens,
+    }
+
+    try:
+        resp = requests.post(f"{BASE}/acervo/lotes", json=payload, headers=headers)
+    except requests.exceptions.RequestException as e:
+        falha_indeterminavel(e)
+
+    if resp.status_code >= 500:
+        falha_indeterminavel(resp)
+    if resp.status_code != 201:
+        try:
+            pj = resp.json()
+            sys.stderr.write(f"ingerir: erro {resp.status_code} ({pj.get('title', 'Erro')}): {pj.get('detail', resp.text)}\n")
+        except Exception:
+            sys.stderr.write(f"ingerir: erro {resp.status_code}: {resp.text}\n")
+        sys.exit(1)
+
+    lote = resp.json()
+    lote_id = lote["id"]
+
+    if not args.apply:
+        if args.como_json:
+            print(json.dumps(lote, indent=2, ensure_ascii=False))
+        else:
+            print(formatar_tabela_plano(lote))
+        reprovados = sum(1 for it in lote.get("itens", []) if it.get("veredito") == "reprovado")
+        sys.exit(3 if reprovados > 0 else 0)
+
+    # Execução assíncrona (--apply)
+    try:
+        resp_app = requests.post(f"{BASE}/acervo/lotes/{lote_id}/aplicar", headers=headers)
+    except requests.exceptions.RequestException as e:
+        falha_indeterminavel(e)
+
+    if resp_app.status_code >= 500:
+        falha_indeterminavel(resp_app)
+    if resp_app.status_code not in (200, 202):
+        sys.stderr.write(f"ingerir: erro ao aplicar lote ({resp_app.status_code}): {resp_app.text}\n")
+        sys.exit(1)
+
+    while True:
+        time.sleep(1.0)
+        try:
+            r_chk = requests.get(f"{BASE}/acervo/lotes/{lote_id}", headers=headers)
+        except requests.exceptions.RequestException as e:
+            falha_indeterminavel(e)
+        if r_chk.status_code >= 500:
+            falha_indeterminavel(r_chk)
+        if r_chk.status_code != 200:
+            continue
+        lote_atual = r_chk.json()
+        if lote_atual.get("estado") in ("concluido", "falhou"):
+            lote = lote_atual
+            break
+
+    if args.como_json:
+        print(json.dumps(lote, indent=2, ensure_ascii=False))
+    else:
+        print(formatar_tabela_aplicado(lote))
+
+    if lote.get("estado") == "concluido":
+        sys.exit(0)
+    else:
+        sys.exit(1)
+
+
+if __name__ == "__main__":
+    main()
