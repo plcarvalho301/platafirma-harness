@@ -13,7 +13,7 @@
 
 | chamo | quando |
 |---|---|
-| `conferir sessao --cadeira <c> --chapeu <s>` | ao afirmar que uma peça está sendo servida — mede o servido, não o commit |
+| `conta-abertura <cadeira> --chapeu <s>` | ao afirmar que uma peça está sendo servida — mede o servido (tokens por peça), não o commit |
 
 **Diagnóstico de degradação**
 

@@ -3,7 +3,7 @@
 # capacidade: verificacao
 # dono: claudinho-TI
 # use para: declarado × servido, 'existe X?' (âncora de NEGATIVA), cabeçalho de verbo, paridade de serviço
-# atos: existe, servico, verbo, skill, procedencia, repo, sessao, superficie, front, arranque, chapeu, ferramental, commit
+# atos: existe, servico, verbo, skill, procedencia, repo, superficie, front, arranque, ferramental, commit
 # componente: docker, git
 """Classes:
 
@@ -127,7 +127,7 @@ def uso(erro=None):
         print(f"erro: {erro}\n", file=sys.stderr)
     print(__doc__.strip(), file=sys.stderr)
     print("\nuso: conferir <classe> [alvo]", file=sys.stderr)
-    print("     classes implementadas : servico . verbo . repo . skill . procedencia . superficie . commit . arranque . chapeu . ferramental . front . existe . alcance", file=sys.stderr)
+    print("     classes implementadas : servico . verbo . repo . skill . procedencia . superficie . commit . arranque . ferramental . front . existe . alcance", file=sys.stderr)
     for c, motivo in CLASSES_ABERTAS.items():
         print(f"     classe declarada, sem implementacao : {c} — {motivo}", file=sys.stderr)
     sys.exit(2)
@@ -2150,134 +2150,6 @@ def _norm(texto):
     return " ".join(texto.split())
 
 
-def _chapeus_do_disco(alvo=None):
-    """[(cadeira, slug, caminho)]. Descoberta, nunca lista fixa: chapeu escrito por
-    outra cadeira entra na conferencia sem ninguem emendar codigo."""
-    if not os.path.isdir(CHAPEUS):
-        return []
-    cadeira_alvo = slug_alvo = None
-    if alvo:
-        cadeira_alvo, _, slug_alvo = alvo.partition("/")
-        slug_alvo = slug_alvo or None
-    achados = []
-    for cadeira in sorted(os.listdir(CHAPEUS)):
-        d = os.path.join(CHAPEUS, cadeira)
-        if not os.path.isdir(d) or (cadeira_alvo and cadeira != cadeira_alvo):
-            continue
-        for nome in sorted(os.listdir(d)):
-            if not nome.endswith(".md") or nome.startswith("."):
-                continue
-            slug = nome[:-3]
-            if slug_alvo and slug != slug_alvo:
-                continue
-            achados.append((cadeira, slug, os.path.join(d, nome)))
-    return achados
-
-
-def _eco_da_base(texto, cadeira):
-    """Predicado 1: nenhuma frase da base reaparece. Mede n-grama de 10 palavras —
-    abaixo disso, frase de servico casa por acaso e o predicado vira ruido."""
-    base = os.path.join(PERSONAS_DIR, f"persona-{cadeira}.md")
-    if not os.path.isfile(base):
-        return None, f"base ausente: {base}"
-    pal_base = _norm(open(base, encoding="utf-8").read()).lower().split()
-    grams = {" ".join(pal_base[i:i + 10]) for i in range(len(pal_base) - 9)}
-    pal = _norm(texto).lower().split()
-    ecos = [" ".join(pal[i:i + 10]) for i in range(len(pal) - 9)
-            if " ".join(pal[i:i + 10]) in grams]
-    return ecos, None
-
-
-def _terceira_coluna(texto):
-    """(b) so paga a carga quando o rotulo tem decisao associada. Linha de tabela com
-    a terceira celula vazia e glossario, e glossario nao muda resposta nenhuma."""
-    dentro, vazias = False, []
-    for linha in texto.splitlines():
-        if linha.startswith("## "):
-            dentro = linha.startswith("## b)")
-            continue
-        if not dentro or not linha.strip().startswith("|"):
-            continue
-        celulas = [c.strip() for c in linha.strip().strip("|").split("|")]
-        if len(celulas) < 3 or set("".join(celulas)) <= set("-: "):
-            continue
-        if celulas[0].lower().startswith("rótulo"):
-            continue
-        if not celulas[2]:
-            vazias.append(celulas[0][:40])
-    return vazias
-
-
-def conferir_chapeu(alvo=None, como_json=False):
-    achados = _chapeus_do_disco(alvo)
-    if not achados:
-        msg = f"nenhum chapeu encontrado{' para ' + alvo if alvo else ''} em {CHAPEUS}"
-        print(json.dumps({"erro": msg}) if como_json else msg)
-        return 2
-    medir, motivo = _tokenizador()
-    if not medir:
-        msg = f"sem tokenizador, nao ha medicao: {motivo}"
-        print(json.dumps({"erro": msg}) if como_json else msg)
-        return 2
-
-    linhas, reprovados = [], 0
-    for cadeira, slug, caminho in achados:
-        texto = open(caminho, encoding="utf-8").read()
-        faltas = []
-        tokens = medir(texto)
-        norm = _norm(texto)
-        for nome, fixo in FIXOS_CHAPEU.items():
-            if _norm(fixo) not in norm:
-                # Distingue ausencia de divergencia: "nao escreveu" e "escreveu
-                # diferente" pedem correcao de dono diferente, e a mensagem que
-                # confunde as duas manda o leitor procurar no lugar errado.
-                abertura = " ".join(_norm(fixo).split()[:12])
-                como = "DIVERGE do canonico" if abertura in norm else "ausente"
-                faltas.append(f"texto fixo {como}: {nome}")
-        for nome, cabecalho in SECOES_CHAPEU:
-            if cabecalho not in texto:
-                faltas.append(f"secao ausente: {nome}")
-        vazias = _terceira_coluna(texto)
-        if vazias:
-            faltas.append("(b) sem 'o que decide': " + ", ".join(vazias))
-        if not texto.startswith("---\n"):
-            faltas.append("sem front-matter")
-        ecos, err = _eco_da_base(texto, cadeira)
-        if err:
-            faltas.append(err)
-        elif ecos:
-            faltas.append(f"eco da base ({len(ecos)}): «{ecos[0]}»")
-        veredito = "em dia" if not faltas else "REPROVA"
-        reprovados += bool(faltas)
-        linhas.append({"cadeira": cadeira, "slug": slug, "caminho": caminho,
-                       "tokens": tokens,
-                       "veredito": veredito, "faltas": faltas})
-
-    if como_json:
-        print(json.dumps({"chapeus": linhas, "reprovados": reprovados,
-                          "medicao": "tokenizador qwen2.5"}, ensure_ascii=False))
-        return 1 if reprovados else 0
-    for l in linhas:
-        print(f"\n### {l['cadeira']}/{l['slug']}")
-        print(f"    tokens : {l['tokens']}")
-        for f in l["faltas"]:
-            print(f"    FALTA  : {f}")
-        print(f"    veredito: {l['veredito']}")
-    print(f"\nchapeus julgados: {len(linhas)} · reprovados: {reprovados} "
-          f"· medicao: tokenizador qwen2.5")
-    return 1 if reprovados else 0
-
-
-# --- classe: ferramental ----------------------------------------------------
-# Reconcilia a ESPINHA (capacidade->verbo->instancia) do golden record
-# acervo.ferramental contra o host. A tabela e a fonte; o host obedece. NAO julga
-# stack-de-deploy: essa entidade esta no ok de claudinho-dados (schema dela).
-# So olha. 0 sem divergencia, 1 com, 2 chamada errada.
-
-FERRAMENTAL_PG = "rag-extractor-pg"
-FERRAMENTAL_DB = "rag_extractor"
-FERRAMENTAL_USR = "rag"
-STACKS_JSON = os.path.join(RAIZ, "platafirma-harness", "registro", "stacks.json")
 
 
 def _ferramental_psql(sql):
@@ -2698,19 +2570,6 @@ def main(argv):
         if alvo == "--staged":
             return conferir_repo(None, staged=True, como_json=como_json)
         return conferir_repo(alvo, como_json=como_json)
-    if classe == "sessao":
-        registrar = None
-        if "--registrar" in argv:
-            i = argv.index("--registrar")
-            registrar = argv[i + 1] if len(argv) > i + 1 else None
-            if not registrar:
-                print("uso: conferir sessao [<cadeira>] --registrar <id-da-fita>")
-                return 2
-            if alvo == "--registrar":
-                alvo = None
-        return conferir_sessao(alvo, como_json=como_json, registrar=registrar)
-    if classe == "chapeu":
-        return conferir_chapeu(alvo, como_json=como_json)
     if classe == "ferramental":
         return conferir_ferramental(alvo, como_json=como_json)
     if classe == "commit":
