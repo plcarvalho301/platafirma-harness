@@ -193,7 +193,12 @@ declarando que foi na mão.
 
 - acervo (obras, chunks, vetores, fuga por degrau): `acervo escada`
 - facetas e população do índice: o instrumento de facetas do acervo
-- catálogo dos verbos: `abertura/oficio.md`
+- catálogo dos verbos: `tools/list` do conector `claudinho-mcp` (projeção de
+  `acervo listar ferramental --tools`); whitelist em `abertura/oficio-ferramental.md`
+- escrever verbo novo em `bin/`: cabeçalho com `# capacidade:` e `# dono:`,
+  `acervo registrar <verbo>` no mesmo commit, slug no whitelist se for do núcleo —
+  a tool nasce sozinha na próxima subida do ops-mcp. Verbo não registrado é verbo
+  inexistente para toda cadeira.
 
 O modo de falha não é errar a conta: é acertar uma conta que mede outra coisa.
 `SELECT count(*) FROM chunks WHERE embedding IS NULL` roda sem erro e devolve

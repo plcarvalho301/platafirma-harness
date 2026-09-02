@@ -197,5 +197,9 @@
       "compara contra o que o registro conhece, nao contra o universo."
     ],
     "nomes": []
+  },
+  "tools_do_conector": {
+    "claudinho-mcp": "fallback (run_command, read_file, write_file) + monta_sessao + tools derivadas do whitelist do nucleo (abertura/oficio-ferramental.md, projetadas por `acervo listar ferramental --tools`). Flag PF_TOOLS_VERBOS=0 no env do ops-mcp desliga a projecao. spec_capsula-de-verbos, 02/09/2026.",
+    "_": "a lista nominal de tools NAO mora aqui: e projecao do catalogo, e mudar junto com ele e o ponto (spec §5)."
   }
 }

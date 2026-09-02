@@ -103,9 +103,10 @@ order by stk.slug;
 USO = """uso:
   acervo listar conceitos [--json]              golden record acervo.conceito:
                                                 slug . rotulo . outros rotulos . origem . obras-ancora
-  acervo listar ferramental [--json] [--oficio] golden record acervo.ferramental:
+  acervo listar ferramental [--json] [--oficio] [--tools] golden record acervo.ferramental:
                                                 capacidade . verbo . sot . descricao . instancias
                                                 --oficio: so os verbos do nucleo de abertura
+                                                --tools: projecao do nucleo em tools MCP (JSON; spec capsula)
   acervo listar topologia [--json] [--completo] topologia de deploy acervo.stack (eixo irmao):
                                                 stack . critico . instancias . papel
                                                 --completo: + repo, compose, rotas, gate,
@@ -203,6 +204,43 @@ def listar_conceitos(quero_json):
         org = ",".join(c["origem"]) if c["origem"] else "-"
         print("%-*s  %5d  %-20s  %s" % (w, c["slug"], c["obras_ancora"], org, c["rotulo"]))
     sys.stderr.write("\n%d conceito(s) no golden record (acervo.conceito).\n" % len(conceitos))
+
+
+def listar_ferramental_tools():
+    """Projecao do whitelist do nucleo em tools MCP (spec_capsula-de-verbos §3.2).
+
+    Um slug = uma tool; nome = slug, sem traducao. Slug sem binario em bin/ sai da
+    lista com aviso em stderr — a porta nunca aborta por isso. `monta-sessao` fica de
+    fora: `monta_sessao` ja e tool e e a unica excecao de nome. Sempre JSON: o
+    consumidor e o ops-server, nao gente.
+    """
+    whitelist = _le_whitelist_oficio()
+    # Binario e o que o PATH da porta resolve (ops-server injeta ~/AI/bin e
+    # ~/.local/bin): `fila` e symlink em ~/AI/bin -> fila_streams.py, nao mora em bin/.
+    import shutil
+    casa = os.path.expanduser("~")
+    caminho = ":".join([os.path.join(casa, "AI", "bin"), os.path.join(casa, ".local", "bin"),
+                        os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                        os.environ.get("PATH", "")])
+    itens = []
+    vistos = set()
+    for cap, verbo, sot, desc, inst in _linhas(SQL_FERRAMENTAL, "ferramental", 5):
+        if verbo not in whitelist or verbo == "monta-sessao":
+            continue
+        vistos.add(verbo)
+        binario = shutil.which(verbo, path=caminho)
+        if not binario:
+            sys.stderr.write("aviso: whitelist cita %r sem binario executavel no PATH — tool ausente\n" % verbo)
+            continue
+        itens.append({
+            "tool": verbo, "verbo": verbo, "capacidade": cap,
+            "descricao": (desc or "").strip() or ("verbo %s (sem descricao no golden record)" % verbo),
+            "binario": binario,
+        })
+    faltam = whitelist - vistos - {"monta-sessao"}
+    for v in sorted(faltam):
+        sys.stderr.write("aviso: whitelist cita %r ausente no golden record — tool ausente\n" % v)
+    print(json.dumps(itens, ensure_ascii=False, indent=2))
 
 
 def listar_ferramental(quero_json, so_oficio=False):
@@ -335,11 +373,14 @@ def main(argv):
     quero_json = False
     so_oficio = False
     completo = False
+    so_tools = False
     for a in resto:
         if a == "--json":
             quero_json = True
         elif a == "--oficio" and alvo == "ferramental":
             so_oficio = True
+        elif a == "--tools" and alvo == "ferramental":
+            so_tools = True
         elif a == "--completo" and alvo == "topologia":
             completo = True
         else:
@@ -349,6 +390,8 @@ def main(argv):
         listar_conceitos(quero_json)
     elif alvo == "topologia":
         listar_topologia(quero_json, completo)
+    elif so_tools:
+        listar_ferramental_tools()
     else:
         listar_ferramental(quero_json, so_oficio)
 

@@ -410,8 +410,11 @@ def _run_blocking(command: str, d: Path, timeout: int, sessao_id: str = "-", oid
 
 
 async def run_command(command: str, cwd: str = "", timeout: int = 120) -> dict:
-    """Executa um comando shell (bash -c) como o usuário @USER@. Verbo único e
-    genérico por decisão: git, docker (rootless), systemctl --user, tudo passa por aqui.
+    """FALLBACK genérico: executa um comando shell (bash -c) como o usuário @USER@.
+    Os verbos do núcleo têm tool própria (nome = slug do verbo: `tarefas`, `fila`,
+    `mesa`, `acervo`...) — use-as; venha aqui só para o que não tem verbo: git, docker
+    (rootless), systemctl --user, rg, busca de ADR por texto, fluxo de dado entre verbos.
+    A taxa de uso desta tool em caminho servido por verbo é medida (spec cápsula §3.8).
 
     cwd é relativo a @ROOT@ (vazio = a própria raiz). timeout em segundos
     (teto 600). stdout/stderr voltam com truncagem declarada (truncado/bytes_total).
@@ -754,8 +757,130 @@ for _fn in _TOOLS:
     mcp.tool()(_fn)
 
 
-# ponytail: tool git dedicada não existe — git é comando e run_command cobre; adicionar
-# verbo próprio só se o uso mostrar necessidade.
+# --- Cápsula de verbos: tools derivadas do golden record (spec_capsula-de-verbos) ---
+# A porta não tem lista própria de verbos: projeta o whitelist do núcleo via
+# `acervo listar ferramental --tools` (§3.2). Uma tool por slug, nome = slug, descrição
+# = coluna `descricao`, execução fina de `bin/<verbo> <ato> <args>` sem shell no meio.
+# O que a tool acrescenta a `run_command` é SÓ a identidade da sessão (arq:0068 §1):
+# `sessao_id` explícito -> `sessao:{id}` em Valkey -> PF_CADEIRA/PF_ORDEM_ID/PF_SESSAO.
+# Flag: PF_TOOLS_VERBOS=0 desliga a projeção inteira (rollback: env + restart, sem
+# tocar banco nem ADR). Lote 2 (mudança, acesso, infra, solicitação) fica atrás de
+# PF_TOOLS_LOTE2=1 até seguranca bater a régua acao/tipo por tool (§3.6, §8).
+# Geração na subida: verbo novo = `systemctl --user restart ops-mcp` (por-chamada
+# fica pro teste de superfície, §3.2/§7.3).
+TOOLS_VERBOS = os.environ.get("PF_TOOLS_VERBOS", "1") != "0"
+TOOLS_LOTE2 = os.environ.get("PF_TOOLS_LOTE2", "0") == "1"
+LOTE2 = {"deploy", "acesso", "infra", "chat"}
+
+
+def _sessao_resolve(sessao_id: str | None) -> dict:
+    """cadeira/ordem da sessão: parâmetro -> join por conexão -> nada (§3.5)."""
+    sid_conexao = _sessao_atual()
+    if not sessao_id:
+        sessao_id = _sessao_por_sid.get(sid_conexao) or None
+    out = {"sessao_id": sessao_id or "-", "ordem_id": _ordem_por_sid.get(sid_conexao, "-"),
+           "cadeira": ""}
+    if not sessao_id:
+        return out
+    try:
+        _rc = redis.Redis(host=MEM_REDIS_HOST, port=MEM_REDIS_PORT, decode_responses=True)
+        raw = _rc.get(f"sessao:{sessao_id}")
+        if raw:
+            d = json.loads(raw)
+            out["cadeira"] = d.get("cadeira") or ""
+            out["ordem_id"] = d.get("ordem_id") or out["ordem_id"]
+    except Exception as e:  # noqa: BLE001
+        print(f"[valkey] sessao:{sessao_id} nao resolvida: {e!r}", file=sys.stderr, flush=True)
+    return out
+
+
+def _run_verbo_blocking(argv: list, stdin: str | None, timeout: int, ident: dict) -> dict:
+    env = {**_env_subprocesso(), "PF_SESSAO": ident["sessao_id"], "PF_ORDEM_ID": ident["ordem_id"]}
+    if ident["cadeira"]:
+        env["PF_CADEIRA"] = ident["cadeira"]
+    try:
+        p = subprocess.Popen(argv, cwd=RAIZ, env=env,
+                             stdin=subprocess.PIPE if stdin is not None else subprocess.DEVNULL,
+                             stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                             start_new_session=True)
+    except OSError as e:
+        return {"erro": str(e), "cwd": str(RAIZ)}
+    try:
+        stdout, stderr = p.communicate(input=(stdin.encode() if stdin is not None else None),
+                                       timeout=timeout)
+    except subprocess.TimeoutExpired:
+        try:
+            os.killpg(os.getpgid(p.pid), signal.SIGKILL)
+        except ProcessLookupError:
+            pass
+        p.wait()
+        return {"erro": f"timeout ({timeout}s) — grupo de processo morto", "cwd": str(RAIZ)}
+    return {"exit_code": p.returncode, "stdout": _cap(stdout),
+            "stderr": _cap(stderr), "cwd": str(RAIZ)}
+
+
+def _faz_tool_verbo(slug: str, binario: str, descricao: str):
+    async def _tool(ato: str = "", args: list[str] | None = None, stdin: str | None = None,
+                    sessao_id: str | None = None, timeout: int = 120) -> dict:
+        args = list(args or [])
+        linha = " ".join([slug] + ([ato] if ato else []) + args)
+        # Lote 1: mesma decisão do fallback (acao/tipo de run_command), auditada pelo
+        # slug. acao/tipo POR tool é a régua de lote 2 (seguranca).
+        negado = _autoriza(slug, "run_command", "comando", linha, DOM_RUNTIME)
+        if negado:
+            return negado
+        timeout = max(1, min(timeout, 600))
+        ident = _sessao_resolve(sessao_id)  # aqui: dentro da task da tool (#2911)
+        argv = [binario] + ([ato] if ato else []) + args
+        t0 = time.monotonic()
+        r = await anyio.to_thread.run_sync(_run_verbo_blocking, argv, stdin, timeout, ident)
+        _audit(tool=slug, ato=ato or None, args=" ".join(args)[:CMD_CAP],
+               cadeira=ident["cadeira"] or None, sessao_id=ident["sessao_id"],
+               ordem_id=ident["ordem_id"], exit_code=r.get("exit_code"), erro=r.get("erro"),
+               bytes_stdout=r.get("stdout", {}).get("bytes_total"),
+               dur_ms=round((time.monotonic() - t0) * 1000))
+        return r
+    _tool.__name__ = slug.replace("-", "_")
+    _tool.__doc__ = descricao
+    return _tool
+
+
+def _gera_tools_verbos() -> list:
+    """Lê a projeção do catálogo. Falha = zero tools derivadas e aviso; nunca aborta."""
+    if not TOOLS_VERBOS or not PERSONAS.is_dir():
+        return []
+    try:
+        cp = subprocess.run(["acervo", "listar", "ferramental", "--tools"],
+                            env={**_env_subprocesso(), "PF_CADEIRA": "ti"},
+                            capture_output=True, text=True, timeout=30, cwd=RAIZ)
+    except Exception as e:  # noqa: BLE001
+        print(f"[capsula] gerador falhou: {e!r} — sem tools derivadas", file=sys.stderr, flush=True)
+        return []
+    if cp.stderr.strip():
+        print(f"[capsula] {cp.stderr.strip()}", file=sys.stderr, flush=True)
+    if cp.returncode != 0:
+        print(f"[capsula] gerador exit {cp.returncode} — sem tools derivadas", file=sys.stderr, flush=True)
+        return []
+    try:
+        itens = json.loads(cp.stdout)
+    except ValueError as e:
+        print(f"[capsula] JSON do gerador invalido: {e!r}", file=sys.stderr, flush=True)
+        return []
+    servidas = []
+    for i in itens:
+        slug = i["tool"]
+        if slug in LOTE2 and not TOOLS_LOTE2:
+            continue
+        desc = (i.get("descricao") or "") + f" · tool derivada do verbo `{slug}` (ato + args; `{slug}` sem ato lista os atos). Passe `sessao_id` do monta_sessao."
+        mcp.tool(name=slug, description=desc)(_faz_tool_verbo(slug, i["binario"], desc))
+        servidas.append(slug)
+    print(f"[capsula] tools derivadas servidas ({len(servidas)}): {' '.join(servidas)}"
+          + (f" · lote 2 retido: {' '.join(sorted(LOTE2))}" if not TOOLS_LOTE2 else ""),
+          file=sys.stderr, flush=True)
+    return servidas
+
+
+TOOLS_DERIVADAS = _gera_tools_verbos()
 
 
 class RedigeToken(logging.Filter):

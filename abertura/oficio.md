@@ -2,25 +2,17 @@ Substitui: tool-manifest-geral (arq:0071/0073); mora em abertura/oficio.md
 
 # tool-manifest — núcleo
 
-Índice de abertura, comum a toda cadeira. Uma linha por ato: **o que existe**, não
-como se chama cada flag.
+Regras comuns a toda cadeira. **Os verbos do núcleo chegam como tools** (nome = slug
+do verbo, descrição do golden record — `tools/list` é o índice; spec cápsula de
+verbos, 02/09/2026). Sem tool para o que precisa → `run_command`, que é fallback.
 
-- Opção de um verbo: chamá-lo **sem argumento**.
-- Contrato, armadilha e o porquê de cada um: ficha do verbo, por ato (lote B).
 - Norma de card, execução inteira e teste de admissão da fila:
   `platafirma-arquitetura/docs/administrativo.md`, por ato.
 
-> **Verbo novo em `bin/`, mesmo commit:** linha aqui antes do push. Ferramenta não
-> indexada é ferramenta inexistente.
 > **Entrega vai a git ou wiki no mesmo turno.** O dono não tem shell no host: arquivo
 > parado em `~/AI` é rascunho. Publica, e só então relata, com link inteiro e colável.
 
-**Verbos do núcleo:** `acervo listar ferramental --oficio` serve as fichas — o que
-existe e qual o verbo certo. O whitelist do núcleo mora em `oficio-ferramental.md`; o
-conteúdo é gerado do golden record, não repetido aqui. Sub-ato e flag: ficha do verbo
-(lote B). `acervo | seg | motor` sem argumento listam os próprios sub-atos.
-
-O que o golden record NÃO serve, e por isso mora aqui:
+O que NÃO é tool, e por isso mora aqui (vai por `run_command`):
 
 ```
 rastreador|keycloak ...       SHIM de instancia: nome de servico nao e verbo. `_shims-instancia` gera do acervo; redireciona e avisa
