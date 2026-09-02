@@ -81,7 +81,7 @@ async def _repassa(req, base):
     """Repassa preservando streaming — MCP sobre HTTP e resposta longa."""
     corpo = await req.body()
     cabecalhos = {k: v for k, v in req.headers.items()
-                  if k.lower() not in ("host", "authorization", "content-length")}
+                  if k.lower() not in ("host", "authorization", "content-length", "user-agent")}
     cabecalhos["Authorization"] = f"Bearer {await _token()}"
     cabecalhos["User-Agent"] = _UA
     pedido = _cli.build_request(req.method, base, headers=cabecalhos,
