@@ -199,8 +199,10 @@ demanda de negócio se perdia (12 pais com filhas mistas em 02/09; #2942 é o ca
 - **Sem a linha, a entrega é NULA** — como a PARADA sem âncora e a NEGATIVA sem
   retorno: não se discute, corrige-se citando `arq:0095`. Vale para o dono ler: sem
   `ENTREGA:`, não acredita.
-- **Feature só se quebra com aceite escrito no corpo** — uma linha, o que o negócio
-  consegue fazer quando o derivado fechar. Sem ela ninguém sabe o que homologar.
+- **Feature e épico se escrevem no padrão da wiki** (`PlataFirma:Método/criar-um-card-
+  de-tarefa`): `Sai quando:` + os seis campos da entrega (Terreno, Capacidade, Agente,
+  Evidência, Público, Continuidade). É o aceite que o derivado homologa; sem ele a
+  feature não se quebra. Story/task: só `Sai quando:` + `Fonte:` + Evidência-predicado.
 
 **`em-execucao` é o carimbo "tô mexendo"**, e só move card que já existe. Criar card já
 carimbado (`PF_ESTADO_INICIAL=em-execucao tarefas criar`, "stub é suficiente") está
