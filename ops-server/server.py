@@ -1124,6 +1124,13 @@ async def _sessao_encerrar(req):
     if not nota:
         return JSONResponse({"erro": "campo obrigatorio: nota"}, status_code=400)
     r = await anyio.to_thread.run_sync(_anota_mesa, quem, nota)
+    # 3 primeiros giros auto-relatados -> sessao.giro (ordem do dono 02/09, #2945).
+    # Best-effort: falha aqui nunca derruba o encerramento (a nota da mesa e o ato).
+    giro = corpo.get("giro") or []
+    if isinstance(giro, list) and giro:
+        sid = (corpo.get("sessao_id") or os.environ.get("PF_SESSAO") or "").strip()
+        r["giro"] = await anyio.to_thread.run_sync(
+            _giro_carrega, sid, quem, corpo.get("chapeu"), giro[:3])
     _audit(tool="sessao", evento="fita_encerrada", sujeito=quem, bytes_nota=len(nota),
            ok=r.get("ok"))
     return JSONResponse(r, status_code=200 if r.get("ok") else 500)
@@ -1139,6 +1146,26 @@ def _anota_mesa(quem: str, nota: str) -> dict:
         if proc.returncode == 0:
             return {"ok": True, "slot": quem, "saida": proc.stdout.strip()}
         return {"ok": False, "erro": (proc.stderr or proc.stdout).strip()[:300]}
+    except (OSError, subprocess.SubprocessError) as e:
+        return {"ok": False, "erro": f"{type(e).__name__}: {e}"}
+
+
+def _giro_carrega(sessao_id: str, cadeira: str, chapeu, giro: list) -> dict:
+    """Carrega os 3 primeiros giros auto-relatados em sessao.giro pelo verbo
+    bin/_giro-carga.py — nunca cliente de banco proprio (ops-mcp roda em .venv-ops,
+    sem driver de banco; mesma razao de _anota_mesa)."""
+    if not sessao_id:
+        return {"ok": False, "erro": "sem sessao_id"}
+    payload = json.dumps({"sessao_id": sessao_id, "cadeira": cadeira,
+                          "chapeu": chapeu, "giro": giro})
+    try:
+        proc = subprocess.run([str(RAIZ / "bin" / "_giro-carga.py")],
+                              input=payload, capture_output=True, text=True,
+                              timeout=15, env={**_env_subprocesso()})
+        try:
+            return json.loads(proc.stdout or "{}")
+        except ValueError:
+            return {"ok": False, "erro": (proc.stderr or proc.stdout).strip()[:300]}
     except (OSError, subprocess.SubprocessError) as e:
         return {"ok": False, "erro": f"{type(e).__name__}: {e}"}
 
