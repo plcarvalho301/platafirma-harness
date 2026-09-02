@@ -37,6 +37,13 @@ reincide (o caderno portfolio já dizia "entregue é estado, não adjetivo" 6 di
 de a mesma falha voltar). E antes de propor regra, conferir se o substrato já a modela:
 o board já derivava entrega do pai; o vazamento era no relato, não no modelo.
 
+Segunda rodada, mesma fita: quando o dono diz "forçar o uso do padrão", o gate vai para
+a API — a forma checável (rótulo no corpo) é o que a máquina consegue recusar, e o mérito
+fica no refinamento. Preservar um estado de captura crua (`captada`) é o que deixa o gate
+ser duro sem matar o funil. E o padrão se relê contra o corpus ANTES de redesenhar: foi
+Cohn quem mostrou que a nossa nomenclatura estava um degrau deslocada (feature = story
+dele, story = task dele), e isso resolveu a pergunta "precisamos de task?" sem opinião.
+
 ## Caminho de injeção se mede, não se lembra
 
 Escrevi de memória a tabela de injeção das quatro superfícies e duas linhas estavam
