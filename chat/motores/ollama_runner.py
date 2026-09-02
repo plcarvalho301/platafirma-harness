@@ -91,13 +91,18 @@ def main(argv):
     emite({"type": "system", "subtype": "init", "session_id": sid})
 
     # (b) RODA o modelo local: /api/chat com stream de tokens.
-    payload = {"model": args.modelo, "messages": msgs, "stream": True}
+    # think:false — o qwen3.5 (e outros com raciocinio) senao gasta o giro inteiro
+    # no thinking e devolve content vazio (medido 01/09: 1939 chunks de thinking,
+    # zero de content). Chat de fita quer a RESPOSTA, nao o raciocinio; desligamos.
+    # Modelos sem thinking ignoram o campo.
+    payload = {"model": args.modelo, "messages": msgs, "stream": True, "think": False}
     req = urllib.request.Request(
         f"{args.base_url}/api/chat",
         data=json.dumps(payload).encode(), headers={"Content-Type": "application/json"})
 
     texto = ""
     prompt_n = eval_n = 0
+    pensou = False   # o modelo emitiu thinking? (para diagnosticar content vazio)
     try:
         with urllib.request.urlopen(req, timeout=600) as resp:
             for linha in resp:
@@ -105,11 +110,19 @@ def main(argv):
                 if not linha:
                     continue
                 ev = json.loads(linha)
-                pedaco = (ev.get("message") or {}).get("content") or ""
+                msg = ev.get("message") or {}
+                pedaco = msg.get("content") or ""
+                # THINKING: o qwen3.5 gera raciocinio em message.thinking, separado
+                # do content. NAO vai para a sala (contrato: raciocinio nao vaza),
+                # mas EMITE passo de vida — senao o watchdog do worker (silencio de
+                # 240-300s) mata o giro durante um raciocinio longo, achando que
+                # pendurou. Medido 01/09: giro gastou 161s no thinking, content
+                # vazio, e o worker quase cortou. O passo aqui e o batimento.
+                if msg.get("thinking"):
+                    pensou = True
+                    emite({"type": "thinking", "em_curso": True})
                 if pedaco:
                     texto += pedaco
-                    # passo de progresso: conteudo NAO vai (contrato); so o fato
-                    # de que houve texto assistente. O um_giro chama passo() disto.
                     emite({"type": "assistant",
                            "message": {"content": [{"type": "text", "text": pedaco}]}})
                 if ev.get("done"):
@@ -120,6 +133,19 @@ def main(argv):
         emite({"type": "result", "subtype": "error", "is_error": True,
                "result": "", "session_id": sid})
         return 0  # contrato: exit 0 sempre que houver JSON valido em stdout
+
+    # CONTENT VAZIO: o modelo pensou mas nao respondeu (gastou tudo no thinking, ou
+    # travou no raciocinio). NAO grava resposta vazia calada — a sala ficaria muda
+    # sem explicacao. Reporta como erro legivel, e nao grava o assistant vazio na
+    # fita (senao polui o historico do proximo giro com um turno em branco).
+    if not texto.strip():
+        motivo = ("o modelo gastou o giro no raciocinio e nao produziu resposta"
+                  if pensou else "o modelo devolveu resposta vazia")
+        sys.stderr.write(f"content vazio: {motivo}\n")
+        emite({"type": "result", "subtype": "error", "is_error": True,
+               "result": f"[{motivo} — tente reformular ou use um modelo maior]",
+               "session_id": sid})
+        return 0
 
     # (c) fecha a sessao: grava historico com a resposta, para o proximo giro.
     msgs.append({"role": "assistant", "content": texto})
