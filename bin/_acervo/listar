@@ -58,12 +58,12 @@ order by c.slug;
 # ferramental: uma linha por par capacidade→verbo, com as instâncias agregadas.
 # O 1:1 capacidade↔verbo é constraint no schema; o join reflete isso (inner).
 SQL_FERRAMENTAL = """
-select cap.slug, vb.slug, coalesce(vb.sot,''),
+select cap.slug, vb.slug, coalesce(vb.sot,''), coalesce(vb.descricao,''),
        coalesce(string_agg(distinct ins.slug, ',' order by ins.slug), '')
 from acervo.ferramental_capacidade cap
 join acervo.ferramental_verbo vb on vb.capacidade_id = cap.id
 left join acervo.ferramental_instancia ins on ins.verbo_id = vb.id
-group by cap.slug, vb.slug, vb.sot
+group by cap.slug, vb.slug, vb.sot, vb.descricao
 order by cap.slug;
 """
 
@@ -104,7 +104,7 @@ USO = """uso:
   acervo listar conceitos [--json]              golden record acervo.conceito:
                                                 slug . rotulo . outros rotulos . origem . obras-ancora
   acervo listar ferramental [--json] [--oficio] golden record acervo.ferramental:
-                                                capacidade . verbo . sot . instancias
+                                                capacidade . verbo . sot . descricao . instancias
                                                 --oficio: so os verbos do nucleo de abertura
   acervo listar topologia [--json] [--completo] topologia de deploy acervo.stack (eixo irmao):
                                                 stack . critico . instancias . papel
@@ -207,11 +207,12 @@ def listar_conceitos(quero_json):
 
 def listar_ferramental(quero_json, so_oficio=False):
     itens = []
-    for cap, verbo, sot, inst in _linhas(SQL_FERRAMENTAL, "ferramental", 4):
+    for cap, verbo, sot, desc, inst in _linhas(SQL_FERRAMENTAL, "ferramental", 5):
         instancias = [i for i in inst.split(",") if i]
         itens.append({
             "capacidade": cap, "verbo": verbo,
             "sot": sot or None,
+            "descricao": desc or None,
             "instancias": instancias or None,
         })
     if so_oficio:
@@ -227,11 +228,13 @@ def listar_ferramental(quero_json, so_oficio=False):
         return
     wc = max((len(i["capacidade"]) for i in itens), default=10)
     wv = max((len(i["verbo"]) for i in itens), default=5)
-    print("%-*s  %-*s  %s" % (wc, "capacidade", wv, "verbo", "instancias"))
-    print("%s  %s  %s" % ("-" * wc, "-" * wv, "-" * 10))
+    def _ins(i):
+        return ",".join(i["instancias"]) if i["instancias"] else "-"
+    wi = max([len(_ins(i)) for i in itens] + [len("instancias")])
+    print("%-*s  %-*s  %-*s  %s" % (wc, "capacidade", wv, "verbo", wi, "instancias", "descricao"))
+    print("%s  %s  %s  %s" % ("-" * wc, "-" * wv, "-" * wi, "-" * 9))
     for i in itens:
-        ins = ",".join(i["instancias"]) if i["instancias"] else "-"
-        print("%-*s  %-*s  %s" % (wc, i["capacidade"], wv, i["verbo"], ins))
+        print("%-*s  %-*s  %-*s  %s" % (wc, i["capacidade"], wv, i["verbo"], wi, _ins(i), i["descricao"] or "-"))
     rotulo = "acervo.ferramental, nucleo de abertura" if so_oficio else "acervo.ferramental"
     sys.stderr.write("\n%d capacidade(s) no golden record (%s).\n" % (len(itens), rotulo))
 
