@@ -48,7 +48,7 @@ def main(argv: list[str]) -> int:
     )
     parser.add_argument("-k", type=int, default=8, help="Numero maximo de itens (default: 8)")
     parser.add_argument("--json", action="store_true", help="Saida em JSON estruturado (envelope)")
-    parser.add_argument("--sujeito", default=os.environ.get("PF_CADEIRA", ""), help="Identidade do chamador para PEP")
+    parser.add_argument("--sujeito", default=os.environ.get("PF_CONTA") or os.environ.get("PF_CADEIRA", ""), help="Identidade (conta) do chamador para PEP")
     parser.add_argument("-h", "--help", "--ajuda", action="store_true", help="Imprime ajuda")
 
     args, desconhecidos = parser.parse_known_args(argv[1:])

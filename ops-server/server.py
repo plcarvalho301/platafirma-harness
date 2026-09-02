@@ -708,7 +708,8 @@ def _sessao_resolve(sessao_id: str | None) -> dict:
 
 
 def _run_verbo_blocking(argv: list, stdin: str | None, timeout: int, ident: dict) -> dict:
-    env = {**_env_subprocesso(), "PF_SESSAO": ident["sessao_id"], "PF_ORDEM_ID": ident["ordem_id"]}
+    env = {**_env_subprocesso(), "PF_SESSAO": ident["sessao_id"], "PF_ORDEM_ID": ident["ordem_id"],
+           "PF_CONTA": OPS_USER}
     if ident["cadeira"]:
         env["PF_CADEIRA"] = ident["cadeira"]
     try:
