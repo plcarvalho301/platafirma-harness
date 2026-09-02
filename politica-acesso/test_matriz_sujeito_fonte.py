@@ -40,7 +40,7 @@ PERMITE, NEGA = True, False
 # não tem atributo, e atributo ausente nega — é a régua, não a exceção.
 DONO = "megafone"                  # operador, credencial própria no realm
 EMERGENCIA = "claudinho"           # operador, rota de token estático
-EXTERNO = "jaiminho"               # pesquisador-externo (seg:0009, card 344)
+EXTERNO = "jaiminho"               # EX-pesquisador-externo: expurgado 02/09/2026 (11a7603 + papel removido). Sujeito e papel fora do PDP: NEGA tudo
 FABRICA = "jaiminho-fabrica"       # fornecedor (org:0020)
 ESTRANHO = "cadeira-que-nao-existe"
 
@@ -56,31 +56,20 @@ MATRIZ: list[tuple[str, str, str, bool, str]] = [
     (EMERGENCIA, "wiki", "wiki:PlataFirma/*", PERMITE, "mesma mão, quando o realm cai"),
     (EMERGENCIA, "acervo", "acervo:firma/*", PERMITE, "idem"),
 
-    # --- o externo: lê o que foi nomeado, e nada mais -------------------------------
-    (EXTERNO, "acervo", "acervo:firma/*", PERMITE, "jaiminho-le-acervo-inteiro"),
-    (EXTERNO, "acervo", "acervo:firma/ia/*", PERMITE, "recorte dentro da concessão"),
-    # DESATUALIZADO ATE 20/08/2026: as duas linhas abaixo esperavam NEGA. Ordem do dono
-    # nesta data concedeu o acervo INTEIRO ao externo (`jaiminho-le-acervo-inteiro`) e
-    # removeu `externo-nunca-alcanca-acervo-pessoal`. Fundamento dele: externo que coda
-    # contra a plataforma sem base sólida quebra o ambiente, e a coleção pessoal é do
-    # titular. Corrigidas à mão, como o gabarito literal exige.
-    (EXTERNO, "acervo", "acervo:pessoal/*", PERMITE, "jaiminho-le-acervo-inteiro, 20/08/2026"),
-    (EXTERNO, "acervo", "acervo:*", PERMITE, "a concessão é o corpus inteiro, por ordem do dono"),
-    (EXTERNO, "wiki", "wiki:principal/*", PERMITE, "jaiminho-le-wiki-conceito"),
-    (EXTERNO, "wiki", "wiki:PlataFirma/*", NEGA, "externo-nao-le-wiki-interna"),
-    (EXTERNO, "wiki", "wiki:Operar/*", NEGA, "runbook é a casa por dentro"),
-    (EXTERNO, "wiki", "wiki:Frente/*", NEGA, "trabalho em curso idem"),
-    (EXTERNO, "wiki", "wiki:*", NEGA, "genérico não casa a concessão nominal"),
-    (EXTERNO, "fila", "caixa:jaiminho", PERMITE, "jaiminho-canal-exclusivo-com-IA"),
-    (EXTERNO, "fila", "caixa:claudinho-IA", PERMITE, "a outra ponta do mesmo canal"),
-    (EXTERNO, "fila", "caixa:claudinho-TI", NEGA, "canal é exclusivo, não é malha"),
-    (EXTERNO, "fila", "caixa:*", NEGA, "as outras seis caixas não são alcançáveis"),
-    (EXTERNO, "board", "item:*", NEGA, "sem regra: o default nega"),
-    (EXTERNO, "board", "item:2303", NEGA, "idem, e nominal não muda nada"),
-    (EXTERNO, "mesa", "mem:*", NEGA, "memória de cadeira não é de externo"),
-    (EXTERNO, "mesa", "mem:ia:harness", NEGA, "idem"),
-    (EXTERNO, "registro", "adr:*", NEGA, "decisão da casa não é de externo"),
-    (EXTERNO, "registro", "seg:0009", NEGA, "idem — inclusive a que o concede"),
+    # --- o ex-externo: sujeito expurgado em 02/09/2026 — atributo ausente nega tudo --
+    # O jaiminho OSINT saiu do realm (client L0R8OJ desabilitado), do sujeitos.yaml
+    # (11a7603) e o papel `pesquisador-externo` saiu do PAP no mesmo dia. Estas linhas
+    # sao a prova de que nada do que ele alcancava sobreviveu ao expurgo.
+    (EXTERNO, "acervo", "acervo:firma/*", NEGA, "sujeito fora do PDP"),
+    (EXTERNO, "acervo", "acervo:pessoal/*", NEGA, "idem"),
+    (EXTERNO, "wiki", "wiki:principal/*", NEGA, "concessao de wiki saiu com o papel"),
+    (EXTERNO, "wiki", "wiki:PlataFirma/*", NEGA, "a casa por dentro segue vedada"),
+    (EXTERNO, "wiki", "wiki:Operar/*", NEGA, "idem"),
+    (EXTERNO, "fila", "caixa:jaiminho", NEGA, "canal exclusivo removido em 11a7603"),
+    (EXTERNO, "fila", "caixa:claudinho-IA", NEGA, "idem, a outra ponta"),
+    (EXTERNO, "board", "item:*", NEGA, "nunca teve"),
+    (EXTERNO, "mesa", "mem:*", NEGA, "nunca teve"),
+    (EXTERNO, "registro", "*", NEGA, "sujeito fora do PDP"),
 
     # --- a fábrica: executa card sobre repositório, e o recuperador não a amplia ----
     (FABRICA, "board", "item:2303", NEGA, "`recuperar` não é verbo do fornecedor"),
@@ -138,9 +127,16 @@ def test_externo_nao_alcanca_a_casa_por_dentro_pelo_recuperar(pep, fonte, alvo):
 
 def test_vedado_nao_passa_nem_misturado_com_alvo_concedido(pep):
     """Negativa total: o alvo vedado no meio de um pedido legítimo derruba a fonte."""
+    n = pep.autoriza_fonte(DONO, Fonte("wiki"),
+                           ["wiki:principal/*", "wiki:PlataFirma/*"])
+    assert n is None, "o dono alcanca os dois: a prova de mistura precisa de um sujeito com concessao parcial"
+    n = pep.autoriza_fonte(FABRICA, Fonte("acervo"),
+                           ["acervo:firma/*", "acervo:pessoal/*"])
+    assert n is None, "fabrica-le-acervo-inteiro cobre os dois desde 20/08"
+    # sujeito sem concessao alguma: a negativa e no primeiro alvo, nao no vedado
     n = pep.autoriza_fonte(EXTERNO, Fonte("wiki"),
                            ["wiki:principal/*", "wiki:PlataFirma/*"])
-    assert n is not None and n.alvo == "wiki:PlataFirma/*"
+    assert n is not None and n.alvo == "wiki:principal/*"
 
 
 # --- completude: fonte nova entra na matriz, ou o build para -------------------------

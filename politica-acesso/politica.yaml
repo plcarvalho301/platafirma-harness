@@ -64,8 +64,9 @@ eixos:
       rotulo: "Fábrica e colaboração externa — executa card, não administra"
     operador:
       rotulo: "Humano com credencial própria"
-    pesquisador-externo:
-      rotulo: "Colaboração externa que lê o acervo por concessão — não executa comando, não administra"
+    # `pesquisador-externo` REMOVIDO em 02/09/2026 (seguranca): o braco OSINT do agy foi
+    # expurgado por ordem do dono nesta data (11a7603 tirou o sujeito; este ato tira o
+    # papel e as regras que so ele casava). Papel sem titular e regra viva para ninguem.
     # --- Papéis da floresta de org (docs/escopos-e-papeis.md §3) ------------------
     # Qualificados por `unidade-organizacional`: valem no par, nunca soltos.
     executor:
@@ -230,7 +231,7 @@ regras:
   #   - id: <sujeito>-le-<recorte>
   #     efeito: permite
   #     motivo: "<atividade que exige conhecer> · concedido por <quem> · vence AAAA-MM-DD"
-  #     quando: {papel: pesquisador-externo, dominio: plataforma-acervo, tipo: acervo}
+  #     quando: {papel: <papel-do-externo>, dominio: plataforma-acervo, tipo: acervo}
   #     acoes: [rag_buscar]
   #     sobre: ["acervo:firma/<dominio-do-acervo>/*"]
   #
@@ -239,96 +240,13 @@ regras:
   # uma, `jaiminho-le-acervo-inteiro` (20/08/2026). Vencida a data do `motivo`, a
   # regra sai por merge.
 
-  # ORDEM DO DONO, 20/08/2026, assinada em sessao de chat: o externo le o acervo
-  # INTEIRO, colecao pessoal inclusa. Fundamento dele, literal: o Jaiminho codar
-  # contra a plataforma sem base solida e o risco maior — externo mais embasado
-  # erra menos no ambiente dele. A colecao pessoal e do titular e o titular decide
-  # quem le. Substitui a concessao de 15/08/2026, restrita a `acervo:firma/*`.
-  #
-  # Este e o unico `sobre` do arquivo que alcanca um corpus inteiro. Fica assim por
-  # ato do dono, nao por conveniencia de quem escreve: revogar tambem e ato dele.
-  - id: jaiminho-le-acervo-inteiro
-    efeito: permite
-    motivo: "codar contra a PlataFirma com base solida no acervo: sem embasamento o externo quebra o ambiente · ordem direta do dono em 20/08/2026 · vence 2026-11-15"
-    quando: {papel: pesquisador-externo, dominio: plataforma-acervo, tipo: acervo}
-    acoes: [rag_buscar]
-    sobre: ["acervo:*"]
-
-  # ORDEM DO DONO, 20/08/2026: o externo escreve codigo PARA a PlataFirma e precisa
-  # LER o codigo dela para escrever bem. Livro de terceiro nao ensina a stack da casa.
-  # O alcance e somente-leitura por construcao: `repo_ler` bate no espelho do ref
-  # remoto pelo wiki-mcp; escrever, fazer push ou rodar git local e `run_command`,
-  # que segue negado a este papel por `externo-nao-executa-comando`.
-  - id: jaiminho-le-repo
-    efeito: permite
-    motivo: "escrever codigo para a PlataFirma exige ler o codigo dela: padrao da casa, contrato de verbo e teste em vigor · ordem direta do dono em 20/08/2026 · vence 2026-11-15"
-    quando: {papel: pesquisador-externo, dominio: plataforma-repo, tipo: repo}
-    acoes: [repo_ler]
-    sobre: ["repo:platafirma-*", "repo:modulo-*"]
-
-  # Drive: area de transferencia de MAO UNICA com o dono. Ele nao tem shell no host
-  # e o externo nao tem wiki nem git — sem esta pasta, entrega dele nao chega nele.
-  # `sobre` nomeia UMA pasta, nunca "*": o escopo `drive.file` do proprio Google ja
-  # limita a credencial ao que o app criou, e esta regra e o segundo cadeado, do
-  # nosso lado. `drive_apagar` manda para a lixeira, nao apaga — o dono recupera.
-  - id: jaiminho-usa-area-de-transferencia
-    efeito: permite
-    motivo: "colaborador externo sem wiki e sem git precisa de superficie onde o dono leia o que ele produz: le, escreve e limpa o que ELE criou dentro da pasta concedida · concedido por claudinho-IA com autorizacao do dono em 16/08/2026 · vence 2026-11-16"
-    quando: {papel: pesquisador-externo, dominio: plataforma-drive, tipo: drive}
-    acoes: [drive_ler, drive_escrever, drive_apagar]
-    sobre: ["drive:1oFQgrkpoVHikOlV6gJqH8nGgzDwAtqVz/*"]
-
-  # O resto do Drive do dono nao e concedido, e a negativa fica escrita em vez de
-  # depender do default — para o dia em que a credencial trocar de escopo.
-  - id: externo-nao-alcanca-resto-do-drive
-    efeito: nega
-    motivo: "o Drive do dono e dele: fora da pasta de transferencia, nada se concede a externo"
-    quando: {papel: pesquisador-externo, dominio: plataforma-drive}
-    acoes: ["*"]
-    sobre: ["drive:root/*", "drive:*/"]
-
-  - id: jaiminho-le-wiki-conceito
-    efeito: permite
-    motivo: "investigacao em fonte aberta precisa do vocabulario da casa, nao so do texto de terceiro: le as paginas de conceito da wiki · ordem direta do dono em 16/08/2026, sobre a concessao de acervo ja dada por claudinho-IA · vence 2026-11-15"
-    quando: {papel: pesquisador-externo, dominio: plataforma-wiki, tipo: wiki}
-    acoes: [wiki_ler, wiki_buscar, wiki_listar, wiki_consultar]
-    sobre: ["wiki:principal/*"]
-
-  # A camada interna da wiki NAO e concedida, e a negativa fica escrita em vez de
-  # depender do default: `PlataFirma:` (decisao, org, metodo), `Operar:` (runbook) e
-  # `Frente:` (trabalho em curso) sao a casa por dentro. O jaiminho-server ja corta
-  # por namespace no codigo; esta regra e o segundo cadeado, para o dia em que uma
-  # tool nova esquecer o corte.
-  - id: externo-nao-le-wiki-interna
-    efeito: nega
-    motivo: "decisao, org, runbook e trabalho em curso sao a casa por dentro: fora de concessao a externo"
-    quando: {papel: pesquisador-externo}
-    acoes: ["*"]
-    sobre: ["wiki:PlataFirma/*", "wiki:Operar/*", "wiki:Frente/*"]
-
-  # `externo-nunca-alcanca-acervo-pessoal` REMOVIDA em 20/08/2026 por ordem do dono,
-  # no mesmo ato que concedeu `jaiminho-le-acervo-inteiro`. O titular da colecao
-  # decide quem a le, e ele decidiu. seg:0009 item 4 fica sobreposto — quem for
-  # emendar o seg:0009 leia esta linha antes de reabrir a negativa por reflexo.
-
-  - id: externo-nao-executa-comando
-    efeito: nega
-    motivo: "colaboracao externa le acervo, nao opera o host: nenhum comando, nenhuma shell"
-    quando: {papel: pesquisador-externo, tipo: comando}
-    acoes: ["*"]
-    sobre: ["*"]
-
-  # Canal exclusivo do Jaiminho com claudinho-IA (card 344). O recurso e a CAIXA, nao
-  # o broker: ele nao tem credencial do Valkey e fala com o PEP do ops-server, que
-  # valida o JWT e escreve em nome dele. `sobre` nomeia as duas caixas e nada mais —
-  # nenhuma das outras seis cadeiras e alcancavel por ele, e nenhuma o alcanca.
-
-  - id: externo-nao-toca-identidade
-    efeito: nega
-    motivo: "dominio de identidade e segredo nao se concede a externo"
-    quando: {papel: pesquisador-externo, dominio: plataforma-identidade}
-    acoes: ["*"]
-    sobre: ["*"]
+  # --- Externo (papel `pesquisador-externo`): REMOVIDO em 02/09/2026 -----------
+  # Saíram daqui, no mesmo ato que tirou o papel: jaiminho-le-acervo-inteiro,
+  # jaiminho-le-repo, jaiminho-usa-area-de-transferencia, externo-nao-alcanca-resto-
+  # do-drive, jaiminho-le-wiki-conceito, externo-nao-le-wiki-interna,
+  # externo-nao-executa-comando, externo-nao-toca-identidade. Historico em git
+  # (`git log -S pesquisador-externo`). Externo novo entra por concessao nova, com
+  # papel proprio e prazo — nao por ressurreicao destas.
 
   # --- Fabrica: a conta jaiminho-fabrica precisa ABRIR --------------------------
   # Ordem direta do dono em 18/08/2026, contra o repasse a claudinho-seguranca que
@@ -416,13 +334,6 @@ regras:
   # LER e ESCREVER sao acoes separadas de proposito, e ENVIAR ARQUIVO e uma terceira:
   # conceder edicao de texto nao pode conceder envio de binario, que e superficie de
   # outra natureza (tipo de arquivo, tamanho, o que o servidor faz com ele depois).
-
-  - id: externo-nao-escreve-na-wiki
-    efeito: nega
-    motivo: "a wiki e o registro da casa: colaboracao externa le, nao escreve"
-    quando: {papel: pesquisador-externo, dominio: plataforma-wiki}
-    acoes: [wiki_editar, wiki_enviar_arquivo]
-    sobre: ["*"]
 
   - id: fornecedor-nao-escreve-na-wiki
     efeito: nega

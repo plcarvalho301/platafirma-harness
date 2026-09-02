@@ -31,7 +31,7 @@ from pdp import Politica, Recurso, Sujeito, decide  # noqa: E402
 PERMITE, NEGA = True, False
 
 DONO = "megafone"
-EXTERNO = "jaiminho"
+EXTERNO = "jaiminho"   # expurgado 02/09/2026: sujeito e papel fora do PDP, NEGA tudo
 FABRICA = "jaiminho-fabrica"
 ESTRANHO = "cadeira-que-nao-existe"
 
@@ -39,19 +39,19 @@ ESTRANHO = "cadeira-que-nao-existe"
 CASOS = [
     # --- (e) wiki: leitura por sujeito, de qualquer servidor -------------------
     (EXTERNO, "wiki_ler", "wiki", "plataforma-wiki", "wiki:principal/Ontologia",
-     PERMITE, "jaiminho-le-wiki-conceito"),
+     NEGA, "jaiminho-le-wiki-conceito saiu com o papel em 02/09/2026"),
     (EXTERNO, "wiki_buscar", "wiki", "plataforma-wiki", "wiki:principal/*",
-     PERMITE, "busca entrou na mesma concessao em 20/08"),
+     NEGA, "idem"),
     (EXTERNO, "wiki_listar", "wiki", "plataforma-wiki", "wiki:principal/*",
-     PERMITE, "idem"),
+     NEGA, "idem"),
     (EXTERNO, "wiki_consultar", "wiki", "plataforma-wiki", "wiki:principal/*",
-     PERMITE, "idem — cargo le o mesmo namespace"),
+     NEGA, "idem"),
     (EXTERNO, "wiki_buscar", "wiki", "plataforma-wiki", "wiki:PlataFirma/*",
-     NEGA, "externo-nao-le-wiki-interna, e buscar nao contorna"),
+     NEGA, "a casa por dentro: sem regra, o default nega"),
 
     # --- (e) wiki: escrita nao se concede por portar token ---------------------
     (EXTERNO, "wiki_editar", "wiki", "plataforma-wiki", "wiki:principal/Ontologia",
-     NEGA, "externo-nao-escreve-na-wiki"),
+     NEGA, "sujeito fora do PDP: nem ler, nem escrever"),
     (EXTERNO, "wiki_enviar_arquivo", "wiki", "plataforma-wiki", "wiki:File/x.png",
      NEGA, "envio de binario e superficie de outra natureza"),
     (FABRICA, "wiki_editar", "wiki", "plataforma-wiki", "wiki:principal/Ontologia",
