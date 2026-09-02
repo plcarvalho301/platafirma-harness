@@ -2,6 +2,8 @@
 # mesa — memoria de trabalho da cadeira entre fitas, por chapeu
 # capacidade: memoria
 # dono: claudinho-IA (conteudo e formato) · claudinho-TI (substrato)
+# use para: pendência entre fitas, 'o que ficou na mesa', anotar, caderno do chapéu
+# atos: ver, item, fez, anota, fita, limpa, caderno, legado
 #
 # Despachante (arq:0040): o binario agrupa a memoria da cadeira, o sub-ato e o
 # ato. Dois substratos duraveis, um eixo — o chapeu (slot) e o mesmo nos dois:

@@ -2,6 +2,8 @@
 # conferir — compara o que esta DECLARADO com o que esta SERVIDO, por classe de alvo.
 # capacidade: verificacao
 # dono: claudinho-TI
+# use para: declarado × servido, 'existe X?' (âncora de NEGATIVA), cabeçalho de verbo, paridade de serviço
+# atos: existe, servico, verbo, skill, procedencia, repo, sessao, superficie, front, arranque, chapeu, ferramental, commit
 # componente: docker, git
 """Classes:
 
@@ -287,7 +289,7 @@ def cabecalho(caminho):
     campos = {"proposito": None, "capacidade": None, "dono": None, "componente": None}
     try:
         with open(caminho, "r", errors="replace") as f:
-            linhas = [next(f, "") for _ in range(8)]
+            linhas = [next(f, "") for _ in range(12)]
     except OSError:
         return campos
     for i, l in enumerate(linhas):

@@ -2,6 +2,8 @@
 # persona — escrita compartimentada das personas da PlataFirma.
 # capacidade: organizacao
 # dono: claudinha-gestao-estrategica
+# use para: escrever/editar persona, designar, afastar, desligar, foto/filme da cadeira
+# atos: abrir, salvar, conferir, prover, designar, afastar, dispensar, desligar, remover, reverter, foto, filme, idade
 # Leitura serve do clone sem rede (monta_sessao); a sincronização mora aqui,
 # do lado da escrita: pull antes, confere, commit e push depois. Só toca
 # personas/ — mudança fora dela aborta o salvar em vez de entrar de carona.

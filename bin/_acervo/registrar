@@ -59,28 +59,46 @@ def _lit(v):
     return "null" if v is None else "'" + str(v).replace("'", "''") + "'"
 
 
+CHAVES = ("capacidade", "dono", "componente", "use para", "atos")
+
+
 def _le_cabecalho(path):
-    """Le capacidade e descricao (a linha '# <verbo> — desc') do cabecalho. Mesma
-    convencao que `conferir` parseia."""
-    cap = desc = None
+    """Le o cabecalho por CHAVE, nunca por posicao (spec_capsula-de-verbos §6):
+    `# <verbo> — <o que>` (continua nas linhas `#` seguintes ate um `#` vazio ou uma
+    linha chaveada — `descansar` quebra a frase em duas linhas), `# capacidade:`,
+    `# use para:` e `# atos:`. A descricao servida em tools/list e composta aqui,
+    forma fixa: `<o que> · use para: <vocabulario> · atos: <lista>`; chave ausente
+    so omite a parte, nunca inventa. Mesma convencao de chaves que `conferir` parseia."""
+    desc, campos, lendo_desc = [], {}, False
     with open(path, errors="replace") as f:
-        linhas = [next(f, "") for _ in range(8)]
+        linhas = [next(f, "") for _ in range(12)]
     for l in linhas:
         s = l.strip()
-        if not s.startswith("#"):
+        if not s.startswith("#") or s.startswith("#!"):
             continue
         s = s.lstrip("#").strip()
-        low = s.lower()
-        if low.startswith("capacidade:"):
-            cap = s.split(":", 1)[1].strip()
-        elif low.startswith("dono:"):
+        if not s:
+            lendo_desc = False
             continue
-        elif desc is None:
+        low = s.lower()
+        chave = next((c for c in CHAVES if low.startswith(c + ":")), None)
+        if chave:
+            campos[chave] = s.split(":", 1)[1].strip()
+            lendo_desc = False
+            continue
+        if not desc:
             for sep in (" — ", " - "):
                 if sep in s:
-                    desc = s.split(sep, 1)[1].strip()
+                    desc.append(s.split(sep, 1)[1].strip())
+                    lendo_desc = True
                     break
-    return cap, desc
+        elif lendo_desc:
+            desc.append(s)
+    partes = [" ".join(desc).strip().rstrip(".")] if desc else []
+    for chave in ("use para", "atos"):
+        if campos.get(chave):
+            partes.append("%s: %s" % (chave, campos[chave]))
+    return campos.get("capacidade"), (" · ".join(partes) or None)
 
 
 def _le_whitelist():
@@ -95,7 +113,7 @@ def _le_whitelist():
                 dentro = not dentro
                 continue
             if dentro and s and not s.startswith("#"):
-                slugs.append(s)
+                slugs.append(s.split()[0])   # marcadores (`lote:2`) ficam no resto da linha
     if not slugs:
         morre("acervo registrar --todos: whitelist vazio.", 3)
     return slugs

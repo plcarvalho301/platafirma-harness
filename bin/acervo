@@ -2,6 +2,8 @@
 # acervo — opera o acervo: ingestão ponta a ponta, escada, obra, bancada e extrato.
 # capacidade: conhecimento
 # dono: claudinho-dados
+# use para: ingerir obra, escada, bancada, extrato, stack, registrar verbo, golden record
+# atos: ingerir, baixar, escada, bancada, extrato, listar, registrar, ferramenta, stack, adr
 #
 # Despachante (arq:0040): o verbo é o par binário+subcomando. Os sub-atos moram
 # em bin/_acervo/ e não entram no PATH; a porta é esta.

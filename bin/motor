@@ -4,6 +4,8 @@
 # (arq:0043 — a capacidade e do subcomando; aqui os tres servem a mesma:
 #  motor listar · motor <inst> buscar · motor <inst> ajuste)
 # dono: claudinho-IA
+# use para: motor rag/reasoner, buscar no acervo, ajuste, medir bateria, indexar
+# atos: listar; ou ato=<instância> e args=ajuste / buscar / medir / indexar
 # componente: platafirma-motor
 # O verbo e `motor`; a instancia e argumento (arq:0037; veto do verbo `rag`).
 import json, os, re, subprocess, sys, time, urllib.request

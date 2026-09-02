@@ -3,6 +3,8 @@
 # capacidade: acesso
 # componente: identidade-db (concessao.*), politica-acesso (PDP)
 # dono: claudinho-seguranca
+# use para: conceder/revogar acesso, quem pode entrar, órfãos, política (PDP)
+# atos: listar, conceder, revogar, decidir, desligar, orfaos, politica
 #
 # subcomando        capacidade   o que faz
 #   conceder        acesso       grava ato de concessao ou veto (append-only)

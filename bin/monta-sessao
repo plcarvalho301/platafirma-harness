@@ -132,8 +132,9 @@ def _mapa_alias_cadeiras():
     servir o organograma inteiro faz as instancias levantarem muro). O ledger de
     vinculo NAO se le (incidente/ordem do dono): o alias afetivo migrou para a arvore
     viva. Cadeira viva (abertura/<slug>/persona.md) sem alias no mapa sai OMITIDA com
-    nota declarada — nao trava o conserto. fabrica e atores internos nao entram: nome
-    afetivo de destino de roteamento e materia da persona deles, nao desta peca."""
+    nota declarada — nao trava o conserto. Ator interno sem nome afetivo (fabrica)
+    entra no mapa com valor null: e a fonte que diz "sem alias, de proposito", nao
+    este codigo — aqui nao ha lista de cadeira nenhuma."""
     caminho = os.path.join(ABERTURA, "aliases.json")
     try:
         with open(caminho, encoding="utf-8") as fh:
@@ -141,9 +142,9 @@ def _mapa_alias_cadeiras():
     except (OSError, ValueError) as e:
         return None, f"{type(e).__name__}: {e}"
     por_slug = {slug: alias for slug, alias in mapa.items() if slug and alias}
-    # cadeiras vivas sem alias no mapa: declara a omissao (mesma nota de antes).
-    vivas = {d for d in cadeiras_validas() if d not in ("fabrica",)}
-    sem_alias = vivas - set(por_slug)
+    # cadeiras vivas AUSENTES do mapa: declara a omissao. Chave com null e alias
+    # negado de proposito (fabrica), nao omissao.
+    sem_alias = set(cadeiras_validas()) - set(mapa)
     if not por_slug:
         return None, "aliases.json sem nenhum alias"
     linhas = [f"{alias} -> {slug}"

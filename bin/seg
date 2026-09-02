@@ -3,6 +3,8 @@
 # capacidade: politica
 # componente: openscap, keycloak, openssl+oqsprovider
 # dono: claudinho-seguranca
+# use para: openscap, keycloak, openssl pós-quântico, régua de segurança
+# atos: oscap, ssg, keycloak, openssl
 #
 # subcomando          capacidade          origem do ato
 #   oscap avaliar     politica            era oscap-casco

@@ -2,6 +2,8 @@
 # fila — caixa de mensagens entre personas da PlataFirma, sobre a malha msg (Valkey/Streams).
 # capacidade: mensagem
 # dono: ia
+# use para: caixa, carta, recado, handoff, 'o que chegou', mandar para outra cadeira
+# atos: status, ler, enviar, tipos
 #
 # Substrato: componente msg do motor (arq:0018, arq:0036). Stream por caixa,
 # "caixa:<persona>", com consumer group unico "cadeira" — a cadeira dona e o unico

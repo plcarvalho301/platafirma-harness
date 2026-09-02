@@ -126,9 +126,13 @@ def _le_whitelist_oficio():
     """Slugs de verbo do núcleo, do bloco cercado de oficio-ferramental.md.
 
     Só as linhas dentro do primeiro par de cercas ``` contam; fora delas é prosa.
-    Linha vazia e comentário (#) são ignorados. Ausência do arquivo ou bloco vazio
-    é erro duro: --oficio sem whitelist serviria a lista inteira e mentiria sobre
-    ser 'só o núcleo'.
+    Linha vazia e comentário (#) são ignorados. O slug é o primeiro token da linha;
+    o resto são marcadores `chave:valor` (hoje: `lote:2`, tool retida atrás de
+    PF_TOOLS_LOTE2 — o whitelist é a ÚNICA fonte de quem é lote 2). Ausência do
+    arquivo ou bloco vazio é erro duro: --oficio sem whitelist serviria a lista
+    inteira e mentiria sobre ser 'só o núcleo'.
+
+    Devolve set de slugs; `_marcadores_oficio()` devolve {slug: {chave: valor}}.
     """
     try:
         with open(OFICIO_WHITELIST, encoding="utf-8") as fh:
@@ -147,12 +151,35 @@ def _le_whitelist_oficio():
             continue
         if not dentro or not s or s.startswith("#"):
             continue
-        slugs.append(s)
+        slugs.append(s.split()[0])
     if not slugs:
         morre("acervo listar ferramental --oficio: whitelist vazio em\n  %s\n"
               "  (esperado um bloco cercado com um slug de verbo por linha)"
               % OFICIO_WHITELIST, 3)
     return set(slugs)
+
+
+def _marcadores_oficio():
+    """{slug: {chave: valor}} dos marcadores da linha do whitelist (ex.: `deploy lote:2`)."""
+    out = {}
+    try:
+        with open(OFICIO_WHITELIST, encoding="utf-8") as fh:
+            linhas = fh.read().splitlines()
+    except FileNotFoundError:
+        return out
+    dentro = False
+    for l in linhas:
+        s = l.strip()
+        if s.startswith("```"):
+            if dentro:
+                break
+            dentro = True
+            continue
+        if not dentro or not s or s.startswith("#"):
+            continue
+        tok = s.split()
+        out[tok[0]] = dict(t.split(":", 1) for t in tok[1:] if ":" in t)
+    return out
 
 
 def _psql(sql):
@@ -215,6 +242,7 @@ def listar_ferramental_tools():
     consumidor e o ops-server, nao gente.
     """
     whitelist = _le_whitelist_oficio()
+    marcas = _marcadores_oficio()
     # Binario e o que o PATH da porta resolve (ops-server injeta ~/AI/bin e
     # ~/.local/bin): `fila` e symlink em ~/AI/bin -> fila_streams.py, nao mora em bin/.
     import shutil
@@ -236,6 +264,7 @@ def listar_ferramental_tools():
             "tool": verbo, "verbo": verbo, "capacidade": cap,
             "descricao": (desc or "").strip() or ("verbo %s (sem descricao no golden record)" % verbo),
             "binario": binario,
+            "lote": int(marcas.get(verbo, {}).get("lote", 1)),
         })
     faltam = whitelist - vistos - {"monta-sessao"}
     for v in sorted(faltam):

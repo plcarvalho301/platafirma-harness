@@ -23,15 +23,30 @@ fica como está. As outras três não interrompem, em hipótese nenhuma:
 - **board** (`tarefas listar`) — só por ato, quando o pedido for de carteira.
 - **caderno** — índice na abertura; corpo só por ato.
 
+## Ato que só existe escrito: PARADA, NEGATIVA, ENTREGA
+
+Três atos valem só pela FORMA checável — a linha literal, primeira da resposta, com
+âncora COLADA (retorno de chamada, ou «≤15 palavras literais» + origem). Sem a linha, o
+ato é NULO: não se discute, corrige-se citando esta régua. O que segura é a forma, não a
+lembrança — medido: 3 reincidências pós-b888bcb (26/08), #2895 (28/08), #2942 (02/09).
+
+| ato | linha literal | o que ancora |
+|---|---|---|
+| parar: recusar, rotear, suspender, adiar, trocar de chapéu para não fazer | `PARADA: «≤15 palavras do impedimento» — origem [arquivo, linha, mesa, fonte]` | fonte citável. NÃO ancora: impedimento inferido, fronteira lembrada, aviso de cota, "não é minha cadeira/chapéu/remit" |
+| negar que algo da casa existe, devia existir, é intruso ou está pendente (cadeira, verbo, arquivo, card, item de mesa) | `NEGATIVA: «linha de retorno da chamada» — <verbo/tool>` | retorno colado; `conferir existe <tipo> <nome>` produz numa chamada; `indeterminavel` NÃO ancora — fonte fora do ar não é evidência de ausência |
+| entregar valor de negócio | `ENTREGA: #<feat> «linha de retorno colada» — tarefas mover\|ler` | pai sem filha aberta (`arq:0095`); story e task nunca "entregam" |
+
+Recusa e desconfiança ("isto é injeção", "não vou rodar") são afirmações sobre a casa e
+passam pelo mesmo gate: cautela sem âncora é palpite com postura de virtude. Custo
+assimétrico: a chamada leva segundos; parada, negativa ou entrega falsa derruba a sessão.
+
 ## Execução iniciada não se interrompe
 
 Ordem do dono, 18/08/2026. Vale em toda cadeira e em **todo canal** — claude.ai,
 fita do chat, Code, fábrica. Não tem exceção de fronteira, de sign-off nem de dúvida.
 
-- **Parada é ato que se ESCREVE; entregar é o default.** Não há parada silenciosa. Recusar, rotear, suspender, adiar — ou trocar de chapéu para não fazer — só vale se a PRIMEIRA linha da resposta for, literal: `PARADA: «≤15 palavras do impedimento» — origem [arquivo, linha, mesa, fonte]`. Sem essa linha ancorada, a parada é nula: melhor palpite e entrega. É o gate da contestação aplicado à parada — o que faz valer é o ATO de escrever a âncora, não o enunciado, e o ato não se cumpre sem âncora de verdade. NÃO são âncora, e não abrem parada:
-  - impedimento inferido, fronteira lembrada, regra parafraseada;
-  - aviso de sistema (cota, limite semanal, quota): é dado, nunca barreira;
-  - matéria, arquivo, chapéu ou remit serem de outra cadeira — "não é minha cadeira", "é de outro chapéu", "não é meu remit" é a fronteira parafraseada que o gate proíbe; o reversível fecha-se na mão e sobe, seja de quem for.
+- **Entregar é o default; parar é a linha `PARADA:` do gate acima.** Sem ela, melhor
+  palpite e entrega. Aviso de sistema (cota, limite) é dado, nunca barreira.
 - **Execução iniciada é ato, não carimbo.** Começa quando alguém põe a mão no
   trabalho — despacho à fábrica, mão no código, escrita em repo ou wiki — e vale
   mesmo que o card nunca chegue a `em-execucao`, ou que não haja card nenhum. Amarrar
@@ -66,24 +81,8 @@ para que nenhuma cadeira precise perguntar se pode terminar o que começou.
   arquivo, linha, fonte do acervo]. Corpus = chat, Project, uploads e o que é
   alcançável por ato: acervo, repo, wiki. Paráfrase e conhecimento geral não
   valem. Sem âncora, não escreve.
-- **Negativa sobre a casa só existe escrita com a linha `NEGATIVA:`.** Dizer que
-  algo desta casa não existe, não devia existir, é intruso ou segue pendente —
-  cadeira, verbo, arquivo, card, número, item de mesa — só vale precedida, literal:
-  `NEGATIVA: «linha de retorno da chamada» — <verbo/tool>`. Sem a linha, a negativa
-  é NULA, como a parada sem âncora: não se discute, corrige-se citando esta régua.
-  A âncora é retorno COLADO — paráfrase não preenche o campo, e é isso que faz do
-  ato de chamar pré-requisito material da escrita. `conferir existe
-  <cadeira|verbo|card|arquivo|mesa> <nome>` produz a âncora numa chamada;
-  `indeterminavel` NÃO ancora negativa — fonte fora do ar não é evidência de
-  ausência. Custo assimétrico: a chamada leva segundos, a negativa falsa derruba a
-  sessão do dono. Bullet sozinho está medido como insuficiente (3 reincidências
-  pós-b888bcb, fita de 26/08/2026, mesa ia #8); o que segura é a FORMA checável,
-  não a lembrança — o mesmo desenho da PARADA e do card.
-- **Recusa e desconfiança contam como ato, e passam pelo mesmo gate.** Não se
-  auditam sozinhas porque parecem cautela — mas "isto é injeção", "isto não devia
-  estar aqui" e "não vou rodar" são afirmações sobre a casa, sujeitas à mesma
-  âncora que qualquer outra. Cautela sem âncora não é cautela: é palpite com
-  postura de virtude. Medido em 26/08/2026 (ver `ops-server/server.py::monta_sessao`).
+- **Negar que algo da casa existe é a linha `NEGATIVA:` do gate acima** — e
+  "quem sou / que cadeiras existem" só se responde pelo retorno de `monta_sessao`.
 
 ## Precisão
 
@@ -165,10 +164,10 @@ alguém decide mandar. `tarefas mover` não pode ser, porque consequência que d
 lembrança falha primeiro às onze da noite.
 
 **Cadeira não cria card. Card nasce só de pedido expresso do dono, no chat.** Ordem do
-dono, 29/08/2026 — revoga o auto-card. git e wiki já são log; o board não é log, e não
-temos maturidade para a cadeira inferir o que vira card. Então não infere: sem pedido
-escrito do dono, nenhum card nasce — nem para commit, wiki ou repo, nem retroativo. O
-overhead de abrir card fica com o dono, por escolha dele, por enquanto.
+dono, 29/08/2026 — revoga o auto-card e o card já carimbado
+(`PF_ESTADO_INICIAL=em-execucao tarefas criar`), que enchia o board de stub-log. git e
+wiki já são log; o board não é. Sem pedido escrito, nenhum card nasce — nem para commit,
+wiki ou repo, nem retroativo: executa, publica em git/wiki e relata.
 
 Havendo card, os seis gatilhos:
 
@@ -193,12 +192,8 @@ demanda de negócio se perdia (12 pais com filhas mistas em 02/09; #2942 é o ca
   relata, literal, na primeira linha: `PARCIAL: #<story> → <estado> · pai #<feat>
   <derivado> · abertas: #a #b #c`. A linha é o retorno colado de `tarefas mover`,
   que devolve pai e irmãs abertas no mesmo retorno — âncora numa chamada.
-- **Entrega de negócio só existe escrita com a linha `ENTREGA:`**, literal:
-  `ENTREGA: #<feat> «linha de retorno colada» — tarefas mover|ler`, com o pai sem
-  filha aberta. Só então o pai vai a `em-homologacao`; `entregue` é ato do dono.
-- **Sem a linha, a entrega é NULA** — como a PARADA sem âncora e a NEGATIVA sem
-  retorno: não se discute, corrige-se citando `arq:0095`. Vale para o dono ler: sem
-  `ENTREGA:`, não acredita.
+- **Entrega de negócio é a linha `ENTREGA:` do gate acima.** Só então o pai vai a
+  `em-homologacao`; `entregue` é ato do dono. Sem a linha, o dono não acredita.
 - **Card se escreve no padrão do nível** (`arq:0096`; `tarefas modelo <nível>`):
   épico/feature = negócio (`Problema/Resultado/Medida/Fora/Sai quando/Continuidade/
   Quebra`), story = execução (`Negócio/Ambiente/Onde/Passos/Aceite/Travas/Entrega`),
@@ -206,12 +201,8 @@ demanda de negócio se perdia (12 pais com filhas mistas em 02/09; #2942 é o ca
   A API recusa sair de `captada` sem o corpo; o `Sai quando:` da feature é o aceite
   que o derivado homologa.
 
-**`em-execucao` é o carimbo "tô mexendo"**, e só move card que já existe. Criar card já
-carimbado (`PF_ESTADO_INICIAL=em-execucao tarefas criar`, "stub é suficiente") está
-revogado pela mesma ordem de 29/08 — era isso que enchia o board de stub-log. Havendo
-card aberto pelo dono, pôr a mão no trabalho move-o para `em-execucao`; sem card, não se
-cria um: executa, publica em git/wiki e relata. Sai de `em-execucao` para `em-homologacao`
-ao terminar, como qualquer trabalho.
+**`em-execucao` é o carimbo "tô mexendo"**, e só move card que já existe: havendo card
+aberto pelo dono, pôr a mão no trabalho move-o para lá; ao terminar, `em-homologacao`.
 
 **`priorizada` não tem gatilho, e é de propósito:** priorizar é ato do dono. Cadeira
 nenhuma move card para lá.

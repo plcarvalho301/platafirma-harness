@@ -1,8 +1,9 @@
 #!/home/claudinho/AI/.venv-harness/bin/python
-# descansar — fim de fita: confere a memoria e mede os fatos volateis contra os
-# quais a sessao confere o que "lembra"
+# descansar — fim de fita: confere a memoria e mede os fatos volateis contra os quais a sessao confere o que "lembra"
 # capacidade: encerramento
 # dono: claudinho-IA
+# use para: encerrar fita, fim de sessão, conferir memória antes de fechar
+# atos: fita, varredura
 #
 # Par do `mesa`: `mesa` guarda, `descansar` fecha. O encerramento de fita nao pode
 # depender de a sessao saber que vai morrer — ela nao sabe. O que este verbo faz e

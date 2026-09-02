@@ -385,6 +385,13 @@ mcp = FastMCP(
 )
 
 
+# Por que thread + process group (rationale que morava no __doc__ de run_command):
+# o FastMCP despacha tool síncrona inline (`fn(**args)`, sem offload) e o processo é
+# single-threaded/asyncio cooperativo — um run_command inline travaria TODO o ops-mcp
+# (outras tools, /health, accept()) até retornar. Por isso a parte bloqueante vai a
+# anyio.to_thread (limite padrão 40) e roda em session própria (start_new_session):
+# no timeout mata-se o grupo (os.killpg), senão `&`/nohup/docker exec sobrevivem e,
+# herdando o fd do pipe, travam o communicate() driblando o timeout declarado.
 def _run_blocking(command: str, d: Path, timeout: int, sessao_id: str = "-", oid: str = "-") -> dict:
     """Parte síncrona de run_command — roda em thread do anyio, nunca no event loop
     (ver docstring de run_command pra motivo)."""
@@ -410,34 +417,17 @@ def _run_blocking(command: str, d: Path, timeout: int, sessao_id: str = "-", oid
 
 
 async def run_command(command: str, cwd: str = "", timeout: int = 120) -> dict:
-    """FALLBACK genérico: executa um comando shell (bash -c) como o usuário @USER@.
-    Os verbos do núcleo têm tool própria (nome = slug do verbo: `tarefas`, `fila`,
-    `mesa`, `acervo`...) — use-as; venha aqui só para o que não tem verbo: git, docker
-    (rootless), systemctl --user, rg, busca de ADR por texto, fluxo de dado entre verbos.
-    A taxa de uso desta tool em caminho servido por verbo é medida (spec cápsula §3.8).
+    """FALLBACK: executa um comando shell (`bash -c`) como o usuário @USER@, para o que
+    não tem verbo — git, docker (rootless), systemctl --user, rg, fluxo de dado entre
+    verbos. Verbo do núcleo tem tool própria (nome = slug); usá-lo por aqui é medido.
 
-    cwd é relativo a @ROOT@ (vazio = a própria raiz). timeout em segundos
-    (teto 600). stdout/stderr voltam com truncagem declarada (truncado/bytes_total).
+    cwd é relativo a @ROOT@ (vazio = a raiz). timeout em segundos (teto 600); estourou,
+    o grupo de processo inteiro é morto. stdout/stderr voltam com truncagem declarada
+    (`truncado`/`bytes_total`). `&&` engole o exit code — use `;` ou chamadas separadas.
 
-    PATH: @ROOT@/bin e ~/.local/bin JÁ ESTÃO no PATH do comando — o servidor os injeta,
-    porque `bash -c` não-login não lê .bashrc nem .profile. Não é preciso exportar PATH
-    nem usar caminho absoluto para o ferramental instalado em user-space. Os segredos da
-    instância (OPS_AUTH_TOKEN, TUNNEL_TOKEN) NÃO descem para o ambiente do comando.
-
-    AUDITORIA: toda chamada grava linha JSONL em @ROOT@/var/log/ops/ com o comando, o
-    cwd, o exit code e a duração. Não é opcional e não é silenciável pelo chamador.
-
-    A parte bloqueante roda em thread separada via anyio.to_thread (limite padrão 40
-    concorrentes) — NUNCA inline no event loop. O FastMCP despacha tool síncrona com
-    `fn(**args)` direto (mcp/server/fastmcp/utilities/func_metadata.py), sem offload
-    próprio; sem esse anyio.to_thread aqui, um run_command em andamento — mesmo dentro
-    do timeout declarado — trava TODO o resto do ops-mcp (outras tool calls, /health,
-    accept() de conexão nova) até retornar, porque o processo é single-threaded e
-    asyncio é cooperativo. Roda também em session/process group próprio
-    (start_new_session=True): no timeout, mata o grupo inteiro (os.killpg), não só o
-    bash direto — sem isso, algo em background (&, nohup, docker exec ...) sobrevive
-    ao run_command que o criou, e se herdou o fd do pipe de stdout/stderr, trava o
-    communicate() driblando o timeout declarado.
+    PATH já traz @ROOT@/bin e ~/.local/bin (bash -c não lê .bashrc). Segredos da instância
+    NÃO descem para o ambiente. AUDITORIA: toda chamada grava JSONL em @ROOT@/var/log/ops/
+    (comando, cwd, exit, duração) — não é silenciável.
     """
     negado = _autoriza("run_command", "run_command", "comando", command,
                        DOM_RUNTIME)
@@ -593,12 +583,9 @@ def _montar(cadeira: str, atualizar: bool, chapeu: str = "", pergunta: str = "")
     O servidor não acrescenta nada ao pacote: o envelope da fila saiu daqui em
     17/08 (#189) e a camada B inteira é por ato, pelo verbo.
     """
-    alvo = cadeira.strip()
-    for prefixo in ("claudinho-", "claudinha-"):
-        if alvo.lower().startswith(prefixo):
-            alvo = alvo[len(prefixo):]
-
-    argv = [str(RAIZ / "bin" / "monta-sessao"), alvo, "--json"]
+    # Strip do prefixo claudinho-/claudinha- e do verbo (`_sufixo_sem_prefixo`, #2438):
+    # segunda implementacao aqui divergiria em silencio. A porta passa o que recebeu.
+    argv = [str(RAIZ / "bin" / "monta-sessao"), cadeira.strip(), "--json"]
     if not atualizar:
         argv.append("--sem-atualizar")
     if chapeu:
@@ -637,65 +624,27 @@ def _montar(cadeira: str, atualizar: bool, chapeu: str = "", pergunta: str = "")
 
 
 async def monta_sessao(cadeira: str = "", atualizar: bool = True, chapeu: str = "", pergunta: str = "") -> dict:
-    """Devolve, numa chamada, o contexto de abertura de uma cadeira da PlataFirma:
-    persona canônica, tool-manifest que ELA declara, org canônico e a mesa.
+    """Abre a sessão de uma cadeira numa chamada: devolve o pacote de abertura como
+    catálogo de peças (persona, ofício, conduta do dono, alias de cadeiras, mesa, índice
+    de cadernos, acervo consultado) e cunha `sessao_id` + `ordem_id` para as demais tools.
 
-    NÃO traz fila nem board. A abertura carrega só o que é impedimento — o que, sem
-    ato, deixa o estado como está —, e hoje isso é a mesa. Caixa e carteira saem por
-    `fila` e `tarefas`, verbos chamados por ordem do dono como qualquer outro.
+    NÃO traz fila nem board — abertura carrega só impedimento (a mesa); caixa e carteira
+    saem por `fila` e `tarefas`, por ordem do dono.
 
-    Chamar no lugar de encadear leituras na abertura de sessão — é o que esta tool
-    existe para matar.
+    `cadeira`: sufixo da persona (`claudinho-`/`claudinha-` aceito e descartado). A lista
+    viva de cadeiras NÃO mora neste texto: vem do disco (`abertura/<slug>/`), a cada
+    chamada; vazia ou desconhecida devolve `cadeiras` com a lista válida. Afirmar que uma
+    cadeira não existe exige essa chamada como âncora (conduta do dono, `NEGATIVA:`).
 
-    `cadeira`: sufixo da persona — o prefixo `claudinho-`/`claudinha-` é aceito e
-    descartado. Vazia ou desconhecida devolve `cadeiras` com a lista válida, nunca
-    erro mudo.
+    `pergunta`: SEMPRE o corpo literal do turno do dono — é o sinal que roteia o chapéu
+    (`roteador.via` = determinístico | semântico | fallback). Sem ela, `chapeu` sai null.
+    `chapeu`: força o slug e pula o roteador — só quando o dono o disse.
 
-    NÃO TRATE NENHUMA LISTA DESTE DOCSTRING COMO EXAUSTIVA. A lista viva é
-    `_cadeiras()` — os subdiretórios de `abertura/`, lidos a cada chamada. Em
-    26/08/2026 eram oito: arquiteto, dados, fabrica, gestao-estrategica, ia,
-    produto, seguranca, ti. A enumeração é datada e vai envelhecer; a tool não.
-
-    Incidente 26/08/2026 que obriga este parágrafo: o docstring dizia
-    "(`TI`, `IA`, `fabrica`)" como exemplo, e uma instância leu os três como
-    whitelist e respondeu ao dono que `gestao-estrategica` "não é uma cadeira que
-    existe na PlataFirma" — sem chamar a tool. O log mostra a mesma cadeira
-    resolvendo limpa 77 min antes (`resolvida: claudinha-gestao-estrategica`,
-    `erro: null`, 1604 ms). Afirmar que uma cadeira não existe É CONTESTAÇÃO e
-    exige âncora; aqui a âncora só pode ser esta chamada. Uma chamada custa ~1,6 s
-    e devolve a lista. A afirmação sem ela custou a sessão inteira do dono.
-
-    `atualizar` (default true): dá `git pull --ff-only` nos clones de persona e org
-    antes de ler. Falha de rede não interrompe — o pacote vem do clone com
-    `atualizado: false` declarado. Com ou sem pull, `repos` traz sempre `sha`,
-    `head_em` (data do commit servido) e `sincronizado_em` (último fetch): clone
-    velho e clone no head são indistinguíveis sem isso, e servir do clone só é
-    seguro quando a idade vem declarada.
-
-    O pacote sai como CATÁLOGO DE PEÇAS (#189 fase 5): `pecas` é uma lista em ordem de
-    injeção, e cada item traz `{peca, dono, ref, sha, regime, tokens, frescor}` mais o
-    conteúdo servido. Persona, tool-manifest da cadeira, núcleo comum, org, antirreabertura,
-    mesa e índice de cadernos são peças — não há mais uma chave por artefato. Peça que falta
-    vem com `frescor: indisponivel` e o motivo, nunca omitida: pacote sem a peça e pacote
-    com peça vazia seriam indistinguíveis.
-
-    `pacote` traz a conta do que foi servido — número de peças, tokens medidos com o
-    tokenizador do harness, método da contagem e o SHA do clone do montador — e diz se o
-    registro em `sessao.peca_servida` aconteceu. `avisos` traz teto estourado, clone
-    atrasado e divergência entre o que a persona declara e o que o catálogo serve.
-
-    Persona sem linha `FERRAMENTAL:` devolve `manifesto.ausente` com aviso explícito.
-    Ausência declarada, nunca omissão silenciosa. Sem caso vivo hoje: o exemplo que
-    morava aqui era a claudinha-osint, desligada em 15/08/2026 (org:0002).
-
-    `pergunta`: PASSE SEMPRE o corpo do turno do dono aqui — o pedido literal que
-    abriu a sessão, sem parafrasear. NÃO é opcional e NÃO é o `--chapeu`: é o SINAL
-    a partir do qual a cadeira roteia o próprio chapéu (determinístico -> semântico).
-    Omitir `pergunta` mata o roteamento na origem: sem ela, a abertura cai direto no
-    fallback e serve `chapeu=null`, e o dono passa a ter de dizer o chapéu na mão —
-    exatamente o que esta tool existe para evitar. Só se abre sem `pergunta` quando
-    não há turno ainda (ex.: claude.ai antes do 1º prompt). Medido: 243/249 aberturas
-    em 7 dias vieram sem pergunta e portanto sem roteamento (#2919).
+    `atualizar` (default true): `git pull --ff-only` nos clones antes de ler; falha de rede
+    não interrompe (`repos.atualizado: false`). Cada peça traz `{peca, dono, ref, sha,
+    regime, volatilidade, tokens, frescor}` e o conteúdo; peça que falta vem com
+    `frescor: indisponivel` e o motivo, nunca omitida. `pacote` traz a conta (peças,
+    tokens, SHA do montador, registro); `avisos` traz teto, clone atrasado e divergência.
     """
     negado = _autoriza("monta_sessao", "monta_sessao", "documento",
                        f"sessao:{cadeira or '-'}", DOM_PLATAFORMA)
@@ -770,7 +719,8 @@ for _fn in _TOOLS:
 # fica pro teste de superfície, §3.2/§7.3).
 TOOLS_VERBOS = os.environ.get("PF_TOOLS_VERBOS", "1") != "0"
 TOOLS_LOTE2 = os.environ.get("PF_TOOLS_LOTE2", "0") == "1"
-LOTE2 = {"deploy", "acesso", "infra", "chat"}
+# Quem é lote 2 NÃO mora aqui: é o marcador `lote:2` na linha do slug em
+# abertura/oficio-ferramental.md, que `acervo listar ferramental --tools` projeta em `lote`.
 
 
 def _sessao_resolve(sessao_id: str | None) -> dict:
@@ -851,7 +801,7 @@ def _gera_tools_verbos() -> list:
         return []
     try:
         cp = subprocess.run(["acervo", "listar", "ferramental", "--tools"],
-                            env={**_env_subprocesso(), "PF_CADEIRA": "ti"},
+                            env=_env_subprocesso(),  # projecao nao tem sujeito: nenhuma cadeira chumbada
                             capture_output=True, text=True, timeout=30, cwd=RAIZ)
     except Exception as e:  # noqa: BLE001
         print(f"[capsula] gerador falhou: {e!r} — sem tools derivadas", file=sys.stderr, flush=True)
@@ -866,16 +816,19 @@ def _gera_tools_verbos() -> list:
     except ValueError as e:
         print(f"[capsula] JSON do gerador invalido: {e!r}", file=sys.stderr, flush=True)
         return []
-    servidas = []
+    servidas, retidas = [], []
     for i in itens:
         slug = i["tool"]
-        if slug in LOTE2 and not TOOLS_LOTE2:
+        if int(i.get("lote") or 1) >= 2 and not TOOLS_LOTE2:
+            retidas.append(slug)
             continue
-        desc = (i.get("descricao") or "") + f" · tool derivada do verbo `{slug}` (ato + args; `{slug}` sem ato lista os atos). Passe `sessao_id` do monta_sessao."
+        # Descrição = coluna `descricao` do golden record, SEM edição (spec §3.1): o
+        # contrato comum (ato, args, sessao_id) está no ofício, uma vez, não 17.
+        desc = i.get("descricao") or ""
         mcp.tool(name=slug, description=desc)(_faz_tool_verbo(slug, i["binario"], desc))
         servidas.append(slug)
     print(f"[capsula] tools derivadas servidas ({len(servidas)}): {' '.join(servidas)}"
-          + (f" · lote 2 retido: {' '.join(sorted(LOTE2))}" if not TOOLS_LOTE2 else ""),
+          + (f" · lote 2 retido: {' '.join(retidas)}" if retidas else ""),
           file=sys.stderr, flush=True)
     return servidas
 

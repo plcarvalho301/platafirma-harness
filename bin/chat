@@ -2,6 +2,8 @@
 # chat — despacha o giro do motor por cadeira e abre a fita da sala
 # capacidade: solicitacao
 # dono: claudinho-TI
+# use para: giro do motor, despachar prompt a uma cadeira, fita da sala
+# atos: cadeiras, despachar, versao
 # componente: chat (recepcao + worker + Claude Code headless)
 #
 # Porta unica entre a superficie de conversa e o motor. Quem chama e a recepcao

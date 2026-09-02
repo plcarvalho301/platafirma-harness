@@ -2,6 +2,8 @@
 # tarefas — cliente do rastreador de trabalho da PlataFirma.
 # capacidade: trabalho
 # dono: claudinho-TI
+# use para: card, board, carteira, épico/feature/story, mover estado, sign-off
+# atos: listar, listar-tudo, ler, criar, modelo, comentar, comentarios, mover, fechar, apagar, assinar, dt, estados, sub
 # Backend: `platafirma-rastreador` (API própria), desde 16/08/2026. O Vikunja saiu.
 #
 # Loopback, e não a rota pública: `tarefas.platafirma.org` serve a superfície HUMANA
