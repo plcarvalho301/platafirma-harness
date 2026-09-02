@@ -1,35 +1,23 @@
 # caderno — head (dados)
 
-## Entrega inteira ou entrega nenhuma — ordem do dono, 02/09/2026
+## Entrega é a dinâmica capturada inteira — não completude garantida (dono, 02/09/2026)
 
-Régua da cadeira, vale em TODO chapéu. Quando o dono pede "quero X **e** Y
-acontecendo", o pedido é X e Y juntos. Entregar X e declarar Y aberto **não é
-entrega parcial — é NÃO-ENTREGA.** A frase "X foi feito, mas Y não" está proibida
-como relato de entrega: ou os dois fecham, ou o trabalho não fechou. Ponto.
+Quando o dono pede "quero X e Y acontecendo", ele pede uma DINÂMICA. Entrega é
+essa dinâmica capturada ponta a ponta e rodando. **Não** é garantia absoluta de
+que nunca falha, não é gate, não é prova de completude — o dono NÃO pede isso e
+recusa quando aparece.
 
-- Meia-entrega não se apresenta como progresso. Se Y não fechou, o PEDIDO não
-  fechou — diga isso reto, na primeira linha, sem embrulhar o X como se fosse a
-  entrega.
-- Isto morde dados mais que qualquer cadeira: aqui o caminho é uma CADEIA
-  (schema → carga → transporte → consumo) e ela quebra elo a elo. "Liguei um elo"
-  vira falsa entrega o tempo todo. Só há entrega quando o caminho serve INTEIRO,
-  ponta a ponta, medido — não quando uma peça isolada passa a existir.
-- Antes de relatar "feito", percorra a cadeia inteira do pedido e ache o elo mais
-  fraco. É esse elo que decide se houve entrega, não o mais forte.
+- **Meia-entrega** = capturar só metade da dinâmica (ex.: o server coleta mas nada
+  crava). Isso é não-entrega: a dinâmica pedida não acontece.
+- **Entrega** = a dinâmica acontece inteira (ex.: encerrar → 3 giros no banco,
+  rodando e provado). Capturou a dinâmica, parou.
+- Os dois erros simétricos: entregar metade e chamar de progresso; ou, do outro
+  lado, travar a entrega caçando garantia absoluta. Ambos ignoram o pedido.
+- Morde dados mais que as outras cadeiras: o caminho é uma cadeia
+  (schema → carga → transporte → consumo). Antes de dizer "feito", confira que a
+  dinâmica corre ponta a ponta — não que um elo isolado passou a existir.
 
-## Corolário vivo — auto-relato dos giros no encerrar (#2945)
-
-Aplicação direta da régua acima, e a razão de ela ter sido escrita.
-
-- Ao **encerrar/descansar** uma fita de dados, a sessão (o modelo, não o verbo)
-  **auto-relata os 3 primeiros giros** no corpo de `/sessao/encerrar`
-  (`giro: [{seq, prompt, resposta}]`). O verbo só grava o que recebe — o texto
-  vem do contexto da sessão, ninguém mais o tem.
-- "O server coleta" **não é entrega** dos giros. Entrega é o encerrar CRAVAR, o
-  que exige os dois elos: server coletando (feito) **e** a sessão auto-relatando
-  (esta regra). Elo do auto-relato omitido = giros não entregues.
-- Mecanismo servido: `_sessao_encerrar` → `bin/_giro-carga.py` (cria a fita por
-  `sessao_id` se não existir, upsert idempotente por `(fita_id, seq)`),
-  `sessao.fita.sessao_id` (mig. 0089), `sessao.giro.fidelidade='auto-relato'`
-  (mig. 0088). Para valer em TODA cadeira, e não só em dados, o auto-relato tem
-  de subir para a conduta de abertura — decisão do dono.
+Corolário vivo (#2945): a dinâmica "encerrar → 3 primeiros giros no banco" está
+capturada — `_sessao_encerrar` coleta e chama `bin/_giro-carga.py` (cria a fita
+por `sessao_id`, upsert idempotente), migrações 0088/0089 aplicadas, prova cravada
+nesta fita. Capturado.
