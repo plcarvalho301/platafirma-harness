@@ -39,19 +39,6 @@ sujeitos:
     dominios: [plataforma]
     conta: claudinho
 
-  # Colaboração externa em modelo DMZ (card 344, seg:0009). Lê acervo por concessão
-  # nomeada e fala pelo canal exclusivo com claudinho-IA. Não executa comando, não
-  # toca identidade — as três negativas duras do PAP pegam este papel.
-  # Token real: client L0R8OJ (service account), criado em 13/08/2026 por claudinho-TI
-  # com autorizacao do dono. sub do realm cc897004-7afd-4a53-9a16-c568220d524c; o
-  # `preferred_username` sai como `jaiminho` por mapper hardcoded no client, e e por
-  # ele que o PEP resolve o sujeito e monta `caixa:jaiminho`.
-  jaiminho:
-    natureza: servico
-    papeis: [pesquisador-externo]
-    dominios: [plataforma-acervo, plataforma-wiki, plataforma-repo, plataforma-drive, mensageria]
-    client: L0R8OJ
-    conta: jaiminho
 
   # Segunda conta da fábrica, motor `agy` (Antigravity, assinatura do dono, sem API
   # paga). Vínculo e razão: `org:0020`. NÃO é o Jaiminho — contas, sujeitos e papéis
@@ -118,13 +105,6 @@ sujeitos:
     dominios: [plataforma]
     usuario: megafone
 
-  # colaboração externa — mesmo sujeito de `jaiminho`, client L0R8OJ
-  cc897004-7afd-4a53-9a16-c568220d524c:
-    natureza: servico
-    papeis: [pesquisador-externo]
-    dominios: [plataforma-acervo, plataforma-wiki, plataforma-repo, plataforma-drive, mensageria]
-    client: L0R8OJ
-    conta: jaiminho
 
   # `claudinho` (rota de emergência) e `jaiminho-fabrica` NÃO ganham entrada por sub,
   # e cada um por uma razão diferente:

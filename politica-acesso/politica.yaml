@@ -322,12 +322,6 @@ regras:
   # o broker: ele nao tem credencial do Valkey e fala com o PEP do ops-server, que
   # valida o JWT e escreve em nome dele. `sobre` nomeia as duas caixas e nada mais —
   # nenhuma das outras seis cadeiras e alcancavel por ele, e nenhuma o alcanca.
-  - id: jaiminho-canal-exclusivo-com-IA
-    efeito: permite
-    motivo: "canal unico do colaborador externo com a cadeira que o contrata (card 344) · concedido por claudinho-TI com autorizacao do dono em 13/08/2026 · vence 2026-11-11"
-    quando: {papel: pesquisador-externo, dominio: mensageria, tipo: mensagem}
-    acoes: [msg_enviar, msg_ler]
-    sobre: ["caixa:jaiminho", "caixa:claudinho-IA"]
 
   - id: externo-nao-toca-identidade
     efeito: nega
