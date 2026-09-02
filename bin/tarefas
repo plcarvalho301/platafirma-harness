@@ -49,7 +49,9 @@ uso:
   tarefas comentarios <id>                lista os comentários do item, em ordem
   tarefas mover <id> <estado> [--motivo "<txt>"] [--englobado-em <id>]
                                           move o card pelo fluxo; a recusa diz para onde
-                                          se PODE ir a partir do estado atual
+                                          se PODE ir a partir do estado atual. Item com
+                                          pai devolve junto o derivado do pai e as irmãs
+                                          abertas (arq:0095) — é a âncora do PARCIAL:
   tarefas fechar <id> [--como <estado>] [--cascata]
                                           fecha; default: entregue. Filha aberta na
                                           subárvore? a recusa NOMEIA quem seria encerrado
@@ -290,7 +292,15 @@ ler() {
   # e peneira client-side por `.pai == id`. SÓ ABERTAS: terminal (entregue, englobada,
   # etc.) fica fora — a mesma régua de fase que `listar` aplica, pela mesma razão.
   # Filha entregue é auditoria, e auditoria é `listar-tudo`, não leitura de card.
-  local filhas; filhas=$(busca GET "/itens" | jq -r --argjson id "$id" '
+  local filhas; filhas=$(filhas_abertas "$id")
+  [ -n "$filhas" ] && printf '\nfilhas (abertas):\n%s\n' "$filhas"
+}
+
+# Filhas DIRETAS ainda abertas de <id>, uma por linha (id · estado · cadeira · título).
+# Compartilhada por `ler` e por `mover`: é a MESMA peneira nas duas, para que a linha
+# `PARCIAL:` do relato (arq:0095) e a leitura do card nunca discordem sobre o que pende.
+filhas_abertas() {
+  busca GET "/itens" | jq -r --argjson id "$1" '
     ([.estados[]? | select(.fase == "terminal" or .natureza == "terminal") | .estado]
      + ["entregue","recusada","cancelada","englobada","encerrada","resolvido"]
      | unique) as $term
@@ -300,8 +310,27 @@ ler() {
     | select(if $it.estado_derivado != null
              then ($term | index([$it.estado_derivado]) == null)
              else ($it.estado_fase != "terminal") end)
-    | "  #\($it.id)\t\($it.estado)\t\($it.cadeira // "—")\t\($it.titulo)"')
-  [ -n "$filhas" ] && printf '\nfilhas (abertas):\n%s\n' "$filhas"
+    | "  #\($it.id)\t\($it.estado)\t\($it.cadeira // "—")\t\($it.titulo)"'
+}
+
+# ENTREGA É DERIVADA DO PAI (arq:0095, dono 02/09/2026). Item executável movido devolve, no
+# MESMO retorno, o estado derivado do pai e as irmãs abertas — é a âncora que a linha
+# `PARCIAL:`/`ENTREGA:` do relato cola. Sem isto a forma exigiria segunda chamada, e regra
+# que depende de segunda chamada morre como o bullet morreu (3 reincidências pós-b888bcb).
+# Medido em 02/09/2026: 12 pais com filhas mistas no board, 10 com derivado `captada` —
+# a story fechava, o relato dizia "entregue", e a frente restante nem lapidada estava.
+pai_e_irmas() { # pai_e_irmas <id-do-pai>
+  local pai; pai=$(so_id "$1")
+  busca GET "/itens/$pai" | jq -r '
+    "  pai #\(.id) [\(.nivel_nome)]: "
+    + (if .estado_derivado != null then "\(.estado_derivado) [derivado]" else .estado_nome end)
+    + " — \(.titulo)"'
+  local abertas; abertas=$(filhas_abertas "$pai")
+  if [ -n "$abertas" ]; then
+    printf '  abertas no pai (entrega de negócio NÃO fechou):\n%s\n' "$abertas"
+  else
+    printf '  nenhuma filha aberta no pai — o pai é homologável pelo dono\n'
+  fi
 }
 
 # SIGN-OFF PELO VERBO — card #347. A rota existia desde o #466 e não tinha verbo, e a
@@ -441,12 +470,12 @@ mover() {
       *) echo "opção desconhecida: $1" >&2; exit 2 ;;
     esac
   done
-  jq -n --arg e "$destino" --arg m "$motivo" --arg g "$elo" \
+  local resp; resp=$(jq -n --arg e "$destino" --arg m "$motivo" --arg g "$elo" \
      '{estado:$e}
       + (if $m == "" then {} else {motivo:$m} end)
       + (if $g == "" then {} else {englobado_em:($g|tonumber)} end)' \
-    | envia PATCH "/itens/$id$q" \
-    | jq -r '"item \(.id) → "
+    | envia PATCH "/itens/$id$q") || return 1
+  printf '%s' "$resp" | jq -r '"item \(.id) → "
              + (if .estado_derivado != null
                 then "\(.estado_derivado) [derivado; cru: \(.estado_nome)]"
                 else .estado_nome
@@ -455,6 +484,11 @@ mover() {
              + (if ((.propagacao.movidas // []) | length) > 0
                 then "\n  filhas movidas junto: " + ([.propagacao.movidas[] | "#\(.id)"] | join(", "))
                 else "" end)'
+  # Tem pai → o relato precisa do pai (arq:0095). Sai sempre, em qualquer destino: a story
+  # que entra em `em-execucao` também tem de saber quantas irmãs faltam.
+  local pai; pai=$(printf '%s' "$resp" | jq -r '.pai // empty')
+  [ -n "$pai" ] && pai_e_irmas "$pai"
+  return 0
 }
 
 # `fechar` CONTINUA EXISTINDO PARA FECHAR, e deixa de ser a porta de mover. Não morre: 145
