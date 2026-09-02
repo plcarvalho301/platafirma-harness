@@ -116,3 +116,16 @@ WHERE i.obra_id = '<uuid>' AND t.elegivel;
 
 Zero aqui é pendência de **ingestão** (OCR), não de aquisição — e são estados diferentes,
 que pedem atos diferentes de quem lê a fila.
+
+## Entrega da fábrica se prova no ambiente que serve, nunca no host
+
+Teste verde no host não diz nada sobre o serviço: o host tem `mc`, alias `pf`,
+venv com tudo; a imagem `edm-rag-api` só tem o que `requirements-api.txt` instala
+(o `Dockerfile.api` NÃO lê o `pyproject`). Uma entrega passou 9 testes no host
+chamando `subprocess mc` — e o container não tem `mc`, nem `~/.mc`, nem cliente
+S3. O relato "9 passed" era verdadeiro e irrelevante.
+
+Antes de aprovar: `docker exec <api> which <binário>` / `python3 -c "import <dep>"`,
+e o teste da rota rodando DENTRO do container. Dependência nova entra em
+`requirements-api.txt` além do `pyproject`, ou a imagem quebra no import.
+Build da imagem leva minutos: `longjob`, nunca inline no turno.
