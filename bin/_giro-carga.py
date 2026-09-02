@@ -21,6 +21,7 @@
 import json
 import os
 import sys
+import uuid
 
 RAIZ = os.environ.get("PF_RAIZ", os.path.expanduser("~/AI"))
 SESSAO_ENV = os.path.join(RAIZ, "platafirma-harness", "sessao", ".env")
@@ -47,8 +48,14 @@ def main() -> int:
     sessao_id = (payload.get("sessao_id") or "").strip()
     giro = payload.get("giro") or []
     if not sessao_id:
-        print(json.dumps({"ok": False, "erro": "sessao_id obrigatorio"}))
-        return 1
+        # A GRAVACAO cunha o shadow (ordem do dono 02/09). No claude.ai cada tool call
+        # e isolada: o sessao_id cunhado por monta_sessao vive so no Valkey efemero e e
+        # inexistivel no encerrar. Entao o shadow nasce aqui, no ato de gravar — chave
+        # propria (uuidv4), nunca o id do fornecedor (arq:0091 D2). Devolvido em cunhado.
+        sessao_id = uuid.uuid4().hex
+        cunhado = True
+    else:
+        cunhado = False
     if not giro:
         print(json.dumps({"ok": True, "carregados": 0, "motivo": "giro vazio"}))
         return 0
@@ -93,7 +100,7 @@ def main() -> int:
                 "fidelidade = EXCLUDED.fidelidade",
                 linhas)
             con.commit()
-        print(json.dumps({"ok": True, "fita": fita_id, "carregados": len(linhas)}))
+        print(json.dumps({"ok": True, "fita": fita_id, "carregados": len(linhas), "shadow_cunhado": cunhado}))
         return 0
     except Exception as e:                                  # noqa: BLE001 — banco mudo nao pode explodir o encerrar
         print(json.dumps({"ok": False, "erro": f"{type(e).__name__}: {e}"}))
