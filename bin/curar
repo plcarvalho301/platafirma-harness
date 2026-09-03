@@ -2,13 +2,14 @@
 # curar — cliente fino da API de curadoria do acervo
 # capacidade: classificacao
 # dono: claudinho-dados
-# use para: curadoria do acervo, reclassificação em lote e avulsa, expurgo, restauração e promoção
-# atos: --reclassificar, --situacao, --expurgar, --restaurar, --promover
+# use para: curadoria do acervo, reclassificação em lote e avulsa, expurgo, restauração, promoção e teia de conceitos (aresta entre conceitos)
+# atos: --reclassificar, --situacao, --expurgar, --restaurar, --promover, --relacionar, --relacoes, --desrelacionar
 import argparse
 import json
 import os
 import re
 import secrets
+import subprocess
 import sys
 import urllib.parse
 
@@ -35,6 +36,10 @@ USO = """uso:
   curar --expurgar <obra> [--sim]
   curar --restaurar <obra>
   curar --promover <obra> --impressao <id>
+  curar --relacionar <de> <para> --tipo <t> --garantia <g> --motivo <m> [--lastro <obra>] [--apply]
+  curar --relacionar --help     cartilha: as 11 famílias (frase-molde) e as 3 garantias
+  curar --relacoes <conceito>   arestas de um conceito, coluna + tabela (o que já está lavrado)
+  curar --desrelacionar <id>    desfaz UMA aresta lavrada (pede confirmação 'sim')
 
 ações principais:
   --reclassificar               reclassifica obra(s) em lote ou individualmente (default: plano seco)
@@ -42,6 +47,18 @@ ações principais:
   --expurgar <obra>             expurgo reversível de uma obra (pede confirmação 'sim')
   --restaurar <obra>            restaura obra expurgada (expurgada: false)
   --promover <obra>             promove impressão de bancada para servindo (exige --impressao)
+  --relacionar <de> <para>      lavra UMA aresta em acervo.conceito_relacao (default: plano seco —
+                                conferências SQL com a aresta dentro + HermiT com diff de insatisfazíveis)
+  --relacoes <conceito>         lista as arestas de um conceito (pai/filhos da coluna + tabela)
+  --desrelacionar <id>          apaga uma aresta pelo id (o export versionado é o registro)
+
+opções de --relacionar:
+  --tipo <família>              generica|partitiva|instancia|instrumental|condicional|tematica|
+                                patologica|aferidora|economica|relacionada|disjunta
+  --garantia <g>                literaria (exige --lastro) | de-uso | instituida
+  --motivo <texto>              na frase-molde da família (ver --relacionar --help)
+  --lastro <obra>               obra do acervo que sustenta (uuid ou título exato)
+  --sem-hermit                  pula a projeção formal (só com --apply se o HermiT estiver fora)
 
 opções de alteração (--reclassificar):
   --trata-de <conceitos>        adiciona conceito(s) (separados por vírgula)
@@ -301,6 +318,272 @@ def acao_promover(obra: str, impressao_id: str, autor: str, como_json: bool, hea
     return 0
 
 
+# Espelho de motor_acervo.relacao_conceito.MOLDES (conhecimento) — a API serve o mesmo em
+# GET /acervo/conceitos/relacoes/cartilha; aqui fica o que --help imprime sem rede.
+CARTILHA = """cartilha de --relacionar — A = <de>, B = <para>; o motivo tem de caber na frase-molde
+
+hierárquicas (ont:0080; sobem na expansão da busca):
+  generica      A é um tipo/forma/escola/método de B; A é B aplicado a X
+  partitiva     A é uma camada/estágio/elo/dimensão de B
+  instancia     A é um B específico; A é o que instancia B
+associativas (ont:0080; vizinhança, não herança):
+  instrumental  A é o instrumento/mecanismo/artefato de B
+  condicional   A é exigência/condição/restrição/critério de B
+  tematica      B é o assunto largo de A; A é o objeto de B
+  patologica    A é a falha/risco/degradação de B
+  aferidora     A afere B; A é a medida de B
+  economica     A é o custo/preço de B
+simétricas (gravam uma vez, ordem canônica de uuid):
+  relacionada   A e B andam colados, sem direção nem hierarquia (skos:related, ont:0085)
+  disjunta      A e B nunca são a mesma coisa (owl:disjointWith, ont:0086 4b) — homonímia ou exclusão
+
+garantias (Z39.19 §5.3.5; caderno de ontologia 02/09):
+  literaria     obra do acervo sustenta — exige --lastro (obra não expurgada)
+  de-uso        pergunta feita ao motor sustenta (evento_recuperacao)
+  instituida    dono ou cadeira afirma — não precisa de trecho (ont:0078)
+
+regras que o plano aplica antes de gravar:
+  - a coluna mais_amplo_id é o pai de navegação: repetir o mesmo pai/tipo é duplicata (409);
+  - pai e lateral ao mesmo tempo é recusado para o par, nos dois sentidos (ont:0080 Aberto; SKOS S27);
+  - conferências SQL rodam com a aresta dentro (ciclo, categoria, exclusividade, ciclo da coluna):
+    qualquer linha NOVA reprova; HermiT roda com a aresta em memória e o diff de insatisfazíveis
+    tem de ser vazio;
+  - aresta cruzando domínio: lavra a cadeira do <de>, avisa a outra pela fila (mesa dados #22).
+depois de --apply: o export ontologia/acervo/conceito_relacao.jsonl é regenerado no clone de
+conhecimento — commit e push são da cadeira que lavrou.
+"""
+
+_PROJECAO_REL = "ontologia/projecao/gerar-e-raciocinar.py"
+
+
+def _repo_conhecimento() -> str | None:
+    """Clone de conhecimento em `main` — o export e a projeção escrevem/leem daí. Um clone
+    parado em branch de fábrica NÃO serve (03/09: clone principal ficou em fabrica/2974)."""
+    cands = [os.environ.get("PF_CONHECIMENTO_DIR"),
+             os.path.expanduser("~/AI/platafirma-conhecimento"),
+             os.path.expanduser("~/AI/var/wt/conhecimento-main")]
+    for d in cands:
+        if not d or not os.path.isfile(os.path.join(d, _PROJECAO_REL)):
+            continue
+        try:
+            br = subprocess.run(["git", "-C", d, "branch", "--show-current"], capture_output=True, text=True, check=False).stdout.strip()
+        except OSError:
+            br = ""
+        if br == "main":
+            return d
+    return None
+
+
+def _hermit(de: str, para: str, tipo: str) -> dict | None:
+    """Projeção formal duas vezes (sem e com a aresta em memória) e diff de insatisfazíveis.
+    Devolve None quando não dá para rodar (sem clone em main, sem venv, script falhou)."""
+    repo = _repo_conhecimento()
+    py = os.environ.get("PF_PROJECAO_PYTHON") or os.path.expanduser("~/AI/.venv/bin/python")
+    if not repo or not os.path.isfile(py):
+        return None
+    script = os.path.join(repo, _PROJECAO_REL)
+    tmp = os.path.expanduser("~/AI/tmp")
+    os.makedirs(tmp, exist_ok=True)
+
+    def roda(extra, ttl):
+        r = subprocess.run([py, script, "--json", "--ttl", ttl, *extra], capture_output=True, text=True, cwd=repo, check=False)
+        if r.returncode:
+            raise RuntimeError((r.stderr or r.stdout).strip()[-400:])
+        return json.loads(r.stdout.strip().splitlines()[-1])
+    try:
+        base = roda([], os.path.join(tmp, "projecao-base.ttl"))
+        com = roda(["--mais", f"{de}:{para}:{tipo}"], os.path.join(tmp, "projecao-plano.ttl"))
+    except (RuntimeError, ValueError, OSError) as e:
+        return {"erro": str(e)}
+    b, c = set(base["insatisfaziveis"]), set(com["insatisfaziveis"])
+    return {"antes": len(b), "depois": len(c), "novos": sorted(c - b), "saem": sorted(b - c),
+            "triplas": (base["triplas"], com["triplas"]), "repo": repo}
+
+
+def _exportar(repo: str) -> str | None:
+    """Regenera ontologia/acervo/*.jsonl no clone (cli exportar-acervo). Devolve os arquivos
+    alterados segundo o git, ou None se não deu para rodar."""
+    py = os.environ.get("PF_EXPORT_PYTHON") or os.path.expanduser("~/AI/.venv-testes/bin/python")
+    if not os.path.isfile(py):
+        return None
+    r = subprocess.run([py, "-m", "motor_acervo.cli", "exportar-acervo"], capture_output=True, text=True,
+                       cwd=os.path.join(repo, "rag"), check=False)
+    if r.returncode:
+        return f"exportar-acervo falhou: {(r.stderr or r.stdout).strip()[-300:]}"
+    g = subprocess.run(["git", "-C", repo, "status", "--short", "--", "ontologia/acervo"], capture_output=True, text=True, check=False)
+    return g.stdout.strip() or "(export igual ao versionado)"
+
+
+def formatar_plano_relacao(p: dict, hermit: dict | None) -> str:
+    a = p.get("aresta", {})
+    seta = "<->" if a.get("simetrica") else "->"
+    titulo = "Aresta aplicada" if p.get("modo") == "aplicado" else "Plano de aresta"
+    cabeca = (f"{titulo}: {a.get('de')} -{a.get('tipo')}{seta} {a.get('para')}  "
+              f"[{a.get('familia')}; garantia {a.get('garantia')}; curador {p.get('emitido_por')}]")
+    lin = [cabeca]
+    if a.get("ordem_canonica"):
+        lin.append("  (simétrica: gravada em ordem canônica de uuid — de/para trocados, sem efeito)")
+    lin.append(f"  motivo : {a.get('motivo')}")
+    lin.append(f"  molde  : {p.get('molde')}")
+    if p.get("lastro"):
+        lin.append(f"  lastro : {p['lastro'].get('titulo')} ({p['lastro'].get('id')})")
+    for nome, c in (p.get("conferencias") or {}).items():
+        novas = c.get("novas") or []
+        tag = "OK" if not novas else f"REPROVA +{len(novas)}"
+        lin.append(f"  conferência {nome:<14} {c.get('antes')} -> {c.get('depois')}  {tag}")
+        for r in novas[:5]:
+            lin.append(f"      + {r}")
+    if hermit is None:
+        lin.append("  HermiT: indisponível (clone de conhecimento em main + ~/AI/.venv/bin/python não achados)")
+    elif hermit.get("erro"):
+        lin.append(f"  HermiT: falhou — {hermit['erro']}")
+    else:
+        tag = "OK" if not hermit["novos"] else f"REPROVA +{len(hermit['novos'])}"
+        lin.append(f"  HermiT insatisfazíveis {hermit['antes']} -> {hermit['depois']}  {tag}"
+                   + (f"  novos: {', '.join(hermit['novos'])}" if hermit["novos"] else "")
+                   + (f"  saem: {', '.join(hermit['saem'])}" if hermit["saem"] else ""))
+    if p.get("modo") == "aplicado":
+        lin.append(f"  id     : {p.get('id')}   (desfazer: curar --desrelacionar {p.get('id')})")
+    else:
+        lin.append(f"  veredito: {'APROVADO — repita com --apply para gravar' if p.get('aprovado') and not (hermit or {}).get('novos') and not (hermit or {}).get('erro') else 'REPROVADO — nada gravado'}")
+    return "\n".join(lin)
+
+
+def acao_relacionar(args, autor: str, como_json: bool, headers: dict) -> int:
+    pos = args.relacionar or []
+    if args.ajuda or not pos:
+        print(CARTILHA)
+        return 0 if args.ajuda else 2
+    if len(pos) != 2:
+        sys.stderr.write("curar: erro: --relacionar espera exatamente <de> <para>\n")
+        return 2
+    faltam = [k for k in ("tipo", "garantia", "motivo") if not getattr(args, k)]
+    if faltam:
+        sys.stderr.write(f"curar: erro: --relacionar exige --{' --'.join(faltam)} (veja --relacionar --help)\n")
+        return 2
+    de, para = pos
+    corpo = {"de": de, "para": para, "tipo": args.tipo, "garantia": args.garantia, "motivo": args.motivo, "autor": autor}
+    if args.lastro:
+        corpo["lastro"] = resolver_obra_id(args.lastro, headers)
+
+    def post(aplicar: bool):
+        try:
+            r = requests.post(f"{BASE}/acervo/conceitos/relacoes", json={**corpo, "aplicar": aplicar}, headers=headers)
+        except requests.exceptions.RequestException as e:
+            falha_indeterminavel(e)
+        if r.status_code >= 500:
+            falha_indeterminavel(r)
+        return r
+
+    # 1. plano seco na API (validação + conferências SQL com a aresta dentro, sem gravar)
+    resp = post(False)
+    if resp.status_code != 200:
+        try:
+            pj = resp.json()
+        except ValueError:
+            pj = {}
+        if isinstance(pj, dict) and pj.get("plano"):
+            print(formatar_plano_relacao(pj["plano"], None))
+        falha_problem(resp)
+    plano = resp.json()
+
+    # 2. projeção formal com a aresta em memória
+    hermit = None if args.sem_hermit else _hermit(plano["aresta"]["de"], plano["aresta"]["para"], plano["aresta"]["tipo"])
+    hermit_ok = args.sem_hermit or (hermit is not None and not hermit.get("erro") and not hermit["novos"])
+    aprovado = bool(plano.get("aprovado")) and hermit_ok
+
+    if not args.apply:
+        if como_json:
+            print(json.dumps({"plano": plano, "hermit": hermit, "aprovado": aprovado}, indent=2, ensure_ascii=False))
+        else:
+            print(formatar_plano_relacao(plano, hermit))
+        return 0 if aprovado else 1
+
+    if not aprovado:
+        print(formatar_plano_relacao(plano, hermit))
+        if not plano.get("aprovado"):
+            sys.stderr.write("curar: conferência SQL reprovou; nada gravado\n")
+        elif hermit is None or hermit.get("erro"):
+            sys.stderr.write("curar: HermiT não rodou; para gravar mesmo assim passe --sem-hermit\n")
+        else:
+            sys.stderr.write("curar: HermiT reprovou (insatisfazíveis novos); nada gravado\n")
+        return 1
+
+    # 3. grava
+    resp = post(True)
+    if resp.status_code != 201:
+        falha_problem(resp)
+    feito = resp.json()
+    export = _exportar(hermit["repo"]) if hermit and hermit.get("repo") else (_exportar(_repo_conhecimento()) if _repo_conhecimento() else None)
+    if como_json:
+        print(json.dumps({"aplicado": feito, "hermit": hermit, "export": export}, indent=2, ensure_ascii=False))
+    else:
+        print(formatar_plano_relacao(feito, hermit))
+        if export is None:
+            print("  export : NÃO regenerado (clone de conhecimento em main / venv não achados) — rode `exportar-acervo` e commite")
+        else:
+            print(f"  export : regenerado no clone — commit e push são seus:\n    {export.replace(chr(10), chr(10) + '    ')}")
+    return 0
+
+
+def acao_relacoes(conceito: str, como_json: bool, headers: dict) -> int:
+    url = f"{BASE}/acervo/conceitos/{urllib.parse.quote(conceito, safe='')}/relacoes"
+    try:
+        resp = requests.get(url, headers=headers)
+    except requests.exceptions.RequestException as e:
+        falha_indeterminavel(e)
+    if resp.status_code >= 500:
+        falha_indeterminavel(resp)
+    if resp.status_code != 200:
+        falha_problem(resp)
+    data = resp.json()
+    itens = data.get("itens", [])
+    if como_json:
+        print(json.dumps(data, indent=2, ensure_ascii=False))
+        return 0
+    print(f"Arestas de {conceito}: {len(itens)}")
+    for a in itens:
+        seta = "->" if a.get("direcao") == "saida" else "<-"
+        origem = a.get("origem") or "coluna"
+        extra = f"  [{a.get('garantia')}] {a.get('motivo')}" if a.get("motivo") else ""
+        idt = f"  id {a['id']}" if a.get("id") else ""
+        print(f"  {seta} {a.get('conceito'):<36} {a.get('tipo'):<13} {a.get('papel'):<15} {origem}{extra}{idt}")
+    return 0
+
+
+def acao_desrelacionar(relacao_id: str, autor: str, como_json: bool, headers: dict, confirmado: bool = False) -> int:
+    if not _UUID_RE.match(relacao_id.strip()):
+        sys.stderr.write("curar: erro: --desrelacionar espera o uuid da aresta (veja --relacoes <conceito>)\n")
+        return 2
+    if not confirmado:
+        try:
+            ans = input(f"Desfazer a aresta {relacao_id}? digite 'sim' para confirmar: ")
+        except EOFError:
+            ans = ""
+        if ans.strip().lower() != "sim":
+            print("cancelado")
+            return 1
+    url = f"{BASE}/acervo/conceitos/relacoes/{relacao_id.strip()}?autor={urllib.parse.quote(autor)}"
+    try:
+        resp = requests.delete(url, headers=headers)
+    except requests.exceptions.RequestException as e:
+        falha_indeterminavel(e)
+    if resp.status_code >= 500:
+        falha_indeterminavel(resp)
+    if resp.status_code != 200:
+        falha_problem(resp)
+    data = resp.json()
+    repo = _repo_conhecimento()
+    export = _exportar(repo) if repo else None
+    if como_json:
+        print(json.dumps({**data, "export": export}, indent=2, ensure_ascii=False))
+    else:
+        d = data.get("desfeita", {})
+        print(f"Aresta desfeita: {d.get('de')} -{d.get('tipo')}-> {d.get('para')} [{d.get('garantia')}] ({d.get('id')})")
+        print("  export : " + (export.replace(chr(10), chr(10) + '    ') if export else "NÃO regenerado — rode `exportar-acervo` e commite"))
+    return 0
+
+
 def acao_reclassificar(args, autor: str, como_json: bool, headers: dict) -> int:
     alteracao = {}
     if args.dominio is not None:
@@ -442,6 +725,14 @@ def main(argv=None):
     parser.add_argument("--expurgar", default=None)
     parser.add_argument("--restaurar", default=None)
     parser.add_argument("--promover", default=None)
+    parser.add_argument("--relacionar", nargs="*", default=None)
+    parser.add_argument("--relacoes", default=None)
+    parser.add_argument("--desrelacionar", default=None)
+    parser.add_argument("--tipo", default=None)
+    parser.add_argument("--garantia", default=None)
+    parser.add_argument("--motivo", default=None)
+    parser.add_argument("--lastro", default=None)
+    parser.add_argument("--sem-hermit", dest="sem_hermit", action="store_true", default=False)
 
     # Alterações
     parser.add_argument("--trata-de", default=None)
@@ -473,6 +764,9 @@ def main(argv=None):
 
     args, desconhecidos = parser.parse_known_args(argv)
 
+    if args.ajuda and args.relacionar is not None:
+        print(CARTILHA)
+        sys.exit(0)
     if args.ajuda or (not argv):
         sys.stdout.write(USO)
         sys.exit(0 if args.ajuda else 2)
@@ -491,7 +785,13 @@ def main(argv=None):
     traceparent = f"00-{secrets.token_hex(16)}-{secrets.token_hex(8)}-01"
     headers["traceparent"] = traceparent
 
-    if args.situacao:
+    if args.relacionar is not None:
+        return acao_relacionar(args, autor, args.como_json, headers)
+    elif args.relacoes:
+        return acao_relacoes(args.relacoes, args.como_json, headers)
+    elif args.desrelacionar:
+        return acao_desrelacionar(args.desrelacionar, autor, args.como_json, headers, confirmado=args.confirmado)
+    elif args.situacao:
         return acao_situacao(args.situacao, args.como_json, headers)
     elif args.expurgar:
         return acao_expurgar(args.expurgar, autor, args.como_json, headers, confirmado=args.confirmado)
