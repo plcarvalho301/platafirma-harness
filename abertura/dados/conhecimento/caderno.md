@@ -129,3 +129,20 @@ Antes de aprovar: `docker exec <api> which <binário>` / `python3 -c "import <de
 e o teste da rota rodando DENTRO do container. Dependência nova entra em
 `requirements-api.txt` além do `pyproject`, ou a imagem quebra no import.
 Build da imagem leva minutos: `longjob`, nunca inline no turno.
+
+## Relato da fábrica é fonte não verificada — o que vale é o que se mede
+
+O relato chega bem escrito e parcialmente falso, sem má-fé: numa mesma fita o commit
+"empurrado" não estava no branch remoto (só como ancestral de outro branch), o clone de
+trabalho ficou no branch dela com o verbo **vazio** no working tree (e o symlink do host
+apontando pra ele), duas obras reais ficaram com conceito gravado pelo aceite de `--apply`,
+e uma flag listada como entregue (`--situacao`) dava 404 em toda obra viva porque ninguém a
+rodou. Nenhum desses fatos estava no relato, e todos custaram segundos para medir.
+
+Antes de aprovar, na ordem: `git ls-remote` (o commit está onde o relato diz?) →
+`git branch --show-current; git status --short` nos DOIS clones (a fábrica trabalha no
+clone de trabalho e o deixa como estiver) → rodar cada flag que o relato lista, não só o
+aceite do card → conferir o banco DEPOIS do aceite e exigir "desfeito" → build de produção
+de worktree limpo em `main` (`~/AI/var/wt/…`), nunca do clone que ela ocupa. Dois PRs
+seguidos, dois consertos de dados por cima: o toque livre por cima da entrega é a regra,
+não a exceção — e sobe no mesmo turno.
