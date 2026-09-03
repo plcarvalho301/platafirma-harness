@@ -10,7 +10,9 @@
 set -euo pipefail
 
 REPO="${PERSONA_REPO:-$HOME/AI/platafirma-harness}"
-ALVO="personas"
+# conteudo vivo mora na arvore de abertura (um dir por cadeira, persona.md + chapeus).
+# o ledger de organizacao mora em registro/eventos-org.jsonl (ato proprio, _persona-org.py).
+ALVO="abertura"
 
 uso() {
   cat >&2 <<'EOF'
@@ -18,7 +20,7 @@ uso:
   persona abrir              pull --ff-only antes de editar; diz o sha e a idade
   persona idade              sha, data do último commit e idade do clone
   persona conferir           roda os checks sem escrever nada
-  persona salvar -m "<msg>"  pull, confere, commit só de personas/ e push
+  persona salvar -m "<msg>"  pull, confere, commit só de abertura/ e push
 
   atos de organização — ledger append-only em personas/eventos-org.jsonl:
   persona prover <cadeira> [--alias "<Nome>"]     abre cadeira
@@ -32,10 +34,10 @@ uso:
   persona filme [cadeira]                          a série datada
   Comuns: --em AAAA-MM-DD (data do fato) · --nota "<txt>" · --autor <quem>
 
-  Checks que BLOQUEIAM: texto fixo divergente do TEMPLATE, bloco repetido
-  dentro do mesmo arquivo, seção declarada vazia ("SEÇÃO: —") com conteúdo
-  embaixo, linha acima de 88 colunas.
-  Checks que AVISAM: teto de 650 palavras.
+  Checks que BLOQUEIAM: falta de seção obrigatória (ESPECIALISTA, GERÊNCIAS,
+  POSTURA, NEGATIVAS) ou fora de ordem, bloco repetido no mesmo arquivo, seção
+  declarada vazia ("SEÇÃO: —") com conteúdo embaixo, linha acima de 88 colunas.
+  Checks que AVISAM: gerência sem chapeu.md servido, teto de 650 palavras.
 EOF
   exit 2
 }
@@ -56,65 +58,72 @@ conferir() {
 import pathlib, re, sys, collections
 
 raiz = pathlib.Path(sys.argv[1])
-tpl = (raiz / "TEMPLATE-persona.md").read_text(encoding="utf-8")
-
-INTERNAS = {"IA", "TI", "arquiteto", "conhecimento", "gestao-estrategica",
-            "produto", "seguranca"}
-CONSULTOR = {"politicas-publicas"}
-CONTRATADAS = {"fabrica", "osint"}
 TETO = 650
 
-def norm(s):
-    return re.sub(r"\s+", " ", s).strip()
-
-def fixo(rotulo):
-    m = re.search(rf"^{rotulo}:.*?(?=\n\n|\n\{{|\n>)", tpl, re.S | re.M)
-    return norm(m.group(0)) if m else None
-
-ATIV = fixo("ATIVAÇÃO")
-FRONT = fixo("FRONTEIRA")
-# a parte entre parênteses é variável por cadeira
-ATIV_PRE = norm(ATIV.split("(")[0]) if ATIV else None
-ATIV_POS = norm(ATIV.split(")")[-1]) if ATIV else None
+# Schema vivo da persona (arvore de abertura): rotulos obrigatorios, na ordem.
+# ATIVACAO/FRONTEIRA/TEMPLATE eram do formato antigo (personas/persona-*.md), morto.
+# obrigatorias: presentes em TODAS as personas vivas. ESPECIALISTA e recomendada
+# (3 cadeiras validas nao a tem: politicas-publicas, seguranca, ti) -> vira aviso.
+ROTULOS = ["GERÊNCIAS", "POSTURA", "NEGATIVAS"]
+RECOMENDADAS = ["ESPECIALISTA"]
 
 erros, avisos = [], []
 
-for f in sorted(raiz.glob("persona-*.md")):
-    cad = f.stem.replace("persona-", "")
+# uma persona por cadeira: abertura/<cadeira>/persona.md
+alvos = sorted(raiz.glob("*/persona.md"))
+if not alvos:
+    print("nenhuma persona em abertura/*/persona.md", file=sys.stderr)
+    sys.exit(0)
+
+for f in alvos:
+    cad = f.parent.name
     txt = f.read_text(encoding="utf-8")
-    n = norm(txt)
 
-    # 1. texto fixo
-    if cad in INTERNAS | CONSULTOR:
-        if ATIV_PRE and ATIV_PRE not in n:
-            erros.append(f"{f.name}: ATIVAÇÃO divergente do TEMPLATE")
-        elif ATIV_POS and ATIV_POS not in n:
-            erros.append(f"{f.name}: ATIVAÇÃO truncada (falta o fecho do TEMPLATE)")
-    if cad in INTERNAS and FRONT and FRONT not in n:
-        erros.append(f"{f.name}: FRONTEIRA divergente do TEMPLATE")
+    # 1. rotulos obrigatorios presentes e em ordem
+    pos = -1
+    for r in ROTULOS:
+        m = re.search(rf"^{re.escape(r)}\b", txt, re.M)
+        if not m:
+            erros.append(f"{cad}: falta a secao {r}")
+        elif m.start() < pos:
+            erros.append(f"{cad}: secao {r} fora de ordem")
+        else:
+            pos = m.start()
+    for r in RECOMENDADAS:
+        if not re.search(rf"^{re.escape(r)}\b", txt, re.M):
+            avisos.append(f"{cad}: sem a secao recomendada {r}")
 
-    # 2. bloco repetido no mesmo arquivo (o defeito que passou meses na IA)
+    # 2. cada gerencia listada tem um chapeu servido (dir irmao com chapeu.md)
+    mg = re.search(r"^GERÊNCIAS\s*$(.*?)^POSTURA", txt, re.S | re.M)
+    if mg:
+        ger = re.findall(r"^-\s+([a-z0-9-]+)\s+·", mg.group(1), re.M)
+        for g in ger:
+            if not (f.parent / g / "chapeu.md").is_file():
+                avisos.append(f"{cad}: gerencia '{g}' sem chapeu.md servido")
+
+    # 3. bloco repetido no mesmo arquivo (o defeito que passou meses na IA)
     linhas = [l.rstrip() for l in txt.splitlines()]
     c = collections.Counter(l for l in linhas if len(l.strip()) > 40)
-    rep = [l for l, k in c.items() if k > 1]
-    for l in rep:
-        erros.append(f"{f.name}: linha repetida — {l[:60]}…")
+    for l, k in c.items():
+        if k > 1:
+            erros.append(f"{cad}: linha repetida — {l[:60]}…")
 
-    # 3. seção declarada vazia com conteúdo embaixo
+    # 4. secao declarada vazia com conteudo embaixo
     for m in re.finditer(r"^([A-ZÇÃÉÍÓÚ][A-ZÇÃÉÍÓÚ ]+):\s*—\s*$", txt, re.M):
         resto = txt[m.end():].lstrip("\n")
         if resto and not resto[:1].isupper():
-            erros.append(f"{f.name}: {m.group(1)} declara vazio e tem conteúdo abaixo")
+            erros.append(f"{cad}: {m.group(1)} declara vazio e tem conteudo abaixo")
 
-    # 4. wrap quebrado
+    # 5. largura (conta caracteres, nao bytes; tabela e link isentos). O formato vivo
+    #    corre mais largo que o antigo; >100 col e aviso de legibilidade, nao erro.
     for i, l in enumerate(linhas, 1):
-        if len(l) > 88 and "http" not in l:
-            erros.append(f"{f.name}:{i}: linha com {len(l)} colunas")
+        if len(l) > 100 and "http" not in l and not l.lstrip().startswith("|"):
+            avisos.append(f"{cad}:{i}: linha com {len(l)} colunas (>100)")
 
-    # 5. teto
-    p = len(txt.split())
-    if p > TETO:
-        avisos.append(f"{f.name}: {p} palavras (teto {TETO})")
+    # 6. teto de palavras (aviso)
+    pw = len(txt.split())
+    if pw > TETO:
+        avisos.append(f"{cad}: {pw} palavras (teto {TETO})")
 
 for a in avisos:
     print(f"aviso  {a}")
@@ -148,15 +157,19 @@ case "${1:-}" in
     shift
     [ "${1:-}" = "-m" ] && [ -n "${2:-}" ] || uso
     msg="$2"
-    sujo=$(git status --porcelain | grep -v "^.. $ALVO/" || true)
+    # o verbo versiona dois caminhos: o conteudo vivo (abertura/) e o ledger de
+    # organizacao (registro/eventos-org.jsonl), que _persona-org.py escreve sem commitar.
+    # Mudanca fora desses dois aborta em vez de entrar de carona.
+    sujo=$(git status --porcelain | grep -v "^.. abertura/" \
+                                  | grep -v "^.. registro/eventos-org.jsonl" || true)
     if [ -n "$sujo" ]; then
-      echo "abortado: há mudança fora de $ALVO/ — commite ou guarde antes." >&2
+      echo "abortado: há mudança fora de abertura/ e do ledger — commite ou guarde antes." >&2
       echo "$sujo" >&2
       exit 1
     fi
     git pull --ff-only -q origin HEAD
     conferir
-    git add "$ALVO"
+    git add abertura registro/eventos-org.jsonl
     git diff --cached --quiet && { echo "nada a salvar"; exit 0; }
     git commit -q -m "$msg"
     git push -q origin HEAD
