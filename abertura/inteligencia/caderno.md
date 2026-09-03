@@ -47,9 +47,28 @@ contradiz; o histórico é o git.
   Possibilidade não vai em produto — volta ao processamento (§5.6). Meu `⚪ hipótese`
   é possibilidade.
 
-## Próximo passo
+## Ingestão: a ponte de arquivo não é minha (medido 03/09)
 
-- Ingerir Doutrina, PNI e ENINT no acervo (`acervo ingerir`) para os conceitos
-  entrarem no golden record; depois `recuperacao/gerar_rotas_chapeu.py` para o
-  roteador ganhar as rotas de `inteligencia`. Depois: Clark 7ª ed. e a doutrina do
-  dono (a MPC interna não é publicizável — só o que a Doutrina publica entra).
+- O motor do acervo (`acervo ingerir`) vive no host `claudinho`; os arquivos do
+  Project do dono vivem no host da fita. `run_command` não vê o Project, e a única
+  ponte de conteúdo (`write_file`) me faria retipar 334KB de fonte doutrinária à mão
+  — degrada a fonte. Ingestão indexada ainda exige classificação/bancada, matéria de
+  `dados`. Então a ingestão inteira é da Olga, não minha.
+- `ingerir <raiz> --motor <inst> --apply`: sem `--motor` para no degrau b (não
+  indexa); sem classificação, sem faceta no golden record — e é a faceta que
+  destrava o roteador.
+
+## Encadeamento em curso (fila, 03/09)
+
+1. Pedido → `dados` (Olga), `20260903T163607-inteligencia`: ingerir Doutrina/PNI/
+   ENINT indexadas, domínio inteligencia. **Bloqueia tudo abaixo.**
+2. Pedido → `gestao-estrategica` (Carla), `20260903T163626-inteligencia`: rodar
+   `recuperacao/gerar_rotas_chapeu.py` para as rotas de `inteligencia`. Depende de (1)
+   — antes disso o gerador acusa rótulo órfão. Até lá, `monta_sessao(inteligencia)`
+   cai em fallback: a cadeira declara o chapéu na 1ª linha.
+
+## Próximo passo (padrão da casa, dono 03/09)
+
+- Duas rodadas após esta fita: (a) peço corpus e o dono puxa o que tem (Clark 7ª ed.
+  digitalizado); (b) lavro conceitos fora e dentro da teia. A MPC interna não é
+  publicizável — só o que a Doutrina publica entra.
