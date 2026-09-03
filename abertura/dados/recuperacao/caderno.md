@@ -131,3 +131,12 @@ de 70–138 conceitos ao mesmo tempo: o vetor dela é próximo de tudo. Qualquer
 vizinhança entre conceitos por passagem comum tem de excluir seção com mais de ~3 conceitos —
 sem o filtro, `conhecimento-arquitetural ~ aprendizado-por-reforco` aparece com 10 seções em
 comum. Mesmo mecanismo produz falso vizinho por homonímia (contexto-delimitado ~ janela-de-contexto).
+
+## Ajuste de rede na busca só chega ao contêiner pelo compose (03/09/2026)
+
+`ajustes_do_trilho` lê `VEREDITO_POR_CONCEITO`, `VIZINHANCA_DIRIGIDA` e afins do ambiente do
+processo — e o rag-api recebe ambiente por lista EXPLÍCITA no `docker-compose.yml`, não por
+`env_file`. Variável escrita no `rag/.env` sem a linha `NOME: ${NOME:-0}` no compose não existe
+para o motor: `docker exec rag-extractor-api env` é a prova, antes de concluir que o código não
+liga. O bloco lateral (`ontologia.vizinhanca`) é o caso vivido: nasceu desligado com os três
+(1970020), foi ligado em 03/09 assim.

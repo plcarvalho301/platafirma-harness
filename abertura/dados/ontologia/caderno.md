@@ -53,6 +53,8 @@ regenera o export no clone de conhecimento em `main` — commit é de quem lavro
 tabela; pai e lateral no mesmo par é recusado; aresta cruzando domínio lavra a cadeira do `de`.
 Fila `ont:0080` zerada em 03/09 (14 reparos caso a caso, `colheita/2026-09-03-reparo-…sql`);
 `conf_conceito_generica_categoria` (041) acusa em SQL o que o HermiT tornaria insatisfazível.
-Motor: `vizinhos()` lê `conceito_aresta` (1 salto, sem encadear) e `expandir()` sobe também pelo
-2º pai — mas o bloco lateral só serve com `VIZINHANCA_DIRIGIDA` > 0, que está desligado por
-decisão de origem (1970020); ligar é do dono.
+Motor: `vizinhos()` lê `conceito_aresta` (1 salto, sem encadear, sem devolver quem já está na
+pergunta) e `expandir()` sobe também pelo 2º pai. O bloco sai em `ontologia.vizinhanca` da
+resposta — ligado pelo dono em 03/09 (`VIZINHANCA_DIRIGIDA=5`), fora do ranking por construção.
+Órfão (conceito sem obra) não tem dono: qualquer cadeira que o reconheça liga ao seu domínio,
+2º pai permitido sem negociar — e órfão com dois pais é sinal de ambiguidade, fila de fusão.
