@@ -42,3 +42,17 @@ em `acervo.trecho` (busca de frase, `phraseto_tsquery('simple')` — acento não
 acento). Passagem-chave só com seção-hub filtrada. A hipótese do dono não precisa de nenhuma
 das duas: entra como `garantia = instituida`. Aceite de regra formal: planta o caso falso, mede
 no HermiT E na conferência SQL, desfaz — os dois têm de acusar a mesma linha.
+
+## A teia cresce por `curar --relacionar` (dono, 03/09/2026)
+
+Aresta entre conceitos se lavra pelo verbo, nunca por SQL avulso: `curar --relacionar <de> <para>
+--tipo --garantia --motivo [--lastro]` é plano seco (conferências SQL com a aresta dentro, no
+servidor; HermiT com a aresta em memória, no cliente); `--apply` grava com `curador = cadeira` e
+regenera o export no clone de conhecimento em `main` — commit é de quem lavrou. Cartilha:
+`--relacionar --help` e guia §4.5. Regras cravadas: pai de navegação fica na coluna, 2º pai na
+tabela; pai e lateral no mesmo par é recusado; aresta cruzando domínio lavra a cadeira do `de`.
+Fila `ont:0080` zerada em 03/09 (14 reparos caso a caso, `colheita/2026-09-03-reparo-…sql`);
+`conf_conceito_generica_categoria` (041) acusa em SQL o que o HermiT tornaria insatisfazível.
+Motor: `vizinhos()` lê `conceito_aresta` (1 salto, sem encadear) e `expandir()` sobe também pelo
+2º pai — mas o bloco lateral só serve com `VIZINHANCA_DIRIGIDA` > 0, que está desligado por
+decisão de origem (1970020); ligar é do dono.
