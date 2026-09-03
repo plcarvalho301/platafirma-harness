@@ -1,191 +1,172 @@
-#!/usr/bin/env bash
-# acervo escada — estado corrente do acervo por OBRA, nos cinco degraus do fluxo.
-# Leitura direta do substrato: MinIO (store) + Postgres (catálogo e índice).
-# Read-only: não cria objeto no schema do rag, não escreve em tabela nenhuma.
+#!/usr/bin/env python3
+# acervo escada — estado corrente do acervo por PARTIÇÃO (blob-minio | wiki), nos cinco
+# degraus do fluxo.
 #
-# uso:  acervo escada [--json] [--detalhe]
-set -euo pipefail
-
-export DOCKER_HOST=${DOCKER_HOST:-unix:///run/user/1001/docker.sock}
-PG=rag-extractor-pg
-DB=rag_extractor
-USR=rag
-MC_ALIAS=pf
-BUCKETS="acervo pessoal"
-TMP=$(mktemp -d); trap 'rm -rf "$TMP"' EXIT
-
-JSON=0; DETALHE=0
-for a in "$@"; do
-  case "$a" in
-    --json) JSON=1 ;;
-    --detalhe) DETALHE=1 ;;
-    *) echo "uso: acervo escada [--json] [--detalhe]" >&2; exit 2 ;;
-  esac
-done
-
-# 1. store: a verdade sobre "armazenada" mora no MinIO, não no catálogo.
+# CLIENTE FINO de `GET /acervo/particao` (arq:0089: a rota é a única fonte). O que este
+# script fazia até 02/09/2026 — `mc ls` nos buckets, `docker cp` do resultado para dentro
+# do Postgres, SQL de 90 linhas com `\copy`, e uma segunda conexão ao motor-pg — mora agora
+# em `rag/motor_acervo/particao.py`. Aqui não se abre socket para MinIO nem para Postgres:
+# a medição é do serviço, e o verbo formata.
 #
-# Três buracos fechados aqui, todos do mesmo tipo — a lista encolhe e ninguém vê:
-#   (a) o `2>/dev/null` engolia o diagnóstico do `mc`. Quando ele falha o script morre pelo
-#       `pipefail`, mas morria MUDO, e o operador não via por quê.
-#   (b) o filtro descartava em silêncio: `except: continue` e `type != file`. `mc ls` NÃO é
-#       recursivo e reporta prefixo como `folder` — objeto que ganhe prefixo some da lista
-#       com o `mc` saindo 0. Agora prefixo e linha ilegível são CONTADOS e abortam.
-#   (c) não havia guarda de não-vazio, e `\copy` de arquivo vazio é sucesso no Postgres.
-#       Store vazio faz "armazenadas" ir a 0 e `catalogo_aponta_pro_vazio` explodir para o
-#       catálogo inteiro — alarme que parece descoberta e é defeito de coleta.
-for b in $BUCKETS; do
-  mc ls --json "$MC_ALIAS/$b" | python3 -c "
-import sys,json
-pastas=ilegiveis=0
-for l in sys.stdin:
-    if not l.strip(): continue
-    try: o=json.loads(l)
-    except Exception:
-        ilegiveis+=1; continue
-    t=o.get('type')
-    if t=='file': print('$b/'+o['key'])
-    elif t=='folder': pastas+=1
-if pastas or ilegiveis:
-    print(f'bucket $b: {pastas} prefixo(s) e {ilegiveis} linha(s) ilegivel(is) -- '
-          'a listagem nao e recursiva, entao a lista esta INCOMPLETA', file=sys.stderr)
-    sys.exit(3)
-"
-done > "$TMP/store.txt"
+# uso:  acervo escada [--json] [--detalhe] [--colecao firma|pessoal]
+# saída: 0 medido e invariante fechado · 2 uso inválido · 3 invariante FUROU · 4 fonte fora
+# capacidade: incorporacao
+# dono: claudinho-dados
 
-if [ ! -s "$TMP/store.txt" ]; then
-  echo "acervo escada: a listagem do store saiu VAZIA — abortando antes de medir." >&2
-  echo "  Sem isto, 'armazenadas' iria a 0 e o alarme apontaria para o catálogo inteiro." >&2
-  echo "  Confira o alias: mc ls $MC_ALIAS/acervo | head" >&2
-  exit 3
-fi
-docker cp "$TMP/store.txt" "$PG:/tmp/acervo-escada-store.txt" >/dev/null
+import argparse
+import json
+import os
+import sys
+import urllib.error
+import urllib.parse
+import urllib.request
 
-# 2. o vetor mora noutra instância (motor-pg) desde a partição do RAG em 11/08/2026: contagem
-# por impressão sai de lá e entra como VALUES no SQL do acervo. Duas instâncias não fazem JOIN,
-# e trazer 623 linhas é mais barato que qualquer ponte permanente entre os dois bancos.
-MOTOR=motor-pg
-VET=$(docker exec -i "$MOTOR" psql -U motor -d motor -At -c "
-  SELECT COALESCE(string_agg(format('(%L::uuid,%s,%s)', impressao_id, n_emb, n_meta), ','), '')
-    FROM (SELECT i.impressao_id,
-                 count(*) FILTER (WHERE i.granularidade = 'trecho')    AS n_emb,
-                 count(*) FILTER (WHERE i.granularidade = 'impressao') AS n_meta
-            FROM motor.vetor v JOIN motor.indice i ON i.id = v.indice_id
-           WHERE i.estado = 'servindo' GROUP BY 1) x;")
-[ -z "$VET" ] && VET="(NULL::uuid,0,0)"
+HARNESS_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.realpath(__file__))))
+if HARNESS_DIR not in sys.path:
+    sys.path.insert(0, HARNESS_DIR)
 
-# 3. a escada, medida degrau a degrau contra o store carregado.
-SQL=$(cat <<EOSQL
-CREATE TEMP TABLE store_obj (objeto text PRIMARY KEY);
-\copy store_obj FROM '/tmp/acervo-escada-store.txt'
+try:
+    from recuperacao.adaptadores.motor_acervo_rest import BASE as DEFAULT_BASE, TOKEN as DEFAULT_TOKEN
+except ImportError:                                   # o verbo roda fora do harness instalado
+    DEFAULT_BASE = "http://127.0.0.1:8100"
+    DEFAULT_TOKEN = ""
 
-CREATE TEMP TABLE vet (impressao_id uuid, n_emb int, n_meta int);
-INSERT INTO vet VALUES $VET;
+BASE = (os.environ.get("RAG_API_BASE") or os.environ.get("MOTOR_ACERVO_URL") or DEFAULT_BASE).rstrip("/")
+TOKEN = os.environ.get("RAG_API_TOKEN") or DEFAULT_TOKEN
+TIMEOUT_S = float(os.environ.get("RAG_TIMEOUT_S", "30"))
 
-CREATE TEMP VIEW e AS
-SELECT o.id, o.titulo, o.objeto, o.endereco,
-       (o.endereco IS NOT NULL AND o.endereco LIKE 'wiki://%') AS e_pagina,
-       (o.objeto IS NOT NULL)                           AS tem_objeto,
-       EXISTS (SELECT 1 FROM store_obj s WHERE s.objeto = o.objeto) AS no_store,
-       (i.id IS NOT NULL)                               AS tem_doc,
-       COALESCE(c.n_chunk,0) AS n_chunk,
-       COALESCE(c.n_texto,0) AS n_texto,
-       COALESCE(v.n_emb,0)   AS n_emb,
-       COALESCE(v.n_meta,0)  AS n_meta
-FROM acervo.obra o
--- A ponte agora é a IMPRESSÃO servindo: uma por obra, garantida pelo índice parcial
--- impressao_uma_servindo_por_obra. \`documents\` não existe mais (dropada em 11/08/2026).
-LEFT JOIN acervo.impressao i ON i.obra_id = o.id AND i.estado = 'servindo'
-LEFT JOIN (
-  SELECT impressao_id,
-         count(*)                                        AS n_chunk,
-         count(*) FILTER (WHERE elegivel)                AS n_texto
-  FROM acervo.trecho GROUP BY 1
-) c ON c.impressao_id = i.id
-LEFT JOIN vet v ON v.impressao_id = i.id;
+EXIT_INVARIANTE = 3
+EXIT_FONTE_FORA = 4
 
-SELECT json_build_object(
-  'medido_em', now(),
-  -- O contrato do índice deixou de ser tabela do rag: mora em motor.indice.metodo, e o par
-  -- (modelo, backend) que autoriza a leitura vem de lá, por índice servindo.
-  'contrato_do_indice', (SELECT json_object_agg(k, n) FROM (
-      SELECT 'impressoes_com_indice_servindo' AS k, count(DISTINCT impressao_id)::text AS n FROM vet) z),
-  'degraus', json_build_object(
-    -- a escada mede só o que PODE subir degrau; a obra-wiki (a obra é a página,
-    -- objeto IS NULL por desenho) sai em fora_da_escada.paginas_wiki e não aqui.
-    'a_catalogadas',  (SELECT count(*) FROM e WHERE e_pagina IS NOT TRUE),
-    'b_armazenadas',  (SELECT count(*) FROM e WHERE e_pagina IS NOT TRUE AND no_store),
-    'c_ingeridas',    (SELECT count(*) FROM e WHERE e_pagina IS NOT TRUE AND n_chunk > 0),
-    'd_embedded',     (SELECT count(*) FROM e WHERE e_pagina IS NOT TRUE AND n_texto > 0 AND n_emb  = n_texto),
-    -- O vetor de faceta virou UM ponto por obra em 11/08/2026 (era replicado em cada trecho,
-    -- 198x). O degrau é ter o ponto, não ter tantos pontos quanto trechos.
-    'e_vetor_meta',   (SELECT count(*) FROM e WHERE e_pagina IS NOT TRUE AND n_texto > 0 AND n_meta >= 1)
-  ),
-  'fora_da_escada', json_build_object(
-    'paginas_wiki',           (SELECT count(*) FROM e WHERE e_pagina)
-  ),
-  'fuga_por_degrau', json_build_object(
-    'catalogo_aponta_pro_vazio', (SELECT count(*) FROM e WHERE e_pagina IS NOT TRUE AND tem_objeto AND NOT no_store),
-    'objeto_sem_documento',      (SELECT count(*) FROM e WHERE e_pagina IS NOT TRUE AND no_store AND NOT tem_doc),
-    'impressao_sem_trecho',      (SELECT count(*) FROM e WHERE e_pagina IS NOT TRUE AND tem_doc AND n_chunk = 0),
-    'embedding_parcial',         (SELECT count(*) FROM e WHERE e_pagina IS NOT TRUE AND n_texto > 0 AND n_emb  < n_texto),
-    'sem_vetor_de_faceta',       (SELECT count(*) FROM e WHERE e_pagina IS NOT TRUE AND n_texto > 0 AND n_meta = 0),
-    'objeto_no_store_sem_obra',  (SELECT count(*) FROM store_obj s
-                                    WHERE NOT EXISTS (SELECT 1 FROM acervo.obra o WHERE o.objeto = s.objeto)),
-    -- O derivado órfão, invariante da arq:0027: 'a permanência de um derivado depende da
-    -- existência da obra, e de nada mais'. Entra como FUGA e não como sexto degrau porque a
-    -- escada é POR OBRA, e órfão por definição não tem obra — além de 'cinco degraus' estar
-    -- cravado no tool-manifest.
-    -- Hoje a regra se cumpre POR CONSTRUÇÃO: acervo.impressao.obra_id é NOT NULL com FK ON
-    -- DELETE CASCADE (migração 034, 27/08/2026 — antes era RESTRICT e a baixa da obra era
-    -- BLOQUEADA, não cascateada), e acervo.trecho.impressao_id cascateia dela. Estas duas linhas leem 0 e
-    -- DEVEM ler 0. Existem para o dia em que a construção sair — a arq:0027 admite varredura
-    -- periódica como forma, e até agora essa varredura era feita à mão, não pelo instrumento.
-    'impressao_sem_obra',        (SELECT count(*) FROM acervo.impressao i
-                                    WHERE NOT EXISTS (SELECT 1 FROM acervo.obra o WHERE o.id = i.obra_id)),
-    'vetor_sem_impressao',       (SELECT count(*) FROM vet v
-                                    WHERE v.impressao_id IS NOT NULL
-                                      AND NOT EXISTS (SELECT 1 FROM acervo.impressao i
-                                                       WHERE i.id = v.impressao_id))
-  ),
-  'chunks', json_build_object(
-    'total',      (SELECT count(*) FROM acervo.trecho),
-    'textuais',   (SELECT count(*) FROM acervo.trecho WHERE elegivel),
-    'nao_textuais', (SELECT count(*) FROM acervo.trecho WHERE NOT elegivel),
-    'com_vetor',  (SELECT COALESCE(sum(n_emb),0) FROM vet),
-    'com_vetor_meta', (SELECT COALESCE(sum(n_meta),0) FROM vet)
-  )
-);
-EOSQL
-)
+DEGRAUS = [
+    ("a  catalogadas", "a_catalogadas"),
+    ("b  armazenadas", "b_armazenadas"),
+    ("c  ingeridas (chunkadas)", "c_ingeridas"),
+    ("d  embedded (texto)", "d_embedded"),
+    ("e  vetorizadas (metadado)", "e_vetor_meta"),
+]
+FUGAS = [
+    ("catálogo aponta pro vazio", "catalogo_aponta_pro_vazio"),
+    ("objeto sem documento", "objeto_sem_documento"),
+    ("impressão sem trecho", "impressao_sem_trecho"),
+    ("embedding parcial", "embedding_parcial"),
+    ("sem vetor de faceta", "sem_vetor_de_faceta"),
+]
+COLUNAS = ["blob-minio", "wiki"]
 
-OUT=$(docker exec -i "$PG" psql -U "$USR" -d "$DB" -At <<< "$SQL" | tail -n 1)
 
-if [ "$JSON" = 1 ]; then
-  echo "$OUT" | python3 -m json.tool
-else
-  echo "$OUT" | python3 "$(dirname "$(readlink -f "$0")")/_fmt.py"
-fi
+def indeterminavel(detalhe, problema=None):
+    """Fonte fora é fonte fora: não se imprime tabela de zeros para não parecer descoberta."""
+    print("indeterminavel", file=sys.stderr)
+    print(f"acervo escada: {detalhe}", file=sys.stderr)
+    if problema:
+        print(json.dumps(problema, indent=2, ensure_ascii=False), file=sys.stderr)
+    sys.exit(EXIT_FONTE_FORA)
 
-if [ "$DETALHE" = 1 ]; then
-  echo
-  echo "=== quem está fora do lugar ==="
-  docker exec -i "$PG" psql -U "$USR" -d "$DB" <<'EOSQL'
-CREATE TEMP TABLE store_obj (objeto text PRIMARY KEY);
-\copy store_obj FROM '/tmp/acervo-escada-store.txt'
-\echo '-- obra cujo objeto não existe no store'
-SELECT o.titulo, o.objeto FROM acervo.obra o
- WHERE o.objeto IS NOT NULL AND NOT EXISTS (SELECT 1 FROM store_obj s WHERE s.objeto=o.objeto);
-\echo '-- obra com objeto no store e sem impressão no índice'
-SELECT o.titulo, o.objeto FROM acervo.obra o JOIN store_obj s USING (objeto)
- WHERE NOT EXISTS (SELECT 1 FROM acervo.impressao i WHERE i.obra_id = o.id);
-\echo '-- obra com impressão e zero trecho (skip_stub / needs_ocr / sem extrator)'
-SELECT o.titulo, i.estado, i.criada_em::date FROM acervo.obra o JOIN acervo.impressao i ON i.obra_id = o.id
- WHERE NOT EXISTS (SELECT 1 FROM acervo.trecho t WHERE t.impressao_id = i.id) ORDER BY o.titulo;
-\echo '-- derivado órfão: impressão sem obra (invariante arq:0027; 0 por construção hoje)'
-SELECT i.id, i.fonte_versao FROM acervo.impressao i
- WHERE NOT EXISTS (SELECT 1 FROM acervo.obra o WHERE o.id = i.obra_id);
-\echo '-- objeto no store sem obra no catálogo'
-SELECT s.objeto FROM store_obj s WHERE NOT EXISTS (SELECT 1 FROM acervo.obra o WHERE o.objeto=s.objeto);
-EOSQL
-fi
+
+def buscar(colecao, detalhe):
+    query = {}
+    if colecao:
+        query["colecao"] = colecao
+    if detalhe:
+        query["detalhe"] = "true"
+    url = f"{BASE}/acervo/particao" + (f"?{urllib.parse.urlencode(query)}" if query else "")
+    req = urllib.request.Request(
+        url, headers={**({"authorization": f"Bearer {TOKEN}"} if TOKEN else {})})
+    try:
+        with urllib.request.urlopen(req, timeout=TIMEOUT_S) as r:  # noqa: S310 — loopback
+            return json.loads(r.read())
+    except urllib.error.HTTPError as e:
+        corpo = e.read()
+        try:
+            problema = json.loads(corpo)
+        except Exception:
+            problema = {"status": e.code, "detail": corpo.decode("utf-8", "replace")}
+        indeterminavel(f"{BASE} respondeu {e.code}", problema)
+    except Exception as e:
+        indeterminavel(f"motor_acervo indisponível em {BASE}: {e}")
+
+
+def _linha(rotulo, valores, nota=""):
+    celulas = "".join(f"{v:>12}" for v in valores)
+    print(f'  {rotulo:.<32}{celulas}   {nota}'.rstrip())
+
+
+def imprimir(d, colecao):
+    p = d["particoes"]
+    recorte = f" · coleção {colecao}" if colecao else ""
+    print(f'ACERVO por partição — medido em {d["medido_em"][:19]}{recorte}')
+    print(f'fonte: GET {BASE}/acervo/particao (o verbo não lê MinIO nem Postgres)')
+    print()
+    print(" " * 34 + "".join(f"{c:>12}" for c in COLUNAS))
+    _linha("obras", [p[c]["obras"] for c in COLUNAS])
+    print()
+    for rotulo, chave in DEGRAUS:
+        nota = {"b_armazenadas": "presença real no store",
+                "e_vetor_meta": "ponto de faceta por obra"}.get(chave, "")
+        _linha(rotulo, [p[c]["degraus"][chave] for c in COLUNAS], nota)
+    print()
+    _linha("servindo", [p[c].get("servindo", 0) for c in COLUNAS])
+    _linha("bloqueadas por OCR", [p[c].get("bloqueadas_ocr", 0) for c in COLUNAS])
+    print()
+    print("FUGA POR DEGRAU (0 em tudo = escada sem vazamento)")
+    for rotulo, chave in FUGAS:
+        valores = [p[c]["fuga"].get(chave, 0) for c in COLUNAS]
+        marca = "!" if any(valores) else " "
+        celulas = "".join(f"{v:>12}" for v in valores)
+        print(f'  {marca} {rotulo:.<30}{celulas}')
+    print()
+    fora = d.get("fora_da_particao", {})
+    print(f'  fora da partição: {fora.get("objeto_no_store_sem_obra", 0)} objeto(s) no store sem obra')
+    print(f'  expurgadas (reversível, fora da medição): {d.get("expurgadas", 0)}')
+    print()
+
+    inv = d["invariante"]
+    if inv["ok"]:
+        print("  invariante: OK — toda obra viva está armazenada em uma das duas partições")
+        return
+    print(f'  invariante: FUROU — {inv["terceiro_caso"]} obra(s) sem objeto, '
+          "fora de qualquer partição")
+    for oid in inv["ids"][:20]:
+        print(f"    {oid}")
+    if len(inv["ids"]) > 20:
+        print(f'    … e mais {len(inv["ids"]) - 20}')
+
+
+def imprimir_detalhe(d):
+    print()
+    print("=== quem está fora do lugar ===")
+    for particao, bloco in d["particoes"].items():
+        for chave, ids in (bloco.get("fuga_ids") or {}).items():
+            print(f"-- {particao} · {chave} ({len(ids)})")
+            for oid in ids:
+                print(f"   {oid}")
+    orfaos = (d.get("fora_da_particao") or {}).get("objeto_no_store_sem_obra_ids") or []
+    if orfaos:
+        print(f"-- objeto no store sem obra ({len(orfaos)})")
+        for objeto in orfaos:
+            print(f"   {objeto}")
+
+
+def main():
+    ap = argparse.ArgumentParser(prog="acervo escada", add_help=True,
+                                 description="escada do acervo por partição (blob-minio | wiki)")
+    ap.add_argument("--json", action="store_true", help="repassa o corpo da rota, cru")
+    ap.add_argument("--detalhe", action="store_true", help="lista os ids ofensores")
+    ap.add_argument("--colecao", choices=["firma", "pessoal"], help="recorta por coleção")
+    args = ap.parse_args()
+
+    d = buscar(args.colecao, args.detalhe)
+    if args.json:
+        print(json.dumps(d, indent=2, ensure_ascii=False))
+    else:
+        imprimir(d, args.colecao)
+        if args.detalhe:
+            imprimir_detalhe(d)
+
+    # O dado é conhecido e a rota responde 200: quem falha ruidosamente é o consumidor.
+    sys.exit(EXIT_INVARIANTE if not d["invariante"]["ok"] else 0)
+
+
+if __name__ == "__main__":
+    main()
