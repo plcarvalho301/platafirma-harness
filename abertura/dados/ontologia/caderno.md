@@ -82,3 +82,27 @@ apelido ganha qualificador ("kernel (estratégia)" × "kernel (sistema operacion
 `SELECT lower(rotulo) FROM acervo.conceito_rotulo GROUP BY 1 HAVING count(DISTINCT conceito_id) > 1`
 vazia. Primeiro pai hierárquico vai na coluna; enquanto `curar` só escrever a tabela (#2983), o
 primeiro pai sobe por SQL registrado em `ontologia/colheita/` e o motivo fica no export em git.
+
+## Lavrar do TSV de coocorrência: título truncado e lastro por UUID (03/09/2026)
+
+Ao lavrar arestas em lote a partir de `var/tmp/teia-parecer/pares-coocorrentes-sem-aresta.tsv`
+(avenida 1), dois mordem:
+- **O TSV traz o título da obra TRUNCADO** (ex.: "...Using L"). `curar --relacionar --lastro`
+  recusa match aproximado — devolve "casou só aproximado com <uuid> (...)" e NÃO grava. Título
+  curto que casa EXATO passa (ex.: "Accelerate: State of DevOps 2018"); título longo truncado
+  falha. Remédio: puxar o UUID da obra no banco (`SELECT id,titulo FROM acervo.obra WHERE titulo
+  ILIKE '<prefixo>%'`) e passar o UUID no `--lastro`, não o título do TSV.
+- **`grep` filtrando a saída do `--apply` engole o erro**: um loop que só faz `grep -E "^Aresta"`
+  vê zero linhas e parece "nada aplicado" sem dizer por quê. Rodar UM sem filtro primeiro para
+  ver a recusa real, depois lotear.
+
+## curar --relacionar regenera o export no WORKTREE main, não no clone corrente (03/09/2026)
+
+`curar --relacionar --apply` grava no banco E regenera `ontologia/acervo/conceito_relacao.jsonl`
+— mas no worktree `/home/claudinho/AI/var/wt/conhecimento-main` (branch main), NÃO no clone de
+trabalho `platafirma-conhecimento` se este estiver noutra branch (ex.: `fabrica/NNNN-...`).
+Sinal do descompasso: banco tem N arestas, export do clone de fábrica tem N-92. O commit+push é
+do worktree main: `cd var/wt/conhecimento-main; git add ...jsonl; git commit; git push origin main`.
+O banco é fonte de verdade; o jsonl é derivado e legível (FK resolvida para slug, sem uuid, uma
+linha por registro) — `git diff --numstat` confirma que o apply só adicionou (N insertions, 0
+removals) antes de commitar.
