@@ -123,3 +123,11 @@ Três fatos medidos que valem régua (detalhe nos cards #2886-2888 e na wiki
   teste on/off antes de acreditar em braço novo.
 - **obra_trata_de não participa da busca**: recall do declarado ~0.31, 50% zero no top-8.
 - **RERANK_BLEND=0 no env do container**: `rerank=true` per-request paga o CE e não reordena.
+
+## Seções-hub contaminam `secao_prior_passagem_chave` (medido 02/09/2026)
+
+Seção curta e genérica ("Further reading", "9 Vigência", "15 Conformidade") vira passagem-chave
+de 70–138 conceitos ao mesmo tempo: o vetor dela é próximo de tudo. Qualquer leitura de
+vizinhança entre conceitos por passagem comum tem de excluir seção com mais de ~3 conceitos —
+sem o filtro, `conhecimento-arquitetural ~ aprendizado-por-reforco` aparece com 10 seções em
+comum. Mesmo mecanismo produz falso vizinho por homonímia (contexto-delimitado ~ janela-de-contexto).

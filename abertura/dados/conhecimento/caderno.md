@@ -146,3 +146,11 @@ aceite do card → conferir o banco DEPOIS do aceite e exigir "desfeito" → bui
 de worktree limpo em `main` (`~/AI/var/wt/…`), nunca do clone que ela ocupa. Dois PRs
 seguidos, dois consertos de dados por cima: o toque livre por cima da entrega é a regra,
 não a exceção — e sobe no mesmo turno.
+
+## `outros_rotulos` é derivada; quem escreve é `conceito_rotulo` (ont:0086, 02/09/2026)
+
+Apelido de conceito se grava em `acervo.conceito_rotulo` (rótulo, língua, papel); o array
+`conceito.outros_rotulos` é reconstruído por trigger e continua sendo o que o motor lê.
+Escrever no array direto é escrever em derivada: some na próxima sincronização. Mudou apelido
+→ `embed-meta --all` (30 s). Aresta entre conceitos fora da coluna: `acervo.conceito_relacao`
+(ont:0085), com `motivo` e `garantia`; leitura única pela view `conceito_aresta`.

@@ -34,3 +34,11 @@ Ligação ou conceito que o dono afirma existe por afirmação dele (`estatuto` 
 Z39.19 §5.3.5.2 chama de garantia organizacional). Contar trechos no acervo mede lastro
 literário, não validade — `ont:0078`: "obra ausente da estante não veta lavratura". Reportar
 "o texto não sustenta" como se fosse veto é erro medido nesta data.
+
+## Como se mede uma aresta antes de lavrar (02–03/09/2026)
+
+Duas fontes, nesta ordem: co-ocorrência em `obra_trata_de` (obras que tratam dos dois) e lastro
+em `acervo.trecho` (busca de frase, `phraseto_tsquery('simple')` — acento não casa se buscar sem
+acento). Passagem-chave só com seção-hub filtrada. A hipótese do dono não precisa de nenhuma
+das duas: entra como `garantia = instituida`. Aceite de regra formal: planta o caso falso, mede
+no HermiT E na conferência SQL, desfaz — os dois têm de acusar a mesma linha.
