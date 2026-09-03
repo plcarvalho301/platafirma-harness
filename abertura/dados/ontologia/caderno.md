@@ -58,3 +58,27 @@ pergunta) e `expandir()` sobe também pelo 2º pai. O bloco sai em `ontologia.vi
 resposta — ligado pelo dono em 03/09 (`VIZINHANCA_DIRIGIDA=5`), fora do ranking por construção.
 Órfão (conceito sem obra) não tem dono: qualquer cadeira que o reconheça liga ao seu domínio,
 2º pai permitido sem negociar — e órfão com dois pais é sinal de ambiguidade, fila de fusão.
+
+## O que a teia mede é a ficha do livro, não o assunto (parecer da rodada geral, 03/09/2026)
+
+Cruzamento de estante, isolamento de domínio e "livros em comum" leem `obra_trata_de` — a ficha que
+alguém escreveu à mão (1,6 conceitos por livro). Estante que sai "fechada" na medida (IA, 03/09) é
+ficha rala, não assunto fechado: o conceito implícito (o harness em Python, a memória em Postgres,
+o javascript do livro de interface) não está na ficha. Antes de afirmar isolamento, conferir a
+ficha; o remédio mecânico é refletir estante e subestante em conceito e espalhar por
+`curar --reclassificar --de-dominio X --trata-de X` (dono, avenida 6) — e, feito isso, descontar os
+conceitos de estante ao medir coocorrência, senão toda ligação parece sustentada. "Consistente" no
+HermiT com `filhos_exclusivos` = 0 e 4 `disjunta` não prova nada: ninguém afirmou o que pudesse
+falhar. Ligar por garantia instituída é o natural antes de haver uso medido; garantia de uso só
+nasce quando o registro de busca guardar os conceitos declarados por pergunta (hoje guarda só o
+texto).
+
+## Apelido é de um conceito só (Z39.19 §6.2.2 e §8.2; dono, 03/09/2026)
+
+Termo mais amplo não lista o mais estreito como sinônimo — se o filho existe como conceito, o nome
+é dele (governo eletrônico era apelido de governo digital e vice-versa; "API" em
+contratos-de-interface; "dense retrieval" em recuperacao-semantica). Homonímia não some: cada
+apelido ganha qualificador ("kernel (estratégia)" × "kernel (sistema operacional)"). Conferência:
+`SELECT lower(rotulo) FROM acervo.conceito_rotulo GROUP BY 1 HAVING count(DISTINCT conceito_id) > 1`
+vazia. Primeiro pai hierárquico vai na coluna; enquanto `curar` só escrever a tabela (#2983), o
+primeiro pai sobe por SQL registrado em `ontologia/colheita/` e o motivo fica no export em git.
