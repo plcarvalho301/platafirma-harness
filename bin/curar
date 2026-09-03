@@ -141,6 +141,12 @@ def resolver_obra_id(obra: str, headers: dict, expurgadas: bool = False) -> str:
     if not oid:
         sys.stderr.write(f"curar: não foi possível resolver o ID da obra '{obra}'\n")
         sys.exit(1)
+    # Verbo de ESCRITA: título só resolve por casamento EXATO (trava do card #2975 — nada de
+    # seleção por texto livre). Aproximado devolve o candidato e exige o uuid.
+    if data.get("casamento") not in (None, "exato"):
+        sys.stderr.write(f"curar: '{obra}' casou só aproximado com {oid} ({data.get('titulo')}); "
+                         "passe o uuid para escrever nela\n")
+        sys.exit(2)
     return oid
 
 
@@ -192,14 +198,19 @@ def formatar_situacao(payload: dict) -> str:
 
 
 def acao_situacao(obra: str, como_json: bool, headers: dict) -> int:
-    qs = "?expurgadas=true"
-    url = f"{BASE}/acervo/obras/{urllib.parse.quote(obra, safe='')}/situacao{qs}"
-    try:
-        resp = requests.get(url, headers=headers)
-    except requests.exceptions.RequestException as e:
-        falha_indeterminavel(e)
-    if resp.status_code >= 500:
-        falha_indeterminavel(resp)
+    # `?expurgadas=true` carrega SÓ o catálogo das expurgadas (servidor): obra viva vira 404.
+    # Primeiro o catálogo vivo; expurgada só no 404, como segunda leitura.
+    base_url = f"{BASE}/acervo/obras/{urllib.parse.quote(obra, safe='')}/situacao"
+    resp = None
+    for qs in ("", "?expurgadas=true"):
+        try:
+            resp = requests.get(base_url + qs, headers=headers)
+        except requests.exceptions.RequestException as e:
+            falha_indeterminavel(e)
+        if resp.status_code >= 500:
+            falha_indeterminavel(resp)
+        if resp.status_code != 404:
+            break
     if resp.status_code != 200:
         falha_problem(resp)
     data = resp.json()
