@@ -2,8 +2,8 @@
 # curar — cliente fino da API de curadoria do acervo
 # capacidade: classificacao
 # dono: claudinho-dados
-# use para: curadoria do acervo, reclassificação em lote e avulsa, expurgo, restauração, promoção e teia de conceitos (aresta entre conceitos)
-# atos: --reclassificar, --situacao, --expurgar, --restaurar, --promover, --relacionar, --relacoes, --desrelacionar
+# use para: curadoria do acervo, reclassificação em lote e avulsa, expurgo, restauração, promoção, criação de conceito (nó) e teia de conceitos (aresta entre conceitos)
+# atos: --reclassificar, --situacao, --expurgar, --restaurar, --promover, --conceito, --relacionar, --relacoes, --desrelacionar
 import argparse
 import json
 import os
@@ -36,6 +36,7 @@ USO = """uso:
   curar --expurgar <obra> [--sim]
   curar --restaurar <obra>
   curar --promover <obra> --impressao <id>
+  curar --conceito <slug> --rotulo <r> --definicao <d> --natureza <n> --estatuto <e> [--mais-amplo <slug> --mais-amplo-tipo <t>] [--rotulo-alt 'lingua|rotulo']... [--trata-de <obras>] [--apply]
   curar --relacionar <de> <para> --tipo <t> --garantia <g> --motivo <m> [--lastro <obra>] [--apply]
   curar --relacionar --help     cartilha: as 11 famílias (frase-molde) e as 3 garantias
   curar --relacoes <conceito>   arestas de um conceito, coluna + tabela (o que já está lavrado)
@@ -51,6 +52,19 @@ ações principais:
                                 conferências SQL com a aresta dentro + HermiT com diff de insatisfazíveis)
   --relacoes <conceito>         lista as arestas de um conceito (pai/filhos da coluna + tabela)
   --desrelacionar <id>          apaga uma aresta pelo id (o export versionado é o registro)
+
+opções de --conceito:
+  --rotulo <texto>              rótulo preferido (obrigatório)
+  --definicao <texto>           definição (obrigatório)
+  --natureza <n>                processo|disposicao|modelo|fenomeno (obrigatório)
+  --estatuto <e>                instituido|doutrinario|natural (obrigatório)
+  --mais-amplo <slug>           conceito pai (opcional; exige --mais-amplo-tipo)
+  --mais-amplo-tipo <t>         generica|partitiva|instancia|instrumental|aferidora|patologica|condicional|economica|tematica
+  --rotulo-alt 'lingua|rotulo'  rótulo alternativo (repetível; lingua pt|en|zxx)
+  --lingua <l>                  língua do rótulo preferido (default pt)
+  --endereco <texto>            endereço/URI canônico (opcional)
+  --filhos-exclusivos           filhos mutuamente exclusivos
+  --trata-de <obras>            obra(s) de lastro literário (uuid/título, vírgula)
 
 opções de --relacionar:
   --tipo <família>              generica|partitiva|instancia|instrumental|condicional|tematica|
@@ -449,6 +463,110 @@ def formatar_plano_relacao(p: dict, hermit: dict | None) -> str:
     return "\n".join(lin)
 
 
+def formatar_plano_conceito(p: dict) -> str:
+    c = p.get("conceito", {})
+    lin = [f"conceito : {c.get('slug')}  «{c.get('rotulo')}»",
+           f"  natureza/estatuto: {c.get('natureza')} / {c.get('estatuto')}"]
+    if c.get("mais_amplo"):
+        lin.append(f"  pai      : {c.get('mais_amplo')}  ({c.get('mais_amplo_tipo')})")
+    rots = c.get("rotulos", [])
+    alt = [r for r in rots if r.get("papel") != "preferido"]
+    if alt:
+        lin.append("  rótulos  : +" + str(len(alt)) + " alt — " +
+                   ", ".join(f"{r['rotulo']}[{r['lingua']}]" for r in alt))
+    if c.get("trata_de"):
+        lin.append(f"  trata_de : {len(c['trata_de'])} obra(s)")
+    for nome, d in (p.get("conferencias") or {}).items():
+        marca = "OK" if not d.get("novas") else f"REPROVOU +{len(d['novas'])}"
+        lin.append(f"  conf {nome:<13}: {marca}")
+    for nome, d in (p.get("avisos") or {}).items():
+        if d.get("linhas"):
+            lin.append(f"  aviso {nome:<12}: {d['linhas']} linha(s) (não bloqueia)")
+    lin.append(f"  emitido_por: {p.get('emitido_por')}")
+    if p.get("modo") == "aplicado":
+        ver = f"GRAVADO — id {p.get('id')}"
+    elif p.get("aprovado"):
+        ver = "APROVADO — repita com --apply para gravar"
+    else:
+        ver = "REPROVADO — nada gravado"
+    lin.append(f"  veredito : {ver}")
+    return "\n".join(lin)
+
+
+def acao_conceito(args, autor: str, como_json: bool, headers: dict) -> int:
+    slug = args.conceito
+    faltam = [k for k in ("rotulo", "definicao", "natureza", "estatuto") if not getattr(args, k)]
+    if faltam:
+        sys.stderr.write(f"curar: erro: --conceito exige --{' --'.join(faltam)}\n")
+        return 2
+    if bool(args.mais_amplo) != bool(args.mais_amplo_tipo):
+        sys.stderr.write("curar: erro: --mais-amplo e --mais-amplo-tipo andam juntos\n")
+        return 2
+    corpo = {"slug": slug, "rotulo": args.rotulo, "definicao": args.definicao,
+             "natureza": args.natureza, "estatuto": args.estatuto, "autor": autor}
+    if args.lingua:
+        corpo["lingua"] = args.lingua
+    if args.endereco:
+        corpo["endereco"] = args.endereco
+    if args.filhos_exclusivos:
+        corpo["filhos_exclusivos"] = True
+    if args.mais_amplo:
+        corpo["mais_amplo"] = args.mais_amplo
+        corpo["mais_amplo_tipo"] = args.mais_amplo_tipo
+    alts = []
+    for item in (args.rotulo_alt or []):
+        if "|" not in item:
+            sys.stderr.write(f"curar: erro: --rotulo-alt no formato 'lingua|rotulo' (ex: 'en|site reliability engineering'): {item}\n")
+            return 2
+        lg, r = item.split("|", 1)
+        alts.append({"lingua": lg.strip(), "rotulo": r.strip()})
+    if alts:
+        corpo["rotulos_alt"] = alts
+    if args.trata_de:
+        corpo["trata_de"] = [resolver_obra_id(o, headers) for o in _parse_lista(args.trata_de)]
+
+    def post(aplicar: bool):
+        try:
+            r = requests.post(f"{BASE}/acervo/conceitos", json={**corpo, "aplicar": aplicar}, headers=headers)
+        except requests.exceptions.RequestException as e:
+            falha_indeterminavel(e)
+        if r.status_code >= 500:
+            falha_indeterminavel(r)
+        return r
+
+    resp = post(False)
+    if resp.status_code != 200:
+        try:
+            pj = resp.json()
+        except ValueError:
+            pj = {}
+        if isinstance(pj, dict) and pj.get("plano"):
+            print(formatar_plano_conceito(pj["plano"]))
+        falha_problem(resp)
+    plano = resp.json()
+
+    if not args.apply:
+        if como_json:
+            print(json.dumps({"plano": plano}, indent=2, ensure_ascii=False))
+        else:
+            print(formatar_plano_conceito(plano))
+        return 0 if plano.get("aprovado") else 1
+
+    if not plano.get("aprovado"):
+        print(formatar_plano_conceito(plano))
+        sys.stderr.write("curar: conceito reprovado nas conferências — nada gravado\n")
+        return 1
+    resp = post(True)
+    if resp.status_code not in (200, 201):
+        falha_problem(resp)
+    aplicado = resp.json()
+    if como_json:
+        print(json.dumps(aplicado, indent=2, ensure_ascii=False))
+    else:
+        print(formatar_plano_conceito(aplicado))
+    return 0
+
+
 def acao_relacionar(args, autor: str, como_json: bool, headers: dict) -> int:
     pos = args.relacionar or []
     if args.ajuda or not pos:
@@ -728,6 +846,17 @@ def main(argv=None):
     parser.add_argument("--relacionar", nargs="*", default=None)
     parser.add_argument("--relacoes", default=None)
     parser.add_argument("--desrelacionar", default=None)
+    parser.add_argument("--conceito", default=None)
+    parser.add_argument("--rotulo", default=None)
+    parser.add_argument("--definicao", default=None)
+    parser.add_argument("--natureza", default=None)
+    parser.add_argument("--estatuto", default=None)
+    parser.add_argument("--endereco", default=None)
+    parser.add_argument("--lingua", default=None)
+    parser.add_argument("--mais-amplo", dest="mais_amplo", default=None)
+    parser.add_argument("--mais-amplo-tipo", dest="mais_amplo_tipo", default=None)
+    parser.add_argument("--rotulo-alt", dest="rotulo_alt", action="append", default=None)
+    parser.add_argument("--filhos-exclusivos", dest="filhos_exclusivos", action="store_true", default=False)
     parser.add_argument("--tipo", default=None)
     parser.add_argument("--garantia", default=None)
     parser.add_argument("--motivo", default=None)
@@ -785,6 +914,8 @@ def main(argv=None):
     traceparent = f"00-{secrets.token_hex(16)}-{secrets.token_hex(8)}-01"
     headers["traceparent"] = traceparent
 
+    if args.conceito:
+        return acao_conceito(args, autor, args.como_json, headers)
     if args.relacionar is not None:
         return acao_relacionar(args, autor, args.como_json, headers)
     elif args.relacoes:
