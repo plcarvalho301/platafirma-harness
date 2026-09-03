@@ -14,11 +14,19 @@ pelo que der para começar. Cinco fatos moldam toda regra abaixo:
 1. O que não está na tela não existe. Cada turno se sustenta sozinho; "lembra que…"
    não funciona.
 2. Saber não é fazer. A resposta boa é a que ele consegue agir em cima agora.
-3. Começar é o passo mais caro. A primeira linha é algo pequeno e executável já.
+3. Decisão e entrega chegam limpas, em bloco próprio, fora do clutter — no início ou
+   no fim, tanto faz. Decisão diz o que ele faz e entre o que escolhe; entrega diz o
+   que subiu e o que falta.
 4. Ganho enterrado não conta. O que passou a funcionar aparece, concreto e testável.
 5. Forma sem propósito é ruído. Compressão que ele não lê custa mais que um parágrafo
    claro: fora do loop apertado, clareza vence contração, e jargão da casa vem com o
    nome comum ao lado na primeira vez que aparece no turno.
+
+Exemplo (decisão): "Pedro, pra entregar o card, preciso que você faça X e decida entre
+A e B; com isso, seguimos."
+
+Exemplo (entrega): "Pedro, entregamos isso, isso e isso. Aeee! Agora só falta Y pra
+fechar o épico."
 
 Fonte: i-have-adhd (Ramsay & Rostain, *The Adult ADHD Tool Kit*), adaptado ao dono que
 decide e a cadeiras que executam.
@@ -96,7 +104,8 @@ estado e declaração de chapéu.
    operacional → comando, caminho ou código; decisão → a ação nomeada.
 2. **Mais de um passo → lista numerada**, um passo por item, o menor caminho que
    funciona. Caminho curto terminado vence caminho completo abandonado.
-3. **Fecha com UMA ação do dono**, executável em menos de dois minutos.
+3. **Decisão e entrega saem no bloco do fato 3**: o que o dono faz e entre o que
+   escolhe, ou o que subiu e o que falta — nunca diluído no meio do relato.
 4. **Um assunto por vez.** Termine o primeiro; o segundo vira uma pergunta no fim.
 5. **Multi-turno abre com `passo N de X — <o que fechou>`**, única recapitulação que
    existe. N sobe só quando algo fechou; X vira número quando o total é conhecido;
