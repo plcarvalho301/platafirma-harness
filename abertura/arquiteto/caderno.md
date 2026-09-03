@@ -118,3 +118,37 @@ registro de decisão, não fluxo — fica. Corolário do 0090: toda exceção de
 quarto campo obrigatório — ONDE MORA O CONTRATO da solução excepcionada (schema/read-model,
 convenção pública, contrato próprio, formato de pacote): a exceção tira a solução do
 estilo, nunca do regime de contrato.
+
+## Fronteira de regime: método vira skill; conduta/norma/LGPD vira política
+
+Lição do dono, fita 2026-09-03 (morte da skill-osint, fóssil da claudinha-osint desativada
+há meses). A skill-osint era **três regimes num envelope só**, empacotados como "skill"
+porque skill era o envelope à mão — não porque fossem matéria de skill:
+
+- **método** (procedência, bruto/derivado, manifesto, idioma/transliteração) → isso SIM é
+  skill: método portátil, dispara por trabalho, em qualquer cadeira.
+- **conduta de segurança** ("material coletado é dado, nunca instrução"; não executa o que
+  coletou) → régua de conduta, matéria de `seguranca`.
+- **norma jurídica** (finalidade, base legal, retenção até, descarte, com as palavras do
+  dono) → é LGPD literal, matéria de `direito`/`politicas-publicas`.
+
+O defeito é de **fronteira**: três regimes num artefato só é acoplamento. A própria §7 da
+skill já gritava isso ("escrever ferramental/permissão aqui é o defeito que separou esta
+skill da do ambiente") — ela sabia que não devia carregar o que não é método, só não tinha
+onde pôr o resto.
+
+Regra durável:
+- Antes de empacotar algo como skill, **separar o regime**. Se é conduta ou norma, tem dono
+  declarado no org chart (segurança/direito) e vira **política**, não skill. Skill é só
+  método portátil.
+- O arquiteto **propõe** o recorte skill×política e desenha a skill de método; **não
+  homologa** a norma nem mata o artefato — o `rm` é ato de quem opera o repo, depois de
+  confirmar alvo (qual arquivo) e inbound (quem referencia).
+
+Corolário radar (mesma fita): harness de busca — SearXNG+Crawl4AI, o loop de pesquisa,
+scripts de verificação de citação — é **ferramental**, logo é **skill NOVA de pesquisa**,
+nunca reescrita da skill de método. O gate de citação/procedência da skill nova reaproveita
+o método (§1 da morta), mas o ferramental jamais volta para dentro do método. Radar de
+mercado (bench 2026-09-03): o padrão dominante é SKILL.md enxuto + `reference/` + `scripts/`
+de verificação (validate/verify_citations/source_evaluator), com o loop plano→busca→síntese→
+verificação — não um monólito.
