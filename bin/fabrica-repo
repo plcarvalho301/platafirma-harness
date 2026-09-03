@@ -1,0 +1,83 @@
+#!/usr/bin/env bash
+# capacidade: entrega-mediada
+# dono: claudinho-TI
+#
+# Verbo da FABRICA (e de qualquer cadeira isolada no daemon 1003). Da o fluxo de dev
+# INTEIRO exceto push em main e deploy em prod — reservados a um claudinho/dono
+# (principio de seguranca do dono, 03/09/2026: "fazem tudo que a gente faz, menos
+# push em main e deploy em prod").
+#
+# Dois modos, escolhidos por deteccao (o operador nao pensa):
+#  - CREDENCIADO: se git alcanca o GitHub, empurra a BRANCH e abre PR. main nunca.
+#  - MEDIADO (padrao hoje na fabrica isolada): clona do espelho no drop; na entrega
+#    gera bundle em entregas/ para claudinho-TI empurrar. Zero credencial do lado dela.
+#
+# Sub-atos:
+#   pegar    <repo> <card-slug>   clona/atualiza e cria branch fabrica/<card-slug> de main
+#   entregar <repo> <card-slug>   credenciado: push branch + PR; mediado: bundle no drop
+#   receber  <repo> <card-slug>   [claudinho-TI, no host] pega o bundle, empurra, abre PR
+#   estado   <repo>               diz o modo e o caminho
+set -euo pipefail
+
+DROP="${PF_DROP:-/srv/pf/entrada-jaiminho}"
+GH_OWNER="plcarvalho301"
+TRAB="${PF_TRABALHO:-$HOME/trabalho}"
+
+repo_ok(){ case "$1" in platafirma-*|modulo-osint) return 0;; *) echo "repo desconhecido: $1" >&2; return 1;; esac; }
+tem_credencial(){ git ls-remote "https://github.com/$GH_OWNER/$1.git" HEAD >/dev/null 2>&1; }
+
+pegar(){
+  local repo="$1" slug="$2"; repo_ok "$repo" || exit 2
+  local dest="$TRAB/$repo"
+  mkdir -p "$TRAB"
+  if tem_credencial "$repo"; then
+    [ -d "$dest/.git" ] || git clone "https://github.com/$GH_OWNER/$repo.git" "$dest"
+  else
+    [ -d "$dest/.git" ] || git clone "$DROP/$repo.git" "$dest"
+  fi
+  git -C "$dest" fetch origin --prune
+  git -C "$dest" switch -c "fabrica/$slug" origin/main 2>/dev/null || git -C "$dest" switch "fabrica/$slug"
+  echo "pronto: $dest na branch fabrica/$slug (base origin/main)"
+}
+
+entregar(){
+  local repo="$1" slug="$2"; repo_ok "$repo" || exit 2
+  local dest="$TRAB/$repo" br="fabrica/$slug"
+  [ "$br" = "main" ] && { echo "RECUSA: main e reservado (push/merge nao e da fabrica)" >&2; exit 3; }
+  git -C "$dest" rev-parse --verify "$br" >/dev/null 2>&1 || { echo "branch $br nao existe em $dest" >&2; exit 2; }
+  if tem_credencial "$repo"; then
+    git -C "$dest" push -u origin "$br"
+    gh pr create --repo "$GH_OWNER/$repo" --base main --head "$br" --fill 2>/dev/null \
+      || echo "branch empurrada; abra o PR: https://github.com/$GH_OWNER/$repo/pull/new/$br"
+  else
+    mkdir -p "$DROP/entregas"
+    local out="$DROP/entregas/$slug.bundle"
+    git -C "$dest" bundle create "$out" --branches="$br"
+    chmod a+r "$out"
+    echo "MEDIADO: bundle em $out — handoff a claudinho-TI: 'fabrica-repo receber $repo $slug'"
+  fi
+}
+
+receber(){  # rodado por claudinho-TI no host (tem credencial). Empurra branch, nunca main.
+  local repo="$1" slug="$2"; repo_ok "$repo" || exit 2
+  local b="$DROP/entregas/$slug.bundle" host="$HOME/AI/$repo" br="fabrica/$slug"
+  [ -f "$b" ] || { echo "sem bundle: $b" >&2; exit 2; }
+  git -C "$host" fetch "$b" "$br:$br"
+  git -C "$host" push -u origin "$br"
+  gh pr create --repo "$GH_OWNER/$repo" --base main --head "$br" --fill 2>/dev/null || true
+  echo "empurrado e PR aberto (sem merge): $br"
+}
+
+estado(){
+  local repo="$1"; repo_ok "$repo" || exit 2
+  if tem_credencial "$repo"; then echo "$repo: CREDENCIADO (push branch + PR direto; main reservado)"
+  else echo "$repo: MEDIADO (clona de $DROP/$repo.git; entrega por bundle; TI empurra)"; fi
+}
+
+case "${1:-}" in
+  pegar)    shift; pegar "$@";;
+  entregar) shift; entregar "$@";;
+  receber)  shift; receber "$@";;
+  estado)   shift; estado "$@";;
+  *) sed -n '1,34p' "$0"; exit 1;;
+esac
