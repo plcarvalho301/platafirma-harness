@@ -109,9 +109,9 @@ def personas_validas():
         }
     except OSError:
         return None
-    # atores internos nao-cadeira (fabrica) tem persona.md mas nao sao destinatario
-    # de fila entre cadeiras; participantes entram por PERSONAS_PARTICIPANTES.
-    cadeiras.discard("fabrica")
+    # toda cadeira com persona.md na arvore viva e destinatario/emissor pleno
+    # (dono, 03/09/2026: cadeiras flat, sem diferenca de head — a fabrica manda e
+    # recebe como as demais). Participantes externos entram por PERSONAS_PARTICIPANTES.
     if not cadeiras:
         return None
     return cadeiras | set(PERSONAS_PARTICIPANTES)
