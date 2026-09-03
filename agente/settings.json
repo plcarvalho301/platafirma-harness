@@ -37,6 +37,13 @@
       "Bash(git fetch:*)",
       "Bash(git add:*)",
       "Bash(git commit:*)",
+      "Bash(git push:*)",
+      "Bash(docker:*)",
+      "Bash(systemctl:*)",
+      "Bash(loginctl:*)",
+      "Bash(psql:*)",
+      "Bash(mc:*)",
+      "Bash(sudo:*)",
       "Bash(python3:*)",
       "Bash(python:*)",
       "Bash(pytest:*)",
@@ -53,18 +60,13 @@
       "mcp__claude_ai_claudinho-mcp__write_file",
       "mcp__claude_ai_claudinho-mcp__run_command"
     ],
+    "ask": [
+      "Bash(deploy:*)"
+    ],
     "deny": [
-      "Bash(sudo:*)",
-      "Bash(docker:*)",
-      "Bash(systemctl:*)",
-      "Bash(loginctl:*)",
-      "Bash(psql:*)",
-      "Bash(mc:*)",
-      "Bash(rm -rf /:*)",
-      "Bash(git push:*)",
+      "Bash(curl:*)",
       "Read(//home/claudinho/.config/**)",
-      "Read(//home/claudinho/.claude/.credentials.json)",
-      "Bash(curl:*)"
+      "Read(//home/claudinho/.claude/.credentials.json)"
     ],
     "defaultMode": "bypassPermissions"
   },

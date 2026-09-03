@@ -76,7 +76,7 @@ def _ledger_map():
                         suf = suf[len(pref):]
                         break
                 if suf:
-                    mapa[suf.lower()] = slug
+                    mapa[suf.lower()] = suf.lower()  # valor canonico igual a chave: o campo cadeira cru pode trazer prefixo/maiuscula fossil (arq:0075)
     except OSError:
         pass
     return mapa
