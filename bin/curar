@@ -1,0 +1,503 @@
+#!/usr/bin/env python3
+# curar — cliente fino da API de curadoria do acervo
+# capacidade: classificacao
+# dono: claudinho-dados
+# use para: curadoria do acervo, reclassificação em lote e avulsa, expurgo, restauração e promoção
+# atos: --reclassificar, --situacao, --expurgar, --restaurar, --promover
+import argparse
+import json
+import os
+import re
+import secrets
+import sys
+import urllib.parse
+
+import requests
+
+HARNESS_DIR = os.path.dirname(os.path.dirname(os.path.realpath(__file__)))
+if HARNESS_DIR not in sys.path:
+    sys.path.insert(0, HARNESS_DIR)
+
+try:
+    from recuperacao.adaptadores.motor_acervo_rest import BASE as DEFAULT_BASE, TOKEN as DEFAULT_TOKEN
+except ImportError:
+    DEFAULT_BASE = "http://127.0.0.1:8100"
+    DEFAULT_TOKEN = ""
+
+BASE = (os.environ.get("MOTOR_ACERVO_URL") or os.environ.get("RAG_API_URL") or os.environ.get("RAG_API_BASE") or DEFAULT_BASE).rstrip("/")
+TOKEN = os.environ.get("RAG_API_TOKEN") or DEFAULT_TOKEN
+
+_UUID_RE = re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$", re.IGNORECASE)
+
+USO = """uso:
+  curar --reclassificar [opções de alteração] [opções de seleção]
+  curar --situacao <obra>
+  curar --expurgar <obra> [--sim]
+  curar --restaurar <obra>
+  curar --promover <obra> --impressao <id>
+
+ações principais:
+  --reclassificar               reclassifica obra(s) em lote ou individualmente (default: plano seco)
+  --situacao <obra>             consulta a situação viva de uma obra no acervo
+  --expurgar <obra>             expurgo reversível de uma obra (pede confirmação 'sim')
+  --restaurar <obra>            restaura obra expurgada (expurgada: false)
+  --promover <obra>             promove impressão de bancada para servindo (exige --impressao)
+
+opções de alteração (--reclassificar):
+  --trata-de <conceitos>        adiciona conceito(s) (separados por vírgula)
+  --remover-trata-de <conceitos> remove conceito(s) (separados por vírgula)
+  --substituir-trata-de <concs> substitui todo o conjunto de conceitos da obra
+  --dominio <slug>              novo domínio da obra (ou 'null' para limpar)
+  --subdominio <slug>           novo subdomínio da obra (ou 'null' para limpar)
+  --especie <slug>              nova espécie da obra (ou 'null' para limpar)
+  --anotacao <texto>            anotação textual da obra
+
+opções de seleção (--reclassificar em lote):
+  --obras <id1,id2,...>         lista de IDs ou títulos de obras a alterar
+  --obra <id>                   alteração de uma única obra
+  --de-dominio <slug>           filtra obras pelo domínio de origem
+  --de-subdominio <slug>        filtra obras pelo subdomínio de origem (usado com --de-dominio)
+  --de-conceito <slug>          filtra obras pelo conceito de origem
+  --de-colecao <slug>           filtra obras pela coleção (firma | pessoal)
+  --sem-dominio                 filtra obras sem domínio atribuído
+  --expurgadas                  filtra obras expurgadas
+  --teto <n>                    teto máximo de obras a alterar no lote (default: 200, máx: 5000)
+
+opções gerais:
+  --apply                       aplica as alterações (default: falso, dry-run do plano)
+  --autor <slug>                curador responsável (default: cadeira da sessão ou 'dados')
+  --impressao <id>              ID da impressão a promover (obrigatório com --promover)
+  --json                        emite resultado em formato JSON
+  --sim, -y                     confirma expurgo sem prompt interativo
+"""
+
+
+def falha_indeterminavel(erro_ou_resp):
+    print("indeterminavel")
+    if isinstance(erro_ou_resp, requests.Response):
+        try:
+            pj = erro_ou_resp.json()
+            print(json.dumps(pj, indent=2, ensure_ascii=False))
+        except Exception:
+            print(json.dumps({
+                "type": "about:blank",
+                "title": "FonteIndisponivel",
+                "status": erro_ou_resp.status_code,
+                "detail": erro_ou_resp.text,
+            }, indent=2, ensure_ascii=False))
+    else:
+        print(json.dumps({
+            "type": "about:blank",
+            "title": "FonteIndisponivel",
+            "status": 503,
+            "detail": f"Motor acervo indisponível em {BASE}: {erro_ou_resp}",
+        }, indent=2, ensure_ascii=False))
+    sys.exit(1)
+
+
+def falha_problem(resp: requests.Response) -> None:
+    try:
+        pj = resp.json()
+        title = pj.get("title") or f"HTTP {resp.status_code}"
+        detail = pj.get("detail")
+        msg = f"{title}\n{detail}" if detail else f"{title}\n"
+    except Exception:
+        msg = f"HTTP {resp.status_code}\n{resp.text}"
+    sys.stderr.write(msg.rstrip() + "\n")
+    print(msg.rstrip())
+    sys.exit(1)
+
+
+def _parse_lista(vals) -> list[str]:
+    if not vals:
+        return []
+    if isinstance(vals, str):
+        vals = [vals]
+    res = []
+    for v in vals:
+        for p in re.split(r"[,;\s]+", str(v)):
+            p = p.strip()
+            if p:
+                res.append(p)
+    return res
+
+
+def resolver_obra_id(obra: str, headers: dict, expurgadas: bool = False) -> str:
+    obra = obra.strip()
+    if _UUID_RE.match(obra):
+        return obra
+    qs = "?expurgadas=true" if expurgadas else ""
+    url = f"{BASE}/acervo/obras/{urllib.parse.quote(obra, safe='')}/situacao{qs}"
+    try:
+        resp = requests.get(url, headers=headers)
+    except requests.exceptions.RequestException as e:
+        falha_indeterminavel(e)
+    if resp.status_code >= 500:
+        falha_indeterminavel(resp)
+    if resp.status_code != 200:
+        falha_problem(resp)
+    data = resp.json()
+    oid = data.get("obra_id")
+    if not oid:
+        sys.stderr.write(f"curar: não foi possível resolver o ID da obra '{obra}'\n")
+        sys.exit(1)
+    return oid
+
+
+def formatar_lote_resultado(res: dict) -> str:
+    modo = res.get("modo", "plano")
+    n = res.get("n", 0)
+    itens = res.get("itens", [])
+    linhas = []
+    if modo == "plano":
+        linhas.append(f"Plano de curadoria: plano com n:{n} (dry-run)")
+    else:
+        linhas.append(f"Curadoria aplicada: n:{n} aplicado")
+    linhas.append("")
+    linhas.append(f"{'#':<3} {'Obra ID':<38} {'Título':<40} {'Alterações'}")
+    linhas.append("-" * 125)
+    for idx, item in enumerate(itens, 1):
+        oid = item.get("obra_id", "-")
+        tit = item.get("titulo", "-")
+        if len(tit) > 38:
+            tit = tit[:35] + "..."
+        antes = item.get("antes", {})
+        depois = item.get("depois", {})
+        diffs = []
+        for k in sorted(set(antes.keys()) | set(depois.keys())):
+            a = antes.get(k)
+            d = depois.get(k)
+            diffs.append(f"{k}: {a} -> {d}")
+        diff_str = "; ".join(diffs) if diffs else "(sem alterações)"
+        linhas.append(f"{idx:<3} {oid:<38} {tit:<40} {diff_str}")
+    return "\n".join(linhas)
+
+
+def formatar_situacao(payload: dict) -> str:
+    oid = payload.get("obra_id", "-")
+    tit = payload.get("titulo", "-")
+    servivel = "sim" if payload.get("servivel") else "não"
+    degrau = payload.get("degrau", "-")
+    desde = payload.get("desde") or "-"
+    imp = payload.get("impressao_id") or "-"
+    obj = payload.get("objeto") or "-"
+    return (
+        f"Situação da obra: {tit} ({oid})\n"
+        f"  Servível   : {servivel}\n"
+        f"  Degrau     : {degrau}\n"
+        f"  Desde      : {desde}\n"
+        f"  Impressão  : {imp}\n"
+        f"  Objeto     : {obj}"
+    )
+
+
+def acao_situacao(obra: str, como_json: bool, headers: dict) -> int:
+    qs = "?expurgadas=true"
+    url = f"{BASE}/acervo/obras/{urllib.parse.quote(obra, safe='')}/situacao{qs}"
+    try:
+        resp = requests.get(url, headers=headers)
+    except requests.exceptions.RequestException as e:
+        falha_indeterminavel(e)
+    if resp.status_code >= 500:
+        falha_indeterminavel(resp)
+    if resp.status_code != 200:
+        falha_problem(resp)
+    data = resp.json()
+    if como_json:
+        print(json.dumps(data, indent=2, ensure_ascii=False))
+    else:
+        print(formatar_situacao(data))
+    return 0
+
+
+def acao_expurgar(obra: str, autor: str, como_json: bool, headers: dict, confirmado: bool = False) -> int:
+    obra_id = resolver_obra_id(obra, headers)
+    if not confirmado:
+        sys.stderr.write(f"Confirma expurgo da obra '{obra}' ({obra_id})? Digite 'sim' para confirmar: ")
+        sys.stderr.flush()
+        try:
+            resp_conf = input().strip()
+        except EOFError:
+            resp_conf = ""
+        if resp_conf.lower() != "sim":
+            sys.stderr.write("Expurgo cancelado.\n")
+            return 1
+
+    url = f"{BASE}/acervo/obras/{obra_id}?autor={urllib.parse.quote(autor)}"
+    try:
+        resp = requests.delete(url, headers=headers)
+    except requests.exceptions.RequestException as e:
+        falha_indeterminavel(e)
+    if resp.status_code >= 500:
+        falha_indeterminavel(resp)
+    if resp.status_code != 204:
+        falha_problem(resp)
+
+    if como_json:
+        print(json.dumps({"expurgada": True, "obra_id": obra_id, "autor": autor}, indent=2, ensure_ascii=False))
+    else:
+        print(f"Obra {obra_id} expurgada com sucesso.")
+    return 0
+
+
+def acao_restaurar(obra: str, autor: str, como_json: bool, headers: dict) -> int:
+    obra_id = resolver_obra_id(obra, headers, expurgadas=True)
+    url = f"{BASE}/acervo/obras/{obra_id}"
+    payload = {
+        "autor": autor,
+        "expurgada": False,
+    }
+    try:
+        resp = requests.patch(url, json=payload, headers=headers)
+    except requests.exceptions.RequestException as e:
+        falha_indeterminavel(e)
+    if resp.status_code >= 500:
+        falha_indeterminavel(resp)
+    if resp.status_code != 200:
+        falha_problem(resp)
+    data = resp.json()
+    if como_json:
+        print(json.dumps(data, indent=2, ensure_ascii=False))
+    else:
+        print(f"Obra {obra_id} restaurada com sucesso.")
+    return 0
+
+
+def acao_promover(obra: str, impressao_id: str, autor: str, como_json: bool, headers: dict) -> int:
+    obra_id = resolver_obra_id(obra, headers)
+    url = f"{BASE}/acervo/obras/{obra_id}/promover"
+    payload = {
+        "autor": autor,
+        "impressao_id": impressao_id,
+    }
+    try:
+        resp = requests.post(url, json=payload, headers=headers)
+    except requests.exceptions.RequestException as e:
+        falha_indeterminavel(e)
+    if resp.status_code >= 500:
+        falha_indeterminavel(resp)
+    if resp.status_code != 200:
+        falha_problem(resp)
+    data = resp.json()
+    if como_json:
+        print(json.dumps(data, indent=2, ensure_ascii=False))
+    else:
+        prom = data.get("promovida", {})
+        apos = data.get("aposentada") or {}
+        apos_str = f" (aposentada: {apos.get('id')})" if apos.get("id") else ""
+        print(f"Impressão {prom.get('id')} promovida a servindo com sucesso{apos_str}.")
+        print(f"Obra {data.get('obra_id')}: servível=sim, degrau={data.get('degrau')}")
+    return 0
+
+
+def acao_reclassificar(args, autor: str, como_json: bool, headers: dict) -> int:
+    alteracao = {}
+    if args.dominio is not None:
+        alteracao["dominio"] = None if args.dominio.lower() in ("null", "none", "") else args.dominio
+    if args.subdominio is not None:
+        alteracao["subdominio"] = None if args.subdominio.lower() in ("null", "none", "") else args.subdominio
+    if args.especie is not None:
+        alteracao["especie"] = None if args.especie.lower() in ("null", "none", "") else args.especie
+    if args.anotacao is not None:
+        alteracao["anotacao"] = args.anotacao
+
+    trata_de = _parse_lista(args.trata_de) if args.trata_de else []
+    remover_trata_de = _parse_lista(args.remover_trata_de) if args.remover_trata_de else []
+    substituir_trata_de = _parse_lista(args.substituir_trata_de) if args.substituir_trata_de else []
+
+    cont_delta = sum(bool(x) for x in (trata_de, remover_trata_de, substituir_trata_de))
+    if cont_delta > 1:
+        sys.stderr.write("curar: erro: use apenas uma das opções de conceitos: --trata-de, --remover-trata-de ou --substituir-trata-de\n")
+        sys.exit(2)
+    elif trata_de:
+        alteracao["conceitos"] = {"adicionar": trata_de}
+    elif remover_trata_de:
+        alteracao["conceitos"] = {"remover": remover_trata_de}
+    elif substituir_trata_de:
+        alteracao["conceitos"] = {"substituir": substituir_trata_de}
+
+    if args.obra:
+        obra_id = resolver_obra_id(args.obra, headers)
+        if not args.apply:
+            payload = {
+                "autor": autor,
+                "selecao": {"ids": [obra_id]},
+                "alteracao": alteracao,
+                "modo": "plano",
+                "teto": args.teto,
+            }
+            url = f"{BASE}/acervo/obras"
+            try:
+                resp = requests.patch(url, json=payload, headers=headers)
+            except requests.exceptions.RequestException as e:
+                falha_indeterminavel(e)
+            if resp.status_code >= 500:
+                falha_indeterminavel(resp)
+            if resp.status_code != 200:
+                falha_problem(resp)
+            data = resp.json()
+            if como_json:
+                print(json.dumps(data, indent=2, ensure_ascii=False))
+            else:
+                print(formatar_lote_resultado(data))
+            return 0
+        else:
+            url = f"{BASE}/acervo/obras/{obra_id}"
+            payload = {
+                "autor": autor,
+                **alteracao,
+            }
+            try:
+                resp = requests.patch(url, json=payload, headers=headers)
+            except requests.exceptions.RequestException as e:
+                falha_indeterminavel(e)
+            if resp.status_code >= 500:
+                falha_indeterminavel(resp)
+            if resp.status_code != 200:
+                falha_problem(resp)
+            data = resp.json()
+            if como_json:
+                print(json.dumps(data, indent=2, ensure_ascii=False))
+            else:
+                print(f"Obra {obra_id} reclassificada com sucesso:")
+                print(f"  Título     : {data.get('titulo')}")
+                print(f"  Domínio    : {data.get('dominio')} / {data.get('subdominio')}")
+                print(f"  Espécie    : {data.get('especie')}")
+                print(f"  Conceitos  : {', '.join(data.get('conceitos', []))}")
+            return 0
+
+    selecao = {}
+    obras_lista = _parse_lista(args.obras) if args.obras else []
+    if obras_lista:
+        resolved_ids = [resolver_obra_id(x, headers) for x in obras_lista]
+        selecao["ids"] = resolved_ids
+    elif args.de_dominio:
+        selecao["dominio"] = args.de_dominio
+        if args.de_subdominio:
+            selecao["subdominio"] = args.de_subdominio
+    elif args.de_conceito:
+        selecao["conceito"] = args.de_conceito
+    elif args.de_colecao:
+        selecao["colecao"] = args.de_colecao
+    elif args.sem_dominio:
+        selecao["sem_dominio"] = True
+    elif args.expurgadas:
+        selecao["expurgadas"] = True
+    else:
+        sys.stderr.write("curar: erro: reclassificação exige seleção (--obras, --de-dominio, etc.) ou --obra\n")
+        sys.exit(2)
+
+    if not alteracao:
+        sys.stderr.write("curar: erro: nenhuma alteração informada (--trata-de, --dominio, --subdominio, etc.)\n")
+        sys.exit(2)
+
+    modo = "aplicar" if args.apply else "plano"
+    payload = {
+        "autor": autor,
+        "selecao": selecao,
+        "alteracao": alteracao,
+        "modo": modo,
+        "teto": args.teto,
+    }
+    url = f"{BASE}/acervo/obras"
+    try:
+        resp = requests.patch(url, json=payload, headers=headers)
+    except requests.exceptions.RequestException as e:
+        falha_indeterminavel(e)
+    if resp.status_code >= 500:
+        falha_indeterminavel(resp)
+    if resp.status_code != 200:
+        falha_problem(resp)
+    data = resp.json()
+    if como_json:
+        print(json.dumps(data, indent=2, ensure_ascii=False))
+    else:
+        print(formatar_lote_resultado(data))
+    return 0
+
+
+def main(argv=None):
+    if argv is None:
+        argv = sys.argv[1:]
+
+    parser = argparse.ArgumentParser(
+        prog="curar",
+        description="Cliente fino da API de curadoria do acervo.",
+        add_help=False,
+    )
+    # Ações
+    parser.add_argument("--reclassificar", action="store_true", default=False)
+    parser.add_argument("--situacao", default=None)
+    parser.add_argument("--expurgar", default=None)
+    parser.add_argument("--restaurar", default=None)
+    parser.add_argument("--promover", default=None)
+
+    # Alterações
+    parser.add_argument("--trata-de", default=None)
+    parser.add_argument("--remover-trata-de", default=None)
+    parser.add_argument("--substituir-trata-de", default=None)
+    parser.add_argument("--dominio", default=None)
+    parser.add_argument("--subdominio", default=None)
+    parser.add_argument("--especie", default=None)
+    parser.add_argument("--anotacao", default=None)
+
+    # Seleção
+    parser.add_argument("--obras", nargs="*", default=None)
+    parser.add_argument("--obra", default=None)
+    parser.add_argument("--de-dominio", default=None)
+    parser.add_argument("--de-subdominio", default=None)
+    parser.add_argument("--de-conceito", default=None)
+    parser.add_argument("--de-colecao", default=None)
+    parser.add_argument("--sem-dominio", action="store_true", default=False)
+    parser.add_argument("--expurgadas", action="store_true", default=False)
+    parser.add_argument("--teto", type=int, default=200)
+
+    # Gerais
+    parser.add_argument("--apply", action="store_true", default=False)
+    parser.add_argument("--autor", default=None)
+    parser.add_argument("--impressao", default=None)
+    parser.add_argument("--json", dest="como_json", action="store_true", default=False)
+    parser.add_argument("--sim", "-y", dest="confirmado", action="store_true", default=False)
+    parser.add_argument("-h", "--help", "--ajuda", dest="ajuda", action="store_true", default=False)
+
+    args, desconhecidos = parser.parse_known_args(argv)
+
+    if args.ajuda or (not argv):
+        sys.stdout.write(USO)
+        sys.exit(0 if args.ajuda else 2)
+
+    autor = args.autor
+    if not autor:
+        cad = (os.environ.get("PF_CADEIRA") or os.environ.get("PF_CONTA") or "").strip().lower()
+        if cad:
+            autor = cad.removeprefix("claudinho-").removeprefix("claudinha-")
+        else:
+            autor = "dados"
+
+    headers = {}
+    if TOKEN:
+        headers["authorization"] = f"Bearer {TOKEN}"
+    traceparent = f"00-{secrets.token_hex(16)}-{secrets.token_hex(8)}-01"
+    headers["traceparent"] = traceparent
+
+    if args.situacao:
+        return acao_situacao(args.situacao, args.como_json, headers)
+    elif args.expurgar:
+        return acao_expurgar(args.expurgar, autor, args.como_json, headers, confirmado=args.confirmado)
+    elif args.restaurar:
+        return acao_restaurar(args.restaurar, autor, args.como_json, headers)
+    elif args.promover:
+        if not args.impressao:
+            sys.stderr.write("curar: erro: --promover exige --impressao <id>\n")
+            sys.exit(2)
+        return acao_promover(args.promover, args.impressao, autor, args.como_json, headers)
+    elif args.reclassificar or args.obra or args.obras or args.de_dominio or args.trata_de or args.remover_trata_de or args.substituir_trata_de:
+        return acao_reclassificar(args, autor, args.como_json, headers)
+    else:
+        sys.stderr.write(USO)
+        sys.stderr.write("curar: erro: nenhuma ação especificada\n")
+        sys.exit(2)
+
+
+if __name__ == "__main__":
+    sys.exit(main())
