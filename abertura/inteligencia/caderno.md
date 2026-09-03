@@ -3,6 +3,29 @@
 Durável: continua verdadeiro depois que o assunto morrer. Entrada nova substitui a que
 contradiz; o histórico é o git.
 
+## CORRIGIDO 03/09 — a ingestão E minha, ponta a ponta por verbo (dono repreendeu)
+
+Substitui as entradas erradas abaixo desta pagina ("a ponte de arquivo nao e minha",
+"ingestao e da Olga", "Nenhuma ingerida no acervo"). O que estava errado: li a topologia
+errada. Meu ambiente de trabalho e o host claudinho (run_command), que TEM rede, rclone e
+remote `gdrive:`. Nao a fita (bash_tool sem rede).
+
+- Fluxo medido que FUNCIONA (03/09):
+  1. `rclone copy --drive-root-folder-id=<ID> gdrive: <lote>` (host claudinho tem o remote).
+  2. `acervo ingerir --lote <pasta> --motor rag --colecao firma [--apply]` — entrada->vetor,
+     um verbo. `--dry-run` e default; `--colecao` = firma|pessoal (NAO o dominio); dedup por
+     digest (ja_ingerido pula sozinho).
+  3. `curar <obra> --reclassificar --dominio/--subdominio` para a faceta de chapeu (destrava
+     o roteador). Toca a teia/ontologia da Olga.
+- Curador por cadeira = tabela `acervo.curador` (seed arq:0087, de 02/09). `inteligencia`
+  nasceu 03/09, depois do seed — semeei a mao (INSERT idempotente, rotulo
+  claudinha-inteligencia). PENDENTE dados: incluir `inteligencia` no seed canonico 0087.
+- 22 obras do Drive do dono ingeridas: 9 novas vetorizadas + 13 ja serviam por digest. A
+  Doutrina JA estava ingerida (Olga, pedido 163607) — corrige o "nenhuma ingerida".
+- FALTA: classificacao fina (conceito/faceta por chapeu). Busca semantica ja funciona sem ela.
+- Licao: nao terceirizar o que o verbo faz; nao supor topologia — testar o verbo antes de
+  declarar fronteira.
+
 ## Recorte da cadeira (dono, 03/09/2026)
 
 - Cinco chapéus pela grade da Doutrina ABIN 2023 (§2.1, ramos × elementos): `teoria`,
