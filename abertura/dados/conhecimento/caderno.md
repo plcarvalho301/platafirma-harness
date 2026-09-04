@@ -154,3 +154,12 @@ Apelido de conceito se grava em `acervo.conceito_rotulo` (rótulo, língua, pape
 Escrever no array direto é escrever em derivada: some na próxima sincronização. Mudou apelido
 → `embed-meta --all` (30 s). Aresta entre conceitos fora da coluna: `acervo.conceito_relacao`
 (ont:0085), com `motivo` e `garantia`; leitura única pela view `conceito_aresta`.
+
+## `frente` e gancho de organizacao; cobertura se mede em dominio e subdominio
+
+`frente` serve para pendurar obra que nao achou casa em dominio/subdominio — e recorte
+de trabalho, nao eixo tematico. Frente com ZERO obra e o estado normal: quer dizer que
+tudo que passou por ali achou casa definitiva, que e o certo. Reportar isso como buraco
+de corpus (feito uma vez, corrigido pelo dono em 01/09/2026) inventa lacuna onde ha
+arrumacao. Ao ler `rag_facets`: dominio e subdominio sao a medida de cobertura — so ali
+a ausencia significa "nao ha obra que responda"; `frente` e marcador de trabalho.
