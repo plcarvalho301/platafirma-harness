@@ -143,3 +143,15 @@ latência).
 RETOMAR: construir `motor <inst> conceito <slug>` (payload v1 node-local:
 slug/existe/rotulo/outros_rotulos/obras_servindo/mais_amplo). Espec no card #2931; objeção no ADR
 0090 (arquitetura@45e0d3c). Execução "muito em breve", junto do rerefactor da recuperação (#2930).
+
+## Spec de ferramenta descreve a FORMA e o LUGAR da política do dono, nunca o CONTEÚDO
+
+Especificar um verbo é desenhar mecânica (`--sujeito`, `--cat`, campo no manifesto,
+lista de tipos do `resolver`, `settings.yml`). O RECORTE que essa mecânica serve —
+quais categorias ligam, o que dispara guarda de privacidade/LGPD, se um ato recusa —
+é decisão do dono, e a spec no máximo aponta o lugar reservado a ela (o arquivo de
+config, a lista fechada), sem preencher. Colar régua de privacidade ou recorte de
+categoria dentro do contrato do verbo, ainda que a mecânica seja legítima, é tomar a
+decisão por ele. Sinal do erro: o dono corrige o recorte, não a mecânica. A mecânica
+é da cadeira; o recorte é dele. Vale para qualquer spec que sirva política, não só
+para pesquisa web.
