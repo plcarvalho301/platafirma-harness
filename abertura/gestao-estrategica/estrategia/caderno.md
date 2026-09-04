@@ -61,6 +61,11 @@ re-derivar. Fato de negócio, estado de runtime e remit canônico NÃO entram.
   Proprietário (quem responde pelo dado), ISP (a Política Mestra de Segurança). Medido em
   04/09: entreguei "mapa de domínios" sem tradução no mesmo turno em que escrevi o filtro
   da curse of knowledge. O teste não é "eu sei o que significa": é "ele saberia".
+  Corrigido no mesmo dia pelo dono: traduzir NÃO é a cura quando o decisor vai OUVIR a
+  palavra no trabalho seguinte — aí a palavra se ensina, num slide, ancorada no
+  vocabulário que ele já tem (na casa: temática → iniciativa = domínio → plano de
+  produção, com o mapa de domínios = lista de iniciativas com dono). Substituir esconde;
+  ensinar habilita. Escolher entre os dois pelo que ele fará com a palavra depois.
 - **O que o decisor não é: leitor da NT.** Documento técnico de 15 políticas é anexo que
   ele leva; a fala é o corte (5 slides, dez minutos até o pedido), e o pedido é o que ELE
   faz — pautar, apadrinhar, datas na mão.
