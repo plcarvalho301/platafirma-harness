@@ -136,6 +136,30 @@ regras:
   # Estado de 13/08/2026: as 7 cadeiras seguem com o alcance que já têm. Isto não é
   # ausência de regra, é regra escrita — e é ela que se estreita quando as cadeiras
   # novas nascerem segregadas (seg:0006).
+  #
+  # QUEM EDITA A LISTA DE DOMÍNIOS DO SUJEITO EDITA O CONTROLE INTEIRO.
+  # Medido em 04/09/2026 (claudinho-seguranca) com `acesso decidir`, porque a leitura
+  # da regra sozinha induz ao erro — e induziu: a fita anterior anotou "herança de
+  # domínio" e NÃO é isso. Não há herança no PDP. São duas peças somadas:
+  #   a) `intersecao` exige que o sujeito detenha o domínio DO RECURSO — e ele segura;
+  #   b) esta regra, com acoes ["*"] e sobre ["*"], não trava nada DENTRO dos domínios
+  #      que o sujeito já alcança.
+  # Somadas: quem detém o PAI `plataforma` passa na interseção contra TODO filho, e
+  # esta regra libera qualquer ação sobre qualquer coisa neles — inclusive
+  # `plataforma-identidade`. Não é herança: é o pai satisfazendo a interseção com
+  # cada filho, um por um.
+  #
+  #   papel   domínios do sujeito           recurso em              veredito
+  #   reino   [plataforma]                  plataforma-drive        PERMITIDO
+  #   reino   [plataforma]                  plataforma-identidade   PERMITIDO
+  #   reino   [plataforma-acervo, -wiki]    plataforma-acervo       PERMITIDO
+  #   reino   [plataforma-acervo, -wiki]    plataforma-identidade   NEGADO (interseção)
+  #
+  # Consequência prática, e é a razão deste comentário: para o papel `reino` a lista
+  # de domínios é a ÚNICA superfície de controle que existe — não há segunda trava por
+  # ação nem por recurso. Concessão nova sob este papel cita os FILHOS nomeados, nunca
+  # o pai `plataforma`. Citou o pai, toda negativa nomeada em outra regra vira enfeite,
+  # e isso não aparece revisando a regra: só aparece rodando `acesso decidir`. Rode.
   - id: reino-plataforma-tudo
     efeito: permite
     motivo: "cadeira do reino, alcance amplo declarado em seg:0006"
