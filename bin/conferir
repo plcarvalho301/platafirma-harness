@@ -110,6 +110,10 @@ RAIZ = os.path.expanduser("~/AI")
 DEPLOY = os.path.join(RAIZ, "deploy")
 BIN = os.path.join(RAIZ, "bin")
 HARNESS = os.path.join(RAIZ, "platafirma-harness")
+# stacks.json foi aposentado (deploy:17; acervo.stack e a fonte). Constante restaurada
+# (caiu em 8288b76, usos em conferir_ferramental sobreviveram): ausente -> except OSError
+# zera no_arquivo e a paridade de transicao passa, que e o estado pos-morte do arquivo.
+STACKS_JSON = os.path.join(RAIZ, "platafirma-harness", "registro", "stacks.json")
 POLITICA_DIR = os.environ.get("PDP_DIR",
     os.path.join(RAIZ, "var", "politica-acesso"))  # dados fora do WT de fabrica (#2956)
 SUPERFICIES = os.path.join(POLITICA_DIR, "superficies.yaml")
