@@ -1,0 +1,180 @@
+#!/usr/bin/env bash
+# publicar-abertura — publica o pacote de abertura de um REF FIXADO para a morada servida.
+#
+# capacidade: publica a arvore abertura/ (pecas-arquivo + aliases.json + rotas-chapeu.json)
+#             de um commit git IMUTAVEL para PF_ABERTURA_DIR (default
+#             ~/AI/var/abertura-publicada), a morada que o montador (monta-sessao) le e
+#             que nenhum ato de git de um CLONE DE TRABALHO move.
+# dono: ti
+#
+# Fecha o unico holdout do arq:0097 (runtime nao le working tree git): o montador fazia
+# `git pull --ff-only` nos clones de trabalho na abertura e travava o boot na divergencia
+# da arvore. Aqui git entra so na PUBLICACAO — ato deliberado — produzindo artefato
+# imutavel fixado por ref; o runtime passa a ler a morada publicada.
+#
+# Mesmo par que a casa ja usa e que o ADR nomeia como padrao:
+#   - politica-sync: repo -> PDP_DIR (copia servida que o PEP le; git de fabrica nao move).
+#   - deploy promover: promocao por ref (checkout --detach origin/main), com ponto de volta.
+# Este verbo e o politica-sync da abertura, com a imutabilidade+ref do deploy.
+#
+# PONTO-CHAVE arq:0097: a fonte e `git archive <commit>`, que le o OBJECT STORE, nunca o
+# working tree. Arvore suja, commit local ou divergencia num clone de trabalho NAO podem,
+# por construcao, contaminar nem travar o que e servido — a mesma garantia que
+# politica-sync ja da ao PEP.
+#
+# CONTRATO DE MORADA (o que monta-sessao/IA passa a ler; formato a formalizar por Produto
+# na spec do harness):
+#   $PF_ABERTURA_DIR/
+#     refs/<commit-sha>/abertura/**     snapshot imutavel (escrito uma vez, nunca alterado)
+#     refs/<commit-sha>/MANIFEST.json   {sha, sha_curto, ref, tree_sha, publicado_em,
+#                                        publicado_por, n_arquivos, n_bytes}
+#     current -> refs/<commit-sha>      ponteiro atomico; frescor de runtime = este sha
+#   O montador le  $PF_ABERTURA_DIR/current/abertura  como ABERTURA, e
+#                  $PF_ABERTURA_DIR/current/MANIFEST.json  para o "publicado no ref X".
+#
+# atos:
+#   publicar-abertura [ref]            publica o ref (default origin/main) e aponta current
+#   publicar-abertura estado           o que esta no ar (current -> sha) vs head de origin/main
+#   publicar-abertura reverter <sha>   reaponta current para um ref JA publicado (imutavel)
+#   publicar-abertura podar [--manter N]  remove refs antigos nao apontados (default mantem 10)
+set -euo pipefail
+
+RAIZ="${OPS_ROOT:-${PF_RAIZ:-$HOME/AI}}"
+HARNESS="${PF_HARNESS:-$RAIZ/platafirma-harness}"
+MORADA="${PF_ABERTURA_DIR:-$RAIZ/var/abertura-publicada}"
+SUBARVORE="abertura"   # o subdir versionado que o montador serve
+
+g() { git -C "$HARNESS" "$@"; }
+
+# ---- validacao do snapshot: nao publicar pacote quebrado ---------------------
+# Um snapshot so e servivel se traz o dado vivo do roteador e ao menos uma persona.
+# Faltando, aborta ANTES de mover current — o runtime nunca ve meia arvore.
+validar_snapshot() {
+  local dir="$1" faltando=()
+  [ -f "$dir/$SUBARVORE/aliases.json" ]      || faltando+=("aliases.json")
+  [ -f "$dir/$SUBARVORE/rotas-chapeu.json" ] || faltando+=("rotas-chapeu.json")
+  [ -f "$dir/$SUBARVORE/dono.md" ]           || faltando+=("dono.md")
+  [ -f "$dir/$SUBARVORE/oficio.md" ]         || faltando+=("oficio.md")
+  local n_persona; n_persona="$(find "$dir/$SUBARVORE" -name persona.md 2>/dev/null | wc -l)"
+  [ "$n_persona" -ge 1 ] || faltando+=("nenhuma persona.md")
+  if [ "${#faltando[@]}" -ne 0 ]; then
+    echo "recusa: snapshot incompleto, current NAO movido — falta: ${faltando[*]}" >&2
+    return 1
+  fi
+}
+
+manifest() {  # $1=dir_do_ref  $2=commit  $3=ref_pedido  $4=tree_sha
+  local dir="$1" sha="$2" ref="$3" tree="$4"
+  local n_arq n_byt
+  n_arq="$(find "$dir/$SUBARVORE" -type f | wc -l)"
+  n_byt="$(du -sb "$dir/$SUBARVORE" | cut -f1)"
+  jq -n --arg sha "$sha" --arg curto "${sha:0:7}" --arg ref "$ref" \
+        --arg tree "$tree" --arg em "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+        --arg por "publicar-abertura" --argjson narq "$n_arq" --argjson nbyt "$n_byt" \
+     '{sha:$sha, sha_curto:$curto, ref:$ref, tree_sha:$tree, publicado_em:$em,
+       publicado_por:$por, n_arquivos:$narq, n_bytes:$nbyt}' \
+     > "$dir/MANIFEST.json"
+}
+
+apontar_current() {  # $1=commit  — troca atomica do ponteiro
+  local sha="$1" tmp
+  tmp="$(mktemp -d "$MORADA/.current.XXXXXX")"; rmdir "$tmp"
+  ln -s "refs/$sha" "$tmp"
+  mv -T "$tmp" "$MORADA/current"
+}
+
+# ---- ato: estado ------------------------------------------------------------
+if [ "${1:-}" = "estado" ]; then
+  if [ -L "$MORADA/current" ]; then
+    alvo="$(readlink "$MORADA/current")"; sha="${alvo#refs/}"
+    if [ -f "$MORADA/current/MANIFEST.json" ]; then
+      jq -r '"no ar:   \(.sha_curto)  (ref pedido: \(.ref))\npublicado: \(.publicado_em)\ntree:      \(.tree_sha[0:12])   arquivos: \(.n_arquivos)  bytes: \(.n_bytes)"' \
+        "$MORADA/current/MANIFEST.json"
+    else
+      echo "no ar:   ${sha:0:7}  (MANIFEST ausente)"
+    fi
+  else
+    echo "no ar:   nada publicado ainda"
+  fi
+  if g fetch -q origin 2>/dev/null && head="$(g rev-parse --short origin/main 2>/dev/null)"; then
+    atras="$( [ -L "$MORADA/current" ] && g rev-list --count "${sha}..origin/main" 2>/dev/null || echo '?')"
+    if [ "${atras:-?}" = "0" ]; then echo "origin:  $head (current no head de origin/main)"
+    else echo "origin:  $head (current $atras commit(s) atras de origin/main)"; fi
+  else
+    echo "origin:  indisponivel (sem rede/fetch) — nao afeta o que ja esta no ar"
+  fi
+  echo "morada:  $MORADA"
+  exit 0
+fi
+
+# ---- ato: reverter <sha> ----------------------------------------------------
+if [ "${1:-}" = "reverter" ]; then
+  alvo="${2:-}"
+  [ -n "$alvo" ] || { echo "uso: publicar-abertura reverter <sha>" >&2; exit 1; }
+  destino=""; for d in "$MORADA"/refs/*/; do
+    s="$(basename "$d")"; case "$s" in "$alvo"*) destino="$s"; break;; esac
+  done
+  [ -n "$destino" ] || { echo "recusa: ref \"$alvo\" nao esta publicado em $MORADA/refs/" >&2
+                         echo "        publicados: $(ls "$MORADA/refs" 2>/dev/null | sed 's/.\{7\}$//;s/^\(.\{7\}\).*/\1/' | tr '\n' ' ')" >&2; exit 1; }
+  validar_snapshot "$MORADA/refs/$destino" || exit 1
+  antes="$( [ -L "$MORADA/current" ] && basename "$(readlink "$MORADA/current")" || echo nenhum )"
+  apontar_current "$destino"
+  echo "revertido: current  ${antes:0:7} -> ${destino:0:7}  (ref ja publicado, imutavel)"
+  exit 0
+fi
+
+# ---- ato: podar [--manter N] ------------------------------------------------
+if [ "${1:-}" = "podar" ]; then
+  manter=10; [ "${2:-}" = "--manter" ] && manter="${3:?N apos --manter}"
+  atual="$( [ -L "$MORADA/current" ] && basename "$(readlink "$MORADA/current")" || echo '' )"
+  mapfile -t todos < <(ls -1dt "$MORADA"/refs/*/ 2>/dev/null | xargs -r -n1 basename)
+  removidos=0; i=0
+  for s in "${todos[@]}"; do
+    i=$((i+1))
+    [ "$s" = "$atual" ] && continue          # nunca poda o que esta no ar
+    [ "$i" -le "$manter" ] && continue        # mantem os N mais recentes
+    rm -rf "${MORADA:?}/refs/$s"; removidos=$((removidos+1))
+  done
+  echo "podados: $removidos ref(s); mantidos os $manter mais recentes + o current"
+  exit 0
+fi
+
+# ---- ato default: publicar [ref] --------------------------------------------
+REF="${1:-origin/main}"
+mkdir -p "$MORADA/refs"
+
+# Fonte fixada: fetch (ato deliberado, pode exigir rede) e resolve o ref -> COMMIT imutavel.
+if ! g fetch -q origin 2>/dev/null; then
+  echo "aviso: fetch falhou — resolvendo \"$REF\" contra objetos locais" >&2
+fi
+SHA="$(g rev-parse --verify -q "${REF}^{commit}" 2>/dev/null || true)"
+[ -n "$SHA" ] || { echo "recusa: ref \"$REF\" nao resolve a um commit no harness" >&2; exit 1; }
+TREE="$(g rev-parse --verify -q "${SHA}:${SUBARVORE}" 2>/dev/null || true)"
+[ -n "$TREE" ] || { echo "recusa: commit ${SHA:0:7} nao tem subarvore \"$SUBARVORE/\"" >&2; exit 1; }
+
+DEST="$MORADA/refs/$SHA"
+
+# Idempotente e imutavel: snapshot ja publicado nao se reescreve.
+if [ -d "$DEST/$SUBARVORE" ]; then
+  echo "ja publicado: ${SHA:0:7} (imutavel, nao reescrito)"
+else
+  TMP="$(mktemp -d "$MORADA/.pub.XXXXXX")"
+  mkdir -p "$TMP/$SUBARVORE"
+  # `git archive` le do OBJECT STORE do commit — nunca do working tree.
+  g archive --format=tar "$SHA" -- "$SUBARVORE" | tar -x -C "$TMP"
+  if ! validar_snapshot "$TMP"; then rm -rf "$TMP"; exit 1; fi
+  manifest "$TMP" "$SHA" "$REF" "$TREE"
+  mv -T "$TMP" "$DEST"
+  echo "publicado: ${SHA:0:7}  (ref \"$REF\", tree ${TREE:0:12})"
+fi
+
+# Aponta current, se ainda nao aponta para este sha (promocao deliberada).
+atual="$( [ -L "$MORADA/current" ] && basename "$(readlink "$MORADA/current")" || echo '' )"
+if [ "$atual" = "$SHA" ]; then
+  echo "current:   ja em ${SHA:0:7} — nada a mover"
+else
+  validar_snapshot "$DEST" || exit 1
+  apontar_current "$SHA"
+  echo "current:   ${atual:0:7} -> ${SHA:0:7}"
+fi
+echo "servido em: $MORADA/current/$SUBARVORE"
