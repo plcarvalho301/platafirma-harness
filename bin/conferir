@@ -2148,6 +2148,14 @@ def conferir_procedencia(alvo, como_json=False):
 
 def _norm(texto):
     return " ".join(texto.split())
+# Conexão do golden record servido — espelha bin/_acervo/registrar (verbo `acervo registrar`):
+# schema `acervo` no container rag-extractor-pg. Constantes faltavam e _ferramental_psql
+# estourava NameError antes de qualquer checagem (fix de harness, ia, exec spec_pesquisa-web).
+FERRAMENTAL_PG = "rag-extractor-pg"
+FERRAMENTAL_DB = "rag_extractor"
+FERRAMENTAL_USR = "rag"
+
+
 
 
 
