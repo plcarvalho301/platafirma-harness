@@ -1,0 +1,12 @@
+# Dependências de runtime do verbo `pesquisar` (spec §6; dono desta linha: ia).
+# Instalar no venv do harness (~/AI/.venv):
+#     uv pip install --python ~/AI/.venv/bin/python -r pesquisa/requirements.txt
+#     ~/AI/.venv/bin/crawl4ai-setup    # baixa o Chromium do Playwright (~600 MB; RAM zero em repouso)
+#
+# crawl4ai já embute playwright, bs4 e lxml. httpx costuma vir com o harness; fica
+# explícito aqui porque searxng.py e os resolvedores dependem dele.
+crawl4ai>=0.9
+httpx>=0.27
+
+# Só para a suíte de contrato/conformidade:
+pytest>=8.2
