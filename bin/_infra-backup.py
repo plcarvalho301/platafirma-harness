@@ -7,15 +7,40 @@
 Tres estados existem para nao mentir por omissao: `sem-backup` e alvo declarado sem
 cobertura, que fica na lista de proposito; `nao-medivel-daqui` e alvo cuja rotina roda
 em conta que este usuario nao alcanca; `vazio` e diretorio declarado sem nenhum arquivo
-do padrao. Alvo com `log` declarado tem a idade medida pelo log, nao pelo arquivo mais
-novo: espelho com --remove nao toca mtime quando nada mudou, e a copia continua em dia. Reportar zero nos tres casos seria dizer a mesma coisa sobre situacoes
-diferentes.
+do padrao OU cujo conteudo real soma zero bytes (mirror que espelhou nada). Alvo com
+`log` declarado tem a idade medida pelo log, nao pelo arquivo mais novo: espelho com
+--remove nao toca mtime quando nada mudou, e a copia continua em dia. Reportar zero nos
+tres casos seria dizer a mesma coisa sobre situacoes diferentes.
+
+O tamanho e medido pelo CONTEUDO real, recursivo: o mirror do minio guarda os objetos em
+subdirs por bucket, entao somar so a entrada de topo (o diretorio) media ~0 e assinava
+"ok, 0 MB" para um backup que podia estar vazio. `_bytes` desce na arvore; conteudo real
+zero cai em `vazio` e falha ruidoso, em vez de assinar ok. Card #2987 / DT #2861.
 """
 import glob
 import json
 import os
 import sys
 import time
+
+
+def _bytes(p):
+    """Bytes reais de conteudo. Diretorio soma recursivo; arquivo e o proprio tamanho.
+    Mede o que foi COPIADO, nao a entrada de diretorio."""
+    if os.path.isdir(p):
+        t = 0
+        for raiz, _dirs, arquivos in os.walk(p):
+            for f in arquivos:
+                try:
+                    t += os.path.getsize(os.path.join(raiz, f))
+                except OSError:
+                    pass
+        return t
+    try:
+        return os.path.getsize(p)
+    except OSError:
+        return 0
+
 
 reg = json.load(open(os.environ["INFRA_BACKUPS_REG"], encoding="utf-8"))
 como_json = "--json" in sys.argv
@@ -30,7 +55,8 @@ for nome, a in sorted((reg.get("alvos") or {}).items()):
     else:
         d = os.path.expanduser(a.get("diretorio", ""))
         arqs = sorted(glob.glob(os.path.join(d, a.get("padrao", "*"))), key=os.path.getmtime)
-        if not arqs:
+        total = sum(_bytes(f) for f in arqs)
+        if not arqs or total == 0:
             item["estado"] = "vazio"
             ruim += 1
         else:
@@ -40,7 +66,7 @@ for nome, a in sorted((reg.get("alvos") or {}).items()):
             idade = (agora - os.path.getmtime(prova)) / 86400
             item.update(geracoes=len(arqs), idade_dias=round(idade, 1),
                         ultimo=os.path.basename(arqs[-1]),
-                        bytes=sum(os.path.getsize(f) for f in arqs))
+                        bytes=total)
             item["estado"] = "ok" if idade < 2 else "atrasado"
             if idade >= 2:
                 ruim += 1
@@ -60,7 +86,7 @@ else:
         elif estado == "nao-medivel-daqui":
             det = "roda em conta que este usuario nao alcanca"
         else:
-            det = "diretorio declarado nao tem nenhum arquivo do padrao"
+            det = "diretorio declarado sem arquivo do padrao ou com conteudo real de 0 bytes"
         print("{:<18} {:<16} {}".format(estado, i["alvo"], det))
 
 sys.exit(1 if ruim else 0)
