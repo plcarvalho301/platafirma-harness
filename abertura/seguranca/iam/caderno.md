@@ -58,6 +58,15 @@ Ordem: primeiro o realm (apagar o client mata service account e secret juntos), 
 `.env`. Fecha quando `acesso orfaos` perde o achado — a única confirmação que não depende
 da minha narrativa.
 
+Corolário aprendido em 04/09, apagando o client L0R8OJ: **perder o achado só conta se a
+medição foi COMPLETA**. `acesso orfaos` tem um terceiro veredito além de achou/não-achou —
+`REPROVADO: realm NAO medido`, exit 2 — e ele sai quando o kcadm não alcançou o realm de
+dentro do próprio verbo. Login de kcadm que eu refiz à mão numa chamada anterior NÃO o
+alcança: a sessão vive no arquivo do contêiner, mas o caminho que o verbo usa é outro.
+Nesse estado o verbo lista os achados de SO e banco normalmente, o que engana — parece
+resultado. Ler o exit code, não a lista. Fecho declarado com `get` devolvendo vazio é
+menos que fecho medido, e a diferença é justamente a que o auditor pede.
+
 ## Gate de borda com mais de um upstream (oauth2-proxy v7)
 
 MÉTODO, que vale mais que o caso: subir instância DESCARTÁVEL da mesma imagem na mesma
@@ -98,9 +107,36 @@ perguntas que só aparecem DENTRO do trabalho alheio. Agrega quando chega junto 
 descrevendo-a melhor do que quem a propôs, não quando autoriza; e chega tarde por desenho,
 porque o gatilho é o deploy e não o nascimento do card.
 
+## O PAP afirma; só o PDP decide — e a herança de domínio é onde a negativa morre
+
+O `politica.yaml` é prosa comentada com generosidade, e os comentários dizem coisas
+verdadeiras sobre o próprio arquivo ("o default do PDP é negar", em duas linhas distintas).
+Assinar embaixo de comentário é o erro barato de cometer e caro de descobrir: comentário
+declara a INTENÇÃO de quem escreveu a regra, não o comportamento do motor que a avalia.
+`acesso decidir --papel … --dominio … --acao … --recurso …` não toca banco e devolve o
+veredito com a regra que o produziu — quando volta `NEGADO regra=default`, isso é a
+medição, e é o que se cita para outra cadeira. Perguntado se o default fecha, eu respondo
+com quatro casos rodados, incluindo um domínio e uma ação inexistentes; não com número de
+linha.
+
+**A pergunta que parece a certa quase sempre é a errada.** Quando o TI pediu conferência do
+recorte do quinzinho, a dúvida oferecida era "negativa nomeada basta, ou preciso de
+catch-all?" — e a resposta é que basta, porque o default fecha. Mas medir o default só
+prova o que acontece SEM concessão. O buraco estava no lado oposto: `reino`, com regra
+escrita no PAI `plataforma`, sai PERMITIDO quando perguntado sobre `plataforma-drive`. A
+herança do eixo domínio é real e desce sozinha. Logo toda trava construída como negativa
+por domínio nomeado tem uma premissa não escrita — que ninguém conceda o pai — e ela cai
+sem que regra nenhuma esteja errada, o que é o modo de falhar que nenhuma revisão de regra
+pega. Conferência de recorte que se limita a auditar as regras escritas está incompleta por
+construção: audita-se também o que a concessão pode citar. Por isso OK de alcance sai
+condicionado ao domínio FILHO nomeado, e a condição é parte do OK, não recomendação.
+
 ## Padrões da casa, medidos
 
 - Secret de stack: ~/AI/var/secrets/<stack>/, dir 700, arquivo 600 — nunca compose/git/fila.
+- `seg keycloak -- …` (e todo passthrough do `seg`) executa DENTRO do contêiner: endereço
+  que vale é o de lá (`http://localhost:8080`), não o publicado no host
+  (`127.0.0.1:8180`, que dá `Connection refused` e parece serviço fora do ar).
 - Conta isolada nova: uid sequencial, home 700, faixa subuid/subgid disjunta de 65536,
   linger on, grupo único, sem sudo.
 - `conferir superficie` é HOMÔNIMO: julga superfície de SESSÃO (claude.ai, code-seco,
