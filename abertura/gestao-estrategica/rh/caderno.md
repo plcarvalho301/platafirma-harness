@@ -174,3 +174,24 @@ O dono não precisa mandar `encerrar fita` literal. Qualquer dispensa coloquial 
 encerramento, e dispara o protocolo (consolidação da mesa, delta de caderno, triagem
 da memória do Project). Comportamento que existia nos Project e se perdeu na migração;
 volta a valer. Sinal: mensagem que dispensa a cadeira em vez de pedir trabalho.
+
+## Deriva de tabela de roteamento: migracao de chapeu nao e perda (medido 04/09/2026)
+
+Ao comparar `rotas-chapeu.json` em disco contra o gerador, a contagem agregada por cadeira
+mente. Um gatilho que sai de um chapeu e aparece em outro conta como remocao aqui e adicao
+la — e lido como regressao, quando e recuradoria correta: 'janela de contexto' saiu do rh
+e ficou so em ia/contexto, que e a casa certa; 'API' saiu de produto/canais e ficou em
+fabrica/devops. Continuam roteando.
+
+A leitura que vale, e e barata: achatar as duas tabelas em gatilho -> conjunto de chapeus,
+e separar em tres baldes — MIGROU (existe nos dois, mudou de dono), SUMIU DE TODO CHAPEU
+(a perda real) e ENTROU. So o segundo balde e regressao. Na medicao de 04/09, das 72
+remocoes aparentes, 28 eram migracao e 56 eram perda — e ler o agregado teria condenado um
+rebuild em que 9 das 10 cadeiras ganhavam.
+
+Diagnostico da perda real, na ordem que elimina causa: (1) o rotulo ainda existe no golden
+record? existindo, o golden nao encolheu; (2) alguma secao (b) ainda o declara? nenhuma
+declarando, a causa esta na curadoria, nao no dado; (3) qual commit mexeu naquela (b)?
+Em 04/09 a resposta foi 225f40b — migracao de formato que enxugou a (b) de tres chapeus.
+Conceito entra em rota porque um chapeu o declarou, nunca por semelhanca: cortar a (b)
+corta o fio sem tocar em conceito nenhum, e nada no golden acusa.

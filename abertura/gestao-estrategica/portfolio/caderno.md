@@ -224,3 +224,20 @@ proposta ate onde toca card alheio; o carimbo terminal e sempre do dono.
 - Corolario sobre "bug": bug e card como qualquer outro, sem fluxo especial. O que
   existe e TESTE TRAVADO comendo lead time — e isso se nomeia pelo teste travado,
   nao vira uma categoria "bug".
+
+## Gatilho de carteira escrito como "quando X fechar" nao dispara em descarte (medido 04/09/2026)
+
+A mesa carregava por dois dias uma proxima jogada condicionada: "quando #2847 e #2458
+fecharem, retomar priorizacao em nivel EPICO". Os dois sairam do board DESCARTADOS, nao
+fechados. A condicao literal nunca ocorreu, e a espera continuou de pe sozinha — a mesa
+ficou aguardando um evento que ja era impossivel.
+
+O que fica: gatilho de carteira se escreve por SAIDA DO BOARD, nao por "fechar".
+"Quando #2847 e #2458 sairem do board — entregues, descartados ou cancelados" dispara nos
+tres caminhos; "quando fecharem" so no feliz. Entregue e uma das cinco saidas terminais, e
+carteira nao distingue: para sequenciamento, card descartado libera a fila igual a card
+entregue. A distincao entrega x descarte importa ao dono do card, nao a quem sequencia.
+
+Corolario de higiene: bloco de mesa que descreve trabalho vivo tem de ser conferido contra
+o board ANTES de ser reafirmado no encerramento. Reescrever a mesa sem medir propaga um
+mundo que ja andou, e a proxima fita herda a ficcao com cara de fato recente.
