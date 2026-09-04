@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
-# acervo — opera o acervo: ingestão ponta a ponta, escada, obra, bancada e extrato.
+# acervo — opera o acervo: ingestão ponta a ponta, escada, obra, bancada, extrato e a wiki.
 # capacidade: conhecimento
 # dono: claudinho-dados
-# use para: ingerir obra, escada, bancada, extrato, stack, registrar verbo, golden record
-# atos: ingerir, baixar, escada, bancada, extrato, listar, registrar, ferramenta, stack, adr
+# use para: ingerir obra, escada, bancada, extrato, stack, registrar verbo, golden record, operar a wiki
+# atos: ingerir, baixar, escada, bancada, extrato, listar, registrar, ferramenta, stack, adr, wiki
 #
 # Despachante (arq:0040): o verbo é o par binário+subcomando. Os sub-atos moram
 # em bin/_acervo/ e não entram no PATH; a porta é esta.
@@ -25,11 +25,23 @@ uso:
   acervo stack   ver|import|rm               topologia de deploy: lê e ESCREVE acervo.stack
   acervo ferramenta <nome> [--json]          o que e <nome> e qual o verbo certo
   acervo adr <lista|<codigo>|--<entidade>>   consulta registro de decisões de arquitetura (ADR)
+  acervo wiki    <ato>                        a wiki (MediaWiki) como fonte editável do acervo
+
+`acervo wiki` (a wiki é SoT de registro editável, dona dados — arq:0069). Atos:
+  ler <titulo...>                            wikitext da(s) página(s) (+rev p/ editar sem conflito)
+  buscar <termo> [--limite N]                busca full-text na prosa (ns de conteúdo)
+  listar [--prefixo|--categoria|--ns]        títulos por prefixo, categoria ou namespace
+  editar <titulo> [--resumo] [--base-rev]    cria/substitui (conteúdo por STDIN), sob a conta de bot
+  subir <arquivo> [--nome]                   envia arquivo (Arquivo:<nome>), teto 2 MB
+  cargo <tabela> <campos> [--where ...]      consulta SQL sobre campos Cargo declarados
+Leitura é anônima; editar/subir logam com a conta de bot Claudinho. Contrato = a
+Action API do MediaWiki (spec_recuperador §5); `acervo wiki` é consumidor direto dela.
 
 Os cinco degraus da escada: catalogada, armazenada, ingerida, embedded,
 vetorizada. `escada` mede; os outros três produzem artefato.
 
-`ingerir` é o único que escreve, e é dry-run sem `--apply`. Os outros cinco só
+`ingerir` é o único da ingestão que escreve, e é dry-run sem `--apply`. Em `wiki`,
+`editar`/`subir` escrevem; `ler`/`buscar`/`listar`/`cargo` só leem. Os demais atos só
 leem. Ato desconhecido recusa em vez de adivinhar.
 FIM
   exit 2
@@ -38,11 +50,15 @@ FIM
 # --ajuda UNIVERSAL, sem efeito colateral (card #2868, ex-#2274 defeito 4). ANTES do
 # despacho e varrendo TODOS os argumentos: interceptar aqui cobre `acervo --ajuda`
 # e `acervo <sub> --ajuda`, e nenhum sub-ato (exec do $ATOS/*) chega a rodar. `uso` ja sai 2.
-for _a in "$@"; do
-  case "$_a" in
-    --ajuda|--help|-h) uso ;;
-  esac
-done
+# EXCECAO: `acervo wiki ... --ajuda` cai para o sub-ato (argparse do wiki tem -h proprio),
+# senao a ajuda do wiki nunca apareceria.
+if [ "${1:-}" != "wiki" ]; then
+  for _a in "$@"; do
+    case "$_a" in
+      --ajuda|--help|-h) uso ;;
+    esac
+  done
+fi
 
 [ $# -eq 0 ] && uso
 ATO="$1"; shift
@@ -58,6 +74,7 @@ case "$ATO" in
   stack)           exec "$ATOS/stack"   "$@" ;;
   ferramenta)      exec "$ATOS/ferramenta" "$@" ;;
   adr)             exec "$ATOS/adr"     "$@" ;;
+  wiki)            exec "$ATOS/wiki"    "$@" ;;
   -h|--help|ajuda) uso ;;
   *) echo "acervo: ato desconhecido '$ATO'" >&2; uso ;;
 esac
