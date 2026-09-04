@@ -14,6 +14,16 @@
 # verde HOJE, listado em `controle/tests/VERDES`, e arquivo consertado ENTRA na lista
 # no mesmo commit que o conserta. A lista so cresce.
 #
+# JULGA A REV EMPURRADA, NAO O WORKING TREE (achado de claudinha-gestao-estrategica,
+# 04/09/2026). O clone de ~/AI e COMPARTILHADO entre cadeiras: quando alguem esta com
+# bin/monta-sessao modificado e nao commitado, quem commita em abertura/ paga o
+# vermelho alheio. Medido naquele dia: 17 failed no clone sujo, 18 passed no mesmo
+# HEAD em worktree limpo — o commit estava verde e o push foi barrado assim mesmo.
+# A saida "obvia" (stashear o trabalho alheio pra desbloquear o proprio push) troca
+# atraso por perda de trabalho de outro, e por isso o gate e que muda, nao o humano.
+# Entao: worktree descartavel na rev que o git esta empurrando, medida la, remocao no
+# trap. O estado sujo do clone deixa de ter voto.
+#
 # NAO TRAVA POR AMBIENTE. Sem `uvx`, avisa e deixa passar: gate que bloqueia push por
 # falta de ferramenta na maquina e gate contornado com --no-verify na segunda vez.
 # Bloqueia so quando MEDIU e o teste falhou.
@@ -44,16 +54,62 @@ done < "$LISTA"
 
 [ -n "$ARQUIVOS" ] || exit 0
 
-cd "$RAIZ/controle" || exit 0
+# A REV A JULGAR vem do stdin do hook: "<local_ref> <local_oid> <remote_ref> <remote_oid>".
+# local_oid todo-zero e delecao de ref: nao ha arvore a medir, e o hook nao opina.
+# stdin vazio (invocacao a mao) cai no HEAD, que continua sendo commit, nunca o worktree.
+REV=""
+while read -r _ local_oid _ _; do
+  case "$local_oid" in
+    ''|*[!0-9a-f]*) continue ;;
+    0000000000000000000000000000000000000000) continue ;;
+  esac
+  REV="$local_oid"
+  break
+done
+
+if [ -z "$REV" ]; then
+  REV="$(git rev-parse --verify HEAD 2>/dev/null)" || exit 0
+  [ -n "$REV" ] || exit 0
+fi
+
+# Worktree descartavel: o gate mede a arvore da rev empurrada, sem tocar no clone.
+ARVORE="$(mktemp -d "${TMPDIR:-/tmp}/pre-push-arvore.XXXXXX")" || exit 0
+limpa() {
+  git worktree remove --force "$ARVORE" >/dev/null 2>&1 || rm -rf "$ARVORE"
+  git worktree prune >/dev/null 2>&1
+}
+trap limpa EXIT
+
+# mktemp -d ja criou o diretorio; `worktree add` exige inexistente ou vazio.
+if ! git worktree add --detach --no-checkout "$ARVORE" "$REV" >/tmp/pre-push-arvore.txt 2>&1; then
+  echo "pre-push: nao consegui isolar a rev $REV — suite NAO foi medida neste push." >&2
+  tail -n 5 /tmp/pre-push-arvore.txt >&2
+  exit 0
+fi
+if ! git -C "$ARVORE" checkout --quiet --detach "$REV" >>/tmp/pre-push-arvore.txt 2>&1; then
+  echo "pre-push: nao consegui materializar a rev $REV — suite NAO foi medida neste push." >&2
+  tail -n 5 /tmp/pre-push-arvore.txt >&2
+  exit 0
+fi
+
+# A lista vale a do clone (e o gate de agora); os testes vem da arvore empurrada.
+ALVOS=""
+for arq in $ARQUIVOS; do
+  [ -f "$ARVORE/controle/$arq" ] && ALVOS="$ALVOS $arq"
+done
+[ -n "$ALVOS" ] || exit 0
+
+cd "$ARVORE/controle" || exit 0
 # shellcheck disable=SC2086
-if ! timeout 300 uvx --with redis pytest $ARQUIVOS -q >/tmp/pre-push-contrato.txt 2>&1; then
+if ! timeout 300 uvx --with redis pytest $ALVOS -q >/tmp/pre-push-contrato.txt 2>&1; then
   echo >&2
-  echo "pre-push: BASELINE VERDE QUEBROU — push barrado." >&2
+  echo "pre-push: BASELINE VERDE QUEBROU na rev ${REV:0:7} — push barrado." >&2
   tail -n 15 /tmp/pre-push-contrato.txt >&2
   echo >&2
+  echo "  medido em worktree limpo da rev empurrada, nao no seu clone." >&2
   echo "  saida inteira: /tmp/pre-push-contrato.txt" >&2
   echo "  a lista do baseline: controle/tests/VERDES" >&2
   exit 1
 fi
 
-echo "pre-push: baseline de contrato verde ($(tail -n 1 /tmp/pre-push-contrato.txt))"
+echo "pre-push: baseline de contrato verde em ${REV:0:7} ($(tail -n 1 /tmp/pre-push-contrato.txt))"
