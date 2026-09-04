@@ -1,6 +1,6 @@
 ---
 name: pesquisa
-description: Use quando a sessão precisar de fonte da WEB ABERTA — "pesquisa na web", "procura fonte sobre X", "o que se sabe sobre X fora do acervo", "acha a página oficial de", "resolve esse DOI/domínio/ORCID", "verifica as citações deste relatório". Dá o loop de pesquisa com procedência (consultar → triar → ler → sintetizar → verificar) sobre o verbo `pesquisar` (SearXNG + Crawl4AI soberanos, sem chave e sem conta). NÃO dispare para o acervo da casa — aí é `descobrir <assunto>` / `motor buscar` primeiro, porque fonte da casa vence fonte externa. NÃO se aplica ao ambiente isolado (modulo-osint): lá a skill é `osint`.
+description: Use quando a sessão precisar de fonte da WEB ABERTA — "pesquisa na web", "procura fonte sobre X", "o que se sabe sobre X fora do acervo", "acha a página oficial de", "resolve esse DOI/domínio/ORCID", "verifica as citações deste relatório". Dá o loop de pesquisa com procedência (consultar → triar → ler → sintetizar → verificar) sobre o verbo `pesquisar` (SearXNG + Crawl4AI soberanos, sem chave e sem conta). NÃO dispare para o acervo da casa — aí é `descobrir` / `motor buscar` primeiro, porque fonte da casa vence fonte externa. NÃO se aplica ao ambiente isolado (modulo-osint): lá a skill é `osint`.
 cadeiras: todas (matéria de pesquisa web; dono da capacidade é claudinha-inteligencia)
 compatibility: precisa do verbo `pesquisar` (tool via cápsula) e da stack `searxng` no ar (TI). Sem SearXNG, `pesquisar saude` diz o que falta.
 ---
