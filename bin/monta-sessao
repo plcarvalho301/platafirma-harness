@@ -35,6 +35,7 @@
 from __future__ import annotations
 
 import argparse
+import calendar
 import glob
 import json
 import os
@@ -248,6 +249,21 @@ def de_chapeu(pecas):
 
 # ------------------------------------------------------------------ morada publicada
 _MORADA = {}
+# Acima disto, a morada no ar deixa de ser detalhe e vira aviso na abertura. Um dia
+# e a folga que um dia util comporta; abaixo dela, avisar todo giro seria ruido.
+IDADE_MORADA_AVISO_H = 24
+
+
+def _idade_horas(publicado_em):
+    """Horas desde a publicacao, do carimbo ISO-8601 UTC do MANIFEST. None se ilegivel:
+    idade desconhecida se declara como desconhecida, nunca como zero."""
+    if not publicado_em:
+        return None
+    try:
+        quando = time.strptime(str(publicado_em).replace("Z", ""), "%Y-%m-%dT%H:%M:%S")
+    except (ValueError, TypeError):
+        return None
+    return round(max(0.0, (time.time() - calendar.timegm(quando)) / 3600), 1)
 
 
 def morada():
@@ -276,6 +292,12 @@ def morada():
     tem_arvore = os.path.isdir(ABERTURA)
     if dados and not tem_arvore:
         motivo = f"MANIFEST presente mas arvore ausente: {ABERTURA}"
+    # A morada nao envelhece sozinha: `publicar-abertura` e ato deliberado, e entre
+    # dois atos ela serve texto de ontem sem nada dizer — o "clone atrasado" do
+    # arq:0058 de volta com outro nome (medido em 04/09: 27 commits atras, calada).
+    # Medir "atras do remoto" exigiria git, que este caminho nao pode chamar; o que da
+    # para afirmar sem rede e a IDADE do que esta no ar, e e o que sai declarado.
+    idade_h = _idade_horas(dados.get("publicado_em"))
     _MORADA.update({
         "raiz": MORADA,
         "abertura": ABERTURA,
@@ -285,6 +307,7 @@ def morada():
         "publicado_em": dados.get("publicado_em"),
         "publicado_por": dados.get("publicado_por"),
         "frescor": "publicado" if (dados and tem_arvore) else "indisponivel",
+        "idade_h": idade_h,
         "motivo": motivo,
         # A abertura nao se atualiza no caminho de servico (arq:0097). Dito no pacote
         # para que a flag `--sem-atualizar` / `atualizar=` nao passe por promessa muda.
@@ -650,6 +673,10 @@ def monta(cadeira, atualizar, pergunta=None, forcado_chapeu=None, so_chapeu=Fals
     # FLAG explícita `--so-chapeu`, nunca por inferência. Default serve abertura: esquecer
     # a flag falha para o lado seguro (nunca abre vazio), honrando o contrato acima.
     servidas, avisos = [], []
+    if (m["idade_h"] or 0) > IDADE_MORADA_AVISO_H:
+        avisos.append(
+            f"morada publicada ha {m['idade_h']}h (ref {m['sha']}): a abertura servida "
+            "pode estar atras do main — `publicar-abertura` republica")
     if not so_chapeu:
         for peca in pecas:
             env, conteudo = serve(peca, cadeira, nome)

@@ -30,6 +30,7 @@ import shutil
 import stat
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 import pytest
@@ -110,7 +111,7 @@ def publicado(raiz: Path, rel: str) -> Path:
     return morada_de(raiz) / "current" / "abertura" / rel
 
 
-def _publica(raiz: Path, sha: str = "0" * 40) -> None:
+def _publica(raiz: Path, sha: str = "0" * 40, publicado_em: str | None = None) -> None:
     """Publica a árvore do clone na morada, no formato de `publicar-abertura`.
 
     Cópia, não git: o contrato que este teste guarda é o de LEITURA da morada. Que a
@@ -129,7 +130,7 @@ def _publica(raiz: Path, sha: str = "0" * 40) -> None:
         "sha_curto": sha[:7],
         "ref": "origin/main",
         "tree_sha": "t" * 40,
-        "publicado_em": "2026-09-04T00:00:00Z",
+        "publicado_em": publicado_em or time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
         "publicado_por": "publicar-abertura",
         "n_arquivos": len(arquivos),
         "n_bytes": sum(p.stat().st_size for p in arquivos),
@@ -348,6 +349,41 @@ def test_morada_nao_publicada_e_erro_com_a_cura_nomeada(raiz):
     assert dados["morada"]["frescor"] == "indisponivel"
     assert dados["morada"]["motivo"]
     assert any("publicar-abertura" in a for a in dados["avisos"])
+
+
+def test_morada_declara_a_propria_idade(raiz):
+    """Publicada agora, a idade é ~0 e nenhum aviso de atraso aparece."""
+    dados = json.loads(_run(["teste", "--json"], raiz).stdout)
+    assert dados["morada"]["idade_h"] is not None
+    assert dados["morada"]["idade_h"] < 1
+    assert not any("morada publicada ha" in a for a in dados["avisos"])
+
+
+def test_morada_velha_sai_avisada_na_abertura(tmp_path):
+    """Morada não envelhece sozinha: `publicar-abertura` é ato deliberado, e entre dois
+    atos ela serve texto de ontem calada — foi o que se mediu em 04/09 (27 commits
+    atrás, sem sinal). Medir 'atrás do main' exigiria git, proibido neste caminho; a
+    idade, não. Acima de 24h a abertura avisa, e nomeia o ato que republica."""
+    raiz = _monta_raiz(tmp_path)
+    _publica(raiz, publicado_em="2020-01-01T00:00:00Z")
+    dados = json.loads(_run(["teste", "--json"], raiz).stdout)
+    assert dados["morada"]["idade_h"] > 24
+    aviso = [a for a in dados["avisos"] if "morada publicada ha" in a]
+    assert aviso, dados["avisos"]
+    assert "publicar-abertura" in aviso[0]
+    # avisa, não bloqueia: servir texto de ontem com sinal é melhor que não abrir
+    assert "erro" not in dados
+    assert dados["pacote"]["pecas"] > 0
+
+
+def test_publicado_em_ilegivel_vira_idade_desconhecida_nao_zero(tmp_path):
+    """Idade desconhecida se declara como desconhecida. Carimbo ilegível virando 0.0
+    seria o falso-verde 'acabou de publicar' — pior que a ausência."""
+    raiz = _monta_raiz(tmp_path)
+    _publica(raiz, publicado_em="ontem de manhã")
+    dados = json.loads(_run(["teste", "--json"], raiz).stdout)
+    assert dados["morada"]["idade_h"] is None
+    assert not any("morada publicada ha" in a for a in dados["avisos"])
 
 
 # --- resto do contrato ------------------------------------------------------
