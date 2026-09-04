@@ -133,6 +133,7 @@ def verificar(relatorio, *, trab: "M.Trabalho") -> dict[str, Any]:
 # ---------------------------------------------------------------------------- saude
 def saude(*, trab: "M.Trabalho | None" = None) -> dict[str, Any]:
     """engines_ok/total, latência da sonda, versões, Chromium presente (§4.7)."""
+    import concurrent.futures as cf
     import shutil
     import time
 
@@ -140,14 +141,36 @@ def saude(*, trab: "M.Trabalho | None" = None) -> dict[str, Any]:
     engines_total = 0
     latencia_ms = None
     causa = None
-    try:
-        t0 = time.time()
-        r = searxng.consultar("platafirma sonda saude", k=1, categoria="geral")
-        latencia_ms = int((time.time() - t0) * 1000)
-        engines_ok = r["engines_ok"]
-        engines_total = len(r["engines_ok"]) + len(r["engines_falha"])
-    except FalhaFonte as f:
-        causa = f.causa
+    # A saude do servico e o que ele ENTREGA no conjunto curado, nao numa categoria so:
+    # `geral` sozinha vive castigada por anti-bot (google responde, brave/ddg/startpage
+    # nao), entao sondar so ela cravava saudavel=false com o searxng no ar e util. Sonda
+    # todas as categorias e agrega os engines distintos — reflete a capacidade real.
+    ok: set[str] = set()
+    falha: set[str] = set()
+    causas: list[str] = []
+
+    def _sonda(cat: str):
+        return cat, searxng.consultar("platafirma sonda saude", k=1, categoria=cat)
+
+    # Sondas em paralelo: em serie o probe somava a latencia das 4 categorias (~10s),
+    # cada uma esperando engine externo lento. Um healthcheck nao pode custar isso.
+    t0 = time.time()
+    with cf.ThreadPoolExecutor(max_workers=len(searxng.CATEGORIAS)) as ex:
+        futs = {ex.submit(_sonda, c): c for c in searxng.CATEGORIAS}
+        for fut in cf.as_completed(futs):
+            try:
+                _, r = fut.result()
+                ok.update(r["engines_ok"])
+                falha.update(r["engines_falha"])
+            except FalhaFonte as f:
+                causas.append(f"{futs[fut]}:{f.causa}")
+    latencia_ms = int((time.time() - t0) * 1000)
+    engines_ok = sorted(ok)
+    engines_total = len(ok | falha)
+    # `causa` so quando o servico nao entregou NADA em categoria alguma (searxng fora) —
+    # uma categoria isolada capengando por anti-bot nao derruba o juizo de saude.
+    if not ok and causas:
+        causa = "; ".join(causas)
 
     try:
         import crawl4ai
@@ -159,8 +182,15 @@ def saude(*, trab: "M.Trabalho | None" = None) -> dict[str, Any]:
 
     # relatorio: o comando teve sucesso mesmo com o SearXNG fora — a saude esta no corpo
     # (engines_ok/causa), lida por `sinal`. `saudavel` e o juizo; `ok` e "o probe rodou".
+    # O farol `saudavel` e liveness+utilidade minima ESTAVEL, nao cobertura: o servico
+    # responde (causa None) e ha fontes distintas respondendo acima de um piso baixo. A
+    # contagem de engines oscila com o anti-bot dos buscadores web (`geral`); amarrar o
+    # farol num numero alto o fazia piscar e cravava false com o servico no ar. Piso 3
+    # fica sob o patamar estavel dos engines-ancora (APIs cientificas, cse, mastodon:
+    # ~6), tolera oscilacao/manutencao de fonte isolada e so cai em degradacao real. A
+    # cobertura fina para diagnostico vive em engines_ok/engines_total, nao no farol.
     return envelope("saude", trab.slug if trab else "-",
-                    saudavel=causa is None and len(engines_ok) >= 8,
+                    saudavel=causa is None and len(engines_ok) >= 3,
                     engines_ok=engines_ok, engines_total=engines_total,
                     latencia_ms=latencia_ms, searxng_url=searxng.BASE,
                     crawl4ai=ver_crawl, chromium=chromium, causa=causa)
