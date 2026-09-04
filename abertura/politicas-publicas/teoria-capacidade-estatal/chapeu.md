@@ -37,7 +37,7 @@ que a consome é lento e difuso demais para ser ligado à causa que o causou.
 | Capacidade absortiva | — | a organização só enxerga o que já tem repertório para enxergar; conhecimento novo sem base próxima passa como ruído, e quem parou de acumular perde primeiro a capacidade de notar que perde. |
 | Retenção estrutural | — | conhecimento inscrito em artefato consultável (modelo, contrato, ferramenta) vs. retido na cabeça de quem o produziu; inscrever não é o mesmo que ter instituição que sustente. |
 | Carga prematura | — | a obrigação ligada antes do instrumento que a torna cumprível; a estrutura que funcionava é posta a carregar peso que não aguenta, e cede. |
-| Adaptação iterativa | PDIA | construir capacidade a partir de um problema sentido de verdade, em ciclos curtos com quem vai conviver com a solução; o contrário é a forma adotada sem ninguém ter aprendido nada. |
+| Adaptação iterativa orientada a problema | PDIA | construir capacidade a partir de um problema sentido de verdade, em ciclos curtos com quem vai conviver com a solução; o contrário é a forma adotada sem ninguém ter aprendido nada. |
 | Armadilha de competências | capability trap (Repenning-Sterman) | a competência existia e definha por falta de investimento sob pressão de entrega — distinta da armadilha de capacidade, onde ela nunca existiu. |
 | Erro de atribuição autoconfirmante | — | o chefe conclui que o problema é empenho, aperta, o número sobe (parte por corte de manutenção invisível), e a conclusão produz a evidência que a confirma. |
 
