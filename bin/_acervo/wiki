@@ -1,0 +1,382 @@
+#!/usr/bin/env python3
+"""acervo wiki <ato> — a wiki (MediaWiki) como fonte do acervo.
+
+capacidade: conhecimento
+dono: claudinho-dados
+
+Sub-ato do verbo `acervo` (arq:0069): a wiki é SoT de registro editável, dona dados,
+alcançada por `acervo wiki <ato>`. Fonte é argumento, não verbo — não há `bin/wiki`
+(arq:0037). O modelo alcança a wiki chamando isto por dentro de `run_command`, sob a
+conta (arq:0068).
+
+CONTRATO = a Action API do MediaWiki (spec_recuperador §5; adaptadores/wiki.py). Este
+verbo é mais um consumidor DIRETO de `api.php`, de mesma dignidade que o wiki-mcp e o
+recuperador — os três falam a mesma API, nenhum encadeia no outro. Não há wrapper REST
+intermediário: a Action API já é o contrato explícito e versionado que arq:0002 pede
+(MediaWiki 1.43.9 LTS). As tools wiki_* do conector (get_page/edit_page/search_pages/
+list_pages/upload_file/query_cargo) são o transporte redundante que arq:0069 aposenta;
+o que elas faziam de legítimo passa a viver aqui.
+
+Endpoint: `MW_API_URL` (default `http://127.0.0.1:8080/api.php`, a porta que o host
+publica; a rede docker vê `mediawiki:80`, mas o verbo roda no host). Leituras são
+anônimas; `editar`/`subir` fazem login com a conta de bot `Claudinho`
+(MW_BOT_USER/MW_BOT_PASSWORD; se ausentes do ambiente, carregadas de PF_WIKI_ENV).
+
+Namespaces de busca: 0|4|12|3000|3004 — inclui 3004 (Operar), que o CONTENT_NS do
+wiki-mcp OMITE (medido no siteinfo 20/08/2026; o wiki-mcp diz cobrir "Operar:" mas usa
+0|4|12|3000, onde 3000 é Frente). Achado registrado; o verbo nasce certo.
+"""
+from __future__ import annotations
+
+import argparse
+import http.cookiejar
+import json
+import os
+import re
+import sys
+import urllib.error
+import urllib.parse
+import urllib.request
+
+RAIZ = os.environ.get("PF_RAIZ", os.path.expanduser("~/AI"))
+API = (os.environ.get("MW_API_URL") or "http://127.0.0.1:8080/api.php").rstrip("/")
+TIMEOUT_S = float(os.environ.get("MW_TIMEOUT_S", "20"))
+UA = "platafirma-acervo-wiki/1.0 (claudinho-dados)"
+
+# Namespaces de conteúdo da busca em prosa. Corrige o engano do wiki-mcp (inclui 3004).
+CONTENT_NS = os.environ.get("MW_CONTENT_NS", "0|4|12|3000|3004")
+BATCH = 50                                   # títulos por chamada / teto de edições
+UPLOAD_MAX_BYTES = 2 * 1024 * 1024           # upload_max_filesize=2M do PHP
+
+_cookies = http.cookiejar.CookieJar()
+_opener = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(_cookies))
+_opener.addheaders = [("User-Agent", UA)]
+_logged_in = False
+
+
+def morre(msg: str, code: int = 1):
+    print(f"acervo wiki: {msg}", file=sys.stderr)
+    sys.exit(code)
+
+
+# ---- transporte (Action API) ------------------------------------------------------
+def _get(params: dict) -> dict:
+    url = f"{API}?{urllib.parse.urlencode({**params, 'format': 'json'})}"
+    try:
+        with _opener.open(url, timeout=TIMEOUT_S) as r:
+            data = json.loads(r.read())
+    except urllib.error.URLError as e:
+        morre(f"sem rota até {API}: {e}")
+    except TimeoutError:
+        morre(f"timeout em {API}")
+    except ValueError:
+        morre("resposta da wiki não é JSON")
+    if isinstance(data, dict) and "error" in data:
+        # O MediaWiki devolve 200 com erro no corpo: parse do JSON, nunca status HTTP.
+        err = data["error"]
+        morre(f"{err.get('code', 'erro')}: {err.get('info', err)}")
+    return data
+
+
+def _post(data: dict, files: dict | None = None) -> dict:
+    payload = {**data, "format": "json"}
+    if files is None:
+        body = urllib.parse.urlencode(payload).encode()
+        headers = {"Content-Type": "application/x-www-form-urlencoded"}
+    else:
+        body, ctype = _multipart(payload, files)
+        headers = {"Content-Type": ctype}
+    req = urllib.request.Request(API, data=body, headers=headers, method="POST")
+    try:
+        with _opener.open(req, timeout=max(TIMEOUT_S, 60)) as r:
+            out = json.loads(r.read())
+    except urllib.error.URLError as e:
+        morre(f"sem rota até {API}: {e}")
+    return out
+
+
+def _multipart(fields: dict, files: dict) -> tuple[bytes, str]:
+    """multipart/form-data em stdlib puro (o upload é o único ato que precisa)."""
+    bound = "----platafirma" + os.urandom(8).hex()
+    out = bytearray()
+    for k, v in fields.items():
+        out += f"--{bound}\r\n".encode()
+        out += f'Content-Disposition: form-data; name="{k}"\r\n\r\n'.encode()
+        out += f"{v}\r\n".encode()
+    for k, (fname, raw) in files.items():
+        out += f"--{bound}\r\n".encode()
+        out += (f'Content-Disposition: form-data; name="{k}"; '
+                f'filename="{fname}"\r\n').encode()
+        out += b"Content-Type: application/octet-stream\r\n\r\n"
+        out += raw + b"\r\n"
+    out += f"--{bound}--\r\n".encode()
+    return bytes(out), f"multipart/form-data; boundary={bound}"
+
+
+# ---- credencial / login -----------------------------------------------------------
+def _credencial() -> tuple[str, str, str]:
+    user, pw = os.environ.get("MW_BOT_USER"), os.environ.get("MW_BOT_PASSWORD")
+    if user and pw:
+        return user, pw, "env"
+    env_path = os.environ.get(
+        "PF_WIKI_ENV", os.path.join(RAIZ, "platafirma-conhecimento", ".env"))
+    if not os.path.exists(env_path):
+        morre(f"sem credencial de bot: MW_BOT_USER/MW_BOT_PASSWORD ausentes e "
+              f"{env_path} não existe. Defina PF_WIKI_ENV ou as variáveis.")
+    vals = {}
+    with open(env_path) as fh:
+        for ln in fh:
+            ln = ln.strip()
+            if ln and not ln.startswith("#") and "=" in ln:
+                k, _, v = ln.partition("=")
+                vals[k.strip()] = v.strip().strip('"').strip("'")
+    user, pw = vals.get("MW_BOT_USER"), vals.get("MW_BOT_PASSWORD")
+    if not user or not pw:
+        morre(f"credencial de bot incompleta em {env_path}")
+    return user, pw, env_path
+
+
+def _login():
+    global _logged_in
+    if _logged_in:
+        return
+    user, pw, fonte = _credencial()
+    if fonte != "env":
+        print(f"[wiki] credencial de bot lida de {fonte}", file=sys.stderr)
+    tok = _get({"action": "query", "meta": "tokens", "type": "login"})
+    lgtoken = tok["query"]["tokens"]["logintoken"]
+    res = _post({"action": "login", "lgname": user, "lgpassword": pw, "lgtoken": lgtoken})
+    if res.get("login", {}).get("result") != "Success":
+        morre(f"login do bot falhou: {res.get('login', {}).get('result', res)}")
+    _logged_in = True
+
+
+def _csrf() -> str:
+    return _get({"action": "query", "meta": "tokens", "type": "csrf"})[
+        "query"]["tokens"]["csrftoken"]
+
+
+def _sem_tags(html: str) -> str:
+    return re.sub(r"<[^>]+>", "", html or "").strip()
+
+
+# ---- atos -------------------------------------------------------------------------
+def ato_ler(a):
+    params = {"action": "query", "prop": "revisions", "rvslots": "main",
+              "rvprop": "content|timestamp|ids", "titles": "|".join(a.titulo),
+              "curtimestamp": 1, "formatversion": 2}
+    if not a.sem_redirect:
+        params["redirects"] = 1
+    q = _get(params).get("query", {})
+    pages = q.get("pages", [])
+    if a.json:
+        print(json.dumps(pages, ensure_ascii=False, indent=2))
+        return
+    for p in pages:
+        titulo = p.get("title", "?")
+        if p.get("missing"):
+            print(f"### {titulo} — INEXISTENTE\n")
+            continue
+        rev = (p.get("revisions") or [{}])[0]
+        revid = rev.get("revid", "?")
+        ts = rev.get("timestamp", "?")
+        corpo = ((rev.get("slots") or {}).get("main") or {}).get("content", "")
+        print(f"### {titulo}  (rev {revid} · {ts})\n{corpo}\n")
+
+
+def ato_buscar(a):
+    data = _get({"action": "query", "list": "search", "srnamespace": CONTENT_NS,
+                 "srsearch": a.termo, "srlimit": min(a.limite, 50)})
+    achados = data.get("query", {}).get("search", [])
+    if a.json:
+        print(json.dumps([{"title": s["title"], "snippet": _sem_tags(s.get("snippet"))}
+                          for s in achados], ensure_ascii=False, indent=2))
+        return
+    if not achados:
+        print("(nenhum resultado)")
+        return
+    for s in achados:
+        snip = _sem_tags(s.get("snippet"))
+        print(f"- {s['title']}" + (f" — {snip}" if snip else ""))
+
+
+def ato_listar(a):
+    if a.categoria:
+        cat = a.categoria if a.categoria.lower().startswith("category:") \
+            else f"Category:{a.categoria}"
+        data = _get({"action": "query", "list": "categorymembers", "cmtitle": cat,
+                     "cmlimit": min(a.limite, 500)})
+        titulos = [p["title"] for p in data.get("query", {}).get("categorymembers", [])]
+    else:
+        ns, prefixo = a.ns, a.prefixo
+        if ns is None and ":" in prefixo:
+            # 'PlataFirma:Método' → resolve o ns pelo prefixo textual via siteinfo
+            cand, _, resto = prefixo.partition(":")
+            nsmap = _ns_map()
+            achado = nsmap.get(cand.strip().lower())
+            if achado is not None:
+                ns, prefixo = achado, resto
+        data = _get({"action": "query", "list": "allpages",
+                     "apnamespace": ns if ns is not None else 0,
+                     "apprefix": prefixo, "aplimit": min(a.limite, 500)})
+        titulos = [p["title"] for p in data.get("query", {}).get("allpages", [])]
+    if a.json:
+        print(json.dumps(titulos, ensure_ascii=False, indent=2))
+        return
+    for t in titulos:
+        print(t)
+
+
+_nsc: dict[str, int] = {}
+
+
+def _ns_map() -> dict[str, int]:
+    if not _nsc:
+        d = _get({"action": "query", "meta": "siteinfo", "siprop": "namespaces"})
+        for nid, info in d.get("query", {}).get("namespaces", {}).items():
+            for nome in (info.get("*"), info.get("canonical")):
+                if nome:
+                    _nsc[nome.lower()] = int(nid)
+    return _nsc
+
+
+def ato_editar(a):
+    conteudo = sys.stdin.read()
+    if not conteudo and not a.permitir_vazio:
+        morre("conteúdo vem por STDIN e está vazio. "
+              "Use --permitir-vazio para gravar página em branco.")
+    _login()
+    params = {"action": "edit", "title": a.titulo, "text": conteudo,
+              "summary": a.resumo, "token": _csrf(), "bot": "1"}
+    if a.base_rev:
+        params["baserevid"] = a.base_rev          # detecção de conflito (arq: rev, não título)
+    res = _post(params)
+    if "error" in res:
+        err = res["error"]
+        code = err.get("code", "erro")
+        if code == "editconflict":
+            atual = _get({"action": "query", "prop": "revisions", "rvslots": "main",
+                          "rvprop": "content|ids", "titles": a.titulo,
+                          "formatversion": 2})
+            morre("editconflict: a página mudou desde a leitura. "
+                  "Releia (acervo wiki ler) e reedite a partir da rev atual.\n"
+                  + json.dumps(atual.get("query", {}).get("pages", []),
+                               ensure_ascii=False))
+        morre(f"{code}: {err.get('info', err)}")
+    ed = res.get("edit", {})
+    if ed.get("result") == "Success":
+        nr = ed.get("newrevid", "?")
+        vazio = " (sem mudança)" if ed.get("nochange") is not None else ""
+        print(f"ok: {a.titulo} → rev {nr}{vazio}")
+    else:
+        morre(f"resultado inesperado: {ed}")
+
+
+def ato_subir(a):
+    if not os.path.exists(a.arquivo):
+        morre(f"arquivo não existe: {a.arquivo}")
+    with open(a.arquivo, "rb") as fh:
+        raw = fh.read()
+    if not raw:
+        morre("arquivo tem 0 bytes")
+    if len(raw) > UPLOAD_MAX_BYTES:
+        morre(f"arquivo tem {len(raw)} bytes; teto da Action API é {UPLOAD_MAX_BYTES} "
+              "(upload_max_filesize=2M). Para maior, rota importImages.php no host "
+              "(ignora o teto) ou aguardar MinIO.")
+    nome = a.nome or os.path.basename(a.arquivo)
+    _login()
+    campos = {"action": "upload", "filename": nome, "comment": a.comentario,
+              "token": _csrf(), "ignorewarnings": "1" if a.ignorar_avisos else "0"}
+    res = _post(campos, files={"file": (nome, raw)})
+    if "error" in res:
+        err = res["error"]
+        morre(f"{err.get('code', 'erro')}: {err.get('info', err)}")
+    up = res.get("upload", {})
+    if up.get("result") != "Success":
+        morre(f"{up.get('result', 'falha')}: {up.get('warnings', up)}")
+    info = up.get("imageinfo", {})
+    print(f"ok: Arquivo:{nome} → {info.get('url', '(sem url)')}")
+
+
+def ato_cargo(a):
+    params = {"action": "cargoquery", "tables": a.tabela, "fields": a.campos,
+              "limit": min(a.limite, 100)}
+    for k, v in (("where", a.where), ("join_on", a.join_on),
+                 ("group_by", a.group_by), ("order_by", a.order_by)):
+        if v:
+            params[k] = v
+    data = _get(params)
+    linhas = [row.get("title", row) for row in data.get("cargoquery", [])]
+    if a.json:
+        print(json.dumps(linhas, ensure_ascii=False, indent=2))
+        return
+    if not linhas:
+        print("(nenhuma linha)")
+        return
+    for row in linhas:
+        print(" | ".join(f"{k}={v}" for k, v in row.items()))
+
+
+# ---- parser -----------------------------------------------------------------------
+def build_parser():
+    p = argparse.ArgumentParser(
+        prog="acervo wiki",
+        description="a wiki (MediaWiki) como fonte do acervo — leitura anônima; "
+                    "editar/subir sob a conta de bot Claudinho.")
+    sub = p.add_subparsers(dest="ato", required=True)
+
+    s = sub.add_parser("ler", help="lê o wikitext de uma ou mais páginas")
+    s.add_argument("titulo", nargs="+")
+    s.add_argument("--sem-redirect", action="store_true", dest="sem_redirect")
+    s.add_argument("--json", action="store_true")
+    s.set_defaults(fn=ato_ler)
+
+    s = sub.add_parser("buscar", help="busca full-text na prosa (ns de conteúdo)")
+    s.add_argument("termo")
+    s.add_argument("--limite", type=int, default=10)
+    s.add_argument("--json", action="store_true")
+    s.set_defaults(fn=ato_buscar)
+
+    s = sub.add_parser("listar", help="lista títulos por prefixo/categoria/namespace")
+    s.add_argument("--prefixo", default="")
+    s.add_argument("--categoria", default="")
+    s.add_argument("--ns", type=int, default=None)
+    s.add_argument("--limite", type=int, default=100)
+    s.add_argument("--json", action="store_true")
+    s.set_defaults(fn=ato_listar)
+
+    s = sub.add_parser("editar", help="cria/substitui uma página (conteúdo por STDIN)")
+    s.add_argument("titulo")
+    s.add_argument("--resumo", default="")
+    s.add_argument("--base-rev", dest="base_rev", default="",
+                   help="revid da leitura, para detectar conflito de edição")
+    s.add_argument("--permitir-vazio", action="store_true", dest="permitir_vazio")
+    s.set_defaults(fn=ato_editar)
+
+    s = sub.add_parser("subir", help="envia um arquivo (Arquivo:<nome>), teto 2 MB")
+    s.add_argument("arquivo")
+    s.add_argument("--nome", default="")
+    s.add_argument("--comentario", default="")
+    s.add_argument("--ignorar-avisos", action="store_true", dest="ignorar_avisos")
+    s.set_defaults(fn=ato_subir)
+
+    s = sub.add_parser("cargo", help="consulta SQL sobre campos Cargo declarados")
+    s.add_argument("tabela")
+    s.add_argument("campos", help='ex.: "_pageName=pagina, tipo, dominio"')
+    s.add_argument("--where", default="")
+    s.add_argument("--join-on", dest="join_on", default="")
+    s.add_argument("--group-by", dest="group_by", default="")
+    s.add_argument("--order-by", dest="order_by", default="")
+    s.add_argument("--limite", type=int, default=100)
+    s.add_argument("--json", action="store_true")
+    s.set_defaults(fn=ato_cargo)
+    return p
+
+
+def main(argv):
+    args = build_parser().parse_args(argv)
+    args.fn(args)
+
+
+if __name__ == "__main__":
+    main(sys.argv[1:])
