@@ -26,12 +26,18 @@ def consultar(consulta, *, k, categoria, desde, idioma, trab: "M.Trabalho") -> d
             "status": 200, "resultado": len(resultados), "engines_ok": r["engines_ok"],
         })
     else:
+        # Não-achado só é afirmável com quem RESPONDEU no manifesto. `engines_ok` aqui é
+        # sempre vazio (ninguém produziu resultado), então sem `engines_vivos` a linha
+        # gravada não distingue "5 fontes procuraram e nada tinham" de "ninguém procurou"
+        # — e é essa linha que sustenta um "não há registro de X" em relatório.
         linha = trab.grava_linha({
             "ato": "consultar", "consulta": consulta, "categoria": categoria,
             "status": 200, "nao_achado": True, "resultados": 0, "engines_ok": r["engines_ok"],
+            "engines_vivos": r.get("engines_vivos"), "engines_falha": r["engines_falha"],
         })
     return envelope("consultar", trab.slug, consulta=consulta, categoria=categoria,
                     resultados=resultados, engines_ok=r["engines_ok"],
+                    engines_vivos=r.get("engines_vivos"),
                     engines_falha=r["engines_falha"], manifesto=trab.ref_manifesto(linha))
 
 

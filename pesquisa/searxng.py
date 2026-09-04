@@ -32,6 +32,60 @@ CAT_SEARX = {
 
 Fetch = Callable[[str, dict], dict]
 
+# /config do SearXNG, uma vez por processo: 271 engines com `enabled` e `categories`,
+# 18ms em loopback (medido). E o unico jeito de saber QUEM DEVIA responder, e sem isso
+# nao se distingue "todos cairam" de "responderam e nao acharam".
+_HABILITADOS: dict[str, frozenset[str] | None] = {}
+
+
+def habilitados(categoria_searx: str, fetch_config: Fetch | None = None) -> frozenset[str] | None:
+    """Engines HABILITADOS na categoria, pelo /config. None quando o /config nao responde.
+
+    None e indeterminado, e indeterminado nao vira juizo: sem saber quem devia responder,
+    nao se afirma que todos cairam. Cacheado por processo — a lista so muda por deploy
+    (settings.yml e politica do dono), nunca no meio de um trabalho.
+    """
+    if categoria_searx in _HABILITADOS:
+        return _HABILITADOS[categoria_searx]
+    try:
+        if fetch_config is not None:
+            dados = fetch_config(BASE, {})
+        else:
+            import httpx  # local: mantem o modulo importavel sem httpx no contrato
+
+            r = httpx.get(BASE + "/config", timeout=5.0)
+            r.raise_for_status()
+            dados = r.json()
+        nomes = frozenset(
+            e["name"] for e in dados.get("engines", [])
+            if e.get("enabled") and categoria_searx in (e.get("categories") or [])
+        )
+        _HABILITADOS[categoria_searx] = nomes or None
+    except Exception:  # noqa: BLE001 — /config mudo nao pode derrubar uma consulta
+        _HABILITADOS[categoria_searx] = None
+    return _HABILITADOS[categoria_searx]
+
+
+def _vivos(dados, engines_ok, engines_falha, categoria_searx, fetch_config=None):
+    """Quem RESPONDEU — nao quem achou. None quando nao se pode saber.
+
+    Esta e a distincao que faltava. `engines_ok` derivado de results[].engine mede
+    COBERTURA: engine que responde "nao tenho nada" nao aparece em resultado nenhum e
+    fica invisivel. Usar essa invisibilidade como prova de morte foi o defeito: consulta
+    trivial em `ciencia`, com 5 dos 7 engines respondendo vazio e 2 em timeout, saia como
+    FalhaFonte("nenhum-engine-respondeu") — nao-achado legitimo classificado como fonte
+    fora (medido em 04/09). Vida se prova pelo COMPLEMENTO: habilitados menos os que se
+    declararam fora.
+    """
+    if "engines" in dados:
+        # Forma antiga (instancias < 2026.9): a resposta declara quem respondeu, nome a
+        # nome. Nao ha o que inferir — a lista vazia e a afirmacao de que ninguem veio.
+        return frozenset(engines_ok)
+    todos = habilitados(categoria_searx, fetch_config)
+    if todos is None:
+        return None
+    return todos - frozenset(engines_falha)
+
 
 def _canoniza(url: str) -> str:
     """Chave de dedup: esquema+host+path sem fragmento nem barra final redundante."""
@@ -61,11 +115,18 @@ def consultar(
     desde: int | None = None,
     idioma: str = "auto",
     fetch: Fetch | None = None,
+    fetch_config: Fetch | None = None,
 ) -> dict[str, Any]:
-    """Metabusca. Devolve {resultados, engines_ok, engines_falha}.
+    """Metabusca. Devolve {resultados, engines_ok, engines_falha, engines_vivos}.
 
     Zero resultado NÃO é erro — é achado de não-achado, escrito no manifesto por quem
     chama (§4.1). Aqui só devolvemos `resultados: []` com os engines que responderam.
+
+    Três campos, porque são três coisas: `engines_ok` é quem PRODUZIU resultado (medida
+    de cobertura); `engines_falha` é quem se declarou fora; `engines_vivos` é quem
+    RESPONDEU — o que dá procedência ao não-achado, e sem o qual "ninguém achou" é
+    indistinguível de "ninguém procurou". `engines_vivos: null` é indeterminado
+    declarado, não zero.
     """
     if categoria not in CATEGORIAS:
         raise FalhaFonte(f"categoria-desconhecida:{categoria}")
@@ -91,8 +152,12 @@ def consultar(
         engines_falha = sorted(
             {(e[0] if isinstance(e, (list, tuple)) else e) for e in dados.get("unresponsive_engines", [])} - {None}
         )
-    if not engines_ok and not dados.get("results"):
-        # nenhum engine respondeu E nada veio: é fonte fora, não não-achado
+    vivos = _vivos(dados, engines_ok, engines_falha, CAT_SEARX[categoria], fetch_config)
+    # Fonte fora é quando NINGUÉM respondeu — e isso só se afirma sabendo quem devia.
+    # Com `vivos` indeterminado (None), zero resultado sai como não-achado: o HTTP 200
+    # já prova que o SearXNG não está fora, e classificar não-achado como falha de fonte
+    # é o erro mais caro dos dois — some do relatório como se ninguém tivesse procurado.
+    if not dados.get("results") and vivos is not None and not vivos:
         raise FalhaFonte("nenhum-engine-respondeu", engines_falha=engines_falha)
 
     vistos: set[str] = set()
@@ -123,4 +188,6 @@ def consultar(
         )
         if len(resultados) >= k:
             break
-    return {"resultados": resultados, "engines_ok": engines_ok, "engines_falha": engines_falha}
+    return {"resultados": resultados, "engines_ok": engines_ok,
+            "engines_falha": engines_falha,
+            "engines_vivos": sorted(vivos) if vivos is not None else None}
