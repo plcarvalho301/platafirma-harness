@@ -61,11 +61,17 @@ re-derivar. Fato de negócio, estado de runtime e remit canônico NÃO entram.
   Proprietário (quem responde pelo dado), ISP (a Política Mestra de Segurança). Medido em
   04/09: entreguei "mapa de domínios" sem tradução no mesmo turno em que escrevi o filtro
   da curse of knowledge. O teste não é "eu sei o que significa": é "ele saberia".
-  Corrigido no mesmo dia pelo dono: traduzir NÃO é a cura quando o decisor vai OUVIR a
-  palavra no trabalho seguinte — aí a palavra se ensina, num slide, ancorada no
-  vocabulário que ele já tem (na casa: temática → iniciativa = domínio → plano de
-  produção, com o mapa de domínios = lista de iniciativas com dono). Substituir esconde;
-  ensinar habilita. Escolher entre os dois pelo que ele fará com a palavra depois.
+  Corrigido no mesmo dia pelo dono, duas vezes, em direções opostas — e as duas certas:
+  (1) traduzir NÃO é a cura quando o decisor vai OUVIR a palavra no trabalho seguinte;
+  aí a palavra se ensina, num slide, ancorada no vocabulário que ele já tem (na casa:
+  temática → [domínio] → plano de produção). Substituir esconde; ensinar habilita.
+  (2) Ensinar NÃO é cravar: quando a entidade que instancia o conceito é matéria de
+  deliberação posterior (o recorte de domínio é da Reunião 2, negociado com as
+  diretorias), o slide define pelos LIMITES — o que o domínio não pode ser (nem o tema,
+  público e grande; nem o plano, miúdo) — e deixa o grão em aberto, marcado como slot a
+  deliberar. É construção de affordance: o decisor entende a forma do objeto sem que a
+  TI pré-decida o comitê. "Quero emplacar X" é ambição da proposta técnica, não estado
+  decidido — li como decidido e cravei; erro político, não de forma.
 - **O que o decisor não é: leitor da NT.** Documento técnico de 15 políticas é anexo que
   ele leva; a fala é o corte (5 slides, dez minutos até o pedido), e o pedido é o que ELE
   faz — pautar, apadrinhar, datas na mão.
