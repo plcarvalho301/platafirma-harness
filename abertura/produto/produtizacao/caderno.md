@@ -15,6 +15,12 @@ Aprendizado durável do chapéu; fato, card e estado ficam na mesa e no rastread
 - Card: uma linha por campo (Problema / Resultado / Medida / Fora / Sai quando), sem racional no corpo; o racional vai em comentário ou documento apontado.
 - Rollout se escreve como escada: um release por perfil de usuário, na ordem de adoção; cada release lista o que entra, a ordem interna e um gate que acontece com gente de fora. Sem a escada, os goalposts ficam dispersos.
 
+## Decisão que atravessa cadeira não é parecer, é minuta
+
+- Parecer de produto julga o que já está escrito; ele não decide corte que muda o trabalho de outras cadeiras. Onde a decisão redistribui matéria alheia, o instrumento é a minuta circulada, e cada cadeira responde por posição ou abstenção declarada.
+- O sinal de que errei o instrumento: levo ao dono como pergunta de sim-ou-não uma coisa que ele devolve como «é a decisão mais importante deste épico». Pergunta grande demais para caber em resposta binária é minuta, não item de lista.
+- Deliberação é trabalho e por isso tem card próprio, com o `Fora` dizendo que a feature decide e não move. O que a minuta produz — a decisão de arquitetura — é o que vira gate na escada de release; gate se ancora em artefato conferível, nunca no juízo de quem embrulhou o pacote.
+
 ## Armadilhas medidas
 
 - Reduzir «porta humana» à busca da wiki esquece a exposição do acervo — o operador lê o acervo pela tela.
