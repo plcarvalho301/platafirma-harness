@@ -603,11 +603,14 @@ async def monta_sessao(cadeira: str = "", atualizar: bool = True, chapeu: str = 
     (`roteador.via` = determinístico | semântico | fallback). Sem ela, `chapeu` sai null.
     `chapeu`: força o slug e pula o roteador — só quando o dono o disse.
 
-    `atualizar` (default true): `git pull --ff-only` nos clones antes de ler; falha de rede
-    não interrompe (`repos.atualizado: false`). Cada peça traz `{peca, dono, ref, sha,
-    regime, volatilidade, tokens, frescor}` e o conteúdo; peça que falta vem com
-    `frescor: indisponivel` e o motivo, nunca omitida. `pacote` traz a conta (peças,
-    tokens, SHA do montador, registro); `avisos` traz teto, clone atrasado e divergência.
+    `atualizar`: aceito e SEM EFEITO desde arq:0097 — o runtime não lê working tree git.
+    A abertura vem da morada publicada (`morada.abertura`), árvore imutável fixada pelo
+    ponteiro `current`, e quem a atualiza é o ato deliberado `publicar-abertura`. Cada
+    peça traz `{peca, dono, ref, sha, regime, volatilidade, tokens, frescor}` e o
+    conteúdo; peça que falta vem com `frescor: indisponivel` e o motivo, nunca omitida.
+    `pacote` traz a conta (peças, tokens, SHA do ref publicado, registro); `morada` traz
+    `{sha, ref, publicado_em, frescor}`; `avisos` traz teto e peça indisponível. Morada
+    não publicada é a única recusa de abrir, e o erro nomeia a cura.
     """
     negado = _autoriza("monta_sessao", "monta_sessao", "documento",
                        f"sessao:{cadeira or '-'}", DOM_PLATAFORMA)

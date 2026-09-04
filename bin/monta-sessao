@@ -19,7 +19,10 @@
 # memoria por ultimo. Custo zero, e ganha cache de prefixo em todo giro.
 #
 # DUAS FORMAS DE ARTEFATO, as duas do catalogo:
-#   <repo>@<path>   lido do CLONE LOCAL, nunca do espelho de repo_read (E3/arq:0058)
+#   <repo>@<path>   lido da MORADA PUBLICADA, nunca de clone nem do espelho de
+#                   repo_read (arq:0097; E3/arq:0058). O <repo> ficou ROTULO: ele
+#                   mantem o `ref` citavel pela cadeira, e o conteudo vem de
+#                   $PF_ABERTURA_DIR/current/abertura.
 #   verbo:<comando> peca servida por execucao — mesa, cadernos, fila
 #
 # AUSENCIA SE DECLARA. Artefato que falta ou verbo que falha viram `frescor:
@@ -43,7 +46,16 @@ import time
 
 RAIZ = os.environ.get("PF_RAIZ", os.path.expanduser("~/AI"))
 HARNESS = os.path.join(RAIZ, "platafirma-harness")
-ABERTURA = os.path.join(HARNESS, "abertura")
+# arq:0097: RUNTIME NAO LE WORKING TREE GIT. A abertura vem da MORADA PUBLICADA —
+# arvore imutavel extraida de um commit por `publicar-abertura` (git archive no object
+# store) e fixada pelo ponteiro atomico `current`. Sem working tree lido nao ha arvore
+# a divergir: commit local nao empurrado num clone deixou de travar o boot de qualquer
+# cadeira, e a classe `divergente` (arq:0058) sai deste caminho junto com pull/fetch/
+# reconciliar. Git volta a ser fonte so na publicacao, que e ato deliberado e separado.
+MORADA = os.environ.get("PF_ABERTURA_DIR",
+                        os.path.join(RAIZ, "var", "abertura-publicada"))
+ABERTURA = os.path.join(MORADA, "current", "abertura")
+MANIFESTO = os.path.join(MORADA, "current", "MANIFEST.json")
 # (ledger de vinculo NAO se le mais aqui — incidente/ordem do dono; identidade viva
 #  sai da arvore abertura/. `persona filme|foto` ainda o le, mas e outro verbo.)
 # arq:0073: morada unica em abertura/. Fonte de conceito e o golden record acervo.conceito
@@ -234,81 +246,63 @@ def de_chapeu(pecas):
                                       p.get("id", "")))
 
 
-# ------------------------------------------------------------------ repos
-def sha_e_frescor(repo):
-    """SHA curto do clone e como ele esta contra o remoto — sem ida a rede.
+# ------------------------------------------------------------------ morada publicada
+_MORADA = {}
 
-    Clone atrasado e clone no head sao indistinguiveis sem isto, e pacote montado de
-    clone atrasado serve texto velho sem sinal (arq:0058).
+
+def morada():
+    """Estado da morada publicada, resolvido UMA vez por corrida: sem git e sem rede.
+
+    A arvore sob `current/` e IMUTAVEL — saiu de um commit por `git archive` e o ponteiro
+    so se move por ato deliberado. Logo nao ha "atras do remoto" a medir no caminho de
+    servico: ou a morada esta publicada, e o servido e exatamente o ref que o MANIFEST
+    nomeia, ou ela nao esta, e a sessao nao abre. O que morava aqui — `sha_e_frescor`,
+    `pull`, `_fetch`, `reconciliar` e a classe `divergente` — saiu inteiro por arq:0097:
+    eram tres idas a rede por abertura para provar uma paridade que a publicacao ja prova.
+
+    Ausencia se declara, como qualquer peca: morada nao publicada volta com o motivo e a
+    cura, nunca como arvore vazia — as duas seriam indistinguiveis.
     """
-    d = os.path.join(RAIZ, repo)
-    if not os.path.isdir(os.path.join(d, ".git")):
-        return None, "indisponivel", f"{repo} nao e clone git"
-    def git(*a):
-        p = subprocess.run(["git", "-C", d, *a], capture_output=True, text=True, timeout=10)
-        return p.stdout.strip() if p.returncode == 0 else None
-    sha = git("rev-parse", "--short", "HEAD")
-    atras = git("rev-list", "--count", "HEAD..@{upstream}")
-    adiante = git("rev-list", "--count", "@{upstream}..HEAD")
-    # Falso-verde fechado: sem upstream NAO e fresco — e nao-verificavel. `fresco`
-    # exige prova de paridade com o remoto; sem upstream nao ha contra o que provar.
-    if atras is None:
-        return sha, "indeterminado", "sem upstream conhecido"
-    # Divergencia (commit local ausente no remoto) e classe propria: nao e "atras" e
-    # nao se cura com ff. reset --hard curaria destruindo trabalho — nunca em silencio.
-    if adiante and adiante != "0":
-        return sha, "divergente", f"{adiante} commit(s) local(is) ausente(s) no remoto"
-    # `fresco` aqui = HEAD == @{upstream} CACHEADO. So e honesto se houve fetch nesta
-    # corrida; o gate de valor (monta) faz esse fetch antes de confiar neste verde.
-    return sha, ("fresco" if atras == "0" else "defasado"), (
-        None if atras == "0" else f"{atras} commit(s) atras do remoto")
-
-
-def pull(repos):
-    estado = {}
-    for r in sorted(repos):
-        d = os.path.join(RAIZ, r)
-        if not os.path.isdir(os.path.join(d, ".git")):
-            estado[r] = {"atualizado": False, "erro": "nao e clone git"}
-            continue
-        try:
-            p = subprocess.run(["git", "-C", d, "pull", "--ff-only", "-q"],
-                               capture_output=True, text=True, timeout=25)
-            estado[r] = ({"atualizado": True} if p.returncode == 0 else
-                         {"atualizado": False, "erro": p.stderr.strip()[:200]})
-        except (OSError, subprocess.SubprocessError) as e:
-            estado[r] = {"atualizado": False, "erro": f"{type(e).__name__}: {e}"}
-    return estado
-
-
-def _fetch(repo):
-    """Atualiza o remote-tracking do clone SEM integrar. E o que torna o `fresco` do
-    frescor honesto: `sha_e_frescor` compara com `@{upstream}` cacheado, e sem este
-    fetch o cache pode estar atras do origin real — o falso-verde que servia conduta
-    velha marcada `fresco`. Falha de rede volta declarada, nunca como sucesso."""
-    d = os.path.join(RAIZ, repo)
+    if _MORADA:
+        return _MORADA
+    dados, motivo = {}, None
     try:
-        p = subprocess.run(["git", "-C", d, "fetch", "-q"], capture_output=True,
-                           text=True, timeout=25)
-    except (OSError, subprocess.SubprocessError) as e:
-        return False, f"{type(e).__name__}: {e}"
-    return (p.returncode == 0, (p.stderr or "").strip()[:160] or None)
+        with open(MANIFESTO, encoding="utf-8") as fh:
+            dados = json.load(fh)
+    except FileNotFoundError:
+        motivo = f"morada nao publicada: nao existe {MANIFESTO}"
+    except (OSError, ValueError) as e:
+        motivo = f"MANIFEST ilegivel: {type(e).__name__}: {e}"
+    tem_arvore = os.path.isdir(ABERTURA)
+    if dados and not tem_arvore:
+        motivo = f"MANIFEST presente mas arvore ausente: {ABERTURA}"
+    _MORADA.update({
+        "raiz": MORADA,
+        "abertura": ABERTURA,
+        "sha": dados.get("sha_curto"),
+        "ref": dados.get("ref"),
+        "tree_sha": dados.get("tree_sha"),
+        "publicado_em": dados.get("publicado_em"),
+        "publicado_por": dados.get("publicado_por"),
+        "frescor": "publicado" if (dados and tem_arvore) else "indisponivel",
+        "motivo": motivo,
+        # A abertura nao se atualiza no caminho de servico (arq:0097). Dito no pacote
+        # para que a flag `--sem-atualizar` / `atualizar=` nao passe por promessa muda.
+        "atualiza_por": "publicar-abertura",
+    })
+    return _MORADA
 
 
-def reconciliar(repo):
-    """Uma tentativa de trazer o clone ao head do remoto SEM destruir historico local:
-    fetch + merge --ff-only. Diverge (ff impossivel) ou offline -> NAO reconcilia e
-    devolve o motivo. Nunca `reset --hard`: o clone e compartilhado e pode ter trabalho
-    nao empurrado — apagar isso em silencio troca um defeito por outro pior (mesa #3)."""
-    ok, motivo = _fetch(repo)
-    if not ok:
-        return False, f"fetch falhou: {motivo}"
-    d = os.path.join(RAIZ, repo)
-    m = subprocess.run(["git", "-C", d, "merge", "--ff-only", "-q", "@{upstream}"],
-                       capture_output=True, text=True, timeout=25)
-    if m.returncode != 0:
-        return False, f"ff impossivel (divergencia): {(m.stderr or '').strip()[:160]}"
-    return True, None
+def caminho_publicado(path):
+    """Resolve `abertura/...` do artefato para o arquivo dentro da morada.
+
+    Fora de `abertura/` nao ha morada onde ler: devolve None, e quem chamou declara a
+    indisponibilidade. Nao ha fallback para o clone — fallback silencioso para working
+    tree e exatamente o que o arq:0097 fecha.
+    """
+    if not path.startswith("abertura/"):
+        return None
+    return os.path.join(ABERTURA, path[len("abertura/"):])
 
 
 # ------------------------------------------------------------------ servir peca
@@ -411,16 +405,21 @@ def serve(peca, cadeira, persona=None, chapeu=None):
     repo, path = art.split("@", 1)
     path = path.replace("{cadeira}", cadeira).replace("{chapeu}", chapeu or "")
     env["ref"] = f"{repo}@{path}"
-    _, frescor, motivo = sha_e_frescor(repo)
-    env["motivo"] = motivo or env["motivo"]
-    caminho = os.path.join(RAIZ, repo, path)
+    # O `ref` segue na forma <repo>@<path> porque e o que a cadeira cita; o conteudo,
+    # porem, vem da morada publicada (arq:0097). Servida a arvore imutavel, `fresco`
+    # deixa de ser comparacao com cache de remote-tracking e passa a ser fato: o que
+    # esta em `current` E o ref publicado, e o MANIFEST diz qual.
+    caminho = caminho_publicado(path)
+    if caminho is None:
+        env["motivo"] = f"fora da morada publicada: {art!r} nao esta sob abertura/"
+        return env, None
     if not os.path.isfile(caminho):
         env["frescor"] = "indisponivel"
         env["motivo"] = f"nao existe {caminho}"
         return env, None
     with open(caminho, encoding="utf-8", errors="replace") as fh:
         texto = fh.read()
-    env["frescor"] = frescor
+    env["frescor"] = "fresco"
     env["tokens"] = conta_tokens(texto)
     env["sha"] = sha_conteudo(texto)
     return env, texto
@@ -601,52 +600,39 @@ def _agora_iso():
 
 
 def monta(cadeira, atualizar, pergunta=None, forcado_chapeu=None, so_chapeu=False):
+    # `atualizar` sobrevive por compatibilidade de chamada (a flag `--sem-atualizar` e o
+    # parametro da tool) e NAO faz mais nada: nao ha o que atualizar no caminho de
+    # servico. Atualizar a abertura virou ato deliberado e separado, `publicar-abertura`
+    # (arq:0097). Aceitar a flag sem efeito e o menor estrago para quem ja chama assim;
+    # ignora-la calada seria falso-verde, entao o pacote declara quem atualiza, no bloco
+    # `morada` (campo `atualiza_por`).
+    m = morada()
+
+    # ---- GATE DE VALOR (arq:0058, no que dele sobrevive ao arq:0097) --------
+    # Peca de valor nao se serve de procedencia nao verificavel. Antes isso custava, por
+    # abertura, um fetch e um merge --ff-only por clone, e a classe `divergente` travava
+    # o boot de TODA cadeira quando um clone tinha commit local nao empurrado. Agora e
+    # uma pergunta local e barata: a morada esta publicada? Nao estando, a sessao NAO
+    # abre — e a cura segue sendo ato deliberado (`publicar-abertura`), nunca um
+    # reset --hard em silencio. Este gate vem ANTES da validacao de cadeira de proposito:
+    # sem morada, `cadeiras_validas()` sai vazia e "cadeira desconhecida" seria diagnostico
+    # errado do defeito real.
+    if m["frescor"] != "publicado":
+        return {
+            "erro": "sessao nao aberta: pacote de abertura nao publicado na morada "
+                    "(runtime nao le working tree git — arq:0097)",
+            "cadeira": cadeira, "nome_canonico": None,
+            "morada": m, "cadeiras_validas": [],
+            "avisos": [f"morada `{m['raiz']}` indisponivel: {m['motivo']}",
+                       "cura: `publicar-abertura` — publica o ref e move `current`"],
+        }
+
     if cadeira.lower() not in [c.lower() for c in cadeiras_validas()]:
         return {"erro": f"cadeira desconhecida: '{cadeira}'",
                 "cadeiras_validas": cadeiras_validas()}
     p_persona = os.path.join(ABERTURA, cadeira, "persona.md")
 
     pecas = de_abertura(catalogo(), cadeira)
-    repos = sorted({p["artefato"].split("@", 1)[0] for p in pecas
-                    if "@" in p.get("artefato", "")})
-    estado_repos = pull(repos) if atualizar else {
-        r: {"atualizado": False, "motivo": "sem pull nesta chamada"} for r in repos}
-    for r in repos:
-        sha, frescor, motivo = sha_e_frescor(r)
-        estado_repos.setdefault(r, {}).update({"sha": sha, "frescor": frescor})
-
-    # ---- GATE DE VALOR (arq:0058; ordem do dono 25/08) ----------------------
-    # Peca de VALOR nao-volatil (conduta, persona, oficio, chapeu,
-    # ferramental) NUNCA se serve defasada em silencio. Volatil (mesa, caderno)
-    # pode degradar com aviso — por isso o filtro e por volatilidade, nao so por regime.
-    # Para cada repo que respalda peca assim: (1) fetch, para `fresco` deixar de comparar
-    # com cache velho; (2) nao ficando fresco, UMA tentativa de reconciliar por ff (nunca
-    # reset --hard); (3) persistindo nao-fresco -> a sessao NAO abre: devolve `erro`, sem
-    # servir o conteudo de valor. Sem prova de paridade, recusa alto.
-    repos_valor = sorted({
-        p["artefato"].split("@", 1)[0] for p in pecas
-        if "@" in p.get("artefato", "")
-        and p.get("regime") == "valor" and p.get("volatilidade") != "volatil"})
-    bloqueio = []
-    for r in repos_valor:
-        _fetch(r)  # torna o `fresco` honesto antes de julgar
-        sha, frescor, motivo = sha_e_frescor(r)
-        if frescor != "fresco":
-            ok, m2 = reconciliar(r)
-            sha, frescor, motivo = sha_e_frescor(r)
-            if not ok or frescor != "fresco":
-                bloqueio.append({"repo": r, "frescor": frescor,
-                                 "motivo": m2 or motivo or "nao verificavel"})
-        estado_repos.setdefault(r, {}).update({"sha": sha, "frescor": frescor})
-    if bloqueio:
-        return {
-            "erro": "sessao nao aberta: peca de valor nao pode ser servida fresca "
-                    "(reconciliacao por ff falhou; reset --hard nao e automatico)",
-            "cadeira": cadeira, "nome_canonico": _canonico(cadeira),
-            "bloqueio": bloqueio, "repos": estado_repos,
-            "avisos": [f"repo `{b['repo']}` {b['frescor']}: {b['motivo']}"
-                       for b in bloqueio],
-        }
 
     texto_persona = (open(p_persona, encoding="utf-8", errors="replace").read()
                      if os.path.isfile(p_persona) else "")
@@ -709,11 +695,14 @@ def monta(cadeira, atualizar, pergunta=None, forcado_chapeu=None, so_chapeu=Fals
         if env_ac["frescor"] == "indisponivel":
             avisos.append(f"peca `acervo-consultado` indisponivel: {env_ac['motivo']}")
 
-    montador_sha = (estado_repos.get("platafirma-harness") or {}).get("sha")
+    # Quem data o pacote e o ref PUBLICADO, nao o clone: era o SHA do working tree do
+    # montador (arq:0058, 'um clone so data o pacote'), e agora e o commit de onde a
+    # arvore foi extraida — imutavel, e por isso reproduzivel.
+    montador_sha = m["sha"]
     return {
         "cadeira": cadeira,
         "nome_canonico": nome,
-        "repos": estado_repos,
+        "morada": m,
         "pacote": {
             "pecas": len(servidas),
             "tokens": sum(e["tokens"] for e in servidas),
@@ -833,7 +822,9 @@ def main():
                                 description="pacote de abertura da cadeira, montado por catálogo")
     p.add_argument("cadeira", nargs="?")
     p.add_argument("--json", action="store_true")
-    p.add_argument("--sem-atualizar", action="store_true")
+    p.add_argument("--sem-atualizar", action="store_true",
+                   help="aceito e SEM EFEITO desde arq:0097: a abertura vem da morada "
+                        "publicada, e quem a atualiza e `publicar-abertura`")
     # Chapeu NAO entra na abertura (spec_montagem-de-sessao §7): carrega sob demanda,
     # no giro em que a linha ativa. Estas duas flags sao essa demanda, e por isso saem
     # do mesmo verbo — a conta e um verbo por capacidade (arq:0037), e a capacidade

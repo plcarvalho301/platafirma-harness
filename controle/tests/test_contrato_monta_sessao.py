@@ -6,19 +6,27 @@ do ledger de vínculo (`registro/eventos-org.jsonl`), não mais da linha 1 da pe
 — a persona nova traz o ALIAS ali, não o slug. As peças de chapéu (chapeu, ferramental,
 caderno-chapeu) só entram na 2ª chamada (`--chapeu <slug>`), servidas por catálogo.
 
-Contrato: `{cadeira, nome_canonico, repos, pacote, pecas, chapeu, roteador, avisos}`,
+Contrato: `{cadeira, nome_canonico, morada, pacote, pecas, chapeu, roteador, avisos}`,
 peças em envelope uniforme. `fila` não é peça de abertura (verbo on-demand, ordem do
 dono) — test_fila_nao_e_peca_de_abertura é o guarda de regressão.
 
-Isolamento: catálogo, abertura e repositório vivem sob um `PF_RAIZ` hermético. O
-script chama `git` de verdade (bare local, sem rede) e o verbo `mesa` por subprocess;
-`env_verbo()` prepende `{PF_RAIZ}/bin` no PATH, então o stub mora em `<raiz>/bin/mesa`.
+arq:0097 (runtime não lê working tree git): a abertura vem da MORADA PUBLICADA em
+`$PF_ABERTURA_DIR/current/abertura`, e a chave `repos` do pacote deu lugar a `morada`.
+O fixture publica a morada E mantém o clone git — de propósito: o clone existe para
+provar que o montador NÃO o lê, e é ele que sustenta os dois guardas do ADR
+(test_commit_local_nao_empurrado_nao_trava_o_boot,
+test_nenhum_git_no_caminho_de_servico).
+
+Isolamento: catálogo, morada e repositório vivem sob um `PF_RAIZ` hermético. O verbo
+`mesa` entra por subprocess; `env_verbo()` prepende `{PF_RAIZ}/bin` no PATH, então o
+stub mora em `<raiz>/bin/mesa` — e o stub de `git`, ao lado dele.
 """
 
 from __future__ import annotations
 
 import json
 import os
+import shutil
 import stat
 import subprocess
 import sys
@@ -52,6 +60,14 @@ case "$sub" in
 esac
 """
 
+# Delator, não bloqueador: registra a chamada e ainda assim falha, para que um `git`
+# que voltasse ao caminho de serviço apareça como linha no log E como pacote quebrado.
+GIT_STUB = """#!/bin/sh
+echo "$@" >> "${PF_GIT_LOG:?}"
+echo "git nao pode ser chamado no caminho de servico (arq:0097)" 1>&2
+exit 99
+"""
+
 
 def _git(cwd: Path, *args: str) -> None:
     subprocess.run(["git", *args], cwd=str(cwd), capture_output=True, text=True, check=True)
@@ -61,6 +77,11 @@ def _escreve(base: Path, rel: str, texto: str) -> Path:
     caminho = base / rel
     caminho.parent.mkdir(parents=True, exist_ok=True)
     caminho.write_text(texto, encoding="utf-8", newline="\n")
+    return caminho
+
+
+def _executavel(caminho: Path) -> Path:
+    caminho.chmod(caminho.stat().st_mode | stat.S_IEXEC | stat.S_IXGRP | stat.S_IXOTH)
     return caminho
 
 
@@ -75,8 +96,52 @@ def _peca(id_, artefato, *, evento="abertura", volatilidade="estavel"):
     }
 
 
+def morada_de(raiz: Path) -> Path:
+    """A morada publicada da raiz hermética — o contrato de `publicar-abertura`."""
+    return raiz / "var" / "abertura-publicada"
+
+
+def publicado(raiz: Path, rel: str) -> Path:
+    """Caminho de um arquivo de abertura DENTRO da morada.
+
+    Os testes que exercitam ausência apagam aqui, não no clone: apagar no clone não
+    mudaria nada — que é justamente o ponto do arq:0097.
+    """
+    return morada_de(raiz) / "current" / "abertura" / rel
+
+
+def _publica(raiz: Path, sha: str = "0" * 40) -> None:
+    """Publica a árvore do clone na morada, no formato de `publicar-abertura`.
+
+    Cópia, não git: o contrato que este teste guarda é o de LEITURA da morada. Que a
+    árvore saia de um commit imutável por `git archive` é contrato do publicador, e
+    tem teste próprio — repetí-lo aqui só acoplaria este arquivo ao git de novo.
+    """
+    origem = raiz / "platafirma-harness" / "abertura"
+    ref = morada_de(raiz) / "refs" / sha
+    if ref.exists():
+        shutil.rmtree(ref)
+    ref.mkdir(parents=True)
+    shutil.copytree(origem, ref / "abertura")
+    arquivos = [p for p in (ref / "abertura").rglob("*") if p.is_file()]
+    (ref / "MANIFEST.json").write_text(json.dumps({
+        "sha": sha,
+        "sha_curto": sha[:7],
+        "ref": "origin/main",
+        "tree_sha": "t" * 40,
+        "publicado_em": "2026-09-04T00:00:00Z",
+        "publicado_por": "publicar-abertura",
+        "n_arquivos": len(arquivos),
+        "n_bytes": sum(p.stat().st_size for p in arquivos),
+    }, ensure_ascii=False) + "\n", encoding="utf-8")
+    current = morada_de(raiz) / "current"
+    if current.is_symlink() or current.exists():
+        current.unlink()
+    current.symlink_to(Path("refs") / sha)
+
+
 def _monta_raiz(tmp_path: Path) -> Path:
-    """Raiz hermética no modelo abertura/: catálogo + árvore abertura + ledger + git."""
+    """Raiz hermética no modelo abertura/: árvore + ledger + git + morada publicada."""
     raiz = tmp_path / "raiz"
     harness = raiz / "platafirma-harness"
 
@@ -110,8 +175,8 @@ def _monta_raiz(tmp_path: Path) -> Path:
     _escreve(harness, "abertura/aliases.json",
              json.dumps({"teste": "Testildo Testonildo"}, ensure_ascii=False) + "\n")
 
-    stub = _escreve(raiz, "bin/mesa", MESA_STUB)
-    stub.chmod(stub.stat().st_mode | stat.S_IEXEC | stat.S_IXGRP | stat.S_IXOTH)
+    _executavel(_escreve(raiz, "bin/mesa", MESA_STUB))
+    _executavel(_escreve(raiz, "bin/git", GIT_STUB))
 
     origin = tmp_path / "origin.git"
     subprocess.run(["git", "init", "--bare", "-q", str(origin)],
@@ -124,6 +189,7 @@ def _monta_raiz(tmp_path: Path) -> Path:
     _git(harness, "remote", "add", "origin", str(origin))
     _git(harness, "push", "-q", "-u", "origin", "main")
 
+    _publica(raiz)
     return raiz
 
 
@@ -136,6 +202,10 @@ def _run(args, raiz: Path, *, mesa_modo: str = "ok",
          caderno_modo: str = "ok") -> subprocess.CompletedProcess:
     env = dict(os.environ)
     env["PF_RAIZ"] = str(raiz)
+    # `git` do stub à frente do real: no caminho de serviço não deve haver git nenhum,
+    # e o que houver fica registrado em PF_GIT_LOG.
+    env["PATH"] = f"{raiz / 'bin'}{os.pathsep}" + env.get("PATH", "")
+    env["PF_GIT_LOG"] = str(raiz / "git-chamado.log")
     env["MESA_STUB_MODO"] = mesa_modo
     env["CADERNO_STUB_MODO"] = caderno_modo
     env.pop("PF_FITA", None)
@@ -165,6 +235,7 @@ def test_json_pacote_e_objeto_unico_com_envelope_uniforme(raiz):
     assert ENVELOPE_CHAVES <= por_id["oficio"].keys()
     assert por_id["oficio"]["frescor"] == "fresco"
     assert por_id["oficio"]["conteudo"]
+    # o `ref` continua na forma citável <repo>@<path>, mesmo lido da morada
     assert por_id["persona"]["ref"].endswith("abertura/teste/persona.md")
 
     assert dados["pacote"]["pecas"] == len(dados["pecas"])
@@ -173,8 +244,21 @@ def test_json_pacote_e_objeto_unico_com_envelope_uniforme(raiz):
     assert dados["pacote"]["registro"] == {
         "registrado": False, "motivo": "sem PF_FITA — sessao de mao nao tem fita"}
 
-    assert dados["repos"]["platafirma-harness"]["atualizado"] is True
-    assert dados["repos"]["platafirma-harness"]["frescor"] == "fresco"
+
+def test_pacote_traz_morada_publicada_no_lugar_de_repos(raiz):
+    """arq:0097: quem data o pacote é o ref publicado, não o SHA de um clone. A chave
+    `repos` sai inteira — manter um campo com nome de working tree seria justamente o
+    falso-verde que o ADR fecha."""
+    dados = json.loads(_run(["teste", "--json"], raiz).stdout)
+    assert "repos" not in dados
+    m = dados["morada"]
+    assert m["frescor"] == "publicado"
+    assert m["motivo"] is None
+    assert m["sha"] == "0" * 7
+    assert m["abertura"].endswith("current/abertura")
+    assert m["atualiza_por"] == "publicar-abertura"
+    # o pacote é datado pelo ref publicado
+    assert dados["pacote"]["montador_sha"] == m["sha"]
 
 
 def test_nome_canonico_e_o_slug_puro_da_arvore(raiz):
@@ -209,11 +293,64 @@ def test_segunda_chamada_serve_pecas_do_chapeu(raiz):
         assert do_chapeu[pid]["conteudo"], pid
 
 
-def test_atualizado_reflete_flag_sem_atualizar(raiz):
+def test_sem_atualizar_e_aceito_e_sem_efeito(raiz):
+    """A flag sobrevive por compatibilidade de chamada e não muda mais nada: não há o
+    que atualizar no caminho de serviço (arq:0097). Guarda contra alguém a reanimar
+    ligando de novo o pull na abertura — quem atualiza é `publicar-abertura`."""
     com = json.loads(_run(["teste", "--json"], raiz).stdout)
     sem = json.loads(_run(["teste", "--json", "--sem-atualizar"], raiz).stdout)
-    assert com["repos"]["platafirma-harness"]["atualizado"] is True
-    assert sem["repos"]["platafirma-harness"]["atualizado"] is False
+    assert com["morada"] == sem["morada"]
+    assert [p["peca"] for p in com["pecas"]] == [p["peca"] for p in sem["pecas"]]
+    assert com["pacote"]["tokens"] == sem["pacote"]["tokens"]
+
+
+# --- arq:0097: nada de working tree no caminho de serviço --------------------
+
+
+def test_nenhum_git_no_caminho_de_servico(raiz):
+    """Critério de pronto do arq:0097, medido e não declarado: com `git` sequestrado
+    por um stub delator no PATH, uma abertura completa não deixa uma linha no log."""
+    log = raiz / "git-chamado.log"
+    proc = _run(["teste", "--chapeu", "rh", "--json"], raiz)
+    assert proc.returncode == 0
+    assert not log.exists(), f"git chamado no caminho de serviço: {log.read_text()}"
+
+
+def test_commit_local_nao_empurrado_nao_trava_o_boot(raiz):
+    """O defeito que o ADR fecha: um commit local ausente no remoto punha o clone na
+    classe `divergente` e a sessão de TODA cadeira não abria (a cura seria reset --hard,
+    destrutiva). Publicada a morada, o clone pode divergir à vontade — ninguém o lê."""
+    harness = raiz / "platafirma-harness"
+    _escreve(harness, "abertura/teste/persona.md", "persona reescrita, commitada, não empurrada\n")
+    _git(harness, "add", "-A")
+    _git(harness, "commit", "-q", "-m", "trabalho local nao empurrado")
+
+    proc = _run(["teste", "--json"], raiz)
+    assert proc.returncode == 0
+    dados = json.loads(proc.stdout)
+    assert "erro" not in dados
+    por_id = {p["peca"]: p for p in dados["pecas"]}
+    assert por_id["persona"]["frescor"] == "fresco"
+    # e o que se serve é o PUBLICADO, não o commit local
+    assert "Testildo" in por_id["persona"]["conteudo"]
+
+
+def test_morada_nao_publicada_e_erro_com_a_cura_nomeada(raiz):
+    """Ausência se declara. Sem morada a sessão não abre — e o erro traz o ato que a
+    cura, não um diagnóstico de cadeira desconhecida (o gate vem antes da validação
+    de cadeira justamente por isso)."""
+    (morada_de(raiz) / "current").unlink()
+    proc = _run(["teste", "--json"], raiz)
+    assert proc.returncode == 1
+    dados = json.loads(proc.stdout)
+    assert "nao publicado" in dados["erro"]
+    assert "desconhecida" not in dados["erro"]
+    assert dados["morada"]["frescor"] == "indisponivel"
+    assert dados["morada"]["motivo"]
+    assert any("publicar-abertura" in a for a in dados["avisos"])
+
+
+# --- resto do contrato ------------------------------------------------------
 
 
 def test_fora_do_quadro_nao_recebe_antirreabertura(raiz):
@@ -257,8 +394,7 @@ def test_persona_ausente_nao_derruba_o_pacote(tmp_path):
     redigido (backfill pendente): persona sai indisponível-declarada, o pacote
     continua válido — nunca erro. O diretório é o que mantém a cadeira pedível."""
     raiz = _monta_raiz(tmp_path)
-    persona = raiz / "platafirma-harness" / "abertura" / "teste" / "persona.md"
-    persona.unlink()
+    publicado(raiz, "teste/persona.md").unlink()
     # o diretório permanece: a cadeira segue pedível, só a peça persona fica ausente.
     proc = _run(["teste", "--json"], raiz)
     assert proc.returncode == 0
@@ -365,7 +501,7 @@ def test_alias_cadeiras_indisponivel_sem_aliases_nao_derruba_pacote(tmp_path):
     """aliases.json ausente é indisponibilidade declarada, não crash do montador.
     (O ledger de vínculo não é mais lido para isto — incidente/ordem do dono.)"""
     raiz = _monta_raiz(tmp_path)
-    (raiz / "platafirma-harness" / "abertura" / "aliases.json").unlink()
+    publicado(raiz, "aliases.json").unlink()
     dados = json.loads(_run(["teste", "--json"], raiz).stdout)
     env = {p["peca"]: p for p in dados["pecas"]}["alias-cadeiras"]
     assert env["frescor"] == "indisponivel"
