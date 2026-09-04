@@ -55,6 +55,12 @@ re-derivar. Fato de negócio, estado de runtime e remit canônico NÃO entram.
   em que ela precisa (sequenciamento-por-pre-requisito), com o "S" do SCQA dimensionado
   ao repertório do público, não ao do apresentador (curse of knowledge — Torres). Teste
   por afirmação: ele consegue dizer POR QUE isso é verdade, ou só que a gente disse?
+- **A palavra que o decisor não tem é a que a casa mais usa.** "Domínio" (DDD, 8 obras no
+  acervo) é jargão para o diretor; arq:0098 vale para fora ainda mais que para dentro — na
+  primeira ocorrência, o nome comum ao lado: domínio (o assunto que tem um dono),
+  Proprietário (quem responde pelo dado), ISP (a Política Mestra de Segurança). Medido em
+  04/09: entreguei "mapa de domínios" sem tradução no mesmo turno em que escrevi o filtro
+  da curse of knowledge. O teste não é "eu sei o que significa": é "ele saberia".
 - **O que o decisor não é: leitor da NT.** Documento técnico de 15 políticas é anexo que
   ele leva; a fala é o corte (5 slides, dez minutos até o pedido), e o pedido é o que ELE
   faz — pautar, apadrinhar, datas na mão.
