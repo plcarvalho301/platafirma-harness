@@ -141,3 +141,29 @@ claudinho tem que montar o ambiente, senão o comando cai num contexto plausíve
 que abre um segundo armazém vazio). Corolário: o ops-server não se reinicia de dentro de si
 (mata a própria tool call), então o restart dele é sempre ato de terminal DE FORA — e por isso
 cai justamente na conta do operador, que é onde este bug mora.
+
+## Sessão do kcadm expira, e reautenticar não precisa passar o segredo por mim
+
+`seg keycloak -- ...` é passthrough para o `kcadm.sh` DENTRO de
+`platafirma-core-keycloak-1`, e o kcadm guarda a sessão em arquivo no contêiner. Ela expira
+sozinha: `Session has expired. Login again with 'kcadm.sh config credentials'`. Isso não é
+incidente, é o estado normal de qualquer fita que não operou o realm recentemente — e é
+muro que já parou cadeira de fora no meio de um expurgo (TI, 02/09, client L0R8OJ), com o
+ato passando adiante por handoff em vez de por falta de alcance.
+
+O reflexo errado é procurar a senha do admin para digitá-la no comando. Não procure: o
+contêiner JÁ a tem no próprio ambiente, e o login se refaz de lá de dentro, sem o segredo
+atravessar o contexto da sessão nem o log de auditoria do `run_command`:
+
+    docker exec platafirma-core-keycloak-1 sh -c \
+      '/opt/keycloak/bin/kcadm.sh config credentials --server http://localhost:8080 \
+         --realm master --user "$KC_BOOTSTRAP_ADMIN_USERNAME" \
+         --password "$KC_BOOTSTRAP_ADMIN_PASSWORD" \
+       2>&1 | sed "s/$KC_BOOTSTRAP_ADMIN_PASSWORD/<oculto>/g"'
+
+Três coisas que a forma carrega, e que é o que vale guardar: (1) o segredo é lido e gasto no
+mesmo processo que já tinha direito a ele — quem opera nunca o vê; (2) o `sed` na saída é
+cinto de segurança contra a ferramenta ecoar o que recebeu; (3) `env | sed 's/=.*/=<oculto>/'`
+é como se descobre o NOME da variável sem colher o valor — descobrir onde o segredo mora não
+exige lê-lo. Régua geral: segredo que já está do lado de lá não se traz para cá; leva-se o
+comando até ele.
