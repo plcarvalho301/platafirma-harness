@@ -73,15 +73,24 @@ def consultar(
         "q": consulta,
         "format": "json",
         "categories": CAT_SEARX[categoria],
-        "language": "" if idioma == "auto" else idioma,
+        "language": "auto" if idioma == "auto" else idioma,  # SearXNG 2026.9 recusa vazio (400)
         "pageno": 1,
     }
     if desde:
         params["time_range"] = "year"  # SearXNG só tem janelas; --desde filtra abaixo
     dados = (fetch or _fetch_httpx)(BASE, params)
 
-    engines_ok = sorted({e.get("name") for e in dados.get("engines", []) if not e.get("error")} - {None})
-    engines_falha = sorted({e.get("name") for e in dados.get("engines", []) if e.get("error")} - {None})
+    # SearXNG mudou de forma entre versões: instâncias antigas devolvem `engines`
+    # (lista de {name,error}); a 2026.9 não devolve esse campo — quem respondeu está
+    # em results[].engine e quem falhou em unresponsive_engines ([nome, motivo]).
+    if "engines" in dados:
+        engines_ok = sorted({e.get("name") for e in dados["engines"] if not e.get("error")} - {None})
+        engines_falha = sorted({e.get("name") for e in dados["engines"] if e.get("error")} - {None})
+    else:
+        engines_ok = sorted({r.get("engine") for r in dados.get("results", [])} - {None})
+        engines_falha = sorted(
+            {(e[0] if isinstance(e, (list, tuple)) else e) for e in dados.get("unresponsive_engines", [])} - {None}
+        )
     if not engines_ok and not dados.get("results"):
         # nenhum engine respondeu E nada veio: é fonte fora, não não-achado
         raise FalhaFonte("nenhum-engine-respondeu", engines_falha=engines_falha)
