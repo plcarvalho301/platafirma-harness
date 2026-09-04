@@ -27,3 +27,4 @@ Aprendizado durável do chapéu; fato, card e estado ficam na mesa e no rastread
 - Design system é entregável do produto (biblioteca publicada que toda tela consome), não «só DS».
 - «Entrega não é medida» rebaixa release e distro na fila, mas não os apaga: o que muda é a ordem.
 - Pendurar card terminal (descartada) sob feature aberta mata a feature pelo derivado; conferir estado real antes de reparentar — a fila pode estar velha.
+- Formalizar minuta em spec não termina na spec. A régua CANÔNICA (o documento) e a régua SERVIDA (a página viva que quem trabalha abre) são dois entregáveis, e só a segunda é usada. Publiquei a explicação de um styleguide apontando para a página servida antes de ela existir: ponteiro vermelho, entrega pela metade, e o handoff da outra cadeira só pedia os dois primeiros. Antes de relatar entrega, abrir todo ponteiro que a página publicada cria.
