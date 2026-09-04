@@ -2223,6 +2223,10 @@ def conferir_ferramental(alvo, como_json=False):
     try:
         with open(STACKS_JSON) as f:
             no_arquivo = set(json.load(f).get("stacks", {}).keys())
+    except FileNotFoundError:
+        # stacks.json morto (arq:0076): a tabela acervo.stack e a fonte-verdade e o arquivo
+        # saiu depois da transicao. Ausencia e o estado terminal esperado, nao deriva.
+        no_arquivo = set()
     except (OSError, ValueError):
         no_arquivo = set()
         achados.append(("DERIVA", f"nao li {STACKS_JSON} para conferir paridade de transicao"))
