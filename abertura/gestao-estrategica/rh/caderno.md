@@ -195,3 +195,29 @@ declarando, a causa esta na curadoria, nao no dado; (3) qual commit mexeu naquel
 Em 04/09 a resposta foi 225f40b — migracao de formato que enxugou a (b) de tres chapeus.
 Conceito entra em rota porque um chapeu o declarou, nunca por semelhanca: cortar a (b)
 corta o fio sem tocar em conceito nenhum, e nada no golden acusa.
+
+## Rotulo orfao derruba o conceito inteiro, e o golden nao acusa (medido 04/09/2026)
+
+Terceira causa de perda de rota, e a que escapa do diagnostico de tres passos acima: o
+conceito existe no golden E a (b) o declara — mas com a grafia canonica VELHA. O gerador
+casa (b) contra rotulo canonico + alternativos; nao casando, nao gera rota curta: descarta
+o conceito inteiro, levando junto o slug e todos os `outros_rotulos`. Medido: 'Adaptacao
+iterativa' virou 'Adaptacao iterativa orientada a problema' no golden (slug intacto, PDIA
+rebaixado a alternativo), e a celula velha na (b) de teoria-capacidade-estatal derrubava o
+conceito e o PDIA com ele. Um caractere de grafia custa um conceito inteiro.
+
+Por isso o passo (1) do diagnostico precisa ser «o rotulo CANONICO ainda e este?», nao «o
+conceito ainda existe?» — a segunda pergunta responde sim e manda para a pista errada. E
+por isso a lista de orfaos que o gerador imprime em stderr vale mais que o diff: ela e a
+unica saida que separa 'a (b) nao declara' de 'a (b) declara errado'. Rodar sem ler o
+stderr e perder o unico sinal que a ferramenta da de graca.
+
+## Ingerir obra nao lavra conceito (medido 04/09/2026)
+
+Sao dois atos, e confundi-los faz cobrar a cadeira errada. `ingerir` poe a obra no acervo;
+o no de ontologia so nasce por `curar --conceito`, a mao, um por um. Prova: em 04/09 o
+dono confirmou ter ingerido tudo o que tinha da doutrina de inteligencia, as obras estavam
+la, e mesmo assim os 5 chapeus da cadeira deram delta ZERO no rebuild — 39 rotulos orfaos,
+porque nenhum conceito correspondente existia no golden. Antes de responder «a ingestao
+ainda nao entrou», conferir qual dos dois atos falta: a resposta muda o destinatario da
+cobranca e o verbo que resolve.
