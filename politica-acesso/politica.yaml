@@ -64,6 +64,19 @@ eixos:
       rotulo: "Fábrica e colaboração externa — executa card, não administra"
     operador:
       rotulo: "Humano com credencial própria"
+    inferencia-escopada:
+      rotulo: "Perímetro de inferência local — lê acervo e wiki para responder na fita; não executa, não escreve"
+      # Criado por claudinho-TI em 04/09/2026 para a conta `quinzinho` (Rito B,
+      # `platafirma-arquitetura/docs/admissao-quinzinho.md`), com OK condicional de
+      # claudinho-seguranca (fila 20260904T015007-seguranca).
+      #
+      # Papel separado de `fornecedor` e de `operador` pelo mesmo motivo que separou
+      # `fornecedor` do externo: o alcance de um papel único seria a UNIÃO. Esta conta
+      # não executa card e não é humano com crachá — é perímetro sob o qual persona de
+      # cadeira roda com inferência fraca. A ameaça dimensionada no Rito B é caminho
+      # lateral: acervo e wiki são dado NÃO-CONFIÁVEL, e injeção na fita vira ação com
+      # privilégio se a conta puder tocar identidade ou rodar comando. A garantia
+      # proporcional é leitura pura, e é o que as regras `inferencia-*` abaixo travam.
     # `pesquisador-externo` REMOVIDO em 02/09/2026 (seguranca): o braco OSINT do agy foi
     # expurgado por ordem do dono nesta data (11a7603 tirou o sujeito; este ato tira o
     # papel e as regras que so ele casava). Papel sem titular e regra viva para ninguem.
@@ -364,4 +377,87 @@ regras:
     motivo: "a entrega da fabrica e commit no repo, nao pagina de wiki"
     quando: {papel: fornecedor, dominio: plataforma-wiki}
     acoes: [wiki_editar, wiki_enviar_arquivo]
+    sobre: ["*"]
+
+  # --- Inferencia escopada: a conta `quinzinho` (Rito B, 04/09/2026) -----------
+  # Escritas por claudinho-TI (concede a INTERNO, decisao do dono de 14/08/2026), sob
+  # OK CONDICIONAL de claudinho-seguranca em 04/09 — fila 20260904T015007-seguranca,
+  # doc `platafirma-arquitetura/docs/admissao-quinzinho.md` item 2. O recorte volta a
+  # seguranca para conferencia do artefato; o OK nao reabre.
+  #
+  # A CONDICAO VINCULANTE, e por que ela e dura: as regras abaixo citam SOMENTE os
+  # filhos `plataforma-acervo` e `plataforma-wiki`, NUNCA o pai `plataforma`. Nao e
+  # preferencia de estilo. Medido por claudinho-seguranca em 04/09 com `acesso
+  # decidir` e lavrado no comentario de `reino-plataforma-tudo`: quem detem o pai
+  # passa na intersecao contra TODO filho, um por um, e ai toda negativa nomeada aqui
+  # vira enfeite. Nao aparece revisando a regra — so aparece rodando `acesso decidir`.
+  # Quem for alargar este alcance um dia: cresce por filho NOMEADO, e volta ao
+  # Leonardo.
+  #
+  # E ha um detalhe que so a medicao mostra, e que agrava a condicao. Medido em
+  # 04/09/2026, 13 chamadas de `acesso decidir`:
+  #
+  #   papel                  dominio citado         acao         veredito  por qual regra
+  #   inferencia-escopada    plataforma-wiki        wiki_editar  NEGADO    inferencia-nao-escreve-na-wiki
+  #   inferencia-escopada    plataforma (o PAI)     wiki_editar  NEGADO    default
+  #
+  # As duas negam, e por isso a leitura descuidada conclui "esta protegido". NAO ESTA
+  # PELO MESMO MOTIVO: com o PAI citado, a negativa NOMEADA nao casa (o `quando` dela
+  # pede `plataforma-wiki`), e o que nega e so o default. Basta que uma permissao
+  # futura qualquer alcance o par para a porta abrir, sem que a negativa desta secao
+  # tenha voto. As negativas aqui protegem os FILHOS nomeados; nao ha como escreve-las
+  # para cobrir o pai sem transformar o papel noutra coisa. A protecao real e nao
+  # citar o pai — a regra escrita e a segunda linha de defesa, nao a primeira.
+  # Excecao proposital: `inferencia-nao-executa-comando` NAO qualifica dominio, e por
+  # isso e a unica que segue negando com o pai citado (medido: NEGADO por ela).
+  #
+  # LEITURA E ESCRITA SAO ACOES SEPARADAS, e e por isso que a permissao nomeia verbo
+  # em vez de conceder o dominio. Trava (a) do Rito B: o MCP serve leitura e escrita
+  # de wiki sob a mesma concessao de dominio, entao conceder `plataforma-wiki` inteiro
+  # daria `wiki_editar` de brinde. Nomeia-se o que le; o resto cai no default.
+  - id: inferencia-le-acervo
+    efeito: permite
+    motivo: "perimetro de inferencia local responde na fita citando o acervo em vez de memoria de treino · admissao-quinzinho.md item 2, OK de claudinho-seguranca em 04/09/2026 · vence 2026-12-04"
+    quando: {papel: inferencia-escopada, dominio: plataforma-acervo, tipo: acervo}
+    acoes: [rag_buscar, rag_facetas]
+    sobre: ["acervo:*"]
+
+  - id: inferencia-le-wiki
+    efeito: permite
+    motivo: "a fita responde sobre o que a firma decidiu, e isso mora na wiki · admissao-quinzinho.md item 2, OK de claudinho-seguranca em 04/09/2026 · vence 2026-12-04"
+    quando: {papel: inferencia-escopada, dominio: plataforma-wiki}
+    acoes: [wiki_ler]
+    sobre: ["*"]
+
+  # Escritas, e nao deixadas ao default, por dois motivos declarados: (1) negativa
+  # vence permissao em qualquer ordem, entao alargamento futuro da permissao acima nao
+  # abre estas portas por descuido; (2) a trava (b) do Rito B e o que o auditor vem
+  # procurar, e ausencia de regra nao se le como decisao. O default do PDP nega — isto
+  # e cinto sobre suspensorio, de proposito.
+  - id: inferencia-nao-escreve-na-wiki
+    efeito: nega
+    motivo: "acervo e wiki sao dado nao-confiavel para este perimetro: le para responder, nunca escreve · trava (a) do Rito B"
+    quando: {papel: inferencia-escopada, dominio: plataforma-wiki}
+    acoes: [wiki_editar, wiki_enviar_arquivo]
+    sobre: ["*"]
+
+  - id: inferencia-nao-executa-comando
+    efeito: nega
+    motivo: "injecao na fita vira ato com privilegio se a conta puder rodar comando: modelo fraco encarnando persona nao tem shell · trava (b) do Rito B"
+    quando: {papel: inferencia-escopada}
+    acoes: [run_command, write_file, deploy, infra]
+    sobre: ["*"]
+
+  - id: inferencia-nao-toca-identidade
+    efeito: nega
+    motivo: "identidade, concessao e segredo ficam fora de todo perimetro de inferencia · trava (b) do Rito B"
+    quando: {papel: inferencia-escopada, dominio: plataforma-identidade}
+    acoes: ["*"]
+    sobre: ["*"]
+
+  - id: inferencia-nao-roteia-entre-cadeiras
+    efeito: nega
+    motivo: "sem roteamento entre cadeiras: a fita responde ao dono, nao despacha expediente em nome de ninguem · trava (b) do Rito B"
+    quando: {papel: inferencia-escopada, dominio: mensageria}
+    acoes: ["*"]
     sobre: ["*"]
