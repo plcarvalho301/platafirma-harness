@@ -1,43 +1,61 @@
 ---
 name: prosa
-description: Use quando for ESCREVER ou REVISAR prosa da wiki (Inteligência de Base) antes de publicar — página nova, edição de página, ou passar um rascunho pela régua da casa. Orienta o agente que escreve. Implementa a spec do styleguide (platafirma-arquitetura/docs/spec_styleguide-da-wiki.md) e a wikipage explicativa (PlataFirma:Styleguide_da_wiki,_explicado) — não tem régua própria. NÃO dispare para o acervo (obra tem proveniência própria), nem para mural/fila (push, régua própria), nem para produto acabado (informe, apreciação, estimativa). O par `conferir prosa` é o lint que CONFERE o que já está escrito; esta skill ORIENTA quem escreve.
+description: Use quando for ESCREVER ou REVISAR prosa da wiki (Inteligência de Base) antes de publicar — página nova, edição de página, ou passar um rascunho pela régua da casa. Orienta o agente que escreve. Implementa a spec do styleguide (platafirma-arquitetura/docs/spec_styleguide-da-wiki.md) e a régua servida na wiki (Operar:styleguide) — não tem régua própria. NÃO dispare para o acervo (obra tem proveniência própria), nem para mural/fila (push, régua própria), nem para produto acabado (informe, apreciação, estimativa). O par `conferir prosa` é o lint que CONFERE o que já está escrito; esta skill ORIENTA quem escreve.
 cadeiras: todas (matéria de escrita da wiki). Dono da régua é produto (§5 da spec); dono da skill, como implementadora, é o arquiteto.
-compatibility: a régua servida está na spec + na wikipage; a amostra de voz padrão é a conduta do dono (abertura/dono.md, no harness). Roda antes de publicar página. O catálogo de marcas por extenso está em reference/marcas-pt-br.md.
+compatibility: régua canônica na spec, servida em Operar:styleguide (wiki viva); a conduta do dono (abertura/dono.md, no harness) é referência de voz, não isenção de regra. Roda antes de publicar página. Catálogo de marcas por extenso em reference/marcas-pt-br.md.
 ---
 
 # Prosa — escrever para a wiki pela régua do styleguide
 
 A régua da wiki não é apagar marca de máquina. É fazer quem chega depois ler uma
-página e fazer o que ela descreve sem falar com quem a escreveu. Marca de máquina é
-o ÚLTIMO item da lista: um texto sem marca nenhuma que o leitor não consegue usar é
-a mesma página ruim, agora bem passada a ferro.
+página e fazer o que ela descreve sem falar com quem a escreveu.
 
 Escopo: só a wiki — Inteligência de Base, o que se usa para trabalhar e repassar
 conhecimento entre pares. Não é acervo, não é mural, não é fila, não é produto
 acabado.
 
+## Os dois modos de falha
+
+A skill vive entre dois erros, e os dois são fáceis de cometer:
+
+1. **Cortar demais** e achar que explicou sem ter explicado. A barra de uma IA para
+   «isto está claro» não é a de um humano: o modelo se dá por satisfeito onde o
+   leitor de fora ainda não entendeu. O teste não é o teu senso — é a pessoa de fora
+   responder a pergunta de fato (spec §6).
+2. **Vazar estilo de IA:** deixar o jargão, a vitrine e o enchimento que denunciam a
+   máquina e cansam quem lê.
+
+Toda passada mira o meio: explica de verdade, sem soar a máquina.
+
 ## A ordem que decide tudo
 
-Duas regras boas às vezes brigam. Quando brigam, a de cima vence a de baixo, sempre:
+Quando duas regras brigam, a de cima vence a de baixo:
 
 1. **O leitor sai fazendo.** A página muda o que alguém consegue fazer.
-2. **O leitor entende** — inclui saber o que na página é fato e o que é palpite.
-3. **A voz da casa** — direta, começando pela coisa, sem cortesia de abertura.
-4. **A ausência de marca de máquina** — texto que não denuncia ter saído de IA.
+2. **O leitor entende** — fato vs palpite. **O jargão de IA mora aqui, não lá
+   embaixo:** é o que mais quebra entendimento e mais cansa, então some primeiro.
+3. **A voz da casa** — direta, começando pela coisa.
+4. **A ausência de marca cosmética** — aspas, caixa de título, emoji, negrito solto,
+   travessão fora de enumeração. Isso é acabamento; vem por último.
 
-Corrigir marca (4) antes de compreensão (1–2) é lustrar o que ninguém vai usar. Por
-isso o catálogo de marcas é capítulo subordinado, nunca o eixo.
+A marca que fica por último é só a cosmética. O jargão de IA não é cosmético.
 
 ## O loop — uma página por vez
 
-Método forkado do blader/humanizer (MIT), mas ordenado pela precedência acima:
+Método forkado do blader/humanizer (MIT), reordenado pela precedência:
 
-1. **Corta o que não muda nada.** Seção que não altera o que o leitor faz sai. A
-   primeira passada não trata a estrutura do rascunho como fixa.
-2. **Faz o leitor entender.** Fato no presente ou no passado; palpite marcado como
-   inferência; jargão com o nome comum ao lado na 1ª vez; uma leitura basta.
-3. **Bota a voz da casa.** Casa a amostra (padrão: a conduta do dono, abaixo).
-4. **Tira as marcas de máquina.** Confere contra `reference/marcas-pt-br.md`.
+1. **Tira o jargão e o estilo de IA que quebram entendimento.** Palavra de vitrine,
+   importância inflada, gerúndio raso, fonte vaga, enchimento, «não X, mas Y», trio
+   forçado, ditado formulaico. É o que mais atrapalha o leitor e o que mais irrita
+   com fadiga de IA — por isso vem primeiro. (Catálogo: `reference/marcas-pt-br.md`.)
+2. **Faz o leitor entender de verdade.** Seção que não muda nada sai; fato no
+   presente ou passado, palpite marcado como inferência; jargão de domínio com o
+   nome comum ao lado na 1ª vez; uma leitura basta. Aqui mora a guarda contra o modo
+   de falha 1: não corte até o ponto em que só uma IA acharia que ficou explicado.
+3. **Bota a voz da casa.** Usa a conduta do dono como referência de voz (ritmo,
+   direção, palavra) — não como isenção de regra (abaixo).
+4. **Apara a marca cosmética que sobrou.** Aspas, caixa de título, emoji, negrito,
+   travessão fora de enumeração.
 
 Duas travas do método, em toda passada:
 
@@ -49,30 +67,35 @@ Duas travas do método, em toda passada:
 
 ## A voz é a do dono
 
-A amostra de voz padrão da wiki é a conduta do dono (`abertura/dono.md`, no harness):
-direta, começa pela coisa, sem moldura de cortesia, frase de comprimento variável.
-Leia a amostra antes de escrever e case o ritmo, a escolha de palavra e a pontuação
-dela. Amostra vence regra de estilo genérica.
+A referência de voz da wiki é a conduta do dono (`abertura/dono.md`, no harness):
+direta, começa pela coisa, sem cortesia de abertura, frase de comprimento variável.
+Leia antes de escrever e case o ritmo, a direção e a escolha de palavra.
 
-Consequência que separa esta skill do humanizer em inglês: **a amostra da casa usa
-travessão (—) à vontade**, para aposto e parêntese, do jeito do pt-BR. Aqui o
-travessão NÃO é banido — o §14 do humanizer não vale como proibição. Some só o
-travessão usado como suspense fabricado; o de aposto fica.
+O que a amostra NÃO faz: **ela dá voz, não isenta de regra.** A conduta em si passa
+pelo lint como qualquer página — não é gabarito imune.
+
+**Travessão:** não é banido, mas o uso é **principalmente em enumerações** —
+introduzir ou emoldurar uma lista de itens. Fora disso, apare: travessão de aposto
+espalhado e travessão de suspense fabricado (o que corta a frase pra criar drama).
+Não confunda com o hífen de palavra composta. (Sim, a conduta abusa de travessão; a
+régua vale pra ela também.)
 
 ## O núcleo — o que toda página cumpre (spec §3.1)
 
 - **Voz da casa.** Direta, começando pela coisa.
 - **Seção muda o que o leitor faz.** Senão, sai. É o teste mais barato contra a
   página de escritório que ninguém reabre.
-- **Jargão com o nome comum ao lado.** Termo do vocabulário da casa sem a tradução
-  na 1ª ocorrência é falta.
+- **Jargão de domínio com o nome comum ao lado.** Termo do vocabulário da casa sem a
+  tradução na 1ª ocorrência é falta. (Diferente do jargão de IA, que sai, não se
+  traduz.)
 - **Fato vs inferência.** Sabido no presente ou passado; inferido marcado («é
   provável que», futuro do pretérito); possibilidade só em seção à parte, ou fora;
   adjetivo de juízo sem evidência sai; fonte que copia fonte conta como uma.
 - **Sem citação inline.** Nem «segundo X», nem `[n]`, nem autor-data, nem nota
   ancorada. A obra entra como objeto (página de fichamento, ficha de referência) ou
-  como lista de leitura ao fim, não amarrada a uma frase. É a régua mais mecânica.
-- **Marcas de IA:** capítulo subordinado → `reference/marcas-pt-br.md`.
+  como lista de leitura ao fim, não amarrada a uma frase.
+- **Marcas de IA:** catálogo em `reference/marcas-pt-br.md`, aplicado em dois tempos
+  — o que quebra entendimento sai no passo 1 do loop; o cosmético, no passo 4.
 
 ## O molde da página (estratos)
 
@@ -84,7 +107,7 @@ lavrado é o do **verbete de conceito**, em quatro estratos:
    *valia em ‹data›*, *estado* (nota autoral | revisada | validada) e
    *classificação/difusão*.
 1. **Abertura** — a 1ª frase define o conceito; um a três parágrafos que se bastam
-   sozinhos e resumem o resto; jargão com o nome comum ao lado.
+   sozinhos e resumem o resto; jargão de domínio com o nome comum ao lado.
 2. **Corpo** — seções planas, um nível só, na ordem em que a pessoa usa ou em que a
    coisa funciona. Exemplo é seção, não nota de rodapé.
 3. **Apêndices** — leitura relacionada não ancorada; «veja também» só com conceitos
@@ -102,24 +125,27 @@ Roda **antes de publicar** a página. Três modos:
   muda só a prosa; depois, um resumo curto.
 - **Embutido** (a favor de outra tarefa): devolve só a versão final.
 
-Antes de devolver, releia e pergunte: (a) o que ainda soa gerado por IA? (b) o
-rewrite somou ou perdeu algum fato, nome, número, data, citação ou juízo? Adição sem
-lastro, ou fato perdido, é erro.
+Antes de devolver, releia e pergunte: (a) ainda soa gerado por IA, ou soa explicado
+só pra uma IA? (b) o rewrite somou ou perdeu algum fato, nome, número, data, citação
+ou juízo? Adição sem lastro, ou fato perdido, é erro.
 
 ## Falsos positivos
 
 Pessoa também usa esses padrões — nenhum, sozinho, prova IA. A lista do que NÃO
 acusar e os detalhes humanos a preservar estão em `reference/marcas-pt-br.md`. Na
-dúvida, procure vários padrões juntos: um travessão não prova nada.
+dúvida, procure vários padrões juntos.
 
 ## Fonte e fronteira
 
 - Método: fork do blader/humanizer (https://github.com/blader/humanizer, MIT), cujos
   padrões vêm de «Signs of AI writing» (Wikipedia, WikiProject AI Cleanup).
-- Régua: a spec (`platafirma-arquitetura/docs/spec_styleguide-da-wiki.md`) + a
-  wikipage explicativa. A régua é de **produto**; esta skill é **implementadora**
-  (arquiteto). O par que confere o que já está escrito é o lint `conferir prosa`.
-- 1º caso de teste: a própria wikipage explicativa
-  (`PlataFirma:Styleguide_da_wiki,_explicado`).
+- Régua: **canônica** na spec (`platafirma-arquitetura/docs/spec_styleguide-da-wiki.md`);
+  **servida** na wiki viva, em `Operar:styleguide` (o «como»). A wikipage
+  `PlataFirma:Styleguide_da_wiki,_explicado` é o «porquê» e o 1º caso de teste. A
+  régua é de **produto** (§5); esta skill é **implementadora** (arquiteto). O par que
+  confere o que já está escrito é o lint `conferir prosa`.
+- Ponto para produto: a spec põe toda «marca de máquina» por último (§1/§3.1). Esta
+  skill trata o jargão de IA como quebra-entendimento (nível 2, cortado primeiro) e
+  só o cosmético como nível 4. Se produto concordar, a spec e o servido refletem isso.
 - Trava: passe do dono, linha a linha, antes de qualquer promoção de anel. Esta skill
   não fecha sem isso.

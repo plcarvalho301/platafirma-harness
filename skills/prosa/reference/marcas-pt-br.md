@@ -1,27 +1,39 @@
 # Marcas de máquina — catálogo pt-BR
 
-Capítulo subordinado do styleguide: é o ÚLTIMO item da precedência (a ausência de
-marca de máquina). Corrigir marca antes de compreensão é lustrar o que ninguém vai
-usar. Adapta, não copia: os padrões vêm de «Signs of AI writing» (Wikipedia,
-WikiProject AI Cleanup) via fork do blader/humanizer (MIT), e os que eram próprios do
-inglês estão reescritos para o pt-BR e para a voz da casa aqui.
+Capítulo subordinado do styleguide. Adapta, não copia: os padrões vêm de «Signs of
+AI writing» (Wikipedia, WikiProject AI Cleanup) via fork do blader/humanizer (MIT), e
+os que eram próprios do inglês estão reescritos para o pt-BR e para a voz da casa.
 
 Marca de estilo é alvo móvel (muda por modelo e por versão). Esta lista carrega
 versão e data, e se revê quando o alvo se move.
 
 Versão: 1 · Revisão: 2026-09-04.
 
-Duas travas valem em cada correção: **não inventa fato** (nome, número, data, citação
-só da fonte ou de quem escreve) e **só mexe na prosa** (código, dado, frontmatter,
-moldura derivada e alvo de link ficam intactos).
+## Como aplicar (dois tempos)
+
+Não é uma lista plana de igual peso. Pela precedência do styleguide:
+
+- **Quebra entendimento ou cansa → sai PRIMEIRO** (junto com fazer o leitor
+  entender): vitrine, importância inflada, gerúndio raso, fonte vaga, enchimento,
+  jargão de IA, ditado formulaico, tom de chatbot. É o que mais atrapalha o leitor e
+  o que mais irrita com fadiga de IA.
+- **Cosmético → sai por ÚLTIMO** (acabamento): travessão fora de enumeração (14),
+  negrito (15–16), caixa de título (17), emoji (18), aspas (19), hífens (26).
+
+E os dois modos de falha, sempre à vista: **cortar demais** e achar que explicou (a
+barra de uma IA para «está claro» não é a de um humano — o teste é a pessoa de fora)
+e **vazar estilo de IA** demais.
+
+Duas travas em cada correção: **não inventa fato** (nome, número, data, citação só da
+fonte ou de quem escreve) e **só mexe na prosa** (código, dado, frontmatter, moldura
+derivada e alvo de link ficam intactos).
 
 ---
 
-## Conteúdo (1–6)
+## Conteúdo (1–6) — quebram entendimento, saem primeiro
 
 ### 1. Importância e legado inflados
 Palavras: *marca um ponto de virada, momento decisivo, papel crucial/fundamental/central, testemunho de, cimenta seu legado, reflete uma tendência maior, no cenário em evolução, deixa uma marca indelével, profundamente enraizado.*
-Ordinário virando grande transformação, legado ou tendência ampla.
 - Antes: «O instituto foi criado em 1989, marcando um momento decisivo na evolução da estatística regional e refletindo um movimento mais amplo de descentralização.»
 - Depois: «O instituto foi criado em 1989, parte de uma descentralização administrativa mais ampla.»
 
@@ -33,13 +45,11 @@ Se a fonte diz o que a pessoa afirmou e onde, mantenha a citação útil. Não i
 
 ### 3. Análise rasa com gerúndio
 Palavras: *destacando, evidenciando, refletindo, simbolizando, garantindo, contribuindo para, promovendo, abarcando.*
-Um gerúndio grudado para fazer um fato simples soar profundo.
 - Antes: «A paleta de azul, verde e dourado ressoa com a beleza natural da região, simbolizando o cerrado e refletindo a ligação da comunidade com a terra.»
 - Depois: «O templo é pintado de azul, verde e dourado, cores que evocam o cerrado.»
 
 ### 4. Linguagem de vitrine
 Palavras: *aninhada no coração de, exuberante, rico (figurado), deslumbrante, imperdível, de tirar o fôlego, renomada, comprometimento com, beleza natural, ostenta.*
-Texto que soa anúncio, sobretudo ao descrever lugar, cultura, produto ou instituição.
 - Antes: «Aninhada no coração de Minas, a cidade se destaca como um polo vibrante de rica herança cultural e beleza natural deslumbrante.»
 - Depois: «É uma cidade da Zona da Mata mineira.»
 
@@ -56,11 +66,10 @@ Palavras: *Apesar dos desafios..., Desafios e legado, Perspectivas futuras, segu
 
 ---
 
-## Língua e gramática (7–13)
+## Língua e gramática (7–13) — quebram entendimento, saem primeiro
 
 ### 7. Palavras de IA superusadas (lista pt-BR)
 *ademais, outrossim, crucial, fundamental, robusto, aprimorar, elevar, mergulhar, desvendar, panorama/cenário (abstrato), tapeçaria (abstrato), interação/interseção, intrincado, vale ressaltar, vale destacar, é importante notar/frisar, notável, vibrante, rico, jornada, testemunho, sublinhar, fomentar, primordial.*
-Aparecem muito mais do que a maioria escreve, ainda mais em grupo.
 - Antes: «Ademais, um traço notável da culinária é o uso da mandioca. Um testemunho enduradouro da influência portuguesa é o bacalhau, evidenciando como esses pratos se integraram ao cenário culinário local.»
 - Depois: «A culinária também usa muito a mandioca. O bacalhau, herança portuguesa, continua comum, sobretudo no Natal.»
 
@@ -103,53 +112,54 @@ Em pt-BR o sujeito oculto é comum e às vezes correto — cuidado (ver falsos p
 
 ---
 
-## Estilo (14–19, 26–35)
+## Estilo
 
-### 14. Travessão — NÃO é banido aqui
-Divergência maior do humanizer em inglês. A amostra da casa (conduta do dono) usa
-travessão (—) à vontade, para aposto e parêntese, do jeito do pt-BR. Mantenha nesse
-uso. Some só o travessão de **suspense fabricado** — aquele que corta a frase para
-criar drama. Não confunda com o hífen de palavra composta.
-- Mantém (aposto): «A régua da wiki — direta, sem cortesia — vale em toda página.»
-- Corta (drama): «Então a régua chegou. E mudou tudo — para sempre.» → «A régua mudou como a wiki é escrita.»
+### 14. Travessão — não banido, mas principalmente em enumerações  · COSMÉTICO, sai por último
+Divergência do humanizer em inglês. O travessão (—) NÃO é banido; o uso legítimo é
+**principalmente em enumerações** — introduzir ou emoldurar uma lista de itens. Fora
+disso, apare: travessão de **aposto espalhado** e travessão de **suspense
+fabricado** (o que corta a frase pra criar drama). Não confunda com o hífen de
+palavra composta. A amostra não isenta: a conduta do dono abusa de travessão e
+passaria no lint como qualquer página — a régua vale pra ela também.
+- Enumeração (mantém): «A página cumpre três coisas — abertura, corpo e apêndices.»
+- Aposto espalhado (troca por vírgula ou parêntese): «A régua — direta, sem cortesia — vale.» → «A régua, direta e sem cortesia, vale.»
+- Drama (corta): «Então a régua chegou. E mudou tudo — para sempre.» → «A régua mudou como a wiki é escrita.»
 
-### 15. Negrito demais
-Palavras e frases em negrito sem motivo claro.
+### 15. Negrito demais · COSMÉTICO
 - Antes: «Combina **OKRs**, **KPIs** e ferramentas como o **Business Model Canvas**.»
 - Depois: «Combina OKRs, KPIs e ferramentas como o Business Model Canvas.»
 
-### 16. Lista com mini-título em negrito
+### 16. Lista com mini-título em negrito · COSMÉTICO
 Toda linha começando com rótulo em negrito e dois-pontos.
 - Antes: «- **Desempenho:** o desempenho melhorou. - **Segurança:** a segurança foi reforçada.»
 - Depois: «A atualização acelera o carregamento e adiciona criptografia de ponta a ponta.»
 Use prosa quando a lista não acrescenta nada.
 
-### 17. Caixa de título
+### 17. Caixa de título · COSMÉTICO
 Capitalizar toda palavra principal do título. Em pt-BR a caixa de frase é o natural.
 - Antes: «## Negociações Estratégicas E Parcerias Globais»
 - Depois: «## Negociações estratégicas e parcerias globais»
 
-### 18. Emoji
+### 18. Emoji · COSMÉTICO
 Emoji como enfeite em título ou item de lista. Remova. (Alinha com a conduta: sem emoji, salvo pedido.)
 
-### 19. Aspas
-Use a convenção do alvo, de forma consistente — a wiki usa aspa reta (") ou « », não
-a aspa curva ("") que o editor põe por acidente.
+### 19. Aspas · COSMÉTICO
+Use a convenção do alvo, de forma consistente — a wiki usa aspa reta (") ou « », não a aspa curva ("") que o editor põe por acidente.
 - Antes: «Ele disse "o projeto está no prazo".»
 - Depois: «Ele disse "o projeto está no prazo".»
 
-### 26. Pares hifenizados demais
+### 26. Pares hifenizados demais · COSMÉTICO
 *político-institucional, técnico-científico, orientado-a-dados, de longo-prazo.*
 Mantenha o hífen antes do substantivo, quando a gramática pede; solte depois.
 - Antes: «A equipe é multi-disciplinar, o relatório é orientado-a-dados e a decisão é de-longo-prazo.»
 - Depois: «A equipe multidisciplinar entregou um relatório orientado a dados. A decisão é de longo prazo.»
 
-### 27. Fingir revelar uma verdade profunda
+### 27. Fingir revelar uma verdade profunda — quebra entendimento, sai primeiro
 Palavras: *no fundo, na verdade, o que realmente importa, a questão de fato é, o cerne da questão, fundamentalmente.*
 - Antes: «A questão de fato é se os times se adaptam. No fundo, o que realmente importa é o preparo da organização.»
 - Depois: «A questão é se os times se adaptam, e isso depende de a organização mudar seus hábitos.»
 
-### 28. Anunciar o próximo ponto
+### 28. Anunciar o próximo ponto — quebra entendimento, sai primeiro
 Palavras: *vamos mergulhar, vamos explorar, sem mais delongas, aqui está o que você precisa saber, um aviso rápido, antes que eu esqueça.*
 - Antes: «Vamos mergulhar em como o cache funciona. Aqui está o que você precisa saber.»
 - Depois: «O sistema faz cache em várias camadas: memoização da requisição, cache de dados e cache de rota.»
@@ -169,12 +179,12 @@ Cada frase virando uma tirada de efeito. Uma frase curta enfatiza; uma fileira d
 - Antes: «Então o modelo chegou. Sem preferência por simetria. Sem estética prévia. Sem nostalgia. As regras antigas acabaram.»
 - Depois: «O modelo mudou a busca porque não favorecia simetria nem desenho de aparência humana, o que tornou algumas suposições antigas menos úteis.»
 
-### 32. Ditado formulaico
+### 32. Ditado formulaico — quebra entendimento, sai primeiro
 Formas: *X é a linguagem de Y, X vira uma armadilha, X não é ferramenta, é espelho, a moeda de, a arquitetura de.*
 - Antes: «Simetria é a linguagem da confiança. Eficiência vira uma armadilha quando se esquece a camada humana.»
 - Depois: «Layouts simétricos costumam parecer mais previsíveis. Times podem otimizar demais e perder como as pessoas de fato usam o produto.»
 
-### 33. Abertura de falsa franqueza
+### 33. Abertura de falsa franqueza — quebra entendimento, sai primeiro
 Palavras: *Sinceramente?, Olha, A verdade é que, Vou ser honesto, Falando sério* — como gancho isolado.
 - Antes: «Vale o preço? Sinceramente? Depende de quanto você vai usar.»
 - Depois: «Se vale o preço depende de quanto você vai usar.»
@@ -193,7 +203,7 @@ Uma alternativa rejeitada pode ser válida; várias, curtas e soltas, são o sin
 
 ---
 
-## Chatbot (20–22)
+## Chatbot (20–22) — quebram entendimento, saem primeiro
 
 ### 20. Texto de chatbot deixado na resposta
 Palavras: *espero que ajude, claro!, com certeza!, você está certíssimo!, quer que eu..., posso continuar?, segue abaixo um...*
@@ -211,7 +221,7 @@ Palavras: *até minha última atualização, embora os detalhes sejam escassos, 
 
 ---
 
-## Enchimento e hedge (23–25)
+## Enchimento e hedge (23–25) — quebram entendimento, saem primeiro
 
 ### 23. Frases de enchimento
 - «com o intuito de» → «para»
@@ -246,7 +256,7 @@ Pessoa também usa esses padrões. Nenhum, sozinho, prova IA:
 - **Palavra formal isolada.** O item 7 lista palavras que a IA superusa; não simplifique toda palavra formal.
 - **Saudação e despedida em comentário.** São mais velhas que o ChatGPT.
 - **Conectivo comum isolado.** «Além disso», «portanto» só contam empilhados.
-- **Travessão sozinho.** Na casa é voz, não tell (ver §14).
+- **Travessão em enumeração.** É o uso sancionado (ver §14) — não acuse. Travessão de aposto ou de drama, sim, é marca.
 - **Aspa curva sozinha.** Editor curva por padrão.
 - **Uma frase curta de ênfase.** Só marque fileira de fragmentos.
 - **Abertura repetida deliberada, com ritmo.** «Vim. Vi. Venci.» fica.
@@ -257,7 +267,7 @@ Pessoa também usa esses padrões. Nenhum, sozinho, prova IA:
 - **Formatação correta e complexa.** Editor visual e predefinição produzem saída limpa sem IA.
 - **Texto de segunda mão.** Não reescreva frase dentro de citação, título, nome próprio ou exemplo onde ela está sendo DISCUTIDA, não usada.
 
-Na dúvida, procure vários padrões juntos. Um travessão não prova nada.
+Na dúvida, procure vários padrões juntos.
 
 ## Detalhes humanos a preservar
 
@@ -274,5 +284,6 @@ Costumam carregar a voz de quem escreve. Mantenha, salvo se atrapalharem o senti
 
 Fork do blader/humanizer (MIT); padrões de «Signs of AI writing» (Wikipedia,
 WikiProject AI Cleanup), adaptados ao pt-BR e à voz da casa. A régua canônica é a
-spec (`platafirma-arquitetura/docs/spec_styleguide-da-wiki.md`) e a wikipage
-explicativa; este catálogo é o anexo de marcas que a spec §4 manda morar na skill.
+spec (`platafirma-arquitetura/docs/spec_styleguide-da-wiki.md`); a servida é
+`Operar:styleguide` na wiki viva. Este catálogo é o anexo de marcas que a spec §4
+manda morar na skill.
