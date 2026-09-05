@@ -213,11 +213,12 @@ class MotorClaudeCode:
 
     def cota_barrada(self, ev):
         """Cota e evento proprio do stream, e o unico lugar onde o horario de
-        liberacao existe. `allowed` passa; qualquer outro estado e barreira."""
+        liberacao existe. `allowed` e `allowed_warning` passam (warning e so aviso, nao barra); qualquer
+        outro estado e barreira."""
         if ev.get("type") != "rate_limit_event":
             return None
         info = ev.get("rate_limit_info") or {}
-        if info.get("status") in (None, "allowed"):
+        if info.get("status") in (None, "allowed", "allowed_warning"):
             return None
         reseta = info.get("resetsAt")
         quando = ""
