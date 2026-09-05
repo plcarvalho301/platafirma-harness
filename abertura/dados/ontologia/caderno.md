@@ -168,21 +168,39 @@ Dois corolarios que custaram medicao:
   versionada junto das migracoes, a camada do meio simplesmente nao existe do lado de fora
   — e e ela que faz a de cima funcionar.
 
-## Onde mora a verdade do vocabulário, e os dois eixos que se confundem (05/09/2026)
+## Onde mora a verdade do vocabulário, e o que fazer com o eixo que sobra (05/09/2026)
 
-`acervo.especie_tipo` tipa **obra** — é referenciada por `acervo.obra.especie_id` e diz que
-espécie é o que se ingeriu (paper, norma-tecnica, parecer). **Molde de página é outro eixo**:
-quais estratos a página tem, em que ordem. Os dois se cruzam só nos tipos que a casa também
-produz (parecer, benchmark, runbook) e divergem no resto — o verbete de conceito, único molde
-que a spec do styleguide carrega por inteiro, não é espécie nenhuma. Pedido para "espelhar o
-estrato em `especie_tipo`" está pedindo o eixo errado: a tabela é (`id`, `slug`, `familia_id`),
-e nenhuma tabela do schema carrega estrato (varredura de 05/09: zero para
-estrato|molde|tipologia). Enquanto a ADR de tipologia de página não sair, a estrutura dos
-moldes mora em prosa, nos documentos de arquitetura — e isso está certo: não se cria coluna
-que ninguém lê para depois divergir dela.
+`acervo.especie_tipo` tipa **o documento** — que espécie é (paper, norma-tecnica, parecer) —, e
+desde 05/09 tipa também o que a casa escreve: obra, artefato de git e página de wiki usam o mesmo
+vocabulário, sem tipologia paralela (`ont:0088`). **A estrutura é outro eixo**: quais estratos a
+página tem, em que ordem, e quais saem do banco em vez de serem escritos. Os dois eixos se cruzam
+nos tipos que a casa produz e divergem no resto, e por isso moram em tabelas diferentes —
+`especie_estrato` pendura na espécie, não a substitui. Pedido para «espelhar o estrato em
+`especie_tipo`» está pedindo o eixo errado, e essa confusão já chegou duas vezes por escrito.
+
+**A ausência tem de ser representável, senão vira lacuna.** Espécie sem estrato pode significar
+duas coisas opostas — «não tem molde porque a forma é fixada fora» (adr, spec, minuta, ato
+normativo) e «ainda não foi lavrada» — e sem um campo que as separe as duas são o mesmo silêncio,
+que quem consome lê como falta. É o que o `forma_canonica` resolve, e a lição vale para qualquer
+vocabulário que a casa sirva: onde o zero é decisão, o zero precisa de marca.
 
 O mesmo vocabulário tem duas superfícies e uma fonte só: o **banco** é fonte,
 `ontologia/acervo/*.jsonl` é **export derivado** (o cabeçalho do próprio arquivo diz isso e
 proíbe edição à mão). Divergência entre os dois se fecha exportando, nunca editando o jsonl, e
 reverter um commit do export não desfaz nada no banco. Corolário medido em 05/09: contagem de
 espécie tirada do repo pode estar velha; a do banco não.
+
+## Origem de conceito é derivada, e o conjunto vazio é 10% dele (05/09/2026)
+
+Conceito não estanteia (`ont:0062`): não há coluna de domínio: a origem sai de `obra_trata_de ×
+obra.dominio_id`. Duas consequências que só aparecem ao medir, e que toda regra apoiada em origem
+tem de tratar antes de ser proposta:
+
+- **A origem nasce de INGESTÃO, não de curadoria.** Fichar uma obra de outro domínio que trate do
+  conceito cria o vínculo sem que ninguém tenha decidido criá-lo — não existe ato de lavratura
+  onde pendurar aprovação, e regra que peça aceite por vínculo põe um humano no meio de toda
+  ingestão em lote.
+- **O caso vazio é grande.** Em 05/09: 510 conceitos, 96 com mais de uma origem e **52 com
+  nenhuma** (10%, os nascidos por `curar` sem obra). Regra escrita como «o que vale é o conjunto
+  das origens» não decide nada para eles — e conjunto vazio não é caso de borda quando é um
+  décimo da base.
