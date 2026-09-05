@@ -167,3 +167,22 @@ Dois corolarios que custaram medicao:
   banco -> export -> wiki so existe para quem ja tem o banco do dono. Sem semente
   versionada junto das migracoes, a camada do meio simplesmente nao existe do lado de fora
   — e e ela que faz a de cima funcionar.
+
+## Onde mora a verdade do vocabulário, e os dois eixos que se confundem (05/09/2026)
+
+`acervo.especie_tipo` tipa **obra** — é referenciada por `acervo.obra.especie_id` e diz que
+espécie é o que se ingeriu (paper, norma-tecnica, parecer). **Molde de página é outro eixo**:
+quais estratos a página tem, em que ordem. Os dois se cruzam só nos tipos que a casa também
+produz (parecer, benchmark, runbook) e divergem no resto — o verbete de conceito, único molde
+que a spec do styleguide carrega por inteiro, não é espécie nenhuma. Pedido para "espelhar o
+estrato em `especie_tipo`" está pedindo o eixo errado: a tabela é (`id`, `slug`, `familia_id`),
+e nenhuma tabela do schema carrega estrato (varredura de 05/09: zero para
+estrato|molde|tipologia). Enquanto a ADR de tipologia de página não sair, a estrutura dos
+moldes mora em prosa, nos documentos de arquitetura — e isso está certo: não se cria coluna
+que ninguém lê para depois divergir dela.
+
+O mesmo vocabulário tem duas superfícies e uma fonte só: o **banco** é fonte,
+`ontologia/acervo/*.jsonl` é **export derivado** (o cabeçalho do próprio arquivo diz isso e
+proíbe edição à mão). Divergência entre os dois se fecha exportando, nunca editando o jsonl, e
+reverter um commit do export não desfaz nada no banco. Corolário medido em 05/09: contagem de
+espécie tirada do repo pode estar velha; a do banco não.
