@@ -13,6 +13,6 @@
 #   conta-abertura --tudo          quebra por peca de todas
 #   conta-abertura [...] --json | --chapeu <slug>
 set -euo pipefail
-AQUI="$(cd "$(dirname "$0")" && pwd)"
+AQUI="$(cd "$(dirname "$(readlink -f "$0")")" && pwd)"
 MIOLO="$AQUI/_conta/conta-abertura.py"
 exec uvx --quiet --with tokenizers python3 "$MIOLO" "$@"
