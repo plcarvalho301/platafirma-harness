@@ -136,3 +136,34 @@ A regua: distincao real se lavra; sinonimo do que ja existe, nao. Antes de criar
 pedido de consumidor, perguntar que distincao ele precisa fazer que o vocabulario atual nao faz
 — a resposta costuma ser nenhuma, e o consumidor passa a ler o vocabulario existente. Duplicar
 faceta por conveniencia de quem le quebra a coocorrencia e faz toda medida futura mentir.
+
+## O dado se corta em tres camadas, nao em duas (05/09/2026)
+
+Sempre que a pergunta for "o que e produto e o que e do dono" — publico x interno, o que
+entra num pacote, o que sai num export —, a divisao binaria programa/conteudo nao fecha, e
+a peca que sobra e sempre a mesma: o vocabulario controlado. As tres camadas:
+
+- **forma** — tabelas, colunas, chaves, invariantes e as conferencias `conf_*`. Ensina
+  sozinha, sem uma linha de dado dentro; e a camada de maior valor para quem instala.
+- **etiquetas** — os valores fechados que os campos aceitam. Nem programa nem conteudo:
+  sem elas a forma instala inteira e a busca por faceta devolve zero LEGITIMAMENTE, sem
+  erro — a mesma armadilha da faceta despovoada anotada acima, agora no pior lugar
+  possivel, o primeiro uso de quem acabou de instalar.
+- **linhas** — as instancias (obra, conceito, aresta, trecho, evento).
+
+Dentro das etiquetas o corte e por NATUREZA DO VALOR, e essa parte e medivel, nao de gosto:
+tipologia geral do artefato (familia/especie de documento, forca, colecao — as que ja estao
+ancoradas em registro formal externo) vale em qualquer casa e viaja; recorte de assunto
+(dominio, subdominio, frente) e o que a casa estuda e nao viaja. Perguntar "este valor
+descreve o documento ou a agenda de quem o guardou?" separa os dois sem discussao.
+
+Dois corolarios que custaram medicao:
+
+- **Cortar por schema e errado.** O schema `acervo` nao guarda so acervo: no mesmo lugar
+  moram catalogo, vocabulario, inventario de maquina, curador, evento de recuperacao, lote
+  e as tabelas de sobra de migracao. Corte por schema leva tudo isso junto sem ninguem ter
+  decidido que fosse.
+- **Vocabulario cuja unica fonte e o banco nao chega a instalacao nenhuma.** A cadeia
+  banco -> export -> wiki so existe para quem ja tem o banco do dono. Sem semente
+  versionada junto das migracoes, a camada do meio simplesmente nao existe do lado de fora
+  — e e ela que faz a de cima funcionar.
