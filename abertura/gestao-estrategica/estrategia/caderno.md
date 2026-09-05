@@ -22,6 +22,14 @@ re-derivar. Fato de negócio, estado de runtime e remit canônico NÃO entram.
   qualquer ato sobre quem nunca foi provido — colaborador externo sem cadeira no org chart
   não entra no ledger, e forçar o provimento para registrar um ato criaria o vínculo que a
   persona dele nega.
+- **`curar --apply` regenera o export no WORKTREE de main, nao no clone.** Grava o conceito
+  no Postgres e reescreve `ontologia/acervo/*.jsonl` em `var/wt/conhecimento-main`; o clone
+  `platafirma-conhecimento` pode estar em branch alheia, e commitar de la leva a lavra para
+  a branch de outra cadeira. Medido em 04/09, lavrando comunicacao-executiva: rodei
+  `exportar-acervo` no clone antes de perceber e o commit caiu numa branch da fabrica. O
+  commit e o push sao de quem lavrou — e o lugar deles e o worktree. Junto: `emitido_por`
+  sai como a cadeira dona da API (dados), nunca quem lavrou; autoria no golden nao se
+  resolve por quem chamou o verbo.
 - **`fila enviar` exige `PF_CADEIRA` ou `--eu`**, e o erro só aparece depois de o
   pre-commit inteiro rodar. Num `git commit; fila enviar` encadeado, a falha do segundo
   não é visível no meio da saída do primeiro.
