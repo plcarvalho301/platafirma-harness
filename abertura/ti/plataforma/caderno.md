@@ -80,3 +80,26 @@ outros dois. O sintoma de todos é silêncio, não erro.
   sobrevive a crash e morre no boot, calada.
 - **`is-active` não responde por `is-enabled`.** Serviço no ar há semanas pode nunca ter
   voltado de um boot, e ninguém reinicia a máquina para descobrir.
+- **Para conta de outro uid há um sexto estado, e nenhum dos cinco acima o vê: o
+  linger** (`/var/lib/systemd/linger/<user>`). Com ele, `user@<uid>.service` sobe no
+  boot e leva junto tudo que a sessão segura — dockerd rootless incluso. Parar sem
+  desarmar o que repõe é falso-cumprido: derruba hoje e volta inteiro no próximo boot,
+  e ninguém liga a volta ao "stop" de semanas antes. `disable-linger` ANTES do `stop`,
+  sempre — e a ordem inversa para voltar.
+
+## Sonda que deriva "fonte ok" de ter vindo resultado mede outra coisa (medido 04/09)
+
+Instrumento de saúde que pergunta algo e conta como "vivas" as fontes que
+responderam COM RESULTADO confunde *não achou* com *não respondeu*. Sonda com string
+sem sentido (para não sujar cache) é justamente a que nenhuma fonte casa: quanto mais
+neutra a sonda, mais fonte saudável some da conta.
+
+- **O sintoma é o oposto do esperado:** o número desce enquanto o serviço melhora, e
+  quem lê conclui degradação. Aqui: 6 de 13 "ok" na sonda, com uma fonte servindo 30
+  de 48 resultados numa consulta real, e zero mudas no campo que o próprio serviço já
+  publica.
+- **Quando existe campo de falha declarado pela fonte, é ele que responde** — derivar
+  saúde do conteúdo da resposta é inferência onde havia medida.
+- **Critério de fecho amarrado a esse número não fecha nunca**, e o defeito passa por
+  meta ambiciosa: a spec pedia ≥8, e o instrumento não conseguia produzir 8 com o
+  serviço perfeito. Antes de baixar a meta, conferir se o instrumento mede a meta.
