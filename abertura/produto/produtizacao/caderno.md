@@ -36,3 +36,12 @@ Aprendizado durável do chapéu; fato, card e estado ficam na mesa e no rastread
 - Pitch e posicionamento são camadas distintas, e o erro caro é o pitch definir o posicionamento. O pitch pode entrar pela porta da moda (o assistente que entende os documentos do órgão); o posicionamento não pode mentir, senão a pessoa adota, se decepciona e sai, e adoção é o norte. A camada de dentro segura a régua: o conhecimento é do órgão, o modelo é trocável, sem aprisionamento a fornecedor. Uma abre a porta, a outra evita a devolução.
 - No recorte entre produto e instância, a linha corta o dado, não a ferramenta. Comando é código genérico e vai inteiro ao pacote público; o que se reparte é o conteúdo que cada comando opera (personas, acervo, mesa). Perguntar em que camada fica o harness é a pergunta errada: ele atravessa as três e não se reparte.
 - Decisão de discovery que o dono ainda não maturou não é cobrança minha, mesmo listada como aberta com ele na mesa. Quando o rosto do primeiro adotante depende de um pré-requisito que também é dele (o pronto de um artefato), os dois se olham no espelho — o rosto define o pronto e o pronto filtra os rostos. Empurrar o rosto antes do pré-requisito é chutar; o item espera o dono trazer.
+
+## Régua que o dono devolve pede prova conferível
+
+- Duas devoluções seguidas na mesma régua fina pediram a mesma coisa em formas diferentes: no benchmark, Medições como tabela candidato × funcionalidade; no parecer, a lista de fontes ao fim. Nenhuma pediu mais prosa nem mais rigor de voz — pediram a peça que se confere de relance. Quando ele devolve régua minha, a hipótese primeira é que falta o conferível, não que falta explicação.
+- Corolário de escrita: o estrato central de um tipo carrega a PROVA (a tabela, a lista de fontes, o comando literal), e a prosa em volta existe para situá-la. Régua que descreve só voz, sem nomear a peça conferível do tipo, sai pela metade.
+
+## Ordem do dono que cruza linha de titularidade
+
+- Régua de escrita de cada estrato é minha; quais estratos e em que ordem é de dados. Ordem do dono que acrescenta ou tira estrato muda titularidade alheia por dentro da minha caneta. O que serviu: escrever assim mesmo — a ordem é dele —, declarar a divergência dentro do próprio documento, no estrato de aberto, e rotear o espelhamento por carta a quem é dono da estrutura. Recusar por titularidade trava o dono; absorver calado cria duas fontes da mesma coisa, que é o que o arq:0051 existe para impedir.
