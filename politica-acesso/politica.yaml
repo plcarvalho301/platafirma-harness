@@ -331,8 +331,10 @@ regras:
   # ORDEM DIRETA DO DONO nesta data, com dispensa expressa do repasse a
   # claudinho-seguranca: "eu to autorizando, n precisa passar pelo leonardo". Escrita
   # por claudinho-TI, no papel `fornecedor` que ja existia — nenhum papel novo nasce
-  # aqui, e a regua continua sendo `seg:0009` (default deny, permissao nomeada, prazo,
-  # `acervo:pessoal/*` negado sempre).
+  # aqui, e a regua e o PDP padrao: default deny + concessao nomeada por merge. seg:0009
+  # foi REVOGADA em 05/09/2026 (ordem do dono) — `pessoal` e namespace de org NORMAL, sem
+  # negativa dura; acesso a ele decide-se pelo PEP como qualquer recurso. (Ja nao ha regra
+  # viva barrando `pessoal`: as negativas sairam em 20/08 e 02/09.)
   #
   # ATIVIDADE QUE EXIGE CONHECER, que e a linha sem a qual seg:0009 nao admite merge:
   # a fabrica constroi contra criterio de engenharia (padrao de adaptador, cache,
