@@ -283,3 +283,30 @@ cinto de segurança contra a ferramenta ecoar o que recebeu; (3) `env | sed 's/=
 é como se descobre o NOME da variável sem colher o valor — descobrir onde o segredo mora não
 exige lê-lo. Régua geral: segredo que já está do lado de lá não se traz para cá; leva-se o
 comando até ele.
+
+## Grão de leitura se decide pelo produto, não pelo aviso do fornecedor do motor
+
+O mediawiki.org diz «não foi desenhado para restrição por página» — e eu vetei ABAC na
+wiki por isso, respondendo «instância» na 0024 (05/09). O dono derrubou em dois turnos: a
+wiki É a camada de leitura do acervo; leitor não lê banco; logo o grão é a PÁGINA, ou o
+produto não existe. Vetar era a patologia da persona (casco que ninguém entra) vestida de
+prudência. A régua que sobra: **pergunte primeiro «esta superfície é a de leitura do
+produto?»** — sendo, o grão é o que o produto precisa, e o trabalho de segurança é pagar o
+mecanismo, não negá-lo. Bench de mercado (Confluence/Notion/BookStack, manifesto m:7–m:16)
+serve para nomear o custo, não para decidir o grão.
+
+O que «pagar o mecanismo» é, no MediaWiki, e vale para qualquer motor que avise «não
+desenhado»: (1) sujeito dentro do motor (sem identidade lá dentro não há grão); (2) um
+hook, uma pergunta ao PDP da casa, zero regra no motor; (3) a lista oficial de furos do
+fornecedor vira SUÍTE que roda como sujeito sem concessão e é gate de upgrade; (4) porta
+lateral que não fecha por hook se remove e se substitui por peça nossa — a busca da wiki
+sai e o motor da casa entra, porque aí a decisão é de ponta a ponta; (5) atributo de
+página escrita por humano vem do CAMINHO, nunca de campo editável (o `move` da Lockdown por
+outra porta); (6) intermediário que serve leitura (motor de busca) tem sujeito próprio para
+trilha, mas decide cada resultado contra o sujeito do LEITOR — acesso delegado, mesma régua
+da `inferencia-escopada`. Risco aceito escrito: o resíduo é a porta que um upgrade abre;
+dono seguranca; reabre sem a suíte verde.
+
+Erro de forma que custou um turno de confiança: usei «segregação» em dois sentidos entre
+turnos (tranca na wiki × recorte de conteúdo) sem avisar, e o dono leu contradição. Palavra
+que muda de sentido entre turnos se declara no turno em que muda.
