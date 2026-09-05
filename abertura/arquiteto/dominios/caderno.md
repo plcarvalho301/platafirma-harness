@@ -30,3 +30,32 @@ ponto como dívida.
 - **Cortar um caso do alcance não fecha o item aberto vizinho.** Tirar algo por *não ser
   servido* não decide nada sobre o que é servido por outro transporte. Fechar o vizinho de
   carona é a economia que produz decisão não-deliberada.
+
+## Aresta da teia se confere contra a frase-molde, e o motivo do lavrador denuncia a família errada
+
+Conferir aresta que outra cadeira lavrou é leitura de forma antes de leitura de mérito. A
+intuição sobre o par chega primeiro e erra; o molde da família e o motivo já escrito
+decidem quase tudo.
+
+- **Molde antes da intuição.** `generica` inclui "A é B aplicado a X" — não é só "A é um
+  tipo de B". Caso medido: opus a `titularidade-do-core -generica-> dominio-central` por
+  achar que titularidade não é *espécie* de domínio central, e o motivo lavrado estava
+  exatamente na segunda forma do molde. Objeção levantada antes de ler a cartilha custa
+  retratação por carta.
+- **O motivo do lavrador é o melhor delator da família errada.** Quando uma aresta
+  `relacionada` traz motivo com "é uma das inscrições de", "é X assumido no destino", "é o
+  veículo de" — há direção, e a simétrica é definida como *sem* direção nem hierarquia. A
+  família certa costuma ser `instrumental`. Caso: `registro-de-decisao`, que saiu de
+  relacionada para instrumental sem que uma palavra do sentido mudasse.
+- **Consistência no `<para>` é evidência, não estética.** Antes de escolher família, olhe
+  as arestas que já chegam no mesmo alvo com o mesmo papel. Duas famílias diferentes para
+  o mesmo papel no mesmo alvo é o defeito que se vê de fora, e sustenta a objeção melhor
+  que argumento de definição.
+- **Homonímia contra massa de corpus não se conserta com `disjunta`.** Disjunta exige dois
+  conceitos *lavrados*; quando o segundo sentido da palavra não é conceito e sim volume de
+  obra no acervo, não há `<para>` para apontar. O instrumento é o qualificador no rótulo
+  alternativo — o apelido ambíguo é que puxa o corpus errado.
+- **Definição frouxa enfraquece toda aresta que se apoia nela.** Conceito com definição
+  circular deixa a aresta sustentada pelo entendimento de quem confere, não pelo texto
+  lavrado. Ao conferir, olhe também a definição do `<de>` e do `<para>`: achado de
+  curadoria vale carta separada, não vira objeção à aresta.
