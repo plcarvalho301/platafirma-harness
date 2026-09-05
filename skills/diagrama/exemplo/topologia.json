@@ -1,0 +1,28 @@
+{
+  "nome": "topologia da PlataFirma — três superfícies, uma porta, um host",
+  "largura": 1000,
+  "altura": 600,
+  "fronteira": {"nome": "PlataFirma", "x": 50, "y": 215, "w": 920, "h": 345},
+  "zonas": [
+    {"id": "sup",  "nome": "superfícies", "categoria": "superficie", "x": 50, "y": 40,  "w": 920, "h": 130, "fora_da_fronteira": true},
+    {"id": "host", "nome": "host ~/AI",   "categoria": "host",       "x": 50, "y": 395, "w": 920, "h": 140}
+  ],
+  "caixas": [
+    {"id": "ai",  "titulo": "claude.ai",        "subtitulo": "chat web e mobile",  "categoria": "superficie", "tipo": "cliente", "x": 80,  "y": 80,  "w": 240, "h": 70},
+    {"id": "ch",  "titulo": "fita do chat",     "subtitulo": "canal de mensagens", "categoria": "superficie", "tipo": "cliente", "x": 380, "y": 80,  "w": 240, "h": 70},
+    {"id": "cc",  "titulo": "Claude Code",      "subtitulo": "terminal e IDE",     "categoria": "superficie", "tipo": "cliente", "x": 680, "y": 80,  "w": 240, "h": 70},
+    {"id": "mcp", "titulo": "claudinho-mcp",    "subtitulo": "porta MCP · verbos como tools", "categoria": "porta", "tipo": "MCP", "x": 160, "y": 250, "w": 340, "h": 84},
+    {"id": "wk",  "titulo": "platafirma-wiki",  "subtitulo": "Inteligência de Base", "categoria": "conhecimento", "tipo": "wiki", "x": 560, "y": 250, "w": 300, "h": 84},
+    {"id": "git", "titulo": "clones dos repos", "subtitulo": "core, harness…",    "categoria": "host", "tipo": "repo",      "x": 70,  "y": 440, "w": 205, "h": 76},
+    {"id": "var", "titulo": "var/",             "subtitulo": "abertura, log",      "categoria": "host", "tipo": "arquivos",  "x": 290, "y": 440, "w": 175, "h": 76},
+    {"id": "stk", "titulo": "stacks",           "subtitulo": "fila, rastreador, motor", "categoria": "host", "tipo": "contêiner", "x": 480, "y": 440, "w": 250, "h": 76},
+    {"id": "tun", "titulo": "cloudflared",      "subtitulo": "túnel de saída",     "categoria": "porta", "tipo": "túnel",     "x": 745, "y": 440, "w": 210, "h": 76}
+  ],
+  "arestas": [
+    {"pontos": [[330, 170], [330, 250]], "rotulo": "chama"},
+    {"pontos": [[710, 170], [710, 250]], "rotulo": "lê e edita"},
+    {"pontos": [[500, 292], [560, 292]], "rotulo": "publica"},
+    {"pontos": [[260, 334], [260, 395]]},
+    {"pontos": [[400, 334], [400, 365], [605, 365], [605, 395]]}
+  ]
+}
