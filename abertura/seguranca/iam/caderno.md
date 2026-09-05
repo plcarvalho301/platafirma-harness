@@ -335,3 +335,16 @@ que a varredura de permissionamento da jaiminho (05/09) cobrou uma a uma:
   com o nome que o verbo NÃO emite é conceder no papel e negar na porta. Ao escrever regra,
   conferir que o `acoes:` casa o nome que a tool/verbo de fato submete ao PEP, não o nome
   conceitual da operação.
+
+## Política é estrutura; tabela de sujeitos é dado de instância
+
+Ao empacotar IAM para outra casa instalar, os dois arquivos do PAP têm destinos
+opostos: as REGRAS ensinam o desenho e viajam; a tabela de SUJEITOS descreve quem
+existe aqui e fica, substituída por um exemplo. Misturar os dois num arquivo só faz
+o pacote sair vazio de método ou cheio de gente real — não há terceira saída.
+
+E o default do pacote não pode ser a regra larga que a casa usa para si: papel com
+ações e alcance irrestritos é conta-mestra por padrão, e quem detém o domínio pai
+passa na interseção contra todo filho. Instalação nova nasce com tabela vazia,
+negando tudo por atributo ausente — fail-closed é o que já está escrito no arquivo,
+e o pacote tem de nascer honrando isso, não afrouxando para a primeira sessão subir.

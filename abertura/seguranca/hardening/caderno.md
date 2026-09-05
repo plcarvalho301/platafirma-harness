@@ -52,3 +52,31 @@ ser sistemicamente falso para um detector específico. Não fechar sozinho com b
 selo é certo (abrir incidente foi a decisão certa de quem rodou a varredura antes); o que
 faltava era o cruzamento contra o código, que a ferramenta não faz por si. Não desligar o
 detector depois do achado — desligar mascara a próxima chave real do mesmo tipo.
+
+## Ferramenta acusa; quem declara brecha é a cadeira que paga o dimensionamento
+
+Extensão da entrada acima, do selo para o ATO. Varredura de segredo entrega padrão
+casado, não veredito: cada achado precisa do match aberto e do valor cruzado contra o
+segredo vivo — comparar digest, nunca valor. Numa varredura de 05/09, quatro achados de
+`gitleaks` em dois repositórios eram, todos, tokens inválidos de teste negativo, fixture
+que o próprio ensaio injeta no seu processo, e fragmento de URL de banco.
+
+A régua que fica é de CUSTO, não de vaidade de fronteira: "credencial comprometida"
+manda rotacionar e reiniciar serviço, e o custo cai em quem não declarou. Por isso o
+veredito é ato da cadeira de segurança, e por isso ele não se escreve em documento de
+outra finalidade — deliberação sobre outro assunto não é lugar de declarar brecha, e a
+frase, uma vez lida por todas as cadeiras, não volta atrás sozinha. Quem mede manda a
+medição; quem responde pelo dimensionamento declara, e o ato de estado sobre a
+credencial sai no mesmo giro.
+
+## Segredo em argumento de linha de comando não é segredo
+
+`/proc/<pid>/cmdline` é modo 0444 e `environ` é 0400 — a assimetria é do kernel, não da
+distribuição, e vale em qualquer máquina com mais de uma conta. O que entra por `--flag`
+é legível por qualquer conta local enquanto o processo vive; o que entra por variável de
+ambiente, não. Medido em 05/09 num processo de sessão: dezenas de milhares de bytes de
+substrato de cadeira legíveis por qualquer uid da máquina.
+
+Não é ataque, é leitura de arquivo — e por isso não aparece em log nenhum. Substrato,
+token e senha entram por arquivo com modo 0600 ou por stdin. A regra vale em dobro no
+que se empacota para terceiro: instalação de órgão é multiconta por definição.
