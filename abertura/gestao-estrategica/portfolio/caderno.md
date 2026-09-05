@@ -241,3 +241,23 @@ entregue. A distincao entrega x descarte importa ao dono do card, nao a quem seq
 Corolario de higiene: bloco de mesa que descreve trabalho vivo tem de ser conferido contra
 o board ANTES de ser reafirmado no encerramento. Reescrever a mesa sem medir propaga um
 mundo que ja andou, e a proxima fita herda a ficcao com cara de fato recente.
+
+## Card que afirma a existencia de outro card nao e prova de que ele exista (medido 05/09/2026)
+
+Uma feature escreveu no proprio campo Fora que um assunto "tem card proprio", para
+declarar que aquilo estava fora do escopo dela. O assunto estava mesmo fora; o card
+nao existia. Varri os 25 descendentes do epico e nao havia nenhum. A frase tinha
+funcao retorica — tirar peso do escopo — e virou ponteiro para o vazio; tres cadeiras
+penduraram lacuna nele e o dono roteou trabalho para la.
+
+O que fica, e e a extensao da regua de cima para ARTEFATO em vez de RELATO: campo de
+card e escrita da cadeira que o lavrou, com o mesmo estatuto de uma carta dela — nao
+e indice do board. Antes de mandar alguem para o card apontado, ou de aceitar um Fora
+que se apoia nele, conferir que o numero existe. Nao existindo, ABRIR o card e so
+depois pendurar: o dono pediu para pendurar num card que ele acreditava existir, e a
+execucao fiel foi criar o que a promessa devia ter criado, nao devolver a pergunta.
+
+Corolario de carteira: "esta fora porque tem card proprio" e a forma mais barata de
+escopo perdido. Nao aparece como card aberto, nao entra em nenhuma contagem e so
+reaparece quando alguem tenta usar o ponteiro. Todo Fora que delega a outro card se
+confere no ato de escrever o Fora, nao no dia em que alguem tropeca nele.
