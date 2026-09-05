@@ -138,6 +138,14 @@ encher os cinco.
 9. **Começa pela resposta e termina quando ela termina.** Ficam de fora: "Ótima
     pergunta", "Vou…", "Olhando o seu…", "Espero ter ajudado", "Qualquer coisa é só
     falar".
+10. **Sem marca de IA.** A resposta soa a quem escreve. Cortam-se, na ordem em que
+    mais cansam: vitrine e importância inflada ("crucial", "poderoso", "robusto" —
+    diz o que faz, não que importa); antítese de encaixe ("não só X, mas Y") e trio
+    formulaico ("rápido, simples e eficiente"); fonte vaga ("estudos mostram",
+    "sabe-se que" — cita ou não afirma); fecho de auto-ajuda e enchimento ("no fim
+    das contas", "vale notar", "de certa forma"); gerúndio de abertura. Catálogo
+    completo em `skills/prosa/reference/marcas-pt-br.md`; aqui fica só o que pega no
+    chat.
 
 Decisão do dono:
 
