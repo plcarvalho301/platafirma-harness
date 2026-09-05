@@ -61,11 +61,19 @@ da minha narrativa.
 Corolário aprendido em 04/09, apagando o client L0R8OJ: **perder o achado só conta se a
 medição foi COMPLETA**. `acesso orfaos` tem um terceiro veredito além de achou/não-achou —
 `REPROVADO: realm NAO medido`, exit 2 — e ele sai quando o kcadm não alcançou o realm de
-dentro do próprio verbo. Login de kcadm que eu refiz à mão numa chamada anterior NÃO o
-alcança: a sessão vive no arquivo do contêiner, mas o caminho que o verbo usa é outro.
-Nesse estado o verbo lista os achados de SO e banco normalmente, o que engana — parece
-resultado. Ler o exit code, não a lista. Fecho declarado com `get` devolvendo vazio é
-menos que fecho medido, e a diferença é justamente a que o auditor pede.
+dentro do próprio verbo. Nesse estado o verbo lista os achados de SO e banco normalmente, o
+que engana — parece resultado. Ler o exit code, não a lista. Fecho declarado com `get`
+devolvendo vazio é menos que fecho medido, e a diferença é justamente a que o auditor pede.
+
+CORRIGE o que esta entrada dizia até 04/09 (noite): eu havia anotado que refazer o login do
+kcadm à mão "NÃO alcança o verbo, porque o caminho que o verbo usa é outro". É falso, e
+custou uma fita inteira de exit 2. Não há dois caminhos: o `seg keycloak` e o login pelo
+`docker exec` gravam e leem o MESMO `~/.keycloak/kcadm.config` dentro do contêiner. Refeito
+o login lá dentro, o verbo passa a alcançar o realm na chamada seguinte, sem mais nada — e
+`acesso orfaos` sai de exit 2 para exit 1 no mesmo giro. O que não alcança é login feito no
+HOST, que grava noutro arquivo. Diagnóstico velho, quando não é refutado, vira muro
+imaginário: o de baixo (\"a sessão do kcadm expira\") já trazia a forma certa, e eu não a
+tentei porque esta entrada dizia que não adiantava.
 
 ## Gate de borda com mais de um upstream (oauth2-proxy v7)
 
@@ -107,7 +115,7 @@ perguntas que só aparecem DENTRO do trabalho alheio. Agrega quando chega junto 
 descrevendo-a melhor do que quem a propôs, não quando autoriza; e chega tarde por desenho,
 porque o gatilho é o deploy e não o nascimento do card.
 
-## O PAP afirma; só o PDP decide — e a herança de domínio é onde a negativa morre
+## O PAP afirma; só o PDP decide — e é o domínio PAI, não herança, que mata a negativa
 
 O `politica.yaml` é prosa comentada com generosidade, e os comentários dizem coisas
 verdadeiras sobre o próprio arquivo ("o default do PDP é negar", em duas linhas distintas).
@@ -122,14 +130,86 @@ linha.
 **A pergunta que parece a certa quase sempre é a errada.** Quando o TI pediu conferência do
 recorte do quinzinho, a dúvida oferecida era "negativa nomeada basta, ou preciso de
 catch-all?" — e a resposta é que basta, porque o default fecha. Mas medir o default só
-prova o que acontece SEM concessão. O buraco estava no lado oposto: `reino`, com regra
-escrita no PAI `plataforma`, sai PERMITIDO quando perguntado sobre `plataforma-drive`. A
-herança do eixo domínio é real e desce sozinha. Logo toda trava construída como negativa
-por domínio nomeado tem uma premissa não escrita — que ninguém conceda o pai — e ela cai
-sem que regra nenhuma esteja errada, o que é o modo de falhar que nenhuma revisão de regra
-pega. Conferência de recorte que se limita a auditar as regras escritas está incompleta por
-construção: audita-se também o que a concessão pode citar. Por isso OK de alcance sai
-condicionado ao domínio FILHO nomeado, e a condição é parte do OK, não recomendação.
+prova o que acontece SEM concessão. O buraco estava no lado oposto: `reino`, detendo o PAI
+`plataforma`, sai PERMITIDO quando perguntado sobre `plataforma-drive`.
+
+**Não é herança, e chamar de herança manda a próxima fita caçar uma engrenagem que não
+existe** — anotei "a herança do eixo domínio é real e desce sozinha" em 04/09 (tarde) e a
+medição da mesma noite refutou. São duas peças somadas, e é a soma que ninguém vê:
+
+- `intersecao` exige que o sujeito detenha o domínio DO RECURSO, e ele SEGURA:
+  `reino + [plataforma-acervo] → plataforma-drive` dá `NEGADO regra=intersecao`.
+- `reino-plataforma-tudo` tem `acoes: ["*"]` e `sobre: ["*"]` — não trava nada DENTRO dos
+  domínios que o sujeito já alcança.
+
+Deter o pai satisfaz a interseção contra cada filho, um por um, e a segunda regra libera
+tudo neles. As quatro medidas: `[plataforma]→drive` PERMITIDO; `[plataforma]→identidade`
+PERMITIDO; `[acervo,wiki]→acervo` PERMITIDO; `[acervo,wiki]→identidade` NEGADO.
+
+A consequência prática é a mesma de antes e por isso a condição não mudou — toda trava
+construída como negativa por domínio nomeado tem a premissa não escrita de que ninguém
+conceda o pai, e cai sem que regra nenhuma esteja errada. Mas o mecanismo certo diz ONDE
+olhar: para um papel com `acoes`/`sobre` irrestritos, a LISTA DE DOMÍNIOS do sujeito é a
+única superfície de controle que existe — quem edita essa lista edita o controle inteiro.
+Conferência de recorte que audita só as regras escritas está incompleta por construção:
+audita-se o que a CONCESSÃO pode citar. Por isso OK de alcance sai condicionado ao domínio
+FILHO nomeado, e a condição é parte do OK, não recomendação.
+
+Régua que sobra das duas versões: **hipótese de mecanismo não vira entrada de caderno sem
+o caso de controle rodado.** "Herança" explicava o PERMITIDO e por isso pareceu suficiente;
+faltava rodar o caso que a refutava — o sujeito com só o filho. Um PERMITIDO confirma que
+alguma coisa permite, nunca QUAL. As medidas moram em `politica.yaml`, no comentário sobre
+`reino-plataforma-tudo` (commit 6aa3e33), que é onde quem for editar a regra vai ler.
+
+## Trilha que não existe não é ato sem autor — e não se leva ao dono como suspeita
+
+Perguntado "quem desabilitou este client?", o reflexo é caçar o autor. Antes disso: conferir
+se o sistema GRAVA autor. Medido 04/09 — o realm `platafirma` estava com `eventsEnabled:
+false` E `adminEventsEnabled: false`, e nunca gravou um ato administrativo sequer. A pergunta
+não tinha resposta possível, e a diferença importa porque as duas situações produzem a mesma
+tela vazia: ato deliberadamente apagado e ato nunca registrado. Sem instrumento não há
+achado — há falta de instrumento, que é ato meu de corrigir, não suspeita para levar ao dono.
+Levar como suspeita queima confiança de outra cadeira por uma lacuna que é minha.
+
+Corolário sobre o próprio instrumento: `adminEventsDetailsEnabled` guarda o CORPO da
+requisição, e corpo de update de client carrega `secret` em claro. Ligar details troca um
+buraco de auditoria por um depósito de segredo no banco. Quem/o-quê/onde já responde à
+pergunta de responsabilidade — `operationType`, `resourcePath`, `userId`, `ipAddress` saem
+sem details. Antes-e-depois não vale esse preço, e a escolha se declara para quem for
+auditar, senão parece descuido.
+
+E a régua que fecha: **controle só conta verificado por execução, não por configuração**.
+Ligar a flag e ler a flag de volta prova que a flag está ligada, não que o evento é gravado.
+Provar é gerar um ato e achá-lo em `get admin-events`. Contraponto honesto, que fica como
+próximo passo e não como conquista: trilha que ninguém LÊ ainda não é detecção — vale como
+registro até algum verbo passar a consultá-la.
+
+## Deletar conta de SO não reduz superfície quando o uid é reciclável
+
+O pedido chega como "mata a conta" e o reflexo é `userdel`. Medir o resíduo antes: quem mais
+no disco pertence àquele uid. Em 04/09, o `modulo-osint` (uid 1002) possuía o home E sete
+cópias dele dentro de `/timeshift/snapshots/`. Deletado o cadastro, o uid volta à fila — e,
+sendo o menor livre da faixa, a PRÓXIMA conta criada o recebe e herda a propriedade de tudo
+aquilo, sem que ninguém tenha decidido nada. Deletar não limpa: transfere a herança para um
+estranho, e o transfere calado.
+
+Ordem que preserva as duas coisas (superfície pequena e dado intacto):
+`usermod -L -s /usr/sbin/nologin` primeiro — inerte, reversível com `-U`, não destrói nada e
+resolve HOJE; o destino dos dados depois, com calma; `userdel` por último e só com o uid
+queimado ou os arquivos chowneados antes.
+
+Duas distinções que a mesma noite cobrou, e que valem para todo desligamento de conta:
+- **Runtime caído ≠ conta morta.** Derrubar a sessão apaga processo, socket e
+  `/run/user/<uid>`; o cadastro, o shell e o home continuam. `acesso orfaos` segue apontando,
+  corretamente. Quem relata "matei a conta" costuma ter matado o runtime — conferir o
+  `getent passwd`, não a frase.
+- **`disable-linger` é o que faz durar.** Só o `stop` derruba hoje e o lingering remonta a
+  sessão inteira no próximo boot. A ordem é `disable-linger` e depois `stop`, e o que se
+  verifica é o sumiço de `/var/lib/systemd/linger/<conta>`.
+
+Limite que se declara em vez de encobrir: home 0700 de outra conta não se lê sem root, então
+"não há chave SSH autorizada" é afirmação que eu não posso fazer. O que se relata é o que se
+mediu — e que `.ssh` ficou fora do alcance.
 
 ## Padrões da casa, medidos
 
