@@ -95,14 +95,44 @@ Ao lavrar arestas em lote a partir de `var/tmp/teia-parecer/pares-coocorrentes-s
 - **`grep` filtrando a saída do `--apply` engole o erro**: um loop que só faz `grep -E "^Aresta"`
   vê zero linhas e parece "nada aplicado" sem dizer por quê. Rodar UM sem filtro primeiro para
   ver a recusa real, depois lotear.
+## O export do acervo e de todos e nao declara autoria na hora de commitar (03-04/09/2026)
 
-## curar --relacionar regenera o export no WORKTREE main, não no clone corrente (03/09/2026)
+`curar --apply` grava no banco E regenera `ontologia/acervo/*.jsonl` — mas no worktree
+`/home/claudinho/AI/var/wt/conhecimento-main` (branch main), NAO no clone de trabalho
+`platafirma-conhecimento` se este estiver noutra branch (ex.: `fabrica/NNNN-...`). Sinal do
+descompasso: banco tem N arestas, export do clone de fabrica tem N-92. Rodar `exportar-acervo`
+a mao no clone principal escreve na branch da fabrica (aconteceu com produto, desfeito por
+force-with-lease). O commit+push e do worktree main. O banco e fonte de verdade; o jsonl e
+derivado e legivel (FK resolvida para slug, uma linha por registro).
 
-`curar --relacionar --apply` grava no banco E regenera `ontologia/acervo/conceito_relacao.jsonl`
-— mas no worktree `/home/claudinho/AI/var/wt/conhecimento-main` (branch main), NÃO no clone de
-trabalho `platafirma-conhecimento` se este estiver noutra branch (ex.: `fabrica/NNNN-...`).
-Sinal do descompasso: banco tem N arestas, export do clone de fábrica tem N-92. O commit+push é
-do worktree main: `cd var/wt/conhecimento-main; git add ...jsonl; git commit; git push origin main`.
-O banco é fonte de verdade; o jsonl é derivado e legível (FK resolvida para slug, sem uuid, uma
-linha por registro) — `git diff --numstat` confirma que o apply só adicionou (N insertions, 0
-removals) antes de commitar.
+**O buraco que isso abre, e que custou trabalho manual a tres cadeiras em dois dias:** o export
+regenera do Postgres INTEIRO, entao quem commita o arquivo assina o lote de quem lavrou antes e
+nao commitou. `emitido_por` esta em cada registro, mas o ato de commitar nao o le. Arquiteto
+montou o indice a mao, seguranca commitou so as duas linhas dele, produto levou 6 obras alheias
+de carona e declarou na mensagem — tres defesas manuais do mesmo defeito e falta de ato, nao
+falta de disciplina. Enquanto nao houver ato, a defesa e ler o diff antes de assinar.
+
+**Como distinguir reescrita de remocao antes de commitar** — e o susto que faz parar: linha `-`
+em `obra.jsonl` quase nunca e obra apagada, e a MESMA obra reescrita com classificacao
+corrigida. Confere-se por id, nao por olho:
+
+```sh
+git diff -U0 -- ontologia/acervo/obra.jsonl | grep '^-[^-]' | sed 's/^-//' | jq -r .id | sort > /tmp/rem
+git diff -U0 -- ontologia/acervo/obra.jsonl | grep '^+[^+]' | sed 's/^+//' | jq -r .id | sort > /tmp/add
+comm -23 /tmp/rem /tmp/add    # vazio = zero perda; o que sair aqui e remocao de verdade
+```
+
+Vazio prova que nenhuma obra sumiu. `git diff --numstat` sozinho nao distingue os dois casos.
+
+## Vocabulario controlado nao ganha termo para caber no mapa de quem consome (04/09/2026)
+
+Faceta do acervo e `subdominio`, e o vocabulario dele nao e obrigado a espelhar o recorte de
+nenhum consumidor. A cadeira de inteligencia pediu classificacao por quatro facetas de chapeu
+(teoria/coleta/analise/marco); os subdominios instituidos sao cinco e cortam diferente — teoria
+e analise colapsam em `doutrina-e-analise`, e `marco` se parte em `politica-e-estrategia` (o que
+a casa quer fazer) e `marco-legal-e-controle` (o que a lei obriga).
+
+A regua: distincao real se lavra; sinonimo do que ja existe, nao. Antes de criar termo por
+pedido de consumidor, perguntar que distincao ele precisa fazer que o vocabulario atual nao faz
+— a resposta costuma ser nenhuma, e o consumidor passa a ler o vocabulario existente. Duplicar
+faceta por conveniencia de quem le quebra a coocorrencia e faz toda medida futura mentir.
