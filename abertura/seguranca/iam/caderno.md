@@ -310,3 +310,28 @@ dono seguranca; reabre sem a suíte verde.
 Erro de forma que custou um turno de confiança: usei «segregação» em dois sentidos entre
 turnos (tranca na wiki × recorte de conteúdo) sem avisar, e o dono leu contradição. Palavra
 que muda de sentido entre turnos se declara no turno em que muda.
+
+## `acesso decidir`: o que o veredito NÃO diz (tipo, existência, casamento de nome)
+
+`acesso decidir` é a medição da política — mas o veredito, sozinho, esconde três coisas
+que a varredura de permissionamento da jaiminho (05/09) cobrou uma a uma:
+
+- **O tipo é parte da pergunta, não opcional.** A regra casa por `tipo:` no `quando`, e o
+  PEP carimba o tipo em runtime. Rodar `acesso decidir` sem `--tipo` (ou com o errado)
+  devolve `NEGADO regra=default` mesmo HAVENDO regra que permite. Medido: `rag_buscar` sem
+  `--tipo acervo` → NEGADO/default; com `--tipo acervo` → PERMITIDO/`fabrica-le-acervo-inteiro`.
+  Falso-negativo por tipo omitido é indistinguível de política fechando de verdade — sempre
+  passar o tipo que o PEP carimbaria naquela chamada.
+- **PERMITIDO é sobre POLÍTICA, não sobre existência nem alcançabilidade.** O PDP avalia a
+  regra; não checa se o verbo existe. `teste_rodar`/`repo_*` saem PERMITIDO por
+  `fornecedor-usa-verbo-operacional` e NÃO EXISTEM (`conferir verbo` não os lista) — regra
+  viva para verbo inerte. "Pode chamar o verbo V?" exige TRÊS medidas, não uma: `acesso
+  decidir` (a política permite) E `conferir verbo` (o verbo existe) E o nome-da-ação casa o
+  verbo.
+- **Concessão por nome-de-ação que não bate o verbo é concessão que a superfície não
+  alcança.** O acervo é concedido ao fornecedor via ações `rag_buscar`/`rag_facetas`, mas o
+  verbo servido chama-se `acervo` — e o verbo `acervo` sai NEGADO enquanto `rag_buscar` sai
+  PERMITIDO. Resultado medido: 0 usos do acesso concedido em 11 dias. Conceder a ação certa
+  com o nome que o verbo NÃO emite é conceder no papel e negar na porta. Ao escrever regra,
+  conferir que o `acoes:` casa o nome que a tool/verbo de fato submete ao PEP, não o nome
+  conceitual da operação.
