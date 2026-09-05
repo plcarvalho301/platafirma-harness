@@ -24,10 +24,14 @@ EXATO, o que sobra na janela está fora da contabilidade.
 ## Prova de mudança em código de abertura, quando não há gate
 
 Sem CI que segure, a prova é manual e em quatro passos: `py_compile`; rodar
-`bin/monta-sessao --json --sem-atualizar` nas quatro classes (comum, TI, dados e
-**fábrica**, a única `fora_do_quadro`); boot-check com o env real, porque compilar
-não é subir e o import roda no boot; e só então restart, confirmando **pela tool**,
-que é a superfície que precisa provar.
+`bin/monta-sessao --json` nas quatro classes (comum, TI, dados e **fábrica**, a
+única `fora_do_quadro`); boot-check com o env real, porque compilar não é subir e o
+import roda no boot; e só então restart, confirmando **pela tool**, que é a
+superfície que precisa provar.
+
+`--sem-atualizar` não isola mais nada e não faz parte da prova: depois do arq:0097 a
+abertura é local por construção (morada publicada), e a flag sobrevive só como
+compatibilidade de chamada.
 
 ## Remover comportamento sem remover o mecanismo é convite a reincidência
 
@@ -155,3 +159,45 @@ categoria dentro do contrato do verbo, ainda que a mecânica seja legítima, é 
 decisão por ele. Sinal do erro: o dono corrige o recorte, não a mecânica. A mecânica
 é da cadeira; o recorte é dele. Vale para qualquer spec que sirva política, não só
 para pesquisa web.
+
+## Ao tirar uma medida de frescor, perguntar qual falso-verde nasce no lugar
+
+Instrumento que acusa defasagem costuma sair junto com o mecanismo que ele media, e o
+buraco não fica vazio: a mesma defasagem volta calada, com outro nome. Ao trocar a
+leitura de working tree por artefato publicado, a classe `divergente` sumiu — e a
+morada passou a envelhecer sem sinal nenhum, que é o "clone atrasado" de volta. Trocar
+um falso-verde por outro não é conserto.
+
+A saída não é reanimar a medida velha: é achar o que ainda se pode AFIRMAR sob a nova
+restrição. Sem git no caminho de serviço não se mede distância até o remoto, mas se
+mede IDADE, que sai de um campo do próprio artefato, sem rede. Duas perguntas
+diferentes querem dois instrumentos: quem SERVE declara a idade do que serve; quem
+PUBLICA mede a distância. Instrumento que estima a pergunta do outro erra as duas.
+
+## Prova de vida não é medida de cobertura
+
+Quando N fontes respondem a uma consulta, "quem respondeu" e "quem produziu resultado"
+são conjuntos diferentes, e derivar o primeiro do segundo torna invisível quem
+respondeu VAZIO. A invisibilidade então vira morte: zero resultado com todas as fontes
+vivas fica indistinguível de nenhuma fonte no ar, e um não-achado legítimo sai
+classificado como falha de fonte. É o erro mais caro dos dois, porque some do relatório
+como se ninguém tivesse procurado.
+
+Vida se prova pelo COMPLEMENTO: o universo declarado menos quem se declarou fora —
+nunca pela presença em resultado. Isso exige conhecer o universo (uma leitura de
+config, cacheável), e o custo dessa leitura é o preço da distinção. Não conseguindo
+saber o universo, o campo sai `null` — indeterminado DECLARADO, que não vira juízo
+nem para um lado nem para o outro.
+
+## Critério de pronto negativo se prova por SEQUESTRO, não por leitura
+
+"Não chama X no caminho de serviço" é a forma mais comum de critério de pronto em
+migração, e a mais fácil de deixar em declaração: ninguém consegue provar ausência
+lendo o diff. O teste é pôr um X DELATOR na frente do real (stub no PATH que registra
+toda chamada num log) e exercitar o caminho inteiro; o guarda é o log vazio. Barato,
+e não envelhece: quem reintroduzir a chamada seis meses depois cai nele sem saber que
+ele existe.
+
+O par disso é reproduzir o defeito que motivou a migração, não só a cura. O commit
+local não empurrado que travava o boot virou fixture — sem ele, a próxima limpeza
+"desnecessária" apaga a cura por não ver o que ela custava.

@@ -43,3 +43,21 @@ aqui: desce a card, commit ou wiki. Corpo lido sob demanda (`mesa caderno contex
   declara `num_ctx` e confere `prompt_eval_count` contra os tokens servidos: pacote
   cortado e pacote inteiro são indistinguíveis sem essa conta. Medido 16/08/2026 em
   `qwen2.5:14b` e `qwen3.5:9b`, Ollama 0.31.2.
+
+## Golden record que só sabe CRIAR acumula erro até virar carta
+
+Ferramenta de curadoria costuma nascer com o ato de inserir e a régua formal em volta
+dele (plano seco, conferências, export), e sem os atos de CORRIGIR e RETIRAR. O efeito
+não é ergonômico, é de conteúdo: nó com definição errada não tem caminho de conserto,
+então dura — e o custo aparece longe, como discussão entre cadeiras sobre um defeito
+que ninguém podia consertar sozinho. Antes de aceitar "está ruim mas foi assim que
+entrou", conferir se o ato de correção existe; não existindo, isso é a demanda, e a
+correção pontual é o sintoma.
+
+Corolário para quando a correção tem de sair na mão: antes de retirar um nó, separar o
+que o cascade leva entre DERIVADO e CURADO. Derivado (top-k por similaridade, prior de
+seção, qualquer coisa que um recálculo refaz) pode ir junto sem perda. Curado (lastro
+de obra, classificação de gente) tem de ser repontado ANTES — e a FK que trava o delete
+até isso acontecer é feature, não obstáculo. Subsumir também não é esquecer: o termo
+que sai do golden record vira rótulo alternativo do que fica, senão quem procura pelo
+nome antigo não acha nada.
