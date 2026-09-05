@@ -261,3 +261,39 @@ Corolario de carteira: "esta fora porque tem card proprio" e a forma mais barata
 escopo perdido. Nao aparece como card aberto, nao entra em nenhuma contagem e so
 reaparece quando alguem tenta usar o ponteiro. Todo Fora que delega a outro card se
 confere no ato de escrever o Fora, nao no dia em que alguem tropeca nele.
+
+## Triagem de roadmap: todo card é uma de três, não há quarta (ordem do dono, 05/09/2026)
+
+Não faz sentido entregar uma release inteira e deixar débito técnico na board. Na
+triagem, cada card resolve numa de três, e a régua é do dono:
+
+1. **Entra no roadmap** — subsome no épico ou é sequenciado nele.
+2. **Fora de escopo, em lar nomeado** — outro épico, uma política, ou o sistema
+   permanente (o rastreador, o harness) declarado como tal. \"Fora\" exige endereço.
+3. **Descarte** — sai do board, sem débito retido.
+
+Não existe a quarta via \"fica fora e segue vida própria\": isso é débito órfão, que é
+exatamente o que a régua proíbe. Medido nesta fita: propus \"fica fora do #180, segue
+vida própria\" para quatro épicos candidatos, e o dono cortou. Segue-vida-própria é o
+nome bonito do órfão.
+
+Refino da via 2 — matéria não é descarte. Card cuja matéria pertence a OUTRO lar não
+se descarta: remete-se (comentário no card do lar, com o diagnóstico e as filhas) e
+encerra-se apontando para lá. #297 (conformidade) e #2461 (controles ausentes) eram
+matéria da política de segurança #2977 — comentário lá, `fechar --como encerrada
+--cascata` cá. A matéria não morre; muda de dono.
+
+Método do corte por subsunção. O discriminador é uma pergunta, não a semelhança de
+título: *a entrega deste card faz parte do RESULTADO do épico?* Título que rima com o
+épico (\"instrumento\", \"controles\", \"harness\") não basta — dos quatro candidatos ao
+#180 (produto FOSS), só um (#2961, abertura sobrevive a substrato caído) era bootstrap.
+
+Subsumir épico inteiro ≠ reparentar uma filha. A tentação é subir três das sete filhas
+\"para salvar\" o épico e não descartá-lo — é trocar corte por processo, a patologia da
+cadeira. Ou o épico é do épico, ou é de outro lar, ou descarta; reparentagem cirúrgica
+de filha é decisão à parte, dentro do outro épico, não meia-subsunção para evitar o
+descarte.
+
+Corolário de higiene: o gesto que impede o órfão é a cascata. Encerrar o épico leva as
+filhas junto; conferir DEPOIS que nenhuma sobrou aberta (`listar-tudo --json`), porque
+o read-side atrasa e \"encerrei o pai\" não prova que as filhas foram.
