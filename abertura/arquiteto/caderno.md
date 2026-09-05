@@ -152,3 +152,26 @@ o método (§1 da morta), mas o ferramental jamais volta para dentro do método.
 mercado (bench 2026-09-03): o padrão dominante é SKILL.md enxuto + `reference/` + `scripts/`
 de verificação (validate/verify_citations/source_evaluator), com o loop plano→busca→síntese→
 verificação — não um monólito.
+
+## Antes de afirmar que um desenho de acesso "está certo", ler a série seg: vigente
+
+Modo de falha observado (fita 05/09/2026, o dono flagrou): opinei sobre o desenho de
+acesso da casa — "gate = oauth2-proxy só faz AuthN, PDP só na superfície MCP, e isso é o
+design certo/final" — a partir de nota de mesa herdada + leitura do servido, SEM ler a
+série `seg:` vigente. Estava desatualizado.
+
+- O locus de controle de acesso MUDOU (seg:0014, 05/09/2026, ordem do dono): sai da
+  allowlist de comando e passa a morar no **PEP no endpoint de cada recurso lateral**.
+  A ADR nomeia "oauth2-proxy só AuthN + allowlist de comando" como o desenho que
+  ERROU o lugar do controle. Invariante fixada: todo acesso lateral é mediado por PEP
+  em endpoint de recurso protegido (rastreador, wiki, acervo) — não só no MCP. Hoje é
+  lacuna medida, com dono seg/TI (tabela de verificação da própria ADR).
+- Regra durável: acesso/autorização tem dono declarado (segurança) e série própria
+  (`seg:`), que se move rápido (0008→0014 em ~1 mês). O arquiteto NÃO homologa "o
+  desenho de acesso está consistente" sem ler a última `seg:`. Diagrama de sistemas que
+  mostra AuthZ desenha o ESTADO atual; o alvo pode já ter mudado por ADR de segurança
+  recente — não vender o atual como o pretendido.
+- Corolário para o diagrama de sistemas: `MCP → PDP` (único PDP no desenho) é o estado
+  de hoje, que a seg:0014 já classifica como lacuna. O desenho-alvo tem PEP em cada
+  endpoint. Ao reencostar no diagrama (no contato), refletir o alvo ou marcar o atual
+  como transitório.
