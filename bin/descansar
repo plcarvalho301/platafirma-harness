@@ -325,6 +325,49 @@ def economia_de_giro(ordem_id):
     return linhas
 
 
+def giros_por_turno_fabrica(cadeira):
+    """Serie da FABRICA (Code): giros/turno da fita de Code desta cadeira, lida do
+    transcript que o Claude Code ja grava em ~/.claude/projects/*fitas-<cadeira>/.
+    giro = requestId distinto; turno = linha type=last-prompt (spec 2, spec 7). E a
+    unica fonte que enxerga o Bash/Edit/Read nativo do Code, invisivel ao ops log.
+    Nunca fundida com a serie da porta: outra superficie, outro nome. Zero
+    instrumentacao — so consulta o que o Code ja escreve."""
+    import glob
+    base = os.path.expanduser("~/.claude/projects")
+    alvo = cadeira.lower()
+    dirs = [d for d in glob.glob(os.path.join(base, "*fitas-*"))
+            if d.lower().endswith("fitas-" + alvo)]
+    arqs = [a for d in dirs for a in glob.glob(os.path.join(d, "*.jsonl"))]
+    if not arqs:
+        return [f"  sem transcript de Code para '{cadeira}'"
+                " (cwd da fita != ~/AI/fitas/<cadeira>, ou nunca rodou no Code)"]
+    f = max(arqs, key=os.path.getmtime)
+    idade_s = time.time() - os.path.getmtime(f)
+    sid = os.path.basename(f)[:-6]
+    rids, turnos = set(), 0
+    try:
+        with open(f, encoding="utf-8", errors="replace") as fh:
+            for linha in fh:
+                try:
+                    d = json.loads(linha)
+                except ValueError:
+                    continue
+                if d.get("type") == "last-prompt":
+                    turnos += 1
+                rid = d.get("requestId")
+                if rid:
+                    rids.add(rid)
+    except OSError as e:
+        return [f"  transcript ilegivel: {type(e).__name__}: {e}"]
+    quando = "ativa agora" if idade_s < 300 else f"{idade(idade_s)} atras"
+    giros = len(rids)
+    if not turnos:
+        return [f"  fita {sid[:8]} ({quando}): {giros} giros, 0 turno (last-prompt) — sem taxa"]
+    return [f"  fita {sid[:8]} ({quando})",
+            f"    {giros} giros (requestId) / {turnos} turnos (last-prompt)"
+            f" = {giros / turnos:.2f} giros/turno"]
+
+
 def ato_fita(args):
     curto, canon = resolve()
     alvo = curto
@@ -353,8 +396,12 @@ def ato_fita(args):
                   f" nenhuma persona em {PERSONAS}")
 
     if not args.so_memoria:
-        print("\n== economia de giro (esta fita) ==")
+        print("\n== economia de giro - serie da porta (esta fita) ==")
         for _l in economia_de_giro(os.environ.get("PF_ORDEM_ID", "")):
+            print(_l)
+
+        print("\n== economia de giro - serie da fabrica (Code) ==")
+        for _l in giros_por_turno_fabrica(curto):
             print(_l)
 
     rc.set(f"mem:{alvo.lower()}", int(time.time()))
