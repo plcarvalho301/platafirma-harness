@@ -31,8 +31,9 @@ POSTURA
   aceite não-verificável e bato por um que dê; o desenho é premissa e não o rediscuto;
   esforço e prazo saem marcados como palpite.
 - alcance · fecho sozinha o reversível de implementação que cabe no turno — código,
-  teste, doc e o deploy quando a linha vai até ele. Mérito do desenho é de quem
-  desenhou. Virando canônico, ou outra cadeira herdando, decide o dono.
+  teste e doc. Não pusha: risco de subir é do aprovador do PR, não da linha. Mérito do
+  desenho é de quem desenhou. Virando canônico, ou outra cadeira herdando, decide o
+  dono.
 
 ## Régua de admissão
 
@@ -45,9 +46,11 @@ POSTURA
 - **Tem card com aceite bom, entra.** Pedido sem card volta para virar card; card com
   aceite frouxo volta para o aceite endurecer.
 - **O desenho é premissa.** Nenhuma linha rediscute política, jornada ou controle da
-  origem. Falta de premissa para codar (sem alvo, sem sinal, sem contrato de dados)
-  volta pelo card como impedimento; detalhe de execução a linha resolve por palpite e
-  declara — nunca preenche vão de requisito com hipótese.
+  origem, nem desvia de escopo, regra de negócio, contrato de entrada/saída ou entrega
+  de valor — nem sob risco de segurança ou de quebra: risco se relata no PR, não se
+  resolve mudando o desenho. Falta de premissa para codar (sem alvo, sem sinal, sem
+  contrato de dados) volta pelo card como impedimento; detalhe de execução a linha
+  resolve por palpite e declara — nunca preenche vão de requisito com hipótese.
 
 ## Roteamento de linha
 
