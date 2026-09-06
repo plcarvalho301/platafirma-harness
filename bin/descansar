@@ -325,8 +325,69 @@ def economia_de_giro(ordem_id):
     return linhas
 
 
-def giros_por_turno_fabrica(cadeira):
-    """Serie da FABRICA (Code): giros/turno da fita de Code desta cadeira, lida do
+def fabrica_pela_porta():
+    """Serie da FABRICA (agy), medida na PORTA — o ponto de convergencia das
+    superficies (arq:0100). A fabrica roda o motor agy em container isolado
+    (uid 1003) e NAO grava fita em ~/.claude/projects; o disco dela e inalcancavel
+    do host. O que dela e log de NEGOCIO cruza a porta do connector, autenticado
+    como `jaiminho`, e vira linha no ops log. Mede-se aqui VOLUME de chamada e
+    desfecho, nunca conteudo de fita (limite honesto do 0100). Fonte:
+    ~/AI/var/log/ops/ops-*.jsonl, filtro sujeito=='jaiminho'."""
+    import glob
+    from collections import Counter
+    total = 0
+    por_evento, por_tool, sessoes = Counter(), Counter(), set()
+    ult_ts = None
+    for arq in sorted(glob.glob(os.path.join(RAIZ, "var/log/ops", "ops-*.jsonl")))[-5:]:
+        try:
+            with open(arq, encoding="utf-8", errors="replace") as fh:
+                for linha in fh:
+                    try:
+                        d = json.loads(linha)
+                    except ValueError:
+                        continue
+                    if d.get("sujeito") != "jaiminho":
+                        continue
+                    total += 1
+                    por_evento[d.get("evento") or "-"] += 1
+                    t = d.get("tool") or "-"
+                    if t != "-":
+                        por_tool[t] += 1
+                    s = d.get("sessao")
+                    if s and s != "-":
+                        sessoes.add(s)
+                    if d.get("ts"):
+                        ult_ts = d["ts"]
+        except OSError:
+            continue
+    if not total:
+        return ["  fabrica sem registro na porta nos ultimos 5 dias"
+                " (nao rodou, ou nao cruzou o connector)"]
+    negados = por_evento.get("pep_negou", 0)
+    linhas = [f"  {total} evento(s) da fabrica na porta (sujeito=jaiminho, 5 dias)",
+              f"  ultimo: {ult_ts or '-'}",
+              "  VOLUME de chamada e desfecho — NAO conteudo de fita (arq:0100)"]
+    for ev, n in por_evento.most_common():
+        linhas.append(f"    evento {ev:<12} {n:>4}")
+    if por_tool:
+        linhas.append("  tools tentadas (algumas podem ter sido negadas):")
+        for t, n in por_tool.most_common():
+            linhas.append(f"    {t:<14} {n:>4}")
+    linhas.append(f"  {len(sessoes)} sessao(oes) estabelecida(s) na porta"
+                  + ("" if sessoes else " — nenhum giro produtivo"))
+    if negados:
+        linhas.append(f"  ATENCAO: {negados} pep_negou — fabrica barrada na porta;"
+                      " credencial/PEP e materia de TI/seguranca, nao deste verbo")
+    return linhas
+
+
+def giros_por_turno_code_local(cadeira):
+    """PARCIAL — uma superficie so (arq:0100): fita de Code LOCAL desta cadeira, no
+    host, lida de ~/.claude/projects/*fitas-<cadeira>/. NAO e a fabrica (essa e agy
+    em container isolado, medida pela porta — fabrica_pela_porta) e NAO ve
+    claude.ai. Ler disco de runtime para medir e leitura parcial por design: a
+    saida se declara parcial e nunca vale como verdade do conjunto.
+    Antiga "Serie da FABRICA (Code)": giros/turno da fita de Code desta cadeira, lida do
     transcript que o Claude Code ja grava em ~/.claude/projects/*fitas-<cadeira>/.
     giro = requestId distinto; turno = linha type=last-prompt (spec 2, spec 7). E a
     unica fonte que enxerga o Bash/Edit/Read nativo do Code, invisivel ao ops log.
@@ -400,8 +461,12 @@ def ato_fita(args):
         for _l in economia_de_giro(os.environ.get("PF_ORDEM_ID", "")):
             print(_l)
 
-        print("\n== economia de giro - serie da fabrica (Code) ==")
-        for _l in giros_por_turno_fabrica(curto):
+        print("\n== fabrica — serie da PORTA (arq:0100) ==")
+        for _l in fabrica_pela_porta():
+            print(_l)
+
+        print("\n== Code local desta cadeira — PARCIAL, uma superficie (arq:0100) ==")
+        for _l in giros_por_turno_code_local(curto):
             print(_l)
 
     rc.set(f"mem:{alvo.lower()}", int(time.time()))
