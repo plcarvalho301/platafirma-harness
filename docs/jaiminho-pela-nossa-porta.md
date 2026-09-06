@@ -55,7 +55,7 @@ abertura, e a resposta passou a abrir com `linha de ... aqui`.
 
 O alcance **não se decide em flag deste verbo**: é calculado a cada chamada MCP pelo
 PDP do ops-server, contra a política vigente. Aumentar alcance é ato de concessão no
-PAP (`seg:0009`), nunca argumento de linha de comando.
+PAP (concessão nomeada), nunca argumento de linha de comando.
 
 Sujeito no PAP: `jaiminho`, natureza `servico`, papel `pesquisador-externo`, domínios
 `plataforma-acervo` e `mensageria`. O `preferred_username` sai do client `L0R8OJ` por

@@ -248,7 +248,7 @@ regras:
     acoes: ["*"]
     sobre: ["*"]
 
-  # --- Colaboracao externa que le o acervo (seg:0009) --------------------------
+  # --- Colaboracao externa que le o acervo -------------------------------------
   # Papel separado de `fornecedor` de proposito: a fabrica executa card e nao le
   # acervo; o externo le acervo e nao executa nada. Um papel so daria a uniao dos
   # dois alcances, que e o oposto de necessidade de conhecer.
@@ -331,12 +331,11 @@ regras:
   # ORDEM DIRETA DO DONO nesta data, com dispensa expressa do repasse a
   # claudinho-seguranca: "eu to autorizando, n precisa passar pelo leonardo". Escrita
   # por claudinho-TI, no papel `fornecedor` que ja existia — nenhum papel novo nasce
-  # aqui, e a regua e o PDP padrao: default deny + concessao nomeada por merge. seg:0009
-  # foi REVOGADA em 05/09/2026 (ordem do dono) — `pessoal` e namespace de org NORMAL, sem
-  # negativa dura; acesso a ele decide-se pelo PEP como qualquer recurso. (Ja nao ha regra
-  # viva barrando `pessoal`: as negativas sairam em 20/08 e 02/09.)
+  # aqui, e a regua e o PDP padrao: default deny + concessao nomeada por merge. `pessoal`
+  # e namespace de org NORMAL, sem negativa dura; acesso a ele decide-se pelo PEP como
+  # qualquer recurso (ja nao ha regra viva barrando: negativas sairam em 20/08 e 02/09).
   #
-  # ATIVIDADE QUE EXIGE CONHECER, que e a linha sem a qual seg:0009 nao admite merge:
+  # ATIVIDADE QUE EXIGE CONHECER, que e a linha sem a qual o merge de concessao nao entra:
   # a fabrica constroi contra criterio de engenharia (padrao de adaptador, cache,
   # resiliencia) e hoje responde de memoria de treino. Sem o acervo ela inventa a
   # regua em vez de citar a da casa — foi por isso que o dono mandou conceder.
