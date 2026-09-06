@@ -223,6 +223,29 @@ def roda(rotulo, cmd, timeout=60):
         print(f"  NAO MEDIDO — {type(e).__name__}: {e}")
 
 
+def _turnos_por_gap(tss, gap_s):
+    """Turnos de uma fita por gap temporal entre registros de tool. Sem marca
+    de turno no log (marca-la custaria 1 giro/turno, o oposto do que se corta),
+    o gap e o sinal disponivel: dentro do turno as tools saem em rajada de
+    segundos; entre turnos entra resposta + leitura + digitacao do dono.
+    Estimativa declarada, nao medida exata."""
+    from datetime import datetime
+    ts = []
+    for s in tss:
+        try:
+            ts.append(datetime.fromisoformat(s))
+        except (ValueError, TypeError):
+            continue
+    if not ts:
+        return 0
+    ts.sort()
+    turnos = 1
+    for a, b in zip(ts, ts[1:]):
+        if (b - a).total_seconds() > gap_s:
+            turnos += 1
+    return turnos
+
+
 def economia_de_giro(ordem_id):
     """Custo de giro DESTA fita, lido do ops log por ordem_id (leva 3 da
     economia-de-giro). Mede o que a otimizacao quer derrubar: volume de tool e,
@@ -239,6 +262,7 @@ def economia_de_giro(ordem_id):
               "descobrir", "situacao", "persona", "acesso", "chat", "infra", "seg",
               "sinal", "lint", "teste", "minuta", "descansar", "encerrar"}
     por_tool, classe_fb = Counter(), Counter()
+    tss, lote_ids, giros_avulsos = [], set(), 0
     for arq in sorted(glob.glob(os.path.join(RAIZ, "var/log/ops", "ops-*.jsonl")))[-3:]:
         try:
             with open(arq, encoding="utf-8", errors="replace") as fh:
@@ -253,6 +277,14 @@ def economia_de_giro(ordem_id):
                     if tool == "-":
                         continue
                     por_tool[tool] += 1
+                    _ts = d.get("ts")
+                    if _ts:
+                        tss.append(_ts)
+                    _lid = d.get("lote_id")
+                    if _lid:
+                        lote_ids.add(_lid)
+                    else:
+                        giros_avulsos += 1
                     if tool == "run_command" and d.get("evento") == "fallback":
                         cmd = (d.get("comando") or "").strip()
                         prim = cmd.split()[0] if cmd else ""
@@ -271,6 +303,17 @@ def economia_de_giro(ordem_id):
               "  registro != giro: com lote, 1 giro rende varios (separacao: passo 2)"]
     for tool, n in por_tool.most_common():
         linhas.append(f"    {tool:<16} {n:>4}")
+    giros = len(lote_ids) + giros_avulsos
+    linhas.append(f"  {giros} giro(s) na fita (lote_id conta 1; registro sem lote_id conta 1)")
+    if giros_avulsos and por_tool.get("run_command"):
+        linhas.append("    run_command/read_file em lote so carimbam lote_id apos o restart")
+        linhas.append("    do server -> ate la giro=registro nesses dois (sobreconta giro).")
+    gap_s = int(os.environ.get("PF_TURNO_GAP_S", "60"))
+    turnos = _turnos_por_gap(tss, gap_s)
+    if turnos:
+        linhas.append(f"  turnos ~= {turnos}  (ESTIMATIVA por gap > {gap_s}s; em sessao de mao o")
+        linhas.append("    gap confunde rodada-de-tool com turno — o /turno abaixo e so ordem de grandeza)")
+        linhas.append(f"    giros/turno ~= {giros / turnos:.1f}  ·  registros/turno ~= {total / turnos:.1f}")
     fb = por_tool.get("run_command", 0)
     if fb:
         linhas.append(f"  fallback run_command: {fb} ({100 * fb // total}% dos registros)")

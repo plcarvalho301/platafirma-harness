@@ -405,6 +405,7 @@ async def run_command(command: str = "", cwd: str = "", timeout: int = 120,
     if commands and PF_TOOLS_LOTE:
         timeout = max(1, min(timeout, 600))
         ident = _sessao_resolve(sessao_id)
+        lote_id = uuid.uuid4().hex[:8]
         d = (RAIZ / cwd) if cwd else RAIZ
         resultados = []
         acumulado = 0
@@ -424,7 +425,8 @@ async def run_command(command: str = "", cwd: str = "", timeout: int = 120,
                        cadeira=ident["cadeira"] or None, sessao_id=ident["sessao_id"],
                        ordem_id=ident["ordem_id"], exit_code=r.get("exit_code"), erro=r.get("erro"),
                        bytes_stdout=r.get("stdout", {}).get("bytes_total"),
-                       dur_ms=round((time.monotonic() - t0) * 1000))
+                       dur_ms=round((time.monotonic() - t0) * 1000),
+                       lote_id=lote_id, lote_n=_i)
             acumulado += (r.get("stdout") or {}).get("bytes_total", 0)
             resultados.append(r)
         for _i in range(len(resultados), len(commands)):
@@ -497,7 +499,8 @@ def _nega_fila(p: Path, tool: str):
     return None
 
 
-def _le_um_arquivo(path: str, offset: int, max_bytes: int, ident: dict) -> dict:
+def _le_um_arquivo(path: str, offset: int, max_bytes: int, ident: dict,
+                   lote_id: str | None = None, lote_n: int | None = None) -> dict:
     negado = _autoriza("read_file", "read_file", "documento", path, DOM_PLATAFORMA)
     if negado:
         return negado
@@ -507,7 +510,8 @@ def _le_um_arquivo(path: str, offset: int, max_bytes: int, ident: dict) -> dict:
         return bloqueio
     if not p.is_file():
         _audit(tool="read_file", path=str(p), erro="não existe ou não é arquivo",
-               cadeira=ident["cadeira"] or None, sessao_id=ident["sessao_id"], ordem_id=ident["ordem_id"])
+               cadeira=ident["cadeira"] or None, sessao_id=ident["sessao_id"], ordem_id=ident["ordem_id"],
+               lote_id=lote_id, lote_n=lote_n)
         return {"erro": "não existe ou não é arquivo", "path": str(p)}
     data = p.read_bytes()
     offset = max(0, offset)
@@ -515,7 +519,8 @@ def _le_um_arquivo(path: str, offset: int, max_bytes: int, ident: dict) -> dict:
     chunk = data[offset:offset + max_bytes]
     fim = offset + len(chunk)
     _audit(tool="read_file", path=str(p), bytes_lidos=len(chunk), bytes_total=len(data),
-           cadeira=ident["cadeira"] or None, sessao_id=ident["sessao_id"], ordem_id=ident["ordem_id"])
+           cadeira=ident["cadeira"] or None, sessao_id=ident["sessao_id"], ordem_id=ident["ordem_id"],
+           lote_id=lote_id, lote_n=lote_n)
     return {"content": chunk.decode("utf-8", "replace"), "bytes_total": len(data),
             "truncated": fim < len(data), "next_offset": fim if fim < len(data) else None,
             "path": str(p)}
@@ -534,6 +539,7 @@ def read_file(path: str = "", offset: int = 0, max_bytes: int = 40000,
     """
     ident = _sessao_resolve(sessao_id)
     if paths and PF_TOOLS_LOTE:
+        lote_id = uuid.uuid4().hex[:8]
         resultados = []
         acumulado = 0
         lote_next = None
@@ -541,7 +547,7 @@ def read_file(path: str = "", offset: int = 0, max_bytes: int = 40000,
             if acumulado >= CAP:
                 lote_next = _i
                 break
-            r = _le_um_arquivo(pth, offset, max_bytes, ident)
+            r = _le_um_arquivo(pth, offset, max_bytes, ident, lote_id, _i)
             acumulado += r.get("bytes_total", 0)
             resultados.append(r)
         for _i in range(len(resultados), len(paths)):
