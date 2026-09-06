@@ -106,7 +106,7 @@ _sessao: ContextVar[str] = ContextVar("sessao", default="-")
 #
 # `ordem_id` e o `sid` de conexao sao ATRIBUTOS dentro de `sessao:{id}`, nunca identidade.
 # Os dicionarios de RAM (_ordem_por_sid, _sessao_por_sid) sairam: o join conexao->sessao
-# vive no msg-mem (`conexao:{sid}`), e por isso sobrevive ao restart da porta — fita viva
+# vive no msg-mem (`sessao:{id}`), e por isso sobrevive ao restart da porta — fita viva
 # atravessa restart, e um join em RAM reabriria sessao nova do outro lado.
 TTL_SESSAO_S = 172800          # 48 h — o mesmo de `sessao:{id}`, `ledger:` e `giro:`
 
@@ -116,26 +116,6 @@ def _rc():
     curto porque banco mudo nunca pode segurar a porta."""
     return redis.Redis(host=MEM_REDIS_HOST, port=MEM_REDIS_PORT, decode_responses=True,
                        socket_connect_timeout=2, socket_timeout=3)
-
-
-def _sid_header() -> str | None:
-    """O `Mcp-Session-Id` DO CLIENTE, e só ele — nunca o `s<hex>` de `id(session)`.
-
-    O join `conexao:{sid}` só vale sobre identificador ESTÁVEL. O degrau 2 de
-    `_sessao_atual` (`f"s{id(s):x}"`) é reciclado depois do GC — com
-    `stateless_http=True` cada POST cria um ServerSession novo, então ele muda a cada
-    chamada e, pior, pode REAPARECER em outra fita horas depois (#409, a atribuição
-    errada de autoria de 18/08). Gravar o ledger de uma sessão sob uma chave reciclável
-    é dar a fita de alguém para a próxima que calhar do mesmo `id()`. Sem header, não
-    há join: a fita porta o `sessao_id`, que é o mecanismo do arq:0101 §1.
-    """
-    try:
-        ctx = mcp.get_context()
-        req = getattr(getattr(ctx, "request_context", None), "request", None)
-        cab = getattr(req, "headers", None)
-        return (cab.get("mcp-session-id") or None) if cab is not None else None
-    except Exception:                                         # noqa: BLE001
-        return None
 
 
 def _uuid_valido(bruto: str) -> str | None:
@@ -943,7 +923,6 @@ async def monta_sessao(cadeira: str = "", atualizar: bool = True, chapeu: str = 
     # sessao='-' e nao e o caminho que a fita usa.
     if not r.get("erro"):
         _sid = _sessao_atual()
-        _sid_h = _sid_header()
         _q = _quem()                                   # async: nunca dentro do to_thread (#2911)
         # ordem_id é de UMA ordem do dono e sempre nasce aqui; sessao_id é da CONVERSA e
         # nasce uma vez só. Segunda abertura da mesma fita cunha ordem, não sessão.
@@ -968,17 +947,6 @@ async def monta_sessao(cadeira: str = "", atualizar: bool = True, chapeu: str = 
                                "sub": _sub, "sid": _q_sid, "jti": _jti,
                                "sid_conexao": _sid}, ensure_ascii=False)
             _con.set(f"sessao:{_sessao_id}", _val, ex=TTL_SESSAO_S)
-            # join conexão->sessão no msg-mem, no lugar dos dicionários de RAM: é o que
-            # sustenta `sessao_id` implícito nas demais tools depois de um restart. SÓ
-            # com header do cliente — `s<hex>` de id() é reciclável e não serve de chave
-            # (ver `_sid_header`). Sem header, o porte explícito é o caminho, e ele é o
-            # mecanismo canônico do arq:0101 §1, não um remendo.
-            if _sid_h:
-                _con.set(f"conexao:{_sid_h}", _sessao_id, ex=TTL_SESSAO_S)
-            if not (_sub == "-" and _q_sid == "-" and _jti == "-"):
-                _chave_sombra = f"sombra:{_sub}:{_q_sid}:{_jti}"
-                _con.sadd(_chave_sombra, _sessao_id)
-                _con.expire(_chave_sombra, TTL_SESSAO_S)
         except Exception as e:  # noqa: BLE001
             print(f"[valkey] FALHOU persistir sessao:{_sessao_id}: {e!r}", file=sys.stderr, flush=True)
         r["ordem_id"] = _oid
@@ -1025,7 +993,6 @@ for _fn in _TOOLS:
 # fica pro teste de superfície, §3.2/§7.3).
 TOOLS_VERBOS = os.environ.get("PF_TOOLS_VERBOS", "1") != "0"
 TOOLS_LEVA2 = os.environ.get("PF_TOOLS_LEVA2", "0") == "1"
-PF_SOMBRA = os.environ.get("PF_SOMBRA", "1") != "0"      # sessão-sombra inequívoca (§3)
 PF_GATE = os.environ.get("PF_GATE", "1") != "0"          # gate transparente (§4)
 PF_TOOLS_LOTE = os.environ.get("PF_TOOLS_LOTE", "0") == "1" # chamada em lote (§5) — Leva 2
 # Quem é leva 2 NÃO mora aqui: é o marcador `leva:2` na linha do slug em
@@ -1033,24 +1000,14 @@ PF_TOOLS_LOTE = os.environ.get("PF_TOOLS_LOTE", "0") == "1" # chamada em lote (�
 
 
 def _sessao_resolve(sessao_id: str | None) -> dict:
-    """cadeira/ordem da sessão: parâmetro → join por conexão → sombra inequívoca → nada.
+    """cadeira/ordem da sessão: SÓ o `sessao_id` que a fita porta, cunhado por `monta_sessao`.
 
-    O join por conexão saiu da RAM para o msg-mem (arq:0101 §1): `conexao:{sid}`. Sem
-    `sessao_id` resolvido, roda SEM ledger — contado (`ledger: sem_sessao`), nunca
-    recusado. Recusar aqui seria a porta exigindo da fita um estado que a fita de
-    superfície pobre não tem como guardar.
+    Sem inferência nenhuma (ordem do dono, 06/09/2026): nem join por conexão, nem
+    sessão-sombra. Faltou o parâmetro, roda SEM ledger — contado (`ledger: sem_sessao`),
+    nunca recusado e nunca adivinhado. Só existe UMA sessão: a gerada no `monta_sessao`.
     """
     if sessao_id:
         sessao_id = _uuid_valido(sessao_id) or sessao_id   # legado 32-hex normaliza
-    sid_h = _sid_header()
-    if not sessao_id and sid_h:
-        try:
-            sessao_id = _rc().get(f"conexao:{sid_h}") or None
-        except Exception as e:  # noqa: BLE001
-            print(f"[valkey] join conexao:{sid_h} indisponível: {e!r}",
-                  file=sys.stderr, flush=True)
-    if not sessao_id and PF_SOMBRA:
-        sessao_id = _sombra_inequivoca()   # None quando 0 ou ≥2 vivas
     out = {"sessao_id": sessao_id or "-", "ordem_id": "-", "cadeira": ""}
     if not sessao_id:
         return out
@@ -1063,22 +1020,6 @@ def _sessao_resolve(sessao_id: str | None) -> dict:
     except Exception as e:  # noqa: BLE001
         print(f"[valkey] sessao:{sessao_id} nao resolvida: {e!r}", file=sys.stderr, flush=True)
     return out
-
-
-def _sombra_inequivoca() -> str | None:
-    q = _quem()
-    sub, sid, jti = q.get("sub", "-"), q.get("sid", "-"), q.get("jti", "-")
-    if sub == "-" and sid == "-" and jti == "-":
-        return None                      # token estático: não infere
-    try:
-        rc = _rc()
-        vivas = [s for s in rc.smembers(f"sombra:{sub}:{sid}:{jti}") if rc.exists(f"sessao:{s}")]
-    except Exception as e:               # noqa: BLE001
-        print(f"[sombra] indisponível: {e!r}", file=sys.stderr, flush=True); return None
-    if len(vivas) == 1:
-        return vivas[0]
-    _audit(tool="-", evento="sessao_ambigua", sob=f"{sub}:{sid}:{jti}", vivas=len(vivas))
-    return None                          # 0 ou ≥2 → "-" + aviso (#409: não inferir com ambiguidade)
 
 
 def _run_verbo_blocking(argv: list, stdin: str | None, timeout: int, ident: dict) -> dict:

@@ -78,7 +78,7 @@ print("[limpeza] mesa:", (p.stdout or p.stderr).strip())
 
 # ======================================================================
 # Leva 1 — economia de giro (docs/ordem-economia-de-giro.md, apagado na
-# Leva 2): sombra inequivoca (A1), sessao_id nas genericas + auditoria de
+# Leva 2): sessao_id nas genericas + auditoria de
 # identidade (A2), gate transparente em run_command (A3), renome leva (A4).
 # Hermetico DAQUI PRA BAIXO: redis e _quem() sao dublados nestes testes novos,
 # nada deles toca o Valkey real. O script de ensaio ACIMA (linhas 1-76, canal
@@ -143,57 +143,6 @@ def _fake_redis_cls(kv=None, sets=None):
             return n
 
     return _FakeRedis
-
-
-def test_sombra_inequivoca_uma_viva():
-    FakeRedis = _fake_redis_cls(kv={"sessao:S1": "{}"}, sets={"sombra:u:sd:j": {"S1"}})
-    with patch.object(s, "redis") as _rmod, \
-         patch.object(s, "_quem", return_value={"sub": "u", "sid": "sd", "jti": "j"}):
-        _rmod.Redis = FakeRedis
-        assert s._sombra_inequivoca() == "S1"
-
-
-def test_sombra_inequivoca_duas_vivas_audita_ambigua():
-    FakeRedis = _fake_redis_cls(kv={"sessao:S1": "{}", "sessao:S2": "{}"},
-                                sets={"sombra:u:sd:j": {"S1", "S2"}})
-    with patch.object(s, "redis") as _rmod, \
-         patch.object(s, "_quem", return_value={"sub": "u", "sid": "sd", "jti": "j"}), \
-         patch.object(s, "_audit") as _aud:
-        _rmod.Redis = FakeRedis
-        assert s._sombra_inequivoca() is None
-        assert any(c.kwargs.get("evento") == "sessao_ambigua" for c in _aud.call_args_list)
-
-
-def test_sombra_inequivoca_zero_vivas():
-    FakeRedis = _fake_redis_cls()
-    with patch.object(s, "redis") as _rmod, \
-         patch.object(s, "_quem", return_value={"sub": "u", "sid": "sd", "jti": "j"}):
-        _rmod.Redis = FakeRedis
-        assert s._sombra_inequivoca() is None
-
-
-def test_sombra_inequivoca_token_estatico_nao_toca_valkey():
-    with patch.object(s, "redis") as _rmod, \
-         patch.object(s, "_quem", return_value={"sub": "-", "sid": "-", "jti": "-"}):
-        assert s._sombra_inequivoca() is None
-        _rmod.Redis.assert_not_called()
-
-
-def test_sessao_resolve_parametro_vence_sombra():
-    with patch.object(s, "_sombra_inequivoca", return_value="NUNCA-CHAMADA"):
-        out = s._sessao_resolve("EXPLICITO")
-    assert out["sessao_id"] == "EXPLICITO"
-
-
-def test_sessao_resolve_sem_parametro_usa_sombra_e_resolve_cadeira():
-    FakeRedis = _fake_redis_cls(kv={"sessao:VIA-SOMBRA": _json.dumps(
-        {"cadeira": "fabrica", "ordem_id": "o-teste"})})
-    with patch.object(s, "_sombra_inequivoca", return_value="VIA-SOMBRA"), \
-         patch.object(s, "redis") as _rmod:
-        _rmod.Redis = FakeRedis
-        out = s._sessao_resolve(None)
-    assert out["sessao_id"] == "VIA-SOMBRA"
-    assert out["cadeira"] == "fabrica"
 
 
 def test_gate_verbo_roteado_traz_aviso():
@@ -434,49 +383,19 @@ def test_montador_e_o_unico_gerador_de_sessao_id():
 
 
 
-def test_join_nao_se_grava_sob_sid_reciclavel():
-    """`s<hex>` de id(session) reaparece em outra fita depois do GC (#409): chave
-    reciclavel no ledger daria a fita de uma sessao para a proxima que calhar."""
-    Fake = _fake_redis_cls()
-    with patch.object(s, "_autoriza", return_value=None), \
-         patch.object(s, "_montar", side_effect=lambda *a: _pacote_falso(a[4] or None)), \
-         patch.object(s, "_sessao_atual", return_value="s7aab160cb740"), \
-         patch.object(s, "_sid_header", return_value=None), \
-         patch.object(s, "redis") as _rmod:
-        _rmod.Redis = Fake
-        asyncio.run(s.monta_sessao(cadeira="fabrica"))
-        rc = Fake()
-        assert rc.get("conexao:s7aab160cb740") is None, "sid reciclavel nao vira chave"
-        with patch.object(s, "_sombra_inequivoca", return_value=None):
-            assert s._sessao_resolve(None)["sessao_id"] == "-"
-
-
-def test_join_grava_e_resolve_com_header_do_cliente():
-    Fake = _fake_redis_cls()
-    with patch.object(s, "_autoriza", return_value=None), \
-         patch.object(s, "_montar", side_effect=lambda *a: _pacote_falso(a[4] or None)), \
-         patch.object(s, "_sessao_atual", return_value="hdr-abc"), \
-         patch.object(s, "_sid_header", return_value="hdr-abc"), \
-         patch.object(s, "redis") as _rmod:
-        _rmod.Redis = Fake
-        r = asyncio.run(s.monta_sessao(cadeira="fabrica"))
-        out = s._sessao_resolve(None)
-    assert out["sessao_id"] == r["sessao_id"] and out["cadeira"] == "fabrica"
-
-
-def test_join_conexao_sessao_vive_no_msg_mem_nao_em_ram():
-    """O que sobrevive ao restart da porta e o join no msg-mem — nao ha mais dict."""
-    assert not hasattr(s, "_sessao_por_sid") and not hasattr(s, "_ordem_por_sid")
+def test_sessao_resolve_so_parametro_nunca_infere():
+    """So existe UMA sessao: a cunhada no monta_sessao e portada pela fita (dono, 06/09).
+    Sem parametro -> '-' sempre, mesmo com sessao viva no msg-mem e header de cliente."""
     Fake = _fake_redis_cls(kv={f"sessao:{_UUID_A}": _json.dumps({"cadeira": "fabrica",
                                                                  "ordem_id": "o-x"}),
-                               "conexao:sid-teste": _UUID_A})
-    with patch.object(s, "redis") as _rmod, \
-         patch.object(s, "_sessao_atual", return_value="sid-teste"), \
-         patch.object(s, "_sid_header", return_value="sid-teste"):
+                               "conexao:hdr-abc": _UUID_A})
+    with patch.object(s, "redis") as _rmod:
         _rmod.Redis = Fake
-        out = s._sessao_resolve(None)
+        assert s._sessao_resolve(None)["sessao_id"] == "-"
+        out = s._sessao_resolve(_UUID_A)
     assert out["sessao_id"] == _UUID_A and out["cadeira"] == "fabrica"
-
+    for morto in ("_sombra_inequivoca", "_sid_header"):
+        assert not hasattr(s, morto), f"{morto} voltou: inferencia de sessao arrancada"
 
 # --- aceite 2: ops log grava bytes_servidos + sha, e sessao_id em toda linha ---
 def test_ops_log_grava_sessao_id_em_toda_linha():
