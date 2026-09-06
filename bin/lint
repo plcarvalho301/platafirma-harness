@@ -10,6 +10,8 @@
 # canonica. Linha de corte: `conferir` verifica a plataforma; `lint` verifica o codigo.
 # use para: lintar um repo, conferir estilo antes de commit/PR, ver o que o linter aponta
 # atos: rodar, detectar
+# forma: log
+# cauda: sim
 #
 # Verbo-por-API do braco de lint (card #3004, feature #3003, invariante seg:0014).
 # Mesma regua do verbo `teste`: o chamador escolhe o REPO (e no maximo um alvo dentro

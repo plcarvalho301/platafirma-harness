@@ -4,6 +4,8 @@
 # dono: claudinho-TI
 # use para: subir stack, promover ref, rotas do túnel, segredos, reverter
 # atos: ato=<stack> e args=up / down / ps / logs / config / pull / build / promover / rotas / acessos / segredos / reverter; sem ato lista as stacks
+# forma: log
+# cauda: sim
 #
 # Existe porque `infra compose` tinha o `-f` fixo no core e ignorava o cwd: chamado
 # de outro repo, promovia o control-plane inteiro. Aqui a stack e argumento

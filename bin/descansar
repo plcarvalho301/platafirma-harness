@@ -4,6 +4,8 @@
 # dono: claudinho-IA
 # use para: encerrar fita, fim de sessão, conferir memória antes de fechar
 # atos: fita, varredura
+# forma: relatorio
+# cauda: sim
 #
 # Par do `mesa`: `mesa` guarda, `descansar` fecha. O encerramento de fita nao pode
 # depender de a sessao saber que vai morrer — ela nao sabe. O que este verbo faz e
@@ -424,6 +426,43 @@ def giros_por_turno_code_local(cadeira):
             f" = {giros / turnos:.2f} giros/turno"]
 
 
+def encerra_sessao(rc, sessao_id):
+    """DEL `sessao:{id}`, `ledger:{id}`, `giro:{id}` e o derrame da fita (arq:0101 §1).
+
+    A sessao morre por TRES caminhos e so tres: este ato, o TTL de 48 h, ou eviction do
+    msg-mem — o terceiro so se declara, nunca se conta com ele. Escrito porque «a
+    entidade que ninguem mata» era o que fazia o ledger de dedup crescer sem fim: o
+    contrato de morte e parte da entidade, nao faxina.
+
+    Sem PF_SESSAO nao ha o que apagar, e isso NAO e erro: sessao de mao roda sem ledger
+    (`ledger=sem_sessao`), por desenho.
+    """
+    sid = (sessao_id or "").strip()
+    if not sid:
+        return ["  sem PF_SESSAO — fita sem entidade-sessao (roda sem ledger, por desenho)"]
+    fora = []
+    try:
+        apagadas = rc.delete(f"sessao:{sid}", f"ledger:{sid}", f"giro:{sid}")
+        fora.append(f"  sessao {sid}: {apagadas} chave(s) apagada(s) no msg-mem")
+    except Exception as e:                                    # noqa: BLE001
+        fora.append(f"  msg-mem nao respondeu ao DEL: {type(e).__name__}: {e}")
+    derrame = os.path.join(os.environ.get("PF_DERRAME",
+                                          os.path.expanduser("~/AI/var/tmp/retornos")), sid)
+    n = 0
+    try:
+        for nome in os.listdir(derrame):
+            try:
+                os.unlink(os.path.join(derrame, nome))
+                n += 1
+            except OSError:
+                pass
+        os.rmdir(derrame)
+    except OSError:
+        pass
+    fora.append(f"  derrame de retorno: {n} arquivo(s) removido(s) ({derrame})")
+    return fora
+
+
 def ato_fita(args):
     curto, canon = resolve()
     alvo = curto
@@ -463,6 +502,10 @@ def ato_fita(args):
         print("\n== Code local desta cadeira — PARCIAL, uma superficie (arq:0100) ==")
         for _l in giros_por_turno_code_local(curto):
             print(_l)
+
+    print("\n== contrato de morte da sessao (arq:0101 §1) ==")
+    for _l in encerra_sessao(rc, os.environ.get("PF_SESSAO", "")):
+        print(_l)
 
     rc.set(f"mem:{alvo.lower()}", int(time.time()))
     print("\n== proximo passo ==\n"

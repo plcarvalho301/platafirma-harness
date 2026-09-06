@@ -4,6 +4,8 @@
 # dono: claudinho-TI
 # use para: declarado × servido, 'existe X?' (âncora de NEGATIVA), cabeçalho de verbo, paridade de serviço
 # atos: existe, servico, verbo, skill, procedencia, repo, superficie, front, arranque, ferramental, commit
+# forma: relatorio
+# cauda: sim
 # componente: docker, git
 """Classes:
 

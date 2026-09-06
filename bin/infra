@@ -4,6 +4,8 @@
 # dono: claudinho-TI
 # use para: contêiner, unit, timer, restart, logs, saúde, backup
 # atos: estado, saude, logs, restart, backup, cache, exclusivo
+# forma: log
+# cauda: sim
 # Encapsula as três pegadinhas conhecidas: DOCKER_HOST rootless, restart que
 # mata a própria chamada, e alvo que pode ser contêiner ou unit de usuário.
 set -euo pipefail

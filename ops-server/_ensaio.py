@@ -87,12 +87,14 @@ print("[limpeza] mesa:", (p.stdout or p.stderr).strip())
 # ======================================================================
 import asyncio
 import json as _json
+import sys
 from unittest.mock import patch
 
 
 def _fake_redis_cls(kv=None, sets=None):
     _kv = dict(kv or {})
     _sets = {k: set(v) for k, v in (sets or {}).items()}
+    _hash = {}
 
     class _FakeRedis:
         def __init__(self, *a, **k):
@@ -115,6 +117,30 @@ def _fake_redis_cls(kv=None, sets=None):
 
         def exists(self, k):
             return k in _kv
+
+        # --- hash, contador e DEL: o que o ledger de dedup (arq:0101 R2) usa ---
+        def hget(self, k, campo):
+            return _hash.get(k, {}).get(campo)
+
+        def hset(self, k, campo=None, valor=None, mapping=None):
+            d = _hash.setdefault(k, {})
+            if mapping:
+                d.update(mapping)
+            else:
+                d[campo] = valor
+
+        def hgetall(self, k):
+            return dict(_hash.get(k, {}))
+
+        def incr(self, k):
+            _kv[k] = int(_kv.get(k, 0)) + 1
+            return _kv[k]
+
+        def delete(self, *ks):
+            n = 0
+            for k in ks:
+                n += 1 if _kv.pop(k, None) is not None or _hash.pop(k, None) is not None else 0
+            return n
 
     return _FakeRedis
 
@@ -306,3 +332,265 @@ def test_pf_tools_lote_off_ignora_paths():
         r = s.read_file(path="platafirma-harness/ops-server/requirements.txt", paths=["platafirma-harness/ops-server/_ensaio.py"])
     assert "lote" not in r
     assert "content" in r
+
+
+# ======================================================================
+# arq:0101 — poda de contexto na porta + entidade-sessao unica (card #3013).
+# Hermetico: Valkey dublado, derrame em tmp, nada toca infra real. Cada bloco
+# abaixo casa com uma linha do ACEITE do card, nesta ordem.
+# ======================================================================
+import tempfile                                              # noqa: E402
+import uuid as _uuid                                         # noqa: E402
+from pathlib import Path as _Path                            # noqa: E402
+
+import poda as _p                                            # noqa: E402
+
+_UUID_A = "11111111-2222-4333-8444-555555555555"
+
+
+def _derrame_tmp():
+    """Derrame e ledger em tmp: teste que escreve em var/tmp/retornos real polui o
+    contrato de morte da fita viva ao lado."""
+    return patch.object(_p, "DERRAME", _Path(tempfile.mkdtemp(prefix="poda-ensaio-")))
+
+
+def _pacote_falso(**extra):
+    return {"cadeira": "fabrica", "nome_canonico": "fabrica", "pecas": [],
+            "roteador": {"via": "teste", "slug": None}, **extra}
+
+
+# --- aceite 1: uma conversa = um sessao_id RFC-4122, cunhado uma vez -----------
+def test_abertura_cunha_rfc4122_uma_vez_e_segunda_nao_recunha():
+    Fake = _fake_redis_cls()
+    with patch.object(s, "_autoriza", return_value=None), \
+         patch.object(s, "_montar", side_effect=lambda *a: _pacote_falso()), \
+         patch.object(s, "redis") as _rmod:
+        _rmod.Redis = Fake
+        r1 = asyncio.run(s.monta_sessao(cadeira="fabrica"))
+        sid = r1["sessao_id"]
+        r2 = asyncio.run(s.monta_sessao(cadeira="fabrica", sessao_id=sid))
+    assert str(_uuid.UUID(sid)) == sid and sid.count("-") == 4, "formato voltou ao RFC-4122 (0091 §4)"
+    assert r1["sessao"]["cunhada_agora"] is True
+    assert r2["sessao_id"] == sid and r2["sessao"]["cunhada_agora"] is False
+    assert r1["ordem_id"] != r2["ordem_id"], "ordem_id e por ordem; sessao_id e por conversa"
+
+
+def test_abertura_normaliza_32hex_legado():
+    Fake = _fake_redis_cls()
+    with patch.object(s, "_autoriza", return_value=None), \
+         patch.object(s, "_montar", return_value=_pacote_falso()), \
+         patch.object(s, "redis") as _rmod:
+        _rmod.Redis = Fake
+        r = asyncio.run(s.monta_sessao(cadeira="fabrica", sessao_id=_UUID_A.replace("-", "")))
+    assert r["sessao_id"] == _UUID_A
+
+
+def test_abertura_sessao_id_invalido_e_declarado_nao_aceito():
+    Fake = _fake_redis_cls()
+    with patch.object(s, "_autoriza", return_value=None), \
+         patch.object(s, "_montar", return_value=_pacote_falso()), \
+         patch.object(s, "redis") as _rmod:
+        _rmod.Redis = Fake
+        r = asyncio.run(s.monta_sessao(cadeira="fabrica", sessao_id="nao-e-uuid"))
+    assert r["sessao_id"] != "nao-e-uuid"
+    assert any("RFC-4122" in a for a in r.get("avisos", [])), "valor invalido se declara"
+
+
+def test_join_conexao_sessao_vive_no_msg_mem_nao_em_ram():
+    """O que sobrevive ao restart da porta e o join no msg-mem — nao ha mais dict."""
+    assert not hasattr(s, "_sessao_por_sid") and not hasattr(s, "_ordem_por_sid")
+    Fake = _fake_redis_cls(kv={f"sessao:{_UUID_A}": _json.dumps({"cadeira": "fabrica",
+                                                                 "ordem_id": "o-x"}),
+                               "conexao:sid-teste": _UUID_A})
+    with patch.object(s, "redis") as _rmod, patch.object(s, "_sessao_atual", return_value="sid-teste"):
+        _rmod.Redis = Fake
+        out = s._sessao_resolve(None)
+    assert out["sessao_id"] == _UUID_A and out["cadeira"] == "fabrica"
+
+
+# --- aceite 2: ops log grava bytes_servidos + sha, e sessao_id em toda linha ---
+def test_ops_log_grava_sessao_id_em_toda_linha():
+    with tempfile.TemporaryDirectory() as d, patch.object(s, "LOG_DIR", _Path(d)):
+        s._audit(tool="-", evento="teste_sem_sessao")
+        linha = _json.loads(next(iter(_Path(d).glob("ops-*.jsonl"))).read_text().splitlines()[0])
+    assert linha["sessao_id"] == "-", "ausencia se declara, nao se omite"
+
+
+def test_ops_log_grava_bytes_servidos_e_sha_por_retorno():
+    Fake = _fake_redis_cls()
+    with _derrame_tmp(), patch.object(s, "_autoriza", return_value=None), \
+         patch.object(s, "redis") as _rmod, patch.object(s, "_audit") as _aud:
+        _rmod.Redis = Fake
+        s.read_file(path="platafirma-harness/ops-server/requirements.txt", sessao_id=_UUID_A)
+    kw = [c.kwargs for c in _aud.call_args_list if c.kwargs.get("tool") == "read_file"][0]
+    assert kw["bytes_servidos"] and kw["sha"], "o servido e o hash sao o que faltava medir"
+
+
+# --- aceite 3: corte cabeca+cauda+alca; erro nunca podado; id exato intocado ---
+def test_corte_cauda_sim_preserva_o_fim():
+    texto = "CABECA\n" + ("x" * 5_000) + "\nVEREDITO: passou"
+    fora, meta = _p.corta(texto, 1_000, cauda=True, alca="var/tmp/retornos/x.txt")
+    assert fora.startswith("CABECA") and fora.endswith("VEREDITO: passou")
+    assert meta["cortado"] and "var/tmp/retornos/x.txt" in fora
+
+
+def test_corte_cauda_nao_e_o_comportamento_de_hoje():
+    texto = "CABECA\n" + ("x" * 5_000) + "\nFIM"
+    fora, _ = _p.corta(texto, 1_000, cauda=False, alca=None)
+    assert fora.startswith("CABECA") and not fora.endswith("FIM")
+
+
+def test_erro_e_exit_diferente_de_zero_nunca_podam():
+    assert _p.intocavel({"erro": "timeout"})
+    assert _p.intocavel({"exit_code": 1})
+    assert not _p.intocavel({"exit_code": 0})
+    ruidoso = {"exit_code": 2, "stdout": {"texto": "a\n" * 500, "bytes_total": 1000}}
+    with patch.object(s, "redis") as _rmod:
+        _rmod.Redis = _fake_redis_cls()
+        assert s._serve(dict(ruidoso), tool="t", alca="a", ident={"sessao_id": _UUID_A}) == ruidoso
+
+
+def test_identificador_exato_nao_se_toca():
+    """`path` e alca sao identificador: a poda mexe no conteudo, nunca no endereco."""
+    Fake = _fake_redis_cls()
+    alvo = "platafirma-harness/ops-server/requirements.txt"
+    with _derrame_tmp(), patch.object(s, "_autoriza", return_value=None), \
+         patch.object(s, "redis") as _rmod:
+        _rmod.Redis = Fake
+        r = s.read_file(path=alvo, sessao_id=_UUID_A)
+    assert r["path"].endswith("requirements.txt")
+
+
+# --- aceite 4: releitura identica serve delta; mudada serve diff ---------------
+def test_releitura_identica_serve_aviso_estavel_sem_timestamp():
+    Fake = _fake_redis_cls()
+    with _derrame_tmp(), patch.object(s, "_autoriza", return_value=None), \
+         patch.object(s, "redis") as _rmod:
+        _rmod.Redis = Fake
+        alvo = "platafirma-harness/ops-server/server.py"
+        r1 = s.read_file(path=alvo, sessao_id=_UUID_A)
+        r2 = s.read_file(path=alvo, sessao_id=_UUID_A)
+        r3 = s.read_file(path=alvo, sessao_id=_UUID_A)
+    assert r1["poda"]["ledger"] == "novo"
+    assert r2["poda"]["modo"] == "igual" and "não reenviados" in r2["content"]
+    assert r2["content"] == r3["content"], "aviso e ESTAVEL: sem timestamp, senao vira conteudo novo"
+    assert len(r2["content"]) < len(r1["content"])
+
+
+def test_retorno_curto_nao_deduplica_porque_o_aviso_custaria_mais():
+    """Poda que engorda o retorno nao e poda: duas linhas cabem por menos que o aviso."""
+    Fake = _fake_redis_cls()
+    with _derrame_tmp(), patch.object(s, "_autoriza", return_value=None), \
+         patch.object(s, "redis") as _rmod:
+        _rmod.Redis = Fake
+        alvo = "platafirma-harness/ops-server/requirements.txt"
+        s.read_file(path=alvo, sessao_id=_UUID_A)
+        r2 = s.read_file(path=alvo, sessao_id=_UUID_A)
+    assert r2["poda"]["ledger"] == "curto" and "mcp==" in r2["content"]
+
+
+def test_releitura_de_arquivo_mudado_serve_diff():
+    Fake = _fake_redis_cls()
+    with _derrame_tmp(), patch.object(s, "redis") as _rmod:
+        _rmod.Redis = Fake
+        led = _p.Ledger(Fake(), _UUID_A)
+        base = "linha 1\nlinha 2\nlinha 3\n" * 20
+        led.olha("arq", base, 1, "read_file")
+        d = led.olha("arq", base.replace("linha 2", "linha DOIS", 1), 2, "read_file")
+    assert d["modo"] == "diff" and "linha DOIS" in d["texto"] and "giro 1" in d["texto"]
+
+
+def test_ledger_sem_sessao_roda_e_conta_nunca_recusa():
+    led = _p.Ledger(None, "")
+    d = led.olha("a", "texto", 0, "t")
+    assert d["modo"] == "inteiro" and d["ledger"] == "sem_sessao"
+
+
+# --- aceite 6: PF_PODA=0 + restart reverte -------------------------------------
+def test_pf_poda_zero_reverte_a_porta_inteira():
+    r = {"exit_code": 0, "stdout": {"texto": "\x1b[31mcor\x1b[0m\n" * 50, "bytes_total": 10}}
+    with patch.dict(os.environ, {"PF_PODA": "0"}):
+        assert s._serve(dict(r), tool="t", alca="a", ident={"sessao_id": _UUID_A}) == r
+    with patch.dict(os.environ, {"PF_PODA": "1"}), _derrame_tmp(), patch.object(s, "redis") as _rmod:
+        _rmod.Redis = _fake_redis_cls()
+        assert s._serve(dict(r), tool="t", alca="a", ident={"sessao_id": _UUID_A}) != r
+
+
+# --- R1: lavador determinístico ------------------------------------------------
+def test_lavador_tira_ansi_e_progress_bar():
+    fora, rel = _p.lava("\x1b[31mvermelho\x1b[0m\nbaixando 10%\rbaixando 100%\n")
+    assert "\x1b[" not in fora and "baixando 100%" in fora and "10%" not in fora
+    assert "terminal" in rel["classes"]
+
+
+def test_lavador_colapsa_repeticao_identica():
+    fora, rel = _p.lava("igual\n" * 10)
+    assert "× 10" in fora and "repeticao" in rel["classes"]
+
+
+def test_lavador_resume_molde_com_numero_variando():
+    fora, rel = _p.lava("\n".join(f"processando item {i}" for i in range(20)))
+    assert "+18 linhas no mesmo molde" in fora and "repeticao" in rel["classes"]
+
+
+def test_lavador_marca_blob_e_preserva_bordas():
+    fora, rel = _p.lava("prefixo " + ("Zm9vYmFyego" * 40) + " sufixo")
+    assert "<blob tipo=base64 bytes=440" in fora and fora.startswith("prefixo")
+    assert fora.endswith("sufixo") and "blob" in rel["classes"]
+
+
+def test_lavador_agrupa_saida_de_busca():
+    linhas = [f"src/a.py:{i}:achou aqui" for i in range(1, 12)]
+    linhas += [f"src/b.py:{i}:achou tambem" for i in range(1, 4)]
+    fora, rel = _p.lava("\n".join(linhas))
+    assert "src/a.py  (11 matches)" in fora and "+6 matches neste arquivo" in fora
+    assert "busca" in rel["classes"] and "src/b.py" in fora
+
+
+def test_lavador_tira_rastro_de_pacote_e_pontos_de_pytest():
+    fora, _ = _p.lava("Collecting redis\nDownloading redis.whl\n....... [ 87%]\nok final")
+    assert fora.strip() == "ok final"
+
+
+def test_guardrail_de_entrada_quatro_vezes_o_cap():
+    fora, rel = _p.lava("z" * 10_000, cap=1_000)
+    assert "guardrail" in rel["classes"] and len(fora) < 5_000
+
+
+def test_envelope_enxuto_tira_stderr_vazio_e_cwd_repetido():
+    fora = _p.enxuga_envelope({"exit_code": 0, "stderr": {"texto": "", "bytes_total": 0},
+                               "cwd": str(_p.RAIZ), "erro": None, "stdout": {"texto": "x"}})
+    assert "stderr" not in fora and "cwd" not in fora and "erro" not in fora
+    assert "stdout" in fora
+
+
+# --- R4: perfil por verbo lido do cabecalho ------------------------------------
+def test_perfil_por_verbo_sai_do_cabecalho_e_ausente_e_o_de_hoje():
+    s._PERFIS.clear()
+    assert s._perfil_verbo("descansar", str(_Path(__file__).parent.parent / "bin/descansar")) == {
+        "forma": "relatorio", "cauda": True}
+    s._PERFIS.clear()
+    assert s._perfil_verbo("inexistente", "/nao/existe") == {"forma": "listagem", "cauda": False}
+
+
+# --- R7: hash unico, uma lib para a porta e para o montador --------------------
+def test_hash_unico_porta_e_montador():
+    sys.path.insert(0, str(_Path(__file__).parent.parent / "comum"))
+    from hash_servido import sha_servido
+    assert sha_servido("  abc\n") == sha_servido("abc") == _p.sha_servido("abc")
+    assert len(sha_servido("abc")) == 12
+
+
+# --- R2 na abertura: peca ja servida nesta sessao volta como aviso -------------
+def test_peca_de_abertura_repetida_vira_aviso_na_segunda_abertura():
+    Fake = _fake_redis_cls()
+    peca = {"peca": "persona", "sha": "abc123abc123", "conteudo": "TEXTO DA PERSONA " * 50}
+    with patch.object(s, "redis") as _rmod:
+        _rmod.Redis = Fake
+        r1 = {"pecas": [dict(peca)]}
+        s._delta_pecas(r1, _UUID_A)
+        r2 = {"pecas": [dict(peca)]}
+        conta = s._delta_pecas(r2, _UUID_A)
+    assert r1["pecas"][0]["conteudo"].startswith("TEXTO DA PERSONA")
+    assert "já servido nesta sessão" in r2["pecas"][0]["conteudo"]
+    assert conta["pecas_dedup"] == 1

@@ -16,6 +16,8 @@
 # verbo, superficie, servico). `teste` e `lint` verificam o CODIGO de um repo.
 # use para: rodar teste de um repo, suite verde/vermelha, conferir mudanca antes de PR
 # atos: rodar, detectar
+# forma: log
+# cauda: sim
 #
 # Verbo-por-API do braco de teste (card #3004, feature #3003, invariante seg:0014).
 # Substitui `run_command "cd ... && pytest"` — a linha livre atravessava a allowlist de

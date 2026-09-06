@@ -96,13 +96,37 @@ ENV_OCULTO = ("OPS_AUTH_TOKEN", "TUNNEL_TOKEN")
 
 _sessao: ContextVar[str] = ContextVar("sessao", default="-")
 
-# ordem_id: identidade de UMA fita (uma ordem do dono), estavel do inicio ao fim,
-# gravada identica em sessao_aberta e em consulta -> chave do join de D (#2902).
-# sid (_sessao_atual) e por-conexao e reciclavel (#409); nao serve. monta_sessao
-# gera o ordem_id na abertura e mapeia sid->ordem_id; run_command le esse mapa e
-# injeta PF_ORDEM_ID no subprocesso, onde o motor ja o consome (bin/motor:281).
-_ordem_por_sid: dict[str, str] = {}
-_sessao_por_sid: dict[str, str] = {}
+# ENTIDADE-SESSAO UNICA (arq:0101 §1, emenda ao arq:0091). Uma sessao, um `sessao_id`,
+# cunhado UMA vez por `monta_sessao` e carregado PELA FITA em cada chamada. A porta nao
+# infere sessao na abertura.
+#
+# Antes disto a entidade nascia em quatro pontos com tres identificadores (monta_sessao
+# cunhava uuid; /sessao cunhava so ordem_id; o sid de conexao; _giro-carga.py cunhava um
+# SEGUNDO uuid no encerrar) — e o ledger de dedup precisa de chave estavel, que nao havia.
+#
+# `ordem_id` e o `sid` de conexao sao ATRIBUTOS dentro de `sessao:{id}`, nunca identidade.
+# Os dicionarios de RAM (_ordem_por_sid, _sessao_por_sid) sairam: o join conexao->sessao
+# vive no msg-mem (`conexao:{sid}`), e por isso sobrevive ao restart da porta — fita viva
+# atravessa restart, e um join em RAM reabriria sessao nova do outro lado.
+TTL_SESSAO_S = 172800          # 48 h — o mesmo de `sessao:{id}`, `ledger:` e `giro:`
+
+
+def _rc():
+    """Cliente do msg-mem. Uma funcao, nao um cliente por chamador: connect_timeout
+    curto porque banco mudo nunca pode segurar a porta."""
+    return redis.Redis(host=MEM_REDIS_HOST, port=MEM_REDIS_PORT, decode_responses=True,
+                       socket_connect_timeout=2, socket_timeout=3)
+
+
+def _uuid_valido(bruto: str) -> str | None:
+    """Normaliza para RFC-4122 (arq:0091 §4) — 32 hex sem hifen entra e sai com hifen.
+
+    O formato voltou a ser o do 0091 porque a fita PORTA este valor: identificador que
+    muda de forma entre quem cunha e quem devolve nao e o mesmo identificador."""
+    try:
+        return str(uuid.UUID(str(bruto).strip()))
+    except (ValueError, AttributeError, TypeError):
+        return None
 
 
 # --- helpers puros ---
@@ -122,6 +146,149 @@ def _token_ok(header: str, expected: str) -> bool:
 def _cap(raw: bytes) -> dict:
     return {"texto": raw[:CAP].decode("utf-8", "replace"),
             "truncado": len(raw) > CAP, "bytes_total": len(raw)}
+
+
+# --- PODA (arq:0101 §3) — a régua mora em poda.py; aqui fica só a costura ------
+# `PF_PODA=0` + restart reverte tudo abaixo sem tocar banco, ADR nem catálogo: é a
+# reversão declarada da ADR, e por isso é lida em runtime, não capturada na subida.
+if str(Path(__file__).resolve().parent) not in sys.path:
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+import poda as _poda                                          # noqa: E402
+
+
+def _poda_ligada() -> bool:
+    return os.environ.get("PF_PODA", "1") != "0"
+
+
+# R4 — perfil por verbo, lido do CABEÇALHO do próprio verbo (`# forma:`, `# cauda:`),
+# mesmo parser por chave da spec cápsula §3.3. Sem tabela paralela: tabela paralela ao
+# cabeçalho é a segunda fonte que diverge em silêncio. Ausente = listagem/cauda:nao,
+# que é exatamente o comportamento de hoje — verbo que não declara nada não muda.
+_PERFIS: dict[str, dict] = {}
+_RE_CHAVE = re.compile(r"^#\s*(forma|cauda)\s*:\s*(\S+)", re.M)
+FORMAS = ("json", "listagem", "relatorio", "log")
+
+
+def _perfil_verbo(slug: str, binario: str) -> dict:
+    if slug in _PERFIS:
+        return _PERFIS[slug]
+    perfil = {"forma": "listagem", "cauda": False}
+    try:
+        with open(binario, encoding="utf-8", errors="replace") as fh:
+            cab = "".join(next(fh, "") for _ in range(40))
+        for chave, valor in _RE_CHAVE.findall(cab):
+            if chave == "forma" and valor in FORMAS:
+                perfil["forma"] = valor
+            elif chave == "cauda":
+                perfil["cauda"] = valor.lower() in ("sim", "1", "true")
+    except OSError:
+        pass
+    _PERFIS[slug] = perfil
+    return perfil
+
+
+def _serve(r: dict, *, tool: str, alca: str, ident: dict, cauda: bool = False) -> dict:
+    """R8 — o único caminho por onde retorno de tool sai desta porta.
+
+    Erro e `exit != 0` passam intocados (invariante iii): o diagnóstico inteiro vale
+    mais que o byte poupado. O resto lava, deduplica contra o ledger da sessão, corta
+    com alça e sai com o aviso em banda nos dois níveis (campo `poda` para o log e o
+    ensaio; `poda_aviso` para quem lê o retorno).
+    """
+    if not isinstance(r, dict) or not _poda_ligada() or _poda.intocavel(r):
+        return r
+    sessao_id = ident.get("sessao_id") or "-"
+    try:
+        ledger = _poda.Ledger(_rc(), sessao_id, TTL_SESSAO_S)
+        giro = ledger.giro()
+    except Exception:                                         # noqa: BLE001
+        ledger, giro = None, 0
+    metas = []
+    for campo, sub in (("stdout", "texto"), ("content", None)):
+        alvo = r.get(campo)
+        texto = (alvo or {}).get(sub) if sub else alvo
+        if not isinstance(texto, str) or not texto:
+            continue
+        servido, meta = _poda.poda_texto(
+            texto, cap=CAP, cauda=cauda, alca=f"{tool}:{alca}", sessao_id=sessao_id,
+            giro=giro, tool=tool, ledger=ledger,
+            nome_derrame=f"g{giro:05d}-{campo}.txt")
+        if sub:
+            r[campo] = {**alvo, sub: servido}
+        else:
+            r[campo] = servido
+        metas.append(meta)
+    if not metas:
+        return r
+    meta = metas[0] if len(metas) == 1 else {"campos": metas, **metas[0]}
+    r = _poda.enxuga_envelope(r)
+    r["poda"] = meta
+    humana = _poda.linha_humana(meta)
+    if humana:
+        r["poda_aviso"] = humana
+    return r
+
+
+def _delta_pecas(r: dict, sessao_id: str) -> dict:
+    """R2 na abertura — peça já servida NESTA sessão volta como aviso, não como texto.
+
+    A segunda abertura da mesma conversa (troca de chapéu, retomada) reenviava o pacote
+    inteiro: persona, ofício e conduta são estáveis por construção, e pagá-los duas
+    vezes na mesma fita é o dup mais barato de matar. O sha comparado é o do montador —
+    mesma lib de hash dos dois lados (R7), sem o que nada casaria.
+    """
+    pecas = r.get("pecas")
+    if not _poda_ligada() or not isinstance(pecas, list) or not sessao_id or sessao_id == "-":
+        return {"bytes_servidos": None}
+    try:
+        rc, chave = _rc(), f"ledger:{sessao_id}"
+        vistos = rc.hgetall(chave) or {}
+    except Exception:                                         # noqa: BLE001
+        return {"bytes_servidos": None, "ledger": "indisponivel"}
+    servidos = deduplicadas = 0
+    novos = {}
+    for e in pecas:
+        sha, pid = e.get("sha"), e.get("peca")
+        conteudo = e.get("conteudo")
+        if not sha or not pid:
+            continue
+        alca = f"peca:{pid}"
+        antes = vistos.get(alca)
+        if antes and isinstance(conteudo, str):
+            try:
+                d = json.loads(antes)
+            except ValueError:
+                d = {}
+            if d.get("sha") == sha:
+                e["conteudo"] = (f"[já servido nesta sessão — peça `{pid}`, sha {sha}, "
+                                 f"{len(conteudo.encode())} bytes não reenviados]")
+                e["poda"] = {"ato": "monta_sessao", "modo": "igual", "sha": sha,
+                             "bytes_omitidos": len(conteudo.encode())}
+                deduplicadas += 1
+                continue
+        novos[alca] = json.dumps({"sha": sha, "giro": 0, "tool": "monta_sessao"})
+        servidos += len(conteudo.encode()) if isinstance(conteudo, str) else 0
+    try:
+        if novos:
+            rc.hset(chave, mapping=novos)
+        rc.expire(chave, TTL_SESSAO_S)
+    except Exception:                                         # noqa: BLE001
+        pass
+    if deduplicadas:
+        r.setdefault("avisos", []).append(
+            f"{deduplicadas} peça(s) já servidas nesta sessão vieram como aviso (arq:0101 R2)")
+    return {"bytes_servidos": servidos, "pecas_dedup": deduplicadas or None}
+
+
+def _campos_poda(r: dict) -> dict:
+    """O que o ops log grava por retorno (arq:0101 §4): bytes SERVIDOS e sha do servido.
+
+    A porta gravava bytes PRODUZIDOS e nenhum hash — por isso o dup de conteúdo entre
+    chamadas nunca esteve medido, e a perícia teve de estimá-lo.
+    """
+    p = (r or {}).get("poda") or {}
+    return {"bytes_servidos": p.get("bytes_servidos"), "sha": p.get("sha"),
+            "poda_modo": p.get("modo"), "ledger": p.get("ledger")}
 
 
 def _env_subprocesso() -> dict:
@@ -199,6 +366,10 @@ def _audit(**campos) -> None:
         reg = {"ts": datetime.now().astimezone().isoformat(timespec="milliseconds"),
                "instancia": OPS_NAME, "usuario": OPS_USER,
                "sessao": _sessao_atual(), **ident, **campos}
+        # `sessao_id` em TODA linha, mesmo ausente (arq:0101 §4): campo que so aparece
+        # quando tem valor obriga quem periciar a distinguir "nao havia sessao" de
+        # "esta versao ainda nao gravava" — e as duas leituras dao numeros diferentes.
+        reg.setdefault("sessao_id", "-")
         linha = (json.dumps(reg, ensure_ascii=False)[:LINHA_CAP] + "\n").encode()
         alvo = LOG_DIR / f"ops-{date.today().isoformat()}.jsonl"
         fd = os.open(alvo, os.O_WRONLY | os.O_APPEND | os.O_CREAT, 0o600)
@@ -421,12 +592,13 @@ async def run_command(command: str = "", cwd: str = "", timeout: int = 120,
                 t0 = time.monotonic()
                 r = await anyio.to_thread.run_sync(_run_blocking, cmd, d, timeout,
                                                    ident["sessao_id"], ident["ordem_id"], ident["cadeira"])
+                r = _serve(r, tool="run_command", alca=f"{d}|{cmd}", ident=ident)
                 _audit(tool="run_command", comando=cmd[:CMD_CAP], evento="fallback",
                        cadeira=ident["cadeira"] or None, sessao_id=ident["sessao_id"],
                        ordem_id=ident["ordem_id"], exit_code=r.get("exit_code"), erro=r.get("erro"),
                        bytes_stdout=r.get("stdout", {}).get("bytes_total"),
                        dur_ms=round((time.monotonic() - t0) * 1000),
-                       lote_id=lote_id, lote_n=_i)
+                       lote_id=lote_id, lote_n=_i, **_campos_poda(r))
             acumulado += (r.get("stdout") or {}).get("bytes_total", 0)
             resultados.append(r)
         for _i in range(len(resultados), len(commands)):
@@ -458,9 +630,13 @@ async def run_command(command: str = "", cwd: str = "", timeout: int = 120,
             for argv in argvs:
                 r = await anyio.to_thread.run_sync(
                     _run_verbo_blocking, argv, None, timeout, ident)
+                _perf = _perfil_verbo(argv[0], str(RAIZ / "bin" / argv[0]))
+                r = _serve(r, tool=argv[0], alca=" ".join(argv), ident=ident,
+                           cauda=_perf["cauda"])
                 _audit(tool=argv[0], evento="verbo_contornado", comando=" ".join(argv)[:CMD_CAP],
                        cadeira=ident["cadeira"] or None, sessao_id=ident["sessao_id"],
-                       ordem_id=ident["ordem_id"], exit_code=r.get("exit_code"), erro=r.get("erro"))
+                       ordem_id=ident["ordem_id"], exit_code=r.get("exit_code"),
+                       erro=r.get("erro"), **_campos_poda(r))
                 resultados.append(r)
             if len(resultados) == 1:
                 return {**resultados[0], "aviso": f"tem tool {argvs[0][0]} — chamada roteada pela porta"}
@@ -469,12 +645,13 @@ async def run_command(command: str = "", cwd: str = "", timeout: int = 120,
     t0 = time.monotonic()
     r = await anyio.to_thread.run_sync(_run_blocking, command, d, timeout,
                                        ident["sessao_id"], ident["ordem_id"], ident["cadeira"])
+    r = _serve(r, tool="run_command", alca=f"{d}|{command}", ident=ident)
     _audit(tool="run_command", comando=command[:CMD_CAP], evento="fallback",
            comando_truncado=len(command) > CMD_CAP, cwd=str(d),
            cadeira=ident["cadeira"] or None, sessao_id=ident["sessao_id"], ordem_id=ident["ordem_id"],
            exit_code=r.get("exit_code"), erro=r.get("erro"),
            bytes_stdout=r.get("stdout", {}).get("bytes_total"),
-           dur_ms=round((time.monotonic() - t0) * 1000))
+           dur_ms=round((time.monotonic() - t0) * 1000), **_campos_poda(r))
     return r
 
 
@@ -518,12 +695,17 @@ def _le_um_arquivo(path: str, offset: int, max_bytes: int, ident: dict,
     max_bytes = max(1, min(max_bytes, 200000))
     chunk = data[offset:offset + max_bytes]
     fim = offset + len(chunk)
+    r = {"content": chunk.decode("utf-8", "replace"), "bytes_total": len(data),
+         "truncated": fim < len(data), "next_offset": fim if fim < len(data) else None,
+         "path": str(p)}
+    # O dup exato mais caro medido na perícia de 5 dias é o MESMO caminho relido: a alça
+    # é (path, offset), e é por ela que a releitura idêntica sai como aviso e a mudada
+    # sai como diff. `path` é identificador exato — nunca entra na poda (invariante iv).
+    r = _serve(r, tool="read_file", alca=f"{p}|{offset}", ident=ident)
     _audit(tool="read_file", path=str(p), bytes_lidos=len(chunk), bytes_total=len(data),
            cadeira=ident["cadeira"] or None, sessao_id=ident["sessao_id"], ordem_id=ident["ordem_id"],
-           lote_id=lote_id, lote_n=lote_n)
-    return {"content": chunk.decode("utf-8", "replace"), "bytes_total": len(data),
-            "truncated": fim < len(data), "next_offset": fim if fim < len(data) else None,
-            "path": str(p)}
+           lote_id=lote_id, lote_n=lote_n, **_campos_poda(r))
+    return r
 
 
 def read_file(path: str = "", offset: int = 0, max_bytes: int = 40000,
@@ -684,7 +866,8 @@ def _montar(cadeira: str, atualizar: bool, chapeu: str = "", pergunta: str = "")
     return r
 
 
-async def monta_sessao(cadeira: str = "", atualizar: bool = True, chapeu: str = "", pergunta: str = "") -> dict:
+async def monta_sessao(cadeira: str = "", atualizar: bool = True, chapeu: str = "",
+                        pergunta: str = "", sessao_id: str | None = None) -> dict:
     """Abre a sessão de uma cadeira numa chamada: devolve o pacote de abertura como
     catálogo de peças (persona, ofício, conduta do dono, alias de cadeiras, mesa, índice
     de cadernos, acervo consultado) e cunha `sessao_id` + `ordem_id` para as demais tools.
@@ -709,6 +892,12 @@ async def monta_sessao(cadeira: str = "", atualizar: bool = True, chapeu: str = 
     `pacote` traz a conta (peças, tokens, SHA do ref publicado, registro); `morada` traz
     `{sha, ref, publicado_em, frescor}`; `avisos` traz teto e peça indisponível. Morada
     não publicada é a única recusa de abrir, e o erro nomeia a cura.
+
+    `sessao_id`: o uuid da fita, quando ela JÁ abriu uma vez. A porta não infere sessão
+    (arq:0101 §1) — a fita porta o valor. Passe de volta o `sessao_id` da primeira
+    abertura em toda chamada e na segunda abertura da MESMA conversa: assim a segunda
+    não recunha, cunha só `ordem_id`, e o ledger de dedup tem chave estável. Valor
+    inválido é ignorado e declarado em `avisos`, nunca aceito calado.
     """
     negado = _autoriza("monta_sessao", "monta_sessao", "documento",
                        f"sessao:{cadeira or '-'}", DOM_PLATAFORMA)
@@ -718,6 +907,7 @@ async def monta_sessao(cadeira: str = "", atualizar: bool = True, chapeu: str = 
     r = await anyio.to_thread.run_sync(_montar, cadeira, atualizar, chapeu, pergunta)
     _rot = (r.get("roteador") or {})
     _sessao_id = None
+    _delta = None
     # emite sessao_aberta AQUI (contexto MCP da tool), ancorado no MESMO
     # id(session) que run_command usa -> chave do join de D casa por construcao
     # dentro da conexao (#2902). A rota /sessao (externa) nao serve: cai em
@@ -725,41 +915,49 @@ async def monta_sessao(cadeira: str = "", atualizar: bool = True, chapeu: str = 
     if not r.get("erro"):
         _sid = _sessao_atual()
         _q = _quem()                                   # async: nunca dentro do to_thread (#2911)
+        # ordem_id é de UMA ordem do dono e sempre nasce aqui; sessao_id é da CONVERSA e
+        # nasce uma vez só. Segunda abertura da mesma fita cunha ordem, não sessão.
         _oid = "o" + datetime.now().astimezone().strftime("%Y%m%dT%H%M%S") + "-" + uuid.uuid4().hex[:6]
-        _sessao_id = uuid.uuid4().hex
-        _ordem_por_sid[_sid] = _oid
-        if len(_ordem_por_sid) > 4096:
-            for _k in list(_ordem_por_sid)[:-2048]:
-                _ordem_por_sid.pop(_k, None)
-        _sessao_por_sid[_sid] = _sessao_id
-        if len(_sessao_por_sid) > 4096:
-            for _k in list(_sessao_por_sid)[:-2048]:
-                _sessao_por_sid.pop(_k, None)
+        _portado = _uuid_valido(sessao_id) if sessao_id else None
+        if sessao_id and not _portado:
+            r.setdefault("avisos", []).append(
+                f"sessao_id {sessao_id!r} não é RFC-4122 — ignorado, sessão nova cunhada")
+        _sessao_id = _portado or str(uuid.uuid4())
+        _cunhou = _portado is None
         _aberto_em = datetime.now().astimezone().isoformat(timespec="milliseconds")
         _sub, _q_sid, _jti = _q.get("sub", "-"), _q.get("sid", "-"), _q.get("jti", "-")
         try:
             _cad = r.get("cadeira") or cadeira or r.get("nome_canonico", "-")
-            _rc = redis.Redis(host=MEM_REDIS_HOST, port=MEM_REDIS_PORT, decode_responses=True)
+            _con = _rc()
             _val = json.dumps({"cadeira": _cad, "ordem_id": _oid, "aberto_em": _aberto_em,
-                               "sub": _sub, "sid": _q_sid, "jti": _jti}, ensure_ascii=False)
-            _rc.set(f"sessao:{_sessao_id}", _val, ex=172800)
+                               "sub": _sub, "sid": _q_sid, "jti": _jti,
+                               "sid_conexao": _sid}, ensure_ascii=False)
+            _con.set(f"sessao:{_sessao_id}", _val, ex=TTL_SESSAO_S)
+            # join conexão->sessão no msg-mem, no lugar dos dicionários de RAM: é o que
+            # sustenta `sessao_id` implícito nas demais tools depois de um restart.
+            _con.set(f"conexao:{_sid}", _sessao_id, ex=TTL_SESSAO_S)
             if not (_sub == "-" and _q_sid == "-" and _jti == "-"):
                 _chave_sombra = f"sombra:{_sub}:{_q_sid}:{_jti}"
-                _rc.sadd(_chave_sombra, _sessao_id)
-                _rc.expire(_chave_sombra, 172800)
+                _con.sadd(_chave_sombra, _sessao_id)
+                _con.expire(_chave_sombra, TTL_SESSAO_S)
         except Exception as e:  # noqa: BLE001
             print(f"[valkey] FALHOU persistir sessao:{_sessao_id}: {e!r}", file=sys.stderr, flush=True)
         r["ordem_id"] = _oid
         r["sessao_id"] = _sessao_id
+        r["sessao"] = {"id": _sessao_id, "cunhada_agora": _cunhou, "ordem_id": _oid,
+                       "porte": "devolva `sessao_id` em toda chamada e na próxima "
+                                "abertura desta mesma conversa — a porta não infere"}
         _audit(tool="sessao", evento="sessao_aberta",
-               sujeito=r.get("nome_canonico", "-"), ordem_id=_oid, sessao_id=_sessao_id, via="tool")
+               sujeito=r.get("nome_canonico", "-"), ordem_id=_oid, sessao_id=_sessao_id,
+               via="tool", cunhada=_cunhou)
+        _delta = _delta_pecas(r, _sessao_id)   # R2: peça repetida na mesma sessão sai como aviso
     _audit(tool="monta_sessao", cadeira=cadeira, atualizar=atualizar,
            resolvida=r.get("nome_canonico"), erro=r.get("erro"),
            chapeu=(r.get("chapeu") or None),
            pergunta=(pergunta or None),
            roteador_via=_rot.get("via"), roteador_slug=_rot.get("slug"),
            dur_ms=round((time.monotonic() - t0) * 1000),
-           sessao_id=_sessao_id)
+           sessao_id=_sessao_id or "-", **(_delta or {}))
     return r
 
 
@@ -798,19 +996,29 @@ PF_TOOLS_LOTE = os.environ.get("PF_TOOLS_LOTE", "0") == "1" # chamada em lote (�
 
 
 def _sessao_resolve(sessao_id: str | None) -> dict:
-    """cadeira/ordem da sessão: parâmetro → join por conexão → sombra inequívoca → nada (§3, spec_economia-de-giro)."""
+    """cadeira/ordem da sessão: parâmetro → join por conexão → sombra inequívoca → nada.
+
+    O join por conexão saiu da RAM para o msg-mem (arq:0101 §1): `conexao:{sid}`. Sem
+    `sessao_id` resolvido, roda SEM ledger — contado (`ledger: sem_sessao`), nunca
+    recusado. Recusar aqui seria a porta exigindo da fita um estado que a fita de
+    superfície pobre não tem como guardar.
+    """
     sid_conexao = _sessao_atual()
+    if sessao_id:
+        sessao_id = _uuid_valido(sessao_id) or sessao_id   # legado 32-hex normaliza
     if not sessao_id:
-        sessao_id = _sessao_por_sid.get(sid_conexao) or None
+        try:
+            sessao_id = _rc().get(f"conexao:{sid_conexao}") or None
+        except Exception as e:  # noqa: BLE001
+            print(f"[valkey] join conexao:{sid_conexao} indisponível: {e!r}",
+                  file=sys.stderr, flush=True)
     if not sessao_id and PF_SOMBRA:
         sessao_id = _sombra_inequivoca()   # None quando 0 ou ≥2 vivas
-    out = {"sessao_id": sessao_id or "-", "ordem_id": _ordem_por_sid.get(sid_conexao, "-"),
-           "cadeira": ""}
+    out = {"sessao_id": sessao_id or "-", "ordem_id": "-", "cadeira": ""}
     if not sessao_id:
         return out
     try:
-        _rc = redis.Redis(host=MEM_REDIS_HOST, port=MEM_REDIS_PORT, decode_responses=True)
-        raw = _rc.get(f"sessao:{sessao_id}")
+        raw = _rc().get(f"sessao:{sessao_id}")
         if raw:
             d = json.loads(raw)
             out["cadeira"] = d.get("cadeira") or ""
@@ -826,7 +1034,7 @@ def _sombra_inequivoca() -> str | None:
     if sub == "-" and sid == "-" and jti == "-":
         return None                      # token estático: não infere
     try:
-        rc = redis.Redis(host=MEM_REDIS_HOST, port=MEM_REDIS_PORT, decode_responses=True)
+        rc = _rc()
         vivas = [s for s in rc.smembers(f"sombra:{sub}:{sid}:{jti}") if rc.exists(f"sessao:{s}")]
     except Exception as e:               # noqa: BLE001
         print(f"[sombra] indisponível: {e!r}", file=sys.stderr, flush=True); return None
@@ -888,12 +1096,14 @@ def _faz_tool_verbo(slug: str, binario: str, descricao: str):
                     argv = [binario] + ([_ato] if _ato else []) + _args
                     t0 = time.monotonic()
                     r = await anyio.to_thread.run_sync(_run_verbo_blocking, argv, _stdin, timeout, ident)
+                    r = _serve(r, tool=slug, alca=_linha, ident=ident,
+                               cauda=_perfil_verbo(slug, binario)["cauda"])
                     _audit(tool=slug, ato=_ato or None, args=" ".join(_args)[:CMD_CAP],
                            cadeira=ident["cadeira"] or None, sessao_id=ident["sessao_id"],
                            ordem_id=ident["ordem_id"], exit_code=r.get("exit_code"), erro=r.get("erro"),
                            bytes_stdout=r.get("stdout", {}).get("bytes_total"),
                            dur_ms=round((time.monotonic() - t0) * 1000),
-                           lote_id=lote_id, lote_n=_i)
+                           lote_id=lote_id, lote_n=_i, **_campos_poda(r))
                 acumulado += (r.get("stdout") or {}).get("bytes_total", 0)
                 resultados.append(r)
             for _i in range(len(resultados), len(lote)):
@@ -911,11 +1121,15 @@ def _faz_tool_verbo(slug: str, binario: str, descricao: str):
         argv = [binario] + ([ato] if ato else []) + args
         t0 = time.monotonic()
         r = await anyio.to_thread.run_sync(_run_verbo_blocking, argv, stdin, timeout, ident)
+        # R4: a forma e a cauda saem do cabeçalho DESTE verbo. `descansar` é o caso que
+        # nomeia a regra — batia o teto e era cortado só na cabeça, perdendo o veredito.
+        r = _serve(r, tool=slug, alca=linha, ident=ident,
+                   cauda=_perfil_verbo(slug, binario)["cauda"])
         _audit(tool=slug, ato=ato or None, args=" ".join(args)[:CMD_CAP],
                cadeira=ident["cadeira"] or None, sessao_id=ident["sessao_id"],
                ordem_id=ident["ordem_id"], exit_code=r.get("exit_code"), erro=r.get("erro"),
                bytes_stdout=r.get("stdout", {}).get("bytes_total"),
-               dur_ms=round((time.monotonic() - t0) * 1000))
+               dur_ms=round((time.monotonic() - t0) * 1000), **_campos_poda(r))
         return r
     _tool.__name__ = slug.replace("-", "_")
     _tool.__doc__ = descricao
@@ -1177,13 +1391,16 @@ async def _sessao_abrir(req):
     except Exception as e:                                  # noqa: BLE001
         pac["fila"] = {"indisponivel": True, "erro": f"{type(e).__name__}: {e}"}
 
-    _sid = _sessao_atual()
+    # ROTA FOSSIL (arq:0101 §2): serve a classe «externo/DMZ» de um modelo de seguranca
+    # que o seg:0011 substituiu em 15/08 — sob ele a unidade de segregacao e a CONTA, a
+    # persona e inquilina dela, e nao ha eixo «externo». Sai quando quem a usa
+    # (jaiminho-fabrica) abrir por `monta_sessao`; migrar ANTES de remover, sob pena de
+    # 404 em 5.523 aberturas/periodo. Enquanto isso, NAO cunha entidade-sessao: devolve
+    # ordem_id ao chamador e nao escreve join nenhum — quem cunha sessao e monta_sessao.
     _oid = "o" + datetime.now().astimezone().strftime("%Y%m%dT%H%M%S") + "-" + uuid.uuid4().hex[:6]
-    _ordem_por_sid[_sid] = _oid
-    if len(_ordem_por_sid) > 4096:            # nao vazar memoria: guarda so as fitas recentes
-        for _k in list(_ordem_por_sid)[:-2048]:
-            _ordem_por_sid.pop(_k, None)
     pac["ordem_id"] = _oid
+    pac["aviso_rota"] = ("rota fóssil (arq:0101 §2) — abra por `monta_sessao`, que cunha "
+                         "`sessao_id`; esta rota sai assim que o último cliente migrar")
     _audit(tool="sessao", evento="sessao_aberta", sujeito=quem, ordem_id=_oid,
            acoes=len(pac["acoes"]), persona_ausente=pac["persona"].get("ausente", False))
     return JSONResponse(pac)

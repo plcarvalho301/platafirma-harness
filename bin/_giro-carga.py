@@ -16,6 +16,10 @@
 # inventa fita aqui (quem inventa, quando preciso, e monta_sessao — fita
 # sintetica de sessao de mao, bin/monta-sessao::registra_pacote).
 #
+# SEM sessao_id, RECUSA (arq:0101 §1): este ponto cunhava um segundo uuid, e era um dos
+# quatro pontos onde a entidade-sessao nascia. Uma sessao, um sessao_id, cunhado uma vez
+# por monta_sessao e portado pela fita — inclusive ate aqui.
+#
 # Idempotente por (fita_id, seq): reprocessar a mesma carga (replay do JSONL
 # local) faz upsert, nao duplica nem falha.
 import json
@@ -48,14 +52,23 @@ def main() -> int:
     sessao_id = (payload.get("sessao_id") or "").strip()
     giro = payload.get("giro") or []
     if not sessao_id:
-        # A GRAVACAO cunha o shadow (ordem do dono 02/09). No claude.ai cada tool call
-        # e isolada: o sessao_id cunhado por monta_sessao vive so no Valkey efemero e e
-        # inexistivel no encerrar. Entao o shadow nasce aqui, no ato de gravar — chave
-        # propria (uuidv4), nunca o id do fornecedor (arq:0091 D2). Devolvido em cunhado.
-        sessao_id = uuid.uuid4().hex
-        cunhado = True
-    else:
-        cunhado = False
+        # ENCERRAR SEM sessao_id E RECUSA DECLARADA (arq:0101 §1). Ate 06/09 este ponto
+        # cunhava um SEGUNDO uuid ("shadow", ordem do dono 02/09) — quarto ponto de
+        # nascimento da entidade-sessao, e o que garantia que o giro gravado no encerrar
+        # NUNCA casava com a fita aberta por monta_sessao. Agora a fita porta o uuid: ela
+        # o recebeu na abertura e o devolve no encerrar. Sem ele nao ha o que casar, e
+        # inventar chave aqui e produzir orfao com cara de dado bom.
+        print(json.dumps({
+            "ok": False, "erro": "encerrar sem sessao_id",
+            "cura": "devolva o `sessao_id` que `monta_sessao` cunhou na abertura desta "
+                    "fita (arq:0101 §1 — a porta nao infere sessao)"}))
+        return 1
+    # Formato do 0091 §4: 32-hex legado entra e normaliza; o que nao e uuid nao passa.
+    try:
+        sessao_id = str(uuid.UUID(sessao_id))
+    except ValueError:
+        print(json.dumps({"ok": False, "erro": f"sessao_id nao e RFC-4122: {sessao_id!r}"}))
+        return 1
     if not giro:
         print(json.dumps({"ok": True, "carregados": 0, "motivo": "giro vazio"}))
         return 0
@@ -100,7 +113,8 @@ def main() -> int:
                 "fidelidade = EXCLUDED.fidelidade",
                 linhas)
             con.commit()
-        print(json.dumps({"ok": True, "fita": fita_id, "carregados": len(linhas), "shadow_cunhado": cunhado}))
+        print(json.dumps({"ok": True, "fita": fita_id, "carregados": len(linhas),
+                          "sessao_id": sessao_id}))
         return 0
     except Exception as e:                                  # noqa: BLE001 — banco mudo nao pode explodir o encerrar
         print(json.dumps({"ok": False, "erro": f"{type(e).__name__}: {e}"}))

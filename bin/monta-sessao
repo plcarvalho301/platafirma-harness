@@ -69,6 +69,9 @@ CHAPEUS_DIR = ABERTURA
 _REPO_REAL = os.path.dirname(os.path.dirname(os.path.realpath(__file__)))
 sys.path.insert(0, _REPO_REAL)
 from recuperacao import roteador_chapeu as _rot
+# Mesma razao para o hash: a lib e do repo real, e a porta importa a MESMA (arq:0101 R7).
+sys.path.insert(0, os.path.join(_REPO_REAL, "comum"))
+from hash_servido import sha_servido
 
 SESSAO_ENV = os.path.join(HARNESS, "sessao", ".env")
 
@@ -360,9 +363,13 @@ def conta_tokens(texto):
 
 def sha_conteudo(texto):
     """Hash do que foi SERVIDO, nao do commit: e o que `conferir sessao` compara, e o
-    que identifica peca servida por verbo, que nao tem blob nenhum."""
-    import hashlib
-    return hashlib.sha256(texto.encode("utf-8")).hexdigest()[:12]
+    que identifica peca servida por verbo, que nao tem blob nenhum.
+
+    A CONTA vive em `comum/hash_servido.py` desde o arq:0101 R7, e nao mais aqui: a
+    porta compara o sha da peca servida na abertura com o da peca reservida por verbo
+    (dedup R2), e duas implementacoes do mesmo hash — uma com `.strip()`, outra sem —
+    nunca casariam. Uma lib, dois consumidores."""
+    return sha_servido(texto)
 
 
 def serve(peca, cadeira, persona=None, chapeu=None):
@@ -566,7 +573,7 @@ def dispara_acervo(cadeira, sujeito, pergunta):
         cobertura = str(d.get("cobertura") or "ausente")
         carimbo = str(d.get("formato_section_id") or "-")
         hit = bool(fontes)
-        env["conteudo"] = _formata_acervo(d, pergunta)
+        env["conteudo"] = _portao_cobertura(d, pergunta, env)
         env["frescor"] = "fresco"
         env["tokens"] = conta_tokens(env["conteudo"]) if env.get("conteudo") else 0
     except Exception as e:  # noqa: BLE001
@@ -582,6 +589,37 @@ def dispara_acervo(cadeira, sujeito, pergunta):
              "carimbo": carimbo, "hit": hit, "disjuntor": disjuntor, "dur_ms": dur_ms}
     _grava_trilha(linha)
     return env, dur_ms
+
+
+PODA = os.environ.get("PF_PODA", "1") != "0"
+
+
+def _portao_cobertura(d, pergunta, env):
+    """R5 (arq:0101) — a peca `acervo-consultado` entra INTEIRA so com sinal acima do
+    piso; abaixo, uma linha.
+
+    Medido: a abertura de uma fita gastou 28% dos tokens do pacote numa peca de RAG com
+    cobertura fraca e uso ZERO — seis trechos de obra nenhuma relacionada, que a cadeira
+    nao citou uma vez. Servir recuperacao ruim nao e neutro: ocupa a janela e ainda
+    convida a responder pelo vizinho.
+
+    O PISO NAO E DESTA LINHA. Usa-se o que o proprio `motor rag buscar` declara em
+    `sinal.piso` — quem e dono do numero e a cadeira de dados (spec capsula §8), e
+    inventar um segundo piso aqui seria decidir na marra o que tem dono. Sem `sinal`
+    no retorno, serve inteiro: ausencia de medida nao e medida ruim.
+    """
+    sinal = d.get("sinal") or {}
+    valor, piso = sinal.get("valor"), sinal.get("piso")
+    tem_medida = isinstance(valor, (int, float)) and isinstance(piso, (int, float))
+    if not PODA or not tem_medida or valor >= piso:
+        return _formata_acervo(d, pergunta)
+    env["motivo"] = (f"portao de cobertura (arq:0101 R5): sinal {valor} < piso {piso} "
+                     f"[{sinal.get('medida', '?')}]")
+    return ("CONSULTA AO ACERVO - " + pergunta[:80] + f"\nNAO SERVIDA: sinal {valor} "
+            f"abaixo do piso {piso} (cobertura {d.get('cobertura') or '?'}), "
+            f"{len(d.get('fontes') or [])} trechos retidos. O acervo nao cobre esta "
+            "ordem — nao responda pelo vizinho. Por ato, se precisar: "
+            "`motor rag buscar \"<pergunta>\"`.")
 
 
 def _formata_acervo(d, pergunta):

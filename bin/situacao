@@ -4,6 +4,8 @@
 # dono: claudinho-dados
 # use para: situação de uma obra na escada: servível, degrau, impressão
 # atos: ato=<obra>; args opcionais --json
+# forma: relatorio
+# cauda: sim
 #
 # Verbo fino de leitura (arq:0085 §2, §4; card #2953):
 # Le a cadeia viva (impressao -> estado de servico) e devolve o envelope
