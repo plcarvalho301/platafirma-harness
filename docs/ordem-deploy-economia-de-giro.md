@@ -13,7 +13,7 @@ Leva 1+2 já em `origin/main` (merge `daac764`). Falta pôr no ar. Dois fatos de
 2. **Env — drop-in `~/.config/systemd/user/ops-mcp.service.d/capsula.conf`:**
    - Renomear `PF_TOOLS_LOTE2` → `PF_TOOLS_LEVA2` (manter `=0`). É a onda de rollout da cápsula, que passou a chamar-se «leva» (D2). Sem renomear, a flag vira letra morta silenciosa (server.py agora lê `PF_TOOLS_LEVA2`).
    - Mesma renomeação na base `ops-mcp.service` linha 26 (higiene; o drop-in sobrepõe).
-   - **Se for ligar o lote/batch junto (ver decisão do dono):** adicionar `Environment=PF_TOOLS_LOTE=1`.
+   - **Adicionar `Environment=PF_TOOLS_LOTE=1`** — decisão do dono (06/09): tudo junto, leva 1 e batch no mesmo restart.
    - `systemctl --user daemon-reload`.
 3. **Publicar o texto novo do `oficio.md`:** `publicar-abertura` (default `origin/main`). Conferir `publicar-abertura estado` = current no head de origin/main.
 4. **Restart:** `infra restart ops-mcp`. Espera ~10s antes de verificar (o restart é destacado; a fita reconecta no próximo giro).
@@ -21,7 +21,7 @@ Leva 1+2 já em `origin/main` (merge `daac764`). Falta pôr no ar. Dois fatos de
    - `run_command("mesa ver")` volta com `aviso: "tem tool mesa …"` (gate roteou pela via de verbo).
    - `run_command("git status")` NÃO traz aviso (fallback legítimo, os 78%).
    - Uma linha de `run_command` no ops log de hoje (`~/AI/var/log/ops/ops-<hoje>.jsonl`) carrega `cadeira`/`sessao_id`/`ordem_id` (M1).
-6. **Batch (leva 2) — só se NÃO ligou `PF_TOOLS_LOTE` no passo 2 (opção duas-fases):** medir a leva 1 primeiro, depois `Environment=PF_TOOLS_LOTE=1` no drop-in; `daemon-reload`; `infra restart ops-mcp`. Verificar: `read_file(paths=["<a>","<b>"])` volta lote de 2 itens.
+6. **Verificar batch (já ligado no passo 2):** `read_file(paths=["<a>","<b>"])` volta lote de 2 itens; `run_command(commands=["echo a","echo b"])` idem. (Voltar a duas fases um dia: `PF_TOOLS_LOTE=0` no drop-in, restart.)
 7. Apagar esta ordem (`git rm docs/ordem-deploy-economia-de-giro.md`), commit + push no main.
 
 ## Rollback (qualquer perna, sem tocar banco nem git de conteúdo)
