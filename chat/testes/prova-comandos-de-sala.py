@@ -97,6 +97,42 @@ def prova_morte_na_rotacao(con):
     bate("nova nasce sem heranca", journal.preferencias_da_sala(con, nova), {})
 
 
+def prova_semeadura_por_cadeira(con):
+    """`fabrica` e excecao ao "sala nova sem heranca": nasce e renasce fixada
+    em sonnet/ultracode. Nao e heranca da sala velha (que continua morrendo) —
+    e a cadeira pedindo de novo a cada nascimento. Pedido do dono, 06/09/2026.
+    """
+    # primeira mensagem de uma sala nova da cadeira `fabrica`: semeia sozinha
+    sala = "!fabrica:teste"
+    journal.grava_cadeira(con, sala, "fabrica")
+    bate(
+        "fabrica nasce semeada",
+        journal.preferencias_da_sala(con, sala),
+        {"modelo": "sonnet", "esforco": "ultracode"},
+    )
+
+    # o dono muda na mao: a semeadura nao pisa por cima em mensagem seguinte
+    journal.grava_preferencia(con, sala, "modelo", "opus")
+    journal.grava_cadeira(con, sala, "fabrica")  # segunda mensagem na mesma sala
+    bate("pedido do dono nao e pisado", journal.preferencias_da_sala(con, sala).get("modelo"), "opus")
+
+    # rotacionou: a sala velha morre (com o opus que o dono tinha pedido), a
+    # nova renasce semeada de novo — e o pedido permanente da cadeira, nao
+    # heranca da sala velha (que segue morrendo, como qualquer outra).
+    nova = "!fabrica-2:teste"
+    journal.troca_de_sala(con, sala, nova, "fabrica")
+    bate("sala velha da fabrica tambem morre", journal.preferencias_da_sala(con, sala), {})
+    bate(
+        "sala nova da fabrica renasce semeada",
+        journal.preferencias_da_sala(con, nova),
+        {"modelo": "sonnet", "esforco": "ultracode"},
+    )
+
+    # cadeira sem default proprio continua sem heranca nenhuma (prova_morte_na_rotacao
+    # ja cobre isso com "claudinho-IA"; aqui so a confirmacao pelo lado do dict)
+    bate("so fabrica tem default hoje", sorted(journal.DEFAULTS_CADEIRA.keys()), ["fabrica"])
+
+
 def prova_argv():
     """Ausencia de preferencia nao vira flag; presenca vira a flag do motor."""
     sys.path.insert(0, os.path.join(os.path.dirname(RAIZ), "bin"))
@@ -171,6 +207,7 @@ def main():
         prova_fronteira()
         prova_enum(con)
         prova_morte_na_rotacao(con)
+        prova_semeadura_por_cadeira(con)
         prova_argv()
         prova_plantio_de_skills()
 

@@ -589,6 +589,11 @@ def grava_cadeira(con: sqlite3.Connection, sala: str, cadeira: str) -> None:
     `nascida_em` NAO se reescreve no conflito: a idade e da sala, e o gatilho da
     rotacao e a mensagem (minuta 0002). Reescrever aqui faria toda mensagem
     rejuvenescer a sala, e a rotacao de 24h nunca dispararia.
+
+    Cadeira com DEFAULT PROPRIO (`DEFAULTS_CADEIRA`) semeia preferencia aqui —
+    seguro chamar em toda mensagem, nao so na primeira, porque a semeadura e
+    `INSERT OR IGNORE`: preferencia ja gravada (por `pf` do dono ou por
+    semeadura anterior) nunca e pisada.
     """
     agora = _agora()
     con.execute(
@@ -597,6 +602,7 @@ def grava_cadeira(con: sqlite3.Connection, sala: str, cadeira: str) -> None:
         " atualizado_em = excluded.atualizado_em",
         (sala, cadeira, agora, agora),
     )
+    _semeia_defaults_da_cadeira(con, sala, cadeira)
 
 
 def nascimento_da_sala(con: sqlite3.Connection, sala: str) -> float | None:
@@ -651,6 +657,34 @@ def zera_giros(con: sqlite3.Connection, sala: str) -> None:
     con.execute("UPDATE fitas SET giros = 0 WHERE sala = ?", (sala,))
 
 
+# Defaults de modelo/esforco POR CADEIRA — excecao ao design de "sala nova sem
+# heranca" descrito em `troca_de_sala`. Pedido explicito do dono, 06/09/2026:
+# a sala da cadeira `fabrica` nasce (e renasce a cada rotacao) ja fixada em
+# sonnet/ultracode, sem precisar de `pf modelo`/`pf esforco` manual. Nao e a
+# preferencia da sala "sobrevivendo" a rotacao — e a cadeira pedindo de novo, a
+# cada nascimento, exatamente o padrao que `troca_de_sala` recusa herdar.
+DEFAULTS_CADEIRA: dict[str, dict[str, str]] = {
+    "fabrica": {"modelo": "sonnet", "esforco": "ultracode"},
+}
+
+
+def _semeia_defaults_da_cadeira(con: sqlite3.Connection, sala: str, cadeira: str) -> None:
+    """Grava o default da cadeira, se houver, sem nunca pisar preferencia que
+    ja exista — `INSERT OR IGNORE` na PK (sala, chave). Chamada e idempotente:
+    pode rodar em toda mensagem (`grava_cadeira`) e no nascimento da sala nova
+    (`troca_de_sala`) sem custo de reescrever o que ja esta certo."""
+    defaults = DEFAULTS_CADEIRA.get(cadeira)
+    if not defaults:
+        return
+    agora = _agora()
+    for chave, valor in defaults.items():
+        con.execute(
+            "INSERT OR IGNORE INTO preferencias (sala, chave, valor, atualizado_em)"
+            " VALUES (?, ?, ?, ?)",
+            (sala, chave, valor, agora),
+        )
+
+
 def preferencias_da_sala(con: sqlite3.Connection, sala: str) -> dict[str, str]:
     """Parametros de giro que a sala pediu (modelo, esforco). Sala sem pedido
     devolve dicionario vazio, e quem chama cai no default do verbo — ausencia
@@ -692,6 +726,10 @@ def troca_de_sala(con: sqlite3.Connection, velha: str, nova: str, cadeira: str) 
         # default do verbo. Herdar aqui faria a rotacao — que existe para dar
         # tela limpa — carregar um modelo caro que o dono nao pediu de novo.
         con.execute("DELETE FROM preferencias WHERE sala = ?", (velha,))
+        # Excecao: cadeira com DEFAULT PROPRIO (`DEFAULTS_CADEIRA`) semeia de
+        # novo na sala que acabou de nascer — nao e heranca da sala velha (essa
+        # morreu na linha acima), e o pedido permanente da cadeira se repetindo.
+        _semeia_defaults_da_cadeira(con, nova, cadeira)
         con.execute("COMMIT")
     except Exception:
         con.execute("ROLLBACK")
