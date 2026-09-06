@@ -326,17 +326,17 @@ def economia_de_giro(ordem_id):
 
 
 def fabrica_pela_porta():
-    """Serie da FABRICA (agy), medida na PORTA — o ponto de convergencia das
-    superficies (arq:0100). A fabrica roda o motor agy em container isolado
-    (uid 1003) e NAO grava fita em ~/.claude/projects; o disco dela e inalcancavel
-    do host. O que dela e log de NEGOCIO cruza a porta do connector, autenticado
-    como `jaiminho`, e vira linha no ops log. Mede-se aqui VOLUME de chamada e
-    desfecho, nunca conteudo de fita (limite honesto do 0100). Fonte:
-    ~/AI/var/log/ops/ops-*.jsonl, filtro sujeito=='jaiminho'."""
+    """Serie da persona FABRICA, medida na PORTA (arq:0100). FABRICA e PERSONA de
+    agente, transversal ao provider de inferencia (claudinho, jaiminho): mede-se por
+    cadeira=fabrica, nunca por provider. As chamadas da persona cruzam a porta do
+    connector e viram linha no ops log. Le-se VOLUME de chamada e classe de
+    desperdicio (run_command em fallback, verbo contornado), o alvo direto da
+    economia-de-giro; nao giros/turno (turno nao carimba na porta). Fonte:
+    ~/AI/var/log/ops/ops-*.jsonl, filtro cadeira=fabrica."""
     import glob
     from collections import Counter
     total = 0
-    por_evento, por_tool, sessoes = Counter(), Counter(), set()
+    por_tool, desperdicio = Counter(), Counter()
     ult_ts = None
     for arq in sorted(glob.glob(os.path.join(RAIZ, "var/log/ops", "ops-*.jsonl")))[-5:]:
         try:
@@ -346,45 +346,40 @@ def fabrica_pela_porta():
                         d = json.loads(linha)
                     except ValueError:
                         continue
-                    if d.get("sujeito") != "jaiminho":
+                    if d.get("cadeira") != "fabrica":
+                        continue
+                    tool = d.get("tool") or "-"
+                    if tool == "-":
                         continue
                     total += 1
-                    por_evento[d.get("evento") or "-"] += 1
-                    t = d.get("tool") or "-"
-                    if t != "-":
-                        por_tool[t] += 1
-                    s = d.get("sessao")
-                    if s and s != "-":
-                        sessoes.add(s)
+                    por_tool[tool] += 1
+                    ev = d.get("evento")
+                    if ev == "fallback" and tool == "run_command":
+                        desperdicio["run_command em fallback (encadeado sem verbo?)"] += 1
+                    elif ev == "verbo_contornado":
+                        desperdicio[f"verbo contornado ({tool})"] += 1
                     if d.get("ts"):
                         ult_ts = d["ts"]
         except OSError:
             continue
     if not total:
-        return ["  fabrica sem registro na porta nos ultimos 5 dias"
-                " (nao rodou, ou nao cruzou o connector)"]
-    negados = por_evento.get("pep_negou", 0)
-    linhas = [f"  {total} evento(s) da fabrica na porta (sujeito=jaiminho, 5 dias)",
-              f"  ultimo: {ult_ts or '-'}",
-              "  VOLUME de chamada e desfecho — NAO conteudo de fita (arq:0100)"]
-    for ev, n in por_evento.most_common():
-        linhas.append(f"    evento {ev:<12} {n:>4}")
-    if por_tool:
-        linhas.append("  tools tentadas (algumas podem ter sido negadas):")
-        for t, n in por_tool.most_common():
-            linhas.append(f"    {t:<14} {n:>4}")
-    linhas.append(f"  {len(sessoes)} sessao(oes) estabelecida(s) na porta"
-                  + ("" if sessoes else " — nenhum giro produtivo"))
-    if negados:
-        linhas.append(f"  ATENCAO: {negados} pep_negou — fabrica barrada na porta;"
-                      " credencial/PEP e materia de TI/seguranca, nao deste verbo")
+        return ["  persona fabrica sem chamada na porta nos ultimos 5 dias"]
+    linhas = [f"  {total} chamada(s) da persona fabrica na porta (cadeira=fabrica, 5 dias)",
+              f"  ultima: {ult_ts or '-'}",
+              "  VOLUME e desperdicio, NAO giros/turno (turno nao carimba na porta)",
+              "  por tool:"]
+    for t, n in por_tool.most_common():
+        linhas.append(f"    {t:<14} {n:>4}")
+    if desperdicio:
+        linhas.append("  desperdicio (o que a economia-de-giro corta):")
+        for c, n in desperdicio.most_common():
+            linhas.append(f"    {n:>4}  {c}")
     return linhas
 
 
 def giros_por_turno_code_local(cadeira):
     """PARCIAL — uma superficie so (arq:0100): fita de Code LOCAL desta cadeira, no
-    host, lida de ~/.claude/projects/*fitas-<cadeira>/. NAO e a fabrica (essa e agy
-    em container isolado, medida pela porta — fabrica_pela_porta) e NAO ve
+    host, lida de ~/.claude/projects/*fitas-<cadeira>/. NAO e a fabrica (essa mede-se na porta por cadeira=fabrica — fabrica_pela_porta) e NAO ve
     claude.ai. Ler disco de runtime para medir e leitura parcial por design: a
     saida se declara parcial e nunca vale como verdade do conjunto.
     Antiga "Serie da FABRICA (Code)": giros/turno da fita de Code desta cadeira, lida do
