@@ -95,3 +95,22 @@ prática), e é assim que entra no card existente — não como incidente novo.
 Medido no #3012 (09/2026): o braço da fábrica estava fora do ar havia dias, e a story em
 curso era justamente aposentá-lo. O que era entrega — "o argumento da #3007, medido" —
 subiu como alarme, e o dono teve de cortar.
+
+## Checagem de lote/sessão não se prova por chamadas "paralelas" do cliente
+
+Duas chamadas de tool emitidas no mesmo turno não chegam por garantia na mesma sessão de
+transporte. Cada uma pode abrir conexão própria no servidor, e um mecanismo que agrupa
+por sessão (`lote_id`/`lote_n`, por exemplo) fica cego para elas — não porque o
+agrupamento esteja quebrado, mas porque a premissa "mesmo turno == mesmo canal" não vale
+para todo cliente.
+
+A régua: antes de reportar a checagem como falha do serviço, confirme que o CANAL usado
+para testar de fato produz o que o mecanismo espera monitorar. Sem essa confirmação, o
+resultado é INDETERMINÁVEL, não vermelho — mesma família do "suíte que não rodou não é
+suíte vermelha" acima.
+
+Medido na ordem-deploy economia-de-giro §3 (06/09/2026): duas chamadas `read_file` no
+mesmo turno, pós-restart do `ops-mcp`, vieram com `lote_id`/`lote_n` null nas duas, cada
+uma em `sessao` HTTP distinta no log. Ficou registrado como achado aberto, não como
+regressão confirmada — o cliente (Code) pode nunca produzir lote literal em tool calls
+"paralelas", e sem outro cliente para comparar a checagem não decide sozinha.
