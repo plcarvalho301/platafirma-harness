@@ -71,5 +71,29 @@
     "defaultMode": "bypassPermissions"
   },
   "model": "opus",
-  "theme": "dark"
+  "theme": "dark",
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "mcp__claudinho-mcp__.*|mcp__claude_ai_claudinho-mcp__.*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 /home/claudinho/AI/platafirma-harness/agente/hooks/porta-sessao.py"
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "mcp__claudinho-mcp__monta_sessao|mcp__claude_ai_claudinho-mcp__monta_sessao",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 /home/claudinho/AI/platafirma-harness/agente/hooks/porta-sessao.py"
+          }
+        ]
+      }
+    ]
+  }
 }
