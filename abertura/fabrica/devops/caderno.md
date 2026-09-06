@@ -114,3 +114,27 @@ mesmo turno, pós-restart do `ops-mcp`, vieram com `lote_id`/`lote_n` null nas d
 uma em `sessao` HTTP distinta no log. Ficou registrado como achado aberto, não como
 regressão confirmada — o cliente (Code) pode nunca produzir lote literal em tool calls
 "paralelas", e sem outro cliente para comparar a checagem não decide sozinha.
+
+## Ordem de deploy que pede restart de serviço precisa se declarar como tal
+
+Um agente de contexto fresco — sem a fita que escreveu a ordem, só o texto do runbook —
+não sabe, só pela letra do passo, que reiniciar um serviço desta conta é trabalho de
+devops rotineiro sobre infraestrutura própria. A régua de segurança do agente classifica
+"reiniciar serviço" e "editar drop-in de systemd" como modificação de configuração de
+sistema/segurança — categoria que trava mesmo com autorização explícita — porque essa é a
+leitura correta por default quando não se sabe de quem é a infraestrutura. Sem uma linha
+dizendo que o alvo é próprio da conta, o passo do restart tem chance real de ser
+recusado, e a recusa se propaga: o rollback documentado na mesma ordem cai na mesma
+categoria e também é recusado.
+
+A régua: ordem de deploy que inclui restart de serviço ou edição de unit/drop-in nomeia,
+na própria linha do passo, que o alvo é infraestrutura desta conta administrada por esta
+cadeira — não configuração de sistema ou conta de terceiro. Custa uma linha; sem ela,
+custa um ciclo inteiro de recusa, escalonamento e retomada manual.
+
+Medido na ordem-deploy economia-de-giro (06/09/2026): um subagent de Workflow, com o
+runbook completo no prompt mas sem o resto da fita, recusou o restart do `ops-mcp` E o
+rollback documentado na mesma ordem, citando exatamente essa categoria — mesmo com o
+passo anterior (env já editado e conferido por outra parte do processo) relatado como
+concluído no próprio prompt. O restart só aconteceu depois de a cadeira que orquestrava
+fazer a chamada direta, autorizada em chat pelo dono.
