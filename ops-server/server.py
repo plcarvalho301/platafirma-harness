@@ -874,6 +874,17 @@ def _montar(cadeira: str, atualizar: bool, chapeu: str = "", pergunta: str = "",
     return r
 
 
+def _primeiro_giro(pergunta: str) -> bool:
+    """Abertura de fita = ha prompt do dono e a fita ainda nao portou sessao.
+
+    Predicado deliberadamente simples e verificavel: `pergunta` presente sem
+    `sessao_id` e a primeira passagem por `monta_sessao` da conversa. Reabertura
+    da mesma fita SEMPRE porta o `sessao_id` (arq:0101 §1), entao cai no ramo (b);
+    quem chega sem prompt e sem id nao esta abrindo — cai no (c) e e negado.
+    """
+    return bool((pergunta or "").strip())
+
+
 async def monta_sessao(cadeira: str = "", atualizar: bool = True, chapeu: str = "",
                         pergunta: str = "", sessao_id: str | None = None) -> dict:
     """Abre a sessão de uma cadeira numa chamada: devolve o pacote de abertura como
@@ -911,9 +922,28 @@ async def monta_sessao(cadeira: str = "", atualizar: bool = True, chapeu: str = 
                        f"sessao:{cadeira or '-'}", DOM_PLATAFORMA)
     if negado:
         return negado
+    # SESSAO_ID: a/b/c (ordem do dono, 06/09/2026). Quem cunha e a PORTA, nao o schema
+    # da tool — expor `sessao_id` como input a preencher fazia o cliente MCP abrir gate
+    # de aprovacao ANTES de montar ("No approval received", sem pacote de abertura). O id
+    # nasce aqui:
+    #   (a) fita sem sessao E primeiro giro (so o prompt do dono) -> CUNHA e passa
+    #   (b) fita ja porta uma sessao valida -> passa a que veio
+    #   (c) senao (valor malformado, ou reabertura sem portar o id) -> nega, nao adivinha
+    _portado = _uuid_valido(sessao_id) if sessao_id else None
+    if _portado:                                       # (b)
+        _sid_montar = _portado
+    elif not sessao_id and _primeiro_giro(pergunta):   # (a) abertura: a porta cunha
+        _sid_montar = str(uuid.uuid4())
+    else:                                              # (c)
+        _audit(tool="monta_sessao", evento="sessao_id_invalido", cadeira=cadeira,
+               recebido=(sessao_id or "")[:64])
+        return {"erro": "sessao_id ausente ou malformado numa reabertura — a fita deve "
+                        "portar o `sessao_id` da primeira abertura (arq:0101 §1); a "
+                        "primeira abertura NAO envia `sessao_id`, a porta o cunha",
+                "regra": "sessao"}
     t0 = time.monotonic()
     r = await anyio.to_thread.run_sync(_montar, cadeira, atualizar, chapeu, pergunta,
-                                       sessao_id or "")
+                                       _sid_montar)
     _rot = (r.get("roteador") or {})
     _sessao_id = None
     _delta = None
