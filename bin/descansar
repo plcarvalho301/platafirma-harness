@@ -223,6 +223,65 @@ def roda(rotulo, cmd, timeout=60):
         print(f"  NAO MEDIDO — {type(e).__name__}: {e}")
 
 
+def economia_de_giro(ordem_id):
+    """Custo de giro DESTA fita, lido do ops log por ordem_id (leva 3 da
+    economia-de-giro). Mede o que a otimizacao quer derrubar: volume de tool e,
+    dentro do fallback run_command, quanto era evitavel (verbo que ja tem tool,
+    sessao_id passado por export). NAO separa giro de item: com PF_TOOLS_LOTE um
+    giro em lote rende varios registros — o marcador de lote (server.py, passo 2,
+    exige restart do TI) fecha essa conta. O que sai limpo aqui — volume e classe
+    de fallback — independe de lote. Fonte e o proprio log; medicao, nao suposicao."""
+    import glob
+    from collections import Counter
+    if not ordem_id or ordem_id == "-":
+        return ["  sem ordem_id — sessao de mao nao tem fita a medir"]
+    VERBOS = {"mesa", "fila", "tarefas", "acervo", "motor", "deploy", "conferir",
+              "descobrir", "situacao", "persona", "acesso", "chat", "infra", "seg",
+              "sinal", "lint", "teste", "minuta", "descansar", "encerrar"}
+    por_tool, classe_fb = Counter(), Counter()
+    for arq in sorted(glob.glob(os.path.join(RAIZ, "var/log/ops", "ops-*.jsonl")))[-3:]:
+        try:
+            with open(arq, encoding="utf-8", errors="replace") as fh:
+                for linha in fh:
+                    try:
+                        d = json.loads(linha)
+                    except ValueError:
+                        continue
+                    if d.get("ordem_id") != ordem_id:
+                        continue
+                    tool = d.get("tool") or "-"
+                    if tool == "-":
+                        continue
+                    por_tool[tool] += 1
+                    if tool == "run_command" and d.get("evento") == "fallback":
+                        cmd = (d.get("comando") or "").strip()
+                        prim = cmd.split()[0] if cmd else ""
+                        if "PF_CADEIRA" in cmd[:80]:
+                            classe_fb["export PF_CADEIRA (era parametro sessao_id)"] += 1
+                        elif prim in VERBOS:
+                            classe_fb[f"verbo '{prim}' (ja tem tool)"] += 1
+                        else:
+                            classe_fb["exploracao/fluxo (git, rg, sed... legitimo)"] += 1
+        except OSError:
+            continue
+    total = sum(por_tool.values())
+    if not total:
+        return [f"  nenhum registro de tool nesta fita (ordem {ordem_id})"]
+    linhas = [f"  {total} registros de tool na fita (ordem {ordem_id})",
+              "  registro != giro: com lote, 1 giro rende varios (separacao: passo 2)"]
+    for tool, n in por_tool.most_common():
+        linhas.append(f"    {tool:<16} {n:>4}")
+    fb = por_tool.get("run_command", 0)
+    if fb:
+        linhas.append(f"  fallback run_command: {fb} ({100 * fb // total}% dos registros)")
+        for cl, n in classe_fb.most_common():
+            linhas.append(f"    {n:>4}  {cl}")
+        evitaveis = sum(n for c, n in classe_fb.items() if "legitimo" not in c)
+        if evitaveis:
+            linhas.append(f"  -> {evitaveis} evitavel(is): iam por tool/parametro, nao por bash")
+    return linhas
+
+
 def ato_fita(args):
     curto, canon = resolve()
     alvo = curto
@@ -249,6 +308,11 @@ def ato_fita(args):
         else:
             print(f"\n-- fila\n  NAO MEDIDO — PF_CADEIRA={alvo!r} nao casa com"
                   f" nenhuma persona em {PERSONAS}")
+
+    if not args.so_memoria:
+        print("\n== economia de giro (esta fita) ==")
+        for _l in economia_de_giro(os.environ.get("PF_ORDEM_ID", "")):
+            print(_l)
 
     rc.set(f"mem:{alvo.lower()}", int(time.time()))
     print("\n== proximo passo ==\n"
