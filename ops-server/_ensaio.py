@@ -696,3 +696,19 @@ def test_busca_preserva_linha_que_nao_e_match():
     assert fora.splitlines()[0] == "procurando…"
     assert fora.splitlines()[-1] == "8 arquivos varridos"
     assert "src/a.py  (8 matches)" in fora
+
+
+def test_contrato_de_morte_e_o_ultimo_ato_nao_o_do_meio():
+    """`descansar fita` sem flag NAO mata: matar `sessao:{id}` no meio do rito tira a
+    cadeira dos passos que o proprio verbo manda executar em seguida (medido 06/09)."""
+    import subprocess as _sp
+    verbo = str(_Path(__file__).parent.parent / "bin/descansar")
+    env = {**os.environ, "PF_CADEIRA": "fabrica",
+           "PF_SESSAO": "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee"}
+    sem = _sp.run([verbo, "fita", "--so-memoria"], capture_output=True, text=True,
+                  timeout=120, env=env).stdout
+    assert "descansar fita --encerra-sessao" in sem, "o rito nomeia o passo 4"
+    assert "contrato de morte" not in sem, "sem a flag, nao mata"
+    com = _sp.run([verbo, "fita", "--encerra-sessao"], capture_output=True, text=True,
+                  timeout=120, env=env).stdout
+    assert "contrato de morte" in com and "chave(s) apagada(s)" in com

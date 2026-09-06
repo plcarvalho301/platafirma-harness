@@ -463,7 +463,28 @@ def encerra_sessao(rc, sessao_id):
     return fora
 
 
+def estado_sessao(sessao_id):
+    """So DIZ o que ha para morrer. Matar e o passo 4 do roteiro, nao este ponto."""
+    sid = (sessao_id or "").strip()
+    if not sid:
+        return ["  sem PF_SESSAO — fita sem entidade-sessao (roda sem ledger, por desenho)"]
+    return [f"  sessao {sid} viva; encerre-a no PASSO 4, depois da mesa e do caderno:",
+            "    `descansar fita --encerra-sessao`"]
+
+
 def ato_fita(args):
+    # O contrato de morte e o ULTIMO ato da fita, e por isso tem flag propria. Medido
+    # em 06/09, na fita que implantou o arq:0101: matando `sessao:{id}` no meio do
+    # `descansar`, os passos que o proprio verbo manda executar em seguida (mesa anota,
+    # `mesa caderno <chapeu>`) perdem a cadeira — a porta resolve PF_CADEIRA a partir de
+    # `sessao:{id}`, e sem ela `mesa caderno` responde "PF_CADEIRA nao definida". A ADR
+    # diz O QUE morre; em que ponto do rito, quem diz e o rito.
+    if getattr(args, "encerra_sessao", False):
+        curto, _ = resolve()
+        print(f"== contrato de morte da sessao (arq:0101 §1) — {curto} ==")
+        for _l in encerra_sessao(conn(), os.environ.get("PF_SESSAO", "")):
+            print(_l)
+        return 0
     curto, canon = resolve()
     alvo = curto
     rc = conn()
@@ -503,8 +524,8 @@ def ato_fita(args):
         for _l in giros_por_turno_code_local(curto):
             print(_l)
 
-    print("\n== contrato de morte da sessao (arq:0101 §1) ==")
-    for _l in encerra_sessao(rc, os.environ.get("PF_SESSAO", "")):
+    print("\n== entidade-sessao (arq:0101 §1) ==")
+    for _l in estado_sessao(os.environ.get("PF_SESSAO", "")):
         print(_l)
 
     rc.set(f"mem:{alvo.lower()}", int(time.time()))
@@ -550,7 +571,14 @@ def ato_fita(args):
           "       aqui — nem como resumo.\"\n"
           "   e) reporte o que saiu, o que ficou e o que nao deu para conferir.\n"
           "   Nao remova o que voce so SUSPEITA estar velho: sem tool que confirme,\n"
-          "   o edit fica e a duvida vai no relatorio.")
+          "   o edit fica e a duvida vai no relatorio.\n"
+          "\n"
+          "4. POR ULTIMO, depois dos tres acima: `descansar fita --encerra-sessao`\n"
+          "   (contrato de morte, arq:0101 §1: DEL sessao/ledger/giro + derrame).\n"
+          "   E o ultimo ato da fita porque matar `sessao:{id}` tira a cadeira de\n"
+          "   toda tool seguinte — `mesa caderno` do passo 2 morre com\n"
+          "   `PF_CADEIRA nao definida`. Esquecer nao vaza nada: o TTL de 48 h e o\n"
+          "   segundo caminho de morte que a propria ADR escreve.")
     return 0
 
 
@@ -590,6 +618,10 @@ def main():
     f = sub.add_parser("fita", help="o descanso da cadeira corrente (PF_CADEIRA)")
     f.add_argument("--so-memoria", action="store_true",
                    help="pula o dossie volatil; so o estado da memoria")
+    f.add_argument("--encerra-sessao", action="store_true",
+                   help="ULTIMO ato da fita: DEL sessao/ledger/giro + derrame (arq:0101 "
+                        "§1). Separado porque matar a sessao tira a cadeira das tools "
+                        "seguintes; rode depois da mesa e do delta de caderno")
     f.set_defaults(func=ato_fita)
 
     v = sub.add_parser("varredura", help="passada por todas as cadeiras; so o que esta fora do lugar")
