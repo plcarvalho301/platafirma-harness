@@ -138,3 +138,48 @@ rollback documentado na mesma ordem, citando exatamente essa categoria — mesmo
 passo anterior (env já editado e conferido por outra parte do processo) relatado como
 concluído no próprio prompt. O restart só aconteceu depois de a cadeira que orquestrava
 fazer a chamada direta, autorizada em chat pelo dono.
+
+## Aposentadoria se decide por quem CONSOME, não pelo papel que o card atribui
+
+Card que manda aposentar um componente carrega uma premissa junto: a de que aquele
+componente é o que o card diz que ele é. A premissa envelhece — o nome sobrevive à
+migração, e a frase "hoje X é o braço" continua legível muito depois de deixar de ser
+verdade. Executar o passo de aposentadoria sobre a premissa, e não sobre a medida,
+derruba contrato vivo de outra frente com o card inteiro parecendo cumprido.
+
+A régua tem dois lados, e o segundo é o que se esquece:
+
+- **O que ele É** — não o papel no card, e sim a superfície servida. Um servidor sem
+  caminho de execução não isola execução nenhuma; aposentá-lo não move a agulha que o
+  card quer mover, por mais que o texto diga que sim.
+- **Quem o CONSOME** — `grep` do endereço dele (host:porta, alias de rede, URL em
+  compose/env) por todo o repositório. Consumidor vivo transforma "aposentar" em
+  "regredir", e a decisão volta para o dono como recorte, não como execução.
+
+Medido no #3007 (09/2026): o card mandava aposentar o `jaiminho-server` como "o braço
+da fábrica". Ele é o MCP de recurso do colaborador externo — sem `run_command`, sem
+superfície de execução —, o braço real já havia migrado noutro card, e o `ACERVO_URL`
+de um serviço vivo apontava para o endereço que o passo mandava derrubar. Uma leitura
+das tools e um `grep` do endereço separaram os três fatos; executar o passo teria
+tirado acervo e wiki do externo e desfeito um sign-off anterior.
+
+## Trocar de identidade não é ganhar capacidade — são dois atos, e falta sempre o segundo
+
+Isolar execução por conta de SO parece um ato só: autorizar a troca de uid. Não é. A
+autorização move QUEM executa; ela não cria, em lugar nenhum, um chão em que a nova
+identidade possa escrever. O caminho feliz do teste — `id -u` devolvendo o uid novo —
+passa com o segundo ato faltando, e a falha só aparece no primeiro `write` real, como
+`EACCES` num ponto que ninguém associa à troca.
+
+A régua, ao projetar qualquer execução sob outra identidade: liste os dois atos lado a
+lado antes de estimar, e trate o segundo como parte do aceite, não como detalhe de
+ambiente. (1) o mecanismo da troca — sudoers, `runuser`, `User=` de unit; (2) o alcance
+da identidade de destino — grupo, dono de diretório, socket, `$HOME`. Vale para além do
+uid: token que troca de sujeito sem entrada correspondente no PAP falha pelo mesmo
+formato — identidade nova sem alcance projetado.
+
+Medido no #3007 (09/2026): o card previa só a regra de sudoers. `/home/claudinho/AI` é
+`claudinho:claudinho` e a conta de destino não estava no grupo — com a regra instalada
+e sem mais nada, o comando trocaria de uid e o arquivo não nasceria. O aceite pedia
+justamente um arquivo com o owner novo no disco: passaria no `id -u` e falharia no que
+importava.
