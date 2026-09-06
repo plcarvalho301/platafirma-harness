@@ -594,3 +594,35 @@ def test_peca_de_abertura_repetida_vira_aviso_na_segunda_abertura():
     assert r1["pecas"][0]["conteudo"].startswith("TEXTO DA PERSONA")
     assert "já servido nesta sessão" in r2["pecas"][0]["conteudo"]
     assert conta["pecas_dedup"] == 1
+
+
+# --- regressao medida no ar (06/09, primeiro retorno depois de subir) ----------
+_JOURNAL = """active
+ActiveEnterTimestamp=Sun 2026-09-06 18:58:05 -03
+MainPID=737373
+health=200
+Sep 06 18:58:00 host systemd[1]: Stopping ops-mcp...
+Sep 06 18:58:01 host systemd[1]: Started ops-mcp.
+Sep 06 18:58:05 host uvicorn[737373]: INFO:     Started server process
+Sep 06 18:58:05 host uvicorn[737373]: INFO:     Application startup complete.
+Sep 06 18:58:05 host uvicorn[737373]: INFO:     Uvicorn running on http://127.0.0.1:8010
+Sep 06 18:58:06 host uvicorn[737373]: INFO:     GET /mcp 200 OK"""
+
+
+def test_timestamp_nao_e_resultado_de_busca():
+    """`18:58:05` casava `arquivo:linha:conteudo` e journalctl saia remontado."""
+    fora, rel = _p.lava(_JOURNAL)
+    assert "busca" not in rel["classes"]
+    assert "MainPID=737373" in fora and "health=200" in fora and "active" in fora
+    assert "(7 matches)" not in fora
+
+
+def test_busca_preserva_linha_que_nao_e_match():
+    """Numa saida mista, o que nao e match sai onde estava — poda nao come linha."""
+    bruto = ("procurando…\n" + "\n".join(f"src/a.py:{i}:achou" for i in range(1, 9))
+             + "\n8 arquivos varridos")
+    fora, rel = _p.lava(bruto)
+    assert "busca" in rel["classes"]
+    assert fora.splitlines()[0] == "procurando…"
+    assert fora.splitlines()[-1] == "8 arquivos varridos"
+    assert "src/a.py  (8 matches)" in fora

@@ -57,7 +57,11 @@ DERRAME = Path(os.environ.get("PF_DERRAME", RAIZ / "var/tmp/retornos"))
 
 _ANSI = re.compile(r"\x1b\[[0-9;?]*[ -/]*[@-~]|\x1b\][^\x07\x1b]*(\x07|\x1b\\)")
 _BLOB = re.compile(r"[A-Za-z0-9+/=]{%d,}|[0-9a-fA-F]{%d,}" % (BLOB_MIN, BLOB_MIN))
-_RG_LINHA = re.compile(r"^(?P<arq>[^\s:][^:]*):(?P<lin>\d+):(?P<resto>.*)$")
+# `arquivo:linha:conteúdo` — e o campo do arquivo NÃO pode ter espaço nem deixar de
+# parecer caminho. Sem estas duas guardas, `18:58:05` de um timestamp casa como
+# arquivo `18`, linha `58`, e a saída de `journalctl` inteira era remontada como se
+# fosse resultado de busca. Medido no primeiro retorno real depois de subir (06/09).
+_RG_LINHA = re.compile(r"^(?P<arq>[^\s:]+):(?P<lin>\d+):(?P<resto>.*)$")
 _NUMERO = re.compile(r"\d+")
 # Rastro fixo de gerenciador de pacote e de git: linha que existe para o humano ver
 # progresso e que nenhuma decisão jamais leu.
@@ -132,22 +136,46 @@ def _colapsa_repeticao(linhas: list[str]) -> tuple[list[str], int]:
     return fora, cortadas
 
 
+def _parece_caminho(arq: str) -> bool:
+    """`src/a.py` e `README.md` são caminho; `18` (de um timestamp) não é."""
+    return ("/" in arq or "." in arq) and not arq.isdigit()
+
+
 def _agrupa_busca(linhas: list[str]) -> tuple[list[str], int] | None:
     """Saída de `rg`/`fd` no formato `arquivo:linha:conteúdo` agrupada por arquivo.
 
     Devolve None quando a saída não é busca — a heurística é a proporção de linhas no
     formato, nunca o nome do comando: `rg` chamado dentro de um pipe não se anuncia.
+
+    LINHA QUE NÃO CASA NÃO SE PERDE. A primeira versão descartava tudo que não era
+    match e devolvia só os grupos: numa saída mista, `MainPID=…` e `health=200`
+    sumiam sem uma palavra — poda silenciosa é o oposto do que a régua manda. Agora
+    cada grupo sai na posição da PRIMEIRA ocorrência daquele arquivo, e o que não é
+    match sai onde estava, intacto.
     """
     casadas = [(_RG_LINHA.match(l), l) for l in linhas if l.strip()]
-    uteis = [m for m, _ in casadas if m]
+    uteis = [m for m, _ in casadas if m and _parece_caminho(m.group("arq"))]
     if not casadas or len(uteis) / len(casadas) < RG_PROPORCAO or len(uteis) < MOLDE_MIN:
         return None
     por_arq: dict[str, list[tuple[str, str]]] = {}
-    for m in uteis:
-        por_arq.setdefault(m.group("arq"), []).append((m.group("lin"), m.group("resto")))
+    roteiro: list[tuple[str, str]] = []          # ("arq", nome) | ("literal", linha)
+    for linha in linhas:
+        m = _RG_LINHA.match(linha)
+        if m and _parece_caminho(m.group("arq")):
+            arq = m.group("arq")
+            if arq not in por_arq:
+                por_arq[arq] = []
+                roteiro.append(("arq", arq))
+            por_arq[arq].append((m.group("lin"), m.group("resto")))
+        else:
+            roteiro.append(("literal", linha))
     fora, cortadas = [], 0
-    for arq, ms in por_arq.items():
-        fora.append(f"{arq}  ({len(ms)} matches)")
+    for tipo, valor in roteiro:
+        if tipo == "literal":
+            fora.append(valor)
+            continue
+        ms = por_arq[valor]
+        fora.append(f"{valor}  ({len(ms)} matches)")
         for lin, resto in ms[:RG_MAX_MATCH]:
             fora.append(f"  {lin}: {resto.strip()[:LINHA_LONGA]}")
         if len(ms) > RG_MAX_MATCH:
