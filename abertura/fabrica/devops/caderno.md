@@ -43,3 +43,55 @@ letra, isso matava também a busca por `ordem_id` — porque a mesma mudança fa
 herdar `PF_SESSAO`, e voto por `ordem_id` passaria a chegar com `sessao_id` preenchido sem
 ninguém pedir. Cortar só o degrau CEGO e declarar o desvio custou um parágrafo; descobrir
 a regressão depois do deploy teria custado o ciclo inteiro.
+
+## Uma recusa se mede pelo efeito, não pela mensagem
+
+Trava que imprime "recuso" e mesmo assim executa é pior que trava nenhuma: some do
+radar por parecer ativa. Testar uma contenção é tentar violá-la e conferir que a AÇÃO
+não aconteceu — não que a mensagem apareceu.
+
+Duas formas do mesmo erro, medidas no #3004 (09/2026):
+
+- **A recusa que morre no subshell.** Validação chamada dentro de `$(...)` que recusa por
+  `exit` mata só o subshell. Sem `|| exit $?` no chamador, o "não" vira string vazia e o
+  fluxo segue. O alvo recusado virou alvo VAZIO, e o runner rodou o repositório inteiro,
+  com a mensagem de recusa impressa no stderr logo acima. Em bash, `[ -n "$x" ] && x="$(valida)"`
+  também não serve: encadeado a `|| exit`, dispara quando a condição é falsa.
+- **O gate vazio, que ninguém provou.** Uma flag de retenção ficou ligada meses porque
+  não havia ninguém para reter — inofensiva por vacuidade. No dia em que o primeiro
+  sujeito entrou na lista, ela serviu tudo. Gate sem sujeito não está provado: prova-se
+  no ato de pôr o PRIMEIRO sob ele, conferindo que reteve.
+
+Corolário: ao pôr o primeiro item sob um controle existente, a medição não é "o controle
+existe" — é "o controle reteve ESTE item". São afirmações diferentes, e só a segunda é
+observável.
+
+## Suíte que não rodou não é suíte vermelha
+
+Runner que monta ambiente isolado (`uvx pytest` e parentes) tira do projeto as próprias
+dependências: a suíte morre no import, não no teste. A cor é vermelha e a causa é o
+ambiente — reportar isso como falha do código manda a próxima fita caçar bug que não
+existe.
+
+Vale para todo instrumento de leitura, e a régua é a mesma do `situacao` (arq:0085):
+fonte inalcançável responde INDETERMINÁVEL, nunca zero. Não-rodou, não-alcançou e
+não-encontrou são estados distintos de falhou, e um verbo que os funde num só mente
+barato. Quando o fallback isolado for o único caminho, ele sai avisado — a saída diz que
+uma falha de import ali é do ambiente, não do código.
+
+Medido no #3004: o mesmo alvo deu `No module named yaml` no ambiente isolado e 25 passed
+com o interpretador do projeto. Nada no código mudou entre as duas execuções.
+
+## Antes de abrir incidente, confira se o roadmap já condena aquilo
+
+Serviço fora do ar nem sempre é incidente. Quando a feature em curso vai APOSENTAR aquele
+componente, "está down" é o estado esperado, não um alarme — e tratá-lo como alarme gasta
+a fita do dono, abre card que ninguém vai executar e enterra o achado que importava.
+
+A pergunta antes de escalar não é "isto está quebrado?", é "alguém já decidiu que isto
+morre?". Se sim, o achado vale como MEDIDA a favor da feature (o argumento dela, na
+prática), e é assim que entra no card existente — não como incidente novo.
+
+Medido no #3012 (09/2026): o braço da fábrica estava fora do ar havia dias, e a story em
+curso era justamente aposentá-lo. O que era entrega — "o argumento da #3007, medido" —
+subiu como alarme, e o dono teve de cortar.
