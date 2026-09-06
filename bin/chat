@@ -402,6 +402,25 @@ def settings_da_fita(modelo="", cadeira=""):
                 "Read(//home/claudinho/.claude/.credentials.json)",
             ],
         },
+        # A fita do Code PORTA o sessao_id em toda chamada, mecanico (arq:0101 §1,
+        # spec do dono 06/09). Sem estes hooks NO settings da fita, a cadeira recebe
+        # o sessao_id no retorno do monta_sessao e nao o repassa (medido 0/190) — e a
+        # porta nao infere mais (85ece31), entao a fita rodaria sem sessao. O settings
+        # e reescrito a cada giro, entao o porte tem de nascer AQUI. PostToolUse grava
+        # o id por fita do Code; PreToolUse injeta nas tools do claudinho-mcp (nunca
+        # sobrescreve id que o agente ja pos).
+        "hooks": {
+            "PreToolUse": [{
+                "matcher": "mcp__claudinho-mcp__.*|mcp__claude_ai_claudinho-mcp__.*",
+                "hooks": [{"type": "command",
+                           "command": "python3 /home/claudinho/AI/platafirma-harness/agente/hooks/porta-sessao.py"}],
+            }],
+            "PostToolUse": [{
+                "matcher": "mcp__claudinho-mcp__monta_sessao|mcp__claude_ai_claudinho-mcp__monta_sessao",
+                "hooks": [{"type": "command",
+                           "command": "python3 /home/claudinho/AI/platafirma-harness/agente/hooks/porta-sessao.py"}],
+            }],
+        },
     }
     # `git push` e negado por padrao e liberado por cadeira. Nao e controle — a
     # mesma cadeira empurra por `run_command`, que nao tem allowlist. E atrito
