@@ -57,6 +57,8 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse, PlainTextResponse, RedirectResponse
 from starlette.routing import Route
 
+import exec_conta
+
 OPS_NAME = os.environ.get("OPS_NAME", "claudinho-mcp")
 OPS_USER = os.environ.get("OPS_USER", "claudinho")
 RAIZ = Path(os.environ.get("OPS_ROOT", "/home/claudinho/AI"))
@@ -92,6 +94,11 @@ LINHA_CAP = 8_000      # teto da linha JSONL
 
 # Segredos da instância não descem para o subprocesso.
 ENV_OCULTO = ("OPS_AUTH_TOKEN", "TUNNEL_TOKEN")
+
+# Como se troca de conta de SO no despacho (story #3007). O QUEM troca não mora aqui:
+# é o campo `conta_so` do sujeito no PAP, lido a cada chamada. Sujeito sem o campo —
+# toda cadeira — não passa por wrapper nenhum e roda como sempre rodou.
+EXEC_WRAPPER = os.environ.get("PF_EXEC_WRAPPER", exec_conta.WRAPPER_PADRAO)
 
 _sessao: ContextVar[str] = ContextVar("sessao", default="-")
 
@@ -341,6 +348,25 @@ def _autoriza(tool: str, acao: str, tipo: str, alvo: str, dominio: str,
     return {"erro": f"negado pela politica de acesso: {d.motivo}", "regra": d.regra}
 
 
+def _conta_exec() -> str | None:
+    """Conta de SO deste sujeito, ou None para 'a conta da porta' (story #3007).
+
+    Chamar SEMPRE na task da tool, nunca dentro da thread do anyio: depende de
+    `_quem()`, que depende do RequestContext do FastMCP — mesma armadilha que fez
+    `_sessao_atual` cair no fallback '-' no #2911.
+
+    Política ilegível devolve None, e a escolha é consciente: quando o PDP não carrega,
+    `_autoriza` já negou a chamada inteira antes daqui, então não há caminho em que
+    este None execute algo. Duplicar o fail-closed aqui só produziria uma segunda
+    mensagem de erro para o mesmo fato.
+    """
+    est = _carrega_politica()
+    if est.get("erro"):
+        return None
+    quem = _quem().get("sujeito") or "-"
+    return exec_conta.conta_do_sujeito((est["sujeitos"] or {}).get(quem), OPS_USER)
+
+
 mcp = FastMCP(
     OPS_NAME,
     transport_security=TransportSecuritySettings(enable_dns_rebinding_protection=False),
@@ -355,13 +381,24 @@ mcp = FastMCP(
 # anyio.to_thread (limite padrão 40) e roda em session própria (start_new_session):
 # no timeout mata-se o grupo (os.killpg), senão `&`/nohup/docker exec sobrevivem e,
 # herdando o fd do pipe, travam o communicate() driblando o timeout declarado.
-def _run_blocking(command: str, d: Path, timeout: int, sessao_id: str = "-", oid: str = "-") -> dict:
+def _run_blocking(command: str, d: Path, timeout: int, sessao_id: str = "-", oid: str = "-",
+                  conta: str | None = None) -> dict:
     """Parte síncrona de run_command — roda em thread do anyio, nunca no event loop
-    (ver docstring de run_command pra motivo)."""
+    (ver docstring de run_command pra motivo).
+
+    `conta` None é o caminho de toda cadeira e é idêntico ao de antes do #3007.
+    Preenchida, o comando atravessa para aquela conta de SO e uma falha da travessia
+    NÃO vira execução sob a conta da porta (ver exec_conta)."""
+    env = {**_env_subprocesso(), "PF_SESSAO": sessao_id, "PF_ORDEM_ID": oid}
+    argv = ["bash", "-c", command]
+    if conta:
+        try:
+            env = exec_conta.env_sob_conta(env, conta)
+            argv = exec_conta.argv_sob_conta(argv, conta, env, EXEC_WRAPPER)
+        except exec_conta.ContaNaoDespachavel as e:
+            return {"erro": str(e), "cwd": str(d), "conta_exec": conta}
     try:
-        p = subprocess.Popen(["bash", "-c", command], cwd=d,
-                              env={**_env_subprocesso(), "PF_SESSAO": sessao_id,
-                                   "PF_ORDEM_ID": oid},
+        p = subprocess.Popen(argv, cwd=d, env=env,
                               stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                               start_new_session=True)
     except OSError as e:
@@ -375,8 +412,17 @@ def _run_blocking(command: str, d: Path, timeout: int, sessao_id: str = "-", oid
             pass
         p.wait()
         return {"erro": f"timeout ({timeout}s) — grupo de processo morto", "cwd": str(d)}
-    return {"exit_code": p.returncode, "stdout": _cap(stdout),
-            "stderr": _cap(stderr), "cwd": str(d)}
+    r = {"exit_code": p.returncode, "stdout": _cap(stdout),
+         "stderr": _cap(stderr), "cwd": str(d)}
+    if conta:
+        r["conta_exec"] = conta
+        # Falha DA TRAVESSIA se nomeia: "sudo: a password is required" no stderr de um
+        # `git status` lê-se como defeito do git, e o dono perde a tarde procurando no
+        # lugar errado. O que falta é regra de sudoers, e a resposta diz isso.
+        falha = exec_conta.erro_de_conta(p.returncode, stderr)
+        if falha:
+            r["erro"] = falha
+    return r
 
 
 async def run_command(command: str, cwd: str = "", timeout: int = 120) -> dict:
@@ -403,9 +449,12 @@ async def run_command(command: str, cwd: str = "", timeout: int = 120) -> dict:
     t0 = time.monotonic()
     oid = _ordem_por_sid.get(sid, "-")
     sessao_id = _sessao_por_sid.get(sid, "-")
-    r = await anyio.to_thread.run_sync(_run_blocking, command, d, timeout, sessao_id, oid)
+    conta = _conta_exec()  # aqui pelo mesmo motivo do sid: depende do RequestContext
+    r = await anyio.to_thread.run_sync(_run_blocking, command, d, timeout, sessao_id, oid,
+                                       conta)
     _audit(tool="run_command", comando=command[:CMD_CAP],
            comando_truncado=len(command) > CMD_CAP, cwd=str(d),
+           conta_exec=conta or OPS_USER,
            exit_code=r.get("exit_code"), erro=r.get("erro"),
            bytes_stdout=r.get("stdout", {}).get("bytes_total"),
            dur_ms=round((time.monotonic() - t0) * 1000))
@@ -460,6 +509,35 @@ def read_file(path: str, offset: int = 0, max_bytes: int = 40000) -> dict:
             "path": str(p)}
 
 
+def _write_sob_conta(p: Path, content: str, conta: str, timeout: int = 30) -> dict:
+    """Escreve `p` sob a conta de SO `conta`, para o arquivo nascer com o owner dela.
+
+    O caminho vai por ARGV (`$0`), nunca interpolado no texto do script: `bash -c` com
+    o nome do arquivo dentro da string aceitaria `$(...)` vindo do parâmetro da tool.
+    `set -e` porque `mkdir` que falha e `cat` que segue produz o pior resultado
+    possível — sucesso reportado, arquivo em lugar nenhum.
+
+    Fica síncrono, como o write_file que ele substitui: o fork só existe no caminho da
+    conta segregada, é limitado por timeout curto, e transformar a tool em async
+    mudaria a assinatura de todo mundo para o benefício de um sujeito.
+    """
+    env = exec_conta.env_sob_conta(_env_subprocesso(), conta)
+    argv = ["bash", "-c", 'set -e; mkdir -p "$(dirname "$0")"; cat > "$0"', str(p)]
+    try:
+        argv = exec_conta.argv_sob_conta(argv, conta, env, EXEC_WRAPPER)
+        cp = subprocess.run(argv, input=content.encode(), capture_output=True,
+                            timeout=timeout, env=env, check=False)
+    except exec_conta.ContaNaoDespachavel as e:
+        return {"erro": str(e), "path": str(p), "conta_exec": conta}
+    except (OSError, subprocess.SubprocessError) as e:
+        return {"erro": f"{type(e).__name__}: {e}", "path": str(p), "conta_exec": conta}
+    if cp.returncode != 0:
+        falha = exec_conta.erro_de_conta(cp.returncode, cp.stderr)
+        return {"erro": falha or cp.stderr.decode("utf-8", "replace")[:300],
+                "path": str(p), "conta_exec": conta}
+    return {"ok": True, "path": str(p), "bytes": len(content.encode()), "conta_exec": conta}
+
+
 def write_file(path: str, content: str) -> dict:
     """Cria ou substitui um arquivo sob @ROOT@ (path relativo à raiz),
     criando diretórios intermediários. Conteúdo é o arquivo INTEIRO."""
@@ -471,10 +549,21 @@ def write_file(path: str, content: str) -> dict:
     if bloqueio:
         return bloqueio
     existia = p.is_file()
+    conta = _conta_exec()
+    if conta:
+        # O write TAMBÉM atravessa (story #3007). Escrever in-process aqui deixaria o
+        # arquivo com owner da porta ainda que todo comando já rodasse sob a conta — e
+        # é o owner no disco que isola, não o uid de quem executou o comando anterior.
+        # Subprocesso só existe neste caminho: cadeira segue com o `write_text` de
+        # sempre, sem fork e sem sudo.
+        r = _write_sob_conta(p, content, conta)
+        _audit(tool="write_file", path=str(p), bytes=len(content.encode()),
+               substituiu=existia, conta_exec=conta, erro=r.get("erro"))
+        return r
     p.parent.mkdir(parents=True, exist_ok=True)
     p.write_text(content)
     _audit(tool="write_file", path=str(p), bytes=len(content.encode()),
-           substituiu=existia)
+           substituiu=existia, conta_exec=OPS_USER)
     return {"ok": True, "path": str(p), "bytes": len(content.encode())}
 
 
@@ -710,11 +799,20 @@ def _sessao_resolve(sessao_id: str | None) -> dict:
     return out
 
 
-def _run_verbo_blocking(argv: list, stdin: str | None, timeout: int, ident: dict) -> dict:
+def _run_verbo_blocking(argv: list, stdin: str | None, timeout: int, ident: dict,
+                        conta: str | None = None) -> dict:
+    # PF_CONTA acompanha a troca: é o que o verbo lê para saber sob que conta rodou, e
+    # deixá-lo em OPS_USER depois de trocar de uid seria mentir para o núcleo inteiro.
     env = {**_env_subprocesso(), "PF_SESSAO": ident["sessao_id"], "PF_ORDEM_ID": ident["ordem_id"],
-           "PF_CONTA": OPS_USER}
+           "PF_CONTA": conta or OPS_USER}
     if ident["cadeira"]:
         env["PF_CADEIRA"] = ident["cadeira"]
+    if conta:
+        try:
+            env = exec_conta.env_sob_conta(env, conta)
+            argv = exec_conta.argv_sob_conta(argv, conta, env, EXEC_WRAPPER)
+        except exec_conta.ContaNaoDespachavel as e:
+            return {"erro": str(e), "cwd": str(RAIZ), "conta_exec": conta}
     try:
         p = subprocess.Popen(argv, cwd=RAIZ, env=env,
                              stdin=subprocess.PIPE if stdin is not None else subprocess.DEVNULL,
@@ -732,8 +830,14 @@ def _run_verbo_blocking(argv: list, stdin: str | None, timeout: int, ident: dict
             pass
         p.wait()
         return {"erro": f"timeout ({timeout}s) — grupo de processo morto", "cwd": str(RAIZ)}
-    return {"exit_code": p.returncode, "stdout": _cap(stdout),
-            "stderr": _cap(stderr), "cwd": str(RAIZ)}
+    r = {"exit_code": p.returncode, "stdout": _cap(stdout),
+         "stderr": _cap(stderr), "cwd": str(RAIZ)}
+    if conta:
+        r["conta_exec"] = conta
+        falha = exec_conta.erro_de_conta(p.returncode, stderr)
+        if falha:
+            r["erro"] = falha
+    return r
 
 
 def _faz_tool_verbo(slug: str, binario: str, descricao: str):
@@ -748,10 +852,13 @@ def _faz_tool_verbo(slug: str, binario: str, descricao: str):
             return negado
         timeout = max(1, min(timeout, 600))
         ident = _sessao_resolve(sessao_id)  # aqui: dentro da task da tool (#2911)
+        conta = _conta_exec()               # idem
         argv = [binario] + ([ato] if ato else []) + args
         t0 = time.monotonic()
-        r = await anyio.to_thread.run_sync(_run_verbo_blocking, argv, stdin, timeout, ident)
+        r = await anyio.to_thread.run_sync(_run_verbo_blocking, argv, stdin, timeout, ident,
+                                           conta)
         _audit(tool=slug, ato=ato or None, args=" ".join(args)[:CMD_CAP],
+               conta_exec=conta or OPS_USER,
                cadeira=ident["cadeira"] or None, sessao_id=ident["sessao_id"],
                ordem_id=ident["ordem_id"], exit_code=r.get("exit_code"), erro=r.get("erro"),
                bytes_stdout=r.get("stdout", {}).get("bytes_total"),
