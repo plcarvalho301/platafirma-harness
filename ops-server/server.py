@@ -784,7 +784,13 @@ for _fn in _TOOLS:
 # fica pro teste de superfície, §3.2/§7.3).
 TOOLS_VERBOS = os.environ.get("PF_TOOLS_VERBOS", "1") != "0"
 TOOLS_LEVA2 = os.environ.get("PF_TOOLS_LEVA2", "0") == "1"
-PF_SOMBRA = os.environ.get("PF_SOMBRA", "1") != "0"      # sessão-sombra inequívoca (§3)
+# sessão-sombra: DEFAULT OFF (achado medido 06/09/2026). A chave (sub,sid,jti) é escopo
+# de PROVIDER, não de agente: ia (claude.ai) e fabrica (Code) usam a MESMA credencial —
+# jti idêntico no ops log — então "uma sessão viva sob (sub,sid,jti)" resolve chamadas da
+# ia para a sessão da fabrica quando só uma está registrada (#409, autoria errada). A
+# sombra só é sã em conta de UM agente; ligue PF_SOMBRA=1 apenas aí. Identidade real =
+# sessao_id explícito (as tools de verbo já o passam); ausente → "-", nunca um palpite.
+PF_SOMBRA = os.environ.get("PF_SOMBRA", "0") != "0"
 PF_GATE = os.environ.get("PF_GATE", "1") != "0"          # gate transparente (§4)
 PF_TOOLS_LOTE = os.environ.get("PF_TOOLS_LOTE", "0") == "1" # chamada em lote (§5) — Leva 2
 # Quem é leva 2 NÃO mora aqui: é o marcador `leva:2` na linha do slug em

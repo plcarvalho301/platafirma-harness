@@ -10,9 +10,10 @@ só aqui:
 - `<verbo>(ato, args, stdin, sessao_id, timeout)` executa `bin/<verbo> <ato> <args>`.
   Sem `ato` o verbo lista os atos; `deploy`, `descobrir`, `situacao` e `motor <inst>`
   levam o alvo no `ato` — a descrição diz.
-- `sessao_id` é o do `monta_sessao`. Sem ele, a porta resolve por sessão-sombra só
-  quando é inequívoca (uma sessão viva sua); ambíguo → roda sem cadeira, e
-  `mesa`/`fila`/`tarefas` não sabem de quem é o ato.
+- `sessao_id` é o do `monta_sessao` — passe-o SEMPRE nas chamadas de verbo. Sem ele a
+  porta roda sem cadeira (`-`): ela NÃO adivinha por (sub,sid,jti), que é a credencial do
+  provider e não distingue ia de fábrica. Sem `sessao_id`, `mesa`/`fila`/`tarefas` não
+  sabem de quem é o ato.
 - Sem tool para o que precisa → `run_command`, fallback, medido por nome de tool.
 
 ## Abertura: `monta_sessao` é a PRIMEIRA ação, em toda cadeira
