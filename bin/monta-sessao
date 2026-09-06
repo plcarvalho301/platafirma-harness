@@ -660,7 +660,30 @@ def _agora_iso():
     return time.strftime("%Y-%m-%dT%H:%M:%S+00:00", time.gmtime())
 
 
-def monta(cadeira, atualizar, pergunta=None, forcado_chapeu=None, so_chapeu=False):
+def cunha_sessao(portado):
+    """O UNICO gerador de `sessao_id` da casa (arq:0101 §1, ordem do dono 06/09).
+
+    Fica aqui, no montador, e nao na porta: `monta-sessao` e o ponto por onde TODA
+    superficie abre — a tool `monta_sessao` delega a este verbo, e a fabrica o chama
+    direto (`bin/chat`). Cunhar na porta deixava a fabrica sem sessao nenhuma e
+    convidava um segundo gerador do lado do `chat` — que seria o quinto ponto de
+    nascimento da mesma entidade, exatamente o defeito que a ADR fecha.
+
+    `portado` e o uuid que a fita ja tem. Vindo valido, NAO se recunha: a segunda
+    abertura da mesma conversa reusa. Invalido nao passa calado — vira aviso.
+    """
+    import uuid
+    if portado:
+        try:
+            return str(uuid.UUID(str(portado).strip())), False, None
+        except ValueError:
+            return (str(uuid.uuid4()), True,
+                    f"sessao_id {portado!r} nao e RFC-4122 — ignorado, sessao nova cunhada")
+    return str(uuid.uuid4()), True, None
+
+
+def monta(cadeira, atualizar, pergunta=None, forcado_chapeu=None, so_chapeu=False,
+          sessao_id=None):
     # `atualizar` sobrevive por compatibilidade de chamada (a flag `--sem-atualizar` e o
     # parametro da tool) e NAO faz mais nada: nao ha o que atualizar no caminho de
     # servico. Atualizar a abertura virou ato deliberado e separado, `publicar-abertura`
@@ -764,8 +787,16 @@ def monta(cadeira, atualizar, pergunta=None, forcado_chapeu=None, so_chapeu=Fals
     # montador (arq:0058, 'um clone so data o pacote'), e agora e o commit de onde a
     # arvore foi extraida — imutavel, e por isso reproduzivel.
     montador_sha = m["sha"]
+    sid, cunhada, aviso_sid = cunha_sessao(sessao_id)
+    if aviso_sid:
+        avisos.append(aviso_sid)
     return {
         "cadeira": cadeira,
+        "sessao_id": sid,
+        "sessao": {"id": sid, "cunhada_agora": cunhada,
+                   "porte": "devolva este `sessao_id` em toda chamada de tool e na "
+                            "proxima abertura desta mesma conversa — quem cunha e este "
+                            "verbo, uma vez (arq:0101 §1); a porta nao infere"},
         "nome_canonico": nome,
         "morada": m,
         "pacote": {
@@ -789,6 +820,10 @@ def imprime_texto(pac):
         print("cadeiras: " + " ".join(pac["cadeiras_validas"]), file=sys.stderr)
         return 1
     print(f"== cadeira: {pac['nome_canonico'] or '<nome não resolvido>'} ==")
+    if pac.get("sessao_id"):
+        print(f"== sessao_id: {pac['sessao_id']} == "
+              "(porte-o em `sessao_id=` de toda chamada de tool e na proxima abertura "
+              "desta conversa; sem ele a porta roda sem ledger de dedup)")
     for e in pac["pecas"]:
         cab = f"===== {e['peca']}: {e['ref']}"
         if e["sha"]:
@@ -904,6 +939,10 @@ def main():
                         "Default: serve abertura + chapeu roteado.")
     p.add_argument("--chapeu", metavar="SLUG",
                    help="serve UM chapeu da cadeira (sob demanda, fora da abertura)")
+    p.add_argument("--sessao-id", metavar="UUID",
+                   help="o uuid da fita, quando ela JA abriu uma vez: reusa em vez de "
+                        "cunhar (arq:0101 §1 — uma conversa, um sessao_id). Sem a flag, "
+                        "cunha-se um novo aqui, que e o unico ponto onde isso acontece")
     args = p.parse_args()
 
     if not args.cadeira:
@@ -924,6 +963,7 @@ def main():
         return imprime_chapeu(alvo, args)
 
     pac = monta(alvo, atualizar=not args.sem_atualizar, pergunta=args.pergunta,
+                sessao_id=args.sessao_id,
                 forcado_chapeu=args.chapeu, so_chapeu=args.so_chapeu)
     if args.json:
         print(json.dumps(pac, ensure_ascii=False))

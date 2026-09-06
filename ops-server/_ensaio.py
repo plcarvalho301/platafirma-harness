@@ -354,8 +354,13 @@ def _derrame_tmp():
     return patch.object(_p, "DERRAME", _Path(tempfile.mkdtemp(prefix="poda-ensaio-")))
 
 
-def _pacote_falso(**extra):
+def _pacote_falso(sessao_id=None, **extra):
+    """Duble do MONTADOR — e ele quem cunha `sessao_id` (arq:0101 §1). A porta so
+    repassa o que a fita portou e persiste o que voltou."""
+    sid = sessao_id or str(_uuid.uuid4())
     return {"cadeira": "fabrica", "nome_canonico": "fabrica", "pecas": [],
+            "sessao_id": sid,
+            "sessao": {"id": sid, "cunhada_agora": not sessao_id},
             "roteador": {"via": "teste", "slug": None}, **extra}
 
 
@@ -363,7 +368,7 @@ def _pacote_falso(**extra):
 def test_abertura_cunha_rfc4122_uma_vez_e_segunda_nao_recunha():
     Fake = _fake_redis_cls()
     with patch.object(s, "_autoriza", return_value=None), \
-         patch.object(s, "_montar", side_effect=lambda *a: _pacote_falso()), \
+         patch.object(s, "_montar", side_effect=lambda *a: _pacote_falso(a[4] or None)), \
          patch.object(s, "redis") as _rmod:
         _rmod.Redis = Fake
         r1 = asyncio.run(s.monta_sessao(cadeira="fabrica"))
@@ -375,25 +380,58 @@ def test_abertura_cunha_rfc4122_uma_vez_e_segunda_nao_recunha():
     assert r1["ordem_id"] != r2["ordem_id"], "ordem_id e por ordem; sessao_id e por conversa"
 
 
-def test_abertura_normaliza_32hex_legado():
-    Fake = _fake_redis_cls()
+def test_porta_repassa_o_portado_ao_verbo_e_nao_cunha():
+    """QUEM CUNHA E O MONTADOR. A porta nao tem gerador — repassa e persiste."""
+    Fake, visto = _fake_redis_cls(), {}
+
+    def _duble(cadeira, atualizar, chapeu, pergunta, sessao_id):
+        visto["sessao_id"] = sessao_id
+        return _pacote_falso(sessao_id or None)
+
     with patch.object(s, "_autoriza", return_value=None), \
-         patch.object(s, "_montar", return_value=_pacote_falso()), \
+         patch.object(s, "_montar", side_effect=_duble), \
          patch.object(s, "redis") as _rmod:
         _rmod.Redis = Fake
-        r = asyncio.run(s.monta_sessao(cadeira="fabrica", sessao_id=_UUID_A.replace("-", "")))
-    assert r["sessao_id"] == _UUID_A
+        asyncio.run(s.monta_sessao(cadeira="fabrica", sessao_id=_UUID_A))
+    assert visto["sessao_id"] == _UUID_A, "o portado desce para o verbo"
 
-
-def test_abertura_sessao_id_invalido_e_declarado_nao_aceito():
-    Fake = _fake_redis_cls()
+    # Montador mudo: a porta NAO inventa uuid — sai sem sessao, declarado. (O uuid4 que
+    # sobra em `monta_sessao` e o do `ordem_id`, que e da porta por norma: ordem_id e por
+    # ordem do dono, sessao_id e por conversa.)
     with patch.object(s, "_autoriza", return_value=None), \
-         patch.object(s, "_montar", return_value=_pacote_falso()), \
+         patch.object(s, "_montar", side_effect=lambda *a: {"cadeira": "fabrica",
+                                                            "nome_canonico": "fabrica",
+                                                            "pecas": []}), \
          patch.object(s, "redis") as _rmod:
-        _rmod.Redis = Fake
-        r = asyncio.run(s.monta_sessao(cadeira="fabrica", sessao_id="nao-e-uuid"))
-    assert r["sessao_id"] != "nao-e-uuid"
-    assert any("RFC-4122" in a for a in r.get("avisos", [])), "valor invalido se declara"
+        _rmod.Redis = _fake_redis_cls()
+        r = asyncio.run(s.monta_sessao(cadeira="fabrica"))
+    assert not r.get("sessao_id"), "porta sem gerador proprio"
+    assert any("sessao_id" in a for a in r.get("avisos", [])), "ausencia se declara"
+    assert r.get("ordem_id"), "ordem_id continua sendo da porta"
+
+
+def test_montador_e_o_unico_gerador_de_sessao_id():
+    """Cunho e reuso medidos no VERBO, por subprocesso — e ele o ponto por onde toda
+    superficie abre (a fabrica chama `bin/monta-sessao` direto, sem porta)."""
+    verbo = str(_Path(__file__).parent.parent / "bin/monta-sessao")
+    import subprocess as _sp
+
+    def _abre(*flags):
+        cp = _sp.run([verbo, "fabrica", "--json", "--so-chapeu", *flags],
+                     capture_output=True, text=True, timeout=120)
+        return _json.loads(cp.stdout)
+
+    p1 = _abre()
+    assert _uuid.UUID(p1["sessao_id"]) and p1["sessao"]["cunhada_agora"] is True
+    p2 = _abre("--sessao-id", p1["sessao_id"])
+    assert p2["sessao_id"] == p1["sessao_id"] and p2["sessao"]["cunhada_agora"] is False
+    p3 = _abre("--sessao-id", _UUID_A.replace("-", ""))          # 32-hex legado
+    assert p3["sessao_id"] == _UUID_A
+    p4 = _abre("--sessao-id", "nao-e-uuid")
+    assert p4["sessao_id"] != "nao-e-uuid"
+    assert any("RFC-4122" in a for a in p4.get("avisos", []))
+
+
 
 
 def test_join_nao_se_grava_sob_sid_reciclavel():
@@ -401,7 +439,7 @@ def test_join_nao_se_grava_sob_sid_reciclavel():
     reciclavel no ledger daria a fita de uma sessao para a proxima que calhar."""
     Fake = _fake_redis_cls()
     with patch.object(s, "_autoriza", return_value=None), \
-         patch.object(s, "_montar", side_effect=lambda *a: _pacote_falso()), \
+         patch.object(s, "_montar", side_effect=lambda *a: _pacote_falso(a[4] or None)), \
          patch.object(s, "_sessao_atual", return_value="s7aab160cb740"), \
          patch.object(s, "_sid_header", return_value=None), \
          patch.object(s, "redis") as _rmod:
@@ -416,7 +454,7 @@ def test_join_nao_se_grava_sob_sid_reciclavel():
 def test_join_grava_e_resolve_com_header_do_cliente():
     Fake = _fake_redis_cls()
     with patch.object(s, "_autoriza", return_value=None), \
-         patch.object(s, "_montar", side_effect=lambda *a: _pacote_falso()), \
+         patch.object(s, "_montar", side_effect=lambda *a: _pacote_falso(a[4] or None)), \
          patch.object(s, "_sessao_atual", return_value="hdr-abc"), \
          patch.object(s, "_sid_header", return_value="hdr-abc"), \
          patch.object(s, "redis") as _rmod:

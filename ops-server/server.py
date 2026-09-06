@@ -834,7 +834,8 @@ def _memoria(cadeira: str) -> dict:
     return out
 
 
-def _montar(cadeira: str, atualizar: bool, chapeu: str = "", pergunta: str = "") -> dict:
+def _montar(cadeira: str, atualizar: bool, chapeu: str = "", pergunta: str = "",
+            sessao_id: str = "") -> dict:
     """Delega ao verbo `bin/monta-sessao --json`, que monta por catálogo (#189 fase 5).
 
     Aqui havia uma SEGUNDA implementação da montagem: este servidor lia persona, org e
@@ -855,6 +856,13 @@ def _montar(cadeira: str, atualizar: bool, chapeu: str = "", pergunta: str = "")
         argv += ["--chapeu", chapeu]
     if pergunta:
         argv += ["--pergunta", pergunta]
+    # QUEM CUNHA `sessao_id` E O VERBO, nao esta porta (arq:0101 §1, ordem do dono
+    # 06/09). A porta so repassa o que a fita portou e persiste o que voltou: cunhar
+    # aqui deixava a fabrica — que chama `bin/monta-sessao` direto, sem passar por
+    # nenhuma porta — sem sessao nenhuma, e convidava um segundo gerador do lado do
+    # `chat`. Um gerador so, no ponto por onde toda superficie abre.
+    if sessao_id:
+        argv += ["--sessao-id", sessao_id]
     try:
         proc = subprocess.run(argv, capture_output=True, text=True, timeout=90,
                               env={**_env_subprocesso(), "PF_SUPERFICIE": "claude.ai"})
@@ -924,7 +932,8 @@ async def monta_sessao(cadeira: str = "", atualizar: bool = True, chapeu: str = 
     if negado:
         return negado
     t0 = time.monotonic()
-    r = await anyio.to_thread.run_sync(_montar, cadeira, atualizar, chapeu, pergunta)
+    r = await anyio.to_thread.run_sync(_montar, cadeira, atualizar, chapeu, pergunta,
+                                       sessao_id or "")
     _rot = (r.get("roteador") or {})
     _sessao_id = None
     _delta = None
@@ -939,15 +948,20 @@ async def monta_sessao(cadeira: str = "", atualizar: bool = True, chapeu: str = 
         # ordem_id é de UMA ordem do dono e sempre nasce aqui; sessao_id é da CONVERSA e
         # nasce uma vez só. Segunda abertura da mesma fita cunha ordem, não sessão.
         _oid = "o" + datetime.now().astimezone().strftime("%Y%m%dT%H%M%S") + "-" + uuid.uuid4().hex[:6]
-        _portado = _uuid_valido(sessao_id) if sessao_id else None
-        if sessao_id and not _portado:
+        # O uuid vem do montador, que e o unico gerador. Faltando (montador velho ou
+        # mudo), a abertura sai SEM sessao — declarado, contado `ledger=sem_sessao`,
+        # nunca recusado. Cunhar aqui de novo seria recriar o ponto que acabou de sair.
+        _sessao_id = _uuid_valido(r.get("sessao_id") or "")
+        _cunhou = bool((r.get("sessao") or {}).get("cunhada_agora"))
+        if not _sessao_id:
             r.setdefault("avisos", []).append(
-                f"sessao_id {sessao_id!r} não é RFC-4122 — ignorado, sessão nova cunhada")
-        _sessao_id = _portado or str(uuid.uuid4())
-        _cunhou = _portado is None
+                "montador nao devolveu `sessao_id` — fita sem entidade-sessao, "
+                "roda sem ledger de dedup (arq:0101 §1)")
         _aberto_em = datetime.now().astimezone().isoformat(timespec="milliseconds")
         _sub, _q_sid, _jti = _q.get("sub", "-"), _q.get("sid", "-"), _q.get("jti", "-")
         try:
+            if not _sessao_id:
+                raise RuntimeError("sem sessao_id do montador — nada a persistir")
             _cad = r.get("cadeira") or cadeira or r.get("nome_canonico", "-")
             _con = _rc()
             _val = json.dumps({"cadeira": _cad, "ordem_id": _oid, "aberto_em": _aberto_em,
@@ -968,10 +982,8 @@ async def monta_sessao(cadeira: str = "", atualizar: bool = True, chapeu: str = 
         except Exception as e:  # noqa: BLE001
             print(f"[valkey] FALHOU persistir sessao:{_sessao_id}: {e!r}", file=sys.stderr, flush=True)
         r["ordem_id"] = _oid
-        r["sessao_id"] = _sessao_id
-        r["sessao"] = {"id": _sessao_id, "cunhada_agora": _cunhou, "ordem_id": _oid,
-                       "porte": "devolva `sessao_id` em toda chamada e na próxima "
-                                "abertura desta mesma conversa — a porta não infere"}
+        if _sessao_id:
+            r.setdefault("sessao", {})["ordem_id"] = _oid
         _audit(tool="sessao", evento="sessao_aberta",
                sujeito=r.get("nome_canonico", "-"), ordem_id=_oid, sessao_id=_sessao_id,
                via="tool", cunhada=_cunhou)
