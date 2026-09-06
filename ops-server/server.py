@@ -118,6 +118,26 @@ def _rc():
                        socket_connect_timeout=2, socket_timeout=3)
 
 
+def _sid_header() -> str | None:
+    """O `Mcp-Session-Id` DO CLIENTE, e só ele — nunca o `s<hex>` de `id(session)`.
+
+    O join `conexao:{sid}` só vale sobre identificador ESTÁVEL. O degrau 2 de
+    `_sessao_atual` (`f"s{id(s):x}"`) é reciclado depois do GC — com
+    `stateless_http=True` cada POST cria um ServerSession novo, então ele muda a cada
+    chamada e, pior, pode REAPARECER em outra fita horas depois (#409, a atribuição
+    errada de autoria de 18/08). Gravar o ledger de uma sessão sob uma chave reciclável
+    é dar a fita de alguém para a próxima que calhar do mesmo `id()`. Sem header, não
+    há join: a fita porta o `sessao_id`, que é o mecanismo do arq:0101 §1.
+    """
+    try:
+        ctx = mcp.get_context()
+        req = getattr(getattr(ctx, "request_context", None), "request", None)
+        cab = getattr(req, "headers", None)
+        return (cab.get("mcp-session-id") or None) if cab is not None else None
+    except Exception:                                         # noqa: BLE001
+        return None
+
+
 def _uuid_valido(bruto: str) -> str | None:
     """Normaliza para RFC-4122 (arq:0091 §4) — 32 hex sem hifen entra e sai com hifen.
 
@@ -914,6 +934,7 @@ async def monta_sessao(cadeira: str = "", atualizar: bool = True, chapeu: str = 
     # sessao='-' e nao e o caminho que a fita usa.
     if not r.get("erro"):
         _sid = _sessao_atual()
+        _sid_h = _sid_header()
         _q = _quem()                                   # async: nunca dentro do to_thread (#2911)
         # ordem_id é de UMA ordem do dono e sempre nasce aqui; sessao_id é da CONVERSA e
         # nasce uma vez só. Segunda abertura da mesma fita cunha ordem, não sessão.
@@ -934,8 +955,12 @@ async def monta_sessao(cadeira: str = "", atualizar: bool = True, chapeu: str = 
                                "sid_conexao": _sid}, ensure_ascii=False)
             _con.set(f"sessao:{_sessao_id}", _val, ex=TTL_SESSAO_S)
             # join conexão->sessão no msg-mem, no lugar dos dicionários de RAM: é o que
-            # sustenta `sessao_id` implícito nas demais tools depois de um restart.
-            _con.set(f"conexao:{_sid}", _sessao_id, ex=TTL_SESSAO_S)
+            # sustenta `sessao_id` implícito nas demais tools depois de um restart. SÓ
+            # com header do cliente — `s<hex>` de id() é reciclável e não serve de chave
+            # (ver `_sid_header`). Sem header, o porte explícito é o caminho, e ele é o
+            # mecanismo canônico do arq:0101 §1, não um remendo.
+            if _sid_h:
+                _con.set(f"conexao:{_sid_h}", _sessao_id, ex=TTL_SESSAO_S)
             if not (_sub == "-" and _q_sid == "-" and _jti == "-"):
                 _chave_sombra = f"sombra:{_sub}:{_q_sid}:{_jti}"
                 _con.sadd(_chave_sombra, _sessao_id)
@@ -1003,14 +1028,14 @@ def _sessao_resolve(sessao_id: str | None) -> dict:
     recusado. Recusar aqui seria a porta exigindo da fita um estado que a fita de
     superfície pobre não tem como guardar.
     """
-    sid_conexao = _sessao_atual()
     if sessao_id:
         sessao_id = _uuid_valido(sessao_id) or sessao_id   # legado 32-hex normaliza
-    if not sessao_id:
+    sid_h = _sid_header()
+    if not sessao_id and sid_h:
         try:
-            sessao_id = _rc().get(f"conexao:{sid_conexao}") or None
+            sessao_id = _rc().get(f"conexao:{sid_h}") or None
         except Exception as e:  # noqa: BLE001
-            print(f"[valkey] join conexao:{sid_conexao} indisponível: {e!r}",
+            print(f"[valkey] join conexao:{sid_h} indisponível: {e!r}",
                   file=sys.stderr, flush=True)
     if not sessao_id and PF_SOMBRA:
         sessao_id = _sombra_inequivoca()   # None quando 0 ou ≥2 vivas

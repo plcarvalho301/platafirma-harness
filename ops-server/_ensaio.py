@@ -396,13 +396,45 @@ def test_abertura_sessao_id_invalido_e_declarado_nao_aceito():
     assert any("RFC-4122" in a for a in r.get("avisos", [])), "valor invalido se declara"
 
 
+def test_join_nao_se_grava_sob_sid_reciclavel():
+    """`s<hex>` de id(session) reaparece em outra fita depois do GC (#409): chave
+    reciclavel no ledger daria a fita de uma sessao para a proxima que calhar."""
+    Fake = _fake_redis_cls()
+    with patch.object(s, "_autoriza", return_value=None), \
+         patch.object(s, "_montar", side_effect=lambda *a: _pacote_falso()), \
+         patch.object(s, "_sessao_atual", return_value="s7aab160cb740"), \
+         patch.object(s, "_sid_header", return_value=None), \
+         patch.object(s, "redis") as _rmod:
+        _rmod.Redis = Fake
+        asyncio.run(s.monta_sessao(cadeira="fabrica"))
+        rc = Fake()
+        assert rc.get("conexao:s7aab160cb740") is None, "sid reciclavel nao vira chave"
+        with patch.object(s, "_sombra_inequivoca", return_value=None):
+            assert s._sessao_resolve(None)["sessao_id"] == "-"
+
+
+def test_join_grava_e_resolve_com_header_do_cliente():
+    Fake = _fake_redis_cls()
+    with patch.object(s, "_autoriza", return_value=None), \
+         patch.object(s, "_montar", side_effect=lambda *a: _pacote_falso()), \
+         patch.object(s, "_sessao_atual", return_value="hdr-abc"), \
+         patch.object(s, "_sid_header", return_value="hdr-abc"), \
+         patch.object(s, "redis") as _rmod:
+        _rmod.Redis = Fake
+        r = asyncio.run(s.monta_sessao(cadeira="fabrica"))
+        out = s._sessao_resolve(None)
+    assert out["sessao_id"] == r["sessao_id"] and out["cadeira"] == "fabrica"
+
+
 def test_join_conexao_sessao_vive_no_msg_mem_nao_em_ram():
     """O que sobrevive ao restart da porta e o join no msg-mem — nao ha mais dict."""
     assert not hasattr(s, "_sessao_por_sid") and not hasattr(s, "_ordem_por_sid")
     Fake = _fake_redis_cls(kv={f"sessao:{_UUID_A}": _json.dumps({"cadeira": "fabrica",
                                                                  "ordem_id": "o-x"}),
                                "conexao:sid-teste": _UUID_A})
-    with patch.object(s, "redis") as _rmod, patch.object(s, "_sessao_atual", return_value="sid-teste"):
+    with patch.object(s, "redis") as _rmod, \
+         patch.object(s, "_sessao_atual", return_value="sid-teste"), \
+         patch.object(s, "_sid_header", return_value="sid-teste"):
         _rmod.Redis = Fake
         out = s._sessao_resolve(None)
     assert out["sessao_id"] == _UUID_A and out["cadeira"] == "fabrica"
