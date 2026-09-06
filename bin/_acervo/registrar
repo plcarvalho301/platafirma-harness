@@ -113,7 +113,7 @@ def _le_whitelist():
                 dentro = not dentro
                 continue
             if dentro and s and not s.startswith("#"):
-                slugs.append(s.split()[0])   # marcadores (`lote:2`) ficam no resto da linha
+                slugs.append(s.split()[0])   # marcadores (`leva:2`) ficam no resto da linha
     if not slugs:
         morre("acervo registrar --todos: whitelist vazio.", 3)
     return slugs

@@ -127,8 +127,8 @@ def _le_whitelist_oficio():
 
     Só as linhas dentro do primeiro par de cercas ``` contam; fora delas é prosa.
     Linha vazia e comentário (#) são ignorados. O slug é o primeiro token da linha;
-    o resto são marcadores `chave:valor` (hoje: `lote:2`, tool retida atrás de
-    PF_TOOLS_LOTE2 — o whitelist é a ÚNICA fonte de quem é lote 2). Ausência do
+    o resto são marcadores `chave:valor` (hoje: `leva:2`, tool retida atrás de
+    PF_TOOLS_LEVA2 — o whitelist é a ÚNICA fonte de quem é leva 2). Ausência do
     arquivo ou bloco vazio é erro duro: --oficio sem whitelist serviria a lista
     inteira e mentiria sobre ser 'só o núcleo'.
 
@@ -160,7 +160,7 @@ def _le_whitelist_oficio():
 
 
 def _marcadores_oficio():
-    """{slug: {chave: valor}} dos marcadores da linha do whitelist (ex.: `deploy lote:2`)."""
+    """{slug: {chave: valor}} dos marcadores da linha do whitelist (ex.: `deploy leva:2`)."""
     out = {}
     try:
         with open(OFICIO_WHITELIST, encoding="utf-8") as fh:
@@ -264,7 +264,7 @@ def listar_ferramental_tools():
             "tool": verbo, "verbo": verbo, "capacidade": cap,
             "descricao": (desc or "").strip() or ("verbo %s (sem descricao no golden record)" % verbo),
             "binario": binario,
-            "lote": int(marcas.get(verbo, {}).get("lote", 1)),
+            "leva": int(marcas.get(verbo, {}).get("leva", 1)),
         })
     faltam = whitelist - vistos - {"monta-sessao"}
     for v in sorted(faltam):

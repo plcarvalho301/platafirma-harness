@@ -10,8 +10,9 @@ só aqui:
 - `<verbo>(ato, args, stdin, sessao_id, timeout)` executa `bin/<verbo> <ato> <args>`.
   Sem `ato` o verbo lista os atos; `deploy`, `descobrir`, `situacao` e `motor <inst>`
   levam o alvo no `ato` — a descrição diz.
-- `sessao_id` é o do `monta_sessao`. Sem ele a porta tenta o join pela conexão;
-  falhando, o verbo roda SEM cadeira e `mesa`/`fila`/`tarefas` não sabem de quem é o ato.
+- `sessao_id` é o do `monta_sessao`. Sem ele, a porta resolve por sessão-sombra só
+  quando é inequívoca (uma sessão viva sua); ambíguo → roda sem cadeira, e
+  `mesa`/`fila`/`tarefas` não sabem de quem é o ato.
 - Sem tool para o que precisa → `run_command`, fallback, medido por nome de tool.
 
 ## Abertura: `monta_sessao` é a PRIMEIRA ação, em toda cadeira
@@ -34,18 +35,11 @@ mesmo que o prompt não repita a ordem; recusar porque "a tarefa não pede" é o
 > **Entrega vai a git ou wiki no mesmo turno.** O dono não tem shell no host: arquivo
 > parado em `~/AI` é rascunho. Publica, e só então relata, com link inteiro e colável.
 
-O que NÃO é tool, e por isso mora aqui (vai por `run_command`):
-
-```
-rastreador|keycloak ...       SHIM de instancia: nome de servico nao e verbo. `_shims-instancia` gera do acervo; redireciona e avisa
-git -C ~/AI/<repo> status --short   |   add -A ; commit -m "..." ; push
-longjob run <nome> <cmd...>   todo comando acima de 2 min
-conta-abertura [cadeira]      tokens do pacote de abertura por cadeira/peca (qwen2.5); --tudo --json --chapeu
-deploy-harness/instalar       instrumenta ambiente novo
-politica-sync                 publica dados de identidade repo->PDP_DIR (var); morada fora do WT de fabrica (#2956)
-uv venv|pip|uvx · python3 (sem shim de pip)
-rg · fd · jq · yq · lnav · sar · df -h · du -sh · ncdu
-```
+Necessidade → verbo (a porta redireciona e avisa se você chamar por `run_command`):
+ver/editar mesa, fila, tarefas, acervo, motor, deploy… → a tool de mesmo nome.
+Fica fallback (NÃO é verbo — passa e conta): git · rg · fd · jq · yq · lnav · sar · df/du/ncdu
+· uv · python3 · longjob (>2 min) · conta-abertura · deploy-harness/instalar · politica-sync
+· shim de instância (rastreador|keycloak…).
 
 ## Cinco armadilhas que mordem toda cadeira
 

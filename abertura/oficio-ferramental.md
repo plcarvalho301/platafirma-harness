@@ -6,7 +6,7 @@ por esta lista. Uma linha por slug de verbo canônico (a coluna `verbo` do golde
 record); o que vier depois do slug na mesma linha é marcador `chave:valor`.
 Recorte por chapéu NÃO mora aqui — vai no `ferramental.md` de cada chapéu.
 
-`lote:2` foi retirado em 02/09 (retinha acesso/infra/deploy/chat atrás de uma régua
+`leva:2` foi retirado em 02/09 (retinha acesso/infra/deploy/chat atrás de uma régua
 acao/tipo por tool que nunca chegou a ser pedida — `_autoriza` já cobre essas quatro
 pelo mesmo PEP genérico que cobre as outras treze e o `run_command`, então a retenção
 não protegia nada) e **volta em 05/09 para `repo` e `pr`**, por pedido escrito no
@@ -40,7 +40,7 @@ persona
 seg
 sinal
 situacao
-repo lote:2
+repo leva:2
 teste
 lint
 ```

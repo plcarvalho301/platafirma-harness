@@ -40,6 +40,7 @@ import logging
 import os
 import uuid
 import re
+import shlex
 import signal
 import subprocess
 import sys
@@ -355,13 +356,15 @@ mcp = FastMCP(
 # anyio.to_thread (limite padrão 40) e roda em session própria (start_new_session):
 # no timeout mata-se o grupo (os.killpg), senão `&`/nohup/docker exec sobrevivem e,
 # herdando o fd do pipe, travam o communicate() driblando o timeout declarado.
-def _run_blocking(command: str, d: Path, timeout: int, sessao_id: str = "-", oid: str = "-") -> dict:
+def _run_blocking(command: str, d: Path, timeout: int, sessao_id: str = "-", oid: str = "-",
+                  cadeira: str = "") -> dict:
     """Parte síncrona de run_command — roda em thread do anyio, nunca no event loop
     (ver docstring de run_command pra motivo)."""
+    env = {**_env_subprocesso(), "PF_SESSAO": sessao_id, "PF_ORDEM_ID": oid}
+    if cadeira:
+        env["PF_CADEIRA"] = cadeira
     try:
-        p = subprocess.Popen(["bash", "-c", command], cwd=d,
-                              env={**_env_subprocesso(), "PF_SESSAO": sessao_id,
-                                   "PF_ORDEM_ID": oid},
+        p = subprocess.Popen(["bash", "-c", command], cwd=d, env=env,
                               stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                               start_new_session=True)
     except OSError as e:
@@ -379,7 +382,8 @@ def _run_blocking(command: str, d: Path, timeout: int, sessao_id: str = "-", oid
             "stderr": _cap(stderr), "cwd": str(d)}
 
 
-async def run_command(command: str, cwd: str = "", timeout: int = 120) -> dict:
+async def run_command(command: str, cwd: str = "", timeout: int = 120,
+                       sessao_id: str | None = None) -> dict:
     """FALLBACK: executa um comando shell (`bash -c`) como o usuário @USER@, para o que
     não tem verbo — git, docker (rootless), systemctl --user, rg, fluxo de dado entre
     verbos. Verbo do núcleo tem tool própria (nome = slug); usá-lo por aqui é medido.
@@ -396,16 +400,42 @@ async def run_command(command: str, cwd: str = "", timeout: int = 120) -> dict:
                        DOM_RUNTIME)
     if negado:
         return negado
-    d = (RAIZ / cwd) if cwd else RAIZ
     timeout = max(1, min(timeout, 600))
-    sid = _sessao_atual()  # capturado AQUI: dentro da thread do anyio,
-    # mcp.get_context() nao acha o RequestContext e cairia no fallback '-' (#2911)
+    ident = _sessao_resolve(sessao_id)
+    if PF_GATE:
+        segs = [s.strip() for s in command.split(";") if s.strip()]
+        elegivel = bool(segs) and not any(c in command for c in "|&><$`*?()")
+        argvs = []
+        if elegivel:
+            for seg in segs:
+                try:
+                    argv = shlex.split(seg)
+                except ValueError:
+                    elegivel = False
+                    break
+                if not argv or argv[0] not in SLUGS_SERVIDOS:
+                    elegivel = False
+                    break
+                argvs.append(argv)
+        if elegivel:
+            resultados = []
+            for argv in argvs:
+                r = await anyio.to_thread.run_sync(
+                    _run_verbo_blocking, argv, None, timeout, ident)
+                _audit(tool=argv[0], evento="verbo_contornado", comando=" ".join(argv)[:CMD_CAP],
+                       cadeira=ident["cadeira"] or None, sessao_id=ident["sessao_id"],
+                       ordem_id=ident["ordem_id"], exit_code=r.get("exit_code"), erro=r.get("erro"))
+                resultados.append(r)
+            if len(resultados) == 1:
+                return {**resultados[0], "aviso": f"tem tool {argvs[0][0]} — chamada roteada pela porta"}
+            return {"lote": resultados, "aviso": f"{len(resultados)} verbos roteados"}
+    d = (RAIZ / cwd) if cwd else RAIZ
     t0 = time.monotonic()
-    oid = _ordem_por_sid.get(sid, "-")
-    sessao_id = _sessao_por_sid.get(sid, "-")
-    r = await anyio.to_thread.run_sync(_run_blocking, command, d, timeout, sessao_id, oid)
-    _audit(tool="run_command", comando=command[:CMD_CAP],
+    r = await anyio.to_thread.run_sync(_run_blocking, command, d, timeout,
+                                       ident["sessao_id"], ident["ordem_id"], ident["cadeira"])
+    _audit(tool="run_command", comando=command[:CMD_CAP], evento="fallback",
            comando_truncado=len(command) > CMD_CAP, cwd=str(d),
+           cadeira=ident["cadeira"] or None, sessao_id=ident["sessao_id"], ordem_id=ident["ordem_id"],
            exit_code=r.get("exit_code"), erro=r.get("erro"),
            bytes_stdout=r.get("stdout", {}).get("bytes_total"),
            dur_ms=round((time.monotonic() - t0) * 1000))
@@ -433,7 +463,8 @@ def _nega_fila(p: Path, tool: str):
     return None
 
 
-def read_file(path: str, offset: int = 0, max_bytes: int = 40000) -> dict:
+def read_file(path: str, offset: int = 0, max_bytes: int = 40000,
+              sessao_id: str | None = None) -> dict:
     """Lê um arquivo sob @ROOT@ (path relativo à raiz).
 
     Truncagem sempre declarada: truncated/bytes_total/next_offset para paginar.
@@ -442,30 +473,34 @@ def read_file(path: str, offset: int = 0, max_bytes: int = 40000) -> dict:
     negado = _autoriza("read_file", "read_file", "documento", path, DOM_PLATAFORMA)
     if negado:
         return negado
+    ident = _sessao_resolve(sessao_id)
     p = RAIZ / path
     bloqueio = _nega_fila(p, "read_file")
     if bloqueio:
         return bloqueio
     if not p.is_file():
-        _audit(tool="read_file", path=str(p), erro="não existe ou não é arquivo")
+        _audit(tool="read_file", path=str(p), erro="não existe ou não é arquivo",
+               cadeira=ident["cadeira"] or None, sessao_id=ident["sessao_id"], ordem_id=ident["ordem_id"])
         return {"erro": "não existe ou não é arquivo", "path": str(p)}
     data = p.read_bytes()
     offset = max(0, offset)
     max_bytes = max(1, min(max_bytes, 200000))
     chunk = data[offset:offset + max_bytes]
     fim = offset + len(chunk)
-    _audit(tool="read_file", path=str(p), bytes_lidos=len(chunk), bytes_total=len(data))
+    _audit(tool="read_file", path=str(p), bytes_lidos=len(chunk), bytes_total=len(data),
+           cadeira=ident["cadeira"] or None, sessao_id=ident["sessao_id"], ordem_id=ident["ordem_id"])
     return {"content": chunk.decode("utf-8", "replace"), "bytes_total": len(data),
             "truncated": fim < len(data), "next_offset": fim if fim < len(data) else None,
             "path": str(p)}
 
 
-def write_file(path: str, content: str) -> dict:
+def write_file(path: str, content: str, sessao_id: str | None = None) -> dict:
     """Cria ou substitui um arquivo sob @ROOT@ (path relativo à raiz),
     criando diretórios intermediários. Conteúdo é o arquivo INTEIRO."""
     negado = _autoriza("write_file", "write_file", "documento", path, DOM_PLATAFORMA)
     if negado:
         return negado
+    ident = _sessao_resolve(sessao_id)
     p = RAIZ / path
     bloqueio = _nega_fila(p, "write_file")
     if bloqueio:
@@ -474,7 +509,8 @@ def write_file(path: str, content: str) -> dict:
     p.parent.mkdir(parents=True, exist_ok=True)
     p.write_text(content)
     _audit(tool="write_file", path=str(p), bytes=len(content.encode()),
-           substituiu=existia)
+           substituiu=existia, cadeira=ident["cadeira"] or None,
+           sessao_id=ident["sessao_id"], ordem_id=ident["ordem_id"])
     return {"ok": True, "path": str(p), "bytes": len(content.encode())}
 
 
@@ -626,6 +662,7 @@ async def monta_sessao(cadeira: str = "", atualizar: bool = True, chapeu: str = 
     # sessao='-' e nao e o caminho que a fita usa.
     if not r.get("erro"):
         _sid = _sessao_atual()
+        _q = _quem()                                   # async: nunca dentro do to_thread (#2911)
         _oid = "o" + datetime.now().astimezone().strftime("%Y%m%dT%H%M%S") + "-" + uuid.uuid4().hex[:6]
         _sessao_id = uuid.uuid4().hex
         _ordem_por_sid[_sid] = _oid
@@ -637,11 +674,17 @@ async def monta_sessao(cadeira: str = "", atualizar: bool = True, chapeu: str = 
             for _k in list(_sessao_por_sid)[:-2048]:
                 _sessao_por_sid.pop(_k, None)
         _aberto_em = datetime.now().astimezone().isoformat(timespec="milliseconds")
+        _sub, _q_sid, _jti = _q.get("sub", "-"), _q.get("sid", "-"), _q.get("jti", "-")
         try:
             _cad = r.get("cadeira") or cadeira or r.get("nome_canonico", "-")
             _rc = redis.Redis(host=MEM_REDIS_HOST, port=MEM_REDIS_PORT, decode_responses=True)
-            _val = json.dumps({"cadeira": _cad, "ordem_id": _oid, "aberto_em": _aberto_em}, ensure_ascii=False)
+            _val = json.dumps({"cadeira": _cad, "ordem_id": _oid, "aberto_em": _aberto_em,
+                               "sub": _sub, "sid": _q_sid, "jti": _jti}, ensure_ascii=False)
             _rc.set(f"sessao:{_sessao_id}", _val, ex=172800)
+            if not (_sub == "-" and _q_sid == "-" and _jti == "-"):
+                _chave_sombra = f"sombra:{_sub}:{_q_sid}:{_jti}"
+                _rc.sadd(_chave_sombra, _sessao_id)
+                _rc.expire(_chave_sombra, 172800)
         except Exception as e:  # noqa: BLE001
             print(f"[valkey] FALHOU persistir sessao:{_sessao_id}: {e!r}", file=sys.stderr, flush=True)
         r["ordem_id"] = _oid
@@ -679,21 +722,25 @@ for _fn in _TOOLS:
 # O que a tool acrescenta a `run_command` é SÓ a identidade da sessão (arq:0068 §1):
 # `sessao_id` explícito -> `sessao:{id}` em Valkey -> PF_CADEIRA/PF_ORDEM_ID/PF_SESSAO.
 # Flag: PF_TOOLS_VERBOS=0 desliga a projeção inteira (rollback: env + restart, sem
-# tocar banco nem ADR). Lote 2 (mudança, acesso, infra, solicitação) fica atrás de
-# PF_TOOLS_LOTE2=1 até seguranca bater a régua acao/tipo por tool (§3.6, §8).
+# tocar banco nem ADR). Leva 2 (mudança, acesso, infra, solicitação) fica atrás de
+# PF_TOOLS_LEVA2=1 até seguranca bater a régua acao/tipo por tool (§3.6, §8).
 # Geração na subida: verbo novo = `systemctl --user restart ops-mcp` (por-chamada
 # fica pro teste de superfície, §3.2/§7.3).
 TOOLS_VERBOS = os.environ.get("PF_TOOLS_VERBOS", "1") != "0"
-TOOLS_LOTE2 = os.environ.get("PF_TOOLS_LOTE2", "0") == "1"
-# Quem é lote 2 NÃO mora aqui: é o marcador `lote:2` na linha do slug em
-# abertura/oficio-ferramental.md, que `acervo listar ferramental --tools` projeta em `lote`.
+TOOLS_LEVA2 = os.environ.get("PF_TOOLS_LEVA2", "0") == "1"
+PF_SOMBRA = os.environ.get("PF_SOMBRA", "1") != "0"      # sessão-sombra inequívoca (§3)
+PF_GATE = os.environ.get("PF_GATE", "1") != "0"          # gate transparente (§4)
+# Quem é leva 2 NÃO mora aqui: é o marcador `leva:2` na linha do slug em
+# abertura/oficio-ferramental.md, que `acervo listar ferramental --tools` projeta em `leva`.
 
 
 def _sessao_resolve(sessao_id: str | None) -> dict:
-    """cadeira/ordem da sessão: parâmetro -> join por conexão -> nada (§3.5)."""
+    """cadeira/ordem da sessão: parâmetro → join por conexão → sombra inequívoca → nada (§3, spec_economia-de-giro)."""
     sid_conexao = _sessao_atual()
     if not sessao_id:
         sessao_id = _sessao_por_sid.get(sid_conexao) or None
+    if not sessao_id and PF_SOMBRA:
+        sessao_id = _sombra_inequivoca()   # None quando 0 ou ≥2 vivas
     out = {"sessao_id": sessao_id or "-", "ordem_id": _ordem_por_sid.get(sid_conexao, "-"),
            "cadeira": ""}
     if not sessao_id:
@@ -708,6 +755,22 @@ def _sessao_resolve(sessao_id: str | None) -> dict:
     except Exception as e:  # noqa: BLE001
         print(f"[valkey] sessao:{sessao_id} nao resolvida: {e!r}", file=sys.stderr, flush=True)
     return out
+
+
+def _sombra_inequivoca() -> str | None:
+    q = _quem()
+    sub, sid, jti = q.get("sub", "-"), q.get("sid", "-"), q.get("jti", "-")
+    if sub == "-" and sid == "-" and jti == "-":
+        return None                      # token estático: não infere
+    try:
+        rc = redis.Redis(host=MEM_REDIS_HOST, port=MEM_REDIS_PORT, decode_responses=True)
+        vivas = [s for s in rc.smembers(f"sombra:{sub}:{sid}:{jti}") if rc.exists(f"sessao:{s}")]
+    except Exception as e:               # noqa: BLE001
+        print(f"[sombra] indisponível: {e!r}", file=sys.stderr, flush=True); return None
+    if len(vivas) == 1:
+        return vivas[0]
+    _audit(tool="-", evento="sessao_ambigua", sob=f"{sub}:{sid}:{jti}", vivas=len(vivas))
+    return None                          # 0 ou ≥2 → "-" + aviso (#409: não inferir com ambiguidade)
 
 
 def _run_verbo_blocking(argv: list, stdin: str | None, timeout: int, ident: dict) -> dict:
@@ -741,8 +804,8 @@ def _faz_tool_verbo(slug: str, binario: str, descricao: str):
                     sessao_id: str | None = None, timeout: int = 120) -> dict:
         args = list(args or [])
         linha = " ".join([slug] + ([ato] if ato else []) + args)
-        # Lote 1: mesma decisão do fallback (acao/tipo de run_command), auditada pelo
-        # slug. acao/tipo POR tool é a régua de lote 2 (seguranca).
+        # Leva 1: mesma decisão do fallback (acao/tipo de run_command), auditada pelo
+        # slug. acao/tipo POR tool é a régua de leva 2 (seguranca).
         negado = _autoriza(slug, "run_command", "comando", linha, DOM_RUNTIME)
         if negado:
             return negado
@@ -786,7 +849,7 @@ def _gera_tools_verbos() -> list:
     servidas, retidas = [], []
     for i in itens:
         slug = i["tool"]
-        if int(i.get("lote") or 1) >= 2 and not TOOLS_LOTE2:
+        if int(i.get("leva") or 1) >= 2 and not TOOLS_LEVA2:
             retidas.append(slug)
             continue
         # Descrição = coluna `descricao` do golden record, SEM edição (spec §3.1): o
@@ -795,12 +858,13 @@ def _gera_tools_verbos() -> list:
         mcp.tool(name=slug, description=desc)(_faz_tool_verbo(slug, i["binario"], desc))
         servidas.append(slug)
     print(f"[capsula] tools derivadas servidas ({len(servidas)}): {' '.join(servidas)}"
-          + (f" · lote 2 retido: {' '.join(retidas)}" if retidas else ""),
+          + (f" · leva 2 retido: {' '.join(retidas)}" if retidas else ""),
           file=sys.stderr, flush=True)
     return servidas
 
 
 TOOLS_DERIVADAS = _gera_tools_verbos()
+SLUGS_SERVIDOS = set(TOOLS_DERIVADAS)
 
 
 class RedigeToken(logging.Filter):
