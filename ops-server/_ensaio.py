@@ -220,7 +220,7 @@ def test_audit_run_command_carrega_identidade():
 
 def test_audit_read_file_carrega_identidade():
     with patch.object(s, "_audit") as _aud, patch.object(s, "_autoriza", return_value=None):
-        s.read_file(path="README.md", sessao_id="ensaio-sid-abc")
+        s.read_file(path="platafirma-harness/ops-server/requirements.txt", sessao_id="ensaio-sid-abc")
     achou = [c.kwargs for c in _aud.call_args_list if c.kwargs.get("tool") == "read_file"]
     assert achou and all(("sessao_id" in kw and "ordem_id" in kw and "cadeira" in kw) for kw in achou)
 
@@ -232,3 +232,77 @@ def test_audit_write_file_carrega_identidade():
     achou = [c.kwargs for c in _aud.call_args_list if c.kwargs.get("tool") == "write_file"]
     assert achou and all(("sessao_id" in kw and "ordem_id" in kw and "cadeira" in kw) for kw in achou)
     (s.RAIZ / alvo).unlink(missing_ok=True)
+
+
+# ======================================================================
+# Leva 2 — economia de giro: chamada em lote nos verbos e genericas (B1/B2),
+# teto D4. Atras de PF_TOOLS_LOTE; hermetico (autoriza liberado, sem tocar
+# infra alem do subprocesso real de bash -c / bin/mesa, que ja e o
+# comportamento normal de run_command/verbo fora de lote).
+# ======================================================================
+
+
+def test_lote_verbo_dois_atos():
+    with patch.object(s, "PF_TOOLS_LOTE", True), patch.object(s, "_autoriza", return_value=None):
+        _tool = s._faz_tool_verbo("mesa", "mesa", "mesa (teste)")
+        r = asyncio.run(_tool(lote=[{"ato": "ver"}, {"ato": "ver"}]))
+    assert r["lote_n"] == 2
+    assert len(r["lote"]) == 2
+
+
+def test_lote_verbo_autoriza_bloqueia_item_negado():
+    sentinela = {"erro": "negado de teste"}
+
+    def _run_verbo_nao_deveria_rodar(*a, **k):
+        raise AssertionError("_run_verbo_blocking nao deveria rodar quando _autoriza nega")
+
+    with patch.object(s, "PF_TOOLS_LOTE", True), \
+         patch.object(s, "_autoriza", return_value=sentinela), \
+         patch.object(s, "_run_verbo_blocking", side_effect=_run_verbo_nao_deveria_rodar):
+        _tool = s._faz_tool_verbo("mesa", "mesa", "mesa (teste)")
+        r = asyncio.run(_tool(lote=[{"ato": "ver"}, {"ato": "ver"}]))
+    assert r["lote"] == [sentinela, sentinela]
+
+
+def test_lote_verbo_off_ignora_campo():
+    with patch.object(s, "PF_TOOLS_LOTE", False), patch.object(s, "_autoriza", return_value=None):
+        _tool = s._faz_tool_verbo("mesa", "mesa", "mesa (teste)")
+        r = asyncio.run(_tool(ato="ver", lote=[{"ato": "ver"}]))
+    assert "lote" not in r
+
+
+def test_lote_run_command_dois_itens_erro_nao_derruba():
+    with patch.object(s, "PF_TOOLS_LOTE", True), patch.object(s, "_autoriza", return_value=None):
+        r = asyncio.run(s.run_command(commands=["echo a", "false"], cwd="."))
+    assert r["lote_n"] == 2
+    assert r["lote"][0]["exit_code"] == 0
+    assert r["lote"][1]["exit_code"] != 0
+
+
+def test_lote_run_command_teto_corta_e_devolve_lote_next():
+    with patch.object(s, "PF_TOOLS_LOTE", True), patch.object(s, "_autoriza", return_value=None), \
+         patch.object(s, "CAP", 1):
+        r = asyncio.run(s.run_command(commands=["echo a", "echo b", "echo c"], cwd="."))
+    assert r["lote_next"] is not None
+    assert any(item.get("omitido_por_teto") for item in r["lote"])
+
+
+def test_pf_tools_lote_off_ignora_commands():
+    with patch.object(s, "PF_TOOLS_LOTE", False), patch.object(s, "_autoriza", return_value=None):
+        r = asyncio.run(s.run_command(command="echo ok", commands=["echo a", "echo b"], cwd="."))
+    assert "lote" not in r
+    assert r.get("exit_code") == 0
+
+
+def test_lote_read_file_dois_paths():
+    with patch.object(s, "PF_TOOLS_LOTE", True), patch.object(s, "_autoriza", return_value=None):
+        r = s.read_file(paths=["platafirma-harness/ops-server/requirements.txt", "platafirma-harness/ops-server/_ensaio.py"])
+    assert r["lote_n"] == 2
+    assert len(r["lote"]) == 2
+
+
+def test_pf_tools_lote_off_ignora_paths():
+    with patch.object(s, "PF_TOOLS_LOTE", False), patch.object(s, "_autoriza", return_value=None):
+        r = s.read_file(path="platafirma-harness/ops-server/requirements.txt", paths=["platafirma-harness/ops-server/_ensaio.py"])
+    assert "lote" not in r
+    assert "content" in r

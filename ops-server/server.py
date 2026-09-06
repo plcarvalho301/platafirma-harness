@@ -382,8 +382,9 @@ def _run_blocking(command: str, d: Path, timeout: int, sessao_id: str = "-", oid
             "stderr": _cap(stderr), "cwd": str(d)}
 
 
-async def run_command(command: str, cwd: str = "", timeout: int = 120,
-                       sessao_id: str | None = None) -> dict:
+async def run_command(command: str = "", cwd: str = "", timeout: int = 120,
+                       sessao_id: str | None = None,
+                       commands: list[str] | None = None) -> dict:
     """FALLBACK: executa um comando shell (`bash -c`) como o usuário @USER@, para o que
     não tem verbo — git, docker (rootless), systemctl --user, rg, fluxo de dado entre
     verbos. Verbo do núcleo tem tool própria (nome = slug); usá-lo por aqui é medido.
@@ -392,10 +393,43 @@ async def run_command(command: str, cwd: str = "", timeout: int = 120,
     o grupo de processo inteiro é morto. stdout/stderr voltam com truncagem declarada
     (`truncado`/`bytes_total`). `&&` engole o exit code — use `;` ou chamadas separadas.
 
+    `commands`: lista de comandos, cada um seu próprio `bash -c`, sequencial, mesmo
+    `ident`; erro num item não derruba o lote. Atrás de `PF_TOOLS_LOTE` (§5c); teto de
+    bytes do lote = `CAP` (D4), item excedente volta `{"omitido_por_teto": True}` com
+    `lote_next`. `command` escalar segue válido quando `commands` não vem.
+
     PATH já traz @ROOT@/bin e ~/.local/bin (bash -c não lê .bashrc). Segredos da instância
     NÃO descem para o ambiente. AUDITORIA: toda chamada grava JSONL em @ROOT@/var/log/ops/
     (comando, cwd, exit, duração) — não é silenciável.
     """
+    if commands and PF_TOOLS_LOTE:
+        timeout = max(1, min(timeout, 600))
+        ident = _sessao_resolve(sessao_id)
+        d = (RAIZ / cwd) if cwd else RAIZ
+        resultados = []
+        acumulado = 0
+        lote_next = None
+        for _i, cmd in enumerate(commands):
+            if acumulado >= CAP:
+                lote_next = _i
+                break
+            negado_item = _autoriza("run_command", "run_command", "comando", cmd, DOM_RUNTIME)
+            if negado_item:
+                r = negado_item
+            else:
+                t0 = time.monotonic()
+                r = await anyio.to_thread.run_sync(_run_blocking, cmd, d, timeout,
+                                                   ident["sessao_id"], ident["ordem_id"], ident["cadeira"])
+                _audit(tool="run_command", comando=cmd[:CMD_CAP], evento="fallback",
+                       cadeira=ident["cadeira"] or None, sessao_id=ident["sessao_id"],
+                       ordem_id=ident["ordem_id"], exit_code=r.get("exit_code"), erro=r.get("erro"),
+                       bytes_stdout=r.get("stdout", {}).get("bytes_total"),
+                       dur_ms=round((time.monotonic() - t0) * 1000))
+            acumulado += (r.get("stdout") or {}).get("bytes_total", 0)
+            resultados.append(r)
+        for _i in range(len(resultados), len(commands)):
+            resultados.append({"omitido_por_teto": True})
+        return {"lote": resultados, "lote_n": len(commands), "lote_next": lote_next}
     negado = _autoriza("run_command", "run_command", "comando", command,
                        DOM_RUNTIME)
     if negado:
@@ -463,17 +497,10 @@ def _nega_fila(p: Path, tool: str):
     return None
 
 
-def read_file(path: str, offset: int = 0, max_bytes: int = 40000,
-              sessao_id: str | None = None) -> dict:
-    """Lê um arquivo sob @ROOT@ (path relativo à raiz).
-
-    Truncagem sempre declarada: truncated/bytes_total/next_offset para paginar.
-    Inexistente volta com erro preenchido, nunca exceção.
-    """
+def _le_um_arquivo(path: str, offset: int, max_bytes: int, ident: dict) -> dict:
     negado = _autoriza("read_file", "read_file", "documento", path, DOM_PLATAFORMA)
     if negado:
         return negado
-    ident = _sessao_resolve(sessao_id)
     p = RAIZ / path
     bloqueio = _nega_fila(p, "read_file")
     if bloqueio:
@@ -492,6 +519,35 @@ def read_file(path: str, offset: int = 0, max_bytes: int = 40000,
     return {"content": chunk.decode("utf-8", "replace"), "bytes_total": len(data),
             "truncated": fim < len(data), "next_offset": fim if fim < len(data) else None,
             "path": str(p)}
+
+
+def read_file(path: str = "", offset: int = 0, max_bytes: int = 40000,
+              sessao_id: str | None = None, paths: list[str] | None = None) -> dict:
+    """Lê um arquivo sob @ROOT@ (path relativo à raiz).
+
+    Truncagem sempre declarada: truncated/bytes_total/next_offset para paginar.
+    Inexistente volta com erro preenchido, nunca exceção.
+
+    `paths`: lista de caminhos, um item por leitura, atrás de `PF_TOOLS_LOTE` (§5c);
+    teto de bytes do lote = `CAP` (D4), item excedente volta `{"omitido_por_teto": True}`
+    com `lote_next`. `path` escalar segue válido quando `paths` não vem.
+    """
+    ident = _sessao_resolve(sessao_id)
+    if paths and PF_TOOLS_LOTE:
+        resultados = []
+        acumulado = 0
+        lote_next = None
+        for _i, pth in enumerate(paths):
+            if acumulado >= CAP:
+                lote_next = _i
+                break
+            r = _le_um_arquivo(pth, offset, max_bytes, ident)
+            acumulado += r.get("bytes_total", 0)
+            resultados.append(r)
+        for _i in range(len(resultados), len(paths)):
+            resultados.append({"omitido_por_teto": True})
+        return {"lote": resultados, "lote_n": len(paths), "lote_next": lote_next}
+    return _le_um_arquivo(path, offset, max_bytes, ident)
 
 
 def write_file(path: str, content: str, sessao_id: str | None = None) -> dict:
@@ -730,6 +786,7 @@ TOOLS_VERBOS = os.environ.get("PF_TOOLS_VERBOS", "1") != "0"
 TOOLS_LEVA2 = os.environ.get("PF_TOOLS_LEVA2", "0") == "1"
 PF_SOMBRA = os.environ.get("PF_SOMBRA", "1") != "0"      # sessão-sombra inequívoca (§3)
 PF_GATE = os.environ.get("PF_GATE", "1") != "0"          # gate transparente (§4)
+PF_TOOLS_LOTE = os.environ.get("PF_TOOLS_LOTE", "0") == "1" # chamada em lote (§5) — Leva 2
 # Quem é leva 2 NÃO mora aqui: é o marcador `leva:2` na linha do slug em
 # abertura/oficio-ferramental.md, que `acervo listar ferramental --tools` projeta em `leva`.
 
@@ -801,7 +858,41 @@ def _run_verbo_blocking(argv: list, stdin: str | None, timeout: int, ident: dict
 
 def _faz_tool_verbo(slug: str, binario: str, descricao: str):
     async def _tool(ato: str = "", args: list[str] | None = None, stdin: str | None = None,
-                    sessao_id: str | None = None, timeout: int = 120) -> dict:
+                    sessao_id: str | None = None, timeout: int = 120,
+                    lote: list[dict] | None = None) -> dict:
+        if lote and PF_TOOLS_LOTE:
+            timeout = max(1, min(timeout, 600))
+            ident = _sessao_resolve(sessao_id)
+            lote_id = uuid.uuid4().hex[:8]
+            resultados = []
+            acumulado = 0
+            lote_next = None
+            for _i, item in enumerate(lote):
+                if acumulado >= CAP:
+                    lote_next = _i
+                    break
+                _ato = item.get("ato", "")
+                _args = list(item.get("args") or [])
+                _stdin = item.get("stdin")
+                _linha = " ".join([slug] + ([_ato] if _ato else []) + _args)
+                negado_item = _autoriza(slug, "run_command", "comando", _linha, DOM_RUNTIME)
+                if negado_item:
+                    r = negado_item
+                else:
+                    argv = [binario] + ([_ato] if _ato else []) + _args
+                    t0 = time.monotonic()
+                    r = await anyio.to_thread.run_sync(_run_verbo_blocking, argv, _stdin, timeout, ident)
+                    _audit(tool=slug, ato=_ato or None, args=" ".join(_args)[:CMD_CAP],
+                           cadeira=ident["cadeira"] or None, sessao_id=ident["sessao_id"],
+                           ordem_id=ident["ordem_id"], exit_code=r.get("exit_code"), erro=r.get("erro"),
+                           bytes_stdout=r.get("stdout", {}).get("bytes_total"),
+                           dur_ms=round((time.monotonic() - t0) * 1000),
+                           lote_id=lote_id, lote_n=_i)
+                acumulado += (r.get("stdout") or {}).get("bytes_total", 0)
+                resultados.append(r)
+            for _i in range(len(resultados), len(lote)):
+                resultados.append({"omitido_por_teto": True})
+            return {"lote": resultados, "lote_n": len(lote), "lote_next": lote_next}
         args = list(args or [])
         linha = " ".join([slug] + ([ato] if ato else []) + args)
         # Leva 1: mesma decisão do fallback (acao/tipo de run_command), auditada pelo
