@@ -183,3 +183,64 @@ Medido no #3007 (09/2026): o card previa só a regra de sudoers. `/home/claudinh
 e sem mais nada, o comando trocaria de uid e o arquivo não nasceria. O aceite pedia
 justamente um arquivo com o owner novo no disco: passaria no `id -u` e falharia no que
 importava.
+
+## Filtro que reformata saída alheia guarda o que não casou
+
+Todo filtro que reagrupa saída de outro programa — resultado de busca, log, tabela — é
+uma aposta sobre o formato. A aposta erra, e o modo de errar tem duas metades: casar o
+que não devia, e **sumir com o que não casou**. A segunda é a cara, porque é muda: quem
+lê o retorno vê um bloco bem formatado e não tem como saber que três linhas foram
+descartadas no caminho.
+
+Duas regras, e a segunda não é opcional:
+
+- **O reconhecedor exige forma plausível, não só o padrão.** `arquivo:linha:conteúdo`
+  casa qualquer timestamp `HH:MM:SS`; exigir que o primeiro campo pareça caminho (sem
+  espaço, com `/` ou `.`, não só dígito) é o que separa um `rg` de um `journalctl`.
+- **O que não casou sai onde estava, intacto.** Agrupar é poda; descartar linha é
+  perda de informação, e perda muda é a que treina a próxima sessão a confiar num
+  retorno mutilado.
+
+Medido no #3013 (06/09/2026): o lavador da porta remontou `systemctl show; journalctl`
+como se fosse busca — `18:58:05` virou «arquivo 18, linha 58» — e engoliu `active`,
+`MainPID=…` e `health=200`. Não apareceu em 48 testes verdes: o ensaio é hermético e
+não tem saída de sistema de verdade dentro. Apareceu no PRIMEIRO retorno real depois
+do restart. Regra de método que fica: subiu filtro de retorno, leia o primeiro retorno
+de produção com desconfiança — é o único lugar onde a saída é do mundo, e não sua.
+
+## Chave de estado nunca sob identificador reciclável
+
+Estado que pertence a uma conversa — ledger, cache, atribuição de autoria — precisa de
+chave que não reapareça na vida de outra. Identificador derivado de endereço de objeto
+(`id()`, ponteiro, handle) parece estável dentro de um processo e é **reciclado depois
+do GC**: horas depois, outra sessão recebe o mesmo valor e herda o estado da primeira.
+O sintoma não é erro; é dado de um aparecendo na fita de outro.
+
+A régua: chave de estado vem de quem tem dono e ciclo de vida declarados — uuid cunhado
+por ato, id de sessão que o cliente manda no header. Não vindo nenhum, **não se grava**:
+rodar sem o índice é degradação honesta, e chave reciclável é troca silenciosa de
+identidade. Vale igual para nome de arquivo temporário e diretório de trabalho.
+
+Medido no #3013: o join conexão→sessão gravou sob `s<hex>` de `id(ServerSession)`. Com
+`stateless_http=True` cada POST cria sessão nova, então nem resolvia — e teria sido pior
+se resolvesse. É o mesmo formato do #409 (18/08), que quase produziu atribuição errada
+de autoria.
+
+## Gerador único mora no ponto por onde toda superfície passa
+
+Quando uma entidade tem de nascer UMA vez, a pergunta não é «qual componente é o mais
+natural para cunhar», e sim **por onde todas as entradas passam**. Cunhar no componente
+mais próximo do consumidor mais visível deixa as outras entradas sem a entidade — e a
+correção que aparece sozinha, na cabeça de quem opera a entrada órfã, é cunhar mais um
+ali. É assim que uma entidade com «um gerador» vira quatro, cada um defensável no seu
+contexto.
+
+Régua ao implementar identidade única: liste as entradas ANTES de escolher o lugar, e
+escolha a interseção — normalmente o verbo, não a porta, porque a porta é uma superfície
+entre várias e o verbo é o que todas chamam. Quem não pode cunhar deve poder RECEBER
+(flag, parâmetro) e declarar ausência quando não veio; nunca inventar.
+
+Medido no #3013: o cunho do `sessao_id` ficou na tool da porta, e a fábrica — que chama
+`bin/monta-sessao` direto, sem porta no meio — nascia sem sessão. A saída que eu propus
+foi um segundo gerador no `chat`, que seria o quinto ponto de nascimento da mesma
+entidade que a ADR tinha acabado de reduzir a um. O dono cortou: a geração é no verbo.
