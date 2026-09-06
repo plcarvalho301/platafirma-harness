@@ -132,7 +132,7 @@ dentro do serviço).
 
 1. **Uma decisão por fonte**, com o par `(dominio, sobre)` que `fontes.py` já declara do
    §5. PEP único faria a concessão de uma matéria valer pela outra — que é o que
-   `seg:0009` separa ao distinguir `plataforma-acervo` de `plataforma-wiki`.
+   o PAP separa ao distinguir `plataforma-acervo` de `plataforma-wiki`.
 2. **Negativa total** (§6): nem entre fontes, nem entre alvos da mesma fonte. Pedido de
    dois recortes com concessão de um não vira busca em um.
 3. **Fail-closed em falha de mecanismo** — política ilegível, sujeito fora da projeção,

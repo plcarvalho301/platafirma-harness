@@ -1,0 +1,280 @@
+#!/usr/bin/env bash
+# repo — opera o clone local de um repositorio da stack, do clone ao PR
+# capacidade: construcao
+# dono: claudinho-TI
+# use para: clonar repo, estado do clone, criar/trocar ramo, commitar, empurrar, abrir PR
+# atos: estado, clonar, ramo, commitar, empurrar, pr-abrir, pr-listar, pr-ver
+#
+# Por que `construcao`, e nao um nome novo: a primeira volta desta story inventou
+# `repo`, `teste`, `lint` e `revisao-de-codigo` — quatro capacidades paralelas a uma que
+# a mesa ja lavrou: `construcao` — "artefato de software entregue", cuja instancia
+# declarada no mapa e literalmente `git` (arquitetura-negocio-operacao.md:60, dono
+# claudinho-TI, «fábrica (executa, não decide)»). O que faltava nao era a capacidade: era
+# o VERBO. Abrir PR entrou aqui como ato pelo mesmo motivo — entregar o artefato e
+# construcao, e verbo proprio para isso duplicaria a capacidade (arq:0037).
+#
+# Verbo-por-API do braco de repo (card #3004, feature #3003, invariante seg:0014).
+# Substitui `run_command "git -C ... "` — allowlist de PREFIXO DE STRING, que o proprio
+# PAP marca como "mitigacao, nao controle": `git -c` contorna o texto, e o alcance real
+# nao aparece na decisao. Aqui o alcance e ESTRUTURAL, nao textual:
+#
+#   1. RAIZ fixa (PF_REPO_RAIZ) — todo alvo resolve DENTRO dela; `..`, caminho absoluto
+#      e symlink que escapa sao recusados ANTES de o git ser chamado.
+#   2. O git roda sobre o clone LOCAL da conta. Nao ha tunel de container (#3007): o
+#      isolamento e o uid da conta, e o clone e do uid. O que sai da conta para o mundo
+#      e SO `empurrar` — e so ele fala com o forge.
+#   3. Nenhuma flag do chamador atravessa para o git. Cada ato monta a linha do git com
+#      argumento posicional conferido; o que o chamador passa e dado, nao comando.
+#
+# Trava de producao (seg:0014, "Sai quando" da #3003): `empurrar` recusa main/master.
+# Mudanca em producao chega por PR que operador do host aprova — `pr abrir`, nao push.
+#
+# NAO decide autorizacao: quem decide e o PEP no caminho da chamada (`_autoriza` por
+# slug na porta; #3006 poe o PEP nos endpoints laterais). Este verbo executa ou recusa
+# por contencao propria, e a recusa sai com o motivo.
+set -uo pipefail
+
+RAIZ="${PF_REPO_RAIZ:-$HOME/AI}"
+VERBO="$(basename "$0")"
+
+uso() {
+  cat >&2 <<EOF
+uso:
+  $VERBO estado [<repo>]                estado do clone: ramo, sujidade, ahead/behind, ultimo commit
+                                        sem <repo>, lista os clones da raiz
+  $VERBO clonar <url|owner/nome> [nome] clona em \$RAIZ/<nome>; recusa se o destino ja existe
+  $VERBO ramo <repo> [<nome>]           sem <nome>, lista os ramos; com <nome>, troca (cria se faltar)
+  $VERBO commitar <repo> -m <msg> [--staged]
+                                        add -A + commit; --staged commita so o que ja esta no index
+  $VERBO empurrar <repo> [<ramo>]       push -u origin <ramo> (default: o ramo atual)
+                                        RECUSA main/master: producao entra por PR
+  $VERBO pr-abrir <repo> --titulo <t> [--corpo <c>] [--base <ramo>]
+                                        abre PR do ramo ATUAL contra <base> (default: main)
+  $VERBO pr-listar <repo> [--todos]     PR abertos (--todos inclui fechado e merged)
+  $VERBO pr-ver <repo> <numero>         estado, revisao e checks de um PR
+
+raiz de trabalho: $RAIZ   (PF_REPO_RAIZ)
+exit: 0 ok · 2 uso · 3 falha do git · 4 alvo fora da raiz ou trava de producao
+      5 indeterminavel (o git recusa o clone — ownership de outro uid, .git quebrado)
+EOF
+  exit 2
+}
+
+morre() { printf '%s: %s\n' "$VERBO" "$1" >&2; exit "${2:-3}"; }
+
+# Resolve <nome> para um clone DENTRO da raiz. Contencao estrutural: nome e slug simples,
+# nunca caminho. O realpath final confere que nem symlink escapa.
+clone_de() {
+  local nome="$1" alvo real
+  [ -n "$nome" ] || morre "falta o nome do repo" 2
+  case "$nome" in
+    */*|.*|*..*) morre "nome de repo invalido: '$nome' — e slug dentro de $RAIZ, nao caminho" 4 ;;
+  esac
+  case "$nome" in
+    *[!A-Za-z0-9._-]*) morre "nome de repo invalido: '$nome' — use [A-Za-z0-9._-]" 4 ;;
+  esac
+  alvo="$RAIZ/$nome"
+  [ -d "$alvo" ] || morre "nao ha clone '$nome' em $RAIZ — \`$VERBO clonar\` primeiro" 3
+  real="$(realpath "$alvo" 2>/dev/null)" || morre "nao resolvi '$alvo'" 4
+  case "$real/" in
+    "$RAIZ"/*) : ;;
+    *) morre "'$nome' resolve para $real, fora da raiz $RAIZ" 4 ;;
+  esac
+  # `-e`, nao `-d`: em worktree o `.git` e ARQUIVO com o ponteiro, e worktree e clone.
+  [ -e "$real/.git" ] || morre "'$nome' existe mas nao e clone git" 3
+  # Clone que o git recusa (ownership de outro uid) e INDETERMINAVEL, nao vazio.
+  git -C "$real" rev-parse --git-dir >/dev/null 2>&1 \
+    || morre "indeterminavel: o git recusa o clone '$nome' — $(git -C "$real" rev-parse --git-dir 2>&1 | head -1)" 5
+  printf '%s' "$real"
+}
+
+ramo_atual() { git -C "$1" rev-parse --abbrev-ref HEAD 2>/dev/null; }
+
+ato_estado() {
+  local nome="${1:-}" c ramo sujo trilha
+  if [ -z "$nome" ]; then
+    printf 'clones em %s\n' "$RAIZ"
+    for d in "$RAIZ"/*/; do
+      [ -e "$d.git" ] || continue
+      d="${d%/}"
+      # Clone que o git recusa (ownership de outro uid, .git corrompido) responde
+      # INDETERMINAVEL, nunca "limpo": arvore inalcancavel nao e arvore sem mudanca.
+      # No mundo-alvo (#3007) a conta roda sob uid proprio, e clone de outro dono e
+      # exatamente este caso — tem de aparecer, nao sumir num zero.
+      if ! ramo="$(git -C "$d" rev-parse --abbrev-ref HEAD 2>&1)"; then
+        printf '  %-28s %-34s %s\n' "$(basename "$d")" "-" \
+          "indeterminavel: $(printf '%s' "$ramo" | head -1)"
+        continue
+      fi
+      sujo="$(git -C "$d" status --porcelain 2>/dev/null | wc -l)"
+      printf '  %-28s %-34s %s\n' "$(basename "$d")" "$ramo" \
+        "$([ "$sujo" -eq 0 ] && echo limpo || echo "$sujo alteracao(oes)")"
+    done
+    return 0
+  fi
+  c="$(clone_de "$nome")" || exit $?
+  ramo="$(ramo_atual "$c")"
+  printf '%s  ·  ramo %s\n' "$nome" "$ramo"
+  trilha="$(git -C "$c" rev-list --left-right --count "@{upstream}...HEAD" 2>/dev/null)"
+  if [ -n "$trilha" ]; then
+    printf '  upstream %s  ·  atras %s  ·  a frente %s\n' \
+      "$(git -C "$c" rev-parse --abbrev-ref '@{upstream}' 2>/dev/null)" \
+      "$(printf '%s' "$trilha" | cut -f1)" "$(printf '%s' "$trilha" | cut -f2)"
+  else
+    printf '  sem upstream (ramo local ainda nao empurrado)\n'
+  fi
+  printf '  ultimo   %s\n' "$(git -C "$c" log -1 --format='%h %s  (%an, %ar)' 2>/dev/null)"
+  local st
+  st="$(git -C "$c" status --short 2>/dev/null)"
+  if [ -n "$st" ]; then printf '  arvore suja:\n%s\n' "$(printf '%s' "$st" | sed 's/^/    /')"
+  else printf '  arvore limpa\n'; fi
+}
+
+ato_clonar() {
+  local origem="${1:-}" nome="${2:-}" url
+  [ -n "$origem" ] || uso
+  case "$origem" in
+    https://*|git@*) url="$origem" ;;
+    */*) url="https://github.com/$origem.git" ;;
+    *) morre "origem invalida: '$origem' — use uma URL ou owner/nome" 2 ;;
+  esac
+  [ -n "$nome" ] || { nome="$(basename "$origem")"; nome="${nome%.git}"; }
+  case "$nome" in
+    */*|.*|*..*|*[!A-Za-z0-9._-]*) morre "nome de destino invalido: '$nome'" 4 ;;
+  esac
+  [ -e "$RAIZ/$nome" ] && morre "'$RAIZ/$nome' ja existe — nao sobrescrevo clone" 3
+  mkdir -p "$RAIZ" || morre "nao criei a raiz $RAIZ" 3
+  git clone "$url" "$RAIZ/$nome" || morre "git clone falhou" 3
+  printf 'clonado: %s -> %s (ramo %s)\n' "$url" "$RAIZ/$nome" "$(ramo_atual "$RAIZ/$nome")"
+}
+
+ato_ramo() {
+  local nome="${1:-}" alvo="${2:-}" c
+  c="$(clone_de "$nome")" || exit $?
+  if [ -z "$alvo" ]; then
+    printf '%s  ·  atual: %s\n' "$nome" "$(ramo_atual "$c")"
+    git -C "$c" branch --format='  %(refname:short)' || morre "git branch falhou" 3
+    return 0
+  fi
+  case "$alvo" in
+    -*|*' '*|*'..'*) morre "nome de ramo invalido: '$alvo'" 2 ;;
+  esac
+  if git -C "$c" show-ref --verify --quiet "refs/heads/$alvo"; then
+    git -C "$c" checkout "$alvo" || morre "checkout falhou" 3
+    printf 'ramo trocado: %s (ja existia)\n' "$alvo"
+  else
+    git -C "$c" checkout -b "$alvo" || morre "checkout -b falhou" 3
+    printf 'ramo criado: %s (de %s)\n' "$alvo" "$nome"
+  fi
+}
+
+ato_commitar() {
+  local nome="${1:-}" msg="" so_staged=0
+  shift || uso
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      -m|--mensagem) msg="${2:-}"; shift 2 || uso ;;
+      --staged) so_staged=1; shift ;;
+      *) morre "argumento nao reconhecido: '$1'" 2 ;;
+    esac
+  done
+  [ -n "$msg" ] || morre "falta a mensagem (-m)" 2
+  local c; c="$(clone_de "$nome")" || exit $?
+  [ "$so_staged" -eq 1 ] || git -C "$c" add -A || morre "git add falhou" 3
+  git -C "$c" diff --cached --quiet && morre "nada para commitar em '$nome'" 3
+  git -C "$c" commit -m "$msg" >/dev/null || morre "git commit falhou" 3
+  printf 'commit em %s (%s): %s\n' "$nome" "$(ramo_atual "$c")" \
+    "$(git -C "$c" log -1 --format='%h %s')"
+}
+
+ato_empurrar() {
+  local nome="${1:-}" ramo="${2:-}" c
+  c="$(clone_de "$nome")" || exit $?
+  [ -n "$ramo" ] || ramo="$(ramo_atual "$c")"
+  case "$ramo" in
+    main|master|HEAD)
+      morre "recuso empurrar '$ramo': producao entra por PR que operador do host aprova (seg:0014). Use \`$VERBO pr-abrir\`." 4 ;;
+  esac
+  git -C "$c" push -u origin "$ramo" || morre "git push falhou" 3
+  printf 'empurrado: %s -> origin/%s (%s)\n' "$nome" "$ramo" \
+    "$(git -C "$c" log -1 --format='%h %s')"
+}
+
+# --- PR: o forge, unico ponto que fala com fora ------------------------------
+# Endpoint: API do GitHub por `gh`, com a credencial da CONTA que executa. Nao ha
+# credencial da casa embutida aqui. Conta sem credencial recebe a recusa do proprio
+# gh, com o endereco de quem concede — recusa certa, nao contorno.
+# NAO ha ato de merge, e isso e do desenho: `empurrar` recusa main, entao mudanca em
+# producao so entra por PR que operador do host aprova ("Sai quando" da #3003).
+
+tem_gh() {
+  command -v gh >/dev/null 2>&1 \
+    || morre "'gh' nao esta no PATH desta conta — o endpoint do forge nao esta alcancavel daqui" 3
+}
+
+ato_pr_abrir() {
+  local nome="${1:-}" titulo="" corpo="" base="main" c ramo
+  shift || uso
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --titulo) titulo="${2:-}"; shift 2 || uso ;;
+      --corpo)  corpo="${2:-}";  shift 2 || uso ;;
+      --base)   base="${2:-}";   shift 2 || uso ;;
+      *) morre "argumento nao reconhecido: '$1'" 2 ;;
+    esac
+  done
+  [ -n "$titulo" ] || morre "falta o titulo (--titulo)" 2
+  case "$base" in -*|*' '*) morre "base invalida: '$base'" 2 ;; esac
+  tem_gh
+  c="$(clone_de "$nome")" || exit $?
+  ramo="$(ramo_atual "$c")"
+  case "$ramo" in
+    main|master|HEAD) morre "o ramo atual e '$ramo' — PR sai de ramo de trabalho, nao de producao" 4 ;;
+  esac
+  [ "$ramo" = "$base" ] && morre "ramo e base sao o mesmo ('$ramo')" 2
+  git -C "$c" rev-parse --abbrev-ref '@{upstream}' >/dev/null 2>&1 \
+    || morre "'$ramo' nao esta em origin — \`$VERBO empurrar $nome\` primeiro" 3
+  (cd "$c" && gh pr create --base "$base" --head "$ramo" --title "$titulo" --body "$corpo") \
+    || morre "gh pr create falhou" 3
+}
+
+ato_pr_listar() {
+  local nome="${1:-}" todos=0 c
+  shift || true
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --todos) todos=1; shift ;;
+      *) morre "argumento nao reconhecido: '$1'" 2 ;;
+    esac
+  done
+  tem_gh
+  c="$(clone_de "$nome")" || exit $?
+  if [ "$todos" -eq 1 ]; then
+    (cd "$c" && gh pr list --state all --limit 30) || morre "gh pr list falhou" 3
+  else
+    (cd "$c" && gh pr list --limit 30) || morre "gh pr list falhou" 3
+  fi
+}
+
+ato_pr_ver() {
+  local nome="${1:-}" num="${2:-}" c
+  [ -n "$num" ] || morre "falta o numero do PR" 2
+  case "$num" in *[!0-9]*) morre "numero de PR invalido: '$num'" 2 ;; esac
+  tem_gh
+  c="$(clone_de "$nome")" || exit $?
+  (cd "$c" && gh pr view "$num") || morre "gh pr view falhou" 3
+}
+
+ato="${1:-}"; [ -n "$ato" ] && shift
+case "$ato" in
+  estado)    ato_estado "$@" ;;
+  clonar)    ato_clonar "$@" ;;
+  ramo)      ato_ramo "$@" ;;
+  commitar)  ato_commitar "$@" ;;
+  empurrar)  ato_empurrar "$@" ;;
+  pr-abrir)  ato_pr_abrir "$@" ;;
+  pr-listar) ato_pr_listar "$@" ;;
+  pr-ver)    ato_pr_ver "$@" ;;
+  ""|-h|--help|ajuda) uso ;;
+  *) morre "ato desconhecido: '$ato' — atos: estado, clonar, ramo, commitar, empurrar, pr-abrir, pr-listar, pr-ver" 2 ;;
+esac

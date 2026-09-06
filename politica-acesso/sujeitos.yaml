@@ -56,9 +56,10 @@ sujeitos:
   # vivo antes desta linha entrar — id interno eccde9b9.
   #
   # PENDENTE, e fora do alcance desta cadeira:
-  #   - conta de SO própria (`seg:0013`): exige root, não há uid `jaiminho-fabrica`.
-  #     Hoje `run_command` executaria sob uid 1001, o que a régua de segregação
-  #     (`seg:0011`) não aceita.
+  #   - exec sob uid próprio (`seg:0013`): a conta de SO `jaiminho` (uid 1003) EXISTE.
+  #     O pendente é a exec da conta segregada passar a rodar sob ela — hoje
+  #     `run_command` roda sob uid 1001 (claudinho). Fecha na story #3007; o passo
+  #     exige root que esta conta de operação não tem (cobrança ao dono, não contorno).
   jaiminho-fabrica:
     natureza: servico
     papeis: [fornecedor]
@@ -113,5 +114,8 @@ sujeitos:
   #     fallback explícito, o sujeito vira `-`, não casa com entrada nenhuma, e a mão
   #     que existe para quando o realm cai morre junto com o realm. É o primeiro item
   #     da revisão do #2287.
-  #   - `jaiminho-fabrica` nunca atuou: zero linha no log de auditoria. Sem uso não há
-  #     `sub` medido, e sub suposto em PAP é pior que ausente.
+  #   - `jaiminho-fabrica` ATUOU: sub `e57eadb1` medido no log de auditoria — 2.290
+  #     linhas com `sujeito: jaiminho-fabrica` desde 25/08 (~/AI/var/log/ops). A
+  #     entrada por `sub` (e57eadb1) já existe acima — ⚠ contradiz o cabeçalho deste
+  #     bloco; reconciliar é de segurança. Correção FACTUAL, não muda veredito do
+  #     PDP (comentário, não campo lido). — story #3008, 05/09.

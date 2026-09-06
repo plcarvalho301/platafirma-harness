@@ -1,0 +1,119 @@
+#!/usr/bin/env bash
+# lint — roda o linter do clone local, detectando a stack do repo
+# capacidade: verificacao/lint
+# dono: claudinho-TI
+#
+# Por que essa capacidade: mesma razao do verbo `teste` — a raiz e `verificacao` (conformidade do
+# servido com o declarado: lint e conformidade com o padrao declarado), mas `conferir` ja
+# a ocupa e arq:0037 quer 1:1. Barra na convencao do mapa (`risco/operacional`,
+# `politica/seguranca`). Sub-linha a lavrar pelo arquiteto — este comentario nao a torna
+# canonica. Linha de corte: `conferir` verifica a plataforma; `lint` verifica o codigo.
+# use para: lintar um repo, conferir estilo antes de commit/PR, ver o que o linter aponta
+# atos: rodar, detectar
+#
+# Verbo-por-API do braco de lint (card #3004, feature #3003, invariante seg:0014).
+# Mesma regua do verbo `teste`: o chamador escolhe o REPO (e no maximo um alvo dentro
+# dele); a linha do linter e montada aqui. Nenhuma flag do chamador atravessa.
+#
+# Deteccao (nesta ordem; `detectar` mostra sem rodar):
+#   python  pyproject.toml | .ruff.toml | .ruff_cache  ->  uvx ruff check
+#   node    package.json com scripts.lint              ->  npm run lint
+# Repo sem nenhuma das duas responde INDETERMINAVEL (exit 5), nunca "limpo": linter que
+# nao existe nao e linter que passou.
+set -uo pipefail
+
+RAIZ="${PF_REPO_RAIZ:-$HOME/AI}"
+VERBO="$(basename "$0")"
+
+uso() {
+  cat >&2 <<EOF
+uso:
+  $VERBO rodar <repo> [<alvo>]   roda o linter do clone; <alvo> = caminho dentro do repo
+  $VERBO detectar <repo>         diz qual stack casou e que linha rodaria, sem rodar
+
+raiz de trabalho: $RAIZ   (PF_REPO_RAIZ)
+exit: 0 limpo · 1 apontamentos · 2 uso · 3 falha do linter · 4 alvo fora da raiz
+      5 indeterminavel (nenhuma stack de lint detectada)
+EOF
+  exit 2
+}
+
+morre() { printf '%s: %s\n' "$VERBO" "$1" >&2; exit "${2:-3}"; }
+
+clone_de() {
+  local nome="$1" alvo real
+  [ -n "$nome" ] || morre "falta o nome do repo" 2
+  case "$nome" in
+    */*|.*|*..*|*[!A-Za-z0-9._-]*) morre "nome de repo invalido: '$nome' — e slug dentro de $RAIZ" 4 ;;
+  esac
+  alvo="$RAIZ/$nome"
+  [ -d "$alvo" ] || morre "nao ha clone '$nome' em $RAIZ" 3
+  real="$(realpath "$alvo" 2>/dev/null)" || morre "nao resolvi '$alvo'" 4
+  case "$real/" in "$RAIZ"/*) : ;; *) morre "'$nome' resolve fora da raiz $RAIZ" 4 ;; esac
+  printf '%s' "$real"
+}
+
+alvo_de() {
+  local c="$1" a="$2" real
+  case "$a" in
+    -*) morre "alvo nao pode comecar com '-': '$a'" 2 ;;
+    /*|*..*) morre "alvo tem de ser caminho dentro do repo: '$a'" 4 ;;
+  esac
+  [ -e "$c/$a" ] || morre "alvo '$a' nao existe em $c" 3
+  real="$(realpath "$c/$a")" || morre "nao resolvi o alvo" 4
+  case "$real/" in "$c"/*) : ;; *) morre "alvo '$a' resolve fora do clone" 4 ;; esac
+  printf '%s' "$real"
+}
+
+detecta() {
+  local c="$1"
+  if [ -f "$c/pyproject.toml" ] || [ -f "$c/.ruff.toml" ] || [ -f "$c/ruff.toml" ] \
+     || [ -d "$c/.ruff_cache" ]; then printf 'python|uvx ruff check'; return 0; fi
+  if [ -f "$c/package.json" ] && grep -q '"lint"[[:space:]]*:' "$c/package.json" 2>/dev/null; then
+    printf 'node|npm run lint'; return 0
+  fi
+  return 1
+}
+
+ato_detectar() {
+  local c d stack
+  c="$(clone_de "${1:-}")" || exit $?
+  if ! d="$(detecta "$c")"; then
+    printf '%s: indeterminavel — nenhuma stack de lint detectada em %s\n' "$VERBO" "$c" >&2
+    exit 5
+  fi
+  stack="${d%%|*}"
+  printf '%s  ·  stack %s  ·  rodaria: %s\n' "$(basename "$c")" "$stack" "${d#*|}"
+}
+
+ato_rodar() {
+  local nome="${1:-}" alvo="${2:-}" c d stack rc
+  c="$(clone_de "$nome")" || exit $?
+  if ! d="$(detecta "$c")"; then
+    printf '%s: indeterminavel — nenhuma stack de lint detectada em %s\n' "$VERBO" "$c" >&2
+    exit 5
+  fi
+  stack="${d%%|*}"
+  # `if`, e com `|| exit`: `alvo_de` recusa por `exit` DENTRO da substituicao de comando,
+  # que mata so o subshell. Sem propagar o codigo aqui, a recusa virava alvo vazio e o
+  # linter rodava o repo INTEIRO — contencao que avisa e deixa passar nao e contencao.
+  if [ -n "$alvo" ]; then alvo="$(alvo_de "$c" "$alvo")" || exit $?; fi
+  printf '# %s · stack %s · %s\n' "$nome" "$stack" "${d#*|}" >&2
+  case "$stack" in
+    python) (cd "$c" && uvx ruff check "${alvo:-.}") ;;
+    node)
+      if [ -n "$alvo" ]; then (cd "$c" && npm run lint -- "$alvo"); else (cd "$c" && npm run lint); fi ;;
+  esac
+  rc=$?
+  [ "$rc" -eq 0 ] && printf 'lint LIMPO: %s (%s)\n' "$nome" "$stack" \
+                  || printf 'lint com APONTAMENTOS: %s (%s) — exit %s\n' "$nome" "$stack" "$rc"
+  return "$rc"
+}
+
+ato="${1:-}"; [ -n "$ato" ] && shift
+case "$ato" in
+  rodar)    ato_rodar "$@" ;;
+  detectar) ato_detectar "$@" ;;
+  ""|-h|--help|ajuda) uso ;;
+  *) morre "ato desconhecido: '$ato' — atos: rodar, detectar" 2 ;;
+esac
