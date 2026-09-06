@@ -1,0 +1,164 @@
+#!/usr/bin/env bash
+# teste — roda a suite de teste do clone local, detectando a stack e o ambiente do repo
+# capacidade: teste
+# dono: claudinho-TI
+# use para: rodar teste de um repo, suite verde/vermelha, conferir mudanca antes de PR
+# atos: rodar, detectar
+#
+# Verbo-por-API do braco de teste (card #3004, feature #3003, invariante seg:0014).
+# Substitui `run_command "cd ... && pytest"` — a linha livre atravessava a allowlist de
+# prefixo por flag (`-p`, `--rootdir`) e o alcance real nao aparecia na decisao. Aqui o
+# chamador escolhe o REPO e, no maximo, um alvo DENTRO dele; a linha do runner e montada
+# pelo verbo, e nenhuma flag do chamador atravessa.
+#
+# DETECCAO DO AMBIENTE, e nao so da stack. Medido em 05/09: `uvx pytest` num repo desta
+# casa da FALSO VERMELHO — monta ambiente isolado, o projeto perde as proprias
+# dependencias e a suite morre no import (`No module named yaml`), nao no teste. Suite
+# que nao chegou a rodar nao e suite vermelha. Por isso a escada abaixo procura o
+# interpretador do projeto ANTES de cair no isolado, e o ultimo degrau sai avisado.
+#
+#   python  interpretador, na ordem: PF_TESTE_PYTHON · <repo>/.venv · $RAIZ/.venv-<sufixo>
+#           (convencao da casa: platafirma-harness -> .venv-harness)
+#           ->  uv run --python <py> --with pytest pytest     (ve as deps do venv)
+#           pyproject.toml sem venv casado  ->  uv run pytest
+#           nenhum dos dois              ->  uvx pytest       (ISOLADO — avisa no stderr)
+#   node    package.json com scripts.test  ->  npm test
+#
+# Repo sem stack nenhuma responde INDETERMINAVEL (exit 5), nunca "verde": suite que nao
+# existe nao e suite que passou — a mesma regua de fonte inalcancavel dos verbos de
+# leitura (arq:0085).
+set -uo pipefail
+
+RAIZ="${PF_REPO_RAIZ:-$HOME/AI}"
+VERBO="$(basename "$0")"
+
+# preenchidos por detecta()
+STACK=""; LINHA=""; PY=""; ISOLADO=0
+
+uso() {
+  cat >&2 <<EOF
+uso:
+  $VERBO rodar <repo> [<alvo>]   roda a suite do clone; <alvo> = caminho dentro do repo
+  $VERBO detectar <repo>         diz a stack, o interpretador e a linha que rodaria
+
+raiz de trabalho: $RAIZ   (PF_REPO_RAIZ)   ·   interpretador: PF_TESTE_PYTHON
+exit: 0 suite verde · 1 suite vermelha · 2 uso · 3 falha do runner · 4 alvo fora da raiz
+      5 indeterminavel (nenhuma stack de teste detectada)
+EOF
+  exit 2
+}
+
+morre() { printf '%s: %s\n' "$VERBO" "$1" >&2; exit "${2:-3}"; }
+
+clone_de() {
+  local nome="$1" alvo real
+  [ -n "$nome" ] || morre "falta o nome do repo" 2
+  case "$nome" in
+    */*|.*|*..*|*[!A-Za-z0-9._-]*) morre "nome de repo invalido: '$nome' — e slug dentro de $RAIZ" 4 ;;
+  esac
+  alvo="$RAIZ/$nome"
+  [ -d "$alvo" ] || morre "nao ha clone '$nome' em $RAIZ" 3
+  real="$(realpath "$alvo" 2>/dev/null)" || morre "nao resolvi '$alvo'" 4
+  case "$real/" in "$RAIZ"/*) : ;; *) morre "'$nome' resolve fora da raiz $RAIZ" 4 ;; esac
+  printf '%s' "$real"
+}
+
+# Alvo opcional: caminho DENTRO do clone. Nao pode escapar nem virar flag.
+alvo_de() {
+  local c="$1" a="$2" real
+  case "$a" in
+    -*) morre "alvo nao pode comecar com '-': '$a'" 2 ;;
+    /*|*..*) morre "alvo tem de ser caminho dentro do repo: '$a'" 4 ;;
+  esac
+  [ -e "$c/$a" ] || morre "alvo '$a' nao existe em $c" 3
+  real="$(realpath "$c/$a")" || morre "nao resolvi o alvo" 4
+  case "$real/" in "$c"/*) : ;; *) morre "alvo '$a' resolve fora do clone" 4 ;; esac
+  printf '%s' "$real"
+}
+
+# Interpretador do projeto, ou vazio. Convencao da casa: venv fora do repo, em
+# $RAIZ/.venv-<sufixo>, com o sufixo = nome do repo sem o prefixo `platafirma-`.
+python_do_projeto() {
+  local c="$1" sufixo
+  if [ -n "${PF_TESTE_PYTHON:-}" ]; then
+    [ -x "$PF_TESTE_PYTHON" ] || morre "PF_TESTE_PYTHON='$PF_TESTE_PYTHON' nao e executavel" 3
+    printf '%s' "$PF_TESTE_PYTHON"; return 0
+  fi
+  [ -x "$c/.venv/bin/python" ] && { printf '%s' "$c/.venv/bin/python"; return 0; }
+  sufixo="$(basename "$c")"; sufixo="${sufixo#platafirma-}"
+  [ -x "$RAIZ/.venv-$sufixo/bin/python" ] && { printf '%s' "$RAIZ/.venv-$sufixo/bin/python"; return 0; }
+  return 1
+}
+
+detecta() {
+  local c="$1"
+  STACK=""; LINHA=""; PY=""; ISOLADO=0
+  if [ -f "$c/package.json" ] && grep -q '"test"[[:space:]]*:' "$c/package.json" 2>/dev/null \
+     && [ ! -f "$c/pyproject.toml" ]; then
+    STACK="node"; LINHA="npm test"; return 0
+  fi
+  if [ -f "$c/pyproject.toml" ] || [ -d "$c/testes" ] \
+     || compgen -G "$c/test_*.py" >/dev/null 2>&1 || compgen -G "$c/*/test_*.py" >/dev/null 2>&1; then
+    STACK="python"
+    if PY="$(python_do_projeto "$c")"; then
+      LINHA="uv run --python $PY --with pytest pytest"
+    elif [ -f "$c/pyproject.toml" ]; then
+      LINHA="uv run pytest"
+    else
+      LINHA="uvx pytest"; ISOLADO=1
+    fi
+    return 0
+  fi
+  if [ -f "$c/package.json" ] && grep -q '"test"[[:space:]]*:' "$c/package.json" 2>/dev/null; then
+    STACK="node"; LINHA="npm test"; return 0
+  fi
+  return 1
+}
+
+ato_detectar() {
+  local c
+  c="$(clone_de "${1:-}")" || exit $?
+  detecta "$c" || { printf '%s: indeterminavel — nenhuma stack de teste detectada em %s\n' \
+                      "$VERBO" "$c" >&2; exit 5; }
+  printf '%s  ·  stack %s  ·  rodaria: %s\n' "$(basename "$c")" "$STACK" "$LINHA"
+  [ -n "$PY" ] && printf '  interpretador do projeto: %s\n' "$PY"
+  [ "$ISOLADO" -eq 1 ] && printf '  AVISO: ambiente isolado — dependencia do projeto pode faltar e a suite morrer no import\n'
+  return 0
+}
+
+ato_rodar() {
+  local nome="${1:-}" alvo="${2:-}" c rc
+  c="$(clone_de "$nome")" || exit $?
+  detecta "$c" || { printf '%s: indeterminavel — nenhuma stack de teste detectada em %s\n' \
+                      "$VERBO" "$c" >&2; exit 5; }
+  # `if`, e com `|| exit`: `alvo_de` recusa por `exit` DENTRO da substituicao de comando,
+  # que mata so o subshell. Sem propagar o codigo aqui, a recusa virava alvo vazio e o
+  # runner rodava o repo INTEIRO — contencao que avisa e deixa passar nao e contencao.
+  if [ -n "$alvo" ]; then alvo="$(alvo_de "$c" "$alvo")" || exit $?; fi
+  printf '# %s · stack %s · %s\n' "$nome" "$STACK" "$LINHA" >&2
+  [ "$ISOLADO" -eq 1 ] && printf '# AVISO: ambiente isolado — falha de import aqui e do ambiente, nao do codigo\n' >&2
+  case "$STACK" in
+    python)
+      if [ -n "$PY" ]; then
+        (cd "$c" && uv run --python "$PY" --with pytest pytest ${alvo:+"$alvo"})
+      elif [ "$ISOLADO" -eq 1 ]; then
+        (cd "$c" && uvx pytest ${alvo:+"$alvo"})
+      else
+        (cd "$c" && uv run pytest ${alvo:+"$alvo"})
+      fi ;;
+    node)
+      if [ -n "$alvo" ]; then (cd "$c" && npm test -- "$alvo"); else (cd "$c" && npm test); fi ;;
+  esac
+  rc=$?
+  if [ "$rc" -eq 0 ]; then printf 'suite VERDE: %s (%s)\n' "$nome" "$STACK"
+  else printf 'suite VERMELHA: %s (%s) — exit %s\n' "$nome" "$STACK" "$rc"; fi
+  return "$rc"
+}
+
+ato="${1:-}"; [ -n "$ato" ] && shift
+case "$ato" in
+  rodar)    ato_rodar "$@" ;;
+  detectar) ato_detectar "$@" ;;
+  ""|-h|--help|ajuda) uso ;;
+  *) morre "ato desconhecido: '$ato' — atos: rodar, detectar" 2 ;;
+esac

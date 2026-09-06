@@ -1,0 +1,120 @@
+#!/usr/bin/env bash
+# pr — abre e consulta pull request do clone local no forge (GitHub, via gh)
+# capacidade: revisao-de-codigo
+# dono: claudinho-TI
+# use para: abrir PR de um ramo, listar PR aberto, ver estado/revisao de um PR
+# atos: abrir, listar, ver
+#
+# Verbo-por-API do braco de PR (card #3004, feature #3003, invariante seg:0014).
+# E o unico caminho pelo qual mudanca da conta de provider chega a producao: `repo
+# empurrar` recusa main/master, entao o ramo sobe e o merge e ato de operador do host
+# que aprova o PR ("Sai quando" da #3003). O verbo NAO faz merge, e isso e do desenho.
+#
+# Endpoint: a API do forge, alcancada por `gh` com a credencial da CONTA que executa
+# (nao ha credencial da casa embutida aqui). Conta sem credencial recebe a recusa do
+# proprio gh, com o endereco de quem concede — recusa certa, nao contorno.
+#
+# NAO decide autorizacao: quem decide e o PEP no caminho da chamada. Este verbo executa
+# ou recusa por contencao propria (raiz fixa, sem merge, sem flag do chamador).
+set -uo pipefail
+
+RAIZ="${PF_REPO_RAIZ:-$HOME/AI}"
+VERBO="$(basename "$0")"
+
+uso() {
+  cat >&2 <<EOF
+uso:
+  $VERBO abrir <repo> --titulo <t> [--corpo <c>] [--base <ramo>]
+                                 abre PR do ramo ATUAL do clone contra <base> (default: main)
+  $VERBO listar <repo> [--todos]  PR abertos do repo (--todos inclui fechado e merged)
+  $VERBO ver <repo> <numero>      estado, revisao e checks de um PR
+
+raiz de trabalho: $RAIZ   (PF_REPO_RAIZ)
+merge NAO e ato deste verbo: quem aprova e faz merge e operador do host (seg:0014).
+exit: 0 ok · 2 uso · 3 falha do forge/gh · 4 alvo fora da raiz ou trava de producao
+EOF
+  exit 2
+}
+
+morre() { printf '%s: %s\n' "$VERBO" "$1" >&2; exit "${2:-3}"; }
+
+clone_de() {
+  local nome="$1" alvo real
+  [ -n "$nome" ] || morre "falta o nome do repo" 2
+  case "$nome" in
+    */*|.*|*..*|*[!A-Za-z0-9._-]*) morre "nome de repo invalido: '$nome' — e slug dentro de $RAIZ" 4 ;;
+  esac
+  alvo="$RAIZ/$nome"
+  [ -d "$alvo" ] || morre "nao ha clone '$nome' em $RAIZ" 3
+  real="$(realpath "$alvo" 2>/dev/null)" || morre "nao resolvi '$alvo'" 4
+  case "$real/" in "$RAIZ"/*) : ;; *) morre "'$nome' resolve fora da raiz $RAIZ" 4 ;; esac
+  [ -d "$real/.git" ] || morre "'$nome' existe mas nao e clone git" 3
+  printf '%s' "$real"
+}
+
+tem_gh() {
+  command -v gh >/dev/null 2>&1 \
+    || morre "'gh' nao esta no PATH desta conta — o endpoint do forge nao esta alcancavel daqui" 3
+}
+
+ato_abrir() {
+  local nome="${1:-}" titulo="" corpo="" base="main" c ramo
+  shift || uso
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --titulo) titulo="${2:-}"; shift 2 || uso ;;
+      --corpo)  corpo="${2:-}";  shift 2 || uso ;;
+      --base)   base="${2:-}";   shift 2 || uso ;;
+      *) morre "argumento nao reconhecido: '$1'" 2 ;;
+    esac
+  done
+  [ -n "$titulo" ] || morre "falta o titulo (--titulo)" 2
+  case "$base" in -*|*' '*) morre "base invalida: '$base'" 2 ;; esac
+  tem_gh
+  c="$(clone_de "$nome")" || exit $?
+  ramo="$(git -C "$c" rev-parse --abbrev-ref HEAD 2>/dev/null)"
+  case "$ramo" in
+    main|master|HEAD) morre "o ramo atual e '$ramo' — PR sai de ramo de trabalho, nao de producao" 4 ;;
+  esac
+  [ "$ramo" = "$base" ] && morre "ramo e base sao o mesmo ('$ramo')" 2
+  git -C "$c" rev-parse --abbrev-ref '@{upstream}' >/dev/null 2>&1 \
+    || morre "'$ramo' nao esta em origin — \`repo empurrar $nome\` primeiro" 3
+  (cd "$c" && gh pr create --base "$base" --head "$ramo" --title "$titulo" --body "$corpo") \
+    || morre "gh pr create falhou" 3
+}
+
+ato_listar() {
+  local nome="${1:-}" todos=0 c
+  shift || true
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --todos) todos=1; shift ;;
+      *) morre "argumento nao reconhecido: '$1'" 2 ;;
+    esac
+  done
+  tem_gh
+  c="$(clone_de "$nome")" || exit $?
+  if [ "$todos" -eq 1 ]; then
+    (cd "$c" && gh pr list --state all --limit 30) || morre "gh pr list falhou" 3
+  else
+    (cd "$c" && gh pr list --limit 30) || morre "gh pr list falhou" 3
+  fi
+}
+
+ato_ver() {
+  local nome="${1:-}" num="${2:-}" c
+  [ -n "$num" ] || morre "falta o numero do PR" 2
+  case "$num" in *[!0-9]*) morre "numero de PR invalido: '$num'" 2 ;; esac
+  tem_gh
+  c="$(clone_de "$nome")" || exit $?
+  (cd "$c" && gh pr view "$num") || morre "gh pr view falhou" 3
+}
+
+ato="${1:-}"; [ -n "$ato" ] && shift
+case "$ato" in
+  abrir)  ato_abrir "$@" ;;
+  listar) ato_listar "$@" ;;
+  ver)    ato_ver "$@" ;;
+  ""|-h|--help|ajuda) uso ;;
+  *) morre "ato desconhecido: '$ato' — atos: abrir, listar, ver" 2 ;;
+esac
