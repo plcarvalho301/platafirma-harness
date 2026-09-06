@@ -1,7 +1,19 @@
 #!/usr/bin/env bash
 # teste — roda a suite de teste do clone local, detectando a stack e o ambiente do repo
-# capacidade: teste
+# capacidade: verificacao/teste
 # dono: claudinho-TI
+#
+# Por que essa capacidade, e o que nela esta sujo: `verificacao` e "conformidade do servido com o
+# declarado" (mapa da mesa, linha 59) — rodar a suite e conferir que o codigo faz o que
+# o teste declara, entao a raiz e essa. Mas `verificacao` ja esta ocupada pelo verbo
+# `conferir`, e arq:0037 quer um verbo por capacidade. Dai a barra: `verificacao/teste`,
+# na convencao que o mapa ja usa para `risco/operacional` e `politica/seguranca` — nao e
+# nome novo paralelo, e sub-divisao de uma capacidade lavrada. A sub-linha ainda precisa
+# ser lavrada pelo arquiteto: capacidade nao se inventa no cabecalho, e este comentario
+# nao a torna canonica.
+#
+# Linha de corte com `conferir`: `conferir` verifica a PLATAFORMA (declarado x servido —
+# verbo, superficie, servico). `teste` e `lint` verificam o CODIGO de um repo.
 # use para: rodar teste de um repo, suite verde/vermelha, conferir mudanca antes de PR
 # atos: rodar, detectar
 #

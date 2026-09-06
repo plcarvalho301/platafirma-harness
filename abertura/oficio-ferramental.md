@@ -43,10 +43,9 @@ situacao
 repo lote:2
 teste
 lint
-pr lote:2
 ```
 
-Os quatro últimos são o braço de repo/teste/lint/PR da #3004 (feature #3003, invariante
+Os três últimos são o braço de repo/teste/lint/PR da #3004 (feature #3003, invariante
 `seg:0014`): a verbologia que substitui `run_command "git -C …"` — allowlist de PREFIXO
 DE STRING, que o próprio PAP marca como «mitigação, não controle». Entram no núcleo por
 uma razão de mecânica, não de escopo: o whitelist daqui é a ÚNICA fonte da projeção de

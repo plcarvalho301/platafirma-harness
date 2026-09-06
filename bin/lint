@@ -1,7 +1,13 @@
 #!/usr/bin/env bash
 # lint — roda o linter do clone local, detectando a stack do repo
-# capacidade: lint
+# capacidade: verificacao/lint
 # dono: claudinho-TI
+#
+# Por que essa capacidade: mesma razao do verbo `teste` — a raiz e `verificacao` (conformidade do
+# servido com o declarado: lint e conformidade com o padrao declarado), mas `conferir` ja
+# a ocupa e arq:0037 quer 1:1. Barra na convencao do mapa (`risco/operacional`,
+# `politica/seguranca`). Sub-linha a lavrar pelo arquiteto — este comentario nao a torna
+# canonica. Linha de corte: `conferir` verifica a plataforma; `lint` verifica o codigo.
 # use para: lintar um repo, conferir estilo antes de commit/PR, ver o que o linter aponta
 # atos: rodar, detectar
 #
