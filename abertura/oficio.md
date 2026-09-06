@@ -41,6 +41,24 @@ Fica fallback (NÃO é verbo — passa e conta): git · rg · fd · jq · yq · 
 · uv · python3 · longjob (>2 min) · conta-abertura · deploy-harness/instalar · politica-sync
 · shim de instância (rastreador|keycloak…).
 
+## Um giro carrega o independente — agrupe, nao encadeie
+
+Cada chamada de tool e um giro, e giro custa token. O que mais infla giro/turno e
+disparar comandos em cadeia — roda um, le, roda outro — quando eles nao dependiam
+um do outro.
+
+- `run_command(commands=[...])`: varios shells num giro so; cada item roda em seu
+  proprio `bash -c`, erro num nao derruba os outros, resultado por item.
+- `read_file(paths=[...])`: varias leituras num giro so.
+
+A regua e a DEPENDENCIA, nao o gosto: so encadeia (um giro por vez) quando o
+proximo comando PRECISA do resultado do anterior. Antes de disparar o segundo
+`run_command`, pergunte se ele ja nao cabia no primeiro.
+
+E antes de sondar o host, leia a memoria que ja veio na abertura — mesa e caderno
+(`mesa caderno <chapeu>`). Sondar com `run_command` o que a mesa ja diz e giro
+gasto a toa.
+
 ## Cinco armadilhas que mordem toda cadeira
 
 - **Espelho de repo serve o SHA velho depois do push** — `repo_sync`, ou ler o clone
