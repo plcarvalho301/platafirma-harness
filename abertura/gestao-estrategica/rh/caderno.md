@@ -221,3 +221,17 @@ la, e mesmo assim os 5 chapeus da cadeira deram delta ZERO no rebuild — 39 rot
 porque nenhum conceito correspondente existia no golden. Antes de responder «a ingestao
 ainda nao entrou», conferir qual dos dois atos falta: a resposta muda o destinatario da
 cobranca e o verbo que resolve.
+
+## `persona salvar` não leva cadeira, só `-m` (medido 06/09/2026)
+
+`persona salvar -m "<msg>"` comita e dá push de tudo que estiver sob `abertura/` no
+clone inteiro — não recebe `<cadeira>` nem `--mensagem`. Rode `persona conferir
+<cadeira>` antes: ele avisa (não bloqueia) o teto de 650 palavras por persona, e uma
+edição pontual de poucas frases já estourou esse teto uma vez (+68 palavras).
+
+## Push de persona é bypass por desenho, não achado (dono, 06/09/2026)
+
+`persona salvar` empurra direto em `main`, e o hook do host acusa bypass da regra de
+PR ("Changes must be made through a pull request"). O dono confirmou: bypass é
+esperado neste fluxo, porque as cadeiras rodam no host, sessão de mão. Não reportar
+como risco 🟠/🔴 de novo — é comportamento fixado, não descoberta.
