@@ -55,6 +55,13 @@
 import argparse
 import json
 import os
+import pathlib
+import sys as _sys
+
+# lib/uso.py e irma deste bin/ no clone do harness; `resolve()` atravessa o symlink
+# servido em ~/AI/bin. Card #3016: a forma do verbo sai de UMA regua, nao de cada um.
+_sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent / "lib"))
+from uso import Uso  # noqa: E402
 import re
 import subprocess
 import sys
@@ -569,11 +576,11 @@ def ato_caderno(args):
 
 
 def main():
-    # --ajuda UNIVERSAL (card #2868, ex-#2274 defeito 4): argparse ja da -h/--help;
-    # aqui so mapeamos o alias PT --ajuda -> --help antes do parse, sem colidir com
-    # os subparsers. Sem efeito colateral: nenhum ato roda.
-    sys.argv = [("--help" if a == "--ajuda" else a) for a in sys.argv]
-    p = argparse.ArgumentParser(prog="mesa", description="memoria de trabalho da cadeira, por chapeu")
+    # `--ajuda` deixou de ser remendo no sys.argv (card #2868): `Uso` registra -h,
+    # --help e --ajuda na MESMA acao, no verbo e em cada ato, e traduz o argparse
+    # para pt-BR com o erro no formato da casa (card #3016).
+    p = Uso(prog="mesa", description="memoria de trabalho da cadeira, por chapeu",
+            saidas="0 ok · 1 falha declarada · 2 uso")
     sub = p.add_subparsers(dest="ato")
 
     v = sub.add_parser("ver", help="o que esta pendente: item com ato, e a prosa que sobrou")
@@ -615,9 +622,9 @@ def main():
     c.set_defaults(func=ato_caderno)
 
     args = p.parse_args()
+    # Verbo sem ato e PERGUNTA, nao erro: mapa em stdout, exit 0 (card #3016, N1).
     if not args.ato:
-        p.print_help()
-        return 2
+        p.sem_ato()
     return args.func(args)
 
 

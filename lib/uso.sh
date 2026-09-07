@@ -74,9 +74,20 @@ uso_atos() {
   _uso_blocos | awk -F'\t' '$1 == "A" { split($2, p, /[ \t]/); print p[1] }'
 }
 
+# Alias de ato, declarado no cabecalho como `# alias: ver = ler`. O alias e aceito
+# na chamada e mostra a forma do ato de DESTINO — sem virar linha propria no mapa,
+# que descreveria duas vezes o mesmo ato.
+uso_alias() {
+  sed -n "s/^# alias:[[:space:]]*//p" "$_USO_FONTE" 2>/dev/null \
+    | awk -F= -v a="${1:-}" '
+        { gsub(/[ \t]/, "", $1); gsub(/[ \t]/, "", $2)
+          if ($1 == a) { print $2; exit } }'
+}
+
 uso_tem_ato() {
   [ -n "${1:-}" ] || return 1
-  uso_atos | grep -qxF -- "$1"
+  uso_atos | grep -qxF -- "$1" && return 0
+  [ -n "$(uso_alias "$1")" ]
 }
 
 # --- N1: o mapa --------------------------------------------------------------
@@ -115,8 +126,10 @@ uso_mapa() {
 # Sinopse + detalhe (uma linha cada) + exit. STDOUT. Ato sem bloco declarado cai
 # no mapa, que e a resposta honesta para "este ato nao declarou forma".
 uso_ato() {
-  local alvo="${1:-}"
+  local alvo="${1:-}" destino
   uso_tem_ato "$alvo" || { uso_mapa; return 0; }
+  destino="$(uso_alias "$alvo")"
+  [ -n "$destino" ] && alvo="$destino"
   _uso_blocos | awk -F'\t' -v verbo="$_USO_VERBO" -v alvo="$alvo" '
     $1 == "A" {
       linha = $2
@@ -190,6 +203,14 @@ uso_intercepta() {
       if uso_tem_ato "$1"; then uso_ato "$1"; else uso_mapa; fi
       exit 0 ;;
   esac
+  # Ato desconhecido morre AQUI, e nao no `*)` de cada despacho: a recusa e a mesma
+  # em toda a casa, e verbo nenhum precisa lembrar de escreve-la.
+  #   USO_ATO_LIVRE=1 -> o primeiro argumento nao e ato de conjunto fechado, e sim
+  #                      alvo do chamador (deploy <stack>, motor <instancia>,
+  #                      descobrir <assunto>, situacao <obra>, ingerir <pasta>).
+  if [ -z "${USO_ATO_LIVRE:-}" ] && [ -n "$(uso_atos)" ] && ! uso_tem_ato "$1"; then
+    uso_erro_ato "$1"
+  fi
   return 0
 }
 

@@ -10,8 +10,8 @@
 # ato: listar-tudo [mesmos filtros de listar] — inclui os terminais
 #   ex: tarefas listar-tudo --nivel feature
 # ato: ler <id> — o item em texto: cabecalho, ancestrais, corpo e filhas diretas
-#   ver           alias de ler
 #   ex: tarefas ler 3016
+# alias: ver = ler
 # ato: criar "<titulo>" [--desc "<txt>"|--desc-stdin] [--nivel <n>] [--cadeira <c>] [--pai <id>] — cria o card
 #   --nivel       epico|feature|story; default story. task so por `dt admitir`
 #   --desc-stdin  le o corpo do stdin
