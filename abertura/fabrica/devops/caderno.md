@@ -256,3 +256,76 @@ Medido no #3013: o cunho do `sessao_id` ficou na tool da porta, e a fábrica —
 `bin/monta-sessao` direto, sem porta no meio — nascia sem sessão. A saída que eu propus
 foi um segundo gerador no `chat`, que seria o quinto ponto de nascimento da mesma
 entidade que a ADR tinha acabado de reduzir a um. O dono cortou: a geração é no verbo.
+
+## Gate que mede chamando o medido dispara o efeito colateral do medido
+
+Instrumento que verifica um programa EXECUTANDO o programa não é leitura: é escrita, na
+mão de quem só queria conferir. Rodar `--help` parece inofensivo até o alvo ser um
+podador, um deploy ou um migrador — aí a conferência apaga, sobe ou migra, e o relatório
+sai verde por cima do estrago.
+
+Duas réguas, e a segunda é do lado do alvo:
+
+- **O instrumento mede só o que é chamado do jeito que ele chama.** Arquivo sem bit de
+  execução devolve `EACCES`, que é permissão e não forma; reportar isso como "não
+  respondeu" mistura duas réguas e reprova o que nunca foi verbo. Cada régua no seu
+  verbo: forma numa, instalação noutra.
+- **O alvo serve a forma ANTES do primeiro efeito.** A interceptação de `--help` vai no
+  topo do arquivo, acima do `mkdir`, do `flock` e do `rm` — não depois do despacho.
+  Verbo cujo "sem ato" já é chamada válida (cron) declara isso, em vez de sequestrar o
+  vazio.
+
+Medido no #3016 (07/09/2026): o gate de uso de `conferir verbo` chama cada verbo com
+`--help` e com um ato falso. Antes desta fita, isso EXECUTAVA `ops-log-prune` e
+`quarentena-prune` a cada conferência da casa — poda de log e `rm -rf` de leva de
+quarentena disparados por quem perguntava a forma. E o mesmo gate reprovava um fixture
+de teste sem `+x`, denunciando como falta de forma o que era falta de permissão.
+
+## Cabeçalho que serve humano E parser precisa de régua de forma, ou o parser inventa
+
+Linha de cabeçalho escrita para humano ler (`# atos: ato=<assunto>; args opcionais
+--eixos, -k, --json`) vira conjunto ERRADO no dia em que um parser passa a lia como
+fonte-verdade: `-k` e `--json` viram atos, e o instrumento passa a cobrar do verbo a
+forma de um ato que não existe. O texto não mudou — mudou o número de leitores, e o
+segundo não tem senso comum.
+
+A régua, ao promover texto de cabeçalho a fonte de máquina: escreva o predicado do que
+CONTA como item (nome de ato começa por letra), aplique-o igual em todos os substratos
+que leem a mesma linha, e deixe o que não casa VISÍVEL no lugar humano — no mapa que a
+cadeira lê — e fora do conjunto que a máquina confere. Placeholder de alvo livre
+(`<inst>`, `(sem ato)`) é exatamente esse caso: mostra-se, não se confere.
+
+Medido no #3016: uma lib bash e uma python liam a mesma linha com dois predicados
+ligeiramente diferentes; a python aceitava `-k` como ato. Duas ideias do que é um ato
+no mesmo cabeçalho é a mesma falha de "duas listas divergentes sobre identidade", só
+que em escala de sintaxe.
+
+## diário de bordo — devops
+
+07/09/2026 — precisei achar a função `gate_uso` dentro de `bin/conferir` (126 KB) e não
+há busca literal em arquivo na porta: `read_file` só pagina por offset, `descobrir` é
+semântico sobre o acervo (perguntei por uma string de código e voltou trecho de PDF), e
+não há verbo de `grep`. Contorno encontrado NA DATA 07/09/2026 foi paginar por chute
+(4 fatias de 14 KB até caber a função) — ~50 KB de contexto gastos para ler 60 linhas.
+
+07/09/2026 — `infra exclusivo` (registrado na mesa da fita anterior como o executor de
+git) devolveu `erro: ato desconhecido`: o ato não existe em `bin/infra`, embora a
+descrição servida da tool MCP `infra` o anuncie. Contorno encontrado NA DATA 07/09/2026
+foi `repo git <clone> <args...>`, que existe e cobre git em worktree; a divergência
+golden record × verbo ficou como item de mesa.
+
+07/09/2026 — `lint platafirma-harness` recusou (`atos de lint: rodar, detectar`) e
+`teste rodar platafirma-harness -q` recusou (`alvo nao pode comecar com '-'`). Contorno
+encontrado NA DATA 07/09/2026 foi `lint rodar <repo>` e rodar sem flags — nos dois
+casos a própria recusa ensinou a forma em um giro, que é o que a #3015 promete.
+
+07/09/2026 — `run_command` com `lint` e `teste` no mesmo lote estourou o teto de saída
+da superfície (52 mil caracteres) e o resultado foi salvo em
+`~/.claude/projects/.../tool-results/`, fora de `~/AI` e portanto ilegível por
+`read_file`. Contorno encontrado NA DATA 07/09/2026 foi repetir cada verbo sozinho.
+
+07/09/2026 — `repo empurrar` foi barrado pelo pre-push: o baseline de contrato
+vermelhou em `test_verbo_json_formato_ok` por causa do gate novo. Contorno encontrado NA
+DATA 07/09/2026 foi consertar a causa (gate ignora arquivo sem `+x`), commitar de novo e
+empurrar — o hook mede em worktree limpo da rev empurrada, então rodar o teste no clone
+antes economiza o ciclo.
