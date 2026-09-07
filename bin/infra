@@ -3,7 +3,7 @@
 # capacidade: infra
 # dono: claudinho-TI
 # use para: contêiner, unit, timer, restart, logs, saúde, backup
-# atos: estado, saude, logs, restart, unit-env, backup, cache, exclusivo
+# atos: estado, saude, logs, restart, unit-env, backup, cache
 # forma: log
 # cauda: sim
 # Encapsula as três pegadinhas conhecidas: DOCKER_HOST rootless, restart que
@@ -21,7 +21,6 @@ uso:
   infra logs   <alvo> [n]        alvo = nome de contêiner OU unit --user (default 50)
   infra restart <alvo> [--nao-esperar]  contêiner ou unit --user; confere antes de dizer ok
   infra unit-env <unit> [--ver | CHAVE=VALOR...]  drop-in de ambiente da unit --user (daemon-reload; restart e outro ato)
-  infra exclusivo [--] <cmd...>  fila de carga GPU-bound + cota de CPU/RAM
   infra cache [ver|vram|disco]   ver o que ocupa VRAM e disco; liberar e explicito
   infra backup [--json]          por alvo declarado: quando rodou, se saiu bem, quantas geracoes
 
@@ -350,34 +349,6 @@ logs() {
   fi
 }
 
-# Fila de carga GPU-bound (card #256). Serializa bancada; `rag-extractor-api`
-# fica fora da fila por decisao: serve rag_search ao vivo as outras cadeiras.
-exclusivo() {
-  [ "${1:-}" = "--" ] && shift
-  [ $# -ge 1 ] || { echo "uso: infra exclusivo [--] <comando...>" >&2; exit 2; }
-  local lock="${PF_GPU_LOCK:-/run/user/$(id -u)/pf-gpu.lock}"
-  local dono="$lock.dono" espera="${PF_GPU_ESPERA:-3600}" rc=0
-  exec 9>"$lock"
-  if ! flock -n 9; then
-    echo "gpu ocupada por: $(cat "$dono" 2>/dev/null || echo '(sem registro)')" >&2
-    echo "aguardando ate ${espera}s (PF_GPU_ESPERA ajusta)" >&2
-    flock -w "$espera" 9 || {
-      echo "erro: a fila nao liberou em ${espera}s - nada foi executado." >&2; exit 75; }
-  fi
-  printf 'pid=%s desde=%s cmd=%s\n' "$$" "$(date -Is)" "$*" >"$dono"
-  trap "rm -f -- '$dono'" EXIT
-  # Cota de CPU e RAM: scope transiente irmao do ops-mcp. cgroup v2 nao controla GPU,
-  # mas controla estes dois - e bancada pesada e quem estrangula o serving na CPU.
-  systemd-run --user --scope --quiet --collect \
-    --unit="pf-exclusivo-$$" \
-    -p CPUQuota="${PF_CPU_QUOTA:-800%}" \
-    -p CPUWeight="${PF_CPU_PESO:-50}" \
-    -p MemoryHigh="${PF_MEM_ALTA:-10G}" \
-    -p MemoryMax="${PF_MEM_MAX:-12G}" \
-    -- "$@" || rc=$?
-  return $rc
-}
-
 # Cache: o que ocupa VRAM e o que ocupa disco. Leitura por default; liberar e explicito.
 cache() {
   local ato="${1:-ver}"
@@ -543,7 +514,6 @@ case "$cmd" in
   estado)  estado "$@" ;;
   saude)   saude "$@" ;;
   logs)    logs "${1:?uso: infra logs <alvo> [n]}" "${2:-50}" ;;
-  exclusivo) exclusivo "$@" ;;
   cache)     cache "${1:-ver}" ;;
   backup)    backup "$@" ;;
   unit-env)  unit_env "$@" ;;
