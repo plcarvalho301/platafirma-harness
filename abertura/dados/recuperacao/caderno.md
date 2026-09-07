@@ -132,6 +132,29 @@ vizinhança entre conceitos por passagem comum tem de excluir seção com mais d
 sem o filtro, `conhecimento-arquitetural ~ aprendizado-por-reforco` aparece com 10 seções em
 comum. Mesmo mecanismo produz falso vizinho por homonímia (contexto-delimitado ~ janela-de-contexto).
 
+## Acervo `casa`: prova de ingestão do substrato (07/09/2026, ordem do dono)
+
+O dono mandou indexar tudo que a cadeira tateia (harness, ADR, spec, wiki, cadernos) e
+servir por recuperação, com índice cravado no sha da morada publicada e gancho no deploy.
+Prova feita: `acervo ingerir --lote platafirma-harness/abertura --motor rag --apply`
+(lote 42fa7fcd): 97 arquivos, 86 vetorizados, 11 falharam. Busca servida, top-1 em 4
+perguntas de abertura: 1/4 (PARADA → `dono.md#três-atos`; chapéu recuperação, push na
+main e "quem é Olga" caíram em livro).
+
+Três lacunas que a prova mediu, por ordem de custo:
+
+- **Identidade por título quebra a casa**: `obra_titulo_key` é único, e 9 de 10
+  `persona.md` têm H1 "persona" — só a primeira entrou. Para documento da casa a
+  identidade é `repo@path`, não o H1. Sem isso, persona não é recuperável.
+- **Sem coleção `casa`**: `--colecao` aceita só `firma|pessoal`; substrato entrou em
+  `firma` misturado a 859 obras, e a pergunta de casa perde para trecho de livro (3/4).
+  Faceta é condição, não acabamento.
+- **`.json` não ingere** (`aliases.json`, `rotas-chapeu.json`): o que roteia chapéu
+  não está no índice.
+
+O que não é arquivo não entra: a ordem de push direto vive na mesa, e mesa não é obra.
+Recuperação cobre o que está publicado em git/wiki; o volátil segue pela abertura.
+
 ## Ajuste de rede na busca só chega ao contêiner pelo compose (03/09/2026)
 
 `ajustes_do_trilho` lê `VEREDITO_POR_CONCEITO`, `VIZINHANCA_DIRIGIDA` e afins do ambiente do
