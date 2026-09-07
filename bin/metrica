@@ -1,0 +1,480 @@
+#!/usr/bin/env python3
+# metrica — agrega o ops log em eventos de uso do harness: giro, erro, help, acerto, cadeia, lote
+# capacidade: metrica
+# dono: claudinho-ia
+# use para: giros por fita, erros por verbo, giros-ate-acerto, profundidade de cadeia de erro
+# atos: eventos, dia, ate-acerto
+# forma: relatorio
+# cauda: nao
+#
+# Card #3017; fecha o loop do #3015 (todo verbo --help + erro gracioso). O ops log tinha
+# o dado (~1,7 MB/dia) e nao tinha leitor: a porta-so-verbo recusa grep/jq sobre ele, e
+# medir na mao custou uma fita inteira.
+#
+# TRES CAMADAS, decompostas por DOMINIO e nao por funcao tecnica (data mesh, Dehghani
+# cap. 4 Domain Ownership / cap. 5 Data as a Product). Ingestao-limpeza-agregacao seria
+# o eixo errado: ortogonal ao que muda.
+#
+#   eventos      source-aligned     o stream cru, um objeto por evento de negocio
+#   dia          aggregate          o resumo do dia
+#   ate-acerto   consumer-aligned   a metrica-mae, que responde a pergunta do #3015
+#
+# Metrica nova se monta POR FORA, sobre `eventos`, sem tocar as outras duas camadas.
+#
+# A LEITURA e a unica parte que sabe que a fonte e .jsonl em disco (classe FonteJsonl).
+# Trocar o arquivo por stream da malha de mensageria e trocar essa classe: as tres
+# camadas consomem dicionarios, nunca linhas.
+#
+# Read-only sobre o log: nao escreve, nao rotaciona, nao toca campo.
+#
+# Saida JSON por default — rota de maquina, nao `--json` opcional. `--resumo` e a rota
+# humana, e so ela.
+#
+# exit: 0 ok · 2 uso invalido · 4 fonte do dia inexistente (gracioso, nunca stack)
+import argparse
+import json
+import os
+import statistics
+import sys
+from collections import defaultdict
+from datetime import date
+
+RAIZ = os.environ.get("PF_RAIZ", os.path.expanduser("~/AI"))
+LOG_OPS = os.environ.get("PF_LOG_OPS") or os.path.join(RAIZ, "var", "log", "ops")
+
+VERBO = "metrica"
+ATOS = ("eventos", "dia", "ate-acerto")
+TIPOS = ("giro", "erro", "help", "acerto", "cadeia", "lote")
+
+# O que o ops log grava por chamada de verbo (ops-server/server.py, `_audit`).
+CAMPOS_GIRO = ("ts", "cadeira", "ordem_id", "sessao_id", "tool", "ato",
+               "exit_code", "dur_ms", "lote_id", "lote_n")
+
+
+# --- fronteira de LEITURA: a unica parte que sabe do .jsonl -----------------------
+
+class FonteAusente(Exception):
+    """Dia sem arquivo. Vira erro gracioso na borda, nunca stack."""
+
+    def __init__(self, alvo, dia):
+        super().__init__(alvo)
+        self.alvo, self.dia = alvo, dia
+
+
+class FonteJsonl:
+    """Contrato: `linhas(dia)` devolve dicionarios, na ordem em que foram escritos.
+
+    Quem consome nao sabe de arquivo, de linha nem de JSON — por isso a fonte pode
+    virar stream da malha de mensageria sem que as tres camadas mudem uma linha.
+    """
+
+    def __init__(self, diretorio=LOG_OPS):
+        self.diretorio = diretorio
+        self.ilegiveis = 0    # linha cortada por LINHA_CAP existe; contar e mais honesto
+                              # que ignorar em silencio ou que derrubar a leitura.
+
+    def caminho(self, dia):
+        return os.path.join(self.diretorio, f"ops-{dia}.jsonl")
+
+    def linhas(self, dia):
+        alvo = self.caminho(dia)
+        if not os.path.isfile(alvo):
+            raise FonteAusente(alvo, dia)
+        with open(alvo, encoding="utf-8", errors="replace") as f:
+            for bruta in f:
+                bruta = bruta.strip()
+                if not bruta:
+                    continue
+                try:
+                    reg = json.loads(bruta)
+                except ValueError:
+                    self.ilegiveis += 1
+                    continue
+                if isinstance(reg, dict):
+                    yield reg
+
+
+# --- camada 1: EVENTOS (source-aligned) ------------------------------------------
+
+def _nulo(v):
+    return v in (None, "", "-")
+
+
+def e_giro(reg):
+    """Um giro e uma chamada de verbo. Fora: `http_req`, que e o transporte e nao o
+    uso, e `tool: "-"`, a linha que nem chegou a resolver qual verbo era."""
+    return reg.get("evento") != "http_req" and not _nulo(reg.get("tool"))
+
+
+def falhou(reg):
+    """`erro` = giro que nao deu certo.
+
+    O card escreve 'exit_code diferente de 0', e esse e o caso comum. O log tem outras
+    duas formas de fracasso que nao passam por exit_code nenhum, e ignora-las contaria
+    erro A MENOS:
+      - `read_file`/`write_file` gravam `erro` e nao gravam `exit_code`;
+      - a recusa da porta-so-verbo sai como `evento: sem_verbo`, so com `motivo`.
+    """
+    ec = reg.get("exit_code")
+    if ec is not None and ec != 0:
+        return True
+    return bool(reg.get("erro")) or reg.get("evento") == "sem_verbo"
+
+
+def em_lote(reg):
+    """`lote` = giro agrupado com outros numa chamada so (run_command/read_file/verbo).
+
+    DIVERGENCIA DO CARD, declarada: o card define lote como `lote_n > 1`, supondo que
+    `lote_n` seja o TAMANHO do lote. No log ele e o INDICE 0-based do item dentro do
+    lote (`_audit(..., lote_n=_i)`, server.py:671/732/1403) — o tamanho so aparece no
+    retorno da tool, nunca na linha de auditoria. Com a regra literal, todo lote de
+    dois itens sairia como zero lote, e um de tres sairia como um. O que o log marca
+    sem ambiguidade e a PERTINENCIA a um lote: `lote_id` preenchido. E essa a regra
+    usada aqui, e ela realiza a intencao escrita ao lado da formula no proprio card
+    ('run_command/read_file agrupados'). Registrado em comentario no #3017.
+    """
+    return not _nulo(reg.get("lote_id"))
+
+
+def giros_do_dia(fonte, dia, cadeira=None):
+    """O atomo: um dicionario por chamada de verbo, em ordem estavel.
+
+    Ordem importa para tudo que se deriva abaixo (acerto, cadeia, ate-acerto), e o log
+    e append de varias tasks: empate de milissegundo existe. `(ts, posicao no arquivo)`
+    desempata sem inventar ordem.
+    """
+    brutos = []
+    for pos, reg in enumerate(fonte.linhas(dia)):
+        if not e_giro(reg):
+            continue
+        if cadeira and reg.get("cadeira") != cadeira:
+            continue
+        g = {c: reg.get(c) for c in CAMPOS_GIRO}
+        g["pos"] = pos
+        g["falhou"] = falhou(reg)
+        g["lote"] = em_lote(reg)
+        g["help"] = False
+        g["acerto"] = False
+        g["ate_acerto"] = None
+        brutos.append(g)
+    brutos.sort(key=lambda g: (g["ts"] or "", g["pos"]))
+    return brutos
+
+
+def _por_par(giros):
+    """Indices agrupados por (ordem_id, tool) — o par que o card usa para acerto,
+    cadeia e ate-acerto."""
+    par = defaultdict(list)
+    for n, g in enumerate(giros):
+        par[(g["ordem_id"], g["tool"])].append(n)
+    return par
+
+
+def marca_help(giros, par):
+    """`help-pedido`: verbo chamado sem ato (ou que saiu com exit 2) e, no MESMO
+    ordem_id, o mesmo verbo chamado depois com ato real.
+
+    E o giro que a fita gastou para descobrir a forma — exatamente o que o `--help` do
+    #3015 existe para eliminar. Sem o segundo giro nao ha pedido de ajuda: ha so uma
+    chamada que nao deu em nada.
+    """
+    for idxs in par.values():
+        for k, n in enumerate(idxs):
+            g = giros[n]
+            if not (_nulo(g["ato"]) or g["exit_code"] == 2):
+                continue
+            if any(not _nulo(giros[m]["ato"]) for m in idxs[k + 1:]):
+                g["help"] = True
+
+
+def _cadeia(giros, ordem, tool, corrida, acerto_n, posicao):
+    fim = giros[acerto_n] if acerto_n is not None else None
+    return {
+        "tipo": "cadeia",
+        "ordem_id": ordem,
+        "tool": tool,
+        "cadeira": giros[corrida[0]]["cadeira"],
+        "profundidade": len(corrida),
+        "atos": [giros[m]["ato"] for m in corrida],
+        "exit_codes": [giros[m]["exit_code"] for m in corrida],
+        "ts_primeiro_erro": giros[corrida[0]]["ts"],
+        "ts_acerto": fim["ts"] if fim else None,
+        "acerto_no_giro": posicao,
+    }
+
+
+def marca_acerto_e_cadeias(giros, par):
+    """`acerto`: o primeiro exit 0 que fecha uma corrida de erros no mesmo par.
+    `cadeia-de-erro`: 2 ou mais erros consecutivos antes desse acerto.
+
+    `ate_acerto` = posicao do acerto dentro da sequencia do par, do primeiro giro do
+    par ao acerto (definicao literal do card). Um par que se recupera duas vezes tem
+    dois acertos; o segundo continua contado a partir do primeiro giro do par, porque
+    e o unico marco que o card define. Cadeia que o dia terminou sem fechar existe e
+    conta — descartar a que nao acertou esconderia justamente a pior.
+    """
+    cadeias = []
+    for (ordem, tool), idxs in sorted(par.items(),
+                                      key=lambda kv: (kv[0][0] or "", kv[0][1] or "")):
+        corrida = []
+        for k, n in enumerate(idxs):
+            g = giros[n]
+            if g["falhou"]:
+                corrida.append(n)
+                continue
+            if corrida:
+                g["acerto"] = True
+                g["ate_acerto"] = k + 1
+                if len(corrida) >= 2:
+                    cadeias.append(_cadeia(giros, ordem, tool, corrida, n, k + 1))
+            corrida = []
+        if len(corrida) >= 2:
+            cadeias.append(_cadeia(giros, ordem, tool, corrida, None, None))
+    return cadeias
+
+
+def classifica(fonte, dia, cadeira=None):
+    """Uma passada: giros + as marcacoes derivadas + as cadeias. Tudo abaixo le daqui."""
+    giros = giros_do_dia(fonte, dia, cadeira)
+    par = _por_par(giros)
+    marca_help(giros, par)
+    cadeias = marca_acerto_e_cadeias(giros, par)
+    return giros, par, cadeias
+
+
+def stream_eventos(giros, cadeias, tipo=None):
+    """Um objeto por evento. Um mesmo giro pode render mais de um evento — ele e o
+    atomo, e os outros cinco sao leituras dele —, e cada objeto sai com o seu `tipo`."""
+    saida = []
+    for g in giros:
+        base = {c: g[c] for c in CAMPOS_GIRO}
+        if tipo in (None, "giro"):
+            saida.append({"tipo": "giro", **base})
+        if g["falhou"] and tipo in (None, "erro"):
+            saida.append({"tipo": "erro", **base})
+        if g["help"] and tipo in (None, "help"):
+            saida.append({"tipo": "help", **base})
+        if g["acerto"] and tipo in (None, "acerto"):
+            saida.append({"tipo": "acerto", "ate_acerto": g["ate_acerto"], **base})
+        if g["lote"] and tipo in (None, "lote"):
+            saida.append({"tipo": "lote", **base})
+    if tipo in (None, "cadeia"):
+        saida.extend(cadeias)
+    return saida
+
+
+# --- camada 2: DIA (aggregate) ---------------------------------------------------
+
+def resumo_do_dia(giros, cadeias):
+    """As quatro perguntas do card, agregadas. Ordem de chave fixa: a saida e
+    comparavel entre dias sem diff ruidoso."""
+    por_fita = defaultdict(int)
+    por_verbo = defaultdict(lambda: defaultdict(int))
+    por_help = defaultdict(int)
+    erros_tool = defaultdict(int)
+    for g in giros:
+        por_fita[g["ordem_id"] or "-"] += 1
+        if g["falhou"]:
+            erros_tool[g["tool"]] += 1
+            por_verbo[g["tool"]][g["ato"] or "-"] += 1
+        if g["help"]:
+            por_help[g["tool"]] += 1
+    maior = max((c["profundidade"] for c in cadeias), default=0)
+    return {
+        "giros_por_fita": dict(sorted(por_fita.items(), key=lambda kv: (-kv[1], kv[0]))),
+        "erros_por_verbo": {
+            t: {"total": erros_tool[t], "por_ato": dict(sorted(por_verbo[t].items()))}
+            for t in sorted(por_verbo)
+        },
+        "profundidade_de_cadeia": {
+            "maior": maior,
+            "cadeias": len(cadeias),
+            "onde": [c for c in cadeias if c["profundidade"] == maior] if maior else [],
+        },
+        "giros_de_help": dict(sorted(por_help.items(), key=lambda kv: (-kv[1], kv[0]))),
+        "total": {
+            "giros": len(giros),
+            "erros": sum(erros_tool.values()),
+            "help": sum(por_help.values()),
+            "lotes": len({g["lote_id"] for g in giros if g["lote"]}),
+            "fitas": len(por_fita),
+        },
+    }
+
+
+# --- camada 3: ATE-ACERTO (consumer-aligned) -------------------------------------
+
+def ate_acerto(giros, par):
+    """A metrica-mae: giros-ate-acerto por (ordem_id, tool).
+
+    E ela que responde se a ergonomia do #3015 cortou a degradacao — quanto custa, em
+    giros, a fita descobrir como chamar um verbo. Par que acertou de primeira nao
+    entra: nao houve nada a recuperar.
+    """
+    linhas = []
+    for g in giros:
+        if not g["acerto"]:
+            continue
+        idxs = par[(g["ordem_id"], g["tool"])]
+        antes = [giros[m] for m in idxs[:g["ate_acerto"] - 1]]
+        linhas.append({
+            "ordem_id": g["ordem_id"],
+            "tool": g["tool"],
+            "cadeira": g["cadeira"],
+            "giros_ate_acerto": g["ate_acerto"],
+            "erros_antes": sum(1 for x in antes if x["falhou"]),
+            "atos": [x["ato"] for x in antes] + [g["ato"]],
+            "ts_primeiro": giros[idxs[0]]["ts"],
+            "ts_acerto": g["ts"],
+        })
+    linhas.sort(key=lambda x: (-x["giros_ate_acerto"], x["ts_acerto"] or ""))
+    n = [x["giros_ate_acerto"] for x in linhas]
+    return {
+        "ate_acerto": linhas,
+        "resumo": {
+            "pares_com_acerto": len(linhas),
+            "maior": max(n) if n else 0,
+            "mediana": statistics.median(n) if n else 0,
+            "media": round(sum(n) / len(n), 2) if n else 0,
+        },
+    }
+
+
+# --- borda ------------------------------------------------------------------------
+
+def uso(codigo=2):
+    saida = sys.stdout if codigo == 0 else sys.stderr
+    saida.write("""uso:
+  metrica eventos [<dia>] [--tipo giro|erro|help|acerto|cadeia|lote] [--cadeira <slug>]
+  metrica dia [<dia>] [--cadeira <slug>]
+  metrica ate-acerto [<dia>] [--cadeira <slug>]
+
+Agrega o ops log (var/log/ops/ops-AAAA-MM-DD.jsonl) em eventos de uso do harness.
+<dia> e AAAA-MM-DD; sem ele, hoje. Saida JSON; --resumo imprime o sumario legivel.
+
+eventos     stream cru, um objeto por evento (giro, erro, help, acerto, cadeia, lote)
+dia         resumo: giros por fita, erros por verbo, profundidade de cadeia, help
+ate-acerto  a metrica-mae: giros-ate-acerto por (ordem_id, tool)
+
+exit: 0 ok · 2 uso invalido · 4 nao ha log desse dia
+""")
+    return codigo
+
+
+def erro_gracioso(oque, correcoes, codigo):
+    sys.stderr.write(f"erro: {oque}\ncorrija:\n")
+    for linha in correcoes:
+        sys.stderr.write(f"  {linha}\n")
+    return codigo
+
+
+def texto(ato, r):
+    """Sumario legivel. Deriva do MESMO dicionario que sai em JSON — nao existe numero
+    aqui que a rota de maquina nao sirva."""
+    linhas = [f"== metrica {ato} — {r['dia']} =="]
+    if ato == "dia":
+        t = r["total"]
+        linhas.append(f"{t['giros']} giros · {t['erros']} erros · {t['help']} help · "
+                      f"{t['lotes']} lotes · {t['fitas']} fitas")
+        linhas.append("")
+        linhas.append("giros por fita (top 10):")
+        for k, v in list(r["giros_por_fita"].items())[:10]:
+            linhas.append(f"  {v:5d}  {k}")
+        linhas.append("")
+        linhas.append("erros por verbo:")
+        for t_, d in sorted(r["erros_por_verbo"].items(), key=lambda kv: -kv[1]["total"]):
+            atos = " ".join(f"{a}={n}" for a, n in d["por_ato"].items())
+            linhas.append(f"  {d['total']:5d}  {t_}  ({atos})")
+        pc = r["profundidade_de_cadeia"]
+        linhas.append("")
+        linhas.append(f"cadeia de erro: {pc['cadeias']} cadeias, maior profundidade {pc['maior']}")
+        for c in pc["onde"]:
+            linhas.append(f"  {c['tool']} [{' → '.join(str(a) for a in c['atos'])}] "
+                          f"· {c['cadeira']} · acerto no giro {c['acerto_no_giro']} · {c['ts_acerto']}")
+        linhas.append("")
+        linhas.append("giros de help por verbo:")
+        for k, v in r["giros_de_help"].items():
+            linhas.append(f"  {v:5d}  {k}")
+    elif ato == "ate-acerto":
+        s = r["resumo"]
+        linhas.append(f"{s['pares_com_acerto']} pares com acerto · maior {s['maior']} · "
+                      f"mediana {s['mediana']} · media {s['media']}")
+        for x in r["ate_acerto"][:20]:
+            linhas.append(f"  {x['giros_ate_acerto']:3d} giros  {(x['tool'] or '-'):12s} "
+                          f"{(x['cadeira'] or '-'):10s} {x['ts_acerto']}  "
+                          f"[{' → '.join(str(a) for a in x['atos'])}]")
+    else:
+        conta = defaultdict(int)
+        for e in r["eventos"]:
+            conta[e["tipo"]] += 1
+        for k in TIPOS:
+            linhas.append(f"  {conta[k]:6d}  {k}")
+    if r.get("linhas_ilegiveis"):
+        linhas.append(f"({r['linhas_ilegiveis']} linhas ilegiveis, cortadas por LINHA_CAP)")
+    return linhas
+
+
+def main(argv):
+    if len(argv) < 2:
+        return uso()
+    ato = argv[1]
+    if ato in ("-h", "--help", "--ajuda", "ajuda"):
+        return uso(0)
+    if ato not in ATOS:
+        return erro_gracioso(
+            f"{VERBO}: ato desconhecido '{ato}'",
+            [f"os atos: {', '.join(ATOS)}", f"a forma de cada um: {VERBO} --help"], 2)
+
+    p = argparse.ArgumentParser(prog=f"{VERBO} {ato}", add_help=False)
+    p.add_argument("dia", nargs="?", default="")
+    p.add_argument("--dia", dest="dia_flag", default="")
+    p.add_argument("--cadeira", default="")
+    p.add_argument("--tipo", default="")
+    p.add_argument("--resumo", action="store_true")
+    p.add_argument("-h", "--help", "--ajuda", dest="ajuda", action="store_true")
+    args, _sobra = p.parse_known_args(argv[2:])
+    if args.ajuda:
+        return uso(0)
+
+    dia = args.dia_flag or args.dia or date.today().isoformat()
+    try:
+        date.fromisoformat(dia)
+    except ValueError:
+        return erro_gracioso(f"{VERBO}: dia invalido '{dia}'",
+                             ["o formato e AAAA-MM-DD",
+                              f"sem <dia>, {VERBO} le hoje"], 2)
+    if args.tipo and args.tipo not in TIPOS:
+        return erro_gracioso(f"{VERBO}: tipo desconhecido '{args.tipo}'",
+                             [f"os tipos: {', '.join(TIPOS)}"], 2)
+
+    fonte = FonteJsonl()
+    try:
+        giros, par, cadeias = classifica(fonte, dia, args.cadeira or None)
+    except FonteAusente as e:
+        return erro_gracioso(
+            f"{VERBO}: nao ha ops log de {e.dia}",
+            [f"esperado em {e.alvo}",
+             "o log e escrito por dia, e dia sem chamada nao gera arquivo",
+             f"para outro dia: {VERBO} {ato} AAAA-MM-DD"], 4)
+
+    if ato == "eventos":
+        r = {"dia": dia, "eventos": stream_eventos(giros, cadeias, args.tipo or None)}
+    elif ato == "dia":
+        r = {"dia": dia, **resumo_do_dia(giros, cadeias)}
+    else:
+        r = {"dia": dia, **ate_acerto(giros, par)}
+    if args.cadeira:
+        r["cadeira"] = args.cadeira
+    if fonte.ilegiveis:
+        r["linhas_ilegiveis"] = fonte.ilegiveis   # cortadas por LINHA_CAP, nao contadas
+
+    if args.resumo:
+        for linha in texto(ato, r):
+            print(linha)
+    else:
+        print(json.dumps(r, ensure_ascii=False, indent=2))
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv))
