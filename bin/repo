@@ -239,7 +239,7 @@ ato_commitar() {
   shift
   while [ $# -gt 0 ]; do
     case "$1" in
-      -m|--mensagem) msg="$(uso_flag "${2:-}" -m commitar)"; shift 2 ;;
+      -m|--mensagem) uso_flag "${2:-}" -m commitar; msg="$2"; shift 2 ;;
       --staged) so_staged=1; shift ;;
       *) uso_erro "argumento nao reconhecido: '$1'" commitar ;;
     esac

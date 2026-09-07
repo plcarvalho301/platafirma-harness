@@ -203,18 +203,16 @@ uso_intercepta() {
 #
 #   uso_arg "${1:-}" "<id>" ler      # falta -> erro: falta <id> + a forma de `ler`
 #
-# Ecoa o valor, para o uso normal `id="$(uso_arg "${1:-}" '<id>' ler)"`.
+# GUARDA, nao filtro: nao ecoa valor nenhum, e por isso se usa como COMANDO, nunca
+# dentro de `$( )`. Em substituicao o `exit 2` mataria so o subshell, o verbo seguiria
+# com a string vazia e o erro sairia duas vezes — medido ao ligar o `repo`.
 uso_arg() {
-  local valor="${1:-}" nome="${2:-<arg>}" ato="${3:---mapa}"
-  [ -n "$valor" ] || uso_erro "falta $nome" "$ato"
-  printf '%s\n' "$valor"
+  [ -n "${1:-}" ] || uso_erro "falta ${2:-<arg>}" "${3:---mapa}"
 }
 
 # Mesma coisa para flag que exige valor: `uso_flag "${2:-}" -m commitar`.
 uso_flag() {
-  local valor="${1:-}" flag="${2:---flag}" ato="${3:---mapa}"
-  case "$valor" in
-    ""|-*) uso_erro "a flag $flag exige um valor" "$ato" ;;
+  case "${1:-}" in
+    ""|-*) uso_erro "a flag ${2:---flag} exige um valor" "${3:---mapa}" ;;
   esac
-  printf '%s\n' "$valor"
 }

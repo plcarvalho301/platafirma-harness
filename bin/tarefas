@@ -3,7 +3,56 @@
 # capacidade: trabalho
 # dono: claudinho-TI
 # use para: card, board, carteira, épico/feature/story, mover estado, sign-off
-# atos: listar, listar-tudo, ler, criar, modelo, comentar, comentarios, mover, fechar, apagar, assinar, dt, estados, sub
+# atos: listar, listar-tudo, ler, criar, modelo, comentar, comentarios, mover, fechar, apagar, apagar-comentario, assinar, dt, estados, sub, api, api-corpo
+#
+# ato: listar [--cadeira <c>] [--estado <e>] [--nivel <n>] [--json] — itens abertos (fase != terminal)
+#   ex: tarefas listar --cadeira fabrica
+# ato: listar-tudo [mesmos filtros de listar] — inclui os terminais
+#   ex: tarefas listar-tudo --nivel feature
+# ato: ler <id> — o item em texto: cabecalho, ancestrais, corpo e filhas diretas
+#   ver           alias de ler
+#   ex: tarefas ler 3016
+# ato: criar "<titulo>" [--desc "<txt>"|--desc-stdin] [--nivel <n>] [--cadeira <c>] [--pai <id>] — cria o card
+#   --nivel       epico|feature|story; default story. task so por `dt admitir`
+#   --desc-stdin  le o corpo do stdin
+#   nascer fora de `captada`, ou sair dela, exige o corpo no padrao do nivel (arq:0096)
+#   ex: tarefas criar "verbos com --help" --nivel story --pai 3015
+# ato: modelo <epico|feature|story|task> — esqueleto do corpo, com os rotulos que a API exige
+#   ex: tarefas modelo story
+# ato: comentar <id> ["<txt>"] — cria comentario (entidade propria; nao altera o corpo)
+#   stdin: o texto do comentario, quando "<txt>" nao vem
+#   ex: tarefas comentar 3016 "SHA 52acd35, aceite verde"
+# ato: comentarios <id> — lista os comentarios do item, em ordem
+#   ex: tarefas comentarios 3016
+# ato: mover <id> <estado> [--motivo "<txt>"] [--englobado-em <id>] — move o card pelo fluxo
+#   a recusa diz para onde se PODE ir a partir do estado atual
+#   item com pai devolve o derivado do pai e as irmas abertas (arq:0095): a ancora do PARCIAL:
+#   ex: tarefas mover 3016 em-execucao
+# ato: fechar <id> [--como <estado>] [--cascata] — fecha o item; default entregue
+#   --cascata     confirma o encerramento da subarvore que a recusa nomeia
+#   ex: tarefas fechar 3016 --como entregue
+# ato: apagar <id> [--cascata] — APAGA o item; so fora do miolo do fluxo (funil e terminal)
+#   ex: tarefas apagar 3099
+# ato: apagar-comentario <id> <cid> — apaga um comentario do item
+#   ex: tarefas apagar-comentario 3016 658
+# ato: assinar <id> --aprovador <c> [--decisao aprovado|recusado] [--motivo "<txt>"] — sign-off
+#   sem --decisao, inscreve o aprovador como PENDENTE; `recusado` exige --motivo
+#   ex: tarefas assinar 3016 --aprovador claudinho-seguranca
+# ato: sub <pai> <filho> — declara <filho> filho de <pai>
+#   ex: tarefas sub 3015 3016
+# ato: dt <listar|admitir|vencidos> — balde de debito tecnico (rito §4)
+#   admitir "<problema>" --solucao "<txt>" --medido-em <data> --evidencia <verbo|arquivo:linha>
+#   ex: tarefas dt listar
+# ato: estados — os estados do registro, com fase
+#   ex: tarefas estados
+# ato: api <METODO> <caminho> — escotilha para a API do rastreador, sem corpo
+#   ex: tarefas api GET /itens/3016
+# ato: api-corpo <METODO> <caminho> — escotilha para a API, corpo JSON no stdin
+#   stdin: o JSON do corpo
+#   ex: tarefas api-corpo PATCH /itens/3016
+#
+# exit: 0 ok · 1 falha declarada (a API recusou) · 2 uso
+#
 # Backend: `platafirma-rastreador` (API própria), desde 16/08/2026. O Vikunja saiu.
 #
 # Loopback, e não a rota pública: `tarefas.platafirma.org` serve a superfície HUMANA
@@ -36,52 +85,19 @@ _apipath() {
 }
 QUEM="${PF_CADEIRA:-}"
 
-uso() {
-  cat >&2 <<'FIM'
-uso:
-  tarefas listar [--cadeira <c>] [--estado <e>] [--nivel <n>] [--json]
-                                          itens abertos (fase != terminal)
-  tarefas listar-tudo [mesmos filtros]    inclui os terminais
-  tarefas ler|ver <id>                    item em texto: cabeçalho, ancestrais,
-                                          corpo e filhas diretas
-  tarefas criar "<título>" [--desc "<txt>"|--desc-stdin]
-                [--nivel épico|feature|story] [--cadeira <c>] [--pai <id>]
-                                          default: story. task só por `dt admitir`.
-                                          Nascer fora de `captada`, ou sair dela, exige o
-                                          corpo no padrão do nível (arq:0096)
-  tarefas modelo <épico|feature|story|task>
-                                          esqueleto do corpo, com os rótulos que a API exige
-  tarefas comentar <id> ["<txt>"]         cria comentário (entidade própria — card #390,
-                                          não altera o corpo do item); sem texto, lê stdin
-  tarefas comentarios <id>                lista os comentários do item, em ordem
-  tarefas mover <id> <estado> [--motivo "<txt>"] [--englobado-em <id>]
-                                          move o card pelo fluxo; a recusa diz para onde
-                                          se PODE ir a partir do estado atual. Item com
-                                          pai devolve junto o derivado do pai e as irmãs
-                                          abertas (arq:0095) — é a âncora do PARCIAL:
-  tarefas fechar <id> [--como <estado>] [--cascata]
-                                          fecha; default: entregue. Filha aberta na
-                                          subárvore? a recusa NOMEIA quem seria encerrado
-                                          junto, e `--cascata` confirma. Para mover, `mover`.
-  tarefas apagar <id> [--cascata]        APAGA o item. Fora do miolo do fluxo (funil e
-                                         terminal); `--cascata` leva a subárvore junto.
-  tarefas assinar <id> --aprovador <c> [--decisao aprovado|recusado] [--motivo "<txt>"]
-                                          sign-off. Sem --decisao, inscreve o aprovador
-                                          como PENDENTE. `recusado` exige --motivo.
-  tarefas sub <pai> <filho>               declara <filho> filho de <pai>
-  tarefas dt <listar|admitir|vencidos>    balde de débito técnico (rito §4); `dt` sem
-                                          sub lista os atos. admitir: "<problema>" --solucao
-                                          "<txt>" --medido-em <data> --evidencia <...>
-  tarefas estados                         os estados do registro, com fase
-  tarefas api <MÉTODO> <caminho>          escotilha, sem corpo
-  tarefas api-corpo <MÉTODO> <caminho>    escotilha, corpo JSON em stdin
+# Mapa (N1), forma por ato (N2) e erro gracioso saem de lib/uso.sh, que renderiza o
+# CABECALHO deste arquivo (card #3016). O heredoc que morava aqui era a segunda fonte
+# do mesmo texto — e a que divergia: `api`, `api-corpo` e `apagar-comentario` estavam
+# nele e fora de `# atos:`, que e o que o golden record le.
+. "$(dirname "$(readlink -f "$0")")/../lib/uso.sh"
+uso_intercepta "$@"
 
-NÃO HÁ PROJETO neste modelo. `46` e `1` eram do Vikunja; o recorte agora é por eixo
-(cadeira, estado, nível). Chamada antiga com projeto no lugar do primeiro argumento
-segue funcionando: o número é ignorado, com aviso em stderr.
-FIM
-  exit 2
-}
+# Call sites antigos de `uso` sao caminho de ERRO: mapa no stderr, exit 2 de uso.
+uso() { uso_mapa >&2; exit 2; }
+
+# NAO HA PROJETO neste modelo. `46` e `1` eram do Vikunja; o recorte agora e por eixo
+# (cadeira, estado, nivel). Chamada antiga com projeto no lugar do primeiro argumento
+# segue funcionando: o numero e ignorado, com aviso em stderr.
 
 # --- transporte -------------------------------------------------------------
 
@@ -301,7 +317,12 @@ ler() {
   # etc.) fica fora — a mesma régua de fase que `listar` aplica, pela mesma razão.
   # Filha entregue é auditoria, e auditoria é `listar-tudo`, não leitura de card.
   local filhas; filhas=$(filhas_abertas "$id")
-  [ -n "$filhas" ] && printf '\nfilhas (abertas):\n%s\n' "$filhas"
+  # `[ -n ... ] && printf` como ULTIMO comando dava o exit da funcao: card sem filha
+  # aberta saia 1 com o card inteiro em stdout — sucesso com exit de falha, que poluia a
+  # metrica de exit!=0 da feature #3015 (card #3016, passo 6).
+  if [ -n "$filhas" ]; then
+    printf '\nfilhas (abertas):\n%s\n' "$filhas"
+  fi
 }
 
 # Filhas DIRETAS ainda abertas de <id>, uma por linha (id · estado · cadeira · título).
@@ -382,7 +403,8 @@ assinar() {
 
 criar() {
   descarta_projeto "${1:-}" && shift
-  local titulo="${1:?uso: tarefas criar \"<título>\" [opções]}"; shift || true
+  uso_arg "${1:-}" "o \"<titulo>\" do card" criar
+  local titulo="$1"; shift || true
   # DEFAULT É STORY (arq:0096, dono 02/09/2026): task é débito técnico e nasce só por
   # `tarefas dt admitir`. Medido antes da virada: 390 tasks, 156 órfãs, 13 stories com
   # filha task — o default `task` fazia da task uma "story sem nome".
@@ -470,13 +492,15 @@ comentarios() {
 # verbo não guarda tabela de arestas, e é isso que o mantém correto quando um estado novo
 # entra no registro por INSERT.
 mover() {
-  local id; id=$(so_id "${1:?uso: tarefas mover <id> <estado> [--motivo \"...\"]}")
-  local destino="${2:?uso: tarefas mover <id> <estado> [--motivo \"...\"]}"; shift 2
+  uso_arg "${1:-}" "<id> do item" mover
+  uso_arg "${2:-}" "<estado> de destino (\`tarefas estados\` lista)" mover
+  local id; id=$(so_id "$1")
+  local destino="$2"; shift 2
   local motivo="" elo="" q=""
   while [ $# -gt 0 ]; do
     case "$1" in
-      --motivo)       motivo="${2:?--motivo pede texto}"; shift 2 ;;
-      --englobado-em) elo="${2:?--englobado-em pede o id que absorveu}"; shift 2 ;;
+      --motivo)       uso_flag "${2:-}" --motivo mover; motivo="$2"; shift 2 ;;
+      --englobado-em) uso_flag "${2:-}" --englobado-em mover; elo="$2"; shift 2 ;;
       # CONFIRMAÇÃO DA CASCATA (ordem do dono, 18/08/2026). O verbo não decide NADA aqui:
       # ele só carrega a declaração até a API, que é quem sabe se há filha aberta e quem
       # NOMEIA quais são na recusa. Repetir a regra do lado do CLI daria duas verdades, e a
@@ -577,15 +601,18 @@ M
 # Filho declara o pai, e o pai tem de ser de nível estritamente MENOR — a restrição é do
 # banco (`pai_nivel`, escrito por subconsulta), não deste verbo. Recusa vem nomeada da API.
 subtarefa() {
-  local pai filho; pai=$(so_id "${1:?uso: tarefas sub <pai> <filho>}"); filho=$(so_id "${2:?uso: tarefas sub <pai> <filho>}")
+  uso_arg "${1:-}" "<pai>" sub; uso_arg "${2:-}" "<filho>" sub
+  local pai filho; pai=$(so_id "$1"); filho=$(so_id "$2")
   jq -n --argjson p "$pai" '{pai:$p}' | envia PATCH "/itens/$filho" >/dev/null
   echo "item $filho agora é filho de $pai"
 }
 
 apagar_comentario() {
   local id cid
-  id=$(so_id "${1:?uso: tarefas apagar-comentario <id> <cid>}")
-  cid=$(so_id "${2:?uso: tarefas apagar-comentario <id> <cid>}")
+  uso_arg "${1:-}" "<id> do item" apagar-comentario
+  uso_arg "${2:-}" "<cid> do comentario" apagar-comentario
+  id=$(so_id "$1")
+  cid=$(so_id "$2")
   busca DELETE "/itens/$id/comentarios/$cid" | jq -r '"comentário #\(.apagado) apagado do item \(.item)"'
 }
 
@@ -658,7 +685,8 @@ dt_listar() {
 # (verbo | arquivo:linha) e a data entram no corpo como a primeira linha obrigatória do
 # rito, e é essa linha que `listar` lê para marcar "medido: sim".
 dt_admitir() {
-  local titulo="${1:?uso: tarefas dt admitir \"<txt>\" --medido-em <data> --evidencia <verbo|arquivo:linha> [--cadeira <c>]}"; shift || true
+  uso_arg "${1:-}" "o \"<problema>\" do debito tecnico" dt
+  local titulo="$1"; shift || true
   local medido_em="" evidencia="" cadeira="$QUEM" solucao=""
   while [ $# -gt 0 ]; do
     case "$1" in
@@ -743,36 +771,47 @@ FIM
 
 # --- despacho ---------------------------------------------------------------
 
-# --ajuda UNIVERSAL, sem efeito colateral (card #2274, defeito 4). ANTES do despacho e
-# varrendo TODOS os argumentos: `tarefas criar --ajuda` criava um card chamado "--ajuda"
-# porque `--ajuda` caía como título posicional. Interceptar aqui cobre tanto `tarefas
-# --ajuda` quanto `tarefas <sub> --ajuda`, e nenhum sub-ato chega a rodar. `uso` já sai 2.
+# Ajuda UNIVERSAL, sem efeito colateral (card #2274, defeito 4). `uso_intercepta` la em
+# cima ja resolve `tarefas --help` e `tarefas <ato> --help` com a forma ESCOPADA do ato
+# (card #3016); esta varredura e a rede para a ajuda pedida em qualquer outra posicao
+# (`tarefas dt admitir --help`), e responde com o mapa. Nenhum ato chega a rodar: era
+# assim que nascia um card chamado "--ajuda", com `--ajuda` caindo de titulo posicional.
 for _a in "$@"; do
   case "$_a" in
-    --ajuda|--help|-h) uso ;;
+    --ajuda|--help|-h) uso_mapa; exit 0 ;;
   esac
 done
 
-cmd="${1:-}"; shift || uso
+cmd="${1:-}"
+shift || true
 
+# `${1:?...}` no despacho era a fonte do vazamento medido (`bin/tarefas: line 761: 1:
+# uso:`): a mensagem do bash cita a linha do INTERPRETADOR, nao o que o chamador tem de
+# corrigir. `uso_arg` poe `erro:` na linha 1 e a forma do ato embaixo (card #3016, passo 2).
 case "$cmd" in
   listar)      descarta_projeto "${1:-}" && shift; listar "$@" ;;
   listar-tudo) descarta_projeto "${1:-}" && shift; listar_tudo "$@" ;;
-  ler|ver)     ler "${1:?uso: tarefas ler <id>}" ;;
+  ler|ver)     uso_arg "${1:-}" "<id> do item" ler; ler "$1" ;;
   criar)       criar "$@" ;;
-  comentar)    comentar "${1:?uso: tarefas comentar <id> [\"<txt>\"]}" "${2:-$(cat)}" ;;
-  comentarios) comentarios "${1:?uso: tarefas comentarios <id>}" ;;
+  comentar)    uso_arg "${1:-}" "<id> do item" comentar; comentar "$1" "${2:-$(cat)}" ;;
+  comentarios) uso_arg "${1:-}" "<id> do item" comentarios; comentarios "$1" ;;
   mover)       mover "$@" ;;
-  fechar)      fechar "${1:?uso: tarefas fechar <id>}" "${@:2}" ;;
-  apagar)      apagar "${1:?uso: tarefas apagar <id> [--cascata]}" "${@:2}" ;;
-  apagar-comentario) apagar_comentario "${1:?uso: tarefas apagar-comentario <id> <cid>}" "${2:?cid}" ;;
-  assinar)     assinar "${1:?uso: tarefas assinar <id> --aprovador <cadeira> [--decisao aprovado|recusado] [--motivo \"<txt>\"]}" "${@:2}" ;;
-  sub)         subtarefa "${1:?pai}" "${2:?filho}" ;;
+  fechar)      uso_arg "${1:-}" "<id> do item" fechar; fechar "$1" "${@:2}" ;;
+  apagar)      uso_arg "${1:-}" "<id> do item" apagar; apagar "$1" "${@:2}" ;;
+  apagar-comentario)
+               uso_arg "${1:-}" "<id> do item" apagar-comentario
+               uso_arg "${2:-}" "<cid> do comentario" apagar-comentario
+               apagar_comentario "$1" "$2" ;;
+  assinar)     uso_arg "${1:-}" "<id> do item" assinar; assinar "$1" "${@:2}" ;;
+  sub)         uso_arg "${1:-}" "<pai>" sub; uso_arg "${2:-}" "<filho>" sub
+               subtarefa "$1" "$2" ;;
   modelo)      modelo "${1:-}" ;;
   estados)     estados ;;
   dt)          dt "$@" ;;
-  projetos)    echo "não há projeto neste modelo: o recorte é por eixo (cadeira, estado, nível)." >&2; exit 2 ;;
-  api)         busca "${1:?método}" "$(_apipath "${2:?caminho}")" ;;
-  api-corpo)   envia "${1:?método}" "$(_apipath "${2:?caminho}")" ;;
-  *)           uso ;;
+  projetos)    uso_erro "nao ha projeto neste modelo: o recorte e por eixo (cadeira, estado, nivel)" listar ;;
+  api)         uso_arg "${1:-}" "<METODO>" api; uso_arg "${2:-}" "<caminho>" api
+               busca "$1" "$(_apipath "$2")" ;;
+  api-corpo)   uso_arg "${1:-}" "<METODO>" api-corpo; uso_arg "${2:-}" "<caminho>" api-corpo
+               envia "$1" "$(_apipath "$2")" ;;
+  *)           uso_erro_ato "$cmd" ;;
 esac
