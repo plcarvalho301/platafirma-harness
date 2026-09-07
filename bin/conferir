@@ -446,6 +446,12 @@ def gate_uso(nome, caminho):
     """Lista de falhas do gate para um verbo. Vazia = conforme."""
     if nome in GATE_USO_ISENTOS:
         return []
+    # Arquivo sem bit de execucao nao tem forma a medir: `--help` nele volta EACCES,
+    # que e permissao, nao uso, e o gate acusaria "nao respondeu" no que nunca foi
+    # chamado como verbo. Quem julga instalacao e `origem` e `conferir procedencia` —
+    # cada regua no seu lugar.
+    if not os.access(caminho, os.X_OK):
+        return []
     falhas = []
     for flag in ("--help", "--ajuda"):
         rc, out, _err = _roda_verbo(caminho, flag)
