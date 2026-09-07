@@ -1,50 +1,40 @@
 #!/usr/bin/env bash
-# gh — shim fino para o gh real do forge, com allowlist de subcomando
-# capacidade: construcao
+# gh — redireciona a sintaxe de gh para o verbo `repo`, ou erra com gracia
+# capacidade: orfa
 # dono: claudinho-TI
-# use para: PR, issue, release e api do GitHub finos, sem reimplementacao no verbo repo
-# atos: pr, issue, release, api, repo, run, workflow, auth, search
+# use para: cadeira digitou `gh` por habito — traduz pro `repo` ou aponta o manual
+# atos: pr create/list/view (traduzidos p/ repo pr-abrir/pr-listar/pr-ver)
 #
-# Por que ESTE arquivo existe (decisao 2b do dono, 07/09/2026): o verbo `repo`
-# reimplementava gh por dentro (pr-ver, pr-listar...) e isso quebrava no que o gh ja
-# faz bem — Projects classic, rebase/merge, diff de PR. A ordem foi parar de
-# reimplementar e servir gh FINO. Este shim e o "fino": nao reimplementa nada, so
-# repassa ao gh real os subcomandos da allowlist e nega o resto com o endereco certo.
-#
-# COMO nao entra em recursao: a porta executa /home/claudinho/AI/bin/gh (este shim).
-# Se ele chamasse `gh`, chamaria a si mesmo. Por isso resolve o gh REAL por caminho,
-# excluindo o proprio diretorio de bin/ do PATH na hora de procurar (padrao busybox:
-# o dispatcher nunca e o alvo do exec).
-#
-# So-verbo intacto: `gh` agora E verbo (este arquivo, com golden record no cabecalho);
-# a capsula o projeta como tool. Nao furou a porta — ao contrario, tirou o gh do
-# _SUGESTAO "sem verbo".
+# NAO e verbo com capacidade propria (`capacidade: orfa`): a capacidade `construcao`
+# e do `repo` (arq:0037). Porta de entrada — a cadeira que digita `gh ...` por habito
+# vai ao `repo` quando a sintaxe casa, ou recebe erro gracioso apontando o `repo`.
+# NAO roda o gh real: roteia por DENTRO com `exec repo <ato>`, para nao abrir segundo
+# caminho ao forge fora da contencao do `repo`. Decisao 2b do dono, 07/09/2026.
 set -uo pipefail
 
-VERBO="$(basename "$0")"
-ESTE_DIR="$(cd "$(dirname "$0")" && pwd)"
+REPO="$(dirname "$0")/repo"
 
-morre() { printf 'gh: %s\n' "$1" >&2; exit "${2:-3}"; }
-
-# gh REAL: procura no PATH menos o diretorio deste shim, para nunca achar a si mesmo.
-PATH_LIMPO="$(printf '%s' "$PATH" | tr ':' '\n' | grep -vxF "$ESTE_DIR" | paste -sd: -)"
-GH_REAL="$(PATH="$PATH_LIMPO" command -v gh 2>/dev/null)"
-[ -n "$GH_REAL" ] || morre "gh real nao esta instalado nesta conta — o endpoint do forge nao esta alcancavel daqui" 3
-
-# Allowlist de subcomando (o 'ato' na convencao de verbo). Leitura e PR/issue/release
-# passam finos; o que muda estado no forge alem disso fica de fora e aponta o caminho.
-ATO="${1:-}"
-case "$ATO" in
-  "")
-    cat >&2 <<EOF
-uso: gh <subcomando> [args do gh real]
-  subcomandos servidos: pr issue release api repo run workflow auth search
-  este e um shim fino — os args passam direto ao gh real ($GH_REAL)
-  para clonar/commitar/empurrar/PR pela contencao do verbo, use \`repo\`
+manual() {
+  cat >&2 <<EOF
+gh: o verbo da casa e \`repo\`, nao \`gh\` (arq:0037, um verbo por capacidade).
+  '$*' nao tem traducao direta.
+  \`repo\` sem ato lista os atos; use o \`repo\` correspondente a mao.
+  mapa: pr create->pr-abrir  pr list->pr-listar  pr view N->pr-ver N
 EOF
-    exit 2 ;;
-  pr|issue|release|api|repo|run|workflow|auth|search)
-    exec "$GH_REAL" "$@" ;;
-  *)
-    morre "subcomando '$ATO' fora da allowlist do shim. Servidos: pr issue release api repo run workflow auth search. Para operacao de clone/commit/PR contida, use o verbo \`repo\`." 4 ;;
+  exit 2
+}
+
+ATO="${1:-}"; [ -n "$ATO" ] && shift
+case "$ATO" in
+  pr)
+    SUB="${1:-}"; [ -n "$SUB" ] && shift
+    case "$SUB" in
+      create)          exec "$REPO" pr-abrir "$@" ;;
+      list)            exec "$REPO" pr-listar "$@" ;;
+      view)            exec "$REPO" pr-ver "$@" ;;
+      "")              manual "gh pr" ;;
+      *)               manual "gh pr $SUB" ;;
+    esac ;;
+  "")                  manual "gh" ;;
+  *)                   manual "gh $ATO" ;;
 esac
