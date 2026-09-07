@@ -314,8 +314,12 @@ ato_pr_merge() {
   if printf '%s' "$checks" | grep -qiE '\bfail|\berror|\bcancel'; then
     [ "$forcar" -eq 1 ] || morre "PR #$num tem check vermelho — recuso mesclar. Confira \`$VERBO pr-ver $nome $num\`; para mesclar assim mesmo, --forcar." 4
   fi
-  (cd "$c" && gh pr merge "$num" $metodo) || morre "gh pr merge falhou" 3
-  printf 'mesclado: PR #%s em %s (%s)\n' "$num" "$nome" "${metodo#--}"
+  # main protegida por policy: o merge normal e barrado e o gh manda usar --admin.
+  # O operador do host tem esse privilegio (invariante do dono 07/09); --forcar liga-o.
+  local admin=""
+  [ "$forcar" -eq 1 ] && admin="--admin"
+  (cd "$c" && gh pr merge "$num" $metodo $admin) || morre "gh pr merge falhou" 3
+  printf 'mesclado: PR #%s em %s (%s%s)\n' "$num" "$nome" "${metodo#--}" "$([ -n "$admin" ] && echo ' +admin')"
 }
 
 ato="${1:-}"; [ -n "$ato" ] && shift
