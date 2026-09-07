@@ -103,3 +103,25 @@ neutra a sonda, mais fonte saudável some da conta.
 - **Critério de fecho amarrado a esse número não fecha nunca**, e o defeito passa por
   meta ambiciosa: a spec pedia ≥8, e o instrumento não conseguia produzir 8 com o
   serviço perfeito. Antes de baixar a meta, conferir se o instrumento mede a meta.
+
+## Verbo que deveria reusar outro não se serve LATERAL, se REDIRECIONA (medido 07/09)
+
+Quando uma palavra que a cadeira digita por hábito (`git`, `gh`) tem de cair num verbo
+que já existe (`repo`), a tentação é criar um verbo irmão que faz o mesmo trabalho. Erra
+duas vezes: fere arq:0037 (uma capacidade, um verbo — dois verbos na mesma capacidade
+reprovam no `conferir`) e duplica lógica. O desenho certo é o redirecionador.
+
+- **Redirecionador, não verbo:** o arquivo em `bin/` traduz a sintaxe conhecida para o
+  ato do verbo dono (`git status` -> `exec repo estado`) e, no que não casa, sai com erro
+  gracioso apontando o verbo certo. `capacidade: orfa` — não é capacidade, então não
+  compete no 1:1 do arq:0037 e a projeção `--tools` o exclui (não vira tool).
+- **NÃO se registra no golden record.** `acervo registrar` de um redirecionador cria
+  linha em `acervo.ferramental` e ocupa a capacidade `orfa` (unique no banco: uma
+  capacidade, um verbo) — e não há ato de remover, só `docker exec psql` na mão. Alias/
+  redirecionador vive só como symlink no PATH, nunca no golden record.
+- **O symlink é o mecanismo:** `~/AI/bin/<nome>` -> o fonte em `platafirma-harness/bin/`.
+  Sem o symlink o redirecionador não existe pro sistema; `write_file` recusa escrever em
+  `~/AI/bin` (é espelho) e não há verbo de `ln` — o symlink é ato de host, na mão.
+- **Um fonte, N nomes (busybox):** se dois redirecionadores compartilham lógica, um só
+  arquivo despacha por `argv[0]` e dois symlinks apontam pra ele — o segundo cai como
+  alias no `conferir`, que já sabe tratá-lo. Evita a colisão de unique na capacidade.
