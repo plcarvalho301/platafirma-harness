@@ -1,40 +1,16 @@
 #!/usr/bin/env bash
-# gh — redireciona a sintaxe de gh para o verbo `repo`, ou erra com gracia
-# capacidade: orfa
-# dono: claudinho-TI
-# use para: cadeira digitou `gh` por habito — traduz pro `repo` ou aponta o manual
-# atos: pr create/list/view (traduzidos p/ repo pr-abrir/pr-listar/pr-ver)
+# gh — bilhete: nao roda aqui, o forge da casa e `repo git <clone> ...` (ou repo pr-*)
 #
-# NAO e verbo com capacidade propria (`capacidade: orfa`): a capacidade `construcao`
-# e do `repo` (arq:0037). Porta de entrada — a cadeira que digita `gh ...` por habito
-# vai ao `repo` quando a sintaxe casa, ou recebe erro gracioso apontando o `repo`.
-# NAO roda o gh real: roteia por DENTRO com `exec repo <ato>`, para nao abrir segundo
-# caminho ao forge fora da contencao do `repo`. Decisao 2b do dono, 07/09/2026.
-set -uo pipefail
-
-REPO="$(dirname "$0")/repo"
-
-manual() {
-  cat >&2 <<EOF
-gh: o verbo da casa e \`repo\`, nao \`gh\` (arq:0037, um verbo por capacidade).
-  '$*' nao tem traducao direta.
-  \`repo\` sem ato lista os atos; use o \`repo\` correspondente a mao.
-  mapa: pr create->pr-abrir  pr list->pr-listar  pr view N->pr-ver N
+# NAO e verbo (arq:0037) e mora FORA de ~/AI/bin, entao nao entra na conta de verbos
+# nem aparece no `conferir verbo`. So aponta o caminho para quem digita `gh` por habito
+# e sai 2, sem executar nada. A traducao de sintaxe antiga (exec repo <ato>) foi
+# removida (carta arquiteto 07/09/2026): perdia flag e engolia o nome do clone.
+cat >&2 <<'EOF'
+gh nao roda aqui — o forge da casa passa pelo verbo `repo` (arq:0037).
+o `repo` opera por NOME DE CLONE, nao pelo cwd:
+  gh <qualquer-coisa>  ->  repo git <clone> <qualquer-coisa>
+ex.: repo git platafirma-harness pr list
+atalhos ergonomicos: repo pr-abrir | pr-listar | pr-ver | pr-merge
+`repo` sem ato lista os atos.
 EOF
-  exit 2
-}
-
-ATO="${1:-}"; [ -n "$ATO" ] && shift
-case "$ATO" in
-  pr)
-    SUB="${1:-}"; [ -n "$SUB" ] && shift
-    case "$SUB" in
-      create)          exec "$REPO" pr-abrir "$@" ;;
-      list)            exec "$REPO" pr-listar "$@" ;;
-      view)            exec "$REPO" pr-ver "$@" ;;
-      "")              manual "gh pr" ;;
-      *)               manual "gh pr $SUB" ;;
-    esac ;;
-  "")                  manual "gh" ;;
-  *)                   manual "gh $ATO" ;;
-esac
+exit 2

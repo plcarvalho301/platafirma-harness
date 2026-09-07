@@ -1,45 +1,16 @@
 #!/usr/bin/env bash
-# git — redireciona a sintaxe de git para o verbo `repo`, ou erra com gracia
-# capacidade: orfa
-# dono: claudinho-TI
-# use para: cadeira digitou `git` por habito — traduz pro `repo` ou aponta o manual
-# atos: status, fetch, pull, branch, checkout, commit, push (traduzidos p/ repo)
+# git — bilhete: nao roda aqui, o git da casa e `repo git <clone> ...`
 #
-# NAO e verbo com capacidade propria (por isso `capacidade: orfa`): a capacidade
-# `construcao` e do `repo`, e arq:0037 quer UM verbo por capacidade. Este arquivo e
-# porta de entrada — a cadeira que digita `git ...` por habito e levada ao `repo`
-# correspondente quando a sintaxe casa, ou recebe erro gracioso apontando o `repo`.
-# Decisao 2b do dono, 07/09/2026: um verbo so (repo); git/gh so roteiam pra ele.
-#
-# NAO roda o git real. Roteia por DENTRO: `exec repo <ato>`. Assim toda a contencao
-# do `repo` (raiz fixa, trava, gate de release) vale, e nao ha segundo caminho ao git.
-set -uo pipefail
-
-REPO="$(dirname "$0")/repo"
-
-manual() {
-  cat >&2 <<EOF
-git: o verbo da casa e \`repo\`, nao \`git\` (arq:0037, um verbo por capacidade).
-  '$*' nao tem traducao direta.
-  \`repo\` sem ato lista os atos; use o \`repo\` correspondente a mao.
-  mapa: status->estado  fetch/pull->atualizar  branch/checkout->ramo
-        commit->commitar  push->empurrar
+# NAO e verbo (sem capacidade, sem dono no sentido de arq:0037) e mora FORA de
+# ~/AI/bin, entao nao entra na conta de verbos nem aparece no `conferir verbo`.
+# So existe para a cadeira que digita `git` por habito: aponta o caminho e sai 2,
+# sem executar nada. A traducao de sintaxe antiga (exec repo <ato>) foi removida
+# (carta arquiteto 07/09/2026): era rasa, perdia flag e engolia o nome do clone.
+cat >&2 <<'EOF'
+git nao roda aqui — o verbo da casa e `repo` (arq:0037).
+o `repo` opera por NOME DE CLONE, nao pelo cwd:
+  git <qualquer-coisa>  ->  repo git <clone> <qualquer-coisa>
+ex.: repo git platafirma-harness log --oneline -10
+`repo` sem ato lista os atos.
 EOF
-  exit 2
-}
-
-ATO="${1:-}"; [ -n "$ATO" ] && shift
-case "$ATO" in
-  status)              exec "$REPO" estado "$@" ;;
-  fetch|pull)          exec "$REPO" atualizar "$@" ;;
-  # `git branch X` e `git checkout -b X`/`git checkout X` viram `repo ramo [X]`.
-  # -b e descartado (repo ramo cria se faltar); a flag do chamador nao atravessa.
-  branch)              exec "$REPO" ramo "$@" ;;
-  checkout)
-    [ "${1:-}" = "-b" ] && shift
-    exec "$REPO" ramo "$@" ;;
-  commit)              exec "$REPO" commitar "$@" ;;
-  push)                exec "$REPO" empurrar "$@" ;;
-  "")                  manual "git" ;;
-  *)                   manual "git $ATO" ;;
-esac
+exit 2
