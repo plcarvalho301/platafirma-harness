@@ -3,7 +3,7 @@
 # capacidade: infra
 # dono: claudinho-TI
 # use para: contêiner, unit, timer, restart, logs, saúde, backup
-# atos: estado, saude, logs, restart, backup, cache, exclusivo
+# atos: estado, saude, logs, restart, unit-env, backup, cache, exclusivo
 # forma: log
 # cauda: sim
 # Encapsula as três pegadinhas conhecidas: DOCKER_HOST rootless, restart que
@@ -20,6 +20,7 @@ uso:
   infra saude  [alvo] [--json]   /health do ops, contêiner não-saudável, disco, RAM
   infra logs   <alvo> [n]        alvo = nome de contêiner OU unit --user (default 50)
   infra restart <alvo> [--nao-esperar]  contêiner ou unit --user; confere antes de dizer ok
+  infra unit-env <unit> [--ver | CHAVE=VALOR...]  drop-in de ambiente da unit --user (daemon-reload; restart e outro ato)
   infra exclusivo [--] <cmd...>  fila de carga GPU-bound + cota de CPU/RAM
   infra cache [ver|vram|disco]   ver o que ocupa VRAM e disco; liberar e explicito
   infra backup [--json]          por alvo declarado: quando rodou, se saiu bem, quantas geracoes
@@ -460,6 +461,61 @@ restart() {
   exit 2
 }
 
+# Ambiente de unit --user por drop-in (spec_porta-so-verbo §9: o shell saiu da porta, e
+# editar ~/.config/systemd/user/<unit>.service.d/ e operacao de unit — capacidade infra).
+# Escreve SO o drop-in 90-infra-env.conf (nunca a unit nem outros drop-ins), chave por
+# chave, merge com o que ja esta nele; `systemctl daemon-reload` no fim. Nao reinicia:
+# `infra restart <unit>` e ato separado, para a janela ser dita antes.
+unit_env() {
+  local unit="${1:-}"; shift || true
+  [ -n "$unit" ] || { echo "uso: infra unit-env <unit> [--ver | CHAVE=VALOR...]" >&2; exit 2; }
+  unit="${unit%.service}.service"
+  e_unit "$unit" || { echo "erro: unit --user '$unit' nao existe (systemctl --user cat)." >&2; exit 2; }
+  local dir="$HOME/.config/systemd/user/$unit.d" arq
+  # drop-in vence por ordem lexica (o ultimo ganha); `zz-` para passar por cima de
+  # drop-in sem numero (capsula.conf), senao a chave gravada aqui perde calada.
+  arq="$dir/zz-infra-env.conf"
+  if [ $# -eq 0 ] || [ "${1:-}" = "--ver" ]; then
+    echo "== ambiente efetivo de $unit (unit + drop-ins)"
+    systemctl --user show -p Environment --value -- "$unit" | tr ' ' '\n' | grep . || echo "(vazio)"
+    echo; echo "== drop-in gerido por infra: $arq"
+    cat "$arq" 2>/dev/null || echo "(ainda nao existe)"
+    return
+  fi
+  local kv
+  for kv in "$@"; do
+    case "$kv" in
+      [A-Za-z_]*=*) ;;
+      *) echo "erro: '$kv' nao e CHAVE=VALOR." >&2; exit 2 ;;
+    esac
+  done
+  mkdir -p "$dir"
+  python3 - "$arq" "$@" <<'PY'
+import os, sys, tempfile
+arq, novos = sys.argv[1], sys.argv[2:]
+env = {}
+legado = os.path.join(os.path.dirname(arq), "90-infra-env.conf")  # nome antigo, perdia para capsula.conf
+for fonte in (legado, arq):
+    if os.path.exists(fonte):
+        for l in open(fonte):
+            l = l.strip()
+            if l.startswith("Environment=") and "=" in l[12:]:
+                k, v = l[12:].split("=", 1); env[k] = v
+if os.path.exists(legado):
+    os.unlink(legado)
+for kv in novos:
+    k, v = kv.split("=", 1); env[k] = v
+corpo = "[Service]\n" + "".join(f"Environment={k}={v}\n" for k, v in sorted(env.items()))
+fd, tmp = tempfile.mkstemp(dir=os.path.dirname(arq), prefix=".90-infra-env.")
+with os.fdopen(fd, "w") as f:
+    f.write(corpo); f.flush(); os.fsync(f.fileno())
+os.chmod(tmp, 0o644); os.rename(tmp, arq)
+print(corpo, end="")
+PY
+  systemctl --user daemon-reload
+  echo "daemon-reload feito; vale apos: infra restart ${unit%.service}"
+}
+
 # Mede backup, nao faz backup e nao propoe rotina. Le o DECLARADO em
 # registro/backups.json: alvo sem cobertura fica na lista de proposito, porque alvo que
 # some da lista deixa de ser medido e reaparece como surpresa. Alvo cujo backup roda em
@@ -490,6 +546,7 @@ case "$cmd" in
   exclusivo) exclusivo "$@" ;;
   cache)     cache "${1:-ver}" ;;
   backup)    backup "$@" ;;
+  unit-env)  unit_env "$@" ;;
   restart) [ $# -ge 1 ] || { echo "erro: restart exige alvo explícito — não reinicia tudo." >&2; exit 2; }
            restart "$@" ;;
   compose) echo "erro: promover release saiu do \`infra\` — capacidade \`mudanca\`, verbo \`deploy\`." >&2
