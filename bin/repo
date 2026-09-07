@@ -3,7 +3,7 @@
 # capacidade: construcao
 # dono: claudinho-TI
 # use para: clonar repo, estado do clone, criar/trocar ramo, commitar, empurrar, abrir PR
-# atos: estado, clonar, ramo, commitar, empurrar, pr-abrir, pr-listar, pr-ver
+# atos: estado, clonar, ramo, commitar, empurrar, pr-abrir, pr-listar, pr-ver, pr-diff, pr-merge
 #
 # Por que `construcao`, e nao um nome novo: a primeira volta desta story inventou
 # `repo`, `teste`, `lint` e `revisao-de-codigo` — quatro capacidades paralelas a uma que
@@ -52,6 +52,10 @@ uso:
                                         abre PR do ramo ATUAL contra <base> (default: main)
   $VERBO pr-listar <repo> [--todos]     PR abertos (--todos inclui fechado e merged)
   $VERBO pr-ver <repo> <numero>         estado, revisao e checks de um PR
+  $VERBO pr-diff <repo> <numero>        o diff completo do PR (o que ele muda, linha a linha)
+  $VERBO pr-merge <repo> <numero> [--squash|--merge|--rebase] [--forcar]
+                                        aprova e mescla o PR (operador do host); default --squash
+                                        recusa check vermelho salvo --forcar
 
 raiz de trabalho: $RAIZ   (PF_REPO_RAIZ)
 exit: 0 ok · 2 uso · 3 falha do git · 4 alvo fora da raiz ou trava de producao
@@ -274,6 +278,50 @@ ato_pr_ver() {
   (cd "$c" && gh pr view "$num") || morre "gh pr view falhou" 3
 }
 
+ato_pr_diff() {
+  local nome="${1:-}" num="${2:-}" c
+  [ -n "$num" ] || morre "falta o numero do PR" 2
+  case "$num" in *[!0-9]*) morre "numero de PR invalido: '$num'" 2 ;; esac
+  tem_gh
+  c="$(clone_de "$nome")" || exit $?
+  (cd "$c" && gh pr diff "$num") || morre "gh pr diff falhou" 3
+}
+
+# Merge: o operador do host aprova e mescla o PR, sob a credencial da CONTA que executa.
+# Coerente com o invariante do dono (07/09): promover ao ar e ato de quem atua na conta
+# do host, nunca do jaiminho. --squash por default (historico limpo em producao);
+# --merge preserva os commits do ramo. Confere que os checks passaram ANTES de mesclar,
+# e recusa merge com check vermelho, a nao ser que --forcar diga o contrario.
+ato_pr_merge() {
+  local nome="${1:-}" num="" metodo="--squash" forcar=0 c
+  shift || uso
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --merge)  metodo="--merge";  shift ;;
+      --squash) metodo="--squash"; shift ;;
+      --rebase) metodo="--rebase"; shift ;;
+      --forcar) forcar=1; shift ;;
+      *) [ -z "$num" ] && { num="$1"; shift; } || morre "argumento nao reconhecido: '$1'" 2 ;;
+    esac
+  done
+  [ -n "$num" ] || morre "falta o numero do PR" 2
+  case "$num" in *[!0-9]*) morre "numero de PR invalido: '$num'" 2 ;; esac
+  tem_gh
+  c="$(clone_de "$nome")" || exit $?
+  # Estado dos checks antes de mesclar. Vermelho recusa, salvo --forcar.
+  local checks
+  checks="$(cd "$c" && gh pr checks "$num" 2>&1)"
+  if printf '%s' "$checks" | grep -qiE '\bfail|\berror|\bcancel'; then
+    [ "$forcar" -eq 1 ] || morre "PR #$num tem check vermelho — recuso mesclar. Confira \`$VERBO pr-ver $nome $num\`; para mesclar assim mesmo, --forcar." 4
+  fi
+  # main protegida por policy: o merge normal e barrado e o gh manda usar --admin.
+  # O operador do host tem esse privilegio (invariante do dono 07/09); --forcar liga-o.
+  local admin=""
+  [ "$forcar" -eq 1 ] && admin="--admin"
+  (cd "$c" && gh pr merge "$num" $metodo $admin) || morre "gh pr merge falhou" 3
+  printf 'mesclado: PR #%s em %s (%s%s)\n' "$num" "$nome" "${metodo#--}" "$([ -n "$admin" ] && echo ' +admin')"
+}
+
 ato="${1:-}"; [ -n "$ato" ] && shift
 case "$ato" in
   estado)    ato_estado "$@" ;;
@@ -284,6 +332,8 @@ case "$ato" in
   pr-abrir)  ato_pr_abrir "$@" ;;
   pr-listar) ato_pr_listar "$@" ;;
   pr-ver)    ato_pr_ver "$@" ;;
+  pr-diff)   ato_pr_diff "$@" ;;
+  pr-merge)  ato_pr_merge "$@" ;;
   ""|-h|--help|ajuda) uso ;;
-  *) morre "ato desconhecido: '$ato' — atos: estado, clonar, ramo, commitar, empurrar, pr-abrir, pr-listar, pr-ver" 2 ;;
+  *) morre "ato desconhecido: '$ato' — atos: estado, clonar, ramo, commitar, empurrar, pr-abrir, pr-listar, pr-ver, pr-diff, pr-merge" 2 ;;
 esac
