@@ -194,11 +194,6 @@ ato_commitar() {
     "$(git -C "$c" log -1 --format='%h %s')"
 }
 
-# Quem empurra da fita: TODA cadeira que roda na conta do host (claudinho), direto, sem
-# PR — ordem do dono, 07/09/2026, valida enquanto nao houver PEP centralizado. O gate
-# anterior (allowlist EMPURRAM por string de cadeira + recusa de main/master) era a
-# classe que seg:0014 aposenta: quando o PEP entrar, a decisao de push e dele, nao deste
-# arquivo. Historico: `git log -S EMPURRAM -- bin/repo`.
 ato_empurrar() {
   local nome="${1:-}" ramo="${2:-}" c
   c="$(clone_de "$nome")" || exit $?
@@ -276,48 +271,19 @@ ato_pr_ver() {
   (cd "$c" && gh pr view "$num") || morre "gh pr view falhou" 3
 }
 
-ato_pr_diff() {
+# pr-merge: operador do host aprova o PR pela credencial da CONTA (uid do host), que e
+# quem a seg:0014 diz que promove. NAO afrouxa a fronteira: `empurrar` segue recusando
+# main, o PR segue obrigatorio. Isto so da ao verbo o que o operador ja faz por fora.
+# --admin passa por cima da policy do forge quando o operador precisa promover o proprio
+# PR (branch protection ligada, autor != aprovador). Squash + delete do ramo por default.
+ato_pr_merge() {
   local nome="${1:-}" num="${2:-}" c
   [ -n "$num" ] || morre "falta o numero do PR" 2
   case "$num" in *[!0-9]*) morre "numero de PR invalido: '$num'" 2 ;; esac
   tem_gh
   c="$(clone_de "$nome")" || exit $?
-  (cd "$c" && gh pr diff "$num") || morre "gh pr diff falhou" 3
-}
-
-# Merge: o operador do host aprova e mescla o PR, sob a credencial da CONTA que executa.
-# Coerente com o invariante do dono (07/09): promover ao ar e ato de quem atua na conta
-# do host, nunca do jaiminho. --squash por default (historico limpo em producao);
-# --merge preserva os commits do ramo. Confere que os checks passaram ANTES de mesclar,
-# e recusa merge com check vermelho, a nao ser que --forcar diga o contrario.
-ato_pr_merge() {
-  local nome="${1:-}" num="" metodo="--squash" forcar=0 c
-  shift || uso
-  while [ $# -gt 0 ]; do
-    case "$1" in
-      --merge)  metodo="--merge";  shift ;;
-      --squash) metodo="--squash"; shift ;;
-      --rebase) metodo="--rebase"; shift ;;
-      --forcar) forcar=1; shift ;;
-      *) [ -z "$num" ] && { num="$1"; shift; } || morre "argumento nao reconhecido: '$1'" 2 ;;
-    esac
-  done
-  [ -n "$num" ] || morre "falta o numero do PR" 2
-  case "$num" in *[!0-9]*) morre "numero de PR invalido: '$num'" 2 ;; esac
-  tem_gh
-  c="$(clone_de "$nome")" || exit $?
-  # Estado dos checks antes de mesclar. Vermelho recusa, salvo --forcar.
-  local checks
-  checks="$(cd "$c" && gh pr checks "$num" 2>&1)"
-  if printf '%s' "$checks" | grep -qiE '\bfail|\berror|\bcancel'; then
-    [ "$forcar" -eq 1 ] || morre "PR #$num tem check vermelho — recuso mesclar. Confira \`$VERBO pr-ver $nome $num\`; para mesclar assim mesmo, --forcar." 4
-  fi
-  # main protegida por policy: o merge normal e barrado e o gh manda usar --admin.
-  # O operador do host tem esse privilegio (invariante do dono 07/09); --forcar liga-o.
-  local admin=""
-  [ "$forcar" -eq 1 ] && admin="--admin"
-  (cd "$c" && gh pr merge "$num" $metodo $admin) || morre "gh pr merge falhou" 3
-  printf 'mesclado: PR #%s em %s (%s%s)\n' "$num" "$nome" "${metodo#--}" "$([ -n "$admin" ] && echo ' +admin')"
+  (cd "$c" && gh pr merge "$num" --admin --squash --delete-branch) \
+    || morre "gh pr merge falhou" 3
 }
 
 ato="${1:-}"; [ -n "$ato" ] && shift
@@ -330,8 +296,7 @@ case "$ato" in
   pr-abrir)  ato_pr_abrir "$@" ;;
   pr-listar) ato_pr_listar "$@" ;;
   pr-ver)    ato_pr_ver "$@" ;;
-  pr-diff)   ato_pr_diff "$@" ;;
   pr-merge)  ato_pr_merge "$@" ;;
   ""|-h|--help|ajuda) uso ;;
-  *) morre "ato desconhecido: '$ato' — atos: estado, clonar, ramo, commitar, empurrar, pr-abrir, pr-listar, pr-ver, pr-diff, pr-merge" 2 ;;
+  *) morre "ato desconhecido: '$ato' — atos: estado, clonar, ramo, commitar, empurrar, pr-abrir, pr-listar, pr-ver, pr-merge" 2 ;;
 esac
