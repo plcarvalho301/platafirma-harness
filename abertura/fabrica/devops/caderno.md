@@ -163,7 +163,7 @@ de um serviço vivo apontava para o endereço que o passo mandava derrubar. Uma 
 das tools e um `grep` do endereço separaram os três fatos; executar o passo teria
 tirado acervo e wiki do externo e desfeito um sign-off anterior.
 
-## Trocar de identidade não é ganhar capacidade — são dois atos, e falta sempre o segundo
+## Trocar de identidade não é ganhar capacidade — são três atos, e falta sempre o último
 
 Isolar execução por conta de SO parece um ato só: autorizar a troca de uid. Não é. A
 autorização move QUEM executa; ela não cria, em lugar nenhum, um chão em que a nova
@@ -171,10 +171,11 @@ identidade possa escrever. O caminho feliz do teste — `id -u` devolvendo o uid
 passa com o segundo ato faltando, e a falha só aparece no primeiro `write` real, como
 `EACCES` num ponto que ninguém associa à troca.
 
-A régua, ao projetar qualquer execução sob outra identidade: liste os dois atos lado a
-lado antes de estimar, e trate o segundo como parte do aceite, não como detalhe de
-ambiente. (1) o mecanismo da troca — sudoers, `runuser`, `User=` de unit; (2) o alcance
-da identidade de destino — grupo, dono de diretório, socket, `$HOME`. Vale para além do
+A régua, ao projetar qualquer execução sob outra identidade: liste os três atos lado a
+lado antes de estimar, e trate os dois últimos como parte do aceite, não como detalhe
+de ambiente. (1) o mecanismo da troca — sudoers, `runuser`, `User=` de unit; (2) o
+alcance da identidade de destino — grupo, dono de diretório, socket, `$HOME`; (3) a
+INTERSEÇÃO desse alcance com o que a política já permite àquele sujeito. Vale para além do
 uid: token que troca de sujeito sem entrada correspondente no PAP falha pelo mesmo
 formato — identidade nova sem alcance projetado.
 
@@ -183,6 +184,17 @@ Medido no #3007 (09/2026): o card previa só a regra de sudoers. `/home/claudinh
 e sem mais nada, o comando trocaria de uid e o arquivo não nasceria. O aceite pedia
 justamente um arquivo com o owner novo no disco: passaria no `id -u` e falharia no que
 importava.
+
+O terceiro ato apareceu no mesmo card um dia depois, com os dois primeiros já feitos, e
+é o que nenhum dos dois lados acusa sozinho: a regra que permite ao fornecedor escrever
+casa `sobre: [platafirma-*/*, var/tmp/*]` — tudo na casa da plataforma, onde o uid novo
+leva `EACCES` —, e a raiz onde ele de fato escreve não está no `sobre` de regra nenhuma.
+SO verde de um lado, política verde do outro, interseção vazia no meio: o write é
+impossível e nenhum teste de um lado só o mostra. O teste do SO escreve num caminho que
+a política não autoriza; o do PDP autoriza um caminho onde o SO não deixa escrever. A
+medida que decide é uma só, e tem de ser feita no MESMO caminho: aquele onde os dois
+dizem sim. Vale para toda identidade nova, não só para uid — o par (mecanismo, alcance)
+sem a interseção com a política é meia migração que passa em todo ensaio.
 
 ## Filtro que reformata saída alheia guarda o que não casou
 
