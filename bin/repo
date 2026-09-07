@@ -193,7 +193,7 @@ ato_commitar() {
 
 # Quem empurra da fita: endereco unico da excecao (veio de bin/chat com a Bash nativa
 # desligada — spec_porta-so-verbo §5). Sem PF_CADEIRA (operador do host, a mao) passa.
-EMPURRAM="produto ti"
+EMPURRAM="produto ti seguranca"  # seguranca: 07/09, ordem do dono. Gate por string de cadeira e allowlist hardcoded (a classe que seg:0014 aposenta) — vira decisao de PEP na equalizacao de push/deploy; ate la, a linha.
 ato_empurrar() {
   if [ -n "${PF_CADEIRA:-}" ]; then
     case " $EMPURRAM " in
