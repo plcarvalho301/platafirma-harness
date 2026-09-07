@@ -3,7 +3,7 @@
 # capacidade: construcao
 # dono: claudinho-TI
 # use para: clonar repo, estado do clone, criar/trocar ramo, commitar, empurrar, abrir PR
-# atos: estado, clonar, ramo, commitar, empurrar, pr-abrir, pr-listar, pr-ver
+# atos: estado, clonar, ramo, commitar, empurrar, pr-abrir, pr-listar, pr-ver, pr-diff, pr-merge
 #
 # Por que `construcao`, e nao um nome novo: a primeira volta desta story inventou
 # `repo`, `teste`, `lint` e `revisao-de-codigo` — quatro capacidades paralelas a uma que
@@ -26,8 +26,10 @@
 #   3. Nenhuma flag do chamador atravessa para o git. Cada ato monta a linha do git com
 #      argumento posicional conferido; o que o chamador passa e dado, nao comando.
 #
-# Trava de producao (seg:0014, "Sai quando" da #3003): `empurrar` recusa main/master.
-# Mudanca em producao chega por PR que operador do host aprova — `pr abrir`, nao push.
+# Trava de producao: SUSPENSA por ordem do dono (07/09/2026) enquanto nao houver PEP
+# centralizado — toda cadeira que roda na conta do host empurra direto, main inclusive,
+# sem pedir PR. A recusa de main e a allowlist por cadeira voltam como decisao do PEP
+# (seg:0014), nao como string neste arquivo. PR segue disponivel para quem quiser revisao.
 #
 # NAO decide autorizacao: quem decide e o PEP no caminho da chamada (`_autoriza` por
 # slug na porta; #3006 poe o PEP nos endpoints laterais). Este verbo executa ou recusa
@@ -47,11 +49,16 @@ uso:
   $VERBO commitar <repo> -m <msg> [--staged]
                                         add -A + commit; --staged commita so o que ja esta no index
   $VERBO empurrar <repo> [<ramo>]       push -u origin <ramo> (default: o ramo atual)
-                                        RECUSA main/master: producao entra por PR
+                                        cadeira na conta do host empurra direto, main inclusive
+                                        (ordem do dono 07/09/2026, ate haver PEP centralizado)
   $VERBO pr-abrir <repo> --titulo <t> [--corpo <c>] [--base <ramo>]
                                         abre PR do ramo ATUAL contra <base> (default: main)
   $VERBO pr-listar <repo> [--todos]     PR abertos (--todos inclui fechado e merged)
   $VERBO pr-ver <repo> <numero>         estado, revisao e checks de um PR
+  $VERBO pr-diff <repo> <numero>        o diff completo do PR (o que ele muda, linha a linha)
+  $VERBO pr-merge <repo> <numero> [--squash|--merge|--rebase] [--forcar]
+                                        aprova e mescla o PR (operador do host); default --squash
+                                        recusa check vermelho salvo --forcar
 
 raiz de trabalho: $RAIZ   (PF_REPO_RAIZ)
 exit: 0 ok · 2 uso · 3 falha do git · 4 alvo fora da raiz ou trava de producao
@@ -192,8 +199,7 @@ ato_empurrar() {
   c="$(clone_de "$nome")" || exit $?
   [ -n "$ramo" ] || ramo="$(ramo_atual "$c")"
   case "$ramo" in
-    main|master|HEAD)
-      morre "recuso empurrar '$ramo': producao entra por PR que operador do host aprova (seg:0014). Use \`$VERBO pr-abrir\`." 4 ;;
+    HEAD) morre "HEAD solto — troque para um ramo antes de empurrar" 4 ;;
   esac
   git -C "$c" push -u origin "$ramo" || morre "git push falhou" 3
   printf 'empurrado: %s -> origin/%s (%s)\n' "$nome" "$ramo" \
