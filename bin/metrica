@@ -37,7 +37,7 @@ import os
 import statistics
 import sys
 from collections import defaultdict
-from datetime import date
+from datetime import date, datetime
 
 RAIZ = os.environ.get("PF_RAIZ", os.path.expanduser("~/AI"))
 LOG_OPS = os.environ.get("PF_LOG_OPS") or os.path.join(RAIZ, "var", "log", "ops")
@@ -436,7 +436,10 @@ def main(argv):
     if args.ajuda:
         return uso(0)
 
-    dia = args.dia_flag or args.dia or date.today().isoformat()
+    # Data LOCAL, e nao UTC: o nome do arquivo do dia e escrito pela porta com a data
+    # local do host (`ops-server/server.py`, `LOG_DIR / f"ops-{date.today()}.jsonl"`).
+    # Ler em UTC erraria o arquivo nas tres primeiras horas de cada dia.
+    dia = args.dia_flag or args.dia or datetime.now().astimezone().date().isoformat()
     try:
         date.fromisoformat(dia)
     except ValueError:
