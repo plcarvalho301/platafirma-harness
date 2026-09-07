@@ -1,0 +1,51 @@
+#!/usr/bin/env bash
+# git — shim fino para o git real, com allowlist de subcomando
+# capacidade: construcao
+# dono: claudinho-TI
+# use para: git fino de leitura e de arvore local (status, log, diff, fetch, rebase, merge, stash, branch)
+# atos: status, log, diff, show, fetch, rebase, merge, stash, branch, checkout, restore, tag, remote, worktree
+#
+# Por que ESTE arquivo existe (decisao 2b do dono, 07/09/2026): o verbo `repo` nao
+# tinha pull/fetch/rebase/merge e reimplementava mal o resto. A ordem foi servir git
+# FINO em vez de reimplementar. Este shim repassa ao git real os subcomandos da
+# allowlist; o que promove ao forge (push) continua SO pelo verbo `repo`, que carrega
+# a contencao de producao e o gate de release.
+#
+# RECURSAO: identica ao shim gh — a porta executa este arquivo; ele resolve o git REAL
+# por PATH menos o proprio bin/, para nunca chamar a si mesmo.
+#
+# FRONTEIRA que este shim NAO cruza:
+#   - push: e do verbo `repo` (trava de producao + gate). Aqui push aponta pra la.
+#   - reescrita destrutiva (reset --hard, clean -f, push --force): fora da allowlist;
+#     sao o que a contencao existe pra evitar. Quem precisa mesmo faz no host, a mao.
+# Leitura e operacao de arvore LOCAL (rebase/merge/stash/branch/checkout) passam finas:
+# reconciliar divergencia era exatamente o que faltava e mandava a fita pro host.
+set -uo pipefail
+
+VERBO="$(basename "$0")"
+ESTE_DIR="$(cd "$(dirname "$0")" && pwd)"
+
+morre() { printf 'git: %s\n' "$1" >&2; exit "${2:-3}"; }
+
+PATH_LIMPO="$(printf '%s' "$PATH" | tr ':' '\n' | grep -vxF "$ESTE_DIR" | paste -sd: -)"
+GIT_REAL="$(PATH="$PATH_LIMPO" command -v git 2>/dev/null)"
+[ -n "$GIT_REAL" ] || morre "git real nao esta instalado nesta conta" 3
+
+ATO="${1:-}"
+case "$ATO" in
+  "")
+    cat >&2 <<EOF
+uso: git <subcomando> [args do git real]
+  servidos (leitura + arvore local): status log diff show fetch rebase merge stash
+    branch checkout restore tag remote worktree
+  push NAO passa aqui — use \`repo empurrar\` (carrega trava de producao e gate)
+  reset --hard, clean -f, push --force: fora do shim (host, a mao)
+EOF
+    exit 2 ;;
+  push)
+    morre "push nao passa pelo shim: producao e ramo entram por \`repo empurrar\` (trava + gate de release). Use o verbo repo." 4 ;;
+  status|log|diff|show|fetch|rebase|merge|stash|branch|checkout|restore|tag|remote|worktree)
+    exec "$GIT_REAL" "$@" ;;
+  *)
+    morre "subcomando '$ATO' fora da allowlist do shim. Servidos: status log diff show fetch rebase merge stash branch checkout restore tag remote worktree. push -> \`repo empurrar\`." 4 ;;
+esac

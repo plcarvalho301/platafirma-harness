@@ -561,7 +561,10 @@ PF_RUN_SO_VERBO = os.environ.get("PF_RUN_SO_VERBO", "1") != "0"
 _META_SHELL = set("|&><$`*?();\n")
 # spec_porta-so-verbo §3.5: programa que era fallback -> quem o cobre. `null` = verbo que falta.
 _SUGESTAO = {
-    "git": "repo", "gh": "repo",
+    # git/gh SAIRAM daqui: viram verbos finos (bin/git, bin/gh, shims), servidos pela
+    # capsula (decisao 2b do dono, 07/09/2026). Verbo servido nao tem sugestao de
+    # substituto — ele proprio roda. O shim git nega `push` e aponta `repo empurrar`;
+    # o `repo` continua para a operacao contida (trava de producao + gate de release).
     "cat": "read_file", "head": "read_file", "tail": "read_file", "sed": "read_file",
     "less": "read_file", "ls": "read_file", "stat": "read_file", "wc": "read_file",
     "rg": "descobrir", "grep": "descobrir", "fd": "descobrir", "find": "descobrir",
