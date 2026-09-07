@@ -26,8 +26,10 @@
 #   3. Nenhuma flag do chamador atravessa para o git. Cada ato monta a linha do git com
 #      argumento posicional conferido; o que o chamador passa e dado, nao comando.
 #
-# Trava de producao (seg:0014, "Sai quando" da #3003): `empurrar` recusa main/master.
-# Mudanca em producao chega por PR que operador do host aprova — `pr abrir`, nao push.
+# Trava de producao: SUSPENSA por ordem do dono (07/09/2026) enquanto nao houver PEP
+# centralizado — toda cadeira que roda na conta do host empurra direto, main inclusive,
+# sem pedir PR. A recusa de main e a allowlist por cadeira voltam como decisao do PEP
+# (seg:0014), nao como string neste arquivo. PR segue disponivel para quem quiser revisao.
 #
 # NAO decide autorizacao: quem decide e o PEP no caminho da chamada (`_autoriza` por
 # slug na porta; #3006 poe o PEP nos endpoints laterais). Este verbo executa ou recusa
@@ -47,7 +49,8 @@ uso:
   $VERBO commitar <repo> -m <msg> [--staged]
                                         add -A + commit; --staged commita so o que ja esta no index
   $VERBO empurrar <repo> [<ramo>]       push -u origin <ramo> (default: o ramo atual)
-                                        RECUSA main/master: producao entra por PR
+                                        cadeira na conta do host empurra direto, main inclusive
+                                        (ordem do dono 07/09/2026, ate haver PEP centralizado)
   $VERBO pr-abrir <repo> --titulo <t> [--corpo <c>] [--base <ramo>]
                                         abre PR do ramo ATUAL contra <base> (default: main)
   $VERBO pr-listar <repo> [--todos]     PR abertos (--todos inclui fechado e merged)
@@ -191,22 +194,17 @@ ato_commitar() {
     "$(git -C "$c" log -1 --format='%h %s')"
 }
 
-# Quem empurra da fita: endereco unico da excecao (veio de bin/chat com a Bash nativa
-# desligada — spec_porta-so-verbo §5). Sem PF_CADEIRA (operador do host, a mao) passa.
-EMPURRAM="produto ti seguranca"  # seguranca: 07/09, ordem do dono. Gate por string de cadeira e allowlist hardcoded (a classe que seg:0014 aposenta) — vira decisao de PEP na equalizacao de push/deploy; ate la, a linha.
+# Quem empurra da fita: TODA cadeira que roda na conta do host (claudinho), direto, sem
+# PR — ordem do dono, 07/09/2026, valida enquanto nao houver PEP centralizado. O gate
+# anterior (allowlist EMPURRAM por string de cadeira + recusa de main/master) era a
+# classe que seg:0014 aposenta: quando o PEP entrar, a decisao de push e dele, nao deste
+# arquivo. Historico: `git log -S EMPURRAM -- bin/repo`.
 ato_empurrar() {
-  if [ -n "${PF_CADEIRA:-}" ]; then
-    case " $EMPURRAM " in
-      *" $PF_CADEIRA "*) ;;
-      *) morre "recuso empurrar: cadeira '$PF_CADEIRA' nao empurra da fita (EMPURRAM='$EMPURRAM'). Use \`$VERBO pr-abrir\` por quem empurra." 4 ;;
-    esac
-  fi
   local nome="${1:-}" ramo="${2:-}" c
   c="$(clone_de "$nome")" || exit $?
   [ -n "$ramo" ] || ramo="$(ramo_atual "$c")"
   case "$ramo" in
-    main|master|HEAD)
-      morre "recuso empurrar '$ramo': producao entra por PR que operador do host aprova (seg:0014). Use \`$VERBO pr-abrir\`." 4 ;;
+    HEAD) morre "HEAD solto — troque para um ramo antes de empurrar" 4 ;;
   esac
   git -C "$c" push -u origin "$ramo" || morre "git push falhou" 3
   printf 'empurrado: %s -> origin/%s (%s)\n' "$nome" "$ramo" \
