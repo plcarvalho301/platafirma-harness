@@ -3,7 +3,7 @@
 # capacidade: verificacao
 # dono: claudinho-TI
 # use para: declarado × servido, 'existe X?' (âncora de NEGATIVA), cabeçalho de verbo, paridade de serviço
-# atos: existe, servico, verbo, skill, procedencia, repo, superficie, front, arranque, ferramental, commit
+# atos: existe, servico, verbo, skill, procedencia, repo, superficie, front, arranque, ferramental, commit, alcance
 # forma: relatorio
 # cauda: sim
 # componente: docker, git
@@ -122,21 +122,38 @@ SUPERFICIES = os.path.join(POLITICA_DIR, "superficies.yaml")
 
 MAPA = os.path.join(RAIZ, "platafirma-arquitetura", "docs", "arquitetura-negocio-operacao.md")
 
+# `chapeu` e `sessao` estavam DESCRITAS no docstring e nao existiam em lugar nenhum:
+# `conferir chapeu` respondia "classe desconhecida" citando a propria tela que a
+# anunciava (caso-ancora do #3015, medido 07/09). Entram aqui, que e onde a casa
+# declara ausencia — ou se implementa, ou se para de anunciar; o que nao vale e
+# prometer na tela e negar na chamada.
 CLASSES_ABERTAS = {
     "canal": "regua do design system e de claudinha-produto e ainda nao existe",
     "casco": "avaliacao CIS ja tem verbo proprio (oscap-casco), de claudinho-seguranca",
+    "chapeu": "predicados de personas/TEMPLATE-chapeu.md ainda nao viraram codigo",
+    "sessao": "medicao do pacote servido depende do tokenizador do harness, que nao esta ligado aqui",
 }
+
+CLASSES_IMPLEMENTADAS = ("servico", "verbo", "repo", "skill", "procedencia",
+                         "superficie", "commit", "arranque", "ferramental",
+                         "front", "existe", "alcance")
 
 
 def uso(erro=None):
+    # Pedir a forma NAO e erro (card #3016): `--help`/`--ajuda` sai em STDOUT com
+    # exit 0; so a chamada errada vai ao stderr com exit 2. Antes os dois casos
+    # saiam iguais, e quem pedia ajuda levava exit 2 na cara.
+    saida = sys.stderr if erro else sys.stdout
     if erro:
-        print(f"erro: {erro}\n", file=sys.stderr)
-    print(__doc__.strip(), file=sys.stderr)
-    print("\nuso: conferir <classe> [alvo]", file=sys.stderr)
-    print("     classes implementadas : servico . verbo . repo . skill . procedencia . superficie . commit . arranque . ferramental . front . existe . alcance", file=sys.stderr)
+        print(f"erro: {erro}\n", file=saida)
+        print("corrija:", file=saida)
+    print(__doc__.strip(), file=saida)
+    print("\nuso: conferir <classe> [alvo]", file=saida)
+    print("     classes implementadas : " + " . ".join(CLASSES_IMPLEMENTADAS), file=saida)
     for c, motivo in CLASSES_ABERTAS.items():
-        print(f"     classe declarada, sem implementacao : {c} — {motivo}", file=sys.stderr)
-    sys.exit(2)
+        print(f"     classe declarada, sem implementacao : {c} — {motivo}", file=saida)
+    print("\nexit: 0 sem divergencia · 1 divergencia · 2 uso", file=saida)
+    sys.exit(2 if erro else 0)
 
 
 def sh(args, cwd=None):
@@ -375,6 +392,88 @@ def canonica(cap, validas):
     return None
 
 
+# --- gate de uso (card #3016, continuidade da feature #3015) -----------------
+#
+# Predicados, por verbo servido, todos medidos por CHAMADA — nao por leitura do
+# fonte, que diria o que o autor quis e nao o que a cadeira recebe:
+#
+#   1. `<verbo> --help` e `<verbo> --ajuda` saem 0 e escrevem a forma em stdout;
+#   2. ato fora do conjunto declarado sai 2 com `erro:` na PRIMEIRA linha;
+#   3. cada ato declarado responde `<verbo> <ato> --help` com 0.
+#
+# O predicado 2 so se aplica a quem DECLARA conjunto: verbo cujo primeiro argumento
+# e alvo livre (deploy <stack>, motor <instancia>, descobrir <assunto>) nao tem
+# conjunto a recusar, e cobrar recusa dele seria inventar regra.
+#
+# Nao se testa por chamada o que muda o mundo: script de uma vez so fica de fora,
+# COM o motivo escrito — isencao declarada nao e aprovacao silenciosa.
+GATE_USO_ISENTOS = {
+    "jaiminho-git-token-refresh.sh": "cron de token, nao verbo de cadeira",
+    "migrar-agy-para-jaiminho.sh": "script de migracao de uma vez so, ja executado",
+}
+
+GATE_USO_TIMEOUT = 15
+GATE_USO_ATO_FALSO = "ato-que-nao-existe-3016"
+
+
+def _roda_verbo(caminho, *args):
+    """(rc, stdout, stderr) — rc None quando o verbo nao respondeu no prazo."""
+    try:
+        p = subprocess.run([caminho, *args], capture_output=True, text=True,
+                           timeout=GATE_USO_TIMEOUT)
+        return p.returncode, p.stdout, p.stderr
+    except subprocess.TimeoutExpired:
+        return None, "", ""
+    except OSError as e:
+        return None, "", str(e)
+
+
+def _atos_declarados(caminho):
+    """A MESMA leitura de cabecalho da lib/uso.sh, importada de lib/uso.py: o gate
+    nao pode ter uma segunda ideia do que e um ato declarado."""
+    import pathlib
+    lib = str(pathlib.Path(__file__).resolve().parent.parent / "lib")
+    if lib not in sys.path:
+        sys.path.insert(0, lib)
+    try:
+        from uso import atos_do_cabecalho
+    except ImportError:
+        return []
+    return atos_do_cabecalho(pathlib.Path(caminho))
+
+
+def gate_uso(nome, caminho):
+    """Lista de falhas do gate para um verbo. Vazia = conforme."""
+    if nome in GATE_USO_ISENTOS:
+        return []
+    falhas = []
+    for flag in ("--help", "--ajuda"):
+        rc, out, _err = _roda_verbo(caminho, flag)
+        if rc is None:
+            falhas.append(f"`{nome} {flag}` nao respondeu em {GATE_USO_TIMEOUT}s")
+        elif rc != 0:
+            falhas.append(f"`{nome} {flag}` sai {rc} — pedir a forma nao e erro")
+        elif not out.strip():
+            falhas.append(f"`{nome} {flag}` nao escreve a forma em stdout")
+    declarados = _atos_declarados(caminho)
+    if declarados:
+        rc, out, err = _roda_verbo(caminho, GATE_USO_ATO_FALSO)
+        primeira = ((err or out).strip().splitlines() or [""])[0]
+        if rc is None:
+            falhas.append(f"ato invalido nao respondeu em {GATE_USO_TIMEOUT}s")
+        elif rc != 2:
+            falhas.append(f"ato invalido sai {rc} — o exit de uso e 2")
+        elif not primeira.startswith("erro:"):
+            falhas.append("ato invalido nao diz `erro:` na primeira linha")
+        for ato in declarados:
+            rc, out, _err = _roda_verbo(caminho, ato, "--help")
+            if rc is None:
+                falhas.append(f"`{nome} {ato} --help` nao respondeu em {GATE_USO_TIMEOUT}s")
+            elif rc != 0:
+                falhas.append(f"`{nome} {ato} --help` sai {rc} — a forma do ato se pede")
+    return falhas
+
+
 def conferir_verbo(alvo, como_json=False):
     houve = False
     validas = capacidades_do_mapa()
@@ -421,6 +520,16 @@ def conferir_verbo(alvo, como_json=False):
         if not como_json:
             print(f"\n### {nome}")
             print(f"    origem  : {classe} — {onde}")
+        # Gate de uso (card #3016): a forma do verbo e a recusa graciosa entram na
+        # conformidade, para a regua nao regredir depois de aplicada.
+        falhas_uso = gate_uso(nome, caminho)
+        if falhas_uso:
+            houve = True
+            conforme = False
+            motivos += falhas_uso
+            if not como_json:
+                for f in falhas_uso:
+                    print(f"    USO     : {f}")
         if classe in ("so-no-host", "divergente"):
             houve = True
             conforme = False
