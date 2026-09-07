@@ -153,6 +153,21 @@ mercado (bench 2026-09-03): o padrão dominante é SKILL.md enxuto + `reference/
 de verificação (validate/verify_citations/source_evaluator), com o loop plano→busca→síntese→
 verificação — não um monólito.
 
+## Cadeira na conta do host empurra direto — sem PR — até haver PEP centralizado
+
+Ordem do dono, 07/09/2026 (broadcast a todas as cadeiras): **TODA cadeira rodando na
+conta `claudinho` dá push direto, main inclusive, sem pedir PR a ninguém**, enquanto o
+PEP centralizado não existir. O gate por allowlist de cadeira (`EMPURRAM`) e a recusa de
+main em `bin/repo` foram suspensos no mesmo ato; voltam como decisão do PEP (seg:0014),
+nunca como string no verbo.
+
+- Modo de falha que gerou a ordem (fita 07/09): a posição na minuta 0029 ficou commitada
+  e invisível porque o verbo recusou a cadeira, e a cadeira pediu push a outra por carta
+  em vez de reconhecer que está na conta do host. Recusa de verbo por string de cadeira
+  NÃO é fronteira de acesso: é contingência — a conta é uma, o uid é um.
+- Entrega vai a git no mesmo turno (ofício). Sem PEP, o único gate real é o uid; pedir PR
+  entre cadeiras do mesmo uid é teatro que só atrasa o dono.
+
 ## Antes de afirmar que um desenho de acesso "está certo", ler a série seg: vigente
 
 Modo de falha observado (fita 05/09/2026, o dono flagrou): opinei sobre o desenho de

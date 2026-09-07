@@ -23,7 +23,7 @@ uso:
   minuta ler [<n>|<slug>]
   minuta formalizar <n> --como adr|spec [--destino <slug>] [--vencido]
 
-escrever   — numera e grava o esqueleto; não commita, não circula.
+escrever   — numera, grava e publica o esqueleto (commit+push); não circula.
 circular   — despacha o ping tipo:minuta às convocadas; recusa pauta vazia ou
              minuta não commitada.
 ler        — sem argumento, as abertas em que PF_CADEIRA está convocada; com

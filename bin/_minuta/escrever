@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
-# minuta escrever — numera e grava o esqueleto do protocolo. Não commita, não
-# circula: entre o esqueleto e a circulação existe o texto que só a cadeira
-# escreve. Protocolo: minutas/PROTOCOLO.md §2-3.
+# minuta escrever — numera, grava e PUBLICA o esqueleto (commit+push no nascimento,
+# 07/09/2026): o dono nao le clone local, minuta so no disco e rascunho invisivel.
+# Nao circula — entre o esqueleto e a circulacao existe o merito que so a cadeira
+# escreve, e 'circular' barra pauta vazia. Protocolo: minutas/PROTOCOLO.md §2-3.
 set -euo pipefail
 
 REPO="${MINUTA_REPO:-$HOME/AI/platafirma-arquitetura}"
@@ -113,5 +114,16 @@ TITULO="$(tr '[:lower:]' '[:upper:]' <<<"${TITULO:0:1}")${TITULO:1}"
   echo "## Decisão"
   echo "<preenchida por quem fecha, com ponteiro para o canônico>"
 } > "$ARQ"
+
+# Publica o esqueleto no nascimento. O dono NAO le clone local — arquivo parado em
+# ~/AI e rascunho invisivel (oficio.md). Antes desta linha existia uma janela entre
+# 'escrever' e 'circular' em que a minuta so vivia no clone de quem abriu, e quem
+# pedia pra ver nao a encontrava. Publicar cedo (esqueleto) e publicar de novo (merito,
+# antes de circular) vence rascunho invisivel: 'circular' ja barra pauta vazia, entao
+# o esqueleto publicado nao circula sozinho. Ordem do dono, 07/09/2026.
+REL="$(realpath --relative-to="$REPO" "$ARQ")"
+git -C "$REPO" add "$REL"
+git -C "$REPO" commit -q -m "minuta ${N}: esqueleto (${CADEIRA} abre, convoca ${CONV_LINE})"
+git -C "$REPO" push -q origin HEAD
 
 echo "$ARQ"
