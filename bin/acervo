@@ -5,11 +5,50 @@
 # use para: ingerir obra, escada, bancada, extrato, stack, registrar verbo, golden record, operar a wiki
 # atos: ingerir, baixar, escada, bancada, extrato, listar, registrar, ferramenta, stack, adr, wiki
 #
+# ato: ingerir <raiz> [--apply] — leva a obra da entrada ate a vetorizacao
+#   sem --apply, so diz o que faria
+#   ex: acervo ingerir entrada/lote-12 --apply
+# ato: escada [--json] [--detalhe] — onde cada obra parou nos cinco degraus
+#   ex: acervo escada --json
+# ato: baixar "<trecho do titulo>" [dest] — tira uma copia da obra do store
+#   ex: acervo baixar "rito de debito"
+# ato: bancada [destino] — monta o lote do que falta classificar
+#   ex: acervo bancada
+# ato: extrato [destino] — foto do acervo para ler fora da bancada
+#   ex: acervo extrato
+# ato: listar <conceitos|ferramental> [--json] — golden record acervo.conceito / acervo.ferramental
+#   ex: acervo listar ferramental --json
+# ato: registrar <verbo>|--todos — ESCREVE o verbo no golden record, lido do cabecalho
+#   ex: acervo registrar repo
+# ato: stack <ver|import|rm> — topologia de deploy: le e ESCREVE acervo.stack
+#   ex: acervo stack ver
+# ato: ferramenta <nome> [--json] — o que e <nome> e qual o verbo certo
+#   ex: acervo ferramenta pytest
+# ato: adr <lista|<codigo>|--<entidade>> — consulta o registro de decisoes de arquitetura
+#   ex: acervo adr 0037
+# ato: wiki <sub-ato> — a wiki (MediaWiki) como fonte editavel do acervo
+#   ler <titulo...>                      wikitext da(s) pagina(s), com rev para editar sem conflito
+#   buscar <termo> [--limite N]          busca full-text na prosa
+#   listar [--prefixo|--categoria|--ns]  titulos por prefixo, categoria ou namespace
+#   editar <titulo> [--resumo] [--base-rev]   cria/substitui; conteudo por STDIN
+#   subir <arquivo> [--nome]             envia arquivo (Arquivo:<nome>), teto 2 MB
+#   cargo <tabela> <campos> [--where ...]     consulta SQL sobre campos Cargo
+#   leitura e anonima; editar e subir logam com a conta de bot
+#   ex: acervo wiki ler "PlataFirma"
+#
+# exit: 0 ok · 1 falha declarada · 2 uso
+#
 # Despachante (arq:0040): o verbo é o par binário+subcomando. Os sub-atos moram
 # em bin/_acervo/ e não entram no PATH; a porta é esta.
 set -euo pipefail
 
 ATOS="$(dirname "$(readlink -f "$0")")/_acervo"
+
+# Mapa (N1), forma por ato (N2) e recusa de ato desconhecido saem de lib/uso.sh, que
+# renderiza o cabecalho deste arquivo (card #3016). O heredoc abaixo segue servindo o
+# erro DENTRO de um ato, que e do verbo.
+. "$(dirname "$(readlink -f "$0")")/../lib/uso.sh"
+uso_intercepta "$@"
 
 uso() {
   cat >&2 <<'FIM'

@@ -4,6 +4,22 @@
 # dono: claudinho-TI
 # use para: subir stack, promover ref, rotas do túnel, segredos, reverter
 # atos: ato=<stack> e args=up / down / ps / logs / config / pull / build / promover / rotas / acessos / segredos / reverter; sem ato lista as stacks
+#
+# ato: <stack> — mostra o declarado da stack, sem tocar em nada
+#   sem <stack>, `deploy` lista as stacks do registro
+#   ex: deploy rastreador
+# ato: <stack> up|down|ps|logs|config|pull|build — as acoes de compose sobre a stack
+#   ex: deploy rastreador ps
+# ato: <stack> promover [ref] — worktree de deploy: fetch + checkout + build + recreate
+#   ex: deploy rastreador promover main
+# ato: <stack> rotas — qual hostname do tunel entra em qual servico
+# ato: <stack> acessos — quem pode entrar em cada superficie gateada
+# ato: <stack> segredos — arquivos fora do git que a stack exige, e se estao ali
+# ato: <stack> reverter [--executar [ref]] — como se desfaz, em quanto tempo e por quem
+#   ex: deploy rastreador reverter
+#
+# exit: 0 ok · 1 falha declarada · 2 uso
+# nao existe alvo default e nao existe "todas": stack e argumento obrigatorio
 # forma: log
 # cauda: sim
 #
@@ -34,6 +50,16 @@ expandir() { printf '%s\n' "${1/#\~/$HOME}"; }
 # `compose` e `profiles` aceitam string ou lista: uma linha por item, sempre.
 lista()    { jq -r --arg s "$1" --arg c "$2" \
                '.stacks[$s][$c] // empty | if type=="array" then .[] else . end' <<<"$TOPO_JSON"; }
+
+# lib/uso.sh serve `deploy --help` e `deploy <stack> --help` a partir do cabecalho
+# (card #3016). Duas excecoes DECLARADAS, e por isso as variaveis abaixo:
+#   USO_ATO_LIVRE — o primeiro argumento aqui e a STACK, alvo do chamador, e nao um
+#                   ato de conjunto fechado: quem confere o conjunto e o registro.
+#   USO_SEM_ATO   — `deploy` pelado ja e a resposta certa (o catalogo de stacks vivo,
+#                   que o cabecalho nao tem como listar), entao nao se sequestra.
+export USO_ATO_LIVRE=1 USO_SEM_ATO=passa
+. "$(dirname "$(readlink -f "$0")")/../lib/uso.sh"
+uso_intercepta "$@"
 
 uso() {
   cat >&2 <<FIM

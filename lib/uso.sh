@@ -70,8 +70,25 @@ _uso_blocos() {
 }
 
 # Nomes dos atos declarados, um por linha. Usado pelo gate do `conferir`.
+#
+# Duas fontes, nesta ordem: os blocos `# ato:` (que tambem carregam a forma) e, na
+# falta deles, a lista `# atos:` que TODO verbo ja declara. A segunda nao da forma
+# por ato, mas da o conjunto valido — e conjunto valido e o que separa a recusa
+# graciosa do exit 2 mudo. Entrada que nao e nome de ato (`ato=<stack>`, `nenhum`,
+# frase com espaco) fica de fora: verbo de alvo livre nao tem conjunto a conferir.
 uso_atos() {
-  _uso_blocos | awk -F'\t' '$1 == "A" { split($2, p, /[ \t]/); print p[1] }'
+  local blocos
+  blocos="$(_uso_blocos | awk -F'\t' '$1 == "A" { split($2, p, /[ \t]/); print p[1] }')"
+  if [ -n "$blocos" ]; then
+    printf '%s\n' "$blocos"
+    return 0
+  fi
+  uso_chave atos \
+    | tr ',' '\n' \
+    | sed 's/^[[:space:]]*//; s/[[:space:]]*$//' \
+    | grep -Ex '[A-Za-z][A-Za-z0-9_-]*' \
+    | grep -vx 'nenhum' \
+    || true
 }
 
 # Alias de ato, declarado no cabecalho como `# alias: ver = ler`. O alias e aceito
@@ -100,7 +117,11 @@ uso_mapa() {
   prop="$(uso_proposito)"
   [ -n "$prop" ] && printf '%s\n\n' "$prop"
   printf 'uso: %s <ato> [args]\n\n' "$_USO_VERBO"
-  if [ -n "$(uso_atos)" ]; then
+  if [ -z "$(_uso_blocos)" ]; then
+    # Sem bloco `# ato:`: o conjunto vem de `# atos:`, e o mapa diz os NOMES. Menos
+    # que a forma, mais que nada — e nunca uma tela vazia.
+    uso_atos | sed 's/^/  /'
+  else
     _uso_blocos | awk -F'\t' -v verbo="$_USO_VERBO" '
       $1 != "A" { next }
       {
@@ -113,9 +134,6 @@ uso_mapa() {
         else if (length(forma) <= 40) printf "  %-40s %s\n", forma, res
         else printf "  %s\n  %-40s %s\n", forma, "", res
       }'
-  else
-    atos="$(uso_chave atos)"
-    [ -n "$atos" ] && printf '  atos: %s\n' "$atos"
   fi
   printf '\nexit: %s\n' "$(uso_exit)"
   printf 'a forma de um ato: %s <ato> --help\n' "$_USO_VERBO"

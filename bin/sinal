@@ -180,4 +180,11 @@ def main():
 
 
 if __name__ == "__main__":
+    # Regua de forma da casa (card #3016). `sem_ato=passa` e `ato_livre`: este verbo
+    # roda DIRETO, sem ato (`# atos: nenhum`), entao o vazio nao se sequestra.
+    import pathlib as _pl
+    import sys as _sys
+    _sys.path.insert(0, str(_pl.Path(__file__).resolve().parent.parent / "lib"))
+    from uso import intercepta as _intercepta
+    _intercepta(ato_livre=True, sem_ato="passa")
     sys.exit(main())

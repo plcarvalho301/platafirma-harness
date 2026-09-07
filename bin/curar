@@ -942,4 +942,11 @@ def main(argv=None):
 
 
 if __name__ == "__main__":
+    # Regua de forma da casa (card #3016): --help/--ajuda em stdout com exit 0, e a
+    # recusa graciosa de ato desconhecido, lidas do cabecalho deste arquivo.
+    import pathlib as _pl
+    import sys as _sys
+    _sys.path.insert(0, str(_pl.Path(__file__).resolve().parent.parent / "lib"))
+    from uso import intercepta as _intercepta
+    _intercepta()
     sys.exit(main())

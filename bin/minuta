@@ -5,6 +5,26 @@
 # use para: deliberação entre cadeiras, parecer, circular pauta, formalizar em ADR/spec
 # atos: ler, escrever, circular, formalizar
 #
+# ato: escrever <slug> --convoca <c1>[,<c2>...] [--fecha <cadeira|pedro>] [--card <#N>] — numera, grava e publica o esqueleto (commit+push)
+#   --convoca     cadeiras convocadas, separadas por virgula (obrigatorio)
+#   --fecha       quem fecha a minuta
+#   --card <#N>   card de origem
+#   escrever NAO circula: circular e ato proprio
+#   ex: minuta escrever verbos-com-help --convoca ia,ti --card 3016
+# ato: circular <n> [<cadeira>...] — despacha o ping tipo:minuta as convocadas
+#   recusa pauta vazia ou minuta nao commitada
+#   ex: minuta circular 12
+# ato: ler [<n>|<slug>] — sem argumento, as abertas em que PF_CADEIRA esta convocada
+#   com argumento, o arquivo inteiro; leitura fria
+#   ex: minuta ler 12
+# ato: formalizar <n> --como adr|spec [--destino <slug>] [--vencido] — cria o canonico vazio e apaga a minuta
+#   --como        adr ou spec (obrigatorio)
+#   recusa convocada com secao vazia, salvo --vencido
+#   ex: minuta formalizar 12 --como adr
+#
+# exit: 0 ok · 1 falha declarada · 2 uso
+# protocolo: platafirma-arquitetura/minutas/PROTOCOLO.md · spec: docs/spec_verbo-minuta.md
+#
 # Externaliza platafirma-arquitetura/minutas/PROTOCOLO.md em verbo (spec:
 # platafirma-arquitetura/docs/spec_verbo-minuta.md). Ciclo de vida: escrever ->
 # (a cadeira escreve o mérito) -> circular -> (convocadas manifestam) ->
@@ -15,25 +35,13 @@ set -euo pipefail
 
 ATOS="$(dirname "$(readlink -f "$0")")/_minuta"
 
+# Mapa, forma por ato e erro gracioso: lib/uso.sh renderiza o cabecalho deste
+# arquivo (card #3016). O texto de uso mora la em cima, uma vez so.
+. "$(dirname "$(readlink -f "$0")")/../lib/uso.sh"
+uso_intercepta "$@"
+
 uso() {
-  cat >&2 <<'FIM'
-uso:
-  minuta escrever <slug> --convoca <c1>[,<c2>...] [--fecha <cadeira|pedro>] [--card <#N>]
-  minuta circular <n> [<cadeira>...]
-  minuta ler [<n>|<slug>]
-  minuta formalizar <n> --como adr|spec [--destino <slug>] [--vencido]
-
-escrever   — numera, grava e publica o esqueleto (commit+push); não circula.
-circular   — despacha o ping tipo:minuta às convocadas; recusa pauta vazia ou
-             minuta não commitada.
-ler        — sem argumento, as abertas em que PF_CADEIRA está convocada; com
-             argumento, o arquivo inteiro. Leitura fria.
-formalizar — cria o canônico vazio (ADR ou spec), apaga a minuta, um commit só.
-             Recusa convocada com seção vazia, salvo --vencido.
-
-Protocolo: platafirma-arquitetura/minutas/PROTOCOLO.md
-Spec:      platafirma-arquitetura/docs/spec_verbo-minuta.md
-FIM
+  uso_mapa >&2
   exit 2
 }
 

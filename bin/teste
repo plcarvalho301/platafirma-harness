@@ -16,6 +16,14 @@
 # verbo, superficie, servico). `teste` e `lint` verificam o CODIGO de um repo.
 # use para: rodar teste de um repo, suite verde/vermelha, conferir mudanca antes de PR
 # atos: rodar, detectar
+#
+# ato: rodar <repo> [<alvo>] — roda a suite do clone
+#   <alvo>        caminho dentro do repo; sem ele, a suite inteira
+#   ex: teste rodar platafirma-harness
+# ato: detectar <repo> — diz a stack, o interpretador e a linha que rodaria, sem rodar
+#   ex: teste detectar platafirma-harness
+#
+# exit: 0 suite verde · 1 suite vermelha · 2 uso · 3 falha do runner · 4 alvo fora da raiz · 5 indeterminavel (nenhuma stack detectada)
 # forma: log
 # cauda: sim
 #
@@ -49,18 +57,12 @@ VERBO="$(basename "$0")"
 # preenchidos por detecta()
 STACK=""; LINHA=""; PY=""; ISOLADO=0
 
-uso() {
-  cat >&2 <<EOF
-uso:
-  $VERBO rodar <repo> [<alvo>]   roda a suite do clone; <alvo> = caminho dentro do repo
-  $VERBO detectar <repo>         diz a stack, o interpretador e a linha que rodaria
+# Mapa, forma por ato e erro gracioso: lib/uso.sh renderiza o cabecalho deste
+# arquivo (card #3016). O texto de uso mora la em cima, uma vez so.
+. "$(dirname "$(readlink -f "$0")")/../lib/uso.sh"
+uso_intercepta "$@"
 
-raiz de trabalho: $RAIZ   (PF_REPO_RAIZ)   ·   interpretador: PF_TESTE_PYTHON
-exit: 0 suite verde · 1 suite vermelha · 2 uso · 3 falha do runner · 4 alvo fora da raiz
-      5 indeterminavel (nenhuma stack de teste detectada)
-EOF
-  exit 2
-}
+uso() { uso_mapa >&2; exit 2; }
 
 morre() { printf '%s: %s\n' "$VERBO" "$1" >&2; exit "${2:-3}"; }
 

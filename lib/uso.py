@@ -29,7 +29,143 @@ import os
 import sys
 from pathlib import Path
 
-__all__ = ["Uso", "erro", "nome_do_verbo", "liga_lib", "mapa"]
+__all__ = ["Uso", "erro", "nome_do_verbo", "liga_lib", "mapa", "intercepta", "atos_do_cabecalho"]
+
+
+# --- a mesma regua da lib/uso.sh, para quem nao usa argparse ------------------
+#
+# Metade dos verbos em Python tem despacho proprio (`sys.argv[1]` num if/elif), e
+# converte-los a argparse seria reescrever verbo, nao dar-lhes forma. As funcoes
+# abaixo leem o CABECALHO do arquivo do verbo — os mesmos `# ato:` e `# atos:` que a
+# lib bash le — e servem N1, N2 e a recusa de ato desconhecido. Uma regua, dois
+# substratos, zero texto duplicado.
+
+
+def _linhas(fonte):
+    try:
+        return fonte.read_text(encoding="utf-8", errors="replace").splitlines()
+    except OSError:
+        return []
+
+
+def _blocos(fonte):
+    """[(sinopse, [detalhe])] das linhas `# ato:` do cabecalho. Bloco fecha em
+    qualquer linha de comentario que nao seja detalhe (`#` + dois espacos)."""
+    saida = []
+    dentro = False
+    for linha in _linhas(fonte):
+        if linha.startswith("#!"):
+            continue
+        if linha.startswith("# ato:"):
+            saida.append((linha[6:].strip(), []))
+            dentro = True
+        elif dentro and linha.startswith("#  "):
+            saida[-1][1].append(linha[1:].strip())
+        elif linha.startswith("#"):
+            dentro = False
+        else:
+            break
+    return saida
+
+
+def _chave(fonte, chave):
+    marca = f"# {chave}:"
+    for linha in _linhas(fonte):
+        if linha.startswith(marca):
+            return linha[len(marca):].strip()
+    return ""
+
+
+def atos_do_cabecalho(fonte):
+    """Nomes dos atos: dos blocos `# ato:` e, na falta deles, da lista `# atos:`.
+    Entrada que nao e nome de ato (`ato=<stack>`, `nenhum`, frase com espaco) fica
+    de fora — verbo de alvo livre nao tem conjunto a conferir."""
+    blocos = _blocos(fonte)
+    if blocos:
+        return [b[0].split()[0] for b in blocos if b[0].split()]
+    crus = [p.strip() for p in _chave(fonte, "atos").split(",")]
+    return [p for p in crus
+            if p and p != "nenhum" and p.replace("-", "").replace("_", "").isalnum()]
+
+
+def _proposito(fonte):
+    linhas = _linhas(fonte)
+    for linha in linhas[1:4]:
+        if linha.startswith("# ") and " — " in linha:
+            return linha[2:].strip()
+    return ""
+
+
+def _saidas(fonte):
+    return _chave(fonte, "exit") or _SAIDAS_PADRAO
+
+
+def _mapa(verbo, fonte):
+    blocos = _blocos(fonte)
+    itens = []
+    for sinopse, _ in blocos:
+        if " — " in sinopse:
+            forma, resumo = sinopse.split(" — ", 1)
+        else:
+            forma, resumo = sinopse, ""
+        itens.append((forma.strip(), resumo.strip()))
+    if not itens:
+        itens = [(nome, "") for nome in atos_do_cabecalho(fonte)]
+    return mapa(verbo, _proposito(fonte), itens, _saidas(fonte))
+
+
+def _forma(verbo, fonte, alvo):
+    for sinopse, detalhe in _blocos(fonte):
+        if not sinopse.split() or sinopse.split()[0] != alvo:
+            continue
+        if " — " in sinopse:
+            forma, resumo = sinopse.split(" — ", 1)
+        else:
+            forma, resumo = sinopse, ""
+        linhas = [f"uso: {verbo} {forma.strip()}"]
+        if resumo.strip():
+            linhas.append(f"  {resumo.strip()}")
+        linhas.append("")
+        linhas += [f"  {d}" for d in detalhe]
+        linhas += ["", f"exit: {_saidas(fonte)}"]
+        return "\n".join(linhas)
+    return _mapa(verbo, fonte)
+
+
+_AJUDA = ("-h", "--help", "--ajuda", "ajuda")
+
+
+def intercepta(argv=None, ato_livre=False, sem_ato="mapa", fonte=None):
+    """Chamada ANTES de qualquer posicional do verbo (card #3016).
+
+    N1 em stdout/exit 0 para `<verbo>` sem ato, `--help`, `--ajuda`, `-h`; N2 para
+    `<verbo> <ato> --help`; recusa graciosa (exit 2) para ato fora do conjunto.
+    Nao erra por ajuda: pedido que nao casa com ato declarado cai no mapa.
+
+      ato_livre=True  -> o primeiro argumento e alvo do chamador, nao ato fechado
+      sem_ato="passa" -> `<verbo>` pelado ja e chamada valida do verbo
+    """
+    argv = list(sys.argv[1:] if argv is None else argv)
+    arq = Path(fonte or sys.argv[0]).resolve()
+    verbo = nome_do_verbo()
+    primeiro = argv[0] if argv else ""
+    if primeiro in _AJUDA:
+        print(_mapa(verbo, arq))
+        sys.exit(0)
+    if not primeiro:
+        if sem_ato == "passa":
+            return
+        print(_mapa(verbo, arq))
+        sys.exit(0)
+    declarados = atos_do_cabecalho(arq)
+    if len(argv) > 1 and argv[1] in _AJUDA:
+        print(_forma(verbo, arq, primeiro) if primeiro in declarados
+              else _mapa(verbo, arq))
+        sys.exit(0)
+    if declarados and not ato_livre and primeiro not in declarados:
+        erro(f"ato desconhecido: '{primeiro}'",
+             [f"atos de {verbo}: " + ", ".join(declarados),
+              f"a forma de um ato: {verbo} <ato> --help"])
 
 
 def liga_lib() -> None:

@@ -80,4 +80,11 @@ def main(argv: list[str]) -> int:
 
 
 if __name__ == "__main__":
+    # Regua de forma da casa (card #3016). `ato_livre`: o primeiro argumento e o
+    # ASSUNTO a descobrir, alvo do chamador, nao ato de conjunto fechado.
+    import pathlib as _pl
+    import sys as _sys
+    _sys.path.insert(0, str(_pl.Path(__file__).resolve().parent.parent / "lib"))
+    from uso import intercepta as _intercepta
+    _intercepta(ato_livre=True)
     sys.exit(main(sys.argv))

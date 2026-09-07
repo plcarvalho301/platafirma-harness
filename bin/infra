@@ -4,6 +4,27 @@
 # dono: claudinho-TI
 # use para: contêiner, unit, timer, restart, logs, saúde, backup
 # atos: estado, saude, logs, restart, unit-env, backup, cache
+#
+# ato: estado [alvo] [--json] — conteineres, units de usuario e timers, uma tela
+#   [alvo]        sem alvo, olha tudo
+#   ex: infra estado rastreador-api
+# ato: saude [alvo] [--json] — /health do ops, conteiner nao-saudavel, disco, RAM
+#   ex: infra saude
+# ato: logs <alvo> [n] — log do conteiner OU da unit --user (default 50 linhas)
+#   ex: infra logs jaiminho-server 100
+# ato: restart <alvo> [--nao-esperar] — reinicia conteiner ou unit --user
+#   mutacao exige alvo explicito; confere antes de dizer ok
+#   ex: infra restart rastreador-api
+# ato: unit-env <unit> [--ver | CHAVE=VALOR...] — drop-in de ambiente da unit --user
+#   faz daemon-reload; reiniciar e outro ato
+#   ex: infra unit-env ops-server --ver
+# ato: cache [ver|vram|disco] — ver o que ocupa VRAM e disco; liberar e explicito
+#   ex: infra cache ver
+# ato: backup [--json] — por alvo declarado: quando rodou, se saiu bem, quantas geracoes
+#   ex: infra backup
+#
+# exit: 0 ok · 1 falha declarada · 2 uso
+# promover release nao e daqui: `deploy <stack>`
 # forma: log
 # cauda: sim
 # Encapsula as três pegadinhas conhecidas: DOCKER_HOST rootless, restart que
@@ -13,22 +34,14 @@ set -euo pipefail
 export DOCKER_HOST="${DOCKER_HOST:-unix:///run/user/$(id -u)/docker.sock}"
 OPS_HEALTH="${INFRA_OPS_HEALTH:-http://127.0.0.1:8010/health}"
 
-uso() {
-  cat >&2 <<'FIM'
-uso:
-  infra estado [alvo] [--json]   contêineres, units de usuário e timers, uma tela
-  infra saude  [alvo] [--json]   /health do ops, contêiner não-saudável, disco, RAM
-  infra logs   <alvo> [n]        alvo = nome de contêiner OU unit --user (default 50)
-  infra restart <alvo> [--nao-esperar]  contêiner ou unit --user; confere antes de dizer ok
-  infra unit-env <unit> [--ver | CHAVE=VALOR...]  drop-in de ambiente da unit --user (daemon-reload; restart e outro ato)
-  infra cache [ver|vram|disco]   ver o que ocupa VRAM e disco; liberar e explicito
-  infra backup [--json]          por alvo declarado: quando rodou, se saiu bem, quantas geracoes
+# Mapa (N1), forma por ato (N2) e erro gracioso saem de lib/uso.sh, que renderiza o
+# CABECALHO deste arquivo (card #3016). Uma fonte so: o heredoc que morava aqui
+# repetia o que `# atos:` ja declarava, e as duas listas divergiam com o tempo.
+. "$(dirname "$(readlink -f "$0")")/../lib/uso.sh"
+uso_intercepta "$@"
 
-Leitura aceita alvo opcional; sem alvo, olha tudo. Mutação exige alvo explícito e
-recusa sem ele. Promover release não é daqui: `deploy <stack>`.
-FIM
-  exit 2
-}
+# Call sites antigos de `uso` sao caminho de ERRO: mapa no stderr, exit 2 de uso.
+uso() { uso_mapa >&2; exit 2; }
 
 # --- leituras elementares ---------------------------------------------------
 

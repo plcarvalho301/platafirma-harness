@@ -49,6 +49,12 @@ SQL
   printf '%s' "$id"
 }
 
+# Mapa (N1), forma por ato (N2) e recusa graciosa de ato desconhecido saem de
+# lib/uso.sh, do cabecalho deste arquivo (card #3016). O heredoc abaixo segue
+# servindo o erro DENTRO de um ato, que e materia do verbo.
+. "$(dirname "$(readlink -f "$0")")/../lib/uso.sh"
+uso_intercepta "$@"
+
 uso() {
   sed -n '2,20p' "$0" | sed 's/^# \{0,1\}//'
   cat <<'FIM'

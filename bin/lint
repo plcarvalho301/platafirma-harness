@@ -10,6 +10,14 @@
 # canonica. Linha de corte: `conferir` verifica a plataforma; `lint` verifica o codigo.
 # use para: lintar um repo, conferir estilo antes de commit/PR, ver o que o linter aponta
 # atos: rodar, detectar
+#
+# ato: rodar <repo> [<alvo>] — roda o linter do clone
+#   <alvo>        caminho dentro do repo; sem ele, o clone inteiro
+#   ex: lint rodar platafirma-harness bin/repo
+# ato: detectar <repo> — diz qual stack casou e que linha rodaria, sem rodar
+#   ex: lint detectar platafirma-harness
+#
+# exit: 0 limpo · 1 apontamentos · 2 uso · 3 falha do linter · 4 alvo fora da raiz · 5 indeterminavel (nenhuma stack detectada)
 # forma: log
 # cauda: sim
 #
@@ -27,18 +35,12 @@ set -uo pipefail
 RAIZ="${PF_REPO_RAIZ:-$HOME/AI}"
 VERBO="$(basename "$0")"
 
-uso() {
-  cat >&2 <<EOF
-uso:
-  $VERBO rodar <repo> [<alvo>]   roda o linter do clone; <alvo> = caminho dentro do repo
-  $VERBO detectar <repo>         diz qual stack casou e que linha rodaria, sem rodar
+# Mapa, forma por ato e erro gracioso: lib/uso.sh renderiza o cabecalho deste
+# arquivo (card #3016). O texto de uso mora la em cima, uma vez so.
+. "$(dirname "$(readlink -f "$0")")/../lib/uso.sh"
+uso_intercepta "$@"
 
-raiz de trabalho: $RAIZ   (PF_REPO_RAIZ)
-exit: 0 limpo · 1 apontamentos · 2 uso · 3 falha do linter · 4 alvo fora da raiz
-      5 indeterminavel (nenhuma stack de lint detectada)
-EOF
-  exit 2
-}
+uso() { uso_mapa >&2; exit 2; }
 
 morre() { printf '%s: %s\n' "$VERBO" "$1" >&2; exit "${2:-3}"; }
 
