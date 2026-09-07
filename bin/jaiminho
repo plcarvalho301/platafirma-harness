@@ -3,6 +3,24 @@
 # capacidade: mensagem
 # dono: claudinho-TI
 # componente: jaiminho (Antigravity CLI + ponte MCP)
+# use para: falar com o colaborador externo, estado da conta dele, login do agy
+# atos: perguntar, continuar, estado, login, login-codigo, logs
+#
+# ato: perguntar "<texto>" — uma pergunta em sessao NOVA, abrindo com a persona dele
+#   stdin: o corpo, quando nao vem no argumento
+#   ex: jaiminho perguntar "o que voce alcanca da plataforma?"
+# ato: continuar "<texto>" — retoma a ultima conversa dele, sem reinjetar a persona
+#   ex: jaiminho continuar "e o segundo ponto?"
+# ato: estado — conta autenticada, modelo, ponte MCP e sessao na plataforma
+#   ex: jaiminho estado
+# ato: login — reabre o fluxo OAuth e imprime a URL de autorizacao para o dono
+#   ex: jaiminho login
+# ato: login-codigo <codigo> — devolve ao container o codigo que a pagina imprimiu
+#   ex: jaiminho login-codigo 4/0Ab...
+# ato: logs [n] — ultimas n linhas do container (default 40)
+#   ex: jaiminho logs 100
+#
+# exit: 0 ok · 1 falha declarada · 2 uso
 """jaiminho — interlocucao com o colaborador externo (card 344, seg:0009).
 
 O Jaiminho e um modelo do Google que roda DENTRO do container `jaiminho`:
@@ -30,6 +48,12 @@ import re
 import shlex
 import subprocess
 import sys
+
+# Mapa (N1), forma por ato (N2) e recusa graciosa saem de lib/uso.py, que renderiza o
+# CABECALHO deste arquivo (card #3016). A docstring segue sendo o texto longo do verbo.
+sys.path.insert(0, os.path.join(
+    os.path.dirname(os.path.dirname(os.path.realpath(__file__))), "lib"))
+from uso import intercepta  # noqa: E402
 
 # Tres constantes viraram env com o default de sempre (18/08/2026, org:0020): a
 # segunda conta da fabrica roda o MESMO motor `agy` no MESMO desenho de container, e
@@ -276,9 +300,10 @@ def logs(args):
 
 
 def main():
-    if len(sys.argv) < 2:
-        print(__doc__.strip())
-        return
+    # Forma e recusa ANTES do despacho (#3016): `--help`/`--ajuda`, `jaiminho` pelado e
+    # `jaiminho <ato> --help` saem em STDOUT com exit 0 — pedir a forma nao e erro —, e
+    # ato fora do conjunto sai com `erro:` na linha 1 e exit 2.
+    intercepta()
     ato, args = sys.argv[1], sys.argv[2:]
     if ato == "perguntar":
         falar(args)

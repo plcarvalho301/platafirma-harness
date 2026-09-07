@@ -82,10 +82,19 @@ def atos_do_cabecalho(fonte):
     de fora — verbo de alvo livre nao tem conjunto a conferir."""
     blocos = _blocos(fonte)
     if blocos:
-        return [b[0].split()[0] for b in blocos if b[0].split()]
+        # `# ato: <inst> buscar ...` (alvo livre) e `# ato: (sem ato) ...` (verbo de
+        # cron) nao declaram ato de conjunto fechado: o placeholder e do CHAMADOR, ou
+        # nao ha ato nenhum. Ficam no mapa, fora do conjunto. Nome de ato comeca por
+        # letra — a mesma regua da lib/uso.sh.
+        return [b[0].split()[0] for b in blocos
+                if b[0][:1].isalpha()]
     crus = [p.strip() for p in _chave(fonte, "atos").split(",")]
+    # Flag nao e ato. `# atos: ato=<assunto>; args opcionais --eixos, -k, --json`
+    # entregava `-k` e `--json` como atos, e o gate passava a cobrar a forma deles.
+    # Nome de ato comeca por letra — a mesma regua do `grep -Ex` da lib/uso.sh.
     return [p for p in crus
-            if p and p != "nenhum" and p.replace("-", "").replace("_", "").isalnum()]
+            if p and p != "nenhum" and p[:1].isalpha()
+            and p.replace("-", "").replace("_", "").isalnum()]
 
 
 def _proposito(fonte):

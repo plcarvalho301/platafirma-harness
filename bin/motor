@@ -6,6 +6,22 @@
 # dono: claudinho-IA
 # use para: motor rag/reasoner, buscar no acervo, ajuste, medir bateria, indexar
 # atos: listar; ou ato=<instância> e args=ajuste / buscar / medir / indexar
+#
+# ato: listar — instancias declaradas, estado e container
+#   ex: motor listar
+# ato: <inst> ajuste [<slug> [<valor>]] — os ajustes da instancia, com o valor de hoje
+#   <slug>        sem slug, lista tudo; com slug, o que ele troca por que
+#   <valor>       mexe, promove e confere o servido
+#   ex: motor rag ajuste corte-de-chunk
+# ato: <inst> buscar "<pergunta>" [--k N] [--texto secao|trecho|nenhum] [--conceito <slug>] — busca pela porta servida
+#   ex: motor rag buscar "porta so-verbo" --k 5
+# ato: <inst> medir [--k N] [--rerank] [--rotulo <nome>] [--gabarito <arq>] [--expansao] — bateria no gold canonico + delta contra a ultima
+#   ex: motor rag medir --rotulo baseline
+# ato: <inst> indexar [--apply] — fases 2-5: materializa, chunka, embedda
+#   o que ENTRA no corpus e `acervo ingerir`, nao este ato
+#   ex: motor rag indexar
+#
+# exit: 0 ok · 1 falha declarada · 2 uso
 # forma: json
 # cauda: nao
 # componente: platafirma-motor
@@ -15,6 +31,11 @@ import json, os, re, subprocess, sys, time, urllib.request
 RAIZ = os.path.expanduser("~/AI")
 REG = os.path.join(RAIZ, "platafirma-harness/registro/motor-instancias.json")
 DOCKER = {"DOCKER_HOST": "unix:///run/user/1001/docker.sock"}
+
+# Mapa (N1), forma por ato (N2) e recusa graciosa saem de lib/uso.py, que renderiza o
+# CABECALHO deste arquivo (card #3016). O `uso()` abaixo fica como caminho de ERRO.
+sys.path.insert(0, os.path.join(RAIZ, "platafirma-harness", "lib"))
+from uso import erro, intercepta  # noqa: E402
 
 
 def sh(cmd, **kw):
@@ -609,25 +630,34 @@ def cmd_medir(nome, inst, argv):
 
 
 def main():
+    # Forma ANTES de tudo, inclusive antes de ler o registro (#3016): pedir a forma
+    # sai em STDOUT com exit 0, e nao depende de o registro estar legivel.
+    # `ato_livre` porque o primeiro argumento aqui e a INSTANCIA, nao ato de conjunto
+    # fechado — quem recusa instancia desconhecida e o registro, logo abaixo.
+    intercepta(ato_livre=True)
+    # Varredura universal (card #2868, ex-#2274 defeito 4): `motor rag ajuste --ajuda`
+    # nao chega ao interceptador, que so olha o primeiro par. Pedido de forma em
+    # qualquer posicao mostra o mapa e sai 0; nenhum sub-ato chega a rodar.
+    if any(x in ("--ajuda", "--help", "-h") for x in sys.argv[1:]):
+        intercepta(["--help"])
     d = reg()
     a = sys.argv[1:]
-    # --ajuda UNIVERSAL, sem efeito colateral (card #2868, ex-#2274 defeito 4): varre
-    # todos os argumentos antes do despacho; nenhum sub-ato chega a rodar. uso() sai 2.
-    if any(x in ("--ajuda", "--help", "-h") for x in a):
-        uso()
-    if not a:
-        uso()
     if a[0] == "listar":
         return cmd_listar(d)
     if a[0] not in d:
-        print(f"nao conheco a instancia '{a[0]}'. Ha: {', '.join(d)}", file=sys.stderr)
-        sys.exit(1)
+        # Alvo fora do conjunto e erro de USO (#3016), nao falha de dominio: sai 2, e a
+        # correcao vem colada — o conjunto valido, que aqui e o registro de instancias.
+        erro(f"nao conheco a instancia '{a[0]}'",
+             [f"instancias: {', '.join(d)}",
+              "o mapa inteiro: motor --help"])
     inst = d[a[0]]
     if inst["estado"] != "ativa":
         print(f"instancia '{a[0]}' esta {inst['estado']} — nenhum ato aceito", file=sys.stderr)
         sys.exit(1)
     if len(a) < 2:
-        uso()
+        erro(f"falta o ato da instancia '{a[0]}'",
+             [f"{a[0]} aceita: ajuste, buscar, indexar, medir",
+              "a forma de um ato: motor <ato> --help"])
     if a[1] == "ajuste":
         return cmd_ajuste(a[0], inst, a[2:])
     if a[1] == "buscar":
@@ -636,8 +666,9 @@ def main():
         return cmd_indexar(inst, a[2:])
     if a[1] == "medir":
         return cmd_medir(a[0], inst, a[2:])
-    print(f"ato desconhecido '{a[1]}'. {a[0]} aceita: ajuste, buscar, indexar, medir", file=sys.stderr)
-    sys.exit(1)
+    erro(f"ato desconhecido: '{a[1]}'",
+         [f"{a[0]} aceita: ajuste, buscar, indexar, medir",
+          "a forma de um ato: motor <ato> --help"])
 
 
 main()

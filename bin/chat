@@ -6,6 +6,22 @@
 # atos: cadeiras, despachar, versao
 # componente: chat (recepcao + worker + Claude Code headless)
 #
+# ato: despachar --cadeira <slug> --fita <id|vazio> [--silencioso] [--modelo <alias>] [--esforco <nivel>] — um giro do motor na cadeira
+#   --cadeira <slug>   cadeira ou participante; o conjunto sai em `chat cadeiras`
+#   --fita <id>        vazio abre fita nova; id existente retoma sem reinjetar pacote
+#   --silencioso       nao devolve o texto no JSON (so estado e id da fita)
+#   --modelo <alias>   modelo pedido pela sala; vazio = default do motor
+#   --esforco <nivel>  esforco pedido pela sala; vence o settings.json do cwd
+#   stdin: o corpo da mensagem, obrigatorio
+#   saida: UMA linha JSON no stdout; uma linha JSON por passo no stderr
+#   ex: echo "bom dia" | chat despachar --cadeira fabrica --fita ""
+# ato: versao — versao pinada do motor contra a servida
+#   ex: chat versao
+# ato: cadeiras — slugs aceitos em --cadeira (cadeiras + participantes)
+#   ex: chat cadeiras
+#
+# exit: 0 ok (ha JSON valido no stdout) · 1 falha de invocacao ou versao divergente · 2 uso
+#
 # Porta unica entre a superficie de conversa e o motor. Quem chama e a recepcao
 # (o Application Service); quem responde e um Claude Code headless rodando no cwd
 # da cadeira. O contrato de saida — UMA linha JSON no stdout, uma linha JSON por
@@ -41,6 +57,12 @@ SKILLS = os.path.join(RAIZ, "platafirma-harness", "skills")
 # duas traducoes divergem, e a que diverge produz cadeira errada.
 sys.path.insert(0, os.path.join(RAIZ, "platafirma-harness", "chat"))
 from comum.cadeiras import atores, eh_participante, slug_da_cadeira  # noqa: E402
+
+# Mapa (N1), forma por ato (N2) e recusa graciosa saem de lib/uso.py, que renderiza
+# o CABECALHO deste arquivo (card #3016). O heredoc de `uso()` fica: ele e o texto
+# do caminho de ERRO de `despachar`, que fala de flags, nao de atos.
+sys.path.insert(0, os.path.join(RAIZ, "platafirma-harness", "lib"))
+from uso import intercepta  # noqa: E402
 
 # Watchdog de atividade, nao teto fixo (minuta 0002, posicao de claudinho-TI,
 # anel 2): o stream emite evento por passo, entao silencio prolongado e giro
@@ -1008,12 +1030,11 @@ def despachar(argv):
 
 
 def main(argv):
-    # --ajuda UNIVERSAL, sem efeito colateral (card #2868, ex-#2274 defeito 4): varre
-    # todos os argumentos antes do despacho; nenhum ato chega a rodar. uso() sai 2.
-    if any(x in ("--ajuda", "--help", "-h") for x in argv):
-        return uso()
-    if not argv:
-        return uso()
+    # Ajuda e recusa de ato ANTES do despacho, sem efeito colateral (card #2868,
+    # ex-#2274 defeito 4; regua do #3016): `--help`/`--ajuda` e `chat <ato> --help`
+    # saem em STDOUT com exit 0 — pedir a forma nao e erro —, e ato fora do conjunto
+    # sai com `erro:` na linha 1 e exit 2. Nenhum ato chega a rodar.
+    intercepta(argv)
     ato, resto = argv[0], argv[1:]
     if ato == "despachar":
         return despachar(resto)

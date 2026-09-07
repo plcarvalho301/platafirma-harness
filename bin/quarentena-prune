@@ -4,6 +4,15 @@
 # capacidade: orfa
 # orfa por design: entra em gerenciamento de memoria (F3d), junto de ops-log-prune
 # dono: claudinho-TI
+# use para: fim da janela de arrependimento da quarentena (quem chama e o cron)
+# atos: nenhum
+#
+# ato: (sem ato) — apaga as levas que passaram da retencao e grava o que apagou
+#   QUARENTENA_RETENCAO_DIAS  dias de janela (default 7)
+#   OPS_ROOT                  raiz da quarentena (default ~/AI)
+#   ex: quarentena-prune
+#
+# exit: 0 ok · 1 falha declarada · 2 uso
 #
 # A quarentena existe para que apagar seja reversivel: o que entra la foi movido,
 # nao removido, e volta com um mv enquanto a leva viver. Este verbo e o fim dessa
@@ -13,6 +22,13 @@
 # a poda de amanha. Sem o corte de idade, rodar na sexta daria 1 dia de janela a
 # quem quarentenou na quinta, e a garantia deixaria de existir.
 set -uo pipefail
+
+# Forma sem efeito colateral (card #3016): `--help`/`--ajuda` mostram o mapa e saem 0,
+# ANTES da trava e de qualquer `rm -rf`. `USO_SEM_ATO=passa`: a chamada pelada E a
+# chamada valida; quem chama e o cron.
+. "$(dirname "$(readlink -f "$0")")/../lib/uso.sh"
+USO_SEM_ATO=passa
+uso_intercepta "$@"
 
 RETENCAO_DIAS="${QUARENTENA_RETENCAO_DIAS:-7}"
 RAIZ="${OPS_ROOT:-$HOME/AI}"

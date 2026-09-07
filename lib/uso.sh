@@ -35,8 +35,11 @@
 
 # Fonte = o arquivo do verbo que nos carregou; nome = como ele foi invocado (o
 # symlink servido, que e o nome que a cadeira digita: `fila`, nao `fila_streams.py`).
-_USO_FONTE="$(readlink -f "$0" 2>/dev/null || printf '%s' "$0")"
-_USO_VERBO="$(basename "$0")"
+# Sub-ato de despachante (arq:0040 — `bin/_minuta/escrever`) declara USO_FONTE e
+# USO_VERBO ANTES do source, e renderiza o cabecalho do verbo PAI: a forma de
+# `minuta escrever` mora no cabecalho de `minuta`, uma vez so.
+_USO_FONTE="${USO_FONTE:-$(readlink -f "$0" 2>/dev/null || printf '%s' "$0")}"
+_USO_VERBO="${USO_VERBO:-$(basename "$0")}"
 _USO_VERBO="${_USO_VERBO%.py}"
 _USO_VERBO="${_USO_VERBO%.sh}"
 
@@ -78,7 +81,9 @@ _uso_blocos() {
 # frase com espaco) fica de fora: verbo de alvo livre nao tem conjunto a conferir.
 uso_atos() {
   local blocos
-  blocos="$(_uso_blocos | awk -F'\t' '$1 == "A" { split($2, p, /[ \t]/); print p[1] }')"
+  # `# ato: <inst> buscar ...` (verbo de alvo livre) nao declara ato chamado `<inst>`:
+  # o placeholder e do CHAMADOR. Fica no mapa, fora do conjunto que se confere.
+  blocos="$(_uso_blocos | awk -F'\t' '$1 == "A" { split($2, p, /[ \t]/); if (p[1] ~ /^[A-Za-z]/) print p[1] }')"
   if [ -n "$blocos" ]; then
     printf '%s\n' "$blocos"
     return 0

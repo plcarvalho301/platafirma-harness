@@ -4,10 +4,28 @@
 # capacidade: orfa
 # orfa por design: entra em gerenciamento de memoria (F3d)
 # dono: claudinho-TI
+# use para: poda diaria do registro de operacao (quem chama e o cron, nao a cadeira)
+# atos: nenhum
+#
+# ato: (sem ato) — poda os alvos declarados pela retencao e grava a linha de vida
+#   OPS_LOG_RETENCAO_DIAS  dias de retencao (default 90)
+#   OPS_ROOT               raiz dos alvos (default ~/AI)
+#   ex: ops-log-prune
+#
+# exit: 0 ok · 1 falha declarada · 2 uso
+#
 # Retenção declarada em RETENCAO_DIAS; alvos em ALVOS.
 # Não roda dentro do ops-mcp de propósito: processo que se auto-poda perde o log
 # justamente quando morre.
 set -uo pipefail
+
+# Forma sem efeito colateral (card #3016): `--help`/`--ajuda` mostram o mapa e saem 0,
+# ANTES de qualquer poda. Podador que apaga ao ser perguntado pela forma e o pior tipo
+# de efeito colateral — e e exatamente o que o gate de `conferir verbo` dispara.
+# `USO_SEM_ATO=passa`: a chamada pelada E a chamada valida; quem chama e o cron.
+. "$(dirname "$(readlink -f "$0")")/../lib/uso.sh"
+USO_SEM_ATO=passa
+uso_intercepta "$@"
 
 RETENCAO_DIAS="${OPS_LOG_RETENCAO_DIAS:-90}"
 RAIZ="${OPS_ROOT:-$HOME/AI}"

@@ -5,6 +5,24 @@
 # use para: caixa, carta, recado, handoff, 'o que chegou', mandar para outra cadeira
 # atos: status, ler, enviar, tipos
 #
+# ato: status [<persona> | --todas] [--json] — profundidade da caixa: novas e historico
+#   --todas       todas as caixas (so a espia)
+#   ex: fila status fabrica
+# ato: ler <persona> [<remetente>] [--tudo | --desde AAAAMMDDTHHMMSS] — o que chegou; confirma a entrega
+#   --tudo        historico dos 7 dias, leitura FRIA: nao move o ponteiro
+#   --desde <ts>  historico a partir do carimbo, tambem frio
+#   <remetente>   filtra por quem mandou; so vale em leitura fria
+#   ex: fila ler fabrica
+# ato: enviar <destinatario> --tipo <t> --assunto <a> [--de <p>] [--ref <r>] [--responde <id>] — poe a carta na caixa do outro
+#   --tipo <t>    decisao | resposta | pedido | minuta | demanda | handoff (`fila tipos`)
+#   --responde    msgid da carta que esta sendo respondida
+#   stdin: o corpo da carta, auto-contido
+#   ex: echo "..." | fila enviar seguranca --tipo pedido --assunto "PAP x disco"
+# ato: tipos — os tipos validos de --tipo; nao toca a malha
+#   ex: fila tipos
+#
+# exit: 0 ok · 1 falha declarada · 2 uso
+#
 # Substrato: componente msg do motor (arq:0018, arq:0036). Stream por caixa,
 # "caixa:<persona>", com consumer group unico "cadeira" — a cadeira dona e o unico
 # consumidor. Envelope inalterado: de/tipo/assunto/ref/responde + corpo auto-contido.
@@ -31,6 +49,12 @@ try:
     import redis
 except ImportError:
     sys.exit("erro: modulo 'redis' nao instalado neste venv (uv pip install redis)")
+
+# Mapa (N1), forma por ato (N2) e recusa graciosa saem de lib/uso.py, que renderiza o
+# CABECALHO deste arquivo (card #3016). O `uso()` daqui fica como caminho de ERRO.
+sys.path.insert(0, os.path.join(
+    os.path.dirname(os.path.dirname(os.path.realpath(__file__))), "lib"))
+from uso import intercepta  # noqa: E402
 
 # Fonte UNICA de quem e destinatario valido: a ARVORE VIVA `abertura/<cadeira>/`
 # (arq:0073 §1, estado vivo arq:0074), o mesmo que comum/cadeiras.py le. O ledger de
@@ -571,6 +595,10 @@ def uso():
 
 
 def main():
+    # Forma e recusa ANTES do parser (#3016): os subparsers nascem com `add_help=False`,
+    # entao `fila ler --help` caia como argumento faltando. Agora sai a forma do ato, em
+    # STDOUT e exit 0; ato fora do conjunto sai com `erro:` na linha 1 e exit 2.
+    intercepta()
     ap = build_parser()
     args, _resto = ap.parse_known_args()
     if not args.verbo:

@@ -3,6 +3,24 @@
 # capacidade: orfa
 # orfa por design: entra em gerenciamento de memoria (F3d)
 # dono: claudinho-TI
+# use para: trabalho longo fora do giro, log em arquivo, unit transiente
+# atos: run, list, logs, status, log, stop
+#
+# ato: run <nome> <comando> [args...] — dispara; devolve o nome da unit e o caminho do log
+#   <nome>        rotulo que entra no nome da unit (platafirma-job-<nome>-<carimbo>)
+#   ex: longjob run ingestao bash -lc 'acervo ingerir var/entrada'
+# ato: list — units platafirma-job-* ativas e falhadas, uma por linha
+#   ex: longjob list
+# ato: logs — os 20 arquivos de log mais recentes
+#   ex: longjob logs
+# ato: status <unit> — estado da unit + ultimas 20 linhas do log
+#   ex: longjob status platafirma-job-ingestao-20260907T120000
+# ato: log <unit> [n] — ultimas n linhas do log (default 40)
+#   ex: longjob log platafirma-job-ingestao-20260907T120000 100
+# ato: stop <unit> — encerra a unit
+#   ex: longjob stop platafirma-job-ingestao-20260907T120000
+#
+# exit: 0 ok · 1 falha declarada · 2 uso
 #
 # A unit nasce IRMÃ do ops-mcp.service dentro do app.slice, não filha: fica fora
 # do process group do run_command (imune ao os.killpg do timeout) e fora do
@@ -17,21 +35,17 @@
 # no meio deixa o que já escreveu.
 set -euo pipefail
 
+# Mapa (N1), forma por ato (N2) e erro gracioso saem de lib/uso.sh, que renderiza o
+# CABECALHO deste arquivo (card #3016). ANTES do mkdir: pedir a forma nao cria
+# diretorio nem dispara nada.
+. "$(dirname "$(readlink -f "$0")")/../lib/uso.sh"
+uso_intercepta "$@"
+
+# Call sites antigos de `uso` sao caminho de ERRO: mapa no stderr, exit 2 de uso.
+uso() { uso_mapa >&2; exit 2; }
+
 LOGDIR="${LONGJOB_LOGDIR:-$HOME/AI/var/log/jobs}"
 mkdir -p "$LOGDIR"
-
-uso() {
-  cat >&2 <<'FIM'
-uso:
-  longjob run <nome> <comando> [args...]   dispara; devolve nome da unit e caminho do log
-  longjob list                             units platafirma-job-* ativas e falhadas
-  longjob logs                             arquivos de log mais recentes
-  longjob status <unit>                    estado da unit + últimas linhas do log
-  longjob log <unit> [n]                   últimas n linhas do log (default 40)
-  longjob stop <unit>                      encerra a unit
-FIM
-  exit 2
-}
 
 cmd="${1:-}"; shift || uso
 

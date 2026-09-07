@@ -2684,8 +2684,15 @@ def main(argv):
                 "erro": f"classe {classe!r} e conhecida e ainda nao tem implementacao: {CLASSES_ABERTAS[classe]}",
             }))
         else:
-            print(f"classe {classe!r} e conhecida e ainda nao tem implementacao: {CLASSES_ABERTAS[classe]}")
-            print("nao confundir ausencia de implementacao com conformidade.")
+            # Formato da casa (#3016): `erro:` na linha 1, `corrija:` depois, em STDERR.
+            # Classe declarada e sem funcao e recusa de USO, nao relatorio — sair pelo
+            # stdout fazia a ausencia de implementacao parecer resultado de conferencia.
+            print(f"erro: classe {classe!r} e declarada e ainda nao tem implementacao",
+                  file=sys.stderr)
+            print("corrija:", file=sys.stderr)
+            print(f"  {CLASSES_ABERTAS[classe]}", file=sys.stderr)
+            print("  ausencia de implementacao nao e conformidade", file=sys.stderr)
+            print("  as classes que respondem: conferir --help", file=sys.stderr)
         return 2
     if classe == "servico":
         return conferir_servico(alvo, como_json=como_json)

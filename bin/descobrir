@@ -5,6 +5,15 @@
 # use para: 'o que o acervo tem sobre X', varredura por título/conceito/subdomínio
 # atos: ato=<assunto>; args opcionais --eixos, -k, --json
 #
+# ato: <assunto> [--eixos titulo,conceito,subdominio] [-k N] [--json] [--sujeito <id>] — varre os tres eixos e devolve a uniao, com procedencia
+#   --eixos <lista>   eixos a consultar (default: titulo,conceito,subdominio)
+#   -k N              teto de itens no envelope (default: 8)
+#   --json            envelope estruturado em vez do texto
+#   --sujeito <id>    identidade do chamador para o PEP (default: PF_CONTA ou PF_CADEIRA)
+#   ex: descobrir "porta so-verbo" -k 5
+#
+# exit: 0 ok · 1 falha declarada · 2 uso
+#
 # Verbo fino de leitura (arq:0085 §2, §5; card #2952):
 # Varre os tres eixos (titulo, conceito, subdominio) e devolve a uniao (OR),
 # marcando por quais eixos cada obra entrou no envelope.
