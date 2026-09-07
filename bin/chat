@@ -356,7 +356,7 @@ def giro_de_participante(quem, id_fita, corpo, passo_out):
 # Cadeira que responde pela propria entrega do commit ao ar, e por isso empurra
 # E PROMOVE da fita. Endereco unico da excecao — crescer aqui, nao em copia de
 # allowlist.
-EMPURRAM_DA_FITA = {"produto"}
+# (endereco unico mudou: bin/repo, EMPURRAM — spec_porta-so-verbo §5)
 
 
 def settings_da_fita(modelo="", cadeira=""):
@@ -372,34 +372,14 @@ def settings_da_fita(modelo="", cadeira=""):
         "enableAllProjectMcpServers": True,
         "permissions": {
             "defaultMode": "bypassPermissions",
-            "allow": [
-                "Bash(ls:*)", "Bash(cat:*)", "Bash(head:*)", "Bash(tail:*)",
-                "Bash(wc:*)", "Bash(find:*)", "Bash(file:*)", "Bash(stat:*)",
-                "Bash(diff:*)", "Bash(rg:*)", "Bash(fd:*)", "Bash(grep:*)",
-                "Bash(jq:*)", "Bash(yq:*)", "Bash(sed -n:*)", "Bash(awk:*)",
-                "Bash(sort:*)", "Bash(uniq:*)", "Bash(mkdir:*)", "Bash(cp:*)",
-                "Bash(mv:*)", "Bash(touch:*)",
-                "Bash(git status:*)", "Bash(git diff:*)", "Bash(git log:*)",
-                "Bash(git show:*)", "Bash(git blame:*)", "Bash(git branch:*)",
-                "Bash(git checkout:*)", "Bash(git switch:*)", "Bash(git restore:*)",
-                "Bash(git stash:*)", "Bash(git fetch:*)", "Bash(git add:*)",
-                "Bash(git commit:*)",
-                "Bash(python3:*)", "Bash(python:*)", "Bash(pytest:*)", "Bash(ruff:*)",
-                "Bash(uv run:*)", "Bash(uv sync:*)", "Bash(uv venv:*)", "Bash(uv pip:*)",
-                "Bash(tarefas:*)", "Bash(fila:*)", "Bash(mesa:*)", "Bash(acervo:*)",
-                "Bash(monta-sessao:*)", "Bash(conferir:*)", "Bash(infra:*)",
-                # `encerrar` e o que o ritual de encerramento chama (card 449).
-                # Fora da allowlist, o giro silencioso da rotacao seria negado
-                # calado e a mesa morreria junto com a fita.
-                "Bash(encerrar:*)",
-                "Bash(motor:*)", "Bash(sinal:*)", "Bash(longjob:*)",
-            ],
+            "allow": [],
+            # spec_porta-so-verbo §5: as nativas do Code ficam DESLIGADAS — tudo passa pela
+            # porta (tools de verbo, read_file, write_file com `trecho`, run_command so-verbo).
+            # Medido 06/09 em 11 fitas: Bash 238, Edit 156, Read 48, Write 34; as demais
+            # tinham uso zero e saem junto para nao voltar por habito.
             "deny": [
-                "Bash(sudo:*)", "Bash(docker:*)", "Bash(systemctl:*)",
-                "Bash(loginctl:*)", "Bash(psql:*)", "Bash(mc:*)",
-                "Bash(rm -rf /:*)", "Bash(curl:*)",
-                "Read(//home/claudinho/.config/**)",
-                "Read(//home/claudinho/.claude/.credentials.json)",
+                "Bash", "Edit", "MultiEdit", "Write", "Read", "NotebookEdit",
+                "Glob", "Grep", "WebFetch", "WebSearch", "Task",
             ],
         },
         # A fita do Code PORTA o sessao_id em toda chamada, mecanico (arq:0101 §1,
@@ -436,12 +416,9 @@ def settings_da_fita(modelo="", cadeira=""):
     # O verbo recusa alvo que nao esteja no registro e nao tem default nem "todas":
     # a stack e argumento obrigatorio. `docker` segue negado, e nao ha contradicao —
     # o que se libera e o verbo, que ja carrega a regra da casa.
-    if cadeira.strip().lower() not in EMPURRAM_DA_FITA:
-        base["permissions"]["deny"].append("Bash(git push:*)")
-        base["permissions"]["deny"].append("Bash(deploy:*)")
-    else:
-        base["permissions"]["allow"].append("Bash(git push:*)")
-        base["permissions"]["allow"].append("Bash(deploy:*)")
+    # `git push` por cadeira saiu daqui com a Bash: a regua mora no verbo — `repo
+    # empurrar` confere PF_CADEIRA contra EMPURRAM (bin/repo). `deploy` ja recusa alvo
+    # fora do registro e e leva 2 (seguranca).
     return base
 
 

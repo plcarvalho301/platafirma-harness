@@ -34,6 +34,7 @@ nem .profile — sem isto, tudo que vive em OPS_ROOT/bin e ~/.local/bin existe n
 é invisível para quem chama a tool. O env do subprocesso também é depurado dos segredos
 da instância: um comando qualquer não deve conseguir ecoar o token que o autorizou.
 """
+import hashlib
 import hmac
 import json
 import logging
@@ -42,12 +43,14 @@ import uuid
 import re
 import shlex
 import signal
+import resource
 import subprocess
+import tempfile
 import sys
 import time
 from contextvars import ContextVar
 from datetime import date, datetime
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 
 import anyio
 import redis
@@ -61,6 +64,7 @@ from starlette.routing import Route
 OPS_NAME = os.environ.get("OPS_NAME", "claudinho-mcp")
 OPS_USER = os.environ.get("OPS_USER", "claudinho")
 RAIZ = Path(os.environ.get("OPS_ROOT", "/home/claudinho/AI"))
+RAIZ_REAL = RAIZ.resolve()
 OPS_AUTH_TOKEN = os.environ.get("OPS_AUTH_TOKEN", "")
 MEM_REDIS_HOST = os.environ.get("MEM_REDIS_HOST", "127.0.0.1")
 MEM_REDIS_PORT = int(os.environ.get("MEM_REDIS_PORT", "6380"))
@@ -553,7 +557,131 @@ def _run_blocking(command: str, d: Path, timeout: int, sessao_id: str = "-", oid
             "stderr": _cap(stderr), "cwd": str(d)}
 
 
+PF_RUN_SO_VERBO = os.environ.get("PF_RUN_SO_VERBO", "1") != "0"
+_META_SHELL = set("|&><$`*?();\n")
+# spec_porta-so-verbo §3.5: programa que era fallback -> quem o cobre. `null` = verbo que falta.
+_SUGESTAO = {
+    "git": "repo", "gh": "repo",
+    "cat": "read_file", "head": "read_file", "tail": "read_file", "sed": "read_file",
+    "less": "read_file", "ls": "read_file", "stat": "read_file", "wc": "read_file",
+    "rg": "descobrir", "grep": "descobrir", "fd": "descobrir", "find": "descobrir",
+    "docker": "infra", "systemctl": "infra", "journalctl": "infra", "loginctl": "infra",
+    "curl": "pesquisar", "wget": "pesquisar",
+    "python3": "teste", "python": "teste", "pytest": "teste", "uv": "teste", "ruff": "lint",
+    "psql": "motor", "tee": "write_file", "cp": "write_file", "mv": "write_file",
+}
+
+def _recusa(verbo: str, motivo: str) -> dict:
+    return {"recusado": True, "verbo": verbo[:80], "motivo": motivo,
+            "sugestao": _SUGESTAO.get(verbo.split("/")[-1])}
+
+def _item_de_lote(x):
+    """item de run_command -> (argv, stdin, recusa). argv[0] e o binario do whitelist."""
+    stdin = None
+    if isinstance(x, str):
+        if any(c in x for c in _META_SHELL):
+            cab = x.split()[0] if x.split() else x
+            return None, None, _recusa(cab, "metacaractere de shell — um verbo por item; "
+                                            "pipe vira stdin.de, ';' vira dois itens")
+        try:
+            toks = shlex.split(x)
+        except ValueError as e:
+            return None, None, _recusa(x, f"nao parte: {e}")
+        if not toks:
+            return None, None, _recusa("", "item vazio")
+        verbo, resto = toks[0], toks[1:]
+    elif isinstance(x, dict):
+        verbo = str(x.get("verbo") or "")
+        ato = str(x.get("ato") or "")
+        resto = ([ato] if ato else []) + [str(a) for a in (x.get("args") or [])]
+        stdin = x.get("stdin")
+    else:
+        return None, None, _recusa(str(x)[:40], "item nem string nem {verbo, ato, args, stdin}")
+    slug = verbo.split("/")[-1]
+    if slug not in SLUGS_SERVIDOS:
+        if slug in SLUGS_RETIDOS:
+            return None, None, _recusa(slug, "leva 2 desligada (PF_TOOLS_LEVA2)")
+        return None, None, _recusa(slug, "sem verbo")
+    return [BINARIOS[slug]] + resto, stdin, None
+
 async def run_command(command: str = "", cwd: str = "", timeout: int = 120,
+                       sessao_id: str | None = None,
+                       commands: list | None = None) -> dict:
+    """Lote entre verbos DISTINTOS numa chamada so — sem shell, sem fallback (spec_porta-so-verbo).
+
+    `commands`: lista de itens, cada um `{verbo, ato, args, stdin}` ou a string
+    `"<verbo> <ato> <args...>"` (partida com shlex; `| & > < $ \\` * ? ( ) ;` recusam o item).
+    Um `execve` por item (`bin/<verbo> <ato> <args>`), nunca `bash -c`; item roda na raiz e
+    `cwd` e ignorado. `stdin` e texto ou `{"de": n}` = stdout do item n do mesmo lote
+    (substitui o pipe). Programa que NAO e verbo servido nao roda: volta
+    `{recusado, verbo, motivo, sugestao}` com o verbo que o cobre (`sugestao: null` = verbo
+    que falta — vira card). Sequencial; erro ou recusa num item nao derruba os outros; teto
+    `CAP` por lote com `omitido_por_teto`/`lote_next`. `command` escalar = lote de 1 e
+    devolve o resultado do item. `sessao_id` e o do `monta_sessao`. AUDITORIA: um JSONL
+    por item em @ROOT@/var/log/ops/ — nao e silenciavel. Rollback: PF_RUN_SO_VERBO=0 + restart.
+    """
+    if not PF_RUN_SO_VERBO:
+        return await _run_command_legado(command, cwd, timeout, sessao_id, commands)
+    itens = list(commands) if commands else ([command] if command else [])
+    if not itens:
+        return {"recusado": True, "motivo": "sem item", "verbos_servidos": sorted(SLUGS_SERVIDOS)}
+    timeout = max(1, min(timeout, 600))
+    ident = _sessao_resolve(sessao_id)
+    lote_id = uuid.uuid4().hex[:8]
+    resultados, brutos = [], []
+    acumulado, lote_next = 0, None
+    for _i, x in enumerate(itens):
+        if acumulado >= CAP:
+            lote_next = _i
+            break
+        argv, stdin, recusa = _item_de_lote(x)
+        if recusa is None and isinstance(stdin, dict):
+            n = stdin.get("de")
+            slug0 = argv[0].rsplit("/", 1)[-1]
+            if not isinstance(n, int) or n < 0 or n >= _i:
+                recusa = _recusa(slug0, f"stdin.de={n!r} fora do lote (0..{_i - 1})")
+            elif resultados[n].get("recusado") or resultados[n].get("erro"):
+                recusa = _recusa(slug0, f"insumo do item {n} nao rodou")
+            else:
+                stdin = brutos[n]
+        if recusa:
+            _audit(tool="run_command", evento="sem_verbo", verbo=recusa["verbo"],
+                   motivo=recusa["motivo"], sugestao=recusa["sugestao"],
+                   cadeira=ident["cadeira"] or None, sessao_id=ident["sessao_id"],
+                   ordem_id=ident["ordem_id"], lote_id=lote_id, lote_n=_i)
+            resultados.append(recusa)
+            brutos.append("")
+            continue
+        slug = argv[0].rsplit("/", 1)[-1]
+        linha = " ".join([slug] + argv[1:])
+        negado = _autoriza(slug, "run_command", "comando", linha, DOM_RUNTIME)
+        if negado:
+            r = negado
+            brutos.append("")
+        else:
+            t0 = time.monotonic()
+            r = await anyio.to_thread.run_sync(_run_verbo_blocking, argv, stdin, timeout, ident)
+            so = r.get("stdout")
+            brutos.append(so.get("texto", "") if isinstance(so, dict) else "")
+            r = _serve(r, tool=slug, alca=linha, ident=ident,
+                       cauda=_perfil_verbo(slug, argv[0])["cauda"])
+            _audit(tool=slug, evento="verbo", via="run_command",
+                   ato=argv[1] if len(argv) > 1 else None, args=" ".join(argv[2:])[:CMD_CAP],
+                   cadeira=ident["cadeira"] or None, sessao_id=ident["sessao_id"],
+                   ordem_id=ident["ordem_id"], exit_code=r.get("exit_code"), erro=r.get("erro"),
+                   bytes_stdout=(r.get("stdout") or {}).get("bytes_total") if isinstance(r.get("stdout"), dict) else None,
+                   dur_ms=round((time.monotonic() - t0) * 1000),
+                   lote_id=lote_id, lote_n=_i, **_campos_poda(r))
+        so = r.get("stdout")
+        acumulado += so.get("bytes_total", 0) if isinstance(so, dict) else 0
+        resultados.append(r)
+    for _i in range(len(resultados), len(itens)):
+        resultados.append({"omitido_por_teto": True})
+    if len(itens) == 1:
+        return resultados[0]
+    return {"lote": resultados, "lote_n": len(itens), "lote_next": lote_next}
+
+async def _run_command_legado(command: str = "", cwd: str = "", timeout: int = 120,
                        sessao_id: str | None = None,
                        commands: list[str] | None = None) -> dict:
     """FALLBACK: executa um comando shell (`bash -c`) como o usuário @USER@, para o que
@@ -676,13 +804,30 @@ def _nega_fila(p: Path, tool: str):
     return None
 
 
+_PDP_DIR = Path(os.environ["PDP_DIR"]).resolve() if os.environ.get("PDP_DIR") else None
+_SEGREDO_DIRS = tuple(d for d in (RAIZ_REAL / "var/deploy-env", _PDP_DIR) if d)
+
+def _nega_segredo(p: Path, tool: str):
+    """spec_porta-so-verbo §4.6: .env*, *.key|*.pem, .credentials.json, var/deploy-env/, PDP_DIR."""
+    try:
+        alvo = p.resolve()
+    except OSError:
+        return None
+    nome = alvo.name
+    if (nome.startswith(".env") or alvo.suffix in (".key", ".pem") or nome == ".credentials.json"
+            or any(d == alvo or d in alvo.parents for d in _SEGREDO_DIRS)):
+        _audit(tool=tool, evento="leitura_recusada", path=str(p), motivo="segredo")
+        return {"recusado": True, "path": str(p),
+                "motivo": "segredo: fora do alcance de read_file (spec_porta-so-verbo §4.6)"}
+    return None
+
 def _le_um_arquivo(path: str, offset: int, max_bytes: int, ident: dict,
                    lote_id: str | None = None, lote_n: int | None = None) -> dict:
     negado = _autoriza("read_file", "read_file", "documento", path, DOM_PLATAFORMA)
     if negado:
         return negado
     p = RAIZ / path
-    bloqueio = _nega_fila(p, "read_file")
+    bloqueio = _nega_fila(p, "read_file") or _nega_segredo(p, "read_file")
     if bloqueio:
         return bloqueio
     if not p.is_file():
@@ -738,24 +883,155 @@ def read_file(path: str = "", offset: int = 0, max_bytes: int = 40000,
     return _le_um_arquivo(path, offset, max_bytes, ident)
 
 
-def write_file(path: str, content: str, sessao_id: str | None = None) -> dict:
-    """Cria ou substitui um arquivo sob @ROOT@ (path relativo à raiz),
-    criando diretórios intermediários. Conteúdo é o arquivo INTEIRO."""
+# --- write_file: tipo x morada, sem symlink, atomico (spec_porta-so-verbo §4) ----
+TIPOS_TEXTO = {".py", ".md", ".sh", ".sql", ".yaml", ".yml", ".json", ".toml",
+               ".css", ".html", ".js", ".txt"}
+CLONES = ("platafirma-core", "platafirma-conhecimento", "platafirma-arquitetura",
+          "platafirma-harness", "platafirma-motor", "platafirma-posto", "modulo-osint")
+ESCRITA_TETO = 1_048_576
+BIN_VERBOS = RAIZ_REAL / "platafirma-harness/bin"
+TMP_FITA = RAIZ_REAL / "var/tmp"
+NEGADAS_ESCRITA = {
+    "fila": "use o verbo `fila` (append sob flock, com identidade)",
+    "var/abertura-publicada": "arvore imutavel — so `publicar-abertura` (arq:0097)",
+    "var/log": "log nao se edita",
+    "registro": "registro se escreve pelo verbo dono (acervo stack, acesso...)",
+    "bin": "e espelho (symlink); o verbo mora em platafirma-harness/bin/",
+}
+
+def _moradas_escrita():
+    # bin/ dos verbos antes do clone que o contem: regra mais especifica primeiro.
+    return [(BIN_VERBOS, TIPOS_TEXTO | {""}), (TMP_FITA, TIPOS_TEXTO)] + \
+           [(RAIZ_REAL / c, TIPOS_TEXTO) for c in CLONES]
+
+def _resolve_escrita(path: str, ident: dict):
+    """(alvo_real, erro). Lexico -> realpath do PAI -> negativas -> morada -> tipo -> symlink.
+    So o pai se resolve (TLPI cap. 18, tab. 18-1: componente symlink no meio escapa da
+    comparacao de string); o alvo se confere por lstat e o rename final nunca segue link."""
+    pp = PurePosixPath(path or "")
+    partes = pp.parts
+    if not partes or pp.is_absolute() or ".." in partes or any(ord(ch) < 32 for ch in path):
+        return None, "caminho: relativo a raiz, sem '..' nem caractere de controle"
+    if ".git" in partes:
+        return None, "fora de morada: .git nao se escreve por write_file — use `repo`"
+    alvo = RAIZ / pp
+    pai = alvo.parent
+    anc = pai
+    while not anc.exists():
+        anc = anc.parent
+    try:
+        real_pai = anc.resolve() / pai.relative_to(anc)
+    except OSError as e:
+        return None, f"caminho: {e}"
+    for neg, porque in NEGADAS_ESCRITA.items():
+        n = RAIZ_REAL / neg
+        if real_pai == n or n in real_pai.parents:
+            return None, f"fora de morada: {neg}/ — {porque}"
+    ext = alvo.suffix.lower()
+    for raiz, tipos in _moradas_escrita():
+        if not (real_pai == raiz or raiz in real_pai.parents):
+            continue
+        if ext not in tipos:
+            return None, (f"tipo: '{ext or '(sem extensao)'}' fora de "
+                          f"{sorted(t or '(sem)' for t in tipos)} em {raiz.relative_to(RAIZ_REAL)}/")
+        if raiz == TMP_FITA:
+            rel = real_pai.relative_to(TMP_FITA).parts
+            if not rel:
+                return None, "morada: var/tmp/<ordem_id>/<arquivo> — subpasta da fita e obrigatoria"
+            if ident["ordem_id"] not in ("-", rel[0]):
+                return None, f"morada: var/tmp/{rel[0]}/ nao e a pasta desta fita ({ident['ordem_id']})"
+        real_alvo = real_pai / alvo.name
+        if real_alvo.is_symlink():
+            return None, "alvo e symlink — write_file nao escreve atraves de link"
+        return real_alvo, None
+    return None, ("fora de morada: " + ", ".join(
+        str(r.relative_to(RAIZ_REAL)) + "/" for r, _ in _moradas_escrita()))
+
+def _escreve_atomico(real_alvo: Path, data: bytes, modo: int) -> None:
+    """mkstemp no MESMO dir -> write -> fsync -> rename -> fsync do dir. Inteira ou nada
+    (Secure Programs HOWTO §7.11.1.1); temporario nunca em /tmp (§7.11.1.2)."""
+    real_alvo.parent.mkdir(parents=True, exist_ok=True)
+    fd, tmp = tempfile.mkstemp(dir=str(real_alvo.parent), prefix=f".{real_alvo.name}.pf-")
+    try:
+        with os.fdopen(fd, "wb") as f:
+            f.write(data)
+            f.flush()
+            os.fsync(f.fileno())
+        os.chmod(tmp, modo)
+        os.rename(tmp, real_alvo)
+    except BaseException:
+        try:
+            os.unlink(tmp)
+        except OSError:
+            pass
+        raise
+    dfd = os.open(str(real_alvo.parent), os.O_RDONLY)
+    try:
+        os.fsync(dfd)
+    finally:
+        os.close(dfd)
+
+def write_file(path: str, content: str = "", sessao_id: str | None = None,
+               trecho: dict | None = None) -> dict:
+    """Escreve arquivo de TIPO declarado em MORADA declarada, atomico (spec_porta-so-verbo §4).
+
+    `path` relativo a @ROOT@. Moradas: clones platafirma-*/modulo-osint (working tree, fora
+    de .git), platafirma-harness/bin/ (verbo: sem extensao + shebang) e var/tmp/<ordem_id>/
+    (rascunho da fita). Tipos: .py .md .sh .sql .yaml .yml .json .toml .css .html .js .txt.
+    Fora disso volta `{recusado, motivo}` nomeando o porque (fila/, var/abertura-publicada/,
+    var/log/, registro/, bin/ da raiz, .git, symlink, tipo, tamanho). `content` = arquivo
+    INTEIRO (teto 1 MiB). `trecho={"antes","depois"}` = edicao por trecho: `antes` tem de
+    ocorrer exatamente UMA vez no arquivo; zero ou mais recusa com a contagem. Escrita por
+    mkstemp no mesmo dir + fsync + rename: inteira ou nada. Auditoria com sha256 antes/depois.
+    """
     negado = _autoriza("write_file", "write_file", "documento", path, DOM_PLATAFORMA)
     if negado:
         return negado
     ident = _sessao_resolve(sessao_id)
-    p = RAIZ / path
-    bloqueio = _nega_fila(p, "write_file")
-    if bloqueio:
-        return bloqueio
-    existia = p.is_file()
-    p.parent.mkdir(parents=True, exist_ok=True)
-    p.write_text(content)
-    _audit(tool="write_file", path=str(p), bytes=len(content.encode()),
-           substituiu=existia, cadeira=ident["cadeira"] or None,
-           sessao_id=ident["sessao_id"], ordem_id=ident["ordem_id"])
-    return {"ok": True, "path": str(p), "bytes": len(content.encode())}
+
+    def _rec(motivo):
+        _audit(tool="write_file", evento="escrita_recusada", path=path, motivo=motivo,
+               cadeira=ident["cadeira"] or None, sessao_id=ident["sessao_id"],
+               ordem_id=ident["ordem_id"])
+        return {"recusado": True, "path": path, "motivo": motivo}
+
+    real_alvo, erro = _resolve_escrita(path, ident)
+    if erro:
+        return _rec(erro)
+    existia = real_alvo.is_file()
+    antes_sha = hashlib.sha256(real_alvo.read_bytes()).hexdigest() if existia else None
+    if trecho:
+        if not existia:
+            return _rec("trecho: arquivo nao existe")
+        a, d = str(trecho.get("antes") or ""), str(trecho.get("depois") or "")
+        if not a:
+            return _rec("trecho: `antes` vazio")
+        atual = real_alvo.read_text("utf-8", "replace")
+        n = atual.count(a)
+        if n != 1:
+            return _rec(f"trecho: `antes` ocorre {n} vez(es) — precisa ser exatamente 1")
+        content = atual.replace(a, d, 1)
+    data = (content or "").encode("utf-8")
+    if len(data) > ESCRITA_TETO:
+        return _rec(f"tamanho: {len(data)} B > teto {ESCRITA_TETO} B")
+    em_bin = real_alvo.parent == BIN_VERBOS or BIN_VERBOS in real_alvo.parent.parents
+    if em_bin and not real_alvo.suffix and not data.startswith(b"#!"):
+        return _rec("tipo: verbo sem shebang na primeira linha")
+    if existia:
+        modo = real_alvo.stat().st_mode & 0o777
+    else:
+        modo = 0o755 if (em_bin and not real_alvo.suffix) else 0o644
+    try:
+        _escreve_atomico(real_alvo, data, modo)
+    except OSError as e:
+        return {"erro": str(e), "path": str(real_alvo)}
+    depois_sha = hashlib.sha256(data).hexdigest()
+    _audit(tool="write_file", evento="escrita", path=str(real_alvo), bytes=len(data),
+           substituiu=existia, trecho=bool(trecho), sha256_antes=antes_sha, sha256=depois_sha,
+           cadeira=ident["cadeira"] or None, sessao_id=ident["sessao_id"],
+           ordem_id=ident["ordem_id"])
+    return {"ok": True, "path": str(real_alvo), "bytes": len(data), "substituiu": existia,
+            "sha256": depois_sha}
 
 
 # --- contexto de abertura de cadeira -----------------------------------------
@@ -1052,13 +1328,23 @@ def _sessao_resolve(sessao_id: str | None) -> dict:
     return out
 
 
+def _rlimits_filho():
+    """Teto por verbo (TLPI cap. 36): processos e tamanho de arquivo. Nunca sobe o hard."""
+    for lim, val in ((resource.RLIMIT_NPROC, 2048), (resource.RLIMIT_FSIZE, 2 * 1024 ** 3)):
+        try:
+            soft, hard = resource.getrlimit(lim)
+            novo = val if hard == resource.RLIM_INFINITY else min(val, hard)
+            resource.setrlimit(lim, (novo, hard))
+        except (ValueError, OSError):
+            pass
+
 def _run_verbo_blocking(argv: list, stdin: str | None, timeout: int, ident: dict) -> dict:
     env = {**_env_subprocesso(), "PF_SESSAO": ident["sessao_id"], "PF_ORDEM_ID": ident["ordem_id"],
            "PF_CONTA": OPS_USER}
     if ident["cadeira"]:
         env["PF_CADEIRA"] = ident["cadeira"]
     try:
-        p = subprocess.Popen(argv, cwd=RAIZ, env=env,
+        p = subprocess.Popen(argv, cwd=RAIZ, env=env, preexec_fn=_rlimits_filho,
                              stdin=subprocess.PIPE if stdin is not None else subprocess.DEVNULL,
                              stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                              start_new_session=True)
@@ -1144,6 +1430,9 @@ def _faz_tool_verbo(slug: str, binario: str, descricao: str):
     return _tool
 
 
+BINARIOS: dict = {}
+SLUGS_RETIDOS: set = set()
+
 def _gera_tools_verbos() -> list:
     """Lê a projeção do catálogo. Falha = zero tools derivadas e aviso; nunca aborta."""
     if not TOOLS_VERBOS or not PERSONAS.is_dir():
@@ -1168,8 +1457,10 @@ def _gera_tools_verbos() -> list:
     servidas, retidas = [], []
     for i in itens:
         slug = i["tool"]
+        BINARIOS[slug] = i["binario"]
         if int(i.get("leva") or 1) >= 2 and not TOOLS_LEVA2:
             retidas.append(slug)
+            SLUGS_RETIDOS.add(slug)
             continue
         # Descrição = coluna `descricao` do golden record, SEM edição (spec §3.1): o
         # contrato comum (ato, args, sessao_id) está no ofício, uma vez, não 17.

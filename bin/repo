@@ -187,7 +187,16 @@ ato_commitar() {
     "$(git -C "$c" log -1 --format='%h %s')"
 }
 
+# Quem empurra da fita: endereco unico da excecao (veio de bin/chat com a Bash nativa
+# desligada — spec_porta-so-verbo §5). Sem PF_CADEIRA (operador do host, a mao) passa.
+EMPURRAM="produto ti"
 ato_empurrar() {
+  if [ -n "${PF_CADEIRA:-}" ]; then
+    case " $EMPURRAM " in
+      *" $PF_CADEIRA "*) ;;
+      *) morre "recuso empurrar: cadeira '$PF_CADEIRA' nao empurra da fita (EMPURRAM='$EMPURRAM'). Use \`$VERBO pr-abrir\` por quem empurra." 4 ;;
+    esac
+  fi
   local nome="${1:-}" ramo="${2:-}" c
   c="$(clone_de "$nome")" || exit $?
   [ -n "$ramo" ] || ramo="$(ramo_atual "$c")"

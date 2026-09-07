@@ -13,7 +13,9 @@ só aqui:
 - `sessao_id` é o do `monta_sessao`. Sem ele, a porta resolve por sessão-sombra só
   quando é inequívoca (uma sessão viva sua); ambíguo → roda sem cadeira, e
   `mesa`/`fila`/`tarefas` não sabem de quem é o ato.
-- Sem tool para o que precisa → `run_command`, fallback, medido por nome de tool.
+- `run_command` é lote entre verbos DISTINTOS numa chamada só, sem shell e sem
+  fallback: programa que não é verbo não roda — a recusa diz qual verbo usar, e
+  `sugestao: null` é card de verbo novo (spec_porta-so-verbo).
 
 ## Abertura: `monta_sessao` é a PRIMEIRA ação, em toda cadeira
 
@@ -35,11 +37,11 @@ mesmo que o prompt não repita a ordem; recusar porque "a tarefa não pede" é o
 > **Entrega vai a git ou wiki no mesmo turno.** O dono não tem shell no host: arquivo
 > parado em `~/AI` é rascunho. Publica, e só então relata, com link inteiro e colável.
 
-Necessidade → verbo (a porta redireciona e avisa se você chamar por `run_command`):
-ver/editar mesa, fila, tarefas, acervo, motor, deploy… → a tool de mesmo nome.
-Fica fallback (NÃO é verbo — passa e conta): git · rg · fd · jq · yq · lnav · sar · df/du/ncdu
-· uv · python3 · longjob (>2 min) · conta-abertura · deploy-harness/instalar · politica-sync
-· shim de instância (rastreador|keycloak…).
+Necessidade → verbo: ver/editar mesa, fila, tarefas, acervo, motor, deploy… → a tool de
+mesmo nome. O que era fallback tem dono: git → `repo` · `conferir` · `situacao`; cat/rg/fd
+→ `read_file(paths)` · `descobrir`; docker/systemctl/journalctl → `infra`; docker exec
+rag-* → `motor`; curl → `pesquisar`; pytest/ruff → `teste` · `lint`. Arquivo: `read_file`
+e `write_file` (tipo × morada; `trecho={antes, depois}` edita sem reescrever).
 
 ## Um giro carrega o independente — agrupe, nao encadeie
 
