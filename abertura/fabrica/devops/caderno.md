@@ -256,3 +256,89 @@ Medido no #3013: o cunho do `sessao_id` ficou na tool da porta, e a fábrica —
 `bin/monta-sessao` direto, sem porta no meio — nascia sem sessão. A saída que eu propus
 foi um segundo gerador no `chat`, que seria o quinto ponto de nascimento da mesma
 entidade que a ADR tinha acabado de reduzir a um. O dono cortou: a geração é no verbo.
+
+## Gancho que chama ferramenta futura dispara pelo ANÚNCIO, nunca às cegas
+
+Escrever o gatilho antes da ferramenta que ele aciona é legítimo: o card fatia assim de
+propósito («só o gancho aqui; a ingestão é a outra story»). O erro que isso convida não é
+o gancho falhar — falha é barata e se avisa. É a flag desconhecida ser ENGOLIDA como
+argumento posicional pela versão de hoje da ferramenta, e o gatilho disparar uma operação
+válida e errada, com o mesmo exit 0 de um sucesso.
+
+A régua: gancho para sub-ato que ainda não existe só dispara se a ferramenta ANUNCIAR o
+sub-ato — o texto de uso do verbo é o golden record da forma dele, e lê-lo custa uma
+chamada. Não anunciando, o gancho declara o que faltou e sai 0. Duas amarras vêm junto:
+falha do lado acessório nunca desfaz o ato principal (índice atrasado se conserta
+reindexando; publicação desfeita tira do ar o que toda cadeira lê), e o guarda lê o uso
+capturado ANTES — sob `pipefail`, `cmd | grep -q` herda o exit 2 do uso e mente que não
+achou.
+
+Medido no #3019 (07/09/2026): o gancho de reindexação da casa em `publicar-abertura`
+chama `acervo ingerir --casa --sha <sha> --de <arvore> --apply`. O `acervo` de hoje é
+`ingerir <raiz> [--apply]`: sem o guarda, `--casa` viraria a RAIZ de uma ingestão de obra
+com `--apply`, disparada por toda publicação de abertura.
+
+## Aceite que a superfície não pode medir se embute no artefato
+
+Quando o instrumento do aceite não existe na superfície que executa — porta só-verbo sem
+psql, sem shell, sem o verbo que o card supõe —, há três saídas e só uma entrega: parar
+(devolve nada), alegar verde por analogia (mente), ou EMBUTIR o aceite no artefato, de
+modo que ele se meça sozinho no ato de quem aplicar. Migração leva o aceite dentro, em
+bloco que aborta a transação; script leva a conferência antes do efeito. O limite de
+medição continua declarado — o que muda é que a medida deixa de depender de quem não
+pode fazê-la.
+
+A régua vale para além do SQL: entregue o aceite como código que roda no ambiente do
+destinatário, não como comando no comentário do card esperando que alguém o rode.
+
+Medido no #3019: nenhum dos quatro aceites era executável da fábrica. Os dois que cabiam
+em SQL viraram blocos `DO` dentro da própria migração 045 (as seis espécies presentes; e
+gravar/ler/rejeitar-FK, desfeito na mesma transação); os outros dois foram declarados
+como não medidos no comentário do card, com o motivo nomeado.
+
+## Diário de bordo
+
+Episódio cru: a fita chamou um verbo e teve de chamar outro, ou bateu em parede de
+ferramenta da casa. Sem interpretação.
+
+07/09/2026 — precisei escrever migração num worktree porque o clone `platafirma-conhecimento`
+estava sujo e detached com trabalho de outra cadeira; `repo git ... worktree add` criou
+`var/wt/conhecimento-3019` sem problema, mas `write_file` recusou o caminho («fora de morada»:
+só clones `platafirma-*`, `platafirma-harness/bin/` e `var/tmp/`) — contorno encontrado NA DATA
+07/09/2026 foi escrever o arquivo no clone principal (morada válida, untracked, sem tocar no
+trabalho alheio), `repo git <clone> hash-object -w <arq>`, `repo git <clone> -C <worktree>
+update-index --add --cacheinfo 100644,<blob>,<path>`, `checkout-index -f -- <path>`, commit no
+worktree e `clean -f -- <path>` no clone principal. `repo git <clone> -C <abs>` funciona: git
+aceita vários `-C` e o último absoluto vence.
+
+07/09/2026 — quis validar sintaxe de bash: `lint rodar platafirma-harness bin/publicar-abertura`
+devolveu 53k de `invalid-syntax` do ruff lendo shell como Python, e o retorno estourou o teto da
+tool, indo parar num arquivo em `~/.claude/projects/...` que `read_file` só alcançou por
+`../.claude/...` — contorno encontrado NA DATA 07/09/2026 foi nenhum linter de shell: revisão
+por leitura mais `teste rodar platafirma-harness controle/tests/test_contrato_monta_sessao.py`
+(25 passed) e o pre-push (42 passed); item de mesa #12 aberto.
+
+07/09/2026 — tentei rodar o próprio verbo que acabara de editar, `publicar-abertura estado`, e
+`run_command` recusou com `{recusado, motivo: "sem verbo", sugestao: null}` — contorno encontrado
+NA DATA 07/09/2026 foi nenhum: aceite declarado como não medido no card e item de mesa #13
+aberto. `sugestao: null` é verbo que falta, e vira card por ato do dono.
+
+07/09/2026 — `fila enviar ti --tipo impedimento` recusou («tipo invalido»; válidos: decisao,
+demanda, handoff, minuta, pedido, resposta) — contorno encontrado NA DATA 07/09/2026 foi
+`--tipo handoff`, que é o tipo da parada devolvida à cadeira dona.
+
+07/09/2026 — `mesa item` e `mesa anota` têm assinatura que a lista de atos não mostra — contorno
+encontrado NA DATA 07/09/2026 foi chamar o ato sem args para o argparse imprimir o uso:
+`mesa item <chapeu> --ato ATO --alvo ALVO`, `mesa anota <slot>` com corpo em stdin. `mesa caderno
+[slot]` só declara leitura; escrever nele foi por `write_file` na fonte do clone
+(`platafirma-harness/abertura/fabrica/<chapeu>/caderno.md`), com `trecho`, para não arriscar
+sobrescrever 16k de caderno por stdin de assinatura não declarada.
+
+07/09/2026 — `write_file` com `trecho` grande (~6 KB de JSON) voltou `InputValidationError: could
+not be parsed as JSON`, com a entrada cortada no meio — contorno encontrado NA DATA 07/09/2026
+foi partir a escrita em duas chamadas menores.
+
+07/09/2026 — passo 3 do `descansar fita` (triagem da memória do Project por `memory_user_edits`)
+não rodou: a tool não existe nesta superfície, e o próprio roteiro diz que o host não a alcança
+— contorno encontrado NA DATA 07/09/2026 foi nenhum, fica registrado aqui e no item de mesa #10,
+para a superfície que alcança.
