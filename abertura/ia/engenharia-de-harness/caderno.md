@@ -201,3 +201,63 @@ ele existe.
 O par disso é reproduzir o defeito que motivou a migração, não só a cura. O commit
 local não empurrado que travava o boot virou fixture — sem ele, a próxima limpeza
 "desnecessária" apaga a cura por não ver o que ela custava.
+
+## Quando método e conteúdo dividem a mesma árvore, o corte é na lista servida
+
+Separar o que é produto do que é do dono não se resolve por repositório quando os dois
+moram no mesmo diretório: o corte tem de ser no MONTADOR — a lista de peças que ele
+serve —, e o repositório vira detalhe de morada. O sinal de que o corte por repo vai
+falhar é a proporção: método e conteúdo na mesma árvore em ordens de grandeza
+diferentes (medido 07/09: 3 arquivos de método contra 91 de conteúdo de cadeira, 4%
+contra 96% dos bytes). Cortar por repo leva os dois ou não leva nenhum; cortar na lista
+de peças deixa o montador, o envelope e uma cadeira de exemplo saírem juntos e o resto
+ficar. Vale para qualquer publicação de harness, não só para pacote livre.
+
+## Wrapper que acha o miolo por `dirname $0` quebra quando o verbo é servido por symlink
+
+Verbo do PATH da casa é symlink de `~/AI/bin` para o clone. `dirname "$0"` devolve o
+diretório do LINK, não o do arquivo; wrapper que compõe caminho a partir dele procura o
+miolo numa pasta que só existe no repo e morre com "can't open file". `readlink -f "$0"`
+antes do `dirname` é a forma; o sintoma é o wrapper achar que a instalação está
+incompleta quando ela está inteira do outro lado do link. Quem escreve verbo em duas
+peças (porta + miolo em `_<verbo>/`) paga isso na primeira vez que o verbo é servido em
+vez de rodado do clone.
+
+## Diário de bordo
+
+07/09/2026 — `conta-abertura` (instrumento de custo do pacote) morria com `python: can't
+open file '/home/claudinho/AI/bin/_conta/conta-abertura.py'`; o miolo existe, em
+`platafirma-harness/bin/_conta/`. Causa: linha 16 do wrapper fazia
+`AQUI="$(cd "$(dirname "$0")" && pwd)"`, e `$0` é o symlink de `~/AI/bin`. — contorno
+encontrado NA DATA 07/09/2026 foi `dirname "$(readlink -f "$0")"`, commitado em
+platafirma-harness@1835835.
+
+07/09/2026 — ordem do dono era `encerrar fita --so-memoria`; a porta só-verbo recusou
+com `{recusado, verbo: encerrar, motivo: "sem verbo", sugestao: null}`, nas três formas
+(string com flag, string sem flag, item de lote). `encerrar` não é servido pela porta, e
+a `sugestao: null` diz "verbo que falta" quando na verdade ele existe sob outro nome. —
+contorno encontrado NA DATA 07/09/2026 foi chamar a tool `descansar`: `bin/encerrar` e
+`bin/descansar` são o MESMO arquivo com dois nomes (o próprio `main()` monta o `prog` a
+partir de `sys.argv[0]` por causa disso), e só `descansar` está no manifesto.
+
+07/09/2026 — `descansar fita --so-memoria` e `mesa ver` responderam `erro: PF_CADEIRA
+nao definida`; tentei `--cadeira ia`, que o argparse não conhece (`unrecognized
+arguments`), e a porta não aceita env. A fita não portava o `sessao_id` (contexto
+compactado), e sem ele a porta não resolve a sessão-sombra. — contorno encontrado NA
+DATA 07/09/2026 foi `monta_sessao(cadeira="ia")`, que devolveu a sessão VIVA com
+`cunhada_agora: false` (não criou órfã) e o `sessao_id` destravou mesa e descansar. Custo
+do contorno: o pacote inteiro de volta na janela (8.924 tokens) para recuperar um uuid.
+
+07/09/2026 — a mesma `run_command` que nos primeiros giros da fita rodou shell livre
+(`;`, pipe, heredoc, `git`, `grep`) passou a recusar no meio da fita: `metacaractere de
+shell` e `{recusado, verbo: grep, sugestao: descobrir}`. O regime da porta mudou sob a
+fita em curso, e o mesmo comando de meia hora antes deixou de valer. — contorno
+encontrado NA DATA 07/09/2026 foi `read_file(paths=[...])` para leitura e um item de
+lote por verbo; o que era `git log`/`grep` virou leitura de arquivo e verbo `repo`.
+
+07/09/2026 — `git push` em platafirma-harness imprimiu `remote: - Changes must be made
+through a pull request.` e o commit SUBIU mesmo assim (`git ls-remote origin
+refs/heads/main` = 1835835, e o fix está em `origin/main:bin/conta-abertura`). Aviso do
+remoto que não corresponde ao resultado — quem ler só a saída do push conclui que
+perdeu o trabalho e recommita. — contorno encontrado NA DATA 07/09/2026 foi conferir o
+remoto por `ls-remote` em vez de acreditar na saída do push.
