@@ -43,6 +43,14 @@ aqui: desce a card, commit ou wiki. Corpo lido sob demanda (`mesa caderno contex
   declara `num_ctx` e confere `prompt_eval_count` contra os tokens servidos: pacote
   cortado e pacote inteiro são indistinguíveis sem essa conta. Medido 16/08/2026 em
   `qwen2.5:14b` e `qwen3.5:9b`, Ollama 0.31.2.
+- Corolário: o pacote se dimensiona pela MENOR janela em que ele vai rodar, não pela do
+  modelo de nuvem. Os locais instalados declaram `context_length` 16.384 (`/api/tags`,
+  07/09/2026), e a abertura de uma cadeira é 7.564 tokens na `ia` e 10.502 no
+  `arquiteto` (`conta-abertura --tudo`): metade da janela gasta antes da primeira
+  palavra do dono, com o histórico da fita ainda por entrar. Enquanto o pacote crescer
+  contra a janela do Claude, "trocar de modelo" continua verdadeiro no papel e falso na
+  primeira fita longa — a troca só é real se o orçamento de abertura couber na janela
+  menor com folga para a conversa.
 
 ## Golden record que só sabe CRIAR acumula erro até virar carta
 
