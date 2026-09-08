@@ -44,6 +44,7 @@ repo leva:2
 teste
 lint
 pesquisar
+migrar
 ```
 
 Os três últimos são o braço de repo/teste/lint/PR da #3004 (feature #3003, invariante
