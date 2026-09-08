@@ -1,0 +1,72 @@
+#!/usr/bin/env bash
+# acervo psql — SQL ad-hoc contra um Postgres da casa, por STDIN, resultado cru de volta.
+#
+# Por que existe: por meses a leitura do acervo foi psql cru no host — some quando a
+# porta-so-verbo fecha o shell, e nunca funcionou de fora de casa. Sem este ato, as
+# cadeiras (e o dono, remoto) ficam tateando fossil em repo procurando o que uma query
+# resolve num giro. Este verbo traz o psql PARA a porta: passa pelo controle da casa,
+# roda de qualquer superficie (logo, de fora tambem), e captura os DOIS streams.
+#
+# ESCOPO HOJE (decisao do dono, 08/09/2026): SEM bloqueio de escrita. A conexao usa o
+# mesmo role de sempre; DROP/DELETE/UPDATE PASSAM. Encapsular ja traz o ganho — controle
+# da casa e captura de stderr — e o bloqueio (role read-only) entra depois, no proprio
+# verbo, sem mexer em quem chama. ate la: e psql cru, com o poder de escrita que isso tem.
+#
+# Contencao ESTRUTURAL (o que NAO afrouxou, no molde do `migrar`):
+#   1. ALVO por allowlist de banco (slug), nunca string arbitraria para o docker.
+#   2. O SQL vem por STDIN, sempre. Nenhum caminho de arquivo do host e aberto aqui.
+#   3. Nenhuma flag do chamador atravessa para o psql fora do corpo no stdin.
+#
+# Captura os DOIS streams e devolve os dois — corrige o debito `migrar-stdout` no molde
+# certo: o stdout do docker aninhado (resultado da query) NAO se perde no stderr do
+# wrapper, que era o furo do `migrar` (`psql -f -` mandando stdout ao terminal do host).
+set -uo pipefail
+
+VERBO="acervo psql"
+
+# Mesma allowlist do `migrar` — os dois Postgres versionados da casa. slug -> ctr:usr:base
+declare -A BANCOS=(
+  [rag]="rag-extractor-pg:rag:rag_extractor"
+  [motor]="motor-pg:motor:motor"
+)
+
+uso() {
+  cat >&2 <<EOF
+uso:
+  acervo psql [<banco>]      roda o SQL lido do STDIN no <banco>, resultado cru de volta
+                             banco default: rag (schema acervo.*). o SQL entra por stdin.
+
+bancos declarados: ${!BANCOS[*]}  (default: rag)
+o SQL entra SEMPRE por stdin — a tool passa \`stdin=<sua query>\`.
+SEM bloqueio de escrita (decisao do dono 08/09): DROP/DELETE/UPDATE passam.
+exit: 0 ok · 2 uso · 3 falha (docker/psql) · 4 banco fora da allowlist
+EOF
+  exit 2
+}
+
+morre() { printf '%s: %s\n' "$VERBO" "$1" >&2; exit "${2:-3}"; }
+
+case "${1:-}" in -h|--help|ajuda) uso ;; esac
+
+banco="${1:-rag}"
+[ -n "${BANCOS[$banco]:-}" ] || morre "banco '$banco' fora da allowlist — validos: ${!BANCOS[*]}" 4
+IFS=: read -r ctr usr base <<<"${BANCOS[$banco]}"
+
+command -v docker >/dev/null 2>&1 || morre "'docker' nao esta no PATH desta conta" 3
+docker inspect -f '{{.State.Running}}' "$ctr" 2>/dev/null | grep -qx true \
+  || morre "contêiner '$ctr' nao esta de pe — \`infra estado\`" 3
+
+sql="$(cat)"
+[ -n "${sql//[[:space:]]/}" ] || morre "stdin vazio — passe a query em \`stdin=<SELECT ...>\`" 2
+
+# -P pager=off para nao travar; sem tty. O corpo vai por stdin, nao como -c: aceita
+# meta-comandos (\d, \dt, \l) e SQL na mesma sessao, igual a um psql interativo.
+# Capturamos stdout e stderr SEPARADOS e devolvemos os dois — a query sai no stdout,
+# NOTICE/erro de sintaxe no stderr. Este e o conserto do debito migrar-stdout.
+out="$(docker exec -i "$ctr" psql -U "$usr" -d "$base" -P pager=off 2>/tmp/acervo-psql.err <<<"$sql")"
+rc=$?
+err="$(cat /tmp/acervo-psql.err)"; rm -f /tmp/acervo-psql.err
+
+[ -n "$out" ] && printf '%s\n' "$out"
+[ -n "$err" ] && printf '%s\n' "$err" >&2
+exit "$rc"

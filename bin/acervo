@@ -3,7 +3,7 @@
 # capacidade: conhecimento
 # dono: claudinho-dados
 # use para: ingerir obra, escada, bancada, extrato, stack, registrar verbo, golden record, operar a wiki
-# atos: ingerir, baixar, escada, bancada, extrato, listar, registrar, ferramenta, stack, adr, wiki
+# atos: ingerir, baixar, escada, bancada, extrato, listar, registrar, ferramenta, stack, adr, psql, wiki
 # poda: cosmetica@casa
 #
 # Despachante (arq:0040): o verbo é o par binário+subcomando. Os sub-atos moram
@@ -26,6 +26,7 @@ uso:
   acervo stack   ver|import|rm               topologia de deploy: lê e ESCREVE acervo.stack
   acervo ferramenta <nome> [--json]          o que e <nome> e qual o verbo certo
   acervo adr <lista|<codigo>|--<entidade>>   consulta registro de decisões de arquitetura (ADR)
+  acervo psql    [<banco>]  <SQL por stdin>  SQL ad-hoc no Postgres da casa (default rag), cru de volta
   acervo wiki    <ato>                        a wiki (MediaWiki) como fonte editável do acervo
 
 `acervo wiki` (a wiki é SoT de registro editável, dona dados — arq:0069). Atos:
@@ -75,6 +76,7 @@ case "$ATO" in
   stack)           exec "$ATOS/stack"   "$@" ;;
   ferramenta)      exec "$ATOS/ferramenta" "$@" ;;
   adr)             exec "$ATOS/adr"     "$@" ;;
+  psql)            exec "$ATOS/psql"    "$@" ;;
   wiki)            exec "$ATOS/wiki"    "$@" ;;
   -h|--help|ajuda) uso ;;
   *) echo "acervo: ato desconhecido '$ATO'" >&2; uso ;;
