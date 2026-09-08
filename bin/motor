@@ -4,8 +4,8 @@
 # (arq:0043 — a capacidade e do subcomando; aqui os tres servem a mesma:
 #  motor listar · motor <inst> buscar · motor <inst> ajuste)
 # dono: claudinho-IA
-# use para: motor rag/reasoner, buscar no acervo, ajuste, medir bateria, indexar
-# atos: listar; ou ato=<instância> e args=ajuste / buscar / medir / indexar
+# use para: "o que o acervo diz sobre X" (buscar obra|casa), medir a bateria de um motor (medir), reindexar uma partição (indexar)
+# atos: buscar, medir, indexar, ajuste, listar — buscar exige partição: motor <inst> buscar <partição> "<pergunta>"
 # forma: json
 # cauda: nao
 # poda: cosmetica@rag,casa
@@ -17,6 +17,21 @@ RAIZ = os.path.expanduser("~/AI")
 REG = os.path.join(RAIZ, "platafirma-harness/registro/motor-instancias.json")
 DOCKER = {"DOCKER_HOST": "unix:///run/user/1001/docker.sock"}
 
+
+SPEC = "https://github.com/plcarvalho301/platafirma-arquitetura/blob/main/docs/spec_motor.md"
+PARTICOES = ("obra", "casa", "registro")
+
+def resolve_particao(argv, ato):
+    """Gramatica arq:0106: motor <inst> <ato> <particao>. Forma vigente sem particao
+    NAO some em silencio: cai em 'obra' com aviso ao stderr apontando a forma nova e
+    a spec (spec_motor §5). Enquanto so 'obra' esta povoada, o default e seguro."""
+    if argv and argv[0] in PARTICOES:
+        return argv[0], argv[1:]
+    sys.stderr.write(
+        f"motor {ato}: sem particao — a forma conforme e "
+        f"`motor <inst> {ato} <particao> ...` (particoes: {', '.join(PARTICOES)}).\n"
+        f"  assumindo 'obra' (unica povoada hoje); declare a particao.\n  {SPEC}\n")
+    return "obra", argv
 
 def sh(cmd, **kw):
     env = dict(os.environ, **DOCKER)
@@ -35,13 +50,17 @@ def uso(cod=2):
   motor <inst> ajuste                    todos os ajustes, com o valor de hoje
   motor <inst> ajuste <slug>             o que esse ajuste troca por que
   motor <inst> ajuste <slug> <valor>     mexe, promove e confere o servido
-  motor <inst> buscar "<pergunta>" [--k N] [--texto secao|trecho|nenhum] [--conceito <slug>] [--ordem-id <id>]
-  motor <inst> medir [--k N] [--rerank] [--rotulo <nome>] [--gabarito <arq>]
+  motor <inst> buscar <particao> "<pergunta>" [--k N] [--texto secao|trecho|nenhum] [--conceito <slug>] [--ordem-id <id>]
+  motor <inst> medir  <particao> [--k N] [--rerank] [--rotulo <nome>] [--gabarito <arq>]
                      [--expansao [--peso-conceito X]]
-                                        bateria no gold canonico, pela porta servida:
+                                        bateria no gold da particao, pela porta servida:
                                         as duas familias separadas + delta contra a ultima
-  motor <inst> indexar [--apply]        fases 2-5: materializa, chunka, embedda
+  motor <inst> indexar <particao> [--apply]  fases 2-5: materializa, chunka, embedda
                                         (o que ENTRA no corpus e `acervo ingerir`)
+
+gramatica (arq:0106): motor <inst> <ato> <particao> [seletor]. instancia = quem
+busca (ortogonal a particao); particao = onde (obra, casa, registro).
+doc de produto: """ + SPEC + """
 
 instancias: """ + ", ".join(reg().keys()))
     sys.exit(cod)
@@ -218,6 +237,7 @@ def python_do_rag():
 def cmd_indexar(inst, argv):
     """Fases 2-5 do trilho: materializa, chunka, embedda, propaga faceta, embedda meta.
     Fase 1 (o que entra no corpus) e curadoria: fica em `acervo ingerir`."""
+    particao, argv = resolve_particao(argv, "indexar")
     apply_ = "--apply" in argv
     rag = os.path.join(RAIZ, "platafirma-conhecimento/rag")
     py = python_do_rag()
@@ -304,7 +324,8 @@ def _emite_consulta(nome, inst, corpo, resp, dur_ms):
 
 
 def cmd_buscar(nome_inst, inst, argv):
-    uso = 'motor <inst> buscar "<pergunta>" [--k N] [--texto secao|trecho|nenhum] [--conceito <slug>] [--ordem-id <id>]'
+    uso = ('motor <inst> buscar <particao> "<pergunta>" [--k N] [--texto secao|trecho|nenhum] '
+           '[--conceito <slug>] [--ordem-id <id>]\n  ' + SPEC)
     if not argv:
         print(uso, file=sys.stderr)
         sys.exit(2)
@@ -313,7 +334,10 @@ def cmd_buscar(nome_inst, inst, argv):
         print("buscar: a pergunta (posicional) vem antes das flags; recebi a flag "
               + repr(argv[0]) + " na frente.\n  " + uso, file=sys.stderr)
         sys.exit(2)
-    corpo = {"pergunta": argv[0]}
+    particao, argv = resolve_particao(argv, "buscar")
+    if not argv:
+        print(uso, file=sys.stderr); sys.exit(2)
+    corpo = {"pergunta": argv[0], "particao": particao}
     conceitos = []
     resto = argv[1:]
     i = 0
@@ -515,6 +539,12 @@ def ultima_medicao(inst, gabarito):
 
 
 def cmd_medir(nome, inst, argv):
+    particao, argv = resolve_particao(argv, "medir")
+    if particao != "obra" and "--gabarito" not in argv:
+        print(f"motor medir {particao}: sem gabarito para esta particao. So 'obra' tem\n"
+              f"  gabarito canonico hoje; passe --gabarito <arq> para as outras.\n  {SPEC}",
+              file=sys.stderr)
+        sys.exit(2)
     k = 5
     rerank = "--rerank" in argv
     if "--k" in argv:

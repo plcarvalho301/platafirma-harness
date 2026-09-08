@@ -2,58 +2,61 @@
 # acervo — opera o acervo: ingestão ponta a ponta, escada, obra, bancada, extrato e a wiki.
 # capacidade: conhecimento
 # dono: claudinho-dados
-# use para: ingerir obra, escada, bancada, extrato, stack, registrar verbo, golden record, operar a wiki
-# atos: ingerir, baixar, escada, bancada, extrato, listar, registrar, ferramenta, stack, adr, psql, wiki
-# poda: cosmetica@casa
+# use para: ler uma ADR/página/obra que você sabe onde está (ler casa|obra), listar o que há de um tipo (listar), gravar uma página de wiki (escrever casa pagina)
+# atos: ler, listar, escrever, ingerir, baixar, bancada, extrato, escada, psql — sobre partição obra|casa|registro
+# conforme: parcial (arq:0106 — gramatica verbo-ato-particao-entidade; forma vigente ainda responde COM aviso)
 #
 # Despachante (arq:0040): o verbo é o par binário+subcomando. Os sub-atos moram
 # em bin/_acervo/ e não entram no PATH; a porta é esta.
+#
+# GRAMATICA (arq:0106): acervo <ato> <particao> <entidade> [seletor]. A forma
+# conforme roteia para os mesmos sub-atos de _acervo/; a forma vigente (adr, wiki,
+# ferramenta, registrar, stack, listar conceitos...) ainda responde, mas cospe um
+# aviso ao stderr apontando a forma nova e a spec. Doc de produto:
+#   https://github.com/plcarvalho301/platafirma-arquitetura/blob/main/docs/spec_acervo.md
 set -euo pipefail
 
 ATOS="$(dirname "$(readlink -f "$0")")/_acervo"
+SPEC="https://github.com/plcarvalho301/platafirma-arquitetura/blob/main/docs/spec_acervo.md"
+
+# aviso de forma vigente: nunca em silencio (spec_acervo §5). $1=forma velha, $2=forma nova
+avisa() {
+  printf 'acervo: `%s` e a forma vigente; a conforme (arq:0106) e `%s`.\n  %s\n' \
+    "$1" "$2" "$SPEC" >&2
+}
 
 uso() {
-  cat >&2 <<'FIM'
-uso:
-  acervo ingerir <raiz> [--apply]            leva a obra da entrada até a vetorização
-  acervo escada  [--json] [--detalhe]        onde cada obra parou nos cinco degraus
-  acervo baixar  "<trecho do titulo>" [dest] tira uma cópia da obra do store
-  acervo bancada [destino]                   monta o lote do que falta classificar
-  acervo extrato [destino]                   foto do acervo para ler fora da bancada
-  acervo listar  conceitos [--json]          golden record acervo.conceito (referência)
-  acervo listar  ferramental [--json]        golden record acervo.ferramental (3 níveis)
-  acervo registrar <verbo>|--todos           ESCREVE verbo no golden record (do cabeçalho)
-  acervo stack   ver|import|rm               topologia de deploy: lê e ESCREVE acervo.stack
-  acervo ferramenta <nome> [--json]          o que e <nome> e qual o verbo certo
-  acervo adr <lista|<codigo>|--<entidade>>   consulta registro de decisões de arquitetura (ADR)
-  acervo psql    [<banco>]  <SQL por stdin>  SQL ad-hoc no Postgres da casa (default rag), cru de volta
-  acervo wiki    <ato>                        a wiki (MediaWiki) como fonte editável do acervo
+  cat >&2 <<FIM
+uso (gramatica arq:0106 — acervo <ato> <particao> <entidade> [seletor]):
+  acervo ler      <particao> <entidade> <seletor>   leitura exata (nao passa pelo motor)
+      ex: acervo ler casa adr 0105 · acervo ler casa ferramental <nome>
+          acervo ler casa chapeu <slug> · acervo ler casa stack <slug>
+          acervo ler casa pagina "<Titulo>" · acervo ler obra objeto "<titulo>" [dest]
+  acervo listar   <particao> <entidade> [filtros]   lista entidades de um tipo
+      ex: acervo listar obra conceito [--json] · acervo listar casa adr [--cap x]
+          acervo listar casa ferramental [--json] [--oficio] · acervo listar casa pagina [--prefixo|--categoria|--ns]
+  acervo escrever <particao> <entidade> <seletor>   cria/substitui (corpo por STDIN)
+      ex: acervo escrever casa pagina "<Titulo>" [--resumo] · acervo escrever casa ferramental <verbo>|--todos
+          acervo escrever casa stack <arquivo.json>|--rm <slug> · acervo escrever casa arquivo <nome>
+  acervo ingerir  <particao> <raiz> [--apply]       leva a fonte ate a vetorizacao (dry-run sem --apply)
+  acervo baixar   obra objeto "<titulo>" [dest]     copia do objeto do store
+  acervo bancada  obra lote [dest]                  monta o lote de classificacao humana
+  acervo extrato  --todas [dest]                    foto do schema para leitura fora da bancada
+  acervo escada   --todas|<particao> [--json] [--detalhe]  onde cada obra parou nos cinco degraus
+  acervo psql     [--banco rag|motor]  <SQL por stdin>     SQL cru no Postgres da casa (default rag)
 
-`acervo wiki` (a wiki é SoT de registro editável, dona dados — arq:0069). Atos:
-  ler <titulo...>                            wikitext da(s) página(s) (+rev p/ editar sem conflito)
-  buscar <termo> [--limite N]                busca full-text na prosa (ns de conteúdo)
-  listar [--prefixo|--categoria|--ns]        títulos por prefixo, categoria ou namespace
-  editar <titulo> [--resumo] [--base-rev]    cria/substitui (conteúdo por STDIN), sob a conta de bot
-  subir <arquivo> [--nome]                   envia arquivo (Arquivo:<nome>), teto 2 MB
-  cargo <tabela> <campos> [--where ...]      consulta SQL sobre campos Cargo declarados
-Leitura é anônima; editar/subir logam com a conta de bot Claudinho. Contrato = a
-Action API do MediaWiki (spec_recuperador §5); `acervo wiki` é consumidor direto dela.
+as particoes: obra, casa, registro (arq:0106 §3). conceito e transversal, vive em obra.
+leitura e anonima; escrever loga com a conta de bot. ato/particao/entidade desconhecidos
+recusam em vez de adivinhar — errar a chamada devolve o vocabulario certo.
 
-Os cinco degraus da escada: catalogada, armazenada, ingerida, embedded,
-vetorizada. `escada` mede; os outros três produzem artefato.
-
-`ingerir` é o único da ingestão que escreve, e é dry-run sem `--apply`. Em `wiki`,
-`editar`/`subir` escrevem; `ler`/`buscar`/`listar`/`cargo` só leem. Os demais atos só
-leem. Ato desconhecido recusa em vez de adivinhar.
+doc de produto (o que cada ato faz, entidades por particao, transicao):
+  $SPEC
 FIM
   exit 2
 }
 
-# --ajuda UNIVERSAL, sem efeito colateral (card #2868, ex-#2274 defeito 4). ANTES do
-# despacho e varrendo TODOS os argumentos: interceptar aqui cobre `acervo --ajuda`
-# e `acervo <sub> --ajuda`, e nenhum sub-ato (exec do $ATOS/*) chega a rodar. `uso` ja sai 2.
-# EXCECAO: `acervo wiki ... --ajuda` cai para o sub-ato (argparse do wiki tem -h proprio),
-# senao a ajuda do wiki nunca apareceria.
+# --ajuda UNIVERSAL, sem efeito colateral (card #2868). ANTES do despacho e varrendo
+# TODOS os argumentos. EXCECAO: `... wiki ... --ajuda` cai para o sub-ato (argparse proprio).
 if [ "${1:-}" != "wiki" ]; then
   for _a in "$@"; do
     case "$_a" in
@@ -65,19 +68,79 @@ fi
 [ $# -eq 0 ] && uso
 ATO="$1"; shift
 
+# ---- forma CONFORME: acervo <ato> <particao> <entidade> [seletor] ----
+# ler/listar/escrever roteiam por (particao, entidade) para o sub-ato que ja faz o
+# trabalho. A particao entra na decisao; a entidade escolhe o sub-ato de _acervo/.
+conforme() {
+  local ato="$1"; shift
+  local particao="${1:-}"; local entidade="${2:-}"
+  case "$particao" in
+    obra|casa|registro) ;;
+    *) echo "acervo $ato: particao '$particao' desconhecida (obra, casa, registro)." >&2
+       echo "  $SPEC" >&2; exit 2 ;;
+  esac
+  shift 2 || { echo "acervo $ato $particao: falta a entidade." >&2; echo "  $SPEC" >&2; exit 2; }
+  case "$ato:$particao:$entidade" in
+    # --- casa: wiki, adr, golden records ---
+    ler:casa:pagina)        exec "$ATOS/wiki" ler "$@" ;;
+    ler:casa:adr)           exec "$ATOS/adr" "$@" ;;
+    ler:casa:ferramental)   exec "$ATOS/ferramenta" "$@" ;;
+    ler:casa:stack)         exec "$ATOS/stack" ver "$@" ;;
+    ler:casa:cargo)         exec "$ATOS/wiki" cargo "$@" ;;
+    listar:casa:pagina)     exec "$ATOS/wiki" listar "$@" ;;
+    listar:casa:adr)        exec "$ATOS/adr" lista "$@" ;;
+    listar:casa:ferramental) exec "$ATOS/listar" ferramental "$@" ;;
+    escrever:casa:pagina)   exec "$ATOS/wiki" editar "$@" ;;
+    escrever:casa:arquivo)  exec "$ATOS/wiki" subir "$@" ;;
+    escrever:casa:ferramental) exec "$ATOS/registrar" "$@" ;;
+    escrever:casa:stack)
+        case "${1:-}" in
+          --rm) shift; exec "$ATOS/stack" rm "$@" ;;
+          *)    exec "$ATOS/stack" import "$@" ;;
+        esac ;;
+    # --- obra: conceito, objeto, bancada ---
+    listar:obra:conceito)   exec "$ATOS/listar" conceitos "$@" ;;
+    ler:obra:objeto)        exec "$ATOS/baixar" "$@" ;;
+    # --- ingerir por particao ---
+    ingerir:obra:*|ingerir:casa:*|ingerir:registro:*)
+        exec "$ATOS/../ingerir" --lote "$entidade" "$@" ;;
+    *) echo "acervo $ato $particao $entidade: combinacao nao servida." >&2
+       echo "  entidades de $particao e formas validas: $SPEC" >&2; exit 2 ;;
+  esac
+}
+
 case "$ATO" in
-  ingerir)         exec "$ATOS/ingerir" "$@" ;;
+  # gramatica conforme (arq:0106)
+  ler|listar|escrever)  conforme "$ATO" "$@" ;;
+  ingerir)
+    # conforme: ingerir <particao> <raiz>; vigente: ingerir <raiz> (alias de `ingerir --lote`)
+    case "${1:-}" in
+      obra|casa|registro) conforme ingerir "$@" ;;
+      *) avisa "acervo ingerir <raiz>" "acervo ingerir <particao> <raiz>"
+         exec "$ATOS/ingerir" "$@" ;;
+    esac ;;
   escada)          exec "$ATOS/escada"  "$@" ;;
-  baixar)          exec "$ATOS/baixar"  "$@" ;;
-  bancada)         exec "$ATOS/bancada" "$@" ;;
+  baixar)          avisa "acervo baixar \"<titulo>\"" "acervo ler obra objeto \"<titulo>\""
+                   exec "$ATOS/baixar"  "$@" ;;
+  bancada)         avisa "acervo bancada" "acervo bancada obra lote"
+                   exec "$ATOS/bancada" "$@" ;;
   extrato)         exec "$ATOS/extrato" "$@" ;;
-  listar)          exec "$ATOS/listar"  "$@" ;;
-  registrar)       exec "$ATOS/registrar" "$@" ;;
-  stack)           exec "$ATOS/stack"   "$@" ;;
-  ferramenta)      exec "$ATOS/ferramenta" "$@" ;;
-  adr)             exec "$ATOS/adr"     "$@" ;;
   psql)            exec bash "$ATOS/psql"    "$@" ;;
-  wiki)            exec "$ATOS/wiki"    "$@" ;;
+
+  # formas VIGENTES: respondem, mas avisam a forma conforme (spec_acervo §5)
+  adr)             avisa "acervo adr" "acervo ler casa adr / acervo listar casa adr"
+                   exec "$ATOS/adr"     "$@" ;;
+  listar)          avisa "acervo listar <entidade>" "acervo listar <particao> <entidade>"
+                   exec "$ATOS/listar"  "$@" ;;
+  registrar)       avisa "acervo registrar <verbo>" "acervo escrever casa ferramental <verbo>"
+                   exec "$ATOS/registrar" "$@" ;;
+  stack)           avisa "acervo stack <ato>" "acervo ler/escrever casa stack"
+                   exec "$ATOS/stack"   "$@" ;;
+  ferramenta)      avisa "acervo ferramenta <nome>" "acervo ler casa ferramental <nome>"
+                   exec "$ATOS/ferramenta" "$@" ;;
+  wiki)            avisa "acervo wiki <ato>" "acervo ler/listar/escrever casa pagina|arquivo|cargo"
+                   exec "$ATOS/wiki"    "$@" ;;
+
   -h|--help|ajuda) uso ;;
   *) echo "acervo: ato desconhecido '$ATO'" >&2; uso ;;
 esac
