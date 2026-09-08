@@ -296,6 +296,48 @@ em SQL viraram blocos `DO` dentro da própria migração 045 (as seis espécies 
 gravar/ler/rejeitar-FK, desfeito na mesma transação); os outros dois foram declarados
 como não medidos no comentário do card, com o motivo nomeado.
 
+## Corte declarado como marcador ainda é corte
+
+Substituir conteúdo por um marcador com hash — `<blob tipo=base64 … sha=…>`, `<linha longa
+bytes=… sha=…>` — só é ALÇA quando o que saiu é token opaco que decisão nenhuma lê. Quando
+o que saiu era o próprio conteúdo, o marcador é corte de miolo com outro nome, e o sha não
+restaura nada utilizável: quem lê não sabe sequer o que perdeu. Ao julgar uma regra de
+poda, pergunte o que SOBRA para quem lê, nunca que nome a classe tem — a classe é o nome
+que o autor deu à aposta dele sobre o formato, e a aposta erra.
+
+O caso que engana é o da regra com dois ramos, em que só um é alça. `_marca_blob` marca
+base64/hex contíguo (alça legítima) E janela `±120` qualquer linha acima de 1.000 bytes
+(corte). Sob a mesma classe `blob`, no mesmo relatório. Quem revisa a lista de classes vê
+uma; quem lê o retorno recebe a outra.
+
+Medido no #3022 (08/09/2026): um `motor rag buscar` real volta como UMA linha de JSON de
+12.250 bytes, e o segundo ramo servia `<linha longa …>` — o top-k inteiro sumia. O card
+havia diagnosticado três outras regras e mandado PRESERVAR a classe `blob`; a medida
+mostrou que a trava valia para um ramo e não para o outro.
+
+## Mede-se o SERVIDO, não o produzido
+
+O envelope da porta traz `poda.bytes_produzidos` ao lado de `poda.bytes_servidos`. A razão
+entre os dois denuncia poda destrutiva em UM giro, sem precisar do cru e sem desligar
+nada: 12.510 produzidos contra 291 servidos é um número que não precisa de interpretação.
+Nenhum ensaio hermético teria achado isso — fixture de teste tem o formato que o autor do
+teste imaginou, e o retorno de produção tem o formato do mundo. Mesma família do «filtro
+que reformata saída alheia» acima: subiu regra de retorno, leia o primeiro retorno REAL e
+compare os dois números do envelope antes de qualquer outra coisa.
+
+## Curadoria feita no espaço vetorial não se re-cura por heurística de string
+
+Top-k ranqueado por similaridade já passou pelo filtro bom, e cada trecho é unidade
+inteira de recuperação. Regra de terminal a jusante — agrupar como busca, fundir molde,
+cortar no teto, janelar linha longa — dobra o filtro do vetor com um pior, que decide por
+formato de string o que já fora decidido por sentido. Vale para todo retorno de
+recuperação, não só para o verbo que motivou; o controle de qualidade mora no campo de
+similaridade, e o que a porta pode fazer sem estragar é lavagem cosmética.
+
+Corolário de fatiamento: quando um regime novo desliga regras por VERBO, verbo misto não
+cabe num perfil só — `acervo casa` é recuperação semântica e `acervo listar` é listagem
+estruturada. Sem escopo por ato, a listagem herda o regime e perde o teto.
+
 ## Diário de bordo
 
 Episódio cru: a fita chamou um verbo e teve de chamar outro, ou bateu em parede de
@@ -342,3 +384,34 @@ foi partir a escrita em duas chamadas menores.
 não rodou: a tool não existe nesta superfície, e o próprio roteiro diz que o host não a alcança
 — contorno encontrado NA DATA 07/09/2026 foi nenhum, fica registrado aqui e no item de mesa #10,
 para a superfície que alcança.
+
+08/09/2026 — `read_file` com `paths` de dois arquivos (54.637 chars) estourou o teto do
+harness, que salvou o resultado num arquivo LOCAL sob `~/.claude/projects/…/tool-results/`
+e mandou lê-lo — a fábrica não tem Read nativo e não alcança esse FS; reler o mesmo path
+inteiro devolveu `ledger: igual` e 67 bytes de aviso, ou seja, o dedup da poda deduplicou
+contra conteúdo que NUNCA chegou à fita — contorno encontrado NA DATA 08/09/2026 foi reler
+em fatias por `offset`/`max_bytes` (~11 KB cada), porque cada fatia tem sha próprio e
+escapa do ledger.
+
+08/09/2026 — `teste rodar platafirma-harness ops-server/_ensaio.py` deu `ModuleNotFoundError:
+No module named 'mcp'` (o `.venv-harness` não tem, e `_ensaio.py` importa `server`); `infra
+unit-env ops-server` respondeu que a unit `--user` não existe; `longjob`, que a mesa velha
+dizia servir para `bash -lc 'export …; <verbo>'`, voltou `{recusado, motivo: "sem verbo"}`
+do `run_command` — contorno encontrado NA DATA 08/09/2026 foi escrever um arquivo espelho
+`_ensaio_3022_tmp.py` importando SÓ `poda` (que por desenho não depende da porta), rodar 8
+testes verdes por ele, e apagar com `repo git <clone> clean -f <path>` no mesmo turno.
+
+08/09/2026 — `repo commitar <repo> "<msg>"` recusou com «argumento nao reconhecido» e `mesa
+item <chapeu> "<texto>"` recusou pedindo `--ato` e `--alvo` — contorno encontrado NA DATA
+08/09/2026 foi chamar o verbo SEM ato para ele imprimir o uso: `repo commitar <repo> -m
+<msg>` e `mesa item <chapeu> --ato … --alvo …`.
+
+08/09/2026 — `repo_grep` da wiki com `context: 55` devolveu só ~10 linhas de «after»,
+inútil para ler bloco grande de código — contorno encontrado NA DATA 08/09/2026 foi
+`repo_read` com `offset` em BYTES, estimando ~45 bytes por linha para achar a região.
+
+08/09/2026 — passo 3 do `descansar fita` (triagem da memória do Project) de novo não
+rodou: não há `memory_user_edits` nem Write/Edit nativo nesta superfície, então nem ver
+nem remover — contorno encontrado NA DATA 08/09/2026 foi nenhum; fica o achado para quem
+alcança: a memória `verbo-de-memoria-da-cadeira-precisa-de-pf-cadeira` é FÓSSIL — nesta
+fita `mesa item` e `mesa anota` rodaram pela porta só com `sessao_id`, sem `PF_CADEIRA`.
