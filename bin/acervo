@@ -76,7 +76,7 @@ case "$ATO" in
   stack)           exec "$ATOS/stack"   "$@" ;;
   ferramenta)      exec "$ATOS/ferramenta" "$@" ;;
   adr)             exec "$ATOS/adr"     "$@" ;;
-  psql)            exec "$ATOS/psql"    "$@" ;;
+  psql)            exec bash "$ATOS/psql"    "$@" ;;
   wiki)            exec "$ATOS/wiki"    "$@" ;;
   -h|--help|ajuda) uso ;;
   *) echo "acervo: ato desconhecido '$ATO'" >&2; uso ;;
