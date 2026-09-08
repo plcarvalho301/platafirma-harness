@@ -1,0 +1,86 @@
+#!/usr/bin/env bash
+# migrar — aplica uma migracao SQL versionada num Postgres da stack, por stdin
+# capacidade: plataforma
+# dono: claudinho-TI
+# use para: aplicar migracao de schema num contêiner Postgres da casa (rag, motor, ...)
+# atos: aplicar, bancos
+#
+# Por que existe: o schema `acervo` (rag-extractor-pg) e o do motor evoluem por ARQUIVO
+# versionado (rag/db/init/NNN_*.sql), nao DDL solta. `docker-entrypoint-initdb.d` so roda
+# em volume vazio; base viva precisa de `psql -f`. Isso e `docker exec -i <ctr> psql` com
+# o arquivo no stdin — pipe entrando noutro contêiner, exatamente o que a porta so-verbo
+# corta, e nenhum verbo encapsulava. A carta da fabrica bateu nesse teto (#3019): "a porta
+# nao serve psql, aceites embutidos na migracao, quem aplicar mede no ato". Este verbo e o
+# ato de aplicar — mede no ato, com ON_ERROR_STOP, e a transacao da propria migracao aborta
+# se um aceite falhar. Sem ele, migracao de schema nao e homologavel por aplicacao.
+#
+# Contencao ESTRUTURAL, no molde do `repo`:
+#   1. ALVO por allowlist de contêiner (PF_MIGRAR_BANCOS) — slug simples, nunca caminho,
+#      nunca string arbitraria para o docker. Fora da lista, recusa antes do docker.
+#   2. O SQL vem por STDIN, sempre. Nao ha ato que receba caminho de arquivo do host e o
+#      leia: quem chama entrega o texto (a tool passa `stdin`), o verbo nao abre arquivo.
+#   3. psql roda com ON_ERROR_STOP=1 e -1 (transacao unica): a migracao inteira aplica ou
+#      nada aplica. O que sai da migracao (COMMIT/ROLLBACK) e da migracao, nao do verbo.
+#   4. Nenhuma flag do chamador atravessa para o psql. Banco e slug conferido; o corpo e
+#      dado no stdin, nao comando.
+#
+# NAO decide autorizacao (o PEP decide no caminho da chamada). NAO promove release
+# (`deploy`). NAO roda SQL ad-hoc de leitura — isto e para migracao versionada, com
+# aceite embutido; consulta de leitura e outro verbo se um dia fizer falta.
+set -uo pipefail
+
+VERBO="$(basename "$0")"
+
+# Allowlist de bancos: slug -> "contêiner:usuario:base". Cresce por acrescimo, aqui,
+# sob revisao — nao por argumento do chamador. Os dois Postgres versionados da casa hoje.
+declare -A BANCOS=(
+  [rag]="rag-extractor-pg:rag:rag_extractor"
+  [motor]="motor-pg:motor:motor"
+)
+
+uso() {
+  cat >&2 <<EOF
+uso:
+  $VERBO aplicar <banco>     aplica no <banco> a migracao SQL lida do STDIN
+                             (transacao unica, ON_ERROR_STOP; aborta inteira no 1o erro)
+  $VERBO bancos              lista os bancos declarados (slug -> contêiner/base)
+
+bancos declarados: ${!BANCOS[*]}
+o SQL entra SEMPRE por stdin — a tool passa \`stdin=<corpo da migracao>\`.
+exit: 0 ok · 2 uso · 3 falha (docker/psql) · 4 banco fora da allowlist
+EOF
+  exit 2
+}
+
+morre() { printf '%s: %s\n' "$VERBO" "$1" >&2; exit "${2:-3}"; }
+
+ato="${1:-}"; [ -n "$ato" ] && shift
+case "$ato" in
+  bancos)
+    printf 'bancos declarados (allowlist):\n'
+    for s in "${!BANCOS[@]}"; do
+      IFS=: read -r ctr usr base <<<"${BANCOS[$s]}"
+      printf '  %-8s -> %s  (psql -U %s -d %s)\n' "$s" "$ctr" "$usr" "$base"
+    done
+    ;;
+  aplicar)
+    banco="${1:-}"
+    [ -n "$banco" ] || morre "falta o banco — \`$VERBO bancos\` lista os validos" 2
+    [ -n "${BANCOS[$banco]:-}" ] || morre "banco '$banco' fora da allowlist — validos: ${!BANCOS[*]}" 4
+    IFS=: read -r ctr usr base <<<"${BANCOS[$banco]}"
+
+    command -v docker >/dev/null 2>&1 || morre "'docker' nao esta no PATH desta conta" 3
+    docker inspect -f '{{.State.Running}}' "$ctr" 2>/dev/null | grep -qx true \
+      || morre "contêiner '$ctr' nao esta de pe — \`infra estado\`" 3
+
+    # -T sem tty; -i para o stdin fluir. ON_ERROR_STOP + -1: aplica inteira ou nada.
+    # O stdin do verbo (o corpo da migracao) e o stdin do psql, direto.
+    if docker exec -i "$ctr" psql -U "$usr" -d "$base" -v ON_ERROR_STOP=1 -1 -f -; then
+      printf '%s: migracao aplicada em %s (%s/%s)\n' "$VERBO" "$banco" "$ctr" "$base" >&2
+    else
+      morre "psql abortou em '$banco' — a transacao nao commitou; corrija a migracao e repita" 3
+    fi
+    ;;
+  ""|-h|--help|ajuda) uso ;;
+  *) morre "ato desconhecido: '$ato' — atos: aplicar, bancos" 2 ;;
+esac
