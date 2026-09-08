@@ -74,8 +74,11 @@ case "$ato" in
       || morre "contêiner '$ctr' nao esta de pe — \`infra estado\`" 3
 
     # -T sem tty; -i para o stdin fluir. ON_ERROR_STOP + -1: aplica inteira ou nada.
-    # O stdin do verbo (o corpo da migracao) e o stdin do psql, direto.
-    if docker exec -i "$ctr" psql -U "$usr" -d "$base" -v ON_ERROR_STOP=1 -1 -f -; then
+    # -e ecoa cada comando e -P pager=off; NOTICE dos aceites vao a stderr do psql.
+    # stdout do psql (linhas de SELECT/aceite) SOBE para o chamador: e a prova que o
+    # card #3019 pede no comentario. Sem isto o veredito seria "nao deu erro", nao "os
+    # aceites passaram" — e o dono homologaria no escuro.
+    if docker exec -i "$ctr" psql -U "$usr" -d "$base" -v ON_ERROR_STOP=1 -1 -P pager=off -f -; then
       printf '%s: migracao aplicada em %s (%s/%s)\n' "$VERBO" "$banco" "$ctr" "$base" >&2
     else
       morre "psql abortou em '$banco' — a transacao nao commitou; corrija a migracao e repita" 3
