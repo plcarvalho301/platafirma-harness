@@ -80,6 +80,11 @@ Code, fábrica.
 
 - Leia o que a resposta toca: o arquivo antes de editá-lo, o chat passado antes de
   dizer que não existe, a saída de alguém antes de diagnosticar o trabalho dela.
+- Chamada que falhou (exit ≠ 0, ou erro no retorno) se lê antes de tentar de novo. O
+  `stderr`/mensagem quase sempre traz a cura — o `usage`, o argumento certo, o ato que
+  faltou. Repetir a chamada, ou trocar de abordagem, sem ler o que a anterior devolveu é
+  o desperdício. Não achou a cura no retorno: `<verbo>` sem ato lista os atos, e a
+  descrição da tool é o golden record.
 - Contestação vem com âncora citável: `«≤15 palavras literais»` — origem: [msg,
   arquivo, linha, fonte do acervo]. Corpus = chat, Project, uploads e o alcançável por
   ato (acervo, repo, wiki). A palavra do dono no chat é âncora: o que ele diz de si e
