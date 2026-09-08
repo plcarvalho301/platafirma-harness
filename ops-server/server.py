@@ -1503,8 +1503,34 @@ def _gera_tools_verbos() -> list:
     return servidas
 
 
+def _slugs_do_bin() -> set:
+    """Fallback: verbos = executaveis em PF_HARNESS/bin sem prefixo _ e sem extensao.
+    Nao depende de nenhum verbo (o gerador chama `acervo`, que pode estar quebrado —
+    foi o que derrubou a porta em 08/09: refatoracao arq:0106 mudou a gramatica do
+    acervo, `acervo listar ferramental` passou a recusar, gerador caiu em [] e a
+    porta subiu sem verbo nenhum). Aqui a fonte e o filesystem, imune a isso."""
+    binp = PF_HARNESS / "bin"
+    if not binp.is_dir():
+        return set()
+    slugs = set()
+    for p in binp.iterdir():
+        n = p.name
+        if n.startswith("_") or "." in n or not p.is_file():
+            continue
+        if os.access(p, os.X_OK):
+            slugs.add(n)
+            BINARIOS.setdefault(n, str(p))
+    return slugs
+
 TOOLS_DERIVADAS = _gera_tools_verbos()
 SLUGS_SERVIDOS = set(TOOLS_DERIVADAS)
+if not SLUGS_SERVIDOS:
+    # gerador veio vazio (acervo quebrado, etc): degrada, nao derruba. run_command
+    # resolve verbo pelo bin/; a projecao de tools MCP fica degradada ate o gerador
+    # voltar, mas a porta NUNCA sobe cega recusando todo verbo.
+    SLUGS_SERVIDOS = _slugs_do_bin()
+    print(f"[capsula] gerador vazio — fallback bin/ ({len(SLUGS_SERVIDOS)} verbos): "
+          f"{' '.join(sorted(SLUGS_SERVIDOS))}", file=sys.stderr, flush=True)
 
 
 class RedigeToken(logging.Filter):
