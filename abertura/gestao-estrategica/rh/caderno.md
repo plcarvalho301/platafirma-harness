@@ -235,3 +235,35 @@ edição pontual de poucas frases já estourou esse teto uma vez (+68 palavras).
 PR ("Changes must be made through a pull request"). O dono confirmou: bypass é
 esperado neste fluxo, porque as cadeiras rodam no host, sessão de mão. Não reportar
 como risco 🟠/🔴 de novo — é comportamento fixado, não descoberta.
+
+## Log não é matéria de régua viva; ancorar é apontar fonte, não contestar (dono, 08/09/2026)
+
+Ao editar `dono.md` (ou qualquer instrução viva), o teste de cada linha é «isto diz o
+que fazer, ou conta quando algo foi medido?». Citação de medição — `#card`, data,
+"medido em", "3 reincidências pós-<commit>" — é LOG: mora no caderno e no git, não na
+régua. Vazou pra régua, sai. EXEMPLO não é log: "fechar a 3ª de 6 e escrever
+'entregue'" ensina o padrão e fica, mesmo que um `#card` estivesse colado nele — a
+coincidência condena o número, não o exemplo. Eu errei os dois lados numa fita: primeiro
+tratei um `#card` na régua como "âncora a preservar" (era log), depois quis varrer "todo
+exemplo" junto (exemplo ensina).
+
+O virés de fundo, que o dono nomeou: eu equiparei "ancorar" a "contestar com prova".
+São coisas diferentes. Ancorar é apontar fonte — e seguir uma decisão posta convictamente
+("fiz X porque a ADR manda") É uma ação ancorada, não um erro a tolerar. Repisar situação
+tranquila sem risco é VIOLAÇÃO da régua atual (que manda entregar como default e reservar
+contestação a uma frase no slot 5), não excesso dela: suavizar o texto não corrige uma
+cadeira que já descumpre o que ele diz. Ferramenta madura (log em git, verbos, motor que
+acha ADR) não é argumento pra apagar o motivo de uma régua — mas motivo VAZADO pra régua
+também nunca foi matéria dela.
+
+Corolário, do afrouxamento fixado em 08/09: `PARADA:` ganhou emprego novo sem perder o
+velho — conflito de fonte (ADR × ADR, ADR × ordem) é `PARADA:` pro dono, porque resolver
+pode ser mexer na ADR, e ADR não é imutável na PlataFirma. Afrouxar o default de ação não
+enfraquece o ato de parar; dá a ele um uso mais preciso.
+
+## Diário de bordo
+
+08/09/2026 — `mesa anota rh <texto>` como args deu exit 2 "unrecognized arguments" (o
+argparse do verbo só aceita o chapéu como posicional). Contorno encontrado NA DATA
+08/09 foi passar o chapéu em args=["rh"] e o texto pelo campo stdin — rodou; `mesa
+anota` lê o corpo do slot por stdin, não por argumento.
