@@ -101,6 +101,7 @@ conforme() {
     # --- obra: conceito, objeto, bancada ---
     listar:obra:conceito)   exec "$ATOS/listar" conceitos "$@" ;;
     ler:obra:objeto)        exec "$ATOS/baixar" "$@" ;;
+    bancada:obra:lote)      exec "$ATOS/bancada" "$@" ;;
     # --- ingerir por particao ---
     ingerir:obra:*|ingerir:casa:*|ingerir:registro:*)
         exec "$ATOS/../ingerir" --lote "$entidade" "$@" ;;
@@ -119,13 +120,36 @@ case "$ATO" in
       *) avisa "acervo ingerir <raiz>" "acervo ingerir <particao> <raiz>"
          exec "$ATOS/ingerir" "$@" ;;
     esac ;;
-  escada)          exec "$ATOS/escada"  "$@" ;;
+  escada)
+    case "${1:-}" in
+      --todas) shift ;;
+      obra|casa|registro) ;;
+      *) avisa "acervo escada" "acervo escada --todas" ;;
+    esac
+    exec "$ATOS/escada" "$@" ;;
   baixar)          avisa "acervo baixar \"<titulo>\"" "acervo ler obra objeto \"<titulo>\""
                    exec "$ATOS/baixar"  "$@" ;;
-  bancada)         avisa "acervo bancada" "acervo bancada obra lote"
-                   exec "$ATOS/bancada" "$@" ;;
-  extrato)         exec "$ATOS/extrato" "$@" ;;
-  psql)            exec bash "$ATOS/psql"    "$@" ;;
+  bancada)
+    case "${1:-}" in
+      obra) conforme bancada "$@" ;;
+      *) avisa "acervo bancada" "acervo bancada obra lote"
+         exec "$ATOS/bancada" "$@" ;;
+    esac ;;
+  extrato)
+    case "${1:-}" in
+      --todas) shift ;;
+      obra|casa|registro) ;;
+      *) avisa "acervo extrato" "acervo extrato --todas" ;;
+    esac
+    exec "$ATOS/extrato" "$@" ;;
+  psql)
+    case "${1:-}" in
+      --banco) ;;
+      "") ;;
+      -h|--help|ajuda) ;;
+      *) avisa "acervo psql <banco>" "acervo psql --banco <banco>" ;;
+    esac
+    exec bash "$ATOS/psql" "$@" ;;
 
   # formas VIGENTES: respondem, mas avisam a forma conforme (spec_acervo §5)
   adr)             avisa "acervo adr" "acervo ler casa adr / acervo listar casa adr"

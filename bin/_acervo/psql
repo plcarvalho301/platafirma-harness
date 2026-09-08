@@ -33,8 +33,10 @@ declare -A BANCOS=(
 uso() {
   cat >&2 <<EOF
 uso:
-  acervo psql [<banco>]      roda o SQL lido do STDIN no <banco>, resultado cru de volta
+  acervo psql [--banco <banco>]   roda o SQL lido do STDIN no <banco>, resultado cru de volta
                              banco default: rag (schema acervo.*). o SQL entra por stdin.
+                             forma vigente (posicional, \`acervo psql <banco>\`) ainda responde,
+                             com aviso da porta apontando esta forma.
 
 bancos declarados: ${!BANCOS[*]}  (default: rag)
 o SQL entra SEMPRE por stdin — a tool passa \`stdin=<sua query>\`.
@@ -48,7 +50,12 @@ morre() { printf '%s: %s\n' "$VERBO" "$1" >&2; exit "${2:-3}"; }
 
 case "${1:-}" in -h|--help|ajuda) uso ;; esac
 
-banco="${1:-rag}"
+if [ "${1:-}" = "--banco" ]; then
+  banco="${2:-}"
+  [ -n "$banco" ] || morre "--banco exige um valor" 2
+else
+  banco="${1:-rag}"
+fi
 [ -n "${BANCOS[$banco]:-}" ] || morre "banco '$banco' fora da allowlist — validos: ${!BANCOS[*]}" 4
 IFS=: read -r ctr usr base <<<"${BANCOS[$banco]}"
 

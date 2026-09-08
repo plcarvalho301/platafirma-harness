@@ -6,6 +6,7 @@
 # dono: claudinho-IA
 # use para: "o que o acervo diz sobre X" (buscar obra|casa), medir a bateria de um motor (medir), reindexar uma partição (indexar)
 # atos: buscar, medir, indexar, ajuste, listar — buscar exige partição: motor <inst> buscar <partição> "<pergunta>"
+# conforme: parcial (arq:0106 — buscar/medir/indexar roteiam <particao>; forma vigente cai em obra COM aviso)
 # forma: json
 # cauda: nao
 # poda: cosmetica@rag,casa
