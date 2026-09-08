@@ -682,6 +682,58 @@ def cunha_sessao(portado):
     return str(uuid.uuid4()), True, None
 
 
+# msg-mem: o mesmo banco e o mesmo TTL que a porta usa em `sessao:{id}` (ops-server).
+MEM_HOST = os.environ.get("MEM_REDIS_HOST", "127.0.0.1")
+MEM_PORTA = int(os.environ.get("MEM_REDIS_PORT", "6380"))
+TTL_SESSAO_S = 172800          # 48 h — igual ao da porta, para nao haver duas verdades
+
+
+def registra_sessao(sid, cadeira):
+    """Grava `sessao:{id}` no msg-mem NO ATO DE CUNHAR — quem cunha registra.
+
+    Ordem do dono, 07/09/2026. O SET vivia SO no caminho da tool
+    (`ops-server/server.py`), depois que este verbo devolvia o pacote: abertura pela
+    tool nascia resolvivel, e abertura pelo CLI direto — `bin/chat`, isto e, a fita do
+    chat E a fabrica — nascia com id legitimo e sem registro. A porta lia `sessao:{id}`,
+    nao achava, devolvia cadeira vazia, e `mesa`/`fila`/`tarefas`/`minuta` rodavam sem
+    saber de quem era o ato. Medido em 07/09 na fita da ia: tres chamadas portando o id
+    correto recusadas com "nao sei quem esta operando a fila", e o registro so aconteceu
+    quando a cadeira gastou um giro chamando a tool — na superficie em que o CLAUDE.md
+    manda nao chamar.
+
+    SINCRONO de proposito: o valor e uma linha, o SET custa menos que um giro de verbo,
+    e assincrono devolveria o pacote antes de a chave existir — a primeira tool da fita
+    cairia justamente na janela sem sessao, que e o defeito que isto fecha.
+
+    Read-modify-write: a porta enriquece a mesma chave com o que so ela tem (`sub`,
+    `jti`, `sid_conexao`), e a segunda abertura da mesma conversa nao pode apagar isso.
+
+    Banco mudo NAO derruba a abertura — vira aviso, como o registro em Postgres.
+    """
+    try:
+        import redis
+    except ImportError:
+        return "sessao nao registrada no msg-mem: modulo 'redis' ausente neste venv"
+    chave = f"sessao:{sid}"
+    try:
+        rc = redis.Redis(host=MEM_HOST, port=MEM_PORTA, decode_responses=True,
+                         socket_connect_timeout=2, socket_timeout=3)
+        try:
+            val = json.loads(rc.get(chave) or "{}")
+            if not isinstance(val, dict):
+                val = {}
+        except ValueError:
+            val = {}
+        val.update({"cadeira": cadeira, "aberto_em": _agora_iso()})
+        val.setdefault("ordem_id", "-")
+        val.setdefault("origem", "monta-sessao")
+        rc.set(chave, json.dumps(val, ensure_ascii=False), ex=TTL_SESSAO_S)
+    except Exception as e:  # noqa: BLE001 — msg-mem mudo nao pode derrubar a abertura
+        return (f"sessao nao registrada no msg-mem ({MEM_HOST}:{MEM_PORTA}): "
+                f"{type(e).__name__} — a porta rodara sem cadeira ate o registro voltar")
+    return None
+
+
 def monta(cadeira, atualizar, pergunta=None, forcado_chapeu=None, so_chapeu=False,
           sessao_id=None):
     # `atualizar` sobrevive por compatibilidade de chamada (a flag `--sem-atualizar` e o
@@ -690,6 +742,12 @@ def monta(cadeira, atualizar, pergunta=None, forcado_chapeu=None, so_chapeu=Fals
     # (arq:0097). Aceitar a flag sem efeito e o menor estrago para quem ja chama assim;
     # ignora-la calada seria falso-verde, entao o pacote declara quem atualiza, no bloco
     # `morada` (campo `atualiza_por`).
+    #
+    # PRIMEIRA ACAO da montagem (ordem do dono, 07/09/2026): o `sessao_id` nasce antes
+    # de morada, catalogo, peca, roteador e RAG. Cunhar no fim — como era — punha a
+    # identidade da fita atras de todo o trabalho caro do montador, e o registro dela
+    # atras de mais uma volta ate a porta.
+    sid, cunhada, aviso_sid = cunha_sessao(sessao_id)
     m = morada()
 
     # ---- GATE DE VALOR (arq:0058, no que dele sobrevive ao arq:0097) --------
@@ -714,6 +772,11 @@ def monta(cadeira, atualizar, pergunta=None, forcado_chapeu=None, so_chapeu=Fals
     if cadeira.lower() not in [c.lower() for c in cadeiras_validas()]:
         return {"erro": f"cadeira desconhecida: '{cadeira}'",
                 "cadeiras_validas": cadeiras_validas()}
+
+    # Cadeira validada: a sessao ja esta completa (id + dono), entao registra-se AQUI,
+    # antes de montar peca nenhuma. Cadeira invalida nao gera registro — sessao sem
+    # dono na chave e o que fazia `mesa`/`fila` abrirem caixa de ninguem.
+    aviso_reg = registra_sessao(sid, _canonico(cadeira) or cadeira.strip().lower())
     p_persona = os.path.join(ABERTURA, cadeira, "persona.md")
 
     pecas = de_abertura(catalogo(), cadeira)
@@ -787,13 +850,18 @@ def monta(cadeira, atualizar, pergunta=None, forcado_chapeu=None, so_chapeu=Fals
     # montador (arq:0058, 'um clone so data o pacote'), e agora e o commit de onde a
     # arvore foi extraida — imutavel, e por isso reproduzivel.
     montador_sha = m["sha"]
-    sid, cunhada, aviso_sid = cunha_sessao(sessao_id)
     if aviso_sid:
         avisos.append(aviso_sid)
+    if aviso_reg:
+        avisos.append(aviso_reg)
     return {
         "cadeira": cadeira,
         "sessao_id": sid,
         "sessao": {"id": sid, "cunhada_agora": cunhada,
+                   # Ausencia se declara: sem esta chave no msg-mem a porta roda sem
+                   # cadeira, e a fita tem de saber disso na abertura, nao no primeiro
+                   # verbo que falhar.
+                   "registrada": aviso_reg is None,
                    "porte": "devolva este `sessao_id` em toda chamada de tool e na "
                             "proxima abertura desta mesma conversa — quem cunha e este "
                             "verbo, uma vez (arq:0101 §1); a porta nao infere"},
