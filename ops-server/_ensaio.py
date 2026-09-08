@@ -557,9 +557,125 @@ def test_envelope_enxuto_tira_stderr_vazio_e_cwd_repetido():
 def test_perfil_por_verbo_sai_do_cabecalho_e_ausente_e_o_de_hoje():
     s._PERFIS.clear()
     assert s._perfil_verbo("descansar", str(_Path(__file__).parent.parent / "bin/descansar")) == {
-        "forma": "relatorio", "cauda": True}
+        "forma": "relatorio", "cauda": True, "poda": "inteira", "poda_atos": ()}
     s._PERFIS.clear()
-    assert s._perfil_verbo("inexistente", "/nao/existe") == {"forma": "listagem", "cauda": False}
+    assert s._perfil_verbo("inexistente", "/nao/existe") == {
+        "forma": "listagem", "cauda": False, "poda": "inteira", "poda_atos": ()}
+
+
+# --- card #3022: regime cosmetico para retorno de recuperacao semantica ---------
+# O motor entrega top-k ranqueado por similaridade; cada trecho e unidade inteira de
+# recuperacao. Re-curar isso por heuristica de string a jusante e dobrar o filtro do
+# vetor com um pior. Os testes abaixo travam a regua nos dois sentidos: hoje destroi,
+# no regime cosmetico preserva, e verbo que nao declara nada nao muda.
+_TRECHOS_VETORIAIS = "\n".join(
+    f"platafirma-arquitetura/docs/arq-0101.md:{10 + i * 7}: trecho {i} do top-k, "
+    f"ranqueado por similaridade e servido inteiro" for i in range(1, 9))
+
+
+def test_poda_inteira_hoje_destroi_o_top_k_do_motor():
+    """O defeito medido: 8 trechos ranqueados entram, 5 saem, 3 viram '+3 matches'."""
+    fora, rel = _p.lava(_TRECHOS_VETORIAIS)
+    assert "busca" in rel["classes"] and "+3 matches neste arquivo" in fora
+    assert "trecho 8" not in fora, "o 8o lugar do ranking sumiu sem uma palavra"
+
+
+def test_cosmetica_preserva_os_k_trechos_na_ordem_do_ranking():
+    fora, rel = _p.lava(_TRECHOS_VETORIAIS, cosmetica=True)
+    assert set(rel["classes"]) <= {"terminal", "branco", "blob"}
+    for i in range(1, 9):
+        assert f"trecho {i} do top-k" in fora
+    assert fora.index("trecho 1") < fora.index("trecho 8"), "ordem do ranking mantida"
+
+
+def test_cosmetica_nao_funde_trechos_no_mesmo_molde():
+    molde = "\n".join(f"trecho {i} de 8 - score 0.9{i} - fonte arq 101 secao 3"
+                      for i in range(1, 9))
+    assert "repeticao" in _p.lava(molde)[1]["classes"], "hoje funde"
+    fora, rel = _p.lava(molde, cosmetica=True)
+    assert "repeticao" not in rel["classes"] and "mesmo molde" not in fora
+    assert fora.count("score") == 8
+
+
+def test_cosmetica_lava_ansi_branco_e_blob():
+    """Cosmetico nao e 'nao poda': o que NAO re-cura o conjunto continua saindo."""
+    sujo = "\x1b[31m[1] fonte\x1b[0m\n\n\n[2] " + ("Zm9vYmFyego" * 40)
+    fora, rel = _p.lava(sujo, cosmetica=True)
+    assert "\x1b[" not in fora and "\n\n\n" not in fora and "<blob tipo=base64" in fora
+    assert set(rel["classes"]) == {"terminal", "branco", "blob"}
+
+
+def test_cosmetica_nao_janela_a_linha_longa_que_e_o_retorno_inteiro():
+    """Medido em 08/09 num `motor rag buscar` REAL: o retorno volta como UMA linha de
+    JSON de 12.250 bytes e chegava a fita com 291. Janelar linha longa e corte de miolo
+    com nome de marcador — e a linha longa aqui e o top-k inteiro."""
+    linha = '{"fontes":[' + ",".join(f'{{"n":{i},"trecho":"conteudo do trecho {i}"}}'
+                                     for i in range(1, 40)) + "]}"
+    assert len(linha) > _p.LINHA_LONGA
+    assert "<linha longa" in _p.lava(linha)[0], "hoje janela"
+    fora, rel = _p.lava(linha, cosmetica=True)
+    assert fora == linha and rel["classes"] == []
+
+
+def test_cosmetica_ainda_marca_base64_de_verdade():
+    """Trava do card: blob DENTRO de trecho mantem a marcacao — e alca, nao corte."""
+    fora, rel = _p.lava("[1] anexo " + ("Zm9vYmFyego" * 40), cosmetica=True)
+    assert "<blob tipo=base64" in fora and rel["classes"] == ["blob"]
+
+
+def test_cosmetica_acima_do_cap_derrama_inteiro_e_nunca_corta_o_miolo():
+    texto = "\n".join(f"[{i}] trecho vetorial numero {i} " + "conteudo " * 30
+                      for i in range(1, 21))
+    args = {"cap": 2_000, "cauda": False, "alca": "motor:casa", "sessao_id": _UUID_A,
+            "giro": 1, "tool": "motor", "ledger": None,
+            "nome_derrame": "g00001-stdout.txt"}
+    with _derrame_tmp():
+        fora, meta = _p.poda_texto(texto, cosmetica=True, **args)
+        hoje, m_hoje = _p.poda_texto(texto, **args)
+    assert meta["modo"] == "derrame" and meta["perfil"] == "cosmetica" and meta["alca"]
+    assert "[20] trecho vetorial numero 20" in fora and "bytes omitidos" not in fora
+    assert "repeticao" in m_hoje["lavado"]
+    assert "[20] trecho vetorial numero 20" not in hoje, "o default segue como era"
+
+
+def test_cosmetica_mantem_o_ledger_de_dedup():
+    """R2 vale igual: reenvio identico ainda vira aviso. O que sai e a poda que ALTERA
+    o conjunto, nunca a que evita reenviar o mesmo conjunto."""
+    Fake = _fake_redis_cls()
+    args = {"cap": 50_000, "cauda": False, "alca": "motor:casa", "sessao_id": _UUID_A,
+            "tool": "motor", "cosmetica": True}
+    with _derrame_tmp(), patch.object(s, "redis") as _rmod:
+        _rmod.Redis = Fake
+        led = _p.Ledger(Fake(), _UUID_A)
+        um = _p.poda_texto(_TRECHOS_VETORIAIS, giro=1, ledger=led,
+                           nome_derrame="g1.txt", **args)[1]
+        dois = _p.poda_texto(_TRECHOS_VETORIAIS, giro=2, ledger=led,
+                             nome_derrame="g2.txt", **args)[1]
+    assert um["ledger"] == "novo" and dois["modo"] == "igual"
+
+
+def test_eixo_poda_sai_do_cabecalho_e_o_escopo_por_ato_vale():
+    bin_ = _Path(__file__).parent.parent / "bin"
+    s._PERFIS.clear()
+    motor = s._perfil_verbo("motor", str(bin_ / "motor"))
+    assert motor["poda"] == "cosmetica" and motor["poda_atos"] == ("rag", "casa")
+    assert s._cosmetica(motor, "casa") and not s._cosmetica(motor, "listar")
+    s._PERFIS.clear()
+    descobrir = s._perfil_verbo("descobrir", str(bin_ / "descobrir"))
+    assert descobrir["poda_atos"] == () and s._cosmetica(descobrir, "qualquer assunto")
+    s._PERFIS.clear()
+    acervo = s._perfil_verbo("acervo", str(bin_ / "acervo"))
+    assert s._cosmetica(acervo, "casa") and not s._cosmetica(acervo, "listar")
+    s._PERFIS.clear()
+
+
+def test_verbo_sem_declaracao_segue_com_poda_inteira():
+    """Trava do card: terminal, git e fabrica nao mudam — o default fica."""
+    bin_ = _Path(__file__).parent.parent / "bin"
+    s._PERFIS.clear()
+    assert not s._cosmetica(s._perfil_verbo("teste", str(bin_ / "teste")), "rodar")
+    assert not s._cosmetica(s._perfil_verbo("repo", str(bin_ / "repo")), "git")
+    s._PERFIS.clear()
 
 
 # --- R7: hash unico, uma lib para a porta e para o montador --------------------

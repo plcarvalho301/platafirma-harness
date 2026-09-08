@@ -8,6 +8,7 @@
 # atos: listar; ou ato=<instância> e args=ajuste / buscar / medir / indexar
 # forma: json
 # cauda: nao
+# poda: cosmetica@rag,casa
 # componente: platafirma-motor
 # O verbo e `motor`; a instancia e argumento (arq:0037; veto do verbo `rag`).
 import json, os, re, subprocess, sys, time, urllib.request

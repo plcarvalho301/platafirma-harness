@@ -85,11 +85,18 @@ def _sem_ansi(t: str) -> str:
     return "\n".join(l.split("\r")[-1] if "\r" in l else l for l in t.split("\n"))
 
 
-def _marca_blob(linha: str) -> tuple[str, bool]:
+def _marca_blob(linha: str, *, janela: bool = True) -> tuple[str, bool]:
     """Base64/hex longo vira marcador com sha; linha longa qualquer vira janela ±120.
 
     A alça aqui é o próprio sha: o inteiro está no derrame, e o que o modelo precisa
     para pedi-lo de volta é saber que existe e qual é.
+
+    `janela=False` desliga o SEGUNDO ramo, e só ele. Medido em 08/09: um `motor rag
+    buscar` real volta como UMA linha de JSON de 12.250 bytes, e a janela ±120 servia
+    291 — o top-k inteiro sumia com um sha por alça. Janelar linha longa é corte de
+    miolo com nome de marcador, e é o que o aceite do #3022 proíbe. O primeiro ramo
+    fica de pé nos dois regimes: base64/hex contíguo é token opaco que decisão nenhuma
+    lê, e a marcação dele é ganho, não perda.
     """
     m = _BLOB.search(linha)
     if m and len(m.group(0)) >= BLOB_MIN:
@@ -97,7 +104,7 @@ def _marca_blob(linha: str) -> tuple[str, bool]:
         tipo = "hex" if re.fullmatch(r"[0-9a-fA-F]+", bruto) else "base64"
         marca = f"<blob tipo={tipo} bytes={len(bruto)} sha={sha_servido(bruto)}>"
         return linha[:m.start()] + marca + linha[m.end():], True
-    if len(linha) > LINHA_LONGA:
+    if janela and len(linha) > LINHA_LONGA:
         return (f"{linha[:JANELA]} <linha longa bytes={len(linha)} "
                 f"sha={sha_servido(linha)} …> {linha[-JANELA:]}"), True
     return linha, False
@@ -184,11 +191,20 @@ def _agrupa_busca(linhas: list[str]) -> tuple[list[str], int] | None:
     return fora, cortadas
 
 
-def lava(texto: str, cap: int = 50_000) -> tuple[str, dict]:
+def lava(texto: str, cap: int = 50_000, *, cosmetica: bool = False) -> tuple[str, dict]:
     """R1 — lavador determinístico, ANTES do teto. Devolve (lavado, relatório).
 
     Determinístico é o ponto: mascaramento por regra iguala resumo por LLM à metade do
     custo (Lindenbauer et al., arXiv:2508.21433) e, ao contrário do resumo, não inventa.
+
+    `cosmetica=True` é o regime NÃO-SEMÂNTICO (card #3022): retorno de recuperação
+    vetorial — top-k de trechos ranqueados por similaridade — passa só por `terminal`,
+    `branco` e `blob`. `rastro`, `busca` e `repeticao` ficam de fora porque as três
+    RE-CURAM o conjunto: `_agrupa_busca` vê trecho no formato `[n] (fonte#âncora)` ou
+    `path:linha:` e o remonta como saída de `rg`, descartando do 5º match em diante;
+    `_colapsa_repeticao` funde N trechos parecidos num molde. A curadoria já aconteceu
+    no espaço vetorial: dobrá-la com heurística de string a jusante é trocar o filtro
+    do vetor por um pior. Não conserte de volta.
     """
     if not texto:
         return texto or "", {"classes": [], "bytes_antes": 0, "bytes_depois": 0}
@@ -205,10 +221,11 @@ def lava(texto: str, cap: int = 50_000) -> tuple[str, dict]:
         classes.append("terminal")
     linhas = t.split("\n")
 
-    limpas = [l for l in linhas if not _RASTRO.match(l) and not _PYTEST_DOTS.match(l)]
-    if len(limpas) != len(linhas):
-        classes.append("rastro")
-        linhas = limpas
+    if not cosmetica:
+        limpas = [l for l in linhas if not _RASTRO.match(l) and not _PYTEST_DOTS.match(l)]
+        if len(limpas) != len(linhas):
+            classes.append("rastro")
+            linhas = limpas
 
     # vazias consecutivas → uma só
     enxutas: list[str] = []
@@ -220,19 +237,22 @@ def lava(texto: str, cap: int = 50_000) -> tuple[str, dict]:
         classes.append("branco")
         linhas = enxutas
 
-    busca = _agrupa_busca(linhas)
-    if busca:
-        linhas, _cortadas = busca
-        classes.append("busca")
-    else:
-        linhas, cortadas = _colapsa_repeticao(linhas)
-        if cortadas:
-            classes.append("repeticao")
+    if not cosmetica:
+        # As duas classes que RE-CURAM o conjunto — e por isso as duas que o regime
+        # não-semântico pula. O top-k já vem curado do vetor (ver o docstring).
+        busca = _agrupa_busca(linhas)
+        if busca:
+            linhas, _cortadas = busca
+            classes.append("busca")
+        else:
+            linhas, cortadas = _colapsa_repeticao(linhas)
+            if cortadas:
+                classes.append("repeticao")
 
     houve_blob = False
     fora = []
     for l in linhas:
-        nova, marcou = _marca_blob(l)
+        nova, marcou = _marca_blob(l, janela=not cosmetica)
         houve_blob = houve_blob or marcou
         fora.append(nova)
     if houve_blob:
@@ -449,11 +469,13 @@ def intocavel(r: dict) -> bool:
 
 def poda_texto(texto: str, *, cap: int, cauda: bool, alca: str, sessao_id: str,
                giro: int, tool: str, ledger: Ledger | None,
-               nome_derrame: str) -> tuple[str, dict]:
+               nome_derrame: str, cosmetica: bool = False) -> tuple[str, dict]:
     """Um retorno textual, a régua inteira na ordem do R8. Devolve (texto, campo `poda`)."""
-    lavado, rel = lava(texto, cap)
+    lavado, rel = lava(texto, cap, cosmetica=cosmetica)
     meta = {"ato": tool, "giro": giro, "sha": sha_servido(lavado),
             "lavado": rel["classes"], "bytes_produzidos": rel["bytes_antes"]}
+    if cosmetica:
+        meta["perfil"] = "cosmetica"
     servir = lavado
     if ledger is not None:
         d = ledger.olha(alca, lavado, giro, tool)
@@ -467,10 +489,20 @@ def poda_texto(texto: str, *, cap: int, cauda: bool, alca: str, sessao_id: str,
     caminho = None
     if len(servir.encode("utf-8", "replace")) > cap:
         caminho = derrama(sessao_id, nome_derrame, texto)
-    servir, cm = corta(servir, cap, cauda=cauda, alca=caminho)
-    if cm.get("cortado"):
-        meta.update(modo="corte", bytes_omitidos=cm["bytes_omitidos"], alca=caminho,
-                    cauda=cauda)
+    if cosmetica:
+        # Acima do teto o semântico DERRAMA e serve inteiro. `corta()` parte uma unidade
+        # de recuperação ao meio, e meio trecho é pior que trecho nenhum: quem lê não vê
+        # onde acabou. O teto duro continua existindo — é o guardrail de 4×CAP do R1,
+        # que age no lavador e se declara na classe `guardrail`.
+        if caminho:
+            meta.update(modo="derrame", alca=caminho)
+            servir += (f"\n[retorno semântico servido inteiro — sem corte de miolo; "
+                       f"cru em {caminho}; `read_file offset=`]")
+    else:
+        servir, cm = corta(servir, cap, cauda=cauda, alca=caminho)
+        if cm.get("cortado"):
+            meta.update(modo="corte", bytes_omitidos=cm["bytes_omitidos"], alca=caminho,
+                        cauda=cauda)
     meta["bytes_servidos"] = len(servir.encode("utf-8", "replace"))
     return servir, meta
 
@@ -484,6 +516,8 @@ def linha_humana(meta: dict) -> str:
     if modo == "diff":
         return (f"poda: delta desde o giro {meta.get('giro_ref')} — "
                 f"{meta.get('bytes_omitidos', 0)} bytes não reenviados")
+    if modo == "derrame":
+        return f"poda: retorno semântico inteiro, sem corte — cru em {meta.get('alca')}"
     if modo == "corte":
         alca = meta.get("alca")
         return (f"poda: {meta.get('bytes_omitidos', 0)} bytes omitidos no miolo"

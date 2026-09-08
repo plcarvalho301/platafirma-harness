@@ -4,6 +4,7 @@
 # dono: claudinho-dados
 # use para: ingerir obra, escada, bancada, extrato, stack, registrar verbo, golden record, operar a wiki
 # atos: ingerir, baixar, escada, bancada, extrato, listar, registrar, ferramenta, stack, adr, wiki
+# poda: cosmetica@casa
 #
 # Despachante (arq:0040): o verbo é o par binário+subcomando. Os sub-atos moram
 # em bin/_acervo/ e não entram no PATH; a porta é esta.

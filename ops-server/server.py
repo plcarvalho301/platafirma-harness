@@ -169,14 +169,14 @@ def _poda_ligada() -> bool:
 # cabeçalho é a segunda fonte que diverge em silêncio. Ausente = listagem/cauda:nao,
 # que é exatamente o comportamento de hoje — verbo que não declara nada não muda.
 _PERFIS: dict[str, dict] = {}
-_RE_CHAVE = re.compile(r"^#\s*(forma|cauda)\s*:\s*(\S+)", re.M)
+_RE_CHAVE = re.compile(r"^#\s*(forma|cauda|poda)\s*:\s*(\S+)", re.MULTILINE)
 FORMAS = ("json", "listagem", "relatorio", "log")
 
 
 def _perfil_verbo(slug: str, binario: str) -> dict:
     if slug in _PERFIS:
         return _PERFIS[slug]
-    perfil = {"forma": "listagem", "cauda": False}
+    perfil = {"forma": "listagem", "cauda": False, "poda": "inteira", "poda_atos": ()}
     try:
         with open(binario, encoding="utf-8", errors="replace") as fh:
             cab = "".join(next(fh, "") for _ in range(40))
@@ -185,19 +185,42 @@ def _perfil_verbo(slug: str, binario: str) -> dict:
                 perfil["forma"] = valor
             elif chave == "cauda":
                 perfil["cauda"] = valor.lower() in ("sim", "1", "true")
+            elif chave == "poda":
+                regime, _, atos = valor.partition("@")
+                if regime.lower() == "cosmetica":
+                    perfil["poda"] = "cosmetica"
+                    perfil["poda_atos"] = tuple(a for a in atos.split(",") if a)
     except OSError:
         pass
     _PERFIS[slug] = perfil
     return perfil
 
 
-def _serve(r: dict, *, tool: str, alca: str, ident: dict, cauda: bool = False) -> dict:
+def _cosmetica(perfil: dict, ato: str | None) -> bool:
+    """`# poda: cosmetica[@ato,ato]` — terceiro eixo do R4, ao lado de forma e cauda.
+
+    O escopo por ato existe porque verbo MISTO não cabe num perfil só: `acervo casa` é
+    recuperação semântica e `acervo listar` é listagem estruturada, e listagem sem teto
+    derrama a fita. Sem `@`, o verbo inteiro é semântico — caso de `descobrir`, cujo ato
+    é o próprio assunto consultado, e não haveria o que enumerar.
+    """
+    if perfil.get("poda") != "cosmetica":
+        return False
+    atos = perfil.get("poda_atos") or ()
+    return not atos or (ato or "") in atos
+
+
+def _serve(r: dict, *, tool: str, alca: str, ident: dict, cauda: bool = False,
+           cosmetica: bool = False) -> dict:
     """R8 — o único caminho por onde retorno de tool sai desta porta.
 
     Erro e `exit != 0` passam intocados (invariante iii): o diagnóstico inteiro vale
     mais que o byte poupado. O resto lava, deduplica contra o ledger da sessão, corta
     com alça e sai com o aviso em banda nos dois níveis (campo `poda` para o log e o
     ensaio; `poda_aviso` para quem lê o retorno).
+
+    `cosmetica` vem do cabeçalho do verbo (`_cosmetica`) e vale só para retorno de
+    recuperação semântica: lava o cosmético, deduplica igual, e NUNCA corta miolo.
     """
     if not isinstance(r, dict) or not _poda_ligada() or _poda.intocavel(r):
         return r
@@ -215,7 +238,7 @@ def _serve(r: dict, *, tool: str, alca: str, ident: dict, cauda: bool = False) -
             continue
         servido, meta = _poda.poda_texto(
             texto, cap=CAP, cauda=cauda, alca=f"{tool}:{alca}", sessao_id=sessao_id,
-            giro=giro, tool=tool, ledger=ledger,
+            giro=giro, tool=tool, ledger=ledger, cosmetica=cosmetica,
             nome_derrame=f"g{giro:05d}-{campo}.txt")
         if sub:
             r[campo] = {**alvo, sub: servido}
@@ -666,8 +689,9 @@ async def run_command(command: str = "", cwd: str = "", timeout: int = 120,
             r = await anyio.to_thread.run_sync(_run_verbo_blocking, argv, stdin, timeout, ident)
             so = r.get("stdout")
             brutos.append(so.get("texto", "") if isinstance(so, dict) else "")
-            r = _serve(r, tool=slug, alca=linha, ident=ident,
-                       cauda=_perfil_verbo(slug, argv[0])["cauda"])
+            _perf = _perfil_verbo(slug, argv[0])
+            r = _serve(r, tool=slug, alca=linha, ident=ident, cauda=_perf["cauda"],
+                       cosmetica=_cosmetica(_perf, argv[1] if len(argv) > 1 else None))
             _audit(tool=slug, evento="verbo", via="run_command",
                    ato=argv[1] if len(argv) > 1 else None, args=" ".join(argv[2:])[:CMD_CAP],
                    cadeira=ident["cadeira"] or None, sessao_id=ident["sessao_id"],
@@ -763,7 +787,8 @@ async def _run_command_legado(command: str = "", cwd: str = "", timeout: int = 1
                     _run_verbo_blocking, argv, None, timeout, ident)
                 _perf = _perfil_verbo(argv[0], str(RAIZ / "bin" / argv[0]))
                 r = _serve(r, tool=argv[0], alca=" ".join(argv), ident=ident,
-                           cauda=_perf["cauda"])
+                           cauda=_perf["cauda"],
+                           cosmetica=_cosmetica(_perf, argv[1] if len(argv) > 1 else None))
                 _audit(tool=argv[0], evento="verbo_contornado", comando=" ".join(argv)[:CMD_CAP],
                        cadeira=ident["cadeira"] or None, sessao_id=ident["sessao_id"],
                        ordem_id=ident["ordem_id"], exit_code=r.get("exit_code"),
@@ -1393,8 +1418,9 @@ def _faz_tool_verbo(slug: str, binario: str, descricao: str):
                     argv = [binario] + ([_ato] if _ato else []) + _args
                     t0 = time.monotonic()
                     r = await anyio.to_thread.run_sync(_run_verbo_blocking, argv, _stdin, timeout, ident)
-                    r = _serve(r, tool=slug, alca=_linha, ident=ident,
-                               cauda=_perfil_verbo(slug, binario)["cauda"])
+                    _perf = _perfil_verbo(slug, binario)
+                    r = _serve(r, tool=slug, alca=_linha, ident=ident, cauda=_perf["cauda"],
+                               cosmetica=_cosmetica(_perf, _ato))
                     _audit(tool=slug, ato=_ato or None, args=" ".join(_args)[:CMD_CAP],
                            cadeira=ident["cadeira"] or None, sessao_id=ident["sessao_id"],
                            ordem_id=ident["ordem_id"], exit_code=r.get("exit_code"), erro=r.get("erro"),
@@ -1420,8 +1446,9 @@ def _faz_tool_verbo(slug: str, binario: str, descricao: str):
         r = await anyio.to_thread.run_sync(_run_verbo_blocking, argv, stdin, timeout, ident)
         # R4: a forma e a cauda saem do cabeçalho DESTE verbo. `descansar` é o caso que
         # nomeia a regra — batia o teto e era cortado só na cabeça, perdendo o veredito.
-        r = _serve(r, tool=slug, alca=linha, ident=ident,
-                   cauda=_perfil_verbo(slug, binario)["cauda"])
+        _perf = _perfil_verbo(slug, binario)
+        r = _serve(r, tool=slug, alca=linha, ident=ident, cauda=_perf["cauda"],
+                   cosmetica=_cosmetica(_perf, ato))
         _audit(tool=slug, ato=ato or None, args=" ".join(args)[:CMD_CAP],
                cadeira=ident["cadeira"] or None, sessao_id=ident["sessao_id"],
                ordem_id=ident["ordem_id"], exit_code=r.get("exit_code"), erro=r.get("erro"),
