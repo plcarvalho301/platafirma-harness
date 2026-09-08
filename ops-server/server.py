@@ -619,7 +619,14 @@ def _item_de_lote(x):
     elif isinstance(x, dict):
         verbo = str(x.get("verbo") or "")
         ato = str(x.get("ato") or "")
-        resto = ([ato] if ato else []) + [str(a) for a in (x.get("args") or [])]
+        args = x.get("args") or []
+        # #3026: args STRING itera char-a-char ('motor' -> ['m','o','t',...]) e roda o
+        # verbo com token corrompido, sem erro. O contrato quer lista; string e erro de
+        # uso, e a porta o recusa aqui em vez de mascarar (custou a fita e8a97d73, 08/09).
+        if isinstance(args, (str, bytes)):
+            return None, None, _recusa(
+                verbo, "args deve ser lista de tokens, recebido string; use args: [ ... ]")
+        resto = ([ato] if ato else []) + [str(a) for a in args]
         stdin = x.get("stdin")
     else:
         return None, None, _recusa(str(x)[:40], "item nem string nem {verbo, ato, args, stdin}")
