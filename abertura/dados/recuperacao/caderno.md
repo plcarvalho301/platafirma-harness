@@ -140,3 +140,50 @@ processo — e o rag-api recebe ambiente por lista EXPLÍCITA no `docker-compose
 para o motor: `docker exec rag-extractor-api env` é a prova, antes de concluir que o código não
 liga. O bloco lateral (`ontologia.vizinhanca`) é o caso vivido: nasceu desligado com os três
 (1970020), foi ligado em 03/09 assim.
+
+## Separação de corpus é `motor.indice`, não tabela, schema nem container (08/09/2026)
+
+Medido em `deploy/motor@0f635ef`, o sha que motor-pg serve. Vale toda vez que alguém
+quiser "um índice vetorial separado" para um corpus novo (foi a pergunta de TI sobre
+`acervo.casa`, #3018/#3019):
+
+- **Corpus separado = uma linha em `motor.indice`** (impressao_id, metodo,
+  metodo_digest, dimensao, estado). A busca por `indice_id` já não cruza corpora. Não
+  precisa de tabela de vetor nova, schema novo nem container novo.
+- **`motor.vetor` particiona por LIST(`dimensao`)**, não por corpus: `vetor_d1024`
+  (texto) e `vetor_d256` (faceta), HNSW próprio em cada
+  (`003_particionar_vetor.sql:41-44,83-86`). Família nova de dimensão entra ali; sem
+  partição declarada, a escrita levanta erro em vez de sumir.
+- **Texto e vetor já vivem em containers distintos**: texto no schema `acervo`
+  (rag-extractor-pg), vetor no motor-pg, ligados por `motor.vetor.alvo_id` —
+  "referência lógica ao acervo, sem FK" (`002_tabelas.sql:27`). Tabela de acervo com
+  coluna `embedding` é peça que não existe na casa; propor uma quebra o gatilho
+  `motor.confere_dimensao`, a escada (que cruza acervo × motor por impressao_id) e o
+  aposentar-e-criar por `estado`.
+
+🟠 **"Partição" tem três referentes e isso já causou pergunta errada.** Em `acervo
+escada` é o STORE de origem (blob-minio × wiki); em `motor.vetor` é a FAMÍLIA DE
+DIMENSÃO; na spec_acervo-casa §4 é o CORPUS. Termo canônico proposto para corpus
+separado: ÍNDICE. "Partição" fica com o que o Postgres particiona.
+
+⚪ **Hipótese aberta — diluição de recall no HNSW compartilhado.** Corpora de mesma
+dimensão dividem o mesmo grafo (`vetor_d1024_hnsw`), e a separação por `indice_id` é
+filtro DEPOIS da travessia. Corpus minoritário dentro de ~123k vetores de texto pode
+voltar top-k quase todo do majoritário — falha que aparece como resposta pobre, não
+como lentidão. O que confirmaria: `motor rag medir` com gabarito do corpus pequeno,
+contra o mesmo conjunto num índice isolado. Saída barata se confirmar: família própria
+de dimensão (HNSW próprio, mesmo container, mesmo modelo) antes de cogitar container.
+
+## Embedder é ferramental compartilhado — divergir é decisão de ferramental (08/09/2026)
+
+A pergunta "corpus X pode ter modelo próprio, já que nunca busca junto com Y?" tem
+resposta NÃO por razão operacional, não semântica. Recuperação separada torna a busca
+federada irrelevante, e migração de conteúdo entre corpora distintos quase nunca é caso
+real — os dois argumentos usuais caem. O que sobra e decide: um modelo no ar, um
+cache-key `model|backend|device`, um `re-embed --all`. Dois modelos dobram VRAM,
+pipeline de ingestão, escada e chunking (dois tokenizers, dois orçamentos de fronteira).
+
+A porta de saída fica declarada e barata: `motor.indice.metodo`/`metodo_digest` já
+registram o método POR ÍNDICE. Divergir depois é declarar outro método e criar a
+partição de dimensão — uma linha, não migração de schema. Por isso se crava igual agora
+sem fechar a porta.
