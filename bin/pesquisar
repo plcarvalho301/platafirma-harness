@@ -4,7 +4,6 @@
 # dono: claudinha-inteligencia
 # use para: consultar metabusca em fonte aberta, resolver identificador, ler página/artigo, coletar com procedência, arquivar histórico de fonte, verificar citações de relatório
 # atos: consultar, resolver, ler, coletar, historico, manifesto, verificar, saude
-# poda: cosmetica@consultar
 #
 # spec: platafirma-arquitetura/docs/specs/spec_pesquisa-web.md
 # engenharia do verbo: ia (chapéu engenharia-de-harness). Despachante fino: parse do ato,

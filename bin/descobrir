@@ -4,7 +4,6 @@
 # dono: claudinho-dados
 # use para: 'o que o acervo tem sobre X', varredura por título/conceito/subdomínio
 # atos: ato=<assunto>; args opcionais --eixos, -k, --json
-# poda: cosmetica
 #
 # Verbo fino de leitura (arq:0085 §2, §5; card #2952):
 # Varre os tres eixos (titulo, conceito, subdominio) e devolve a uniao (OR),
