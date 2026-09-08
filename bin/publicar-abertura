@@ -37,6 +37,13 @@
 #   publicar-abertura estado           o que esta no ar (current -> sha) vs head de origin/main
 #   publicar-abertura reverter <sha>   reaponta current para um ref JA publicado (imutavel)
 #   publicar-abertura podar [--manter N]  remove refs antigos nao apontados (default mantem 10)
+#
+# GANCHO DA CASA (spec_acervo-casa §6, card #3019): quando `current` passa a apontar OUTRO
+# sha — publicacao ou reverter —, o verbo dispara a reindexacao de `acervo.casa` pelo verbo
+# `acervo`, passando o sha que passou a ser servido. Aqui e so o gatilho: aposentar-e-criar
+# por sha e a ingestao sao do `acervo`. Falha do indice avisa e NAO desfaz a publicacao.
+#   PF_CASA_REINDEXA=0   desliga o gancho
+#   PF_ACERVO=<caminho>  aponta outro verbo `acervo`
 set -euo pipefail
 
 RAIZ="${OPS_ROOT:-${PF_RAIZ:-$HOME/AI}}"
@@ -83,6 +90,49 @@ apontar_current() {  # $1=commit  — troca atomica do ponteiro
   mv -T "$tmp" "$MORADA/current"
 }
 
+# ---- gancho: reindexacao do indice da casa (spec_acervo-casa §6, card #3019) ----
+# Publicar e o gatilho de APOSENTAR-E-CRIAR por sha: a arvore que passa a ser servida e a
+# que o indice da casa (`acervo.casa`) tem de refletir, e o `sha` e o que distingue fresco
+# de fossil no runtime. A INGESTAO nao e daqui — e do verbo `acervo`, capacidade
+# conhecimento (passo 2 da spec). Este gancho so a DISPARA, com o sha publicado e a arvore
+# imutavel de onde ler.
+#
+# Falha do indice NAO desfaz a publicacao: o que esta no ar e o snapshot, e indice atrasado
+# se conserta reindexando — ja o inverso (publicacao desfeita por causa do indice) tiraria
+# do ar a abertura que toda cadeira le. Enquanto o sub-ato `acervo ingerir --casa` nao
+# existe, o gancho declara o que faltou e sai 0.
+#
+#   PF_CASA_REINDEXA=0   desliga o gancho (base sem motor, teste, reverter em fogo)
+#   PF_ACERVO=<caminho>  aponta outro verbo `acervo` (default: o do proprio harness)
+reindexar_casa() {  # $1=commit que passou a ser servido
+  local sha="$1" ingestor uso rc=0
+  [ "${PF_CASA_REINDEXA:-1}" = "1" ] || { echo "casa:      gancho desligado (PF_CASA_REINDEXA=0)"; return 0; }
+  ingestor="${PF_ACERVO:-$HARNESS/bin/acervo}"
+  if [ ! -x "$ingestor" ]; then
+    echo "casa:      aviso — verbo \`acervo\` nao encontrado em $ingestor; indice fica no sha anterior" >&2
+    return 0
+  fi
+  # Guarda: so dispara se o verbo ANUNCIAR o sub-ato. `acervo ingerir <raiz> --apply` existe
+  # hoje e escreve; mandar `--casa` para uma versao que nao o conhece seria disparar ingestao
+  # de OBRA com o snapshot como raiz. O uso do verbo e o golden record da forma dele — nao
+  # anunciando `--casa`, o gancho declara e sai 0.
+  uso="$("$ingestor" 2>&1 || true)"
+  case "$uso" in
+    *--casa*) : ;;
+    *) echo "casa:      aviso — \`acervo\` ainda nao serve \`ingerir --casa\`; indice nao reindexado" >&2
+       echo "           (o sub-ato e do passo 2 da spec_acervo-casa; a publicacao esta feita)" >&2
+       return 0 ;;
+  esac
+  "$ingestor" ingerir --casa --sha "$sha" --de "$MORADA/refs/$sha/$SUBARVORE" --apply || rc=$?
+  if [ "$rc" = 0 ]; then
+    echo "casa:      indice reindexado no sha ${sha:0:7}"
+  else
+    echo "casa:      aviso — reindexacao saiu $rc; indice segue no sha anterior" >&2
+    echo "           (o sub-ato \`acervo ingerir --casa\` e do passo 2 da spec_acervo-casa)" >&2
+  fi
+  return 0
+}
+
 # ---- ato: estado ------------------------------------------------------------
 if [ "${1:-}" = "estado" ]; then
   if [ -L "$MORADA/current" ]; then
@@ -120,6 +170,8 @@ if [ "${1:-}" = "reverter" ]; then
   antes="$( [ -L "$MORADA/current" ] && basename "$(readlink "$MORADA/current")" || echo nenhum )"
   apontar_current "$destino"
   echo "revertido: current  ${antes:0:7} -> ${destino:0:7}  (ref ja publicado, imutavel)"
+  # Reverter tambem troca o que e servido: o indice da casa segue o ponteiro, nao o relogio.
+  reindexar_casa "$destino"
   exit 0
 fi
 
@@ -176,5 +228,8 @@ else
   validar_snapshot "$DEST" || exit 1
   apontar_current "$SHA"
   echo "current:   ${atual:0:7} -> ${SHA:0:7}"
+  # So aqui: current mudou de sha, entao o indice da casa esta velho por definicao.
+  # Quando o ponteiro ja estava neste sha (ramo acima), nao ha o que aposentar.
+  reindexar_casa "$SHA"
 fi
 echo "servido em: $MORADA/current/$SUBARVORE"
