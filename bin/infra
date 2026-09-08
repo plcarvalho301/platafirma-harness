@@ -3,7 +3,7 @@
 # capacidade: infra
 # dono: claudinho-TI
 # use para: contêiner, unit, timer, restart, logs, saúde, backup
-# atos: estado, saude, logs, restart, unit-env, backup, cache
+# atos: estado, saude, logs, restart, unit-env, instalar, backup, cache
 # forma: log
 # cauda: sim
 # Encapsula as três pegadinhas conhecidas: DOCKER_HOST rootless, restart que
@@ -22,6 +22,7 @@ uso:
   infra restart <alvo> [--nao-esperar]  contêiner ou unit --user; confere antes de dizer ok
   infra unit-env <unit> [--ver | CHAVE=VALOR...]  drop-in de ambiente da unit --user (daemon-reload; restart e outro ato)
   infra cache [ver|vram|disco]   ver o que ocupa VRAM e disco; liberar e explicito
+  infra instalar <verbo>|--todos assenta verbo do clone do harness em ~/AI/bin (de onde a porta roda)
   infra backup [--json]          por alvo declarado: quando rodou, se saiu bem, quantas geracoes
 
 Leitura aceita alvo opcional; sem alvo, olha tudo. Mutação exige alvo explícito e
@@ -497,6 +498,49 @@ backup() {
   INFRA_BACKUPS_REG="$reg" python3 "$HOME/AI/platafirma-harness/bin/_infra-backup.py" "$@"
 }
 
+# Assenta um verbo do clone do harness no bin servido pela porta (~/AI/bin), de onde
+# a porta executa a cada chamada (stateless: le o bin no ato, sem cache). Fecha o vao
+# medido no #3019: verbo novo commitado+empurrado morria no clone porque nada, por verbo
+# servido, copiava bin/<v> do clone para ~/AI/bin. Nao exige sudo — e a conta escrevendo
+# no proprio home; e infra (plataforma), nao deploy (release de stack).
+#
+# Contencao ESTRUTURAL: (1) o verbo e slug simples [a-z0-9-], nunca caminho — `..`,
+# barra e absoluto recusam; (2) a fonte e SEMPRE $HARNESS/bin/<v>, o clone do harness,
+# nunca caminho do chamador; (3) o destino e SEMPRE $HOME/AI/bin/<v>, fixo. O chamador
+# escolhe QUAL verbo, nunca de onde nem para onde. `--todos` reassenta o bin inteiro a
+# partir do clone (menos os que ja estao iguais), para o caso de bootstrap/deriva.
+instalar() {
+  local BIN_SERVIDO="${PF_BIN_SERVIDO:-$HOME/AI/bin}"
+  local HARNESS="${PF_HARNESS:-$HOME/AI/platafirma-harness}"
+  local FONTE="$HARNESS/bin"
+  [ -d "$FONTE" ] || { echo "erro: fonte '$FONTE' nao existe — clone do harness ausente?" >&2; exit 3; }
+  mkdir -p "$BIN_SERVIDO"
+
+  if [ "${1:-}" = "--todos" ]; then
+    local n=0 v base
+    for v in "$FONTE"/*; do
+      [ -f "$v" ] || continue
+      base="$(basename "$v")"
+      if ! cmp -s "$v" "$BIN_SERVIDO/$base"; then
+        install -m 0755 "$v" "$BIN_SERVIDO/$base" && n=$((n+1))
+      fi
+    done
+    echo "instalados/atualizados: $n verbo(s) em $BIN_SERVIDO (fonte: $FONTE)"
+    return
+  fi
+
+  local v="${1:-}"
+  [ -n "$v" ] || { echo "uso: infra instalar <verbo> | --todos" >&2; exit 2; }
+  case "$v" in
+    */*|.*|*..*) echo "erro: '$v' e slug de verbo, nao caminho" >&2; exit 4 ;;
+    *[!a-z0-9._-]*) echo "erro: nome de verbo invalido: '$v' — use [a-z0-9._-]" >&2; exit 4 ;;
+  esac
+  [ -f "$FONTE/$v" ] || { echo "erro: '$v' nao existe em $FONTE — commite+empurre no harness antes" >&2; exit 3; }
+  install -m 0755 "$FONTE/$v" "$BIN_SERVIDO/$v" \
+    || { echo "erro: install falhou em $BIN_SERVIDO/$v" >&2; exit 3; }
+  echo "instalado: $v -> $BIN_SERVIDO/$v (0755, fonte $FONTE/$v)"
+}
+
 # --- despacho ---------------------------------------------------------------
 
 # --ajuda UNIVERSAL, sem efeito colateral (card #2868, ex-#2274 defeito 4). ANTES do
@@ -517,6 +561,7 @@ case "$cmd" in
   cache)     cache "${1:-ver}" ;;
   backup)    backup "$@" ;;
   unit-env)  unit_env "$@" ;;
+  instalar)  instalar "$@" ;;
   restart) [ $# -ge 1 ] || { echo "erro: restart exige alvo explícito — não reinicia tudo." >&2; exit 2; }
            restart "$@" ;;
   compose) echo "erro: promover release saiu do \`infra\` — capacidade \`mudanca\`, verbo \`deploy\`." >&2
