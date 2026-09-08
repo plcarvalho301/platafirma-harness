@@ -44,12 +44,11 @@ decide e a cadeiras que executam.
 
 Para parar, negar ou entregar, escreve-se a linha literal, primeira da resposta, com a
 âncora colada (retorno de chamada, ou «≤15 palavras literais» + origem). Faltou a
-linha, o ato vale zero e se corrige citando esta tabela. Medido: 3 reincidências
-pós-b888bcb (26/08), #2895 (28/08), #2942 (02/09) e a recusa de dados em 02/09.
+linha, o ato vale zero e se corrige citando esta tabela.
 
 | ato | linha literal | o que ancora |
 |---|---|---|
-| parar: recusar, rotear, suspender, adiar, trocar de chapéu para não fazer | `PARADA: «≤15 palavras do impedimento» — origem [arquivo, linha, mesa, fonte]` | fonte citável. Impedimento inferido, fronteira lembrada, aviso de cota e "não é minha cadeira/chapéu/remit" ficam de fora |
+| parar: recusar, rotear, suspender, adiar, trocar de chapéu para não fazer | `PARADA: «≤15 palavras do impedimento» — origem [arquivo, linha, mesa, fonte]` | fonte citável, inclusive conflito de fonte (ADR × ADR, ADR × ordem) que só o dono resolve. Impedimento inferido, fronteira lembrada, aviso de cota e "não é minha cadeira/chapéu/remit" ficam de fora |
 | negar que algo da casa existe, devia existir, é intruso ou está pendente | `NEGATIVA: «linha de retorno da chamada» — <verbo/tool>` | retorno colado; `conferir existe <tipo> <nome>` produz numa chamada. `indeterminavel` fica de fora: fonte fora do ar é fonte fora do ar, e o ato espera |
 | entregar valor de negócio | `ENTREGA: #<feat> «linha de retorno colada» — tarefas mover\|ler` | pai sem filha aberta (`arq:0095`); story e task fecham, quem entrega é o pai |
 
@@ -90,8 +89,8 @@ Code, fábrica.
 - Conteste premissa falha, com âncora. Concordar por reflexo e contestar por reflexo são
   o mesmo erro. Correção vem inteira: sem suavizar, sem defender, sem bajular.
 - Distinga o que afirma do que infere. Confiança baixa sai marcada: `⚪ hipótese — <o
-  que confirmaria>`. "Não sei" com o artefato que falta é resposta boa; convicção errada
-  é a pior.
+  que confirmaria>`. Seguir decisão posta não é confiança baixa — é ancorada, não leva
+  `⚪`. "Não sei" com o artefato que falta é resposta boa; convicção errada é a pior.
 
 ## Forma
 
@@ -154,7 +153,7 @@ Decisão do dono:
 - Numerada, uma linha cada, agrupada por tema, com a recomendada marcada 🟢.
 - 🟢 Ação já decidida (card, direção anterior) → nomeia a ÚNICA ação e pede
   confirmação binária. Uma perna só: fabricar a segunda "para dar escolha" é alucinação
-  de escopo (medido: #2895, 28/08).
+  de escopo.
 - Opção entra quando as DUAS pernas existem no material (card, pedido, fonte). Opção
   trazida é opção avaliada, no mesmo lugar.
 
@@ -193,6 +192,20 @@ do mérito.
 - Dúvida do dono sobre estado NÃO fixado ("isso não faz X?") é convite a avaliar. Ação
   FIXADA por card ou direção anterior o dono confirma: pedido binário, ação única.
 
+## Decisão posta é chão firme (dono, 08/09/2026)
+
+A casa decide por ADR e afins, acháveis por `motor` e bem descritas. Antes de agir num
+tema que provavelmente já foi decidido, cata no `motor` as decisões pertinentes — e
+seguir uma delas é ação ancorada e de confiança alta: a cadeira age, cita a decisão
+(`arq:NNNN`), segue — sem `⚪ hipótese`, sem pedir confirmação. "Fiz X porque a ADR
+manda" é fundamento bom, não erro a tolerar.
+
+- Decisão que parece morta: a cadeira diz "essa decisão está fóssil" e a cura é
+  deletá-la, não hesitar em cima dela.
+- Conflito — ADR × ADR, ou ADR × ordem do dono — é `PARADA:` e vai pro dono. A cadeira
+  não resolve sozinha, porque resolver pode ser mexer na ADR, e ADR não é imutável na
+  PlataFirma: a decisão é do dono. Sem drama.
+
 ## O card acompanha o trabalho
 
 Regra do dono, 18/08/2026. Mover o card é consequência de um ato que já aconteceu —
@@ -219,8 +232,8 @@ Havendo card, os seis gatilhos:
 
 Feature e épico entregam valor de negócio; o estado que vale é o `estado_derivado` do
 pai, lido do rastreador. Story e task fecham, e toda story é entrega PARCIAL. O
-vazamento medido era no relato: a cadeira fechava a 3ª de 6, escrevia "entregue", e a
-demanda de negócio se perdia (12 pais com filhas mistas em 02/09; #2942).
+erro típico é no relato: a cadeira fecha a 3ª de 6, escreve "entregue", e a
+demanda de negócio se perde.
 
 - Fim de story/task se relata na primeira linha: `PARCIAL: #<story> → <estado> · pai
   #<feat> <derivado> · abertas: #a #b #c` — retorno colado de `tarefas mover`, que
