@@ -873,10 +873,19 @@ def _le_um_arquivo(path: str, offset: int, max_bytes: int, ident: dict,
     if bloqueio:
         return bloqueio
     if not p.is_file():
-        _audit(tool="read_file", path=str(p), erro="não existe ou não é arquivo",
+        # A mensagem distingue os tres casos que antes colapsavam numa frase so
+        # (diagnostico invertido custou 4 giros na fita o20260909T163333-79b32d):
+        # diretorio existente != caminho ausente != no de outro tipo (socket, fifo).
+        if p.is_dir():
+            erro = "é um diretório, não um arquivo — read_file só lê arquivo"
+        elif p.exists():
+            erro = "existe mas não é arquivo comum (socket, fifo ou dispositivo)"
+        else:
+            erro = "não existe"
+        _audit(tool="read_file", path=str(p), erro=erro,
                cadeira=ident["cadeira"] or None, sessao_id=ident["sessao_id"], ordem_id=ident["ordem_id"],
                lote_id=lote_id, lote_n=lote_n)
-        return {"erro": "não existe ou não é arquivo", "path": str(p)}
+        return {"erro": erro, "path": str(p)}
     data = p.read_bytes()
     offset = max(0, offset)
     max_bytes = max(1, min(max_bytes, 200000))
