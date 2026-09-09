@@ -236,7 +236,14 @@ trouxe o schema. Nenhum destes precisou de handoff.
 ops-server marcava 07/09 no mesmo instante. Consequência prática já sentida: id de carta da
 fila não serve para datar nada, e data escrita à mão em ADR/spec pode divergir do id do
 artefato que a acompanha. Contorno na data: datar o conteúdo pelo que foi MEDIDO (sha do
-clone servido), não pelo relógio. Encaminhado a ninguém ainda — se reaparecer, é de TI.
+clone servido), não pelo relógio.
+→ FECHADO no mesmo dia, e a conclusão muda: no fim da fita, `fila enviar` cunhou
+`20260909T205512` — 09/09, certo. Entre as duas medidas o MCP caiu e voltou várias vezes,
+e o mais provável é que o ops-server tenha reiniciado e o relógio acertado; NÃO há relógio
+sistematicamente errado a reportar, e não é de TI. O que fica de lição é outro: **id de
+carta da fila carimba o instante do SERVIÇO, e o serviço pode ter reiniciado no meio da
+fita** — então id de carta não ordena eventos com segurança nem data conteúdo. Datar pelo
+medido (sha do clone servido) continua sendo a régua, agora por razão mais forte.
 
 09/09/2026 — **o passo 3 do `descansar fita` não roda na superfície do Code (fita `dados`),
 e isso é da instrução, não da fita.** O passo manda `memory_user_edits view` para triar a
