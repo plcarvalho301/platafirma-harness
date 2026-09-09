@@ -223,6 +223,20 @@ incompleta quando ela está inteira do outro lado do link. Quem escreve verbo em
 peças (porta + miolo em `_<verbo>/`) paga isso na primeira vez que o verbo é servido em
 vez de rodado do clone.
 
+## Opção declarada só no parser PAI fica inalcançável depois do subcomando
+
+Em `argparse`, o parser pai para de processar as próprias opções assim que casa um
+subcomando: tudo o que vem depois é do subparser. Flag global declarada só no pai
+(`ap.add_argument("--eu")` + `add_subparsers`) some nas duas posições — antes do ato
+ela não é ato, e depois do ato o subparser não a conhece e ela cai calada no resto do
+`parse_known_args`. O defeito só aparece quando alguém tenta usar a flag, e a mensagem
+de erro do verbo continua ensinando-a como cura.
+
+O agravante não é o argparse, é o par: **erro que nomeia uma cura inalcançável custa
+mais do que erro que não nomeia cura nenhuma** — quem lê tenta, tenta nas duas ordens,
+e só então vai ler o código. São três giros por encontro, em toda cadeira, para sempre.
+Ao escrever recusa que ensina a saída, a saída se roda uma vez antes de virar texto.
+
 ## Diário de bordo
 
 07/09/2026 — `conta-abertura` (instrumento de custo do pacote) morria com `python: can't
@@ -270,3 +284,41 @@ encontrado NA DATA 07/09/2026 foi empurrar o ramo (39aeae7, para não perder), `
 platafirma-harness main`, reescrever os dois cadernos em main e devolver o clone ao ramo
 da fábrica no fim. Antes de commitar em clone compartilhado, `repo estado` — o ramo é
 estado de outra sessão, não desta.
+
+07/09/2026 — `fila status` e `fila ler ia` recusaram com `nao sei quem esta operando a
+fila` mesmo com o `sessao_id` portado em toda chamada, por `run_command` e pela tool;
+tentei `--eu ia` antes do ato (`erro: ato desconhecido: '--eu'`, do `intercepta()` do
+#3016) e depois do ato (engolido pelo `parse_known_args`, `args.eu` segue None); `minuta
+ler` caiu no mesmo `exporte PF_CADEIRA`. Quatro giros. Causa: `sessao:{id}` não existia
+no msg-mem — a fita do chat abre pelo CLI `monta-sessao`, e o `SET` morava só na porta.
+— contorno encontrado NA DATA 07/09/2026 foi uma chamada de `monta_sessao` pela tool
+(que grava a chave), e depois disso a MESMA chamada de `fila` passou; correção definitiva
+commitada no mesmo dia em `platafirma-harness@6d25443` (quem cunha registra).
+
+07/09/2026 — `write_file` com `trecho` recusou com «`antes` ocorre 0 vez(es)» usando uma
+âncora copiada do retorno de `read_file`. Causa: a poda da porta LAVA linha em branco
+(`poda_aviso: lavado (branco)`), então o texto lido tem uma linha em branco onde o
+arquivo tem duas — âncora que atravessa linha vazia nunca casa. — contorno encontrado NA
+DATA 07/09/2026 foi ancorar numa Única linha não vazia (ex.: a assinatura da função
+seguinte) e reconstruir o espaçamento no `depois`.
+
+07/09/2026 — `monta-sessao ia --so-chapeu --sessao-id <uuid>` pela porta devolveu
+`{recusado, verbo: monta-sessao, motivo: "sem verbo", sugestao: null}`: o montador não é
+verbo servido, só a tool `monta_sessao` o alcança — e pela tool não dá para exercitar o
+caminho do CLI direto, porque a porta grava a chave de qualquer jeito. — contorno
+encontrado NA DATA 07/09/2026 foi provar pelo campo novo `sessao.registrada` do próprio
+pacote, que é calculado DENTRO do montador, antes de a porta tocar em nada.
+
+07/09/2026 — `mesa anota <chapeu>` respondeu `slot contexto reescrito (1 linhas)`: o ato
+SUBSTITUI o slot de prosa inteiro (substrato velho) e só depois avisa, em stderr, que o
+que tem ato pendente vai em `mesa item`. Nada se perdeu porque os itens vivem noutro
+substrato, mas a prosa anterior do slot foi embora. — contorno encontrado NA DATA
+07/09/2026 foi usar `mesa item <chapeu> --ato ... --alvo ...` (corpo no stdin) e tratar
+`mesa anota` como escrita destrutiva de um campo só.
+
+07/09/2026 — reincidência, mesmo dia: o clone de `platafirma-harness` estava outra vez
+em `fabrica/3016-help-erro-gracioso` na hora de commitar o conserto do montador. —
+contorno encontrado NA DATA 07/09/2026 foi o mesmo (`repo estado` antes, `repo ramo
+<repo> main`, que carrega a árvore suja junto, commitar e devolver o clone ao ramo da
+fábrica no fim). Duas vezes em um dia: `repo estado` antes de commitar deixou de ser
+zelo e virou passo.

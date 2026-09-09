@@ -51,6 +51,15 @@ aqui: desce a card, commit ou wiki. Corpo lido sob demanda (`mesa caderno contex
   contra a janela do Claude, "trocar de modelo" continua verdadeiro no papel e falso na
   primeira fita longa — a troca só é real se o orçamento de abertura couber na janela
   menor com folga para a conversa.
+- Composição medida em 07/09/2026 (cadeira `ia`, abertura COM pergunta, 8.194 tokens):
+  conduta do dono 4.476 (54,6%) · ofício 1.495 (18,2%) · mesa 1.188 (14,5%) · persona 744
+  (9,1%) · alias 106 · índice de cadernos 83 · `acervo-consultado` 102 (1,2%). O RAG de
+  obras deixou de ser o gasto que se corta — o portão de cobertura (arq:0101 R5) já o
+  retém quando o sinal fica abaixo do piso, e os 28% que a bibliografia da casa ainda
+  cita são o TETO de quando ele serve, não a média. O que sobrou é texto de conduta:
+  abertura mínima que corte ofício, alias e índice fica em ~5,2k (36% a menos) e o
+  `dono.md` segue sendo metade do pacote. Antes de vender ganho de abertura, medir QUAL
+  peça paga — a peça óbvia já foi podada por outro mecanismo.
 
 ## Golden record que só sabe CRIAR acumula erro até virar carta
 
@@ -69,3 +78,22 @@ de obra, classificação de gente) tem de ser repontado ANTES — e a FK que tra
 até isso acontecer é feature, não obstáculo. Subsumir também não é esquecer: o termo
 que sai do golden record vira rótulo alternativo do que fica, senão quem procura pelo
 nome antigo não acha nada.
+
+## A sessão se registra no ATO de nascer, nunca na volta pela camada que a consome
+
+Quem cunha o identificador tem o dado na mão; quem o consome, não. Registrar o estado
+da sessão na volta — na porta, no adaptador, em quem recebe — abre uma janela do
+tamanho do resto da montagem mais um round-trip, e dentro dela a fita já carrega um id
+legítimo que ninguém do outro lado sabe de quem é. A janela não aparece em teste: quem
+abre PELA camada que registra nunca a vê, e quem abre pelo caminho direto falha longe
+dali, num verbo qualquer que só sabe dizer "não sei quem está operando". Duas vias de
+abertura, uma só registrando, e a assimetria é invisível de dentro de cada uma.
+
+Régua: **o ato que cria a entidade grava o estado dela, síncrono, antes de devolver** —
+e cria como PRIMEIRA ação, não depois do trabalho caro. Assíncrono aqui não serve mesmo
+sendo barato: devolver o pacote antes de a chave existir põe a primeira chamada da fita
+exatamente na janela que se quer fechar.
+
+Medido e corrigido em 07/09/2026 (`platafirma-harness@6d25443`): `monta-sessao` cunhava
+o `sessao_id` no FIM da montagem e o `SET sessao:{id}` morava só no caminho da tool, de
+modo que abertura por CLI direto (fita do chat e fábrica) nascia sem registro.
