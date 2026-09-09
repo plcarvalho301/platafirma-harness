@@ -456,7 +456,7 @@ def serve(peca, cadeira, persona=None, chapeu=None):
 
 
 # ------------------------------------------------------------------ registro do pacote
-def registra_pacote(cadeira, envelopes, montador_sha):
+def registra_pacote(cadeira, envelopes, montador_sha, sid=None):
     """Uma linha por peca servida (§6.6). Sem isto, orcamento de janela e declaracao.
     Falha aqui NAO derruba a abertura: devolve o motivo, e o pacote sai mesmo assim."""
     fid = (os.environ.get("PF_FITA") or "").strip()
@@ -479,8 +479,13 @@ def registra_pacote(cadeira, envelopes, montador_sha):
         sup = "desconhecida"
     try:
         with psycopg.connect(dsn, connect_timeout=3) as con, con.cursor() as cur:
-            cur.execute("INSERT INTO sessao.fita (id, persona, superficie) VALUES (%s,%s,%s) "
-                        "ON CONFLICT (id) DO NOTHING", (fid, cadeira, sup))
+            # sessao_id preenche o par sessao<->fita (arq:0091/0087 #3030): a fita
+            # aponta a sessao a que pertence. COALESCE no UPDATE nao apaga um sessao_id
+            # ja gravado se uma 2a passada vier sem sid.
+            cur.execute("INSERT INTO sessao.fita (id, persona, superficie, sessao_id) "
+                        "VALUES (%s,%s,%s,%s) ON CONFLICT (id) DO UPDATE SET "
+                        "sessao_id = COALESCE(EXCLUDED.sessao_id, sessao.fita.sessao_id)",
+                        (fid, cadeira, sup, sid))
             cur.execute("INSERT INTO sessao.pacote (fita_id, montador_sha, tokens) "
                         "VALUES (%s,%s,%s) ON CONFLICT (fita_id) DO UPDATE SET "
                         "montado_em = now(), montador_sha = EXCLUDED.montador_sha, "
@@ -924,7 +929,7 @@ def monta(cadeira, atualizar, pergunta=None, forcado_chapeu=None, so_chapeu=Fals
             "metodo_tokens": medidor()[1],
             "montador_sha": montador_sha,
             "montado_em": int(time.time()),
-            "registro": registra_pacote(cadeira, servidas, montador_sha),
+            "registro": registra_pacote(cadeira, servidas, montador_sha, sid),
         },
         "pecas": servidas,
         "chapeu": (chapeu_env["slug"] if chapeu_env else None),
