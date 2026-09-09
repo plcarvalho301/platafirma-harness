@@ -111,12 +111,13 @@ conforme() {
     ingerir:obra:*|ingerir:registro:*)
         exec "$ATOS/../ingerir" --lote "$entidade" "$@" ;;
     ingerir:casa:*)
-        echo "acervo ingerir casa: o cliente de casa ainda nao existe (card #3027)." >&2
-        echo "  o servidor ja serve: POST /acervo/casa/lotes e .../aplicar." >&2
-        echo "  recusa deliberada: o cliente de OBRA subiria o .md ao MinIO e criaria uma" >&2
-        echo "  obra, em vez de gravar em acervo.casa. Errado calado e pior que parado." >&2
-        echo "  $SPEC" >&2
-        exit 2 ;;
+        # $entidade e a <raiz> (lista curada ou clone). O cliente magro de casa (card #3027,
+        # rota POST /acervo/casa/lotes) parseia a lista, resolve sha por repo, le o corpo do
+        # git e sobe no payload -- sem MinIO, sem OCR. Nao passa pelo cliente de OBRA.
+        case "$entidade" in
+          --*) exec "$ATOS/casa-ingerir" "$@" ;;
+          *)   exec "$ATOS/casa-ingerir" "$entidade" "$@" ;;
+        esac ;;
     # --- casa generico: especies que vivem na TABELA acervo.casa (arq:0106) ---
     # As especies com fonte propria (adr, pagina-wiki, stack, ferramental) ja foram
     # capturadas acima. O que sobra em ler/listar casa <especie> vai ao sub-ato casa,

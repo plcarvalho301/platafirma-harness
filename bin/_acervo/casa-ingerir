@@ -1,0 +1,332 @@
+#!/usr/bin/env python3
+# _acervo/casa-ingerir — cliente fino da rota de ingestao da particao `casa` (card #3027).
+# capacidade: incorporacao
+# dono: claudinho-dados
+#   (recorte de dados: como a lista curada vira {repo,path,sha_ref,dono,tipo,natureza,ciclo}
+#    e' materia de dados · dono; o mecanismo HTTP espelha bin/ingerir de obra · construcao TI)
+#
+# Doc de casa e' TEXTO DE GIT: identidade (repo,path), versao = sha do ref publicado do repo,
+# corpo no payload — sem MinIO, sem OCR, sem bancada (spec_ingestao-casa, decisao B). Este
+# cliente:
+#   1. le a lista curada (docs/varredura-casa-candidatos.md do platafirma-arquitetura):
+#      repo do titulo `## <repo>`, especie PROPOSTA de `### ... (<familia>)`, path dos bullets.
+#   2. resolve o sha_ref por `git rev-parse HEAD` de cada clone em $RAIZ.
+#   3. le o corpo de cada doc do clone.
+#   4. deriva dono (cadeira dona do repo), natureza (golden), ciclo (publicado) — default,
+#      sobrescrivivel por doc na propria lista via sufixo ` :: dono=<c> natureza=<n> ciclo=<c>`.
+#   5. POST /acervo/casa/lotes (dry-run) e .../aplicar (--apply), com poll — espelha ingerir.
+#
+# A especie e' PROPOSTA: quem decide e' o servidor contra acervo.especie_tipo. Doc cuja
+# especie proposta nao resolver REPROVA no dry-run, com o nome — e' o sinal de triagem fina
+# do passo (e), nao erro do cliente.
+import argparse
+import json
+import os
+import re
+import subprocess
+import sys
+import time
+
+import requests
+
+HARNESS_DIR = os.path.dirname(os.path.dirname(os.path.realpath(__file__)))
+if HARNESS_DIR not in sys.path:
+    sys.path.insert(0, HARNESS_DIR)
+
+try:
+    from recuperacao.adaptadores.motor_acervo_rest import BASE as DEFAULT_BASE, TOKEN as DEFAULT_TOKEN
+except ImportError:
+    DEFAULT_BASE = "http://127.0.0.1:8100"
+    DEFAULT_TOKEN = ""
+
+BASE = (os.environ.get("RAG_API_BASE") or DEFAULT_BASE).rstrip("/")
+TOKEN = os.environ.get("RAG_API_TOKEN") or DEFAULT_TOKEN
+RAIZ = os.environ.get("PF_REPO_RAIZ") or os.path.expanduser("~/AI")
+
+# Familia da secao `### ... (<familia>)` -> especie PROPOSTA (slug de especie_tipo). A familia
+# e' grossa; a especie proposta e' a mais comum daquela familia na lista. Doc que fugir disso
+# reprova no dry-run e recebe override por linha.
+FAMILIA_ESPECIE = {
+    "instrumento-de-processo": "nota-tecnica",
+    "padrao-tecnico": "spec",
+    "autoral": "verbete-de-conceito",
+}
+# Palavra na linha do `###` -> especie proposta (vence a familia quando bate).
+PISTA_ESPECIE = {
+    "benchmark": "benchmark",
+    "spec": "spec",
+    "padrão": "spec",
+    "padrao": "spec",
+    "parecer": "parecer",
+    "nota-técnica": "nota-tecnica",
+    "nota-tecnica": "nota-tecnica",
+    "referência": "referencia",
+    "referencia": "referencia",
+    "guia": "guia",
+    "runbook": "runbook",
+    "glossário": "verbete-de-conceito",
+    "glossario": "verbete-de-conceito",
+    "ontologia": "verbete-de-conceito",
+    "medição": "nota-tecnica",
+    "medicao": "nota-tecnica",
+}
+# Repo -> cadeira dona (default do campo `dono`). Sobrescrivivel por doc.
+REPO_DONO = {
+    "platafirma-arquitetura": "arquiteto",
+    "platafirma-conhecimento": "dados",
+    "platafirma-core": "ti",
+    "platafirma-motor": "dados",
+}
+
+USO = """uso:
+  acervo ingerir casa <lista.md|clone> [--apply] [--motor rag] [--ate vetor]
+                                       [--autor <slug>] [--limite N] [--so <substr>] [--json]
+
+  <lista.md>   arquivo de varredura curada (default:
+               platafirma-arquitetura/docs/varredura-casa-candidatos.md)
+  --limite N   ingere so os N primeiros itens (dry-run pequeno do passo e)
+  --so <s>     so itens cujo repo@path contem <s> (recorte para prova de ponta)
+  --apply      aplica (default: dry-run do plano)
+  --ate        catalogar | chunk | embed | vetor (default: vetor)
+"""
+
+def morre(msg, code=1):
+    sys.stderr.write("acervo ingerir casa: " + msg.rstrip("\n") + "\n")
+    sys.exit(code)
+
+def sha_do_repo(repo):
+    """HEAD curto do clone em RAIZ. Repo ausente -> None (item pula com aviso)."""
+    clone = os.path.join(RAIZ, repo)
+    if not os.path.isdir(os.path.join(clone, ".git")):
+        return None
+    try:
+        r = subprocess.run(["git", "-C", clone, "rev-parse", "HEAD"],
+                           capture_output=True, text=True, check=True)
+        return r.stdout.strip()
+    except (subprocess.CalledProcessError, FileNotFoundError):
+        return None
+
+def _override(cauda):
+    """`path :: dono=x natureza=y ciclo=z tipo=w` -> (path, dict). Sufixo opcional por linha."""
+    ov = {}
+    if "::" in cauda:
+        path, resto = cauda.split("::", 1)
+        for par in resto.split():
+            if "=" in par:
+                k, v = par.split("=", 1)
+                if k in ("dono", "natureza", "ciclo", "tipo"):
+                    ov[k] = v.strip()
+        return path.strip(), ov
+    return cauda.strip(), ov
+
+def parse_lista(caminho):
+    """Le a lista curada. Devolve itens {repo, path, tipo, dono, natureza, ciclo}."""
+    repo_atual = None
+    especie_atual = None
+    itens = []
+    with open(caminho, encoding="utf-8") as f:
+        for linha in f:
+            s = linha.rstrip("\n")
+            m_repo = re.match(r"^##\s+(\S+)\s*$", s)
+            if m_repo:
+                # `## platafirma-core / motor` -> primeiro token; docs trazem o repo no path.
+                repo_atual = m_repo.group(1).strip()
+                especie_atual = None
+                continue
+            m_sec = re.match(r"^###\s+(.+)$", s)
+            if m_sec:
+                rotulo = m_sec.group(1).lower()
+                especie_atual = None
+                for pista, esp in PISTA_ESPECIE.items():
+                    if pista in rotulo:
+                        especie_atual = esp
+                        break
+                if not especie_atual:
+                    m_fam = re.search(r"\(([a-z-]+)\)", rotulo)
+                    if m_fam:
+                        especie_atual = FAMILIA_ESPECIE.get(m_fam.group(1))
+                continue
+            m_item = re.match(r"^-\s+(.+)$", s)
+            if m_item and repo_atual:
+                cauda, ov = _override(m_item.group(1))
+                # path pode trazer o repo como prefixo (secao "core / motor"): se o primeiro
+                # segmento e' um clone conhecido, ele e' o repo e sai do path.
+                repo = repo_atual
+                path = cauda
+                seg0 = cauda.split("/", 1)[0]
+                if seg0 in REPO_DONO and os.path.isdir(os.path.join(RAIZ, seg0)):
+                    repo = seg0
+                    path = cauda.split("/", 1)[1]
+                itens.append({
+                    "repo": repo,
+                    "path": path,
+                    "tipo": ov.get("tipo") or especie_atual,
+                    "dono": ov.get("dono") or REPO_DONO.get(repo, "arquiteto"),
+                    "natureza": ov.get("natureza") or "golden",
+                    "ciclo": ov.get("ciclo") or "publicado",
+                })
+    return itens
+
+def montar_itens(curados, limite, so):
+    """Resolve sha e le corpo de cada item. Devolve (itens_payload, pulos)."""
+    itens, pulos = [], []
+    sha_cache = {}
+    for it in curados:
+        chave = f"{it['repo']}@{it['path']}"
+        if so and so not in chave:
+            continue
+        if it["repo"] not in sha_cache:
+            sha_cache[it["repo"]] = sha_do_repo(it["repo"])
+        sha = sha_cache[it["repo"]]
+        if not sha:
+            pulos.append((chave, "clone ausente em " + RAIZ))
+            continue
+        fp = os.path.join(RAIZ, it["repo"], it["path"])
+        if not os.path.isfile(fp):
+            pulos.append((chave, "arquivo nao existe no clone"))
+            continue
+        try:
+            with open(fp, encoding="utf-8", errors="replace") as f:
+                corpo = f.read()
+        except OSError as e:
+            pulos.append((chave, f"leitura falhou: {e}"))
+            continue
+        titulo = None
+        for linha in corpo.splitlines()[:15]:
+            t = linha.strip()
+            if t.startswith("# ") and not t.startswith("##"):
+                titulo = t.lstrip("#").strip()
+                break
+        itens.append({
+            "repo": it["repo"], "path": it["path"], "sha_ref": sha,
+            "dono": it["dono"], "tipo": it["tipo"] or "",
+            "natureza": it["natureza"], "ciclo": it["ciclo"],
+            "titulo": titulo or os.path.splitext(os.path.basename(it["path"]))[0],
+            "corpo": corpo, "referentes": [],
+        })
+        if limite and len(itens) >= limite:
+            break
+    return itens, pulos
+
+def tabela_plano(lote, pulos):
+    L = []
+    total = len(lote.get("itens", []))
+    resumo = {}
+    for it in lote.get("itens", []):
+        resumo[it.get("veredito", "?")] = resumo.get(it.get("veredito", "?"), 0) + 1
+    L.append(f"Plano de ingestao casa: lote {lote.get('id')} (dry-run)")
+    L.append(f"Autor: {lote.get('autor')} · Motor: {lote.get('motor')} · Ate: {lote.get('ate')}")
+    L.append(f"Resumo: total={total} | " +
+             " | ".join(f"{k}={v}" for k, v in sorted(resumo.items())))
+    if pulos:
+        L.append(f"Pulados antes do envio: {len(pulos)}")
+        for chave, motivo in pulos:
+            L.append(f"    - {chave}: {motivo}")
+    L.append("")
+    L.append(f"{'#':<3} {'repo@path':<52} {'veredito':<12} portoes")
+    L.append("-" * 100)
+    for it in lote.get("itens", []):
+        pos = str(it.get("posicao", 0))
+        arq = it.get("arquivo") or "-"
+        if len(arq) > 50:
+            arq = "..." + arq[-47:]
+        ver = it.get("veredito") or "-"
+        reprova = [f"{p.get('portao')}:{p.get('detail', p.get('title', ''))}"
+                   for p in it.get("portoes", []) if p.get("resultado") == "reprovado"]
+        det = "; ".join(reprova) if reprova else "ok"
+        L.append(f"{pos:<3} {arq:<52} {ver:<12} {det}")
+    return "\n".join(L)
+
+def main():
+    ap = argparse.ArgumentParser(add_help=False)
+    ap.add_argument("lista", nargs="?", default=None)
+    ap.add_argument("--apply", action="store_true", default=False)
+    ap.add_argument("--motor", default="rag")
+    ap.add_argument("--ate", default="vetor")
+    ap.add_argument("--autor", default=None)
+    ap.add_argument("--limite", type=int, default=0)
+    ap.add_argument("--so", default=None)
+    ap.add_argument("--json", dest="como_json", action="store_true", default=False)
+    ap.add_argument("-h", "--help", "--ajuda", dest="ajuda", action="store_true", default=False)
+    args, _ = ap.parse_known_args()
+
+    if args.ajuda:
+        sys.stderr.write(USO)
+        sys.exit(0)
+    if args.ate not in ("catalogar", "chunk", "embed", "vetor"):
+        morre(f"--ate invalido: {args.ate}", 2)
+
+    lista = args.lista or os.path.join(
+        RAIZ, "platafirma-arquitetura", "docs", "varredura-casa-candidatos.md")
+    if not os.path.isfile(lista):
+        morre(f"lista curada nao encontrada: {lista}", 1)
+
+    autor = args.autor
+    if not autor:
+        cad = os.environ.get("PF_CADEIRA", "").strip().lower()
+        cad = cad.removeprefix("claudinho-").removeprefix("claudinha-")
+        autor = cad or "dados"
+
+    curados = parse_lista(lista)
+    if not curados:
+        morre(f"nenhum item na lista {lista}", 1)
+    itens, pulos = montar_itens(curados, args.limite, args.so)
+    if not itens:
+        morre("nenhum item ingerivel (todos pulados; veja motivos com --json)", 1)
+
+    headers = {}
+    if TOKEN:
+        headers["authorization"] = f"Bearer {TOKEN}"
+    payload = {"autor": autor, "motor": args.motor, "ate": args.ate, "itens": itens}
+
+    try:
+        resp = requests.post(f"{BASE}/acervo/casa/lotes", json=payload, headers=headers)
+    except requests.exceptions.RequestException as e:
+        morre(f"motor acervo indisponivel em {BASE}: {e}", 1)
+    if resp.status_code != 201:
+        try:
+            pj = resp.json()
+            morre(f"erro {resp.status_code} ({pj.get('title')}): {pj.get('detail', resp.text)}", 1)
+        except ValueError:
+            morre(f"erro {resp.status_code}: {resp.text}", 1)
+
+    lote = resp.json()
+    lote_id = lote["id"]
+
+    if not args.apply:
+        if args.como_json:
+            print(json.dumps({"lote": lote, "pulos": pulos}, indent=2, ensure_ascii=False))
+        else:
+            print(tabela_plano(lote, pulos))
+        reprovados = sum(1 for it in lote.get("itens", []) if it.get("veredito") == "reprovado")
+        sys.exit(3 if reprovados else 0)
+
+    try:
+        ra = requests.post(f"{BASE}/acervo/casa/lotes/{lote_id}/aplicar", headers=headers)
+    except requests.exceptions.RequestException as e:
+        morre(f"aplicar falhou: {e}", 1)
+    if ra.status_code not in (200, 202):
+        morre(f"aplicar {ra.status_code}: {ra.text}", 1)
+
+    while True:
+        time.sleep(1.0)
+        try:
+            rc = requests.get(f"{BASE}/acervo/lotes/{lote_id}", headers=headers)
+        except requests.exceptions.RequestException as e:
+            morre(f"poll falhou: {e}", 1)
+        if rc.status_code != 200:
+            continue
+        atual = rc.json()
+        if atual.get("estado") in ("concluido", "falhou"):
+            lote = atual
+            break
+
+    if args.como_json:
+        print(json.dumps({"lote": lote, "pulos": pulos}, indent=2, ensure_ascii=False))
+    else:
+        print(tabela_plano(lote, pulos))
+        print(f"\nestado final do lote: {lote.get('estado')}")
+    sys.exit(0 if lote.get("estado") == "concluido" else 1)
+
+if __name__ == "__main__":
+    main()
