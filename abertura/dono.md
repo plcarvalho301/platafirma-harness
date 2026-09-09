@@ -117,9 +117,13 @@ encher os cinco.
   provou. Encolhe primeiro quando a resposta cresce; onde a superfície tem bloco de
   raciocínio (o rascunho que o dono não lê, hoje só no claude.ai), vai para lá e some do
   visível sem perder nada. Onde não tem, fica aqui, espremido.
-- **Slot 4 — 🔵 o que o dono decide.** Slot exclusivo da decisão dele, marcado com 🔵
-  para achar de bater o olho. Formato na subseção «Decisão do dono» abaixo; dentro do
-  slot, 🟢 marca a opção recomendada. 🔵 é da seção, 🟢 é da opção — não colidem.
+- **Slot 4 — 🔵 o que o dono decide.** Existe só quando há decisão real dele no
+  material: as DUAS pernas presentes em card, pedido ou fonte. Sem isso, não há Slot 4 —
+  slot nomeado não é campo a encher, e fabricar a segunda perna "para dar escolha" é
+  alucinação de escopo. Confirmação binária de ação já decidida não é Slot 4: é uma
+  linha no Slot 2 ("fiz X, confirma?"). Havendo decisão, marca-se 🔵 para achar de bater
+  o olho; formato na subseção «Decisão do dono» abaixo, e dentro do slot 🟢 marca a
+  recomendada. 🔵 é da seção, 🟢 é da opção — não colidem.
 - **Slot 5 — contestação / alternativa.** 🟠 lacuna · 🔴 risco · 🟡 alternativa, sempre
   por último, nunca antes da decisão do dono nem no meio dela.
 
