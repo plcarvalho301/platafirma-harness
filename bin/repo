@@ -39,6 +39,12 @@ set -uo pipefail
 RAIZ="${PF_REPO_RAIZ:-$HOME/AI}"
 VERBO="$(basename "$0")"
 
+# git por caminho absoluto: ~/AI/bin tem um shim `git` (bilhete que so sai 2) a frente
+# do git real no PATH da porta. Chamar `git` nu aqui cai no shim e todo ato morre no
+# clone_de com exit 5 enlatado. Resolve-se o binario real UMA vez, fora do PATH.
+GIT="$(command -v /usr/bin/git /bin/git 2>/dev/null | head -1)"
+[ -x "$GIT" ] || GIT=/usr/bin/git
+
 uso() {
   cat >&2 <<EOF
 uso:
@@ -93,12 +99,12 @@ clone_de() {
   # `-e`, nao `-d`: em worktree o `.git` e ARQUIVO com o ponteiro, e worktree e clone.
   [ -e "$real/.git" ] || morre "'$nome' existe mas nao e clone git" 3
   # Clone que o git recusa (ownership de outro uid) e INDETERMINAVEL, nao vazio.
-  git -C "$real" rev-parse --git-dir >/dev/null 2>&1 \
-    || morre "indeterminavel: o git recusa o clone '$nome' — $(git -C "$real" rev-parse --git-dir 2>&1 | head -1)" 5
+  "$GIT" -C "$real" rev-parse --git-dir >/dev/null 2>&1 \
+    || morre "indeterminavel: o git recusa o clone '$nome' — $("$GIT" -C "$real" rev-parse --git-dir 2>&1 | head -1)" 5
   printf '%s' "$real"
 }
 
-ramo_atual() { git -C "$1" rev-parse --abbrev-ref HEAD 2>/dev/null; }
+ramo_atual() { "$GIT" -C "$1" rev-parse --abbrev-ref HEAD 2>/dev/null; }
 
 # git: passthrough total sobre o clone. Resolve o clone pelo `clone_de` (raiz fixa, sem
 # escape de symlink) e entrega o resto ao git, cru. Roda QUALQUER git — push e forge
@@ -109,7 +115,7 @@ ramo_atual() { git -C "$1" rev-parse --abbrev-ref HEAD 2>/dev/null; }
 ato_git() {
   local nome="${1:-}"; shift || uso
   local c; c="$(clone_de "$nome")" || exit $?
-  exec git -C "$c" "$@"
+  exec "$GIT" -C "$c" "$@"
 }
 
 ato_estado() {
@@ -228,11 +234,11 @@ ato_commitar() {
   done
   [ -n "$msg" ] || morre "falta a mensagem (-m)" 2
   local c; c="$(clone_de "$nome")" || exit $?
-  [ "$so_staged" -eq 1 ] || git -C "$c" add -A || morre "git add falhou" 3
-  git -C "$c" diff --cached --quiet && morre "nada para commitar em '$nome'" 3
-  git -C "$c" commit -m "$msg" >/dev/null || morre "git commit falhou" 3
+  [ "$so_staged" -eq 1 ] || "$GIT" -C "$c" add -A || morre "git add falhou" 3
+  "$GIT" -C "$c" diff --cached --quiet && morre "nada para commitar em '$nome'" 3
+  "$GIT" -C "$c" commit -m "$msg" >/dev/null || morre "git commit falhou" 3
   printf 'commit em %s (%s): %s\n' "$nome" "$(ramo_atual "$c")" \
-    "$(git -C "$c" log -1 --format='%h %s')"
+    "$("$GIT" -C "$c" log -1 --format='%h %s')"
 }
 
 ato_empurrar() {
@@ -242,9 +248,9 @@ ato_empurrar() {
   case "$ramo" in
     HEAD) morre "HEAD solto — troque para um ramo antes de empurrar" 4 ;;
   esac
-  git -C "$c" push -u origin "$ramo" || morre "git push falhou" 3
+  "$GIT" -C "$c" push -u origin "$ramo" || morre "git push falhou" 3
   printf 'empurrado: %s -> origin/%s (%s)\n' "$nome" "$ramo" \
-    "$(git -C "$c" log -1 --format='%h %s')"
+    "$("$GIT" -C "$c" log -1 --format='%h %s')"
 }
 
 # --- PR: o forge, unico ponto que fala com fora ------------------------------
