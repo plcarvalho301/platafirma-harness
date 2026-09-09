@@ -25,9 +25,27 @@ def erro(msg, code=1):
     sys.exit(code)
 
 
+# git por caminho absoluto: ~/AI/bin tem um shim `git` (bilhete que so sai 2) a frente
+# do git real no PATH da porta — chamar `git` nu aqui mata todo ato com exit 2 e sem
+# mensagem (capture_output engole o bilhete). Mesma cura de bin/repo.
+GIT = next((p for p in ("/usr/bin/git", "/bin/git") if os.path.exists(p)), "git")
+
+# ... e o mesmo vale para o `gh`, que e o credential helper do pull/push HTTPS: com o
+# shim a frente, a rede morre em "could not read Username". Poe-se o gh real na FRENTE
+# do PATH do subprocesso, como bin/repo faz nos atos que falam com o forge.
+_GH = next(
+    (p for p in ("/usr/bin/gh", "/bin/gh", os.path.expanduser("~/.local/bin/gh"))
+     if os.path.exists(p)),
+    None,
+)
+ENV = dict(os.environ)
+if _GH:
+    ENV["PATH"] = os.path.dirname(_GH) + ":" + ENV.get("PATH", "")
+
+
 def git(*args, check=True):
     return subprocess.run(
-        ["git", "-C", REPO, *args], capture_output=True, text=True, check=check
+        [GIT, "-C", REPO, *args], capture_output=True, text=True, check=check, env=ENV
     )
 
 

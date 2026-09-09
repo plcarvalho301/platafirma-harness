@@ -137,12 +137,12 @@ ato_estado() {
       # INDETERMINAVEL, nunca "limpo": arvore inalcancavel nao e arvore sem mudanca.
       # No mundo-alvo (#3007) a conta roda sob uid proprio, e clone de outro dono e
       # exatamente este caso — tem de aparecer, nao sumir num zero.
-      if ! ramo="$(git -C "$d" rev-parse --abbrev-ref HEAD 2>&1)"; then
+      if ! ramo="$("$GIT" -C "$d" rev-parse --abbrev-ref HEAD 2>&1)"; then
         printf '  %-28s %-34s %s\n' "$(basename "$d")" "-" \
           "indeterminavel: $(printf '%s' "$ramo" | head -1)"
         continue
       fi
-      sujo="$(git -C "$d" status --porcelain 2>/dev/null | wc -l)"
+      sujo="$("$GIT" -C "$d" status --porcelain 2>/dev/null | wc -l)"
       printf '  %-28s %-34s %s\n' "$(basename "$d")" "$ramo" \
         "$([ "$sujo" -eq 0 ] && echo limpo || echo "$sujo alteracao(oes)")"
     done
@@ -151,17 +151,17 @@ ato_estado() {
   c="$(clone_de "$nome")" || exit $?
   ramo="$(ramo_atual "$c")"
   printf '%s  ·  ramo %s\n' "$nome" "$ramo"
-  trilha="$(git -C "$c" rev-list --left-right --count "@{upstream}...HEAD" 2>/dev/null)"
+  trilha="$("$GIT" -C "$c" rev-list --left-right --count "@{upstream}...HEAD" 2>/dev/null)"
   if [ -n "$trilha" ]; then
     printf '  upstream %s  ·  atras %s  ·  a frente %s\n' \
-      "$(git -C "$c" rev-parse --abbrev-ref '@{upstream}' 2>/dev/null)" \
+      "$("$GIT" -C "$c" rev-parse --abbrev-ref '@{upstream}' 2>/dev/null)" \
       "$(printf '%s' "$trilha" | cut -f1)" "$(printf '%s' "$trilha" | cut -f2)"
   else
     printf '  sem upstream (ramo local ainda nao empurrado)\n'
   fi
-  printf '  ultimo   %s\n' "$(git -C "$c" log -1 --format='%h %s  (%an, %ar)' 2>/dev/null)"
+  printf '  ultimo   %s\n' "$("$GIT" -C "$c" log -1 --format='%h %s  (%an, %ar)' 2>/dev/null)"
   local st
-  st="$(git -C "$c" status --short 2>/dev/null)"
+  st="$("$GIT" -C "$c" status --short 2>/dev/null)"
   if [ -n "$st" ]; then printf '  arvore suja:\n%s\n' "$(printf '%s' "$st" | sed 's/^/    /')"
   else printf '  arvore limpa\n'; fi
 }
