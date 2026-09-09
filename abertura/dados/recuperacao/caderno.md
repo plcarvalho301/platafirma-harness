@@ -187,3 +187,53 @@ A porta de saída fica declarada e barata: `motor.indice.metodo`/`metodo_digest`
 registram o método POR ÍNDICE. Divergir depois é declarar outro método e criar a
 partição de dimensão — uma linha, não migração de schema. Por isso se crava igual agora
 sem fechar a porta.
+
+## `cobertura: boa` do `rag_search` NÃO quer dizer que o acervo cobre o assunto (09/09/2026)
+
+Medido ao procurar literatura sobre busca ANN com filtro (quatro eixos: recall sob filtro
+pós-travessia, HNSW/IVF com subconjunto pequeno, coleção separada × índice único, embedder
+único para vários corpora). O retorno veio `cobertura: boa`, `sinal.valor 0.693` contra piso
+0.55 — e os oito trechos eram **página de bibliografia, índice remissivo e título de
+fichamento**. Nenhuma linha pertinente. O acervo simplesmente não tem obra desse terreno.
+
+Por que o sinal engana: a métrica é similaridade do melhor candidato, e página de
+bibliografia de livro de IR é densa em termo técnico do domínio ("retrieval", "filtering",
+"ranking") sem conter afirmação nenhuma. Casa alto e diz nada. O mesmo mecanismo das
+seções-hub (02/09), por outra porta: texto genérico do domínio é próximo de tudo dentro
+dele.
+
+Régua: **antes de citar o acervo como procedência, ler os trechos.** `cobertura` e `sinal`
+dizem que houve vizinho perto, não que houve fonte. E quando não há fonte, a saída é
+NEGATIVA ancorada com a consulta declarada — nunca bibliografia de enfeite, que é o que o
+retorno convida a fazer.
+
+## Diário de bordo
+
+09/09/2026 — parede de porta e de verbo, na fita do parecer `acervo.casa`, em sequência:
+(1) `run_command` com pipe e `;` para inspecionar Postgres via `docker exec` — recusado, a
+porta é só-verbo e devolveu `sugestao: infra`; contorno foi ler o DDL servido pelo repo
+(`repo_grep` sobre `platafirma-motor`, conferindo antes por `conferir servico` que o sha do
+clone é o que `motor-pg` sobe). (2) `repo commitar <repo> <arquivo>` — "argumento nao
+reconhecido"; o uso é `repo commitar <repo> -m <msg>` e o verbo faz `add -A`, então árvore
+suja de outro assunto entraria junto: conferir `repo estado` antes. Aconteceu no fim desta
+mesma fita — ao commitar este caderno, a árvore do harness carregava dois cadernos da
+cadeira de IA modificados; contorno foi `repo git <clone> add <arquivo>` seguido de
+`repo commitar <repo> -m <msg> --staged`, que julga só o index. Caderno de cadeira alheia
+na árvore é o caso NORMAL num clone compartilhado, não a exceção: `--staged` é o default
+prudente para commit de caderno. (3) `fila enviar --tipo
+parecer` — tipo inválido; os válidos são decisao, demanda, handoff, minuta, pedido,
+resposta (parecer de cadeira vai como `decisao`). (4) `minuta ler 0032` — "não encontrada",
+porque a 0032 já tinha virado spec vigente em `docs/spec_automacao-gestao.md`; contorno foi
+`repo_grep`. Lição: minuta citada por número em spec vigente pode já não existir como
+minuta. (5) `mesa caderno` só LÊ — escrever no caderno é `write_file` no clone
+`platafirma-harness` + `repo commitar`/`empurrar`. (6) `ToolSearch` com
+`select:mcp__claudinho-mcp__descansar` não resolveu o nome; só a busca por palavra-chave
+trouxe o schema. Nenhum destes precisou de handoff.
+
+09/09/2026 — ⚪ relógios em desacordo, NÃO resolvido nesta fita: a sessão abriu com
+`currentDate` 09/09/2026, a mesa mostra itens "plantados ha 21 h" descrevendo trabalho de
+08/09, e `fila enviar` cunhou ids `20260907T2252`…`20260907T2321` — ou seja o relógio do
+ops-server marcava 07/09 no mesmo instante. Consequência prática já sentida: id de carta da
+fila não serve para datar nada, e data escrita à mão em ADR/spec pode divergir do id do
+artefato que a acompanha. Contorno na data: datar o conteúdo pelo que foi MEDIDO (sha do
+clone servido), não pelo relógio. Encaminhado a ninguém ainda — se reaparecer, é de TI.
