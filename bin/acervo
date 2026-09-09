@@ -103,8 +103,20 @@ conforme() {
     ler:obra:objeto)        exec "$ATOS/baixar" "$@" ;;
     bancada:obra:lote)      exec "$ATOS/bancada" "$@" ;;
     # --- ingerir por particao ---
-    ingerir:obra:*|ingerir:casa:*|ingerir:registro:*)
+    # Obra e registro seguem no cliente de obra (objeto-por-sha, MinIO, OCR, bancada).
+    # Casa NAO: doc de casa e texto de git — identidade (repo,path), corpo no payload, sem
+    # objeto e sem OCR — e o servidor separa os dois caminhos desde o #3027
+    # (POST /acervo/casa/lotes). Deixar casa cair aqui SUBIA o .md da casa ao MinIO e criava
+    # uma OBRA no lugar de uma linha em acervo.casa: falha silenciosa, que e pior que recusa.
+    ingerir:obra:*|ingerir:registro:*)
         exec "$ATOS/../ingerir" --lote "$entidade" "$@" ;;
+    ingerir:casa:*)
+        echo "acervo ingerir casa: o cliente de casa ainda nao existe (card #3027)." >&2
+        echo "  o servidor ja serve: POST /acervo/casa/lotes e .../aplicar." >&2
+        echo "  recusa deliberada: o cliente de OBRA subiria o .md ao MinIO e criaria uma" >&2
+        echo "  obra, em vez de gravar em acervo.casa. Errado calado e pior que parado." >&2
+        echo "  $SPEC" >&2
+        exit 2 ;;
     # --- casa generico: especies que vivem na TABELA acervo.casa (arq:0106) ---
     # As especies com fonte propria (adr, pagina-wiki, stack, ferramental) ja foram
     # capturadas acima. O que sobra em ler/listar casa <especie> vai ao sub-ato casa,
