@@ -516,16 +516,27 @@ instalar() {
   [ -d "$FONTE" ] || { echo "erro: fonte '$FONTE' nao existe — clone do harness ausente?" >&2; exit 3; }
   mkdir -p "$BIN_SERVIDO"
 
+  # Bilhetes (git, gh) NAO sao verbos: o cabecalho diz "NAO e verbo (arq:0037)", e eles
+  # so existem para pegar o humano que digita `git`/`gh` num PATH interativo. Assentados
+  # em ~/AI/bin (de onde a porta roda os verbos REAIS), eles ficam a frente do git/gh de
+  # verdade e sabotam o `repo`, que chama git/gh por nome nu (medido 09/09: exit 5 nos 16
+  # clones). O `instalar` os PULA: bilhete nao vai para o bin servido pela porta.
+  e_bilhete() { head -8 "$1" 2>/dev/null | grep -q 'NAO e verbo'; }
+
   if [ "${1:-}" = "--todos" ]; then
-    local n=0 v base
+    local n=0 pulados=0 v base
     for v in "$FONTE"/*; do
       [ -f "$v" ] || continue
       base="$(basename "$v")"
+      if e_bilhete "$v"; then
+        rm -f "$BIN_SERVIDO/$base"   # limpa bilhete que ja vazou para o bin servido
+        pulados=$((pulados+1)); continue
+      fi
       if ! cmp -s "$v" "$BIN_SERVIDO/$base"; then
         install -m 0755 "$v" "$BIN_SERVIDO/$base" && n=$((n+1))
       fi
     done
-    echo "instalados/atualizados: $n verbo(s) em $BIN_SERVIDO (fonte: $FONTE)"
+    echo "instalados/atualizados: $n verbo(s) em $BIN_SERVIDO (fonte: $FONTE); bilhetes pulados: $pulados"
     return
   fi
 
@@ -536,6 +547,7 @@ instalar() {
     *[!a-z0-9._-]*) echo "erro: nome de verbo invalido: '$v' — use [a-z0-9._-]" >&2; exit 4 ;;
   esac
   [ -f "$FONTE/$v" ] || { echo "erro: '$v' nao existe em $FONTE — commite+empurre no harness antes" >&2; exit 3; }
+  e_bilhete "$FONTE/$v" && { echo "erro: '$v' e bilhete (NAO e verbo), nao vai para o bin servido pela porta" >&2; exit 4; }
   install -m 0755 "$FONTE/$v" "$BIN_SERVIDO/$v" \
     || { echo "erro: install falhou em $BIN_SERVIDO/$v" >&2; exit 3; }
   echo "instalado: $v -> $BIN_SERVIDO/$v (0755, fonte $FONTE/$v)"
