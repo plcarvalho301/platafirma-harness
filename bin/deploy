@@ -15,17 +15,21 @@ set -euo pipefail
 export DOCKER_HOST="${DOCKER_HOST:-unix:///run/user/$(id -u)/docker.sock}"
 
 # A topologia se le UMA vez e mora em memoria; nenhuma funcao abaixo toca disco de novo.
-# FONTE-VERDADE: a tabela acervo.stack, servida por `acervo listar topologia --completo`
-# (arq:0076/#6). O stacks.json foi aposentado; a edicao humana agora e `acervo stack
-# import|def|rm`. DEPLOY_TOPO_ARQUIVO=<caminho> ainda le de um JSON, so para diagnostico.
+# FONTE-VERDADE: a tabela acervo.stack, servida por `acervo stack ver --json`. A rota
+# `acervo listar topologia --completo` foi eliminada na migracao arq:0106 (a gramatica
+# nova so tem as particoes obra/casa/registro; `topologia` deixou de existir como
+# particao, e `stack` nao e especie de acervo.especie_tipo). `acervo stack ver` continua
+# vigente e serve a MESMA tabela como array puro [{...}], que o jq abaixo embrulha em
+# {stacks: {...}}. Edicao humana: `acervo stack import|rm`. DEPLOY_TOPO_ARQUIVO=<caminho>
+# ainda le de um JSON, so para diagnostico.
 if [ -n "${DEPLOY_TOPO_ARQUIVO:-}" ]; then
   [ -r "$DEPLOY_TOPO_ARQUIVO" ] || { echo "arquivo de topologia ilegivel: $DEPLOY_TOPO_ARQUIVO" >&2; exit 1; }
   TOPO_JSON="$(cat "$DEPLOY_TOPO_ARQUIVO")"
 else
-  TOPO_JSON="$(acervo listar topologia --completo --json \
+  TOPO_JSON="$(acervo stack ver --json 2>/dev/null \
     | jq '{stacks: (map({key: .slug, value: .}) | from_entries)}')"
   [ -n "$TOPO_JSON" ] && [ "$(jq -r '.stacks | length' <<<"$TOPO_JSON" 2>/dev/null)" -gt 0 ] \
-    || { echo "topologia vazia do verbo — acervo listar topologia --completo falhou" >&2; exit 1; }
+    || { echo "topologia vazia do verbo — acervo stack ver --json falhou" >&2; exit 1; }
 fi
 
 stacks()   { jq -r '.stacks | keys[]' <<<"$TOPO_JSON"; }
