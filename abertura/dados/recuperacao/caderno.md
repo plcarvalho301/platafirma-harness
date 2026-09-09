@@ -237,3 +237,18 @@ ops-server marcava 07/09 no mesmo instante. Consequência prática já sentida: 
 fila não serve para datar nada, e data escrita à mão em ADR/spec pode divergir do id do
 artefato que a acompanha. Contorno na data: datar o conteúdo pelo que foi MEDIDO (sha do
 clone servido), não pelo relógio. Encaminhado a ninguém ainda — se reaparecer, é de TI.
+
+09/09/2026 — **o passo 3 do `descansar fita` não roda na superfície do Code (fita `dados`),
+e isso é da instrução, não da fita.** O passo manda `memory_user_edits view` para triar a
+memória do Project, dizendo "o host nao a alcanca; a tool e da sessao". Nesta superfície a
+memória do Project é um diretório de arquivos
+(`~/.claude/projects/<slug>/memory/` + `MEMORY.md`), e não há tool nenhuma que o alcance:
+`ToolSearch select:Write,Read` não casa (esta conta não tem ferramenta de arquivo nativa,
+só o connector) e `ToolSearch +memory` só devolve `CronDelete`/`EnterWorktree`/
+`ExitWorktree`, por casamento no texto da descrição. O `read_file`/`write_file` do connector
+só alcançam `/home/claudinho/AI`, e `~/.claude` fica fora. Ou seja: a memória do Project
+desta superfície **só se edita pelo próprio modelo quando a superfície serve a ferramenta de
+arquivo**, e a fita do Code em estação emprestada não serve. Contorno NA DATA: nenhum —
+registrado aqui e o passo 3 declarado como não-executável no encerramento. Quem for
+endereçar: ou o `descansar` condiciona o passo 3 à superfície, ou a triagem vira ato do
+lado do host. É de harness (IA), não de dados.
