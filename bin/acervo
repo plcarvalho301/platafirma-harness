@@ -105,6 +105,14 @@ conforme() {
     # --- ingerir por particao ---
     ingerir:obra:*|ingerir:casa:*|ingerir:registro:*)
         exec "$ATOS/../ingerir" --lote "$entidade" "$@" ;;
+    # --- casa generico: especies que vivem na TABELA acervo.casa (arq:0106) ---
+    # As especies com fonte propria (adr, pagina-wiki, stack, ferramental) ja foram
+    # capturadas acima. O que sobra em ler/listar casa <especie> vai ao sub-ato casa,
+    # que valida a especie contra acervo.especie_tipo e le de acervo.casa. Assim as
+    # especies novas (caderno, persona, spec, minuta, cabecalho-de-verbo, automacao)
+    # sao servidas sem hard-code, resolvendo contra a taxonomia viva.
+    ler:casa:*)             exec "$ATOS/casa" ler "$entidade" "$@" ;;
+    listar:casa:*)          exec "$ATOS/casa" listar "$entidade" "$@" ;;
     *) echo "acervo $ato $particao $entidade: combinacao nao servida." >&2
        echo "  entidades de $particao e formas validas: $SPEC" >&2; exit 2 ;;
   esac
