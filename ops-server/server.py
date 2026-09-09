@@ -598,8 +598,14 @@ _SUGESTAO = {
 }
 
 def _recusa(verbo: str, motivo: str) -> dict:
-    return {"recusado": True, "verbo": verbo[:80], "motivo": motivo,
-            "sugestao": _SUGESTAO.get(verbo.split("/")[-1])}
+    r = {"recusado": True, "verbo": verbo[:80], "motivo": motivo,
+         "sugestao": _SUGESTAO.get(verbo.split("/")[-1])}
+    if motivo == "sem verbo" and r["sugestao"] is None:
+        # sem reflexo conhecido: nao devolve so o null seco (spec_porta-so-verbo,
+        # card fabrica/devops) — a lista inteira + o golden de uso, incondicional.
+        r["verbos_servidos"] = sorted(SLUGS_SERVIDOS)
+        r["golden"] = "<verbo> sem ato lista os atos, e a descricao da tool e o golden record"
+    return r
 
 def _item_de_lote(x):
     """item de run_command -> (argv, stdin, recusa). argv[0] e o binario do whitelist."""
@@ -648,7 +654,8 @@ async def run_command(command: str = "", cwd: str = "", timeout: int = 120,
     `cwd` e ignorado. `stdin` e texto ou `{"de": n}` = stdout do item n do mesmo lote
     (substitui o pipe). Programa que NAO e verbo servido nao roda: volta
     `{recusado, verbo, motivo, sugestao}` com o verbo que o cobre (`sugestao: null` = verbo
-    que falta — vira card). Sequencial; erro ou recusa num item nao derruba os outros; teto
+    que falta — vira card; junto vem `verbos_servidos` e `golden`, incondicional, nunca so
+    o null seco). Sequencial; erro ou recusa num item nao derruba os outros; teto
     `CAP` por lote com `omitido_por_teto`/`lote_next`. `command` escalar = lote de 1 e
     devolve o resultado do item. `sessao_id` e o do `monta_sessao`. AUDITORIA: um JSONL
     por item em @ROOT@/var/log/ops/ — nao e silenciavel. Rollback: PF_RUN_SO_VERBO=0 + restart.
