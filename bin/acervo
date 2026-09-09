@@ -83,7 +83,9 @@ conforme() {
   case "$ato:$particao:$entidade" in
     # --- casa: wiki, adr, golden records ---
     ler:casa:pagina)        exec "$ATOS/wiki" ler "$@" ;;
-    ler:casa:adr)           exec "$ATOS/adr" "$@" ;;
+    # ADR agora vive em acervo.casa (especie 'adr') como qualquer especie da tabela: cai no
+    # ramo generico `ler:casa:*` abaixo, que le de acervo.casa via _acervo/casa. O sub-ato
+    # _acervo/adr (que varria macro-global/) esta MORTO (arq:0106: `acervo adr` proscrito).
     ler:casa:ferramental)   exec "$ATOS/ferramenta" "$@" ;;
     ler:casa:stack)         exec "$ATOS/stack" ver "$@" ;;
     ler:casa:cargo)         exec "$ATOS/wiki" cargo "$@" ;;
@@ -173,8 +175,14 @@ case "$ATO" in
     exec bash "$ATOS/psql" "$@" ;;
 
   # formas VIGENTES: respondem, mas avisam a forma conforme (spec_acervo §5)
-  adr)             avisa "acervo adr" "acervo ler casa adr / acervo listar casa adr"
-                   exec "$ATOS/adr"     "$@" ;;
+  adr)             # MORTO (arq:0106 §Consequencias: `acervo adr` -> `acervo ler casa adr`).
+                   # ADR agora e especie de acervo.casa, ingerida e servida como as demais.
+                   echo "acervo adr: verbo morto (arq:0106). ADR agora vive em acervo.casa." >&2
+                   echo "  ler uma:   acervo ler casa adr <codigo|path>   (ex: acervo ler casa adr arq:0106)" >&2
+                   echo "  listar:    acervo listar casa adr" >&2
+                   echo "  buscar:    motor rag buscar casa \"<pergunta>\"" >&2
+                   echo "  $SPEC" >&2
+                   exit 2 ;;
   listar)          avisa "acervo listar <entidade>" "acervo listar <particao> <entidade>"
                    exec "$ATOS/listar"  "$@" ;;
   registrar)       avisa "acervo registrar <verbo>" "acervo escrever casa ferramental <verbo>"
