@@ -1,22 +1,30 @@
 #!/usr/bin/env python3
-# acervo listar — referências do acervo. Hoje: conceitos e ferramental (golden records).
+# acervo listar — referências do acervo. Hoje: conceitos, ferramental e topologia (golden records).
 # capacidade: conhecimento
 # dono: claudinho-dados
 #   (matéria/semântica: claudinho-dados · dono; mecanismo/harness: claudinho-TI · construcao)
 #
 # `acervo listar conceitos [--json]`   — golden record acervo.conceito (rag-extractor-pg).
-# `acervo listar ferramental [--json] [--oficio]` — golden record acervo.ferramental
+# `acervo listar ferramental [--json] [--oficio] [--tools]` — golden record acervo.ferramental
 #     (3 níveis: capacidade → verbo → instância). Fatia física da minuta 0012 / ADR 0076.
 #     Com --oficio, filtra pelos verbos do NÚCLEO de abertura (whitelist em
 #     abertura/oficio-ferramental.md), pra o oficio.md não duplicar a lista à mão.
+#     Com --tools, projeta o núcleo em tools MCP (consumidor: ops-server).
+# `acervo listar topologia [--json] [--completo]` — golden record acervo.stack (eixo irmão).
 # Read-only. NÃO servido na montagem: é referência e fallback (D4 do ADR 0076).
+#
+# TRANSPORTE (arq:0106 seguido à risca): o psql devolve UMA linha, um array JSON, via
+# json_agg(row_to_json(...)). Identidade de verbo/conceito/stack é o SLUG — coluna
+# cravada. Descrição é payload opaco (texto pra IA); não é chave, não se parseia, não
+# se conta campo. Nada de split posicional por delimitador: um `|` numa descrição é
+# conteúdo, não estrutura. `_linhas`/contagem-de-campos foi deletada (era bloat que só
+# existia pra defender transporte por texto delimitado — o incidente 09/09 da porta
+# cega saiu daí).
 #
 # Contrato: platafirma-arquitetura/docs/abertura-de-sessao/abertura-novo-pedro/
 #           P2 - monta-sessao.md, "índice de conceito" (22/08/2026).
 # ferramental: platafirma-arquitetura/macro-global/decisions/
 #           0076-catalogo-de-ferramental-golden-record-relacional.md
-# conceitos: SQL espelha .gerar-conceitos.py (mesmo join/colunas => slugs idênticos
-# por construção), sem o whitelist por chapéu: o golden record é a tabela inteira.
 import json
 import os
 import signal
@@ -42,62 +50,74 @@ OFICIO_WHITELIST = os.path.join(
     "abertura", "oficio-ferramental.md",
 )
 
+# Cada SELECT devolve UMA linha: um array JSON de objetos, chaveados por nome de coluna.
+# json_agg preserva a ordem do ORDER BY interno. coalesce(..., '[]') porque json_agg de
+# zero linhas é NULL, não array vazio.
 SQL_CONCEITOS = """
-select c.slug, c.id, c.rotulo,
-       coalesce(array_to_string(c.outros_rotulos, ' / '), ''),
-       coalesce(string_agg(distinct d.slug, ','), ''),
-       count(distinct t.obra_id)
-from acervo.conceito c
-left join acervo.obra_trata_de t on t.conceito_id = c.id
-left join acervo.obra o on o.id = t.obra_id
-left join acervo.dominio d on d.id = o.dominio_id
-group by c.slug, c.id, c.rotulo, c.outros_rotulos
-order by c.slug;
+select coalesce(json_agg(row_to_json(t) order by t.slug), '[]')
+from (
+  select c.slug, c.id, c.rotulo,
+         nullif(array_to_string(c.outros_rotulos, ' / '), '') as outros_rotulos,
+         coalesce(
+           (select array_agg(distinct d.slug)
+            from acervo.obra_trata_de tr
+            join acervo.obra o on o.id = tr.obra_id
+            join acervo.dominio d on d.id = o.dominio_id
+            where tr.conceito_id = c.id), '{}') as origem,
+         (select count(distinct tr.obra_id)
+          from acervo.obra_trata_de tr where tr.conceito_id = c.id) as obras_ancora
+  from acervo.conceito c
+) t;
 """
 
 # ferramental: uma linha por par capacidade→verbo, com as instâncias agregadas.
 # O 1:1 capacidade↔verbo é constraint no schema; o join reflete isso (inner).
 SQL_FERRAMENTAL = """
-select cap.slug, vb.slug, coalesce(vb.sot,''), coalesce(vb.descricao,''),
-       coalesce(string_agg(distinct ins.slug, ',' order by ins.slug), '')
-from acervo.ferramental_capacidade cap
-join acervo.ferramental_verbo vb on vb.capacidade_id = cap.id
-left join acervo.ferramental_instancia ins on ins.verbo_id = vb.id
-group by cap.slug, vb.slug, vb.sot, vb.descricao
-order by cap.slug;
+select coalesce(json_agg(row_to_json(t) order by t.capacidade, t.verbo), '[]')
+from (
+  select cap.slug as capacidade, vb.slug as verbo,
+         nullif(vb.sot, '') as sot, nullif(vb.descricao, '') as descricao,
+         coalesce(
+           (select array_agg(distinct ins.slug order by ins.slug)
+            from acervo.ferramental_instancia ins where ins.verbo_id = vb.id),
+           '{}') as instancias
+  from acervo.ferramental_capacidade cap
+  join acervo.ferramental_verbo vb on vb.capacidade_id = cap.id
+) t;
 """
 
 # topologia: uma linha por stack, com as instancias que nela rodam agregadas (M:N).
-# stack sem instancia e estado normal (recorte de deploy e arbitrario, ADR 0076),
-# por isso LEFT join -- nao se esconde a stack avulsa.
+# stack sem instancia e estado normal (recorte de deploy e arbitrario, ADR 0076).
 SQL_TOPOLOGIA = """
-select stk.slug, coalesce(stk.papel,\'\'), coalesce(stk.critico,false),
-       coalesce(string_agg(distinct ins.slug, \',\' order by ins.slug), \'\')
-from acervo.stack stk
-left join acervo.instancia_roda_em_stack m on m.stack_id = stk.id
-left join acervo.ferramental_instancia ins on ins.id = m.instancia_id
-group by stk.slug, stk.papel, stk.critico
-order by stk.slug;
+select coalesce(json_agg(row_to_json(t) order by t.slug), '[]')
+from (
+  select stk.slug, nullif(stk.papel, '') as papel, coalesce(stk.critico, false) as critico,
+         coalesce(
+           (select array_agg(distinct ins.slug order by ins.slug)
+            from acervo.instancia_roda_em_stack m
+            join acervo.ferramental_instancia ins on ins.id = m.instancia_id
+            where m.stack_id = stk.id), '{}') as instancias
+  from acervo.stack stk
+) t;
 """
 
 # topologia --completo: TODAS as colunas que `deploy` le de stacks.json, servidas da
-# tabela (acervo.stack e projecao fiel do registro apos o seed corrigido do #2703).
-# repo/compose/nota sao text; rotas/segredos/reversao/gate/profiles sao jsonb e saem
-# como json cru pra o consumidor parsear. E o contrato que permite `deploy` reapontar
-# o REGISTRO do stacks.json para este verbo sem perder campo.
+# tabela. rotas/segredos/reversao/gate/profiles sao jsonb e ja saem como json aninhado
+# no row_to_json (sem ::text, sem reparse). compose e text OU lista serializada.
 SQL_TOPOLOGIA_COMPLETA = """
-select stk.slug, coalesce(stk.papel,''), coalesce(stk.critico,false),
-       coalesce(stk.repo,''), coalesce(stk.compose,''),
-       coalesce(stk.rotas::text,'null'), coalesce(stk.segredos::text,'null'),
-       coalesce(stk.reversao::text,'null'), coalesce(stk.gate::text,'null'),
-       coalesce(stk.profiles::text,'null'), coalesce(stk.nota,''),
-       coalesce(string_agg(distinct ins.slug, ',' order by ins.slug), '')
-from acervo.stack stk
-left join acervo.instancia_roda_em_stack m on m.stack_id = stk.id
-left join acervo.ferramental_instancia ins on ins.id = m.instancia_id
-group by stk.slug, stk.papel, stk.critico, stk.repo, stk.compose, stk.rotas,
-         stk.segredos, stk.reversao, stk.gate, stk.profiles, stk.nota
-order by stk.slug;
+select coalesce(json_agg(row_to_json(t) order by t.slug), '[]')
+from (
+  select stk.slug, nullif(stk.papel, '') as papel, coalesce(stk.critico, false) as critico,
+         nullif(stk.repo, '') as repo, stk.compose,
+         stk.rotas, stk.segredos, stk.reversao, stk.gate, stk.profiles,
+         nullif(stk.nota, '') as nota,
+         coalesce(
+           (select array_agg(distinct ins.slug order by ins.slug)
+            from acervo.instancia_roda_em_stack m
+            join acervo.ferramental_instancia ins on ins.id = m.instancia_id
+            where m.stack_id = stk.id), '{}') as instancias
+  from acervo.stack stk
+) t;
 """
 
 USO = """uso:
@@ -116,11 +136,9 @@ USO = """uso:
 Read-only. E o golden record: a lista (b) do chapeu e GERADA disto, nao editada a mao.
 """
 
-
 def morre(msg, code=2):
     sys.stderr.write(msg.rstrip("\n") + "\n")
     sys.exit(code)
-
 
 def _le_whitelist_oficio():
     """Slugs de verbo do núcleo, do bloco cercado de oficio-ferramental.md.
@@ -158,7 +176,6 @@ def _le_whitelist_oficio():
               % OFICIO_WHITELIST, 3)
     return set(slugs)
 
-
 def _marcadores_oficio():
     """{slug: {chave: valor}} dos marcadores da linha do whitelist (ex.: `deploy leva:2`)."""
     out = {}
@@ -181,46 +198,35 @@ def _marcadores_oficio():
         out[tok[0]] = dict(t.split(":", 1) for t in tok[1:] if ":" in t)
     return out
 
+def _psql_json(sql, alvo):
+    """Roda o SELECT (que devolve UMA linha: um array JSON) e desserializa.
 
-def _psql(sql):
+    Sem -F, sem split posicional: a estrutura vem do JSON do proprio Postgres, que
+    escapa qualquer coisa que houver nos campos-texto (| incluido). O slug e a
+    identidade; a descricao e payload opaco que vive dentro do JSON e nunca vira chave.
+    """
     env = dict(os.environ)
     env.setdefault("DOCKER_HOST", "unix:///run/user/1001/docker.sock")
     try:
-        return subprocess.run(
-            ["docker", "exec", "-i", PG, "psql", "-U", USR, "-d", DB, "-tAF|", "-c", sql],
+        saida = subprocess.run(
+            ["docker", "exec", "-i", PG, "psql", "-U", USR, "-d", DB, "-tA", "-c", sql],
             capture_output=True, text=True, check=True, env=env).stdout
     except FileNotFoundError:
         morre("acervo listar: 'docker' nao encontrado no PATH.", 3)
     except subprocess.CalledProcessError as e:
         morre("acervo listar: psql falhou (rc=%s):\n%s"
               % (e.returncode, (e.stderr or "").strip()), 3)
-
-
-def _linhas(sql, alvo, ncampos):
-    saida = _psql(sql)
-    linhas = [l for l in saida.splitlines() if l.strip()]
-    if not linhas:
-        morre("acervo listar %s: tabela nao devolveu linha nenhuma." % alvo, 3)
-    out = []
-    for l in linhas:
-        campos = l.split("|")
-        if len(campos) != ncampos:
-            morre("acervo listar %s: linha com formato inesperado (%d campos):\n  %s"
-                  % (alvo, len(campos), l), 3)
-        out.append(campos)
-    return out
-
+    try:
+        return json.loads(saida)
+    except (ValueError, TypeError) as e:
+        morre("acervo listar %s: psql nao devolveu JSON parseavel (%s):\n  %s"
+              % (alvo, e, saida[:200]), 3)
 
 def listar_conceitos(quero_json):
-    conceitos = []
-    for slug, cid, rotulo, alt, doms, obras in _linhas(SQL_CONCEITOS, "conceitos", 6):
-        origem = [d for d in doms.split(",") if d]
-        conceitos.append({
-            "slug": slug, "id": cid, "rotulo": rotulo,
-            "outros_rotulos": alt or None,
-            "origem": origem or None,
-            "obras_ancora": int(obras),
-        })
+    conceitos = _psql_json(SQL_CONCEITOS, "conceitos")
+    for c in conceitos:
+        c["origem"] = c.get("origem") or None
+        c["obras_ancora"] = int(c.get("obras_ancora") or 0)
     if quero_json:
         print(json.dumps(conceitos, ensure_ascii=False, indent=2))
         return
@@ -232,14 +238,13 @@ def listar_conceitos(quero_json):
         print("%-*s  %5d  %-20s  %s" % (w, c["slug"], c["obras_ancora"], org, c["rotulo"]))
     sys.stderr.write("\n%d conceito(s) no golden record (acervo.conceito).\n" % len(conceitos))
 
-
 def listar_ferramental_tools():
     """Projecao do whitelist do nucleo em tools MCP (spec_capsula-de-verbos §3.2).
 
-    Um slug = uma tool; nome = slug, sem traducao. Slug sem binario em bin/ sai da
-    lista com aviso em stderr — a porta nunca aborta por isso. `monta-sessao` fica de
-    fora: `monta_sessao` ja e tool e e a unica excecao de nome. Sempre JSON: o
-    consumidor e o ops-server, nao gente.
+    Um slug = uma tool; nome = slug, sem traducao. A identidade e vb.slug — coluna
+    cravada do golden record. Slug sem binario em bin/ sai da lista com aviso em
+    stderr — a porta nunca aborta por isso. `monta-sessao` fica de fora: `monta_sessao`
+    ja e tool e e a unica excecao de nome. Sempre JSON: o consumidor e o ops-server.
     """
     whitelist = _le_whitelist_oficio()
     marcas = _marcadores_oficio()
@@ -252,7 +257,8 @@ def listar_ferramental_tools():
                         os.environ.get("PATH", "")])
     itens = []
     vistos = set()
-    for cap, verbo, sot, desc, inst in _linhas(SQL_FERRAMENTAL, "ferramental", 5):
+    for row in _psql_json(SQL_FERRAMENTAL, "ferramental"):
+        verbo = row["verbo"]
         if verbo not in whitelist or verbo == "monta-sessao":
             continue
         vistos.add(verbo)
@@ -260,9 +266,10 @@ def listar_ferramental_tools():
         if not binario:
             sys.stderr.write("aviso: whitelist cita %r sem binario executavel no PATH — tool ausente\n" % verbo)
             continue
+        desc = (row.get("descricao") or "").strip()
         itens.append({
-            "tool": verbo, "verbo": verbo, "capacidade": cap,
-            "descricao": (desc or "").strip() or ("verbo %s (sem descricao no golden record)" % verbo),
+            "tool": verbo, "verbo": verbo, "capacidade": row["capacidade"],
+            "descricao": desc or ("verbo %s (sem descricao no golden record)" % verbo),
             "binario": binario,
             "leva": int(marcas.get(verbo, {}).get("leva", 1)),
         })
@@ -271,16 +278,14 @@ def listar_ferramental_tools():
         sys.stderr.write("aviso: whitelist cita %r ausente no golden record — tool ausente\n" % v)
     print(json.dumps(itens, ensure_ascii=False, indent=2))
 
-
 def listar_ferramental(quero_json, so_oficio=False):
     itens = []
-    for cap, verbo, sot, desc, inst in _linhas(SQL_FERRAMENTAL, "ferramental", 5):
-        instancias = [i for i in inst.split(",") if i]
+    for row in _psql_json(SQL_FERRAMENTAL, "ferramental"):
         itens.append({
-            "capacidade": cap, "verbo": verbo,
-            "sot": sot or None,
-            "descricao": desc or None,
-            "instancias": instancias or None,
+            "capacidade": row["capacidade"], "verbo": row["verbo"],
+            "sot": row.get("sot") or None,
+            "descricao": row.get("descricao") or None,
+            "instancias": row.get("instancias") or None,
         })
     if so_oficio:
         whitelist = _le_whitelist_oficio()
@@ -305,27 +310,15 @@ def listar_ferramental(quero_json, so_oficio=False):
     rotulo = "acervo.ferramental, nucleo de abertura" if so_oficio else "acervo.ferramental"
     sys.stderr.write("\n%d capacidade(s) no golden record (%s).\n" % (len(itens), rotulo))
 
-
-def _jsonb_ou_none(txt):
-    """Campo jsonb servido como texto pelo psql: 'null' -> None, resto -> parse."""
-    if txt == "null" or txt == "":
-        return None
-    try:
-        return json.loads(txt)
-    except (ValueError, TypeError):
-        return txt  # nao deveria acontecer com jsonb valido; nao mascara silenciosamente
-
-
 def listar_topologia(quero_json, completo=False):
     if not completo:
         stacks = []
-        for slug, papel, critico, inst in _linhas(SQL_TOPOLOGIA, "topologia", 4):
-            instancias = [i for i in inst.split(",") if i]
+        for row in _psql_json(SQL_TOPOLOGIA, "topologia"):
             stacks.append({
-                "slug": slug,
-                "papel": papel or None,
-                "critico": critico == "t",
-                "instancias": instancias or None,
+                "slug": row["slug"],
+                "papel": row.get("papel") or None,
+                "critico": bool(row.get("critico")),
+                "instancias": row.get("instancias") or None,
             })
         if quero_json:
             print(json.dumps(stacks, ensure_ascii=False, indent=2))
@@ -340,30 +333,23 @@ def listar_topologia(quero_json, completo=False):
         sys.stderr.write("\n%d stack(s) na topologia (acervo.stack); vinculo M:N em instancia_roda_em_stack.\n" % len(stacks))
         return
 
-    # --completo: todas as colunas que `deploy` le. compose sai como string OU lista
-    # (o registro aceita os dois; lista chega serializada em json e e reidratada aqui).
+    # --completo: todas as colunas que `deploy` le. jsonb ja vem aninhado do row_to_json;
+    # compose e string OU lista (o registro aceita os dois; lista ja chega como array json).
     stacks = []
-    for row in _linhas(SQL_TOPOLOGIA_COMPLETA, "topologia --completo", 12):
-        slug, papel, critico, repo, compose, rotas, segredos, reversao, gate, profiles, nota, inst = row
-        compose_val = compose
-        if compose.startswith("["):  # lista serializada
-            try:
-                compose_val = json.loads(compose)
-            except ValueError:
-                pass
+    for row in _psql_json(SQL_TOPOLOGIA_COMPLETA, "topologia --completo"):
         stacks.append({
-            "slug": slug,
-            "papel": papel or None,
-            "critico": critico == "t",
-            "repo": repo or None,
-            "compose": compose_val or None,
-            "rotas": _jsonb_ou_none(rotas),
-            "segredos": _jsonb_ou_none(segredos),
-            "reversao": _jsonb_ou_none(reversao),
-            "gate": _jsonb_ou_none(gate),
-            "profiles": _jsonb_ou_none(profiles),
-            "nota": nota or None,
-            "instancias": [i for i in inst.split(",") if i] or None,
+            "slug": row["slug"],
+            "papel": row.get("papel") or None,
+            "critico": bool(row.get("critico")),
+            "repo": row.get("repo") or None,
+            "compose": row.get("compose") or None,
+            "rotas": row.get("rotas"),
+            "segredos": row.get("segredos"),
+            "reversao": row.get("reversao"),
+            "gate": row.get("gate"),
+            "profiles": row.get("profiles"),
+            "nota": row.get("nota") or None,
+            "instancias": row.get("instancias") or None,
         })
     if quero_json:
         print(json.dumps(stacks, ensure_ascii=False, indent=2))
@@ -388,7 +374,6 @@ def listar_topologia(quero_json, completo=False):
                 print("            estado: %s" % rev["estado"])
         print("  instancias: %s" % (",".join(st["instancias"]) if st["instancias"] else "-"))
     sys.stderr.write("\n%d stack(s) na topologia completa (acervo.stack) — todos os campos que `deploy` le.\n" % len(stacks))
-
 
 def main(argv):
     if not argv or argv[0] in ("-h", "--help", "ajuda"):
@@ -423,7 +408,6 @@ def main(argv):
         listar_ferramental_tools()
     else:
         listar_ferramental(quero_json, so_oficio)
-
 
 if __name__ == "__main__":
     main(sys.argv[1:])
