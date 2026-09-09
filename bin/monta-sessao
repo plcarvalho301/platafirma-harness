@@ -734,6 +734,47 @@ def registra_sessao(sid, cadeira):
     return None
 
 
+def registra_sessao_duravel(sid, cadeira, chapeu):
+    """Grava a entidade-sessao em sessao.sessao (Postgres) NO ATO DE CUNHAR.
+
+    arq:0091 fixa `sessao_id` como chave DURAVEL da entidade-sessao-L3, e a migracao
+    0087 criou a tabela `sessao.sessao` pra ela. Mas ate #3030 o unico registro do
+    sessao_id era o `sessao:{id}` do msg-mem (registra_sessao acima): cache com TTL
+    48h, nao durabilidade. A entidade que a ADR desenhou como permanente sumia da
+    tabela que existe pra guarda-la. Esta funcao fecha o furo: INSERT duravel, FORA do
+    gate de PF_FITA (a entidade-sessao existe mesmo em sessao de mao, sem fita; a 0087
+    aceita superficie=claude.ai de proposito).
+
+    ON CONFLICT DO NOTHING garante a durabilidade da arq:0091 secao 3: a 2a abertura da
+    mesma conversa reusa a linha, nao cria segunda. Banco mudo NAO derruba a abertura,
+    vira aviso, igual a registra_pacote.
+    """
+    try:
+        import psycopg
+    except ImportError:
+        return "sessao.sessao nao gravada: psycopg ausente neste venv"
+    senha = os.environ.get("SESSAO_PG_PASSWORD", "")
+    if not senha and os.path.isfile(SESSAO_ENV):
+        for linha in open(SESSAO_ENV, encoding="utf-8"):
+            if linha.startswith("SESSAO_PG_PASSWORD="):
+                senha = linha.split("=", 1)[1].strip()
+                break
+    porta = os.environ.get("SESSAO_PG_PORT", "5437")
+    dsn = f"host=127.0.0.1 port={porta} dbname=sessao user=sessao password={senha}"
+    sup = os.environ.get("PF_SUPERFICIE", "").strip() or "desconhecida"
+    if sup not in ("claude.ai", "chat", "code", "desconhecida"):
+        sup = "desconhecida"
+    try:
+        with psycopg.connect(dsn, connect_timeout=3) as con, con.cursor() as cur:
+            cur.execute(
+                "INSERT INTO sessao.sessao (sessao_id, cadeira, chapeu, superficie) "
+                "VALUES (%s,%s,%s,%s) ON CONFLICT (sessao_id) DO NOTHING",
+                (sid, cadeira, chapeu or None, sup))
+            con.commit()
+    except Exception as e:  # noqa: BLE001 -- banco mudo nao pode derrubar a abertura
+        return f"sessao.sessao nao gravada: {type(e).__name__}"
+    return None
+
 def monta(cadeira, atualizar, pergunta=None, forcado_chapeu=None, so_chapeu=False,
           sessao_id=None):
     # `atualizar` sobrevive por compatibilidade de chamada (a flag `--sem-atualizar` e o
@@ -776,7 +817,12 @@ def monta(cadeira, atualizar, pergunta=None, forcado_chapeu=None, so_chapeu=Fals
     # Cadeira validada: a sessao ja esta completa (id + dono), entao registra-se AQUI,
     # antes de montar peca nenhuma. Cadeira invalida nao gera registro — sessao sem
     # dono na chave e o que fazia `mesa`/`fila` abrirem caixa de ninguem.
-    aviso_reg = registra_sessao(sid, _canonico(cadeira) or cadeira.strip().lower())
+    _cad_canon = _canonico(cadeira) or cadeira.strip().lower()
+    aviso_reg = registra_sessao(sid, _cad_canon)
+    # arq:0091: a entidade-sessao tambem se grava DURAVEL, fora do gate de PF_FITA (#3030).
+    # chapeu ainda nao foi roteado aqui; a linha nasce com chapeu NULL e o eixo analitico
+    # o preenche depois se precisar. superficie sai de PF_SUPERFICIE dentro da funcao.
+    aviso_reg_dur = registra_sessao_duravel(sid, _cad_canon, None)
     p_persona = os.path.join(ABERTURA, cadeira, "persona.md")
 
     pecas = de_abertura(catalogo(), cadeira)
@@ -854,6 +900,8 @@ def monta(cadeira, atualizar, pergunta=None, forcado_chapeu=None, so_chapeu=Fals
         avisos.append(aviso_sid)
     if aviso_reg:
         avisos.append(aviso_reg)
+    if aviso_reg_dur:
+        avisos.append(aviso_reg_dur)
     return {
         "cadeira": cadeira,
         "sessao_id": sid,
@@ -862,6 +910,9 @@ def monta(cadeira, atualizar, pergunta=None, forcado_chapeu=None, so_chapeu=Fals
                    # cadeira, e a fita tem de saber disso na abertura, nao no primeiro
                    # verbo que falhar.
                    "registrada": aviso_reg is None,
+                   # arq:0091 (#3030): a entidade-sessao durou em Postgres? Distinto de
+                   # `registrada` (msg-mem, efemero 48h) — este e o registro duravel.
+                   "duravel": aviso_reg_dur is None,
                    "porte": "devolva este `sessao_id` em toda chamada de tool e na "
                             "proxima abertura desta mesma conversa — quem cunha e este "
                             "verbo, uma vez (arq:0101 §1); a porta nao infere"},
