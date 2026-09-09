@@ -45,6 +45,14 @@ VERBO="$(basename "$0")"
 GIT="$(command -v /usr/bin/git /bin/git 2>/dev/null | head -1)"
 [ -x "$GIT" ] || GIT=/usr/bin/git
 
+# gh real para o credential helper do push: ~/AI/bin tambem tem um shim `gh` (bilhete)
+# a frente do gh real no PATH. O push HTTPS usa `gh` como credential helper; sem o gh
+# real alcancavel, o push morre com "could not read Username". Resolve-se o dir do gh
+# real e poe-se na FRENTE do PATH so para os atos que falam com o forge.
+GH_REAL="$(command -v /usr/bin/gh /bin/gh "$HOME/.local/bin/gh" 2>/dev/null | head -1)"
+PATH_FORGE="$PATH"
+[ -n "$GH_REAL" ] && PATH_FORGE="$(dirname "$GH_REAL"):$PATH"
+
 uso() {
   cat >&2 <<EOF
 uso:
@@ -248,7 +256,7 @@ ato_empurrar() {
   case "$ramo" in
     HEAD) morre "HEAD solto — troque para um ramo antes de empurrar" 4 ;;
   esac
-  "$GIT" -C "$c" push -u origin "$ramo" || morre "git push falhou" 3
+  PATH="$PATH_FORGE" "$GIT" -C "$c" push -u origin "$ramo" || morre "git push falhou" 3
   printf 'empurrado: %s -> origin/%s (%s)\n' "$nome" "$ramo" \
     "$("$GIT" -C "$c" log -1 --format='%h %s')"
 }
