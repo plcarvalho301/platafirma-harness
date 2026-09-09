@@ -78,6 +78,93 @@ REPO_DONO = {
     "platafirma-motor": "dados",
 }
 
+# --- fonte ADR (passo a, docs/nomenclatura-adr-em-acervo-casa.md) ---
+# ADR e' arquivo .md de platafirma-arquitetura/macro-global/, servida por `acervo ler casa
+# adr`. Toda ADR entra na casa sem filtro (decisao do dono, fita 09/09): sao as mais
+# importantes da particao. especie fixa 'adr', dono 'arquiteto', natureza 'golden'.
+ADR_REPO = "platafirma-arquitetura"
+ADR_DIR_GLOBAL = "macro-global/decisions"
+ADR_DIR_CAPS = "macro-global/capabilities"
+
+def _status_para_ciclo(status):
+    s = (status or "").lower()
+    if any(w in s for w in ("aceito", "aceita", "accepted")):
+        return "publicado"
+    if any(w in s for w in ("proposto", "proposta", "proposed")):
+        return "minuta"
+    if any(w in s for w in ("superado", "substitu", "superseded")):
+        return "superado"
+    return "publicado"
+
+def _campo_cabecalho(corpo, rotulo):
+    cabeca = corpo.split("\n##", 1)[0]
+    m = re.search(r"^-\s+\*\*\s*" + re.escape(rotulo) + r"\s*:\*\*\s*(.+)$",
+                  cabeca, re.M | re.I)
+    return m.group(1).strip() if m else ""
+
+def _titulo_adr(corpo):
+    linha = corpo.splitlines()[0] if corpo.splitlines() else ""
+    t = linha.lstrip("#").strip()
+    for sep in (" \u2014 ", " -- ", " - "):
+        if sep in t:
+            return t.split(sep, 1)[1].strip()
+    return t
+
+def _referentes_adr(corpo, registro, numero):
+    refs = [{"tipo_ref": "codigo", "ref": f"{registro}:{numero}"}]
+    for rotulo, tipo_ref in (("Capability", "capability"), ("Stack", "stack")):
+        val = _campo_cabecalho(corpo, rotulo)
+        for v in re.split(r"[,;]+", val):
+            v = v.strip().lower()
+            if v:
+                refs.append({"tipo_ref": tipo_ref, "ref": v})
+    return refs
+
+def varre_adrs():
+    """Varre os dois layouts de ADR e devolve itens JA prontos (titulo/ciclo/referentes/corpo)."""
+    clone = os.path.join(RAIZ, ADR_REPO)
+    itens = []
+
+    def _um(caminho_abs, path_rel, registro):
+        base = os.path.basename(path_rel)
+        m = re.match(r"^(\d{3,4})-.+\.md$", base)
+        if not m:
+            return None
+        numero = m.group(1).zfill(4)
+        with open(caminho_abs, encoding="utf-8", errors="replace") as f:
+            corpo = f.read()
+        return {
+            "repo": ADR_REPO, "path": path_rel, "tipo": "adr", "dono": "arquiteto",
+            "natureza": "golden",
+            "ciclo": _status_para_ciclo(_campo_cabecalho(corpo, "Status")),
+            "titulo": _titulo_adr(corpo),
+            "referentes": _referentes_adr(corpo, registro, numero),
+            "corpo": corpo,
+        }
+
+    dglobal = os.path.join(clone, ADR_DIR_GLOBAL)
+    if os.path.isdir(dglobal):
+        for fn in sorted(os.listdir(dglobal)):
+            if fn.endswith(".md"):
+                it = _um(os.path.join(dglobal, fn), f"{ADR_DIR_GLOBAL}/{fn}", "arq")
+                if it:
+                    itens.append(it)
+
+    dcaps = os.path.join(clone, ADR_DIR_CAPS)
+    if os.path.isdir(dcaps):
+        for cap in sorted(os.listdir(dcaps)):
+            ddec = os.path.join(dcaps, cap, "decisions")
+            if not os.path.isdir(ddec):
+                continue
+            registro = "seg" if cap == "seguranca" else cap
+            for fn in sorted(os.listdir(ddec)):
+                if fn.endswith(".md"):
+                    it = _um(os.path.join(ddec, fn),
+                             f"{ADR_DIR_CAPS}/{cap}/decisions/{fn}", registro)
+                    if it:
+                        itens.append(it)
+    return itens
+
 USO = """uso:
   acervo ingerir casa <lista.md|clone> [--apply] [--motor rag] [--ate vetor]
                                        [--autor <slug>] [--limite N] [--so <substr>] [--json]
@@ -86,6 +173,7 @@ USO = """uso:
                platafirma-arquitetura/docs/varredura-casa-candidatos.md)
   --limite N   ingere so os N primeiros itens (dry-run pequeno do passo e)
   --so <s>     so itens cujo repo@path contem <s> (recorte para prova de ponta)
+  --adr        fonte = TODAS as ADRs de macro-global/ (ignora a lista curada)
   --apply      aplica (default: dry-run do plano)
   --ate        catalogar | chunk | embed | vetor (default: vetor)
 """
@@ -191,18 +279,22 @@ def montar_itens(curados, limite, so):
         except OSError as e:
             pulos.append((chave, f"leitura falhou: {e}"))
             continue
-        titulo = None
-        for linha in corpo.splitlines()[:15]:
-            t = linha.strip()
-            if t.startswith("# ") and not t.startswith("##"):
-                titulo = t.lstrip("#").strip()
-                break
+        # Titulo: se o curado ja trouxe (fonte ADR), respeita; senao le o 1o `# ` do corpo.
+        titulo = it.get("titulo")
+        if not titulo:
+            for linha in corpo.splitlines()[:15]:
+                t = linha.strip()
+                if t.startswith("# ") and not t.startswith("##"):
+                    titulo = t.lstrip("#").strip()
+                    break
+        # Corpo: fonte ADR ja leu; lista curada le do disco aqui.
+        corpo_final = it.get("corpo") or corpo
         itens.append({
             "repo": it["repo"], "path": it["path"], "sha_ref": sha,
             "dono": it["dono"], "tipo": it["tipo"] or "",
             "natureza": it["natureza"], "ciclo": it["ciclo"],
             "titulo": titulo or os.path.splitext(os.path.basename(it["path"]))[0],
-            "corpo": corpo, "referentes": [],
+            "corpo": corpo_final, "referentes": it.get("referentes") or [],
         })
         if limite and len(itens) >= limite:
             break
@@ -246,6 +338,7 @@ def main():
     ap.add_argument("--autor", default=None)
     ap.add_argument("--limite", type=int, default=0)
     ap.add_argument("--so", default=None)
+    ap.add_argument("--adr", action="store_true", default=False)
     ap.add_argument("--json", dest="como_json", action="store_true", default=False)
     ap.add_argument("-h", "--help", "--ajuda", dest="ajuda", action="store_true", default=False)
     args, _ = ap.parse_known_args()
@@ -256,20 +349,25 @@ def main():
     if args.ate not in ("catalogar", "chunk", "embed", "vetor"):
         morre(f"--ate invalido: {args.ate}", 2)
 
-    lista = args.lista or os.path.join(
-        RAIZ, "platafirma-arquitetura", "docs", "varredura-casa-candidatos.md")
-    if not os.path.isfile(lista):
-        morre(f"lista curada nao encontrada: {lista}", 1)
-
     autor = args.autor
     if not autor:
         cad = os.environ.get("PF_CADEIRA", "").strip().lower()
         cad = cad.removeprefix("claudinho-").removeprefix("claudinha-")
         autor = cad or "dados"
 
-    curados = parse_lista(lista)
-    if not curados:
-        morre(f"nenhum item na lista {lista}", 1)
+    # Fonte: --adr varre macro-global/ (todas as ADRs, passo a); senao a lista curada.
+    if args.adr:
+        curados = varre_adrs()
+        if not curados:
+            morre("nenhuma ADR encontrada em macro-global/ de " + ADR_REPO, 1)
+    else:
+        lista = args.lista or os.path.join(
+            RAIZ, "platafirma-arquitetura", "docs", "varredura-casa-candidatos.md")
+        if not os.path.isfile(lista):
+            morre(f"lista curada nao encontrada: {lista}", 1)
+        curados = parse_lista(lista)
+        if not curados:
+            morre(f"nenhum item na lista {lista}", 1)
     itens, pulos = montar_itens(curados, args.limite, args.so)
     if not itens:
         morre("nenhum item ingerivel (todos pulados; veja motivos com --json)", 1)
