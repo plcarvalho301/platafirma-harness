@@ -36,6 +36,7 @@ VERBO="$(basename "$0")"
 declare -A BANCOS=(
   [rag]="rag-extractor-pg:rag:rag_extractor"
   [motor]="motor-pg:motor:motor"
+  [sessao]="harness-sessao-db:sessao:sessao"
 )
 
 uso() {
