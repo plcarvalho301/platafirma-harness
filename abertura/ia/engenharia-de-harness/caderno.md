@@ -322,3 +322,23 @@ contorno encontrado NA DATA 07/09/2026 foi o mesmo (`repo estado` antes, `repo r
 <repo> main`, que carrega a árvore suja junto, commitar e devolver o clone ao ramo da
 fábrica no fim). Duas vezes em um dia: `repo estado` antes de commitar deixou de ser
 zelo e virou passo.
+
+07/09/2026 — no fecho da mesma fita, `repo ramo platafirma-harness
+fabrica/3016-help-erro-gracioso` (devolver o clone ao ramo da fábrica) falhou com o
+texto do SHIM de git — «git nao roda aqui — o verbo da casa e `repo`» — seguido de
+`repo: checkout -b falhou`; `repo ramo <repo>` (só listar) falhou igual, em `git branch`,
+depois de imprimir `atual: main`. Minutos antes, no mesmo clone, `repo ramo <repo> main`
+TINHA funcionado. Ou seja: partes internas do próprio verbo `repo` caem no shim que
+recusa git, e o ato falha por dentro sem que o alvo tenha nada de errado. — contorno
+encontrado NA DATA 07/09/2026 foi NENHUM: o clone ficou em `main` (árvore limpa,
+nada perdido; o ramo da fábrica segue empurrado em 39aeae7). Próxima fita que precisar
+do ramo da fábrica troca com `repo ramo` e, falhando de novo, o alvo é o próprio verbo.
+
+07/09/2026 — reincidência do falso negativo de push, agora com outra cara: `repo
+empurrar` saiu com exit 3 e `! [remote rejected] main -> main (cannot lock ref
+'refs/heads/main': is at ad4cca8 but expected 7315abe)` — e o commit ad4cca8 ESTAVA no
+remoto, confirmado por `repo git platafirma-harness ls-remote origin refs/heads/main`. A
+própria mensagem de erro carrega a prova de que subiu (o `is at` é o meu SHA). — contorno
+encontrado NA DATA 07/09/2026 foi o mesmo de mais cedo: conferir por `ls-remote` antes
+de recommitar. Duas caras num dia só — exit code de `repo empurrar` não decide sozinho
+se a entrega subiu.
