@@ -541,6 +541,9 @@ modelo() {
 Problema: como é hoje — o fato, sem número (o número vai em Medida)
 Resultado: quem passa a conseguir o quê (público, não usuário); outcome marcado "não fecha card"
 Medida: escala · medidor · valor hoje · mínimo aceitável — UMA linha
+Referencial: os canônicos que governam este épico, por slug (arq:NNNN, spec_<slug>, minuta NNNN) — lista fechada
+Raio de ataque: escopo em linguagem da casa — capacidades, verbos, entidades e stacks tocadas
+Comportamento esperado: prosa — como o conjunto se comporta DEPOIS de entregue; o estado observável de chegada
 Fora: o que NÃO entra neste épico
 Quebra: <data> — features #a #b #c (referência datada, não contrato)
 M
@@ -549,6 +552,9 @@ M
 Problema: como é hoje — o fato, sem número (o número vai em Medida)
 Resultado: quem passa a conseguir o quê (público, não usuário); outcome marcado "não fecha card"
 Medida: escala · medidor · valor hoje · mínimo aceitável — UMA linha
+Referencial: os canônicos que governam esta feature, por slug (arq:NNNN, spec_<slug>, minuta NNNN) — lista fechada
+Raio de ataque: escopo em linguagem da casa — capacidades, verbos, tools, entidades e stacks tocadas
+Comportamento esperado: prosa — como a capacidade se comporta DEPOIS de entregue; o estado observável de chegada
 Fora: o que NÃO entra nesta feature
 Sai quando: predicado ponta a ponta — o comando/consulta que prova a capacidade INTEIRA, verdadeiro/falso
 Continuidade: o mecanismo que sustenta (quem passa a depender) — não fecha card
@@ -557,6 +563,9 @@ M
     ;;
     story) cat <<'M'
 Negócio: #<feature> — só o ponteiro; nada de contexto de negócio aqui
+Referencial: os canônicos que governam este trabalho, por slug (arq:NNNN, spec_<slug>, minuta NNNN) — lista fechada, não leitura recomendada
+Raio de ataque: escopo em linguagem da casa — capacidades, verbos, tools servidas, entidades tocadas (motor, instancia, stack, verbo…), e os arquivos de código no escopo por repo@path
+Comportamento esperado: prosa — como a aplicação se comporta DEPOIS de implantada; o estado observável de chegada (não os passos)
 Ambiente: repo absoluto · como instalar · o que está de pé e não se derruba · credenciais (nunca impressas)
 Onde: arquivo, função, linha aproximada · peça análoga a imitar, se existir
 Passos: numerados, um por ação, comando literal
