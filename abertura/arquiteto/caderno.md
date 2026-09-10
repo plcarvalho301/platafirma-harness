@@ -190,3 +190,24 @@ série `seg:` vigente. Estava desatualizado.
   de hoje, que a seg:0014 já classifica como lacuna. O desenho-alvo tem PEP em cada
   endpoint. Ao reencostar no diagrama (no contato), refletir o alvo ou marcar o atual
   como transitório.
+
+## Colisão de nome é colisão de categoria — a espécie resolve antes do nome
+
+Lição da fita 09/09/2026 (minuta 0021 → `arq:0108`, anexo ontológico de dados endossado
+pelo dono). Quatro `superficie`, quatro `evento`, `fita` × `sessao`, `gerencia` ×
+`chapeu`, `cadeira` × `sujeito` × `identidade`: em quase todo caso eram dois referentes de
+ESPÉCIE diferente (coisa, chapéu, conteúdo, ligação, acontecimento, etiqueta) atrás do
+mesmo nome. Declarada a espécie, o nome deixa de precisar de desempate.
+
+- Antes de arbitrar nome entre cadeiras, perguntar a espécie de cada referente. Desempate
+  de nome sem espécie produz nome certo por acidente e volta como colisão.
+- Golden record sem ATO de resolução não cumpre a 0022 — medido três vezes independentes
+  (identidade povoada e não lida pelo PEP; `nivel` com tabela e dois dicts; motor servido
+  por chave e configurado por arquivo). O entregável é o ato; a tabela é substrato.
+- A raiz é fichário (dono, 09/09): toda linha é ficha SOBRE algo; a plataforma nunca
+  instancia a coisa. Vale para as três ontologias (mundo, acervo, casa).
+- O TBox se GERA da coluna de espécie; OWL à mão é o segundo lugar onde a categoria mora.
+- Corolário de verbo: `minuta ler <n>` resolve por prefixo de nome de arquivo e serviu o
+  anexo `0021-anexo-2` no lugar da minuta `0021-entidade-raiz` (mesma classe de defeito da
+  0021). `minuta formalizar <n>` corre o mesmo risco quando há anexo homônimo —
+  formalizar à mão (write_file + git rm + commit único) até gestao-estrategica curar.
