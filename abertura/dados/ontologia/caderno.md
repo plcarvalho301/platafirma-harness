@@ -190,6 +190,19 @@ proíbe edição à mão). Divergência entre os dois se fecha exportando, nunca
 reverter um commit do export não desfaz nada no banco. Corolário medido em 05/09: contagem de
 espécie tirada do repo pode estar velha; a do banco não.
 
+## Sempre a ficha — pergunta fechada, não perguntar de novo (dono, 09/09/2026)
+
+«A PlataFirma registra coisas, não gera referenciais autônomos do mundo.» Toda linha de golden
+record é um REGISTRO (ICE com uuid opaco) *sobre* algo; a espécie (coisa · chapéu/aptidão ·
+conteúdo · ligação · acontecimento · etiqueta) diz o que a ficha representa, e o referente nunca é
+classe instanciada pela plataforma. Fecha a nota «registro × referente» do README do `modelo_bfo`
+(aberta desde julho) e o passo 0 do anexo 2 da minuta 0021. Ordem literal do dono: «não me
+pergunta isso nunca mais». Débito que a decisão abre: `plataforma.ttl` afirma o referente
+(`pf:Pessoa ⊑ cco:Person`, `pf:Fenomeno ⊑ process`) — corrigir por passe próprio pelo guia §4.3.
+
+Cravado na mesma fita: chapéu especializa gerência (gerência é aptidão, não ligação; a ligação é o
+ato de designação); superfície é entidade (coisa), sessão é processo, fita é o registro dela.
+
 ## Origem de conceito é derivada, e o conjunto vazio é 10% dele (05/09/2026)
 
 Conceito não estanteia (`ont:0062`): não há coluna de domínio: a origem sai de `obra_trata_de ×
