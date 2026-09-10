@@ -3,7 +3,7 @@
 # capacidade: conhecimento
 # dono: claudinho-dados
 # use para: ler uma ADR/página/obra que você sabe onde está (ler casa|obra), listar o que há de um tipo (listar), gravar uma página de wiki (escrever casa pagina)
-# atos: ler, listar, escrever, ingerir, baixar, bancada, extrato, escada, psql — sobre partição obra|casa|registro
+# atos: ler, listar, escrever, resolver, ingerir, baixar, bancada, extrato, escada, psql — sobre partição obra|casa|registro
 # conforme: parcial (arq:0106 — gramatica verbo-ato-particao-entidade; forma vigente ainda responde COM aviso)
 #
 # Despachante (arq:0040): o verbo é o par binário+subcomando. Os sub-atos moram
@@ -35,6 +35,9 @@ uso (gramatica arq:0106 — acervo <ato> <particao> <entidade> [seletor]):
   acervo listar   <particao> <entidade> [filtros]   lista entidades de um tipo
       ex: acervo listar obra conceito [--json] · acervo listar casa adr [--cap x]
           acervo listar casa ferramental [--json] [--oficio] · acervo listar casa pagina [--prefixo|--categoria|--ns]
+          acervo listar entidade [--especie <e>] [--dona <cadeira>]  indice de classes da raiz (arq:0108)
+  acervo resolver <classe> <string>                 resolve a string para o uuid da ficha (arq:0108 §5)
+      ex: acervo resolver adr 0108 · acervo resolver cadeira dados · acervo resolver stack rag
   acervo escrever <particao> <entidade> <seletor>   cria/substitui (corpo por STDIN)
       ex: acervo escrever casa pagina "<Titulo>" [--resumo] · acervo escrever casa ferramental <verbo>|--todos
           acervo escrever casa stack <arquivo.json>|--rm <slug> · acervo escrever casa arquivo <nome>
@@ -100,6 +103,11 @@ conforme() {
           --rm) shift; exec "$ATOS/stack" rm "$@" ;;
           *)    exec "$ATOS/stack" import "$@" ;;
         esac ;;
+    # --- casa: raiz de entidades (arq:0108) ---
+    # A raiz vive na particao casa. `listar casa entidade` e a forma conforme;
+    # o atalho `listar entidade` (sem particao) e tratado no case de $ATO abaixo.
+    listar:casa:entidade)   exec "$ATOS/entidade" listar "$@" ;;
+    ler:casa:entidade)      exec "$ATOS/entidade" listar "$@" ;;
     # --- obra: conceito, objeto, bancada ---
     listar:obra:conceito)   exec "$ATOS/listar" conceitos "$@" ;;
     ler:obra:objeto)        exec "$ATOS/baixar" "$@" ;;
@@ -134,8 +142,24 @@ conforme() {
 }
 
 case "$ATO" in
+  # resolver <classe> <string>: o ato de resolucao de identidade da raiz (arq:0108
+  # §5, arq:0022). Nao segue a gramatica ato-particao-entidade: a raiz e uma so
+  # (acervo.entidade), a classe ja diz o recorte. Vai direto ao sub-ato.
+  resolver)             exec "$ATOS/entidade" resolver "$@" ;;
+
+  # listar/ler com alvo `entidade` SEM particao explicita: atalho para a raiz.
+  # `listar entidade [--especie|--dona]` e a forma que a ordem de 0108 pediu; a
+  # conforme e `listar casa entidade`, roteada no conforme() acima. Aqui capturamos
+  # o atalho antes de conforme() tratar `entidade` como nome de particao (e recusar).
+  listar|ler)
+    if [ "${1:-}" = "entidade" ]; then
+      shift
+      exec "$ATOS/entidade" listar "$@"
+    fi
+    conforme "$ATO" "$@" ;;
+
   # gramatica conforme (arq:0106)
-  ler|listar|escrever)  conforme "$ATO" "$@" ;;
+  escrever)             conforme "$ATO" "$@" ;;
   ingerir)
     # conforme: ingerir <particao> <raiz>; vigente: ingerir <raiz> (alias de `ingerir --lote`)
     case "${1:-}" in
