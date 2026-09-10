@@ -125,3 +125,52 @@ reprovam no `conferir`) e duplica lógica. O desenho certo é o redirecionador.
 - **Um fonte, N nomes (busybox):** se dois redirecionadores compartilham lógica, um só
   arquivo despacha por `argv[0]` e dois symlinks apontam pra ele — o segundo cai como
   alias no `conferir`, que já sabe tratá-lo. Evita a colisão de unique na capacidade.
+
+## Porta sem catálogo recusa como "verbo que falta" (medido 08/09)
+
+`SLUGS_SERVIDOS = set(TOOLS_DERIVADAS)` (ops-server/server.py:1507), e `_gera_tools_verbos`
+diz de si mesma: *"Falha = zero tools derivadas e aviso; nunca aborta"*. Gerador quebrado na
+subida = catálogo VAZIO, e aí todo verbo do mundo cai no `_recusa(slug, "sem verbo")` da
+linha 630. Vivido em 08/09: 10 verbos íntegros recusados em 10 tentativas.
+
+- **A recusa mente com a cara de quem informa.** `sugestao: null` significa, pelo ofício,
+  "verbo que falta — vira card". Estava dizendo isso de `mesa`, `fila` e `infra`, que
+  existem inteiros em `~/AI/bin` (conferido por `read_file`: `bin/mesa`, 26878 B). Cadeira
+  obediente abriria card pedindo verbo que já existe — o oposto do que o ofício quer.
+- **A sessão PARECE viva:** `read_file`, `write_file` e `monta_sessao` não passam pelo
+  whitelist e seguem servindo. Dá para trabalhar meio turno acreditando que moveu card e
+  fechou mesa sem que nada tenha acontecido.
+- **O log da porta data a quebra sem precisar de journal.** `var/log/ops/ops-<data>.jsonl`
+  grava `evento: "verbo"` com `exit_code` nas execuções e `evento: "sem_verbo"` nas recusas:
+  bisseção por `offset` no `read_file` achou a última OK (13:24:45) e a primeira recusa
+  (13:34:42). Quinze minutos, sem shell.
+- **A cadeia de que a execução depende é mais longa do que parece:** `acervo listar
+  ferramental --tools` faz parse do bloco cercado de `abertura/oficio-ferramental.md`
+  (bloco vazio = erro duro) E `SELECT` em `acervo.ferramental_verbo` por `docker exec` no
+  `rag-extractor-pg`. Cerca ``` desbalanceada em arquivo de prosa, ou container do RAG
+  fora, tiram a execução da plataforma inteira do ar.
+- **Não há contorno de dentro:** o conserto é `systemctl --user restart ops-mcp`, e restart
+  é verbo. Fita que pega a porta assim é fita de leitura, e o certo é declarar isso no
+  primeiro giro em vez de tentar contornar.
+- **O padrão certo a casa já tem, noutro lugar:** `bin/_shims-instancia` faz FAIL-SOFT —
+  piso conhecido quando a fonte não responde, com a origem declarada como fallback. A
+  porta não adotou; cache da última projeção boa + `stale` teria virado aviso o que virou
+  apagão.
+
+## Fita cujo `tools/list` nasceu antes do restart fecha sem mesa (medido 09/09)
+
+A identidade de sessão só entra pelo caminho da TOOL derivada (`sessao_id` -> Valkey ->
+`PF_CADEIRA`, arq:0068 §1). Por `run_command` ela NÃO entra — e `mesa` e `descansar`
+recusam sem ela.
+
+- `descansar fita --so-memoria` por `run_command`, com `sessao_id` correto no argumento:
+  `erro: PF_CADEIRA nao definida — nao ha fita a fechar sem cadeira`. `mesa ver ti`:
+  mesma coisa (`a memoria e privada da cadeira (arq:0041)`).
+- **A lista de tools da fita é congelada na abertura.** Verbos que voltaram depois de um
+  restart no meio da fita não aparecem em `tools/list`, e `ToolSearch` não os acha: dá para
+  chamá-los por `run_command` (que não injeta cadeira) e não pela tool (que injetaria).
+  Resultado: memória inalcançável, e o fecho vai para o caderno — que é do repo, não da
+  cadeira, e sobrevive à rotação.
+- **`encerrar` não é servido; o verbo é `descansar`** — mesmo arquivo, dois nomes. A recusa
+  hoje já vem com `verbos_servidos` e `golden` junto, o que mata a adivinhação: 37 verbos
+  na lista, e `encerrar` não é um deles.
