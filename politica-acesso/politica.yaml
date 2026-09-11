@@ -218,12 +218,17 @@ regras:
   # CONSTRUCAO DOS VERBOS: claudinho-TI. REGRA: claudinho-seguranca.
   # `run_command` para `fornecedor` SAI no dia em que os verbos subirem, e nao antes:
   # tirar agora deixaria a fabrica sem braco nenhum.
+  # AMPLIADA em 11/09/2026 (fila 20260911T130743-arquiteto, spec_saneamento-de-clones.md
+  # §3.3/§4): acrescenta `repo_sanear` — gatilho 1 da §3.4 (sanear antes de despachar a
+  # fabrica) depende deste ato. Nao e superficie nova: agrega commit/push/merge --ff-only/
+  # worktree-remove, ja concedidos em separado por esta mesma regra. INERTE ate ti
+  # escrever o ato — mesmo regime das demais acoes desta lista.
   - id: fornecedor-usa-verbo-operacional
     efeito: permite
     motivo: "o braco da fabrica no deploy e verbo nomeado, nao string de shell · ordem do dono em 20/08/2026 · vence 2026-11-20"
     quando: {papel: fornecedor, dominio: plataforma, tipo: operacao}
     acoes: [repo_clonar, repo_ramo, repo_commitar, repo_empurrar, repo_estado,
-            teste_rodar, lint_rodar]
+            repo_sanear, teste_rodar, lint_rodar]
     sobre: ["platafirma-*/*", "modulo-osint/*", "var/tmp/*"]
 
   - id: fornecedor-sem-estado-do-host
