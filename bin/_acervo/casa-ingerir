@@ -42,6 +42,10 @@ except ImportError:
 BASE = (os.environ.get("RAG_API_BASE") or DEFAULT_BASE).rstrip("/")
 TOKEN = os.environ.get("RAG_API_TOKEN") or DEFAULT_TOKEN
 RAIZ = os.environ.get("PF_REPO_RAIZ") or os.path.expanduser("~/AI")
+# git ABSOLUTO: sob a porta nao ha PATH, e `git` nu levanta FileNotFoundError — o que fazia
+# sha_do_repo devolver None e TODO item ser pulado calado. Mesmo padrao de bin/repo e
+# bin/publicar-abertura.
+GIT = next((p for p in ("/usr/bin/git", "/bin/git") if os.path.exists(p)), "git")
 
 # Familia da secao `### ... (<familia>)` -> especie PROPOSTA (slug de especie_tipo). A familia
 # e' grossa; a especie proposta e' a mais comum daquela familia na lista. Doc que fugir disso
@@ -111,8 +115,12 @@ def _titulo_adr(corpo):
     return t
 
 def _referentes_adr(corpo, registro, numero):
-    refs = [{"tipo_ref": "codigo", "ref": f"{registro}:{numero}"}]
-    for rotulo, tipo_ref in (("Capability", "capability"), ("Stack", "stack")):
+    # Vocabulario FECHADO do enum acervo.casa_tipo_ref (045_acervo_casa.sql): o codigo da ADR
+    # e' um referente de classe `decisao`, e Capability e' `capacidade`. Os termos que a
+    # nomenclatura usava em prosa (`codigo`, `capability`) nao existem no enum e faziam o
+    # lote inteiro falhar em InvalidTextRepresentation na hora de gravar o referente.
+    refs = [{"tipo_ref": "decisao", "ref": f"{registro}:{numero}"}]
+    for rotulo, tipo_ref in (("Capability", "capacidade"), ("Stack", "stack")):
         val = _campo_cabecalho(corpo, rotulo)
         for v in re.split(r"[,;]+", val):
             v = v.strip().lower()
@@ -138,7 +146,13 @@ def varre_adrs():
             "natureza": "golden",
             "ciclo": _status_para_ciclo(_campo_cabecalho(corpo, "Status")),
             "titulo": _titulo_adr(corpo),
-            "referentes": _referentes_adr(corpo, registro, numero),
+            # DEBITO: casa_referente.ref virou FK para acervo.entidade(id) em 09/09
+            # (0108b-casa-referente-fk.sql) e o fichario da raiz esta VAZIO (0 fichas). Ate
+            # ele ser populado, referente de ADR nao tem alvo: emitir `arq:0001` como texto
+            # derruba o lote inteiro em InvalidTextRepresentation. Entra sem referente; o
+            # backfill liga (repo,path) -> ficha quando a raiz existir. _referentes_adr fica
+            # de pe, ja com o vocabulario certo do enum, para esse dia.
+            "referentes": [],
             "corpo": corpo,
         }
 
@@ -188,7 +202,7 @@ def sha_do_repo(repo):
     if not os.path.isdir(os.path.join(clone, ".git")):
         return None
     try:
-        r = subprocess.run(["git", "-C", clone, "rev-parse", "HEAD"],
+        r = subprocess.run([GIT, "-C", clone, "rev-parse", "HEAD"],
                            capture_output=True, text=True, check=True)
         return r.stdout.strip()
     except (subprocess.CalledProcessError, FileNotFoundError):
@@ -370,7 +384,11 @@ def main():
             morre(f"nenhum item na lista {lista}", 1)
     itens, pulos = montar_itens(curados, args.limite, args.so)
     if not itens:
-        morre("nenhum item ingerivel (todos pulados; veja motivos com --json)", 1)
+        # Os motivos saem AQUI: o caminho do --json fica depois do POST, entao mandar o dono
+        # "ver com --json" era um beco — nenhum item, nenhum lote, nenhuma saida.
+        detalhe = "\n".join(f"    - {chave}: {motivo}" for chave, motivo in pulos[:20])
+        extra = f"\n    ... e mais {len(pulos) - 20}" if len(pulos) > 20 else ""
+        morre(f"nenhum item ingerivel ({len(pulos)} pulados):\n{detalhe}{extra}", 1)
 
     headers = {}
     if TOKEN:

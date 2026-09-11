@@ -124,10 +124,9 @@ conforme() {
         # $entidade e a <raiz> (lista curada ou clone). O cliente magro de casa (card #3027,
         # rota POST /acervo/casa/lotes) parseia a lista, resolve sha por repo, le o corpo do
         # git e sobe no payload -- sem MinIO, sem OCR. Nao passa pelo cliente de OBRA.
-        case "$entidade" in
-          --*) exec "$ATOS/casa-ingerir" "$@" ;;
-          *)   exec "$ATOS/casa-ingerir" "$entidade" "$@" ;;
-        esac ;;
+        # $entidade repassa SEMPRE: quando e' flag (--adr), o ramo antigo a descartava, e
+        # `ingerir casa --adr` caia calado na lista curada default.
+        exec "$ATOS/casa-ingerir" "$entidade" "$@" ;;
     # --- casa generico: especies que vivem na TABELA acervo.casa (arq:0106) ---
     # As especies com fonte propria (adr, pagina-wiki, stack, ferramental) ja foram
     # capturadas acima. O que sobra em ler/listar casa <especie> vai ao sub-ato casa,

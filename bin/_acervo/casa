@@ -20,6 +20,7 @@
 # Read-only. Escrita é `acervo escrever/ingerir casa` (outro caminho).
 import json
 import os
+import re
 import signal
 import subprocess
 import sys
@@ -112,32 +113,62 @@ def listar(especie, quero_json):
     return 0
 
 
+def _cond_codigo_adr(especie, seletor):
+    """`arq:0101`, `seg:0011` ou `0101` -> condicao por path da ADR. None se nao casar.
+
+    A nomenclatura de ADR promete `acervo ler casa adr <codigo>` e o codigo NAO e coluna:
+    e' derivado de `<registro>:<numero>`, ambos reconstruiveis do path (0106). Enquanto o
+    fichario da raiz (acervo.entidade) estiver vazio, o referente nao existe para resolver
+    por ele — o path e' a unica identidade viva, e o par (registro, numero) mapeia nele sem
+    ambiguidade: numero e' unico por registro.
+    """
+    if especie != "adr":
+        return None
+    m = re.match(r"^(?:([a-z]+):)?(\d{1,4})$", seletor.strip())
+    if not m:
+        return None
+    registro = (m.group(1) or "arq").lower()
+    numero = m.group(2).zfill(4)
+    if registro == "arq":
+        prefixo = "macro-global/decisions/%s-" % numero
+    else:
+        cap = "seguranca" if registro == "seg" else registro
+        prefixo = "macro-global/capabilities/%s/decisions/%s-" % (cap, numero)
+    return "c.path like %s" % _lit(prefixo + "%")
+
 def ler(especie, seletor, quero_json):
     """Uma linha pela identidade: seletor casa com path (ou repo@path se vier o repo)."""
     _valida_especie(especie)
-    if "@" in seletor:
+    cond_adr = _cond_codigo_adr(especie, seletor)
+    if cond_adr:
+        cond = cond_adr
+    elif "@" in seletor:
         repo, path = seletor.split("@", 1)
         cond = "c.repo=%s and c.path=%s" % (_lit(repo), _lit(path))
     else:
         cond = "c.path=%s" % _lit(seletor)
-    sql = (
-        "select c.repo, c.path, c.sha, c.dono, c.natureza, c.ciclo, "
-        "       coalesce(c.titulo,''), c.corpo "
+    # DUAS queries, de proposito. O corpo de um doc da casa e' multi-LINHA, e a saida do
+    # psql -tAF| e' quebrada por linha: trazer corpo junto fazia UM doc de 96 linhas parecer
+    # 96 registros, e toda leitura de doc longo morria em "seletor ambiguo". A contagem sai
+    # do metadado (uma linha por doc); o corpo vem depois, pela identidade ja resolvida.
+    sql_meta = (
+        "select c.repo, c.path, c.sha, c.dono, c.natureza, c.ciclo, coalesce(c.titulo,'') "
         "from acervo.casa c join acervo.especie_tipo e on e.id=c.especie_id "
-        "where e.slug=%s and %s;" % (_lit(especie), cond)
+        "where e.slug=%s and %s order by c.repo, c.path;" % (_lit(especie), cond)
     )
-    saida = _psql(sql)
-    linhas = [l for l in saida.splitlines() if l.strip()]
+    linhas = [l for l in _psql(sql_meta).splitlines() if l.strip()]
     if not linhas:
         morre("acervo casa: nada da especie '%s' com seletor '%s' em acervo.casa."
               % (especie, seletor), 1)
     if len(linhas) > 1:
-        morre("acervo casa: seletor '%s' ambiguo (%d linhas); use repo@path."
-              % (seletor, len(linhas)), 2)
-    campos = linhas[0].split("|")
-    # corpo pode conter |; junta o rump depois dos 7 primeiros campos
-    repo, path, sha, dono, natureza, ciclo, titulo = campos[:7]
-    corpo = "|".join(campos[7:])
+        achados = "\n".join("    - %s@%s" % tuple(l.split("|")[:2]) for l in linhas[:10])
+        morre("acervo casa: seletor '%s' ambiguo (%d docs); use repo@path:\n%s"
+              % (seletor, len(linhas), achados), 2)
+    repo, path, sha, dono, natureza, ciclo, titulo = linhas[0].split("|")[:7]
+    corpo = _psql(
+        "select c.corpo from acervo.casa c where c.repo=%s and c.path=%s;"
+        % (_lit(repo), _lit(path))
+    )
     if quero_json:
         print(json.dumps({
             "repo": repo, "path": path, "sha": sha, "dono": dono,
