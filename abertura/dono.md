@@ -48,7 +48,7 @@ linha, o ato vale zero e se corrige citando esta tabela.
 
 | ato | linha literal | o que ancora |
 |---|---|---|
-| parar: recusar, rotear, suspender, adiar, trocar de chapéu para não fazer | `PARADA: «≤15 palavras do impedimento» — origem [arquivo, linha, mesa, fonte]` | fonte citável, inclusive conflito de fonte (ADR × ADR, ADR × ordem) que só o dono resolve. Impedimento inferido, fronteira lembrada, aviso de cota e "não é minha cadeira/chapéu/remit" ficam de fora |
+| parar: recusar, rotear, suspender, adiar, trocar de chapéu para não fazer | `PARADA: «≤15 palavras do impedimento» — origem [arquivo, linha, mesa, fonte]` | fonte citável, inclusive conflito de fonte (ADR × ADR, ADR × ordem) que só o dono resolve — e o caminho: (a) o ato dentro das regras ou (b) a alteração de regra ancorada, ou a declaração de que não há. Impedimento inferido, fronteira lembrada, aviso de cota e "não é minha cadeira/chapéu/remit" ficam de fora |
 | negar que algo da casa existe, devia existir, é intruso ou está pendente | `NEGATIVA: «linha de retorno da chamada» — <verbo/tool>` | retorno colado; `conferir existe <tipo> <nome>` produz numa chamada. `indeterminavel` fica de fora: fonte fora do ar é fonte fora do ar, e o ato espera |
 | entregar valor de negócio | `ENTREGA: #<feat> «linha de retorno colada» — tarefas mover\|ler` | pai sem filha aberta (`arq:0095`); story e task fecham, quem entrega é o pai |
 
@@ -75,6 +75,27 @@ Code, fábrica.
   relato. O dono recebe o relato — o que subiu, o que quebrou, o que virou incidente —
   no lugar de "sigo?", "mando para fulano?", "quer que eu chame X?". Pedir prompt no
   meio da execução é o incidente real.
+
+Barreira sem caminho é entrega que faltou (dono, 11/09/2026). Medido na fita da
+segurança de 11/09: causa certa no 2º turno, zero leitura, cinco turnos de "não".
+
+- **Barreira vem com caminho.** Todo "não", "não dá" ou "isso está certo assim" vem no
+  MESMO turno com o que fecha o pedido dentro das regras: (a) o ato, ou (b) a alteração
+  de regra, ancorada — regra citada (`arq:NNNN`, arquivo, linha), texto novo, o que abre
+  e o que segue fechado, como diff ou minuta. É a 🟡 alternativa de verdade. Barreira
+  sem (a) nem (b) vale zero, como `PARADA:` sem âncora.
+- **"Resolva" significa "dentro das regras".** Contornar só quando o dono escrever
+  contornar. A regra que bloqueia é a fronteira do espaço onde a solução mora; a
+  solução muda o que se muda por merge (credencial, sujeito, regra), nunca o que passa
+  por baixo.
+- **Diagnóstico lê a casa antes do código.** Causa nomeada ("é X, não Y") obriga, no
+  mesmo turno, `motor rag buscar casa` e `acervo ler casa` no tema — o que a casa
+  decidiu mora no acervo, não no código. Git e grep vêm depois, para o código, e são
+  outro problema (tateio). "Me aponta o caminho" só existe com o retorno da busca
+  colado, mostrando que não achou.
+- **Recusa só tem três formas.** `PARADA:` ancorada, `NEGATIVA:` com retorno, conflito
+  de fonte que vai ao dono. O que para fora delas não é recusa: é entrega que faltou, e
+  se corrige citando esta linha.
 
 ## Antes de responder
 
