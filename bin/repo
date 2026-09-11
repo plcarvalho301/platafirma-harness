@@ -3,7 +3,7 @@
 # capacidade: construcao
 # dono: claudinho-TI
 # use para: clonar repo, estado do clone, criar/trocar ramo, commitar, empurrar, abrir PR
-# atos: git, estado, atualizar, clonar, ramo, commitar, empurrar, pr-abrir, pr-listar, pr-ver, pr-diff, pr-merge
+# atos: git, estado, atualizar, clonar, ramo, commitar, empurrar, pr-abrir, pr-listar, pr-ver, pr-diff, pr-merge, sanear
 #
 # Por que `construcao`, e nao um nome novo: a primeira volta desta story inventou
 # `repo`, `teste`, `lint` e `revisao-de-codigo` — quatro capacidades paralelas a uma que
@@ -76,6 +76,12 @@ uso:
   $VERBO pr-merge <repo> <numero> [--squash|--merge|--rebase] [--forcar]
                                         aprova e mescla o PR (operador do host); default --squash
                                         recusa check vermelho salvo --forcar
+  $VERBO sanear [<repo>] [--relatar]    o "arruma tudo": varre a raiz (ou so <repo>) e aplica
+                                        a tabela estado->acao da spec_saneamento-de-clones #3.3.
+                                        Nunca perde trabalho (sujo/divergido vira wip/ empurrado
+                                        antes de qualquer reset); nunca funde (so ff-only).
+                                        O que a tabela nao cobre vira incidente, nunca pergunta
+                                        ao dono. --relatar faz o mesmo passeio sem escrever nada.
 
 raiz de trabalho: $RAIZ   (PF_REPO_RAIZ)
 exit: 0 ok · 2 uso · 3 falha do git · 4 alvo fora da raiz ou trava de producao
@@ -341,6 +347,129 @@ ato_pr_merge() {
     || morre "gh pr merge falhou" 3
 }
 
+# sanear: o "arruma tudo" (spec_saneamento-de-clones.md #3.3, ordem do dono 11/09/2026).
+# Varre a raiz inteira (ou um clone so, se nomeado); para CADA worktree/clone, a tabela
+# da spec e o contrato -- a maquina decide tudo que esta nela, o que nao esta vira
+# incidente na mesa de ti (fila enviar), nunca pergunta ao dono.
+# Invariante que este ato honra sempre: NUNCA perde trabalho (todo estado local sujo
+# vira ramo wip/ empurrado antes de qualquer reset) e NUNCA funde por conta propria
+# (so ff-only). --relatar faz o mesmo passeio sem escrever nada (dry-run).
+ato_sanear() {
+  local alvo="" relatar=0 raiz_incidentes=0
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --relatar) relatar=1; shift ;;
+      -*) morre "argumento nao reconhecido: '$1'" 2 ;;
+      *) [ -z "$alvo" ] && { alvo="$1"; shift; } || morre "argumento excedente: '$1'" 2 ;;
+    esac
+  done
+
+  local dirs=()
+  if [ -n "$alvo" ]; then
+    local c; c="$(clone_de "$alvo")" || exit $?
+    dirs=("$c")
+  else
+    for d in "$RAIZ"/*/; do
+      [ -e "${d%/}/.git" ] && dirs+=("${d%/}")
+    done
+  fi
+
+  local ts; ts="$(date -u +%Y%m%d-%H%M)"
+  local incidentes=()
+
+  for c in "${dirs[@]}"; do
+    local nome; nome="$(basename "$c")"
+
+    # dubious ownership / .git quebrado -- indeterminavel, nao toca, vira incidente.
+    if ! "$GIT" -C "$c" rev-parse --git-dir >/dev/null 2>&1; then
+      incidentes+=("$nome: indeterminavel -- $("$GIT" -C "$c" rev-parse --git-dir 2>&1 | head -1) (uid: $(stat -c%u "$c" 2>/dev/null))")
+      continue
+    fi
+
+    local ramo; ramo="$(ramo_atual "$c")"
+    local sujo; sujo="$("$GIT" -C "$c" status --porcelain 2>/dev/null)"
+
+    # working tree sujo OU HEAD destacado com commits proprios -> wip/<ramo-ou-head>-<ts>, push. Nunca descarta.
+    if [ -n "$sujo" ] || [ "$ramo" = "HEAD" ]; then
+      local base_wip="${ramo:-HEAD}"; [ "$base_wip" = "HEAD" ] && base_wip="detached-$("$GIT" -C "$c" rev-parse --short HEAD 2>/dev/null)"
+      local ramo_wip="wip/${base_wip}-${ts}"
+      if [ "$relatar" -eq 1 ]; then
+        printf '%s: relataria wip -> %s (sujo=%s HEAD=%s)\n' "$nome" "$ramo_wip" "$([ -n "$sujo" ] && echo sim || echo nao)" "$ramo"
+        continue
+      fi
+      "$GIT" -C "$c" checkout -b "$ramo_wip" >/dev/null 2>&1 || { incidentes+=("$nome: falhou checkout -b $ramo_wip"); continue; }
+      [ -n "$sujo" ] && { "$GIT" -C "$c" add -A && "$GIT" -C "$c" commit -q -m "wip: sanear $ts" >/dev/null; }
+      if PATH="$PATH_FORGE" "$GIT" -C "$c" push -u origin "$ramo_wip" >/dev/null 2>&1; then
+        printf '%s: salvo em wip -> origin/%s\n' "$nome" "$ramo_wip"
+      else
+        incidentes+=("$nome: wip $ramo_wip criado mas push falhou -- trabalho local, nao empurrado")
+      fi
+      continue
+    fi
+
+    # ramo com commit local nao empurrado -> push -u.
+    local upstream; upstream="$("$GIT" -C "$c" rev-parse --abbrev-ref "@{upstream}" 2>/dev/null)"
+    if [ -z "$upstream" ]; then
+      if [ "$relatar" -eq 1 ]; then printf '%s: relataria push -u origin %s (sem upstream)\n' "$nome" "$ramo"; continue; fi
+      if PATH="$PATH_FORGE" "$GIT" -C "$c" push -u origin "$ramo" >/dev/null 2>&1; then
+        printf '%s: empurrado -u origin/%s\n' "$nome" "$ramo"
+      else
+        incidentes+=("$nome: ramo '$ramo' sem upstream e push -u falhou")
+      fi
+      continue
+    fi
+
+    # atras/a-frente do upstream.
+    "$GIT" -C "$c" fetch --prune origin >/dev/null 2>&1
+    local trilha; trilha="$("$GIT" -C "$c" rev-list --left-right --count "@{upstream}...HEAD" 2>/dev/null)"
+    local atras="${trilha%%$'\t'*}" frente="${trilha##*$'\t'}"
+
+    if [ "${atras:-0}" -gt 0 ] && [ "${frente:-0}" -eq 0 ]; then
+      # so atras, ff possivel.
+      if [ "$relatar" -eq 1 ]; then printf '%s: relataria merge --ff-only (%s atras)\n' "$nome" "$atras"; continue; fi
+      if "$GIT" -C "$c" merge --ff-only "@{upstream}" >/dev/null 2>&1; then
+        printf '%s: atualizado -> %s\n' "$nome" "$("$GIT" -C "$c" log -1 --format='%h %s')"
+      else
+        incidentes+=("$nome: ff-only falhou apesar de so-atras (${atras}) -- confira a mao")
+      fi
+    elif [ "${atras:-0}" -gt 0 ] && [ "${frente:-0}" -gt 0 ]; then
+      # divergiu: salva o lado local em wip, reseta ao upstream, incidente pra cadeira do ramo.
+      local ramo_wip="wip/${ramo}-${ts}"
+      if [ "$relatar" -eq 1 ]; then
+        printf '%s: relataria divergencia -> salvar wip/%s e reset a upstream (atras=%s frente=%s)\n' "$nome" "$ramo_wip" "$atras" "$frente"
+        continue
+      fi
+      "$GIT" -C "$c" branch "$ramo_wip" "$ramo" >/dev/null 2>&1
+      if PATH="$PATH_FORGE" "$GIT" -C "$c" push -u origin "$ramo_wip" >/dev/null 2>&1 \
+        && "$GIT" -C "$c" reset --hard "@{upstream}" >/dev/null 2>&1; then
+        incidentes+=("$nome: '$ramo' divergiu de upstream (atras=$atras frente=$frente) -- lado local salvo em wip/$ramo_wip (empurrado), checkout resetado a upstream. Cadeira dona do ramo rebaseia.")
+      else
+        incidentes+=("$nome: divergiu (atras=$atras frente=$frente) e falhei salvando/resetando -- NAO tocado, confira a mao")
+      fi
+    fi
+
+    # worktree cujo ramo ja foi mesclado em origin/main -> remove.
+    if "$GIT" -C "$c" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+      local wt_git; wt_git="$("$GIT" -C "$c" rev-parse --git-common-dir 2>/dev/null)"
+      local main_git; main_git="$("$GIT" -C "$c" rev-parse --git-dir 2>/dev/null)"
+      if [ -n "$wt_git" ] && [ "$wt_git" != "$main_git" ] && [ "$ramo" != "HEAD" ] \
+        && "$GIT" -C "$c" merge-base --is-ancestor "$ramo" origin/main 2>/dev/null; then
+        if [ "$relatar" -eq 1 ]; then printf '%s: relataria worktree remove + branch -d %s (ja mesclado)\n' "$nome" "$ramo"; continue; fi
+        "$GIT" -C "$c" worktree remove --force "$c" 2>/dev/null \
+          && printf '%s: worktree removido (%s ja mesclado em origin/main)\n' "$nome" "$ramo" \
+          || incidentes+=("$nome: ramo '$ramo' ja mesclado mas worktree remove falhou")
+      fi
+    fi
+  done
+
+  if [ "${#incidentes[@]}" -eq 0 ]; then
+    [ "$relatar" -eq 1 ] || printf 'limpo -- nada a fazer\n'
+  else
+    printf '\nincidentes (%d):\n' "${#incidentes[@]}"
+    printf '  - %s\n' "${incidentes[@]}"
+  fi
+}
+
 ato="${1:-}"; [ -n "$ato" ] && shift
 case "$ato" in
   git)       ato_git "$@" ;;
@@ -354,6 +483,7 @@ case "$ato" in
   pr-listar) ato_pr_listar "$@" ;;
   pr-ver)    ato_pr_ver "$@" ;;
   pr-merge)  ato_pr_merge "$@" ;;
+  sanear)    ato_sanear "$@" ;;
   ""|-h|--help|ajuda) uso ;;
-  *) morre "ato desconhecido: '$ato' — atos: git, estado, atualizar, clonar, ramo, commitar, empurrar, pr-abrir, pr-listar, pr-ver, pr-diff, pr-merge" 2 ;;
+  *) morre "ato desconhecido: '$ato' — atos: git, estado, atualizar, clonar, ramo, commitar, empurrar, pr-abrir, pr-listar, pr-ver, pr-diff, pr-merge, sanear" 2 ;;
 esac
