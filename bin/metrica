@@ -43,7 +43,7 @@ RAIZ = os.environ.get("PF_RAIZ", os.path.expanduser("~/AI"))
 LOG_OPS = os.environ.get("PF_LOG_OPS") or os.path.join(RAIZ, "var", "log", "ops")
 
 VERBO = "metrica"
-ATOS = ("eventos", "dia", "ate-acerto")
+ATOS = ("eventos", "dia", "ate-acerto", "tateio")
 TIPOS = ("giro", "erro", "help", "acerto", "cadeia", "lote")
 
 # O que o ops log grava por chamada de verbo (ops-server/server.py, `_audit`).
@@ -150,6 +150,10 @@ def giros_do_dia(fonte, dia, cadeira=None):
         if cadeira and reg.get("cadeira") != cadeira:
             continue
         g = {c: reg.get(c) for c in CAMPOS_GIRO}
+        # FORA de CAMPOS_GIRO de proposito: `evento` e `motivo` nao saem no stream de
+        # eventos (contrato estavel), mas `tateio` precisa deles para separar recusa da
+        # porta (sem_verbo) de falha de execucao.
+        g["evento"] = reg.get("evento")
         g["pos"] = pos
         g["falhou"] = falhou(reg)
         g["lote"] = em_lote(reg)
@@ -340,6 +344,115 @@ def ate_acerto(giros, par):
     }
 
 
+# --- camada 3b: TATEIO (consumer-aligned) ----------------------------------------
+#
+# Pedido de gestao-estrategica, 11/09/2026, por ordem do dono: separar DOIS tateios que
+# `ate-acerto` mistura, e que pedem curas opostas.
+#
+#   (1) GRAMATICA  a cadeira nao sabe a FORMA do verbo. Sinal: giro que falhou com
+#                  exit 2 (uso invalido), sem ato (verbo nu, listando atos), ou recusado
+#                  pela porta (`sem_verbo`). Cura: a recusa devolver o exemplo que casa.
+#   (2) LEITURA    a cadeira sabe a forma e procura no lugar errado: gasta a fita em
+#                  read_file/repo/run_command por bisseccao numa sessao onde `motor` e
+#                  `acervo` nao foram chamados uma vez. Cura e' de conduta, nao de porta.
+#
+# Por que nao usar `ate-acerto` para isso: ela conta a distancia ate o primeiro exit 0
+# de um par (ordem_id, tool) e nao olha se os giros do meio falharam. Uma fita que roda
+# 40 chamadas BEM-SUCEDIDAS de `acervo psql` e depois uma que falha aparece la como
+# cadeia longa — trabalho, nao tateio. Medido em 11/09: os cinco maiores pares do dia
+# eram execucao produtiva. Aqui so entra giro que FALHOU.
+
+# Ferramentas de codigo: onde a bisseccao acontece.
+CODIGO = ("read_file", "write_file", "run_command", "repo", "git", "lint", "teste")
+# Leitura da casa: o que responde "o que a casa decidiu" numa chamada.
+CASA = ("motor", "acervo", "descobrir")
+# Piso de uma sessao "tecnica": abaixo disso nao ha bisseccao, ha uma consulta solta.
+PISO_TECNICA = 5
+
+def _e_gramatica(g):
+    """Falha de FORMA: exit 2, verbo nu, ou recusa da porta."""
+    if not g["falhou"]:
+        return False
+    return (g["exit_code"] == 2 or _nulo(g["ato"]) or g.get("evento") == "sem_verbo")
+
+def tateio(giros, par):
+    gram_verbo = defaultdict(int)
+    exec_verbo = defaultdict(int)
+    gram_cadeira = defaultdict(int)
+    for g in giros:
+        if not g["falhou"]:
+            continue
+        if _e_gramatica(g):
+            gram_verbo[g["tool"]] += 1
+            gram_cadeira[g["cadeira"] or "-"] += 1
+        else:
+            exec_verbo[g["tool"]] += 1
+
+    # Giros de gramatica gastos ANTES do primeiro acerto de cada par: o custo real da
+    # forma desconhecida, sem os giros de trabalho que inflam `ate-acerto`.
+    gasto = []
+    for (ordem, tool), idxs in par.items():
+        n_gram = 0
+        for n in idxs:
+            g = giros[n]
+            if _e_gramatica(g):
+                n_gram += 1
+                continue
+            if not g["falhou"]:
+                if n_gram:
+                    gasto.append({"ordem_id": ordem, "tool": tool,
+                                  "cadeira": g["cadeira"], "giros_de_gramatica": n_gram,
+                                  "acertou_em": g["ato"], "ts": g["ts"]})
+                break
+    gasto.sort(key=lambda x: (-x["giros_de_gramatica"], x["ts"] or ""))
+
+    # Sessao tecnica sem leitura da casa.
+    por_ordem = defaultdict(list)
+    for g in giros:
+        por_ordem[g["ordem_id"] or "-"].append(g)
+    sem_casa, com_casa = [], 0
+    for ordem, gs in sorted(por_ordem.items()):
+        if ordem == "-":
+            continue                      # giro sem fita: nao ha sessao a julgar
+        cod = sum(1 for g in gs if g["tool"] in CODIGO)
+        casa = sum(1 for g in gs if g["tool"] in CASA)
+        if cod < PISO_TECNICA:
+            continue
+        if casa:
+            com_casa += 1
+        else:
+            sem_casa.append({"ordem_id": ordem, "cadeira": gs[0]["cadeira"],
+                             "giros": len(gs), "giros_de_codigo": cod})
+    sem_casa.sort(key=lambda x: -x["giros_de_codigo"])
+
+    n_gram = sum(gram_verbo.values())
+    n_exec = sum(exec_verbo.values())
+    tecnicas = len(sem_casa) + com_casa
+    return {
+        "gramatica": {
+            "total": n_gram,
+            "por_verbo": dict(sorted(gram_verbo.items(), key=lambda kv: -kv[1])),
+            "por_cadeira": dict(sorted(gram_cadeira.items(), key=lambda kv: -kv[1])),
+            "gasto_ate_acerto": gasto[:20],
+        },
+        "execucao": {
+            "total": n_exec,
+            "por_verbo": dict(sorted(exec_verbo.items(), key=lambda kv: -kv[1])),
+        },
+        "leitura": {
+            "sessoes_tecnicas": tecnicas,
+            "sem_leitura_da_casa": len(sem_casa),
+            "com_leitura_da_casa": com_casa,
+            "onde": sem_casa[:20],
+        },
+        "total": {
+            "giros": len(giros),
+            "erros": n_gram + n_exec,
+            "taxa_erro": round((n_gram + n_exec) / len(giros), 4) if giros else 0,
+            "fracao_gramatica": round(n_gram / (n_gram + n_exec), 4) if (n_gram + n_exec) else 0,
+        },
+    }
+
 # --- borda ------------------------------------------------------------------------
 
 def uso(codigo=2):
@@ -348,6 +461,7 @@ def uso(codigo=2):
   metrica eventos [<dia>] [--tipo giro|erro|help|acerto|cadeia|lote] [--cadeira <slug>]
   metrica dia [<dia>] [--cadeira <slug>]
   metrica ate-acerto [<dia>] [--cadeira <slug>]
+  metrica tateio [<dia>] [--cadeira <slug>]
 
 Agrega o ops log (var/log/ops/ops-AAAA-MM-DD.jsonl) em eventos de uso do harness.
 <dia> e AAAA-MM-DD; sem ele, hoje. Saida JSON; --resumo imprime o sumario legivel.
@@ -355,6 +469,8 @@ Agrega o ops log (var/log/ops/ops-AAAA-MM-DD.jsonl) em eventos de uso do harness
 eventos     stream cru, um objeto por evento (giro, erro, help, acerto, cadeia, lote)
 dia         resumo: giros por fita, erros por verbo, profundidade de cadeia, help
 ate-acerto  a metrica-mae: giros-ate-acerto por (ordem_id, tool)
+tateio      separa tateio de GRAMATICA (exit 2, verbo nu, recusa da porta) de tateio de
+            LEITURA (sessao tecnica sem motor/acervo/descobrir), e do erro de execucao
 
 exit: 0 ok · 2 uso invalido · 4 nao ha log desse dia
 """)
@@ -394,6 +510,33 @@ def texto(ato, r):
         linhas.append("")
         linhas.append("giros de help por verbo:")
         for k, v in r["giros_de_help"].items():
+            linhas.append(f"  {v:5d}  {k}")
+    elif ato == "tateio":
+        t = r["total"]
+        linhas.append(f"{t['giros']} giros · {t['erros']} erros ({t['taxa_erro']:.1%}) · "
+                      f"gramatica {r['gramatica']['total']} ({t['fracao_gramatica']:.0%} "
+                      f"dos erros) · execucao {r['execucao']['total']}")
+        linhas.append("")
+        linhas.append("(1) gramatica — por verbo:")
+        for k, v in list(r["gramatica"]["por_verbo"].items())[:10]:
+            linhas.append(f"  {v:5d}  {k}")
+        linhas.append("gramatica — por cadeira:")
+        for k, v in list(r["gramatica"]["por_cadeira"].items())[:10]:
+            linhas.append(f"  {v:5d}  {k}")
+        linhas.append("gramatica — giros gastos antes do acerto (top 5):")
+        for x in r["gramatica"]["gasto_ate_acerto"][:5]:
+            linhas.append(f"  {x['giros_de_gramatica']:3d}  {(x['tool'] or '-'):12s} "
+                          f"{(x['cadeira'] or '-'):20s} acertou em '{x['acertou_em']}'")
+        lt = r["leitura"]
+        linhas.append("")
+        linhas.append(f"(2) leitura — {lt['sem_leitura_da_casa']} de "
+                      f"{lt['sessoes_tecnicas']} sessoes tecnicas sem motor/acervo/descobrir:")
+        for x in lt["onde"][:8]:
+            linhas.append(f"  {x['giros_de_codigo']:4d} giros de codigo  "
+                          f"{(x['cadeira'] or '-'):20s} {x['ordem_id']}")
+        linhas.append("")
+        linhas.append("erros de execucao (nao sao tateio de forma):")
+        for k, v in list(r["execucao"]["por_verbo"].items())[:8]:
             linhas.append(f"  {v:5d}  {k}")
     elif ato == "ate-acerto":
         s = r["resumo"]
@@ -464,6 +607,8 @@ def main(argv):
         r = {"dia": dia, "eventos": stream_eventos(giros, cadeias, args.tipo or None)}
     elif ato == "dia":
         r = {"dia": dia, **resumo_do_dia(giros, cadeias)}
+    elif ato == "tateio":
+        r = {"dia": dia, **tateio(giros, par)}
     else:
         r = {"dia": dia, **ate_acerto(giros, par)}
     if args.cadeira:
