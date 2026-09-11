@@ -354,6 +354,12 @@ ato_pr_merge() {
 # Invariante que este ato honra sempre: NUNCA perde trabalho (todo estado local sujo
 # vira ramo wip/ empurrado antes de qualquer reset) e NUNCA funde por conta propria
 # (so ff-only). --relatar faz o mesmo passeio sem escrever nada (dry-run).
+#
+# IDEMPOTENTE EM DUAS PASSADAS (D3 do parecer do arquiteto, aceito como doc): um clone
+# sujo E atras do upstream so recebe o wip nesta rodada (o fluxo e sequencial com
+# `continue`) -- nao chega a fazer merge --ff-only na mesma passada. A proxima chamada
+# de `sanear` encontra o clone ja limpo e entao atualiza. "Limpo" no fim de uma passada
+# nao significa "convergido"; rodar duas vezes converge sempre.
 ato_sanear() {
   local alvo="" relatar=0 raiz_incidentes=0
   while [ $# -gt 0 ]; do
@@ -419,10 +425,38 @@ ato_sanear() {
       continue
     fi
 
-    # atras/a-frente do upstream.
+    # fetch origin/main sempre (nao so quando ha upstream) -- o guard de
+    # worktree-mesclado abaixo depende de origin/main fresco (nao-defeito
+    # apontado no parecer: sem isto, ramo sem upstream pulava o fetch e
+    # testava contra origin/main potencialmente velho).
     "$GIT" -C "$c" fetch --prune origin >/dev/null 2>&1
-    local trilha; trilha="$("$GIT" -C "$c" rev-list --left-right --count "@{upstream}...HEAD" 2>/dev/null)"
-    local atras="${trilha%%$'\t'*}" frente="${trilha##*$'\t'}"
+
+    # worktree cujo ramo ja foi mesclado em origin/main -> remove. Roda ANTES
+    # do bloco de divergencia (D1 do parecer): se o ramo ja esta mesclado, ele
+    # NUNCA e "feature viva", entao remove aqui e pula o reset --hard abaixo
+    # de vez -- reset so acontece em ramo que NAO esta mesclado.
+    local ja_mesclado=0
+    if "$GIT" -C "$c" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+      local wt_git; wt_git="$("$GIT" -C "$c" rev-parse --git-common-dir 2>/dev/null)"
+      local main_git; main_git="$("$GIT" -C "$c" rev-parse --git-dir 2>/dev/null)"
+      if [ -n "$wt_git" ] && [ "$wt_git" != "$main_git" ] && [ "$ramo" != "HEAD" ] \
+        && "$GIT" -C "$c" merge-base --is-ancestor "$ramo" origin/main 2>/dev/null; then
+        ja_mesclado=1
+        if [ "$relatar" -eq 1 ]; then printf '%s: relataria worktree remove + branch -d %s (ja mesclado)\n' "$nome" "$ramo"; continue; fi
+        "$GIT" -C "$c" worktree remove --force "$c" 2>/dev/null \
+          && printf '%s: worktree removido (%s ja mesclado em origin/main)\n' "$nome" "$ramo" \
+          || incidentes+=("$nome: ramo '$ramo' ja mesclado mas worktree remove falhou")
+        continue
+      fi
+    fi
+
+    # atras/a-frente do upstream. So chega aqui quem NAO foi removido acima
+    # (ja_mesclado=0), ou seja: todo ramo que sobrevive ate aqui e "feature
+    # viva" pelo criterio que importa para reset --hard nao perder trabalho.
+    # read com IFS de espaco/tab separa pelos DOIS, nao depende de qual byte o
+    # git usa nesta versao entre left(atras) e right(a frente) (parecer D2).
+    local atras frente
+    read -r atras frente < <("$GIT" -C "$c" rev-list --left-right --count "@{upstream}...HEAD" 2>/dev/null)
 
     if [ "${atras:-0}" -gt 0 ] && [ "${frente:-0}" -eq 0 ]; then
       # so atras, ff possivel.
@@ -434,6 +468,9 @@ ato_sanear() {
       fi
     elif [ "${atras:-0}" -gt 0 ] && [ "${frente:-0}" -gt 0 ]; then
       # divergiu: salva o lado local em wip, reseta ao upstream, incidente pra cadeira do ramo.
+      # Chega aqui SO se ja_mesclado=0 (checado acima, antes deste bloco) --
+      # e por isso que resetar aqui e seguro: o ramo tem trabalho proprio nao
+      # mesclado, o reset --hard so acontece DEPOIS de o wip estar empurrado.
       local ramo_wip="wip/${ramo}-${ts}"
       if [ "$relatar" -eq 1 ]; then
         printf '%s: relataria divergencia -> salvar wip/%s e reset a upstream (atras=%s frente=%s)\n' "$nome" "$ramo_wip" "$atras" "$frente"
@@ -445,19 +482,6 @@ ato_sanear() {
         incidentes+=("$nome: '$ramo' divergiu de upstream (atras=$atras frente=$frente) -- lado local salvo em wip/$ramo_wip (empurrado), checkout resetado a upstream. Cadeira dona do ramo rebaseia.")
       else
         incidentes+=("$nome: divergiu (atras=$atras frente=$frente) e falhei salvando/resetando -- NAO tocado, confira a mao")
-      fi
-    fi
-
-    # worktree cujo ramo ja foi mesclado em origin/main -> remove.
-    if "$GIT" -C "$c" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
-      local wt_git; wt_git="$("$GIT" -C "$c" rev-parse --git-common-dir 2>/dev/null)"
-      local main_git; main_git="$("$GIT" -C "$c" rev-parse --git-dir 2>/dev/null)"
-      if [ -n "$wt_git" ] && [ "$wt_git" != "$main_git" ] && [ "$ramo" != "HEAD" ] \
-        && "$GIT" -C "$c" merge-base --is-ancestor "$ramo" origin/main 2>/dev/null; then
-        if [ "$relatar" -eq 1 ]; then printf '%s: relataria worktree remove + branch -d %s (ja mesclado)\n' "$nome" "$ramo"; continue; fi
-        "$GIT" -C "$c" worktree remove --force "$c" 2>/dev/null \
-          && printf '%s: worktree removido (%s ja mesclado em origin/main)\n' "$nome" "$ramo" \
-          || incidentes+=("$nome: ramo '$ramo' ja mesclado mas worktree remove falhou")
       fi
     fi
   done
