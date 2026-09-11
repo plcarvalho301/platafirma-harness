@@ -261,7 +261,56 @@ velho — conflito de fonte (ADR × ADR, ADR × ordem) é `PARADA:` pro dono, po
 pode ser mexer na ADR, e ADR não é imutável na PlataFirma. Afrouxar o default de ação não
 enfraquece o ato de parar; dá a ele um uso mais preciso.
 
+## Skill de arranque é casca (dono, 11/09/2026)
+
+A skill `platafirma` servida no claude.ai carregava 12,7 KB de regra copiada da abertura em
+16/08 — "aponto, não decido / transporte é o Pedro", protocolo de fila, "eu faço ou vai pra
+fábrica" — e o `dono.md` andou para o outro lado desde 18/08. Duas fontes, uma fóssil, e a
+cadeira do claude.ai lia as duas; o agy (Gemini) lê só o pacote. Daí a percepção do dono de
+que o Gemini "resolvia e vocês não": não era o modelo, era o texto a mais.
+
+- **Regra:** skill de arranque é PONTEIRO, como o `CLAUDE.md` de worktree desde
+  `arranque.md` (16/08). Conteúdo mínimo: disparar na menção e mandar chamar
+  `monta_sessao`; o pacote vence a skill. Nenhuma regra, nenhum "por quê" — o dono cortou
+  até a justificativa (cdb3873). Skill de MATÉRIA (`prosa`, `diagrama`, `pesquisa`) carrega
+  conteúdo por desenho; o que nelas repetir abertura ou regra de cadeira é fóssil candidato.
+- **Travessia é manual e por superfície:** nada no harness publica skill; web e desktop do
+  claude.ai recebem cada um o seu upload e não se equalizam (medido 11/09: desktop servia
+  blob anterior a main). Carimbo = `git hash-object` da fonte; servido hoje nas duas:
+  `af51abdd9395914cbba1d1544ac2bbec4c6bfee9` (main cdb3873). `conferir skill --servido`
+  mede, quando TI curar o git nu do verbo.
+- **Sinal de fóssil:** cadeira citando regra que não está no pacote da abertura. Se a
+  frase não vem de peça servida, vem de cópia congelada.
+
+## Barreira sem caminho é entrega que faltou (dono, 11/09/2026)
+
+Mecanismo, medido na fita da segurança de 11/09 (sessão 9803bb03): causa certa no 2º turno
+("é credencial, não política"), zero `read_file`, zero `motor`, cinco turnos de "não" e um
+"me aponta o caminho". Três forças, todas estruturais:
+
+- **Barreira custa zero; solução custa leitura.** Só a `PARADA:` formal exigia âncora; a
+  recusa em prosa escapava da tabela e saía de graça. Cura em `dono.md` f1c4973: barreira
+  vem com caminho — (a) o ato dentro das regras ou (b) a alteração de regra ancorada (a
+  🟡 alternativa de verdade) — e `PARADA:` ancora impedimento E caminho.
+- **"Resolva" cai no reflexo de "contorne".** Postura de segurança + treino do modelo. Cura:
+  "resolva" significa dentro das regras; contornar só quando o dono escrever contornar.
+- **Diagnóstico fechava o turno em vez de abrir a leitura.** E a leitura que o dono quer é
+  a da CASA (`motor rag buscar casa`, `acervo ler casa`), não git/grep: a decisão mora no
+  acervo. Provado contra mim na mesma fita — 50 giros de grep, 1 `motor`, e o `motor`
+  devolveu no 1º resultado (`break-glass.md`) o que qualificava a entrega antes de subir.
+  Git/grep é outro problema (tateio), com fila aberta em dados.
+
+Corolário para desenho de persona: postura "olho pelo risco" sem a obrigação de caminho
+produz o casco grosso que a própria persona nomeia como patologia. A obrigação mora no
+`dono.md`, não em cada persona — vale para toda cadeira.
+
 ## Diário de bordo
+
+11/09/2026 — `publicar-abertura` e `conferir skill` chamavam `git` nu e morriam sob o shim
+da porta (classe de c5d2321); curei o primeiro (357675e), o segundo foi a TI. `repo
+atualizar` disse "main não tem upstream" logo depois de `empurrar` ter dito "set up to
+track origin/main" — contorno: `repo git <clone> fetch origin main` + `merge --ff-only`.
+`motor` com ato errado (`motor motor buscar`): o ato é a INSTÂNCIA (`rag`), não o verbo.
 
 08/09/2026 — `mesa anota rh <texto>` como args deu exit 2 "unrecognized arguments" (o
 argparse do verbo só aceita o chapéu como posicional). Contorno encontrado NA DATA
