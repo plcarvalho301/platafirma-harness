@@ -44,8 +44,22 @@ _UA = ("Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
 REALM = os.environ.get("OIDC_ISSUER", "https://auth.platafirma.org/realms/platafirma")
 OPS = os.environ.get("OPS_URL", "https://ops.platafirma.org")
 ACERVO = os.environ.get("ACERVO_URL", "http://jaiminho-server:8000")
-CLIENT_ID = os.environ.get("JAIMINHO_CLIENT_ID", "")
-CLIENT_SECRET = os.environ.get("JAIMINHO_CLIENT_SECRET", "")
+# QUEM A PONTE E, decide-se pela credencial que o LANCADOR injeta — nunca pelo uid,
+# sudo ou terminal, que o PEP do outro lado nao ve (arranque.md: PF_CADEIRA nao
+# atravessa; identidade e o `sub` do JWT, identidade.py). Tres modos, por precedencia:
+#   1. PF_OPS_TOKEN            token estatico do ops-mcp -> sujeito `claudinho`
+#                              (operador; sujeitos.yaml: "e o dono"). E o agy local
+#                              rodado pelo dono na conta claudinho (11/09/2026).
+#   2. PONTE_CLIENT_ID/SECRET  client_credentials generico — o par que o lancador
+#                              der (ex.: um client `agy-dono` quando TI o criar).
+#   3. JAIMINHO_CLIENT_ID/..   o par da fabrica, como sempre foi (jaiminho-fabrica).
+# Sob `sudo` o ambiente NAO passa por padrao: `--preserve-env=PF_OPS_TOKEN` ou
+# `env_keep` no sudoers — sem isso a ponte cai no modo 3 e chega como fabrica.
+TOKEN_ESTATICO = os.environ.get("PF_OPS_TOKEN", "")
+CLIENT_ID = (os.environ.get("PONTE_CLIENT_ID")
+             or os.environ.get("JAIMINHO_CLIENT_ID", ""))
+CLIENT_SECRET = (os.environ.get("PONTE_CLIENT_SECRET")
+                 or os.environ.get("JAIMINHO_CLIENT_SECRET", ""))
 
 _tok = {"valor": None, "expira": 0}
 _cli = httpx.AsyncClient(timeout=httpx.Timeout(600.0, connect=15.0),
@@ -53,10 +67,13 @@ _cli = httpx.AsyncClient(timeout=httpx.Timeout(600.0, connect=15.0),
 
 
 async def _token():
+    if TOKEN_ESTATICO:                      # modo 1: nao renova, nao expira aqui
+        return TOKEN_ESTATICO
     if _tok["valor"] and time.time() < _tok["expira"] - 30:
         return _tok["valor"]
     if not (CLIENT_ID and CLIENT_SECRET):
-        raise RuntimeError("JAIMINHO_CLIENT_ID/SECRET ausentes")
+        raise RuntimeError("sem credencial: PF_OPS_TOKEN, PONTE_CLIENT_ID/SECRET "
+                           "ou JAIMINHO_CLIENT_ID/SECRET")
     r = await _cli.post(f"{REALM}/protocol/openid-connect/token", data={
         "grant_type": "client_credentials",
         "client_id": CLIENT_ID, "client_secret": CLIENT_SECRET})
