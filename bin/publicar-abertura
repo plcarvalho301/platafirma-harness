@@ -51,7 +51,12 @@ HARNESS="${PF_HARNESS:-$RAIZ/platafirma-harness}"
 MORADA="${PF_ABERTURA_DIR:-$RAIZ/var/abertura-publicada}"
 SUBARVORE="abertura"   # o subdir versionado que o montador serve
 
-g() { git -C "$HARNESS" "$@"; }
+# git por caminho absoluto, imune ao shim `git` de ~/AI/bin (mesma cura de c5d2321 no
+# `repo`): sob a porta o shim recusa, e a publicacao morria em "origin/main nao resolve"
+# (medido 11/09/2026, fita de gestao-estrategica).
+GIT="$(command -v /usr/bin/git /bin/git 2>/dev/null | head -1)"
+[ -x "$GIT" ] || GIT=/usr/bin/git
+g() { "$GIT" -C "$HARNESS" "$@"; }
 
 # ---- validacao do snapshot: nao publicar pacote quebrado ---------------------
 # Um snapshot so e servivel se traz o dado vivo do roteador e ao menos uma persona.
