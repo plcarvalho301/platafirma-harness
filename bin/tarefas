@@ -115,13 +115,16 @@ _recusa() { # lê o corpo do erro em $1 e devolve a mensagem da API
   return 1
 }
 
+# RECUSA E' FALHA (medido 12/09/2026): `|| _recusa` imprimia a causa e a funcao seguia
+# para o printf e devolvia 0 — `tarefas mover` recusado pela API saia "item null → : null"
+# com exit 0. Falha silenciosa e' pior que exit 1: o log de erro nao a ve.
 busca() { # busca MÉTODO /caminho
   local saida
   if [ -n "$QUEM" ]; then
     saida=$(curl -s --fail-with-body -X "$1" "$BASE$2" \
-                 -H "x-auth-request-preferred-username: $QUEM") || _recusa "$saida"
+                 -H "x-auth-request-preferred-username: $QUEM") || { _recusa "$saida"; return 1; }
   else
-    saida=$(curl -s --fail-with-body -X "$1" "$BASE$2") || _recusa "$saida"
+    saida=$(curl -s --fail-with-body -X "$1" "$BASE$2") || { _recusa "$saida"; return 1; }
   fi
   printf '%s' "$saida"
 }
@@ -131,10 +134,10 @@ envia() { # envia MÉTODO /caminho  (corpo JSON em stdin)
   if [ -n "$QUEM" ]; then
     saida=$(printf '%s' "$corpo" | curl -s --fail-with-body -X "$1" "$BASE$2" \
                  -H 'Content-Type: application/json' \
-                 -H "x-auth-request-preferred-username: $QUEM" -d @-) || _recusa "$saida"
+                 -H "x-auth-request-preferred-username: $QUEM" -d @-) || { _recusa "$saida"; return 1; }
   else
     saida=$(printf '%s' "$corpo" | curl -s --fail-with-body -X "$1" "$BASE$2" \
-                 -H 'Content-Type: application/json' -d @-) || _recusa "$saida"
+                 -H 'Content-Type: application/json' -d @-) || { _recusa "$saida"; return 1; }
   fi
   printf '%s' "$saida"
 }
