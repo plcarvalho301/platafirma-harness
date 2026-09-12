@@ -154,6 +154,13 @@ def giros_do_dia(fonte, dia, cadeira=None):
         # eventos (contrato estavel), mas `tateio` precisa deles para separar recusa da
         # porta (sem_verbo) de falha de execucao.
         g["evento"] = reg.get("evento")
+        # Custo do giro em bytes DEVOLVIDOS a fita — o que de fato ocupa contexto. Existe
+        # desde a poda na porta (arq:0101); giro anterior a ela nao tem o campo, e a
+        # medida declara a cobertura em vez de somar zero calado.
+        b = reg.get("bytes_servidos")
+        if b is None:
+            b = reg.get("bytes_produzidos")
+        g["bytes"] = b if isinstance(b, int) else None
         g["pos"] = pos
         g["falhou"] = falhou(reg)
         g["lote"] = em_lote(reg)
@@ -425,6 +432,24 @@ def tateio(giros, par):
                              "giros": len(gs), "giros_de_codigo": cod})
     sem_casa.sort(key=lambda x: -x["giros_de_codigo"])
 
+    # CUSTO em bytes servidos: giro caiu, mas byte acompanhou? Um giro que traz 40 KB
+    # custa mais contexto que dez que trazem 200 bytes — contar giro sem contar byte mede
+    # a metade barata.
+    com_bytes = [g for g in giros if g["bytes"] is not None]
+    bytes_total = sum(g["bytes"] for g in com_bytes)
+    bytes_erro = sum(g["bytes"] for g in com_bytes if g["falhou"])
+    por_verbo_bytes = defaultdict(int)
+    for g in com_bytes:
+        por_verbo_bytes[g["tool"]] += g["bytes"]
+    custo = {
+        "giros_com_medida": len(com_bytes),
+        "cobertura": round(len(com_bytes) / len(giros), 4) if giros else 0,
+        "bytes_servidos": bytes_total,
+        "bytes_por_giro": round(bytes_total / len(com_bytes)) if com_bytes else 0,
+        "bytes_em_giro_que_falhou": bytes_erro,
+        "por_verbo": dict(sorted(por_verbo_bytes.items(), key=lambda kv: -kv[1])[:10]),
+    }
+
     n_gram = sum(gram_verbo.values())
     n_exec = sum(exec_verbo.values())
     tecnicas = len(sem_casa) + com_casa
@@ -445,6 +470,7 @@ def tateio(giros, par):
             "com_leitura_da_casa": com_casa,
             "onde": sem_casa[:20],
         },
+        "custo": custo,
         "total": {
             "giros": len(giros),
             "erros": n_gram + n_exec,
@@ -534,6 +560,14 @@ def texto(ato, r):
         for x in lt["onde"][:8]:
             linhas.append(f"  {x['giros_de_codigo']:4d} giros de codigo  "
                           f"{(x['cadeira'] or '-'):20s} {x['ordem_id']}")
+        c = r["custo"]
+        linhas.append("")
+        linhas.append(f"custo — {c['bytes_servidos']/1024:.0f} KB servidos em "
+                      f"{c['giros_com_medida']} giros medidos ({c['cobertura']:.0%} de "
+                      f"cobertura) · {c['bytes_por_giro']} B/giro · "
+                      f"{c['bytes_em_giro_que_falhou']/1024:.0f} KB em giro que falhou")
+        for k, v in list(c["por_verbo"].items())[:6]:
+            linhas.append(f"  {v/1024:8.0f} KB  {k}")
         linhas.append("")
         linhas.append("erros de execucao (nao sao tateio de forma):")
         for k, v in list(r["execucao"]["por_verbo"].items())[:8]:

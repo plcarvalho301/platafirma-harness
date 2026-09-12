@@ -314,8 +314,31 @@ def _campos_poda(r: dict) -> dict:
     chamadas nunca esteve medido, e a perícia teve de estimá-lo.
     """
     p = (r or {}).get("poda") or {}
-    return {"bytes_servidos": p.get("bytes_servidos"), "sha": p.get("sha"),
-            "poda_modo": p.get("modo"), "ledger": p.get("ledger")}
+    if p:
+        return {"bytes_servidos": p.get("bytes_servidos"), "sha": p.get("sha"),
+                "poda_modo": p.get("modo"), "ledger": p.get("ledger")}
+    # Retorno que a poda nao tocou — erro e exit != 0 saem inteiros (invariante iii) —
+    # tambem OCUPA contexto, e ficava com `bytes_servidos: null`. Efeito medido em
+    # 11/09: todo dia do log fecha com "0 KB em giro que falhou", como se tateio fosse
+    # de graca. A invariante continua: nao se corta o diagnostico; passa-se a CONTA-LO,
+    # com `poda_modo: intocavel` dizendo que nao houve corte.
+    return {"bytes_servidos": _bytes_crus(r), "sha": None,
+            "poda_modo": "intocavel", "ledger": None}
+
+
+def _bytes_crus(r: dict) -> int | None:
+    """Tamanho do que saiu, nos mesmos campos que a poda mede — mais `stderr`, onde o
+    diagnostico de erro mora. Comparavel com `bytes_servidos` de retorno podado."""
+    if not isinstance(r, dict):
+        return None
+    total = 0
+    for campo, sub in (("stdout", "texto"), ("stderr", "texto"), ("content", None),
+                       ("erro", None)):
+        alvo = r.get(campo)
+        texto = (alvo or {}).get(sub) if sub else alvo
+        if isinstance(texto, str):
+            total += len(texto.encode("utf-8", "replace"))
+    return total
 
 
 def _env_subprocesso() -> dict:
