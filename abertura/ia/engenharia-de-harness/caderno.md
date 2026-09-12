@@ -237,6 +237,45 @@ mais do que erro que não nomeia cura nenhuma** — quem lê tenta, tenta nas du
 e só então vai ler o código. São três giros por encontro, em toda cadeira, para sempre.
 Ao escrever recusa que ensina a saída, a saída se roda uma vez antes de virar texto.
 
+## Exit code carrega três significados, e instrumento que não os separa mede errado por construção
+
+`exit ≠ 0` em verbo da casa é (a) falha, (b) VEREDITO (`conferir existe` = não existe,
+`acesso decidir` = negado, `git grep` = sem resultado, `lint` = achou) ou (c) PEDIDO DE
+AJUDA (verbo nu que lista os atos, `--help`). Contar tudo como erro produz taxa que
+nunca cai, porque (b) e (c) estão certos. A separação não se infere do número: (c) se
+reconhece na CHAMADA (ato nulo + exit 2, token de ajuda), (b) só se reconhece por marca
+no VERBO (`forma: predicado` no cabeçalho). Medido 12/09: de 248 "erros" de um dia, 92
+eram (b)+(c). O par disso do lado do verbo: ajuda pedida sai por stdout com exit 0; só
+a chamada errada sai por stderr com exit 2.
+
+## Contagem de erro por giro infla com o lote, e o caso de uso some quando a auditoria grava só o primeiro token
+
+Um template errado copiado em N itens de lote conta N erros de UM erro (12/09: 15% dos
+erros do dia, `tarefas ver` ×9 num lote só). Dedup por `(lote_id, tool, ato, exit)`
+antes de qualquer taxa. E a recusa da porta que grava só `verbo: repo` sem o item inteiro,
+ou o `read_file` que grava "não existe" sem o path, deixa a classe visível e o caso de uso
+irrecuperável — o que se recusa se audita INTEIRO, ou a métrica seguinte não tem o que
+ler.
+
+## Queda numa série após intervenção não separa aprendizado de mudança de texto
+
+Antes de ler "a cadeira aprendeu" numa curva que cai, inventariar as intervenções de
+superfície na janela (git log de abertura/, skills/, tool-manifest/) e a composição de
+cadeiras por dia. Em 07–11/09 havia cinco mudanças de texto e o mix trocava a cada dia:
+a curva não distingue as três causas. O que se AFIRMA é o inverso, e é mais útil: texto
+da casa que cita `<verbo> <ato>` inexistente produz a chamada errada NO MESMO DIA (dono.md
+f1c4973 → `motor casa` às 22:57). Vocabulário citado em texto servido se confere contra
+os atos servidos, como arquivo se confere por procedência.
+
+## Em verbo bash sob `set -e`, o exit do último comando é o contrato — e dois padrões o quebram nos dois sentidos
+
+`[ -n "$x" ] && cmd` como último comando devolve 1 quando `$x` é vazio: verbo que
+imprimiu tudo certo sai como erro (falso erro). `saida=$(...) || funcao_que_so_imprime`
+sem `return 1` segue para o `printf` e devolve 0: recusa da API sai como sucesso (falha
+silenciosa). Medidos no mesmo verbo no mesmo dia (`tarefas ler` e `tarefas mover`,
+12/09). A regra é `return 0` explícito no fim e `|| { avisa; return 1; }` na recusa;
+o lint deveria pegar os dois.
+
 ## Diário de bordo
 
 07/09/2026 — `conta-abertura` (instrumento de custo do pacote) morria com `python: can't
@@ -342,3 +381,32 @@ própria mensagem de erro carrega a prova de que subiu (o `is at` é o meu SHA).
 encontrado NA DATA 07/09/2026 foi o mesmo de mais cedo: conferir por `ls-remote` antes
 de recommitar. Duas caras num dia só — exit code de `repo empurrar` não decide sozinho
 se a entrega subiu.
+
+12/09/2026 — `fila` (nu, uso), `fila ver` (ato inválido), `fila ler` ("persona
+obrigatória"): três giros de gramática antes de `fila ler ia --tudo`, com o `sessao_id`
+na mão. — contorno encontrado NA DATA 12/09/2026 foi passar a persona; a cura é persona
+padrão = cadeira da sessão (item 2 do #3045).
+
+12/09/2026 — `metrica eventos 2026-09-11 --tipo erro` truncou em 50 KB e o stream não
+carrega args/motivo (contrato estável de CAMPOS_GIRO); `read_file` do ops log cru tem
+1,66 MB. — contorno encontrado NA DATA 12/09/2026 foi escrever o ato `metrica casos`
+(consumer-aligned, por fora de `eventos`), que lê o registro bruto do giro falhado
+(harness@0af8090, --agregado em b153257).
+
+12/09/2026 — `tarefas mover 3044 em-execucao`: a API recusou ("faltam os campos
+`Onde:`" — eu tinha escrito `Onde (medição…):`) e o verbo imprimiu `item null → :
+null` com exit 0. Não há ato de editar corpo em `tarefas`. — contorno encontrado NA DATA
+12/09/2026 foi `tarefas apagar 3044` + `criar` de novo (#3045) com o rótulo literal; o
+exit 0 na recusa foi corrigido em `busca`/`envia` (harness@6446a3e).
+
+12/09/2026 — `repo commitar platafirma-harness` (add -A) relatou "4 arquivo(s) sob
+juízo" quando eu tinha tocado 2: o clone compartilhado tinha alteração de outra cadeira
+parada, e ela subiu no meu commit 0af8090. Não conferi quais. — contorno encontrado NA
+DATA 12/09/2026 foi nenhum; `repo estado` antes de commitar em clone compartilhado (já
+no diário de 07/09) vale também para árvore suja de terceiro, não só para ramo.
+
+12/09/2026 — `encerrar fita`, ordem do dono: a porta recusa `encerrar` ("sem verbo").
+`bin/encerrar` e `bin/descansar` são o mesmo arquivo (diário de 07/09); o que falta é
+`encerrar` no manifesto que a porta serve. — contorno encontrado NA DATA 12/09/2026 foi
+`descansar fita`; a cura (ordem do dono 12/09: "esse é o vocabulário que eu uso, tem que
+ser alias mesmo") é servir `encerrar` como apelido no manifesto — item 4 do #3045.
