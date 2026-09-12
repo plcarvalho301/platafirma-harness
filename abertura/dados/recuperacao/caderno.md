@@ -259,3 +259,29 @@ arquivo**, e a fita do Code em estação emprestada não serve. Contorno NA DATA
 registrado aqui e o passo 3 declarado como não-executável no encerramento. Quem for
 endereçar: ou o `descansar` condiciona o passo 3 à superfície, ou a triagem vira ato do
 lado do host. É de harness (IA), não de dados.
+
+12/09/2026 — saneamento de `acervo.ferramental_capacidade`, paredes em sequência:
+(1) `acervo psql` via `run_command` — stdin NÃO chega ao verbo passado como parâmetro
+`stdin=` da chamada NEM em `command=` string; recusa "stdin vazio". Contorno NA DATA:
+passar como item-objeto no lote — `run_command(commands=[{verbo,ato,args,stdin}])` — e o
+stdin dentro do item-objeto chega. Vale pra todo verbo que lê stdin (`acervo psql`,
+`migrar`). (2) Item de lote sem o campo `verbo` explícito recusa "sem verbo": o
+item-objeto exige os quatro campos {verbo, ato, args, stdin}, não herda o verbo de fora.
+(3) Lote de 25 usages de uma vez estourou `fork: Resource temporarily unavailable` no
+`repo`, que cuspiu a própria usage centenas de vezes (655 KB). Contorno: lotes de ~10-12
+no máximo quando envolver verbo pesado (repo/gh disparam subprocesso git). (4) `arq:0110`
+não estava em `acervo casa` nem no `motor rag casa` — a ingestão de ADRs parou em 108 e a
+0110 era do mesmo dia; contorno foi ler o `.md` direto no git (`repo git log` + `read_file`).
+Régua: decisão do MESMO dia ainda não está no acervo casa, git é a fonte até a próxima
+ingestão. (5) `read_file`: a raiz já é `/home/claudinho/AI`, caminho relativo NÃO leva
+prefixo `AI/` (`AI/platafirma-...` deu "não existe"; `platafirma-...` funcionou). Nenhum
+precisou de handoff.
+
+12/09/2026 — a transação (BEGIN…ROLLBACK como dry-run, depois COMMIT) foi a rede que
+segurou três erros meus sem tocar o banco: `UNIQUE(capacidade_id)` bateu ao pôr dois
+verbos na mesma folha; `UNIQUE(slug)` bateu ao INSERIR `situacao`/`descoberta` que já
+existiam (eram L1, só reparentar); `UNIQUE(capacidade_id)` de novo ao pendurar `mesa` em
+`trabalho`(11) que já tinha `tarefas`. Lição durável, não beco: para saneamento de golden
+record, SEMPRE dry-run com ROLLBACK antes do COMMIT — cada erro veio de premissa minha
+("é linha nova" quando era reparent), e o ROLLBACK custou zero. Uma capacidade que já
+existe se REPARENTA (UPDATE pai_id), nunca se re-insere.
