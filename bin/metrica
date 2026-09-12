@@ -546,17 +546,49 @@ def casos(giros, tool=None):
     por_classe = defaultdict(int)
     for c in saida:
         por_classe[c["classe"]] += 1
-    return {"casos": saida,
+    # Agregado por verbo x classe, e o que a porta recusou (verbo pedido) — e' o que
+    # compara dias sem ler 600 casos um a um.
+    por_tool = defaultdict(lambda: defaultdict(int))
+    recusados = defaultdict(int)
+    atos_falhos = defaultdict(lambda: defaultdict(int))
+    for c in saida:
+        por_tool[c["tool"]][c["classe"]] += 1
+        if c["classe"] == "recusa-da-porta":
+            recusados[c.get("verbo") or "(vazio)"] += 1
+        if c["tool"] not in ("run_command", "read_file"):
+            atos_falhos[c["tool"]][(c["ato"] or "\u2205") + f":{c['exit_code']}"] += 1
+    agregado = {
+        "por_tool": {t: dict(sorted(d.items(), key=lambda kv: -kv[1]))
+                     for t, d in sorted(por_tool.items(), key=lambda kv: -sum(kv[1].values()))},
+        "recusados": dict(sorted(recusados.items(), key=lambda kv: -kv[1])),
+        "atos_falhos": {t: dict(sorted(d.items(), key=lambda kv: -kv[1])[:8])
+                        for t, d in sorted(atos_falhos.items(), key=lambda kv: -sum(kv[1].values()))},
+    }
+    return {"casos": saida, "agregado": agregado,
             "por_classe": dict(sorted(por_classe.items(), key=lambda kv: -kv[1])),
             "erros": len(saida),
             "erros_distintos": len({(c["lote_id"] or c["ts"], c["tool"], c["ato"],
                                     c["exit_code"]) for c in saida}),
             "chaves_presentes": dict(sorted(chaves.items(), key=lambda kv: -kv[1]))}
 
-def casos_texto(r):
+def casos_texto(r, agregado=False):
     linhas = [f"== metrica casos — {r['dia']} == {r['erros']} erros · "
               f"{r['erros_distintos']} distintos (dedup por lote)"]
     linhas.append("por classe: " + " · ".join(f"{k}={v}" for k, v in r["por_classe"].items()))
+    if agregado:
+        a = r["agregado"]
+        linhas.append("")
+        linhas.append("por verbo x classe:")
+        for t, d in a["por_tool"].items():
+            linhas.append(f"  {sum(d.values()):4d}  {t:14s} " + " ".join(f"{k}={v}" for k, v in d.items()))
+        linhas.append("")
+        linhas.append("recusados pela porta (verbo pedido): " +
+                      " ".join(f"{k}={v}" for k, v in a["recusados"].items()))
+        linhas.append("")
+        linhas.append("atos que falharam (ato:exit), por verbo:")
+        for t, d in a["atos_falhos"].items():
+            linhas.append(f"  {t:14s} " + " ".join(f"{k}={v}" for k, v in d.items()))
+        return linhas
     linhas.append("chaves: " + " ".join(f"{k}={v}" for k, v in r["chaves_presentes"].items()))
     for c in r["casos"]:
         rep = f" x{c['repeticoes_no_lote']}" if c["repeticoes_no_lote"] > 1 else ""
@@ -700,6 +732,7 @@ def main(argv):
     p.add_argument("--cadeira", default="")
     p.add_argument("--tipo", default="")
     p.add_argument("--tool", default="")
+    p.add_argument("--agregado", action="store_true")
     p.add_argument("--resumo", action="store_true")
     p.add_argument("-h", "--help", "--ajuda", dest="ajuda", action="store_true")
     args, _sobra = p.parse_known_args(argv[2:])
@@ -738,8 +771,8 @@ def main(argv):
         r = {"dia": dia, **tateio(giros, par)}
     elif ato == "casos":
         r = {"dia": dia, **casos(giros, args.tool or None)}
-        if args.resumo:
-            for linha in casos_texto(r):
+        if args.resumo or args.agregado:
+            for linha in casos_texto(r, agregado=args.agregado):
                 print(linha)
             return 0
     else:
