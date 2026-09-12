@@ -36,8 +36,12 @@ _apipath() {
 }
 QUEM="${PF_CADEIRA:-}"
 
+# Pedido de ajuda nao e erro (dono, 12/09/2026): `--ajuda` sai por stdout com exit 0; so
+# a chamada errada continua saindo por stderr com exit 2.
 uso() {
-  cat >&2 <<'FIM'
+  local codigo="${1:-2}" fd=2
+  [ "$codigo" = 0 ] && fd=1
+  cat >&$fd <<'FIM'
 uso:
   tarefas listar [--cadeira <c>] [--estado <e>] [--nivel <n>] [--json]
                                           itens abertos (fase != terminal)
@@ -80,7 +84,7 @@ NÃO HÁ PROJETO neste modelo. `46` e `1` eram do Vikunja; o recorte agora é po
 (cadeira, estado, nível). Chamada antiga com projeto no lugar do primeiro argumento
 segue funcionando: o número é ignorado, com aviso em stderr.
 FIM
-  exit 2
+  exit "$codigo"
 }
 
 # --- transporte -------------------------------------------------------------
@@ -762,7 +766,7 @@ FIM
 # --ajuda` quanto `tarefas <sub> --ajuda`, e nenhum sub-ato chega a rodar. `uso` já sai 2.
 for _a in "$@"; do
   case "$_a" in
-    --ajuda|--help|-h) uso ;;
+    --ajuda|--help|-h) uso 0 ;;
   esac
 done
 

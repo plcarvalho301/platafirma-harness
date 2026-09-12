@@ -44,7 +44,30 @@ LOG_OPS = os.environ.get("PF_LOG_OPS") or os.path.join(RAIZ, "var", "log", "ops"
 
 VERBO = "metrica"
 ATOS = ("eventos", "dia", "ate-acerto", "tateio", "casos")
-TIPOS = ("giro", "erro", "help", "acerto", "cadeia", "lote")
+TIPOS = ("giro", "erro", "ajuda", "help", "acerto", "cadeia", "lote")
+
+# PEDIDO DE AJUDA NAO E ERRO (dono, 12/09/2026): verbo chamado sem ato lista os atos por
+# contrato (oficio.md), e `--help`/`--ajuda` devolvem o uso. Que o uso saia por stderr com
+# exit 2 e defeito do verbo (card #3015), nao tateio da cadeira. Toda camada abaixo
+# segrega: ajuda sai de `erro` e conta em `ajuda`, em `dia`, `tateio`, `ate-acerto` e `casos`.
+AJUDA = ("--help", "-h", "--ajuda", "ajuda", "help", "--ajuda-flags", "--usage")
+# Tools sem a nocao de ato: chamada sem ato nelas nao e pedido de ajuda.
+SEM_ATO = ("read_file", "write_file", "monta_sessao", "monta-sessao", "sessao", "run_command")
+
+def e_ajuda(reg):
+    """Verbo nu so e ajuda quando devolveu o uso (exit 2): `rag_buscar` da abertura e o
+    shell de antes de 06/09 tambem gravam ato nulo, com exit 0, e nao sao pedido de ajuda.
+    Token explicito (`--help`, `--ajuda`) e ajuda com qualquer exit."""
+    if reg.get("evento") == "sem_verbo" or reg.get("tool") in SEM_ATO:
+        return False
+    ato = reg.get("ato")
+    if ato in (None, "", "-"):
+        return reg.get("exit_code") == 2
+    if str(ato) in AJUDA:
+        return True
+    args = reg.get("args")
+    toks = args.split() if isinstance(args, str) else (args if isinstance(args, list) else [])
+    return any(str(t) in AJUDA for t in toks)
 
 # O que o ops log grava por chamada de verbo (ops-server/server.py, `_audit`).
 CAMPOS_GIRO = ("ts", "cadeira", "ordem_id", "sessao_id", "tool", "ato",
@@ -163,7 +186,8 @@ def giros_do_dia(fonte, dia, cadeira=None):
         g["bytes"] = b if isinstance(b, int) else None
         g["pos"] = pos
         g["bruto"] = reg          # so `casos` le; nunca sai no stream (CAMPOS_GIRO)
-        g["falhou"] = falhou(reg)
+        g["ajuda"] = e_ajuda(reg)
+        g["falhou"] = falhou(reg) and not g["ajuda"]
         g["lote"] = em_lote(reg)
         g["help"] = False
         g["acerto"] = False
@@ -264,6 +288,8 @@ def stream_eventos(giros, cadeias, tipo=None):
             saida.append({"tipo": "giro", **base})
         if g["falhou"] and tipo in (None, "erro"):
             saida.append({"tipo": "erro", **base})
+        if g["ajuda"] and tipo in (None, "ajuda"):
+            saida.append({"tipo": "ajuda", **base})
         if g["help"] and tipo in (None, "help"):
             saida.append({"tipo": "help", **base})
         if g["acerto"] and tipo in (None, "acerto"):
@@ -307,6 +333,7 @@ def resumo_do_dia(giros, cadeias):
         "total": {
             "giros": len(giros),
             "erros": sum(erros_tool.values()),
+            "ajuda": sum(1 for g in giros if g["ajuda"]),
             "help": sum(por_help.values()),
             "lotes": len({g["lote_id"] for g in giros if g["lote"]}),
             "fitas": len(por_fita),
@@ -475,6 +502,7 @@ def tateio(giros, par):
         "total": {
             "giros": len(giros),
             "erros": n_gram + n_exec,
+            "ajuda": sum(1 for g in giros if g["ajuda"]),
             "taxa_erro": round((n_gram + n_exec) / len(giros), 4) if giros else 0,
             "fracao_gramatica": round(n_gram / (n_gram + n_exec), 4) if (n_gram + n_exec) else 0,
         },
@@ -564,7 +592,13 @@ def casos(giros, tool=None):
         "atos_falhos": {t: dict(sorted(d.items(), key=lambda kv: -kv[1])[:8])
                         for t, d in sorted(atos_falhos.items(), key=lambda kv: -sum(kv[1].values()))},
     }
+    ajuda = defaultdict(int)
+    for g in giros:
+        if g["ajuda"] and (not tool or g["tool"] == tool):
+            ajuda[g["tool"]] += 1
     return {"casos": saida, "agregado": agregado,
+            "ajuda_fora_do_erro": {"total": sum(ajuda.values()),
+                                   "por_verbo": dict(sorted(ajuda.items(), key=lambda kv: -kv[1]))},
             "por_classe": dict(sorted(por_classe.items(), key=lambda kv: -kv[1])),
             "erros": len(saida),
             "erros_distintos": len({(c["lote_id"] or c["ts"], c["tool"], c["ato"],
@@ -575,6 +609,9 @@ def casos_texto(r, agregado=False):
     linhas = [f"== metrica casos — {r['dia']} == {r['erros']} erros · "
               f"{r['erros_distintos']} distintos (dedup por lote)"]
     linhas.append("por classe: " + " · ".join(f"{k}={v}" for k, v in r["por_classe"].items()))
+    aj = r["ajuda_fora_do_erro"]
+    linhas.append(f"ajuda (fora do erro): {aj['total']} — " +
+                  " ".join(f"{k}={v}" for k, v in aj["por_verbo"].items()))
     if agregado:
         a = r["agregado"]
         linhas.append("")
@@ -640,8 +677,8 @@ def texto(ato, r):
     linhas = [f"== metrica {ato} — {r['dia']} =="]
     if ato == "dia":
         t = r["total"]
-        linhas.append(f"{t['giros']} giros · {t['erros']} erros · {t['help']} help · "
-                      f"{t['lotes']} lotes · {t['fitas']} fitas")
+        linhas.append(f"{t['giros']} giros · {t['erros']} erros · {t['ajuda']} ajuda (fora do erro) · "
+                      f"{t['help']} help · {t['lotes']} lotes · {t['fitas']} fitas")
         linhas.append("")
         linhas.append("giros por fita (top 10):")
         for k, v in list(r["giros_por_fita"].items())[:10]:
@@ -665,7 +702,8 @@ def texto(ato, r):
         t = r["total"]
         linhas.append(f"{t['giros']} giros · {t['erros']} erros ({t['taxa_erro']:.1%}) · "
                       f"gramatica {r['gramatica']['total']} ({t['fracao_gramatica']:.0%} "
-                      f"dos erros) · execucao {r['execucao']['total']}")
+                      f"dos erros) · execucao {r['execucao']['total']} · "
+                      f"ajuda {t['ajuda']} (fora do erro)")
         linhas.append("")
         linhas.append("(1) gramatica — por verbo:")
         for k, v in list(r["gramatica"]["por_verbo"].items())[:10]:
