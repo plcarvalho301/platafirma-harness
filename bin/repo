@@ -53,7 +53,7 @@ GH_REAL="$(command -v /usr/bin/gh /bin/gh "$HOME/.local/bin/gh" 2>/dev/null | he
 PATH_FORGE="$PATH"
 [ -n "$GH_REAL" ] && PATH_FORGE="$(dirname "$GH_REAL"):$PATH"
 
-uso() {
+uso_texto() {
   cat >&2 <<EOF
 uso:
   $VERBO git <clone> <args...>          roda qualquer git no clone (push/forge inclusive)
@@ -87,16 +87,21 @@ raiz de trabalho: $RAIZ   (PF_REPO_RAIZ)
 exit: 0 ok · 2 uso · 3 falha do git · 4 alvo fora da raiz ou trava de producao
       5 indeterminavel (o git recusa o clone — ownership de outro uid, .git quebrado)
 EOF
+}
+
+uso() {
+  uso_texto
   exit 2
 }
 
 morre() { printf '%s: %s\n' "$VERBO" "$1" >&2; exit "${2:-3}"; }
+morre_com_uso() { printf '%s: %s\n' "$VERBO" "$1" >&2; uso_texto; exit "${2:-3}"; }
 
 # Resolve <nome> para um clone DENTRO da raiz. Contencao estrutural: nome e slug simples,
 # nunca caminho. O realpath final confere que nem symlink escapa.
 clone_de() {
   local nome="$1" alvo real
-  [ -n "$nome" ] || morre "falta o nome do repo" 2
+  [ -n "$nome" ] || morre_com_uso "falta o nome do repo" 2
   case "$nome" in
     */*|.*|*..*) morre "nome de repo invalido: '$nome' — e slug dentro de $RAIZ, nao caminho" 4 ;;
   esac
@@ -104,7 +109,7 @@ clone_de() {
     *[!A-Za-z0-9._-]*) morre "nome de repo invalido: '$nome' — use [A-Za-z0-9._-]" 4 ;;
   esac
   alvo="$RAIZ/$nome"
-  [ -d "$alvo" ] || morre "nao ha clone '$nome' em $RAIZ — \`$VERBO clonar\` primeiro" 3
+  [ -d "$alvo" ] || morre_com_uso "nao ha clone '$nome' em $RAIZ — \`$VERBO clonar\` primeiro" 3
   real="$(realpath "$alvo" 2>/dev/null)" || morre "nao resolvi '$alvo'" 4
   case "$real/" in
     "$RAIZ"/*) : ;;
