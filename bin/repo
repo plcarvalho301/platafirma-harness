@@ -129,7 +129,7 @@ ramo_atual() { "$GIT" -C "$1" rev-parse --abbrev-ref HEAD 2>/dev/null; }
 ato_git() {
   local nome="${1:-}"; shift || uso
   local c; c="$(clone_de "$nome")" || exit $?
-  exec "$GIT" -C "$c" "$@"
+  exec env PATH="$PATH_FORGE" "$GIT" -C "$c" "$@"
 }
 
 ato_estado() {
@@ -185,17 +185,17 @@ ato_atualizar() {
   case "$ramo" in
     HEAD) morre "HEAD destacado em '$nome' — sem ramo para atualizar" 3 ;;
   esac
-  up="$(git -C "$c" rev-parse --abbrev-ref '@{upstream}' 2>/dev/null)" \
+  up="$("$GIT" -C "$c" rev-parse --abbrev-ref '@{upstream}' 2>/dev/null)" \
     || morre "'$ramo' nao tem upstream — nada para puxar" 3
-  git -C "$c" fetch --prune origin || morre "git fetch falhou" 3
-  if ! git -C "$c" merge --ff-only "@{upstream}" >/dev/null 2>&1; then
+  PATH="$PATH_FORGE" "$GIT" -C "$c" fetch --prune origin || morre "git fetch falhou" 3
+  if ! "$GIT" -C "$c" merge --ff-only "@{upstream}" >/dev/null 2>&1; then
     local trilha
-    trilha="$(git -C "$c" rev-list --left-right --count "@{upstream}...HEAD" 2>/dev/null)"
+    trilha="$("$GIT" -C "$c" rev-list --left-right --count "@{upstream}...HEAD" 2>/dev/null)"
     morre "recuso atualizar '$nome': '$ramo' divergiu de '$up' (atras/frente: ${trilha:-?}). \
 ff-only nao funde nem forca — reconcilie a mao com \`repo ramo\` + merge/rebase deliberado." 4
   fi
   printf 'atualizado: %s/%s -> %s\n' "$nome" "$ramo" \
-    "$(git -C "$c" log -1 --format='%h %s')"
+    "$("$GIT" -C "$c" log -1 --format='%h %s')"
 }
 
 ato_clonar() {
