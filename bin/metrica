@@ -658,6 +658,13 @@ def casos_texto(r, agregado=False):
 # `run_command`, `read_file`, `write_file`, `monta_sessao` e o shim `git` aparecem por
 # serem tools no log; nao sao verbos da planilha e a leitura deles e outra.
 
+# TRANSPORTE nao e verbo da planilha (arq:0110): run_command so aparece no log quando
+# RECUSA um item (evento sem_verbo) — quando despacha um verbo, a linha sai com tool=<verbo>,
+# via=run_command (ops-server/server.py). Somar transporte ao ranking de verbos compara
+# despachante com carga, e antes de 06/09 run_command carregava todo o shell (regime
+# _run_command_legado). read_file/write_file sao leitura/escrita, nao verbo servido.
+TRANSPORTE = ("run_command", "read_file", "write_file")
+
 def verbos(giros):
     por = defaultdict(lambda: {"giros": 0, "erros": 0, "ajuda": 0,
                                "gramatica": 0, "execucao": 0})
@@ -684,12 +691,15 @@ def verbos(giros):
                     "giros_distintos": gd, "erros_distintos": ed,
                     "taxa": round(d["erros"] / d["giros"], 4) if d["giros"] else 0,
                     "taxa_distinta": round(ed / gd, 4) if gd else 0}
-    ordenado = dict(sorted(saida.items(),
+    verbo = {t: d for t, d in saida.items() if t not in TRANSPORTE}
+    transp = {t: saida[t] for t in TRANSPORTE if t in saida}
+    ordenado = dict(sorted(verbo.items(),
                            key=lambda kv: (-kv[1]["erros"], -kv[1]["giros"], kv[0] or "")))
-    tg = sum(d["giros"] for d in saida.values())
-    te = sum(d["erros"] for d in saida.values())
+    tg = sum(d["giros"] for d in verbo.values())
+    te = sum(d["erros"] for d in verbo.values())
     return {"por_verbo": ordenado,
-            "total": {"verbos": len(saida), "giros": tg, "erros": te,
+            "transporte": dict(sorted(transp.items(), key=lambda kv: -kv[1]["giros"])),
+            "total": {"verbos": len(verbo), "giros": tg, "erros": te,
                       "taxa": round(te / tg, 4) if tg else 0}}
 
 COLS_VERBOS = ("verbo", "giros", "erros", "taxa", "giros_distintos", "erros_distintos",
@@ -715,6 +725,11 @@ def verbos_texto(r):
         linhas.append(f"{(v or '-'):16s} {d['giros']:6d} {d['erros']:6d} {d['taxa']:7.1%} "
                       f"{d['erros_distintos']:7d} {d['taxa_distinta']:7.1%} "
                       f"{d['gramatica']:5d} {d['execucao']:5d} {d['ajuda']:5d}")
+    if r.get("transporte"):
+        linhas.append("")
+        linhas.append("transporte (nao e verbo da planilha — run_command so loga recusa):")
+        for v, d in r["transporte"].items():
+            linhas.append(f"  {(v):14s} {d['giros']:6d} giros · {d['erros']:5d} recusa/erro")
     return linhas
 
 # --- borda ------------------------------------------------------------------------
