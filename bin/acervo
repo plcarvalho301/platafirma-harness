@@ -10,9 +10,10 @@
 # em bin/_acervo/ e não entram no PATH; a porta é esta.
 #
 # GRAMATICA (arq:0106): acervo <ato> <particao> <entidade> [seletor]. A forma
-# conforme roteia para os mesmos sub-atos de _acervo/; a forma vigente (adr, wiki,
+# conforme roteia para os mesmos sub-atos de _acervo/; a forma vigente (wiki,
 # ferramenta, registrar, stack, listar conceitos...) ainda responde, mas cospe um
-# aviso ao stderr apontando a forma nova e a spec. Doc de produto:
+# aviso ao stderr apontando a forma nova e a spec. `adr` foi RETIRADO (arq:0106):
+# ADR e especie de acervo.casa, lida por `acervo ler|listar casa adr`. Doc de produto:
 #   https://github.com/plcarvalho301/platafirma-arquitetura/blob/main/docs/spec_acervo.md
 set -euo pipefail
 
@@ -93,7 +94,6 @@ conforme() {
     ler:casa:stack)         exec "$ATOS/stack" ver "$@" ;;
     ler:casa:cargo)         exec "$ATOS/wiki" cargo "$@" ;;
     listar:casa:pagina)     exec "$ATOS/wiki" listar "$@" ;;
-    listar:casa:adr)        exec "$ATOS/adr" lista "$@" ;;
     listar:casa:ferramental) exec "$ATOS/listar" ferramental "$@" ;;
     escrever:casa:pagina)   exec "$ATOS/wiki" editar "$@" ;;
     escrever:casa:arquivo)  exec "$ATOS/wiki" subir "$@" ;;
@@ -198,14 +198,6 @@ case "$ATO" in
     exec bash "$ATOS/psql" "$@" ;;
 
   # formas VIGENTES: respondem, mas avisam a forma conforme (spec_acervo §5)
-  adr)             # MORTO (arq:0106 §Consequencias: `acervo adr` -> `acervo ler casa adr`).
-                   # ADR agora e especie de acervo.casa, ingerida e servida como as demais.
-                   echo "acervo adr: verbo morto (arq:0106). ADR agora vive em acervo.casa." >&2
-                   echo "  ler uma:   acervo ler casa adr <codigo|path>   (ex: acervo ler casa adr arq:0106)" >&2
-                   echo "  listar:    acervo listar casa adr" >&2
-                   echo "  buscar:    motor rag buscar casa \"<pergunta>\"" >&2
-                   echo "  $SPEC" >&2
-                   exit 2 ;;
   listar)          avisa "acervo listar <entidade>" "acervo listar <particao> <entidade>"
                    exec "$ATOS/listar"  "$@" ;;
   registrar)       avisa "acervo registrar <verbo>" "acervo escrever casa ferramental <verbo>"
