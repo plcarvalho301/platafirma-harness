@@ -549,6 +549,7 @@ instalar() {
     done
     for d in "$FONTE"/_*/; do
       [ -d "$d" ] || continue
+      case "$(basename "$d")" in __*) continue;; esac   # __pycache__ nao e ajudante
       assenta_ajudantes "$(basename "$d")"; nd=$((nd+1))
     done
     echo "instalados/atualizados: $n verbo(s) em $BIN_SERVIDO (fonte: $FONTE); bilhetes pulados: $pulados; diretorios de ajudante espelhados: $nd"
