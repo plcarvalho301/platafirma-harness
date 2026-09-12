@@ -523,8 +523,19 @@ instalar() {
   # clones). O `instalar` os PULA: bilhete nao vai para o bin servido pela porta.
   e_bilhete() { head -8 "$1" 2>/dev/null | grep -q 'NAO e verbo'; }
 
+  # arq:0110 s1/Q8: ajudante e sub-ato moram em bin/_<verbo>/ e o verbo servido os resolve
+  # por caminho relativo ao proprio arquivo (`fila` -> _fila/streams.py, `acesso` ->
+  # _acesso/desligar.py). O bin servido espelha esses diretorios; sem isso o `fila`
+  # instalado procura ~/AI/bin/_fila/ e morre. Espelho inteiro (rm + cp), nunca merge:
+  # ajudante que saiu do clone sai do servido.
+  assenta_ajudantes() {  # $1 = nome do diretorio, ex. _fila
+    [ -d "$FONTE/$1" ] || return 0
+    rm -rf "$BIN_SERVIDO/$1" && cp -r "$FONTE/$1" "$BIN_SERVIDO/$1" \
+      || { echo "erro: nao assentou $1 em $BIN_SERVIDO" >&2; exit 3; }
+  }
+
   if [ "${1:-}" = "--todos" ]; then
-    local n=0 pulados=0 v base
+    local n=0 pulados=0 nd=0 v base d
     for v in "$FONTE"/*; do
       [ -f "$v" ] || continue
       base="$(basename "$v")"
@@ -536,7 +547,11 @@ instalar() {
         install -m 0755 "$v" "$BIN_SERVIDO/$base" && n=$((n+1))
       fi
     done
-    echo "instalados/atualizados: $n verbo(s) em $BIN_SERVIDO (fonte: $FONTE); bilhetes pulados: $pulados"
+    for d in "$FONTE"/_*/; do
+      [ -d "$d" ] || continue
+      assenta_ajudantes "$(basename "$d")"; nd=$((nd+1))
+    done
+    echo "instalados/atualizados: $n verbo(s) em $BIN_SERVIDO (fonte: $FONTE); bilhetes pulados: $pulados; diretorios de ajudante espelhados: $nd"
     return
   fi
 
@@ -550,7 +565,8 @@ instalar() {
   e_bilhete "$FONTE/$v" && { echo "erro: '$v' e bilhete (NAO e verbo), nao vai para o bin servido pela porta" >&2; exit 4; }
   install -m 0755 "$FONTE/$v" "$BIN_SERVIDO/$v" \
     || { echo "erro: install falhou em $BIN_SERVIDO/$v" >&2; exit 3; }
-  echo "instalado: $v -> $BIN_SERVIDO/$v (0755, fonte $FONTE/$v)"
+  assenta_ajudantes "_$v"
+  echo "instalado: $v -> $BIN_SERVIDO/$v (0755, fonte $FONTE/$v)$([ -d "$FONTE/_$v" ] && echo "; ajudantes em _$v/ espelhados")"
 }
 
 # --- despacho ---------------------------------------------------------------
