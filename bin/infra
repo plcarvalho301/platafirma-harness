@@ -515,6 +515,14 @@ instalar() {
   local FONTE="$HARNESS/bin"
   [ -d "$FONTE" ] || { echo "erro: fonte '$FONTE' nao existe — clone do harness ausente?" >&2; exit 3; }
   mkdir -p "$BIN_SERVIDO"
+  # Medido 12/09/2026: ~/AI/bin RESOLVE para o proprio bin/ do clone (symlink de diretorio).
+  # Nesse estado `install` falha ("same file") e o espelho de ajudantes faria rm -rf no
+  # working tree — aconteceu com bin/_acervo, restaurado por git checkout. E o estado que
+  # arq:0097/arq:0110 s2 proibem (runtime le working tree); a cura e o release (#3014).
+  if [ "$(readlink -f "$BIN_SERVIDO")" = "$(readlink -f "$FONTE")" ]; then
+    echo "bin servido ($BIN_SERVIDO) resolve para o proprio clone ($FONTE): nada a assentar — o que esta no working tree ja esta servido (arq:0097 violada; cura: release #3014)" >&2
+    exit 0
+  fi
 
   # Bilhetes (git, gh) NAO sao verbos: o cabecalho diz "NAO e verbo (arq:0037)", e eles
   # so existem para pegar o humano que digita `git`/`gh` num PATH interativo. Assentados
