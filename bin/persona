@@ -183,10 +183,10 @@ case "${1:-}" in
     # lembra e sempre o dono; esta linha divide esse trabalho com ele.
     echo "lembrete: passou pelo mapa de capacidades? platafirma-arquitetura@docs/arquitetura-negocio-operacao.md · arq:0059" >&2
     echo "          claudinho-arquiteto qualifica; nao e gate e nao bloqueia este ato." >&2
-    exec python3 "$REPO/bin/_persona-org.py" "$@"
+    exec python3 "$REPO/bin/_persona/org.py" "$@"
     ;;
   afastar|reverter|desligar|foto|filme)
-    exec python3 "$REPO/bin/_persona-org.py" "$@"
+    exec python3 "$REPO/bin/_persona/org.py" "$@"
     ;;
   *)
     uso

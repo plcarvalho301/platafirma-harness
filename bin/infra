@@ -495,7 +495,7 @@ PY
 backup() {
   local reg="${INFRA_BACKUPS:-$HOME/AI/platafirma-harness/registro/backups.json}"
   [ -r "$reg" ] || { echo "registro nao legivel: $reg" >&2; exit 1; }
-  INFRA_BACKUPS_REG="$reg" python3 "$HOME/AI/platafirma-harness/bin/_infra-backup.py" "$@"
+  INFRA_BACKUPS_REG="$reg" python3 "$HOME/AI/platafirma-harness/bin/_infra/backup.py" "$@"
 }
 
 # Assenta um verbo do clone do harness no bin servido pela porta (~/AI/bin), de onde

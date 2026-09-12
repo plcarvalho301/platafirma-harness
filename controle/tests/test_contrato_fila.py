@@ -10,11 +10,12 @@ from pathlib import Path
 
 import pytest
 
-BIN_DIR = Path(__file__).resolve().parents[2] / "bin"
+# arq:0110 §1: o modulo da fila mora em bin/_fila/streams.py (ajudante fora do PATH).
+BIN_DIR = Path(__file__).resolve().parents[2] / "bin" / "_fila"
 if str(BIN_DIR) not in sys.path:
     sys.path.insert(0, str(BIN_DIR))
 
-import fila_streams
+import streams as fila_streams
 import redis
 
 

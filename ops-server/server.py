@@ -1699,13 +1699,15 @@ FILA_BIN = Path(os.environ.get("PF_BIN", RAIZ / "platafirma-harness/bin"))
 def _fila_mod():
     """Levanta ModuleNotFoundError com o caminho tentado — quem chama devolve 503
     nomeando o defeito, em vez de 500 nomeando nada."""
-    if str(FILA_BIN) not in sys.path:
-        sys.path.insert(0, str(FILA_BIN))
+    # arq:0110 §1: ajudante mora em bin/_<verbo>/ — o modulo e bin/_fila/streams.py.
+    fila_dir = str(FILA_BIN / "_fila")
+    if fila_dir not in sys.path:
+        sys.path.insert(0, fila_dir)
     try:
-        import fila_streams
+        import streams as fila_streams
     except ImportError as e:
         raise ModuleNotFoundError(
-            f"modulo da fila nao encontrado em {FILA_BIN} — aponte PF_BIN") from e
+            f"modulo da fila nao encontrado em {fila_dir} — aponte PF_BIN") from e
     return fila_streams
 
 
@@ -1851,14 +1853,14 @@ def _anota_mesa(quem: str, nota: str) -> dict:
 
 def _giro_carrega(sessao_id: str, cadeira: str, chapeu, giro: list) -> dict:
     """Carrega os 3 primeiros giros auto-relatados em sessao.giro pelo verbo
-    bin/_giro-carga.py — nunca cliente de banco proprio (ops-mcp roda em .venv-ops,
+    bin/_sessao/giro-carga.py — nunca cliente de banco proprio (ops-mcp roda em .venv-ops,
     sem driver de banco; mesma razao de _anota_mesa)."""
     if not sessao_id:
         return {"ok": False, "erro": "sem sessao_id"}
     payload = json.dumps({"sessao_id": sessao_id, "cadeira": cadeira,
                           "chapeu": chapeu, "giro": giro})
     try:
-        proc = subprocess.run([str(RAIZ / "bin" / "_giro-carga.py")],
+        proc = subprocess.run([str(RAIZ / "bin" / "_sessao" / "giro-carga.py")],
                               input=payload, capture_output=True, text=True,
                               timeout=15, env={**_env_subprocesso()})
         try:

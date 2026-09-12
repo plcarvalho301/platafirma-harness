@@ -317,5 +317,5 @@ if __name__ == "__main__":
         sys.exit(cmd_orfaos(sys.argv[2:]))
     if sub == "desligar":
         sys.exit(cmd_desligar(sys.argv[2:]))
-    print("uso: _acesso-desligar.py {orfaos|desligar <sujeito> [--executar]}", file=sys.stderr)
+    print("uso: acesso {orfaos|desligar <sujeito> [--executar]}  (corpo em bin/_acesso/desligar.py)", file=sys.stderr)
     sys.exit(2)
