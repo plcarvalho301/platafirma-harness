@@ -302,6 +302,10 @@ ler() {
   # Filha entregue é auditoria, e auditoria é `listar-tudo`, não leitura de card.
   local filhas; filhas=$(filhas_abertas "$id")
   [ -n "$filhas" ] && printf '\nfilhas (abertas):\n%s\n' "$filhas"
+  # Sem filha aberta o `[ -n ]` acima devolve 1 e, sendo o ultimo comando da funcao sob
+  # `set -e`, o verbo saia com exit 1 DEPOIS de imprimir o card inteiro. Medido em
+  # 11/09/2026: 24 dos 33 "erros" de tarefas no ops log eram isto (metrica casos).
+  return 0
 }
 
 # Filhas DIRETAS ainda abertas de <id>, uma por linha (id · estado · cadeira · título).

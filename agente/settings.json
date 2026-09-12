@@ -60,18 +60,17 @@
       "mcp__claude_ai_claudinho-mcp__write_file",
       "mcp__claude_ai_claudinho-mcp__run_command"
     ],
-    "ask": [
-      "Bash(deploy:*)"
-    ],
     "deny": [
       "Bash(curl:*)",
       "Read(//home/claudinho/.config/**)",
       "Read(//home/claudinho/.claude/.credentials.json)"
     ],
+    "ask": [
+      "Bash(deploy:*)"
+    ],
     "defaultMode": "bypassPermissions"
   },
   "model": "opus",
-  "theme": "dark",
   "hooks": {
     "PreToolUse": [
       {
@@ -95,5 +94,8 @@
         ]
       }
     ]
-  }
+  },
+  "skipDangerousModePermissionPrompt": true,
+  "theme": "dark",
+  "agentPushNotifEnabled": false
 }

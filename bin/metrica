@@ -43,7 +43,7 @@ RAIZ = os.environ.get("PF_RAIZ", os.path.expanduser("~/AI"))
 LOG_OPS = os.environ.get("PF_LOG_OPS") or os.path.join(RAIZ, "var", "log", "ops")
 
 VERBO = "metrica"
-ATOS = ("eventos", "dia", "ate-acerto", "tateio")
+ATOS = ("eventos", "dia", "ate-acerto", "tateio", "casos")
 TIPOS = ("giro", "erro", "help", "acerto", "cadeia", "lote")
 
 # O que o ops log grava por chamada de verbo (ops-server/server.py, `_audit`).
@@ -162,6 +162,7 @@ def giros_do_dia(fonte, dia, cadeira=None):
             b = reg.get("bytes_produzidos")
         g["bytes"] = b if isinstance(b, int) else None
         g["pos"] = pos
+        g["bruto"] = reg          # so `casos` le; nunca sai no stream (CAMPOS_GIRO)
         g["falhou"] = falhou(reg)
         g["lote"] = em_lote(reg)
         g["help"] = False
@@ -479,6 +480,96 @@ def tateio(giros, par):
         },
     }
 
+# --- camada 3c: CASOS (consumer-aligned) -----------------------------------------
+#
+# Pedido do dono, 11/09/2026 (carta dados 20260911T214249): descer ao CASO DE USO —
+# o que a cadeira ESTAVA TENTANDO quando o giro falhou. `eventos` nao carrega args nem
+# motivo (contrato estavel); aqui sai o giro falhado com o que o log gravou de
+# argumento, motivo e erro, mais uma classe heuristica e a contagem de repeticao por
+# lote (um template errado copiado em N itens conta N vezes em `tateio`).
+
+# Campos que nao dizem o que a cadeira tentava: transporte, identidade, ja em CAMPOS_GIRO.
+_RUIDO = set(CAMPOS_GIRO) | {
+    "instancia", "usuario", "sessao", "sub", "sujeito", "username", "azp", "sid",
+    "jti", "mcp_session", "via", "path", "poda", "poda_modo", "poda_aviso",
+    "bytes_servidos", "bytes_produzidos", "ledger", "giro", "sha", "lavado", "evento",
+}
+CASOS_TAM = 220     # chars por campo — o bastante para ler o comando, nao o retorno
+
+def _corta(v, n=CASOS_TAM):
+    s = v if isinstance(v, str) else json.dumps(v, ensure_ascii=False)
+    return s if len(s) <= n else s[:n] + "…"
+
+def _classe(g, texto_livre):
+    """Heuristica declarada, nao verdade: separa a recusa da porta do uso invalido,
+    do verbo nu, da falha rapida (exit != 0 em < 150 ms — quase sempre argumento
+    errado que o verbo nao classificou como exit 2) e da execucao que quebrou."""
+    ev, ec, dur = g.get("evento"), g["exit_code"], g["dur_ms"]
+    if ev == "sem_verbo":
+        return "recusa-da-porta"
+    if g["tool"] in ("read_file", "write_file") and ec is None:
+        return "arquivo"
+    if ec == 2 and _nulo(g["ato"]):
+        return "verbo-nu"
+    if ec == 2:
+        return "uso-invalido"
+    if isinstance(dur, (int, float)) and dur < 150:
+        return "falha-rapida"
+    return "execucao"
+
+def casos(giros, tool=None):
+    saida, chaves = [], defaultdict(int)
+    for g in giros:
+        if not g["falhou"]:
+            continue
+        if tool and g["tool"] != tool:
+            continue
+        extra = {k: _corta(v) for k, v in g["bruto"].items()
+                 if k not in _RUIDO and not _nulo(v)}
+        for k in extra:
+            chaves[k] += 1
+        livre = " ".join(extra.values())
+        saida.append({
+            "ts": g["ts"], "cadeira": g["cadeira"], "ordem_id": g["ordem_id"],
+            "tool": g["tool"], "ato": g["ato"], "exit_code": g["exit_code"],
+            "dur_ms": g["dur_ms"], "lote_id": g["lote_id"], "lote_n": g["lote_n"],
+            "classe": _classe(g, livre), **extra,
+        })
+    # Repeticao por lote: mesmo (lote, tool, ato, exit) = um erro contado N vezes.
+    rep = defaultdict(int)
+    for c in saida:
+        if not _nulo(c["lote_id"]):
+            rep[(c["lote_id"], c["tool"], c["ato"], c["exit_code"])] += 1
+    for c in saida:
+        k = (c["lote_id"], c["tool"], c["ato"], c["exit_code"])
+        c["repeticoes_no_lote"] = rep.get(k, 1)
+    por_classe = defaultdict(int)
+    for c in saida:
+        por_classe[c["classe"]] += 1
+    return {"casos": saida,
+            "por_classe": dict(sorted(por_classe.items(), key=lambda kv: -kv[1])),
+            "erros": len(saida),
+            "erros_distintos": len({(c["lote_id"] or c["ts"], c["tool"], c["ato"],
+                                    c["exit_code"]) for c in saida}),
+            "chaves_presentes": dict(sorted(chaves.items(), key=lambda kv: -kv[1]))}
+
+def casos_texto(r):
+    linhas = [f"== metrica casos — {r['dia']} == {r['erros']} erros · "
+              f"{r['erros_distintos']} distintos (dedup por lote)"]
+    linhas.append("por classe: " + " · ".join(f"{k}={v}" for k, v in r["por_classe"].items()))
+    linhas.append("chaves: " + " ".join(f"{k}={v}" for k, v in r["chaves_presentes"].items()))
+    for c in r["casos"]:
+        rep = f" x{c['repeticoes_no_lote']}" if c["repeticoes_no_lote"] > 1 else ""
+        cab = (f"{c['ts'][11:19]} {(c['cadeira'] or '-'):18s} {c['tool']} {c['ato'] or '∅'} "
+               f"exit={c['exit_code']} {c['dur_ms']}ms [{c['classe']}]{rep}")
+        linhas.append(cab)
+        for k, v in c.items():
+            if k in ("ts", "cadeira", "ordem_id", "tool", "ato", "exit_code", "dur_ms",
+                     "lote_id", "lote_n", "classe", "repeticoes_no_lote"):
+                continue
+            linhas.append(f"    {k}: {v}")
+    return linhas
+
 # --- borda ------------------------------------------------------------------------
 
 def uso(codigo=2):
@@ -488,6 +579,7 @@ def uso(codigo=2):
   metrica dia [<dia>] [--cadeira <slug>]
   metrica ate-acerto [<dia>] [--cadeira <slug>]
   metrica tateio [<dia>] [--cadeira <slug>]
+  metrica casos [<dia>] [--tool <verbo>] [--cadeira <slug>]
 
 Agrega o ops log (var/log/ops/ops-AAAA-MM-DD.jsonl) em eventos de uso do harness.
 <dia> e AAAA-MM-DD; sem ele, hoje. Saida JSON; --resumo imprime o sumario legivel.
@@ -607,6 +699,7 @@ def main(argv):
     p.add_argument("--dia", dest="dia_flag", default="")
     p.add_argument("--cadeira", default="")
     p.add_argument("--tipo", default="")
+    p.add_argument("--tool", default="")
     p.add_argument("--resumo", action="store_true")
     p.add_argument("-h", "--help", "--ajuda", dest="ajuda", action="store_true")
     args, _sobra = p.parse_known_args(argv[2:])
@@ -643,6 +736,12 @@ def main(argv):
         r = {"dia": dia, **resumo_do_dia(giros, cadeias)}
     elif ato == "tateio":
         r = {"dia": dia, **tateio(giros, par)}
+    elif ato == "casos":
+        r = {"dia": dia, **casos(giros, args.tool or None)}
+        if args.resumo:
+            for linha in casos_texto(r):
+                print(linha)
+            return 0
     else:
         r = {"dia": dia, **ate_acerto(giros, par)}
     if args.cadeira:

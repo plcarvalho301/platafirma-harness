@@ -297,3 +297,11 @@ descarte.
 Corolário de higiene: o gesto que impede o órfão é a cascata. Encerrar o épico leva as
 filhas junto; conferir DEPOIS que nenhuma sobrou aberta (`listar-tudo --json`), porque
 o read-side atrasa e \"encerrei o pai\" não prova que as filhas foram.
+
+## diario de bordo
+
+11/09/2026 — dono pediu overview do board e depois "itens abertos na ultima semana em captada". Tateei a data: `tarefas listar --json` estoura teto (215KB, servido 50KB truncado); a porta recusa `jq` e pipe (metacaractere; encadeia por stdin.de, mas jq nao e verbo servido); `tarefas api GET /itens/contagem-por-estado` e endpoint chutado, nao existe; `/itens` filtra so por cadeira/estado/nivel/origem, NAO por data; projecao de campos recusa `criado_em` (validos: id,titulo,estado,cadeira,nivel,pai,pessoa,frente); `tarefas ler <id>` nao traz criado_em no cabecalho; corpo completo com data e 1,3MB. Contorno NA DATA 11/09: nenhum — data de criacao NAO e servida por caminho que caiba na porta; declarei a lacuna e ofereci proxy por id. Contagem por coluna que FUNCIONA: `tarefas listar --estado <e>`, um giro por coluna.
+
+11/09/2026 — prova de aceite do #3018: chamei `motor casa "..."` e deu "nao conheco a instancia 'casa'. Ha: rag, reasoner". Contorno NA DATA 11/09: `motor` sem ato mostrou a gramatica arq:0106 — a forma certa e `motor rag buscar casa "<pergunta>"` (casa e PARTICAO, nao instancia). A forma no "Sai quando" do card (`motor casa ...`) e a intencao, nao o verbo real.
+
+11/09/2026 — `encerrar fita` recusado (nao e verbo); o encerramento e `descansar fita`, e o rito tem 4 passos (mesa, caderno, memoria do project, `descansar fita --encerra-sessao` por ultimo). `mesa caderno` so LE; escrita de caderno durável e `write_file` por trecho no arquivo, ancorando o `antes` no texto CRU do disco (`read_file`), nao no servido pela porta (a poda normaliza espaco e o trecho casa 0 vez).
