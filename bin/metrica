@@ -3,7 +3,7 @@
 # capacidade: metrica
 # dono: claudinho-ia
 # use para: giros por fita, erros por verbo, giros-ate-acerto, profundidade de cadeia de erro
-# atos: eventos, dia, ate-acerto
+# atos: eventos, dia, ate-acerto, tateio, casos, verbos
 # forma: relatorio
 # cauda: nao
 #
@@ -37,13 +37,13 @@ import os
 import statistics
 import sys
 from collections import defaultdict
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 
 RAIZ = os.environ.get("PF_RAIZ", os.path.expanduser("~/AI"))
 LOG_OPS = os.environ.get("PF_LOG_OPS") or os.path.join(RAIZ, "var", "log", "ops")
 
 VERBO = "metrica"
-ATOS = ("eventos", "dia", "ate-acerto", "tateio", "casos")
+ATOS = ("eventos", "dia", "ate-acerto", "tateio", "casos", "verbos")
 TIPOS = ("giro", "erro", "ajuda", "help", "acerto", "cadeia", "lote")
 
 # PEDIDO DE AJUDA NAO E ERRO (dono, 12/09/2026): verbo chamado sem ato lista os atos por
@@ -639,6 +639,84 @@ def casos_texto(r, agregado=False):
             linhas.append(f"    {k}: {v}")
     return linhas
 
+# --- camada 3d: VERBOS (consumer-aligned) ----------------------------------------
+#
+# Pedido do dono, 12/09/2026: a planilha de verbos (arq:0110) ganha uma coluna de taxa
+# de erro por verbo. `dia` ja dava o numerador (erros por verbo) e nunca deu o
+# denominador (giros por verbo) — sem ele nao ha taxa. Aqui saem os dois, por verbo,
+# numa janela de dias (`--desde`/`--ate`), porque um dia so mede o mix de cadeiras
+# daquele dia (licao do caderno: a serie 07→11/09 nao separa aprendizado de texto).
+#
+#   giros           todo giro do verbo, ajuda inclusa — pedido de ajuda e chamada
+#   erros           giro que falhou, JA SEM ajuda (mesma regra de `dia`/`tateio`)
+#   taxa            erros / giros — cada giro conta uma vez dos dois lados
+#   *_distintos     dedup por (lote_id, ato, exit, falhou): template errado copiado em N
+#                   itens conta 1; giro fora de lote e unico por `ts`
+#   taxa_distinta   erros_distintos / giros_distintos, mesma chave dos dois lados
+#   gramatica/execucao  particao dos erros, como em `tateio`
+#
+# `run_command`, `read_file`, `write_file`, `monta_sessao` e o shim `git` aparecem por
+# serem tools no log; nao sao verbos da planilha e a leitura deles e outra.
+
+def verbos(giros):
+    por = defaultdict(lambda: {"giros": 0, "erros": 0, "ajuda": 0,
+                               "gramatica": 0, "execucao": 0})
+    chaves_g, chaves_e = defaultdict(set), defaultdict(set)
+    for g in giros:
+        t = g["tool"]
+        d = por[t]
+        d["giros"] += 1
+        k = (g["lote_id"] or g["ts"] or g["pos"], g["ato"], g["exit_code"], bool(g["falhou"]))
+        chaves_g[t].add(k)
+        if g["ajuda"]:
+            d["ajuda"] += 1
+        if g["falhou"]:
+            d["erros"] += 1
+            chaves_e[t].add(k)
+            if _e_gramatica(g):
+                d["gramatica"] += 1
+            else:
+                d["execucao"] += 1
+    saida = {}
+    for t, d in por.items():
+        gd, ed = len(chaves_g[t]), len(chaves_e[t])
+        saida[t] = {**d,
+                    "giros_distintos": gd, "erros_distintos": ed,
+                    "taxa": round(d["erros"] / d["giros"], 4) if d["giros"] else 0,
+                    "taxa_distinta": round(ed / gd, 4) if gd else 0}
+    ordenado = dict(sorted(saida.items(),
+                           key=lambda kv: (-kv[1]["erros"], -kv[1]["giros"], kv[0] or "")))
+    tg = sum(d["giros"] for d in saida.values())
+    te = sum(d["erros"] for d in saida.values())
+    return {"por_verbo": ordenado,
+            "total": {"verbos": len(saida), "giros": tg, "erros": te,
+                      "taxa": round(te / tg, 4) if tg else 0}}
+
+COLS_VERBOS = ("verbo", "giros", "erros", "taxa", "giros_distintos", "erros_distintos",
+               "taxa_distinta", "gramatica", "execucao", "ajuda")
+
+def verbos_csv(r):
+    """Uma linha por verbo, para colar na planilha. Taxa em fracao (0.0652), nao em
+    porcento — a planilha formata."""
+    linhas = [",".join(COLS_VERBOS)]
+    for t, d in r["por_verbo"].items():
+        linhas.append(",".join([t or "-"] + [str(d[c]) for c in COLS_VERBOS[1:]]))
+    return linhas
+
+def verbos_texto(r):
+    t = r["total"]
+    linhas = [f"== metrica verbos — {r['dia']} == {t['giros']} giros · {t['erros']} erros · "
+              f"taxa {t['taxa']:.1%} · {t['verbos']} verbos"]
+    if r.get("dias_sem_log"):
+        linhas.append("sem log: " + ", ".join(r["dias_sem_log"]))
+    linhas.append(f"{'verbo':16s} {'giros':>6s} {'erros':>6s} {'taxa':>7s} "
+                  f"{'distint':>7s} {'taxa_d':>7s} {'gram':>5s} {'exec':>5s} {'ajuda':>5s}")
+    for v, d in r["por_verbo"].items():
+        linhas.append(f"{(v or '-'):16s} {d['giros']:6d} {d['erros']:6d} {d['taxa']:7.1%} "
+                      f"{d['erros_distintos']:7d} {d['taxa_distinta']:7.1%} "
+                      f"{d['gramatica']:5d} {d['execucao']:5d} {d['ajuda']:5d}")
+    return linhas
+
 # --- borda ------------------------------------------------------------------------
 
 def uso(codigo=2):
@@ -649,6 +727,7 @@ def uso(codigo=2):
   metrica ate-acerto [<dia>] [--cadeira <slug>]
   metrica tateio [<dia>] [--cadeira <slug>]
   metrica casos [<dia>] [--tool <verbo>] [--cadeira <slug>]
+  metrica verbos [<dia>] [--desde AAAA-MM-DD] [--ate AAAA-MM-DD] [--cadeira <slug>] [--csv]
 
 Agrega o ops log (var/log/ops/ops-AAAA-MM-DD.jsonl) em eventos de uso do harness.
 <dia> e AAAA-MM-DD; sem ele, hoje. Saida JSON; --resumo imprime o sumario legivel.
@@ -658,6 +737,8 @@ dia         resumo: giros por fita, erros por verbo, profundidade de cadeia, hel
 ate-acerto  a metrica-mae: giros-ate-acerto por (ordem_id, tool)
 tateio      separa tateio de GRAMATICA (exit 2, verbo nu, recusa da porta) de tateio de
             LEITURA (sessao tecnica sem motor/acervo/descobrir), e do erro de execucao
+casos       o giro falhado com o que o log gravou (args, motivo); --agregado resume
+verbos      taxa de erro POR VERBO (erros/giros) numa janela de dias; --csv para planilha
 
 exit: 0 ok · 2 uso invalido · 4 nao ha log desse dia
 """)
@@ -771,6 +852,9 @@ def main(argv):
     p.add_argument("--tipo", default="")
     p.add_argument("--tool", default="")
     p.add_argument("--agregado", action="store_true")
+    p.add_argument("--desde", default="")
+    p.add_argument("--ate", default="")
+    p.add_argument("--csv", action="store_true")
     p.add_argument("--resumo", action="store_true")
     p.add_argument("-h", "--help", "--ajuda", dest="ajuda", action="store_true")
     args, _sobra = p.parse_known_args(argv[2:])
@@ -791,15 +875,44 @@ def main(argv):
         return erro_gracioso(f"{VERBO}: tipo desconhecido '{args.tipo}'",
                              [f"os tipos: {', '.join(TIPOS)}"], 2)
 
+    # Janela de dias: so `verbos` agrega entre dias (acerto/cadeia/ate-acerto sao
+    # intra-dia por construcao: o par (ordem_id, tool) nao atravessa a meia-noite).
+    dias = [dia]
+    if args.desde or args.ate:
+        if ato != "verbos":
+            return erro_gracioso(f"{VERBO} {ato}: --desde/--ate so valem em `verbos`",
+                                 [f"um dia: {VERBO} {ato} AAAA-MM-DD"], 2)
+        try:
+            d0 = date.fromisoformat(args.desde or args.ate)
+            d1 = date.fromisoformat(args.ate or dia)
+        except ValueError:
+            return erro_gracioso(f"{VERBO}: --desde/--ate invalido",
+                                 ["o formato e AAAA-MM-DD"], 2)
+        if d1 < d0:
+            d0, d1 = d1, d0
+        dias = [(d0 + timedelta(n)).isoformat() for n in range((d1 - d0).days + 1)]
+    rotulo = dia if len(dias) == 1 else f"{dias[0]}..{dias[-1]}"
+
     fonte = FonteJsonl()
-    try:
-        giros, par, cadeias = classifica(fonte, dia, args.cadeira or None)
-    except FonteAusente as e:
-        return erro_gracioso(
-            f"{VERBO}: nao ha ops log de {e.dia}",
-            [f"esperado em {e.alvo}",
-             "o log e escrito por dia, e dia sem chamada nao gera arquivo",
-             f"para outro dia: {VERBO} {ato} AAAA-MM-DD"], 4)
+    giros, cadeias, sem_log = [], [], []
+    for d in dias:
+        try:
+            g, _p, c = classifica(fonte, d, args.cadeira or None)
+        except FonteAusente as e:
+            if len(dias) == 1:
+                return erro_gracioso(
+                    f"{VERBO}: nao ha ops log de {e.dia}",
+                    [f"esperado em {e.alvo}",
+                     "o log e escrito por dia, e dia sem chamada nao gera arquivo",
+                     f"para outro dia: {VERBO} {ato} AAAA-MM-DD"], 4)
+            sem_log.append(d)      # janela: dia sem log se declara, nao derruba
+            continue
+        giros.extend(g)
+        cadeias.extend(c)
+    if not giros and sem_log:
+        return erro_gracioso(f"{VERBO}: nao ha ops log em {rotulo}",
+                             [f"esperado em {fonte.diretorio}"], 4)
+    par = _por_par(giros)
 
     if ato == "eventos":
         r = {"dia": dia, "eventos": stream_eventos(giros, cadeias, args.tipo or None)}
@@ -807,6 +920,12 @@ def main(argv):
         r = {"dia": dia, **resumo_do_dia(giros, cadeias)}
     elif ato == "tateio":
         r = {"dia": dia, **tateio(giros, par)}
+    elif ato == "verbos":
+        r = {"dia": rotulo, "dias": dias, "dias_sem_log": sem_log, **verbos(giros)}
+        if args.csv or args.resumo:
+            for linha in (verbos_csv(r) if args.csv else verbos_texto(r)):
+                print(linha)
+            return 0
     elif ato == "casos":
         r = {"dia": dia, **casos(giros, args.tool or None)}
         if args.resumo or args.agregado:
