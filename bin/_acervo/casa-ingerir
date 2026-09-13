@@ -184,16 +184,22 @@ def varre_adrs():
     return itens
 
 USO = """uso:
-  acervo ingerir casa <lista.md|clone> [--apply] [--motor rag] [--ate vetor]
-                                       [--autor <slug>] [--limite N] [--so <substr>] [--json]
+  acervo ingerir casa <repo> [--apply] [--motor rag] [--ate vetor]
+                             [--autor <slug>] [--limite N] [--so <substr>] [--json]
 
-  <lista.md>   arquivo de varredura curada (default:
-               platafirma-arquitetura/docs/varredura-casa-candidatos.md)
-  --limite N   ingere so os N primeiros itens (dry-run pequeno do passo e)
-  --so <s>     so itens cujo repo@path contem <s> (recorte para prova de ponta)
-  --adr        fonte = TODAS as ADRs de macro-global/ (ignora a lista curada)
-  --apply      aplica (default: dry-run do plano)
+  <repo>       nome do repositorio de documentacao (default: platafirma-arquitetura).
+               Fonte: var/prod/<repo> (o release); sem release do repo, o clone em ~/AI/<repo>,
+               declarado no plano. Varre o repo inteiro e classifica a especie por
+               acervo.especie_tipo.padrao_path; o que nenhum glob cobre sai `reprovado` com motivo.
+  <lista.md>   (transicao) arquivo de lista curada no lugar de <repo>
+  --adr        (transicao) fonte = as ADRs de macro-global/
+  --limite N   ingere so os N primeiros itens
+  --so <s>     so itens cujo repo@path contem <s>
+  --apply      aplica (default: dry-run do plano, nada escrito)
   --ate        catalogar | chunk | embed | vetor (default: vetor)
+
+  Toda escrita e do servidor (POST /acervo/casa/lotes): casa, impressao, trechos, indices e
+  o ponteiro acervo.casa_fonte. Este cliente nao escreve no banco.
 """
 
 def morre(msg, code=1):
@@ -281,22 +287,28 @@ def montar_itens(curados, limite, so):
         chave = f"{it['repo']}@{it['path']}"
         if so and so not in chave:
             continue
-        if it["repo"] not in sha_cache:
-            sha_cache[it["repo"]] = sha_do_repo(it["repo"])
-        sha = sha_cache[it["repo"]]
+        # Fonte ja resolvida (varre_repo / varre_adrs traz sha e corpo): respeita. Senao,
+        # lista curada: sha do clone em RAIZ e corpo lido do disco.
+        sha = it.get("sha_ref")
+        corpo = it.get("corpo")
+        if not sha:
+            if it["repo"] not in sha_cache:
+                sha_cache[it["repo"]] = sha_do_repo(it["repo"])
+            sha = sha_cache[it["repo"]]
         if not sha:
             pulos.append((chave, "clone ausente em " + RAIZ))
             continue
-        fp = os.path.join(RAIZ, it["repo"], it["path"])
-        if not os.path.isfile(fp):
-            pulos.append((chave, "arquivo nao existe no clone"))
-            continue
-        try:
-            with open(fp, encoding="utf-8", errors="replace") as f:
-                corpo = f.read()
-        except OSError as e:
-            pulos.append((chave, f"leitura falhou: {e}"))
-            continue
+        if corpo is None:
+            fp = os.path.join(RAIZ, it["repo"], it["path"])
+            if not os.path.isfile(fp):
+                pulos.append((chave, "arquivo nao existe no clone"))
+                continue
+            try:
+                with open(fp, encoding="utf-8", errors="replace") as f:
+                    corpo = f.read()
+            except OSError as e:
+                pulos.append((chave, f"leitura falhou: {e}"))
+                continue
         # Titulo: se o curado ja trouxe (fonte ADR), respeita; senao le o 1o `# ` do corpo.
         titulo = it.get("titulo")
         if not titulo:
@@ -472,75 +484,35 @@ def main():
         cad = cad.removeprefix("claudinho-").removeprefix("claudinha-")
         autor = cad or "dados"
 
-    # Se recebeu nome de repositório direto (spec_acervo.md §6: acervo ingerir casa <repo>)
-    if not args.adr:
-        lista = args.lista or "platafirma-arquitetura"
-        if not os.path.isfile(lista):
-            repo, sha, repo_dir, aprovados, reprovados = varre_repo(lista)
-            if not args.apply:
-                if args.como_json:
-                    print(json.dumps({
-                        "repo": repo, "sha": sha,
-                        "aprovados": aprovados,
-                        "reprovados": reprovados,
-                    }, indent=2, ensure_ascii=False))
-                else:
-                    print(tabela_plano_repo(repo, sha, aprovados, reprovados))
-                sys.exit(0)
-
-            ordem_id = os.environ.get("PF_ORDEM_ID") or f"o{int(time.time())}"
-            sql_fonte = """
-            insert into acervo.casa_fonte (repo, sha, ingerido_em, ordem_id)
-            values (%s, %s, now(), %s)
-            on conflict (repo, sha) do update set
-              ingerido_em = excluded.ingerido_em,
-              ordem_id = excluded.ordem_id;
-            """ % (_identidade._lit(repo), _identidade._lit(sha), _identidade._lit(ordem_id))
-            _identidade.psql_exec(sql_fonte)
-
-            for it in aprovados:
-                sql_esp = "select id from acervo.especie_tipo where slug = %s;" % _identidade._lit(it["tipo"])
-                esp_rows = _identidade.psql_json("select coalesce(json_agg(row_to_json(t)), '[]') from (%s) t;" % sql_esp.strip().rstrip(";"))
-                esp_id = esp_rows[0]["id"] if esp_rows else None
-                if esp_id:
-                    sql_ins = """
-                    insert into acervo.casa (repo, path, sha, dono, especie_id, natureza, ciclo, titulo, corpo)
-                    values ({repo}, {path}, {sha}, {dono}, {esp_id}, {natureza}, {ciclo}, {titulo}, {corpo})
-                    on conflict (repo, path) do update set
-                      sha = excluded.sha,
-                      titulo = excluded.titulo,
-                      corpo = excluded.corpo,
-                      ciclo = excluded.ciclo;
-                    """.format(
-                        repo=_identidade._lit(it["repo"]),
-                        path=_identidade._lit(it["path"]),
-                        sha=_identidade._lit(it["sha_ref"]),
-                        dono=_identidade._lit(it["dono"]),
-                        esp_id=_identidade._lit(esp_id),
-                        natureza=_identidade._lit(it["natureza"]),
-                        ciclo=_identidade._lit(it["ciclo"]),
-                        titulo=_identidade._lit(it["titulo"]),
-                        corpo=_identidade._lit(it["corpo"]),
-                    )
-                    _identidade.psql_exec(sql_ins)
-
-            print(f"acervo ingerir casa: {len(aprovados)} doc(s) ingeridos em acervo.casa; gravado acervo.casa_fonte ({repo}@{sha[:12]}).")
-            sys.exit(0)
-
-    # Fonte: --adr varre macro-global/ (todas as ADRs, passo a); senao a lista curada.
+    # Fonte (spec_acervo §6): `acervo ingerir casa <repo>` varre o repositorio inteiro e
+    # classifica por especie_tipo.padrao_path. Toda ESCRITA vai pela rota do servidor
+    # (POST /acervo/casa/lotes + aplicar), que grava casa, impressao, trechos, indices e
+    # casa_fonte. O cliente nao toca o banco para escrever. Lista curada (arquivo) e --adr
+    # seguem aceitos como fonte de transicao, pela mesma rota.
+    pulos_previos = []
+    cabecalho_plano = None
     if args.adr:
         curados = varre_adrs()
         if not curados:
             morre("nenhuma ADR encontrada em macro-global/ de " + ADR_REPO, 1)
     else:
-        lista = args.lista or os.path.join(
-            RAIZ, "platafirma-arquitetura", "docs", "varredura-casa-candidatos.md")
-        if not os.path.isfile(lista):
-            morre(f"lista curada nao encontrada: {lista}", 1)
-        curados = parse_lista(lista)
-        if not curados:
-            morre(f"nenhum item na lista {lista}", 1)
+        lista = args.lista or "platafirma-arquitetura"
+        if os.path.isfile(lista):
+            curados = parse_lista(lista)
+            if not curados:
+                morre(f"nenhum item na lista {lista}", 1)
+        else:
+            repo, sha, repo_dir, aprovados, reprovados = varre_repo(lista)
+            curados = aprovados
+            pulos_previos = [(f"{repo}@{r['path']}", r["motivo"]) for r in reprovados]
+            cabecalho_plano = tabela_plano_repo(repo, sha, aprovados, reprovados)
+            if not curados:
+                morre(f"nenhum arquivo de {repo} casa com padrao_path de acervo.especie_tipo", 1)
     itens, pulos = montar_itens(curados, args.limite, args.so)
+    pulos = pulos_previos + pulos
+    if cabecalho_plano and not args.como_json:
+        print(cabecalho_plano)
+        print()
     if not itens:
         # Os motivos saem AQUI: o caminho do --json fica depois do POST, entao mandar o dono
         # "ver com --json" era um beco — nenhum item, nenhum lote, nenhuma saida.

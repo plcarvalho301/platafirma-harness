@@ -3,9 +3,25 @@
 # capacidade: conhecimento
 # dono: dados
 # classe: B
-# atos: ler (leitura, casa), listar (leitura, casa), resolver (identidade, casa), escrever (escrita, registro), ingerir (incorporacao, casa), curar (curadoria, casa), extrato (leitura, acervo), psql (leitura, acervo)
-# le: acervo.casa, acervo.obra, acervo.registro, release
-# escreve: acervo.casa, acervo.obra, acervo.registro, motor, arquivo
+# use para: ler uma ADR/spec/pagina/obra que sabe onde esta (ler), listar o que ha de um tipo ou sobre um assunto pelo catalogo (listar --sobre), gravar uma pagina de wiki (escrever casa pagina), por um repo de doc no acervo (ingerir casa <repo>)
+# atos: ler (leitura, casa), listar (leitura, casa), resolver (leitura, casa), escrever (escrita, registro), ingerir (escrita, incorporacao), curar (escrita, curadoria), extrato (leitura, acervo), psql (escrita, acervo)
+# forma: texto
+# le: ler=acervo.casa,acervo.obra,acervo.registro
+# le: listar=acervo.casa,acervo.obra,acervo.registro
+# le: resolver=acervo.casa
+# le: escrever=nada
+# le: ingerir=release
+# le: curar=acervo.obra,acervo.casa
+# le: extrato=acervo.*
+# le: psql=acervo.*
+# escreve: ler=nada
+# escreve: listar=nada
+# escreve: resolver=nada
+# escreve: escrever=acervo.casa
+# escreve: ingerir=acervo.casa,acervo.obra,acervo.registro,motor
+# escreve: curar=acervo.obra,acervo.casa
+# escreve: extrato=arquivo-local
+# escreve: psql=acervo.*
 # consome: motor_acervo_rest, rag_extractor_pg
 # ambiente: PF_REPO_RAIZ (opcional, raiz dos clones), RAG_API_BASE (opcional, url do motor), RAG_API_TOKEN (opcional, auth do motor)
 # depende: docker, git, psql

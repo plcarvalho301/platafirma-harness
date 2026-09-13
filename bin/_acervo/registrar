@@ -75,7 +75,7 @@ def _le_cabecalho(path):
     so omite a parte, nunca inventa. Mesma convencao de chaves que `conferir` parseia."""
     desc, campos, lendo_desc = [], {}, False
     with open(path, errors="replace") as f:
-        linhas = [next(f, "") for _ in range(25)]
+        linhas = [next(f, "") for _ in range(45)]
     for l in linhas:
         s = l.strip()
         if not s.startswith("#") or s.startswith("#!"):
@@ -87,7 +87,13 @@ def _le_cabecalho(path):
         low = s.lower()
         chave = next((c for c in CHAVES if low.startswith(c + ":")), None)
         if chave:
-            campos[chave] = s.split(":", 1)[1].strip()
+            valor = s.split(":", 1)[1].strip()
+            # `le:` e `escreve:` sao POR ATO (spec_acervo §1, §7): uma linha por ato,
+            # `# le: <ato>=<recurso>[,<recurso>]`; chave repetida acumula, nao sobrescreve.
+            if chave in ("le", "escreve"):
+                campos.setdefault(chave, []).append(valor)
+            else:
+                campos[chave] = valor
             lendo_desc = False
             continue
         if not desc:
@@ -161,11 +167,18 @@ def registrar_um(verbo):
                     op, subcap = "execucao", cap
                 atos_info.append((ato_nome, op, subcap))
 
-    le_raw = campos.get("le", "")
-    escreve_raw = campos.get("escreve", "")
-    recurso_map = {"arquivo": "arquivo-local"}
-    le_recursos = [recurso_map.get(r.strip(), r.strip()) for r in le_raw.split(",") if r.strip()]
-    escreve_recursos = [recurso_map.get(r.strip(), r.strip()) for r in escreve_raw.split(",") if r.strip()]
+    # Acesso por ato: {ato: [recurso, ...]} para `le` e `escreve`. Recurso e id logico de
+    # acervo.ferramental_recurso (FK reprova valor fora do enum); `nada` e linha explicita.
+    def _acesso_por_ato(linhas):
+        por_ato = {}
+        for linha in linhas or []:
+            if "=" not in linha:
+                morre("acervo registrar: linha de acesso sem ato: '%s' (forma: <ato>=<recurso>,...)" % linha, 3)
+            ato_nome, recs = linha.split("=", 1)
+            por_ato[ato_nome.strip()] = [r.strip() for r in recs.split(",") if r.strip()]
+        return por_ato
+    le_por_ato = _acesso_por_ato(campos.get("le"))
+    escreve_por_ato = _acesso_por_ato(campos.get("escreve"))
 
     consome_raw = campos.get("consome", "")
     consumos = [c.strip() for c in consome_raw.split(",") if c.strip()]
@@ -193,28 +206,32 @@ def registrar_um(verbo):
         "capacidade_id=excluded.capacidade_id;\n" % (_lit(verbo), _lit(sot), _lit(desc), _lit(cap))
     ]
 
+    # A projecao e do cabecalho inteiro: o que o verbo declara hoje substitui o que declarou
+    # ontem (idempotente por verbo), em vez de acumular sobras.
+    sql_parts.append("delete from acervo.ferramental_ato where verbo=%s;\n" % _lit(verbo))
+    sql_parts.append("delete from acervo.ferramental_acesso where verbo=%s;\n" % _lit(verbo))
     for ato_nome, op, subcap in atos_info:
-        ato_slug = f"{verbo}:{ato_nome}"
-        ato_rotulo = f"{verbo} {ato_nome}"
+        # (verbo, ato) -> folha: mapeamento em ferramental_ato; a tabela de capacidades
+        # continua sendo so o mapa de folhas (spec_acervo §7).
         sql_parts.append(
-            "insert into acervo.ferramental_capacidade (slug, rotulo, verbo, ato, capacidade) "
-            "values (%s, %s, %s, %s, %s) "
-            "on conflict (verbo, ato) where verbo is not null and ato is not null "
-            "do update set slug=excluded.slug, rotulo=excluded.rotulo, capacidade=excluded.capacidade;\n"
-            % (_lit(ato_slug), _lit(ato_rotulo), _lit(verbo), _lit(ato_nome), _lit(subcap))
+            "insert into acervo.ferramental_ato (verbo, ato, capacidade, acao, tipo) "
+            "values (%s, %s, %s, %s, %s) on conflict (verbo, ato) do update set "
+            "capacidade=excluded.capacidade, acao=excluded.acao, tipo=excluded.tipo;\n"
+            % (_lit(verbo), _lit(ato_nome), _lit(subcap), _lit(op), _lit(subcap))
         )
-        for rec in le_recursos:
-            sql_parts.append(
-                "insert into acervo.ferramental_acesso (verbo, ato, recurso_id, modo) "
-                "values (%s, %s, %s, 'le') on conflict (verbo, ato, recurso_id, modo) do nothing;\n"
-                % (_lit(verbo), _lit(ato_nome), _lit(rec))
-            )
-        for rec in escreve_recursos:
-            sql_parts.append(
-                "insert into acervo.ferramental_acesso (verbo, ato, recurso_id, modo) "
-                "values (%s, %s, %s, 'escreve') on conflict (verbo, ato, recurso_id, modo) do nothing;\n"
-                % (_lit(verbo), _lit(ato_nome), _lit(rec))
-            )
+        for modo, por_ato in (("le", le_por_ato), ("escreve", escreve_por_ato)):
+            if not le_por_ato and not escreve_por_ato:
+                break   # verbo ainda sem declaracao de acesso (pre-0110): registra sem acesso
+            recs = por_ato.get(ato_nome)
+            if recs is None:
+                morre("acervo registrar: bin/%s nao declara `# %s: %s=...` \u2014 ato sem linha "
+                      "de acesso nao se registra (`nada` e linha explicita)." % (verbo, modo, ato_nome), 3)
+            for rec in recs:
+                sql_parts.append(
+                    "insert into acervo.ferramental_acesso (verbo, ato, recurso_id, modo) "
+                    "values (%s, %s, %s, %s) on conflict (verbo, ato, recurso_id, modo) do nothing;\n"
+                    % (_lit(verbo), _lit(ato_nome), _lit(rec), _lit(modo))
+                )
         for cons in consumos:
             sql_parts.append(
                 "insert into acervo.ferramental_consumo (verbo, ato, servico, consumo_raw) "

@@ -163,21 +163,23 @@ def resolver_canon(classe, canon, numero_sem_serie=None):
 
 def gerar_negativa(classe, seletor):
     """Gera as 4 linhas fixas da spec §4 para exit 1."""
-    # 1. varrido
+    # 1. varrido: um ponteiro por repositorio (spec_acervo §2): o ultimo sha ingerido de CADA
+    # repo em casa_fonte. Sem linha nenhuma, o acervo declara que nao sabe de que sha veio.
     cf = psql_json(
         "select coalesce(json_agg(row_to_json(t)), '[]') from ("
-        "  select repo, sha, to_char(ingerido_em, 'YYYY-MM-DD') as dt "
-        "  from acervo.casa_fonte order by ingerido_em desc limit 1"
+        "  select distinct on (repo) repo, sha, to_char(ingerido_em, 'DD/MM HH24:MI') as dt "
+        "  from acervo.casa_fonte order by repo, ingerido_em desc"
         ") t;", "casa_fonte"
     )
     if cf:
-        repo = cf[0]["repo"]
-        sha = cf[0]["sha"][:12]
-        dt = cf[0]["dt"]
-        varrido = f"acervo.casa ({repo}@{sha}, ingerido {dt})"
+        varrido = "acervo.casa (" + "; ".join(
+            f"{r['repo']}@{r['sha'][:12]}, ingerido {r['dt']}" for r in cf) + ")"
+        repos = [r["repo"] for r in cf]
     else:
-        repo = "platafirma-arquitetura"
-        varrido = f"acervo.casa ({repo}@desconhecido, nao ingerido)"
+        varrido = "acervo.casa (sem ponteiro de fonte: nenhuma ingestao registrou sha)"
+        repos = []
+    # O repo do vizinho: ADR mora num repo so; o resto aponta os repos varridos.
+    repo = "platafirma-arquitetura" if classe == "adr" else (repos[0] if len(repos) == 1 else "<repo>")
 
     # 2. parecidos (pg_trgm)
     parecidos_rows = psql_json(
@@ -195,7 +197,7 @@ def gerar_negativa(classe, seletor):
               join acervo.entidade e on e.id = a.entidade_id
              where e.classe = {classe}
           ) sub
-          where sim > 0.05
+          where sim > 0.2
           order by candidato, sim desc
         ) t;
         """.format(alvo=_lit(seletor), classe=_lit(classe)), "parecidos"

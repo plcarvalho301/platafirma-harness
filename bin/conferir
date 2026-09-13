@@ -445,7 +445,8 @@ def conferir_verbo(alvo, como_json=False):
             motivos.append(msg_origem)
             if not como_json:
                 print(f"    ORIGEM  : {msg_origem}")
-        elif classe == "copia":
+        elif classe in ("copia", "copia-identica-ao-repo"):
+            # copia identica ainda e copia: instalacao e por release (arq:0110 §2)
             houve = True
             conforme = False
             motivos.append("copia identica por sorte, nao por mecanismo — trocar por symlink")

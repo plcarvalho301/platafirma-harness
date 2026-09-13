@@ -4,7 +4,10 @@ import subprocess
 import os
 import pytest
 
-BIN = os.path.expanduser("~/AI/bin/acervo")
+# `teste <verbo>` mede a REV (arq:0110 §9): o bin do repo, nao a copia servida no PATH.
+REPO = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+BIN = os.path.join(REPO, "bin", "acervo")
+CONFERIR = os.path.join(REPO, "bin", "conferir")
 PG = "rag-extractor-pg"
 DB = "rag_extractor"
 USR = "rag"
@@ -33,8 +36,17 @@ def test_schema_ferramental_acesso():
     assert int(out) == 4
 
 def test_schema_casa_fonte():
-    out = psql("SELECT count(*) FROM acervo.casa_fonte WHERE repo='platafirma-arquitetura';")
-    assert int(out) >= 1
+    # A tabela existe; linha so nasce no apply de uma ingestao (servidor). Sem seed.
+    out = psql("SELECT count(*) FROM information_schema.columns WHERE table_schema='acervo' AND table_name='casa_fonte';")
+    assert int(out) == 4
+    semeadas = psql("SELECT count(*) FROM acervo.casa_fonte WHERE ordem_id LIKE 'seed-%';")
+    assert int(semeadas) == 0
+
+def test_schema_ferramental_ato():
+    out = psql("SELECT count(*) FROM information_schema.columns WHERE table_schema='acervo' AND table_name='ferramental_ato';")
+    assert int(out) == 5
+    colunas_velhas = psql("SELECT count(*) FROM information_schema.columns WHERE table_schema='acervo' AND table_name='ferramental_capacidade' AND column_name IN ('verbo','ato');")
+    assert int(colunas_velhas) == 0
 
 def test_schema_entidade_classe_forma_chave():
     out = psql("SELECT forma_chave FROM acervo.entidade_classe WHERE slug='adr';")
@@ -196,6 +208,8 @@ def test_curar_casa_alias():
     r_res = subprocess.run([BIN, "resolver", "conceito", "teste-alias-tempo"], capture_output=True, text=True)
     assert r_res.returncode == 0
     assert "via: alias" in r_res.stdout
+    # o teste nao deixa vocabulario de teste no canon
+    psql("DELETE FROM acervo.entidade_alias WHERE alias='teste-alias-tempo' AND origem='curadoria';")
 
 def test_ingerir_casa_dry_run():
     r = subprocess.run([BIN, "ingerir", "casa", "platafirma-arquitetura"], capture_output=True, text=True)
@@ -217,16 +231,27 @@ def test_camada_d_cabecalho_q1():
     assert "# capacidade: conhecimento" in text
     assert "# dono: dados" in text
     assert "# classe: B" in text
-    assert "# atos: ler (leitura, casa), listar (leitura, casa), resolver (identidade, casa), escrever (escrita, registro), ingerir (incorporacao, casa), curar (curadoria, casa), extrato (leitura, acervo), psql (leitura, acervo)" in text
-    assert "# le: acervo.casa, acervo.obra, acervo.registro, release" in text
-    assert "# escreve: acervo.casa, acervo.obra, acervo.registro, motor, arquivo" in text
+    with open(BIN, "r", encoding="utf-8") as f:
+        text = "".join(f.readline() for _ in range(45))
+    # acesso e POR ATO: uma linha `# le:`/`# escreve:` para cada um dos oito atos
+    for ato in ("ler", "listar", "resolver", "escrever", "ingerir", "curar", "extrato", "psql"):
+        assert f"# le: {ato}=" in text
+        assert f"# escreve: {ato}=" in text
+    # ato que escreve declara escrita (Q12): psql escreve, logo nao e 'leitura'
+    assert "psql (escrita, acervo)" in text
+    assert "# escreve: ler=nada" in text
     assert "# consome: motor_acervo_rest, rag_extractor_pg" in text
 
 
 def test_camada_d_conferir_verbo_acervo():
-    r = subprocess.run(["/home/claudinho/AI/bin/conferir", "verbo", "acervo"], capture_output=True, text=True)
-    assert r.returncode == 0
-    assert "origem  : copia-identica-ao-repo" in r.stdout or "origem  : symlink-release" in r.stdout
+    r = subprocess.run([CONFERIR, "verbo", "acervo"], capture_output=True, text=True)
+    # symlink para release e a unica origem conforme (arq:0110 §2); copia identica e defeito
+    # de instalacao e sai 1 — o gate mede o verbo, nao o passa por estar igual ao repo.
+    if "origem  : symlink-release" in r.stdout:
+        assert r.returncode == 0
+    else:
+        assert "origem  : copia-identica-ao-repo" in r.stdout
+        assert r.returncode == 1
     assert "capacidade=conhecimento" in r.stdout
 
 
@@ -234,8 +259,15 @@ def test_camada_d_escrever_casa_ferramental_acervo():
     r = subprocess.run([BIN, "escrever", "casa", "ferramental", "acervo"], capture_output=True, text=True)
     assert r.returncode == 0
     # Verifica em acervo.ferramental_capacidade as 8 linhas
-    out_cap = psql("SELECT count(*) FROM acervo.ferramental_capacidade WHERE verbo='acervo' AND ato IS NOT NULL")
-    assert out_cap.strip() == "8"
+    out_ato = psql("SELECT count(*) FROM acervo.ferramental_ato WHERE verbo='acervo'")
+    assert out_ato.strip() == "8"
+    # acesso por ato: todo ato tem linha `le` e linha `escreve`; `nada` e linha explicita
+    out_le = psql("SELECT count(DISTINCT ato) FROM acervo.ferramental_acesso WHERE verbo='acervo' AND modo='le'")
+    assert out_le.strip() == "8"
+    out_w = psql("SELECT count(DISTINCT ato) FROM acervo.ferramental_acesso WHERE verbo='acervo' AND modo='escreve'")
+    assert out_w.strip() == "8"
+    out_nada = psql("SELECT count(*) FROM acervo.ferramental_acesso WHERE verbo='acervo' AND ato='ler' AND modo='escreve' AND recurso_id='nada'")
+    assert out_nada.strip() == "1"
     # Verifica acervo.ferramental_acesso
     out_acesso = psql("SELECT count(*) FROM acervo.ferramental_acesso WHERE verbo='acervo'")
     assert int(out_acesso.strip()) > 0
@@ -294,6 +326,7 @@ def test_camada_d_oito_atos_canonicos_disponiveis():
     # 6. curar
     r_cur = subprocess.run([BIN, "curar", "casa", "alias", "adr", "0110", "alias-teste-d"], capture_output=True, text=True)
     assert r_cur.returncode == 0
+    psql("DELETE FROM acervo.entidade_alias WHERE alias='alias-teste-d' AND origem='curadoria';")
     # 7. extrato
     r_ext = subprocess.run([BIN, "extrato", "--ajuda"], capture_output=True, text=True)
     assert r_ext.returncode == 2
