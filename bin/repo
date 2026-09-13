@@ -1,143 +1,195 @@
 #!/usr/bin/env bash
 # repo — opera o clone local de um repositorio da stack, do clone ao PR
 # capacidade: construcao
-# dono: claudinho-TI
-# use para: clonar repo, estado do clone, criar/trocar ramo, commitar, empurrar, abrir PR
-# atos: git, estado, atualizar, clonar, ramo, commitar, empurrar, pr-abrir, pr-listar, pr-ver, pr-diff, pr-merge, sanear
-#
-# Por que `construcao`, e nao um nome novo: a primeira volta desta story inventou
-# `repo`, `teste`, `lint` e `revisao-de-codigo` — quatro capacidades paralelas a uma que
-# a mesa ja lavrou: `construcao` — "artefato de software entregue", cuja instancia
-# declarada no mapa e literalmente `git` (arquitetura-negocio-operacao.md:60, dono
-# claudinho-TI, «fábrica (executa, não decide)»). O que faltava nao era a capacidade: era
-# o VERBO. Abrir PR entrou aqui como ato pelo mesmo motivo — entregar o artefato e
-# construcao, e verbo proprio para isso duplicaria a capacidade (arq:0037).
-#
-# Verbo-por-API do braco de repo (card #3004, feature #3003, invariante seg:0014).
-# Substitui `run_command "git -C ... "` — allowlist de PREFIXO DE STRING, que o proprio
-# PAP marca como "mitigacao, nao controle": `git -c` contorna o texto, e o alcance real
-# nao aparece na decisao. Aqui o alcance e ESTRUTURAL, nao textual:
-#
-#   1. RAIZ fixa (PF_REPO_RAIZ) — todo alvo resolve DENTRO dela; `..`, caminho absoluto
-#      e symlink que escapa sao recusados ANTES de o git ser chamado.
-#   2. O git roda sobre o clone LOCAL da conta. Nao ha tunel de container (#3007): o
-#      isolamento e o uid da conta, e o clone e do uid. O que sai da conta para o mundo
-#      e SO `empurrar` — e so ele fala com o forge.
-#   3. Nenhuma flag do chamador atravessa para o git. Cada ato monta a linha do git com
-#      argumento posicional conferido; o que o chamador passa e dado, nao comando.
-#
-# Trava de producao: SUSPENSA por ordem do dono (07/09/2026) enquanto nao houver PEP
-# centralizado — toda cadeira que roda na conta do host empurra direto, main inclusive,
-# sem pedir PR. A recusa de main e a allowlist por cadeira voltam como decisao do PEP
-# (seg:0014), nao como string neste arquivo. PR segue disponivel para quem quiser revisao.
-#
-# NAO decide autorizacao: quem decide e o PEP no caminho da chamada (`_autoriza` por
-# slug na porta; #3006 poe o PEP nos endpoints laterais). Este verbo executa ou recusa
-# por contencao propria, e a recusa sai com o motivo.
+# dono: ti
+# classe: B
+# forma: predicado (estado, diff) / lista (listar, procurar, historico, pr-listar) / texto (ler, pr-diff) / fluxo (sanear)
+# atos: estado (leitura, operacao) · listar (leitura, operacao) · ler (leitura, operacao) ·
+#       procurar (leitura, operacao) · historico (leitura, operacao) · diff (leitura, operacao) ·
+#       commitar (escrita, operacao) · ramo (escrita, operacao) · atualizar (escrita, operacao) ·
+#       abrir (escrita, operacao) · clonar (escrita, operacao) · empurrar (escrita, forge) ·
+#       pr-abrir (escrita, forge) · pr-listar (leitura, forge) · pr-ver (leitura, forge) ·
+#       pr-diff (leitura, forge) · pr-merge (escrita, forge) · sanear (escrita, forge) ·
+#       git (escrita, operacao)
+# escreve: var/wt/<repo>/<cadeira> (objetos e refs) · origin (refs, PR) · wip/ (só sanear) · nada (leitura)
+# consome: porta@ops-log
+# ambiente: PF_REPO_RAIZ[=$HOME/AI] porta · PF_CADEIRA porta (lida) · PF_SESSAO porta (lida) · PF_OPS_LOG_DIR[=$HOME/AI/var/log/ops] porta · HOME
+# depende: git · gh (pr-*, empurrar, atualizar, clonar) · rede ao forge
+# substitui: git -C … ls-files|grep|log|diff|show|status|checkout -b|commit|push|fetch · gh pr create|list|view|diff|merge
+# conforme: parcial
+# falta: abrir (aguarda porta servir main); var/wt/<repo>/<cadeira> (aguarda abrir)
 set -uo pipefail
 
 RAIZ="${PF_REPO_RAIZ:-$HOME/AI}"
 VERBO="$(basename "$0")"
+COMO_JSON=0
 
-# git por caminho absoluto: ~/AI/bin tem um shim `git` (bilhete que so sai 2) a frente
-# do git real no PATH da porta. Chamar `git` nu aqui cai no shim e todo ato morre no
-# clone_de com exit 5 enlatado. Resolve-se o binario real UMA vez, fora do PATH.
+# Resolução de binário real uma vez, evitando shims no PATH da porta
 GIT="$(command -v /usr/bin/git /bin/git 2>/dev/null | head -1)"
 [ -x "$GIT" ] || GIT=/usr/bin/git
+if [ ! -x "$GIT" ]; then
+  printf 'repo: dependência ausente: git não encontrado\n' >&2
+  exit 3
+fi
 
-# gh real para o credential helper do push: ~/AI/bin tambem tem um shim `gh` (bilhete)
-# a frente do gh real no PATH. O push HTTPS usa `gh` como credential helper; sem o gh
-# real alcancavel, o push morre com "could not read Username". Resolve-se o dir do gh
-# real e poe-se na FRENTE do PATH so para os atos que falam com o forge.
-GH_REAL="$(command -v /usr/bin/gh /bin/gh "$HOME/.local/bin/gh" 2>/dev/null | head -1)"
+GH="$(command -v /usr/bin/gh /bin/gh "$HOME/.local/bin/gh" 2>/dev/null | head -1)"
 PATH_FORGE="$PATH"
-[ -n "$GH_REAL" ] && PATH_FORGE="$(dirname "$GH_REAL"):$PATH"
+if [ -n "$GH" ] && [ -x "$GH" ]; then
+  PATH_FORGE="$(dirname "$GH"):$PATH"
+fi
 
 uso_texto() {
-  cat >&2 <<EOF
+  cat >&2 <<'EOF'
 uso:
-  $VERBO git <clone> <args...>          roda qualquer git no clone (push/forge inclusive)
-                                        'pull' sozinho vira \`$VERBO atualizar\` (fetch + ff-only)
-  $VERBO estado [<repo>]                estado do clone: ramo, sujidade, ahead/behind, ultimo commit
-                                        sem <repo>, lista os clones da raiz
-  $VERBO atualizar <repo>              fetch + merge --ff-only do upstream do ramo atual
-                                        RECUSA se divergiu (nao funde, nao forca)
-  $VERBO clonar <url|owner/nome> [nome] clona em \$RAIZ/<nome>; recusa se o destino ja existe
-  $VERBO ramo <repo> [<nome>]           sem <nome>, lista os ramos; com <nome>, troca (cria se faltar)
-  $VERBO commitar <repo> -m <msg> [--staged]
-                                        add -A + commit; --staged commita so o que ja esta no index
-  $VERBO empurrar <repo> [<ramo>]       push -u origin <ramo> (default: o ramo atual)
-                                        cadeira na conta do host empurra direto, main inclusive
-                                        (ordem do dono 07/09/2026, ate haver PEP centralizado)
-  $VERBO pr-abrir <repo> --titulo <t> [--corpo <c>] [--base <ramo>]
-                                        abre PR do ramo ATUAL contra <base> (default: main)
-  $VERBO pr-listar <repo> [--todos]     PR abertos (--todos inclui fechado e merged)
-  $VERBO pr-ver <repo> <numero>         estado, revisao e checks de um PR
-  $VERBO pr-diff <repo> <numero>        o diff completo do PR (o que ele muda, linha a linha)
-  $VERBO pr-merge <repo> <numero> [--squash|--merge|--rebase] [--forcar]
-                                        aprova e mescla o PR (operador do host); default --squash
-                                        recusa check vermelho salvo --forcar
-  $VERBO sanear [<repo>] [--relatar]    o "arruma tudo": varre a raiz (ou so <repo>) e aplica
-                                        a tabela estado->acao da spec_saneamento-de-clones #3.3.
-                                        Nunca perde trabalho (sujo/divergido vira wip/ empurrado
-                                        antes de qualquer reset); nunca funde (so ff-only).
-                                        O que a tabela nao cobre vira incidente, nunca pergunta
-                                        ao dono. --relatar faz o mesmo passeio sem escrever nada.
+  repo estado     [<repo>] [--json]
+  repo listar     <repo> [<prefixo>] [--json]
+  repo ler        <repo> <caminho>
+  repo procurar   <repo> --termo <termo> [<prefixo>] [--json]
+  repo historico  <repo> [<caminho>] [--n <N>] [--json]
+  repo diff       <repo> [<caminho>] [--staged]
+  repo ramo       <repo> [<card>] [--slug <slug>]
+  repo commitar   <repo> -m <msg> [<caminho>…] [--tudo]
+  repo empurrar   <repo> [<ramo>]
+  repo atualizar  <repo>
+  repo abrir      <repo>
+  repo clonar     <url|owner/nome> [<nome>]
+  repo sanear     [<repo>] [--relatar]
+  repo pr-abrir   <repo> --titulo <t> [--corpo <c>] [--base <ramo>]
+  repo pr-listar  <repo> [--todos]
+  repo pr-ver     <repo> <numero>
+  repo pr-diff    <repo> <numero>
+  repo pr-merge   <repo> <numero> [--squash|--merge|--rebase] [--forcar]
+  repo git        <repo> <args…>
 
-raiz de trabalho: $RAIZ   (PF_REPO_RAIZ)
-exit: 0 ok · 2 uso · 3 falha do git · 4 alvo fora da raiz ou trava de producao
-      5 indeterminavel (o git recusa o clone — ownership de outro uid, .git quebrado)
+raiz de trabalho: PF_REPO_RAIZ[=$HOME/AI]
+exit: 0 achou/fez · 1 nao existe/negativo · 2 uso · 3 dependencia · 4 politica · 5 indeterminavel
 EOF
 }
 
 uso() {
+  if [ "$COMO_JSON" -eq 1 ]; then
+    python3 -c 'import sys, json; print(json.dumps({"erro": sys.argv[1]}))' "uso incorreto"
+    exit 2
+  fi
   uso_texto
   exit 2
 }
 
-morre() { printf '%s: %s\n' "$VERBO" "$1" >&2; exit "${2:-3}"; }
-morre_com_uso() { printf '%s: %s\n' "$VERBO" "$1" >&2; uso_texto; exit "${2:-3}"; }
+morre() {
+  local msg="$1" rc="${2:-3}"
+  if [ "$COMO_JSON" -eq 1 ]; then
+    python3 -c 'import sys, json; print(json.dumps({"erro": sys.argv[1]}))' "$msg"
+  else
+    printf '%s: %s\n' "$VERBO" "$msg" >&2
+  fi
+  exit "$rc"
+}
 
-# Resolve <nome> para um clone DENTRO da raiz. Contencao estrutural: nome e slug simples,
-# nunca caminho. O realpath final confere que nem symlink escapa.
+# Resolução de bancada: hoje raiz fixa $RAIZ/<repo>; amanhã var/wt/<repo>/<cadeira> (arq:0109).
+# Mantida em UMA função só para a troca ser um commit quando a porta servir main.
+bancada_de() {
+  local nome="$1"
+  printf '%s/%s' "$RAIZ" "$nome"
+}
+
+listar_repos() {
+  local r=()
+  if [ -d "$RAIZ" ]; then
+    for d in "$RAIZ"/*; do
+      if [ -e "$d/.git" ]; then
+        r+=("$(basename "$d")")
+      fi
+    done
+  fi
+  printf '%s\n' "${r[@]}"
+}
+
 clone_de() {
-  local nome="$1" alvo real
-  [ -n "$nome" ] || morre_com_uso "falta o nome do repo" 2
+  local nome="${1:-}"
+  [ -n "$nome" ] || {
+    if [ "$COMO_JSON" -eq 1 ]; then
+      morre "falta o nome do repo" 2
+    fi
+    printf '%s: erro: falta o nome do repo\n' "$VERBO" >&2
+    uso
+  }
+
+  if [ "$nome" = "pull" ]; then
+    if [ "$COMO_JSON" -eq 1 ]; then
+      morre "ordem trocada: 'repo git pull <repo>' — use 'repo atualizar <repo>'" 2
+    fi
+    printf '%s: ordem trocada: '\''repo git pull <repo>'\'' — use '\''repo atualizar <repo>'\''\n' "$VERBO" >&2
+    printf 'repositórios disponíveis:\n' >&2
+    local lr; lr="$(listar_repos)"
+    if [ -n "$lr" ]; then printf '%s\n' "$lr" | sed 's/^/  /' >&2; else printf '  (nenhum)\n' >&2; fi
+    uso_texto
+    exit 2
+  elif [ "$nome" = "-C" ]; then
+    if [ "$COMO_JSON" -eq 1 ]; then
+      morre "ordem trocada: 'repo git -C <repo>' — use 'repo <ato> <repo>'" 2
+    fi
+    printf '%s: ordem trocada: '\''repo git -C <repo>'\'' — use '\''repo <ato> <repo>'\''\n' "$VERBO" >&2
+    printf 'repositórios disponíveis:\n' >&2
+    local lr; lr="$(listar_repos)"
+    if [ -n "$lr" ]; then printf '%s\n' "$lr" | sed 's/^/  /' >&2; else printf '  (nenhum)\n' >&2; fi
+    uso_texto
+    exit 2
+  fi
+
   case "$nome" in
     */*|.*|*..*) morre "nome de repo invalido: '$nome' — e slug dentro de $RAIZ, nao caminho" 4 ;;
-  esac
-  case "$nome" in
     *[!A-Za-z0-9._-]*) morre "nome de repo invalido: '$nome' — use [A-Za-z0-9._-]" 4 ;;
   esac
-  alvo="$RAIZ/$nome"
-  [ -d "$alvo" ] || morre_com_uso "nao ha clone '$nome' em $RAIZ — \`$VERBO clonar\` primeiro" 3
-  real="$(realpath "$alvo" 2>/dev/null)" || morre "nao resolvi '$alvo'" 4
+
+  local alvo; alvo="$(bancada_de "$nome")"
+  if [ ! -d "$alvo" ] || [ ! -e "$alvo/.git" ]; then
+    if [ "$COMO_JSON" -eq 1 ]; then
+      morre "repositório desconhecido: '$nome'" 2
+    fi
+    printf '%s: repositório desconhecido: '\''%s'\''\n' "$VERBO" "$nome" >&2
+    printf 'repositórios disponíveis:\n' >&2
+    local lr; lr="$(listar_repos)"
+    if [ -n "$lr" ]; then printf '%s\n' "$lr" | sed 's/^/  /' >&2; else printf '  (nenhum)\n' >&2; fi
+    uso_texto
+    exit 2
+  fi
+
+  local real; real="$(realpath "$alvo" 2>/dev/null)" || morre "nao resolvi '$alvo'" 4
   case "$real/" in
     "$RAIZ"/*) : ;;
     *) morre "'$nome' resolve para $real, fora da raiz $RAIZ" 4 ;;
   esac
-  # `-e`, nao `-d`: em worktree o `.git` e ARQUIVO com o ponteiro, e worktree e clone.
-  [ -e "$real/.git" ] || morre "'$nome' existe mas nao e clone git" 3
-  # Clone que o git recusa (ownership de outro uid) e INDETERMINAVEL, nao vazio.
-  "$GIT" -C "$real" rev-parse --git-dir >/dev/null 2>&1 \
-    || morre "indeterminavel: o git recusa o clone '$nome' — $("$GIT" -C "$real" rev-parse --git-dir 2>&1 | head -1)" 5
+
+  if ! "$GIT" -C "$real" rev-parse --git-dir >/dev/null 2>&1; then
+    morre "indeterminavel: o git recusa o clone '$nome' — $("$GIT" -C "$real" rev-parse --git-dir 2>&1 | head -1)" 5
+  fi
+
   printf '%s' "$real"
 }
 
-ramo_atual() { "$GIT" -C "$1" rev-parse --abbrev-ref HEAD 2>/dev/null; }
+ramo_atual() {
+  local c="$1"
+  "$GIT" -C "$c" rev-parse --abbrev-ref HEAD 2>/dev/null || echo "HEAD"
+}
 
-# git: passthrough total sobre o clone. Resolve o clone pelo `clone_de` (raiz fixa, sem
-# escape de symlink) e entrega o resto ao git, cru. Roda QUALQUER git — push e forge
-# inclusive. Sem gate: quem esta na conta claudinho ja tem a credencial do forge e a
-# contencao que importa e o uid da conta (decisao do dono 07/09/2026; seg de deploy e do
-# `deploy`/`infra`, nao do `repo`). A contencao estrutural do verbo e SO a raiz fixa via
-# `clone_de`; alem dela, o git e do chamador.
+info_varrido() {
+  local c="$1" repo="$2"
+  local cadeira="${PF_CADEIRA:-sem-cadeira}"
+  local ramo; ramo="$(ramo_atual "$c")"
+  local sha; sha="$("$GIT" -C "$c" rev-parse --short HEAD 2>/dev/null || echo "0000000")"
+  local sujo; sujo="$("$GIT" -C "$c" status --porcelain 2>/dev/null | wc -l)"
+  local estado_arvore="árvore limpa"
+  [ "${sujo:-0}" -gt 0 ] && estado_arvore="árvore suja"
+  printf 'varrido: bancada %s/%s (%s @ %s, %s)\n' "$repo" "$cadeira" "$ramo" "$sha" "$estado_arvore" >&2
+}
+
+tem_gh() {
+  [ -n "$GH" ] && [ -x "$GH" ] \
+    || morre "'gh' nao esta no PATH desta conta — o endpoint do forge nao esta alcancavel daqui" 3
+}
+
 ato_git() {
   local nome="${1:-}"; shift || uso
-  # 'pull' cru e ff-only por natureza: pode abrir editor pra mensagem de merge
-  # (trava em shell nao-interativo) e nao tem guarda de divergencia nenhuma.
-  # 'atualizar' ja e o pull seguro da casa (fetch + merge --ff-only, recusa se
-  # divergiu) - sem args extra, redireciona pra la em vez de rodar git cru.
   if [ "${1:-}" = pull ] && [ $# -eq 1 ]; then
     ato_atualizar "$nome"
     return $?
@@ -146,52 +198,436 @@ ato_git() {
   exec env PATH="$PATH_FORGE" "$GIT" -C "$c" "$@"
 }
 
-ato_estado() {
-  local nome="${1:-}" c ramo sujo trilha
-  if [ -z "$nome" ]; then
+cmd_estado() {
+  local como_json=0
+  local repo_alvo=""
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --json) como_json=1; COMO_JSON=1; shift ;;
+      -*) morre "opção desconhecida: '$1'" 2 ;;
+      *)
+        if [ -z "$repo_alvo" ]; then
+          repo_alvo="$1"
+        else
+          morre "argumento excedente: '$1'" 2
+        fi
+        shift
+        ;;
+    esac
+  done
+
+  if [ -z "$repo_alvo" ]; then
+    local repos=()
+    while IFS= read -r r; do
+      [ -n "$r" ] && repos+=("$r")
+    done < <(listar_repos)
+
+    if [ "$como_json" -eq 1 ]; then
+      local json_recs=()
+      for r in "${repos[@]}"; do
+        local c; c="$(bancada_de "$r")"
+        local ramo sha sujo_qtd trilha upstream
+        ramo="$(ramo_atual "$c")"
+        sha="$("$GIT" -C "$c" rev-parse --short HEAD 2>/dev/null || echo "")"
+        sujo_qtd="$("$GIT" -C "$c" status --porcelain 2>/dev/null | wc -l)"
+        upstream="$("$GIT" -C "$c" rev-parse --abbrev-ref '@{upstream}' 2>/dev/null || echo "")"
+        local atras=0 frente=0
+        if [ -n "$upstream" ]; then
+          read -r atras frente < <("$GIT" -C "$c" rev-list --left-right --count "@{upstream}...HEAD" 2>/dev/null || echo "0 0")
+        fi
+        json_recs+=("$(python3 -c '
+import sys, json
+print(json.dumps({
+  "repo": sys.argv[1],
+  "ramo": sys.argv[2],
+  "sha": sys.argv[3],
+  "upstream": sys.argv[4] or None,
+  "atras": int(sys.argv[5]),
+  "a_frente": int(sys.argv[6]),
+  "limpo": int(sys.argv[7]) == 0,
+  "alteracoes": int(sys.argv[7])
+}))' "$r" "$ramo" "$sha" "$upstream" "${atras:-0}" "${frente:-0}" "${sujo_qtd:-0}")")
+      done
+      python3 -c '
+import sys, json
+recs = [json.loads(l) for l in sys.stdin.read().splitlines() if l]
+print(json.dumps({"bancadas": {r["repo"]: r for r in recs}}, indent=2))' <<<"$(printf '%s\n' "${json_recs[@]}")"
+      return 0
+    fi
+
     printf 'clones em %s\n' "$RAIZ"
-    for d in "$RAIZ"/*/; do
-      [ -e "$d.git" ] || continue
-      d="${d%/}"
-      # Clone que o git recusa (ownership de outro uid, .git corrompido) responde
-      # INDETERMINAVEL, nunca "limpo": arvore inalcancavel nao e arvore sem mudanca.
-      # No mundo-alvo (#3007) a conta roda sob uid proprio, e clone de outro dono e
-      # exatamente este caso — tem de aparecer, nao sumir num zero.
-      if ! ramo="$("$GIT" -C "$d" rev-parse --abbrev-ref HEAD 2>&1)"; then
-        printf '  %-28s %-34s %s\n' "$(basename "$d")" "-" \
-          "indeterminavel: $(printf '%s' "$ramo" | head -1)"
+    for r in "${repos[@]}"; do
+      local c; c="$(bancada_de "$r")"
+      local ramo sujo
+      if ! ramo="$("$GIT" -C "$c" rev-parse --abbrev-ref HEAD 2>&1)"; then
+        printf '  %-28s %-34s %s\n' "$r" "-" "indeterminavel: $(printf '%s' "$ramo" | head -1)"
         continue
       fi
-      sujo="$("$GIT" -C "$d" status --porcelain 2>/dev/null | wc -l)"
-      printf '  %-28s %-34s %s\n' "$(basename "$d")" "$ramo" \
-        "$([ "$sujo" -eq 0 ] && echo limpo || echo "$sujo alteracao(oes)")"
+      sujo="$("$GIT" -C "$c" status --porcelain 2>/dev/null | wc -l)"
+      printf '  %-28s %-34s %s\n' "$r" "$ramo" \
+        "$([ "${sujo:-0}" -eq 0 ] && echo limpo || echo "$sujo alteracao(oes)")"
     done
     return 0
   fi
-  c="$(clone_de "$nome")" || exit $?
+
+  local c; c="$(clone_de "$repo_alvo")" || exit $?
+  local ramo sha sujo_qtd trilha upstream
   ramo="$(ramo_atual "$c")"
-  printf '%s  ·  ramo %s\n' "$nome" "$ramo"
-  trilha="$("$GIT" -C "$c" rev-list --left-right --count "@{upstream}...HEAD" 2>/dev/null)"
-  if [ -n "$trilha" ]; then
-    printf '  upstream %s  ·  atras %s  ·  a frente %s\n' \
-      "$("$GIT" -C "$c" rev-parse --abbrev-ref '@{upstream}' 2>/dev/null)" \
-      "$(printf '%s' "$trilha" | cut -f1)" "$(printf '%s' "$trilha" | cut -f2)"
+  sha="$("$GIT" -C "$c" rev-parse --short HEAD 2>/dev/null || echo "")"
+  sujo_qtd="$("$GIT" -C "$c" status --porcelain 2>/dev/null | wc -l)"
+  upstream="$("$GIT" -C "$c" rev-parse --abbrev-ref '@{upstream}' 2>/dev/null || echo "")"
+  local atras=0 frente=0
+  if [ -n "$upstream" ]; then
+    read -r atras frente < <("$GIT" -C "$c" rev-list --left-right --count "@{upstream}...HEAD" 2>/dev/null || echo "0 0")
+  fi
+  local ultimo; ultimo="$("$GIT" -C "$c" log -1 --format='%h %s  (%an, %ar)' 2>/dev/null || echo "")"
+
+  if [ "$como_json" -eq 1 ]; then
+    python3 -c '
+import sys, json
+print(json.dumps({
+  "repo": sys.argv[1],
+  "ramo": sys.argv[2],
+  "sha": sys.argv[3],
+  "upstream": sys.argv[4] or None,
+  "atras": int(sys.argv[5]),
+  "a_frente": int(sys.argv[6]),
+  "limpo": int(sys.argv[7]) == 0,
+  "alteracoes": int(sys.argv[7]),
+  "ultimo_commit": sys.argv[8] or None
+}, indent=2))' "$repo_alvo" "$ramo" "$sha" "$upstream" "${atras:-0}" "${frente:-0}" "${sujo_qtd:-0}" "$ultimo"
+    return 0
+  fi
+
+  printf '%s  ·  ramo %s\n' "$repo_alvo" "$ramo"
+  if [ -n "$upstream" ]; then
+    printf '  upstream %s  ·  atras %s  ·  a frente %s\n' "$upstream" "${atras:-0}" "${frente:-0}"
   else
     printf '  sem upstream (ramo local ainda nao empurrado)\n'
   fi
-  printf '  ultimo   %s\n' "$("$GIT" -C "$c" log -1 --format='%h %s  (%an, %ar)' 2>/dev/null)"
-  local st
-  st="$("$GIT" -C "$c" status --short 2>/dev/null)"
-  if [ -n "$st" ]; then printf '  arvore suja:\n%s\n' "$(printf '%s' "$st" | sed 's/^/    /')"
-  else printf '  arvore limpa\n'; fi
+  printf '  ultimo   %s\n' "$ultimo"
+  local st; st="$("$GIT" -C "$c" status --short 2>/dev/null)"
+  if [ -n "$st" ]; then
+    printf '  arvore suja:\n%s\n' "$(printf '%s' "$st" | sed 's/^/    /')"
+  else
+    printf '  arvore limpa\n'
+  fi
+  return 0
 }
 
-# fetch + merge --ff-only: puxa o upstream do ramo atual e avanca o ramo local SO
-# se for fast-forward puro. Nao faz merge de fusao, nao rebaseia, nao forca. Se o
-# local tem commit que o upstream nao tem (divergencia real), o --ff-only RECUSA e
-# nada e tocado — a arvore fica como estava, e a recusa diz o que houve. Cura o
-# clone que congela atras de origin sem `pull` (o `repo` nao tinha fetch nenhum).
-# Escrito para o caso seguro; reconciliar divergencia real e ato humano, nao deste verbo.
+cmd_listar() {
+  local como_json=0 repo="" prefixo=""
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --json) como_json=1; COMO_JSON=1; shift ;;
+      -*) morre "opção desconhecida: '$1'" 2 ;;
+      *)
+        if [ -z "$repo" ]; then
+          repo="$1"
+        elif [ -z "$prefixo" ]; then
+          prefixo="$1"
+        else
+          morre "argumento excedente: '$1'" 2
+        fi
+        shift
+        ;;
+    esac
+  done
+  [ -n "$repo" ] || morre "repo obrigatório para listar" 2
+
+  local c; c="$(clone_de "$repo")" || exit $?
+
+  if [ -n "$prefixo" ]; then
+    if [[ "$prefixo" == /* ]] || [[ "$prefixo" == *..* ]]; then
+      morre "prefixo fora da raiz ou símbolo que escapa: '$prefixo'" 4
+    fi
+  fi
+
+  local files
+  if [ -n "$prefixo" ]; then
+    files="$("$GIT" -C "$c" ls-files -- "$prefixo" 2>/dev/null || true)"
+  else
+    files="$("$GIT" -C "$c" ls-files 2>/dev/null || true)"
+  fi
+
+  if [ -z "$files" ]; then
+    if [ "$como_json" -eq 1 ]; then
+      python3 -c 'import sys, json; print(json.dumps({"repo": sys.argv[1], "arquivos": [], "total": 0, "motivo": "nenhum arquivo encontrado sob '\''" + sys.argv[2] + "'\''"}, indent=2))' "$repo" "${prefixo:-.}"
+    else
+      printf 'motivo: nenhum arquivo encontrado sob '\''%s'\''\n' "${prefixo:-.}"
+    fi
+    return 0
+  fi
+
+  if [ "$como_json" -eq 1 ]; then
+    python3 -c 'import sys, json; arqs = [l for l in sys.stdin.read().splitlines() if l]; print(json.dumps({"repo": sys.argv[1], "arquivos": arqs, "total": len(arqs)}, indent=2))' "$repo" <<<"$files"
+  else
+    printf '%s\n' "$files"
+  fi
+  return 0
+}
+
+cmd_ler() {
+  local repo="" caminho=""
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      -*) morre "opção desconhecida: '$1'" 2 ;;
+      *)
+        if [ -z "$repo" ]; then
+          repo="$1"
+        elif [ -z "$caminho" ]; then
+          caminho="$1"
+        else
+          morre "argumento excedente: '$1'" 2
+        fi
+        shift
+        ;;
+    esac
+  done
+  [ -n "$repo" ] && [ -n "$caminho" ] || morre "repo e caminho são obrigatórios para ler" 2
+
+  local c; c="$(clone_de "$repo")" || exit $?
+
+  if [[ "$caminho" == /* ]] || [[ "$caminho" == *..* ]]; then
+    morre "caminho fora da raiz ou símbolo que escapa: '$caminho'" 4
+  fi
+
+  local alvo_arquivo="$c/$caminho"
+  if [ ! -f "$alvo_arquivo" ]; then
+    info_varrido "$c" "$repo"
+    printf 'vizinho: release ler %s %s\n' "$repo" "$caminho" >&2
+    exit 1
+  fi
+
+  cat "$alvo_arquivo"
+
+  local ramo; ramo="$(ramo_atual "$c")"
+  local sha; sha="$("$GIT" -C "$c" rev-parse --short HEAD 2>/dev/null || echo "")"
+  local mod=""
+  if ! "$GIT" -C "$c" diff --quiet HEAD -- "$caminho" 2>/dev/null; then
+    mod=" (modificado)"
+  elif ! "$GIT" -C "$c" ls-files --error-unmatch "$caminho" >/dev/null 2>&1; then
+    mod=" (modificado)"
+  fi
+  printf 'versão: %s@%s%s\n' "$ramo" "$sha" "$mod" >&2
+  return 0
+}
+
+cmd_procurar() {
+  local como_json=0 repo="" termo="" prefixo=""
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --json) como_json=1; COMO_JSON=1; shift ;;
+      --termo)
+        shift
+        [ $# -gt 0 ] || morre "--termo exige um valor" 2
+        termo="$1"
+        shift
+        ;;
+      -*) morre "opção desconhecida: '$1'" 2 ;;
+      *)
+        if [ -z "$repo" ]; then
+          repo="$1"
+        elif [ -z "$prefixo" ]; then
+          prefixo="$1"
+        else
+          morre "argumento excedente: '$1'" 2
+        fi
+        shift
+        ;;
+    esac
+  done
+
+  [ -n "$repo" ] || morre "repo obrigatório para procurar" 2
+  [ -n "$termo" ] || morre "--termo <termo> é obrigatório para procurar" 2
+
+  local c; c="$(clone_de "$repo")" || exit $?
+
+  if [ -n "$prefixo" ]; then
+    if [[ "$prefixo" == /* ]] || [[ "$prefixo" == *..* ]]; then
+      morre "prefixo fora da raiz ou símbolo que escapa: '$prefixo'" 4
+    fi
+  fi
+
+  local out=""
+  if [ -n "$prefixo" ]; then
+    out="$("$GIT" -C "$c" grep -n -F -- "$termo" -- "$prefixo" 2>/dev/null || true)"
+  else
+    out="$("$GIT" -C "$c" grep -n -F -- "$termo" 2>/dev/null || true)"
+  fi
+
+  if [ -z "$out" ]; then
+    if [ "$como_json" -eq 1 ]; then
+      python3 -c 'import sys, json; print(json.dumps({"repo": sys.argv[1], "termo": sys.argv[2], "ocorrencias": [], "total": 0, "motivo": "termo não encontrado na bancada"}, indent=2))' "$repo" "$termo"
+    else
+      printf 'motivo: termo '\''%s'\'' não encontrado na bancada %s\n' "$termo" "$repo"
+    fi
+    return 0
+  fi
+
+  if [ "$como_json" -eq 1 ]; then
+    python3 -c '
+import sys, json
+linhas = [l for l in sys.stdin.read().splitlines() if l]
+ocorr = []
+for l in linhas:
+    partes = l.split(":", 2)
+    if len(partes) >= 3:
+        ocorr.append({"caminho": partes[0], "linha": int(partes[1]) if partes[1].isdigit() else partes[1], "texto": partes[2]})
+    else:
+        ocorr.append({"linha_crua": l})
+print(json.dumps({"repo": sys.argv[1], "termo": sys.argv[2], "ocorrencias": ocorr, "total": len(ocorr)}, indent=2))
+' "$repo" "$termo" <<<"$out"
+  else
+    printf '%s\n' "$out"
+  fi
+  return 0
+}
+
+cmd_historico() {
+  local como_json=0 repo="" caminho="" n_commits="10"
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --json) como_json=1; COMO_JSON=1; shift ;;
+      --n)
+        shift
+        [ $# -gt 0 ] || { printf '%s: erro: --n exige um número\n' "$VERBO" >&2; uso; }
+        n_commits="$1"
+        shift
+        ;;
+      -*) morre "opção desconhecida: '$1'" 2 ;;
+      *)
+        if [ -z "$repo" ]; then
+          repo="$1"
+        elif [ -z "$caminho" ]; then
+          caminho="$1"
+        else
+          morre "argumento excedente: '$1'" 2
+        fi
+        shift
+        ;;
+    esac
+  done
+  [ -n "$repo" ] || { printf '%s: erro: repo obrigatório para historico\n' "$VERBO" >&2; uso; }
+  case "$n_commits" in *[!0-9]*) morre "número de commits inválido: '$n_commits'" 2 ;; esac
+
+  local c; c="$(clone_de "$repo")" || exit $?
+
+  if [ -n "$caminho" ]; then
+    if [[ "$caminho" == /* ]] || [[ "$caminho" == *..* ]]; then
+      morre "caminho fora da raiz ou símbolo que escapa: '$caminho'" 4
+    fi
+    if [ ! -e "$c/$caminho" ] && [ -z "$("$GIT" -C "$c" log -1 --format='%h' -- "$caminho" 2>/dev/null)" ]; then
+      info_varrido "$c" "$repo"
+      printf 'vizinho: release ler %s %s\n' "$repo" "$caminho" >&2
+      exit 1
+    fi
+  fi
+
+  local log_fmt='%h%x09%ad%x09%an%x09%s'
+  local out=""
+  if [ -n "$caminho" ]; then
+    out="$("$GIT" -C "$c" log -n "$n_commits" --format="$log_fmt" --date=short -- "$caminho" 2>/dev/null || true)"
+  else
+    out="$("$GIT" -C "$c" log -n "$n_commits" --format="$log_fmt" --date=short 2>/dev/null || true)"
+  fi
+
+  if [ -z "$out" ]; then
+    if [ "$como_json" -eq 1 ]; then
+      python3 -c 'import sys, json; print(json.dumps({"repo": sys.argv[1], "caminho": sys.argv[2] or None, "commits": [], "total": 0, "motivo": "nenhum commit encontrado"}, indent=2))' "$repo" "$caminho"
+    else
+      printf 'motivo: nenhum commit encontrado\n'
+    fi
+    return 0
+  fi
+
+  if [ "$como_json" -eq 1 ]; then
+    python3 -c '
+import sys, json
+linhas = [l for l in sys.stdin.read().splitlines() if l]
+commits = []
+for l in linhas:
+    partes = l.split("\t", 3)
+    if len(partes) == 4:
+        commits.append({"sha": partes[0], "data": partes[1], "autor": partes[2], "mensagem": partes[3]})
+    else:
+        commits.append({"linha_crua": l})
+print(json.dumps({"repo": sys.argv[1], "caminho": sys.argv[2] or None, "commits": commits, "total": len(commits)}, indent=2))
+' "$repo" "$caminho" <<<"$out"
+  else
+    python3 -c '
+import sys
+for l in sys.stdin.read().splitlines():
+    if not l: continue
+    partes = l.split("\t", 3)
+    if len(partes) == 4:
+        print(f"{partes[0]} {partes[1]} {partes[2]}: {partes[3]}")
+    else:
+        print(l)
+' <<<"$out"
+  fi
+  return 0
+}
+
+cmd_diff() {
+  local staged=0 repo="" caminho=""
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --staged) staged=1; shift ;;
+      -*) morre "opção desconhecida: '$1'" 2 ;;
+      *)
+        if [ -z "$repo" ]; then
+          repo="$1"
+        elif [ -z "$caminho" ]; then
+          caminho="$1"
+        else
+          morre "argumento excedente: '$1'" 2
+        fi
+        shift
+        ;;
+    esac
+  done
+  [ -n "$repo" ] || { printf '%s: erro: repo obrigatório para diff\n' "$VERBO" >&2; uso; }
+
+  local c; c="$(clone_de "$repo")" || exit $?
+
+  if [ -n "$caminho" ]; then
+    if [[ "$caminho" == /* ]] || [[ "$caminho" == *..* ]]; then
+      morre "caminho fora da raiz ou símbolo que escapa: '$caminho'" 4
+    fi
+  fi
+
+  if [ "$staged" -eq 1 ]; then
+    if [ -n "$caminho" ]; then
+      "$GIT" -C "$c" diff --staged -- "$caminho"
+    else
+      "$GIT" -C "$c" diff --staged
+    fi
+  else
+    local base_ref=""
+    if "$GIT" -C "$c" rev-parse --verify origin/main >/dev/null 2>&1; then
+      base_ref="origin/main"
+    elif "$GIT" -C "$c" rev-parse --verify main >/dev/null 2>&1; then
+      base_ref="main"
+    fi
+
+    if [ -n "$base_ref" ]; then
+      if [ -n "$caminho" ]; then
+        "$GIT" -C "$c" diff "$base_ref" -- "$caminho"
+      else
+        "$GIT" -C "$c" diff "$base_ref"
+      fi
+    else
+      if [ -n "$caminho" ]; then
+        "$GIT" -C "$c" diff -- "$caminho"
+      else
+        "$GIT" -C "$c" diff
+      fi
+    fi
+  fi
+  return 0
+}
+
 ato_atualizar() {
   local nome="${1:-}" c ramo up
   c="$(clone_de "$nome")" || exit $?
@@ -201,12 +637,19 @@ ato_atualizar() {
   esac
   up="$("$GIT" -C "$c" rev-parse --abbrev-ref '@{upstream}' 2>/dev/null)" \
     || morre "'$ramo' nao tem upstream — nada para puxar" 3
-  PATH="$PATH_FORGE" "$GIT" -C "$c" fetch --prune origin || morre "git fetch falhou" 3
+  env PATH="$PATH_FORGE" "$GIT" -C "$c" fetch --prune origin || morre "git fetch falhou" 3
+
+  local atras frente
+  read -r atras frente < <("$GIT" -C "$c" rev-list --left-right --count "@{upstream}...HEAD" 2>/dev/null || echo "0 0")
+  if [ "${atras:-0}" -eq 0 ]; then
+    printf 'já em dia: %s/%s (@ %s)\n' "$nome" "$ramo" "$("$GIT" -C "$c" rev-parse --short HEAD)"
+    exit 1
+  fi
+
   if ! "$GIT" -C "$c" merge --ff-only "@{upstream}" >/dev/null 2>&1; then
     local trilha
     trilha="$("$GIT" -C "$c" rev-list --left-right --count "@{upstream}...HEAD" 2>/dev/null)"
-    morre "recuso atualizar '$nome': '$ramo' divergiu de '$up' (atras/frente: ${trilha:-?}). \
-ff-only nao funde nem forca — reconcilie a mao com \`repo ramo\` + merge/rebase deliberado." 4
+    morre "recuso atualizar '$nome': '$ramo' divergiu de '$up' (atras/frente: ${trilha:-?}). ff-only nao funde nem forca — reconcilie a mao com \`repo ramo\` + merge/rebase deliberado." 4
   fi
   printf 'atualizado: %s/%s -> %s\n' "$nome" "$ramo" \
     "$("$GIT" -C "$c" log -1 --format='%h %s')"
@@ -216,7 +659,7 @@ ato_clonar() {
   local origem="${1:-}" nome="${2:-}" url
   [ -n "$origem" ] || uso
   case "$origem" in
-    https://*|git@*) url="$origem" ;;
+    https://*|git@*|file://*|/*|./*) url="$origem" ;;
     */*) url="https://github.com/$origem.git" ;;
     *) morre "origem invalida: '$origem' — use uma URL ou owner/nome" 2 ;;
   esac
@@ -226,44 +669,195 @@ ato_clonar() {
   esac
   [ -e "$RAIZ/$nome" ] && morre "'$RAIZ/$nome' ja existe — nao sobrescrevo clone" 3
   mkdir -p "$RAIZ" || morre "nao criei a raiz $RAIZ" 3
-  git clone "$url" "$RAIZ/$nome" || morre "git clone falhou" 3
+  env PATH="$PATH_FORGE" "$GIT" clone "$url" "$RAIZ/$nome" || morre "git clone falhou" 3
   printf 'clonado: %s -> %s (ramo %s)\n' "$url" "$RAIZ/$nome" "$(ramo_atual "$RAIZ/$nome")"
 }
 
+cmd_abrir() {
+  printf '%s: abrir depende de a porta servir main; bancada em var/wt/<repo>/<cadeira> chega após migração de release\n' "$VERBO" >&2
+  exit 2
+}
+
 ato_ramo() {
-  local nome="${1:-}" alvo="${2:-}" c
-  c="$(clone_de "$nome")" || exit $?
-  if [ -z "$alvo" ]; then
+  local nome="${1:-}"
+  [ -n "$nome" ] || uso
+  local c; c="$(clone_de "$nome")" || exit $?
+  shift || true
+
+  if [ $# -eq 0 ]; then
     printf '%s  ·  atual: %s\n' "$nome" "$(ramo_atual "$c")"
-    git -C "$c" branch --format='  %(refname:short)' || morre "git branch falhou" 3
+    "$GIT" -C "$c" branch --format='  %(refname:short)' || morre "git branch falhou" 3
     return 0
   fi
-  case "$alvo" in
-    -*|*' '*|*'..'*) morre "nome de ramo invalido: '$alvo'" 2 ;;
-  esac
-  if git -C "$c" show-ref --verify --quiet "refs/heads/$alvo"; then
-    git -C "$c" checkout "$alvo" || morre "checkout falhou" 3
-    printf 'ramo trocado: %s (ja existia)\n' "$alvo"
+
+  local card="" slug=""
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --slug)
+        shift
+        [ $# -gt 0 ] || { printf '%s: erro: --slug exige um valor\n' "$VERBO" >&2; exit 2; }
+        slug="$1"
+        shift
+        ;;
+      -*)
+        morre "argumento nao reconhecido: '$1'" 2
+        ;;
+      *)
+        if [ -z "$card" ]; then
+          card="$1"
+        else
+          morre "argumento excedente: '$1'" 2
+        fi
+        shift
+        ;;
+    esac
+  done
+
+  local card_num="${card###}"
+  local ramo_alvo=""
+  if [[ "$card_num" =~ ^[0-9]+$ ]]; then
+    if [ -n "$slug" ]; then
+      ramo_alvo="fabrica/${card_num}-${slug}"
+    else
+      ramo_alvo="fabrica/${card_num}"
+    fi
   else
-    git -C "$c" checkout -b "$alvo" || morre "checkout -b falhou" 3
-    printf 'ramo criado: %s (de %s)\n' "$alvo" "$nome"
+    ramo_alvo="$card"
+    if [ -n "$slug" ]; then
+      ramo_alvo="${ramo_alvo}-${slug}"
+    fi
+    printf 'aviso: nome livre de ramo ('\''%s'\''); padrão da casa é '\''repo ramo <repo> <card> [--slug <slug>]'\'' -> fabrica/<card>-<slug>\n' "$ramo_alvo" >&2
+  fi
+
+  case "$ramo_alvo" in
+    -*|*' '*|*'..'*) morre "nome de ramo invalido: '$ramo_alvo'" 2 ;;
+  esac
+
+  local atual; atual="$(ramo_atual "$c")"
+  if [ "$atual" = "$ramo_alvo" ]; then
+    printf 'ramo já em '\''%s'\'' (@ %s)\n' "$ramo_alvo" "$("$GIT" -C "$c" rev-parse --short HEAD)"
+    exit 1
+  fi
+
+  if "$GIT" -C "$c" show-ref --verify --quiet "refs/heads/$ramo_alvo"; then
+    "$GIT" -C "$c" checkout "$ramo_alvo" || morre "checkout falhou" 3
+    printf 'ramo trocado: %s (ja existia)\n' "$ramo_alvo"
+  else
+    local base_ref="HEAD"
+    if "$GIT" -C "$c" rev-parse --verify origin/main >/dev/null 2>&1; then
+      base_ref="origin/main"
+    elif "$GIT" -C "$c" rev-parse --verify main >/dev/null 2>&1; then
+      base_ref="main"
+    fi
+    "$GIT" -C "$c" checkout -b "$ramo_alvo" "$base_ref" || morre "checkout -b falhou" 3
+    printf 'ramo criado: %s (de %s)\n' "$ramo_alvo" "$base_ref"
   fi
 }
 
 ato_commitar() {
-  local nome="${1:-}" msg="" so_staged=0
+  local nome="${1:-}" msg="" tudo=0 caminhos=()
   shift || uso
   while [ $# -gt 0 ]; do
     case "$1" in
-      -m|--mensagem) msg="${2:-}"; shift 2 || uso ;;
-      --staged) so_staged=1; shift ;;
-      *) morre "argumento nao reconhecido: '$1'" 2 ;;
+      -m|--mensagem)
+        shift
+        [ $# -gt 0 ] || { printf '%s: erro: -m exige mensagem\n' "$VERBO" >&2; exit 2; }
+        msg="$1"
+        shift
+        ;;
+      --tudo)
+        tudo=1
+        shift
+        ;;
+      -*)
+        morre "argumento nao reconhecido: '$1'" 2
+        ;;
+      *)
+        caminhos+=("$1")
+        shift
+        ;;
     esac
   done
+
   [ -n "$msg" ] || morre "falta a mensagem (-m)" 2
   local c; c="$(clone_de "$nome")" || exit $?
-  [ "$so_staged" -eq 1 ] || "$GIT" -C "$c" add -A || morre "git add falhou" 3
-  "$GIT" -C "$c" diff --cached --quiet && morre "nada para commitar em '$nome'" 3
+
+  if [ "$tudo" -eq 1 ]; then
+    printf 'deprecado: --tudo faz add -A no clone compartilhado; prefira caminhos nomeados ou lista da sessão\n' >&2
+    "$GIT" -C "$c" add -A || morre "git add falhou" 3
+    "$GIT" -C "$c" diff --cached --quiet && { printf 'nada a commitar em '\''%s'\''\n' "$nome"; exit 1; }
+    "$GIT" -C "$c" commit -m "$msg" >/dev/null || morre "git commit falhou" 3
+    printf 'commit em %s (%s): %s\n' "$nome" "$(ramo_atual "$c")" \
+      "$("$GIT" -C "$c" log -1 --format='%h %s')"
+    return 0
+  fi
+
+  local alvos_commit=()
+  if [ "${#caminhos[@]}" -gt 0 ]; then
+    for p in "${caminhos[@]}"; do
+      case "$p" in /*|*..*) morre "caminho inválido ou fora da raiz: '$p'" 4 ;; esac
+      if [ ! -e "$c/$p" ] && ! "$GIT" -C "$c" ls-files --error-unmatch "$p" >/dev/null 2>&1; then
+        morre "caminho '$p' não existe na bancada '$nome'" 1
+      fi
+      alvos_commit+=("$p")
+    done
+  else
+    if [ -z "${PF_SESSAO:-}" ]; then
+      morre "dependência ausente: PF_SESSAO ausente para commitar sem caminho — nomeie os caminhos ou abra a sessão com \`monta_sessao\`" 3
+    fi
+
+    local log_dir="${PF_OPS_LOG_DIR:-${OPS_LOG_DIR:-${RAIZ}/var/log/ops}}"
+    local session_paths=()
+    if [ -d "$log_dir" ]; then
+      while IFS= read -r p; do
+        [ -n "$p" ] || continue
+        local rel_p=""
+        if [[ "$p" == "$c/"* ]]; then
+          rel_p="${p#$c/}"
+        elif [[ "$p" == "$nome/"* ]]; then
+          rel_p="${p#$nome/}"
+        elif [[ "$p" != /* ]] && [ -e "$c/$p" ]; then
+          rel_p="$p"
+        fi
+        if [ -n "$rel_p" ]; then
+          session_paths+=("$rel_p")
+        fi
+      done < <(grep -h "\"tool\":[[:space:]]*\"write_file\"" "$log_dir"/ops-*.jsonl 2>/dev/null \
+               | grep "\"sessao_id\":[[:space:]]*\"$PF_SESSAO\"" 2>/dev/null \
+               | sed -n 's/.*"path":[[:space:]]*"\([^"]*\)".*/\1/p' \
+               | sort -u)
+    fi
+    alvos_commit=("${session_paths[@]}")
+
+    local dirty_files=()
+    while IFS= read -r line; do
+      [ -n "$line" ] || continue
+      local f="${line:3}"
+      f="${f%\"}"; f="${f#\"}"
+      dirty_files+=("$f")
+    done < <("$GIT" -C "$c" status --porcelain 2>/dev/null)
+
+    for df in "${dirty_files[@]}"; do
+      local pertence=0
+      for ac in "${alvos_commit[@]}"; do
+        if [ "$df" = "$ac" ]; then
+          pertence=1
+          break
+        fi
+      done
+      if [ "$pertence" -eq 0 ]; then
+        morre "recusa de política: arquivo sujo de terceiro na árvore: '$df' — use caminhos nomeados ou limpe a árvore ou use --tudo" 4
+      fi
+    done
+  fi
+
+  if [ "${#alvos_commit[@]}" -eq 0 ]; then
+    "$GIT" -C "$c" diff --cached --quiet && { printf 'nada a commitar em '\''%s'\''\n' "$nome"; exit 1; }
+  else
+    "$GIT" -C "$c" add -- "${alvos_commit[@]}" || morre "git add falhou" 3
+  fi
+
+  "$GIT" -C "$c" diff --cached --quiet && { printf 'nada a commitar em '\''%s'\''\n' "$nome"; exit 1; }
   "$GIT" -C "$c" commit -m "$msg" >/dev/null || morre "git commit falhou" 3
   printf 'commit em %s (%s): %s\n' "$nome" "$(ramo_atual "$c")" \
     "$("$GIT" -C "$c" log -1 --format='%h %s')"
@@ -276,21 +870,9 @@ ato_empurrar() {
   case "$ramo" in
     HEAD) morre "HEAD solto — troque para um ramo antes de empurrar" 4 ;;
   esac
-  PATH="$PATH_FORGE" "$GIT" -C "$c" push -u origin "$ramo" || morre "git push falhou" 3
+  env PATH="$PATH_FORGE" "$GIT" -C "$c" push -u origin "$ramo" || morre "git push falhou" 3
   printf 'empurrado: %s -> origin/%s (%s)\n' "$nome" "$ramo" \
     "$("$GIT" -C "$c" log -1 --format='%h %s')"
-}
-
-# --- PR: o forge, unico ponto que fala com fora ------------------------------
-# Endpoint: API do GitHub por `gh`, com a credencial da CONTA que executa. Nao ha
-# credencial da casa embutida aqui. Conta sem credencial recebe a recusa do proprio
-# gh, com o endereco de quem concede — recusa certa, nao contorno.
-# NAO ha ato de merge, e isso e do desenho: `empurrar` recusa main, entao mudanca em
-# producao so entra por PR que operador do host aprova ("Sai quando" da #3003).
-
-tem_gh() {
-  command -v gh >/dev/null 2>&1 \
-    || morre "'gh' nao esta no PATH desta conta — o endpoint do forge nao esta alcancavel daqui" 3
 }
 
 ato_pr_abrir() {
@@ -313,9 +895,9 @@ ato_pr_abrir() {
     main|master|HEAD) morre "o ramo atual e '$ramo' — PR sai de ramo de trabalho, nao de producao" 4 ;;
   esac
   [ "$ramo" = "$base" ] && morre "ramo e base sao o mesmo ('$ramo')" 2
-  git -C "$c" rev-parse --abbrev-ref '@{upstream}' >/dev/null 2>&1 \
+  "$GIT" -C "$c" rev-parse --abbrev-ref '@{upstream}' >/dev/null 2>&1 \
     || morre "'$ramo' nao esta em origin — \`$VERBO empurrar $nome\` primeiro" 3
-  (cd "$c" && gh pr create --base "$base" --head "$ramo" --title "$titulo" --body "$corpo") \
+  (cd "$c" && env PATH="$PATH_FORGE" "$GH" pr create --base "$base" --head "$ramo" --title "$titulo" --body "$corpo") \
     || morre "gh pr create falhou" 3
 }
 
@@ -331,9 +913,9 @@ ato_pr_listar() {
   tem_gh
   c="$(clone_de "$nome")" || exit $?
   if [ "$todos" -eq 1 ]; then
-    (cd "$c" && gh pr list --state all --limit 30) || morre "gh pr list falhou" 3
+    (cd "$c" && env PATH="$PATH_FORGE" "$GH" pr list --state all --limit 30) || morre "gh pr list falhou" 3
   else
-    (cd "$c" && gh pr list --limit 30) || morre "gh pr list falhou" 3
+    (cd "$c" && env PATH="$PATH_FORGE" "$GH" pr list --limit 30) || morre "gh pr list falhou" 3
   fi
 }
 
@@ -343,7 +925,7 @@ ato_pr_ver() {
   case "$num" in *[!0-9]*) morre "numero de PR invalido: '$num'" 2 ;; esac
   tem_gh
   c="$(clone_de "$nome")" || exit $?
-  (cd "$c" && gh pr view "$num") || morre "gh pr view falhou" 3
+  (cd "$c" && env PATH="$PATH_FORGE" "$GH" pr view "$num") || morre "gh pr view falhou" 3
 }
 
 ato_pr_diff() {
@@ -352,39 +934,37 @@ ato_pr_diff() {
   case "$num" in *[!0-9]*) morre "numero de PR invalido: '$num'" 2 ;; esac
   tem_gh
   c="$(clone_de "$nome")" || exit $?
-  (cd "$c" && gh pr diff "$num") || morre "gh pr diff falhou" 3
+  (cd "$c" && env PATH="$PATH_FORGE" "$GH" pr diff "$num") || morre "gh pr diff falhou" 3
 }
 
-# pr-merge: operador do host aprova o PR pela credencial da CONTA (uid do host), que e
-# quem a seg:0014 diz que promove. NAO afrouxa a fronteira: `empurrar` segue recusando
-# main, o PR segue obrigatorio. Isto so da ao verbo o que o operador ja faz por fora.
-# --admin passa por cima da policy do forge quando o operador precisa promover o proprio
-# PR (branch protection ligada, autor != aprovador). Squash + delete do ramo por default.
 ato_pr_merge() {
-  local nome="${1:-}" num="${2:-}" c
+  local nome="${1:-}" num="${2:-}" modo="--squash" forcar=0 c
+  shift 2 || uso
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --squash|--merge|--rebase) modo="$1"; shift ;;
+      --forcar) forcar=1; shift ;;
+      -*) morre "argumento nao reconhecido: '$1'" 2 ;;
+      *) morre "argumento excedente: '$1'" 2 ;;
+    esac
+  done
   [ -n "$num" ] || morre "falta o numero do PR" 2
   case "$num" in *[!0-9]*) morre "numero de PR invalido: '$num'" 2 ;; esac
   tem_gh
   c="$(clone_de "$nome")" || exit $?
-  (cd "$c" && gh pr merge "$num" --admin --squash --delete-branch) \
+  if [ "$forcar" -eq 0 ]; then
+    local status_checks
+    status_checks="$(cd "$c" && env PATH="$PATH_FORGE" "$GH" pr view "$num" --json statusCheckRollup 2>/dev/null || true)"
+    if echo "$status_checks" | grep -q '"conclusion":"FAILURE"'; then
+      morre "recusa de política: check vermelho no PR #$num (use --forcar para ignorar)" 4
+    fi
+  fi
+  (cd "$c" && env PATH="$PATH_FORGE" "$GH" pr merge "$num" --admin "$modo" --delete-branch) \
     || morre "gh pr merge falhou" 3
 }
 
-# sanear: o "arruma tudo" (spec_saneamento-de-clones.md #3.3, ordem do dono 11/09/2026).
-# Varre a raiz inteira (ou um clone so, se nomeado); para CADA worktree/clone, a tabela
-# da spec e o contrato -- a maquina decide tudo que esta nela, o que nao esta vira
-# incidente na mesa de ti (fila enviar), nunca pergunta ao dono.
-# Invariante que este ato honra sempre: NUNCA perde trabalho (todo estado local sujo
-# vira ramo wip/ empurrado antes de qualquer reset) e NUNCA funde por conta propria
-# (so ff-only). --relatar faz o mesmo passeio sem escrever nada (dry-run).
-#
-# IDEMPOTENTE EM DUAS PASSADAS (D3 do parecer do arquiteto, aceito como doc): um clone
-# sujo E atras do upstream so recebe o wip nesta rodada (o fluxo e sequencial com
-# `continue`) -- nao chega a fazer merge --ff-only na mesma passada. A proxima chamada
-# de `sanear` encontra o clone ja limpo e entao atualiza. "Limpo" no fim de uma passada
-# nao significa "convergido"; rodar duas vezes converge sempre.
 ato_sanear() {
-  local alvo="" relatar=0 raiz_incidentes=0
+  local alvo="" relatar=0
   while [ $# -gt 0 ]; do
     case "$1" in
       --relatar) relatar=1; shift ;;
@@ -409,7 +989,6 @@ ato_sanear() {
   for c in "${dirs[@]}"; do
     local nome; nome="$(basename "$c")"
 
-    # dubious ownership / .git quebrado -- indeterminavel, nao toca, vira incidente.
     if ! "$GIT" -C "$c" rev-parse --git-dir >/dev/null 2>&1; then
       incidentes+=("$nome: indeterminavel -- $("$GIT" -C "$c" rev-parse --git-dir 2>&1 | head -1) (uid: $(stat -c%u "$c" 2>/dev/null))")
       continue
@@ -418,7 +997,6 @@ ato_sanear() {
     local ramo; ramo="$(ramo_atual "$c")"
     local sujo; sujo="$("$GIT" -C "$c" status --porcelain 2>/dev/null)"
 
-    # working tree sujo OU HEAD destacado com commits proprios -> wip/<ramo-ou-head>-<ts>, push. Nunca descarta.
     if [ -n "$sujo" ] || [ "$ramo" = "HEAD" ]; then
       local base_wip="${ramo:-HEAD}"; [ "$base_wip" = "HEAD" ] && base_wip="detached-$("$GIT" -C "$c" rev-parse --short HEAD 2>/dev/null)"
       local ramo_wip="wip/${base_wip}-${ts}"
@@ -428,7 +1006,7 @@ ato_sanear() {
       fi
       "$GIT" -C "$c" checkout -b "$ramo_wip" >/dev/null 2>&1 || { incidentes+=("$nome: falhou checkout -b $ramo_wip"); continue; }
       [ -n "$sujo" ] && { "$GIT" -C "$c" add -A && "$GIT" -C "$c" commit -q -m "wip: sanear $ts" >/dev/null; }
-      if PATH="$PATH_FORGE" "$GIT" -C "$c" push -u origin "$ramo_wip" >/dev/null 2>&1; then
+      if env PATH="$PATH_FORGE" "$GIT" -C "$c" push -u origin "$ramo_wip" >/dev/null 2>&1; then
         printf '%s: salvo em wip -> origin/%s\n' "$nome" "$ramo_wip"
       else
         incidentes+=("$nome: wip $ramo_wip criado mas push falhou -- trabalho local, nao empurrado")
@@ -436,11 +1014,10 @@ ato_sanear() {
       continue
     fi
 
-    # ramo com commit local nao empurrado -> push -u.
     local upstream; upstream="$("$GIT" -C "$c" rev-parse --abbrev-ref "@{upstream}" 2>/dev/null)"
     if [ -z "$upstream" ]; then
       if [ "$relatar" -eq 1 ]; then printf '%s: relataria push -u origin %s (sem upstream)\n' "$nome" "$ramo"; continue; fi
-      if PATH="$PATH_FORGE" "$GIT" -C "$c" push -u origin "$ramo" >/dev/null 2>&1; then
+      if env PATH="$PATH_FORGE" "$GIT" -C "$c" push -u origin "$ramo" >/dev/null 2>&1; then
         printf '%s: empurrado -u origin/%s\n' "$nome" "$ramo"
       else
         incidentes+=("$nome: ramo '$ramo' sem upstream e push -u falhou")
@@ -448,16 +1025,8 @@ ato_sanear() {
       continue
     fi
 
-    # fetch origin/main sempre (nao so quando ha upstream) -- o guard de
-    # worktree-mesclado abaixo depende de origin/main fresco (nao-defeito
-    # apontado no parecer: sem isto, ramo sem upstream pulava o fetch e
-    # testava contra origin/main potencialmente velho).
-    "$GIT" -C "$c" fetch --prune origin >/dev/null 2>&1
+    env PATH="$PATH_FORGE" "$GIT" -C "$c" fetch --prune origin >/dev/null 2>&1
 
-    # worktree cujo ramo ja foi mesclado em origin/main -> remove. Roda ANTES
-    # do bloco de divergencia (D1 do parecer): se o ramo ja esta mesclado, ele
-    # NUNCA e "feature viva", entao remove aqui e pula o reset --hard abaixo
-    # de vez -- reset so acontece em ramo que NAO esta mesclado.
     local ja_mesclado=0
     if "$GIT" -C "$c" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
       local wt_git; wt_git="$("$GIT" -C "$c" rev-parse --git-common-dir 2>/dev/null)"
@@ -473,16 +1042,10 @@ ato_sanear() {
       fi
     fi
 
-    # atras/a-frente do upstream. So chega aqui quem NAO foi removido acima
-    # (ja_mesclado=0), ou seja: todo ramo que sobrevive ate aqui e "feature
-    # viva" pelo criterio que importa para reset --hard nao perder trabalho.
-    # read com IFS de espaco/tab separa pelos DOIS, nao depende de qual byte o
-    # git usa nesta versao entre left(atras) e right(a frente) (parecer D2).
     local atras frente
-    read -r atras frente < <("$GIT" -C "$c" rev-list --left-right --count "@{upstream}...HEAD" 2>/dev/null)
+    read -r atras frente < <("$GIT" -C "$c" rev-list --left-right --count "@{upstream}...HEAD" 2>/dev/null || echo "0 0")
 
     if [ "${atras:-0}" -gt 0 ] && [ "${frente:-0}" -eq 0 ]; then
-      # so atras, ff possivel.
       if [ "$relatar" -eq 1 ]; then printf '%s: relataria merge --ff-only (%s atras)\n' "$nome" "$atras"; continue; fi
       if "$GIT" -C "$c" merge --ff-only "@{upstream}" >/dev/null 2>&1; then
         printf '%s: atualizado -> %s\n' "$nome" "$("$GIT" -C "$c" log -1 --format='%h %s')"
@@ -490,17 +1053,13 @@ ato_sanear() {
         incidentes+=("$nome: ff-only falhou apesar de so-atras (${atras}) -- confira a mao")
       fi
     elif [ "${atras:-0}" -gt 0 ] && [ "${frente:-0}" -gt 0 ]; then
-      # divergiu: salva o lado local em wip, reseta ao upstream, incidente pra cadeira do ramo.
-      # Chega aqui SO se ja_mesclado=0 (checado acima, antes deste bloco) --
-      # e por isso que resetar aqui e seguro: o ramo tem trabalho proprio nao
-      # mesclado, o reset --hard so acontece DEPOIS de o wip estar empurrado.
       local ramo_wip="wip/${ramo}-${ts}"
       if [ "$relatar" -eq 1 ]; then
         printf '%s: relataria divergencia -> salvar wip/%s e reset a upstream (atras=%s frente=%s)\n' "$nome" "$ramo_wip" "$atras" "$frente"
         continue
       fi
       "$GIT" -C "$c" branch "$ramo_wip" "$ramo" >/dev/null 2>&1
-      if PATH="$PATH_FORGE" "$GIT" -C "$c" push -u origin "$ramo_wip" >/dev/null 2>&1 \
+      if env PATH="$PATH_FORGE" "$GIT" -C "$c" push -u origin "$ramo_wip" >/dev/null 2>&1 \
         && "$GIT" -C "$c" reset --hard "@{upstream}" >/dev/null 2>&1; then
         incidentes+=("$nome: '$ramo' divergiu de upstream (atras=$atras frente=$frente) -- lado local salvo em wip/$ramo_wip (empurrado), checkout resetado a upstream. Cadeira dona do ramo rebaseia.")
       else
@@ -517,21 +1076,43 @@ ato_sanear() {
   fi
 }
 
-ato="${1:-}"; [ -n "$ato" ] && shift
-case "$ato" in
-  git)       ato_git "$@" ;;
-  estado)    ato_estado "$@" ;;
-  atualizar) ato_atualizar "$@" ;;
-  clonar)    ato_clonar "$@" ;;
+if [ $# -eq 0 ]; then
+  uso
+fi
+
+for _a in "$@"; do
+  case "$_a" in
+    --ajuda|--help|-h) uso ;;
+  esac
+done
+
+cmd="$1"
+shift
+
+case "$cmd" in
+  estado)    cmd_estado "$@" ;;
+  listar)    cmd_listar "$@" ;;
+  ler)       cmd_ler "$@" ;;
+  procurar)  cmd_procurar "$@" ;;
+  historico) cmd_historico "$@" ;;
+  diff)      cmd_diff "$@" ;;
   ramo)      ato_ramo "$@" ;;
   commitar)  ato_commitar "$@" ;;
   empurrar)  ato_empurrar "$@" ;;
+  atualizar) ato_atualizar "$@" ;;
+  abrir)     cmd_abrir "$@" ;;
+  clonar)    ato_clonar "$@" ;;
+  sanear)    ato_sanear "$@" ;;
   pr-abrir)  ato_pr_abrir "$@" ;;
   pr-listar) ato_pr_listar "$@" ;;
   pr-ver)    ato_pr_ver "$@" ;;
   pr-diff)   ato_pr_diff "$@" ;;
   pr-merge)  ato_pr_merge "$@" ;;
-  sanear)    ato_sanear "$@" ;;
-  ""|-h|--help|ajuda) uso ;;
-  *) morre "ato desconhecido: '$ato' — atos: git, estado, atualizar, clonar, ramo, commitar, empurrar, pr-abrir, pr-listar, pr-ver, pr-diff, pr-merge, sanear" 2 ;;
+  git)       ato_git "$@" ;;
+  *)
+    printf '%s: erro: ato desconhecido '\''%s'\''\n' "$VERBO" "$cmd" >&2
+    printf 'atos: estado · listar · ler · procurar · historico · diff · ramo · commitar · empurrar · atualizar · abrir · clonar · sanear · pr-abrir · pr-listar · pr-ver · pr-diff · pr-merge · git\n' >&2
+    uso_texto
+    exit 2
+    ;;
 esac
