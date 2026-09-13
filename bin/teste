@@ -174,5 +174,14 @@ case "$ato" in
   rodar)    ato_rodar "$@" ;;
   detectar) ato_detectar "$@" ;;
   ""|-h|--help|ajuda) uso ;;
-  *) morre "ato desconhecido: '$ato' — atos: rodar, detectar" 2 ;;
+  *)
+    # arq:0110 §3 Q9: teste <verbo>
+    c="$(clone_de "platafirma-harness")" || exit $?
+    if [ -f "$c/controle/tests/test_contrato_$ato.py" ]; then
+      ato_rodar "platafirma-harness" "controle/tests/test_contrato_$ato.py"
+    elif [ -f "$c/testes/test_contrato_$ato.py" ]; then
+      ato_rodar "platafirma-harness" "testes/test_contrato_$ato.py"
+    else
+      morre "ato desconhecido: '$ato' — atos: rodar, detectar (ou teste <verbo>)" 2
+    fi ;;
 esac
