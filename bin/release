@@ -27,6 +27,7 @@ STACKS_DEFAULT=(
   "rastreador"
   "rastreador-tela"
   "harness-sessao"
+  "searxng"
 )
 
 uso() {

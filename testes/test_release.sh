@@ -33,8 +33,9 @@ for repo in "$HARNESS_DIR" "$CORE_DIR" "$CONHECIMENTO_DIR"; do
 done
 
 # Copia verbo release e cria estrutura basica
-mkdir -p "$HARNESS_DIR/bin" "$HARNESS_DIR/politica-acesso"
+mkdir -p "$HARNESS_DIR/bin" "$HARNESS_DIR/politica-acesso" "$HARNESS_DIR/docs"
 cp /home/jaiminho/harness-repo/bin/release "$HARNESS_DIR/bin/release"
+cp /home/jaiminho/harness-repo/docs/procedencia-do-harness.md "$HARNESS_DIR/docs/procedencia-do-harness.md"
 chmod +x "$HARNESS_DIR/bin/release"
 cat > "$HARNESS_DIR/bin/exemplo-verbo" <<'EOF'
 #!/usr/bin/env bash
@@ -118,5 +119,8 @@ echo "OK: de volta a $DE_VOLTA com sucesso."
 
 echo "== Passo 7: teste do conferir pdp =="
 PF_CURRENT_LINK="$OPT_DIR/current" python3 /home/jaiminho/harness-repo/bin/conferir pdp
+
+echo "== Passo 8: teste do conferir procedencia (0 fora) =="
+PF_AI_DIR="$AI_DIR" PF_BIN_DIR="$BIN_DIR" PF_HARNESS_DIR="$HARNESS_DIR" PF_OPT_DIR="$OPT_DIR" python3 /home/jaiminho/harness-repo/bin/conferir procedencia
 
 echo "=== Todos os testes e ensaios de release passaram com sucesso! ==="

@@ -108,10 +108,10 @@ import sys
 import urllib.error
 import urllib.request
 
-RAIZ = os.path.expanduser("~/AI")
-DEPLOY = os.path.join(RAIZ, "deploy")
-BIN = os.path.join(RAIZ, "bin")
-HARNESS = os.path.join(RAIZ, "platafirma-harness")
+RAIZ = os.environ.get("PF_AI_DIR", os.path.expanduser("~/AI"))
+DEPLOY = os.environ.get("PF_DEPLOY_DIR", os.path.join(RAIZ, "deploy"))
+BIN = os.environ.get("PF_BIN_DIR", os.path.join(RAIZ, "bin"))
+HARNESS = os.environ.get("PF_HARNESS_DIR", os.path.join(RAIZ, "platafirma-harness"))
 # stacks.json foi aposentado (deploy:17; acervo.stack e a fonte). Constante restaurada
 # (caiu em 8288b76, usos em conferir_ferramental sobreviveram): ausente -> except OSError
 # zera no_arquivo e a paridade de transicao passa, que e o estado pos-morte do arquivo.
@@ -321,7 +321,8 @@ def origem(nome, caminho):
         destino = os.path.realpath(caminho)
         if destino.startswith(os.path.realpath(RAIZ)) and "/opt/" not in destino:
             return "symlink", destino
-        if destino.startswith("/opt/platafirma/"):
+        opt_dir = os.environ.get("PF_OPT_DIR", "/opt/platafirma").rstrip(os.sep)
+        if destino.startswith("/opt/platafirma/") or destino.startswith(opt_dir + os.sep):
             return "symlink", destino
         return "terceiro", destino
     if not e_script(caminho):
@@ -924,7 +925,7 @@ def conferir_commit(alvo, como_json=False):
 
 # --- classe: skill ----------------------------------------------------------
 
-HARNESS = os.path.expanduser("~/AI/platafirma-harness")
+HARNESS = os.environ.get("PF_HARNESS_DIR", os.path.join(RAIZ, "platafirma-harness"))
 
 
 def _texto_da_fita():
@@ -2101,13 +2102,15 @@ def conferir_procedencia(alvo, como_json=False):
         caminho = os.path.join(BIN, nome)
         destino = os.path.realpath(caminho)
         e_link = os.path.islink(caminho)
+        opt_dir = os.environ.get("PF_OPT_DIR", "/opt/platafirma").rstrip(os.sep)
         if not os.path.exists(caminho):
             veredito, detalhe = "quebrado", f"symlink sem destino: {destino}"
         elif (
             destino == raiz
             or destino.startswith(raiz + os.sep)
             or destino.startswith("/opt/platafirma/")
-            or (e_link and os.readlink(caminho).startswith("/opt/platafirma/"))
+            or destino.startswith(opt_dir + os.sep)
+            or (e_link and (os.readlink(caminho).startswith("/opt/platafirma/") or os.readlink(caminho).startswith(opt_dir + os.sep)))
         ):
             veredito, detalhe = "harness", destino
         elif nome in por_nome:
