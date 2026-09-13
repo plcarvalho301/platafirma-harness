@@ -1,17 +1,21 @@
 #!/usr/bin/env python3
-# motor — gestao de motores de decisao: o que um motor serve e mede.
-# capacidade: gestao-de-motores
-# (arq:0043 — a capacidade e do subcomando; aqui os tres servem a mesma:
-#  motor listar · motor <inst> buscar · motor <inst> ajuste)
-# dono: claudinho-IA
-# use para: "o que o acervo diz sobre X" (buscar obra|casa), medir a bateria de um motor (medir), reindexar uma partição (indexar)
-# atos: buscar, medir, indexar, ajuste, listar — buscar exige partição: motor <inst> buscar <partição> "<pergunta>"
-# conforme: parcial (arq:0106 — buscar/medir/indexar roteiam <particao>; forma vigente cai em obra COM aviso)
+# motor — busca semantica sobre uma particao do acervo: o que um motor serve e mede.
+# capacidade: motor
+# dono: ia
+# componente: platafirma-motor
+# classe: B
+# use para: "o que o acervo diz sobre X" (buscar <particao>), medir a bateria de um motor (medir), reindexar uma particao (indexar), ler/mexer um ajuste (ajuste)
+# atos: listar (leitura, texto), ajuste (leitura|escrita, config), buscar (leitura, busca), medir (leitura, medida), indexar (escrita, indice) — buscar/medir/indexar exigem particao: motor <inst> <ato> <particao> ...
 # forma: json
 # cauda: nao
 # poda: cosmetica@rag,casa
-# componente: platafirma-motor
+# consome: rag-extractor-api@platafirma-conhecimento/rag/openapi.yaml >=1.0 (buscar, medir; endpoint por instancia em motor-instancias.json)
+# ambiente: RAG_PYTHON origem-shell RAG_PYTHON=<python-do-rag> (indexar; ausente cai no venv do rag); CORPUS_DIR origem-shell (indexar; ausente usa rag/corpus); PF_SESSAO porta; PF_ORDEM_ID porta; PF_CADEIRA porta; PF_CHAPEU porta; OPS_NAME porta; USER shell
+# escreve: var/log/ops/*.jsonl (evento consulta, best-effort); .env da ingestao segredo (ajuste de corte, via motor-instancias.json); compose da stack (ajuste de container); var/medicoes/*.json (medir)
+# depende: docker (ajuste servido, medir banco, indexar); git (ajuste que promove); rede (consome a API do rag)
+# substitui: docker exec rag-* ; curl ao endpoint de busca
 # O verbo e `motor`; a instancia e argumento (arq:0037; veto do verbo `rag`).
+# atos: a capacidade e do (verbo, ato) (arq:0110 §6). Transicao vigente->conforme em spec_motor §5.
 import json, os, re, subprocess, sys, time, urllib.request
 
 RAIZ = os.path.expanduser("~/AI")
