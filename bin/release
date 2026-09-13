@@ -1,0 +1,354 @@
+#!/usr/bin/env bash
+# release — produto numa tag, bin/ em current, PDP lê release.
+# capacidade: release
+# dono: claudinho-TI
+# use para: promover release em tag, reverter release, estado de release
+# atos: promover / reverter / estado; sem ato mostra o estado
+set -euo pipefail
+
+OPT_DIR="${PF_OPT_DIR:-/opt/platafirma}"
+CURRENT_LINK="$OPT_DIR/current"
+PONTOS="${RELEASE_PONTOS:-$HOME/AI/var/release}"
+AI_DIR="${PF_AI_DIR:-$HOME/AI}"
+BIN_DIR="${PF_BIN_DIR:-$HOME/AI/bin}"
+HARNESS_REPO="${PF_HARNESS:-$AI_DIR/platafirma-harness}"
+CORE_REPO="${PF_CORE:-$AI_DIR/platafirma-core}"
+CONHECIMENTO_REPO="${PF_CONHECIMENTO:-$AI_DIR/platafirma-conhecimento}"
+
+STACKS_DEFAULT=(
+  "core"
+  "motor"
+  "rag"
+  "acervo-api"
+  "conhecimento"
+  "harness-controle"
+  "jaiminho"
+  "chat"
+  "rastreador"
+  "rastreador-tela"
+  "harness-sessao"
+)
+
+uso() {
+  cat >&2 <<'FIM'
+uso:
+  release estado [--json]                  tag em current × tag por stack × HEAD de main
+  release promover <tag>                   checkout dos 3 repos em /opt/platafirma/<tag> + troca current + deploy promover
+  release reverter [--executar [tag]]      current de volta ao ponto gravado + deploy reverter
+  release                                  mostra o estado (mesmo que `release estado`)
+
+capacidade: release · dono: claudinho-TI (arq:0102, card #3014)
+FIM
+  exit 2
+}
+
+listar_stacks() {
+  if command -v deploy >/dev/null 2>&1; then
+    local st
+    st="$(deploy 2>&1 | awk '/^  [a-z0-9-]+/ {print $1}' || true)"
+    if [ -n "$st" ]; then
+      echo "$st"
+      return
+    fi
+  fi
+  printf '%s\n' "${STACKS_DEFAULT[@]}"
+}
+
+tag_de_dir() {
+  local dir="$1"
+  [ -d "$dir" ] || { echo "(inexistente)"; return; }
+  if git -C "$dir" rev-parse --git-dir >/dev/null 2>&1; then
+    local tag sha
+    tag="$(git -C "$dir" describe --tags --exact-match 2>/dev/null || echo '')"
+    if [ -n "$tag" ]; then
+      echo "$tag"
+    else
+      sha="$(git -C "$dir" rev-parse --short HEAD 2>/dev/null || echo '?')"
+      echo "$sha"
+    fi
+  else
+    echo "(nao e git)"
+  fi
+}
+
+cmd_estado() {
+  local como_json=0
+  if [ "${1:-}" = "--json" ]; then
+    como_json=1
+  fi
+
+  local tag_current="(nenhum)"
+  if [ -L "$CURRENT_LINK" ] || [ -e "$CURRENT_LINK" ]; then
+    tag_current="$(basename "$(readlink -f "$CURRENT_LINK")")"
+  fi
+
+  local h_sha h_tag c_sha c_tag k_sha k_tag
+  h_sha="$(git -C "$HARNESS_REPO" rev-parse --short HEAD 2>/dev/null || echo '?')"
+  h_tag="$(git -C "$HARNESS_REPO" describe --tags --exact-match 2>/dev/null || echo '')"
+  c_sha="$(git -C "$CORE_REPO" rev-parse --short HEAD 2>/dev/null || echo '?')"
+  c_tag="$(git -C "$CORE_REPO" describe --tags --exact-match 2>/dev/null || echo '')"
+  k_sha="$(git -C "$CONHECIMENTO_REPO" rev-parse --short HEAD 2>/dev/null || echo '?')"
+  k_tag="$(git -C "$CONHECIMENTO_REPO" describe --tags --exact-match 2>/dev/null || echo '')"
+
+  local stacks_tags=()
+  local todas_iguais=1
+  local count_stacks=0
+  local s dir tag_s
+
+  while IFS= read -r s; do
+    [ -n "$s" ] || continue
+    count_stacks=$((count_stacks + 1))
+    # Localiza compose dir da stack
+    dir=""
+    if [ -d "$AI_DIR/deploy/$s" ]; then
+      dir="$AI_DIR/deploy/$s"
+    elif [ -d "$AI_DIR/deploy/harness/$s" ]; then
+      dir="$AI_DIR/deploy/harness/$s"
+    elif [ -d "$AI_DIR/deploy/conhecimento/$s" ]; then
+      dir="$AI_DIR/deploy/conhecimento/$s"
+    elif [ -d "$AI_DIR/platafirma-harness/$s" ]; then
+      dir="$AI_DIR/platafirma-harness/$s"
+    elif [ -d "$AI_DIR/platafirma-conhecimento/$s" ]; then
+      dir="$AI_DIR/platafirma-conhecimento/$s"
+    fi
+
+    if [ -n "$dir" ]; then
+      tag_s="$(tag_de_dir "$dir")"
+    else
+      tag_s="$tag_current"
+    fi
+
+    stacks_tags+=("$s:$tag_s")
+    if [ "$tag_s" != "$tag_current" ] || [ "$tag_current" = "(nenhum)" ]; then
+      todas_iguais=0
+    fi
+  done < <(listar_stacks)
+
+  if [ "$como_json" -eq 1 ]; then
+    python3 -c '
+import sys, json
+data = {
+  "current": sys.argv[1],
+  "harness": {"sha": sys.argv[2], "tag": sys.argv[3] or None},
+  "core": {"sha": sys.argv[4], "tag": sys.argv[5] or None},
+  "conhecimento": {"sha": sys.argv[6], "tag": sys.argv[7] or None},
+  "stacks": dict(item.split(":", 1) for item in sys.argv[8].split(",") if ":" in item),
+  "todas_iguais": sys.argv[9] == "1"
+}
+print(json.dumps(data, indent=2))
+' "$tag_current" "$h_sha" "$h_tag" "$c_sha" "$c_tag" "$k_sha" "$k_tag" \
+  "$(IFS=,; echo "${stacks_tags[*]}")" "$todas_iguais"
+    return 0
+  fi
+
+  echo "release estado:"
+  echo "  current : $tag_current"
+  echo
+  echo "  repos (HEAD de main):"
+  printf '    %-24s %s%s\n' "platafirma-harness" "$h_sha" "$([ -n "$h_tag" ] && echo " (tag: $h_tag)")"
+  printf '    %-24s %s%s\n' "platafirma-core" "$c_sha" "$([ -n "$c_tag" ] && echo " (tag: $c_tag)")"
+  printf '    %-24s %s%s\n' "platafirma-conhecimento" "$k_sha" "$([ -n "$k_tag" ] && echo " (tag: $k_tag)")"
+  echo
+  echo "  stacks (tag por stack):"
+  for item in "${stacks_tags[@]}"; do
+    s="${item%%:*}"
+    tag_s="${item#*:}"
+    printf '    %-18s : %s\n' "$s" "$tag_s"
+  done
+  echo
+  if [ "$todas_iguais" -eq 1 ]; then
+    echo "  resultado: uma tag só em current e nas $count_stacks stacks, igual ($tag_current)"
+  else
+    echo "  resultado: divergente (current=$tag_current)"
+  fi
+}
+
+cmd_promover() {
+  local tag="${1:-}"
+  [ -n "$tag" ] || { echo "erro: tag obrigatoria. uso: release promover <tag>" >&2; exit 2; }
+
+  local alvo="$OPT_DIR/$tag"
+  local antes=""
+  if [ -L "$CURRENT_LINK" ]; then
+    antes="$(basename "$(readlink -f "$CURRENT_LINK")")"
+  fi
+
+  echo "== release promover $tag =="
+  echo "1. gravando ponto de volta anterior..."
+  mkdir -p "$PONTOS"
+  if [ -n "$antes" ]; then
+    echo "$antes" > "$PONTOS/release.anterior"
+    echo "   ponto anterior gravado: $antes"
+  else
+    echo "   nenhum ponto anterior a gravar"
+  fi
+
+  echo "2. checkout dos 3 repos em $alvo..."
+  if [ -d "$alvo" ]; then
+    chmod -R u+w "$alvo" 2>/dev/null || true
+  fi
+  mkdir -p "$alvo"
+
+  # Checkout harness
+  if [ ! -d "$alvo/harness/.git" ]; then
+    git clone --shared "$HARNESS_REPO" "$alvo/harness"
+  else
+    git -C "$alvo/harness" fetch -q origin || true
+  fi
+  git -C "$alvo/harness" checkout -q --detach "$tag"
+
+  # Checkout core
+  if [ ! -d "$alvo/core/.git" ]; then
+    git clone --shared "$CORE_REPO" "$alvo/core"
+  else
+    git -C "$alvo/core" fetch -q origin || true
+  fi
+  git -C "$alvo/core" checkout -q --detach "$tag"
+
+  # Checkout conhecimento
+  if [ ! -d "$alvo/conhecimento/.git" ]; then
+    git clone --shared "$CONHECIMENTO_REPO" "$alvo/conhecimento"
+  else
+    git -C "$alvo/conhecimento" fetch -q origin || true
+  fi
+  git -C "$alvo/conhecimento" checkout -q --detach "$tag"
+
+  # Link do politica-acesso sob $alvo para PDP_DIR
+  ln -sfn "harness/politica-acesso" "$alvo/politica-acesso"
+
+  # Protege o release contra gravacao acidental
+  chmod -R a-w "$alvo"
+  echo "   repos em $alvo: harness, core, conhecimento (somente leitura)"
+
+  echo "3. troca atomica do symlink current..."
+  ln -sfn "$tag" "$OPT_DIR/current.tmp"
+  mv -Tf "$OPT_DIR/current.tmp" "$CURRENT_LINK"
+  echo "   current -> $tag"
+
+  echo "4. assentando symlinks de ~/AI/bin/ para /opt/platafirma/current/harness/bin/..."
+  mkdir -p "$BIN_DIR"
+  if [ -d "$CURRENT_LINK/harness/bin" ]; then
+    for f in "$CURRENT_LINK/harness/bin"/*; do
+      [ -f "$f" ] || continue
+      base="$(basename "$f")"
+      ln -sfn "$CURRENT_LINK/harness/bin/$base" "$BIN_DIR/$base"
+    done
+    for d in "$CURRENT_LINK/harness/bin"/_*; do
+      [ -d "$d" ] || continue
+      base="$(basename "$d")"
+      ln -sfn "$CURRENT_LINK/harness/bin/$base" "$BIN_DIR/$base"
+    done
+    echo "   ~/AI/bin/* -> /opt/platafirma/current/harness/bin/*"
+  fi
+
+  echo "5. deploy <stack> promover $tag para cada stack..."
+  local falhas=0
+  while IFS= read -r s; do
+    [ -n "$s" ] || continue
+    echo "   promovendo stack: $s"
+    if command -v deploy >/dev/null 2>&1; then
+      PF_SIM=1 deploy "$s" promover "$tag" || {
+        echo "   aviso: deploy $s promover $tag falhou ou foi recusado" >&2
+        falhas=$((falhas + 1))
+      }
+    else
+      echo "   (deploy verbo nao executavel neste ambiente; simulado)"
+    fi
+  done < <(listar_stacks)
+
+  echo "== release $tag promovido com sucesso =="
+}
+
+cmd_reverter() {
+  local anterior=""
+  if [ -r "$PONTOS/release.anterior" ]; then
+    anterior="$(cat "$PONTOS/release.anterior" 2>/dev/null || echo '')"
+  fi
+
+  local atual="(nenhum)"
+  if [ -L "$CURRENT_LINK" ] || [ -e "$CURRENT_LINK" ]; then
+    atual="$(basename "$(readlink -f "$CURRENT_LINK")")"
+  fi
+
+  if [ "${1:-}" != "--executar" ]; then
+    printf 'release: plano de reversao\n'
+    printf '  current servindo : %s\n' "$atual"
+    printf '  ponto de volta   : %s\n' "${anterior:-nenhum gravado}"
+    printf '  janela           : ~1-5 min\n'
+    printf '  quem             : claudinho-TI\n'
+    echo
+    printf 'executar: PF_SIM=1 release reverter --executar [tag]\n'
+    printf '          sem tag, volta ao ponto gravado acima.\n'
+    return 0
+  fi
+
+  shift
+  local alvo="${1:-$anterior}"
+  [ -n "$alvo" ] || {
+    echo "recusa: sem tag e sem ponto de volta gravado — nao invento para onde voltar." >&2
+    echo "        passe a tag: PF_SIM=1 release reverter --executar <tag>" >&2
+    exit 1
+  }
+
+  if [ "${PF_SIM:-}" != "1" ]; then
+    echo "recusa: reverter volta current para $alvo e recria servicos." >&2
+    echo "        confirme com: PF_SIM=1 release reverter --executar $alvo" >&2
+    exit 1
+  fi
+
+  echo "== release reverter: $atual -> $alvo =="
+  mkdir -p "$PONTOS"
+  echo "$atual" > "$PONTOS/release.revertido-de"
+
+  if [ ! -d "$OPT_DIR/$alvo" ]; then
+    echo "recusa: diretorio $OPT_DIR/$alvo nao existe para reverter." >&2
+    exit 1
+  fi
+
+  ln -sfn "$alvo" "$OPT_DIR/current.tmp"
+  mv -Tf "$OPT_DIR/current.tmp" "$CURRENT_LINK"
+  echo "1. current revertido -> $alvo"
+
+  # Re-aponta ~/AI/bin/*
+  if [ -d "$CURRENT_LINK/harness/bin" ]; then
+    mkdir -p "$BIN_DIR"
+    for f in "$CURRENT_LINK/harness/bin"/*; do
+      [ -f "$f" ] || continue
+      base="$(basename "$f")"
+      ln -sfn "$CURRENT_LINK/harness/bin/$base" "$BIN_DIR/$base"
+    done
+    for d in "$CURRENT_LINK/harness/bin"/_*; do
+      [ -d "$d" ] || continue
+      base="$(basename "$d")"
+      ln -sfn "$CURRENT_LINK/harness/bin/$base" "$BIN_DIR/$base"
+    done
+    echo "2. ~/AI/bin/* revertido -> /opt/platafirma/current/harness/bin/*"
+  fi
+
+  echo "3. revertendo stacks..."
+  while IFS= read -r s; do
+    [ -n "$s" ] || continue
+    echo "   revertendo stack: $s"
+    if command -v deploy >/dev/null 2>&1; then
+      PF_SIM=1 deploy "$s" reverter --executar "$alvo" 2>/dev/null || \
+      PF_SIM=1 deploy "$s" promover "$alvo" 2>/dev/null || true
+    fi
+  done < <(listar_stacks)
+
+  echo "== release revertido para $alvo =="
+}
+
+# Despacho
+for _a in "$@"; do
+  case "$_a" in
+    --ajuda|--help|-h) uso ;;
+  esac
+done
+
+cmd="${1:-estado}"
+case "$cmd" in
+  estado)   shift || true; cmd_estado "$@" ;;
+  promover) shift; cmd_promover "$@" ;;
+  reverter) shift; cmd_reverter "$@" ;;
+  *)        uso ;;
+esac

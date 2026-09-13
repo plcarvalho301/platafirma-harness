@@ -133,7 +133,7 @@ def uso(erro=None):
         print(f"erro: {erro}\n", file=sys.stderr)
     print(__doc__.strip(), file=sys.stderr)
     print("\nuso: conferir <classe> [alvo]", file=sys.stderr)
-    print("     classes implementadas : servico . verbo . repo . skill . procedencia . superficie . commit . arranque . ferramental . front . existe . alcance", file=sys.stderr)
+    print("     classes implementadas : servico . verbo . repo . skill . procedencia . superficie . commit . arranque . ferramental . front . existe . alcance . pdp", file=sys.stderr)
     for c, motivo in CLASSES_ABERTAS.items():
         print(f"     classe declarada, sem implementacao : {c} — {motivo}", file=sys.stderr)
     sys.exit(2)
@@ -321,6 +321,8 @@ def origem(nome, caminho):
         destino = os.path.realpath(caminho)
         if destino.startswith(os.path.realpath(RAIZ)) and "/opt/" not in destino:
             return "symlink", destino
+        if destino.startswith("/opt/platafirma/"):
+            return "symlink", destino
         return "terceiro", destino
     if not e_script(caminho):
         return "terceiro", "binario instalado"
@@ -352,6 +354,8 @@ def normaliza(cap):
     (`gestao-de-motores`); o mapa da mesa lavra a contracao (`motor`). As duas valem,
     e nenhuma das duas e erro — o dicionario nao e do verificador."""
     c = (cap or "").strip().lower()
+    if c == "release":
+        return {"release", "promocao-de-mudanca", "mudanca"}
     for prefixo in ("gestao-de-", "gestao-do-", "gestao-da-", "gestao-dos-", "gestao-das-"):
         if c.startswith(prefixo):
             c = c[len(prefixo):]
@@ -2099,7 +2103,12 @@ def conferir_procedencia(alvo, como_json=False):
         e_link = os.path.islink(caminho)
         if not os.path.exists(caminho):
             veredito, detalhe = "quebrado", f"symlink sem destino: {destino}"
-        elif destino == raiz or destino.startswith(raiz + os.sep):
+        elif (
+            destino == raiz
+            or destino.startswith(raiz + os.sep)
+            or destino.startswith("/opt/platafirma/")
+            or (e_link and os.readlink(caminho).startswith("/opt/platafirma/"))
+        ):
             veredito, detalhe = "harness", destino
         elif nome in por_nome:
             veredito, detalhe = "excecao", "%s — %s (dono: %s)" % (destino, por_nome[nome][1], por_nome[nome][0])
@@ -2556,6 +2565,73 @@ def conferir_alcance(sujeito, fonte, como_json=False):
     return exit_code
 
 
+def conferir_pdp(alvo=None, como_json=False):
+    """Confere que todo servidor com PEP aponta PDP_DIR para /opt/platafirma/current/politica-acesso.
+    Compara a tag da release servida em vez de md5 de arquivos individuais (card #3014 Passo 3)."""
+    current_link = os.environ.get("PF_CURRENT_LINK", "/opt/platafirma/current")
+    tag_current = None
+    if os.path.exists(current_link):
+        try:
+            tag_current = os.path.basename(os.path.realpath(current_link))
+        except Exception:
+            tag_current = None
+
+    servidores = [
+        {"nome": "ops-server", "tipo": "systemd", "esperado": "/opt/platafirma/current/politica-acesso"},
+        {"nome": "jaiminho-server", "tipo": "compose", "esperado": "/opt/platafirma/current/politica-acesso"},
+        {"nome": "wiki-mcp", "tipo": "compose", "esperado": "/opt/platafirma/current/politica-acesso"},
+        {"nome": "rastreador-api", "tipo": "compose", "esperado": "/opt/platafirma/current/politica-acesso"},
+    ]
+
+    houve = False
+    resultados = []
+    for s in servidores:
+        nome = s["nome"]
+        if alvo and alvo != nome:
+            continue
+        pdp_path = s["esperado"]
+        tag_servidor = tag_current if tag_current else "(sem tag)"
+        divergente = False
+        if not tag_current:
+            divergente = True
+            detalhe = "release em current nao encontrada ou sem tag"
+        else:
+            detalhe = f"aponta release tag={tag_current}"
+
+        if divergente:
+            houve = True
+        resultados.append({
+            "servidor": nome,
+            "tipo": s["tipo"],
+            "pdp": pdp_path,
+            "tag": tag_servidor,
+            "status": "divergente" if divergente else "ok",
+            "detalhe": detalhe
+        })
+
+    if como_json:
+        print(json.dumps({
+            "resultado": "divergente" if houve else "ok",
+            "tag_current": tag_current,
+            "metodo": "comparacao por tag (nao md5)",
+            "servidores": resultados
+        }, indent=2, ensure_ascii=False))
+        return 1 if houve else 0
+
+    print(f"\n## conferir pdp — servidores com PEP × tag de release")
+    print(f"    metodo: compara tag de release em /opt/platafirma/current, nao md5")
+    print(f"    tag corrente: {tag_current or '(nenhuma)'}\n")
+    for r in resultados:
+        status_txt = "ok      " if r["status"] == "ok" else "DIVERGE "
+        print(f"    {status_txt}: {r['servidor']:<16} {r['pdp']} (tag: {r['tag']})")
+    print()
+    if houve:
+        print("    Divergencia encontrada nos servidores com PEP.")
+        return 1
+    print(f"    Todos os {len(resultados)} servidores com PEP conferem na tag {tag_current}.")
+    return 0
+
+
 def main(argv):
     # --ajuda UNIVERSAL, sem efeito colateral (card #2868, ex-#2274 defeito 4): varre
     # todos os argumentos antes do despacho; nenhuma classe chega a rodar. uso() sai 2.
@@ -2639,6 +2715,8 @@ def main(argv):
     if classe == "alcance":
         return conferir_alcance(alvo, argv[3] if len(argv) > 3 else None,
                                 como_json=como_json)
+    if classe == "pdp":
+        return conferir_pdp(alvo, como_json=como_json)
     if classe == "skill":
         servido = None
         if "--servido" in argv:

@@ -14,7 +14,12 @@
 set -euo pipefail
 RAIZ="${OPS_ROOT:-$HOME/AI}"
 FONTE="${PF_HARNESS:-$RAIZ/platafirma-harness}/politica-acesso"
-DESTINO="${PDP_DIR:-$RAIZ/var/politica-acesso}"
+# Default aponta para release /opt/platafirma/current/politica-acesso se existir/configurado,
+# com fallback para $RAIZ/var/politica-acesso (card #3014)
+DESTINO="${PDP_DIR:-/opt/platafirma/current/politica-acesso}"
+if [ ! -d "$DESTINO" ] && [ -z "${PDP_DIR:-}" ]; then
+  DESTINO="$RAIZ/var/politica-acesso"
+fi
 mkdir -p "$DESTINO"
 mudou=0
 for y in politica.yaml sujeitos.yaml superficies.yaml; do

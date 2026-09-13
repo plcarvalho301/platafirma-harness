@@ -73,8 +73,8 @@ services:
       GOOGLE_TOKEN: "/opt/pf/google/token.json"
     volumes:
       # PAP e PDP por bind READ-ONLY: merge no PAP vale sem rebuild, e o processo
-      # nao tem como reescrever a regra que o prende.
-      - "${HOME}/AI/platafirma-harness/politica-acesso:/opt/pf/politica-acesso:ro"
+      # nao tem como reescrever a regra que o prende (card #3014: le release em current).
+      - "${PF_PDP_DIR:-/opt/platafirma/current/politica-acesso}:/opt/pf/politica-acesso:ro"
       # O bind nasce dono do root do namespace (= claudinho no host) e o processo
       # roda como 10001: sem converter a posse, `_audit` cai no fallback de stderr
       # e a trilha do externo so vive no `docker logs`. Converter, uma vez por

@@ -13,7 +13,8 @@ código, seria transformar decisão de dono em detalhe de implementação.
 
 Uma entrada de `~/AI/bin` está **conforme** quando o que ela executa mora no
 harness — symlink cujo `readlink -f` cai dentro de
-`~/AI/platafirma-harness`. Nome do link diferente do nome do arquivo de destino
+`~/AI/platafirma-harness` ou da release imutável em `/opt/platafirma/current/harness/bin`
+(card #3014, arq:0102). Nome do link diferente do nome do arquivo de destino
 não é divergência: alias (`encerrar` → `descansar`, `fila` → `fila_streams.py`)
 continua sendo um caminho de execução com origem única.
 
