@@ -1,23 +1,23 @@
 uso:
-  repo estado     [<repo>] [--json]
-  repo listar     <repo> [<prefixo>] [--json]
-  repo ler        <repo> <caminho>
-  repo procurar   <repo> --termo <termo> [<prefixo>] [--json]
-  repo historico  <repo> [<caminho>] [--n <N>] [--json]
-  repo diff       <repo> [<caminho>] [--staged]
-  repo ramo       <repo> [<card>] [--slug <slug>]
-  repo commitar   <repo> -m <msg> [<caminho>…] [--tudo]
-  repo empurrar   <repo> [<ramo>]
-  repo atualizar  <repo>
-  repo abrir      <repo>
-  repo clonar     <url|owner/nome> [<nome>]
-  repo sanear     [<repo>] [--relatar]
-  repo pr-abrir   <repo> --titulo <t> [--corpo <c>] [--base <ramo>]
-  repo pr-listar  <repo> [--todos]
-  repo pr-ver     <repo> <numero>
-  repo pr-diff    <repo> <numero>
-  repo pr-merge   <repo> <numero> [--squash|--merge|--rebase] [--forcar]
-  repo git        <repo> <args…>
+  repo estado    [<repo>] [--json]
+  repo listar    <repo> [<prefixo>] [--json]
+  repo ler       <repo> <caminho>
+  repo procurar  <repo> --termo <termo> [<prefixo>] [--json]
+  repo historico <repo> [<caminho>] [--n <N>] [--json]
+  repo diff      <repo> [<caminho>] [--staged] base: origin/main, senão main, senão HEAD
+  repo ramo      <repo> [<card>] [--slug <slug>]
+  repo commitar  <repo> -m <msg> [<caminho>…] [--tudo]
+  repo empurrar  <repo> [<ramo>]
+  repo atualizar <repo>
+  repo abrir     <repo>
+  repo clonar    <url|owner/nome> [<nome>]
+  repo sanear    [<repo>] [--relatar]
+  repo pr-abrir  <repo> --titulo <t> [--corpo <c>] [--base <ramo>]
+  repo pr-listar <repo> [--todos]
+  repo pr-ver    <repo> <numero>
+  repo pr-diff   <repo> <numero>
+  repo pr-merge  <repo> <numero> [--squash|--merge|--rebase] [--forcar]
+  repo git       <repo> <args…>
 
 raiz de trabalho: PF_REPO_RAIZ[=$HOME/AI]
 exit: 0 achou/fez · 1 nao existe/negativo · 2 uso · 3 dependencia · 4 politica · 5 indeterminavel

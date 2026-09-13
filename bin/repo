@@ -41,25 +41,25 @@ fi
 uso_texto() {
   cat >&2 <<'EOF'
 uso:
-  repo estado     [<repo>] [--json]
-  repo listar     <repo> [<prefixo>] [--json]
-  repo ler        <repo> <caminho>
-  repo procurar   <repo> --termo <termo> [<prefixo>] [--json]
-  repo historico  <repo> [<caminho>] [--n <N>] [--json]
-  repo diff       <repo> [<caminho>] [--staged]
-  repo ramo       <repo> [<card>] [--slug <slug>]
-  repo commitar   <repo> -m <msg> [<caminho>…] [--tudo]
-  repo empurrar   <repo> [<ramo>]
-  repo atualizar  <repo>
-  repo abrir      <repo>
-  repo clonar     <url|owner/nome> [<nome>]
-  repo sanear     [<repo>] [--relatar]
-  repo pr-abrir   <repo> --titulo <t> [--corpo <c>] [--base <ramo>]
-  repo pr-listar  <repo> [--todos]
-  repo pr-ver     <repo> <numero>
-  repo pr-diff    <repo> <numero>
-  repo pr-merge   <repo> <numero> [--squash|--merge|--rebase] [--forcar]
-  repo git        <repo> <args…>
+  repo estado    [<repo>] [--json]
+  repo listar    <repo> [<prefixo>] [--json]
+  repo ler       <repo> <caminho>
+  repo procurar  <repo> --termo <termo> [<prefixo>] [--json]
+  repo historico <repo> [<caminho>] [--n <N>] [--json]
+  repo diff      <repo> [<caminho>] [--staged] base: origin/main, senão main, senão HEAD
+  repo ramo      <repo> [<card>] [--slug <slug>]
+  repo commitar  <repo> -m <msg> [<caminho>…] [--tudo]
+  repo empurrar  <repo> [<ramo>]
+  repo atualizar <repo>
+  repo abrir     <repo>
+  repo clonar    <url|owner/nome> [<nome>]
+  repo sanear    [<repo>] [--relatar]
+  repo pr-abrir  <repo> --titulo <t> [--corpo <c>] [--base <ramo>]
+  repo pr-listar <repo> [--todos]
+  repo pr-ver    <repo> <numero>
+  repo pr-diff   <repo> <numero>
+  repo pr-merge  <repo> <numero> [--squash|--merge|--rebase] [--forcar]
+  repo git       <repo> <args…>
 
 raiz de trabalho: PF_REPO_RAIZ[=$HOME/AI]
 exit: 0 achou/fez · 1 nao existe/negativo · 2 uso · 3 dependencia · 4 politica · 5 indeterminavel
@@ -674,8 +674,7 @@ ato_clonar() {
 }
 
 cmd_abrir() {
-  printf '%s: abrir depende de a porta servir main; bancada em var/wt/<repo>/<cadeira> chega após migração de release\n' "$VERBO" >&2
-  exit 2
+  morre "dependência ausente: abrir depende de a porta servir main; a bancada em var/wt/<repo>/<cadeira> chega com o release" 3
 }
 
 ato_ramo() {
@@ -807,26 +806,85 @@ ato_commitar() {
     fi
 
     local log_dir="${PF_OPS_LOG_DIR:-${OPS_LOG_DIR:-${RAIZ}/var/log/ops}}"
-    local session_paths=()
-    if [ -d "$log_dir" ]; then
-      while IFS= read -r p; do
-        [ -n "$p" ] || continue
-        local rel_p=""
-        if [[ "$p" == "$c/"* ]]; then
-          rel_p="${p#$c/}"
-        elif [[ "$p" == "$nome/"* ]]; then
-          rel_p="${p#$nome/}"
-        elif [[ "$p" != /* ]] && [ -e "$c/$p" ]; then
-          rel_p="$p"
-        fi
-        if [ -n "$rel_p" ]; then
-          session_paths+=("$rel_p")
-        fi
-      done < <(grep -h "\"tool\":[[:space:]]*\"write_file\"" "$log_dir"/ops-*.jsonl 2>/dev/null \
-               | grep "\"sessao_id\":[[:space:]]*\"$PF_SESSAO\"" 2>/dev/null \
-               | sed -n 's/.*"path":[[:space:]]*"\([^"]*\)".*/\1/p' \
-               | sort -u)
+    local py_out rc_py
+    py_out="$(python3 -c '
+import sys, os, glob, json
+
+log_dir = sys.argv[1]
+sessao_id = sys.argv[2]
+repo_root = os.path.abspath(sys.argv[3])
+repo_nome = sys.argv[4]
+
+if not os.path.isdir(log_dir) or not os.access(log_dir, os.R_OK):
+    sys.exit(3)
+
+pattern = os.path.join(log_dir, "ops-*.jsonl")
+files = glob.glob(pattern)
+readable = [f for f in files if os.path.isfile(f) and os.access(f, os.R_OK)]
+if not readable:
+    sys.exit(3)
+
+caminhos = set()
+for f in readable:
+    try:
+        with open(f, "r", encoding="utf-8", errors="replace") as fp:
+            for line in fp:
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    obj = json.loads(line)
+                except Exception:
+                    continue
+                if not isinstance(obj, dict):
+                    continue
+                if obj.get("tool") == "write_file" and str(obj.get("sessao_id")) == sessao_id:
+                    p = obj.get("path")
+                    if not isinstance(p, str) or not p:
+                        continue
+                    p_norm = os.path.normpath(p)
+                    rel = None
+                    if p_norm == repo_root:
+                        continue
+                    elif os.path.isabs(p_norm):
+                        if p_norm.startswith(repo_root + os.sep):
+                            rel = os.path.relpath(p_norm, repo_root)
+                    elif p_norm == repo_nome:
+                        continue
+                    elif p_norm.startswith(repo_nome + os.sep):
+                        rel = p_norm[len(repo_nome) + 1:]
+                    else:
+                        cand = os.path.normpath(os.path.join(repo_root, p_norm))
+                        if cand.startswith(repo_root + os.sep) and os.path.exists(cand):
+                            rel = os.path.relpath(cand, repo_root)
+                    if rel and not rel.startswith(".."):
+                        caminhos.add(rel)
+    except Exception:
+        pass
+
+for p in sorted(caminhos):
+    print(p)
+' "$log_dir" "$PF_SESSAO" "$c" "$nome")"
+    rc_py=$?
+
+    if [ "$rc_py" -eq 3 ]; then
+      morre "dependência ausente: log da porta ilegível em $log_dir — nomeie os caminhos" 3
+    elif [ "$rc_py" -ne 0 ]; then
+      morre "erro ao ler log da porta em $log_dir" 3
     fi
+
+    local session_paths=()
+    if [ -n "$py_out" ]; then
+      while IFS= read -r p; do
+        [ -n "$p" ] && session_paths+=("$p")
+      done <<< "$py_out"
+    fi
+
+    if [ "${#session_paths[@]}" -eq 0 ]; then
+      printf 'motivo: a sessão %s não tocou %s\n' "$PF_SESSAO" "$nome"
+      exit 1
+    fi
+
     alvos_commit=("${session_paths[@]}")
 
     local dirty_files=()
@@ -851,16 +909,12 @@ ato_commitar() {
     done
   fi
 
-  if [ "${#alvos_commit[@]}" -eq 0 ]; then
-    "$GIT" -C "$c" diff --cached --quiet && { printf 'nada a commitar em '\''%s'\''\n' "$nome"; exit 1; }
-  else
-    "$GIT" -C "$c" add -- "${alvos_commit[@]}" || morre "git add falhou" 3
-  fi
-
+  "$GIT" -C "$c" add -- "${alvos_commit[@]}" || morre "git add falhou" 3
   "$GIT" -C "$c" diff --cached --quiet && { printf 'nada a commitar em '\''%s'\''\n' "$nome"; exit 1; }
   "$GIT" -C "$c" commit -m "$msg" >/dev/null || morre "git commit falhou" 3
   printf 'commit em %s (%s): %s\n' "$nome" "$(ramo_atual "$c")" \
     "$("$GIT" -C "$c" log -1 --format='%h %s')"
+  return 0
 }
 
 ato_empurrar() {

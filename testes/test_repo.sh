@@ -330,6 +330,7 @@ echo "OK: repo estado funciona no terminal e com --json"
 echo "--- Teste 6: Atos de ciclo e mutação ---"
 
 # 6a. ramo
+# com card e slug -> fabrica/<card>-<slug>
 set +e
 out_ramo_card="$("$VERBO" ramo repo-teste 3052 --slug onda1)"
 rc_ramo_card=$?
@@ -342,7 +343,23 @@ if ! grep -q "ramo criado: fabrica/3052-onda1" <<<"$out_ramo_card"; then
   echo "FALHA: ramo criado não tem padrão fabrica/<card>-<slug>: $out_ramo_card" >&2
   exit 1
 fi
+git -C "$REPO_TESTE" checkout -q main
 
+# com card e sem slug -> fabrica/<card>
+set +e
+out_ramo_sem_slug="$("$VERBO" ramo repo-teste 3053)"
+rc_ramo_sem_slug=$?
+set -e
+if [ "$rc_ramo_sem_slug" -ne 0 ]; then
+  echo "FALHA: ramo com card sem slug devia sair 0, saiu $rc_ramo_sem_slug" >&2
+  exit 1
+fi
+if ! grep -q "ramo criado: fabrica/3053" <<<"$out_ramo_sem_slug"; then
+  echo "FALHA: ramo criado sem slug não tem padrão fabrica/<card>: $out_ramo_sem_slug" >&2
+  exit 1
+fi
+
+git -C "$REPO_TESTE" checkout -q fabrica/3052-onda1
 # Ramo já lá -> exit 1
 set +e
 out_ramo_ja_la="$("$VERBO" ramo repo-teste 3052 --slug onda1 2>&1)"
@@ -373,7 +390,7 @@ if ! grep -q "aviso: nome livre de ramo ('meu-ramo-livre')" <<<"$err_ramo_livre"
 fi
 git -C "$REPO_TESTE" checkout -q main
 
-echo "OK: repo ramo cria padrão fabrica/<card>-<slug>, ramo já lá sai 1, nome livre emite aviso"
+echo "OK: repo ramo cria padrão fabrica/<card>-<slug> e fabrica/<card>, ramo já lá sai 1, nome livre emite aviso"
 
 # 6b. commitar
 # Falta -m -> exit 2
@@ -400,6 +417,38 @@ if ! grep -q "PF_SESSAO ausente para commitar sem caminho" <<<"$out_com_sem_sess
   exit 1
 fi
 
+# Log da porta ausente -> exit 3
+set +e
+out_log_ausente="$(PF_OPS_LOG_DIR="$TMP_DIR/log_inexistente" PF_SESSAO="sessao-1" "$VERBO" commitar repo-teste -m "msg teste" 2>&1)"
+rc_log_ausente=$?
+set -e
+if [ "$rc_log_ausente" -ne 3 ]; then
+  echo "FALHA: commitar com log ausente devia sair 3, saiu $rc_log_ausente" >&2
+  exit 1
+fi
+if ! grep -q "dependência ausente: log da porta ilegível em $TMP_DIR/log_inexistente — nomeie os caminhos" <<<"$out_log_ausente"; then
+  echo "FALHA: mensagem de log ausente não confere: $out_log_ausente" >&2
+  exit 1
+fi
+
+# Log da porta ilegível (sem permissão de leitura) -> exit 3
+DIR_SEM_PERM="$TMP_DIR/log_sem_perm"
+mkdir -p "$DIR_SEM_PERM"
+chmod 000 "$DIR_SEM_PERM"
+set +e
+out_log_ilegiv="$(PF_OPS_LOG_DIR="$DIR_SEM_PERM" PF_SESSAO="sessao-1" "$VERBO" commitar repo-teste -m "msg teste" 2>&1)"
+rc_log_ilegiv=$?
+set -e
+chmod 755 "$DIR_SEM_PERM"
+if [ "$rc_log_ilegiv" -ne 3 ]; then
+  echo "FALHA: commitar com log ilegível devia sair 3, saiu $rc_log_ilegiv" >&2
+  exit 1
+fi
+if ! grep -q "dependência ausente: log da porta ilegível em $DIR_SEM_PERM — nomeie os caminhos" <<<"$out_log_ilegiv"; then
+  echo "FALHA: mensagem de log ilegível não confere: $out_log_ilegiv" >&2
+  exit 1
+fi
+
 # Com caminhos nomeados: commita só eles
 echo "conteudo1" >> "$REPO_TESTE/docs/spec.md"
 echo "conteudo2" >> "$REPO_TESTE/README.md"
@@ -411,12 +460,31 @@ if ! grep -q "README.md" <<<"$st_readme"; then
   exit 1
 fi
 
-# Arquivo sujo de terceiro na árvore -> exit 4
-# README.md está sujo na árvore. Configuramos log de ops para sessão-teste tocando src/main.py.
+# Log lido, mas nenhuma escrita desta sessão neste repo -> exit 1 com motivo:
 LOG_OPS_DIR="$TMP_DIR/AI/var/log/ops"
 mkdir -p "$LOG_OPS_DIR"
 export PF_OPS_LOG_DIR="$LOG_OPS_DIR"
-echo '{"tool": "write_file", "sessao_id": "sessao-1", "path": "'"$REPO_TESTE"'/src/main.py"}' > "$LOG_OPS_DIR/ops-2026-09-13.jsonl"
+# Grava escrita de outra sessão e linha com JSON quebrado para testar tolerância do parser
+cat > "$LOG_OPS_DIR/ops-2026-09-13.jsonl" <<EOF
+{broken json linha invalida que o parser deve ignorar
+{"tool": "write_file", "sessao_id": "outra-sessao", "path": "$REPO_TESTE/src/main.py"}
+EOF
+set +e
+out_sem_toque="$(PF_SESSAO="sessao-1" "$VERBO" commitar repo-teste -m "commit sem toque" 2>&1)"
+rc_sem_toque=$?
+set -e
+if [ "$rc_sem_toque" -ne 1 ]; then
+  echo "FALHA: commitar sem escrita da sessão devia sair 1, saiu $rc_sem_toque" >&2
+  exit 1
+fi
+if ! grep -q "motivo: a sessão sessao-1 não tocou repo-teste" <<<"$out_sem_toque"; then
+  echo "FALHA: mensagem de sessão não tocou repo não confere: $out_sem_toque" >&2
+  exit 1
+fi
+
+# Arquivo sujo de terceiro na árvore -> exit 4
+# README.md está sujo na árvore. Acrescentamos escrita válida da sessão-1 tocando src/main.py.
+echo '{"tool": "write_file", "sessao_id": "sessao-1", "path": "'"$REPO_TESTE"'/src/main.py"}' >> "$LOG_OPS_DIR/ops-2026-09-13.jsonl"
 echo "# mudanca src" >> "$REPO_TESTE/src/main.py"
 
 set +e
@@ -441,7 +509,21 @@ if [ -n "$st_depois" ]; then
   exit 1
 fi
 
-# Nada a commitar -> exit 1
+# Log lido, escritas da sessão no repo mas working tree sem alterações nelas -> exit 1 "nada a commitar"
+set +e
+out_nada_sessao="$(PF_SESSAO="sessao-1" "$VERBO" commitar repo-teste -m "nada a commitar sessao" 2>&1)"
+rc_nada_sessao=$?
+set -e
+if [ "$rc_nada_sessao" -ne 1 ]; then
+  echo "FALHA: commitar sessão sem alterações na árvore devia sair 1, saiu $rc_nada_sessao" >&2
+  exit 1
+fi
+if ! grep -q "nada a commitar em 'repo-teste'" <<<"$out_nada_sessao"; then
+  echo "FALHA: mensagem de nada a commitar na sessão não confere: $out_nada_sessao" >&2
+  exit 1
+fi
+
+# Nada a commitar com caminho explícito -> exit 1
 set +e
 out_nada="$("$VERBO" commitar repo-teste -m "nada" docs/spec.md 2>&1)"
 rc_nada=$?
@@ -466,7 +548,7 @@ if ! grep -q "deprecado: --tudo" <<<"$err_tudo"; then
   echo "FALHA: commitar --tudo deve avisar deprecado em stderr: $err_tudo" >&2
   exit 1
 fi
-echo "OK: repo commitar sem add -A, PF_SESSAO ausente sai 3, arquivo de terceiro sai 4, nada a commitar sai 1, --tudo avisa deprecado"
+echo "OK: repo commitar sem add -A, PF_SESSAO ausente sai 3, log ilegível sai 3, sem escrita sai 1 com motivo:, arquivo de terceiro sai 4, nada a commitar sai 1, --tudo avisa deprecado"
 
 # 6c. atualizar
 # Já em dia -> exit 1
@@ -480,16 +562,16 @@ if [ "$rc_atualizar" -ne 3 ]; then
   exit 1
 fi
 
-# 6d. abrir -> exit 2 informando que aguarda release
+# 6d. abrir -> exit 3 informando dependência ausente
 set +e
 out_abrir="$("$VERBO" abrir repo-teste 2>&1)"
 rc_abrir=$?
 set -e
-if [ "$rc_abrir" -ne 2 ]; then
-  echo "FALHA: abrir devia sair 2, saiu $rc_abrir" >&2
+if [ "$rc_abrir" -ne 3 ]; then
+  echo "FALHA: abrir devia sair 3, saiu $rc_abrir" >&2
   exit 1
 fi
-if ! grep -q "abrir depende de a porta servir main" <<<"$out_abrir"; then
+if ! grep -q "dependência ausente: abrir depende de a porta servir main; a bancada em var/wt/<repo>/<cadeira> chega com o release" <<<"$out_abrir"; then
   echo "FALHA: mensagem de abrir não confere: $out_abrir" >&2
   exit 1
 fi
