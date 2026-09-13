@@ -384,13 +384,21 @@ def normaliza(cap):
 
 
 def canonica(cap, validas):
-    """Devolve o termo como o mapa o lavrou, ou None se nenhuma forma bater."""
+    """Devolve o termo como o mapa o lavrou, ou None se nenhuma forma bater.
+    Folha declarada como `nivel1/folha` (arq:0110 §14: `infra/promocao-de-mudanca`)
+    vale quando o mapa lavra o nivel 1 E a folha: as tabelas de nivel 2 lavram a folha
+    pelo nome curto, e o cabecalho carrega o caminho inteiro para nao ser ambiguo entre
+    niveis. O termo canonico e o caminho declarado, nao a folha solta."""
     if validas is None or not cap:
         return None
     minhas = normaliza(cap)
     for v in validas:
         if normaliza(v) & minhas:
             return v
+    if "/" in cap:
+        nivel1, folha = cap.strip().lower().split("/", 1)
+        if canonica(nivel1, validas) and canonica(folha, validas):
+            return cap.strip().lower()
     return None
 
 
