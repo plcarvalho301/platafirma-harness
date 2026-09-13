@@ -190,6 +190,7 @@ if [ "${1:-}" = "podar" ]; then
     i=$((i+1))
     [ "$s" = "$atual" ] && continue          # nunca poda o que esta no ar
     [ "$i" -le "$manter" ] && continue        # mantem os N mais recentes
+    chmod -R u+w "${MORADA:?}/refs/$s" 2>/dev/null || true   # snapshot e somente-leitura; podar e o unico ato que o remove
     rm -rf "${MORADA:?}/refs/$s"; removidos=$((removidos+1))
   done
   echo "podados: $removidos ref(s); mantidos os $manter mais recentes + o current"
@@ -221,6 +222,9 @@ else
   g archive --format=tar "$SHA" -- "$SUBARVORE" | tar -x -C "$TMP"
   if ! validar_snapshot "$TMP"; then rm -rf "$TMP"; exit 1; fi
   manifest "$TMP" "$SHA" "$REF" "$TREE"
+  # Imutavel no disco, nao so por convencao: o servido e somente-leitura (arq:0097,
+  # arq:0110 §2); `release estado` confere a forma e recusa arvore gravavel como servido.
+  chmod -R a-w "$TMP"
   mv -T "$TMP" "$DEST"
   echo "publicado: ${SHA:0:7}  (ref \"$REF\", tree ${TREE:0:12})"
 fi

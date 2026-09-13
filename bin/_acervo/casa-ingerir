@@ -386,14 +386,16 @@ def varre_repo(repo):
     itens_aprovados = []
     itens_reprovados = []
 
+    # So documento de texto e candidato: doc de casa e markdown de git. Diretorio de
+    # ferramenta (node_modules, .git, venv) nem entra na conta de reprovados.
+    PULA_DIR = {".git", "node_modules", ".venv", "venv", "__pycache__", ".cache"}
     for root, dirs, files in os.walk(repo_dir):
-        if ".git" in root:
-            continue
+        dirs[:] = [d for d in dirs if d not in PULA_DIR and not d.startswith(".")]
         for f in sorted(files):
-            rel = os.path.relpath(os.path.join(root, f), repo_dir)
-            if rel.startswith(".git") or f.startswith("README") or rel.startswith("abertura/"):
+            if not f.endswith(".md"):
                 continue
-            if f.endswith((".pyc", ".swp", ".DS_Store", "~")):
+            rel = os.path.relpath(os.path.join(root, f), repo_dir)
+            if f.upper().startswith(("README", "AGENTS", "CLAUDE")) or rel.startswith("abertura/"):
                 continue
 
             match_esp = None
@@ -509,7 +511,10 @@ def main():
             if not curados:
                 morre(f"nenhum arquivo de {repo} casa com padrao_path de acervo.especie_tipo", 1)
     itens, pulos = montar_itens(curados, args.limite, args.so)
-    pulos = pulos_previos + pulos
+    # Reprovados da varredura ja saem resumidos no cabecalho do plano (contagem + 10
+    # exemplos); no --json vao inteiros. Nao se despejam um a um na tabela do lote.
+    if args.como_json:
+        pulos = pulos_previos + pulos
     if cabecalho_plano and not args.como_json:
         print(cabecalho_plano)
         print()

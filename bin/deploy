@@ -389,6 +389,16 @@ if [ "$ACAO" = "promover" ]; then
   # servico fora. Erro reversivel e defeito; erro irreversivel e perda.
   mkdir -p "$PONTOS"; echo "$ANTES" > "$PONTOS/$STACK.anterior"
   git -C "$DIR" fetch -q origin
+  # Worktree de deploy sujo (alguem editou em producao) trava o checkout e a promocao
+  # para calada: o servido fica atras de main por tempo indefinido. A sujeira nao se
+  # descarta nem se promove: vai para um stash nomeado (com untracked), o verbo diz onde
+  # ficou, e a promocao segue. Quem editou recupera com `git stash list` no worktree.
+  if [ -n "$(git -C "$DIR" status --porcelain 2>/dev/null)" ]; then
+    STASH_MSG="deploy $STACK promover $(date -u +%Y%m%dT%H%M%S): sujeira do worktree em $ANTES"
+    git -C "$DIR" stash push -q -u -m "$STASH_MSG" || {
+      echo "recusa: worktree $DIR sujo e nao consegui guardar a sujeira em stash." >&2; exit 1; }
+    echo "worktree sujo: edicoes guardadas em stash — \"$STASH_MSG\" ($DIR, git stash list)"
+  fi
   git -C "$DIR" checkout -q --detach "$REF"
   DEPOIS="$(git -C "$DIR" rev-parse --short HEAD)"
   printf 'worktree: %s\n  %s -> %s (%s)\n' "$DIR" "$ANTES" "$DEPOIS" "$REF"
