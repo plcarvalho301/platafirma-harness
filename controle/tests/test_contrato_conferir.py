@@ -19,7 +19,9 @@ from pathlib import Path
 
 import pytest
 
-CONFERIR_PATH = Path(__file__).resolve().parents[2] / "bin" / "conferir"
+# A implementacao virou sub-ato de `release` (arq:0110 §1, spec_release §4): bin/conferir e o
+# despachante em bash; o contrato --json mora em bin/_release/conferir/conferir.py.
+CONFERIR_PATH = Path(__file__).resolve().parents[2] / "bin" / "_release" / "conferir" / "conferir.py"
 
 
 def _carregar_conferir():
