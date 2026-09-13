@@ -1,53 +1,54 @@
 #!/usr/bin/env bash
-# acervo — opera o acervo: ingestão ponta a ponta, escada, obra, bancada, extrato e a wiki.
+# acervo — opera o acervo da plataforma (casa, obra, registro)
 # capacidade: conhecimento
-# dono: claudinho-dados
-# use para: ler uma ADR/página/obra que você sabe onde está (ler casa|obra), listar o que há de um tipo (listar), gravar uma página de wiki (escrever casa pagina)
-# atos: ler, listar, escrever, resolver, ingerir, baixar, bancada, extrato, escada, psql — sobre partição obra|casa|registro
-# conforme: parcial (arq:0106 — gramatica verbo-ato-particao-entidade; forma vigente ainda responde COM aviso)
+# dono: dados
+# classe: B
+# atos: ler (leitura, casa), listar (leitura, casa), resolver (identidade, casa), escrever (escrita, registro), ingerir (incorporacao, casa), curar (curadoria, casa), extrato (leitura, acervo), psql (leitura, acervo)
+# le: acervo.casa, acervo.obra, acervo.registro, release
+# escreve: acervo.casa, acervo.obra, acervo.registro, motor, arquivo
+# consome: motor_acervo_rest, rag_extractor_pg
+# ambiente: PF_REPO_RAIZ (opcional, raiz dos clones), RAG_API_BASE (opcional, url do motor), RAG_API_TOKEN (opcional, auth do motor)
+# depende: docker, git, psql
+# substitui: situacao, escada, descobrir, bancada
 #
-# Despachante (arq:0040): o verbo é o par binário+subcomando. Os sub-atos moram
-# em bin/_acervo/ e não entram no PATH; a porta é esta.
+# Despachante (arq:0040): o verbo e o par binario+subcomando. Os sub-atos moram
+# em bin/_acervo/ e nao entram no PATH; a porta e esta.
 #
-# GRAMATICA (arq:0106): acervo <ato> <particao> <entidade> [seletor]. A forma
-# conforme roteia para os mesmos sub-atos de _acervo/; a forma vigente (wiki,
-# ferramenta, registrar, stack, listar conceitos...) ainda responde, mas cospe um
-# aviso ao stderr apontando a forma nova e a spec. `adr` foi RETIRADO (arq:0106):
-# ADR e especie de acervo.casa, lida por `acervo ler|listar casa adr`. Doc de produto:
+# GRAMATICA (arq:0106): acervo <ato> <particao> <entidade> [seletor].
+# Doc de produto:
 #   https://github.com/plcarvalho301/platafirma-arquitetura/blob/main/docs/spec_acervo.md
 set -euo pipefail
 
 ATOS="$(dirname "$(readlink -f "$0")")/_acervo"
 SPEC="https://github.com/plcarvalho301/platafirma-arquitetura/blob/main/docs/spec_acervo.md"
 
-# aviso de forma vigente: nunca em silencio (spec_acervo §5). $1=forma velha, $2=forma nova
+# aviso de forma vigente/deprecada: uma vez por sessao (arq:0110 §11, spec_acervo §8)
 avisa() {
-  printf 'acervo: `%s` e a forma vigente; a conforme (arq:0106) e `%s`.\n  %s\n' \
-    "$1" "$2" "$SPEC" >&2
+  local forma_velha="$1"
+  local forma_nova="$2"
+  local sess_dir="/tmp/platafirma-avisos-${PF_SESSAO_ID:-${PF_SESSAO:-${USER:-default}}}"
+  mkdir -p "$sess_dir" 2>/dev/null || true
+  local chave
+  chave="$(printf '%s' "$forma_velha" | tr -c 'a-zA-Z0-9_' '_')"
+  local trava="$sess_dir/$chave"
+  if [ ! -f "$trava" ]; then
+    touch "$trava" 2>/dev/null || true
+    printf 'acervo: `%s` e a forma vigente; a conforme (arq:0106) e `%s`.\n  %s\n' \
+      "$forma_velha" "$forma_nova" "$SPEC" >&2
+  fi
 }
 
 uso() {
   cat >&2 <<FIM
 uso (gramatica arq:0106 — acervo <ato> <particao> <entidade> [seletor]):
-  acervo ler      <particao> <entidade> <seletor>   leitura exata (nao passa pelo motor)
-      ex: acervo ler casa adr 0105 · acervo ler casa ferramental <nome>
-          acervo ler casa chapeu <slug> · acervo ler casa stack <slug>
-          acervo ler casa pagina "<Titulo>" · acervo ler obra objeto "<titulo>" [dest]
-  acervo listar   <particao> <entidade> [filtros]   lista entidades de um tipo
-      ex: acervo listar obra conceito [--json] · acervo listar casa adr [--cap x]
-          acervo listar casa ferramental [--json] [--oficio] · acervo listar casa pagina [--prefixo|--categoria|--ns]
-          acervo listar entidade [--especie <e>] [--dona <cadeira>]  indice de classes da raiz (arq:0108)
-  acervo resolver <classe> <string>                 resolve a string para o uuid da ficha (arq:0108 §5)
-      ex: acervo resolver adr 0108 · acervo resolver cadeira dados · acervo resolver stack rag
-  acervo escrever <particao> <entidade> <seletor>   cria/substitui (corpo por STDIN)
-      ex: acervo escrever casa pagina "<Titulo>" [--resumo] · acervo escrever casa ferramental <verbo>|--todos
-          acervo escrever casa stack <arquivo.json>|--rm <slug> · acervo escrever casa arquivo <nome>
-  acervo ingerir  <particao> <raiz> [--apply]       leva a fonte ate a vetorizacao (dry-run sem --apply)
-  acervo baixar   obra objeto "<titulo>" [dest]     copia do objeto do store
-  acervo bancada  obra lote [dest]                  monta o lote de classificacao humana
-  acervo extrato  --todas [dest]                    foto do schema para leitura fora da bancada
-  acervo escada   --todas|<particao> [--json] [--detalhe]  onde cada obra parou nos cinco degraus
-  acervo psql     [--banco rag|motor]  <SQL por stdin>     SQL cru no Postgres da casa (default rag)
+  acervo ler      <particao> <entidade> <seletor> [--situacao]
+  acervo listar   <particao> <entidade> [--sobre <termo>] [--eixo <eixo>] [--situacao] [--dono <cadeira>] [--json]
+  acervo resolver <classe> <string>
+  acervo escrever <particao> <entidade> <seletor>
+  acervo ingerir  <particao> <raiz> [--apply]
+  acervo curar    obra lote [dest] · casa alias <classe> <chave> <alias>
+  acervo extrato  --todas [dest]
+  acervo psql     [--banco rag|motor]  <SQL por stdin>
 
 as particoes: obra, casa, registro (arq:0106 §3). conceito e transversal, vive em obra.
 leitura e anonima; escrever loga com a conta de bot. ato/particao/entidade desconhecidos
@@ -159,12 +160,24 @@ case "$ATO" in
   # `listar entidade [--especie|--dona]` e a forma que a ordem de 0108 pediu; a
   # conforme e `listar casa entidade`, roteada no conforme() acima. Aqui capturamos
   # o atalho antes de conforme() tratar `entidade` como nome de particao (e recusar).
-  listar|ler)
+  ler)
     if [ "${1:-}" = "entidade" ]; then
       shift
       exec "$ATOS/entidade" listar "$@"
     fi
     conforme "$ATO" "$@" ;;
+
+  listar)
+    if [ "${1:-}" = "entidade" ]; then
+      shift
+      exec "$ATOS/entidade" listar "$@"
+    fi
+    case "${1:-}" in
+      obra|casa|registro) conforme "$ATO" "$@" ;;
+      *)
+        avisa "acervo listar <entidade>" "acervo listar <particao> <entidade>"
+        exec "$ATOS/listar" "$@" ;;
+    esac ;;
 
   # gramatica conforme (arq:0106)
   escrever)             conforme "$ATO" "$@" ;;
@@ -177,19 +190,19 @@ case "$ATO" in
          exec "$ATOS/ingerir" "$@" ;;
     esac ;;
   escada)
+    avisa "acervo escada" "acervo listar obra obra --situacao"
     case "${1:-}" in
       --todas) shift ;;
       obra|casa|registro) ;;
-      *) avisa "acervo escada" "acervo escada --todas" ;;
     esac
     exec "$ATOS/escada" "$@" ;;
   baixar)          avisa "acervo baixar \"<titulo>\"" "acervo ler obra objeto \"<titulo>\""
                    exec "$ATOS/baixar"  "$@" ;;
   bancada)
+    avisa "acervo bancada" "acervo curar obra lote"
     case "${1:-}" in
       obra) conforme bancada "$@" ;;
-      *) avisa "acervo bancada" "acervo bancada obra lote"
-         exec "$ATOS/bancada" "$@" ;;
+      *) exec "$ATOS/bancada" "$@" ;;
     esac ;;
   extrato)
     case "${1:-}" in
@@ -207,9 +220,7 @@ case "$ATO" in
     esac
     exec bash "$ATOS/psql" "$@" ;;
 
-  # formas VIGENTES: respondem, mas avisam a forma conforme (spec_acervo §5)
-  listar)          avisa "acervo listar <entidade>" "acervo listar <particao> <entidade>"
-                   exec "$ATOS/listar"  "$@" ;;
+  # formas VIGENTES/DEPRECADAS com implementacao: avisam uma vez por sessao e delegam
   registrar)       avisa "acervo registrar <verbo>" "acervo escrever casa ferramental <verbo>"
                    exec "$ATOS/registrar" "$@" ;;
   stack)           avisa "acervo stack <ato>" "acervo ler/escrever casa stack"
@@ -219,6 +230,15 @@ case "$ATO" in
   wiki)            avisa "acervo wiki <ato>" "acervo ler/listar/escrever casa pagina|arquivo|cargo"
                    exec "$ATOS/wiki"    "$@" ;;
 
+  # atos deprecados sem implementacao (ex: adr removido): recusam com exit 2
+  adr)
+    echo "acervo adr: ato deprecado e removido. Substituto: acervo ler casa adr <codigo> ou acervo listar casa adr." >&2
+    echo "  $SPEC" >&2
+    exit 2 ;;
+
   -h|--help|ajuda) uso ;;
-  *) echo "acervo: ato desconhecido '$ATO'" >&2; uso ;;
+  *)
+    echo "acervo: ato '$ATO' desconhecido. Atos canonicos: ler, listar, resolver, escrever, ingerir, curar, extrato, psql." >&2
+    echo "  $SPEC" >&2
+    exit 2 ;;
 esac

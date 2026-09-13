@@ -207,3 +207,98 @@ def test_ingerir_casa_dry_run():
     assert "Reprovados sem cobertura" in r.stdout
     assert "nenhum padrao_path em acervo.especie_tipo cobre este caminho" in r.stdout
 
+
+# --- CAMADA D: Despachante, Cabeçalho Q1 e Conferencia ---
+
+def test_camada_d_cabecalho_q1():
+    with open(BIN, "r", encoding="utf-8") as f:
+        lines = [f.readline() for _ in range(15)]
+    text = "".join(lines)
+    assert "# capacidade: conhecimento" in text
+    assert "# dono: dados" in text
+    assert "# classe: B" in text
+    assert "# atos: ler (leitura, casa), listar (leitura, casa), resolver (identidade, casa), escrever (escrita, registro), ingerir (incorporacao, casa), curar (curadoria, casa), extrato (leitura, acervo), psql (leitura, acervo)" in text
+    assert "# le: acervo.casa, acervo.obra, acervo.registro, release" in text
+    assert "# escreve: acervo.casa, acervo.obra, acervo.registro, motor, arquivo" in text
+    assert "# consome: motor_acervo_rest, rag_extractor_pg" in text
+
+
+def test_camada_d_conferir_verbo_acervo():
+    r = subprocess.run(["/home/claudinho/AI/bin/conferir", "verbo", "acervo"], capture_output=True, text=True)
+    assert r.returncode == 0
+    assert "origem  : copia-identica-ao-repo" in r.stdout or "origem  : symlink-release" in r.stdout
+    assert "capacidade=conhecimento" in r.stdout
+
+
+def test_camada_d_escrever_casa_ferramental_acervo():
+    r = subprocess.run([BIN, "escrever", "casa", "ferramental", "acervo"], capture_output=True, text=True)
+    assert r.returncode == 0
+    # Verifica em acervo.ferramental_capacidade as 8 linhas
+    out_cap = psql("SELECT count(*) FROM acervo.ferramental_capacidade WHERE verbo='acervo' AND ato IS NOT NULL")
+    assert out_cap.strip() == "8"
+    # Verifica acervo.ferramental_acesso
+    out_acesso = psql("SELECT count(*) FROM acervo.ferramental_acesso WHERE verbo='acervo'")
+    assert int(out_acesso.strip()) > 0
+    # Verifica acervo.ferramental_consumo
+    out_consumo = psql("SELECT count(*) FROM acervo.ferramental_consumo WHERE verbo='acervo'")
+    assert int(out_consumo.strip()) > 0
+    # Verifica acervo.ferramental_ambiente
+    out_amb = psql("SELECT count(*) FROM acervo.ferramental_ambiente WHERE verbo='acervo'")
+    assert int(out_amb.strip()) == 3
+
+
+def test_camada_d_recusa_adr_deprecado():
+    r = subprocess.run([BIN, "adr", "0110"], capture_output=True, text=True)
+    assert r.returncode == 2
+    assert "acervo adr: ato deprecado e removido" in r.stderr
+    assert "acervo ler casa adr" in r.stderr
+
+
+def test_camada_d_recusa_ato_desconhecido():
+    r = subprocess.run([BIN, "ato_inexistente"], capture_output=True, text=True)
+    assert r.returncode == 2
+    assert "acervo: ato 'ato_inexistente' desconhecido" in r.stderr
+    assert "Atos canonicos: ler, listar, resolver, escrever, ingerir, curar, extrato, psql" in r.stderr
+
+
+def test_camada_d_aviso_uma_vez_por_sessao(tmp_path):
+    sess_id = f"test-sess-{os.getpid()}"
+    env = dict(os.environ, PF_SESSAO_ID=sess_id)
+    # Primeira chamada: emite aviso
+    r1 = subprocess.run([BIN, "bancada", "obra", "lote"], env=env, capture_output=True, text=True)
+    assert "acervo: `acervo bancada` e a forma vigente" in r1.stderr
+    # Segunda chamada na mesma sessão: NÃO emite aviso
+    r2 = subprocess.run([BIN, "bancada", "obra", "lote"], env=env, capture_output=True, text=True)
+    assert "acervo: `acervo bancada` e a forma vigente" not in r2.stderr
+    # Limpa diretório efêmero de aviso
+    import shutil
+    shutil.rmtree(f"/tmp/platafirma-avisos-{sess_id}", ignore_errors=True)
+
+
+def test_camada_d_oito_atos_canonicos_disponiveis():
+    # 1. ler
+    r_ler = subprocess.run([BIN, "ler", "casa", "adr", "0110"], capture_output=True, text=True)
+    assert r_ler.returncode == 0
+    # 2. listar
+    r_listar = subprocess.run([BIN, "listar", "casa", "adr"], capture_output=True, text=True)
+    assert r_listar.returncode == 0
+    # 3. resolver
+    r_res = subprocess.run([BIN, "resolver", "adr", "0110"], capture_output=True, text=True)
+    assert r_res.returncode == 0
+    # 4. escrever (fronteira)
+    r_esc = subprocess.run([BIN, "escrever", "casa", "adr", "0110"], capture_output=True, text=True)
+    assert r_esc.returncode == 2
+    # 5. ingerir
+    r_ing = subprocess.run([BIN, "ingerir", "casa", "platafirma-arquitetura"], capture_output=True, text=True)
+    assert r_ing.returncode == 0
+    # 6. curar
+    r_cur = subprocess.run([BIN, "curar", "casa", "alias", "adr", "0110", "alias-teste-d"], capture_output=True, text=True)
+    assert r_cur.returncode == 0
+    # 7. extrato
+    r_ext = subprocess.run([BIN, "extrato", "--ajuda"], capture_output=True, text=True)
+    assert r_ext.returncode == 2
+    # 8. psql
+    r_psql = subprocess.run([BIN, "psql", "--ajuda"], capture_output=True, text=True)
+    assert r_psql.returncode == 2
+
+

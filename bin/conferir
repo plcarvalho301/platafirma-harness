@@ -316,27 +316,37 @@ def cabecalho(caminho):
 
 
 def origem(nome, caminho):
-    """Classifica de onde o verbo vem. Copia identica continua sendo copia."""
-    if os.path.islink(caminho):
-        destino = os.path.realpath(caminho)
-        if destino.startswith(os.path.realpath(RAIZ)) and "/opt/" not in destino:
-            return "symlink", destino
-        opt_dir = os.environ.get("PF_OPT_DIR", "/opt/platafirma").rstrip(os.sep)
-        if destino.startswith("/opt/platafirma/") or destino.startswith(opt_dir + os.sep):
-            return "symlink", destino
-        return "terceiro", destino
+    """Classifica de onde o verbo vem. Segue arq:0110 §9:
+    Candidatos em ordem fixa:
+    1. /opt/platafirma/current/harness/bin/<verbo>
+    2. ~/AI/platafirma-harness/bin/<verbo>
+    Vereditos em tres palavras:
+    - symlink-release
+    - copia-identica-ao-repo
+    - divergente-do-repo
+    """
     if not e_script(caminho):
         return "terceiro", "binario instalado"
-    achados = []
-    for base, _, arquivos in os.walk(RAIZ):
-        if "/.git" in base or base.startswith(os.path.join(RAIZ, "opt")) or base == BIN:
-            continue
-        if nome in arquivos:
-            achados.append(os.path.join(base, nome))
-    if not achados:
-        return "so-no-host", "sem contraparte em repo"
-    rc, _, _ = sh(["diff", "-q", caminho, achados[0]])
-    return ("copia" if rc == 0 else "divergente"), achados[0]
+
+    # Candidato 1: release
+    opt_dir = os.environ.get("PF_OPT_DIR", "/opt/platafirma").rstrip(os.sep)
+    cand_release = os.path.join(opt_dir, "current", "harness", "bin", nome)
+    if os.path.islink(caminho):
+        destino = os.path.realpath(caminho)
+        if destino == os.path.realpath(cand_release) or destino.startswith(opt_dir + os.sep):
+            return "symlink-release", destino
+
+    # Candidato 2: repo
+    cand_repo = os.path.join(HARNESS, "bin", nome)
+    if os.path.exists(cand_repo):
+        if os.path.realpath(caminho) == os.path.realpath(cand_repo):
+            return "copia-identica-ao-repo", cand_repo
+        rc, _, _ = sh(["diff", "-q", caminho, cand_repo])
+        if rc == 0:
+            return "copia-identica-ao-repo", cand_repo
+        return "divergente-do-repo", cand_repo
+
+    return "so-no-host", "sem contraparte em repo"
 
 
 def capacidades_do_mapa():
@@ -387,6 +397,8 @@ def conferir_verbo(alvo, como_json=False):
     vistos = 0
     verbos_json = []
     for nome in sorted(os.listdir(BIN)):
+        if nome.startswith("_"):
+            continue
         caminho = os.path.join(BIN, nome)
         if alvo and alvo != nome:
             continue
@@ -405,7 +417,7 @@ def conferir_verbo(alvo, como_json=False):
         # `controle/tests/test_contrato_fila.py` fazem `import fila_streams`); o symlink
         # e o verbo. Alias de verdade e nome que DUPLICA outro ja exposto, e e so esse
         # caso que arq:0037 precisa isentar.
-        if (classe == "symlink" and os.path.basename(onde) != nome
+        if (classe.startswith("symlink") and os.path.basename(onde) != nome
                 and os.path.basename(onde) in os.listdir(BIN)):
             vistos += 1
             if not como_json:
@@ -426,12 +438,13 @@ def conferir_verbo(alvo, como_json=False):
         if not como_json:
             print(f"\n### {nome}")
             print(f"    origem  : {classe} — {onde}")
-        if classe in ("so-no-host", "divergente"):
+        if classe in ("so-no-host", "divergente", "divergente-do-repo"):
             houve = True
             conforme = False
-            motivos.append("sem origem unica — copia nao e forma valida de instalacao")
+            msg_origem = "divergente do repo" if classe == "divergente-do-repo" else "sem origem unica — copia nao e forma valida de instalacao"
+            motivos.append(msg_origem)
             if not como_json:
-                print("    ORIGEM  : sem origem unica — copia nao e forma valida de instalacao")
+                print(f"    ORIGEM  : {msg_origem}")
         elif classe == "copia":
             houve = True
             conforme = False

@@ -11,6 +11,7 @@
 # mao + aplicar de psql. Fonte = o cabecalho do script (o host); a tabela e a projecao.
 # Idempotente por slug. Migration continua so para DDL (criar coluna/tabela).
 import os
+import re
 import signal
 import subprocess
 import sys
@@ -59,7 +60,10 @@ def _lit(v):
     return "null" if v is None else "'" + str(v).replace("'", "''") + "'"
 
 
-CHAVES = ("capacidade", "dono", "componente", "use para", "atos")
+CHAVES = (
+    "capacidade", "dono", "componente", "use para", "atos", "classe",
+    "le", "escreve", "consome", "ambiente", "depende", "substitui"
+)
 
 
 def _le_cabecalho(path):
@@ -71,7 +75,7 @@ def _le_cabecalho(path):
     so omite a parte, nunca inventa. Mesma convencao de chaves que `conferir` parseia."""
     desc, campos, lendo_desc = [], {}, False
     with open(path, errors="replace") as f:
-        linhas = [next(f, "") for _ in range(12)]
+        linhas = [next(f, "") for _ in range(25)]
     for l in linhas:
         s = l.strip()
         if not s.startswith("#") or s.startswith("#!"):
@@ -98,7 +102,7 @@ def _le_cabecalho(path):
     for chave in ("use para", "atos"):
         if campos.get(chave):
             partes.append("%s: %s" % (chave, campos[chave]))
-    return campos.get("capacidade"), (" · ".join(partes) or None)
+    return campos, (" · ".join(partes) or None)
 
 
 def _le_whitelist():
@@ -134,22 +138,101 @@ def registrar_um(verbo):
     path = _resolve(verbo)
     if not path:
         morre("acervo registrar: nao achei o script de bin/%s (nem ~/AI/bin nem bin/)" % verbo, 3)
-    cap, desc = _le_cabecalho(path)
+    campos, desc = _le_cabecalho(path)
+    cap = campos.get("capacidade")
     if not cap:
         morre("acervo registrar: bin/%s sem '# capacidade:' no cabecalho — "
               "nao registro sem capacidade (1:1, arq:0037)." % verbo, 3)
     sot = "bin/%s" % verbo
-    sql = (
-        "begin;\n"
-        "insert into acervo.ferramental_capacidade (slug, rotulo) values (%s, %s) "
-        "on conflict (slug) do nothing;\n" % (_lit(cap), _lit(cap))
-        + "insert into acervo.ferramental_verbo (slug, capacidade_id, sot, descricao) "
-        "select %s, c.id, %s, %s from acervo.ferramental_capacidade c where c.slug=%s "
+
+    atos_raw = campos.get("atos", "")
+    atos_info = []
+    if atos_raw:
+        for item in re.findall(r'([a-zA-Z0-9_-]+(?:\s*\([^)]*\))?)', atos_raw):
+            m = re.match(r"^([a-zA-Z0-9_-]+)(?:\s*\(([^)]+)\))?$", item.strip())
+            if m:
+                ato_nome = m.group(1)
+                inside = [p.strip() for p in m.group(2).split(",")] if m.group(2) else []
+                if len(inside) >= 2:
+                    op, subcap = inside[0], inside[1]
+                elif len(inside) == 1:
+                    op, subcap = inside[0], inside[0]
+                else:
+                    op, subcap = "execucao", cap
+                atos_info.append((ato_nome, op, subcap))
+
+    le_raw = campos.get("le", "")
+    escreve_raw = campos.get("escreve", "")
+    recurso_map = {"arquivo": "arquivo-local"}
+    le_recursos = [recurso_map.get(r.strip(), r.strip()) for r in le_raw.split(",") if r.strip()]
+    escreve_recursos = [recurso_map.get(r.strip(), r.strip()) for r in escreve_raw.split(",") if r.strip()]
+
+    consome_raw = campos.get("consome", "")
+    consumos = [c.strip() for c in consome_raw.split(",") if c.strip()]
+
+    ambiente_raw = campos.get("ambiente", "")
+    ambientes = []
+    if ambiente_raw:
+        for item in re.findall(r'([A-Z0-9_]+(?:\s*\([^)]*\))?)', ambiente_raw):
+            m = re.match(r"^([A-Z0-9_]+)(?:\s*\(([^)]+)\))?$", item.strip())
+            if m:
+                var_name = m.group(1)
+                detail = m.group(2) or ""
+                obrig = "opcional" not in detail.lower()
+                origem = detail.replace("opcional,", "").replace("opcional", "").strip() or None
+                ambientes.append((var_name, obrig, origem))
+
+    sql_parts = [
+        "begin;\n",
+        "insert into acervo.ferramental_capacidade (slug, rotulo) "
+        "select %s, %s where not exists (select 1 from acervo.ferramental_capacidade where slug=%s);\n"
+        % (_lit(cap), _lit(cap), _lit(cap)),
+        "insert into acervo.ferramental_verbo (slug, capacidade_id, sot, descricao) "
+        "select %s, c.id, %s, %s from acervo.ferramental_capacidade c where c.slug=%s limit 1 "
         "on conflict (slug) do update set sot=excluded.sot, descricao=excluded.descricao, "
         "capacidade_id=excluded.capacidade_id;\n" % (_lit(verbo), _lit(sot), _lit(desc), _lit(cap))
-        + "commit;\n"
-    )
-    _psql(sql, escreve=True)
+    ]
+
+    for ato_nome, op, subcap in atos_info:
+        ato_slug = f"{verbo}:{ato_nome}"
+        ato_rotulo = f"{verbo} {ato_nome}"
+        sql_parts.append(
+            "insert into acervo.ferramental_capacidade (slug, rotulo, verbo, ato, capacidade) "
+            "values (%s, %s, %s, %s, %s) "
+            "on conflict (verbo, ato) where verbo is not null and ato is not null "
+            "do update set slug=excluded.slug, rotulo=excluded.rotulo, capacidade=excluded.capacidade;\n"
+            % (_lit(ato_slug), _lit(ato_rotulo), _lit(verbo), _lit(ato_nome), _lit(subcap))
+        )
+        for rec in le_recursos:
+            sql_parts.append(
+                "insert into acervo.ferramental_acesso (verbo, ato, recurso_id, modo) "
+                "values (%s, %s, %s, 'le') on conflict (verbo, ato, recurso_id, modo) do nothing;\n"
+                % (_lit(verbo), _lit(ato_nome), _lit(rec))
+            )
+        for rec in escreve_recursos:
+            sql_parts.append(
+                "insert into acervo.ferramental_acesso (verbo, ato, recurso_id, modo) "
+                "values (%s, %s, %s, 'escreve') on conflict (verbo, ato, recurso_id, modo) do nothing;\n"
+                % (_lit(verbo), _lit(ato_nome), _lit(rec))
+            )
+        for cons in consumos:
+            sql_parts.append(
+                "insert into acervo.ferramental_consumo (verbo, ato, servico, consumo_raw) "
+                "values (%s, %s, %s, %s) on conflict (verbo, ato, servico) "
+                "do update set consumo_raw=excluded.consumo_raw;\n"
+                % (_lit(verbo), _lit(ato_nome), _lit(cons), _lit(cons))
+            )
+
+    for var_name, obrig, origem in ambientes:
+        sql_parts.append(
+            "insert into acervo.ferramental_ambiente (verbo, variavel, obrigatoria, origem) "
+            "values (%s, %s, %s, %s) on conflict (verbo, variavel) "
+            "do update set obrigatoria=excluded.obrigatoria, origem=excluded.origem;\n"
+            % (_lit(verbo), _lit(var_name), "true" if obrig else "false", _lit(origem))
+        )
+
+    sql_parts.append("commit;\n")
+    _psql("".join(sql_parts), escreve=True)
     return cap, desc
 
 
@@ -164,7 +247,8 @@ def main(argv):
             if not path:
                 pulados.append((v, "sem binario"))
                 continue
-            cap, _ = _le_cabecalho(path)
+            campos, _ = _le_cabecalho(path)
+            cap = campos.get("capacidade")
             if not cap:
                 pulados.append((v, "sem capacidade"))
                 continue
