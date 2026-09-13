@@ -187,3 +187,54 @@ ad-hoc passada como 1o posicional (linha `## repo` + `### secao` + `- path`).
   nome do repo" + "fork: retry: Resource temporarily unavailable" antes
   do exit 2. Formas com ato (`repo estado <repo>`, `repo git <repo> ...`)
   funcionaram normal; nao usei "repo" bare de novo. Sem encaminhamento.
+
+## Escrita no acervo passa pela API; migracao nao semeia dado; teste mede a rev
+
+Tres regras de dado que a fabrica violou na mesma fita (13/09) e que valem para todo
+verbo que toca o acervo:
+- O cliente do verbo nunca escreve no Postgres para gravar conteudo: manda o lote para a
+  rota do servidor, que grava casa, impressao, trechos, indices e o ponteiro
+  (`acervo.casa_fonte`). INSERT direto produz linha cega — esta na tabela, o motor nao ve,
+  o `ja_ingerido` nao reconhece. `curar casa alias` ainda escreve por psql (declarado);
+  e a excecao a fechar, nao o modelo.
+- Migracao e DDL e regra de dado. Linha de fato (sha ingerido, alias de conceito) nasce do
+  ato que a prova; semeada por migracao, ela afirma o que nunca aconteceu, e `varrido:`
+  passa a mentir com ancora.
+- `teste <verbo>` roda contra o bin do repo (a rev), nao contra `~/AI/bin`, e apaga o
+  vocabulario que cria. Hoje `~/AI/bin` resolve para o proprio clone do harness: o que
+  esta em main JA esta servido (arq:0097 violada; cura #3014) — nao ha "copia perigosa".
+
+## Golden record do verbo: (verbo, ato) e a chave, nao o verbo
+
+Desde a onda 1 (verbo = canonico, ato = folha): `ferramental_ato (verbo, ato, capacidade,
+acao, tipo)` e o mapeamento para a folha; `ferramental_acesso (verbo, ato, recurso_id,
+modo)` e o que o ato le e escreve, com `nada` como linha explicita (ato sem linha =
+nao declarado, reprova); `ferramental_recurso` e o enum de arq:0102 D1. A tabela de
+capacidades volta a ser so o mapa de folhas — colunas verbo/ato nela colapsam folha com
+mapeamento. O cabecalho declara `# le: <ato>=<recurso>,...` e `# escreve: <ato>=...`,
+uma linha por ato; `registrar` acumula chave repetida.
+
+## write_file devolvendo `substituiu: true` e sinal de parar e ler
+
+Escrevi um parecer por cima de um que ja existia sem ter lido. O `substituiu: true` do
+retorno e o unico aviso; a cura foi `git checkout --` antes de qualquer commit. Regra: em
+docs/ de repo compartilhado, `read_file` antes de `write_file` sem trecho, sempre.
+
+## Diario de bordo (cru, sem heuristica) — 13/09, fita do verbo acervo
+
+- 13/09 — `repo pr-ver platafirma-harness 22` saiu 3: `gh pr view` quebra em
+  "GraphQL: Projects (classic) is being deprecated". Contorno: `repo git <repo> log
+  origin/main..origin/<ramo>` + `diff --stat`. Sem encaminhamento.
+- 13/09 — `repo git <repo> branch -r --format=%(refname:short)` recusado pela porta
+  (metacaractere `(`). Contorno: `branch -r --sort=-committerdate` sem --format.
+- 13/09 — tentei aplicar migracao com `acervo psql` e stdin `\i /dev/stdin`: exit 0 e
+  nada rodou. Contorno: colar o SQL inteiro no stdin.
+- 13/09 — `acervo ingerir casa platafirma-arquitetura --apply` (versao da fabrica) cuspiu
+  390 KB: varria node_modules e listava 2.366 reprovados um a um; a porta cortou em 50 KB
+  e omitiu o item seguinte do lote. Contorno: so `*.md`, pula node_modules/.git, resumo
+  com 10 exemplos (5eb2490).
+- 13/09 — `deploy rag promover` saiu 1: worktree de deploy com 6 arquivos editados e 6
+  untracked travava o checkout; a rag estava 16 commits atras de main. Contorno: `deploy
+  promover` passou a guardar a sujeira em `git stash push -u` nomeado e seguir (5eb2490).
+- 13/09 — `infra instalar acervo` devolve "nada a assentar": `~/AI/bin` e o clone. Nao e
+  erro; e o estado (arq:0097 violada, #3014).
