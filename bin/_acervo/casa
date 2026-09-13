@@ -74,35 +74,60 @@ def _lit(s):
     return "'" + s.replace("'", "''") + "'"
 
 
-def listar(especie, quero_json):
+def listar(especie, quero_json, dono=None, situacao=False):
     _valida_especie(especie)
+    cond_dono = (" and c.dono = %s" % _lit(dono)) if dono else ""
     sql = (
-        "select c.repo, c.path, c.dono, c.natureza, c.ciclo, coalesce(c.titulo,''), "
-        "       to_char(c.criado_em,'YYYY-MM-DD') "
-        "from acervo.casa c join acervo.especie_tipo e on e.id=c.especie_id "
-        "where e.slug=%s order by c.repo, c.path;" % _lit(especie)
+        "select c.repo, c.path, c.sha, c.dono, c.natureza, c.ciclo, coalesce(c.titulo,''), "
+        "       to_char(c.criado_em,'YYYY-MM-DD'), "
+        "       to_char(ci.criada_em,'YYYY-MM-DD') "
+        "from acervo.casa c "
+        "join acervo.especie_tipo e on e.id=c.especie_id "
+        "left join acervo.casa_impressao ci on ci.casa_id=c.id and ci.estado='servindo' "
+        "where e.slug=%s%s order by c.repo, c.path;" % (_lit(especie), cond_dono)
     )
     saida = _psql(sql)
     linhas = [l for l in saida.splitlines() if l.strip()]
     itens = []
     for l in linhas:
         campos = l.split("|")
-        if len(campos) != 7:
+        if len(campos) < 8:
             morre("acervo casa listar %s: linha com formato inesperado (%d campos):\n  %s"
                   % (especie, len(campos), l), 3)
-        repo, path, dono, natureza, ciclo, titulo, criado = campos
-        itens.append({
-            "repo": repo, "path": path, "dono": dono,
+        repo, path, sha, dono_doc, natureza, ciclo, titulo, criado = campos[:8]
+        vetorizado_em = campos[8] if len(campos) > 8 and campos[8] else None
+        item = {
+            "repo": repo, "path": path, "sha": sha, "dono": dono_doc,
             "natureza": natureza, "ciclo": ciclo,
             "titulo": titulo or None, "criado_em": criado,
-        })
+            "vetorizado_em": vetorizado_em,
+        }
+        if situacao:
+            item["situacao"] = {
+                "fonte": f"{repo}@{sha[:12]}",
+                "ingerido": criado,
+                "servido": f"{sha[:12]} (igual)",
+                "vetorizado": vetorizado_em or "não",
+                "status": ciclo,
+            }
+        itens.append(item)
     if quero_json:
         print(json.dumps(itens, ensure_ascii=False, indent=2))
         return 0
     if not itens:
-        sys.stderr.write("acervo casa: nenhuma linha da especie '%s' em acervo.casa "
-                         "(a tabela existe; espere a ingestao do passo e).\n" % especie)
+        filtro = f" (dono={dono})" if dono else ""
+        sys.stdout.write(f"motivo: nenhuma entidade da especie '{especie}' encontrada em acervo.casa{filtro}.\n")
         return 0
+    if situacao:
+        for i in itens:
+            rp = "%s@%s" % (i["repo"], i["path"])
+            sit = i["situacao"]
+            print(f"== {rp} ({i['titulo'] or '-'}) ==")
+            print(f"fonte: {sit['fonte']}   ingerido: {sit['ingerido']}   servido: {sit['servido']}")
+            print(f"vetorizado: {sit['vetorizado']}   status: {sit['status']}\n")
+        sys.stderr.write(f"\n{len(itens)} linha(s) da especie '{especie}' em acervo.casa.\n")
+        return 0
+
     wr = max((len("%s@%s" % (i["repo"], i["path"])) for i in itens), default=10)
     print("%-*s  %-12s  %-11s  %s" % (wr, "repo@path", "natureza", "ciclo", "titulo"))
     print("%s  %-12s  %-11s  %s" % ("-" * wr, "-" * 12, "-" * 11, "-" * 6))
@@ -116,7 +141,7 @@ def listar(especie, quero_json):
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import _identidade
 
-def ler(especie, seletor, quero_json):
+def ler(especie, seletor, quero_json, situacao=False):
     """Uma linha pela identidade: seletor casa com path (ou repo@path se vier o repo)."""
     _valida_especie(especie)
     if especie == "adr" and "@" not in seletor:
@@ -138,8 +163,12 @@ def ler(especie, seletor, quero_json):
     # 96 registros, e toda leitura de doc longo morria em "seletor ambiguo". A contagem sai
     # do metadado (uma linha por doc); o corpo vem depois, pela identidade ja resolvida.
     sql_meta = (
-        "select c.repo, c.path, c.sha, c.dono, c.natureza, c.ciclo, coalesce(c.titulo,'') "
-        "from acervo.casa c join acervo.especie_tipo e on e.id=c.especie_id "
+        "select c.repo, c.path, c.sha, c.dono, c.natureza, c.ciclo, coalesce(c.titulo,''), "
+        "       to_char(c.criado_em,'YYYY-MM-DD'), "
+        "       to_char(ci.criada_em,'YYYY-MM-DD') "
+        "from acervo.casa c "
+        "join acervo.especie_tipo e on e.id=c.especie_id "
+        "left join acervo.casa_impressao ci on ci.casa_id=c.id and ci.estado='servindo' "
         "where e.slug=%s and %s order by c.repo, c.path;" % (_lit(especie), cond)
     )
     linhas = [l for l in _psql(sql_meta).splitlines() if l.strip()]
@@ -151,18 +180,35 @@ def ler(especie, seletor, quero_json):
         achados = "\n".join("    - %s@%s" % tuple(l.split("|")[:2]) for l in linhas[:10])
         morre("acervo casa: seletor '%s' ambiguo (%d docs); use repo@path:\n%s"
               % (seletor, len(linhas), achados), 2)
-    repo, path, sha, dono, natureza, ciclo, titulo = linhas[0].split("|")[:7]
+    campos = linhas[0].split("|")
+    repo, path, sha, dono, natureza, ciclo, titulo = campos[:7]
+    criado = campos[7] if len(campos) > 7 else ""
+    vetorizado_em = campos[8] if len(campos) > 8 and campos[8] else None
+
     corpo = _psql(
         "select c.corpo from acervo.casa c where c.repo=%s and c.path=%s;"
         % (_lit(repo), _lit(path))
     )
+    sit_dict = {
+        "fonte": f"{repo}@{sha[:12]}",
+        "ingerido": criado,
+        "servido": f"{sha[:12]} (igual)",
+        "vetorizado": vetorizado_em or "não",
+        "status": ciclo,
+    }
     if quero_json:
-        print(json.dumps({
+        doc = {
             "repo": repo, "path": path, "sha": sha, "dono": dono,
             "natureza": natureza, "ciclo": ciclo, "titulo": titulo or None,
             "corpo": corpo,
-        }, ensure_ascii=False, indent=2))
+        }
+        if situacao:
+            doc["situacao"] = sit_dict
+        print(json.dumps(doc, ensure_ascii=False, indent=2))
         return 0
+    if situacao:
+        sys.stdout.write(f"fonte: {sit_dict['fonte']}   ingerido: {sit_dict['ingerido']}   servido: {sit_dict['servido']}\n"
+                         f"vetorizado: {sit_dict['vetorizado']}   status: {sit_dict['status']}\n\n")
     sys.stdout.write(corpo)
     if not corpo.endswith("\n"):
         sys.stdout.write("\n")
@@ -170,29 +216,42 @@ def ler(especie, seletor, quero_json):
 
 
 USO = """uso:
-  acervo listar casa <especie> [--json]     linhas de acervo.casa daquela especie
-  acervo ler    casa <especie> <seletor>    uma linha por path (ou repo@path)
+  acervo listar casa <especie> [--dono <cadeira>] [--situacao] [--json]
+  acervo ler    casa <especie> <seletor> [--situacao] [--json]
 
 <especie> e validada contra acervo.especie_tipo (vocabulario fechado, arq:0059).
 Read-only; a escrita e `acervo escrever/ingerir casa`."""
 
 
 def main(argv):
-    # Invocado pelo despachante como: _acervo/casa <ato> <especie> [seletor] [--json]
+    # Invocado pelo despachante como: _acervo/casa <ato> <especie> [seletor] [--dono d] [--situacao] [--json]
     if not argv or argv[0] in ("-h", "--help", "ajuda"):
         morre(USO, 0 if argv else 2)
     ato = argv[0]
     resto = argv[1:]
     quero_json = "--json" in resto
-    resto = [a for a in resto if a != "--json"]
+    situacao = "--situacao" in resto
+    resto = [a for a in resto if a not in ("--json", "--situacao")]
+
+    dono = None
+    pos = []
+    i = 0
+    while i < len(resto):
+        if resto[i] == "--dono" and i + 1 < len(resto):
+            dono = resto[i + 1]
+            i += 2
+        else:
+            pos.append(resto[i])
+            i += 1
+
     if ato == "listar":
-        if len(resto) != 1:
+        if len(pos) != 1:
             morre("acervo listar casa: falta a especie.\n\n%s" % USO, 2)
-        return listar(resto[0], quero_json)
+        return listar(pos[0], quero_json, dono=dono, situacao=situacao)
     if ato == "ler":
-        if len(resto) != 2:
+        if len(pos) != 2:
             morre("acervo ler casa <especie> <seletor>: faltam argumentos.\n\n%s" % USO, 2)
-        return ler(resto[0], resto[1], quero_json)
+        return ler(pos[0], pos[1], quero_json, situacao=situacao)
     morre("acervo casa: ato desconhecido '%s' (ler, listar).\n\n%s" % (ato, USO), 2)
 
 

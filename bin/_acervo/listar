@@ -140,6 +140,9 @@ def morre(msg, code=2):
     sys.stderr.write(msg.rstrip("\n") + "\n")
     sys.exit(code)
 
+def _lit(s):
+    return "'" + str(s).replace("'", "''") + "'"
+
 def _le_whitelist_oficio():
     """Slugs de verbo do núcleo, do bloco cercado de oficio-ferramental.md.
 
@@ -320,6 +323,12 @@ def listar_topologia(quero_json, completo=False):
                 "critico": bool(row.get("critico")),
                 "instancias": row.get("instancias") or None,
             })
+        if not stacks:
+            if quero_json:
+                print("[]")
+            else:
+                sys.stdout.write("motivo: nenhuma stack na topologia (acervo.stack).\n")
+            return
         if quero_json:
             print(json.dumps(stacks, ensure_ascii=False, indent=2))
             return
@@ -351,6 +360,12 @@ def listar_topologia(quero_json, completo=False):
             "nota": row.get("nota") or None,
             "instancias": row.get("instancias") or None,
         })
+    if not stacks:
+        if quero_json:
+            print("[]")
+        else:
+            sys.stdout.write("motivo: nenhuma stack na topologia (acervo.stack).\n")
+        return
     if quero_json:
         print(json.dumps(stacks, ensure_ascii=False, indent=2))
         return
@@ -375,28 +390,228 @@ def listar_topologia(quero_json, completo=False):
         print("  instancias: %s" % (",".join(st["instancias"]) if st["instancias"] else "-"))
     sys.stderr.write("\n%d stack(s) na topologia completa (acervo.stack) — todos os campos que `deploy` le.\n" % len(stacks))
 
+
+def listar_obra(termo, eixo, situacao, quero_json):
+    cat_info = _psql_json(
+        "select coalesce(json_agg(row_to_json(t)), '[]') from ("
+        "  select count(*) as total, to_char(max(coalesce(classificado_em, now())), 'YYYY-MM-DD') as data "
+        "  from acervo.obra"
+        ") t;", "catalogo_obra"
+    )
+    total_obras = cat_info[0]["total"] if cat_info else 0
+    data_cat = cat_info[0]["data"] if cat_info else ""
+
+    if eixo and eixo not in ("titulo", "conceito", "subdominio"):
+        morre("acervo listar obra obra: --eixo invalido '%s' (titulo, conceito, subdominio)." % eixo, 2)
+
+    if termo:
+        cond_t = "o.titulo ilike %s" % _lit("%" + termo + "%")
+        cond_s = "lower(sd.slug) = lower(%s)" % _lit(termo)
+        cond_c = "lower(cr.rotulo) = lower(%s)" % _lit(termo)
+
+        if eixo == "titulo":
+            sql = """
+            select o.id, o.titulo, o.objeto, 'titulo' as eixo,
+                   sd.slug as subdominio,
+                   (select c.rotulo from acervo.obra_trata_de ot join acervo.conceito c on c.id = ot.conceito_id where ot.obra_id = o.id limit 1) as conceito,
+                   imp.id as impressao_id, imp.estado as impressao_estado
+            from acervo.obra o
+            left join acervo.subdominio sd on sd.id = o.subdominio_id
+            left join acervo.impressao imp on imp.obra_id = o.id and imp.estado = 'servindo'
+            where {cond_t}
+            order by o.titulo;
+            """.format(cond_t=cond_t)
+        elif eixo == "subdominio":
+            sql = """
+            select o.id, o.titulo, o.objeto, 'subdominio' as eixo,
+                   sd.slug as subdominio,
+                   (select c.rotulo from acervo.obra_trata_de ot join acervo.conceito c on c.id = ot.conceito_id where ot.obra_id = o.id limit 1) as conceito,
+                   imp.id as impressao_id, imp.estado as impressao_estado
+            from acervo.obra o
+            join acervo.subdominio sd on sd.id = o.subdominio_id
+            left join acervo.impressao imp on imp.obra_id = o.id and imp.estado = 'servindo'
+            where {cond_s}
+            order by o.titulo;
+            """.format(cond_s=cond_s)
+        elif eixo == "conceito":
+            sql = """
+            select distinct on (o.id) o.id, o.titulo, o.objeto, 'conceito' as eixo,
+                   sd.slug as subdominio,
+                   cr.rotulo as conceito,
+                   imp.id as impressao_id, imp.estado as impressao_estado
+            from acervo.obra o
+            join acervo.obra_trata_de ot on ot.obra_id = o.id
+            join acervo.conceito_rotulo cr on cr.conceito_id = ot.conceito_id
+            left join acervo.subdominio sd on sd.id = o.subdominio_id
+            left join acervo.impressao imp on imp.obra_id = o.id and imp.estado = 'servindo'
+            where {cond_c}
+            order by o.id, o.titulo;
+            """.format(cond_c=cond_c)
+        else:
+            sql = """
+            select distinct on (sub.id, sub.eixo) sub.id, sub.titulo, sub.objeto, sub.eixo, sub.subdominio, sub.conceito, sub.impressao_id, sub.impressao_estado from (
+              select o.id, o.titulo, o.objeto, 'titulo' as eixo,
+                     sd.slug as subdominio,
+                     (select c.rotulo from acervo.obra_trata_de ot join acervo.conceito c on c.id = ot.conceito_id where ot.obra_id = o.id limit 1) as conceito,
+                     imp.id as impressao_id, imp.estado as impressao_estado
+              from acervo.obra o
+              left join acervo.subdominio sd on sd.id = o.subdominio_id
+              left join acervo.impressao imp on imp.obra_id = o.id and imp.estado = 'servindo'
+              where {cond_t}
+              union all
+              select o.id, o.titulo, o.objeto, 'subdominio' as eixo,
+                     sd.slug as subdominio,
+                     (select c.rotulo from acervo.obra_trata_de ot join acervo.conceito c on c.id = ot.conceito_id where ot.obra_id = o.id limit 1) as conceito,
+                     imp.id as impressao_id, imp.estado as impressao_estado
+              from acervo.obra o
+              join acervo.subdominio sd on sd.id = o.subdominio_id
+              left join acervo.impressao imp on imp.obra_id = o.id and imp.estado = 'servindo'
+              where {cond_s}
+              union all
+              select o.id, o.titulo, o.objeto, 'conceito' as eixo,
+                     sd.slug as subdominio,
+                     cr.rotulo as conceito,
+                     imp.id as impressao_id, imp.estado as impressao_estado
+              from acervo.obra o
+              join acervo.obra_trata_de ot on ot.obra_id = o.id
+              join acervo.conceito_rotulo cr on cr.conceito_id = ot.conceito_id
+              left join acervo.subdominio sd on sd.id = o.subdominio_id
+              left join acervo.impressao imp on imp.obra_id = o.id and imp.estado = 'servindo'
+              where {cond_c}
+            ) sub
+            order by sub.id, sub.eixo, sub.titulo;
+            """.format(cond_t=cond_t, cond_s=cond_s, cond_c=cond_c)
+    else:
+        sql = """
+        select o.id, o.titulo, o.objeto, 'obra' as eixo,
+               sd.slug as subdominio,
+               (select c.rotulo from acervo.obra_trata_de ot join acervo.conceito c on c.id = ot.conceito_id where ot.obra_id = o.id limit 1) as conceito,
+               imp.id as impressao_id, imp.estado as impressao_estado
+        from acervo.obra o
+        left join acervo.subdominio sd on sd.id = o.subdominio_id
+        left join acervo.impressao imp on imp.obra_id = o.id and imp.estado = 'servindo'
+        order by o.titulo;
+        """
+
+    raw_itens = _psql_json(
+        "select coalesce(json_agg(row_to_json(t)), '[]') from (%s) t;" % sql.strip().rstrip(";"),
+        "listar obra"
+    )
+
+    itens = []
+    for row in raw_itens:
+        obj = row.get("objeto")
+        imp_id = row.get("impressao_id")
+        imp_st = row.get("impressao_estado")
+
+        if not obj:
+            degrau = "catalogada"
+        elif not imp_id:
+            degrau = "armazenada"
+        elif imp_st == "em_construcao":
+            degrau = "ingerida"
+        else:
+            degrau = "vetorizada"
+
+        servivel = "sim" if imp_st == "servindo" else "nao"
+        store = "acervo" if (obj and obj.startswith("acervo/")) else ("pessoal" if (obj and obj.startswith("pessoal/")) else "-")
+        imp_str = imp_id[:8] if imp_id else "-"
+
+        item = {
+            "id": row["id"],
+            "titulo": row["titulo"],
+            "eixo": row.get("eixo"),
+            "subdominio": row.get("subdominio"),
+            "conceito": row.get("conceito"),
+        }
+        if situacao:
+            item["situacao"] = {
+                "servivel": servivel,
+                "degrau": degrau,
+                "store": store,
+                "impressao": imp_str,
+                "impressao_id": imp_id,
+            }
+        itens.append(item)
+
+    if not itens:
+        if quero_json:
+            print("[]")
+        else:
+            if termo:
+                print(f"motivo: nenhuma obra encontrada para --sobre '{termo}'")
+            else:
+                print("motivo: nenhuma obra no catalogo")
+            print(f"varrido:   acervo.obra ({total_obras} obras, catálogo de {data_cat})")
+        return 0
+
+    if quero_json:
+        print(json.dumps(itens, ensure_ascii=False, indent=2))
+        return 0
+
+    if situacao:
+        for i in itens:
+            sit = i["situacao"]
+            eixo_tag = f"[{i['eixo']}] " if i.get("eixo") and i['eixo'] != "obra" else ""
+            print(f"{eixo_tag}{i['titulo']}")
+            print(f"  servivel: {sit['servivel']}   degrau: {sit['degrau']}   store: {sit['store']}   impressao: {sit['impressao']}\n")
+        sys.stderr.write(f"\n{len(itens)} obra(s) encontrada(s).\n")
+        return 0
+
+    for i in itens:
+        eixo_tag = f"[{i['eixo']}] " if i.get("eixo") and i['eixo'] != "obra" else ""
+        extra = []
+        if i.get("subdominio"):
+            extra.append(f"subdominio: {i['subdominio']}")
+        if i.get("conceito"):
+            extra.append(f"conceito: {i['conceito']}")
+        info = f" ({', '.join(extra)})" if extra else ""
+        print(f"{eixo_tag}{i['titulo']}{info}")
+    sys.stderr.write(f"\n{len(itens)} obra(s) encontrada(s).\n")
+    return 0
+
+
 def main(argv):
     if not argv or argv[0] in ("-h", "--help", "ajuda"):
         morre(USO, 0 if argv else 2)
 
     alvo, resto = argv[0], argv[1:]
-    if alvo not in ("conceitos", "ferramental", "topologia"):
-        morre("acervo listar: alvo desconhecido %r (hoje 'conceitos', 'ferramental' e 'topologia')\n\n%s"
+    if alvo not in ("conceitos", "ferramental", "topologia", "obra"):
+        morre("acervo listar: alvo desconhecido %r (hoje 'conceitos', 'ferramental', 'topologia' e 'obra')\n\n%s"
               % (alvo, USO))
 
     quero_json = False
     so_oficio = False
     completo = False
     so_tools = False
-    for a in resto:
+    situacao = False
+    termo = None
+    eixo = None
+
+    i = 0
+    while i < len(resto):
+        a = resto[i]
         if a == "--json":
             quero_json = True
+            i += 1
+        elif a == "--situacao":
+            situacao = True
+            i += 1
         elif a == "--oficio" and alvo == "ferramental":
             so_oficio = True
+            i += 1
         elif a == "--tools" and alvo == "ferramental":
             so_tools = True
+            i += 1
         elif a == "--completo" and alvo == "topologia":
             completo = True
+            i += 1
+        elif a == "--sobre" and alvo == "obra" and i + 1 < len(resto):
+            termo = resto[i + 1]
+            i += 2
+        elif a == "--eixo" and alvo == "obra" and i + 1 < len(resto):
+            eixo = resto[i + 1]
+            i += 2
         else:
             morre("acervo listar: opcao desconhecida %r\n\n%s" % (a, USO))
 
@@ -404,10 +619,13 @@ def main(argv):
         listar_conceitos(quero_json)
     elif alvo == "topologia":
         listar_topologia(quero_json, completo)
+    elif alvo == "obra":
+        listar_obra(termo, eixo, situacao, quero_json)
     elif so_tools:
         listar_ferramental_tools()
     else:
         listar_ferramental(quero_json, so_oficio)
+
 
 if __name__ == "__main__":
     main(sys.argv[1:])

@@ -31,6 +31,26 @@ def _lit(s):
     return "'" + str(s).replace("'", "''") + "'"
 
 
+def psql_exec(sql):
+    """Executa comando DDL/DML no rag_extractor."""
+    env = dict(os.environ)
+    env.setdefault("DOCKER_HOST", "unix:///run/user/1001/docker.sock")
+    try:
+        res = subprocess.run(
+            ["docker", "exec", "-i", PG, "psql", "-U", USR, "-d", DB, "-c", sql],
+            capture_output=True, text=True, env=env)
+    except FileNotFoundError:
+        morre("acervo identidade: 'docker' nao encontrado no PATH.", 3)
+
+    if res.returncode != 0:
+        stderr = (res.stderr or "").strip()
+        if "is not running" in stderr or "could not connect" in stderr or "Connection refused" in stderr:
+            morre("acervo identidade: banco de dados indisponivel (rag_extractor):\n%s" % stderr, 5)
+        morre("acervo identidade: psql falhou (rc=%s):\n%s" % (res.returncode, stderr), 3)
+
+    return res.stdout.strip()
+
+
 def psql_json(sql, alvo="query"):
     """Executa SELECT no rag_extractor e devolve estrutura desserializada de JSON."""
     env = dict(os.environ)

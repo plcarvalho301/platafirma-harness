@@ -20,6 +20,7 @@
 # especie proposta nao resolver REPROVA no dry-run, com o nome — e' o sinal de triagem fina
 # do passo (e), nao erro do cliente.
 import argparse
+import fnmatch
 import json
 import os
 import re
@@ -28,6 +29,9 @@ import sys
 import time
 
 import requests
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import _identidade
 
 HARNESS_DIR = os.path.dirname(os.path.dirname(os.path.realpath(__file__)))
 if HARNESS_DIR not in sys.path:
@@ -343,6 +347,105 @@ def tabela_plano(lote, pulos):
         L.append(f"{pos:<3} {arq:<52} {ver:<12} {det}")
     return "\n".join(L)
 
+def sha_do_repo_dir(repo_dir):
+    try:
+        r = subprocess.run([GIT, "-C", repo_dir, "rev-parse", "HEAD"],
+                           capture_output=True, text=True, check=True)
+        return r.stdout.strip()
+    except Exception:
+        return None
+
+def varre_repo(repo):
+    """Varre var/prod/<repo> (ou ~/AI/<repo>) e classifica por padrao_path."""
+    caminho_prod = os.path.join(os.path.expanduser("~/AI/var/prod"), repo)
+    if os.path.isdir(caminho_prod):
+        repo_dir = caminho_prod
+    else:
+        caminho_ai = os.path.join(RAIZ, repo)
+        if os.path.isdir(caminho_ai):
+            repo_dir = caminho_ai
+        else:
+            morre(f"acervo ingerir casa: repositorio '{repo}' nao encontrado em var/prod/{repo} nem em ~/AI/{repo}.", 1)
+
+    sha = sha_do_repo_dir(repo_dir) or "desconhecido"
+    sql_esp = "select coalesce(json_agg(row_to_json(t)), '[]') from (select slug, padrao_path from acervo.especie_tipo where padrao_path is not null) t;"
+    especies = _identidade.psql_json(sql_esp, "especies")
+
+    itens_aprovados = []
+    itens_reprovados = []
+
+    for root, dirs, files in os.walk(repo_dir):
+        if ".git" in root:
+            continue
+        for f in sorted(files):
+            rel = os.path.relpath(os.path.join(root, f), repo_dir)
+            if rel.startswith(".git") or f.startswith("README") or rel.startswith("abertura/"):
+                continue
+            if f.endswith((".pyc", ".swp", ".DS_Store", "~")):
+                continue
+
+            match_esp = None
+            dono_padrao = REPO_DONO.get(repo, "arquiteto")
+            for esp in especies:
+                for pat in esp.get("padrao_path", []):
+                    if fnmatch.fnmatch(rel, pat):
+                        match_esp = esp["slug"]
+                        if esp.get("dono"):
+                            dono_padrao = esp["dono"]
+                        break
+                if match_esp:
+                    break
+
+            if match_esp:
+                try:
+                    with open(os.path.join(repo_dir, rel), encoding="utf-8", errors="replace") as fh:
+                        corpo = fh.read()
+                except OSError:
+                    corpo = ""
+                titulo = None
+                for linha in corpo.splitlines()[:15]:
+                    t = linha.strip()
+                    if t.startswith("# ") and not t.startswith("##"):
+                        titulo = t.lstrip("#").strip()
+                        break
+                itens_aprovados.append({
+                    "repo": repo, "path": rel, "sha_ref": sha,
+                    "dono": dono_padrao, "tipo": match_esp,
+                    "natureza": "golden", "ciclo": "publicado",
+                    "titulo": titulo or os.path.splitext(os.path.basename(rel))[0],
+                    "corpo": corpo, "referentes": [],
+                    "veredito": "aprovado",
+                })
+            else:
+                itens_reprovados.append({
+                    "repo": repo, "path": rel, "sha_ref": sha,
+                    "veredito": "reprovado",
+                    "motivo": "nenhum padrao_path em acervo.especie_tipo cobre este caminho",
+                })
+
+    return repo, sha, repo_dir, itens_aprovados, itens_reprovados
+
+def tabela_plano_repo(repo, sha, aprovados, reprovados):
+    por_esp = {}
+    for it in aprovados:
+        esp = it["tipo"]
+        por_esp[esp] = por_esp.get(esp, 0) + 1
+
+    L = []
+    L.append(f"Plano de ingestao casa: {repo}@{sha[:12]} (dry-run)")
+    L.append(f"Total escaneado: {len(aprovados) + len(reprovados)} arquivos")
+    L.append("Aprovados por espécie:")
+    for esp, cnt in sorted(por_esp.items()):
+        L.append(f"  - {esp:<20} : {cnt} doc(s)")
+    L.append(f"Reprovados sem cobertura : {len(reprovados)} arquivo(s)")
+    if reprovados:
+        L.append("\nExemplos de reprovados (com motivo):")
+        for r in reprovados[:10]:
+            L.append(f"  - {r['path']}: {r['motivo']}")
+        if len(reprovados) > 10:
+            L.append(f"  ... e mais {len(reprovados) - 10} arquivo(s)")
+    return "\n".join(L)
+
 def main():
     ap = argparse.ArgumentParser(add_help=False)
     ap.add_argument("lista", nargs="?", default=None)
@@ -368,6 +471,61 @@ def main():
         cad = os.environ.get("PF_CADEIRA", "").strip().lower()
         cad = cad.removeprefix("claudinho-").removeprefix("claudinha-")
         autor = cad or "dados"
+
+    # Se recebeu nome de repositório direto (spec_acervo.md §6: acervo ingerir casa <repo>)
+    if not args.adr:
+        lista = args.lista or "platafirma-arquitetura"
+        if not os.path.isfile(lista):
+            repo, sha, repo_dir, aprovados, reprovados = varre_repo(lista)
+            if not args.apply:
+                if args.como_json:
+                    print(json.dumps({
+                        "repo": repo, "sha": sha,
+                        "aprovados": aprovados,
+                        "reprovados": reprovados,
+                    }, indent=2, ensure_ascii=False))
+                else:
+                    print(tabela_plano_repo(repo, sha, aprovados, reprovados))
+                sys.exit(0)
+
+            ordem_id = os.environ.get("PF_ORDEM_ID") or f"o{int(time.time())}"
+            sql_fonte = """
+            insert into acervo.casa_fonte (repo, sha, ingerido_em, ordem_id)
+            values (%s, %s, now(), %s)
+            on conflict (repo, sha) do update set
+              ingerido_em = excluded.ingerido_em,
+              ordem_id = excluded.ordem_id;
+            """ % (_identidade._lit(repo), _identidade._lit(sha), _identidade._lit(ordem_id))
+            _identidade.psql_exec(sql_fonte)
+
+            for it in aprovados:
+                sql_esp = "select id from acervo.especie_tipo where slug = %s;" % _identidade._lit(it["tipo"])
+                esp_rows = _identidade.psql_json("select coalesce(json_agg(row_to_json(t)), '[]') from (%s) t;" % sql_esp.strip().rstrip(";"))
+                esp_id = esp_rows[0]["id"] if esp_rows else None
+                if esp_id:
+                    sql_ins = """
+                    insert into acervo.casa (repo, path, sha, dono, especie_id, natureza, ciclo, titulo, corpo)
+                    values ({repo}, {path}, {sha}, {dono}, {esp_id}, {natureza}, {ciclo}, {titulo}, {corpo})
+                    on conflict (repo, path) do update set
+                      sha = excluded.sha,
+                      titulo = excluded.titulo,
+                      corpo = excluded.corpo,
+                      ciclo = excluded.ciclo;
+                    """.format(
+                        repo=_identidade._lit(it["repo"]),
+                        path=_identidade._lit(it["path"]),
+                        sha=_identidade._lit(it["sha_ref"]),
+                        dono=_identidade._lit(it["dono"]),
+                        esp_id=_identidade._lit(esp_id),
+                        natureza=_identidade._lit(it["natureza"]),
+                        ciclo=_identidade._lit(it["ciclo"]),
+                        titulo=_identidade._lit(it["titulo"]),
+                        corpo=_identidade._lit(it["corpo"]),
+                    )
+                    _identidade.psql_exec(sql_ins)
+
+            print(f"acervo ingerir casa: {len(aprovados)} doc(s) ingeridos em acervo.casa; gravado acervo.casa_fonte ({repo}@{sha[:12]}).")
+            sys.exit(0)
 
     # Fonte: --adr varre macro-global/ (todas as ADRs, passo a); senao a lista curada.
     if args.adr:

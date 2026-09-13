@@ -103,14 +103,23 @@ conforme() {
           --rm) shift; exec "$ATOS/stack" rm "$@" ;;
           *)    exec "$ATOS/stack" import "$@" ;;
         esac ;;
+    escrever:casa:*)
+        echo "acervo escrever casa $entidade: $entidade nasce em git, não se escreve no acervo. Caminho: write_file → repo commitar → release promover → acervo ingerir casa <repo>. escrever grava só: pagina, arquivo, ferramental, stack." >&2
+        exit 2 ;;
+    escrever:obra:*)
+        echo "acervo escrever obra: obra nasce fora e entra por acervo ingerir obra <raiz>, nunca por escrever." >&2
+        exit 2 ;;
     # --- casa: raiz de entidades (arq:0108) ---
     # A raiz vive na particao casa. `listar casa entidade` e a forma conforme;
     # o atalho `listar entidade` (sem particao) e tratado no case de $ATO abaixo.
     listar:casa:entidade)   exec "$ATOS/entidade" listar "$@" ;;
     ler:casa:entidade)      exec "$ATOS/entidade" listar "$@" ;;
-    # --- obra: conceito, objeto, bancada ---
+    # --- obra: conceito, objeto, bancada, obra ---
+    listar:obra:obra)       exec "$ATOS/listar" obra "$@" ;;
     listar:obra:conceito)   exec "$ATOS/listar" conceitos "$@" ;;
     ler:obra:objeto)        exec "$ATOS/baixar" "$@" ;;
+    curar:obra:lote)        exec "$ATOS/bancada" "$@" ;;
+    curar:casa:alias)       exec "$ATOS/curar" alias "$@" ;;
     bancada:obra:lote)      exec "$ATOS/bancada" "$@" ;;
     # --- ingerir por particao ---
     # Obra e registro seguem no cliente de obra (objeto-por-sha, MinIO, OCR, bancada).
@@ -159,6 +168,7 @@ case "$ATO" in
 
   # gramatica conforme (arq:0106)
   escrever)             conforme "$ATO" "$@" ;;
+  curar)                conforme "$ATO" "$@" ;;
   ingerir)
     # conforme: ingerir <particao> <raiz>; vigente: ingerir <raiz> (alias de `ingerir --lote`)
     case "${1:-}" in

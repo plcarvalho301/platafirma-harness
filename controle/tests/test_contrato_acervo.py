@@ -141,3 +141,69 @@ def test_identidade_inexistente_exit_1():
     assert "parecidos:" in r_res.stderr
     assert "vizinho:" in r_res.stderr
     assert "cura:" in r_res.stderr
+
+
+# --- Camada C: Contrato de Retorno ---
+
+def test_listar_casa_vazio_com_motivo():
+    r = subprocess.run([BIN, "listar", "casa", "adr", "--dono", "cadeira_inexistente_xyz"], capture_output=True, text=True)
+    assert r.returncode == 0
+    assert "motivo:" in r.stdout
+
+def test_listar_casa_situacao():
+    r = subprocess.run([BIN, "listar", "casa", "adr", "--situacao"], capture_output=True, text=True)
+    assert r.returncode == 0
+    assert "fonte:" in r.stdout
+    assert "ingerido:" in r.stdout
+    assert "servido:" in r.stdout
+    assert "vetorizado:" in r.stdout
+    assert "status:" in r.stdout
+
+def test_listar_obra_sobre_termo():
+    r = subprocess.run([BIN, "listar", "obra", "obra", "--sobre", "mathematical"], capture_output=True, text=True)
+    assert r.returncode == 0
+    assert "Proofs and Refutations" in r.stdout
+    assert "[titulo]" in r.stdout
+
+def test_listar_obra_situacao():
+    r = subprocess.run([BIN, "listar", "obra", "obra", "--sobre", "mathematical", "--situacao"], capture_output=True, text=True)
+    assert r.returncode == 0
+    assert "Proofs and Refutations" in r.stdout
+    assert "servivel:" in r.stdout
+    assert "degrau:" in r.stdout
+    assert "store:" in r.stdout
+    assert "impressao:" in r.stdout
+
+def test_listar_obra_vazio_com_motivo():
+    r = subprocess.run([BIN, "listar", "obra", "obra", "--sobre", "termo_completamente_inexistente_12345"], capture_output=True, text=True)
+    assert r.returncode == 0
+    assert "motivo:" in r.stdout
+    assert "varrido:" in r.stdout
+    assert "acervo.obra" in r.stdout
+
+def test_escrever_recusa_de_fronteira():
+    r = subprocess.run([BIN, "escrever", "casa", "adr", "x"], capture_output=True, text=True)
+    assert r.returncode == 2
+    assert "adr nasce em git, não se escreve no acervo." in r.stderr
+    assert "Caminho: write_file → repo commitar → release promover → acervo ingerir casa <repo>." in r.stderr
+    assert "escrever grava só: pagina, arquivo, ferramental, stack." in r.stderr
+
+def test_curar_casa_alias():
+    r_curar = subprocess.run([BIN, "curar", "casa", "alias", "conceito", "tempo-percebido", "teste-alias-tempo"], capture_output=True, text=True)
+    assert r_curar.returncode == 0
+    assert "vinculado" in r_curar.stdout
+
+    r_res = subprocess.run([BIN, "resolver", "conceito", "teste-alias-tempo"], capture_output=True, text=True)
+    assert r_res.returncode == 0
+    assert "via: alias" in r_res.stdout
+
+def test_ingerir_casa_dry_run():
+    r = subprocess.run([BIN, "ingerir", "casa", "platafirma-arquitetura"], capture_output=True, text=True)
+    assert r.returncode == 0
+    assert "Plano de ingestao casa:" in r.stdout
+    assert "Aprovados por espécie:" in r.stdout
+    assert "adr" in r.stdout
+    assert "spec" in r.stdout
+    assert "Reprovados sem cobertura" in r.stdout
+    assert "nenhum padrao_path em acervo.especie_tipo cobre este caminho" in r.stdout
+
