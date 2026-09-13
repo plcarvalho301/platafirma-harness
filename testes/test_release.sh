@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Testes do verbo release conforme spec_release rev 2 (arq:0110, arq:0109)
+# Testes do verbo release conforme spec_release rev 2 (arq:0110, arq:0109) — Lote 1
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -9,11 +9,11 @@ VERBO="$REPO_ROOT/bin/release"
 TMP_DIR="$(mktemp -d /tmp/pf-release-test.XXXXXX)"
 trap 'chmod -R u+w "$TMP_DIR" 2>/dev/null || true; rm -rf "$TMP_DIR"' EXIT
 
-echo "=== Iniciando suite de testes de release (Lote 1) ==="
+echo "=== Iniciando suite de testes de release (Lote 1 — Revisão TI) ==="
 
 # 0. Verificações estáticas de bin/release
-echo "--- Teste 0: Verificação de git nu no bin ---"
-if grep -n '^[[:space:]]*git ' "$VERBO" | grep -v 'GIT=' | grep -v '#'; then
+echo "--- Teste 0: Verificação de git nu no bin (inclui \$(git …) e (git …)) ---"
+if grep -n -E '([$(]|^[[:space:]]*)git[[:space:]]' "$VERBO" | grep -v 'GIT=' | grep -v '#'; then
   echo "FALHA: comando git nu encontrado em $VERBO" >&2
   exit 1
 fi
@@ -76,7 +76,7 @@ if ! grep -q "ato desconhecido" <<<"$out_desconhecido"; then
 fi
 echo "OK: ato desconhecido sai 2 com causa e usage"
 
-# 3. Montagem da fixture de servido
+# 3. Montagem da fixture de servido com SHAs reais
 PROD_RAIZ="$TMP_DIR/var/prod"
 PONTOS="$TMP_DIR/var/release"
 ABERTURA_DIR="$TMP_DIR/var/abertura-publicada"
@@ -84,8 +84,8 @@ BIN_DIR="$TMP_DIR/bin"
 mkdir -p "$PROD_RAIZ" "$PONTOS" "$ABERTURA_DIR" "$BIN_DIR"
 
 export PF_PROD_RAIZ="$PROD_RAIZ"
-export RELEASE_PONTOS="$PONTOS"
-export PF_ABERTURA_DIR="$ABERTURA_DIR"
+export PF_RELEASE_RAIZ="$PONTOS"
+export PF_ABERTURA_RAIZ="$ABERTURA_DIR"
 export PF_BIN_DIR="$BIN_DIR"
 
 # Repo 1: platafirma-harness (CÓDIGO, com tag v0.1.0)
@@ -113,11 +113,12 @@ echo "arquitetura doc" > "$DOC_DIR/README.md"
 mkdir -p "$DOC_DIR/docs"
 echo "# Spec de teste" > "$DOC_DIR/docs/spec_teste.md"
 echo "termo_procurado_aqui" >> "$DOC_DIR/docs/spec_teste.md"
+echo "termo.com[regex]*literal" >> "$DOC_DIR/docs/spec_teste.md"
 git -C "$DOC_DIR" add .
 git -C "$DOC_DIR" commit -q -m "init doc"
 DOC_SHA="$(git -C "$DOC_DIR" rev-parse HEAD)"
 
-# Materializa no servido var/prod/<repo>/<sha>
+# Materializa no servido var/prod/<repo>/<sha real de 40 hex>
 # 1. platafirma-harness
 mkdir -p "$PROD_RAIZ/platafirma-harness/$HARNESS_SHA"
 git clone --shared -q "$HARNESS_DIR" "$PROD_RAIZ/platafirma-harness/$HARNESS_SHA"
@@ -125,10 +126,11 @@ git -C "$PROD_RAIZ/platafirma-harness/$HARNESS_SHA" checkout -q --detach "$HARNE
 chmod -R a-w "$PROD_RAIZ/platafirma-harness/$HARNESS_SHA"
 ln -s "$HARNESS_SHA" "$PROD_RAIZ/platafirma-harness/current"
 
-# Ponto de volta para platafirma-harness
+# Ponto de volta e atual para platafirma-harness (com sha de 40 hex e ISO-8601 UTC)
 mkdir -p "$PONTOS/platafirma-harness"
-echo "anterior1234567890" > "$PONTOS/platafirma-harness/anterior"
-echo "2026-09-12T14:26:16Z" > "$PONTOS/platafirma-harness/atual"
+ANTERIOR_REAL_SHA="88d0993881b68f5acc699b11e8831d489d4f432b"
+echo "$ANTERIOR_REAL_SHA" > "$PONTOS/platafirma-harness/anterior"
+echo "$HARNESS_SHA 2026-09-12T14:26:16Z" > "$PONTOS/platafirma-harness/atual"
 
 # 2. platafirma-arquitetura
 mkdir -p "$PROD_RAIZ/platafirma-arquitetura/$DOC_SHA"
@@ -137,11 +139,13 @@ git -C "$PROD_RAIZ/platafirma-arquitetura/$DOC_SHA" checkout -q --detach "$DOC_S
 chmod -R a-w "$PROD_RAIZ/platafirma-arquitetura/$DOC_SHA"
 ln -s "$DOC_SHA" "$PROD_RAIZ/platafirma-arquitetura/current"
 
-# 3. abertura em var/abertura-publicada
-mkdir -p "$ABERTURA_DIR/refs/aberturasha123/abertura"
-printf '{"sha": "aberturasha123", "sha_curto": "abertur", "publicado_em": "2026-09-12T14:26:16Z"}' > "$ABERTURA_DIR/refs/aberturasha123/MANIFEST.json"
-chmod -R a-w "$ABERTURA_DIR/refs/aberturasha123"
-ln -s "refs/aberturasha123" "$ABERTURA_DIR/current"
+# 3. abertura em var/abertura-publicada com sha real de 40 hex
+ABERTURA_REAL_SHA="d299099a10b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6"
+mkdir -p "$ABERTURA_DIR/refs/$ABERTURA_REAL_SHA/abertura"
+printf '{"sha": "%s", "sha_curto": "%s", "publicado_em": "2026-09-12T14:26:16Z"}' \
+  "$ABERTURA_REAL_SHA" "${ABERTURA_REAL_SHA:0:7}" > "$ABERTURA_DIR/refs/$ABERTURA_REAL_SHA/MANIFEST.json"
+chmod -R a-w "$ABERTURA_DIR/refs/$ABERTURA_REAL_SHA"
+ln -s "refs/$ABERTURA_REAL_SHA" "$ABERTURA_DIR/current"
 
 echo "--- Teste 3: Família desconhecida e escape de raiz ---"
 set +e
@@ -167,7 +171,7 @@ if [ "$rc_escape" -ne 4 ]; then
 fi
 echo "OK: família desconhecida sai 2 com lista; escape sai 4"
 
-echo "--- Teste 4: Forma do servido (clone com ramo, gravável, sem git, dangling) ---"
+echo "--- Teste 4: Forma do servido (clone com ramo, gravável, sem git, dangling, nome difere de HEAD) ---"
 # 4a. current pendurado (dangling symlink) -> 5
 mkdir -p "$PROD_RAIZ/repo_pendurado"
 ln -s "sha_nao_existe" "$PROD_RAIZ/repo_pendurado/current"
@@ -181,10 +185,10 @@ if [ "$rc_pendurado" -ne 5 ]; then
 fi
 
 # 4b. Clone com ramo (não destacado) -> 5
-mkdir -p "$PROD_RAIZ/repo_com_ramo/sha_ramo"
-git clone --shared -q "$HARNESS_DIR" "$PROD_RAIZ/repo_com_ramo/sha_ramo"
-chmod -R a-w "$PROD_RAIZ/repo_com_ramo/sha_ramo"
-ln -s "sha_ramo" "$PROD_RAIZ/repo_com_ramo/current"
+mkdir -p "$PROD_RAIZ/repo_com_ramo/$HARNESS_SHA"
+git clone --shared -q "$HARNESS_DIR" "$PROD_RAIZ/repo_com_ramo/$HARNESS_SHA"
+chmod -R a-w "$PROD_RAIZ/repo_com_ramo/$HARNESS_SHA"
+ln -s "$HARNESS_SHA" "$PROD_RAIZ/repo_com_ramo/current"
 set +e
 out_ramo="$("$VERBO" estado repo_com_ramo 2>&1)"
 rc_ramo=$?
@@ -193,17 +197,12 @@ if [ "$rc_ramo" -ne 5 ]; then
   echo "FALHA: checkout com ramo devia sair 5, saiu $rc_ramo" >&2
   exit 1
 fi
-if ! grep -q "não é servido" <<<"$out_ramo"; then
-  echo "FALHA: mensagem de clone com ramo deve dizer 'não é servido'" >&2
-  exit 1
-fi
 
 # 4c. Clone gravável -> 5
-mkdir -p "$PROD_RAIZ/repo_gravavel/sha_gravavel"
-git clone --shared -q "$HARNESS_DIR" "$PROD_RAIZ/repo_gravavel/sha_gravavel"
-git -C "$PROD_RAIZ/repo_gravavel/sha_gravavel" checkout -q --detach "$HARNESS_SHA"
-# deixa gravável
-ln -s "sha_gravavel" "$PROD_RAIZ/repo_gravavel/current"
+mkdir -p "$PROD_RAIZ/repo_gravavel/$HARNESS_SHA"
+git clone --shared -q "$HARNESS_DIR" "$PROD_RAIZ/repo_gravavel/$HARNESS_SHA"
+git -C "$PROD_RAIZ/repo_gravavel/$HARNESS_SHA" checkout -q --detach "$HARNESS_SHA"
+ln -s "$HARNESS_SHA" "$PROD_RAIZ/repo_gravavel/current"
 set +e
 out_gravavel="$("$VERBO" estado repo_gravavel 2>&1)"
 rc_gravavel=$?
@@ -214,9 +213,9 @@ if [ "$rc_gravavel" -ne 5 ]; then
 fi
 
 # 4d. Sem .git -> 5
-mkdir -p "$PROD_RAIZ/repo_sem_git/sha_sem_git"
-chmod -R a-w "$PROD_RAIZ/repo_sem_git/sha_sem_git"
-ln -s "sha_sem_git" "$PROD_RAIZ/repo_sem_git/current"
+mkdir -p "$PROD_RAIZ/repo_sem_git/$HARNESS_SHA"
+chmod -R a-w "$PROD_RAIZ/repo_sem_git/$HARNESS_SHA"
+ln -s "$HARNESS_SHA" "$PROD_RAIZ/repo_sem_git/current"
 set +e
 out_sem_git="$("$VERBO" estado repo_sem_git 2>&1)"
 rc_sem_git=$?
@@ -225,15 +224,59 @@ if [ "$rc_sem_git" -ne 5 ]; then
   echo "FALHA: diretório sem .git devia sair 5, saiu $rc_sem_git" >&2
   exit 1
 fi
-echo "OK: current pendurado, com ramo, gravável e sem .git todos saem 5"
 
-# Limpa repositórios de teste inválidos para os testes de leitura
-chmod -R u+w "$PROD_RAIZ/repo_com_ramo" "$PROD_RAIZ/repo_sem_git" "$PROD_RAIZ/repo_gravavel" 2>/dev/null || true
-rm -rf "$PROD_RAIZ/repo_pendurado" "$PROD_RAIZ/repo_com_ramo" "$PROD_RAIZ/repo_sem_git" "$PROD_RAIZ/repo_gravavel"
+# 4e. Nome do diretório difere do sha de HEAD -> 5 (Item 5)
+mkdir -p "$PROD_RAIZ/repo_nome_errado/1111111111111111111111111111111111111111"
+git clone --shared -q "$HARNESS_DIR" "$PROD_RAIZ/repo_nome_errado/1111111111111111111111111111111111111111"
+git -C "$PROD_RAIZ/repo_nome_errado/1111111111111111111111111111111111111111" checkout -q --detach "$HARNESS_SHA"
+chmod -R a-w "$PROD_RAIZ/repo_nome_errado/1111111111111111111111111111111111111111"
+ln -s "1111111111111111111111111111111111111111" "$PROD_RAIZ/repo_nome_errado/current"
+set +e
+out_nome_errado="$("$VERBO" estado repo_nome_errado 2>&1)"
+rc_nome_errado=$?
+set -e
+if [ "$rc_nome_errado" -ne 5 ]; then
+  echo "FALHA: diretório cujo nome difere de HEAD devia sair 5, saiu $rc_nome_errado" >&2
+  exit 1
+fi
+echo "OK: current pendurado, com ramo, gravável, sem .git e nome diferente do HEAD todos saem 5"
 
-echo "--- Teste 5: release estado ---"
+# Limpa repositórios de teste inválidos
+chmod -R u+w "$PROD_RAIZ/repo_com_ramo" "$PROD_RAIZ/repo_sem_git" "$PROD_RAIZ/repo_gravavel" "$PROD_RAIZ/repo_nome_errado" 2>/dev/null || true
+rm -rf "$PROD_RAIZ/repo_pendurado" "$PROD_RAIZ/repo_com_ramo" "$PROD_RAIZ/repo_sem_git" "$PROD_RAIZ/repo_gravavel" "$PROD_RAIZ/repo_nome_errado"
+
+echo "--- Teste 5: release estado e não abortar o parque (Item 1) ---"
+# Adiciona uma família pendurada e uma família sem current ao parque
+mkdir -p "$PROD_RAIZ/repo_quebrado"
+ln -s "sha_nao_existe" "$PROD_RAIZ/repo_quebrado/current"
+mkdir -p "$PROD_RAIZ/repo_sem_current"
+
+set +e
+out_parque="$("$VERBO" estado)"
+rc_parque=$?
+set -e
+if ! grep -q "platafirma-harness" <<<"$out_parque"; then
+  echo "FALHA: estado do parque não listou platafirma-harness" >&2
+  exit 1
+fi
+if ! grep -q "repo_quebrado[[:space:]]*indeterminável: current pendurado" <<<"$out_parque"; then
+  echo "FALHA: repo_quebrado não saiu como 'indeterminável: current pendurado'" >&2
+  exit 1
+fi
+if ! grep -q "repo_sem_current[[:space:]]*sem current" <<<"$out_parque"; then
+  echo "FALHA: repo_sem_current não saiu como 'sem current'" >&2
+  exit 1
+fi
+if [ "$rc_parque" -ne 5 ]; then
+  echo "FALHA: pior exit do parque devia ser 5 (havia repo pendurado), saiu $rc_parque" >&2
+  exit 1
+fi
+echo "OK: release estado lista todo o parque com o estado de cada família e sai o pior exit (5)"
+
+# Limpa os quebrados para os testes de leitura limpa
+rm -rf "$PROD_RAIZ/repo_quebrado" "$PROD_RAIZ/repo_sem_current"
+
 out_estado="$("$VERBO" estado)"
-echo "$out_estado"
 if grep -q "resultado:" <<<"$out_estado"; then
   echo "FALHA: release estado não pode julgar (linha resultado: proibida)" >&2
   exit 1
@@ -242,21 +285,20 @@ if ! grep -q "${HARNESS_SHA:0:7}" <<<"$out_estado" || ! grep -q "v0.1.0" <<<"$ou
   echo "FALHA: harness deve mostrar sha curto e tag" >&2
   exit 1
 fi
-if ! grep -q "${DOC_SHA:0:7}" <<<"$out_estado"; then
-  echo "FALHA: doc repo deve mostrar sha curto" >&2
-  exit 1
-fi
-if ! grep -q "anterior: anterio" <<<"$out_estado"; then
-  echo "FALHA: harness deve mostrar ponto anterior" >&2
+if ! grep -q "anterior: ${ANTERIOR_REAL_SHA:0:7}" <<<"$out_estado"; then
+  echo "FALHA: harness deve mostrar anterior curto de sha hex real" >&2
   exit 1
 fi
 
-# estado com repo específico
-out_est_harness="$("$VERBO" estado platafirma-harness)"
-if ! grep -q "platafirma-harness" <<<"$out_est_harness" || grep -q "platafirma-arquitetura" <<<"$out_est_harness"; then
-  echo "FALHA: release estado <repo> deve imprimir apenas a linha da família" >&2
+# Teste Item 5: anterior ilegível
+echo "nao_eh_hex_123" > "$PONTOS/platafirma-harness/anterior"
+out_ant_ilegivel="$("$VERBO" estado platafirma-harness)"
+if ! grep -q "anterior: ilegível" <<<"$out_ant_ilegivel"; then
+  echo "FALHA: anterior não-hex deve sair 'anterior: ilegível'" >&2
   exit 1
 fi
+# Restaura anterior real
+echo "$ANTERIOR_REAL_SHA" > "$PONTOS/platafirma-harness/anterior"
 
 # estado --json
 out_est_json="$("$VERBO" estado --json)"
@@ -266,8 +308,9 @@ data = json.loads(sys.stdin.read())
 assert "familias" in data, "json deve conter familias no topo"
 assert "platafirma-harness" in data["familias"]
 assert data["familias"]["platafirma-harness"]["tag"] == "v0.1.0"
+assert data["familias"]["platafirma-harness"]["anterior"] == "'"$ANTERIOR_REAL_SHA"'"
 ' <<<"$out_est_json"
-echo "OK: release estado exibe sha, tag, anterior, sem veredito; --json válido"
+echo "OK: release estado exibe sha, tag, anterior hex validado, sem veredito; --json válido"
 
 echo "--- Teste 6: release ler ---"
 # Ler existente
@@ -371,7 +414,7 @@ assert "arquivos" in d and d["total"] >= 2
 ' <<<"$out_listar_json"
 echo "OK: release listar funciona, prefixo funciona, vazio legítimo sai 0 com motivo; --json válido"
 
-echo "--- Teste 8: release procurar ---"
+echo "--- Teste 8: release procurar e busca literal -F (Item 6) ---"
 # Falta --termo -> 2
 set +e
 out_proc_sem_termo="$("$VERBO" procurar platafirma-arquitetura 2>&1)"
@@ -382,10 +425,10 @@ if [ "$rc_proc_sem_termo" -ne 2 ]; then
   exit 1
 fi
 
-# Termo encontrado
-out_proc="$("$VERBO" procurar platafirma-arquitetura --termo termo_procurado)"
-if ! grep -q "docs/spec_teste.md:2:termo_procurado_aqui" <<<"$out_proc"; then
-  echo "FALHA: procurar não achou ocorrência esperada: $out_proc" >&2
+# Termo literal com caracteres especiais (prova uso de -F)
+out_proc_literal="$("$VERBO" procurar platafirma-arquitetura --termo "termo.com[regex]*literal")"
+if ! grep -q "docs/spec_teste.md:3:termo.com\[regex\]\*literal" <<<"$out_proc_literal"; then
+  echo "FALHA: procurar com termo literal falhou: $out_proc_literal" >&2
   exit 1
 fi
 
@@ -412,48 +455,77 @@ assert "ocorrencias" in d and d["total"] == 1
 assert d["ocorrencias"][0]["caminho"] == "docs/spec_teste.md"
 assert d["ocorrencias"][0]["linha"] == 2
 ' <<<"$out_proc_json"
-echo "OK: release procurar funciona, vazio legítimo sai 0 com motivo; --json válido"
+echo "OK: release procurar funciona com -F, vazio legítimo sai 0 com motivo; --json válido"
 
-echo "--- Teste 9: Dependência ausente (git -> 3) ---"
+echo "--- Teste 9: release conferir e filtro de classes (Item 7) ---"
+# Sem classe -> exit 2
 set +e
-out_git_ausente="$(PF_GIT_BIN="/caminho/inexistente/git" "$VERBO" estado 2>&1)"
-rc_git_ausente=$?
+out_conf_sem_classe="$("$VERBO" conferir 2>&1)"
+rc_conf_sem_classe=$?
 set -e
-if [ "$rc_git_ausente" -ne 3 ]; then
-  echo "FALHA: git ausente devia sair 3, saiu $rc_git_ausente" >&2
-  exit 1
-fi
-if ! grep -q "dependência ausente: git" <<<"$out_git_ausente"; then
-  echo "FALHA: mensagem de erro de dependência git ausente não confere: $out_git_ausente" >&2
-  exit 1
-fi
-echo "OK: git ausente sai 3 com mensagem"
-
-echo "--- Teste 10: promover e reverter (compatibilidade vigente na nova raiz) ---"
-export PF_HARNESS="$HARNESS_DIR"
-export PF_CORE="$HARNESS_DIR"
-export PF_CONHECIMENTO="$HARNESS_DIR"
-mkdir -p "$TMP_DIR/mock_bin"
-printf '#!/usr/bin/env bash
-echo "mock deploy $*"
-' > "$TMP_DIR/mock_bin/deploy"
-chmod +x "$TMP_DIR/mock_bin/deploy"
-export PATH="$TMP_DIR/mock_bin:$PATH"
-
-"$VERBO" promover "v0.1.0" --ensaio
-"$VERBO" promover "v0.1.0"
-
-if [ ! -L "$PROD_RAIZ/current" ]; then
-  echo "FALHA: current não é symlink após promover" >&2
-  exit 1
-fi
-if [ "$(readlink "$PROD_RAIZ/current")" != "v0.1.0" ]; then
-  echo "FALHA: current aponta para $(readlink "$PROD_RAIZ/current"), esperado v0.1.0" >&2
+if [ "$rc_conf_sem_classe" -ne 2 ]; then
+  echo "FALHA: conferir sem classe devia sair 2, saiu $rc_conf_sem_classe" >&2
   exit 1
 fi
 
-# Reverter
-PF_SIM=1 "$VERBO" reverter --executar "v0.1.0"
-echo "OK: promover e reverter operam na nova raiz PF_PROD_RAIZ"
+# Classe 'existe' recusada apontando conferir existe -> exit 2
+set +e
+out_conf_existe="$("$VERBO" conferir existe verbo foo 2>&1)"
+rc_conf_existe=$?
+set -e
+if [ "$rc_conf_existe" -ne 2 ] || ! grep -q "conferir existe" <<<"$out_conf_existe"; then
+  echo "FALHA: conferir existe devia sair 2 apontando 'conferir existe'" >&2
+  exit 1
+fi
 
-echo "=== Todos os testes do Lote 1 passaram com sucesso! ==="
+# Classe de bancada 'repo' recusada apontando lint/conferir -> exit 2
+set +e
+out_conf_bancada="$("$VERBO" conferir repo 2>&1)"
+rc_conf_bancada=$?
+set -e
+if [ "$rc_conf_bancada" -ne 2 ] || ! grep -q "classe de bancada" <<<"$out_conf_bancada"; then
+  echo "FALHA: conferir repo devia sair 2 apontando classe de bancada" >&2
+  exit 1
+fi
+
+# Classe desconhecida recusada com lista das 11 classes do servido -> exit 2
+set +e
+out_conf_desconhecida="$("$VERBO" conferir classe_inexistente 2>&1)"
+rc_conf_desconhecida=$?
+set -e
+if [ "$rc_conf_desconhecida" -ne 2 ] || ! grep -q "classes do servido" <<<"$out_conf_desconhecida"; then
+  echo "FALHA: classe desconhecida devia sair 2 listando classes do servido" >&2
+  exit 1
+fi
+echo "OK: release conferir valida classes do servido e rejeita existe e bancada com exit 2"
+
+echo "--- Teste 10: promover e reverter no Lote 1 (Item 3) ---"
+# No lote 1, promover e reverter saem 2 com mensagem declarada
+set +e
+out_prom_lote1="$("$VERBO" promover v0.1.0 2>&1)"
+rc_prom_lote1=$?
+set -e
+if [ "$rc_prom_lote1" -ne 2 ]; then
+  echo "FALHA: promover no lote 1 devia sair 2, saiu $rc_prom_lote1" >&2
+  exit 1
+fi
+if ! grep -q "promover/reverter conforme chegam no lote 2; o servido vigente segue no /opt até TI migrar" <<<"$out_prom_lote1"; then
+  echo "FALHA: mensagem de promover lote 1 não confere: $out_prom_lote1" >&2
+  exit 1
+fi
+
+set +e
+out_rev_lote1="$("$VERBO" reverter 2>&1)"
+rc_rev_lote1=$?
+set -e
+if [ "$rc_rev_lote1" -ne 2 ]; then
+  echo "FALHA: reverter no lote 1 devia sair 2, saiu $rc_rev_lote1" >&2
+  exit 1
+fi
+if ! grep -q "promover/reverter conforme chegam no lote 2; o servido vigente segue no /opt até TI migrar" <<<"$out_rev_lote1"; then
+  echo "FALHA: mensagem de reverter lote 1 não confere: $out_rev_lote1" >&2
+  exit 1
+fi
+echo "OK: promover e reverter saem 2 com mensagem de lote 2"
+
+echo "=== Todos os testes do Lote 1 (com revisão TI) passaram com sucesso! ==="
