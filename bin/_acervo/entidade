@@ -117,44 +117,20 @@ def listar_entidade(especie, dona, quero_json):
 
 # --------------------------------------------------------------------- resolver
 
-SQL_RESOLVE = """
-select coalesce(json_agg(row_to_json(t)), '[]') from (
-  select e.id, e.chave_humana, 'exato' as via
-    from acervo.entidade e
-   where e.classe = {classe} and e.chave_humana = {alvo}
-  union all
-  select e.id, e.chave_humana, 'alias' as via
-    from acervo.entidade e
-    join acervo.entidade_alias a on a.entidade_id = e.id
-   where e.classe = {classe} and a.alias = {alvo}
-     and not exists (select 1 from acervo.entidade e2
-                      where e2.classe = {classe} and e2.chave_humana = {alvo})
-) t;
-"""
-
-def _classe_existe(classe):
-    got = _psql_json(
-        "select coalesce(json_agg(slug),'[]') from acervo.entidade_classe "
-        "where slug = %s;" % _lit(classe), "classe")
-    return bool(got)
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import _identidade
 
 def resolver(classe, alvo, quero_json):
-    if not _classe_existe(classe):
-        vivas = _psql_json(
-            "select coalesce(json_agg(slug order by slug),'[]') "
-            "from acervo.entidade_classe;", "classes")
-        morre("acervo resolver: classe '%s' nao existe em acervo.entidade_classe.\n"
-              "  classes vivas: %s" % (classe, ", ".join(vivas)), 2)
-    sql = SQL_RESOLVE.format(classe=_lit(classe), alvo=_lit(alvo))
-    cand = _psql_json(sql, "resolver")
+    canon, num_sem_serie = _identidade.validar_forma(classe, alvo)
+    cand = _identidade.resolver_canon(classe, canon, num_sem_serie)
     if not cand:
         if quero_json:
             print(json.dumps({"classe": classe, "chave": alvo, "id": None,
                               "achou": False}, ensure_ascii=False))
         else:
-            sys.stderr.write("acervo resolver: '%s' nao resolve em '%s' "
-                             "(nenhuma ficha com essa chave nem alias).\n"
-                             % (alvo, classe))
+            diag = _identidade.gerar_negativa(classe, alvo)
+            sys.stderr.write("acervo resolver: '%s' nao existe em '%s'.\n%s\n"
+                             % (alvo, classe, diag))
         return 1
     if len(cand) > 1:
         sys.stderr.write("acervo resolver: '%s' ambiguo em '%s' (%d fichas):\n"
@@ -166,9 +142,12 @@ def resolver(classe, alvo, quero_json):
     c = cand[0]
     if quero_json:
         print(json.dumps({"classe": classe, "chave": alvo, "id": c["id"],
+                          "chave_humana": c["chave_humana"],
                           "via": c["via"], "achou": True}, ensure_ascii=False))
     else:
         print(c["id"])
+        if c.get("via") == "alias":
+            print("via: alias")
     return 0
 
 USO = """uso:

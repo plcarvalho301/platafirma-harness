@@ -113,35 +113,21 @@ def listar(especie, quero_json):
     return 0
 
 
-def _cond_codigo_adr(especie, seletor):
-    """`arq:0101`, `seg:0011` ou `0101` -> condicao por path da ADR. None se nao casar.
-
-    A nomenclatura de ADR promete `acervo ler casa adr <codigo>` e o codigo NAO e coluna:
-    e' derivado de `<registro>:<numero>`, ambos reconstruiveis do path (0106). Enquanto o
-    fichario da raiz (acervo.entidade) estiver vazio, o referente nao existe para resolver
-    por ele — o path e' a unica identidade viva, e o par (registro, numero) mapeia nele sem
-    ambiguidade: numero e' unico por registro.
-    """
-    if especie != "adr":
-        return None
-    m = re.match(r"^(?:([a-z]+):)?(\d{1,4})$", seletor.strip())
-    if not m:
-        return None
-    registro = (m.group(1) or "arq").lower()
-    numero = m.group(2).zfill(4)
-    if registro == "arq":
-        prefixo = "macro-global/decisions/%s-" % numero
-    else:
-        cap = "seguranca" if registro == "seg" else registro
-        prefixo = "macro-global/capabilities/%s/decisions/%s-" % (cap, numero)
-    return "c.path like %s" % _lit(prefixo + "%")
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import _identidade
 
 def ler(especie, seletor, quero_json):
     """Uma linha pela identidade: seletor casa com path (ou repo@path se vier o repo)."""
     _valida_especie(especie)
-    cond_adr = _cond_codigo_adr(especie, seletor)
-    if cond_adr:
-        cond = cond_adr
+    if especie == "adr" and "@" not in seletor:
+        ficha = _identidade.resolver_identidade("adr", seletor)
+        substrato = _identidade.obter_substrato(ficha["id"])
+        if not substrato or not substrato.get("repo") or not substrato.get("path"):
+            morre("acervo casa: ficha '%s' (%s) sem substrato em acervo.entidade_suporte."
+                  % (ficha["id"], ficha.get("chave_humana", seletor)), 3)
+        repo = substrato["repo"]
+        path = substrato["path"]
+        cond = "c.repo=%s and c.path=%s" % (_lit(repo), _lit(path))
     elif "@" in seletor:
         repo, path = seletor.split("@", 1)
         cond = "c.repo=%s and c.path=%s" % (_lit(repo), _lit(path))
@@ -158,8 +144,9 @@ def ler(especie, seletor, quero_json):
     )
     linhas = [l for l in _psql(sql_meta).splitlines() if l.strip()]
     if not linhas:
-        morre("acervo casa: nada da especie '%s' com seletor '%s' em acervo.casa."
-              % (especie, seletor), 1)
+        diag = _identidade.gerar_negativa(especie, seletor)
+        morre("acervo casa: nada da especie '%s' com seletor '%s' em acervo.casa.\n%s"
+              % (especie, seletor, diag), 1)
     if len(linhas) > 1:
         achados = "\n".join("    - %s@%s" % tuple(l.split("|")[:2]) for l in linhas[:10])
         morre("acervo casa: seletor '%s' ambiguo (%d docs); use repo@path:\n%s"
