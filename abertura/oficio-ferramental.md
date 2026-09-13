@@ -32,6 +32,7 @@ acervo
 motor
 infra
 deploy
+release
 conferir
 acesso
 descansar
