@@ -723,14 +723,49 @@ cmd_conferir() {
     exit 2
   fi
 
-  local conferir_bin; conferir_bin="$(achar_verbo conferir)"
-
-  if [ -n "$conferir_bin" ]; then
-    exec "$conferir_bin" "$classe" "$@"
-  else
-    printf 'release: dependência ausente: conferir não encontrado\n' >&2
+  # a implementacao e sub-ato deste verbo (arq:0110 §1): bin/_release/conferir/conferir.py
+  local impl; impl="$(dirname "$(readlink -f "$0")")/_release/conferir/conferir.py"
+  if [ ! -f "$impl" ]; then
+    printf 'release: dependência ausente: implementacao de conferir nao encontrada em %s\n' "$impl" >&2
     exit 3
   fi
+
+  # --ref <rev>: a classe `verbo` mede a revisao candidata a promocao (arq:0110 §9), materializada
+  # em worktree destacado a partir do espelho da familia que serve verbos; as demais medem current.
+  local ref="" resto=()
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --ref) shift; [ $# -gt 0 ] || { printf 'release: erro: --ref exige uma rev\n' >&2; exit 2; }; ref="$1"; shift ;;
+      *) resto+=("$1"); shift ;;
+    esac
+  done
+  if [ -n "$ref" ]; then
+    if [ "$classe" != "verbo" ]; then
+      printf 'release: erro: --ref so mede a classe verbo nesta rev; %s mede o current\n' "$classe" >&2
+      exit 2
+    fi
+    local esp; esp="$(espelho_de "$FAMILIA_BIN")"
+    if [ ! -d "$esp" ]; then
+      printf 'release: erro: familia %s sem espelho — promova uma vez antes de medir por --ref\n' "$FAMILIA_BIN" >&2
+      exit 2
+    fi
+    "$GIT" --git-dir="$esp" fetch -q --prune origin '+refs/heads/*:refs/remotes/origin/*' '+refs/tags/*:refs/tags/*' 2>/dev/null || true
+    local sha; sha="$(resolver_rev "$FAMILIA_BIN" "$ref")" || {
+      printf 'release: recusa: rev '\''%s'\'' nao esta no forge de %s\n' "$ref" "$FAMILIA_BIN" >&2
+      exit 4
+    }
+    local wt; wt="$(mktemp -d "${TMPDIR:-/tmp}/pf-release-ref.XXXXXX")"
+    if ! "$GIT" --git-dir="$esp" worktree add -q --detach "$wt/arvore" "$sha" 2>/dev/null; then
+      rm -rf "$wt"; printf 'release: indeterminavel: nao consegui materializar %s para medir\n' "${sha:0:7}" >&2; exit 5
+    fi
+    printf 'ref:       %s materializada em %s (classe verbo mede a rev, nao o current)\n' "${sha:0:7}" "$wt/arvore" >&2
+    local rc=0
+    PF_BIN_DIR="$wt/arvore/bin" PF_HARNESS_DIR="$wt/arvore" python3 "$impl" "$classe" "${resto[@]}" || rc=$?
+    "$GIT" --git-dir="$esp" worktree remove --force "$wt/arvore" 2>/dev/null || true
+    rm -rf "$wt"
+    exit "$rc"
+  fi
+  exec python3 "$impl" "$classe" "${resto[@]}"
 }
 
 # ---- promoção: helpers -----------------------------------------------------------
