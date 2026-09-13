@@ -44,14 +44,9 @@ FIM
 }
 
 listar_stacks() {
-  if command -v deploy >/dev/null 2>&1; then
-    local st
-    st="$(deploy 2>&1 | awk '/^  [a-z0-9-]+/ {print $1}' || true)"
-    if [ -n "$st" ]; then
-      echo "$st"
-      return
-    fi
-  fi
+  # A lista das 12 stacks e canonica em STACKS_DEFAULT (conferida contra o
+  # registro deploy). Nao se deriva do texto de help do `deploy`, que mistura
+  # a secao de uso com a de stacks (bug do card #3014: capturava 'deploy').
   printf '%s\n' "${STACKS_DEFAULT[@]}"
 }
 
