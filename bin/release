@@ -6,20 +6,21 @@
 # use para: saber que sha esta no ar e desde quando (estado), ler/listar/procurar um arquivo do que esta servido (ler, listar, procurar), medir o servido contra a regua de uma classe (conferir), por um sha ou tag no ar (promover) e voltar ao anterior (reverter)
 # atos: estado (leitura, operacao), listar (leitura, operacao), ler (leitura, operacao), procurar (leitura, operacao), conferir (leitura, operacao), promover (escrita, operacao), reverter (escrita, operacao)
 # forma: texto
-# le: estado=servido,porta
-# le: listar=servido
-# le: ler=servido
-# le: procurar=servido
-# le: conferir=servido,porta
-# le: promover=forge,servido,registro-de-stacks
-# le: reverter=servido,ponto-de-volta
+# le: estado=release,arquivo-local
+# le: listar=release
+# le: ler=release
+# le: procurar=release
+# le: conferir=release,arquivo-local
+# le: promover=release,repo,acervo.casa
+# le: reverter=release,arquivo-local
 # escreve: estado=nada
 # escreve: listar=nada
 # escreve: ler=nada
 # escreve: procurar=nada
 # escreve: conferir=nada
-# escreve: promover=servido,path,ponto-de-volta,stacks
-# escreve: reverter=servido,path,ponto-de-volta,stacks
+# escreve: promover=release,arquivo-local
+# escreve: reverter=release,arquivo-local
+# (recursos pelo enum de ferramental_recurso; porta, forge e stack pendem id proprio - dados)
 # ambiente: PF_PROD_RAIZ[=$HOME/AI/var/prod] porta · PF_ABERTURA_RAIZ[=$HOME/AI/var/abertura-publicada] porta · PF_RELEASE_RAIZ[=$HOME/AI/var/release] porta · PF_BIN_DIR[=$HOME/AI/bin] porta · PF_REPO_RAIZ[=$HOME/AI] porta (só a URL do origin na primeira promoção de uma família) · PF_CADEIRA porta (lida) · HOME
 # depende: git · deploy (promover/reverter de família com stack) · acervo (registro de stacks) · python3 · jq · rede ao forge (promover) · porta (hora de arranque) · systemd de usuário (systemd-run agenda o restart fora do processo)
 # substitui: readlink current · git -C var/prod/… describe|rev-parse|ls-files|show|grep · git worktree add --detach · ln -sfn + mv -T · chmod -R a-w · conferir <classe> · deploy <stack> promover|reverter · systemctl --user restart ops-mcp
