@@ -75,7 +75,9 @@ def _le_cabecalho(path):
     so omite a parte, nunca inventa. Mesma convencao de chaves que `conferir` parseia."""
     desc, campos, lendo_desc = [], {}, False
     with open(path, errors="replace") as f:
-        linhas = [next(f, "") for _ in range(45)]
+        # 80 e nao 45: `le:`/`escreve:` sao uma linha POR ATO, e verbo de 19 atos (repo)
+        # passa de 45 linhas de cabecalho; cortar aqui registrava ato sem acesso (morre).
+        linhas = [next(f, "") for _ in range(80)]
     for l in linhas:
         s = l.strip()
         if not s.startswith("#") or s.startswith("#!"):

@@ -6,7 +6,45 @@
 # forma: predicado (estado, diff) / lista (listar, procurar, historico, pr-listar) / texto (ler, pr-diff) / fluxo (sanear)
 # use para: ler, listar ou procurar o que esta na bancada, ainda nao servido (ler, listar, procurar); historico de um caminho e diff contra origin/main (historico, diff); estado do clone; ramo por card; commitar so o que a sessao tocou; empurrar; PR de ponta a ponta (pr-abrir, pr-listar, pr-ver, pr-diff, pr-merge); atualizar e sanear o clone; git cru contido (git)
 # atos: estado (leitura, operacao), listar (leitura, operacao), ler (leitura, operacao), procurar (leitura, operacao), historico (leitura, operacao), diff (leitura, operacao), commitar (escrita, operacao), ramo (escrita, operacao), atualizar (escrita, operacao), abrir (escrita, operacao), clonar (escrita, operacao), empurrar (escrita, forge), pr-abrir (escrita, forge), pr-listar (leitura, forge), pr-ver (leitura, forge), pr-diff (leitura, forge), pr-merge (escrita, forge), sanear (escrita, forge), git (escrita, operacao)
-# escreve: var/wt/<repo>/<cadeira> (objetos e refs) · origin (refs, PR) · wip/ (só sanear) · nada (leitura)
+# le: estado=repo
+# le: listar=repo
+# le: ler=repo
+# le: procurar=repo
+# le: historico=repo
+# le: diff=repo
+# le: commitar=repo,arquivo-local
+# le: ramo=repo
+# le: atualizar=repo
+# le: abrir=repo
+# le: clonar=repo
+# le: empurrar=repo
+# le: pr-abrir=repo
+# le: pr-listar=repo
+# le: pr-ver=repo
+# le: pr-diff=repo
+# le: pr-merge=repo
+# le: sanear=repo
+# le: git=repo
+# escreve: estado=nada
+# escreve: listar=nada
+# escreve: ler=nada
+# escreve: procurar=nada
+# escreve: historico=nada
+# escreve: diff=nada
+# escreve: commitar=repo
+# escreve: ramo=repo
+# escreve: atualizar=repo
+# escreve: abrir=repo
+# escreve: clonar=repo
+# escreve: empurrar=repo
+# escreve: pr-abrir=repo
+# escreve: pr-listar=nada
+# escreve: pr-ver=nada
+# escreve: pr-diff=nada
+# escreve: pr-merge=repo
+# escreve: sanear=repo
+# escreve: git=repo
+# (recursos pelo enum de ferramental_recurso; o forge - origin, PR - pende id proprio, e ate la sai como repo; commitar le o log da porta em arquivo-local)
 # consome: porta@ops-log
 # ambiente: PF_REPO_RAIZ[=$HOME/AI] porta · PF_CADEIRA porta (lida) · PF_SESSAO porta (lida) · PF_OPS_LOG_DIR[=$HOME/AI/var/log/ops] porta · HOME
 # depende: git · gh (pr-*, empurrar, atualizar, clonar) · rede ao forge
