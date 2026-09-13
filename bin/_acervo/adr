@@ -1,0 +1,311 @@
+#!/usr/bin/env python3
+# acervo adr — consulta e leitura do registro de decisões de arquitetura (ADR).
+# capacidade: conhecimento
+# dono: claudinho-dados / claudinho-arquiteto
+#
+# Formas de invocação (arq:0094):
+#   acervo adr lista                      lista todas as ADRs (<codigo>  <titulo>), global no topo
+#   acervo adr <codigo>                   exibe o texto cru da ADR (arq:0074, seg:0003, infra:0001, 74)
+#   acervo adr --<entidade> <valor>       filtra a lista por campo-tag (--cap, --stack); combina com E
+#
+# Registros varridos:
+#   macro-global/decisions/                    (arq)
+#   macro-global/capabilities/<cap>/decisions/ (arq/seg -> seg, infra, integracao)
+import glob
+import os
+import re
+import signal
+import sys
+
+try:
+    signal.signal(signal.SIGPIPE, signal.SIG_DFL)
+except (AttributeError, ValueError):
+    pass
+
+RAIZ = os.environ.get("PF_RAIZ", os.path.expanduser("~/AI"))
+ARQ_REPO = os.environ.get("ARQUITETURA_REPO") or os.path.join(RAIZ, "platafirma-arquitetura")
+HARNESS_REPO = os.environ.get("HARNESS_REPO") or os.path.join(RAIZ, "platafirma-harness")
+
+USO = """uso:
+  acervo adr lista                      todas as ADRs (<codigo>  <titulo>), global no topo
+  acervo adr <codigo>                   devolve a ADR inteira (texto cru do .md)
+  acervo adr --<entidade> <valor>       filtra a lista por campo-tag do cabeçalho
+
+Códigos aceitos: arq:0074, seg:0003, infra:0001, integracao:0001 (sem prefixo assume 'arq').
+Flags taggeáveis derivadas do canon: --cap (ou --capability), --stack.
+Filtros combinam por E lógico. Read-only."""
+
+
+def morre(msg, code=2):
+    sys.stderr.write(msg.rstrip("\n") + "\n")
+    sys.exit(code)
+
+
+def get_capability_canon():
+    """Deriva o canon de capacidades nível 1 de docs/arquitetura-negocio-operacao.md §1."""
+    mapa = os.path.join(ARQ_REPO, "docs", "arquitetura-negocio-operacao.md")
+    caps = set()
+    if os.path.isfile(mapa):
+        try:
+            with open(mapa, "r", encoding="utf-8") as f:
+                text = f.read()
+            sec1 = text.split("## 2.")[0]
+            tier_lines = re.findall(r"^\|\s*(?:Direção|Core|Segurança|Suporte)\s*\|\s*([^|]+)\|", sec1, re.M)
+            for tl in tier_lines:
+                for c in re.findall(r"`([a-z-]+)`", tl):
+                    caps.add(c.lower())
+        except OSError:
+            pass
+    if not caps:
+        caps = {
+            "acesso", "ativo", "canal", "comunicacao", "conhecimento", "construcao",
+            "decisao", "expediente", "incidente", "infra", "mensagem", "motor",
+            "mudanca", "organizacao", "politica", "recuperacao", "risco", "solicitacao",
+            "trabalho", "verificacao"
+        }
+    caps.add("global")
+    return caps
+
+
+def get_stack_canon():
+    """Deriva o canon de stacks da topologia de deploy (acervo.stack seed)."""
+    sf = os.path.join(HARNESS_REPO, "sessao", "migracao", "0076c_acervo_stack_seed.sql")
+    stacks = set()
+    if os.path.isfile(sf):
+        try:
+            with open(sf, "r", encoding="utf-8") as f:
+                content = f.read()
+            m = re.search(r"insert into acervo\.stack[^(]*\([^)]*\)\s*values\s*(.*?)\s*on conflict", content, re.S | re.I)
+            if m:
+                slugs = re.findall(r"\(\s*\'([a-z0-9-]+)\'", m.group(1))
+                stacks = set(s.lower() for s in slugs)
+        except OSError:
+            pass
+    if not stacks:
+        stacks = {
+            "acervo-api", "chat", "conhecimento", "core", "harness-controle",
+            "harness-sessao", "jaiminho", "motor", "rag", "rastreador", "rastreador-tela"
+        }
+    return stacks
+
+
+def extract_title(first_line):
+    """Extrai o título limpo a partir da linha de cabeçalho # NNNN — <titulo>."""
+    t = first_line.lstrip("#").strip()
+    for sep in [" — ", " -- ", " - "]:
+        if sep in t:
+            return t.split(sep, 1)[1].strip()
+    m = re.match(r"^(?:[a-z/]+:?)?\d{1,4}\s*[-—]\s*(.*)$", t)
+    if m:
+        return m.group(1).strip()
+    return t
+
+
+class ADRRecord:
+    def __init__(self, registro, numero, slug, caminho, raw_content):
+        self.registro = registro  # 'arq', 'seg', 'infra', 'integracao', etc.
+        self.numero = numero.zfill(4)
+        self.slug = slug
+        self.caminho = caminho
+        self.raw_content = raw_content
+        self.codigo = f"{self.registro}:{self.numero}"
+        
+        first_line = raw_content.splitlines()[0] if raw_content.splitlines() else ""
+        self.titulo = extract_title(first_line)
+        
+        # Parse header tags before ##
+        header_part = raw_content.split("##")[0]
+        bullets = re.findall(r"^-\s+\*\*([^:]+):\*\*(.*)$", header_part, re.M)
+        self.fields = {}
+        for k, v in bullets:
+            self.fields[k.strip().lower()] = v.strip()
+            
+        # Parse capabilities
+        cap_str = self.fields.get("capability", "")
+        self.capabilities = set(c.strip().lower() for c in re.split(r"[,;]+", cap_str) if c.strip())
+        
+        # Parse stacks
+        stack_str = self.fields.get("stack", "")
+        self.stacks = set(s.strip().lower() for s in re.split(r"[,;]+", stack_str) if s.strip())
+
+    @property
+    def is_global(self):
+        return "global" in self.capabilities
+
+
+def scan_adrs():
+    """Varre macro-global/decisions/ e macro-global/capabilities/<cap>/decisions/."""
+    if not os.path.isdir(ARQ_REPO):
+        morre("acervo adr: repositório de arquitetura não encontrado em %s." % ARQ_REPO, 3)
+
+    records = []
+    
+    # 1. Registro global: macro-global/decisions/
+    global_dir = os.path.join(ARQ_REPO, "macro-global", "decisions")
+    if os.path.isdir(global_dir):
+        for fname in sorted(os.listdir(global_dir)):
+            if fname.endswith(".md"):
+                m = re.match(r"^(\d{4})-(.+)\.md$", fname)
+                if m:
+                    num, slug = m.group(1), m.group(2)
+                    caminho = os.path.join(global_dir, fname)
+                    with open(caminho, "r", encoding="utf-8", errors="replace") as fh:
+                        raw = fh.read()
+                    records.append(ADRRecord("arq", num, slug, caminho, raw))
+
+    # 2. Registros setoriais: macro-global/capabilities/<cap>/decisions/
+    caps_dir = os.path.join(ARQ_REPO, "macro-global", "capabilities")
+    if os.path.isdir(caps_dir):
+        for cap_entry in sorted(os.listdir(caps_dir)):
+            cap_dec_dir = os.path.join(caps_dir, cap_entry, "decisions")
+            if os.path.isdir(cap_dec_dir):
+                # Map directory name to canonical registry qualifier
+                reg_name = "seg" if cap_entry == "seguranca" else cap_entry
+                for fname in sorted(os.listdir(cap_dec_dir)):
+                    if fname.endswith(".md"):
+                        m = re.match(r"^(\d{4})-(.+)\.md$", fname)
+                        if m:
+                            num, slug = m.group(1), m.group(2)
+                            caminho = os.path.join(cap_dec_dir, fname)
+                            with open(caminho, "r", encoding="utf-8", errors="replace") as fh:
+                                raw = fh.read()
+                            records.append(ADRRecord(reg_name, num, slug, caminho, raw))
+
+    return records
+
+
+def format_lista(records):
+    """Ordena: Capability: global no topo, resto em seguida. Dentro de cada bloco, ordena por código."""
+    globais = [r for r in records if r.is_global]
+    outras = [r for r in records if not r.is_global]
+    
+    globais.sort(key=lambda r: (r.registro, r.numero))
+    outras.sort(key=lambda r: (r.registro, r.numero))
+    
+    linhas = []
+    for r in globais + outras:
+        linhas.append(f"{r.codigo}  {r.titulo}")
+    return "\n".join(linhas)
+
+
+def cmd_ver(alvo, records):
+    """Busca ADR por código: arq:0074, seg:0003, infra:0001, ou 74 / 0074 (assume arq)."""
+    alvo = alvo.strip()
+    
+    # Normalização de prefixos conhecidos
+    # Exemplos: 'arq:0074', 'seg:0003', 'infra:0001', 'integracao:0001', 'arq/seg:0003', '74'
+    if ":" in alvo:
+        reg, num_raw = alvo.split(":", 1)
+        reg = reg.lower().strip()
+        if reg in ("arq/seg", "seguranca"):
+            reg = "seg"
+        elif reg in ("arq/infra",):
+            reg = "infra"
+        elif reg in ("arq/integracao",):
+            reg = "integracao"
+        elif reg in ("adr",):
+            reg = "arq"
+    else:
+        reg = "arq"
+        num_raw = alvo
+
+    if not re.match(r"^\d{1,4}$", num_raw):
+        morre("acervo adr: formato de código inválido '%s'." % alvo, 2)
+
+    num = num_raw.zfill(4)
+    known_registries = {"arq", "seg", "infra", "integracao"}
+    all_registries = known_registries.union(set(r.registro for r in records))
+    
+    if reg not in all_registries:
+        morre("acervo adr: registro '%s' desconhecido (registros válidos: %s)."
+              % (reg, ", ".join(sorted(all_registries))), 2)
+
+    target_code = f"{reg}:{num}"
+    for r in records:
+        if r.registro == reg and r.numero == num:
+            sys.stdout.write(r.raw_content)
+            if not r.raw_content.endswith("\n"):
+                sys.stdout.write("\n")
+            return 0
+
+    morre("acervo adr: ADR '%s' inexistente." % target_code, 1)
+
+
+def cmd_filtrar(filtros, records):
+    """Filtra ADRs pelas flags derivadas do canon e imprime lista."""
+    cap_canon = get_capability_canon()
+    stack_canon = get_stack_canon()
+
+    # Validação dos valores de filtro contra o canon correspondente
+    if "cap" in filtros:
+        val = filtros["cap"].lower()
+        if val not in cap_canon:
+            morre("acervo adr: valor '%s' fora do canon de capacidade. Válidos: %s"
+                  % (val, ", ".join(sorted(cap_canon))), 2)
+
+    if "stack" in filtros:
+        val = filtros["stack"].lower()
+        if val not in stack_canon:
+            morre("acervo adr: valor '%s' fora do canon de stack. Válidos: %s"
+                  % (val, ", ".join(sorted(stack_canon))), 2)
+
+    # Filtragem com E lógico
+    filtrados = []
+    for r in records:
+        match = True
+        if "cap" in filtros:
+            if filtros["cap"].lower() not in r.capabilities:
+                match = False
+        if "stack" in filtros:
+            if filtros["stack"].lower() not in r.stacks:
+                match = False
+        if match:
+            filtrados.append(r)
+
+    if filtrados:
+        print(format_lista(filtrados))
+    return 0
+
+
+def main(argv):
+    if not argv or argv[0] in ("-h", "--help", "ajuda"):
+        morre(USO, 0 if argv else 2)
+
+    records = scan_adrs()
+
+    if argv[0] == "lista":
+        if len(argv) > 1:
+            morre("acervo adr lista não aceita argumentos adicionais.\n\n%s" % USO, 2)
+        print(format_lista(records))
+        return 0
+
+    # Verifica se é busca por flags (--cap, --stack, etc.)
+    if any(a.startswith("--") for a in argv):
+        valid_flags = {"--cap": "cap", "--capability": "cap", "--stack": "stack"}
+        
+        filtros = {}
+        i = 0
+        while i < len(argv):
+            arg = argv[i]
+            if arg in valid_flags:
+                if i + 1 >= len(argv) or argv[i + 1].startswith("--"):
+                    morre("acervo adr: a flag '%s' requer um valor.\n\n%s" % (arg, USO), 2)
+                entidade = valid_flags[arg]
+                filtros[entidade] = argv[i + 1]
+                i += 2
+            elif arg.startswith("--"):
+                morre("acervo adr: flag '%s' inválida. Entidades taggeáveis derivadas do canon: --cap, --stack." % arg, 2)
+            else:
+                morre("acervo adr: argumento inesperado '%s' junto de filtros.\n\n%s" % (arg, USO), 2)
+
+        return cmd_filtrar(filtros, records)
+
+    # Caso seja busca por código: acervo adr <codigo>
+    if len(argv) == 1:
+        return cmd_ver(argv[0], records)
+
+    morre("acervo adr: uso inválido.\n\n%s" % USO, 2)
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))
