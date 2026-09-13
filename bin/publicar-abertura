@@ -224,8 +224,8 @@ else
   manifest "$TMP" "$SHA" "$REF" "$TREE"
   # Imutavel no disco, nao so por convencao: o servido e somente-leitura (arq:0097,
   # arq:0110 §2); `release estado` confere a forma e recusa arvore gravavel como servido.
-  chmod -R a-w "$TMP"
   mv -T "$TMP" "$DEST"
+  chmod -R a-w "$DEST"   # depois do mv: rename de diretorio exige escrita nele proprio
   echo "publicado: ${SHA:0:7}  (ref \"$REF\", tree ${TREE:0:12})"
 fi
 
