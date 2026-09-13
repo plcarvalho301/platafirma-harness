@@ -55,15 +55,26 @@ export PF_HARNESS="$HARNESS_DIR"
 export PF_CORE="$CORE_DIR"
 export PF_CONHECIMENTO="$CONHECIMENTO_DIR"
 
+mkdir -p "$AI_DIR/mock_bin"
+cat > "$AI_DIR/mock_bin/deploy" <<'EOF'
+#!/usr/bin/env bash
+echo "   [deploy-real] executado: deploy $* (PF_SIM=${PF_SIM:-vazio})"
+EOF
+chmod +x "$AI_DIR/mock_bin/deploy"
+export PATH="$AI_DIR/mock_bin:$PATH"
+
 VERBO="$HARNESS_DIR/bin/release"
 
 echo "== Passo 1: release estado inicial (sem current) =="
 "$VERBO" estado
 
-echo "== Passo 2: release promover v0.0.9 (versao base) =="
+echo "== Passo 2: release promover v0.0.9 (versao base, modo real) =="
 "$VERBO" promover "v0.0.9"
 
-echo "== Passo 3: release promover v0.1.0 (versao alvo) =="
+echo "== Passo 2b: teste de release promover com --ensaio =="
+"$VERBO" promover "v0.0.9" --ensaio
+
+echo "== Passo 3: release promover v0.1.0 (versao alvo, modo real) =="
 "$VERBO" promover "v0.1.0"
 
 # Verificacoes do Passo 3

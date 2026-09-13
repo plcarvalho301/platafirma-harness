@@ -34,7 +34,7 @@ uso() {
   cat >&2 <<'FIM'
 uso:
   release estado [--json]                  tag em current × tag por stack × HEAD de main
-  release promover <tag>                   checkout dos 3 repos em /opt/platafirma/<tag> + troca current + deploy promover
+  release promover <tag> [--ensaio]        checkout dos 3 repos em /opt/platafirma/<tag> + troca current + deploy promover
   release reverter [--executar [tag]]      current de volta ao ponto gravado + deploy reverter
   release                                  mostra o estado (mesmo que `release estado`)
 
@@ -165,8 +165,16 @@ print(json.dumps(data, indent=2))
 }
 
 cmd_promover() {
-  local tag="${1:-}"
-  [ -n "$tag" ] || { echo "erro: tag obrigatoria. uso: release promover <tag>" >&2; exit 2; }
+  local ensaio=0
+  local tag=""
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --ensaio) ensaio=1; shift ;;
+      -*) echo "opcao desconhecida: $1" >&2; exit 2 ;;
+      *) tag="$1"; shift ;;
+    esac
+  done
+  [ -n "$tag" ] || { echo "erro: tag obrigatoria. uso: release promover <tag> [--ensaio]" >&2; exit 2; }
 
   local alvo="$OPT_DIR/$tag"
   local antes=""
@@ -247,8 +255,12 @@ cmd_promover() {
   while IFS= read -r s; do
     [ -n "$s" ] || continue
     echo "   promovendo stack: $s"
+    if [ "$ensaio" -eq 1 ] || [ "${PF_ENSAIO:-0}" = "1" ]; then
+      echo "   (modo ensaio: deploy real nao executado)"
+      continue
+    fi
     if command -v deploy >/dev/null 2>&1; then
-      PF_SIM=1 deploy "$s" promover "$tag" || {
+      deploy "$s" promover "$tag" || {
         echo "   aviso: deploy $s promover $tag falhou ou foi recusado" >&2
         falhas=$((falhas + 1))
       }
@@ -261,6 +273,18 @@ cmd_promover() {
 }
 
 cmd_reverter() {
+  local ensaio=0
+  local executar=0
+  local tag_arg=""
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --executar) executar=1; shift ;;
+      --ensaio)   ensaio=1; shift ;;
+      -*) echo "opcao desconhecida: $1" >&2; exit 2 ;;
+      *)  tag_arg="$1"; shift ;;
+    esac
+  done
+
   local anterior=""
   if [ -r "$PONTOS/release.anterior" ]; then
     anterior="$(cat "$PONTOS/release.anterior" 2>/dev/null || echo '')"
@@ -271,7 +295,7 @@ cmd_reverter() {
     atual="$(basename "$(readlink -f "$CURRENT_LINK")")"
   fi
 
-  if [ "${1:-}" != "--executar" ]; then
+  if [ "$executar" -ne 1 ]; then
     printf 'release: plano de reversao\n'
     printf '  current servindo : %s\n' "$atual"
     printf '  ponto de volta   : %s\n' "${anterior:-nenhum gravado}"
@@ -283,8 +307,7 @@ cmd_reverter() {
     return 0
   fi
 
-  shift
-  local alvo="${1:-$anterior}"
+  local alvo="${tag_arg:-$anterior}"
   [ -n "$alvo" ] || {
     echo "recusa: sem tag e sem ponto de volta gravado — nao invento para onde voltar." >&2
     echo "        passe a tag: PF_SIM=1 release reverter --executar <tag>" >&2
@@ -330,9 +353,13 @@ cmd_reverter() {
   while IFS= read -r s; do
     [ -n "$s" ] || continue
     echo "   revertendo stack: $s"
+    if [ "$ensaio" -eq 1 ] || [ "${PF_ENSAIO:-0}" = "1" ]; then
+      echo "   (modo ensaio: deploy real nao executado)"
+      continue
+    fi
     if command -v deploy >/dev/null 2>&1; then
-      PF_SIM=1 deploy "$s" reverter --executar "$alvo" 2>/dev/null || \
-      PF_SIM=1 deploy "$s" promover "$alvo" 2>/dev/null || true
+      deploy "$s" reverter --executar "$alvo" 2>/dev/null || \
+      deploy "$s" promover "$alvo" 2>/dev/null || true
     fi
   done < <(listar_stacks)
 
