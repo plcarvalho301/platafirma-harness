@@ -8,4 +8,5 @@ uso:
   release reverter   <repo> [<rev>] [--ensaio]
 
 raiz servida: PF_PROD_RAIZ[=$HOME/AI/var/prod]
+promover: <rev> (sha ou tag) obrigatória em família com stack; sem rev, avança para origin/main
 exit: 0 achou/fez · 1 nao existe · 2 uso · 3 dependencia · 4 politica · 5 indeterminavel

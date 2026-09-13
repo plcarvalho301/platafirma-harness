@@ -7,10 +7,10 @@
 # atos: estado (leitura, operacao) · listar (leitura, operacao) · ler (leitura, operacao) ·
 #       procurar (leitura, operacao) · conferir (leitura, operacao) · promover (escrita, operacao) ·
 #       reverter (escrita, operacao)
-# escreve: var/prod/<repo> (checkout, current) · ~/AI/bin (symlinks) · var/release/<repo> · stacks via deploy
-# ambiente: PF_PROD_RAIZ[=$HOME/AI/var/prod] porta · PF_ABERTURA_RAIZ[=$HOME/AI/var/abertura-publicada] porta · PF_RELEASE_RAIZ[=$HOME/AI/var/release] porta · PF_BIN_DIR[=$HOME/AI/bin] porta · PF_CADEIRA porta (lida) · HOME
-# depende: git · gh (promover) · deploy · rede ao forge (promover) · porta (hora de arranque) · systemd de usuário
-# substitui: readlink current · git -C var/prod/… describe|rev-parse|ls-files|show|grep · ln -sfn + mv -T · chmod -R a-w · conferir <classe> · deploy <stack> promover|reverter
+# escreve: var/prod/<repo> (espelho bare, checkout por sha, current) · ~/AI/bin (symlinks) · var/release/<repo> (anterior, atual) · stacks via deploy
+# ambiente: PF_PROD_RAIZ[=$HOME/AI/var/prod] porta · PF_ABERTURA_RAIZ[=$HOME/AI/var/abertura-publicada] porta · PF_RELEASE_RAIZ[=$HOME/AI/var/release] porta · PF_BIN_DIR[=$HOME/AI/bin] porta · PF_REPO_RAIZ[=$HOME/AI] porta (só a URL do origin na primeira promoção de uma família) · PF_CADEIRA porta (lida) · HOME
+# depende: git · deploy (promover/reverter de família com stack) · acervo (registro de stacks) · python3 · jq · rede ao forge (promover) · porta (hora de arranque) · systemd de usuário (systemd-run agenda o restart fora do processo)
+# substitui: readlink current · git -C var/prod/… describe|rev-parse|ls-files|show|grep · git worktree add --detach · ln -sfn + mv -T · chmod -R a-w · conferir <classe> · deploy <stack> promover|reverter · systemctl --user restart ops-mcp
 # conforme: parcial
 set -euo pipefail
 
@@ -18,7 +18,10 @@ PROD_RAIZ="${PF_PROD_RAIZ:-$HOME/AI/var/prod}"
 ABERTURA_DIR="${PF_ABERTURA_RAIZ:-$HOME/AI/var/abertura-publicada}"
 PONTOS="${PF_RELEASE_RAIZ:-$HOME/AI/var/release}"
 BIN_DIR="${PF_BIN_DIR:-$HOME/AI/bin}"
+REPO_RAIZ="${PF_REPO_RAIZ:-$HOME/AI}"
 CADEIRA="${PF_CADEIRA:-}"
+FAMILIA_BIN="platafirma-harness"   # a única família que serve verbos no PATH e reinicia a porta
+ESPELHO=".repo.git"                 # espelho bare por família; fora do glob de famílias
 
 # Resolução de binário real: evitar shims no PATH da porta
 GIT="$(command -v /usr/bin/git /bin/git 2>/dev/null | head -1)"
@@ -55,6 +58,7 @@ uso:
   release reverter   <repo> [<rev>] [--ensaio]
 
 raiz servida: PF_PROD_RAIZ[=$HOME/AI/var/prod]
+promover: <rev> (sha ou tag) obrigatória em família com stack; sem rev, avança para origin/main
 exit: 0 achou/fez · 1 nao existe · 2 uso · 3 dependencia · 4 politica · 5 indeterminavel
 FIM
 }
@@ -79,6 +83,18 @@ validar_slug() {
 is_hex_sha() {
   local s="$1"
   [[ "$s" =~ ^[0-9a-fA-F]{40}$ ]]
+}
+
+curto_ou() {  # $1=sha ou vazio  $2=texto quando vazio
+  if [ -n "$1" ]; then printf '%s' "${1:0:7}"; else printf '%s' "$2"; fi
+}
+
+# verbos irmãos: só pelo PATH ou pelo PF_BIN_DIR servido — nunca pelo diretório deste script
+# (na bancada, o vizinho seria o da bancada, e um teste chamaria o deploy real)
+achar_verbo() {  # $1=nome ; imprime caminho ou nada
+  if command -v "$1" >/dev/null 2>&1; then printf '%s' "$1"
+  elif [ -x "$BIN_DIR/$1" ]; then printf '%s' "$BIN_DIR/$1"
+  fi
 }
 
 listar_familias() {
@@ -170,7 +186,7 @@ resolver_identidade() {
     return 5
   fi
 
-  # 1. Deve ter .git
+  # 1. Deve ter .git (diretório ou arquivo de worktree)
   if [ ! -e "$TARGET_DIR/.git" ]; then
     RESOLVER_MOTIVO="sem .git em $TARGET_DIR"
     return 5
@@ -216,6 +232,30 @@ resolver_identidade() {
   return 0
 }
 
+# ---- recusas comuns aos atos com <repo> ----------------------------------------
+recusar_familia_desconhecida() {
+  printf 'release: erro: família desconhecida: %s\n' "$1" >&2
+  printf 'famílias disponíveis:\n' >&2
+  for fa in $(listar_familias); do
+    printf '  %s\n' "$fa" >&2
+  done
+  uso_texto
+  exit 2
+}
+
+validar_repo_ou_sair() {
+  validar_slug "$1" || {
+    local rc=$?
+    if [ "$rc" -eq 4 ]; then
+      printf 'release: erro: nome de família inválido: '\''%s'\''\n' "$1" >&2
+      exit 4
+    else
+      uso_texto
+      exit 2
+    fi
+  }
+}
+
 cmd_estado() {
   local como_json=0
   local repo_alvo=""
@@ -242,16 +282,7 @@ cmd_estado() {
   done
 
   if [ -n "$repo_alvo" ]; then
-    validar_slug "$repo_alvo" || {
-      local rc=$?
-      if [ "$rc" -eq 4 ]; then
-        printf 'release: erro: nome de família inválido: '\''%s'\''\n' "$repo_alvo" >&2
-        exit 4
-      else
-        uso_texto
-        exit 2
-      fi
-    }
+    validar_repo_ou_sair "$repo_alvo"
   fi
 
   local fams=()
@@ -273,13 +304,7 @@ cmd_estado() {
 
     if [ -n "$repo_alvo" ]; then
       if [ "$rc" -eq 2 ]; then
-        printf 'release: erro: família desconhecida: %s\n' "$repo_alvo" >&2
-        printf 'famílias disponíveis:\n' >&2
-        for fa in $(listar_familias); do
-          printf '  %s\n' "$fa" >&2
-        done
-        uso_texto
-        exit 2
+        recusar_familia_desconhecida "$repo_alvo"
       elif [ "$rc" -eq 4 ]; then
         printf 'release: erro: alvo fora da raiz ou símbolo que escapa: %s\n' "$f" >&2
         exit 4
@@ -315,7 +340,7 @@ cmd_estado() {
     fi
 
     local porta_str=""
-    if [ "$f" = "platafirma-harness" ]; then
+    if [ "$f" = "$FAMILIA_BIN" ]; then
       local porta_ts=""
       if command -v systemctl >/dev/null 2>&1; then
         porta_ts="$(systemctl --user show ops-mcp -p ActiveEnterTimestamp --value 2>/dev/null || echo '')"
@@ -395,8 +420,7 @@ import sys, json
 records = [json.loads(line) for line in sys.stdin.read().splitlines() if line]
 obj = {"familias": {r["familia"]: r for r in records}}
 print(json.dumps(obj, indent=2))
-' <<<"$(printf '%s
-' "${json_records[@]}")"
+' <<<"$(printf '%s\n' "${json_records[@]}")"
     fi
   fi
 
@@ -437,16 +461,7 @@ cmd_listar() {
     exit 2
   }
 
-  validar_slug "$repo" || {
-    local rc=$?
-    if [ "$rc" -eq 4 ]; then
-      printf 'release: erro: nome de família inválido: '\''%s'\''\n' "$repo" >&2
-      exit 4
-    else
-      uso_texto
-      exit 2
-    fi
-  }
+  validar_repo_ou_sair "$repo"
 
   if [ -n "$prefixo" ]; then
     if [[ "$prefixo" == /* ]] || [[ "$prefixo" == *..* ]]; then
@@ -462,13 +477,7 @@ cmd_listar() {
     printf 'vizinho: repo listar %s %s\n' "$repo" "${prefixo:-}" >&2
     exit 1
   elif [ "$rc" -eq 2 ]; then
-    printf 'release: erro: família desconhecida: %s\n' "$repo" >&2
-    printf 'famílias disponíveis:\n' >&2
-    for fa in $(listar_familias); do
-      printf '  %s\n' "$fa" >&2
-    done
-    uso_texto
-    exit 2
+    recusar_familia_desconhecida "$repo"
   elif [ "$rc" -eq 5 ]; then
     printf 'release: indeterminável: %s\n' "$RESOLVER_MOTIVO" >&2
     exit 5
@@ -532,16 +541,7 @@ cmd_ler() {
     exit 2
   }
 
-  validar_slug "$repo" || {
-    local rc=$?
-    if [ "$rc" -eq 4 ]; then
-      printf 'release: erro: nome de família inválido: '\''%s'\''\n' "$repo" >&2
-      exit 4
-    else
-      uso_texto
-      exit 2
-    fi
-  }
+  validar_repo_ou_sair "$repo"
 
   if [[ "$caminho" == /* ]] || [[ "$caminho" == *..* ]]; then
     printf 'release: erro: caminho fora da raiz ou símbolo que escapa: %s\n' "$caminho" >&2
@@ -555,13 +555,7 @@ cmd_ler() {
     printf 'vizinho: repo ler %s %s\n' "$repo" "$caminho" >&2
     exit 1
   elif [ "$rc" -eq 2 ]; then
-    printf 'release: erro: família desconhecida: %s\n' "$repo" >&2
-    printf 'famílias disponíveis:\n' >&2
-    for fa in $(listar_familias); do
-      printf '  %s\n' "$fa" >&2
-    done
-    uso_texto
-    exit 2
+    recusar_familia_desconhecida "$repo"
   elif [ "$rc" -eq 5 ]; then
     printf 'release: indeterminável: %s\n' "$RESOLVER_MOTIVO" >&2
     exit 5
@@ -623,16 +617,7 @@ cmd_procurar() {
   [ -n "$repo" ] || { printf 'release: erro: repo obrigatório para procurar\n' >&2; uso_texto; exit 2; }
   [ -n "$termo" ] || { printf 'release: erro: --termo <termo> é obrigatório para procurar\n' >&2; uso_texto; exit 2; }
 
-  validar_slug "$repo" || {
-    local rc=$?
-    if [ "$rc" -eq 4 ]; then
-      printf 'release: erro: nome de família inválido: '\''%s'\''\n' "$repo" >&2
-      exit 4
-    else
-      uso_texto
-      exit 2
-    fi
-  }
+  validar_repo_ou_sair "$repo"
 
   if [ -n "$prefixo" ]; then
     if [[ "$prefixo" == /* ]] || [[ "$prefixo" == *..* ]]; then
@@ -648,13 +633,7 @@ cmd_procurar() {
     printf 'vizinho: repo procurar %s --termo %s\n' "$repo" "$termo" >&2
     exit 1
   elif [ "$rc" -eq 2 ]; then
-    printf 'release: erro: família desconhecida: %s\n' "$repo" >&2
-    printf 'famílias disponíveis:\n' >&2
-    for fa in $(listar_familias); do
-      printf '  %s\n' "$fa" >&2
-    done
-    uso_texto
-    exit 2
+    recusar_familia_desconhecida "$repo"
   elif [ "$rc" -eq 5 ]; then
     printf 'release: indeterminável: %s\n' "$RESOLVER_MOTIVO" >&2
     exit 5
@@ -731,14 +710,7 @@ cmd_conferir() {
     exit 2
   fi
 
-  local conferir_bin=""
-  if command -v conferir >/dev/null 2>&1; then
-    conferir_bin="conferir"
-  elif [ -x "$BIN_DIR/conferir" ]; then
-    conferir_bin="$BIN_DIR/conferir"
-  elif [ -x "$(dirname "$0")/conferir" ]; then
-    conferir_bin="$(dirname "$0")/conferir"
-  fi
+  local conferir_bin; conferir_bin="$(achar_verbo conferir)"
 
   if [ -n "$conferir_bin" ]; then
     exec "$conferir_bin" "$classe" "$@"
@@ -748,14 +720,411 @@ cmd_conferir() {
   fi
 }
 
-cmd_promover() {
-  printf 'promover/reverter conforme chegam no lote 2; o servido vigente segue no /opt até TI migrar\n' >&2
-  exit 2
+# ---- promoção: helpers -----------------------------------------------------------
+
+# stacks da família no registro (acervo.stack), só as que promovem por `deploy promover`.
+# Sai em STACKS_PROMOVER (via promover) e STACKS_FORA (aponta clone de trabalho: via up).
+STACKS_PROMOVER=()
+STACKS_FORA=()
+ler_stacks_da_familia() {
+  local repo="$1" json=""
+  STACKS_PROMOVER=()
+  STACKS_FORA=()
+  local acervo_bin; acervo_bin="$(achar_verbo acervo)"
+  if [ -z "$acervo_bin" ]; then
+    printf 'release: dependência ausente: acervo (registro de stacks) não encontrado\n' >&2
+    return 3
+  fi
+  json="$("$acervo_bin" ler casa stack "$repo" --json 2>/dev/null)" || {
+    printf 'release: dependência ausente: acervo ler casa stack não respondeu (registro de stacks)\n' >&2
+    return 3
+  }
+  local linhas
+  linhas="$(python3 -c '
+import sys, json
+repo = sys.argv[1]
+d = json.loads(sys.stdin.read())
+if isinstance(d, dict): d = [d]
+for s in d:
+    if s.get("repo") != repo: continue
+    via = ((s.get("reversao") or {}).get("via")) or "?"
+    print("%s %s" % (s.get("slug"), via))
+' "$repo" <<<"$json")" || {
+    printf 'release: dependência com outro contrato: registro de stacks não é JSON legível\n' >&2
+    return 3
+  }
+  local slug via
+  while read -r slug via; do
+    [ -n "$slug" ] || continue
+    if [ "$via" = "promover" ]; then STACKS_PROMOVER+=("$slug"); else STACKS_FORA+=("$slug"); fi
+  done <<<"$linhas"
+  return 0
 }
 
+espelho_de() { printf '%s/%s/%s' "$PROD_RAIZ" "$1" "$ESPELHO"; }
+
+# garante o espelho bare da família; primeira vez clona da URL do origin da bancada
+garantir_espelho() {
+  local repo="$1" ensaio="$2" esp; esp="$(espelho_de "$repo")"
+  if [ -d "$esp" ]; then
+    if [ "$ensaio" -eq 1 ]; then
+      printf 'espelho:   %s (sem fetch em ensaio)\n' "$esp"
+      return 0
+    fi
+    "$GIT" --git-dir="$esp" fetch -q --prune origin '+refs/heads/*:refs/remotes/origin/*' '+refs/tags/*:refs/tags/*' 2>/dev/null || {
+      printf 'release: dependência ausente: forge fora do ar (fetch em %s falhou)\n' "$esp" >&2
+      return 3
+    }
+    return 0
+  fi
+  local bancada="$REPO_RAIZ/$repo" url=""
+  if [ -d "$bancada/.git" ] || "$GIT" -C "$bancada" rev-parse --git-dir >/dev/null 2>&1; then
+    url="$("$GIT" -C "$bancada" remote get-url origin 2>/dev/null || echo '')"
+  fi
+  if [ -z "$url" ]; then
+    printf 'release: erro: família nova sem origem — não há clone de %s em %s para ler a URL do origin\n' "$repo" "$REPO_RAIZ" >&2
+    return 2
+  fi
+  if [ "$ensaio" -eq 1 ]; then
+    printf 'espelho:   família nova — clonaria %s em %s\n' "$url" "$esp"
+    return 0
+  fi
+  mkdir -p "$PROD_RAIZ/$repo"
+  "$GIT" clone -q --bare "$url" "$esp" 2>/dev/null || {
+    printf 'release: dependência ausente: forge fora do ar (clone de %s falhou)\n' "$url" >&2
+    return 3
+  }
+  "$GIT" --git-dir="$esp" fetch -q --prune origin '+refs/heads/*:refs/remotes/origin/*' '+refs/tags/*:refs/tags/*' 2>/dev/null || true
+  return 0
+}
+
+# resolve <rev> (sha, tag, ramo remoto) para sha no espelho; sem rev, origin/main
+resolver_rev() {
+  local repo="$1" rev="$2" esp; esp="$(espelho_de "$repo")"
+  local alvo="${rev:-origin/main}"
+  local sha
+  sha="$("$GIT" --git-dir="$esp" rev-parse --verify -q "${alvo}^{commit}" 2>/dev/null || true)"
+  if [ -z "$sha" ]; then
+    [ -n "$rev" ] || return 1
+    sha="$("$GIT" --git-dir="$esp" rev-parse --verify -q "refs/tags/${rev}^{commit}" 2>/dev/null || true)"
+    [ -n "$sha" ] || sha="$("$GIT" --git-dir="$esp" rev-parse --verify -q "refs/remotes/origin/${rev}^{commit}" 2>/dev/null || true)"
+  fi
+  [ -n "$sha" ] || return 1
+  printf '%s' "$sha"
+}
+
+# rev tem de descender de origin/main (produção é checkout de origin/main, arq:0109 §1)
+descende_de_main() {
+  local repo="$1" sha="$2" esp; esp="$(espelho_de "$repo")"
+  "$GIT" --git-dir="$esp" merge-base --is-ancestor "$sha" origin/main 2>/dev/null
+}
+
+# materializa var/prod/<repo>/<sha> como worktree destacado e somente-leitura; idempotente
+materializar() {
+  local repo="$1" sha="$2" esp dest; esp="$(espelho_de "$repo")"; dest="$PROD_RAIZ/$repo/$sha"
+  if [ -d "$dest" ]; then
+    return 0
+  fi
+  "$GIT" --git-dir="$esp" worktree prune 2>/dev/null || true
+  "$GIT" --git-dir="$esp" worktree add -q --detach "$dest" "$sha" 2>/dev/null || {
+    chmod -R u+w "$dest" 2>/dev/null || true
+    rm -rf "$dest"
+    printf 'release: indeterminável: não consegui materializar %s em %s\n' "${sha:0:7}" "$dest" >&2
+    return 5
+  }
+  chmod -R a-w "$dest"
+  return 0
+}
+
+trocar_current() {  # $1=repo $2=sha — troca atômica do ponteiro
+  local repo="$1" sha="$2" tmp
+  tmp="$(mktemp -d "$PROD_RAIZ/$repo/.current.XXXXXX")"; rmdir "$tmp"
+  ln -s "$sha" "$tmp"
+  mv -T "$tmp" "$PROD_RAIZ/$repo/current"
+}
+
+gravar_pontos() {  # $1=repo $2=sha_anterior(ou vazio) $3=sha_novo
+  local repo="$1" ant="$2" novo="$3"
+  mkdir -p "$PONTOS/$repo"
+  if [ -n "$ant" ]; then printf '%s\n' "$ant" > "$PONTOS/$repo/anterior"; fi
+  printf '%s %s\n' "$novo" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > "$PONTOS/$repo/atual"
+}
+
+assentar_path() {  # só a família que serve verbos
+  local repo="$1"
+  [ "$repo" = "$FAMILIA_BIN" ] || return 0
+  local cur="$PROD_RAIZ/$repo/current"
+  [ -d "$cur/bin" ] || { printf 'PATH:      %s não tem bin/ — nada a assentar\n' "$repo"; return 0; }
+  mkdir -p "$BIN_DIR"
+  local n=0 f base
+  for f in "$cur/bin"/*; do
+    [ -f "$f" ] || continue
+    base="$(basename "$f")"
+    ln -sfn "$cur/bin/$base" "$BIN_DIR/$base"
+    n=$((n+1))
+  done
+  for f in "$cur/bin"/_*; do
+    [ -d "$f" ] || continue
+    base="$(basename "$f")"
+    ln -sfn "$cur/bin/$base" "$BIN_DIR/$base"
+    n=$((n+1))
+  done
+  printf 'PATH:      %d entradas de %s apontadas para %s/bin\n' "$n" "$BIN_DIR" "$cur"
+}
+
+achar_deploy() { achar_verbo deploy; }
+
+# dependência conferida ANTES de tocar current: família com stack exige deploy no PATH
+exigir_deploy_se_stack() {
+  [ "${#STACKS_PROMOVER[@]}" -gt 0 ] || return 0
+  [ -n "$(achar_deploy)" ] || {
+    printf 'release: dependência ausente: deploy não encontrado e a família tem stacks (%s)\n' "${STACKS_PROMOVER[*]}" >&2
+    return 3
+  }
+}
+
+promover_stacks() {  # $1=sha ; usa STACKS_PROMOVER; devolve 0 ou o nome da stack que recusou em STACK_FALHOU
+  local sha="$1" s
+  STACK_FALHOU=""
+  local deploy_bin; deploy_bin="$(achar_deploy)"
+  if [ "${#STACKS_PROMOVER[@]}" -eq 0 ]; then
+    return 0
+  fi
+  if [ -z "$deploy_bin" ]; then
+    printf 'release: dependência ausente: deploy não encontrado e a família tem stacks (%s)\n' "${STACKS_PROMOVER[*]}" >&2
+    return 3
+  fi
+  for s in "${STACKS_PROMOVER[@]}"; do
+    printf 'stack:     %s → deploy %s promover %s\n' "$s" "$s" "${sha:0:7}"
+    if ! "$deploy_bin" "$s" promover "$sha"; then
+      STACK_FALHOU="$s"
+      return 5
+    fi
+  done
+  return 0
+}
+
+agendar_restart_porta() {
+  local repo="$1"
+  [ "$repo" = "$FAMILIA_BIN" ] || return 0
+  if command -v systemd-run >/dev/null 2>&1 && command -v systemctl >/dev/null 2>&1; then
+    if systemd-run --user --quiet --on-active=5 --unit="pf-porta-restart-$(date +%s)" systemctl --user restart ops-mcp 2>/dev/null; then
+      printf 'porta:     restart de ops-mcp agendado em 5s (fora deste processo); confira com `release estado %s`\n' "$repo"
+    else
+      printf 'porta:     restart NÃO agendado (systemd-run recusou) — rode: systemctl --user restart ops-mcp\n' >&2
+    fi
+  else
+    printf 'porta:     restart NÃO agendado (systemd-run ausente) — rode: systemctl --user restart ops-mcp\n' >&2
+  fi
+}
+
+# desfaz a troca de current e o PATH quando as stacks recusaram; nunca apaga o checkout
+desfazer_para() {  # $1=repo $2=sha_anterior(ou vazio)
+  local repo="$1" ant="$2"
+  if [ -n "$ant" ] && [ -d "$PROD_RAIZ/$repo/$ant" ]; then
+    trocar_current "$repo" "$ant"
+    assentar_path "$repo" >/dev/null
+    printf 'current:   devolvido a %s\n' "${ant:0:7}" >&2
+  else
+    rm -f "$PROD_RAIZ/$repo/current"
+    printf 'current:   removido (família não tinha ponto anterior materializado)\n' >&2
+  fi
+}
+
+# ---- ato: promover <repo> [<rev>] [--ensaio] --------------------------------------
+cmd_promover() {
+  local ensaio=0 repo="" rev=""
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --ensaio) ensaio=1; shift ;;
+      -*) printf 'release: erro: opção desconhecida: %s\n' "$1" >&2; uso_texto; exit 2 ;;
+      *)
+        if [ -z "$repo" ]; then repo="$1"
+        elif [ -z "$rev" ]; then rev="$1"
+        else printf 'release: erro: argumento extra: %s\n' "$1" >&2; uso_texto; exit 2; fi
+        shift ;;
+    esac
+  done
+  [ -n "$repo" ] || { printf 'release: erro: repo obrigatório para promover\n' >&2; uso_texto; exit 2; }
+  validar_repo_ou_sair "$repo"
+  if [ "$repo" = "abertura" ]; then
+    printf 'release: erro: a abertura ainda promove por publicar-abertura (Aberto da spec)\n' >&2
+    exit 2
+  fi
+
+  # regime: família com stack no registro promove por rev explícita
+  local rc=0
+  ler_stacks_da_familia "$repo" || { rc=$?; exit "$rc"; }
+  local tem_stack=$(( ${#STACKS_PROMOVER[@]} + ${#STACKS_FORA[@]} ))
+  if [ "$tem_stack" -gt 0 ] && [ -z "$rev" ]; then
+    printf 'release: erro: %s é família de código (stacks: %s) e promove por rev explícita: release promover %s <sha|tag>\n' \
+      "$repo" "${STACKS_PROMOVER[*]} ${STACKS_FORA[*]}" "$repo" >&2
+    exit 2
+  fi
+
+  garantir_espelho "$repo" "$ensaio" || { rc=$?; exit "$rc"; }
+  local esp; esp="$(espelho_de "$repo")"
+  if [ ! -d "$esp" ]; then
+    # só em ensaio de família nova
+    printf 'ensaio:    família nova; nada resolvido sem espelho\n'
+    exit 0
+  fi
+
+  local sha
+  sha="$(resolver_rev "$repo" "$rev")" || {
+    printf 'release: erro: rev '\''%s'\'' não resolve no forge de %s\n' "${rev:-origin/main}" "$repo" >&2
+    printf 'tags recentes:\n' >&2
+    "$GIT" --git-dir="$esp" for-each-ref --sort=-creatordate --count=5 --format='  %(refname:short)  %(objectname:short)' refs/tags 2>/dev/null >&2 || true
+    exit 2
+  }
+  if ! descende_de_main "$repo" "$sha"; then
+    printf 'release: recusa: %s não descende de origin/main — produção é checkout de origin/main (arq:0109 §1)\n' "${sha:0:7}" >&2
+    exit 4
+  fi
+
+  # o que está no ar agora
+  local atual="" rc_id=0
+  resolver_identidade "$repo" || rc_id=$?
+  case "$rc_id" in
+    0) atual="$SHA" ;;
+    1) atual="" ;;
+    2) atual="" ;;   # família nova: diretório recém-criado pelo espelho
+    *) printf 'release: indeterminável: %s — arrume antes de promover\n' "$RESOLVER_MOTIVO" >&2; exit 5 ;;
+  esac
+
+  if [ "$atual" = "$sha" ]; then
+    printf 'já no ar:  %s current → %s — nada a mover\n' "$repo" "${sha:0:7}"
+    exit 1
+  fi
+
+  local tag; tag="$("$GIT" --git-dir="$esp" describe --tags --exact-match "$sha" 2>/dev/null || echo '')"
+  printf '== release promover %s %s%s ==\n' "$repo" "${sha:0:7}" "${tag:+ ($tag)}"
+  printf 'de:        %s\n' "$(curto_ou "$atual" '(sem current)')"
+  if [ -d "$PROD_RAIZ/$repo/$sha" ]; then printf 'checkout:  %s já materializado (imutável, não reescrito)\n' "${sha:0:7}"
+  else printf 'checkout:  materializar %s/%s/%s\n' "$PROD_RAIZ" "$repo" "$sha"; fi
+  [ "${#STACKS_PROMOVER[@]}" -eq 0 ] || printf 'stacks:    %s (deploy promover)\n' "${STACKS_PROMOVER[*]}"
+  [ "${#STACKS_FORA[@]}" -eq 0 ]     || printf 'stacks:    fora da promoção por release — apontam clone de trabalho (via up): %s\n' "${STACKS_FORA[*]}"
+  if [ "$ensaio" -eq 1 ]; then
+    printf 'ensaio:    nada tocado\n'
+    exit 0
+  fi
+
+  exigir_deploy_se_stack || { rc=$?; exit "$rc"; }
+  materializar "$repo" "$sha" || { rc=$?; exit "$rc"; }
+  gravar_pontos "$repo" "$atual" "$sha"
+  trocar_current "$repo" "$sha"
+  printf 'current:   %s → %s\n' "$(curto_ou "$atual" '(nenhum)')" "${sha:0:7}"
+  assentar_path "$repo"
+
+  local rc_st=0
+  promover_stacks "$sha" || rc_st=$?
+  if [ "$rc_st" -ne 0 ]; then
+    if [ "$rc_st" -eq 5 ]; then
+      printf 'release: indeterminável: stack %s recusou a promoção; as anteriores da lista já foram promovidas\n' "$STACK_FALHOU" >&2
+    fi
+    desfazer_para "$repo" "$atual"
+    gravar_pontos "$repo" "$sha" "${atual:-$sha}"
+    exit "$rc_st"
+  fi
+
+  agendar_restart_porta "$repo"
+  printf 'no ar:     %s %s%s\n' "$repo" "${sha:0:7}" "${tag:+ ($tag)}"
+  printf '%s\n' "$sha"
+}
+
+# ---- ato: reverter <repo> [<rev>] [--ensaio] --------------------------------------
 cmd_reverter() {
-  printf 'promover/reverter conforme chegam no lote 2; o servido vigente segue no /opt até TI migrar\n' >&2
-  exit 2
+  local ensaio=0 repo="" rev=""
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --ensaio) ensaio=1; shift ;;
+      --executar) printf 'release: aviso: --executar é o comportamento padrão de reverter; flag ignorada\n' >&2; shift ;;
+      -*) printf 'release: erro: opção desconhecida: %s\n' "$1" >&2; uso_texto; exit 2 ;;
+      *)
+        if [ -z "$repo" ]; then repo="$1"
+        elif [ -z "$rev" ]; then rev="$1"
+        else printf 'release: erro: argumento extra: %s\n' "$1" >&2; uso_texto; exit 2; fi
+        shift ;;
+    esac
+  done
+  [ -n "$repo" ] || { printf 'release: erro: repo obrigatório para reverter\n' >&2; uso_texto; exit 2; }
+  validar_repo_ou_sair "$repo"
+  if [ "$repo" = "abertura" ]; then
+    printf 'release: erro: a abertura ainda reverte por publicar-abertura reverter (Aberto da spec)\n' >&2
+    exit 2
+  fi
+  [ -d "$PROD_RAIZ/$repo" ] || recusar_familia_desconhecida "$repo"
+
+  local rc=0 atual="" rc_id=0
+  resolver_identidade "$repo" || rc_id=$?
+  case "$rc_id" in
+    0) atual="$SHA" ;;
+    1) atual="" ;;
+    *) printf 'release: indeterminável: %s — arrume antes de reverter\n' "$RESOLVER_MOTIVO" >&2; exit 5 ;;
+  esac
+
+  local alvo=""
+  if [ -n "$rev" ]; then
+    if is_hex_sha "$rev"; then
+      alvo="$rev"   # sha completo: reverter não precisa do forge; materializado ou não decide abaixo
+    else
+      local esp; esp="$(espelho_de "$repo")"
+      if [ -d "$esp" ]; then alvo="$(resolver_rev "$repo" "$rev" 2>/dev/null || true)"; fi
+      if [ -z "$alvo" ]; then
+        printf 'release: erro: rev '\''%s'\'' não resolve para %s\n' "$rev" "$repo" >&2
+        exit 2
+      fi
+    fi
+  else
+    if [ -f "$PONTOS/$repo/anterior" ]; then alvo="$(cat "$PONTOS/$repo/anterior" 2>/dev/null || echo '')"; fi
+    if ! is_hex_sha "$alvo"; then
+      printf 'release: erro: sem rev e sem ponto de volta gravado para %s — não invento para onde voltar\n' "$repo" >&2
+      printf 'materializados em %s/%s:\n' "$PROD_RAIZ" "$repo" >&2
+      for d in "$PROD_RAIZ/$repo"/*/; do
+        b="$(basename "$d")"; is_hex_sha "$b" && printf '  %s\n' "${b:0:7}" >&2
+      done
+      exit 2
+    fi
+  fi
+
+  if [ ! -d "$PROD_RAIZ/$repo/$alvo" ]; then
+    printf 'varrido: servido %s (%s/%s não está materializado)\n' "$repo" "$PROD_RAIZ/$repo" "${alvo:0:7}" >&2
+    printf 'vizinho: release promover %s %s\n' "$repo" "$alvo" >&2
+    exit 1
+  fi
+  if [ "$atual" = "$alvo" ]; then
+    printf 'já no ar:  %s current → %s — nada a mover\n' "$repo" "${alvo:0:7}"
+    exit 1
+  fi
+
+  ler_stacks_da_familia "$repo" || { rc=$?; exit "$rc"; }
+
+  printf '== release reverter %s %s → %s ==\n' "$repo" "$(curto_ou "$atual" '(sem current)')" "${alvo:0:7}"
+  [ "${#STACKS_PROMOVER[@]}" -eq 0 ] || printf 'stacks:    %s (deploy promover %s)\n' "${STACKS_PROMOVER[*]}" "${alvo:0:7}"
+  [ "${#STACKS_FORA[@]}" -eq 0 ]     || printf 'stacks:    fora da reversão por release — apontam clone de trabalho (via up): %s\n' "${STACKS_FORA[*]}"
+  if [ "$ensaio" -eq 1 ]; then
+    printf 'ensaio:    nada tocado\n'
+    exit 0
+  fi
+
+  exigir_deploy_se_stack || { rc=$?; exit "$rc"; }
+  gravar_pontos "$repo" "$atual" "$alvo"
+  trocar_current "$repo" "$alvo"
+  printf 'current:   %s → %s\n' "$(curto_ou "$atual" '(nenhum)')" "${alvo:0:7}"
+  assentar_path "$repo"
+
+  local rc_st=0
+  promover_stacks "$alvo" || rc_st=$?
+  if [ "$rc_st" -ne 0 ]; then
+    [ "$rc_st" -ne 5 ] || printf 'release: indeterminável: stack %s recusou a reversão\n' "$STACK_FALHOU" >&2
+    desfazer_para "$repo" "$atual"
+    gravar_pontos "$repo" "$alvo" "${atual:-$alvo}"
+    exit "$rc_st"
+  fi
+
+  agendar_restart_porta "$repo"
+  printf 'no ar:     %s %s\n' "$repo" "${alvo:0:7}"
+  printf '%s\n' "$alvo"
 }
 
 # Se nenhum argumento passado, imprime usage e sai 2

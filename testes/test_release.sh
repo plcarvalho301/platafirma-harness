@@ -499,33 +499,25 @@ if [ "$rc_conf_desconhecida" -ne 2 ] || ! grep -q "classes do servido" <<<"$out_
 fi
 echo "OK: release conferir valida classes do servido e rejeita existe e bancada com exit 2"
 
-echo "--- Teste 10: promover e reverter no Lote 1 (Item 3) ---"
-# No lote 1, promover e reverter saem 2 com mensagem declarada
+echo "--- Teste 10: forma velha de promover/reverter (sem família) sai 2 e ensina a nova ---"
+# `release promover <tag>` (forma vigente, sem família) e `release reverter` (sem família) saem 2.
+# O comportamento de promover/reverter por família e por sha mora em testes/test_release_lote2.sh.
 set +e
-out_prom_lote1="$("$VERBO" promover v0.1.0 2>&1)"
-rc_prom_lote1=$?
+out_prom_velho="$("$VERBO" promover v0.1.0 2>&1)"
+rc_prom_velho=$?
 set -e
-if [ "$rc_prom_lote1" -ne 2 ]; then
-  echo "FALHA: promover no lote 1 devia sair 2, saiu $rc_prom_lote1" >&2
+if [ "$rc_prom_velho" -ne 2 ]; then
+  echo "FALHA: promover na forma velha (tag sem família) devia sair 2, saiu $rc_prom_velho: $out_prom_velho" >&2
   exit 1
 fi
-if ! grep -q "promover/reverter conforme chegam no lote 2; o servido vigente segue no /opt até TI migrar" <<<"$out_prom_lote1"; then
-  echo "FALHA: mensagem de promover lote 1 não confere: $out_prom_lote1" >&2
-  exit 1
-fi
-
 set +e
-out_rev_lote1="$("$VERBO" reverter 2>&1)"
-rc_rev_lote1=$?
+out_rev_velho="$("$VERBO" reverter 2>&1)"
+rc_rev_velho=$?
 set -e
-if [ "$rc_rev_lote1" -ne 2 ]; then
-  echo "FALHA: reverter no lote 1 devia sair 2, saiu $rc_rev_lote1" >&2
+if [ "$rc_rev_velho" -ne 2 ]; then
+  echo "FALHA: reverter sem família devia sair 2, saiu $rc_rev_velho" >&2
   exit 1
 fi
-if ! grep -q "promover/reverter conforme chegam no lote 2; o servido vigente segue no /opt até TI migrar" <<<"$out_rev_lote1"; then
-  echo "FALHA: mensagem de reverter lote 1 não confere: $out_rev_lote1" >&2
-  exit 1
-fi
-echo "OK: promover e reverter saem 2 com mensagem de lote 2"
+echo "OK: forma velha de promover/reverter sai 2"
 
 echo "=== Todos os testes do Lote 1 (com revisão TI) passaram com sucesso! ==="
