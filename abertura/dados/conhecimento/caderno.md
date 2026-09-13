@@ -163,3 +163,27 @@ tudo que passou por ali achou casa definitiva, que e o certo. Reportar isso como
 de corpus (feito uma vez, corrigido pelo dono em 01/09/2026) inventa lacuna onde ha
 arrumacao. Ao ler `rag_facets`: dominio e subdominio sao a medida de cobertura — so ali
 a ausencia significa "nao ha obra que responda"; `frente` e marcador de trabalho.
+
+## `acervo ingerir casa <raiz>` espera lista curada, nao path solto
+
+`raiz` nao e diretorio nem arquivo-alvo: e uma lista curada (formato de
+`docs/varredura-casa-candidatos.md` — `## repo` / `### secao (familia)` /
+`- path`). Passar o caminho do proprio doc-alvo devolve "nenhum item na
+lista", nao ingere nada. O unico atalho que ignora a lista e `--adr`
+(varre `macro-global/decisions` e `macro-global/capabilities/*/decisions`
+inteiro, idempotente por sha via aposentar-e-criar). Doc de casa que nao
+e ADR e nao esta na lista canonica so entra por edicao dela ou por lista
+ad-hoc passada como 1o posicional (linha `## repo` + `### secao` + `- path`).
+
+## Diario de bordo (cru, sem heuristica)
+
+- 13/09 — pedido: ingerir ultimas ADR + spec_verbologia_onda1.md em
+  acervo.casa. `acervo ingerir casa platafirma-arquitetura/docs/spec_verbologia_onda1.md`
+  deu "nenhum item na lista <path>" (path tratado como lista curada, nao
+  como alvo). Contorno na mesma fita: lista ad-hoc de 1 item em
+  `var/tmp/<ordem_id>/lista-verbologia.md`, ingerida por ela. Sem
+  encaminhamento.
+- 13/09 — `run_command "repo"` sem args: ~250 linhas de "repo: falta o
+  nome do repo" + "fork: retry: Resource temporarily unavailable" antes
+  do exit 2. Formas com ato (`repo estado <repo>`, `repo git <repo> ...`)
+  funcionaram normal; nao usei "repo" bare de novo. Sem encaminhamento.
