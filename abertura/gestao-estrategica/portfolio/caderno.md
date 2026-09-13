@@ -305,3 +305,27 @@ o read-side atrasa e \"encerrei o pai\" não prova que as filhas foram.
 11/09/2026 — prova de aceite do #3018: chamei `motor casa "..."` e deu "nao conheco a instancia 'casa'. Ha: rag, reasoner". Contorno NA DATA 11/09: `motor` sem ato mostrou a gramatica arq:0106 — a forma certa e `motor rag buscar casa "<pergunta>"` (casa e PARTICAO, nao instancia). A forma no "Sai quando" do card (`motor casa ...`) e a intencao, nao o verbo real.
 
 11/09/2026 — `encerrar fita` recusado (nao e verbo); o encerramento e `descansar fita`, e o rito tem 4 passos (mesa, caderno, memoria do project, `descansar fita --encerra-sessao` por ultimo). `mesa caderno` so LE; escrita de caderno durável e `write_file` por trecho no arquivo, ancorando o `antes` no texto CRU do disco (`read_file`), nao no servido pela porta (a poda normaliza espaco e o trecho casa 0 vez).
+
+## 13/09/2026 — rodada arq:0110 (conformacao de verbos)
+
+Onda de conformacao se corta por JORNADA da cadeira, nao por dono do verbo: verbos que a cadeira usa juntos (os que acham coisas: repo, acervo, motor, descobrir, situacao, conferir) conformam juntos, porque o tateio e aprendizado por padrao dos vizinhos — conformar um e deixar o outro ensina meia gramatica. (dono, 12/09; substitui o corte por dono do verbo que eu propus.)
+
+Exigencia formal trava o SELO, nao a OBRA: antes de chamar um card de caminho critico, separar o que ele trava de fato (carimbo, prova) do que segue sem ele (o trabalho). Errei isso com #3014 em 12/09.
+
+Versionamento formal nao precede refactor grande: carimbar o que vai mudar e versionar descarte. O que uma rodada de refactor precisa e "a porta executa main" (#3029), nao release com tag (#3014). (dono, 13/09.)
+
+Story por onda, nao por verbo, quando o dono controla linha a linha fora do board (planilha): o card e envelope da onda; a planilha e o controle. (dono, 13/09; emenda o §12 da 0110 por ordem; arquiteto avisado.)
+
+Taxa de erro de verbo-gate (conferir, lint, teste) mistura reprovacao (exit 1 = o gate trabalhando) com erro de uso (exit 2): separar por exit ANTES de ordenar carteira por erro, senao o gate parece o pior verbo.
+
+Pedir tudo de uma vez ao dono cansado = pedido que ele aceita sem ler ("entendi nada", 12/09). Uma decisao por turno, em portugues, com o que muda para ele; o resto fica na mesa e sai um por vez.
+
+12/09/2026 — `motor rag buscar casa arq:0110 ...` sem aspas: exit 2 (pergunta entre aspas); com aspas voltou vazio; `descobrir arq:0110` vazio; `acervo ler casa arq:0110` exit 2 (exige especie + seletor). Contorno NA DATA 12/09: `read_file platafirma-arquitetura/macro-global/decisions/0110-governanca-de-verbos.md` (ADR aceita no dia, ainda nao indexada; o caminho veio na carta do arquiteto).
+
+12/09/2026 — `repo git -C platafirma-arquitetura ls-files macro-global/decisions` (arg de clone invalido): repetiu usage centenas de vezes ate `fork: retry: Resource temporarily unavailable`, 657 KB de stderr. Contorno NA DATA 12/09: nenhum, encaminhado a ti (carta 20260912T201801; agora dentro de #3052). Nao repetir `repo` com clone que nao existe.
+
+12/09/2026 — `sinal "<texto com crase>"`: recusado por metacaractere; sem crase rodou, mas `sinal` e sonda de saude (no-ar/sem-sinal), nao abre incidente. Contorno NA DATA 12/09: `fila enviar ti --tipo demanda --assunto "..."` com corpo por stdin (`--tipo` e `--assunto` obrigatorios; sem `--assunto` da exit 2).
+
+12/09/2026 — `mesa anota portfolio "<texto>"` como argumento: exit 2 (unrecognized arguments); por stdin gravou, MAS reescreveu o slot inteiro e apagou o estado de 11/09. Contorno NA DATA 12/09: reescrever por stdin com o texto anterior + o novo, sempre. (Ja estava neste caderno em 11/09 que `mesa caderno` so le — nao reli o caderno antes de tatear; o caderno e a memoria, ler antes.)
+
+12/09/2026 — duas `fila enviar` no mesmo lote e mesmo segundo devolveram o MESMO id (`20260912T215800-gestao-estrategica`); nao conferi se as duas persistiram. Contorno: nenhum; conferir no proximo `fila ler` do destinatario.
