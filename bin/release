@@ -1,16 +1,27 @@
 #!/usr/bin/env bash
-# release — produto numa tag, bin/ em current, PDP lê release.
-# capacidade: release
-# dono: claudinho-TI
-# use para: promover release em tag, reverter release, estado de release
-# atos: promover / reverter / estado; sem ato mostra o estado
-set -euo pipefail
+# release — o canônico produção: o que está no ar, desde quando, e como voltar
+# capacidade: infra/promocao-de-mudanca
+# dono: ti
+# classe: B
+# forma: predicado (estado, conferir) / lista (listar, procurar) / texto (ler) / fluxo (promover, reverter)
+# atos: estado (leitura, operacao) · listar (leitura, operacao) · ler (leitura, operacao) ·
+#       procurar (leitura, operacao) · conferir (leitura, operacao) · promover (escrita, operacao) ·
+#       reverter (escrita, operacao)
+# escreve: var/prod/<repo> (checkout, current) · ~/AI/bin (symlinks) · var/release/<repo> · stacks via deploy
+# ambiente: PF_PROD_RAIZ[=$HOME/AI/var/prod] porta · PF_BIN_DIR[=$HOME/AI/bin] porta · PF_CADEIRA porta (lida) · HOME
+# depende: git · gh (promover) · deploy · rede ao forge (promover) · porta (hora de arranque) · systemd de usuário
+# substitui: readlink current · git -C var/prod/… describe|rev-parse|ls-files|show|grep · ln -sfn + mv -T · chmod -R a-w · conferir <classe> · deploy <stack> promover|reverter
+# conforme: parcial
+set -uo pipefail
 
-OPT_DIR="${PF_OPT_DIR:-/opt/platafirma}"
-CURRENT_LINK="$OPT_DIR/current"
+PROD_RAIZ="${PF_PROD_RAIZ:-${PF_OPT_DIR:-$HOME/AI/var/prod}}"
+ABERTURA_DIR="${PF_ABERTURA_DIR:-$HOME/AI/var/abertura-publicada}"
+CURRENT_LINK="$PROD_RAIZ/current"
 PONTOS="${RELEASE_PONTOS:-$HOME/AI/var/release}"
 AI_DIR="${PF_AI_DIR:-$HOME/AI}"
 BIN_DIR="${PF_BIN_DIR:-$HOME/AI/bin}"
+CADEIRA="${PF_CADEIRA:-}"
+
 HARNESS_REPO="${PF_HARNESS:-$AI_DIR/platafirma-harness}"
 CORE_REPO="${PF_CORE:-$AI_DIR/platafirma-core}"
 CONHECIMENTO_REPO="${PF_CONHECIMENTO:-$AI_DIR/platafirma-conhecimento}"
@@ -30,132 +41,633 @@ STACKS_DEFAULT=(
   "searxng"
 )
 
-uso() {
+# Resolução de binário real: evitar shims no PATH da porta
+if [ -n "${PF_GIT_BIN:-}" ]; then
+  GIT="$PF_GIT_BIN"
+else
+  GIT="$(command -v /usr/bin/git /bin/git 2>/dev/null | head -1)"
+  [ -x "$GIT" ] || GIT=/usr/bin/git
+fi
+
+if [ ! -x "$GIT" ]; then
+  printf 'release: dependência ausente: git não encontrado\n' >&2
+  exit 3
+fi
+
+uso_texto() {
   cat >&2 <<'FIM'
 uso:
-  release estado [--json]                  tag em current × tag por stack × HEAD de main
-  release promover <tag> [--ensaio]        checkout dos 3 repos em /opt/platafirma/<tag> + troca current + deploy promover
-  release reverter [--executar [tag]]      current de volta ao ponto gravado + deploy reverter
-  release                                  mostra o estado (mesmo que `release estado`)
+  release estado     [<repo>] [--json]
+  release listar     <repo> [<prefixo>] [--json]
+  release ler        <repo> <caminho>
+  release procurar   <repo> --termo <termo> [<prefixo>] [--json]
+  release conferir   <classe> [<alvo>] [--ref <rev>] [--json]
+  release promover   <repo> [<rev>] [--ensaio]
+  release reverter   <repo> [<rev>] [--ensaio]
 
-capacidade: release · dono: claudinho-TI (arq:0102, card #3014)
+raiz servida: PF_PROD_RAIZ[=$HOME/AI/var/prod]
+exit: 0 achou/fez · 1 nao existe · 2 uso · 3 dependencia · 4 politica · 5 indeterminavel
 FIM
+}
+
+uso() {
+  uso_texto
   exit 2
 }
 
+validar_slug() {
+  local s="$1"
+  [ -n "$s" ] || return 2
+  case "$s" in
+    */*|.*|*..*) return 4 ;;
+  esac
+  case "$s" in
+    *[!A-Za-z0-9._-]*) return 4 ;;
+  esac
+  return 0
+}
+
+listar_familias() {
+  local fams=()
+  if [ -d "$PROD_RAIZ" ]; then
+    for d in "$PROD_RAIZ"/*; do
+      [ -d "$d" ] || continue
+      local b; b="$(basename "$d")"
+      [ "$b" != "current" ] || continue
+      fams+=("$b")
+    done
+  fi
+  if [ -d "$ABERTURA_DIR" ]; then
+    fams+=("abertura")
+  fi
+  printf '%s\n' "${fams[@]}"
+}
+
 listar_stacks() {
-  # A lista das 12 stacks e canonica em STACKS_DEFAULT (conferida contra o
-  # registro deploy). Nao se deriva do texto de help do `deploy`, que mistura
-  # a secao de uso com a de stacks (bug do card #3014: capturava 'deploy').
   printf '%s\n' "${STACKS_DEFAULT[@]}"
 }
 
-tag_de_dir() {
-  local dir="$1"
-  [ -d "$dir" ] || { echo "(inexistente)"; return; }
-  if git -C "$dir" rev-parse --git-dir >/dev/null 2>&1; then
-    local tag sha
-    tag="$(git -C "$dir" describe --tags --exact-match 2>/dev/null || echo '')"
-    if [ -n "$tag" ]; then
-      echo "$tag"
-    else
-      sha="$(git -C "$dir" rev-parse --short HEAD 2>/dev/null || echo '?')"
-      echo "$sha"
+# Resolução de identidade e validação da forma do servido
+# Retorna: 0 ok, 1 sem current / nao existe, 2 familia desconhecida, 4 fora da raiz, 5 indeterminavel
+resolver_identidade() {
+  local repo="$1"
+  TARGET_DIR=""
+  SHA=""
+  SHA_CURTO=""
+  TAG=""
+  QUANDO=""
+
+  validar_slug "$repo" || {
+    local rc=$?
+    return "$rc"
+  }
+
+  if [ "$repo" = "abertura" ]; then
+    local current_link="$ABERTURA_DIR/current"
+    if [ ! -e "$current_link" ] && [ ! -L "$current_link" ]; then
+      return 1
     fi
-  else
-    echo "(nao e git)"
+    if [ -L "$current_link" ] && [ ! -e "$current_link" ]; then
+      printf 'release: indeterminável: current pendurado em %s\n' "$current_link" >&2
+      return 5
+    fi
+    TARGET_DIR="$(realpath "$current_link" 2>/dev/null)" || {
+      printf 'release: indeterminável: erro ao resolver realpath de %s\n' "$current_link" >&2
+      return 5
+    }
+    if [ -w "$TARGET_DIR" ]; then
+      printf 'release: indeterminável: %s não é servido (diretório gravável — servido é somente-leitura)\n' "$TARGET_DIR" >&2
+      return 5
+    fi
+    if [ -f "$TARGET_DIR/MANIFEST.json" ]; then
+      SHA="$(jq -r '.sha // .sha_curto // empty' "$TARGET_DIR/MANIFEST.json" 2>/dev/null || true)"
+      QUANDO="$(jq -r '.publicado_em // empty' "$TARGET_DIR/MANIFEST.json" 2>/dev/null || true)"
+    fi
+    [ -n "$SHA" ] || SHA="$(basename "$TARGET_DIR")"
+    SHA_CURTO="${SHA:0:7}"
+    [ -n "$QUANDO" ] || QUANDO="$(date -r "$TARGET_DIR" "+%Y-%m-%d %H:%M:%SZ" 2>/dev/null || date -u "+%Y-%m-%d %H:%M:%SZ")"
+    TAG=""
+    return 0
   fi
+
+  local repo_dir="$PROD_RAIZ/$repo"
+  if [ ! -d "$repo_dir" ]; then
+    return 2
+  fi
+
+  local current_link="$repo_dir/current"
+  if [ ! -e "$current_link" ] && [ ! -L "$current_link" ]; then
+    return 1
+  fi
+  if [ -L "$current_link" ] && [ ! -e "$current_link" ]; then
+    printf 'release: indeterminável: current pendurado em %s\n' "$current_link" >&2
+    return 5
+  fi
+
+  TARGET_DIR="$(realpath "$current_link" 2>/dev/null)" || {
+    printf 'release: indeterminável: erro ao resolver realpath de %s\n' "$current_link" >&2
+    return 5
+  }
+  if [ -z "$TARGET_DIR" ] || [ ! -d "$TARGET_DIR" ]; then
+    printf 'release: indeterminável: destino de current não existe: %s\n' "$current_link" >&2
+    return 5
+  fi
+
+  # Forma do servido:
+  # 1. Deve ter .git
+  if [ ! -e "$TARGET_DIR/.git" ]; then
+    printf 'release: indeterminável: %s não é servido (sem .git)\n' "$TARGET_DIR" >&2
+    return 5
+  fi
+
+  # 2. Deve ser checkout destacado (sem ramo)
+  if "$GIT" -C "$TARGET_DIR" symbolic-ref HEAD >/dev/null 2>&1; then
+    local ramo
+    ramo="$("$GIT" -C "$TARGET_DIR" symbolic-ref --short HEAD 2>/dev/null || echo '?')"
+    printf 'release: indeterminável: %s não é servido (tem ramo: %s — servido é checkout destacado)\n' "$TARGET_DIR" "$ramo" >&2
+    return 5
+  fi
+
+  # 3. Deve ser somente-leitura
+  if [ -w "$TARGET_DIR" ]; then
+    printf 'release: indeterminável: %s não é servido (diretório gravável — servido é somente-leitura)\n' "$TARGET_DIR" >&2
+    return 5
+  fi
+
+  SHA="$("$GIT" -C "$TARGET_DIR" rev-parse HEAD 2>/dev/null || echo '')"
+  SHA_CURTO="${SHA:0:7}"
+  TAG="$("$GIT" -C "$TARGET_DIR" describe --tags --exact-match "$SHA" 2>/dev/null || echo '')"
+
+  QUANDO=""
+  if [ -f "$PONTOS/$repo/atual" ]; then
+    QUANDO="$(awk '{print $2}' "$PONTOS/$repo/atual" 2>/dev/null || cat "$PONTOS/$repo/atual" 2>/dev/null)"
+  fi
+  if [ -z "$QUANDO" ]; then
+    QUANDO="$(date -r "$TARGET_DIR" "+%Y-%m-%d %H:%M:%SZ" 2>/dev/null || date -u "+%Y-%m-%d %H:%M:%SZ")"
+  fi
+
+  return 0
 }
 
 cmd_estado() {
   local como_json=0
-  if [ "${1:-}" = "--json" ]; then
-    como_json=1
+  local repo_alvo=""
+
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --json) como_json=1; shift ;;
+      -*)
+        printf 'release: erro: opção desconhecida: %s\n' "$1" >&2
+        uso_texto
+        exit 2
+        ;;
+      *)
+        if [ -z "$repo_alvo" ]; then
+          repo_alvo="$1"
+        else
+          printf 'release: erro: argumento extra: %s\n' "$1" >&2
+          uso_texto
+          exit 2
+        fi
+        shift
+        ;;
+    esac
+  done
+
+  if [ -n "$repo_alvo" ]; then
+    validar_slug "$repo_alvo" || {
+      local rc=$?
+      if [ "$rc" -eq 4 ]; then
+        printf 'release: erro: nome de família inválido: '\''%s'\''\n' "$repo_alvo" >&2
+        exit 4
+      else
+        uso_texto
+        exit 2
+      fi
+    }
   fi
 
-  local tag_current="(nenhum)"
-  if [ -L "$CURRENT_LINK" ] || [ -e "$CURRENT_LINK" ]; then
-    tag_current="$(basename "$(readlink -f "$CURRENT_LINK")")"
+  local fams=()
+  if [ -n "$repo_alvo" ]; then
+    fams=("$repo_alvo")
+  else
+    while IFS= read -r l; do
+      [ -n "$l" ] || continue
+      fams+=("$l")
+    done < <(listar_familias)
   fi
 
-  local h_sha h_tag c_sha c_tag k_sha k_tag
-  h_sha="$(git -C "$HARNESS_REPO" rev-parse --short HEAD 2>/dev/null || echo '?')"
-  h_tag="$(git -C "$HARNESS_REPO" describe --tags --exact-match 2>/dev/null || echo '')"
-  c_sha="$(git -C "$CORE_REPO" rev-parse --short HEAD 2>/dev/null || echo '?')"
-  c_tag="$(git -C "$CORE_REPO" describe --tags --exact-match 2>/dev/null || echo '')"
-  k_sha="$(git -C "$CONHECIMENTO_REPO" rev-parse --short HEAD 2>/dev/null || echo '?')"
-  k_tag="$(git -C "$CONHECIMENTO_REPO" describe --tags --exact-match 2>/dev/null || echo '')"
+  local json_records=()
 
-  local stacks_tags=()
-  local todas_iguais=1
-  local count_stacks=0
-  local s dir tag_s
-
-  while IFS= read -r s; do
-    [ -n "$s" ] || continue
-    count_stacks=$((count_stacks + 1))
-    # Localiza compose dir da stack
-    dir=""
-    if [ -d "$AI_DIR/deploy/$s" ]; then
-      dir="$AI_DIR/deploy/$s"
-    elif [ -d "$AI_DIR/deploy/harness/$s" ]; then
-      dir="$AI_DIR/deploy/harness/$s"
-    elif [ -d "$AI_DIR/deploy/conhecimento/$s" ]; then
-      dir="$AI_DIR/deploy/conhecimento/$s"
-    elif [ -d "$AI_DIR/platafirma-harness/$s" ]; then
-      dir="$AI_DIR/platafirma-harness/$s"
-    elif [ -d "$AI_DIR/platafirma-conhecimento/$s" ]; then
-      dir="$AI_DIR/platafirma-conhecimento/$s"
+  for f in "${fams[@]}"; do
+    local rc=0
+    resolver_identidade "$f" || rc=$?
+    if [ "$rc" -eq 2 ]; then
+      if [ -n "$repo_alvo" ]; then
+        printf 'release: erro: família desconhecida: %s\n' "$repo_alvo" >&2
+        printf 'famílias disponíveis:\n' >&2
+        for fa in $(listar_familias); do
+          printf '  %s\n' "$fa" >&2
+        done
+        uso_texto
+        exit 2
+      fi
+      continue
+    elif [ "$rc" -eq 4 ]; then
+      printf 'release: erro: alvo fora da raiz ou símbolo que escapa: %s\n' "$f" >&2
+      exit 4
+    elif [ "$rc" -eq 5 ]; then
+      exit 5
+    elif [ "$rc" -eq 1 ]; then
+      if [ -n "$repo_alvo" ]; then
+        printf 'varrido: servido %s (família sem current)\n' "$repo_alvo" >&2
+        printf 'vizinho: repo estado %s\n' "$repo_alvo" >&2
+        exit 1
+      fi
+      continue
     fi
 
-    if [ -n "$dir" ]; then
-      tag_s="$(tag_de_dir "$dir")"
+    local porta_str=""
+    if [ "$f" = "platafirma-harness" ]; then
+      porta_str="porta: sem leitura"
+      if command -v systemctl >/dev/null 2>&1; then
+        local ts
+        ts="$(systemctl --user show ops-mcp -p ActiveEnterTimestamp --value 2>/dev/null || echo '')"
+        if [ -n "$ts" ] && [ "$ts" != "n/a" ]; then
+          porta_str="porta reiniciada $ts"
+        fi
+      fi
+    fi
+
+    local anterior_str=""
+    local ant_sha=""
+    if [ -f "$PONTOS/$f/anterior" ]; then
+      ant_sha="$(cat "$PONTOS/$f/anterior" 2>/dev/null || echo '')"
+      if [ -n "$ant_sha" ]; then
+        anterior_str="anterior: ${ant_sha:0:7}"
+      fi
+    fi
+
+    if [ "$como_json" -eq 1 ]; then
+      json_records+=("$(python3 -c '
+import sys, json
+print(json.dumps({
+  "familia": sys.argv[1],
+  "sha": sys.argv[2],
+  "sha_curto": sys.argv[3],
+  "tag": sys.argv[4] or None,
+  "no_ar_desde": sys.argv[5],
+  "porta": sys.argv[6] or None,
+  "anterior": sys.argv[7] or None
+}))
+' "$f" "$SHA" "$SHA_CURTO" "$TAG" "$QUANDO" "$porta_str" "$ant_sha")")
     else
-      tag_s="$tag_current"
+      if [ "$f" = "abertura" ]; then
+        printf '%-24s %-8s              publicada %s\n' "$f" "$SHA_CURTO" "$QUANDO"
+      else
+        printf '%-24s %-8s' "$f" "$SHA_CURTO"
+        if [ -n "$TAG" ]; then
+          printf '  %-11s' "$TAG"
+        else
+          printf '             '
+        fi
+        printf ' no ar desde %s' "$QUANDO"
+        if [ -n "$porta_str" ]; then
+          printf '  %s' "$porta_str"
+        fi
+        if [ -n "$anterior_str" ]; then
+          printf '  %s' "$anterior_str"
+        fi
+        echo
+      fi
     fi
+  done
 
-    stacks_tags+=("$s:$tag_s")
-    if [ "$tag_s" != "$tag_current" ] || [ "$tag_current" = "(nenhum)" ]; then
-      todas_iguais=0
+  if [ "$como_json" -eq 1 ]; then
+    if [ -n "$repo_alvo" ]; then
+      if [ "${#json_records[@]}" -gt 0 ]; then
+        printf '%s\n' "${json_records[0]}"
+      fi
+    else
+      python3 -c '
+import sys, json
+records = [json.loads(line) for line in sys.stdin.read().splitlines() if line]
+obj = {"familias": {r["familia"]: r for r in records}}
+print(json.dumps(obj, indent=2))
+' <<<"$(printf '%s\n' "${json_records[@]}")"
     fi
-  done < <(listar_stacks)
+  fi
+  return 0
+}
+
+cmd_listar() {
+  local como_json=0
+  local repo=""
+  local prefixo=""
+
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --json) como_json=1; shift ;;
+      -*)
+        printf 'release: erro: opção desconhecida: %s\n' "$1" >&2
+        uso_texto
+        exit 2
+        ;;
+      *)
+        if [ -z "$repo" ]; then
+          repo="$1"
+        elif [ -z "$prefixo" ]; then
+          prefixo="$1"
+        else
+          printf 'release: erro: argumento extra: %s\n' "$1" >&2
+          uso_texto
+          exit 2
+        fi
+        shift
+        ;;
+    esac
+  done
+
+  [ -n "$repo" ] || {
+    printf 'release: erro: repo obrigatório para listar\n' >&2
+    uso_texto
+    exit 2
+  }
+
+  validar_slug "$repo" || {
+    local rc=$?
+    if [ "$rc" -eq 4 ]; then
+      printf 'release: erro: nome de família inválido: '\''%s'\''\n' "$repo" >&2
+      exit 4
+    else
+      uso_texto
+      exit 2
+    fi
+  }
+
+  if [ -n "$prefixo" ]; then
+    if [[ "$prefixo" == /* ]] || [[ "$prefixo" == *..* ]]; then
+      printf 'release: erro: prefixo fora da raiz ou símbolo que escapa: %s\n' "$prefixo" >&2
+      exit 4
+    fi
+  fi
+
+  local rc=0
+  resolver_identidade "$repo" || rc=$?
+  if [ "$rc" -eq 1 ]; then
+    printf 'varrido: servido %s (família sem current)\n' "$repo" >&2
+    printf 'vizinho: repo listar %s %s\n' "$repo" "${prefixo:-}" >&2
+    exit 1
+  elif [ "$rc" -eq 2 ]; then
+    printf 'release: erro: família desconhecida: %s\n' "$repo" >&2
+    printf 'famílias disponíveis:\n' >&2
+    for fa in $(listar_familias); do
+      printf '  %s\n' "$fa" >&2
+    done
+    uso_texto
+    exit 2
+  elif [ "$rc" -ne 0 ]; then
+    exit "$rc"
+  fi
+
+  local files
+  if [ -n "$prefixo" ]; then
+    files="$("$GIT" -C "$TARGET_DIR" ls-files -- "$prefixo" 2>/dev/null || true)"
+  else
+    files="$("$GIT" -C "$TARGET_DIR" ls-files 2>/dev/null || true)"
+  fi
+
+  if [ -z "$files" ]; then
+    if [ "$como_json" -eq 1 ]; then
+      python3 -c 'import sys, json; print(json.dumps({"familia": sys.argv[1], "arquivos": [], "total": 0, "motivo": "nenhum arquivo encontrado sob '\''" + sys.argv[2] + "'\''"}, indent=2))' "$repo" "${prefixo:-.}"
+    else
+      printf 'motivo: nenhum arquivo encontrado sob '\''%s'\''\n' "${prefixo:-.}"
+    fi
+    return 0
+  fi
+
+  if [ "$como_json" -eq 1 ]; then
+    python3 -c 'import sys, json; arqs = [l for l in sys.stdin.read().splitlines() if l]; print(json.dumps({"familia": sys.argv[1], "arquivos": arqs, "total": len(arqs)}, indent=2))' "$repo" <<<"$files"
+  else
+    printf '%s\n' "$files"
+  fi
+  return 0
+}
+
+cmd_ler() {
+  local repo=""
+  local caminho=""
+
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      -*)
+        printf 'release: erro: opção desconhecida: %s\n' "$1" >&2
+        uso_texto
+        exit 2
+        ;;
+      *)
+        if [ -z "$repo" ]; then
+          repo="$1"
+        elif [ -z "$caminho" ]; then
+          caminho="$1"
+        else
+          printf 'release: erro: argumento extra: %s\n' "$1" >&2
+          uso_texto
+          exit 2
+        fi
+        shift
+        ;;
+    esac
+  done
+
+  [ -n "$repo" ] && [ -n "$caminho" ] || {
+    printf 'release: erro: repo e caminho são obrigatórios para ler\n' >&2
+    uso_texto
+    exit 2
+  }
+
+  validar_slug "$repo" || {
+    local rc=$?
+    if [ "$rc" -eq 4 ]; then
+      printf 'release: erro: nome de família inválido: '\''%s'\''\n' "$repo" >&2
+      exit 4
+    else
+      uso_texto
+      exit 2
+    fi
+  }
+
+  if [[ "$caminho" == /* ]] || [[ "$caminho" == *..* ]]; then
+    printf 'release: erro: caminho fora da raiz ou símbolo que escapa: %s\n' "$caminho" >&2
+    exit 4
+  fi
+
+  local rc=0
+  resolver_identidade "$repo" || rc=$?
+  if [ "$rc" -eq 1 ]; then
+    printf 'varrido: servido %s (família sem current)\n' "$repo" >&2
+    printf 'vizinho: repo ler %s %s\n' "$repo" "$caminho" >&2
+    exit 1
+  elif [ "$rc" -eq 2 ]; then
+    printf 'release: erro: família desconhecida: %s\n' "$repo" >&2
+    printf 'famílias disponíveis:\n' >&2
+    for fa in $(listar_familias); do
+      printf '  %s\n' "$fa" >&2
+    done
+    uso_texto
+    exit 2
+  elif [ "$rc" -ne 0 ]; then
+    exit "$rc"
+  fi
+
+  local alvo_arquivo="$TARGET_DIR/$caminho"
+  if [ ! -f "$alvo_arquivo" ]; then
+    printf 'varrido: servido %s (%s, promovido %s)\n' "$repo" "$TARGET_DIR" "$QUANDO" >&2
+    printf 'vizinho: repo ler %s %s\n' "$repo" "$caminho" >&2
+    exit 1
+  fi
+
+  cat "$alvo_arquivo"
+  if [ -n "$TAG" ]; then
+    printf 'versão: current@%s (%s)\n' "$SHA_CURTO" "$TAG" >&2
+  else
+    printf 'versão: current@%s\n' "$SHA_CURTO" >&2
+  fi
+  return 0
+}
+
+cmd_procurar() {
+  local como_json=0
+  local repo=""
+  local termo=""
+  local prefixo=""
+
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --json) como_json=1; shift ;;
+      --termo)
+        shift
+        [ $# -gt 0 ] || { printf 'release: erro: --termo exige um valor\n' >&2; uso_texto; exit 2; }
+        termo="$1"
+        shift
+        ;;
+      -*)
+        printf 'release: erro: opção desconhecida: %s\n' "$1" >&2
+        uso_texto
+        exit 2
+        ;;
+      *)
+        if [ -z "$repo" ]; then
+          repo="$1"
+        elif [ -z "$prefixo" ]; then
+          prefixo="$1"
+        else
+          printf 'release: erro: argumento extra: %s\n' "$1" >&2
+          uso_texto
+          exit 2
+        fi
+        shift
+        ;;
+    esac
+  done
+
+  [ -n "$repo" ] || { printf 'release: erro: repo obrigatório para procurar\n' >&2; uso_texto; exit 2; }
+  [ -n "$termo" ] || { printf 'release: erro: --termo <termo> é obrigatório para procurar\n' >&2; uso_texto; exit 2; }
+
+  validar_slug "$repo" || {
+    local rc=$?
+    if [ "$rc" -eq 4 ]; then
+      printf 'release: erro: nome de família inválido: '\''%s'\''\n' "$repo" >&2
+      exit 4
+    else
+      uso_texto
+      exit 2
+    fi
+  }
+
+  if [ -n "$prefixo" ]; then
+    if [[ "$prefixo" == /* ]] || [[ "$prefixo" == *..* ]]; then
+      printf 'release: erro: prefixo fora da raiz ou símbolo que escapa: %s\n' "$prefixo" >&2
+      exit 4
+    fi
+  fi
+
+  local rc=0
+  resolver_identidade "$repo" || rc=$?
+  if [ "$rc" -eq 1 ]; then
+    printf 'varrido: servido %s (família sem current)\n' "$repo" >&2
+    printf 'vizinho: repo procurar %s --termo %s\n' "$repo" "$termo" >&2
+    exit 1
+  elif [ "$rc" -eq 2 ]; then
+    printf 'release: erro: família desconhecida: %s\n' "$repo" >&2
+    printf 'famílias disponíveis:\n' >&2
+    for fa in $(listar_familias); do
+      printf '  %s\n' "$fa" >&2
+    done
+    uso_texto
+    exit 2
+  elif [ "$rc" -ne 0 ]; then
+    exit "$rc"
+  fi
+
+  local out
+  if [ -n "$prefixo" ]; then
+    out="$("$GIT" -C "$TARGET_DIR" grep -n -- "$termo" -- "$prefixo" 2>/dev/null || true)"
+  else
+    out="$("$GIT" -C "$TARGET_DIR" grep -n -- "$termo" 2>/dev/null || true)"
+  fi
+
+  if [ -z "$out" ]; then
+    if [ "$como_json" -eq 1 ]; then
+      python3 -c 'import sys, json; print(json.dumps({"familia": sys.argv[1], "termo": sys.argv[2], "ocorrencias": [], "total": 0, "motivo": "termo não encontrado no servido"}, indent=2))' "$repo" "$termo"
+    else
+      printf 'motivo: termo '\''%s'\'' não encontrado no servido %s\n' "$termo" "$repo"
+    fi
+    return 0
+  fi
 
   if [ "$como_json" -eq 1 ]; then
     python3 -c '
 import sys, json
-data = {
-  "current": sys.argv[1],
-  "harness": {"sha": sys.argv[2], "tag": sys.argv[3] or None},
-  "core": {"sha": sys.argv[4], "tag": sys.argv[5] or None},
-  "conhecimento": {"sha": sys.argv[6], "tag": sys.argv[7] or None},
-  "stacks": dict(item.split(":", 1) for item in sys.argv[8].split(",") if ":" in item),
-  "todas_iguais": sys.argv[9] == "1"
+linhas = [l for l in sys.stdin.read().splitlines() if l]
+ocorr = []
+for l in linhas:
+    partes = l.split(":", 2)
+    if len(partes) >= 3:
+        ocorr.append({"caminho": partes[0], "linha": int(partes[1]) if partes[1].isdigit() else partes[1], "texto": partes[2]})
+    else:
+        ocorr.append({"linha_crua": l})
+print(json.dumps({"familia": sys.argv[1], "termo": sys.argv[2], "ocorrencias": ocorr, "total": len(ocorr)}, indent=2))
+' "$repo" "$termo" <<<"$out"
+  else
+    printf '%s\n' "$out"
+  fi
+  return 0
 }
-print(json.dumps(data, indent=2))
-' "$tag_current" "$h_sha" "$h_tag" "$c_sha" "$c_tag" "$k_sha" "$k_tag" \
-  "$(IFS=,; echo "${stacks_tags[*]}")" "$todas_iguais"
-    return 0
+
+cmd_conferir() {
+  if [ $# -eq 0 ]; then
+    printf 'release: erro: classe obrigatória para conferir\n' >&2
+    uso_texto
+    exit 2
+  fi
+  local classe="$1"
+  shift
+
+  local conferir_bin=""
+  if command -v conferir >/dev/null 2>&1; then
+    conferir_bin="conferir"
+  elif [ -x "$BIN_DIR/conferir" ]; then
+    conferir_bin="$BIN_DIR/conferir"
+  elif [ -x "$(dirname "$0")/conferir" ]; then
+    conferir_bin="$(dirname "$0")/conferir"
   fi
 
-  echo "release estado:"
-  echo "  current : $tag_current"
-  echo
-  echo "  repos (HEAD de main):"
-  printf '    %-24s %s%s\n' "platafirma-harness" "$h_sha" "$([ -n "$h_tag" ] && echo " (tag: $h_tag)")"
-  printf '    %-24s %s%s\n' "platafirma-core" "$c_sha" "$([ -n "$c_tag" ] && echo " (tag: $c_tag)")"
-  printf '    %-24s %s%s\n' "platafirma-conhecimento" "$k_sha" "$([ -n "$k_tag" ] && echo " (tag: $k_tag)")"
-  echo
-  echo "  stacks (tag por stack):"
-  for item in "${stacks_tags[@]}"; do
-    s="${item%%:*}"
-    tag_s="${item#*:}"
-    printf '    %-18s : %s\n' "$s" "$tag_s"
-  done
-  echo
-  if [ "$todas_iguais" -eq 1 ]; then
-    echo "  resultado: uma tag só em current e nas $count_stacks stacks, igual ($tag_current)"
+  if [ -n "$conferir_bin" ]; then
+    exec "$conferir_bin" "$classe" "$@"
   else
-    echo "  resultado: divergente (current=$tag_current)"
+    printf 'release: erro: dependência ausente: conferir não encontrado\n' >&2
+    exit 3
   fi
 }
 
@@ -165,13 +677,13 @@ cmd_promover() {
   while [ $# -gt 0 ]; do
     case "$1" in
       --ensaio) ensaio=1; shift ;;
-      -*) echo "opcao desconhecida: $1" >&2; exit 2 ;;
+      -*) printf 'release: erro: opção desconhecida: %s\n' "$1" >&2; exit 2 ;;
       *) tag="$1"; shift ;;
     esac
   done
-  [ -n "$tag" ] || { echo "erro: tag obrigatoria. uso: release promover <tag> [--ensaio]" >&2; exit 2; }
+  [ -n "$tag" ] || { printf 'release: erro: tag obrigatória. uso: release promover <tag> [--ensaio]\n' >&2; exit 2; }
 
-  local alvo="$OPT_DIR/$tag"
+  local alvo="$PROD_RAIZ/$tag"
   local antes=""
   if [ -L "$CURRENT_LINK" ]; then
     antes="$(basename "$(readlink -f "$CURRENT_LINK")")"
@@ -194,42 +706,50 @@ cmd_promover() {
   mkdir -p "$alvo"
 
   # Checkout harness
-  if [ ! -d "$alvo/harness/.git" ]; then
-    git clone --shared "$HARNESS_REPO" "$alvo/harness"
-  else
-    git -C "$alvo/harness" fetch -q origin || true
+  if [ -d "$HARNESS_REPO" ]; then
+    if [ ! -d "$alvo/harness/.git" ]; then
+      "$GIT" clone --shared "$HARNESS_REPO" "$alvo/harness"
+    else
+      "$GIT" -C "$alvo/harness" fetch -q origin || true
+    fi
+    "$GIT" -C "$alvo/harness" checkout -q --detach "$tag"
   fi
-  git -C "$alvo/harness" checkout -q --detach "$tag"
 
   # Checkout core
-  if [ ! -d "$alvo/core/.git" ]; then
-    git clone --shared "$CORE_REPO" "$alvo/core"
-  else
-    git -C "$alvo/core" fetch -q origin || true
+  if [ -d "$CORE_REPO" ]; then
+    if [ ! -d "$alvo/core/.git" ]; then
+      "$GIT" clone --shared "$CORE_REPO" "$alvo/core"
+    else
+      "$GIT" -C "$alvo/core" fetch -q origin || true
+    fi
+    "$GIT" -C "$alvo/core" checkout -q --detach "$tag"
   fi
-  git -C "$alvo/core" checkout -q --detach "$tag"
 
   # Checkout conhecimento
-  if [ ! -d "$alvo/conhecimento/.git" ]; then
-    git clone --shared "$CONHECIMENTO_REPO" "$alvo/conhecimento"
-  else
-    git -C "$alvo/conhecimento" fetch -q origin || true
+  if [ -d "$CONHECIMENTO_REPO" ]; then
+    if [ ! -d "$alvo/conhecimento/.git" ]; then
+      "$GIT" clone --shared "$CONHECIMENTO_REPO" "$alvo/conhecimento"
+    else
+      "$GIT" -C "$alvo/conhecimento" fetch -q origin || true
+    fi
+    "$GIT" -C "$alvo/conhecimento" checkout -q --detach "$tag"
   fi
-  git -C "$alvo/conhecimento" checkout -q --detach "$tag"
 
-  # Link do politica-acesso sob $alvo para PDP_DIR
-  ln -sfn "harness/politica-acesso" "$alvo/politica-acesso"
+  # Link do politica-acesso sob $alvo para PDP_DIR se harness existir
+  if [ -d "$alvo/harness/politica-acesso" ]; then
+    ln -sfn "harness/politica-acesso" "$alvo/politica-acesso"
+  fi
 
   # Protege o release contra gravacao acidental
   chmod -R a-w "$alvo"
   echo "   repos em $alvo: harness, core, conhecimento (somente leitura)"
 
   echo "3. troca atomica do symlink current..."
-  ln -sfn "$tag" "$OPT_DIR/current.tmp"
-  mv -Tf "$OPT_DIR/current.tmp" "$CURRENT_LINK"
+  ln -sfn "$tag" "$PROD_RAIZ/current.tmp"
+  mv -Tf "$PROD_RAIZ/current.tmp" "$CURRENT_LINK"
   echo "   current -> $tag"
 
-  echo "4. assentando symlinks de ~/AI/bin/ para /opt/platafirma/current/harness/bin/..."
+  echo "4. assentando symlinks de ~/AI/bin/ para $CURRENT_LINK/harness/bin/..."
   mkdir -p "$BIN_DIR"
   if [ -d "$CURRENT_LINK/harness/bin" ]; then
     for f in "$CURRENT_LINK/harness/bin"/*; do
@@ -242,7 +762,6 @@ cmd_promover() {
       base="$(basename "$d")"
       ln -sfn "$CURRENT_LINK/harness/bin/$base" "$BIN_DIR/$base"
     done
-    echo "   ~/AI/bin/* -> /opt/platafirma/current/harness/bin/*"
   fi
 
   echo "5. deploy <stack> promover $tag para cada stack..."
@@ -275,7 +794,7 @@ cmd_reverter() {
     case "$1" in
       --executar) executar=1; shift ;;
       --ensaio)   ensaio=1; shift ;;
-      -*) echo "opcao desconhecida: $1" >&2; exit 2 ;;
+      -*) printf 'release: erro: opção desconhecida: %s\n' "$1" >&2; exit 2 ;;
       *)  tag_arg="$1"; shift ;;
     esac
   done
@@ -319,13 +838,13 @@ cmd_reverter() {
   mkdir -p "$PONTOS"
   echo "$atual" > "$PONTOS/release.revertido-de"
 
-  if [ ! -d "$OPT_DIR/$alvo" ]; then
-    echo "recusa: diretorio $OPT_DIR/$alvo nao existe para reverter." >&2
+  if [ ! -d "$PROD_RAIZ/$alvo" ]; then
+    echo "recusa: diretorio $PROD_RAIZ/$alvo nao existe para reverter." >&2
     exit 1
   fi
 
-  ln -sfn "$alvo" "$OPT_DIR/current.tmp"
-  mv -Tf "$OPT_DIR/current.tmp" "$CURRENT_LINK"
+  ln -sfn "$alvo" "$PROD_RAIZ/current.tmp"
+  mv -Tf "$PROD_RAIZ/current.tmp" "$CURRENT_LINK"
   echo "1. current revertido -> $alvo"
 
   # Re-aponta ~/AI/bin/*
@@ -341,7 +860,7 @@ cmd_reverter() {
       base="$(basename "$d")"
       ln -sfn "$CURRENT_LINK/harness/bin/$base" "$BIN_DIR/$base"
     done
-    echo "2. ~/AI/bin/* revertido -> /opt/platafirma/current/harness/bin/*"
+    echo "2. ~/AI/bin/* revertido -> $CURRENT_LINK/harness/bin/*"
   fi
 
   echo "3. revertendo stacks..."
@@ -361,17 +880,33 @@ cmd_reverter() {
   echo "== release revertido para $alvo =="
 }
 
-# Despacho
+# Se nenhum argumento passado, imprime usage e sai 2
+if [ $# -eq 0 ]; then
+  uso
+fi
+
+# Tratamento universal de --ajuda / -h / --help
 for _a in "$@"; do
   case "$_a" in
     --ajuda|--help|-h) uso ;;
   esac
 done
 
-cmd="${1:-estado}"
+cmd="$1"
+shift
+
 case "$cmd" in
-  estado)   shift || true; cmd_estado "$@" ;;
-  promover) shift; cmd_promover "$@" ;;
-  reverter) shift; cmd_reverter "$@" ;;
-  *)        uso ;;
+  estado)   cmd_estado "$@" ;;
+  listar)   cmd_listar "$@" ;;
+  ler)      cmd_ler "$@" ;;
+  procurar) cmd_procurar "$@" ;;
+  conferir) cmd_conferir "$@" ;;
+  promover) cmd_promover "$@" ;;
+  reverter) cmd_reverter "$@" ;;
+  *)
+    printf 'release: erro: ato desconhecido '\''%s'\''\n' "$cmd" >&2
+    printf 'atos: estado · listar · ler · procurar · conferir · promover · reverter\n' >&2
+    uso_texto
+    exit 2
+    ;;
 esac
