@@ -417,6 +417,11 @@ def conferir_verbo(alvo, como_json=False):
         classe, onde = origem(nome, caminho)
         if classe == "terceiro":
             continue
+        # PF_CONFERIR_ORIGEM=0: o BIN medido e uma rev materializada (release conferir --ref,
+        # gate de promover), nao a instalacao. Ali o arquivo E o repo por construcao, e julgar
+        # origem (symlink × copia) nao mede nada — so cabecalho e capacidade valem.
+        if os.environ.get("PF_CONFERIR_ORIGEM", "1") == "0":
+            classe, onde = "rev", caminho
         # symlink cujo destino tem outro nome e ALIAS de um verbo ja contado: aparece
         # declarado, mas nao entra na conta de arq:0037 — senao a deprecacao de um verbo
         # o faz reprovar por existir duas vezes.

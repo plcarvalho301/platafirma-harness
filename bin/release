@@ -760,7 +760,7 @@ cmd_conferir() {
     fi
     printf 'ref:       %s materializada em %s (classe verbo mede a rev, nao o current)\n' "${sha:0:7}" "$wt/arvore" >&2
     local rc=0
-    PF_BIN_DIR="$wt/arvore/bin" PF_HARNESS_DIR="$wt/arvore" python3 "$impl" "$classe" "${resto[@]}" || rc=$?
+    PF_BIN_DIR="$wt/arvore/bin" PF_HARNESS_DIR="$wt/arvore" PF_CONFERIR_ORIGEM=0 python3 "$impl" "$classe" "${resto[@]}" || rc=$?
     "$GIT" --git-dir="$esp" worktree remove --force "$wt/arvore" 2>/dev/null || true
     rm -rf "$wt"
     exit "$rc"
@@ -973,6 +973,54 @@ agendar_restart_porta() {
   fi
 }
 
+# gate de promocao (arq:0110 §9; mapa: `conferir` e o gate de infra/promocao-de-mudanca). A familia
+# que serve verbos so troca current se cada verbo que a rev MUDOU (bin/<verbo> ou bin/_<verbo>/,
+# em relacao ao current) passa em `conferir verbo` medido no checkout ja materializado. Conformacao
+# e para frente (arq:0042): verbo que a rev nao tocou carrega o debito que ja carregava e nao
+# segura a promocao. Mede com o conferir da propria rev, PF_CONFERIR_ORIGEM=0 (o checkout E o
+# repo; origem nao mede nada ali). Divergencia e politica: exit 4, current intacto.
+gate_conferir_verbo() {  # $1=repo $2=sha_candidato $3=sha_atual(ou vazio)
+  local repo="$1" sha="$2" atual="$3" esp arvore impl
+  [ "$repo" = "$FAMILIA_BIN" ] || return 0
+  esp="$(espelho_de "$repo")"; arvore="$PROD_RAIZ/$repo/$sha"; impl="$arvore/bin/_release/conferir/conferir.py"
+  if [ ! -f "$impl" ]; then
+    printf 'gate:      rev %s nao traz bin/_release/conferir — anterior ao gate; nada medido\n' "${sha:0:7}"
+    return 0
+  fi
+  if [ -z "$atual" ]; then
+    printf 'gate:      familia sem current — sem base para dizer o que a rev mudou; nada medido\n'
+    return 0
+  fi
+  local caminho nome verbos=() v
+  while IFS= read -r caminho; do
+    caminho="${caminho#bin/}"
+    nome="${caminho%%/*}"
+    nome="${nome#_}"
+    [ -n "$nome" ] || continue
+    [ -f "$arvore/bin/$nome" ] || continue      # sub-ato de verbo apagado, ou arquivo solto
+    for v in "${verbos[@]}"; do [ "$v" = "$nome" ] && continue 2; done
+    verbos+=("$nome")
+  done < <("$GIT" --git-dir="$esp" diff --name-only "$atual" "$sha" -- bin 2>/dev/null)
+  if [ "${#verbos[@]}" -eq 0 ]; then
+    printf 'gate:      %s → %s nao muda verbo nenhum em bin/ — nada a medir\n' "${atual:0:7}" "${sha:0:7}"
+    return 0
+  fi
+  printf 'gate:      conferir verbo na rev %s para o que ela mudou: %s\n' "${sha:0:7}" "${verbos[*]}"
+  local rc=0 reprovados=()
+  for v in "${verbos[@]}"; do
+    rc=0
+    PF_BIN_DIR="$arvore/bin" PF_HARNESS_DIR="$arvore" PF_CONFERIR_ORIGEM=0 python3 "$impl" verbo "$v" || rc=$?
+    [ "$rc" -eq 0 ] || reprovados+=("$v")
+  done
+  if [ "${#reprovados[@]}" -gt 0 ]; then
+    printf 'release: recusa: rev %s reprova em conferir verbo: %s — current segue em %s; corrija o cabecalho (capacidade/dono no mapa da mesa) e promova de novo\n' \
+      "${sha:0:7}" "${reprovados[*]}" "${atual:0:7}" >&2
+    return 4
+  fi
+  printf 'gate:      verde\n'
+  return 0
+}
+
 # desfaz a troca de current e o PATH quando as stacks recusaram; nunca apaga o checkout
 desfazer_para() {  # $1=repo $2=sha_anterior(ou vazio)
   local repo="$1" ant="$2"
@@ -1066,6 +1114,7 @@ cmd_promover() {
 
   exigir_deploy_se_stack || { rc=$?; exit "$rc"; }
   materializar "$repo" "$sha" || { rc=$?; exit "$rc"; }
+  gate_conferir_verbo "$repo" "$sha" "$atual" || { rc=$?; exit "$rc"; }
   gravar_pontos "$repo" "$atual" "$sha"
   trocar_current "$repo" "$sha"
   printf 'current:   %s → %s\n' "$(curto_ou "$atual" '(nenhum)')" "${sha:0:7}"

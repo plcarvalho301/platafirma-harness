@@ -182,4 +182,34 @@ set +e; out="$(PATH="$TMP_DIR/semdeploy:/usr/bin:/bin" "$VERBO" promover platafi
 [ "$(readlink "$PROD_RAIZ/platafirma-harness/current")" = "$H_SHA1" ] || falha "current mudou com deploy ausente"
 echo "OK"
 
+echo "--- 12: gate de promoção — rev que muda verbo reprovado em conferir verbo → 4 e current intacto; rev sem conferir passa sem gate"
+# rev anterior ao gate (não traz bin/_release/conferir): promove e declara que não mediu
+out="$("$VERBO" promover platafirma-harness "$H_SHA3" 2>&1)" || falha "promover sha3 (sem conferir na rev): $out"
+grep -q "anterior ao gate" <<<"$out" || falha "rev sem conferir devia declarar que nao mediu: $out"
+[ "$(readlink "$PROD_RAIZ/platafirma-harness/current")" = "$H_SHA3" ] || falha "current devia ser sha3"
+# c4: traz o conferir da casa e um verbo novo com capacidade inventada
+WT="$REPO_RAIZ/platafirma-harness"
+mkdir -p "$WT/bin/_release/conferir"; cp "$REPO_ROOT/bin/_release/conferir/conferir.py" "$WT/bin/_release/conferir/conferir.py"
+printf '#!/usr/bin/env bash\n# bar — verbo de teste do gate\n# capacidade: inventada-no-cabecalho\n# dono: ti\necho bar\n' > "$WT/bin/bar"; chmod +x "$WT/bin/bar"
+git -C "$WT" add .; git -C "$WT" commit -q -m c4; git -C "$WT" push -q origin main
+H_SHA4="$(git -C "$WT" rev-parse HEAD)"
+set +e; out="$("$VERBO" promover platafirma-harness "$H_SHA4" 2>&1)"; rc=$?; set -e
+[ "$rc" -eq 4 ] || falha "verbo reprovado devia segurar a promoção com 4: rc=$rc $out"
+grep -q "reprova em conferir verbo: bar" <<<"$out" || falha "recusa devia nomear o verbo reprovado: $out"
+[ "$(readlink "$PROD_RAIZ/platafirma-harness/current")" = "$H_SHA3" ] || falha "current mudou com gate vermelho"
+[ -d "$PROD_RAIZ/platafirma-harness/$H_SHA4" ] || falha "checkout da rev reprovada devia ficar materializado (imutável, reaproveitável)"
+# c5: cabeçalho conforme (capacidade lavrada no mapa) → gate verde, current move
+printf '#!/usr/bin/env bash\n# bar — verbo de teste do gate\n# capacidade: construcao\n# dono: ti\necho bar\n' > "$WT/bin/bar"
+git -C "$WT" commit -q -am c5; git -C "$WT" push -q origin main
+H_SHA5="$(git -C "$WT" rev-parse HEAD)"
+out="$("$VERBO" promover platafirma-harness "$H_SHA5" 2>&1)" || falha "promover sha5 (gate verde): $out"
+grep -q "gate:      verde" <<<"$out" && grep -q "para o que ela mudou: bar" <<<"$out" || falha "gate devia medir só bar e sair verde: $out"
+[ "$(readlink "$PROD_RAIZ/platafirma-harness/current")" = "$H_SHA5" ] || falha "current devia ser sha5"
+# rev que não toca bin/ não mede nada
+echo v6 > "$WT/README.md"; git -C "$WT" commit -q -am c6; git -C "$WT" push -q origin main
+H_SHA6="$(git -C "$WT" rev-parse HEAD)"
+out="$("$VERBO" promover platafirma-harness "$H_SHA6" 2>&1)" || falha "promover sha6: $out"
+grep -q "nao muda verbo nenhum" <<<"$out" || falha "rev sem mudança em bin/ devia declarar nada a medir: $out"
+echo "OK"
+
 echo "=== lote 2: todos os testes passaram ==="
