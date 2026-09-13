@@ -4,13 +4,8 @@
 # dono: ti
 # classe: B
 # forma: predicado (estado, diff) / lista (listar, procurar, historico, pr-listar) / texto (ler, pr-diff) / fluxo (sanear)
-# atos: estado (leitura, operacao) · listar (leitura, operacao) · ler (leitura, operacao) ·
-#       procurar (leitura, operacao) · historico (leitura, operacao) · diff (leitura, operacao) ·
-#       commitar (escrita, operacao) · ramo (escrita, operacao) · atualizar (escrita, operacao) ·
-#       abrir (escrita, operacao) · clonar (escrita, operacao) · empurrar (escrita, forge) ·
-#       pr-abrir (escrita, forge) · pr-listar (leitura, forge) · pr-ver (leitura, forge) ·
-#       pr-diff (leitura, forge) · pr-merge (escrita, forge) · sanear (escrita, forge) ·
-#       git (escrita, operacao)
+# use para: ler, listar ou procurar o que esta na bancada, ainda nao servido (ler, listar, procurar); historico de um caminho e diff contra origin/main (historico, diff); estado do clone; ramo por card; commitar so o que a sessao tocou; empurrar; PR de ponta a ponta (pr-abrir, pr-listar, pr-ver, pr-diff, pr-merge); atualizar e sanear o clone; git cru contido (git)
+# atos: estado (leitura, operacao), listar (leitura, operacao), ler (leitura, operacao), procurar (leitura, operacao), historico (leitura, operacao), diff (leitura, operacao), commitar (escrita, operacao), ramo (escrita, operacao), atualizar (escrita, operacao), abrir (escrita, operacao), clonar (escrita, operacao), empurrar (escrita, forge), pr-abrir (escrita, forge), pr-listar (leitura, forge), pr-ver (leitura, forge), pr-diff (leitura, forge), pr-merge (escrita, forge), sanear (escrita, forge), git (escrita, operacao)
 # escreve: var/wt/<repo>/<cadeira> (objetos e refs) · origin (refs, PR) · wip/ (só sanear) · nada (leitura)
 # consome: porta@ops-log
 # ambiente: PF_REPO_RAIZ[=$HOME/AI] porta · PF_CADEIRA porta (lida) · PF_SESSAO porta (lida) · PF_OPS_LOG_DIR[=$HOME/AI/var/log/ops] porta · HOME
