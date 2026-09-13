@@ -1,0 +1,11 @@
+uso:
+  release estado     [<repo>] [--json]
+  release listar     <repo> [<prefixo>] [--json]
+  release ler        <repo> <caminho>
+  release procurar   <repo> --termo <termo> [<prefixo>] [--json]
+  release conferir   <classe> [<alvo>] [--ref <rev>] [--json]
+  release promover   <repo> [<rev>] [--ensaio]
+  release reverter   <repo> [<rev>] [--ensaio]
+
+raiz servida: PF_PROD_RAIZ[=$HOME/AI/var/prod]
+exit: 0 achou/fez · 1 nao existe · 2 uso · 3 dependencia · 4 politica · 5 indeterminavel
