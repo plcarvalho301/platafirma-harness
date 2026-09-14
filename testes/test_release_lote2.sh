@@ -137,12 +137,28 @@ set +e; out="$("$VERBO" reverter platafirma-harness "$H_SHA1" 2>&1)"; rc=$?; set
 [ "$rc" -eq 1 ] || falha "reverter para onde já está devia sair 1: rc=$rc"
 echo "OK"
 
-echo "--- 7: stack que recusa → 5 e current volta"
+echo "--- 7: stack que recusa → 5, ESTADO PARTIDO: current FICA no sha novo (arq:0110 item 11c)"
+# Contrato novo (#3057 item 11c): current (verbos) e stack (containers) sao planos
+# separados. Stack que recusa NAO reverte o current -- fatiar codigo bom por falha de
+# container e desfazer trabalho valido. O current fica no sha novo, a stack vira
+# incidente, e o relato grita o estado partido. Antes deste item o teste exigia o
+# oposto (current volta); a mudanca de comportamento foi deliberada.
 : > "$DEPLOY_LOG"
+# parte-se de sha1 no ar (o caso 6 reverteu para sha1)
+[ "$(readlink "$PROD_RAIZ/platafirma-harness/current")" = "$H_SHA1" ] || falha "pre-condicao do 7: current devia estar em sha1"
 set +e; out="$(DEPLOY_FALHA=harness-controle "$VERBO" promover platafirma-harness "$H_SHA2" 2>&1)"; rc=$?; set -e
 [ "$rc" -eq 5 ] || falha "stack recusando devia sair 5: rc=$rc $out"
-[ "$(readlink "$PROD_RAIZ/platafirma-harness/current")" = "$H_SHA1" ] || falha "current não voltou após falha de stack"
-[ "$(readlink "$BIN_DIR/foo")" = "$PROD_RAIZ/platafirma-harness/current/bin/foo" ] || falha "PATH não reassentado após falha"
+[ "$(readlink "$PROD_RAIZ/platafirma-harness/current")" = "$H_SHA2" ] || falha "ESTADO PARTIDO: current devia FICAR no sha novo (sha2), nao voltar"
+[ "$(readlink "$BIN_DIR/foo")" = "$PROD_RAIZ/platafirma-harness/current/bin/foo" ] || falha "PATH devia seguir assentado no sha novo"
+grep -q "ESTADO PARTIDO" <<<"$out" || falha "a recusa devia GRITAR o estado partido: $out"
+grep -q "${H_SHA2:0:7}" <<<"$out" || falha "o relato devia dizer o sha no ar"
+grep -q "deploy harness-controle promover" <<<"$out" || falha "o relato devia dar o comando de RETOMAR"
+# o ponto de volta gravado permite a volta deliberada: anterior = sha1
+[ "$(cat "$PONTOS/platafirma-harness/anterior")" = "$H_SHA1" ] || falha "anterior devia ser sha1 para o reverter deliberado"
+# devolve o estado para sha1 (via reverter deliberado, stack ok) para os proximos casos
+: > "$DEPLOY_LOG"
+"$VERBO" reverter platafirma-harness "$H_SHA1" >/dev/null 2>&1 || falha "nao consegui devolver o estado a sha1 para os proximos casos"
+[ "$(readlink "$PROD_RAIZ/platafirma-harness/current")" = "$H_SHA1" ] || falha "pos-7: current devia estar de volta em sha1"
 echo "OK"
 
 echo "--- 8: reverter sem rev e sem ponto → 2; rev não materializada → 1 com vizinho"
