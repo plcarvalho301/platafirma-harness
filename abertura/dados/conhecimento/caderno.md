@@ -164,16 +164,35 @@ de corpus (feito uma vez, corrigido pelo dono em 01/09/2026) inventa lacuna onde
 arrumacao. Ao ler `rag_facets`: dominio e subdominio sao a medida de cobertura — so ali
 a ausencia significa "nao ha obra que responda"; `frente` e marcador de trabalho.
 
-## `acervo ingerir casa <raiz>` espera lista curada, nao path solto
+## `acervo ingerir casa <repo>` varre o SERVIDO inteiro; o que entra e o padrao_path
 
-`raiz` nao e diretorio nem arquivo-alvo: e uma lista curada (formato de
-`docs/varredura-casa-candidatos.md` — `## repo` / `### secao (familia)` /
-`- path`). Passar o caminho do proprio doc-alvo devolve "nenhum item na
-lista", nao ingere nada. O unico atalho que ignora a lista e `--adr`
-(varre `macro-global/decisions` e `macro-global/capabilities/*/decisions`
-inteiro, idempotente por sha via aposentar-e-criar). Doc de casa que nao
-e ADR e nao esta na lista canonica so entra por edicao dela ou por lista
-ad-hoc passada como 1o posicional (linha `## repo` + `### secao` + `- path`).
+`acervo ingerir casa platafirma-arquitetura` varre `var/prod/<repo>/current` (o release,
+arq:0097 — nunca a raiz da morada, que e um dir por sha) e classifica cada `*.md` pelo
+`padrao_path` de `acervo.especie_tipo`; sem glob que case, o arquivo sai `reprovado` com
+motivo. Logo: doc em `main` que nao esta no release NAO entra — `release promover` vem
+antes. Lista curada e `--adr` seguem aceitos como fonte de transicao. "Nenhum arquivo casa
+com padrao_path" com o repo no ar e sinal de varredura na morada errada, nao de glob.
+
+## Versao de doc de casa e do TEXTO, nao do ref (14/09/2026)
+
+`casa_impressao.fonte_versao = sha256:<corpo normalizado>` (CRLF→LF, sem newline final),
+a mesma forma de obra; `ja_ingerido` = mesmo texto servindo. O sha do ref e do repositorio
+inteiro: por ele todo promover parecia edicao de tudo e re-embedava 155 docs por uma ADR.
+O ref e proveniencia (`casa.sha`, `casa_fonte`), nao identidade da versao; item
+`ja_ingerido` so avanca `casa.sha`. Uma unica funcao compoe a versao
+(`escrita_casa.versao_do_corpo`), chamada no plano e na impressao — duas composicoes
+divergem na primeira normalizacao. Antes de mudar a FORMA de uma coluna, ler a CHECK dela
+(a 046 fixava `sha:<ref>`).
+
+## Averbar verbo no golden record: migracao seed, nao `acervo registrar`
+
+`bin/_acervo/registrar` existe, mas o dispatcher `acervo` nao o roteia; o trilho vivo e
+migracao seed em `platafirma-conhecimento/rag/db/init/NNN_*.sql` (padrao 049), aplicada por
+`migrar aplicar rag` — sem BEGIN/COMMIT, o verbo ja envolve. `ferramental_verbo.estado`
+e o eixo de baixa (`deprecado` exige `sucessor`). Cabecalho com `# escreve:` em prosa (nao
+`<ato>=<recurso>`) nao entra em `ferramental_acesso`: registrar SEM acesso e o certo; inventar
+recurso e errado. A projecao `--tools` filtra pelo whitelist do oficio (ti), nao por estado:
+averbar nao basta para a porta servir.
 
 ## Diario de bordo (cru, sem heuristica)
 
@@ -238,3 +257,41 @@ docs/ de repo compartilhado, `read_file` antes de `write_file` sem trecho, sempr
   promover` passou a guardar a sujeira em `git stash push -u` nomeado e seguir (5eb2490).
 - 13/09 — `infra instalar acervo` devolve "nada a assentar": `~/AI/bin` e o clone. Nao e
   erro; e o estado (arq:0097 violada, #3014).
+
+## Diario de bordo (cru, sem heuristica) — 14/09, fita da caixa (golden, ingestao, idempotencia)
+
+- 14/09 — `acervo ingerir casa platafirma-arquitetura` deu "nenhum arquivo casa com
+  padrao_path" com o repo no ar; varre_repo lia `var/prod/<repo>` (raiz por sha), nao
+  `/current` — contorno na data 14/09: corrigir casa-ingerir (harness PR #27) e promover
+  8c961e4.
+- 14/09 — `repo commitar platafirma-harness` recusou por sujeira de terceiro
+  (agente/settings.json) — contorno na data 14/09: commitar por caminho nomeado.
+- 14/09 — `repo git platafirma-harness switch main` falhou (main preso no worktree
+  platafirma-harness-caderno); `repo pr-merge` falhou pelo mesmo motivo, o merge remoto
+  aconteceu — contorno na data 14/09: branch de origin/main + pr-abrir + fetch +
+  `release promover <sha explicito>`.
+- 14/09 — `migrar aplicar rag` com BEGIN no corpo: WARNING "transaction in progress"; e
+  `ON CONFLICT (slug)` em ferramental_capacidade falhou por falta de UNIQUE — contorno na
+  data 14/09: sem BEGIN/COMMIT e a UNIQUE criada na propria 049.
+- 14/09 — migracao 050: UPDATE violou `casa_impressao_fonte_versao_check` (046 fixava
+  `sha:<ref>`) — contorno na data 14/09: DROP/ADD da check aceitando `sha256:` na mesma
+  migracao.
+- 14/09 — `fila enviar` com tipo/assunto posicionais: "--tipo e --assunto sao
+  obrigatorios" — contorno na data 14/09: `--de --tipo --assunto --responde`.
+- 14/09 — `mesa anota --chapeu X`: unrecognized arguments — contorno na data 14/09: o slot
+  e posicional, `mesa anota X`. `mesa caderno X` so LE (stdin ignorado): escrever e editar o
+  .md em `abertura/<cadeira>/<chapeu>/caderno.md` no clone e subir.
+- 14/09 — `write_file` recusou `platafirma-harness-caderno/...` (fora de morada) —
+  contorno na data 14/09: branch no clone platafirma-harness (que estava no ramo da
+  fabrica), escrever la, PR.
+- 14/09 — `teste rodar platafirma-conhecimento` morre na coleta de mcp/test_server.py
+  (ModuleNotFoundError: mcp) — contorno na data 14/09: `teste rodar platafirma-conhecimento
+  rag/tests`; as 7 falhas restantes (fosseis, fora de casa) viraram dt #3058.
+- 14/09 — `acervo psql "<sql>"` como string: recusa por metacaractere — contorno na data
+  14/09: item estruturado `{verbo: acervo, ato: psql, args: [rag], stdin: <sql>}`.
+- 14/09 — `release ler <repo> <path> --linhas`: opcao desconhecida; `repo procurar` sem
+  `--termo` recusa — contorno na data 14/09: `read_file` com offset/max_bytes no caminho
+  servido; `repo procurar <repo> --termo <t> [prefixo]`.
+- 14/09 — depois do restart do ops-mcp pelo ti (whitelist #28), a porta passou a servir 22
+  verbos SEM `release` e com `repo` sem ler/listar/procurar — nenhum contorno; encaminhado a
+  ti na resposta da caixa.
