@@ -1,3 +1,14 @@
 #!/home/claudinho/AI/.venv-harness/bin/python
+# fila — caixa de mensagens entre personas da PlataFirma, sobre a malha msg (Valkey/Streams).
+# capacidade: mensagem
+# dono: ia
+# use para: caixa, carta, recado, handoff, 'o que chegou', mandar para outra cadeira
+# atos: status, ler, enviar, tipos
+#
+# Shim: o cabecalho canonico (proposito/capacidade/dono/use para/atos) mora AQUI,
+# no binario que `conferir verbo`/`release conferir` leem, e nao so no modulo
+# _fila/streams.py — os demais verbos da Onda 2 (mesa, tarefas, sessao) trazem o
+# cabecalho no proprio binario servido; a fila, por ser shim, ficava sem. A regua
+# do corpo continua em _fila/streams.py (fonte unica de comportamento).
 import runpy, os
 runpy.run_path(os.path.join(os.path.dirname(os.path.realpath(__file__)), "_fila", "streams.py"), run_name="__main__")
