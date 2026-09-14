@@ -341,3 +341,19 @@ track origin/main" — contorno: `repo git <clone> fetch origin main` + `merge -
 argparse do verbo só aceita o chapéu como posicional). Contorno encontrado NA DATA
 08/09 foi passar o chapéu em args=["rh"] e o texto pelo campo stdin — rodou; `mesa
 anota` lê o corpo do slot por stdin, não por argumento.
+
+14/09/2026 — `ops-server/test_*.py` não roda em `teste rodar platafirma-harness` (venv-
+harness sem o módulo `mcp`, que `server.py` importa) — a suite "verde" que o `teste`
+mede nunca cobre a porta. Encaminhado a ti (venv de teste da porta separado do da
+bancada). Nenhum contorno meu: validei o diff da porta por leitura (`repo git ... show`)
+contra a spec, sem rodar o teste dela.
+
+## Servido é caminho, não existência (medido 14/09/2026)
+
+Revisando `_acha_bin` da porta (fabrica, #3053): a função caía em `PF_HARNESS/bin` e no
+`PATH` quando o binário não estava em `RAIZ/bin`. Parece resiliência; é o mesmo defeito
+de sempre com nome novo — a porta passa a executar o que o CLONE tem, não o que o
+`release` publicou (arq:0097, #3029: a porta só executa o SERVIDO). O teste certo pra
+qualquer resolução de binário/arquivo não é "existe em algum lugar do disco?", é "está
+no caminho que o release publica?" — os dois fallbacks a mais SEMPRE re-introduzem a
+bancada como fonte, mesmo escritos como "só se faltar".
