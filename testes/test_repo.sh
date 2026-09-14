@@ -673,6 +673,11 @@ if ! grep -q "aviso: worktree var/wt/repo-teste/seguranca nao existe — usando 
   exit 1
 fi
 
+# 6d deixa o clone-pai $REPO_TESTE com ramos de trabalho e worktrees pendurados
+# (abrir/ramo fazem checkout no pai). Devolve o pai a main para que os testes
+# seguintes (6g em diante) partam de um estado conhecido, e nao de HEAD destacado.
+git -C "$REPO_TESTE" checkout -q main 2>/dev/null || true
+
 echo "OK: repo abrir cria worktree de origin/main, ramo por card, idempotente, duas cadeiras isoladas (checkout de uma não move HEAD da outra)"
 
 # 6e. clonar
@@ -699,53 +704,66 @@ fi
 
 # 6g. pr-* com gh ausente -> exit 3
 echo "--- Teste 6g: Atos pr-* com gh ausente ---"
-# Simulando PATH sem gh
-PATH_SEM_GH="/usr/bin:/bin"
-set +e
-out_pr_abrir="$(env PATH="$PATH_SEM_GH" "$VERBO" pr-abrir repo-teste --titulo "PR" 2>&1)"
-rc_pr_abrir=$?
-set -e
-if [ "$rc_pr_abrir" -ne 3 ] || ! grep -q "'gh' nao esta no PATH" <<<"$out_pr_abrir"; then
-  echo "FALHA: pr-abrir sem gh devia sair 3 com erro: $out_pr_abrir" >&2
-  exit 1
-fi
+# bin/repo resolve o gh por CAMINHO ABSOLUTO na init (command -v /usr/bin/gh
+# /bin/gh $HOME/.local/bin/gh), justamente para escapar de shims no PATH. Logo
+# um PATH restrito NAO esconde o gh: para forcar a ausencia e preciso (a) apontar
+# HOME para um dir sem .local/bin/gh e (b) garantir que /usr/bin/gh e /bin/gh nao
+# existam. Se o host tiver gh nessas moradas de sistema, nenhum teste de espaco de
+# usuario consegue esconde-lo — entao o 6g e PULADO com aviso, em vez de falhar.
+if [ -x /usr/bin/gh ] || [ -x /bin/gh ]; then
+  echo "PULADO: Teste 6g — gh instalado em /usr/bin ou /bin; ausencia nao e simulavel em espaco de usuario" >&2
+else
+  FAKE_HOME="$TMP_DIR/fake_home_sem_gh"
+  mkdir -p "$FAKE_HOME"
+  # HOME sem .local/bin/gh + PATH restrito: as tres moradas do resolvedor caem.
+  sem_gh() { env -i HOME="$FAKE_HOME" PATH="/usr/bin:/bin" PF_REPO_RAIZ="$PF_REPO_RAIZ" PF_CADEIRA="$PF_CADEIRA" "$VERBO" "$@"; }
 
-set +e
-out_pr_listar="$(env PATH="$PATH_SEM_GH" "$VERBO" pr-listar repo-teste 2>&1)"
-rc_pr_listar=$?
-set -e
-if [ "$rc_pr_listar" -ne 3 ]; then
-  echo "FALHA: pr-listar sem gh devia sair 3, saiu $rc_pr_listar" >&2
-  exit 1
-fi
+  set +e
+  out_pr_abrir="$(sem_gh pr-abrir repo-teste --titulo "PR" 2>&1)"
+  rc_pr_abrir=$?
+  set -e
+  if [ "$rc_pr_abrir" -ne 3 ] || ! grep -q "'gh' nao esta no PATH" <<<"$out_pr_abrir"; then
+    echo "FALHA: pr-abrir sem gh devia sair 3 com erro: $out_pr_abrir" >&2
+    exit 1
+  fi
 
-set +e
-out_pr_ver="$(env PATH="$PATH_SEM_GH" "$VERBO" pr-ver repo-teste 1 2>&1)"
-rc_pr_ver=$?
-set -e
-if [ "$rc_pr_ver" -ne 3 ]; then
-  echo "FALHA: pr-ver sem gh devia sair 3, saiu $rc_pr_ver" >&2
-  exit 1
-fi
+  set +e
+  out_pr_listar="$(sem_gh pr-listar repo-teste 2>&1)"
+  rc_pr_listar=$?
+  set -e
+  if [ "$rc_pr_listar" -ne 3 ]; then
+    echo "FALHA: pr-listar sem gh devia sair 3, saiu $rc_pr_listar" >&2
+    exit 1
+  fi
 
-set +e
-out_pr_diff="$(env PATH="$PATH_SEM_GH" "$VERBO" pr-diff repo-teste 1 2>&1)"
-rc_pr_diff=$?
-set -e
-if [ "$rc_pr_diff" -ne 3 ]; then
-  echo "FALHA: pr-diff sem gh devia sair 3, saiu $rc_pr_diff" >&2
-  exit 1
-fi
+  set +e
+  out_pr_ver="$(sem_gh pr-ver repo-teste 1 2>&1)"
+  rc_pr_ver=$?
+  set -e
+  if [ "$rc_pr_ver" -ne 3 ]; then
+    echo "FALHA: pr-ver sem gh devia sair 3, saiu $rc_pr_ver" >&2
+    exit 1
+  fi
 
-set +e
-out_pr_merge="$(env PATH="$PATH_SEM_GH" "$VERBO" pr-merge repo-teste 1 2>&1)"
-rc_pr_merge=$?
-set -e
-if [ "$rc_pr_merge" -ne 3 ]; then
-  echo "FALHA: pr-merge sem gh devia sair 3, saiu $rc_pr_merge" >&2
-  exit 1
+  set +e
+  out_pr_diff="$(sem_gh pr-diff repo-teste 1 2>&1)"
+  rc_pr_diff=$?
+  set -e
+  if [ "$rc_pr_diff" -ne 3 ]; then
+    echo "FALHA: pr-diff sem gh devia sair 3, saiu $rc_pr_diff" >&2
+    exit 1
+  fi
+
+  set +e
+  out_pr_merge="$(sem_gh pr-merge repo-teste 1 2>&1)"
+  rc_pr_merge=$?
+  set -e
+  if [ "$rc_pr_merge" -ne 3 ]; then
+    echo "FALHA: pr-merge sem gh devia sair 3, saiu $rc_pr_merge" >&2
+    exit 1
+  fi
+  echo "OK: atos pr-* saem 3 quando gh está ausente"
 fi
-echo "OK: atos pr-* saem 3 quando gh está ausente"
 
 # 7. --json devolve {"erro": ...} na falha
 echo "--- Teste 7: --json devolve {\"erro\": ...} na falha ---"
