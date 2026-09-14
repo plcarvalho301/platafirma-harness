@@ -949,13 +949,27 @@ promover_stacks() {  # $1=sha ; usa STACKS_PROMOVER; devolve 0 ou o nome da stac
     printf 'release: dependência ausente: deploy não encontrado e a família tem stacks (%s)\n' "${STACKS_PROMOVER[*]}" >&2
     return 3
   fi
+  local errf; errf="$(mktemp)"
+  local rc_dep
   for s in "${STACKS_PROMOVER[@]}"; do
     printf 'stack:     %s → deploy %s promover %s\n' "$s" "$s" "${sha:0:7}"
-    if ! "$deploy_bin" "$s" promover "$sha"; then
+    # stdout do deploy segue pro terminal (build log); stderr vai a um arquivo e e
+    # ecoado logo apos, para o motivo da recusa (ex.: worktree de deploy sujo)
+    # sobreviver quando o release roda pela porta e o stderr solto se perderia.
+    # Sem isto a saida dizia so "stack recusou a promocao", generica, apagando a
+    # causa que tem conserto. Arquivo (nao process substitution) evita a corrida
+    # entre o tee e o tail quando o deploy recusa rapido.
+    rc_dep=0
+    "$deploy_bin" "$s" promover "$sha" 2>"$errf" || rc_dep=$?
+    cat "$errf" >&2
+    if [ "$rc_dep" -ne 0 ]; then
       STACK_FALHOU="$s"
+      STACK_MOTIVO="$(tail -n 3 "$errf" 2>/dev/null || true)"
+      rm -f "$errf"
       return 5
     fi
   done
+  rm -f "$errf"
   return 0
 }
 
@@ -1125,6 +1139,7 @@ cmd_promover() {
   if [ "$rc_st" -ne 0 ]; then
     if [ "$rc_st" -eq 5 ]; then
       printf 'release: indeterminável: stack %s recusou a promoção; as anteriores da lista já foram promovidas\n' "$STACK_FALHOU" >&2
+      [ -n "${STACK_MOTIVO:-}" ] && printf 'motivo (deploy %s):\n%s\n' "$STACK_FALHOU" "$STACK_MOTIVO" >&2
     fi
     desfazer_para "$repo" "$atual"
     gravar_pontos "$repo" "$sha" "${atual:-$sha}"
@@ -1220,7 +1235,10 @@ cmd_reverter() {
   local rc_st=0
   promover_stacks "$alvo" || rc_st=$?
   if [ "$rc_st" -ne 0 ]; then
-    [ "$rc_st" -ne 5 ] || printf 'release: indeterminável: stack %s recusou a reversão\n' "$STACK_FALHOU" >&2
+    if [ "$rc_st" -eq 5 ]; then
+      printf 'release: indeterminável: stack %s recusou a reversão\n' "$STACK_FALHOU" >&2
+      [ -n "${STACK_MOTIVO:-}" ] && printf 'motivo (deploy %s):\n%s\n' "$STACK_FALHOU" "$STACK_MOTIVO" >&2
+    fi
     desfazer_para "$repo" "$atual"
     gravar_pontos "$repo" "$alvo" "${atual:-$alvo}"
     exit "$rc_st"
