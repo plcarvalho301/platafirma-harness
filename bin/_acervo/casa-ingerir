@@ -368,10 +368,20 @@ def sha_do_repo_dir(repo_dir):
         return None
 
 def varre_repo(repo):
-    """Varre var/prod/<repo> (ou ~/AI/<repo>) e classifica por padrao_path."""
-    caminho_prod = os.path.join(os.path.expanduser("~/AI/var/prod"), repo)
+    """Varre o SERVIDO (var/prod/<repo>/current, arq:0097) e classifica por padrao_path.
+
+    var/prod/<repo>/ e a morada de release: um diretorio por sha + o ponteiro `current`
+    (`release promover`). Varrer a raiz da morada em vez do ponteiro dava caminho relativo
+    `<sha>/docs/...`, que glob nenhum de padrao_path casa — e o verbo saia com "nenhum
+    arquivo casa com padrao_path" mesmo com o repo inteiro no ar (medido 14/09, dados).
+    Sem release da familia, cai no clone ~/AI/<repo> (transicao; o alvo e sempre o servido).
+    """
+    morada = os.path.join(os.path.expanduser("~/AI/var/prod"), repo)
+    caminho_prod = os.path.join(morada, "current")
     if os.path.isdir(caminho_prod):
-        repo_dir = caminho_prod
+        repo_dir = os.path.realpath(caminho_prod)
+    elif os.path.isdir(morada) and os.path.exists(os.path.join(morada, ".git")):
+        repo_dir = morada   # morada antiga: worktree direto, sem ponteiro
     else:
         caminho_ai = os.path.join(RAIZ, repo)
         if os.path.isdir(caminho_ai):
