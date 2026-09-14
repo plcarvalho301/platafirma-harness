@@ -9,10 +9,19 @@
 # folhas: montar -> expediente/pacote · rotear -> expediente/chapeu · catalogo -> expediente/catalogo
 # escreve: registro do pacote servido (sessao.fita/pacote/peca_servida — transição, direto); nada em rotear|catalogo
 # consome: persona, mesa, motor, acervo
-# ambiente: PF_CADEIRA (obrigatória, origem porta), PF_SESSAO, PF_ORDEM_ID, PF_SUPERFICIE[=desconhecida]
-# depende: persona, mesa, motor, tokenizador da casa (opt/tokenizers, fallback bytes/4 declarado)
-# substitui: monta-sessao <cadeira> na parte que monta
-# conforme: parcial
+# ambiente: PF_CADEIRA (obrigatória; origem: verbo `sessao abrir`, injetada pela porta), PF_SESSAO e PF_ORDEM_ID (origem: verbo `sessao abrir`), PF_SUPERFICIE[=desconhecida] e PF_FITA (origem: superfície), PF_PODA[=1] (origem: superfície; 0 desliga o portão de cobertura), PF_RAIZ[=~/AI] e PF_ABERTURA_DIR (origem: superfície/instalação), SESSAO_PG_PORT[=5437] (constante do verbo); SESSAO_PG_PASSWORD é segredo, entra por `seg segredo ler` no processo (transição Q11: aceita a variável só quando o verbo não responde)
+# depende: persona, mesa, motor, seg (segredo do registro), comum/hash_servido, lib/uso, tokenizador da casa (opt/tokenizers, fallback bytes/4 declarado), Postgres da sessão (registro do pacote — transição até a API da entidade-sessão)
+# substitui: monta-sessao <cadeira> na parte que monta; a lib recuperacao/roteador_chapeu importada por caminho
+# conforme: parcial — catálogo no cabeçalho até dados averbar a espécie no acervo; registro direto no Postgres até a API da entidade-sessão; rotas de rotas-chapeu.json da morada publicada até virem do golden record de conceitos
+#
+# CATÁLOGO (spec_expediente §7) — uma chamada por peça; {cadeira}, {chapeu} e {pergunta} são os únicos placeholders.
+#   conduta            abertura                 valor  estavel  persona conduta                                gestao-estrategica
+#   persona            abertura                 valor  estavel  persona ler {cadeira}                          gestao-estrategica
+#   alias-cadeiras     abertura                 valor  morna    persona foto                                   gestao-estrategica
+#   mesa               abertura                 valor  volatil  mesa ver                                       gestao-estrategica
+#   acervo-consultado  abertura, com pergunta   valor  volatil  motor rag buscar casa "{pergunta}" --k 6 --texto secao   dados (a partição)
+#   chapeu             chapeu                   valor  estavel  persona ler {cadeira} --chapeu {chapeu}        gestao-estrategica
+#   cadernos           abertura; com chapeu, o corpo dele  valor  volatil  mesa caderno --chapeu {chapeu}   gestao-estrategica
 #
 from __future__ import annotations
 
@@ -72,7 +81,7 @@ CATALOGO = [
         "gatilho": "abertura, com pergunta",
         "regime": "valor",
         "volatilidade": "volatil",
-        "chamada": 'motor rag buscar casa "{pergunta}" --k 6',
+        "chamada": 'motor rag buscar casa "{pergunta}" --k 6 --texto secao',
         "dono": "dados",
     },
     {
@@ -147,21 +156,16 @@ def resolve_montador_sha() -> str:
                     return d["sha"][:7]
         except (OSError, ValueError):
             pass
-    try:
-        cp = subprocess.run(["git", "rev-parse", "--short", "HEAD"],
-                            capture_output=True, text=True, timeout=5,
-                            cwd=str(_REPO_REAL))
-        if cp.returncode == 0 and cp.stdout.strip():
-            return cp.stdout.strip()
-    except (OSError, subprocess.SubprocessError):
-        pass
-    return "transicao"
+    # Runtime nao le working tree git (arq:0097): morada nao publicada sai declarada,
+    # nunca adivinhada por `git rev-parse` no clone.
+    return "morada-nao-publicada"
 
 
-def executa_verbo(cmd_linha: str, cadeira: str, timeout: int = 30) -> tuple[int, str, str]:
-    """Executa um comando de verbo no ambiente env_verbo."""
+def executa_verbo(cmd_linha: str | list[str], cadeira: str, timeout: int = 30) -> tuple[int, str, str]:
+    """Executa um comando de verbo no ambiente env_verbo. Lista = argv pronto: texto
+    livre (a pergunta) entra assim, nunca por shlex."""
     try:
-        args = shlex.split(cmd_linha)
+        args = cmd_linha if isinstance(cmd_linha, list) else shlex.split(cmd_linha)
         p = subprocess.run(
             args,
             capture_output=True,
@@ -175,18 +179,13 @@ def executa_verbo(cmd_linha: str, cadeira: str, timeout: int = 30) -> tuple[int,
 
 
 def acha_roteador() -> Path | None:
-    """Acha o binário sub-ato bin/_expediente/roteador."""
+    """Acha o sub-ato bin/_expediente/rotear: sob PF_RAIZ (raiz hermetica de teste, stub)
+    e, faltando la, no checkout real deste binario (o servido)."""
+    candidatos = []
     raiz = os.environ.get("PF_RAIZ")
     if raiz:
-        candidatos = [
-            Path(raiz) / "bin" / "_expediente" / "roteador",
-            Path(raiz) / "bin" / "_expediente" / "rotear",
-        ]
-    else:
-        candidatos = [
-            _REPO_REAL / "bin" / "_expediente" / "roteador",
-            _REPO_REAL / "bin" / "_expediente" / "rotear",
-        ]
+        candidatos.append(Path(raiz) / "bin" / "_expediente" / "rotear")
+    candidatos.append(_REPO_REAL / "bin" / "_expediente" / "rotear")
     for c in candidatos:
         if c.is_file() and os.access(c, os.X_OK):
             return c
@@ -201,8 +200,8 @@ def executa_roteador(pergunta: str, cadeira: str) -> tuple[dict, str | None, int
             "via": "fallback",
             "slug": None,
             "acertos": {},
-            "motivo": "roteador ausente: bin/_expediente/roteador",
-        }, "roteador ausente: bin/_expediente/roteador", 0
+            "motivo": "roteador ausente: bin/_expediente/rotear",
+        }, "roteador ausente: bin/_expediente/rotear", 0
 
     try:
         p = subprocess.run(
@@ -296,11 +295,12 @@ def _portao_cobertura(d: dict, pergunta: str, env: dict) -> str:
 
 # ------------------------------------------------------------------ registro
 def obtem_senha_sessao(cadeira: str) -> str:
-    """Obtém senha via `seg segredo SESSAO_PG_PASSWORD`, senão variável SESSAO_PG_PASSWORD."""
-    for cmd in ("seg segredo SESSAO_PG_PASSWORD", "seg segredo ler SESSAO_PG_PASSWORD"):
-        rc, out, _ = executa_verbo(cmd, cadeira, timeout=5)
-        if rc == 0 and out.strip():
-            return out.strip()
+    """Segredo entra por verbo, no processo (spec_acesso §2): `seg segredo ler`. A variavel
+    SESSAO_PG_PASSWORD e aceita so como transicao (Q11), quando o verbo nao responde;
+    arquivo .env nunca e fonte."""
+    rc, out, _ = executa_verbo("seg segredo ler SESSAO_PG_PASSWORD", cadeira, timeout=5)
+    if rc == 0 and out.strip():
+        return out.strip()
     return (os.environ.get("SESSAO_PG_PASSWORD") or "").strip()
 
 
@@ -377,14 +377,9 @@ def valida_chapeu(cadeira: str, slug: str) -> tuple[bool, str]:
 
 # ------------------------------------------------------------------ ato: catalogo
 def ato_catalogo(como_json: bool = False) -> int:
-    if os.environ.get("PF_CATALOGO_AUSENTE") == "1":
-        msg = "catálogo: ausente — espécie não averbada no acervo"
-        if como_json:
-            print(json.dumps({"erro": msg}, ensure_ascii=False))
-        else:
-            print(msg, file=sys.stderr)
-        return 3
-
+    # Etapa 3 (§4): "catalogo ausente" so existe quando o catalogo vier do acervo. Na
+    # transicao ele mora neste arquivo e nao tem como faltar; a etapa e declarada, nao
+    # simulada por variavel de ambiente (toda variavel lida tem origem nomeada).
     if como_json:
         print(json.dumps(CATALOGO, ensure_ascii=False, indent=2))
         return 0
@@ -447,14 +442,6 @@ def ato_montar(chapeu_forcado: str | None = None, sem_acervo: bool = False,
                 print(msg, file=sys.stderr)
             return 2
 
-    if os.environ.get("PF_CATALOGO_AUSENTE") == "1":
-        msg = "catálogo: ausente — espécie não averbada no acervo"
-        if como_json:
-            print(json.dumps({"erro": msg}, ensure_ascii=False))
-        else:
-            print(msg, file=sys.stderr)
-        return 3
-
     pergunta = sys.stdin.read().strip()
 
     # Roteador de chapéu
@@ -513,8 +500,9 @@ def ato_montar(chapeu_forcado: str | None = None, sem_acervo: bool = False,
             cmd = "mesa ver"
             ref = "verbo:mesa ver"
         elif peca_id == "acervo-consultado":
-            cmd = f'motor rag buscar casa "{pergunta}" --k 6'
-            ref = f'verbo:motor rag buscar casa "{pergunta[:40]}..." --k 6'
+            # argv pronto: a pergunta e texto livre e nao passa por shlex
+            cmd = ["motor", "rag", "buscar", "casa", pergunta, "--k", "6", "--texto", "secao"]
+            ref = f'verbo:motor rag buscar casa "{pergunta[:40]}" --k 6 --texto secao'
         elif peca_id == "cadernos":
             if chapeu_slug:
                 cmd = f"mesa caderno --chapeu {chapeu_slug}"

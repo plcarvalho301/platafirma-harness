@@ -5,11 +5,14 @@ Quem importa este módulo não quebra.
 from __future__ import annotations
 
 import importlib.util
+from importlib.machinery import SourceFileLoader
 import sys
 from pathlib import Path
 
-_ROTEAR_PATH = Path(__file__).resolve().parent.parent / "bin" / "_expediente" / "rotear.py"
-_spec = importlib.util.spec_from_file_location("_rotear", _ROTEAR_PATH)
+# O sub-ato nao tem extensao (verbo: sem extensao + shebang); o loader e explicito.
+_ROTEAR_PATH = Path(__file__).resolve().parent.parent / "bin" / "_expediente" / "rotear"
+_spec = importlib.util.spec_from_file_location(
+    "_rotear", _ROTEAR_PATH, loader=SourceFileLoader("_rotear", str(_ROTEAR_PATH)))
 if _spec is None or _spec.loader is None:
     raise ImportError(f"Não foi possível carregar o sub-ato rotear em {_ROTEAR_PATH}")
 _mod = importlib.util.module_from_spec(_spec)
