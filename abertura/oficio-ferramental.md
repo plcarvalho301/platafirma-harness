@@ -24,7 +24,8 @@ da lista (b) do chapéu).
 ```
 fila
 minuta
-monta-sessao
+sessao
+expediente
 chat
 mesa
 tarefas
