@@ -1,16 +1,13 @@
 #!/usr/bin/env bash
 # teste — roda a suite de teste do clone local, detectando a stack e o ambiente do repo
-# capacidade: verificacao/teste
+# capacidade: construcao/qualidade-do-codigo
 # dono: claudinho-TI
 #
-# Por que essa capacidade, e o que nela esta sujo: `verificacao` e "conformidade do servido com o
-# declarado" (mapa da mesa, linha 59) — rodar a suite e conferir que o codigo faz o que
-# o teste declara, entao a raiz e essa. Mas `verificacao` ja esta ocupada pelo verbo
-# `conferir`, e arq:0037 quer um verbo por capacidade. Dai a barra: `verificacao/teste`,
-# na convencao que o mapa ja usa para `risco/operacional` e `politica/seguranca` — nao e
-# nome novo paralelo, e sub-divisao de uma capacidade lavrada. A sub-linha ainda precisa
-# ser lavrada pelo arquiteto: capacidade nao se inventa no cabecalho, e este comentario
-# nao a torna canonica.
+# Por que essa capacidade: o mapa (arquitetura-negocio-operacao.md, construcao nivel 2) poe
+# `lint` e `teste` na folha `construcao/qualidade-do-codigo` desde 12/09/2026 — a L1
+# `verificacao` foi extinta e `conferir` desceu a `infra/promocao-de-mudanca`. DEBITO 1:1: a
+# folha carrega DOIS verbos (lint, teste), nao-conformidade com arq:0037 a refatorar em fita
+# propria (linter-e-ferramenta vs. segunda folha L2).
 #
 # Linha de corte com `conferir`: `conferir` verifica a PLATAFORMA (declarado x servido —
 # verbo, superficie, servico). `teste` e `lint` verificam o CODIGO de um repo.
