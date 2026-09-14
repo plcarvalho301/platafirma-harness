@@ -1,9 +1,23 @@
 #!/home/claudinho/AI/.venv-harness/bin/python
 # mesa — memoria de trabalho da cadeira entre fitas, por chapeu
-# capacidade: memoria
-# dono: claudinho-IA (conteudo e formato) · claudinho-TI (substrato)
+# capacidade: trabalho
+# dono: gestao-estrategica (a forma: o que e mesa, o que e caderno) · ia (montador) · ti (substrato)
+# classe: B
 # use para: pendência entre fitas, 'o que ficou na mesa', anotar, caderno do chapéu
 # atos: ver, item, fez, anota, fita, limpa, caderno, legado
+# folhas: ver|item|fez -> trabalho/mesa (o item com ato) · caderno -> expediente/caderno (o duravel) ·
+#         anota|limpa|legado -> trabalho/mesa, transicao · fita -> pende (guarda de fita e de sessao)
+# ambiente: PF_CADEIRA (obrigatoria, origem porta), PF_FITA, PF_SUPERFICIE[=desconhecida],
+#           MEM_REDIS_HOST[=127.0.0.1], MEM_REDIS_PORT[=6380], SESSAO_PG_PORT[=5437],
+#           SESSAO_PG_PASSWORD (segredo; leitura de sessao/.env e transicao, nao forma)
+# depende: msg-mem (Valkey), Postgres da sessao, arvore abertura/ (cadernos)
+# escreve: sessao.mesa_item (item, fez), mem:<cadeira>:<slot> (anota, limpa), fita:<cadeira> (fita)
+#
+# A ABERTURA CHAMA DOIS ATOS, e so dois (spec_expediente §7): `mesa ver` (peca `mesa`,
+# o impedimento) e `mesa caderno --chapeu <slug>` (peca `cadernos`, a ultima injetada:
+# indice da cadeira + corpo do caderno do chapeu, NUM GIRO). Sem chapeu roteado, a
+# chamada sai sem --chapeu e serve so o indice. O corpo por posicao (`mesa caderno
+# <slot>`) fica como esta — a forma de saida nao muda in-place (classe B).
 #
 # Despachante (arq:0040): o binario agrupa a memoria da cadeira, o sub-ato e o
 # ato. Dois substratos duraveis, um eixo — o chapeu (slot) e o mesmo nos dois:
@@ -532,19 +546,37 @@ def dir_caderno():
     return os.path.join(CADERNOS, cadeira())
 
 
+def _corpo_caderno(d, slot):
+    """Imprime o corpo do caderno de um slot. Ausencia se declara e sai 0: caderno
+    que nao existe e resposta valida (arq:0041), nao erro."""
+    caminho = os.path.join(d, slot, "caderno.md")
+    if not os.path.isfile(caminho):
+        print(f"caderno {slot}: nao existe ({caminho})")
+        return 0
+    print(f"===== abertura/{cadeira()}/{slot}/caderno.md =====")
+    with open(caminho, errors="replace") as fh:
+        sys.stdout.write(fh.read())
+    return 0
+
 def ato_caderno(args):
     """Sem slot: indice (o que entra na abertura). Com slot: corpo, sob demanda.
+    Com --chapeu: indice E corpo do chapeu, num giro so — e a chamada da peca
+    `cadernos` da abertura (spec_expediente §7), a ultima injetada.
     Morada arq:0073: abertura/<cadeira>/<slot>/caderno.md."""
     d = dir_caderno()
+    if args.slot and args.chapeu:
+        sys.exit("erro: `mesa caderno <slot>` OU `mesa caderno --chapeu <slug>` — "
+                 "o segundo ja traz indice e corpo numa chamada")
     if args.slot:
-        slot = valida_slot(args.slot)
-        caminho = os.path.join(d, slot, "caderno.md")
-        if not os.path.isfile(caminho):
-            print(f"caderno {slot}: nao existe ({caminho})")
-            return 0
-        print(f"===== abertura/{cadeira()}/{slot}/caderno.md =====")
-        sys.stdout.write(open(caminho, errors="replace").read())
-        return 0
+        return _corpo_caderno(d, valida_slot(args.slot))
+    chapeu = valida_slot(args.chapeu) if args.chapeu else None
+    rc = _indice_cadernos(d)
+    if chapeu:
+        print()
+        rc = _corpo_caderno(d, chapeu) or rc
+    return rc
+
+def _indice_cadernos(d):
     if not os.path.isdir(d):
         print(f"cadernos: nenhum ({d} nao existe)")
         return 0
@@ -610,8 +642,11 @@ def main():
     l.add_argument("slot")
     l.set_defaults(func=ato_limpa)
 
-    c = sub.add_parser("caderno", help="sem slot, o indice; com slot, o corpo do caderno duravel")
+    c = sub.add_parser("caderno", help="sem slot, o indice; com slot, o corpo do caderno duravel; "
+                                       "com --chapeu, indice e corpo do chapeu num giro")
     c.add_argument("slot", nargs="?")
+    c.add_argument("--chapeu", metavar="SLUG",
+                   help="indice da cadeira + corpo do caderno deste chapeu (a peca `cadernos` da abertura)")
     c.set_defaults(func=ato_caderno)
 
     args = p.parse_args()
