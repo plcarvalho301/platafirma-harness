@@ -22,8 +22,8 @@
 # escreve: reverter=release,arquivo-local
 # (recursos pelo enum de ferramental_recurso; porta, forge e stack pendem id proprio - dados)
 # ambiente: PF_PROD_RAIZ[=$HOME/AI/var/prod] porta · PF_ABERTURA_RAIZ[=$HOME/AI/var/abertura-publicada] porta · PF_RELEASE_RAIZ[=$HOME/AI/var/release] porta · PF_BIN_DIR[=$HOME/AI/bin] porta · PF_REPO_RAIZ[=$HOME/AI] porta (só a URL do origin na primeira promoção de uma família) · PF_CADEIRA porta (lida) · HOME
-# depende: git · deploy (promover/reverter de família com stack) · acervo (registro de stacks) · python3 · jq · rede ao forge (promover) · porta (hora de arranque) · systemd de usuário (systemd-run agenda o restart fora do processo)
-# substitui: readlink current · git -C var/prod/… describe|rev-parse|ls-files|show|grep · git worktree add --detach · ln -sfn + mv -T · chmod -R a-w · conferir <classe> · deploy <stack> promover|reverter · systemctl --user restart ops-mcp
+# depende: git · deploy (promover/reverter de família com stack) · acervo (registro de stacks) · python3 · jq · rede ao forge (promover) · porta (hora de arranque). O restart da porta NAO e deste verbo (rev 5): quem reinicia e o observador pf-porta-watch (unit .path --user sobre current), fora do processo
+# substitui: readlink current · git -C var/prod/… describe|rev-parse|ls-files|show|grep · git worktree add --detach · ln -sfn + mv -T · chmod -R a-w · conferir <classe> · deploy <stack> promover|reverter
 # conforme: parcial
 set -euo pipefail
 
@@ -973,18 +973,18 @@ promover_stacks() {  # $1=sha ; usa STACKS_PROMOVER; devolve 0 ou o nome da stac
   return 0
 }
 
-agendar_restart_porta() {
+# O restart da porta NÃO é responsabilidade deste verbo (spec_release rev 5). Reiniciar
+# aqui dependia do bus da sessão que chamou o release: shell sem DBUS_SESSION_BUS_ADDRESS
+# fazia systemd-run recusar e a porta servia código velho; shell com bus tinha o restart
+# matando a própria conexão que emitiu o promover. Quem reinicia é o observador do daemon:
+# a unit `.path` --user pf-porta-watch vigia este `current` e reinicia ops-mcp fora de
+# qualquer shell, com Restart=always na porta como rede de segurança. Os verbos trocam a
+# quente (a porta faz execve de bin/<verbo> a cada chamada), então só a mudança do próprio
+# server.py exige restart, e o observador cobre isso. Esta função só informa.
+nota_restart_porta() {
   local repo="$1"
   [ "$repo" = "$FAMILIA_BIN" ] || return 0
-  if command -v systemd-run >/dev/null 2>&1 && command -v systemctl >/dev/null 2>&1; then
-    if systemd-run --user --quiet --on-active=5 --unit="pf-porta-restart-$(date +%s)" systemctl --user restart ops-mcp 2>/dev/null; then
-      printf 'porta:     restart de ops-mcp agendado em 5s (fora deste processo); confira com `release estado %s`\n' "$repo"
-    else
-      printf 'porta:     restart NÃO agendado (systemd-run recusou) — rode: systemctl --user restart ops-mcp\n' >&2
-    fi
-  else
-    printf 'porta:     restart NÃO agendado (systemd-run ausente) — rode: systemctl --user restart ops-mcp\n' >&2
-  fi
+  printf 'porta:     current trocado; o observador pf-porta-watch reinicia ops-mcp fora deste processo\n'
 }
 
 # gate de promocao (arq:0110 §9; mapa: `conferir` e o gate de infra/promocao-de-mudanca). A familia
@@ -1136,7 +1136,7 @@ cmd_promover() {
     # gravar_pontos mantem 'atual' = sha novo (o current de fato no ar) e 'anterior' =
     # o sha de onde saiu, para o reverter deliberado ter para onde voltar.
     gravar_pontos "$repo" "$atual" "$sha"
-    agendar_restart_porta "$repo"
+    nota_restart_porta "$repo"
     {
       printf '\n'
       printf '=========================================================================\n'
@@ -1158,7 +1158,7 @@ cmd_promover() {
     exit "$rc_st"
   fi
 
-  agendar_restart_porta "$repo"
+  nota_restart_porta "$repo"
   printf 'no ar:     %s %s%s\n' "$repo" "${sha:0:7}" "${tag:+ ($tag)}"
   printf '%s\n' "$sha"
 }
@@ -1253,7 +1253,7 @@ cmd_reverter() {
     # justo quando ele volta por algo quebrado. O current FICA no alvo, a stack vira
     # incidente, e o relato GRITA onde partiu.
     gravar_pontos "$repo" "$atual" "$alvo"
-    agendar_restart_porta "$repo"
+    nota_restart_porta "$repo"
     {
       printf '\n'
       printf '=========================================================================\n'
@@ -1271,7 +1271,7 @@ cmd_reverter() {
     exit "$rc_st"
   fi
 
-  agendar_restart_porta "$repo"
+  nota_restart_porta "$repo"
   printf 'no ar:     %s %s\n' "$repo" "${alvo:0:7}"
   printf '%s\n' "$alvo"
 }
