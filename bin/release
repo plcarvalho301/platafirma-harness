@@ -1035,18 +1035,9 @@ gate_conferir_verbo() {  # $1=repo $2=sha_candidato $3=sha_atual(ou vazio)
   return 0
 }
 
-# desfaz a troca de current e o PATH quando as stacks recusaram; nunca apaga o checkout
-desfazer_para() {  # $1=repo $2=sha_anterior(ou vazio)
-  local repo="$1" ant="$2"
-  if [ -n "$ant" ] && [ -d "$PROD_RAIZ/$repo/$ant" ]; then
-    trocar_current "$repo" "$ant"
-    assentar_path "$repo" >/dev/null
-    printf 'current:   devolvido a %s\n' "${ant:0:7}" >&2
-  else
-    rm -f "$PROD_RAIZ/$repo/current"
-    printf 'current:   removido (família não tinha ponto anterior materializado)\n' >&2
-  fi
-}
+# NOTA (arq:0110 item 11c): nao ha mais reversao automatica de current na recusa de
+# stack. current e stack sao planos separados; stack que recusa vira incidente e o
+# current fica onde o gate o pos. A volta deliberada e `release reverter <repo> <sha>`.
 
 # ---- ato: promover <repo> [<rev>] [--ensaio] --------------------------------------
 cmd_promover() {
@@ -1137,12 +1128,33 @@ cmd_promover() {
   local rc_st=0
   promover_stacks "$sha" || rc_st=$?
   if [ "$rc_st" -ne 0 ]; then
-    if [ "$rc_st" -eq 5 ]; then
-      printf 'release: indeterminável: stack %s recusou a promoção; as anteriores da lista já foram promovidas\n' "$STACK_FALHOU" >&2
-      [ -n "${STACK_MOTIVO:-}" ] && printf 'motivo (deploy %s):\n%s\n' "$STACK_FALHOU" "$STACK_MOTIVO" >&2
-    fi
-    desfazer_para "$repo" "$atual"
-    gravar_pontos "$repo" "$sha" "${atual:-$sha}"
+    # ESTADO PARTIDO (arq:0110 item 11c): o current (codigo dos verbos) ja trocou e
+    # passou o gate; foi a stack (containers) que recusou. NAO se reverte o current —
+    # fatiar o codigo bom por falha de container e desfazer trabalho valido. O current
+    # FICA no sha novo, a stack vira incidente separado, e o relato GRITA exatamente
+    # onde partiu: codigo no ar em X, stack Y atras, containers rodando o codigo velho.
+    # gravar_pontos mantem 'atual' = sha novo (o current de fato no ar) e 'anterior' =
+    # o sha de onde saiu, para o reverter deliberado ter para onde voltar.
+    gravar_pontos "$repo" "$atual" "$sha"
+    agendar_restart_porta "$repo"
+    {
+      printf '\n'
+      printf '=========================================================================\n'
+      printf 'PROMOCAO PARCIAL — ESTADO PARTIDO, LEIA (release %s)\n' "$repo"
+      printf '=========================================================================\n'
+      printf '  codigo (current): NO AR em %s%s — verbos ja servem esta rev\n' "${sha:0:7}" "${tag:+ ($tag)}"
+      printf '  stack recusada  : %s — NAO subiu; seus containers seguem no codigo ANTERIOR (%s)\n' "$STACK_FALHOU" "$(curto_ou "$atual" 'nenhum')"
+      if [ "${#STACKS_PROMOVER[@]}" -gt 1 ]; then
+        printf '  demais stacks   : as listadas antes de %s ja foram promovidas; as depois, nao\n' "$STACK_FALHOU"
+      fi
+      if [ -n "${STACK_MOTIVO:-}" ]; then
+        printf '  motivo (deploy %s):\n' "$STACK_FALHOU"
+        printf '%s\n' "$STACK_MOTIVO" | sed 's/^/    /'
+      fi
+      printf '  RETOMAR         : conserte a causa acima e rode  deploy %s promover %s\n' "$STACK_FALHOU" "${sha:0:7}"
+      printf '  VOLTAR CODIGO   : release reverter %s %s  (devolve o current; a stack ainda depende do deploy subir)\n' "$repo" "$(curto_ou "$atual" '<sha-anterior>')"
+      printf '=========================================================================\n'
+    } >&2
     exit "$rc_st"
   fi
 
@@ -1235,12 +1247,27 @@ cmd_reverter() {
   local rc_st=0
   promover_stacks "$alvo" || rc_st=$?
   if [ "$rc_st" -ne 0 ]; then
-    if [ "$rc_st" -eq 5 ]; then
-      printf 'release: indeterminável: stack %s recusou a reversão\n' "$STACK_FALHOU" >&2
-      [ -n "${STACK_MOTIVO:-}" ] && printf 'motivo (deploy %s):\n%s\n' "$STACK_FALHOU" "$STACK_MOTIVO" >&2
-    fi
-    desfazer_para "$repo" "$atual"
-    gravar_pontos "$repo" "$alvo" "${atual:-$alvo}"
+    # ESTADO PARTIDO (arq:0110 item 11c), simetrico ao promover: o current ja voltou
+    # para o alvo (codigo revertido no ar) e foi a stack que recusou a recriacao. NAO
+    # se re-troca o current para frente — isso desfaria a reversao que o operador pediu,
+    # justo quando ele volta por algo quebrado. O current FICA no alvo, a stack vira
+    # incidente, e o relato GRITA onde partiu.
+    gravar_pontos "$repo" "$atual" "$alvo"
+    agendar_restart_porta "$repo"
+    {
+      printf '\n'
+      printf '=========================================================================\n'
+      printf 'REVERSAO PARCIAL — ESTADO PARTIDO, LEIA (release %s)\n' "$repo"
+      printf '=========================================================================\n'
+      printf '  codigo (current): REVERTIDO e no ar em %s — verbos ja servem esta rev\n' "${alvo:0:7}"
+      printf '  stack recusada  : %s — NAO recriou; seus containers seguem em %s\n' "$STACK_FALHOU" "$(curto_ou "$atual" 'estado anterior')"
+      if [ -n "${STACK_MOTIVO:-}" ]; then
+        printf '  motivo (deploy %s):\n' "$STACK_FALHOU"
+        printf '%s\n' "$STACK_MOTIVO" | sed 's/^/    /'
+      fi
+      printf '  RETOMAR         : conserte a causa acima e rode  deploy %s promover %s\n' "$STACK_FALHOU" "${alvo:0:7}"
+      printf '=========================================================================\n'
+    } >&2
     exit "$rc_st"
   fi
 
