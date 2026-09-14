@@ -1,0 +1,237 @@
+#!/usr/bin/env python3
+"""Sub-ato rotear — responde 'qual chapéu?' para a cadeira (spec_expediente §1, §8).
+
+Mora em bin/_expediente/rotear, fora do PATH (arq:0110 §1).
+Expediente rotear delega a ele, e expediente montar chama a mesma função `escolhe()`.
+
+Rotas seguem de rotas-chapeu.json por ora; fonte conforme é o golden record
+de conceitos (`acervo listar conceitos`).
+
+via ∈ {determinístico, semântico, fallback}; fallback → slug null, aviso, exit 0.
+"""
+
+from __future__ import annotations
+
+import json
+import os
+import re
+import sys
+import unicodedata
+from dataclasses import dataclass
+from pathlib import Path
+
+# Limiar/margem de (b): carregados quando o endpoint existir.
+LIMIAR_SEMANTICO = 0.55   # abaixo -> None -> fallback (c)
+MARGEM_SEMANTICA = 0.05   # 1o e 2o colados -> None: ambiguidade e sinal, nao moeda
+
+
+@dataclass(frozen=True, slots=True)
+class Rota:
+    """Um chapéu candidato: o slug e os rótulos que o disparam."""
+
+    slug: str
+    rotulos: tuple[str, ...]
+
+
+@dataclass(frozen=True, slots=True)
+class Decisao:
+    """O que o roteador decidiu, e por qual via. `slug=None` e o fallback (c)."""
+
+    slug: str | None
+    via: str                       # "comando" | "deterministico" | "semantico" | "fallback"
+    motivo: str = ""
+    acertos: dict | None = None    # bloco -> no de rotulos casados, para o envelope declarar
+
+
+def _normaliza(texto: str) -> str:
+    """Sem acento, sem pontuação, sem o `s` de plural. Mesma régua do motor."""
+    sem_acento = "".join(c for c in unicodedata.normalize("NFD", texto or "")
+                         if unicodedata.category(c) != "Mn")
+    limpo = re.sub(r"[^a-z0-9]+", " ", sem_acento.lower()).strip()
+    return re.sub(r"\b(\w{3,}?)s\b", r"\1", limpo)
+
+
+def _resolve_dir_chapeus(raiz_chapeus: str | None = None) -> str:
+    """Resolve o diretório onde moram abertura e rotas-chapeu.json."""
+    if raiz_chapeus and os.path.exists(raiz_chapeus):
+        return raiz_chapeus
+    raiz = os.environ.get("PF_RAIZ", os.path.expanduser("~/AI"))
+    morada = os.environ.get("PF_ABERTURA_DIR", os.path.join(raiz, "var", "abertura-publicada"))
+    abertura = os.path.join(morada, "current", "abertura")
+    if os.path.exists(abertura):
+        return abertura
+    clone_abertura = os.path.join(raiz, "platafirma-harness", "abertura")
+    if os.path.exists(clone_abertura):
+        return clone_abertura
+    aqui_abertura = Path(__file__).resolve().parent.parent.parent / "abertura"
+    if aqui_abertura.exists():
+        return str(aqui_abertura)
+    return raiz_chapeus or abertura
+
+
+def _carrega_gatilhos(raiz_chapeus: str, cadeira: str) -> dict[str, tuple[str, ...]]:
+    """Os gatilhos por chapéu da cadeira, lidos de rotas-chapeu.json.
+
+    Rotas seguem de rotas-chapeu.json por ora; fonte conforme é o golden record
+    de conceitos (`acervo listar conceitos`).
+    """
+    caminhos = [
+        os.path.join(raiz_chapeus, "rotas-chapeu.json"),
+        os.path.join(os.path.dirname(raiz_chapeus), "rotas-chapeu.json"),
+        str(Path(__file__).resolve().parent.parent.parent / "abertura" / "rotas-chapeu.json"),
+    ]
+    tabela = {}
+    for caminho in caminhos:
+        if os.path.isfile(caminho):
+            try:
+                with open(caminho, encoding="utf-8") as f:
+                    tabela = json.load(f)
+                    if tabela:
+                        break
+            except (OSError, ValueError):
+                continue
+    da_cadeira = tabela.get(cadeira, {})
+    return {slug: tuple(gatilhos) for slug, gatilhos in da_cadeira.items()}
+
+
+def rotas_do_disco(cadeira: str, raiz_chapeus: str) -> list[Rota]:
+    """Os chapéus da cadeira existentes no disco ou no rotas-chapeu.json."""
+    base = os.path.join(raiz_chapeus, cadeira)
+    gatilhos = _carrega_gatilhos(raiz_chapeus, cadeira)
+    if os.path.isdir(base):
+        rotas = [Rota(slug=nome, rotulos=gatilhos.get(nome, ()))
+                 for nome in sorted(os.listdir(base))
+                 if os.path.isdir(os.path.join(base, nome))]
+        if rotas:
+            return rotas
+    if gatilhos:
+        return [Rota(slug=nome, rotulos=gats) for nome, gats in sorted(gatilhos.items())]
+    return []
+
+
+def casa(pergunta: str, rotas: list[Rota]) -> dict[str, int]:
+    """Acertos por slug: quantos rótulos da rota aparecem inteiros na pergunta."""
+    alvo = f" {_normaliza(pergunta)} "
+    acertos: dict[str, int] = {}
+    for rota in rotas:
+        n = 0
+        vistos: set[str] = set()
+        for rotulo in rota.rotulos:
+            norm = _normaliza(rotulo)
+            if len(norm) >= 3 and norm not in vistos and f" {norm} " in alvo:
+                vistos.add(norm)
+                n += 1
+        if n:
+            acertos[rota.slug] = n
+    return acertos
+
+
+def decide(pergunta: str, rotas: list[Rota]) -> Decisao:
+    """(a) determinístico. Vencedor por margem estrita, senão fallback."""
+    acertos = casa(pergunta, rotas)
+    if not acertos:
+        return Decisao(slug=None, via="fallback",
+                       motivo="nenhum rotulo canonico casou na pergunta", acertos={})
+    ordenado = sorted(acertos.items(), key=lambda kv: kv[1], reverse=True)
+    (slug1, n1) = ordenado[0]
+    n2 = ordenado[1][1] if len(ordenado) > 1 else 0
+    if n1 > n2:
+        return Decisao(slug=slug1, via="deterministico",
+                       motivo=f"{slug1}: {n1} rotulos vs {n2} do 2o", acertos=acertos)
+    return Decisao(slug=None, via="fallback",
+                   motivo=f"empate em {n1}: ambiguidade vira pergunta ao modelo", acertos=acertos)
+
+
+def roteia_semantico(pergunta: str, rotas: list[Rota]) -> Decisao:
+    """(b) semântico. Retorna fallback declarado enquanto endpoint /embed não existir."""
+    return Decisao(slug=None, via="fallback",
+                   motivo="roteador semantico inativo: sem endpoint /embed no motor servido "
+                          "(carregar o embedder por montagem e proibido — ~2,4 GB, ~25 s)")
+
+
+def escolhe(pergunta: str | None, cadeira: str, raiz_chapeus: str | None = None,
+            forcado: str | None = None) -> Decisao:
+    """O ponto único de decisão de chapéu. Ordem: comando explícito -> (a) -> (b) -> (c)."""
+    chapeus_dir = _resolve_dir_chapeus(raiz_chapeus)
+    rotas = rotas_do_disco(cadeira, chapeus_dir)
+    validos = {r.slug for r in rotas}
+
+    if forcado:
+        if not validos or forcado in validos:
+            return Decisao(slug=forcado, via="comando", motivo="chapeu forcado")
+        return Decisao(slug=None, via="fallback",
+                       motivo=f"chapeu forcado '{forcado}' nao existe; validos: {sorted(validos)}")
+
+    if not (pergunta or "").strip():
+        return Decisao(slug=None, via="fallback", motivo="sem pergunta: nada para rotear")
+    if not rotas:
+        return Decisao(slug=None, via="fallback",
+                       motivo=f"cadeira '{cadeira}' sem tabela de rotas gerada (golden record acervo.conceito)")
+
+    d = decide(pergunta, rotas)
+    if d.slug:
+        return d
+    s = roteia_semantico(pergunta, rotas)
+    if s.slug:
+        return s
+    return Decisao(slug=None, via="fallback", motivo=d.motivo, acertos=d.acertos)
+
+
+def main_cli(args: list[str] | None = None) -> int:
+    """Ponto de entrada CLI para o sub-ato rotear."""
+    if args is None:
+        args = sys.argv[1:]
+
+    como_json = False
+    for a in args:
+        if a == "--json":
+            como_json = True
+        elif a in ("--help", "-h", "--ajuda"):
+            print("uso: expediente rotear [--json] < pergunta", file=sys.stderr)
+            return 2
+        else:
+            if como_json:
+                print(json.dumps({"erro": f"argumento desconhecido: '{a}'"}, ensure_ascii=False))
+            else:
+                print(f"uso: expediente rotear [--json] < pergunta\nargumento desconhecido: '{a}'", file=sys.stderr)
+            return 2
+
+    cadeira = (os.environ.get("PF_CADEIRA") or "").strip()
+    if not cadeira:
+        msg = "sem cadeira: a porta não injetou"
+        if como_json:
+            print(json.dumps({"erro": msg}, ensure_ascii=False))
+        else:
+            print(msg, file=sys.stderr)
+        return 3
+
+    pergunta = sys.stdin.read().strip()
+    dec = escolhe(pergunta, cadeira)
+
+    via_map = {
+        "deterministico": "determinístico",
+        "semantico": "semântico",
+        "comando": "comando",
+        "fallback": "fallback",
+    }
+    via = via_map.get(dec.via, dec.via)
+    slug_txt = dec.slug if dec.slug else "null"
+
+    if como_json:
+        res = {
+            "slug": dec.slug,
+            "via": via,
+            "motivo": dec.motivo,
+            "acertos": dec.acertos or {},
+        }
+        print(json.dumps(res, ensure_ascii=False))
+    else:
+        print(f"chapeu: {slug_txt}   roteador: {via}")
+        if dec.motivo:
+            print(f"motivo: {dec.motivo}")
+
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main_cli())
