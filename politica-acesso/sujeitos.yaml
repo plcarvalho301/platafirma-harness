@@ -72,6 +72,23 @@ sujeitos:
     client: jaiminho-fabrica
     conta: jaiminho-fabrica
 
+  # Agente local do dono (agy) rodando na conta `claudinho` (uid 1001). Client
+  # `agy-dono` no realm: client credentials, `preferred_username` fixo por
+  # hardcoded-claim-mapper, `aud` ops-mcp — a receita do jaiminho-fabrica. Natureza
+  # pessoa porque e a MAO DO DONO, como `megafone`: o sujeito vem do cracha que o
+  # processo apresenta, nao do uid (caderno iam, 13/09). `operador-plataforma` ja
+  # cobre; nenhuma regra nova. Substitui a rota estatica `claudinho` (acima) para
+  # esse uso: a entrada `claudinho` sai junto com OPS_TOKEN_ESTATICO no ops-server
+  # (2a leva da Onda 2, antes de 2026-09-30). Pedido: fila 20260911T193834-gestao-
+  # estrategica. INERTE ate o client existir no realm (kcadm expirado em 13/09 —
+  # `seg keycloak entrar` e o pre-requisito); a linha por `sub` entra quando ele nascer.
+  agy-dono:
+    natureza: pessoa
+    papeis: [operador]
+    dominios: [plataforma]
+    client: agy-dono
+    conta: claudinho
+
   # DUAL-KEY Onda 5 (#2678/#137): o PEP passa a chavear por `sub`. Esta entrada traduz o
   # MESMO grant de fornecedor para o restart nao trancar a fabrica (jaiminho-fabrica faz
   # ~9k tool calls/dia, medido no log 25/08). A chave username fica ate o restart validar.
