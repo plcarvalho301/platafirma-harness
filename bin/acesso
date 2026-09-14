@@ -491,7 +491,7 @@ cmd_decidir() {
   local chave="${recurso#*:}"
   local tipo_dom=""
   case "$tipo" in
-    sessao) tipo_dom="plataforma";;
+    sessao|expediente) tipo_dom="plataforma";;
     concessao|politica|sujeito) tipo_dom="plataforma-identidade";;
     acervo) tipo_dom="plataforma-acervo";;
     comando|operacao) tipo_dom="plataforma-runtime";;

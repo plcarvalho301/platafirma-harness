@@ -331,6 +331,20 @@ regras:
     acoes: [sessao_abrir, sessao_ver, sessao_listar, sessao_encerrar]
     sobre: ["sessao:fabrica", "sessao:fabrica/*"]
 
+  # Expediente (spec_expediente §5): os tres atos sao (leitura, expediente); o nome do
+  # tipo e de seguranca (14/09): `expediente`, dominio `plataforma`, recurso
+  # `expediente:<cadeira>` — o pacote e DA cadeira, como a sessao e da cadeira, e a
+  # cadeira vem de PF_CADEIRA (porta), nunca de argumento. Fornecedor monta so o
+  # proprio; `operador` e `reino` alcancam todo `expediente:*` pelo alcance amplo.
+  # INERTE ate a porta submeter `expediente_<ato>` sobre esse id (hoje submete
+  # run_command/comando). Pedido: fila 20260914T000405-gestao-estrategica.
+  - id: fornecedor-monta-o-proprio-expediente
+    efeito: permite
+    motivo: "o pacote de abertura da fabrica e da propria cadeira, e de nenhuma outra · spec_expediente §5, card #3053 · concedido por seguranca em 14/09/2026 · vence 2026-12-13"
+    quando: {papel: fornecedor, dominio: plataforma, tipo: expediente}
+    acoes: [expediente_montar, expediente_rotear, expediente_catalogo]
+    sobre: ["expediente:fabrica"]
+
   # `cat *` ja e permitido em fornecedor-le-repo, e `cat > arquivo` escreve. Negar
   # write_file e permitir cat seria teatro: a regra nomeia o alcance de verdade, que
   # sao os clones de trabalho, e deixa o resto ao default.

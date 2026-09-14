@@ -374,7 +374,51 @@ ponteiro do release), não redundância a manter. Regra do dono que decide o des
 injeção tem origem em {superfície, verbo, fluxo OAuth}; veredito injetado pela porta não
 é nenhuma das três, verbo é — por isso a pergunta dentro do verbo fica.
 
+## Negativa por glob não exprime "todas menos a minha"
+
+No PDP negativa vence permissão em qualquer ordem, e `sobre` é glob por prefixo. Uma
+negativa `sobre: ["*"]` escrita como cinto ("fornecedor não encerra sessão alheia") nega
+também a própria `sessao:fabrica/*` que a permissão ao lado concede — não há como escrever
+"todas exceto a minha" sem mecanismo de exceção, que o PDP não tem. O alheio se protege
+pelo default (permissão cita só o filho próprio) e a prova é a medida do caso alheio
+saindo `NEGADO regra=default`. A spec_acesso §7 nasceu com essa negativa e foi emendada
+(rev 1.3, 13/09) antes de virar PAP.
+
+## Entrega da fábrica em verbo de acesso: os quatro furos que reaparecem
+
+Revisando `bin/acesso` reescrito pela fábrica (14/09), quatro defeitos que não são de
+lógica de acesso e por isso não aparecem lendo a spec: (1) parâmetro parametrizado
+(`psql -v`, env para o python) trocado por interpolação — argumento vira código; (2)
+projeção do sujeito "mais generosa" que a do PEP (casando `conta:`/`client:`) — o verbo
+permite o que a porta nega; (3) em id de recurso com duas formas, permissão achada numa
+forma sobrepondo negativa achada na outra — negativa tem de vencer nas duas; (4) ato de
+estado editando a árvore SERVIDA do release em vez da bancada. Mais o teste que grava no
+registro vivo para "provar" conceder. Revisão de verbo de acesso vindo de fora começa por
+esses cinco, antes do contrato de exit.
+
+## Aviso em stdout quebra o chamador máquina
+
+Deprecado (arq:0110 §11) avisa "uma vez por sessão" — em STDERR. Aviso em stdout entra
+na linha 0 do pacote e derruba todo contrato que lê stdout (teste de contrato, casca do
+chat, `--json` parseado). Barrou o pre-push do ramo inteiro em 14/09.
+
 ## diário de bordo
+
+2026-09-14 — `repo empurrar platafirma-harness` barrado pelo pre-push (baseline de contrato
+quebrado por commit de OUTRA cadeira no mesmo ramo, `monta-sessao` aviso em stdout) —
+contorno na data foi corrigir o commit alheio (stderr) no mesmo ramo e empurrar; o gate
+mede o ramo, não o autor.
+2026-09-14 — `write_file trecho` com `antes` copiado de `read_file` recusado ("ocorre 0
+vezes"): a leitura veio `lavado (branco)` e o espaçamento não bate byte a byte — contorno
+foi encurtar o `antes` para poucas linhas sem linha em branco.
+2026-09-14 — `mesa item` exige `--ato --alvo` E o posicional `chapeu` (usage:
+`mesa item --ato ATO --alvo ALVO chapeu`); a nota de 13/09 estava incompleta.
+2026-09-14 — `seg keycloak -- get ...` → `Session has expired`; nenhum verbo servido refaz
+o login (run_command só-verbo não roda `docker exec`) — contorno: ato `seg keycloak
+entrar` escrito no ramo fabrica/3053, só vale depois do promover.
+2026-09-14 — `lint rodar platafirma-harness` reprova o repo inteiro por ruído pré-existente
+(260 KB de saída); não serve de gate para um commit — o gate é o baseline de contrato do
+pre-push.
 
 2026-09-13 — `fila enviar --tipo parecer` recusado (válidos: decisao, demanda, handoff,
 minuta, pedido, resposta) — contorno na data: `--tipo resposta`.
