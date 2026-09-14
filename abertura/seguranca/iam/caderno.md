@@ -348,3 +348,47 @@ ações e alcance irrestritos é conta-mestra por padrão, e quem detém o domí
 passa na interseção contra todo filho. Instalação nova nasce com tabela vazia,
 negando tudo por atributo ausente — fail-closed é o que já está escrito no arquivo,
 e o pacote tem de nascer honrando isso, não afrouxando para a primeira sessão subir.
+
+## Identidade vem do token; custódia do token vem da conta
+
+"Como o PEP diferencia o jaiminho na 1003 do agy do dono na 1001?" tem uma resposta só:
+pelo crachá que o processo apresenta. O uid não vota — `identidade.py` lê `claims["sub"]`,
+não há `getuid` em lugar nenhum. O que o uid faz é decidir quem CONSEGUE portar qual
+credencial: o segredo mora no home de uma conta, e a outra não o lê. Segregar conta não
+dá identidade; impede que um sujeito se apresente como outro. Consequência: ato sobre
+credencial e ato sobre conta de SO são dois atos, e um nunca substitui o outro.
+
+## "Conta" tem dois sentidos na casa — declarar qual
+
+Em `sujeitos.yaml`, `conta:` é a conta de SO (alvo de desligamento). Em spec de sessão,
+"o sujeito — a conta" é a credencial no realm. Ler um pelo outro produz a pergunta errada
+("sujeito deriva do uid?"). Em texto de acesso: "conta de SO" ou "credencial no realm",
+nunca "conta" seca.
+
+## Duas perguntas ao mesmo PDP não são duas defesas
+
+PEP da porta na tool e etapa dentro do verbo perguntando a mesma tripla ao mesmo plano
+devolvem o mesmo veredito; a segunda só acrescenta registro. Se um dia divergem, é porque
+leem planos diferentes — e essa é a classe de defeito a fechar (plano servido único pelo
+ponteiro do release), não redundância a manter. Regra do dono que decide o desenho:
+injeção tem origem em {superfície, verbo, fluxo OAuth}; veredito injetado pela porta não
+é nenhuma das três, verbo é — por isso a pergunta dentro do verbo fica.
+
+## diário de bordo
+
+2026-09-13 — `fila enviar --tipo parecer` recusado (válidos: decisao, demanda, handoff,
+minuta, pedido, resposta) — contorno na data: `--tipo resposta`.
+2026-09-13 — `repo procurar <repo> <termo>` deu "--termo obrigatório" e depois "argumento
+excedente" com caminho extra; forma que funciona: `repo procurar <repo> --termo <termo>`.
+2026-09-13 — `motor rag buscar casa "..."`: (a) recusado pelo run_command por metacaractere
+quando a pergunta tinha parênteses; (b) sem parênteses, HTTP 503 do rag — partição casa
+fora do ar. Contorno: ADRs lidas do clone por read_file (não é o servido; declarado ao dono).
+2026-09-13 — `descobrir arq:0110` devolve cobertura vazia; a ADR está em
+`platafirma-arquitetura/macro-global/decisions/0110-governanca-de-verbos.md`. Contorno:
+`repo procurar platafirma-arquitetura --termo "PEP por tool"`.
+2026-09-13 — `mesa item <texto>` recusado: exige `--ato --alvo <chapeu>`; `mesa caderno
+<chapeu>` com stdin só LÊ — o caderno se escreve no repo (`write_file` neste arquivo) e
+sobe por git; a morada publicada só muda por `publicar-abertura`.
+2026-09-13 — `descansar fita` imprime traceback em "declarado x servido" (`conferir.py`:
+`/home/claudinho/AI/deploy/rastreador-tela/app/rastreador` inexistente); o resto sai.
+Nenhum contorno; encaminhado a ti (`bin/_release/conferir`).
