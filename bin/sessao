@@ -1,0 +1,475 @@
+#!/home/claudinho/AI/.venv-harness/bin/python
+# sessao — o dia de trabalho do agente: autoriza, cunha e torna a fita resolvivel pela porta (arq:0101, arq:0110 §14)
+# capacidade: sessao
+# dono: ia
+# classe: A
+# forma: objeto (abrir, ver) / lista (listar) / predicado (encerrar) / fluxo (longjob)
+# use para: abrir a fita autorizado e reconhecido pela porta (abrir), saber quem opera uma sessao e por qual regra abriu (ver), as sessoes vivas (listar), apagar a chave viva (encerrar), execucao que atravessa a fita (longjob)
+# atos: abrir (escrita, sessao), ver (leitura, sessao), listar (leitura, sessao), encerrar (escrita, sessao), longjob (herdado do alvo)
+# folhas: abrir|encerrar -> sessao/cunhagem · ver|listar -> sessao/estado · longjob -> sessao/execucao-longa
+# escreve: sessao:{id}, ledger:{id}, giro:{id} (msg-mem; DEL em encerrar), sessao.sessao (duravel); nada em ver|listar
+# consome: a API da entidade-sessao, quando houver (ate la: msg-mem e Postgres direto, declarados abaixo)
+# ambiente: PF_SUJEITO (obrigatoria em abrir; origem: fluxo OAuth, entregue pela porta), PF_SUPERFICIE[=desconhecida] (origem: superficie), PF_RAIZ[=~/AI] (origem: superficie/instalacao); MEM_REDIS_HOST[=127.0.0.1], MEM_REDIS_PORT[=6380] e SESSAO_PG_PORT[=5437] sao endereco de servico, constantes do verbo; SESSAO_PG_PASSWORD nao e variavel: e segredo, obtido por `seg segredo ler` no processo. PF_CADEIRA, PF_SESSAO e PF_ORDEM_ID nao sao lidas — este verbo as origina
+# depende: msg-mem (modulo redis), Postgres da sessao (psycopg), persona (vocabulario: `persona foto --json`), acesso (`acesso decidir sessao_abrir sessao:<cadeira> --json`), seg (`seg segredo ler`), longjob (bin/longjob, contrato herdado)
+# substitui: monta-sessao <cadeira> na parte que cunha; redis-cli SET sessao:*; psql -d sessao
+# conforme: parcial — chave viva e registro duravel gravados direto ate a API da entidade-sessao existir (spec_sessao §6)
+#
+# spec_sessao rev 3, §3 (forma), §4 (exit por etapa), §0 (a pergunta a `acesso decidir`).
+#
+# O que este verbo E: o arranque. Recebe QUEM chegou (PF_SUJEITO, do token, pela porta) e
+# ONDE quer sentar (a cadeira, do arranque), pergunta a politica se pode, e so com o sim
+# cunha. Nunca deriva um do outro; nunca cola sujeito depois. O pacote (conduta, persona,
+# mesa) e de `expediente montar`, que le PF_CADEIRA/PF_SESSAO que a porta injeta a partir
+# da chave que este verbo gravou.
+#
+# Falha alta, nunca muda (classe A): o que impede a porta de resolver a fita sai exit != 0
+# com causa e cura; o que nao impede (registro duravel) sai exit 0 declarado.
+from __future__ import annotations
+
+import argparse
+import json
+import os
+import subprocess
+import sys
+import time
+import uuid
+from pathlib import Path
+
+RAIZ = os.environ.get("PF_RAIZ", os.path.expanduser("~/AI"))
+_REPO_REAL = Path(__file__).resolve().parent.parent
+MEM_HOST = os.environ.get("MEM_REDIS_HOST", "127.0.0.1")
+MEM_PORTA = int(os.environ.get("MEM_REDIS_PORT", "6380"))
+PG_PORTA = os.environ.get("SESSAO_PG_PORT", "5437")
+TTL_SESSAO_S = 172800          # 48 h — o mesmo da porta, para nao haver duas verdades
+ATOS = ("abrir", "ver", "listar", "encerrar", "longjob")
+PREFIXOS_CADEIRA = ("claudinho-", "claudinha-")
+SUPERFICIES = ("claude.ai", "chat", "code", "desconhecida")
+
+# ------------------------------------------------------------------ util
+def _agora_iso() -> str:
+    return time.strftime("%Y-%m-%dT%H:%M:%S+00:00", time.gmtime())
+
+def _uuid_valido(s: str | None) -> str | None:
+    """RFC-4122 canonico, ou None. Portado invalido NAO vira id novo (arq:0101 §1)."""
+    try:
+        return str(uuid.UUID(str(s).strip()))
+    except (ValueError, AttributeError, TypeError):
+        return None
+
+def _superficie() -> str:
+    sup = (os.environ.get("PF_SUPERFICIE") or "").strip() or "desconhecida"
+    return sup if sup in SUPERFICIES else "desconhecida"
+
+def _env_verbo() -> dict[str, str]:
+    """PATH explicito para os verbos que este chama (persona, acesso, seg): quando a porta
+    ou um servico chama este binario, o PATH herdado nao tem RAIZ/bin."""
+    e = dict(os.environ)
+    e["PATH"] = f"{RAIZ}/bin:{os.path.expanduser('~')}/.local/bin:" + os.environ.get("PATH", "")
+    return e
+
+def _roda(argv: list[str], timeout: int = 20, stdin: str | None = None) -> tuple[int, str, str]:
+    try:
+        p = subprocess.run(argv, capture_output=True, text=True, timeout=timeout,
+                           env=_env_verbo(), input=stdin, check=False)
+        return p.returncode, p.stdout or "", p.stderr or ""
+    except (OSError, subprocess.SubprocessError) as e:
+        return 127, "", f"{type(e).__name__}: {e}"
+
+def _sufixo(cadeira: str) -> str:
+    cad = (cadeira or "").strip()
+    for pref in PREFIXOS_CADEIRA:
+        if cad.lower().startswith(pref):
+            return cad[len(pref):].lower()
+    return cad.lower()
+
+class Saida:
+    """Texto ou JSON, decidido uma vez. Erro em --json e objeto {erro} em stdout; em
+    texto, stderr. Exit 2 sai uma vez."""
+
+    def __init__(self, como_json: bool):
+        self.json = como_json
+
+    def erro(self, msg: str, exit_code: int, **campos) -> int:
+        if self.json:
+            print(json.dumps({"erro": msg, **campos}, ensure_ascii=False))
+        else:
+            print(msg, file=sys.stderr)
+        return exit_code
+
+# ------------------------------------------------------------------ msg-mem
+def _msgmem():
+    """Cliente do msg-mem. `None` com o motivo quando nao alcanca: classe A decide o exit,
+    nao esta funcao. Separada para o teste substituir por um fake em memoria."""
+    try:
+        import redis
+    except ImportError:
+        return None, "modulo `redis` ausente neste venv"
+    try:
+        rc = redis.Redis(host=MEM_HOST, port=MEM_PORTA, decode_responses=True,
+                         socket_connect_timeout=2, socket_timeout=3)
+        rc.ping()
+        return rc, None
+    except Exception as e:  # noqa: BLE001 — o motivo vai na linha, o exit e do ato
+        return None, f"{type(e).__name__}"
+
+def _cura_msgmem(motivo: str) -> str:
+    return (f"msg-mem: ausente ({MEM_HOST}:{MEM_PORTA} — {motivo}); "
+            "levanta com `infra estado` / `infra restart` na stack do msg-mem")
+
+def _le_chave(rc, sid: str) -> dict | None:
+    bruto = rc.get(f"sessao:{sid}")
+    if bruto is None:
+        return None
+    try:
+        val = json.loads(bruto)
+    except ValueError:
+        return {}
+    return val if isinstance(val, dict) else {}
+
+# ------------------------------------------------------------------ organizacao
+def _vocabulario() -> tuple[dict | None, str | None]:
+    """`persona foto --json`: {slug: {alias, chapeus}}. Exit 0 e 1 (aliases ilegivel,
+    degrada declarado) trazem o vocabulario; qualquer outro e organizacao muda."""
+    rc, out, err = _roda(["persona", "foto", "--json"], timeout=15)
+    if rc not in (0, 1) or not out.strip():
+        return None, (err or out).strip()[:200] or f"persona foto: exit {rc}"
+    try:
+        d = json.loads(out)
+    except ValueError:
+        return None, "persona foto: saida nao e JSON"
+    return (d if isinstance(d, dict) else None), (None if isinstance(d, dict) else "persona foto: JSON inesperado")
+
+def _canoniza(cadeira: str, voc: dict) -> str | None:
+    """Slug puro se a cadeira existe no vocabulario — por slug ou por alias humano."""
+    suf = _sufixo(cadeira)
+    if suf in voc:
+        return suf
+    alvo = cadeira.strip().lower()
+    for slug, meta in voc.items():
+        alias = (meta or {}).get("alias") if isinstance(meta, dict) else None
+        if alias and alias.strip().lower() == alvo:
+            return slug
+    return None
+
+# ------------------------------------------------------------------ autorizacao
+def _decidir(slug: str) -> tuple[int, dict, str]:
+    """`acesso decidir sessao_abrir sessao:<slug> --json` (spec_acesso §7). Devolve
+    (exit, objeto, stderr)."""
+    rc, out, err = _roda(["acesso", "decidir", "sessao_abrir", f"sessao:{slug}", "--json"], timeout=20)
+    d = {}
+    if out.strip():
+        try:
+            d = json.loads(out.strip().splitlines()[-1])
+        except ValueError:
+            d = {}
+    return rc, (d if isinstance(d, dict) else {}), (err or "").strip()
+
+# ------------------------------------------------------------------ registro duravel
+def _senha_pg() -> tuple[str | None, str | None]:
+    """Segredo por verbo, no processo (spec_acesso §2). Sem fallback de variavel nem de
+    arquivo: `SESSAO_PG_PASSWORD` nao e ambiente (spec_sessao §5)."""
+    rc, out, err = _roda(["seg", "segredo", "ler", "SESSAO_PG_PASSWORD"], timeout=10)
+    if rc == 0 and out.strip():
+        return out.strip(), None
+    return None, f"seg segredo ler SESSAO_PG_PASSWORD: {(err or out).strip()[:120] or f'exit {rc}'}"
+
+def _registra_duravel(sid: str, slug: str) -> str | None:
+    """INSERT em sessao.sessao (arq:0091). Devolve o motivo quando nao grava; nunca trava."""
+    try:
+        import psycopg
+    except ImportError:
+        return "psycopg ausente neste venv"
+    senha, motivo = _senha_pg()
+    if not senha:
+        return motivo
+    dsn = f"host=127.0.0.1 port={PG_PORTA} dbname=sessao user=sessao password={senha}"
+    try:
+        with psycopg.connect(dsn, connect_timeout=3) as con, con.cursor() as cur:
+            cur.execute("INSERT INTO sessao.sessao (sessao_id, cadeira, chapeu, superficie) "
+                        "VALUES (%s,%s,%s,%s) ON CONFLICT (sessao_id) DO NOTHING",
+                        (sid, slug, None, _superficie()))
+            con.commit()
+    except Exception as e:  # noqa: BLE001 — banco mudo nao derruba a cunhagem
+        return f"Postgres da sessao: {type(e).__name__}"
+    return None
+
+# ------------------------------------------------------------------ ato: abrir
+def _imprime_abrir(ch: dict, sid: str, cunhada: bool, registrada: bool, duravel: bool,
+                   motivo_duravel: str | None, avisos: list[str], saida: Saida) -> None:
+    porte = ("devolva este sessao_id em toda chamada de tool e na proxima abertura desta "
+             "conversa")
+    obj = {
+        "sessao_id": sid, "cunhada_agora": cunhada,
+        "sujeito": ch.get("sujeito"), "cadeira": ch.get("cadeira"),
+        "canonizada": ch.get("canonizada"), "autorizada_por": ch.get("autorizada_por"),
+        "ordem_id": ch.get("ordem_id"), "superficie": ch.get("superficie"),
+        "aberto_em": ch.get("aberto_em"),
+        "registrada": registrada, "duravel": duravel,
+        "porte": porte, "avisos": avisos,
+    }
+    if motivo_duravel:
+        obj["duravel_motivo"] = motivo_duravel
+    if not ch.get("canonizada"):
+        obj["regime"] = "nao canonizada — escrita restrita a cura"
+    if saida.json:
+        print(json.dumps(obj, ensure_ascii=False))
+        return
+    suj = str(ch.get("sujeito") or "")
+    suj_disp = suj[:8] if _uuid_valido(suj) else suj
+    print(f"sessao_id: {sid}   cunhada_agora: {'true' if cunhada else 'false'}")
+    print(f"sujeito: {suj_disp}   cadeira: {ch.get('cadeira')}   canonizada: "
+          f"{'true' if ch.get('canonizada') else 'false'}")
+    print(f"autorizada_por: {ch.get('autorizada_por')}")
+    print(f"ordem_id: {ch.get('ordem_id')}")
+    dur = "true" if duravel else f"false ({motivo_duravel})"
+    print(f"registrada: {'true' if registrada else 'false'}   duravel: {dur}")
+    if not ch.get("canonizada"):
+        print("regime: nao canonizada — escrita restrita a cura")
+    print(f"porte: {porte}")
+    for a in avisos:
+        print(f"(aviso: {a})")
+
+def ato_abrir(cadeira: str, sessao_id: str | None, saida: Saida) -> int:
+    # etapa 1 — uso
+    if not (cadeira or "").strip():
+        return saida.erro("uso: sessao abrir <cadeira> [--sessao-id <uuid>] [--json]", 2)
+    sid_portado = None
+    if sessao_id is not None:
+        sid_portado = _uuid_valido(sessao_id)
+        if not sid_portado:
+            return saida.erro(f"--sessao-id {sessao_id!r} nao e RFC-4122 — chame sem `--sessao-id` "
+                              "para cunhar uma sessao nova; um id invalido nunca vira id novo "
+                              "(arq:0101 §1)", 2)
+    # etapa 2 — sujeito
+    sujeito = (os.environ.get("PF_SUJEITO") or "").strip()
+    if not sujeito:
+        return saida.erro("sem sujeito: a porta nao autenticou — PF_SUJEITO vem do fluxo OAuth "
+                          "(sub do token), nunca de arquivo ou unit (spec_acesso §2)", 3)
+    # etapa 3 — organizacao (canonizacao); 3' organizacao muda degrada, mas so DEPOIS da 4
+    avisos: list[str] = []
+    voc, motivo_org = _vocabulario()
+    canonizada = False
+    if voc is not None:
+        slug = _canoniza(cadeira, voc)
+        if not slug:
+            validas = " ".join(sorted(voc))
+            return saida.erro(f"cadeira desconhecida: {cadeira!r} — validas: {validas}", 2,
+                              cadeiras_validas=sorted(voc))
+        canonizada = True
+    else:
+        slug = _sufixo(cadeira)
+        if not slug:
+            return saida.erro("uso: sessao abrir <cadeira>", 2)
+        avisos.append(f"organizacao muda ({motivo_org}): cadeira gravada como rotulo "
+                      f"normalizado {slug!r}, canonizada: false — regime restrito ate "
+                      "`publicar-abertura` (arq:0110 §6 A(a))")
+    # etapa 4 — autorizacao; nunca degrada
+    rc, d, err = _decidir(slug)
+    if rc == 0:
+        autorizada_por = f"{d.get('regra') or 'default'}@{d.get('plano') or '?'}"
+    elif rc == 1:
+        regra = d.get("regra") or "default"
+        return saida.erro(f"nao autorizado: {sujeito[:8]} nao abre sessao:{slug} — regra {regra} "
+                          f"({d.get('motivo') or err or 'sem motivo'}); quem concede: merge no PAP "
+                          "com fundamento (seguranca), depois `release promover`", 4,
+                          regra=regra, plano=d.get("plano"))
+    elif rc == 5:
+        faltou = ", ".join(d.get("faltou") or []) or "?"
+        return saida.erro(f"projecao incompleta: faltou: {faltou} — nasce na tabela de sujeitos "
+                          "(sujeitos.yaml) ou no claim do token; a politica nao decidiu", 3,
+                          faltou=d.get("faltou"))
+    else:
+        return saida.erro(f"politica: ausente — `acesso decidir` saiu {rc} "
+                          f"({err[:160] or 'sem stderr'}); sem plano nao ha sessao", 3)
+    # etapa 5 — chave viva (uma vez, inteira)
+    rc_mem, motivo_mem = _msgmem()
+    sid = sid_portado or str(uuid.uuid4())
+    cunhada = sid_portado is None
+    ordem_id = f"o{time.strftime('%Y%m%dT%H%M%S', time.gmtime())}-{uuid.uuid4().hex[:6]}"
+    if rc_mem is None:
+        return saida.erro(f"{_cura_msgmem(motivo_mem)} — sessao_id cunhado e NAO gravado: {sid}",
+                          3, sessao_id=sid)
+    chave = f"sessao:{sid}"
+    try:
+        existente = _le_chave(rc_mem, sid) if sid_portado else None
+        if existente:
+            # reabrir a mesma conversa: atualiza ordem_id e nada mais (§2)
+            existente["ordem_id"] = ordem_id
+            ch = existente
+        else:
+            ch = {"sujeito": sujeito, "cadeira": slug, "canonizada": canonizada,
+                  "autorizada_por": autorizada_por, "ordem_id": ordem_id,
+                  "superficie": _superficie(), "aberto_em": _agora_iso(),
+                  "origem": "sessao abrir"}
+        rc_mem.set(chave, json.dumps(ch, ensure_ascii=False), ex=TTL_SESSAO_S)
+    except Exception as e:  # noqa: BLE001
+        return saida.erro(f"{_cura_msgmem(type(e).__name__)} — sessao_id cunhado e NAO gravado: {sid}",
+                          3, sessao_id=sid)
+    # etapa 6 — registro duravel; nunca trava
+    motivo_dur = _registra_duravel(sid, slug)
+    # etapa 7 — releitura
+    try:
+        relida = _le_chave(rc_mem, sid) or {}
+    except Exception as e:  # noqa: BLE001
+        relida = {}
+        motivo_rel = type(e).__name__
+    else:
+        motivo_rel = "chave ausente ou diferente"
+    if relida.get("cadeira") != slug or relida.get("ordem_id") != ordem_id:
+        return saida.erro(f"gravou e nao confirma: {chave} ({motivo_rel}) — msg-mem instavel; "
+                          f"sessao_id: {sid}", 5, sessao_id=sid)
+    _imprime_abrir(relida, sid, cunhada, True, motivo_dur is None, motivo_dur, avisos, saida)
+    return 0
+
+# ------------------------------------------------------------------ ato: ver
+def ato_ver(sessao_id: str, saida: Saida) -> int:
+    sid = _uuid_valido(sessao_id)
+    if not sid:
+        return saida.erro("uso: sessao ver <sessao_id> — <sessao_id> e um uuid RFC-4122", 2)
+    rc_mem, motivo = _msgmem()
+    if rc_mem is None:
+        return saida.erro(_cura_msgmem(motivo), 3)
+    try:
+        ch = _le_chave(rc_mem, sid)
+    except Exception as e:  # noqa: BLE001
+        return saida.erro(_cura_msgmem(type(e).__name__), 3)
+    if ch is None:
+        return saida.erro(f"sessao {sid} nao existe ou expirou — varrido: msg-mem "
+                          f"{MEM_HOST}:{MEM_PORTA} (TTL {TTL_SESSAO_S // 3600} h); "
+                          "vizinho: `sessao listar`", 1,
+                          varrido=f"msg-mem {MEM_HOST}:{MEM_PORTA}", vizinho="sessao listar")
+    regime = None if ch.get("canonizada", True) else "nao canonizada — escrita restrita a cura"
+    if saida.json:
+        obj = {"sessao_id": sid, **ch}
+        if regime:
+            obj["regime"] = regime
+        print(json.dumps(obj, ensure_ascii=False))
+        return 0
+    suj = str(ch.get("sujeito") or "")
+    print(f"sessao_id: {sid}")
+    print(f"sujeito: {suj[:8] if _uuid_valido(suj) else suj or '-'}   cadeira: {ch.get('cadeira')}"
+          f"   canonizada: {'true' if ch.get('canonizada', True) else 'false'}")
+    print(f"autorizada_por: {ch.get('autorizada_por') or '-'}")
+    print(f"ordem_id: {ch.get('ordem_id') or '-'}   superficie: {ch.get('superficie') or '-'}"
+          f"   aberto_em: {ch.get('aberto_em') or '-'}")
+    if regime:
+        print(f"regime: {regime}")
+    return 0
+
+# ------------------------------------------------------------------ ato: listar
+def ato_listar(cadeira: str | None, saida: Saida) -> int:
+    rc_mem, motivo = _msgmem()
+    if rc_mem is None:
+        return saida.erro(_cura_msgmem(motivo), 3)
+    filtro = _sufixo(cadeira) if cadeira else None
+    linhas = []
+    try:
+        for chave in rc_mem.scan_iter(match="sessao:*", count=200):
+            sid = chave.split(":", 1)[1]
+            if not _uuid_valido(sid):
+                continue
+            ch = _le_chave(rc_mem, sid) or {}
+            if filtro and ch.get("cadeira") != filtro:
+                continue
+            linhas.append({"sessao_id": sid, "cadeira": ch.get("cadeira"),
+                           "sujeito": ch.get("sujeito"), "aberto_em": ch.get("aberto_em"),
+                           "canonizada": ch.get("canonizada", True)})
+    except Exception as e:  # noqa: BLE001
+        return saida.erro(_cura_msgmem(type(e).__name__), 3)
+    linhas.sort(key=lambda l: (l.get("cadeira") or "", l.get("aberto_em") or ""))
+    if saida.json:
+        print(json.dumps({"sessoes": linhas,
+                          "motivo": None if linhas else "nenhuma sessao viva"}, ensure_ascii=False))
+        return 0
+    if not linhas:
+        print("motivo: nenhuma sessao viva" + (f" na cadeira {filtro}" if filtro else ""))
+        return 0
+    for l in linhas:
+        suj = str(l.get("sujeito") or "")
+        print(f"{l['sessao_id']}  {l.get('cadeira') or '-':<20} "
+              f"{suj[:8] if _uuid_valido(suj) else (suj or '-'):<10} {l.get('aberto_em') or '-'}"
+              + ("" if l.get("canonizada", True) else "  [nao canonizada]"))
+    return 0
+
+# ------------------------------------------------------------------ ato: encerrar
+def ato_encerrar(sessao_id: str, saida: Saida) -> int:
+    sid = _uuid_valido(sessao_id)
+    if not sid:
+        return saida.erro("uso: sessao encerrar <sessao_id> — <sessao_id> e um uuid RFC-4122", 2)
+    rc_mem, motivo = _msgmem()
+    if rc_mem is None:
+        return saida.erro(_cura_msgmem(motivo), 3)
+    chaves = [f"sessao:{sid}", f"ledger:{sid}", f"giro:{sid}"]
+    try:
+        if not rc_mem.exists(chaves[0]):
+            return saida.erro(f"sessao {sid} ja nao existia no msg-mem", 1)
+        apagadas = [c for c in chaves if rc_mem.delete(c)]
+        if rc_mem.exists(chaves[0]):
+            return saida.erro(f"DEL sem confirmacao: {chaves[0]} ainda existe", 5)
+    except Exception as e:  # noqa: BLE001
+        return saida.erro(_cura_msgmem(type(e).__name__), 3)
+    if saida.json:
+        print(json.dumps({"encerrada": sid, "apagadas": apagadas,
+                          "duravel": "sessao.sessao fica"}, ensure_ascii=False))
+    else:
+        print(f"encerrada: {sid}   apagadas: {' '.join(apagadas)}   (registro duravel fica)")
+    return 0
+
+# ------------------------------------------------------------------ ato: longjob
+def ato_longjob(resto: list[str]) -> int:
+    """Contrato herdado de bin/longjob (spec_sessao §1): exec, sem reinterpretar."""
+    alvo = _REPO_REAL / "bin" / "longjob"
+    if not alvo.is_file():
+        print(f"longjob: nao existe {alvo}", file=sys.stderr)
+        return 3
+    os.execve(str(alvo), [str(alvo), *resto], _env_verbo())
+    return 3  # pragma: no cover — execve nao volta
+
+# ------------------------------------------------------------------ CLI
+USO = """uso:
+  sessao abrir     <cadeira> [--sessao-id <uuid>] [--json]   autoriza (acesso decidir), cunha e grava a chave viva
+  sessao ver       <sessao_id> [--json]                       a chave como esta: sujeito, cadeira, regra, ordem_id
+  sessao listar    [--cadeira <slug>] [--json]                as sessoes vivas
+  sessao encerrar  <sessao_id>                                apaga sessao:{id}, ledger:{id}, giro:{id}; o duravel fica
+  sessao longjob   <args...>                                  contrato herdado de bin/longjob
+
+exit (abrir): 0 cunhou · 2 uso/cadeira desconhecida · 3 sem sujeito/politica ausente/msg-mem mudo · 4 nao autorizado · 5 gravou e nao confirma
+exit (ver/listar/encerrar): 0 · 1 nao existe · 2 uso · 3 msg-mem mudo · 5 DEL sem confirmacao"""
+
+def main(argv: list[str] | None = None) -> int:
+    argv = list(sys.argv[1:] if argv is None else argv)
+    como_json = "--json" in argv
+    saida = Saida(como_json)
+    if not argv or argv[0] in ("-h", "--help", "--ajuda"):
+        print(USO, file=sys.stderr if not argv else sys.stdout)
+        return 2 if not argv else 0
+    ato = argv[0]
+    if ato not in ATOS:
+        return saida.erro(f"ato desconhecido: {ato!r} — atos: {' '.join(ATOS)}", 2)
+    if ato == "longjob":
+        return ato_longjob(argv[1:])
+    p = argparse.ArgumentParser(prog=f"sessao {ato}", add_help=False)
+    if ato == "abrir":
+        p.add_argument("cadeira", nargs="?")
+        p.add_argument("--sessao-id", dest="sessao_id", default=None)
+    elif ato in ("ver", "encerrar"):
+        p.add_argument("sessao_id", nargs="?")
+    elif ato == "listar":
+        p.add_argument("--cadeira", default=None)
+    p.add_argument("--json", action="store_true")
+    try:
+        ns, sobra = p.parse_known_args(argv[1:])
+    except SystemExit:
+        return saida.erro(USO, 2)
+    if sobra:
+        return saida.erro(f"sessao {ato}: argumento desconhecido {sobra[0]!r}\n{USO}", 2)
+    if ato == "abrir":
+        return ato_abrir(ns.cadeira or "", ns.sessao_id, saida)
+    if ato == "ver":
+        return ato_ver(ns.sessao_id or "", saida)
+    if ato == "listar":
+        return ato_listar(ns.cadeira, saida)
+    return ato_encerrar(ns.sessao_id or "", saida)
+
+if __name__ == "__main__":
+    sys.exit(main())
