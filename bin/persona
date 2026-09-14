@@ -1,15 +1,28 @@
 #!/usr/bin/env bash
-# persona — escrita compartimentada das personas da PlataFirma.
+# persona — quem a cadeira e e como se comporta: leitura para o expediente, escrita compartimentada.
 # capacidade: organizacao
-# dono: claudinha-gestao-estrategica
-# use para: escrever/editar persona, designar, afastar, desligar, foto/filme da cadeira
-# atos: abrir, salvar, conferir, prover, designar, afastar, dispensar, desligar, remover, reverter, foto, filme, idade
-# Leitura serve do clone sem rede (monta_sessao); a sincronização mora aqui,
-# do lado da escrita: pull antes, confere, commit e push depois. Só toca
-# personas/ — mudança fora dela aborta o salvar em vez de entrar de carona.
+# dono: gestao-estrategica
+# classe: B
+# use para: ler persona/chapeu/conduta (o que o expediente serve), escrever/editar persona, designar, afastar, desligar, foto/filme da cadeira
+# atos: ler, conduta, abrir, salvar, conferir, prover, designar, afastar, dispensar, desligar, remover, reverter, foto, filme, idade
+# folhas: ler|conduta -> organizacao/leitura (serve o expediente) · abrir|salvar|conferir -> organizacao/redacao ·
+#         prover|designar|dispensar|remover|afastar|reverter|desligar|foto|filme -> organizacao/vinculo (ledger)
+# ambiente: PF_ABERTURA_DIR[=~/AI/var/abertura-publicada] (leitura, arq:0097) · PERSONA_REPO[=~/AI/platafirma-harness] (escrita)
+# depende: morada publicada (ler, conduta); git + origin (abrir, salvar)
+# escreve: abertura/ e registro/eventos-org.jsonl do clone (salvar); nada em ler|conduta|foto|filme
+#
+# LEITURA E DA MORADA PUBLICADA, nunca do clone (arq:0097): `ler` e `conduta` servem a
+# arvore imutavel sob $PF_ABERTURA_DIR/current/abertura — e o que o expediente injeta
+# (spec_expediente §7: persona, chapeu, conduta), sem open() de caminho composto no
+# montador. A sincronizacao mora do lado da ESCRITA: pull antes, confere, commit e push
+# depois. So toca abertura/ e o ledger — mudanca fora deles aborta o salvar.
+# Ausencia se declara e ensina: cadeira fora da arvore lista as validas (exit 1),
+# chapeu fora do vocabulario lista os da cadeira (exit 1), morada nao publicada exit 3.
 set -euo pipefail
 
 REPO="${PERSONA_REPO:-$HOME/AI/platafirma-harness}"
+MORADA="${PF_ABERTURA_DIR:-$HOME/AI/var/abertura-publicada}"
+ARVORE="$MORADA/current/abertura"
 # conteudo vivo mora na arvore de abertura (um dir por cadeira, persona.md + chapeus).
 # o ledger de organizacao mora em registro/eventos-org.jsonl (ato proprio, _persona-org.py).
 ALVO="abertura"
@@ -17,6 +30,12 @@ ALVO="abertura"
 uso() {
   cat >&2 <<'EOF'
 uso:
+  leitura, da morada publicada (o que o expediente serve):
+  persona ler <cadeira>                 persona.md da cadeira, cru
+  persona ler <cadeira> --chapeu <slug> chapeu.md + ferramental.md do chapeu, crus
+  persona conduta                       dono.md — a conduta do dono, igual em toda cadeira
+
+  redacao, no clone:
   persona abrir              pull --ff-only antes de editar; diz o sha e a idade
   persona idade              sha, data do último commit e idade do clone
   persona conferir           roda os checks sem escrever nada
@@ -41,6 +60,85 @@ uso:
 EOF
   exit 2
 }
+
+# --- leitura: morada publicada ------------------------------------------------
+exige_morada() {
+  if [ ! -d "$ARVORE" ]; then
+    echo "persona: morada nao publicada ($ARVORE nao existe) — a cura e \`publicar-abertura\`" >&2
+    exit 3
+  fi
+}
+
+# slug puro: sem prefixo claudinho-/claudinha-, minusculas — a mesma forma que nomeia o
+# diretorio em abertura/ (arq:0073 §1).
+slug_cadeira() {
+  local c
+  c=$(printf '%s' "${1:-}" | tr '[:upper:]' '[:lower:]')
+  c="${c#claudinho-}"; c="${c#claudinha-}"
+  printf '%s' "$c"
+}
+
+cadeiras_validas() {
+  # cadeira viva = diretorio com persona.md (arq:0073 §1)
+  find "$ARVORE" -mindepth 2 -maxdepth 2 -name persona.md -printf '%h\n' \
+    | xargs -rn1 basename | sort | tr '\n' ' '
+}
+
+chapeus_da_cadeira() {
+  find "$ARVORE/$1" -mindepth 2 -maxdepth 2 -name chapeu.md -printf '%h\n' 2>/dev/null \
+    | xargs -rn1 basename | sort | tr '\n' ' '
+}
+
+ler() {
+  exige_morada
+  local cad chapeu=""
+  cad=$(slug_cadeira "${1:-}")
+  [ -n "$cad" ] || { echo "persona ler: falta <cadeira> — validas: $(cadeiras_validas)" >&2; exit 2; }
+  shift
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --chapeu) chapeu="${2:-}"; [ -n "$chapeu" ] || { echo "persona ler: --chapeu exige <slug>" >&2; exit 2; }; shift 2 ;;
+      *) echo "persona ler: argumento desconhecido '$1'" >&2; uso ;;
+    esac
+  done
+  if [ ! -d "$ARVORE/$cad" ]; then
+    echo "nao-existe: cadeira $cad — validas: $(cadeiras_validas)" >&2
+    exit 1
+  fi
+  if [ -z "$chapeu" ]; then
+    if [ ! -f "$ARVORE/$cad/persona.md" ]; then
+      echo "nao-existe: abertura/$cad/persona.md — cadeira provida e nao redigida" >&2
+      exit 1
+    fi
+    cat "$ARVORE/$cad/persona.md"
+    return 0
+  fi
+  if [ ! -f "$ARVORE/$cad/$chapeu/chapeu.md" ]; then
+    echo "nao-existe: chapeu $chapeu em $cad — validos: $(chapeus_da_cadeira "$cad")" >&2
+    exit 1
+  fi
+  cat "$ARVORE/$cad/$chapeu/chapeu.md"
+  if [ -f "$ARVORE/$cad/$chapeu/ferramental.md" ]; then
+    printf '\n'
+    cat "$ARVORE/$cad/$chapeu/ferramental.md"
+  else
+    echo "(chapeu $chapeu sem ferramental.md — declarado, nao e erro)" >&2
+  fi
+}
+
+conduta() {
+  exige_morada
+  if [ ! -f "$ARVORE/dono.md" ]; then
+    echo "nao-existe: abertura/dono.md na morada publicada" >&2
+    exit 1
+  fi
+  cat "$ARVORE/dono.md"
+}
+
+case "${1:-}" in
+  ler)     shift; ler "$@"; exit $? ;;
+  conduta) conduta; exit $? ;;
+esac
 
 cd "$REPO"
 
