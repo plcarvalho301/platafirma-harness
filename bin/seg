@@ -3,31 +3,42 @@
 # capacidade: politica
 # componente: openscap, keycloak, openssl+oqsprovider
 # dono: claudinho-seguranca
-# use para: openscap, keycloak, openssl pós-quântico, régua de segurança
-# atos: oscap, ssg, keycloak, openssl
+# classe: B
+# use para: openscap, keycloak, openssl pós-quântico, régua de segurança, segredos
+# atos: oscap, ssg, keycloak, openssl, segredo
+# folhas: oscap|ssg -> politica/avaliacao · keycloak|openssl -> politica/acesso · segredo -> politica/segredo
+# escreve: var/secrets/<stack>/<nome>
+# ambiente: SEG_SECRETS_DIR[=$HOME/AI/var/secrets]
 #
 # subcomando          capacidade          origem do ato
 #   oscap avaliar     politica            era oscap-casco
 #   oscap falhas      politica            era oscap-casco-falhas
 #   oscap --          politica            passthrough openscap
 #   ssg derivar       politica            era ssg-deriva
+#   keycloak entrar   acesso              sessao kcadm dentro do conteiner
 #   keycloak --       acesso              passthrough kcadm.sh (era kcadm)
 #   openssl --        acesso              passthrough openssl+oqsprovider (era openssl-pqc)
+#   segredo ler       politica            leitura de segredo
+#   segredo listar    politica            metadados de segredo
+#   segredo gravar    politica            escrita atomica de segredo
+#   segredo importar  politica            importacao de .env
+#   segredo rotacionar politica           rotacao de client-secret no keycloak
 #
 # NAO E GATE. Enquanto oscap, kcadm.sh e openssl seguirem alcancaveis fora deste
 # binario, ele e conveniencia e trilha: quem quiser desviar chama a ferramenta
 # direto. Vira controle no dia em que as ferramentas sairem do PATH do usuario.
 set -euo pipefail
 
-LOG_DIR="$HOME/AI/var/log/seg"
+LOG_DIR="${SEG_LOG_DIR:-$HOME/AI/var/log/seg}"
 DS_DIR="$HOME/AI/opt/ssg"
 OUT="$HOME/AI/var/oscap"
+SEG_SECRETS_DIR="${SEG_SECRETS_DIR:-$HOME/AI/var/secrets}"
 
 registra() {
-  mkdir -p "$LOG_DIR"
+  mkdir -p "$LOG_DIR" 2>/dev/null || true
   printf '{"em":"%s","quem":"%s","sub":"%s","args":%s}\n' \
     "$(date -Is)" "$(id -un)" "${1:-}" "$(printf '%s\n' "${*:2}" | jq -Rsc . 2>/dev/null || echo '""')" \
-    >> "$LOG_DIR/seg-$(date +%F).jsonl"
+    >> "$LOG_DIR/seg-$(date +%F).jsonl" 2>/dev/null || true
 }
 
 uso() {
@@ -38,8 +49,18 @@ seg — toolkit de seguranca da PlataFirma
   seg oscap falhas <log>          lista as regras que falharam num log de avaliacao
   seg oscap -- <nativos>          repassa cru ao openscap
   seg ssg derivar <datastream>    compila a regua: remove o CPE de SO do datastream
+  seg keycloak entrar             refaz a sessao do kcadm dentro do conteiner
   seg keycloak -- <nativos>       repassa cru ao kcadm.sh, no conteiner
   seg openssl -- <nativos>        repassa cru ao openssl com oqsprovider
+  seg segredo ler <stack>/<nome>|<nome>
+                                  le o segredo em stdout
+  seg segredo listar [<stack>]    lista metadados dos segredos (nome, stack, bytes, mtime, modo)
+  seg segredo gravar <stack>/<nome>
+                                  grava segredo vindo de stdin (escrita atomica)
+  seg segredo importar <stack> --de <caminho .env>
+                                  importa segredos de arquivo .env
+  seg segredo rotacionar <stack>/<nome> --keycloak-client <clientId>
+                                  rotaciona client-secret no keycloak
 
 Perfis de avaliacao:
   cis_level1_server  cis_level1_workstation  cis_level2_server
@@ -51,6 +72,367 @@ FIM
   exit 2
 }
 
+cmd_segredo_ler() {
+  local alvo="${1:-}"
+  if [ -z "$alvo" ]; then
+    echo "uso: seg segredo ler <stack>/<nome> ou <nome>" >&2
+    exit 2
+  fi
+
+  # Recusa: (a) stdout e TTY ou (b) processo pai e a porta (cmdline contem ops-server/server.py)
+  local pai_cmd=""
+  if [ -f "/proc/$PPID/cmdline" ]; then
+    pai_cmd="$(tr '\0' ' ' < "/proc/$PPID/cmdline" 2>/dev/null || true)"
+  fi
+  if [ -t 1 ] || [[ "$pai_cmd" == *"ops-server/server.py"* ]]; then
+    echo "segredo não atravessa a porta: chame de dentro do verbo que o consome" >&2
+    exit 4
+  fi
+
+  local arq=""
+  if [[ "$alvo" == *"/"* ]]; then
+    local stack="${alvo%%/*}"
+    local nome="${alvo#*/}"
+    arq="$SEG_SECRETS_DIR/$stack/$nome"
+    if [ ! -f "$arq" ]; then
+      echo "segredo nao encontrado: $alvo" >&2
+      exit 1
+    fi
+  else
+    shopt -s nullglob
+    local matches=()
+    for c in "$SEG_SECRETS_DIR"/*/"$alvo"; do
+      if [ -f "$c" ]; then
+        matches+=("$c")
+      fi
+    done
+    shopt -u nullglob
+
+    if [ "${#matches[@]}" -eq 0 ]; then
+      echo "segredo nao encontrado: $alvo" >&2
+      exit 1
+    elif [ "${#matches[@]}" -gt 1 ]; then
+      echo "multiplos candidatos para $alvo:" >&2
+      for c in "${matches[@]}"; do
+        local rel="${c#"$SEG_SECRETS_DIR/"}"
+        echo "$rel" >&2
+      done
+      exit 2
+    fi
+    arq="${matches[0]}"
+  fi
+
+  cat "$arq"
+}
+
+cmd_segredo_listar() {
+  local stack="${1:-}"
+  local erro=0
+  local achados=()
+
+  if [ ! -d "$SEG_SECRETS_DIR" ]; then
+    return 0
+  fi
+
+  local m_raiz
+  m_raiz="$(stat -c '%a' "$SEG_SECRETS_DIR")"
+  if [ "$m_raiz" != "700" ]; then
+    echo "diretorio com permissao incorreta ($m_raiz != 700): $SEG_SECRETS_DIR" >&2
+    erro=1
+  fi
+
+  if [ -n "$stack" ]; then
+    local sdir="$SEG_SECRETS_DIR/$stack"
+    if [ ! -d "$sdir" ]; then
+      if [ "$erro" -ne 0 ]; then
+        exit 1
+      fi
+      return 0
+    fi
+    local m_dir
+    m_dir="$(stat -c '%a' "$sdir")"
+    if [ "$m_dir" != "700" ]; then
+      echo "diretorio com permissao incorreta ($m_dir != 700): $sdir" >&2
+      erro=1
+    fi
+    shopt -s nullglob
+    for f in "$sdir"/*; do
+      if [ -f "$f" ]; then
+        local m_f
+        m_f="$(stat -c '%a' "$f")"
+        if [ "$m_f" != "600" ]; then
+          echo "arquivo com permissao incorreta ($m_f != 600): $f" >&2
+          erro=1
+        fi
+        achados+=("$f")
+      elif [ -d "$f" ]; then
+        local m_sub
+        m_sub="$(stat -c '%a' "$f")"
+        if [ "$m_sub" != "700" ]; then
+          echo "diretorio com permissao incorreta ($m_sub != 700): $f" >&2
+          erro=1
+        fi
+      fi
+    done
+    shopt -u nullglob
+  else
+    shopt -s nullglob
+    for d in "$SEG_SECRETS_DIR"/*; do
+      if [ -d "$d" ]; then
+        local m_dir
+        m_dir="$(stat -c '%a' "$d")"
+        if [ "$m_dir" != "700" ]; then
+          echo "diretorio com permissao incorreta ($m_dir != 700): $d" >&2
+          erro=1
+        fi
+        for f in "$d"/*; do
+          if [ -f "$f" ]; then
+            local m_f
+            m_f="$(stat -c '%a' "$f")"
+            if [ "$m_f" != "600" ]; then
+              echo "arquivo com permissao incorreta ($m_f != 600): $f" >&2
+              erro=1
+            fi
+            achados+=("$f")
+          elif [ -d "$f" ]; then
+            local m_sub
+            m_sub="$(stat -c '%a' "$f")"
+            if [ "$m_sub" != "700" ]; then
+              echo "diretorio com permissao incorreta ($m_sub != 700): $f" >&2
+              erro=1
+            fi
+          fi
+        done
+      elif [ -f "$d" ]; then
+        local m_f
+        m_f="$(stat -c '%a' "$d")"
+        if [ "$m_f" != "600" ]; then
+          echo "arquivo com permissao incorreta ($m_f != 600): $d" >&2
+          erro=1
+        fi
+      fi
+    done
+    shopt -u nullglob
+  fi
+
+  if [ "$erro" -ne 0 ]; then
+    exit 1
+  fi
+
+  for f in "${achados[@]}"; do
+    local f_nome f_stack f_bytes f_mtime f_modo
+    f_nome="$(basename "$f")"
+    f_stack="$(basename "$(dirname "$f")")"
+    f_bytes="$(stat -c '%s' "$f")"
+    f_mtime="$(date -u +%Y-%m-%dT%H:%M:%SZ -r "$f")"
+    f_modo="$(stat -c '%a' "$f")"
+    printf '%s %s %s %s %s\n' "$f_nome" "$f_stack" "$f_bytes" "$f_mtime" "$f_modo"
+  done
+}
+
+cmd_segredo_gravar() {
+  local alvo="${1:-}"
+  if [ -z "$alvo" ] || [[ "$alvo" != *"/"* ]]; then
+    echo "seg segredo gravar exige <stack>/<nome>" >&2
+    exit 2
+  fi
+  local stack="${alvo%%/*}"
+  local nome="${alvo#*/}"
+  if [ -z "$stack" ] || [ -z "$nome" ]; then
+    echo "seg segredo gravar exige <stack>/<nome>" >&2
+    exit 2
+  fi
+
+  local dir="$SEG_SECRETS_DIR/$stack"
+  mkdir -p "$dir"
+  chmod 700 "$dir"
+  chmod 700 "$SEG_SECRETS_DIR" 2>/dev/null || true
+
+  local tmp
+  tmp="$(mktemp "$dir/tmp.XXXXXXXXXX")"
+  chmod 600 "$tmp"
+
+  cat > "$tmp"
+
+  local bytes
+  bytes="$(stat -c '%s' "$tmp")"
+  if [ "$bytes" -eq 0 ]; then
+    rm -f "$tmp"
+    echo "seg segredo gravar: stdin vazio" >&2
+    exit 2
+  fi
+
+  sync "$tmp" 2>/dev/null || true
+  mv -f "$tmp" "$dir/$nome"
+  chmod 600 "$dir/$nome"
+
+  echo "gravado: $stack/$nome ($bytes bytes)"
+}
+
+cmd_segredo_importar() {
+  local stack="${1:-}"
+  shift || true
+  local caminho=""
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --de)
+        caminho="${2:-}"
+        shift 2 || true
+        ;;
+      *)
+        shift
+        ;;
+    esac
+  done
+
+  if [ -z "$stack" ] || [ -z "$caminho" ]; then
+    echo "uso: seg segredo importar <stack> --de <caminho .env>" >&2
+    exit 2
+  fi
+
+  if [ ! -f "$caminho" ]; then
+    echo "arquivo .env nao encontrado: $caminho" >&2
+    exit 1
+  fi
+
+  local dir="$SEG_SECRETS_DIR/$stack"
+  mkdir -p "$dir"
+  chmod 700 "$dir"
+  chmod 700 "$SEG_SECRETS_DIR" 2>/dev/null || true
+
+  while IFS= read -r linha || [ -n "$linha" ]; do
+    linha="${linha%$'\r'}"
+    [[ "$linha" =~ ^[[:space:]]*# ]] && continue
+    [[ "$linha" =~ ^[[:space:]]*$ ]] && continue
+    if [[ "$linha" =~ ^[[:space:]]*export[[:space:]]+ ]]; then
+      linha="$(echo "$linha" | sed -E 's/^[[:space:]]*export[[:space:]]+//')"
+    fi
+    [[ "$linha" != *"="* ]] && continue
+
+    local chave="${linha%%=*}"
+    local valor="${linha#*=}"
+    chave="$(echo "$chave" | tr -d '[:space:]')"
+    [ -z "$chave" ] && continue
+
+    if [[ "$valor" =~ ^\"(.*)\"$ ]]; then
+      valor="${BASH_REMATCH[1]}"
+    elif [[ "$valor" =~ ^\'(.*)\'$ ]]; then
+      valor="${BASH_REMATCH[1]}"
+    fi
+
+    local tmp
+    tmp="$(mktemp "$dir/tmp.XXXXXXXXXX")"
+    chmod 600 "$tmp"
+    printf '%s' "$valor" > "$tmp"
+    sync "$tmp" 2>/dev/null || true
+    mv -f "$tmp" "$dir/$chave"
+    chmod 600 "$dir/$chave"
+
+    echo "$chave"
+  done < "$caminho"
+}
+
+cmd_segredo_rotacionar() {
+  local alvo="${1:-}"
+  shift || true
+  local client_id=""
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --keycloak-client)
+        client_id="${2:-}"
+        shift 2 || true
+        ;;
+      *)
+        shift
+        ;;
+    esac
+  done
+
+  if [ -z "$alvo" ] || [[ "$alvo" != *"/"* ]] || [ -z "$client_id" ]; then
+    echo "uso: seg segredo rotacionar <stack>/<nome> --keycloak-client <clientId>" >&2
+    exit 2
+  fi
+
+  local stack="${alvo%%/*}"
+  local nome="${alvo#*/}"
+  if [ -z "$stack" ] || [ -z "$nome" ]; then
+    echo "seg segredo rotacionar exige <stack>/<nome>" >&2
+    exit 2
+  fi
+
+  export DOCKER_HOST="${DOCKER_HOST:-unix:///run/user/1001/docker.sock}"
+  export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/run/user/1001}"
+
+  # 1. Resolve o ID
+  local out_id id
+  out_id="$(docker exec platafirma-core-keycloak-1 /opt/keycloak/bin/kcadm.sh get clients -r platafirma -q "clientId=$client_id" --fields id)"
+  id="$(echo "$out_id" | jq -r 'if type=="array" then .[0].id elif type=="object" then .id else . end' 2>/dev/null || true)"
+  if [ -z "$id" ] || [ "$id" = "null" ]; then
+    id="$(echo "$out_id" | sed -n 's/.*"id"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -n1)"
+  fi
+  if [ -z "$id" ]; then
+    id="$(echo "$out_id" | tr -d '[:space:]"[]{}' || true)"
+  fi
+  if [ -z "$id" ]; then
+    echo "falha ao resolver client id para '$client_id'" >&2
+    exit 1
+  fi
+
+  # 2. Regenera secret
+  docker exec platafirma-core-keycloak-1 /opt/keycloak/bin/kcadm.sh create "clients/$id/client-secret" -r platafirma >/dev/null
+
+  # 3. Le secret
+  local out_val val
+  out_val="$(docker exec platafirma-core-keycloak-1 /opt/keycloak/bin/kcadm.sh get "clients/$id/client-secret" -r platafirma --fields value)"
+  val="$(echo "$out_val" | jq -r 'if type=="array" then .[0].value elif type=="object" then .value else . end' 2>/dev/null || true)"
+  if [ -z "$val" ] || [ "$val" = "null" ]; then
+    val="$(echo "$out_val" | sed -n 's/.*"value"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -n1)"
+  fi
+  if [ -z "$val" ]; then
+    val="$(echo "$out_val" | tr -d '[:space:]"[]{}' || true)"
+  fi
+  if [ -z "$val" ]; then
+    echo "falha ao ler novo client-secret para '$client_id' ($id)" >&2
+    exit 1
+  fi
+
+  # 4. Grava direto no arquivo (atomico, dir 700, arq 600)
+  local dir="$SEG_SECRETS_DIR/$stack"
+  mkdir -p "$dir"
+  chmod 700 "$dir"
+  chmod 700 "$SEG_SECRETS_DIR" 2>/dev/null || true
+
+  local tmp
+  tmp="$(mktemp "$dir/tmp.XXXXXXXXXX")"
+  chmod 600 "$tmp"
+  printf '%s' "$val" > "$tmp"
+  sync "$tmp" 2>/dev/null || true
+  mv -f "$tmp" "$dir/$nome"
+  chmod 600 "$dir/$nome"
+
+  local ts
+  ts="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+  echo "rotacionado: $stack/$nome <- client $client_id ($id) em $ts"
+}
+
+cmd_keycloak_entrar() {
+  export DOCKER_HOST="${DOCKER_HOST:-unix:///run/user/1001/docker.sock}"
+  export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/run/user/1001}"
+
+  # Verifica existencia das variaveis dentro do conteiner
+  if ! docker exec platafirma-core-keycloak-1 sh -c '[ -n "${KC_BOOTSTRAP_ADMIN_USERNAME:-}" ] && [ -n "${KC_BOOTSTRAP_ADMIN_PASSWORD:-}" ]'; then
+    echo "variaveis KC_BOOTSTRAP_ADMIN_USERNAME/PASSWORD ausentes no conteiner" >&2
+    docker exec platafirma-core-keycloak-1 sh -c 'env | sed "s/=.*/=<oculto>/"' >&2
+    exit 1
+  fi
+
+  docker exec platafirma-core-keycloak-1 sh -c '/opt/keycloak/bin/kcadm.sh config credentials --server http://localhost:8080 --realm master --user "$KC_BOOTSTRAP_ADMIN_USERNAME" --password "$KC_BOOTSTRAP_ADMIN_PASSWORD" 2>&1 | sed "s/$KC_BOOTSTRAP_ADMIN_PASSWORD/<oculto>/g"'
+
+  docker exec platafirma-core-keycloak-1 /opt/keycloak/bin/kcadm.sh get realms/platafirma --fields realm >/dev/null
+
+  echo "sessao kcadm: ok"
+}
+
 # --- separa o que e nosso do que e repasse ---------------------------------
 ARGS=(); NATIVOS=(); TEM_BARREIRA=0
 for a in "$@"; do
@@ -58,9 +440,6 @@ for a in "$@"; do
   elif [ "$a" = "--" ];        then TEM_BARREIRA=1
   else ARGS+=("$a"); fi
 done
-# --ajuda UNIVERSAL, sem efeito colateral (card #2868, ex-#2274 defeito 4). Varre so
-# ARGS (o que e nosso), nao os NATIVOS apos `--`: `seg openssl -- x509 --help` leva o
-# --help ao comando nativo; `seg --ajuda` e `seg <sub> --ajuda` dao ajuda do seg.
 for _a in "${ARGS[@]}"; do
   case "$_a" in
     --ajuda|--help|-h) uso ;;
@@ -123,9 +502,20 @@ case "$SUB" in
     ;;
 
   keycloak)
-    [ "$TEM_BARREIRA" -eq 1 ] && [ "${#NATIVOS[@]}" -ge 1 ] || { echo "seg keycloak exige -- seguido do comando nativo do kcadm.sh" >&2; uso; }
-    export DOCKER_HOST=unix:///run/user/1001/docker.sock XDG_RUNTIME_DIR=/run/user/1001
-    exec docker exec -i platafirma-core-keycloak-1 /opt/keycloak/bin/kcadm.sh "${NATIVOS[@]}"
+    case "$ATO" in
+      entrar)
+        cmd_keycloak_entrar
+        ;;
+      *)
+        if [ "$TEM_BARREIRA" -eq 1 ] && [ "${#NATIVOS[@]}" -ge 1 ]; then
+          export DOCKER_HOST="${DOCKER_HOST:-unix:///run/user/1001/docker.sock}"
+          export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/run/user/1001}"
+          exec docker exec -i platafirma-core-keycloak-1 /opt/keycloak/bin/kcadm.sh "${NATIVOS[@]}"
+        fi
+        echo "seg keycloak exige 'entrar' ou '--' seguido do comando nativo do kcadm.sh" >&2
+        uso
+        ;;
+    esac
     ;;
 
   openssl)
@@ -133,6 +523,29 @@ case "$SUB" in
     export OPENSSL_CONF="$HOME/AI/opt/oqs/openssl-oqs.cnf"
     export LD_LIBRARY_PATH="$HOME/AI/opt/oqs/lib:${LD_LIBRARY_PATH:-}"
     exec /usr/bin/openssl "${NATIVOS[@]}"
+    ;;
+
+  segredo)
+    case "$ATO" in
+      ler)
+        cmd_segredo_ler "$ALVO"
+        ;;
+      listar)
+        cmd_segredo_listar "$ALVO"
+        ;;
+      gravar)
+        cmd_segredo_gravar "$ALVO"
+        ;;
+      importar)
+        cmd_segredo_importar "${ARGS[@]:2}"
+        ;;
+      rotacionar)
+        cmd_segredo_rotacionar "${ARGS[@]:2}"
+        ;;
+      *)
+        uso
+        ;;
+    esac
     ;;
 
   *) uso ;;
