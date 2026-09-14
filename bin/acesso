@@ -3,20 +3,24 @@
 # capacidade: acesso
 # dono: claudinho-seguranca
 # classe: A (proposta)
-# forma: por ato
+# forma: objeto (decidir) · lista (listar, historico, vocabulario, orfaos) · predicado (politica, conceder, revogar, desligar)
 # use para: saber se posso fazer ação sobre recurso (decidir), saber o que vale ou valeu para sujeito (listar, historico), vocabulário de eixos (vocabulario), conferir e importar PAP servido (politica), conceder ou revogar acesso com fundamento (conceder, revogar), desligar sujeito em quatro atos (desligar), medir resíduos e concessões vencidas (orfaos)
 # atos: decidir (leitura, concessao), listar (leitura, concessao), historico (leitura, concessao), vocabulario (leitura, concessao), politica (leitura, politica), importar (escrita, concessao), conceder (escrita, concessao), revogar (escrita, concessao), desligar (escrita, sujeito), orfaos (leitura, concessao)
-# escreve: concessao.ato (conceder, revogar, desligar), concessao.eixo_valor (politica importar), realm e tabela de sujeitos (desligar --executar); nada nos demais
+# escreve: concessao.ato (conceder, revogar, desligar), concessao.eixo_valor (politica importar), realm e tabela de sujeitos da BANCADA (desligar --executar); nada nos demais
 # consome:
 # ambiente: PF_SUJEITO (fluxo OAuth; obrigatória em conceder, revogar, desligar; default em decidir), PF_SESSAO (verbo sessao abrir, só log de operação), ACESSO_DB_CONTAINER[=platafirma-core-identidade-db-1], ACESSO_DB_USER[=identidade], ACESSO_DB_NAME[=identidade] e ACESSO_POLITICA_DIR[=/opt/platafirma/current/politica-acesso] (constantes com default)
 # depende: docker, python3+pdp.py do plano servido
 # substitui: psql -d identidade, kcadm.sh para desligamento, leitura manual de politica.yaml
 # conforme: parcial
-# falta: escrita em concessao.* por API da entidade concessao (aguarda API); rota estatica claudinho (aguarda extincao); politica-sync vs release promover (aguarda decisao do dono)
+# falta: escrita em concessao.* por API da entidade concessao (aguarda API); rota estatica claudinho (aguarda extincao); politica-sync vs release promover (aguarda decisao do dono); tabela tipo->dominio em cmd_decidir (aguarda vocabulario de tipos de recurso, dados); id de recurso em duas formas (prefixado e nu) enquanto o PAP misturar as duas
 #
 # SEPARADO DE `seg` DE PROPOSITO (decisao do dono, 13/08/2026): `seg` e o toolkit da
 # cadeira de seguranca; `acesso` e chamado por qualquer um que precise verificar o que
 # pode. Ferramenta de verificacao aberta nao mora em toolkit de time.
+#
+# SEM INTERPOLACAO DE ENTRADA: chave, uuid e argumento de decidir entram no psql por
+# `-v` e no python por ambiente. Texto vindo de PF_SUJEITO ou de argumento nunca
+# vira codigo (regressao corrigida por seguranca em 14/09/2026).
 set -uo pipefail
 
 POLITICA_DIR="${ACESSO_POLITICA_DIR:-/opt/platafirma/current/politica-acesso}"
@@ -25,6 +29,7 @@ SUJEITOS="${POLITICA_DIR}/sujeitos.yaml"
 DB_CONTAINER="${ACESSO_DB_CONTAINER:-platafirma-core-identidade-db-1}"
 DB_USER="${ACESSO_DB_USER:-identidade}"
 DB_NAME="${ACESSO_DB_NAME:-identidade}"
+UUID_RE='^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$'
 
 morre() {
   printf 'acesso: %s\n' "$*" >&2
@@ -42,15 +47,17 @@ psql_() {
   printf '%s\n' "$out"
 }
 
-# Resolve contracao (G48UFN) ou uuid para o uuid interno.
+# Resolve contracao (G48UFN) ou uuid para o uuid interno. Chave entra por -v.
 resolve() {
   local chave="$1" papel="$2" id
-  local sql="select id from identidade.identidade where id::text = '$chave' or contracao = upper('$chave');"
-  id="$(psql_ -tAq -c "$sql")" || exit 3
+  id="$(psql_ -tAq -v k="$chave" <<'SQL'
+select id from identidade.identidade where id::text = :'k' or contracao = upper(:'k');
+SQL
+)" || exit 3
   id="$(printf '%s' "$id" | tr -d '[:space:]')"
   if [ -z "$id" ]; then
     if [ "$papel" = "autor" ]; then
-      printf "acesso: faltou: autor (chave de sujeito: PF_SUJEITO '%s' não casa identidade)\n" "$chave" >&2
+      printf "acesso: faltou: autor (chave de sujeito: PF_SUJEITO '%s' não casa identidade — Aberto da spec_acesso: alinhamento sub do realm x identidade.identidade)\n" "$chave" >&2
       exit 5
     else
       printf "acesso: sujeito não encontrado: %s\n" "$chave" >&2
@@ -75,7 +82,7 @@ uso:
   acesso desligar    <sujeito> [--executar]
   acesso orfaos      [--json]
 
-nota sobre --sujeito: aceita sub (UUID) ou username (preferred_username) conforme sujeitos.yaml
+nota sobre --sujeito: aceita sub (UUID) ou username, exatamente como chaveado em sujeitos.yaml — a mesma chave que o PEP da porta usa
 nota sobre autor: em conceder/revogar, o autor é PF_SUJEITO do ambiente (--por é deprecado)
 
 exemplos:
@@ -130,8 +137,8 @@ cmd_conceder() {
   fi
 
   local pid sid
-  pid="$(resolve "$autor" autor)"
-  sid="$(resolve "$sujeito" sujeito)"
+  pid="$(resolve "$autor" autor)" || exit $?
+  sid="$(resolve "$sujeito" sujeito)" || exit $?
 
   psql_ -v ON_ERROR_STOP=1 -v s="$sid" -v p="$pid" -v e="$eixo" -v v="$valor" \
         -v f="$fundamento" -v ate="${ate:-}" -v esp="$especie" <<'SQL'
@@ -163,6 +170,10 @@ cmd_revogar() {
     printf 'uso: acesso revogar <ato-uuid> --fundamento <texto>\n' >&2
     exit 2
   fi
+  if ! [[ "$ato" =~ $UUID_RE ]]; then
+    printf 'acesso: <ato-uuid> não é uuid: %s\n' "$ato" >&2
+    exit 2
+  fi
   if [ -z "$fundamento" ] || [ ${#fundamento} -lt 10 ]; then
     printf 'acesso: --fundamento é obrigatório e não-trivial (>= 10 caracteres)\n' >&2
     exit 2
@@ -175,10 +186,13 @@ cmd_revogar() {
   fi
 
   local pid
-  pid="$(resolve "$autor" autor)"
+  pid="$(resolve "$autor" autor)" || exit $?
 
   local existe
-  existe="$(psql_ -tAq -c "select count(*) from concessao.ato where id = '$ato'::uuid;" 2>/dev/null)" || exit 3
+  existe="$(psql_ -tAq -v a="$ato" <<'SQL'
+select count(*) from concessao.ato where id = :'a'::uuid;
+SQL
+)" || exit 3
   existe="$(printf '%s' "$existe" | tr -d '[:space:]')"
   if [ "$existe" != "1" ]; then
     printf 'acesso: ato referido não existe: %s\n' "$ato" >&2
@@ -212,7 +226,7 @@ cmd_listar() {
 
   if [ -n "$quem" ]; then
     local sid
-    sid="$(resolve "$quem" sujeito)"
+    sid="$(resolve "$quem" sujeito)" || exit $?
     if [ "$como_json" -eq 1 ]; then
       psql_ -tAq -v s="$sid" <<'SQL'
 select coalesce(json_agg(t), '[]'::json) from (
@@ -228,7 +242,7 @@ select i.contracao, v.eixo, v.valor, v.especie, v.vigencia_fim, v.ato_id
   from concessao.vigente v join identidade.identidade i on i.id = v.sujeito_id
  where v.sujeito_id = :'s'::uuid order by v.eixo, v.valor;
 SQL
-)"
+)" || exit 3
       if [ -z "$out" ] || [[ "$out" =~ \(0\ rows\) ]]; then
         printf '%s\n' "$out"
         printf 'motivo: nenhum acesso vigente para %s\n' "$quem"
@@ -274,7 +288,7 @@ cmd_historico() {
     exit 2
   fi
   local sid
-  sid="$(resolve "$quem" sujeito)"
+  sid="$(resolve "$quem" sujeito)" || exit $?
   if [ "$como_json" -eq 1 ]; then
     psql_ -tAq -v s="$sid" <<'SQL'
 select coalesce(json_agg(t), '[]'::json) from (
@@ -345,12 +359,12 @@ cmd_politica() {
         printf 'acesso: PAP ausente em %s\n' "$POLITICA" >&2
         exit 3
       fi
-      python3 -c "
-import sys, os
+      ACESSO_POLITICA_DIR="$POLITICA_DIR" python3 - <<'PY'
+import os, sys
 from pathlib import Path
-politica_dir = os.environ.get('ACESSO_POLITICA_DIR', '/opt/platafirma/current/politica-acesso')
+politica_dir = os.environ['ACESSO_POLITICA_DIR']
 politica_path = Path(politica_dir) / 'politica.yaml'
-sys.path.insert(0, str(politica_dir))
+sys.path.insert(0, politica_dir)
 try:
     from pdp import Politica
     p = Politica.de_arquivo(politica_path)
@@ -358,10 +372,10 @@ except Exception as e:
     print(f'acesso: política inválida: {e}', file=sys.stderr)
     sys.exit(1)
 print(f'politica valida: {len(p.dominios)} dominios, {len(p.papeis)} papeis, {len(p.regras)} regras')
-print(f'  raizes de unidade-organizacional: ' + (', '.join(p.raizes_org) or '(nenhuma)'))
+print('  raizes de unidade-organizacional: ' + (', '.join(p.raizes_org) or '(nenhuma)'))
 for r in p.regras:
-    print(f\"  {r['efeito']:8} {r['id']}\")
-"
+    print(f"  {r['efeito']:8} {r['id']}")
+PY
       ;;
     importar)
       if [ ! -f "$POLITICA" ]; then
@@ -369,11 +383,12 @@ for r in p.regras:
         exit 3
       fi
       local sql_cmds
-      sql_cmds="$(python3 -c "
-import sys, os, yaml, pathlib
-politica_dir = os.environ.get('ACESSO_POLITICA_DIR', '/opt/platafirma/current/politica-acesso')
+      sql_cmds="$(ACESSO_POLITICA_DIR="$POLITICA_DIR" python3 - <<'PY'
+import os, sys, yaml
+from pathlib import Path
+politica_dir = os.environ['ACESSO_POLITICA_DIR']
 politica_path = Path(politica_dir) / 'politica.yaml'
-sys.path.insert(0, str(politica_dir))
+sys.path.insert(0, politica_dir)
 try:
     from pdp import Politica
     p = Politica.de_arquivo(politica_path)
@@ -384,13 +399,14 @@ d = yaml.safe_load(politica_path.read_text('utf-8'))
 for eixo, itens in (d.get('eixos') or {}).items():
     for valor, corpo in (itens or {}).items():
         corpo = corpo or {}
-        rot = (corpo.get('rotulo') or valor).replace(chr(39), chr(39)*2)
+        rot = (corpo.get('rotulo') or valor).replace("'", "''")
         pai = corpo.get('pai')
-        pai_sql = \"'\" + pai + \"'\" if pai else 'null'
-        print(f\"insert into concessao.eixo_valor (eixo, valor, rotulo, pai) values \"
-              f\"('{eixo}', '{valor}', '{rot}', {pai_sql}) on conflict (eixo, valor) \"
-              f\"do update set rotulo = excluded.rotulo, pai = excluded.pai;\")
-")" || exit 1
+        pai_sql = "'" + pai + "'" if pai else 'null'
+        print(f"insert into concessao.eixo_valor (eixo, valor, rotulo, pai) values "
+              f"('{eixo}', '{valor}', '{rot}', {pai_sql}) on conflict (eixo, valor) "
+              f"do update set rotulo = excluded.rotulo, pai = excluded.pai;")
+PY
+)" || exit 1
       printf '%s\n' "$sql_cmds" | psql_ -v ON_ERROR_STOP=1
       printf 'vocabulario importado de %s\n' "$POLITICA"
       cmd_vocabulario
@@ -470,6 +486,7 @@ cmd_decidir() {
     exit 2
   fi
 
+  # Tabela tipo -> dominio: TRANSICAO ate `acesso vocabulario` servir tipos (dados).
   local tipo="${recurso%%:*}"
   local chave="${recurso#*:}"
   local tipo_dom=""
@@ -504,125 +521,92 @@ cmd_decidir() {
     exit 2
   fi
 
-  python3 -c "
+  # Tudo entra no python por AMBIENTE (heredoc com delimitador citado): argumento
+  # nunca vira codigo.
+  ACESSO_POLITICA_DIR="$POLITICA_DIR" \
+  DEC_JSON="$como_json" DEC_ACAO="$acao" DEC_RECURSO="$recurso" DEC_TIPO="$tipo" \
+  DEC_CHAVE="$chave" DEC_TIPO_DOM="$tipo_dom" DEC_DOM_REC="${dominio_recurso:-}" \
+  DEC_SUJEITO="${sujeito:-}" DEC_PAPEL="${papel:-}" DEC_DOMINIO="${dominio:-}" \
+  DEC_TEMA="${tema:-}" DEC_HAB="${habilitacao:-}" DEC_VETO="${veto:-}" DEC_SIGILO="${sigilo:-}" \
+  python3 - <<'PY'
 import os, sys, json, hashlib
 from pathlib import Path
 
-politica_dir = os.environ.get('ACESSO_POLITICA_DIR', '/opt/platafirma/current/politica-acesso')
+E = os.environ.get
+politica_dir = E('ACESSO_POLITICA_DIR')
 politica_path = Path(politica_dir) / 'politica.yaml'
 sujeitos_path = Path(politica_dir) / 'sujeitos.yaml'
-como_json = ('$como_json' == '1')
-acao = '$acao'
-recurso = '$recurso'
-tipo = '$tipo'
-chave = '$chave'
-tipo_dom = '$tipo_dom'
-dominio_recurso = '${dominio_recurso:-}' or tipo_dom
-sujeito_arg = '${sujeito:-}'
-papel = '${papel:-}'
-dominio = '${dominio:-}'
-tema = '${tema:-}'
-habilitacao = '${habilitacao:-}'
-veto = '${veto:-}'
-sigilo = '${sigilo:-}'
+como_json = E('DEC_JSON') == '1'
+acao, recurso, tipo, chave = E('DEC_ACAO'), E('DEC_RECURSO'), E('DEC_TIPO'), E('DEC_CHAVE')
+tipo_dom = E('DEC_TIPO_DOM')
+rec_dom = E('DEC_DOM_REC') or tipo_dom
+sujeito_arg, papel, dominio = E('DEC_SUJEITO', ''), E('DEC_PAPEL', ''), E('DEC_DOMINIO', '')
+tema, habilitacao, veto, sigilo = E('DEC_TEMA', '-'), E('DEC_HAB', 'publico'), E('DEC_VETO', ''), E('DEC_SIGILO', 'publico')
+
+def falha(msg, code):
+    if como_json:
+        print(json.dumps({'erro': msg}, ensure_ascii=False))
+    print(f'acesso: {msg}', file=sys.stderr)
+    sys.exit(code)
 
 if not politica_path.is_file():
-    msg = f'PAP servido ausente em {politica_path}'
-    if como_json:
-        print(json.dumps({'erro': msg}))
-    print(f'acesso: {msg}', file=sys.stderr)
-    sys.exit(3)
+    falha(f'PAP servido ausente em {politica_path}', 3)
 
-sys.path.insert(0, str(politica_dir))
+sys.path.insert(0, politica_dir)
 try:
     import yaml
-    from pdp import Politica, PoliticaInvalida, Sujeito, Recurso, decide
+    from pdp import Politica, Sujeito, Recurso, decide
     pol = Politica.de_arquivo(politica_path)
 except Exception as e:
-    msg = f'PAP servido inválido: {e}'
-    if como_json:
-        print(json.dumps({'erro': msg}))
-    print(f'acesso: {msg}', file=sys.stderr)
-    sys.exit(3)
+    falha(f'PAP servido inválido: {e}', 3)
 
 plano = hashlib.sha256(politica_path.read_bytes()).hexdigest()[:8]
 
 if papel and dominio:
     quem = '(hipotetico)'
-    papeis = tuple(p.strip() for p in papel.split(',') if p.strip())
-    dominios = tuple(d.strip() for d in dominio.split(',') if d.strip())
-    temas = tuple(t.strip() for t in tema.replace('-', '').split(',') if t.strip()) if tema != '-' else ()
-    vetos = tuple(v.strip() for v in veto.split(',') if v.strip())
-    hab = habilitacao or 'publico'
-    s = Sujeito(id=quem, natureza='cadeira', papeis=papeis, dominios=dominios,
-                temas=temas, vetos=vetos, habilitacao=hab)
+    lista = lambda v: tuple(x.strip() for x in v.split(',') if x.strip())
+    temas = lista(tema.replace('-', '')) if tema != '-' else ()
+    s = Sujeito(id=quem, natureza='cadeira', papeis=lista(papel), dominios=lista(dominio),
+                temas=temas, vetos=lista(veto), habilitacao=habilitacao or 'publico')
 else:
-    quem = sujeito_arg or os.environ.get('PF_SUJEITO', '')
+    quem = sujeito_arg or E('PF_SUJEITO', '')
     if not sujeitos_path.is_file():
-        msg = f'projeção indisponível: {sujeitos_path} ausente'
-        if como_json:
-            print(json.dumps({'erro': msg}))
-        print(f'acesso: {msg}', file=sys.stderr)
-        sys.exit(3)
+        falha(f'projeção indisponível: {sujeitos_path} ausente', 3)
     try:
-        suj_raw = yaml.safe_load(sujeitos_path.read_text('utf-8')) or {}
-        suj_data = suj_raw.get('sujeitos') or {}
+        suj_data = (yaml.safe_load(sujeitos_path.read_text('utf-8')) or {}).get('sujeitos') or {}
     except Exception as e:
-        msg = f'projeção indisponível: erro ao carregar sujeitos.yaml ({e})'
-        if como_json:
-            print(json.dumps({'erro': msg}))
-        print(f'acesso: {msg}', file=sys.stderr)
-        sys.exit(3)
+        falha(f'projeção indisponível: erro ao carregar sujeitos.yaml ({e})', 3)
+    # A MESMA projecao do PEP (`_autoriza` em ops-server): chave direta na tabela, por
+    # sub ou username como ela esta chaveada. Nenhum casamento por `usuario:`,
+    # `client:` ou `conta:` — conta de SO nao e identidade, e projetar por ela faria o
+    # verbo permitir o que a porta nega (caderno iam: duas perguntas ao mesmo PDP).
+    atrib = suj_data.get(quem) or {}
+    s = Sujeito(id=quem, natureza=atrib.get('natureza', 'pessoa'),
+                papeis=tuple(atrib.get('papeis') or ()), dominios=tuple(atrib.get('dominios') or ()),
+                temas=tuple(atrib.get('temas') or ()), vetos=tuple(atrib.get('vetos') or ()),
+                habilitacao=atrib.get('habilitacao', 'publico'))
 
-    atrib = suj_data.get(quem)
-    if not atrib:
-        for k, v in suj_data.items():
-            if isinstance(v, dict) and (v.get('usuario') == quem or v.get('client') == quem or v.get('conta') == quem):
-                atrib = v
-                break
+def julga(rid):
+    return decide(s, acao, Recurso(tipo=tipo, id=rid, dominio=rec_dom, tema=tema, sigilo=sigilo), pol)
 
-    if not atrib:
-        s = Sujeito(id=quem, natureza='pessoa', papeis=(), dominios=(), habilitacao='publico')
-    else:
-        s = Sujeito(
-            id=quem,
-            natureza=atrib.get('natureza', 'pessoa'),
-            papeis=tuple(atrib.get('papeis') or ()),
-            dominios=tuple(atrib.get('dominios') or ()),
-            temas=tuple(atrib.get('temas') or ()),
-            vetos=tuple(atrib.get('vetos') or ()),
-            habilitacao=atrib.get('habilitacao', 'publico')
-        )
+def por_regra(x):
+    return (x.regra or 'default') != 'default' and not x.faltou
 
-rec_dom = dominio_recurso or tipo_dom
-r = Recurso(tipo=tipo, id=recurso, dominio=rec_dom, tema=tema, sigilo=sigilo)
-d = decide(s, acao, r, pol)
-if not d.permitido and recurso != chave:
-    r_alt = Recurso(tipo=tipo, id=chave, dominio=rec_dom, tema=tema, sigilo=sigilo)
-    d_alt = decide(s, acao, r_alt, pol)
-    if d_alt.permitido:
-        d = d_alt
+# TRANSICAO: o PAP mistura ids prefixados (`sessao:fabrica`) e nus (`git status*`,
+# `docker*`). Julga-se nas duas formas e NEGATIVA VENCE nas duas: negada por regra em
+# qualquer forma -> negada por essa regra; senao permitida em qualquer forma ->
+# permitida; senao a primeira (default ou faltou). Sai quando o PAP so tiver id logico.
+ds = [julga(recurso)] + ([julga(chave)] if chave != recurso else [])
+neg = [x for x in ds if not x.permitido and por_regra(x)]
+per = [x for x in ds if x.permitido]
+d = neg[0] if neg else (per[0] if per else ds[0])
 
-if d.permitido:
-    exit_code = 0
-elif d.faltou:
-    exit_code = 5
-else:
-    exit_code = 1
-
+exit_code = 0 if d.permitido else (5 if d.faltou else 1)
 regra_nome = d.regra or ('projecao' if d.faltou else 'default')
 if como_json:
-    saida = {
-        'permitido': d.permitido,
-        'regra': regra_nome,
-        'motivo': d.motivo,
-        'faltou': list(d.faltou),
-        'plano': plano,
-        'sujeito': quem,
-        'acao': acao,
-        'recurso': recurso
-    }
-    print(json.dumps(saida, ensure_ascii=False))
+    print(json.dumps({'permitido': d.permitido, 'regra': regra_nome, 'motivo': d.motivo,
+                      'faltou': list(d.faltou), 'plano': plano, 'sujeito': quem,
+                      'acao': acao, 'recurso': recurso}, ensure_ascii=False))
 else:
     veredito = 'PERMITIDO' if d.permitido else 'NEGADO'
     print(f'{veredito}  regra={regra_nome}  plano={plano}')
@@ -632,11 +616,9 @@ else:
     print(f'sujeito: {suj_disp} ({papeis_s} @ {dominios_s})   acao: {acao}   recurso: {recurso} [{tipo}/{rec_dom}]')
     print(f'motivo: {d.motivo}')
     if d.faltou:
-        faltou_s = ', '.join(d.faltou)
-        print(f'faltou: {faltou_s}  <- defeito de projecao (adicione o sujeito em sujeitos.yaml ou forneca claims no token)')
-
+        print(f"faltou: {', '.join(d.faltou)}  <- defeito de projecao: linha em sujeitos.yaml (chave = sub ou username do token), ou claim no token")
 sys.exit(exit_code)
-"
+PY
 }
 
 # ---------------------------------------------------------------------------

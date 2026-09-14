@@ -251,15 +251,57 @@ def test_subcomando_desconhecido_exit_2():
 # ==============================================================================
 
 @pytest.mark.skipif(not TEM_BANCO, reason="exige contêiner de banco de dados identidade rodando")
-def test_conceder_com_banco():
+def test_conceder_sem_sujeito_exit_3():
+    """Exit 3: conceder sem PF_SUJEITO nao chega ao banco. Ato de ESTADO nunca se testa
+    contra o registro vivo (gravaria concessao real); o contrato provavel sem banco e o
+    que vem ANTES dele: uso, fundamento e autor."""
     r = run_acesso("conceder", "claudinho", "papel", "operador", "--fundamento", "concessao de teste valida")
-    assert r.returncode in (0, 1)
+    assert r.returncode == 3
+    assert "sem sujeito" in r.stderr
+
+def test_conceder_fundamento_trivial_exit_2():
+    r = run_acesso("conceder", "claudinho", "papel", "operador", "--fundamento", "curto")
+    assert r.returncode == 2
 
 
 @pytest.mark.skipif(not TEM_BANCO, reason="exige contêiner de banco de dados identidade rodando")
-def test_revogar_com_banco():
-    r = run_acesso("revogar", "claudinho", "papel", "operador", "--fundamento", "revogacao de teste valida")
-    assert r.returncode in (0, 1)
+def test_revogar_sem_uuid_exit_2():
+    r = run_acesso("revogar", "nao-e-uuid", "--fundamento", "revogacao de teste valida")
+    assert r.returncode == 2
+
+def test_revogar_sem_sujeito_exit_3():
+    r = run_acesso("revogar", "00000000-0000-4000-8000-000000000000", "--fundamento", "revogacao de teste valida")
+    assert r.returncode == 3
+    assert "sem sujeito" in r.stderr
+
+# ==============================================================================
+# Transicao: id de recurso em duas formas — NEGATIVA VENCE nas duas; projecao = a do PEP
+# ==============================================================================
+
+def test_decidir_negativa_vence_na_forma_nua():
+    """`comando:docker ps` casa a negativa `fornecedor-sem-estado-do-host` so na forma nua;
+    o veredito tem de citar ESSA regra, nao o default."""
+    r = run_acesso("decidir", "run_command", "comando:docker ps", "--papel", "fornecedor", "--dominio", "plataforma-runtime")
+    assert r.returncode == 1
+    assert "regra=fornecedor-sem-estado-do-host" in r.stdout
+
+def test_decidir_permissao_na_forma_nua():
+    r = run_acesso("decidir", "run_command", "comando:git status", "--papel", "fornecedor", "--dominio", "plataforma-runtime")
+    assert r.returncode == 0
+    assert "regra=fornecedor-le-repo" in r.stdout
+
+def test_decidir_projecao_e_a_do_pep():
+    """`--sujeito` casa so a chave da tabela (username ou sub), como a porta."""
+    r = run_acesso("decidir", "sessao_abrir", "sessao:fabrica", "--sujeito", "jaiminho-fabrica")
+    assert r.returncode == 0
+    r2 = run_acesso("decidir", "sessao_abrir", "sessao:fabrica", "--sujeito", "e57eadb1-ec5d-41b5-a1be-e6d62196cff5")
+    assert r2.returncode == 0
+
+def test_decidir_argumento_nao_vira_codigo():
+    """Acao com aspas e ponto-e-virgula chega ao PDP como texto: exit 1 (default), sem traceback."""
+    r = run_acesso("decidir", "x'; import os; os.system('id') #", "sessao:fabrica", "--papel", "fornecedor", "--dominio", "plataforma")
+    assert r.returncode == 1
+    assert "Traceback" not in r.stderr
 
 
 @pytest.mark.skipif(not TEM_BANCO, reason="exige contêiner de banco de dados identidade rodando")

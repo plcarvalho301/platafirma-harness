@@ -5,7 +5,7 @@
 # dono: claudinho-seguranca
 # classe: B
 # use para: openscap, keycloak, openssl pós-quântico, régua de segurança, segredos
-# atos: oscap, ssg, keycloak, openssl, segredo
+# atos: oscap (leitura, casco), ssg (escrita, regua), keycloak entrar (escrita, credencial), keycloak (escrita, realm), openssl (leitura, cripto), segredo ler (leitura, segredo), segredo listar (leitura, segredo), segredo gravar (escrita, segredo), segredo importar (escrita, segredo), segredo rotacionar (escrita, segredo)
 # folhas: oscap|ssg -> politica/avaliacao · keycloak|openssl -> politica/acesso · segredo -> politica/segredo
 # escreve: var/secrets/<stack>/<nome>
 # ambiente: SEG_SECRETS_DIR[=$HOME/AI/var/secrets]
