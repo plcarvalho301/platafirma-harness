@@ -19,14 +19,17 @@ from pathlib import Path
 import yaml
 
 # dados de identidade fora do working tree de fabrica (#2956, minuta arq 0015 perna 1)
-RAIZ = Path(os.environ.get("ACESSO_PDP_DIR",
-    os.environ.get("PDP_DIR", Path.home() / "AI/var/politica-acesso")))
+RAIZ = Path(os.environ.get("ACESSO_POLITICA_DIR",
+    os.environ.get("ACESSO_PDP_DIR",
+        os.environ.get("PDP_DIR", "/opt/platafirma/current/politica-acesso"))))
 SUJEITOS = RAIZ / "sujeitos.yaml"
 POLITICA = RAIZ / "politica.yaml"
 # HARNESS/PERSONAS derivam do repo, nao de RAIZ (que agora e a morada de dados)
-HARNESS = Path(os.environ.get("PF_HARNESS", Path.home() / "AI/platafirma-harness"))
+HARNESS = Path(os.environ.get("PF_HARNESS", Path(__file__).resolve().parent.parent.parent))
 PERSONAS = HARNESS / "personas"
-SEG = Path.home() / "AI/bin/seg"
+SEG = Path(os.environ.get("PF_BIN", Path(__file__).resolve().parent.parent)) / "seg"
+if not SEG.exists():
+    SEG = Path.home() / "AI/bin/seg"
 VENCE = re.compile(r"vence\s+(\d{4}-\d{2}-\d{2})")
 
 
@@ -164,8 +167,8 @@ def cmd_orfaos(argv: list[str]) -> int:
     # Veredito no EXIT, nao no meio do relatorio: realm nao medido reprova duro.
     if not realm_medido:
         print("\nREPROVADO: realm NAO medido — resultado INCOMPLETO, nao vale como "
-              "'sem orfaos'. exit 2 (medicao incompleta), distinto de 0/1.")
-        return 2
+              "'sem orfaos'. exit 5 (medicao incompleta), distinto de 0/1.")
+        return 5
     if not achados:
         print("nenhum residuo: sujeito, regra, segredo e conta em dia")
         return 0
@@ -294,7 +297,10 @@ def cmd_desligar(argv: list[str]) -> int:
             falhou.append(f"segredo {s}: {e}")
 
     # 5. o PAP tem de continuar valido depois da cirurgia.
-    r = subprocess.run([str(Path.home() / "AI/bin/acesso"), "politica", "conferir"],
+    acesso_bin = Path(__file__).resolve().parent.parent / "acesso"
+    if not acesso_bin.exists():
+        acesso_bin = Path(os.environ.get("PF_BIN", Path.home() / "AI/bin")) / "acesso"
+    r = subprocess.run([str(acesso_bin), "politica", "conferir"],
                        capture_output=True, text=True)
     print(f"  conferencia    {(r.stdout or r.stderr).strip().splitlines()[0] if (r.stdout or r.stderr) else 'sem saida'}")
     if r.returncode != 0:
