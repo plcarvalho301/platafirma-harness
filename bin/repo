@@ -1046,8 +1046,38 @@ ato_pr_merge() {
       morre "recusa de política: check vermelho no PR #$num (use --forcar para ignorar)" 4
     fi
   fi
-  (cd "$c" && env PATH="$PATH_FORGE" "$GH" pr merge "$num" --admin "$modo" --delete-branch) \
+  # O merge remoto e a poda do ramo local sao dois atos. --delete-branch tenta apagar
+  # o ramo local e falha quando 'main' (ou o ramo do PR) esta preso em worktree, o que
+  # propaga exit != 0 mesmo com o merge remoto ja valido (#3057 item 7). Separa-se:
+  # merge remoto primeiro (sem tocar ramo local); poda em seguida, best-effort.
+  (cd "$c" && env PATH="$PATH_FORGE" "$GH" pr merge "$num" --admin "$modo") \
     || morre "gh pr merge falhou" 3
+
+  # Confirma que o merge remoto valeu de fato antes de declarar sucesso.
+  local pr_state
+  pr_state="$(cd "$c" && env PATH="$PATH_FORGE" "$GH" pr view "$num" --json state --jq .state 2>/dev/null || true)"
+  if [ "$pr_state" != "MERGED" ]; then
+    morre "gh pr merge retornou 0 mas o PR #$num esta em estado '${pr_state:-desconhecido}', nao MERGED" 3
+  fi
+
+  # Poda dos ramos (remoto e local): best-effort. Antes, --delete-branch fazia as duas;
+  # a poda LOCAL e que falha quando o ramo esta preso em worktree, e derrubava o exit.
+  # Agora cada poda e independente e nenhuma derruba o exit — o merge remoto ja valeu.
+  local ramo_pr
+  ramo_pr="$(cd "$c" && env PATH="$PATH_FORGE" "$GH" pr view "$num" --json headRefName --jq .headRefName 2>/dev/null || true)"
+  local aviso_local=""
+  if [ -n "$ramo_pr" ]; then
+    # remoto: sempre funcionou; segue best-effort e silencioso no sucesso
+    env PATH="$PATH_FORGE" "$GIT" -C "$c" push origin --delete "$ramo_pr" >/dev/null 2>&1 || true
+    # local: e o que trava em worktree — falha vira aviso, nao exit != 0
+    if ! env PATH="$PATH_FORGE" "$GIT" -C "$c" branch -d "$ramo_pr" >/dev/null 2>&1; then
+      aviso_local=" (ramo local '$ramo_pr' nao podado: preso em worktree ou ja removido)"
+    fi
+  fi
+  if [ -n "$aviso_local" ]; then
+    printf 'PR #%s mesclado (%s)%s\n' "$num" "$modo" "$aviso_local" >&2
+  fi
+  printf 'PR #%s mesclado (%s)\n' "$num" "$modo"
 }
 
 ato_sanear() {
