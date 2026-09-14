@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/home/claudinho/AI/.venv-harness/bin/python
 # expediente — monta o pacote de expediente da cadeira (conduta, persona, mesa, cadernos)
 # capacidade: expediente
 # dono: gestao-estrategica
@@ -7,64 +7,91 @@
 # use para: o pacote de expediente antes da primeira fala do dono, rotear chapéu, catálogo de peças
 # atos: montar (leitura, expediente), rotear (leitura, expediente), catalogo (leitura, expediente)
 # folhas: montar -> expediente/pacote · rotear -> expediente/chapeu · catalogo -> expediente/catalogo
-# escreve: sessao.fita, sessao.pacote, sessao.peca_servida (montar, sob PF_FITA); nada em rotear|catalogo
-# consome: persona, mesa, motor, acervo; a API da entidade-sessão, quando houver
-# ambiente: PF_CADEIRA (porta, obrigatória), PF_SESSAO (porta), PF_ORDEM_ID (porta), PF_FITA (superfície), PF_SUPERFICIE[=desconhecida] (superfície), SESSAO_PG_PORT[=5437], SESSAO_PG_PASSWORD (segredo, transição: leitura de variável, Q11)
-# depende: persona, mesa, motor, acervo, tokenizador qwen2.5 (fallback bytes/4)
-# substitui: monta-sessao (a parte que monta) · recuperacao/roteador_chapeu.py
+# escreve: registro do pacote servido (sessao.fita/pacote/peca_servida — transição, direto); nada em rotear|catalogo
+# consome: persona, mesa, motor, acervo
+# ambiente: PF_CADEIRA (obrigatória, origem porta), PF_SESSAO, PF_ORDEM_ID, PF_SUPERFICIE[=desconhecida]
+# depende: persona, mesa, motor, tokenizador da casa (opt/tokenizers, fallback bytes/4 declarado)
+# substitui: monta-sessao <cadeira> na parte que monta
 # conforme: parcial
 #
-# catalogo:
-# peca: conduta | gatilho: abertura | regime: valor | volatilidade: estavel | chamada: persona conduta | dono: gestao-estrategica
-# peca: persona | gatilho: abertura | regime: valor | volatilidade: estavel | chamada: persona ler {cadeira} | dono: gestao-estrategica
-# peca: alias-cadeiras | gatilho: abertura | regime: valor | volatilidade: morna | chamada: persona foto | dono: gestao-estrategica
-# peca: mesa | gatilho: abertura | regime: valor | volatilidade: volatil | chamada: mesa ver | dono: gestao-estrategica
-# peca: acervo-consultado | gatilho: abertura, com pergunta | regime: valor | volatilidade: volatil | chamada: motor rag buscar casa "{pergunta}" --k 6 --texto secao | dono: dados
-# peca: chapeu | gatilho: chapeu | regime: valor | volatilidade: estavel | chamada: persona ler {cadeira} --chapeu {chapeu} | dono: gestao-estrategica
-# peca: cadernos | gatilho: abertura; com chapeu, o corpo dele | regime: valor | volatilidade: volatil | chamada: mesa caderno --chapeu {chapeu} | dono: gestao-estrategica
-
 from __future__ import annotations
 
-import argparse
-import importlib.util
 import json
 import os
 from pathlib import Path
 import re
+import shlex
+import shutil
 import subprocess
 import sys
 import time
 
-# Repo real e libs compartilhadas
 _REPO_REAL = Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(_REPO_REAL))
+sys.path.insert(0, str(_REPO_REAL / "lib"))
 sys.path.insert(0, str(_REPO_REAL / "comum"))
 
-try:
-    from hash_servido import sha_servido
-except ImportError:
-    import hashlib
-    def sha_servido(texto: str) -> str:
-        if isinstance(texto, bytes):
-            texto = texto.decode("utf-8", "replace")
-        return hashlib.sha256((texto or "").strip().encode("utf-8")).hexdigest()[:12]
+from uso import Uso, erro
+from hash_servido import sha_servido
 
-# Carrega sub-ato rotear
-_ROTEAR_BIN = _REPO_REAL / "bin" / "_expediente" / "rotear"
-if not _ROTEAR_BIN.exists() and (_REPO_REAL / "bin" / "_expediente" / "rotear.py").exists():
-    _ROTEAR_BIN = _REPO_REAL / "bin" / "_expediente" / "rotear.py"
-
-_spec_rot = importlib.util.spec_from_file_location("_rotear", str(_ROTEAR_BIN))
-if _spec_rot and _spec_rot.loader:
-    _mod_rot = importlib.util.module_from_spec(_spec_rot)
-    sys.modules["_rotear"] = _mod_rot
-    _spec_rot.loader.exec_module(_mod_rot)
-    escolhe = _mod_rot.escolhe
-    rotas_do_disco = _mod_rot.rotas_do_disco
-    _resolve_dir_chapeus = _mod_rot._resolve_dir_chapeus
-    Decisao = _mod_rot.Decisao
-else:
-    from recuperacao.roteador_chapeu import escolhe, rotas_do_disco, _resolve_dir_chapeus, Decisao
+# Catálogo de peças (spec_expediente §7, transição: declarado no verbo até dados averbar no acervo)
+CATALOGO = [
+    {
+        "peca": "conduta",
+        "gatilho": "abertura",
+        "regime": "valor",
+        "volatilidade": "estavel",
+        "chamada": "persona conduta",
+        "dono": "gestao-estrategica",
+    },
+    {
+        "peca": "persona",
+        "gatilho": "abertura",
+        "regime": "valor",
+        "volatilidade": "estavel",
+        "chamada": "persona ler {cadeira}",
+        "dono": "gestao-estrategica",
+    },
+    {
+        "peca": "alias-cadeiras",
+        "gatilho": "abertura",
+        "regime": "valor",
+        "volatilidade": "morna",
+        "chamada": "persona foto",
+        "dono": "gestao-estrategica",
+    },
+    {
+        "peca": "mesa",
+        "gatilho": "abertura",
+        "regime": "valor",
+        "volatilidade": "volatil",
+        "chamada": "mesa ver",
+        "dono": "gestao-estrategica",
+    },
+    {
+        "peca": "acervo-consultado",
+        "gatilho": "abertura, com pergunta",
+        "regime": "valor",
+        "volatilidade": "volatil",
+        "chamada": 'motor rag buscar casa "{pergunta}" --k 6',
+        "dono": "dados",
+    },
+    {
+        "peca": "chapeu",
+        "gatilho": "chapeu",
+        "regime": "valor",
+        "volatilidade": "estavel",
+        "chamada": "persona ler {cadeira} --chapeu {chapeu}",
+        "dono": "gestao-estrategica",
+    },
+    {
+        "peca": "cadernos",
+        "gatilho": "abertura; com chapeu, o corpo dele",
+        "regime": "valor",
+        "volatilidade": "volatil",
+        "chamada": "mesa caderno [--chapeu {chapeu}]",
+        "dono": "gestao-estrategica",
+    },
+]
 
 RAIZ = os.environ.get("PF_RAIZ", os.path.expanduser("~/AI"))
 TOKENIZADOR = os.path.join(RAIZ, "opt", "tokenizers", "qwen2.5.json")
@@ -97,12 +124,7 @@ def conta_tokens(texto: str) -> int:
 
 
 def env_verbo(cadeira: str) -> dict[str, str]:
-    """Env da peça-verbo: PF_CADEIRA canônico + PATH explícito (spec_expediente §2, R7).
-
-    O PATH herdado NÃO serve: quando o montador é chamado por um serviço (ops-mcp,
-    systemd --user), o ambiente do processo pai não tem RAIZ/bin, e toda peça servida
-    por execução morre com FileNotFoundError.
-    """
+    """Env da peça-verbo: PF_CADEIRA canônico + PATH explícito (spec_expediente §2, R7)."""
     raiz_atual = os.environ.get("PF_RAIZ", os.path.expanduser("~/AI"))
     casa = os.path.expanduser("~")
     e = dict(os.environ)
@@ -136,44 +158,12 @@ def resolve_montador_sha() -> str:
     return "transicao"
 
 
-# ------------------------------------------------------------------ catálogo
-def le_catalogo_do_proprio_arquivo() -> list[dict] | None:
-    """Lê as peças do catálogo no cabeçalho deste próprio arquivo (transição, R4)."""
-    if os.environ.get("PF_CATALOGO_AUSENTE") == "1":
-        return None
-    caminho = Path(__file__).resolve()
-    pecas = []
-    try:
-        with open(caminho, "r", encoding="utf-8") as f:
-            em_catalogo = False
-            for linha in f:
-                s = linha.strip()
-                if s == "# catalogo:":
-                    em_catalogo = True
-                    continue
-                if em_catalogo:
-                    if not s.startswith("# peca:"):
-                        if pecas and not s.startswith("#"):
-                            break
-                        continue
-                    partes = s.lstrip("#").strip().split("|")
-                    d = {}
-                    for p in partes:
-                        if ":" in p:
-                            k, v = p.split(":", 1)
-                            d[k.strip()] = v.strip()
-                    if "peca" in d:
-                        pecas.append(d)
-    except OSError:
-        return None
-    return pecas if pecas else None
-
-
 def executa_verbo(cmd_linha: str, cadeira: str, timeout: int = 30) -> tuple[int, str, str]:
     """Executa um comando de verbo no ambiente env_verbo."""
     try:
+        args = shlex.split(cmd_linha)
         p = subprocess.run(
-            cmd_linha.split(),
+            args,
             capture_output=True,
             text=True,
             timeout=timeout,
@@ -182,6 +172,86 @@ def executa_verbo(cmd_linha: str, cadeira: str, timeout: int = 30) -> tuple[int,
         return p.returncode, p.stdout or "", p.stderr or ""
     except (OSError, subprocess.SubprocessError) as e:
         return 1, "", f"{type(e).__name__}: {e}"
+
+
+def acha_roteador() -> Path | None:
+    """Acha o binário sub-ato bin/_expediente/roteador."""
+    raiz = os.environ.get("PF_RAIZ")
+    if raiz:
+        candidatos = [
+            Path(raiz) / "bin" / "_expediente" / "roteador",
+            Path(raiz) / "bin" / "_expediente" / "rotear",
+        ]
+    else:
+        candidatos = [
+            _REPO_REAL / "bin" / "_expediente" / "roteador",
+            _REPO_REAL / "bin" / "_expediente" / "rotear",
+        ]
+    for c in candidatos:
+        if c.is_file() and os.access(c, os.X_OK):
+            return c
+    return None
+
+
+def executa_roteador(pergunta: str, cadeira: str) -> tuple[dict, str | None, int]:
+    """Executa o sub-ato bin/_expediente/roteador por subprocesso (spec §1, §4, §5)."""
+    p_rot = acha_roteador()
+    if not p_rot:
+        return {
+            "via": "fallback",
+            "slug": None,
+            "acertos": {},
+            "motivo": "roteador ausente: bin/_expediente/roteador",
+        }, "roteador ausente: bin/_expediente/roteador", 0
+
+    try:
+        p = subprocess.run(
+            [str(p_rot), "--json"],
+            input=pergunta,
+            capture_output=True,
+            text=True,
+            timeout=15,
+            env=env_verbo(cadeira),
+        )
+        if p.returncode == 3:
+            # Conceitos do golden record mudos
+            motivo = (p.stderr or p.stdout).strip() or "conceitos do golden record mudos"
+            return {
+                "via": "fallback",
+                "slug": None,
+                "acertos": {},
+                "motivo": motivo,
+            }, motivo, 3
+        elif p.returncode == 0:
+            d = json.loads(p.stdout)
+            via_map = {
+                "deterministico": "determinístico",
+                "semantico": "semântico",
+                "comando": "comando",
+                "fallback": "fallback",
+            }
+            via = via_map.get(d.get("via", "fallback"), d.get("via", "fallback"))
+            return {
+                "via": via,
+                "slug": d.get("slug"),
+                "acertos": d.get("acertos") or {},
+                "motivo": d.get("motivo"),
+            }, None, 0
+        else:
+            motivo = (p.stderr or p.stdout).strip() or f"exit {p.returncode}"
+            return {
+                "via": "fallback",
+                "slug": None,
+                "acertos": {},
+                "motivo": motivo,
+            }, f"roteador falhou: {motivo}", 0
+    except Exception as e:
+        return {
+            "via": "fallback",
+            "slug": None,
+            "acertos": {},
+            "motivo": f"{type(e).__name__}: {e}",
+        }, f"roteador falhou: {type(e).__name__}: {e}", 0
 
 
 # ------------------------------------------------------------------ acervo / cobertura
@@ -225,17 +295,31 @@ def _portao_cobertura(d: dict, pergunta: str, env: dict) -> str:
 
 
 # ------------------------------------------------------------------ registro
-def registra_pacote(cadeira: str, envelopes: list[dict], montador_sha: str, sid: str | None = None) -> dict:
-    """Registra o pacote servido em Postgres sob PF_FITA. Senha SÓ de SESSAO_PG_PASSWORD."""
+def obtem_senha_sessao(cadeira: str) -> str:
+    """Obtém senha via `seg segredo SESSAO_PG_PASSWORD`, senão variável SESSAO_PG_PASSWORD."""
+    for cmd in ("seg segredo SESSAO_PG_PASSWORD", "seg segredo ler SESSAO_PG_PASSWORD"):
+        rc, out, _ = executa_verbo(cmd, cadeira, timeout=5)
+        if rc == 0 and out.strip():
+            return out.strip()
+    return (os.environ.get("SESSAO_PG_PASSWORD") or "").strip()
+
+
+def registra_pacote(cadeira: str, envelopes: list[dict], montador_sha: str,
+                    sid: str | None = None, oid: str | None = None) -> dict:
+    """Registra o pacote servido em Postgres sob PF_FITA. Senha SÓ de segredo/variável."""
     fid = (os.environ.get("PF_FITA") or "").strip()
     if not fid:
         return {"registrado": False, "motivo": "sem PF_FITA — sessao de mao nao tem fita"}
+
+    senha = obtem_senha_sessao(cadeira)
+    if not senha:
+        return {"registrado": False, "motivo": "sem senha SESSAO_PG_PASSWORD"}
+
     try:
         import psycopg
     except ImportError:
         return {"registrado": False, "motivo": "psycopg ausente neste venv"}
 
-    senha = os.environ.get("SESSAO_PG_PASSWORD", "")
     porta = os.environ.get("SESSAO_PG_PORT", "5437")
     dsn = f"host=127.0.0.1 port={porta} dbname=sessao user=sessao password={senha}"
     sup = os.environ.get("PF_SUPERFICIE", "").strip() or "desconhecida"
@@ -269,56 +353,46 @@ def registra_pacote(cadeira: str, envelopes: list[dict], montador_sha: str, sid:
 # ------------------------------------------------------------------ validações
 def valida_cadeira() -> tuple[str | None, str | None]:
     """Etapa 2: PF_CADEIRA presente e slug puro."""
-    cad = (os.environ.get("PF_CADEIRA") or "").strip()
-    if not cad:
+    cad = os.environ.get("PF_CADEIRA")
+    if not cad or not cad.strip():
         return None, "sem cadeira: a porta não injetou"
+    cad = cad.strip()
     cad_lower = cad.lower()
     for pref in ("claudinho-", "claudinha-"):
         if cad_lower.startswith(pref):
             return None, "sem cadeira: a porta não injetou (cadeira não é slug puro)"
-    if not re.match(r"^[a-z0-9_-]+$", cad):
+    if not re.match(r"^[a-z0-9-]+$", cad):
         return None, "sem cadeira: a porta não injetou (cadeira não é slug puro)"
     return cad, None
 
 
-def valida_chapeu(cadeira: str, slug: str) -> tuple[bool, list[str]]:
+def valida_chapeu(cadeira: str, slug: str) -> tuple[bool, str]:
     """Etapa 1: --chapeu está no vocabulário de chapéus da cadeira."""
-    chapeus_dir = _resolve_dir_chapeus()
-    rotas = rotas_do_disco(cadeira, chapeus_dir)
-    validos = sorted({r.slug for r in rotas})
-    if validos:
-        return (slug in validos), validos
-
-    # Se não encontrou no disco/rotas, consulta o verbo persona
     rc, stdout, stderr = executa_verbo(f"persona ler {cadeira} --chapeu {slug}", cadeira)
     if rc != 0:
-        m = re.search(r"validos:\s*([a-zA-Z0-9_\- ]+)", stderr + stdout)
-        if m:
-            v = [x.strip() for x in m.group(1).split() if x.strip()]
-            return False, v
-        return False, []
-    return True, []
+        detalhe = (stderr or stdout).strip()
+        return False, detalhe
+    return True, ""
 
 
 # ------------------------------------------------------------------ ato: catalogo
 def ato_catalogo(como_json: bool = False) -> int:
-    pecas, erro = le_catalogo_do_proprio_arquivo(), None
-    if not pecas:
-        erro = "catálogo: ausente — espécie não averbada no acervo (aguarda averbação)"
+    if os.environ.get("PF_CATALOGO_AUSENTE") == "1":
+        msg = "catálogo: ausente — espécie não averbada no acervo"
         if como_json:
-            print(json.dumps({"erro": erro}, ensure_ascii=False))
+            print(json.dumps({"erro": msg}, ensure_ascii=False))
         else:
-            print(erro, file=sys.stderr)
+            print(msg, file=sys.stderr)
         return 3
 
     if como_json:
-        print(json.dumps(pecas, ensure_ascii=False, indent=2))
+        print(json.dumps(CATALOGO, ensure_ascii=False, indent=2))
         return 0
 
     print("# catálogo de peças (transição: declarado no verbo até averbação no acervo)")
     print(f"{'peça':<18} {'gatilho':<25} {'regime':<8} {'volatilidade':<12} {'dono':<20} chamada")
     print("-" * 110)
-    for p in pecas:
+    for p in CATALOGO:
         print(f"{p.get('peca', ''):<18} {p.get('gatilho', ''):<25} {p.get('regime', ''):<8} "
               f"{p.get('volatilidade', ''):<12} {p.get('dono', ''):<20} {p.get('chamada', '')}")
     return 0
@@ -335,28 +409,20 @@ def ato_rotear(como_json: bool = False) -> int:
         return 3
 
     pergunta = sys.stdin.read().strip()
-    dec = escolhe(pergunta, cadeira)
-
-    via_map = {
-        "deterministico": "determinístico",
-        "semantico": "semântico",
-        "comando": "comando",
-        "fallback": "fallback",
-    }
-    via = via_map.get(dec.via, dec.via)
+    dec, erro_rot, rc_rot = executa_roteador(pergunta, cadeira)
+    if rc_rot == 3:
+        if como_json:
+            print(json.dumps({"erro": erro_rot}, ensure_ascii=False))
+        else:
+            print(erro_rot, file=sys.stderr)
+        return 3
 
     if como_json:
-        res = {
-            "slug": dec.slug,
-            "via": via,
-            "motivo": dec.motivo,
-            "acertos": dec.acertos or {},
-        }
-        print(json.dumps(res, ensure_ascii=False))
+        print(json.dumps(dec, ensure_ascii=False))
     else:
-        print(f"chapeu: {dec.slug or 'null'}   roteador: {via}")
-        if dec.motivo:
-            print(f"motivo: {dec.motivo}")
+        print(f"chapeu: {dec.get('slug') or 'null'}   roteador: {dec.get('via')}")
+        if dec.get("motivo"):
+            print(f"motivo: {dec.get('motivo')}")
     return 0
 
 
@@ -372,18 +438,16 @@ def ato_montar(chapeu_forcado: str | None = None, sem_acervo: bool = False,
         return 3
 
     if chapeu_forcado:
-        valido, validos = valida_chapeu(cadeira, chapeu_forcado)
+        valido, err_chapeu = valida_chapeu(cadeira, chapeu_forcado)
         if not valido:
-            msg = (f"erro: chapéu '{chapeu_forcado}' fora do vocabulário da cadeira '{cadeira}' — "
-                   f"válidos: {' '.join(validos) if validos else '(nenhum)'}")
+            msg = f"erro: chapéu '{chapeu_forcado}' fora do vocabulário da cadeira '{cadeira}' — {err_chapeu}"
             if como_json:
                 print(json.dumps({"erro": msg}, ensure_ascii=False))
             else:
                 print(msg, file=sys.stderr)
             return 2
 
-    catalogo = le_catalogo_do_proprio_arquivo()
-    if not catalogo:
+    if os.environ.get("PF_CATALOGO_AUSENTE") == "1":
         msg = "catálogo: ausente — espécie não averbada no acervo"
         if como_json:
             print(json.dumps({"erro": msg}, ensure_ascii=False))
@@ -395,41 +459,26 @@ def ato_montar(chapeu_forcado: str | None = None, sem_acervo: bool = False,
 
     # Roteador de chapéu
     if chapeu_forcado:
-        dec = Decisao(slug=chapeu_forcado, via="comando", motivo="chapéu forçado")
+        roteador_info = {
+            "via": "comando",
+            "slug": chapeu_forcado,
+            "acertos": {},
+            "motivo": "chapéu forçado por argumento",
+        }
+        aviso_rot = None
     else:
-        dec = escolhe(pergunta, cadeira)
+        roteador_info, aviso_rot, rc_rot = executa_roteador(pergunta, cadeira)
 
-    via_map = {
-        "deterministico": "determinístico",
-        "semantico": "semântico",
-        "comando": "comando",
-        "fallback": "fallback",
-    }
-    via = via_map.get(dec.via, dec.via)
-    roteador_info = {
-        "via": via,
-        "motivo": dec.motivo,
-        "acertos": dec.acertos or {},
-        "slug": dec.slug,
-    }
-
-    chapeu_slug = dec.slug
+    chapeu_slug = roteador_info.get("slug")
     avisos: list[str] = []
-    if not chapeu_slug:
-        avisos.append(f"chapéu não roteado (fallback): {dec.motivo}")
+    if aviso_rot:
+        avisos.append(aviso_rot)
+    elif not chapeu_slug:
+        avisos.append(f"chapéu não roteado (fallback): {roteador_info.get('motivo')}")
 
-    # Catálogo indexado por id
-    cat_por_id = {item["peca"]: item for item in catalogo}
+    cat_por_id = {item["peca"]: item for item in CATALOGO}
 
-    # Ordem de injeção: estável -> morna -> volátil; cadernos por ÚLTIMO SEMPRE
-    # Peças potenciais:
-    # 1. conduta (estável)
-    # 2. persona (estável)
-    # 3. chapeu (estável, se houver chapéu roteado)
-    # 4. alias-cadeiras (morna)
-    # 5. mesa (volátil)
-    # 6. acervo-consultado (volátil, se houver pergunta e não sem_acervo)
-    # 7. cadernos (volátil, SEMPRE POR ÚLTIMO)
+    # Ordem de injeção: estável -> morna -> volátil; cadernos SEMPRE por ÚLTIMO
     ordem_chaves = ["conduta", "persona"]
     if chapeu_slug:
         ordem_chaves.append("chapeu")
@@ -448,7 +497,6 @@ def ato_montar(chapeu_forcado: str | None = None, sem_acervo: bool = False,
         volatilidade = meta.get("volatilidade", "volatil")
         chamada_tmpl = meta.get("chamada", "")
 
-        # Resolução da chamada e ref
         if peca_id == "conduta":
             cmd = "persona conduta"
             ref = "verbo:persona conduta"
@@ -465,11 +513,8 @@ def ato_montar(chapeu_forcado: str | None = None, sem_acervo: bool = False,
             cmd = "mesa ver"
             ref = "verbo:mesa ver"
         elif peca_id == "acervo-consultado":
-            cmd = f'motor rag buscar casa "{pergunta}" --k 6 --texto secao'
-            ordem_id_env = os.environ.get("PF_ORDEM_ID")
-            if ordem_id_env:
-                cmd += f" --ordem-id {ordem_id_env}"
-            ref = f'verbo:motor rag buscar casa "{pergunta[:40]}..." --k 6 --texto secao'
+            cmd = f'motor rag buscar casa "{pergunta}" --k 6'
+            ref = f'verbo:motor rag buscar casa "{pergunta[:40]}..." --k 6'
         elif peca_id == "cadernos":
             if chapeu_slug:
                 cmd = f"mesa caderno --chapeu {chapeu_slug}"
@@ -508,16 +553,16 @@ def ato_montar(chapeu_forcado: str | None = None, sem_acervo: bool = False,
         if peca_id == "acervo-consultado":
             try:
                 d_acervo = json.loads(stdout)
-                if d_acervo.get("erro"):
-                    env["frescor"] = "indisponivel"
-                    motivo = str(d_acervo["erro"])[:200]
-                    env["motivo"] = motivo
-                    avisos.append(f"peça `acervo-consultado` indisponível: {motivo}")
-                    servidas.append(env)
-                    continue
-                conteudo_bruto = _portao_cobertura(d_acervo, pergunta, env)
+                if isinstance(d_acervo, dict):
+                    if d_acervo.get("erro"):
+                        env["frescor"] = "indisponivel"
+                        motivo = str(d_acervo["erro"])[:200]
+                        env["motivo"] = motivo
+                        avisos.append(f"peça `acervo-consultado` indisponível: {motivo}")
+                        servidas.append(env)
+                        continue
+                    conteudo_bruto = _portao_cobertura(d_acervo, pergunta, env)
             except (ValueError, TypeError):
-                # Se não for json (ex: stub mock em teste), usa texto cru
                 conteudo_bruto = stdout.strip()
 
         env["frescor"] = "fresco"
@@ -530,7 +575,7 @@ def ato_montar(chapeu_forcado: str | None = None, sem_acervo: bool = False,
     sessao_id = os.environ.get("PF_SESSAO") or None
     ordem_id = os.environ.get("PF_ORDEM_ID") or None
 
-    reg_pacote = registra_pacote(cadeira, servidas, montador_sha, sid=sessao_id)
+    reg_pacote = registra_pacote(cadeira, servidas, montador_sha, sid=sessao_id, oid=ordem_id)
     if os.environ.get("PF_FITA") and not reg_pacote.get("registrado"):
         avisos.append(f"registro do pacote não gravado: {reg_pacote.get('motivo')}")
 
@@ -598,68 +643,55 @@ def imprime_texto(pac: dict) -> int:
 
 
 # ------------------------------------------------------------------ CLI / main
-def uso(msg: str | None = None) -> int:
-    if msg:
-        print(f"erro: {msg}\n", file=sys.stderr)
-    print("""uso:
-  expediente montar   [--chapeu <slug>] [--sem-acervo] [--json]   < pergunta
-  expediente rotear   [--json]                                    < pergunta
-  expediente catalogo [--json]
-
-atos:
-  montar    monta o pacote na ordem do §2; com pergunta, roteia o chapéu e consulta o acervo
-  rotear    só o roteador: pergunta → chapéu, com via (determinístico, semântico, fallback)
-  catalogo  as peças do catálogo e metadados""", file=sys.stderr)
-    return 2
-
-
 def main() -> int:
+    # Trata --json com erro em stdout quando argumento/ato inválido
     argv = sys.argv[1:]
+    como_json = "--json" in argv
+
+    parser = Uso(
+        descricao="monta o pacote de expediente da cadeira (conduta, persona, mesa, cadernos)",
+        saidas="0 ok · 2 uso · 3 sem cadeira / catálogo ausente",
+    )
+    atos = parser.atos()
+
+    p_montar = atos.novo("montar", "monta o pacote na ordem do §2; com pergunta, roteia o chapéu e consulta o acervo")
+    p_montar.add_argument("--chapeu", metavar="<slug>", help="força o slug do chapéu (ignora roteador)")
+    p_montar.add_argument("--sem-acervo", action="store_true", help="omite a consulta ao acervo")
+    p_montar.add_argument("--json", action="store_true", help="saída em formato JSON")
+
+    p_rotear = atos.novo("rotear", "só o roteador: pergunta → chapéu, com via (determinístico, semântico, fallback)")
+    p_rotear.add_argument("--json", action="store_true", help="saída em formato JSON")
+
+    p_catalogo = atos.novo("catalogo", "as peças do catálogo e metadados")
+    p_catalogo.add_argument("--json", action="store_true", help="saída em formato JSON")
+
     if not argv:
-        return uso("falta o ato")
+        parser.error("falta o ato")
 
-    ato = argv[0]
-    resto = argv[1:]
+    primeiro = argv[0]
+    if primeiro in ("-h", "--help", "--ajuda"):
+        parser.print_help(sys.stdout)
+        sys.exit(0)
 
-    if ato in ("--help", "-h", "--ajuda"):
-        return uso()
+    if primeiro not in ("montar", "rotear", "catalogo"):
+        if como_json:
+            print(json.dumps({"erro": f"ato desconhecido: '{primeiro}'"}, ensure_ascii=False))
+            sys.exit(2)
+        parser.error(f"ato desconhecido: '{primeiro}'")
 
-    if ato == "catalogo":
-        parser = argparse.ArgumentParser(prog="expediente catalogo", add_help=False)
-        parser.add_argument("--json", action="store_true")
-        try:
-            args = parser.parse_args(resto)
-        except SystemExit:
-            return 2
+    args = parser.parse_args()
+
+    if args.ato == "catalogo":
         return ato_catalogo(como_json=args.json)
-
-    elif ato == "rotear":
-        parser = argparse.ArgumentParser(prog="expediente rotear", add_help=False)
-        parser.add_argument("--json", action="store_true")
-        try:
-            args = parser.parse_args(resto)
-        except SystemExit:
-            return 2
+    elif args.ato == "rotear":
         return ato_rotear(como_json=args.json)
-
-    elif ato == "montar":
-        parser = argparse.ArgumentParser(prog="expediente montar", add_help=False)
-        parser.add_argument("--chapeu", metavar="SLUG")
-        parser.add_argument("--sem-acervo", action="store_true")
-        parser.add_argument("--json", action="store_true")
-        try:
-            args = parser.parse_args(resto)
-        except SystemExit:
-            return 2
-        return ato_montar(chapeu_forcado=args.chapeu, sem_acervo=args.sem_acervo,
-                          como_json=args.json)
-
-    else:
-        if "--json" in resto:
-            print(json.dumps({"erro": f"ato desconhecido: '{ato}' — atos válidos: montar, rotear, catalogo"},
-                             ensure_ascii=False))
-            return 2
-        return uso(f"ato desconhecido: '{ato}'")
+    elif args.ato == "montar":
+        return ato_montar(
+            chapeu_forcado=args.chapeu,
+            sem_acervo=args.sem_acervo,
+            como_json=args.json,
+        )
+    return 2
 
 
 if __name__ == "__main__":
