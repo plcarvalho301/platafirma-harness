@@ -42,16 +42,36 @@ EOF
 
 morre() { printf '%s: %s\n' "$VERBO" "$1" >&2; exit "${2:-3}"; }
 
+bancada_de() {
+  local nome="$1"
+  local cadeira="${PF_CADEIRA:-}"
+  cadeira="${cadeira#claudinho-}"
+  cadeira="${cadeira#claudinha-}"
+  if [ -n "$cadeira" ] && [ -d "$RAIZ/var/wt/$nome/$cadeira" ] && [ -e "$RAIZ/var/wt/$nome/$cadeira/.git" ]; then
+    printf '%s/var/wt/%s/%s' "$RAIZ" "$nome" "$cadeira"
+    return 0
+  fi
+  if [ -d "$RAIZ/$nome" ]; then
+    if [ -n "$cadeira" ]; then
+      printf '%s: aviso: worktree var/wt/%s/%s nao existe — usando fallback %s/%s\n' "$VERBO" "$nome" "$cadeira" "$RAIZ" "$nome" >&2
+    else
+      printf '%s: aviso: PF_CADEIRA nao definida — usando fallback %s/%s\n' "$VERBO" "$RAIZ" "$nome" >&2
+    fi
+  fi
+  printf '%s/%s' "$RAIZ" "$nome"
+}
+
 clone_de() {
-  local nome="$1" alvo real
+  local nome="$1" alvo real raiz_real
   [ -n "$nome" ] || morre "falta o nome do repo" 2
   case "$nome" in
     */*|.*|*..*|*[!A-Za-z0-9._-]*) morre "nome de repo invalido: '$nome' — e slug dentro de $RAIZ" 4 ;;
   esac
-  alvo="$RAIZ/$nome"
+  alvo="$(bancada_de "$nome")"
   [ -d "$alvo" ] || morre "nao ha clone '$nome' em $RAIZ" 3
   real="$(realpath "$alvo" 2>/dev/null)" || morre "nao resolvi '$alvo'" 4
-  case "$real/" in "$RAIZ"/*) : ;; *) morre "'$nome' resolve fora da raiz $RAIZ" 4 ;; esac
+  raiz_real="$(realpath "$RAIZ" 2>/dev/null || printf '%s' "$RAIZ")"
+  case "$real/" in "$RAIZ"/*|"$raiz_real"/*) : ;; *) morre "'$nome' resolve fora da raiz $RAIZ" 4 ;; esac
   printf '%s' "$real"
 }
 

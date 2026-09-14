@@ -49,8 +49,7 @@
 # ambiente: PF_REPO_RAIZ[=$HOME/AI] porta · PF_CADEIRA porta (lida) · PF_SESSAO porta (lida) · PF_OPS_LOG_DIR[=$HOME/AI/var/log/ops] porta · HOME
 # depende: git · gh (pr-*, empurrar, atualizar, clonar) · rede ao forge
 # substitui: git -C … ls-files|grep|log|diff|show|status|checkout -b|commit|push|fetch · gh pr create|list|view|diff|merge
-# conforme: parcial
-# falta: abrir (aguarda porta servir main); var/wt/<repo>/<cadeira> (aguarda abrir)
+# conforme: sim
 set -uo pipefail
 
 RAIZ="${PF_REPO_RAIZ:-$HOME/AI}"
@@ -118,10 +117,24 @@ morre() {
   exit "$rc"
 }
 
-# Resolução de bancada: hoje raiz fixa $RAIZ/<repo>; amanhã var/wt/<repo>/<cadeira> (arq:0109).
-# Mantida em UMA função só para a troca ser um commit quando a porta servir main.
+# Resolução de bancada: var/wt/<repo>/<cadeira> (arq:0109, arq:0110).
+# Fallback a $RAIZ/<repo> com aviso enquanto o worktree não existe.
 bancada_de() {
   local nome="$1"
+  local cadeira="${PF_CADEIRA:-}"
+  cadeira="${cadeira#claudinho-}"
+  cadeira="${cadeira#claudinha-}"
+  if [ -n "$cadeira" ] && [ -d "$RAIZ/var/wt/$nome/$cadeira" ] && [ -e "$RAIZ/var/wt/$nome/$cadeira/.git" ]; then
+    printf '%s/var/wt/%s/%s' "$RAIZ" "$nome" "$cadeira"
+    return 0
+  fi
+  if [ -d "$RAIZ/$nome" ]; then
+    if [ -n "$cadeira" ]; then
+      printf '%s: aviso: worktree var/wt/%s/%s nao existe — usando fallback %s/%s\n' "$VERBO" "$nome" "$cadeira" "$RAIZ" "$nome" >&2
+    else
+      printf '%s: aviso: PF_CADEIRA nao definida — usando fallback %s/%s\n' "$VERBO" "$RAIZ" "$nome" >&2
+    fi
+  fi
   printf '%s/%s' "$RAIZ" "$nome"
 }
 
@@ -188,8 +201,9 @@ clone_de() {
   fi
 
   local real; real="$(realpath "$alvo" 2>/dev/null)" || morre "nao resolvi '$alvo'" 4
+  local raiz_real; raiz_real="$(realpath "$RAIZ" 2>/dev/null || printf '%s' "$RAIZ")"
   case "$real/" in
-    "$RAIZ"/*) : ;;
+    "$RAIZ"/*|"$raiz_real"/*) : ;;
     *) morre "'$nome' resolve para $real, fora da raiz $RAIZ" 4 ;;
   esac
 
@@ -707,7 +721,100 @@ ato_clonar() {
 }
 
 cmd_abrir() {
-  morre "dependência ausente: abrir depende de a porta servir main; a bancada em var/wt/<repo>/<cadeira> chega com o release" 3
+  local nome="${1:-}"
+  [ -n "$nome" ] || uso
+  shift || true
+
+  case "$nome" in
+    */*|.*|*..*) morre "nome de repo invalido: '$nome' — e slug dentro de $RAIZ, nao caminho" 4 ;;
+    *[!A-Za-z0-9._-]*) morre "nome de repo invalido: '$nome' — use [A-Za-z0-9._-]" 4 ;;
+  esac
+
+  local card="" slug="" arg_cadeira=""
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --slug)
+        shift
+        [ $# -gt 0 ] || { printf '%s: erro: --slug exige um valor\n' "$VERBO" >&2; exit 2; }
+        slug="$1"
+        shift
+        ;;
+      --cadeira)
+        shift
+        [ $# -gt 0 ] || { printf '%s: erro: --cadeira exige um valor\n' "$VERBO" >&2; exit 2; }
+        arg_cadeira="$1"
+        shift
+        ;;
+      -*)
+        morre "argumento nao reconhecido: '$1'" 2
+        ;;
+      *)
+        if [ -z "$card" ]; then
+          card="$1"
+        else
+          morre "argumento excedente: '$1'" 2
+        fi
+        shift
+        ;;
+    esac
+  done
+
+  local cadeira="${arg_cadeira:-${PF_CADEIRA:-}}"
+  cadeira="${cadeira#claudinho-}"
+  cadeira="${cadeira#claudinha-}"
+  [ -n "$cadeira" ] || morre "dependência ausente: PF_CADEIRA não definida — abrir exige cadeira" 3
+
+  local clone_raiz="$RAIZ/$nome"
+  [ -d "$clone_raiz" ] && [ -e "$clone_raiz/.git" ] || morre "repositório desconhecido: '$nome'" 2
+
+  local wt_dir="$RAIZ/var/wt/$nome/$cadeira"
+
+  if [ -d "$wt_dir" ] && [ -e "$wt_dir/.git" ]; then
+    printf 'bancada já aberta: %s (@ %s)\n' "$wt_dir" "$(ramo_atual "$wt_dir")"
+    return 0
+  fi
+
+  local base_ref="HEAD"
+  if "$GIT" -C "$clone_raiz" rev-parse --verify origin/main >/dev/null 2>&1; then
+    base_ref="origin/main"
+  elif "$GIT" -C "$clone_raiz" rev-parse --verify main >/dev/null 2>&1; then
+    base_ref="main"
+  fi
+
+  mkdir -p "$(dirname "$wt_dir")" || morre "falha ao criar diretório pai de $wt_dir" 3
+  if [ -d "$wt_dir" ] && [ ! -e "$wt_dir/.git" ]; then
+    rmdir "$wt_dir" 2>/dev/null || true
+  fi
+
+  if [ -n "$card" ]; then
+    local card_num="${card###}"
+    local ramo_alvo=""
+    if [[ "$card_num" =~ ^[0-9]+$ ]]; then
+      if [ -n "$slug" ]; then
+        ramo_alvo="fabrica/${card_num}-${slug}"
+      else
+        ramo_alvo="fabrica/${card_num}"
+      fi
+    else
+      ramo_alvo="$card"
+      if [ -n "$slug" ]; then
+        ramo_alvo="${ramo_alvo}-${slug}"
+      fi
+    fi
+    case "$ramo_alvo" in
+      -*|*' '*|*'..'*) morre "nome de ramo invalido: '$ramo_alvo'" 2 ;;
+    esac
+
+    if "$GIT" -C "$clone_raiz" show-ref --verify --quiet "refs/heads/$ramo_alvo"; then
+      "$GIT" -C "$clone_raiz" worktree add "$wt_dir" "$ramo_alvo" || morre "git worktree add falhou" 3
+    else
+      "$GIT" -C "$clone_raiz" worktree add -b "$ramo_alvo" "$wt_dir" "$base_ref" || morre "git worktree add -b falhou" 3
+    fi
+    printf 'bancada aberta: %s (ramo %s de %s)\n' "$wt_dir" "$ramo_alvo" "$base_ref"
+  else
+    "$GIT" -C "$clone_raiz" worktree add --detach "$wt_dir" "$base_ref" || morre "git worktree add falhou" 3
+    printf 'bancada aberta: %s (HEAD destacado em %s)\n' "$wt_dir" "$base_ref"
+  fi
 }
 
 ato_ramo() {

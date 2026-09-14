@@ -562,19 +562,118 @@ if [ "$rc_atualizar" -ne 3 ]; then
   exit 1
 fi
 
-# 6d. abrir -> exit 3 informando dependência ausente
+# 6d. abrir e bancada por cadeira (arq:0109, card #3059)
+echo "--- Teste 6d: repo abrir e bancada por cadeira ---"
+
+# Sem argumento -> exit 2
 set +e
-out_abrir="$("$VERBO" abrir repo-teste 2>&1)"
-rc_abrir=$?
+out_abrir_sem_arg="$("$VERBO" abrir 2>&1)"
+rc_abrir_sem_arg=$?
 set -e
-if [ "$rc_abrir" -ne 3 ]; then
-  echo "FALHA: abrir devia sair 3, saiu $rc_abrir" >&2
+if [ "$rc_abrir_sem_arg" -ne 2 ]; then
+  echo "FALHA: abrir sem argumento devia sair 2, saiu $rc_abrir_sem_arg" >&2
   exit 1
 fi
-if ! grep -q "dependência ausente: abrir depende de a porta servir main; a bancada em var/wt/<repo>/<cadeira> chega com o release" <<<"$out_abrir"; then
-  echo "FALHA: mensagem de abrir não confere: $out_abrir" >&2
+
+# Sem PF_CADEIRA -> exit 3
+set +e
+out_abrir_sem_cad="$(PF_CADEIRA="" "$VERBO" abrir repo-teste 2>&1)"
+rc_abrir_sem_cad=$?
+set -e
+if [ "$rc_abrir_sem_cad" -ne 3 ]; then
+  echo "FALHA: abrir sem PF_CADEIRA devia sair 3, saiu $rc_abrir_sem_cad" >&2
   exit 1
 fi
+
+# Repo desconhecido -> exit 2
+set +e
+out_abrir_repo_desc="$("$VERBO" abrir repo_fantasma 2>&1)"
+rc_abrir_repo_desc=$?
+set -e
+if [ "$rc_abrir_repo_desc" -ne 2 ]; then
+  echo "FALHA: abrir repo desconhecido devia sair 2, saiu $rc_abrir_repo_desc" >&2
+  exit 1
+fi
+
+# Abrir worktree para cadeira ti
+WT_TI="$RAIZ_TESTE/var/wt/repo-teste/ti"
+out_abrir_ti="$(PF_CADEIRA="ti" "$VERBO" abrir repo-teste)"
+if [ ! -d "$WT_TI" ] || [ ! -e "$WT_TI/.git" ]; then
+  echo "FALHA: abrir não criou worktree em $WT_TI" >&2
+  exit 1
+fi
+
+# Idempotência: re-abrir ti não duplica e sai 0
+set +e
+out_abrir_ti_dup="$(PF_CADEIRA="ti" "$VERBO" abrir repo-teste)"
+rc_abrir_ti_dup=$?
+set -e
+if [ "$rc_abrir_ti_dup" -ne 0 ] || ! grep -q "bancada já aberta" <<<"$out_abrir_ti_dup"; then
+  echo "FALHA: re-abrir worktree devia ser idempotente (exit 0 com aviso): $out_abrir_ti_dup" >&2
+  exit 1
+fi
+
+# Abrir worktree para cadeira dados
+WT_DADOS="$RAIZ_TESTE/var/wt/repo-teste/dados"
+out_abrir_dados="$(PF_CADEIRA="dados" "$VERBO" abrir repo-teste)"
+if [ ! -d "$WT_DADOS" ] || [ ! -e "$WT_DADOS/.git" ]; then
+  echo "FALHA: abrir não criou worktree em $WT_DADOS" >&2
+  exit 1
+fi
+
+# Idempotência para dados
+set +e
+out_abrir_dados_dup="$(PF_CADEIRA="dados" "$VERBO" abrir repo-teste)"
+rc_abrir_dados_dup=$?
+set -e
+if [ "$rc_abrir_dados_dup" -ne 0 ] || ! grep -q "bancada já aberta" <<<"$out_abrir_dados_dup"; then
+  echo "FALHA: re-abrir dados devia ser idempotente: $out_abrir_dados_dup" >&2
+  exit 1
+fi
+
+# Duas cadeiras, dois worktrees: checkout de uma não move HEAD da outra (bug da fita dados)
+head_ti_antes="$(git -C "$WT_TI" rev-parse HEAD)"
+
+# Cadeira dados cria e faz checkout de ramo por card
+PF_CADEIRA="dados" "$VERBO" ramo repo-teste 3059 --slug dados-ramo >/dev/null
+ramo_dados_depois="$(git -C "$WT_DADOS" rev-parse --abbrev-ref HEAD)"
+if [ "$ramo_dados_depois" != "fabrica/3059-dados-ramo" ]; then
+  echo "FALHA: dados devia estar no ramo fabrica/3059-dados-ramo, está em $ramo_dados_depois" >&2
+  exit 1
+fi
+
+# Cadeira ti NÃO teve seu HEAD alterado
+head_ti_depois="$(git -C "$WT_TI" rev-parse HEAD)"
+ramo_ti_depois="$(git -C "$WT_TI" rev-parse --abbrev-ref HEAD)"
+if [ "$head_ti_antes" != "$head_ti_depois" ] || [ "$ramo_ti_depois" = "fabrica/3059-dados-ramo" ]; then
+  echo "FALHA: checkout na cadeira dados moveu o HEAD da cadeira ti sob os pés! antes=$head_ti_antes depois=$head_ti_depois" >&2
+  exit 1
+fi
+
+# Abrir com card direto (fabrica/<card>-<slug>)
+WT_PRODUTO="$RAIZ_TESTE/var/wt/repo-teste/produto"
+PF_CADEIRA="produto" "$VERBO" abrir repo-teste 3060 --slug ui >/dev/null
+if [ ! -d "$WT_PRODUTO" ] || [ ! -e "$WT_PRODUTO/.git" ]; then
+  echo "FALHA: abrir com card não criou worktree em $WT_PRODUTO" >&2
+  exit 1
+fi
+ramo_produto="$(git -C "$WT_PRODUTO" rev-parse --abbrev-ref HEAD)"
+if [ "$ramo_produto" != "fabrica/3060-ui" ]; then
+  echo "FALHA: abrir com card devia criar ramo fabrica/3060-ui, criou $ramo_produto" >&2
+  exit 1
+fi
+
+# Resolução de bancada_de / fallback
+# Cadeira sem worktree emite aviso de fallback em stderr
+set +e
+out_fallback="$(PF_CADEIRA="seguranca" "$VERBO" estado repo-teste 2>&1)"
+set -e
+if ! grep -q "aviso: worktree var/wt/repo-teste/seguranca nao existe — usando fallback" <<<"$out_fallback"; then
+  echo "FALHA: bancada_de sem worktree devia emitir aviso de fallback em stderr: $out_fallback" >&2
+  exit 1
+fi
+
+echo "OK: repo abrir cria worktree de origin/main, ramo por card, idempotente, duas cadeiras isoladas (checkout de uma não move HEAD da outra)"
 
 # 6e. clonar
 "$VERBO" clonar "$REPO_TESTE" repo-clonado >/dev/null
@@ -593,7 +692,7 @@ fi
 
 # 6f. git (passthrough)
 out_git="$("$VERBO" git repo-teste status)"
-if ! grep -q "On branch main" <<<"$out_git"; then
+if ! grep -q -E "(On branch main|HEAD detached|Not currently on any branch)" <<<"$out_git"; then
   echo "FALHA: repo git passthrough não funcionou: $out_git" >&2
   exit 1
 fi
