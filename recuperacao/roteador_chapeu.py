@@ -26,6 +26,7 @@ casa = _mod.casa
 decide = _mod.decide
 roteia_semantico = _mod.roteia_semantico
 escolhe = _mod.escolhe
+_resolve_dir_chapeus = _mod._resolve_dir_chapeus
 LIMIAR_SEMANTICO = _mod.LIMIAR_SEMANTICO
 MARGEM_SEMANTICA = _mod.MARGEM_SEMANTICA
 
@@ -39,6 +40,7 @@ __all__ = [
     "decide",
     "roteia_semantico",
     "escolhe",
+    "_resolve_dir_chapeus",
     "LIMIAR_SEMANTICO",
     "MARGEM_SEMANTICA",
 ]
