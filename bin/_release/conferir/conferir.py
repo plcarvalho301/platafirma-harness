@@ -232,7 +232,9 @@ def conferir_servico(alvo, como_json=False):
             print(f"    sobe de : {c['working_dir']}")
         # Container de pe apontando working_dir removido do disco e deriva grave, nao
         # ausencia silenciosa: git_estado volta None por nao achar o dir, e sem esta
-        # linha a conferencia passaria batido. Reporta e conta como divergencia.
+        # linha a conferencia passaria batido. E divergencia SOMADA (nao terminal): as
+        # demais checagens abaixo — fora de deploy, env — seguem valendo, e a guarda em
+        # sh() ja impede o FileNotFoundError que estourava aqui (#3057 item 5).
         if not os.path.isdir(c["working_dir"]):
             houve = True
             divergencias.append(
@@ -240,8 +242,6 @@ def conferir_servico(alvo, como_json=False):
                 "container servindo de diretorio removido")
             if not como_json:
                 print(f"    SUMIU   : working_dir nao existe no disco — container servindo de diretorio removido")
-            servicos.append({"nome": c["nome"], "servico": c["servico"], "divergencias": divergencias})
-            continue
         if not dentro_de_deploy:
             houve = True
             divergencias.append("nao e worktree de deploy — producao sobe de clone de trabalho")
