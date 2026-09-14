@@ -135,6 +135,29 @@ def _uuid_valido(bruto: str) -> str | None:
         return None
 
 
+def _extrai_sessao_id(texto: str) -> str | None:
+    """Extrai sessao_id de uma saída de texto ou JSON."""
+    if not texto:
+        return None
+    try:
+        dados = json.loads(texto)
+        if isinstance(dados, dict):
+            sid = dados.get("sessao_id") or (dados.get("sessao") or {}).get("sessao_id")
+            val = _uuid_valido(sid)
+            if val:
+                return val
+    except Exception:
+        pass
+    m = re.search(r'"sessao_id"\s*:\s*"([0-9a-fA-F-]{32,36})"', texto)
+    if not m:
+        m = re.search(r'\bsessao_id[:=]\s*([0-9a-fA-F-]{32,36})\b', texto)
+    if not m:
+        m = re.search(r'\b([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\b', texto, re.I)
+    if m:
+        return _uuid_valido(m.group(1))
+    return None
+
+
 # --- helpers puros ---
 def _token_ok(header: str, expected: str) -> bool:
     """So o header. `?token=` SAIU em 20/08/2026 (claudinho-seguranca).
@@ -741,6 +764,14 @@ async def run_command(command: str = "", cwd: str = "", timeout: int = 120,
         so = r.get("stdout")
         acumulado += so.get("bytes_total", 0) if isinstance(so, dict) else 0
         resultados.append(r)
+        # Injeção entre itens do lote (Aberto spec_sessao/expediente, #3053):
+        # se o item executado foi sessao abrir com sucesso, extrai sessao_id e
+        # chama ident = _sessao_resolve(sid_novo) antes do item seguinte (n+1)
+        ato = argv[1] if len(argv) > 1 else ""
+        if slug == "sessao" and ato == "abrir" and r.get("exit_code") == 0:
+            sid_novo = _extrai_sessao_id(brutos[-1])
+            if sid_novo:
+                ident = _sessao_resolve(sid_novo)
     for _i in range(len(resultados), len(itens)):
         resultados.append({"omitido_por_teto": True})
     if len(itens) == 1:
@@ -786,6 +817,8 @@ async def _run_command_legado(command: str = "", cwd: str = "", timeout: int = 1
                 t0 = time.monotonic()
                 r = await anyio.to_thread.run_sync(_run_blocking, cmd, d, timeout,
                                                    ident["sessao_id"], ident["ordem_id"], ident["cadeira"])
+                so = r.get("stdout")
+                txt_bruto = so.get("texto", "") if isinstance(so, dict) else (so if isinstance(so, str) else "")
                 r = _serve(r, tool="run_command", alca=f"{d}|{cmd}", ident=ident)
                 _audit(tool="run_command", comando=cmd[:CMD_CAP], evento="fallback",
                        cadeira=ident["cadeira"] or None, sessao_id=ident["sessao_id"],
@@ -793,6 +826,10 @@ async def _run_command_legado(command: str = "", cwd: str = "", timeout: int = 1
                        bytes_stdout=r.get("stdout", {}).get("bytes_total"),
                        dur_ms=round((time.monotonic() - t0) * 1000),
                        lote_id=lote_id, lote_n=_i, **_campos_poda(r))
+                if r.get("exit_code") == 0 and re.search(r"\bsessao\s+abrir\b", cmd):
+                    sid_novo = _extrai_sessao_id(txt_bruto)
+                    if sid_novo:
+                        ident = _sessao_resolve(sid_novo)
             acumulado += (r.get("stdout") or {}).get("bytes_total", 0)
             resultados.append(r)
         for _i in range(len(resultados), len(commands)):
