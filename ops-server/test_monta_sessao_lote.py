@@ -95,7 +95,9 @@ async def test_abrir_ok_expediente_recebe_tres_pf_em_slug_puro():
     assert len(chamadas_run) == 2
     abrir_call = chamadas_run[0]
     assert "abrir" in abrir_call["argv"]
-    assert "ia" in abrir_call["argv"]
+    # a porta passa a cadeira COMO RECEBEU; canonizar e etapa 3 de `sessao abrir` (spec_sessao §2)
+    assert "claudinho-IA" in abrir_call["argv"]
+    assert "ia" not in abrir_call["argv"]
     assert abrir_call["kwargs"]["env"]["PF_SUJEITO"] == sub
 
     # Assert: expediente montar recebeu os três PF_* em slug puro

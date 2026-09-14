@@ -44,7 +44,6 @@ import re
 import shlex
 import signal
 import resource
-import shutil
 import subprocess
 import tempfile
 import sys
@@ -1206,18 +1205,12 @@ def _memoria(cadeira: str) -> dict:
 
 
 def _acha_bin(nome: str) -> str:
-    """Resolve o caminho executável do binário (BINARIOS -> RAIZ/bin -> PF_HARNESS/bin -> PATH)."""
+    """Resolve o binário SERVIDO (BINARIOS -> RAIZ/bin). A porta executa o que está no ar
+    (release), nunca o working tree do clone (arq:0097; #3029): faltando no servido, o
+    caminho volta inexistente e o execve declara — não se cai em PF_HARNESS/bin nem no
+    PATH, que é como o SHA velho (ou o novo demais) entra calado na abertura."""
     if nome in BINARIOS and os.path.isfile(BINARIOS[nome]):
         return BINARIOS[nome]
-    p_raiz = RAIZ / "bin" / nome
-    if p_raiz.is_file() and os.access(p_raiz, os.X_OK):
-        return str(p_raiz)
-    p_harness = PF_HARNESS / "bin" / nome
-    if p_harness.is_file() and os.access(p_harness, os.X_OK):
-        return str(p_harness)
-    w = shutil.which(nome, path=f"{RAIZ}/bin:{PF_HARNESS}/bin:" + os.environ.get("PATH", ""))
-    if w:
-        return w
     return str(RAIZ / "bin" / nome)
 
 
@@ -1255,11 +1248,11 @@ def _montar(cadeira: str, atualizar: bool = True, chapeu: str = "", pergunta: st
     bin_sessao = _acha_bin("sessao")
     bin_expediente = _acha_bin("expediente")
 
-    cad = (cadeira or "").strip()
-    slug = cad.lower()
-    for pref in ("claudinho-", "claudinha-"):
-        if slug.startswith(pref):
-            slug = slug[len(pref):]
+    # A porta passa a cadeira COMO RECEBEU: canonizar (prefixo fora, minúsculas, alias)
+    # é a etapa 3 de `sessao abrir`, por `persona foto` — um chamador só (spec_sessao §2;
+    # arq:0108: resolução por um ato, parsing é violação). Segunda implementação aqui
+    # divergiria em silêncio (#2438).
+    slug = (cadeira or "").strip()
 
     # (a) execve `bin/sessao abrir <slug> [--sessao-id <uuid>] --json` com PF_SUJEITO = sub
     argv_abrir = _exec_argv(bin_sessao, "abrir")
@@ -1324,12 +1317,10 @@ def _montar(cadeira: str, atualizar: bool = True, chapeu: str = "", pergunta: st
             print(f"[valkey] releitura sessao:{sid} falhou: {e!r}", file=sys.stderr, flush=True)
 
     # Slug puro da cadeira e ordem_id da chave (ou fallback do próprio abrir_json)
+    # Slug puro vem da CHAVE (quem cunhou canonizou); faltando a releitura, do json de
+    # `abrir`, que já sai canonizado (spec_sessao §3). Nunca se normaliza aqui: se o que
+    # chegar não for slug puro, `expediente` sai 3 declarado — melhor que parse calado.
     cad_slug = cad_slug or abrir_json.get("cadeira") or slug
-    if cad_slug:
-        cad_slug = cad_slug.lower()
-        for pref in ("claudinho-", "claudinha-"):
-            if cad_slug.startswith(pref):
-                cad_slug = cad_slug[len(pref):]
     oid = oid or abrir_json.get("ordem_id") or ""
 
     # (c) execve `bin/expediente montar [--chapeu <slug>] --json` com
@@ -1402,6 +1393,15 @@ async def monta_sessao(cadeira: str = "", atualizar: bool = True, chapeu: str = 
                        f"sessao:{cadeira or '-'}", DOM_PLATAFORMA)
     if negado:
         return negado
+    # Regra (c) da porta (ordem do dono, 06/09/2026; arq:0101 §1): reabertura sem portar
+    # o `sessao_id` não cunha outro — a porta nega, não adivinha. Abertura de verdade
+    # traz o prompt do dono; id malformado quem recusa é `sessao abrir` (exit 2).
+    if not sessao_id and not _primeiro_giro(pergunta):
+        _audit(tool="monta_sessao", evento="sessao_id_ausente_na_reabertura", cadeira=cadeira)
+        return {"erro": "sessao_id ausente numa reabertura — a fita deve portar o "
+                        "`sessao_id` da primeira abertura (arq:0101 §1); a primeira "
+                        "abertura envia a pergunta e NÃO envia `sessao_id`",
+                "regra": "sessao"}
 
     t0 = time.monotonic()
     _q = _quem()  # async: no contexto da task MCP (#2911)
