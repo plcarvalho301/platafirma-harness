@@ -847,7 +847,9 @@ def monta(cadeira, atualizar, pergunta=None, forcado_chapeu=None, so_chapeu=Fals
     # reenviar a abertura já servida é desperdício) é caso real — mas agora se pede por
     # FLAG explícita `--so-chapeu`, nunca por inferência. Default serve abertura: esquecer
     # a flag falha para o lado seguro (nunca abre vazio), honrando o contrato acima.
-    servidas, avisos = [], []
+    servidas, avisos = [], [
+        "deprecado: sucessor sessao abrir + expediente montar (arq:0110 §11), remoção após 14 dias",
+    ]
     if (m["idade_h"] or 0) > IDADE_MORADA_AVISO_H:
         avisos.append(
             f"morada publicada ha {m['idade_h']}h (ref {m['sha']}): a abertura servida "
@@ -939,6 +941,7 @@ def monta(cadeira, atualizar, pergunta=None, forcado_chapeu=None, so_chapeu=Fals
 
 
 def imprime_texto(pac):
+    print("deprecado: sucessor sessao abrir + expediente montar (arq:0110 §11), remoção após 14 dias")
     if "erro" in pac:
         print(f"{pac['erro']}" + (f" (procurado: {pac['procurado']})" if pac.get('procurado') else ""), file=sys.stderr)
         print("cadeiras: " + " ".join(pac["cadeiras_validas"]), file=sys.stderr)
