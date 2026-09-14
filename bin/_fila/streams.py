@@ -2,8 +2,19 @@
 # fila — caixa de mensagens entre personas da PlataFirma, sobre a malha msg (Valkey/Streams).
 # capacidade: mensagem
 # dono: ia
+# componente: harness
 # use para: caixa, carta, recado, handoff, 'o que chegou', mandar para outra cadeira
-# atos: status, ler, enviar, tipos
+# atos: status (leitura, mensagem) · ler (leitura, mensagem) · enviar (escrita, mensagem) · tipos (leitura, mensagem)
+# forma: status,tipos=lista · ler=texto · enviar=objeto
+# cauda: nao
+# classe: B
+# consome: valkey@streams (protocolo redis — sem OpenAPI)
+# ambiente: FILA_REDIS_HOST[=127.0.0.1] · FILA_REDIS_PORT[=6379] · PF_RAIZ[=~/AI] (arvore abertura/) · PF_CADEIRA (obrigatoria em enviar e em ler/status sem persona; porta) · PF_SESSAO (porta, so log)
+# depende: modulo redis no venv; arvore abertura/<cadeira>/persona.md (fonte de destinatario); rede ao loopback da malha
+# escreve: malha msg — XADD na caixa do destinatario (enviar); XACK do ponteiro do grupo (ler quente); nada em status/tipos/ler frio
+# substitui: redis-cli XADD/XREADGROUP/XRANGE na caixa; o "cola a mensagem aqui" que a conduta do dono proibe
+# conforme: parcial (spec_fila §6)
+# spec: platafirma-arquitetura/docs/spec_fila.md
 #
 # Substrato: componente msg do motor (arq:0018, arq:0036). Stream por caixa,
 # "caixa:<persona>", com consumer group unico "cadeira" — a cadeira dona e o unico
