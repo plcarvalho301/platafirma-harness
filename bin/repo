@@ -1012,7 +1012,29 @@ ato_pr_ver() {
   case "$num" in *[!0-9]*) morre "numero de PR invalido: '$num'" 2 ;; esac
   tem_gh
   c="$(clone_de "$nome")" || exit $?
-  (cd "$c" && env PATH="$PATH_FORGE" "$GH" pr view "$num") || morre "gh pr view falhou" 3
+  # `gh pr view <num>` sem --json puxa TODOS os campos, inclusive projectCards, que o
+  # forge deprecou (Projects classic) e o GraphQL agora recusa — exit 3 sobre um PR que
+  # existe. Pedindo so os campos usados, o campo morto nao entra na query. Campos e
+  # template cobrem o que um 'ver' precisa; para o resto ha --json cru ou o proprio gh.
+  local campos="number,title,state,author,headRefName,baseRefName,url,isDraft,mergeable,body"
+  local tmpl='#{{.number}} {{.title}}  [{{.state}}]{{if .isDraft}} (rascunho){{end}}
+  autor : {{.author.login}}
+  ramo  : {{.headRefName}} -> {{.baseRefName}}
+  merge : {{.mergeable}}
+  url   : {{.url}}
+
+{{.body}}
+'
+  # --template formata legivel; se o template falhar por qualquer motivo, cai para JSON
+  # cru (que nunca falha de formatacao) em vez de derrubar o pr-ver. So um exit 3 real
+  # (PR inexistente, forge fora) chega no morre.
+  if (cd "$c" && env PATH="$PATH_FORGE" "$GH" pr view "$num" --json "$campos" --template "$tmpl" 2>/dev/null); then
+    :
+  elif (cd "$c" && env PATH="$PATH_FORGE" "$GH" pr view "$num" --json "$campos"); then
+    :
+  else
+    morre "gh pr view falhou" 3
+  fi
 }
 
 ato_pr_diff() {
