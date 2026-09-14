@@ -3,19 +3,19 @@
 # capacidade: organizacao
 # dono: gestao-estrategica
 # classe: B
-# use para: ler persona/chapeu/conduta (o que o expediente serve), escrever/editar persona, designar, afastar, desligar, foto/filme da cadeira
-# atos: ler, conduta, abrir, salvar, conferir, prover, designar, afastar, dispensar, desligar, remover, reverter, foto, filme, idade
-# folhas: ler|conduta -> organizacao/leitura (serve o expediente) · abrir|salvar|conferir -> organizacao/redacao ·
-#         prover|designar|dispensar|remover|afastar|reverter|desligar|foto|filme -> organizacao/vinculo (ledger)
+# use para: ler persona/chapeu/conduta/foto (o que o expediente serve), escrever/editar persona, designar, afastar, desligar, filme da cadeira
+# atos: ler, conduta, foto, abrir, salvar, conferir, prover, designar, afastar, dispensar, desligar, remover, reverter, filme, idade
+# folhas: ler|conduta|foto -> organizacao/leitura (serve o expediente) · abrir|salvar|conferir -> organizacao/redacao ·
+#         prover|designar|dispensar|remover|afastar|reverter|desligar|filme -> organizacao/vinculo (ledger)
 # ambiente: PF_ABERTURA_DIR[=~/AI/var/abertura-publicada] (leitura, arq:0097) · PERSONA_REPO[=~/AI/platafirma-harness] (escrita)
-# depende: morada publicada (ler, conduta); git + origin (abrir, salvar)
+# depende: morada publicada (ler, conduta, foto); git + origin (abrir, salvar)
 # escreve: abertura/ e registro/eventos-org.jsonl do clone (salvar); nada em ler|conduta|foto|filme
 #
-# LEITURA E DA MORADA PUBLICADA, nunca do clone (arq:0097): `ler` e `conduta` servem a
-# arvore imutavel sob $PF_ABERTURA_DIR/current/abertura — e o que o expediente injeta
-# (spec_expediente §7: persona, chapeu, conduta), sem open() de caminho composto no
-# montador. A sincronizacao mora do lado da ESCRITA: pull antes, confere, commit e push
-# depois. So toca abertura/ e o ledger — mudanca fora deles aborta o salvar.
+# LEITURA E DA MORADA PUBLICADA, nunca do clone (arq:0097): `ler`, `conduta` e `foto`
+# servem a arvore imutavel sob $PF_ABERTURA_DIR/current/abertura — e o que o expediente
+# injeta (spec_expediente §7: persona, chapeu, conduta, alias-cadeiras), sem open() de caminho
+# composto no montador. A sincronizacao mora do lado da ESCRITA: pull antes, confere, commit
+# e push depois. So toca abertura/ e o ledger — mudanca fora deles aborta o salvar.
 # Ausencia se declara e ensina: cadeira fora da arvore lista as validas (exit 1),
 # chapeu fora do vocabulario lista os da cadeira (exit 1), morada nao publicada exit 3.
 set -euo pipefail
@@ -34,6 +34,7 @@ uso:
   persona ler <cadeira>                 persona.md da cadeira, cru
   persona ler <cadeira> --chapeu <slug> chapeu.md + ferramental.md do chapeu, crus
   persona conduta                       dono.md — a conduta do dono, igual em toda cadeira
+  persona foto [--json]                 vocabulário de cadeiras e aliases da morada publicada
 
   redacao, no clone:
   persona abrir              pull --ff-only antes de editar; diz o sha e a idade
@@ -49,7 +50,6 @@ uso:
   persona afastar <cadeira> --gatilho "<cond>"     suspende; gatilho é obrigatório
   persona reverter <cadeira>                       reabre a suspensa
   persona desligar <cadeira> --motivo "<txt>"      encerra
-  persona foto                                     estado atual, por replay
   persona filme [cadeira]                          a série datada
   Comuns: --em AAAA-MM-DD (data do fato) · --nota "<txt>" · --autor <quem>
 
@@ -135,9 +135,98 @@ conduta() {
   cat "$ARVORE/dono.md"
 }
 
+foto() {
+  exige_morada
+  python3 - "$ARVORE" "$@" <<'PY'
+# Transição declarada no ato: quando `acervo resolver` (feature #3032, dados)
+# existir, `foto` o consome e a leitura de aliases.json sai.
+import json, os, pathlib, sys
+
+arvore = pathlib.Path(sys.argv[1])
+como_json = False
+
+for arg in sys.argv[2:]:
+    if arg == "--json":
+        como_json = True
+    else:
+        print(f"persona foto: argumento desconhecido '{arg}'", file=sys.stderr)
+        sys.exit(2)
+
+# cadeira viva = diretório com persona.md (arq:0073 §1); chapéus = subdirs com chapeu.md
+vivas = {}
+for p in sorted(arvore.iterdir()):
+    if p.is_dir() and (p / "persona.md").is_file():
+        slug = p.name
+        chapeus = sorted([
+            c.name for c in p.iterdir()
+            if c.is_dir() and (c / "chapeu.md").is_file()
+        ])
+        vivas[slug] = chapeus
+
+# alias = aliases.json da árvore publicada.
+# exit: 0 · 3 morada não publicada · 1 aliases.json ilegível (declara e lista as cadeiras sem alias mesmo assim — degrada, não trava).
+aliases_path = arvore / "aliases.json"
+aliases_map = {}
+degra_exit = 0
+
+try:
+    if not aliases_path.is_file():
+        raise FileNotFoundError(f"{aliases_path} nao existe")
+    with open(aliases_path, "r", encoding="utf-8") as f:
+        aliases_map = json.load(f)
+    if not isinstance(aliases_map, dict):
+        raise ValueError("aliases.json nao e um mapa JSON")
+except Exception as e:
+    print(f"persona foto: aliases.json ausente ou ilegivel ({e}) — listando cadeiras sem alias", file=sys.stderr)
+    degra_exit = 1
+    aliases_map = {}
+
+if como_json:
+    saida = {}
+    for slug in sorted(vivas.keys()):
+        alias_val = aliases_map.get(slug) if degra_exit == 0 else None
+        if not isinstance(alias_val, str) or not alias_val.strip():
+            alias_val = None
+        else:
+            alias_val = alias_val.strip()
+        saida[slug] = {
+            "alias": alias_val,
+            "chapeus": vivas[slug],
+        }
+    print(json.dumps(saida, ensure_ascii=False))
+    sys.exit(degra_exit)
+
+# Formato texto: uma linha por cadeira, ordenada pelo alias: `Nome Humano -> slug`;
+# cadeira viva sem alias (aliases.json com null, ex. fabrica) sai `(sem alias) -> fabrica`;
+# cadeira viva ausente do mapa sai com nota `(sem alias, omitido)`.
+linhas = []
+for slug in vivas:
+    if degra_exit != 0:
+        alias_txt = "(sem alias)"
+    elif slug in aliases_map:
+        val = aliases_map[slug]
+        if val is not None and isinstance(val, str) and val.strip():
+            alias_txt = val.strip()
+        else:
+            alias_txt = "(sem alias)"
+    else:
+        alias_txt = "(sem alias, omitido)"
+    linhas.append((alias_txt, slug))
+
+# ordenada pelo alias
+linhas.sort(key=lambda item: (item[0], item[1]))
+
+for alias_txt, slug in linhas:
+    print(f"{alias_txt} -> {slug}")
+
+sys.exit(degra_exit)
+PY
+}
+
 case "${1:-}" in
   ler)     shift; ler "$@"; exit $? ;;
   conduta) conduta; exit $? ;;
+  foto)    shift; foto "$@"; exit $? ;;
 esac
 
 cd "$REPO"
@@ -283,7 +372,7 @@ case "${1:-}" in
     echo "          claudinho-arquiteto qualifica; nao e gate e nao bloqueia este ato." >&2
     exec python3 "$REPO/bin/_persona/org.py" "$@"
     ;;
-  afastar|reverter|desligar|foto|filme)
+  afastar|reverter|desligar|filme)
     exec python3 "$REPO/bin/_persona/org.py" "$@"
     ;;
   *)
