@@ -19,10 +19,10 @@ from __future__ import annotations
 
 import json
 import os
-from pathlib import Path
 import stat
 import subprocess
 import sys
+from pathlib import Path
 
 import pytest
 
@@ -228,7 +228,7 @@ def test_slug_com_prefixo_exit_3(raiz_hermetica):
     for cad_invalida in ("claudinho-ia", "claudinha-fabrica", "ia com espaco", "ia/chapeu"):
         proc = _run_expediente(["montar", "--json"], raiz_hermetica, env_extra={"PF_CADEIRA": cad_invalida})
         assert proc.returncode == 3
-        d = json.loads(proc_json := proc.stdout)
+        d = json.loads(proc.stdout)
         assert "sem cadeira: a porta não injetou" in d["erro"]
 
 

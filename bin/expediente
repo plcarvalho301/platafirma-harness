@@ -27,20 +27,19 @@ from __future__ import annotations
 
 import json
 import os
-from pathlib import Path
 import re
 import shlex
-import shutil
 import subprocess
 import sys
 import time
+from pathlib import Path
 
 _REPO_REAL = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(_REPO_REAL / "lib"))
 sys.path.insert(0, str(_REPO_REAL / "comum"))
 
-from uso import Uso, erro
 from hash_servido import sha_servido
+from uso import Uso
 
 # Catálogo de peças (spec_expediente §7, transição: declarado no verbo até dados averbar no acervo)
 CATALOGO = [
@@ -172,6 +171,7 @@ def executa_verbo(cmd_linha: str | list[str], cadeira: str, timeout: int = 30) -
             text=True,
             timeout=timeout,
             env=env_verbo(cadeira),
+            check=False,
         )
         return p.returncode, p.stdout or "", p.stderr or ""
     except (OSError, subprocess.SubprocessError) as e:
@@ -211,6 +211,7 @@ def executa_roteador(pergunta: str, cadeira: str) -> tuple[dict, str | None, int
             text=True,
             timeout=15,
             env=env_verbo(cadeira),
+            check=False,
         )
         if p.returncode == 3:
             # Conceitos do golden record mudos
@@ -244,7 +245,7 @@ def executa_roteador(pergunta: str, cadeira: str) -> tuple[dict, str | None, int
                 "acertos": {},
                 "motivo": motivo,
             }, f"roteador falhou: {motivo}", 0
-    except Exception as e:
+    except (OSError, subprocess.SubprocessError, ValueError) as e:
         return {
             "via": "fallback",
             "slug": None,
@@ -454,7 +455,7 @@ def ato_montar(chapeu_forcado: str | None = None, sem_acervo: bool = False,
         }
         aviso_rot = None
     else:
-        roteador_info, aviso_rot, rc_rot = executa_roteador(pergunta, cadeira)
+        roteador_info, aviso_rot, _rc_rot = executa_roteador(pergunta, cadeira)
 
     chapeu_slug = roteador_info.get("slug")
     avisos: list[str] = []

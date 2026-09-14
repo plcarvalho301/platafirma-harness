@@ -8,11 +8,11 @@ O binario e importado como modulo (sem sufixo .py) e `main(argv)` roda em proces
 from __future__ import annotations
 
 import importlib.util
-from importlib.machinery import SourceFileLoader
 import json
 import os
-from pathlib import Path
 import stat
+from importlib.machinery import SourceFileLoader
+from pathlib import Path
 
 import pytest
 
@@ -122,7 +122,7 @@ def _log(raiz: Path) -> str:
 
 # ------------------------------------------------------------------ uso (etapa 1)
 def test_sem_ato_e_ato_desconhecido_exit_2(amb, capsys):
-    mod, mem, _ = amb
+    mod, _mem, _ = amb
     assert mod.main([]) == 2
     assert mod.main(["dormir"]) == 2
     assert "atos: abrir ver listar encerrar longjob" in capsys.readouterr().err
@@ -161,7 +161,7 @@ def test_abrir_cadeira_desconhecida_exit_2_lista_validas(amb, capsys):
     assert mem.d == {}
 
 def test_abrir_alias_humano_e_prefixo_canonizam(amb, capsys):
-    mod, mem, _ = amb
+    mod, _mem, _ = amb
     assert mod.main(["abrir", "Elias Elefante", "--json"]) == 0
     assert _json(capsys)["cadeira"] == "ia"
     assert mod.main(["abrir", "claudinho-IA", "--json"]) == 0
@@ -205,7 +205,7 @@ def test_abrir_politica_ausente_exit_3(amb, capsys, monkeypatch):
 
 # ------------------------------------------------------------------ chave viva (etapa 5)
 def test_abrir_msgmem_ausente_exit_3_com_id_na_mensagem(amb, capsys, monkeypatch):
-    mod, mem, _ = amb
+    mod, _mem, _ = amb
     monkeypatch.setattr(mod, "_msgmem", lambda: (None, "ConnectionError"))
     assert mod.main(["abrir", "ia", "--json"]) == 3
     d = _json(capsys)
@@ -255,7 +255,7 @@ def test_reabrir_com_id_expirado_regrava_sem_recunhar(amb, capsys):
 
 # ------------------------------------------------------------------ registro duravel (etapa 6)
 def test_registro_duravel_falha_exit_0_declarado(amb, capsys, monkeypatch):
-    mod, mem, _ = amb
+    mod, _mem, _ = amb
     monkeypatch.setattr(mod, "_registra_duravel", _duravel_real(mod))
     monkeypatch.setenv("STUB_SEG_MODO", "falha")
     assert mod.main(["abrir", "ia", "--json"]) == 0
@@ -282,7 +282,7 @@ def test_gravou_e_nao_confirma_exit_5(amb, capsys):
 
 # ------------------------------------------------------------------ ver
 def test_ver_existe_nao_existe_e_uso(amb, capsys):
-    mod, mem, _ = amb
+    mod, _mem, _ = amb
     assert mod.main(["abrir", "ia", "--json"]) == 0
     sid = _json(capsys)["sessao_id"]
     assert mod.main(["ver", sid, "--json"]) == 0
@@ -294,7 +294,7 @@ def test_ver_existe_nao_existe_e_uso(amb, capsys):
     assert mod.main(["ver", "nao-uuid"]) == 2
 
 def test_ver_nao_canonizada_declara_regime(amb, capsys, monkeypatch):
-    mod, mem, _ = amb
+    mod, _mem, _ = amb
     monkeypatch.setenv("STUB_PERSONA_MODO", "muda")
     assert mod.main(["abrir", "ia", "--json"]) == 0
     sid = _json(capsys)["sessao_id"]
@@ -303,7 +303,7 @@ def test_ver_nao_canonizada_declara_regime(amb, capsys, monkeypatch):
 
 # ------------------------------------------------------------------ listar
 def test_listar_vazio_e_filtro_por_cadeira(amb, capsys):
-    mod, mem, _ = amb
+    mod, _mem, _ = amb
     assert mod.main(["listar", "--json"]) == 0
     assert _json(capsys)["motivo"] == "nenhuma sessao viva"
     assert mod.main(["abrir", "ia", "--json"]) == 0
@@ -332,7 +332,7 @@ def test_encerrar_apaga_as_tres_e_segunda_vez_exit_1(amb, capsys):
 
 # ------------------------------------------------------------------ msg-mem mudo nos atos de leitura
 def test_msgmem_mudo_exit_3_em_ver_listar_encerrar(amb, capsys, monkeypatch):
-    mod, mem, _ = amb
+    mod, _mem, _ = amb
     monkeypatch.setattr(mod, "_msgmem", lambda: (None, "ConnectionError"))
     sid = "654160f8-2e43-4478-97b7-a19e7c36bdb5"
     assert mod.main(["ver", sid]) == 3
