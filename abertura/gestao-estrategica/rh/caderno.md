@@ -318,7 +318,61 @@ chamada exata — arquivo lido por caminho composto no montador é o que produz
 volátil: vão por último, e o que custa dois giros pela mesma origem vira um ato com flag
 (`mesa caderno --chapeu`), nunca dois itens no catálogo.
 
+## Hook de efeito colateral mora em quem escreve o artefato, não em camada que infere o tipo (medido 14/09/2026)
+
+O dono quis um hook: ADR publicada tem de entrar no acervo/motor sozinha (mordeu — motor
+não achava ADR recém-lavrada). A tentação percorreu três lares errados antes do certo, e
+cada um falhava pela mesma raiz: pôr o gatilho onde ele teria de ADIVINHAR o alvo.
+
+- "flag no minuta formalizar pra pular a minuta": não há bypass e não precisa —
+  formalizar exige minuta viva; ADR-direto já é `write_file` + `release promover` à mão,
+  e isso é rito, não buraco.
+- "ato novo no release": desnecessário — o pipeline git→promover→ingerir já existe
+  (spec_release §9).
+- "emenda no release promover DE DOCUMENTAÇÃO": este o dono matou na hora, e é a lição.
+  "De documentação" me obrigava a classificar arquivo por arquivo ("isso é doc, aquilo
+  não") — o parse proibido (arq:0110). `release promover` de família de doc reingere a
+  FAMÍLIA inteira; não varre diff decidindo o que é reindexável. Foi por classificar tipo
+  que o `acervo adr` morreu antes, por usage confusa.
+
+O pouso certo: `minuta formalizar --como adr` JÁ TEM a família cravada no ato, porque foi
+ELE quem gravou o arquivo (§5 passo 1: grava em platafirma-arquitetura). A família é dado
+do ato, não descoberta. O hook mora no formalizar: ao fim, `release promover <família-que-
+ele-gravou>`. Mesmo padrão cobre ADR-direto (quem escreveu com `write_file` sabe o caminho
+e encadeia o promover à mão). Zero inferência.
+
+Princípio geral, além do minuta: o gatilho de "esse artefato entrou no canônico, reindexa"
+pertence ao verbo que ESCREVEU o artefato — ele conhece família e caminho como dado.
+Camada abaixo que receba só "um push aconteceu" tem de reconstruir o quê-e-onde
+adivinhando, e adivinhar tipo de arquivo é a violação. Regra de método pra mim: quando eu
+começar a redigir "de documentação / do tipo X / o que mudou", conferir se estou
+classificando em vez de ler dado que o ato já carrega.
+
+Corolário de segurança (a trava que escrevi na emenda): efeito colateral que roda a cada
+escrita amplifica bug latente da camada de baixo. Reindex a cada formalização inclui ADR
+REVISADA; se `acervo ingerir casa` não faz upsert vetorial (delete-then-insert por
+`(fonte,sha)`), os chunks da versão velha ficam órfãos e `motor buscar` devolve trecho que
+não existe mais — pior que não achar. Hook novo nasce INERTE com a dependência nomeada,
+não ligado na esperança.
+
 ## Diário de bordo
+
+14/09/2026 (tarde) — `conferir superficie` e `conferir verbo` respondem mas estão
+DEPRECADOS (forma conforme: `release conferir <classe>`, spec_release §8); usei a
+deprecada 2x por tateio. `conferir existe` não aceita tipo `spec` (só
+cadeira|verbo|card|arquivo|mesa). `acervo listar --sobre` não existe (alvos:
+conceitos|ferramental|topologia|obra). `fila enviar --tipo pergunta` recusa (tipos:
+decisao|demanda|handoff|minuta|pedido|resposta) e `--assunto` é obrigatório junto de
+`--tipo` — duas recusas antes de acertar `pedido`+`assunto`. `mesa caderno <chapeu>` com
+stdin IGNORA o stdin: é LEITURA PURA, não escreve caderno — o delta de caderno se grava
+por `write_file` em platafirma-harness/abertura/<cadeira>/<chapeu>/caderno.md + `persona
+salvar`, não por ato de mesa. `run_command` recusa `find` (metacaractere/só-verbo);
+caminho de arquivo se acha por `repo listar <repo> <prefixo>`. `persona abrir` deu exit
+128 "can't be fast-forwarded" (clone do harness com commit local 13:18 não empurrado).
+Contorno encontrado NA DATA 14/09: gravei o caderno direto por `write_file` no clone do
+harness (o delta também está em var/tmp/<ordem>/caderno-delta.md); NAO rodei `persona
+salvar` por causa da divergência — o commit/push do caderno fica pendente, relatado ao
+dono, pra não mexer no que diverge no clone alheio.
 
 13/09/2026 — `lint rodar platafirma-harness bin/persona` aplicou ruff a script BASH e
 cuspiu 169 KB de invalid-syntax (o verbo detecta stack do repo, não do arquivo); `lint
@@ -357,3 +411,30 @@ de sempre com nome novo — a porta passa a executar o que o CLONE tem, não o q
 qualquer resolução de binário/arquivo não é "existe em algum lugar do disco?", é "está
 no caminho que o release publica?" — os dois fallbacks a mais SEMPRE re-introduzem a
 bancada como fonte, mesmo escritos como "só se faltar".
+
+## Seção de card tem leitor, e o leitor decide se é redundância (medido 14/09/2026)
+
+Ao revisar o molde de story, li `Referencial`, `Raio de ataque` e `Comportamento
+esperado` como sobreposição de `Negócio`, `Onde` e `Aceite` e propus cortar. O
+referente estava errado: as três são instrução para o agente que executa o card sem
+contexto (lista de decisões a consultar, lista literal de arquivos a mexer, caminho feliz
+técnico), não leitura de humano — e mediram melhora na execução. Regra: antes de
+julgar duas seções como "a mesma coisa", perguntar a quem cada uma se destina; seção
+para humano e seção para agente podem dizer o mesmo fato em formas diferentes e não
+são redundância — são dois contratos. Vale para molde de card, para spec (§10 da
+arq:0110 tem dois leitores) e para qualquer artefato que a IA consome.
+
+14/09/2026 (tarde) — `repo pr-merge platafirma-harness 25` saiu 3 ("'main' is already
+used by worktree platafirma-harness-caderno") mas o merge remoto tinha acontecido;
+`repo pr-ver 25` saiu 3 por GraphQL de Projects classic. Contorno encontrado NA DATA
+14/09 foi `repo pr-listar --todos` (mostra MERGED) e `repo atualizar
+platafirma-harness-caderno` para trazer o main. O clone `platafirma-harness` estava no
+ramo de outra cadeira (ia, 3057) com arquivo sujo dela: `repo ramo` de origin/main,
+commit, push, PR, `repo git checkout` de volta ao ramo dela — sem tocar o sujo.
+`write_file` recusa `platafirma-harness-caderno/` (fora de morada): caderno se escreve
+no clone `platafirma-harness/`, em ramo próprio, e sobe por PR. `acervo listar casa
+ferramental --sobre tarefas` saiu 2 (`--sobre` não existe em `listar ferramental`; a
+descrição da tool está à frente da usage) — contorno: `acervo listar ferramental` sem
+filtro. `metrica casos` recusado pela porta (`sem verbo`): o golden record lista
+`metrica`, o PATH não serve — nenhum contorno; medição de uso do `tarefas` ficou para a
+story de conformação.
