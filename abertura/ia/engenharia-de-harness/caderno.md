@@ -410,3 +410,46 @@ no diário de 07/09) vale também para árvore suja de terceiro, não só para r
 `encerrar` no manifesto que a porta serve. — contorno encontrado NA DATA 12/09/2026 foi
 `descansar fita`; a cura (ordem do dono 12/09: "esse é o vocabulário que eu uso, tem que
 ser alias mesmo") é servir `encerrar` como apelido no manifesto — item 4 do #3045.
+
+14/09/2026 — `repo commitar platafirma-harness -m ...` recusou (exit 4, "arquivo sujo de
+terceiro na árvore: agente/settings.json"); com caminhos nomeados, recusou de novo (exit 1)
+porque um dos caminhos era arquivo já removido por `git rm` ("não existe na bancada"). —
+contorno encontrado NA DATA 14/09/2026 foi `repo git <repo> add <caminhos>` + `repo git
+<repo> commit -q -m` em dois itens de lote; para deleção/renome, `repo git rm` e `repo git
+mv` antes. Clone compartilhado com fita paralela (Leonardo editando bin/acesso ao mesmo
+tempo): nunca `add -A`.
+
+14/09/2026 — `write_file trecho` recusou ("antes ocorre 0 vezes") num trecho copiado de
+`read_file` que atravessava duas funções: a poda `lavado (branco)` tira linhas em branco do
+que a fita vê, e o `antes` não casa o arquivo real. — contorno encontrado NA DATA
+14/09/2026 foi anchor curto dentro de UMA função, sem linha em branco no meio.
+
+14/09/2026 — validar binário do ramo antes de promover: `conferir verbo X` mede só o servido
+(prod) e diz "não é verbo" para verbo novo; `run_command` não roda binário do clone (só
+verbo servido). — contorno encontrado NA DATA 14/09/2026 foi `release conferir verbo X --ref
+<ramo>` (materializa a rev em /tmp e mede lá) + `teste rodar <repo> testes/test_X.py` com
+stubs em PF_RAIZ/bin (o teste importa o binário sem sufixo por `SourceFileLoader`).
+
+14/09/2026 — `mesa item <chapeu>` sem `--ato/--alvo` sai exit 2 ("required: --ato, --alvo");
+`mesa caderno --ajuda` mostra `[slot]` positional (o `--chapeu` está só no ramo
+fabrica/3053, não no servido). — contorno encontrado NA DATA 14/09/2026 foi `mesa item
+<chapeu> --ato "<texto>" --alvo "<alvo>"`.
+
+## conhecimento curado — delta 14/09/2026 (Onda 2, partição arranque × expediente)
+
+- Verbo de classe A (arranque) e verbo de classe B (expediente) não dividem um exit: o que
+  trava (sujeito, política, chave viva) sai ≠ 0 com causa e cura; o que degrada (registro
+  durável, peça do pacote, organização muda) sai 0 declarado. É a razão da partição, e a
+  régua para decidir onde uma falha nova cai.
+- Etapa que não pode falhar na transição (catálogo dentro do binário) se DECLARA como
+  transição — não se simula por variável de ambiente para "cobrir a etapa" no teste. Toda
+  variável lida tem origem nomeada (superfície | verbo | fluxo OAuth); variável de teste é
+  injeção não nomeada.
+- Texto livre (a pergunta do dono) entra em argv pronto ou por stdin; nunca por `shlex.split`
+  de uma linha montada — aspas na pergunta partem o comando calado.
+- Teste hermético de verbo que chama verbos: stubs `sh` em `<raiz>/bin` + PATH, msg-mem fake
+  trocado no módulo, registro em banco trocado no módulo exceto no caso que mede a falha
+  dele (que para antes do banco, no verbo de segredo). Um caso por etapa do §4, cada um
+  provando que NÃO cunhou quando não devia.
+- Contrato que a porta lê é o `--json` do §3, não o texto: quem consome (`ops-server`) acha
+  o id e relê a chave por ele. Mudar chave de saída é mudar contrato da porta.

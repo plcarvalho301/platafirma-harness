@@ -303,6 +303,48 @@ regras:
     acoes: [monta_sessao]
     sobre: ["sessao:fabrica"]
 
+  # --- Onda 2 (card #3053): o arranque conforme — `sessao abrir` pergunta ao PDP ---
+  # spec_acesso §7 / spec_sessao §0. Tipo `sessao`, dominio `plataforma` (carimbo do
+  # tipo); acao submetida `sessao_<ato>`; recurso `sessao:<cadeira>` (abrir, listar
+  # --cadeira) e `sessao:<cadeira>/<uuid>` (ver, encerrar). A cadeira e RECURSO, nunca
+  # eixo do sujeito: quem senta onde e regra de matriz, e o PEP projeta o sujeito so
+  # do token. `operador` e `reino` ja alcancam `sessao:*` pelas regras de alcance
+  # amplo — o dono senta em toda cadeira. `inferencia-escopada` nao recebe regra.
+  #
+  # `fornecedor-monta-a-propria-sessao` (acima: tipo documento, acao monta_sessao)
+  # FICA ate `monta-sessao` morrer (deprecado -> sucessor, arq:0110 §11) e sai no
+  # merge que o retira.
+  #
+  # NAO HA negativa `fornecedor-nao-encerra-sessao-alheia` de proposito: negativa vence
+  # permissao, e `sobre: ["*"]` negaria tambem `sessao:fabrica/*`, a propria — o PDP nao
+  # expressa "todas menos a minha". Sessao alheia e negada pelo default, e a medida e
+  # a ancora, nao a leitura: `acesso decidir --papel fornecedor --dominio plataforma
+  # --tipo sessao --acao sessao_encerrar --recurso sessao:ia/x` -> NEGADO regra=default.
+  #
+  # Medido em 13/09/2026 ANTES desta regra: sessao_abrir sobre sessao:fabrica ->
+  # NEGADO regra=default (exit 3 na forma vigente). INERTE ate `bin/sessao` submeter
+  # `sessao_abrir` — mesmo regime das regras de verbo operacional acima.
+  - id: fornecedor-abre-a-propria-sessao
+    efeito: permite
+    motivo: "a fabrica abre a fita na propria cadeira, e em nenhuma outra · spec_acesso §7, card #3053 · concedido por seguranca em 13/09/2026 · vence 2026-12-13"
+    quando: {papel: fornecedor, dominio: plataforma, tipo: sessao}
+    acoes: [sessao_abrir, sessao_ver, sessao_listar, sessao_encerrar]
+    sobre: ["sessao:fabrica", "sessao:fabrica/*"]
+
+  # Expediente (spec_expediente §5): os tres atos sao (leitura, expediente); o nome do
+  # tipo e de seguranca (14/09): `expediente`, dominio `plataforma`, recurso
+  # `expediente:<cadeira>` — o pacote e DA cadeira, como a sessao e da cadeira, e a
+  # cadeira vem de PF_CADEIRA (porta), nunca de argumento. Fornecedor monta so o
+  # proprio; `operador` e `reino` alcancam todo `expediente:*` pelo alcance amplo.
+  # INERTE ate a porta submeter `expediente_<ato>` sobre esse id (hoje submete
+  # run_command/comando). Pedido: fila 20260914T000405-gestao-estrategica.
+  - id: fornecedor-monta-o-proprio-expediente
+    efeito: permite
+    motivo: "o pacote de abertura da fabrica e da propria cadeira, e de nenhuma outra · spec_expediente §5, card #3053 · concedido por seguranca em 14/09/2026 · vence 2026-12-13"
+    quando: {papel: fornecedor, dominio: plataforma, tipo: expediente}
+    acoes: [expediente_montar, expediente_rotear, expediente_catalogo]
+    sobre: ["expediente:fabrica"]
+
   # `cat *` ja e permitido em fornecedor-le-repo, e `cat > arquivo` escreve. Negar
   # write_file e permitir cat seria teatro: a regra nomeia o alcance de verdade, que
   # sao os clones de trabalho, e deixa o resto ao default.

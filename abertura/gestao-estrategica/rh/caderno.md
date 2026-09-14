@@ -304,7 +304,32 @@ Corolário para desenho de persona: postura "olho pelo risco" sem a obrigação 
 produz o casco grosso que a própria persona nomeia como patologia. A obrigação mora no
 `dono.md`, não em cada persona — vale para toda cadeira.
 
+## Régua de admissão de peça no pacote de abertura
+
+Uma peça entra no pacote só se passa nos dois: precisa estar na janela ANTES da
+primeira fala do dono, E nenhum verbo já a serve por descritor. O golden record dos
+verbos chega pela porta em toda superfície (`tools/list`), então regra de ferramenta,
+armadilha de verbo e mapa necessidade→verbo são do descritor do verbo, nunca de peça:
+quando o `oficio` foi medido, três das cinco armadilhas citavam ferramenta que não
+existia mais — peça-índice envelhece calada, descritor não. Corolários: peça de gatilho
+`ato` (caixa, carteira) é índice duplicado, não pacote; e uma origem por peça é VERBO com
+chamada exata — arquivo lido por caminho composto no montador é o que produz
+`caderno-head` indisponível sem ninguém saber por quê. Cadernos são a maior peça e a mais
+volátil: vão por último, e o que custa dois giros pela mesma origem vira um ato com flag
+(`mesa caderno --chapeu`), nunca dois itens no catálogo.
+
 ## Diário de bordo
+
+13/09/2026 — `lint rodar platafirma-harness bin/persona` aplicou ruff a script BASH e
+cuspiu 169 KB de invalid-syntax (o verbo detecta stack do repo, não do arquivo); `lint
+rodar <repo>` sem alvo despeja o repo inteiro e estoura o teto do lote. `teste rodar
+<repo> -k mesa` recusou ("alvo nao pode comecar com '-'"). A porta só executa o SERVIDO:
+bin editado na bancada não tem smoke por `run_command` — só o pre-push (baseline de
+contrato) mede. `tarefas` não tem ato de editar corpo de card (correção de planilha foi
+por comentário). `descobrir abertura-de-sessao` voltou `cobertura: vazia` para duas specs
+que a spec_sessao cita em "Vale junto com". Contorno encontrado NA DATA 13/09 foi: ler o
+bash a olho por `read_file` com offset, confiar no pre-push, e declarar o smoke pendente
+no card; para o lint, nenhum — encaminhado a ti (lint por tipo de arquivo).
 
 11/09/2026 — `publicar-abertura` e `conferir skill` chamavam `git` nu e morriam sob o shim
 da porta (classe de c5d2321); curei o primeiro (357675e), o segundo foi a TI. `repo
@@ -316,3 +341,19 @@ track origin/main" — contorno: `repo git <clone> fetch origin main` + `merge -
 argparse do verbo só aceita o chapéu como posicional). Contorno encontrado NA DATA
 08/09 foi passar o chapéu em args=["rh"] e o texto pelo campo stdin — rodou; `mesa
 anota` lê o corpo do slot por stdin, não por argumento.
+
+14/09/2026 — `ops-server/test_*.py` não roda em `teste rodar platafirma-harness` (venv-
+harness sem o módulo `mcp`, que `server.py` importa) — a suite "verde" que o `teste`
+mede nunca cobre a porta. Encaminhado a ti (venv de teste da porta separado do da
+bancada). Nenhum contorno meu: validei o diff da porta por leitura (`repo git ... show`)
+contra a spec, sem rodar o teste dela.
+
+## Servido é caminho, não existência (medido 14/09/2026)
+
+Revisando `_acha_bin` da porta (fabrica, #3053): a função caía em `PF_HARNESS/bin` e no
+`PATH` quando o binário não estava em `RAIZ/bin`. Parece resiliência; é o mesmo defeito
+de sempre com nome novo — a porta passa a executar o que o CLONE tem, não o que o
+`release` publicou (arq:0097, #3029: a porta só executa o SERVIDO). O teste certo pra
+qualquer resolução de binário/arquivo não é "existe em algum lugar do disco?", é "está
+no caminho que o release publica?" — os dois fallbacks a mais SEMPRE re-introduzem a
+bancada como fonte, mesmo escritos como "só se faltar".

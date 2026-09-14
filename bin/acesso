@@ -1,100 +1,144 @@
 #!/usr/bin/env bash
-# acesso — opera o controle de acesso: concede, revoga, consulta e decide.
+# acesso — opera o controle de acesso: decide, consulta, concede, revoga e desliga
 # capacidade: acesso
-# componente: identidade-db (concessao.*), politica-acesso (PDP)
 # dono: claudinho-seguranca
-# use para: conceder/revogar acesso, quem pode entrar, órfãos, política (PDP)
-# atos: listar, conceder, revogar, decidir, desligar, orfaos, politica
-#
-# subcomando        capacidade   o que faz
-#   conceder        acesso       grava ato de concessao ou veto (append-only)
-#   revogar         acesso       grava ato de revogacao apontando o ato revogado
-#   listar          acesso       le concessao.vigente — o que vale AGORA
-#   historico       acesso       le concessao.ato — o que valeu, inclusive revogado
-#   vocabulario     acesso       valores validos dos tres eixos
-#   politica        acesso       confere e importa o PAP (politica.yaml)
-#   decidir         acesso       avalia um caso contra a politica, sem tocar em banco
-#   desligar        acesso       encadeia os quatro atos da revogacao (seg:0011 item 7)
-#   orfaos          acesso       mede residuo: concessao vencida, regra sem titular,
-#                                sujeito sem alvo de desligamento, conta sem sujeito
+# classe: A (proposta)
+# forma: objeto (decidir) · lista (listar, historico, vocabulario, orfaos) · predicado (politica, conceder, revogar, desligar)
+# use para: saber se posso fazer ação sobre recurso (decidir), saber o que vale ou valeu para sujeito (listar, historico), vocabulário de eixos (vocabulario), conferir e importar PAP servido (politica), conceder ou revogar acesso com fundamento (conceder, revogar), desligar sujeito em quatro atos (desligar), medir resíduos e concessões vencidas (orfaos)
+# atos: decidir (leitura, concessao), listar (leitura, concessao), historico (leitura, concessao), vocabulario (leitura, concessao), politica (leitura, politica), importar (escrita, concessao), conceder (escrita, concessao), revogar (escrita, concessao), desligar (escrita, sujeito), orfaos (leitura, concessao)
+# escreve: concessao.ato (conceder, revogar, desligar), concessao.eixo_valor (politica importar), realm e tabela de sujeitos da BANCADA (desligar --executar); nada nos demais
+# consome:
+# ambiente: PF_SUJEITO (fluxo OAuth; obrigatória em conceder, revogar, desligar; default em decidir), PF_SESSAO (verbo sessao abrir, só log de operação), ACESSO_DB_CONTAINER[=platafirma-core-identidade-db-1], ACESSO_DB_USER[=identidade], ACESSO_DB_NAME[=identidade] e ACESSO_POLITICA_DIR[=/opt/platafirma/current/politica-acesso] (constantes com default)
+# depende: docker, python3+pdp.py do plano servido
+# substitui: psql -d identidade, kcadm.sh para desligamento, leitura manual de politica.yaml
+# conforme: parcial
+# falta: escrita em concessao.* por API da entidade concessao (aguarda API); rota estatica claudinho (aguarda extincao); politica-sync vs release promover (aguarda decisao do dono); tabela tipo->dominio em cmd_decidir (aguarda vocabulario de tipos de recurso, dados); id de recurso em duas formas (prefixado e nu) enquanto o PAP misturar as duas
 #
 # SEPARADO DE `seg` DE PROPOSITO (decisao do dono, 13/08/2026): `seg` e o toolkit da
 # cadeira de seguranca; `acesso` e chamado por qualquer um que precise verificar o que
 # pode. Ferramenta de verificacao aberta nao mora em toolkit de time.
 #
-# NAO E GATE. Enquanto o ops-server nao consultar o PDP, este verbo registra e explica
-# o acesso; quem executa segue sem consultar ninguem. O enxerto no ops-server esta
-# declarado em seg:0008 como pendente de gate de claudinho-TI.
-set -euo pipefail
+# SEM INTERPOLACAO DE ENTRADA: chave, uuid e argumento de decidir entram no psql por
+# `-v` e no python por ambiente. Texto vindo de PF_SUJEITO ou de argumento nunca
+# vira codigo (regressao corrigida por seguranca em 14/09/2026).
+set -uo pipefail
 
-RAIZ="${HOME}/AI/platafirma-harness/politica-acesso"
-POLITICA="${ACESSO_POLITICA:-${RAIZ}/politica.yaml}"
+POLITICA_DIR="${ACESSO_POLITICA_DIR:-/opt/platafirma/current/politica-acesso}"
+POLITICA="${POLITICA_DIR}/politica.yaml"
+SUJEITOS="${POLITICA_DIR}/sujeitos.yaml"
 DB_CONTAINER="${ACESSO_DB_CONTAINER:-platafirma-core-identidade-db-1}"
 DB_USER="${ACESSO_DB_USER:-identidade}"
 DB_NAME="${ACESSO_DB_NAME:-identidade}"
+UUID_RE='^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$'
 
-morre() { printf 'acesso: %s\n' "$*" >&2; exit 1; }
+morre() {
+  printf 'acesso: %s\n' "$*" >&2
+  exit 1
+}
 
-psql_() { docker exec -i "$DB_CONTAINER" psql -U "$DB_USER" -d "$DB_NAME" "$@"; }
+psql_() {
+  local rc=0 out
+  out="$(docker exec -i "$DB_CONTAINER" psql -U "$DB_USER" -d "$DB_NAME" "$@" 2>&1)" || rc=$?
+  if [ "$rc" -ne 0 ]; then
+    printf 'acesso: registro fora do ar: contêiner %s não responde\n' "$DB_CONTAINER" >&2
+    printf '%s\n' "$out" >&2
+    exit 3
+  fi
+  printf '%s\n' "$out"
+}
 
-# Resolve contracao (G48UFN) ou uuid para o uuid interno. Falha se nao achar: sujeito
-# inexistente tem de parar o ato, nao virar NULL.
+# Resolve contracao (G48UFN) ou uuid para o uuid interno. Chave entra por -v.
 resolve() {
   local chave="$1" papel="$2" id
   id="$(psql_ -tAq -v k="$chave" <<'SQL'
 select id from identidade.identidade where id::text = :'k' or contracao = upper(:'k');
 SQL
-)" || morre "falha ao consultar identidade"
-  [ -n "$id" ] || morre "$papel nao encontrado: $chave"
+)" || exit 3
+  id="$(printf '%s' "$id" | tr -d '[:space:]')"
+  if [ -z "$id" ]; then
+    if [ "$papel" = "autor" ]; then
+      printf "acesso: faltou: autor (chave de sujeito: PF_SUJEITO '%s' não casa identidade — Aberto da spec_acesso: alinhamento sub do realm x identidade.identidade)\n" "$chave" >&2
+      exit 5
+    else
+      printf "acesso: sujeito não encontrado: %s\n" "$chave" >&2
+      exit 1
+    fi
+  fi
   printf '%s' "$id"
 }
 
 uso() {
-  sed -n '2,20p' "$0" | sed 's/^# \{0,1\}//'
   cat <<'FIM'
+uso:
+  acesso decidir     <acao> <recurso> [--sujeito <id>]
+                                      [--papel <p> --dominio <d> [--tema <t>] [--habilitacao <g>] [--veto <d>]]
+                                      [--sigilo <g>] [--json]
+  acesso listar      [<sujeito>] [--json]
+  acesso historico   <sujeito> [--json]
+  acesso vocabulario [<eixo>] [--json]
+  acesso politica    [conferir|importar]
+  acesso conceder    <sujeito> <eixo> <valor> --fundamento <texto> [--ate <AAAA-MM-DD>] [--veto]
+  acesso revogar     <ato-uuid> --fundamento <texto>
+  acesso desligar    <sujeito> [--executar]
+  acesso orfaos      [--json]
 
-exemplos
-  acesso conceder --sujeito G48UFN --eixo dominio --valor plataforma \
-      --fundamento "cadeira de seguranca, card #250" --por AURELI
-  acesso conceder --sujeito G48UFN --eixo tema --valor licitacoes \
-      --fundamento "designacao da portaria 14/2026" --por AURELI --ate 2026-12-31
-  acesso revogar <uuid-do-ato> --fundamento "fim da designacao" --por AURELI
+nota sobre --sujeito: aceita sub (UUID) ou username, exatamente como chaveado em sujeitos.yaml — a mesma chave que o PEP da porta usa
+nota sobre autor: em conceder/revogar, o autor é PF_SUJEITO do ambiente (--por é deprecado)
+
+exemplos:
+  acesso decidir sessao_abrir sessao:fabrica
+  acesso decidir sessao_encerrar sessao:ia/uuid --papel fornecedor --dominio plataforma
+  acesso conceder G48UFN dominio plataforma --fundamento "cadeira de seguranca, card #250"
+  acesso revogar <uuid-do-ato> --fundamento "fim da designacao"
   acesso listar G48UFN
   acesso politica conferir
-  acesso decidir --papel fornecedor --dominio plataforma --acao run_command \
-      --recurso "docker restart keycloak"
   acesso orfaos
-  acesso desligar jaiminho              # plano medido, nada executado
-  acesso desligar jaiminho --executar   # os quatro atos; o commit continua sendo seu
+  acesso desligar jaiminho
+  acesso desligar jaiminho --executar
 FIM
 }
 
 # ---------------------------------------------------------------------------
 cmd_conceder() {
   local sujeito="" eixo="" valor="" fundamento="" por="" ate="" especie="concessao"
+  if [ $# -ge 3 ] && [[ "$1" != --* ]] && [[ "$2" != --* ]] && [[ "$3" != --* ]]; then
+    sujeito="$1"; eixo="$2"; valor="$3"; shift 3
+  fi
   while [ $# -gt 0 ]; do
     case "$1" in
       --sujeito) sujeito="$2"; shift 2;;
       --eixo) eixo="$2"; shift 2;;
       --valor) valor="$2"; shift 2;;
       --fundamento) fundamento="$2"; shift 2;;
-      --por) por="$2"; shift 2;;
+      --por)
+        por="$2"
+        printf 'acesso: aviso: --por é deprecado; o autor virá de PF_SUJEITO (spec_acesso §2)\n' >&2
+        shift 2;;
       --ate) ate="$2"; shift 2;;
       --veto) especie="veto"; shift;;
-      *) morre "opcao desconhecida em conceder: $1";;
+      *)
+        printf 'acesso: opcao desconhecida em conceder: %s\n' "$1" >&2
+        exit 2;;
     esac
   done
-  [ -n "$sujeito" ] || morre "--sujeito e obrigatorio"
-  [ -n "$eixo" ] || morre "--eixo e obrigatorio (dominio|papel|tema)"
-  [ -n "$valor" ] || morre "--valor e obrigatorio"
-  [ ${#fundamento} -ge 10 ] || morre "--fundamento e obrigatorio e nao-trivial (>= 10 caracteres)"
-  # `--por` e obrigatorio por decisao do dono (13/08/2026): ter acesso a tudo nao dispensa
-  # dizer quem praticou o ato. O banco exige registrado_por; aqui nao ha default.
-  [ -n "$por" ] || morre "--por e obrigatorio: todo ato tem autor, inclusive o seu"
+  if [ -z "$sujeito" ] || [ -z "$eixo" ] || [ -z "$valor" ]; then
+    printf 'uso: acesso conceder <sujeito> <eixo> <valor> --fundamento <texto> [--ate <AAAA-MM-DD>] [--veto]\n' >&2
+    exit 2
+  fi
+  if [ -z "$fundamento" ] || [ ${#fundamento} -lt 10 ]; then
+    printf 'acesso: --fundamento é obrigatório e não-trivial (>= 10 caracteres)\n' >&2
+    exit 2
+  fi
 
-  local sid pid
-  sid="$(resolve "$sujeito" sujeito)"
-  pid="$(resolve "$por" 'autor do ato (--por)')"
+  local autor="${por:-${PF_SUJEITO:-}}"
+  if [ -z "$autor" ]; then
+    printf 'acesso: sem sujeito: PF_SUJEITO ausente do ambiente\n' >&2
+    exit 3
+  fi
+
+  local pid sid
+  pid="$(resolve "$autor" autor)" || exit $?
+  sid="$(resolve "$sujeito" sujeito)" || exit $?
 
   psql_ -v ON_ERROR_STOP=1 -v s="$sid" -v p="$pid" -v e="$eixo" -v v="$valor" \
         -v f="$fundamento" -v ate="${ate:-}" -v esp="$especie" <<'SQL'
@@ -106,24 +150,55 @@ SQL
 }
 
 cmd_revogar() {
-  local ato="${1:-}" fundamento="" por=""
-  [ -n "$ato" ] || morre "uso: acesso revogar <uuid-do-ato> --fundamento ... --por ..."
-  shift
+  local ato="" fundamento="" por=""
+  if [ $# -ge 1 ] && [[ "$1" != --* ]]; then
+    ato="$1"; shift
+  fi
   while [ $# -gt 0 ]; do
     case "$1" in
       --fundamento) fundamento="$2"; shift 2;;
-      --por) por="$2"; shift 2;;
-      *) morre "opcao desconhecida em revogar: $1";;
+      --por)
+        por="$2"
+        printf 'acesso: aviso: --por é deprecado; o autor virá de PF_SUJEITO (spec_acesso §2)\n' >&2
+        shift 2;;
+      *)
+        printf 'acesso: opcao desconhecida em revogar: %s\n' "$1" >&2
+        exit 2;;
     esac
   done
-  [ ${#fundamento} -ge 10 ] || morre "--fundamento e obrigatorio e nao-trivial (>= 10 caracteres)"
-  [ -n "$por" ] || morre "--por e obrigatorio: todo ato tem autor"
+  if [ -z "$ato" ]; then
+    printf 'uso: acesso revogar <ato-uuid> --fundamento <texto>\n' >&2
+    exit 2
+  fi
+  if ! [[ "$ato" =~ $UUID_RE ]]; then
+    printf 'acesso: <ato-uuid> não é uuid: %s\n' "$ato" >&2
+    exit 2
+  fi
+  if [ -z "$fundamento" ] || [ ${#fundamento} -lt 10 ]; then
+    printf 'acesso: --fundamento é obrigatório e não-trivial (>= 10 caracteres)\n' >&2
+    exit 2
+  fi
+
+  local autor="${por:-${PF_SUJEITO:-}}"
+  if [ -z "$autor" ]; then
+    printf 'acesso: sem sujeito: PF_SUJEITO ausente do ambiente\n' >&2
+    exit 3
+  fi
 
   local pid
-  pid="$(resolve "$por" 'autor do ato (--por)')"
+  pid="$(resolve "$autor" autor)" || exit $?
 
-  # Revogar e ACRESCENTAR: o ato original permanece, e a auditoria le os dois. O sujeito,
-  # o eixo e o valor sao copiados do ato revogado — nao se digita de novo o que ja existe.
+  local existe
+  existe="$(psql_ -tAq -v a="$ato" <<'SQL'
+select count(*) from concessao.ato where id = :'a'::uuid;
+SQL
+)" || exit 3
+  existe="$(printf '%s' "$existe" | tr -d '[:space:]')"
+  if [ "$existe" != "1" ]; then
+    printf 'acesso: ato referido não existe: %s\n' "$ato" >&2
+    exit 1
+  fi
+
   psql_ -v ON_ERROR_STOP=1 -v a="$ato" -v p="$pid" -v f="$fundamento" <<'SQL'
 insert into concessao.ato
   (sujeito_id, especie, eixo, valor, fundamento, registrado_por, ato_referido)
@@ -134,130 +209,423 @@ SQL
 }
 
 cmd_listar() {
-  local quem="${1:-}"
+  local quem="" como_json=0
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --json) como_json=1; shift;;
+      *)
+        if [ -z "$quem" ]; then
+          quem="$1"
+        else
+          printf 'acesso: argumento excedente em listar: %s\n' "$1" >&2
+          exit 2
+        fi
+        shift;;
+    esac
+  done
+
   if [ -n "$quem" ]; then
-    local sid; sid="$(resolve "$quem" sujeito)"
-    psql_ -v s="$sid" <<'SQL'
+    local sid
+    sid="$(resolve "$quem" sujeito)" || exit $?
+    if [ "$como_json" -eq 1 ]; then
+      psql_ -tAq -v s="$sid" <<'SQL'
+select coalesce(json_agg(t), '[]'::json) from (
+  select i.contracao, v.eixo, v.valor, v.especie, v.vigencia_fim, v.ato_id
+    from concessao.vigente v join identidade.identidade i on i.id = v.sujeito_id
+   where v.sujeito_id = :'s'::uuid order by v.eixo, v.valor
+) t;
+SQL
+    else
+      local out
+      out="$(psql_ -v s="$sid" <<'SQL'
 select i.contracao, v.eixo, v.valor, v.especie, v.vigencia_fim, v.ato_id
   from concessao.vigente v join identidade.identidade i on i.id = v.sujeito_id
  where v.sujeito_id = :'s'::uuid order by v.eixo, v.valor;
 SQL
+)" || exit 3
+      if [ -z "$out" ] || [[ "$out" =~ \(0\ rows\) ]]; then
+        printf '%s\n' "$out"
+        printf 'motivo: nenhum acesso vigente para %s\n' "$quem"
+      else
+        printf '%s\n' "$out"
+      fi
+    fi
   else
-    psql_ -c \
-      "select i.contracao, i.natureza, v.eixo, v.valor, v.especie, v.vigencia_fim
-         from concessao.vigente v join identidade.identidade i on i.id = v.sujeito_id
-        order by i.contracao, v.eixo, v.valor;"
+    if [ "$como_json" -eq 1 ]; then
+      psql_ -tAq <<'SQL'
+select coalesce(json_agg(t), '[]'::json) from (
+  select i.contracao, i.natureza, v.eixo, v.valor, v.especie, v.vigencia_fim
+    from concessao.vigente v join identidade.identidade i on i.id = v.sujeito_id
+   order by i.contracao, v.eixo, v.valor
+) t;
+SQL
+    else
+      psql_ -c \
+        "select i.contracao, i.natureza, v.eixo, v.valor, v.especie, v.vigencia_fim
+           from concessao.vigente v join identidade.identidade i on i.id = v.sujeito_id
+          order by i.contracao, v.eixo, v.valor;"
+    fi
   fi
 }
 
 cmd_historico() {
-  local quem="${1:-}"
-  [ -n "$quem" ] || morre "uso: acesso historico <sujeito>"
-  local sid; sid="$(resolve "$quem" sujeito)"
-  psql_ -v s="$sid" <<'SQL'
+  local quem="" como_json=0
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --json) como_json=1; shift;;
+      *)
+        if [ -z "$quem" ]; then
+          quem="$1"
+        else
+          printf 'acesso: argumento excedente em historico: %s\n' "$1" >&2
+          exit 2
+        fi
+        shift;;
+    esac
+  done
+  if [ -z "$quem" ]; then
+    printf 'uso: acesso historico <sujeito> [--json]\n' >&2
+    exit 2
+  fi
+  local sid
+  sid="$(resolve "$quem" sujeito)" || exit $?
+  if [ "$como_json" -eq 1 ]; then
+    psql_ -tAq -v s="$sid" <<'SQL'
+select coalesce(json_agg(t), '[]'::json) from (
+  select a.registrado_em, a.especie, a.eixo, a.valor, a.vigencia_fim,
+         a.fundamento, a.ato_referido, a.id
+    from concessao.ato a where a.sujeito_id = :'s'::uuid order by a.registrado_em
+) t;
+SQL
+  else
+    psql_ -v s="$sid" <<'SQL'
 select a.registrado_em, a.especie, a.eixo, a.valor, a.vigencia_fim,
        left(a.fundamento, 48) as fundamento, a.ato_referido, a.id
   from concessao.ato a where a.sujeito_id = :'s'::uuid order by a.registrado_em;
 SQL
+  fi
 }
 
 cmd_vocabulario() {
-  psql_ -c "select eixo, valor, estado, coalesce(pai,'') as pai, rotulo
-              from concessao.eixo_valor order by eixo, valor;"
+  local eixo="" como_json=0
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --json) como_json=1; shift;;
+      *)
+        if [ -z "$eixo" ]; then
+          eixo="$1"
+        else
+          printf 'acesso: argumento excedente em vocabulario: %s\n' "$1" >&2
+          exit 2
+        fi
+        shift;;
+    esac
+  done
+  if [ "$como_json" -eq 1 ]; then
+    if [ -n "$eixo" ]; then
+      psql_ -tAq -v e="$eixo" <<'SQL'
+select coalesce(json_agg(t), '[]'::json) from (
+  select eixo, valor, estado, coalesce(pai,'') as pai, rotulo
+    from concessao.eixo_valor where eixo = :'e' order by eixo, valor
+) t;
+SQL
+    else
+      psql_ -tAq <<'SQL'
+select coalesce(json_agg(t), '[]'::json) from (
+  select eixo, valor, estado, coalesce(pai,'') as pai, rotulo
+    from concessao.eixo_valor order by eixo, valor
+) t;
+SQL
+    fi
+  else
+    if [ -n "$eixo" ]; then
+      psql_ -v e="$eixo" <<'SQL'
+select eixo, valor, estado, coalesce(pai,'') as pai, rotulo
+  from concessao.eixo_valor where eixo = :'e' order by eixo, valor;
+SQL
+    else
+      psql_ -c "select eixo, valor, estado, coalesce(pai,'') as pai, rotulo
+                  from concessao.eixo_valor order by eixo, valor;"
+    fi
+  fi
 }
 
 # ---------------------------------------------------------------------------
 cmd_politica() {
-  case "${1:-conferir}" in
+  local sub="${1:-conferir}"
+  case "$sub" in
     conferir)
-      python3 -c "
-import sys; sys.path.insert(0, '${RAIZ}')
-from pdp import Politica
-p = Politica.de_arquivo('${POLITICA}')
+      if [ ! -f "$POLITICA" ]; then
+        printf 'acesso: PAP ausente em %s\n' "$POLITICA" >&2
+        exit 3
+      fi
+      ACESSO_POLITICA_DIR="$POLITICA_DIR" python3 - <<'PY'
+import os, sys
+from pathlib import Path
+politica_dir = os.environ['ACESSO_POLITICA_DIR']
+politica_path = Path(politica_dir) / 'politica.yaml'
+sys.path.insert(0, politica_dir)
+try:
+    from pdp import Politica
+    p = Politica.de_arquivo(politica_path)
+except Exception as e:
+    print(f'acesso: política inválida: {e}', file=sys.stderr)
+    sys.exit(1)
 print(f'politica valida: {len(p.dominios)} dominios, {len(p.papeis)} papeis, {len(p.regras)} regras')
-print(f'  raizes de unidade-organizacional: ' + (', '.join(p.raizes_org) or '(nenhuma)'))
+print('  raizes de unidade-organizacional: ' + (', '.join(p.raizes_org) or '(nenhuma)'))
 for r in p.regras:
-    print(f\"  {r['efeito']:8} {r['id']}\")
-"
+    print(f"  {r['efeito']:8} {r['id']}")
+PY
       ;;
     importar)
-      # O importador e o unico caminho do PAP para o banco. Idempotente: valor ja
-      # existente nao vira erro, e nada aqui APAGA — retirar valor do vocabulario e ato
-      # de extincao (seg:0007), nao delete.
-      python3 -c "
-import sys; sys.path.insert(0, '${RAIZ}')
-from pdp import Politica
-p = Politica.de_arquivo('${POLITICA}')
-import yaml, pathlib
-d = yaml.safe_load(pathlib.Path('${POLITICA}').read_text())
+      if [ ! -f "$POLITICA" ]; then
+        printf 'acesso: PAP ausente em %s\n' "$POLITICA" >&2
+        exit 3
+      fi
+      local sql_cmds
+      sql_cmds="$(ACESSO_POLITICA_DIR="$POLITICA_DIR" python3 - <<'PY'
+import os, sys, yaml
+from pathlib import Path
+politica_dir = os.environ['ACESSO_POLITICA_DIR']
+politica_path = Path(politica_dir) / 'politica.yaml'
+sys.path.insert(0, politica_dir)
+try:
+    from pdp import Politica
+    p = Politica.de_arquivo(politica_path)
+except Exception as e:
+    print(f'acesso: política inválida: {e}', file=sys.stderr)
+    sys.exit(1)
+d = yaml.safe_load(politica_path.read_text('utf-8'))
 for eixo, itens in (d.get('eixos') or {}).items():
     for valor, corpo in (itens or {}).items():
         corpo = corpo or {}
-        rot = (corpo.get('rotulo') or valor).replace(chr(39), chr(39)*2)
+        rot = (corpo.get('rotulo') or valor).replace("'", "''")
         pai = corpo.get('pai')
-        pai_sql = \"'\" + pai + \"'\" if pai else 'null'
-        print(f\"insert into concessao.eixo_valor (eixo, valor, rotulo, pai) values \"
-              f\"('{eixo}', '{valor}', '{rot}', {pai_sql}) on conflict (eixo, valor) \"
-              f\"do update set rotulo = excluded.rotulo, pai = excluded.pai;\")
-" | psql_ -v ON_ERROR_STOP=1
+        pai_sql = "'" + pai + "'" if pai else 'null'
+        print(f"insert into concessao.eixo_valor (eixo, valor, rotulo, pai) values "
+              f"('{eixo}', '{valor}', '{rot}', {pai_sql}) on conflict (eixo, valor) "
+              f"do update set rotulo = excluded.rotulo, pai = excluded.pai;")
+PY
+)" || exit 1
+      printf '%s\n' "$sql_cmds" | psql_ -v ON_ERROR_STOP=1
       printf 'vocabulario importado de %s\n' "$POLITICA"
       cmd_vocabulario
       ;;
-    *) morre "uso: acesso politica [conferir|importar]";;
+    *)
+      printf 'uso: acesso politica [conferir|importar]\n' >&2
+      exit 2;;
   esac
 }
 
+# ---------------------------------------------------------------------------
 cmd_decidir() {
-  local papel="" dominio="" tema="-" habilitacao="publico" acao="" recurso="" tipo="comando"
-  local sigilo="publico" veto="" dominio_recurso=""
+  local como_json=0
+  for a in "$@"; do
+    if [ "$a" = "--json" ]; then
+      como_json=1
+    fi
+    if [ "$a" = "--acao" ] || [ "$a" = "--recurso" ] || [ "$a" = "--tipo" ]; then
+      printf 'uso: acesso decidir <acao> <recurso> [--sujeito <id>] [--papel <p> --dominio <d> ...] [--json]\n' >&2
+      printf 'acesso decidir: forma obsoleta --acao/--recurso/--tipo; use a forma nova: acesso decidir <acao> <recurso>\n' >&2
+      if [ "$como_json" -eq 1 ]; then
+        printf '{"erro": "forma obsoleta: use acesso decidir <acao> <recurso>"}\n'
+      fi
+      exit 2
+    fi
+  done
+
+  local acao="" recurso="" sujeito="" papel="" dominio="" dominio_recurso=""
+  local tema="-" habilitacao="publico" veto="" sigilo="publico"
+
   while [ $# -gt 0 ]; do
     case "$1" in
+      --json) como_json=1; shift;;
+      --sujeito) sujeito="$2"; shift 2;;
       --papel) papel="$2"; shift 2;;
       --dominio) dominio="$2"; shift 2;;
       --dominio-recurso) dominio_recurso="$2"; shift 2;;
       --tema) tema="$2"; shift 2;;
       --habilitacao) habilitacao="$2"; shift 2;;
       --veto) veto="$2"; shift 2;;
-      --acao) acao="$2"; shift 2;;
-      --recurso) recurso="$2"; shift 2;;
-      --tipo) tipo="$2"; shift 2;;
       --sigilo) sigilo="$2"; shift 2;;
-      *) morre "opcao desconhecida em decidir: $1";;
+      -*)
+        printf 'acesso: opção desconhecida em decidir: %s\n' "$1" >&2
+        if [ "$como_json" -eq 1 ]; then
+          printf '{"erro": "opção desconhecida: %s"}\n' "$1"
+        fi
+        exit 2;;
+      *)
+        if [ -z "$acao" ]; then
+          acao="$1"
+        elif [ -z "$recurso" ]; then
+          recurso="$1"
+        else
+          printf 'acesso: argumento posicional excedente em decidir: %s\n' "$1" >&2
+          if [ "$como_json" -eq 1 ]; then
+            printf '{"erro": "argumento posicional excedente: %s"}\n' "$1"
+          fi
+          exit 2
+        fi
+        shift;;
     esac
   done
-  [ -n "$acao" ] || morre "--acao e obrigatorio"
-  [ -n "$recurso" ] || morre "--recurso e obrigatorio"
-  PF_PAPEL="$papel" PF_DOMINIO="$dominio" PF_DOMINIO_RECURSO="${dominio_recurso:-$dominio}" \
-  PF_TEMA="$tema" PF_HAB="$habilitacao" PF_VETO="$veto" PF_ACAO="$acao" \
-  PF_RECURSO="$recurso" PF_TIPO="$tipo" PF_SIGILO="$sigilo" \
-  python3 -c "
-import os, sys; sys.path.insert(0, '${RAIZ}')
-from pdp import Politica, Sujeito, Recurso, decide
-def lista(v): return tuple(x for x in v.split(',') if x)
-p = Politica.de_arquivo('${POLITICA}')
-s = Sujeito(id='(hipotetico)', natureza='cadeira',
-            papeis=lista(os.environ['PF_PAPEL']),
-            dominios=lista(os.environ['PF_DOMINIO']),
-            temas=lista(os.environ['PF_TEMA'].replace('-','')),
-            vetos=lista(os.environ['PF_VETO']),
-            habilitacao=os.environ['PF_HAB'])
-r = Recurso(tipo=os.environ['PF_TIPO'], id=os.environ['PF_RECURSO'],
-            dominio=os.environ['PF_DOMINIO_RECURSO'] or None,
-            tema=os.environ['PF_TEMA'], sigilo=os.environ['PF_SIGILO'])
-d = decide(s, os.environ['PF_ACAO'], r, p)
-print(('PERMITIDO' if d.permitido else 'NEGADO') + f'  regra={d.regra}')
-print('motivo: ' + d.motivo)
-if d.faltou: print('faltou: ' + ', '.join(d.faltou) + '  <- defeito de projecao, nao decisao de politica')
-sys.exit(0 if d.permitido else 3)
-"
+
+  if [ -z "$acao" ] || [ -z "$recurso" ]; then
+    printf 'uso: acesso decidir <acao> <recurso> [--sujeito <id>] [--papel <p> --dominio <d> ...] [--json]\n' >&2
+    if [ "$como_json" -eq 1 ]; then
+      printf '{"erro": "uso: acesso decidir <acao> <recurso> [--sujeito <id>] [--papel <p> --dominio <d> ...] [--json]"}\n'
+    fi
+    exit 2
+  fi
+
+  if [[ "$recurso" != *:* ]]; then
+    printf "acesso: recurso sem prefixo de tipo: '%s' (tipos válidos: acervo, comando, concessao, documento, operacao, politica, sessao, sujeito)\n" "$recurso" >&2
+    if [ "$como_json" -eq 1 ]; then
+      printf '{"erro": "recurso sem prefixo de tipo: %s"}\n' "$recurso"
+    fi
+    exit 2
+  fi
+
+  # Tabela tipo -> dominio: TRANSICAO ate `acesso vocabulario` servir tipos (dados).
+  local tipo="${recurso%%:*}"
+  local chave="${recurso#*:}"
+  local tipo_dom=""
+  case "$tipo" in
+    sessao|expediente) tipo_dom="plataforma";;
+    concessao|politica|sujeito) tipo_dom="plataforma-identidade";;
+    acervo) tipo_dom="plataforma-acervo";;
+    comando|operacao) tipo_dom="plataforma-runtime";;
+    documento) tipo_dom="plataforma";;
+    *)
+      printf "acesso: tipo de recurso fora da tabela: '%s' (tipos válidos: acervo, comando, concessao, documento, operacao, politica, sessao, sujeito)\n" "$tipo" >&2
+      if [ "$como_json" -eq 1 ]; then
+        printf '{"erro": "tipo de recurso fora da tabela: %s"}\n' "$tipo"
+      fi
+      exit 2
+      ;;
+  esac
+
+  if [ -n "$papel" ] || [ -n "$dominio" ]; then
+    if [ -z "$papel" ] || [ -z "$dominio" ]; then
+      printf 'acesso: eixos hipotéticos incompletos: --papel e --dominio devem ser fornecidos juntos\n' >&2
+      if [ "$como_json" -eq 1 ]; then
+        printf '{"erro": "eixos hipotéticos incompletos: --papel e --dominio devem ser fornecidos juntos"}\n'
+      fi
+      exit 2
+    fi
+  elif [ -z "$sujeito" ] && [ -z "${PF_SUJEITO:-}" ]; then
+    printf 'acesso: sem sujeito: PF_SUJEITO ausente e --sujeito/--papel não vieram\n' >&2
+    if [ "$como_json" -eq 1 ]; then
+      printf '{"erro": "sem sujeito: PF_SUJEITO ausente e --sujeito/--papel não vieram"}\n'
+    fi
+    exit 2
+  fi
+
+  # Tudo entra no python por AMBIENTE (heredoc com delimitador citado): argumento
+  # nunca vira codigo.
+  ACESSO_POLITICA_DIR="$POLITICA_DIR" \
+  DEC_JSON="$como_json" DEC_ACAO="$acao" DEC_RECURSO="$recurso" DEC_TIPO="$tipo" \
+  DEC_CHAVE="$chave" DEC_TIPO_DOM="$tipo_dom" DEC_DOM_REC="${dominio_recurso:-}" \
+  DEC_SUJEITO="${sujeito:-}" DEC_PAPEL="${papel:-}" DEC_DOMINIO="${dominio:-}" \
+  DEC_TEMA="${tema:-}" DEC_HAB="${habilitacao:-}" DEC_VETO="${veto:-}" DEC_SIGILO="${sigilo:-}" \
+  python3 - <<'PY'
+import os, sys, json, hashlib
+from pathlib import Path
+
+E = os.environ.get
+politica_dir = E('ACESSO_POLITICA_DIR')
+politica_path = Path(politica_dir) / 'politica.yaml'
+sujeitos_path = Path(politica_dir) / 'sujeitos.yaml'
+como_json = E('DEC_JSON') == '1'
+acao, recurso, tipo, chave = E('DEC_ACAO'), E('DEC_RECURSO'), E('DEC_TIPO'), E('DEC_CHAVE')
+tipo_dom = E('DEC_TIPO_DOM')
+rec_dom = E('DEC_DOM_REC') or tipo_dom
+sujeito_arg, papel, dominio = E('DEC_SUJEITO', ''), E('DEC_PAPEL', ''), E('DEC_DOMINIO', '')
+tema, habilitacao, veto, sigilo = E('DEC_TEMA', '-'), E('DEC_HAB', 'publico'), E('DEC_VETO', ''), E('DEC_SIGILO', 'publico')
+
+def falha(msg, code):
+    if como_json:
+        print(json.dumps({'erro': msg}, ensure_ascii=False))
+    print(f'acesso: {msg}', file=sys.stderr)
+    sys.exit(code)
+
+if not politica_path.is_file():
+    falha(f'PAP servido ausente em {politica_path}', 3)
+
+sys.path.insert(0, politica_dir)
+try:
+    import yaml
+    from pdp import Politica, Sujeito, Recurso, decide
+    pol = Politica.de_arquivo(politica_path)
+except Exception as e:
+    falha(f'PAP servido inválido: {e}', 3)
+
+plano = hashlib.sha256(politica_path.read_bytes()).hexdigest()[:8]
+
+if papel and dominio:
+    quem = '(hipotetico)'
+    lista = lambda v: tuple(x.strip() for x in v.split(',') if x.strip())
+    temas = lista(tema.replace('-', '')) if tema != '-' else ()
+    s = Sujeito(id=quem, natureza='cadeira', papeis=lista(papel), dominios=lista(dominio),
+                temas=temas, vetos=lista(veto), habilitacao=habilitacao or 'publico')
+else:
+    quem = sujeito_arg or E('PF_SUJEITO', '')
+    if not sujeitos_path.is_file():
+        falha(f'projeção indisponível: {sujeitos_path} ausente', 3)
+    try:
+        suj_data = (yaml.safe_load(sujeitos_path.read_text('utf-8')) or {}).get('sujeitos') or {}
+    except Exception as e:
+        falha(f'projeção indisponível: erro ao carregar sujeitos.yaml ({e})', 3)
+    # A MESMA projecao do PEP (`_autoriza` em ops-server): chave direta na tabela, por
+    # sub ou username como ela esta chaveada. Nenhum casamento por `usuario:`,
+    # `client:` ou `conta:` — conta de SO nao e identidade, e projetar por ela faria o
+    # verbo permitir o que a porta nega (caderno iam: duas perguntas ao mesmo PDP).
+    atrib = suj_data.get(quem) or {}
+    s = Sujeito(id=quem, natureza=atrib.get('natureza', 'pessoa'),
+                papeis=tuple(atrib.get('papeis') or ()), dominios=tuple(atrib.get('dominios') or ()),
+                temas=tuple(atrib.get('temas') or ()), vetos=tuple(atrib.get('vetos') or ()),
+                habilitacao=atrib.get('habilitacao', 'publico'))
+
+def julga(rid):
+    return decide(s, acao, Recurso(tipo=tipo, id=rid, dominio=rec_dom, tema=tema, sigilo=sigilo), pol)
+
+def por_regra(x):
+    return (x.regra or 'default') != 'default' and not x.faltou
+
+# TRANSICAO: o PAP mistura ids prefixados (`sessao:fabrica`) e nus (`git status*`,
+# `docker*`). Julga-se nas duas formas e NEGATIVA VENCE nas duas: negada por regra em
+# qualquer forma -> negada por essa regra; senao permitida em qualquer forma ->
+# permitida; senao a primeira (default ou faltou). Sai quando o PAP so tiver id logico.
+ds = [julga(recurso)] + ([julga(chave)] if chave != recurso else [])
+neg = [x for x in ds if not x.permitido and por_regra(x)]
+per = [x for x in ds if x.permitido]
+d = neg[0] if neg else (per[0] if per else ds[0])
+
+exit_code = 0 if d.permitido else (5 if d.faltou else 1)
+regra_nome = d.regra or ('projecao' if d.faltou else 'default')
+if como_json:
+    print(json.dumps({'permitido': d.permitido, 'regra': regra_nome, 'motivo': d.motivo,
+                      'faltou': list(d.faltou), 'plano': plano, 'sujeito': quem,
+                      'acao': acao, 'recurso': recurso}, ensure_ascii=False))
+else:
+    veredito = 'PERMITIDO' if d.permitido else 'NEGADO'
+    print(f'{veredito}  regra={regra_nome}  plano={plano}')
+    suj_disp = quem[:8] if (len(quem) == 36 and quem.count('-') == 4) else quem
+    papeis_s = ', '.join(s.papeis) if s.papeis else '-'
+    dominios_s = ', '.join(s.dominios) if s.dominios else '-'
+    print(f'sujeito: {suj_disp} ({papeis_s} @ {dominios_s})   acao: {acao}   recurso: {recurso} [{tipo}/{rec_dom}]')
+    print(f'motivo: {d.motivo}')
+    if d.faltou:
+        print(f"faltou: {', '.join(d.faltou)}  <- defeito de projecao: linha em sujeitos.yaml (chave = sub ou username do token), ou claim no token")
+sys.exit(exit_code)
+PY
 }
 
 # ---------------------------------------------------------------------------
-# --ajuda UNIVERSAL, sem efeito colateral (card #2868, ex-#2274 defeito 4). ANTES do
-# despacho, varrendo TODOS os argumentos: cobre `acesso --ajuda` e `acesso <sub> --ajuda`.
+# --ajuda UNIVERSAL, sem efeito colateral
 for _a in "$@"; do
   case "$_a" in
-    --ajuda|--help|-h) uso ;;
+    --ajuda|--help|-h) uso; exit 0 ;;
   esac
 done
 
@@ -271,6 +639,6 @@ case "${1:-}" in
   decidir)     shift; cmd_decidir "$@";;
   desligar)    shift; exec python3 "$(dirname "$(readlink -f "$0")")/_acesso/desligar.py" desligar "$@";;
   orfaos)      shift; exec python3 "$(dirname "$(readlink -f "$0")")/_acesso/desligar.py" orfaos "$@";;
-  -h|--help|"") uso;;
-  *) morre "subcomando desconhecido: $1 (rode 'acesso' sem argumento)";;
+  -h|--help|"") uso; exit 0;;
+  *) printf "acesso: subcomando desconhecido: %s (rode 'acesso' sem argumento)\n" "$1" >&2; exit 2;;
 esac

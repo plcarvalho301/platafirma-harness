@@ -19,14 +19,21 @@ from pathlib import Path
 import yaml
 
 # dados de identidade fora do working tree de fabrica (#2956, minuta arq 0015 perna 1)
-RAIZ = Path(os.environ.get("ACESSO_PDP_DIR",
-    os.environ.get("PDP_DIR", Path.home() / "AI/var/politica-acesso")))
+RAIZ = Path(os.environ.get("ACESSO_POLITICA_DIR",
+    os.environ.get("ACESSO_PDP_DIR",
+        os.environ.get("PDP_DIR", "/opt/platafirma/current/politica-acesso"))))
 SUJEITOS = RAIZ / "sujeitos.yaml"
 POLITICA = RAIZ / "politica.yaml"
 # HARNESS/PERSONAS derivam do repo, nao de RAIZ (que agora e a morada de dados)
-HARNESS = Path(os.environ.get("PF_HARNESS", Path.home() / "AI/platafirma-harness"))
+HARNESS = Path(os.environ.get("PF_HARNESS", Path(__file__).resolve().parent.parent.parent))
+# LE do servido (RAIZ), ESCREVE na bancada: o servido e arvore imutavel do release;
+# a edicao de sujeitos.yaml/PAP vai ao clone e vira historico por merge + `release
+# promover` (spec_acesso §2). Editar o servido a mao seria producao fora do git.
+BANCADA = Path(os.environ.get("ACESSO_BANCADA_DIR", HARNESS / "politica-acesso"))
 PERSONAS = HARNESS / "personas"
-SEG = Path.home() / "AI/bin/seg"
+SEG = Path(os.environ.get("PF_BIN", Path(__file__).resolve().parent.parent)) / "seg"
+if not SEG.exists():
+    SEG = Path.home() / "AI/bin/seg"
 VENCE = re.compile(r"vence\s+(\d{4}-\d{2}-\d{2})")
 
 
@@ -164,8 +171,8 @@ def cmd_orfaos(argv: list[str]) -> int:
     # Veredito no EXIT, nao no meio do relatorio: realm nao medido reprova duro.
     if not realm_medido:
         print("\nREPROVADO: realm NAO medido — resultado INCOMPLETO, nao vale como "
-              "'sem orfaos'. exit 2 (medicao incompleta), distinto de 0/1.")
-        return 2
+              "'sem orfaos'. exit 5 (medicao incompleta), distinto de 0/1.")
+        return 5
     if not achados:
         print("nenhum residuo: sujeito, regra, segredo e conta em dia")
         return 0
@@ -262,28 +269,32 @@ def cmd_desligar(argv: list[str]) -> int:
             if rc != 0:
                 falhou.append(f"realm: {saida[:120]}")
 
-    # 2. sujeitos.yaml
-    texto = SUJEITOS.read_text(encoding="utf-8")
-    faixa = bloco_do_sujeito(texto, nome)
-    if faixa:
-        linhas = texto.splitlines(keepends=True)
-        SUJEITOS.write_text("".join(linhas[:faixa[0]] + linhas[faixa[1]:]), encoding="utf-8")
-        print(f"  sujeitos.yaml  bloco `{nome}` removido ({faixa[1] - faixa[0]} linhas)")
+    # 2. sujeitos.yaml — na BANCADA (o servido nao se edita a mao)
+    suj_bancada, pap_bancada = BANCADA / "sujeitos.yaml", BANCADA / "politica.yaml"
+    if not suj_bancada.is_file():
+        falhou.append(f"bancada ausente: {suj_bancada} (PF_HARNESS/ACESSO_BANCADA_DIR)")
     else:
-        falhou.append("sujeitos.yaml: bloco nao localizado por texto")
+        texto = suj_bancada.read_text(encoding="utf-8")
+        faixa = bloco_do_sujeito(texto, nome)
+        if faixa:
+            linhas = texto.splitlines(keepends=True)
+            suj_bancada.write_text("".join(linhas[:faixa[0]] + linhas[faixa[1]:]), encoding="utf-8")
+            print(f"  sujeitos.yaml  bloco `{nome}` removido na bancada ({faixa[1] - faixa[0]} linhas)")
+        else:
+            falhou.append("sujeitos.yaml (bancada): bloco nao localizado por texto")
 
-    # 3. PAP
-    if alvo_regras:
-        texto = POLITICA.read_text(encoding="utf-8")
+    # 3. PAP — na BANCADA
+    if alvo_regras and pap_bancada.is_file():
+        texto = pap_bancada.read_text(encoding="utf-8")
         for rid in alvo_regras:
             faixa = bloco_da_regra(texto, rid)
             if not faixa:
-                falhou.append(f"PAP: regra {rid} nao localizada por texto")
+                falhou.append(f"PAP (bancada): regra {rid} nao localizada por texto")
                 continue
             linhas = texto.splitlines(keepends=True)
             texto = "".join(linhas[:faixa[0]] + linhas[faixa[1]:])
-            print(f"  PAP            regra {rid} removida")
-        POLITICA.write_text(texto, encoding="utf-8")
+            print(f"  PAP            regra {rid} removida na bancada")
+        pap_bancada.write_text(texto, encoding="utf-8")
 
     # 4. segredo
     for s in segredos:
@@ -294,11 +305,15 @@ def cmd_desligar(argv: list[str]) -> int:
             falhou.append(f"segredo {s}: {e}")
 
     # 5. o PAP tem de continuar valido depois da cirurgia.
-    r = subprocess.run([str(Path.home() / "AI/bin/acesso"), "politica", "conferir"],
-                       capture_output=True, text=True)
+    acesso_bin = Path(__file__).resolve().parent.parent / "acesso"
+    if not acesso_bin.exists():
+        acesso_bin = Path(os.environ.get("PF_BIN", Path.home() / "AI/bin")) / "acesso"
+    r = subprocess.run([str(acesso_bin), "politica", "conferir"],
+                       capture_output=True, text=True,
+                       env={**os.environ, "ACESSO_POLITICA_DIR": str(BANCADA)})
     print(f"  conferencia    {(r.stdout or r.stderr).strip().splitlines()[0] if (r.stdout or r.stderr) else 'sem saida'}")
     if r.returncode != 0:
-        falhou.append("PAP invalido depois da edicao — reverta pelo git antes de qualquer commit")
+        falhou.append("PAP da bancada invalido depois da edicao — reverta pelo git antes de qualquer commit")
 
     print(f"\n{datetime.now():%Y-%m-%d %H:%M} — desligamento de {nome}")
     if falhou:
@@ -306,7 +321,7 @@ def cmd_desligar(argv: list[str]) -> int:
             print(f"  PENDENTE  {f}")
         print("  git: NAO commitado. Resolva o pendente antes.")
         return 1
-    print("  git: NAO commitado — o diff e seu, o commit tambem.")
+    print("  git: NAO commitado — o diff esta na bancada; commit, merge e `release promover` sao seus.")
     print("  Falta o ato do dono: conta de SO e custodia do segredo fora do host.")
     return 0
 
