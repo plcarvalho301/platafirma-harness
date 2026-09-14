@@ -2,13 +2,26 @@
 # fila — caixa de mensagens entre personas da PlataFirma, sobre a malha msg (Valkey/Streams).
 # capacidade: mensagem
 # dono: ia
+# componente: harness
 # use para: caixa, carta, recado, handoff, 'o que chegou', mandar para outra cadeira
-# atos: status, ler, enviar, tipos
+# atos: status (leitura, mensagem) · ler (leitura, mensagem) · enviar (escrita, mensagem) · tipos (leitura, mensagem)
+# forma: status,tipos=lista · ler=texto · enviar=objeto
+# cauda: nao
+# classe: B
+# consome: valkey@streams (protocolo redis — sem OpenAPI)
+# ambiente: FILA_REDIS_HOST[=127.0.0.1] · FILA_REDIS_PORT[=6379] · PF_RAIZ[=~/AI] (arvore abertura/) · PF_CADEIRA (obrigatoria em enviar e em ler/status sem persona; porta) · PF_SESSAO (porta, so log)
+# depende: modulo redis no venv; arvore abertura/<cadeira>/persona.md (fonte de destinatario); rede ao loopback da malha
+# escreve: malha msg — XADD na caixa do destinatario (enviar); XACK do ponteiro do grupo (ler quente); nada em status/tipos/ler frio
+# substitui: redis-cli XADD/XREADGROUP/XRANGE na caixa; o "cola a mensagem aqui" que a conduta do dono proibe
+# conforme: parcial (spec_fila §6)
+# spec: platafirma-arquitetura/docs/spec_fila.md
 #
 # Shim: o cabecalho canonico (proposito/capacidade/dono/use para/atos) mora AQUI,
 # no binario que `conferir verbo`/`release conferir` leem, e nao so no modulo
 # _fila/streams.py — os demais verbos da Onda 2 (mesa, tarefas, sessao) trazem o
 # cabecalho no proprio binario servido; a fila, por ser shim, ficava sem. A regua
 # do corpo continua em _fila/streams.py (fonte unica de comportamento).
-import runpy, os
+import os
+import runpy
+
 runpy.run_path(os.path.join(os.path.dirname(os.path.realpath(__file__)), "_fila", "streams.py"), run_name="__main__")
