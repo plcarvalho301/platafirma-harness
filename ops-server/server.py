@@ -44,6 +44,7 @@ import re
 import shlex
 import signal
 import resource
+import shutil
 import subprocess
 import tempfile
 import sys
@@ -1127,6 +1128,8 @@ RE_FERRAMENTAL = re.compile(r"^FERRAMENTAL:\s*(\S+\.md)")
 
 def _cadeiras() -> list:
     # arq:0073: a cadeira e um subdir de abertura/, nao mais persona-<x>.md.
+    if not PERSONAS.is_dir():
+        return []
     return sorted(p.name for p in PERSONAS.iterdir() if p.is_dir())
 
 
@@ -1165,180 +1168,227 @@ def _memoria(cadeira: str) -> dict:
     return out
 
 
-def _montar(cadeira: str, atualizar: bool, chapeu: str = "", pergunta: str = "",
-            sessao_id: str = "") -> dict:
-    """Delega ao verbo `bin/monta-sessao --json`, que monta por catálogo (#189 fase 5).
+def _acha_bin(nome: str) -> str:
+    """Resolve o caminho executável do binário (BINARIOS -> RAIZ/bin -> PF_HARNESS/bin -> PATH)."""
+    if nome in BINARIOS and os.path.isfile(BINARIOS[nome]):
+        return BINARIOS[nome]
+    p_raiz = RAIZ / "bin" / nome
+    if p_raiz.is_file() and os.access(p_raiz, os.X_OK):
+        return str(p_raiz)
+    p_harness = PF_HARNESS / "bin" / nome
+    if p_harness.is_file() and os.access(p_harness, os.X_OK):
+        return str(p_harness)
+    w = shutil.which(nome, path=f"{RAIZ}/bin:{PF_HARNESS}/bin:" + os.environ.get("PATH", ""))
+    if w:
+        return w
+    return str(RAIZ / "bin" / nome)
 
-    Aqui havia uma SEGUNDA implementação da montagem: este servidor lia persona, org e
-    manifestos por conta própria enquanto o verbo lia os seus. Duas fontes da mesma
-    regra divergem em silêncio — é a razão pela qual a mesa e a fila já eram lidas pelo
-    verbo, e agora vale para o pacote inteiro. A superfície não pode mudar o pacote:
-    `registro/superficies.json` manda que o comportamento seja o mesmo nas três.
 
-    O servidor não acrescenta nada ao pacote: o envelope da fila saiu daqui em
-    17/08 (#189) e a camada B inteira é por ato, pelo verbo.
+def _exec_argv(binario: str, *args) -> list[str]:
+    """Monta argv para execução. Se o shebang apontar para python inexistente, executa via sys.executable."""
+    if os.path.isfile(binario):
+        try:
+            with open(binario, "rb") as f:
+                first_line = f.readline()
+                if first_line.startswith(b"#!"):
+                    interp = first_line[2:].decode("utf-8", "ignore").strip().split()[0]
+                    if not os.path.exists(interp) and "python" in interp:
+                        return [sys.executable, binario, *args]
+        except Exception:
+            pass
+    return [binario, *args]
+
+
+def _montar(cadeira: str, atualizar: bool = True, chapeu: str = "", pergunta: str = "",
+            sessao_id: str | None = None, sub: str | None = None) -> dict:
+    """Projeção do lote sessao abrir -> expediente montar (spec_sessao §6, #3053).
+
+    (a) execve `bin/sessao abrir <slug> [--sessao-id <uuid>] --json` com PF_SUJEITO = o `sub`
+        do token validado. Sem sub -> execve roda sem PF_SUJEITO e devolve o exit 3 de abrir
+        como está, não fabrica sujeito.
+    (b) Lê sessao_id do JSON de abrir; RELÊ a chave `sessao:{id}` no msg-mem e dela tira
+        cadeira, ordem_id — em slug puro (arq:0110 §5). A porta NÃO escreve na chave.
+    (c) execve `bin/expediente montar [--chapeu <slug>] --json` com
+        PF_CADEIRA/PF_SESSAO/PF_ORDEM_ID/PF_SUPERFICIE injetados e a pergunta por STDIN
+        (nunca por argumento).
+    (d) Resposta = JSON do expediente com o bloco `sessao` (saída do abrir) no topo,
+        campo `chapeu` preservado; `atualizar` continua aceito e sem efeito. Falha em `abrir`
+        (exit ≠ 0) interrompe — não roda expediente e devolve o erro do abrir com o id, se houver.
     """
-    # Strip do prefixo claudinho-/claudinha- e do verbo (`_sufixo_sem_prefixo`, #2438):
-    # segunda implementacao aqui divergiria em silencio. A porta passa o que recebeu.
-    argv = [str(RAIZ / "bin" / "monta-sessao"), cadeira.strip(), "--json"]
-    if not atualizar:
-        argv.append("--sem-atualizar")
-    if chapeu:
-        argv += ["--chapeu", chapeu]
-    if pergunta:
-        argv += ["--pergunta", pergunta]
-    # QUEM CUNHA `sessao_id` E O VERBO, nao esta porta (arq:0101 §1, ordem do dono
-    # 06/09). A porta so repassa o que a fita portou e persiste o que voltou: cunhar
-    # aqui deixava a fabrica — que chama `bin/monta-sessao` direto, sem passar por
-    # nenhuma porta — sem sessao nenhuma, e convidava um segundo gerador do lado do
-    # `chat`. Um gerador so, no ponto por onde toda superficie abre.
+    bin_sessao = _acha_bin("sessao")
+    bin_expediente = _acha_bin("expediente")
+
+    cad = (cadeira or "").strip()
+    slug = cad.lower()
+    for pref in ("claudinho-", "claudinha-"):
+        if slug.startswith(pref):
+            slug = slug[len(pref):]
+
+    # (a) execve `bin/sessao abrir <slug> [--sessao-id <uuid>] --json` com PF_SUJEITO = sub
+    argv_abrir = _exec_argv(bin_sessao, "abrir")
+    if slug:
+        argv_abrir.append(slug)
     if sessao_id:
-        argv += ["--sessao-id", sessao_id]
+        argv_abrir += ["--sessao-id", sessao_id]
+    argv_abrir.append("--json")
+
+    env_abrir = {
+        **_env_subprocesso(),
+        "PF_SUPERFICIE": os.environ.get("PF_SUPERFICIE", "claude.ai"),
+    }
+    if sub and sub != "-":
+        env_abrir["PF_SUJEITO"] = sub
+
+    d_cwd = RAIZ if RAIZ.is_dir() else Path.cwd()
     try:
-        proc = subprocess.run(argv, capture_output=True, text=True, timeout=90,
-                              env={**_env_subprocesso(), "PF_SUPERFICIE": "claude.ai"})
-        r = json.loads(proc.stdout)
-    except (OSError, subprocess.SubprocessError, ValueError) as e:
-        # Montador mudo se declara: pacote vazio seria indistinguível de cadeira sem peça.
-        return {"erro": f"montador não respondeu: {type(e).__name__}: {e}",
-                "verbo": " ".join(argv), "cadeiras": _cadeiras()}
-    if "erro" in r:
-        r.setdefault("cadeiras", _cadeiras())
-        return r
+        proc_abrir = subprocess.run(
+            argv_abrir,
+            capture_output=True,
+            text=True,
+            timeout=30,
+            env=env_abrir,
+            cwd=d_cwd,
+        )
+    except (OSError, subprocess.SubprocessError) as e:
+        return {"erro": f"falha ao executar sessao abrir: {type(e).__name__}: {e}",
+                "verbo": " ".join(argv_abrir), "cadeiras": _cadeiras()}
 
-    nome = r.get("nome_canonico") or ""
-    r["nota_pecas"] = ("cada peça traz {peca, dono, ref, sha, regime, tokens, frescor} "
-                       "e o conteúdo servido; a ordem é a de injeção (estável → volátil) "
-                       "declarada no catálogo, não a de leitura")
+    # Falha em abrir (exit ≠ 0) interrompe — não roda expediente e devolve o erro do abrir com o id, se houver.
+    if proc_abrir.returncode != 0:
+        try:
+            err_json = json.loads(proc_abrir.stdout)
+            if isinstance(err_json, dict):
+                return err_json
+        except Exception:
+            pass
+        msg = proc_abrir.stderr.strip() or proc_abrir.stdout.strip() or f"exit {proc_abrir.returncode}"
+        return {"erro": msg, "exit_code": proc_abrir.returncode}
 
-    # A FILA NAO ENTRA NA ABERTURA (#189, ordem do dono 17/08).
-    # Regra: a abertura carrega IMPEDIMENTO — o que, sem ato, deixa o estado como
-    # esta. Hoje so a mesa; incidente entra nessa classe quando existir. A caixa nao
-    # e impedimento: carta nao lida continua la, com retencao de 7 dias, e sai por
-    # `fila ler` --tudo/--desde (leitura fria, sem mover o ponteiro).
-    # Servir envelope aqui — ou so a contagem — devolve a fila ao lugar da mesa pela
-    # saliencia, que e o defeito que ja tinha sido corrigido uma vez e voltou. A
-    # conduta corta o ATO de abrir a caixa; enquanto o pacote injetava o texto da
-    # carta, a proibicao competia com o item mais concreto da janela.
-    # Fila e board sao verbos on-demand, chamados por ordem do dono como qualquer
-    # outro. Nao ha peca, nao ha envelope, nao ha contagem.
-    return r
+    try:
+        abrir_json = json.loads(proc_abrir.stdout)
+    except Exception as e:
+        return {"erro": f"sessao abrir devolveu JSON inválido: {e}", "stdout": proc_abrir.stdout[:200]}
+
+    if not isinstance(abrir_json, dict):
+        return {"erro": f"sessao abrir saída inesperada: {proc_abrir.stdout[:200]}"}
+
+    # (b) Lê sessao_id do JSON de abrir; RELÊ sessao:{id} no msg-mem (arq:0110 §5)
+    sid = abrir_json.get("sessao_id")
+    cad_slug = None
+    oid = None
+    if sid:
+        try:
+            raw = _rc().get(f"sessao:{sid}")
+            if raw:
+                dados_chave = json.loads(raw)
+                cad_slug = dados_chave.get("cadeira")
+                oid = dados_chave.get("ordem_id")
+        except Exception as e:
+            print(f"[valkey] releitura sessao:{sid} falhou: {e!r}", file=sys.stderr, flush=True)
+
+    # Slug puro da cadeira e ordem_id da chave (ou fallback do próprio abrir_json)
+    cad_slug = cad_slug or abrir_json.get("cadeira") or slug
+    if cad_slug:
+        cad_slug = cad_slug.lower()
+        for pref in ("claudinho-", "claudinha-"):
+            if cad_slug.startswith(pref):
+                cad_slug = cad_slug[len(pref):]
+    oid = oid or abrir_json.get("ordem_id") or ""
+
+    # (c) execve `bin/expediente montar [--chapeu <slug>] --json` com
+    # PF_CADEIRA/PF_SESSAO/PF_ORDEM_ID/PF_SUPERFICIE injetados e a pergunta por STDIN
+    argv_exp = _exec_argv(bin_expediente, "montar", "--json")
+    if chapeu:
+        argv_exp += ["--chapeu", chapeu]
+
+    env_exp = {
+        **_env_subprocesso(),
+        "PF_CADEIRA": cad_slug,
+        "PF_SESSAO": sid or "",
+        "PF_ORDEM_ID": oid or "",
+        "PF_SUPERFICIE": os.environ.get("PF_SUPERFICIE", "claude.ai"),
+    }
+
+    try:
+        proc_exp = subprocess.run(
+            argv_exp,
+            input=pergunta or "",
+            capture_output=True,
+            text=True,
+            timeout=90,
+            env=env_exp,
+            cwd=d_cwd,
+        )
+    except (OSError, subprocess.SubprocessError) as e:
+        return {"erro": f"falha ao executar expediente montar: {type(e).__name__}: {e}",
+                "verbo": " ".join(argv_exp)}
+
+    if proc_exp.returncode != 0:
+        try:
+            err_exp = json.loads(proc_exp.stdout)
+            if isinstance(err_exp, dict):
+                return err_exp
+        except Exception:
+            pass
+        msg = proc_exp.stderr.strip() or proc_exp.stdout.strip() or f"expediente exit {proc_exp.returncode}"
+        return {"erro": msg, "exit_code": proc_exp.returncode}
+
+    try:
+        exp_json = json.loads(proc_exp.stdout)
+    except Exception as e:
+        return {"erro": f"expediente montar devolveu JSON inválido: {e}", "stdout": proc_exp.stdout[:200]}
+
+    # (d) Resposta = JSON do expediente com o bloco `sessao` (saída do abrir) no topo,
+    # campo `chapeu` preservado; `atualizar` continua aceito e sem efeito.
+    resposta = {"sessao": abrir_json}
+    resposta.update(exp_json)
+    return resposta
 
 
 def _primeiro_giro(pergunta: str) -> bool:
-    """Abertura de fita = ha prompt do dono e a fita ainda nao portou sessao.
-
-    Predicado deliberadamente simples e verificavel: `pergunta` presente sem
-    `sessao_id` e a primeira passagem por `monta_sessao` da conversa. Reabertura
-    da mesma fita SEMPRE porta o `sessao_id` (arq:0101 §1), entao cai no ramo (b);
-    quem chega sem prompt e sem id nao esta abrindo — cai no (c) e e negado.
-    """
+    """Predicado auxiliar mantido para compatibilidade."""
     return bool((pergunta or "").strip())
 
 
 async def monta_sessao(cadeira: str = "", atualizar: bool = True, chapeu: str = "",
                         pergunta: str = "", sessao_id: str | None = None) -> dict:
-    """Abre a sessão de uma cadeira numa chamada: devolve o pacote de abertura como
-    catálogo de peças (persona, ofício, conduta do dono, alias de cadeiras, mesa, índice
-    de cadernos, acervo consultado) e cunha `sessao_id` + `ordem_id` para as demais tools.
+    """Abre a sessão de uma cadeira numa chamada (projeção do lote sessao abrir -> expediente montar).
 
-    NÃO traz fila nem board — abertura carrega só impedimento (a mesa); caixa e carteira
-    saem por `fila` e `tarefas`, por ordem do dono.
-
-    `cadeira`: sufixo da persona (`claudinho-`/`claudinha-` aceito e descartado). A lista
-    viva de cadeiras NÃO mora neste texto: vem do disco (`abertura/<slug>/`), a cada
-    chamada; vazia ou desconhecida devolve `cadeiras` com a lista válida. Afirmar que uma
-    cadeira não existe exige essa chamada como âncora (conduta do dono, `NEGATIVA:`).
-
-    `pergunta`: SEMPRE o corpo literal do turno do dono — é o sinal que roteia o chapéu
-    (`roteador.via` = determinístico | semântico | fallback). Sem ela, `chapeu` sai null.
-    `chapeu`: força o slug e pula o roteador — só quando o dono o disse.
-
-    `atualizar`: aceito e SEM EFEITO desde arq:0097 — o runtime não lê working tree git.
-    A abertura vem da morada publicada (`morada.abertura`), árvore imutável fixada pelo
-    ponteiro `current`, e quem a atualiza é o ato deliberado `publicar-abertura`. Cada
-    peça traz `{peca, dono, ref, sha, regime, volatilidade, tokens, frescor}` e o
-    conteúdo; peça que falta vem com `frescor: indisponivel` e o motivo, nunca omitida.
-    `pacote` traz a conta (peças, tokens, SHA do ref publicado, registro); `morada` traz
-    `{sha, ref, publicado_em, frescor}`; `avisos` traz teto e peça indisponível. Morada
-    não publicada é a única recusa de abrir, e o erro nomeia a cura.
-
-    `sessao_id`: o uuid da fita, quando ela JÁ abriu uma vez. A porta não infere sessão
-    (arq:0101 §1) — a fita porta o valor. Passe de volta o `sessao_id` da primeira
-    abertura em toda chamada e na segunda abertura da MESMA conversa: assim a segunda
-    não recunha, cunha só `ordem_id`, e o ledger de dedup tem chave estável. Valor
-    inválido é ignorado e declarado em `avisos`, nunca aceito calado.
+    Devolve o pacote de expediente com o bloco `sessao` no topo.
+    `cadeira`: slug da cadeira.
+    `pergunta`: corpo literal do turno do dono, enviado via STDIN para expediente montar.
+    `chapeu`: força o slug do chapéu (ignora o roteador).
+    `atualizar`: aceito e sem efeito desde arq:0097.
+    `sessao_id`: uuid da sessão quando portado da conversa anterior; sem ele, sessao abrir cunha um novo.
     """
     negado = _autoriza("monta_sessao", "monta_sessao", "documento",
                        f"sessao:{cadeira or '-'}", DOM_PLATAFORMA)
     if negado:
         return negado
-    # SESSAO_ID: a/b/c (ordem do dono, 06/09/2026). Quem cunha e a PORTA, nao o schema
-    # da tool — expor `sessao_id` como input a preencher fazia o cliente MCP abrir gate
-    # de aprovacao ANTES de montar ("No approval received", sem pacote de abertura). O id
-    # nasce aqui:
-    #   (a) fita sem sessao E primeiro giro (so o prompt do dono) -> CUNHA e passa
-    #   (b) fita ja porta uma sessao valida -> passa a que veio
-    #   (c) senao (valor malformado, ou reabertura sem portar o id) -> nega, nao adivinha
-    _portado = _uuid_valido(sessao_id) if sessao_id else None
-    if _portado:                                       # (b)
-        _sid_montar = _portado
-    elif not sessao_id and _primeiro_giro(pergunta):   # (a) abertura: a porta cunha
-        _sid_montar = str(uuid.uuid4())
-    else:                                              # (c)
-        _audit(tool="monta_sessao", evento="sessao_id_invalido", cadeira=cadeira,
-               recebido=(sessao_id or "")[:64])
-        return {"erro": "sessao_id ausente ou malformado numa reabertura — a fita deve "
-                        "portar o `sessao_id` da primeira abertura (arq:0101 §1); a "
-                        "primeira abertura NAO envia `sessao_id`, a porta o cunha",
-                "regra": "sessao"}
+
     t0 = time.monotonic()
+    _q = _quem()  # async: no contexto da task MCP (#2911)
+    _sub = _q.get("sub")
+    if _sub == "-":
+        _sub = None
+
     r = await anyio.to_thread.run_sync(_montar, cadeira, atualizar, chapeu, pergunta,
-                                       _sid_montar)
+                                       sessao_id, _sub)
+
     _rot = (r.get("roteador") or {})
-    _sessao_id = None
+    _sessao_id = r.get("sessao_id") or (r.get("sessao") or {}).get("sessao_id")
     _delta = None
-    # emite sessao_aberta AQUI (contexto MCP da tool), ancorado no MESMO
-    # id(session) que run_command usa -> chave do join de D casa por construcao
-    # dentro da conexao (#2902). A rota /sessao (externa) nao serve: cai em
-    # sessao='-' e nao e o caminho que a fita usa.
-    if not r.get("erro"):
-        _sid = _sessao_atual()
-        _q = _quem()                                   # async: nunca dentro do to_thread (#2911)
-        # ordem_id é de UMA ordem do dono e sempre nasce aqui; sessao_id é da CONVERSA e
-        # nasce uma vez só. Segunda abertura da mesma fita cunha ordem, não sessão.
-        _oid = "o" + datetime.now().astimezone().strftime("%Y%m%dT%H%M%S") + "-" + uuid.uuid4().hex[:6]
-        # O uuid vem do montador, que e o unico gerador. Faltando (montador velho ou
-        # mudo), a abertura sai SEM sessao — declarado, contado `ledger=sem_sessao`,
-        # nunca recusado. Cunhar aqui de novo seria recriar o ponto que acabou de sair.
-        _sessao_id = _uuid_valido(r.get("sessao_id") or "")
+
+    if not r.get("erro") and _sessao_id:
         _cunhou = bool((r.get("sessao") or {}).get("cunhada_agora"))
-        if not _sessao_id:
-            r.setdefault("avisos", []).append(
-                "montador nao devolveu `sessao_id` — fita sem entidade-sessao, "
-                "roda sem ledger de dedup (arq:0101 §1)")
-        _aberto_em = datetime.now().astimezone().isoformat(timespec="milliseconds")
-        _sub, _q_sid, _jti = _q.get("sub", "-"), _q.get("sid", "-"), _q.get("jti", "-")
-        try:
-            if not _sessao_id:
-                raise RuntimeError("sem sessao_id do montador — nada a persistir")
-            _cad = r.get("cadeira") or cadeira or r.get("nome_canonico", "-")
-            _con = _rc()
-            _val = json.dumps({"cadeira": _cad, "ordem_id": _oid, "aberto_em": _aberto_em,
-                               "sub": _sub, "sid": _q_sid, "jti": _jti,
-                               "sid_conexao": _sid}, ensure_ascii=False)
-            _con.set(f"sessao:{_sessao_id}", _val, ex=TTL_SESSAO_S)
-        except Exception as e:  # noqa: BLE001
-            print(f"[valkey] FALHOU persistir sessao:{_sessao_id}: {e!r}", file=sys.stderr, flush=True)
-        r["ordem_id"] = _oid
-        if _sessao_id:
-            r.setdefault("sessao", {})["ordem_id"] = _oid
+        _oid = r.get("ordem_id") or (r.get("sessao") or {}).get("ordem_id") or "-"
         _audit(tool="sessao", evento="sessao_aberta",
-               sujeito=r.get("nome_canonico", "-"), ordem_id=_oid, sessao_id=_sessao_id,
+               sujeito=r.get("cadeira", "-"), ordem_id=_oid, sessao_id=_sessao_id,
                via="tool", cunhada=_cunhou)
         _delta = _delta_pecas(r, _sessao_id)   # R2: peça repetida na mesma sessão sai como aviso
+
     _audit(tool="monta_sessao", cadeira=cadeira, atualizar=atualizar,
-           resolvida=r.get("nome_canonico"), erro=r.get("erro"),
+           resolvida=r.get("cadeira"), erro=r.get("erro"),
            chapeu=(r.get("chapeu") or None),
            pergunta=(pergunta or None),
            roteador_via=_rot.get("via"), roteador_slug=_rot.get("slug"),
@@ -1413,18 +1463,21 @@ def _rlimits_filho():
         except (ValueError, OSError):
             pass
 
+# Contrato item 2 (#3053): todo execve de verbo chamado com sessao_id válido injeta
+# PF_CADEIRA/PF_SESSAO/PF_ORDEM_ID lidos da chave pelo _sessao_resolve (linhas 1431-1450).
 def _run_verbo_blocking(argv: list, stdin: str | None, timeout: int, ident: dict) -> dict:
     env = {**_env_subprocesso(), "PF_SESSAO": ident["sessao_id"], "PF_ORDEM_ID": ident["ordem_id"],
            "PF_CONTA": OPS_USER}
     if ident["cadeira"]:
         env["PF_CADEIRA"] = ident["cadeira"]
+    d_cwd = RAIZ if RAIZ.is_dir() else Path.cwd()
     try:
-        p = subprocess.Popen(argv, cwd=RAIZ, env=env, preexec_fn=_rlimits_filho,
+        p = subprocess.Popen(argv, cwd=d_cwd, env=env, preexec_fn=_rlimits_filho,
                              stdin=subprocess.PIPE if stdin is not None else subprocess.DEVNULL,
                              stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                              start_new_session=True)
     except OSError as e:
-        return {"erro": str(e), "cwd": str(RAIZ)}
+        return {"erro": str(e), "cwd": str(d_cwd)}
     try:
         stdout, stderr = p.communicate(input=(stdin.encode() if stdin is not None else None),
                                        timeout=timeout)
@@ -1434,9 +1487,9 @@ def _run_verbo_blocking(argv: list, stdin: str | None, timeout: int, ident: dict
         except ProcessLookupError:
             pass
         p.wait()
-        return {"erro": f"timeout ({timeout}s) — grupo de processo morto", "cwd": str(RAIZ)}
+        return {"erro": f"timeout ({timeout}s) — grupo de processo morto", "cwd": str(d_cwd)}
     return {"exit_code": p.returncode, "stdout": _cap(stdout),
-            "stderr": _cap(stderr), "cwd": str(RAIZ)}
+            "stderr": _cap(stderr), "cwd": str(d_cwd)}
 
 
 def _faz_tool_verbo(slug: str, binario: str, descricao: str):
