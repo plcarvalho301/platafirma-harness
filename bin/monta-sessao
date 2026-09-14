@@ -941,7 +941,11 @@ def monta(cadeira, atualizar, pergunta=None, forcado_chapeu=None, so_chapeu=Fals
 
 
 def imprime_texto(pac):
-    print("deprecado: sucessor sessao abrir + expediente montar (arq:0110 §11), remoção após 14 dias")
+    # Aviso de deprecado vai ao STDERR: stdout e contrato de quem le o pacote (teste de
+    # contrato `== cadeira: ... ==` na linha 0; casca do chat). Corrigido por seguranca em
+    # 14/09 ao destravar o pre-push do ramo fabrica/3053.
+    print("deprecado: sucessor sessao abrir + expediente montar (arq:0110 §11), remoção após 14 dias",
+          file=sys.stderr)
     if "erro" in pac:
         print(f"{pac['erro']}" + (f" (procurado: {pac['procurado']})" if pac.get('procurado') else ""), file=sys.stderr)
         print("cadeiras: " + " ".join(pac["cadeiras_validas"]), file=sys.stderr)
