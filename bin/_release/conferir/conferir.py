@@ -140,7 +140,18 @@ def uso(erro=None):
 
 
 def sh(args, cwd=None):
-    p = subprocess.run(args, capture_output=True, text=True, cwd=cwd)
+    # cwd inexistente faz subprocess.run levantar FileNotFoundError ANTES de rodar o
+    # comando (o erro e do fork ao trocar de diretorio, nao do binario). Acontece quando
+    # um container segue de pe apontando um working_dir (worktree de deploy) que ja foi
+    # removido do disco: conferir_servico chamava sh(cwd=working_dir) e a conferencia
+    # inteira caia num traceback em vez de reportar a deriva. Aqui vira returncode de
+    # erro com motivo declarado, e o chamador segue medindo o resto.
+    if cwd is not None and not os.path.isdir(cwd):
+        return 127, "", f"diretorio de trabalho nao existe: {cwd}"
+    try:
+        p = subprocess.run(args, capture_output=True, text=True, cwd=cwd)
+    except (FileNotFoundError, NotADirectoryError, PermissionError) as e:
+        return 127, "", f"nao consegui executar em {cwd or os.getcwd()!r}: {e}"
     return p.returncode, p.stdout.strip(), p.stderr.strip()
 
 
@@ -219,6 +230,18 @@ def conferir_servico(alvo, como_json=False):
         if not como_json:
             print(f"\n### {c['nome']}  (servico {c['servico']})")
             print(f"    sobe de : {c['working_dir']}")
+        # Container de pe apontando working_dir removido do disco e deriva grave, nao
+        # ausencia silenciosa: git_estado volta None por nao achar o dir, e sem esta
+        # linha a conferencia passaria batido. Reporta e conta como divergencia.
+        if not os.path.isdir(c["working_dir"]):
+            houve = True
+            divergencias.append(
+                f"working_dir nao existe no disco: {c['working_dir']} — "
+                "container servindo de diretorio removido")
+            if not como_json:
+                print(f"    SUMIU   : working_dir nao existe no disco — container servindo de diretorio removido")
+            servicos.append({"nome": c["nome"], "servico": c["servico"], "divergencias": divergencias})
+            continue
         if not dentro_de_deploy:
             houve = True
             divergencias.append("nao e worktree de deploy — producao sobe de clone de trabalho")
