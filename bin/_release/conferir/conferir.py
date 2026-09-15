@@ -112,10 +112,6 @@ RAIZ = os.environ.get("PF_AI_DIR", os.path.expanduser("~/AI"))
 DEPLOY = os.environ.get("PF_DEPLOY_DIR", os.path.join(RAIZ, "deploy"))
 BIN = os.environ.get("PF_BIN_DIR", os.path.join(RAIZ, "bin"))
 HARNESS = os.environ.get("PF_HARNESS_DIR", os.path.join(RAIZ, "platafirma-harness"))
-# stacks.json foi aposentado (deploy:17; acervo.stack e a fonte). Constante restaurada
-# (caiu em 8288b76, usos em conferir_ferramental sobreviveram): ausente -> except OSError
-# zera no_arquivo e a paridade de transicao passa, que e o estado pos-morte do arquivo.
-STACKS_JSON = os.path.join(RAIZ, "platafirma-harness", "registro", "stacks.json")
 POLITICA_DIR = os.environ.get("PDP_DIR",
     os.path.join(RAIZ, "var", "politica-acesso"))  # dados fora do WT de fabrica (#2956)
 SUPERFICIES = os.path.join(POLITICA_DIR, "superficies.yaml")
@@ -2287,27 +2283,10 @@ def conferir_ferramental(alvo, como_json=False):
     # "capacidade X mora na stack Y"; instancia rodar avulsa (ollama no harness)
     # e estado normal, nao divergencia. O mapa instancia_roda_em_stack fica como
     # INFORMACAO consultavel (JOIN), nunca como invariante que reprova.
-    # (c) Paridade de TRANSICAO: stack no stacks.json que a tabela acervo.stack ainda
-    #     nao absorveu. E a pre-condicao de morte do arquivo — enquanto houver falta
-    #     aqui, stacks.json NAO morre. Some quando o seed cobrir os 11.
-    try:
-        with open(STACKS_JSON) as f:
-            no_arquivo = set(json.load(f).get("stacks", {}).keys())
-    except FileNotFoundError:
-        # stacks.json morto (arq:0076): a tabela acervo.stack e a fonte-verdade e o arquivo
-        # saiu depois da transicao. Ausencia e o estado terminal esperado, nao deriva.
-        no_arquivo = set()
-    except (OSError, ValueError):
-        no_arquivo = set()
-        achados.append(("DERIVA", f"nao li {STACKS_JSON} para conferir paridade de transicao"))
-    if no_arquivo:
-        na_tabela, erro = _ferramental_psql("select slug from acervo.stack")
-        se_tab = set(x.strip() for x in (na_tabela or []))
-        faltam = sorted(no_arquivo - se_tab)
-        if faltam:
-            achados.append(("FALHA",
-                f"{len(faltam)} stack(s) no stacks.json ausente(s) em acervo.stack: "
-                f"{', '.join(faltam)} — stacks.json nao morre ate a tabela absorver todos"))
+    # (c) Paridade de TRANSICAO: aposentada. Media stacks.json (registro/) contra
+    #     acervo.stack como pre-condicao de morte do arquivo. O arquivo ja morreu
+    #     (arq:0076: acervo.stack e a fonte-verdade, registro/stacks.json nao existe),
+    #     entao a pre-condicao esta cumprida e nao ha mais nada a medir aqui.
 
     falhas = [t for sev, t in achados if sev == "FALHA"]
     derivas = [t for sev, t in achados if sev == "DERIVA"]
