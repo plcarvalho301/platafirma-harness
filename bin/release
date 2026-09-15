@@ -1044,7 +1044,7 @@ rodar_publicador() {  # $@=args do publicar-abertura
     return 3
   fi
   PF_HARNESS="$(espelho_de "$FAMILIA_BIN")" PF_ABERTURA_DIR="$ABERTURA_DIR" \
-    PF_ACERVO="$(achar_verbo acervo)" "$pub" "$@"
+    PF_ACERVO="$(command -v "$(achar_verbo acervo)" 2>/dev/null || true)" "$pub" "$@"
 }
 
 sha_abertura_no_ar() {
