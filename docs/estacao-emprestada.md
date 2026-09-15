@@ -47,9 +47,12 @@ monta_sessao(cadeira="<cadeira>")
 
 Tudo abaixo vai por `run_command`, e executa na máquina do dono, nunca na estação.
 
-- Verbo: `pf <verbo> [args]` chama o verbo da release pelo nome, em qualquer conta
-  e de qualquer diretório (`pf` sem argumento lista); na conta dos serviços, o
-  nome direto basta (`release estado`, `sinal`).
+- Verbo: `platafirma <verbo> [args]` chama o verbo da release pelo nome, em
+  qualquer conta e de qualquer diretório (`platafirma` sem argumento lista); na
+  conta dos serviços, o nome direto basta (`release estado`, `sinal`).
+  `puxar-bancada --alias` grava na conta o atalho de shell `pf` → `platafirma`
+  (opcional, ergonomia; a plataforma não nomeia nada `pf`, ont:0087). Por
+  `run_command` o shell não é interativo e não lê alias: use o nome inteiro.
 - Bancada: quem vai codar e ainda não tem bancada declarada roda uma vez
   `/opt/platafirma/current/harness/deploy-harness/puxar-bancada --declarar <dir>`.
   Ele grava `~/.config/platafirma/bancada` da conta (sem sobrescrever outra já

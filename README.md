@@ -67,11 +67,21 @@ lê; sem declaração ele sai 3 com "bancada nao declarada".
 
 ## Trabalhar: chamar verbo e puxar a bancada
 
-**Chamar verbo.** Em qualquer conta, `pf <verbo> [args]` — `/usr/local/bin/pf`,
-posto pelo bootstrap do host, chama o verbo da release pelo nome, de qualquer
-diretório, e o verbo roda como a conta dos serviços; `pf` sem argumento lista os
-verbos. Na conta dos serviços, o nome direto (`release estado`, `sinal`) basta:
-o PATH já é `/opt/platafirma/current/harness/bin`. Ninguém precisa ir até `bin/`.
+**Chamar verbo.** Em qualquer conta, `platafirma <verbo> [args]` —
+`/usr/local/bin/platafirma`, posto pelo bootstrap do host, chama o verbo da release
+pelo nome, de qualquer diretório, e o verbo roda como a conta dos serviços;
+`platafirma` sem argumento lista os verbos. Na conta dos serviços, o nome direto
+(`release estado`, `sinal`) basta: o PATH já é `/opt/platafirma/current/harness/bin`.
+Ninguém precisa ir até `bin/`.
+
+**Atalho `pf`, opcional.** `puxar-bancada --alias` grava no rc do shell da conta
+(`~/.bashrc`) o alias `pf` → `platafirma`, entre os marcadores
+`# >>> platafirma alias >>>` e `# <<< platafirma alias <<<`; vale no próximo
+shell. É ergonomia e configuração da conta, não nome de coisa da plataforma: nenhum
+arquivo, verbo, variável ou unit da PlataFirma se chama `pf` (ont:0087). Segunda
+execução relata `conforme`; alias ou função `pf` com outro alvo no rc ou em
+`~/.bash_aliases`, ou comando `pf` alheio no PATH, sai 4 sem editar; rc sem permissão
+de escrita sai 3. Sem família e sem `--declarar`, `--alias` só grava o atalho.
 
 **Puxar a bancada.** Quem vai codar começa trazendo cada família para a bancada
 no sha que está em produção — o que roda, não `origin/main`:
@@ -82,6 +92,9 @@ no sha que está em produção — o que roda, não `origin/main`:
 
 # depois: todas as famílias com current, ou só as nomeadas; card abre ramo
 puxar-bancada [<familia>...] [--cadeira <slug>] [--card <n> --slug <s>] [--ensaio]
+
+# atalho de shell pf -> platafirma na conta (opcional)
+puxar-bancada --alias
 ```
 
 `--declarar <dir>` grava a raiz em `~/.config/platafirma/bancada` (0600) só se a

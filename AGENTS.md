@@ -5,4 +5,4 @@ fazer). Charter do módulo e o que entra/não entra: `README.md`.
 
 Clone é cliente: execução e escrita só por `claudinho-mcp`, na máquina do dono.
 
-Verbo se chama por `pf <verbo>` (qualquer conta) ou pelo nome (conta dos serviços); para codar, `deploy-harness/puxar-bancada --declarar <dir>` na primeira vez traz cada família para a bancada no sha de produção (`README.md`, "Trabalhar").
+Verbo se chama por `platafirma <verbo>` (qualquer conta) ou pelo nome (conta dos serviços); `puxar-bancada --alias` grava na conta o atalho de shell `pf` (opcional, ergonomia; a plataforma não nomeia nada `pf`, ont:0087); para codar, `deploy-harness/puxar-bancada --declarar <dir>` na primeira vez traz cada família para a bancada no sha de produção (`README.md`, "Trabalhar").

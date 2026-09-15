@@ -41,9 +41,13 @@ O que isso implica, e é preciso saber antes de despachar:
   sendo o roteiro daquele repo;
 - job acima de 600 s vai por `longjob`: `run_command` mata o grupo de processos
   no timeout, e build ou indexação passa disso;
-- verbo se chama por `pf <verbo> [args]` em qualquer conta (`pf` sem argumento
-  lista), ou pelo nome direto na conta dos serviços, cujo PATH é
-  `/opt/platafirma/current/harness/bin` — nunca indo até `bin/`;
+- verbo se chama por `platafirma <verbo> [args]` em qualquer conta (`platafirma`
+  sem argumento lista), ou pelo nome direto na conta dos serviços, cujo PATH é
+  `/opt/platafirma/current/harness/bin` — nunca indo até `bin/`.
+  `puxar-bancada --alias` grava no rc do shell da conta o atalho `pf` →
+  `platafirma` (opcional, ergonomia; a plataforma não nomeia nada `pf`, ont:0087);
+  o alias só existe em shell interativo da conta, então comando que vai por
+  `run_command` usa o nome inteiro;
 - bancada ausente (primeira vez na conta, ou apagada) não se remonta à mão:
   `run_command` com
   `/opt/platafirma/current/harness/deploy-harness/puxar-bancada --declarar <dir>`

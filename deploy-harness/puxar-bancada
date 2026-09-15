@@ -4,13 +4,26 @@
 # dono: ti
 # use para: primeiro passo de quem vai codar (inclusive depois de a bancada ter sido apagada):
 #           declarar a bancada da conta, abrir <bancada>/wt/<familia>/<cadeira> no sha que
-#           /opt/platafirma/<familia>/current aponta, e saber como chamar e testar verbo
+#           /opt/platafirma/<familia>/current aponta, e saber como chamar (platafirma <verbo>) e
+#           testar verbo; com --alias, gravar na conta o atalho de shell pf -> platafirma
 # ambiente: PF_RELEASE_RAIZ[=/opt/platafirma] (familias com current) · PF_RELEASE[=$PF_RELEASE_RAIZ/current]
 #           (o repo chamado e $PF_RELEASE/harness/bin/repo) · PF_BANCADA ou a linha de
 #           PF_ARQUIVO_BANCADA[=$HOME/.config/platafirma/bancada] (sem default; ausente e sem
 #           --declarar = exit 3) · PF_CADEIRA (lida; --cadeira vence; senao fabrica) ·
-#           PF_INSTANCIA[=/srv/platafirma/casa] (lida so para recusar bancada dentro dela) · HOME
-# depende: repo da release (abrir --da-producao, estado --json) · git e rede ao forge, pelo repo
+#           PF_INSTANCIA[=/srv/platafirma/casa] (lida so para recusar bancada dentro dela) ·
+#           PF_ARQUIVO_SHELLRC[=$HOME/.bashrc] (rc do shell da conta, so com --alias) · HOME
+# depende: repo da release (abrir --da-producao, estado --json) · git e rede ao forge, pelo repo ·
+#          python3 (--ensaio sobre worktree existente, --alias)
+#
+# ALIAS (--alias): o ponto de entrada dos verbos e /usr/local/bin/platafirma. `pf` e so atalho de
+# shell da conta que roda este script, por ergonomia — configuracao da conta, nao nome de coisa da
+# plataforma (ont:0087). Grava no rc do shell da conta um bloco entre marcadores fixos
+#   # >>> platafirma alias >>>  ...  alias pf='platafirma'  ...  # <<< platafirma alias <<<
+# Idempotente (bloco igual = conforme, nada escrito). Alias ou funcao pf com outro alvo fora do
+# bloco (no rc ou em ~/.bash_aliases), ou comando pf alheio no PATH = recusado, exit 4, sem
+# editar; rc sem permissao de escrita = exit 3. Escrita atomica (temporario no mesmo diretorio + rename),
+# preservando byte a byte o resto do arquivo e o modo; rc que e symlink tem o alvo editado.
+# Sem familia e sem --declarar, --alias so grava o alias e sai.
 #
 # Nao entra na conta de arq:0037: nao mora em bin/ e nao e chamado por cadeira. E preparo de
 # bancada, rodado por quem vai editar codigo.
@@ -23,13 +36,15 @@
 #
 # SAIDA: uma linha por familia — familia, sha em producao (curto), estado (criado | conforme |
 # impossivel: motivo), caminho. Em --ensaio nada e escrito e o estado diz o que aconteceria.
-# Depois, uma linha de como chamar verbo e uma de como testar verbo editado.
+# Depois, uma linha de como chamar verbo e uma de como testar verbo editado. Com --alias, antes
+# de tudo: "alias pf -> platafirma: criado | conforme | recusado (motivo)".
 #
 # EXIT (arq:0110 §4): 0 toda familia criada ou conforme · 1 familia fora da release · 2 uso ·
-# 3 dependencia (bancada nao declarada, repo da release ausente, forge fora) · 4 politica
-# (outra bancada ja declarada, bancada em /opt ou /srv, repo chamado dentro da bancada, worktree
-# em outro sha, sujo ou em outro ramo) · 5 indeterminavel (arquivo de declaracao que existe e
-# nao declara, current fora da forma). Com varias familias, sai o maior codigo visto.
+# 3 dependencia (bancada nao declarada, repo da release ausente, forge fora, rc nao gravavel) ·
+# 4 politica (outra bancada ja declarada, bancada em /opt ou /srv, repo chamado dentro da bancada,
+# worktree em outro sha, sujo ou em outro ramo, alias, funcao ou comando pf alheio) · 5 indeterminavel
+# (arquivo de declaracao que existe e nao declara, current fora da forma, rc que nao e arquivo
+# legivel ou com bloco de alias malformado). Com varias familias, sai o maior codigo visto.
 set -uo pipefail
 
 . "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/../lib/raizes.sh"
@@ -39,12 +54,14 @@ INSTANCIA_REAL="/srv/platafirma/casa"
 
 uso() {
   cat >&2 <<'FIM'
-uso: puxar-bancada [<familia>...] [--cadeira <slug>] [--card <n> [--slug <s>]] [--declarar <dir>] [--ensaio]
+uso: puxar-bancada [<familia>...] [--cadeira <slug>] [--card <n> [--slug <s>]] [--declarar <dir>] [--alias] [--ensaio]
 
   <familia>         nome do repo na release (platafirma-harness…); sem nenhuma, todas com current
   --cadeira         cadeira do worktree; senao PF_CADEIRA; senao fabrica
   --card/--slug     worktree num ramo fabrica/<card>-<slug> nascido do sha de producao
   --declarar <dir>  grava <dir> (absoluto) como bancada da conta, se ela ainda nao declarou
+  --alias           grava no rc do shell da conta o atalho pf -> platafirma (so isso, sem
+                    familia e sem --declarar)
   --ensaio          mostra o plano sem escrever nada
 
 exit: 0 fez · 1 familia fora da release · 2 uso · 3 dependencia · 4 politica · 5 indeterminavel
@@ -52,19 +69,23 @@ FIM
   exit 2
 }
 
-erro() {  # $1=mensagem $2=exit
+RC_ALIAS=0
+erro() {  # $1=mensagem $2=exit (nunca abaixo do codigo do --alias ja relatado)
+  local c="$2"
+  [ "$RC_ALIAS" -gt "$c" ] && c="$RC_ALIAS"
   printf '%s: %s\n' "$SCRIPT" "$1" >&2
-  exit "$2"
+  exit "$c"
 }
 
 FAMILIAS=()
-CADEIRA="" CARD="" SLUG="" DECLARAR="" ENSAIO=0
+CADEIRA="" CADEIRA_DADA=0 CARD="" SLUG="" DECLARAR="" ENSAIO=0 ALIAS=0
 while [ $# -gt 0 ]; do
   case "$1" in
-    --cadeira)  [ $# -ge 2 ] || uso; CADEIRA="$2"; shift 2 ;;
+    --cadeira)  [ $# -ge 2 ] || uso; CADEIRA="$2"; CADEIRA_DADA=1; shift 2 ;;
     --card)     [ $# -ge 2 ] || uso; CARD="$2"; shift 2 ;;
     --slug)     [ $# -ge 2 ] || uso; SLUG="$2"; shift 2 ;;
     --declarar) [ $# -ge 2 ] || uso; DECLARAR="$2"; shift 2 ;;
+    --alias)    ALIAS=1; shift ;;
     --ensaio)   ENSAIO=1; shift ;;
     -h|--help|--ajuda) uso ;;
     -*) printf '%s: opcao desconhecida: %s\n' "$SCRIPT" "$1" >&2; uso ;;
@@ -90,6 +111,208 @@ fi
 case "$SLUG" in
   *[!a-z0-9-]*) erro "slug invalido: '$SLUG' — use [a-z0-9-]" 2 ;;
 esac
+
+# --- alias da conta --------------------------------------------------------------------------
+# Atalho de shell pf -> platafirma no rc da conta que roda este script (ont:0087: pf nao nomeia
+# nada da plataforma; e configuracao da conta). Relata uma linha e devolve o exit.
+grava_alias() {
+  local rc_arq="${PF_ARQUIVO_SHELLRC:-$HOME/.bashrc}"
+  if ! command -v python3 >/dev/null 2>&1; then
+    echo "alias pf -> platafirma: recusado (python3 ausente — nao escrevo)"
+    return 3
+  fi
+  python3 - "$rc_arq" "$ENSAIO" <<'PY'
+import hashlib, os, re, shutil, sys, tempfile
+
+arq, ensaio = sys.argv[1], sys.argv[2] == "1"
+ABRE = "# >>> platafirma alias >>>"
+FECHA = "# <<< platafirma alias <<<"
+BLOCO = (ABRE + "\n"
+         "# gravado por puxar-bancada --alias: atalho de shell da conta, nao nome da plataforma (ont:0087)\n"
+         "alias pf='platafirma'\n"
+         + FECHA + "\n")
+ROTULO = "alias pf -> platafirma"
+
+def relata(estado, codigo, lembrete=False):
+    print(f"{ROTULO}: {estado}")
+    if lembrete:
+        print(f"lembrete: o alias vale no proximo shell (ou: source {arq})")
+    sys.exit(codigo)
+
+alvo = os.path.realpath(arq)
+original = b""
+modo = None
+if os.path.lexists(arq):
+    if not os.path.exists(arq):
+        relata(f"recusado (indeterminavel: {arq} e symlink pendurado — nao escrevo)", 5)
+    if not os.path.isfile(alvo):
+        relata(f"recusado (indeterminavel: {arq} existe e nao e arquivo regular — nao escrevo)", 5)
+    try:
+        with open(alvo, "rb") as f:
+            original = f.read()
+        modo = os.stat(alvo).st_mode & 0o7777
+    except OSError as e:
+        relata(f"recusado (indeterminavel: {arq} ilegivel: {e.strerror})", 5)
+
+texto = original.decode("utf-8", "surrogateescape")
+
+def quebra(t):
+    # linhas como o bash as le: so \n separa (\r e U+2028 ficam dentro da linha)
+    return re.findall(r"[^\n]*\n|[^\n]+\Z", t)
+
+linhas = quebra(texto)
+
+# definicao de pf fora do bloco: alias (qualquer posicao na lista de nomes, \alias incluso) ou funcao
+RE_ALIAS = re.compile(r"""(?:^|[\s;&|({])\\?alias\b[^;#\n]*?(?<![\w.-])pf=('([^']*)'|"([^"]*)"|([^\s;&|)]*))""")
+RE_FUNCAO = re.compile(r"(?:^|[\s;&|({])(?:function\s+pf(?![\w.-])|pf\s*\(\s*\))")
+
+alheias, iguais = [], []
+
+def examina(onde, n, bruta, conta_igual=True):
+    linha = bruta.rstrip("\n")  # o \r de CRLF fica: o bash o le como parte da ultima palavra
+    if linha.lstrip().startswith("#"):
+        return
+    for m in RE_ALIAS.finditer(linha):
+        valor = next((g for g in m.groups()[1:] if g is not None), "")
+        colado = linha[m.end():m.end() + 1]  # caractere colado ao valor vira parte do alvo
+        if valor == "platafirma" and colado in ("", " ", "\t", ";", "&", "|", ")"):
+            if conta_igual:
+                iguais.append((onde, n, linha.strip()))
+        else:
+            alheias.append((onde, n, linha.strip()))
+    if RE_FUNCAO.search(linha):
+        alheias.append((onde, n, linha.strip()))
+
+inicio = fim = None
+dentro = False
+for n, bruta in enumerate(linhas, 1):
+    linha = bruta.rstrip("\r\n")
+    if linha == ABRE:
+        if inicio is not None:
+            relata(f"recusado (indeterminavel: marcador de abertura repetido em {arq}:{n} — nao escrevo)", 5)
+        inicio, dentro = n, True
+        continue
+    if linha == FECHA:
+        if not dentro:
+            relata(f"recusado (indeterminavel: marcador de fechamento sem abertura em {arq}:{n} — nao escrevo)", 5)
+        fim, dentro = n, False
+        continue
+    if not dentro:
+        examina(arq, n, bruta)
+if dentro:
+    relata(f"recusado (indeterminavel: bloco aberto em {arq}:{inicio} sem fechamento — nao escrevo)", 5)
+
+# ~/.bash_aliases (lido pelo .bashrc padrao): pf alheio la tambem seria sombreado em silencio.
+# Definicao igual la nao conta como conforme: nada garante que o rc a leia.
+casa = os.environ.get("HOME", "")
+extra = os.path.join(casa, ".bash_aliases") if casa else ""
+if extra and os.path.isfile(extra) and os.path.realpath(extra) != alvo:
+    try:
+        with open(extra, "rb") as f:
+            for n, bruta in enumerate(quebra(f.read().decode("utf-8", "surrogateescape")), 1):
+                examina(extra, n, bruta, conta_igual=False)
+    except OSError:
+        pass
+
+if alheias:
+    onde, n, l = alheias[0]
+    relata(f"recusado ({onde}:{n} ja define pf com outro alvo: {l} — nao edito; tire a linha ou renomeie o atalho)", 4)
+
+# comando pf no PATH que o alias sombrearia. Nao e alheio o proprio ponto de entrada com o nome
+# antigo: copia byte a byte de platafirma no PATH, ou o deploy/pf publicado em platafirma-core
+# 5bd608b (a mesma sobra que deploy/bootstrap-host.sh remove).
+ENTRADA_ANTIGA_SHA256 = {"70ef073a491ec40287194cfd6f8ffeed65167ecd7c4524cbcb0ad38bd9cdde9e"}
+
+def le(caminho):
+    try:
+        with open(os.path.realpath(caminho), "rb") as f:
+            return f.read()
+    except OSError:
+        return None
+
+def comando_alheio():
+    achado = shutil.which("pf")
+    if not achado:
+        return None
+    dados = le(achado)
+    if dados is not None:
+        if hashlib.sha256(dados).hexdigest() in ENTRADA_ANTIGA_SHA256:
+            return None
+        entrada = shutil.which("platafirma")
+        if entrada and le(entrada) == dados:
+            return None
+    return achado
+
+if inicio is not None:
+    atual = "".join(linhas[inicio - 1:fim])
+    if atual == BLOCO:
+        relata("conforme", 0)
+    novo = "".join(linhas[:inicio - 1]) + BLOCO + "".join(linhas[fim:])
+    estado = "criado (bloco refeito)"
+elif iguais:
+    relata(f"conforme (definido fora do bloco em {iguais[0][0]}:{iguais[0][1]})", 0)
+else:
+    sep = "" if texto == "" or texto.endswith("\n") else "\n"
+    novo = texto + sep + BLOCO
+    estado = "criado"
+
+cmd = comando_alheio()
+if cmd:
+    relata(f"recusado (comando pf alheio no PATH: {cmd} — o alias o sombrearia; nao edito)", 4)
+# rc que existe sem permissao de escrita: o rename no diretorio contornaria o modo; recusa
+if modo is not None and not os.access(alvo, os.W_OK):
+    relata(f"recusado (nao gravavel: {arq} sem permissao de escrita — nao escrevo)", 3)
+
+if ensaio:
+    verbo = "criaria" if estado == "criado" else "refaria o bloco"
+    relata(f"{verbo} em {arq} (ensaio)", 0)
+
+diretorio = os.path.dirname(alvo)
+try:
+    os.makedirs(diretorio, exist_ok=True)
+    fd, tmp = tempfile.mkstemp(prefix=".platafirma-alias.", dir=diretorio)
+except OSError as e:
+    relata(f"recusado (nao gravei {arq}: {e.strerror})", 3)
+try:
+    with os.fdopen(fd, "wb") as f:
+        f.write(novo.encode("utf-8", "surrogateescape"))
+        f.flush()
+        os.fsync(f.fileno())
+    if modo is None:
+        mascara = os.umask(0); os.umask(mascara)
+        modo = 0o666 & ~mascara
+    os.chmod(tmp, modo)
+    # outra escrita entre a leitura e aqui: recusa em vez de sobrescrever
+    atual_disco = b""
+    if os.path.exists(alvo):
+        with open(alvo, "rb") as f:
+            atual_disco = f.read()
+    if atual_disco != original:
+        os.unlink(tmp)
+        relata(f"recusado ({arq} mudou durante a escrita — nao sobrescrevo)", 4)
+    os.replace(tmp, alvo)
+except OSError as e:
+    try:
+        os.unlink(tmp)
+    except OSError:
+        pass
+    relata(f"recusado (nao gravei {arq}: {e.strerror})", 3)
+relata(estado, 0, lembrete=True)
+PY
+}
+
+if [ "$ALIAS" -eq 1 ]; then
+  if [ "${#FAMILIAS[@]}" -eq 0 ] && [ -z "$DECLARAR" ]; then
+    # so o alias: cadeira, card e slug nao teriam onde valer
+    [ "$CADEIRA_DADA" -eq 0 ] && [ -z "$CARD" ] && [ -z "$SLUG" ] \
+      || erro "--alias sem familia nem --declarar so grava o alias: --cadeira, --card e --slug nao se aplicam" 2
+    grava_alias
+    exit $?
+  fi
+  grava_alias
+  RC_ALIAS=$?
+  [ "$RC_ALIAS" -le 5 ] || RC_ALIAS=5
+fi
 
 # --- bancada declarada --------------------------------------------------------------------
 # Declaracao e da conta (desenho #3010 §9): uma linha em PF_ARQUIVO_BANCADA; PF_BANCADA no
@@ -198,7 +421,7 @@ motivo_de() {  # $1=stderr do repo $2=caminho do worktree (sai do motivo: ja e a
   printf '%s' "${m:-sem motivo do repo}"
 }
 
-PIOR=0
+PIOR="$RC_ALIAS"
 # codigo fora de 0..5 (repo que nem rodou: 126, 127, sinal) conta como indeterminavel
 pior() { local c="$1"; [ "$c" -le 5 ] || c=5; [ "$c" -gt "$PIOR" ] && PIOR="$c"; return 0; }
 
@@ -260,7 +483,7 @@ except Exception:
 done
 
 # --- como chamar e como testar -------------------------------------------------------------
-printf 'verbos: pf <verbo> [args] em qualquer conta (pf sem argumento lista); na conta dos servicos, o nome direto (PATH %s/harness/bin)\n' "$PF_RELEASE"
+printf 'verbos: platafirma <verbo> [args] em qualquer conta (platafirma sem argumento lista); na conta dos servicos, o nome direto (PATH %s/harness/bin); atalho pf na conta: puxar-bancada --alias\n' "$PF_RELEASE"
 printf 'testar verbo editado: PF_INSTANCIA=<tmp> PF_RELEASE_RAIZ=<tmp> %s/wt/<familia>/%s/bin/<verbo> … — a producao segue servida pela release\n' "$BANCADA" "$CADEIRA"
 # O aviso e sobre o verbo da bancada, nao sobre o ambiente deste script: sai sempre.
 printf 'aviso: verbo da bancada chamado sem PF_INSTANCIA de teste executa contra a instancia real (%s)\n' "$INSTANCIA_REAL"
