@@ -25,7 +25,7 @@
 | KC_DB / IDENTIDADE_DB / MDM_RH_DB _PASSWORD | .env | não declarada | não declarada |
 | TODOIST_TOKEN | .env | não declarada | não declarada |
 | OPS_AUTH_TOKEN (break-glass estático) | EnvironmentFile do unit (não inline) | expira 2026-09-30 (default de CÓDIGO, não declarado no unit) | em uso (74 chamadas via `token-estatico`) |
-| Google token | ~/AI/var/google/token.json | — | **permissão 644 — world-readable** |
+| Google token | `var/google/token.json` da pasta de trabalho da conta (25/08) | — | **permissão 644 — world-readable** |
 
 ## 4. PAP — operadores (poder pleno)
 - `megafone` (+ chave por sub `b6986be0…`) e `claudinho`. Dois operadores, ambos justificados (dono; conta de serviço / rota estática). Sem operador a mais.

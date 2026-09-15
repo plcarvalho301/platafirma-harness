@@ -6,25 +6,25 @@
     "conhecimento-db": {
       "o_que": "MariaDB da wiki",
       "cobertura": "cron do claudinho, 03:00",
-      "diretorio": "~/AI/deploy/conhecimento/backups",
+      "diretorio": "/srv/platafirma/casa/dados/backups/wiki",
       "padrao": "*.sql.gz",
       "alcance": "aqui"
     },
     "rag-db": {
       "o_que": "Postgres do acervo (schema acervo + vetores)",
       "cobertura": "cron do claudinho, 03:30",
-      "diretorio": "~/AI/deploy/conhecimento/rag/backups",
+      "diretorio": "/srv/platafirma/casa/dados/backups/rag",
       "padrao": "acervo-*.sql.gz",
       "alcance": "aqui"
     },
     "rag-minio": {
       "o_que": "object storage do acervo",
       "cobertura": "cron do claudinho, 03:45",
-      "diretorio": "~/backups/minio",
+      "diretorio": "/srv/platafirma/casa/dados/backups/minio",
       "padrao": "*",
       "alcance": "aqui",
       "_nota": "mirror, nao geracao: o backup-minio.sh espelha os buckets com --remove, entao 'geracoes' aqui e o numero de buckets espelhados, nao de copias no tempo.",
-      "log": "~/AI/deploy/conhecimento/rag/backups/backup.log"
+      "log": "/srv/platafirma/casa/var/log/cron/backup-rag-minio.log"
     },
     "cofre-keepass": {
       "o_que": "cofre de credenciais, em geracoes datadas",

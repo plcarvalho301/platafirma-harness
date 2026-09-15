@@ -5,8 +5,9 @@
 # escreve, e 'circular' barra pauta vazia. Protocolo: minutas/PROTOCOLO.md §2-3.
 set -euo pipefail
 
-REPO="${MINUTA_REPO:-$HOME/AI/platafirma-arquitetura}"
-DIR="$REPO/minutas"
+# Raizes e bancada declarada (card #3010): escrever commita e empurra, entao roda no
+# worktree da cadeira, <bancada>/wt/platafirma-arquitetura/<cadeira> (arq:0109 §2).
+. "$(dirname "$(readlink -f "$0")")/../../lib/raizes.sh"
 
 uso() {
   echo "uso: minuta escrever <slug> --convoca <c1>[,<c2>...] [--fecha <cadeira|pedro>] [--card <#N>]" >&2
@@ -32,6 +33,19 @@ done
 
 CADEIRA="${PF_CADEIRA:-}"
 [ -n "$CADEIRA" ] || { echo "minuta escrever: exporte PF_CADEIRA=<cadeira>." >&2; exit 2; }
+
+# MINUTA_REPO aponta outro checkout (teste); sem ele, o worktree da cadeira. Sem bancada
+# declarada ou sem worktree: exit 3, nunca criacao silenciosa.
+if [ -n "${MINUTA_REPO:-}" ]; then
+  REPO="$MINUTA_REPO"
+else
+  CAD_WT="${CADEIRA#claudinho-}"
+  CAD_WT="${CAD_WT#claudinha-}"
+  BANCADA="$(pf_bancada)" || exit 3
+  REPO="$BANCADA/wt/platafirma-arquitetura/$CAD_WT"
+  [ -d "$REPO" ] || { echo "minuta escrever: worktree ausente: $REPO — rode 'repo abrir platafirma-arquitetura'." >&2; exit 3; }
+fi
+DIR="$REPO/minutas"
 
 [[ "$SLUG" =~ ^[a-z0-9]+(-[a-z0-9]+)*$ ]] || { echo "minuta escrever: slug precisa ser kebab-case (a-z0-9-)." >&2; exit 2; }
 
@@ -116,7 +130,7 @@ TITULO="$(tr '[:lower:]' '[:upper:]' <<<"${TITULO:0:1}")${TITULO:1}"
 } > "$ARQ"
 
 # Publica o esqueleto no nascimento. O dono NAO le clone local — arquivo parado em
-# ~/AI e rascunho invisivel (oficio.md). Antes desta linha existia uma janela entre
+# bancada e rascunho invisivel (oficio.md). Antes desta linha existia uma janela entre
 # 'escrever' e 'circular' em que a minuta so vivia no clone de quem abriu, e quem
 # pedia pra ver nao a encontrava. Publicar cedo (esqueleto) e publicar de novo (merito,
 # antes de circular) vence rascunho invisivel: 'circular' ja barra pauta vazia, entao

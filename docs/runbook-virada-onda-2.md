@@ -33,7 +33,7 @@ faz com a própria mão.
 3. `teste rodar platafirma-harness testes` (46) e `controle/tests/test_contrato_monta_sessao.py`
    (25) e `test_contrato_acesso.py` (27) verdes; `lint rodar platafirma-harness` limpo.
 4. `ops-server/test_monta_sessao_lote.py` e `test_run_command_lote_injecao.py` no venv da
-   porta (venv-harness não tem `mcp`). Se pela porta não rodar, declara-se e segue —
+   porta, `/opt/platafirma/current/venv/ops` (o venv harness da release não tem `mcp`). Se pela porta não rodar, declara-se e segue —
    carta branca da gestão para ajuste de mock.
 
 Gate: qualquer item fora do verde é `PARADA:` — não vira.

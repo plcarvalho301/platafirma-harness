@@ -20,7 +20,8 @@ o que elas faziam de legítimo passa a viver aqui.
 Endpoint: `MW_API_URL` (default `http://127.0.0.1:8080/api.php`, a porta que o host
 publica; a rede docker vê `mediawiki:80`, mas o verbo roda no host). Leituras são
 anônimas; `editar`/`subir` fazem login com a conta de bot `Claudinho`
-(MW_BOT_USER/MW_BOT_PASSWORD; se ausentes do ambiente, carregadas de PF_WIKI_ENV).
+(MW_BOT_USER/MW_BOT_PASSWORD; se ausentes do ambiente, lidas por nome dos segredos da
+instancia, <instancia>/segredos/conhecimento/<NOME>, card #3010).
 
 Namespaces de busca: 0|4|12|3000|3004 — inclui 3004 (Operar), que o CONTENT_NS do
 wiki-mcp OMITE (medido no siteinfo 20/08/2026; o wiki-mcp diz cobrir "Operar:" mas usa
@@ -37,8 +38,12 @@ import sys
 import urllib.error
 import urllib.parse
 import urllib.request
+from pathlib import Path
 
-RAIZ = os.environ.get("PF_RAIZ", os.path.expanduser("~/AI"))
+# Raizes de producao (card #3010): credencial e segredo da instancia, nunca .env de clone.
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "lib"))
+from raizes import instancia  # noqa: E402
+
 API = (os.environ.get("MW_API_URL") or "http://127.0.0.1:8080/api.php").rstrip("/")
 TIMEOUT_S = float(os.environ.get("MW_TIMEOUT_S", "20"))
 UA = "platafirma-acervo-wiki/1.0 (claudinho-dados)"
@@ -118,22 +123,20 @@ def _credencial() -> tuple[str, str, str]:
     user, pw = os.environ.get("MW_BOT_USER"), os.environ.get("MW_BOT_PASSWORD")
     if user and pw:
         return user, pw, "env"
-    env_path = os.environ.get(
-        "PF_WIKI_ENV", os.path.join(RAIZ, "platafirma-conhecimento", ".env"))
-    if not os.path.exists(env_path):
-        morre(f"sem credencial de bot: MW_BOT_USER/MW_BOT_PASSWORD ausentes e "
-              f"{env_path} não existe. Defina PF_WIKI_ENV ou as variáveis.")
+    # Um arquivo por variavel (o layout de `seg segredo gravar`); ausencia e falha alta.
+    cofre = Path(os.environ.get("SEG_SECRETS_DIR") or instancia() / "segredos") / "conhecimento"
     vals = {}
-    with open(env_path) as fh:
-        for ln in fh:
-            ln = ln.strip()
-            if ln and not ln.startswith("#") and "=" in ln:
-                k, _, v = ln.partition("=")
-                vals[k.strip()] = v.strip().strip('"').strip("'")
-    user, pw = vals.get("MW_BOT_USER"), vals.get("MW_BOT_PASSWORD")
-    if not user or not pw:
-        morre(f"credencial de bot incompleta em {env_path}")
-    return user, pw, env_path
+    for nome in ("MW_BOT_USER", "MW_BOT_PASSWORD"):
+        arq = cofre / nome
+        try:
+            vals[nome] = arq.read_text(encoding="utf-8").strip()
+        except OSError:
+            vals[nome] = ""
+    faltam = [n for n, v in vals.items() if not v]
+    if faltam:
+        morre(f"sem credencial de bot: {', '.join(faltam)} ausente(s) do ambiente e de "
+              f"{cofre}/. Grave com `seg segredo gravar conhecimento/<NOME>`.")
+    return vals["MW_BOT_USER"], vals["MW_BOT_PASSWORD"], str(cofre)
 
 
 def _login():

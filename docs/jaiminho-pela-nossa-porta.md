@@ -129,7 +129,7 @@ Aceite medido, pela ponte e pela superfície dele: `wiki_buscar "capacidade
 estatal"` devolve páginas do namespace principal; `wiki_ler "Capacidade-estatal"`
 devolve o texto; `wiki_ler "Operar:catalogo-de-verbos"` volta
 `fora do alcance: camada interna da wiki`, nomeando o que recusou. A trilha em
-`~/AI/var/log/jaiminho/` registra sujeito e ação a cada chamada.
+`/srv/platafirma/casa/var/log/jaiminho/` registra sujeito e ação a cada chamada.
 
 **Como conferir que subiu de verdade.** Ler o JSON não prova nada — a config pode
 estar perfeita e o CLI ter descartado tudo. A prova é pela superfície dele:

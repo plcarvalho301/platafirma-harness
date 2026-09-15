@@ -1,0 +1,37 @@
+# compose.override.exemplo.yaml — FORMA da sobreposicao da instancia para a stack `chat`
+# (card #3010). Exemplo versionado; o real mora em
+#   /srv/platafirma/casa/deploy/chat/compose.override.yaml
+# e o `deploy chat up|promover` sobe, com o projeto de sempre (`chat`):
+#   docker compose -p chat \
+#     -f /opt/platafirma/current/harness/chat/docker-compose.yml \
+#     -f /srv/platafirma/casa/deploy/chat/compose.override.yaml \
+#     --env-file <tmpfs materializado de /srv/platafirma/casa/segredos/chat/>
+#
+# Aqui mora TODO caminho da instancia, e so ele: a base na release nao carrega nenhum.
+# Instancia noutra raiz troca /srv/platafirma/casa nas linhas abaixo, e em mais lugar
+# nenhum — o valor de PF_INSTANCIA dado a recepcao e o prefixo dos binds andam juntos.
+#
+# Nome do arquivo termina em .exemplo.yaml de proposito: `docker compose` sem -f carrega
+# compose.override.yaml sozinho, e este exemplo nao pode entrar em subida nenhuma.
+
+services:
+  chat-synapse:
+    volumes:
+      # Cofre matrix (segredos.yaml, signing.key, registration.yaml), 600, lido pelo
+      # root-do-container = claudinho. Cunhado por chat/prepara.sh.
+      - /srv/platafirma/casa/segredos/matrix:/segredos:ro
+
+  chat-recepcao:
+    environment:
+      PF_INSTANCIA: /srv/platafirma/casa
+      PF_ABERTURA_DIR: /srv/platafirma/casa/var/abertura-publicada
+      CHAT_JOURNAL: /srv/platafirma/casa/var/run/chat/journal.db
+      CHAT_FITAS_RAIZ: /srv/platafirma/casa/var/fitas
+    volumes:
+      # MESMO caminho absoluto dentro e fora: o worker do host abre o caminho do anexo
+      # tal como a recepcao o gravou, e os dois batem no mesmo journal.
+      - /srv/platafirma/casa/var/fitas:/srv/platafirma/casa/var/fitas:rw
+      - /srv/platafirma/casa/var/run/chat:/srv/platafirma/casa/var/run/chat:rw
+      # Somente leitura: a MORADA PUBLICADA inteira (arq:0097, arq:0109 §1), porque
+      # `current` e symlink e tem de resolver dentro do container.
+      - /srv/platafirma/casa/var/abertura-publicada:/srv/platafirma/casa/var/abertura-publicada:ro

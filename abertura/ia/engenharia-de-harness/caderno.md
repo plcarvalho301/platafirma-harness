@@ -215,7 +215,7 @@ ficar. Vale para qualquer publicação de harness, não só para pacote livre.
 
 ## Wrapper que acha o miolo por `dirname $0` quebra quando o verbo é servido por symlink
 
-Verbo do PATH da casa é symlink de `~/AI/bin` para o clone. `dirname "$0"` devolve o
+Verbo servido por symlink (o PATH da casa até o card #3010; alias em qualquer tempo). `dirname "$0"` devolve o
 diretório do LINK, não o do arquivo; wrapper que compõe caminho a partir dele procura o
 miolo numa pasta que só existe no repo e morre com "can't open file". `readlink -f "$0"`
 antes do `dirname` é a forma; o sintoma é o wrapper achar que a instalação está
@@ -279,9 +279,9 @@ o lint deveria pegar os dois.
 ## Diário de bordo
 
 07/09/2026 — `conta-abertura` (instrumento de custo do pacote) morria com `python: can't
-open file '/home/claudinho/AI/bin/_conta/conta-abertura.py'`; o miolo existe, em
+open file '<diretório de verbos da pasta de trabalho da conta>/_conta/conta-abertura.py'`; o miolo existe, em
 `platafirma-harness/bin/_conta/`. Causa: linha 16 do wrapper fazia
-`AQUI="$(cd "$(dirname "$0")" && pwd)"`, e `$0` é o symlink de `~/AI/bin`. — contorno
+`AQUI="$(cd "$(dirname "$0")" && pwd)"`, e `$0` é o symlink do diretório de verbos da casa. — contorno
 encontrado NA DATA 07/09/2026 foi `dirname "$(readlink -f "$0")"`, commitado em
 platafirma-harness@1835835.
 

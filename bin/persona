@@ -7,9 +7,9 @@
 # atos: ler, conduta, foto, abrir, salvar, conferir, prover, designar, afastar, dispensar, desligar, remover, reverter, filme, idade
 # folhas: ler|conduta|foto -> organizacao/leitura (serve o expediente) · abrir|salvar|conferir -> organizacao/redacao ·
 #         prover|designar|dispensar|remover|afastar|reverter|desligar|filme -> organizacao/vinculo (ledger)
-# ambiente: PF_ABERTURA_DIR[=~/AI/var/abertura-publicada] (leitura, arq:0097) · PERSONA_REPO[=~/AI/platafirma-harness] (escrita)
+# ambiente: PF_ABERTURA_DIR[=/srv/platafirma/casa/var/abertura-publicada] (leitura, arq:0097) · PF_INSTANCIA[=/srv/platafirma/casa] · PF_BANCADA[sem default; senao a linha de $HOME/.config/platafirma/bancada; ausente = exit 3] (escrita: <bancada>/wt/platafirma-harness/$PF_CADEIRA, senao <bancada>/platafirma-harness) · PERSONA_REPO (override de teste do clone de escrita) · PF_CADEIRA porta
 # depende: morada publicada (ler, conduta, foto); git + origin (abrir, salvar)
-# escreve: abertura/ e registro/eventos-org.jsonl do clone (salvar); nada em ler|conduta|foto|filme
+# escreve: abertura/ e registro/eventos-org.jsonl do clone de bancada (salvar); nada em ler|conduta|foto|filme
 #
 # LEITURA E DA MORADA PUBLICADA, nunca do clone (arq:0097): `ler`, `conduta` e `foto`
 # servem a arvore imutavel sob $PF_ABERTURA_DIR/current/abertura — e o que o expediente
@@ -20,8 +20,14 @@
 # chapeu fora do vocabulario lista os da cadeira (exit 1), morada nao publicada exit 3.
 set -euo pipefail
 
-REPO="${PERSONA_REPO:-$HOME/AI/platafirma-harness}"
-MORADA="${PF_ABERTURA_DIR:-$HOME/AI/var/abertura-publicada}"
+# Raizes da casa (card #3010): leitura na instancia; escrita so na bancada declarada.
+AQUI="$(dirname "$(readlink -f "$0")")"
+. "$AQUI/../lib/raizes.sh"
+
+MORADA="${PF_ABERTURA_DIR:-$PF_INSTANCIA/var/abertura-publicada}"
+# Clone de escrita: resolvido so pelos atos que o usam (entra_no_clone). Leitura nunca
+# toca a bancada — sem ela declarada, ler/conduta/foto/conferir seguem servindo.
+REPO="${PERSONA_REPO:-}"
 ARVORE="$MORADA/current/abertura"
 # conteudo vivo mora na arvore de abertura (um dir por cadeira, persona.md + chapeus).
 # o ledger de organizacao mora em registro/eventos-org.jsonl (ato proprio, _persona-org.py).
@@ -229,7 +235,26 @@ case "${1:-}" in
   foto)    shift; foto "$@"; exit $? ;;
 esac
 
-cd "$REPO"
+# Worktree da cadeira na bancada (arq:0109 §2), senao o clone base. Bancada nao
+# declarada sai 3; clone ausente sai 3 com a cura, nunca criacao silenciosa.
+entra_no_clone() {
+  if [ -z "$REPO" ]; then
+    local b
+    b="$(pf_bancada)" || exit 3
+    if [ -n "${PF_CADEIRA:-}" ] && [ -e "$b/wt/platafirma-harness/$PF_CADEIRA/.git" ]; then
+      REPO="$b/wt/platafirma-harness/$PF_CADEIRA"
+    else
+      REPO="$b/platafirma-harness"
+    fi
+  fi
+  if [ ! -d "$REPO" ]; then
+    echo "persona: clone de escrita ausente em $REPO — a cura e \`repo abrir platafirma-harness\`" >&2
+    exit 3
+  fi
+  cd "$REPO"
+  # o sub-ato de ledger escreve no MESMO clone que o salvar versiona
+  export PERSONA_REPO="$REPO"
+}
 
 idade() {
   local sha data seg
@@ -336,9 +361,11 @@ done
 
 case "${1:-}" in
   abrir)
+    entra_no_clone
     git pull --ff-only -q origin HEAD && echo "clone em dia · $(idade)"
     ;;
   idade)
+    entra_no_clone
     idade
     ;;
   conferir)
@@ -348,6 +375,7 @@ case "${1:-}" in
     shift
     [ "${1:-}" = "-m" ] && [ -n "${2:-}" ] || uso
     msg="$2"
+    entra_no_clone
     # o verbo versiona dois caminhos: o conteudo vivo (abertura/) e o ledger de
     # organizacao (registro/eventos-org.jsonl), que _persona-org.py escreve sem commitar.
     # Mudanca fora desses dois aborta em vez de entrar de carona.
@@ -374,10 +402,12 @@ case "${1:-}" in
     # lembra e sempre o dono; esta linha divide esse trabalho com ele.
     echo "lembrete: passou pelo mapa de capacidades? platafirma-arquitetura@docs/arquitetura-negocio-operacao.md · arq:0059" >&2
     echo "          claudinho-arquiteto qualifica; nao e gate e nao bloqueia este ato." >&2
-    exec python3 "$REPO/bin/_persona/org.py" "$@"
+    entra_no_clone
+    exec python3 "$AQUI/_persona/org.py" "$@"
     ;;
   afastar|reverter|desligar|filme)
-    exec python3 "$REPO/bin/_persona/org.py" "$@"
+    entra_no_clone
+    exec python3 "$AQUI/_persona/org.py" "$@"
     ;;
   *)
     uso

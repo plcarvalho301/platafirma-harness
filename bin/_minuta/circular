@@ -10,8 +10,15 @@ import sys
 import glob
 import subprocess
 
-REPO = os.environ.get("MINUTA_REPO") or os.path.expanduser("~/AI/platafirma-arquitetura")
-DIR = os.path.join(REPO, "minutas")
+sys.path.insert(0, os.path.join(
+    os.path.dirname(os.path.dirname(os.path.dirname(os.path.realpath(__file__)))), "lib"))
+from raizes import BancadaNaoDeclarada, bancada  # noqa: E402
+
+# Circular commita e empurra: roda no worktree da cadeira na bancada DECLARADA,
+# <bancada>/wt/platafirma-arquitetura/<cadeira> (arq:0109 §2, card #3010). Resolvido em
+# main(); MINUTA_REPO aponta outro checkout (teste).
+REPO = None
+DIR = None
 PLACEHOLDER_ABRE = "<escreva aqui antes de circular>"
 PLACEHOLDER_CONV = "<a preencher pela própria cadeira>"
 
@@ -33,6 +40,26 @@ def esqueleto_posicao(ph):
 def erro(msg, code=1):
     print(f"minuta circular: {msg}", file=sys.stderr)
     sys.exit(code)
+
+
+def worktree_da_cadeira(verbo):
+    """MINUTA_REPO, senao <bancada>/wt/platafirma-arquitetura/<cadeira>. Sem bancada
+    declarada ou sem worktree: exit 3, nunca criacao silenciosa."""
+    explicito = os.environ.get("MINUTA_REPO")
+    if explicito:
+        return explicito
+    cadeira = os.environ.get("PF_CADEIRA", "").strip()
+    cadeira = cadeira.removeprefix("claudinho-").removeprefix("claudinha-")
+    if not cadeira:
+        erro("exporte PF_CADEIRA=<cadeira>: a minuta se edita no worktree da cadeira.", 2)
+    try:
+        raiz = bancada()
+    except BancadaNaoDeclarada as e:
+        erro(str(e), 3)
+    wt = os.path.join(str(raiz), "wt", "platafirma-arquitetura", cadeira)
+    if not os.path.isdir(wt):
+        erro(f"worktree ausente: {wt} — rode `repo abrir platafirma-arquitetura` antes de {verbo}.", 3)
+    return wt
 
 
 def git(*args, check=True):
@@ -61,9 +88,12 @@ def parse_secoes(texto):
 
 
 def main():
+    global REPO, DIR
     args = sys.argv[1:]
     if not args:
         erro("uso: minuta circular <n> [<cadeira>...]", 2)
+    REPO = worktree_da_cadeira("circular")
+    DIR = os.path.join(REPO, "minutas")
     n = args[0]
     alvos_pedidos = args[1:]
     num, caminho = resolve(n)

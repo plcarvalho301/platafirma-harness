@@ -1,4 +1,4 @@
-#!/home/claudinho/AI/.venv-harness/bin/python
+#!/opt/platafirma/current/venv/harness/bin/python
 # monta-sessao <cadeira> — monta o pacote de abertura A PARTIR DO CATALOGO.
 # capacidade: expediente
 # dono: ia (politica de sessao) · ti (montador)
@@ -39,22 +39,28 @@ import calendar
 import glob
 import json
 import os
-from pathlib import Path
 import re
 import subprocess
 import sys
 import time
 
-RAIZ = os.environ.get("PF_RAIZ", os.path.expanduser("~/AI"))
-HARNESS = os.path.join(RAIZ, "platafirma-harness")
+# A propria arvore (release no ar, ou o checkout que roda) resolve por realpath, nunca
+# por raiz montada a mao (card #3010). Dela vem codigo, verbos irmaos e artefato pinado.
+_REPO_REAL = os.path.dirname(os.path.dirname(os.path.realpath(__file__)))
+sys.path.insert(0, os.path.join(_REPO_REAL, "lib"))
+import raizes  # noqa: E402 — as duas raizes de producao (release, instancia)
+
+# Verbos irmaos: o bin/ desta mesma arvore. PF_BIN so existe para teste apontar stubs.
+BIN = os.environ.get("PF_BIN") or os.path.join(_REPO_REAL, "bin")
 # arq:0097: RUNTIME NAO LE WORKING TREE GIT. A abertura vem da MORADA PUBLICADA —
 # arvore imutavel extraida de um commit por `publicar-abertura` (git archive no object
 # store) e fixada pelo ponteiro atomico `current`. Sem working tree lido nao ha arvore
 # a divergir: commit local nao empurrado num clone deixou de travar o boot de qualquer
 # cadeira, e a classe `divergente` (arq:0058) sai deste caminho junto com pull/fetch/
 # reconciliar. Git volta a ser fonte so na publicacao, que e ato deliberado e separado.
+# A morada e estado da INSTANCIA (plano /srv), nao da release nem da bancada.
 MORADA = os.environ.get("PF_ABERTURA_DIR",
-                        os.path.join(RAIZ, "var", "abertura-publicada"))
+                        str(raizes.instancia() / "var" / "abertura-publicada"))
 ABERTURA = os.path.join(MORADA, "current", "abertura")
 MANIFESTO = os.path.join(MORADA, "current", "MANIFEST.json")
 # (ledger de vinculo NAO se le mais aqui — incidente/ordem do dono; identidade viva
@@ -64,16 +70,27 @@ MANIFESTO = os.path.join(MORADA, "current", "MANIFEST.json")
 # `abertura/rotas-chapeu.json`, lido pelo roteador. O caminho conceitos.json foi aposentado
 # no tombamento (arq:0073) e nao e mais procurado por codigo nenhum.
 CHAPEUS_DIR = ABERTURA
-# O modulo de codigo `recuperacao` vem do REPO REAL (via __file__), nunca do PF_RAIZ:
-# o contrato monta o script sob um PF_RAIZ hermetico que nao tem este pacote.
-_REPO_REAL = os.path.dirname(os.path.dirname(os.path.realpath(__file__)))
+# O modulo de codigo `recuperacao` vem do REPO REAL (via __file__), nunca de raiz de
+# ambiente: o contrato monta morada e stubs sob um diretorio hermetico sem este pacote.
 sys.path.insert(0, _REPO_REAL)
 from recuperacao import roteador_chapeu as _rot
 # Mesma razao para o hash: a lib e do repo real, e a porta importa a MESMA (arq:0101 R7).
 sys.path.insert(0, os.path.join(_REPO_REAL, "comum"))
 from hash_servido import sha_servido
 
-SESSAO_ENV = os.path.join(HARNESS, "sessao", ".env")
+# Senha do banco da sessao: segredo da instancia, um arquivo por variavel (desenho §3), na
+# stack do compose (`harness-sessao`, a mesma de que o deploy materializa o --env-file).
+# Nada de .env em arvore de repo. SESSAO_PG_PASSWORD no ambiente segue vencendo.
+SESSAO_SEGREDO = os.path.join(str(raizes.instancia()), "segredos", "harness-sessao",
+                              "SESSAO_PG_PASSWORD")
+
+
+def _senha_sessao():
+    senha = os.environ.get("SESSAO_PG_PASSWORD", "")
+    if not senha and os.path.isfile(SESSAO_SEGREDO):
+        with open(SESSAO_SEGREDO, encoding="utf-8") as fh:
+            senha = fh.read().strip()
+    return senha
 
 # Clones que a abertura pode tocar. arq:0058 (E1) manda a abertura ler UM repositorio:
 # `platafirma-arquitetura` so aparece aqui se alguma peca ainda apontar para ele, e
@@ -84,15 +101,15 @@ def env_verbo(persona_ou_cadeira):
     """Env da peca-verbo: PF_CADEIRA canonico + PATH explicito.
 
     O PATH herdado NAO serve: quando o montador e chamado por um servico (ops-mcp,
-    systemd --user), o ambiente do processo pai nao tem RAIZ/bin, e toda peca servida
-    por execucao morre com FileNotFoundError — mesa, cadernos e fila sairam vazias em
-    17/08 na superficie claude.ai, com a ausencia declarada e o pacote entregue mutilado.
-    Montar aqui, e nao no chamador, e o que faz o pacote ser o mesmo nas tres superficies.
+    systemd --user), o ambiente do processo pai nao tem o bin/ dos verbos, e toda peca
+    servida por execucao morre com FileNotFoundError — mesa, cadernos e fila sairam
+    vazias em 17/08 na superficie claude.ai, com a ausencia declarada e o pacote entregue
+    mutilado. Montar aqui, e nao no chamador, e o que faz o pacote ser o mesmo nas tres
+    superficies. O bin/ e o da propria arvore: na release, /opt/platafirma/current/harness/bin.
     """
-    casa = os.path.expanduser("~")
     e = dict(os.environ)
     e["PF_CADEIRA"] = persona_ou_cadeira
-    e["PATH"] = f"{RAIZ}/bin:{casa}/.local/bin:" + os.environ.get("PATH", "")
+    e["PATH"] = f"{BIN}:" + os.environ.get("PATH", "")
     return e
 
 
@@ -332,7 +349,10 @@ def caminho_publicado(path):
 
 
 # ------------------------------------------------------------------ servir peca
-TOKENIZADOR = os.path.join(RAIZ, "opt", "tokenizers", "qwen2.5.json")
+# Artefato de terceiro pinado: dentro da arvore da familia, por realpath (desenho §2).
+# PF_TOKENIZADOR so existe para teste passar o caminho por fixture.
+TOKENIZADOR = (os.environ.get("PF_TOKENIZADOR")
+               or os.path.join(_REPO_REAL, "terceiros", "tokenizers", "qwen2.5.json"))
 _MEDIDOR = {"fn": None, "metodo": None}
 
 
@@ -466,12 +486,7 @@ def registra_pacote(cadeira, envelopes, montador_sha, sid=None):
         import psycopg
     except ImportError:
         return {"registrado": False, "motivo": "psycopg ausente neste venv"}
-    senha = os.environ.get("SESSAO_PG_PASSWORD", "")
-    if not senha and os.path.isfile(SESSAO_ENV):
-        for linha in open(SESSAO_ENV, encoding="utf-8"):
-            if linha.startswith("SESSAO_PG_PASSWORD="):
-                senha = linha.split("=", 1)[1].strip()
-                break
+    senha = _senha_sessao()
     porta = os.environ.get("SESSAO_PG_PORT", "5437")
     dsn = f"host=127.0.0.1 port={porta} dbname=sessao user=sessao password={senha}"
     sup = os.environ.get("PF_SUPERFICIE", "").strip() or "desconhecida"
@@ -536,9 +551,10 @@ def cadeiras_validas():
 # Trilha de LEITURA que o eixo-2 (disparo.py, #2317) le para medir D. Uma linha por
 # fonte alcancada: {ts, tool, sujeito, sessao, fonte, cobertura, carimbo, hit|miss,
 # disjuntor}. E esta escrita que faz D subir de 0,043 - sem ela o disparo nao conta.
+# Log da instancia: o default tem de bater com o de recuperacao/disparo.py.
 _TRILHA_LEITURA = os.environ.get(
     "PF_REC_TRILHA_LEITURA",
-    str(Path.home() / "AI" / "var" / "log" / "recuperacao" / "leitura.jsonl"))
+    str(raizes.instancia() / "var" / "log" / "recuperacao" / "leitura.jsonl"))
 
 
 def dispara_acervo(cadeira, sujeito, pergunta):
@@ -562,7 +578,7 @@ def dispara_acervo(cadeira, sujeito, pergunta):
     t0 = time.monotonic()
     hit, cobertura, carimbo, disjuntor = False, "ausente", "-", "fechado"
     # PORTA CANONICA: o verbo `motor rag buscar`, nao HTTP cru. Uma porta so pro indice.
-    argv = [os.path.join(str(RAIZ), "bin", "motor"), "rag", "buscar", pergunta.strip(),
+    argv = [os.path.join(BIN, "motor"), "rag", "buscar", pergunta.strip(),
             "--k", "6", "--texto", "secao"]
     if ordem_id:
         argv += ["--ordem-id", ordem_id]
@@ -758,12 +774,7 @@ def registra_sessao_duravel(sid, cadeira, chapeu):
         import psycopg
     except ImportError:
         return "sessao.sessao nao gravada: psycopg ausente neste venv"
-    senha = os.environ.get("SESSAO_PG_PASSWORD", "")
-    if not senha and os.path.isfile(SESSAO_ENV):
-        for linha in open(SESSAO_ENV, encoding="utf-8"):
-            if linha.startswith("SESSAO_PG_PASSWORD="):
-                senha = linha.split("=", 1)[1].strip()
-                break
+    senha = _senha_sessao()
     porta = os.environ.get("SESSAO_PG_PORT", "5437")
     dsn = f"host=127.0.0.1 port={porta} dbname=sessao user=sessao password={senha}"
     sup = os.environ.get("PF_SUPERFICIE", "").strip() or "desconhecida"

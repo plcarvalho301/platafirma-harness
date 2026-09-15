@@ -28,8 +28,8 @@
 # que nao chegou a rodar nao e suite vermelha. Por isso a escada abaixo procura o
 # interpretador do projeto ANTES de cair no isolado, e o ultimo degrau sai avisado.
 #
-#   python  interpretador, na ordem: PF_TESTE_PYTHON · <repo>/.venv · $RAIZ/.venv-<sufixo>
-#           (convencao da casa: platafirma-harness -> .venv-harness)
+#   python  interpretador, na ordem: PF_TESTE_PYTHON · <repo>/.venv · <bancada>/.venv-<sufixo>
+#           · $PF_RELEASE/venv/<sufixo> (convencao da casa: platafirma-harness -> harness)
 #           ->  uv run --python <py> --with pytest pytest     (ve as deps do venv)
 #           pyproject.toml sem venv casado  ->  uv run pytest
 #           nenhum dos dois              ->  uvx pytest       (ISOLADO — avisa no stderr)
@@ -40,7 +40,10 @@
 # leitura (arq:0085).
 set -uo pipefail
 
-RAIZ="${PF_REPO_RAIZ:-$HOME/AI}"
+# Raizes da casa (card #3010): a bancada vem de pf_bancada, sem default.
+. "$(dirname "$(readlink -f "$0")")/../lib/raizes.sh"
+
+BANCADA=""   # preenchida por declara_bancada, depois de validado o ato
 VERBO="$(basename "$0")"
 
 # preenchidos por detecta()
@@ -52,7 +55,8 @@ uso:
   $VERBO rodar <repo> [<alvo>]   roda a suite do clone; <alvo> = caminho dentro do repo
   $VERBO detectar <repo>         diz a stack, o interpretador e a linha que rodaria
 
-raiz de trabalho: $RAIZ   (PF_REPO_RAIZ)   ·   interpretador: PF_TESTE_PYTHON
+bancada: PF_BANCADA, senao $PF_ARQUIVO_BANCADA (sem default: exit 3)
+interpretador: PF_TESTE_PYTHON
 exit: 0 suite verde · 1 suite vermelha · 2 uso · 3 falha do runner · 4 alvo fora da raiz
       5 indeterminavel (nenhuma stack de teste detectada)
 EOF
@@ -61,36 +65,46 @@ EOF
 
 morre() { printf '%s: %s\n' "$VERBO" "$1" >&2; exit "${2:-3}"; }
 
+# Bancada declarada pela conta (card #3010): PF_BANCADA, senao a linha de
+# ~/.config/platafirma/bancada. Sem declaracao: exit 3. Nunca cria diretorio.
+declara_bancada() {
+  BANCADA="$(pf_bancada)" || exit 3
+  case "$BANCADA" in
+    /*) BANCADA="${BANCADA%/}" ;;
+    *) morre "bancada declarada nao e caminho absoluto: $BANCADA" 3 ;;
+  esac
+}
+
 bancada_de() {
   local nome="$1"
   local cadeira="${PF_CADEIRA:-}"
   cadeira="${cadeira#claudinho-}"
   cadeira="${cadeira#claudinha-}"
-  if [ -n "$cadeira" ] && [ -d "$RAIZ/var/wt/$nome/$cadeira" ] && [ -e "$RAIZ/var/wt/$nome/$cadeira/.git" ]; then
-    printf '%s/var/wt/%s/%s' "$RAIZ" "$nome" "$cadeira"
+  if [ -n "$cadeira" ] && [ -d "$BANCADA/wt/$nome/$cadeira" ] && [ -e "$BANCADA/wt/$nome/$cadeira/.git" ]; then
+    printf '%s/wt/%s/%s' "$BANCADA" "$nome" "$cadeira"
     return 0
   fi
-  if [ -d "$RAIZ/$nome" ]; then
+  if [ -d "$BANCADA/$nome" ]; then
     if [ -n "$cadeira" ]; then
-      printf '%s: aviso: worktree var/wt/%s/%s nao existe — usando fallback %s/%s\n' "$VERBO" "$nome" "$cadeira" "$RAIZ" "$nome" >&2
+      printf '%s: aviso: worktree wt/%s/%s nao existe — usando fallback %s/%s\n' "$VERBO" "$nome" "$cadeira" "$BANCADA" "$nome" >&2
     else
-      printf '%s: aviso: PF_CADEIRA nao definida — usando fallback %s/%s\n' "$VERBO" "$RAIZ" "$nome" >&2
+      printf '%s: aviso: PF_CADEIRA nao definida — usando fallback %s/%s\n' "$VERBO" "$BANCADA" "$nome" >&2
     fi
   fi
-  printf '%s/%s' "$RAIZ" "$nome"
+  printf '%s/%s' "$BANCADA" "$nome"
 }
 
 clone_de() {
   local nome="$1" alvo real raiz_real
   [ -n "$nome" ] || morre "falta o nome do repo" 2
   case "$nome" in
-    */*|.*|*..*|*[!A-Za-z0-9._-]*) morre "nome de repo invalido: '$nome' — e slug dentro de $RAIZ" 4 ;;
+    */*|.*|*..*|*[!A-Za-z0-9._-]*) morre "nome de repo invalido: '$nome' — e slug dentro da bancada $BANCADA" 4 ;;
   esac
   alvo="$(bancada_de "$nome")"
-  [ -d "$alvo" ] || morre "nao ha clone '$nome' em $RAIZ" 3
+  [ -d "$alvo" ] || morre "nao ha clone '$nome' na bancada $BANCADA — \`repo abrir $nome\` clona" 3
   real="$(realpath "$alvo" 2>/dev/null)" || morre "nao resolvi '$alvo'" 4
-  raiz_real="$(realpath "$RAIZ" 2>/dev/null || printf '%s' "$RAIZ")"
-  case "$real/" in "$RAIZ"/*|"$raiz_real"/*) : ;; *) morre "'$nome' resolve fora da raiz $RAIZ" 4 ;; esac
+  raiz_real="$(realpath "$BANCADA" 2>/dev/null || printf '%s' "$BANCADA")"
+  case "$real/" in "$BANCADA"/*|"$raiz_real"/*) : ;; *) morre "'$nome' resolve fora da bancada $BANCADA" 4 ;; esac
   printf '%s' "$real"
 }
 
@@ -108,21 +122,24 @@ alvo_de() {
 }
 
 # Interpretador do projeto, ou vazio. Convencao da casa: venv fora do repo, em
-# $RAIZ/.venv-<sufixo>, com o sufixo = nome do repo sem o prefixo `platafirma-`.
+# <bancada>/.venv-<sufixo>, senao o venv da release ($PF_RELEASE/venv/<sufixo>, o mesmo
+# do shebang dos verbos), com o sufixo = nome do repo sem o prefixo `platafirma-`.
 python_do_projeto() {
-  local c="$1" sufixo
+  local c="$1" nome="${2:-}" sufixo
   if [ -n "${PF_TESTE_PYTHON:-}" ]; then
     [ -x "$PF_TESTE_PYTHON" ] || morre "PF_TESTE_PYTHON='$PF_TESTE_PYTHON' nao e executavel" 3
     printf '%s' "$PF_TESTE_PYTHON"; return 0
   fi
   [ -x "$c/.venv/bin/python" ] && { printf '%s' "$c/.venv/bin/python"; return 0; }
-  sufixo="$(basename "$c")"; sufixo="${sufixo#platafirma-}"
-  [ -x "$RAIZ/.venv-$sufixo/bin/python" ] && { printf '%s' "$RAIZ/.venv-$sufixo/bin/python"; return 0; }
+  # sufixo pelo NOME do repo: no worktree wt/<repo>/<cadeira> o basename e a cadeira
+  sufixo="${nome:-$(basename "$c")}"; sufixo="${sufixo#platafirma-}"
+  [ -x "$BANCADA/.venv-$sufixo/bin/python" ] && { printf '%s' "$BANCADA/.venv-$sufixo/bin/python"; return 0; }
+  [ -x "$PF_RELEASE/venv/$sufixo/bin/python" ] && { printf '%s' "$PF_RELEASE/venv/$sufixo/bin/python"; return 0; }
   return 1
 }
 
 detecta() {
-  local c="$1"
+  local c="$1" nome="${2:-}"
   STACK=""; LINHA=""; PY=""; ISOLADO=0
   if [ -f "$c/package.json" ] && grep -q '"test"[[:space:]]*:' "$c/package.json" 2>/dev/null \
      && [ ! -f "$c/pyproject.toml" ]; then
@@ -131,7 +148,7 @@ detecta() {
   if [ -f "$c/pyproject.toml" ] || [ -d "$c/testes" ] \
      || compgen -G "$c/test_*.py" >/dev/null 2>&1 || compgen -G "$c/*/test_*.py" >/dev/null 2>&1; then
     STACK="python"
-    if PY="$(python_do_projeto "$c")"; then
+    if PY="$(python_do_projeto "$c" "$nome")"; then
       LINHA="uv run --python $PY --with pytest pytest"
     elif [ -f "$c/pyproject.toml" ]; then
       LINHA="uv run pytest"
@@ -147,11 +164,11 @@ detecta() {
 }
 
 ato_detectar() {
-  local c
-  c="$(clone_de "${1:-}")" || exit $?
-  detecta "$c" || { printf '%s: indeterminavel — nenhuma stack de teste detectada em %s\n' \
+  local nome="${1:-}" c
+  c="$(clone_de "$nome")" || exit $?
+  detecta "$c" "$nome" || { printf '%s: indeterminavel — nenhuma stack de teste detectada em %s\n' \
                       "$VERBO" "$c" >&2; exit 5; }
-  printf '%s  ·  stack %s  ·  rodaria: %s\n' "$(basename "$c")" "$STACK" "$LINHA"
+  printf '%s  ·  stack %s  ·  rodaria: %s\n' "$nome" "$STACK" "$LINHA"
   [ -n "$PY" ] && printf '  interpretador do projeto: %s\n' "$PY"
   [ "$ISOLADO" -eq 1 ] && printf '  AVISO: ambiente isolado — dependencia do projeto pode faltar e a suite morrer no import\n'
   return 0
@@ -160,7 +177,7 @@ ato_detectar() {
 ato_rodar() {
   local nome="${1:-}" alvo="${2:-}" c rc
   c="$(clone_de "$nome")" || exit $?
-  detecta "$c" || { printf '%s: indeterminavel — nenhuma stack de teste detectada em %s\n' \
+  detecta "$c" "$nome" || { printf '%s: indeterminavel — nenhuma stack de teste detectada em %s\n' \
                       "$VERBO" "$c" >&2; exit 5; }
   # `if`, e com `|| exit`: `alvo_de` recusa por `exit` DENTRO da substituicao de comando,
   # que mata so o subshell. Sem propagar o codigo aqui, a recusa virava alvo vazio e o
@@ -187,6 +204,10 @@ ato_rodar() {
 }
 
 ato="${1:-}"; [ -n "$ato" ] && shift
+case "$ato" in
+  ""|-h|--help|ajuda) uso ;;
+esac
+declara_bancada
 case "$ato" in
   rodar)    ato_rodar "$@" ;;
   detectar) ato_detectar "$@" ;;

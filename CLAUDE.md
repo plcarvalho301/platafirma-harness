@@ -22,7 +22,7 @@ bem; identidade lida de dentro dela é a cópia congelada que a peça elimina.
 
 `Bash`, `Write`, `Edit` e `NotebookEdit` estão negados em `.claude/settings.json`, e
 `deny` vence `allow` em qualquer modo. Escrita e execução acontecem **só** por
-`claudinho-mcp`, na máquina do dono, com auditoria em `~/AI/var/log/ops/`.
+`claudinho-mcp`, na máquina do dono, com auditoria em `/srv/platafirma/casa/var/log/ops/`.
 
 Ler o clone segue liberado. Editar o clone, não: mudança em persona, manifesto ou
 skill se faz na máquina do dono, pelo caminho da cadeira dona daquele artefato.

@@ -12,7 +12,7 @@
 --     entram como inventário de nível 3 quando os atributos operacionais de TI forem povoados.
 --
 --   - recurso/gestao-de-recurso: REMOVIDO do seed (24/08). O catalogo-global.md
---     plano listava o verbo, mas ele NAO existe em ~/AI/bin (conferir ferramental
+--     plano listava o verbo, mas ele NAO existe entre os verbos servidos (conferir ferramental
 --     pegou). Capacidade de espinha nao se inventa: se 'gestao-de-recurso' deve
 --     existir, e decisao de arquiteto/dados, nao correcao de TI no seed.
 -- Idempotente por slug (ON CONFLICT DO NOTHING). Roda depois da DDL 0076.

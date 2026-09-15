@@ -1,4 +1,4 @@
-#!/home/claudinho/AI/.venv-harness/bin/python
+#!/opt/platafirma/current/venv/harness/bin/python
 # capturar-mesa-legada — copia a mesa escrita no Valkey para `sessao.mesa_legado`.
 # capacidade: memoria
 # dono: claudinho-TI
@@ -19,6 +19,7 @@
 import os
 import re
 import sys
+from pathlib import Path
 
 try:
     import psycopg
@@ -30,8 +31,9 @@ try:
 except ImportError:
     sys.exit("erro: modulo 'redis' nao instalado neste venv (uv pip install redis)")
 
-RAIZ = os.environ.get("PF_RAIZ", os.path.expanduser("~/AI"))
-PERSONAS = os.path.join(RAIZ, "platafirma-harness", "personas")
+# personas/ da MESMA arvore do harness deste arquivo (sessao/migracao/ -> raiz), por
+# realpath: nunca raiz montada a mao (card #3010).
+PERSONAS = str(Path(__file__).resolve().parents[2] / "personas")
 
 MEM_HOST = os.environ.get("MEM_REDIS_HOST", "127.0.0.1")
 MEM_PORTA = int(os.environ.get("MEM_REDIS_PORT", "6380"))
@@ -43,7 +45,7 @@ PG = os.environ.get(
 
 
 def mapa_de_slug():
-    """alias curto -> slug canonico, derivado das personas que existem no clone.
+    """alias curto -> slug canonico, derivado das personas que existem na arvore do harness.
 
     Sem tabela escrita a mao: o nome canonico ja esta na linha 1 de cada persona, e
     segunda fonte diverge em silencio.

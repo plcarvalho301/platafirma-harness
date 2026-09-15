@@ -13,6 +13,8 @@ import os
 import re
 from pathlib import Path
 
+from ._raizes import TOKENIZADOR, release
+
 
 class ErroTabelaFontes(ValueError):
     """Erro de validação na tabela de fontes do catálogo."""
@@ -36,11 +38,10 @@ def _acha_catalogo_padrao() -> Path:
     cand = raiz / "docs" / "catalogo-de-fontes.md"
     if cand.is_file():
         return cand
-    # Fallback le da morada publicada, nao do clone de trabalho (arq:0097/0109 §1).
-    cand_ai = Path(os.path.expanduser(
-        "~/AI/var/prod/platafirma-harness/current/docs/catalogo-de-fontes.md"))
-    if cand_ai.is_file():
-        return cand_ai
+    # Fallback le da release no ar, nunca de clone de bancada (arq:0097/0109 §1).
+    cand_release = release() / "harness" / "docs" / "catalogo-de-fontes.md"
+    if cand_release.is_file():
+        return cand_release
     return cand
 
 
@@ -165,12 +166,8 @@ def gera_descricao_tool(fontes: list[FonteInfo]) -> str:
 
 def conta_tokens(texto: str) -> int | None:
     """Mede tokens com o tokenizador do harness (qwen2.5.json) se disponível."""
-    candidatos = [
-        Path(__file__).resolve().parent.parent.parent / "opt" / "tokenizers" / "qwen2.5.json",
-        Path(os.path.expanduser("~/AI/opt/tokenizers/qwen2.5.json")),
-    ]
-    tok_path = next((p for p in candidatos if p.is_file()), None)
-    if not tok_path:
+    tok_path = Path(TOKENIZADOR)
+    if not tok_path.is_file():
         return None
     try:
         from tokenizers import Tokenizer

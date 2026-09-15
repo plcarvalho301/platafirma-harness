@@ -4,7 +4,8 @@ import re, csv, os, glob, unicodedata
 from collections import defaultdict, OrderedDict
 from rapidfuzz import fuzz
 
-BASE = os.path.expanduser('~/AI/platafirma-harness/distribuicao')
+# distribuicao/ desta mesma arvore: julgamento -> rodada-2 -> distribuicao
+BASE = os.path.dirname(os.path.dirname(os.path.dirname(os.path.realpath(__file__))))
 R1 = f'{BASE}/rodada-1'
 R2 = f'{BASE}/rodada-2'
 OUT = f'{R2}/julgamento'

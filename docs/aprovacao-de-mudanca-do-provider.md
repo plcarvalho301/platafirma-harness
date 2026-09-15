@@ -15,7 +15,7 @@ na fase de bootstrap e concluir que "o gate está quebrado por auto-aprovação"
 - **Provider (autor).** Opera por um **GitHub App próprio**. O App é quem clona, comita
   e abre PR — os PRs saem como `app/<provider>` (ex. `app/jaiminho-platafirma`), nunca
   como uma pessoa. A **chave privada do App (`.pem`) vive só no host**, em cofre 600
-  (`~/AI/var/secrets/<provider>-app/app.pem`); o braço recebe apenas um **token de
+  (`/srv/platafirma/casa/segredos/<provider>-app/app.pem`); o braço recebe apenas um **token de
   instalação de ~1h**, entregue no volume da conta — nunca a chave. `APP_ID` e
   `INSTALL_ID` são do App, não segredo. Ref: `bin/jaiminho-git-token-refresh.sh`
   (cards #2899, #3012).

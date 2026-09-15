@@ -37,9 +37,11 @@ import sys
 # silencio. Quem seta e o shim `bin/jaiminho-fabrica`; chamada sem env nenhum
 # continua sendo o Jaiminho, byte por byte.
 CONTAINER = os.environ.get("PF_JAIMINHO_CONTAINER", "jaiminho")
-RAIZ = os.environ.get("PF_RAIZ", os.path.expanduser("~/AI"))
+# A persona sai da MESMA arvore deste verbo (a release servida, por realpath), nunca de
+# raiz montada a mao.
+HARNESS_DIR = os.path.dirname(os.path.dirname(os.path.realpath(__file__)))
 PERSONA = os.environ.get("PF_JAIMINHO_PERSONA") or os.path.join(
-    RAIZ, "platafirma-harness", "personas", "persona-jaiminho.md")
+    HARNESS_DIR, "personas", "persona-jaiminho.md")
 # O home dentro do container e /home/jaiminho nas duas contas porque a IMAGEM e a
 # mesma (uid 10001). O que separa as contas nao e o caminho: e o volume, o client
 # do realm e o papel no PAP.

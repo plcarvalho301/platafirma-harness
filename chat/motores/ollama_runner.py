@@ -15,7 +15,7 @@ CONTRATO DE SAIDA (stdout, uma linha JSON por evento):
 stderr: diagnostico de invocacao (modelo inexistente, ollama fora do ar).
 
 SESSAO: o ollama nao guarda historico. Este runner guarda em
-~/AI/fitas/ollama/<session_id>.json (lista de mensagens role/content) e o remonta
+$PF_INSTANCIA/var/fitas/ollama/<session_id>.json (lista de mensagens role/content) e o remonta
 a cada giro. Fita nova cunha id e grava so o system (persona) + a 1a msg. Fita
 existente (--resume) recarrega o historico e anexa. E o "controla a sessao" (c).
 
@@ -29,9 +29,15 @@ import sys
 import urllib.request
 import uuid
 from datetime import datetime, timezone
+from pathlib import Path
 
-RAIZ = os.environ.get("PF_RAIZ", os.path.expanduser("~/AI"))
-HIST_DIR = os.path.join(RAIZ, "fitas", "ollama")
+# Historico e estado da instancia, pelo auxiliar da propria arvore (card #3010).
+_LIB = Path(__file__).resolve().parents[2] / "lib"
+if str(_LIB) not in sys.path:
+    sys.path.insert(0, str(_LIB))
+from raizes import instancia  # noqa: E402
+
+HIST_DIR = str(instancia() / "var" / "fitas" / "ollama")
 # Teto de historico remontado: alem disso, corta as mais antigas (mantendo o
 # system) e declara compactou=True no result. Modelo local tem janela menor.
 MAX_MSGS = int(os.environ.get("PF_OLLAMA_MAX_MSGS", "40"))

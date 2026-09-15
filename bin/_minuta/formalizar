@@ -13,10 +13,14 @@ import glob
 import subprocess
 import datetime
 
-REPO = os.environ.get("MINUTA_REPO") or os.path.expanduser("~/AI/platafirma-arquitetura")
-DIR = os.path.join(REPO, "minutas")
-DECISIONS = os.path.join(REPO, "macro-global", "decisions")
-DOCS = os.path.join(REPO, "docs")
+sys.path.insert(0, os.path.join(
+    os.path.dirname(os.path.dirname(os.path.dirname(os.path.realpath(__file__)))), "lib"))
+from raizes import BancadaNaoDeclarada, bancada  # noqa: E402
+
+# Formalizar commita e empurra: roda no worktree da cadeira na bancada DECLARADA,
+# <bancada>/wt/platafirma-arquitetura/<cadeira> (arq:0109 §2, card #3010). Resolvido em
+# main(); MINUTA_REPO aponta outro checkout (teste).
+REPO = DIR = DECISIONS = DOCS = None
 PLACEHOLDER_CONV = "<a preencher pela própria cadeira>"
 
 
@@ -25,7 +29,27 @@ def erro(msg, code=1):
     sys.exit(code)
 
 
-# git por caminho absoluto: ~/AI/bin tem um shim `git` (bilhete que so sai 2) a frente
+def worktree_da_cadeira(verbo):
+    """MINUTA_REPO, senao <bancada>/wt/platafirma-arquitetura/<cadeira>. Sem bancada
+    declarada ou sem worktree: exit 3, nunca criacao silenciosa."""
+    explicito = os.environ.get("MINUTA_REPO")
+    if explicito:
+        return explicito
+    cadeira = os.environ.get("PF_CADEIRA", "").strip()
+    cadeira = cadeira.removeprefix("claudinho-").removeprefix("claudinha-")
+    if not cadeira:
+        erro("exporte PF_CADEIRA=<cadeira>: a minuta se edita no worktree da cadeira.", 2)
+    try:
+        raiz = bancada()
+    except BancadaNaoDeclarada as e:
+        erro(str(e), 3)
+    wt = os.path.join(str(raiz), "wt", "platafirma-arquitetura", cadeira)
+    if not os.path.isdir(wt):
+        erro(f"worktree ausente: {wt} — rode `repo abrir platafirma-arquitetura` antes de {verbo}.", 3)
+    return wt
+
+
+# git por caminho absoluto: o PATH da porta tem um shim `git` (bilhete que so sai 2) a frente
 # do git real no PATH da porta — chamar `git` nu aqui mata todo ato com exit 2 e sem
 # mensagem (capture_output engole o bilhete). Mesma cura de bin/repo.
 GIT = next((p for p in ("/usr/bin/git", "/bin/git") if os.path.exists(p)), "git")
@@ -73,9 +97,14 @@ def slugify(s):
 
 
 def main():
+    global REPO, DIR, DECISIONS, DOCS
     args = sys.argv[1:]
     if not args:
         erro("uso: minuta formalizar <n> --como adr|spec [--destino <slug>] [--vencido]", 2)
+    REPO = worktree_da_cadeira("formalizar")
+    DIR = os.path.join(REPO, "minutas")
+    DECISIONS = os.path.join(REPO, "macro-global", "decisions")
+    DOCS = os.path.join(REPO, "docs")
     n = args[0]
     como = None
     destino_arg = None

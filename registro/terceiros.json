@@ -1,0 +1,12 @@
+{
+  "_leia": "Artefatos de terceiro pinados que o `release promover|reverter` materializa DENTRO da arvore da rev (/opt/platafirma/<familia>/<sha>/<destino>), antes de trocar current (desenho #3010 §2). `familia` e a familia em cuja arvore o artefato entra; `destino` e o caminho relativo nela (fora do git: .gitignore); `sha256` e o pino; `url` e so de onde baixar quando o cache nao tem. O cache e /opt/platafirma/terceiros/sha256/<sha256>: host sem rede se semeia copiando o arquivo para la com o nome do sha. Conteudo com sha diferente do pino e recusado, current intacto. Codigo acha o artefato por realpath da propria arvore, nunca por caminho de host.",
+  "qwen2.5-tokenizer": {
+    "familia": "platafirma-harness",
+    "destino": "terceiros/tokenizers/qwen2.5.json",
+    "sha256": "c0382117ea329cdf097041132f6d735924b697924d6f6fc3945713e96ce87539",
+    "bytes": 7031645,
+    "url": "https://huggingface.co/Qwen/Qwen2.5-7B-Instruct/resolve/main/tokenizer.json",
+    "consumidores": ["bin/monta-sessao", "bin/expediente", "recuperacao/_raizes.py"],
+    "conferido": "vocab 151643 (mesmo criterio do CI de recuperacao)"
+  }
+}

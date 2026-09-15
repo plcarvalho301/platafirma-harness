@@ -16,7 +16,7 @@ e do chamador) e cospe o mesmo stream-json que o Claude Code cospe. Para o
 um_giro, um motor e outro sao indistinguiveis.
 
 SESSAO (ponto c do pedido): o runner guarda o historico por id_fita em
-~/AI/fitas/ollama/<id>.json e o remonta a cada giro. `--session-id` na fita nova,
+$PF_INSTANCIA/var/fitas/ollama/<id>.json e o remonta a cada giro. `--session-id` na fita nova,
 `--resume <id>` na existente — mesmos flags que o Code, resolvidos pelo runner.
 
 Persona (ponto d): a persona e injetada no prompt como system, exatamente como
@@ -26,9 +26,18 @@ usa as MESMAS personas; so infere com modelo local e alcance escopado.
 import os
 import shutil
 import subprocess
+import sys
+from pathlib import Path
 
-RAIZ = os.environ.get("PF_RAIZ", os.path.expanduser("~/AI"))
-RUNNER = os.path.join(RAIZ, "platafirma-harness", "chat", "motores", "ollama_runner.py")
+# Raizes de producao pelo auxiliar da propria arvore (lib/raizes.py, card #3010); o
+# runner e o arquivo ao lado deste, por realpath — nunca clone montado a mao.
+_LIB = Path(__file__).resolve().parents[2] / "lib"
+if str(_LIB) not in sys.path:
+    sys.path.insert(0, str(_LIB))
+from raizes import instancia  # noqa: E402
+
+RUNNER = str(Path(__file__).resolve().parent / "ollama_runner.py")
+HIST_DIR = str(instancia() / "var" / "fitas" / "ollama")
 
 
 def _agora_iso():
@@ -73,7 +82,7 @@ class MotorOllama:
         fita de resume que o ollama nunca viu tambem (senao responde generico)."""
         if not id_fita:
             return True
-        hist = os.path.join(RAIZ, "fitas", "ollama", f"{id_fita}.json")
+        hist = os.path.join(HIST_DIR, f"{id_fita}.json")
         return not os.path.exists(hist)
 
     def comando(self, id_fita, pacote, cwd):
@@ -90,7 +99,7 @@ class MotorOllama:
         # como --sistema mesmo em resume, mantendo o id da fita. Bug medido
         # 01/09/2026 na transicao de motor no meio da sala.
         import os as _os
-        hist = _os.path.join(RAIZ, "fitas", "ollama", f"{id_fita}.json") if id_fita else ""
+        hist = _os.path.join(HIST_DIR, f"{id_fita}.json") if id_fita else ""
         if id_fita and _os.path.exists(hist):
             argv += ["--resume", id_fita]
         elif id_fita:

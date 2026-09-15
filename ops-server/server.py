@@ -17,12 +17,19 @@ alcança o log do proxy, o Referer nem o histórico — e o que trafega ali é c
 de portador.
 
 MULTI-INSTÂNCIA: o mesmo arquivo serve mais de uma instância, uma por usuário do host.
-OPS_NAME, OPS_USER, OPS_ROOT e OPS_AUTH_TOKEN separam as instâncias; o default é a
-instância histórica (claudinho-mcp sob claudinho). OPS_USER e OPS_ROOT entram nas
-descrições das tools em tempo de registro — sem isso a instância nova se descreve com
-o usuário e a raiz da instância velha, e o cliente age sobre um caminho que não existe.
+OPS_NAME, OPS_USER, PF_INSTANCIA e OPS_AUTH_TOKEN separam as instâncias; o default é a
+instância histórica (claudinho-mcp sob claudinho, instância /srv/platafirma/casa).
+OPS_USER, o log e o bin servido entram nas descrições das tools em tempo de registro —
+sem isso a instância nova se descreve com o usuário e os caminhos da instância velha, e
+o cliente age sobre um caminho que não existe.
 
-AUDITORIA: toda invocação de tool grava uma linha JSONL em OPS_ROOT/var/log/ops/, com
+RAÍZES (card #3010): código servido vem da release (PF_RELEASE_RAIZ, default
+/opt/platafirma); estado, log e rascunho vêm da instância (PF_INSTANCIA, default
+/srv/platafirma/casa). A bancada — onde se escreve código — não é raiz de produção: só
+entra quando a chamada pede caminho relativo, e sem bancada declarada a porta recusa
+esse pedido em vez de adivinhar lugar.
+
+AUDITORIA: toda invocação de tool grava uma linha JSONL em PF_INSTANCIA/var/log/ops/, com
 retenção declarada (OPS_LOG_RETENCAO_DIAS, podada por cron, não por este processo). O
 campo `sessao` agrupa chamadas de uma mesma sessão de cliente; `sujeito` e `azp` vêm
 do JWT e registram QUEM chamou e por qual cliente OAuth. Atribuição de PERSONA segue
@@ -30,7 +37,7 @@ dívida: as cadeiras compartilham um client (`claudinho-mcp`), então o log iden
 humano e o cliente, não a cadeira — projetar a cadeira no token é o card #436.
 
 PATH DO SUBPROCESSO: montado explicitamente, porque `bash -c` não-login não lê .bashrc
-nem .profile — sem isto, tudo que vive em OPS_ROOT/bin e ~/.local/bin existe no disco e
+nem .profile — sem isto, o bin da release e ~/.local/bin existem no disco e
 é invisível para quem chama a tool. O env do subprocesso também é depurado dos segredos
 da instância: um comando qualquer não deve conseguir ecoar o token que o autorizou.
 """
@@ -63,22 +70,37 @@ from starlette.routing import Route
 
 OPS_NAME = os.environ.get("OPS_NAME", "claudinho-mcp")
 OPS_USER = os.environ.get("OPS_USER", "claudinho")
-RAIZ = Path(os.environ.get("OPS_ROOT", "/home/claudinho/AI"))
-RAIZ_REAL = RAIZ.resolve()
 OPS_AUTH_TOKEN = os.environ.get("OPS_AUTH_TOKEN", "")
 MEM_REDIS_HOST = os.environ.get("MEM_REDIS_HOST", "127.0.0.1")
 MEM_REDIS_PORT = int(os.environ.get("MEM_REDIS_PORT", "6380"))
 
-PF_HARNESS = Path(os.environ.get("PF_HARNESS", RAIZ / "var/prod/platafirma-harness/current"))
+# RAIZES (card #3010). Produção mora em duas raízes e só nelas: a release (código
+# imutável, /opt/platafirma) e a instância (segredos, dados, estado, logs,
+# /srv/platafirma/casa). Todo caminho abaixo deriva de uma das duas; a bancada (onde se
+# escreve código) só é lida quando a chamada a nomeia — nunca no arranque. A porta sobe
+# sem bancada declarada e sem criar diretório nenhum nela.
+_LIB = Path(__file__).resolve().parents[1] / "lib"
+if str(_LIB) not in sys.path:
+    sys.path.insert(0, str(_LIB))
+import raizes                                                 # noqa: E402
+
+INSTANCIA = raizes.instancia()
+# Cwd de quem não nomeia um: a casa da conta do processo. Não é raiz de produção — é o
+# lugar neutro onde um comando sem endereço não escreve em árvore de ninguém.
+CASA = Path(os.path.expanduser("~"))
+
+PF_HARNESS = Path(os.environ.get("PF_HARNESS", raizes.release() / "harness"))
+# Verbo servido: bin/ da release no ar. Override por PF_BIN (teste, ensaio).
+BIN_VERBOS = Path(os.environ.get("PF_BIN", raizes.release() / "harness" / "bin"))
 # CODIGO do PDP (pdp.py, identidade.py, pep.py) mora no repo — versionado, importavel.
 PDP_CODE_DIR = PF_HARNESS / "politica-acesso"
 if str(PDP_CODE_DIR) not in sys.path:
     sys.path.insert(0, str(PDP_CODE_DIR))
 # DADOS de identidade (politica/sujeitos/superficies.yaml) moram FORA do working tree
 # de fabrica (incidente #2956, minuta arq 0015 perna 1, card #3014: release em current).
-# Override por PDP_DIR; default aponta para release /opt/platafirma/current/politica-acesso.
-_pdp_current = Path("/opt/platafirma/current/politica-acesso")
-PDP_DIR = Path(os.environ.get("PDP_DIR", str(_pdp_current) if _pdp_current.exists() else str(RAIZ / "var" / "politica-acesso")))
+# Override por PDP_DIR; default e a release (arq:0102 D6), sem fallback: politica que
+# falta nega por default, nunca cai numa copia de outro lugar.
+PDP_DIR = Path(os.environ.get("PDP_DIR", raizes.release() / "politica-acesso"))
 from identidade import _jwks, _sujeito_do_jwt
 
 # --- OIDC (card #435) ---
@@ -92,7 +114,7 @@ OPS_RESOURCE = os.environ.get("OPS_RESOURCE", "https://ops.platafirma.org")
 OPS_TOKEN_ESTATICO_ATE = os.environ.get("OPS_TOKEN_ESTATICO_ATE", "2026-09-30")
 CAP = 50_000   # teto de bytes de stdout/stderr devolvidos (truncagem sempre declarada)
 
-LOG_DIR = Path(os.environ.get("OPS_LOG_DIR", RAIZ / "var/log/ops"))
+LOG_DIR = Path(os.environ.get("OPS_LOG_DIR", INSTANCIA / "var/log/ops"))
 CMD_CAP = 2_000        # teto do comando gravado na auditoria
 LINHA_CAP = 8_000      # teto da linha JSONL
 
@@ -369,13 +391,44 @@ def _env_subprocesso() -> dict:
     """Env do subprocesso: PATH explícito + segredos removidos.
 
     `bash -c` não-login não lê .bashrc nem .profile, então o PATH herdado do systemd
-    não contém OPS_ROOT/bin nem ~/.local/bin. Montar aqui é a única forma de o binário
-    instalado em user-space ser encontrável por quem chama a tool.
+    não contém o bin da release nem ~/.local/bin. Montar aqui é a única forma de o
+    verbo servido (/opt/platafirma/current/harness/bin) ser encontrável por quem chama
+    a tool.
     """
     env = {k: v for k, v in os.environ.items() if k not in ENV_OCULTO}
-    casa = os.path.expanduser("~")
-    env["PATH"] = f"{RAIZ}/bin:{casa}/.local/bin:" + os.environ.get("PATH", "")
+    env["PATH"] = f"{BIN_VERBOS}:{CASA}/.local/bin:" + os.environ.get("PATH", "")
     return env
+
+
+def _bancada() -> Path | None:
+    """Bancada declarada pela conta, lida NA HORA da chamada — nunca no arranque.
+
+    None quando não há declaração: quem chama recusa o pedido que dependia dela. A
+    porta nunca cria a bancada nem nada dentro dela por conta própria."""
+    try:
+        return raizes.bancada()
+    except raizes.BancadaNaoDeclarada:
+        return None
+
+
+_SEM_BANCADA = ("caminho relativo pede bancada declarada (PF_BANCADA ou "
+                "~/.config/platafirma/bancada) — sem ela, use caminho absoluto")
+
+
+def _resolve_relativo(caminho: str) -> tuple[Path | None, str | None]:
+    """(caminho, erro). Absoluto vale como está; relativo é relativo à bancada declarada."""
+    p = Path(caminho)
+    if p.is_absolute():
+        return p, None
+    b = _bancada()
+    if b is None:
+        return None, _SEM_BANCADA
+    return b / p, None
+
+
+def _cwd_de(cwd: str) -> tuple[Path | None, str | None]:
+    """Cwd de run_command: vazio = a casa da conta; relativo = na bancada declarada."""
+    return (CASA, None) if not cwd else _resolve_relativo(cwd)
 
 
 def _sessao_atual() -> str:
@@ -697,15 +750,15 @@ async def run_command(command: str = "", cwd: str = "", timeout: int = 120,
 
     `commands`: lista de itens, cada um `{verbo, ato, args, stdin}` ou a string
     `"<verbo> <ato> <args...>"` (partida com shlex; `| & > < $ \\` * ? ( ) ;` recusam o item).
-    Um `execve` por item (`bin/<verbo> <ato> <args>`), nunca `bash -c`; item roda na raiz e
-    `cwd` e ignorado. `stdin` e texto ou `{"de": n}` = stdout do item n do mesmo lote
+    Um `execve` por item (`bin/<verbo> <ato> <args>`), nunca `bash -c`; item roda na casa da
+    conta e `cwd` e ignorado. `stdin` e texto ou `{"de": n}` = stdout do item n do mesmo lote
     (substitui o pipe). Programa que NAO e verbo servido nao roda: volta
     `{recusado, verbo, motivo, sugestao}` com o verbo que o cobre (`sugestao: null` = verbo
     que falta — vira card; junto vem `verbos_servidos` e `golden`, incondicional, nunca so
     o null seco). Sequencial; erro ou recusa num item nao derruba os outros; teto
     `CAP` por lote com `omitido_por_teto`/`lote_next`. `command` escalar = lote de 1 e
     devolve o resultado do item. `sessao_id` e o do `monta_sessao`. AUDITORIA: um JSONL
-    por item em @ROOT@/var/log/ops/ — nao e silenciavel. Rollback: PF_RUN_SO_VERBO=0 + restart.
+    por item em @LOG@/ — nao e silenciavel. Rollback: PF_RUN_SO_VERBO=0 + restart.
     """
     if not PF_RUN_SO_VERBO:
         return await _run_command_legado(command, cwd, timeout, sessao_id, commands)
@@ -784,7 +837,9 @@ async def _run_command_legado(command: str = "", cwd: str = "", timeout: int = 1
     não tem verbo — git, docker (rootless), systemctl --user, rg, fluxo de dado entre
     verbos. Verbo do núcleo tem tool própria (nome = slug); usá-lo por aqui é medido.
 
-    cwd é relativo a @ROOT@ (vazio = a raiz). timeout em segundos (teto 600); estourou,
+    cwd vazio = a casa da conta; absoluto vale como está; relativo é relativo à bancada
+    declarada (PF_BANCADA ou ~/.config/platafirma/bancada) e, sem ela, a chamada é
+    recusada. timeout em segundos (teto 600); estourou,
     o grupo de processo inteiro é morto. stdout/stderr voltam com truncagem declarada
     (`truncado`/`bytes_total`). `&&` engole o exit code — use `;` ou chamadas separadas.
 
@@ -793,15 +848,18 @@ async def _run_command_legado(command: str = "", cwd: str = "", timeout: int = 1
     bytes do lote = `CAP` (D4), item excedente volta `{"omitido_por_teto": True}` com
     `lote_next`. `command` escalar segue válido quando `commands` não vem.
 
-    PATH já traz @ROOT@/bin e ~/.local/bin (bash -c não lê .bashrc). Segredos da instância
-    NÃO descem para o ambiente. AUDITORIA: toda chamada grava JSONL em @ROOT@/var/log/ops/
+    PATH já traz @BIN@ e ~/.local/bin (bash -c não lê .bashrc). Segredos da instância
+    NÃO descem para o ambiente. AUDITORIA: toda chamada grava JSONL em @LOG@/
     (comando, cwd, exit, duração) — não é silenciável.
     """
+    d, erro_cwd = _cwd_de(cwd)
+    if erro_cwd:
+        _audit(tool="run_command", evento="cwd_recusado", cwd=cwd, motivo=erro_cwd)
+        return {"recusado": True, "cwd": cwd, "motivo": erro_cwd}
     if commands and PF_TOOLS_LOTE:
         timeout = max(1, min(timeout, 600))
         ident = _sessao_resolve(sessao_id)
         lote_id = uuid.uuid4().hex[:8]
-        d = (RAIZ / cwd) if cwd else RAIZ
         resultados = []
         acumulado = 0
         lote_next = None
@@ -860,7 +918,7 @@ async def _run_command_legado(command: str = "", cwd: str = "", timeout: int = 1
             for argv in argvs:
                 r = await anyio.to_thread.run_sync(
                     _run_verbo_blocking, argv, None, timeout, ident)
-                _perf = _perfil_verbo(argv[0], str(RAIZ / "bin" / argv[0]))
+                _perf = _perfil_verbo(argv[0], str(BIN_VERBOS / argv[0]))
                 r = _serve(r, tool=argv[0], alca=" ".join(argv), ident=ident,
                            cauda=_perf["cauda"],
                            cosmetica=_cosmetica(_perf, argv[1] if len(argv) > 1 else None))
@@ -872,7 +930,6 @@ async def _run_command_legado(command: str = "", cwd: str = "", timeout: int = 1
             if len(resultados) == 1:
                 return {**resultados[0], "aviso": f"tem tool {argvs[0][0]} — chamada roteada pela porta"}
             return {"lote": resultados, "aviso": f"{len(resultados)} verbos roteados"}
-    d = (RAIZ / cwd) if cwd else RAIZ
     t0 = time.monotonic()
     r = await anyio.to_thread.run_sync(_run_blocking, command, d, timeout,
                                        ident["sessao_id"], ident["ordem_id"], ident["cadeira"])
@@ -889,8 +946,9 @@ async def _run_command_legado(command: str = "", cwd: str = "", timeout: int = 1
 # --- fila: fora do alcance de read_file/write_file ---------------------------
 # A fila tem verbo proprio (`fila`), que faz append sob flock e sabe de quem e a
 # caixa. write_file SUBSTITUI: em 05/08/2026 apagou 23.120 bytes da caixa de uma
-# persona alheia numa tacada. Arquivo de fila so se toca pelo verbo.
-FILA_RAIZ = Path(os.environ.get("PF_FILA", RAIZ / "fila")).resolve()
+# persona alheia numa tacada. Arquivo de fila so se toca pelo verbo. A fila v0 em
+# arquivo e fossil (Valkey Streams a substituiu); a negativa fica ate ela sair do estado.
+FILA_RAIZ = Path(os.environ.get("PF_FILA", INSTANCIA / "var" / "fila")).resolve()
 
 
 def _nega_fila(p: Path, tool: str):
@@ -908,16 +966,33 @@ def _nega_fila(p: Path, tool: str):
 
 
 _PDP_DIR = Path(os.environ["PDP_DIR"]).resolve() if os.environ.get("PDP_DIR") else None
-_SEGREDO_DIRS = tuple(d for d in (RAIZ_REAL / "var/deploy-env", _PDP_DIR) if d)
+_SEGREDO_DIRS = tuple(d for d in (_PDP_DIR,) if d)
+# Toda instancia guarda segredo em <raiz-das-instancias>/<instancia>/segredos (desenho
+# §3). A negativa e POR CONSTRUCAO, por forma de caminho, e nao pela lista de instancias
+# que existem hoje: instancia nova nasce negada sem ninguem lembrar de acrescentar.
+_RAIZES_DE_INSTANCIA = tuple(dict.fromkeys((Path("/srv/platafirma"), INSTANCIA.parent)))
+
+
+def _sob_segredos_de_instancia(alvo: Path) -> bool:
+    for base in _RAIZES_DE_INSTANCIA:
+        try:
+            partes = alvo.relative_to(base).parts
+        except ValueError:
+            continue
+        if len(partes) >= 2 and partes[1] == "segredos":
+            return True
+    return False
+
 
 def _nega_segredo(p: Path, tool: str):
-    """spec_porta-so-verbo §4.6: .env*, *.key|*.pem, .credentials.json, var/deploy-env/, PDP_DIR."""
+    """spec_porta-so-verbo §4.6: .env*, *.key|*.pem, .credentials.json, <instancia>/segredos/, PDP_DIR."""
     try:
         alvo = p.resolve()
     except OSError:
         return None
     nome = alvo.name
     if (nome.startswith(".env") or alvo.suffix in (".key", ".pem") or nome == ".credentials.json"
+            or _sob_segredos_de_instancia(alvo) or _sob_segredos_de_instancia(p.absolute())
             or any(d == alvo or d in alvo.parents for d in _SEGREDO_DIRS)):
         _audit(tool=tool, evento="leitura_recusada", path=str(p), motivo="segredo")
         return {"recusado": True, "path": str(p),
@@ -929,7 +1004,12 @@ def _le_um_arquivo(path: str, offset: int, max_bytes: int, ident: dict,
     negado = _autoriza("read_file", "read_file", "documento", path, DOM_PLATAFORMA)
     if negado:
         return negado
-    p = RAIZ / path
+    p, erro_caminho = _resolve_relativo(path)
+    if erro_caminho:
+        _audit(tool="read_file", evento="leitura_recusada", path=path, motivo=erro_caminho,
+               cadeira=ident["cadeira"] or None, sessao_id=ident["sessao_id"],
+               ordem_id=ident["ordem_id"], lote_id=lote_id, lote_n=lote_n)
+        return {"recusado": True, "path": path, "motivo": erro_caminho}
     bloqueio = _nega_fila(p, "read_file") or _nega_segredo(p, "read_file")
     if bloqueio:
         return bloqueio
@@ -967,7 +1047,7 @@ def _le_um_arquivo(path: str, offset: int, max_bytes: int, ident: dict,
 
 def read_file(path: str = "", offset: int = 0, max_bytes: int = 40000,
               sessao_id: str | None = None, paths: list[str] | None = None) -> dict:
-    """Lê um arquivo sob @ROOT@ (path relativo à raiz).
+    """Lê um arquivo: `path` absoluto, ou relativo à bancada declarada (sem ela, recusa).
 
     Truncagem sempre declarada: truncated/bytes_total/next_offset para paginar.
     Inexistente volta com erro preenchido, nunca exceção.
@@ -1001,20 +1081,76 @@ TIPOS_TEXTO = {".py", ".md", ".sh", ".sql", ".yaml", ".yml", ".json", ".toml",
 CLONES = ("platafirma-core", "platafirma-conhecimento", "platafirma-arquitetura",
           "platafirma-harness", "platafirma-motor", "platafirma-posto", "modulo-osint")
 ESCRITA_TETO = 1_048_576
-BIN_VERBOS = Path(os.environ.get("PF_BIN", RAIZ_REAL / "var/prod/platafirma-harness/current/bin"))
-TMP_FITA = RAIZ_REAL / "var/tmp"
-NEGADAS_ESCRITA = {
-    "fila": "use o verbo `fila` (append sob flock, com identidade)",
-    "var/abertura-publicada": "arvore imutavel — so `publicar-abertura` (arq:0097)",
-    "var/log": "log nao se edita",
-    "registro": "registro se escreve pelo verbo dono (acervo stack, acesso...)",
-    "bin": "e espelho (symlink); o verbo mora em platafirma-harness/bin/",
-}
+TMP_FITA = INSTANCIA / "var" / "tmp"
+
+
+def _negadas_escrita() -> dict:
+    """Negativas por caminho absoluto. Avaliadas antes das moradas: vencem sempre."""
+    return {
+        raizes.release_raiz(): "release e imutavel — muda por `release promover`, nunca por escrita",
+        FILA_RAIZ: "use o verbo `fila` (append sob flock, com identidade)",
+        INSTANCIA / "var" / "abertura-publicada": "arvore imutavel — so `publicar-abertura` (arq:0097)",
+        INSTANCIA / "var" / "log": "log nao se edita",
+        INSTANCIA / "segredos": "segredo se grava por `seg segredo gravar`",
+    }
+
+
+def _real(p: Path) -> Path:
+    try:
+        return p.resolve()
+    except OSError:
+        return p
+
 
 def _moradas_escrita():
-    # bin/ dos verbos antes do clone que o contem: regra mais especifica primeiro.
-    return [(BIN_VERBOS, TIPOS_TEXTO | {""}), (TMP_FITA, TIPOS_TEXTO)] + \
-           [(RAIZ_REAL / c, TIPOS_TEXTO) for c in CLONES]
+    """Rascunho da fita (instancia) + clones e worktrees da bancada DECLARADA.
+
+    Sem bancada declarada sobra so o rascunho: a porta nao inventa lugar de codigo.
+    `<bancada>/<repo>` e o clone base (o `repo` cai nele sem worktree da cadeira) e
+    `<bancada>/wt/<repo>/<cadeira>` o worktree por cadeira (arq:0109 §2)."""
+    moradas = [(_real(TMP_FITA), TIPOS_TEXTO)]
+    b = _bancada()
+    if b is not None:
+        b = _real(b)
+        moradas += [(b / "wt" / c, TIPOS_TEXTO) for c in CLONES]
+        moradas += [(b / c, TIPOS_TEXTO) for c in CLONES]
+    return moradas
+
+
+def _em_bin_do_harness(real_pai: Path) -> bool:
+    """bin/ de um clone ou worktree do harness na bancada: morada de verbo (sem extensao)."""
+    b = _bancada()
+    if b is None:
+        return False
+    b = _real(b)
+    for raiz_clone, prof in ((b / "platafirma-harness", 0), (b / "wt" / "platafirma-harness", 1)):
+        try:
+            partes = real_pai.relative_to(raiz_clone).parts
+        except ValueError:
+            continue
+        if len(partes) > prof and partes[prof] == "bin":
+            return True
+    return False
+
+
+def _clone_ausente(raiz: Path, real_pai: Path) -> str | None:
+    """Morada na bancada so vale sobre clone ou worktree que JA existe no disco.
+
+    Sem isto o mkdir do `_escreve_atomico` recriaria a bancada apagada (ou um worktree
+    que nunca foi aberto) como diretorio comum, sem git — criacao silenciosa que o
+    desenho §6 proibe. Clone e worktree nascem por `repo abrir`, nunca por write_file."""
+    rel = real_pai.relative_to(raiz).parts
+    if raiz.parent.name == "wt":
+        if not rel:
+            return f"morada: {raiz}/<cadeira>/<arquivo> — worktree da cadeira e obrigatorio"
+        base = raiz / rel[0]
+    else:
+        base = raiz
+    if not base.is_dir():
+        return (f"fora de morada: {base}/ nao existe — clone e worktree nascem por "
+                f"`repo abrir {raiz.name}`, write_file nao os cria")
+    return None
+
 
 def _resolve_escrita(path: str, ident: dict):
     """(alvo_real, erro). Lexico -> realpath do PAI -> negativas -> morada -> tipo -> symlink.
@@ -1022,11 +1158,13 @@ def _resolve_escrita(path: str, ident: dict):
     comparacao de string); o alvo se confere por lstat e o rename final nunca segue link."""
     pp = PurePosixPath(path or "")
     partes = pp.parts
-    if not partes or pp.is_absolute() or ".." in partes or any(ord(ch) < 32 for ch in path):
-        return None, "caminho: relativo a raiz, sem '..' nem caractere de controle"
+    if not partes or ".." in partes or any(ord(ch) < 32 for ch in path):
+        return None, "caminho: absoluto ou relativo a bancada, sem '..' nem caractere de controle"
     if ".git" in partes:
         return None, "fora de morada: .git nao se escreve por write_file — use `repo`"
-    alvo = RAIZ / pp
+    alvo, erro = _resolve_relativo(str(pp))
+    if erro:
+        return None, erro
     pai = alvo.parent
     anc = pai
     while not anc.exists():
@@ -1035,29 +1173,38 @@ def _resolve_escrita(path: str, ident: dict):
         real_pai = anc.resolve() / pai.relative_to(anc)
     except OSError as e:
         return None, f"caminho: {e}"
-    for neg, porque in NEGADAS_ESCRITA.items():
-        n = RAIZ_REAL / neg
-        if real_pai == n or n in real_pai.parents:
-            return None, f"fora de morada: {neg}/ — {porque}"
+    for neg, porque in _negadas_escrita().items():
+        for n in dict.fromkeys((neg, _real(neg))):
+            if real_pai == n or n in real_pai.parents:
+                return None, f"fora de morada: {neg}/ — {porque}"
     ext = alvo.suffix.lower()
+    tmp_fita = _real(TMP_FITA)
     for raiz, tipos in _moradas_escrita():
         if not (real_pai == raiz or raiz in real_pai.parents):
             continue
+        if _em_bin_do_harness(real_pai):
+            tipos = tipos | {""}
         if ext not in tipos:
             return None, (f"tipo: '{ext or '(sem extensao)'}' fora de "
-                          f"{sorted(t or '(sem)' for t in tipos)} em {raiz.relative_to(RAIZ_REAL)}/")
-        if raiz == TMP_FITA:
-            rel = real_pai.relative_to(TMP_FITA).parts
+                          f"{sorted(t or '(sem)' for t in tipos)} em {raiz}/")
+        if raiz == tmp_fita:
+            rel = real_pai.relative_to(tmp_fita).parts
             if not rel:
-                return None, "morada: var/tmp/<ordem_id>/<arquivo> — subpasta da fita e obrigatoria"
+                return None, f"morada: {TMP_FITA}/<ordem_id>/<arquivo> — subpasta da fita e obrigatoria"
             if ident["ordem_id"] not in ("-", rel[0]):
-                return None, f"morada: var/tmp/{rel[0]}/ nao e a pasta desta fita ({ident['ordem_id']})"
+                return None, f"morada: {TMP_FITA}/{rel[0]}/ nao e a pasta desta fita ({ident['ordem_id']})"
+        else:
+            erro_clone = _clone_ausente(raiz, real_pai)
+            if erro_clone:
+                return None, erro_clone
         real_alvo = real_pai / alvo.name
         if real_alvo.is_symlink():
             return None, "alvo e symlink — write_file nao escreve atraves de link"
         return real_alvo, None
-    return None, ("fora de morada: " + ", ".join(
-        str(r.relative_to(RAIZ_REAL)) + "/" for r, _ in _moradas_escrita()))
+    moradas = ", ".join(str(r) + "/" for r, _ in _moradas_escrita())
+    if _bancada() is None:
+        moradas += " (bancada nao declarada: clones e worktrees fora de alcance)"
+    return None, "fora de morada: " + moradas
 
 def _escreve_atomico(real_alvo: Path, data: bytes, modo: int) -> None:
     """mkstemp no MESMO dir -> write -> fsync -> rename -> fsync do dir. Inteira ou nada
@@ -1087,11 +1234,13 @@ def write_file(path: str, content: str = "", sessao_id: str | None = None,
                trecho: dict | None = None) -> dict:
     """Escreve arquivo de TIPO declarado em MORADA declarada, atomico (spec_porta-so-verbo §4).
 
-    `path` relativo a @ROOT@. Moradas: clones platafirma-*/modulo-osint (working tree, fora
-    de .git), platafirma-harness/bin/ (verbo: sem extensao + shebang) e var/tmp/<ordem_id>/
-    (rascunho da fita). Tipos: .py .md .sh .sql .yaml .yml .json .toml .css .html .js .txt.
-    Fora disso volta `{recusado, motivo}` nomeando o porque (fila/, var/abertura-publicada/,
-    var/log/, registro/, bin/ da raiz, .git, symlink, tipo, tamanho). `content` = arquivo
+    `path` absoluto, ou relativo à bancada declarada (sem ela, recusa). Moradas: na
+    bancada, clones platafirma-*/modulo-osint e seus worktrees em wt/<repo>/<cadeira>
+    (working tree, fora de .git), com bin/ do harness aceitando verbo (sem extensao +
+    shebang); na instancia, @TMP@/<ordem_id>/ (rascunho da fita). Tipos: .py .md .sh
+    .sql .yaml .yml .json .toml .css .html .js .txt. Fora disso volta `{recusado, motivo}`
+    nomeando o porque (release, fila, abertura publicada, log, segredos, .git, symlink,
+    tipo, tamanho). `content` = arquivo
     INTEIRO (teto 1 MiB). `trecho={"antes","depois"}` = edicao por trecho: `antes` tem de
     ocorrer exatamente UMA vez no arquivo; zero ou mais recusa com a contagem. Escrita por
     mkstemp no mesmo dir + fsync + rename: inteira ou nada. Auditoria com sha256 antes/depois.
@@ -1126,7 +1275,7 @@ def write_file(path: str, content: str = "", sessao_id: str | None = None,
     data = (content or "").encode("utf-8")
     if len(data) > ESCRITA_TETO:
         return _rec(f"tamanho: {len(data)} B > teto {ESCRITA_TETO} B")
-    em_bin = real_alvo.parent == BIN_VERBOS or BIN_VERBOS in real_alvo.parent.parents
+    em_bin = _em_bin_do_harness(real_alvo.parent)
     if em_bin and not real_alvo.suffix and not data.startswith(b"#!"):
         return _rec("tipo: verbo sem shebang na primeira linha")
     if existia:
@@ -1151,11 +1300,12 @@ def write_file(path: str, content: str = "", sessao_id: str | None = None,
 # ("Você é <nome>,") dá o nome canônico — que é o diretório da fila — e a linha
 # FERRAMENTAL: dá o caminho do manifesto. Convenção de nome de arquivo não produz o
 # "claudinha" de persona-fabrica.md.
-PERSONAS = Path(os.environ.get("PF_PERSONAS", RAIZ / "var/prod/platafirma-harness/current/abertura"))
+# A abertura servida e a MORADA PUBLICADA da instancia (arq:0097), nunca o clone.
+PERSONAS = Path(os.environ.get(
+    "PF_PERSONAS", INSTANCIA / "var/abertura-publicada/current/abertura"))
 ORG_CANONICO = Path(os.environ.get(
-    "PF_ORG", RAIZ / "platafirma-arquitetura/docs/org-template-canonico.md"))
-MANIFESTO_GERAL = Path(os.environ.get(
-    "PF_MANIFESTO_GERAL", RAIZ / "var/prod/platafirma-harness/current/abertura/oficio.md"))
+    "PF_ORG", raizes.release() / "arquitetura/docs/org-template-canonico.md"))
+MANIFESTO_GERAL = Path(os.environ.get("PF_MANIFESTO_GERAL", PERSONAS / "oficio.md"))
 
 
 RE_NOME = re.compile(r"^Você é ([A-Za-zÀ-ÿ][A-Za-zÀ-ÿ-]*)")
@@ -1186,7 +1336,7 @@ def _memoria(cadeira: str) -> dict:
     chapéus a cada giro anularia a razão de a memória ser partida por chapéu.
     """
     out = {}
-    verbo = str(RAIZ / "bin" / "mesa")
+    verbo = str(BIN_VERBOS / "mesa")
     for chave, args in (("mesa", ["ver"]), ("cadernos", ["caderno"])):
         try:
             proc = subprocess.run([verbo, *args], capture_output=True, text=True,
@@ -1205,13 +1355,13 @@ def _memoria(cadeira: str) -> dict:
 
 
 def _acha_bin(nome: str) -> str:
-    """Resolve o binário SERVIDO (BINARIOS -> RAIZ/bin). A porta executa o que está no ar
-    (release), nunca o working tree do clone (arq:0097; #3029): faltando no servido, o
-    caminho volta inexistente e o execve declara — não se cai em PF_HARNESS/bin nem no
+    """Resolve o binário SERVIDO (BINARIOS -> bin da release). A porta executa o que está
+    no ar (release), nunca o working tree do clone (arq:0097; #3029): faltando no servido,
+    o caminho volta inexistente e o execve declara — não se cai em PF_HARNESS/bin nem no
     PATH, que é como o SHA velho (ou o novo demais) entra calado na abertura."""
     if nome in BINARIOS and os.path.isfile(BINARIOS[nome]):
         return BINARIOS[nome]
-    return str(RAIZ / "bin" / nome)
+    return str(BIN_VERBOS / nome)
 
 
 def _exec_argv(binario: str, *args) -> list[str]:
@@ -1269,7 +1419,7 @@ def _montar(cadeira: str, atualizar: bool = True, chapeu: str = "", pergunta: st
     if sub and sub != "-":
         env_abrir["PF_SUJEITO"] = sub
 
-    d_cwd = RAIZ if RAIZ.is_dir() else Path.cwd()
+    d_cwd = CASA if CASA.is_dir() else Path.cwd()
     try:
         proc_abrir = subprocess.run(
             argv_abrir,
@@ -1435,16 +1585,18 @@ async def monta_sessao(cadeira: str = "", atualizar: bool = True, chapeu: str = 
 
 
 # Registro tardio: o __doc__ é a descrição que o cliente lê, e ela precisa nomear o
-# usuário e a raiz DESTA instância. Substituir depois de registrar não adianta — o
+# usuário e os caminhos DESTA instância. Substituir depois de registrar não adianta — o
 # FastMCP copia a descrição no momento do mcp.tool().
 _TOOLS = [run_command, read_file, write_file]
-# monta_sessao só existe onde há personas: numa instância com outra OPS_ROOT (osint)
+# monta_sessao só existe onde há personas: numa instância sem abertura publicada (osint)
 # a tool não teria o que montar, e tool inútil no catálogo é contexto desperdiçado.
 if PERSONAS.is_dir():
     _TOOLS.append(monta_sessao)
 
 for _fn in _TOOLS:
-    _fn.__doc__ = (_fn.__doc__ or "").replace("@ROOT@", str(RAIZ)).replace("@USER@", OPS_USER)
+    _fn.__doc__ = ((_fn.__doc__ or "").replace("@LOG@", str(LOG_DIR))
+                   .replace("@BIN@", str(BIN_VERBOS)).replace("@TMP@", str(TMP_FITA))
+                   .replace("@USER@", OPS_USER))
     mcp.tool()(_fn)
 
 
@@ -1507,7 +1659,7 @@ def _run_verbo_blocking(argv: list, stdin: str | None, timeout: int, ident: dict
            "PF_CONTA": OPS_USER}
     if ident["cadeira"]:
         env["PF_CADEIRA"] = ident["cadeira"]
-    d_cwd = RAIZ if RAIZ.is_dir() else Path.cwd()
+    d_cwd = CASA if CASA.is_dir() else Path.cwd()
     try:
         p = subprocess.Popen(argv, cwd=d_cwd, env=env, preexec_fn=_rlimits_filho,
                              stdin=subprocess.PIPE if stdin is not None else subprocess.DEVNULL,
@@ -1607,7 +1759,8 @@ def _gera_tools_verbos() -> list:
     try:
         cp = subprocess.run(["acervo", "listar", "ferramental", "--tools"],
                             env=_env_subprocesso(),  # projecao nao tem sujeito: nenhuma cadeira chumbada
-                            capture_output=True, text=True, timeout=30, cwd=RAIZ)
+                            capture_output=True, text=True, timeout=30,
+                            cwd=CASA if CASA.is_dir() else None)
     except Exception as e:  # noqa: BLE001
         print(f"[capsula] gerador falhou: {e!r} — sem tools derivadas", file=sys.stderr, flush=True)
         return []
@@ -1783,8 +1936,9 @@ async def _token(req):
 # o broker nunca ve o externo.
 # Caminho proprio, nao derivado de PF_HARNESS: uma instancia que aponte PF_HARNESS
 # para um recorte do repo (persona e politica, sem `bin`) ficava sem o modulo da
-# fila e devolvia 500 sem dizer por que. Medido no ensaio de 13/08/2026.
-FILA_BIN = Path(os.environ.get("PF_BIN", RAIZ / "var/prod/platafirma-harness/current/bin"))
+# fila e devolvia 500 sem dizer por que. Medido no ensaio de 13/08/2026. E o bin
+# servido (PF_BIN, default a release).
+FILA_BIN = BIN_VERBOS
 
 
 def _fila_mod():
@@ -1932,7 +2086,7 @@ def _anota_mesa(quem: str, nota: str) -> dict:
     """Pelo verbo `mesa`, nunca por cliente redis proprio: segunda implementacao da
     mesma regra diverge em silencio (mesma razao de `_memoria`)."""
     try:
-        proc = subprocess.run([str(RAIZ / "bin" / "mesa"), "anota", quem],
+        proc = subprocess.run([str(BIN_VERBOS / "mesa"), "anota", quem],
                               input=nota, capture_output=True, text=True, timeout=15,
                               env={**_env_subprocesso(), "PF_CADEIRA": quem})
         if proc.returncode == 0:
@@ -1944,14 +2098,14 @@ def _anota_mesa(quem: str, nota: str) -> dict:
 
 def _giro_carrega(sessao_id: str, cadeira: str, chapeu, giro: list) -> dict:
     """Carrega os 3 primeiros giros auto-relatados em sessao.giro pelo verbo
-    bin/_sessao/giro-carga.py — nunca cliente de banco proprio (ops-mcp roda em .venv-ops,
-    sem driver de banco; mesma razao de _anota_mesa)."""
+    bin/_sessao/giro-carga.py — nunca cliente de banco proprio (ops-mcp roda no venv ops
+    da release, sem driver de banco; mesma razao de _anota_mesa)."""
     if not sessao_id:
         return {"ok": False, "erro": "sem sessao_id"}
     payload = json.dumps({"sessao_id": sessao_id, "cadeira": cadeira,
                           "chapeu": chapeu, "giro": giro})
     try:
-        proc = subprocess.run([str(RAIZ / "bin" / "_sessao" / "giro-carga.py")],
+        proc = subprocess.run([str(BIN_VERBOS / "_sessao" / "giro-carga.py")],
                               input=payload, capture_output=True, text=True,
                               timeout=15, env={**_env_subprocesso()})
         try:

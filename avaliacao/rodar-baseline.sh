@@ -3,11 +3,12 @@
 # Mede no container (host nao alcanca o motor), grava avaliacao.run + resultado (motor-pg),
 # aplicando a regua N/A: sem alvo -> rank/hit/recall = NULL (nunca 0).
 # Uso: bash rodar-baseline.sh [caminho_gold.jsonl] [rotulo_conjunto]
+# Gabarito default: o da propria arvore (release ou worktree de onde o script roda).
+# Senha do motor: `seg segredo ler motor/MOTOR_PG_PASSWORD` (cofre da instancia); ausente = falha.
 set -euo pipefail
-ROOT="/home/claudinho/AI"
-GOLD="${1:-$ROOT/platafirma-harness/avaliacao/gabarito.jsonl}"
+DIR="$(cd "$(dirname "$(readlink -f "$0")")" && pwd)"
+GOLD="${1:-$DIR/gabarito.jsonl}"
 CONJ="${2:-gold-228-reancorado}"
-DIR="$(cd "$(dirname "$0")" && pwd)"
 C=rag-extractor-api
 
 docker cp "$GOLD" $C:/tmp/gabarito.jsonl >/dev/null
@@ -15,7 +16,9 @@ docker cp "$DIR/runner_gold_baseline.py" $C:/tmp/ >/dev/null
 docker exec -w /app -e PYTHONPATH=/app $C python /tmp/runner_gold_baseline.py | tee /tmp/baseline_agg.txt
 docker cp $C:/tmp/baseline_resultados.jsonl /tmp/baseline_resultados.jsonl >/dev/null
 
-MDSN=$(python3 -c "import urllib.parse;e={k:v.strip().strip(chr(34)).strip(chr(39)) for k,v in (l.strip().split('=',1) for l in open('$ROOT/deploy/motor/.env') if '=' in l and not l.startswith('#'))};print('postgresql://motor:%s@127.0.0.1:5433/motor'%urllib.parse.quote(e['MOTOR_PG_PASSWORD'],safe=''))")
+MOTOR_PG_PASSWORD="$(seg segredo ler motor/MOTOR_PG_PASSWORD)" || { echo "segredo motor/MOTOR_PG_PASSWORD ausente no cofre da instancia" >&2; exit 3; }
+MDSN=$(MOTOR_PG_PASSWORD="$MOTOR_PG_PASSWORD" python3 -c "import os,urllib.parse;print('postgresql://motor:%s@127.0.0.1:5433/motor'%urllib.parse.quote(os.environ['MOTOR_PG_PASSWORD'],safe=''))")
+unset MOTOR_PG_PASSWORD
 GV=$(psql "$MDSN" -tAq -c "select id from avaliacao.gabarito_versao order by criado_em desc limit 1" | grep -Eo '[0-9a-f-]{36}')
 J=$(grep '^JSON ' /tmp/baseline_agg.txt | tail -1 | cut -c6-)
 P50=$(python3 -c "import json,sys;print(json.loads('''$J''')['p50'])")

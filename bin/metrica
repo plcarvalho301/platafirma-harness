@@ -39,8 +39,13 @@ import sys
 from collections import defaultdict
 from datetime import date, datetime, timedelta
 
-RAIZ = os.environ.get("PF_RAIZ", os.path.expanduser("~/AI"))
-LOG_OPS = os.environ.get("PF_LOG_OPS") or os.path.join(RAIZ, "var", "log", "ops")
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.realpath(__file__))), "lib"))
+from raizes import instancia  # noqa: E402
+
+# O ops log mora na instancia. OPS_LOG_DIR e o nome unico do diretorio (o mesmo da porta,
+# de repo, motor e descansar); PF_LOG_OPS segue lido so como alias antigo.
+LOG_OPS = (os.environ.get("OPS_LOG_DIR") or os.environ.get("PF_LOG_OPS")
+           or str(instancia() / "var" / "log" / "ops"))
 
 VERBO = "metrica"
 ATOS = ("eventos", "dia", "ate-acerto", "tateio", "casos", "verbos")
@@ -744,7 +749,7 @@ def uso(codigo=2):
   metrica casos [<dia>] [--tool <verbo>] [--cadeira <slug>]
   metrica verbos [<dia>] [--desde AAAA-MM-DD] [--ate AAAA-MM-DD] [--cadeira <slug>] [--csv]
 
-Agrega o ops log (var/log/ops/ops-AAAA-MM-DD.jsonl) em eventos de uso do harness.
+Agrega o ops log ($PF_INSTANCIA/var/log/ops/ops-AAAA-MM-DD.jsonl, ou OPS_LOG_DIR) em eventos de uso do harness.
 <dia> e AAAA-MM-DD; sem ele, hoje. Saida JSON; --resumo imprime o sumario legivel.
 
 eventos     stream cru, um objeto por evento (giro, erro, help, acerto, cadeia, lote)

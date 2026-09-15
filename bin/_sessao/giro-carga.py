@@ -1,10 +1,10 @@
-#!/home/claudinho/AI/.venv-harness/bin/python
+#!/opt/platafirma/current/venv/harness/bin/python
 # _giro-carga.py — carga em lote do giro auto-relatado (claude.ai) em sessao.giro.
 # capacidade: memoria (giro) · dono: claudinho-IA
 #
 # Chamado pelo ops-mcp (_giro_carrega, server.py::_sessao_encerrar), nunca direto
-# por uma cadeira. ops-mcp roda em .venv-ops, sem driver de banco; a escrita fica
-# aqui, em .venv-harness, que ja fala com o Postgres de sessao (bin/monta-sessao
+# por uma cadeira. ops-mcp roda no venv ops, sem driver de banco; a escrita fica
+# aqui, no venv harness da release, que ja fala com o Postgres de sessao (bin/monta-sessao
 # tem o mesmo DSN) — mesmo padrao de bin/mesa para _anota_mesa: verbo, nao
 # segunda implementacao de cliente de banco dentro do servidor MCP.
 #
@@ -27,17 +27,27 @@ import os
 import sys
 import uuid
 
-RAIZ = os.environ.get("PF_RAIZ", os.path.expanduser("~/AI"))
-SESSAO_ENV = os.path.join(RAIZ, "platafirma-harness", "sessao", ".env")
+# Raizes de producao (card #3010): a senha e segredo da instancia, um arquivo por
+# variavel (stack harness-sessao), nunca .env de clone.
+sys.path.insert(0, os.path.join(
+    os.path.dirname(os.path.dirname(os.path.dirname(os.path.realpath(__file__)))), "lib"))
+from raizes import instancia  # noqa: E402
+
+SEGREDO_SENHA = os.path.join(os.environ.get("SEG_SECRETS_DIR") or str(instancia() / "segredos"),
+                             "harness-sessao", "SESSAO_PG_PASSWORD")
 
 
 def _dsn() -> str:
     senha = os.environ.get("SESSAO_PG_PASSWORD", "")
-    if not senha and os.path.isfile(SESSAO_ENV):
-        for linha in open(SESSAO_ENV, encoding="utf-8"):
-            if linha.startswith("SESSAO_PG_PASSWORD="):
-                senha = linha.split("=", 1)[1].strip()
-                break
+    if not senha:
+        try:
+            with open(SEGREDO_SENHA, encoding="utf-8") as fh:
+                senha = fh.read().strip()
+        except OSError:
+            senha = ""
+    if not senha:
+        # Ausencia e falha alta: DSN sem senha mascarava o erro como "banco mudo".
+        raise RuntimeError(f"segredo ausente: SESSAO_PG_PASSWORD nem no ambiente nem em {SEGREDO_SENHA}")
     porta = os.environ.get("SESSAO_PG_PORT", "5437")
     return f"host=127.0.0.1 port={porta} dbname=sessao user=sessao password={senha}"
 

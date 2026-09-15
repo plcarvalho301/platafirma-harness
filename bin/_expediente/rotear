@@ -20,6 +20,10 @@ import unicodedata
 from dataclasses import dataclass
 from pathlib import Path
 
+# Raizes de producao (card #3010): a morada publicada e estado da instancia.
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "lib"))
+from raizes import instancia  # noqa: E402
+
 # Limiar/margem de (b): carregados quando o endpoint existir.
 LIMIAR_SEMANTICO = 0.55   # abaixo -> None -> fallback (c)
 MARGEM_SEMANTICA = 0.05   # 1o e 2o colados -> None: ambiguidade e sinal, nao moeda
@@ -55,8 +59,7 @@ def _resolve_dir_chapeus(raiz_chapeus: str | None = None) -> str:
     """Resolve o diretório onde moram abertura e rotas-chapeu.json."""
     if raiz_chapeus and os.path.exists(raiz_chapeus):
         return raiz_chapeus
-    raiz = os.environ.get("PF_RAIZ", os.path.expanduser("~/AI"))
-    morada = os.environ.get("PF_ABERTURA_DIR", os.path.join(raiz, "var", "abertura-publicada"))
+    morada = os.environ.get("PF_ABERTURA_DIR") or str(instancia() / "var" / "abertura-publicada")
     # So a morada publicada (arq:0097): runtime nao le working tree git. Morada ausente
     # devolve o caminho mesmo assim; sem rotas o roteador cai em fallback DECLARADO.
     return os.path.join(morada, "current", "abertura")

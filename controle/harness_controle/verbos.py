@@ -21,15 +21,13 @@ import os
 from pathlib import Path
 from typing import Any
 
-# parents[2] resolve pro repo quando se roda do clone, mas em container o pacote
-# mora em /app e parents[2] vira "/" — dai o "/bin/conferir" que nao existe.
-# PF_RAIZ e a mesma ancora que o agregador ja usa; o default preserva o clone.
-_PF_RAIZ = os.environ.get("PF_RAIZ")
-BIN = (
-    Path(_PF_RAIZ) / "platafirma-harness" / "bin"
-    if _PF_RAIZ
-    else Path(__file__).resolve().parents[2] / "bin"
-)
+from ._raizes import ARVORE, release
+
+# Os verbos saem da propria arvore do harness quando o pacote roda dentro dela (host:
+# o agregador roda da release). Em container o pacote mora em /app, fora de arvore, e
+# os verbos saem da release no ar, montada somente-leitura. PF_BIN e override de teste.
+HARNESS = ARVORE if ARVORE is not None else release() / "harness"
+BIN = Path(os.environ["PF_BIN"]) if os.environ.get("PF_BIN") else HARNESS / "bin"
 
 
 @dataclass(frozen=True)

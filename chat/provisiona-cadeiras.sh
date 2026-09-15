@@ -37,27 +37,36 @@
 #   ./provisiona-cadeiras.sh @megafone:chat.platafirma.org
 #
 # Variaveis de escape (todas com padrao util): PF_DONO, PF_COFRE, PF_ORG, PF_AVATARES,
-# PF_RECEPCAO, PF_DOMINIO, PF_RAIZ.
+# PF_RECEPCAO, PF_DOMINIO, PF_INSTANCIA, PF_RELEASE, PF_ABERTURA_DIR.
+#
+# ambiente: PF_INSTANCIA (default /srv/platafirma/casa; cofre em
+# $PF_INSTANCIA/segredos/matrix, morada da abertura em $PF_INSTANCIA/var/abertura-publicada),
+# PF_RELEASE (default /opt/platafirma/current; org canonico em $PF_RELEASE/arquitetura).
 set -euo pipefail
 
 DONO="${1:-${PF_DONO:-}}"
 : "${DONO:?uso: ./provisiona-cadeiras.sh @megafone:chat.platafirma.org}"
 
+. "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/../lib/raizes.sh"
+
 export DOCKER_HOST="${DOCKER_HOST:-unix:///run/user/$(id -u)/docker.sock}"
-AQUI="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-COFRE="${PF_COFRE:-$HOME/AI/var/secrets/matrix}"
+AQUI="$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")"
+COFRE="${PF_COFRE:-$PF_INSTANCIA/segredos/matrix}"
 RECEPCAO="${PF_RECEPCAO:-chat-recepcao}"
 AVATARES="${PF_AVATARES:-$AQUI/avatares}"
 DOMINIO="${PF_DOMINIO:-chat.platafirma.org}"
 # O alias sai do org canonico e nao se fixa aqui: quem ocupa a cadeira e com que nome e
 # decisao de claudinha-gestao-estrategica, versionada no repo de arquitetura. Codigo com
-# a tabela dentro seria uma segunda fonte da verdade envelhecendo em silencio.
-ORG="${PF_ORG:-$AQUI/../../platafirma-arquitetura/docs/org-template-canonico.md}"
+# a tabela dentro seria uma segunda fonte da verdade envelhecendo em silencio. Lido da
+# arquitetura servida pela release, nunca de repo irmao na bancada (card #3010).
+ORG="${PF_ORG:-$PF_RELEASE/arquitetura/docs/org-template-canonico.md}"
+# cadeiras.py, no python do host abaixo, le a morada da instancia.
+export PF_INSTANCIA
 
 [ -s "$COFRE/as-token" ] || { echo "erro: falta $COFRE/as-token — rode ./prepara.sh" >&2; exit 1; }
 [ -s "$ORG" ] || {
   echo "erro: org canonico nao encontrado em $ORG" >&2
-  echo "      e de la que sai o alias de cada cadeira. Aponte PF_ORG se o clone mora noutro lugar." >&2
+  echo "      e de la que sai o alias de cada cadeira. Aponte PF_ORG se a release no ar nao traz a arquitetura." >&2
   exit 1
 }
 

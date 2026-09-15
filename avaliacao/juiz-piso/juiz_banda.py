@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Runner resumível do juiz estrutural (piso <40 toks), com pool de threads.
 
-Produtiza tmp/judge_smoke.py -> tmp/juiz_piso.py em runner de banda inteira.
-Le a banda de tmp/banda_lt40.jsonl, julga cada secao (real|so-titulo|ancora-ruido)
+Produtiza os smokes judge_smoke.py -> juiz_piso.py em runner de banda inteira.
+Le a banda de JUIZ_BANDA, julga cada secao (real|so-titulo|ancora-ruido)
 via ollama local, e faz CHECKPOINT linha-a-linha em OUT. NAO escreve no banco:
 secao.qualidade so e tocada por juiz_aplica.py, depois da banda inteira julgada.
 
@@ -19,19 +19,26 @@ OLLAMA_NUM_PARALLEL >= JUIZ_THREADS (auto costuma bastar).
 env:
   JUIZ_MODELO   modelo ollama            (default qwen3.5:9b)
   JUIZ_THREADS  requests concorrentes    (default 1)
-  JUIZ_BANDA    entrada jsonl            (default tmp/banda_lt40.jsonl)
-  JUIZ_OUT      checkpoint jsonl         (default tmp/juiz_banda.out.jsonl)
+  JUIZ_BANDA    entrada jsonl            (default $PF_INSTANCIA/dados/avaliacao/juiz-piso/banda_lt40.jsonl)
+  JUIZ_OUT      checkpoint jsonl         (default $PF_INSTANCIA/dados/avaliacao/juiz-piso/juiz_banda.out.jsonl)
+  PF_INSTANCIA  raiz da instancia        (default /srv/platafirma/casa)
   JUIZ_LIMIT    teto de itens NOVOS      (default 0 = banda inteira)
   JUIZ_LOG_A_CADA  cadencia de progresso (default 200)
 """
 import json, os, sys, time, threading, urllib.request
 from collections import Counter
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "lib"))
+from raizes import instancia  # noqa: E402
+
+DADOS     = instancia() / "dados" / "avaliacao" / "juiz-piso"
 
 MODEL     = os.environ.get("JUIZ_MODELO", "qwen3.5:9b")
 OLLAMA    = "http://127.0.0.1:11434/api/generate"
-BANDA     = os.environ.get("JUIZ_BANDA", "/home/claudinho/AI/tmp/banda_lt40.jsonl")
-OUT       = os.environ.get("JUIZ_OUT", "/home/claudinho/AI/tmp/juiz_banda.out.jsonl")
+BANDA     = os.environ.get("JUIZ_BANDA", str(DADOS / "banda_lt40.jsonl"))
+OUT       = os.environ.get("JUIZ_OUT", str(DADOS / "juiz_banda.out.jsonl"))
 LIMIT     = int(os.environ.get("JUIZ_LIMIT", "0"))
 LOG_CADA  = int(os.environ.get("JUIZ_LOG_A_CADA", "200"))
 THREADS   = max(1, int(os.environ.get("JUIZ_THREADS", "1")))

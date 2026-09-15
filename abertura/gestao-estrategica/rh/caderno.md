@@ -396,7 +396,7 @@ argparse do verbo só aceita o chapéu como posicional). Contorno encontrado NA 
 08/09 foi passar o chapéu em args=["rh"] e o texto pelo campo stdin — rodou; `mesa
 anota` lê o corpo do slot por stdin, não por argumento.
 
-14/09/2026 — `ops-server/test_*.py` não roda em `teste rodar platafirma-harness` (venv-
+14/09/2026 — `ops-server/test_*.py` não roda em `teste rodar platafirma-harness` (venv
 harness sem o módulo `mcp`, que `server.py` importa) — a suite "verde" que o `teste`
 mede nunca cobre a porta. Encaminhado a ti (venv de teste da porta separado do da
 bancada). Nenhum contorno meu: validei o diff da porta por leitura (`repo git ... show`)

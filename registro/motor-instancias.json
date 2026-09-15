@@ -2,14 +2,14 @@
  "rag": {
   "estado": "ativa",
   "container": "rag-extractor-api",
-  "compose": "platafirma-conhecimento/rag/docker-compose.yml",
+  "compose": "/opt/platafirma/current/conhecimento/rag/docker-compose.yml",
   "servico": "rag-api",
   "stack": "rag",
   "endpoint": "http://127.0.0.1:8100/search",
-  "token_em": "platafirma-conhecimento/rag/.env",
+  "token_em": "/srv/platafirma/casa/segredos/rag/RAG_API_TOKEN",
   "facets": "http://127.0.0.1:8100/facets",
-  "gabarito": "platafirma-harness/avaliacao/gabarito.jsonl",
-  "medicoes_em": "var/medicoes/rag",
+  "gabarito": "/opt/platafirma/current/harness/avaliacao/gabarito.jsonl",
+  "medicoes_em": "/srv/platafirma/casa/var/medicoes/rag",
   "banco": {
    "container": "rag-extractor-pg",
    "db": "rag_extractor",
@@ -356,7 +356,7 @@
    "GEN_PROVIDER": "roteamento de instalacao (qual provedor atende), nao qualidade de resposta",
    "JUDGE_MODEL": "bancada de avaliacao (fase 11), nao motor servido: ajustar e medir sao coisas diferentes"
   },
-  "env_da_ingestao": "platafirma-conhecimento/rag/.env"
+  "env_da_ingestao": "/srv/platafirma/casa/deploy/rag/ingestao.env"
  },
  "reasoner": {
   "estado": "planejada",

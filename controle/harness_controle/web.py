@@ -37,9 +37,11 @@ from starlette.staticfiles import StaticFiles
 from . import render
 from .agregador import ESTADO_PATH
 from .estado_leitura import carregar_estado
-from .verbos import BIN, chamar
+from .verbos import BIN, HARNESS, chamar
 
-REPO_HARNESS = Path(__file__).resolve().parents[2]
+# /feito le `git log` da mesma arvore de onde saem os verbos: a propria, no host; a
+# release montada somente-leitura, no container.
+REPO_HARNESS = HARNESS
 
 TIPOS_VALIDOS = {"decisao", "resposta", "pedido", "minuta", "demanda", "handoff"}
 PF_CADEIRA_TELA = os.environ.get("PF_CADEIRA_TELA", "ti")

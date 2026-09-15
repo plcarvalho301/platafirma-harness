@@ -7,8 +7,8 @@
 # use para: openscap, keycloak, openssl pós-quântico, régua de segurança, segredos
 # atos: oscap (leitura, casco), ssg (escrita, regua), keycloak entrar (escrita, credencial), keycloak (escrita, realm), openssl (leitura, cripto), segredo ler (leitura, segredo), segredo listar (leitura, segredo), segredo gravar (escrita, segredo), segredo importar (escrita, segredo), segredo rotacionar (escrita, segredo)
 # folhas: oscap|ssg -> politica/avaliacao · keycloak|openssl -> politica/acesso · segredo -> politica/segredo
-# escreve: var/secrets/<stack>/<nome>
-# ambiente: SEG_SECRETS_DIR[=$HOME/AI/var/secrets]
+# escreve: $PF_INSTANCIA/segredos/<stack>/<nome>
+# ambiente: SEG_SECRETS_DIR[=$PF_INSTANCIA/segredos] · SEG_LOG_DIR[=$PF_INSTANCIA/var/log/seg] · SEG_OSCAP_DIR[=$PF_INSTANCIA/var/oscap] · SEG_SSG_DIR[=/opt/terceiros/ssg/current] · SEG_OQS_DIR[=/opt/terceiros/oqs/current] · PF_INSTANCIA[=/srv/platafirma/casa]
 #
 # subcomando          capacidade          origem do ato
 #   oscap avaliar     politica            era oscap-casco
@@ -29,10 +29,17 @@
 # direto. Vira controle no dia em que as ferramentas sairem do PATH do usuario.
 set -euo pipefail
 
-LOG_DIR="${SEG_LOG_DIR:-$HOME/AI/var/log/seg}"
-DS_DIR="$HOME/AI/opt/ssg"
-OUT="$HOME/AI/var/oscap"
-SEG_SECRETS_DIR="${SEG_SECRETS_DIR:-$HOME/AI/var/secrets}"
+. "$(dirname "$(readlink -f "$0")")/../lib/raizes.sh"
+
+# Estado, trilha e cofre sao da instancia (/srv); o ferramental de terceiro e do plano host
+# (/opt/terceiros, instalado por ti com procedencia). A regua derivada e produto da casa: mora
+# com a evidencia do oscap, nunca dentro do ferramental r-x.
+LOG_DIR="${SEG_LOG_DIR:-$PF_INSTANCIA/var/log/seg}"
+DS_DIR="${SEG_SSG_DIR:-/opt/terceiros/ssg/current}"
+OQS_DIR="${SEG_OQS_DIR:-/opt/terceiros/oqs/current}"
+OUT="${SEG_OSCAP_DIR:-$PF_INSTANCIA/var/oscap}"
+REGUA_DIR="$OUT/regua"
+SEG_SECRETS_DIR="${SEG_SECRETS_DIR:-$PF_INSTANCIA/segredos}"
 
 registra() {
   mkdir -p "$LOG_DIR" 2>/dev/null || true
@@ -460,7 +467,7 @@ case "$SUB" in
     case "$ATO" in
       avaliar)
         [ -n "$ALVO" ] || { echo "seg oscap avaliar exige perfil explicito — sem default" >&2; uso; }
-        DS="$DS_DIR/ssg-ubuntu2404-ds-sem-cpe.xml"
+        DS="$REGUA_DIR/ssg-ubuntu2404-ds-sem-cpe.xml"
         [ -f "$DS" ] || { echo "datastream derivado ausente em $DS — rode: seg ssg derivar ssg-ubuntu2404-ds.xml" >&2; exit 1; }
         STAMP="$(date +%Y%m%dT%H%M)"; mkdir -p "$OUT"
         oscap xccdf eval \
@@ -490,11 +497,12 @@ case "$SUB" in
     case "$ATO" in
       derivar)
         [ -n "$ALVO" ] || { echo "seg ssg derivar exige o datastream de origem — mutacao nao opera sem alvo" >&2; uso; }
-        cd "$DS_DIR"
-        [ -f "$ALVO" ] || { echo "datastream de origem ausente em $DS_DIR/$ALVO" >&2; exit 1; }
-        DEST="${ALVO%.xml}-sem-cpe.xml"
-        sed -E 's|<[A-Za-z0-9.:_-]+:platform idref="cpe:/o:[^"]*"[[:space:]]*/>||g' "$ALVO" > "$DEST"
-        echo "derivado: $DS_DIR/$DEST"
+        case "$ALVO" in /*) ORIGEM="$ALVO" ;; *) ORIGEM="$DS_DIR/$ALVO" ;; esac
+        [ -f "$ORIGEM" ] || { echo "datastream de origem ausente em $ORIGEM" >&2; exit 1; }
+        mkdir -p "$REGUA_DIR"
+        DEST="$REGUA_DIR/$(basename "${ALVO%.xml}")-sem-cpe.xml"
+        sed -E 's|<[A-Za-z0-9.:_-]+:platform idref="cpe:/o:[^"]*"[[:space:]]*/>||g' "$ORIGEM" > "$DEST"
+        echo "derivado: $DEST"
         echo "cpe de SO removidos, applicability de regra preservada: $(grep -c 'platform idref="#' "$DEST")"
         ;;
       *) uso ;;
@@ -520,8 +528,8 @@ case "$SUB" in
 
   openssl)
     [ "$TEM_BARREIRA" -eq 1 ] && [ "${#NATIVOS[@]}" -ge 1 ] || { echo "seg openssl exige -- seguido do comando nativo do openssl" >&2; uso; }
-    export OPENSSL_CONF="$HOME/AI/opt/oqs/openssl-oqs.cnf"
-    export LD_LIBRARY_PATH="$HOME/AI/opt/oqs/lib:${LD_LIBRARY_PATH:-}"
+    export OPENSSL_CONF="$OQS_DIR/openssl-oqs.cnf"
+    export LD_LIBRARY_PATH="$OQS_DIR/lib:${LD_LIBRARY_PATH:-}"
     exec /usr/bin/openssl "${NATIVOS[@]}"
     ;;
 

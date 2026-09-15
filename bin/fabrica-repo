@@ -17,19 +17,31 @@
 #   entregar <repo> <card-slug>   credenciado: push branch + PR; mediado: bundle no drop
 #   receber  <repo> <card-slug>   [claudinho-TI, no host] pega o bundle, empurra, abre PR
 #   estado   <repo>               diz o modo e o caminho
+#
+# Verbo de bancada (card #3010): o clone de trabalho mora na bancada declarada pela conta
+# (PF_BANCADA, senao ~/.config/platafirma/bancada; sem declaracao, exit 3). PF_TRABALHO
+# segue como override explicito de pegar/entregar. Nenhum default em codigo.
 set -euo pipefail
+
+. "$(dirname "$(readlink -f "$0")")/../lib/raizes.sh"
 
 DROP="${PF_DROP:-/srv/pf/entrada-jaiminho}"
 GH_OWNER="plcarvalho301"
-TRAB="${PF_TRABALHO:-$HOME/trabalho}"
+
+# bancada declarada, so caminho absoluto (relativo cairia no diretorio corrente)
+bancada_abs(){ local b; b="$(pf_bancada)" || exit 3
+  case "$b" in /*) printf '%s' "${b%/}";; *) echo "bancada declarada nao e caminho absoluto: $b" >&2; exit 3;; esac; }
+# raiz de trabalho: PF_TRABALHO se dado, senao a bancada declarada
+trabalho(){ if [ -n "${PF_TRABALHO:-}" ]; then printf '%s' "$PF_TRABALHO"; else bancada_abs || exit 3; fi; }
 
 repo_ok(){ case "$1" in platafirma-*|modulo-osint) return 0;; *) echo "repo desconhecido: $1" >&2; return 1;; esac; }
 tem_credencial(){ git ls-remote "https://github.com/$GH_OWNER/$1.git" HEAD >/dev/null 2>&1; }
 
 pegar(){
   local repo="$1" slug="$2"; repo_ok "$repo" || exit 2
-  local dest="$TRAB/$repo"
-  mkdir -p "$TRAB"
+  local trab; trab="$(trabalho)" || exit 3
+  local dest="$trab/$repo"
+  mkdir -p "$trab"
   if tem_credencial "$repo"; then
     [ -d "$dest/.git" ] || git clone "https://github.com/$GH_OWNER/$repo.git" "$dest"
   else
@@ -42,7 +54,8 @@ pegar(){
 
 entregar(){
   local repo="$1" slug="$2"; repo_ok "$repo" || exit 2
-  local dest="$TRAB/$repo" br="fabrica/$slug"
+  local trab; trab="$(trabalho)" || exit 3
+  local dest="$trab/$repo" br="fabrica/$slug"
   [ "$br" = "main" ] && { echo "RECUSA: main e reservado (push/merge nao e da fabrica)" >&2; exit 3; }
   git -C "$dest" rev-parse --verify "$br" >/dev/null 2>&1 || { echo "branch $br nao existe em $dest" >&2; exit 2; }
   if tem_credencial "$repo"; then
@@ -60,8 +73,11 @@ entregar(){
 
 receber(){  # rodado por claudinho-TI no host (tem credencial). Empurra branch, nunca main.
   local repo="$1" slug="$2"; repo_ok "$repo" || exit 2
-  local b="$DROP/entregas/$slug.bundle" host="$HOME/AI/$repo" br="fabrica/$slug"
+  local bancada; bancada="$(bancada_abs)" || exit 3
+  local b="$DROP/entregas/$slug.bundle" host="$bancada/$repo" br="fabrica/$slug"
   [ -f "$b" ] || { echo "sem bundle: $b" >&2; exit 2; }
+  # clone base ausente (bancada apagada): refaz do forge, nunca de clone local
+  if [ ! -e "$host/.git" ]; then mkdir -p "$bancada"; git clone "https://github.com/$GH_OWNER/$repo.git" "$host"; fi
   git -C "$host" fetch "$b" "$br:$br"
   git -C "$host" push -u origin "$br"
   gh pr create --repo "$GH_OWNER/$repo" --base main --head "$br" --fill 2>/dev/null || true
@@ -79,5 +95,5 @@ case "${1:-}" in
   entregar) shift; entregar "$@";;
   receber)  shift; receber "$@";;
   estado)   shift; estado "$@";;
-  *) sed -n '1,34p' "$0"; exit 1;;
+  *) sed -n '1,23p' "$0"; exit 1;;
 esac

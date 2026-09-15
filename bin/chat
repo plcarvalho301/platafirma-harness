@@ -32,14 +32,24 @@ import threading
 import time
 import uuid
 
-RAIZ = os.environ.get("PF_RAIZ", os.path.expanduser("~/AI"))
-PERSONAS = os.path.join(RAIZ, "platafirma-harness", "personas")
-FITAS = os.path.join(RAIZ, "fitas")
-SKILLS = os.path.join(RAIZ, "platafirma-harness", "skills")
+# Duas raizes e so duas (card #3010). O CODIGO (skills, chat/, verbos irmaos) sai da
+# arvore deste arquivo, por realpath — a release servida. O ESTADO (fitas) mora na
+# instancia. PF_BIN so aponta outro diretorio de verbos (teste com stub).
+HARNESS_DIR = os.path.dirname(os.path.dirname(os.path.realpath(__file__)))
+sys.path.insert(0, os.path.join(HARNESS_DIR, "lib"))
+from raizes import instancia, release  # noqa: E402
+
+BIN = os.environ.get("PF_BIN") or os.path.join(HARNESS_DIR, "bin")
+# Mesmo caminho absoluto dentro e fora do conteiner da recepcao (anexo.py le a mesma
+# variavel): o caminho do anexo atravessa no corpo da mensagem.
+FITAS = os.environ.get("CHAT_FITAS_RAIZ") or str(instancia() / "var" / "fitas")
+SKILLS = os.path.join(HARNESS_DIR, "skills")
+# Gravado no settings de cada fita: caminho estavel da release no ar, nunca o sha.
+HOOK_PORTA_SESSAO = str(release() / "harness" / "agente" / "hooks" / "porta-sessao.py")
 
 # A costura de identidade e de chat/comum/cadeiras.py, e nao se reimplementa:
 # duas traducoes divergem, e a que diverge produz cadeira errada.
-sys.path.insert(0, os.path.join(RAIZ, "platafirma-harness", "chat"))
+sys.path.insert(0, os.path.join(HARNESS_DIR, "chat"))
 from comum.cadeiras import atores, eh_participante, slug_da_cadeira  # noqa: E402
 
 # Watchdog de atividade, nao teto fixo (minuta 0002, posicao de claudinho-TI,
@@ -252,8 +262,8 @@ def id_fita_novo():
 # "sem verbo declarado" — medido no chat em 18/08/2026, com o participante ja
 # admitido em cadeiras.py e sem rota nenhuma deste lado.
 VERBO_DO_PARTICIPANTE = {
-    "jaiminho": os.path.join(RAIZ, "bin", "jaiminho"),
-    "jaiminho-fabrica": os.path.join(RAIZ, "bin", "jaiminho-fabrica"),
+    "jaiminho": os.path.join(BIN, "jaiminho"),
+    "jaiminho-fabrica": os.path.join(BIN, "jaiminho-fabrica"),
 }
 
 # `jaiminho perguntar` e sincrono e nao emite stream: ele volta quando o `agy`
@@ -287,7 +297,7 @@ def giro_de_participante(quem, id_fita, corpo, passo_out):
     passo_out({"passo": "rota", "em": agora_iso(), "motor": quem, "ato": ato})
 
     env = dict(os.environ)
-    caminhos = [os.path.join(RAIZ, "bin"), os.path.expanduser("~/.local/bin")]
+    caminhos = [BIN, os.path.expanduser("~/.local/bin")]
     atual = env.get("PATH", "").split(":")
     env["PATH"] = ":".join(caminhos + [p for p in atual if p and p not in caminhos])
     # O verbo do participante fala com o container por `docker exec`, e o worker
@@ -397,12 +407,12 @@ def settings_da_fita(modelo="", cadeira=""):
             "PreToolUse": [{
                 "matcher": "mcp__claudinho-mcp__.*|mcp__claude_ai_claudinho-mcp__.*",
                 "hooks": [{"type": "command",
-                           "command": "python3 /home/claudinho/AI/platafirma-harness/agente/hooks/porta-sessao.py"}],
+                           "command": f"python3 {HOOK_PORTA_SESSAO}"}],
             }],
             "PostToolUse": [{
                 "matcher": "mcp__claudinho-mcp__monta_sessao|mcp__claude_ai_claudinho-mcp__monta_sessao",
                 "hooks": [{"type": "command",
-                           "command": "python3 /home/claudinho/AI/platafirma-harness/agente/hooks/porta-sessao.py"}],
+                           "command": f"python3 {HOOK_PORTA_SESSAO}"}],
             }],
         },
     }
@@ -513,7 +523,7 @@ def planta_skills(dot, cadeira):
 
 
 def prepara_cwd(cadeira, modelo=""):
-    """~/AI/fitas/<cadeira>/ com allowlist e anexos/. Criado pelo verbo se faltar —
+    """$PF_INSTANCIA/var/fitas/<cadeira>/ com allowlist e anexos/. Criado pelo verbo se faltar —
     a recepcao grava anexo ali e nao tem por que saber montar o diretorio.
 
     O diretorio se chama `anexos` por medicao de 15/08: com o nome de caixa de
@@ -593,11 +603,10 @@ def ambiente_do_giro(cadeira):
             f"personas/persona-{cadeira}.md tem de nomear claudinho-/claudinha-"
         )
     env = dict(os.environ)
-    caminhos = [os.path.join(RAIZ, "bin"), os.path.expanduser("~/.local/bin")]
+    caminhos = [BIN, os.path.expanduser("~/.local/bin")]
     atual = env.get("PATH", "").split(":")
     env["PATH"] = ":".join(caminhos + [p for p in atual if p and p not in caminhos])
     env["PF_CADEIRA"] = slug
-    env["PF_RAIZ"] = RAIZ
     env.update(segredos_dos_conectores())
     return env
 
@@ -605,10 +614,13 @@ def ambiente_do_giro(cadeira):
 # Onde os tokens dos conectores vivem no host. Le o VERBO, nunca a cadeira: a
 # allowlist da fita nega `Read(//home/claudinho/.config/**)` de proposito, e essa
 # negativa continua valendo — quem abre o arquivo e o processo que monta o giro,
-# nao o modelo.
+# nao o modelo. Duas formas: `env` e arquivo CHAVE=valor (o EnvironmentFile da
+# porta); `nome` e um arquivo por variavel em $PF_INSTANCIA/segredos/<stack>/ (card
+# #3010) — nenhum `.env` em arvore de repo ou de deploy.
 FONTES_DE_SEGREDO = (
-    (os.path.expanduser("~/.config/ops/env"), "OPS_AUTH_TOKEN", "PF_OPS_TOKEN"),
-    (os.path.join(RAIZ, "deploy", "conhecimento", ".env"), "MCP_AUTH_TOKEN", "PF_WIKI_TOKEN"),
+    ("env", os.path.expanduser("~/.config/ops/env"), "OPS_AUTH_TOKEN", "PF_OPS_TOKEN"),
+    ("nome", str(instancia() / "segredos" / "conhecimento" / "MCP_AUTH_TOKEN"),
+     "MCP_AUTH_TOKEN", "PF_WIKI_TOKEN"),
 )
 
 
@@ -621,9 +633,14 @@ def segredos_dos_conectores():
     um conector transformaria falha de credencial em sala muda.
     """
     fora = {}
-    for caminho, chave, destino in FONTES_DE_SEGREDO:
+    for forma, caminho, chave, destino in FONTES_DE_SEGREDO:
         try:
             with open(caminho, encoding="utf-8", errors="replace") as f:
+                if forma == "nome":
+                    valor = f.read().strip()
+                    if valor:
+                        fora[destino] = valor
+                    continue
                 for linha in f:
                     if linha.startswith(chave + "="):
                         fora[destino] = linha.split("=", 1)[1].strip().strip("'\"")
@@ -642,14 +659,15 @@ def monta_pacote(cadeira, env, corpo=""):
     de chapeu (a) determinístico (#249): sem ele, monta-sessao roda escolhe() com
     pergunta vazia -> fallback (c) sempre, e o chapeu nunca e inferido nesta
     superficie. Corpo vazio nao anexa a flag: cai no fallback declarado, como antes."""
-    argv = [os.path.join(RAIZ, "bin", "monta-sessao"), cadeira]
+    argv = [os.path.join(BIN, "monta-sessao"), cadeira]
     if os.environ.get("PF_CHAT_SEM_ATUALIZAR") == "1":
         argv.append("--sem-atualizar")
     if (corpo or "").strip():
         argv += ["--pergunta", corpo]
     try:
         r = subprocess.run(
-            argv, capture_output=True, text=True, timeout=PACOTE_S, env=env, cwd=RAIZ
+            argv, capture_output=True, text=True, timeout=PACOTE_S, env=env,
+            cwd=os.path.expanduser("~"),
         )
     except subprocess.TimeoutExpired:
         return None, f"monta-sessao nao respondeu em {PACOTE_S}s"
@@ -699,7 +717,7 @@ def abre_slot_de_fita(cadeira, id_fita, env, passo_out):
     comportamento de sempre, que e o degradado aceitavel. Giro perdido por causa
     do registro da memoria seria pior que memoria sem guarda.
     """
-    argv = [os.path.join(RAIZ, "bin", "mesa"), "fita", "abre", "--id", id_fita]
+    argv = [os.path.join(BIN, "mesa"), "fita", "abre", "--id", id_fita]
     ambiente = dict(env)
     ambiente["PF_CADEIRA"] = cadeira
     try:
@@ -732,7 +750,7 @@ def escolhe_motor(modelo, esforco):
     """Motor local se o alias for de modelo ollama; Claude Code caso contrario."""
     chave = (modelo or "").strip().lower()
     if chave in ALIAS_LOCAL:
-        sys.path.insert(0, os.path.join(RAIZ, "platafirma-harness", "chat"))
+        sys.path.insert(0, os.path.join(HARNESS_DIR, "chat"))
         from motores.ollama import MotorOllama
         return MotorOllama(modelo=ALIAS_LOCAL[chave], esforco=esforco)
     return MotorClaudeCode(modelo=modelo, esforco=esforco)

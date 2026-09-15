@@ -6,8 +6,8 @@ Substitui: tool_manifest.md (02/08/2026)
 - **Sem `sudo`.** Pacote de sistema exige o usuário `megafone` — vira pedido ao Pedro,
   em duas linhas separadas (`apt update` e `apt install`, nunca com `&&`: se o update
   sair não-zero por repo de terceiro quebrado, o install some em silêncio).
-- **`~/AI/bin` e `~/.local/bin` estão no PATH** desde `platafirma-core@40a2f3e`
-  (`_env_subprocesso()` em `ops-server/server.py`). Binário em user-space é encontrável.
+- **`/opt/platafirma/current/harness/bin` e `~/.local/bin` estão no PATH**
+  (`_env_subprocesso()` em `ops-server/server.py`; o da release desde o card #3010). Binário em user-space é encontrável.
 - **Segredos não descem para o subprocesso**: `OPS_AUTH_TOKEN` e `TUNNEL_TOKEN` saem do
   env via `ENV_OCULTO`. Valor real em `~/.config/ops/env` (root:claudinho, 0640).
 - `~/.config/systemd/user/ops-mcp.service` é **root-owned**: não dá para editar a unit
@@ -29,7 +29,7 @@ mtr · traceroute · ping · iftop · nethogs · openssl · cloudflared
 ### Log, texto, dados estruturados
 journalctl · lnav · jq · yq · rg · fd · ts · sponge · parallel · awk · sed · column · watch
 → `yq` lê compose e YAML sem regex — usar em vez de grep para config.
-→ `rg` varre ~/AI inteiro em ~16 ms. `grep -r` está aposentado.
+→ `rg` varre a bancada inteira em ~16 ms. `grep -r` está aposentado.
 → `ts` (moreutils) carimba hora em pipe sem timestamp próprio.
 → `lnav` para leitura de log com timeline e SQL.
  
@@ -38,15 +38,16 @@ docker 29.7.1 (rootless) · docker compose 5.3.1 · ctop · dive · hadolint · 
 systemctl --user · journalctl · systemd-run · systemd-analyze · loginctl · busctl
 → `ctop`: recurso por contêiner ao vivo. `dive`: camadas de imagem sem subir contêiner.
 → `longjob`: job longo como unidade transiente em `app.slice/platafirma-job-*`, fora do
-  cgroup do ops-mcp. Log em `~/AI/var/log/jobs/`. Fonte em
-  `platafirma-core/deploy/ops/longjob`; `~/AI/bin/longjob` é symlink.
+  cgroup do ops-mcp. Log em `/srv/platafirma/casa/var/log/jobs/`. Fonte em
+  `platafirma-harness/bin/longjob`, servido no PATH da release
+  (`/opt/platafirma/current/harness/bin/longjob`).
  
 ### Python e ambiente
 python3 3.12.3 · pip 24.0 · pip3 (=/usr/bin/pip3, são) · pipx · uv 0.12.1 · uvx
 node 24.18.1 · npm 11.16.0 · make · gcc
 → `uv` para venv reprodutível.
  
-### Scripts próprios em ~/AI/bin
+### Scripts próprios fora de git (medido 03/08/2026 na pasta de trabalho da conta)
 longjob (em git) · ops-log-prune · acervo-get · acervo-pacote · exporta-acervo-xlsx.py
 → **só o `longjob` está versionado.** Os outros quatro são exemplar único no host.
  
@@ -58,7 +59,7 @@ gpg · ssh · rsync · git · gh · git-lfs · tmux · age · sops · minisign �
 ### De outra cadeira — presente no PATH, escopo do claudinho-seguranca
 cosign · gitleaks · trufflehog · grype · trivy · syft · osv-scanner · opa · step
 jwt · oauth2c · kcadm · openssl-pqc · hurl · lynis · testssl.sh · oscap · oscap-casco
-ssg-deriva · docker-bench-security (~/AI/opt)
+ssg-deriva · docker-bench-security (terceiro, fora da release)
 → Fonte da documentação: `PlataFirma:Sec/ferramental` na wiki. Usar é permitido;
   decidir sobre eles, não.
  
@@ -68,6 +69,6 @@ Instaláveis sem privilégio quando a decisão de branching sair.
 (yamllint e pre-commit deixaram de faltar: estão em ~/.local/bin.)
  
 ### Reinstalar em user-space
-`bash ~/AI/platafirma-core/deploy/instala-ferramental.sh`
-`bash ~/AI/platafirma-core/deploy/seguranca/instala-ferramental-seguranca.sh`
+`bash /opt/platafirma/current/core/deploy/instala-ferramental.sh`
+`bash /opt/platafirma/current/core/deploy/seguranca/instala-ferramental-seguranca.sh`
 Ambos idempotentes, sem privilégio.

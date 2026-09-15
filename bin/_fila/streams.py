@@ -1,4 +1,4 @@
-#!/home/claudinho/AI/.venv-harness/bin/python
+#!/opt/platafirma/current/venv/harness/bin/python
 # fila — caixa de mensagens entre personas da PlataFirma, sobre a malha msg (Valkey/Streams).
 # capacidade: mensagem
 # dono: ia
@@ -9,7 +9,7 @@
 # cauda: nao
 # classe: B
 # consome: valkey@streams (protocolo redis — sem OpenAPI)
-# ambiente: FILA_REDIS_HOST[=127.0.0.1] · FILA_REDIS_PORT[=6379] · PF_RAIZ[=~/AI] (arvore abertura/) · PF_CADEIRA (obrigatoria em enviar e em ler/status sem persona; porta) · PF_SESSAO (porta, so log)
+# ambiente: FILA_REDIS_HOST[=127.0.0.1] · FILA_REDIS_PORT[=6379] · PF_ABERTURA_DIR[=/srv/platafirma/casa/var/abertura-publicada] (morada publicada, arvore current/abertura/) · PF_CADEIRA (obrigatoria em enviar e em ler/status sem persona; porta) · PF_SESSAO (porta, so log)
 # depende: modulo redis no venv; arvore abertura/<cadeira>/persona.md (fonte de destinatario); rede ao loopback da malha
 # escreve: malha msg — XADD na caixa do destinatario (enviar); XACK do ponteiro do grupo (ler quente); nada em status/tipos/ler frio
 # substitui: redis-cli XADD/XREADGROUP/XRANGE na caixa; o "cola a mensagem aqui" que a conduta do dono proibe
@@ -49,9 +49,15 @@ except ImportError:
 # resolver identidade (incidente, ordem do dono): o slug fossil `claudinho-<cadeira>`
 # do ledger resolvia como vigente. Antes um roster mantido a mao divergia da fonte
 # (faltavam engenharia e politicas-publicas), caixa fantasma (#2431); a arvore nao
-# diverge porque e a propria morada da persona.
-ABERTURA = os.path.join(os.environ.get("PF_RAIZ", os.path.expanduser("~/AI")),
-                        "platafirma-harness", "abertura")
+# diverge porque e a propria morada da persona. Le-se a MORADA PUBLICADA da instancia
+# (arq:0097, card #3010), nunca a arvore de um clone.
+sys.path.insert(0, os.path.join(
+    os.path.dirname(os.path.dirname(os.path.dirname(os.path.realpath(__file__)))), "lib"))
+from raizes import instancia  # noqa: E402
+
+ABERTURA = os.path.join(
+    os.environ.get("PF_ABERTURA_DIR") or str(instancia() / "var" / "abertura-publicada"),
+    "current", "abertura")
 # Participantes (DMZ): tem caixa na malha mas NAO sao cadeira. jaiminho e destinatario
 # valido do Elias (ver PARES_EXCLUSIVOS). Unificar TAMBEM esta lista com
 # comum/cadeiras.py::_SAO_PARTICIPANTE exige a lib compartilhada (colapso 3->1, adiado
@@ -177,8 +183,8 @@ def valida_persona(p: str, json_mode: bool = False):
     # ledger nao era alcancado, e a validacao ficava DESLIGADA — destinatario com
     # erro de digitacao virava caixa nova, com o remetente vendo sucesso.
     if validas is None:
-        msg = (f"nao consegui ler o ledger de vinculo ({LEDGER}) — "
-               "sem ele nao ha destinatario valido. Aponte PF_RAIZ.")
+        msg = (f"nao consegui ler a arvore de cadeiras ({ABERTURA}) — "
+               "sem ela nao ha destinatario valido. Aponte PF_ABERTURA_DIR.")
         if json_mode:
             _falha_json(msg, 2)
         sys.stderr.write(f"erro: {msg}\n")

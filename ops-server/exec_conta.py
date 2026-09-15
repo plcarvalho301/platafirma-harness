@@ -91,9 +91,9 @@ def env_sob_conta(env: dict, conta: str, home: str | None = None) -> dict:
     `home` explicito quando a conta nao mora em /home/<conta> — o default cobre o caso
     desta casa (`/home/jaiminho`, uid 1003) sem uma tabela nova para manter.
 
-    PATH: o `<raiz>/bin` da plataforma FICA, porque e o ferramental da casa e e
-    legivel; o `~/.local/bin` do uid da porta SAI e vira o da conta nova, senao a
-    conta segregada executaria binario instalado na casa alheia.
+    PATH: o bin da release (/opt/platafirma/current/harness/bin) FICA, porque e o
+    ferramental da casa e e legivel; o `~/.local/bin` do uid da porta SAI e vira o da
+    conta nova, senao a conta segregada executaria binario instalado na casa alheia.
     """
     casa = home or f"/home/{conta}"
     novo = {k: v for k, v in env.items() if k not in _NAO_ATRAVESSA}

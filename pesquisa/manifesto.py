@@ -1,6 +1,6 @@
 """Manifesto por trabalho e layout em disco (spec §4.8, §2.3).
 
-    ~/AI/var/pesquisa/<trabalho>/
+    /srv/platafirma/casa/var/pesquisa/<trabalho>/   ($PF_INSTANCIA/var/pesquisa; override PF_PESQUISA_DIR)
       bruto/          # imutável: byte como veio, nome de origem
       derivado/       # .headers, .md, traduções — tudo que o verbo ou o modelo produziu
       MANIFESTO.jsonl # fonte única; `manifesto --md` renderiza
@@ -19,10 +19,17 @@ import datetime as _dt
 import hashlib
 import json
 import os
+import sys
 from pathlib import Path
 from typing import Any
 
-RAIZ_VAR = Path(os.environ.get("PF_PESQUISA_DIR", str(Path.home() / "AI" / "var" / "pesquisa")))
+# lib/ da propria arvore do harness, por realpath (card #3010).
+_LIB = Path(__file__).resolve().parents[1] / "lib"
+if str(_LIB) not in sys.path:
+    sys.path.insert(0, str(_LIB))
+from raizes import instancia  # noqa: E402
+
+RAIZ_VAR = Path(os.environ.get("PF_PESQUISA_DIR", str(instancia() / "var" / "pesquisa")))
 UA = "PlataFirma-pesquisa/1.0 (+https://platafirma.org; verbo pesquisar; robots respeitado)"
 
 

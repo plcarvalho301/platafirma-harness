@@ -27,7 +27,7 @@ services:
     environment:
       POSTGRES_DB: ${SESSAO_PG_DB:-sessao}
       POSTGRES_USER: ${SESSAO_PG_USER:-sessao}
-      POSTGRES_PASSWORD: ${SESSAO_PG_PASSWORD:?defina SESSAO_PG_PASSWORD em sessao/.env}
+      POSTGRES_PASSWORD: ${SESSAO_PG_PASSWORD:?falta SESSAO_PG_PASSWORD no --env-file — o deploy materializa de /srv/platafirma/casa/segredos/harness-sessao/}
     ports:
       - "127.0.0.1:${SESSAO_PG_PORT:-5437}:5432"
     volumes:

@@ -143,7 +143,7 @@ Antes de aprovar, na ordem: `git ls-remote` (o commit está onde o relato diz?) 
 `git branch --show-current; git status --short` nos DOIS clones (a fábrica trabalha no
 clone de trabalho e o deixa como estiver) → rodar cada flag que o relato lista, não só o
 aceite do card → conferir o banco DEPOIS do aceite e exigir "desfeito" → build de produção
-de worktree limpo em `main` (`~/AI/var/wt/…`), nunca do clone que ela ocupa. Dois PRs
+da release promovida de `main` (`/opt/platafirma/<familia>/<sha>`), nunca do clone que ela ocupa. Dois PRs
 seguidos, dois consertos de dados por cima: o toque livre por cima da entrega é a regra,
 não a exceção — e sobe no mesmo turno.
 
@@ -166,7 +166,7 @@ a ausencia significa "nao ha obra que responda"; `frente` e marcador de trabalho
 
 ## `acervo ingerir casa <repo>` varre o SERVIDO inteiro; o que entra e o padrao_path
 
-`acervo ingerir casa platafirma-arquitetura` varre `var/prod/<repo>/current` (o release,
+`acervo ingerir casa platafirma-arquitetura` varre `/opt/platafirma/current/<curto>` (o release, atalho para `<familia>/current`,
 arq:0097 — nunca a raiz da morada, que e um dir por sha) e classifica cada `*.md` pelo
 `padrao_path` de `acervo.especie_tipo`; sem glob que case, o arquivo sai `reprovado` com
 motivo. Logo: doc em `main` que nao esta no release NAO entra — `release promover` vem
@@ -219,9 +219,10 @@ verbo que toca o acervo:
 - Migracao e DDL e regra de dado. Linha de fato (sha ingerido, alias de conceito) nasce do
   ato que a prova; semeada por migracao, ela afirma o que nunca aconteceu, e `varrido:`
   passa a mentir com ancora.
-- `teste <verbo>` roda contra o bin do repo (a rev), nao contra `~/AI/bin`, e apaga o
-  vocabulario que cria. Hoje `~/AI/bin` resolve para o proprio clone do harness: o que
-  esta em main JA esta servido (arq:0097 violada; cura #3014) — nao ha "copia perigosa".
+- `teste <verbo>` roda contra o bin do repo (a rev), nao contra o PATH servido
+  (`/opt/platafirma/current/harness/bin`), e apaga o vocabulario que cria. Ate 13/09 o
+  PATH da casa resolvia para o proprio clone do harness (arq:0097 violada; cura #3014 e
+  #3010); hoje o servido e a release, e o que esta em main so chega la por `release promover`.
 
 ## Golden record do verbo: (verbo, ato) e a chave, nao o verbo
 
@@ -255,14 +256,14 @@ docs/ de repo compartilhado, `read_file` antes de `write_file` sem trecho, sempr
 - 13/09 — `deploy rag promover` saiu 1: worktree de deploy com 6 arquivos editados e 6
   untracked travava o checkout; a rag estava 16 commits atras de main. Contorno: `deploy
   promover` passou a guardar a sujeira em `git stash push -u` nomeado e seguir (5eb2490).
-- 13/09 — `infra instalar acervo` devolve "nada a assentar": `~/AI/bin` e o clone. Nao e
+- 13/09 — `infra instalar acervo` devolve "nada a assentar": o diretorio de verbos da pasta de trabalho da conta era o clone. Nao e
   erro; e o estado (arq:0097 violada, #3014).
 
 ## Diario de bordo (cru, sem heuristica) — 14/09, fita da caixa (golden, ingestao, idempotencia)
 
 - 14/09 — `acervo ingerir casa platafirma-arquitetura` deu "nenhum arquivo casa com
-  padrao_path" com o repo no ar; varre_repo lia `var/prod/<repo>` (raiz por sha), nao
-  `/current` — contorno na data 14/09: corrigir casa-ingerir (harness PR #27) e promover
+  padrao_path" com o repo no ar; varre_repo lia a raiz por sha do repo (na data, sob a pasta de trabalho
+  da conta; hoje `/opt/platafirma/<familia>/<sha>`), nao `/current` — contorno na data 14/09: corrigir casa-ingerir (harness PR #27) e promover
   8c961e4.
 - 14/09 — `repo commitar platafirma-harness` recusou por sujeira de terceiro
   (agente/settings.json) — contorno na data 14/09: commitar por caminho nomeado.

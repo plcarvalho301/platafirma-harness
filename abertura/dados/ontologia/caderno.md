@@ -85,7 +85,7 @@ primeiro pai sobe por SQL registrado em `ontologia/colheita/` e o motivo fica no
 
 ## Lavrar do TSV de coocorrência: título truncado e lastro por UUID (03/09/2026)
 
-Ao lavrar arestas em lote a partir de `var/tmp/teia-parecer/pares-coocorrentes-sem-aresta.tsv`
+Ao lavrar arestas em lote a partir de `/srv/platafirma/casa/var/tmp/teia-parecer/pares-coocorrentes-sem-aresta.tsv`
 (avenida 1), dois mordem:
 - **O TSV traz o título da obra TRUNCADO** (ex.: "...Using L"). `curar --relacionar --lastro`
   recusa match aproximado — devolve "casou só aproximado com <uuid> (...)" e NÃO grava. Título
@@ -98,7 +98,7 @@ Ao lavrar arestas em lote a partir de `var/tmp/teia-parecer/pares-coocorrentes-s
 ## O export do acervo e de todos e nao declara autoria na hora de commitar (03-04/09/2026)
 
 `curar --apply` grava no banco E regenera `ontologia/acervo/*.jsonl` — mas no worktree
-`/home/claudinho/AI/var/wt/conhecimento-main` (branch main), NAO no clone de trabalho
+de `main` da bancada (`<bancada>/wt/platafirma-conhecimento/…`, branch main), NAO no clone de trabalho
 `platafirma-conhecimento` se este estiver noutra branch (ex.: `fabrica/NNNN-...`). Sinal do
 descompasso: banco tem N arestas, export do clone de fabrica tem N-92. Rodar `exportar-acervo`
 a mao no clone principal escreve na branch da fabrica (aconteceu com produto, desfeito por

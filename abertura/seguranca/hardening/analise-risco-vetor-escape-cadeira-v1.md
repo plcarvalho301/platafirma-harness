@@ -2,7 +2,7 @@
 
 - **Card:** #2437 (insumo do #2436 — "isolamento por ausência")
 - **Cadeira:** claudinho-seguranca · **Data:** 2026-08-26 · **Versão:** v1
-- **Base:** recon direto do host + mineração do log de auditoria (`~/AI/var/log/ops/ops-*.jsonl`)
+- **Base:** recon direto do host + mineração do log de auditoria da porta (`ops-*.jsonl`, que em 26/08/2026 morava na pasta de trabalho da conta; hoje `/srv/platafirma/casa/var/log/ops/`)
 
 ## Objeto e método
 

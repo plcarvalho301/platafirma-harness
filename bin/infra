@@ -3,12 +3,15 @@
 # capacidade: infra
 # dono: claudinho-TI
 # use para: contêiner, unit, timer, restart, logs, saúde, backup
-# atos: estado, saude, logs, restart, unit-env, instalar, backup, cache
+# atos: estado, saude, logs, restart, unit-env, backup, cache
 # forma: log
 # cauda: sim
 # Encapsula as três pegadinhas conhecidas: DOCKER_HOST rootless, restart que
 # mata a própria chamada, e alvo que pode ser contêiner ou unit de usuário.
 set -euo pipefail
+
+AQUI="$(dirname "$(readlink -f "$0")")"
+. "$AQUI/../lib/raizes.sh"
 
 export DOCKER_HOST="${DOCKER_HOST:-unix:///run/user/$(id -u)/docker.sock}"
 OPS_HEALTH="${INFRA_OPS_HEALTH:-http://127.0.0.1:8010/health}"
@@ -22,7 +25,6 @@ uso:
   infra restart <alvo> [--nao-esperar]  contêiner ou unit --user; confere antes de dizer ok
   infra unit-env <unit> [--ver | CHAVE=VALOR...]  drop-in de ambiente da unit --user (daemon-reload; restart e outro ato)
   infra cache [ver|vram|disco]   ver o que ocupa VRAM e disco; liberar e explicito
-  infra instalar <verbo>|--todos assenta verbo do clone do harness em ~/AI/bin (de onde a porta roda)
   infra backup [--json]          por alvo declarado: quando rodou, se saiu bem, quantas geracoes
 
 Leitura aceita alvo opcional; sem alvo, olha tudo. Mutação exige alvo explícito e
@@ -493,89 +495,20 @@ PY
 # some da lista deixa de ser medido e reaparece como surpresa. Alvo cujo backup roda em
 # conta que o claudinho nao alcanca sai como `nao medivel daqui`, nunca como zero.
 backup() {
-  local reg="${INFRA_BACKUPS:-$HOME/AI/platafirma-harness/registro/backups.json}"
+  # registro e corpo do sub-ato vem da propria arvore deste verbo (a release no ar), nunca de clone
+  local reg="${INFRA_BACKUPS:-$AQUI/../registro/backups.json}"
   [ -r "$reg" ] || { echo "registro nao legivel: $reg" >&2; exit 1; }
-  INFRA_BACKUPS_REG="$reg" python3 "$HOME/AI/platafirma-harness/bin/_infra/backup.py" "$@"
+  INFRA_BACKUPS_REG="$reg" python3 "$AQUI/_infra/backup.py" "$@"
 }
 
-# Assenta um verbo do clone do harness no bin servido pela porta (~/AI/bin), de onde
-# a porta executa a cada chamada (stateless: le o bin no ato, sem cache). Fecha o vao
-# medido no #3019: verbo novo commitado+empurrado morria no clone porque nada, por verbo
-# servido, copiava bin/<v> do clone para ~/AI/bin. Nao exige sudo — e a conta escrevendo
-# no proprio home; e infra (plataforma), nao deploy (release de stack).
-#
-# Contencao ESTRUTURAL: (1) o verbo e slug simples [a-z0-9-], nunca caminho — `..`,
-# barra e absoluto recusam; (2) a fonte e SEMPRE $HARNESS/bin/<v>, o clone do harness,
-# nunca caminho do chamador; (3) o destino e SEMPRE $HOME/AI/bin/<v>, fixo. O chamador
-# escolhe QUAL verbo, nunca de onde nem para onde. `--todos` reassenta o bin inteiro a
-# partir do clone (menos os que ja estao iguais), para o caso de bootstrap/deriva.
+# `infra instalar` saiu (desenho #3010 §2; arq:0109 Consequencias): nao existe mais bin servido
+# por copia nem diretorio de symlinks de verbos. O PATH e a release no ar,
+# $PF_RELEASE/harness/bin, e verbo novo chega ao ar por `release promover platafirma-harness <rev>`.
 instalar() {
-  local BIN_SERVIDO="${PF_BIN_SERVIDO:-$HOME/AI/bin}"
-  local HARNESS="${PF_HARNESS:-$HOME/AI/platafirma-harness}"
-  local FONTE="$HARNESS/bin"
-  [ -d "$FONTE" ] || { echo "erro: fonte '$FONTE' nao existe — clone do harness ausente?" >&2; exit 3; }
-  mkdir -p "$BIN_SERVIDO"
-  # Medido 12/09/2026: ~/AI/bin RESOLVE para o proprio bin/ do clone (symlink de diretorio).
-  # Nesse estado `install` falha ("same file") e o espelho de ajudantes faria rm -rf no
-  # working tree — aconteceu com bin/_acervo, restaurado por git checkout. E o estado que
-  # arq:0097/arq:0110 s2 proibem (runtime le working tree); a cura e o release (#3014).
-  if [ "$(readlink -f "$BIN_SERVIDO")" = "$(readlink -f "$FONTE")" ]; then
-    echo "bin servido ($BIN_SERVIDO) resolve para o proprio clone ($FONTE): nada a assentar — o que esta no working tree ja esta servido (arq:0097 violada; cura: release #3014)" >&2
-    exit 0
-  fi
-
-  # Bilhetes (git, gh) NAO sao verbos: o cabecalho diz "NAO e verbo (arq:0037)", e eles
-  # so existem para pegar o humano que digita `git`/`gh` num PATH interativo. Assentados
-  # em ~/AI/bin (de onde a porta roda os verbos REAIS), eles ficam a frente do git/gh de
-  # verdade e sabotam o `repo`, que chama git/gh por nome nu (medido 09/09: exit 5 nos 16
-  # clones). O `instalar` os PULA: bilhete nao vai para o bin servido pela porta.
-  e_bilhete() { head -8 "$1" 2>/dev/null | grep -q 'NAO e verbo'; }
-
-  # arq:0110 s1/Q8: ajudante e sub-ato moram em bin/_<verbo>/ e o verbo servido os resolve
-  # por caminho relativo ao proprio arquivo (`fila` -> _fila/streams.py, `acesso` ->
-  # _acesso/desligar.py). O bin servido espelha esses diretorios; sem isso o `fila`
-  # instalado procura ~/AI/bin/_fila/ e morre. Espelho inteiro (rm + cp), nunca merge:
-  # ajudante que saiu do clone sai do servido.
-  assenta_ajudantes() {  # $1 = nome do diretorio, ex. _fila
-    [ -d "$FONTE/$1" ] || return 0
-    rm -rf "$BIN_SERVIDO/$1" && cp -r "$FONTE/$1" "$BIN_SERVIDO/$1" \
-      || { echo "erro: nao assentou $1 em $BIN_SERVIDO" >&2; exit 3; }
-  }
-
-  if [ "${1:-}" = "--todos" ]; then
-    local n=0 pulados=0 nd=0 v base d
-    for v in "$FONTE"/*; do
-      [ -f "$v" ] || continue
-      base="$(basename "$v")"
-      if e_bilhete "$v"; then
-        rm -f "$BIN_SERVIDO/$base"   # limpa bilhete que ja vazou para o bin servido
-        pulados=$((pulados+1)); continue
-      fi
-      if ! cmp -s "$v" "$BIN_SERVIDO/$base"; then
-        install -m 0755 "$v" "$BIN_SERVIDO/$base" && n=$((n+1))
-      fi
-    done
-    for d in "$FONTE"/_*/; do
-      [ -d "$d" ] || continue
-      case "$(basename "$d")" in __*) continue;; esac   # __pycache__ nao e ajudante
-      assenta_ajudantes "$(basename "$d")"; nd=$((nd+1))
-    done
-    echo "instalados/atualizados: $n verbo(s) em $BIN_SERVIDO (fonte: $FONTE); bilhetes pulados: $pulados; diretorios de ajudante espelhados: $nd"
-    return
-  fi
-
-  local v="${1:-}"
-  [ -n "$v" ] || { echo "uso: infra instalar <verbo> | --todos" >&2; exit 2; }
-  case "$v" in
-    */*|.*|*..*) echo "erro: '$v' e slug de verbo, nao caminho" >&2; exit 4 ;;
-    *[!a-z0-9._-]*) echo "erro: nome de verbo invalido: '$v' — use [a-z0-9._-]" >&2; exit 4 ;;
-  esac
-  [ -f "$FONTE/$v" ] || { echo "erro: '$v' nao existe em $FONTE — commite+empurre no harness antes" >&2; exit 3; }
-  e_bilhete "$FONTE/$v" && { echo "erro: '$v' e bilhete (NAO e verbo), nao vai para o bin servido pela porta" >&2; exit 4; }
-  install -m 0755 "$FONTE/$v" "$BIN_SERVIDO/$v" \
-    || { echo "erro: install falhou em $BIN_SERVIDO/$v" >&2; exit 3; }
-  assenta_ajudantes "_$v"
-  echo "instalado: $v -> $BIN_SERVIDO/$v (0755, fonte $FONTE/$v)$([ -d "$FONTE/_$v" ] && echo "; ajudantes em _$v/ espelhados")"
+  echo "erro: \`infra instalar\` saiu — nao ha bin servido por copia." >&2
+  echo "       o PATH e a release no ar: $PF_RELEASE/harness/bin" >&2
+  echo "       verbo novo vai ao ar por: release promover platafirma-harness <rev>" >&2
+  exit 2
 }
 
 # --- despacho ---------------------------------------------------------------

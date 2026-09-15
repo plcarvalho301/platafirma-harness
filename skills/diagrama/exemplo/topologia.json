@@ -5,7 +5,7 @@
   "fronteira": {"nome": "PlataFirma", "x": 50, "y": 215, "w": 920, "h": 345},
   "zonas": [
     {"id": "sup",  "nome": "superfícies", "categoria": "superficie", "x": 50, "y": 40,  "w": 920, "h": 130, "fora_da_fronteira": true},
-    {"id": "host", "nome": "host ~/AI",   "categoria": "host",       "x": 50, "y": 395, "w": 920, "h": 140}
+    {"id": "host", "nome": "host",       "categoria": "host",       "x": 50, "y": 395, "w": 920, "h": 140}
   ],
   "caixas": [
     {"id": "ai",  "titulo": "claude.ai",        "subtitulo": "chat web e mobile",  "categoria": "superficie", "tipo": "cliente", "x": 80,  "y": 80,  "w": 240, "h": 70},

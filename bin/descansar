@@ -1,4 +1,4 @@
-#!/home/claudinho/AI/.venv-harness/bin/python
+#!/opt/platafirma/current/venv/harness/bin/python
 # descansar — fim de fita: confere a memoria e mede os fatos volateis contra os quais a sessao confere o que "lembra"
 # capacidade: encerramento
 # dono: claudinho-IA
@@ -53,9 +53,19 @@ try:
 except ImportError:
     sys.exit("erro: modulo 'redis' nao instalado neste venv (uv pip install redis)")
 
-RAIZ = os.environ.get("PF_RAIZ", os.path.expanduser("~/AI"))
-ABERTURA = os.path.join(RAIZ, "platafirma-harness", "abertura")
-LEDGER = os.path.join(RAIZ, "platafirma-harness", "registro", "eventos-org.jsonl")
+# Duas raizes e so duas (card #3010). A abertura e a MORADA PUBLICADA da instancia
+# (arq:0097: runtime nao le working tree), a mesma de monta-sessao e fila; o ledger
+# chega pela release — a arvore deste arquivo, por realpath —; ops log e derrame
+# moram na instancia.
+HARNESS_DIR = os.path.dirname(os.path.dirname(os.path.realpath(__file__)))
+sys.path.insert(0, os.path.join(HARNESS_DIR, "lib"))
+from raizes import instancia  # noqa: E402
+
+ABERTURA = os.path.join(
+    os.environ.get("PF_ABERTURA_DIR") or str(instancia() / "var" / "abertura-publicada"),
+    "current", "abertura")
+LEDGER = os.path.join(HARNESS_DIR, "registro", "eventos-org.jsonl")
+LOG_OPS = os.environ.get("OPS_LOG_DIR") or str(instancia() / "var" / "log" / "ops")
 
 
 def _ledger_map():
@@ -91,10 +101,7 @@ RE_CANON = re.compile(r"\b(claudinh[oa]-[A-Za-z0-9-]+)")
 # Fatos volateis comuns a toda cadeira. Cada linha e (rotulo, comando) — o verbo
 # canonico de cada materia, nunca uma segunda medicao propria.
 COMUM = [
-    ("repos (sha e idade do que a sessao leu)",
-     "for r in platafirma-harness platafirma-arquitetura platafirma-core; do "
-     "printf '  %-24s %s  %s\\n' \"$r\" \"$(git -C ~/AI/$r rev-parse --short HEAD)\" "
-     "\"$(git -C ~/AI/$r log -1 --format=%cr)\"; done"),
+    ("release no ar (sha e idade do que a sessao leu)", "release estado 2>&1 | tail -12"),
     ("declarado x servido", "conferir servico 2>&1 | tail -12"),
 ]
 # Por cadeira: o que envelhece na materia dela. Lista curta e revisavel de proposito
@@ -217,7 +224,7 @@ def roda(rotulo, cmd, timeout=60):
     print(f"\n-- {rotulo}")
     try:
         p = subprocess.run(["bash", "-lc", cmd], capture_output=True, text=True,
-                           timeout=timeout, cwd=RAIZ)
+                           timeout=timeout, cwd=os.path.expanduser("~"))
         saida = (p.stdout or p.stderr).rstrip()
         print(saida if saida else "  (sem saida)")
     except subprocess.SubprocessError as e:
@@ -265,7 +272,7 @@ def economia_de_giro(ordem_id):
               "sinal", "lint", "teste", "minuta", "descansar", "encerrar"}
     por_tool, classe_fb = Counter(), Counter()
     tss, lote_ids, giros_avulsos = [], set(), 0
-    for arq in sorted(glob.glob(os.path.join(RAIZ, "var/log/ops", "ops-*.jsonl")))[-3:]:
+    for arq in sorted(glob.glob(os.path.join(LOG_OPS, "ops-*.jsonl")))[-3:]:
         try:
             with open(arq, encoding="utf-8", errors="replace") as fh:
                 for linha in fh:
@@ -334,13 +341,13 @@ def fabrica_pela_porta():
     connector e viram linha no ops log. Le-se VOLUME de chamada e classe de
     desperdicio (run_command em fallback, verbo contornado), o alvo direto da
     economia-de-giro; nao giros/turno (turno nao carimba na porta). Fonte:
-    ~/AI/var/log/ops/ops-*.jsonl, filtro cadeira=fabrica."""
+    $PF_INSTANCIA/var/log/ops/ops-*.jsonl, filtro cadeira=fabrica."""
     import glob
     from collections import Counter
     total = 0
     por_tool, desperdicio = Counter(), Counter()
     ult_ts = None
-    for arq in sorted(glob.glob(os.path.join(RAIZ, "var/log/ops", "ops-*.jsonl")))[-5:]:
+    for arq in sorted(glob.glob(os.path.join(LOG_OPS, "ops-*.jsonl")))[-5:]:
         try:
             with open(arq, encoding="utf-8", errors="replace") as fh:
                 for linha in fh:
@@ -398,7 +405,7 @@ def giros_por_turno_code_local(cadeira):
     arqs = [a for d in dirs for a in glob.glob(os.path.join(d, "*.jsonl"))]
     if not arqs:
         return [f"  sem transcript de Code para '{cadeira}'"
-                " (cwd da fita != ~/AI/fitas/<cadeira>, ou nunca rodou no Code)"]
+                " (cwd da fita != $PF_INSTANCIA/var/fitas/<cadeira>, ou nunca rodou no Code)"]
     f = max(arqs, key=os.path.getmtime)
     idade_s = time.time() - os.path.getmtime(f)
     sid = os.path.basename(f)[:-6]
@@ -447,7 +454,7 @@ def encerra_sessao(rc, sessao_id):
     except Exception as e:                                    # noqa: BLE001
         fora.append(f"  msg-mem nao respondeu ao DEL: {type(e).__name__}: {e}")
     derrame = os.path.join(os.environ.get("PF_DERRAME",
-                                          os.path.expanduser("~/AI/var/tmp/retornos")), sid)
+                                          str(instancia() / "var" / "tmp" / "retornos")), sid)
     n = 0
     try:
         for nome in os.listdir(derrame):
@@ -509,7 +516,7 @@ def ato_fita(args):
                  f"fila ler {canon} --tudo", timeout=90)
         else:
             print(f"\n-- fila\n  NAO MEDIDO — PF_CADEIRA={alvo!r} nao casa com"
-                  f" nenhuma persona em {PERSONAS}")
+                  f" nenhuma persona em {ABERTURA}")
 
     if not args.so_memoria:
         print("\n== economia de giro - serie da porta (esta fita) ==")

@@ -33,10 +33,12 @@ import sys
 import time
 from pathlib import Path
 
-_COMUM = Path(__file__).resolve().parent.parent / "comum"
-if str(_COMUM) not in sys.path:
-    sys.path.insert(0, str(_COMUM))
+_ARVORE = Path(__file__).resolve().parent.parent
+for _d in (_ARVORE / "comum", _ARVORE / "lib"):
+    if str(_d) not in sys.path:
+        sys.path.insert(0, str(_d))
 from hash_servido import sha_servido                          # noqa: E402
+import raizes                                                 # noqa: E402
 
 # --- réguas. Número aqui é palpite declarado, não medida: a proporção cabeça/cauda
 # por tipo de verbo fecha na medição pós-implantação (arq:0101, itens abertos).
@@ -52,8 +54,11 @@ CABECA_FRACAO = 0.7          # com `cauda: sim`, 70% cabeça / 30% cauda (palpit
 DIFF_MAX_LINHAS = 200        # diff maior que isto não é delta, é reenvio disfarçado
 TTL_DERRAME_S = 48 * 3600
 
-RAIZ = Path(os.environ.get("OPS_ROOT", os.path.expanduser("~/AI")))
-DERRAME = Path(os.environ.get("PF_DERRAME", RAIZ / "var/tmp/retornos"))
+# Derrame e estado da instancia (card #3010): mesmo default que `descansar` apaga.
+DERRAME = Path(os.environ.get("PF_DERRAME", raizes.instancia() / "var/tmp/retornos"))
+# Cwd de quem nao nomeia um — o mesmo da porta (server.CASA). Repetido no envelope,
+# e constante; e por isso que sai.
+CWD_PADRAO = Path(os.path.expanduser("~"))
 
 _ANSI = re.compile(r"\x1b\[[0-9;?]*[ -/]*[@-~]|\x1b\][^\x07\x1b]*(\x07|\x1b\\)")
 _BLOB = re.compile(r"[A-Za-z0-9+/=]{%d,}|[0-9a-fA-F]{%d,}" % (BLOB_MIN, BLOB_MIN))
@@ -269,8 +274,8 @@ def lava(texto: str, cap: int = 50_000, *, cosmetica: bool = False) -> tuple[str
 def enxuga_envelope(r: dict) -> dict:
     """R1 classe 5 / R6 — `stderr` vazio, `cwd` repetido e campo nulo saem do lote.
 
-    `cwd` igual à raiz é o caso de 99% das chamadas: repeti-lo em todo retorno é pagar
-    por uma constante. Diferente da raiz, fica: aí ele informa.
+    `cwd` igual ao padrão da porta (a casa da conta) é o caso de 99% das chamadas:
+    repeti-lo em todo retorno é pagar por uma constante. Diferente dele, fica: aí informa.
     """
     fora = {}
     for k, v in r.items():
@@ -278,7 +283,7 @@ def enxuga_envelope(r: dict) -> dict:
             continue
         if k == "stderr" and isinstance(v, dict) and not (v.get("texto") or "").strip():
             continue
-        if k == "cwd" and str(v) == str(RAIZ):
+        if k == "cwd" and str(v) == str(CWD_PADRAO):
             continue
         fora[k] = v
     return fora
@@ -292,15 +297,17 @@ def _dir_derrame(sessao_id: str) -> Path:
 
 
 def derrama(sessao_id: str, nome: str, texto: str) -> str | None:
-    """Grava o inteiro cru, sob TTL de 48 h, e devolve o caminho relativo à raiz.
+    """Grava o inteiro cru, sob TTL de 48 h, e devolve o caminho ABSOLUTO.
 
-    Cru de propósito: o derrame é o que se lê de volta com `read_file offset=`, e
-    formatação adicional ali é ruído a mais no giro que for buscá-lo.
+    Absoluto porque `read_file` resolve relativo na bancada, e o derrame mora na
+    instância: caminho relativo apontaria para o lugar errado. Cru de propósito: o
+    derrame é o que se lê de volta com `read_file offset=`, e formatação adicional ali
+    é ruído a mais no giro que for buscá-lo.
     """
     try:
         alvo = _dir_derrame(sessao_id) / nome
         alvo.write_text(texto, encoding="utf-8", errors="replace")
-        return str(alvo.relative_to(RAIZ)) if alvo.is_relative_to(RAIZ) else str(alvo)
+        return str(alvo)
     except OSError as e:                                      # noqa: BLE001
         print(f"[poda] derrame falhou ({nome}): {e!r}", file=sys.stderr, flush=True)
         return None

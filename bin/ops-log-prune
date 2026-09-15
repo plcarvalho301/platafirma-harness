@@ -8,14 +8,17 @@
 # Não roda dentro do ops-mcp de propósito: processo que se auto-poda perde o log
 # justamente quando morre.
 set -uo pipefail
+# ambiente: PF_INSTANCIA[=/srv/platafirma/casa] · OPS_LOG_DIR[=$PF_INSTANCIA/var/log/ops] · LONGJOB_LOGDIR[=$PF_INSTANCIA/var/log/jobs] · OPS_LOG_RETENCAO_DIAS[=90]
+
+# Raizes de producao (card #3010): os logs moram na instancia.
+. "$(dirname "$(readlink -f "$0")")/../lib/raizes.sh"
 
 RETENCAO_DIAS="${OPS_LOG_RETENCAO_DIAS:-90}"
-RAIZ="${OPS_ROOT:-$HOME/AI}"
 ALVOS=(
-  "$RAIZ/var/log/ops:*.jsonl"
-  "$RAIZ/var/log/jobs:*.log"
+  "${OPS_LOG_DIR:-$PF_INSTANCIA/var/log/ops}:*.jsonl"
+  "${LONGJOB_LOGDIR:-$PF_INSTANCIA/var/log/jobs}:*.log"
 )
-MARCA="$RAIZ/var/log/poda.log"
+MARCA="$PF_INSTANCIA/var/log/poda.log"
 
 mkdir -p "$(dirname "$MARCA")"
 ts() { date -Is; }

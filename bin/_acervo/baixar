@@ -4,6 +4,9 @@
 #       acervo baixar "meditations" /caminho/destino  -> baixa para outro diretório
 set -euo pipefail
 
+# Raizes de producao (card #3010): o interpretador com boto3 e o venv acervo da release.
+. "$(dirname "$(readlink -f "$0")")/../../lib/raizes.sh"
+
 TERMO="${1:-}"
 DESTINO="${2:-.}"
 [ -z "$TERMO" ] && { echo "uso: acervo baixar \"<trecho do titulo>\" [destino]"; exit 1; }
@@ -77,7 +80,7 @@ BUCKET="${OBJETO%%/*}"
 SHA="${OBJETO#*/}"
 
 mkdir -p "$DESTINO"
-~/AI/.venv-acervo/bin/python - "$BUCKET" "$SHA" "$DESTINO/$ARQUIVO" <<'EOF'
+"$PF_RELEASE/venv/acervo/bin/python" - "$BUCKET" "$SHA" "$DESTINO/$ARQUIVO" <<'EOF'
 import sys, subprocess, boto3
 bucket, sha, destino = sys.argv[1], sys.argv[2], sys.argv[3]
 fmt = "{{range .Config.Env}}{{println .}}{{end}}"

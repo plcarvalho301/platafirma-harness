@@ -35,7 +35,11 @@ import os
 import sqlite3
 import time
 
-CAMINHO_PADRAO = "/home/claudinho/AI/var/run/chat/journal.db"
+# Estado da instancia, nunca da arvore do codigo (card #3010). O default repete o de
+# platafirma-harness/lib/raizes.py sem importa-lo: dentro do container so chat/ existe.
+# Container e host veem o MESMO caminho absoluto (bind no override da instancia).
+CAMINHO_PADRAO = os.path.join(
+    os.environ.get("PF_INSTANCIA", "/srv/platafirma/casa"), "var", "run", "chat", "journal.db")
 
 PENDENTE = "pendente"
 EM_CURSO = "em_curso"

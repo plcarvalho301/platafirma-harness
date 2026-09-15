@@ -86,14 +86,14 @@ duas formas (strip do prefixo); a chave canonica e a cadeira nua.
 - **O canal engole a chamada e o comando roda assim mesmo.** `run_command` que volta como
   "Error occurred during tool execution" **executou no host**: o erro é do canal. Cheguei a
   acusar "ator não identificado commitando neste tree"; era eu. Erro de canal → antes de
-  qualquer teoria, `~/AI/var/log/ops/ops-AAAA-MM-DD.jsonl` e `git reflog`.
+  qualquer teoria, `/srv/platafirma/casa/var/log/ops/ops-AAAA-MM-DD.jsonl` e `git reflog`.
 - **O audit diz O QUE rodou, nunca QUEM**: `sessao` é a conexão do conector, não a fita.
 - **Duas fitas minhas na mesma árvore não têm regra.** Worktree por fatia cobre fábrica
   contra cadeira, não fita contra fita. Antes de editar arquivo compartilhado, `git log -3`
   e o timestamp do topo: commit de minutos atrás é sessão viva, não histórico frio. Em
   18/08 cheguei ao DELETE já implementado — por mim, vinte minutos antes.
 
-## Diretório descartável vai em `~/AI/var/`, nunca em `/tmp` (medido 15/08)
+## Diretório descartável vai em `/srv/platafirma/casa/var/tmp/`, nunca em `/tmp` (medido 15/08)
 
 `/tmp` é terreno comum entre agentes do mesmo uid, e o slug converge porque sai do nome do
 card que os dois leram. Rodei `rm -rf` num caminho que outro usava e apaguei o trabalho

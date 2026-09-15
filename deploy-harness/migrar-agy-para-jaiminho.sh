@@ -17,7 +17,16 @@
 #
 # IDEMPOTENTE: cada etapa confere o estado antes de agir. Rodar duas vezes nao
 # duplica nada. COPIA volumes, nunca move — o rollback depende disso.
+#
+# ORIGEM (card #3010): executado em 20/08 a partir da pasta de trabalho da conta das
+# cadeiras. Desde 15/09 a fonte e a release (compose e PAP) e a instancia (estado e
+# segredo); nenhum caminho sai de clone.
+#
+# ambiente: PF_RELEASE_RAIZ (default /opt/platafirma), PF_RELEASE (default
+#           $PF_RELEASE_RAIZ/current), PF_INSTANCIA (default /srv/platafirma/casa).
 set -uo pipefail
+
+. "$(dirname "$(readlink -f "$0")")/../lib/raizes.sh"
 
 DONO_CADEIRAS=claudinho
 CONTA=jaiminho
@@ -26,7 +35,12 @@ BASE=/srv/pf
 DEPLOY=$BASE/agy
 MIG=$BASE/mig
 ENTRADA=$BASE/entrada-jaiminho
-ORIGEM="/home/$DONO_CADEIRAS/AI/platafirma-harness"
+ORIGEM="$PF_RELEASE/harness"
+# Binds de host que o compose da release declara e que este script reescreve para a
+# arvore da conta. Mesmos caminhos da instancia que o compose usa (desenho §3).
+ENTRADA_INSTANCIA="$PF_INSTANCIA/var/entrada-jaiminho"
+LOG_INSTANCIA="$PF_INSTANCIA/var/log/jaiminho"
+TOKEN_GOOGLE="$PF_INSTANCIA/segredos/google/token.json"
 VOLUMES=(jaiminho_casa jaiminho_credenciais jaiminho_trabalho
          jaiminho-fabrica_casa jaiminho-fabrica_credenciais)
 BRACOS=(jaiminho jaiminho-fabrica)
@@ -116,21 +130,40 @@ install -d -o "$DONO_CADEIRAS" -g "$DONO_CADEIRAS" -m 0755 "$MIG" && ok "$MIG (a
 # entrada-jaiminho: o conteiner escreve, e claudinho-TI le para chamar `acervo-drop`.
 # setgid no grupo das cadeiras e o que faz o arquivo nascer legivel pelos dois.
 install -d -o "$CONTA" -g "$DONO_CADEIRAS" -m 2770 "$ENTRADA" && ok "$ENTRADA (escrita do conteiner)"
-if [ -d "/home/$DONO_CADEIRAS/AI/var/entrada-jaiminho" ]; then
-  rsync -a "/home/$DONO_CADEIRAS/AI/var/entrada-jaiminho/" "$ENTRADA/" && ok "conteudo antigo copiado"
+if [ -d "$ENTRADA_INSTANCIA" ]; then
+  rsync -a "$ENTRADA_INSTANCIA/" "$ENTRADA/" && ok "conteudo antigo copiado"
 fi
 install -d -o "$CONTA" -g "$CONTA" -m 0755 "$BASE/log-jaiminho" && ok "$BASE/log-jaiminho"
 
 for stack in jaiminho jaiminho-fabrica; do
   install -d -o "$CONTA" -g "$CONTA" -m 0755 "$DEPLOY/$stack"
-  sed -e 's|\${HOME}/AI/var/entrada-jaiminho|'"$ENTRADA"'|g' \
-      -e 's|\${HOME}/AI/var/log/jaiminho|'"$BASE/log-jaiminho"'|g' \
-      -e 's|\${HOME}/AI/platafirma-harness/politica-acesso|'"$DEPLOY/politica-acesso"'|g' \
-      -e 's|\${HOME}/AI/var/google/token.json|'"$DEPLOY/google-token.json"'|g' \
+  [ -f "$ORIGEM/$stack/docker-compose.yml" ] || { falta "$ORIGEM/$stack/docker-compose.yml"; continue; }
+  sed -e 's|'"$ENTRADA_INSTANCIA"'|'"$ENTRADA"'|g' \
+      -e 's|'"$LOG_INSTANCIA"'|'"$BASE/log-jaiminho"'|g' \
+      -e 's|\${PF_PDP_DIR:-[^}]*}|'"$DEPLOY/politica-acesso"'|g' \
+      -e 's|'"$TOKEN_GOOGLE"'|'"$DEPLOY/google-token.json"'|g' \
       "$ORIGEM/$stack/docker-compose.yml" > "$DEPLOY/$stack/docker-compose.yml"
   sed -i '1i # GERADO por migrar-agy-para-jaiminho.sh — NAO EDITE AQUI.\n# A fonte e platafirma-harness/'"$stack"'/docker-compose.yml.' \
       "$DEPLOY/$stack/docker-compose.yml"
-  [ -f "$ORIGEM/$stack/.env" ] && install -o "$CONTA" -g "$CONTA" -m 0600 "$ORIGEM/$stack/.env" "$DEPLOY/$stack/.env"
+  # Binds de instancia (token, trilha) moram na sobreposicao da instancia desde o
+  # card #3010, nao na base: reescrita igual, ao lado da base, onde `docker compose`
+  # a carrega sozinho.
+  if [ -f "$PF_INSTANCIA/deploy/$stack/compose.override.yaml" ]; then
+    sed -e 's|'"$ENTRADA_INSTANCIA"'|'"$ENTRADA"'|g' \
+        -e 's|'"$LOG_INSTANCIA"'|'"$BASE/log-jaiminho"'|g' \
+        -e 's|'"$TOKEN_GOOGLE"'|'"$DEPLOY/google-token.json"'|g' \
+        "$PF_INSTANCIA/deploy/$stack/compose.override.yaml" > "$DEPLOY/$stack/compose.override.yaml"
+  fi
+  # Segredo da stack: um arquivo por variavel no cofre da instancia (desenho §3),
+  # materializado no .env da arvore da conta, 0600. Nunca .env de arvore de repo.
+  if [ -d "$PF_INSTANCIA/segredos/$stack" ]; then
+    ( umask 077
+      : > "$DEPLOY/$stack/.env"
+      for s in "$PF_INSTANCIA/segredos/$stack"/*; do
+        [ -f "$s" ] && printf '%s=%s\n' "$(basename "$s")" "$(cat "$s")" >> "$DEPLOY/$stack/.env"
+      done )
+    chmod 0600 "$DEPLOY/$stack/.env"
+  fi
   chown -R "$CONTA:$CONTA" "$DEPLOY/$stack"
   ok "$DEPLOY/$stack (compose gerado)"
 done
@@ -139,8 +172,8 @@ rsync -a --delete --exclude '__pycache__' --exclude '.pytest_cache' \
       "$ORIGEM/politica-acesso/" "$DEPLOY/politica-acesso/"
 chown -R root:"$CONTA" "$DEPLOY/politica-acesso"; chmod -R u=rwX,g=rX,o= "$DEPLOY/politica-acesso"
 ok "PAP copiado, root:$CONTA, so leitura para a conta"
-if [ -f "/home/$DONO_CADEIRAS/AI/var/google/token.json" ]; then
-  install -o "$CONTA" -g "$CONTA" -m 0600 "/home/$DONO_CADEIRAS/AI/var/google/token.json" "$DEPLOY/google-token.json"
+if [ -f "$TOKEN_GOOGLE" ]; then
+  install -o "$CONTA" -g "$CONTA" -m 0600 "$TOKEN_GOOGLE" "$DEPLOY/google-token.json"
   ok "credencial do Google copiada (modo 600)"
 fi
 

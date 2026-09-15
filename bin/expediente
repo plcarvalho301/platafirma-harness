@@ -1,4 +1,4 @@
-#!/home/claudinho/AI/.venv-harness/bin/python
+#!/opt/platafirma/current/venv/harness/bin/python
 # expediente — monta o pacote de expediente da cadeira (conduta, persona, mesa, cadernos)
 # capacidade: expediente
 # dono: gestao-estrategica
@@ -9,8 +9,8 @@
 # folhas: montar -> expediente/pacote · rotear -> expediente/chapeu · catalogo -> expediente/catalogo
 # escreve: registro do pacote servido (sessao.fita/pacote/peca_servida — transição, direto); nada em rotear|catalogo
 # consome: persona, mesa, motor, acervo
-# ambiente: PF_CADEIRA (obrigatória; origem: verbo `sessao abrir`, injetada pela porta), PF_SESSAO e PF_ORDEM_ID (origem: verbo `sessao abrir`), PF_SUPERFICIE[=desconhecida] e PF_FITA (origem: superfície), PF_PODA[=1] (origem: superfície; 0 desliga o portão de cobertura), PF_RAIZ[=~/AI] e PF_ABERTURA_DIR (origem: superfície/instalação), SESSAO_PG_PORT[=5437] (constante do verbo); SESSAO_PG_PASSWORD é segredo, entra por `seg segredo ler` no processo (transição Q11: aceita a variável só quando o verbo não responde)
-# depende: persona, mesa, motor, seg (segredo do registro), comum/hash_servido, lib/uso, tokenizador da casa (opt/tokenizers, fallback bytes/4 declarado), Postgres da sessão (registro do pacote — transição até a API da entidade-sessão)
+# ambiente: PF_CADEIRA (obrigatória; origem: verbo `sessao abrir`, injetada pela porta), PF_SESSAO e PF_ORDEM_ID (origem: verbo `sessao abrir`), PF_SUPERFICIE[=desconhecida] e PF_FITA (origem: superfície), PF_PODA[=1] (origem: superfície; 0 desliga o portão de cobertura), PF_INSTANCIA[=/srv/platafirma/casa] e PF_ABERTURA_DIR[=$PF_INSTANCIA/var/abertura-publicada] (origem: superfície/instalação), PF_BIN[=bin/ da própria release] (só teste com stub), SESSAO_PG_PORT[=5437] (constante do verbo); SESSAO_PG_PASSWORD é segredo, entra por `seg segredo ler` no processo (transição Q11: aceita a variável só quando o verbo não responde)
+# depende: persona, mesa, motor, seg (segredo do registro), comum/hash_servido, lib/uso, tokenizador da casa (terceiros/tokenizers da própria release, fallback bytes/4 declarado), Postgres da sessão (registro do pacote — transição até a API da entidade-sessão)
 # substitui: monta-sessao <cadeira> na parte que monta; a lib recuperacao/roteador_chapeu importada por caminho
 # conforme: parcial — catálogo no cabeçalho até dados averbar a espécie no acervo; registro direto no Postgres até a API da entidade-sessão; rotas de rotas-chapeu.json da morada publicada até virem do golden record de conceitos
 #
@@ -101,8 +101,14 @@ CATALOGO = [
     },
 ]
 
-RAIZ = os.environ.get("PF_RAIZ", os.path.expanduser("~/AI"))
-TOKENIZADOR = os.path.join(RAIZ, "opt", "tokenizers", "qwen2.5.json")
+from raizes import instancia  # noqa: E402  (lib/ ja esta no sys.path)
+
+# Artefato de terceiro pinado: dentro da arvore da familia, por realpath (card #3010) —
+# o mesmo caminho de monta-sessao. PF_TOKENIZADOR so existe para teste passar fixture.
+TOKENIZADOR = (os.environ.get("PF_TOKENIZADOR")
+               or str(_REPO_REAL / "terceiros" / "tokenizers" / "qwen2.5.json"))
+# Verbos irmaos: bin/ da propria release. PF_BIN so aponta outro diretorio (teste com stub).
+BIN = Path(os.environ.get("PF_BIN") or (_REPO_REAL / "bin"))
 _MEDIDOR = {"fn": None, "metodo": None}
 
 
@@ -133,17 +139,15 @@ def conta_tokens(texto: str) -> int:
 
 def env_verbo(cadeira: str) -> dict[str, str]:
     """Env da peça-verbo: PF_CADEIRA canônico + PATH explícito (spec_expediente §2, R7)."""
-    raiz_atual = os.environ.get("PF_RAIZ", os.path.expanduser("~/AI"))
     casa = os.path.expanduser("~")
     e = dict(os.environ)
     e["PF_CADEIRA"] = cadeira
-    e["PATH"] = f"{raiz_atual}/bin:{casa}/.local/bin:" + os.environ.get("PATH", "")
+    e["PATH"] = f"{BIN}:{casa}/.local/bin:" + os.environ.get("PATH", "")
     return e
 
 
 def resolve_montador_sha() -> str:
-    raiz = os.environ.get("PF_RAIZ", os.path.expanduser("~/AI"))
-    morada = os.environ.get("PF_ABERTURA_DIR", os.path.join(raiz, "var", "abertura-publicada"))
+    morada = os.environ.get("PF_ABERTURA_DIR", str(instancia() / "var" / "abertura-publicada"))
     manifesto = os.path.join(morada, "current", "MANIFEST.json")
     if os.path.isfile(manifesto):
         try:
@@ -179,12 +183,11 @@ def executa_verbo(cmd_linha: str | list[str], cadeira: str, timeout: int = 30) -
 
 
 def acha_roteador() -> Path | None:
-    """Acha o sub-ato bin/_expediente/rotear: sob PF_RAIZ (raiz hermetica de teste, stub)
+    """Acha o sub-ato bin/_expediente/rotear: sob PF_BIN (diretorio hermetico de teste, stub)
     e, faltando la, no checkout real deste binario (o servido)."""
     candidatos = []
-    raiz = os.environ.get("PF_RAIZ")
-    if raiz:
-        candidatos.append(Path(raiz) / "bin" / "_expediente" / "rotear")
+    if os.environ.get("PF_BIN"):
+        candidatos.append(BIN / "_expediente" / "rotear")
     candidatos.append(_REPO_REAL / "bin" / "_expediente" / "rotear")
     for c in candidatos:
         if c.is_file() and os.access(c, os.X_OK):
@@ -299,7 +302,7 @@ def obtem_senha_sessao(cadeira: str) -> str:
     """Segredo entra por verbo, no processo (spec_acesso §2): `seg segredo ler`. A variavel
     SESSAO_PG_PASSWORD e aceita so como transicao (Q11), quando o verbo nao responde;
     arquivo .env nunca e fonte."""
-    rc, out, _ = executa_verbo("seg segredo ler SESSAO_PG_PASSWORD", cadeira, timeout=5)
+    rc, out, _ = executa_verbo("seg segredo ler harness-sessao/SESSAO_PG_PASSWORD", cadeira, timeout=5)
     if rc == 0 and out.strip():
         return out.strip()
     return (os.environ.get("SESSAO_PG_PASSWORD") or "").strip()

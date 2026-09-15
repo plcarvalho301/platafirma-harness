@@ -47,7 +47,13 @@
 # `conferir repo --staged` que hoje funciona. O custo do fail-open tambem esta escrito, em
 # `bin/conferir`: a serie do DORA fica com buracos nas janelas em que a API esteve fora.
 
-CONFERIR="${CONFERIR:-$HOME/AI/bin/conferir}"
+# O verbo sai da PROPRIA arvore do hook (core.hooksPath aponta a release, entao e o
+# conferir da mesma release) e, faltando ali, do PATH da release. Nunca de pasta de
+# trabalho: apagada a bancada, o gate continua sabendo onde a regua mora.
+if [ -z "${CONFERIR:-}" ]; then
+    CONFERIR="$(dirname "$(readlink -f "$0")")/../bin/conferir"
+    [ -x "$CONFERIR" ] || CONFERIR="$(command -v conferir 2>/dev/null || printf '%s' "$CONFERIR")"
+fi
 
 [ -x "$CONFERIR" ] || {
     echo "commit-msg: 'conferir' nao encontrado em $CONFERIR — commit segue sem gate." >&2

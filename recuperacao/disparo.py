@@ -38,11 +38,12 @@ from collections import defaultdict
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from ._raizes import instancia
 from .fontes import Fonte
 from .veredito import PRODUTORES_COM_PARIDADE
 
 TRILHA_LEITURA = os.environ.get(
-    "PF_REC_TRILHA_LEITURA", str(Path.home() / "AI" / "var" / "log" / "recuperacao" / "leitura.jsonl")
+    "PF_REC_TRILHA_LEITURA", str(instancia() / "var" / "log" / "recuperacao" / "leitura.jsonl")
 )
 
 

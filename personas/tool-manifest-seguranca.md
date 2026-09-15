@@ -12,11 +12,12 @@ Ambiente: Linux Mint 22.3 (base Ubuntu 24.04), usuário `claudinho`, **sem sudo*
 ## Instalar
  
 ```
-bash ~/AI/platafirma-core/deploy/seguranca/instala-ferramental-seguranca.sh
+bash /opt/platafirma/current/core/deploy/seguranca/instala-ferramental-seguranca.sh
 ```
  
-Idempotente, sem privilégio. Binário estático em `~/AI/bin`, ferramenta Python isolada
-por `uv tool` em `~/.local/bin`, venv de biblioteca em `~/AI/.venv-seg`.
+Idempotente, sem privilégio. Ferramenta Python isolada por `uv tool` em `~/.local/bin`;
+binário estático e venv de biblioteca (`venv-seg`) nos destinos declarados no cabeçalho
+do script — nunca na bancada, que pode ser apagada.
  
 Bloco que exige root (pedido ao `megafone`, sempre em duas linhas):
  
@@ -39,7 +40,7 @@ sudo apt install -y oathtool ninja-build ldap-utils nmap openscap-utils libimage
 | `keepassxc-cli` | cofre `.kdbx` |
 | `kcadm` | wrapper do `kcadm.sh`, que vive dentro do contêiner |
  
-`~/AI/.venv-seg`: `pyjwt[crypto]`, `authlib`, `cryptography`, `jwcrypto`, `python-jose`, `requests`.
+`venv-seg`: `pyjwt[crypto]`, `authlib`, `cryptography`, `jwcrypto`, `python-jose`, `requests`.
  
 ## Dados e privacidade
  
@@ -82,7 +83,7 @@ sudo apt install -y oathtool ninja-build ldap-utils nmap openscap-utils libimage
 ### PQC
  
 ```
-bash ~/AI/platafirma-core/deploy/seguranca/build-oqs.sh
+bash /opt/platafirma/current/core/deploy/seguranca/build-oqs.sh
 openssl-pqc list -providers
 ```
  
@@ -97,7 +98,7 @@ exercita no handshake, não como chave em arquivo.
  
 ```
 oscap-casco [cis_level1_server|cis_level1_workstation|cis_level2_server|cis_level2_workstation|stig]
-oscap-casco-falhas ~/AI/var/oscap/eval-<perfil>-<stamp>.log
+oscap-casco-falhas /srv/platafirma/casa/var/oscap/eval-<perfil>-<stamp>.log
 ssg-deriva
 ```
  
@@ -146,8 +147,8 @@ diferentes. `openssl` puro não achar `mldsa65` é o esperado.
 ## Procedência
  
 ```
-bash ~/AI/platafirma-core/deploy/seguranca/verifica-procedencia.sh
-bash ~/AI/platafirma-core/deploy/seguranca/verifica-procedencia-hash-por-asset.sh
+bash /opt/platafirma/current/core/deploy/seguranca/verifica-procedencia.sh
+bash /opt/platafirma/current/core/deploy/seguranca/verifica-procedencia-hash-por-asset.sh
 ```
  
 **15 de 15 binários com cadeia de verificação.** Treze por checksum publicado no release,

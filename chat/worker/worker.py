@@ -2,7 +2,7 @@
 """Worker do chat — o lado VERBO do giro (card 458, fatia B-1).
 
 Roda no HOST, sob systemd --user, porque verbo assume o host inteiro: `claude`
-em ~/.local/bin, `monta-sessao`, ~/AI/fitas, o PATH do harness. Precedente pago
+em ~/.local/bin, `monta-sessao`, $PF_INSTANCIA/var/fitas, o PATH da release. Precedente pago
 e medido no mesmo repo: controle/compose.yaml:1-13 conta que por em container o
 lado que chama verbo deixou 5 dos 8 blocos indisponiveis.
 
@@ -65,7 +65,10 @@ GRACA_KILL_S = 10.0
 # tenha ou nao havido compactacao. Existe porque o rotulo do evento de
 # compactacao e formato de CLI, e formato de CLI muda; contador nao.
 GIROS_POR_ANCORA = int(os.environ.get("CHAT_GIROS_POR_ANCORA", "10"))
-MESA = os.path.expanduser("~/AI/bin/mesa")
+# O verbo `mesa` da MESMA arvore deste arquivo (a release servida), achado por realpath:
+# nunca por raiz montada a mao (card #3010).
+MESA = os.path.join(
+    os.path.dirname(os.path.dirname(os.path.dirname(os.path.realpath(__file__)))), "bin", "mesa")
 
 log_trava = threading.Lock()
 

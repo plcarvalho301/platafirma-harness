@@ -35,13 +35,16 @@ responda só o que não depende de remit. Não improvise cadeira.
 
 - **local** — o clone na máquina onde o Code abriu. `Bash`, `Write` e `Edit`
   nativos valem aqui e só aqui.
-- **host da plataforma** — `~/AI`, uid `claudinho`. Nunca alcançável por Bash
-  nativo, em máquina nenhuma. Só pelo connector `claudinho-mcp`. É onde vivem
-  contêineres, units, banco e os verbos.
+- **host da plataforma** — uid `claudinho`: release em `/opt/platafirma`, instância
+  em `/srv/platafirma/casa`. Nunca alcançável por Bash nativo, em máquina nenhuma.
+  Só pelo connector `claudinho-mcp`. É onde vivem contêineres, units, banco e os
+  verbos.
 
 O connector vem da conta e vale em qualquer diretório e em qualquer máquina.
 Não há ambiente a exportar.
 
-Instalação e atualização: `platafirma-harness/agente/instala.sh` (symlink, na
-máquina do dono) ou `platafirma-posto/sincroniza.sh` (conta que não enxerga a
-fonte). Editar o arquivo instalado não dura — muda na fonte.
+Instalação e atualização: `platafirma-harness/agente/instala.sh` (na máquina do
+dono: `~/.claude/CLAUDE.md` vira symlink para
+`/opt/platafirma/current/harness/agente/CLAUDE.md`, `settings.json` é cópia) ou
+`platafirma-posto/sincroniza.sh` (conta que não enxerga a fonte). Editar o arquivo
+instalado não dura — muda na fonte e chega pela release.

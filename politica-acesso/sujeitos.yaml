@@ -6,7 +6,7 @@
 # não teria como montar o Sujeito, logo negaria tudo por atributo ausente.
 #
 # CHAVE: `preferred_username` do JWT, ou o `sub` quando não há username. O que está
-# aqui foi medido no log de auditoria (~/AI/var/log/ops/), não suposto: em 13/08/2026
+# aqui foi medido no log de auditoria da porta (ops-mcp), não suposto: em 13/08/2026
 # só dois sujeitos aparecem — o dono (OIDC, azp claudinho-mcp) e `claudinho` (rota
 # de emergência por token estático).
 #
@@ -107,7 +107,7 @@ sujeitos:
   # todo sujeito fica sem papel e o PDP nega tudo por atributo ausente. Foi esse
   # exato fail-closed que trancou as cadeiras em 14/08 (incidente do #137).
   #
-  # MEDIDO em ~/AI/var/log/ops/ (25/08/2026), não suposto — e a medida sozinha já
+  # MEDIDO no log de auditoria da porta (25/08/2026), não suposto — e a medida sozinha já
   # prova a tese do card: `megafone` (11.288 linhas) e `g48ufn` (3.464 linhas) são
   # DOIS usernames com o MESMO sub b6986be0. O rename trocou a chave; a identidade
   # nunca mudou.
@@ -132,7 +132,7 @@ sujeitos:
   #     que existe para quando o realm cai morre junto com o realm. É o primeiro item
   #     da revisão do #2287.
   #   - `jaiminho-fabrica` ATUOU: sub `e57eadb1` medido no log de auditoria — 2.290
-  #     linhas com `sujeito: jaiminho-fabrica` desde 25/08 (~/AI/var/log/ops). A
+  #     linhas com `sujeito: jaiminho-fabrica` desde 25/08 (log de auditoria da porta). A
   #     entrada por `sub` (e57eadb1) já existe acima — ⚠ contradiz o cabeçalho deste
   #     bloco; reconciliar é de segurança. Correção FACTUAL, não muda veredito do
   #     PDP (comentário, não campo lido). — story #3008, 05/09.

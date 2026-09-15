@@ -18,8 +18,9 @@ e o slug fossil resolvia como vigente. A fonte viva agora e a arvore, so ela.
 Fonte da persona do ator: abertura/<persona>/persona.md, onde a persona
 sai de _PERSONA_DO_ATOR (ator != persona: jaiminho monta `fabrica`).
 Fonte do alias humano: abertura/aliases.json (mapa slug->nome afetivo, dado vivo).
-A raiz sai de PF_RAIZ, ou do default do host; no container da recepcao ela entra
-por bind mount ro.
+A morada sai de PF_ABERTURA_DIR, ou de $PF_INSTANCIA/var/abertura-publicada (default
+/srv/platafirma/casa); no container da recepcao ela entra por bind mount ro, no mesmo
+caminho absoluto do host.
 """
 
 from __future__ import annotations
@@ -76,12 +77,14 @@ def _raiz_personas() -> Path:
 
     A mesma fonte do montador (`monta-sessao`) e do roteador (`rotear`): a arvore
     imutavel em $PF_ABERTURA_DIR/current/abertura, publicada por `publicar-abertura`.
-    Ler o clone `~/AI/platafirma-harness/abertura` era ler working tree em runtime —
+    Ler `abertura/` do clone de trabalho era ler working tree em runtime —
     commit local, ramo de fabrica ou HEAD destacado mudavam o roster sem promocao.
-    PF_ABERTURA_DIR aponta a morada; no container ela entra por bind mount ro.
+    PF_ABERTURA_DIR aponta a morada; sem ela, a morada da instancia (PF_INSTANCIA,
+    default igual ao de lib/raizes.py, repetido porque o container so recebe chat/).
+    No container ela entra por bind mount ro.
     """
-    raiz = os.environ.get("PF_RAIZ", "/home/claudinho/AI")
-    morada = os.environ.get("PF_ABERTURA_DIR", os.path.join(raiz, "var", "abertura-publicada"))
+    instancia = os.environ.get("PF_INSTANCIA", "/srv/platafirma/casa")
+    morada = os.environ.get("PF_ABERTURA_DIR", os.path.join(instancia, "var", "abertura-publicada"))
     return Path(morada) / "current" / "abertura"
 
 
@@ -104,7 +107,7 @@ def _slugs_da_arvore() -> set[str]:
     if not dir_personas.is_dir():
         raise FileNotFoundError(
             f"diretorio de personas nao encontrado: {dir_personas} "
-            "(defina PF_RAIZ, ou monte abertura/ no container)"
+            "(defina PF_ABERTURA_DIR ou PF_INSTANCIA, ou monte a morada no container)"
         )
     # Existência da cadeira é o DIRETÓRIO (arq:0073 §7.5: criada mas não redigida
     # abre com peças indisponíveis, não some do roster). A peça persona é quem fica
@@ -177,7 +180,7 @@ def participantes() -> list[str]:
     if not dir_personas.is_dir():
         raise FileNotFoundError(
             f"diretorio de personas nao encontrado: {dir_personas} "
-            "(defina PF_RAIZ, ou monte personas/ no container)"
+            "(defina PF_ABERTURA_DIR ou PF_INSTANCIA, ou monte a morada no container)"
         )
     return sorted(
         nome for nome in _SAO_PARTICIPANTE
@@ -193,7 +196,7 @@ def atores_internos() -> list[str]:
     if not dir_personas.is_dir():
         raise FileNotFoundError(
             f"diretorio de personas nao encontrado: {dir_personas} "
-            "(defina PF_RAIZ, ou monte personas/ no container)"
+            "(defina PF_ABERTURA_DIR ou PF_INSTANCIA, ou monte a morada no container)"
         )
     return sorted(
         nome for nome in _ATORES_INTERNOS

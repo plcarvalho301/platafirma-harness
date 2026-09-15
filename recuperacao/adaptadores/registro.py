@@ -33,17 +33,16 @@ import subprocess
 
 from ..envelope import Causa, Item, Procedencia, Versao, VersaoTipo
 from ..fontes import Fonte
+from .._raizes import release
 from .base import Adaptador, FonteIndisponivel
 
-RAIZ = os.environ.get("PF_RAIZ", os.path.expanduser("~/AI"))
-
-# Runtime le da morada publicada, nao do clone de trabalho (arq:0097/0109 §1). Cada
-# serie resolve para var/prod/<repo>/current/<sub>; o clone ~/AI/<repo> nunca entra no
-# caminho de servico. Override por PF_RAIZ (testes/fabrica).
-_PROD = os.path.join(RAIZ, "var", "prod")
-
-def _prod_repo(repo: str) -> str:
-    return os.path.join(_PROD, repo, "current")
+# Runtime le da release no ar, nunca de clone de bancada (arq:0097/0109 §1, arq:0102 D6).
+# Cada serie resolve para <release>/<curto>/<sub> — /opt/platafirma/current/arquitetura e
+# /opt/platafirma/current/conhecimento. Override por PF_RELEASE ou `raiz=` (testes).
+_CURTO = {
+    "platafirma-arquitetura": "arquitetura",
+    "platafirma-conhecimento": "conhecimento",
+}
 
 SERIES = {
     "adr": ("platafirma-arquitetura", "macro-global/decisions"),
@@ -59,17 +58,20 @@ class AdaptadorRegistro(Adaptador):
     fonte = Fonte.REGISTRO
     tem_gold = False
 
-    def __init__(self, raiz: str = RAIZ) -> None:
-        self.raiz = raiz
+    def __init__(self, raiz: str | None = None) -> None:
+        self.raiz = raiz if raiz is not None else str(release())
+
+    def _prod_repo(self, repo: str) -> str:
+        return os.path.join(self.raiz, _CURTO[repo])
 
     # ---- morada ---------------------------------------------------------------------
 
     def _dir(self, serie: str) -> str:
         repo, sub = SERIES[serie]
-        return os.path.join(_prod_repo(repo), sub)
+        return os.path.join(self._prod_repo(repo), sub)
 
     def _repo(self, serie: str) -> str:
-        return _prod_repo(SERIES[serie][0])
+        return self._prod_repo(SERIES[serie][0])
 
     def _lista(self, serie: str) -> list[tuple[str, str, str]]:
         """(numero, titulo-slug, caminho) de cada decisão da série."""
@@ -96,7 +98,7 @@ class AdaptadorRegistro(Adaptador):
         """
         partes = []
         for repo in ("platafirma-arquitetura", "platafirma-conhecimento"):
-            partes.append(f"{repo.split('-')[-1]}:{self._sha_head(_prod_repo(repo))}")
+            partes.append(f"{repo.split('-')[-1]}:{self._sha_head(self._prod_repo(repo))}")
         return " ".join(partes)
 
     def _sha_head(self, repo: str) -> str:

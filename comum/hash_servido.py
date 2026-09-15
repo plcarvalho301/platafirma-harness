@@ -12,8 +12,8 @@
 # ora vem com \n final, ora nao (subprocess.stdout x leitura de arquivo), e sem o
 # strip o ledger via dois conteudos onde ha um.
 #
-# Sem dependencia externa de proposito: a porta roda em .venv-ops (sem driver de
-# banco) e o montador em .venv-harness. O que os dois tem em comum e a stdlib.
+# Sem dependencia externa de proposito: a porta roda no venv ops da release (sem
+# driver de banco) e o montador no venv harness. O que os dois tem em comum e a stdlib.
 import hashlib
 
 TAM = 12

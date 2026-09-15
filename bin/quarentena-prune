@@ -13,15 +13,18 @@
 # a poda de amanha. Sem o corte de idade, rodar na sexta daria 1 dia de janela a
 # quem quarentenou na quinta, e a garantia deixaria de existir.
 set -uo pipefail
+# ambiente: PF_INSTANCIA[=/srv/platafirma/casa] · QUARENTENA_RETENCAO_DIAS[=7]
+
+# Raizes de producao (card #3010): quarentena, trava e log moram na instancia.
+. "$(dirname "$(readlink -f "$0")")/../lib/raizes.sh"
 
 RETENCAO_DIAS="${QUARENTENA_RETENCAO_DIAS:-7}"
-RAIZ="${OPS_ROOT:-$HOME/AI}"
-QUARENTENA="$RAIZ/var/quarentena"
-MARCA="$RAIZ/var/log/poda.log"
-TRAVA="$RAIZ/var/quarentena-prune.lock"
+QUARENTENA="$PF_INSTANCIA/var/quarentena"
+MARCA="$PF_INSTANCIA/var/log/poda.log"
+TRAVA="$PF_INSTANCIA/var/lock/quarentena-prune.lock"
 
 ts() { date -Is; }
-mkdir -p "$(dirname "$MARCA")"
+mkdir -p "$(dirname "$MARCA")" "$(dirname "$TRAVA")"
 
 # Trava: sessao concorrente nao pode apagar a mesma leva duas vezes.
 exec 9>"$TRAVA"
@@ -31,6 +34,9 @@ if ! flock -n 9; then
 fi
 
 [ -d "$QUARENTENA" ] || { echo "$(ts) quarentena-prune: sem $QUARENTENA, nada a fazer" >> "$MARCA"; exit 0; }
+# O cinto abaixo compara com readlink -f: a raiz tambem sai canonica, senao um symlink
+# no caminho da instancia faria recusar toda leva.
+QUARENTENA="$(readlink -f "$QUARENTENA")"
 
 total=0
 bytes=0

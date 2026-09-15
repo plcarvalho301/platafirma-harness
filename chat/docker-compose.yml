@@ -5,8 +5,14 @@ name: chat
 # quanto o que faz: nao fala com pf:msg (o chat e superficie, a malha continua sendo a
 # do motor — arq:0036) e nao tem comportamento de cadeira nenhum, que e o card 448.
 #
-# Segredo nao mora aqui. Os tres servicos leem do cofre (~/AI/var/secrets/matrix), por
-# arquivo montado :ro ou por .env fora do git, e quem cunha e o `prepara.sh` ao lado.
+# Segredo nao mora aqui. Os tres servicos leem do cofre da instancia
+# (/srv/platafirma/casa/segredos/matrix), por arquivo montado :ro ou pelo --env-file que o
+# `deploy` materializa em tmpfs de segredos/chat/, e quem cunha e o `prepara.sh` ao lado.
+#
+# Este arquivo e PRODUTO e sobe da release (/opt/platafirma/current/harness/chat). Todo
+# caminho da INSTANCIA — cofre, fitas, journal, morada da abertura — mora na sobreposicao
+# /srv/platafirma/casa/deploy/chat/compose.override.yaml (forma em
+# compose.override.exemplo.yaml ao lado), que o `deploy` passa como segundo -f (card #3010).
 
 services:
   # Banco proprio da stack, padrao ja vigente no host (identidade, keycloak,
@@ -19,7 +25,7 @@ services:
     environment:
       POSTGRES_DB: synapse
       POSTGRES_USER: synapse
-      POSTGRES_PASSWORD: ${PG_PASSWORD:?defina PG_PASSWORD no .env — sai do cofre por ./prepara.sh}
+      POSTGRES_PASSWORD: ${PG_PASSWORD:?falta PG_PASSWORD no --env-file — sai de segredos/chat, cunhado por ./prepara.sh}
       # O Synapse RECUSA subir contra banco que nao seja C/C e manda usar
       # `allow_unsafe_locale` para ignorar. O locale se decide no initdb e nao se muda
       # depois sem dump/restore: errar aqui custa recriar o volume.
@@ -51,7 +57,7 @@ services:
       # DIRETORIO, nao arquivo: bind de arquivo unico nao acompanha `git checkout` — o
       # checkout troca o inode e o mount fica preso ao velho. Armadilha ja paga no host.
       - ./conf:/config:ro
-      - ${HOME}/AI/var/secrets/matrix:/segredos:ro
+      # /segredos (o cofre matrix, :ro) entra pela sobreposicao da instancia.
       - dados:/data
     healthcheck:
       # Exercita o caminho que a borda vai usar, nao a porta: Synapse de pe com o recurso
@@ -93,7 +99,7 @@ services:
     container_name: chat-recepcao
     restart: unless-stopped
     # rootless: root-do-container = claudinho no host, e e o unico uid que escreve
-    # nos bind mounts abaixo (~/AI e do claudinho). Mesmo motivo ja escrito para o
+    # nos bind mounts da instancia (/srv/platafirma/casa e do claudinho). Mesmo motivo ja escrito para o
     # chat-synapse. O uid 10001 da imagem cairia num subuid sem acesso a nada.
     user: "0:0"
     environment:
@@ -102,15 +108,13 @@ services:
       AS_DOMINIO: chat.platafirma.org
       AS_BOT: _pf
       AS_PORTA: "8080"
-      AS_TOKEN: ${AS_TOKEN:?defina AS_TOKEN no .env — sai do cofre por ./prepara.sh}
-      HS_TOKEN: ${HS_TOKEN:?defina HS_TOKEN no .env — sai do cofre por ./prepara.sh}
+      AS_TOKEN: ${AS_TOKEN:?falta AS_TOKEN no --env-file — sai de segredos/chat, cunhado por ./prepara.sh}
+      HS_TOKEN: ${HS_TOKEN:?falta HS_TOKEN no --env-file — sai de segredos/chat, cunhado por ./prepara.sh}
       # comum/cadeiras.py le a arvore abertura/<x>/ da morada publicada (arq:0073,
       # arq:0097) — nao se calcula, se le da fonte. O ledger registro/ e historico e
-      # nenhum codigo vivo o le (incidente/ordem do dono).
-      PF_RAIZ: /home/claudinho/AI
-      PF_ABERTURA_DIR: /home/claudinho/AI/var/abertura-publicada
-      CHAT_JOURNAL: /home/claudinho/AI/var/run/chat/journal.db
-      CHAT_FITAS_RAIZ: /home/claudinho/AI/fitas
+      # nenhum codigo vivo o le (incidente/ordem do dono). PF_INSTANCIA, PF_ABERTURA_DIR,
+      # CHAT_JOURNAL e CHAT_FITAS_RAIZ sao caminho de instancia: vem da sobreposicao,
+      # junto com os binds a que correspondem.
       # Gatilho de idade DESARMADO, por decisao do dono em 15/08 (card 449): ele
       # nao quer que a fita morra sozinha. Sala parada nao custa nada na maquina
       # dele, e "isto aqui e de ontem" ele reconhece sem ajuda; o que a rotacao
@@ -123,19 +127,12 @@ services:
       # codigo e o eco junto com ele) tem card proprio; isto aqui e o desarme de
       # hoje, para a sala do dono nao rodar amanha as 11:37.
       CHAT_ROTACAO_S: "inf"
-    volumes:
-      # Os dois montam no MESMO caminho absoluto de fora. Nao e desleixo: o
-      # caminho do anexo atravessa a fronteira dentro do corpo da mensagem, e o
-      # worker abre esse caminho no host. Traduzir prefixo aqui obrigaria a
-      # traduzir de volta la, e a primeira divergencia seria silenciosa.
-      - ${HOME}/AI/fitas:/home/claudinho/AI/fitas:rw
-      - ${HOME}/AI/var/run/chat:/home/claudinho/AI/var/run/chat:rw
-      # Somente leitura: a recepcao le cadeiras e personas da MORADA PUBLICADA
-      # (var/abertura-publicada/current/abertura — arq:0097, arq:0109 §1), nunca do
-      # clone. Monta-se a raiz da morada inteira porque `current` e symlink e tem de
-      # resolver dentro do container. Sem este mount ela nao sobe — a ausencia se
-      # declara na subida, em vez de virar sala muda no primeiro giro.
-      - ${HOME}/AI/var/abertura-publicada:/home/claudinho/AI/var/abertura-publicada:ro
+    # volumes: TODOS na sobreposicao da instancia (fitas e journal rw, morada da abertura
+    # ro), cada um no MESMO caminho absoluto de fora. Nao e desleixo: o caminho do anexo
+    # atravessa a fronteira dentro do corpo da mensagem, e o worker abre esse caminho no
+    # host. Traduzir prefixo aqui obrigaria a traduzir de volta la, e a primeira
+    # divergencia seria silenciosa. Sem a morada montada a recepcao nao sobe — a ausencia
+    # se declara na subida, em vez de virar sala muda no primeiro giro.
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request,sys;sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8080/estado',timeout=8).status==200 else 1)"]
       interval: 30s

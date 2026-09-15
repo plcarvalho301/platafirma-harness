@@ -34,9 +34,16 @@ from ..envelope import Causa, Cobertura, Item, LinhaFonte, Procedencia, Versao, 
 from ..fontes import Fonte
 from .base import Adaptador, FonteIndisponivel, Resultado
 
+from .._raizes import instancia
+
 HOST = os.environ.get("MEM_REDIS_HOST", "127.0.0.1")
 PORTA = int(os.environ.get("MEM_REDIS_PORT", "6380"))  # msg-mem, não a malha
-RAIZ = os.environ.get("PF_RAIZ", os.path.expanduser("~/AI"))
+
+
+def _arquivo_segredo() -> str:
+    """Segredo da instância, lido por nome (desenho #3010 §3): um arquivo por variável em
+    `segredos/<stack>/<NOME>`. Nunca `.env` em árvore de repo."""
+    return os.path.join(str(instancia()), "segredos", "harness-sessao", "SESSAO_PG_PASSWORD")
 
 
 class AdaptadorMesa(Adaptador):
@@ -88,12 +95,13 @@ class AdaptadorMesa(Adaptador):
         if d:
             return d
         senha = os.environ.get("SESSAO_PG_PASSWORD", "")
-        env = os.path.join(RAIZ, "platafirma-harness", "sessao", ".env")
-        if not senha and os.path.isfile(env):
-            for linha in open(env, encoding="utf-8"):
-                if linha.startswith("SESSAO_PG_PASSWORD="):
-                    senha = linha.split("=", 1)[1].strip()
-                    break
+        arq = _arquivo_segredo()
+        if not senha and os.path.isfile(arq):
+            with open(arq, encoding="utf-8") as f:
+                senha = f.read().strip()
+        if not senha:
+            # Ausência é falha alta, nunca DSN sem senha; `pg()` a declara como metade caída.
+            raise RuntimeError(f"segredo SESSAO_PG_PASSWORD ausente (ambiente e {arq})")
         porta = os.environ.get("SESSAO_PG_PORT", "5437")
         return f"host=127.0.0.1 port={porta} dbname=sessao user=sessao password={senha}"
 

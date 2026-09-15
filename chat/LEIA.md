@@ -38,7 +38,7 @@ O ator interno não entra em `cadeiras()` do org: a fábrica não tem head, não
 3. `bin/chat` ramifica por `eh_participante`. No ramo Claude Code:
    - **fita nova** (`--fita ""`) → `monta-sessao <persona>` roda, e o pacote de abertura entra por `--append-system-prompt`, na mesma invocação. Uma chamada.
    - **fita existente** → `--resume <id>`, sem reinjetar o pacote (já está na fita).
-4. O motor gira no cwd `~/AI/fitas/<persona>`, emite um evento por passo (o worker observa por watchdog de silêncio), e devolve uma linha JSON de resultado.
+4. O motor gira no cwd `/srv/platafirma/casa/var/fitas/<persona>` (fitas são estado da instância), emite um evento por passo (o worker observa por watchdog de silêncio), e devolve uma linha JSON de resultado.
 5. A recepção posta a resposta na sala.
 
 O pacote de `monta-sessao` não se replica no `CLAUDE.md` do cwd: fonte única, senão duas personas divergem no dia em que uma não for regenerada.

@@ -9,12 +9,17 @@
 # ajuste que so um dos dois receber.
 #
 # Instalacao (por clone, uma vez):
-#   git -C <clone> config core.hooksPath /home/claudinho/AI/platafirma-harness/hooks
+#   git -C <clone> config core.hooksPath /opt/platafirma/current/harness/hooks
 #
 # Limite declarado: hook e local e `git commit --no-verify` passa por cima. Nao ha
 # gate no push do forge — quem burla aqui entra no repo remoto sem ser visto.
 
-CONFERIR="${CONFERIR:-$HOME/AI/bin/conferir}"
+# O verbo sai da PROPRIA arvore do hook (a release, pelo hooksPath) e, faltando ali,
+# do PATH da release.
+if [ -z "${CONFERIR:-}" ]; then
+    CONFERIR="$(dirname "$(readlink -f "$0")")/../bin/conferir"
+    [ -x "$CONFERIR" ] || CONFERIR="$(command -v conferir 2>/dev/null || printf '%s' "$CONFERIR")"
+fi
 
 [ -x "$CONFERIR" ] || {
     echo "pre-commit: 'conferir' nao encontrado em $CONFERIR — commit segue sem gate." >&2

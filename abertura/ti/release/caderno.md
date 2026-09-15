@@ -14,7 +14,7 @@
 
 ## Gate julga o que vai ser empurrado, nunca o estado do clone (medido 04/09)
 
-O clone de `~/AI` é COMPARTILHADO entre as cadeiras, e é o caso normal — não a
+O clone base da bancada (`<bancada>/<repo>`) é COMPARTILHADO entre as cadeiras, e é o caso normal — não a
 exceção — que ele esteja sujo com trabalho em curso de outra pessoa. Qualquer gate
 que meça o working tree cobra de quem commitou o vermelho de quem está editando.
 

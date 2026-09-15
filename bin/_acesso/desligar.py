@@ -24,17 +24,41 @@ RAIZ = Path(os.environ.get("ACESSO_POLITICA_DIR",
         os.environ.get("PDP_DIR", "/opt/platafirma/current/politica-acesso"))))
 SUJEITOS = RAIZ / "sujeitos.yaml"
 POLITICA = RAIZ / "politica.yaml"
-# HARNESS/PERSONAS derivam do repo, nao de RAIZ (que agora e a morada de dados)
-HARNESS = Path(os.environ.get("PF_HARNESS", Path(__file__).resolve().parent.parent.parent))
-# LE do servido (RAIZ), ESCREVE na bancada: o servido e arvore imutavel do release;
-# a edicao de sujeitos.yaml/PAP vai ao clone e vira historico por merge + `release
-# promover` (spec_acesso §2). Editar o servido a mao seria producao fora do git.
-BANCADA = Path(os.environ.get("ACESSO_BANCADA_DIR", HARNESS / "politica-acesso"))
+# HARNESS/PERSONAS derivam da propria arvore (realpath), nao de RAIZ (a morada de dados)
+HARNESS = Path(__file__).resolve().parents[2]
 PERSONAS = HARNESS / "personas"
-SEG = Path(os.environ.get("PF_BIN", Path(__file__).resolve().parent.parent)) / "seg"
+# Raizes de producao e bancada declarada (card #3010).
+sys.path.insert(0, str(HARNESS / "lib"))
+from raizes import BancadaNaoDeclarada, bancada, instancia, release, release_raiz  # noqa: E402
+# LE do servido (RAIZ), ESCREVE so na bancada DECLARADA: o servido e arvore imutavel da
+# release (/opt e r-x); a edicao de sujeitos.yaml/PAP vai ao worktree da cadeira e vira
+# historico por commit + merge + `release promover` (spec_acesso §2). Editar o servido a
+# mao seria producao fora do git. A bancada so se resolve no --executar (bancada_pap).
+SEG = Path(os.environ.get("PF_BIN", HARNESS / "bin")) / "seg"
 if not SEG.exists():
-    SEG = Path.home() / "AI/bin/seg"
+    SEG = release() / "harness" / "bin" / "seg"
+# Trilha de auditoria da porta: estado da instancia.
+LOG_OPS = Path(os.environ.get("OPS_LOG_DIR") or instancia() / "var" / "log" / "ops")
 VENCE = re.compile(r"vence\s+(\d{4}-\d{2}-\d{2})")
+
+
+def bancada_pap() -> Path:
+    """politica-acesso/ no worktree da cadeira, na bancada declarada:
+    <bancada>/wt/platafirma-harness/<cadeira>/politica-acesso (arq:0109 §2).
+    ACESSO_BANCADA_DIR vence (teste). Nunca dentro da release."""
+    explicito = os.environ.get("ACESSO_BANCADA_DIR")
+    if explicito:
+        alvo = Path(explicito)
+    else:
+        cadeira = os.environ.get("PF_CADEIRA", "").strip()
+        cadeira = cadeira.removeprefix("claudinho-").removeprefix("claudinha-")
+        if not cadeira:
+            raise BancadaNaoDeclarada("PF_CADEIRA ausente: sem cadeira nao ha worktree de bancada")
+        alvo = bancada() / "wt" / "platafirma-harness" / cadeira / "politica-acesso"
+    opt = release_raiz().resolve()
+    if alvo.resolve() == opt or opt in alvo.resolve().parents:
+        raise BancadaNaoDeclarada(f"{alvo} esta dentro da release ({opt}): a release nao se edita")
+    return alvo
 
 
 def carrega(p: Path) -> dict:
@@ -141,7 +165,7 @@ def cmd_orfaos(argv: list[str]) -> int:
     #    e credencial declarada que nao atuou nenhuma vez. Os dois sao superficie sem
     #    funcao — um por baixo do PAP, outro sobrando no realm.
     import json as _json
-    logs = sorted((Path.home() / "AI/var/log/ops").glob("ops-*.jsonl"))[-int(os.environ.get("ACESSO_DIAS", 7)):]
+    logs = sorted(LOG_OPS.glob("ops-*.jsonl"))[-int(os.environ.get("ACESSO_DIAS", 7)):]
     vistos_sujeito, vistos_azp = set(), set()
     for arq in logs:
         for linha in arq.read_text(errors="replace").splitlines():
@@ -253,6 +277,13 @@ def cmd_desligar(argv: list[str]) -> int:
         print("\nplano medido, nada executado. Repita com --executar.")
         return 0
 
+    # A bancada se resolve ANTES de qualquer ato: sem ela, nada comeca pela metade.
+    try:
+        banc = bancada_pap()
+    except BancadaNaoDeclarada as e:
+        print(f"acesso: {e}", file=sys.stderr)
+        return 3
+
     falhou = []
     # 1. realm
     if client:
@@ -270,9 +301,9 @@ def cmd_desligar(argv: list[str]) -> int:
                 falhou.append(f"realm: {saida[:120]}")
 
     # 2. sujeitos.yaml — na BANCADA (o servido nao se edita a mao)
-    suj_bancada, pap_bancada = BANCADA / "sujeitos.yaml", BANCADA / "politica.yaml"
+    suj_bancada, pap_bancada = banc / "sujeitos.yaml", banc / "politica.yaml"
     if not suj_bancada.is_file():
-        falhou.append(f"bancada ausente: {suj_bancada} (PF_HARNESS/ACESSO_BANCADA_DIR)")
+        falhou.append(f"bancada ausente: {suj_bancada} (`repo abrir platafirma-harness` ou ACESSO_BANCADA_DIR)")
     else:
         texto = suj_bancada.read_text(encoding="utf-8")
         faixa = bloco_do_sujeito(texto, nome)
@@ -305,12 +336,12 @@ def cmd_desligar(argv: list[str]) -> int:
             falhou.append(f"segredo {s}: {e}")
 
     # 5. o PAP tem de continuar valido depois da cirurgia.
-    acesso_bin = Path(__file__).resolve().parent.parent / "acesso"
+    acesso_bin = HARNESS / "bin" / "acesso"
     if not acesso_bin.exists():
-        acesso_bin = Path(os.environ.get("PF_BIN", Path.home() / "AI/bin")) / "acesso"
+        acesso_bin = Path(os.environ.get("PF_BIN", release() / "harness" / "bin")) / "acesso"
     r = subprocess.run([str(acesso_bin), "politica", "conferir"],
                        capture_output=True, text=True,
-                       env={**os.environ, "ACESSO_POLITICA_DIR": str(BANCADA)})
+                       env={**os.environ, "ACESSO_POLITICA_DIR": str(banc)})
     print(f"  conferencia    {(r.stdout or r.stderr).strip().splitlines()[0] if (r.stdout or r.stderr) else 'sem saida'}")
     if r.returncode != 0:
         falhou.append("PAP da bancada invalido depois da edicao — reverta pelo git antes de qualquer commit")

@@ -25,7 +25,10 @@
 # nao existe nao e linter que passou.
 set -uo pipefail
 
-RAIZ="${PF_REPO_RAIZ:-$HOME/AI}"
+# Raizes da casa (card #3010): a bancada vem de pf_bancada, sem default.
+. "$(dirname "$(readlink -f "$0")")/../lib/raizes.sh"
+
+BANCADA=""   # preenchida por declara_bancada, depois de validado o ato
 VERBO="$(basename "$0")"
 
 uso() {
@@ -34,7 +37,7 @@ uso:
   $VERBO rodar <repo> [<alvo>]   roda o linter do clone; <alvo> = caminho dentro do repo
   $VERBO detectar <repo>         diz qual stack casou e que linha rodaria, sem rodar
 
-raiz de trabalho: $RAIZ   (PF_REPO_RAIZ)
+bancada: PF_BANCADA, senao $PF_ARQUIVO_BANCADA (sem default: exit 3)
 exit: 0 limpo · 1 apontamentos · 2 uso · 3 falha do linter · 4 alvo fora da raiz
       5 indeterminavel (nenhuma stack de lint detectada)
 EOF
@@ -43,36 +46,46 @@ EOF
 
 morre() { printf '%s: %s\n' "$VERBO" "$1" >&2; exit "${2:-3}"; }
 
+# Bancada declarada pela conta (card #3010): PF_BANCADA, senao a linha de
+# ~/.config/platafirma/bancada. Sem declaracao: exit 3. Nunca cria diretorio.
+declara_bancada() {
+  BANCADA="$(pf_bancada)" || exit 3
+  case "$BANCADA" in
+    /*) BANCADA="${BANCADA%/}" ;;
+    *) morre "bancada declarada nao e caminho absoluto: $BANCADA" 3 ;;
+  esac
+}
+
 bancada_de() {
   local nome="$1"
   local cadeira="${PF_CADEIRA:-}"
   cadeira="${cadeira#claudinho-}"
   cadeira="${cadeira#claudinha-}"
-  if [ -n "$cadeira" ] && [ -d "$RAIZ/var/wt/$nome/$cadeira" ] && [ -e "$RAIZ/var/wt/$nome/$cadeira/.git" ]; then
-    printf '%s/var/wt/%s/%s' "$RAIZ" "$nome" "$cadeira"
+  if [ -n "$cadeira" ] && [ -d "$BANCADA/wt/$nome/$cadeira" ] && [ -e "$BANCADA/wt/$nome/$cadeira/.git" ]; then
+    printf '%s/wt/%s/%s' "$BANCADA" "$nome" "$cadeira"
     return 0
   fi
-  if [ -d "$RAIZ/$nome" ]; then
+  if [ -d "$BANCADA/$nome" ]; then
     if [ -n "$cadeira" ]; then
-      printf '%s: aviso: worktree var/wt/%s/%s nao existe — usando fallback %s/%s\n' "$VERBO" "$nome" "$cadeira" "$RAIZ" "$nome" >&2
+      printf '%s: aviso: worktree wt/%s/%s nao existe — usando fallback %s/%s\n' "$VERBO" "$nome" "$cadeira" "$BANCADA" "$nome" >&2
     else
-      printf '%s: aviso: PF_CADEIRA nao definida — usando fallback %s/%s\n' "$VERBO" "$RAIZ" "$nome" >&2
+      printf '%s: aviso: PF_CADEIRA nao definida — usando fallback %s/%s\n' "$VERBO" "$BANCADA" "$nome" >&2
     fi
   fi
-  printf '%s/%s' "$RAIZ" "$nome"
+  printf '%s/%s' "$BANCADA" "$nome"
 }
 
 clone_de() {
   local nome="$1" alvo real raiz_real
   [ -n "$nome" ] || morre "falta o nome do repo" 2
   case "$nome" in
-    */*|.*|*..*|*[!A-Za-z0-9._-]*) morre "nome de repo invalido: '$nome' — e slug dentro de $RAIZ" 4 ;;
+    */*|.*|*..*|*[!A-Za-z0-9._-]*) morre "nome de repo invalido: '$nome' — e slug dentro da bancada $BANCADA" 4 ;;
   esac
   alvo="$(bancada_de "$nome")"
-  [ -d "$alvo" ] || morre "nao ha clone '$nome' em $RAIZ" 3
+  [ -d "$alvo" ] || morre "nao ha clone '$nome' na bancada $BANCADA — \`repo abrir $nome\` clona" 3
   real="$(realpath "$alvo" 2>/dev/null)" || morre "nao resolvi '$alvo'" 4
-  raiz_real="$(realpath "$RAIZ" 2>/dev/null || printf '%s' "$RAIZ")"
-  case "$real/" in "$RAIZ"/*|"$raiz_real"/*) : ;; *) morre "'$nome' resolve fora da raiz $RAIZ" 4 ;; esac
+  raiz_real="$(realpath "$BANCADA" 2>/dev/null || printf '%s' "$BANCADA")"
+  case "$real/" in "$BANCADA"/*|"$raiz_real"/*) : ;; *) morre "'$nome' resolve fora da bancada $BANCADA" 4 ;; esac
   printf '%s' "$real"
 }
 
@@ -135,8 +148,8 @@ ato_rodar() {
 
 ato="${1:-}"; [ -n "$ato" ] && shift
 case "$ato" in
-  rodar)    ato_rodar "$@" ;;
-  detectar) ato_detectar "$@" ;;
+  rodar)    declara_bancada; ato_rodar "$@" ;;
+  detectar) declara_bancada; ato_detectar "$@" ;;
   ""|-h|--help|ajuda) uso ;;
   *) morre "ato desconhecido: '$ato' — atos: rodar, detectar" 2 ;;
 esac

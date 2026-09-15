@@ -7,9 +7,10 @@ configuração de **conta**, nunca de repositório alvo.
 ## Onde abrir a sessão — no posto, sempre
 
 `~/platafirma-posto`, na conta `megafone`. Não há segundo procedimento, e o
-número de repositórios que o card toca não escolhe nada: o clone que o runtime
-executa é o de `/home/claudinho/AI`, alcançado pelo connector `claudinho-mcp`,
-e é o único que existe. Sete cards em três repositórios são sete caminhos na
+número de repositórios que o card toca não escolhe nada: o que o runtime
+executa é a release em `/opt/platafirma/current/`, e o código que o card muda
+está na bancada declarada pela conta do host (`~/.config/platafirma/bancada`); as
+duas se alcançam só pelo connector `claudinho-mcp`. Sete cards em três repositórios são sete caminhos na
 mesma sessão.
 
 ```
@@ -35,7 +36,8 @@ O que isso implica, e é preciso saber antes de despachar:
 - `Bash`, `Write` e `Edit` nativos não alcançam o host: escrita é `write_file` do
   `ops`, e mudança cirúrgica vai por `run_command` com `python3 - <<'PY'` —
   heredoc com código dentro corrompe em aspas e escape;
-- git é `run_command` em `~/AI/<repo>`, e `AGENTS.md` da raiz de cada repo segue
+- git é `run_command` com o verbo `repo` sobre o worktree da cadeira na bancada
+  (`<bancada>/wt/<repo>/<cadeira>`), e `AGENTS.md` da raiz de cada repo segue
   sendo o roteiro daquele repo;
 - job acima de 600 s vai por `longjob`: `run_command` mata o grupo de processos
   no timeout, e build ou indexação passa disso.
@@ -49,9 +51,9 @@ Duas consequências do canal, que valem no posto e na estação, e mordem quem
 espera o comportamento do Code nativo:
 
 - commit sai com a identidade de quem o `ops` executa (`claudinho`), não com a da
-  conta que roda a fábrica; push é `run_command` com `git -C ~/AI/<repo> push`, e
+  conta que roda a fábrica; push é `run_command` com `repo empurrar <repo>`, e
   usa a credencial do dono;
-- auditoria de tudo que a fábrica executa fica em `~/AI/var/log/ops/`.
+- auditoria de tudo que a fábrica executa fica em `/srv/platafirma/casa/var/log/ops/`.
 
 Nada a configurar em nenhum dos dois: os conectores vêm da conta claude.ai e
 valem em qualquer diretório — `claude mcp list` mostra os servidores com o
@@ -70,16 +72,15 @@ Escopo de usuário, na conta que roda a fábrica:
 ~/.claude/CLAUDE.md       persona da fábrica (build) e recorte vigente
 ~/.claude/settings.json   perfil de permissão
 ~/.claude/vikunja.env     credencial do rastreador (0600), da conta
-~/.local/bin/tarefas      verbo do rastreador — symlink para o harness
 ```
 
 Fonte canônica da persona: `platafirma-harness/personas/persona-fabrica.md`. O
 arquivo instalado é build dessa fonte; reexecutar o instalador atualiza.
 
 Instalador: `platafirma-harness/agente/instala.sh` — symlink onde o destino
-enxerga a fonte, cópia onde não enxerga. Ele liga `tarefas` a partir de
-`~/AI/platafirma-harness/bin/tarefas`; sem o clone do harness a conta fica sem
-verbo de rastreador, e o instalador diz isso em voz alta. O token continua sendo
+enxerga a fonte, cópia onde não enxerga. `tarefas` não é ligado na
+conta: vem do PATH da release (`/opt/platafirma/current/harness/bin/tarefas`); sem
+a release no ar a conta fica sem verbo de rastreador. O token continua sendo
 o da conta (leitura e comentário; fechar card é aceite de claudinho-TI).
 
 A fábrica roda na conta `megafone`, e lá a instalação é por **cópia**, não por
@@ -117,5 +118,6 @@ a que envelhecer diferente é a que vai ser obedecida.
 - Conexão de MCP se resolve na conta, não no repo alvo, porque o alvo do card
   muda e a conta não.
 - A fábrica não edita o clone do harness em nenhum modo. Card que toque
-  `platafirma-harness` executa por `claudinho-mcp` contra
-  `~/AI/platafirma-harness`.
+  `platafirma-harness` executa por `claudinho-mcp` contra o worktree da cadeira na bancada
+  (`<bancada>/wt/platafirma-harness/<cadeira>`), e chega ao ar só por
+  `release promover`.

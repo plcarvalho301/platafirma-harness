@@ -179,8 +179,8 @@ INTERSEÇÃO desse alcance com o que a política já permite àquele sujeito. Va
 uid: token que troca de sujeito sem entrada correspondente no PAP falha pelo mesmo
 formato — identidade nova sem alcance projetado.
 
-Medido no #3007 (09/2026): o card previa só a regra de sudoers. `/home/claudinho/AI` é
-`claudinho:claudinho` e a conta de destino não estava no grupo — com a regra instalada
+Medido no #3007 (09/2026): o card previa só a regra de sudoers. a pasta de trabalho da conta
+era `claudinho:claudinho` e a conta de destino não estava no grupo — com a regra instalada
 e sem mais nada, o comando trocaria de uid e o arquivo não nasceria. O aceite pedia
 justamente um arquivo com o owner novo no disco: passaria no `id -u` e falharia no que
 importava.
@@ -382,7 +382,7 @@ ferramenta da casa. Sem interpretação.
 
 07/09/2026 — precisei escrever migração num worktree porque o clone `platafirma-conhecimento`
 estava sujo e detached com trabalho de outra cadeira; `repo git ... worktree add` criou
-`var/wt/conhecimento-3019` sem problema, mas `write_file` recusou o caminho («fora de morada»:
+o worktree `conhecimento-3019`, no diretório de worktrees da pasta de trabalho da conta, sem problema, mas `write_file` recusou o caminho («fora de morada»:
 só clones `platafirma-*`, `platafirma-harness/bin/` e `var/tmp/`) — contorno encontrado NA DATA
 07/09/2026 foi escrever o arquivo no clone principal (morada válida, untracked, sem tocar no
 trabalho alheio), `repo git <clone> hash-object -w <arq>`, `repo git <clone> -C <worktree>
@@ -431,7 +431,7 @@ em fatias por `offset`/`max_bytes` (~11 KB cada), porque cada fatia tem sha pró
 escapa do ledger.
 
 08/09/2026 — `teste rodar platafirma-harness ops-server/_ensaio.py` deu `ModuleNotFoundError:
-No module named 'mcp'` (o `.venv-harness` não tem, e `_ensaio.py` importa `server`); `infra
+No module named 'mcp'` (o venv harness que o `teste` usava não tem, e `_ensaio.py` importa `server`); `infra
 unit-env ops-server` respondeu que a unit `--user` não existe; `longjob`, que a mesa velha
 dizia servir para `bash -lc 'export …; <verbo>'`, voltou `{recusado, motivo: "sem verbo"}`
 do `run_command` — contorno encontrado NA DATA 08/09/2026 foi escrever um arquivo espelho

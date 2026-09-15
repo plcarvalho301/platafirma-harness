@@ -2,7 +2,7 @@
 name: diagrama
 description: Use quando for DESENHAR ou REFAZER figura de arquitetura — topologia, fluxo com ramo, estrutura em camadas, relação N:N — para wiki, LP ou slide. Dá o gerador (`gerar.py`), o formato do modelo, as duas vistas (engenharia, estilo provedor de nuvem; diretoria, estilo C4) e a régua de cor fixa por categoria, tudo lido de `tokens.css` em tempo de geração. Implementa `platafirma-arquitetura/design/diagramas.md` (§2 vocabulário de forma, §3 cor, §5 produção) — não tem régua própria. NÃO dispare para gráfico de dado (série, barra), para figura gerada de dado (teia do acervo), nem para ilustração de LP: aí é SVG autoral (§5).
 cadeiras: todas (quem desenha figura). Dono da régua é produto (design/diagramas.md); catálogo de tipos é do arquiteto; dono da skill, como implementadora, é produto.
-compatibility: lê `platafirma-ui/src/tokens.css` (clone em ~/AI) — sem ele não gera. PNG exige Playwright/Chromium no host (`--png`); medição de encaixe exige Inter instalada e PIL. Rota alternativa para wiki é Kroki (Mermaid, d2) com `aplicacao/mermaid-familias.mmd`.
+compatibility: lê `platafirma-ui/src/tokens.css` (da release, `/opt/platafirma/current/ui/src/tokens.css`, ou `--tokens`) — sem ele não gera. PNG exige Playwright/Chromium no host (`--png`); medição de encaixe exige Inter instalada e PIL. Rota alternativa para wiki é Kroki (Mermaid, d2) com `aplicacao/mermaid-familias.mmd`.
 ---
 
 # Diagrama — figura de arquitetura pela régua do DS

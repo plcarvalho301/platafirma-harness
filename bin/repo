@@ -46,14 +46,19 @@
 # escreve: git=repo
 # (recursos pelo enum de ferramental_recurso; o forge - origin, PR - pende id proprio, e ate la sai como repo; commitar le o log da porta em arquivo-local)
 # consome: porta@ops-log
-# ambiente: PF_REPO_RAIZ[=$HOME/AI] porta · PF_CADEIRA porta (lida) · PF_SESSAO porta (lida) · PF_OPS_LOG_DIR[=$HOME/AI/var/log/ops] porta · HOME
+# ambiente: PF_BANCADA[sem default; senao a linha de $HOME/.config/platafirma/bancada; ausente = exit 3] porta · PF_ARQUIVO_BANCADA[=$HOME/.config/platafirma/bancada] porta · PF_RELEASE[=/opt/platafirma/current] porta (registro de familias: URL do forge em abrir/clonar) · PF_CADEIRA porta (lida) · PF_SESSAO porta (lida) · OPS_LOG_DIR[=$PF_INSTANCIA/var/log/ops] porta (PF_OPS_LOG_DIR lido so como alias) · PF_INSTANCIA[=/srv/platafirma/casa] porta · HOME
 # depende: git · gh (pr-*, empurrar, atualizar, clonar) · rede ao forge
 # substitui: git -C … ls-files|grep|log|diff|show|status|checkout -b|commit|push|fetch · gh pr create|list|view|diff|merge
 # conforme: sim
 set -uo pipefail
 
-RAIZ="${PF_REPO_RAIZ:-$HOME/AI}"
+# Raizes da casa (card #3010): a bancada vem de pf_bancada, sem default; o log da porta
+# e o registro de familias derivam da instancia e da release.
+. "$(dirname "$(readlink -f "$0")")/../lib/raizes.sh"
+
 VERBO="$(basename "$0")"
+BANCADA=""   # preenchida por declara_bancada, depois de uso/ato validados
+GH_OWNER="plcarvalho301"
 COMO_JSON=0
 
 # Resolução de binário real uma vez, evitando shims no PATH da porta
@@ -93,7 +98,7 @@ uso:
   repo pr-merge  <repo> <numero> [--squash|--merge|--rebase] [--forcar]
   repo git       <repo> <args…>
 
-raiz de trabalho: PF_REPO_RAIZ[=$HOME/AI]
+bancada: PF_BANCADA[sem default] (exit 3)
 exit: 0 achou/fez · 1 nao existe/negativo · 2 uso · 3 dependencia · 4 politica · 5 indeterminavel
 EOF
 }
@@ -117,31 +122,77 @@ morre() {
   exit "$rc"
 }
 
-# Resolução de bancada: var/wt/<repo>/<cadeira> (arq:0109, arq:0110).
-# Fallback a $RAIZ/<repo> com aviso enquanto o worktree não existe.
+# Bancada declarada pela conta (desenho §6/§9). Sem declaracao: exit 3, nunca criacao
+# silenciosa. Nenhum ato cria diretorio aqui; so abrir e clonar criam, e so ao clonar.
+declara_bancada() {
+  if ! BANCADA="$(pf_bancada)"; then
+    case " $* " in
+      *" --json "*) python3 -c 'import sys, json; print(json.dumps({"erro": sys.argv[1]}))' "bancada nao declarada" ;;
+    esac
+    exit 3
+  fi
+  case "$BANCADA" in
+    /*) BANCADA="${BANCADA%/}" ;;
+    *) printf '%s: bancada declarada nao e caminho absoluto: %s\n' "$VERBO" "$BANCADA" >&2; exit 3 ;;
+  esac
+}
+
+# URL do forge de um repo: registro de familias da release, senao a URL canonica.
+# Nunca lida de clone local (remote de clone de bancada nao e fonte).
+url_forge() {
+  local nome="$1" reg="$PF_RELEASE/harness/registro/familias.json" url=""
+  if [ -r "$reg" ]; then
+    url="$(python3 -c '
+import sys, json
+try:
+    d = json.load(open(sys.argv[1], encoding="utf-8"))
+except Exception:
+    sys.exit(0)
+if isinstance(d, dict) and isinstance(d.get("familias"), (dict, list)):
+    d = d["familias"]
+e = None
+if isinstance(d, dict):
+    e = d.get(sys.argv[2])
+elif isinstance(d, list):
+    for x in d:
+        if isinstance(x, dict) and sys.argv[2] in (x.get("familia"), x.get("nome"), x.get("repo")):
+            e = x
+            break
+if isinstance(e, dict):
+    e = e.get("url") or e.get("forge") or e.get("origem")
+if isinstance(e, str) and e:
+    print(e)
+' "$reg" "$nome" 2>/dev/null)"
+  fi
+  [ -n "$url" ] || url="https://github.com/$GH_OWNER/$nome.git"
+  printf '%s' "$url"
+}
+
+# Resolução de bancada: <bancada>/wt/<repo>/<cadeira> (arq:0109, arq:0110).
+# Fallback a <bancada>/<repo> com aviso enquanto o worktree não existe.
 bancada_de() {
   local nome="$1"
   local cadeira="${PF_CADEIRA:-}"
   cadeira="${cadeira#claudinho-}"
   cadeira="${cadeira#claudinha-}"
-  if [ -n "$cadeira" ] && [ -d "$RAIZ/var/wt/$nome/$cadeira" ] && [ -e "$RAIZ/var/wt/$nome/$cadeira/.git" ]; then
-    printf '%s/var/wt/%s/%s' "$RAIZ" "$nome" "$cadeira"
+  if [ -n "$cadeira" ] && [ -d "$BANCADA/wt/$nome/$cadeira" ] && [ -e "$BANCADA/wt/$nome/$cadeira/.git" ]; then
+    printf '%s/wt/%s/%s' "$BANCADA" "$nome" "$cadeira"
     return 0
   fi
-  if [ -d "$RAIZ/$nome" ]; then
+  if [ -d "$BANCADA/$nome" ]; then
     if [ -n "$cadeira" ]; then
-      printf '%s: aviso: worktree var/wt/%s/%s nao existe — usando fallback %s/%s\n' "$VERBO" "$nome" "$cadeira" "$RAIZ" "$nome" >&2
+      printf '%s: aviso: worktree wt/%s/%s nao existe — usando fallback %s/%s\n' "$VERBO" "$nome" "$cadeira" "$BANCADA" "$nome" >&2
     else
-      printf '%s: aviso: PF_CADEIRA nao definida — usando fallback %s/%s\n' "$VERBO" "$RAIZ" "$nome" >&2
+      printf '%s: aviso: PF_CADEIRA nao definida — usando fallback %s/%s\n' "$VERBO" "$BANCADA" "$nome" >&2
     fi
   fi
-  printf '%s/%s' "$RAIZ" "$nome"
+  printf '%s/%s' "$BANCADA" "$nome"
 }
 
 listar_repos() {
   local r=()
-  if [ -d "$RAIZ" ]; then
-    for d in "$RAIZ"/*; do
+  if [ -d "$BANCADA" ]; then
+    for d in "$BANCADA"/*; do
       if [ -e "$d/.git" ]; then
         r+=("$(basename "$d")")
       fi
@@ -183,7 +234,7 @@ clone_de() {
   fi
 
   case "$nome" in
-    */*|.*|*..*) morre "nome de repo invalido: '$nome' — e slug dentro de $RAIZ, nao caminho" 4 ;;
+    */*|.*|*..*) morre "nome de repo invalido: '$nome' — e slug dentro da bancada $BANCADA, nao caminho" 4 ;;
     *[!A-Za-z0-9._-]*) morre "nome de repo invalido: '$nome' — use [A-Za-z0-9._-]" 4 ;;
   esac
 
@@ -201,10 +252,10 @@ clone_de() {
   fi
 
   local real; real="$(realpath "$alvo" 2>/dev/null)" || morre "nao resolvi '$alvo'" 4
-  local raiz_real; raiz_real="$(realpath "$RAIZ" 2>/dev/null || printf '%s' "$RAIZ")"
+  local raiz_real; raiz_real="$(realpath "$BANCADA" 2>/dev/null || printf '%s' "$BANCADA")"
   case "$real/" in
-    "$RAIZ"/*|"$raiz_real"/*) : ;;
-    *) morre "'$nome' resolve para $real, fora da raiz $RAIZ" 4 ;;
+    "$BANCADA"/*|"$raiz_real"/*) : ;;
+    *) morre "'$nome' resolve para $real, fora da bancada $BANCADA" 4 ;;
   esac
 
   if ! "$GIT" -C "$real" rev-parse --git-dir >/dev/null 2>&1; then
@@ -302,7 +353,7 @@ print(json.dumps({"bancadas": {r["repo"]: r for r in recs}}, indent=2))' <<<"$(p
       return 0
     fi
 
-    printf 'clones em %s\n' "$RAIZ"
+    printf 'clones em %s\n' "$BANCADA"
     for r in "${repos[@]}"; do
       local c; c="$(bancada_de "$r")"
       local ramo sujo
@@ -702,22 +753,30 @@ ato_atualizar() {
     "$("$GIT" -C "$c" log -1 --format='%h %s')"
 }
 
+# Clone base <bancada>/<nome> a partir de <url>. Cria a bancada se ela nao existe
+# (apagar a bancada = o proximo abrir/clonar refaz). Chamado so por atos de escrita.
+clona_base() {
+  local url="$1" nome="$2"
+  [ -e "$BANCADA/$nome" ] && morre "'$BANCADA/$nome' ja existe — nao sobrescrevo clone" 3
+  mkdir -p "$BANCADA" || morre "nao criei a bancada $BANCADA" 3
+  env PATH="$PATH_FORGE" "$GIT" clone "$url" "$BANCADA/$nome" || morre "git clone falhou: $url" 3
+}
+
 ato_clonar() {
   local origem="${1:-}" nome="${2:-}" url
   [ -n "$origem" ] || uso
   case "$origem" in
     https://*|git@*|file://*|/*|./*) url="$origem" ;;
     */*) url="https://github.com/$origem.git" ;;
-    *) morre "origem invalida: '$origem' — use uma URL ou owner/nome" 2 ;;
+    *[!A-Za-z0-9._-]*|.*) morre "origem invalida: '$origem' — use uma URL, owner/nome ou o nome do repo" 2 ;;
+    *) url="$(url_forge "$origem")" ;;
   esac
   [ -n "$nome" ] || { nome="$(basename "$origem")"; nome="${nome%.git}"; }
   case "$nome" in
     */*|.*|*..*|*[!A-Za-z0-9._-]*) morre "nome de destino invalido: '$nome'" 4 ;;
   esac
-  [ -e "$RAIZ/$nome" ] && morre "'$RAIZ/$nome' ja existe — nao sobrescrevo clone" 3
-  mkdir -p "$RAIZ" || morre "nao criei a raiz $RAIZ" 3
-  env PATH="$PATH_FORGE" "$GIT" clone "$url" "$RAIZ/$nome" || morre "git clone falhou" 3
-  printf 'clonado: %s -> %s (ramo %s)\n' "$url" "$RAIZ/$nome" "$(ramo_atual "$RAIZ/$nome")"
+  clona_base "$url" "$nome"
+  printf 'clonado: %s -> %s (ramo %s)\n' "$url" "$BANCADA/$nome" "$(ramo_atual "$BANCADA/$nome")"
 }
 
 cmd_abrir() {
@@ -726,7 +785,7 @@ cmd_abrir() {
   shift || true
 
   case "$nome" in
-    */*|.*|*..*) morre "nome de repo invalido: '$nome' — e slug dentro de $RAIZ, nao caminho" 4 ;;
+    */*|.*|*..*) morre "nome de repo invalido: '$nome' — e slug dentro da bancada $BANCADA, nao caminho" 4 ;;
     *[!A-Za-z0-9._-]*) morre "nome de repo invalido: '$nome' — use [A-Za-z0-9._-]" 4 ;;
   esac
 
@@ -764,10 +823,16 @@ cmd_abrir() {
   cadeira="${cadeira#claudinha-}"
   [ -n "$cadeira" ] || morre "dependência ausente: PF_CADEIRA não definida — abrir exige cadeira" 3
 
-  local clone_raiz="$RAIZ/$nome"
-  [ -d "$clone_raiz" ] && [ -e "$clone_raiz/.git" ] || morre "repositório desconhecido: '$nome'" 2
+  local clone_raiz="$BANCADA/$nome"
+  if [ ! -e "$clone_raiz" ]; then
+    # Bancada ou clone base ausente: clona do forge (registro de familias da release).
+    local url; url="$(url_forge "$nome")"
+    clona_base "$url" "$nome"
+    printf 'clonado: %s -> %s\n' "$url" "$clone_raiz"
+  fi
+  [ -d "$clone_raiz" ] && [ -e "$clone_raiz/.git" ] || morre "repositório desconhecido: '$nome' — $clone_raiz existe e nao e clone" 2
 
-  local wt_dir="$RAIZ/var/wt/$nome/$cadeira"
+  local wt_dir="$BANCADA/wt/$nome/$cadeira"
 
   if [ -d "$wt_dir" ] && [ -e "$wt_dir/.git" ]; then
     printf 'bancada já aberta: %s (@ %s)\n' "$wt_dir" "$(ramo_atual "$wt_dir")"
@@ -945,7 +1010,8 @@ ato_commitar() {
       morre "dependência ausente: PF_SESSAO ausente para commitar sem caminho — nomeie os caminhos ou abra a sessão com \`monta_sessao\`" 3
     fi
 
-    local log_dir="${PF_OPS_LOG_DIR:-${OPS_LOG_DIR:-${RAIZ}/var/log/ops}}"
+    # OPS_LOG_DIR e o nome unico do log da porta; PF_OPS_LOG_DIR so como alias antigo
+    local log_dir="${OPS_LOG_DIR:-${PF_OPS_LOG_DIR:-$PF_INSTANCIA/var/log/ops}}"
     local py_out rc_py
     py_out="$(python3 -c '
 import sys, os, glob, json
@@ -954,6 +1020,7 @@ log_dir = sys.argv[1]
 sessao_id = sys.argv[2]
 repo_root = os.path.abspath(sys.argv[3])
 repo_nome = sys.argv[4]
+bancada = os.path.realpath(sys.argv[5])
 
 if not os.path.isdir(log_dir) or not os.access(log_dir, os.R_OK):
     sys.exit(3)
@@ -991,12 +1058,16 @@ for f in readable:
                             rel = os.path.relpath(p_norm, repo_root)
                     elif p_norm == repo_nome:
                         continue
-                    elif p_norm.startswith(repo_nome + os.sep):
+                    elif p_norm.startswith(repo_nome + os.sep) and \
+                            os.path.normpath(os.path.join(bancada, repo_nome)) == repo_root:
                         rel = p_norm[len(repo_nome) + 1:]
                     else:
-                        cand = os.path.normpath(os.path.join(repo_root, p_norm))
-                        if cand.startswith(repo_root + os.sep) and os.path.exists(cand):
-                            rel = os.path.relpath(cand, repo_root)
+                        # relativo a bancada (wt/<repo>/<cadeira>/...) ou ao proprio clone
+                        for base in (bancada, repo_root):
+                            cand = os.path.normpath(os.path.join(base, p_norm))
+                            if cand.startswith(repo_root + os.sep) and os.path.exists(cand):
+                                rel = os.path.relpath(cand, repo_root)
+                                break
                     if rel and not rel.startswith(".."):
                         caminhos.add(rel)
     except Exception:
@@ -1004,7 +1075,7 @@ for f in readable:
 
 for p in sorted(caminhos):
     print(p)
-' "$log_dir" "$PF_SESSAO" "$c" "$nome")"
+' "$log_dir" "$PF_SESSAO" "$c" "$nome" "$BANCADA")"
     rc_py=$?
 
     if [ "$rc_py" -eq 3 ]; then
@@ -1224,7 +1295,7 @@ ato_sanear() {
     local c; c="$(clone_de "$alvo")" || exit $?
     dirs=("$c")
   else
-    for d in "$RAIZ"/*/; do
+    for d in "$BANCADA"/*/; do
       [ -e "${d%/}/.git" ] && dirs+=("${d%/}")
     done
   fi
@@ -1334,6 +1405,11 @@ done
 
 cmd="$1"
 shift
+
+case "$cmd" in
+  estado|listar|ler|procurar|historico|diff|ramo|commitar|empurrar|atualizar|abrir|clonar|sanear|pr-abrir|pr-listar|pr-ver|pr-diff|pr-merge|git)
+    declara_bancada "$@" ;;
+esac
 
 case "$cmd" in
   estado)    cmd_estado "$@" ;;

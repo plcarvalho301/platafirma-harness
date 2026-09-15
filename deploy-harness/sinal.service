@@ -4,7 +4,10 @@ Documentation=https://tarefas.platafirma.org/tasks/391
 
 [Service]
 Type=oneshot
-ExecStart=%h/AI/platafirma-harness/bin/sinal
+# Da release, nunca de clone (card #3010): a unit sobrevive a bancada apagada.
+WorkingDirectory=/opt/platafirma/current/harness
+Environment=PATH=/opt/platafirma/current/harness/bin:/usr/local/bin:/usr/bin:/bin
+ExecStart=/opt/platafirma/current/harness/bin/sinal
 # O verbo sai 1 quando ha servico fora — que e informacao, nao falha da coleta.
 # Sem isto o systemd marcaria a unit como failed toda vez que a plataforma
 # estivesse degradada, e o proprio instrumento viraria ruido.

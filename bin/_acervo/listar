@@ -251,11 +251,14 @@ def listar_ferramental_tools():
     """
     whitelist = _le_whitelist_oficio()
     marcas = _marcadores_oficio()
-    # Binario e o que o PATH da porta resolve (ops-server injeta ~/AI/bin e
-    # ~/.local/bin): `fila` e symlink em ~/AI/bin -> fila_streams.py, nao mora em bin/.
+    # Binario e o que o PATH da porta resolve: a porta injeta o bin/ da release no ar
+    # (<release>/harness/bin, estavel entre promocoes). Depois, o bin/ desta arvore e o
+    # PATH herdado — nao ha mais diretorio de symlinks de verbos.
     import shutil
-    casa = os.path.expanduser("~")
-    caminho = ":".join([os.path.join(casa, "AI", "bin"), os.path.join(casa, ".local", "bin"),
+    sys.path.insert(0, os.path.join(
+        os.path.dirname(os.path.dirname(os.path.dirname(os.path.realpath(__file__)))), "lib"))
+    from raizes import release
+    caminho = ":".join([str(release() / "harness" / "bin"),
                         os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
                         os.environ.get("PATH", "")])
     itens = []

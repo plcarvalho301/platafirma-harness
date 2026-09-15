@@ -10,7 +10,13 @@ import sys
 import glob
 import datetime
 
-REPO = os.environ.get("MINUTA_REPO") or os.path.expanduser("~/AI/platafirma-arquitetura")
+# Leitura fria le a PRODUCAO: a familia arquitetura na release no ar (acompanha
+# origin/main), nunca a bancada (card #3010). MINUTA_REPO aponta outro checkout (teste).
+sys.path.insert(0, os.path.join(
+    os.path.dirname(os.path.dirname(os.path.dirname(os.path.realpath(__file__)))), "lib"))
+from raizes import release  # noqa: E402
+
+REPO = os.environ.get("MINUTA_REPO") or str(release() / "arquitetura")
 DIR = os.path.join(REPO, "minutas")
 PLACEHOLDER_CONV = "<a preencher pela própria cadeira>"
 PLACEHOLDER_ABRE = "<escreva aqui antes de circular>"

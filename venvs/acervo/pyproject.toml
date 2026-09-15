@@ -1,0 +1,16 @@
+# Venv `acervo` da release (desenho #3010 §2): /opt/platafirma/venv/acervo-<hash-do-uv.lock>,
+# atalhado em /opt/platafirma/current/venv/acervo. Construido por `release promover` com
+#   uv sync --frozen --no-dev --no-install-project --project venvs/acervo
+#
+# Dependencias MEDIDAS por import dos consumidores do venv acervo:
+#   boto3   bin/_acervo/bancada (shebang /opt/platafirma/current/venv/acervo/bin/python)
+#           bin/_acervo/baixar ("$PF_RELEASE/venv/acervo/bin/python" - <<heredoc>)
+# O resto do que esses dois importam e biblioteca padrao ou lib/raizes.py da arvore.
+[project]
+name = "venv-acervo"
+version = "0"
+description = "Dependencias do venv acervo da release (objeto do acervo no MinIO)."
+requires-python = ">=3.12"
+dependencies = [
+    "boto3>=1.34",
+]

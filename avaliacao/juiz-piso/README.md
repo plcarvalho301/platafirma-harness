@@ -2,8 +2,8 @@
 
 Runner resumível que julga cada seção curta do acervo (**banda <40 tokens**, ~14,5k
 seções) como `real | so-titulo | ancora-ruido` via LLM local (ollama), e grava o
-veredito em `acervo.secao.qualidade`. Produtiza os smokes `tmp/judge_smoke.py` e
-`tmp/juiz_piso.py`.
+veredito em `acervo.secao.qualidade`. Produtiza os smokes `judge_smoke.py` e
+`juiz_piso.py`.
 
 ## Por que a banda <40
 
@@ -16,6 +16,8 @@ suba na recuperação.
 
 1. **`juiz_banda.py`** — lê `banda_lt40.jsonl` (dump da banda), julga item a item,
    faz **checkpoint linha-a-linha** em `juiz_banda.out.jsonl`. **Não toca o banco.**
+   Dump e checkpoint moram em `/srv/platafirma/casa/dados/avaliacao/juiz-piso/`
+   (`$PF_INSTANCIA/dados/avaliacao/juiz-piso/`).
    - Resumível: ao subir, pula ids já julgados; `erro` é re-tentado no próximo lance.
    - Kill-safe: `flush`+`fsync` por item; matar no meio perde no máximo o item em voo.
    - `JUIZ_MODELO`, `JUIZ_BANDA`, `JUIZ_OUT`, `JUIZ_LIMIT` (0=banda inteira), `JUIZ_LOG_A_CADA`.
@@ -42,8 +44,8 @@ Ordenar por `id` mantém a ordem estável entre relances (resumibilidade).
 ## Lançar (longjob, ~3h single-thread a ~1,2–1,5 it/s)
 
 ```
-longjob run juiz-banda-lt40 bash -lc 'cd ~/AI/tmp && python3 juiz_banda.py'
-python3 juiz_aplica.py           # ao terminar: grava + distribuição corrigida
+longjob run juiz-banda-lt40 bash -lc 'python3 /opt/platafirma/current/harness/avaliacao/juiz-piso/juiz_banda.py'
+python3 /opt/platafirma/current/harness/avaliacao/juiz-piso/juiz_aplica.py   # ao terminar: grava + distribuição corrigida
 ```
 
 ## Ressalva

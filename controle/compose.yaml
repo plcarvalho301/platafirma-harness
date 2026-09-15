@@ -19,28 +19,32 @@ services:
     restart: unless-stopped
     command: ["uvicorn", "harness_controle.web:app", "--host", "0.0.0.0", "--port", "8000"]
     environment:
-      PF_RAIZ: /home/claudinho/AI
+      # As duas raizes de producao (card #3010). Os defaults sao absolutos, entao o
+      # HOME do container (que nao e /home/claudinho) nao muda caminho nenhum; elas
+      # vao declaradas mesmo assim para o verbo chamado pela tela ver o mesmo que o
+      # host ve. A bancada nunca entra aqui.
+      PF_RELEASE_RAIZ: ${PF_RELEASE_RAIZ:-/opt/platafirma}
+      PF_INSTANCIA: ${PF_INSTANCIA:-/srv/platafirma/casa}
+      # O pacote mora em /app, fora da arvore do harness: lib/raizes.py vem da release.
+      PYTHONPATH: ${PF_RELEASE_RAIZ:-/opt/platafirma}/current/harness/lib
       AGREGADOR_ESTADO_PATH: /estado/estado.json
       PF_CADEIRA_TELA: claudinho-TI
-      # HOME no container nao e /home/claudinho: sem PF_RAIZ o verbo procura o
-      # ledger de vinculo pelo default do host e nao acha. Antes isso desligava a
-      # validacao em silencio; hoje e erro duro, mas o caminho certo e apontar.
-      FILA_RAIZ: /home/claudinho/AI/fila
       DOCKER_HOST: unix:///run/user/1001/docker.sock
       FILA_REDIS_HOST: ${FILA_REDIS_HOST:-motor-msg}
       FILA_REDIS_PORT: ${FILA_REDIS_PORT:-6379}
     volumes:
-      # Este mount NAO serve mais pro front (card #476: pf-ui.css, pf-ui.js e as
-      # fontes vem COPIADOS pra dentro da imagem, arq:0056, e TOKENS_CSS_PATH
-      # morreu junto). Ele continua porque o resto da tela ainda depende dele:
-      # PF_RAIZ e FILA_RAIZ apontam pra ca, os verbos que as duas acoes chamam
-      # sao ~/AI/platafirma-harness/bin/{fila_streams.py,infra}, e /feito roda
-      # `git log` no clone. Remover isto quebraria acao e leitura, nao estilo.
-      - /home/claudinho/AI:/home/claudinho/AI:ro
+      # A release inteira, somente-leitura, no MESMO caminho absoluto do host. Nao
+      # serve pro front (card #476: pf-ui.css, pf-ui.js e as fontes vem COPIADOS pra
+      # dentro da imagem, arq:0056). Serve o resto da tela: os verbos que as duas
+      # acoes chamam sao <release>/current/harness/bin/{fila_streams.py,infra}, e
+      # /feito roda `git log` na arvore do harness. Monta-se a raiz e nao so
+      # current/, porque current/<curto> e current/venv/<nome> sao symlinks
+      # relativos que apontam para fora de current/ (a familia e o venv por hash).
+      - ${PF_RELEASE_RAIZ:-/opt/platafirma}:${PF_RELEASE_RAIZ:-/opt/platafirma}:ro
       - /run/user/1001/docker.sock:/run/user/1001/docker.sock
       - /usr/bin/docker:/usr/local/bin/docker:ro
       - /run/user/1001:/run/user/1001
-      - /home/claudinho/AI/var/run/harness-controle:/estado:ro
+      - ${PF_INSTANCIA:-/srv/platafirma/casa}/var/run/harness-controle:/estado:ro
     ports:
       - "127.0.0.1:${HARNESS_CONTROLE_PORTA:-8091}:8000"
     networks: [conhecimento, msg]

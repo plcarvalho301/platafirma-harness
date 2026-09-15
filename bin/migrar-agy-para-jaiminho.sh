@@ -22,13 +22,25 @@
 #       sudo bash migrar-agy-para-jaiminho.sh subir
 #       sudo bash migrar-agy-para-jaiminho.sh conferir
 #       sudo bash migrar-agy-para-jaiminho.sh rollback
+#
+# REGISTRO HISTORICO (migracao concluida em 20/08/2026). Naquele estado o compose de
+# origem e a entrada do braco moravam na pasta de trabalho da conta `claudinho`; este
+# arquivo nao nomeia mais essa pasta. Reexecutar exige declarar as duas origens:
+#   MIGRAR_COMPOSE_ORIGEM  diretorio com docker-compose.yml e .env do braco (preparar, rollback)
+#   MIGRAR_ENTRADA_ORIGEM  diretorio da entrada antiga do braco (preparar)
+# sudo nao repassa o ambiente: declare na propria linha, por exemplo
+#   sudo MIGRAR_COMPOSE_ORIGEM=<dir> MIGRAR_ENTRADA_ORIGEM=<dir> bash migrar-agy-para-jaiminho.sh preparar
 set -euo pipefail
 
-CLAUD_HOME=/home/claudinho
 MIG=/srv/pf/mig
 AGY=/srv/pf/agy
 ENTRADA=/srv/pf/entrada-jaiminho
-COMPOSE_ORIGEM="$CLAUD_HOME/AI/platafirma-harness/jaiminho"
+
+origem() {  # imprime a origem declarada ou falha alto; nunca adivinha caminho
+  local nome="$1" valor="${!1:-}"
+  [ -n "$valor" ] || { echo "falta $nome: declare a origem (ver cabecalho)" >&2; exit 3; }
+  printf '%s' "$valor"
+}
 
 como_jaiminho() {
   runuser -u jaiminho -- env XDG_RUNTIME_DIR=/run/user/1003 \
@@ -38,19 +50,23 @@ como_jaiminho() {
 case "${1:-}" in
 
 preparar)   # root. Cria a arvore da conta 1003 FORA de /home/claudinho, que e 750.
+  COMPOSE_ORIGEM="$(origem MIGRAR_COMPOSE_ORIGEM)"
+  ENTRADA_ORIGEM="$(origem MIGRAR_ENTRADA_ORIGEM)"
   install -d -o jaiminho  -g claudinho -m 2770 "$ENTRADA"
   install -d -o jaiminho  -g jaiminho  -m 0755 "$AGY"
   install -d -o claudinho -g claudinho -m 0755 "$MIG"
-  rsync -a "$CLAUD_HOME/AI/var/entrada-jaiminho/" "$ENTRADA/"
+  rsync -a "$ENTRADA_ORIGEM/" "$ENTRADA/"
   cp "$COMPOSE_ORIGEM/docker-compose.yml" "$COMPOSE_ORIGEM/.env" "$AGY/"
   # O compose da conta 1003 tem UM servico. `jaiminho-server` e a rede `wiki` sao do
   # daemon do claudinho e nao atravessam para ca.
   python3 - "$AGY/docker-compose.yml" <<'PY'
+import re
 import sys
 p = sys.argv[1]
 t = open(p).read()
 t = t.split("  # O MCP DELE.")[0].rstrip() + "\n"
-t = t.replace("${HOME}/AI/var/entrada-jaiminho", "/srv/pf/entrada-jaiminho")
+# origem do bind da entrada, qualquer que fosse o prefixo da conta naquele estado
+t = re.sub(r"[^\s:'\"]*/var/entrada-jaiminho", "/srv/pf/entrada-jaiminho", t)
 t += "\nnetworks:\n  saida:\n    driver: bridge\n\nvolumes:\n  casa:\n  credenciais:\n"
 open(p, "w").write(t)
 PY
@@ -96,6 +112,7 @@ conferir)   # ordem importa: primeiro o lado de la vivo, depois o de ca vazio.
 
 rollback)   # dois atos, e e por isso que este recorte e o seguro.
   como_jaiminho 'docker stop jaiminho; docker rm jaiminho' || true
+  COMPOSE_ORIGEM="$(origem MIGRAR_COMPOSE_ORIGEM)"
   runuser -u claudinho -- bash -lc "cd $COMPOSE_ORIGEM && docker compose up -d jaiminho"
   echo "ok: voltou para o daemon do claudinho, com os volumes originais intactos"
   ;;

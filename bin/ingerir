@@ -23,6 +23,8 @@ import requests
 HARNESS_DIR = os.path.dirname(os.path.dirname(os.path.realpath(__file__)))
 if HARNESS_DIR not in sys.path:
     sys.path.insert(0, HARNESS_DIR)
+sys.path.insert(0, os.path.join(HARNESS_DIR, "lib"))
+from raizes import instancia  # noqa: E402
 
 try:
     from recuperacao.adaptadores.motor_acervo_rest import BASE as DEFAULT_BASE, TOKEN as DEFAULT_TOKEN
@@ -47,7 +49,7 @@ USO = """uso:
 
 opções obrigatórias (uma das duas fontes):
   --lote <pasta>         pasta local com arquivos do lote a ingerir
-  --origem <o>           pasta do Drive a espelhar para ~/AI/entrada antes de ingerir;
+  --origem <o>           pasta do Drive a espelhar para $PF_INSTANCIA/var/entrada antes de ingerir;
                          aceita 'gdrive:<caminho>' ou URL drive/.../folders/<ID>
   --motor <inst>         instância do motor (ex: --motor rag)
 
@@ -205,11 +207,11 @@ def _resolver_gdrive(caminho: str) -> str:
 
 def aterrissar_origem(origem: str) -> str:
     # Etapa 1 do runbook ingestao-do-drive, como ato do verbo: espelha uma
-    # pasta do Drive para ~/AI/entrada e devolve o caminho local (o --lote).
+    # pasta do Drive para $PF_INSTANCIA/var/entrada e devolve o caminho local (o --lote).
     remote = _resolver_gdrive(origem)
     slug = _slug_origem(origem)
     data = time.strftime("%Y%m%d")
-    entrada = os.path.join(os.path.expanduser("~/AI/entrada"), f"drive-{data}-{slug}")
+    entrada = os.path.join(str(instancia() / "var" / "entrada"), f"drive-{data}-{slug}")
     os.makedirs(entrada, exist_ok=True)
     sys.stderr.write(f"ingerir: espelhando {origem} -> {entrada}\n")
     try:

@@ -58,20 +58,19 @@ denominador subindo. Antes de dizer que algo se perdeu, contar `motor.vetor`.
 ## MOTOR_DSN — a causa real
 
 O default no código é `postgresql://motor@127.0.0.1:5433/motor`, **sem senha**, e nada
-monta o DSN a partir do `.env`: `deploy/motor/.env` declara a chave como
+monta o DSN a partir do cofre: `/srv/platafirma/casa/segredos/motor/` guarda a chave como
 **`MOTOR_PG_PASSWORD`** (não `POSTGRES_PASSWORD`). Daí o `fe_sendauth: no password
 supplied`. Não é problema de percent-encode, como o #42/#167 registrava.
 
 Contorno em uma chamada:
 
 ```python
-# /tmp/mkdsn.py
-import urllib.parse
-env = {k: v.strip().strip('"').strip("'")
-       for k, v in (l.strip().split('=', 1) for l in open('/home/claudinho/AI/deploy/motor/.env')
-                    if '=' in l and not l.startswith('#'))}
+# /tmp/mkdsn.py — de dentro do verbo que consome; segredo não atravessa a porta
+import subprocess, urllib.parse
+senha = subprocess.run(["seg", "segredo", "ler", "motor/MOTOR_PG_PASSWORD"],
+                       capture_output=True, text=True, check=True).stdout.strip()
 print("postgresql://motor:%s@127.0.0.1:5433/motor"
-      % urllib.parse.quote(env['MOTOR_PG_PASSWORD'], safe=""))
+      % urllib.parse.quote(senha, safe=""))
 ```
 
 `MORADA=nova` continua obrigatório em toda chamada de `rag_extractor.cli`; o default
@@ -110,7 +109,7 @@ docker exec -w /app -e PYTHONPATH=/app rag-extractor-api python /tmp/<script>.py
 # API: localhost:8000, token em $RAG_API_TOKEN do container; docker cp p/ levar script+gabarito
 ```
 
-Scripts prontos (baseline 27/08 do #2882): `~/AI/var/tmp/x2882_m1_compreensao.py`
+Scripts do baseline 27/08 do #2882 (na data em `var/tmp/` da pasta de trabalho da conta): `x2882_m1_compreensao.py`
 (casar/veredito/expandir offline), `x2882_m2d_direto.py` (recall do declarado, 419 conceitos),
 `x2882_m23_recuperacao.py` (T4 travessia, expansao on/off). Gabarito canônico:
 `platafirma-harness/avaliacao/gabarito.jsonl` + `estrato-expansao.jsonl` — o estrato é GERADO
@@ -143,7 +142,7 @@ liga. O bloco lateral (`ontologia.vizinhanca`) é o caso vivido: nasceu desligad
 
 ## Separação de corpus é `motor.indice`, não tabela, schema nem container (08/09/2026)
 
-Medido em `deploy/motor@0f635ef`, o sha que motor-pg serve. Vale toda vez que alguém
+Medido no deploy do motor em `0f635ef` (08/09/2026), o sha que motor-pg serve. Vale toda vez que alguém
 quiser "um índice vetorial separado" para um corpus novo (foi a pergunta de TI sobre
 `acervo.casa`, #3018/#3019):
 
@@ -253,7 +252,7 @@ memória do Project é um diretório de arquivos
 `ToolSearch select:Write,Read` não casa (esta conta não tem ferramenta de arquivo nativa,
 só o connector) e `ToolSearch +memory` só devolve `CronDelete`/`EnterWorktree`/
 `ExitWorktree`, por casamento no texto da descrição. O `read_file`/`write_file` do connector
-só alcançam `/home/claudinho/AI`, e `~/.claude` fica fora. Ou seja: a memória do Project
+só alcançavam, na data, a pasta de trabalho da conta, e `~/.claude` fica fora. Ou seja: a memória do Project
 desta superfície **só se edita pelo próprio modelo quando a superfície serve a ferramenta de
 arquivo**, e a fita do Code em estação emprestada não serve. Contorno NA DATA: nenhum —
 registrado aqui e o passo 3 declarado como não-executável no encerramento. Quem for
@@ -273,8 +272,8 @@ no máximo quando envolver verbo pesado (repo/gh disparam subprocesso git). (4) 
 não estava em `acervo casa` nem no `motor rag casa` — a ingestão de ADRs parou em 108 e a
 0110 era do mesmo dia; contorno foi ler o `.md` direto no git (`repo git log` + `read_file`).
 Régua: decisão do MESMO dia ainda não está no acervo casa, git é a fonte até a próxima
-ingestão. (5) `read_file`: a raiz já é `/home/claudinho/AI`, caminho relativo NÃO leva
-prefixo `AI/` (`AI/platafirma-...` deu "não existe"; `platafirma-...` funcionou). Nenhum
+ingestão. (5) `read_file`: a raiz, na data, já era a pasta de trabalho da conta; caminho relativo NÃO
+repetia o nome dela como prefixo (com o prefixo deu "não existe"; `platafirma-...` funcionou). Nenhum
 precisou de handoff.
 
 12/09/2026 — a transação (BEGIN…ROLLBACK como dry-run, depois COMMIT) foi a rede que

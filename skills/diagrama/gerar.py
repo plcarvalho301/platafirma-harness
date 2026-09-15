@@ -15,8 +15,19 @@ uso: gerar.py <modelo.json> [--vista engenharia|diretoria|ambas] [--saida DIR] [
 """
 import argparse, json, pathlib, re, sys
 
-RAIZ = pathlib.Path(__file__).resolve().parents[3]          # ~/AI
-TOKENS = RAIZ / "platafirma-ui" / "src" / "tokens.css"
+# tokens.css vem da release no ar (atalho estavel /opt/platafirma/current/ui), nunca de clone.
+# A skill tambem viaja sozinha (claude.ai): sem lib/ ao lado, repete os mesmos defaults.
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[2] / "lib"))
+try:
+    from raizes import release  # noqa: E402
+except ImportError:
+    import os
+
+    def release() -> pathlib.Path:
+        raiz = os.environ.get("PF_RELEASE_RAIZ", "/opt/platafirma")
+        return pathlib.Path(os.environ.get("PF_RELEASE", raiz + "/current"))
+
+TOKENS = release() / "ui" / "src" / "tokens.css"
 
 # catálogo — design/diagramas.md §3 (família fixa por categoria)
 CATEGORIA = {

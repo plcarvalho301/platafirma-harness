@@ -12,13 +12,22 @@
 #   (exit 127) e perde o turno sem descobrir o verbo. Erro mudo.
 #
 # A CORREÇÃO É DIRIGIDA PELO DADO, não por lista hardcoded: para cada par
-# (instancia ≠ verbo) do acervo, gera ~/.local/bin/<instancia> que avisa a
-# causa+correção e delega ao verbo. Instância nova cadastrada no golden record ganha
-# o shim na próxima instalação, sem ninguém lembrar de nada. Fonte única de verdade:
-# acervo.ferramental_instancia. Ver docs/administrativo.md §shims-de-instancia.
+# (instancia ≠ verbo) do acervo, gera <shims>/<instancia> que avisa a causa+correção e
+# delega ao verbo. Instância nova cadastrada no golden record ganha o shim na próxima
+# instalação, sem ninguém lembrar de nada. Fonte única de verdade:
+# acervo.ferramental_instancia.
+#
+# ONDE (card #3010, desenho §3/§5): o par vem do dado da instância, então o shim é estado
+# da instância — $PF_INSTANCIA/var/shims. Nunca ~/.local/bin (fora de /opt e /srv) nem a
+# árvore da release (r-x). Quem quer o shim no PATH põe esse diretório DEPOIS do bin da
+# release, para que verbo nenhum seja sombreado por shim.
+#
+# ambiente: PF_INSTANCIA[=/srv/platafirma/casa] · PF_SHIMS_DIR[=$PF_INSTANCIA/var/shims] (teste)
 set -euo pipefail
 
-BINDIR="$HOME/.local/bin"
+. "$(dirname "$(readlink -f "$0")")/../lib/raizes.sh"
+
+BINDIR="${PF_SHIMS_DIR:-$PF_INSTANCIA/var/shims}"
 mkdir -p "$BINDIR"
 
 # Consulta o golden record. Padrão de conexão: o mesmo de bin/_acervo/listar.
@@ -29,7 +38,10 @@ SQL="select ins.slug, vb.slug
      where ins.slug <> vb.slug order by ins.slug;"
 
 pares=""
-if pares=$(docker exec -i "$PG" psql -d "$DB" -U "$USR" -tAF'|' -c "$SQL" 2>/dev/null) && [ -n "$pares" ]; then
+if [ -n "${PF_SHIMS_PARES:-}" ]; then
+  # teste: pares injetados, sem tocar o acervo
+  pares="$PF_SHIMS_PARES"; origem="PF_SHIMS_PARES"
+elif pares=$(docker exec -i "$PG" psql -d "$DB" -U "$USR" -tAF'|' -c "$SQL" 2>/dev/null) && [ -n "$pares" ]; then
   origem="acervo"
 else
   # FAIL-SOFT: acervo fora do ar não pode apagar os shims conhecidos. Os dois casos
@@ -39,8 +51,11 @@ else
 fi
 
 gerar_shim() {
-  local inst="$1" verbo="$2" alvo="$BINDIR/$1"
-  cat > "$alvo" <<SHIM
+  local inst="$1" verbo="$2" alvo tmp
+  case "$inst$verbo" in *[!a-z0-9_-]*) echo "recusa: par fora do slug: $inst|$verbo" >&2; return 0 ;; esac
+  alvo="$BINDIR/$inst"
+  tmp="$(mktemp "$BINDIR/.$inst.XXXXXX")"
+  cat > "$tmp" <<SHIM
 #!/usr/bin/env bash
 # GERADO por _shims-instancia a partir do acervo. Não editar à mão.
 # '$inst' é o nome da INSTÂNCIA (serviço/banco/motor), não um verbo. O verbo é '$verbo'.
@@ -50,11 +65,12 @@ printf '%s\n' \\
   "       redirecionando: $verbo \$*" >&2
 exec "$verbo" "\$@"
 SHIM
-  chmod +x "$alvo"
+  chmod 755 "$tmp"
+  mv -f "$tmp" "$alvo"
   echo "shim: $inst -> $verbo"
 }
 
-echo "materializando shims de instância (fonte: $origem)"
+echo "materializando shims de instância em $BINDIR (fonte: $origem)"
 while IFS='|' read -r inst verbo; do
   [ -n "$inst" ] || continue
   gerar_shim "$inst" "$verbo"

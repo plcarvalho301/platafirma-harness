@@ -213,7 +213,7 @@ mediu — e que `.ssh` ficou fora do alcance.
 
 ## Padrões da casa, medidos
 
-- Secret de stack: ~/AI/var/secrets/<stack>/, dir 700, arquivo 600 — nunca compose/git/fila.
+- Secret de stack: /srv/platafirma/casa/segredos/<stack>/<NOME>, dir 700, arquivo 600 — nunca compose/git/fila.
 - `seg keycloak -- …` (e todo passthrough do `seg`) executa DENTRO do contêiner: endereço
   que vale é o de lá (`http://localhost:8080`), não o publicado no host
   (`127.0.0.1:8180`, que dá `Connection refused` e parece serviço fora do ar).
@@ -237,7 +237,7 @@ Runbook que entrega comando escopado a usuário (`systemctl --user`, docker root
 passando a Onda 5 (#2678) do dono (conta `megafone`, uid 1000) para os serviços (conta
 `claudinho`, uid 1001):
 
-- **`~` mente.** `~/AI/...` vira `/home/megafone/AI` na mão do dono, não `/home/claudinho/AI`.
+- **`~` mente.** `~/<caminho>` vira `/home/megafone/<caminho>` na mão do dono, não `/home/claudinho/<caminho>`.
   Runbook cross-conta usa caminho ABSOLUTO, sempre.
 - **`docker` sem contexto bate no daemon errado.** megafone está no grupo `docker`, então
   `docker compose ... --build` foi para o daemon de SISTEMA, não para o rootless do claudinho
@@ -434,5 +434,5 @@ fora do ar. Contorno: ADRs lidas do clone por read_file (não é o servido; decl
 <chapeu>` com stdin só LÊ — o caderno se escreve no repo (`write_file` neste arquivo) e
 sobe por git; a morada publicada só muda por `publicar-abertura`.
 2026-09-13 — `descansar fita` imprime traceback em "declarado x servido" (`conferir.py`:
-`/home/claudinho/AI/deploy/rastreador-tela/app/rastreador` inexistente); o resto sai.
+`deploy/rastreador-tela/app/rastreador` da pasta de trabalho da conta, inexistente); o resto sai.
 Nenhum contorno; encaminhado a ti (`bin/_release/conferir`).

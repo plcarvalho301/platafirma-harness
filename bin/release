@@ -11,7 +11,7 @@
 # le: ler=release
 # le: procurar=release
 # le: conferir=release,arquivo-local
-# le: promover=release,repo,acervo.casa
+# le: promover=release,acervo.casa
 # le: reverter=release,arquivo-local
 # escreve: estado=nada
 # escreve: listar=nada
@@ -21,17 +21,26 @@
 # escreve: promover=release,arquivo-local
 # escreve: reverter=release,arquivo-local
 # (recursos pelo enum de ferramental_recurso; porta, forge e stack pendem id proprio - dados)
-# ambiente: PF_PROD_RAIZ[=$HOME/AI/var/prod] porta · PF_ABERTURA_RAIZ[=$HOME/AI/var/abertura-publicada] porta · PF_RELEASE_RAIZ[=$HOME/AI/var/release] porta · PF_BIN_DIR[=$HOME/AI/bin] porta · PF_REPO_RAIZ[=$HOME/AI] porta (só a URL do origin na primeira promoção de uma família) · PF_CADEIRA porta (lida) · HOME
-# depende: git · deploy (promover/reverter de família com stack) · acervo (registro de stacks) · python3 · jq · rede ao forge (promover) · porta (hora de arranque) · infra (restart da porta, destacado) · publicar-abertura (motor da familia abertura, #3054). O restart da porta e deste verbo (spec_release §2, rev 6): o observador pf-porta-watch nao disparou em 15/09, 2 de 2 promocoes
-# substitui: readlink current · git -C var/prod/… describe|rev-parse|ls-files|show|grep · git worktree add --detach · ln -sfn + mv -T · chmod -R a-w · conferir <classe> · deploy <stack> promover|reverter
+# ambiente: PF_RELEASE_RAIZ[=/opt/platafirma] porta · PF_RELEASE[=$PF_RELEASE_RAIZ/current] porta (atalhos; verbos irmãos em harness/bin) · PF_INSTANCIA[=/srv/platafirma/casa] porta (pontos em var/release/<familia>) · PF_ABERTURA_DIR[=$PF_INSTANCIA/var/abertura-publicada] porta · PF_FAMILIAS[=registro/familias.json desta árvore] porta · PF_VENVS[=registro/venvs.json desta árvore] porta · PF_TERCEIROS[=registro/terceiros.json desta árvore] porta · PF_CADEIRA porta (lida) · HOME
+# depende: git · deploy (promover/reverter de família com stack) · acervo (registro de stacks) · python3 · jq · uv (venv do lock) · sha256sum + curl (artefato de terceiro pinado; curl só quando o cache em <release>/terceiros não tem) · rede ao forge (promover) · porta (hora de arranque) · infra (restart da porta, destacado) · publicar-abertura (motor da familia abertura, #3054). O restart da porta e deste verbo (spec_release §2, rev 6): o observador pf-porta-watch nao disparou em 15/09, 2 de 2 promocoes
+# substitui: readlink current · git -C /opt/platafirma/<familia>/… describe|rev-parse|ls-files|show|grep · git worktree add --detach · ln -sfn + mv -T · chmod -R a-w · conferir <classe> · deploy <stack> promover|reverter
 # conforme: parcial
 set -euo pipefail
 
-PROD_RAIZ="${PF_PROD_RAIZ:-$HOME/AI/var/prod}"
-ABERTURA_DIR="${PF_ABERTURA_RAIZ:-$HOME/AI/var/abertura-publicada}"
-PONTOS="${PF_RELEASE_RAIZ:-$HOME/AI/var/release}"
-BIN_DIR="${PF_BIN_DIR:-$HOME/AI/bin}"
-REPO_RAIZ="${PF_REPO_RAIZ:-$HOME/AI}"
+# As duas raízes de produção (desenho #3010 §1): release em /opt, instância em /srv. Nada
+# deste verbo lê a bancada — nem para achar a URL de uma família nova.
+AQUI="$(dirname "$(readlink -f "$0")")"
+. "$AQUI/../lib/raizes.sh"
+
+PROD_RAIZ="$PF_RELEASE_RAIZ"                     # <familia>/{.repo.git,<sha>,current,anterior} e venv/
+ATALHOS="$PF_RELEASE_RAIZ/current"               # DIRETÓRIO de atalhos estáveis (arq:0102 D6)
+ABERTURA_DIR="${PF_ABERTURA_DIR:-$PF_INSTANCIA/var/abertura-publicada}"
+PONTOS="$PF_INSTANCIA/var/release"               # registro de promoções; o ponto de volta mora em /opt
+BIN_DIR="$PF_RELEASE/harness/bin"                # verbos irmãos servidos
+FAMILIAS="${PF_FAMILIAS:-$AQUI/../registro/familias.json}"   # familia -> URL do forge
+VENVS="${PF_VENVS:-$AQUI/../registro/venvs.json}"            # venv -> familia + lock
+TERCEIROS="${PF_TERCEIROS:-$AQUI/../registro/terceiros.json}" # artefato -> familia + destino + sha256 + url
+TERCEIROS_CACHE="$PF_RELEASE_RAIZ/terceiros/sha256"          # conteúdo endereçado pelo pino
 CADEIRA="${PF_CADEIRA:-}"
 FAMILIA_BIN="platafirma-harness"   # a única família que serve verbos no PATH e reinicia a porta
 ESPELHO=".repo.git"                 # espelho bare por família; fora do glob de famílias
@@ -72,7 +81,7 @@ uso:
   release promover   abertura [<rev>] [--ensaio]   publica a abertura do harness na rev (sem rev: origin/main)
   release reverter   abertura [<sha>] [--ensaio]   volta a abertura a um sha ja publicado (sem sha: o anterior)
 
-raiz servida: PF_PROD_RAIZ[=$HOME/AI/var/prod]
+raiz servida: PF_RELEASE_RAIZ[=/opt/platafirma] · instancia: PF_INSTANCIA[=/srv/platafirma/casa]
 promover: <rev> (sha ou tag) obrigatória em família com stack; sem rev, avança para origin/main
 exit: 0 achou/fez · 1 nao existe · 2 uso · 3 dependencia · 4 politica · 5 indeterminavel
 FIM
@@ -104,8 +113,9 @@ curto_ou() {  # $1=sha ou vazio  $2=texto quando vazio
   if [ -n "$1" ]; then printf '%s' "${1:0:7}"; else printf '%s' "$2"; fi
 }
 
-# verbos irmãos: só pelo PATH ou pelo PF_BIN_DIR servido — nunca pelo diretório deste script
-# (na bancada, o vizinho seria o da bancada, e um teste chamaria o deploy real)
+# verbos irmãos: só pelo PATH ou pelo bin da release no ar ($PF_RELEASE/harness/bin) — nunca
+# pelo diretório deste script (na bancada, o vizinho seria o da bancada, e um teste chamaria o
+# deploy real)
 achar_verbo() {  # $1=nome ; imprime caminho ou nada
   if command -v "$1" >/dev/null 2>&1; then printf '%s' "$1"
   elif [ -x "$BIN_DIR/$1" ]; then printf '%s' "$BIN_DIR/$1"
@@ -118,7 +128,9 @@ listar_familias() {
     for d in "$PROD_RAIZ"/*; do
       [ -d "$d" ] || continue
       local b; b="$(basename "$d")"
-      [ "$b" != "current" ] || continue
+      # current/ (atalhos) e venv/ nao sao familia; v<N>… e o layout por tag anterior a
+      # primeira promocao por familia, expurgado depois do aceite (desenho #3010 §2)
+      case "$b" in current|venv|v[0-9]*) continue ;; esac
       fams+=("$b")
     done
   fi
@@ -129,6 +141,17 @@ listar_familias() {
 }
 
 RESOLVER_MOTIVO=""
+
+# Ponto de volta de uma família: o symlink <familia>/anterior ao lado do current (plano release);
+# na falta dele, o registro em $PF_INSTANCIA/var/release/<familia>/anterior (a abertura só tem este).
+ponto_de_volta() {  # $1=familia ; imprime o sha (ou o texto gravado) ou nada
+  local f="$1"
+  if [ -L "$PROD_RAIZ/$f/anterior" ]; then
+    basename "$(readlink "$PROD_RAIZ/$f/anterior")"
+  elif [ -f "$PONTOS/$f/anterior" ]; then
+    cat "$PONTOS/$f/anterior" 2>/dev/null || true
+  fi
+}
 
 # Resolução de identidade e validação da forma do servido
 # Retorna: 0 ok, 1 sem current, 2 familia desconhecida, 4 fora da raiz, 5 indeterminavel
@@ -378,14 +401,12 @@ cmd_estado() {
 
     local anterior_str=""
     local ant_sha=""
-    if [ -f "$PONTOS/$f/anterior" ]; then
-      ant_sha="$(cat "$PONTOS/$f/anterior" 2>/dev/null || echo '')"
-      if [ -n "$ant_sha" ]; then
-        if is_hex_sha "$ant_sha"; then
-          anterior_str="anterior: ${ant_sha:0:7}"
-        else
-          anterior_str="anterior: ilegível"
-        fi
+    ant_sha="$(ponto_de_volta "$f")"
+    if [ -n "$ant_sha" ]; then
+      if is_hex_sha "$ant_sha"; then
+        anterior_str="anterior: ${ant_sha:0:7}"
+      else
+        anterior_str="anterior: ilegível"
       fi
     fi
 
@@ -762,18 +783,21 @@ cmd_conferir() {
     fi
     printf 'ref:       %s materializada em %s (classe verbo mede a rev, nao o current)\n' "${sha:0:7}" "$wt/arvore" >&2
     local rc=0
-    PF_BIN_DIR="$wt/arvore/bin" PF_HARNESS_DIR="$wt/arvore" PF_CONFERIR_ORIGEM=0 python3 "$impl" "$classe" "${resto[@]}" || rc=$?
+    PF_PROD_RAIZ="$PROD_RAIZ" PF_BIN_DIR="$wt/arvore/bin" PF_HARNESS_DIR="$wt/arvore" PF_CONFERIR_ORIGEM=0 python3 "$impl" "$classe" "${resto[@]}" || rc=$?
     "$GIT" --git-dir="$esp" worktree remove --force "$wt/arvore" 2>/dev/null || true
     rm -rf "$wt"
     exit "$rc"
   fi
-  exec python3 "$impl" "$classe" "${resto[@]}"
+  # o servido vai explicito (raiz, bin e arvore do harness no ar): a implementacao nao deriva
+  # raiz nenhuma sozinha, e as classes daqui medem a release, nunca a bancada
+  PF_PROD_RAIZ="$PROD_RAIZ" PF_BIN_DIR="$BIN_DIR" PF_HARNESS_DIR="$PF_RELEASE/harness" \
+    exec python3 "$impl" "$classe" "${resto[@]}"
 }
 
 # ---- promoção: helpers -----------------------------------------------------------
 
 # stacks da família no registro (acervo.stack), só as que promovem por `deploy promover`.
-# Sai em STACKS_PROMOVER (via promover) e STACKS_FORA (aponta clone de trabalho: via up).
+# Sai em STACKS_PROMOVER (via promover) e STACKS_FORA (reversao declarada por outra via: fora da promocao).
 STACKS_PROMOVER=()
 STACKS_FORA=()
 ler_stacks_da_familia() {
@@ -834,13 +858,31 @@ atualizar_espelho() {  # $1=esp ; fetch do origin + expurgo do fossil; 0 ok, 3 f
   return 0
 }
 
-# garante o espelho bare da família; primeira vez clona da URL do origin da bancada
+# URL do forge da família, declarada na release (registro/familias.json: familia -> URL).
+# Nunca lida de clone: a bancada pode não existir, e a produção não percebe (desenho #3010 §6).
+url_da_familia() {  # $1=familia ; imprime a URL ou nada; 3 se o registro não se lê
+  [ -r "$FAMILIAS" ] || return 3
+  jq -r --arg f "$1" '.[$f] // empty | select(type == "string")' "$FAMILIAS" 2>/dev/null || return 3
+}
+
+# garante o espelho bare da família; primeira vez clona da URL declarada no registro de famílias
 garantir_espelho() {
-  local repo="$1" ensaio="$2" esp; esp="$(espelho_de "$repo")"
+  local repo="$1" ensaio="$2" esp url="" rc_url=0; esp="$(espelho_de "$repo")"
+  url="$(url_da_familia "$repo")" || rc_url=$?
+  if [ "$rc_url" -ne 0 ]; then
+    printf 'release: dependência ausente: registro de famílias ilegível (%s)\n' "$FAMILIAS" >&2
+    return 3
+  fi
   if [ -d "$esp" ]; then
     if [ "$ensaio" -eq 1 ]; then
       printf 'espelho:   %s (sem fetch em ensaio)\n' "$esp"
       return 0
+    fi
+    # espelho nascido de outra origem (clone de bancada, forge antigo) volta ao que a release declara
+    if [ -n "$url" ] && [ "$("$GIT" --git-dir="$esp" remote get-url origin 2>/dev/null || true)" != "$url" ]; then
+      "$GIT" --git-dir="$esp" remote set-url origin "$url" 2>/dev/null \
+        || "$GIT" --git-dir="$esp" remote add origin "$url" 2>/dev/null || true
+      printf 'espelho:   origin realinhado ao registro de famílias (%s)\n' "$url"
     fi
     atualizar_espelho "$esp" || {
       printf 'release: dependência ausente: forge fora do ar (fetch em %s falhou)\n' "$esp" >&2
@@ -848,12 +890,8 @@ garantir_espelho() {
     }
     return 0
   fi
-  local bancada="$REPO_RAIZ/$repo" url=""
-  if [ -d "$bancada/.git" ] || "$GIT" -C "$bancada" rev-parse --git-dir >/dev/null 2>&1; then
-    url="$("$GIT" -C "$bancada" remote get-url origin 2>/dev/null || echo '')"
-  fi
   if [ -z "$url" ]; then
-    printf 'release: erro: família nova sem origem — não há clone de %s em %s para ler a URL do origin\n' "$repo" "$REPO_RAIZ" >&2
+    printf 'release: erro: família fora do registro de famílias — %s não declara %s\n' "$FAMILIAS" "$repo" >&2
     return 2
   fi
   if [ "$ensaio" -eq 1 ]; then
@@ -896,7 +934,7 @@ descende_de_main() {
   "$GIT" --git-dir="$esp" merge-base --is-ancestor "$sha" origin/main 2>/dev/null
 }
 
-# materializa var/prod/<repo>/<sha> como worktree destacado e somente-leitura; idempotente
+# materializa <PF_RELEASE_RAIZ>/<repo>/<sha> como worktree destacado e somente-leitura; idempotente
 materializar() {
   local repo="$1" sha="$2" esp dest; esp="$(espelho_de "$repo")"; dest="$PROD_RAIZ/$repo/$sha"
   if [ -d "$dest" ]; then
@@ -913,47 +951,211 @@ materializar() {
   return 0
 }
 
-trocar_current() {  # $1=repo $2=sha — troca atômica do ponteiro
-  local repo="$1" sha="$2" tmp
-  tmp="$(mktemp -d "$PROD_RAIZ/$repo/.current.XXXXXX")"; rmdir "$tmp"
-  ln -s "$sha" "$tmp"
-  mv -T "$tmp" "$PROD_RAIZ/$repo/current"
+trocar_link() {  # $1=alvo $2=link — troca atômica de um symlink (tmp + rename)
+  local alvo="$1" link="$2" tmp
+  tmp="$(mktemp -d "$(dirname "$link")/.$(basename "$link").XXXXXX")"; rmdir "$tmp"
+  ln -s "$alvo" "$tmp"
+  mv -T "$tmp" "$link"
+}
+
+# anterior e current trocados atômicos, anterior primeiro: em nenhum instante o current muda
+# sem que o ponto de volta já esteja gravado ao lado dele (spec_release §2)
+trocar_current() {  # $1=repo $2=sha $3=sha_que_sai(ou vazio)
+  local repo="$1" sha="$2" ant="${3:-}"
+  if [ -n "$ant" ]; then trocar_link "$ant" "$PROD_RAIZ/$repo/anterior"; fi
+  trocar_link "$sha" "$PROD_RAIZ/$repo/current"
 }
 
 gravar_pontos() {  # $1=repo $2=sha_anterior(ou vazio) $3=sha_novo
-  local repo="$1" ant="$2" novo="$3"
+  local repo="$1" ant="$2" novo="$3" quando
+  quando="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
   mkdir -p "$PONTOS/$repo"
   if [ -n "$ant" ]; then printf '%s\n' "$ant" > "$PONTOS/$repo/anterior"; fi
-  printf '%s %s\n' "$novo" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > "$PONTOS/$repo/atual"
+  printf '%s %s\n' "$novo" "$quando" > "$PONTOS/$repo/atual"
+  printf '%s %s %s\n' "$quando" "${ant:--}" "$novo" >> "$PONTOS/$repo/historico"
 }
 
-assentar_path() {  # só a família que serve verbos
-  local repo="$1"
-  [ "$repo" = "$FAMILIA_BIN" ] || return 0
-  local cur="$PROD_RAIZ/$repo/current"
-  [ -d "$cur/bin" ] || { printf 'PATH:      %s não tem bin/ — nada a assentar\n' "$repo"; return 0; }
-  # PATH que e symlink para working tree e defeito de instalacao (arq:0110 §2): vira diretorio
-  # de symlinks para o servido. O alvo do link (a bancada) nao e tocado.
-  if [ -L "$BIN_DIR" ]; then
-    local alvo_velho; alvo_velho="$(readlink -f "$BIN_DIR" || true)"
-    rm "$BIN_DIR"
-    printf 'PATH:      %s era symlink para %s (working tree) — substituido por diretorio de symlinks ao servido\n' "$BIN_DIR" "$alvo_velho"
+# Atalhos estáveis (arq:0102 D6; desenho #3010 §2): $PF_RELEASE_RAIZ/current é DIRETÓRIO, uma
+# entrada por família (<curto> -> ../<familia>/current), mais politica-acesso -> harness/politica-acesso
+# e venv/<nome> -> ../../venv/<nome>-<hash>. Código, units e PATH citam /opt/platafirma/current/<curto>/…,
+# que atravessa promoções sem ninguém reescrever caminho. Não há diretório de symlinks de verbos:
+# o PATH é $PF_RELEASE/harness/bin, injetado por quem executa (unit, porta, profile.d).
+assentar_atalhos() {  # $1=repo
+  local repo="$1" curto="${1#platafirma-}"
+  if [ -L "$ATALHOS" ]; then
+    # layout por tag (current -> v0.1.0): vira diretório; o que a tag servia segue atalhado
+    # para ela até a própria família ser promovida, para nada cair na virada
+    local velho tmpd e
+    velho="$(readlink -f "$ATALHOS" || true)"
+    tmpd="$(mktemp -d "$PROD_RAIZ/.atalhos.XXXXXX")"
+    if [ -n "$velho" ] && [ -d "$velho" ]; then
+      for e in "$velho"/*; do
+        [ -e "$e" ] || continue
+        ln -s "$e" "$tmpd/$(basename "$e")"
+      done
+    fi
+    chmod 755 "$tmpd"
+    rm "$ATALHOS"
+    mv -T "$tmpd" "$ATALHOS"
+    printf 'atalhos:   %s era symlink para %s (layout por tag) — virou diretório de atalhos\n' "$ATALHOS" "${velho:-?}"
   fi
-  mkdir -p "$BIN_DIR"
-  local n=0 f base
-  for f in "$cur/bin"/*; do
-    [ -f "$f" ] || continue
-    base="$(basename "$f")"
-    ln -sfn "$cur/bin/$base" "$BIN_DIR/$base"
-    n=$((n+1))
+  mkdir -p "$ATALHOS"
+  trocar_link "../$repo/current" "$ATALHOS/$curto"
+  printf 'atalho:    %s -> ../%s/current\n' "$ATALHOS/$curto" "$repo"
+  if [ "$repo" = "$FAMILIA_BIN" ]; then
+    trocar_link "harness/politica-acesso" "$ATALHOS/politica-acesso"
+  fi
+  local v nome
+  for v in "${VENVS_PRONTOS[@]+"${VENVS_PRONTOS[@]}"}"; do
+    nome="${v%-*}"
+    mkdir -p "$ATALHOS/venv"
+    trocar_link "../../venv/$v" "$ATALHOS/venv/$nome"
+    printf 'atalho:    %s -> ../../venv/%s\n' "$ATALHOS/venv/$nome" "$v"
   done
-  for f in "$cur/bin"/_*; do
-    [ -d "$f" ] || continue
-    base="$(basename "$f")"
-    ln -sfn "$cur/bin/$base" "$BIN_DIR/$base"
-    n=$((n+1))
-  done
-  printf 'PATH:      %d entradas de %s apontadas para %s/bin\n' "$n" "$BIN_DIR" "$cur"
+}
+
+# venv/<nome>-<hash-do-lock>, construído do lockfile da rev antes de trocar current (desenho #3010
+# §2). O hash é do CONTEÚDO do lock: rev que não mexe no lock reaproveita o venv pronto. Declaração
+# em registro/venvs.json: {"<nome>": {"familia": "<familia>", "lock": "<caminho na árvore>"}}.
+# Venv falho sai 3 com current intacto; `.pronto` só se grava no fim, então venv pela metade é
+# refeito, nunca servido.
+VENVS_PRONTOS=()
+construir_venv() {  # $1=lock $2=destino
+  local lock="$1" dest="$2" uv
+  uv="$(command -v uv 2>/dev/null || true)"
+  [ -n "$uv" ] || { printf 'release: dependência ausente: uv (constrói venv do lock)\n' >&2; return 3; }
+  case "$(basename "$lock")" in
+    uv.lock)
+      # --no-install-project: a árvore servida é r-x; o código roda dela, o venv só traz dependência
+      UV_PROJECT_ENVIRONMENT="$dest" "$uv" sync -q --frozen --no-dev --no-install-project \
+        --project "$(dirname "$lock")" >&2 ;;
+    *)
+      "$uv" venv -q "$dest" >&2 || return 3
+      if grep -qvE '^[[:space:]]*(#|$)' "$lock"; then
+        "$uv" pip install -q --python "$dest/bin/python" -r "$lock" >&2 || return 3
+      fi ;;
+  esac
+}
+
+construir_venvs() {  # $1=repo $2=sha ; enche VENVS_PRONTOS; 0 ok, 3 falhou
+  local repo="$1" sha="$2" arvore linhas nome lock hash dest
+  arvore="$PROD_RAIZ/$repo/$sha"
+  VENVS_PRONTOS=()
+  [ -r "$VENVS" ] || return 0
+  linhas="$(jq -r --arg f "$repo" 'to_entries[] | select(.key | startswith("_") | not)
+            | select((.value | type) == "object" and .value.familia == $f)
+            | "\(.key)\t\(.value.lock)"' "$VENVS" 2>/dev/null)" || {
+    printf 'release: dependência com outro contrato: registro de venvs não é JSON legível (%s)\n' "$VENVS" >&2
+    return 3
+  }
+  while IFS=$'\t' read -r nome lock; do
+    [ -n "$nome" ] || continue
+    if ! validar_slug "$nome" || [[ "$lock" == /* ]] || [[ "$lock" == *..* ]]; then
+      printf 'release: erro: venv mal declarado em %s: %s (%s)\n' "$VENVS" "$nome" "$lock" >&2
+      return 3
+    fi
+    if [ ! -f "$arvore/$lock" ]; then
+      printf 'venv:      %s — lock %s ausente na rev %s; atalho do venv segue onde estava\n' "$nome" "$lock" "${sha:0:7}"
+      continue
+    fi
+    hash="$(sha256sum "$arvore/$lock" | cut -c1-12)"
+    dest="$PROD_RAIZ/venv/$nome-$hash"
+    if [ -f "$dest/.pronto" ]; then
+      printf 'venv:      %s-%s já construído (lock inalterado)\n' "$nome" "$hash"
+    else
+      if [ -e "$dest" ]; then chmod -R u+w "$dest" 2>/dev/null || true; rm -rf "$dest"; fi
+      mkdir -p "$PROD_RAIZ/venv"
+      if ! construir_venv "$arvore/$lock" "$dest"; then
+        chmod -R u+w "$dest" 2>/dev/null || true; rm -rf "$dest"
+        printf 'release: dependência ausente: venv %s não construiu do lock %s na rev %s — current intacto\n' "$nome" "$lock" "${sha:0:7}" >&2
+        return 3
+      fi
+      : > "$dest/.pronto"
+      chmod -R a-w "$dest"
+      printf 'venv:      %s-%s construído de %s\n' "$nome" "$hash" "$lock"
+    fi
+    VENVS_PRONTOS+=("$nome-$hash")
+  done <<<"$linhas"
+  return 0
+}
+
+# Artefato de terceiro pinado (desenho #3010 §2): entra DENTRO da árvore da rev, no caminho
+# que o código acha por realpath (ex.: terceiros/tokenizers/qwen2.5.json). Declaração em
+# registro/terceiros.json: {"<nome>": {"familia", "destino", "sha256", "url"}}. Fonte do
+# conteúdo: o cache $PF_RELEASE_RAIZ/terceiros/sha256/<pino> (semeável à mão em host sem rede);
+# faltando, baixa da url. Conteúdo que não bate o pino é recusado e nada troca current.
+# A árvore é a-w: abre só os diretórios do caminho, põe o arquivo e fecha de novo.
+sha256_de() { sha256sum "$1" 2>/dev/null | cut -d' ' -f1; }
+
+materializar_terceiros() {  # $1=repo $2=sha ; 0 ok, 3 dependência ausente, 4 conteúdo fora do pino
+  local repo="$1" sha="$2" arvore linhas nome destino pino url alvo cache tmp curl
+  arvore="$PROD_RAIZ/$repo/$sha"
+  [ -r "$TERCEIROS" ] || return 0
+  linhas="$(jq -r --arg f "$repo" 'to_entries[] | select(.key | startswith("_") | not)
+            | select((.value | type) == "object" and .value.familia == $f)
+            | "\(.key)\t\(.value.destino)\t\(.value.sha256)\t\(.value.url // "")"' "$TERCEIROS" 2>/dev/null)" || {
+    printf 'release: dependência com outro contrato: registro de terceiros não é JSON legível (%s)\n' "$TERCEIROS" >&2
+    return 3
+  }
+  while IFS=$'\t' read -r nome destino pino url; do
+    [ -n "$nome" ] || continue
+    if ! validar_slug "$nome" || [[ "$destino" == /* ]] || [[ "$destino" == *..* ]] || [ -z "$destino" ] \
+       || ! [[ "$pino" =~ ^[0-9a-f]{64}$ ]] || { [ -n "$url" ] && [[ "$url" != https://* ]]; }; then
+      printf 'release: erro: terceiro mal declarado em %s: %s (%s)\n' "$TERCEIROS" "$nome" "$destino" >&2
+      return 3
+    fi
+    alvo="$arvore/$destino"
+    if [ -f "$alvo" ] && [ "$(sha256_de "$alvo")" = "$pino" ]; then
+      printf 'terceiro:  %s já na árvore (sha256 %s)\n' "$nome" "${pino:0:12}"
+      continue
+    fi
+    cache="$TERCEIROS_CACHE/$pino"
+    if [ ! -f "$cache" ] || [ "$(sha256_de "$cache")" != "$pino" ]; then
+      curl="$(command -v curl 2>/dev/null || true)"
+      if [ -z "$url" ] || [ -z "$curl" ]; then
+        printf 'release: dependência ausente: terceiro %s fora do cache (%s) e sem %s para baixar — current intacto\n' \
+          "$nome" "$cache" "$([ -z "$url" ] && echo url || echo curl)" >&2
+        return 3
+      fi
+      mkdir -p "$TERCEIROS_CACHE"
+      tmp="$(mktemp "$TERCEIROS_CACHE/.baixando.XXXXXX")"
+      if ! "$curl" -fsSL --proto '=https' --max-time 600 -o "$tmp" "$url"; then
+        rm -f "$tmp"
+        printf 'release: dependência ausente: terceiro %s não baixou de %s — semeie %s e repita; current intacto\n' "$nome" "$url" "$cache" >&2
+        return 3
+      fi
+      local obtido; obtido="$(sha256_de "$tmp")"
+      if [ "$obtido" != "$pino" ]; then
+        rm -f "$tmp"
+        printf 'release: recusa: terceiro %s veio de %s com sha256 %s, pinado %s — current intacto\n' "$nome" "$url" "$obtido" "$pino" >&2
+        return 4
+      fi
+      chmod 444 "$tmp"; mv -f "$tmp" "$cache"
+      printf 'terceiro:  %s baixado para o cache (sha256 %s)\n' "$nome" "${pino:0:12}"
+    fi
+    local d="$arvore" parte abertos=()
+    local -a partes
+    IFS='/' read -ra partes <<<"$(dirname "$destino")"
+    chmod u+w "$d"; abertos+=("$d")
+    for parte in "${partes[@]}"; do
+      [ -n "$parte" ] && [ "$parte" != "." ] || continue
+      d="$d/$parte"
+      if [ -d "$d" ]; then chmod u+w "$d"; else mkdir "$d"; fi
+      abertos+=("$d")
+    done
+    rm -f "$alvo"
+    if cp "$cache" "$alvo.tmp" && mv -f "$alvo.tmp" "$alvo"; then
+      chmod 444 "$alvo"
+    else
+      rm -f "$alvo.tmp"
+      for d in "${abertos[@]}"; do chmod a-w "$d" 2>/dev/null || true; done
+      printf 'release: indeterminável: não consegui pôr o terceiro %s em %s\n' "$nome" "$alvo" >&2
+      return 5
+    fi
+    for d in "${abertos[@]}"; do chmod a-w "$d"; done
+    printf 'terceiro:  %s -> %s (sha256 %s)\n' "$nome" "$destino" "${pino:0:12}"
+  done <<<"$linhas"
+  return 0
 }
 
 achar_deploy() { achar_verbo deploy; }
@@ -983,7 +1185,7 @@ promover_stacks() {  # $1=sha ; usa STACKS_PROMOVER; devolve 0 ou o nome da stac
   for s in "${STACKS_PROMOVER[@]}"; do
     printf 'stack:     %s → deploy %s promover %s\n' "$s" "$s" "${sha:0:7}"
     # stdout do deploy segue pro terminal (build log); stderr vai a um arquivo e e
-    # ecoado logo apos, para o motivo da recusa (ex.: worktree de deploy sujo)
+    # ecoado logo apos, para o motivo da recusa (ex.: segredo ausente na instancia)
     # sobreviver quando o release roda pela porta e o stderr solto se perderia.
     # Sem isto a saida dizia so "stack recusou a promocao", generica, apagando a
     # causa que tem conserto. Arquivo (nao process substitution) evita a corrida
@@ -1036,7 +1238,7 @@ reiniciar_porta() {
 # motor segue sendo bin/publicar-abertura (snapshot do object store, validado, ponteiro
 # atômico, gancho da casa); o release lhe dá a fonte e o registro: lê do ESPELHO do harness,
 # nunca do clone de trabalho (o 14/09 promoveu o passado lendo clone parado), confere que a
-# rev descende de origin/main e grava o ponto de volta em var/release/abertura.
+# rev descende de origin/main e grava o ponto de volta em $PF_INSTANCIA/var/release/abertura.
 rodar_publicador() {  # $@=args do publicar-abertura
   local pub; pub="$(achar_verbo publicar-abertura)"
   if [ -z "$pub" ]; then
@@ -1185,7 +1387,7 @@ gate_conferir_verbo() {  # $1=repo $2=sha_candidato $3=sha_atual(ou vazio)
   local rc=0 reprovados=()
   for v in "${verbos[@]}"; do
     rc=0
-    PF_BIN_DIR="$arvore/bin" PF_HARNESS_DIR="$arvore" PF_CONFERIR_ORIGEM=0 python3 "$impl" verbo "$v" || rc=$?
+    PF_PROD_RAIZ="$PROD_RAIZ" PF_BIN_DIR="$arvore/bin" PF_HARNESS_DIR="$arvore" PF_CONFERIR_ORIGEM=0 python3 "$impl" verbo "$v" || rc=$?
     [ "$rc" -eq 0 ] || reprovados+=("$v")
   done
   if [ "${#reprovados[@]}" -gt 0 ]; then
@@ -1274,7 +1476,7 @@ cmd_promover() {
   if [ -d "$PROD_RAIZ/$repo/$sha" ]; then printf 'checkout:  %s já materializado (imutável, não reescrito)\n' "${sha:0:7}"
   else printf 'checkout:  materializar %s/%s/%s\n' "$PROD_RAIZ" "$repo" "$sha"; fi
   [ "${#STACKS_PROMOVER[@]}" -eq 0 ] || printf 'stacks:    %s (deploy promover)\n' "${STACKS_PROMOVER[*]}"
-  [ "${#STACKS_FORA[@]}" -eq 0 ]     || printf 'stacks:    fora da promoção por release — apontam clone de trabalho (via up): %s\n' "${STACKS_FORA[*]}"
+  [ "${#STACKS_FORA[@]}" -eq 0 ]     || printf 'stacks:    fora da promoção por release — reversão declarada por outra via (deploy <stack> up): %s\n' "${STACKS_FORA[*]}"
   if [ "$ensaio" -eq 1 ]; then
     printf 'ensaio:    nada tocado\n'
     exit 0
@@ -1282,11 +1484,13 @@ cmd_promover() {
 
   exigir_deploy_se_stack || { rc=$?; exit "$rc"; }
   materializar "$repo" "$sha" || { rc=$?; exit "$rc"; }
+  materializar_terceiros "$repo" "$sha" || { rc=$?; exit "$rc"; }
   gate_conferir_verbo "$repo" "$sha" "$atual" || { rc=$?; exit "$rc"; }
+  construir_venvs "$repo" "$sha" || { rc=$?; exit "$rc"; }
   gravar_pontos "$repo" "$atual" "$sha"
-  trocar_current "$repo" "$sha"
+  trocar_current "$repo" "$sha" "$atual"
   printf 'current:   %s → %s\n' "$(curto_ou "$atual" '(nenhum)')" "${sha:0:7}"
-  assentar_path "$repo"
+  assentar_atalhos "$repo"
   local rc_ab=0
   publicar_abertura_da_familia "$repo" "$sha" || rc_ab=$?
 
@@ -1378,7 +1582,7 @@ cmd_reverter() {
       fi
     fi
   else
-    if [ -f "$PONTOS/$repo/anterior" ]; then alvo="$(cat "$PONTOS/$repo/anterior" 2>/dev/null || echo '')"; fi
+    alvo="$(ponto_de_volta "$repo")"
     if ! is_hex_sha "$alvo"; then
       printf 'release: erro: sem rev e sem ponto de volta gravado para %s — não invento para onde voltar\n' "$repo" >&2
       printf 'materializados em %s/%s:\n' "$PROD_RAIZ" "$repo" >&2
@@ -1403,17 +1607,19 @@ cmd_reverter() {
 
   printf '== release reverter %s %s → %s ==\n' "$repo" "$(curto_ou "$atual" '(sem current)')" "${alvo:0:7}"
   [ "${#STACKS_PROMOVER[@]}" -eq 0 ] || printf 'stacks:    %s (deploy promover %s)\n' "${STACKS_PROMOVER[*]}" "${alvo:0:7}"
-  [ "${#STACKS_FORA[@]}" -eq 0 ]     || printf 'stacks:    fora da reversão por release — apontam clone de trabalho (via up): %s\n' "${STACKS_FORA[*]}"
+  [ "${#STACKS_FORA[@]}" -eq 0 ]     || printf 'stacks:    fora da reversão por release — reversão declarada por outra via (deploy <stack> up): %s\n' "${STACKS_FORA[*]}"
   if [ "$ensaio" -eq 1 ]; then
     printf 'ensaio:    nada tocado\n'
     exit 0
   fi
 
   exigir_deploy_se_stack || { rc=$?; exit "$rc"; }
+  materializar_terceiros "$repo" "$alvo" || { rc=$?; exit "$rc"; }
+  construir_venvs "$repo" "$alvo" || { rc=$?; exit "$rc"; }
   gravar_pontos "$repo" "$atual" "$alvo"
-  trocar_current "$repo" "$alvo"
+  trocar_current "$repo" "$alvo" "$atual"
   printf 'current:   %s → %s\n' "$(curto_ou "$atual" '(nenhum)')" "${alvo:0:7}"
-  assentar_path "$repo"
+  assentar_atalhos "$repo"
   local rc_ab=0
   publicar_abertura_da_familia "$repo" "$alvo" || rc_ab=$?
 

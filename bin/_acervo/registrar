@@ -132,20 +132,16 @@ def _le_whitelist():
 
 
 def _resolve(verbo):
-    """Arquivo real do verbo: primeiro o symlink instalado em ~/AI/bin/<slug>
-    (segue para o nome real, ex. fila->fila_streams.py), senao bin/<slug>."""
-    ai_bin = os.path.join(os.path.dirname(os.path.dirname(BIN)), "bin")
-    cand = os.path.join(ai_bin, verbo)
-    if os.path.exists(cand):
-        return os.path.realpath(cand)
+    """Arquivo real do verbo: bin/<slug> da propria arvore (a release no ar e o PATH;
+    nao existe mais diretorio de symlinks de verbos). Symlink e seguido ate o nome real."""
     cand = os.path.join(BIN, verbo)
-    return cand if os.path.isfile(cand) else None
+    return os.path.realpath(cand) if os.path.isfile(cand) else None
 
 
 def registrar_um(verbo):
     path = _resolve(verbo)
     if not path:
-        morre("acervo registrar: nao achei o script de bin/%s (nem ~/AI/bin nem bin/)" % verbo, 3)
+        morre("acervo registrar: nao achei o script de bin/%s em %s" % (verbo, BIN), 3)
     campos, desc = _le_cabecalho(path)
     cap = campos.get("capacidade")
     if not cap:

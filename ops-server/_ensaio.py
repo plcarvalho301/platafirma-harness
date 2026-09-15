@@ -70,7 +70,7 @@ for mid, campos in rc.xrange("caixa:ia"):
         rc.xdel("caixa:ia", mid)
         apagadas += 1
 print(f"\n[limpeza] mensagem de ensaio removida da caixa do Elias: {apagadas}")
-p = subprocess.run([str(s.RAIZ / "bin" / "mesa"), "limpa", "jaiminho"],
+p = subprocess.run([str(s.BIN_VERBOS / "mesa"), "limpa", "jaiminho"],
                    capture_output=True, text=True,
                    env={**os.environ, "PF_CADEIRA": "jaiminho"})
 print("[limpeza] mesa:", (p.stdout or p.stderr).strip())
@@ -88,7 +88,15 @@ print("[limpeza] mesa:", (p.stdout or p.stderr).strip())
 import asyncio
 import json as _json
 import sys
+from pathlib import Path as _P
 from unittest.mock import patch
+
+# Caminhos do ensaio vem da PROPRIA arvore (absolutos): read_file relativo resolve na
+# bancada declarada, e o ensaio nao pode depender de bancada nenhuma.
+_AQUI = _P(__file__).resolve().parent
+_REQ = str(_AQUI / "requirements.txt")
+_ENSAIO = str(_AQUI / "_ensaio.py")
+_SERVER = str(_AQUI / "server.py")
 
 
 def _fake_redis_cls(kv=None, sets=None):
@@ -153,7 +161,7 @@ def test_gate_verbo_roteado_traz_aviso():
 
 def test_gate_fallback_sem_verbo():
     with patch.object(s, "_autoriza", return_value=None):
-        r = asyncio.run(s.run_command(command="git status", cwd="platafirma-harness"))
+        r = asyncio.run(s.run_command(command="git status", cwd=str(_AQUI)))
     assert "aviso" not in r and "lote" not in r
     assert r.get("exit_code") == 0
 
@@ -174,7 +182,8 @@ def test_gate_pipe_cai_no_fallback():
 def test_renome_leva_campo_json_e_retencao():
     import subprocess
     cp = subprocess.run(["acervo", "listar", "ferramental", "--tools"],
-                        capture_output=True, text=True, timeout=30, cwd=str(s.RAIZ))
+                        capture_output=True, text=True, timeout=30, cwd=str(s.CASA),
+                        env=s._env_subprocesso())
     assert cp.returncode == 0, cp.stderr
     itens = _json.loads(cp.stdout)
     by_tool = {i["tool"]: i for i in itens}
@@ -195,18 +204,18 @@ def test_audit_run_command_carrega_identidade():
 
 def test_audit_read_file_carrega_identidade():
     with patch.object(s, "_audit") as _aud, patch.object(s, "_autoriza", return_value=None):
-        s.read_file(path="platafirma-harness/ops-server/requirements.txt", sessao_id="ensaio-sid-abc")
+        s.read_file(path=_REQ, sessao_id="ensaio-sid-abc")
     achou = [c.kwargs for c in _aud.call_args_list if c.kwargs.get("tool") == "read_file"]
     assert achou and all(("sessao_id" in kw and "ordem_id" in kw and "cadeira" in kw) for kw in achou)
 
 
 def test_audit_write_file_carrega_identidade():
-    alvo = "var/tmp/_ensaio_write_probe.txt"
+    alvo = s.TMP_FITA / "_ensaio_write_probe.txt"
     with patch.object(s, "_audit") as _aud, patch.object(s, "_autoriza", return_value=None):
-        s.write_file(path=alvo, content="ensaio\n", sessao_id="ensaio-sid-abc")
+        s.write_file(path=str(alvo), content="ensaio\n", sessao_id="ensaio-sid-abc")
     achou = [c.kwargs for c in _aud.call_args_list if c.kwargs.get("tool") == "write_file"]
     assert achou and all(("sessao_id" in kw and "ordem_id" in kw and "cadeira" in kw) for kw in achou)
-    (s.RAIZ / alvo).unlink(missing_ok=True)
+    alvo.unlink(missing_ok=True)
 
 
 # ======================================================================
@@ -248,7 +257,7 @@ def test_lote_verbo_off_ignora_campo():
 
 def test_lote_run_command_dois_itens_erro_nao_derruba():
     with patch.object(s, "PF_TOOLS_LOTE", True), patch.object(s, "_autoriza", return_value=None):
-        r = asyncio.run(s.run_command(commands=["echo a", "false"], cwd="."))
+        r = asyncio.run(s.run_command(commands=["echo a", "false"], cwd=str(_AQUI)))
     assert r["lote_n"] == 2
     assert r["lote"][0]["exit_code"] == 0
     assert r["lote"][1]["exit_code"] != 0
@@ -257,28 +266,28 @@ def test_lote_run_command_dois_itens_erro_nao_derruba():
 def test_lote_run_command_teto_corta_e_devolve_lote_next():
     with patch.object(s, "PF_TOOLS_LOTE", True), patch.object(s, "_autoriza", return_value=None), \
          patch.object(s, "CAP", 1):
-        r = asyncio.run(s.run_command(commands=["echo a", "echo b", "echo c"], cwd="."))
+        r = asyncio.run(s.run_command(commands=["echo a", "echo b", "echo c"], cwd=str(_AQUI)))
     assert r["lote_next"] is not None
     assert any(item.get("omitido_por_teto") for item in r["lote"])
 
 
 def test_pf_tools_lote_off_ignora_commands():
     with patch.object(s, "PF_TOOLS_LOTE", False), patch.object(s, "_autoriza", return_value=None):
-        r = asyncio.run(s.run_command(command="echo ok", commands=["echo a", "echo b"], cwd="."))
+        r = asyncio.run(s.run_command(command="echo ok", commands=["echo a", "echo b"], cwd=str(_AQUI)))
     assert "lote" not in r
     assert r.get("exit_code") == 0
 
 
 def test_lote_read_file_dois_paths():
     with patch.object(s, "PF_TOOLS_LOTE", True), patch.object(s, "_autoriza", return_value=None):
-        r = s.read_file(paths=["platafirma-harness/ops-server/requirements.txt", "platafirma-harness/ops-server/_ensaio.py"])
+        r = s.read_file(paths=[_REQ, _ENSAIO])
     assert r["lote_n"] == 2
     assert len(r["lote"]) == 2
 
 
 def test_pf_tools_lote_off_ignora_paths():
     with patch.object(s, "PF_TOOLS_LOTE", False), patch.object(s, "_autoriza", return_value=None):
-        r = s.read_file(path="platafirma-harness/ops-server/requirements.txt", paths=["platafirma-harness/ops-server/_ensaio.py"])
+        r = s.read_file(path=_REQ, paths=[_ENSAIO])
     assert "lote" not in r
     assert "content" in r
 
@@ -410,7 +419,7 @@ def test_ops_log_grava_bytes_servidos_e_sha_por_retorno():
     with _derrame_tmp(), patch.object(s, "_autoriza", return_value=None), \
          patch.object(s, "redis") as _rmod, patch.object(s, "_audit") as _aud:
         _rmod.Redis = Fake
-        s.read_file(path="platafirma-harness/ops-server/requirements.txt", sessao_id=_UUID_A)
+        s.read_file(path=_REQ, sessao_id=_UUID_A)
     kw = [c.kwargs for c in _aud.call_args_list if c.kwargs.get("tool") == "read_file"][0]
     assert kw["bytes_servidos"] and kw["sha"], "o servido e o hash sao o que faltava medir"
 
@@ -442,7 +451,7 @@ def test_erro_e_exit_diferente_de_zero_nunca_podam():
 def test_identificador_exato_nao_se_toca():
     """`path` e alca sao identificador: a poda mexe no conteudo, nunca no endereco."""
     Fake = _fake_redis_cls()
-    alvo = "platafirma-harness/ops-server/requirements.txt"
+    alvo = _REQ
     with _derrame_tmp(), patch.object(s, "_autoriza", return_value=None), \
          patch.object(s, "redis") as _rmod:
         _rmod.Redis = Fake
@@ -456,7 +465,7 @@ def test_releitura_identica_serve_aviso_estavel_sem_timestamp():
     with _derrame_tmp(), patch.object(s, "_autoriza", return_value=None), \
          patch.object(s, "redis") as _rmod:
         _rmod.Redis = Fake
-        alvo = "platafirma-harness/ops-server/server.py"
+        alvo = _SERVER
         r1 = s.read_file(path=alvo, sessao_id=_UUID_A)
         r2 = s.read_file(path=alvo, sessao_id=_UUID_A)
         r3 = s.read_file(path=alvo, sessao_id=_UUID_A)
@@ -472,7 +481,7 @@ def test_retorno_curto_nao_deduplica_porque_o_aviso_custaria_mais():
     with _derrame_tmp(), patch.object(s, "_autoriza", return_value=None), \
          patch.object(s, "redis") as _rmod:
         _rmod.Redis = Fake
-        alvo = "platafirma-harness/ops-server/requirements.txt"
+        alvo = _REQ
         s.read_file(path=alvo, sessao_id=_UUID_A)
         r2 = s.read_file(path=alvo, sessao_id=_UUID_A)
     assert r2["poda"]["ledger"] == "curto" and "mcp==" in r2["content"]
@@ -548,7 +557,7 @@ def test_guardrail_de_entrada_quatro_vezes_o_cap():
 
 def test_envelope_enxuto_tira_stderr_vazio_e_cwd_repetido():
     fora = _p.enxuga_envelope({"exit_code": 0, "stderr": {"texto": "", "bytes_total": 0},
-                               "cwd": str(_p.RAIZ), "erro": None, "stdout": {"texto": "x"}})
+                               "cwd": str(_p.CWD_PADRAO), "erro": None, "stdout": {"texto": "x"}})
     assert "stderr" not in fora and "cwd" not in fora and "erro" not in fora
     assert "stdout" in fora
 

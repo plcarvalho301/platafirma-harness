@@ -229,7 +229,9 @@ regras:
     quando: {papel: fornecedor, dominio: plataforma, tipo: operacao}
     acoes: [repo_clonar, repo_ramo, repo_commitar, repo_empurrar, repo_estado,
             repo_sanear, teste_rodar, lint_rodar]
-    sobre: ["platafirma-*/*", "modulo-osint/*", "var/tmp/*"]
+    # Rascunho da fita e caminho da porta desde o card #3010: absoluto na instancia, como em
+    # `fornecedor-le-e-escreve-no-clone`. O relativo `var/tmp/*` casava contra a bancada.
+    sobre: ["platafirma-*/*", "modulo-osint/*", "/srv/platafirma/*/var/tmp/*"]
 
   - id: fornecedor-sem-estado-do-host
     efeito: nega
@@ -353,7 +355,10 @@ regras:
     motivo: "a fabrica constroi dentro do clone do card: le e escreve arquivo de repositorio, e nada fora dele · ordem do dono em 18/08/2026 · vence 2026-11-18"
     quando: {papel: fornecedor, dominio: plataforma, tipo: documento}
     acoes: [read_file, write_file]
-    sobre: ["platafirma-*/*", "modulo-osint/*", "var/tmp/*"]
+    # Caminhos como a porta os recebe desde o card #3010: clone base e worktree relativos a
+    # bancada declarada (<repo>/..., wt/<repo>/<cadeira>/...) e rascunho da fita absoluto na
+    # instancia. Mesmo alcance de antes, no layout novo.
+    sobre: ["platafirma-*/*", "modulo-osint/*", "wt/platafirma-*/*", "wt/modulo-osint/*", "/srv/platafirma/*/var/tmp/*"]
 
   # A porta da fabrica e o card no board (org:0003) — sem estes sub-atos ela recebe
   # trabalho e nao tem como responder. `apagar` e `fechar` ficam de fora: sumir com

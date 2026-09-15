@@ -20,10 +20,15 @@
 # expira calada e a mesma classe de erro das 133 negativas de 31/08 — o fail-closed
 # funciona, o custo e o dia que ninguem viu.
 set -uo pipefail
-KEY="$HOME/AI/var/secrets/jaiminho-app/app.pem"
+. "$(dirname "$(readlink -f "$0")")/../lib/raizes.sh"
+# Chave e log moram na instancia (segredos/<stack>/ e var/log/<servico>/), nunca em
+# arvore de trabalho: a credencial tem de renovar com a bancada apagada.
+KEY="$PF_INSTANCIA/segredos/jaiminho-app/app.pem"
 APP_ID=4762140
 INSTALL_ID=157525921
-LOG="$HOME/AI/var/log/jaiminho-git-token.log"
+LOG="$PF_INSTANCIA/var/log/jaiminho/git-token.log"
+# Sem o diretorio o `>>` do registra falha calado e a FALHA some do log: cria antes.
+mkdir -p "$(dirname "$LOG")" 2>/dev/null || true
 export DOCKER_HOST="${PF_JAIMINHO_DOCKER_HOST:-unix:///run/user/1003/docker.sock}"
 # Casa do braco: volume onde vive o HOME (uid 10001 dentro do contêiner).
 VOLUME_CASA="${PF_JAIMINHO_VOLUME_CASA:-jaiminho-fabrica_casa}"

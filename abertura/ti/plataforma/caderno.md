@@ -119,9 +119,10 @@ reprovam no `conferir`) e duplica lógica. O desenho certo é o redirecionador.
   linha em `acervo.ferramental` e ocupa a capacidade `orfa` (unique no banco: uma
   capacidade, um verbo) — e não há ato de remover, só `docker exec psql` na mão. Alias/
   redirecionador vive só como symlink no PATH, nunca no golden record.
-- **O symlink é o mecanismo:** `~/AI/bin/<nome>` -> o fonte em `platafirma-harness/bin/`.
-  Sem o symlink o redirecionador não existe pro sistema; `write_file` recusa escrever em
-  `~/AI/bin` (é espelho) e não há verbo de `ln` — o symlink é ato de host, na mão.
+- **O symlink é o mecanismo:** `bin/<nome>` -> o fonte, versionado no próprio
+  `platafirma-harness` e servido pela release em `/opt/platafirma/current/harness/bin/`.
+  Sem o symlink promovido o redirecionador não existe pro sistema; a release é r-x e não
+  há verbo de `ln` — o symlink entra por commit e `release promover`.
 - **Um fonte, N nomes (busybox):** se dois redirecionadores compartilham lógica, um só
   arquivo despacha por `argv[0]` e dois symlinks apontam pra ele — o segundo cai como
   alias no `conferir`, que já sabe tratá-lo. Evita a colisão de unique na capacidade.
@@ -135,12 +136,12 @@ linha 630. Vivido em 08/09: 10 verbos íntegros recusados em 10 tentativas.
 
 - **A recusa mente com a cara de quem informa.** `sugestao: null` significa, pelo ofício,
   "verbo que falta — vira card". Estava dizendo isso de `mesa`, `fila` e `infra`, que
-  existem inteiros em `~/AI/bin` (conferido por `read_file`: `bin/mesa`, 26878 B). Cadeira
+  existiam inteiros no diretório de verbos da casa (conferido por `read_file` em 08/09: `bin/mesa`, 26878 B). Cadeira
   obediente abriria card pedindo verbo que já existe — o oposto do que o ofício quer.
 - **A sessão PARECE viva:** `read_file`, `write_file` e `monta_sessao` não passam pelo
   whitelist e seguem servindo. Dá para trabalhar meio turno acreditando que moveu card e
   fechou mesa sem que nada tenha acontecido.
-- **O log da porta data a quebra sem precisar de journal.** `var/log/ops/ops-<data>.jsonl`
+- **O log da porta data a quebra sem precisar de journal.** `/srv/platafirma/casa/var/log/ops/ops-<data>.jsonl`
   grava `evento: "verbo"` com `exit_code` nas execuções e `evento: "sem_verbo"` nas recusas:
   bisseção por `offset` no `read_file` achou a última OK (13:24:45) e a primeira recusa
   (13:34:42). Quinze minutos, sem shell.

@@ -58,9 +58,9 @@ ficar boa; o eixo 1 é que a torna boa, em paralelo.
 
 Só o que a régua exige para funcionar. Detalhe operacional completo: `caderno.md`.
 
-- **Invocação da CLI que não mente**: `MORADA=nova ~/AI/.venv/bin/python -m
-  rag_extractor.cli <sub>`. `rag_extractor` é servido pelo `.venv` raiz — NÃO por
-  `.venv-embed`/`.venv-acervo` (medido 26/08: ModuleNotFoundError nesses dois).
+- **Invocação da CLI que não mente**: `MORADA=nova /opt/platafirma/current/venv/rag/bin/python -m
+  rag_extractor.cli <sub>`. `rag_extractor` é servido pelo venv `rag` da release — NÃO
+  pelo de embed nem pelo `acervo` (medido 26/08 nos venvs de então: ModuleNotFoundError nesses dois).
 - **`MORADA=nova` é obrigatório em toda chamada** — o default `velha` aponta para
   tabela morta (#167); falha em silêncio, não em erro.
 - **Dois bancos**: `rag-extractor-pg` (5432, schema `acervo`, sem embedding) e

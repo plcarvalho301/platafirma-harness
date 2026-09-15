@@ -95,7 +95,7 @@ _txn_atual: contextvars.ContextVar[str] = contextvars.ContextVar("txn", default=
 def exigido(nome: str) -> str:
     valor = os.environ.get(nome)
     if not valor:
-        raise SystemExit(f"falta a variavel {nome} — ela desce do cofre pelo .env da stack")
+        raise SystemExit(f"falta a variavel {nome} — ela desce do cofre da instancia pelo --env-file que o deploy materializa")
     return valor
 
 

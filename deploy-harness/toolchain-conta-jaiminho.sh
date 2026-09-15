@@ -17,8 +17,12 @@
 #     isolamento e o uid, e ler um binario de /usr/bin nao o afrouxa — a conta nao
 #     escreve la, e `npm config prefix` = /usr so pesa em `npm i -g`, que a conta nao
 #     faz (dependencia de projeto vive em node_modules, sob o HOME).
-#   - /home/claudinho e 0750: a conta NAO le ~/AI. O repo entra no perimetro pelo
-#     entreposto /srv/pf/entrada-jaiminho, como bundle git — nao por leitura lateral.
+#   - /home/claudinho e 0750: a conta NAO le a pasta de trabalho da conta claudinho
+#     (medido em 07/09). O repo entra no perimetro pelo entreposto
+#     /srv/pf/entrada-jaiminho, como bundle git — nao por leitura lateral.
+#   - Desde o card #3010 o bundle sai do espelho da release
+#     (/opt/platafirma/platafirma-ui/.repo.git), e o canario do perimetro e o cofre da
+#     instancia (/srv/platafirma/casa/segredos, 0700): /opt e legivel por desenho.
 #
 # O QUE ESTE SCRIPT NAO E: caminho de producao para disparar build. Pela porta
 # so-verbo (spec_porta-so-verbo §3.5) `npm`/`node`/`npx` nao tem verbo que os cubra
@@ -30,20 +34,24 @@
 # reaproveitar o que uma corrida anterior deixou em ~/.npm.
 set -uo pipefail
 
+. "$(dirname "$(readlink -f "$0")")/../lib/raizes.sh"
+
 CONTA=jaiminho
 UID_CONTA=1003
 ENTREPOSTO=/srv/pf/entrada-jaiminho/3005
 TRABALHO=/home/jaiminho/trabalho/3005
-REPO_FONTE=${REPO_FONTE:-/home/claudinho/AI/platafirma-ui}
 REPO_NOME=platafirma-ui
+REPO_FONTE=${REPO_FONTE:-$PF_RELEASE_RAIZ/$REPO_NOME/.repo.git}
+# Canario do perimetro: o que a conta NAO pode ler. /opt e legivel por desenho.
+PERIMETRO=${PERIMETRO:-$PF_INSTANCIA/segredos}
 SUBDIR=src/base          # o unico pacote da stack com script de build de verdade
 
 falhou=0
 ok()    { printf '  ok   %s\n' "$*"; }
 falha() { printf '  FALHA %s\n' "$*"; falhou=1; }
 
-# Roda na conta, sempre a partir de /tmp: herdar cwd de ~/AI da EACCES no uid 1003
-# antes mesmo de o comando comecar (git morre em `failed to stat`).
+# Roda na conta, sempre a partir de /tmp: herdar cwd da casa de claudinho (0750) da
+# EACCES no uid 1003 antes mesmo de o comando comecar (git morre em `failed to stat`).
 na_conta() { (cd /tmp && sudo -n -u "$CONTA" bash -lc "$1"); }
 
 conferir() {
@@ -68,9 +76,13 @@ conferir() {
   na_conta 'timeout 20 npm ping >/dev/null 2>&1' \
     && ok "registry alcancavel de dentro da conta" \
     || falha "registry inalcancavel de dentro da conta"
-  na_conta "test -r $REPO_FONTE" 2>/dev/null \
-    && falha "a conta LE $REPO_FONTE — o perimetro do host esta frouxo" \
-    || ok "a conta nao le ~/AI (perimetro do host fechado)"
+  if [ ! -d "$PERIMETRO" ]; then
+    falha "canario $PERIMETRO nao existe — sem ele o perimetro passaria por vacuidade"
+  elif na_conta "test -r $PERIMETRO" 2>/dev/null; then
+    falha "a conta LE $PERIMETRO — o perimetro do host esta frouxo"
+  else
+    ok "a conta nao le $PERIMETRO (perimetro do host fechado)"
+  fi
 }
 
 aceite() {

@@ -1,4 +1,4 @@
-#!/home/claudinho/AI/.venv-harness/bin/python
+#!/opt/platafirma/current/venv/harness/bin/python
 # sessao — o dia de trabalho do agente: autoriza, cunha e torna a fita resolvivel pela porta (arq:0101, arq:0110 §14)
 # capacidade: sessao
 # dono: ia
@@ -9,7 +9,7 @@
 # folhas: abrir|encerrar -> sessao/cunhagem · ver|listar -> sessao/estado · longjob -> sessao/execucao-longa
 # escreve: sessao:{id}, ledger:{id}, giro:{id} (msg-mem; DEL em encerrar), sessao.sessao (duravel); nada em ver|listar
 # consome: a API da entidade-sessao, quando houver (ate la: msg-mem e Postgres direto, declarados abaixo)
-# ambiente: PF_SUJEITO (obrigatoria em abrir; origem: fluxo OAuth, entregue pela porta), PF_SUPERFICIE[=desconhecida] (origem: superficie), PF_RAIZ[=~/AI] (origem: superficie/instalacao); MEM_REDIS_HOST[=127.0.0.1], MEM_REDIS_PORT[=6380] e SESSAO_PG_PORT[=5437] sao endereco de servico, constantes do verbo; SESSAO_PG_PASSWORD nao e variavel: e segredo, obtido por `seg segredo ler` no processo. PF_CADEIRA, PF_SESSAO e PF_ORDEM_ID nao sao lidas — este verbo as origina
+# ambiente: PF_SUJEITO (obrigatoria em abrir; origem: fluxo OAuth, entregue pela porta), PF_SUPERFICIE[=desconhecida] (origem: superficie), PF_BIN[=<bin/ da propria arvore; na release /opt/platafirma/current/harness/bin>] (origem: teste); MEM_REDIS_HOST[=127.0.0.1], MEM_REDIS_PORT[=6380] e SESSAO_PG_PORT[=5437] sao endereco de servico, constantes do verbo; SESSAO_PG_PASSWORD nao e variavel: e segredo, obtido por `seg segredo ler` no processo. PF_CADEIRA, PF_SESSAO e PF_ORDEM_ID nao sao lidas — este verbo as origina
 # depende: msg-mem (modulo redis), Postgres da sessao (psycopg), persona (vocabulario: `persona foto --json`), acesso (`acesso decidir sessao_abrir sessao:<cadeira> --json`), seg (`seg segredo ler`), longjob (bin/longjob, contrato herdado)
 # substitui: monta-sessao <cadeira> na parte que cunha; redis-cli SET sessao:*; psql -d sessao
 # conforme: parcial — chave viva e registro duravel gravados direto ate a API da entidade-sessao existir (spec_sessao §6)
@@ -35,8 +35,9 @@ import time
 import uuid
 from pathlib import Path
 
-RAIZ = os.environ.get("PF_RAIZ", os.path.expanduser("~/AI"))
 _REPO_REAL = Path(__file__).resolve().parent.parent
+# Verbos irmaos: o bin/ desta mesma arvore (card #3010). PF_BIN so existe para teste.
+BIN = os.environ.get("PF_BIN") or str(_REPO_REAL / "bin")
 MEM_HOST = os.environ.get("MEM_REDIS_HOST", "127.0.0.1")
 MEM_PORTA = int(os.environ.get("MEM_REDIS_PORT", "6380"))
 PG_PORTA = os.environ.get("SESSAO_PG_PORT", "5437")
@@ -62,9 +63,9 @@ def _superficie() -> str:
 
 def _env_verbo() -> dict[str, str]:
     """PATH explicito para os verbos que este chama (persona, acesso, seg): quando a porta
-    ou um servico chama este binario, o PATH herdado nao tem RAIZ/bin."""
+    ou um servico chama este binario, o PATH herdado nao tem o bin/ dos verbos."""
     e = dict(os.environ)
-    e["PATH"] = f"{RAIZ}/bin:{os.path.expanduser('~')}/.local/bin:" + os.environ.get("PATH", "")
+    e["PATH"] = f"{BIN}:" + os.environ.get("PATH", "")
     return e
 
 def _roda(argv: list[str], timeout: int = 20, stdin: str | None = None) -> tuple[int, str, str]:
@@ -168,10 +169,10 @@ def _decidir(slug: str) -> tuple[int, dict, str]:
 def _senha_pg() -> tuple[str | None, str | None]:
     """Segredo por verbo, no processo (spec_acesso §2). Sem fallback de variavel nem de
     arquivo: `SESSAO_PG_PASSWORD` nao e ambiente (spec_sessao §5)."""
-    rc, out, err = _roda(["seg", "segredo", "ler", "SESSAO_PG_PASSWORD"], timeout=10)
+    rc, out, err = _roda(["seg", "segredo", "ler", "harness-sessao/SESSAO_PG_PASSWORD"], timeout=10)
     if rc == 0 and out.strip():
         return out.strip(), None
-    return None, f"seg segredo ler SESSAO_PG_PASSWORD: {(err or out).strip()[:120] or f'exit {rc}'}"
+    return None, f"seg segredo ler harness-sessao/SESSAO_PG_PASSWORD: {(err or out).strip()[:120] or f'exit {rc}'}"
 
 def _registra_duravel(sid: str, slug: str) -> str | None:
     """INSERT em sessao.sessao (arq:0091). Devolve o motivo quando nao grava; nunca trava."""

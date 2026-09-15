@@ -21,7 +21,12 @@ services:
     image: platafirma/jaiminho-server:local
     container_name: jaiminho-server
     restart: unless-stopped
-    env_file: [../jaiminho-server/.env]
+    # Sem env_file (card #3010): segredo nao mora na arvore do codigo. Os tokens entram
+    # em `environment` abaixo, interpolados do --env-file que o `deploy` materializa em
+    # tmpfs a partir de /srv/platafirma/casa/segredos/jaiminho/. Caminho de instancia
+    # (credencial Google, trilha) mora na sobreposicao
+    # /srv/platafirma/casa/deploy/jaiminho/compose.override.yaml (forma em
+    # compose.override.exemplo.yaml ao lado).
     # PORTA PUBLICADA — NAO SUBIR SEM OS DOIS SIGN-OFFS (card #2380).
     #
     # Por que ela existe: com o card #2286 os dois bracos do `agy` passaram ao daemon
@@ -61,12 +66,13 @@ services:
       # wiki-mcp para AQUI — ele nao tem PEP, e quem o carrega tem edit_page e
       # upload_file junto. O externo alcanca a wiki so pelas tools `wiki_*` deste
       # servidor, que passam pelo PDP e recortam o namespace.
-      # O TOKEN nao entra aqui: `environment` vence `env_file`, e `${WIKI_MCP_TOKEN}`
-      # interpola do .env DO PROJETO (jaiminho/), nao do env_file do servico — a
-      # linha resolveria vazio e apagaria o valor que veio de jaiminho-server/.env.
-      # Medido: health saiu "sem token" com a linha presente. Segredo mora so no
-      # env_file; aqui fica o que nao e segredo.
+      # O TOKEN interpola do --env-file que o `deploy` passa ao `docker compose` (de
+      # segredos/jaiminho/). Obrigatorio: sem esse --env-file o compose RECUSA subir,
+      # nomeando a variavel. Com default vazio o servidor subia calado, health "sem
+      # token" e wiki/busca indisponiveis sem ninguem ter decidido isso.
       WIKI_MCP_URL: "http://mcp:8000/mcp"
+      WIKI_MCP_TOKEN: "${WIKI_MCP_TOKEN:?segredo ausente: jaiminho/WIKI_MCP_TOKEN (deploy jaiminho materializa o --env-file de /srv/platafirma/casa/segredos/jaiminho/)}"
+      RAG_API_TOKEN: "${RAG_API_TOKEN:?segredo ausente: jaiminho/RAG_API_TOKEN (deploy jaiminho materializa o --env-file de /srv/platafirma/casa/segredos/jaiminho/)}"
       # Drive: area de transferencia de mao unica com o dono. O ID da pasta e
       # config, nao segredo; o token e segredo e vem por bind read-only abaixo.
       GDRIVE_PASTA: "1oFQgrkpoVHikOlV6gJqH8nGgzDwAtqVz"
@@ -79,14 +85,14 @@ services:
       # roda como 10001: sem converter a posse, `_audit` cai no fallback de stderr
       # e a trilha do externo so vive no `docker logs`. Converter, uma vez por
       # ambiente, de DENTRO do namespace — no host o chown exigiria CAP_CHOWN:
-      #   docker run --rm -v "$HOME/AI/var/log/jaiminho:/x" --user 0:0 \
+      #   docker run --rm -v "/srv/platafirma/casa/var/log/jaiminho:/x" --user 0:0 \
       #     platafirma/jaiminho-server:local chown -R 10001:999 /x
       # Credencial do Google READ-ONLY e fora da imagem, pelo mesmo motivo do PAP:
       # rotacionar o refresh token nao pode exigir rebuild, e o processo nao tem
       # como reescrever a credencial que o prende. Modo 600 no host, uid 10001 le
       # porque o bind entra como o dono do namespace.
-      - "${HOME}/AI/var/google/token.json:/opt/pf/google/token.json:ro"
-      - "${HOME}/AI/var/log/jaiminho:/var/log/jaiminho:rw"
+      # Os dois binds (token.json em /opt/pf/google, trilha em /var/log/jaiminho) sao
+      # caminho de instancia e moram na sobreposicao.
     networks:
       # `saida`: e por onde a ponte dele chega aqui.
       # `wiki`: e onde o alias `rag-api` resolve — a mesma rede que o wiki-mcp usa

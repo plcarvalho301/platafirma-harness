@@ -10,8 +10,11 @@ O base de Settings espelha o que esta SERVIDO no container rag-extractor-api, me
 10/08/2026 — nao o default do codigo. Toda config e um override declarado sobre esse base.
 
   gabarito: avaliacao/gabarito.jsonl (unico, desde o expurgo de 10/08)
-  venv: ~/AI/.venv-embed  (torch, sentence-transformers, psycopg, pgvector)
-  uso : ~/AI/.venv-embed/bin/python bancada_ruido.py --eixo blend|pool|beta|todos
+  venv: um com torch, sentence-transformers, psycopg, pgvector (ex.: /opt/platafirma/current/venv/rag)
+  uso : <venv>/bin/python bancada_ruido.py --eixo blend|pool|beta|todos
+  rag : platafirma-conhecimento/rag da bancada declarada (PF_BANCADA ou ~/.config/platafirma/bancada);
+        sem declaracao sai 3
+  env : POSTGRES_* lidos do cofre da instancia ($PF_INSTANCIA/segredos/rag/<NOME>)
 """
 
 import argparse
@@ -23,9 +26,18 @@ import time
 from dataclasses import replace
 from pathlib import Path
 
-RAG = Path.home() / "AI/platafirma-conhecimento/rag"
-GABARITO = Path.home() / "AI/platafirma-harness/avaliacao/gabarito.jsonl"
+ARVORE = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(ARVORE / "lib"))
+from raizes import BancadaNaoDeclarada, bancada, instancia  # noqa: E402
+
+try:
+    RAG = bancada() / "platafirma-conhecimento" / "rag"
+except BancadaNaoDeclarada as e:
+    print(f"bancada_ruido: {e}", file=sys.stderr)
+    sys.exit(3)
+GABARITO = ARVORE / "avaliacao" / "gabarito.jsonl"
 SAIDA = Path(__file__).resolve().parent
+COFRE_RAG = instancia() / "segredos" / "rag"
 
 sys.path.insert(0, str(RAG))
 
@@ -38,10 +50,10 @@ K = 10  # recupera 10 e mede recall@1/3/5/10 sobre o mesmo run
 
 def _env_do_servido() -> None:
     """Reproduz o ambiente do container medido. Sem isto a bancada mede outro sistema."""
-    for linha in (RAG / ".env").read_text().splitlines():
-        if linha.startswith("POSTGRES_") and "=" in linha:
-            ch, v = linha.split("=", 1)
-            os.environ.setdefault(ch.strip(), v.strip().strip('"').strip("'"))
+    if not COFRE_RAG.is_dir():
+        sys.exit(f"bancada_ruido: cofre ausente: {COFRE_RAG}")
+    for arq in sorted(COFRE_RAG.glob("POSTGRES_*")):
+        os.environ.setdefault(arq.name, arq.read_text().strip())
     os.environ["POSTGRES_HOST"] = "127.0.0.1"
     servido = {
         "EMBED_MODEL": "Qwen/Qwen3-Embedding-0.6B",

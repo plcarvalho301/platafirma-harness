@@ -12,8 +12,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # build passou em silencio. Vem por bind mount do CLI do host (compose.yaml),
 # junto com o socket — mesma versao que o daemon, por construcao.
 #
-# Os verbos do host tem shebang /home/claudinho/AI/.venv-harness/bin/python, que
-# e symlink para /usr/bin/python3. A imagem oficial instala em /usr/local/bin,
+# Os verbos da release tem shebang /opt/platafirma/current/venv/harness/bin/python
+# (venv construido do lockfile na promocao, montado somente-leitura pelo compose),
+# cujo interpretador e symlink para /usr/bin/python3. A imagem oficial instala em /usr/local/bin,
 # entao sem este link todo verbo Python morre com "No such file or directory" —
 # erro que aponta para o interpretador, nao para o script, e custa caro de ler.
 RUN ln -sf /usr/local/bin/python3 /usr/bin/python3

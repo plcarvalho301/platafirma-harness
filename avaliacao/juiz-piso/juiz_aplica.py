@@ -19,9 +19,15 @@ uso:
 """
 import json, os, subprocess, sys
 from collections import Counter
+from pathlib import Path
 
-BANDA = os.environ.get("JUIZ_BANDA", "/home/claudinho/AI/tmp/banda_lt40.jsonl")
-OUT   = os.environ.get("JUIZ_OUT", "/home/claudinho/AI/tmp/juiz_banda.out.jsonl")
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "lib"))
+from raizes import instancia  # noqa: E402
+
+# mesmos defaults do juiz_banda.py: dump e checkpoint moram nos dados da instancia
+DADOS = instancia() / "dados" / "avaliacao" / "juiz-piso"
+BANDA = os.environ.get("JUIZ_BANDA", str(DADOS / "banda_lt40.jsonl"))
+OUT   = os.environ.get("JUIZ_OUT", str(DADOS / "juiz_banda.out.jsonl"))
 PGC   = ["docker", "exec", "-i", "rag-extractor-pg",
          "psql", "-U", "rag", "-d", "rag_extractor", "-v", "ON_ERROR_STOP=1"]
 CLASSES_JUIZ = {"real", "so-titulo", "ancora-ruido"}

@@ -63,7 +63,7 @@ Regra de precedência do Claude Code: `deny` vence `allow` em qualquer nível, e
 todos os modos de permissão. Consequência prática e desejada: da estação emprestada não
 se commita, não se edita arquivo e não se roda comando local. Escrita e execução passam
 por `claudinho-mcp` — isto é, pela máquina do dono, com auditoria em
-`~/AI/var/log/ops/`.
+`/srv/platafirma/casa/var/log/ops/`.
 
 ## Duas coisas que costumam surpreender
 

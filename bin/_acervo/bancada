@@ -1,4 +1,4 @@
-#!/home/claudinho/AI/.venv-acervo/bin/python
+#!/opt/platafirma/current/venv/acervo/bin/python
 """Monta o pacote de classificação externa do acervo (card 258).
 
 Saída: <out>/pacote-acervo-<data>.zip contendo planilha.csv, capas.zip e,
@@ -24,6 +24,12 @@ from datetime import date
 from pathlib import Path
 
 import boto3
+
+# Raizes de producao (card #3010): o pacote e estado da instancia, nunca da bancada.
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "lib"))
+from raizes import instancia  # noqa: E402
+
+PACOTES = instancia() / "var" / "pacotes"
 
 PG_CONTAINER = "rag-extractor-pg"
 MINIO_CONTAINER = "rag-extractor-minio"
@@ -156,10 +162,9 @@ def extrai(caminho, ext, sha, destino, dpi):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--out", default=str(Path.home() / "AI" / "var" / "pacotes"))
+    ap.add_argument("--out", default=str(PACOTES))
     ap.add_argument("--dpi", type=int, default=100)
-    ap.add_argument("--instrucoes", default=str(
-        Path.home() / "AI" / "var" / "pacotes" / "INSTRUCOES.md"))
+    ap.add_argument("--instrucoes", default=str(PACOTES / "INSTRUCOES.md"))
     ap.add_argument("--limite-mb", type=float, default=20.0)
     ap.add_argument("--amostra", type=int, default=0)
     ap.add_argument("--sha", action="append", default=[],

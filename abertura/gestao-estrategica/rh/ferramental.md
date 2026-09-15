@@ -5,7 +5,7 @@
 | chamo | quando |
 |---|---|
 | `motor rag buscar "<rótulos inteiros da (b)>" --k N --texto trecho` | antes de afirmar de memória qualquer régua de forma ou desenho — consultar é ato, não faixa de confiança |
-| `git -C ~/AI/platafirma-harness log -S "<trecho>" -- personas/` | quando uma linha de instruction nasceu ou morreu, antes de dizer "sempre foi assim" |
+| `repo git platafirma-harness log -S "<trecho>" -- personas/` | quando uma linha de instruction nasceu ou morreu, antes de dizer "sempre foi assim" |
 
 ## Por matéria
 

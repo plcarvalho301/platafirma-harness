@@ -28,7 +28,7 @@ sudo -u jaiminho XDG_RUNTIME_DIR=/run/user/1003 bash -lc \
 
 # como claudinho:
 sudo -u claudinho bash -lc \
-  'cd ~/AI/platafirma-harness/jaiminho-fabrica && docker compose up -d'
+  'deploy jaiminho-fabrica up'
 ```
 
 O `jaiminho-server` nunca para em passo nenhum, entao nao entra no rollback.

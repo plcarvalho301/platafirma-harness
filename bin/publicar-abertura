@@ -9,24 +9,25 @@
 # chamado direto, avisa e segue.
 #
 # O que faz: publica a arvore abertura/ (pecas-arquivo + aliases.json + rotas-chapeu.json)
-# de um commit git IMUTAVEL para PF_ABERTURA_DIR (default ~/AI/var/abertura-publicada),
-# a morada que o montador (monta-sessao) le e que nenhum ato de git de um CLONE DE
-# TRABALHO move.
+# de um commit git IMUTAVEL para PF_ABERTURA_DIR (default $PF_INSTANCIA/var/abertura-publicada,
+# /srv/platafirma/casa/var/abertura-publicada), a morada que o montador (monta-sessao) le e
+# que nenhum ato de git de um CLONE DE TRABALHO move. A fonte e o espelho bare da familia
+# harness na release (/opt/platafirma/platafirma-harness/.repo.git), nunca um clone.
 #
 # Fecha o unico holdout do arq:0097 (runtime nao le working tree git): o montador fazia
 # `git pull --ff-only` nos clones de trabalho na abertura e travava o boot na divergencia
 # da arvore. Aqui git entra so na PUBLICACAO — ato deliberado — produzindo artefato
 # imutavel fixado por ref; o runtime passa a ler a morada publicada.
 #
-# Mesmo par que a casa ja usa e que o ADR nomeia como padrao:
-#   - politica-sync: repo -> PDP_DIR (copia servida que o PEP le; git de fabrica nao move).
-#   - deploy promover: promocao por ref (checkout --detach origin/main), com ponto de volta.
-# Este verbo e o politica-sync da abertura, com a imutabilidade+ref do deploy.
+# Mesmo par que o ADR nomeia como padrao:
+#   - o PDP le a politica da release (/opt/platafirma/current/politica-acesso, arq:0102 D6),
+#     nunca do repo; git de fabrica nao move o que o PEP le.
+#   - release promover: promocao por ref (checkout destacado imutavel), com ponto de volta.
+# Este verbo e a morada publicada da abertura, com a imutabilidade+ref da release.
 #
 # PONTO-CHAVE arq:0097: a fonte e `git archive <commit>`, que le o OBJECT STORE, nunca o
 # working tree. Arvore suja, commit local ou divergencia num clone de trabalho NAO podem,
-# por construcao, contaminar nem travar o que e servido — a mesma garantia que
-# politica-sync ja da ao PEP.
+# por construcao, contaminar nem travar o que e servido.
 #
 # CONTRATO DE MORADA (o que monta-sessao/IA passa a ler; formato a formalizar por Produto
 # na spec do harness):
@@ -50,21 +51,24 @@
 # por sha e a ingestao sao do `acervo`. Falha do indice avisa e NAO desfaz a publicacao.
 #   PF_CASA_REINDEXA=0   desliga o gancho
 #   PF_ACERVO=<caminho>  aponta outro verbo `acervo`
+#
+# ambiente: PF_HARNESS[=$PF_RELEASE_RAIZ/platafirma-harness/.repo.git] · PF_ABERTURA_DIR[=$PF_INSTANCIA/var/abertura-publicada] · PF_ACERVO[=$PF_RELEASE/harness/bin/acervo] · PF_CASA_REINDEXA[=1] · PF_RELEASE_RAIZ[=/opt/platafirma] · PF_INSTANCIA[=/srv/platafirma/casa]
 set -euo pipefail
 
+. "$(dirname "$(readlink -f "$0")")/../lib/raizes.sh"
+
 # Aviso de deprecado so para quem chama direto: o release chama com PF_HARNESS no espelho
-# bare da familia (var/prod/platafirma-harness/.repo.git). `estado` e leitura, nao avisa.
+# bare da familia ($PF_RELEASE_RAIZ/platafirma-harness/.repo.git). `estado` e leitura, nao avisa.
 case "${PF_HARNESS:-}" in
   */.repo.git) : ;;
   *) [ "${1:-}" = "estado" ] || echo "aviso: publicar-abertura direto esta deprecado — use: release promover abertura [<rev>] | release reverter abertura <sha> (#3054)" >&2 ;;
 esac
 
-RAIZ="${OPS_ROOT:-${PF_RAIZ:-$HOME/AI}}"
-HARNESS="${PF_HARNESS:-$RAIZ/platafirma-harness}"
-MORADA="${PF_ABERTURA_DIR:-$RAIZ/var/abertura-publicada}"
+HARNESS="${PF_HARNESS:-$PF_RELEASE_RAIZ/platafirma-harness/.repo.git}"
+MORADA="${PF_ABERTURA_DIR:-$PF_INSTANCIA/var/abertura-publicada}"
 SUBARVORE="abertura"   # o subdir versionado que o montador serve
 
-# git por caminho absoluto, imune ao shim `git` de ~/AI/bin (mesma cura de c5d2321 no
+# git por caminho absoluto, imune ao shim `git` do PATH da porta (mesma cura de c5d2321 no
 # `repo`): sob a porta o shim recusa, e a publicacao morria em "origin/main nao resolve"
 # (medido 11/09/2026, fita de gestao-estrategica).
 GIT="$(command -v /usr/bin/git /bin/git 2>/dev/null | head -1)"
@@ -121,11 +125,11 @@ apontar_current() {  # $1=commit  — troca atomica do ponteiro
 # existe, o gancho declara o que faltou e sai 0.
 #
 #   PF_CASA_REINDEXA=0   desliga o gancho (base sem motor, teste, reverter em fogo)
-#   PF_ACERVO=<caminho>  aponta outro verbo `acervo` (default: o do proprio harness)
+#   PF_ACERVO=<caminho>  aponta outro verbo `acervo` (default: o do harness no ar na release)
 reindexar_casa() {  # $1=commit que passou a ser servido
   local sha="$1" ingestor uso rc=0
   [ "${PF_CASA_REINDEXA:-1}" = "1" ] || { echo "casa:      gancho desligado (PF_CASA_REINDEXA=0)"; return 0; }
-  ingestor="${PF_ACERVO:-$HARNESS/bin/acervo}"
+  ingestor="${PF_ACERVO:-$PF_RELEASE/harness/bin/acervo}"
   if [ ! -x "$ingestor" ]; then
     echo "casa:      aviso — verbo \`acervo\` nao encontrado em $ingestor; indice fica no sha anterior" >&2
     return 0

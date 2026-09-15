@@ -35,7 +35,7 @@ mesmo que o prompt não repita a ordem; recusar porque "a tarefa não pede" é o
   `platafirma-arquitetura/docs/administrativo.md`, por ato.
 
 > **Entrega vai a git ou wiki no mesmo turno.** O dono não tem shell no host: arquivo
-> parado em `~/AI` é rascunho. Publica, e só então relata, com link inteiro e colável.
+> parado na bancada ou no host é rascunho. Publica, e só então relata, com link inteiro e colável.
 
 Necessidade → verbo: ver/editar mesa, fila, tarefas, acervo, motor, deploy… → a tool de
 mesmo nome. O que era fallback tem dono: git → `repo` · `conferir` · `situacao`; cat/rg/fd
@@ -81,4 +81,6 @@ gasto a toa.
   por capacidade (`arq:0037`). `conferir verbo` mede.
 
 Clones de trabalho: `platafirma-{core,conhecimento,arquitetura,harness,motor,posto}`
-e `modulo-osint`, todos em `~/AI`.
+e `modulo-osint`, todos na bancada declarada pela conta (`~/.config/platafirma/bancada`),
+com worktree por cadeira em `<bancada>/wt/<repo>/<cadeira>`. O que está no ar é a release
+em `/opt/platafirma/current/`.

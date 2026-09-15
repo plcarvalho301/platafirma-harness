@@ -10,7 +10,9 @@
 #
 # Sub-atos: os mesmos de `jaiminho` — perguntar | continuar | estado | logs | login.
 set -euo pipefail
-RAIZ="${PF_RAIZ:-$HOME/AI}"
+# Persona e verbo saem da MESMA arvore deste arquivo (a release servida), por readlink:
+# nunca de raiz montada a mao.
+HARNESS="$(cd "$(dirname "$(readlink -f "$0")")/.." && pwd)"
 export PF_JAIMINHO_CONTAINER="jaiminho-fabrica"
 # Daemon do braco desde o #2286: rootless da conta `jaiminho` (uid 1003). Declarado e
 # nao adivinhado — sem isto o verbo pergunta ao daemon do `claudinho`, nao acha o
@@ -18,6 +20,6 @@ export PF_JAIMINHO_CONTAINER="jaiminho-fabrica"
 # hoje isto NAO da alcance: da a RECUSA CERTA, com o endereco de quem alcanca.
 export PF_JAIMINHO_DOCKER_HOST="${PF_JAIMINHO_DOCKER_HOST:-unix:///run/user/1003/docker.sock}"
 export PF_JAIMINHO_DAEMON_DONO="jaiminho (uid 1003), deploy em /srv/pf/agy/jaiminho-fabrica"
-export PF_JAIMINHO_PERSONA="$RAIZ/platafirma-harness/personas/persona-jaiminho-fabrica.md"
+export PF_JAIMINHO_PERSONA="$HARNESS/personas/persona-jaiminho-fabrica.md"
 export PF_JAIMINHO_TRABALHO="/home/jaiminho/trabalho"
-exec "$RAIZ/platafirma-harness/bin/jaiminho" "$@"
+exec "$HARNESS/bin/jaiminho" "$@"

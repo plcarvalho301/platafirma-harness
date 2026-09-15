@@ -308,7 +308,7 @@ conformidade passar por errar igual. Vai a claudinho-dados junto do resto.
 - A trilha do §11 (uma linha por fonte, com as duas identidades) ainda não existe: o PEP
   entrega o material pelo `auditor`, e quem grava é o `ops-mcp` — que ainda não passa um.
   Enquanto não passar, negativa de acesso no recuperador não aparece em
-  `~/AI/var/log/ops/`.
+  `/srv/platafirma/casa/var/log/ops/`.
 
 ## F1 · card #2300 — board, a sexta fonte
 

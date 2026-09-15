@@ -6,11 +6,12 @@
 # NAO APAGA NADA. Volume e imagem sao COPIADOS; os originais do `claudinho` ficam
 # intactos, e e isso que torna o rollback imediato (ver ROLLBACK.md).
 set -euo pipefail
+. "$(dirname "$(readlink -f "$0")")/../lib/raizes.sh"
 
 CLAUD=claudinho
 JAI=jaiminho
 UID_JAI=1003
-ORIGEM=/home/claudinho/AI/var/migracao-2286
+ORIGEM="$PF_INSTANCIA/var/migracao-2286"
 MIG=/srv/pf/mig
 
 comoJai() { sudo -u "$JAI" XDG_RUNTIME_DIR=/run/user/$UID_JAI DOCKER_HOST=unix:///run/user/$UID_JAI/docker.sock bash -lc "$*"; }
@@ -28,14 +29,19 @@ passo "1. diretorios fora de /home/claudinho (0750 nao deixa o 1003 entrar)"
 install -d -o "$JAI"    -g "$CLAUD" -m 2770 /srv/pf/entrada-jaiminho
 install -d -o "$JAI"    -g "$JAI"   -m 0755 /srv/pf/agy
 install -d -o "$CLAUD"  -g "$CLAUD" -m 0777 "$MIG"
-rsync -a /home/claudinho/AI/var/entrada-jaiminho/ /srv/pf/entrada-jaiminho/ || true
+rsync -a "$PF_INSTANCIA/var/entrada/jaiminho/" /srv/pf/entrada-jaiminho/ || true
 chown -R "$JAI":"$CLAUD" /srv/pf/entrada-jaiminho
 
 passo "2. arvore de deploy da conta 1003"
 for d in jaiminho jaiminho-fabrica; do
   install -d -o "$JAI" -g "$JAI" -m 0750 "/srv/pf/agy/$d"
   install -o "$JAI" -g "$JAI" -m 0640 "$ORIGEM/$d/docker-compose.yml" "/srv/pf/agy/$d/docker-compose.yml"
-  install -o "$JAI" -g "$JAI" -m 0600 "/home/claudinho/AI/platafirma-harness/$d/.env" "/srv/pf/agy/$d/.env"
+  # .env da conta 1003 materializado do cofre da instancia (um arquivo por variavel), nunca de arvore de repo
+  [ -d "$PF_INSTANCIA/segredos/$d" ] || { echo "FALTA cofre $PF_INSTANCIA/segredos/$d"; exit 1; }
+  env_tmp="$(mktemp)"; chmod 0600 "$env_tmp"
+  for s in "$PF_INSTANCIA/segredos/$d"/*; do printf '%s=%s\n' "$(basename "$s")" "$(cat "$s")"; done > "$env_tmp"
+  install -o "$JAI" -g "$JAI" -m 0600 "$env_tmp" "/srv/pf/agy/$d/.env"
+  rm -f "$env_tmp"
 done
 
 passo "3. docker rootless sob o uid $UID_JAI"

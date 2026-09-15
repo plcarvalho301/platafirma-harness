@@ -1,0 +1,29 @@
+# Venv `harness` da release (desenho #3010 §2): /opt/platafirma/venv/harness-<hash-do-uv.lock>,
+# atalhado em /opt/platafirma/current/venv/harness. Construido por `release promover` com
+#   uv sync --frozen --no-dev --no-install-project --project venvs/harness
+# O projeto nao se instala: o codigo roda da arvore servida (r-x); o venv so traz dependencia.
+#
+# Dependencias MEDIDAS por import (AST, transitivo pelos pacotes da propria arvore) dos verbos
+# com shebang /opt/platafirma/current/venv/harness/bin/python e das units que o usam:
+#   psycopg     sessao, mesa, expediente, monta-sessao, _sessao/giro-carga.py,
+#               sessao/migracao/capturar-mesa-legada.py, chat/comum/giro.py (chat-worker)
+#   redis       sessao, mesa, descansar, monta-sessao (recuperacao/cache.py), _fila/streams.py
+#   tokenizers  monta-sessao, expediente, recuperacao/catalogo.py e gerador.py
+#   pyyaml      monta-sessao -> recuperacao/pep.py -> politica-acesso/pdp.py
+#   httpx       pesquisar (pesquisa/historico.py, resolvedores.py, searxng.py)
+#   crawl4ai    pesquisar (pesquisa/atos.py, extrator.py); ver pesquisa/requirements.txt
+# controle/harness_controle/agregador.py (harness-agregador.service) nao importa terceiro.
+# Lock novo = hash novo = venv novo na proxima promocao; nunca se instala a mao no venv.
+[project]
+name = "venv-harness"
+version = "0"
+description = "Dependencias do venv harness da release (verbos Python e units do harness)."
+requires-python = ">=3.12"
+dependencies = [
+    "psycopg[binary]>=3.2",
+    "redis>=5.0",
+    "tokenizers>=0.20",
+    "pyyaml>=6.0",
+    "httpx>=0.27",
+    "crawl4ai>=0.9",
+]

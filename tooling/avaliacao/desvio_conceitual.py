@@ -30,9 +30,14 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import sys
 from collections import deque
+from pathlib import Path
 
 import psycopg
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "lib"))
+from raizes import instancia  # noqa: E402
 
 HIERARQUICAS = ("generica", "partitiva", "instancia")
 
@@ -40,13 +45,11 @@ SEM_CAMINHO = None  # distância infinita: nenhuma cadeia de arestas liga os doi
 
 
 def conectar() -> psycopg.Connection:
-    env = {}
-    caminho = os.path.expanduser("~/AI/var/deploy-env/rag.env")
-    if os.path.exists(caminho):
-        for linha in open(caminho):
-            if "=" in linha and not linha.startswith("#"):
-                k, _, v = linha.strip().partition("=")
-                env[k] = v
+    # cofre da instancia: um arquivo por variavel; a senha e obrigatoria
+    cofre = instancia() / "segredos" / "rag"
+    env = {arq.name: arq.read_text().strip() for arq in cofre.glob("POSTGRES_*")} if cofre.is_dir() else {}
+    if "POSTGRES_PASSWORD" not in env:
+        raise SystemExit(f"desvio_conceitual: segredo ausente: {cofre / 'POSTGRES_PASSWORD'}")
     return psycopg.connect(
         host=env.get("POSTGRES_HOST", "localhost"),
         port=env.get("POSTGRES_PORT", "5432"),

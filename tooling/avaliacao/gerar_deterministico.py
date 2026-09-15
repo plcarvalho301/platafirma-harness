@@ -17,7 +17,11 @@ Duas classes de identificador, com regras diferentes:
 ('20 The End of Homo Sapiens') junto com cláusula de norma. Por isso só entram
 documentos cuja obra é de espécie normativa — o resto é ruído com cara de código.
 """
-import json, random, re, subprocess
+import json, random, re, subprocess, sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "lib"))
+from raizes import instancia  # noqa: E402  (gold gerado mora em $PF_INSTANCIA/dados/avaliacao)
 
 random.seed(188)
 
@@ -78,7 +82,8 @@ def main():
                 'doc_hint':None if marker in CRAVAM_SOZINHAS else r['titulo'],
                 'relevancia':'positiva','ausencia':None,'pontuavel':True})
         print(f"  {marker:18s} {len(grupo):6d} chunks · {len(unicos):5d} códigos únicos · {len(amostra):3d} sorteados")
-    saida='/home/claudinho/AI/gold-set/gold-deterministico.jsonl'
+    saida=instancia()/'dados'/'avaliacao'/'gold-deterministico.jsonl'
+    saida.parent.mkdir(parents=True,exist_ok=True)
     with open(saida,'w') as f:
         for it in itens: f.write(json.dumps(it,ensure_ascii=False)+'\n')
     print(f"\n{len(itens)} itens → {saida}")

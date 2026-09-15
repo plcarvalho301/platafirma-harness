@@ -23,8 +23,8 @@ aqui: desce a card, commit ou wiki. Corpo lido sob demanda (`mesa caderno contex
 
 ## Custo de janela — o pacote de abertura é miolo de loop
 - Abertura da cadeira IA custa **11.141 tokens** (34.922 B) no output de
-  `bin/monta-sessao IA`, medido 16/08/2026 com `~/AI/.venv-harness` +
-  `opt/tokenizers/qwen2.5.json`. SUBSTITUI os 16.395 medidos mais cedo no mesmo dia
+  `bin/monta-sessao IA`, medido 16/08/2026 com o venv do harness e o tokenizador
+  `qwen2.5.json`, ambos então na pasta de trabalho da conta. SUBSTITUI os 16.395 medidos mais cedo no mesmo dia
   por soma de peças (persona 1.485 · manifesto 2.829 · TODA-CADEIRA 5.930 · org
   6.151): o pacote servido hoje traz o org em recorte, não inteiro. Estimativa a
   olho errava por ~40% — pacote se mede, e se REMEDE quando o montador muda.

@@ -13,45 +13,57 @@ Módulo do harness (`arq:0019`): a superfície de contato entre as personas
 - **MCP do harness** — predicado do mapa de entrypoints e `identity_check(persona)`.
 - **Verbos de operação** (`bin/`) — o que toda cadeira chama por `run_command`:
   `fila`, `monta-sessao`, `tarefas` (rastreador), `infra` (contêiner, unit,
-  timer), `acervo escada`, `longjob`, `seg`. Fonte única: `~/AI/bin` e
-  `~/.local/bin` são symlink, e `conferir procedencia` reprova quando deixa de
-  ser verdade.
+  timer), `acervo escada`, `longjob`, `seg`. Fonte única: o PATH de produção é
+  `/opt/platafirma/current/harness/bin`, a release deste repo, e `conferir
+  procedencia` reprova quando deixa de ser verdade.
 - **Identidade e plano de controle** (`agente/`, `ops-server/`) — o pacote de
   conta da fábrica e o fonte do MCP de operação, trazidos do `platafirma-core`
   no #396: quem serve a plataforma às personas mora no módulo do harness.
 
 ## Instalar num ambiente
 
+Produção mora em duas raízes, e só nelas (card #3010, `arq:0102` D6):
+
+| raiz | caminho | o que guarda |
+|---|---|---|
+| release | `/opt/platafirma` | código imutável: por família, o espelho do forge, um checkout destacado por sha, `current` e `anterior`; os venvs construídos do lock; e o diretório de atalhos estáveis `/opt/platafirma/current/<curto>/` (`harness`, `core`, `conhecimento`, `motor`, `ui`, `rastreador`, `arquitetura`, `venv/<nome>`) |
+| instância | `/srv/platafirma/casa` | `segredos/<stack>/<NOME>` (0700/0600, um arquivo por variável), `deploy/<stack>/` (sobreposição de compose e config da instância), `dados/` (corpus, acervo, backups, avaliação) e `var/` (log, run, tmp, fitas, abertura publicada, registro de promoções) |
+
+Código referencia sempre `/opt/platafirma/current/<curto>/...`; estado, segredo e
+log, sempre `/srv/platafirma/casa/...`. Nada de produção lê ou grava fora das
+duas: a bancada onde se escreve código pode ser apagada sem que o que está no ar
+perceba.
+
 ```
-git clone https://github.com/plcarvalho301/platafirma-harness.git ~/AI/platafirma-harness
-~/AI/platafirma-harness/deploy-harness/instalar
-export PATH="$HOME/AI/bin:$PATH"     # se ainda não estiver no PATH
+# uma vez por host, com root (dono): /srv/platafirma/casa com dono claudinho,
+# /etc/profile.d/platafirma.sh (PATH da release) e as units root
+sudo bash platafirma-core/deploy/bootstrap-host.sh
+
+# por família: espelha do forge, constrói o venv do lock, troca current/anterior
+# atômico e reassenta /opt/platafirma/current/<curto>
+release promover platafirma-harness <rev>
 ```
 
-Pronto: os verbos (`fila`, `tarefas`, `infra`, `deploy`, `sinal`, `conferir`…)
-passam a ser chamáveis pelo nome. O que o instalador faz e o que ele
-deliberadamente não faz:
+Pronto: `/opt/platafirma/current/harness/bin` é o PATH, e os verbos (`fila`,
+`tarefas`, `infra`, `deploy`, `sinal`, `conferir`…) passam a ser chamáveis pelo
+nome. Ele chega por `Environment=PATH=` nas units, pelo ambiente de subprocesso
+do `ops-server` e por `/etc/profile.d/platafirma.sh` para shell humano e cron —
+não existe diretório de symlinks de verbos para assentar. O que a promoção faz e
+o que ela deliberadamente não faz:
 
 | Faz | Não faz |
 |---|---|
-| um symlink por verbo no prefixo (`~/AI/bin` por default) | instalar pacote de sistema ou binário de terceiro |
-| `core.hooksPath` apontando para `hooks/` nos clones que existirem | clonar repositório |
-| medir terceiro ausente e nomear o que se perde sem ele | escrever credencial ou falar com a rede |
+| espelhar a família a partir da URL do forge declarada na release (`registro/familias.json`) | ler clone de bancada |
+| construir o venv do lock e trocar `current`/`anterior` de uma vez | instalar pacote de sistema ou binário de terceiro |
+| agendar o restart da porta quando a família tem serviço | escrever credencial (isso é `seg segredo gravar`, na instância) |
 
-Ele **converge**: rodar de novo é seguro e é o jeito de corrigir desvio. Link
-apagado ou apontando para o lugar errado é refeito; arquivo comum ocupando o
-nome de um verbo é **relatado e preservado** — quem o pôs ali decide, não o
-script. Cada linha da saída sai como `conforme`, `corrigido` ou `impossivel`
-com o motivo; silêncio não conta como sucesso.
+`release estado` diz que sha está no ar e desde quando; `release reverter` volta
+para `anterior`.
 
-```
-deploy-harness/instalar                     converge
-deploy-harness/instalar --check             só mede; sai 1 se houver divergência
-deploy-harness/instalar --prefixo <dir>     outro alvo para os symlinks
-```
-
-`--check` não escreve nada — serve de teste, e é o que a estação emprestada roda
-primeiro para saber o que falta antes de mexer em qualquer coisa.
+A bancada (onde se escreve código) é da conta, não do ambiente: a raiz é
+declarada em `~/.config/platafirma/bancada` (uma linha) ou em `PF_BANCADA`, sem
+default. Só verbo de bancada (`repo`, `teste`, `lint`, tooling de avaliação) a
+lê; sem declaração ele sai 3 com "bancada nao declarada".
 
 **Depois de instalar**, três verificações valem a pena:
 
@@ -61,8 +73,8 @@ conferir verbo          cabeçalho de cada verbo e a conta de arq:0037
 sinal                   estado de saúde dos serviços, um por linha
 ```
 
-Pré-requisitos que o instalador não resolve: `git`, `python3`, `docker` e as
-ferramentas de terceiro (`rg`, `fd`, `uv`, `jq`…). Faltando alguma, ele diz qual
+Pré-requisitos que a promoção não resolve: `git`, `python3`, `docker` e as
+ferramentas de terceiro (`rg`, `fd`, `uv`, `jq`…). Faltando alguma, ela diz qual
 e o que deixa de funcionar — a instalação segue, degradada e declarada.
 
 Estação emprestada e conta da fábrica têm guia próprio: `docs/estacao-emprestada.md`
@@ -86,7 +98,7 @@ Declarados por `arq:0042`; `conferir repo platafirma-harness` mede contra esta l
 
 | Diretório | O que é |
 |---|---|
-| `bin/` | verbos de operação chamados por toda cadeira; fonte única, `~/AI/bin` é symlink |
+| `bin/` | verbos de operação chamados por toda cadeira; fonte única, servidos pela release em `/opt/platafirma/current/harness/bin` |
 | `hooks/` | gate de commit da `arq:0042` (`pre-commit`); instala-se com `git config core.hooksPath` |
 | `personas/` | texto canônico de cada cadeira, mais template e higiene de redação |
 | `abertura/<cadeira>/<slug>/ferramental.md` | ferramental por chapéu (L2); o comum é `abertura/oficio.md` |
@@ -102,7 +114,7 @@ Declarados por `arq:0042`; `conferir repo platafirma-harness` mede contra esta l
 | `controle/` | plano de controle do harness: agregador de estado e tela de leitura |
 | `caderno/` | caderno durável por cadeira, particionado por chapéu |
 | `deploy-harness/` | o que instala o próprio harness num ambiente: units do `sinal` e o instalador |
-| `agente/` | pacote de conta da fábrica: `CLAUDE.md`, `settings.json` e o instalador; `~/.claude/*` é symlink daqui |
+| `agente/` | pacote de conta da fábrica: `CLAUDE.md`, `settings.json` e o instalador; `~/.claude/CLAUDE.md` é symlink para a release (`/opt/platafirma/current/harness/agente/CLAUDE.md`) e `settings.json` é cópia gerida |
 | `ops-server/` | fonte do MCP de operação (`claudinho-mcp`); sobe por `platafirma-core:deploy/setup-ops.sh`, fora do compose |
 | `.claude/` | configuração do Claude Code na estação emprestada |
 

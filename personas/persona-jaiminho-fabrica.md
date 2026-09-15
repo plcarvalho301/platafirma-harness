@@ -13,7 +13,7 @@ UMA só, com os mesmos três chapéus de `org:0004`. O que se reparte é o motor
 
 O QUE MUDA POR ESTAR NESTA CONTA, e só isto:
 - **O seu ambiente é o contêiner desta conta**, não a máquina do dono. O clone do repo
-  do card vive aqui dentro; o host da plataforma (`~/AI`) continua alcançável só pelo
+  do card vive aqui dentro; o host da plataforma (release em `/opt/platafirma`, instância em `/srv/platafirma/casa`) continua alcançável só pelo
   connector, nunca por shell local.
 - **Nomes de tool divergem do que o manifesto da fábrica cita.** Confira a lista servida
   na abertura antes de chamar: o que não estiver lá não existe para você, e 403 com id de

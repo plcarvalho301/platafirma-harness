@@ -7,9 +7,14 @@ Servidor MCP que expõe os verbos de operação sob o usuário `claudinho`:
 
 ## Topologia (tudo na conta `claudinho`, uid 1001)
 
-- `ops-mcp.service` — uvicorn (`.venv-ops`, porta 127.0.0.1:8010). **Roda DIRETO do
-  repo** (`WorkingDirectory=.../platafirma-harness/ops-server`, `uvicorn server:app`):
-  `restart` já pega o código novo, sem etapa de build/deploy.
+- `ops-mcp.service` — uvicorn (`/opt/platafirma/current/venv/ops`, porta 127.0.0.1:8010).
+  **Roda da release** (`WorkingDirectory=/opt/platafirma/current/harness/ops-server`,
+  `uvicorn server:app`): o código novo chega por `release promover`, que troca `current`
+  e reinicia a porta. Nunca roda de clone de bancada.
+- Raízes: código em `/opt/platafirma` (`PF_RELEASE_RAIZ`), estado e log em
+  `/srv/platafirma/casa` (`PF_INSTANCIA`). A porta sobe sem bancada declarada; caminho
+  relativo em `run_command`/`read_file`/`write_file` é relativo à bancada
+  (`PF_BANCADA` ou `~/.config/platafirma/bancada`) e, sem ela, é recusado.
 - `ops-tunnel.service` — túnel Cloudflare que publica `ops.platafirma.org/mcp` → :8010.
 - `ops-healthcheck.service` + `.timer` — bate `/health` periodicamente e reinicia o
   `ops-mcp` se ele parar de responder. É a rede de segurança de qualquer restart.
@@ -58,9 +63,10 @@ O `ops-healthcheck` cobre se algo sair torto. Verificar depois: `MainPID` novo,
 >     sudo -u claudinho env XDG_RUNTIME_DIR=/run/user/1001 \
 >       DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1001/bus <comando>
 >
-> Use sempre caminho ABSOLUTO `/home/claudinho/AI` — `~/AI` como megafone vira `/home/megafone/AI`.
+> Caminho de produção é sempre absoluto e não depende de `HOME` (`/opt/platafirma`,
+> `/srv/platafirma/casa`): o mesmo comando vale como `claudinho` ou como `megafone`.
 
 ## Auditoria
 
-Toda chamada grava linha JSONL em `~/AI/var/log/ops/` (comando, cwd, exit, duração,
+Toda chamada grava linha JSONL em `/srv/platafirma/casa/var/log/ops/` (comando, cwd, exit, duração,
 `mcp_session`, sujeito). Não é silenciável pelo chamador.

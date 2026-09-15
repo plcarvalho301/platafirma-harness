@@ -78,7 +78,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 /home/claudinho/AI/platafirma-harness/agente/hooks/porta-sessao.py"
+            "command": "python3 /opt/platafirma/current/harness/agente/hooks/porta-sessao.py"
           }
         ]
       }
@@ -89,7 +89,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 /home/claudinho/AI/platafirma-harness/agente/hooks/porta-sessao.py"
+            "command": "python3 /opt/platafirma/current/harness/agente/hooks/porta-sessao.py"
           }
         ]
       }

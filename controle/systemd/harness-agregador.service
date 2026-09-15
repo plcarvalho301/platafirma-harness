@@ -4,11 +4,12 @@ After=network-online.target
 
 [Service]
 Type=simple
-WorkingDirectory=/home/claudinho/AI/deploy/harness/controle
-Environment=PF_RAIZ=/home/claudinho/AI
-Environment=AGREGADOR_ESTADO_PATH=/home/claudinho/AI/var/run/harness-controle/estado.json
-ExecStartPre=/bin/mkdir -p /home/claudinho/AI/var/run/harness-controle
-ExecStart=/home/claudinho/.local/bin/uv run python -m harness_controle.agregador
+# Codigo e interpretador da release (r-x); estado na instancia. Nada fora de /opt e /srv.
+WorkingDirectory=/opt/platafirma/current/harness/controle
+Environment=PATH=/opt/platafirma/current/harness/bin:/usr/local/bin:/usr/bin:/bin
+Environment=AGREGADOR_ESTADO_PATH=/srv/platafirma/casa/var/run/harness-controle/estado.json
+ExecStartPre=/bin/mkdir -p /srv/platafirma/casa/var/run/harness-controle
+ExecStart=/opt/platafirma/current/venv/harness/bin/python -m harness_controle.agregador
 Restart=always
 RestartSec=10
 

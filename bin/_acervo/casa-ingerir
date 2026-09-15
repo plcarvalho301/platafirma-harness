@@ -10,8 +10,8 @@
 # cliente:
 #   1. le a lista curada (docs/varredura-casa-candidatos.md do platafirma-arquitetura):
 #      repo do titulo `## <repo>`, especie PROPOSTA de `### ... (<familia>)`, path dos bullets.
-#   2. resolve o sha_ref por `git rev-parse HEAD` de cada clone em $RAIZ.
-#   3. le o corpo de cada doc do clone.
+#   2. resolve o sha_ref da familia na release no ar (<release>/<curto>, card #3010).
+#   3. le o corpo de cada doc da release.
 #   4. deriva dono (cadeira dona do repo), natureza (golden), ciclo (publicado) — default,
 #      sobrescrivivel por doc na propria lista via sufixo ` :: dono=<c> natureza=<n> ciclo=<c>`.
 #   5. POST /acervo/casa/lotes (dry-run) e .../aplicar (--apply), com poll — espelha ingerir.
@@ -45,7 +45,17 @@ except ImportError:
 
 BASE = (os.environ.get("RAG_API_BASE") or DEFAULT_BASE).rstrip("/")
 TOKEN = os.environ.get("RAG_API_TOKEN") or DEFAULT_TOKEN
-RAIZ = os.environ.get("PF_REPO_RAIZ") or os.path.expanduser("~/AI")
+
+# Fonte de casa e a PRODUCAO, nunca a bancada (card #3010): a release no ar publica cada
+# familia em <release>/<curto> (platafirma-arquitetura -> arquitetura), estavel entre
+# promocoes. Override so para teste, por PF_RELEASE/PF_RELEASE_RAIZ.
+sys.path.insert(0, os.path.join(os.path.dirname(HARNESS_DIR), "lib"))
+from raizes import release  # noqa: E402
+
+def dir_da_familia(repo):
+    """<release>/<curto> da familia `platafirma-<curto>` (ou do nome curto dado)."""
+    return os.path.join(str(release()), repo.removeprefix("platafirma-"))
+
 # git ABSOLUTO: sob a porta nao ha PATH, e `git` nu levanta FileNotFoundError — o que fazia
 # sha_do_repo devolver None e TODO item ser pulado calado. Mesmo padrao de bin/repo e
 # bin/publicar-abertura.
@@ -134,7 +144,7 @@ def _referentes_adr(corpo, registro, numero):
 
 def varre_adrs():
     """Varre os dois layouts de ADR e devolve itens JA prontos (titulo/ciclo/referentes/corpo)."""
-    clone = os.path.join(RAIZ, ADR_REPO)
+    clone = dir_da_familia(ADR_REPO)
     itens = []
 
     def _um(caminho_abs, path_rel, registro):
@@ -188,8 +198,8 @@ USO = """uso:
                              [--autor <slug>] [--limite N] [--so <substr>] [--json]
 
   <repo>       nome do repositorio de documentacao (default: platafirma-arquitetura).
-               Fonte: var/prod/<repo> (o release); sem release do repo, o clone em ~/AI/<repo>,
-               declarado no plano. Varre o repo inteiro e classifica a especie por
+               Fonte: a release no ar, <release>/<curto> (ex.: /opt/platafirma/current/arquitetura);
+               sem a familia na release, recusa (nunca le bancada). Varre o repo inteiro e classifica a especie por
                acervo.especie_tipo.padrao_path; o que nenhum glob cobre sai `reprovado` com motivo.
   <lista.md>   (transicao) arquivo de lista curada no lugar de <repo>
   --adr        (transicao) fonte = as ADRs de macro-global/
@@ -207,16 +217,11 @@ def morre(msg, code=1):
     sys.exit(code)
 
 def sha_do_repo(repo):
-    """HEAD curto do clone em RAIZ. Repo ausente -> None (item pula com aviso)."""
-    clone = os.path.join(RAIZ, repo)
-    if not os.path.isdir(os.path.join(clone, ".git")):
+    """sha da familia na release no ar. Familia ausente -> None (item pula com aviso)."""
+    dirf = dir_da_familia(repo)
+    if not os.path.isdir(dirf):
         return None
-    try:
-        r = subprocess.run([GIT, "-C", clone, "rev-parse", "HEAD"],
-                           capture_output=True, text=True, check=True)
-        return r.stdout.strip()
-    except (subprocess.CalledProcessError, FileNotFoundError):
-        return None
+    return sha_do_repo_dir(dirf)
 
 def _override(cauda):
     """`path :: dono=x natureza=y ciclo=z tipo=w` -> (path, dict). Sufixo opcional por linha."""
@@ -262,11 +267,11 @@ def parse_lista(caminho):
             if m_item and repo_atual:
                 cauda, ov = _override(m_item.group(1))
                 # path pode trazer o repo como prefixo (secao "core / motor"): se o primeiro
-                # segmento e' um clone conhecido, ele e' o repo e sai do path.
+                # segmento e' uma familia conhecida na release, ele e' o repo e sai do path.
                 repo = repo_atual
                 path = cauda
                 seg0 = cauda.split("/", 1)[0]
-                if seg0 in REPO_DONO and os.path.isdir(os.path.join(RAIZ, seg0)):
+                if seg0 in REPO_DONO and os.path.isdir(dir_da_familia(seg0)):
                     repo = seg0
                     path = cauda.split("/", 1)[1]
                 itens.append({
@@ -288,7 +293,7 @@ def montar_itens(curados, limite, so):
         if so and so not in chave:
             continue
         # Fonte ja resolvida (varre_repo / varre_adrs traz sha e corpo): respeita. Senao,
-        # lista curada: sha do clone em RAIZ e corpo lido do disco.
+        # lista curada: sha da familia na release e corpo lido de la.
         sha = it.get("sha_ref")
         corpo = it.get("corpo")
         if not sha:
@@ -296,12 +301,12 @@ def montar_itens(curados, limite, so):
                 sha_cache[it["repo"]] = sha_do_repo(it["repo"])
             sha = sha_cache[it["repo"]]
         if not sha:
-            pulos.append((chave, "clone ausente em " + RAIZ))
+            pulos.append((chave, "familia ausente na release: " + dir_da_familia(it["repo"])))
             continue
         if corpo is None:
-            fp = os.path.join(RAIZ, it["repo"], it["path"])
+            fp = os.path.join(dir_da_familia(it["repo"]), it["path"])
             if not os.path.isfile(fp):
-                pulos.append((chave, "arquivo nao existe no clone"))
+                pulos.append((chave, "arquivo nao existe na release"))
                 continue
             try:
                 with open(fp, encoding="utf-8", errors="replace") as f:
@@ -360,34 +365,32 @@ def tabela_plano(lote, pulos):
     return "\n".join(L)
 
 def sha_do_repo_dir(repo_dir):
+    """sha do checkout. A release materializa <familia>/<sha> (checkout destacado) e o
+    atalho aponta para ele: sem git legivel ali, o proprio nome do diretorio e o sha."""
     try:
         r = subprocess.run([GIT, "-C", repo_dir, "rev-parse", "HEAD"],
                            capture_output=True, text=True, check=True)
-        return r.stdout.strip()
+        if r.stdout.strip():
+            return r.stdout.strip()
     except Exception:
-        return None
+        pass
+    nome = os.path.basename(os.path.realpath(repo_dir))
+    return nome if re.fullmatch(r"[0-9a-f]{7,40}", nome) else None
 
 def varre_repo(repo):
-    """Varre o SERVIDO (var/prod/<repo>/current, arq:0097) e classifica por padrao_path.
+    """Varre o SERVIDO (<release>/<curto>, arq:0097, card #3010) e classifica por padrao_path.
 
-    var/prod/<repo>/ e a morada de release: um diretorio por sha + o ponteiro `current`
-    (`release promover`). Varrer a raiz da morada em vez do ponteiro dava caminho relativo
-    `<sha>/docs/...`, que glob nenhum de padrao_path casa — e o verbo saia com "nenhum
-    arquivo casa com padrao_path" mesmo com o repo inteiro no ar (medido 14/09, dados).
-    Sem release da familia, cai no clone ~/AI/<repo> (transicao; o alvo e sempre o servido).
+    O atalho da release aponta para <familia>/current -> <sha>. Varre-se o destino
+    resolvido, nunca a raiz da familia: a raiz dava caminho relativo `<sha>/docs/...`, que
+    glob nenhum de padrao_path casa — e o verbo saia com "nenhum arquivo casa com
+    padrao_path" mesmo com o repo inteiro no ar (medido 14/09, dados). Sem a familia na
+    release, recusa: a bancada nao e fonte de casa.
     """
-    morada = os.path.join(os.path.expanduser("~/AI/var/prod"), repo)
-    caminho_prod = os.path.join(morada, "current")
+    caminho_prod = dir_da_familia(repo)
     if os.path.isdir(caminho_prod):
         repo_dir = os.path.realpath(caminho_prod)
-    elif os.path.isdir(morada) and os.path.exists(os.path.join(morada, ".git")):
-        repo_dir = morada   # morada antiga: worktree direto, sem ponteiro
     else:
-        caminho_ai = os.path.join(RAIZ, repo)
-        if os.path.isdir(caminho_ai):
-            repo_dir = caminho_ai
-        else:
-            morre(f"acervo ingerir casa: repositorio '{repo}' nao encontrado em var/prod/{repo} nem em ~/AI/{repo}.", 1)
+        morre(f"repositorio '{repo}' nao encontrado na release: {caminho_prod}.", 1)
 
     sha = sha_do_repo_dir(repo_dir) or "desconhecido"
     sql_esp = "select coalesce(json_agg(row_to_json(t)), '[]') from (select slug, padrao_path from acervo.especie_tipo where padrao_path is not null) t;"

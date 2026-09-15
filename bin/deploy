@@ -6,11 +6,24 @@
 # atos: ato=<stack> e args=up / down / ps / logs / config / pull / build / promover / rotas / acessos / segredos / reverter; sem ato lista as stacks
 # forma: log
 # cauda: sim
+# ambiente: PF_RELEASE_RAIZ[=/opt/platafirma] · PF_RELEASE[=$PF_RELEASE_RAIZ/current] · PF_INSTANCIA[=/srv/platafirma/casa] · DEPLOY_PONTOS[=$PF_INSTANCIA/var/deploy] · DEPLOY_ENV_DIR[=$XDG_RUNTIME_DIR/platafirma, /run/user/<uid>/platafirma] · DEPLOY_TOPO_ARQUIVO (diagnostico) · PF_SIM · DOCKER_HOST
 #
 # Existe porque `infra compose` tinha o `-f` fixo no core e ignorava o cwd: chamado
 # de outro repo, promovia o control-plane inteiro. Aqui a stack e argumento
 # obrigatorio, lido do registro; nao ha alvo default e nao ha "tudo".
+#
+# Onde cada pedaco mora (desenho #3010 §3-§4). Nada daqui le a bancada:
+#   base do compose  release, arvore imutavel da familia: $PF_RELEASE_RAIZ/<familia>/<sha>/<caminho>
+#                    (o registro declara o caminho relativo a raiz do repo, ou sob $PF_RELEASE/<curto>/)
+#   sobreposicao     instancia: $PF_INSTANCIA/deploy/<stack>/compose.override.yaml (config I, binds em /srv)
+#   segredo          instancia: $PF_INSTANCIA/segredos/<stack>/<NOME>, materializado em --env-file no
+#                    tmpfs ($DEPLOY_ENV_DIR/<stack>.env) so enquanto o docker compose roda
+#   projeto compose  preservado: campo `projeto` do registro, senao `name:` do compose base; sem os
+#                    dois, recusa — nome inventado pelo docker troca os volumes nomeados
+# Nao ha worktree de deploy: a release ja e o checkout imutavel.
 set -euo pipefail
+
+. "$(dirname "$(readlink -f "$0")")/../lib/raizes.sh"
 
 export DOCKER_HOST="${DOCKER_HOST:-unix:///run/user/$(id -u)/docker.sock}"
 
@@ -34,7 +47,6 @@ fi
 
 stacks()   { jq -r '.stacks | keys[]' <<<"$TOPO_JSON"; }
 campo()    { jq -r --arg s "$1" --arg c "$2" '.stacks[$s][$c] // empty' <<<"$TOPO_JSON"; }
-expandir() { printf '%s\n' "${1/#\~/$HOME}"; }
 # `compose` e `profiles` aceitam string ou lista: uma linha por item, sempre.
 lista()    { jq -r --arg s "$1" --arg c "$2" \
                '.stacks[$s][$c] // empty | if type=="array" then .[] else . end' <<<"$TOPO_JSON"; }
@@ -43,13 +55,16 @@ uso() {
   cat >&2 <<FIM
 uso:
   deploy <stack> <acao> [args...]   acao = up | down | ps | logs | config | pull | build
-  deploy <stack> promover [ref]     worktree de deploy: fetch + checkout + build + recreate
+  deploy <stack> promover [rev]     sobe da arvore da release nessa rev (sem rev: current da familia)
   deploy <stack> rotas              qual hostname do tunel entra em qual servico
   deploy <stack> acessos            quem pode entrar em cada superficie gateada
-  deploy <stack> segredos           arquivos fora do git que a stack exige, e se estao ali
-  deploy <stack> reverter [--executar [ref]]  como se desfaz, em quanto tempo e por quem
+  deploy <stack> segredos           segredos que a stack exige, e se estao ali
+  deploy <stack> reverter [--executar [rev]]  como se desfaz, em quanto tempo e por quem
   deploy <stack>                    mostra o declarado da stack, sem tocar em nada
   deploy                            lista as stacks do registro
+
+base: $PF_RELEASE_RAIZ/<familia>/<sha>/<compose> · sobreposicao: $PF_INSTANCIA/deploy/<stack>/compose.override.yaml
+segredos: $PF_INSTANCIA/segredos/<stack>/ (env-file em tmpfs, apagado na saida)
 
 stacks registradas:
 FIM
@@ -59,34 +74,9 @@ FIM
   cat >&2 <<FIM
 
 Nao existe alvo default e nao existe "todas": stack e argumento obrigatorio.
-Fonte: acervo.stack (verbo topologia --completo); edicao: acervo stack import|def|rm
+Fonte: acervo.stack (acervo stack ver); edicao: acervo stack import|def|rm
 FIM
   exit 2
-}
-
-# De qual commit a stack esta servindo. O worktree de deploy e detached por construcao,
-# entao a pergunta "esta atras de main?" nao tem resposta no branch: e contagem de
-# revisao. Diretorio que nao e git nao vira erro — vira resposta declarada.
-servido() {
-  local dir="$1" sha atras
-  git -C "$dir" rev-parse --git-dir >/dev/null 2>&1 || { echo "nao e checkout git: $dir"; return; }
-  sha="$(git -C "$dir" rev-parse --short HEAD)"
-  if git -C "$dir" rev-parse --verify -q origin/main >/dev/null; then
-    atras="$(git -C "$dir" rev-list --count "HEAD..origin/main" 2>/dev/null || echo '?')"
-    if [ "$atras" = "0" ]; then echo "$sha (no head de origin/main)"
-    else echo "$sha ($atras commit(s) atras de origin/main)"; fi
-  else
-    echo "$sha (sem origin/main no worktree)"
-  fi
-}
-
-# Caminho declarado no registro: `~` e absoluto expandem; o resto e relativo ao
-# diretorio do compose, que e a raiz do worktree de deploy.
-resolve() {
-  case "$1" in
-    "~"*|/*) expandir "$1" ;;
-    *) printf '%s\n' "$(dirname "$COMPOSE")/$1" ;;
-  esac
 }
 
 # --- reversao (#184) -------------------------------------------------------
@@ -94,7 +84,9 @@ resolve() {
 # ja diz "pode subir", e ninguem declarava o caminho de volta. Fica no MESMO lugar
 # que ja declara rota, acesso e segredo, porque plano de reversao publicado como
 # texto na wiki desincroniza no primeiro deploy — o mesmo motivo dos outros tres.
-PONTOS="${DEPLOY_PONTOS:-$HOME/AI/var/deploy}"
+# O ponto de volta da STACK e da instancia (qual sha da release os conteineres rodam);
+# o do CODIGO mora na release, ao lado do current da familia.
+PONTOS="${DEPLOY_PONTOS:-$PF_INSTANCIA/var/deploy}"
 
 rev() { jq -r --arg s "$1" --arg c "$2" '.stacks[$s].reversao[$c] // empty' <<<"$TOPO_JSON"; }
 
@@ -102,6 +94,8 @@ ponto_anterior() {
   local f="$PONTOS/$1.anterior"
   [ -r "$f" ] && cat "$f" || echo ""
 }
+
+gravar_atual() { mkdir -p "$PONTOS"; printf '%s\n' "$1" > "$PONTOS/$STACK.atual"; }
 
 reversao_resumo() {
   jq -e --arg s "$1" '.stacks[$s] | has("reversao")' <<<"$TOPO_JSON" >/dev/null \
@@ -120,41 +114,199 @@ case "${1:-}" in --ajuda|--help|-h) uso ;; esac
 [ $# -ge 1 ] || uso
 STACK="$1"; shift || true
 
-# Uma stack pode precisar de mais de um arquivo (base + overlay de GPU) e de perfil
-# declarado: servico sob `profiles:` no compose e INVISIVEL sem --profile, e o verbo
-# nao acusa nada — foi assim que `rag-api` ficou fora de `deploy rag up`, com o
-# comando saindo 0 e sem subir a API.
-COMPOSE_ARGS=(); COMPOSE_PRIMEIRO=""
-while read -r c; do
-  [ -n "$c" ] || continue
-  c="$(expandir "$c")"
-  [ -r "$c" ] || { echo "erro: compose declarado e ilegivel: $c" >&2; exit 1; }
-  [ -n "$COMPOSE_PRIMEIRO" ] || COMPOSE_PRIMEIRO="$c"
-  COMPOSE_ARGS+=(-f "$c")
-done < <(lista "$STACK" compose)
-
-if [ ${#COMPOSE_ARGS[@]} -eq 0 ]; then
-  echo "erro: stack \"$STACK\" nao esta no registro — nao invento caminho de compose." >&2
+case "$STACK" in
+  */*|.*|*..*) echo "erro: '$STACK' e slug de stack, nao caminho" >&2; exit 4 ;;
+esac
+if ! jq -e --arg s "$STACK" '.stacks | has($s)' <<<"$TOPO_JSON" >/dev/null || [ -z "$(lista "$STACK" compose)" ]; then
+  echo "erro: stack \"$STACK\" nao esta no registro (ou nao declara compose) — nao invento caminho de compose." >&2
   echo "      registradas: $(stacks | tr '\n' ' ')" >&2
   exit 2
 fi
 
-# `docker compose` carrega docker-compose.override.yml sozinho quando descobre o
-# arquivo pelo cwd — e NAO carrega quando ha `-f`, que e sempre o nosso caso. O
-# override some em silencio e o `up` recria o servico sem os volumes dele: foi
-# assim que o mediawiki subiu sem o bind do LocalSettings.php em 10/08/2026 e a
-# wiki voltou na tela de instalacao. Override existente e nao declarado no
-# registro para o verbo aqui, em vez de virar incidente depois do `up`.
-for c in "${COMPOSE_ARGS[@]}"; do
-  [ "$c" = "-f" ] && continue
-  ov="$(dirname "$c")/docker-compose.override.yml"
-  [ -r "$ov" ] || continue
-  case " ${COMPOSE_ARGS[*]} " in *" $ov "*) continue;; esac
-  echo "erro: existe override nao declarado no registro: $ov" >&2
-  echo "      com -f o docker compose NAO o carrega sozinho, e o \"up\" subiria sem ele." >&2
-  echo "      conserto: declarar os dois em registro/stacks.json, campo compose (aceita lista)." >&2
+REPO="$(campo "$STACK" repo)"
+[ -n "$REPO" ] || { echo "erro: stack \"$STACK\" nao declara repo no registro — nao sei de que familia da release ela sobe." >&2; exit 3; }
+CURTO="${REPO#platafirma-}"
+OVERRIDE="$PF_INSTANCIA/deploy/$STACK/compose.override.yaml"
+SEGREDOS_STACK="$PF_INSTANCIA/segredos/$STACK"
+ENV_DIR="${DEPLOY_ENV_DIR:-${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/platafirma}"
+ENV_FILE=""; ENV_TMP=""
+
+limpar_env() { rm -f ${ENV_FILE:+"$ENV_FILE"} ${ENV_TMP:+"$ENV_TMP"}; }
+trap limpar_env EXIT
+
+# --- a release: de qual arvore imutavel a stack sobe ---------------------------
+# Sem rev, o current da familia RESOLVIDO ao sha: o que sobe e um sha, nao um ponteiro que
+# anda sozinho na proxima promocao. Com rev, a arvore que o release ja materializou.
+arvore_de() {  # $1=sha ou vazio ; imprime a arvore ou falha
+  local sha="${1:-}"
+  if [ -z "$sha" ]; then
+    realpath -e "$PF_RELEASE_RAIZ/$REPO/current" 2>/dev/null
+  elif [ -d "$PF_RELEASE_RAIZ/$REPO/$sha" ]; then
+    printf '%s\n' "$PF_RELEASE_RAIZ/$REPO/$sha"
+  else
+    return 1
+  fi
+}
+
+# rev -> sha de 40 hex pelo espelho da familia (sha, tag, ramo do origin), como o release resolve.
+resolver_rev() {  # $1=rev ; imprime o sha ou falha
+  local rev="$1" esp="$PF_RELEASE_RAIZ/$REPO/.repo.git" sha="" r
+  if [[ "$rev" =~ ^[0-9a-f]{40}$ ]]; then printf '%s\n' "$rev"; return 0; fi
+  [ -d "$esp" ] || return 1
+  for r in "${rev}^{commit}" "refs/tags/${rev}^{commit}" "refs/remotes/origin/${rev#origin/}^{commit}"; do
+    sha="$(git --git-dir="$esp" rev-parse --verify -q "$r" 2>/dev/null || true)"
+    [ -z "$sha" ] || break
+  done
+  [ -n "$sha" ] && printf '%s\n' "$sha"
+}
+
+# Compose declarado -> caminho relativo a raiz da familia. Relativo vale como relativo a raiz do
+# repo; absoluto so sob os atalhos da release. O resto nao e base: a base mora na release.
+rel_na_familia() {  # $1=declarado
+  case "$1" in
+    "$PF_RELEASE/$CURTO/"*)             printf '%s\n' "${1#"$PF_RELEASE/$CURTO/"}" ;;
+    "$PF_RELEASE_RAIZ/$REPO/current/"*) printf '%s\n' "${1#"$PF_RELEASE_RAIZ/$REPO/current/"}" ;;
+    "~"*|/*|*..*)                       return 1 ;;
+    *)                                  printf '%s\n' "$1" ;;
+  esac
+}
+
+# Uma stack pode precisar de mais de um arquivo (base + overlay de GPU) e de perfil
+# declarado: servico sob `profiles:` no compose e INVISIVEL sem --profile, e o verbo
+# nao acusa nada — foi assim que `rag-api` ficou fora de `deploy rag up`, com o
+# comando saindo 0 e sem subir a API.
+COMPOSE_ARGS=(); COMPOSE=""; ARVORE=""
+montar_compose() {  # $1=arvore da release
+  ARVORE="$1"; COMPOSE_ARGS=(); COMPOSE=""
+  local c rel ov
+  while read -r c; do
+    [ -n "$c" ] || continue
+    rel="$(rel_na_familia "$c")" || {
+      echo "erro: compose declarado fora da release: $c" >&2
+      echo "      a base mora na release: caminho relativo a raiz de $REPO, ou sob $PF_RELEASE/$CURTO/." >&2
+      echo "      config da instancia vai na sobreposicao: $OVERRIDE" >&2
+      exit 3; }
+    c="$ARVORE/$rel"
+    [ -r "$c" ] || { echo "erro: compose declarado e ilegivel: $c" >&2; exit 1; }
+    [ -n "$COMPOSE" ] || COMPOSE="$c"   # o primeiro manda no diretorio de projeto e no que se imprime
+    COMPOSE_ARGS+=(-f "$c")
+  done < <(lista "$STACK" compose)
+
+  # `docker compose` carrega docker-compose.override.yml sozinho quando descobre o
+  # arquivo pelo cwd — e NAO carrega quando ha `-f`, que e sempre o nosso caso. O
+  # override some em silencio e o `up` recria o servico sem os volumes dele: foi
+  # assim que o mediawiki subiu sem o bind do LocalSettings.php em 10/08/2026 e a
+  # wiki voltou na tela de instalacao. Override existente e nao declarado no
+  # registro para o verbo aqui, em vez de virar incidente depois do `up`.
+  for c in "${COMPOSE_ARGS[@]}"; do
+    [ "$c" = "-f" ] && continue
+    ov="$(dirname "$c")/docker-compose.override.yml"
+    [ -r "$ov" ] || continue
+    case " ${COMPOSE_ARGS[*]} " in *" $ov "*) continue;; esac
+    echo "erro: existe override nao declarado no registro: $ov" >&2
+    echo "      com -f o docker compose NAO o carrega sozinho, e o \"up\" subiria sem ele." >&2
+    echo "      conserto: declarar os dois no registro (acervo stack), campo compose (aceita lista)." >&2
+    exit 3
+  done
+
+  # a sobreposicao da instancia entra por ultimo: vence a base no que declara
+  [ ! -r "$OVERRIDE" ] || COMPOSE_ARGS+=(-f "$OVERRIDE")
+}
+
+projeto_declarado() {
+  local p; p="$(campo "$STACK" projeto)"
+  if [ -z "$p" ] && [ -n "$COMPOSE" ]; then
+    p="$(python3 -c 'import sys, yaml; print((yaml.safe_load(open(sys.argv[1])) or {}).get("name") or "")' "$COMPOSE" 2>/dev/null || true)"
+  fi
+  printf '%s' "$p"
+}
+
+PROJETO=""
+fixar_projeto() {
+  PROJETO="$(projeto_declarado)"
+  [ -n "$PROJETO" ] || {
+    echo "recusa: projeto compose de \"$STACK\" nao declarado (campo projeto no registro, ou name: em $COMPOSE)." >&2
+    echo "        sem ele o docker deriva o nome do diretorio da release, e os volumes nomeados viram outros." >&2
+    exit 3; }
+}
+
+# Segredo para compose (desenho #3010 §3): um arquivo por variavel em $SEGREDOS_STACK, escrito num
+# env-file 0600 no tmpfs e apagado na saida (trap). Nenhum `.env` em arvore de repo. Arquivo cujo
+# nome nao e de variavel (chave, pem, yaml) e bind da sobreposicao, nao linha de env. Nome e
+# presenca, nunca valor: nenhuma linha deste verbo imprime o conteudo.
+materializar_env() {
+  local f nome valor
+  ( umask 077; mkdir -p "$ENV_DIR" )
+  chmod 700 "$ENV_DIR"
+  ENV_TMP="$(mktemp "$ENV_DIR/.$STACK.env.XXXXXX")"
+  if [ -d "$SEGREDOS_STACK" ]; then
+    for f in "$SEGREDOS_STACK"/*; do
+      [ -f "$f" ] || continue
+      nome="$(basename "$f")"
+      [[ "$nome" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]] || continue
+      valor="$(cat "$f")"
+      case "$valor" in
+        *$'\n'*) echo "aviso: segredo $STACK/$nome tem mais de uma linha — fica fora do env-file (e bind, nao variavel)" >&2; continue ;;
+        *"'"*)   echo "recusa: segredo $STACK/$nome tem aspas simples e nao cabe literal no env-file — nada subiu" >&2; exit 3 ;;
+      esac
+      printf "%s='%s'\n" "$nome" "$valor" >> "$ENV_TMP"
+    done
+  fi
+  ENV_FILE="$ENV_DIR/$STACK.env"
+  mv -f "$ENV_TMP" "$ENV_FILE"; ENV_TMP=""
+}
+
+# Caminho declarado de config da instancia: relativo e relativo a $2 (a sobreposicao da stack
+# para rotas e gate; o cofre da stack para segredos); absoluto so vale sob a instancia ou a
+# release. `~` e qualquer outro absoluto recusam: dado de registro que ainda aponta o home da
+# conta se reescreve por `acervo stack def`, nunca se segue em silencio (desenho #3010 §3-§4).
+resolve() {  # $1=declarado $2=base do relativo ; falha fora das raizes de producao
+  case "$1" in
+    "~"*|*..*)                                                  return 1 ;;
+    "$PF_INSTANCIA/"*|"$PF_RELEASE_RAIZ/"*|"$PF_RELEASE/"*)     printf '%s\n' "$1" ;;
+    /*)                                                         return 1 ;;
+    *)                                                          printf '%s\n' "$2/$1" ;;
+  esac
+}
+
+fora_das_raizes() {  # $1=campo $2=declarado $3=base do relativo
+  echo "recusa: $1 de \"$STACK\" declarado fora das raizes de producao: $2" >&2
+  echo "        vale relativo a $3, ou absoluto sob $PF_INSTANCIA ou $PF_RELEASE_RAIZ." >&2
+  echo "        conserto: reescrever pelo acervo stack def (nunca UPDATE a mao)." >&2
   exit 3
-done
+}
+
+# Segredo declarado e ausente para o `up` aqui: a stack nao sobe pela metade (falha alta).
+exigir_segredos() {
+  jq -e --arg s "$STACK" '.stacks[$s] | has("segredos")' <<<"$TOPO_JSON" >/dev/null || return 0
+  local item alvo falta=0
+  while read -r item; do
+    [ -n "$item" ] || continue
+    alvo="$(resolve "$item" "$SEGREDOS_STACK")" || fora_das_raizes segredo "$item" "$SEGREDOS_STACK"
+    [ -e "$alvo" ] && continue
+    echo "  AUSENTE : $item" >&2; falta=$((falta+1))
+  done < <(lista "$STACK" segredos)
+  [ "$falta" -eq 0 ] || { echo "recusa: faltam $falta segredo(s) de \"$STACK\" — ver: deploy $STACK segredos" >&2; exit 1; }
+}
+
+compose() {
+  local env_args=()
+  [ -z "$ENV_FILE" ] || env_args=(--env-file "$ENV_FILE")
+  docker compose -p "$PROJETO" "${COMPOSE_ARGS[@]}" "${env_args[@]+"${env_args[@]}"}" \
+    "${PERFIL_ARGS[@]+"${PERFIL_ARGS[@]}"}" "$@"
+}
+
+# De qual sha da release a stack sobe, e se os conteineres acompanham o current. O sha que
+# subiu e gravado por este verbo; conteiner que ninguem subiu por aqui nao vira afirmacao.
+servido() {
+  local arv atual subiu=""
+  arv="$(arvore_de "")" || { echo "familia $REPO sem current na release ($PF_RELEASE_RAIZ/$REPO/current)"; return; }
+  atual="$(basename "$arv")"
+  if [ -r "$PONTOS/$STACK.atual" ]; then subiu="$(cat "$PONTOS/$STACK.atual")"; fi
+  if [ -z "$subiu" ]; then echo "${atual:0:7} no current de $REPO (nenhum up/promover gravado por este verbo)"
+  elif [ "$subiu" = "$atual" ]; then echo "${atual:0:7} (conteineres no current de $REPO)"
+  else echo "conteineres em ${subiu:0:7}, current de $REPO em ${atual:0:7} — alinhar: deploy $STACK promover"; fi
+}
 
 PERFIL_ARGS=()
 while read -r pf; do
@@ -162,18 +314,22 @@ while read -r pf; do
   PERFIL_ARGS+=(--profile "$pf")
 done < <(lista "$STACK" profiles)
 
-COMPOSE="$COMPOSE_PRIMEIRO"   # o primeiro manda no cwd e no que se imprime
-
 # Sem acao: mostra o declarado. Ver nao muda nada, entao nao precisa de confirmacao.
 if [ $# -eq 0 ]; then
   printf 'stack   : %s\n' "$STACK"
   printf 'papel   : %s\n' "$(campo "$STACK" papel)"
-  printf 'repo    : %s\n' "$(campo "$STACK" repo)"
+  printf 'repo    : %s\n' "$REPO"
   printf 'compose : %s\n' "$(lista "$STACK" compose | tr '\n' ' ')"
+  printf 'sobrepoe: %s\n' "$([ -r "$OVERRIDE" ] && echo "$OVERRIDE" || echo "nenhuma ($OVERRIDE)")"
   printf 'perfis  : %s\n' "$(lista "$STACK" profiles | tr '\n' ' ')"
   printf 'critico : %s\n' "$(campo "$STACK" critico)"
-  printf 'servicos: %s\n' "$(docker compose "${COMPOSE_ARGS[@]}" "${PERFIL_ARGS[@]+"${PERFIL_ARGS[@]}"}" config --services 2>/dev/null | tr '\n' ' ')"
-  printf 'servido : %s\n' "$(servido "$(dirname "$COMPOSE")")"
+  if ARV="$(arvore_de "")"; then
+    montar_compose "$ARV"
+    PROJETO="$(projeto_declarado)"
+    printf 'projeto : %s\n' "${PROJETO:-NAO DECLARADO — up recusa}"
+    printf 'servicos: %s\n' "$(docker compose ${PROJETO:+-p "$PROJETO"} "${COMPOSE_ARGS[@]}" "${PERFIL_ARGS[@]+"${PERFIL_ARGS[@]}"}" config --services 2>/dev/null | tr '\n' ' ')"
+  fi
+  printf 'servido : %s\n' "$(servido)"
   printf 'reverter: %s\n' "$(reversao_resumo "$STACK")"
   exit 0
 fi
@@ -193,7 +349,7 @@ fi
 if [ "$ACAO" = "rotas" ]; then
   ING="$(campo "$STACK" rotas)"
   [ -n "$ING" ] || { echo "stack \"$STACK\" nao declara ingress no registro (campo rotas)."; exit 0; }
-  ING="$(resolve "$ING")"
+  ING="$(resolve "$ING" "$PF_INSTANCIA/deploy/$STACK")" || fora_das_raizes rotas "$(campo "$STACK" rotas)" "$PF_INSTANCIA/deploy/$STACK"
   [ -r "$ING" ] || { echo "erro: ingress declarado e ilegivel: $ING" >&2; exit 1; }
   printf 'ingress : %s\n' "$ING"
   yq -r '.ingress[] | [(.hostname // "(catch-all)"), (.path // "-"), .service] | @tsv' "$ING" \
@@ -217,15 +373,18 @@ if [ "$ACAO" = "acessos" ]; then
   # stack rastreador listaria o gate da wiki e o do harness como se fossem dela. A
   # convencao passa a ser carregada: o servico do gate leva o nome da stack no dele.
   GATE="$(campo "$STACK" gate)"
-  ACESSOS_ARGS=("${COMPOSE_ARGS[@]}")
   FILTRO=""
   if [ -n "$GATE" ]; then
-    GATE="$(resolve "$GATE")"
+    GATE="$(resolve "$GATE" "$PF_INSTANCIA/deploy/$STACK")" || fora_das_raizes gate "$(campo "$STACK" gate)" "$PF_INSTANCIA/deploy/$STACK"
     [ -r "$GATE" ] || { echo "erro: gate declarado e ilegivel: $GATE" >&2; exit 1; }
     printf 'gate    : %s\n' "$GATE"
     printf '          (declarado no registro: o gate desta stack NAO mora no compose dela)\n\n'
     ACESSOS_ARGS=(-f "$GATE")
     FILTRO="$STACK"
+  else
+    ARV="$(arvore_de "")" || { echo "erro: familia $REPO sem current na release — nada a ler" >&2; exit 1; }
+    montar_compose "$ARV"; fixar_projeto; materializar_env
+    ACESSOS_ARGS=(-p "$PROJETO" "${COMPOSE_ARGS[@]}" --env-file "$ENV_FILE")
   fi
   # O compose resolvido normaliza volume para objeto (source/target), nao string, e o
   # `yq` daqui e o de Go: sem --arg e sem env.VAR. Ler isso em shell rendeu falha muda,
@@ -284,15 +443,16 @@ if [ "$ACAO" = "segredos" ]; then
   falta=0; n=0
   while read -r item; do
     [ -n "$item" ] || continue
-    n=$((n+1)); alvo="$(resolve "$item")"
+    n=$((n+1)); alvo="$(resolve "$item" "$SEGREDOS_STACK")" || fora_das_raizes segredo "$item" "$SEGREDOS_STACK"
     if [ -e "$alvo" ]; then
       printf '  ok      : %-58s %s\n' "$item" "$(stat -c '%A %U:%G' "$alvo")"
     else
       printf '  AUSENTE : %s\n' "$item"; falta=$((falta+1))
     fi
   done < <(lista "$STACK" segredos)
-  [ "$n" -gt 0 ] || echo "  (declarado: esta stack nao exige arquivo fora do git)"
+  [ "$n" -gt 0 ] || echo "  (declarado: esta stack nao exige segredo)"
   echo
+  echo "cofre da stack: $SEGREDOS_STACK"
   echo "Nome e presenca, nunca valor: nenhuma linha deste verbo le o conteudo."
   [ "$falta" -eq 0 ] || { echo "faltam $falta arquivo(s) — a stack nao sobe inteira assim." >&2; exit 1; }
   exit 0
@@ -306,8 +466,10 @@ if [ "$ACAO" = "reverter" ]; then
     echo "conserto: declarar reversao via acervo stack (via, janela_min, estado, quem, provado_em)."
     exit 2
   fi
-  DIR="$(dirname "$COMPOSE")"; VIA="$(rev "$STACK" via)"; ANTERIOR="$(ponto_anterior "$STACK")"
-  ATUAL="$(git -C "$DIR" rev-parse --short HEAD 2>/dev/null || echo '?')"
+  VIA="$(rev "$STACK" via)"; ANTERIOR="$(ponto_anterior "$STACK")"
+  ATUAL="?"
+  if [ -r "$PONTOS/$STACK.atual" ]; then ATUAL="$(cat "$PONTOS/$STACK.atual")"
+  elif ARV="$(arvore_de "")"; then ATUAL="$(basename "$ARV")"; fi
 
   if [ "${1:-}" != "--executar" ]; then
     printf 'stack       : %s\n' "$STACK"
@@ -325,12 +487,12 @@ if [ "$ACAO" = "reverter" ]; then
     printf '  %s\n' "$(rev "$STACK" nota)"
     echo
     if [ "$VIA" = "promover" ]; then
-      echo "executar: PF_SIM=1 deploy $STACK reverter --executar [ref]"
-      echo "          sem ref, volta ao ponto gravado acima."
+      echo "executar: PF_SIM=1 deploy $STACK reverter --executar [rev]"
+      echo "          sem rev, volta ao ponto gravado acima; a rev tem de estar materializada na release."
+      echo "          o codigo dos verbos volta por outro ato: release reverter $REPO"
     else
-      echo "executar: NAO por este verbo. O compose aponta clone de trabalho, e checkout ali"
-      echo "          trocaria o branch debaixo de quem edita. Volte o clone na mao e rode"
-      echo "          deploy $STACK up -d --build."
+      echo "executar: NAO por este verbo. A volta desta stack e declarada por \"$VIA\": volte o"
+      echo "          codigo com release reverter $REPO e suba de novo com deploy $STACK up -d."
     fi
     exit 0
   fi
@@ -338,12 +500,12 @@ if [ "$ACAO" = "reverter" ]; then
   shift
   [ "$VIA" = "promover" ] || {
     echo "recusa: reversao de \"$STACK\" e via \"$VIA\", nao \"promover\"." >&2
-    echo "        este verbo nao mexe em clone de trabalho. Rode sem --executar para o plano." >&2
+    echo "        rode sem --executar para o plano." >&2
     exit 1; }
   ALVO="${1:-$ANTERIOR}"
   [ -n "$ALVO" ] || {
-    echo "recusa: sem ref e sem ponto de volta gravado — nao invento para onde voltar." >&2
-    echo "        passe o commit: PF_SIM=1 deploy $STACK reverter --executar <ref>" >&2
+    echo "recusa: sem rev e sem ponto de volta gravado — nao invento para onde voltar." >&2
+    echo "        passe o commit: PF_SIM=1 deploy $STACK reverter --executar <rev>" >&2
     exit 1; }
   # Confirmacao SEMPRE, critica ou nao: reverter e o ato que se faz com o servico
   # quebrado e a pressa alta, e e ai que o alvo errado passa despercebido.
@@ -351,64 +513,70 @@ if [ "$ACAO" = "reverter" ]; then
     echo "recusa: reverter recria os conteineres de \"$STACK\" em $ALVO." >&2
     echo "        confirme com: PF_SIM=1 deploy $STACK reverter --executar $ALVO" >&2
     exit 1; }
-  git -C "$DIR" symbolic-ref -q HEAD >/dev/null && {
-    echo "recusa: $DIR esta num branch — e clone de trabalho, nao worktree de deploy." >&2; exit 1; }
+  SHA="$(resolver_rev "$ALVO")" && ARV="$(arvore_de "$SHA")" || {
+    echo "recusa: $ALVO nao esta materializado na release de $REPO ($PF_RELEASE_RAIZ/$REPO/<sha>)." >&2
+    echo "        a arvore imutavel nasce do release: release promover $REPO $ALVO" >&2
+    exit 1; }
+  montar_compose "$ARV"; fixar_projeto; exigir_segredos; materializar_env
   mkdir -p "$PONTOS"; echo "$ATUAL" > "$PONTOS/$STACK.revertido-de"
-  git -C "$DIR" fetch -q origin || true
-  git -C "$DIR" checkout -q --detach "$ALVO"
-  printf 'revertido: %s\n  %s -> %s\n' "$DIR" "$ATUAL" "$(git -C "$DIR" rev-parse --short HEAD)"
+  printf 'revertido: %s (projeto %s)\n  %s -> %s\n' "$ARVORE" "$PROJETO" "$ATUAL" "$SHA"
   echo "o que NAO voltou: $(rev "$STACK" estado)"
-  cd "$DIR"
-  exec docker compose "${COMPOSE_ARGS[@]}" "${PERFIL_ARGS[@]+"${PERFIL_ARGS[@]}"}" up -d --build --force-recreate
+  cd "$(dirname "$COMPOSE")"
+  rc=0; compose up -d --build --force-recreate || rc=$?
+  [ "$rc" -ne 0 ] || gravar_atual "$SHA"
+  exit "$rc"
 fi
 
-# `promover` fecha o caminho inteiro do worktree de deploy num ato so. Existe porque
-# cada passo isolado PASSA e o conjunto falha calado: config em bind mount de arquivo
-# unico troca de inode no checkout, o mount fica preso ao inode velho, e `reload` rele
-# o arquivo antigo sem erro nenhum — sintaxe valida, teste ok, comportamento inalterado.
+# `promover` sobe a stack da arvore imutavel da release num ato so. Existe porque cada
+# passo isolado PASSA e o conjunto falha calado: config em bind mount de arquivo unico
+# troca de inode entre arvores, o mount fica preso ao inode velho, e `reload` rele o
+# arquivo antigo sem erro nenhum — sintaxe valida, teste ok, comportamento inalterado.
+# Por isso recria (--force-recreate) sempre.
 if [ "$ACAO" = "promover" ]; then
   shift
-  DIR="$(dirname "$COMPOSE")"
-  git -C "$DIR" rev-parse --git-dir >/dev/null 2>&1 || {
-    echo "recusa: $DIR nao e checkout git — nao ha o que promover." >&2; exit 1; }
-  if git -C "$DIR" symbolic-ref -q HEAD >/dev/null; then
-    echo "recusa: $DIR esta num branch — e clone de trabalho, nao worktree de deploy." >&2
-    echo "        checkout ali trocaria o branch debaixo de quem edita." >&2
-    exit 1
-  fi
   if [ "$(campo "$STACK" critico)" = "true" ] && [ "${PF_SIM:-}" != "1" ]; then
     echo "recusa: \"$STACK\" e critica e promover recria os conteineres." >&2
     echo "        confirme com: PF_SIM=1 deploy $STACK promover" >&2
     exit 1
   fi
-  REF="origin/main"
-  if [ $# -gt 0 ] && [[ "$1" != -* ]]; then REF="$1"; shift; fi
-  ANTES="$(git -C "$DIR" rev-parse --short HEAD)"
+  REV=""
+  if [ $# -gt 0 ] && [[ "$1" != -* ]]; then REV="$1"; shift; fi
+  if [ -z "$REV" ]; then
+    ARV="$(arvore_de "")" || {
+      echo "recusa: familia $REPO sem current na release — promova antes: release promover $REPO <rev>" >&2; exit 1; }
+    SHA="$(basename "$ARV")"
+  else
+    SHA="$(resolver_rev "$REV")" && ARV="$(arvore_de "$SHA")" || {
+      echo "recusa: rev \"$REV\" nao esta materializada na release de $REPO." >&2
+      echo "        a arvore imutavel nasce do release: release promover $REPO $REV" >&2
+      exit 1; }
+  fi
+  montar_compose "$ARV"; fixar_projeto; exigir_segredos; materializar_env
   # Ponto de retorno ANTES de mexer: sem isto, `reverter` so funciona com o operador
   # lembrando de cor o SHA de onde saiu — e ninguem lembra as onze da noite, com o
   # servico fora. Erro reversivel e defeito; erro irreversivel e perda.
-  mkdir -p "$PONTOS"; echo "$ANTES" > "$PONTOS/$STACK.anterior"
-  git -C "$DIR" fetch -q origin
-  # Worktree de deploy sujo (alguem editou em producao) trava o checkout e a promocao
-  # para calada: o servido fica atras de main por tempo indefinido. A sujeira nao se
-  # descarta nem se promove: vai para um stash nomeado (com untracked), o verbo diz onde
-  # ficou, e a promocao segue. Quem editou recupera com `git stash list` no worktree.
-  if [ -n "$(git -C "$DIR" status --porcelain 2>/dev/null)" ]; then
-    STASH_MSG="deploy $STACK promover $(date -u +%Y%m%dT%H%M%S): sujeira do worktree em $ANTES"
-    git -C "$DIR" stash push -q -u -m "$STASH_MSG" || {
-      echo "recusa: worktree $DIR sujo e nao consegui guardar a sujeira em stash." >&2; exit 1; }
-    echo "worktree sujo: edicoes guardadas em stash — \"$STASH_MSG\" ($DIR, git stash list)"
-  fi
-  git -C "$DIR" checkout -q --detach "$REF"
-  DEPOIS="$(git -C "$DIR" rev-parse --short HEAD)"
-  printf 'worktree: %s\n  %s -> %s (%s)\n' "$DIR" "$ANTES" "$DEPOIS" "$REF"
-  cd "$DIR"
+  ANTES=""
+  if [ -r "$PONTOS/$STACK.atual" ]; then ANTES="$(cat "$PONTOS/$STACK.atual")"; fi
+  mkdir -p "$PONTOS"
+  if [ -n "$ANTES" ] && [ "$ANTES" != "$SHA" ]; then echo "$ANTES" > "$PONTOS/$STACK.anterior"; fi
+  printf 'release: %s (projeto %s)\n  %s -> %s\n' "$ARVORE" "$PROJETO" "${ANTES:-(nenhum up gravado)}" "$SHA"
+  cd "$(dirname "$COMPOSE")"
   # `--build` porque recriar contêiner NAO reconstroi imagem: quando o commit
   # promovido muda algo que entra por COPY no Dockerfile, o contêiner novo sobe
   # com a imagem velha e o servico quebra sem o verbo acusar nada. Custa o tempo
   # de um build com cache nas stacks que declaram `build:`, e nada nas outras.
-  exec docker compose "${COMPOSE_ARGS[@]}" "${PERFIL_ARGS[@]+"${PERFIL_ARGS[@]}"}" up -d --build --force-recreate "$@"
+  rc=0; compose up -d --build --force-recreate "$@" || rc=$?
+  [ "$rc" -ne 0 ] || gravar_atual "$SHA"
+  exit "$rc"
 fi
 
+ARV="$(arvore_de "")" || {
+  echo "erro: familia $REPO sem current na release ($PF_RELEASE_RAIZ/$REPO/current) — promova: release promover $REPO <rev>" >&2
+  exit 1; }
+montar_compose "$ARV"; fixar_projeto
+[ "$ACAO" != "up" ] || exigir_segredos
+materializar_env
 cd "$(dirname "$COMPOSE")"
-exec docker compose "${COMPOSE_ARGS[@]}" "${PERFIL_ARGS[@]+"${PERFIL_ARGS[@]}"}" "$@"
+rc=0; compose "$@" || rc=$?
+if [ "$rc" -eq 0 ] && [ "$ACAO" = "up" ]; then gravar_atual "$(basename "$ARVORE")"; fi
+exit "$rc"

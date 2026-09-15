@@ -15,9 +15,16 @@
 # Log vai para arquivo desde o primeiro byte: PYTHONUNBUFFERED=1 no ambiente da
 # unit e StandardOutput/StandardError em append no mesmo arquivo. Job que morre
 # no meio deixa o que já escreveu.
+#
+# Tudo o que o job grava de estado mora na instancia, nunca na pasta de onde foi
+# chamado: log em $PF_INSTANCIA/var/log/jobs e cwd da unit em
+# $PF_INSTANCIA/var/tmp/jobs/<unit>. Quem precisa rodar noutro diretorio o declara
+# (LONGJOB_CWD) ou faz `cd` dentro do proprio comando. O PATH da unit e o da release.
 set -euo pipefail
 
-LOGDIR="${LONGJOB_LOGDIR:-$HOME/AI/var/log/jobs}"
+. "$(dirname "$(readlink -f "$0")")/../lib/raizes.sh"
+
+LOGDIR="${LONGJOB_LOGDIR:-$PF_INSTANCIA/var/log/jobs}"
 mkdir -p "$LOGDIR"
 
 uso() {
@@ -41,17 +48,19 @@ case "$cmd" in
     nome="$1"; shift
     unit="platafirma-job-${nome}-$(date +%Y%m%dT%H%M%S)"
     log="$LOGDIR/${unit}.log"
+    cwd="${LONGJOB_CWD:-$PF_INSTANCIA/var/tmp/jobs/$unit}"
+    mkdir -p "$cwd"
     : > "$log"
     printf '# unit=%s\n# inicio=%s\n# cwd=%s\n# comando=%s\n' \
-      "$unit" "$(date -Is)" "$PWD" "$*" >> "$log"
+      "$unit" "$(date -Is)" "$cwd" "$*" >> "$log"
     systemd-run --user --unit="$unit" --quiet \
-      --property=WorkingDirectory="$PWD" \
+      --property=WorkingDirectory="$cwd" \
       --property=StandardOutput="append:$log" \
       --property=StandardError="append:$log" \
       --property=SyslogIdentifier="$unit" \
       --property=CPUWeight="${LONGJOB_CPU_PESO:-50}" \
       --property=MemoryHigh="${LONGJOB_MEM_ALTA:-16G}" \
-      --setenv=PATH="$HOME/AI/bin:$HOME/.local/bin:$PATH" \
+      --setenv=PATH="$PF_RELEASE/harness/bin:$PATH" \
       --setenv=PYTHONUNBUFFERED=1 \
       -- "$@"
     echo "unit: $unit"

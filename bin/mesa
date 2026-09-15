@@ -1,4 +1,4 @@
-#!/home/claudinho/AI/.venv-harness/bin/python
+#!/opt/platafirma/current/venv/harness/bin/python
 # mesa — memoria de trabalho da cadeira entre fitas, por chapeu
 # capacidade: trabalho
 # dono: gestao-estrategica (a forma: o que e mesa, o que e caderno) · ia (montador) · ti (substrato)
@@ -9,7 +9,8 @@
 #         anota|limpa|legado -> trabalho/mesa, transicao · fita -> pende (guarda de fita e de sessao)
 # ambiente: PF_CADEIRA (obrigatoria, origem porta), PF_FITA, PF_SUPERFICIE[=desconhecida],
 #           MEM_REDIS_HOST[=127.0.0.1], MEM_REDIS_PORT[=6380], SESSAO_PG_PORT[=5437],
-#           SESSAO_PG_PASSWORD (segredo; leitura de sessao/.env e transicao, nao forma)
+#           PF_INSTANCIA[=/srv/platafirma/casa], PF_ABERTURA_DIR[=$PF_INSTANCIA/var/abertura-publicada],
+#           SESSAO_PG_PASSWORD (segredo; lido de $PF_INSTANCIA/segredos/harness-sessao/SESSAO_PG_PASSWORD, a variavel e transicao, nao forma)
 # depende: msg-mem (Valkey), Postgres da sessao, arvore abertura/ (cadernos)
 # escreve: sessao.mesa_item (item, fez), mem:<cadeira>:<slot> (anota, limpa), fita:<cadeira> (fita)
 #
@@ -85,11 +86,20 @@ TTL_MESA_H = int(os.environ.get("MEM_MESA_TTL_HORAS", "48"))  # TTL do FOSSIL: i
 TTL_MESA_S = TTL_MESA_H * 3600
 TTL_FITA = int(os.environ.get("MEM_FITA_TTL_DIAS", "14")) * 86400  # guarda de fita corrente, outro eixo
 TETO_AVISO = 4000  # bytes; acima disto e sintoma de fato nao despachado
-RAIZ = os.environ.get("PF_RAIZ", os.path.expanduser("~/AI"))
-HARNESS = os.path.join(RAIZ, "platafirma-harness")
-CADERNOS = os.path.join(HARNESS, "abertura")  # arq:0073: caderno mora em abertura/<cadeira>/<slug>/
+# Duas raizes e so duas (card #3010). Cadernos saem da MORADA PUBLICADA da instancia
+# (arq:0097: runtime nao le working tree), a mesma de monta-sessao e fila; o ledger chega
+# pela release — a arvore deste arquivo, por realpath —; o segredo do banco mora na
+# instancia, um arquivo por nome.
+HARNESS = os.path.dirname(os.path.dirname(os.path.realpath(__file__)))
+sys.path.insert(0, os.path.join(HARNESS, "lib"))
+from raizes import instancia  # noqa: E402
+
+# arq:0073: caderno mora em abertura/<cadeira>/<slug>/
+CADERNOS = os.path.join(
+    os.environ.get("PF_ABERTURA_DIR") or str(instancia() / "var" / "abertura-publicada"),
+    "current", "abertura")
 LEDGER = os.path.join(HARNESS, "registro", "eventos-org.jsonl")
-SESSAO_ENV = os.path.join(HARNESS, "sessao", ".env")
+SESSAO_SEGREDO = str(instancia() / "segredos" / "harness-sessao" / "SESSAO_PG_PASSWORD")
 SLOT_RE = re.compile(r"^[a-z0-9][a-z0-9-]{0,23}$")
 
 # Slot de fita corrente (card 449). Fora do padrao `mem:<cadeira>:<slot>` de
@@ -121,17 +131,16 @@ def conn():
 
 
 def dsn():
-    """DSN do harness-sessao. Senha sai de `sessao/.env`, que e 600 e fora do git —
-    o verbo roda como `claudinho`, dono do arquivo, e nao ha segredo em codigo."""
+    """DSN do harness-sessao. Senha sai de `$PF_INSTANCIA/segredos/harness-sessao/SESSAO_PG_PASSWORD`,
+    um arquivo por nome, 600 e fora de qualquer repo — o verbo roda como `claudinho`, dono
+    do arquivo, e nao ha segredo em codigo. Nunca se procura `.env` em arvore."""
     d = os.environ.get("SESSAO_PG_DSN")
     if d:
         return d
     senha = os.environ.get("SESSAO_PG_PASSWORD", "")
-    if not senha and os.path.isfile(SESSAO_ENV):
-        for linha in open(SESSAO_ENV, encoding="utf-8"):
-            if linha.startswith("SESSAO_PG_PASSWORD="):
-                senha = linha.split("=", 1)[1].strip()
-                break
+    if not senha and os.path.isfile(SESSAO_SEGREDO):
+        with open(SESSAO_SEGREDO, encoding="utf-8") as fh:
+            senha = fh.read().strip()
     porta = os.environ.get("SESSAO_PG_PORT", "5437")
     return f"host=127.0.0.1 port={porta} dbname=sessao user=sessao password={senha}"
 
@@ -588,7 +597,8 @@ def _indice_cadernos(d):
     for slot in achados:
         caminho = os.path.join(d, slot, "caderno.md")
         st = os.stat(caminho)
-        # Idade e a do ultimo commit, nao a do mtime: clone recem-puxado tem mtime de hoje.
+        # Idade e a do ultimo commit quando a arvore e git; a morada publicada nao e, e ali
+        # vale o mtime, que e a hora da publicacao.
         try:
             ts = int(subprocess.run(
                 ["git", "-C", os.path.dirname(CADERNOS), "log", "-1", "--format=%ct", "--", caminho],

@@ -1,5 +1,11 @@
 # Runbook — restart da Onda 5 (#2678): ativar o código de identidade mergeado
 
+> **Registro histórico (estado de 25/08/2026).** Naquele dia o harness rodava do clone na
+> pasta de trabalho da conta `claudinho`, e é esse clone que os passos abaixo chamam de
+> `<clone-harness>`. Desde o card #3010 (15/09/2026) nada de produção roda de lá: código
+> em `/opt/platafirma/current/harness`, log da porta em `/srv/platafirma/casa/var/log/ops/`.
+> Os caminhos de log e de compose abaixo já estão no equivalente novo.
+
 > **EXECUTAR COMO `claudinho` — NÃO como `megafone`.** Todos os serviços vivem na conta
 > `claudinho` (uid 1001): é dela o unit `ops-mcp` (`systemctl --user` só vê o próprio dono)
 > e o daemon docker rootless (`/run/user/1001/docker.sock`). Rodando como `megafone` (uid
@@ -14,7 +20,7 @@
 > da 'Failed to connect to bus: No medium found'):
 >
 >     sudo -u claudinho env XDG_RUNTIME_DIR=/run/user/1001 DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1001/bus <comando> E use SEMPRE caminho ABSOLUTO
-> `/home/claudinho/AI` — nunca `~/AI`, que como megafone vira `/home/megafone/AI`.
+> — nunca `~`, que como megafone resolve para a home de megafone.
 
 **O que este restart põe no ar:** rechaveio do PEP por `sub` (#137), `sid`/`jti` na
 auditoria (#139), unificação das funções de identidade (#2287) e as duas guardas de
@@ -38,14 +44,14 @@ velho segue no ar até este restart.
 ## Passos (na sessão do claudinho, ~2 min)
 
     # 0. repo no head e limpo (deve mostrar f2f5e3c ou mais novo)
-    cd /home/claudinho/AI/platafirma-harness && git pull --ff-only && git log --oneline -1
+    cd <clone-harness> && git pull --ff-only && git log --oneline -1
 
     # 1. ops-mcp — restart pega o código do repo
     systemctl --user restart ops-mcp
     sleep 2 && curl -fsS http://127.0.0.1:8010/health && echo " ops OK"
 
     # 2. jaiminho-server — REBUILD (server.py baked) + recreate; stack isolada, sem depends_on
-    docker compose -f /home/claudinho/AI/platafirma-harness/jaiminho/docker-compose.yml up -d --build jaiminho-server
+    docker compose -f /opt/platafirma/current/harness/jaiminho/docker-compose.yml up -d --build jaiminho-server
 
 Se preferir não abrir a sessão, os dois como one-liner de fora:
 
@@ -57,7 +63,7 @@ Se preferir não abrir a sessão, os dois como one-liner de fora:
 
 ## Verificação — o restart valeu?
 
-    sudo -iu claudinho bash -lc 'tail -5 /home/claudinho/AI/var/log/ops/ops-$(date +%F).jsonl | jq "{sujeito,sub,sid,jti,tool}"'
+    sudo -iu claudinho bash -lc 'tail -5 /srv/platafirma/casa/var/log/ops/ops-$(date +%F).jsonl | jq "{sujeito,sub,sid,jti,tool}"'
     # #137/#139 no ar: sujeito vira o SUB (nao "megafone"), e sid/jti deixam de ser null
     sudo -iu claudinho docker inspect platafirma/jaiminho-server:local -f 'built={{.Created}}'   # de hoje
     # guarda de reentrancia: Bearer malformado da 401 e o servico SEGUE de pe
@@ -66,7 +72,7 @@ Se preferir não abrir a sessão, os dois como one-liner de fora:
 ## Rollback (se travar auth)
 1. **Imediato, sem reverter nada:** chamar o ops-mcp com o token estático —
    `Authorization: Bearer $OPS_AUTH_TOKEN` resolve para `claudinho`/operador (vale até 30/09).
-2. **Reverter código:** `sudo -u claudinho env XDG_RUNTIME_DIR=/run/user/1001 DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1001/bus bash -lc 'cd /home/claudinho/AI/platafirma-harness && git revert --no-edit <sha> && systemctl --user restart ops-mcp'` (e rebuild do jaiminho se o problema for lá). Para desfazer a unificação inteira, voltar a `fc4f28d`.
+2. **Reverter código:** `sudo -u claudinho env XDG_RUNTIME_DIR=/run/user/1001 DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1001/bus bash -lc 'cd <clone-harness> && git revert --no-edit <sha> && systemctl --user restart ops-mcp'` (e rebuild do jaiminho se o problema for lá). Para desfazer a unificação inteira, voltar a `fc4f28d`.
 3. **NÃO** editar `sujeitos.yaml` no susto: o dual-key já cobre username e sub. O destravador é o token estático, não o yaml.
 
 ## Se você já rodou como megafone (limpeza)

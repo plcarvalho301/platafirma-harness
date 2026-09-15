@@ -3,12 +3,12 @@
 
 O caminho do dado e curto e so tem um sentido: o dono manda um print, o receptor
 baixa a midia pelo endpoint AUTENTICADO (spec >= v1.11) e grava em
-~/AI/fitas/<cadeira>/anexos/. O que vai ao verbo e o CAMINHO, nunca os bytes — o
-Claude Code le imagem do disco por `Read`, e anexos/ esta na allowlist da cadeira.
+$PF_INSTANCIA/var/fitas/<cadeira>/anexos/. O que vai ao verbo e o CAMINHO, nunca os
+bytes — o Claude Code le imagem do disco por `Read`, e anexos/ esta na allowlist da cadeira.
 
 Quem grava e o receptor, de dentro do container, porque o bind mount de
-~/AI/fitas e dele: partida por direcao, o worker nunca fala Matrix e o receptor
-nunca chama verbo.
+$PF_INSTANCIA/var/fitas e dele: partida por direcao, o worker nunca fala Matrix e o
+receptor nunca chama verbo.
 
 Duas guardas, e as duas produzem RECUSA EXPLICITA na sala — silencio aqui e o
 defeito que o criterio 19 nomeia:
@@ -28,7 +28,9 @@ import re
 from mautrix.types import SpecVersions
 
 TETO_PADRAO = 20 * 1024 * 1024  # 20 MiB, o numero da posicao de claudinho-TI
-FITAS_RAIZ = "/home/claudinho/AI/fitas"
+# Fitas sao estado da instancia (card #3010). Default igual ao de lib/raizes.py, repetido
+# porque o container so recebe chat/; CHAT_FITAS_RAIZ sobrepoe.
+FITAS_RAIZ = os.path.join(os.environ.get("PF_INSTANCIA", "/srv/platafirma/casa"), "var", "fitas")
 
 MIME_PERMITIDOS = {
     "image/png": ".png",
@@ -182,8 +184,8 @@ def linha_de_corpo(caminho: str, tamanho: int, mime: str, legenda: str = "") -> 
     """O que o verbo recebe no lugar dos bytes.
 
     Caminho absoluto e valido no host tal como esta: o bind mount do receptor
-    monta ~/AI/fitas no MESMO caminho absoluto de fora, justamente para o texto
-    atravessar a fronteira sem traducao.
+    monta $PF_INSTANCIA/var/fitas no MESMO caminho absoluto de fora, justamente para
+    o texto atravessar a fronteira sem traducao.
     """
     cabeca = f"[anexo recebido: {caminho} ({mime}, {_humano(tamanho)})]"
     return f"{cabeca}\n{legenda}".strip()

@@ -4,7 +4,8 @@
 """conta-abertura — tokens do pacote de abertura, por cadeira e por arquivo.
 
 Nao reimplementa contagem: importa `monta-sessao` do repo real e usa o MESMO
-`monta()` (tokenizador qwen2.5, opt/tokenizers/qwen2.5.json). O numero aqui bate
+`monta()` (tokenizador qwen2.5, terceiros/tokenizers/qwen2.5.json da arvore da release,
+pinado por sha256 em registro/terceiros.json). O numero aqui bate
 com o que a mesa e `conferir sessao` mostram, por construcao — mesma funcao.
 
 Le sem rede: `atualizar=False`. Serve do clone; se quiser HEAD fresco, `repo_sync`

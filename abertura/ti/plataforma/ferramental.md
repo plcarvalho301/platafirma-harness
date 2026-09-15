@@ -7,7 +7,7 @@ Working set do chapéu além do ofício: o que roda, onde roda, o que se reinici
 - `deploy <stack> promover` — promover release de stack (nunca `up -d` cru).
 - `longjob run <nome> <cmd...>` — todo comando acima de 2 min; não herda o ambiente,
   `bash -lc 'export VAR=…; <verbo>'`.
-- `git -C ~/AI/<repo>` · `systemctl --user` · `docker` (rootless) — host do uid 1001,
+- `repo git <repo> <args…>` (worktree da bancada) · `systemctl --user` · `docker` (rootless) — host do uid 1001,
   sem sudo.
 - `git-filter-repo` — reescrita de história, irreversível: exige clone descartável.
 

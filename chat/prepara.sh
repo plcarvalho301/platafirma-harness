@@ -7,15 +7,29 @@
 # deliberado, nao efeito colateral de reexecutar o preparo.
 #
 # Nada aqui ecoa valor de segredo. O que sai na tela e nome e presenca.
+#
+# ambiente: PF_INSTANCIA (default /srv/platafirma/casa), PF_COFRE (default
+# $PF_INSTANCIA/segredos/matrix), PF_SEGREDOS_STACK (default $PF_INSTANCIA/segredos/chat).
+#
+# Nada nasce na arvore do codigo (card #3010): o cofre e a instancia. As variaveis que o
+# compose interpola viram um arquivo cada em segredos/chat/, e o `deploy` materializa
+# delas o --env-file em tmpfs. Nao ha .env na stack.
 set -euo pipefail
 
+. "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/../lib/raizes.sh"
+
 export DOCKER_HOST="${DOCKER_HOST:-unix:///run/user/$(id -u)/docker.sock}"
-COFRE="${PF_COFRE:-$HOME/AI/var/secrets/matrix}"
-AQUI="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+COFRE="${PF_COFRE:-$PF_INSTANCIA/segredos/matrix}"
+SEGREDOS_STACK="${PF_SEGREDOS_STACK:-$PF_INSTANCIA/segredos/chat}"
 SYNAPSE_IMG="ghcr.io/element-hq/synapse:v1.157.2"
 
 umask 077
-mkdir -p "$COFRE"
+# O cofre nasce no bootstrap do host e recebe o oidc-client-secret da seguranca antes
+# deste preparo: ausente, para alto — criar diretorio aqui esconderia instancia faltando.
+if [ ! -d "$COFRE" ]; then
+  echo "erro: cofre ausente: $COFRE" >&2
+  exit 1
+fi
 
 # O secret do client OIDC e ato de claudinho-seguranca. Ausente, o preparo para: gerar
 # um aqui produziria stack de pe que nao autentica ninguem, e o erro so apareceria no
@@ -87,12 +101,19 @@ namespaces:
 FIM
 chmod 600 "$COFRE/registration.yaml"
 
-cat > "$AQUI/.env" <<FIM
-# GERADO por ./prepara.sh a partir de $COFRE — fora do git.
-PG_PASSWORD=$(le pg-password)
-AS_TOKEN=$(le as-token)
-HS_TOKEN=$(le hs-token)
-FIM
-chmod 600 "$AQUI/.env"
+# Um arquivo por variavel que o compose interpola. O `deploy` materializa o --env-file
+# a partir daqui; o valor nunca passa pela tela nem pela arvore do codigo.
+[ -d "$(dirname "$SEGREDOS_STACK")" ] || {
+  echo "erro: segredos da instancia ausentes: $(dirname "$SEGREDOS_STACK")" >&2
+  exit 1
+}
+mkdir -p -m 700 "$SEGREDOS_STACK"
+grava_var() {
+  le "$2" > "$SEGREDOS_STACK/$1"
+  chmod 600 "$SEGREDOS_STACK/$1"
+}
+grava_var PG_PASSWORD pg-password
+grava_var AS_TOKEN as-token
+grava_var HS_TOKEN hs-token
 
-echo "gerados: segredos.yaml, registration.yaml (no cofre) e .env (na stack)"
+echo "gerados: segredos.yaml, registration.yaml (no cofre) e PG_PASSWORD, AS_TOKEN, HS_TOKEN em $SEGREDOS_STACK"

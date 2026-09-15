@@ -4,7 +4,10 @@ Documentation=https://wiki.platafirma.org/index.php/Frente:harness/memoria-de-ag
 
 [Service]
 Type=oneshot
-ExecStart=/home/claudinho/AI/bin/descansar varredura
+# Da release, nunca de clone (card #3010): a unit sobrevive a bancada apagada.
+WorkingDirectory=/opt/platafirma/current/harness
+Environment=PATH=/opt/platafirma/current/harness/bin:/usr/local/bin:/usr/bin:/bin
+ExecStart=/opt/platafirma/current/harness/bin/descansar varredura
 # Exit 1 é "achou coisa fora do lugar", não falha de execução: sem isto o systemd
 # marcaria a unit como failed toda vez que a varredura funcionasse e reportasse.
 SuccessExitStatus=0 1

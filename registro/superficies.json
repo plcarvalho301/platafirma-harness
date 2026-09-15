@@ -43,7 +43,7 @@
         "claudinho-mcp",
         "platafirma-wiki"
       ],
-      "onde_declara": "~/AI/fitas/<cadeira>/.mcp.json, escrito por prepara_cwd",
+      "onde_declara": "/srv/platafirma/casa/var/fitas/<cadeira>/.mcp.json, escrito por prepara_cwd",
       "verificavel_do_host": true,
       "porque": "roda no mesmo host: o .mcp.json e o settings sao lisiveis daqui",
       "produtor": {
@@ -61,7 +61,7 @@
       ],
       "onde_declara": "wt-<card>/.mcp.json",
       "verificavel_do_host": true,
-      "porque": "as worktrees vivem em ~/AI; foi daqui que o padrao veio",
+      "porque": "as worktrees vivem na bancada declarada pela conta (PF_BANCADA); foi daqui que o padrao veio",
       "injecao_de_cadeira": "~/.claude/CLAUDE.md (symlink de agente/CLAUDE.md): slug dito na abertura vence; sem slug, default `fabrica`. PF_CADEIRA NAO serve — Bash negado na estacao, e run_command roda no ambiente do ops-server, nao no do terminal. Medido em 16/08/2026.",
       "produtor": {
         "tipo": "arquivo-rastreado",

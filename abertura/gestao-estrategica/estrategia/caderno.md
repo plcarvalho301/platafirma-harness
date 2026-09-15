@@ -23,7 +23,7 @@ re-derivar. Fato de negócio, estado de runtime e remit canônico NÃO entram.
   não entra no ledger, e forçar o provimento para registrar um ato criaria o vínculo que a
   persona dele nega.
 - **`curar --apply` regenera o export no WORKTREE de main, nao no clone.** Grava o conceito
-  no Postgres e reescreve `ontologia/acervo/*.jsonl` em `var/wt/conhecimento-main`; o clone
+  no Postgres e reescreve `ontologia/acervo/*.jsonl` no worktree de main da bancada (`PF_CONHECIMENTO_DIR`; layout `wt/<repo>/<cadeira>`); o clone
   `platafirma-conhecimento` pode estar em branch alheia, e commitar de la leva a lavra para
   a branch de outra cadeira. Medido em 04/09, lavrando comunicacao-executiva: rodei
   `exportar-acervo` no clone antes de perceber e o commit caiu numa branch da fabrica. O

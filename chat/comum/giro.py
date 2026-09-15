@@ -15,29 +15,37 @@ import os
 import sys
 import threading
 
-RAIZ = os.environ.get("PF_RAIZ", os.path.expanduser("~/AI"))
-HARNESS = os.environ.get("PF_HARNESS", os.path.join(RAIZ, "platafirma-harness"))
-SESSAO_ENV = os.path.join(HARNESS, "sessao", ".env")
+# Segredo da stack harness-sessao no cofre da instancia, um arquivo por variavel
+# (card #3010). Nunca .env na arvore do codigo. Default da instancia igual ao de
+# lib/raizes.py, repetido porque este modulo tambem entra no container da recepcao.
+SEGREDO_SENHA = os.path.join(
+    os.environ.get("PF_INSTANCIA", "/srv/platafirma/casa"),
+    "segredos", "harness-sessao", "SESSAO_PG_PASSWORD")
+
+
+class SegredoAusente(RuntimeError):
+    """Sem senha do banco de sessao: nao se monta DSN sem senha."""
 
 
 def dsn() -> str:
     """DSN do Postgres de sessão (5437).
 
-    Senha lida de SESSAO_PG_PASSWORD ou do arquivo sessao/.env (600, fora do git).
+    Senha lida de SESSAO_PG_PASSWORD ou do arquivo em
+    $PF_INSTANCIA/segredos/harness-sessao/SESSAO_PG_PASSWORD (600). Ausente nos dois:
+    SegredoAusente, nunca DSN sem senha.
     """
     d = os.environ.get("SESSAO_PG_DSN")
     if d:
         return d
     senha = os.environ.get("SESSAO_PG_PASSWORD", "")
-    if not senha and os.path.isfile(SESSAO_ENV):
+    if not senha:
         try:
-            with open(SESSAO_ENV, encoding="utf-8") as f:
-                for linha in f:
-                    if linha.startswith("SESSAO_PG_PASSWORD="):
-                        senha = linha.split("=", 1)[1].strip().strip("'\"")
-                        break
+            with open(SEGREDO_SENHA, encoding="utf-8") as f:
+                senha = f.read().strip()
         except OSError:
-            pass
+            senha = ""
+    if not senha:
+        raise SegredoAusente(f"senha do banco de sessao ausente: {SEGREDO_SENHA}")
     porta = os.environ.get("SESSAO_PG_PORT", "5437")
     host = os.environ.get("SESSAO_PG_HOST", "127.0.0.1")
     dbname = os.environ.get("SESSAO_PG_DBNAME", "sessao")
@@ -80,7 +88,11 @@ def grava_giro(
         print("[sessao.giro] FALHOU persistir giro: modulo psycopg ausente", file=sys.stderr, flush=True)
         return {"gravado": False, "motivo": "psycopg ausente"}
 
-    con_dsn = dsn_override or dsn()
+    try:
+        con_dsn = dsn_override or dsn()
+    except SegredoAusente as e:
+        print(f"[sessao.giro] FALHOU persistir giro ({fid}, {seq}): {e}", file=sys.stderr, flush=True)
+        return {"gravado": False, "motivo": str(e)}
     try:
         with psycopg.connect(con_dsn, connect_timeout=3) as con:
             with con.cursor() as cur:

@@ -1,0 +1,19 @@
+# compose.override.exemplo.yaml — FORMA da sobreposicao da instancia para a stack
+# `jaiminho` (card #3010). Exemplo versionado; o real mora em
+#   /srv/platafirma/casa/deploy/jaiminho/compose.override.yaml
+# e o `deploy jaiminho up|promover` sobe, com o projeto de sempre (`jaiminho`):
+#   docker compose -p jaiminho \
+#     -f /opt/platafirma/current/harness/jaiminho/docker-compose.yml \
+#     -f /srv/platafirma/casa/deploy/jaiminho/compose.override.yaml \
+#     --env-file <tmpfs materializado de /srv/platafirma/casa/segredos/jaiminho/>
+#
+# Aqui mora todo caminho da instancia, e so ele. O nome termina em .exemplo.yaml de
+# proposito: `docker compose` sem -f carrega compose.override.yaml sozinho.
+
+services:
+  jaiminho-server:
+    volumes:
+      # Refresh token do Google, 600, READ-ONLY: rotacionar nao exige rebuild.
+      - /srv/platafirma/casa/segredos/google/token.json:/opt/pf/google/token.json:ro
+      # Trilha do externo (posse convertida para 10001 uma vez, ver a base).
+      - /srv/platafirma/casa/var/log/jaiminho:/var/log/jaiminho:rw

@@ -39,12 +39,13 @@ from collections import Counter
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from ._raizes import instancia
 from .fontes import Fonte
 from .gate import Julgamento, Parecer, Veredito
 from .resolvedor import le_chave
 
 TRILHA = os.environ.get(
-    "PF_REC_TRILHA", str(Path.home() / "AI" / "var" / "log" / "recuperacao" / "veredito.jsonl")
+    "PF_REC_TRILHA", str(instancia() / "var" / "log" / "recuperacao" / "veredito.jsonl")
 )
 
 #: Produtores que já escrevem neste esquema. `wiki-mcp` entra em F4 (#2316, TI).

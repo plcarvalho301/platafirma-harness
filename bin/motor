@@ -10,16 +10,24 @@
 # cauda: nao
 # poda: cosmetica@rag,casa
 # consome: rag-extractor-api@platafirma-conhecimento/rag/openapi.yaml >=1.0 (buscar, medir; endpoint por instancia em motor-instancias.json)
-# ambiente: RAG_PYTHON origem-shell RAG_PYTHON=<python-do-rag> (indexar; ausente cai no venv do rag); CORPUS_DIR origem-shell (indexar; ausente usa rag/corpus); PF_SESSAO porta; PF_ORDEM_ID porta; PF_CADEIRA porta; PF_CHAPEU porta; OPS_NAME porta; USER shell
-# escreve: var/log/ops/*.jsonl (evento consulta, best-effort); .env da ingestao segredo (ajuste de corte, via motor-instancias.json); compose da stack (ajuste de container); var/medicoes/*.json (medir)
-# depende: docker (ajuste servido, medir banco, indexar); git (ajuste que promove); rede (consome a API do rag)
+# ambiente: RAG_PYTHON origem-shell RAG_PYTHON=<python-do-rag> (indexar; ausente cai em $PF_RELEASE/venv/rag/bin/python); CORPUS_DIR origem-shell (indexar; ausente usa $PF_INSTANCIA/dados/corpus); PF_RELEASE origem-shell [=/opt/platafirma/current] (codigo do rag, gabarito); PF_INSTANCIA origem-shell [=/srv/platafirma/casa] (segredos, log, medicoes, sobreposicao do compose); OPS_LOG_DIR origem-shell [=$PF_INSTANCIA/var/log/ops]; PF_BIN origem-shell (teste; ausente e o bin/ da propria arvore); PF_SESSAO porta; PF_ORDEM_ID porta; PF_CADEIRA porta; PF_CHAPEU porta; OPS_NAME porta; USER shell
+# escreve: $PF_INSTANCIA/var/log/ops/*.jsonl (evento consulta, best-effort); env da ingestao na instancia, arquivo NOME=valor ou $PF_INSTANCIA/segredos/<stack>/<VAR> (ajuste de corte, via motor-instancias.json); $PF_INSTANCIA/deploy/<stack>/compose.override.yaml (ajuste de container); $PF_INSTANCIA/var/medicoes/*.json (medir)
+# depende: docker (ajuste servido, medir banco, indexar); verbo deploy (ajuste que promove); rede (consome a API do rag)
 # substitui: docker exec rag-* ; curl ao endpoint de busca
 # O verbo e `motor`; a instancia e argumento (arq:0037; veto do verbo `rag`).
 # atos: a capacidade e do (verbo, ato) (arq:0110 §6). Transicao vigente->conforme em spec_motor §5.
 import json, os, re, subprocess, sys, time, urllib.request
+from pathlib import Path
 
-RAIZ = os.path.expanduser("~/AI")
-REG = os.path.join(RAIZ, "platafirma-harness/registro/motor-instancias.json")
+# Raizes da casa (card #3010). Codigo, registro e verbos irmaos vem da PROPRIA arvore
+# (realpath); o que o registro nomeia resolve em duas raizes so: release (codigo do rag,
+# gabarito) e instancia (segredos, log, medicoes, sobreposicao do compose).
+_ARVORE = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(_ARVORE / "lib"))
+import raizes  # noqa: E402
+
+REG = str(_ARVORE / "registro" / "motor-instancias.json")
+BIN = os.environ.get("PF_BIN") or str(_ARVORE / "bin")
 DOCKER = {"DOCKER_HOST": "unix:///run/user/1001/docker.sock"}
 
 
@@ -38,9 +46,70 @@ def resolve_particao(argv, ato):
         f"  assumindo 'obra' (unica povoada hoje); declare a particao.\n  {SPEC}\n")
     return "obra", argv
 
-def sh(cmd, **kw):
-    env = dict(os.environ, **DOCKER)
+def sh(cmd, env_extra=None, **kw):
+    env = {**os.environ, **(env_extra or {}), **DOCKER}
     return subprocess.run(cmd, shell=True, capture_output=True, text=True, env=env, **kw)
+
+
+# O registro nomeia caminho de producao pelo valor canonico das duas raizes (desenho §1-§3).
+# A resolucao rebaseia esse prefixo em raizes.release()/raizes.instancia(), para o teste
+# apontar tudo a um diretorio temporario. A forma relativa (<familia>/<caminho> na release,
+# <stack> ou <stack>/<NOME> sob segredos/) segue aceita.
+_CANON_RELEASE = "/opt/platafirma/current/"
+_CANON_INSTANCIA = "/srv/platafirma/casa/"
+
+
+def _seguro(rel, segmentos=None):
+    """Nome relativo do registro nunca sai da raiz: nada absoluto, nada de '..', nenhum
+    arquivo oculto (.env). `segmentos` fixa a forma: 1 = <stack>, 2 = <stack>/<NOME>."""
+    partes = (rel or "").split("/")
+    if not rel or rel.startswith("/") or ".." in partes or any(x.startswith(".") for x in partes):
+        return False
+    return segmentos is None or len(partes) == segmentos
+
+
+def _curto(familia):
+    return familia[len("platafirma-"):] if familia.startswith("platafirma-") else familia
+
+
+def na_release(valor):
+    """Campo de release do registro -> arquivo na release no ar ($PF_RELEASE/<curto>/<caminho>).
+    Aceita o canonico /opt/platafirma/current/<curto>/... e o logico <familia>/<caminho>.
+    Fora das duas formas devolve ''."""
+    valor = valor or ""
+    if valor.startswith(_CANON_RELEASE):
+        resto = valor[len(_CANON_RELEASE):]
+        return str(raizes.release() / resto) if _seguro(resto) else ""
+    if not _seguro(valor) or "/" not in valor:
+        return ""
+    familia, _, resto = valor.partition("/")
+    return str(raizes.release() / _curto(familia) / resto)
+
+
+def logico_da_release(valor):
+    """Nome logico <familia>/<caminho> (chave estavel das medicoes, igual a das antigas)."""
+    for prefixo in (_CANON_RELEASE, str(raizes.release()).rstrip("/") + "/"):
+        if valor and valor.startswith(prefixo):
+            curto, _, resto = valor[len(prefixo):].partition("/")
+            return f"platafirma-{curto}/{resto}"
+    return valor or ""
+
+
+def na_instancia(valor, relativo_a=""):
+    """Campo de instancia do registro -> caminho sob $PF_INSTANCIA. Aceita o canonico
+    /srv/platafirma/casa/... e o relativo (a `relativo_a` dentro da instancia). Invalido: ''."""
+    valor = valor or ""
+    if valor.startswith(_CANON_INSTANCIA):
+        resto = valor[len(_CANON_INSTANCIA):]
+        return str(raizes.instancia() / resto) if _seguro(resto) else ""
+    if not _seguro(valor):
+        return ""
+    return str(raizes.instancia() / relativo_a / valor) if relativo_a else str(raizes.instancia() / valor)
+
+
+def caminho_override(inst):
+    """Sobreposicao da instancia (desenho §4): o compose base da release e so-leitura."""
+    return str(raizes.instancia() / "deploy" / inst["stack"] / "compose.override.yaml")
 
 
 def reg():
@@ -88,48 +157,70 @@ def cmd_listar(d):
 
 
 def caminho_env(inst):
-    return os.path.join(RAIZ, inst.get("env_da_ingestao", ""))
+    """Env da ingestao, sempre na instancia (desenho §3): o registro declara um arquivo
+    NOME=valor (canonico /srv/platafirma/casa/...) ou uma stack, e ai e o diretorio
+    segredos/<stack> com um arquivo por variavel. Nunca .env em arvore de repo."""
+    valor = inst.get("env_da_ingestao") or ""
+    if _seguro(valor, 1):
+        return str(raizes.instancia() / "segredos" / valor)
+    return na_instancia(valor) if valor.startswith(_CANON_INSTANCIA) else ""
+
+
+def _grava_atomico(alvo, texto):
+    tmp = alvo + ".tmp"
+    fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    with os.fdopen(fd, "w") as f:
+        f.write(texto)
+    os.replace(tmp, alvo)
 
 
 def le_env_da_ingestao(inst):
     """Ajuste da metade OFFLINE. A ingestao nao roda em container: roda no host, com o venv do
-    rag, e o `dotenv` do processo le este arquivo. Ler o compose para dizer o valor de corte
-    diria o que o servico de BUSCA carrega — e a busca nao corta nada."""
+    rag, e recebe este env como ambiente (`indexar`). Ler o compose para dizer o valor de
+    corte diria o que o servico de BUSCA carrega — e a busca nao corta nada."""
     caminho = caminho_env(inst)
-    if not caminho or not os.path.exists(caminho):
-        return {}
     out = {}
-    with open(caminho) as f:
-        for linha in f:
-            linha = linha.strip()
-            if linha and not linha.startswith("#") and "=" in linha:
-                k, v = linha.split("=", 1)
-                out[k.strip()] = v.strip()
+    if caminho and os.path.isdir(caminho):
+        for nome in sorted(os.listdir(caminho)):
+            arq = os.path.join(caminho, nome)
+            if os.path.isfile(arq) and not nome.endswith(".tmp"):
+                with open(arq) as f:
+                    out[nome] = f.read().strip()
+    elif caminho and os.path.isfile(caminho):
+        with open(caminho) as f:
+            for linha in f:
+                linha = linha.strip()
+                if linha and not linha.startswith("#") and "=" in linha:
+                    k, v = linha.split("=", 1)
+                    out[k.strip()] = v.strip()
     return out
 
 
 def escreve_no_env(inst, b, v, novo):
-    """Grava no `.env` da ingestao. Sem commit e sem promover, de proposito: o arquivo carrega
-    segredo e nao e versionado, e nao ha servico a reiniciar — o valor passa a valer na proxima
-    ingestao, e so no que ela cortar."""
+    """Grava a variavel no env da ingestao da instancia. Sem commit e sem promover, de
+    proposito: o env carrega segredo e nao e versionado, e nao ha servico a reiniciar —
+    o valor passa a valer na proxima ingestao, e so no que ela cortar."""
     caminho = caminho_env(inst)
     if not caminho or not os.path.exists(caminho):
-        print(f"nao achei o env da ingestao ({caminho or 'nao declarado'})", file=sys.stderr)
+        print(f"nao achei o env da ingestao ({caminho or 'env_da_ingestao do registro fora da instancia'})",
+              file=sys.stderr)
         sys.exit(1)
-    with open(caminho) as f:
-        texto = f.read()
-    pad = re.compile(rf"^{b['var']}=.*$", re.M)
-    if pad.search(texto):
-        texto = pad.sub(f"{b['var']}={novo}", texto, count=1)
+    if os.path.isdir(caminho):
+        _grava_atomico(os.path.join(caminho, b["var"]), novo + "\n")
     else:
-        texto = texto.rstrip("\n") + f"\n{b['var']}={novo}\n"
-    with open(caminho, "w") as f:
-        f.write(texto)
+        with open(caminho) as f:
+            texto = f.read()
+        pad = re.compile(rf"^{re.escape(b['var'])}=.*$", re.M)
+        if pad.search(texto):
+            texto = pad.sub(lambda m: f"{b['var']}={novo}", texto, count=1)
+        else:
+            texto = texto.rstrip("\n") + f"\n{b['var']}={novo}\n"
+        _grava_atomico(caminho, texto)
     lido = le_env_da_ingestao(inst).get(b["var"])
     if lido != novo:
         print(f"NAO CONFERE: pedi {novo}, o arquivo le {lido}", file=sys.stderr)
         sys.exit(1)
-    print(f"{b['slug']}: {v} -> {novo}  ({b['var']} em {inst['env_da_ingestao']})")
+    print(f"{b['slug']}: {v} -> {novo}  ({b['var']} em {caminho})")
     print("CONFERIDO no arquivo. Nada foi promovido: isto e ajuste de CORTE, e corte so muda")
     print("o que a proxima ingestao cortar. O acervo ja indexado segue com o corte antigo —")
     print("comparar os dois no mesmo gold nao mede nada ate uma reingestao completa.")
@@ -147,7 +238,7 @@ def cmd_ajuste(nome, inst, argv):
         for b in inst["ajustes"]:
             if b.get("onde") == "env":
                 # Ajuste de INGESTAO: nao ha container servindo isto. A ingestao roda no host,
-                # com o `.env` do repo — o valor do compose seria decorativo aqui.
+                # com os segredos da stack como ambiente — o valor do compose seria decorativo aqui.
                 v = env_ing.get(b["var"])
                 onde = "env da ingestao" if v is not None else "default do codigo"
             else:
@@ -178,7 +269,7 @@ def cmd_ajuste(nome, inst, argv):
         print(f"  subir da  : {b['sobe']}")
         print(f"  e custa   : {b['custa']}")
         print(f"  como sei  : {b['medir']}")
-        arquivo = (inst["env_da_ingestao"] if b.get("onde") == "env" else inst["compose"])
+        arquivo = (caminho_env(inst) if b.get("onde") == "env" else caminho_override(inst))
         print(f"  (variavel {b['var']}, no {arquivo})")
         return
 
@@ -190,32 +281,36 @@ def cmd_ajuste(nome, inst, argv):
     if tem_porta and v == novo:
         print(f"{slug} ja esta em {novo} no servido. Nada a fazer.")
         return
-    caminho = os.path.join(RAIZ, inst["compose"])
+    # O compose base mora na release, so-leitura; o ajuste de container vive na SOBREPOSICAO
+    # da instancia (desenho §4). Sem git: nem a release se edita, nem verbo servido commita
+    # em bancada — quem promove e o `deploy`, que compoe base + sobreposicao.
+    caminho = caminho_override(inst)
+    if not os.path.isfile(caminho):
+        print(f"nao achei a sobreposicao da instancia em {caminho} "
+              f"(o compose base {inst['compose']} e da release, so-leitura)", file=sys.stderr)
+        sys.exit(1)
     with open(caminho) as f:
         texto = f.read()
-    pad = re.compile(rf"^(\s+){b['var']}:.*$", re.M)
+    # [ \t], nao \s: \s atravessa quebra de linha e casaria linhas vizinhas.
+    pad = re.compile(rf"^([ \t]+){re.escape(b['var'])}:.*$", re.M)
     achou = pad.findall(texto)
     if len(achou) == 1:
         texto = pad.sub(lambda m: f"{m.group(1)}{b['var']}: {novo}", texto, count=1)
     elif len(achou) == 0:
-        anc = re.compile(r"^(\s+)RAG_API_TOKEN:.*$", re.M)
-        if not anc.search(texto):
-            print(f"nao achei onde declarar {b['var']} em {inst['compose']}", file=sys.stderr)
+        anc = re.compile(r"^([ \t]+)environment:[ \t]*$", re.M)
+        if len(anc.findall(texto)) != 1:
+            print(f"nao achei onde declarar {b['var']} em {caminho}: declare uma vez o "
+                  f"`environment:` do servico {inst.get('servico')}", file=sys.stderr)
             sys.exit(1)
-        texto = anc.sub(lambda m: f"{m.group(1)}{b['var']}: {novo}\n{m.group(0)}", texto, count=1)
+        texto = anc.sub(lambda m: f"{m.group(0)}\n{m.group(1)}  {b['var']}: {novo}", texto, count=1)
     else:
-        print(f"{b['var']} aparece {len(achou)}x no compose — nao mexo as cegas", file=sys.stderr)
+        print(f"{b['var']} aparece {len(achou)}x na sobreposicao — nao mexo as cegas", file=sys.stderr)
         sys.exit(1)
     with open(caminho, "w") as f:
         f.write(texto)
-    print(f"{slug}: {v} -> {novo}  ({b['var']} em {inst['compose']})")
+    print(f"{slug}: {v} -> {novo}  ({b['var']} em {caminho})")
 
-    repo = os.path.join(RAIZ, inst["compose"].split("/")[0])
-    r = sh(f'git -C {repo} add -A && git -C {repo} commit -q -m "motor rag ajuste: {slug} {v} -> {novo}" && git -C {repo} push -q')
-    if r.returncode != 0:
-        print(f"git falhou, nao promovo: {r.stderr.strip()[-300:]}", file=sys.stderr)
-        sys.exit(1)
-    r = sh(f"{RAIZ}/bin/deploy {inst['stack']} promover")
+    r = sh(f"{os.path.join(BIN, 'deploy')} {inst['stack']} promover")
     print(r.stdout.strip()[-300:] or r.stderr.strip()[-300:])
 
     env2, err2 = servido(inst)
@@ -228,10 +323,9 @@ def cmd_ajuste(nome, inst, argv):
 
 
 def python_do_rag():
+    # So o venv da release (construido do lock na promocao); venv de bancada nunca e runtime.
     for c in [os.environ.get("RAG_PYTHON", ""),
-              os.path.expanduser("~/AI/.venv/bin/python"),
-              os.path.join(RAIZ, "platafirma-conhecimento/rag/.venv/bin/python"),
-              os.path.expanduser("~/AI/.venv-testes/bin/python")]:
+              str(raizes.release() / "venv" / "rag" / "bin" / "python")]:
         if c and os.access(c, os.X_OK):
             return c
     print("motor rag indexar: nenhum python com rag_extractor executavel por este usuario.\n"
@@ -244,9 +338,18 @@ def cmd_indexar(inst, argv):
     Fase 1 (o que entra no corpus) e curadoria: fica em `acervo ingerir`."""
     particao, argv = resolve_particao(argv, "indexar")
     apply_ = "--apply" in argv
-    rag = os.path.join(RAIZ, "platafirma-conhecimento/rag")
+    # codigo do rag: a arvore da release onde mora o compose da stack (so-leitura).
+    compose = na_release(inst.get("compose"))
+    if not compose:
+        print(f"motor indexar: compose do registro fora da release: {inst.get('compose')!r}",
+              file=sys.stderr)
+        sys.exit(1)
+    rag = os.path.dirname(compose)
     py = python_do_rag()
-    destino = os.environ.get("CORPUS_DIR", os.path.join(rag, "corpus"))
+    # corpus materializado e dado da instancia; a release nao se escreve.
+    destino = os.environ.get("CORPUS_DIR", str(raizes.instancia() / "dados" / "corpus"))
+    # ambiente da ingestao: os segredos da stack, lidos por nome (nada de .env em arvore).
+    env_ing = le_env_da_ingestao(inst)
     passos = [
         ("materializacao — PDF e sidecar em " + destino,
          f"{py} -m rag_extractor.cli materializar-acervo {destino}" + (" --apply" if apply_ else "")),
@@ -256,7 +359,7 @@ def cmd_indexar(inst, argv):
          f"{py} -m rag_extractor.cli sincronizar-acervo" + (" --apply" if apply_ else "")),
         ("vetor de metadado  [degrau e]", f"{py} -m rag_extractor.cli embed-meta"),
     ]
-    escada = os.path.join(RAIZ, "bin/acervo")
+    escada = os.path.join(BIN, "acervo")
     print("\n== escada antes")
     print(sh(f"{escada} escada").stdout)
     for i, (titulo, cmd) in enumerate(passos, 1):
@@ -264,7 +367,7 @@ def cmd_indexar(inst, argv):
         if not apply_ and (" embed" in cmd or " ingest " in cmd or "--apply" not in cmd):
             print(f"   (dry-run) rodaria: {cmd.split('cli ',1)[1]}")
             continue
-        r = sh(f"cd {rag} && PYTHONPATH={rag} {cmd}")
+        r = sh(f"cd {rag} && PYTHONPATH={rag} {cmd}", env_extra=env_ing)
         print((r.stdout or r.stderr).strip()[-1200:])
         if r.returncode != 0:
             print(f"\nPAROU no passo {i}: {titulo}", file=sys.stderr)
@@ -289,10 +392,10 @@ def cmd_indexar(inst, argv):
 # do server, so o env herdado. Enquanto o server nao injetar PF_SESSAO/PF_ORDEM_ID no
 # _env_subprocesso do run_command, os campos saem '-' — declarado, nao inferido. O JOIN
 # de D (card #2908) se ancora em 'sessao'; a propagacao e o proximo elo (anotado no card).
-LOG_OPS = os.path.join(RAIZ, "var/log/ops")
+LOG_OPS = os.environ.get("OPS_LOG_DIR") or str(raizes.instancia() / "var" / "log" / "ops")
 
 def _emite_consulta(nome, inst, corpo, resp, dur_ms):
-    """Grava uma linha JSONL {evento:'consulta', ...} em var/log/ops. Best-effort:
+    """Grava uma linha JSONL {evento:'consulta', ...} em $PF_INSTANCIA/var/log/ops. Best-effort:
     falha de log NUNCA derruba a busca — o resultado ja saiu para o cliente."""
     try:
         from datetime import datetime, date
@@ -381,11 +484,7 @@ def cmd_buscar(nome_inst, inst, argv):
         i += 2
     if conceitos:
         corpo["conceitos"] = conceitos
-    tok = ""
-    with open(os.path.join(RAIZ, inst["token_em"])) as f:
-        for l in f:
-            if l.startswith("RAG_API_TOKEN="):
-                tok = l.split("=", 1)[1].strip().strip("\"'")
+    tok = token_da(inst)
     req = urllib.request.Request(
         inst["endpoint"], data=json.dumps(corpo).encode(),
         headers={"Authorization": f"Bearer {tok}", "Content-Type": "application/json"})
@@ -410,11 +509,23 @@ def cmd_buscar(nome_inst, inst, argv):
 # do trilho e passa silenciosamente por deploy velho. Aqui, o que responde e o que esta no ar.
 
 def token_da(inst):
-    with open(os.path.join(RAIZ, inst["token_em"])) as f:
-        for l in f:
-            if l.startswith("RAG_API_TOKEN="):
-                return l.split("=", 1)[1].strip().strip("\"'")
-    return ""
+    """RAG_API_TOKEN: segredo da instancia, um arquivo so com o valor. `token_em` e o canonico
+    /srv/platafirma/casa/segredos/<stack>/<NOME> ou a forma curta <stack>/<NOME>.
+    Ausente e falha alta: busca sem token seria 401 com cara de motor fora do ar."""
+    nome = inst.get("token_em") or ""
+    arq = (str(raizes.instancia() / "segredos" / nome) if _seguro(nome, 2)
+           else na_instancia(nome) if nome.startswith(_CANON_INSTANCIA + "segredos/") else "")
+    if not arq:
+        print(f"motor: token_em do registro deve ser um segredo da instancia "
+              f"(segredos/<stack>/<NOME>), veio {nome!r}", file=sys.stderr)
+        sys.exit(1)
+    try:
+        with open(arq) as f:
+            return f.read().strip()
+    except OSError as e:
+        print(f"motor: segredo {nome} ilegivel ({type(e).__name__}) "
+              f"— grave com `seg segredo gravar {nome}`", file=sys.stderr)
+        sys.exit(1)
 
 
 def http(url, tok, corpo=None, timeout=300):
@@ -465,8 +576,8 @@ def monta_gold(inst, gabarito=None):
     Fica de fora, contado e nunca escondido: negativa e multi-step (sem alvo), e alvo cuja
     obra nao esta indexada — gold que encolhe em silencio e baseline que mente.
     """
-    caminho = gabarito or os.path.join(RAIZ, inst.get("gabarito", ""))
-    if not os.path.exists(caminho):
+    caminho = gabarito or na_release(inst.get("gabarito", ""))
+    if not caminho or not os.path.isfile(caminho):
         print(f"gabarito canonico nao encontrado em {caminho}", file=sys.stderr)
         sys.exit(1)
     itens = [json.loads(l) for l in open(caminho, encoding="utf-8") if l.strip()]
@@ -526,7 +637,11 @@ def _p(vals, q):
 
 
 def dir_medicoes(inst):
-    d = os.path.join(RAIZ, inst.get("medicoes_em", "var/medicoes"))
+    rel = inst.get("medicoes_em", "var/medicoes")
+    d = na_instancia(rel)
+    if not d:
+        print(f"medicoes_em invalido no registro (fora da instancia): {rel!r}", file=sys.stderr)
+        sys.exit(1)
     os.makedirs(d, exist_ok=True)
     return d
 
@@ -558,8 +673,11 @@ def cmd_medir(nome, inst, argv):
     expansao = "--expansao" in argv
     peso = argv[argv.index("--peso-conceito") + 1] if "--peso-conceito" in argv else None
     gab = argv[argv.index("--gabarito") + 1] if "--gabarito" in argv else None
-    if gab and not os.path.isabs(gab):
-        gab = os.path.join(RAIZ, gab)
+    if gab:
+        gab = os.path.abspath(gab)
+    # Chave do delta: o nome LOGICO <familia>/<caminho> (estavel entre raizes e igual ao das
+    # medicoes antigas); gabarito passado a mao fora da release entra pelo caminho absoluto.
+    chave_gab = logico_da_release(gab or inst.get("gabarito", ""))
     tok = token_da(inst)
 
     carimbo = http(inst["facets"], tok).get("indice", {})
@@ -598,7 +716,7 @@ def cmd_medir(nome, inst, argv):
          "codigo": _agrega(ranks["codigo"]), "sentido": _agrega(ranks["sentido"])}
     med = {"em": time.strftime("%Y-%m-%dT%H:%M:%S%z"), "rotulo": rotulo, "k": k,
            "rerank": rerank, "expansao": expansao, "peso_conceito": peso,
-           "gabarito": os.path.relpath(gab or os.path.join(RAIZ, inst.get("gabarito", "")), RAIZ),
+           "gabarito": chave_gab,
            "indice": carimbo, "gold": conta, "metricas": m,
            "latencia_ms": {"mediana": round(_p(lat, 0.5), 1), "p90": round(_p(lat, 0.9), 1)},
            "elapsed_s": round(time.time() - t0, 1)}
@@ -610,8 +728,7 @@ def cmd_medir(nome, inst, argv):
     print(f"\n  latencia servida: mediana {med['latencia_ms']['mediana']} ms | "
           f"p90 {med['latencia_ms']['p90']} ms | rodada {med['elapsed_s']}s")
 
-    anterior = ultima_medicao(
-        inst, os.path.relpath(gab or os.path.join(RAIZ, inst.get("gabarito", "")), RAIZ))
+    anterior = ultima_medicao(inst, chave_gab)
     arq = os.path.join(dir_medicoes(inst),
                        time.strftime("%Y%m%dT%H%M%S") + (f"-{rotulo}" if rotulo else "") + ".json")
     with open(arq, "w") as f:

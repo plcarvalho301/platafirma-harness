@@ -29,12 +29,15 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 
-from .verbos import ResultadoVerbo, chamar
+from ._raizes import instancia
+from .verbos import HARNESS, ResultadoVerbo, chamar
 
 log = logging.getLogger("agregador")
 
+# Estado e dado da instancia, nunca arquivo dentro da arvore de codigo (a release e r-x).
 ESTADO_PATH = Path(
-    os.environ.get("AGREGADOR_ESTADO_PATH", str(Path(__file__).resolve().parents[1] / "estado.json"))
+    os.environ.get("AGREGADOR_ESTADO_PATH",
+                   str(instancia() / "var" / "run" / "harness-controle" / "estado.json"))
 )
 
 
@@ -73,19 +76,16 @@ def bloco_de(resultado: ResultadoVerbo, *, agora: float | None = None) -> dict:
 # --- sondas: o que chamar, com que intervalo -------------------------------
 
 
-def _raiz() -> Path:
-    return Path(os.environ.get("PF_RAIZ", os.path.expanduser("~/AI")))
-
-
 def _cadeiras_disponiveis() -> list[str]:
-    d = _raiz() / "platafirma-harness" / "personas"
+    # A mesma arvore de onde saem os verbos (verbos.HARNESS): release no ar, nunca bancada.
+    d = HARNESS / "personas"
     if not d.is_dir():
         return []
     return sorted(p.name.removeprefix("persona-").removesuffix(".md") for p in d.glob("persona-*.md"))
 
 
 def _skills_disponiveis() -> list[str]:
-    d = _raiz() / "platafirma-harness" / "skills"
+    d = HARNESS / "skills"
     if not d.is_dir():
         return []
     return sorted(p.name for p in d.iterdir() if p.is_dir())

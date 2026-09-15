@@ -15,7 +15,8 @@
 # no mesmo commit que o conserta. A lista so cresce.
 #
 # JULGA A REV EMPURRADA, NAO O WORKING TREE (achado de claudinha-gestao-estrategica,
-# 04/09/2026). O clone de ~/AI e COMPARTILHADO entre cadeiras: quando alguem esta com
+# 04/09/2026). O clone da pasta de trabalho da conta era COMPARTILHADO entre
+# cadeiras: quando alguem esta com
 # bin/monta-sessao modificado e nao commitado, quem commita em abertura/ paga o
 # vermelho alheio. Medido naquele dia: 17 failed no clone sujo, 18 passed no mesmo
 # HEAD em worktree limpo — o commit estava verde e o push foi barrado assim mesmo.

@@ -1,4 +1,7 @@
 dist/
+# Artefato de terceiro pinado por sha256 (registro/terceiros.json): o `release` o
+# materializa na árvore da release; nunca é versionado.
+/terceiros/
 __pycache__/
 jaiminho/.env
 chat/.env

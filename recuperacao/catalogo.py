@@ -37,10 +37,8 @@ import os
 from dataclasses import dataclass
 from enum import StrEnum
 
+from ._raizes import TOKENIZADOR
 from .fontes import Fonte
-
-RAIZ = os.environ.get("PF_RAIZ", os.path.expanduser("~/AI"))
-TOKENIZADOR = os.path.join(RAIZ, "opt", "tokenizers", "qwen2.5.json")
 
 
 class Custo(StrEnum):

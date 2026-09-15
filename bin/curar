@@ -18,6 +18,8 @@ import requests
 HARNESS_DIR = os.path.dirname(os.path.dirname(os.path.realpath(__file__)))
 if HARNESS_DIR not in sys.path:
     sys.path.insert(0, HARNESS_DIR)
+sys.path.insert(0, os.path.join(HARNESS_DIR, "lib"))
+from raizes import instancia, release  # noqa: E402
 
 try:
     from recuperacao.adaptadores.motor_acervo_rest import BASE as DEFAULT_BASE, TOKEN as DEFAULT_TOKEN
@@ -371,32 +373,37 @@ _PROJECAO_REL = "ontologia/projecao/gerar-e-raciocinar.py"
 
 
 def _repo_conhecimento() -> str | None:
-    """Clone de conhecimento em `main` — o export e a projeção escrevem/leem daí. Um clone
-    parado em branch de fábrica NÃO serve (03/09: clone principal ficou em fabrica/2974)."""
-    cands = [os.environ.get("PF_CONHECIMENTO_DIR"),
-             os.path.expanduser("~/AI/platafirma-conhecimento"),
-             os.path.expanduser("~/AI/var/wt/conhecimento-main")]
-    for d in cands:
-        if not d or not os.path.isfile(os.path.join(d, _PROJECAO_REL)):
-            continue
-        try:
-            br = subprocess.run(["git", "-C", d, "branch", "--show-current"], capture_output=True, text=True, check=False).stdout.strip()
-        except OSError:
-            br = ""
-        if br == "main":
+    """Clone de conhecimento em `main` onde o export ESCREVE — declarado em PF_CONHECIMENTO_DIR,
+    sem default: verbo servido nao procura arvore de trabalho. Um clone parado em branch de
+    fábrica NÃO serve (03/09: clone principal ficou em fabrica/2974)."""
+    d = os.environ.get("PF_CONHECIMENTO_DIR")
+    if not d or not os.path.isfile(os.path.join(d, _PROJECAO_REL)):
+        return None
+    try:
+        br = subprocess.run(["git", "-C", d, "branch", "--show-current"], capture_output=True, text=True, check=False).stdout.strip()
+    except OSError:
+        br = ""
+    return d if br == "main" else None
+
+
+def _arvore_projecao() -> str | None:
+    """Árvore de conhecimento de onde a projeção só LÊ: o clone declarado, se houver, senão a
+    release no ar ($PF_RELEASE/conhecimento)."""
+    for d in (_repo_conhecimento(), str(release() / "conhecimento")):
+        if d and os.path.isfile(os.path.join(d, _PROJECAO_REL)):
             return d
     return None
 
 
 def _hermit(de: str, para: str, tipo: str) -> dict | None:
     """Projeção formal duas vezes (sem e com a aresta em memória) e diff de insatisfazíveis.
-    Devolve None quando não dá para rodar (sem clone em main, sem venv, script falhou)."""
-    repo = _repo_conhecimento()
-    py = os.environ.get("PF_PROJECAO_PYTHON") or os.path.expanduser("~/AI/.venv/bin/python")
+    Devolve None quando não dá para rodar (sem árvore de conhecimento, sem venv, script falhou)."""
+    repo = _arvore_projecao()
+    py = os.environ.get("PF_PROJECAO_PYTHON") or str(release() / "venv" / "acervo" / "bin" / "python")
     if not repo or not os.path.isfile(py):
         return None
     script = os.path.join(repo, _PROJECAO_REL)
-    tmp = os.path.expanduser("~/AI/tmp")
+    tmp = str(instancia() / "var" / "tmp" / "projecao")
     os.makedirs(tmp, exist_ok=True)
 
     def roda(extra, ttl):
@@ -417,7 +424,7 @@ def _hermit(de: str, para: str, tipo: str) -> dict | None:
 def _exportar(repo: str) -> str | None:
     """Regenera ontologia/acervo/*.jsonl no clone (cli exportar-acervo). Devolve os arquivos
     alterados segundo o git, ou None se não deu para rodar."""
-    py = os.environ.get("PF_EXPORT_PYTHON") or os.path.expanduser("~/AI/.venv-testes/bin/python")
+    py = os.environ.get("PF_EXPORT_PYTHON") or str(release() / "venv" / "acervo" / "bin" / "python")
     if not os.path.isfile(py):
         return None
     r = subprocess.run([py, "-m", "motor_acervo.cli", "exportar-acervo"], capture_output=True, text=True,
@@ -448,7 +455,7 @@ def formatar_plano_relacao(p: dict, hermit: dict | None) -> str:
         for r in novas[:5]:
             lin.append(f"      + {r}")
     if hermit is None:
-        lin.append("  HermiT: indisponível (clone de conhecimento em main + ~/AI/.venv/bin/python não achados)")
+        lin.append("  HermiT: indisponível (árvore de conhecimento na release ou em PF_CONHECIMENTO_DIR + venv acervo da release não achados)")
     elif hermit.get("erro"):
         lin.append(f"  HermiT: falhou — {hermit['erro']}")
     else:
