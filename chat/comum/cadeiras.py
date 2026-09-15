@@ -1,7 +1,8 @@
 """Cadeira: a unica traducao entre o slug do org, o sufixo do harness e o MXID.
 
-Fonte viva unica: a arvore `abertura/<cadeira>/`, HEAD do working tree (arq:0073 §1,
-estado vivo por arq:0074). O slug e o nome do diretorio, MINUSCULO PURO, sem prefixo
+Fonte viva unica: a arvore `abertura/<cadeira>/` da MORADA PUBLICADA
+($PF_ABERTURA_DIR/current/abertura — arq:0097, arq:0109 §1; estado vivo por arq:0074).
+Nunca o working tree do clone: runtime nao le git. O slug e o nome do diretorio, MINUSCULO PURO, sem prefixo
 `claudinho-`/`claudinha-` e sem alias (arq:0073 §2). Cadeira nova entra sozinha, criando
 o diretorio `abertura/<slug>/persona.md`; este arquivo nao se edita.
 
@@ -71,8 +72,17 @@ _PERSONA_DO_ATOR = {
 
 
 def _raiz_personas() -> Path:
+    """Arvore de personas: a MORADA PUBLICADA, nunca o clone (arq:0097, arq:0109 §1).
+
+    A mesma fonte do montador (`monta-sessao`) e do roteador (`rotear`): a arvore
+    imutavel em $PF_ABERTURA_DIR/current/abertura, publicada por `publicar-abertura`.
+    Ler o clone `~/AI/platafirma-harness/abertura` era ler working tree em runtime —
+    commit local, ramo de fabrica ou HEAD destacado mudavam o roster sem promocao.
+    PF_ABERTURA_DIR aponta a morada; no container ela entra por bind mount ro.
+    """
     raiz = os.environ.get("PF_RAIZ", "/home/claudinho/AI")
-    return Path(raiz) / "platafirma-harness" / "abertura"
+    morada = os.environ.get("PF_ABERTURA_DIR", os.path.join(raiz, "var", "abertura-publicada"))
+    return Path(morada) / "current" / "abertura"
 
 
 def _sem_prefixo(slug: str) -> str:
