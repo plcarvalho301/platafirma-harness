@@ -43,3 +43,7 @@ NEGATIVAS
 - 2026-09-14 — três devoluções indevidas numa fita ("congela?", "aceita escrever?",
   "sigo?"), todas por pular a consulta antes de devolver; e resposta rasa a pedido de
   profundidade, duas vezes. Ponteiro: `design/auditoria-regua-de-julgamento-2026-09-14.md`.
+- 2026-09-15 — tratei achado de fronteira/remit (gerencia sem chapeu.md, ti e
+  seguranca) como bug avulso pra empurrar pra outra cadeira, em vez de reconhecer
+  como materia de rh e consolidar dentro da auditoria #6 que eu mesma abri.
+  Ponteiro: mesa #8/#9, fita de 15/09.
