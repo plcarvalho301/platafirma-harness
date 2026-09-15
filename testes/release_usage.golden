@@ -6,6 +6,8 @@ uso:
   release conferir   <classe> [<alvo>] [--ref <rev>] [--json]
   release promover   <repo> [<rev>] [--ensaio]
   release reverter   <repo> [<rev>] [--ensaio]
+  release promover   abertura [<rev>] [--ensaio]   publica a abertura do harness na rev (sem rev: origin/main)
+  release reverter   abertura [<sha>] [--ensaio]   volta a abertura a um sha ja publicado (sem sha: o anterior)
 
 raiz servida: PF_PROD_RAIZ[=$HOME/AI/var/prod]
 promover: <rev> (sha ou tag) obrigatória em família com stack; sem rev, avança para origin/main

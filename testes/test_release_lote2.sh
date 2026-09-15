@@ -43,7 +43,15 @@ cat > "$STUBS/systemctl" <<'EOF'
 #!/usr/bin/env bash
 echo "n/a"
 EOF
+# infra: grava a chamada e responde como o verbo real sob a porta (nunca toca a porta real)
+cat > "$STUBS/infra" <<'EOF'
+#!/usr/bin/env bash
+echo "infra $*" >> "${DEPLOY_LOG:?}"
+echo "restart da unit $2 despachado destacado (stub)"
+EOF
 chmod +x "$STUBS"/*
+# motor da familia abertura: o publicar-abertura da propria rev sob teste
+ln -s "$REPO_ROOT/bin/publicar-abertura" "$STUBS/publicar-abertura"
 export PATH="$STUBS:$PATH"
 export DEPLOY_LOG="$TMP_DIR/deploy.log"; : > "$DEPLOY_LOG"
 
@@ -102,9 +110,11 @@ grep -q "^$H_SHA1 " "$PONTOS/platafirma-harness/atual" || falha "atual não grav
 grep -q "deploy harness-controle promover $H_SHA1" "$DEPLOY_LOG" || falha "stack via promover não promovida"
 ! grep -q "deploy chat" "$DEPLOY_LOG" || falha "stack via up foi promovida"
 grep -q "fora da promoção por release" <<<"$out" || falha "stack via up não declarada"
-# rev 5: o restart NAO e do verbo (observador pf-porta-watch); o verbo so informa
-! grep -q "systemd-run" "$DEPLOY_LOG" || falha "rev 5: release nao agenda restart (e do observador)"
-grep -q "pf-porta-watch" <<<"$out" || falha "nota do observador ausente no relato"
+# rev 6: o restart da porta volta ao verbo, por `infra restart ops-mcp` (o observador
+# pf-porta-watch nao disparou em 15/09, 2 de 2 promocoes); systemd-run direto segue proibido
+! grep -q "systemd-run" "$DEPLOY_LOG" || falha "release nao chama systemd-run direto (a cura e do infra)"
+grep -q "infra restart ops-mcp" "$DEPLOY_LOG" || falha "rev 6: release devia reiniciar a porta por infra restart ops-mcp"
+grep -q "^porta: " <<<"$out" || falha "relato da porta ausente"
 [ "$(tail -1 <<<"$out")" = "$H_SHA1" ] || falha "última linha devia ser o sha"
 echo "OK"
 
@@ -249,6 +259,33 @@ echo v6 > "$WT/README.md"; git -C "$WT" commit -q -am c6; git -C "$WT" push -q o
 H_SHA6="$(git -C "$WT" rev-parse HEAD)"
 out="$("$VERBO" promover platafirma-harness "$H_SHA6" 2>&1)" || falha "promover sha6: $out"
 grep -q "nao muda verbo nenhum" <<<"$out" || falha "rev sem mudança em bin/ devia declarar nada a medir: $out"
+echo "OK"
+
+echo "--- 13: família abertura — promover do harness publica a abertura na mesma rev; promover/reverter abertura pela mesma porta (#3054)"
+export PF_CASA_REINDEXA=0
+mkdir -p "$WT/abertura/ti"
+echo '{}' > "$WT/abertura/aliases.json"; echo '{}' > "$WT/abertura/rotas-chapeu.json"
+echo dono > "$WT/abertura/dono.md"; echo oficio > "$WT/abertura/oficio.md"; echo persona > "$WT/abertura/ti/persona.md"
+git -C "$WT" add .; git -C "$WT" commit -q -m c7; git -C "$WT" push -q origin main
+H_SHA7="$(git -C "$WT" rev-parse HEAD)"
+: > "$DEPLOY_LOG"
+out="$("$VERBO" promover platafirma-harness "$H_SHA7" 2>&1)" || falha "promover sha7 (com abertura): $out"
+[ "$(readlink "$ABERTURA_DIR/current")" = "refs/$H_SHA7" ] || falha "promover do harness nao publicou a abertura na mesma rev: $out"
+grep -q "infra restart ops-mcp" "$DEPLOY_LOG" || falha "porta nao reiniciada no promover com abertura"
+[ "$(tail -1 <<<"$out")" = "$H_SHA7" ] || falha "última linha devia ser o sha: $out"
+out="$("$VERBO" estado abertura)"; grep -q "${H_SHA7:0:7}" <<<"$out" || falha "estado abertura: $out"
+set +e; out="$("$VERBO" promover abertura "$H_SHA7" 2>&1)"; rc=$?; set -e
+[ "$rc" -eq 1 ] && grep -q "já no ar" <<<"$out" || falha "abertura no mesmo sha devia sair 1: rc=$rc $out"
+echo persona2 > "$WT/abertura/ti/persona.md"; git -C "$WT" commit -q -am c8; git -C "$WT" push -q origin main
+H_SHA8="$(git -C "$WT" rev-parse HEAD)"
+out="$("$VERBO" promover abertura 2>&1)" || falha "promover abertura sem rev (origin/main): $out"
+[ "$(readlink "$ABERTURA_DIR/current")" = "refs/$H_SHA8" ] || falha "abertura sem rev devia ir a origin/main: $out"
+[ "$(readlink "$PROD_RAIZ/platafirma-harness/current")" = "$H_SHA7" ] || falha "promover abertura nao mexe no current do harness"
+[ "$(cat "$PONTOS/abertura/anterior")" = "$H_SHA7" ] || falha "abertura: anterior devia ser sha7"
+out="$("$VERBO" reverter abertura 2>&1)" || falha "reverter abertura: $out"
+[ "$(readlink "$ABERTURA_DIR/current")" = "refs/$H_SHA7" ] || falha "reverter abertura devia voltar a sha7: $out"
+set +e; out="$("$VERBO" promover abertura "$FORA_SHA" 2>&1)"; rc=$?; set -e
+[ "$rc" -eq 4 ] || falha "abertura fora de origin/main devia sair 4: rc=$rc $out"
 echo "OK"
 
 echo "=== lote 2: todos os testes passaram ==="

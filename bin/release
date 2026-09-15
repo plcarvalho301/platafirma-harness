@@ -22,7 +22,7 @@
 # escreve: reverter=release,arquivo-local
 # (recursos pelo enum de ferramental_recurso; porta, forge e stack pendem id proprio - dados)
 # ambiente: PF_PROD_RAIZ[=$HOME/AI/var/prod] porta · PF_ABERTURA_RAIZ[=$HOME/AI/var/abertura-publicada] porta · PF_RELEASE_RAIZ[=$HOME/AI/var/release] porta · PF_BIN_DIR[=$HOME/AI/bin] porta · PF_REPO_RAIZ[=$HOME/AI] porta (só a URL do origin na primeira promoção de uma família) · PF_CADEIRA porta (lida) · HOME
-# depende: git · deploy (promover/reverter de família com stack) · acervo (registro de stacks) · python3 · jq · rede ao forge (promover) · porta (hora de arranque). O restart da porta NAO e deste verbo (rev 5): quem reinicia e o observador pf-porta-watch (unit .path --user sobre current), fora do processo
+# depende: git · deploy (promover/reverter de família com stack) · acervo (registro de stacks) · python3 · jq · rede ao forge (promover) · porta (hora de arranque) · infra (restart da porta, destacado) · publicar-abertura (motor da familia abertura, #3054). O restart da porta e deste verbo (spec_release §2, rev 6): o observador pf-porta-watch nao disparou em 15/09, 2 de 2 promocoes
 # substitui: readlink current · git -C var/prod/… describe|rev-parse|ls-files|show|grep · git worktree add --detach · ln -sfn + mv -T · chmod -R a-w · conferir <classe> · deploy <stack> promover|reverter
 # conforme: parcial
 set -euo pipefail
@@ -69,6 +69,8 @@ uso:
   release conferir   <classe> [<alvo>] [--ref <rev>] [--json]
   release promover   <repo> [<rev>] [--ensaio]
   release reverter   <repo> [<rev>] [--ensaio]
+  release promover   abertura [<rev>] [--ensaio]   publica a abertura do harness na rev (sem rev: origin/main)
+  release reverter   abertura [<sha>] [--ensaio]   volta a abertura a um sha ja publicado (sem sha: o anterior)
 
 raiz servida: PF_PROD_RAIZ[=$HOME/AI/var/prod]
 promover: <rev> (sha ou tag) obrigatória em família com stack; sem rev, avança para origin/main
@@ -1000,18 +1002,151 @@ promover_stacks() {  # $1=sha ; usa STACKS_PROMOVER; devolve 0 ou o nome da stac
   return 0
 }
 
-# O restart da porta NÃO é responsabilidade deste verbo (spec_release rev 5). Reiniciar
-# aqui dependia do bus da sessão que chamou o release: shell sem DBUS_SESSION_BUS_ADDRESS
-# fazia systemd-run recusar e a porta servia código velho; shell com bus tinha o restart
-# matando a própria conexão que emitiu o promover. Quem reinicia é o observador do daemon:
-# a unit `.path` --user pf-porta-watch vigia este `current` e reinicia ops-mcp fora de
-# qualquer shell, com Restart=always na porta como rede de segurança. Os verbos trocam a
-# quente (a porta faz execve de bin/<verbo> a cada chamada), então só a mudança do próprio
-# server.py exige restart, e o observador cobre isso. Esta função só informa.
-nota_restart_porta() {
+# O restart da porta é deste verbo (spec_release §2: `promover` agenda o restart fora do
+# próprio processo). A rev 5 o entregara ao observador pf-porta-watch (unit .path --user
+# sobre current); em 15/09 ele não disparou em 2 de 2 promoções — current trocado, porta
+# servindo o código anterior, ninguém avisado. O motivo da rev 5 (systemd-run sem bus; o
+# restart matando a conexão que emitiu o promover) já tem cura na casa: `infra restart
+# ops-mcp` despacha destacado e a chamada que o emite volta antes do restart (medido 15/09
+# pela porta). Chamado por último, depois de tudo relatado. PF_RELEASE_PORTA=0 desliga.
+reiniciar_porta() {
   local repo="$1"
   [ "$repo" = "$FAMILIA_BIN" ] || return 0
-  printf 'porta:     current trocado; o observador pf-porta-watch reinicia ops-mcp fora deste processo\n'
+  if [ "${PF_RELEASE_PORTA:-1}" != "1" ]; then
+    printf 'porta:     restart desligado (PF_RELEASE_PORTA=0) — reinicie com: infra restart ops-mcp\n'
+    return 0
+  fi
+  local infra_bin out rc=0
+  infra_bin="$(achar_verbo infra)"
+  if [ -z "$infra_bin" ]; then
+    printf 'porta:     AVISO — infra não encontrado; a porta segue no código anterior até: infra restart ops-mcp\n' >&2
+    return 0
+  fi
+  out="$("$infra_bin" restart ops-mcp 2>&1)" || rc=$?
+  if [ "$rc" -eq 0 ]; then
+    printf 'porta:     %s\n' "$(tail -n 1 <<<"$out")"
+  else
+    printf 'porta:     AVISO — infra restart ops-mcp saiu %s: %s\n' "$rc" "$(tail -n 1 <<<"$out")" >&2
+  fi
+  return 0
+}
+
+# ---- família abertura: promover/reverter pela mesma porta (#3054; spec_release §Aberto) ----
+# A abertura é a subárvore abertura/ do harness publicada em morada imutável (arq:0097). O
+# motor segue sendo bin/publicar-abertura (snapshot do object store, validado, ponteiro
+# atômico, gancho da casa); o release lhe dá a fonte e o registro: lê do ESPELHO do harness,
+# nunca do clone de trabalho (o 14/09 promoveu o passado lendo clone parado), confere que a
+# rev descende de origin/main e grava o ponto de volta em var/release/abertura.
+rodar_publicador() {  # $@=args do publicar-abertura
+  local pub; pub="$(achar_verbo publicar-abertura)"
+  if [ -z "$pub" ]; then
+    printf 'release: dependência ausente: publicar-abertura não encontrado (motor da família abertura)\n' >&2
+    return 3
+  fi
+  PF_HARNESS="$(espelho_de "$FAMILIA_BIN")" PF_ABERTURA_DIR="$ABERTURA_DIR" \
+    PF_ACERVO="$(achar_verbo acervo)" "$pub" "$@"
+}
+
+sha_abertura_no_ar() {
+  local rc=0
+  resolver_identidade abertura || rc=$?
+  if [ "$rc" -eq 0 ]; then printf '%s' "$SHA"; fi
+  return 0
+}
+
+rev_tem_abertura() {  # $1=sha
+  "$GIT" --git-dir="$(espelho_de "$FAMILIA_BIN")" rev-parse --verify -q "${1}:abertura" >/dev/null 2>&1
+}
+
+# publica a abertura na rev do harness que acabou de ir ao ar; idempotente
+publicar_abertura_da_familia() {  # $1=repo $2=sha ; 0 ok ou nada a fazer, 5 falhou
+  local repo="$1" sha="$2" antes out rc=0
+  [ "$repo" = "$FAMILIA_BIN" ] || return 0
+  if ! rev_tem_abertura "$sha"; then
+    printf 'abertura:  rev %s sem abertura/ — nada a publicar\n' "${sha:0:7}"
+    return 0
+  fi
+  antes="$(sha_abertura_no_ar)"
+  if [ "$antes" = "$sha" ]; then
+    printf 'abertura:  já publicada em %s\n' "${sha:0:7}"
+    return 0
+  fi
+  out="$(rodar_publicador "$sha" 2>&1)" || rc=$?
+  printf '%s\n' "$out" | sed 's/^/abertura:  /'
+  [ "$rc" -eq 0 ] || return 5
+  gravar_pontos abertura "$antes" "$sha"
+  return 0
+}
+
+promover_abertura() {  # $1=rev(opcional) $2=ensaio
+  local rev="$1" ensaio="$2" rc=0 esp sha antes
+  garantir_espelho "$FAMILIA_BIN" "$ensaio" || { rc=$?; return "$rc"; }
+  esp="$(espelho_de "$FAMILIA_BIN")"
+  if [ ! -d "$esp" ]; then
+    printf 'ensaio:    %s sem espelho; nada resolvido\n' "$FAMILIA_BIN"
+    return 0
+  fi
+  sha="$(resolver_rev "$FAMILIA_BIN" "$rev")" || {
+    printf 'release: erro: rev '\''%s'\'' não resolve no forge de %s\n' "${rev:-origin/main}" "$FAMILIA_BIN" >&2
+    return 2
+  }
+  if ! descende_de_main "$FAMILIA_BIN" "$sha"; then
+    printf 'release: recusa: %s não descende de origin/main — produção é checkout de origin/main (arq:0109 §1)\n' "${sha:0:7}" >&2
+    return 4
+  fi
+  if ! rev_tem_abertura "$sha"; then
+    printf 'release: erro: rev %s não tem abertura/\n' "${sha:0:7}" >&2
+    return 2
+  fi
+  antes="$(sha_abertura_no_ar)"
+  if [ "$antes" = "$sha" ]; then
+    printf 'já no ar:  abertura current → %s — nada a mover\n' "${sha:0:7}"
+    return 1
+  fi
+  printf '== release promover abertura %s ==\n' "${sha:0:7}"
+  printf 'de:        %s\n' "$(curto_ou "$antes" '(sem current)')"
+  if [ "$ensaio" -eq 1 ]; then
+    printf 'ensaio:    nada tocado\n'
+    return 0
+  fi
+  publicar_abertura_da_familia "$FAMILIA_BIN" "$sha" || { rc=$?; return "$rc"; }
+  printf 'no ar:     abertura %s\n' "${sha:0:7}"
+  printf '%s\n' "$sha"
+}
+
+reverter_abertura() {  # $1=sha(opcional) $2=ensaio
+  local rev="$1" ensaio="$2" alvo="" antes novo out rc=0
+  if [ -n "$rev" ]; then
+    if [[ ! "$rev" =~ ^[0-9a-fA-F]{7,40}$ ]]; then
+      printf 'release: erro: a abertura reverte por sha já publicado, não por '\''%s'\''\n' "$rev" >&2
+      return 2
+    fi
+    alvo="$rev"
+  elif [ -f "$PONTOS/abertura/anterior" ]; then
+    alvo="$(cat "$PONTOS/abertura/anterior" 2>/dev/null || echo '')"
+  fi
+  if [ -z "$alvo" ]; then
+    printf 'release: erro: sem sha e sem ponto de volta gravado para abertura — não invento para onde voltar\n' >&2
+    return 2
+  fi
+  antes="$(sha_abertura_no_ar)"
+  if [ -n "$antes" ]; then
+    case "$antes" in
+      "$alvo"*) printf 'já no ar:  abertura current → %s — nada a mover\n' "${antes:0:7}"; return 1 ;;
+    esac
+  fi
+  printf '== release reverter abertura %s → %s ==\n' "$(curto_ou "$antes" '(sem current)')" "${alvo:0:7}"
+  if [ "$ensaio" -eq 1 ]; then
+    printf 'ensaio:    nada tocado\n'
+    return 0
+  fi
+  out="$(rodar_publicador reverter "$alvo" 2>&1)" || rc=$?
+  printf '%s\n' "$out" | sed 's/^/abertura:  /'
+  [ "$rc" -eq 0 ] || return 1
+  novo="$(sha_abertura_no_ar)"
+  gravar_pontos abertura "$antes" "$novo"
+  printf 'no ar:     abertura %s\n' "${novo:0:7}"
+  printf '%s\n' "$novo"
 }
 
 # gate de promocao (arq:0110 §9; mapa: `conferir` e o gate de infra/promocao-de-mudanca). A familia
@@ -1083,8 +1218,9 @@ cmd_promover() {
   [ -n "$repo" ] || { printf 'release: erro: repo obrigatório para promover\n' >&2; uso_texto; exit 2; }
   validar_repo_ou_sair "$repo"
   if [ "$repo" = "abertura" ]; then
-    printf 'release: erro: a abertura ainda promove por publicar-abertura (Aberto da spec)\n' >&2
-    exit 2
+    local rc_fam=0
+    promover_abertura "$rev" "$ensaio" || rc_fam=$?
+    exit "$rc_fam"
   fi
 
   # regime: família com stack no registro promove por rev explícita
@@ -1151,6 +1287,8 @@ cmd_promover() {
   trocar_current "$repo" "$sha"
   printf 'current:   %s → %s\n' "$(curto_ou "$atual" '(nenhum)')" "${sha:0:7}"
   assentar_path "$repo"
+  local rc_ab=0
+  publicar_abertura_da_familia "$repo" "$sha" || rc_ab=$?
 
   local rc_st=0
   promover_stacks "$sha" || rc_st=$?
@@ -1163,7 +1301,6 @@ cmd_promover() {
     # gravar_pontos mantem 'atual' = sha novo (o current de fato no ar) e 'anterior' =
     # o sha de onde saiu, para o reverter deliberado ter para onde voltar.
     gravar_pontos "$repo" "$atual" "$sha"
-    nota_restart_porta "$repo"
     {
       printf '\n'
       printf '=========================================================================\n'
@@ -1182,11 +1319,17 @@ cmd_promover() {
       printf '  VOLTAR CODIGO   : release reverter %s %s  (devolve o current; a stack ainda depende do deploy subir)\n' "$repo" "$(curto_ou "$atual" '<sha-anterior>')"
       printf '=========================================================================\n'
     } >&2
+    reiniciar_porta "$repo"
     exit "$rc_st"
   fi
 
-  nota_restart_porta "$repo"
   printf 'no ar:     %s %s%s\n' "$repo" "${sha:0:7}" "${tag:+ ($tag)}"
+  if [ "$rc_ab" -ne 0 ]; then
+    printf 'release: PROMOCAO PARCIAL — codigo no ar em %s, abertura NAO publicada; retomar: release promover abertura %s\n' "${sha:0:7}" "${sha:0:7}" >&2
+    reiniciar_porta "$repo"
+    exit 5
+  fi
+  reiniciar_porta "$repo"
   printf '%s\n' "$sha"
 }
 
@@ -1208,8 +1351,9 @@ cmd_reverter() {
   [ -n "$repo" ] || { printf 'release: erro: repo obrigatório para reverter\n' >&2; uso_texto; exit 2; }
   validar_repo_ou_sair "$repo"
   if [ "$repo" = "abertura" ]; then
-    printf 'release: erro: a abertura ainda reverte por publicar-abertura reverter (Aberto da spec)\n' >&2
-    exit 2
+    local rc_fam=0
+    reverter_abertura "$rev" "$ensaio" || rc_fam=$?
+    exit "$rc_fam"
   fi
   [ -d "$PROD_RAIZ/$repo" ] || recusar_familia_desconhecida "$repo"
 
@@ -1270,6 +1414,8 @@ cmd_reverter() {
   trocar_current "$repo" "$alvo"
   printf 'current:   %s → %s\n' "$(curto_ou "$atual" '(nenhum)')" "${alvo:0:7}"
   assentar_path "$repo"
+  local rc_ab=0
+  publicar_abertura_da_familia "$repo" "$alvo" || rc_ab=$?
 
   local rc_st=0
   promover_stacks "$alvo" || rc_st=$?
@@ -1280,7 +1426,6 @@ cmd_reverter() {
     # justo quando ele volta por algo quebrado. O current FICA no alvo, a stack vira
     # incidente, e o relato GRITA onde partiu.
     gravar_pontos "$repo" "$atual" "$alvo"
-    nota_restart_porta "$repo"
     {
       printf '\n'
       printf '=========================================================================\n'
@@ -1295,11 +1440,17 @@ cmd_reverter() {
       printf '  RETOMAR         : conserte a causa acima e rode  deploy %s promover %s\n' "$STACK_FALHOU" "${alvo:0:7}"
       printf '=========================================================================\n'
     } >&2
+    reiniciar_porta "$repo"
     exit "$rc_st"
   fi
 
-  nota_restart_porta "$repo"
   printf 'no ar:     %s %s\n' "$repo" "${alvo:0:7}"
+  if [ "$rc_ab" -ne 0 ]; then
+    printf 'release: REVERSAO PARCIAL — codigo no ar em %s, abertura NAO acompanhou; retomar: release reverter abertura %s\n' "${alvo:0:7}" "${alvo:0:7}" >&2
+    reiniciar_porta "$repo"
+    exit 5
+  fi
+  reiniciar_porta "$repo"
   printf '%s\n' "$alvo"
 }
 
