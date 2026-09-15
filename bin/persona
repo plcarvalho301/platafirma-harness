@@ -240,8 +240,12 @@ idade() {
     "$sha" "$data" $((seg/3600)) $(( (seg%3600)/60 ))
 }
 
+# conferir le a MORADA PUBLICADA por padrao (arq:0097: o que as cadeiras recebem), nao o
+# clone de trabalho, que pode estar em ramo de outra cadeira (15/09: acusava 'construcao sem
+# chapeu.md' com a abertura ja publicada). `salvar` passa o clone: la a medida e do que
+# vai ser commitado.
 conferir() {
-  python3 - "$REPO/$ALVO" <<'PY'
+  python3 - "${1:-$ARVORE}" <<'PY'
 import pathlib, re, sys, collections
 
 raiz = pathlib.Path(sys.argv[1])
@@ -355,7 +359,7 @@ case "${1:-}" in
       exit 1
     fi
     git pull --ff-only -q origin HEAD
-    conferir
+    conferir "$REPO/$ALVO"
     git add abertura registro/eventos-org.jsonl
     git diff --cached --quiet && { echo "nada a salvar"; exit 0; }
     git commit -q -m "$msg"
