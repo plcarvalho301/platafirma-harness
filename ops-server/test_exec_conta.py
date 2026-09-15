@@ -68,11 +68,11 @@ def test_env_reescreve_identidade_e_casa():
 
 def test_env_troca_o_local_bin_e_preserva_o_ferramental_da_casa():
     novo = env_sob_conta(
-        {"PATH": "/home/claudinho/AI/bin:/home/claudinho/.local/bin:/usr/bin"}, "jaiminho")
+        {"PATH": "/opt/platafirma/current/harness/bin:/home/claudinho/.local/bin:/usr/bin"}, "jaiminho")
     caminhos = novo["PATH"].split(":")
     assert caminhos[0] == "/home/jaiminho/.local/bin"
     assert "/home/claudinho/.local/bin" not in caminhos, "binario da casa alheia"
-    assert "/home/claudinho/AI/bin" in caminhos, "ferramental da plataforma e legivel"
+    assert "/opt/platafirma/current/harness/bin" in caminhos, "ferramental da plataforma e legivel"
 
 
 def test_env_home_explicito_vence_o_default():

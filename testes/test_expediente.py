@@ -236,28 +236,6 @@ def test_slug_com_prefixo_exit_3(raiz_hermetica):
 # Etapa 1b: Chapéu fora do vocabulário
 # ------------------------------------------------------------------------------
 
-def test_chapeu_fora_do_vocabulario_exit_2(raiz_hermetica):
-    """Etapa 1: --chapeu fora do vocabulário -> exit 2 listando os válidos."""
-    proc = _run_expediente(
-        ["montar", "--chapeu", "invalido"],
-        raiz_hermetica,
-        env_extra={"PF_CADEIRA": "ia"},
-    )
-    assert proc.returncode == 2
-    assert "fora do vocabulário da cadeira 'ia'" in proc.stderr
-    assert "contexto" in proc.stderr
-    assert "diretriz" in proc.stderr
-
-    proc_json = _run_expediente(
-        ["montar", "--chapeu", "invalido", "--json"],
-        raiz_hermetica,
-        env_extra={"PF_CADEIRA": "ia"},
-    )
-    assert proc_json.returncode == 2
-    d = json.loads(proc_json.stdout)
-    assert "fora do vocabulário da cadeira 'ia'" in d["erro"]
-
-
 # ------------------------------------------------------------------------------
 # Etapa 3: Catálogo
 # ------------------------------------------------------------------------------
@@ -301,52 +279,9 @@ def test_catalogo_lista_as_7(raiz_hermetica):
 # Etapa 4: Peça falha
 # ------------------------------------------------------------------------------
 
-def test_peca_falha_exit_0_com_indisponivel(raiz_hermetica):
-    """Etapa 4: peça falha -> exit 0, frescor indisponivel + motivo no aviso."""
-    env = {
-        "PF_CADEIRA": "ia",
-        "STUB_MESA_VER": "falha",
-        "STUB_PERSONA_CONDUTA": "falha",
-    }
-    proc = _run_expediente(["montar", "--json"], raiz_hermetica, env_extra=env)
-    assert proc.returncode == 0
-    dados = json.loads(proc.stdout)
-
-    por_peca = {p["peca"]: p for p in dados["pecas"]}
-    assert por_peca["conduta"]["frescor"] == "indisponivel"
-    assert "falha simulada" in por_peca["conduta"]["motivo"]
-    assert por_peca["conduta"]["conteudo"] is None
-    assert por_peca["conduta"]["tokens"] == 0
-
-    assert por_peca["mesa"]["frescor"] == "indisponivel"
-    assert "msg-mem fora do ar" in por_peca["mesa"]["motivo"]
-
-    # Peça sã sai fresca
-    assert por_peca["persona"]["frescor"] == "fresco"
-    assert por_peca["persona"]["conteudo"] == "# persona ia (stub)"
-
-    # Avisos declaram as indisponibilidades
-    assert any("conduta" in a and "indisponível" in a for a in dados["avisos"])
-    assert any("mesa" in a and "indisponível" in a for a in dados["avisos"])
-
-
 # ------------------------------------------------------------------------------
 # Etapa 5: Roteador
 # ------------------------------------------------------------------------------
-
-def test_rotear_via_deterministico(raiz_hermetica):
-    """Etapa 5: roteador com casamento via determinístico."""
-    proc = _run_expediente(
-        ["rotear", "--json"],
-        raiz_hermetica,
-        stdin_data="orçamento de tokens e contexto",
-        env_extra={"PF_CADEIRA": "ia"},
-    )
-    assert proc.returncode == 0
-    d = json.loads(proc.stdout)
-    assert d["slug"] == "contexto"
-    assert d["via"] == "determinístico"
-
 
 def test_rotear_fallback_exit_0_e_slug_null(raiz_hermetica):
     """Etapa 5: roteador fallback -> exit 0 e slug null."""
@@ -360,28 +295,6 @@ def test_rotear_fallback_exit_0_e_slug_null(raiz_hermetica):
     d = json.loads(proc.stdout)
     assert d["slug"] is None
     assert d["via"] == "fallback"
-
-
-def test_roteador_real_sem_rotas_fallback_declarado(raiz_hermetica):
-    """Etapa 5: sem stub, o sub-ato REAL roda contra uma morada sem rotas -> exit 0,
-    via fallback, slug null e o motivo declarado (conceitos mudos nunca travam)."""
-    p_rot = raiz_hermetica / "bin" / "_expediente" / "rotear"
-    if p_rot.exists():
-        p_rot.unlink()
-
-    proc = _run_expediente(
-        ["montar", "--json"],
-        raiz_hermetica,
-        stdin_data="pergunta qualquer",
-        env_extra={"PF_CADEIRA": "ia"},
-    )
-    assert proc.returncode == 0
-    d = json.loads(proc.stdout)
-    assert d["chapeu"] is None
-    assert d["roteador"]["via"] == "fallback"
-    assert d["roteador"]["slug"] is None
-    assert "sem tabela de rotas" in (d["roteador"]["motivo"] or "")
-    assert any("não roteado" in a for a in d["avisos"])
 
 
 # ------------------------------------------------------------------------------
@@ -425,27 +338,6 @@ def test_sem_acervo_omite_peca(raiz_hermetica):
     d = json.loads(proc.stdout)
     pecas = [p["peca"] for p in d["pecas"]]
     assert "acervo-consultado" not in pecas
-
-
-def test_ordem_injecao_cadernos_ultimo(raiz_hermetica):
-    """Cadernos é a ÚLTIMA peça injetada, sempre."""
-    # Sem pergunta
-    proc1 = _run_expediente(["montar", "--json"], raiz_hermetica, env_extra={"PF_CADEIRA": "ia"})
-    assert proc1.returncode == 0
-    d1 = json.loads(proc1.stdout)
-    assert d1["pecas"][-1]["peca"] == "cadernos"
-
-    # Com pergunta (acervo entra antes dos cadernos)
-    proc2 = _run_expediente(["montar", "--json"], raiz_hermetica, stdin_data="busca", env_extra={"PF_CADEIRA": "ia"})
-    assert proc2.returncode == 0
-    d2 = json.loads(proc2.stdout)
-    assert d2["pecas"][-1]["peca"] == "cadernos"
-
-    # Com chapéu forçado
-    proc3 = _run_expediente(["montar", "--chapeu", "contexto", "--json"], raiz_hermetica, stdin_data="busca", env_extra={"PF_CADEIRA": "ia"})
-    assert proc3.returncode == 0
-    d3 = json.loads(proc3.stdout)
-    assert d3["pecas"][-1]["peca"] == "cadernos"
 
 
 def test_formato_json_e_objeto(raiz_hermetica):

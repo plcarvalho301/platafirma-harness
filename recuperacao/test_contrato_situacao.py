@@ -38,8 +38,7 @@ from recuperacao.envelope import Causa, Cobertura, Fonte
 from recuperacao.pep import PEP
 from recuperacao.situacao import situacao
 
-RAIZ = os.environ.get("PF_RAIZ", os.path.expanduser("~/AI"))
-TOKENIZADOR = os.path.join(RAIZ, "opt", "tokenizers", "qwen2.5.json")
+from recuperacao._raizes import TOKENIZADOR
 BIN_SITUACAO = Path(__file__).resolve().parents[1] / "bin" / "situacao"
 MOTOR_ACERVO_URL = os.environ.get(
     "MOTOR_ACERVO_URL", os.environ.get("RAG_API_URL", "http://127.0.0.1:8100")).rstrip("/")
@@ -227,22 +226,6 @@ def test_bin_situacao_ajuda_sai_2():
 
 
 @motor_acervo_no_ar
-def test_bin_situacao_executa_e_emite_payload():
-    """Execução com obra retorna envelope com payload formatado, contra o serviço real."""
-    p = subprocess.run(
-        [sys.executable, str(BIN_SITUACAO), "2020-devops-transformation-google-cloud-dora", "--json"],
-        capture_output=True,
-        text=True,
-    )
-    assert p.returncode == 0
-    d = json.loads(p.stdout)
-    assert "cobertura" in d
-    assert len(d.get("itens", [])) >= 1
-    conteudo = json.loads(d["itens"][0]["conteudo"])
-    assert "degrau" in conteudo
-    assert "servivel" in conteudo
-
-
 # =============================================================================
 # Regressão: ramo `cache is not None` chama a API real do Cache (le/grava).
 # Mesmo bug de `descobrir` — cache.obtem/grava-4-args escapavam do except

@@ -33,8 +33,8 @@ from recuperacao.envelope import (
 )
 from recuperacao.fontes import CLASSE, PREFIXO_CHAVE, TIMEOUT_MS, Classe, Fonte, timeout_ms
 
-RAIZ = os.environ.get("PF_RAIZ", os.path.expanduser("~/AI"))
-TOKENIZADOR = os.path.join(RAIZ, "opt", "tokenizers", "qwen2.5.json")
+from recuperacao._raizes import TOKENIZADOR
+
 TETO_ENVELOPE_VAZIO = 40
 
 

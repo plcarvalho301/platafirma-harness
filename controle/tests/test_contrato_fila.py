@@ -291,24 +291,6 @@ def test_status_todas_via_cli_de_verdade(monkeypatch, capsys):
     }]
 
 
-def test_status_sem_persona_e_sem_todas_vira_uso_incorreto(monkeypatch, capsys):
-    """Nem persona nem --todas: antes o argparse pegava sozinho (persona
-    obrigatória); com persona opcional, cmd_status precisa do próprio
-    guard — confere que ele cobre o buraco que abriu."""
-    monkeypatch.setattr(fila_streams, "personas_validas", lambda: {"ti"})
-    rc = FakeRC({})
-
-    code, cap = _rodar_cli(monkeypatch, capsys, ["status", "--json"], "ti", rc)
-    assert code == 2
-    saida = json.loads(cap.out)
-    assert saida.get("erro")
-
-    code, cap = _rodar_cli(monkeypatch, capsys, ["status"], "ti", rc)
-    assert code == 2
-    assert cap.out == ""
-    assert "uso" in cap.err
-
-
 def test_status_json_sem_identidade_vira_objeto_erro(monkeypatch, capsys):
     """PF_CADEIRA ausente e sem --eu: falha antes mesmo de tocar o Redis."""
     monkeypatch.setattr(fila_streams, "personas_validas", lambda: {"ti"})

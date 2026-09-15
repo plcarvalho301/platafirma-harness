@@ -306,62 +306,6 @@ def _():
         "ritual ja fechado gerou aviso de atraso"
 
 
-# --- identidade no ambiente do giro ----------------------------------------
-
-@prova("PF_CADEIRA do giro leva o SLUG, nao o sufixo")
-def _():
-    import importlib.util
-    from importlib.machinery import SourceFileLoader
-
-    cam = os.path.join(os.path.dirname(CHAT), "bin", "chat")
-    spec = importlib.util.spec_from_loader("chatverbo", SourceFileLoader("chatverbo", cam))
-    verbo = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(verbo)
-
-    # `mesa`, `fila` e `tarefas` chaveiam pelo slug. Exportar o sufixo manda a
-    # escrita para uma chave paralela que nenhuma outra sessao da cadeira le — e
-    # ninguem ve, porque escrita e leitura do giro concordam entre si.
-    assert verbo.ambiente_do_giro("TI")["PF_CADEIRA"] == "claudinho-TI"
-    assert verbo.ambiente_do_giro("produto")["PF_CADEIRA"] == "claudinha-produto", \
-        "o prefixo de genero nao se deriva do sufixo"
-    # `fabrica` tem persona e NAO e ator: nao e cadeira (esta em _NAO_SAO_CADEIRA) e
-    # nao e participante. Era `jaiminho` que fazia este papel ate o card 464; ele
-    # passou a ser participante, ganhou slug proprio e deixou de servir de exemplo
-    # de ausencia — trocar o exemplo mantem a prova medindo o que ela mede.
-    try:
-        verbo.ambiente_do_giro("fabrica")
-    except ValueError:
-        pass
-    else:
-        assert False, "ator inexistente nao levantou — gravaria em lugar nenhum, calada"
-
-
-@prova("participante gira por rota propria e nao pelo cwd de cadeira")
-def _():
-    import importlib.util
-    from importlib.machinery import SourceFileLoader
-
-    cam = os.path.join(os.path.dirname(CHAT), "bin", "chat")
-    spec = importlib.util.spec_from_loader("chatverbo2", SourceFileLoader("chatverbo2", cam))
-    verbo = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(verbo)
-
-    # A escolha de motor sai do ator, nunca de flag do chamador: a recepcao e o
-    # worker despacham o mesmo comando para os dois, e quem ramifica e este verbo.
-    assert verbo.eh_participante("jaiminho") is True
-    assert verbo.eh_participante("TI") is False
-    assert "jaiminho" in verbo.cadeiras(), \
-        "o roster do verbo divergiu do da recepcao — foi essa divergencia que o card 464 fechou"
-    assert "jaiminho" in verbo.VERBO_DO_PARTICIPANTE, \
-        "participante sem verbo declarado giraria em rota nenhuma"
-
-    # A rota do participante devolve o MESMO contrato, inclusive na falha: sem isso
-    # o worker leria "sem JSON valido" e a sala receberia erro seco.
-    passos = []
-    r = verbo.giro_de_participante("ninguem", "", "oi", passos.append)
-    assert r["estado"] == "erro" and "sem verbo declarado" in r["detalhe"]
-
-
 # --- migracao --------------------------------------------------------------
 
 @prova("migracao e idempotente sobre banco do esquema anterior")

@@ -6,9 +6,9 @@ empurra transacao como o Synapse empurraria. O que se mede e o que chegou na
 sala — que e onde os criterios de aceite moram.
 
     docker run --rm --network none -e PYTHONUNBUFFERED=1 \\
-      -e PF_RAIZ=/home/claudinho/AI \\
+      -e PF_ABERTURA_DIR=/abertura-publicada \\
       -v "$PWD:/chat:ro" \\
-      -v "$PWD/../personas:/home/claudinho/AI/platafirma-harness/personas:ro" \\
+      -v "<morada publicada>:/abertura-publicada:ro" \\
       --entrypoint python \\
       platafirma/chat-recepcao:local /chat/testes/prova-ponta-a-ponta.py
 
@@ -298,7 +298,6 @@ async def principal() -> int:
         "CHAT_INTERVALO_VIGIA": "3",
         "CHAT_INTERVALO_RECONCILIA": "2",
         "CHAT_ANEXO_TETO": str(4 * 1024),
-        "PF_RAIZ": os.environ.get("PF_RAIZ", "/home/claudinho/AI"),
         "CHAT_VERBO": f"{CHAT}/testes/verbo-de-mentira.py",
         "CHAT_INTERVALO_RONDA": "0.5",
     })

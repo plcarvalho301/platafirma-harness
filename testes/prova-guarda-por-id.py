@@ -1,4 +1,4 @@
-#!/home/claudinho/AI/.venv-harness/bin/python
+#!/opt/platafirma/current/venv/harness/bin/python
 # prova-guarda-por-id — criterio 18 da minuta 0002: ritual atrasado nao esmaga.
 # capacidade: memoria
 # dono: claudinho-IA

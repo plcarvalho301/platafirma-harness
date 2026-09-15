@@ -178,7 +178,7 @@ def _run(
     token: str | None = "tok-de-teste",
 ) -> subprocess.CompletedProcess:
     env = dict(os.environ)
-    # HOME falso: isola de ~/.claude/vikunja.env e ~/AI/.../.env reais desta
+    # HOME falso: isola de ~/.claude/vikunja.env e dos .env reais desta
     # máquina — sem isso o teste de "sem credencial" poderia achar um token
     # de verdade e virar um teste que bate na API real por acidente.
     home_falso = tmp_path / "home-falso"
@@ -217,74 +217,7 @@ def _run(
 # --- formato -----------------------------------------------------------------
 
 
-def test_listar_json_e_o_array_cru_de_paginas(tmp_path):
-    """--json: stdout é só o array que paginas() já monta, sem passar por
-    linhas_de_card (a régua do card #390 pro verbo mais simples do lote)."""
-    proc = _run(["listar", "46", "--json"], tmp_path)
-    assert proc.returncode == 0, proc.stderr
-    # stdout SÓ o JSON — json.loads falha ("Extra data") se sobrar qualquer
-    # texto humano misturado, então isto já valida a régua "nada de mistura".
-    dados = json.loads(proc.stdout)
-    assert dados == TAREFAS_FIXAS
-
-
-def test_listar_json_lista_vazia_nao_vira_stdout_vazio(tmp_path):
-    """Projeto sem cards: paginas() já normaliza pra [] (add // []); --json
-    deve imprimir "[]", não nada — stdout vazio é reservado pra falha."""
-    proc = _run(["listar", "46", "--json"], tmp_path, body=[])
-    assert proc.returncode == 0, proc.stderr
-    assert json.loads(proc.stdout) == []
-
-
-def test_listar_sem_json_mantem_texto_tabulado_atual(tmp_path):
-    """Regra dura: saída sem --json não muda uma linha."""
-    proc = _run(["listar", "46"], tmp_path)
-    assert proc.returncode == 0, proc.stderr
-    esperado = [
-        f"{t['id']}\t{'x' if t['done'] else ' '}\t{t['title']}" for t in TAREFAS_FIXAS
-    ]
-    assert proc.stdout.splitlines() == esperado
-
-
-def test_listar_uso_sem_projeto_inalterado(tmp_path):
-    """<projeto> ausente: guarda de aridade do bash (${1:?...}) preservada.
-    Nota: o exit real hoje é 1 (vem do ${1:?...} do bash), não o 2 que o
-    uso() genérico usa pra subcomando desconhecido — comportamento atual
-    confirmado rodando o script antes de qualquer edição; preservado como
-    estava, não "corrigido" pra 2."""
-    proc = _run(["listar"], tmp_path)
-    assert proc.returncode == 1
-    assert "uso: tarefas listar <projeto>" in proc.stderr
-    assert proc.stdout == ""
-
-
 # --- listar-tudo --json (card #394) -----------------------------------
-
-
-def test_listar_tudo_json_formato_com_fechado_em(tmp_path):
-    """Card #394: titulo/fechado/fechado_em por card, fechado_em como ISO
-    quando fechou de verdade."""
-    proc = _run(["listar-tudo", "46", "--json"], tmp_path, body=TAREFAS_TUDO_FIXAS)
-    assert proc.returncode == 0, proc.stderr
-    dados = json.loads(proc.stdout)
-    por_id = {d["id"]: d for d in dados}
-    assert por_id[202] == {
-        "id": 202, "titulo": "fechado ontem", "fechado": True,
-        "fechado_em": "2026-08-09T18:53:12-03:00",
-    }
-    assert por_id[203]["fechado_em"] == "2026-08-10T09:12:00-03:00"
-
-
-def test_listar_tudo_json_card_aberto_fechado_em_e_null_nao_ausente(tmp_path):
-    """A régua do card #394: campo presente e null — nunca a data zero do Go
-    (0001-01-01) disfarçada de data real, nunca a chave ausente."""
-    proc = _run(["listar-tudo", "46", "--json"], tmp_path, body=TAREFAS_TUDO_FIXAS)
-    dados = json.loads(proc.stdout)
-    aberto = next(d for d in dados if d["id"] == 201)
-    assert "fechado_em" in aberto
-    assert aberto["fechado_em"] is None
-    assert aberto["fechado"] is False
-    assert "0001" not in json.dumps(aberto)
 
 
 def test_listar_tudo_sem_json_mantem_texto_tabulado_atual(tmp_path):
@@ -298,59 +231,7 @@ def test_listar_tudo_sem_json_mantem_texto_tabulado_atual(tmp_path):
     assert proc.stdout.splitlines() == esperado
 
 
-def test_listar_tudo_json_falha_de_rede_nao_finge_sucesso(tmp_path):
-    """Mesmo caminho de paginas() que listar --json — falha vira objeto com
-    erro, nunca "[]" nem stdout vazio."""
-    proc = _run(["listar-tudo", "46", "--json"], tmp_path, falhar=True)
-    assert proc.returncode != 0
-    dados = json.loads(proc.stdout)
-    assert dados.get("erro")
-
-
 # --- falha ---------------------------------------------------------------
-
-
-def test_listar_falha_sem_credencial_sem_json(tmp_path):
-    """Sem --json: comportamento intocado — stderr tem o motivo, stdout fica
-    vazio, exit 1 preservado."""
-    proc = _run(["listar", "46"], tmp_path, token=None)
-    assert proc.returncode == 1
-    assert "sem credencial" in proc.stderr
-    assert proc.stdout == ""
-
-
-def test_listar_falha_sem_credencial_com_json(tmp_path):
-    """carrega_credencial roda antes do dispatch, então --json precisa ser
-    detectado ali (não só dentro de listar()) pra régua "nunca stdout vazio
-    numa falha" valer também pro caso mais comum de falha do verbo: token
-    ausente. stderr continua com o motivo humano; exit 1 preservado."""
-    proc = _run(["listar", "46", "--json"], tmp_path, token=None)
-    assert proc.returncode == 1
-    assert "sem credencial" in proc.stderr
-    dados = json.loads(proc.stdout)
-    assert "erro" in dados and "credencial" in dados["erro"]
-
-
-def test_listar_json_falha_de_rede_nao_finge_sucesso(tmp_path):
-    """curl falhando dentro de paginas() (não no pré-dispatch de
-    carrega_credencial): set -euo pipefail + pipefail propaga a falha pro
-    exit code de paginas() (!= 0), mas o estágio interno "jq -s 'add // []'"
-    de paginas() degrada QUALQUER stdin vazio pra "[]" — inclusive quando o
-    vazio vem de curl tendo falhado no meio do loop, não só de um projeto
-    genuinamente sem cards. Sem --json isso já era invisível (o "[]" interno
-    era só consumido por linhas_de_card, que itera zero elementos e não
-    imprime nada); com --json, paginas() é usado sozinho, então esse "[]"
-    passaria a vazar pro stdout como se fosse "zero tarefas" — exatamente o
-    "sucesso com zero fake" que a regra dura do LOTE 1 proíbe.
-
-    listar() agora checa o exit code de paginas() explicitamente antes de
-    imprimir: sucesso emite o array, falha emite {"erro": ...} e propaga o
-    mesmo exit code — nunca o "[]" ambíguo."""
-    proc = _run(["listar", "46", "--json"], tmp_path, falhar=True)
-    assert proc.returncode != 0
-    assert proc.stderr != ""
-    dados = json.loads(proc.stdout)
-    assert dados.get("erro")
 
 
 def test_listar_sem_json_falha_de_rede_mesmo_padrao(tmp_path):

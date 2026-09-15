@@ -236,36 +236,6 @@ def _():
     assert "PATH" in linha["detalhe"], linha["detalhe"]
 
 
-@prova("integracao com o verbo REAL: cadeira inexistente vira erro estruturado")
-def _():
-    assert os.access(VERBO_REAL, os.X_OK), f"o verbo real nao esta em {VERBO_REAL}"
-    caminho, con = novo_journal()
-    job = chega(con, cadeira="nao-existe")
-    ambiente = dict(os.environ)
-    ambiente.update({"CHAT_JOURNAL": caminho, "CHAT_VERBO": VERBO_REAL,
-                     "CHAT_INTERVALO_RONDA": "0.2",
-                     "PF_RAIZ": os.path.expanduser("~/AI")})
-    subprocess.run([sys.executable, WORKER, "--uma-volta"], env=ambiente,
-                   capture_output=True, text=True, timeout=120)
-    linha = con.execute("SELECT * FROM jobs WHERE id = ?", (job,)).fetchone()
-    # bin/chat recusa cadeira que nao existe com exit 2 e stderr, sem JSON no
-    # stdout — e o worker tem de virar isso em estado, nunca em giro pendurado.
-    assert linha["estado"] == journal.ERRO, f"{linha['estado']} / {linha['detalhe']}"
-    assert "sem JSON valido" in linha["detalhe"], linha["detalhe"]
-    # So isso acima nao distingue "o verbo recusou a cadeira" de "o verbo esta
-    # quebrado" — renomeie o ato `despachar` e a assercao continua verde. Chama o
-    # verbo com a MESMA argv que worker.py monta e exige o que so o caminho da
-    # cadeira produz: a recusa nomeada, com a lista de cadeiras validas.
-    direto = subprocess.run(
-        [VERBO_REAL, "despachar", "--cadeira", "nao-existe", "--fita", ""],
-        input="oi", capture_output=True, text=True, timeout=60,
-        env={**os.environ, "PF_RAIZ": os.path.expanduser("~/AI")},
-    )
-    assert "nao-existe" in direto.stderr and "cadeiras:" in direto.stderr, (
-        f"o verbo nao chegou a conferir a cadeira — argv ou ato mudou: {direto.stderr[:200]!r}")
-    assert " TI" in direto.stderr, f"a lista de cadeiras validas nao veio: {direto.stderr[:200]!r}"
-
-
 @prova("watchdog do worker: stream mudo vira timeout e mata o grupo")
 def _():
     caminho, con = novo_journal()

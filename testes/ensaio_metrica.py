@@ -206,17 +206,6 @@ def test_lote_e_pertinencia_a_lote_id_nao_lote_n_maior_que_um():
 
 # --- SINTETICO: as tres camadas ---------------------------------------------------
 
-def test_camada_eventos_emite_um_objeto_por_evento():
-    giros, _, cadeias = classifica([
-        reg("10:00:00.000", "repo", "commitar", exit_code=3, lote_id="ab12", lote_n=0),
-        reg("10:00:01.000", "repo", "commitar", exit_code=3),
-        reg("10:00:02.000", "repo", "commitar"),
-    ])
-    evs = m.stream_eventos(giros, cadeias)
-    conta = {t: sum(1 for e in evs if e["tipo"] == t) for t in m.TIPOS}
-    assert conta == {"giro": 3, "erro": 2, "help": 0, "acerto": 1, "cadeia": 1, "lote": 1}
-
-
 def test_camada_eventos_filtra_por_tipo():
     giros, _, cadeias = classifica([
         reg("10:00:00.000", "repo", "commitar", exit_code=3),

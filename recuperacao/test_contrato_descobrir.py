@@ -38,8 +38,7 @@ from recuperacao.disjuntor import EstadoDisjuntor, Painel
 from recuperacao.envelope import Causa, Cobertura, ContratoViolado, Fonte, VersaoTipo
 from recuperacao.pep import PEP
 
-RAIZ = os.environ.get("PF_RAIZ", os.path.expanduser("~/AI"))
-TOKENIZADOR = os.path.join(RAIZ, "opt", "tokenizers", "qwen2.5.json")
+from recuperacao._raizes import TOKENIZADOR
 BIN_DESCOBRIR = Path(__file__).resolve().parents[1] / "bin" / "descobrir"
 MOTOR_ACERVO_URL = os.environ.get(
     "MOTOR_ACERVO_URL", os.environ.get("RAG_API_URL", "http://127.0.0.1:8100")).rstrip("/")

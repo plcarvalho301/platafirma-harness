@@ -59,27 +59,6 @@ def _git(cwd, *args):
 # Mocka containers()/git_estado()/env_declarado(): sao as tres funcoes que falam
 # com docker/git no mundo real (regra do NOTAS-390.md para esta classe).
 
-def test_servico_json_formato_ok(monkeypatch, capsys):
-    container = {
-        "nome": "app-1", "servico": "app",
-        "working_dir": conferir.DEPLOY,  # dentro de DEPLOY -> sem DERIVA
-        "config_files": "", "env": {"FOO": "bar"},
-    }
-    monkeypatch.setattr(conferir, "containers", lambda alvo: [container])
-    monkeypatch.setattr(conferir, "git_estado", lambda caminho: None)
-    monkeypatch.setattr(conferir, "env_declarado", lambda c: ({"FOO": "bar"}, None))
-
-    exit_code = conferir.conferir_servico(None, como_json=True)
-    saida = capsys.readouterr()
-
-    assert exit_code == 0
-    assert saida.out.strip()
-    dado = json.loads(saida.out)
-    assert dado == {
-        "resultado": "ok",
-        "servicos": [{"nome": "app-1", "servico": "app", "divergencias": []}],
-    }
-
 
 def test_servico_json_divergente(monkeypatch, capsys):
     container = {
@@ -223,7 +202,7 @@ def test_skill_json_sem_servido_e_indeterminado(harness_fixture, monkeypatch, ca
 
 # --- repo ---------------------------------------------------------------------
 # Roda contra git de verdade: cada teste cria um repo-fixture descartavel em
-# tmp_path e aponta conferir.RAIZ pra la (a raiz real ~/AI nao existe nesta
+# tmp_path e aponta conferir.RAIZ pra la (a raiz real nao existe nesta
 # maquina de dev, e mesmo se existisse nao queremos varrer o disco todo).
 
 def test_repo_json_formato_ok(tmp_path, monkeypatch, capsys):

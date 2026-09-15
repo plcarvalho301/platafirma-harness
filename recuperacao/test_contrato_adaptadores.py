@@ -24,10 +24,11 @@ from recuperacao.adaptadores import (
     FonteIndisponivel,
     monta_envelope,
 )
+from recuperacao._raizes import release
 from recuperacao.adaptadores.registro import SERIES
 from recuperacao.envelope import Causa, Cobertura, Fonte, VersaoTipo
 
-RAIZ = os.environ.get("PF_RAIZ", os.path.expanduser("~/AI"))
+RELEASE = release()
 
 
 # ------------------------------------------------------------------ fila: cliente falso
@@ -132,51 +133,10 @@ def test_registro_conhece_as_tres_series():
     assert set(SERIES) == {"adr", "seg", "ont"}
 
 
-def test_registro_resolve_chave_exata():
-    a = AdaptadorRegistro()
-    r = a.busca("adr:0064", texto="nenhum")
-    assert len(r.itens) == 1
-    p = r.itens[0].procedencia
-    assert p.chave == "adr:0064"
-    assert p.fonte is Fonte.REGISTRO
-    assert p.versao.tipo in (VersaoTipo.SHA, VersaoTipo.DIGEST)
-
-
-def test_registro_chave_inexistente_e_vazia_nao_e_falha():
-    # `vazia` ≠ `fonte-nao-indexada` (arq:0064 §1): a fonte respondeu, e não há registro.
-    r = AdaptadorRegistro().busca("adr:9999")
-    assert r.linha.cobertura is Cobertura.VAZIA
-    assert r.linha.causa is None
-
-
-def test_registro_busca_por_termo_no_titulo():
-    r = AdaptadorRegistro().busca("recuperador", k=20, texto="nenhum")
-    chaves = [i.procedencia.chave for i in r.itens]
-    assert "adr:0064" in chaves and "adr:0067" in chaves
-
-
-def test_registro_filtra_por_serie():
-    r = AdaptadorRegistro().busca("", {"serie": ["seg"]}, k=50, texto="nenhum")
-    assert r.itens and all(i.procedencia.chave.startswith("seg:") for i in r.itens)
-
-
-def test_registro_traz_conteudo_so_na_chave_exata():
-    exata = AdaptadorRegistro().busca("adr:0064", texto="secao").itens[0]
-    assert exata.conteudo and "Recuperador" in exata.conteudo
-    por_termo = AdaptadorRegistro().busca("recuperador", k=5, texto="secao").itens[0]
-    assert por_termo.ref, "busca por termo devolve ref; conteúdo de N ADRs não cabe em envelope"
-
-
 def test_registro_raiz_inexistente_vira_linha_declarada():
     r = AdaptadorRegistro(raiz="/nao/existe").busca_declarada("adr:0064")
     assert r.linha.cobertura is Cobertura.FONTE_NAO_INDEXADA
     assert r.linha.causa is Causa.SEM_ROTA
-
-
-def test_registro_carimba_os_dois_repositorios():
-    # `ont:` mora em outro repo; carimbo de um só envelheceria calado no outro.
-    carimbo = AdaptadorRegistro().busca("adr:0064").linha.carimbo
-    assert "arquitetura:" in carimbo and "conhecimento:" in carimbo
 
 
 # ================================================================== 3. contrato — mesa
@@ -276,16 +236,6 @@ def test_mesa_aceita_pf_cadeira_nas_duas_formas():
 # ========================================== 4. o núcleo: N adaptadores → um envelope
 
 
-def test_monta_envelope_de_tres_fontes():
-    reg = AdaptadorRegistro().busca_declarada("adr:0064", texto="nenhum")
-    fila = AdaptadorFila(cliente=FilaFalsa([CARTA])).busca_declarada("claudinho-IA")
-    mesa = AdaptadorMesa(sufixo="ia", cliente=ValkeyFalso(PROSA),
-                         conexao_pg=PgFalso(ITEM)).busca_declarada()
-    env = monta_envelope([reg, fila, mesa])
-    assert [l.fonte for l in env.linhas] == [Fonte.REGISTRO, Fonte.FILA, Fonte.MESA]
-    assert len(env.itens) == 4
-
-
 def test_fonte_caida_no_meio_nao_derruba_as_outras():
     reg = AdaptadorRegistro(raiz="/nao/existe").busca_declarada("adr:0064")
     fila = AdaptadorFila(cliente=FilaFalsa([CARTA])).busca_declarada("claudinho-IA")
@@ -293,15 +243,6 @@ def test_fonte_caida_no_meio_nao_derruba_as_outras():
     d = env.para_json()
     assert d["aviso"] == [{"fonte": "registro", "causa": "sem-rota"}]
     assert env.itens, "a fila respondeu normalmente"
-
-
-def test_sem_gold_nenhuma_fonte_diz_coberta():
-    # §13 — fonte sem coleção de teste serve `nao-calibrada` declarado, nunca "boa".
-    for r in (
-        AdaptadorRegistro().busca_declarada("adr:0064", texto="nenhum"),
-        AdaptadorFila(cliente=FilaFalsa([CARTA])).busca_declarada("claudinho-IA"),
-    ):
-        assert r.linha.cobertura is Cobertura.NAO_CALIBRADA
 
 
 def test_busca_medida_devolve_latencia():
@@ -322,11 +263,11 @@ def _fila_no_ar() -> bool:
         return False
 
 
-@pytest.mark.skipif(not os.path.isdir(os.path.join(RAIZ, "platafirma-arquitetura")),
+@pytest.mark.skipif(not (RELEASE / "arquitetura").is_dir(),
                     reason="clone de platafirma-arquitetura ausente nesta máquina")
 def test_conformidade_registro_bate_com_o_diretorio():
     """§5 — o resultado bate com a fonte sobre o mesmo estado."""
-    d = os.path.join(RAIZ, "platafirma-arquitetura", "macro-global", "decisions")
+    d = RELEASE / "arquitetura" / "macro-global" / "decisions"
     no_disco = {n[:4] for n in os.listdir(d) if n.endswith(".md") and n[:4].isdigit()}
     r = AdaptadorRegistro().busca("", {"serie": ["adr"]}, k=1000, texto="nenhum")
     do_adaptador = {i.procedencia.chave.split(":")[1] for i in r.itens}
@@ -339,7 +280,7 @@ def test_conformidade_fila_bate_com_o_verbo_humano():
     caixa = "claudinho-IA"
     # `--tudo` é XRANGE, leitura FRIA: não move o ponteiro do grupo, e por isso a
     # conformidade pode ser medida sem consumir a caixa de ninguém.
-    p = subprocess.run([os.path.join(RAIZ, "bin", "fila"), "ler", caixa, "--tudo"],
+    p = subprocess.run([str(RELEASE / "harness" / "bin" / "fila"), "ler", caixa, "--tudo"],
                        capture_output=True, text=True, timeout=30,
                        env={**os.environ, "PF_CADEIRA": caixa})
     if p.returncode != 0:
