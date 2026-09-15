@@ -69,7 +69,7 @@ OPS_AUTH_TOKEN = os.environ.get("OPS_AUTH_TOKEN", "")
 MEM_REDIS_HOST = os.environ.get("MEM_REDIS_HOST", "127.0.0.1")
 MEM_REDIS_PORT = int(os.environ.get("MEM_REDIS_PORT", "6380"))
 
-PF_HARNESS = Path(os.environ.get("PF_HARNESS", RAIZ / "platafirma-harness"))
+PF_HARNESS = Path(os.environ.get("PF_HARNESS", RAIZ / "var/prod/platafirma-harness/current"))
 # CODIGO do PDP (pdp.py, identidade.py, pep.py) mora no repo — versionado, importavel.
 PDP_CODE_DIR = PF_HARNESS / "politica-acesso"
 if str(PDP_CODE_DIR) not in sys.path:
@@ -1001,7 +1001,7 @@ TIPOS_TEXTO = {".py", ".md", ".sh", ".sql", ".yaml", ".yml", ".json", ".toml",
 CLONES = ("platafirma-core", "platafirma-conhecimento", "platafirma-arquitetura",
           "platafirma-harness", "platafirma-motor", "platafirma-posto", "modulo-osint")
 ESCRITA_TETO = 1_048_576
-BIN_VERBOS = RAIZ_REAL / "platafirma-harness/bin"
+BIN_VERBOS = Path(os.environ.get("PF_BIN", RAIZ_REAL / "var/prod/platafirma-harness/current/bin"))
 TMP_FITA = RAIZ_REAL / "var/tmp"
 NEGADAS_ESCRITA = {
     "fila": "use o verbo `fila` (append sob flock, com identidade)",
@@ -1151,11 +1151,11 @@ def write_file(path: str, content: str = "", sessao_id: str | None = None,
 # ("Você é <nome>,") dá o nome canônico — que é o diretório da fila — e a linha
 # FERRAMENTAL: dá o caminho do manifesto. Convenção de nome de arquivo não produz o
 # "claudinha" de persona-fabrica.md.
-PERSONAS = Path(os.environ.get("PF_PERSONAS", RAIZ / "platafirma-harness/abertura"))
+PERSONAS = Path(os.environ.get("PF_PERSONAS", RAIZ / "var/prod/platafirma-harness/current/abertura"))
 ORG_CANONICO = Path(os.environ.get(
     "PF_ORG", RAIZ / "platafirma-arquitetura/docs/org-template-canonico.md"))
 MANIFESTO_GERAL = Path(os.environ.get(
-    "PF_MANIFESTO_GERAL", RAIZ / "platafirma-harness/abertura/oficio.md"))
+    "PF_MANIFESTO_GERAL", RAIZ / "var/prod/platafirma-harness/current/abertura/oficio.md"))
 
 
 RE_NOME = re.compile(r"^Você é ([A-Za-zÀ-ÿ][A-Za-zÀ-ÿ-]*)")
@@ -1784,7 +1784,7 @@ async def _token(req):
 # Caminho proprio, nao derivado de PF_HARNESS: uma instancia que aponte PF_HARNESS
 # para um recorte do repo (persona e politica, sem `bin`) ficava sem o modulo da
 # fila e devolvia 500 sem dizer por que. Medido no ensaio de 13/08/2026.
-FILA_BIN = Path(os.environ.get("PF_BIN", RAIZ / "platafirma-harness/bin"))
+FILA_BIN = Path(os.environ.get("PF_BIN", RAIZ / "var/prod/platafirma-harness/current/bin"))
 
 
 def _fila_mod():
