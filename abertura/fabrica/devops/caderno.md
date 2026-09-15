@@ -486,3 +486,64 @@ e o teste caiu para `uvx pytest` isolado, avisando que a dependência do projeto
 faltar — contorno encontrado NA DATA 09/09/2026 foi nenhum: código do #3027 ficou sem lint
 e sem suite, declarado na mesa. O `.venv` do projeto está no clone principal e o worktree
 não o enxerga.
+
+### Aprendizado — mover módulo de lugar (fita #3037, 10/09/2026)
+
+- Caminho ancorado em `__file__` contando `parents`/`.parent.parent` quebra ao descer o
+  arquivo de nível, e só um dos cinco casos do #3037 estourou em teste; os outros erram
+  CALADOS (dir default, export, feedback). Antes de mover pacote: grep
+  `__file__|parents\[` nos arquivos movidos, e corrigir o índice no mesmo passo. Quem
+  varre TODOS os `parents` independe da fundura e fica.
+- Renomear módulo reescrevendo import por regex pega `mod.attr` e perde o nome nu
+  (`patch.object(mod, ...)`, `f(mod)`) — deu NameError. Troca de identificador é por
+  token (`tokenize`, só NAME, pulando o que vem depois de `.` e a própria linha de
+  import), nunca por regex, que não separa código de prosa em comentário.
+- Suíte com falha pré-existente só sustenta "zero regressão" com baseline medido ANTES
+  do primeiro movimento, no MESMO ambiente, comparando os nomes das falhas, não a
+  contagem de passes (arquivo novo entra em teste parametrizado e sobe o número).
+
+10/09/2026 — `teste rodar`/`lint rodar` em worktree seguem inúteis (ver 09/09) — contorno
+encontrado NA DATA 10/09/2026 foi `longjob run <n> bash -lc 'cd <worktree>/rag;
+PYTHONPATH=<worktree>/rag ~/AI/platafirma-conhecimento/.venv/bin/python -m pytest tests -q'`
+depois de copiar `rag/.env` do clone principal para o worktree (gitignored; sem ele a
+coleta morre em `EMBED_MODEL não está setado`). O PYTHONPATH vence o editable do venv,
+então importa o código do worktree. Lint continua sem contorno.
+
+10/09/2026 — script de apoio chamando `git` via subprocess dentro de `longjob` morreu no
+shim de `~/AI/bin/git` ("git nao roda aqui") — contorno encontrado NA DATA 10/09/2026 foi
+`/usr/bin/git` explícito. `write_file` recusou o worktree (morada é lista de clones
+nomeados) e recusou `var/tmp/<arquivo>` sem subpasta — `var/tmp/3037/` (subpasta
+qualquer, não precisa ser o ordem_id) aceitou `.py` e `.sh`.
+
+10/09/2026 — `tarefas mover 3037 em-execucao` recusou "faltam os campos `Negócio:`": o
+corpo tinha `Negocio:` sem acento; tentei `tarefas api GET /items/3037` (falha muda),
+`api-corpo PATCH /itens/3037` com `{"corpo": ...}` ("campo não atualizável") — contorno
+encontrado NA DATA 10/09/2026 foi `tarefas api-corpo PATCH /itens/<id>` com
+`{"descricao": "<corpo inteiro corrigido>"}`. A rota é `/itens`, o campo é `descricao`.
+
+10/09/2026 — `repo git <clone> fetch` e `ls-remote` falham ("could not read Username") mas
+`repo empurrar` empurra; `repo pr-abrir` recusou "branch nao esta em origin" com o branch
+lá, e `repo pr-listar` morreu em "gh nao roda aqui"; `/usr/bin/gh pr create` direto no
+longjob morreu no shim do `git` que o gh chama — contorno encontrado NA DATA 10/09/2026 foi
+`longjob run <n> bash -lc 'cd <worktree> && PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin /usr/bin/gh pr create --base main --head <branch> --title ... --body-file var/tmp/<d>/pr.md'`
+(gh está autenticado). Plantado na mesa como achado do verbo `repo`.
+
+10/09/2026 — `longjob log <unit> N` com `| tail` no comando só mostra o resultado no fim, e
+saída do meio de um job longo some da janela do tail — contorno encontrado NA DATA
+10/09/2026 foi `read_file var/log/jobs/<unit>.log` com `offset`, que lê o log inteiro.
+
+10/09/2026 — procurei arquivo do repo com `descobrir arquivo <nome>` e voltou busca
+semântica do ACERVO (Lei 8.159...) — contorno encontrado NA DATA 10/09/2026 foi
+`repo_grep` da wiki no repo certo; `descobrir` não acha arquivo.
+
+14/09/2026 — `descansar fita --so-memoria` com o `sessao_id` da fita recusou
+`PF_CADEIRA nao definida`; `--cadeira fabrica` não existe ("unrecognized arguments") —
+contorno encontrado NA DATA 14/09/2026 foi `monta_sessao(cadeira="fabrica",
+sessao_id=<o mesmo>)`, que re-registra a cadeira na sessão; aí o descanso rodou.
+`mesa caderno <slot>` é só LEITURA: escrever o caderno é `write_file` com `trecho` em
+`platafirma-harness/abertura/fabrica/<slot>/caderno.md` + commit no harness.
+
+14/09/2026 — passo 3 do `descansar fita` (triagem da memória do Project) não rodou pela
+quarta fita: sem `memory_user_edits` e sem Write nativo nesta superfície, e o diretório
+de memória local não é morada de `write_file` — contorno encontrado NA DATA 14/09/2026 foi
+nenhum, fica para superfície que alcança.
