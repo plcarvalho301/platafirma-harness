@@ -36,7 +36,9 @@ def _acha_catalogo_padrao() -> Path:
     cand = raiz / "docs" / "catalogo-de-fontes.md"
     if cand.is_file():
         return cand
-    cand_ai = Path(os.path.expanduser("~/AI/platafirma-harness/docs/catalogo-de-fontes.md"))
+    # Fallback le da morada publicada, nao do clone de trabalho (arq:0097/0109 §1).
+    cand_ai = Path(os.path.expanduser(
+        "~/AI/var/prod/platafirma-harness/current/docs/catalogo-de-fontes.md"))
     if cand_ai.is_file():
         return cand_ai
     return cand

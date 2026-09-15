@@ -37,6 +37,14 @@ from .base import Adaptador, FonteIndisponivel
 
 RAIZ = os.environ.get("PF_RAIZ", os.path.expanduser("~/AI"))
 
+# Runtime le da morada publicada, nao do clone de trabalho (arq:0097/0109 §1). Cada
+# serie resolve para var/prod/<repo>/current/<sub>; o clone ~/AI/<repo> nunca entra no
+# caminho de servico. Override por PF_RAIZ (testes/fabrica).
+_PROD = os.path.join(RAIZ, "var", "prod")
+
+def _prod_repo(repo: str) -> str:
+    return os.path.join(_PROD, repo, "current")
+
 SERIES = {
     "adr": ("platafirma-arquitetura", "macro-global/decisions"),
     "seg": ("platafirma-arquitetura", "macro-global/capabilities/seguranca/decisions"),
@@ -58,10 +66,10 @@ class AdaptadorRegistro(Adaptador):
 
     def _dir(self, serie: str) -> str:
         repo, sub = SERIES[serie]
-        return os.path.join(self.raiz, repo, sub)
+        return os.path.join(_prod_repo(repo), sub)
 
     def _repo(self, serie: str) -> str:
-        return os.path.join(self.raiz, SERIES[serie][0])
+        return _prod_repo(SERIES[serie][0])
 
     def _lista(self, serie: str) -> list[tuple[str, str, str]]:
         """(numero, titulo-slug, caminho) de cada decisão da série."""
@@ -88,7 +96,7 @@ class AdaptadorRegistro(Adaptador):
         """
         partes = []
         for repo in ("platafirma-arquitetura", "platafirma-conhecimento"):
-            partes.append(f"{repo.split('-')[-1]}:{self._sha_head(os.path.join(self.raiz, repo))}")
+            partes.append(f"{repo.split('-')[-1]}:{self._sha_head(_prod_repo(repo))}")
         return " ".join(partes)
 
     def _sha_head(self, repo: str) -> str:
