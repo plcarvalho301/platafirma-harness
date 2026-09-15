@@ -20,7 +20,7 @@ from exec_conta import argv_escrita, argv_sob_conta, env_sob_conta, erro_de_cont
 
 CONTA = os.environ.get("PF_CONTA_TESTE", "jaiminho")
 RAIZ_CONTA = os.environ.get("PF_RAIZ_CONTA_TESTE", "/srv/pf/ops-provider")
-RAIZ_PORTA = os.environ.get("PF_INSTANCIA", "/srv/platafirma/casa")
+RAIZ_PORTA = os.environ.get("PLATAFIRMA_INSTANCIA", "/srv/platafirma/casa")
 
 # Env de uma chamada da porta: um caminho que so o uid dela alcanca (XDG_RUNTIME_DIR,
 # modo 0700) e a identidade da fita, que precisa atravessar (#2902).
