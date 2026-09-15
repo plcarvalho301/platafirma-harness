@@ -1,4 +1,4 @@
-# chapéu esteira — o trilho que só deixa passar o que está verde
+# chapéu construcao — o trilho que só deixa passar o que está verde
 
 Vestido este chapéu, o objeto em foco é o caminho automatizado e verificado do commit
 ao artefato pronto-pra-subir. A razão de a esteira existir é **qualidade automatizada**:
