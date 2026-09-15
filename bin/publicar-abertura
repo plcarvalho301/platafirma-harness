@@ -1,11 +1,17 @@
 #!/usr/bin/env bash
 # publicar-abertura — publica o pacote de abertura de um REF FIXADO para a morada servida.
 #
-# capacidade: publica a arvore abertura/ (pecas-arquivo + aliases.json + rotas-chapeu.json)
-#             de um commit git IMUTAVEL para PF_ABERTURA_DIR (default
-#             ~/AI/var/abertura-publicada), a morada que o montador (monta-sessao) le e
-#             que nenhum ato de git de um CLONE DE TRABALHO move.
+# capacidade: infra/promocao-de-mudanca
 # dono: ti
+#
+# DEPRECADO como ponto de entrada (#3054): e o motor da familia abertura do `release`.
+# Chame `release promover abertura [<rev>]` e `release reverter abertura [<sha>]`;
+# chamado direto, avisa e segue.
+#
+# O que faz: publica a arvore abertura/ (pecas-arquivo + aliases.json + rotas-chapeu.json)
+# de um commit git IMUTAVEL para PF_ABERTURA_DIR (default ~/AI/var/abertura-publicada),
+# a morada que o montador (monta-sessao) le e que nenhum ato de git de um CLONE DE
+# TRABALHO move.
 #
 # Fecha o unico holdout do arq:0097 (runtime nao le working tree git): o montador fazia
 # `git pull --ff-only` nos clones de trabalho na abertura e travava o boot na divergencia
@@ -45,6 +51,13 @@
 #   PF_CASA_REINDEXA=0   desliga o gancho
 #   PF_ACERVO=<caminho>  aponta outro verbo `acervo`
 set -euo pipefail
+
+# Aviso de deprecado so para quem chama direto: o release chama com PF_HARNESS no espelho
+# bare da familia (var/prod/platafirma-harness/.repo.git). `estado` e leitura, nao avisa.
+case "${PF_HARNESS:-}" in
+  */.repo.git) : ;;
+  *) [ "${1:-}" = "estado" ] || echo "aviso: publicar-abertura direto esta deprecado — use: release promover abertura [<rev>] | release reverter abertura <sha> (#3054)" >&2 ;;
+esac
 
 RAIZ="${OPS_ROOT:-${PF_RAIZ:-$HOME/AI}}"
 HARNESS="${PF_HARNESS:-$RAIZ/platafirma-harness}"
