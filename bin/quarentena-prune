@@ -13,15 +13,15 @@
 # a poda de amanha. Sem o corte de idade, rodar na sexta daria 1 dia de janela a
 # quem quarentenou na quinta, e a garantia deixaria de existir.
 set -uo pipefail
-# ambiente: PF_INSTANCIA[=/srv/platafirma/casa] · QUARENTENA_RETENCAO_DIAS[=7]
+# ambiente: PLATAFIRMA_INSTANCIA[=/srv/platafirma/casa] · QUARENTENA_RETENCAO_DIAS[=7]
 
 # Raizes de producao (card #3010): quarentena, trava e log moram na instancia.
 . "$(dirname "$(readlink -f "$0")")/../lib/raizes.sh"
 
 RETENCAO_DIAS="${QUARENTENA_RETENCAO_DIAS:-7}"
-QUARENTENA="$PF_INSTANCIA/var/quarentena"
-MARCA="$PF_INSTANCIA/var/log/poda.log"
-TRAVA="$PF_INSTANCIA/var/lock/quarentena-prune.lock"
+QUARENTENA="$PLATAFIRMA_INSTANCIA/var/quarentena"
+MARCA="$PLATAFIRMA_INSTANCIA/var/log/poda.log"
+TRAVA="$PLATAFIRMA_INSTANCIA/var/lock/quarentena-prune.lock"
 
 ts() { date -Is; }
 mkdir -p "$(dirname "$MARCA")" "$(dirname "$TRAVA")"

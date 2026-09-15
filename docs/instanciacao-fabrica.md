@@ -54,7 +54,7 @@ O que isso implica, e é preciso saber antes de despachar:
   declara a bancada e abre `<bancada>/wt/<familia>/fabrica` de cada família no sha
   que está em produção; depois, `puxar-bancada <familia> --card <n> --slug <s>`
   abre o ramo do card nascido desse sha. Verbo editado se testa pelo caminho do
-  worktree com `PF_INSTANCIA` e `PF_RELEASE_RAIZ` num diretório temporário — sem
+  worktree com `PLATAFIRMA_INSTANCIA` e `PF_RELEASE_RAIZ` num diretório temporário — sem
   isso ele executa contra a instância real.
 
 **Exceção, e é a única:** máquina emprestada, ou sessão que não autentica pela

@@ -388,7 +388,7 @@ def _repo_conhecimento() -> str | None:
 
 def _arvore_projecao() -> str | None:
     """Árvore de conhecimento de onde a projeção só LÊ: o clone declarado, se houver, senão a
-    release no ar ($PF_RELEASE/conhecimento)."""
+    release no ar ($PLATAFIRMA_RELEASE/conhecimento)."""
     for d in (_repo_conhecimento(), str(release() / "conhecimento")):
         if d and os.path.isfile(os.path.join(d, _PROJECAO_REL)):
             return d

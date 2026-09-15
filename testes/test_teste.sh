@@ -12,9 +12,9 @@ LINT="$REPO_ROOT/bin/lint"
 TMP_DIR="$(mktemp -d /tmp/pf-teste-lint.XXXXXX)"
 trap 'rm -rf "$TMP_DIR"' EXIT
 
-unset PF_BANCADA PF_CADEIRA PF_TESTE_PYTHON
-export PF_ARQUIVO_BANCADA="$TMP_DIR/config/bancada"   # nao existe
-export PF_RELEASE="$TMP_DIR/release"                  # nao existe
+unset PLATAFIRMA_BANCADA PF_CADEIRA PF_TESTE_PYTHON
+export PLATAFIRMA_ARQUIVO_BANCADA="$TMP_DIR/config/bancada"   # nao existe
+export PLATAFIRMA_RELEASE="$TMP_DIR/release"                  # nao existe
 
 falha() { echo "FALHA: $*" >&2; exit 1; }
 roda() { set +e; OUT="$("$@" 2>&1)"; RC=$?; set -e; }
@@ -25,11 +25,11 @@ echo "=== teste/lint: bancada declarada ==="
 for v in "$TESTE" "$LINT"; do
   roda "$v"
   [ "$RC" -eq 2 ] || falha "$(basename "$v") sem argumento devia sair 2, saiu $RC"
-  grep -q "PF_BANCADA" <<<"$OUT" || falha "uso de $(basename "$v") devia nomear PF_BANCADA: $OUT"
+  grep -q "PLATAFIRMA_BANCADA" <<<"$OUT" || falha "uso de $(basename "$v") devia nomear PLATAFIRMA_BANCADA: $OUT"
 done
-echo "OK: uso sai 2 sem bancada e nomeia PF_BANCADA"
+echo "OK: uso sai 2 sem bancada e nomeia PLATAFIRMA_BANCADA"
 
-# 2. sem PF_BANCADA e sem arquivo -> exit 3, nada criado
+# 2. sem PLATAFIRMA_BANCADA e sem arquivo -> exit 3, nada criado
 for v in "$TESTE" "$LINT"; do
   for ato in detectar rodar; do
     roda "$v" "$ato" platafirma-fixture
@@ -41,19 +41,19 @@ done
 echo "OK: sem declaracao sai 3 com causa"
 
 # 3. bancada declarada mas inexistente -> recusa sem criar
-export PF_BANCADA="$TMP_DIR/bancada-inexistente"
+export PLATAFIRMA_BANCADA="$TMP_DIR/bancada-inexistente"
 for v in "$TESTE" "$LINT"; do
   roda "$v" detectar platafirma-fixture
   [ "$RC" -eq 3 ] || falha "$(basename "$v") detectar em bancada inexistente devia sair 3, saiu $RC: $OUT"
 done
-[ ! -e "$PF_BANCADA" ] || falha "leitura criou a bancada $PF_BANCADA"
+[ ! -e "$PLATAFIRMA_BANCADA" ] || falha "leitura criou a bancada $PLATAFIRMA_BANCADA"
 echo "OK: bancada inexistente recusa e nao e criada"
 
 # 4. bancada declarada por arquivo; clone base e worktree por cadeira
-unset PF_BANCADA
+unset PLATAFIRMA_BANCADA
 BANC="$TMP_DIR/bancada"
-mkdir -p "$(dirname "$PF_ARQUIVO_BANCADA")"
-printf '%s\n' "$BANC" > "$PF_ARQUIVO_BANCADA"
+mkdir -p "$(dirname "$PLATAFIRMA_ARQUIVO_BANCADA")"
+printf '%s\n' "$BANC" > "$PLATAFIRMA_ARQUIVO_BANCADA"
 FIX="$BANC/platafirma-fixture"
 mkdir -p "$FIX"
 git -C "$FIX" init -q -b main
@@ -81,17 +81,17 @@ done
 echo "OK: bancada do arquivo, fallback ao clone base e worktree em wt/<repo>/<cadeira>"
 
 # 5. teste: interpretador da release quando nao ha venv na bancada
-mkdir -p "$PF_RELEASE/venv/fixture/bin"
-printf '#!/bin/sh\nexit 0\n' > "$PF_RELEASE/venv/fixture/bin/python"
-chmod +x "$PF_RELEASE/venv/fixture/bin/python"
+mkdir -p "$PLATAFIRMA_RELEASE/venv/fixture/bin"
+printf '#!/bin/sh\nexit 0\n' > "$PLATAFIRMA_RELEASE/venv/fixture/bin/python"
+chmod +x "$PLATAFIRMA_RELEASE/venv/fixture/bin/python"
 roda "$TESTE" detectar platafirma-fixture
-grep -q "interpretador do projeto: $PF_RELEASE/venv/fixture/bin/python" <<<"$OUT" \
+grep -q "interpretador do projeto: $PLATAFIRMA_RELEASE/venv/fixture/bin/python" <<<"$OUT" \
   || falha "teste devia cair no venv da release: $OUT"
 roda env PF_CADEIRA=ti "$TESTE" detectar platafirma-fixture
-grep -q "interpretador do projeto: $PF_RELEASE/venv/fixture/bin/python" <<<"$OUT" \
+grep -q "interpretador do projeto: $PLATAFIRMA_RELEASE/venv/fixture/bin/python" <<<"$OUT" \
   || falha "no worktree wt/<repo>/<cadeira> o sufixo do venv vem do repo, nao da cadeira: $OUT"
 mkdir -p "$BANC/.venv-fixture/bin"
-cp "$PF_RELEASE/venv/fixture/bin/python" "$BANC/.venv-fixture/bin/python"
+cp "$PLATAFIRMA_RELEASE/venv/fixture/bin/python" "$BANC/.venv-fixture/bin/python"
 roda "$TESTE" detectar platafirma-fixture
 grep -q "interpretador do projeto: $BANC/.venv-fixture/bin/python" <<<"$OUT" \
   || falha "venv da bancada devia vencer o da release: $OUT"

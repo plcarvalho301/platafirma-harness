@@ -20,8 +20,8 @@ roda() { set +e; OUT="$("$@" 2>&1)"; RC=$?; set -e; }
 RAIZ="$TMP_DIR/opt"; FORGE="$TMP_DIR/forge"; TRAB="$TMP_DIR/trabalho"; CASA="$TMP_DIR/home"
 BANC="$TMP_DIR/bancada"
 mkdir -p "$RAIZ" "$FORGE" "$TRAB" "$CASA" "$TMP_DIR/srv"
-unset PF_BANCADA PF_CADEIRA PF_RELEASE PF_ARQUIVO_BANCADA PF_ARQUIVO_SHELLRC OPS_LOG_DIR PF_SESSAO
-export HOME="$CASA" PF_RELEASE_RAIZ="$RAIZ" PF_INSTANCIA="$TMP_DIR/srv"
+unset PLATAFIRMA_BANCADA PF_CADEIRA PLATAFIRMA_RELEASE PLATAFIRMA_ARQUIVO_BANCADA PLATAFIRMA_ARQUIVO_SHELLRC OPS_LOG_DIR PF_SESSAO
+export HOME="$CASA" PF_RELEASE_RAIZ="$RAIZ" PLATAFIRMA_INSTANCIA="$TMP_DIR/srv"
 export GIT_AUTHOR_NAME=t GIT_AUTHOR_EMAIL=t@t GIT_COMMITTER_NAME=t GIT_COMMITTER_EMAIL=t@t GIT_CONFIG_NOSYSTEM=1
 ARQ_BANCADA="$CASA/.config/platafirma/bancada"
 REPO_REL="$RAIZ/current/harness/bin/repo"
@@ -84,7 +84,7 @@ roda "$PUXAR" --ajuda
 [ "$RC" -eq 2 ] && grep -q -- "--declarar" <<<"$OUT" || falha "puxar-bancada --ajuda devia sair 2 com o uso: $RC $OUT"
 padrao='(/home/[^/ ]+|\$HOME|\$\{HOME\}|~|%h)/A''I([/" ]|$)|home\(\) */ *"A''I"|-home-[a-z]+-A''I'
 ! grep -nE "$padrao" "$PUXAR" "$REPO_ROOT/bin/repo" "$0" || falha "referencia a pasta de trabalho da conta"
-grep -q '"$PF_RELEASE/harness/bin/repo"' "$PUXAR" || falha "puxar-bancada devia chamar o repo da release"
+grep -q '"$PLATAFIRMA_RELEASE/harness/bin/repo"' "$PUXAR" || falha "puxar-bancada devia chamar o repo da release"
 ! grep -nE '^[^#]*(git|"\$GIT")[[:space:]]+(-C[[:space:]]+[^[:space:]]+[[:space:]]+)?(clone|fetch|worktree)' "$PUXAR" \
   || falha "puxar-bancada reimplementa ato do repo"
 # ont:0087: o ponto de entrada e platafirma; pf so aparece como o alias da conta
@@ -137,7 +137,7 @@ for caso in com sem; do
   printf '# rc da conta\nexport X="a b"  # comentario\nalias ll='"'"'ls -l'"'"'\n# alias pf=outra-coisa (comentario nao conta)\n\tultima' > "$rc2"
   [ "$caso" = sem ] || printf '\n' >> "$rc2"
   chmod 640 "$rc2"; cp -p "$rc2" "$rc2.orig"
-  roda env PF_ARQUIVO_SHELLRC="$rc2" "$PUXAR" --alias
+  roda env PLATAFIRMA_ARQUIVO_SHELLRC="$rc2" "$PUXAR" --alias
   [ "$RC" -eq 0 ] && grep -qx "alias pf -> platafirma: criado" <<<"$OUT" || falha "rc $caso newline devia ser criado: $RC $OUT"
   tam="$(stat -c %s "$rc2.orig")"
   cmp -s <(head -c "$tam" "$rc2") "$rc2.orig" || falha "rc $caso newline: resto do arquivo nao preservado byte a byte"
@@ -145,7 +145,7 @@ for caso in com sem; do
   depois="$(tail -c +"$((tam + 1))" "$rc2")"
   if [ "$caso" = sem ]; then esperado_ini=$'\n# >>> platafirma alias >>>'; else esperado_ini='# >>> platafirma alias >>>'; fi
   [ "${depois:0:${#esperado_ini}}" = "$esperado_ini" ] || falha "rc $caso newline: bloco nao vem logo depois do original: $(printf '%q' "$depois")"
-  roda env PF_ARQUIVO_SHELLRC="$rc2" "$PUXAR" --alias
+  roda env PLATAFIRMA_ARQUIVO_SHELLRC="$rc2" "$PUXAR" --alias
   [ "$RC" -eq 0 ] && grep -qx "alias pf -> platafirma: conforme" <<<"$OUT" || falha "rc $caso newline: segunda devia ser conforme: $RC $OUT"
 done
 ! ls -A "$TMP_DIR" | grep -q '^\.platafirma-alias\.' || falha "temporario da escrita atomica ficou para tras"
@@ -153,7 +153,7 @@ done
 # rc que e symlink: o alvo recebe o bloco, o link continua link
 printf 'export Z=1\n' > "$TMP_DIR/rc-alvo"
 ln -s "$TMP_DIR/rc-alvo" "$TMP_DIR/rc-link"
-roda env PF_ARQUIVO_SHELLRC="$TMP_DIR/rc-link" "$PUXAR" --alias
+roda env PLATAFIRMA_ARQUIVO_SHELLRC="$TMP_DIR/rc-link" "$PUXAR" --alias
 [ "$RC" -eq 0 ] && [ -L "$TMP_DIR/rc-link" ] && grep -qx "alias pf='platafirma'" "$TMP_DIR/rc-alvo" \
   || falha "rc symlink devia editar o alvo e manter o link: $RC $OUT"
 
@@ -161,33 +161,33 @@ roda env PF_ARQUIVO_SHELLRC="$TMP_DIR/rc-link" "$PUXAR" --alias
 rc4="$TMP_DIR/rc-alheio"
 printf '# um\nexport Y=1\nalias gs="git status" pf='"'"'git pull --ff-only'"'"'\n' > "$rc4"; chmod 600 "$rc4"
 antes_rc="$(md5sum < "$rc4")"
-roda env PF_ARQUIVO_SHELLRC="$rc4" "$PUXAR" --alias
+roda env PLATAFIRMA_ARQUIVO_SHELLRC="$rc4" "$PUXAR" --alias
 [ "$RC" -eq 4 ] || falha "alias pf alheio devia sair 4: $RC $OUT"
 grep -q "^alias pf -> platafirma: recusado ($rc4:3 ja define pf com outro alvo: alias gs=\"git status\" pf='git pull --ff-only'" <<<"$OUT" \
   || falha "recusa devia dizer a linha: $OUT"
 [ "$(md5sum < "$rc4")" = "$antes_rc" ] && [ "$(stat -c %a "$rc4")" = 600 ] || falha "recusa editou o rc"
 rc5="$TMP_DIR/rc-funcao"
 printf 'export W=1\n\npf() { git pull; }\n' > "$rc5"; antes_rc="$(md5sum < "$rc5")"
-roda env PF_ARQUIVO_SHELLRC="$rc5" "$PUXAR" --alias
+roda env PLATAFIRMA_ARQUIVO_SHELLRC="$rc5" "$PUXAR" --alias
 [ "$RC" -eq 4 ] && grep -q "recusado ($rc5:3 ja define pf" <<<"$OUT" && [ "$(md5sum < "$rc5")" = "$antes_rc" ] \
   || falha "funcao pf devia sair 4 sem editar: $RC $OUT"
 
 # verificacao adversarial: \alias, CRLF, ~/.bash_aliases, comando pf no PATH, rc somente leitura
 rc6="$TMP_DIR/rc-barra"; printf '\\alias pf=ls\n' > "$rc6"; antes_rc="$(md5sum < "$rc6")"
-roda env PF_ARQUIVO_SHELLRC="$rc6" "$PUXAR" --alias
+roda env PLATAFIRMA_ARQUIVO_SHELLRC="$rc6" "$PUXAR" --alias
 [ "$RC" -eq 4 ] && [ "$(md5sum < "$rc6")" = "$antes_rc" ] || falha "\\alias pf alheio devia sair 4 sem editar: $RC $OUT"
 # CRLF: alias pf=platafirma\r define pf='platafirma\r' no bash; nao e conforme
 rc7="$TMP_DIR/rc-crlf-pf"; printf 'export A=1\r\nalias pf=platafirma\r\n' > "$rc7"; antes_rc="$(md5sum < "$rc7")"
-roda env PF_ARQUIVO_SHELLRC="$rc7" "$PUXAR" --alias
+roda env PLATAFIRMA_ARQUIVO_SHELLRC="$rc7" "$PUXAR" --alias
 [ "$RC" -eq 4 ] && grep -q "recusado ($rc7:2 ja define pf" <<<"$OUT" && [ "$(md5sum < "$rc7")" = "$antes_rc" ] \
   || falha "alias pf=platafirma com CRLF devia sair 4 sem editar: $RC $OUT"
 rc8="$TMP_DIR/rc-crlf"; printf 'export A=1\r\nalias ll=ls\r\n' > "$rc8"; cp "$rc8" "$rc8.orig"
-roda env PF_ARQUIVO_SHELLRC="$rc8" "$PUXAR" --alias
+roda env PLATAFIRMA_ARQUIVO_SHELLRC="$rc8" "$PUXAR" --alias
 [ "$RC" -eq 0 ] && grep -qx "alias pf -> platafirma: criado" <<<"$OUT" \
   && cmp -s <(head -c "$(stat -c %s "$rc8.orig")" "$rc8") "$rc8.orig" \
   && [ "$(bash --norc --noprofile -c 'shopt -s expand_aliases; . "$1" 2>/dev/null; alias pf' _ "$rc8")" = "alias pf='platafirma'" ] \
   || falha "rc CRLF sem pf devia ganhar o bloco LF e preservar o resto: $RC $OUT"
-roda env PF_ARQUIVO_SHELLRC="$rc8" "$PUXAR" --alias
+roda env PLATAFIRMA_ARQUIVO_SHELLRC="$rc8" "$PUXAR" --alias
 [ "$RC" -eq 0 ] && grep -qx "alias pf -> platafirma: conforme" <<<"$OUT" || falha "rc CRLF: segunda devia ser conforme: $RC $OUT"
 # ~/.bash_aliases com pf alheio: recusa 4 citando o arquivo; definicao igual la nao vira conforme
 CASA2="$TMP_DIR/casa-aliases"; mkdir -p "$CASA2"; printf 'alias pf=ls\n' > "$CASA2/.bash_aliases"
@@ -199,39 +199,39 @@ roda env HOME="$CASA2" "$PUXAR" --alias
 [ "$RC" -eq 0 ] && grep -qx "alias pf -> platafirma: criado" <<<"$OUT" || falha "pf igual so em ~/.bash_aliases devia gravar o bloco: $RC $OUT"
 # comando pf alheio no PATH: 4; pf que e copia de platafirma no PATH nao e alheio
 BINPF="$TMP_DIR/bin-pf"; mkdir -p "$BINPF"; printf '#!/bin/sh\necho outro\n' > "$BINPF/pf"; chmod 755 "$BINPF/pf"
-roda env PATH="$BINPF:$PATH" PF_ARQUIVO_SHELLRC="$TMP_DIR/rc-cmd" "$PUXAR" --alias
+roda env PATH="$BINPF:$PATH" PLATAFIRMA_ARQUIVO_SHELLRC="$TMP_DIR/rc-cmd" "$PUXAR" --alias
 [ "$RC" -eq 4 ] && grep -q "recusado (comando pf alheio no PATH: $BINPF/pf" <<<"$OUT" && [ ! -e "$TMP_DIR/rc-cmd" ] \
   || falha "comando pf alheio no PATH devia sair 4 sem escrever: $RC $OUT"
 printf '#!/bin/sh\necho entrada\n' > "$BINPF/platafirma"; cp "$BINPF/platafirma" "$BINPF/pf"; chmod 755 "$BINPF/platafirma" "$BINPF/pf"
-roda env PATH="$BINPF:$PATH" PF_ARQUIVO_SHELLRC="$TMP_DIR/rc-cmd" "$PUXAR" --alias
+roda env PATH="$BINPF:$PATH" PLATAFIRMA_ARQUIVO_SHELLRC="$TMP_DIR/rc-cmd" "$PUXAR" --alias
 [ "$RC" -eq 0 ] && grep -qx "alias pf -> platafirma: criado" <<<"$OUT" || falha "pf igual a platafirma no PATH nao e alheio: $RC $OUT"
 # rc somente leitura: 3, sem editar (rename no diretorio contornaria o modo do arquivo)
 rc9="$TMP_DIR/rc-somente-leitura"; printf 'export R=1\n' > "$rc9"; chmod 444 "$rc9"; antes_rc="$(md5sum < "$rc9")"
-roda env PF_ARQUIVO_SHELLRC="$rc9" "$PUXAR" --alias
+roda env PLATAFIRMA_ARQUIVO_SHELLRC="$rc9" "$PUXAR" --alias
 [ "$RC" -eq 3 ] && grep -q "recusado (nao gravavel" <<<"$OUT" && [ "$(md5sum < "$rc9")" = "$antes_rc" ] && [ "$(stat -c %a "$rc9")" = 444 ] \
   || falha "rc somente leitura devia sair 3 sem editar: $RC $OUT"
-roda env PF_ARQUIVO_SHELLRC="$rc9" "$PUXAR" --alias --ensaio
+roda env PLATAFIRMA_ARQUIVO_SHELLRC="$rc9" "$PUXAR" --alias --ensaio
 [ "$RC" -eq 3 ] && [ "$(md5sum < "$rc9")" = "$antes_rc" ] || falha "ensaio sobre rc somente leitura devia antecipar o 3: $RC $OUT"
 # sem python3: recusa 3 com relato, nao 127 calado
 SEMPY="$TMP_DIR/bin-sem-python"; mkdir -p "$SEMPY"
 for c in bash dirname readlink cat; do ln -sf "$(command -v "$c")" "$SEMPY/$c"; done
-roda env PATH="$SEMPY" PF_ARQUIVO_SHELLRC="$TMP_DIR/rc-sem-py" "$SEMPY/bash" "$PUXAR" --alias
+roda env PATH="$SEMPY" PLATAFIRMA_ARQUIVO_SHELLRC="$TMP_DIR/rc-sem-py" "$SEMPY/bash" "$PUXAR" --alias
 [ "$RC" -eq 3 ] && grep -q "recusado (python3 ausente" <<<"$OUT" && [ ! -e "$TMP_DIR/rc-sem-py" ] \
   || falha "sem python3 devia sair 3 com relato: $RC $OUT"
 
 # --alias sozinho com --cadeira: uso, e nada escrito
-roda env PF_ARQUIVO_SHELLRC="$TMP_DIR/rc-nao-criar" "$PUXAR" --alias --cadeira ti
+roda env PLATAFIRMA_ARQUIVO_SHELLRC="$TMP_DIR/rc-nao-criar" "$PUXAR" --alias --cadeira ti
 [ "$RC" -eq 2 ] && [ ! -e "$TMP_DIR/rc-nao-criar" ] || falha "--alias --cadeira sem familia devia sair 2 sem escrever: $RC $OUT"
 echo "OK"
 
 # ---------------------------------------------------------------- 2. ensaio
 echo "--- 2: --ensaio --declarar mostra o plano e nao escreve nada"
-roda env -u PF_INSTANCIA "$PUXAR" --declarar "$BANC" --ensaio
+roda env -u PLATAFIRMA_INSTANCIA "$PUXAR" --declarar "$BANC" --ensaio
 [ "$RC" -eq 0 ] || falha "ensaio devia sair 0: $RC $OUT"
 grep -qx "platafirma-alfa ${A1:0:7} criaria (ensaio) $BANC/wt/platafirma-alfa/fabrica" <<<"$OUT" || falha "plano do alfa: $OUT"
 grep -qx "platafirma-harness ${C1:0:7} criaria (ensaio) $BANC/wt/platafirma-harness/fabrica" <<<"$OUT" || falha "plano do harness: $OUT"
 ! grep -q "nunca-promovida\|venv" <<<"$OUT" || falha "diretorio sem current entrou no plano: $OUT"
-grep -q "instancia real" <<<"$OUT" || falha "sem PF_INSTANCIA de teste devia avisar instancia real: $OUT"
+grep -q "instancia real" <<<"$OUT" || falha "sem PLATAFIRMA_INSTANCIA de teste devia avisar instancia real: $OUT"
 [ ! -e "$ARQ_BANCADA" ] && [ ! -e "$BANC" ] || falha "ensaio escreveu declaracao ou bancada"
 echo "OK"
 
@@ -248,7 +248,7 @@ grep -qx "platafirma-alfa ${A1:0:7} criado $BANC/wt/platafirma-alfa/fabrica" <<<
 ! git -C "$BANC/wt/platafirma-alfa/fabrica" symbolic-ref -q HEAD >/dev/null || falha "worktree sem card devia ser destacado"
 grep -q "^verbos: platafirma <verbo> \[args\] em qualquer conta" <<<"$OUT" || falha "linha de como chamar verbo ausente: $OUT"
 grep -q "^verbos: .*atalho pf na conta: puxar-bancada --alias$" <<<"$OUT" || falha "linha de verbos devia citar o atalho opcional: $OUT"
-grep -q "^testar verbo editado: PF_INSTANCIA=<tmp>" <<<"$OUT" || falha "linha de como testar verbo ausente: $OUT"
+grep -q "^testar verbo editado: PLATAFIRMA_INSTANCIA=<tmp>" <<<"$OUT" || falha "linha de como testar verbo ausente: $OUT"
 grep -q "^aviso: .*instancia real" <<<"$OUT" || falha "o aviso de instancia real e sobre o verbo da bancada e sai sempre: $OUT"
 echo "OK"
 
@@ -261,11 +261,11 @@ grep -qx "platafirma-alfa ${A1:0:7} conforme $BANC/wt/platafirma-alfa/fabrica" <
 roda "$PUXAR" --declarar "$BANC/"
 [ "$RC" -eq 0 ] && grep -q "^bancada conforme $BANC$" <<<"$OUT" || falha "--declarar da mesma bancada devia ser conforme: $RC $OUT"
 # --alias junto de familia: grava o alias e puxa; recusa do alias sobe o exit sem impedir a puxada
-roda env PF_ARQUIVO_SHELLRC="$TMP_DIR/rc-com-familia" "$PUXAR" platafirma-harness --alias
+roda env PLATAFIRMA_ARQUIVO_SHELLRC="$TMP_DIR/rc-com-familia" "$PUXAR" platafirma-harness --alias
 [ "$RC" -eq 0 ] && grep -qx "alias pf -> platafirma: criado" <<<"$OUT" \
   && grep -qx "platafirma-harness ${C1:0:7} conforme $BANC/wt/platafirma-harness/fabrica" <<<"$OUT" \
   || falha "--alias com familia devia gravar e puxar: $RC $OUT"
-roda env PF_ARQUIVO_SHELLRC="$rc4" "$PUXAR" platafirma-harness --alias
+roda env PLATAFIRMA_ARQUIVO_SHELLRC="$rc4" "$PUXAR" platafirma-harness --alias
 [ "$RC" -eq 4 ] && grep -q "^alias pf -> platafirma: recusado" <<<"$OUT" \
   && grep -qx "platafirma-harness ${C1:0:7} conforme $BANC/wt/platafirma-harness/fabrica" <<<"$OUT" \
   || falha "alias recusado com familia devia sair 4 e ainda relatar a familia: $RC $OUT"
@@ -323,13 +323,13 @@ echo "OK"
 
 # ---------------------------------------------------------------- 10. repo da release ausente
 echo "--- 10: sem repo da release sai 3 (nunca cai para o repo da bancada)"
-roda env PF_RELEASE="$TMP_DIR/sem-release" "$PUXAR"
+roda env PLATAFIRMA_RELEASE="$TMP_DIR/sem-release" "$PUXAR"
 [ "$RC" -eq 3 ] && grep -q "repo da release" <<<"$OUT" || falha "sem release devia sair 3: $RC $OUT"
 echo "OK"
 
 # ---------------------------------------------------------------- 11. repo abrir --da-producao
 echo "--- 11: repo abrir --da-producao: recusas, busca no forge e o abrir antigo intacto"
-export PF_BANCADA="$BANC"
+export PLATAFIRMA_BANCADA="$BANC"
 
 roda "$REPO_REL" abrir platafirma-sumida --da-producao --cadeira ti
 [ "$RC" -eq 1 ] && grep -q "^varrido: " <<<"$OUT" && grep -q "^vizinho: " <<<"$OUT" \
@@ -377,7 +377,7 @@ echo "OK"
 
 # ---------------------------------------------------------------- 12. declaracao que nao se sobrescreve
 echo "--- 12: --declarar recusa raiz, espaco, release/instancia e arquivo que existe sem declarar"
-unset PF_BANCADA
+unset PLATAFIRMA_BANCADA
 mv "$ARQ_BANCADA" "$TMP_DIR/declaracao.guardada"
 for ruim in / "$(printf '/tmp/x\ny')" "/tmp/com espaco" /tmp/a/../b; do
   roda "$PUXAR" --declarar "$ruim" --ensaio
@@ -400,10 +400,10 @@ printf '\n%s\n' "$TMP_DIR/de-outro" > "$ARQ_BANCADA"
 roda "$PUXAR" --declarar "$BANC"
 [ "$RC" -eq 5 ] && [ "$(sed -n 2p "$ARQ_BANCADA")" = "$TMP_DIR/de-outro" ] || falha "primeira linha vazia devia sair 5 sem sobrescrever: $RC $OUT"
 rm -f "$ARQ_BANCADA"
-roda env PF_BANCADA="$TMP_DIR/outra" "$PUXAR" --declarar "$BANC" --ensaio
-[ "$RC" -eq 4 ] && [ ! -e "$ARQ_BANCADA" ] || falha "PF_BANCADA diferente de --declarar devia sair 4: $RC $OUT"
-roda env PF_BANCADA="$BANC" "$PUXAR" platafirma-harness --declarar "$BANC"
-[ "$RC" -eq 0 ] && [ "$(cat "$ARQ_BANCADA")" = "$BANC" ] || falha "PF_BANCADA igual e sem arquivo devia gravar a declaracao: $RC $OUT"
+roda env PLATAFIRMA_BANCADA="$TMP_DIR/outra" "$PUXAR" --declarar "$BANC" --ensaio
+[ "$RC" -eq 4 ] && [ ! -e "$ARQ_BANCADA" ] || falha "PLATAFIRMA_BANCADA diferente de --declarar devia sair 4: $RC $OUT"
+roda env PLATAFIRMA_BANCADA="$BANC" "$PUXAR" platafirma-harness --declarar "$BANC"
+[ "$RC" -eq 0 ] && [ "$(cat "$ARQ_BANCADA")" = "$BANC" ] || falha "PLATAFIRMA_BANCADA igual e sem arquivo devia gravar a declaracao: $RC $OUT"
 rm -f "$TMP_DIR/declaracao.guardada"
 echo "OK"
 
@@ -427,11 +427,11 @@ roda "$PUXAR" platafirma-diretorio --ensaio
 echo "OK"
 
 # ---------------------------------------------------------------- 14. repo de dentro da bancada
-echo "--- 14: PF_RELEASE apontado para a bancada sai 4 e o repo de la nao roda"
+echo "--- 14: PLATAFIRMA_RELEASE apontado para a bancada sai 4 e o repo de la nao roda"
 mkdir -p "$BANC/falsa/harness/bin"
 printf '#!/bin/sh\ntouch "%s"\n' "$TMP_DIR/repo-da-bancada-rodou" > "$BANC/falsa/harness/bin/repo"
 chmod +x "$BANC/falsa/harness/bin/repo"
-roda env PF_RELEASE="$BANC/falsa" "$PUXAR" platafirma-harness
+roda env PLATAFIRMA_RELEASE="$BANC/falsa" "$PUXAR" platafirma-harness
 [ "$RC" -eq 4 ] && [ ! -e "$TMP_DIR/repo-da-bancada-rodou" ] || falha "repo dentro da bancada devia ser recusado: $RC $OUT"
 echo "OK"
 

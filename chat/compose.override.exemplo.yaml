@@ -9,7 +9,7 @@
 #
 # Aqui mora TODO caminho da instancia, e so ele: a base na release nao carrega nenhum.
 # Instancia noutra raiz troca /srv/platafirma/casa nas linhas abaixo, e em mais lugar
-# nenhum — o valor de PF_INSTANCIA dado a recepcao e o prefixo dos binds andam juntos.
+# nenhum — o valor de PLATAFIRMA_INSTANCIA dado a recepcao e o prefixo dos binds andam juntos.
 #
 # Nome do arquivo termina em .exemplo.yaml de proposito: `docker compose` sem -f carrega
 # compose.override.yaml sozinho, e este exemplo nao pode entrar em subida nenhuma.
@@ -23,7 +23,7 @@ services:
 
   chat-recepcao:
     environment:
-      PF_INSTANCIA: /srv/platafirma/casa
+      PLATAFIRMA_INSTANCIA: /srv/platafirma/casa
       PF_ABERTURA_DIR: /srv/platafirma/casa/var/abertura-publicada
       CHAT_JOURNAL: /srv/platafirma/casa/var/run/chat/journal.db
       CHAT_FITAS_RAIZ: /srv/platafirma/casa/var/fitas

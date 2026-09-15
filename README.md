@@ -61,7 +61,7 @@ o que ela deliberadamente não faz:
 para `anterior`.
 
 A bancada (onde se escreve código) é da conta, não do ambiente: a raiz é
-declarada em `~/.config/platafirma/bancada` (uma linha) ou em `PF_BANCADA`, sem
+declarada em `~/.config/platafirma/bancada` (uma linha) ou em `PLATAFIRMA_BANCADA`, sem
 default. Só verbo de bancada (`repo`, `teste`, `lint`, tooling de avaliação) a
 lê; sem declaração ele sai 3 com "bancada nao declarada".
 
@@ -108,8 +108,8 @@ sujo é relatado e não é tocado. `--ensaio` mostra o plano sem escrever.
 
 **Testar verbo editado** sem afetar produção: chame o verbo pelo caminho do
 worktree com as raízes num diretório temporário —
-`PF_INSTANCIA=<tmp> PF_RELEASE_RAIZ=<tmp> <bancada>/wt/<familia>/<cadeira>/bin/<verbo>`.
-Sem `PF_INSTANCIA` de teste, o verbo da bancada executa contra a instância real
+`PLATAFIRMA_INSTANCIA=<tmp> PF_RELEASE_RAIZ=<tmp> <bancada>/wt/<familia>/<cadeira>/bin/<verbo>`.
+Sem `PLATAFIRMA_INSTANCIA` de teste, o verbo da bancada executa contra a instância real
 (`/srv/platafirma/casa`); o `puxar-bancada` avisa, não bloqueia. O que foi editado
 chega ao ar só por `release promover`.
 

@@ -9,7 +9,7 @@
 # chamado direto, avisa e segue.
 #
 # O que faz: publica a arvore abertura/ (pecas-arquivo + aliases.json + rotas-chapeu.json)
-# de um commit git IMUTAVEL para PF_ABERTURA_DIR (default $PF_INSTANCIA/var/abertura-publicada,
+# de um commit git IMUTAVEL para PF_ABERTURA_DIR (default $PLATAFIRMA_INSTANCIA/var/abertura-publicada,
 # /srv/platafirma/casa/var/abertura-publicada), a morada que o montador (monta-sessao) le e
 # que nenhum ato de git de um CLONE DE TRABALHO move. A fonte e o espelho bare da familia
 # harness na release (/opt/platafirma/platafirma-harness/.repo.git), nunca um clone.
@@ -52,7 +52,7 @@
 #   PF_CASA_REINDEXA=0   desliga o gancho
 #   PF_ACERVO=<caminho>  aponta outro verbo `acervo`
 #
-# ambiente: PF_HARNESS[=$PF_RELEASE_RAIZ/platafirma-harness/.repo.git] · PF_ABERTURA_DIR[=$PF_INSTANCIA/var/abertura-publicada] · PF_ACERVO[=$PF_RELEASE/harness/bin/acervo] · PF_CASA_REINDEXA[=1] · PF_RELEASE_RAIZ[=/opt/platafirma] · PF_INSTANCIA[=/srv/platafirma/casa]
+# ambiente: PF_HARNESS[=$PF_RELEASE_RAIZ/platafirma-harness/.repo.git] · PF_ABERTURA_DIR[=$PLATAFIRMA_INSTANCIA/var/abertura-publicada] · PF_ACERVO[=$PLATAFIRMA_RELEASE/harness/bin/acervo] · PF_CASA_REINDEXA[=1] · PF_RELEASE_RAIZ[=/opt/platafirma] · PLATAFIRMA_INSTANCIA[=/srv/platafirma/casa]
 set -euo pipefail
 
 . "$(dirname "$(readlink -f "$0")")/../lib/raizes.sh"
@@ -65,7 +65,7 @@ case "${PF_HARNESS:-}" in
 esac
 
 HARNESS="${PF_HARNESS:-$PF_RELEASE_RAIZ/platafirma-harness/.repo.git}"
-MORADA="${PF_ABERTURA_DIR:-$PF_INSTANCIA/var/abertura-publicada}"
+MORADA="${PF_ABERTURA_DIR:-$PLATAFIRMA_INSTANCIA/var/abertura-publicada}"
 SUBARVORE="abertura"   # o subdir versionado que o montador serve
 
 # git por caminho absoluto, imune ao shim `git` do PATH da porta (mesma cura de c5d2321 no
@@ -129,7 +129,7 @@ apontar_current() {  # $1=commit  — troca atomica do ponteiro
 reindexar_casa() {  # $1=commit que passou a ser servido
   local sha="$1" ingestor uso rc=0
   [ "${PF_CASA_REINDEXA:-1}" = "1" ] || { echo "casa:      gancho desligado (PF_CASA_REINDEXA=0)"; return 0; }
-  ingestor="${PF_ACERVO:-$PF_RELEASE/harness/bin/acervo}"
+  ingestor="${PF_ACERVO:-$PLATAFIRMA_RELEASE/harness/bin/acervo}"
   if [ ! -x "$ingestor" ]; then
     echo "casa:      aviso — verbo \`acervo\` nao encontrado em $ingestor; indice fica no sha anterior" >&2
     return 0

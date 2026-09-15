@@ -61,7 +61,7 @@
       ],
       "onde_declara": "wt-<card>/.mcp.json",
       "verificavel_do_host": true,
-      "porque": "as worktrees vivem na bancada declarada pela conta (PF_BANCADA); foi daqui que o padrao veio",
+      "porque": "as worktrees vivem na bancada declarada pela conta (PLATAFIRMA_BANCADA); foi daqui que o padrao veio",
       "injecao_de_cadeira": "~/.claude/CLAUDE.md (symlink de agente/CLAUDE.md): slug dito na abertura vence; sem slug, default `fabrica`. PF_CADEIRA NAO serve — Bash negado na estacao, e run_command roda no ambiente do ops-server, nao no do terminal. Medido em 16/08/2026.",
       "produtor": {
         "tipo": "arquivo-rastreado",

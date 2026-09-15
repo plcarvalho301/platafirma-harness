@@ -21,7 +21,7 @@ import json, random, re, subprocess, sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "lib"))
-from raizes import instancia  # noqa: E402  (gold gerado mora em $PF_INSTANCIA/dados/avaliacao)
+from raizes import instancia  # noqa: E402  (gold gerado mora em $PLATAFIRMA_INSTANCIA/dados/avaliacao)
 
 random.seed(188)
 

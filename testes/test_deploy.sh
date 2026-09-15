@@ -15,9 +15,9 @@ falha() { echo "FALHA: $*" >&2; exit 1; }
 echo "=== deploy: release + instancia ==="
 
 RELEASE="$TMP_DIR/opt"; INSTANCIA="$TMP_DIR/srv"; STUBS="$TMP_DIR/stubs"
-export PF_RELEASE_RAIZ="$RELEASE" PF_INSTANCIA="$INSTANCIA" PF_BANCADA="$TMP_DIR/bancada-inexistente"
+export PF_RELEASE_RAIZ="$RELEASE" PLATAFIRMA_INSTANCIA="$INSTANCIA" PLATAFIRMA_BANCADA="$TMP_DIR/bancada-inexistente"
 export DEPLOY_ENV_DIR="$TMP_DIR/run/platafirma" DEPLOY_TOPO_ARQUIVO="$TMP_DIR/topologia.json"
-unset PF_RELEASE DEPLOY_PONTOS PF_SIM 2>/dev/null || true
+unset PLATAFIRMA_RELEASE DEPLOY_PONTOS PF_SIM 2>/dev/null || true
 export DOCKER_LOG="$TMP_DIR/docker.log"; : > "$DOCKER_LOG"
 
 SHA1="1111111111111111111111111111111111111111"

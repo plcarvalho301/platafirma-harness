@@ -19,7 +19,7 @@ import threading
 # (card #3010). Nunca .env na arvore do codigo. Default da instancia igual ao de
 # lib/raizes.py, repetido porque este modulo tambem entra no container da recepcao.
 SEGREDO_SENHA = os.path.join(
-    os.environ.get("PF_INSTANCIA", "/srv/platafirma/casa"),
+    os.environ.get("PLATAFIRMA_INSTANCIA", "/srv/platafirma/casa"),
     "segredos", "harness-sessao", "SESSAO_PG_PASSWORD")
 
 
@@ -31,7 +31,7 @@ def dsn() -> str:
     """DSN do Postgres de sessão (5437).
 
     Senha lida de SESSAO_PG_PASSWORD ou do arquivo em
-    $PF_INSTANCIA/segredos/harness-sessao/SESSAO_PG_PASSWORD (600). Ausente nos dois:
+    $PLATAFIRMA_INSTANCIA/segredos/harness-sessao/SESSAO_PG_PASSWORD (600). Ausente nos dois:
     SegredoAusente, nunca DSN sem senha.
     """
     d = os.environ.get("SESSAO_PG_DSN")

@@ -9,18 +9,18 @@
 # As variaveis de ambiente existem para teste apontar tudo para um diretorio temporario.
 
 PF_RELEASE_RAIZ="${PF_RELEASE_RAIZ:-/opt/platafirma}"
-PF_RELEASE="${PF_RELEASE:-$PF_RELEASE_RAIZ/current}"
-PF_INSTANCIA="${PF_INSTANCIA:-/srv/platafirma/casa}"
-PF_ARQUIVO_BANCADA="${PF_ARQUIVO_BANCADA:-$HOME/.config/platafirma/bancada}"
+PLATAFIRMA_RELEASE="${PLATAFIRMA_RELEASE:-$PF_RELEASE_RAIZ/current}"
+PLATAFIRMA_INSTANCIA="${PLATAFIRMA_INSTANCIA:-/srv/platafirma/casa}"
+PLATAFIRMA_ARQUIVO_BANCADA="${PLATAFIRMA_ARQUIVO_BANCADA:-$HOME/.config/platafirma/bancada}"
 
 # Imprime a raiz da bancada declarada pela conta; sem declaracao, avisa e devolve 3.
 pf_bancada() {
-  local b="${PF_BANCADA:-}"
-  if [ -z "$b" ] && [ -r "$PF_ARQUIVO_BANCADA" ]; then
-    IFS= read -r b < "$PF_ARQUIVO_BANCADA" || true
+  local b="${PLATAFIRMA_BANCADA:-}"
+  if [ -z "$b" ] && [ -r "$PLATAFIRMA_ARQUIVO_BANCADA" ]; then
+    IFS= read -r b < "$PLATAFIRMA_ARQUIVO_BANCADA" || true
   fi
   if [ -z "$b" ]; then
-    printf 'bancada nao declarada: defina PF_BANCADA ou escreva a raiz em %s\n' "$PF_ARQUIVO_BANCADA" >&2
+    printf 'bancada nao declarada: defina PLATAFIRMA_BANCADA ou escreva a raiz em %s\n' "$PLATAFIRMA_ARQUIVO_BANCADA" >&2
     return 3
   fi
   printf '%s' "$b"

@@ -59,7 +59,7 @@ Tudo abaixo vai por `run_command`, e executa na máquina do dono, nunca na esta�
   declarada) e abre `<bancada>/wt/<familia>/<cadeira>` de cada família no sha que
   está em produção, uma linha por família (`criado`, `conforme` ou
   `impossivel: motivo`). `--ensaio` mostra o plano sem escrever.
-- Testar verbo editado: pelo caminho do worktree, com `PF_INSTANCIA` e
+- Testar verbo editado: pelo caminho do worktree, com `PLATAFIRMA_INSTANCIA` e
   `PF_RELEASE_RAIZ` num diretório temporário; sem isso ele executa contra a
   instância real.
 

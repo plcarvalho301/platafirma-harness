@@ -749,7 +749,7 @@ def uso(codigo=2):
   metrica casos [<dia>] [--tool <verbo>] [--cadeira <slug>]
   metrica verbos [<dia>] [--desde AAAA-MM-DD] [--ate AAAA-MM-DD] [--cadeira <slug>] [--csv]
 
-Agrega o ops log ($PF_INSTANCIA/var/log/ops/ops-AAAA-MM-DD.jsonl, ou OPS_LOG_DIR) em eventos de uso do harness.
+Agrega o ops log ($PLATAFIRMA_INSTANCIA/var/log/ops/ops-AAAA-MM-DD.jsonl, ou OPS_LOG_DIR) em eventos de uso do harness.
 <dia> e AAAA-MM-DD; sem ele, hoje. Saida JSON; --resumo imprime o sumario legivel.
 
 eventos     stream cru, um objeto por evento (giro, erro, help, acerto, cadeia, lote)

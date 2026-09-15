@@ -12,7 +12,7 @@ After=network-online.target
 [Service]
 Type=simple
 WorkingDirectory=/opt/platafirma/current/harness/chat
-Environment=PF_INSTANCIA=/srv/platafirma/casa
+Environment=PLATAFIRMA_INSTANCIA=/srv/platafirma/casa
 # systemd --user NAO le .bashrc nem .profile: sem esta linha o worker nao acha o
 # verbo (/opt/platafirma/current/harness/bin) e o giro morre com "verbo nao esta no
 # PATH". Pegadinha ja paga pelo longjob. So caminho da release e do sistema (desenho

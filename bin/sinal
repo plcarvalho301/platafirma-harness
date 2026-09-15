@@ -31,7 +31,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "lib"))
 import raizes  # noqa: E402
 
-# ambiente: PF_INSTANCIA[=/srv/platafirma/casa] (grava var/sinal/servicos.json; override so para teste)
+# ambiente: PLATAFIRMA_INSTANCIA[=/srv/platafirma/casa] (grava var/sinal/servicos.json; override so para teste)
 SAIDA = str(raizes.instancia() / "var" / "sinal" / "servicos.json")
 # POSTO: contêiner COM curl e NA rede `conhecimento` (plataforma-wiki_default), que é
 # onde os oauth2-proxy vivem. Era `platafirma-core-vikunja-proxy-1`, desligado com o

@@ -18,16 +18,16 @@
 # acervo.ferramental_instancia.
 #
 # ONDE (card #3010, desenho §3/§5): o par vem do dado da instância, então o shim é estado
-# da instância — $PF_INSTANCIA/var/shims. Nunca ~/.local/bin (fora de /opt e /srv) nem a
+# da instância — $PLATAFIRMA_INSTANCIA/var/shims. Nunca ~/.local/bin (fora de /opt e /srv) nem a
 # árvore da release (r-x). Quem quer o shim no PATH põe esse diretório DEPOIS do bin da
 # release, para que verbo nenhum seja sombreado por shim.
 #
-# ambiente: PF_INSTANCIA[=/srv/platafirma/casa] · PF_SHIMS_DIR[=$PF_INSTANCIA/var/shims] (teste)
+# ambiente: PLATAFIRMA_INSTANCIA[=/srv/platafirma/casa] · PLATAFIRMA_SHIMS_DIR[=$PLATAFIRMA_INSTANCIA/var/shims] (teste)
 set -euo pipefail
 
 . "$(dirname "$(readlink -f "$0")")/../lib/raizes.sh"
 
-BINDIR="${PF_SHIMS_DIR:-$PF_INSTANCIA/var/shims}"
+BINDIR="${PLATAFIRMA_SHIMS_DIR:-$PLATAFIRMA_INSTANCIA/var/shims}"
 mkdir -p "$BINDIR"
 
 # Consulta o golden record. Padrão de conexão: o mesmo de bin/_acervo/listar.
@@ -38,9 +38,9 @@ SQL="select ins.slug, vb.slug
      where ins.slug <> vb.slug order by ins.slug;"
 
 pares=""
-if [ -n "${PF_SHIMS_PARES:-}" ]; then
+if [ -n "${PLATAFIRMA_SHIMS_PARES:-}" ]; then
   # teste: pares injetados, sem tocar o acervo
-  pares="$PF_SHIMS_PARES"; origem="PF_SHIMS_PARES"
+  pares="$PLATAFIRMA_SHIMS_PARES"; origem="PLATAFIRMA_SHIMS_PARES"
 elif pares=$(docker exec -i "$PG" psql -d "$DB" -U "$USR" -tAF'|' -c "$SQL" 2>/dev/null) && [ -n "$pares" ]; then
   origem="acervo"
 else

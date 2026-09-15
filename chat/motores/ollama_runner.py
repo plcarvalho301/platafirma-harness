@@ -15,7 +15,7 @@ CONTRATO DE SAIDA (stdout, uma linha JSON por evento):
 stderr: diagnostico de invocacao (modelo inexistente, ollama fora do ar).
 
 SESSAO: o ollama nao guarda historico. Este runner guarda em
-$PF_INSTANCIA/var/fitas/ollama/<session_id>.json (lista de mensagens role/content) e o remonta
+$PLATAFIRMA_INSTANCIA/var/fitas/ollama/<session_id>.json (lista de mensagens role/content) e o remonta
 a cada giro. Fita nova cunha id e grava so o system (persona) + a 1a msg. Fita
 existente (--resume) recarrega o historico e anexa. E o "controla a sessao" (c).
 

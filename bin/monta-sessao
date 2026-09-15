@@ -350,8 +350,8 @@ def caminho_publicado(path):
 
 # ------------------------------------------------------------------ servir peca
 # Artefato de terceiro pinado: dentro da arvore da familia, por realpath (desenho §2).
-# PF_TOKENIZADOR so existe para teste passar o caminho por fixture.
-TOKENIZADOR = (os.environ.get("PF_TOKENIZADOR")
+# PLATAFIRMA_TOKENIZADOR so existe para teste passar o caminho por fixture.
+TOKENIZADOR = (os.environ.get("PLATAFIRMA_TOKENIZADOR")
                or os.path.join(_REPO_REAL, "terceiros", "tokenizers", "qwen2.5.json"))
 _MEDIDOR = {"fn": None, "metodo": None}
 

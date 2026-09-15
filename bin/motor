@@ -10,8 +10,8 @@
 # cauda: nao
 # poda: cosmetica@rag,casa
 # consome: rag-extractor-api@platafirma-conhecimento/rag/openapi.yaml >=1.0 (buscar, medir; endpoint por instancia em motor-instancias.json)
-# ambiente: RAG_PYTHON origem-shell RAG_PYTHON=<python-do-rag> (indexar; ausente cai em $PF_RELEASE/venv/rag/bin/python); CORPUS_DIR origem-shell (indexar; ausente usa $PF_INSTANCIA/dados/corpus); PF_RELEASE origem-shell [=/opt/platafirma/current] (codigo do rag, gabarito); PF_INSTANCIA origem-shell [=/srv/platafirma/casa] (segredos, log, medicoes, sobreposicao do compose); OPS_LOG_DIR origem-shell [=$PF_INSTANCIA/var/log/ops]; PF_BIN origem-shell (teste; ausente e o bin/ da propria arvore); PF_SESSAO porta; PF_ORDEM_ID porta; PF_CADEIRA porta; PF_CHAPEU porta; OPS_NAME porta; USER shell
-# escreve: $PF_INSTANCIA/var/log/ops/*.jsonl (evento consulta, best-effort); env da ingestao na instancia, arquivo NOME=valor ou $PF_INSTANCIA/segredos/<stack>/<VAR> (ajuste de corte, via motor-instancias.json); $PF_INSTANCIA/deploy/<stack>/compose.override.yaml (ajuste de container); $PF_INSTANCIA/var/medicoes/*.json (medir)
+# ambiente: RAG_PYTHON origem-shell RAG_PYTHON=<python-do-rag> (indexar; ausente cai em $PLATAFIRMA_RELEASE/venv/rag/bin/python); CORPUS_DIR origem-shell (indexar; ausente usa $PLATAFIRMA_INSTANCIA/dados/corpus); PLATAFIRMA_RELEASE origem-shell [=/opt/platafirma/current] (codigo do rag, gabarito); PLATAFIRMA_INSTANCIA origem-shell [=/srv/platafirma/casa] (segredos, log, medicoes, sobreposicao do compose); OPS_LOG_DIR origem-shell [=$PLATAFIRMA_INSTANCIA/var/log/ops]; PF_BIN origem-shell (teste; ausente e o bin/ da propria arvore); PF_SESSAO porta; PF_ORDEM_ID porta; PF_CADEIRA porta; PF_CHAPEU porta; OPS_NAME porta; USER shell
+# escreve: $PLATAFIRMA_INSTANCIA/var/log/ops/*.jsonl (evento consulta, best-effort); env da ingestao na instancia, arquivo NOME=valor ou $PLATAFIRMA_INSTANCIA/segredos/<stack>/<VAR> (ajuste de corte, via motor-instancias.json); $PLATAFIRMA_INSTANCIA/deploy/<stack>/compose.override.yaml (ajuste de container); $PLATAFIRMA_INSTANCIA/var/medicoes/*.json (medir)
 # depende: docker (ajuste servido, medir banco, indexar); verbo deploy (ajuste que promove); rede (consome a API do rag)
 # substitui: docker exec rag-* ; curl ao endpoint de busca
 # O verbo e `motor`; a instancia e argumento (arq:0037; veto do verbo `rag`).
@@ -73,7 +73,7 @@ def _curto(familia):
 
 
 def na_release(valor):
-    """Campo de release do registro -> arquivo na release no ar ($PF_RELEASE/<curto>/<caminho>).
+    """Campo de release do registro -> arquivo na release no ar ($PLATAFIRMA_RELEASE/<curto>/<caminho>).
     Aceita o canonico /opt/platafirma/current/<curto>/... e o logico <familia>/<caminho>.
     Fora das duas formas devolve ''."""
     valor = valor or ""
@@ -96,7 +96,7 @@ def logico_da_release(valor):
 
 
 def na_instancia(valor, relativo_a=""):
-    """Campo de instancia do registro -> caminho sob $PF_INSTANCIA. Aceita o canonico
+    """Campo de instancia do registro -> caminho sob $PLATAFIRMA_INSTANCIA. Aceita o canonico
     /srv/platafirma/casa/... e o relativo (a `relativo_a` dentro da instancia). Invalido: ''."""
     valor = valor or ""
     if valor.startswith(_CANON_INSTANCIA):
@@ -395,7 +395,7 @@ def cmd_indexar(inst, argv):
 LOG_OPS = os.environ.get("OPS_LOG_DIR") or str(raizes.instancia() / "var" / "log" / "ops")
 
 def _emite_consulta(nome, inst, corpo, resp, dur_ms):
-    """Grava uma linha JSONL {evento:'consulta', ...} em $PF_INSTANCIA/var/log/ops. Best-effort:
+    """Grava uma linha JSONL {evento:'consulta', ...} em $PLATAFIRMA_INSTANCIA/var/log/ops. Best-effort:
     falha de log NUNCA derruba a busca — o resultado ja saiu para o cliente."""
     try:
         from datetime import datetime, date

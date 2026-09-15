@@ -3,8 +3,8 @@
 # capacidade: infra
 # dono: claudinho-TI
 #
-# ambiente: PF_RELEASE_RAIZ (default /opt/platafirma), PF_RELEASE (default
-#           $PF_RELEASE_RAIZ/current), PF_BANCADA ou ~/.config/platafirma/bancada
+# ambiente: PF_RELEASE_RAIZ (default /opt/platafirma), PLATAFIRMA_RELEASE (default
+#           $PF_RELEASE_RAIZ/current), PLATAFIRMA_BANCADA ou ~/.config/platafirma/bancada
 #           (sem default: so o gate de commit e o texto de arranque a leem),
 #           CONFERIR (default o conferir da release), XDG_DATA_HOME.
 #
@@ -43,7 +43,7 @@ set -uo pipefail
 . "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/../lib/raizes.sh"
 
 # Caminho ESTAVEL da release (atravessa promocao por `current`), nunca o realpath.
-HARNESS="$PF_RELEASE/harness"
+HARNESS="$PLATAFIRMA_RELEASE/harness"
 
 MODO=converge
 
@@ -111,7 +111,7 @@ echo "== gate de commit (core.hooksPath -> $HARNESS/hooks)"
 if [ "$TEM_RELEASE" = 0 ]; then
   medido impossivel "(hooks)" "release ausente — nao aponto hook para arvore que nao existe"
 elif [ -z "$BANCADA" ]; then
-  medido impossivel "(hooks)" "bancada nao declarada (PF_BANCADA ou $PF_ARQUIVO_BANCADA) — sem clone a gatear"
+  medido impossivel "(hooks)" "bancada nao declarada (PLATAFIRMA_BANCADA ou $PLATAFIRMA_ARQUIVO_BANCADA) — sem clone a gatear"
 else
   CLONES="platafirma-harness platafirma-core platafirma-conhecimento platafirma-arquitetura platafirma-motor platafirma-posto"
   for c in $CLONES; do

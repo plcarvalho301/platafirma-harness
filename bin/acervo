@@ -23,7 +23,7 @@
 # escreve: extrato=arquivo-local
 # escreve: psql=acervo.*
 # consome: motor_acervo_rest, rag_extractor_pg
-# ambiente: PF_RELEASE[=/opt/platafirma/current] (opcional; ingerir casa le os repos da release, nunca clone), RAG_API_BASE (opcional, url do motor), RAG_API_TOKEN (opcional, auth do motor)
+# ambiente: PLATAFIRMA_RELEASE[=/opt/platafirma/current] (opcional; ingerir casa le os repos da release, nunca clone), RAG_API_BASE (opcional, url do motor), RAG_API_TOKEN (opcional, auth do motor)
 # depende: docker, git, psql
 # substitui: situacao, escada, descobrir, bancada
 #

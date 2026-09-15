@@ -6,7 +6,7 @@
 # atos: ato=<stack> e args=up / down / ps / logs / config / pull / build / promover / rotas / acessos / segredos / reverter; sem ato lista as stacks
 # forma: log
 # cauda: sim
-# ambiente: PF_RELEASE_RAIZ[=/opt/platafirma] · PF_RELEASE[=$PF_RELEASE_RAIZ/current] · PF_INSTANCIA[=/srv/platafirma/casa] · DEPLOY_PONTOS[=$PF_INSTANCIA/var/deploy] · DEPLOY_ENV_DIR[=$XDG_RUNTIME_DIR/platafirma, /run/user/<uid>/platafirma] · DEPLOY_TOPO_ARQUIVO (diagnostico) · PF_SIM · DOCKER_HOST
+# ambiente: PF_RELEASE_RAIZ[=/opt/platafirma] · PLATAFIRMA_RELEASE[=$PF_RELEASE_RAIZ/current] · PLATAFIRMA_INSTANCIA[=/srv/platafirma/casa] · DEPLOY_PONTOS[=$PLATAFIRMA_INSTANCIA/var/deploy] · DEPLOY_ENV_DIR[=$XDG_RUNTIME_DIR/platafirma, /run/user/<uid>/platafirma] · DEPLOY_TOPO_ARQUIVO (diagnostico) · PF_SIM · DOCKER_HOST
 #
 # Existe porque `infra compose` tinha o `-f` fixo no core e ignorava o cwd: chamado
 # de outro repo, promovia o control-plane inteiro. Aqui a stack e argumento
@@ -14,9 +14,9 @@
 #
 # Onde cada pedaco mora (desenho #3010 §3-§4). Nada daqui le a bancada:
 #   base do compose  release, arvore imutavel da familia: $PF_RELEASE_RAIZ/<familia>/<sha>/<caminho>
-#                    (o registro declara o caminho relativo a raiz do repo, ou sob $PF_RELEASE/<curto>/)
-#   sobreposicao     instancia: $PF_INSTANCIA/deploy/<stack>/compose.override.yaml (config I, binds em /srv)
-#   segredo          instancia: $PF_INSTANCIA/segredos/<stack>/<NOME>, materializado em --env-file no
+#                    (o registro declara o caminho relativo a raiz do repo, ou sob $PLATAFIRMA_RELEASE/<curto>/)
+#   sobreposicao     instancia: $PLATAFIRMA_INSTANCIA/deploy/<stack>/compose.override.yaml (config I, binds em /srv)
+#   segredo          instancia: $PLATAFIRMA_INSTANCIA/segredos/<stack>/<NOME>, materializado em --env-file no
 #                    tmpfs ($DEPLOY_ENV_DIR/<stack>.env) so enquanto o docker compose roda
 #   projeto compose  preservado: campo `projeto` do registro, senao `name:` do compose base; sem os
 #                    dois, recusa — nome inventado pelo docker troca os volumes nomeados
@@ -63,8 +63,8 @@ uso:
   deploy <stack>                    mostra o declarado da stack, sem tocar em nada
   deploy                            lista as stacks do registro
 
-base: $PF_RELEASE_RAIZ/<familia>/<sha>/<compose> · sobreposicao: $PF_INSTANCIA/deploy/<stack>/compose.override.yaml
-segredos: $PF_INSTANCIA/segredos/<stack>/ (env-file em tmpfs, apagado na saida)
+base: $PF_RELEASE_RAIZ/<familia>/<sha>/<compose> · sobreposicao: $PLATAFIRMA_INSTANCIA/deploy/<stack>/compose.override.yaml
+segredos: $PLATAFIRMA_INSTANCIA/segredos/<stack>/ (env-file em tmpfs, apagado na saida)
 
 stacks registradas:
 FIM
@@ -86,7 +86,7 @@ FIM
 # texto na wiki desincroniza no primeiro deploy — o mesmo motivo dos outros tres.
 # O ponto de volta da STACK e da instancia (qual sha da release os conteineres rodam);
 # o do CODIGO mora na release, ao lado do current da familia.
-PONTOS="${DEPLOY_PONTOS:-$PF_INSTANCIA/var/deploy}"
+PONTOS="${DEPLOY_PONTOS:-$PLATAFIRMA_INSTANCIA/var/deploy}"
 
 rev() { jq -r --arg s "$1" --arg c "$2" '.stacks[$s].reversao[$c] // empty' <<<"$TOPO_JSON"; }
 
@@ -126,8 +126,8 @@ fi
 REPO="$(campo "$STACK" repo)"
 [ -n "$REPO" ] || { echo "erro: stack \"$STACK\" nao declara repo no registro — nao sei de que familia da release ela sobe." >&2; exit 3; }
 CURTO="${REPO#platafirma-}"
-OVERRIDE="$PF_INSTANCIA/deploy/$STACK/compose.override.yaml"
-SEGREDOS_STACK="$PF_INSTANCIA/segredos/$STACK"
+OVERRIDE="$PLATAFIRMA_INSTANCIA/deploy/$STACK/compose.override.yaml"
+SEGREDOS_STACK="$PLATAFIRMA_INSTANCIA/segredos/$STACK"
 ENV_DIR="${DEPLOY_ENV_DIR:-${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/platafirma}"
 ENV_FILE=""; ENV_TMP=""
 
@@ -164,7 +164,7 @@ resolver_rev() {  # $1=rev ; imprime o sha ou falha
 # repo; absoluto so sob os atalhos da release. O resto nao e base: a base mora na release.
 rel_na_familia() {  # $1=declarado
   case "$1" in
-    "$PF_RELEASE/$CURTO/"*)             printf '%s\n' "${1#"$PF_RELEASE/$CURTO/"}" ;;
+    "$PLATAFIRMA_RELEASE/$CURTO/"*)             printf '%s\n' "${1#"$PLATAFIRMA_RELEASE/$CURTO/"}" ;;
     "$PF_RELEASE_RAIZ/$REPO/current/"*) printf '%s\n' "${1#"$PF_RELEASE_RAIZ/$REPO/current/"}" ;;
     "~"*|/*|*..*)                       return 1 ;;
     *)                                  printf '%s\n' "$1" ;;
@@ -183,7 +183,7 @@ montar_compose() {  # $1=arvore da release
     [ -n "$c" ] || continue
     rel="$(rel_na_familia "$c")" || {
       echo "erro: compose declarado fora da release: $c" >&2
-      echo "      a base mora na release: caminho relativo a raiz de $REPO, ou sob $PF_RELEASE/$CURTO/." >&2
+      echo "      a base mora na release: caminho relativo a raiz de $REPO, ou sob $PLATAFIRMA_RELEASE/$CURTO/." >&2
       echo "      config da instancia vai na sobreposicao: $OVERRIDE" >&2
       exit 3; }
     c="$ARVORE/$rel"
@@ -263,7 +263,7 @@ materializar_env() {
 resolve() {  # $1=declarado $2=base do relativo ; falha fora das raizes de producao
   case "$1" in
     "~"*|*..*)                                                  return 1 ;;
-    "$PF_INSTANCIA/"*|"$PF_RELEASE_RAIZ/"*|"$PF_RELEASE/"*)     printf '%s\n' "$1" ;;
+    "$PLATAFIRMA_INSTANCIA/"*|"$PF_RELEASE_RAIZ/"*|"$PLATAFIRMA_RELEASE/"*)     printf '%s\n' "$1" ;;
     /*)                                                         return 1 ;;
     *)                                                          printf '%s\n' "$2/$1" ;;
   esac
@@ -271,7 +271,7 @@ resolve() {  # $1=declarado $2=base do relativo ; falha fora das raizes de produ
 
 fora_das_raizes() {  # $1=campo $2=declarado $3=base do relativo
   echo "recusa: $1 de \"$STACK\" declarado fora das raizes de producao: $2" >&2
-  echo "        vale relativo a $3, ou absoluto sob $PF_INSTANCIA ou $PF_RELEASE_RAIZ." >&2
+  echo "        vale relativo a $3, ou absoluto sob $PLATAFIRMA_INSTANCIA ou $PF_RELEASE_RAIZ." >&2
   echo "        conserto: reescrever pelo acervo stack def (nunca UPDATE a mao)." >&2
   exit 3
 }
@@ -349,7 +349,7 @@ fi
 if [ "$ACAO" = "rotas" ]; then
   ING="$(campo "$STACK" rotas)"
   [ -n "$ING" ] || { echo "stack \"$STACK\" nao declara ingress no registro (campo rotas)."; exit 0; }
-  ING="$(resolve "$ING" "$PF_INSTANCIA/deploy/$STACK")" || fora_das_raizes rotas "$(campo "$STACK" rotas)" "$PF_INSTANCIA/deploy/$STACK"
+  ING="$(resolve "$ING" "$PLATAFIRMA_INSTANCIA/deploy/$STACK")" || fora_das_raizes rotas "$(campo "$STACK" rotas)" "$PLATAFIRMA_INSTANCIA/deploy/$STACK"
   [ -r "$ING" ] || { echo "erro: ingress declarado e ilegivel: $ING" >&2; exit 1; }
   printf 'ingress : %s\n' "$ING"
   yq -r '.ingress[] | [(.hostname // "(catch-all)"), (.path // "-"), .service] | @tsv' "$ING" \
@@ -375,7 +375,7 @@ if [ "$ACAO" = "acessos" ]; then
   GATE="$(campo "$STACK" gate)"
   FILTRO=""
   if [ -n "$GATE" ]; then
-    GATE="$(resolve "$GATE" "$PF_INSTANCIA/deploy/$STACK")" || fora_das_raizes gate "$(campo "$STACK" gate)" "$PF_INSTANCIA/deploy/$STACK"
+    GATE="$(resolve "$GATE" "$PLATAFIRMA_INSTANCIA/deploy/$STACK")" || fora_das_raizes gate "$(campo "$STACK" gate)" "$PLATAFIRMA_INSTANCIA/deploy/$STACK"
     [ -r "$GATE" ] || { echo "erro: gate declarado e ilegivel: $GATE" >&2; exit 1; }
     printf 'gate    : %s\n' "$GATE"
     printf '          (declarado no registro: o gate desta stack NAO mora no compose dela)\n\n'

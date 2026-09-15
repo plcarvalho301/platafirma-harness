@@ -12,9 +12,9 @@ O base de Settings espelha o que esta SERVIDO no container rag-extractor-api, me
   gabarito: avaliacao/gabarito.jsonl (unico, desde o expurgo de 10/08)
   venv: um com torch, sentence-transformers, psycopg, pgvector (ex.: /opt/platafirma/current/venv/rag)
   uso : <venv>/bin/python bancada_ruido.py --eixo blend|pool|beta|todos
-  rag : platafirma-conhecimento/rag da bancada declarada (PF_BANCADA ou ~/.config/platafirma/bancada);
+  rag : platafirma-conhecimento/rag da bancada declarada (PLATAFIRMA_BANCADA ou ~/.config/platafirma/bancada);
         sem declaracao sai 3
-  env : POSTGRES_* lidos do cofre da instancia ($PF_INSTANCIA/segredos/rag/<NOME>)
+  env : POSTGRES_* lidos do cofre da instancia ($PLATAFIRMA_INSTANCIA/segredos/rag/<NOME>)
 """
 
 import argparse

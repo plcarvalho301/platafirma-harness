@@ -29,7 +29,7 @@
 # interpretador do projeto ANTES de cair no isolado, e o ultimo degrau sai avisado.
 #
 #   python  interpretador, na ordem: PF_TESTE_PYTHON · <repo>/.venv · <bancada>/.venv-<sufixo>
-#           · $PF_RELEASE/venv/<sufixo> (convencao da casa: platafirma-harness -> harness)
+#           · $PLATAFIRMA_RELEASE/venv/<sufixo> (convencao da casa: platafirma-harness -> harness)
 #           ->  uv run --python <py> --with pytest pytest     (ve as deps do venv)
 #           pyproject.toml sem venv casado  ->  uv run pytest
 #           nenhum dos dois              ->  uvx pytest       (ISOLADO — avisa no stderr)
@@ -55,7 +55,7 @@ uso:
   $VERBO rodar <repo> [<alvo>]   roda a suite do clone; <alvo> = caminho dentro do repo
   $VERBO detectar <repo>         diz a stack, o interpretador e a linha que rodaria
 
-bancada: PF_BANCADA, senao $PF_ARQUIVO_BANCADA (sem default: exit 3)
+bancada: PLATAFIRMA_BANCADA, senao $PLATAFIRMA_ARQUIVO_BANCADA (sem default: exit 3)
 interpretador: PF_TESTE_PYTHON
 exit: 0 suite verde · 1 suite vermelha · 2 uso · 3 falha do runner · 4 alvo fora da raiz
       5 indeterminavel (nenhuma stack de teste detectada)
@@ -65,7 +65,7 @@ EOF
 
 morre() { printf '%s: %s\n' "$VERBO" "$1" >&2; exit "${2:-3}"; }
 
-# Bancada declarada pela conta (card #3010): PF_BANCADA, senao a linha de
+# Bancada declarada pela conta (card #3010): PLATAFIRMA_BANCADA, senao a linha de
 # ~/.config/platafirma/bancada. Sem declaracao: exit 3. Nunca cria diretorio.
 declara_bancada() {
   BANCADA="$(pf_bancada)" || exit 3
@@ -122,7 +122,7 @@ alvo_de() {
 }
 
 # Interpretador do projeto, ou vazio. Convencao da casa: venv fora do repo, em
-# <bancada>/.venv-<sufixo>, senao o venv da release ($PF_RELEASE/venv/<sufixo>, o mesmo
+# <bancada>/.venv-<sufixo>, senao o venv da release ($PLATAFIRMA_RELEASE/venv/<sufixo>, o mesmo
 # do shebang dos verbos), com o sufixo = nome do repo sem o prefixo `platafirma-`.
 python_do_projeto() {
   local c="$1" nome="${2:-}" sufixo
@@ -134,7 +134,7 @@ python_do_projeto() {
   # sufixo pelo NOME do repo: no worktree wt/<repo>/<cadeira> o basename e a cadeira
   sufixo="${nome:-$(basename "$c")}"; sufixo="${sufixo#platafirma-}"
   [ -x "$BANCADA/.venv-$sufixo/bin/python" ] && { printf '%s' "$BANCADA/.venv-$sufixo/bin/python"; return 0; }
-  [ -x "$PF_RELEASE/venv/$sufixo/bin/python" ] && { printf '%s' "$PF_RELEASE/venv/$sufixo/bin/python"; return 0; }
+  [ -x "$PLATAFIRMA_RELEASE/venv/$sufixo/bin/python" ] && { printf '%s' "$PLATAFIRMA_RELEASE/venv/$sufixo/bin/python"; return 0; }
   return 1
 }
 

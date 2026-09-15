@@ -37,11 +37,11 @@
 #   ./provisiona-cadeiras.sh @megafone:chat.platafirma.org
 #
 # Variaveis de escape (todas com padrao util): PF_DONO, PF_COFRE, PF_ORG, PF_AVATARES,
-# PF_RECEPCAO, PF_DOMINIO, PF_INSTANCIA, PF_RELEASE, PF_ABERTURA_DIR.
+# PF_RECEPCAO, PF_DOMINIO, PLATAFIRMA_INSTANCIA, PLATAFIRMA_RELEASE, PF_ABERTURA_DIR.
 #
-# ambiente: PF_INSTANCIA (default /srv/platafirma/casa; cofre em
-# $PF_INSTANCIA/segredos/matrix, morada da abertura em $PF_INSTANCIA/var/abertura-publicada),
-# PF_RELEASE (default /opt/platafirma/current; org canonico em $PF_RELEASE/arquitetura).
+# ambiente: PLATAFIRMA_INSTANCIA (default /srv/platafirma/casa; cofre em
+# $PLATAFIRMA_INSTANCIA/segredos/matrix, morada da abertura em $PLATAFIRMA_INSTANCIA/var/abertura-publicada),
+# PLATAFIRMA_RELEASE (default /opt/platafirma/current; org canonico em $PLATAFIRMA_RELEASE/arquitetura).
 set -euo pipefail
 
 DONO="${1:-${PF_DONO:-}}"
@@ -51,7 +51,7 @@ DONO="${1:-${PF_DONO:-}}"
 
 export DOCKER_HOST="${DOCKER_HOST:-unix:///run/user/$(id -u)/docker.sock}"
 AQUI="$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")"
-COFRE="${PF_COFRE:-$PF_INSTANCIA/segredos/matrix}"
+COFRE="${PF_COFRE:-$PLATAFIRMA_INSTANCIA/segredos/matrix}"
 RECEPCAO="${PF_RECEPCAO:-chat-recepcao}"
 AVATARES="${PF_AVATARES:-$AQUI/avatares}"
 DOMINIO="${PF_DOMINIO:-chat.platafirma.org}"
@@ -59,9 +59,9 @@ DOMINIO="${PF_DOMINIO:-chat.platafirma.org}"
 # decisao de claudinha-gestao-estrategica, versionada no repo de arquitetura. Codigo com
 # a tabela dentro seria uma segunda fonte da verdade envelhecendo em silencio. Lido da
 # arquitetura servida pela release, nunca de repo irmao na bancada (card #3010).
-ORG="${PF_ORG:-$PF_RELEASE/arquitetura/docs/org-template-canonico.md}"
+ORG="${PF_ORG:-$PLATAFIRMA_RELEASE/arquitetura/docs/org-template-canonico.md}"
 # cadeiras.py, no python do host abaixo, le a morada da instancia.
-export PF_INSTANCIA
+export PLATAFIRMA_INSTANCIA
 
 [ -s "$COFRE/as-token" ] || { echo "erro: falta $COFRE/as-token — rode ./prepara.sh" >&2; exit 1; }
 [ -s "$ORG" ] || {

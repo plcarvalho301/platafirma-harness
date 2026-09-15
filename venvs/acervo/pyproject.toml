@@ -4,7 +4,7 @@
 #
 # Dependencias MEDIDAS por import dos consumidores do venv acervo:
 #   boto3   bin/_acervo/bancada (shebang /opt/platafirma/current/venv/acervo/bin/python)
-#           bin/_acervo/baixar ("$PF_RELEASE/venv/acervo/bin/python" - <<heredoc>)
+#           bin/_acervo/baixar ("$PLATAFIRMA_RELEASE/venv/acervo/bin/python" - <<heredoc>)
 # O resto do que esses dois importam e biblioteca padrao ou lib/raizes.py da arvore.
 [project]
 name = "venv-acervo"

@@ -22,9 +22,9 @@ command -v jq >/dev/null || falha "jq ausente (dependencia declarada do release)
 PROD_RAIZ="$TMP_DIR/opt"; INSTANCIA="$TMP_DIR/srv"; FORGE="$TMP_DIR/forge"; CLONES="$TMP_DIR/clones"
 STUBS="$TMP_DIR/stubs"; CASA="$TMP_DIR/home"
 mkdir -p "$PROD_RAIZ" "$INSTANCIA" "$FORGE" "$CLONES" "$STUBS" "$CASA"
-unset PF_BANCADA PF_RELEASE PF_ABERTURA_DIR OPS_LOG_DIR PF_LOG_OPS PF_OPS_LOG_DIR PF_TERCEIROS PF_VENVS
-export HOME="$CASA" PF_RELEASE_RAIZ="$PROD_RAIZ" PF_INSTANCIA="$INSTANCIA" \
-  PF_ARQUIVO_BANCADA="$TMP_DIR/sem-bancada" PF_RELEASE_PORTA=0
+unset PLATAFIRMA_BANCADA PLATAFIRMA_RELEASE PF_ABERTURA_DIR OPS_LOG_DIR PF_LOG_OPS PF_OPS_LOG_DIR PLATAFIRMA_TERCEIROS PLATAFIRMA_VENVS
+export HOME="$CASA" PF_RELEASE_RAIZ="$PROD_RAIZ" PLATAFIRMA_INSTANCIA="$INSTANCIA" \
+  PLATAFIRMA_ARQUIVO_BANCADA="$TMP_DIR/sem-bancada" PF_RELEASE_PORTA=0
 
 echo "=== fechamento #3010 no harness ==="
 
@@ -47,9 +47,9 @@ for n in harness acervo; do
       || falha "venvs/$n/uv.lock nao corresponde ao pyproject (uv lock --check)"
   fi
 done
-# todo venv citado por shebang ou por "$PF_RELEASE/venv/<n>/bin/python" tem de estar declarado
+# todo venv citado por shebang ou por "$PLATAFIRMA_RELEASE/venv/<n>/bin/python" tem de estar declarado
 citados="$(cd "$REPO_ROOT" && git ls-files -z bin chat controle sessao deploy-harness 2>/dev/null \
-  | { xargs -0 grep -hoE '(/opt/platafirma/current|\$PF_RELEASE)/venv/[a-z0-9_-]+/bin/' 2>/dev/null || true; } \
+  | { xargs -0 grep -hoE '(/opt/platafirma/current|\$PLATAFIRMA_RELEASE)/venv/[a-z0-9_-]+/bin/' 2>/dev/null || true; } \
   | sed -E 's#.*/venv/([a-z0-9_-]+)/bin/#\1#' | sort -u)"
 [ -n "$citados" ] || falha "nenhum venv citado no codigo: a varredura de shebang nao achou nada"
 for n in $citados; do
@@ -91,7 +91,7 @@ printf '{"_leia": "fixture sem venv"}\n' > "$TMP_DIR/venvs.json"
 printf 'tokenizador de fixture\n' > "$TMP_DIR/artefato"
 PINO="$(sha256sum "$TMP_DIR/artefato" | cut -d' ' -f1)"
 printf '{"_leia": "fixture", "tok.fixture": {"familia": "platafirma-harness", "destino": "terceiros/tokenizers/fixture.json", "sha256": "%s", "url": "https://127.0.0.1:9/inalcancavel"}}\n' "$PINO" > "$TMP_DIR/terceiros.json"
-export PF_FAMILIAS="$TMP_DIR/familias.json" PF_VENVS="$TMP_DIR/venvs.json" PF_TERCEIROS="$TMP_DIR/terceiros.json"
+export PLATAFIRMA_FAMILIAS="$TMP_DIR/familias.json" PLATAFIRMA_VENVS="$TMP_DIR/venvs.json" PLATAFIRMA_TERCEIROS="$TMP_DIR/terceiros.json"
 CACHE="$PROD_RAIZ/terceiros/sha256"
 
 set +e; out="$("$VERBO" promover platafirma-harness "$SHA1" 2>&1)"; rc=$?; set -e
@@ -127,7 +127,7 @@ grep -q "tok.fixture já na árvore" <<<"$out" || falha "reverter devia conferir
 echo "OK: promover e reverter conferem o terceiro"
 
 printf '{"x": {"familia": "platafirma-harness", "destino": "../fora", "sha256": "%s", "url": "https://a"}}\n' "$PINO" > "$TMP_DIR/terceiros-ruim.json"
-set +e; out="$(PF_TERCEIROS="$TMP_DIR/terceiros-ruim.json" "$VERBO" promover platafirma-harness "$SHA2" 2>&1)"; rc=$?; set -e
+set +e; out="$(PLATAFIRMA_TERCEIROS="$TMP_DIR/terceiros-ruim.json" "$VERBO" promover platafirma-harness "$SHA2" 2>&1)"; rc=$?; set -e
 [ "$rc" -eq 3 ] && grep -q "terceiro mal declarado" <<<"$out" || falha "destino com .. devia ser recusado: rc=$rc $out"
 echo "OK: declaracao que sai da arvore e recusada"
 
@@ -148,8 +148,8 @@ PY
 }
 [ "$(OPS_LOG_DIR="$TMP_DIR/a" PF_LOG_OPS="$TMP_DIR/b" ler_log)" = "$TMP_DIR/a" ] || falha "metrica: OPS_LOG_DIR devia vencer o alias"
 [ "$(PF_LOG_OPS="$TMP_DIR/b" ler_log)" = "$TMP_DIR/b" ] || falha "metrica: alias PF_LOG_OPS devia seguir lido"
-[ "$(ler_log)" = "$INSTANCIA/var/log/ops" ] || falha "metrica: default devia ser \$PF_INSTANCIA/var/log/ops"
-grep -q 'log_dir="${OPS_LOG_DIR:-${PF_OPS_LOG_DIR:-$PF_INSTANCIA/var/log/ops}}"' "$REPO_ROOT/bin/repo" \
+[ "$(ler_log)" = "$INSTANCIA/var/log/ops" ] || falha "metrica: default devia ser \$PLATAFIRMA_INSTANCIA/var/log/ops"
+grep -q 'log_dir="${OPS_LOG_DIR:-${PF_OPS_LOG_DIR:-$PLATAFIRMA_INSTANCIA/var/log/ops}}"' "$REPO_ROOT/bin/repo" \
   || falha "repo: OPS_LOG_DIR devia vir primeiro, PF_OPS_LOG_DIR so como alias"
 echo "OK"
 
@@ -174,8 +174,8 @@ echo "OK"
 
 # ---------------------------------------------------------------- 8. shims
 echo "--- 8: shims de instancia vao para a instancia, nunca ~/.local/bin"
-out="$(PF_SHIMS_PARES='rastreador|tarefas' bash "$REPO_ROOT/bin/_shims-instancia" 2>&1)" || falha "_shims-instancia: $out"
-[ -x "$INSTANCIA/var/shims/rastreador" ] || falha "shim nao nasceu em \$PF_INSTANCIA/var/shims: $out"
+out="$(PLATAFIRMA_SHIMS_PARES='rastreador|tarefas' bash "$REPO_ROOT/bin/_shims-instancia" 2>&1)" || falha "_shims-instancia: $out"
+[ -x "$INSTANCIA/var/shims/rastreador" ] || falha "shim nao nasceu em \$PLATAFIRMA_INSTANCIA/var/shims: $out"
 [ ! -e "$CASA/.local" ] || falha "_shims-instancia criou ~/.local"
 ! grep -qE '^[^#]*\.local/bin' "$REPO_ROOT/bin/_shims-instancia" "$REPO_ROOT/agente/instala.sh" \
   || falha "codigo ainda grava em ~/.local/bin"

@@ -6,12 +6,12 @@
 #           declarar a bancada da conta, abrir <bancada>/wt/<familia>/<cadeira> no sha que
 #           /opt/platafirma/<familia>/current aponta, e saber como chamar (platafirma <verbo>) e
 #           testar verbo; com --alias, gravar na conta o atalho de shell pf -> platafirma
-# ambiente: PF_RELEASE_RAIZ[=/opt/platafirma] (familias com current) · PF_RELEASE[=$PF_RELEASE_RAIZ/current]
-#           (o repo chamado e $PF_RELEASE/harness/bin/repo) · PF_BANCADA ou a linha de
-#           PF_ARQUIVO_BANCADA[=$HOME/.config/platafirma/bancada] (sem default; ausente e sem
+# ambiente: PF_RELEASE_RAIZ[=/opt/platafirma] (familias com current) · PLATAFIRMA_RELEASE[=$PF_RELEASE_RAIZ/current]
+#           (o repo chamado e $PLATAFIRMA_RELEASE/harness/bin/repo) · PLATAFIRMA_BANCADA ou a linha de
+#           PLATAFIRMA_ARQUIVO_BANCADA[=$HOME/.config/platafirma/bancada] (sem default; ausente e sem
 #           --declarar = exit 3) · PF_CADEIRA (lida; --cadeira vence; senao fabrica) ·
-#           PF_INSTANCIA[=/srv/platafirma/casa] (lida so para recusar bancada dentro dela) ·
-#           PF_ARQUIVO_SHELLRC[=$HOME/.bashrc] (rc do shell da conta, so com --alias) · HOME
+#           PLATAFIRMA_INSTANCIA[=/srv/platafirma/casa] (lida so para recusar bancada dentro dela) ·
+#           PLATAFIRMA_ARQUIVO_SHELLRC[=$HOME/.bashrc] (rc do shell da conta, so com --alias) · HOME
 # depende: repo da release (abrir --da-producao, estado --json) · git e rede ao forge, pelo repo ·
 #          python3 (--ensaio sobre worktree existente, --alias)
 #
@@ -116,7 +116,7 @@ esac
 # Atalho de shell pf -> platafirma no rc da conta que roda este script (ont:0087: pf nao nomeia
 # nada da plataforma; e configuracao da conta). Relata uma linha e devolve o exit.
 grava_alias() {
-  local rc_arq="${PF_ARQUIVO_SHELLRC:-$HOME/.bashrc}"
+  local rc_arq="${PLATAFIRMA_ARQUIVO_SHELLRC:-$HOME/.bashrc}"
   if ! command -v python3 >/dev/null 2>&1; then
     echo "alias pf -> platafirma: recusado (python3 ausente — nao escrevo)"
     return 3
@@ -315,7 +315,7 @@ if [ "$ALIAS" -eq 1 ]; then
 fi
 
 # --- bancada declarada --------------------------------------------------------------------
-# Declaracao e da conta (desenho #3010 §9): uma linha em PF_ARQUIVO_BANCADA; PF_BANCADA no
+# Declaracao e da conta (desenho #3010 §9): uma linha em PLATAFIRMA_ARQUIVO_BANCADA; PLATAFIRMA_BANCADA no
 # ambiente vence o arquivo. Nunca se sobrescreve declaracao existente.
 DECLARADA="$(pf_bancada 2>/dev/null)" || DECLARADA=""
 if [ -n "$DECLARAR" ]; then
@@ -329,52 +329,52 @@ if [ -n "$DECLARAR" ]; then
       erro "--declarar invalido: '$DECLARAR' — caminho absoluto normalizado, sem espaco, fora da raiz" 2 ;;
   esac
   # bancada nunca mora na release nem na instancia (desenho #3010 §9)
-  for proibida in /opt /srv "${PF_RELEASE_RAIZ%/}" "${PF_INSTANCIA%/}"; do
+  for proibida in /opt /srv "${PF_RELEASE_RAIZ%/}" "${PLATAFIRMA_INSTANCIA%/}"; do
     [ -n "$proibida" ] || continue
     case "$DECLARAR/" in
       "$proibida"/*) erro "recusa: bancada $DECLARAR dentro de $proibida — a bancada fica fora da release e da instancia" 4 ;;
     esac
   done
-  # A declaracao da conta e o arquivo; PF_BANCADA so vence para teste. Arquivo que existe e nao
+  # A declaracao da conta e o arquivo; PLATAFIRMA_BANCADA so vence para teste. Arquivo que existe e nao
   # declara (diretorio, ilegivel, primeira linha vazia) nao se sobrescreve: indeterminavel.
   ARQ_LIDO=""
-  if [ -e "$PF_ARQUIVO_BANCADA" ] || [ -L "$PF_ARQUIVO_BANCADA" ]; then
-    [ -f "$PF_ARQUIVO_BANCADA" ] && [ -r "$PF_ARQUIVO_BANCADA" ] \
-      || erro "indeterminavel: $PF_ARQUIVO_BANCADA existe e nao e arquivo legivel — nao sobrescrevo" 5
-    IFS= read -r ARQ_LIDO < "$PF_ARQUIVO_BANCADA" || true
+  if [ -e "$PLATAFIRMA_ARQUIVO_BANCADA" ] || [ -L "$PLATAFIRMA_ARQUIVO_BANCADA" ]; then
+    [ -f "$PLATAFIRMA_ARQUIVO_BANCADA" ] && [ -r "$PLATAFIRMA_ARQUIVO_BANCADA" ] \
+      || erro "indeterminavel: $PLATAFIRMA_ARQUIVO_BANCADA existe e nao e arquivo legivel — nao sobrescrevo" 5
+    IFS= read -r ARQ_LIDO < "$PLATAFIRMA_ARQUIVO_BANCADA" || true
     [ -n "$ARQ_LIDO" ] \
-      || erro "indeterminavel: $PF_ARQUIVO_BANCADA existe e a primeira linha esta vazia — nao sobrescrevo" 5
+      || erro "indeterminavel: $PLATAFIRMA_ARQUIVO_BANCADA existe e a primeira linha esta vazia — nao sobrescrevo" 5
   fi
   if [ -n "$ARQ_LIDO" ] && [ "${ARQ_LIDO%/}" != "$DECLARAR" ]; then
-    erro "recusa: a conta ja declarou a bancada ${ARQ_LIDO} — nao sobrescrevo com $DECLARAR (edite $PF_ARQUIVO_BANCADA a mao se for mudanca deliberada)" 4
+    erro "recusa: a conta ja declarou a bancada ${ARQ_LIDO} — nao sobrescrevo com $DECLARAR (edite $PLATAFIRMA_ARQUIVO_BANCADA a mao se for mudanca deliberada)" 4
   fi
-  if [ -n "${PF_BANCADA:-}" ] && [ "${PF_BANCADA%/}" != "$DECLARAR" ]; then
-    erro "recusa: PF_BANCADA=${PF_BANCADA} no ambiente vence a declaracao — nao declaro $DECLARAR" 4
+  if [ -n "${PLATAFIRMA_BANCADA:-}" ] && [ "${PLATAFIRMA_BANCADA%/}" != "$DECLARAR" ]; then
+    erro "recusa: PLATAFIRMA_BANCADA=${PLATAFIRMA_BANCADA} no ambiente vence a declaracao — nao declaro $DECLARAR" 4
   fi
   if [ -n "$ARQ_LIDO" ]; then
     printf 'bancada conforme %s\n' "$DECLARAR"
   elif [ "$ENSAIO" -eq 1 ]; then
-    printf 'bancada ensaio: declararia %s em %s (0600)\n' "$DECLARAR" "$PF_ARQUIVO_BANCADA"
+    printf 'bancada ensaio: declararia %s em %s (0600)\n' "$DECLARAR" "$PLATAFIRMA_ARQUIVO_BANCADA"
   else
-    dir_cfg="$(dirname "$PF_ARQUIVO_BANCADA")"
+    dir_cfg="$(dirname "$PLATAFIRMA_ARQUIVO_BANCADA")"
     mkdir -p "$dir_cfg" 2>/dev/null || erro "nao criei $dir_cfg" 3
     tmp_cfg="$(mktemp "$dir_cfg/.bancada.XXXXXX" 2>/dev/null)" || erro "nao escrevi em $dir_cfg" 3
     # ln nao sobrescreve: se outra execucao declarou entre a leitura e aqui, recusa
     if ! { printf '%s\n' "$DECLARAR" > "$tmp_cfg" && chmod 0600 "$tmp_cfg"; }; then
-      rm -f "$tmp_cfg"; erro "nao gravei $PF_ARQUIVO_BANCADA" 3
+      rm -f "$tmp_cfg"; erro "nao gravei $PLATAFIRMA_ARQUIVO_BANCADA" 3
     fi
-    if ! ln "$tmp_cfg" "$PF_ARQUIVO_BANCADA" 2>/dev/null; then
+    if ! ln "$tmp_cfg" "$PLATAFIRMA_ARQUIVO_BANCADA" 2>/dev/null; then
       rm -f "$tmp_cfg"
-      [ -e "$PF_ARQUIVO_BANCADA" ] && erro "recusa: $PF_ARQUIVO_BANCADA apareceu durante a declaracao — nao sobrescrevo" 4
-      erro "nao gravei $PF_ARQUIVO_BANCADA" 3
+      [ -e "$PLATAFIRMA_ARQUIVO_BANCADA" ] && erro "recusa: $PLATAFIRMA_ARQUIVO_BANCADA apareceu durante a declaracao — nao sobrescrevo" 4
+      erro "nao gravei $PLATAFIRMA_ARQUIVO_BANCADA" 3
     fi
     rm -f "$tmp_cfg"
-    printf 'bancada declarada %s em %s\n' "$DECLARAR" "$PF_ARQUIVO_BANCADA"
+    printf 'bancada declarada %s em %s\n' "$DECLARAR" "$PLATAFIRMA_ARQUIVO_BANCADA"
   fi
   DECLARADA="$DECLARAR"
 fi
 if [ -z "$DECLARADA" ]; then
-  erro "bancada nao declarada: defina PF_BANCADA, escreva a raiz em $PF_ARQUIVO_BANCADA ou rode com --declarar <dir>" 3
+  erro "bancada nao declarada: defina PLATAFIRMA_BANCADA, escreva a raiz em $PLATAFIRMA_ARQUIVO_BANCADA ou rode com --declarar <dir>" 3
 fi
 case "$DECLARADA" in
   /*) BANCADA="${DECLARADA%/}" ;;
@@ -382,9 +382,9 @@ case "$DECLARADA" in
 esac
 
 # --- o verbo da release -------------------------------------------------------------------
-REPO_REL="$PF_RELEASE/harness/bin/repo"
+REPO_REL="$PLATAFIRMA_RELEASE/harness/bin/repo"
 [ -x "$REPO_REL" ] || erro "dependencia ausente: repo da release nao esta em $REPO_REL — sem release no ar nao ha sha de producao a puxar" 3
-# PF_RELEASE mal apontado para dentro da bancada faria chamar o repo da bancada: recusa.
+# PLATAFIRMA_RELEASE mal apontado para dentro da bancada faria chamar o repo da bancada: recusa.
 REPO_REAL="$(realpath "$REPO_REL" 2>/dev/null)" || erro "indeterminavel: nao resolvi $REPO_REL" 5
 BANCADA_REAL="$(realpath -m "$BANCADA" 2>/dev/null)" || BANCADA_REAL="$BANCADA"
 case "$REPO_REAL/" in
@@ -441,7 +441,7 @@ for fam in "${FAMILIAS[@]}"; do
         linha "$fam" - "impossivel: familia sem current em $PF_RELEASE_RAIZ (ensaio)" "$wt"; pior 1
       fi
     elif [ -e "$wt/.git" ]; then
-      est="$(PF_BANCADA="$BANCADA" PF_CADEIRA="$CADEIRA" "$REPO_REL" estado "$fam" --json 2>/dev/null \
+      est="$(PLATAFIRMA_BANCADA="$BANCADA" PF_CADEIRA="$CADEIRA" "$REPO_REL" estado "$fam" --json 2>/dev/null \
         | python3 -c 'import sys, json
 try:
     d = json.load(sys.stdin)
@@ -467,7 +467,7 @@ except Exception:
   fi
 
   err_arq="$(mktemp)"
-  out="$(PF_BANCADA="$BANCADA" PF_CADEIRA="$CADEIRA" \
+  out="$(PLATAFIRMA_BANCADA="$BANCADA" PF_CADEIRA="$CADEIRA" \
     "$REPO_REL" abrir "$fam" --da-producao --cadeira "$CADEIRA" "${ARGS_RAMO[@]}" 2>"$err_arq")"
   rc=$?
   err="$(cat "$err_arq")"; rm -f "$err_arq"
@@ -483,9 +483,9 @@ except Exception:
 done
 
 # --- como chamar e como testar -------------------------------------------------------------
-printf 'verbos: platafirma <verbo> [args] em qualquer conta (platafirma sem argumento lista); na conta dos servicos, o nome direto (PATH %s/harness/bin); atalho pf na conta: puxar-bancada --alias\n' "$PF_RELEASE"
-printf 'testar verbo editado: PF_INSTANCIA=<tmp> PF_RELEASE_RAIZ=<tmp> %s/wt/<familia>/%s/bin/<verbo> … — a producao segue servida pela release\n' "$BANCADA" "$CADEIRA"
+printf 'verbos: platafirma <verbo> [args] em qualquer conta (platafirma sem argumento lista); na conta dos servicos, o nome direto (PATH %s/harness/bin); atalho pf na conta: puxar-bancada --alias\n' "$PLATAFIRMA_RELEASE"
+printf 'testar verbo editado: PLATAFIRMA_INSTANCIA=<tmp> PF_RELEASE_RAIZ=<tmp> %s/wt/<familia>/%s/bin/<verbo> … — a producao segue servida pela release\n' "$BANCADA" "$CADEIRA"
 # O aviso e sobre o verbo da bancada, nao sobre o ambiente deste script: sai sempre.
-printf 'aviso: verbo da bancada chamado sem PF_INSTANCIA de teste executa contra a instancia real (%s)\n' "$INSTANCIA_REAL"
+printf 'aviso: verbo da bancada chamado sem PLATAFIRMA_INSTANCIA de teste executa contra a instancia real (%s)\n' "$INSTANCIA_REAL"
 
 exit "$PIOR"

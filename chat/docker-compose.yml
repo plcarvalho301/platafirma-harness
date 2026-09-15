@@ -112,7 +112,7 @@ services:
       HS_TOKEN: ${HS_TOKEN:?falta HS_TOKEN no --env-file — sai de segredos/chat, cunhado por ./prepara.sh}
       # comum/cadeiras.py le a arvore abertura/<x>/ da morada publicada (arq:0073,
       # arq:0097) — nao se calcula, se le da fonte. O ledger registro/ e historico e
-      # nenhum codigo vivo o le (incidente/ordem do dono). PF_INSTANCIA, PF_ABERTURA_DIR,
+      # nenhum codigo vivo o le (incidente/ordem do dono). PLATAFIRMA_INSTANCIA, PF_ABERTURA_DIR,
       # CHAT_JOURNAL e CHAT_FITAS_RAIZ sao caminho de instancia: vem da sobreposicao,
       # junto com os binds a que correspondem.
       # Gatilho de idade DESARMADO, por decisao do dono em 15/08 (card 449): ele

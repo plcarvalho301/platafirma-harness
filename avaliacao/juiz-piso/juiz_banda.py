@@ -19,9 +19,9 @@ OLLAMA_NUM_PARALLEL >= JUIZ_THREADS (auto costuma bastar).
 env:
   JUIZ_MODELO   modelo ollama            (default qwen3.5:9b)
   JUIZ_THREADS  requests concorrentes    (default 1)
-  JUIZ_BANDA    entrada jsonl            (default $PF_INSTANCIA/dados/avaliacao/juiz-piso/banda_lt40.jsonl)
-  JUIZ_OUT      checkpoint jsonl         (default $PF_INSTANCIA/dados/avaliacao/juiz-piso/juiz_banda.out.jsonl)
-  PF_INSTANCIA  raiz da instancia        (default /srv/platafirma/casa)
+  JUIZ_BANDA    entrada jsonl            (default $PLATAFIRMA_INSTANCIA/dados/avaliacao/juiz-piso/banda_lt40.jsonl)
+  JUIZ_OUT      checkpoint jsonl         (default $PLATAFIRMA_INSTANCIA/dados/avaliacao/juiz-piso/juiz_banda.out.jsonl)
+  PLATAFIRMA_INSTANCIA  raiz da instancia        (default /srv/platafirma/casa)
   JUIZ_LIMIT    teto de itens NOVOS      (default 0 = banda inteira)
   JUIZ_LOG_A_CADA  cadencia de progresso (default 200)
 """

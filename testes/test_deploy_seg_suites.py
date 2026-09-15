@@ -26,6 +26,6 @@ def test_suite_bash(suite):
     env = dict(os.environ)
     env.setdefault("LC_ALL", "C.UTF-8")
     with tempfile.TemporaryDirectory() as tmp:
-        env["PF_BANCADA"] = os.path.join(tmp, "bancada-inexistente")
+        env["PLATAFIRMA_BANCADA"] = os.path.join(tmp, "bancada-inexistente")
         p = subprocess.run(["bash", str(caminho)], capture_output=True, text=True, env=env)
     assert p.returncode == 0, f"{suite} saiu {p.returncode}\n--- stdout ---\n{p.stdout[-4000:]}\n--- stderr ---\n{p.stderr[-4000:]}"

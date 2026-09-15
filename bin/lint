@@ -37,7 +37,7 @@ uso:
   $VERBO rodar <repo> [<alvo>]   roda o linter do clone; <alvo> = caminho dentro do repo
   $VERBO detectar <repo>         diz qual stack casou e que linha rodaria, sem rodar
 
-bancada: PF_BANCADA, senao $PF_ARQUIVO_BANCADA (sem default: exit 3)
+bancada: PLATAFIRMA_BANCADA, senao $PLATAFIRMA_ARQUIVO_BANCADA (sem default: exit 3)
 exit: 0 limpo · 1 apontamentos · 2 uso · 3 falha do linter · 4 alvo fora da raiz
       5 indeterminavel (nenhuma stack de lint detectada)
 EOF
@@ -46,7 +46,7 @@ EOF
 
 morre() { printf '%s: %s\n' "$VERBO" "$1" >&2; exit "${2:-3}"; }
 
-# Bancada declarada pela conta (card #3010): PF_BANCADA, senao a linha de
+# Bancada declarada pela conta (card #3010): PLATAFIRMA_BANCADA, senao a linha de
 # ~/.config/platafirma/bancada. Sem declaracao: exit 3. Nunca cria diretorio.
 declara_bancada() {
   BANCADA="$(pf_bancada)" || exit 3

@@ -19,7 +19,7 @@
 #   estado   <repo>               diz o modo e o caminho
 #
 # Verbo de bancada (card #3010): o clone de trabalho mora na bancada declarada pela conta
-# (PF_BANCADA, senao ~/.config/platafirma/bancada; sem declaracao, exit 3). PF_TRABALHO
+# (PLATAFIRMA_BANCADA, senao ~/.config/platafirma/bancada; sem declaracao, exit 3). PF_TRABALHO
 # segue como override explicito de pegar/entregar. Nenhum default em codigo.
 set -euo pipefail
 

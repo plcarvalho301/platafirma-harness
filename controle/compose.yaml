@@ -24,7 +24,7 @@ services:
       # vao declaradas mesmo assim para o verbo chamado pela tela ver o mesmo que o
       # host ve. A bancada nunca entra aqui.
       PF_RELEASE_RAIZ: ${PF_RELEASE_RAIZ:-/opt/platafirma}
-      PF_INSTANCIA: ${PF_INSTANCIA:-/srv/platafirma/casa}
+      PLATAFIRMA_INSTANCIA: ${PLATAFIRMA_INSTANCIA:-/srv/platafirma/casa}
       # O pacote mora em /app, fora da arvore do harness: lib/raizes.py vem da release.
       PYTHONPATH: ${PF_RELEASE_RAIZ:-/opt/platafirma}/current/harness/lib
       AGREGADOR_ESTADO_PATH: /estado/estado.json
@@ -44,7 +44,7 @@ services:
       - /run/user/1001/docker.sock:/run/user/1001/docker.sock
       - /usr/bin/docker:/usr/local/bin/docker:ro
       - /run/user/1001:/run/user/1001
-      - ${PF_INSTANCIA:-/srv/platafirma/casa}/var/run/harness-controle:/estado:ro
+      - ${PLATAFIRMA_INSTANCIA:-/srv/platafirma/casa}/var/run/harness-controle:/estado:ro
     ports:
       - "127.0.0.1:${HARNESS_CONTROLE_PORTA:-8091}:8000"
     networks: [conhecimento, msg]

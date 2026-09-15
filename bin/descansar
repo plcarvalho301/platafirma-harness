@@ -341,7 +341,7 @@ def fabrica_pela_porta():
     connector e viram linha no ops log. Le-se VOLUME de chamada e classe de
     desperdicio (run_command em fallback, verbo contornado), o alvo direto da
     economia-de-giro; nao giros/turno (turno nao carimba na porta). Fonte:
-    $PF_INSTANCIA/var/log/ops/ops-*.jsonl, filtro cadeira=fabrica."""
+    $PLATAFIRMA_INSTANCIA/var/log/ops/ops-*.jsonl, filtro cadeira=fabrica."""
     import glob
     from collections import Counter
     total = 0
@@ -405,7 +405,7 @@ def giros_por_turno_code_local(cadeira):
     arqs = [a for d in dirs for a in glob.glob(os.path.join(d, "*.jsonl"))]
     if not arqs:
         return [f"  sem transcript de Code para '{cadeira}'"
-                " (cwd da fita != $PF_INSTANCIA/var/fitas/<cadeira>, ou nunca rodou no Code)"]
+                " (cwd da fita != $PLATAFIRMA_INSTANCIA/var/fitas/<cadeira>, ou nunca rodou no Code)"]
     f = max(arqs, key=os.path.getmtime)
     idade_s = time.time() - os.path.getmtime(f)
     sid = os.path.basename(f)[:-6]

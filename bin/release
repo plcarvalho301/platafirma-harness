@@ -21,7 +21,7 @@
 # escreve: promover=release,arquivo-local
 # escreve: reverter=release,arquivo-local
 # (recursos pelo enum de ferramental_recurso; porta, forge e stack pendem id proprio - dados)
-# ambiente: PF_RELEASE_RAIZ[=/opt/platafirma] porta · PF_RELEASE[=$PF_RELEASE_RAIZ/current] porta (atalhos; verbos irmãos em harness/bin) · PF_INSTANCIA[=/srv/platafirma/casa] porta (pontos em var/release/<familia>) · PF_ABERTURA_DIR[=$PF_INSTANCIA/var/abertura-publicada] porta · PF_FAMILIAS[=registro/familias.json desta árvore] porta · PF_VENVS[=registro/venvs.json desta árvore] porta · PF_TERCEIROS[=registro/terceiros.json desta árvore] porta · PF_CADEIRA porta (lida) · HOME
+# ambiente: PF_RELEASE_RAIZ[=/opt/platafirma] porta · PLATAFIRMA_RELEASE[=$PF_RELEASE_RAIZ/current] porta (atalhos; verbos irmãos em harness/bin) · PLATAFIRMA_INSTANCIA[=/srv/platafirma/casa] porta (pontos em var/release/<familia>) · PF_ABERTURA_DIR[=$PLATAFIRMA_INSTANCIA/var/abertura-publicada] porta · PLATAFIRMA_FAMILIAS[=registro/familias.json desta árvore] porta · PLATAFIRMA_VENVS[=registro/venvs.json desta árvore] porta · PLATAFIRMA_TERCEIROS[=registro/terceiros.json desta árvore] porta · PF_CADEIRA porta (lida) · HOME
 # depende: git · deploy (promover/reverter de família com stack) · acervo (registro de stacks) · python3 · jq · uv (venv do lock) · sha256sum + curl (artefato de terceiro pinado; curl só quando o cache em <release>/terceiros não tem) · rede ao forge (promover) · porta (hora de arranque) · infra (restart da porta, destacado) · publicar-abertura (motor da familia abertura, #3054). O restart da porta e deste verbo (spec_release §2, rev 6): o observador pf-porta-watch nao disparou em 15/09, 2 de 2 promocoes
 # substitui: readlink current · git -C /opt/platafirma/<familia>/… describe|rev-parse|ls-files|show|grep · git worktree add --detach · ln -sfn + mv -T · chmod -R a-w · conferir <classe> · deploy <stack> promover|reverter
 # conforme: parcial
@@ -34,12 +34,12 @@ AQUI="$(dirname "$(readlink -f "$0")")"
 
 PROD_RAIZ="$PF_RELEASE_RAIZ"                     # <familia>/{.repo.git,<sha>,current,anterior} e venv/
 ATALHOS="$PF_RELEASE_RAIZ/current"               # DIRETÓRIO de atalhos estáveis (arq:0102 D6)
-ABERTURA_DIR="${PF_ABERTURA_DIR:-$PF_INSTANCIA/var/abertura-publicada}"
-PONTOS="$PF_INSTANCIA/var/release"               # registro de promoções; o ponto de volta mora em /opt
-BIN_DIR="$PF_RELEASE/harness/bin"                # verbos irmãos servidos
-FAMILIAS="${PF_FAMILIAS:-$AQUI/../registro/familias.json}"   # familia -> URL do forge
-VENVS="${PF_VENVS:-$AQUI/../registro/venvs.json}"            # venv -> familia + lock
-TERCEIROS="${PF_TERCEIROS:-$AQUI/../registro/terceiros.json}" # artefato -> familia + destino + sha256 + url
+ABERTURA_DIR="${PF_ABERTURA_DIR:-$PLATAFIRMA_INSTANCIA/var/abertura-publicada}"
+PONTOS="$PLATAFIRMA_INSTANCIA/var/release"               # registro de promoções; o ponto de volta mora em /opt
+BIN_DIR="$PLATAFIRMA_RELEASE/harness/bin"                # verbos irmãos servidos
+FAMILIAS="${PLATAFIRMA_FAMILIAS:-$AQUI/../registro/familias.json}"   # familia -> URL do forge
+VENVS="${PLATAFIRMA_VENVS:-$AQUI/../registro/venvs.json}"            # venv -> familia + lock
+TERCEIROS="${PLATAFIRMA_TERCEIROS:-$AQUI/../registro/terceiros.json}" # artefato -> familia + destino + sha256 + url
 TERCEIROS_CACHE="$PF_RELEASE_RAIZ/terceiros/sha256"          # conteúdo endereçado pelo pino
 CADEIRA="${PF_CADEIRA:-}"
 FAMILIA_BIN="platafirma-harness"   # a única família que serve verbos no PATH e reinicia a porta
@@ -81,7 +81,7 @@ uso:
   release promover   abertura [<rev>] [--ensaio]   publica a abertura do harness na rev (sem rev: origin/main)
   release reverter   abertura [<sha>] [--ensaio]   volta a abertura a um sha ja publicado (sem sha: o anterior)
 
-raiz servida: PF_RELEASE_RAIZ[=/opt/platafirma] · instancia: PF_INSTANCIA[=/srv/platafirma/casa]
+raiz servida: PF_RELEASE_RAIZ[=/opt/platafirma] · instancia: PLATAFIRMA_INSTANCIA[=/srv/platafirma/casa]
 promover: <rev> (sha ou tag) obrigatória em família com stack; sem rev, avança para origin/main
 exit: 0 achou/fez · 1 nao existe · 2 uso · 3 dependencia · 4 politica · 5 indeterminavel
 FIM
@@ -113,7 +113,7 @@ curto_ou() {  # $1=sha ou vazio  $2=texto quando vazio
   if [ -n "$1" ]; then printf '%s' "${1:0:7}"; else printf '%s' "$2"; fi
 }
 
-# verbos irmãos: só pelo PATH ou pelo bin da release no ar ($PF_RELEASE/harness/bin) — nunca
+# verbos irmãos: só pelo PATH ou pelo bin da release no ar ($PLATAFIRMA_RELEASE/harness/bin) — nunca
 # pelo diretório deste script (na bancada, o vizinho seria o da bancada, e um teste chamaria o
 # deploy real)
 achar_verbo() {  # $1=nome ; imprime caminho ou nada
@@ -143,7 +143,7 @@ listar_familias() {
 RESOLVER_MOTIVO=""
 
 # Ponto de volta de uma família: o symlink <familia>/anterior ao lado do current (plano release);
-# na falta dele, o registro em $PF_INSTANCIA/var/release/<familia>/anterior (a abertura só tem este).
+# na falta dele, o registro em $PLATAFIRMA_INSTANCIA/var/release/<familia>/anterior (a abertura só tem este).
 ponto_de_volta() {  # $1=familia ; imprime o sha (ou o texto gravado) ou nada
   local f="$1"
   if [ -L "$PROD_RAIZ/$f/anterior" ]; then
@@ -790,7 +790,7 @@ cmd_conferir() {
   fi
   # o servido vai explicito (raiz, bin e arvore do harness no ar): a implementacao nao deriva
   # raiz nenhuma sozinha, e as classes daqui medem a release, nunca a bancada
-  PF_PROD_RAIZ="$PROD_RAIZ" PF_BIN_DIR="$BIN_DIR" PF_HARNESS_DIR="$PF_RELEASE/harness" \
+  PF_PROD_RAIZ="$PROD_RAIZ" PF_BIN_DIR="$BIN_DIR" PF_HARNESS_DIR="$PLATAFIRMA_RELEASE/harness" \
     exec python3 "$impl" "$classe" "${resto[@]}"
 }
 
@@ -979,7 +979,7 @@ gravar_pontos() {  # $1=repo $2=sha_anterior(ou vazio) $3=sha_novo
 # entrada por família (<curto> -> ../<familia>/current), mais politica-acesso -> harness/politica-acesso
 # e venv/<nome> -> ../../venv/<nome>-<hash>. Código, units e PATH citam /opt/platafirma/current/<curto>/…,
 # que atravessa promoções sem ninguém reescrever caminho. Não há diretório de symlinks de verbos:
-# o PATH é $PF_RELEASE/harness/bin, injetado por quem executa (unit, porta, profile.d).
+# o PATH é $PLATAFIRMA_RELEASE/harness/bin, injetado por quem executa (unit, porta, profile.d).
 assentar_atalhos() {  # $1=repo
   local repo="$1" curto="${1#platafirma-}"
   if [ -L "$ATALHOS" ]; then
@@ -1238,7 +1238,7 @@ reiniciar_porta() {
 # motor segue sendo bin/publicar-abertura (snapshot do object store, validado, ponteiro
 # atômico, gancho da casa); o release lhe dá a fonte e o registro: lê do ESPELHO do harness,
 # nunca do clone de trabalho (o 14/09 promoveu o passado lendo clone parado), confere que a
-# rev descende de origin/main e grava o ponto de volta em $PF_INSTANCIA/var/release/abertura.
+# rev descende de origin/main e grava o ponto de volta em $PLATAFIRMA_INSTANCIA/var/release/abertura.
 rodar_publicador() {  # $@=args do publicar-abertura
   local pub; pub="$(achar_verbo publicar-abertura)"
   if [ -z "$pub" ]; then

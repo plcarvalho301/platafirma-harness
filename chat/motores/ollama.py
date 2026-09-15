@@ -16,7 +16,7 @@ e do chamador) e cospe o mesmo stream-json que o Claude Code cospe. Para o
 um_giro, um motor e outro sao indistinguiveis.
 
 SESSAO (ponto c do pedido): o runner guarda o historico por id_fita em
-$PF_INSTANCIA/var/fitas/ollama/<id>.json e o remonta a cada giro. `--session-id` na fita nova,
+$PLATAFIRMA_INSTANCIA/var/fitas/ollama/<id>.json e o remonta a cada giro. `--session-id` na fita nova,
 `--resume <id>` na existente — mesmos flags que o Code, resolvidos pelo runner.
 
 Persona (ponto d): a persona e injetada no prompt como system, exatamente como

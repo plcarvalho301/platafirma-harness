@@ -10,7 +10,7 @@ Aceite coberto, tudo com as raizes em tmp:
 - write_file: morada = rascunho da fita + clones/worktrees da bancada declarada;
   release e log sao negados; sem bancada, clone fica fora de alcance.
 
-    PF_BANCADA nao precisa existir: o teste declara e desdeclara por monkeypatch.
+    PLATAFIRMA_BANCADA nao precisa existir: o teste declara e desdeclara por monkeypatch.
 """
 from __future__ import annotations
 
@@ -33,24 +33,24 @@ _TMP = Path(tempfile.mkdtemp(prefix="ops-raizes-"))
 os.environ["PF_HARNESS"] = str(HARNESS_DIR)
 # Raiz herdada so vale se ja for tmp (outro modulo de teste chegou antes): o teste
 # escreve em rascunho e log, e nunca pode cair numa instancia de verdade.
-for _var, _sub in (("PF_RELEASE_RAIZ", "release"), ("PF_INSTANCIA", "instancia")):
+for _var, _sub in (("PF_RELEASE_RAIZ", "release"), ("PLATAFIRMA_INSTANCIA", "instancia")):
     if not os.environ.get(_var, "").startswith(tempfile.gettempdir()):
         os.environ[_var] = str(_TMP / _sub)
 # Arranque SEM bancada: nem variavel nem arquivo de declaracao.
-_BANCADA_ANTES = os.environ.pop("PF_BANCADA", None)
-os.environ.setdefault("PF_ARQUIVO_BANCADA", str(_TMP / "sem-declaracao"))
+_BANCADA_ANTES = os.environ.pop("PLATAFIRMA_BANCADA", None)
+os.environ.setdefault("PLATAFIRMA_ARQUIVO_BANCADA", str(_TMP / "sem-declaracao"))
 
 import poda  # noqa: E402
 import server as s  # noqa: E402
 
 if _BANCADA_ANTES is not None:
-    os.environ["PF_BANCADA"] = _BANCADA_ANTES
+    os.environ["PLATAFIRMA_BANCADA"] = _BANCADA_ANTES
 
 
 @pytest.fixture
 def sem_bancada(monkeypatch, tmp_path):
-    monkeypatch.delenv("PF_BANCADA", raising=False)
-    monkeypatch.setenv("PF_ARQUIVO_BANCADA", str(tmp_path / "nao-declarada"))
+    monkeypatch.delenv("PLATAFIRMA_BANCADA", raising=False)
+    monkeypatch.setenv("PLATAFIRMA_ARQUIVO_BANCADA", str(tmp_path / "nao-declarada"))
 
 
 @pytest.fixture
@@ -58,7 +58,7 @@ def bancada(monkeypatch, tmp_path):
     b = tmp_path / "bancada"
     (b / "platafirma-harness" / "bin").mkdir(parents=True)
     (b / "wt" / "platafirma-core" / "fabrica").mkdir(parents=True)
-    monkeypatch.setenv("PF_BANCADA", str(b))
+    monkeypatch.setenv("PLATAFIRMA_BANCADA", str(b))
     return b
 
 
@@ -69,8 +69,8 @@ def sem_pep():
 
 
 def test_nenhuma_raiz_resolve_para_a_casa_da_conta():
-    """Toda raiz de producao da porta deriva de PF_RELEASE_RAIZ ou PF_INSTANCIA."""
-    inst, rel = Path(os.environ["PF_INSTANCIA"]), Path(os.environ["PF_RELEASE_RAIZ"])
+    """Toda raiz de producao da porta deriva de PF_RELEASE_RAIZ ou PLATAFIRMA_INSTANCIA."""
+    inst, rel = Path(os.environ["PLATAFIRMA_INSTANCIA"]), Path(os.environ["PF_RELEASE_RAIZ"])
     assert s.LOG_DIR == inst / "var/log/ops"
     assert s.TMP_FITA == inst / "var/tmp"
     assert s.PERSONAS == inst / "var/abertura-publicada/current/abertura"
@@ -147,7 +147,7 @@ def test_write_file_na_bancada_worktree_e_bin(bancada, sem_pep):
 def test_write_file_nao_recria_bancada_nem_worktree(monkeypatch, tmp_path, sem_pep):
     """Bancada declarada e apagada (ou worktree nunca aberto): recusa, e nada nasce."""
     apagada = tmp_path / "bancada-apagada"
-    monkeypatch.setenv("PF_BANCADA", str(apagada))
+    monkeypatch.setenv("PLATAFIRMA_BANCADA", str(apagada))
     r = s.write_file(path="wt/platafirma-core/fabrica/nota.md", content="x\n")
     assert r.get("recusado") and "repo abrir" in r["motivo"], r
     r = s.write_file(path="platafirma-core/README.md", content="x\n")
@@ -155,7 +155,7 @@ def test_write_file_nao_recria_bancada_nem_worktree(monkeypatch, tmp_path, sem_p
     assert not apagada.exists()
     viva = tmp_path / "bancada-viva"
     (viva / "wt" / "platafirma-core").mkdir(parents=True)
-    monkeypatch.setenv("PF_BANCADA", str(viva))
+    monkeypatch.setenv("PLATAFIRMA_BANCADA", str(viva))
     r = s.write_file(path="wt/platafirma-core/outra-cadeira/nota.md", content="x\n")
     assert r.get("recusado") and "repo abrir" in r["motivo"], r
     assert not (viva / "wt" / "platafirma-core" / "outra-cadeira").exists()

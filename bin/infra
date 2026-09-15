@@ -503,10 +503,10 @@ backup() {
 
 # `infra instalar` saiu (desenho #3010 §2; arq:0109 Consequencias): nao existe mais bin servido
 # por copia nem diretorio de symlinks de verbos. O PATH e a release no ar,
-# $PF_RELEASE/harness/bin, e verbo novo chega ao ar por `release promover platafirma-harness <rev>`.
+# $PLATAFIRMA_RELEASE/harness/bin, e verbo novo chega ao ar por `release promover platafirma-harness <rev>`.
 instalar() {
   echo "erro: \`infra instalar\` saiu — nao ha bin servido por copia." >&2
-  echo "       o PATH e a release no ar: $PF_RELEASE/harness/bin" >&2
+  echo "       o PATH e a release no ar: $PLATAFIRMA_RELEASE/harness/bin" >&2
   echo "       verbo novo vai ao ar por: release promover platafirma-harness <rev>" >&2
   exit 2
 }

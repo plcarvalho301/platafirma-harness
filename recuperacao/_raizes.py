@@ -5,7 +5,7 @@ por realpath deste arquivo — nunca por raiz montada a mao. Daqui saem as duas 
 producao (release e instancia); a bancada nunca e lida por este pacote.
 
 `TOKENIZADOR` e o artefato de terceiro pinado da casa (qwen2.5): mora dentro da arvore da
-familia, em `terceiros/tokenizers/`, e chega pela release. `PF_TOKENIZADOR` existe para
+familia, em `terceiros/tokenizers/`, e chega pela release. `PLATAFIRMA_TOKENIZADOR` existe para
 teste e CI apontarem um arquivo baixado fora da arvore.
 """
 
@@ -23,6 +23,6 @@ if (_LIB / "raizes.py").is_file() and str(_LIB) not in sys.path:
 from raizes import instancia, release, release_raiz  # noqa: E402
 
 TOKENIZADOR = os.environ.get(
-    "PF_TOKENIZADOR", str(ARVORE / "terceiros" / "tokenizers" / "qwen2.5.json"))
+    "PLATAFIRMA_TOKENIZADOR", str(ARVORE / "terceiros" / "tokenizers" / "qwen2.5.json"))
 
 __all__ = ["ARVORE", "TOKENIZADOR", "instancia", "release", "release_raiz"]

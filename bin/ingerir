@@ -49,7 +49,7 @@ USO = """uso:
 
 opções obrigatórias (uma das duas fontes):
   --lote <pasta>         pasta local com arquivos do lote a ingerir
-  --origem <o>           pasta do Drive a espelhar para $PF_INSTANCIA/var/entrada antes de ingerir;
+  --origem <o>           pasta do Drive a espelhar para $PLATAFIRMA_INSTANCIA/var/entrada antes de ingerir;
                          aceita 'gdrive:<caminho>' ou URL drive/.../folders/<ID>
   --motor <inst>         instância do motor (ex: --motor rag)
 
@@ -207,7 +207,7 @@ def _resolver_gdrive(caminho: str) -> str:
 
 def aterrissar_origem(origem: str) -> str:
     # Etapa 1 do runbook ingestao-do-drive, como ato do verbo: espelha uma
-    # pasta do Drive para $PF_INSTANCIA/var/entrada e devolve o caminho local (o --lote).
+    # pasta do Drive para $PLATAFIRMA_INSTANCIA/var/entrada e devolve o caminho local (o --lote).
     remote = _resolver_gdrive(origem)
     slug = _slug_origem(origem)
     data = time.strftime("%Y%m%d")

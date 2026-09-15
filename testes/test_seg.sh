@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Testes do verbo seg nas raizes do desenho #3010: cofre em $PF_INSTANCIA/segredos, trilha em
-# $PF_INSTANCIA/var/log/seg, evidencia e regua derivada em $PF_INSTANCIA/var/oscap, ferramental
+# Testes do verbo seg nas raizes do desenho #3010: cofre em $PLATAFIRMA_INSTANCIA/segredos, trilha em
+# $PLATAFIRMA_INSTANCIA/var/log/seg, evidencia e regua derivada em $PLATAFIRMA_INSTANCIA/var/oscap, ferramental
 # de terceiro so lido (SEG_SSG_DIR). Tudo num tmp; bancada inexistente.
 set -euo pipefail
 
@@ -13,7 +13,7 @@ trap 'chmod -R u+w "$TMP_DIR" 2>/dev/null || true; rm -rf "$TMP_DIR"' EXIT
 falha() { echo "FALHA: $*" >&2; exit 1; }
 
 INSTANCIA="$TMP_DIR/srv"
-export PF_INSTANCIA="$INSTANCIA" PF_BANCADA="$TMP_DIR/bancada-inexistente" SEG_SSG_DIR="$TMP_DIR/ssg"
+export PLATAFIRMA_INSTANCIA="$INSTANCIA" PLATAFIRMA_BANCADA="$TMP_DIR/bancada-inexistente" SEG_SSG_DIR="$TMP_DIR/ssg"
 unset SEG_SECRETS_DIR SEG_LOG_DIR SEG_OSCAP_DIR SEG_OQS_DIR 2>/dev/null || true
 
 echo "=== seg: instancia ==="
@@ -21,7 +21,7 @@ echo "=== seg: instancia ==="
 echo "--- 1: segredo gravar/ler/listar no cofre da instancia, 0700/0600"
 out="$(printf 'valor-teste' | "$VERBO" segredo gravar core/TOKEN 2>&1)" || falha "gravar: $out"
 grep -q "gravado: core/TOKEN (11 bytes)" <<<"$out" || falha "gravar: $out"
-[ -f "$INSTANCIA/segredos/core/TOKEN" ] || falha "segredo fora de \$PF_INSTANCIA/segredos"
+[ -f "$INSTANCIA/segredos/core/TOKEN" ] || falha "segredo fora de \$PLATAFIRMA_INSTANCIA/segredos"
 [ "$(stat -c %a "$INSTANCIA/segredos")" = "700" ] && [ "$(stat -c %a "$INSTANCIA/segredos/core")" = "700" ] || falha "diretorios do cofre deviam ser 0700"
 [ "$(stat -c %a "$INSTANCIA/segredos/core/TOKEN")" = "600" ] || falha "segredo devia ser 0600"
 [ "$("$VERBO" segredo ler core/TOKEN)" = "valor-teste" ] || falha "ler devolveu outro valor"
@@ -31,7 +31,7 @@ set +e; "$VERBO" segredo ler core/NAO >/dev/null 2>&1; rc=$?; set -e
 [ "$rc" -eq 1 ] || falha "segredo ausente devia sair 1: rc=$rc"
 echo "OK"
 
-echo "--- 2: trilha em \$PF_INSTANCIA/var/log/seg sem valor de segredo"
+echo "--- 2: trilha em \$PLATAFIRMA_INSTANCIA/var/log/seg sem valor de segredo"
 LOG="$INSTANCIA/var/log/seg/seg-$(date +%F).jsonl"
 [ -s "$LOG" ] || falha "trilha ausente em $LOG"
 ! grep -q "valor-teste" "$LOG" || falha "valor de segredo na trilha"
@@ -43,7 +43,7 @@ printf '<a:platform idref="cpe:/o:canonical:ubuntu"/>\n<b:platform idref="#machi
 chmod -R a-w "$SEG_SSG_DIR"
 out="$("$VERBO" ssg derivar ssg-ubuntu2404-ds.xml 2>&1)" || falha "derivar: $out"
 DEST="$INSTANCIA/var/oscap/regua/ssg-ubuntu2404-ds-sem-cpe.xml"
-[ -f "$DEST" ] || falha "regua derivada fora de \$PF_INSTANCIA/var/oscap/regua: $out"
+[ -f "$DEST" ] || falha "regua derivada fora de \$PLATAFIRMA_INSTANCIA/var/oscap/regua: $out"
 ! grep -q 'cpe:/o:' "$DEST" || falha "cpe de SO nao removido"
 grep -q 'idref="#machine"' "$DEST" || falha "applicability de regra perdida"
 rm -f "$DEST"

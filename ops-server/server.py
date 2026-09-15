@@ -17,19 +17,19 @@ alcança o log do proxy, o Referer nem o histórico — e o que trafega ali é c
 de portador.
 
 MULTI-INSTÂNCIA: o mesmo arquivo serve mais de uma instância, uma por usuário do host.
-OPS_NAME, OPS_USER, PF_INSTANCIA e OPS_AUTH_TOKEN separam as instâncias; o default é a
+OPS_NAME, OPS_USER, PLATAFIRMA_INSTANCIA e OPS_AUTH_TOKEN separam as instâncias; o default é a
 instância histórica (claudinho-mcp sob claudinho, instância /srv/platafirma/casa).
 OPS_USER, o log e o bin servido entram nas descrições das tools em tempo de registro —
 sem isso a instância nova se descreve com o usuário e os caminhos da instância velha, e
 o cliente age sobre um caminho que não existe.
 
 RAÍZES (card #3010): código servido vem da release (PF_RELEASE_RAIZ, default
-/opt/platafirma); estado, log e rascunho vêm da instância (PF_INSTANCIA, default
+/opt/platafirma); estado, log e rascunho vêm da instância (PLATAFIRMA_INSTANCIA, default
 /srv/platafirma/casa). A bancada — onde se escreve código — não é raiz de produção: só
 entra quando a chamada pede caminho relativo, e sem bancada declarada a porta recusa
 esse pedido em vez de adivinhar lugar.
 
-AUDITORIA: toda invocação de tool grava uma linha JSONL em PF_INSTANCIA/var/log/ops/, com
+AUDITORIA: toda invocação de tool grava uma linha JSONL em PLATAFIRMA_INSTANCIA/var/log/ops/, com
 retenção declarada (OPS_LOG_RETENCAO_DIAS, podada por cron, não por este processo). O
 campo `sessao` agrupa chamadas de uma mesma sessão de cliente; `sujeito` e `azp` vêm
 do JWT e registram QUEM chamou e por qual cliente OAuth. Atribuição de PERSONA segue
@@ -411,7 +411,7 @@ def _bancada() -> Path | None:
         return None
 
 
-_SEM_BANCADA = ("caminho relativo pede bancada declarada (PF_BANCADA ou "
+_SEM_BANCADA = ("caminho relativo pede bancada declarada (PLATAFIRMA_BANCADA ou "
                 "~/.config/platafirma/bancada) — sem ela, use caminho absoluto")
 
 
@@ -838,7 +838,7 @@ async def _run_command_legado(command: str = "", cwd: str = "", timeout: int = 1
     verbos. Verbo do núcleo tem tool própria (nome = slug); usá-lo por aqui é medido.
 
     cwd vazio = a casa da conta; absoluto vale como está; relativo é relativo à bancada
-    declarada (PF_BANCADA ou ~/.config/platafirma/bancada) e, sem ela, a chamada é
+    declarada (PLATAFIRMA_BANCADA ou ~/.config/platafirma/bancada) e, sem ela, a chamada é
     recusada. timeout em segundos (teto 600); estourou,
     o grupo de processo inteiro é morto. stdout/stderr voltam com truncagem declarada
     (`truncado`/`bytes_total`). `&&` engole o exit code — use `;` ou chamadas separadas.

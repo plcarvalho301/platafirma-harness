@@ -38,7 +38,7 @@ from .base import Adaptador, FonteIndisponivel
 
 # Runtime le da release no ar, nunca de clone de bancada (arq:0097/0109 §1, arq:0102 D6).
 # Cada serie resolve para <release>/<curto>/<sub> — /opt/platafirma/current/arquitetura e
-# /opt/platafirma/current/conhecimento. Override por PF_RELEASE ou `raiz=` (testes).
+# /opt/platafirma/current/conhecimento. Override por PLATAFIRMA_RELEASE ou `raiz=` (testes).
 _CURTO = {
     "platafirma-arquitetura": "arquitetura",
     "platafirma-conhecimento": "conhecimento",

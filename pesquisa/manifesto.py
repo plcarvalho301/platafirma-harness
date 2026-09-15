@@ -1,6 +1,6 @@
 """Manifesto por trabalho e layout em disco (spec §4.8, §2.3).
 
-    /srv/platafirma/casa/var/pesquisa/<trabalho>/   ($PF_INSTANCIA/var/pesquisa; override PF_PESQUISA_DIR)
+    /srv/platafirma/casa/var/pesquisa/<trabalho>/   ($PLATAFIRMA_INSTANCIA/var/pesquisa; override PF_PESQUISA_DIR)
       bruto/          # imutável: byte como veio, nome de origem
       derivado/       # .headers, .md, traduções — tudo que o verbo ou o modelo produziu
       MANIFESTO.jsonl # fonte única; `manifesto --md` renderiza

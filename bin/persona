@@ -7,7 +7,7 @@
 # atos: ler, conduta, foto, abrir, salvar, conferir, prover, designar, afastar, dispensar, desligar, remover, reverter, filme, idade
 # folhas: ler|conduta|foto -> organizacao/leitura (serve o expediente) · abrir|salvar|conferir -> organizacao/redacao ·
 #         prover|designar|dispensar|remover|afastar|reverter|desligar|filme -> organizacao/vinculo (ledger)
-# ambiente: PF_ABERTURA_DIR[=/srv/platafirma/casa/var/abertura-publicada] (leitura, arq:0097) · PF_INSTANCIA[=/srv/platafirma/casa] · PF_BANCADA[sem default; senao a linha de $HOME/.config/platafirma/bancada; ausente = exit 3] (escrita: <bancada>/wt/platafirma-harness/$PF_CADEIRA, senao <bancada>/platafirma-harness) · PERSONA_REPO (override de teste do clone de escrita) · PF_CADEIRA porta
+# ambiente: PF_ABERTURA_DIR[=/srv/platafirma/casa/var/abertura-publicada] (leitura, arq:0097) · PLATAFIRMA_INSTANCIA[=/srv/platafirma/casa] · PLATAFIRMA_BANCADA[sem default; senao a linha de $HOME/.config/platafirma/bancada; ausente = exit 3] (escrita: <bancada>/wt/platafirma-harness/$PF_CADEIRA, senao <bancada>/platafirma-harness) · PERSONA_REPO (override de teste do clone de escrita) · PF_CADEIRA porta
 # depende: morada publicada (ler, conduta, foto); git + origin (abrir, salvar)
 # escreve: abertura/ e registro/eventos-org.jsonl do clone de bancada (salvar); nada em ler|conduta|foto|filme
 #
@@ -24,7 +24,7 @@ set -euo pipefail
 AQUI="$(dirname "$(readlink -f "$0")")"
 . "$AQUI/../lib/raizes.sh"
 
-MORADA="${PF_ABERTURA_DIR:-$PF_INSTANCIA/var/abertura-publicada}"
+MORADA="${PF_ABERTURA_DIR:-$PLATAFIRMA_INSTANCIA/var/abertura-publicada}"
 # Clone de escrita: resolvido so pelos atos que o usam (entra_no_clone). Leitura nunca
 # toca a bancada — sem ela declarada, ler/conduta/foto/conferir seguem servindo.
 REPO="${PERSONA_REPO:-}"

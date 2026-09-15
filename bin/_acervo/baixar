@@ -80,7 +80,7 @@ BUCKET="${OBJETO%%/*}"
 SHA="${OBJETO#*/}"
 
 mkdir -p "$DESTINO"
-"$PF_RELEASE/venv/acervo/bin/python" - "$BUCKET" "$SHA" "$DESTINO/$ARQUIVO" <<'EOF'
+"$PLATAFIRMA_RELEASE/venv/acervo/bin/python" - "$BUCKET" "$SHA" "$DESTINO/$ARQUIVO" <<'EOF'
 import sys, subprocess, boto3
 bucket, sha, destino = sys.argv[1], sys.argv[2], sys.argv[3]
 fmt = "{{range .Config.Env}}{{println .}}{{end}}"

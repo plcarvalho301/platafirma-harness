@@ -22,8 +22,8 @@
 # cadeiras. Desde 15/09 a fonte e a release (compose e PAP) e a instancia (estado e
 # segredo); nenhum caminho sai de clone.
 #
-# ambiente: PF_RELEASE_RAIZ (default /opt/platafirma), PF_RELEASE (default
-#           $PF_RELEASE_RAIZ/current), PF_INSTANCIA (default /srv/platafirma/casa).
+# ambiente: PF_RELEASE_RAIZ (default /opt/platafirma), PLATAFIRMA_RELEASE (default
+#           $PF_RELEASE_RAIZ/current), PLATAFIRMA_INSTANCIA (default /srv/platafirma/casa).
 set -uo pipefail
 
 . "$(dirname "$(readlink -f "$0")")/../lib/raizes.sh"
@@ -35,12 +35,12 @@ BASE=/srv/pf
 DEPLOY=$BASE/agy
 MIG=$BASE/mig
 ENTRADA=$BASE/entrada-jaiminho
-ORIGEM="$PF_RELEASE/harness"
+ORIGEM="$PLATAFIRMA_RELEASE/harness"
 # Binds de host que o compose da release declara e que este script reescreve para a
 # arvore da conta. Mesmos caminhos da instancia que o compose usa (desenho §3).
-ENTRADA_INSTANCIA="$PF_INSTANCIA/var/entrada-jaiminho"
-LOG_INSTANCIA="$PF_INSTANCIA/var/log/jaiminho"
-TOKEN_GOOGLE="$PF_INSTANCIA/segredos/google/token.json"
+ENTRADA_INSTANCIA="$PLATAFIRMA_INSTANCIA/var/entrada-jaiminho"
+LOG_INSTANCIA="$PLATAFIRMA_INSTANCIA/var/log/jaiminho"
+TOKEN_GOOGLE="$PLATAFIRMA_INSTANCIA/segredos/google/token.json"
 VOLUMES=(jaiminho_casa jaiminho_credenciais jaiminho_trabalho
          jaiminho-fabrica_casa jaiminho-fabrica_credenciais)
 BRACOS=(jaiminho jaiminho-fabrica)
@@ -148,18 +148,18 @@ for stack in jaiminho jaiminho-fabrica; do
   # Binds de instancia (token, trilha) moram na sobreposicao da instancia desde o
   # card #3010, nao na base: reescrita igual, ao lado da base, onde `docker compose`
   # a carrega sozinho.
-  if [ -f "$PF_INSTANCIA/deploy/$stack/compose.override.yaml" ]; then
+  if [ -f "$PLATAFIRMA_INSTANCIA/deploy/$stack/compose.override.yaml" ]; then
     sed -e 's|'"$ENTRADA_INSTANCIA"'|'"$ENTRADA"'|g' \
         -e 's|'"$LOG_INSTANCIA"'|'"$BASE/log-jaiminho"'|g' \
         -e 's|'"$TOKEN_GOOGLE"'|'"$DEPLOY/google-token.json"'|g' \
-        "$PF_INSTANCIA/deploy/$stack/compose.override.yaml" > "$DEPLOY/$stack/compose.override.yaml"
+        "$PLATAFIRMA_INSTANCIA/deploy/$stack/compose.override.yaml" > "$DEPLOY/$stack/compose.override.yaml"
   fi
   # Segredo da stack: um arquivo por variavel no cofre da instancia (desenho §3),
   # materializado no .env da arvore da conta, 0600. Nunca .env de arvore de repo.
-  if [ -d "$PF_INSTANCIA/segredos/$stack" ]; then
+  if [ -d "$PLATAFIRMA_INSTANCIA/segredos/$stack" ]; then
     ( umask 077
       : > "$DEPLOY/$stack/.env"
-      for s in "$PF_INSTANCIA/segredos/$stack"/*; do
+      for s in "$PLATAFIRMA_INSTANCIA/segredos/$stack"/*; do
         [ -f "$s" ] && printf '%s=%s\n' "$(basename "$s")" "$(cat "$s")" >> "$DEPLOY/$stack/.env"
       done )
     chmod 0600 "$DEPLOY/$stack/.env"

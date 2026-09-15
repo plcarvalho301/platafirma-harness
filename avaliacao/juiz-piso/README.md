@@ -17,7 +17,7 @@ suba na recuperação.
 1. **`juiz_banda.py`** — lê `banda_lt40.jsonl` (dump da banda), julga item a item,
    faz **checkpoint linha-a-linha** em `juiz_banda.out.jsonl`. **Não toca o banco.**
    Dump e checkpoint moram em `/srv/platafirma/casa/dados/avaliacao/juiz-piso/`
-   (`$PF_INSTANCIA/dados/avaliacao/juiz-piso/`).
+   (`$PLATAFIRMA_INSTANCIA/dados/avaliacao/juiz-piso/`).
    - Resumível: ao subir, pula ids já julgados; `erro` é re-tentado no próximo lance.
    - Kill-safe: `flush`+`fsync` por item; matar no meio perde no máximo o item em voo.
    - `JUIZ_MODELO`, `JUIZ_BANDA`, `JUIZ_OUT`, `JUIZ_LIMIT` (0=banda inteira), `JUIZ_LOG_A_CADA`.

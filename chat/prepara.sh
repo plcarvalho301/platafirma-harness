@@ -8,8 +8,8 @@
 #
 # Nada aqui ecoa valor de segredo. O que sai na tela e nome e presenca.
 #
-# ambiente: PF_INSTANCIA (default /srv/platafirma/casa), PF_COFRE (default
-# $PF_INSTANCIA/segredos/matrix), PF_SEGREDOS_STACK (default $PF_INSTANCIA/segredos/chat).
+# ambiente: PLATAFIRMA_INSTANCIA (default /srv/platafirma/casa), PF_COFRE (default
+# $PLATAFIRMA_INSTANCIA/segredos/matrix), PLATAFIRMA_SEGREDOS_STACK (default $PLATAFIRMA_INSTANCIA/segredos/chat).
 #
 # Nada nasce na arvore do codigo (card #3010): o cofre e a instancia. As variaveis que o
 # compose interpola viram um arquivo cada em segredos/chat/, e o `deploy` materializa
@@ -19,8 +19,8 @@ set -euo pipefail
 . "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/../lib/raizes.sh"
 
 export DOCKER_HOST="${DOCKER_HOST:-unix:///run/user/$(id -u)/docker.sock}"
-COFRE="${PF_COFRE:-$PF_INSTANCIA/segredos/matrix}"
-SEGREDOS_STACK="${PF_SEGREDOS_STACK:-$PF_INSTANCIA/segredos/chat}"
+COFRE="${PF_COFRE:-$PLATAFIRMA_INSTANCIA/segredos/matrix}"
+SEGREDOS_STACK="${PLATAFIRMA_SEGREDOS_STACK:-$PLATAFIRMA_INSTANCIA/segredos/chat}"
 SYNAPSE_IMG="ghcr.io/element-hq/synapse:v1.157.2"
 
 umask 077

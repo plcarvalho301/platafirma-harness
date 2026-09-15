@@ -43,7 +43,7 @@ TRABALHO=/home/jaiminho/trabalho/3005
 REPO_NOME=platafirma-ui
 REPO_FONTE=${REPO_FONTE:-$PF_RELEASE_RAIZ/$REPO_NOME/.repo.git}
 # Canario do perimetro: o que a conta NAO pode ler. /opt e legivel por desenho.
-PERIMETRO=${PERIMETRO:-$PF_INSTANCIA/segredos}
+PERIMETRO=${PERIMETRO:-$PLATAFIRMA_INSTANCIA/segredos}
 SUBDIR=src/base          # o unico pacote da stack com script de build de verdade
 
 falhou=0

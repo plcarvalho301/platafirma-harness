@@ -25,7 +25,7 @@ except ImportError:
 
     def release() -> pathlib.Path:
         raiz = os.environ.get("PF_RELEASE_RAIZ", "/opt/platafirma")
-        return pathlib.Path(os.environ.get("PF_RELEASE", raiz + "/current"))
+        return pathlib.Path(os.environ.get("PLATAFIRMA_RELEASE", raiz + "/current"))
 
 TOKENS = release() / "ui" / "src" / "tokens.css"
 

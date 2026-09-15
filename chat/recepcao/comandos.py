@@ -6,7 +6,7 @@ proximo giro, nao uma resposta do modelo.
 
 O que NAO se resolve aqui, e por que:
 
-  - **Nao e `settings.json`.** `chat` reescreve `$PF_INSTANCIA/var/fitas/<cadeira>/.claude/`
+  - **Nao e `settings.json`.** `chat` reescreve `$PLATAFIRMA_INSTANCIA/var/fitas/<cadeira>/.claude/`
     a cada giro (`prepara_cwd`), de proposito. Ajuste gravado la se perde no
     giro seguinte, e o dono ficaria configurando no vazio.
   - **Nao e variavel de ambiente.** `PF_CHAT_MODELO` vale para o worker inteiro

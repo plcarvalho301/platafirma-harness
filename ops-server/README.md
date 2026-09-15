@@ -12,9 +12,9 @@ Servidor MCP que expõe os verbos de operação sob o usuário `claudinho`:
   `uvicorn server:app`): o código novo chega por `release promover`, que troca `current`
   e reinicia a porta. Nunca roda de clone de bancada.
 - Raízes: código em `/opt/platafirma` (`PF_RELEASE_RAIZ`), estado e log em
-  `/srv/platafirma/casa` (`PF_INSTANCIA`). A porta sobe sem bancada declarada; caminho
+  `/srv/platafirma/casa` (`PLATAFIRMA_INSTANCIA`). A porta sobe sem bancada declarada; caminho
   relativo em `run_command`/`read_file`/`write_file` é relativo à bancada
-  (`PF_BANCADA` ou `~/.config/platafirma/bancada`) e, sem ela, é recusado.
+  (`PLATAFIRMA_BANCADA` ou `~/.config/platafirma/bancada`) e, sem ela, é recusado.
 - `ops-tunnel.service` — túnel Cloudflare que publica `ops.platafirma.org/mcp` → :8010.
 - `ops-healthcheck.service` + `.timer` — bate `/health` periodicamente e reinicia o
   `ops-mcp` se ele parar de responder. É a rede de segurança de qualquer restart.

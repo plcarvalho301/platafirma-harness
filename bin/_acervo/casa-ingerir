@@ -48,7 +48,7 @@ TOKEN = os.environ.get("RAG_API_TOKEN") or DEFAULT_TOKEN
 
 # Fonte de casa e a PRODUCAO, nunca a bancada (card #3010): a release no ar publica cada
 # familia em <release>/<curto> (platafirma-arquitetura -> arquitetura), estavel entre
-# promocoes. Override so para teste, por PF_RELEASE/PF_RELEASE_RAIZ.
+# promocoes. Override so para teste, por PLATAFIRMA_RELEASE/PF_RELEASE_RAIZ.
 sys.path.insert(0, os.path.join(os.path.dirname(HARNESS_DIR), "lib"))
 from raizes import release  # noqa: E402
 

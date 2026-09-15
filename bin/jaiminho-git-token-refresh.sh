@@ -23,10 +23,10 @@ set -uo pipefail
 . "$(dirname "$(readlink -f "$0")")/../lib/raizes.sh"
 # Chave e log moram na instancia (segredos/<stack>/ e var/log/<servico>/), nunca em
 # arvore de trabalho: a credencial tem de renovar com a bancada apagada.
-KEY="$PF_INSTANCIA/segredos/jaiminho-app/app.pem"
+KEY="$PLATAFIRMA_INSTANCIA/segredos/jaiminho-app/app.pem"
 APP_ID=4762140
 INSTALL_ID=157525921
-LOG="$PF_INSTANCIA/var/log/jaiminho/git-token.log"
+LOG="$PLATAFIRMA_INSTANCIA/var/log/jaiminho/git-token.log"
 # Sem o diretorio o `>>` do registra falha calado e a FALHA some do log: cria antes.
 mkdir -p "$(dirname "$LOG")" 2>/dev/null || true
 export DOCKER_HOST="${PF_JAIMINHO_DOCKER_HOST:-unix:///run/user/1003/docker.sock}"

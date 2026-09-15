@@ -523,7 +523,7 @@ def planta_skills(dot, cadeira):
 
 
 def prepara_cwd(cadeira, modelo=""):
-    """$PF_INSTANCIA/var/fitas/<cadeira>/ com allowlist e anexos/. Criado pelo verbo se faltar —
+    """$PLATAFIRMA_INSTANCIA/var/fitas/<cadeira>/ com allowlist e anexos/. Criado pelo verbo se faltar —
     a recepcao grava anexo ali e nao tem por que saber montar o diretorio.
 
     O diretorio se chama `anexos` por medicao de 15/08: com o nome de caixa de
@@ -615,7 +615,7 @@ def ambiente_do_giro(cadeira):
 # allowlist da fita nega `Read(//home/claudinho/.config/**)` de proposito, e essa
 # negativa continua valendo — quem abre o arquivo e o processo que monta o giro,
 # nao o modelo. Duas formas: `env` e arquivo CHAVE=valor (o EnvironmentFile da
-# porta); `nome` e um arquivo por variavel em $PF_INSTANCIA/segredos/<stack>/ (card
+# porta); `nome` e um arquivo por variavel em $PLATAFIRMA_INSTANCIA/segredos/<stack>/ (card
 # #3010) — nenhum `.env` em arvore de repo ou de deploy.
 FONTES_DE_SEGREDO = (
     ("env", os.path.expanduser("~/.config/ops/env"), "OPS_AUTH_TOKEN", "PF_OPS_TOKEN"),

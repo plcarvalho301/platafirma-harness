@@ -19,15 +19,15 @@ def release_raiz() -> Path:
 
 def release() -> Path:
     """Atalhos estaveis da release no ar: <raiz>/current/<familia-curta>."""
-    return Path(os.environ.get("PF_RELEASE", str(release_raiz() / "current")))
+    return Path(os.environ.get("PLATAFIRMA_RELEASE", str(release_raiz() / "current")))
 
 
 def instancia() -> Path:
-    return Path(os.environ.get("PF_INSTANCIA", "/srv/platafirma/casa"))
+    return Path(os.environ.get("PLATAFIRMA_INSTANCIA", "/srv/platafirma/casa"))
 
 
 def arquivo_bancada() -> Path:
-    return Path(os.environ.get("PF_ARQUIVO_BANCADA", str(Path.home() / ".config" / "platafirma" / "bancada")))
+    return Path(os.environ.get("PLATAFIRMA_ARQUIVO_BANCADA", str(Path.home() / ".config" / "platafirma" / "bancada")))
 
 
 class BancadaNaoDeclarada(RuntimeError):
@@ -35,12 +35,12 @@ class BancadaNaoDeclarada(RuntimeError):
 
 
 def bancada() -> Path:
-    valor = os.environ.get("PF_BANCADA", "").strip()
+    valor = os.environ.get("PLATAFIRMA_BANCADA", "").strip()
     arq = arquivo_bancada()
     if not valor and arq.is_file():
         linhas = arq.read_text(encoding="utf-8").splitlines()
         valor = linhas[0].strip() if linhas else ""
     if not valor:
         raise BancadaNaoDeclarada(
-            f"bancada nao declarada: defina PF_BANCADA ou escreva a raiz em {arq}")
+            f"bancada nao declarada: defina PLATAFIRMA_BANCADA ou escreva a raiz em {arq}")
     return Path(valor)

@@ -9,8 +9,8 @@
 #         anota|limpa|legado -> trabalho/mesa, transicao · fita -> pende (guarda de fita e de sessao)
 # ambiente: PF_CADEIRA (obrigatoria, origem porta), PF_FITA, PF_SUPERFICIE[=desconhecida],
 #           MEM_REDIS_HOST[=127.0.0.1], MEM_REDIS_PORT[=6380], SESSAO_PG_PORT[=5437],
-#           PF_INSTANCIA[=/srv/platafirma/casa], PF_ABERTURA_DIR[=$PF_INSTANCIA/var/abertura-publicada],
-#           SESSAO_PG_PASSWORD (segredo; lido de $PF_INSTANCIA/segredos/harness-sessao/SESSAO_PG_PASSWORD, a variavel e transicao, nao forma)
+#           PLATAFIRMA_INSTANCIA[=/srv/platafirma/casa], PF_ABERTURA_DIR[=$PLATAFIRMA_INSTANCIA/var/abertura-publicada],
+#           SESSAO_PG_PASSWORD (segredo; lido de $PLATAFIRMA_INSTANCIA/segredos/harness-sessao/SESSAO_PG_PASSWORD, a variavel e transicao, nao forma)
 # depende: msg-mem (Valkey), Postgres da sessao, arvore abertura/ (cadernos)
 # escreve: sessao.mesa_item (item, fez), mem:<cadeira>:<slot> (anota, limpa), fita:<cadeira> (fita)
 #
@@ -131,7 +131,7 @@ def conn():
 
 
 def dsn():
-    """DSN do harness-sessao. Senha sai de `$PF_INSTANCIA/segredos/harness-sessao/SESSAO_PG_PASSWORD`,
+    """DSN do harness-sessao. Senha sai de `$PLATAFIRMA_INSTANCIA/segredos/harness-sessao/SESSAO_PG_PASSWORD`,
     um arquivo por nome, 600 e fora de qualquer repo — o verbo roda como `claudinho`, dono
     do arquivo, e nao ha segredo em codigo. Nunca se procura `.env` em arvore."""
     d = os.environ.get("SESSAO_PG_DSN")

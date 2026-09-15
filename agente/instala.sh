@@ -3,7 +3,7 @@
 # Idempotente, sem privilégio. Fonte: /opt/platafirma/current/harness/agente;
 # destino é o que o Code lê (~/.claude).
 #
-# ambiente: PF_RELEASE_RAIZ (default /opt/platafirma), PF_RELEASE (default
+# ambiente: PF_RELEASE_RAIZ (default /opt/platafirma), PLATAFIRMA_RELEASE (default
 #           $PF_RELEASE_RAIZ/current). Só para teste apontar outra árvore.
 #
 # Por que da release e nunca do clone: o que o Code lê em toda sessão é produção. Ligado
@@ -15,7 +15,7 @@ set -euo pipefail
 
 . "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/../lib/raizes.sh"
 
-FONTE="$PF_RELEASE/harness/agente"
+FONTE="$PLATAFIRMA_RELEASE/harness/agente"
 DESTINO="$HOME/.claude"
 
 if [ ! -f "$FONTE/CLAUDE.md" ] || [ ! -f "$FONTE/settings.json" ]; then
@@ -65,10 +65,10 @@ copia "$FONTE/settings.json" "$DESTINO/settings.json"
 
 # Shims de instancia: para toda INSTANCIA cujo nome != o verbo que serve
 # (rastreador->tarefas, keycloak->acesso), materializa um redirecionador que
-# avisa e delega, em $PF_INSTANCIA/var/shims (estado da instância, nunca ~/.local/bin).
+# avisa e delega, em $PLATAFIRMA_INSTANCIA/var/shims (estado da instância, nunca ~/.local/bin).
 # Dirigido pelo acervo, nao por lista fixa: instancia nova no golden record ganha shim
 # aqui, sem editar este script.
-GERADOR="$PF_RELEASE/harness/bin/_shims-instancia"
+GERADOR="$PLATAFIRMA_RELEASE/harness/bin/_shims-instancia"
 if [ -x "$GERADOR" ]; then
   bash "$GERADOR" || echo "aviso: gerador de shims de instancia falhou (segue sem)"
 fi
@@ -78,7 +78,7 @@ fi
 # contrato dela nega) nem `osint` (ambiente isolado, outra colaboradora).
 SKILLS_DA_FABRICA=()   # vazio até existir skills/fabrica/
 
-SKILLS="$PF_RELEASE/harness/skills"
+SKILLS="$PLATAFIRMA_RELEASE/harness/skills"
 mkdir -p "$DESTINO/skills"
 for nome in ${SKILLS_DA_FABRICA[@]+"${SKILLS_DA_FABRICA[@]}"}; do
   if [ -d "$SKILLS/$nome" ]; then

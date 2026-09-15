@@ -9,7 +9,7 @@
 # folhas: montar -> expediente/pacote · rotear -> expediente/chapeu · catalogo -> expediente/catalogo
 # escreve: registro do pacote servido (sessao.fita/pacote/peca_servida — transição, direto); nada em rotear|catalogo
 # consome: persona, mesa, motor, acervo
-# ambiente: PF_CADEIRA (obrigatória; origem: verbo `sessao abrir`, injetada pela porta), PF_SESSAO e PF_ORDEM_ID (origem: verbo `sessao abrir`), PF_SUPERFICIE[=desconhecida] e PF_FITA (origem: superfície), PF_PODA[=1] (origem: superfície; 0 desliga o portão de cobertura), PF_INSTANCIA[=/srv/platafirma/casa] e PF_ABERTURA_DIR[=$PF_INSTANCIA/var/abertura-publicada] (origem: superfície/instalação), PF_BIN[=bin/ da própria release] (só teste com stub), SESSAO_PG_PORT[=5437] (constante do verbo); SESSAO_PG_PASSWORD é segredo, entra por `seg segredo ler` no processo (transição Q11: aceita a variável só quando o verbo não responde)
+# ambiente: PF_CADEIRA (obrigatória; origem: verbo `sessao abrir`, injetada pela porta), PF_SESSAO e PF_ORDEM_ID (origem: verbo `sessao abrir`), PF_SUPERFICIE[=desconhecida] e PF_FITA (origem: superfície), PF_PODA[=1] (origem: superfície; 0 desliga o portão de cobertura), PLATAFIRMA_INSTANCIA[=/srv/platafirma/casa] e PF_ABERTURA_DIR[=$PLATAFIRMA_INSTANCIA/var/abertura-publicada] (origem: superfície/instalação), PF_BIN[=bin/ da própria release] (só teste com stub), SESSAO_PG_PORT[=5437] (constante do verbo); SESSAO_PG_PASSWORD é segredo, entra por `seg segredo ler` no processo (transição Q11: aceita a variável só quando o verbo não responde)
 # depende: persona, mesa, motor, seg (segredo do registro), comum/hash_servido, lib/uso, tokenizador da casa (terceiros/tokenizers da própria release, fallback bytes/4 declarado), Postgres da sessão (registro do pacote — transição até a API da entidade-sessão)
 # substitui: monta-sessao <cadeira> na parte que monta; a lib recuperacao/roteador_chapeu importada por caminho
 # conforme: parcial — catálogo no cabeçalho até dados averbar a espécie no acervo; registro direto no Postgres até a API da entidade-sessão; rotas de rotas-chapeu.json da morada publicada até virem do golden record de conceitos
@@ -104,8 +104,8 @@ CATALOGO = [
 from raizes import instancia  # noqa: E402  (lib/ ja esta no sys.path)
 
 # Artefato de terceiro pinado: dentro da arvore da familia, por realpath (card #3010) —
-# o mesmo caminho de monta-sessao. PF_TOKENIZADOR so existe para teste passar fixture.
-TOKENIZADOR = (os.environ.get("PF_TOKENIZADOR")
+# o mesmo caminho de monta-sessao. PLATAFIRMA_TOKENIZADOR so existe para teste passar fixture.
+TOKENIZADOR = (os.environ.get("PLATAFIRMA_TOKENIZADOR")
                or str(_REPO_REAL / "terceiros" / "tokenizers" / "qwen2.5.json"))
 # Verbos irmaos: bin/ da propria release. PF_BIN so aponta outro diretorio (teste com stub).
 BIN = Path(os.environ.get("PF_BIN") or (_REPO_REAL / "bin"))
