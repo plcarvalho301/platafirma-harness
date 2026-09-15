@@ -749,7 +749,7 @@ cmd_conferir() {
       printf 'release: erro: familia %s sem espelho — promova uma vez antes de medir por --ref\n' "$FAMILIA_BIN" >&2
       exit 2
     fi
-    "$GIT" --git-dir="$esp" fetch -q --prune origin '+refs/heads/*:refs/remotes/origin/*' '+refs/tags/*:refs/tags/*' 2>/dev/null || true
+    atualizar_espelho "$esp" || true
     local sha; sha="$(resolver_rev "$FAMILIA_BIN" "$ref")" || {
       printf 'release: recusa: rev '\''%s'\'' nao esta no forge de %s\n' "$ref" "$FAMILIA_BIN" >&2
       exit 4
@@ -811,6 +811,27 @@ for s in d:
 
 espelho_de() { printf '%s/%s/%s' "$PROD_RAIZ" "$1" "$ESPELHO"; }
 
+# O espelho so tem tres leituras legitimas: sha, tag e ramo do ORIGIN (refs/remotes/origin/*).
+# refs/heads/* do espelho e referencia fossil (arq:0074): nasce no `clone --bare` e nunca mais
+# e atualizado (o fetch so escreve refs/remotes/origin/* e refs/tags/*). Resolver `main` contra
+# ele promoveu o passado (incidente 14/09: `promover harness main` -> ac68756, com origin/main
+# em 26afbf0). Producao e checkout de origin/main (arq:0109 §1); nada aponta pro fossil.
+# Detectou fossil, expurga no mesmo ato (arq:0074): toda atualizacao do espelho apaga refs/heads/*.
+expurgar_fossil_espelho() {  # $1=esp
+  local esp="$1" ref
+  while IFS= read -r ref; do
+    [ -n "$ref" ] || continue
+    "$GIT" --git-dir="$esp" update-ref -d "$ref" 2>/dev/null || true
+  done < <("$GIT" --git-dir="$esp" for-each-ref --format='%(refname)' refs/heads/ 2>/dev/null)
+}
+
+atualizar_espelho() {  # $1=esp ; fetch do origin + expurgo do fossil; 0 ok, 3 forge fora do ar
+  local esp="$1"
+  "$GIT" --git-dir="$esp" fetch -q --prune origin '+refs/heads/*:refs/remotes/origin/*' '+refs/tags/*:refs/tags/*' 2>/dev/null || return 3
+  expurgar_fossil_espelho "$esp"
+  return 0
+}
+
 # garante o espelho bare da família; primeira vez clona da URL do origin da bancada
 garantir_espelho() {
   local repo="$1" ensaio="$2" esp; esp="$(espelho_de "$repo")"
@@ -819,7 +840,7 @@ garantir_espelho() {
       printf 'espelho:   %s (sem fetch em ensaio)\n' "$esp"
       return 0
     fi
-    "$GIT" --git-dir="$esp" fetch -q --prune origin '+refs/heads/*:refs/remotes/origin/*' '+refs/tags/*:refs/tags/*' 2>/dev/null || {
+    atualizar_espelho "$esp" || {
       printf 'release: dependência ausente: forge fora do ar (fetch em %s falhou)\n' "$esp" >&2
       return 3
     }
@@ -842,21 +863,27 @@ garantir_espelho() {
     printf 'release: dependência ausente: forge fora do ar (clone de %s falhou)\n' "$url" >&2
     return 3
   }
-  "$GIT" --git-dir="$esp" fetch -q --prune origin '+refs/heads/*:refs/remotes/origin/*' '+refs/tags/*:refs/tags/*' 2>/dev/null || true
+  atualizar_espelho "$esp" || true
   return 0
 }
 
-# resolve <rev> (sha, tag, ramo remoto) para sha no espelho; sem rev, origin/main
+# resolve <rev> para sha no espelho por tres portas, nesta ordem: sha (7-40 hex), tag, ramo do
+# origin (`main` e `origin/main` sao a mesma coisa: refs/remotes/origin/main). Sem rev, origin/main.
+# Nunca consulta refs/heads/* do espelho — e fossil, e garantir_espelho o expurga (arq:0074, 0109 §1).
 resolver_rev() {
   local repo="$1" rev="$2" esp; esp="$(espelho_de "$repo")"
-  local alvo="${rev:-origin/main}"
-  local sha
-  sha="$("$GIT" --git-dir="$esp" rev-parse --verify -q "${alvo}^{commit}" 2>/dev/null || true)"
-  if [ -z "$sha" ]; then
-    [ -n "$rev" ] || return 1
-    sha="$("$GIT" --git-dir="$esp" rev-parse --verify -q "refs/tags/${rev}^{commit}" 2>/dev/null || true)"
-    [ -n "$sha" ] || sha="$("$GIT" --git-dir="$esp" rev-parse --verify -q "refs/remotes/origin/${rev}^{commit}" 2>/dev/null || true)"
+  local sha=""
+  if [ -z "$rev" ]; then
+    sha="$("$GIT" --git-dir="$esp" rev-parse --verify -q 'refs/remotes/origin/main^{commit}' 2>/dev/null || true)"
+    [ -n "$sha" ] || return 1
+    printf '%s' "$sha"; return 0
   fi
+  if [[ "$rev" =~ ^[0-9a-fA-F]{7,40}$ ]]; then
+    sha="$("$GIT" --git-dir="$esp" rev-parse --verify -q "${rev}^{commit}" 2>/dev/null || true)"
+  fi
+  [ -n "$sha" ] || sha="$("$GIT" --git-dir="$esp" rev-parse --verify -q "refs/tags/${rev}^{commit}" 2>/dev/null || true)"
+  [ -n "$sha" ] || sha="$("$GIT" --git-dir="$esp" rev-parse --verify -q "refs/remotes/origin/${rev}^{commit}" 2>/dev/null || true)"
+  [ -n "$sha" ] || sha="$("$GIT" --git-dir="$esp" rev-parse --verify -q "refs/remotes/${rev}^{commit}" 2>/dev/null || true)"
   [ -n "$sha" ] || return 1
   printf '%s' "$sha"
 }

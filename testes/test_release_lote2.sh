@@ -102,8 +102,31 @@ grep -q "^$H_SHA1 " "$PONTOS/platafirma-harness/atual" || falha "atual não grav
 grep -q "deploy harness-controle promover $H_SHA1" "$DEPLOY_LOG" || falha "stack via promover não promovida"
 ! grep -q "deploy chat" "$DEPLOY_LOG" || falha "stack via up foi promovida"
 grep -q "fora da promoção por release" <<<"$out" || falha "stack via up não declarada"
-grep -q "systemd-run" "$DEPLOY_LOG" || falha "restart da porta não agendado"
+# rev 5: o restart NAO e do verbo (observador pf-porta-watch); o verbo so informa
+! grep -q "systemd-run" "$DEPLOY_LOG" || falha "rev 5: release nao agenda restart (e do observador)"
+grep -q "pf-porta-watch" <<<"$out" || falha "nota do observador ausente no relato"
 [ "$(tail -1 <<<"$out")" = "$H_SHA1" ] || falha "última linha devia ser o sha"
+echo "OK"
+
+echo "--- 3b: alias 'main' resolve origin/main, nunca refs/heads/main fossil do espelho (arq:0074, 0109 §1)"
+# Regressao do incidente 14/09: o espelho bare nasce com refs/heads/main congelado no clone e o
+# fetch so atualiza refs/remotes/origin/*; `promover main` resolvia o fossil e promovia o passado.
+# Aqui o espelho ja existe (caso 3) com heads/main = sha2 (topo no clone). Avanca-se o origin
+# para sha_novo e promove-se por alias: tem de ir a sha_novo, e refs/heads/* tem de sumir do espelho.
+ESP="$PROD_RAIZ/platafirma-harness/.repo.git"
+[ -d "$ESP" ] || falha "espelho nao existe apos o caso 3"
+git -C "$REPO_RAIZ/platafirma-harness" checkout -q main
+echo "v-alias" > "$REPO_RAIZ/platafirma-harness/README.md"; git -C "$REPO_RAIZ/platafirma-harness" commit -q -am c-alias
+git -C "$REPO_RAIZ/platafirma-harness" push -q origin main
+H_SHA_ALIAS="$(git -C "$REPO_RAIZ/platafirma-harness" rev-parse HEAD)"
+out="$("$VERBO" promover platafirma-harness main 2>&1)" || falha "promover main: $out"
+[ "$(readlink "$PROD_RAIZ/platafirma-harness/current")" = "$H_SHA_ALIAS" ] || falha "alias main promoveu fossil: current=$(readlink "$PROD_RAIZ/platafirma-harness/current") esperado=$H_SHA_ALIAS"
+[ -z "$(git --git-dir="$ESP" for-each-ref refs/heads/)" ] || falha "refs/heads/* sobreviveu no espelho (fossil nao expurgado)"
+# desfaz o avanco: origin volta a sha2 e o servido volta a sha1, como o caso 3 deixou
+git -C "$REPO_RAIZ/platafirma-harness" reset -q --hard "$H_SHA2"
+git -C "$REPO_RAIZ/platafirma-harness" push -q -f origin main
+"$VERBO" reverter platafirma-harness "$H_SHA1" >/dev/null 2>&1 || falha "nao consegui devolver a sha1 apos 3b"
+rm -f "$PONTOS/platafirma-harness/anterior"
 echo "OK"
 
 echo "--- 4: estado lê o promovido; promover o mesmo sha → 1; sha por sha resolve igual à tag"
