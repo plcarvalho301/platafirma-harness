@@ -40,7 +40,18 @@ O que isso implica, e é preciso saber antes de despachar:
   (`<bancada>/wt/<repo>/<cadeira>`), e `AGENTS.md` da raiz de cada repo segue
   sendo o roteiro daquele repo;
 - job acima de 600 s vai por `longjob`: `run_command` mata o grupo de processos
-  no timeout, e build ou indexação passa disso.
+  no timeout, e build ou indexação passa disso;
+- verbo se chama por `pf <verbo> [args]` em qualquer conta (`pf` sem argumento
+  lista), ou pelo nome direto na conta dos serviços, cujo PATH é
+  `/opt/platafirma/current/harness/bin` — nunca indo até `bin/`;
+- bancada ausente (primeira vez na conta, ou apagada) não se remonta à mão:
+  `run_command` com
+  `/opt/platafirma/current/harness/deploy-harness/puxar-bancada --declarar <dir>`
+  declara a bancada e abre `<bancada>/wt/<familia>/fabrica` de cada família no sha
+  que está em produção; depois, `puxar-bancada <familia> --card <n> --slug <s>`
+  abre o ramo do card nascido desse sha. Verbo editado se testa pelo caminho do
+  worktree com `PF_INSTANCIA` e `PF_RELEASE_RAIZ` num diretório temporário — sem
+  isso ele executa contra a instância real.
 
 **Exceção, e é a única:** máquina emprestada, ou sessão que não autentica pela
 conta claude.ai (API key, token de longa duração, provedor de terceiro). Aí não

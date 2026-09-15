@@ -1,0 +1,268 @@
+#!/usr/bin/env bash
+# puxar-bancada — traz para a bancada declarada cada familia no sha que esta em producao.
+# capacidade: construcao
+# dono: ti
+# use para: primeiro passo de quem vai codar (inclusive depois de a bancada ter sido apagada):
+#           declarar a bancada da conta, abrir <bancada>/wt/<familia>/<cadeira> no sha que
+#           /opt/platafirma/<familia>/current aponta, e saber como chamar e testar verbo
+# ambiente: PF_RELEASE_RAIZ[=/opt/platafirma] (familias com current) · PF_RELEASE[=$PF_RELEASE_RAIZ/current]
+#           (o repo chamado e $PF_RELEASE/harness/bin/repo) · PF_BANCADA ou a linha de
+#           PF_ARQUIVO_BANCADA[=$HOME/.config/platafirma/bancada] (sem default; ausente e sem
+#           --declarar = exit 3) · PF_CADEIRA (lida; --cadeira vence; senao fabrica) ·
+#           PF_INSTANCIA[=/srv/platafirma/casa] (lida so para recusar bancada dentro dela) · HOME
+# depende: repo da release (abrir --da-producao, estado --json) · git e rede ao forge, pelo repo
+#
+# Nao entra na conta de arq:0037: nao mora em bin/ e nao e chamado por cadeira. E preparo de
+# bancada, rodado por quem vai editar codigo.
+#
+# O ATO E DO VERBO (arq:0084): este script nao clona, nao busca e nao cria worktree. Resolver o
+# sha de producao, buscar no forge, recusar sha fora de origin/main e criar o worktree e de
+# `repo abrir <familia> --da-producao` — o repo DA RELEASE, nunca o da bancada: a bancada pode
+# nao existir, e e justamente o que se esta puxando. Aqui so se escolhe familia, se declara a
+# bancada e se relata.
+#
+# SAIDA: uma linha por familia — familia, sha em producao (curto), estado (criado | conforme |
+# impossivel: motivo), caminho. Em --ensaio nada e escrito e o estado diz o que aconteceria.
+# Depois, uma linha de como chamar verbo e uma de como testar verbo editado.
+#
+# EXIT (arq:0110 §4): 0 toda familia criada ou conforme · 1 familia fora da release · 2 uso ·
+# 3 dependencia (bancada nao declarada, repo da release ausente, forge fora) · 4 politica
+# (outra bancada ja declarada, bancada em /opt ou /srv, repo chamado dentro da bancada, worktree
+# em outro sha, sujo ou em outro ramo) · 5 indeterminavel (arquivo de declaracao que existe e
+# nao declara, current fora da forma). Com varias familias, sai o maior codigo visto.
+set -uo pipefail
+
+. "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/../lib/raizes.sh"
+
+SCRIPT="puxar-bancada"
+INSTANCIA_REAL="/srv/platafirma/casa"
+
+uso() {
+  cat >&2 <<'FIM'
+uso: puxar-bancada [<familia>...] [--cadeira <slug>] [--card <n> [--slug <s>]] [--declarar <dir>] [--ensaio]
+
+  <familia>         nome do repo na release (platafirma-harness…); sem nenhuma, todas com current
+  --cadeira         cadeira do worktree; senao PF_CADEIRA; senao fabrica
+  --card/--slug     worktree num ramo fabrica/<card>-<slug> nascido do sha de producao
+  --declarar <dir>  grava <dir> (absoluto) como bancada da conta, se ela ainda nao declarou
+  --ensaio          mostra o plano sem escrever nada
+
+exit: 0 fez · 1 familia fora da release · 2 uso · 3 dependencia · 4 politica · 5 indeterminavel
+FIM
+  exit 2
+}
+
+erro() {  # $1=mensagem $2=exit
+  printf '%s: %s\n' "$SCRIPT" "$1" >&2
+  exit "$2"
+}
+
+FAMILIAS=()
+CADEIRA="" CARD="" SLUG="" DECLARAR="" ENSAIO=0
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --cadeira)  [ $# -ge 2 ] || uso; CADEIRA="$2"; shift 2 ;;
+    --card)     [ $# -ge 2 ] || uso; CARD="$2"; shift 2 ;;
+    --slug)     [ $# -ge 2 ] || uso; SLUG="$2"; shift 2 ;;
+    --declarar) [ $# -ge 2 ] || uso; DECLARAR="$2"; shift 2 ;;
+    --ensaio)   ENSAIO=1; shift ;;
+    -h|--help|--ajuda) uso ;;
+    -*) printf '%s: opcao desconhecida: %s\n' "$SCRIPT" "$1" >&2; uso ;;
+    *)
+      case "$1" in
+        */*|.*|*[!A-Za-z0-9._-]*) erro "familia invalida: '$1' — e o nome do repo, nao caminho" 2 ;;
+      esac
+      FAMILIAS+=("$1"); shift ;;
+  esac
+done
+
+CADEIRA="${CADEIRA:-${PF_CADEIRA:-fabrica}}"
+CADEIRA="${CADEIRA#claudinho-}"
+CADEIRA="${CADEIRA#claudinha-}"
+case "$CADEIRA" in
+  ''|*[!a-z0-9-]*) erro "cadeira invalida: '$CADEIRA' — use o slug [a-z0-9-]" 2 ;;
+esac
+if [ -n "$CARD" ]; then
+  CARD="${CARD###}"
+  [[ "$CARD" =~ ^[0-9]+$ ]] || erro "card invalido: '$CARD' — use o numero do card" 2
+fi
+[ -z "$SLUG" ] || [ -n "$CARD" ] || erro "--slug exige --card" 2
+case "$SLUG" in
+  *[!a-z0-9-]*) erro "slug invalido: '$SLUG' — use [a-z0-9-]" 2 ;;
+esac
+
+# --- bancada declarada --------------------------------------------------------------------
+# Declaracao e da conta (desenho #3010 §9): uma linha em PF_ARQUIVO_BANCADA; PF_BANCADA no
+# ambiente vence o arquivo. Nunca se sobrescreve declaracao existente.
+DECLARADA="$(pf_bancada 2>/dev/null)" || DECLARADA=""
+if [ -n "$DECLARAR" ]; then
+  case "$DECLARAR" in
+    /*) DECLARAR="${DECLARAR%/}" ;;
+    *) erro "--declarar exige caminho absoluto: '$DECLARAR'" 2 ;;
+  esac
+  # uma linha, sem espaco (a saida e em colunas), sem segmento . ou .. e nunca a raiz
+  case "$DECLARAR" in
+    ''|*[[:space:][:cntrl:]]*|*//*|*/./*|*/.|*/../*|*/..)
+      erro "--declarar invalido: '$DECLARAR' — caminho absoluto normalizado, sem espaco, fora da raiz" 2 ;;
+  esac
+  # bancada nunca mora na release nem na instancia (desenho #3010 §9)
+  for proibida in /opt /srv "${PF_RELEASE_RAIZ%/}" "${PF_INSTANCIA%/}"; do
+    [ -n "$proibida" ] || continue
+    case "$DECLARAR/" in
+      "$proibida"/*) erro "recusa: bancada $DECLARAR dentro de $proibida — a bancada fica fora da release e da instancia" 4 ;;
+    esac
+  done
+  # A declaracao da conta e o arquivo; PF_BANCADA so vence para teste. Arquivo que existe e nao
+  # declara (diretorio, ilegivel, primeira linha vazia) nao se sobrescreve: indeterminavel.
+  ARQ_LIDO=""
+  if [ -e "$PF_ARQUIVO_BANCADA" ] || [ -L "$PF_ARQUIVO_BANCADA" ]; then
+    [ -f "$PF_ARQUIVO_BANCADA" ] && [ -r "$PF_ARQUIVO_BANCADA" ] \
+      || erro "indeterminavel: $PF_ARQUIVO_BANCADA existe e nao e arquivo legivel — nao sobrescrevo" 5
+    IFS= read -r ARQ_LIDO < "$PF_ARQUIVO_BANCADA" || true
+    [ -n "$ARQ_LIDO" ] \
+      || erro "indeterminavel: $PF_ARQUIVO_BANCADA existe e a primeira linha esta vazia — nao sobrescrevo" 5
+  fi
+  if [ -n "$ARQ_LIDO" ] && [ "${ARQ_LIDO%/}" != "$DECLARAR" ]; then
+    erro "recusa: a conta ja declarou a bancada ${ARQ_LIDO} — nao sobrescrevo com $DECLARAR (edite $PF_ARQUIVO_BANCADA a mao se for mudanca deliberada)" 4
+  fi
+  if [ -n "${PF_BANCADA:-}" ] && [ "${PF_BANCADA%/}" != "$DECLARAR" ]; then
+    erro "recusa: PF_BANCADA=${PF_BANCADA} no ambiente vence a declaracao — nao declaro $DECLARAR" 4
+  fi
+  if [ -n "$ARQ_LIDO" ]; then
+    printf 'bancada conforme %s\n' "$DECLARAR"
+  elif [ "$ENSAIO" -eq 1 ]; then
+    printf 'bancada ensaio: declararia %s em %s (0600)\n' "$DECLARAR" "$PF_ARQUIVO_BANCADA"
+  else
+    dir_cfg="$(dirname "$PF_ARQUIVO_BANCADA")"
+    mkdir -p "$dir_cfg" 2>/dev/null || erro "nao criei $dir_cfg" 3
+    tmp_cfg="$(mktemp "$dir_cfg/.bancada.XXXXXX" 2>/dev/null)" || erro "nao escrevi em $dir_cfg" 3
+    # ln nao sobrescreve: se outra execucao declarou entre a leitura e aqui, recusa
+    if ! { printf '%s\n' "$DECLARAR" > "$tmp_cfg" && chmod 0600 "$tmp_cfg"; }; then
+      rm -f "$tmp_cfg"; erro "nao gravei $PF_ARQUIVO_BANCADA" 3
+    fi
+    if ! ln "$tmp_cfg" "$PF_ARQUIVO_BANCADA" 2>/dev/null; then
+      rm -f "$tmp_cfg"
+      [ -e "$PF_ARQUIVO_BANCADA" ] && erro "recusa: $PF_ARQUIVO_BANCADA apareceu durante a declaracao — nao sobrescrevo" 4
+      erro "nao gravei $PF_ARQUIVO_BANCADA" 3
+    fi
+    rm -f "$tmp_cfg"
+    printf 'bancada declarada %s em %s\n' "$DECLARAR" "$PF_ARQUIVO_BANCADA"
+  fi
+  DECLARADA="$DECLARAR"
+fi
+if [ -z "$DECLARADA" ]; then
+  erro "bancada nao declarada: defina PF_BANCADA, escreva a raiz em $PF_ARQUIVO_BANCADA ou rode com --declarar <dir>" 3
+fi
+case "$DECLARADA" in
+  /*) BANCADA="${DECLARADA%/}" ;;
+  *) erro "bancada declarada nao e caminho absoluto: $DECLARADA" 3 ;;
+esac
+
+# --- o verbo da release -------------------------------------------------------------------
+REPO_REL="$PF_RELEASE/harness/bin/repo"
+[ -x "$REPO_REL" ] || erro "dependencia ausente: repo da release nao esta em $REPO_REL — sem release no ar nao ha sha de producao a puxar" 3
+# PF_RELEASE mal apontado para dentro da bancada faria chamar o repo da bancada: recusa.
+REPO_REAL="$(realpath "$REPO_REL" 2>/dev/null)" || erro "indeterminavel: nao resolvi $REPO_REL" 5
+BANCADA_REAL="$(realpath -m "$BANCADA" 2>/dev/null)" || BANCADA_REAL="$BANCADA"
+case "$REPO_REAL/" in
+  "$BANCADA"/*|"$BANCADA_REAL"/*) erro "recusa: $REPO_REL resolve para $REPO_REAL, dentro da bancada — o repo chamado e o da release" 4 ;;
+esac
+
+# --- familias ------------------------------------------------------------------------------
+# Codigo e platafirma-*; o que nao tem current (espelho solto, familia nunca promovida) nao entra.
+if [ "${#FAMILIAS[@]}" -eq 0 ]; then
+  for d in "$PF_RELEASE_RAIZ"/platafirma-*; do
+    [ -d "$d" ] || continue
+    [ -L "$d/current" ] || [ -e "$d/current" ] || continue
+    FAMILIAS+=("$(basename "$d")")
+  done
+  [ "${#FAMILIAS[@]}" -gt 0 ] || erro "nenhuma familia com current em $PF_RELEASE_RAIZ" 1
+fi
+
+# Sha em producao so para a coluna do relato; quem resolve e recusa e o repo.
+sha_exibido() {
+  local alvo; alvo="$(readlink "$PF_RELEASE_RAIZ/$1/current" 2>/dev/null)" || { printf -- '-'; return; }
+  alvo="$(basename "$alvo")"
+  if [[ "$alvo" =~ ^[0-9a-f]{40}$ ]]; then printf '%s' "${alvo:0:7}"; else printf -- '-'; fi
+}
+
+linha() { printf '%s %s %s %s\n' "$1" "$2" "$3" "$4"; }
+
+# Motivo legivel da recusa do repo: a mensagem do verbo, senao o varrido, senao a ultima linha.
+motivo_de() {  # $1=stderr do repo $2=caminho do worktree (sai do motivo: ja e a ultima coluna)
+  local err="$1" m
+  m="$(printf '%s\n' "$err" | sed -n 's/^repo: //p' | tail -1)"
+  [ -n "$m" ] || m="$(printf '%s\n' "$err" | sed -n 's/^varrido: //p' | tail -1)"
+  [ -n "$m" ] || m="$(printf '%s\n' "$err" | sed '/^[[:space:]]*$/d' | tail -1)"
+  m="${m%: "$2"}"
+  printf '%s' "${m:-sem motivo do repo}"
+}
+
+PIOR=0
+# codigo fora de 0..5 (repo que nem rodou: 126, 127, sinal) conta como indeterminavel
+pior() { local c="$1"; [ "$c" -le 5 ] || c=5; [ "$c" -gt "$PIOR" ] && PIOR="$c"; return 0; }
+
+ARGS_RAMO=()
+[ -z "$CARD" ] || ARGS_RAMO+=("$CARD")
+[ -z "$SLUG" ] || ARGS_RAMO+=(--slug "$SLUG")
+
+for fam in "${FAMILIAS[@]}"; do
+  sha="$(sha_exibido "$fam")"
+  wt="$BANCADA/wt/$fam/$CADEIRA"
+
+  if [ "$ENSAIO" -eq 1 ]; then
+    if [ "$sha" = - ]; then
+      if [ -L "$PF_RELEASE_RAIZ/$fam/current" ] || [ -e "$PF_RELEASE_RAIZ/$fam/current" ]; then
+        linha "$fam" - "impossivel: current fora da forma de servido (ensaio)" "$wt"; pior 5
+      else
+        linha "$fam" - "impossivel: familia sem current em $PF_RELEASE_RAIZ (ensaio)" "$wt"; pior 1
+      fi
+    elif [ -e "$wt/.git" ]; then
+      est="$(PF_BANCADA="$BANCADA" PF_CADEIRA="$CADEIRA" "$REPO_REL" estado "$fam" --json 2>/dev/null \
+        | python3 -c 'import sys, json
+try:
+    d = json.load(sys.stdin)
+    print(d.get("sha") or "", "limpo" if d.get("limpo") else "sujo", d.get("ramo") or "")
+except Exception:
+    print("", "ilegivel", "")' 2>/dev/null)"
+      read -r sha_wt limpeza ramo_wt <<<"$est"
+      if [ -z "${sha_wt:-}" ]; then
+        linha "$fam" "$sha" "impossivel: worktree ilegivel pelo repo (ensaio)" "$wt"; pior 5
+      elif [ "${sha_wt:0:7}" != "$sha" ]; then
+        linha "$fam" "$sha" "impossivel: worktree em ${sha_wt:0:7}, nao mexeria (ensaio)" "$wt"; pior 4
+      elif [ "$limpeza" != limpo ]; then
+        linha "$fam" "$sha" "impossivel: worktree sujo, nao mexeria (ensaio)" "$wt"; pior 4
+      elif [ -n "$CARD" ] && [ "${ramo_wt:-}" != "fabrica/${CARD}${SLUG:+-$SLUG}" ]; then
+        linha "$fam" "$sha" "impossivel: worktree em ${ramo_wt:-?}, nao em fabrica/${CARD}${SLUG:+-$SLUG}, nao mexeria (ensaio)" "$wt"; pior 4
+      else
+        linha "$fam" "$sha" "conforme (ensaio)" "$wt"
+      fi
+    else
+      linha "$fam" "$sha" "criaria (ensaio)" "$wt"
+    fi
+    continue
+  fi
+
+  err_arq="$(mktemp)"
+  out="$(PF_BANCADA="$BANCADA" PF_CADEIRA="$CADEIRA" \
+    "$REPO_REL" abrir "$fam" --da-producao --cadeira "$CADEIRA" "${ARGS_RAMO[@]}" 2>"$err_arq")"
+  rc=$?
+  err="$(cat "$err_arq")"; rm -f "$err_arq"
+  if [ "$rc" -eq 0 ]; then
+    case "$(printf '%s\n' "$out" | tail -1)" in
+      conforme:*) linha "$fam" "$sha" conforme "$wt" ;;
+      *)          linha "$fam" "$sha" criado "$wt" ;;
+    esac
+  else
+    linha "$fam" "$sha" "impossivel: $(motivo_de "$err" "$wt")" "$wt"
+    pior "$rc"
+  fi
+done
+
+# --- como chamar e como testar -------------------------------------------------------------
+printf 'verbos: pf <verbo> [args] em qualquer conta (pf sem argumento lista); na conta dos servicos, o nome direto (PATH %s/harness/bin)\n' "$PF_RELEASE"
+printf 'testar verbo editado: PF_INSTANCIA=<tmp> PF_RELEASE_RAIZ=<tmp> %s/wt/<familia>/%s/bin/<verbo> … — a producao segue servida pela release\n' "$BANCADA" "$CADEIRA"
+# O aviso e sobre o verbo da bancada, nao sobre o ambiente deste script: sai sempre.
+printf 'aviso: verbo da bancada chamado sem PF_INSTANCIA de teste executa contra a instancia real (%s)\n' "$INSTANCIA_REAL"
+
+exit "$PIOR"

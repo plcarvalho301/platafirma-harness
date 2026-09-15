@@ -43,6 +43,23 @@ claude
 monta_sessao(cadeira="<cadeira>")
 ```
 
+## Chamar verbo e puxar a bancada
+
+Tudo abaixo vai por `run_command`, e executa na máquina do dono, nunca na estação.
+
+- Verbo: `pf <verbo> [args]` chama o verbo da release pelo nome, em qualquer conta
+  e de qualquer diretório (`pf` sem argumento lista); na conta dos serviços, o
+  nome direto basta (`release estado`, `sinal`).
+- Bancada: quem vai codar e ainda não tem bancada declarada roda uma vez
+  `/opt/platafirma/current/harness/deploy-harness/puxar-bancada --declarar <dir>`.
+  Ele grava `~/.config/platafirma/bancada` da conta (sem sobrescrever outra já
+  declarada) e abre `<bancada>/wt/<familia>/<cadeira>` de cada família no sha que
+  está em produção, uma linha por família (`criado`, `conforme` ou
+  `impossivel: motivo`). `--ensaio` mostra o plano sem escrever.
+- Testar verbo editado: pelo caminho do worktree, com `PF_INSTANCIA` e
+  `PF_RELEASE_RAIZ` num diretório temporário; sem isso ele executa contra a
+  instância real.
+
 ## O que a configuração do repositório garante
 
 `.mcp.json` declara os dois servidores remotos por HTTP, com o token vindo de variável

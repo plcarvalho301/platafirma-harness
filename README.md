@@ -65,6 +65,41 @@ declarada em `~/.config/platafirma/bancada` (uma linha) ou em `PF_BANCADA`, sem
 default. Só verbo de bancada (`repo`, `teste`, `lint`, tooling de avaliação) a
 lê; sem declaração ele sai 3 com "bancada nao declarada".
 
+## Trabalhar: chamar verbo e puxar a bancada
+
+**Chamar verbo.** Em qualquer conta, `pf <verbo> [args]` — `/usr/local/bin/pf`,
+posto pelo bootstrap do host, chama o verbo da release pelo nome, de qualquer
+diretório, e o verbo roda como a conta dos serviços; `pf` sem argumento lista os
+verbos. Na conta dos serviços, o nome direto (`release estado`, `sinal`) basta:
+o PATH já é `/opt/platafirma/current/harness/bin`. Ninguém precisa ir até `bin/`.
+
+**Puxar a bancada.** Quem vai codar começa trazendo cada família para a bancada
+no sha que está em produção — o que roda, não `origin/main`:
+
+```
+# primeira vez na conta (ou depois de a bancada ter sido apagada)
+/opt/platafirma/current/harness/deploy-harness/puxar-bancada --declarar <dir>
+
+# depois: todas as famílias com current, ou só as nomeadas; card abre ramo
+puxar-bancada [<familia>...] [--cadeira <slug>] [--card <n> --slug <s>] [--ensaio]
+```
+
+`--declarar <dir>` grava a raiz em `~/.config/platafirma/bancada` (0600) só se a
+conta ainda não declarou; outra já declarada, sai 4 sem sobrescrever (arquivo de
+declaração que existe e não declara, sai 5; bancada em `/opt` ou `/srv`, sai 4). Cada família
+vira `<bancada>/wt/<familia>/<cadeira>` (cadeira: `--cadeira`, senão `PF_CADEIRA`,
+senão `fabrica`), pelo `repo abrir <familia> --da-producao` da release — nunca o da
+bancada. Saída, uma linha por família: família, sha em produção, `criado`,
+`conforme` ou `impossivel: motivo`, caminho. Worktree já aberto em outro sha ou
+sujo é relatado e não é tocado. `--ensaio` mostra o plano sem escrever.
+
+**Testar verbo editado** sem afetar produção: chame o verbo pelo caminho do
+worktree com as raízes num diretório temporário —
+`PF_INSTANCIA=<tmp> PF_RELEASE_RAIZ=<tmp> <bancada>/wt/<familia>/<cadeira>/bin/<verbo>`.
+Sem `PF_INSTANCIA` de teste, o verbo da bancada executa contra a instância real
+(`/srv/platafirma/casa`); o `puxar-bancada` avisa, não bloqueia. O que foi editado
+chega ao ar só por `release promover`.
+
 **Depois de instalar**, três verificações valem a pena:
 
 ```
