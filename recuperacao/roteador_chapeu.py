@@ -5,8 +5,8 @@ Quem importa este módulo não quebra.
 from __future__ import annotations
 
 import importlib.util
-from importlib.machinery import SourceFileLoader
 import sys
+from importlib.machinery import SourceFileLoader
 from pathlib import Path
 
 # O sub-ato nao tem extensao (verbo: sem extensao + shebang); o loader e explicito.
@@ -34,27 +34,26 @@ LIMIAR_SEMANTICO = _mod.LIMIAR_SEMANTICO
 MARGEM_SEMANTICA = _mod.MARGEM_SEMANTICA
 
 __all__ = [
-    "Rota",
-    "Decisao",
-    "_normaliza",
-    "_carrega_gatilhos",
-    "rotas_do_disco",
-    "casa",
-    "decide",
-    "roteia_semantico",
-    "escolhe",
-    "_resolve_dir_chapeus",
     "LIMIAR_SEMANTICO",
     "MARGEM_SEMANTICA",
+    "Decisao",
+    "Rota",
+    "_carrega_gatilhos",
+    "_normaliza",
+    "_resolve_dir_chapeus",
+    "casa",
+    "decide",
+    "escolhe",
+    "rotas_do_disco",
+    "roteia_semantico",
 ]
 
 if __name__ == "__main__":
     import json
-    import os
     cad = sys.argv[1] if len(sys.argv) > 1 else "IA"
     perg = sys.argv[2] if len(sys.argv) > 2 else "orcamento de janela de contexto"
-    raiz = os.path.join(os.environ.get("PF_RAIZ", os.path.expanduser("~/AI")),
-                        "platafirma-harness", "abertura")
+    # morada publicada (arq:0097), a mesma que o sub-ato rotear resolve — nunca o clone
+    raiz = _resolve_dir_chapeus()
     dec = escolhe(perg, cad, raiz)
     print(json.dumps({"slug": dec.slug, "via": dec.via, "motivo": dec.motivo,
                       "acertos": dec.acertos}, ensure_ascii=False, indent=2))

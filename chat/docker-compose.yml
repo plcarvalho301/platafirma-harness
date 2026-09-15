@@ -104,10 +104,11 @@ services:
       AS_PORTA: "8080"
       AS_TOKEN: ${AS_TOKEN:?defina AS_TOKEN no .env — sai do cofre por ./prepara.sh}
       HS_TOKEN: ${HS_TOKEN:?defina HS_TOKEN no .env — sai do cofre por ./prepara.sh}
-      # comum/cadeiras.py le o ledger registro/eventos-org.jsonl para o case/prefixo
-      # de cada cadeira (TI e IA maiusculas), e abertura/<x>/persona.md para a persona
-      # de participante — nao se calcula, se le da fonte (arq:0073).
+      # comum/cadeiras.py le a arvore abertura/<x>/ da morada publicada (arq:0073,
+      # arq:0097) — nao se calcula, se le da fonte. O ledger registro/ e historico e
+      # nenhum codigo vivo o le (incidente/ordem do dono).
       PF_RAIZ: /home/claudinho/AI
+      PF_ABERTURA_DIR: /home/claudinho/AI/var/abertura-publicada
       CHAT_JOURNAL: /home/claudinho/AI/var/run/chat/journal.db
       CHAT_FITAS_RAIZ: /home/claudinho/AI/fitas
       # Gatilho de idade DESARMADO, por decisao do dono em 15/08 (card 449): ele
@@ -129,11 +130,12 @@ services:
       # traduzir de volta la, e a primeira divergencia seria silenciosa.
       - ${HOME}/AI/fitas:/home/claudinho/AI/fitas:rw
       - ${HOME}/AI/var/run/chat:/home/claudinho/AI/var/run/chat:rw
-      # Somente leitura: a recepcao le a lista de cadeiras (do ledger) e a persona de
-      # participante (de abertura/), nunca escreve. Sem estes mounts ela nao sobe — a
-      # ausencia se declara na subida, em vez de virar sala muda no primeiro giro.
-      - ${HOME}/AI/platafirma-harness/abertura:/home/claudinho/AI/platafirma-harness/abertura:ro
-      - ${HOME}/AI/platafirma-harness/registro:/home/claudinho/AI/platafirma-harness/registro:ro
+      # Somente leitura: a recepcao le cadeiras e personas da MORADA PUBLICADA
+      # (var/abertura-publicada/current/abertura — arq:0097, arq:0109 §1), nunca do
+      # clone. Monta-se a raiz da morada inteira porque `current` e symlink e tem de
+      # resolver dentro do container. Sem este mount ela nao sobe — a ausencia se
+      # declara na subida, em vez de virar sala muda no primeiro giro.
+      - ${HOME}/AI/var/abertura-publicada:/home/claudinho/AI/var/abertura-publicada:ro
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request,sys;sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8080/estado',timeout=8).status==200 else 1)"]
       interval: 30s
