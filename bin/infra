@@ -14,6 +14,19 @@ AQUI="$(dirname "$(readlink -f "$0")")"
 . "$AQUI/../lib/raizes.sh"
 
 export DOCKER_HOST="${DOCKER_HOST:-unix:///run/user/$(id -u)/docker.sock}"
+# systemctl --user e systemd-run --user falam com o bus da conta. Pelo wrapper, runuser, cron
+# ou pelo release, o ambiente chega sem XDG_RUNTIME_DIR: `systemctl --user cat` sai 1 com
+# 'Failed to connect to bus', a unit não é achada e o restart não acontece (medido 15/09).
+# Os dois só são definidos quando ausentes; valor que já veio no ambiente vence — salvo o
+# herdado de OUTRA conta (runuser/su sem -l levam o XDG de quem chamou, ex. /run/user/0, onde
+# esta conta não entra): diretório que existe e não é desta conta é trocado, e o DBUS que
+# aponta para dentro dele sai junto.
+if [ -n "${XDG_RUNTIME_DIR:-}" ] && [ -d "$XDG_RUNTIME_DIR" ] && [ ! -O "$XDG_RUNTIME_DIR" ]; then
+  case "${DBUS_SESSION_BUS_ADDRESS:-}" in *"$XDG_RUNTIME_DIR"*) unset DBUS_SESSION_BUS_ADDRESS ;; esac
+  unset XDG_RUNTIME_DIR
+fi
+export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"
+export DBUS_SESSION_BUS_ADDRESS="${DBUS_SESSION_BUS_ADDRESS:-unix:path=$XDG_RUNTIME_DIR/bus}"
 OPS_HEALTH="${INFRA_OPS_HEALTH:-http://127.0.0.1:8010/health}"
 
 uso() {
@@ -430,6 +443,12 @@ restart() {
     return
   fi
 
+  # sem bus o `systemctl --user cat` também falha: dizer "não é unit" esconderia a causa
+  if ! systemctl --user show-environment >/dev/null 2>&1; then
+    echo "erro: sem bus do systemd --user (XDG_RUNTIME_DIR=$XDG_RUNTIME_DIR, DBUS_SESSION_BUS_ADDRESS=$DBUS_SESSION_BUS_ADDRESS)." >&2
+    echo "       '$alvo' não foi achado nem reiniciado; rode como a conta dona das units, com a sessão de usuário viva (loginctl enable-linger)." >&2
+    exit 3
+  fi
   echo "erro: '$alvo' não é contêiner conhecido (docker ps -a) nem unit --user (systemctl --user cat)." >&2
   echo "       nada foi reiniciado; conferir o nome com: infra estado" >&2
   exit 2

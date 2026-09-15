@@ -21,8 +21,10 @@
 # escreve: promover=release,arquivo-local
 # escreve: reverter=release,arquivo-local
 # (recursos pelo enum de ferramental_recurso; porta, forge e stack pendem id proprio - dados)
-# ambiente: PF_RELEASE_RAIZ[=/opt/platafirma] porta · PLATAFIRMA_RELEASE[=$PF_RELEASE_RAIZ/current] porta (atalhos; verbos irmãos em harness/bin) · PLATAFIRMA_INSTANCIA[=/srv/platafirma/casa] porta (pontos em var/release/<familia>) · PF_ABERTURA_DIR[=$PLATAFIRMA_INSTANCIA/var/abertura-publicada] porta · PLATAFIRMA_FAMILIAS[=registro/familias.json desta árvore] porta · PLATAFIRMA_VENVS[=registro/venvs.json desta árvore] porta · PLATAFIRMA_TERCEIROS[=registro/terceiros.json desta árvore] porta · PF_CADEIRA porta (lida) · HOME
-# depende: git · deploy (promover/reverter de família com stack) · acervo (registro de stacks) · python3 · jq · uv (venv do lock) · sha256sum + curl (artefato de terceiro pinado; curl só quando o cache em <release>/terceiros não tem) · rede ao forge (promover) · porta (hora de arranque) · infra (restart da porta, destacado) · publicar-abertura (motor da familia abertura, #3054). O restart da porta e deste verbo (spec_release §2, rev 6): o observador pf-porta-watch nao disparou em 15/09, 2 de 2 promocoes
+# ambiente: PF_RELEASE_RAIZ[=/opt/platafirma] porta · PLATAFIRMA_RELEASE[=$PF_RELEASE_RAIZ/current] porta (atalhos; verbos irmãos em harness/bin) · PLATAFIRMA_INSTANCIA[=/srv/platafirma/casa] porta (pontos em var/release/<familia>) · PF_ABERTURA_DIR[=$PLATAFIRMA_INSTANCIA/var/abertura-publicada] porta · PLATAFIRMA_FAMILIAS[=registro/familias.json desta árvore] porta · PLATAFIRMA_VENVS[=registro/venvs.json desta árvore] porta · PLATAFIRMA_TERCEIROS[=registro/terceiros.json desta árvore] porta · PLATAFIRMA_UV porta (override do binário do uv) · PLATAFIRMA_PYTHON[=/usr/bin/python3.12] porta (python de sistema dos venvs) · XDG_RUNTIME_DIR[=/run/user/<uid>] porta · DBUS_SESSION_BUS_ADDRESS[=unix:path=$XDG_RUNTIME_DIR/bus] porta (os dois só quando ausentes, para o infra achar a unit) · PF_CADEIRA porta (lida) · HOME
+# uv: resolvido nesta ordem, e só nela: $PLATAFIRMA_UV, /usr/local/bin/uv, /usr/bin/uv, `command -v uv`. Nenhum achado: exit 3 dizendo como instalar uv de sistema. O PATH do wrapper /usr/local/bin/platafirma não tem ~/.local/bin (medido 15/09).
+# python dos venvs: $PLATAFIRMA_PYTHON, default /usr/bin/python3.12, com UV_PYTHON_PREFERENCE=only-system e UV_PYTHON_DOWNLOADS=never; nunca o python gerenciado pelo uv no home da conta (caminho, caminho real ou home do venv sob $HOME ou em */uv/python/*: exit 3, override incluído). Ausente, ou lock que pede outra versão: exit 3, current intacto. PLATAFIRMA_UV e PLATAFIRMA_PYTHON só em caminho absoluto. XDG_RUNTIME_DIR herdado de outra conta (diretório existente que não é desta) é trocado pelo desta.
+# depende: git · deploy (promover/reverter de família com stack) · acervo (registro de stacks) · python3 · jq · uv (venv do lock; ordem acima) · python de sistema (venvs) · sha256sum + curl (artefato de terceiro pinado; curl só quando o cache em <release>/terceiros não tem) · rede ao forge (promover) · porta (hora de arranque) · infra (restart da porta, destacado) · publicar-abertura (motor da familia abertura, #3054). O restart da porta e deste verbo (spec_release §2, rev 6): o observador pf-porta-watch nao disparou em 15/09, 2 de 2 promocoes
 # substitui: readlink current · git -C /opt/platafirma/<familia>/… describe|rev-parse|ls-files|show|grep · git worktree add --detach · ln -sfn + mv -T · chmod -R a-w · conferir <classe> · deploy <stack> promover|reverter
 # conforme: parcial
 set -euo pipefail
@@ -1019,26 +1021,105 @@ assentar_atalhos() {  # $1=repo
 # em registro/venvs.json: {"<nome>": {"familia": "<familia>", "lock": "<caminho na árvore>"}}.
 # Venv falho sai 3 com current intacto; `.pronto` só se grava no fim, então venv pela metade é
 # refeito, nunca servido.
+#
+# O hash cobre também a identidade do python de sistema (caminho real + major.minor): venv
+# construído contra outro python (o gerenciado pelo uv no home da conta, medido 15/09 em ops e
+# rag) não é reaproveitado por ter o mesmo lock — a próxima promoção constrói ao lado, e o
+# atalho só troca depois de pronto. Venv velho fica no disco, como a árvore de rev velha.
 VENVS_PRONTOS=()
-construir_venv() {  # $1=lock $2=destino
-  local lock="$1" dest="$2" uv
-  uv="$(command -v uv 2>/dev/null || true)"
-  [ -n "$uv" ] || { printf 'release: dependência ausente: uv (constrói venv do lock)\n' >&2; return 3; }
+
+# uv por ordem explícita (cabeçalho): override, dois caminhos de sistema, PATH. A porta e o
+# wrapper não carregam ~/.local/bin, e o release não pode depender do PATH de quem o chama.
+resolver_uv() {  # imprime o caminho do uv; 3 ausente
+  local c
+  if [ -n "${PLATAFIRMA_UV:-}" ]; then
+    # absoluto: relativo resolveria contra o diretório de quem chama, não contra nada declarado
+    if [[ "$PLATAFIRMA_UV" == /* ]] && [ -x "$PLATAFIRMA_UV" ] && [ ! -d "$PLATAFIRMA_UV" ]; then printf '%s' "$PLATAFIRMA_UV"; return 0; fi
+    printf 'release: dependência ausente: PLATAFIRMA_UV=%s não é binário executável em caminho absoluto (override do uv)\n' "$PLATAFIRMA_UV" >&2
+    return 3
+  fi
+  for c in /usr/local/bin/uv /usr/bin/uv; do
+    if [ -x "$c" ] && [ ! -d "$c" ]; then printf '%s' "$c"; return 0; fi
+  done
+  c="$(command -v uv 2>/dev/null || true)"
+  if [ -n "$c" ] && [ -x "$c" ]; then printf '%s' "$c"; return 0; fi
+  {
+    printf 'release: dependência ausente: uv (constrói venv do lock) — procurado em $PLATAFIRMA_UV, /usr/local/bin/uv, /usr/bin/uv e no PATH\n'
+    printf '         instale uv de sistema, fora do home da conta: sudo install -m 0755 -o root -g root <binário uv> /usr/local/bin/uv\n'
+    printf '         (ou: curl -LsSf https://astral.sh/uv/install.sh | sudo env UV_INSTALL_DIR=/usr/local/bin UV_NO_MODIFY_PATH=1 sh), ou aponte PLATAFIRMA_UV\n'
+  } >&2
+  return 3
+}
+
+# 0 quando o caminho está sob o HOME da conta ou numa árvore de python gerenciado pelo uv
+python_gerenciado() {  # $1=caminho
+  local p="$1" casa="${HOME:-}"
+  casa="${casa%/}"
+  if [ -n "$casa" ] && { [ "$p" = "$casa" ] || [[ "$p" == "$casa"/* ]]; }; then return 0; fi
+  case "$p" in */uv/python/*) return 0 ;; esac
+  return 1
+}
+
+# python de sistema dos venvs. Imprime "<caminho>\t<caminho real>\t<major.minor>"; 3 ausente.
+resolver_python() {
+  local py="${PLATAFIRMA_PYTHON:-/usr/bin/python3.12}" real ver
+  if [[ "$py" != /* ]] || [ ! -x "$py" ] || [ -d "$py" ]; then
+    printf 'release: dependência ausente: python de sistema %s não existe ou não é executável (caminho absoluto) — venv de produção não se liga a python gerenciado no home da conta; instale python3.12 do sistema ou aponte PLATAFIRMA_PYTHON\n' "$py" >&2
+    return 3
+  fi
+  real="$(readlink -f "$py")"
+  # override também não liga venv de produção ao home da conta nem a python gerenciado pelo uv
+  # (um PLATAFIRMA_PYTHON que é o python de outro venv resolve, por readlink, para lá)
+  if python_gerenciado "$py" || python_gerenciado "$real"; then
+    printf 'release: dependência ausente: python %s (real %s) está no home da conta ou é gerenciado pelo uv — venv de produção só se liga a python de sistema; aponte PLATAFIRMA_PYTHON para um python do sistema\n' "$py" "$real" >&2
+    return 3
+  fi
+  ver="$("$py" -c 'import sys; print("%d.%d" % sys.version_info[:2])' 2>/dev/null </dev/null)" || ver=""
+  if ! [[ "$ver" =~ ^[0-9]+\.[0-9]+$ ]]; then
+    printf 'release: dependência ausente: python de sistema %s não roda (não disse a versão)\n' "$py" >&2
+    return 3
+  fi
+  printf '%s\t%s\t%s' "$py" "$real" "$ver"
+}
+
+construir_venv() {  # $1=lock $2=destino $3=uv $4=python $5=versão do python
+  local lock="$1" dest="$2" uv="$3" py="$4" ver="$5" rc=0 req home
+  # only-system: o uv não escolhe python gerenciado; never: não baixa um quando o de sistema não serve.
+  # Só no ambiente do uv (não vaza para deploy nem publicar-abertura). Variáveis de quem chama que
+  # brigam com isso saem: UV_MANAGED_PYTHON faz o uv sair 2 junto de --python-preference (medido
+  # com uv 0.12.1), e seria lido como lock incompatível; UV_PYTHON/UV_SYSTEM_PYTHON/VIRTUAL_ENV
+  # não escolhem interpretador aqui.
+  local -a uvenv=(env -u UV_MANAGED_PYTHON -u UV_NO_MANAGED_PYTHON -u UV_PYTHON -u UV_SYSTEM_PYTHON
+    -u VIRTUAL_ENV UV_PYTHON_PREFERENCE=only-system UV_PYTHON_DOWNLOADS=never)
   case "$(basename "$lock")" in
     uv.lock)
-      # --no-install-project: a árvore servida é r-x; o código roda dela, o venv só traz dependência
-      UV_PROJECT_ENVIRONMENT="$dest" "$uv" sync -q --frozen --no-dev --no-install-project \
-        --project "$(dirname "$lock")" >&2 ;;
+      # --no-install-project: a árvore servida é r-x; o código roda dela, o venv só traz dependência.
+      # --python vence o .python-version do projeto (o do rag pede 3.14).
+      "${uvenv[@]}" UV_PROJECT_ENVIRONMENT="$dest" "$uv" sync -q --frozen --no-dev --no-install-project \
+        --python "$py" --project "$(dirname "$lock")" </dev/null >&2 || rc=$? ;;
     *)
-      "$uv" venv -q "$dest" >&2 || return 3
-      if grep -qvE '^[[:space:]]*(#|$)' "$lock"; then
-        "$uv" pip install -q --python "$dest/bin/python" -r "$lock" >&2 || return 3
+      "${uvenv[@]}" "$uv" venv -q --python "$py" "$dest" </dev/null >&2 || rc=$?
+      if [ "$rc" -eq 0 ] && grep -qvE '^[[:space:]]*(#|$)' "$lock"; then
+        "${uvenv[@]}" "$uv" pip install -q --python "$dest/bin/python" -r "$lock" </dev/null >&2 || rc=$?
       fi ;;
   esac
+  if [ "$rc" -ne 0 ]; then
+    req="$(sed -n 's/^requires-python[[:space:]]*=[[:space:]]*"\(.*\)"[[:space:]]*$/\1/p' "$lock" 2>/dev/null | head -n 1)"
+    printf 'release: falha alta: uv saiu %s construindo do lock %s com o python de sistema %s (%s)%s — lock que exige outra versão não se contorna com python gerenciado; ajuste o requires-python/.python-version da família ou aponte PLATAFIRMA_PYTHON\n' \
+      "$rc" "$lock" "$py" "$ver" "${req:+; o lock pede requires-python $req}" >&2
+    return 3
+  fi
+  # confere a ligação: o venv tem de apontar para o python pedido, não para outro que o uv achou
+  home="$(sed -n 's/^home[[:space:]]*=[[:space:]]*//p' "$dest/pyvenv.cfg" 2>/dev/null | head -n 1)"
+  if [ -z "$home" ] || python_gerenciado "$home" \
+    || { [ "$home" != "$(dirname "$py")" ] && [ "$home" != "$(dirname "$(readlink -f "$py")")" ]; }; then
+    printf 'release: falha alta: venv %s ficou ligado a %s, não ao python de sistema %s\n' "$dest" "${home:-(sem pyvenv.cfg)}" "$py" >&2
+    return 3
+  fi
 }
 
 construir_venvs() {  # $1=repo $2=sha ; enche VENVS_PRONTOS; 0 ok, 3 falhou
-  local repo="$1" sha="$2" arvore linhas nome lock hash dest
+  local repo="$1" sha="$2" arvore linhas nome lock hash dest uv="" pyid="" py="" py_real="" py_ver=""
   arvore="$PROD_RAIZ/$repo/$sha"
   VENVS_PRONTOS=()
   [ -r "$VENVS" ] || return 0
@@ -1058,21 +1139,34 @@ construir_venvs() {  # $1=repo $2=sha ; enche VENVS_PRONTOS; 0 ok, 3 falhou
       printf 'venv:      %s — lock %s ausente na rev %s; atalho do venv segue onde estava\n' "$nome" "$lock" "${sha:0:7}"
       continue
     fi
-    hash="$(sha256sum "$arvore/$lock" | cut -c1-12)"
+    if [ -z "$pyid" ]; then
+      pyid="$(resolver_python)" || {
+        printf 'release: venv %s não construído na rev %s — current intacto\n' "$nome" "${sha:0:7}" >&2
+        return 3
+      }
+      IFS=$'\t' read -r py py_real py_ver <<<"$pyid"
+    fi
+    hash="$({ cat "$arvore/$lock"; printf '\npython=%s %s\n' "$py_real" "$py_ver"; } | sha256sum | cut -c1-12)"
     dest="$PROD_RAIZ/venv/$nome-$hash"
     if [ -f "$dest/.pronto" ]; then
-      printf 'venv:      %s-%s já construído (lock inalterado)\n' "$nome" "$hash"
+      printf 'venv:      %s-%s já construído (lock e python inalterados)\n' "$nome" "$hash"
     else
+      if [ -z "$uv" ]; then
+        uv="$(resolver_uv)" || {
+          printf 'release: venv %s não construído na rev %s — current intacto\n' "$nome" "${sha:0:7}" >&2
+          return 3
+        }
+      fi
       if [ -e "$dest" ]; then chmod -R u+w "$dest" 2>/dev/null || true; rm -rf "$dest"; fi
       mkdir -p "$PROD_RAIZ/venv"
-      if ! construir_venv "$arvore/$lock" "$dest"; then
+      if ! construir_venv "$arvore/$lock" "$dest" "$uv" "$py" "$py_ver"; then
         chmod -R u+w "$dest" 2>/dev/null || true; rm -rf "$dest"
         printf 'release: dependência ausente: venv %s não construiu do lock %s na rev %s — current intacto\n' "$nome" "$lock" "${sha:0:7}" >&2
         return 3
       fi
       : > "$dest/.pronto"
       chmod -R a-w "$dest"
-      printf 'venv:      %s-%s construído de %s\n' "$nome" "$hash" "$lock"
+      printf 'venv:      %s-%s construído de %s (python %s %s, uv %s)\n' "$nome" "$hash" "$lock" "$py" "$py_ver" "$uv"
     fi
     VENVS_PRONTOS+=("$nome-$hash")
   done <<<"$linhas"
@@ -1224,7 +1318,21 @@ reiniciar_porta() {
     printf 'porta:     AVISO — infra não encontrado; a porta segue no código anterior até: infra restart ops-mcp\n' >&2
     return 0
   fi
-  out="$("$infra_bin" restart ops-mcp 2>&1)" || rc=$?
+  # Sem XDG_RUNTIME_DIR (wrapper, runuser, cron) o infra não acha a unit --user e o restart não
+  # acontece (medido 15/09). Definidos só quando ausentes; o infra repete a regra para quem o
+  # chama direto. O restart segue destacado (systemd-run --user, dentro do infra).
+  # Valor herdado de OUTRA conta (runuser/su sem -l leva o XDG de quem chamou, ex.
+  # /run/user/0) também não serve: diretório que existe e não é desta conta é trocado, e o
+  # DBUS que aponta para dentro dele sai junto. O infra do PATH pode ser o de uma release
+  # velha, sem essa regra; por isso ela vale aqui também.
+  local xdg="${XDG_RUNTIME_DIR:-}" dbus="${DBUS_SESSION_BUS_ADDRESS:-}"
+  if [ -n "$xdg" ] && [ -d "$xdg" ] && [ ! -O "$xdg" ]; then
+    case "$dbus" in *"$xdg"*) dbus="" ;; esac
+    xdg=""
+  fi
+  xdg="${xdg:-/run/user/$(id -u)}"
+  out="$(XDG_RUNTIME_DIR="$xdg" DBUS_SESSION_BUS_ADDRESS="${dbus:-unix:path=$xdg/bus}" \
+    "$infra_bin" restart ops-mcp 2>&1)" || rc=$?
   if [ "$rc" -eq 0 ]; then
     printf 'porta:     %s\n' "$(tail -n 1 <<<"$out")"
   else
