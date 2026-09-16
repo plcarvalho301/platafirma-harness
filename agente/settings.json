@@ -58,7 +58,9 @@
       "mcp__claudinho-mcp__run_command",
       "mcp__claude_ai_claudinho-mcp__read_file",
       "mcp__claude_ai_claudinho-mcp__write_file",
-      "mcp__claude_ai_claudinho-mcp__run_command"
+      "mcp__claude_ai_claudinho-mcp__run_command",
+      "mcp__claudinho-mcp__repo",
+      "mcp__claude_ai_claudinho-mcp__repo"
     ],
     "deny": [
       "Bash(curl:*)",
