@@ -518,7 +518,14 @@ case "$SUB" in
         if [ "$TEM_BARREIRA" -eq 1 ] && [ "${#NATIVOS[@]}" -ge 1 ]; then
           export DOCKER_HOST="${DOCKER_HOST:-unix:///run/user/1001/docker.sock}"
           export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/run/user/1001}"
-          exec docker exec -i platafirma-core-keycloak-1 /opt/keycloak/bin/kcadm.sh "${NATIVOS[@]}"
+          saida="$(docker exec -i platafirma-core-keycloak-1 /opt/keycloak/bin/kcadm.sh "${NATIVOS[@]}" 2>&1)" && rc=0 || rc=$?
+          if [ "$rc" -ne 0 ] && echo "$saida" | grep -qiE "Session has expired|Login again|token.*expired|unauthorized|401"; then
+            if cmd_keycloak_entrar >/dev/null 2>&1; then
+              exec docker exec -i platafirma-core-keycloak-1 /opt/keycloak/bin/kcadm.sh "${NATIVOS[@]}"
+            fi
+          fi
+          printf '%s\n' "$saida"
+          exit "$rc"
         fi
         echo "seg keycloak exige 'entrar' ou '--' seguido do comando nativo do kcadm.sh" >&2
         uso
