@@ -85,6 +85,7 @@ uso:
 
 raiz servida: PF_RELEASE_RAIZ[=/opt/platafirma] · instancia: PLATAFIRMA_INSTANCIA[=/srv/platafirma/casa]
 promover: <rev> (sha ou tag) obrigatória em família com stack; sem rev, avança para origin/main
+main: promover E reverter só servem rev alcançável por origin/main (arq:0109 §1); fora dela, exit 4
 exit: 0 achou/fez · 1 nao existe · 2 uso · 3 dependencia · 4 politica · 5 indeterminavel
 FIM
 }
@@ -936,6 +937,32 @@ descende_de_main() {
   "$GIT" --git-dir="$esp" merge-base --is-ancestor "$sha" origin/main 2>/dev/null
 }
 
+# O GATE de main, e nao so o texto da ADR: arq:0109 §1 diz que produção serve EXCLUSIVAMENTE
+# main, e quem serve sao promover E reverter. So promover media; reverter aceitava qualquer sha
+# ja materializado e o punha em current (medido 15/09 no fixture do lote 2: exit 0, current
+# movido para sha que so existe em ramo). Reverter reabria a porta que promover fecha, por tres
+# vias: materializar nunca apaga, entao todo sha que um dia esteve no ar segue revertivel; o
+# ponto de volta gravado pode ser de antes do gate; e sha que estava em main pode sair dela
+# (force-push, rebase) sem que o diretorio materializado saiba.
+# A medida e LOCAL, no espelho: reverter e caminho de incidente e nao depende de forge de pe.
+# Espelho que nao conhece o sha ganha UM fetch best-effort; sem espelho, ou ainda sem
+# conhecer, RECUSA — descendencia que nao se mediu nao se afirma, e a saida e promover main.
+exigir_descende_de_main() {  # $1=repo(familia do espelho) $2=sha $3=ato $4=alvo do comando
+  local repo="$1" sha="$2" ato="$3" alvo="$4" esp; esp="$(espelho_de "$repo")"
+  if [ -d "$esp" ]; then
+    descende_de_main "$repo" "$sha" && return 0
+    atualizar_espelho "$esp" >/dev/null 2>&1 || true
+    descende_de_main "$repo" "$sha" && return 0
+  else
+    printf 'release: recusa: sem espelho em %s — descendência de origin/main não medida (arq:0109 §1)\n' "$esp" >&2
+    printf 'caminho: release promover %s <sha|tag de main> clona o espelho e mede\n' "$alvo" >&2
+    return 4
+  fi
+  printf 'release: recusa: %s não descende de origin/main — produção é checkout de origin/main (arq:0109 §1)\n' "${sha:0:7}" >&2
+  printf 'caminho: release %s %s <sha|tag de main>  ·  release estado %s diz o que está no ar\n' "$ato" "$alvo" "$alvo" >&2
+  return 4
+}
+
 # materializa <PF_RELEASE_RAIZ>/<repo>/<sha> como worktree destacado e somente-leitura; idempotente
 materializar() {
   local repo="$1" sha="$2" esp dest; esp="$(espelho_de "$repo")"; dest="$PROD_RAIZ/$repo/$sha"
@@ -1400,10 +1427,7 @@ promover_abertura() {  # $1=rev(opcional) $2=ensaio
     printf 'release: erro: rev '\''%s'\'' não resolve no forge de %s\n' "${rev:-origin/main}" "$FAMILIA_BIN" >&2
     return 2
   }
-  if ! descende_de_main "$FAMILIA_BIN" "$sha"; then
-    printf 'release: recusa: %s não descende de origin/main — produção é checkout de origin/main (arq:0109 §1)\n' "${sha:0:7}" >&2
-    return 4
-  fi
+  exigir_descende_de_main "$FAMILIA_BIN" "$sha" 'promover' abertura || return $?
   if ! rev_tem_abertura "$sha"; then
     printf 'release: erro: rev %s não tem abertura/\n' "${sha:0:7}" >&2
     return 2
@@ -1439,6 +1463,7 @@ reverter_abertura() {  # $1=sha(opcional) $2=ensaio
     printf 'release: erro: sem sha e sem ponto de volta gravado para abertura — não invento para onde voltar\n' >&2
     return 2
   fi
+  exigir_descende_de_main "$FAMILIA_BIN" "$alvo" 'reverter' abertura || return $?
   antes="$(sha_abertura_no_ar)"
   if [ -n "$antes" ]; then
     case "$antes" in
@@ -1558,10 +1583,7 @@ cmd_promover() {
     "$GIT" --git-dir="$esp" for-each-ref --sort=-creatordate --count=5 --format='  %(refname:short)  %(objectname:short)' refs/tags 2>/dev/null >&2 || true
     exit 2
   }
-  if ! descende_de_main "$repo" "$sha"; then
-    printf 'release: recusa: %s não descende de origin/main — produção é checkout de origin/main (arq:0109 §1)\n' "${sha:0:7}" >&2
-    exit 4
-  fi
+  exigir_descende_de_main "$repo" "$sha" promover "$repo" || exit $?
 
   # o que está no ar agora
   local atual="" rc_id=0
@@ -1701,6 +1723,13 @@ cmd_reverter() {
     fi
   fi
 
+  # política antes de existência: sha fora de main não se serve nem se sugere promover
+  local rc_main=0
+  exigir_descende_de_main "$repo" "$alvo" reverter "$repo" || rc_main=$?
+  if [ "$rc_main" -ne 0 ]; then
+    [ -n "$rev" ] || printf 'medido: o ponto de volta gravado de %s é anterior ao gate — voltar a ele reabriria a violação\n' "$repo" >&2
+    exit "$rc_main"
+  fi
   if [ ! -d "$PROD_RAIZ/$repo/$alvo" ]; then
     printf 'varrido: servido %s (%s/%s não está materializado)\n' "$repo" "$PROD_RAIZ/$repo" "${alvo:0:7}" >&2
     printf 'vizinho: release promover %s %s\n' "$repo" "$alvo" >&2
