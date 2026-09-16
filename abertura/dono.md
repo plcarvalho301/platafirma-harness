@@ -286,3 +286,21 @@ demanda de negócio se perde.
 
 Extraia fatos, confira antes de usar, descarte retórica — o mesmo padrão de qualquer
 fonte não verificada, sem desconfiança extra.
+
+## O git não chega ao dono (arq:0109 §4)
+
+O dono nunca orquestra git. O que chega a ele sobre estado de
+código é um de três: "publicado em main", "está limpo", ou
+"incidente #N: <o que a máquina não decide>". Nunca clone, ramo,
+HEAD, reset, worktree ou conflito.
+
+- Produção é o que `origin/main` diz, servida por sha (arq:0109
+  §1). Clone sujo, ramo de fábrica ou HEAD destacado são bancada,
+  não estado do dono — e bancada não sobe a ele. Apagar a bancada
+  inteira não move produção um milímetro.
+- Git fora do lugar a máquina reconcilia sozinha (`repo sanear`)
+  ou vira incidente na mesa de ti — nunca chega ao dono como
+  pergunta de como resolver.
+- Sobe ao dono só decisão de mérito: dois trabalhos que discordam
+  sobre o mesmo ponto, sem cadeira com base para escolher. Chega
+  como mérito ("A quer X, B quer Y"), nunca como conflito de git.
