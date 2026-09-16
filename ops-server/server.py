@@ -325,9 +325,14 @@ def _delta_pecas(r: dict, sessao_id: str) -> dict:
         conteudo = e.get("conteudo")
         if not sha or not pid:
             continue
+        if pid in ("persona", "conduta"):
+            # Prefixo estável [persona, conduta] é CACHE, nunca ponteiro (spec_contexto-na-porta, #3067).
+            # Não sofre dedup R2 na reabertura da sessão para manter o prefixo byte-idêntico.
+            servidos += len(conteudo.encode()) if isinstance(conteudo, str) else 0
+            continue
         alca = f"peca:{pid}"
         antes = vistos.get(alca)
-        if antes and isinstance(conteudo, str):
+        if antes and isinstance(antes, (str, bytes)) and isinstance(conteudo, str):
             try:
                 d = json.loads(antes)
             except ValueError:
@@ -1520,6 +1525,17 @@ def _montar(cadeira: str, atualizar: bool = True, chapeu: str = "", pergunta: st
     # campo `chapeu` preservado; `atualizar` continua aceito e sem efeito.
     resposta = {"sessao": abrir_json}
     resposta.update(exp_json)
+
+    # Porta marca o prefixo estável (persona+conduta) com cache_control (spec_contexto-na-porta, #3067)
+    for p in resposta.get("pecas", []):
+        if p.get("peca") in ("persona", "conduta"):
+            p["cache_control"] = {"type": "ephemeral"}
+            p["cacheavel"] = True
+
+    if isinstance(resposta.get("pacote"), dict):
+        resposta["pacote"]["prefixo_cacheavel"] = ["persona", "conduta"]
+        resposta["pacote"]["cache_control"] = {"type": "ephemeral"}
+
     return resposta
 
 

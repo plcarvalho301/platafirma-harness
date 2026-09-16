@@ -270,3 +270,157 @@ async def test_pergunta_chega_por_stdin():
     assert "--pergunta" not in exp_call["argv"]
     assert "--chapeu" in exp_call["argv"]
     assert res["chapeu"] == "contexto"
+
+
+@pytest.mark.anyio
+async def test_prefixo_estavel_marcado_cache_control():
+    """Passo 3 (#3067): porta marca prefixo estável (persona+conduta) com cache_control."""
+    sid = "44444444-5555-6666-7777-888888888888"
+    oid = "o20260914T150000-aaaaaa"
+    sub = "user-sub-123"
+
+    abrir_out = {
+        "sessao_id": sid,
+        "cunhada_agora": True,
+        "sujeito": sub,
+        "cadeira": "ia",
+        "ordem_id": oid,
+    }
+
+    exp_out = {
+        "cadeira": "ia",
+        "sessao_id": sid,
+        "ordem_id": oid,
+        "chapeu": None,
+        "pacote": {"pecas": 4, "tokens": 2000},
+        "pecas": [
+            {"peca": "persona", "sha": "sha_persona", "conteudo": "Conteudo da Persona"},
+            {"peca": "conduta", "sha": "sha_conduta", "conteudo": "Conteudo da Conduta"},
+            {"peca": "mesa", "sha": "sha_mesa", "conteudo": "Conteudo da Mesa"},
+            {"peca": "cadernos", "sha": "sha_cadernos", "conteudo": "Conteudo dos Cadernos"},
+        ],
+        "avisos": [],
+    }
+
+    mock_rc = MagicMock()
+    mock_rc.get.return_value = json.dumps({"cadeira": "ia", "ordem_id": oid, "sub": sub})
+    mock_rc.hgetall.return_value = {}
+
+    def fake_subprocess_run(argv, *args, **kwargs):
+        is_py = "python" in Path(argv[0]).name
+        cmd = argv[1] if is_py else argv[0]
+        args_rest = argv[2:] if is_py else argv[1:]
+        if "sessao" in cmd and len(args_rest) > 0 and args_rest[0] == "abrir":
+            return subprocess.CompletedProcess(argv, returncode=0, stdout=json.dumps(abrir_out), stderr="")
+        elif "expediente" in cmd and len(args_rest) > 0 and args_rest[0] == "montar":
+            return subprocess.CompletedProcess(argv, returncode=0, stdout=json.dumps(exp_out), stderr="")
+        return subprocess.CompletedProcess(argv, returncode=1, stdout="", stderr="")
+
+    with patch("server._autoriza", return_value=None), \
+         patch("server._quem", return_value={"sub": sub}), \
+         patch("server._rc", return_value=mock_rc), \
+         patch("server._audit"), \
+         patch("subprocess.run", side_effect=fake_subprocess_run):
+
+        res = await s.monta_sessao(cadeira="ia", pergunta="primeiro turno")
+
+    pecas = res["pecas"]
+    p_persona = next(p for p in pecas if p["peca"] == "persona")
+    p_conduta = next(p for p in pecas if p["peca"] == "conduta")
+    p_mesa = next(p for p in pecas if p["peca"] == "mesa")
+    p_cadernos = next(p for p in pecas if p["peca"] == "cadernos")
+
+    # Prefixo estável [persona, conduta] sai marcado cacheável
+    assert p_persona["cache_control"] == {"type": "ephemeral"}
+    assert p_persona["cacheavel"] is True
+    assert p_conduta["cache_control"] == {"type": "ephemeral"}
+    assert p_conduta["cacheavel"] is True
+
+    # Demais peças não são marcadas
+    assert "cache_control" not in p_mesa
+    assert "cache_control" not in p_cadernos
+
+
+@pytest.mark.anyio
+async def test_duas_aberturas_prefixo_byte_identico_e_nao_sofre_dedup():
+    """Aceite (#3067): duas aberturas seguidas da mesma cadeira produzem prefixo
+    persona+conduta byte-idêntico e marcado cacheável; não sofrem desreferência R2."""
+    sid = "55555555-6666-7777-8888-999999999999"
+    oid1 = "o20260914T160000-111111"
+    oid2 = "o20260914T160000-222222"
+    sub = "user-sub-123"
+
+    abrir_out_1 = {"sessao_id": sid, "cunhada_agora": True, "sujeito": sub, "cadeira": "ia", "ordem_id": oid1}
+    abrir_out_2 = {"sessao_id": sid, "cunhada_agora": False, "sujeito": sub, "cadeira": "ia", "ordem_id": oid2}
+
+    def make_exp_out(oid):
+        return {
+            "cadeira": "ia",
+            "sessao_id": sid,
+            "ordem_id": oid,
+            "chapeu": None,
+            "pacote": {"pecas": 3, "tokens": 1500},
+            "pecas": [
+                {"peca": "persona", "sha": "sha_persona_fixo", "conteudo": "Texto imutavel da persona"},
+                {"peca": "conduta", "sha": "sha_conduta_fixo", "conteudo": "Texto imutavel da conduta"},
+                {"peca": "mesa", "sha": "sha_mesa_1", "conteudo": "Texto mutavel da mesa"},
+            ],
+            "avisos": [],
+        }
+
+    ledger_mem = {}
+
+    class FakeRedis:
+        def get(self, key):
+            return json.dumps({"cadeira": "ia", "ordem_id": oid1, "sub": sub})
+        def set(self, key, val, ex=None):
+            pass
+        def hgetall(self, key):
+            return dict(ledger_mem.get(key, {}))
+        def hset(self, key, mapping=None):
+            ledger_mem.setdefault(key, {}).update(mapping or {})
+        def expire(self, key, ttl):
+            pass
+
+    abertura_cont = [0]
+
+    def fake_subprocess_run(argv, *args, **kwargs):
+        is_py = "python" in Path(argv[0]).name
+        cmd = argv[1] if is_py else argv[0]
+        args_rest = argv[2:] if is_py else argv[1:]
+        if "sessao" in cmd and len(args_rest) > 0 and args_rest[0] == "abrir":
+            abrir_out = abrir_out_1 if abertura_cont[0] == 0 else abrir_out_2
+            return subprocess.CompletedProcess(argv, returncode=0, stdout=json.dumps(abrir_out), stderr="")
+        elif "expediente" in cmd and len(args_rest) > 0 and args_rest[0] == "montar":
+            oid = oid1 if abertura_cont[0] == 0 else oid2
+            abertura_cont[0] += 1
+            return subprocess.CompletedProcess(argv, returncode=0, stdout=json.dumps(make_exp_out(oid)), stderr="")
+        return subprocess.CompletedProcess(argv, returncode=1, stdout="", stderr="")
+
+    with patch("server._autoriza", return_value=None), \
+         patch("server._quem", return_value={"sub": sub}), \
+         patch("server._rc", return_value=FakeRedis()), \
+         patch("server._audit"), \
+         patch("subprocess.run", side_effect=fake_subprocess_run):
+
+        res1 = await s.monta_sessao(cadeira="ia", pergunta="primeira abertura")
+        res2 = await s.monta_sessao(cadeira="ia", sessao_id=sid)
+
+    pref1 = res1["pecas"][:2]
+    pref2 = res2["pecas"][:2]
+
+    # Ambas saem marcadas cache_control
+    for p in pref1 + pref2:
+        assert p["cache_control"] == {"type": "ephemeral"}
+        assert p["cacheavel"] is True
+
+    # Prefixo [persona, conduta] é byte-idêntico
+    assert json.dumps(pref1, sort_keys=True) == json.dumps(pref2, sort_keys=True)
+
+    # Conteúdo integral preservado (NÃO substituído por ponteiro de dedup R2)
+    assert pref2[0]["conteudo"] == "Texto imutavel da persona"
+    assert pref2[1]["conteudo"] == "Texto imutavel da conduta"
+
+    # Enquanto mesa (não-prefixo com mesmo sha) sofre dedup R2 e vira ponteiro
+    assert "já servido nesta sessão" in res2["pecas"][2]["conteudo"]
+
