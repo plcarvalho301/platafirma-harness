@@ -503,8 +503,12 @@ def ato_montar(chapeu_forcado: str | None = None, sem_acervo: bool = False,
             cmd = "persona foto"
             ref = "verbo:persona foto"
         elif peca_id == "mesa":
-            cmd = "mesa ver"
-            ref = "verbo:mesa ver"
+            if chapeu_slug:
+                cmd = f"mesa ver {chapeu_slug}"
+                ref = f"verbo:mesa ver {chapeu_slug}"
+            else:
+                cmd = "mesa ver"
+                ref = "verbo:mesa ver"
         elif peca_id == "acervo-consultado":
             # argv pronto: a pergunta e texto livre e nao passa por shlex
             cmd = ["motor", "rag", "buscar", "casa", pergunta, "--k", "6", "--texto", "secao"]

@@ -223,7 +223,7 @@ CATALOGO = {  # peça -> (dono, volatilidade, ref, leitor)
     "chapeu": ("gestao-estrategica", "estavel", "persona ler {cad} --chapeu {ch}", peca_chapeu),
     "conduta": ("gestao-estrategica", "estavel", "persona conduta", peca_conduta),
     "alias-cadeiras": ("gestao-estrategica", "morna", "persona foto", peca_alias),
-    "mesa": ("gestao-estrategica", "volatil", "mesa ver", None),
+    "mesa": ("gestao-estrategica", "volatil", "mesa ver{flag_mesa}", None),
     "acervo-consultado": ("dados", "volatil",
                           'motor rag buscar casa "{perg}" --k 6 --texto secao', None),
     "cadernos": ("gestao-estrategica", "volatil", "mesa caderno{flag}", peca_cadernos),
@@ -254,7 +254,8 @@ def monta(clone, cad, chapeu, pergunta, forcado):
     for nome in ordem:
         dono, vol, ref, leitor = CATALOGO[nome]
         ref = "verbo:" + ref.format(cad=cad, ch=chapeu, perg=(pergunta or "")[:40],
-                                    flag=f" --chapeu {chapeu}" if chapeu else "")
+                                    flag=f" --chapeu {chapeu}" if chapeu else "",
+                                    flag_mesa=f" {chapeu}" if chapeu else "")
         env = {"peca": nome, "dono": dono, "ref": ref, "sha": None, "regime": "valor",
                "volatilidade": vol, "tokens": 0, "frescor": "simulada", "motivo": None,
                "conteudo": None}
