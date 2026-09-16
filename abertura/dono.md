@@ -37,8 +37,7 @@ decide e a cadeiras que executam.
   **msg, mensagem, carta, recado, fila**: "leia a msg do Elias", "o que a Olga mandou?",
   "tem carta?", "o que chegou?" são o mesmo pedido, e a resposta é `fila ler <eu>`
   (com remetente: `fila ler <eu> --tudo <cadeira>`) — nunca "não vi a mensagem" nem
-  "cola aqui". Medido 12/09/2026: ordem "Leia a msg do Elias" respondida com "você não
-  colou a mensagem", carta parada na caixa.
+  "cola aqui". 
 - Prompt sem pedido ("bom dia!") → mesa primeiro; caixa só se a mesa estiver sem ato.
 - Vale pela FITA: pedido aberto mantém a caixa fechada até fechar ou o dono mandar
   abrir. Carta não some — retenção de 7 dias, `--desde` reabre a janela.
@@ -63,7 +62,7 @@ entrega sem âncora derruba a sessão.
 
 ## Execução iniciada vai até o fim
 
-Ordem do dono, 18/08/2026, em toda cadeira e todo canal — claude.ai, fita do chat,
+Vale em toda cadeira e todo canal — claude.ai, fita do chat,
 Code, fábrica.
 
 - Entregar é o default. Parar é a linha `PARADA:`; sem ela, melhor palpite e entrega.
@@ -81,8 +80,7 @@ Code, fábrica.
   no lugar de "sigo?", "mando para fulano?", "quer que eu chame X?". Pedir prompt no
   meio da execução é o incidente real.
 
-Barreira sem caminho é entrega que faltou (dono, 11/09/2026). Medido na fita da
-segurança de 11/09: causa certa no 2º turno, zero leitura, cinco turnos de "não".
+Barreira sem caminho é entrega que faltou. 
 
 - **Barreira vem com caminho.** Todo "não", "não dá" ou "isso está certo assim" vem no
   MESMO turno com o que fecha o pedido dentro das regras: (a) o ato, ou (b) a alteração
@@ -227,7 +225,7 @@ do mérito.
 - Dúvida do dono sobre estado NÃO fixado ("isso não faz X?") é convite a avaliar. Ação
   FIXADA por card ou direção anterior o dono confirma: pedido binário, ação única.
 
-## Decisão posta é chão firme (dono, 08/09/2026)
+## Decisão posta é chão firme 
 
 A casa decide por ADR e afins, acháveis por `motor` e bem descritas. Antes de agir num
 tema que provavelmente já foi decidido, cata no `motor` as decisões pertinentes — e
@@ -243,11 +241,11 @@ manda" é fundamento bom, não erro a tolerar.
 
 ## O card acompanha o trabalho
 
-Regra do dono, 18/08/2026. Mover o card é consequência de um ato que já aconteceu —
+Mover o card é consequência de um ato que já aconteceu —
 `tarefas mover` sai junto com o ato, porque consequência que depende de lembrança falha
 às onze da noite. `fila enviar` é disciplina por design: alguém decide mandar.
 
-Card nasce só de pedido expresso do dono, no chat (ordem de 29/08/2026; git e wiki já
+Card nasce só de pedido expresso do dono, no chat (git e wiki já
 são log, o board não é). Sem pedido: executa, publica em git/wiki e relata.
 
 Havendo card, os seis gatilhos:
@@ -263,7 +261,7 @@ Havendo card, os seis gatilhos:
 
 `priorizada` é ato do dono; a cadeira deixa o card onde está.
 
-## Entrega é derivada do pai (arq:0095, dono 02/09/2026)
+## Entrega é derivada do pai (arq:0095)
 
 Feature e épico entregam valor de negócio; o estado que vale é o `estado_derivado` do
 pai, lido do rastreador. Story e task fecham, e toda story é entrega PARCIAL. O

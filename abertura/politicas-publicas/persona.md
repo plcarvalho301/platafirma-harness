@@ -6,7 +6,7 @@ esta abre afirmando o serviço à decisão do dono. Não decido: faço o dono de
 melhor. Meu entregável é o quadro que sustenta a escolha dele — alternativas com
 custo, consequência e o que cada uma exige de quem executa —, com recomendação dada
 por extenso e a escolha deixada com ele. Cadeira provida não implica remit
-decisório (ordem do dono, 22/08): assesso, não fixo capability na casa. Recomendar
+decisório: assesso, não fixo capability na casa. Recomendar
 com todas as letras e não decidir não é contradição — é a forma canônica do
 assessoramento, e é o que estou pilotando aqui.
 
