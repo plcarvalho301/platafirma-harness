@@ -512,12 +512,19 @@ def cmd_enviar(rc, eu: str, args):
             f'erro: --de "{de}" nao bate com a identidade da sessao ({eu}) — remetente nao se forja.\n'
         )
         sys.exit(1)
-    if not args.tipo or not args.assunto:
-        sys.stderr.write("erro: --tipo e --assunto sao obrigatorios\n")
+    tipo = args.tipo or os.environ.get("PF_TIPO")
+    if not tipo:
+        sys.stderr.write(
+            f"erro: --tipo e obrigatorio (sem tipo na sessao)\n  validos: {', '.join(sorted(TIPOS_VALIDOS))}\n"
+        )
         sys.exit(2)
-    if args.tipo not in TIPOS_VALIDOS:
-        sys.stderr.write(f"erro: tipo invalido: {args.tipo}\n  validos: {', '.join(sorted(TIPOS_VALIDOS))}\n")
+    if not args.assunto:
+        sys.stderr.write("erro: --assunto e obrigatorio\n")
+        sys.exit(2)
+    if tipo not in TIPOS_VALIDOS:
+        sys.stderr.write(f"erro: tipo invalido: {tipo}\n  validos: {', '.join(sorted(TIPOS_VALIDOS))}\n")
         sys.exit(1)
+    args.tipo = tipo
     valida_persona(args.destinatario)
     valida_persona(de)
     # Grava sempre o nome canonico: a caixa e uma so, qualquer que seja a caixa
@@ -580,8 +587,8 @@ def uso():
         "  fila ler <persona>                     so o que chegou desde a ultima leitura\n"
         "  fila ler <persona> --tudo [remetente]  historico dos 7 dias, nao move o ponteiro\n"
         "  fila ler <persona> --desde AAAAMMDDTHHMMSS [remetente]\n"
-        "  fila enviar <destinatario> --tipo <t> --assunto <a> [--ref <r>] [--responde <id>]\n"
-        "              (corpo em stdin)\n"
+        "  fila enviar <destinatario> [--tipo <t>] --assunto <a> [--ref <r>] [--responde <id>]\n"
+        "              (corpo em stdin; --tipo default = PF_TIPO da sessao)\n"
         "  fila tipos                             lista os tipos validos de --tipo\n"
     )
     sys.exit(2)
@@ -596,6 +603,20 @@ def main():
     if args.verbo == "tipos":
         sys.stdout.write("\n".join(sorted(TIPOS_VALIDOS)) + "\n")
         sys.exit(0)
+    if args.verbo == "enviar":
+        tipo = args.tipo or os.environ.get("PF_TIPO")
+        if not tipo:
+            sys.stderr.write(
+                f"erro: --tipo e obrigatorio (sem tipo na sessao)\n  validos: {', '.join(sorted(TIPOS_VALIDOS))}\n"
+            )
+            sys.exit(2)
+        if not args.assunto:
+            sys.stderr.write("erro: --assunto e obrigatorio\n")
+            sys.exit(2)
+        if tipo not in TIPOS_VALIDOS:
+            sys.stderr.write(f"erro: tipo invalido: {tipo}\n  validos: {', '.join(sorted(TIPOS_VALIDOS))}\n")
+            sys.exit(1)
+        args.tipo = tipo
     eu = resolve_eu(args)
     rc = r_conn()
     try:
