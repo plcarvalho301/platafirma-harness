@@ -355,7 +355,32 @@ REVISADA; se `acervo ingerir casa` não faz upsert vetorial (delete-then-insert 
 não existe mais — pior que não achar. Hook novo nasce INERTE com a dependência nomeada,
 não ligado na esperança.
 
+## No Code, o pacote de abertura não entra na fita (medido 16/09/2026)
+
+O retorno de `monta_sessao` (~76 KB, ~22,5k tokens qwen) passa do teto de retorno de
+tool do Claude Code e vira arquivo: o que entra na fita é um aviso de 1,3 KB com o
+caminho. A persona só chega se o modelo LER o arquivo depois. Composição de papel
+que depende de o modelo ir buscar é papel capado por padrão. Maior peça: cadernos
+(~28 KB com chapéu). Medido lendo o transcript da sessão (`~/.claude/projects/`).
+
+## Simular abertura antes de propor mudança nela (16/09/2026)
+
+`agente/abertura-ver.py` (solto no clone do host, sem commit) monta o pacote a partir
+de `abertura/` do clone, na ordem de `bin/expediente`, com o `rotear` e o
+`hash_servido` do próprio clone; mesa e acervo saem SIMULADOS. Conferido contra
+produção: ordem e sha de persona, chapéu, conduta e alias iguais. `--md` gera
+relatório. O dono pediu para ver o pacote, não a sessão: primeiro li "diagnóstico" como
+ler transcript e entreguei a coisa errada — pedido de "o que entra" para propor
+melhoria no fluxo é simulação a partir da fonte, não leitura de produção.
+
 ## Diário de bordo
+
+16/09/2026 — o clone `~/AI/platafirma-harness` da estação do dono é CLIENTE: Bash,
+Write e Edit negados ali (`.claude/settings.json`); criei ramo e arquivo antes de
+ler o CLAUDE.md do clone, e a limpeza foi negada — ficou com o dono (`rh/fita-ver` e
+`agente/fita-ver` na estação). Ler o CLAUDE.md do diretório antes de escrever nele.
+`repo ramo <repo> --slug x` sem card sai 2 (nome '-x' inválido); ramo livre por
+`repo git <repo> switch -c`. `conta-abertura` (citado no ferramental) não é servido.
 
 14/09/2026 (tarde) — `conferir superficie` e `conferir verbo` respondem mas estão
 DEPRECADOS (forma conforme: `release conferir <classe>`, spec_release §8); usei a
