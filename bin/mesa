@@ -71,9 +71,11 @@ import argparse
 import json
 import os
 import re
+import shutil
 import subprocess
 import sys
 import time
+from pathlib import Path
 
 try:
     import redis
@@ -92,7 +94,7 @@ TETO_AVISO = 4000  # bytes; acima disto e sintoma de fato nao despachado
 # instancia, um arquivo por nome.
 HARNESS = os.path.dirname(os.path.dirname(os.path.realpath(__file__)))
 sys.path.insert(0, os.path.join(HARNESS, "lib"))
-from raizes import instancia  # noqa: E402
+from raizes import bancada, BancadaNaoDeclarada, instancia  # noqa: E402
 
 # arq:0073: caderno mora em abertura/<cadeira>/<slug>/
 CADERNOS = os.path.join(
@@ -624,6 +626,66 @@ def _indice_cadernos(d):
     return 0
 
 
+def _acha_worktree(cad: str) -> Path:
+    # 1. Determina a bancada
+    try:
+        raiz = bancada()
+    except BancadaNaoDeclarada:
+        fallback = Path.home() / "AI"
+        if fallback.is_dir():
+            raiz = fallback
+        else:
+            cand = Path(HARNESS).parent
+            if cand.is_dir() and (cand / "platafirma-harness").is_dir():
+                raiz = cand
+            else:
+                sys.stderr.write("mesa escrever: bancada não declarada (defina PLATAFIRMA_BANCADA)\n")
+                sys.exit(3)
+
+    # 2. Candidatos de worktree existente
+    candidatos = [
+        raiz / "var" / "wt" / cad / "platafirma-harness",
+        raiz / "wt" / "platafirma-harness" / cad,
+        raiz / "var" / "wt" / "platafirma-harness" / cad,
+        raiz / "platafirma-harness" / "wt" / cad,
+        raiz / "platafirma-harness",
+    ]
+    for c in candidatos:
+        if c.is_dir() and ((c / ".git").exists() or (c / ".git").is_file()):
+            return c
+
+    # 3. Criar via `repo abrir platafirma-harness` se ausente
+    repo_bin = os.environ.get("PF_BIN") and os.path.join(os.environ["PF_BIN"], "repo")
+    if not repo_bin or not os.path.isfile(repo_bin):
+        cand_repo = os.path.join(HARNESS, "bin", "repo")
+        if os.path.isfile(cand_repo):
+            repo_bin = cand_repo
+        else:
+            repo_bin = shutil.which("repo") or "repo"
+
+    env = dict(os.environ)
+    env["PF_CADEIRA"] = cad
+    env["PLATAFIRMA_BANCADA"] = str(raiz)
+    cmd = [repo_bin, "abrir", "platafirma-harness", "--cadeira", cad]
+    res = subprocess.run(cmd, capture_output=True, text=True, env=env)
+    if res.returncode == 0:
+        m = re.search(r"bancada (?:já )?aberta:\s*(\S+)", res.stdout)
+        if m:
+            p = Path(m.group(1).split()[0])
+            if p.is_dir():
+                return p
+
+    for c in candidatos:
+        if c.is_dir() and ((c / ".git").exists() or (c / ".git").is_file()):
+            return c
+
+    sys.stderr.write(
+        f"mesa escrever: falha ao abrir worktree para a cadeira {cad!r}\n"
+        f"  detalhe: {res.stderr.strip() or res.stdout.strip()}\n"
+    )
+    sys.exit(3)
+
+
 def ato_escrever(args):
     """Escreve o caderno duravel do chapeu (spec_caderno).
     Corpo lido de STDIN. Morada duravel: abertura/<cadeira>/<chapeu>/caderno.md."""
@@ -640,19 +702,93 @@ def ato_escrever(args):
         sys.stderr.write("erro: corpo vazio (esperava texto do caderno em stdin)\n")
         return 2
 
-    cad_repo = os.path.join(HARNESS, "abertura", cadeira(), slot, "caderno.md")
-    cad_pub = os.path.join(CADERNOS, cadeira(), slot, "caderno.md")
+    cad = cadeira()
+    wt_dir = _acha_worktree(cad)
 
-    alvos = [cad_repo]
-    if os.path.abspath(cad_pub) != os.path.abspath(cad_repo) and os.path.isdir(os.path.dirname(os.path.dirname(cad_pub))):
-        alvos.append(cad_pub)
+    cad_repo = wt_dir / "abertura" / cad / slot / "caderno.md"
+    cad_repo.parent.mkdir(parents=True, exist_ok=True)
+    with open(cad_repo, "w", encoding="utf-8") as fh:
+        fh.write(corpo)
 
-    for caminho in alvos:
-        os.makedirs(os.path.dirname(caminho), exist_ok=True)
-        with open(caminho, "w", encoding="utf-8") as fh:
-            fh.write(corpo)
+    git_bin = next((p for p in ("/usr/bin/git", "/bin/git") if os.path.exists(p)), "git")
+    gh_bin = next(
+        (p for p in ("/usr/bin/gh", "/bin/gh", os.path.expanduser("~/.local/bin/gh"))
+         if os.path.exists(p)),
+        None,
+    )
+    env = dict(os.environ)
+    if gh_bin:
+        env["PATH"] = os.path.dirname(gh_bin) + ":" + env.get("PATH", "")
+    if "GIT_AUTHOR_NAME" not in env:
+        env["GIT_AUTHOR_NAME"] = f"claudinho-{cad}"
+        env["GIT_AUTHOR_EMAIL"] = f"{cad}@platafirma.org"
+        env["GIT_COMMITTER_NAME"] = f"claudinho-{cad}"
+        env["GIT_COMMITTER_EMAIL"] = f"{cad}@platafirma.org"
 
-    print(f"caderno {slot}: gravado ({len(corpo.encode('utf-8'))} B em {cad_repo})")
+    proc_ramo = subprocess.run(
+        [git_bin, "-C", str(wt_dir), "rev-parse", "--abbrev-ref", "HEAD"],
+        capture_output=True, text=True, env=env
+    )
+    ramo_atual = proc_ramo.stdout.strip()
+    ramo = ramo_atual
+    if not ramo or ramo in ("HEAD", "main", "master"):
+        ramo = f"caderno/{cad}/{slot}"
+        check_proc = subprocess.run(
+            [git_bin, "-C", str(wt_dir), "show-ref", "--verify", "--quiet", f"refs/heads/{ramo}"],
+            env=env
+        )
+        if check_proc.returncode == 0:
+            subprocess.run([git_bin, "-C", str(wt_dir), "checkout", ramo], check=True, capture_output=True, env=env)
+        else:
+            subprocess.run([git_bin, "-C", str(wt_dir), "checkout", "-b", ramo], check=True, capture_output=True, env=env)
+
+    rel_caminho = os.path.relpath(cad_repo, wt_dir)
+    subprocess.run([git_bin, "-C", str(wt_dir), "add", rel_caminho], check=True, capture_output=True, env=env)
+    diff_cached = subprocess.run([git_bin, "-C", str(wt_dir), "diff", "--cached", "--quiet"], env=env)
+    if diff_cached.returncode != 0:
+        subprocess.run(
+            [git_bin, "-C", str(wt_dir), "commit", "-m", f"caderno({cad}): atualiza {slot}"],
+            check=True, capture_output=True, env=env
+        )
+
+    proc_push = subprocess.run(
+        [git_bin, "-C", str(wt_dir), "push", "-u", "origin", ramo],
+        capture_output=True, text=True, env=env
+    )
+    if proc_push.returncode != 0:
+        proc_remote = subprocess.run(
+            [git_bin, "-C", str(wt_dir), "ls-remote", "origin", f"refs/heads/{ramo}"],
+            capture_output=True, text=True, env=env
+        )
+        remote_sha = proc_remote.stdout.split()[0] if proc_remote.stdout.strip() else ""
+        proc_local = subprocess.run(
+            [git_bin, "-C", str(wt_dir), "rev-parse", f"refs/heads/{ramo}"],
+            capture_output=True, text=True, env=env
+        )
+        local_sha = proc_local.stdout.strip()
+        if not (remote_sha and remote_sha == local_sha):
+            sys.stderr.write(f"mesa escrever: git push falhou: {proc_push.stderr.strip()}\n")
+            return 3
+
+    pr_str = ""
+    if gh_bin:
+        pr_proc = subprocess.run(
+            [gh_bin, "pr", "create", "--base", "main", "--head", ramo,
+             "--title", f"caderno({cad}): atualiza {slot}",
+             "--body", f"Atualização do caderno durável de {cad}/{slot} via `mesa escrever`."],
+            cwd=str(wt_dir), capture_output=True, text=True, env=env
+        )
+        if pr_proc.returncode == 0:
+            pr_str = f" · PR: {pr_proc.stdout.strip()}"
+        else:
+            m_pr = re.search(r"https://github\.com/\S+/pull/\d+", pr_proc.stderr + pr_proc.stdout)
+            if m_pr:
+                pr_str = f" · PR: {m_pr.group(0)}"
+            else:
+                pr_str = f" · PR: {pr_proc.stderr.strip()}"
+
+    tam = len(corpo.encode("utf-8"))
+    print(f"caderno {slot}: gravado ({tam} B em {cad_repo}) · ramo: {ramo}{pr_str}")
     return 0
 
 
