@@ -352,3 +352,85 @@ def test_formato_json_e_objeto(raiz_hermetica):
     assert "pacote" in d
     assert "pecas" in d
     assert "avisos" in d
+
+
+# ------------------------------------------------------------------------------
+# Passo 1: Prefixo estável [persona, conduta] contíguo e byte-estável (#3067)
+# ------------------------------------------------------------------------------
+
+def test_ordem_prefixo_estavel_persona_conduta_contiguo_sem_chapeu(raiz_hermetica):
+    """Passo 1 (#3067): persona e conduta são as duas primeiras peças, contíguas (sem chapéu)."""
+    proc = _run_expediente(["montar", "--json"], raiz_hermetica, env_extra={"PF_CADEIRA": "ia"})
+    assert proc.returncode == 0
+    d = json.loads(proc.stdout)
+    pecas = d["pecas"]
+    assert len(pecas) >= 2
+    assert pecas[0]["peca"] == "persona"
+    assert pecas[1]["peca"] == "conduta"
+
+
+def test_ordem_prefixo_estavel_persona_conduta_contiguo_com_chapeu(raiz_hermetica):
+    """Passo 1 (#3067): com chapéu roteado, persona e conduta continuam contíguos no topo;
+    chapéu vem em 3º (logo após conduta, nunca intercalado entre persona e conduta)."""
+    proc = _run_expediente(
+        ["montar", "--json"],
+        raiz_hermetica,
+        stdin_data="pergunta sobre janela de contexto",
+        env_extra={"PF_CADEIRA": "ia", "PF_BIN": str(raiz_hermetica / "bin")},
+    )
+    assert proc.returncode == 0
+    d = json.loads(proc.stdout)
+    assert d["chapeu"] == "contexto"
+    pecas = d["pecas"]
+    assert len(pecas) >= 3
+    assert pecas[0]["peca"] == "persona"
+    assert pecas[1]["peca"] == "conduta"
+    assert pecas[2]["peca"] == "chapeu"
+
+
+def test_prefixo_byte_estavel_entre_aberturas(raiz_hermetica):
+    """Passo 1 (#3067): aberturas seguidas produzem prefixo persona+conduta byte-idêntico."""
+    proc1 = _run_expediente(["montar", "--json"], raiz_hermetica, env_extra={"PF_CADEIRA": "ia"})
+    proc2 = _run_expediente(["montar", "--json"], raiz_hermetica, env_extra={"PF_CADEIRA": "ia"})
+    assert proc1.returncode == 0
+    assert proc2.returncode == 0
+    d1 = json.loads(proc1.stdout)
+    d2 = json.loads(proc2.stdout)
+    p1 = d1["pecas"][:2]
+    p2 = d2["pecas"][:2]
+    assert json.dumps(p1, sort_keys=True) == json.dumps(p2, sort_keys=True)
+
+
+# ------------------------------------------------------------------------------
+# Passo 2: Chapéu resolvido antes da mesa; sem chapéu, mesa inteira (#3067)
+# ------------------------------------------------------------------------------
+
+def test_mesa_recebe_chapeu_resolvido(raiz_hermetica):
+    """Passo 2 (#3067): chapéu resolvido antes da mesa -> mesa ver <chapeu>."""
+    proc = _run_expediente(
+        ["montar", "--chapeu", "contexto", "--json"],
+        raiz_hermetica,
+        env_extra={"PF_CADEIRA": "ia", "PF_BIN": str(raiz_hermetica / "bin")},
+    )
+    assert proc.returncode == 0
+    d = json.loads(proc.stdout)
+    assert d["chapeu"] == "contexto"
+    peca_mesa = next(p for p in d["pecas"] if p["peca"] == "mesa")
+    assert peca_mesa["ref"] == "verbo:mesa ver contexto"
+
+
+def test_mesa_sem_chapeu_fail_to_inteiro(raiz_hermetica):
+    """Passo 2 (#3067): sem chapéu resolvido -> mesa ver (mesa inteira / fail-to-inteiro)."""
+    proc = _run_expediente(
+        ["montar", "--json"],
+        raiz_hermetica,
+        stdin_data="pergunta sem rotulo",
+        env_extra={"PF_CADEIRA": "ia", "PF_BIN": str(raiz_hermetica / "bin")},
+    )
+    assert proc.returncode == 0
+    d = json.loads(proc.stdout)
+    assert d["chapeu"] is None
+    peca_mesa = next(p for p in d["pecas"] if p["peca"] == "mesa")
+    assert peca_mesa["ref"] == "verbo:mesa ver"
+
+

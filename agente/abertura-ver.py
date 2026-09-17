@@ -223,7 +223,7 @@ CATALOGO = {  # peça -> (dono, volatilidade, ref, leitor)
     "chapeu": ("gestao-estrategica", "estavel", "persona ler {cad} --chapeu {ch}", peca_chapeu),
     "conduta": ("gestao-estrategica", "estavel", "persona conduta", peca_conduta),
     "alias-cadeiras": ("gestao-estrategica", "morna", "persona foto", peca_alias),
-    "mesa": ("gestao-estrategica", "volatil", "mesa ver", None),
+    "mesa": ("gestao-estrategica", "volatil", "mesa ver{flag_mesa}", None),
     "acervo-consultado": ("dados", "volatil",
                           'motor rag buscar casa "{perg}" --k 6 --texto secao', None),
     "cadernos": ("gestao-estrategica", "volatil", "mesa caderno{flag}", peca_cadernos),
@@ -246,15 +246,16 @@ def monta(clone, cad, chapeu, pergunta, forcado):
         chapeu = d.slug
     avisos = [] if chapeu else [f"chapéu não roteado (fallback): {roteador['motivo']}"]
 
-    # Mesma ordem de bin/expediente montar (saliência, não volatilidade).
-    ordem = ["persona"] + (["chapeu"] if chapeu else []) + ["conduta", "alias-cadeiras", "mesa"]
+    # Mesma ordem de bin/expediente montar: prefixo estável [persona, conduta] primeiro (#3067).
+    ordem = ["persona", "conduta"] + (["chapeu"] if chapeu else []) + ["alias-cadeiras", "mesa"]
     ordem += (["acervo-consultado"] if pergunta else []) + ["cadernos"]
 
     pecas = []
     for nome in ordem:
         dono, vol, ref, leitor = CATALOGO[nome]
         ref = "verbo:" + ref.format(cad=cad, ch=chapeu, perg=(pergunta or "")[:40],
-                                    flag=f" --chapeu {chapeu}" if chapeu else "")
+                                    flag=f" --chapeu {chapeu}" if chapeu else "",
+                                    flag_mesa=f" {chapeu}" if chapeu else "")
         env = {"peca": nome, "dono": dono, "ref": ref, "sha": None, "regime": "valor",
                "volatilidade": vol, "tokens": 0, "frescor": "simulada", "motivo": None,
                "conteudo": None}

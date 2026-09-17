@@ -469,17 +469,12 @@ def ato_montar(chapeu_forcado: str | None = None, sem_acervo: bool = False,
 
     cat_por_id = {item["peca"]: item for item in CATALOGO}
 
-    # Ordem de injeção por SALIÊNCIA, não por volatilidade (spec_abertura §1, rev):
-    # identidade em primazia máxima, régua de forma logo após a identidade que ela
-    # enquadra, consulta passiva no meio, cadernos por último. Fundamento: curva em U
-    # de atenção — primazia/recência nas pontas, vale no meio (Liu et al. 2024; role em
-    # primazia é o efeito mais forte para persona). persona ANTES de conduta: a peça que
-    # faz a cadeira ser ela mesma não pode entrar fria atrás de ~5,5k tokens de régua
-    # comum a toda cadeira. chapeu em primazia alta (logo após persona) quando roteia.
-    ordem_chaves = ["persona"]
+    # Prefixo estável [persona, conduta] primeiro, contíguo e byte-estável
+    # (spec_contexto-na-porta, #3067 balde 1): persona e conduta contíguos no topo,
+    # chapéu logo após conduta quando roteado (não intercalado entre persona e conduta).
+    ordem_chaves = ["persona", "conduta"]
     if chapeu_slug:
         ordem_chaves.append("chapeu")
-    ordem_chaves.append("conduta")
     ordem_chaves.append("alias-cadeiras")
     ordem_chaves.append("mesa")
     if pergunta and not sem_acervo:
@@ -508,8 +503,12 @@ def ato_montar(chapeu_forcado: str | None = None, sem_acervo: bool = False,
             cmd = "persona foto"
             ref = "verbo:persona foto"
         elif peca_id == "mesa":
-            cmd = "mesa ver"
-            ref = "verbo:mesa ver"
+            if chapeu_slug:
+                cmd = f"mesa ver {chapeu_slug}"
+                ref = f"verbo:mesa ver {chapeu_slug}"
+            else:
+                cmd = "mesa ver"
+                ref = "verbo:mesa ver"
         elif peca_id == "acervo-consultado":
             # argv pronto: a pergunta e texto livre e nao passa por shlex
             cmd = ["motor", "rag", "buscar", "casa", pergunta, "--k", "6", "--texto", "secao"]
