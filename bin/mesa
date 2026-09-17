@@ -4,8 +4,8 @@
 # dono: gestao-estrategica (a forma: o que e mesa, o que e caderno) · ia (montador) · ti (substrato)
 # classe: B
 # use para: pendência entre fitas, 'o que ficou na mesa', anotar, caderno do chapéu
-# atos: ver, item, fez, anota, fita, limpa, caderno, legado
-# folhas: ver|item|fez -> trabalho/mesa (o item com ato) · caderno -> expediente/caderno (o duravel) ·
+# atos: ver, item, fez, anota, fita, limpa, caderno, legado, escrever
+# folhas: ver|item|fez -> trabalho/mesa (o item com ato) · caderno|escrever -> expediente/caderno (o duravel) ·
 #         anota|limpa|legado -> trabalho/mesa, transicao · fita -> pende (guarda de fita e de sessao)
 # ambiente: PF_CADEIRA (obrigatoria, origem porta), PF_FITA, PF_SUPERFICIE[=desconhecida],
 #           MEM_REDIS_HOST[=127.0.0.1], MEM_REDIS_PORT[=6380], SESSAO_PG_PORT[=5437],
@@ -364,7 +364,21 @@ def ato_item(args):
     """Planta um item. Sem ato e sem alvo nao entra: a regua de admissao da mesa e
     'se eu nao fizer nada, isso continua do jeito que esta?' — sem ato, nao continua
     nada, e o lugar do texto e outro (caderno, card)."""
-    slot = valida_slot(args.chapeu)
+    chapeu = args.chapeu or os.environ.get("PF_CHAPEU")
+    if not chapeu:
+        sys.stderr.write(
+            "erro: chapeu obrigatorio (sem chapeu na sessao: passe <chapeu> ou defina PF_CHAPEU)\n"
+            "  uso: mesa item [<chapeu>] --ato <o-que-fazer> --alvo <sobre-o-que>\n"
+        )
+        return 2
+    if not args.ato or not args.alvo:
+        sys.stderr.write(
+            "erro: --ato e --alvo sao obrigatorios\n"
+            "  exemplo: mesa item --ato conferir --alvo card:3065\n"
+            "  uso: mesa item [<chapeu>] --ato <o-que-fazer> --alvo <sobre-o-que>\n"
+        )
+        return 2
+    slot = valida_slot(chapeu)
     texto = "" if sys.stdin.isatty() else sys.stdin.read().strip()
     con = pg()
     if con is None:
@@ -610,23 +624,59 @@ def _indice_cadernos(d):
     return 0
 
 
+def ato_escrever(args):
+    """Escreve o caderno duravel do chapeu (spec_caderno).
+    Corpo lido de STDIN. Morada duravel: abertura/<cadeira>/<chapeu>/caderno.md."""
+    chapeu = args.slot or os.environ.get("PF_CHAPEU")
+    if not chapeu:
+        sys.stderr.write(
+            "erro: chapeu obrigatorio (sem chapeu na sessao: passe <chapeu> ou defina PF_CHAPEU)\n"
+            "  uso: mesa escrever [<chapeu>]\n"
+        )
+        return 2
+    slot = valida_slot(chapeu)
+    corpo = sys.stdin.read()
+    if not corpo.strip():
+        sys.stderr.write("erro: corpo vazio (esperava texto do caderno em stdin)\n")
+        return 2
+
+    cad_repo = os.path.join(HARNESS, "abertura", cadeira(), slot, "caderno.md")
+    cad_pub = os.path.join(CADERNOS, cadeira(), slot, "caderno.md")
+
+    alvos = [cad_repo]
+    if os.path.abspath(cad_pub) != os.path.abspath(cad_repo) and os.path.isdir(os.path.dirname(os.path.dirname(cad_pub))):
+        alvos.append(cad_pub)
+
+    for caminho in alvos:
+        os.makedirs(os.path.dirname(caminho), exist_ok=True)
+        with open(caminho, "w", encoding="utf-8") as fh:
+            fh.write(corpo)
+
+    print(f"caderno {slot}: gravado ({len(corpo.encode('utf-8'))} B em {cad_repo})")
+    return 0
+
+
 def main():
     # --ajuda UNIVERSAL (card #2868, ex-#2274 defeito 4): argparse ja da -h/--help;
     # aqui so mapeamos o alias PT --ajuda -> --help antes do parse, sem colidir com
     # os subparsers. Sem efeito colateral: nenhum ato roda.
     sys.argv = [("--help" if a == "--ajuda" else a) for a in sys.argv]
     p = argparse.ArgumentParser(prog="mesa", description="memoria de trabalho da cadeira, por chapeu")
-    sub = p.add_subparsers(dest="ato")
+    sub = p.add_subparsers(dest="subcomando")
 
     v = sub.add_parser("ver", help="o que esta pendente: item com ato, e a prosa que sobrou")
     v.add_argument("slot", nargs="?")
     v.set_defaults(func=ato_ver)
 
     i = sub.add_parser("item", help="planta um item de mesa: ato e alvo obrigatorios")
-    i.add_argument("chapeu")
-    i.add_argument("--ato", required=True, help="o que a proxima fita tem de FAZER")
-    i.add_argument("--alvo", required=True, help="sobre o que: card, arquivo, servico, cadeira")
+    i.add_argument("chapeu", nargs="?", default=None, help="slug do chapeu (default: PF_CHAPEU)")
+    i.add_argument("--ato", default=None, help="o que a proxima fita tem de FAZER")
+    i.add_argument("--alvo", default=None, help="sobre o que: card, arquivo, servico, cadeira")
     i.set_defaults(func=ato_item)
+
+    e = sub.add_parser("escrever", help="escreve o caderno duravel do chapeu; corpo em stdin")
+    e.add_argument("slot", nargs="?", default=None, help="slug do chapeu (default: PF_CHAPEU)")
+    e.set_defaults(func=ato_escrever)
 
     f = sub.add_parser("fez", help="esvazia o item (pelo numero exibido) porque o ato foi executado")
     f.add_argument("n", type=int, help="o numero exibido em `mesa ver` (#N), nao o id interno")
@@ -660,7 +710,7 @@ def main():
     c.set_defaults(func=ato_caderno)
 
     args = p.parse_args()
-    if not args.ato:
+    if not getattr(args, "func", None):
         p.print_help()
         return 2
     return args.func(args)

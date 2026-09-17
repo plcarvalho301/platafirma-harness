@@ -80,9 +80,15 @@ def kcadm(*args: str) -> tuple[int, str]:
     try:
         r = subprocess.run([str(SEG), "keycloak", "--", *args],
                            capture_output=True, text=True, timeout=60)
+        saida = (r.stdout or r.stderr).strip()
+        if r.returncode != 0 and any(x in saida.lower() for x in ["session has expired", "login again", "token expired", "unauthorized"]):
+            subprocess.run([str(SEG), "keycloak", "entrar"], capture_output=True, timeout=30)
+            r = subprocess.run([str(SEG), "keycloak", "--", *args],
+                               capture_output=True, text=True, timeout=60)
+            saida = (r.stdout or r.stderr).strip()
     except (OSError, subprocess.TimeoutExpired) as e:
         return 1, f"{type(e).__name__}: {e}"
-    return r.returncode, (r.stdout or r.stderr).strip()
+    return r.returncode, saida
 
 
 def cmd_orfaos(argv: list[str]) -> int:

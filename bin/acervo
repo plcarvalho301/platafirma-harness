@@ -229,10 +229,11 @@ case "$ATO" in
     exec "$ATOS/extrato" "$@" ;;
   psql)
     case "${1:-}" in
-      --banco) ;;
+      --banco|--sql) ;;
       "") ;;
       -h|--help|ajuda) ;;
-      *) avisa "acervo psql <banco>" "acervo psql --banco <banco>" ;;
+      rag|motor) avisa "acervo psql <banco>" "acervo psql --banco <banco>" ;;
+      *) ;;
     esac
     exec bash "$ATOS/psql" "$@" ;;
 

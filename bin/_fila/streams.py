@@ -512,12 +512,17 @@ def cmd_enviar(rc, eu: str, args):
             f'erro: --de "{de}" nao bate com a identidade da sessao ({eu}) — remetente nao se forja.\n'
         )
         sys.exit(1)
-    if not args.tipo or not args.assunto:
-        sys.stderr.write("erro: --tipo e --assunto sao obrigatorios\n")
+    if not args.tipo:
+        sys.stderr.write(
+            f"erro: --tipo e obrigatorio\n  validos: {', '.join(sorted(TIPOS_VALIDOS))}\n"
+        )
         sys.exit(2)
     if args.tipo not in TIPOS_VALIDOS:
         sys.stderr.write(f"erro: tipo invalido: {args.tipo}\n  validos: {', '.join(sorted(TIPOS_VALIDOS))}\n")
         sys.exit(1)
+    if not args.assunto:
+        sys.stderr.write("erro: --assunto e obrigatorio\n")
+        sys.exit(2)
     valida_persona(args.destinatario)
     valida_persona(de)
     # Grava sempre o nome canonico: a caixa e uma so, qualquer que seja a caixa
@@ -596,6 +601,18 @@ def main():
     if args.verbo == "tipos":
         sys.stdout.write("\n".join(sorted(TIPOS_VALIDOS)) + "\n")
         sys.exit(0)
+    if args.verbo == "enviar":
+        if not args.tipo:
+            sys.stderr.write(
+                f"erro: --tipo e obrigatorio\n  validos: {', '.join(sorted(TIPOS_VALIDOS))}\n"
+            )
+            sys.exit(2)
+        if args.tipo not in TIPOS_VALIDOS:
+            sys.stderr.write(f"erro: tipo invalido: {args.tipo}\n  validos: {', '.join(sorted(TIPOS_VALIDOS))}\n")
+            sys.exit(1)
+        if not args.assunto:
+            sys.stderr.write("erro: --assunto e obrigatorio\n")
+            sys.exit(2)
     eu = resolve_eu(args)
     rc = r_conn()
     try:

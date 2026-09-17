@@ -136,6 +136,24 @@ _sessao: ContextVar[str] = ContextVar("sessao", default="-")
 # vive no msg-mem (`sessao:{id}`), e por isso sobrevive ao restart da porta — fita viva
 # atravessa restart, e um join em RAM reabriria sessao nova do outro lado.
 TTL_SESSAO_S = 172800          # 48 h — o mesmo de `sessao:{id}`, `ledger:` e `giro:`
+_ULTIMA_SESSAO_ID: str | None = None
+
+
+def _sessao_viva() -> str | None:
+    """Busca o sessao_id vivo da porta: ContextVar, chave Redis 'sessao:viva', ou última montada."""
+    try:
+        sid = _sessao.get()
+        if sid and sid != "-":
+            return sid
+    except Exception:
+        pass
+    try:
+        sid = _rc().get("sessao:viva")
+        if sid:
+            return str(sid)
+    except Exception:
+        pass
+    return _ULTIMA_SESSAO_ID
 
 
 def _rc():
@@ -282,8 +300,9 @@ def _serve(r: dict, *, tool: str, alca: str, ident: dict, cauda: bool = False,
         texto = (alvo or {}).get(sub) if sub else alvo
         if not isinstance(texto, str) or not texto:
             continue
+        cap_efetivo = max(CAP, len(texto.encode("utf-8", "replace"))) if tool == "read_file" else CAP
         servido, meta = _poda.poda_texto(
-            texto, cap=CAP, cauda=cauda, alca=f"{tool}:{alca}", sessao_id=sessao_id,
+            texto, cap=cap_efetivo, cauda=cauda, alca=f"{tool}:{alca}", sessao_id=sessao_id,
             giro=giro, tool=tool, ledger=ledger, cosmetica=cosmetica,
             nome_derrame=f"g{giro:05d}-{campo}.txt")
         if sub:
@@ -302,13 +321,29 @@ def _serve(r: dict, *, tool: str, alca: str, ident: dict, cauda: bool = False,
     return r
 
 
-def _delta_pecas(r: dict, sessao_id: str) -> dict:
-    """R2 na abertura — peça já servida NESTA sessão volta como aviso, não como texto.
+def _eh_balde_2(e: dict) -> bool:
+    """Balde 2 da spec_contexto-na-porta: acervo-consultado e corpo de caderno.
+    Só esses dois viram ponteiro a partir do 2º giro nesta rodada."""
+    pid = e.get("peca") or ""
+    ref = e.get("ref") or ""
+    if pid == "acervo-consultado":
+        return True
+    if pid in ("caderno", "corpo-caderno", "caderno-corpo", "caderno-chapeu", "corpo de caderno"):
+        return True
+    if pid == "cadernos":
+        if "--chapeu" in ref or (ref.startswith("verbo:mesa caderno") and ref.strip() != "verbo:mesa caderno"):
+            return True
+        return False
+    return False
 
-    A segunda abertura da mesma conversa (troca de chapéu, retomada) reenviava o pacote
-    inteiro: persona, ofício e conduta são estáveis por construção, e pagá-los duas
-    vezes na mesma fita é o dup mais barato de matar. O sha comparado é o do montador —
-    mesma lib de hash dos dois lados (R7), sem o que nada casaria.
+
+def _delta_pecas(r: dict, sessao_id: str) -> dict:
+    """R2 na abertura — dedup por baldes (spec_contexto-na-porta §4, §5).
+
+    Balde 1: persona, conduta -> NUNCA ponteiro (#3067).
+    Balde 2: acervo-consultado, corpo de caderno -> vira ponteiro (ref, sha) do 2º giro em diante.
+    Balde 3: mesa do chapéu ativo, alias-cadeiras, índice de cadernos, turno, erro -> SEMPRE inteiro.
+    Conferência de sha: recomputa sha e recusa fail-closed se não bater.
     """
     pecas = r.get("pecas")
     if not _poda_ligada() or not isinstance(pecas, list) or not sessao_id or sessao_id == "-":
@@ -326,25 +361,47 @@ def _delta_pecas(r: dict, sessao_id: str) -> dict:
         if not sha or not pid:
             continue
         if pid in ("persona", "conduta"):
-            # Prefixo estável [persona, conduta] é CACHE, nunca ponteiro (spec_contexto-na-porta, #3067).
-            # Não sofre dedup R2 na reabertura da sessão para manter o prefixo byte-idêntico.
+            # Balde 1: prefixo estável é cache, nunca ponteiro (#3067).
             servidos += len(conteudo.encode()) if isinstance(conteudo, str) else 0
             continue
+        if not _eh_balde_2(e):
+            # Balde 3 (SEMPRE inteiro, nunca ponteiro): mesa, alias-cadeiras, índice de cadernos, etc.
+            servidos += len(conteudo.encode()) if isinstance(conteudo, str) else 0
+            continue
+
+        # Balde 2: acervo-consultado e corpo de caderno
+        # Conferência do sha de graça: recomputa o sha do que veio e compara; serve fail-closed
+        if conteudo and isinstance(conteudo, str):
+            sha_calc = _poda.sha_servido(conteudo)
+            if sha and sha != sha_calc:
+                e["conteudo"] = None
+                e["frescor"] = "indisponivel"
+                e["motivo"] = f"sha divergente: declarado {sha}, calculado {sha_calc} (fail-closed)"
+                e["recusa"] = "fail-closed"
+                r["erro"] = f"sha que não bate na peça `{pid}`: declarado {sha}, calculado {sha_calc} (recusa fail-closed)"
+                r["regra"] = "sha"
+                r.setdefault("avisos", []).append(
+                    f"peça `{pid}`: sha que não bate — recusa fail-closed")
+                continue
+
         alca = f"peca:{pid}"
         antes = vistos.get(alca)
-        if antes and isinstance(antes, (str, bytes)) and isinstance(conteudo, str):
+        if antes and isinstance(antes, (str, bytes)):
             try:
                 d = json.loads(antes)
             except ValueError:
                 d = {}
             if d.get("sha") == sha:
-                e["conteudo"] = (f"[já servido nesta sessão — peça `{pid}`, sha {sha}, "
-                                 f"{len(conteudo.encode())} bytes não reenviados]")
-                e["poda"] = {"ato": "monta_sessao", "modo": "igual", "sha": sha,
-                             "bytes_omitidos": len(conteudo.encode())}
+                # Vira ponteiro (par ref, sha) do 2º giro em diante
+                bytes_omitidos = len(conteudo.encode()) if isinstance(conteudo, str) else 0
+                e["regime"] = "ponteiro"
+                e["conteudo"] = None
+                e["tokens"] = 0
+                e["poda"] = {"ato": "monta_sessao", "modo": "ponteiro", "sha": sha,
+                             "ref": e.get("ref"), "bytes_omitidos": bytes_omitidos}
                 deduplicadas += 1
                 continue
-        novos[alca] = json.dumps({"sha": sha, "giro": 0, "tool": "monta_sessao"})
+        novos[alca] = json.dumps({"sha": sha, "ref": e.get("ref"), "giro": 0, "tool": "monta_sessao"})
         servidos += len(conteudo.encode()) if isinstance(conteudo, str) else 0
     try:
         if novos:
@@ -354,7 +411,7 @@ def _delta_pecas(r: dict, sessao_id: str) -> dict:
         pass
     if deduplicadas:
         r.setdefault("avisos", []).append(
-            f"{deduplicadas} peça(s) já servidas nesta sessão vieram como aviso (arq:0101 R2)")
+            f"{deduplicadas} peça(s) já servidas nesta sessão vieram como ponteiro (arq:0101 R2)")
     return {"bytes_servidos": servidos, "pecas_dedup": deduplicadas or None}
 
 
@@ -686,7 +743,8 @@ def _run_blocking(command: str, d: Path, timeout: int, sessao_id: str = "-", oid
 
 
 PF_RUN_SO_VERBO = os.environ.get("PF_RUN_SO_VERBO", "1") != "0"
-_META_SHELL = set("|&><$`*?();\n")
+_OPERADORES_SHELL = {"|", ";", "&&", "||", ">", "<", ">>", "&"}
+
 # spec_porta-so-verbo §3.5: programa que era fallback -> quem o cobre. `null` = verbo que falta.
 _SUGESTAO = {
     # git/gh SAIRAM daqui: viram verbos finos (bin/git, bin/gh, shims), servidos pela
@@ -716,16 +774,16 @@ def _item_de_lote(x):
     """item de run_command -> (argv, stdin, recusa). argv[0] e o binario do whitelist."""
     stdin = None
     if isinstance(x, str):
-        if any(c in x for c in _META_SHELL):
-            cab = x.split()[0] if x.split() else x
-            return None, None, _recusa(cab, "metacaractere de shell — um verbo por item; "
-                                            "pipe vira stdin.de, ';' vira dois itens")
         try:
             toks = shlex.split(x)
         except ValueError as e:
             return None, None, _recusa(x, f"nao parte: {e}")
         if not toks:
             return None, None, _recusa("", "item vazio")
+        for t in toks:
+            if t in _OPERADORES_SHELL:
+                return None, None, _recusa(toks[0], "metacaractere de shell — um verbo por item; "
+                                                    "pipe vira stdin.de, ';' vira dois itens")
         verbo, resto = toks[0], toks[1:]
     elif isinstance(x, dict):
         verbo = str(x.get("verbo") or "")
@@ -1032,19 +1090,25 @@ def _le_um_arquivo(path: str, offset: int, max_bytes: int, ident: dict,
                cadeira=ident["cadeira"] or None, sessao_id=ident["sessao_id"], ordem_id=ident["ordem_id"],
                lote_id=lote_id, lote_n=lote_n)
         return {"erro": erro, "path": str(p)}
-    data = p.read_bytes()
+    tamanho_total = p.stat().st_size
     offset = max(0, offset)
     max_bytes = max(1, min(max_bytes, 200000))
-    chunk = data[offset:offset + max_bytes]
+    with open(p, "rb") as fh:
+        if offset > 0:
+            fh.seek(offset)
+        chunk = fh.read(max_bytes)
     fim = offset + len(chunk)
-    r = {"content": chunk.decode("utf-8", "replace"), "bytes_total": len(data),
-         "truncated": fim < len(data), "next_offset": fim if fim < len(data) else None,
+    truncated = fim < tamanho_total
+    next_offset = fim if truncated else None
+    r = {"content": chunk.decode("utf-8", "replace"), "bytes_total": tamanho_total,
+         "offset": offset, "bytes_lidos": len(chunk),
+         "truncated": truncated, "next_offset": next_offset,
          "path": str(p)}
     # O dup exato mais caro medido na perícia de 5 dias é o MESMO caminho relido: a alça
     # é (path, offset), e é por ela que a releitura idêntica sai como aviso e a mudada
     # sai como diff. `path` é identificador exato — nunca entra na poda (invariante iv).
     r = _serve(r, tool="read_file", alca=f"{p}|{offset}", ident=ident)
-    _audit(tool="read_file", path=str(p), bytes_lidos=len(chunk), bytes_total=len(data),
+    _audit(tool="read_file", path=str(p), bytes_lidos=len(chunk), bytes_total=tamanho_total,
            cadeira=ident["cadeira"] or None, sessao_id=ident["sessao_id"], ordem_id=ident["ordem_id"],
            lote_id=lote_id, lote_n=lote_n, **_campos_poda(r))
     return r
@@ -1274,9 +1338,16 @@ def write_file(path: str, content: str = "", sessao_id: str | None = None,
             return _rec("trecho: `antes` vazio")
         atual = real_alvo.read_text("utf-8", "replace")
         n = atual.count(a)
-        if n != 1:
-            return _rec(f"trecho: `antes` ocorre {n} vez(es) — precisa ser exatamente 1")
-        content = atual.replace(a, d, 1)
+        if n == 1:
+            content = atual.replace(a, d, 1)
+        else:
+            pat = re.sub(r'(\r?\n[ \t]*)+', r'(?:\\r?\\n[ \\t]*)+', re.escape(a))
+            matches = list(re.finditer(pat, atual))
+            if len(matches) == 1:
+                m = matches[0]
+                content = atual[:m.start()] + d + atual[m.end():]
+            else:
+                return _rec(f"trecho: `antes` ocorre {len(matches) if matches else n} vez(es) — precisa ser exatamente 1")
     data = (content or "").encode("utf-8")
     if len(data) > ESCRITA_TETO:
         return _rec(f"tamanho: {len(data)} B > teto {ESCRITA_TETO} B")
@@ -1583,6 +1654,13 @@ async def monta_sessao(cadeira: str = "", atualizar: bool = True, chapeu: str = 
     _delta = None
 
     if not r.get("erro") and _sessao_id:
+        global _ULTIMA_SESSAO_ID
+        _ULTIMA_SESSAO_ID = _sessao_id
+        _sessao.set(_sessao_id)
+        try:
+            _rc().set("sessao:viva", _sessao_id, ex=TTL_SESSAO_S)
+        except Exception:
+            pass
         _cunhou = bool((r.get("sessao") or {}).get("cunhada_agora"))
         _oid = r.get("ordem_id") or (r.get("sessao") or {}).get("ordem_id") or "-"
         _audit(tool="sessao", evento="sessao_aberta",
@@ -1638,14 +1716,14 @@ PF_TOOLS_LOTE = os.environ.get("PF_TOOLS_LOTE", "0") == "1" # chamada em lote (�
 def _sessao_resolve(sessao_id: str | None) -> dict:
     """cadeira/ordem da sessão: SÓ o `sessao_id` que a fita porta, cunhado por `monta_sessao`.
 
-    Sem inferência nenhuma (ordem do dono, 06/09/2026): nem join por conexão, nem
-    sessão-sombra. Faltou o parâmetro, roda SEM ledger — contado (`ledger: sem_sessao`),
-    nunca recusado e nunca adivinhado. Só existe UMA sessão: a gerada no `monta_sessao`.
+    Se ausente/vazio/'-', tenta o default da sessão viva (Item 12 #3065).
     """
+    if not sessao_id or sessao_id == "-":
+        sessao_id = _sessao_viva()
     if sessao_id:
         sessao_id = _uuid_valido(sessao_id) or sessao_id   # legado 32-hex normaliza
     out = {"sessao_id": sessao_id or "-", "ordem_id": "-", "cadeira": ""}
-    if not sessao_id:
+    if not sessao_id or sessao_id == "-":
         return out
     try:
         raw = _rc().get(f"sessao:{sessao_id}")

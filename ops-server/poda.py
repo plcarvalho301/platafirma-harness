@@ -196,7 +196,8 @@ def _agrupa_busca(linhas: list[str]) -> tuple[list[str], int] | None:
     return fora, cortadas
 
 
-def lava(texto: str, cap: int = 50_000, *, cosmetica: bool = False) -> tuple[str, dict]:
+def lava(texto: str, cap: int = 50_000, *, cosmetica: bool = False,
+         preserva_branco: bool = False) -> tuple[str, dict]:
     """R1 — lavador determinístico, ANTES do teto. Devolve (lavado, relatório).
 
     Determinístico é o ponto: mascaramento por regra iguala resumo por LLM à metade do
@@ -232,15 +233,16 @@ def lava(texto: str, cap: int = 50_000, *, cosmetica: bool = False) -> tuple[str
             classes.append("rastro")
             linhas = limpas
 
-    # vazias consecutivas → uma só
-    enxutas: list[str] = []
-    for l in linhas:
-        if not l.strip() and enxutas and not enxutas[-1].strip():
-            continue
-        enxutas.append(l)
-    if len(enxutas) != len(linhas):
-        classes.append("branco")
-        linhas = enxutas
+    # vazias consecutivas → uma só (não lava em read_file para preservar âncoras)
+    if not preserva_branco:
+        enxutas: list[str] = []
+        for l in linhas:
+            if not l.strip() and enxutas and not enxutas[-1].strip():
+                continue
+            enxutas.append(l)
+        if len(enxutas) != len(linhas):
+            classes.append("branco")
+            linhas = enxutas
 
     if not cosmetica:
         # As duas classes que RE-CURAM o conjunto — e por isso as duas que o regime
@@ -478,7 +480,8 @@ def poda_texto(texto: str, *, cap: int, cauda: bool, alca: str, sessao_id: str,
                giro: int, tool: str, ledger: Ledger | None,
                nome_derrame: str, cosmetica: bool = False) -> tuple[str, dict]:
     """Um retorno textual, a régua inteira na ordem do R8. Devolve (texto, campo `poda`)."""
-    lavado, rel = lava(texto, cap, cosmetica=cosmetica)
+    preserva_branco = (tool == "read_file")
+    lavado, rel = lava(texto, cap, cosmetica=cosmetica, preserva_branco=preserva_branco)
     meta = {"ato": tool, "giro": giro, "sha": sha_servido(lavado),
             "lavado": rel["classes"], "bytes_produzidos": rel["bytes_antes"]}
     if cosmetica:
