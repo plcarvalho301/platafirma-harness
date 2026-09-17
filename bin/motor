@@ -16,7 +16,7 @@
 # substitui: docker exec rag-* ; curl ao endpoint de busca
 # O verbo e `motor`; a instancia e argumento (arq:0037; veto do verbo `rag`).
 # atos: a capacidade e do (verbo, ato) (arq:0110 §6). Transicao vigente->conforme em spec_motor §5.
-import json, os, re, subprocess, sys, time, urllib.request
+import json, os, re, subprocess, sys, time, urllib.error, urllib.request
 from pathlib import Path
 
 # Raizes da casa (card #3010). Codigo, registro e verbos irmaos vem da PROPRIA arvore
@@ -26,7 +26,7 @@ _ARVORE = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(_ARVORE / "lib"))
 import raizes  # noqa: E402
 
-REG = str(_ARVORE / "registro" / "motor-instancias.json")
+REG = os.environ.get("PF_MOTOR_REG") or str(_ARVORE / "registro" / "motor-instancias.json")
 BIN = os.environ.get("PF_BIN") or str(_ARVORE / "bin")
 DOCKER = {"DOCKER_HOST": "unix:///run/user/1001/docker.sock"}
 
@@ -431,6 +431,26 @@ def _emite_consulta(nome, inst, corpo, resp, dur_ms):
         pass  # log e instrumento, nunca barreira: a busca ja respondeu.
 
 
+def _trata_erro_http(e, contexto="motor"):
+    if isinstance(e, urllib.error.HTTPError):
+        corpo = ""
+        try:
+            corpo = e.read(200).decode("utf-8", "replace").strip()
+        except Exception:
+            pass
+        motivo = f"HTTP {e.code}"
+        if corpo:
+            motivo += f" — {corpo}"
+        elif e.reason:
+            motivo += f" — {e.reason}"
+        print(f"{contexto}: {motivo}", file=sys.stderr)
+    elif isinstance(e, urllib.error.URLError):
+        print(f"{contexto}: erro de rede — {e.reason}", file=sys.stderr)
+    else:
+        print(f"{contexto}: {e}", file=sys.stderr)
+    sys.exit(3)
+
+
 def cmd_buscar(nome_inst, inst, argv):
     uso = ('motor <inst> buscar <particao> "<pergunta>" [--k N] [--texto secao|trecho|nenhum] '
            '[--conceito <slug>] [--ordem-id <id>]\n  ' + SPEC)
@@ -497,8 +517,11 @@ def cmd_buscar(nome_inst, inst, argv):
         inst["endpoint"], data=json.dumps(corpo).encode(),
         headers={"Authorization": f"Bearer {tok}", "Content-Type": "application/json"})
     t0 = time.monotonic()
-    with urllib.request.urlopen(req, timeout=300) as r:
-        bruto = r.read().decode()
+    try:
+        with urllib.request.urlopen(req, timeout=300) as r:
+            bruto = r.read().decode()
+    except (urllib.error.HTTPError, urllib.error.URLError) as e:
+        _trata_erro_http(e, "motor")
     dur_ms = int((time.monotonic() - t0) * 1000)
     # choke point (#2911): parse best-effort so para instrumentar; a saida ao cliente
     # continua sendo o corpo cru, byte a byte, para nao alterar contrato de nenhuma
@@ -540,8 +563,11 @@ def http(url, tok, corpo=None, timeout=300):
     req = urllib.request.Request(
         url, data=json.dumps(corpo).encode() if corpo is not None else None,
         headers={"Authorization": f"Bearer {tok}", "Content-Type": "application/json"})
-    with urllib.request.urlopen(req, timeout=timeout) as r:
-        return json.loads(r.read().decode())
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as r:
+            return json.loads(r.read().decode())
+    except (urllib.error.HTTPError, urllib.error.URLError) as e:
+        _trata_erro_http(e, "motor")
 
 
 def _base(sid):

@@ -1664,7 +1664,8 @@ async def monta_sessao(cadeira: str = "", atualizar: bool = True, chapeu: str = 
         _cunhou = bool((r.get("sessao") or {}).get("cunhada_agora"))
         _oid = r.get("ordem_id") or (r.get("sessao") or {}).get("ordem_id") or "-"
         _audit(tool="sessao", evento="sessao_aberta",
-               sujeito=r.get("cadeira", "-"), ordem_id=_oid, sessao_id=_sessao_id,
+               sujeito=_q.get("sujeito", "-"), cadeira=r.get("cadeira", "-"),
+               ordem_id=_oid, sessao_id=_sessao_id,
                via="tool", cunhada=_cunhou)
         _delta = _delta_pecas(r, _sessao_id)   # R2: peça repetida na mesma sessão sai como aviso
 

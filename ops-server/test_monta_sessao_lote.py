@@ -606,3 +606,73 @@ async def test_sha_que_nao_bate_recusa_fail_closed():
     assert p_acervo.get("recusa") == "fail-closed"
 
 
+@pytest.mark.anyio
+async def test_audit_sessao_aberta_sujeito_do_token_e_slug_da_cadeira():
+    # Card #3068 Aceite 1: evento=sessao_aberta via=tool tem sujeito = sub do token e cadeira = slug
+    sid = "3738e88d-0e55-44dc-b603-63f0c2360c6f"
+    oid = "o20260917T015509-2ea343"
+    sub_jwt = "e57eadb1-ec5d-41b5-a1be-e6d62196cff5"
+
+    abrir_out = {
+        "sessao_id": sid,
+        "cunhada_agora": True,
+        "sujeito": sub_jwt,
+        "cadeira": "fabrica",
+        "canonizada": True,
+        "autorizada_por": "fornecedor@test",
+        "ordem_id": oid,
+        "registrada": True,
+        "duravel": True,
+        "porte": "devolva este sessao_id",
+    }
+    exp_out = {
+        "cadeira": "fabrica",
+        "sessao_id": sid,
+        "ordem_id": oid,
+        "chapeu": "devops",
+        "roteador": {"via": "determinístico", "slug": "devops"},
+        "pacote": {"pecas": 1, "tokens": 100},
+        "pecas": [{"peca": "persona", "tokens": 50}],
+        "avisos": [],
+    }
+
+    class FakeRedis:
+        def get(self, key):
+            return None
+        def set(self, key, val, ex=None):
+            pass
+
+    auditorias = []
+    def fake_audit(**kwargs):
+        auditorias.append(kwargs)
+
+    def fake_subprocess_run(argv, *args, **kwargs):
+        is_py = "python" in Path(argv[0]).name
+        cmd = argv[1] if is_py else argv[0]
+        args_rest = argv[2:] if is_py else argv[1:]
+        if "sessao" in cmd and len(args_rest) > 0 and args_rest[0] == "abrir":
+            return subprocess.CompletedProcess(argv, returncode=0, stdout=json.dumps(abrir_out), stderr="")
+        elif "expediente" in cmd and len(args_rest) > 0 and args_rest[0] == "montar":
+            return subprocess.CompletedProcess(argv, returncode=0, stdout=json.dumps(exp_out), stderr="")
+        return subprocess.CompletedProcess(argv, returncode=1, stdout="", stderr="")
+
+    with patch("server._autoriza", return_value=None), \
+         patch("server._quem", return_value={"sub": sub_jwt, "sujeito": sub_jwt}), \
+         patch("server._rc", return_value=FakeRedis()), \
+         patch("server._audit", side_effect=fake_audit), \
+         patch("subprocess.run", side_effect=fake_subprocess_run):
+
+        res = await s.monta_sessao(cadeira="fabrica", pergunta="Fabrica devops, card 3068")
+
+    assert not res.get("erro")
+    chamadas_sessao = [a for a in auditorias if a.get("tool") == "sessao" and a.get("evento") == "sessao_aberta"]
+    assert len(chamadas_sessao) == 1
+    call = chamadas_sessao[0]
+    assert call["sujeito"] == sub_jwt
+    assert call["cadeira"] == "fabrica"
+    assert call["ordem_id"] == oid
+    assert call["sessao_id"] == sid
+    assert call["via"] == "tool"
+
+
+

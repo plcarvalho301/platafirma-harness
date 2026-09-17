@@ -559,7 +559,7 @@ def build_parser():
     p_ler = sub.add_parser("ler", add_help=False)
     p_ler.add_argument("persona")
     p_ler.add_argument("remetente", nargs="?", default=None)
-    p_ler.add_argument("--tudo", action="store_true")
+    p_ler.add_argument("--tudo", nargs="?", const=True, default=False)
     p_ler.add_argument("--desde", default=None)
 
     # `tipos` — card #2274, defeito 5: a lista de tipos validos so aparecia na mensagem de
@@ -597,6 +597,13 @@ def main():
     args, _resto = ap.parse_known_args()
     if not args.verbo:
         uso()
+    if args.verbo == "ler":
+        if isinstance(args.tudo, str):
+            if not args.remetente:
+                args.remetente = args.tudo
+            args.tudo = True
+        elif not args.remetente and _resto:
+            args.remetente = _resto[0]
     # `tipos` responde ANTES de tocar a malha: e info estatica e deve funcionar offline.
     if args.verbo == "tipos":
         sys.stdout.write("\n".join(sorted(TIPOS_VALIDOS)) + "\n")
