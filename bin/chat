@@ -379,7 +379,8 @@ def settings_da_fita(modelo="", cadeira=""):
     """Allowlist do cwd. `bypassPermissions` nao e relaxamento: no giro headless
     nao existe quem responda ao pedido de permissao, entao o modo `manual` viraria
     giro pendurado ate o watchdog — erro na sala no lugar de resposta. A regua real
-    e a lista de negativas, identica a da sessao da cadeira."""
+    e o par allow/deny abaixo: o allow libera os servers MCP da fita (o bypass
+    deixou de cobri-los na deriva do Code), o deny desliga as nativas."""
     base = {
         "model": modelo or os.environ.get("PF_CHAT_MODELO", "opus"),
         # Sem isto o motor lista o servidor do `.mcp.json` como "pending approval"
@@ -388,7 +389,13 @@ def settings_da_fita(modelo="", cadeira=""):
         "enableAllProjectMcpServers": True,
         "permissions": {
             "defaultMode": "bypassPermissions",
-            "allow": [],
+            # Deriva do Code: 2.1.273 servido, 2.1.220 pinado. bypassPermissions
+            # deixou de cobrir tools MCP; so passam as do allow. Sem isto a fita
+            # nega fila, mesa, tarefas, motor, acervo, e so repo mais os primitivos
+            # (read_file/write_file/run_command, do settings do agente) funcionam.
+            # Libera os dois servers da fita por inteiro; a trava por recurso segue
+            # no PDP da porta, que o run_command ja atravessa (item #11 da mesa).
+            "allow": ["mcp__claudinho-mcp", "mcp__platafirma-wiki"],
             # spec_porta-so-verbo §5: as nativas do Code ficam DESLIGADAS — tudo passa pela
             # porta (tools de verbo, read_file, write_file com `trecho`, run_command so-verbo).
             # Medido 06/09 em 11 fitas: Bash 238, Edit 156, Read 48, Write 34; as demais
