@@ -45,12 +45,14 @@ _FANTASMA_NAMES = {
 _RE_WIKI_DATADO = re.compile(r"^(?:wiki/)?(.+?)@(\d{4}-\d{2}-\d{2})\.md$", re.IGNORECASE)
 
 USO = """uso:
-  ingerir (--lote <pasta> | --origem <gdrive:pasta|url>) --motor <inst> [opções]
+  ingerir (--lote <pasta> | --origem <gdrive:pasta|url> | --drive [<pasta>]) --motor <inst> [opções]
 
-opções obrigatórias (uma das duas fontes):
+opções de fonte (uma das opções):
   --lote <pasta>         pasta local com arquivos do lote a ingerir
   --origem <o>           pasta do Drive a espelhar para $PLATAFIRMA_INSTANCIA/var/entrada antes de ingerir;
                          aceita 'gdrive:<caminho>' ou URL drive/.../folders/<ID>
+  --drive [<pasta>]      espelha pasta do Drive para staging local (~/AI/entrada/drive-<AAAAMMDD>-<rotulo>)
+                         antes de ingerir (default: PlataFirma/entrada)
   --motor <inst>         instância do motor (ex: --motor rag)
 
 opções adicionais:
@@ -58,7 +60,7 @@ opções adicionais:
   --ate <degrau>         degrau alvo: catalogar | chunk | embed | vetor (default: vetor)
   --ocr                  autoriza extração OCR em arquivos escaneados (default: false)
   --autor <slug>         curador do lote (default: cadeira da sessão ou 'dados')
-  --colecao <slug>       coleção do acervo: firma | pessoal (default: firma)
+  --colecao, --bucket <s> coleção do acervo: firma | pessoal (default: firma)
   --json                 emite resultado em formato JSON bruto
 """
 
@@ -227,6 +229,59 @@ def aterrissar_origem(origem: str) -> str:
         sys.exit(1)
     return entrada
 
+def aterrissar_drive(pasta: str | None) -> str:
+    # 1. Pasta-alvo default = PlataFirma/entrada quando --drive vem sem argumento.
+    #    Com argumento, usa o caminho passado.
+    alvo = (pasta or "").strip() or "PlataFirma/entrada"
+    if alvo.startswith("gdrive:"):
+        alvo = alvo[len("gdrive:"):].strip() or "PlataFirma/entrada"
+    remote = _resolver_gdrive(alvo)
+    rotulo = _slug_origem(alvo)
+    data = time.strftime("%Y%m%d")
+    staging_raiz = os.path.expanduser("~/AI/entrada")
+    staging = os.path.join(staging_raiz, f"drive-{data}-{rotulo}")
+    os.makedirs(staging, exist_ok=True)
+    sys.stderr.write(f"ingerir: espelhando {remote} -> {staging}\n")
+    try:
+        r_copy = subprocess.run(
+            ["rclone", "copy", remote, staging, "--drive-acknowledge-abuse", "-P"],
+            capture_output=True, text=True, timeout=1800, check=False,
+        )
+    except (OSError, subprocess.SubprocessError) as e:
+        sys.stderr.write(f"ingerir: erro: rclone copy falhou: {e}\n")
+        sys.exit(1)
+    if r_copy.returncode != 0:
+        sys.stderr.write(f"ingerir: erro: rclone copy falhou ({r_copy.returncode}): {r_copy.stderr.strip()}\n")
+        sys.exit(1)
+
+    # 4. PORTÃO 1 antes de ingerir: contagem de `rclone lsf` bate com o `ls` do
+    #    staging; divergiu, erra e não segue (não deixa lote incompleto passar).
+    try:
+        r_lsf = subprocess.run(
+            ["rclone", "lsf", remote],
+            capture_output=True, text=True, timeout=300, check=False,
+        )
+    except (OSError, subprocess.SubprocessError) as e:
+        sys.stderr.write(f"ingerir: erro: rclone lsf falhou: {e}\n")
+        sys.exit(1)
+    if r_lsf.returncode != 0:
+        sys.stderr.write(f"ingerir: erro: rclone lsf falhou ({r_lsf.returncode}): {r_lsf.stderr.strip()}\n")
+        sys.exit(1)
+
+    itens_lsf = [l.strip() for l in r_lsf.stdout.splitlines() if l.strip()]
+    qtd_lsf = len(itens_lsf)
+    itens_staging = [f for f in os.listdir(staging) if not f.startswith(".")]
+    qtd_staging = len(itens_staging)
+
+    if qtd_lsf != qtd_staging:
+        sys.stderr.write(
+            f"ingerir: erro: PORTÃO 1: contagem de rclone lsf ({qtd_lsf}) diverge do staging ({qtd_staging}) — lote incompleto\n"
+        )
+        sys.exit(1)
+
+    sys.stderr.write(f"ingerir: PORTÃO 1 aprovado: {qtd_staging} arquivo(s) conferidos no staging\n")
+    return staging
+
 def escanear_pasta(pasta: str) -> tuple[list[tuple[str, str]], dict[str, dict]]:
     sidecars = {}
     arquivos_conteudo = []
@@ -372,12 +427,13 @@ def main():
     parser = argparse.ArgumentParser(add_help=False)
     parser.add_argument("--lote", dest="lote", default=None)
     parser.add_argument("--origem", dest="origem", default=None)
+    parser.add_argument("--drive", dest="drive", nargs="?", const="PlataFirma/entrada", default=None)
     parser.add_argument("--motor", dest="motor", default=None)
     parser.add_argument("--apply", dest="apply", action="store_true", default=False)
     parser.add_argument("--ate", dest="ate", default="vetor")
     parser.add_argument("--ocr", dest="ocr", action="store_true", default=False)
     parser.add_argument("--autor", dest="autor", default=None)
-    parser.add_argument("--colecao", dest="colecao", default="firma")
+    parser.add_argument("--colecao", "--bucket", dest="colecao", default="firma")
     parser.add_argument("--json", dest="como_json", action="store_true", default=False)
     parser.add_argument("-h", "--help", "--ajuda", dest="ajuda", action="store_true", default=False)
 
@@ -387,17 +443,20 @@ def main():
         sys.stderr.write(USO + "\n")
         sys.exit(2)
 
-    if args.lote and args.origem:
+    fontes = [k for k, v in [("--lote", args.lote), ("--origem", args.origem), ("--drive", args.drive)] if v is not None]
+    if len(fontes) > 1:
         sys.stderr.write(USO + "\n")
-        sys.stderr.write("ingerir: erro: --lote e --origem são mutuamente exclusivos\n")
+        sys.stderr.write(f"ingerir: erro: {' e '.join(fontes)} são mutuamente exclusivos\n")
         sys.exit(2)
 
-    if not args.lote and not args.origem:
+    if not fontes:
         sys.stderr.write(USO + "\n")
-        sys.stderr.write("ingerir: erro: informe --lote <pasta> ou --origem <gdrive:pasta|url>\n")
+        sys.stderr.write("ingerir: erro: informe --lote <pasta>, --origem <gdrive:pasta|url> ou --drive [<pasta>]\n")
         sys.exit(2)
 
-    if args.origem:
+    if args.drive is not None:
+        args.lote = aterrissar_drive(args.drive)
+    elif args.origem:
         args.lote = aterrissar_origem(args.origem)
 
     if not args.motor:
