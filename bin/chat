@@ -134,25 +134,27 @@ class MotorClaudeCode:
         # "2.1.220 (Claude Code)"
         return saida.split()[0] if saida else None
 
-    def precisa_pacote(self, id_fita):
+    def precisa_pacote(self, id_fita, nova):
         """Code reinjeta pacote so na fita nova; resume usa --resume sem reinjetar."""
-        return not id_fita
+        return nova
 
-    def comando(self, id_fita, pacote, cwd):
-        """argv do giro. Fita nova leva o pacote; fita existente nao leva nada."""
+    def comando(self, id_fita, nova, pacote, cwd):
+        """argv do giro. Fita nova leva o pacote; fita existente nao leva nada.
+        `id_fita` chega sempre resolvido (o chamador o gera antes do cwd por fita);
+        `nova` decide entre abrir (--session-id) e retomar (--resume)."""
         argv = [
             self.bin,
             "--print",
             "--output-format", "stream-json",
             "--verbose",
         ]
-        if id_fita:
+        if not nova:
             argv += ["--resume", id_fita]
         else:
             # id proprio: a fita tem nome antes de o motor responder. Sem isso, giro
             # que morre antes do primeiro evento volta sem id_fita e a proxima
             # mensagem do dono abriria fita nova — perdendo a fita que existe.
-            argv += ["--session-id", id_fita_novo()]
+            argv += ["--session-id", id_fita]
             if pacote:
                 argv += ["--append-system-prompt", pacote]
         # Precedencia, lida no binario do motor 2.1.220: o `--effort` do CLI vence
@@ -517,20 +519,20 @@ def planta_skills(dot, cadeira):
             continue
         if "todas" not in cadeiras and alvo not in cadeiras:
             continue
-        shutil.copytree(origem, os.path.join(destino, nome))
+        shutil.copytree(origem, os.path.join(destino, nome), dirs_exist_ok=True)
         plantadas.append(nome)
     return plantadas
 
 
-def prepara_cwd(cadeira, modelo=""):
+def prepara_cwd(cadeira, id_fita, modelo=""):
     """$PLATAFIRMA_INSTANCIA/var/fitas/<cadeira>/ com allowlist e anexos/. Criado pelo verbo se faltar —
     a recepcao grava anexo ali e nao tem por que saber montar o diretorio.
 
     O diretorio se chama `anexos` por medicao de 15/08: com o nome de caixa de
     mensagem, a cadeira perguntada sobre \"a caixa\" listou este diretorio, achou
     vazio e desmentiu a fila, que tinha 1 nova."""
-    base = os.path.join(FITAS, cadeira)
-    anexos = os.path.join(base, "anexos")
+    base = os.path.join(FITAS, cadeira, id_fita)
+    anexos = os.path.join(FITAS, cadeira, "anexos")
     dot = os.path.join(base, ".claude")
     for d in (base, anexos, dot):
         os.makedirs(d, exist_ok=True)
@@ -756,13 +758,13 @@ def escolhe_motor(modelo, esforco):
     return MotorClaudeCode(modelo=modelo, esforco=esforco)
 
 
-def um_giro(motor, id_fita, pacote, corpo, cwd, env, passo_out):
+def um_giro(motor, id_fita, nova, pacote, corpo, cwd, env, passo_out):
     """Roda uma invocacao e devolve o dicionario cru do resultado. Nao decide
     estado final — quem decide e `despachar`, que tambem sabe se cabe reiniciar."""
-    argv = motor.comando(id_fita, pacote, cwd)
-    # O id que pedimos ao motor: para fita nova e o que volta no contrato mesmo que
-    # o stream morra antes do primeiro evento.
-    pedido = argv[argv.index("--session-id") + 1] if "--session-id" in argv else id_fita
+    argv = motor.comando(id_fita, nova, pacote, cwd)
+    # id ja resolvido pelo chamador: e o que volta no contrato mesmo que o stream
+    # morra antes do primeiro evento, e o mesmo nome do diretorio do cwd por fita.
+    pedido = id_fita
     # A guarda do criterio 18 viaja no AMBIENTE do giro: `mesa anota` chamada la
     # dentro le PF_FITA e so escreve se este id ainda for o corrente da cadeira.
     env = dict(env)
@@ -959,7 +961,12 @@ def despachar(argv):
         "pinada": motor.VERSAO_PINADA, "servida": servida,
     })
 
-    cwd = prepara_cwd(cadeira, modelo)
+    # id resolvido ANTES do cwd: o cwd e por fita (var/fitas/<cadeira>/<id>/), e
+    # precisa do mesmo id que vai no --session-id. `nova` guarda se a fita e nova.
+    nova = not id_fita
+    id_fita = id_fita or id_fita_novo()
+
+    cwd = prepara_cwd(cadeira, id_fita, modelo)
     env = ambiente_do_giro(cadeira)
 
     def responde(estado, texto, id_f, detalhe, reiniciada):
@@ -976,13 +983,13 @@ def despachar(argv):
 
     pacote = None
     reiniciada = False
-    if motor.precisa_pacote(id_fita):
+    if motor.precisa_pacote(id_fita, nova):
         pacote, erro = monta_pacote(cadeira, env, corpo)
         if pacote is None:
             return responde("erro", "", "", erro, False)
         passo_out({"passo": "pacote", "em": agora_iso(), "bytes": len(pacote)})
 
-    r = um_giro(motor, id_fita, pacote, corpo, cwd, env, passo_out)
+    r = um_giro(motor, id_fita, nova, pacote, corpo, cwd, env, passo_out)
     if r.get("falha_invocacao"):
         print(r["falha_invocacao"], file=sys.stderr)
         return 1
@@ -996,8 +1003,12 @@ def despachar(argv):
         if pacote is None:
             return responde("erro", "", "", erro, True)
         passo_out({"passo": "pacote", "em": agora_iso(), "bytes": len(pacote)})
+        # cwd por fita: a retentativa e fita NOVA — novo id e novo cwd, porque a
+        # sessao velha ja nao existe e reusar o dir dela misturaria as duas.
+        id_fita = id_fita_novo()
+        cwd = prepara_cwd(cadeira, id_fita, modelo)
         reiniciada = True
-        r = um_giro(motor, "", pacote, corpo, cwd, env, passo_out)
+        r = um_giro(motor, id_fita, True, pacote, corpo, cwd, env, passo_out)
         if r.get("falha_invocacao"):
             print(r["falha_invocacao"], file=sys.stderr)
             return 1

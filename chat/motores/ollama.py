@@ -77,15 +77,15 @@ class MotorOllama:
         except Exception:  # noqa: BLE001
             return None
 
-    def precisa_pacote(self, id_fita):
+    def precisa_pacote(self, id_fita, nova):
         """True se o pacote de persona precisa ser montado. Fita nova sempre;
         fita de resume que o ollama nunca viu tambem (senao responde generico)."""
-        if not id_fita:
+        if nova:
             return True
         hist = os.path.join(HIST_DIR, f"{id_fita}.json")
         return not os.path.exists(hist)
 
-    def comando(self, id_fita, pacote, cwd):
+    def comando(self, id_fita, nova, pacote, cwd):
         """argv do giro: chama o runner, que fala com o ollama e emite stream-json.
         Mesma logica de fita do Code — id proprio na fita nova, resume na existente."""
         argv = [self.py, RUNNER,
@@ -99,17 +99,13 @@ class MotorOllama:
         # como --sistema mesmo em resume, mantendo o id da fita. Bug medido
         # 01/09/2026 na transicao de motor no meio da sala.
         import os as _os
-        hist = _os.path.join(HIST_DIR, f"{id_fita}.json") if id_fita else ""
-        if id_fita and _os.path.exists(hist):
+        hist = _os.path.join(HIST_DIR, f"{id_fita}.json")
+        if not nova and _os.path.exists(hist):
             argv += ["--resume", id_fita]
-        elif id_fita:
-            # fita existe pro Code mas nao pro ollama: abre no ollama COM persona,
-            # preservando o id para a sala nao perder o fio.
-            argv += ["--session-id", id_fita]
-            if pacote:
-                argv += ["--sistema", pacote]
         else:
-            argv += ["--session-id", _novo_id()]
+            # nova, OU resume que o ollama nunca viu: abre COM persona preservando
+            # o id, para a sala nao perder o fio (bug de transicao de motor, 01/09).
+            argv += ["--session-id", id_fita]
             if pacote:
                 argv += ["--sistema", pacote]
         return argv
