@@ -565,8 +565,17 @@ def prepara_cwd(cadeira, id_fita, modelo=""):
     dot = os.path.join(base, ".claude")
     for d in (base, anexos, dot):
         os.makedirs(d, exist_ok=True)
+    cfg = settings_da_fita(modelo, cadeira)
     with open(os.path.join(dot, "settings.json"), "w") as f:
-        json.dump(settings_da_fita(modelo, cadeira), f, indent=2, ensure_ascii=False)
+        json.dump(cfg, f, indent=2, ensure_ascii=False)
+        f.write("\n")
+    # O allow vai TAMBEM no settings.local.json: o Code so honra allow de projeto
+    # versionado (.claude/settings.json) depois do trust da pasta, que no giro
+    # headless nao existe — la o allow fica ignorado. O .local.json (nao-versionado)
+    # nao espera trust; e dele que o allow pega. Deriva do Code 2.1.273.
+    with open(os.path.join(dot, "settings.local.json"), "w") as f:
+        json.dump({"permissions": {"allow": cfg["permissions"]["allow"]}},
+                  f, indent=2, ensure_ascii=False)
         f.write("\n")
     with open(os.path.join(base, "CLAUDE.md"), "w") as f:
         f.write(claude_md_da_fita(cadeira, anexos))
