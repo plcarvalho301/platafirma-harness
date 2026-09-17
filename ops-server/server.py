@@ -321,13 +321,29 @@ def _serve(r: dict, *, tool: str, alca: str, ident: dict, cauda: bool = False,
     return r
 
 
-def _delta_pecas(r: dict, sessao_id: str) -> dict:
-    """R2 na abertura — peça já servida NESTA sessão volta como aviso, não como texto.
+def _eh_balde_2(e: dict) -> bool:
+    """Balde 2 da spec_contexto-na-porta: acervo-consultado e corpo de caderno.
+    Só esses dois viram ponteiro a partir do 2º giro nesta rodada."""
+    pid = e.get("peca") or ""
+    ref = e.get("ref") or ""
+    if pid == "acervo-consultado":
+        return True
+    if pid in ("caderno", "corpo-caderno", "caderno-corpo", "caderno-chapeu", "corpo de caderno"):
+        return True
+    if pid == "cadernos":
+        if "--chapeu" in ref or (ref.startswith("verbo:mesa caderno") and ref.strip() != "verbo:mesa caderno"):
+            return True
+        return False
+    return False
 
-    A segunda abertura da mesma conversa (troca de chapéu, retomada) reenviava o pacote
-    inteiro: persona, ofício e conduta são estáveis por construção, e pagá-los duas
-    vezes na mesma fita é o dup mais barato de matar. O sha comparado é o do montador —
-    mesma lib de hash dos dois lados (R7), sem o que nada casaria.
+
+def _delta_pecas(r: dict, sessao_id: str) -> dict:
+    """R2 na abertura — dedup por baldes (spec_contexto-na-porta §4, §5).
+
+    Balde 1: persona, conduta -> NUNCA ponteiro (#3067).
+    Balde 2: acervo-consultado, corpo de caderno -> vira ponteiro (ref, sha) do 2º giro em diante.
+    Balde 3: mesa do chapéu ativo, alias-cadeiras, índice de cadernos, turno, erro -> SEMPRE inteiro.
+    Conferência de sha: recomputa sha e recusa fail-closed se não bater.
     """
     pecas = r.get("pecas")
     if not _poda_ligada() or not isinstance(pecas, list) or not sessao_id or sessao_id == "-":
@@ -345,25 +361,47 @@ def _delta_pecas(r: dict, sessao_id: str) -> dict:
         if not sha or not pid:
             continue
         if pid in ("persona", "conduta"):
-            # Prefixo estável [persona, conduta] é CACHE, nunca ponteiro (spec_contexto-na-porta, #3067).
-            # Não sofre dedup R2 na reabertura da sessão para manter o prefixo byte-idêntico.
+            # Balde 1: prefixo estável é cache, nunca ponteiro (#3067).
             servidos += len(conteudo.encode()) if isinstance(conteudo, str) else 0
             continue
+        if not _eh_balde_2(e):
+            # Balde 3 (SEMPRE inteiro, nunca ponteiro): mesa, alias-cadeiras, índice de cadernos, etc.
+            servidos += len(conteudo.encode()) if isinstance(conteudo, str) else 0
+            continue
+
+        # Balde 2: acervo-consultado e corpo de caderno
+        # Conferência do sha de graça: recomputa o sha do que veio e compara; serve fail-closed
+        if conteudo and isinstance(conteudo, str):
+            sha_calc = _poda.sha_servido(conteudo)
+            if sha and sha != sha_calc:
+                e["conteudo"] = None
+                e["frescor"] = "indisponivel"
+                e["motivo"] = f"sha divergente: declarado {sha}, calculado {sha_calc} (fail-closed)"
+                e["recusa"] = "fail-closed"
+                r["erro"] = f"sha que não bate na peça `{pid}`: declarado {sha}, calculado {sha_calc} (recusa fail-closed)"
+                r["regra"] = "sha"
+                r.setdefault("avisos", []).append(
+                    f"peça `{pid}`: sha que não bate — recusa fail-closed")
+                continue
+
         alca = f"peca:{pid}"
         antes = vistos.get(alca)
-        if antes and isinstance(antes, (str, bytes)) and isinstance(conteudo, str):
+        if antes and isinstance(antes, (str, bytes)):
             try:
                 d = json.loads(antes)
             except ValueError:
                 d = {}
             if d.get("sha") == sha:
-                e["conteudo"] = (f"[já servido nesta sessão — peça `{pid}`, sha {sha}, "
-                                 f"{len(conteudo.encode())} bytes não reenviados]")
-                e["poda"] = {"ato": "monta_sessao", "modo": "igual", "sha": sha,
-                             "bytes_omitidos": len(conteudo.encode())}
+                # Vira ponteiro (par ref, sha) do 2º giro em diante
+                bytes_omitidos = len(conteudo.encode()) if isinstance(conteudo, str) else 0
+                e["regime"] = "ponteiro"
+                e["conteudo"] = None
+                e["tokens"] = 0
+                e["poda"] = {"ato": "monta_sessao", "modo": "ponteiro", "sha": sha,
+                             "ref": e.get("ref"), "bytes_omitidos": bytes_omitidos}
                 deduplicadas += 1
                 continue
-        novos[alca] = json.dumps({"sha": sha, "giro": 0, "tool": "monta_sessao"})
+        novos[alca] = json.dumps({"sha": sha, "ref": e.get("ref"), "giro": 0, "tool": "monta_sessao"})
         servidos += len(conteudo.encode()) if isinstance(conteudo, str) else 0
     try:
         if novos:
@@ -373,7 +411,7 @@ def _delta_pecas(r: dict, sessao_id: str) -> dict:
         pass
     if deduplicadas:
         r.setdefault("avisos", []).append(
-            f"{deduplicadas} peça(s) já servidas nesta sessão vieram como aviso (arq:0101 R2)")
+            f"{deduplicadas} peça(s) já servidas nesta sessão vieram como ponteiro (arq:0101 R2)")
     return {"bytes_servidos": servidos, "pecas_dedup": deduplicadas or None}
 
 
