@@ -3,7 +3,7 @@
 echo "Deprecation: use ingerir --lote" >&2
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 for arg in "$@"; do
-    if [[ "$arg" == "--lote" || "$arg" == "--origem" ]]; then
+    if [[ "$arg" == "--lote" || "$arg" == "--origem" || "$arg" == "--drive" ]]; then
         exec "$DIR/../ingerir" "$@"
     fi
 done

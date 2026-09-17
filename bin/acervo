@@ -145,7 +145,11 @@ conforme() {
     # (POST /acervo/casa/lotes). Deixar casa cair aqui SUBIA o .md da casa ao MinIO e criava
     # uma OBRA no lugar de uma linha em acervo.casa: falha silenciosa, que e pior que recusa.
     ingerir:obra:*|ingerir:registro:*)
-        exec "$ATOS/../ingerir" --lote "$entidade" "$@" ;;
+        if [[ "$entidade" == --* ]]; then
+            exec "$ATOS/../ingerir" "$entidade" "$@"
+        else
+            exec "$ATOS/../ingerir" --lote "$entidade" "$@"
+        fi ;;
     ingerir:casa:*)
         # $entidade e a <raiz> (lista curada ou clone). O cliente magro de casa (card #3027,
         # rota POST /acervo/casa/lotes) parseia a lista, resolve sha por repo, le o corpo do
