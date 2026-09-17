@@ -390,12 +390,34 @@ def settings_da_fita(modelo="", cadeira=""):
         "permissions": {
             "defaultMode": "bypassPermissions",
             # Deriva do Code: 2.1.273 servido, 2.1.220 pinado. bypassPermissions
-            # deixou de cobrir tools MCP; so passam as do allow. Sem isto a fita
-            # nega fila, mesa, tarefas, motor, acervo, e so repo mais os primitivos
-            # (read_file/write_file/run_command, do settings do agente) funcionam.
-            # Libera os dois servers da fita por inteiro; a trava por recurso segue
-            # no PDP da porta, que o run_command ja atravessa (item #11 da mesa).
-            "allow": ["mcp__claudinho-mcp", "mcp__platafirma-wiki"],
+            # deixou de cobrir tools MCP; so passa o que esta no allow. E o allow
+            # MCP do Code nao honra curinga nem server-level (medido: um cru
+            # "mcp__claudinho-mcp" nao libera nada) — so nome de tool inteiro. Por
+            # isso ENUMERA as tools de trabalho. Admin de infra/governanca fica fora
+            # (deploy, release, infra, persona, acesso, seg, migrar); a cadeira as
+            # alcanca por run_command, onde o PDP da porta decide por recurso.
+            "allow": [
+                "mcp__claudinho-mcp__read_file",
+                "mcp__claudinho-mcp__write_file",
+                "mcp__claudinho-mcp__run_command",
+                "mcp__claudinho-mcp__repo",
+                "mcp__claudinho-mcp__fila",
+                "mcp__claudinho-mcp__mesa",
+                "mcp__claudinho-mcp__tarefas",
+                "mcp__claudinho-mcp__motor",
+                "mcp__claudinho-mcp__acervo",
+                "mcp__claudinho-mcp__descobrir",
+                "mcp__claudinho-mcp__situacao",
+                "mcp__claudinho-mcp__conferir",
+                "mcp__claudinho-mcp__pesquisar",
+                "mcp__claudinho-mcp__descansar",
+                "mcp__claudinho-mcp__sessao",
+                "mcp__claudinho-mcp__expediente",
+                "mcp__claudinho-mcp__sinal",
+                "mcp__claudinho-mcp__lint",
+                "mcp__claudinho-mcp__teste",
+                "mcp__claudinho-mcp__minuta",
+            ],
             # spec_porta-so-verbo §5: as nativas do Code ficam DESLIGADAS — tudo passa pela
             # porta (tools de verbo, read_file, write_file com `trecho`, run_command so-verbo).
             # Medido 06/09 em 11 fitas: Bash 238, Edit 156, Read 48, Write 34; as demais
