@@ -308,6 +308,14 @@ ato_git() {
       set -- apply "$@"
     fi
   fi
+  if [ "${1:-}" = grep ]; then
+    local rc=0
+    env PATH="$PATH_FORGE" "$GIT" -C "$c" "$@" || rc=$?
+    if [ "$rc" -eq 1 ]; then
+      printf 'veredito: sem ocorrencias\n' >&2
+    fi
+    return "$rc"
+  fi
   exec env PATH="$PATH_FORGE" "$GIT" -C "$c" "$@"
 }
 

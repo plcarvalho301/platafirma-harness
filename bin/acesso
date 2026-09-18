@@ -3,7 +3,7 @@
 # capacidade: acesso
 # dono: claudinho-seguranca
 # classe: A (proposta)
-# forma: objeto (decidir) · lista (listar, historico, vocabulario, orfaos) · predicado (politica, conceder, revogar, desligar)
+# forma: predicado (decidir, politica, conceder, revogar, desligar) · lista (listar, historico, vocabulario, orfaos)
 # use para: saber se posso fazer ação sobre recurso (decidir), saber o que vale ou valeu para sujeito (listar, historico), vocabulário de eixos (vocabulario), conferir e importar PAP servido (politica), conceder ou revogar acesso com fundamento (conceder, revogar), desligar sujeito em quatro atos (desligar), medir resíduos e concessões vencidas (orfaos)
 # atos: decidir (leitura, concessao), listar (leitura, concessao), historico (leitura, concessao), vocabulario (leitura, concessao), politica (leitura, politica), importar (escrita, concessao), conceder (escrita, concessao), revogar (escrita, concessao), desligar (escrita, sujeito), orfaos (leitura, concessao)
 # escreve: concessao.ato (conceder, revogar, desligar), concessao.eixo_valor (politica importar), realm e tabela de sujeitos da BANCADA (desligar --executar); nada nos demais

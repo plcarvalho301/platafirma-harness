@@ -5,7 +5,7 @@
 # classe: C
 # use para: 'existe X?' (ancora de NEGATIVA), regua da bancada antes de commitar (repo --staged, commit, arranque); as classes do SERVIDO respondem aqui deprecadas e moram em `release conferir <classe>`
 # atos: existe (leitura, operacao), repo (leitura, operacao), commit (leitura, operacao), arranque (leitura, operacao), verbo (leitura, operacao), servico (leitura, operacao), skill (leitura, operacao), procedencia (leitura, operacao), superficie (leitura, operacao), front (leitura, operacao), sessao (leitura, operacao), chapeu (leitura, operacao), ferramental (leitura, operacao), pdp (leitura, operacao), alcance (leitura, operacao)
-# forma: texto
+# forma: predicado
 # le: existe=repo,rastreador,arquivo-local
 # le: repo=repo
 # le: commit=rastreador,arquivo-local
