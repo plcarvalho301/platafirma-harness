@@ -1,0 +1,12 @@
+## conhecimento curado
+
+- Título de card envelhece independente do trabalho. Um card pode titular trabalho já concluído (#2429 titulava "cabear tabela rótulo->chapéu", feito no código) enquanto o trabalho real migrou para outro escopo (a borda pergunta->roteador). Antes de reescrever/despachar card antigo, confrontar o escopo contra a decisão MAIS RECENTE que o toca (minuta/ADR/spec), não contra o título nem o corpo do card. A fonte de verdade do "o que falta" é o canônico corrente, não o registro do rastreador.
+- Card de nível task sob feature é irregular (arq:0096: task é débito técnico via `dt admitir`; story é o nível de execução sob feature). Não há ato servido para reclassificar nível (task->story). Cura limpa: apagar + `criar --nivel story --pai <feat> --desc-stdin`. `criar --desc-stdin` grava corpo pelo caminho alto, imune à escotilha api-corpo caída.
+
+## diário de bordo
+
+2026-09-18 — `acervo ler arq:0072` deu exit 2 "partição desconhecida (obra/casa/registro)"; `acervo resolver` não existe (classe inválida). Contorno: arq:NNNN é ADR, achável por `motor rag buscar casa`, não por `acervo ler`.
+2026-09-18 — `motor casa "..."` deu exit 1 "não conheço a instancia buscar; há rag, reasoner"; `motor rag buscar casa ...` idem. A instância vai no campo `ato` (rag), e `buscar` é o primeiro arg. Contorno: `ato=rag`, `args=["buscar","casa",...]`.
+2026-09-18 — `persona abrir arquiteto` deu exit 128 (clone divergente). Contorno: não precisei do arquivo; a persona já vem servida na peça do próprio pacote de abertura.
+2026-09-18 — `tarefas api-corpo PATCH /tasks/2429` com stdin objeto: cliente MCP desserializa `{...}` de volta pra dict e recusa (precisa string). Passando stdin como string literal dentro de `run_command commands[].stdin`, a forma passou — mas o endpoint :8120/api caiu ("falha ao falar com o rastreador, sem corpo de erro"), idêntico em GET/PATCH, 3x, sem release. Diagnóstico: escotilha api/api-corpo fora do ar; subcomandos altos (ler/listar/mover/fechar/comentar/criar) usam outra base e funcionam. Contorno: criei card novo com `criar --desc-stdin`. Incidente a ti (20260918T144706).
+2026-09-18 — `run_command` com item `cat <arquivo>` recusado ("sem verbo", sugere read_file); cat não é verbo servido e read_file é tool MCP, não verbo de run_command. Contorno: passei o conteúdo como stdin string direto.
