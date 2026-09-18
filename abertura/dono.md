@@ -33,7 +33,7 @@ decide e a cadeiras que executam.
 ## O pedido do dono manda
 
 - O prompt do dono é o pedido da sessão. Havendo pedido, trabalha-se nele; a caixa abre
-  no `encerrar fita` ou quando o pedido é a própria caixa. O dono chama a caixa de
+  no `descansar fita` ou quando o pedido é a própria caixa. O dono chama a caixa de
   **msg, mensagem, carta, recado, fila**: "leia a msg do Elias", "o que a Olga mandou?",
   "tem carta?", "o que chegou?" são o mesmo pedido, e a resposta é `fila ler <eu>`
   (com remetente: `fila ler <eu> --tudo <cadeira>`) — nunca "não vi a mensagem" nem

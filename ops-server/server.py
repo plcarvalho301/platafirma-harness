@@ -758,6 +758,11 @@ _SUGESTAO = {
     "curl": "pesquisar", "wget": "pesquisar",
     "python3": "teste", "python": "teste", "pytest": "teste", "uv": "teste", "ruff": "lint",
     "psql": "motor", "tee": "write_file", "cp": "write_file", "mv": "write_file",
+    "read_file": "é tool, não verbo: read_file(path=...)",
+    "write_file": "é tool, não verbo: write_file(path=..., content=...)",
+    "monta_sessao": "é tool, não verbo: monta_sessao(cadeira=...)",
+    "monta-sessao": "é tool, não verbo: monta_sessao(cadeira=...)",
+    "run_command": "é a própria tool que você está chamando",
 }
 
 def _recusa(verbo: str, motivo: str) -> dict:
@@ -780,6 +785,8 @@ def _item_de_lote(x):
             return None, None, _recusa(x, f"nao parte: {e}")
         if not toks:
             return None, None, _recusa("", "item vazio")
+        if toks[0] == "run_command" and len(toks) > 1:
+            toks = toks[1:]
         for t in toks:
             if t in _OPERADORES_SHELL:
                 return None, None, _recusa(toks[0], "metacaractere de shell — um verbo por item; "
@@ -789,6 +796,10 @@ def _item_de_lote(x):
         verbo = str(x.get("verbo") or "")
         ato = str(x.get("ato") or "")
         args = x.get("args") or []
+        if verbo == "run_command" and ato:
+            verbo = ato
+            ato = str(args[0]) if args else ""
+            args = args[1:] if args else []
         # #3026: args STRING itera char-a-char ('motor' -> ['m','o','t',...]) e roda o
         # verbo com token corrompido, sem erro. O contrato quer lista; string e erro de
         # uso, e a porta o recusa aqui em vez de mascarar (custou a fita e8a97d73, 08/09).
@@ -837,6 +848,16 @@ async def run_command(command: str = "", cwd: str = "", timeout: int = 120,
         if acumulado >= CAP:
             lote_next = _i
             break
+        aviso_dup = False
+        if isinstance(x, str):
+            try:
+                _t = shlex.split(x)
+                if _t and _t[0] == "run_command" and len(_t) > 1:
+                    aviso_dup = True
+            except Exception:
+                pass
+        elif isinstance(x, dict) and str(x.get("verbo") or "") == "run_command" and x.get("ato"):
+            aviso_dup = True
         argv, stdin, recusa = _item_de_lote(x)
         if recusa is None and isinstance(stdin, dict):
             n = stdin.get("de")
@@ -849,6 +870,7 @@ async def run_command(command: str = "", cwd: str = "", timeout: int = 120,
                 stdin = brutos[n]
         if recusa:
             _audit(tool="run_command", evento="sem_verbo", verbo=recusa["verbo"],
+                   item=str(x)[:CMD_CAP],
                    motivo=recusa["motivo"], sugestao=recusa["sugestao"],
                    cadeira=ident["cadeira"] or None, sessao_id=ident["sessao_id"],
                    ordem_id=ident["ordem_id"], lote_id=lote_id, lote_n=_i)
@@ -869,6 +891,10 @@ async def run_command(command: str = "", cwd: str = "", timeout: int = 120,
             _perf = _perfil_verbo(slug, argv[0])
             r = _serve(r, tool=slug, alca=linha, ident=ident, cauda=_perf["cauda"],
                        cosmetica=_cosmetica(_perf, argv[1] if len(argv) > 1 else None))
+            if aviso_dup and isinstance(r, dict):
+                r.setdefault("avisos", []).append("run_command: primeiro token 'run_command' desduplicado com aviso")
+                if "aviso" not in r:
+                    r["aviso"] = "run_command: primeiro token 'run_command' desduplicado com aviso"
             _audit(tool=slug, evento="verbo", via="run_command",
                    ato=argv[1] if len(argv) > 1 else None, args=" ".join(argv[2:])[:CMD_CAP],
                    cadeira=ident["cadeira"] or None, sessao_id=ident["sessao_id"],

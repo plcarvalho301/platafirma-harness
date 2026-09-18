@@ -802,6 +802,15 @@ def main():
     # todos os argumentos antes do despacho; nenhum sub-ato chega a rodar. uso() sai 2.
     if any(x in ("--ajuda", "--help", "-h") for x in a):
         uso()
+    if a and a[0] == "motor":
+        sys.stderr.write("motor: primeiro argumento 'motor' desduplicado com aviso\n")
+        a = a[1:]
+    if a and a[0] == "casa":
+        sys.stderr.write("motor: 'motor casa' redirecionado para `motor rag buscar casa` com aviso\n")
+        a = ["rag", "buscar", "casa"] + a[1:]
+    elif a and a[0] == "buscar":
+        sys.stderr.write("motor: assumindo instancia 'rag' para `buscar` com aviso\n")
+        a = ["rag"] + a
     if not a:
         uso()
     if a[0] == "listar":

@@ -1,6 +1,6 @@
 ---
 name: prosa
-description: Use quando for ESCREVER ou REVISAR prosa que um humano vai ler em git ou na wiki, antes de publicar — página de wiki, benchmark, parecer, runbook, e a voz (não a forma) de adr/spec/atos normativos. Orienta o agente que escreve. O MOTOR (tira jargão de IA, faz entender, voz da casa, apara cosmético) é o mesmo pra todo tipo; o MOLDE vem do tipo (um molde por tipo em reference/moldes/); a lista de tipos é a taxonomia de acervo.especie_tipo, a skill não a hardcoda. Régua fina de cada molde na fonte de produto (docs/styleguide-moldes-por-tipo.md). NÃO dispare para: acervo cru (obra tem proveniência própria), mural/fila (régua própria), produtos de negócio de outra cadeira com régua própria (informe, apreciação, estimativa), nem resposta de chat (a régua do chat é a conduta do dono, abertura/dono.md). O par `conferir prosa` é o lint que CONFERE o que já está escrito; esta skill ORIENTA quem escreve.
+description: Use quando for ESCREVER ou REVISAR prosa que um humano vai ler em git ou na wiki, antes de publicar — página de wiki, benchmark, parecer, runbook, e a voz (não a forma) de adr/spec/atos normativos. Orienta o agente que escreve. O MOTOR (tira jargão de IA, faz entender, voz da casa, apara cosmético) é o mesmo pra todo tipo; o MOLDE vem do tipo (um molde por tipo em reference/moldes/); a lista de tipos é a taxonomia de acervo.especie_tipo, a skill não a hardcoda. Régua fina de cada molde na fonte de produto (docs/styleguide-moldes-por-tipo.md). NÃO dispare para: acervo cru (obra tem proveniência própria), mural/fila (régua própria), produtos de negócio de outra cadeira com régua própria (informe, apreciação, estimativa), nem resposta de chat (a régua do chat é a conduta do dono, abertura/dono.md). O par de lint que CONFERE o que já está escrito é matéria fora desta skill; esta skill ORIENTA quem escreve.
 cadeiras: todas (matéria de escrita legível por humano em git/wiki). Dona da régua é produto (spec §5 + anexo styleguide-moldes-por-tipo.md); dono da skill, como implementadora, é o arquiteto. A estrutura dos tipos é de dados (acervo.especie_tipo).
 compatibility: régua canônica na spec e no anexo de moldes; servida em Operar:styleguide (wiki viva). Motor agnóstico de superfície; molde por tipo em reference/moldes/. A conduta do dono (abertura/dono.md) é referência de voz, não isenção de regra. Catálogo de marcas por extenso em reference/marcas-pt-br.md.
 ---
@@ -175,7 +175,7 @@ dúvida, procure vários padrões juntos.
   moldes por tipo mora no anexo `docs/styleguide-moldes-por-tipo.md`. A régua é de
   **produto** (§5); a **estrutura** dos tipos é de **dados** (`acervo.especie_tipo`);
   esta skill é **implementadora** (arquiteto). O par que confere o que já está escrito
-  é o lint `conferir prosa`.
+  é o lint de prosa.
 - Ponto para produto: a spec põe toda «marca de máquina» por último (§1/§3.1). Esta
   skill trata o jargão de IA como quebra-entendimento (nível 2, cortado primeiro) e
   só o cosmético como nível 4. Se produto concordar, a spec e o servido refletem isso.

@@ -487,9 +487,13 @@ def ato_anota(args):
     """FORMA VELHA, mantida porque `descansar`, os rituais do chat e o ops-server
     ainda a chamam com prosa em stdin. Escreve no Valkey, nao no substrato de item."""
     slot = valida_slot(args.slot)
-    texto = sys.stdin.read().strip()
+    texto = (getattr(args, "texto", None) or "").strip()
+    if not texto and not sys.stdin.isatty():
+        texto = sys.stdin.read().strip()
     if not texto:
-        sys.exit("erro: corpo vazio — para esquecer um slot use `mesa limpa <slot>`")
+        print("erro: mesa anota: corpo vazio — passe o texto como argumento ou em stdin; para esquecer um slot use `mesa limpa <slot>`", file=sys.stderr)
+        print("uso: mesa anota <slot> [\"<texto>\"] (ou texto em stdin)", file=sys.stderr)
+        sys.exit(2)
     print("aviso: `mesa anota` escreve prosa no substrato velho. O que tem ATO pendente vai "
           "em `mesa item <chapeu> --ato ... --alvo ...`, que e o que a abertura serve.",
           file=sys.stderr)
@@ -823,8 +827,9 @@ def main():
     g.add_argument("--triado", metavar="CHAPEU", help="marca o chapeu como triado")
     g.set_defaults(func=ato_legado)
 
-    a = sub.add_parser("anota", help="forma velha: reescreve prosa num slot; corpo em stdin")
+    a = sub.add_parser("anota", help="forma velha: reescreve prosa num slot; corpo em stdin ou argumento")
     a.add_argument("slot")
+    a.add_argument("texto", nargs="?", default="", help="prosa a anotar; se omitido, le do stdin")
     a.add_argument("--se-fita", metavar="ID",
                    help="so escreve se esta ainda for a fita corrente; default PF_FITA")
     a.set_defaults(func=ato_anota)

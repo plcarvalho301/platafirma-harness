@@ -198,20 +198,11 @@ def valida_persona(p: str, json_mode: bool = False):
 
 
 def resolve_eu(args) -> str:
-    eu = args.eu or os.environ.get("PF_CADEIRA", "")
+    eu = getattr(args, "eu", None) or os.environ.get("PF_CADEIRA", "")
     if not eu:
         if _json_mode(args):
-            _falha_json(
-                "nao sei quem esta operando a fila — exporte PF_CADEIRA=<cadeira> "
-                "(ex.: PF_CADEIRA=IA) ou passe --eu <persona>.",
-                2,
-            )
-        sys.stderr.write(
-            "erro: nao sei quem esta operando a fila.\n"
-            "  exporte PF_CADEIRA=<cadeira>  (ex.: PF_CADEIRA=ia)  ou passe --eu <persona>.\n"
-            "  sem isso a fila nao abre caixa nenhuma — foi assim que uma caixa alheia ja foi\n"
-            "  sobrescrita.\n"
-        )
+            _falha_json("sem cadeira na sessão: passe sessao_id", 2)
+        sys.stderr.write("erro: sem cadeira na sessão: passe sessao_id\n")
         sys.exit(2)
     # Case/prefixo fossil na entrada (PF_CADEIRA legado, --eu digitado) -> slug puro.
     canon = canoniza_persona(eu)
@@ -274,10 +265,17 @@ def frias(rc, persona: str, desde: str = None):
     piso = "-"
     if desde:
         try:
-            ms = int(datetime.strptime(desde[:15], "%Y%m%dT%H%M%S").timestamp() * 1000)
+            d_str = desde.strip()
+            if len(d_str) == 10 and d_str.count("-") == 2:
+                dt = datetime.strptime(d_str, "%Y-%m-%d")
+            elif "T" in d_str and "-" in d_str:
+                dt = datetime.fromisoformat(d_str)
+            else:
+                dt = datetime.strptime(d_str[:15], "%Y%m%dT%H%M%S")
+            ms = int(dt.timestamp() * 1000)
             piso = f"{ms}-0"
-        except ValueError:
-            sys.stderr.write(f"erro: --desde espera carimbo AAAAMMDDTHHMMSS, recebi: {desde}\n")
+        except (ValueError, TypeError):
+            sys.stderr.write(f"erro: --desde espera carimbo AAAAMMDDTHHMMSS ou AAAA-MM-DD, recebi: {desde}\n")
             sys.exit(2)
     return [_campos(c, t) for t, c in rc.xrange(stream_key(persona), min=piso, max="+")]
 
@@ -432,22 +430,12 @@ def cmd_status(rc, eu: str, args):
         valida_persona(args.persona, json_mode=json_mode)
         so_minha(eu, args.persona, json_mode=json_mode)
         personas = [args.persona]
-    elif os.environ.get("PF_CADEIRA", "").strip():
-        # Sem alvo, a caixa e a de quem opera. Peca de abertura servida por execucao
-        # (`verbo:fila status`, catalogo do #189) nao carrega argumento: o sujeito ja
-        # viaja em PF_CADEIRA, e exigi-lo de novo era a terceira forma da mesma coisa.
-        alvo = os.environ["PF_CADEIRA"].strip()
-        valida_persona(alvo, json_mode=json_mode)
-        so_minha(eu, alvo, json_mode=json_mode)
-        personas = [alvo]
+    elif eu:
+        valida_persona(eu, json_mode=json_mode)
+        so_minha(eu, eu, json_mode=json_mode)
+        personas = [eu]
     else:
-        # Achado no LOTE 1 (card #390): argparse recusa "--todas" como valor do
-        # positional "persona" (parece opção, não é aceito por padrão) — a régua
-        # `args.persona == "--todas"` nunca era alcançável pela CLI de verdade.
-        # "persona" virou opcional e "--todas" virou flag de verdade; este ramo
-        # cobre "nem um nem outro" (uso incorreto), que antes o argparse pegava
-        # sozinho por "persona" ser obrigatório.
-        msg = "uso: fila status <persona> | --todas (ou PF_CADEIRA no ambiente)"
+        msg = "sem cadeira na sessão: passe sessao_id"
         if json_mode:
             _falha_json(msg, 2)
         sys.stderr.write(f"erro: {msg}\n")
@@ -469,13 +457,17 @@ def cmd_status(rc, eu: str, args):
 
 # ---------- ler ----------
 def cmd_ler(rc, eu: str, args):
-    if args.persona == "--todas":
+    alvo = args.persona or eu
+    if not alvo:
+        sys.stderr.write("erro: sem cadeira na sessão: passe sessao_id\n")
+        sys.exit(2)
+    if alvo == "--todas":
         so_espia(eu)
         personas = sorted(personas_validas() or set())
     else:
-        valida_persona(args.persona)
-        so_minha(eu, args.persona)
-        personas = [args.persona]
+        valida_persona(alvo)
+        so_minha(eu, alvo)
+        personas = [alvo]
 
     frio = args.tudo or args.desde
     if args.remetente and not frio:
@@ -555,17 +547,17 @@ def build_parser():
     p_status.add_argument("persona", nargs="?", default=None)
     p_status.add_argument("--todas", action="store_true")
     p_status.add_argument("--json", action="store_true")
+    p_status.add_argument("--eu", default=None)
 
     p_ler = sub.add_parser("ler", add_help=False)
-    p_ler.add_argument("persona")
+    p_ler.add_argument("persona", nargs="?", default=None)
     p_ler.add_argument("remetente", nargs="?", default=None)
     p_ler.add_argument("--tudo", nargs="?", const=True, default=False)
     p_ler.add_argument("--desde", default=None)
+    p_ler.add_argument("--eu", default=None)
 
-    # `tipos` — card #2274, defeito 5: a lista de tipos validos so aparecia na mensagem de
-    # erro do `enviar`. Sem verbo que a liste, descobri-la exigia errar de proposito. Agora
-    # ha um ato que a imprime, e ele NAO toca a malha (info estatica: TIPOS_VALIDOS).
-    sub.add_parser("tipos", add_help=False)
+    p_tipos = sub.add_parser("tipos", add_help=False)
+    p_tipos.add_argument("--eu", default=None)
 
     p_enviar = sub.add_parser("enviar", add_help=False)
     p_enviar.add_argument("destinatario")
@@ -574,6 +566,7 @@ def build_parser():
     p_enviar.add_argument("--assunto", default=None)
     p_enviar.add_argument("--ref", default=None)
     p_enviar.add_argument("--responde", default=None)
+    p_enviar.add_argument("--eu", default=None)
 
     return ap
 
@@ -581,10 +574,10 @@ def build_parser():
 def uso():
     sys.stderr.write(
         "uso:\n"
-        "  fila status <persona> | --todas\n"
-        "  fila ler <persona>                     so o que chegou desde a ultima leitura\n"
-        "  fila ler <persona> --tudo [remetente]  historico dos 7 dias, nao move o ponteiro\n"
-        "  fila ler <persona> --desde AAAAMMDDTHHMMSS [remetente]\n"
+        "  fila status [<persona>] | --todas\n"
+        "  fila ler [<persona>]                     so o que chegou desde a ultima leitura\n"
+        "  fila ler [<persona>] --tudo [remetente]  historico dos 7 dias, nao move o ponteiro\n"
+        "  fila ler [<persona>] --desde <data> [remetente]\n"
         "  fila enviar <destinatario> --tipo <t> --assunto <a> [--ref <r>] [--responde <id>]\n"
         "              (corpo em stdin)\n"
         "  fila tipos                             lista os tipos validos de --tipo\n"
@@ -595,6 +588,14 @@ def uso():
 def main():
     ap = build_parser()
     args, _resto = ap.parse_known_args()
+    if not getattr(args, "eu", None) and _resto:
+        for _idx, _tok in enumerate(_resto):
+            if _tok == "--eu" and _idx + 1 < len(_resto):
+                args.eu = _resto[_idx + 1]
+                break
+            elif _tok.startswith("--eu="):
+                args.eu = _tok.split("=", 1)[1]
+                break
     if not args.verbo:
         uso()
     if args.verbo == "ler":

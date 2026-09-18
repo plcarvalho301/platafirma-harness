@@ -251,11 +251,16 @@ case "$ATO" in
   wiki)            avisa "acervo wiki <ato>" "acervo ler/listar/escrever casa pagina|arquivo|cargo"
                    exec "$ATOS/wiki"    "$@" ;;
 
-  # atos deprecados sem implementacao (ex: adr removido): recusam com exit 2
   adr)
-    echo "acervo adr: ato deprecado e removido. Substituto: acervo ler casa adr <codigo> ou acervo listar casa adr." >&2
-    echo "  $SPEC" >&2
-    exit 2 ;;
+    avisa "acervo adr <codigo>" "acervo ler casa adr <codigo>"
+    num="${1:-}"
+    if [ -z "$num" ]; then
+      exec "$ATOS/casa" listar adr
+    fi
+    if [[ "$num" =~ ^[0-9]+$ ]]; then
+      num="arq:$(printf '%04d' "$num")"
+    fi
+    exec "$ATOS/casa" ler adr "$num" "${@:2}" ;;
 
   -h|--help|ajuda) uso ;;
   *)

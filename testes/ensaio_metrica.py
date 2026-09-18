@@ -106,6 +106,41 @@ def test_exit_zero_nao_e_erro():
     assert giros[0]["falhou"] is False
 
 
+def test_predicado_exit_1_e_veredito_nao_erro():
+    """Card #3045 Passo 3: teste/lint/conferir/acesso com falha de assercao (exit 1)
+    sao vereditos, nao erro de chamada."""
+    for tool in ("teste", "lint", "conferir", "acesso"):
+        giros, _, _ = classifica([reg("10:00:00.000", tool, "rodar", exit_code=1)])
+        assert giros[0]["falhou"] is False, f"{tool} exit 1 nao deveria falhar"
+        assert giros[0]["veredito"] is True, f"{tool} exit 1 deveria ser veredito"
+
+
+def test_repo_git_grep_exit_1_e_veredito():
+    """`repo git ... grep` sem match (exit 1) e veredito ('sem ocorrencias')."""
+    giros, _, _ = classifica([reg("10:00:00.000", "repo", "git", args="platafirma grep foo", exit_code=1)])
+    assert giros[0]["falhou"] is False
+    assert giros[0]["veredito"] is True
+
+
+def test_predicado_exit_2_e_3_continuam_erros():
+    """Exit 2 (uso invalido) e exit 3 (falha de infra) continuam erros de chamada."""
+    giros, _, _ = classifica([
+        reg("10:00:00.000", "teste", "rodar", exit_code=2),
+        reg("10:00:01.000", "teste", "rodar", exit_code=3),
+    ])
+    assert giros[0]["falhou"] is True and giros[0]["veredito"] is False
+    assert giros[1]["falhou"] is True and giros[1]["veredito"] is False
+
+
+def test_predicado_recusa_da_porta_continua_erro():
+    """Recusa da porta (evento sem_verbo) continua erro mesmo para predicado."""
+    linha = reg("10:00:00.000", "teste", evento="sem_verbo", motivo="sem verbo")
+    del linha["exit_code"]
+    giros, _, _ = classifica([linha])
+    assert giros[0]["falhou"] is True
+    assert giros[0]["veredito"] is False
+
+
 # --- SINTETICO: help-pedido -------------------------------------------------------
 
 def test_help_pedido_exige_o_giro_seguinte_com_ato_real():
@@ -249,6 +284,21 @@ def test_cadeira_filtra_antes_de_classificar():
               reg("10:00:01.000", "mesa", "ver", cadeira="fabrica")]
     giros, _, _ = classifica(linhas, cadeira="fabrica")
     assert len(giros) == 1 and giros[0]["cadeira"] == "fabrica"
+
+
+def test_casos_preserva_path_e_item():
+    """Card #3045 Passo 7: _RUIDO nao descarta path nem item em metrica casos."""
+    linhas = [
+        reg("10:00:00.000", "read_file", erro="nao existe", path="/srv/platafirma/doc.md"),
+        reg("10:00:01.000", "run_command", evento="sem_verbo", motivo="sem verbo", item="run_command git status"),
+    ]
+    giros, _, _ = classifica(linhas)
+    c = m.casos(giros)
+    assert len(c["casos"]) == 2
+    r_rf = next(x for x in c["casos"] if x["tool"] == "read_file")
+    assert r_rf.get("path") == "/srv/platafirma/doc.md"
+    r_rc = next(x for x in c["casos"] if x["tool"] == "run_command")
+    assert r_rc.get("item") == "run_command git status"
 
 
 # --- borda: uso, erro gracioso, saida ---------------------------------------------

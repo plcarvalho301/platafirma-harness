@@ -34,6 +34,7 @@
 import argparse
 import json
 import os
+import re
 import statistics
 import sys
 from collections import defaultdict
@@ -49,7 +50,7 @@ LOG_OPS = (os.environ.get("OPS_LOG_DIR") or os.environ.get("PF_LOG_OPS")
 
 VERBO = "metrica"
 ATOS = ("eventos", "dia", "ate-acerto", "tateio", "casos", "verbos")
-TIPOS = ("giro", "erro", "ajuda", "help", "acerto", "cadeia", "lote")
+TIPOS = ("giro", "erro", "ajuda", "help", "acerto", "cadeia", "lote", "veredito")
 
 # PEDIDO DE AJUDA NAO E ERRO (dono, 12/09/2026): verbo chamado sem ato lista os atos por
 # contrato (oficio.md), e `--help`/`--ajuda` devolvem o uso. Que o uso saia por stderr com
@@ -73,6 +74,60 @@ def e_ajuda(reg):
     args = reg.get("args")
     toks = args.split() if isinstance(args, str) else (args if isinstance(args, list) else [])
     return any(str(t) in AJUDA for t in toks)
+
+# PREDICADO FALSO NAO E ERRO DE CHAMADA (card #3045 passo 3, diario 12/09/2026):
+# `exit != 0` em predicado e veredito ('falhou', suite vermelha, sem match, negado),
+# nao erro de sintaxe ou infra. Taxa de erro reflete apenas chamadas com sintaxe
+# invalida (exit 2), verbo inexistente (sem_verbo) ou falha de infra (exit 3/4).
+PREDICADOS = ("conferir", "acesso", "lint", "teste")
+
+_VERBO_FORMA = {}
+
+def _forma_do_verbo(tool):
+    if not tool or tool in SEM_ATO:
+        return None
+    if tool in _VERBO_FORMA:
+        return _VERBO_FORMA[tool]
+    forma = None
+    bin_dir = os.path.join(os.path.dirname(os.path.realpath(__file__)))
+    caminho = os.path.join(bin_dir, tool)
+    if os.path.isfile(caminho):
+        try:
+            with open(caminho, "r", encoding="utf-8", errors="replace") as f:
+                for _ in range(30):
+                    linha = f.readline()
+                    if not linha:
+                        break
+                    m = re.search(r"^#\s*forma:\s*([^\n]+)", linha)
+                    if m:
+                        forma = m.group(1).strip().lower()
+                        break
+        except Exception:
+            pass
+    _VERBO_FORMA[tool] = forma
+    return forma
+
+def e_veredito(reg):
+    """Retorno != 0 em predicado e veredito ('falhou' a assercao), nao erro de chamada.
+    Exit 2 (uso invalido/sintaxe), 3 (dependencia/infra) ou recusa da porta (sem_verbo)
+    continuam erros."""
+    if reg.get("evento") == "sem_verbo":
+        return False
+    ec = reg.get("exit_code")
+    if ec is None or ec == 0 or ec in (2, 3, 4):
+        return False
+    tool = reg.get("tool")
+    if tool in PREDICADOS:
+        return True
+    forma = _forma_do_verbo(tool)
+    if forma and "predicado" in forma:
+        return True
+    if tool == "repo" and reg.get("ato") == "git" and ec == 1:
+        args = reg.get("args")
+        toks = args.split() if isinstance(args, str) else (args if isinstance(args, list) else [])
+        if any("grep" in str(t) for t in toks):
+            return True
+    return False
 
 # O que o ops log grava por chamada de verbo (ops-server/server.py, `_audit`).
 CAMPOS_GIRO = ("ts", "cadeira", "ordem_id", "sessao_id", "tool", "ato",
@@ -192,7 +247,8 @@ def giros_do_dia(fonte, dia, cadeira=None):
         g["pos"] = pos
         g["bruto"] = reg          # so `casos` le; nunca sai no stream (CAMPOS_GIRO)
         g["ajuda"] = e_ajuda(reg)
-        g["falhou"] = falhou(reg) and not g["ajuda"]
+        g["veredito"] = e_veredito(reg)
+        g["falhou"] = falhou(reg) and not g["ajuda"] and not g["veredito"]
         g["lote"] = em_lote(reg)
         g["help"] = False
         g["acerto"] = False
@@ -293,6 +349,8 @@ def stream_eventos(giros, cadeias, tipo=None):
             saida.append({"tipo": "giro", **base})
         if g["falhou"] and tipo in (None, "erro"):
             saida.append({"tipo": "erro", **base})
+        if g.get("veredito") and tipo in (None, "veredito"):
+            saida.append({"tipo": "veredito", **base})
         if g["ajuda"] and tipo in (None, "ajuda"):
             saida.append({"tipo": "ajuda", **base})
         if g["help"] and tipo in (None, "help"):
@@ -339,6 +397,7 @@ def resumo_do_dia(giros, cadeias):
             "giros": len(giros),
             "erros": sum(erros_tool.values()),
             "ajuda": sum(1 for g in giros if g["ajuda"]),
+            "veredito": sum(1 for g in giros if g.get("veredito")),
             "help": sum(por_help.values()),
             "lotes": len({g["lote_id"] for g in giros if g["lote"]}),
             "fitas": len(por_fita),
@@ -508,6 +567,7 @@ def tateio(giros, par):
             "giros": len(giros),
             "erros": n_gram + n_exec,
             "ajuda": sum(1 for g in giros if g["ajuda"]),
+            "veredito": sum(1 for g in giros if g.get("veredito")),
             "taxa_erro": round((n_gram + n_exec) / len(giros), 4) if giros else 0,
             "fracao_gramatica": round(n_gram / (n_gram + n_exec), 4) if (n_gram + n_exec) else 0,
         },
@@ -524,7 +584,7 @@ def tateio(giros, par):
 # Campos que nao dizem o que a cadeira tentava: transporte, identidade, ja em CAMPOS_GIRO.
 _RUIDO = set(CAMPOS_GIRO) | {
     "instancia", "usuario", "sessao", "sub", "sujeito", "username", "azp", "sid",
-    "jti", "mcp_session", "via", "path", "poda", "poda_modo", "poda_aviso",
+    "jti", "mcp_session", "via", "poda", "poda_modo", "poda_aviso",
     "bytes_servidos", "bytes_produzidos", "ledger", "giro", "sha", "lavado", "evento",
 }
 CASOS_TAM = 220     # chars por campo — o bastante para ler o comando, nao o retorno
@@ -598,12 +658,17 @@ def casos(giros, tool=None):
                         for t, d in sorted(atos_falhos.items(), key=lambda kv: -sum(kv[1].values()))},
     }
     ajuda = defaultdict(int)
+    veredito = defaultdict(int)
     for g in giros:
         if g["ajuda"] and (not tool or g["tool"] == tool):
             ajuda[g["tool"]] += 1
+        if g.get("veredito") and (not tool or g["tool"] == tool):
+            veredito[g["tool"]] += 1
     return {"casos": saida, "agregado": agregado,
             "ajuda_fora_do_erro": {"total": sum(ajuda.values()),
                                    "por_verbo": dict(sorted(ajuda.items(), key=lambda kv: -kv[1]))},
+            "veredito_fora_do_erro": {"total": sum(veredito.values()),
+                                      "por_verbo": dict(sorted(veredito.items(), key=lambda kv: -kv[1]))},
             "por_classe": dict(sorted(por_classe.items(), key=lambda kv: -kv[1])),
             "erros": len(saida),
             "erros_distintos": len({(c["lote_id"] or c["ts"], c["tool"], c["ato"],
@@ -617,6 +682,10 @@ def casos_texto(r, agregado=False):
     aj = r["ajuda_fora_do_erro"]
     linhas.append(f"ajuda (fora do erro): {aj['total']} — " +
                   " ".join(f"{k}={v}" for k, v in aj["por_verbo"].items()))
+    vd = r.get("veredito_fora_do_erro")
+    if vd and vd.get("total"):
+        linhas.append(f"veredito (fora do erro): {vd['total']} — " +
+                      " ".join(f"{k}={v}" for k, v in vd["por_verbo"].items()))
     if agregado:
         a = r["agregado"]
         linhas.append("")

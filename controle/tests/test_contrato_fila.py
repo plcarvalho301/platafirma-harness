@@ -56,6 +56,17 @@ class FakeRC:
     def xinfo_consumers(self, chave, grupo):
         return self._p(chave)["consumers"]
 
+    def xreadgroup(self, group, consumer, streams, count=None):
+        out = []
+        for stream, _id in streams.items():
+            persona = stream.split(":", 1)[1]
+            entradas = self._personas[persona]["xrange"]
+            out.append((stream, list(entradas[:count]) if count else list(entradas)))
+        return out
+
+    def xack(self, *a, **k):
+        return True
+
 
 def _rodar_cli(monkeypatch, capsys, argv, eu, rc):
     """Reproduz o caminho real: main() inteiro, com r_conn() trocado pelo fake."""
@@ -440,3 +451,69 @@ def test_cadeira_comum_continua_barrada_em_todas(monkeypatch, capsys):
         monkeypatch, capsys, ["status", "--todas", "--json"], "ti", rc
     )
     assert code == 1
+
+
+# ---------- Card #3045: Passo 1 ----------
+
+def test_status_e_ler_sem_argumento_usam_cadeira(monkeypatch, capsys):
+    """Aceite (c): fila status e fila ler sem argumento funcionam com PF_CADEIRA."""
+    monkeypatch.setattr(fila_streams, "personas_validas", lambda: {"ti"})
+    rc = FakeRC({
+        "ti": {
+            "xlen": 1,
+            "groups": [{"name": "cadeira", "pending": 0, "lag": None, "last-delivered-id": "100-0"}],
+            "xrange": [("100-1", {"id": "20260918T120000-ia", "de": "ia", "tipo": "pedido",
+                                  "assunto": "a", "ref": "", "responde": "", "corpo": "msg teste"})],
+            "consumers": [{"name": "ti", "idle": 100, "pending": 0}],
+        },
+    })
+    # status sem persona
+    code, cap = _rodar_cli(monkeypatch, capsys, ["status"], "ti", rc)
+    assert code == 0
+    assert "ti: 1 nova(s)" in cap.out
+
+    # ler sem persona
+    code2, cap2 = _rodar_cli(monkeypatch, capsys, ["ler"], "ti", rc)
+    assert code2 == 0
+    assert "===MSG 20260918T120000-ia===" in cap2.out
+    assert "msg teste" in cap2.out
+
+
+def test_recusa_sem_cadeira(monkeypatch, capsys):
+    """Chamada sem cadeira recusa com 'sem cadeira na sessão: passe sessao_id'."""
+    rc = FakeRC({})
+    code, cap = _rodar_cli(monkeypatch, capsys, ["status"], "", rc)
+    assert code == 2
+    assert "sem cadeira na sessão: passe sessao_id" in cap.err
+
+
+def test_eu_em_qualquer_posicao(monkeypatch, capsys):
+    """--eu aceito apos o subcomando e no fim da linha."""
+    monkeypatch.setattr(fila_streams, "personas_validas", lambda: {"ti"})
+    rc = FakeRC({
+        "ti": {
+            "xlen": 0,
+            "groups": [],
+            "xrange": [],
+            "consumers": [],
+        },
+    })
+    code, cap = _rodar_cli(monkeypatch, capsys, ["status", "--eu", "ti"], "", rc)
+    assert code == 0
+    assert "ti: caixa vazia" in cap.out
+
+
+def test_desde_aceita_data_iso(monkeypatch, capsys):
+    """--desde aceita AAAA-MM-DD."""
+    monkeypatch.setattr(fila_streams, "personas_validas", lambda: {"ti"})
+    rc = FakeRC({
+        "ti": {
+            "xlen": 0,
+            "groups": [],
+            "xrange": [],
+            "consumers": [],
+        },
+    })
+    code, cap = _rodar_cli(monkeypatch, capsys, ["ler", "ti", "--desde", "2026-09-18"], "ti", rc)
+    assert code == 0
+
