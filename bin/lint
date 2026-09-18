@@ -101,12 +101,35 @@ alvo_de() {
   printf '%s' "$real"
 }
 
+lint_bash() {
+  local c="$1"
+  local achados
+  achados=$(find "$c" -maxdepth 2 -type f \( -name "*.sh" -o -path "*/bin/*" \) ! -name "*.*" ! -path "*/.*" 2>/dev/null | xargs -r awk '
+    /^[a-zA-Z_0-9]+[ ]*\(\)[ ]*\{/ { in_func=1; func_name=$1; last_line="" }
+    in_func && /^\}/ {
+      if (last_line ~ /^[[:space:]]*\[.*\][[:space:]]*&&/ && last_line !~ /\|\|/) {
+        print FILENAME ":" NR-1 ": " func_name " termina com condicional sob set -e sem return/exit explicito"
+      }
+      in_func=0
+    }
+    in_func && NF && !/^[[:space:]]*#/ { last_line=$0 }
+  ')
+  if [ -n "$achados" ]; then
+    printf '%s\n' "$achados" >&2
+    return 1
+  fi
+  return 0
+}
+
 detecta() {
   local c="$1"
   if [ -f "$c/pyproject.toml" ] || [ -f "$c/.ruff.toml" ] || [ -f "$c/ruff.toml" ] \
      || [ -d "$c/.ruff_cache" ]; then printf 'python|uvx ruff check'; return 0; fi
   if [ -f "$c/package.json" ] && grep -q '"lint"[[:space:]]*:' "$c/package.json" 2>/dev/null; then
     printf 'node|npm run lint'; return 0
+  fi
+  if [ -d "$c/bin" ] || compgen -G "$c/*.sh" >/dev/null 2>&1; then
+    printf 'bash|lint_bash'; return 0
   fi
   return 1
 }
@@ -139,8 +162,12 @@ ato_rodar() {
     python) (cd "$c" && uvx ruff check "${alvo:-.}") ;;
     node)
       if [ -n "$alvo" ]; then (cd "$c" && npm run lint -- "$alvo"); else (cd "$c" && npm run lint); fi ;;
+    bash) lint_bash "$c" ;;
   esac
   rc=$?
+  if [ -d "$c/bin" ] && [ "$stack" != "bash" ]; then
+    lint_bash "$c" || rc=$(( rc == 0 ? 1 : rc ))
+  fi
   [ "$rc" -eq 0 ] && printf 'lint LIMPO: %s (%s)\n' "$nome" "$stack" \
                   || printf 'lint com APONTAMENTOS: %s (%s) — exit %s\n' "$nome" "$stack" "$rc"
   return "$rc"

@@ -157,7 +157,11 @@ resolver_rev() {  # $1=rev ; imprime o sha ou falha
     sha="$(git --git-dir="$esp" rev-parse --verify -q "$r" 2>/dev/null || true)"
     [ -z "$sha" ] || break
   done
-  [ -n "$sha" ] && printf '%s\n' "$sha"
+  if [ -n "$sha" ]; then
+    printf '%s\n' "$sha"
+    return 0
+  fi
+  return 1
 }
 
 # Compose declarado -> caminho relativo a raiz da familia. Relativo vale como relativo a raiz do
