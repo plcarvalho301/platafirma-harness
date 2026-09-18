@@ -358,6 +358,10 @@ def origem(nome, caminho):
         if (destino == os.path.realpath(cand_release) or destino.startswith(fam_bin + os.sep)
                 or destino.startswith(opt_dir + os.sep)):
             return "symlink-release", destino
+        nome_destino = os.path.basename(destino)
+        if nome_destino != nome and (os.path.exists(os.path.join(BIN, nome_destino))
+                                     or os.path.exists(os.path.join(HARNESS, "bin", nome_destino))):
+            return "symlink-alias", destino
 
     # Candidato 2: repo
     cand_repo = os.path.join(HARNESS, "bin", nome)
@@ -453,17 +457,19 @@ def conferir_verbo(alvo, como_json=False):
         # `controle/tests/test_contrato_fila.py` fazem `import fila_streams`); o symlink
         # e o verbo. Alias de verdade e nome que DUPLICA outro ja exposto, e e so esse
         # caso que arq:0037 precisa isentar.
-        if (classe.startswith("symlink") and os.path.basename(onde) != nome
-                and os.path.basename(onde) in os.listdir(BIN)):
+        destino_alias = os.path.realpath(caminho) if os.path.islink(caminho) else onde
+        if ((classe.startswith("symlink") or os.path.islink(caminho))
+                and os.path.basename(destino_alias) != nome
+                and os.path.basename(destino_alias) in os.listdir(BIN)):
             vistos += 1
             if not como_json:
                 print(f"\n### {nome}")
-                print(f"    alias   : de {os.path.basename(onde)} — nao conta na capacidade")
+                print(f"    alias   : de {os.path.basename(destino_alias)} — nao conta na capacidade")
             else:
                 verbos_json.append({
                     "nome": nome, "origem": "alias", "capacidade": None,
                     "conforme": True,
-                    "motivos": [f"alias de {os.path.basename(onde)} — nao conta na capacidade"],
+                    "motivos": [f"alias de {os.path.basename(destino_alias)} — nao conta na capacidade"],
                 })
             continue
         vistos += 1
