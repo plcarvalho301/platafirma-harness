@@ -115,3 +115,32 @@ async def test_run_command_legado_injecao_entre_itens_lote():
     assert chamadas[1]["sessao_id"] == sid_novo
     assert chamadas[1]["ordem_id"] == oid_novo
     assert chamadas[1]["cadeira"] == cad_nova
+
+
+def test_operadores_como_token_recusam_e_regex_passa():
+    """Card #3045 Passo 2 / Aceite (d):
+    partir o item com shlex e recusar só operador como TOKEN; regex e aspas passam.
+    """
+    with patch("server.SLUGS_SERVIDOS", {"repo", "fila"}), \
+         patch("server.BINARIOS", {"repo": "/opt/bin/repo", "fila": "/opt/bin/fila"}):
+        # Aceite (d): grep com regex contendo |
+        cmd_d = "repo git platafirma-harness grep -n 'def _audit\\|comando' -- ops-server/server.py"
+        argv, stdin, recusa = s._item_de_lote(cmd_d)
+        assert recusa is None
+        assert argv[0] == "/opt/bin/repo"
+        assert "-n" in argv
+        assert "def _audit\\|comando" in argv
+
+        # Aspas com espaço
+        cmd_espaco = 'fila enviar ti --assunto "x y"'
+        argv, stdin, recusa = s._item_de_lote(cmd_espaco)
+        assert recusa is None
+        assert "x y" in argv
+
+        # Operadores como TOKEN recusam
+        for op in ("|", ";", "&&", "||", ">", "<", ">>", "&"):
+            _, _, rec = s._item_de_lote(f"repo git {op} algo")
+            assert rec is not None
+            assert rec["recusado"] is True
+            assert "metacaractere de shell" in rec["motivo"]
+
