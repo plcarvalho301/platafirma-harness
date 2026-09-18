@@ -144,3 +144,14 @@ def test_operadores_como_token_recusam_e_regex_passa():
             assert rec["recusado"] is True
             assert "metacaractere de shell" in rec["motivo"]
 
+        # Desduplicação do primeiro token run_command (#3045 passo 5)
+        argv, stdin, rec = s._item_de_lote("run_command repo estado")
+        assert rec is None
+        assert argv[0] == "/opt/bin/repo"
+        assert argv[1:] == ["estado"]
+
+        argv, stdin, rec = s._item_de_lote({"verbo": "run_command", "ato": "repo", "args": ["estado"]})
+        assert rec is None
+        assert argv[0] == "/opt/bin/repo"
+        assert argv[1:] == ["estado"]
+
