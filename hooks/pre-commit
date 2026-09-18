@@ -1,0 +1,26 @@
+#!/bin/sh
+# pre-commit — gate autorizado pelo dono (ADR 109 e PEP)
+# capacidade: verificacao
+# dono: ti
+
+if [ -z "${CONFERIR:-}" ]; then
+    CONFERIR="$(dirname "$(readlink -f "$0")")/../bin/conferir"
+    [ -x "$CONFERIR" ] || CONFERIR="$(command -v conferir 2>/dev/null || printf '%s' "$CONFERIR")"
+fi
+
+[ -x "$CONFERIR" ] || {
+    echo "pre-commit: 'conferir' nao encontrado em $CONFERIR — commit segue sem gate." >&2
+    exit 0
+}
+
+# 1. Gate ADR 109: Trabalho é branch por card, main é intocável no checkout.
+branch="$(git rev-parse --abbrev-ref HEAD 2>/dev/null || true)"
+if [ "$branch" = "main" ]; then
+    echo "pre-commit: erro: commit direto em main bloqueado (ADR 109). Crie um branch." >&2
+    exit 1
+fi
+
+# 2. Gate PEP: Policy Enforcement Point.
+"$CONFERIR" pdp || exit 1
+
+exit 0
