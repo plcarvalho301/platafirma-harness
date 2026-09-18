@@ -155,3 +155,25 @@ def test_operadores_como_token_recusam_e_regex_passa():
         assert argv[0] == "/opt/bin/repo"
         assert argv[1:] == ["estado"]
 
+        # Sugestão específica quando tool MCP é chamada como verbo (Aceite f, #3045 passo 6)
+        _, _, rec = s._item_de_lote("read_file /algo")
+        assert rec is not None
+        assert rec["recusado"] is True
+        assert rec["sugestao"] == "é tool, não verbo: read_file(path=...)"
+
+        _, _, rec = s._item_de_lote("write_file /algo conteudo")
+        assert rec is not None
+        assert rec["sugestao"] == "é tool, não verbo: write_file(path=..., content=...)"
+
+        _, _, rec = s._item_de_lote("monta_sessao cadeira=fabrica")
+        assert rec is not None
+        assert rec["sugestao"] == "é tool, não verbo: monta_sessao(cadeira=...)"
+
+        _, _, rec = s._item_de_lote("monta-sessao cadeira=fabrica")
+        assert rec is not None
+        assert rec["sugestao"] == "é tool, não verbo: monta_sessao(cadeira=...)"
+
+        _, _, rec = s._item_de_lote("run_command")
+        assert rec is not None
+        assert rec["sugestao"] == "é a própria tool que você está chamando"
+

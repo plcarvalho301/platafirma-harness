@@ -758,6 +758,11 @@ _SUGESTAO = {
     "curl": "pesquisar", "wget": "pesquisar",
     "python3": "teste", "python": "teste", "pytest": "teste", "uv": "teste", "ruff": "lint",
     "psql": "motor", "tee": "write_file", "cp": "write_file", "mv": "write_file",
+    "read_file": "é tool, não verbo: read_file(path=...)",
+    "write_file": "é tool, não verbo: write_file(path=..., content=...)",
+    "monta_sessao": "é tool, não verbo: monta_sessao(cadeira=...)",
+    "monta-sessao": "é tool, não verbo: monta_sessao(cadeira=...)",
+    "run_command": "é a própria tool que você está chamando",
 }
 
 def _recusa(verbo: str, motivo: str) -> dict:
