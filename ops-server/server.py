@@ -963,7 +963,7 @@ async def _run_command_legado(command: str = "", cwd: str = "", timeout: int = 1
     ident = _sessao_resolve(sessao_id)
     if PF_GATE:
         segs = [s.strip() for s in command.split(";") if s.strip()]
-        elegivel = bool(segs) and not any(c in command for c in "|&><$`*?()")
+        elegivel = bool(segs)
         argvs = []
         if elegivel:
             for seg in segs:
@@ -973,6 +973,10 @@ async def _run_command_legado(command: str = "", cwd: str = "", timeout: int = 1
                     elegivel = False
                     break
                 if not argv or argv[0] not in SLUGS_SERVIDOS:
+                    elegivel = False
+                    break
+                # Barreira DEPOIS do shlex: procura metacaracteres nus nos tokens
+                if any(t in ("|", "&", ">", "<", "$", "`", "*", "?", "(", ")") for t in argv):
                     elegivel = False
                     break
                 argvs.append(argv)

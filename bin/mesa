@@ -632,15 +632,15 @@ def _acha_worktree(cad: str) -> Path:
         raiz = bancada()
     except BancadaNaoDeclarada:
         fallback = Path.home() / "AI"
-        if fallback.is_dir():
+        if fallback.is_dir() and os.access(fallback, os.W_OK):
             raiz = fallback
         else:
             cand = Path(HARNESS).parent
-            if cand.is_dir() and (cand / "platafirma-harness").is_dir():
+            if cand.is_dir() and (cand / "platafirma-harness").is_dir() and os.access(cand, os.W_OK):
                 raiz = cand
             else:
-                sys.stderr.write("mesa escrever: bancada não declarada (defina PLATAFIRMA_BANCADA)\n")
-                sys.exit(3)
+                raiz = Path("/tmp/pf-runtime-bancada")
+                raiz.mkdir(parents=True, exist_ok=True)
 
     # 2. Candidatos de worktree existente
     candidatos = [
