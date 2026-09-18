@@ -40,13 +40,13 @@ canônico. Referência aposentada tem prazo; mesa tem TTL.
 - **Nascimento** — no primeiro delta real. Não se preenche caderno de memória
   nem retroativamente: seria fabricar exatamente o fóssil que a revisão existe
   para matar.
-- **Escrita** — etapa obrigatória de `encerrar fita`, por chapéu tocado na fita.
+- **Escrita** — etapa obrigatória de `descansar fita`, por chapéu tocado na fita.
   "Sem delta" é resposta válida e **declarada**; silêncio não é.
 - **Forma** — só estado atual, como todo documento da casa. Entrada nova
   **substitui** a que contradiz; não convivem. Histórico é o git.
 - **Poda** — teto de **100 linhas por chapéu**. Acima disso, a próxima escrita
-  poda antes de acrescentar. `encerrar fita` mede e marca.
-- **Revisão** — `conferir caderno [cadeira]`: confere nome de cadeira contra o
+  poda antes de acrescentar. `descansar fita` mede e marca.
+- **Revisão** — conferência de caderno [cadeira] (em `conferir`, de claudinho-TI): confere nome de cadeira contra o
   org, verbo contra o catálogo, stack e host contra o registro do `deploy`, e
   reprova referência a coisa que não existe mais. Roda na varredura diária, não
   no gate de commit — reprovar no meio do ritual de encerramento trava a

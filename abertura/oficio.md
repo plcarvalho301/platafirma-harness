@@ -8,7 +8,7 @@ do verbo; descrição = golden record, na forma `<o que> · use para: … · ato
 só aqui:
 
 - `<verbo>(ato, args, stdin, sessao_id, timeout)` executa `bin/<verbo> <ato> <args>`.
-  Sem `ato` o verbo lista os atos; `deploy`, `descobrir`, `situacao` e `motor <inst>`
+  Sem `ato` o verbo lista os atos; `deploy`, `descobrir` e `situacao`
   levam o alvo no `ato` — a descrição diz.
 - `sessao_id` é o do `monta_sessao`. Sem ele, a porta resolve por sessão-sombra só
   quando é inequívoca (uma sessão viva sua); ambíguo → roda sem cadeira, e

@@ -3,7 +3,7 @@
 # capacidade: verificacao
 # dono: claudinho-TI
 # use para: declarado × servido, 'existe X?' (âncora de NEGATIVA), cabeçalho de verbo, paridade de serviço
-# atos: existe, servico, verbo, skill, procedencia, repo, superficie, front, arranque, ferramental, commit
+# atos: existe, servico, verbo, skill, procedencia, repo, superficie, front, arranque, ferramental, commit, vocabulario
 # forma: relatorio
 # cauda: sim
 # componente: docker, git
@@ -93,6 +93,11 @@
                    errado; nunca colapsa em 1: ausencia de resposta nao e
                    evidencia de ausencia, e `indeterminavel` NAO ancora negativa).
 
+   vocabulario [alvo]
+                    varre `<verbo> <ato>` entre crases em dono.md, oficio.md,
+                    skills/*/SKILL.md e docs/spec_*.md e confere contra os atos
+                    listados por bin/<verbo>; ato inexistente sai como "fora".
+
 Classes conhecidas e ainda sem implementacao sao listadas como tais: ausencia se
 declara, nunca se omite.
 
@@ -100,6 +105,7 @@ Sai 0 quando nao ha divergencia, 1 quando ha, 2 quando a chamada esta errada.
 Nao muda nada: so olha.
 """
 import datetime
+import glob
 import json
 import re
 import os
@@ -129,7 +135,7 @@ def uso(erro=None):
         print(f"erro: {erro}\n", file=sys.stderr)
     print(__doc__.strip(), file=sys.stderr)
     print("\nuso: conferir <classe> [alvo]", file=sys.stderr)
-    print("     classes implementadas : servico . verbo . repo . skill . procedencia . superficie . commit . arranque . ferramental . front . existe . alcance . pdp", file=sys.stderr)
+    print("     classes implementadas : servico . verbo . repo . skill . procedencia . superficie . commit . arranque . ferramental . front . existe . alcance . pdp . vocabulario", file=sys.stderr)
     for c, motivo in CLASSES_ABERTAS.items():
         print(f"     classe declarada, sem implementacao : {c} — {motivo}", file=sys.stderr)
     sys.exit(2)
@@ -2676,6 +2682,166 @@ def conferir_pdp(alvo=None, como_json=False):
     return 0
 
 
+def carregar_verbos_e_atos(bin_dir):
+    """Varre bin/ e extrai os atos declarados no cabecalho de cada verbo."""
+    verbos = {}
+    atos_abertos = {}  # verbo -> nome do placeholder, se ato=<placeholder>
+    if not os.path.isdir(bin_dir):
+        return verbos, atos_abertos
+    for nome in os.listdir(bin_dir):
+        caminho = os.path.join(bin_dir, nome)
+        if os.path.isdir(caminho) or nome.startswith("_"):
+            continue
+        real = os.path.realpath(caminho)
+        atos = set()
+        aberto = None
+        try:
+            with open(real, "r", encoding="utf-8", errors="replace") as fp:
+                for i, linha in enumerate(fp):
+                    if i > 35:
+                        break
+                    if linha.startswith("# atos:"):
+                        raw = linha.split(":", 1)[1].strip()
+                        if "nenhum" in raw.lower() and "sem ato" in raw.lower():
+                            continue
+                        if raw.startswith("a capacidade"):
+                            continue
+                        m_ph = re.search(r"ato=<([^>]+)>", raw)
+                        if m_ph:
+                            aberto = m_ph.group(1)
+                            atos.add(f"<{aberto}>")
+                        cleaned = re.sub(r"\(.*?\)", "", raw)
+                        parts = re.split(r"[,·;]", cleaned)
+                        for part in parts:
+                            part = part.strip()
+                            if not part or part.startswith("sem ato") or part.startswith("a capacidade") or part.startswith("nenhum"):
+                                continue
+                            m = re.match(r"^([a-zA-Z0-9_-]+)", part)
+                            if m:
+                                act = m.group(1)
+                                if act not in ("ato", "args", "sem", "flags"):
+                                    atos.add(act)
+        except OSError:
+            pass
+        verbos[nome] = atos
+        if aberto:
+            atos_abertos[nome] = aberto
+
+    # Redirecionamentos e expansoes canonicas conhecidas
+    if "acervo" in verbos:
+        verbos["acervo"].add("adr")
+    if "motor" in verbos:
+        verbos["motor"].add("casa")
+    if "conferir" in verbos:
+        verbos["conferir"].add("vocabulario")
+
+    return verbos, atos_abertos
+
+
+def conferir_vocabulario(alvo=None, como_json=False):
+    """Varre `<verbo> <ato>` entre crases em dono.md, oficio.md, skills/*/SKILL.md
+    e docs/spec_*.md e confere contra os atos listados por bin/<verbo>; ato
+    inexistente sai como 'fora'."""
+    repo_raiz = os.environ.get("PF_HARNESS_DIR")
+    if not repo_raiz or not os.path.isdir(repo_raiz):
+        cand = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.realpath(__file__)))))
+        repo_raiz = cand if os.path.isdir(os.path.join(cand, "bin")) else HARNESS
+
+    bin_dir = os.path.join(repo_raiz, "bin")
+    if not os.path.isdir(bin_dir):
+        bin_dir = BIN
+
+    verbos, abertos = carregar_verbos_e_atos(bin_dir)
+
+    candidatos = []
+    if alvo:
+        p = os.path.join(repo_raiz, alvo) if not os.path.isabs(alvo) else alvo
+        if os.path.isfile(p):
+            candidatos.append(p)
+        else:
+            print(f"conferir vocabulario: alvo '{alvo}' nao encontrado", file=sys.stderr)
+            return 2
+    else:
+        padroes = [
+            os.path.join(repo_raiz, "abertura", "dono.md"),
+            os.path.join(repo_raiz, "abertura", "oficio.md"),
+            os.path.join(repo_raiz, "abertura", "oficio-ferramental.md"),
+            os.path.join(repo_raiz, "docs", "spec_*.md"),
+            os.path.join(repo_raiz, "skills", "*", "SKILL.md"),
+        ]
+        for padrao in padroes:
+            for achado in sorted(glob.glob(padrao)):
+                if os.path.isfile(achado) and achado not in candidatos:
+                    candidatos.append(achado)
+
+    padrao_crase = re.compile(r"`([^`\n]+)`")
+    fora = []
+    ok_count = 0
+
+    for arq in candidatos:
+        rel = os.path.relpath(arq, repo_raiz)
+        try:
+            with open(arq, "r", encoding="utf-8", errors="replace") as fp:
+                linhas = fp.readlines()
+        except OSError:
+            continue
+
+        for num_linha, linha in enumerate(linhas, 1):
+            for m in padrao_crase.finditer(linha):
+                expr = m.group(1).strip()
+                tokens = expr.split()
+                if len(tokens) < 2:
+                    continue
+                v = tokens[0]
+                if v.startswith("bin/"):
+                    v = v[4:]
+                if v not in verbos:
+                    continue
+
+                # Flag nao e ato
+                if tokens[1].startswith("-"):
+                    continue
+
+                # Trata caso de motor <inst> <ato>
+                if v == "motor" and len(tokens) >= 3 and tokens[1] in ("rag", "reasoner", "embeddings"):
+                    ato = tokens[2]
+                else:
+                    ato = tokens[1]
+
+                # Se verbo tem ato aberto (ex: ato=<assunto>, <stack>, <obra>)
+                if v in abertos:
+                    ok_count += 1
+                    continue
+
+                if ato in verbos[v]:
+                    ok_count += 1
+                else:
+                    fora.append({
+                        "arquivo": rel,
+                        "linha": num_linha,
+                        "expressao": expr,
+                        "verbo": v,
+                        "ato": ato,
+                    })
+
+    if como_json:
+        print(json.dumps({
+            "total_conferidos": ok_count + len(fora),
+            "total_fora": len(fora),
+            "fora": fora,
+        }, indent=2))
+        return 0 if not fora else 1
+
+    if fora:
+        print(f"conferir vocabulario: {len(fora)} fora:")
+        for item in fora:
+            print(f"  {item['arquivo']}:{item['linha']} — `{item['expressao']}`: verbo '{item['verbo']}' nao serve ato '{item['ato']}'")
+        return 1
+    else:
+        print(f"conferir vocabulario: 0 fora ({ok_count} referencias conferidas)")
+        return 0
+
+
 def main(argv):
     # --ajuda UNIVERSAL, sem efeito colateral (card #2868, ex-#2274 defeito 4): varre
     # todos os argumentos antes do despacho; nenhuma classe chega a rodar. uso() sai 2.
@@ -2761,6 +2927,8 @@ def main(argv):
                                 como_json=como_json)
     if classe == "pdp":
         return conferir_pdp(alvo, como_json=como_json)
+    if classe == "vocabulario":
+        return conferir_vocabulario(alvo, como_json=como_json)
     if classe == "skill":
         servido = None
         if "--servido" in argv:

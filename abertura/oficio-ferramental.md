@@ -61,7 +61,7 @@ Fora do núcleo, de propósito: `ollama` (inferência-local) e `matrix` (mensage
 — capacidades reais no golden record, mas não são abertura de toda cadeira.
 
 Alias `encerrar` -> `descansar` (capacidade `encerramento`): registrado no golden
-record em 24/08 (dados). `acervo ferramenta encerrar` resolve para `descansar`. Por
+record em 24/08 (dados). `acervo ler casa ferramental encerrar` resolve para `descansar`. Por
 ora o alias mora em `em_vez_de` (eixo de anti-padrao) por falta de eixo de alias-de-
 verbo proprio no schema -- a saida ainda rotula "anti-padrao". Eixo proprio proposto
 ao dono (DDL, TI); quando entrar, o alias migra e o rotulo corrige.
