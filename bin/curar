@@ -38,7 +38,7 @@ USO = """uso:
   curar --expurgar <obra> [--sim]
   curar --restaurar <obra>
   curar --promover <obra> --impressao <id>
-  curar --conceito <slug> --rotulo <r> --definicao <d> --natureza <n> --estatuto <e> [--mais-amplo <slug> --mais-amplo-tipo <t>] [--rotulo-alt 'lingua|rotulo']... [--trata-de <obras>] [--apply]
+  curar --conceito <slug> [--rotulo … --definicao … --natureza … --estatuto … --alt "rótulo@pt,…"] --pai <slug> --tipo <t> --garantia <g> --motivo "…" [--lastro …] [--apply]
   curar --relacionar <de> <para> --tipo <t> --garantia <g> --motivo <m> [--lastro <obra>] [--apply]
   curar --relacionar --help     cartilha: as 11 famílias (frase-molde) e as 3 garantias
   curar --relacoes <conceito>   arestas de um conceito, coluna + tabela (o que já está lavrado)
@@ -501,76 +501,181 @@ def formatar_plano_conceito(p: dict) -> str:
 
 
 def acao_conceito(args, autor: str, como_json: bool, headers: dict) -> int:
-    slug = args.conceito
-    faltam = [k for k in ("rotulo", "definicao", "natureza", "estatuto") if not getattr(args, k)]
-    if faltam:
-        sys.stderr.write(f"curar: erro: --conceito exige --{' --'.join(faltam)}\n")
-        return 2
-    if bool(args.mais_amplo) != bool(args.mais_amplo_tipo):
-        sys.stderr.write("curar: erro: --mais-amplo e --mais-amplo-tipo andam juntos\n")
-        return 2
-    corpo = {"slug": slug, "rotulo": args.rotulo, "definicao": args.definicao,
-             "natureza": args.natureza, "estatuto": args.estatuto, "autor": autor}
-    if args.lingua:
-        corpo["lingua"] = args.lingua
-    if args.endereco:
-        corpo["endereco"] = args.endereco
-    if args.filhos_exclusivos:
-        corpo["filhos_exclusivos"] = True
-    if args.mais_amplo:
-        corpo["mais_amplo"] = args.mais_amplo
-        corpo["mais_amplo_tipo"] = args.mais_amplo_tipo
-    alts = []
-    for item in (args.rotulo_alt or []):
-        if "|" not in item:
-            sys.stderr.write(f"curar: erro: --rotulo-alt no formato 'lingua|rotulo' (ex: 'en|site reliability engineering'): {item}\n")
-            return 2
-        lg, r = item.split("|", 1)
-        alts.append({"lingua": lg.strip(), "rotulo": r.strip()})
-    if alts:
-        corpo["rotulos_alt"] = alts
-    if args.trata_de:
-        corpo["trata_de"] = [resolver_obra_id(o, headers) for o in _parse_lista(args.trata_de)]
+    slug = args.conceito.strip()
+    pai_slug = (getattr(args, "pai", None) or args.mais_amplo or "").strip()
+    tipo = args.tipo or args.mais_amplo_tipo
+    garantia = args.garantia
+    motivo = args.motivo
+    lastro = args.lastro
 
-    def post(aplicar: bool):
+    # 1. Verifica se conceito já existe na API (GET .../relacoes -> 200 existe, 404 nao existe)
+    url_rel = f"{BASE}/acervo/conceitos/{urllib.parse.quote(slug, safe='')}/relacoes"
+    try:
+        r_check = requests.get(url_rel, headers=headers)
+    except requests.exceptions.RequestException as e:
+        falha_indeterminavel(e)
+    if r_check.status_code >= 500:
+        falha_indeterminavel(r_check)
+
+    existe = (r_check.status_code == 200)
+
+    if not existe:
+        # POST /acervo/conceitos (criar)
+        faltam = [k for k in ("rotulo", "definicao", "natureza", "estatuto") if not getattr(args, k)]
+        if faltam:
+            sys.stderr.write(f"curar: erro: criar conceito exige --{' --'.join(faltam)}\n")
+            return 2
+        if pai_slug:
+            faltam_pai = []
+            if not tipo:
+                faltam_pai.append("tipo")
+            if not garantia:
+                faltam_pai.append("garantia")
+            if not motivo:
+                faltam_pai.append("motivo")
+            if faltam_pai:
+                sys.stderr.write(f"curar: erro: --pai exige --{' --'.join(faltam_pai)}\n")
+                return 2
+
+        corpo = {
+            "slug": slug,
+            "rotulo": args.rotulo,
+            "definicao": args.definicao,
+            "natureza": args.natureza,
+            "estatuto": args.estatuto,
+            "autor": autor,
+        }
+        if pai_slug:
+            pai_dict = {
+                "slug": pai_slug,
+                "tipo": tipo,
+                "garantia": garantia,
+                "motivo": motivo,
+            }
+            if lastro:
+                pai_dict["lastro"] = resolver_obra_id(lastro, headers)
+            corpo["pai"] = pai_dict
+
+        alts = []
+        if getattr(args, "alt", None):
+            for pedaco in args.alt.split(","):
+                pedaco = pedaco.strip()
+                if not pedaco:
+                    continue
+                if "@" in pedaco:
+                    r, lg = pedaco.rsplit("@", 1)
+                    alts.append({"rotulo": r.strip(), "lingua": lg.strip()})
+                else:
+                    alts.append({"rotulo": pedaco, "lingua": "pt"})
+        if getattr(args, "rotulo_alt", None):
+            for item in args.rotulo_alt:
+                if "|" in item:
+                    lg, r = item.split("|", 1)
+                    alts.append({"rotulo": r.strip(), "lingua": lg.strip()})
+                elif "@" in item:
+                    r, lg = item.rsplit("@", 1)
+                    alts.append({"rotulo": r.strip(), "lingua": lg.strip()})
+                else:
+                    alts.append({"rotulo": item.strip(), "lingua": "pt"})
+        if alts:
+            corpo["rotulos_alternativos"] = alts
+
+        url_alvo = f"{BASE}/acervo/conceitos"
+        metodo = "POST"
+    else:
+        # PATCH /acervo/conceitos/{id}/pai (trocar pai)
+        if not pai_slug:
+            sys.stderr.write("curar: erro: conceito já existe; use --pai para fixar ou trocar o pai de navegação\n")
+            return 2
+        faltam = []
+        if not tipo:
+            faltam.append("tipo")
+        if not garantia:
+            faltam.append("garantia")
+        if not motivo:
+            faltam.append("motivo")
+        if faltam:
+            sys.stderr.write(f"curar: erro: trocar pai exige --{' --'.join(faltam)}\n")
+            return 2
+
+        corpo = {
+            "pai": pai_slug,
+            "tipo": tipo,
+            "garantia": garantia,
+            "motivo": motivo,
+            "autor": autor,
+        }
+        if lastro:
+            corpo["lastro"] = resolver_obra_id(lastro, headers)
+
+        url_alvo = f"{BASE}/acervo/conceitos/{urllib.parse.quote(slug, safe='')}/pai"
+        metodo = "PATCH"
+
+    def envia(aplicar: bool):
         try:
-            r = requests.post(f"{BASE}/acervo/conceitos", json={**corpo, "aplicar": aplicar}, headers=headers)
+            payload = {**corpo, "aplicar": aplicar}
+            if metodo == "POST":
+                r = requests.post(url_alvo, json=payload, headers=headers)
+            else:
+                r = requests.patch(url_alvo, json=payload, headers=headers)
         except requests.exceptions.RequestException as e:
             falha_indeterminavel(e)
         if r.status_code >= 500:
             falha_indeterminavel(r)
         return r
 
-    resp = post(False)
+    # 1. plano seco na API (validação + conferências SQL com a aresta dentro, sem gravar)
+    resp = envia(False)
     if resp.status_code != 200:
         try:
             pj = resp.json()
         except ValueError:
             pj = {}
         if isinstance(pj, dict) and pj.get("plano"):
-            print(formatar_plano_conceito(pj["plano"]))
+            print(formatar_plano_relacao(pj["plano"], None))
         falha_problem(resp)
     plano = resp.json()
 
+    # 2. projeção formal com a aresta em memória
+    aresta = plano.get("aresta") or {}
+    if not args.sem_hermit and aresta.get("de") and aresta.get("para") and aresta.get("tipo"):
+        hermit = _hermit(aresta["de"], aresta["para"], aresta["tipo"])
+    else:
+        hermit = None
+    hermit_ok = args.sem_hermit or (hermit is not None and not hermit.get("erro") and not hermit.get("novos"))
+    aprovado = bool(plano.get("aprovado")) and hermit_ok
+
     if not args.apply:
         if como_json:
-            print(json.dumps({"plano": plano}, indent=2, ensure_ascii=False))
+            print(json.dumps({"plano": plano, "hermit": hermit, "aprovado": aprovado}, indent=2, ensure_ascii=False))
         else:
-            print(formatar_plano_conceito(plano))
-        return 0 if plano.get("aprovado") else 1
+            print(formatar_plano_relacao(plano, hermit))
+        return 0 if aprovado else 1
 
-    if not plano.get("aprovado"):
-        print(formatar_plano_conceito(plano))
-        sys.stderr.write("curar: conceito reprovado nas conferências — nada gravado\n")
+    if not aprovado:
+        print(formatar_plano_relacao(plano, hermit))
+        if not plano.get("aprovado"):
+            sys.stderr.write("curar: conferência SQL reprovou; nada gravado\n")
+        elif hermit is None or hermit.get("erro"):
+            sys.stderr.write("curar: HermiT não rodou; para gravar mesmo assim passe --sem-hermit\n")
+        else:
+            sys.stderr.write("curar: HermiT reprovou (insatisfazíveis novos); nada gravado\n")
         return 1
-    resp = post(True)
+
+    # 3. grava
+    resp = envia(True)
     if resp.status_code not in (200, 201):
         falha_problem(resp)
-    aplicado = resp.json()
+    feito = resp.json()
+    export = _exportar(hermit["repo"]) if hermit and hermit.get("repo") else (_exportar(_repo_conhecimento()) if _repo_conhecimento() else None)
     if como_json:
-        print(json.dumps(aplicado, indent=2, ensure_ascii=False))
+        print(json.dumps({"aplicado": feito, "hermit": hermit, "export": export}, indent=2, ensure_ascii=False))
     else:
-        print(formatar_plano_conceito(aplicado))
+        print(formatar_plano_relacao(feito, hermit))
+        if export is None:
+            print("  export : NÃO regenerado (clone de conhecimento em main / venv não achados) — rode `exportar-acervo` e commite")
+        else:
+            print(f"  export : regenerado no clone — commit e push são seus:\n    {export.replace(chr(10), chr(10) + '    ')}")
     return 0
 
 
@@ -858,6 +963,8 @@ def main(argv=None):
     parser.add_argument("--definicao", default=None)
     parser.add_argument("--natureza", default=None)
     parser.add_argument("--estatuto", default=None)
+    parser.add_argument("--pai", default=None)
+    parser.add_argument("--alt", default=None)
     parser.add_argument("--endereco", default=None)
     parser.add_argument("--lingua", default=None)
     parser.add_argument("--mais-amplo", dest="mais_amplo", default=None)
