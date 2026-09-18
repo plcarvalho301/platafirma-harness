@@ -584,7 +584,7 @@ def tateio(giros, par):
 # Campos que nao dizem o que a cadeira tentava: transporte, identidade, ja em CAMPOS_GIRO.
 _RUIDO = set(CAMPOS_GIRO) | {
     "instancia", "usuario", "sessao", "sub", "sujeito", "username", "azp", "sid",
-    "jti", "mcp_session", "via", "path", "poda", "poda_modo", "poda_aviso",
+    "jti", "mcp_session", "via", "poda", "poda_modo", "poda_aviso",
     "bytes_servidos", "bytes_produzidos", "ledger", "giro", "sha", "lavado", "evento",
 }
 CASOS_TAM = 220     # chars por campo — o bastante para ler o comando, nao o retorno

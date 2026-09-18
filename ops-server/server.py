@@ -870,6 +870,7 @@ async def run_command(command: str = "", cwd: str = "", timeout: int = 120,
                 stdin = brutos[n]
         if recusa:
             _audit(tool="run_command", evento="sem_verbo", verbo=recusa["verbo"],
+                   item=str(x)[:CMD_CAP],
                    motivo=recusa["motivo"], sugestao=recusa["sugestao"],
                    cadeira=ident["cadeira"] or None, sessao_id=ident["sessao_id"],
                    ordem_id=ident["ordem_id"], lote_id=lote_id, lote_n=_i)

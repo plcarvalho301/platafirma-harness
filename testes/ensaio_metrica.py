@@ -286,6 +286,21 @@ def test_cadeira_filtra_antes_de_classificar():
     assert len(giros) == 1 and giros[0]["cadeira"] == "fabrica"
 
 
+def test_casos_preserva_path_e_item():
+    """Card #3045 Passo 7: _RUIDO nao descarta path nem item em metrica casos."""
+    linhas = [
+        reg("10:00:00.000", "read_file", erro="nao existe", path="/srv/platafirma/doc.md"),
+        reg("10:00:01.000", "run_command", evento="sem_verbo", motivo="sem verbo", item="run_command git status"),
+    ]
+    giros, _, _ = classifica(linhas)
+    c = m.casos(giros)
+    assert len(c["casos"]) == 2
+    r_rf = next(x for x in c["casos"] if x["tool"] == "read_file")
+    assert r_rf.get("path") == "/srv/platafirma/doc.md"
+    r_rc = next(x for x in c["casos"] if x["tool"] == "run_command")
+    assert r_rc.get("item") == "run_command git status"
+
+
 # --- borda: uso, erro gracioso, saida ---------------------------------------------
 
 def test_saida_e_json_por_default(capsys):
