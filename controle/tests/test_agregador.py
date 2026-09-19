@@ -312,3 +312,14 @@ def test_fix_nome_verbo_fila():
     assert argv[0] == "fila"
     assert "status" in argv
 
+
+def test_sonda_caixa_conteudo_le_frio_como_dona():
+    """O conteudo da caixa vem por `fila ler --tudo --json` (frio, machine-
+    readable), lido como a PROPRIA dona (PF_CADEIRA=slug) — nunca consome."""
+    from harness_controle.agregador import SONDAS_GRUPO
+    g = next(s for s in SONDAS_GRUPO if s.nome == "caixa_conteudo")
+    argv = g.fabrica_argv("produto")
+    assert argv[:3] == ["fila", "ler", "produto"]
+    assert "--tudo" in argv and "--json" in argv
+    assert g.fabrica_env("produto")["PF_CADEIRA"] == "produto"
+

@@ -58,6 +58,17 @@ ESTADO_OK = {
     "conferir_verbo": bloco_de(ResultadoVerbo(True, {"resultado": "ok", "verbos": [], "arq0037": []}, None, 0, 0.01), agora=1000.0),
     "conferir_repo": bloco_de(ResultadoVerbo(True, {"resultado": "ok", "repos": []}, None, 0, 0.01), agora=1000.0),
     "skills": {"lido_em": 1000.0, "estado": "ok", "motivo": None, "itens": []},
+    # conteudo das caixas, lido a frio pelo agregador (`fila ler --tudo --json`)
+    "caixa_conteudo": {
+        "lido_em": 1000.0, "estado": "ok", "motivo": None,
+        "itens": [
+            {"persona": "TI", "lido_em": 1000.0, "estado": "ok", "motivo": None, "dados": [
+                {"msgid": "20260919T120000-produto", "de": "produto", "tipo": "pedido",
+                 "assunto": "revisar a tela", "ref": "", "responde": "", "idade_seg": 3600,
+                 "corpo": "Da uma olhada no seletor de chapeu?"},
+            ]},
+        ],
+    },
 }
 
 
@@ -485,7 +496,7 @@ def test_cadeiras_recepcao_deriva_presenca_das_pecas(cliente):
 def test_cadeira_tem_seletor_de_documento_e_le_persona_por_default(cliente):
     corpo = cliente.get("/cadeira/TI").text
     assert 'class="docs"' in corpo
-    for rotulo in ("Persona", "GERAL", "Org", "Mesa", "Cadernos"):
+    for rotulo in ("Persona", "GERAL", "Org", "Mesa", "Cadernos", "Caixa"):
         assert f">{rotulo}<" in corpo
     # default: persona servida, com carimbo de procedencia
     assert "Oswaldo Aranha" in corpo
@@ -534,3 +545,25 @@ def test_cadeira_caixa_vem_do_mesmo_fila_status(cliente):
     corpo = cliente.get("/cadeira/TI").text
     assert "Estado vivo" in corpo
     assert "Pendentes" in corpo
+
+
+def test_cadeira_doc_caixa_le_as_cartas(cliente):
+    """A aba Caixa mostra as cartas lidas a frio (bloco caixa_conteudo): assunto,
+    remetente e corpo. E onde o dono LE a fila, nao so o numero."""
+    corpo = cliente.get("/cadeira/TI?doc=caixa").text
+    assert "revisar a tela" in corpo                 # assunto
+    assert "seletor de chapeu" in corpo              # corpo da carta
+    assert "produto" in corpo                        # remetente
+
+
+def test_cadeira_doc_caixa_vazia_declara(cliente):
+    """Caixa sem cartas se declara vazia, nao some."""
+    corpo = cliente.get("/cadeira/dados?doc=caixa").text
+    # 'dados' nao esta em caixa_conteudo nem em cadeiras -> nao encontrada / sem leitura
+    assert "indisponivel" in corpo.lower() or "não encontrada" in corpo
+
+
+def test_recepcao_caixa_linka_pra_leitura(cliente):
+    """Cada caixa da recepcao e clicavel: abre a leitura da caixa."""
+    trecho = cliente.get("/").text.split('id="caixas"')[1].split("</section>")[0]
+    assert "?doc=caixa" in trecho

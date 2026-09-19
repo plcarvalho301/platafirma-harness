@@ -141,19 +141,56 @@ def _filtra_mesa_por_chapeu(conteudo: str, chapeu: str) -> str:
     return "\n".join(saida) if saida else f"Nenhum item da mesa para o chapeu [{chapeu}]."
 
 
+def _render_caixa_doc(estado: dict, slug_l: str) -> str:
+    """Documento Caixa: as cartas da caixa da cadeira, lidas a FRIO pelo agregador
+    (`fila ler --tudo`), mais nova primeiro. Caixa vazia, sem leitura e
+    indisponivel se declaram — nunca somem, nunca viram saude."""
+    bloco = estado.get("caixa_conteudo", {})
+    item = next((i for i in (bloco.get("itens") or [])
+                 if (i.get("persona") or "").lower() == slug_l), None)
+    if item is None:
+        return ('<div class="leitura"><p class="indisponivel">Caixa sem leitura — o '
+                'agregador ainda nao serve o conteudo desta caixa.</p></div>')
+    if item.get("estado") != "ok":
+        return (f'<div class="leitura"><p class="indisponivel">Caixa indisponível: '
+                f'{_esc(item.get("motivo") or "motivo desconhecido")}.</p></div>')
+    msgs = item.get("dados") or []
+    if not msgs:
+        return ('<div class="leitura"><p class="indisponivel">Caixa vazia — nada nos '
+                'últimos 7 dias.</p></div>')
+    blocos = []
+    for m in msgs:
+        cab = (
+            '<div class="carimbo">'
+            f'<span><b>de</b> {_esc(m.get("de") or "?")}</span>'
+            f'<span><b>tipo</b> {_esc(m.get("tipo") or "?")}</span>'
+            f'<span><b>há</b> {idade_fmt(m.get("idade_seg"))}</span>'
+            + (f'<span><b>responde</b> <span class="mono">{_esc(m.get("responde"))}</span></span>'
+               if m.get("responde") else "")
+            + "</div>"
+        )
+        assunto = f'<h4>{_esc(m.get("assunto") or "(sem assunto)")}</h4>'
+        corpo = f'<div class="corpo">{_esc(m.get("corpo") or "")}</div>'
+        blocos.append(f'<article class="msg">{cab}{assunto}{corpo}</article>')
+    return f'<div class="leitura caixa-lida">{"".join(blocos)}</div>'
+
+
 # Documentos que compoem a cadeira, na ordem do seletor da spec (§/cadeira):
-# persona · GERAL · org · mesa · cadernos. Cada entrada e (chave do ?doc=, rotulo,
-# ids de peca que a servem — o CLI usa o id do catalogo (`conduta-dono`,
+# persona · GERAL · org · mesa · cadernos · caixa. Cada entrada e (chave do ?doc=,
+# rotulo, ids de peca que a servem — o CLI usa o id do catalogo (`conduta-dono`,
 # `cadernos-indice`), a projecao da tool usa o nome curto; aceitam-se os dois).
 # Oficio SAIU: a abertura real (expediente montar) nao serve mais essa peca — o
 # `bin/monta-sessao` deprecado ainda a lista, entao a tela mostrava um documento
 # que a sessao do dono nao recebe. Documento morto nao vira aba.
+# `caixa` nao e peca de monta-sessao: vem do bloco `caixa_conteudo` (leitura fria
+# `fila ler --tudo`), tratada a parte na leitura — candidatos vazios de proposito.
 _DOCS_CADEIRA = [
     ("persona",  "Persona",  ("persona",)),
     ("geral",    "GERAL",    ("conduta-dono", "conduta")),
     ("org",      "Org",      ("alias-cadeiras",)),
     ("mesa",     "Mesa",     ("mesa",)),
     ("cadernos", "Cadernos", ("cadernos-indice", "cadernos")),
+    ("caixa",    "Caixa",    ()),
 ]
 
 
@@ -334,7 +371,8 @@ def bloco_caixas(bloco: dict, limiar_alert_seg: int = 3600) -> str:
             else:
                 papel, rotulo = "caveat", "parada"
             linhas.append(
-                f"<tr><td>{_esc(persona)}</td><td class='dir'>{_num(pendentes)}</td>"
+                f"<tr><td><a href='/cadeira/{_esc(persona)}?doc=caixa'>{_esc(persona)}</a></td>"
+                f"<td class='dir'>{_num(pendentes)}</td>"
                 f"<td class='dir'>{idade_fmt(item.get('idade_mais_antiga_seg'))}</td>"
                 f"<td class='dir'>{idade_fmt(item.get('ultima_leitura_seg'))}</td>"
                 f"<td>{chip(rotulo, papel)}</td></tr>"
@@ -686,29 +724,33 @@ def render_cadeira(estado: dict, slug: str | None = None, doc: str | None = None
         chapeus_html = f'<div class="docs chapeus">{"".join(links)}</div>'
 
     # leitura do documento selecionado, com carimbo de procedencia no topo.
-    cands = next(c for k, _r, c in _DOCS_CADEIRA if k == doc_sel)
-    peca = _acha_peca(idx, cands)
-    if peca is None:
-        leitura = ('<div class="leitura"><p class="indisponivel">Documento não servido '
-                   'nesta abertura (a sonda abre a cadeira sem chapéu).</p></div>')
-    elif peca.get("conteudo"):
-        corpo = peca.get("conteudo")
-        if doc_sel == "mesa" and chapeu_sel:
-            corpo = _filtra_mesa_por_chapeu(corpo, chapeu_sel)
-        carimbo = (
-            '<div class="carimbo">'
-            f'<span><b>ref</b> <span class="mono">{_esc(peca.get("ref") or "—")}</span></span>'
-            f'<span><b>blob</b> <span class="mono">{_esc(peca.get("sha") or "—")}</span></span>'
-            f'<span><b>frescor</b> {_esc(peca.get("frescor") or "—")}</span>'
-            + (f'<span><b>chapéu</b> {_esc(chapeu_sel)}</span>'
-               if doc_sel == "mesa" and chapeu_sel
-               else f'<span class="num"><b>tokens</b> {_num(peca.get("tokens"))}</span>')
-            + "</div>"
-        )
-        leitura = f'<div class="leitura">{carimbo}<div class="corpo">{_esc(corpo)}</div></div>'
+    # A caixa nao e peca de monta-sessao: vem do bloco `caixa_conteudo`, a parte.
+    if doc_sel == "caixa":
+        leitura = _render_caixa_doc(estado, slug_l)
     else:
-        leitura = ('<div class="leitura"><p class="indisponivel">'
-                   f'Indisponível: {_esc(peca.get("motivo") or "sem conteúdo")}.</p></div>')
+        cands = next(c for k, _r, c in _DOCS_CADEIRA if k == doc_sel)
+        peca = _acha_peca(idx, cands)
+        if peca is None:
+            leitura = ('<div class="leitura"><p class="indisponivel">Documento não servido '
+                       'nesta abertura (a sonda abre a cadeira sem chapéu).</p></div>')
+        elif peca.get("conteudo"):
+            corpo = peca.get("conteudo")
+            if doc_sel == "mesa" and chapeu_sel:
+                corpo = _filtra_mesa_por_chapeu(corpo, chapeu_sel)
+            carimbo = (
+                '<div class="carimbo">'
+                f'<span><b>ref</b> <span class="mono">{_esc(peca.get("ref") or "—")}</span></span>'
+                f'<span><b>blob</b> <span class="mono">{_esc(peca.get("sha") or "—")}</span></span>'
+                f'<span><b>frescor</b> {_esc(peca.get("frescor") or "—")}</span>'
+                + (f'<span><b>chapéu</b> {_esc(chapeu_sel)}</span>'
+                   if doc_sel == "mesa" and chapeu_sel
+                   else f'<span class="num"><b>tokens</b> {_num(peca.get("tokens"))}</span>')
+                + "</div>"
+            )
+            leitura = f'<div class="leitura">{carimbo}<div class="corpo">{_esc(corpo)}</div></div>'
+        else:
+            leitura = ('<div class="leitura"><p class="indisponivel">'
+                       f'Indisponível: {_esc(peca.get("motivo") or "sem conteúdo")}.</p></div>')
 
     centro = f'<section class="cartao">{cab}{docs_html}{chapeus_html}{leitura}</section>'
     direita = _painel_vivo(estado, slug_l, idx)
