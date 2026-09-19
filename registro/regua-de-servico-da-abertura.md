@@ -300,7 +300,7 @@ preenchidos são da fita gestao-estrategica de 19/09/2026 (conduta servida no sh
 
 | peça | arquivo | sha revisado | tokens antes | tokens depois |
 |---|---|---|---|---|
-| conduta | `abertura/dono.md` | | 5.686 | |
+| conduta | `abertura/dono.md` | c9b1c8f (PR #84) | 5.686 | a medir no envelope após publicar; por bytes, ~4.250 |
 | persona | `abertura/arquiteto/persona.md` | | | |
 | persona | `abertura/dados/persona.md` | | | |
 | persona | `abertura/direito/persona.md` | | | |
