@@ -27,6 +27,27 @@ import time
 from pathlib import Path
 from typing import Any
 
+from markdown_it import MarkdownIt
+import nh3
+
+# Conteudo LIVRE (corpo de mesa, caderno, fila) escrito pela cadeira em
+# Markdown. `_esc()` cru despejava esse texto grudado, sem heading nem
+# separador — a "linguica" da tela no celular. `md_seguro()` faz parse do
+# Markdown e sanitiza o HTML por allowlist ANTES de entrar na pagina.
+# So para conteudo livre: rotulo de sistema (nome, chip, caminho, sha, numero)
+# segue por `_esc()` cru, que nunca vira Markdown.
+_MD = MarkdownIt("commonmark")
+_TAGS_OK = {"h1", "h2", "h3", "h4", "h5", "h6", "p", "br", "hr",
+            "ul", "ol", "li", "strong", "em", "code", "pre", "blockquote", "a"}
+_ATTR_OK = {"a": {"href"}}
+
+def md_seguro(texto: Any) -> str:
+    """Markdown -> HTML sanitizado. String vazia/None vira vazio, nunca vira
+    saude (mesma regra do resto do render: ausencia se desenha como ausencia)."""
+    if not texto:
+        return ""
+    return nh3.clean(_MD.render(str(texto)), tags=_TAGS_OK, attributes=_ATTR_OK)
+
 # Camada 1 — o front da PlataFirma, copiado do release platafirma/ui para
 # dentro da imagem em tempo de build (arq:0056, ver Dockerfile). pf-ui.css ja
 # traz os tokens inteiros: NAO ha mais tokens.css, e nada mais aqui aponta para
@@ -747,7 +768,7 @@ def render_cadeira(estado: dict, slug: str | None = None, doc: str | None = None
                    else f'<span class="num"><b>tokens</b> {_num(peca.get("tokens"))}</span>')
                 + "</div>"
             )
-            leitura = f'<div class="leitura">{carimbo}<div class="corpo">{_esc(corpo)}</div></div>'
+            leitura = f'<div class="leitura">{carimbo}<div class="corpo">{md_seguro(corpo)}</div></div>'
         else:
             leitura = ('<div class="leitura"><p class="indisponivel">'
                        f'Indisponível: {_esc(peca.get("motivo") or "sem conteúdo")}.</p></div>')
