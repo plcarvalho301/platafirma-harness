@@ -257,11 +257,11 @@ def test_agregador_nao_escreve_nada_alem_do_proprio_estado(tmp_path, monkeypatch
     assert caminhos == ["controle/estado.json"]
 
 
-def test_render_cadeira_seletor_de_documento_sem_filtro_de_chapeu():
-    """A /cadeira le o pacote cru de monta-sessao e serve o DOCUMENTO escolhido
-    (spec §/cadeira), inteiro. Nao ha filtro de chapeu por parsing de texto — o
-    desenho antigo (dropdown de chapeu + poda das linhas da mesa por [rotulo])
-    saiu: pegava so o 1o chapeu e lixo, e nunca era o que a spec pediu."""
+def test_render_cadeira_seletor_de_documento_e_chapeu():
+    """A /cadeira serve o DOCUMENTO escolhido (spec §/cadeira), inteiro, e um
+    seletor de chapeu que filtra a MESA pelo rotulo [chapeu]. A lista de chapeus
+    vem do pacote (montador), completa. Oficio saiu do seletor (morto na
+    abertura). Sem dropdown e sem onchange: tudo por link."""
     from harness_controle.render import render_cadeira
     estado = {
         "cadeiras": {
@@ -271,6 +271,7 @@ def test_render_cadeira_seletor_de_documento_sem_filtro_de_chapeu():
                     "estado": "ok",
                     "dados": {
                         "nome_canonico": "design",
+                        "chapeus": ["g1", "g2", "g3"],
                         "pecas": [
                             {"peca": "mesa", "frescor": "fresco", "sha": "12345",
                              "conteudo": "#1 [g1] linha 1\n#2 [g2] linha 2\n#3 linha sem rotulo"},
@@ -283,21 +284,25 @@ def test_render_cadeira_seletor_de_documento_sem_filtro_de_chapeu():
         }
     }
 
-    # seletor de documento presente, com os seis rotulos da spec
     html = render_cadeira(estado, slug="design")
     assert 'class="docs"' in html
-    for rotulo in ("Persona", "Ofício", "GERAL", "Org", "Mesa", "Cadernos"):
+    for rotulo in ("Persona", "GERAL", "Org", "Mesa", "Cadernos"):
         assert f">{rotulo}<" in html
-    # NAO ha dropdown de chapeu nem poda de linha por [rotulo]
-    assert '<option value="g1">' not in html
-    assert 'name="chapeu"' not in html
-    assert "onchange" not in html
+    assert ">Ofício<" not in html            # oficio saiu do seletor
+    assert "onchange" not in html             # tudo por link, sem JS
+    # lista completa de chapeus, inclusive g3 (sem item de mesa)
+    for c in ("g1", "g2", "g3"):
+        assert f"chapeu={c}" in html
 
-    # doc=mesa serve a mesa INTEIRA, sem filtrar linha nenhuma
+    # sem chapeu: mesa INTEIRA
     html_mesa = render_cadeira(estado, slug="design", doc="mesa")
     assert "#1 [g1] linha 1" in html_mesa
     assert "#2 [g2] linha 2" in html_mesa
-    assert "#3 linha sem rotulo" in html_mesa
+
+    # com chapeu: filtra a mesa ao [g1]
+    html_g1 = render_cadeira(estado, slug="design", doc="mesa", chapeu="g1")
+    assert "#1 [g1] linha 1" in html_g1
+    assert "#2 [g2] linha 2" not in html_g1
 
 
 def test_fix_nome_verbo_fila():

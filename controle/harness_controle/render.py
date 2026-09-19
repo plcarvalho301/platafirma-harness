@@ -22,6 +22,7 @@ desenha como ausência, nunca como saúde. `0` e `—` nunca colapsam.
 from __future__ import annotations
 
 import html
+import re
 import time
 from pathlib import Path
 from typing import Any
@@ -125,14 +126,30 @@ def _acha_peca(idx: dict, candidatos: tuple[str, ...]) -> dict | None:
     return None
 
 
+def _filtra_mesa_por_chapeu(conteudo: str, chapeu: str) -> str:
+    """Mantem as linhas da mesa sob o [chapeu] escolhido. Cada item da mesa abre
+    com um rotulo `[<chapeu>]`; as linhas seguintes sem rotulo sao continuacao do
+    item e vao junto, ate o proximo rotulo. Sem item do chapeu, diz que nao ha —
+    ausencia se declara."""
+    linhas, saida, mantem = conteudo.split("\n"), [], False
+    for linha in linhas:
+        m = re.search(r"\[([^\]]+)\]", linha)
+        if m:
+            mantem = m.group(1) == chapeu
+        if mantem:
+            saida.append(linha)
+    return "\n".join(saida) if saida else f"Nenhum item da mesa para o chapeu [{chapeu}]."
+
+
 # Documentos que compoem a cadeira, na ordem do seletor da spec (§/cadeira):
-# persona · manifesto/oficio · GERAL · org · mesa · cadernos. Cada entrada e
-# (chave do ?doc=, rotulo, ids de peca que a servem — o CLI usa o id do catalogo
-# (`conduta-dono`, `cadernos-indice`), a projecao da tool usa o nome curto;
-# aceitam-se os dois).
+# persona · GERAL · org · mesa · cadernos. Cada entrada e (chave do ?doc=, rotulo,
+# ids de peca que a servem — o CLI usa o id do catalogo (`conduta-dono`,
+# `cadernos-indice`), a projecao da tool usa o nome curto; aceitam-se os dois).
+# Oficio SAIU: a abertura real (expediente montar) nao serve mais essa peca — o
+# `bin/monta-sessao` deprecado ainda a lista, entao a tela mostrava um documento
+# que a sessao do dono nao recebe. Documento morto nao vira aba.
 _DOCS_CADEIRA = [
     ("persona",  "Persona",  ("persona",)),
-    ("oficio",   "Ofício",   ("oficio",)),
     ("geral",    "GERAL",    ("conduta-dono", "conduta")),
     ("org",      "Org",      ("alias-cadeiras",)),
     ("mesa",     "Mesa",     ("mesa",)),
@@ -564,7 +581,6 @@ def _painel_vivo(estado: dict, slug_l: str, idx: dict) -> str:
 
     integridade = (
         _int("Persona", _fresco(idx.get("persona")))
-        + _int("Ofício", _fresco(_acha_peca(idx, ("oficio",))))
         + _int("Org", _fresco(_acha_peca(idx, ("alias-cadeiras",))))
         + _int("Cadernos", _fresco(_acha_peca(idx, ("cadernos-indice", "cadernos"))))
     )
@@ -576,11 +592,13 @@ def _painel_vivo(estado: dict, slug_l: str, idx: dict) -> str:
     )
 
 
-def render_cadeira(estado: dict, slug: str | None = None, doc: str | None = None) -> str:
+def render_cadeira(estado: dict, slug: str | None = None, doc: str | None = None,
+                   chapeu: str | None = None) -> str:
     """É "o que este agente e, e o que ele tem na mao agora" (spec §/cadeira): tres
-    colunas — as cadeiras, o documento escolhido por seletor (persona · ofício ·
-    GERAL · org · mesa · cadernos), e o estado vivo. Le o pacote CRU que a sonda
-    `cadeiras` guarda (`monta-sessao --json`), nunca um digest. So leitura."""
+    colunas — as cadeiras, o documento escolhido por seletor (persona · GERAL ·
+    org · mesa · cadernos) com um seletor de chapeu que filtra a mesa, e o estado
+    vivo. Le o pacote CRU que a sonda `cadeiras` guarda (`monta-sessao --json`),
+    nunca um digest. So leitura."""
     bloco = estado.get("cadeiras", {})
     itens = bloco.get("itens") or []
     por_slug: dict = {}
@@ -638,13 +656,34 @@ def render_cadeira(estado: dict, slug: str | None = None, doc: str | None = None
         )
     cab = f'<div class="cab"><h1>{_esc(nome)}</h1>{proc}</div>'
 
-    # seletor de documento — abas por link (sem JS): ?doc=<chave>. Default: persona.
-    doc_sel = doc if any(doc == k for k, _r, _c in _DOCS_CADEIRA) else _DOCS_CADEIRA[0][0]
+    # chapeus da cadeira: lista COMPLETA vinda do pacote (montador), nao so os que
+    # tem mesa/caderno — a mesa sozinha traz so os chapeus com item. Sem a chave
+    # (agregador em codigo velho, antes do restart) o seletor some, nao mente.
+    chapeus = [c for c in (dados.get("chapeus") or []) if c]
+    chapeu_sel = chapeu if chapeu in chapeus else None
+
+    # seletor de documento — abas por link (sem JS): ?doc=<chave>. Com chapeu
+    # escolhido, o doc que faz sentido e a mesa (unica com rotulo [chapeu]); senao,
+    # default persona.
+    docs_validos = {k for k, _r, _c in _DOCS_CADEIRA}
+    doc_sel = doc if doc in docs_validos else ("mesa" if chapeu_sel else _DOCS_CADEIRA[0][0])
     tabs = []
     for chave, rotulo, _cands in _DOCS_CADEIRA:
         aria = ' aria-current="page"' if chave == doc_sel else ""
         tabs.append(f'<a href="/cadeira/{_esc(slug_disp)}?doc={chave}"{aria}>{_esc(rotulo)}</a>')
     docs_html = f'<div class="docs">{"".join(tabs)}</div>'
+
+    # seletor de chapeu — filtra a mesa (unico doc com rotulo [chapeu]). Sempre
+    # visivel quando a cadeira tem chapeu, pra achar sem garimpar; leva a doc=mesa.
+    chapeus_html = ""
+    if chapeus:
+        links = ['<span class="rotulo">Chapéu (filtra a mesa):</span>']
+        aria_todos = ' aria-current="page"' if not chapeu_sel else ""
+        links.append(f'<a href="/cadeira/{_esc(slug_disp)}?doc=mesa"{aria_todos}>Todos</a>')
+        for c in chapeus:
+            aria = ' aria-current="page"' if c == chapeu_sel else ""
+            links.append(f'<a href="/cadeira/{_esc(slug_disp)}?doc=mesa&amp;chapeu={_esc(c)}"{aria}>{_esc(c)}</a>')
+        chapeus_html = f'<div class="docs chapeus">{"".join(links)}</div>'
 
     # leitura do documento selecionado, com carimbo de procedencia no topo.
     cands = next(c for k, _r, c in _DOCS_CADEIRA if k == doc_sel)
@@ -653,20 +692,25 @@ def render_cadeira(estado: dict, slug: str | None = None, doc: str | None = None
         leitura = ('<div class="leitura"><p class="indisponivel">Documento não servido '
                    'nesta abertura (a sonda abre a cadeira sem chapéu).</p></div>')
     elif peca.get("conteudo"):
+        corpo = peca.get("conteudo")
+        if doc_sel == "mesa" and chapeu_sel:
+            corpo = _filtra_mesa_por_chapeu(corpo, chapeu_sel)
         carimbo = (
             '<div class="carimbo">'
             f'<span><b>ref</b> <span class="mono">{_esc(peca.get("ref") or "—")}</span></span>'
             f'<span><b>blob</b> <span class="mono">{_esc(peca.get("sha") or "—")}</span></span>'
             f'<span><b>frescor</b> {_esc(peca.get("frescor") or "—")}</span>'
-            f'<span class="num"><b>tokens</b> {_num(peca.get("tokens"))}</span>'
-            "</div>"
+            + (f'<span><b>chapéu</b> {_esc(chapeu_sel)}</span>'
+               if doc_sel == "mesa" and chapeu_sel
+               else f'<span class="num"><b>tokens</b> {_num(peca.get("tokens"))}</span>')
+            + "</div>"
         )
-        leitura = f'<div class="leitura">{carimbo}<div class="corpo">{_esc(peca.get("conteudo"))}</div></div>'
+        leitura = f'<div class="leitura">{carimbo}<div class="corpo">{_esc(corpo)}</div></div>'
     else:
         leitura = ('<div class="leitura"><p class="indisponivel">'
                    f'Indisponível: {_esc(peca.get("motivo") or "sem conteúdo")}.</p></div>')
 
-    centro = f'<section class="cartao">{cab}{docs_html}{leitura}</section>'
+    centro = f'<section class="cartao">{cab}{docs_html}{chapeus_html}{leitura}</section>'
     direita = _painel_vivo(estado, slug_l, idx)
     return _pagina(centro, direita)
 

@@ -35,6 +35,7 @@ ESTADO_OK = {
             {"cadeira": "TI", "lido_em": 1000.0, "estado": "ok", "motivo": None, "dados": {
                 "cadeira": "ti", "nome_canonico": "ti",
                 "morada": {"sha": "abc1234", "frescor": "publicado", "idade_h": 2},
+                "chapeus": ["canais", "design", "discovery", "produtizacao"],
                 "pecas": [
                     {"peca": "persona", "ref": "platafirma-harness@abertura/ti/persona.md",
                      "sha": "p1", "frescor": "fresco", "tokens": 12, "conteudo": "Voce e Oswaldo Aranha..."},
@@ -45,7 +46,8 @@ ESTADO_OK = {
                     {"peca": "alias-cadeiras", "ref": "calc:alias-cadeiras",
                      "sha": "a1", "frescor": "fresco", "tokens": 20, "conteudo": "Oswaldo Aranha -> ti"},
                     {"peca": "mesa", "ref": "verbo:mesa ver",
-                     "sha": "m1", "frescor": "fresco", "tokens": 5, "conteudo": "mesa: 1 item"},
+                     "sha": "m1", "frescor": "fresco", "tokens": 5,
+                     "conteudo": "#1 [design] item de design\n#2 [canais] item de canais"},
                     {"peca": "cadernos-indice", "ref": "verbo:mesa caderno",
                      "sha": "cd1", "frescor": "fresco", "tokens": 3, "conteudo": "construcao 0 B\nrelease 0 B"},
                 ],
@@ -483,25 +485,47 @@ def test_cadeiras_recepcao_deriva_presenca_das_pecas(cliente):
 def test_cadeira_tem_seletor_de_documento_e_le_persona_por_default(cliente):
     corpo = cliente.get("/cadeira/TI").text
     assert 'class="docs"' in corpo
-    for rotulo in ("Persona", "Ofício", "GERAL", "Org", "Mesa", "Cadernos"):
+    for rotulo in ("Persona", "GERAL", "Org", "Mesa", "Cadernos"):
         assert f">{rotulo}<" in corpo
     # default: persona servida, com carimbo de procedencia
     assert "Oswaldo Aranha" in corpo
     assert "abertura/ti/persona.md" in corpo
-    # nao ha filtro de chapeu nem select com onchange (zero JS proprio)
-    assert "chapeu" not in corpo.lower()
+    # sem JS proprio: o seletor e por link, nao por onchange
     assert "onchange" not in corpo
+
+
+def test_cadeira_oficio_nao_e_mais_aba(cliente):
+    """Oficio morreu na abertura real (expediente montar) — o `bin/monta-sessao`
+    deprecado ainda serve a peca, mas a tela nao mostra um documento que a sessao
+    do dono nao recebe. Nem aba, nem linha de integridade."""
+    corpo = cliente.get("/cadeira/TI").text
+    assert ">Ofício<" not in corpo
 
 
 def test_cadeira_doc_troca_o_documento_servido(cliente):
     corpo = cliente.get("/cadeira/TI?doc=mesa").text
-    assert "mesa: 1 item" in corpo          # conteudo da peca mesa
+    # mesa inteira (sem chapeu escolhido): os dois itens aparecem
+    assert "item de design" in corpo
+    assert "item de canais" in corpo
     assert "Oswaldo Aranha" not in corpo    # nao serve a persona quando doc=mesa
 
 
 def test_cadeira_doc_invalido_cai_no_default(cliente):
     corpo = cliente.get("/cadeira/TI?doc=inexistente").text
     assert "Oswaldo Aranha" in corpo        # doc invalido -> persona (default)
+
+
+def test_cadeira_seletor_de_chapeu_lista_todos_e_filtra_a_mesa(cliente):
+    """O seletor traz a lista COMPLETA de chapeus (do pacote), inclusive os sem
+    item de mesa; escolher um filtra a mesa ao [chapeu] dele."""
+    corpo = cliente.get("/cadeira/TI").text
+    assert "Chapéu" in corpo
+    for c in ("canais", "design", "discovery", "produtizacao"):
+        assert f"chapeu={c}" in corpo      # canais nao tem item de mesa e mesmo assim aparece
+
+    filtrado = cliente.get("/cadeira/TI?doc=mesa&chapeu=design").text
+    assert "item de design" in filtrado
+    assert "item de canais" not in filtrado   # filtrado ao [design]
 
 
 def test_cadeira_caixa_vem_do_mesmo_fila_status(cliente):

@@ -329,6 +329,12 @@ form#despachar button { justify-self: start; }
   color: var(--platafirma-fg-inverse);
   font-weight: var(--platafirma-weight-medium);
 }
+/* seletor de chapeu: mesma aba, com um rotulo que diz o que ele filtra */
+.docs.chapeus { align-items: center; }
+.docs.chapeus .rotulo {
+  font-size: var(--platafirma-text-meta);
+  color: var(--platafirma-fg-muted);
+}
 
 .leitura .carimbo {
   display: flex; flex-wrap: wrap; gap: var(--platafirma-space-4);
