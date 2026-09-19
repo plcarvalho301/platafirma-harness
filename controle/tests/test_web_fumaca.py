@@ -567,3 +567,29 @@ def test_recepcao_caixa_linka_pra_leitura(cliente):
     """Cada caixa da recepcao e clicavel: abre a leitura da caixa."""
     trecho = cliente.get("/").text.split('id="caixas"')[1].split("</section>")[0]
     assert "?doc=caixa" in trecho
+
+
+# --- md_seguro: Markdown do corpo vira HTML, sanitizado (#3078) ------------
+
+def test_md_seguro_renderiza_estrutura():
+    """Corpo em Markdown vira heading, separador e lista — nao texto grudado."""
+    from harness_controle.render import md_seguro
+    html_saida = md_seguro("## Titulo\n\n---\n\n- item um\n- item dois")
+    assert "<h2>" in html_saida
+    assert "<hr" in html_saida
+    assert "<li>" in html_saida
+
+
+def test_md_seguro_remove_tag_perigosa():
+    """Sanitizacao por allowlist: <script> no corpo nao chega na pagina."""
+    from harness_controle.render import md_seguro
+    html_saida = md_seguro("texto normal\n\n<script>alert(1)</script>")
+    assert "<script" not in html_saida
+    assert "alert" not in html_saida or "<script" not in html_saida
+
+
+def test_md_seguro_vazio_e_vazio():
+    """Ausencia se desenha como ausencia: string vazia/None nunca vira saude."""
+    from harness_controle.render import md_seguro
+    assert md_seguro("") == ""
+    assert md_seguro(None) == ""
