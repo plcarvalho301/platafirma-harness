@@ -83,7 +83,7 @@ def cmd_ver(quero_json):
     sql = ("select slug, coalesce(papel,''), coalesce(critico,false), coalesce(repo,''), "
            "coalesce(compose,''), coalesce(rotas::text,'null'), coalesce(segredos::text,'null'), "
            "coalesce(reversao::text,'null'), coalesce(gate::text,'null'), "
-           "coalesce(profiles::text,'null'), coalesce(nota,'') "
+           "coalesce(profiles::text,'null'), coalesce(nota,''), coalesce(pre_build,'null') "
            "from acervo.stack order by slug")
     linhas = [l for l in _psql(sql).splitlines() if l.strip()]
     if not linhas:
@@ -91,9 +91,9 @@ def cmd_ver(quero_json):
     stacks = []
     for l in linhas:
         c = l.split("|")
-        if len(c) != 11:
+        if len(c) != 12:
             morre("acervo stack ver: linha inesperada (%d campos):\n  %s" % (len(c), l), 3)
-        slug, papel, crit, repo, compose, rotas, seg, rev, gate, prof, nota = c
+        slug, papel, crit, repo, compose, rotas, seg, rev, gate, prof, nota, pre_build = c
         comp = compose
         if compose.startswith("["):
             try:
@@ -104,7 +104,8 @@ def cmd_ver(quero_json):
         stacks.append({"slug": slug, "papel": papel or None, "critico": crit == "t",
                        "repo": repo or None, "compose": comp or None,
                        "rotas": j(rotas), "segredos": j(seg), "reversao": j(rev),
-                       "gate": j(gate), "profiles": j(prof), "nota": nota or None})
+                       "gate": j(gate), "profiles": j(prof), "nota": nota or None,
+                       "pre_build": None if pre_build in ("null", "") else pre_build})
     if quero_json:
         print(json.dumps(stacks, ensure_ascii=False, indent=2))
         return
@@ -134,12 +135,13 @@ def cmd_import(arq):
             _lit_jsonb(s.get("rotas")), _lit_jsonb(s.get("segredos")),
             _lit_jsonb(s.get("reversao")), _lit_jsonb(s.get("gate")),
             _lit_jsonb(s.get("profiles")), _lit_txt(s.get("_nota")),
+            _lit_txt(s.get("pre_build")),
         ]) + ")")
     sets = ",".join("%s = excluded.%s" % (c, c) for c in
                     ("papel", "critico", "repo", "compose", "rotas", "segredos",
-                     "reversao", "gate", "profiles", "nota"))
+                     "reversao", "gate", "profiles", "nota", "pre_build"))
     sql = ("begin;\ninsert into acervo.stack "
-           "(slug,papel,critico,repo,compose,rotas,segredos,reversao,gate,profiles,nota) values\n"
+           "(slug,papel,critico,repo,compose,rotas,segredos,reversao,gate,profiles,nota,pre_build) values\n"
            + ",\n".join(vals) + "\non conflict (slug) do update set " + sets + ";\ncommit;")
     _psql(None, stdin=sql)
     sys.stderr.write("acervo stack import: %d stack(s) carregada(s)/atualizada(s) de %s.\n"
