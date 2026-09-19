@@ -23,21 +23,32 @@ ESTADO_OK = {
         "disco": {}, "memoria": {},
     }, None, 0, 0.01), agora=1000.0),
     "fila_status": bloco_de(ResultadoVerbo(True, [
-        {"persona": "claudinho-TI", "pendentes": 0, "total_historico": 3, "estado": "em_dia",
+        {"persona": "TI", "pendentes": 0, "total_historico": 3, "estado": "em_dia",
          "idade_mais_antiga_seg": None, "ultima_leitura_seg": 120},
     ], None, 0, 0.01), agora=1000.0),
+    # `cadeiras` guarda o pacote CRU de `monta-sessao <c> --json` (uma lista
+    # `pecas`), nao um digest persona.presente/mesa.disponivel — que era ficcao do
+    # fixture e nunca era produzido pela sonda. Presenca deriva do `frescor` da peca.
     "cadeiras": {
         "lido_em": 1000.0, "estado": "ok", "motivo": None,
         "itens": [
             {"cadeira": "TI", "lido_em": 1000.0, "estado": "ok", "motivo": None, "dados": {
-                "cadeira": "TI",
-                "persona": {"presente": True, "caminho": "personas/persona-TI.md", "nome_resolvido": "claudinho-TI"},
-                "manifesto": {"presente": True, "caminho": "abertura/ti/plataforma/ferramental.md"},
-                "org": {"presente": True, "caminho": "docs/org-template-canonico.md"},
-                "mesa": {"disponivel": True, "resumo": "resumo da fita"},
-                "cadernos": {"disponivel": True, "resumo": "nenhum"},
-                "fila": {"disponivel": True, "resumo": "claudinho-TI: caixa em dia"},
-                "atualizado": True,
+                "cadeira": "ti", "nome_canonico": "ti",
+                "morada": {"sha": "abc1234", "frescor": "publicado", "idade_h": 2},
+                "pecas": [
+                    {"peca": "persona", "ref": "platafirma-harness@abertura/ti/persona.md",
+                     "sha": "p1", "frescor": "fresco", "tokens": 12, "conteudo": "Voce e Oswaldo Aranha..."},
+                    {"peca": "oficio", "ref": "platafirma-harness@abertura/ti/oficio.md",
+                     "sha": "o1", "frescor": "fresco", "tokens": 8, "conteudo": "oficio da cadeira..."},
+                    {"peca": "conduta-dono", "ref": "platafirma-harness@abertura/dono.md",
+                     "sha": "c1", "frescor": "fresco", "tokens": 40, "conteudo": "conduta do dono..."},
+                    {"peca": "alias-cadeiras", "ref": "calc:alias-cadeiras",
+                     "sha": "a1", "frescor": "fresco", "tokens": 20, "conteudo": "Oswaldo Aranha -> ti"},
+                    {"peca": "mesa", "ref": "verbo:mesa ver",
+                     "sha": "m1", "frescor": "fresco", "tokens": 5, "conteudo": "mesa: 1 item"},
+                    {"peca": "cadernos-indice", "ref": "verbo:mesa caderno",
+                     "sha": "cd1", "frescor": "fresco", "tokens": 3, "conteudo": "construcao 0 B\nrelease 0 B"},
+                ],
             }},
         ],
     },
@@ -443,3 +454,59 @@ def test_tipo_continua_fechado():
     assert '<select name="tipo"' in html
     for t in ("decisao", "resposta", "pedido", "minuta", "demanda", "handoff"):
         assert f'value="{t}"' in html
+
+
+# ---------- recepcao: presenca vem do pacote cru, nao de um digest ----------
+#
+# A sonda guarda o pacote CRU de `monta-sessao --json` (lista `pecas`). Ler um
+# digest persona.presente/mesa.disponivel que ninguem produz pintava TODA cadeira
+# como ausente/sem-leitura. E fila deixou de ter coluna: a caixa e o bloco Caixas.
+
+
+def test_cadeiras_recepcao_deriva_presenca_das_pecas(cliente):
+    corpo = cliente.get("/").text
+    trecho = corpo.split('id="cadeiras"')[1].split("</section>")[0]
+    # persona e oficio (manifesto) servidos na abertura => presente, nao ausente
+    assert "presente" in trecho
+    assert "ausente" not in trecho
+    # a coluna Fila saiu (a caixa e o bloco Caixas, mesma fonte)
+    assert ">Fila<" not in trecho
+
+
+# ---------- /cadeira: seletor de DOCUMENTO, nao filtro de chapeu ----------
+#
+# A spec (§/cadeira) pede um seletor de documento: persona · oficio · GERAL · org
+# · mesa · cadernos. O codigo antigo inventava um filtro de chapeu por parsing de
+# texto (so pegava "design" + lixo "=====") e so mostrava mesa+caixa.
+
+
+def test_cadeira_tem_seletor_de_documento_e_le_persona_por_default(cliente):
+    corpo = cliente.get("/cadeira/TI").text
+    assert 'class="docs"' in corpo
+    for rotulo in ("Persona", "Ofício", "GERAL", "Org", "Mesa", "Cadernos"):
+        assert f">{rotulo}<" in corpo
+    # default: persona servida, com carimbo de procedencia
+    assert "Oswaldo Aranha" in corpo
+    assert "abertura/ti/persona.md" in corpo
+    # nao ha filtro de chapeu nem select com onchange (zero JS proprio)
+    assert "chapeu" not in corpo.lower()
+    assert "onchange" not in corpo
+
+
+def test_cadeira_doc_troca_o_documento_servido(cliente):
+    corpo = cliente.get("/cadeira/TI?doc=mesa").text
+    assert "mesa: 1 item" in corpo          # conteudo da peca mesa
+    assert "Oswaldo Aranha" not in corpo    # nao serve a persona quando doc=mesa
+
+
+def test_cadeira_doc_invalido_cai_no_default(cliente):
+    corpo = cliente.get("/cadeira/TI?doc=inexistente").text
+    assert "Oswaldo Aranha" in corpo        # doc invalido -> persona (default)
+
+
+def test_cadeira_caixa_vem_do_mesmo_fila_status(cliente):
+    """A caixa da coluna direita sai de `fila status`, casada pelo slug — a
+    mesma fonte do bloco Caixas. Fila e caixa param de discordar."""
+    corpo = cliente.get("/cadeira/TI").text
+    assert "Estado vivo" in corpo
+    assert "Pendentes" in corpo
