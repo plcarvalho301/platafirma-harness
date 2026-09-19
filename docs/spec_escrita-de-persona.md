@@ -401,7 +401,7 @@ preenchidos são da fita gestao-estrategica de 19/09/2026 (conduta servida no sh
 
 | peça | arquivo | sha revisado | tokens antes | tokens depois |
 |---|---|---|---|---|
-| conduta | `abertura/dono.md` | PR #84 | 5.686 | a medir no envelope após publicar |
+| conduta | `abertura/dono.md` | c6d8480 (PR #84) | 5.686 | 3.887 (servido e7324e1497f9, abertura c6d8480) |
 | persona | `abertura/arquiteto/persona.md` | | | |
 | persona | `abertura/dados/persona.md` | | | |
 | persona | `abertura/direito/persona.md` | | | |
