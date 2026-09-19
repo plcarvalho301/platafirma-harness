@@ -77,11 +77,17 @@ def bloco_de(resultado: ResultadoVerbo, *, agora: float | None = None) -> dict:
 
 
 def _cadeiras_disponiveis() -> list[str]:
-    # A mesma arvore de onde saem os verbos (verbos.HARNESS): release no ar, nunca bancada.
-    d = HARNESS / "personas"
-    if not d.is_dir():
+    # Fonte canonica das cadeiras ativas: `persona foto` (replay de
+    # registro/eventos-org.jsonl), nao varredura de diretorio de persona.
+    # canone/organizacao.md: a lista de cadeiras ativas sai de `persona foto`,
+    # a chave e o slug. Varrer personas/persona-*.md era layout morto (as
+    # cadeiras migraram para abertura/<cadeira>/persona.md) e listava
+    # jaiminho-fabrica, que nao e cadeira (organizacao.md: "nao tem cadeira
+    # nem vinculo"). Verbo por tras, nao substrato.
+    r = chamar(["persona", "foto", "--json"], timeout=15)
+    if not r.ok or not isinstance(r.dados, dict):
         return []
-    return sorted(p.name.removeprefix("persona-").removesuffix(".md") for p in d.glob("persona-*.md"))
+    return sorted(r.dados)
 
 
 def _skills_disponiveis() -> list[str]:
