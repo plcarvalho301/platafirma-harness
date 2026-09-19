@@ -59,6 +59,8 @@ opções adicionais:
   --apply                aplica o lote (default: falso, dry-run do plano)
   --ate <degrau>         degrau alvo: catalogar | chunk | embed | vetor (default: vetor)
   --ocr                  autoriza extração OCR em arquivos escaneados (default: false)
+  --semantico            corte semântico por Orçamento de Fronteiras na seção sem heading que
+                         estoura o teto (causa A, card #3073); default: false (corte por tamanho)
   --autor <slug>         curador do lote (default: cadeira da sessão ou 'dados')
   --colecao, --bucket <s> coleção do acervo: firma | pessoal (default: firma)
   --json                 emite resultado em formato JSON bruto
@@ -432,6 +434,7 @@ def main():
     parser.add_argument("--apply", dest="apply", action="store_true", default=False)
     parser.add_argument("--ate", dest="ate", default="vetor")
     parser.add_argument("--ocr", dest="ocr", action="store_true", default=False)
+    parser.add_argument("--semantico", dest="semantico", action="store_true", default=False)
     parser.add_argument("--autor", dest="autor", default=None)
     parser.add_argument("--colecao", "--bucket", dest="colecao", default="firma")
     parser.add_argument("--json", dest="como_json", action="store_true", default=False)
@@ -536,6 +539,7 @@ def main():
         "motor": args.motor,
         "ate": args.ate,
         "ocr": args.ocr,
+        "semantico": args.semantico,
         "colecao": args.colecao,
         "itens": itens,
     }
