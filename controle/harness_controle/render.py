@@ -27,26 +27,103 @@ import time
 from pathlib import Path
 from typing import Any
 
-from markdown_it import MarkdownIt
-import nh3
-
 # Conteudo LIVRE (corpo de mesa, caderno, fila) escrito pela cadeira em
 # Markdown. `_esc()` cru despejava esse texto grudado, sem heading nem
-# separador — a "linguica" da tela no celular. `md_seguro()` faz parse do
-# Markdown e sanitiza o HTML por allowlist ANTES de entrar na pagina.
+# separador — a "linguica" da tela no celular. `md_seguro()` faz o parse do
+# subconjunto de Markdown que a mesa/caderno usa (heading, separador, lista,
+# enfase, codigo inline), SEM dependencia externa.
+#
+# Seguro por construcao: escapa TODO o texto com html.escape ANTES de
+# introduzir qualquer tag — nenhum HTML do conteudo sobrevive, so as tags que
+# este codigo emite. Nao precisa de sanitizador: nada de fora vira tag.
 # So para conteudo livre: rotulo de sistema (nome, chip, caminho, sha, numero)
-# segue por `_esc()` cru, que nunca vira Markdown.
-_MD = MarkdownIt("commonmark")
-_TAGS_OK = {"h1", "h2", "h3", "h4", "h5", "h6", "p", "br", "hr",
-            "ul", "ol", "li", "strong", "em", "code", "pre", "blockquote", "a"}
-_ATTR_OK = {"a": {"href"}}
+# segue por `_esc()` cru.
+_MD_INLINE = (
+    (re.compile(r"`([^`]+)`"), r"<code>\1</code>"),          # `codigo`
+    (re.compile(r"\*\*([^*]+)\*\*"), r"<strong>\1</strong>"),  # **negrito**
+    (re.compile(r"(?<!\*)\*([^*]+)\*(?!\*)"), r"<em>\1</em>"),  # *italico*
+)
+
+def _md_inline(texto_escapado: str) -> str:
+    """Enfase e codigo inline sobre texto JA escapado."""
+    for rx, repl in _MD_INLINE:
+        texto_escapado = rx.sub(repl, texto_escapado)
+    return texto_escapado
 
 def md_seguro(texto: Any) -> str:
-    """Markdown -> HTML sanitizado. String vazia/None vira vazio, nunca vira
-    saude (mesma regra do resto do render: ausencia se desenha como ausencia)."""
+    """Markdown -> HTML, sem lib. String vazia/None vira vazio, nunca vira saude
+    (mesma regra do resto do render: ausencia se desenha como ausencia).
+
+    Cobre o que a mesa/caderno de fato usa: '## '..'###### ' (heading),
+    linha '---'/'***' (separador), '- '/'* ' e '1. ' (lista), paragrafo, e
+    enfase/codigo inline. O resto do Markdown cai como paragrafo de texto
+    escapado — nunca some, nunca vira tag alheia.
+    """
     if not texto:
         return ""
-    return nh3.clean(_MD.render(str(texto)), tags=_TAGS_OK, attributes=_ATTR_OK)
+    linhas = str(texto).replace("\r\n", "\n").split("\n")
+    out: list[str] = []
+    lista: str | None = None  # "ul" | "ol" | None
+    paragrafo: list[str] = []
+
+    def fecha_paragrafo():
+        if paragrafo:
+            out.append("<p>" + _md_inline(" ".join(paragrafo)) + "</p>")
+            paragrafo.clear()
+
+    def fecha_lista():
+        nonlocal lista
+        if lista:
+            out.append(f"</{lista}>")
+            lista = None
+
+    for linha in linhas:
+        crua = linha.strip()
+        if not crua:
+            fecha_paragrafo()
+            fecha_lista()
+            continue
+        # separador
+        if crua in ("---", "***", "___"):
+            fecha_paragrafo()
+            fecha_lista()
+            out.append("<hr>")
+            continue
+        # heading
+        m = re.match(r"^(#{1,6})\s+(.*)$", crua)
+        if m:
+            fecha_paragrafo()
+            fecha_lista()
+            nivel = len(m.group(1))
+            out.append(f"<h{nivel}>{_md_inline(html.escape(m.group(2)))}</h{nivel}>")
+            continue
+        # item de lista nao-ordenada
+        m = re.match(r"^[-*]\s+(.*)$", crua)
+        if m:
+            fecha_paragrafo()
+            if lista != "ul":
+                fecha_lista()
+                out.append("<ul>")
+                lista = "ul"
+            out.append(f"<li>{_md_inline(html.escape(m.group(1)))}</li>")
+            continue
+        # item de lista ordenada
+        m = re.match(r"^\d+\.\s+(.*)$", crua)
+        if m:
+            fecha_paragrafo()
+            if lista != "ol":
+                fecha_lista()
+                out.append("<ol>")
+                lista = "ol"
+            out.append(f"<li>{_md_inline(html.escape(m.group(1)))}</li>")
+            continue
+        # texto de paragrafo (escapa aqui; inline aplica no fecha_paragrafo)
+        fecha_lista()
+        paragrafo.append(html.escape(crua))
+
+    fecha_paragrafo()
+    fecha_lista()
+    return "".join(out)
 
 # Camada 1 — o front da PlataFirma, copiado do release platafirma/ui para
 # dentro da imagem em tempo de build (arq:0056, ver Dockerfile). pf-ui.css ja
