@@ -47,7 +47,7 @@ BANCADA=""   # preenchida por declara_bancada, depois de validado o ato
 VERBO="$(basename "$0")"
 
 # preenchidos por detecta()
-STACK=""; LINHA=""; PY=""; ISOLADO=0
+STACK=""; LINHA=""; PY=""; ISOLADO=0; RAIZPY=""
 
 uso() {
   cat >&2 <<EOF
@@ -121,15 +121,33 @@ alvo_de() {
   printf '%s' "$real"
 }
 
+# Raiz do projeto Python DENTRO do clone: a pasta que tem o pyproject.toml. Quase sempre
+# e o proprio clone; mas ha repo (platafirma-conhecimento) cujo pacote mora num subdir
+# (rag/), e ai `uvx pytest` da raiz cai em ambiente isolado e a suite morre no import
+# (card #3074). Procura o pyproject na raiz e, senao, um nivel abaixo — sem descer a
+# arvore inteira, que acharia pyproject de fixture ou de vendored dep. Ecoa o subdir
+# achado (vazio = raiz), para o `cd` do runner e para o venv casarem no mesmo lugar.
+raiz_projeto_py() {
+  local c="$1"
+  [ -f "$c/pyproject.toml" ] && { printf '%s' "$c"; return 0; }
+  local p
+  for p in "$c"/*/pyproject.toml; do
+    [ -f "$p" ] && { printf '%s' "$(dirname "$p")"; return 0; }
+  done
+  printf '%s' "$c"
+}
+
 # Interpretador do projeto, ou vazio. Convencao da casa: venv fora do repo, em
 # <bancada>/.venv-<sufixo>, senao o venv da release ($PLATAFIRMA_RELEASE/venv/<sufixo>, o mesmo
 # do shebang dos verbos), com o sufixo = nome do repo sem o prefixo `platafirma-`.
+# `raiz` = a pasta do pyproject (pode ser um subdir do clone); o venv do projeto mora la.
 python_do_projeto() {
-  local c="$1" nome="${2:-}" sufixo
+  local c="$1" nome="${2:-}" raiz="${3:-$1}" sufixo
   if [ -n "${PF_TESTE_PYTHON:-}" ]; then
     [ -x "$PF_TESTE_PYTHON" ] || morre "PF_TESTE_PYTHON='$PF_TESTE_PYTHON' nao e executavel" 3
     printf '%s' "$PF_TESTE_PYTHON"; return 0
   fi
+  [ -x "$raiz/.venv/bin/python" ] && { printf '%s' "$raiz/.venv/bin/python"; return 0; }
   [ -x "$c/.venv/bin/python" ] && { printf '%s' "$c/.venv/bin/python"; return 0; }
   # sufixo pelo NOME do repo: no worktree wt/<repo>/<cadeira> o basename e a cadeira
   sufixo="${nome:-$(basename "$c")}"; sufixo="${sufixo#platafirma-}"
@@ -140,17 +158,18 @@ python_do_projeto() {
 
 detecta() {
   local c="$1" nome="${2:-}"
-  STACK=""; LINHA=""; PY=""; ISOLADO=0
+  STACK=""; LINHA=""; PY=""; ISOLADO=0; RAIZPY="$c"
   if [ -f "$c/package.json" ] && grep -q '"test"[[:space:]]*:' "$c/package.json" 2>/dev/null \
      && [ ! -f "$c/pyproject.toml" ]; then
     STACK="node"; LINHA="npm test"; return 0
   fi
-  if [ -f "$c/pyproject.toml" ] || [ -d "$c/testes" ] \
+  RAIZPY="$(raiz_projeto_py "$c")"
+  if [ -f "$RAIZPY/pyproject.toml" ] || [ -d "$c/testes" ] \
      || compgen -G "$c/test_*.py" >/dev/null 2>&1 || compgen -G "$c/*/test_*.py" >/dev/null 2>&1; then
     STACK="python"
-    if PY="$(python_do_projeto "$c" "$nome")"; then
+    if PY="$(python_do_projeto "$c" "$nome" "$RAIZPY")"; then
       LINHA="uv run --python $PY --with pytest pytest"
-    elif [ -f "$c/pyproject.toml" ]; then
+    elif [ -f "$RAIZPY/pyproject.toml" ]; then
       LINHA="uv run pytest"
     else
       LINHA="uvx pytest"; ISOLADO=1
@@ -187,12 +206,14 @@ ato_rodar() {
   [ "$ISOLADO" -eq 1 ] && printf '# AVISO: ambiente isolado — falha de import aqui e do ambiente, nao do codigo\n' >&2
   case "$STACK" in
     python)
+      # roda da RAIZ do projeto (a pasta do pyproject), que pode ser um subdir do clone.
+      # o alvo ja e caminho absoluto (alvo_de -> realpath), entao vale de qualquer cwd.
       if [ -n "$PY" ]; then
-        (cd "$c" && uv run --python "$PY" --with pytest pytest ${alvo:+"$alvo"})
+        (cd "$RAIZPY" && uv run --python "$PY" --with pytest pytest ${alvo:+"$alvo"})
       elif [ "$ISOLADO" -eq 1 ]; then
-        (cd "$c" && uvx pytest ${alvo:+"$alvo"})
+        (cd "$RAIZPY" && uvx pytest ${alvo:+"$alvo"})
       else
-        (cd "$c" && uv run pytest ${alvo:+"$alvo"})
+        (cd "$RAIZPY" && uv run pytest ${alvo:+"$alvo"})
       fi ;;
     node)
       if [ -n "$alvo" ]; then (cd "$c" && npm test -- "$alvo"); else (cd "$c" && npm test); fi ;;
