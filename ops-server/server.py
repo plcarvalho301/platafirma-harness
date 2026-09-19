@@ -274,6 +274,24 @@ def _cosmetica(perfil: dict, ato: str | None) -> bool:
     return not atos or (ato or "") in atos
 
 
+def _argv_verbo(binario: str, ato: str, args: list) -> list:
+    """O argv que vai ao execve de uma tool de verbo: `ato` vazio some, nao vira `''`."""
+    return [binario] + ([ato] if ato else []) + list(args or [])
+
+
+def _ato_efetivo(argv: list) -> str | None:
+    """O ato que o escopo `cosmetica@ato` enxerga e o do argv, nao o do parametro `ato`.
+
+    O cliente MCP chama o mesmo execve de duas formas: `ato="rag", args=["buscar", ...]`
+    e `ato="", args=["rag", "buscar", ...]`. Medido em 18/09: decidir o perfil pelo
+    parametro tirava o regime cosmetico da segunda forma, a janela de linha longa comia
+    o JSON de linha unica do `motor rag buscar` (13 kB -> 289 bytes) e a cadeira ficava
+    sem o corpo dos trechos — o caso que o #3022 fechou, reaberto pela forma da chamada.
+    `run_command` ja decidia pelo argv; agora as quatro saidas decidem igual.
+    """
+    return argv[1] if len(argv) > 1 else None
+
+
 def _serve(r: dict, *, tool: str, alca: str, ident: dict, cauda: bool = False,
            cosmetica: bool = False) -> dict:
     """R8 — o único caminho por onde retorno de tool sai desta porta.
@@ -1829,12 +1847,12 @@ def _faz_tool_verbo(slug: str, binario: str, descricao: str):
                 if negado_item:
                     r = negado_item
                 else:
-                    argv = [binario] + ([_ato] if _ato else []) + _args
+                    argv = _argv_verbo(binario, _ato, _args)
                     t0 = time.monotonic()
                     r = await anyio.to_thread.run_sync(_run_verbo_blocking, argv, _stdin, timeout, ident)
                     _perf = _perfil_verbo(slug, binario)
                     r = _serve(r, tool=slug, alca=_linha, ident=ident, cauda=_perf["cauda"],
-                               cosmetica=_cosmetica(_perf, _ato))
+                               cosmetica=_cosmetica(_perf, _ato_efetivo(argv)))
                     _audit(tool=slug, ato=_ato or None, args=" ".join(_args)[:CMD_CAP],
                            cadeira=ident["cadeira"] or None, sessao_id=ident["sessao_id"],
                            ordem_id=ident["ordem_id"], exit_code=r.get("exit_code"), erro=r.get("erro"),
@@ -1855,14 +1873,14 @@ def _faz_tool_verbo(slug: str, binario: str, descricao: str):
             return negado
         timeout = max(1, min(timeout, 600))
         ident = _sessao_resolve(sessao_id)  # aqui: dentro da task da tool (#2911)
-        argv = [binario] + ([ato] if ato else []) + args
+        argv = _argv_verbo(binario, ato, args)
         t0 = time.monotonic()
         r = await anyio.to_thread.run_sync(_run_verbo_blocking, argv, stdin, timeout, ident)
         # R4: a forma e a cauda saem do cabeçalho DESTE verbo. `descansar` é o caso que
         # nomeia a regra — batia o teto e era cortado só na cabeça, perdendo o veredito.
         _perf = _perfil_verbo(slug, binario)
         r = _serve(r, tool=slug, alca=linha, ident=ident, cauda=_perf["cauda"],
-                   cosmetica=_cosmetica(_perf, ato))
+                   cosmetica=_cosmetica(_perf, _ato_efetivo(argv)))
         _audit(tool=slug, ato=ato or None, args=" ".join(args)[:CMD_CAP],
                cadeira=ident["cadeira"] or None, sessao_id=ident["sessao_id"],
                ordem_id=ident["ordem_id"], exit_code=r.get("exit_code"), erro=r.get("erro"),

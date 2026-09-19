@@ -486,6 +486,14 @@ def poda_texto(texto: str, *, cap: int, cauda: bool, alca: str, sessao_id: str,
             "lavado": rel["classes"], "bytes_produzidos": rel["bytes_antes"]}
     if cosmetica:
         meta["perfil"] = "cosmetica"
+    # Invariante (ii): `blob` e a unica classe do lavador que TIRA conteudo do retorno
+    # (marcador de base64/hex, janela de linha longa), e o sha no marcador nao e alca —
+    # nada nesta porta desreferencia sha. Medido em 18/09: abaixo do teto o cru nao ia
+    # a lugar nenhum, e quem recebia `<linha longa … sha=…>` nao tinha como reler. O cru
+    # derrama sempre que a classe marca, e o caminho sai no envelope e na linha humana.
+    cru = derrama(sessao_id, nome_derrame, texto) if "blob" in rel["classes"] else None
+    if cru:
+        meta["cru"] = cru
     servir = lavado
     if ledger is not None:
         d = ledger.olha(alca, lavado, giro, tool)
@@ -498,7 +506,7 @@ def poda_texto(texto: str, *, cap: int, cauda: bool, alca: str, sessao_id: str,
             return servir, meta
     caminho = None
     if len(servir.encode("utf-8", "replace")) > cap:
-        caminho = derrama(sessao_id, nome_derrame, texto)
+        caminho = cru or derrama(sessao_id, nome_derrame, texto)
     if cosmetica:
         # Acima do teto o semântico DERRAMA e serve inteiro. `corta()` parte uma unidade
         # de recuperação ao meio, e meio trecho é pior que trecho nenhum: quem lê não vê
@@ -533,5 +541,13 @@ def linha_humana(meta: dict) -> str:
         return (f"poda: {meta.get('bytes_omitidos', 0)} bytes omitidos no miolo"
                 + (f" — inteiro em {alca}" if alca else ""))
     if meta.get("lavado"):
-        return "poda: lavado (" + ", ".join(meta["lavado"]) + ")"
+        linha = "poda: lavado (" + ", ".join(meta["lavado"]) + ")"
+        # `blob` tira conteudo; as outras classes so tiram ruido. Quem le precisa saber
+        # qual das duas aconteceu, e onde esta o que saiu (carta do arquiteto, 18/09).
+        if "blob" in meta["lavado"]:
+            cru = meta.get("cru")
+            linha += (" — blob/linha longa saiu do retorno; cru em "
+                      f"{cru}; `read_file offset=`" if cru
+                      else " — blob/linha longa saiu do retorno; sem alca")
+        return linha
     return ""

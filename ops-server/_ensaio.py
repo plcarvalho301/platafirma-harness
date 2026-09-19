@@ -678,6 +678,41 @@ def test_eixo_poda_sai_do_cabecalho_e_o_escopo_por_ato_vale():
     s._PERFIS.clear()
 
 
+def test_escopo_cosmetico_decide_pelo_argv_e_nao_pelo_parametro_ato():
+    """Medido em 18/09 (carta do arquiteto): `motor` chamado com `ato=""` e
+    `args=["rag", "buscar", ...]` perdia o regime cosmetico, a janela de linha longa
+    servia 289 de 13 kB e a cadeira ficava sem o corpo dos trechos. As duas formas de
+    chamada montam o mesmo execve e tem de cair no mesmo perfil."""
+    bin_ = _Path(__file__).parent.parent / "bin"
+    s._PERFIS.clear()
+    motor = s._perfil_verbo("motor", str(bin_ / "motor"))
+    no_ato = s._argv_verbo("bin/motor", "rag", ["buscar", "obra", "pergunta"])
+    no_args = s._argv_verbo("bin/motor", "", ["rag", "buscar", "obra", "pergunta"])
+    assert no_ato == no_args
+    assert s._ato_efetivo(no_args) == "rag" and s._cosmetica(motor, s._ato_efetivo(no_args))
+    assert not s._cosmetica(motor, s._ato_efetivo(s._argv_verbo("bin/motor", "", ["listar"])))
+    assert s._ato_efetivo(s._argv_verbo("bin/motor", "", [])) is None
+    s._PERFIS.clear()
+
+
+def test_blob_abaixo_do_teto_deixa_o_cru_no_derrame_e_diz_onde():
+    """Invariante (ii) da arq:0101. Medido em 18/09: linha longa janelada ABAIXO do teto
+    nao derramava, e o `sha=` do marcador era alca morta — nada na porta desreferencia
+    sha. Classe que tira conteudo deixa o cru no derrame e o caminho nos dois niveis."""
+    linha = '{"fontes":[' + ",".join(f'{{"n":{i},"trecho":"conteudo do trecho {i}"}}'
+                                     for i in range(1, 40)) + "]}"
+    args = {"cap": 50_000, "cauda": False, "alca": "tarefas:listar --json",
+            "sessao_id": _UUID_A, "giro": 1, "tool": "tarefas", "ledger": None,
+            "nome_derrame": "g00001-stdout.txt"}
+    with _derrame_tmp():
+        fora, meta = _p.poda_texto(linha, **args)
+        assert "<linha longa" in fora and "blob" in meta["lavado"]
+        assert meta.get("cru") and _Path(meta["cru"]).read_text(encoding="utf-8") == linha
+        assert meta["cru"] in _p.linha_humana(meta)
+        limpo, m_limpo = _p.poda_texto("duas linhas\ncurtas", **args)
+    assert "cru" not in m_limpo and _p.linha_humana(m_limpo) == ""
+
+
 def test_verbo_sem_declaracao_segue_com_poda_inteira():
     """Trava do card: terminal, git e fabrica nao mudam — o default fica."""
     bin_ = _Path(__file__).parent.parent / "bin"
