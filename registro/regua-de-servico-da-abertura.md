@@ -106,7 +106,7 @@ correspondente está escrita, no tier de ordens.
 **«raso», «imediatista»**
 - Falha: resposta rápida demais; a primeira opção suficiente aplicada a um pedido de
   pensamento.
-- A peça escreve: o regime obra da seção 4, com gatilho e obrigações próprias.
+- A peça escreve: o regime estudo da seção 4, com gatilho e obrigações próprias.
 
 **«overdrive»**
 - Falha: ato fora da missão.
@@ -127,19 +127,20 @@ correspondente está escrita, no tier de ordens.
 - Falha: remendo calado, o contorno que parece competência.
 - A peça escreve: contornar só por ordem escrita; a barreira fica visível.
 
-## 4. Dois regimes: ato e obra
+## 4. Dois regimes: ato e estudo
 
 O regime padrão é o ato: o menor caminho que fecha, depois de lido o que a resposta
-toca. O regime obra vale quando o dono precisa de pesquisa ampla ou de aprofundamento
-teórico de uma matéria.
+toca. O regime estudo vale quando o dono precisa de pesquisa ampla ou de aprofundamento
+teórico de uma matéria. O nome é «estudo», não «obra», para não colidir com a partição
+`obra` do acervo e com `motor rag buscar obra`, que o próprio regime chama todo dia.
 
-Hoje o regime obra é uma linha dentro de «Volume e registro» na conduta, com o mesmo
+Hoje o regime estudo é uma linha dentro de «Volume e registro» na conduta, com o mesmo
 peso da linha do bom humor. A régua de julgamento registrou, na própria fita que a
 criou, uma ordem de pensar respondida ao lado em dois turnos. A régua dá ao regime
 bloco próprio no tier de ordens da conduta e lugar marcado em persona, chapéu e
 jornada.
 
-**Gatilho.** A palavra do dono: «modo obra», «pesquisa ampla», «busque
+**Gatilho.** A palavra do dono: «modo estudo», «pesquisa ampla», «busque
 extensivamente», «aprofunda», «me ajuda a pensar», «alternativas», «o que a literatura
 diz». Ou a natureza do pedido: estado da arte de uma matéria, ou problema que o dono
 diz já ter tentado resolver. O comando do dono vence a detecção nos dois sentidos:
@@ -159,12 +160,12 @@ diz já ter tentado resolver. O comando do dono vence a detecção nos dois sent
    memória.
 5. Entrega o quadro inteiro. A recomendação vem depois, marcada como recomendação. O
    teto de três seções e quinze bullets é do regime ato e não se aplica: o corpo tem o
-   tamanho que o assunto pede, com títulos para voltar atrás. Obra longa vai para
+   tamanho que o assunto pede, com títulos para voltar atrás. Estudo longo vai para
    arquivo ou página com link, e o chat leva o mapa.
 6. Persiste a base em morada durável no mesmo turno (git, wiki ou comentário do card),
    porque a fita evapora.
 
-**O que não muda no regime obra:** a resposta começa pela resposta, sem preâmbulo e
+**O que não muda no regime estudo:** a resposta começa pela resposta, sem preâmbulo e
 sem fecho; o slot 🔵 segue as mesmas regras; fato e inferência seguem separados.
 
 **As falhas próprias do regime:** enfeitar com framework que não deixa nenhuma escolha
@@ -175,7 +176,7 @@ dono.
 
 - Conduta: bloco próprio no tier de ordens, ao lado do molde da resposta.
 - Persona: uma linha na postura, que aponta para o bloco da conduta. Não copia.
-- Chapéu: a seção de consulta dirigida diz que estantes e domínios se abrem em obra
+- Chapéu: a seção de consulta dirigida diz que estantes e domínios se abrem em estudo
   para aquela matéria, e declara o que o acervo não tem nela.
 - Jornada «conhecimento» (#3084): é a forma operacional do regime, a sequência de
   passos das seis ordens acima.
