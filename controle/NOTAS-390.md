@@ -173,7 +173,7 @@ com o exit code que já era o de falha.
 
 Sem docker, sem systemctl, sem jq, sem redis rodando. `uv`/python 3.13/git/bash/curl
 disponíveis. Os testes de contrato (camada 1) **não** devem depender de infra viva:
-- Verbos Python (`conferir`, `fila_streams.py`, `monta-sessao` se virar Python ou ganhar
+- Verbos Python (`conferir`, `fila`, `monta-sessao` se virar Python ou ganhar
   wrapper): isolar a função que fala com o mundo (`sh()`, `redis.Redis`, `subprocess.run`)
   atrás de algo mockável (`unittest.mock.patch`/monkeypatch), testar a lógica de
   formatação/contrato injetando saída canônica.

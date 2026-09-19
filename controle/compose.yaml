@@ -36,7 +36,7 @@ services:
       # A release inteira, somente-leitura, no MESMO caminho absoluto do host. Nao
       # serve pro front (card #476: pf-ui.css, pf-ui.js e as fontes vem COPIADOS pra
       # dentro da imagem, arq:0056). Serve o resto da tela: os verbos que as duas
-      # acoes chamam sao <release>/current/harness/bin/{fila_streams.py,infra}, e
+      # acoes chamam sao <release>/current/harness/bin/{fila,infra}, e
       # /feito roda `git log` na arvore do harness. Monta-se a raiz e nao so
       # current/, porque current/<curto> e current/venv/<nome> sao symlinks
       # relativos que apontam para fora de current/ (a familia e o venv por hash).

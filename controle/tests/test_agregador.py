@@ -61,7 +61,7 @@ def test_bloco_de_verbo_morto_vira_indisponivel_com_motivo():
 
 def test_bloco_de_erro_do_verbo_vira_indisponivel():
     """Verbo rodou, devolveu JSON valido, mas o proprio JSON e {"erro": ...}
-    (ex.: fila_streams.py sem credencial na malha msg) — trata igual a falha
+    (ex.: fila sem credencial na malha msg) — trata igual a falha
     de execucao: indisponivel com o motivo que o verbo relatou."""
     r = ResultadoVerbo(ok=True, dados={"erro": "nao alcancei a malha msg"}, motivo=None,
                         exit_code=1, duracao_seg=0.05)
@@ -255,3 +255,55 @@ def test_agregador_nao_escreve_nada_alem_do_proprio_estado(tmp_path, monkeypatch
 
     caminhos = sorted(p.relative_to(tmp_path).as_posix() for p in tmp_path.rglob("*") if p.is_file())
     assert caminhos == ["controle/estado.json"]
+
+
+def test_render_cadeira_parse_monta_sessao():
+    from harness_controle.render import render_cadeira
+    estado = {
+        "cadeiras": {
+            "itens": [
+                {
+                    "cadeira": "design",
+                    "estado": "ok",
+                    "dados": {
+                        "pecas": [
+                            {
+                                "peca": "mesa",
+                                "frescor": "fresco",
+                                "sha": "12345",
+                                "conteudo": "#1 [chapeu1] linha 1\n#2 [chapeu2] linha 2\n#3 [chapeu1] linha 3\n#4 linha sem chapeu"
+                            },
+                            {
+                                "peca": "cadernos",
+                                "conteudo": "chapeu1   10B\nchapeu2   20B\n"
+                            }
+                        ]
+                    }
+                }
+            ]
+        }
+    }
+    
+    # Sem chapeu -> renderiza todas as linhas e os dropdowns com as opcoes
+    html = render_cadeira(estado, slug="design")
+    assert '<option value="chapeu1">' in html
+    assert '<option value="chapeu2">' in html
+    assert "#1 [chapeu1] linha 1" in html
+    assert "#2 [chapeu2] linha 2" in html
+    assert "#4 linha sem chapeu" in html
+    
+    # Com chapeu filtrado -> mostra apenas a linha daquele chapeu (ignorando as outras)
+    html_chapeu1 = render_cadeira(estado, slug="design", chapeu="chapeu1")
+    assert "#1 [chapeu1] linha 1" in html_chapeu1
+    assert "#3 [chapeu1] linha 3" in html_chapeu1
+    assert "#2 [chapeu2] linha 2" not in html_chapeu1
+    assert "#4 linha sem chapeu" in html_chapeu1
+
+
+def test_fix_nome_verbo_fila():
+    from harness_controle.agregador import SONDAS
+    sonda_fila = next(s for s in SONDAS if s.nome == "fila_status")
+    argv = sonda_fila.fabrica_argv()
+    assert argv[0] == "fila"
+    assert "status" in argv
+
