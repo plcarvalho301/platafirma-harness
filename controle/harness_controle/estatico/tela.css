@@ -357,6 +357,24 @@ form#despachar button { justify-self: start; }
   color: var(--platafirma-fg-default);
 }
 
+/* documento Caixa: uma carta por bloco, mais nova primeiro */
+.caixa-lida { display: flex; flex-direction: column; gap: var(--platafirma-space-4); }
+.caixa-lida .msg {
+  border: var(--platafirma-border-width) solid var(--platafirma-border-default);
+  border-radius: var(--platafirma-radius-sm);
+  padding: var(--platafirma-space-4);
+}
+.caixa-lida .msg h4 {
+  margin: var(--platafirma-space-2) 0;
+  font-size: var(--platafirma-text-body);
+  color: var(--platafirma-fg-default);
+}
+.caixa-lida .msg .corpo {
+  color: var(--platafirma-fg-body);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
 dl { margin: 0; }
 .par {
   display: flex; justify-content: space-between; gap: var(--platafirma-space-3);

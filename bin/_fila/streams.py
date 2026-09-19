@@ -135,8 +135,10 @@ def personas_validas():
 
 
 def _json_mode(args) -> bool:
-    """So o subcomando 'status' ganhou --json — os demais nem tem o atributo."""
-    return getattr(args, "verbo", None) == "status" and bool(getattr(args, "json", False))
+    """status e ler ganharam --json — os demais nem tem o atributo. O tela do
+    harness le saida de verbo, e verbo que so imprime pra humano e lacuna a
+    fechar (spec_plano-de-controle-harness §7.2)."""
+    return getattr(args, "verbo", None) in ("status", "ler") and bool(getattr(args, "json", False))
 
 
 def _falha_json(msg: str, code: int):
@@ -457,25 +459,49 @@ def cmd_status(rc, eu: str, args):
 
 # ---------- ler ----------
 def cmd_ler(rc, eu: str, args):
+    json_mode = bool(getattr(args, "json", False))
     alvo = args.persona or eu
     if not alvo:
+        if json_mode:
+            _falha_json("sem cadeira na sessão: passe sessao_id", 2)
         sys.stderr.write("erro: sem cadeira na sessão: passe sessao_id\n")
         sys.exit(2)
     if alvo == "--todas":
-        so_espia(eu)
+        so_espia(eu, json_mode=json_mode)
         personas = sorted(personas_validas() or set())
     else:
-        valida_persona(alvo)
-        so_minha(eu, alvo)
+        valida_persona(alvo, json_mode=json_mode)
+        so_minha(eu, alvo, json_mode=json_mode)
         personas = [alvo]
 
     frio = args.tudo or args.desde
     if args.remetente and not frio:
+        if json_mode:
+            _falha_json("filtrar por remetente so vale em leitura fria (--tudo ou --desde)", 2)
         sys.stderr.write(
             "erro: filtrar por remetente so vale em leitura fria (--tudo ou --desde).\n"
             "  no modo normal a entrega e confirmada, e filtrar esconderia carta ja confirmada.\n"
         )
         sys.exit(2)
+
+    if json_mode:
+        # Contrato de maquina pra tela: SEMPRE JSON. Sucesso = array de cartas
+        # (mais nova primeiro); erro ja saiu por _falha_json acima. Cada carta
+        # leva idade_seg do carimbo do msgid, como a mesa/status.
+        chaves = ("msgid", "de", "tipo", "assunto", "ref", "responde", "corpo")
+        saida = []
+        for p in personas:
+            msgs = frias(rc, p, args.desde) if frio else novas(rc, p)
+            if args.remetente:
+                msgs = [m for m in msgs if m["de"] == args.remetente]
+            for m in reversed(msgs):
+                item = {k: m.get(k, "") for k in chaves}
+                item["idade_seg"] = _idade_seg_do_msgid(m.get("msgid", ""))
+                if len(personas) > 1:
+                    item["caixa"] = p
+                saida.append(item)
+        print(json.dumps(saida, ensure_ascii=False))
+        return
 
     vazio = True
     for p in personas:
@@ -554,6 +580,7 @@ def build_parser():
     p_ler.add_argument("remetente", nargs="?", default=None)
     p_ler.add_argument("--tudo", nargs="?", const=True, default=False)
     p_ler.add_argument("--desde", default=None)
+    p_ler.add_argument("--json", action="store_true")
     p_ler.add_argument("--eu", default=None)
 
     p_tipos = sub.add_parser("tipos", add_help=False)

@@ -107,6 +107,16 @@ def _env_sonda() -> dict[str, str]:
     return e
 
 
+def _env_caixa(persona: str) -> dict[str, str]:
+    """Le a caixa a FRIO como a propria dona: PF_CADEIRA e o slug, entao `so_minha`
+    aprova, e `fila ler --tudo` (XRANGE) nao move o ponteiro do grupo nem cria
+    consumer. A tela le o conteudo sem queimar carta nem falsear a 'ultima
+    leitura' — a leitura fria que a spec exige (bloco 3, §5)."""
+    e = dict(os.environ)
+    e["PF_CADEIRA"] = persona
+    return e
+
+
 def _env_padrao() -> dict[str, str]:
     return dict(os.environ)
 
@@ -169,6 +179,14 @@ SONDAS_GRUPO: list[SondaGrupo] = [
                _skills_disponiveis,
                lambda s: ["conferir", "skill", s, "--json"],
                chave_item="skill"),
+    # Conteudo das caixas, a FRIO (--tudo = XRANGE), uma por cadeira, lida como a
+    # propria dona. O `status` (acima) so mede profundidade; este traz as cartas
+    # pra tela ter onde ser lida. Nunca consome: leitura fria e o que a spec manda.
+    SondaGrupo("caixa_conteudo", _intervalo("CAIXA", 60), _timeout("CAIXA", 20),
+               _cadeiras_disponiveis,
+               lambda p: ["fila", "ler", p, "--tudo", "--json"],
+               _env_caixa,
+               chave_item="persona"),
 ]
 
 
