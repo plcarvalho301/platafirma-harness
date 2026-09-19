@@ -946,6 +946,11 @@ def monta(cadeira, atualizar, pergunta=None, forcado_chapeu=None, so_chapeu=Fals
         },
         "pecas": servidas,
         "chapeu": (chapeu_env["slug"] if chapeu_env else None),
+        # Lista COMPLETA de chapeus da cadeira (por descoberta no disco), nao so o
+        # roteado: a tela de controle a serve num seletor, e a mesa/cadernos sozinhas
+        # nao trazem os chapeus sem atividade. Fonte unica, `chapeus_de`, a mesma que
+        # `--chapeus` usa. Sem custo de sessao (nao cunha nada).
+        "chapeus": chapeus_de(cadeira),
         "roteador": roteador,
         "avisos": avisos,
     }
