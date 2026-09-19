@@ -58,9 +58,9 @@ async def recepcao(request):
 
 async def cadeira(request):
     slug = request.path_params.get("slug") or request.query_params.get("cadeira")
-    chapeu = request.query_params.get("chapeu")
+    doc = request.query_params.get("doc")
     estado = carregar_estado(ESTADO_PATH)
-    return HTMLResponse(render.render_cadeira(estado, slug, chapeu))
+    return HTMLResponse(render.render_cadeira(estado, slug, doc))
 
 
 _CARD_REF_RE = re.compile(r"#(\d+)")

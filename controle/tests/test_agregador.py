@@ -257,7 +257,11 @@ def test_agregador_nao_escreve_nada_alem_do_proprio_estado(tmp_path, monkeypatch
     assert caminhos == ["controle/estado.json"]
 
 
-def test_render_cadeira_parse_monta_sessao():
+def test_render_cadeira_seletor_de_documento_sem_filtro_de_chapeu():
+    """A /cadeira le o pacote cru de monta-sessao e serve o DOCUMENTO escolhido
+    (spec §/cadeira), inteiro. Nao ha filtro de chapeu por parsing de texto — o
+    desenho antigo (dropdown de chapeu + poda das linhas da mesa por [rotulo])
+    saiu: pegava so o 1o chapeu e lixo, e nunca era o que a spec pediu."""
     from harness_controle.render import render_cadeira
     estado = {
         "cadeiras": {
@@ -266,38 +270,34 @@ def test_render_cadeira_parse_monta_sessao():
                     "cadeira": "design",
                     "estado": "ok",
                     "dados": {
+                        "nome_canonico": "design",
                         "pecas": [
-                            {
-                                "peca": "mesa",
-                                "frescor": "fresco",
-                                "sha": "12345",
-                                "conteudo": "#1 [chapeu1] linha 1\n#2 [chapeu2] linha 2\n#3 [chapeu1] linha 3\n#4 linha sem chapeu"
-                            },
-                            {
-                                "peca": "cadernos",
-                                "conteudo": "chapeu1   10B\nchapeu2   20B\n"
-                            }
-                        ]
-                    }
+                            {"peca": "mesa", "frescor": "fresco", "sha": "12345",
+                             "conteudo": "#1 [g1] linha 1\n#2 [g2] linha 2\n#3 linha sem rotulo"},
+                            {"peca": "cadernos-indice", "frescor": "fresco",
+                             "conteudo": "g1   10B\ng2   20B\n"},
+                        ],
+                    },
                 }
             ]
         }
     }
-    
-    # Sem chapeu -> renderiza todas as linhas e os dropdowns com as opcoes
+
+    # seletor de documento presente, com os seis rotulos da spec
     html = render_cadeira(estado, slug="design")
-    assert '<option value="chapeu1">' in html
-    assert '<option value="chapeu2">' in html
-    assert "#1 [chapeu1] linha 1" in html
-    assert "#2 [chapeu2] linha 2" in html
-    assert "#4 linha sem chapeu" in html
-    
-    # Com chapeu filtrado -> mostra apenas a linha daquele chapeu (ignorando as outras)
-    html_chapeu1 = render_cadeira(estado, slug="design", chapeu="chapeu1")
-    assert "#1 [chapeu1] linha 1" in html_chapeu1
-    assert "#3 [chapeu1] linha 3" in html_chapeu1
-    assert "#2 [chapeu2] linha 2" not in html_chapeu1
-    assert "#4 linha sem chapeu" in html_chapeu1
+    assert 'class="docs"' in html
+    for rotulo in ("Persona", "Ofício", "GERAL", "Org", "Mesa", "Cadernos"):
+        assert f">{rotulo}<" in html
+    # NAO ha dropdown de chapeu nem poda de linha por [rotulo]
+    assert '<option value="g1">' not in html
+    assert 'name="chapeu"' not in html
+    assert "onchange" not in html
+
+    # doc=mesa serve a mesa INTEIRA, sem filtrar linha nenhuma
+    html_mesa = render_cadeira(estado, slug="design", doc="mesa")
+    assert "#1 [g1] linha 1" in html_mesa
+    assert "#2 [g2] linha 2" in html_mesa
+    assert "#3 linha sem rotulo" in html_mesa
 
 
 def test_fix_nome_verbo_fila():
