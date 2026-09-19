@@ -376,6 +376,52 @@ dl { margin: 0; }
 }
 .nota li { margin-bottom: var(--platafirma-space-2); }
 
+/* --- rota /cadeira: seletores e painel --- */
+.seletor-cadeira {
+  display: flex; gap: var(--platafirma-space-4); align-items: center;
+  flex-wrap: wrap;
+}
+.seletor-cadeira label {
+  display: flex; gap: var(--platafirma-space-2); align-items: center;
+  font-size: var(--platafirma-text-label); color: var(--platafirma-fg-muted);
+}
+.seletor-cadeira select {
+  font: inherit; font-size: var(--platafirma-text-body);
+  padding: var(--platafirma-space-1) var(--platafirma-space-2);
+  border: var(--platafirma-border-width) solid var(--platafirma-border-strong);
+  border-radius: var(--platafirma-radius-sm);
+  background: var(--platafirma-bg-surface); color: var(--platafirma-fg-default);
+}
+.painel-vivo {
+  display: flex; flex-direction: column; gap: var(--platafirma-space-4);
+}
+.caixa-fria {
+  padding: var(--platafirma-space-3);
+  background: var(--platafirma-bg-sunken);
+  border-radius: var(--platafirma-radius-md);
+  font-size: var(--platafirma-text-meta); color: var(--platafirma-fg-muted);
+}
+.caixa-fria strong { color: var(--platafirma-fg-default); }
+.mesa-vivo {
+  min-height: 50vh;
+  padding: var(--platafirma-space-4);
+  background: var(--platafirma-bg-sunken);
+  border-radius: var(--platafirma-radius-md);
+  font-family: var(--platafirma-font-code);
+  font-size: var(--platafirma-text-meta);
+  white-space: pre-wrap; overflow-wrap: anywhere;
+}
+.mesa-vivo .meta {
+  margin-bottom: var(--platafirma-space-3);
+  padding-bottom: var(--platafirma-space-2);
+  border-bottom: var(--platafirma-border-width) solid var(--platafirma-border-default);
+  color: var(--platafirma-fg-muted);
+}
+.rodape-integridade {
+  margin-top: auto;
+  font-size: var(--platafirma-text-meta);
+}
+
 /* --- estreito: a grade de três colunas empilha --- */
 @media (max-width: 900px) {
   .grade { grid-template-columns: minmax(0, 1fr); }

@@ -93,7 +93,7 @@ def _skills_disponiveis() -> list[str]:
 
 def _env_sonda() -> dict[str, str]:
     """O agregador nao e sessao de cadeira nenhuma: le como "sonda", identidade
-    propria de leitura automatica (LEITOR em fila_streams.py). Sonda mede
+    propria de leitura automatica (LEITOR em fila). Sonda mede
     profundidade de caixa e nada mais — ler e enviar sao negados no proprio
     verbo, e ela nao esta no roster do ledger, entao nem destinataria e."""
     e = dict(os.environ)
@@ -145,7 +145,7 @@ SONDAS: list[Sonda] = [
     Sonda("infra_saude", _intervalo("INFRA", 30), _timeout("INFRA", 15),
           lambda: ["infra", "saude", "--json"]),
     Sonda("fila_status", _intervalo("FILA", 30), _timeout("FILA", 15),
-          lambda: ["fila_streams.py", "status", "--todas", "--json"], _env_sonda),
+          lambda: ["fila", "status", "--todas", "--json"], _env_sonda),
     Sonda("conferir_servico", _intervalo("CONFERIR", 90), _timeout("CONFERIR", 60),
           lambda: ["conferir", "servico", "--json"]),
     Sonda("conferir_verbo", _intervalo("CONFERIR", 90), _timeout("CONFERIR", 30),
@@ -158,6 +158,10 @@ SONDAS_GRUPO: list[SondaGrupo] = [
     SondaGrupo("cadeiras", _intervalo("CADEIRAS", 45), _timeout("CADEIRAS", 15),
                _cadeiras_disponiveis,
                lambda c: ["monta-sessao", c, "--json", "--sem-atualizar"],
+               chave_item="cadeira"),
+    SondaGrupo("mesas", _intervalo("MESAS", 45), _timeout("MESAS", 15),
+               _cadeiras_disponiveis,
+               lambda c: ["mesa", "ver", c, "--json"],
                chave_item="cadeira"),
     SondaGrupo("skills", _intervalo("SKILLS", 120), _timeout("SKILLS", 15),
                _skills_disponiveis,

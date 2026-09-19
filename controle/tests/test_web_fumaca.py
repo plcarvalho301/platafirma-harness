@@ -75,7 +75,7 @@ def test_cadeira_responde(cliente):
     r = cliente.get("/cadeira/TI")
     assert r.status_code == 200
     assert "TI" in r.text
-    assert "Documentos" in r.text
+    assert "Integridade" in r.text
 
 
 def test_cadeira_desconhecida_nao_quebra(cliente):

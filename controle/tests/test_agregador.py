@@ -61,7 +61,7 @@ def test_bloco_de_verbo_morto_vira_indisponivel_com_motivo():
 
 def test_bloco_de_erro_do_verbo_vira_indisponivel():
     """Verbo rodou, devolveu JSON valido, mas o proprio JSON e {"erro": ...}
-    (ex.: fila_streams.py sem credencial na malha msg) — trata igual a falha
+    (ex.: fila sem credencial na malha msg) — trata igual a falha
     de execucao: indisponivel com o motivo que o verbo relatou."""
     r = ResultadoVerbo(ok=True, dados={"erro": "nao alcancei a malha msg"}, motivo=None,
                         exit_code=1, duracao_seg=0.05)
@@ -255,3 +255,40 @@ def test_agregador_nao_escreve_nada_alem_do_proprio_estado(tmp_path, monkeypatch
 
     caminhos = sorted(p.relative_to(tmp_path).as_posix() for p in tmp_path.rglob("*") if p.is_file())
     assert caminhos == ["controle/estado.json"]
+
+
+def test_sonda_mesas_verbo_morto_indisponivel(tmp_path, monkeypatch):
+    ag = Agregador(estado_path=tmp_path / "estado.json", sondas=[], sondas_grupo=[])
+
+    def _chamar_falso(argv, timeout, env):
+        return ResultadoVerbo(False, None, "verbo morto", None, 0.01)
+
+    monkeypatch.setattr("harness_controle.agregador.chamar", _chamar_falso)
+
+    from harness_controle.agregador import SONDAS_GRUPO
+    g_original = next(g for g in SONDAS_GRUPO if g.nome == "mesas")
+    
+    # Mock cadeiras_disponiveis
+    g = SondaGrupo(
+        "mesas", 999, 5.0,
+        lambda: ["TI"],
+        g_original.fabrica_argv,
+        chave_item="cadeira",
+    )
+    
+    ag._ciclo_sonda_grupo(g)
+
+    bloco = ag._estado["mesas"]
+    assert bloco["estado"] == "ok"  # grupo OK
+    assert bloco["itens"][0]["estado"] == "indisponivel"
+    assert bloco["itens"][0]["motivo"] == "verbo morto"
+    assert bloco["itens"][0].get("dados") is None
+
+
+def test_fix_nome_verbo_fila():
+    from harness_controle.agregador import SONDAS
+    sonda_fila = next(s for s in SONDAS if s.nome == "fila_status")
+    argv = sonda_fila.fabrica_argv()
+    assert argv[0] == "fila"
+    assert "status" in argv
+

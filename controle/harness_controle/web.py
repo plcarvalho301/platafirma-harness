@@ -57,9 +57,10 @@ async def recepcao(request):
 
 
 async def cadeira(request):
-    slug = request.path_params["slug"]
+    slug = request.path_params.get("slug") or request.query_params.get("cadeira")
+    chapeu = request.query_params.get("chapeu")
     estado = carregar_estado(ESTADO_PATH)
-    return HTMLResponse(render.render_cadeira(estado, slug))
+    return HTMLResponse(render.render_cadeira(estado, slug, chapeu))
 
 
 _CARD_REF_RE = re.compile(r"#(\d+)")
@@ -186,7 +187,7 @@ async def tela_css(request):
 def _run_fila_enviar(destinatario: str, tipo: str, assunto: str, corpo: str):
     env = dict(os.environ)
     env["PF_CADEIRA"] = PF_CADEIRA_TELA
-    caminho = BIN / "fila_streams.py"
+    caminho = BIN / "fila"
     return subprocess.run(
         [str(caminho), "enviar", destinatario, "--tipo", tipo, "--assunto", assunto],
         input=corpo, capture_output=True, text=True, encoding="utf-8", env=env, timeout=15, check=False,
@@ -254,6 +255,7 @@ def cria_app(pf_ui_dir: Path | None = None) -> Starlette:
     rotas = [
         Route("/", recepcao),
         Route("/cadeira/{slug}", cadeira),
+        Route("/cadeira", cadeira),
         Route("/feito", feito),
         Route("/estatico/tela.css", tela_css),
         Mount(

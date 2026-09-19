@@ -488,77 +488,117 @@ def render_recepcao(estado: dict) -> str:
 # --- /cadeira/<slug> ---------------------------------------------------
 
 
-def render_cadeira(estado: dict, slug: str) -> str:
-    bloco = estado.get("cadeiras", {})
-    itens = {i.get("cadeira"): i for i in (bloco.get("itens") or [])}
-    todas = sorted(itens)
+def render_cadeira(estado: dict, slug: str | None = None, chapeu: str | None = None) -> str:
+    bloco_cadeiras = estado.get("cadeiras", {})
+    itens_cadeiras = {i.get("cadeira"): i for i in (bloco_cadeiras.get("itens") or [])}
+    todas = sorted(itens_cadeiras)
+    if not slug and todas:
+        slug = todas[0]
 
-    esquerda = "<ul class='cadeiras'>" + "".join(
-        f'<li><a href="/cadeira/{_esc(c)}"{" aria-current=\"page\"" if c == slug else ""}>'
-        f'{_esc(c)}</a> '
-        + chip(
-            "indisponível" if itens[c].get("estado") != "ok" else "ok",
-            "caveat" if itens[c].get("estado") != "ok" else "calmo",
-        )
-        + "</li>"
-        for c in todas
-    ) + "</ul>"
+    # --- Topo: Dropdowns ---
+    bloco_mesas = estado.get("mesas", {})
+    itens_mesas = {i.get("cadeira"): i for i in (bloco_mesas.get("itens") or [])}
+    item_mesa = itens_mesas.get(slug)
+    
+    chapeus_conhecidos = set()
+    mesa_dados = {}
+    if item_mesa and item_mesa.get("estado") == "ok":
+        mesa_dados = item_mesa.get("dados") or {}
+        if isinstance(mesa_dados, dict):
+            chapeus_conhecidos.update(mesa_dados.get("chapeus") or [])
+            if "itens" in mesa_dados:
+                for it in mesa_dados["itens"]:
+                    if isinstance(it, dict) and it.get("chapeu"):
+                        chapeus_conhecidos.add(it["chapeu"])
+        elif isinstance(mesa_dados, list):
+            for it in mesa_dados:
+                if isinstance(it, dict) and it.get("chapeu"):
+                    chapeus_conhecidos.add(it["chapeu"])
 
-    item = itens.get(slug)
-    if item is None:
-        centro = f'<p class="indisponivel">Cadeira {_esc(slug)} não encontrada nesta leitura.</p>'
-        direita = ""
-    elif item.get("estado") != "ok":
-        centro = f'<p class="indisponivel">Sem leitura. {_esc(item.get("motivo"))}.</p>'
-        direita = ""
+    if chapeu and chapeu not in chapeus_conhecidos:
+        chapeus_conhecidos.add(chapeu)
+        
+    lista_chapeus = sorted(chapeus_conhecidos)
+    
+    opts_cadeira = "".join(f'<option value="{_esc(c)}"{" selected" if c == slug else ""}>{_esc(c)}</option>' for c in todas)
+    opts_chapeu = '<option value="">(Todos)</option>' + "".join(f'<option value="{_esc(c)}"{" selected" if c == chapeu else ""}>{_esc(c)}</option>' for c in lista_chapeus)
+    
+    topo = (
+        '<div class="cartao cab">'
+        '<form method="get" action="/cadeira" class="seletor-cadeira">'
+        '<label>Cadeira <select name="cadeira" onchange="this.form.submit()">' + opts_cadeira + '</select></label>'
+        '<label>Chapéu <select name="chapeu" onchange="this.form.submit()">' + opts_chapeu + '</select></label>'
+        '<noscript><button type="submit" class="acao">Ir</button></noscript>'
+        '</form></div>'
+    )
+
+    # --- Centro: Estado Vivo (Mesa + Caixa) ---
+    centro_html = ""
+    if not slug:
+        centro_html = '<p class="indisponivel">Nenhuma cadeira selecionada.</p>'
     else:
-        d = item.get("dados") or {}
+        if not item_mesa:
+            mesa_html = '<p class="indisponivel">Sonda de mesa não encontrou esta cadeira.</p>'
+        elif item_mesa.get("estado") != "ok":
+            mesa_html = f'<p class="indisponivel">Mesa indisponível: {_esc(item_mesa.get("motivo"))}</p>'
+        else:
+            if isinstance(mesa_dados, dict):
+                corpo = mesa_dados.get("corpo")
+                if corpo is None:
+                    corpo = json.dumps(mesa_dados, indent=2, ensure_ascii=False)
+                sha = mesa_dados.get("sha", "—")
+                idade_mesa = idade_fmt(mesa_dados.get("idade_seg"))
+            else:
+                corpo = json.dumps(mesa_dados, indent=2, ensure_ascii=False)
+                sha = "—"
+                idade_mesa = "—"
+                
+            mesa_html = (
+                f'<div class="mesa-vivo">'
+                f'<div class="meta">sha: {_esc(sha)} | idade: {idade_mesa}</div>'
+                f'{_esc(corpo)}</div>'
+            )
+
+        bloco_fila = estado.get("fila_status", {})
+        if bloco_fila.get("estado") != "ok":
+            caixa_html = f'<p class="indisponivel">Caixa indisponível: {_esc(bloco_fila.get("motivo"))}</p>'
+        else:
+            dados_fila = bloco_fila.get("dados") or []
+            item_fila = next((i for i in dados_fila if i.get("persona") == slug), None)
+            if not item_fila:
+                caixa_html = '<p class="indisponivel">Caixa vazia ou não encontrada.</p>'
+            else:
+                pendentes = item_fila.get("pendentes", 0)
+                idade_msg = idade_fmt(item_fila.get("idade_mais_antiga_seg"))
+                ult_leitura = idade_fmt(item_fila.get("ultima_leitura_seg"))
+                caixa_html = (
+                    f'<div class="caixa-fria">'
+                    f'<strong>Caixa:</strong> {pendentes} pendentes | '
+                    f'Mais antiga: {idade_msg} | '
+                    f'Última leitura: {ult_leitura}'
+                    f'</div>'
+                )
+
+        centro_html = f'<div class="cartao painel-vivo"><h2>Estado Vivo</h2>{caixa_html}{mesa_html}</div>'
+
+    # --- Rodapé: Integridade ---
+    item_cad = itens_cadeiras.get(slug)
+    rodape_html = ""
+    if item_cad and item_cad.get("estado") == "ok":
+        d = item_cad.get("dados") or {}
         persona = d.get("persona") or {}
         manifesto = d.get("manifesto") or {}
-        org = d.get("org") or {}
-        mesa = d.get("mesa") or {}
-        cadernos = d.get("cadernos") or {}
-        fila = d.get("fila") or {}
-
-        # Corpo dos documentos (persona/manifesto/GERAL/org) fica sob demanda
-        # numa iteração futura — v1 mostra o que o retrato periódico já dá:
-        # caminho e presença de cada um, carimbados, sem fingir seletor
-        # interativo que não existiria sem JavaScript.
-        docs_linhas = "".join(
-            f"<tr><td>{rotulo}</td><td class='mono'>{_esc(caminho) if caminho else '—'}</td>"
-            f"<td>{chip('presente' if presente else 'AUSENTE', 'calmo' if presente else 'alert')}</td></tr>"
-            for rotulo, caminho, presente in (
-                ("Persona", persona.get("caminho"), persona.get("presente")),
-                ("Manifesto da cadeira", manifesto.get("caminho"), manifesto.get("presente")),
-                ("Org canônico", org.get("caminho"), org.get("presente")),
-            )
-        )
-        centro = (
-            f'<div class="cartao cab"><h1>{_esc(slug)}</h1>'
-            f'<p class="proc">fonte {_esc(persona.get("caminho"))} · '
-            f'{"atualizado nesta leitura" if d.get("atualizado") else "leitura sem git pull"}</p>'
-            "</div>"
-            '<div class="cartao"><h2>Documentos</h2>'
-            f"<table><tbody>{docs_linhas}</tbody></table>"
-            "</div>"
-        )
-        direita = (
-            '<div class="cartao"><h2>Agora</h2><dl>'
-            f'<div class="par"><dt>Mesa</dt><dd>{"em dia" if mesa.get("disponivel") else "sem leitura"}'
-            f' · {_esc(mesa.get("resumo") or "—")}</dd></div>'
-            f'<div class="par"><dt>Cadernos</dt><dd>{"em dia" if cadernos.get("disponivel") else "sem leitura"}'
-            f' · {_esc(cadernos.get("resumo") or "—")}</dd></div>'
-            f'<div class="par"><dt>Caixa</dt><dd>{"em dia" if fila.get("disponivel") else "sem leitura"}'
-            f' · {_esc(fila.get("resumo") or "—")}</dd></div>'
-            "</dl></div>"
-            '<div class="cartao"><h2>Integridade</h2><dl>'
-            f'<div class="par"><dt>Persona</dt><dd>{chip("no head" if persona.get("presente") else "AUSENTE", "calmo" if persona.get("presente") else "alert")}</dd></div>'
-            f'<div class="par"><dt>Manifesto</dt><dd>{chip("no head" if manifesto.get("presente") else "AUSENTE", "calmo" if manifesto.get("presente") else "alert")}</dd></div>'
-            f'<div class="par"><dt>Org canônico</dt><dd>{chip("no head" if org.get("presente") else "AUSENTE", "calmo" if org.get("presente") else "alert")}</dd></div>'
-            "</dl></div>"
+        skill_info = d.get("skill") or {} # maybe present
+        
+        rodape_html = (
+            '<div class="cartao rodape-integridade">'
+            '<strong>Integridade:</strong> '
+            f'Persona {chip("OK" if persona.get("presente") else "AUSENTE", "calmo" if persona.get("presente") else "alert")} | '
+            f'Manifesto {chip("OK" if manifesto.get("presente") else "AUSENTE", "calmo" if manifesto.get("presente") else "alert")}'
+            '</div>'
         )
 
-    corpo = f'<div class="grade"><aside>{esquerda}</aside><main>{centro}</main><aside>{direita}</aside></div>'
+    corpo = f'<div class="folha" style="display: flex; flex-direction: column; min-height: 100vh;">{topo}{centro_html}{rodape_html}</div>'
     return pagina(f"cadeira: {slug}", "cadeira", '<span class="revalida num">revalida em até 60 s</span>', corpo)
 
 

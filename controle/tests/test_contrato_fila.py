@@ -1,4 +1,4 @@
-# Contrato de `fila status --json` (bin/fila_streams.py) — card #390, LOTE 1.
+# Contrato de `fila status --json` (bin/fila) — card #390, LOTE 1.
 #
 # Sem Redis rodando nesta maquina: a conexao e um fake in-memory (FakeRC) que
 # devolve respostas canonicas de XLEN/XINFO GROUPS/XRANGE/XINFO CONSUMERS,
