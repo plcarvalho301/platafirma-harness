@@ -495,33 +495,99 @@ def render_cadeira(estado: dict, slug: str | None = None, chapeu: str | None = N
     if not slug and todas:
         slug = todas[0]
 
-    # --- Topo: Dropdowns ---
-    bloco_mesas = estado.get("mesas", {})
-    itens_mesas = {i.get("cadeira"): i for i in (bloco_mesas.get("itens") or [])}
-    item_mesa = itens_mesas.get(slug)
+    # Parse da sonda `cadeiras`
+    item_cad = itens_cadeiras.get(slug)
     
-    chapeus_conhecidos = set()
-    mesa_dados = {}
-    if item_mesa and item_mesa.get("estado") == "ok":
-        mesa_dados = item_mesa.get("dados") or {}
-        if isinstance(mesa_dados, dict):
-            chapeus_conhecidos.update(mesa_dados.get("chapeus") or [])
-            if "itens" in mesa_dados:
-                for it in mesa_dados["itens"]:
-                    if isinstance(it, dict) and it.get("chapeu"):
-                        chapeus_conhecidos.add(it["chapeu"])
-        elif isinstance(mesa_dados, list):
-            for it in mesa_dados:
-                if isinstance(it, dict) and it.get("chapeu"):
-                    chapeus_conhecidos.add(it["chapeu"])
-
-    if chapeu and chapeu not in chapeus_conhecidos:
-        chapeus_conhecidos.add(chapeu)
+    chapeus_conhecidos = []
+    mesa_html = ""
+    rodape_html = ""
+    
+    if item_cad and item_cad.get("estado") == "ok":
+        d = item_cad.get("dados") or {}
+        pecas = d.get("pecas") or []
+        if isinstance(d, dict) and not pecas and "peca" in d:
+            # Caso o JSON raiz seja uma lista e d seja o próprio dict (fallback de estrutura)
+            pecas = [d] if "peca" in d else []
+        elif not pecas:
+            # Em monta-sessao --json a raiz é uma lista de pecas
+            if isinstance(d, list):
+                pecas = d
         
-    lista_chapeus = sorted(chapeus_conhecidos)
-    
+        peca_mesa = next((p for p in pecas if p.get("peca") == "mesa"), None)
+        peca_cadernos = next((p for p in pecas if p.get("peca") == "cadernos" or p.get("peca") == "cadernos-indice"), None)
+        
+        if peca_cadernos and peca_cadernos.get("conteudo"):
+            # O conteúdo é texto com os chapéus, ex: "devops      0 B..."
+            # Pegar a primeira palavra de cada linha que não começa com espaço
+            linhas = peca_cadernos.get("conteudo").strip().split('\n')
+            for linha in linhas:
+                if linha and not linha.startswith(' ') and not linha.startswith('\t'):
+                    chapeus_conhecidos.append(linha.split()[0])
+        
+        if chapeu and chapeu not in chapeus_conhecidos:
+            chapeus_conhecidos.append(chapeu)
+            chapeus_conhecidos.sort()
+            
+        if not peca_mesa:
+            mesa_html = '<p class="indisponivel">Mesa indisponível: sonda falhou ou peça não encontrada.</p>'
+        elif not peca_mesa.get("conteudo") or not peca_mesa.get("conteudo").strip():
+            mesa_html = (
+                f'<div class="mesa-vivo">'
+                f'<div class="meta">sha: {_esc(peca_mesa.get("sha", "—"))} | idade: {_esc(peca_mesa.get("frescor", "—"))}</div>'
+                f'Mesa vazia.</div>'
+            )
+        else:
+            linhas_mesa = peca_mesa.get("conteudo").split('\n')
+            if chapeu:
+                # Filtrar as linhas que têm [chapeu] no início
+                linhas_filtradas = []
+                # Como é texto livre com rótulos, podemos ter múltiplas linhas de prosa por item.
+                # Se não usarmos um parser complexo, podemos apenas incluir a linha se ela tiver o rótulo.
+                # Mas e as linhas que continuam sem rótulo? A story diz:
+                # "selecionar um chapéu filtra as linhas do corpo da mesa cujo rótulo [chapeu] casa com o selecionado"
+                mantem = False
+                for linha in linhas_mesa:
+                    # Rótulo costuma vir como "#1 [chapeu] ..."
+                    if '[' in linha and ']' in linha:
+                        # Pega o primeiro rótulo entre colchetes
+                        idx1 = linha.find('[')
+                        idx2 = linha.find(']', idx1)
+                        if idx1 != -1 and idx2 != -1:
+                            rotulo = linha[idx1:idx2+1]
+                            mantem = (rotulo == f'[{chapeu}]')
+                    
+                    if mantem:
+                        linhas_filtradas.append(linha)
+                        
+                conteudo_exibicao = '\n'.join(linhas_filtradas) if linhas_filtradas else f"Nenhum item para o chapéu [{chapeu}]."
+            else:
+                conteudo_exibicao = '\n'.join(linhas_mesa)
+                
+            mesa_html = (
+                f'<div class="mesa-vivo">'
+                f'<div class="meta">sha: {_esc(peca_mesa.get("sha", "—"))} | idade: {_esc(peca_mesa.get("frescor", "—"))}</div>'
+                f'{_esc(conteudo_exibicao)}</div>'
+            )
+            
+        # Integridade
+        persona = next((p for p in pecas if p.get("peca") == "persona"), {})
+        manifesto = next((p for p in pecas if p.get("peca") == "manifesto"), {})
+        
+        # fallback para d.get("persona") caso seja estrutura legada
+        if not persona and "persona" in d: persona = d.get("persona") or {}
+        if not manifesto and "manifesto" in d: manifesto = d.get("manifesto") or {}
+        
+        rodape_html = (
+            '<div class="cartao rodape-integridade">'
+            '<strong>Integridade:</strong> '
+            f'Persona {chip("OK" if persona.get("presente") else "AUSENTE", "calmo" if persona.get("presente") else "alert")} | '
+            f'Manifesto {chip("OK" if manifesto.get("presente") else "AUSENTE", "calmo" if manifesto.get("presente") else "alert")}'
+            '</div>'
+        )
+
+    # --- Topo: Dropdowns ---
     opts_cadeira = "".join(f'<option value="{_esc(c)}"{" selected" if c == slug else ""}>{_esc(c)}</option>' for c in todas)
-    opts_chapeu = '<option value="">(Todos)</option>' + "".join(f'<option value="{_esc(c)}"{" selected" if c == chapeu else ""}>{_esc(c)}</option>' for c in lista_chapeus)
+    opts_chapeu = '<option value="">(Todos)</option>' + "".join(f'<option value="{_esc(c)}"{" selected" if c == chapeu else ""}>{_esc(c)}</option>' for c in chapeus_conhecidos)
     
     topo = (
         '<div class="cartao cab">'
@@ -536,29 +602,11 @@ def render_cadeira(estado: dict, slug: str | None = None, chapeu: str | None = N
     centro_html = ""
     if not slug:
         centro_html = '<p class="indisponivel">Nenhuma cadeira selecionada.</p>'
+    elif not item_cad:
+        centro_html = f'<p class="indisponivel">Sonda não encontrou a cadeira {_esc(slug)}.</p>'
+    elif item_cad.get("estado") != "ok":
+        centro_html = f'<p class="indisponivel">Sonda indisponível: {_esc(item_cad.get("motivo"))}</p>'
     else:
-        if not item_mesa:
-            mesa_html = '<p class="indisponivel">Sonda de mesa não encontrou esta cadeira.</p>'
-        elif item_mesa.get("estado") != "ok":
-            mesa_html = f'<p class="indisponivel">Mesa indisponível: {_esc(item_mesa.get("motivo"))}</p>'
-        else:
-            if isinstance(mesa_dados, dict):
-                corpo = mesa_dados.get("corpo")
-                if corpo is None:
-                    corpo = json.dumps(mesa_dados, indent=2, ensure_ascii=False)
-                sha = mesa_dados.get("sha", "—")
-                idade_mesa = idade_fmt(mesa_dados.get("idade_seg"))
-            else:
-                corpo = json.dumps(mesa_dados, indent=2, ensure_ascii=False)
-                sha = "—"
-                idade_mesa = "—"
-                
-            mesa_html = (
-                f'<div class="mesa-vivo">'
-                f'<div class="meta">sha: {_esc(sha)} | idade: {idade_mesa}</div>'
-                f'{_esc(corpo)}</div>'
-            )
-
         bloco_fila = estado.get("fila_status", {})
         if bloco_fila.get("estado") != "ok":
             caixa_html = f'<p class="indisponivel">Caixa indisponível: {_esc(bloco_fila.get("motivo"))}</p>'
@@ -580,23 +628,6 @@ def render_cadeira(estado: dict, slug: str | None = None, chapeu: str | None = N
                 )
 
         centro_html = f'<div class="cartao painel-vivo"><h2>Estado Vivo</h2>{caixa_html}{mesa_html}</div>'
-
-    # --- Rodapé: Integridade ---
-    item_cad = itens_cadeiras.get(slug)
-    rodape_html = ""
-    if item_cad and item_cad.get("estado") == "ok":
-        d = item_cad.get("dados") or {}
-        persona = d.get("persona") or {}
-        manifesto = d.get("manifesto") or {}
-        skill_info = d.get("skill") or {} # maybe present
-        
-        rodape_html = (
-            '<div class="cartao rodape-integridade">'
-            '<strong>Integridade:</strong> '
-            f'Persona {chip("OK" if persona.get("presente") else "AUSENTE", "calmo" if persona.get("presente") else "alert")} | '
-            f'Manifesto {chip("OK" if manifesto.get("presente") else "AUSENTE", "calmo" if manifesto.get("presente") else "alert")}'
-            '</div>'
-        )
 
     corpo = f'<div class="folha" style="display: flex; flex-direction: column; min-height: 100vh;">{topo}{centro_html}{rodape_html}</div>'
     return pagina(f"cadeira: {slug}", "cadeira", '<span class="revalida num">revalida em até 60 s</span>', corpo)

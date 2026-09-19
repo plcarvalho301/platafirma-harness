@@ -257,32 +257,47 @@ def test_agregador_nao_escreve_nada_alem_do_proprio_estado(tmp_path, monkeypatch
     assert caminhos == ["controle/estado.json"]
 
 
-def test_sonda_mesas_verbo_morto_indisponivel(tmp_path, monkeypatch):
-    ag = Agregador(estado_path=tmp_path / "estado.json", sondas=[], sondas_grupo=[])
-
-    def _chamar_falso(argv, timeout, env):
-        return ResultadoVerbo(False, None, "verbo morto", None, 0.01)
-
-    monkeypatch.setattr("harness_controle.agregador.chamar", _chamar_falso)
-
-    from harness_controle.agregador import SONDAS_GRUPO
-    g_original = next(g for g in SONDAS_GRUPO if g.nome == "mesas")
+def test_render_cadeira_parse_monta_sessao():
+    from harness_controle.render import render_cadeira
+    estado = {
+        "cadeiras": {
+            "itens": [
+                {
+                    "cadeira": "design",
+                    "estado": "ok",
+                    "dados": {
+                        "pecas": [
+                            {
+                                "peca": "mesa",
+                                "frescor": "fresco",
+                                "sha": "12345",
+                                "conteudo": "#1 [chapeu1] linha 1\n#2 [chapeu2] linha 2\n#3 [chapeu1] linha 3\n#4 linha sem chapeu"
+                            },
+                            {
+                                "peca": "cadernos",
+                                "conteudo": "chapeu1   10B\nchapeu2   20B\n"
+                            }
+                        ]
+                    }
+                }
+            ]
+        }
+    }
     
-    # Mock cadeiras_disponiveis
-    g = SondaGrupo(
-        "mesas", 999, 5.0,
-        lambda: ["TI"],
-        g_original.fabrica_argv,
-        chave_item="cadeira",
-    )
+    # Sem chapeu -> renderiza todas as linhas e os dropdowns com as opcoes
+    html = render_cadeira(estado, slug="design")
+    assert '<option value="chapeu1">' in html
+    assert '<option value="chapeu2">' in html
+    assert "#1 [chapeu1] linha 1" in html
+    assert "#2 [chapeu2] linha 2" in html
+    assert "#4 linha sem chapeu" in html
     
-    ag._ciclo_sonda_grupo(g)
-
-    bloco = ag._estado["mesas"]
-    assert bloco["estado"] == "ok"  # grupo OK
-    assert bloco["itens"][0]["estado"] == "indisponivel"
-    assert bloco["itens"][0]["motivo"] == "verbo morto"
-    assert bloco["itens"][0].get("dados") is None
+    # Com chapeu filtrado -> mostra apenas a linha daquele chapeu (ignorando as outras)
+    html_chapeu1 = render_cadeira(estado, slug="design", chapeu="chapeu1")
+    assert "#1 [chapeu1] linha 1" in html_chapeu1
+    assert "#3 [chapeu1] linha 3" in html_chapeu1
+    assert "#2 [chapeu2] linha 2" not in html_chapeu1
+    assert "#4 linha sem chapeu" in html_chapeu1
 
 
 def test_fix_nome_verbo_fila():
