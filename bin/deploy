@@ -6,7 +6,7 @@
 # atos: ato=<stack> e args=up / down / ps / logs / config / pull / build / promover / rotas / acessos / segredos / reverter; sem ato lista as stacks
 # forma: log
 # cauda: sim
-# ambiente: PF_RELEASE_RAIZ[=/opt/platafirma] · PLATAFIRMA_RELEASE[=$PF_RELEASE_RAIZ/current] · PLATAFIRMA_INSTANCIA[=/srv/platafirma/casa] · DEPLOY_PONTOS[=$PLATAFIRMA_INSTANCIA/var/deploy] · DEPLOY_ENV_DIR[=$XDG_RUNTIME_DIR/platafirma, /run/user/<uid>/platafirma] · DEPLOY_TOPO_ARQUIVO (diagnostico) · PF_SIM · DOCKER_HOST
+# ambiente: PF_RELEASE_RAIZ[=/opt/platafirma] · PLATAFIRMA_RELEASE[=$PF_RELEASE_RAIZ/current] · PLATAFIRMA_INSTANCIA[=/srv/platafirma/casa] · DEPLOY_PONTOS[=$PLATAFIRMA_INSTANCIA/var/deploy] · DEPLOY_ENV_DIR[=$XDG_RUNTIME_DIR/platafirma, /run/user/<uid>/platafirma] · DEPLOY_TOPO_ARQUIVO (diagnostico) · DOCKER_HOST
 #
 # Existe porque `infra compose` tinha o `-f` fixo no core e ignorava o cwd: chamado
 # de outro repo, promovia o control-plane inteiro. Aqui a stack e argumento
@@ -339,13 +339,6 @@ if [ $# -eq 0 ]; then
 fi
 
 ACAO="$1"
-# Acao que derruba ou recria stack critica pede confirmacao explicita: foi assim que o
-# control-plane caiu em 09/08. `PF_SIM=1` e a forma nao-interativa de confirmar.
-if [ "$(campo "$STACK" critico)" = "true" ] && [ "$ACAO" = "down" ] && [ "${PF_SIM:-}" != "1" ]; then
-  echo "recusa: \"$STACK\" e critica e \"down\" derruba a borda junto." >&2
-  echo "        confirme com: PF_SIM=1 deploy $STACK down" >&2
-  exit 1
-fi
 
 # Ler o declarado nao muda nada e nao pede confirmacao. Os tres sub-atos abaixo
 # existem porque o procedimento derivado da wiki nao pode publicar estes dados como
@@ -491,7 +484,7 @@ if [ "$ACAO" = "reverter" ]; then
     printf '  %s\n' "$(rev "$STACK" nota)"
     echo
     if [ "$VIA" = "promover" ]; then
-      echo "executar: PF_SIM=1 deploy $STACK reverter --executar [rev]"
+      echo "executar: deploy $STACK reverter --executar [rev]"
       echo "          sem rev, volta ao ponto gravado acima; a rev tem de estar materializada na release."
       echo "          o codigo dos verbos volta por outro ato: release reverter $REPO"
     else
@@ -509,13 +502,7 @@ if [ "$ACAO" = "reverter" ]; then
   ALVO="${1:-$ANTERIOR}"
   [ -n "$ALVO" ] || {
     echo "recusa: sem rev e sem ponto de volta gravado — nao invento para onde voltar." >&2
-    echo "        passe o commit: PF_SIM=1 deploy $STACK reverter --executar <rev>" >&2
-    exit 1; }
-  # Confirmacao SEMPRE, critica ou nao: reverter e o ato que se faz com o servico
-  # quebrado e a pressa alta, e e ai que o alvo errado passa despercebido.
-  [ "${PF_SIM:-}" = "1" ] || {
-    echo "recusa: reverter recria os conteineres de \"$STACK\" em $ALVO." >&2
-    echo "        confirme com: PF_SIM=1 deploy $STACK reverter --executar $ALVO" >&2
+    echo "        passe o commit: deploy $STACK reverter --executar <rev>" >&2
     exit 1; }
   SHA="$(resolver_rev "$ALVO")" && ARV="$(arvore_de "$SHA")" || {
     echo "recusa: $ALVO nao esta materializado na release de $REPO ($PF_RELEASE_RAIZ/$REPO/<sha>)." >&2
@@ -538,11 +525,6 @@ fi
 # Por isso recria (--force-recreate) sempre.
 if [ "$ACAO" = "promover" ]; then
   shift
-  if [ "$(campo "$STACK" critico)" = "true" ] && [ "${PF_SIM:-}" != "1" ]; then
-    echo "recusa: \"$STACK\" e critica e promover recria os conteineres." >&2
-    echo "        confirme com: PF_SIM=1 deploy $STACK promover" >&2
-    exit 1
-  fi
   REV=""
   if [ $# -gt 0 ] && [[ "$1" != -* ]]; then REV="$1"; shift; fi
   if [ -z "$REV" ]; then

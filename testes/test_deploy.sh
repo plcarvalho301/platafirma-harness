@@ -128,11 +128,9 @@ grep -q "^projeto : platafirma-core" <<<"$out" || falha "projeto: $out"
 grep -q "conteineres em 2222222, current de platafirma-core em 1111111" <<<"$out" || falha "servido: $out"
 echo "OK"
 
-echo "--- 7: reverter --executar sem PF_SIM recusa; com PF_SIM volta ao ponto gravado"
-set +e; out="$("$VERBO" core reverter --executar 2>&1)"; rc=$?; set -e
-[ "$rc" -eq 1 ] && grep -q "PF_SIM=1" <<<"$out" || falha "reverter sem confirmacao: rc=$rc $out"
+echo "--- 7: reverter --executar volta ao ponto gravado (sem gate de confirmacao)"
 : > "$DOCKER_LOG"
-out="$(PF_SIM=1 "$VERBO" core reverter --executar 2>&1)" || falha "reverter: $out"
+out="$("$VERBO" core reverter --executar 2>&1)" || falha "reverter: $out"
 grep -qF -- "-f $BASE1 " "$DOCKER_LOG" || falha "reverter devia subir da arvore do sha1: $(cat "$DOCKER_LOG")"
 [ "$(cat "$INSTANCIA/var/deploy/core.revertido-de")" = "$SHA2" ] || falha "revertido-de devia ser sha2"
 [ "$(cat "$INSTANCIA/var/deploy/core.atual")" = "$SHA1" ] || falha "atual devia voltar a sha1"
