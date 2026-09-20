@@ -9,9 +9,11 @@ HOOK = Path(__file__).resolve().parent / "porta-sessao.py"
 SID = "0a1b2c3d-1111-4222-8333-444455556666"
 
 
-def _roda(ev: dict, tmp: Path) -> str:
-    env = {**os.environ, "XDG_RUNTIME_DIR": str(tmp / "run"),
-           "PF_ABERTURA_DIR": str(tmp / "morada")}
+def _roda(ev: dict, tmp: Path, projeto: Path | None = None) -> str:
+    env = {k: v for k, v in os.environ.items() if k != "CLAUDE_PROJECT_DIR"}
+    env.update(XDG_RUNTIME_DIR=str(tmp / "run"), PF_ABERTURA_DIR=str(tmp / "morada"))
+    if projeto:
+        env["CLAUDE_PROJECT_DIR"] = str(projeto)
     r = subprocess.run([sys.executable, str(HOOK)], input=json.dumps(ev), text=True,
                        capture_output=True, env=env, timeout=20)
     assert r.returncode == 0, r.stderr
@@ -25,13 +27,23 @@ def _publica(tmp: Path, cadeira: str, texto: str) -> None:
     (raiz / "dono.md").write_text("# conduta — o dono", encoding="utf-8")
 
 
+def _posto(tmp: Path) -> Path:
+    """O posto numa maquina que nao e o host: so a copia da conduta em `abertura/`."""
+    raiz = tmp / "posto"
+    (raiz / "abertura").mkdir(parents=True)
+    (raiz / "abertura" / "dono.md").write_text("# conduta — o dono", encoding="utf-8")
+    return raiz
+
+
 def _abre(tmp: Path, resposta) -> None:
     _roda({"hook_event_name": "PostToolUse", "session_id": "fita-1",
            "tool_name": "mcp__claudinho-mcp__monta_sessao", "tool_response": resposta}, tmp)
 
 
-def _retoma(tmp: Path, origem: str = "compact", fita: str = "fita-1") -> str:
-    return _roda({"hook_event_name": "SessionStart", "session_id": fita, "source": origem}, tmp)
+def _retoma(tmp: Path, origem: str = "compact", fita: str = "fita-1",
+            projeto: Path | None = None) -> str:
+    return _roda({"hook_event_name": "SessionStart", "session_id": fita, "source": origem},
+                 tmp, projeto)
 
 
 def _ctx(saida: str) -> str:
@@ -45,17 +57,25 @@ def test_no_host_compact_devolve_persona_publicada_e_sessao(tmp_path):
     _abre(tmp_path, {"sessao": {"sessao_id": SID, "cadeira": "ia"}})
     ctx = _ctx(_retoma(tmp_path))
     assert "Elias Elefante" in ctx and SID in ctx and "cadeira `ia`" in ctx
-    assert "CLAUDE.md da conta" in ctx
+    assert "CLAUDE.md (import)" in ctx and "ANTES de qualquer outra coisa" not in ctx
 
 
-def test_fora_do_host_manda_reabrir_com_o_mesmo_sessao_id(tmp_path):
-    """No posto (megafone, pc do trabalho) nao ha morada publicada nem import de conduta:
-    o que devolve persona E conduta e o monta_sessao com o mesmo id."""
+def test_no_posto_conduta_fica_e_persona_volta_por_monta_sessao(tmp_path):
+    """Maquina que nao e o host, Code aberto da pasta do posto: a conduta esta no CLAUDE.md
+    do projeto; a persona nao tem copia local e volta pelo mesmo sessao_id."""
+    _abre(tmp_path, {"sessao": {"sessao_id": SID, "cadeira": "ia"}})
+    ctx = _ctx(_retoma(tmp_path, projeto=_posto(tmp_path)))
+    assert "CLAUDE.md (import)" in ctx
+    assert f'monta_sessao(cadeira="ia", sessao_id="{SID}")' in ctx
+    assert "sem persona." in ctx and "sem a conduta" not in ctx
+
+
+def test_sem_host_e_sem_posto_manda_reabrir_por_tudo(tmp_path):
     _abre(tmp_path, {"sessao": {"sessao_id": SID, "cadeira": "ia"}})
     ctx = _ctx(_retoma(tmp_path))
-    assert f'monta_sessao(cadeira="ia", sessao_id="{SID}")' in ctx
     assert "ANTES de qualquer outra coisa" in ctx
-    assert "CLAUDE.md da conta" not in ctx, "fora do host o import nao resolve: nao prometer"
+    assert "sem persona e sem a conduta do dono" in ctx
+    assert "(import)" not in ctx, "sem import resolvido, nao prometer conduta"
 
 
 def test_retorno_como_string_escapada_tambem_grava_cadeira(tmp_path):
