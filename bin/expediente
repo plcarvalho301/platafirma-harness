@@ -355,19 +355,33 @@ def registra_pacote(cadeira: str, envelopes: list[dict], montador_sha: str,
 
 
 # ------------------------------------------------------------------ validações
-def valida_cadeira() -> tuple[str | None, str | None]:
-    """Etapa 2: PF_CADEIRA presente e slug puro."""
-    cad = os.environ.get("PF_CADEIRA")
-    if not cad or not cad.strip():
+def valida_cadeira(cadeira_arg: str | None = None) -> tuple[str | None, str | None]:
+    """Etapa 2: PF_CADEIRA presente e slug puro (ou recebido via argumento)."""
+    cad = (cadeira_arg or os.environ.get("PF_CADEIRA") or "").strip()
+    if not cad:
         return None, "sem cadeira: a porta não injetou"
-    cad = cad.strip()
     cad_lower = cad.lower()
     for pref in ("claudinho-", "claudinha-"):
         if cad_lower.startswith(pref):
-            return None, "sem cadeira: a porta não injetou (cadeira não é slug puro)"
+            if cadeira_arg:
+                cad = cad[len(pref):]
+                cad_lower = cad.lower()
+            else:
+                return None, "sem cadeira: a porta não injetou (cadeira não é slug puro)"
     if not re.match(r"^[a-z0-9-]+$", cad):
         return None, "sem cadeira: a porta não injetou (cadeira não é slug puro)"
     return cad, None
+
+
+def chapeus_de(cadeira: str) -> list[str]:
+    """Descobre os chapéus da cadeira na morada publicada ou árvore de abertura."""
+    morada = os.environ.get("PF_ABERTURA_DIR", str(instancia() / "var" / "abertura-publicada"))
+    base = Path(morada) / "current" / "abertura" / cadeira
+    if not base.is_dir():
+        base = _REPO_REAL / "abertura" / cadeira
+    if not base.is_dir():
+        return []
+    return sorted(p.name for p in base.iterdir() if p.is_dir() and (p / "chapeu.md").is_file())
 
 
 def valida_chapeu(cadeira: str, slug: str) -> tuple[bool, str]:
@@ -426,9 +440,9 @@ def ato_rotear(como_json: bool = False) -> int:
 
 
 # ------------------------------------------------------------------ ato: montar
-def ato_montar(chapeu_forcado: str | None = None, sem_acervo: bool = False,
-               como_json: bool = False) -> int:
-    cadeira, erro_cad = valida_cadeira()
+def ato_montar(cadeira_arg: str | None = None, chapeu_forcado: str | None = None,
+               sem_acervo: bool = False, como_json: bool = False) -> int:
+    cadeira, erro_cad = valida_cadeira(cadeira_arg)
     if not cadeira:
         if como_json:
             print(json.dumps({"erro": erro_cad}, ensure_ascii=False))
@@ -589,9 +603,11 @@ def ato_montar(chapeu_forcado: str | None = None, sem_acervo: bool = False,
 
     resultado = {
         "cadeira": cadeira,
+        "nome_canonico": cadeira,
         "sessao_id": sessao_id,
         "ordem_id": ordem_id,
         "chapeu": chapeu_slug,
+        "chapeus": chapeus_de(cadeira),
         "roteador": roteador_info,
         "pacote": pacote_info,
         "pecas": servidas,
@@ -653,6 +669,7 @@ def main() -> int:
     atos = parser.atos()
 
     p_montar = atos.novo("montar", "monta o pacote na ordem do §2; com pergunta, roteia o chapéu e consulta o acervo")
+    p_montar.add_argument("cadeira", nargs="?", default=None, help="slug da cadeira (opcional; fallback PF_CADEIRA)")
     p_montar.add_argument("--chapeu", metavar="<slug>", help="força o slug do chapéu (ignora roteador)")
     p_montar.add_argument("--sem-acervo", action="store_true", help="omite a consulta ao acervo")
     p_montar.add_argument("--json", action="store_true", help="saída em formato JSON")
@@ -685,6 +702,7 @@ def main() -> int:
         return ato_rotear(como_json=args.json)
     elif args.ato == "montar":
         return ato_montar(
+            cadeira_arg=args.cadeira,
             chapeu_forcado=args.chapeu,
             sem_acervo=args.sem_acervo,
             como_json=args.json,
