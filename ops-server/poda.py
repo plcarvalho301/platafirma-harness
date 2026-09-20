@@ -56,10 +56,18 @@ TTL_DERRAME_S = 48 * 3600
 # Distância (bytes servidos na sessão desde o último envio inteiro) acima da qual um
 # ponteiro/aviso deixa de valer e a peça volta inteira, mesmo com sha igual. Proxy de
 # "ainda provavelmente na cauda visível" — giro não serve (giro não mede tamanho: cinco
-# giros lendo arquivo grande empurram mais que quarenta de `git status`). Palpite
-# declarado (benchmark Hermes / arq:0061 §5, 20/09/2026): 3×CAP, ~150 kB. Fecha com a
-# bateria de sessão longa — «quem é você e qual a sua régua» no giro N.
-DISTANCIA_MAX_PONTEIRO = 150_000
+# giros lendo arquivo grande empurram mais que quarenta de `git status`).
+#
+# Ancorado no gatilho DOCUMENTADO da Anthropic para o mesmo problema (poda de
+# retorno de tool por idade), nao inventado aqui: o context editing nativo
+# (`clear_tool_uses_20250919`, beta context-management-2025-06-27) dispara por
+# default aos 100.000 input tokens (Pedro, 20/09/2026; confere com a doc). Esta
+# camada so ve bytes -- nao ha tokenizador aqui, e conta de token feita fora do
+# tokenizador do modelo servido nao e conta (arq:0061 §3) -- entao a conversao e
+# uma aproximacao DECLARADA (4 bytes/token, regra de bolso comum) e nao uma
+# medida: 100_000 tokens ~= 400_000 bytes. Fecha com a bateria de sessao longa
+# -- «quem e voce e qual a sua regua» no giro N -- que mede o de verdade.
+DISTANCIA_MAX_PONTEIRO = 400_000
 
 # Derrame e estado da instancia (card #3010): mesmo default que `descansar` apaga.
 DERRAME = Path(os.environ.get("PF_DERRAME", raizes.instancia() / "var/tmp/retornos"))
