@@ -1,5 +1,13 @@
 # Instanciar a fábrica no Claude Code
 
+> **Vencido em parte desde 20/09/2026.** O posto deixou de copiar arranque para
+> `~/.claude/`: ele carrega `AGENTS.md`, `CLAUDE.md`, permissões e hook no próprio
+> repositório, por projeto, e o procedimento é `git pull` e abrir o agente de dentro da
+> pasta. O `sincroniza.sh` agora só aposenta a cópia antiga, uma vez por máquina. O
+> procedimento vigente é o `README.md` do `platafirma-posto`; onde este documento
+> disser `sincroniza.sh`, `gh api` ou «conta `megafone`», vale o README de lá. O posto
+> serve a qualquer máquina e a qualquer cadeira, não só à fábrica na `megafone`.
+
 A fábrica é a única cadeira que roda no Claude Code; as outras rodam em
 claude.ai. Skill não alcança o Code, então o veículo da identidade é arquivo de
 configuração de **conta**, nunca de repositório alvo.
