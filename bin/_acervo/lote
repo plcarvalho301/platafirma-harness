@@ -1,0 +1,28 @@
+#!/usr/bin/env python3
+import sys, os, json
+
+def main():
+    if len(sys.argv) < 2:
+        sys.stderr.write("uso: acervo lote <id>\n")
+        sys.exit(2)
+    lote_id = sys.argv[1]
+    bancada_conf = os.path.expanduser("~/.config/platafirma/bancada")
+    if not os.path.exists(bancada_conf):
+        sys.exit(f"erro: {bancada_conf} não existe")
+    bancada = open(bancada_conf).read().strip()
+    manifesto = os.path.join(bancada, "registro", "lotes", f"{lote_id}.json")
+    if not os.path.exists(manifesto):
+        sys.exit(f"erro: manifesto do lote {lote_id} não encontrado ({manifesto})")
+    
+    with open(manifesto, "r", encoding="utf-8") as f:
+        lote = json.load(f)
+    
+    print(f"lote {lote_id}:")
+    for it in lote.get("itens", []):
+        obj = it.get("origem", {}).get("objeto", "?")
+        estado = it.get("veredito", "pendente")
+        print(f"  {obj}: {estado}")
+    print(f"estado geral: {lote.get('estado', '?')}")
+
+if __name__ == "__main__":
+    main()
