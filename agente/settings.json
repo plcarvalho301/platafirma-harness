@@ -74,6 +74,17 @@
   },
   "model": "opus",
   "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "compact|resume",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 /opt/platafirma/current/harness/agente/hooks/porta-sessao.py"
+          }
+        ]
+      }
+    ],
     "PreToolUse": [
       {
         "matcher": "mcp__claudinho-mcp__.*|mcp__claude_ai_claudinho-mcp__.*",
