@@ -1193,7 +1193,7 @@ def read_file(path: str = "", offset: int = 0, max_bytes: int = 40000,
 
 
 # --- write_file: tipo x morada, sem symlink, atomico (spec_porta-so-verbo §4) ----
-TIPOS_TEXTO = {".py", ".md", ".sh", ".sql", ".yaml", ".yml", ".json", ".toml",
+TIPOS_TEXTO = {".py", ".md", ".mmd", ".d2", ".sh", ".sql", ".yaml", ".yml", ".json", ".toml",
                ".css", ".html", ".js", ".txt"}
 CLONES = ("platafirma-core", "platafirma-conhecimento", "platafirma-arquitetura",
           "platafirma-harness", "platafirma-motor", "platafirma-posto", "modulo-osint")
@@ -1354,7 +1354,7 @@ def write_file(path: str, content: str = "", sessao_id: str | None = None,
     `path` absoluto, ou relativo à bancada declarada (sem ela, recusa). Moradas: na
     bancada, clones platafirma-*/modulo-osint e seus worktrees em wt/<repo>/<cadeira>
     (working tree, fora de .git), com bin/ do harness aceitando verbo (sem extensao +
-    shebang); na instancia, @TMP@/<ordem_id>/ (rascunho da fita). Tipos: .py .md .sh
+    shebang); na instancia, @TMP@/<ordem_id>/ (rascunho da fita). Tipos: .py .md .mmd .d2 .sh
     .sql .yaml .yml .json .toml .css .html .js .txt. Fora disso volta `{recusado, motivo}`
     nomeando o porque (release, fila, abertura publicada, log, segredos, .git, symlink,
     tipo, tamanho). `content` = arquivo
