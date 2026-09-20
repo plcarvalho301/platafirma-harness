@@ -265,7 +265,7 @@ def id_fita_novo():
 # admitido em cadeiras.py e sem rota nenhuma deste lado.
 VERBO_DO_PARTICIPANTE = {
     "jaiminho": os.path.join(BIN, "jaiminho"),
-    "jaiminho-fabrica": os.path.join(BIN, "jaiminho-fabrica"),
+    "jaiminho-eng": os.path.join(BIN, "jaiminho-eng"),
 }
 
 # `jaiminho perguntar` e sincrono e nao emite stream: ele volta quando o `agy`
