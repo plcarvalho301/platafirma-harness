@@ -105,6 +105,30 @@ def _sem_ansi(t: str) -> str:
     return "\n".join(l.split("\r")[-1] if "\r" in l else l for l in t.split("\n"))
 
 
+def _eh_estruturada(linha: str) -> bool:
+    """Linha longa que e um documento JSON inteiro NAO e blob: e o retorno do verbo.
+
+    Incidente de 20/09/2026 (fita eedd4c14, giros 47-54): `motor buscar "..."` — a forma
+    curta, sem a instancia — caiu fora do escopo `cosmetica@rag,casa`, a janela +-120
+    serviu 289 de 20.886 bytes e o campo `ontologia.conceitos`, que era o produto da
+    busca, saiu junto. E a terceira vez que a FORMA DA CHAMADA decide se o JSON de linha
+    unica sobrevive (08/09 #3022, 18/09 `_ato_efetivo`). A guarda deixa de depender do
+    perfil do verbo: quem decide e o conteudo. JSON valido em linha unica e saida
+    estruturada — serve inteiro, e o teto (`corta`) continua sendo o unico limite.
+
+    `json.loads` so roda em linha acima de LINHA_LONGA que abre com `{`/`[` e fecha com
+    `}`/`]`: custo desprezivel, e fragmento (janela de `read_file offset=`) nao passa —
+    por isso `read_file` tem a sua propria guarda em `poda_texto`.
+    """
+    s = linha.strip()
+    if len(s) < 2 or s[0] not in "{[" or s[-1] not in "}]":
+        return False
+    try:
+        json.loads(s)
+    except ValueError:
+        return False
+    return True
+
 def _marca_blob(linha: str, *, janela: bool = True) -> tuple[str, bool]:
     """Base64/hex longo vira marcador com sha; linha longa qualquer vira janela ±120.
 
@@ -124,7 +148,7 @@ def _marca_blob(linha: str, *, janela: bool = True) -> tuple[str, bool]:
         tipo = "hex" if re.fullmatch(r"[0-9a-fA-F]+", bruto) else "base64"
         marca = f"<blob tipo={tipo} bytes={len(bruto)} sha={sha_servido(bruto)}>"
         return linha[:m.start()] + marca + linha[m.end():], True
-    if janela and len(linha) > LINHA_LONGA:
+    if janela and len(linha) > LINHA_LONGA and not _eh_estruturada(linha):
         return (f"{linha[:JANELA]} <linha longa bytes={len(linha)} "
                 f"sha={sha_servido(linha)} …> {linha[-JANELA:]}"), True
     return linha, False
@@ -212,7 +236,7 @@ def _agrupa_busca(linhas: list[str]) -> tuple[list[str], int] | None:
 
 
 def lava(texto: str, cap: int = 50_000, *, cosmetica: bool = False,
-         preserva_branco: bool = False) -> tuple[str, dict]:
+         preserva_branco: bool = False, janela: bool = True) -> tuple[str, dict]:
     """R1 — lavador determinístico, ANTES do teto. Devolve (lavado, relatório).
 
     Determinístico é o ponto: mascaramento por regra iguala resumo por LLM à metade do
@@ -274,7 +298,7 @@ def lava(texto: str, cap: int = 50_000, *, cosmetica: bool = False,
     houve_blob = False
     fora = []
     for l in linhas:
-        nova, marcou = _marca_blob(l, janela=not cosmetica)
+        nova, marcou = _marca_blob(l, janela=janela and not cosmetica)
         houve_blob = houve_blob or marcou
         fora.append(nova)
     if houve_blob:
@@ -551,7 +575,13 @@ def poda_texto(texto: str, *, cap: int, cauda: bool, alca: str, sessao_id: str,
                constitutiva: bool = False) -> tuple[str, dict]:
     """Um retorno textual, a régua inteira na ordem do R8. Devolve (texto, campo `poda`)."""
     preserva_branco = (tool == "read_file")
-    lavado, rel = lava(texto, cap, cosmetica=cosmetica, preserva_branco=preserva_branco)
+    # `read_file` E a alca de restauracao (invariante ii): o aviso de poda manda reler o
+    # cru com `read_file offset=`. Janelar aqui fecha a unica porta de volta — medido em
+    # 20/09: reler o cru de 20.886 bytes servia os mesmos 289, e nenhum offset escapava
+    # porque o JSON inteiro e uma linha so. Quem chama `read_file` ja limitou o tamanho
+    # por `max_bytes`; linha longa ali e o conteudo pedido, nao ruido.
+    lavado, rel = lava(texto, cap, cosmetica=cosmetica, preserva_branco=preserva_branco,
+                       janela=(tool != "read_file"))
     meta = {"ato": tool, "giro": giro, "sha": sha_servido(lavado),
             "lavado": rel["classes"], "bytes_produzidos": rel["bytes_antes"]}
     if cosmetica:

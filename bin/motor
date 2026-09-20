@@ -8,7 +8,7 @@
 # atos: listar (leitura, texto), ajuste (leitura|escrita, config), buscar (leitura, busca), medir (leitura, medida), indexar (escrita, indice) — buscar/medir/indexar exigem particao: motor <inst> <ato> <particao> ...
 # forma: json
 # cauda: nao
-# poda: cosmetica@rag,casa
+# poda: cosmetica@rag,casa,buscar
 # consome: rag-extractor-api@platafirma-conhecimento/rag/openapi.yaml >=1.0 (buscar, medir; endpoint por instancia em motor-instancias.json)
 # ambiente: RAG_PYTHON origem-shell RAG_PYTHON=<python-do-rag> (indexar; ausente cai em $PLATAFIRMA_RELEASE/venv/rag/bin/python); CORPUS_DIR origem-shell (indexar; ausente usa $PLATAFIRMA_INSTANCIA/dados/corpus); PLATAFIRMA_RELEASE origem-shell [=/opt/platafirma/current] (codigo do rag, gabarito); PLATAFIRMA_INSTANCIA origem-shell [=/srv/platafirma/casa] (segredos, log, medicoes, sobreposicao do compose); OPS_LOG_DIR origem-shell [=$PLATAFIRMA_INSTANCIA/var/log/ops]; PF_BIN origem-shell (teste; ausente e o bin/ da propria arvore); PF_SESSAO porta; PF_ORDEM_ID porta; PF_CADEIRA porta; PF_CHAPEU porta; OPS_NAME porta; USER shell
 # escreve: $PLATAFIRMA_INSTANCIA/var/log/ops/*.jsonl (evento consulta, best-effort); env da ingestao na instancia, arquivo NOME=valor ou $PLATAFIRMA_INSTANCIA/segredos/<stack>/<VAR> (ajuste de corte, via motor-instancias.json); $PLATAFIRMA_INSTANCIA/deploy/<stack>/compose.override.yaml (ajuste de container); $PLATAFIRMA_INSTANCIA/var/medicoes/*.json (medir)
