@@ -62,6 +62,7 @@ uso (gramatica arq:0106 — acervo <ato> <particao> <entidade> [seletor]):
   acervo resolver <classe> <string>
   acervo escrever <particao> <entidade> <seletor>
   acervo ingerir  <particao> <raiz> [--apply]
+  acervo lote     <id>
   acervo curar    obra lote [dest] · casa alias <classe> <chave> <alias>
   acervo extrato  --todas [dest]
   acervo psql     [--banco rag|motor]  <SQL por stdin>
@@ -202,6 +203,7 @@ case "$ATO" in
   # gramatica conforme (arq:0106)
   escrever)             conforme "$ATO" "$@" ;;
   curar)                conforme "$ATO" "$@" ;;
+  lote)                 exec "$ATOS/lote" "$@" ;;
   ingerir)
     # conforme: ingerir <particao> <raiz>; vigente: ingerir <raiz> (alias de `ingerir --lote`)
     case "${1:-}" in

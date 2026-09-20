@@ -560,7 +560,22 @@ def main():
         sys.exit(1)
 
     lote = resp.json()
+
     lote_id = lote["id"]
+
+    # [3096] Gravar manifesto do lote na bancada
+    def salvar_manifesto(lote_obj):
+        bancada_conf = os.path.expanduser("~/.config/platafirma/bancada")
+        if os.path.exists(bancada_conf):
+            bancada = open(bancada_conf).read().strip()
+            lotes_dir = os.path.join(bancada, "registro", "lotes")
+            os.makedirs(lotes_dir, exist_ok=True)
+            manifesto = os.path.join(lotes_dir, f"{lote_obj['id']}.json")
+            with open(manifesto, "w", encoding="utf-8") as f:
+                json.dump(lote_obj, f, indent=2, ensure_ascii=False)
+    
+    salvar_manifesto(lote)
+
 
     if not args.apply:
         if args.como_json:
@@ -602,7 +617,9 @@ def main():
     else:
         print(formatar_tabela_aplicado(lote))
 
+    salvar_manifesto(lote)
     if lote.get("estado") == "concluido":
+
         sys.exit(0)
     else:
         sys.exit(1)

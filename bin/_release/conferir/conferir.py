@@ -3,7 +3,7 @@
 # capacidade: verificacao
 # dono: claudinho-TI
 # use para: declarado × servido, 'existe X?' (âncora de NEGATIVA), cabeçalho de verbo, paridade de serviço
-# atos: existe, servico, verbo, skill, procedencia, repo, superficie, front, arranque, ferramental, commit, vocabulario
+# atos: existe, servico, verbo, skill, procedencia, repo, superficie, front, arranque, ferramental, commit, vocabulario, diagrama
 # forma: relatorio
 # cauda: sim
 # componente: docker, git
@@ -2738,6 +2738,90 @@ def carregar_verbos_e_atos(bin_dir):
     return verbos, atos_abertos
 
 
+
+def conferir_diagrama(alvo, como_json=False):
+    import os
+    import sys
+    import json
+    import urllib.request
+    import urllib.error
+    if not alvo or not os.path.isfile(alvo):
+        msg = f"arquivo não encontrado: {alvo}"
+        if como_json:
+            print(json.dumps({"erro": msg}))
+        else:
+            print(f"erro: {msg}", file=sys.stderr)
+        return 2
+
+    # Kroki da casa
+    # Endpoint padrao ou override
+    endpoint = os.environ.get("KROKI_URL")
+    if not endpoint:
+        try:
+            import subprocess
+            out = subprocess.check_output(["docker", "inspect", "-f", "{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}", "plataforma-wiki-kroki-1"], text=True).strip()
+            if out:
+                endpoint = f"http://{out}:8000"
+        except:
+            pass
+    if not endpoint:
+        endpoint = "http://127.0.0.1:8000"
+    
+    ext = os.path.splitext(alvo)[1].lower()
+    diagram_type = "mermaid" if ext == ".mmd" else "d2" if ext == ".d2" else None
+    
+    if not diagram_type:
+        msg = f"extensão não suportada: {ext} (esperado: .mmd ou .d2)"
+        if como_json:
+            print(json.dumps({"erro": msg}))
+        else:
+            print(f"erro: {msg}", file=sys.stderr)
+        return 2
+
+    try:
+        with open(alvo, "r", encoding="utf-8") as f:
+            c = f.read()
+    except Exception as e:
+        msg = f"não foi possível ler {alvo}: {e}"
+        if como_json:
+            print(json.dumps({"erro": msg}))
+        else:
+            print(f"erro: {msg}", file=sys.stderr)
+        return 2
+
+    req = urllib.request.Request(f"{endpoint}/{diagram_type}/svg", data=c.encode("utf-8"), headers={"Content-Type": "text/plain"}, method="POST")
+    try:
+        with urllib.request.urlopen(req, timeout=5) as response:
+            if response.status == 200:
+                if como_json:
+                    print(json.dumps({"arquivo": alvo, "status": "ok"}))
+                else:
+                    print(f"diagrama: ok ({diagram_type})")
+                return 0
+            else:
+                msg = f"Kroki retornou status {response.status}"
+                if como_json:
+                    print(json.dumps({"arquivo": alvo, "status": "erro", "erro": msg}))
+                else:
+                    print(f"erro na compilação: {msg}", file=sys.stderr)
+                return 1
+    except urllib.error.HTTPError as e:
+        erro_msg = e.read().decode('utf-8', errors='replace')
+        if como_json:
+            print(json.dumps({"arquivo": alvo, "status": "erro", "erro": erro_msg}))
+        else:
+            print(f"diagrama quebrado: {alvo}", file=sys.stderr)
+            print(erro_msg, file=sys.stderr)
+        return 1
+    except Exception as e:
+        msg = f"falha ao falar com o Kroki em {endpoint}: {e}"
+        if como_json:
+            print(json.dumps({"arquivo": alvo, "status": "erro", "erro": msg}))
+        else:
+            print(f"erro: {msg}", file=sys.stderr)
+        return 1
+
+
 def conferir_vocabulario(alvo=None, como_json=False):
     """Varre `<verbo> <ato>` entre crases em dono.md, oficio.md, skills/*/SKILL.md
     e docs/spec_*.md e confere contra os atos listados por bin/<verbo>; ato
@@ -2929,6 +3013,8 @@ def main(argv):
         return conferir_pdp(alvo, como_json=como_json)
     if classe == "vocabulario":
         return conferir_vocabulario(alvo, como_json=como_json)
+    if classe == "diagrama":
+        return conferir_diagrama(alvo, como_json=como_json)
     if classe == "skill":
         servido = None
         if "--servido" in argv:
