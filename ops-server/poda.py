@@ -53,6 +53,21 @@ RG_PROPORCAO = 0.6           # fração de linhas no formato path:linha: para tr
 CABECA_FRACAO = 0.7          # com `cauda: sim`, 70% cabeça / 30% cauda (palpite declarado)
 DIFF_MAX_LINHAS = 200        # diff maior que isto não é delta, é reenvio disfarçado
 TTL_DERRAME_S = 48 * 3600
+# Distância (bytes servidos na sessão desde o último envio inteiro) acima da qual um
+# ponteiro/aviso deixa de valer e a peça volta inteira, mesmo com sha igual. Proxy de
+# "ainda provavelmente na cauda visível" — giro não serve (giro não mede tamanho: cinco
+# giros lendo arquivo grande empurram mais que quarenta de `git status`).
+#
+# Ancorado no gatilho DOCUMENTADO da Anthropic para o mesmo problema (poda de
+# retorno de tool por idade), nao inventado aqui: o context editing nativo
+# (`clear_tool_uses_20250919`, beta context-management-2025-06-27) dispara por
+# default aos 100.000 input tokens (Pedro, 20/09/2026; confere com a doc). Esta
+# camada so ve bytes -- nao ha tokenizador aqui, e conta de token feita fora do
+# tokenizador do modelo servido nao e conta (arq:0061 §3) -- entao a conversao e
+# uma aproximacao DECLARADA (4 bytes/token, regra de bolso comum) e nao uma
+# medida: 100_000 tokens ~= 400_000 bytes. Fecha com a bateria de sessao longa
+# -- «quem e voce e qual a sua regua» no giro N -- que mede o de verdade.
+DISTANCIA_MAX_PONTEIRO = 400_000
 
 # Derrame e estado da instancia (card #3010): mesmo default que `descansar` apaga.
 DERRAME = Path(os.environ.get("PF_DERRAME", raizes.instancia() / "var/tmp/retornos"))
@@ -388,18 +403,47 @@ class Ledger:
         except Exception:                                     # noqa: BLE001
             return 0
 
+    def bytes_totais(self) -> int:
+        """Bytes cumulativos servidos na sessão, por toda alça — o medidor de
+        DISTÂNCIA (arq:0061 §5, insumo Hermes 20/09): proxy de estar ou não na cauda
+        visível. Só conta; quem decide é `olha()`.
+        """
+        if not self.ativo:
+            return 0
+        try:
+            return int(self.rc.get(f"bytes:{self.sessao_id}") or 0)
+        except Exception:                                     # noqa: BLE001
+            return 0
+
+    def _soma_bytes(self, n: int) -> None:
+        if not self.ativo or n <= 0:
+            return
+        try:
+            self.rc.incrby(f"bytes:{self.sessao_id}", n)
+            self.rc.expire(f"bytes:{self.sessao_id}", self.ttl)
+        except Exception:                                     # noqa: BLE001
+            pass
+
     def _arquivo(self, alca: str) -> Path:
         return _dir_derrame(self.sessao_id) / f"lg-{sha_servido(alca)}.txt"
 
-    def olha(self, alca: str, lavado: str, giro: int, tool: str) -> dict:
+    def olha(self, alca: str, lavado: str, giro: int, tool: str, *,
+             constitutiva: bool = False) -> dict:
         """Devolve o que servir: `{modo: inteiro|igual|diff, texto, ...}`.
 
-        Três desfechos e nada além: nunca visto → inteiro; visto com o mesmo sha →
-        aviso estável (SEM timestamp: aviso que muda a cada giro é conteúdo novo
-        disfarçado, e volta a custar o que se queria poupar); visto e mudado → diff
-        unificado contra o servido, quando o diff for menor que o inteiro.
+        Quatro desfechos: nunca visto → inteiro; ALCA DE CONSTITUICAO (persona conduta,
+        persona ler, mesa caderno, expediente montar) → sempre inteiro, nunca ponteiro
+        nem aviso — e o canal que a superficie poda primeiro (insumo Hermes, arq:0061
+        §5, 20/09/2026), e um aviso aqui apontaria para texto que ja pode ter saido da
+        janela; visto com o mesmo sha e DENTRO da distancia → aviso estavel (SEM
+        timestamp: aviso que muda a cada giro e conteudo novo disfarcado); visto com o
+        mesmo sha mas ALEM da distancia → expirado, serve inteiro de novo e declara;
+        visto e mudado → diff unificado contra o servido, quando o diff for menor que o
+        inteiro.
         """
         sha = sha_servido(lavado)
+        if self.ativo:
+            self._soma_bytes(len(lavado.encode("utf-8", "replace")))
         if not self.ativo:
             return {"modo": "inteiro", "texto": lavado, "sha": sha, "ledger": "sem_sessao"}
         try:
@@ -415,7 +459,15 @@ class Ledger:
         if not antes:
             self._grava(alca, sha, giro, tool, lavado)
             return {"modo": "inteiro", "texto": lavado, "sha": sha, "ledger": "novo"}
+        if constitutiva:
+            self._grava(alca, sha, giro, tool, lavado)
+            return {"modo": "inteiro", "texto": lavado, "sha": sha, "ledger": "constitutiva"}
         if antes.get("sha") == sha:
+            distancia = self.bytes_totais() - int(antes.get("bytes_no_envio") or 0)
+            if distancia > DISTANCIA_MAX_PONTEIRO:
+                self._grava(alca, sha, giro, tool, lavado)
+                return {"modo": "inteiro", "texto": lavado, "sha": sha,
+                        "ledger": "expirado", "distancia": distancia}
             # NÃO se regrava: o aviso aponta o giro do PRIMEIRO envio e tem de sair
             # idêntico na terceira e na décima releitura. Aviso que muda de número a
             # cada giro é conteúdo novo disfarçado — volta a custar o que se poupou.
@@ -458,7 +510,8 @@ class Ledger:
     def _grava(self, alca: str, sha: str, giro: int, tool: str, lavado: str) -> None:
         try:
             self.rc.hset(self.chave, alca,
-                         json.dumps({"sha": sha, "giro": giro, "tool": tool},
+                         json.dumps({"sha": sha, "giro": giro, "tool": tool,
+                                    "bytes_no_envio": self.bytes_totais()},
                                     ensure_ascii=False))
             self.rc.expire(self.chave, self.ttl)
             self._arquivo(alca).write_text(lavado, encoding="utf-8", errors="replace")
@@ -478,7 +531,8 @@ def intocavel(r: dict) -> bool:
 
 def poda_texto(texto: str, *, cap: int, cauda: bool, alca: str, sessao_id: str,
                giro: int, tool: str, ledger: Ledger | None,
-               nome_derrame: str, cosmetica: bool = False) -> tuple[str, dict]:
+               nome_derrame: str, cosmetica: bool = False,
+               constitutiva: bool = False) -> tuple[str, dict]:
     """Um retorno textual, a régua inteira na ordem do R8. Devolve (texto, campo `poda`)."""
     preserva_branco = (tool == "read_file")
     lavado, rel = lava(texto, cap, cosmetica=cosmetica, preserva_branco=preserva_branco)
@@ -496,9 +550,11 @@ def poda_texto(texto: str, *, cap: int, cauda: bool, alca: str, sessao_id: str,
         meta["cru"] = cru
     servir = lavado
     if ledger is not None:
-        d = ledger.olha(alca, lavado, giro, tool)
+        d = ledger.olha(alca, lavado, giro, tool, constitutiva=constitutiva)
         servir = d["texto"]
         meta["ledger"] = d.get("ledger")
+        if d.get("distancia") is not None:
+            meta["distancia"] = d["distancia"]
         if d["modo"] != "inteiro":
             meta.update(giro_ref=d.get("giro_ref"), bytes_omitidos=d.get("bytes_omitidos"),
                         modo=d["modo"])
@@ -529,6 +585,11 @@ def linha_humana(meta: dict) -> str:
     """R7 nível 2 — o que o MODELO lê. O nível 1 é o campo `poda` no envelope, que é o
     que o ops log grava e o ensaio testa. Dois níveis porque são dois leitores."""
     modo = meta.get("modo")
+    if meta.get("ledger") == "constitutiva":
+        return f"poda: peça de constituição reenviada inteira (sha {meta.get('sha')})"
+    if meta.get("ledger") == "expirado":
+        return (f"poda: ponteiro expirado a {meta.get('distancia')} bytes de distância "
+                f"— reenviado inteiro (sha {meta.get('sha')})")
     if modo == "igual":
         return f"poda: igual ao giro {meta.get('giro_ref')} (sha {meta.get('sha')})"
     if modo == "diff":
