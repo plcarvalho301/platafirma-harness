@@ -275,6 +275,25 @@ ramo_atual() {
   "$GIT" -C "$c" rev-parse --abbrev-ref HEAD 2>/dev/null || echo "HEAD"
 }
 
+# [3096] Um ramo pertence a esta cadeira? Aceita main/master, o proprio prefixo
+# <cadeira>/*, os ramos de fabrica (fabrica/*) e o caderno da cadeira
+# (caderno/<cadeira>/*). Sem PF_CADEIRA, nao barra (exit 0). Retorna 1 se e ramo
+# de outra cadeira.
+ramo_da_cadeira() {
+  local ramo="$1"
+  local cad="${PF_CADEIRA:-}"
+  cad="${cad#claudinho-}"
+  cad="${cad#claudinha-}"
+  [ -z "$cad" ] && return 0
+  case "$ramo" in
+    main|master) return 0 ;;
+    "$cad"/*) return 0 ;;
+    fabrica/*) return 0 ;;
+    caderno/"$cad"/*) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
 info_varrido() {
   local c="$1" repo="$2"
   local cadeira="${PF_CADEIRA:-sem-cadeira}"
@@ -308,19 +327,11 @@ ato_git() {
     done
   fi
 
-  # [3096] Recusa commit em ramo de outra sessao
+  # [3096] Recusa commit em ramo de outra cadeira
   if [ "${1:-}" = "commit" ]; then
-    # branch validation: the branch name starts with the current chair?
     local ramo_atual
     ramo_atual="$(ramo_atual "$c")"
-    local cadeira="${PF_CADEIRA:-}"
-    cadeira="${cadeira#claudinho-}"
-    cadeira="${cadeira#claudinha-}"
-    if [ -n "$cadeira" ] && [ "$ramo_atual" != "main" ] && [ "$ramo_atual" != "master" ]; then
-      if [[ "$ramo_atual" != "$cadeira/"* ]]; then
-        morre "commit recusado: o ramo '$ramo_atual' pertence a outra cadeira (esperado prefixo '$cadeira/')." 3
-      fi
-    fi
+    ramo_da_cadeira "$ramo_atual" || morre "commit recusado: o ramo '$ramo_atual' pertence a outra cadeira (esperados: <cadeira>/*, fabrica/*, caderno/<cadeira>/*, main)." 3
   fi
 
   if [ "${1:-}" = apply ]; then
@@ -1160,17 +1171,10 @@ ato_commitar() {
   [ -n "$msg" ] || morre "falta a mensagem (-m)" 2
   local c; c="$(clone_de "$nome")" || exit $?
 
-  # [3096] Recusa commit em ramo de outra sessao
+  # [3096] Recusa commit em ramo de outra cadeira
   local ramo
   ramo="$(ramo_atual "$c")"
-  local cad="${PF_CADEIRA:-}"
-  cad="${cad#claudinho-}"
-  cad="${cad#claudinha-}"
-  if [ -n "$cad" ] && [ "$ramo" != "main" ] && [ "$ramo" != "master" ]; then
-    if [[ "$ramo" != "$cad/"* ]]; then
-      morre "commit recusado: o ramo '$ramo' pertence a outra cadeira (esperado prefixo '$cad/')." 3
-    fi
-  fi
+  ramo_da_cadeira "$ramo" || morre "commit recusado: o ramo '$ramo' pertence a outra cadeira (esperados: <cadeira>/*, fabrica/*, caderno/<cadeira>/*, main)." 3
 
 
   if [ "$tudo" -eq 1 ]; then
