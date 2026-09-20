@@ -1,3 +1,8 @@
+## conhecimento curado
+
+- Na descida de cadeira ao molde novo, a linha de corte de autoria e: gestao escreve o MOLDE (spec_template_persona) e a PERSONA (nivel 1, sempre servida); a CADEIRA DONA escreve os proprios CHAPEUS (nivel 2, secoes b/c), porque o conteudo do chapeu e materia do dominio dela. A gestao so desce persona; nao canoniza chapeu alheio.
+- Vazamento de vocabulario entre personas e esperado por construcao, nao defeito de recorte: um rotulo pode aparecer em varias personas usado no sentido de cada uma (DevOps em ops e engenharia; ciclo de vida na malha em ia e dados). Nao podar rotulo da persona so porque ele aparece noutra; a regra "a linguagem de uma cadeira vale dentro dela" e sobre uso, nao sobre exclusividade.
+
 ## diario de bordo
 
 2026-09-19 — run_command recusou fd, rg, cat e python3 ("sem verbo", sugere descobrir/read_file/teste) — contorno encontrado na data 2026-09-19 foi read_file para arquivo conhecido e repo git <repo> grep -il para varrer clone; sem tokenizador de arquivo local, a medida so sai do envelope de monta_sessao.
@@ -21,3 +26,7 @@
 2026-09-20 — `mesa anota 11 <texto>` gravou um slot orfao "11" (anota e por slug de chapeu, nao por numero de item; o verbo avisou "escreve prosa no substrato velho") e `descansar fita` acusou "ORFAO — slug nao declarado na persona" — contorno encontrado na data 2026-09-20 foi `mesa limpa 11`; ato pendente vai em `mesa item <chapeu> --ato --alvo`, e numero de item so serve a `mesa fez`.
 2026-09-20 — `repo procurar <repo> --termo <nome-de-arquivo>` nao acha arquivo pelo nome (busca conteudo) — contorno encontrado na data 2026-09-20 foi termo que ocorre no texto do arquivo, ou `repo listar <repo> <dir>`.
 2026-09-20 — `write_file` com caminho relativo `wt/<repo>/<cadeira>/<caminho>` gravou direto no worktree da cadeira (morada da bancada), sem precisar do absoluto e sem parede — registrado porque a fita anterior nao tinha achado o caminho.
+2026-09-20 — persona ler ia truncou o corpo no envelope da tool (parou em NEGATIVAS); repo ler e release ler nao acharam personas/persona-ia.md — contorno encontrado na data 2026-09-20 foi repo procurar --termo "Elias Elefante", que revelou o caminho real abertura/ia/persona.md e abertura/ti/persona.md (nao personas/).
+2026-09-20 — tarefas api GET /itens/3086 devolveu o corpo podado (lavado blob); read_file do cru relavou; run_command do mesmo GET voltou "igual ao giro N" — contorno encontrado na data 2026-09-20 foi nao reler o corpo: card ja cumpriu o rastreio, movido direto com tarefas mover.
+2026-09-20 — fila enviar --tipo pauta recusou ("tipo invalido"); validos: decisao, demanda, handoff, minuta, pedido, resposta — contorno encontrado na data 2026-09-20 foi --tipo pedido.
+2026-09-20 — repo ramo com um argumento so recusou exit 4 ("nome de repo invalido") — contorno encontrado na data 2026-09-20 foi repo ramo <repo> <ramo> (dois posicionais, repo primeiro).
