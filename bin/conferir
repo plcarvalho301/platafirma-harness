@@ -54,7 +54,7 @@ AQUI="$(dirname "$(readlink -f "$0")")"
 IMPL="$AQUI/_release/conferir/conferir.py"
 
 CLASSES_SERVIDO="verbo servico skill procedencia superficie ferramental front sessao chapeu pdp alcance"
-CLASSES_BANCADA="existe repo commit arranque vocabulario"
+CLASSES_BANCADA="existe repo commit arranque vocabulario diagrama"
 
 avisa_deprecado() {  # uma vez por sessao (arq:0110 §11)
   local classe="$1"
