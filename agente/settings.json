@@ -80,7 +80,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 /opt/platafirma/current/harness/agente/hooks/porta-sessao.py"
+            "command": "sh -c 'f=/opt/platafirma/current/harness/agente/hooks/porta-sessao.py; [ -f \"$f\" ] || exit 0; exec python3 \"$f\"'"
           }
         ]
       }
@@ -91,7 +91,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 /opt/platafirma/current/harness/agente/hooks/porta-sessao.py"
+            "command": "sh -c 'f=/opt/platafirma/current/harness/agente/hooks/porta-sessao.py; [ -f \"$f\" ] || exit 0; exec python3 \"$f\"'"
           }
         ]
       }
@@ -102,7 +102,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 /opt/platafirma/current/harness/agente/hooks/porta-sessao.py"
+            "command": "sh -c 'f=/opt/platafirma/current/harness/agente/hooks/porta-sessao.py; [ -f \"$f\" ] || exit 0; exec python3 \"$f\"'"
           }
         ]
       }

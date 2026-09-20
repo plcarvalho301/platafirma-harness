@@ -52,6 +52,11 @@ a resposta — ela faz a sessão falar em nome de quem não é e escrever na mes
 | fita | slug chumbado no cwd da fita | `bin/chat`, que já recebe `--cadeira` |
 | fábrica | slug dito na abertura; sem slug, `fabrica` por default | o arranque de conta, `agente/CLAUDE.md` |
 | Code seco | o mesmo arranque de conta: cai no default | escopo de usuário, em qualquer diretório |
+| posto (qualquer máquina, qualquer agente) | slug dito na abertura; sem slug, `fabrica` | `platafirma-posto/AGENTS.md`, por projeto, via `git pull` |
+
+O posto é a porta de entrada humana (dono, 20/09/2026) e a única exceção à regra do
+ponteiro: as duas linhas estão ESCRITAS no `AGENTS.md` de lá, porque daquela porta este
+arquivo não se lê antes de a sessão abrir. Mudou aqui, muda lá no mesmo ato.
 
 - **Worktree não injeta nada.** Ela isola branch, que é o que git worktree faz bem;
   identidade lida de dentro dela é a cópia congelada que este arquivo elimina.
