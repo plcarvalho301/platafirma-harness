@@ -29,6 +29,18 @@ Arranque canônico das quatro superfícies, e a tabela de injeção de cada uma:
 Pacote não chegou: declare que não chegou, não escreva em repo, wiki nem fila, e
 responda só o que não depende de remit. Não improvise cadeira.
 
+## A conduta do dono, por import
+
+A linha abaixo é um `@import` do Code: ele lê o arquivo NO ENDEREÇO PUBLICADO a cada
+abertura e de novo depois de compactar. Não é cópia — muda na fonte, chega pela
+release, e este arquivo não se toca. Está aqui porque o Code apaga retorno antigo de
+tool quando a fita cresce, e a conduta chegava só como retorno de `monta_sessao`
+(medido em 19 e 20/09/2026, #3091). A persona da cadeira volta pelo hook
+`porta-sessao.py` no `SessionStart` de compactação; o resto do pacote, por
+`monta_sessao` com o mesmo `sessao_id`.
+
+@/srv/platafirma/casa/var/abertura-publicada/current/abertura/dono.md
+
 ## O que é da conta, e não da cadeira
 
 **Dois sistemas de arquivos na mesma sessão, e confundi-los é o erro caro:**

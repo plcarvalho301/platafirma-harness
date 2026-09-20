@@ -30,6 +30,16 @@ arranque: leitura de descoberta é contexto gasto para chegar ao mesmo lugar.
 dentro do pacote (medido: 1.460 tokens). Linha mandando lê-la seria segunda fonte
 da mesma régua.
 
+**No Code ela chega também por `@import`, e isso não é segunda fonte (20/09/2026).**
+O Code apaga retorno antigo de tool quando a fita cresce, e o pacote é retorno de
+tool: em fita longa a cadeira deixava de ter a conduta (#3091). `agente/CLAUDE.md`
+importa `abertura/dono.md` do endereço publicado — o mesmo arquivo que o pacote
+serve, lido pelo Code a cada abertura e depois de compactar. É segundo CANAL da
+mesma fonte, não cópia: nada se edita ali. A persona volta pelo hook de
+`SessionStart` (`agente/hooks/porta-sessao.py`), lida da mesma morada. No claude.ai
+não há canal equivalente; lá quem segura é a porta, que nunca deduplica peça de
+constituição (#3092).
+
 ## De onde sai a cadeira, por superfície
 
 A injeção é o ÚNICO ponto em que as quatro diferem. Em nenhuma delas a cadeira se
