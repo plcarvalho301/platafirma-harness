@@ -62,8 +62,26 @@ def _publicado(*partes: str) -> str | None:
     except Exception:
         return None
 
+def _do_projeto(*partes: str) -> str | None:
+    """A copia que o posto carrega em `abertura/` (byte a byte da publicada): e o que existe
+    numa maquina que nao e o host. `CLAUDE_PROJECT_DIR` vem do Code; sem ele, nada."""
+    raiz = os.environ.get("CLAUDE_PROJECT_DIR")
+    if not raiz:
+        return None
+    try:
+        return (Path(raiz) / "abertura").joinpath(*partes).read_text(
+            encoding="utf-8", errors="replace").strip() or None
+    except Exception:
+        return None
+
 def persona_publicada(cadeira: str) -> str | None:
-    return _publicado(cadeira, "persona.md") if SLUG.match(cadeira or "") else None
+    if not SLUG.match(cadeira or ""):
+        return None
+    return _publicado(cadeira, "persona.md") or _do_projeto(cadeira, "persona.md")
+
+def conduta_importada() -> bool:
+    """A conduta chega por `@import` no CLAUDE.md — da conta (host) ou do posto (projeto)."""
+    return (_publicado("dono.md") or _do_projeto("dono.md")) is not None
 
 def primeiro_a_falar(sid_code: str, origem: str) -> bool:
     """O mesmo hook pode estar declarado na conta e no projeto (posto aberto no host): os
@@ -92,18 +110,20 @@ def contexto_de_retomada(sid_code: str, origem: str) -> str | None:
            f"inclusive o pacote de monta_sessao — persona, conduta do dono, mesa. Voce segue "
            f"sendo a cadeira `{cadeira}`" + (f", sessao `{sid}`" if sid else "") + ".\n")
     persona = persona_publicada(cadeira)
-    conduta_no_host = _publicado("dono.md") is not None
-    if persona and conduta_no_host:
-        corpo = (cab
-                 + "1. A conduta do dono esta no CLAUDE.md da conta (import) e nao saiu.\n"
-                 + f"2. Mesa, fila e chapeu: {chamada} devolve o pacote inteiro.\n"
-                 + "3. O que estava em curso e nao esta na mesa: `mesa item`, com ato e alvo, antes de seguir.\n"
-                 + "\nPersona, da morada publicada:\n\n" + persona)
+    conduta = conduta_importada()
+    falta = [n for n, tem in (("persona", persona), ("a conduta do dono", conduta)) if not tem]
+    passos = []
+    if conduta:
+        passos.append("A conduta do dono esta no CLAUDE.md (import) e nao saiu.")
+    if falta:
+        passos.append(f"ANTES de qualquer outra coisa: {chamada}. O mesmo sessao_id devolve o "
+                      f"pacote inteiro; sem ele voce responde sem {' e sem '.join(falta)}.")
     else:
-        corpo = (cab
-                 + f"1. ANTES de qualquer outra coisa: {chamada}. O mesmo sessao_id devolve o "
-                   "pacote inteiro; sem ele voce responde sem persona e sem a conduta do dono.\n"
-                 + "2. O que estava em curso e nao esta na mesa: `mesa item`, com ato e alvo, antes de seguir.\n")
+        passos.append(f"Mesa, fila e chapeu: {chamada} devolve o pacote inteiro.")
+    passos.append("O que estava em curso e nao esta na mesa: `mesa item`, com ato e alvo, antes de seguir.")
+    corpo = cab + "".join(f"{i}. {p}\n" for i, p in enumerate(passos, 1))
+    if persona:
+        corpo += "\nPersona, da morada publicada:\n\n" + persona
     if len(corpo) > TETO_CONTEXTO:
         corpo = corpo[:TETO_CONTEXTO] + "\n[persona cortada pelo teto do hook — inteira por `persona ler`]"
     return corpo
