@@ -57,6 +57,10 @@ Não há ambiente a exportar.
 
 Instalação e atualização: `platafirma-harness/agente/instala.sh` (na máquina do
 dono: `~/.claude/CLAUDE.md` vira symlink para
-`/opt/platafirma/current/harness/agente/CLAUDE.md`, `settings.json` é cópia) ou
-`platafirma-posto/sincroniza.sh` (conta que não enxerga a fonte). Editar o arquivo
-instalado não dura — muda na fonte e chega pela release.
+`/opt/platafirma/current/harness/agente/CLAUDE.md`, `settings.json` é cópia). Editar o
+arquivo instalado não dura — muda na fonte e chega pela release.
+
+Fora do host não se instala nada em `~/.claude/`: a porta de entrada humana é o
+`platafirma-posto`, que carrega o arranque (`AGENTS.md`), as permissões e o hook por
+projeto e chega por `git pull` (20/09/2026). O hook de lá é cópia byte a byte de
+`agente/hooks/porta-sessao.py`: mudou aqui, copia lá no mesmo ato.
