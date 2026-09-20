@@ -868,3 +868,57 @@ def test_contrato_de_morte_e_o_ultimo_ato_nao_o_do_meio():
     _sp.run([verbo, "fita", "--encerra-sessao"], capture_output=True, text=True,
             timeout=120, env=env)
     assert not rc_real.exists(f"sessao:{sid}") and not rc_real.exists(f"ledger:{sid}")
+
+import json
+import pytest
+from unittest.mock import patch, MagicMock
+
+
+@pytest.mark.asyncio
+async def test_superficie_claude_ai():
+    ctx_mock = MagicMock()
+    ctx_mock.request_context.request.headers = {"x-pf-superficie": "claude.ai", "mcp-session-id": "test-123"}
+    with patch.object(s.mcp, "get_context", return_value=ctx_mock), \
+         patch.object(s, "_autoriza", return_value=None), patch.object(s, "_quem", return_value={"sub": "claudinho"}):
+        r = await s.monta_sessao(cadeira="ia", pergunta="o que fazer?")
+        pecas = r.get("pecas", [])
+        persona = next((p for p in pecas if p.get("peca") == "persona"), None)
+        assert persona is not None
+        assert persona.get("regime") == "ponteiro"
+
+@pytest.mark.asyncio
+async def test_superficie_code():
+    ctx_mock = MagicMock()
+    ctx_mock.request_context.request.headers = {"x-pf-superficie": "code", "mcp-session-id": "test-123"}
+    with patch.object(s.mcp, "get_context", return_value=ctx_mock), \
+         patch.object(s, "_autoriza", return_value=None), patch.object(s, "_quem", return_value={"sub": "claudinho"}):
+        r = await s.monta_sessao(cadeira="ia", pergunta="o que fazer?")
+        pecas = r.get("pecas", [])
+        persona = next((p for p in pecas if p.get("peca") == "persona"), None)
+        assert persona is not None
+        assert persona.get("regime") != "ponteiro"
+
+@pytest.mark.asyncio
+async def test_superficie_sem_header():
+    ctx_mock = MagicMock()
+    ctx_mock.request_context.request.headers = {"mcp-session-id": "test-123"}
+    with patch.object(s.mcp, "get_context", return_value=ctx_mock), \
+         patch.object(s, "_autoriza", return_value=None), patch.object(s, "_quem", return_value={"sub": "claudinho"}):
+        r = await s.monta_sessao(cadeira="ia", pergunta="o que fazer?")
+        pecas = r.get("pecas", [])
+        persona = next((p for p in pecas if p.get("peca") == "persona"), None)
+        assert persona is not None
+        assert persona.get("regime") != "ponteiro"
+
+@pytest.mark.asyncio
+async def test_superficie_sem_request():
+    ctx_mock = MagicMock()
+    ctx_mock.request_context.request = None
+    with patch.object(s.mcp, "get_context", return_value=ctx_mock), \
+         patch.object(s, "_autoriza", return_value=None), patch.object(s, "_quem", return_value={"sub": "claudinho"}), \
+         patch.dict("os.environ", {"PF_SUPERFICIE": "desconhecida"}):
+        r = await s.monta_sessao(cadeira="ia", pergunta="o que fazer?")
+        pecas = r.get("pecas", [])
+        persona = next((p for p in pecas if p.get("peca") == "persona"), None)
+        assert persona is not None
+        assert persona.get("regime") != "ponteiro"

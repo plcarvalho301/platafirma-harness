@@ -396,7 +396,30 @@ def _delta_pecas(r: dict, sessao_id: str) -> dict:
         if not sha or not pid:
             continue
         if pid in ("persona", "conduta"):
-            # Balde 1: prefixo estável é cache, nunca ponteiro (#3067).
+            if _superficie() == "claude.ai":
+                if conteudo and isinstance(conteudo, str):
+                    sha_calc = _poda.sha_servido(conteudo)
+                    if sha and sha != sha_calc:
+                        e["conteudo"] = None
+                        e["frescor"] = "indisponivel"
+                        e["motivo"] = f"sha divergente: declarado {sha}, calculado {sha_calc} (fail-closed)"
+                        e["recusa"] = "fail-closed"
+                        r["erro"] = f"sha que não bate na peça `{pid}`: declarado {sha}, calculado {sha_calc} (recusa fail-closed)"
+                        r["regra"] = "sha"
+                        r.setdefault("avisos", []).append(
+                            f"peça `{pid}`: sha que não bate — recusa fail-closed")
+                        continue
+                
+                bytes_omitidos = len(conteudo.encode()) if isinstance(conteudo, str) else 0
+                e["regime"] = "ponteiro"
+                e["conteudo"] = None
+                e["tokens"] = 0
+                e["poda"] = {"ato": "monta_sessao", "modo": "ponteiro", "sha": sha,
+                             "ref": e.get("ref"), "bytes_omitidos": bytes_omitidos}
+                deduplicadas += 1
+                continue
+            
+            # Balde 1 (outras superfícies): prefixo estável é cache, nunca ponteiro (#3067).
             servidos += len(conteudo.encode()) if isinstance(conteudo, str) else 0
             continue
         if not _eh_balde_2(e):
@@ -561,6 +584,21 @@ def _sessao_atual() -> str:
         return f"s{id(s):x}" if s is not None else _sessao.get()
     except Exception:                                       # noqa: BLE001
         return _sessao.get()
+
+
+def _superficie() -> str:
+    """Superfície do request em curso, lida do header com fallback."""
+    try:
+        ctx = mcp.get_context()
+        req = getattr(getattr(ctx, "request_context", None), "request", None)
+        cab = getattr(req, "headers", None)
+        if cab is not None:
+            sup = cab.get("x-pf-superficie")
+            if sup:
+                return sup
+    except Exception:                                       # noqa: BLE001
+        pass
+    return os.environ.get("PF_SUPERFICIE", "desconhecida")
 
 
 # GUARDA DE REENTRANCIA explicita (#2481, Onda 2). O ciclo `_audit`->`_quem`->
@@ -1555,7 +1593,7 @@ def _montar(cadeira: str, atualizar: bool = True, chapeu: str = "", pergunta: st
 
     env_abrir = {
         **_env_subprocesso(),
-        "PF_SUPERFICIE": os.environ.get("PF_SUPERFICIE", "claude.ai"),
+        "PF_SUPERFICIE": _superficie(),
     }
     if sub and sub != "-":
         env_abrir["PF_SUJEITO"] = sub
@@ -1625,7 +1663,7 @@ def _montar(cadeira: str, atualizar: bool = True, chapeu: str = "", pergunta: st
         "PF_CADEIRA": cad_slug,
         "PF_SESSAO": sid or "",
         "PF_ORDEM_ID": oid or "",
-        "PF_SUPERFICIE": os.environ.get("PF_SUPERFICIE", "claude.ai"),
+        "PF_SUPERFICIE": _superficie(),
     }
 
     try:
