@@ -323,3 +323,14 @@ def test_sonda_caixa_conteudo_le_frio_como_dona():
     assert "--tudo" in argv and "--json" in argv
     assert g.fabrica_env("produto")["PF_CADEIRA"] == "produto"
 
+
+def test_sonda_cadeiras_le_via_expediente_montar():
+    """A sonda de cadeiras usa `expediente montar <cadeira> --sem-acervo --json`
+    (leitura pura de morada, sem cunhar sessao no msg-mem) — card #3089."""
+    from harness_controle.agregador import SONDAS_GRUPO
+    g = next(s for s in SONDAS_GRUPO if s.nome == "cadeiras")
+    argv = g.fabrica_argv("produto")
+    assert argv == ["expediente", "montar", "produto", "--sem-acervo", "--json"]
+    assert g.fabrica_env("produto")["PF_CADEIRA"] == "produto"
+
+

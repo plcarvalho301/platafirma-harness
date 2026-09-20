@@ -3,11 +3,11 @@
 # capacidade: sessao
 # dono: ia
 # classe: A
-# forma: objeto (abrir, ver) / lista (listar) / predicado (encerrar) / fluxo (longjob)
-# use para: abrir a fita autorizado e reconhecido pela porta (abrir), saber quem opera uma sessao e por qual regra abriu (ver), as sessoes vivas (listar), apagar a chave viva (encerrar), execucao que atravessa a fita (longjob)
-# atos: abrir (escrita, sessao), ver (leitura, sessao), listar (leitura, sessao), encerrar (escrita, sessao), longjob (herdado do alvo)
-# folhas: abrir|encerrar -> sessao/cunhagem · ver|listar -> sessao/estado · longjob -> sessao/execucao-longa
-# escreve: sessao:{id}, ledger:{id}, giro:{id} (msg-mem; DEL em encerrar), sessao.sessao (duravel); nada em ver|listar
+# forma: objeto (abrir, ver, limpar) / lista (listar) / predicado (encerrar) / fluxo (longjob)
+# use para: abrir a fita autorizado e reconhecido pela porta (abrir), saber quem opera uma sessao e por qual regra abriu (ver), as sessoes vivas (listar), apagar a chave viva (encerrar), limpar chaves-sonda acumuladas (limpar), execucao que atravessa a fita (longjob)
+# atos: abrir (escrita, sessao), ver (leitura, sessao), listar (leitura, sessao), encerrar (escrita, sessao), limpar (escrita, sessao), longjob (herdado do alvo)
+# folhas: abrir|encerrar|limpar -> sessao/cunhagem · ver|listar -> sessao/estado · longjob -> sessao/execucao-longa
+# escreve: sessao:{id}, ledger:{id}, giro:{id} (msg-mem; DEL em encerrar|limpar), sessao.sessao (duravel); nada em ver|listar
 # consome: a API da entidade-sessao, quando houver (ate la: msg-mem e Postgres direto, declarados abaixo)
 # ambiente: PF_SUJEITO (obrigatoria em abrir; origem: fluxo OAuth, entregue pela porta), PF_SUPERFICIE[=desconhecida] (origem: superficie), PF_BIN[=<bin/ da propria arvore; na release /opt/platafirma/current/harness/bin>] (origem: teste); MEM_REDIS_HOST[=127.0.0.1], MEM_REDIS_PORT[=6380] e SESSAO_PG_PORT[=5437] sao endereco de servico, constantes do verbo; SESSAO_PG_PASSWORD nao e variavel: e segredo, obtido por `seg segredo ler` no processo. PF_CADEIRA, PF_SESSAO e PF_ORDEM_ID nao sao lidas — este verbo as origina
 # depende: msg-mem (modulo redis), Postgres da sessao (psycopg), persona (vocabulario: `persona foto --json`), acesso (`acesso decidir sessao_abrir sessao:<cadeira> --json`), seg (`seg segredo ler`), longjob (bin/longjob, contrato herdado)
@@ -42,7 +42,7 @@ MEM_HOST = os.environ.get("MEM_REDIS_HOST", "127.0.0.1")
 MEM_PORTA = int(os.environ.get("MEM_REDIS_PORT", "6380"))
 PG_PORTA = os.environ.get("SESSAO_PG_PORT", "5437")
 TTL_SESSAO_S = 172800          # 48 h — o mesmo da porta, para nao haver duas verdades
-ATOS = ("abrir", "ver", "listar", "encerrar", "longjob")
+ATOS = ("abrir", "ver", "listar", "encerrar", "limpar", "longjob")
 PREFIXOS_CADEIRA = ("claudinho-", "claudinha-")
 SUPERFICIES = ("claude.ai", "chat", "code", "desconhecida")
 
@@ -230,10 +230,10 @@ def _imprime_abrir(ch: dict, sid: str, cunhada: bool, registrada: bool, duravel:
     for a in avisos:
         print(f"(aviso: {a})")
 
-def ato_abrir(cadeira: str, sessao_id: str | None, saida: Saida) -> int:
+def ato_abrir(cadeira: str, sessao_id: str | None, saida: Saida, dry_run: bool = False) -> int:
     # etapa 1 — uso
     if not (cadeira or "").strip():
-        return saida.erro("uso: sessao abrir <cadeira> [--sessao-id <uuid>] [--json]", 2)
+        return saida.erro("uso: sessao abrir <cadeira> [--sessao-id <uuid>] [--dry-run] [--json]", 2)
     sid_portado = None
     if sessao_id is not None:
         sid_portado = _uuid_valido(sessao_id)
@@ -244,8 +244,11 @@ def ato_abrir(cadeira: str, sessao_id: str | None, saida: Saida) -> int:
     # etapa 2 — sujeito
     sujeito = (os.environ.get("PF_SUJEITO") or "").strip()
     if not sujeito:
-        return saida.erro("sem sujeito: a porta nao autenticou — PF_SUJEITO vem do fluxo OAuth "
-                          "(sub do token), nunca de arquivo ou unit (spec_acesso §2)", 3)
+        if dry_run:
+            sujeito = "sonda"
+        else:
+            return saida.erro("sem sujeito: a porta nao autenticou — PF_SUJEITO vem do fluxo OAuth "
+                              "(sub do token), nunca de arquivo ou unit (spec_acesso §2)", 3)
     # etapa 3 — organizacao (canonizacao); 3' organizacao muda degrada, mas so DEPOIS da 4
     avisos: list[str] = []
     voc, motivo_org = _vocabulario()
@@ -268,6 +271,8 @@ def ato_abrir(cadeira: str, sessao_id: str | None, saida: Saida) -> int:
     rc, d, err = _decidir(slug)
     if rc == 0:
         autorizada_por = f"{d.get('regra') or 'default'}@{d.get('plano') or '?'}"
+    elif dry_run:
+        autorizada_por = "dry-run@sonda"
     elif rc == 1:
         regra = d.get("regra") or "default"
         return saida.erro(f"nao autorizado: {sujeito[:8]} nao abre sessao:{slug} — regra {regra} "
@@ -283,10 +288,19 @@ def ato_abrir(cadeira: str, sessao_id: str | None, saida: Saida) -> int:
         return saida.erro(f"politica: ausente — `acesso decidir` saiu {rc} "
                           f"({err[:160] or 'sem stderr'}); sem plano nao ha sessao", 3)
     # etapa 5 — chave viva (uma vez, inteira)
-    rc_mem, motivo_mem = _msgmem()
     sid = sid_portado or str(uuid.uuid4())
     cunhada = sid_portado is None
     ordem_id = f"o{time.strftime('%Y%m%dT%H%M%S', time.gmtime())}-{uuid.uuid4().hex[:6]}"
+    if dry_run:
+        ch = {"sujeito": sujeito, "cadeira": slug, "canonizada": canonizada,
+              "autorizada_por": autorizada_por, "ordem_id": ordem_id,
+              "superficie": _superficie(), "aberto_em": _agora_iso(),
+              "origem": "sessao abrir --dry-run"}
+        motivo_dur = "dry-run: nao gravado"
+        _imprime_abrir(ch, sid, cunhada, False, False, motivo_dur, avisos, saida)
+        return 0
+
+    rc_mem, motivo_mem = _msgmem()
     if rc_mem is None:
         return saida.erro(f"{_cura_msgmem(motivo_mem)} — sessao_id cunhado e NAO gravado: {sid}",
                           3, sessao_id=sid)
@@ -416,6 +430,55 @@ def ato_encerrar(sessao_id: str, saida: Saida) -> int:
         print(f"encerrada: {sid}   apagadas: {' '.join(apagadas)}   (registro duravel fica)")
     return 0
 
+# ------------------------------------------------------------------ ato: limpar
+def ato_limpar(dry_run: bool, saida: Saida) -> int:
+    rc_mem, motivo = _msgmem()
+    if rc_mem is None:
+        return saida.erro(_cura_msgmem(motivo), 3)
+    varridas = 0
+    sondas = 0
+    apagadas = 0
+    preservadas = 0
+    chaves_para_apagar: list[str] = []
+    try:
+        for chave in rc_mem.scan_iter(match="sessao:*", count=500):
+            varridas += 1
+            sid = chave.split(":", 1)[1]
+            if not _uuid_valido(sid):
+                continue
+            ch = _le_chave(rc_mem, sid)
+            if ch is None:
+                continue
+            sujeito = str(ch.get("sujeito") or "").strip()
+            if sujeito and sujeito != "-":
+                preservadas += 1
+            else:
+                sondas += 1
+                chaves_para_apagar.append(sid)
+
+        if not dry_run:
+            for sid in chaves_para_apagar:
+                rc_mem.delete(f"sessao:{sid}", f"ledger:{sid}", f"giro:{sid}")
+                apagadas += 1
+        else:
+            apagadas = 0
+    except Exception as e:  # noqa: BLE001
+        return saida.erro(_cura_msgmem(type(e).__name__), 3)
+
+    if saida.json:
+        print(json.dumps({
+            "dry_run": dry_run,
+            "varridas": varridas,
+            "sondas_encontradas": sondas,
+            "apagadas": apagadas,
+            "preservadas": preservadas,
+        }, ensure_ascii=False))
+    else:
+        modo = " (dry-run)" if dry_run else ""
+        print(f"limpar{modo}: varridas={varridas} sondas_encontradas={sondas} "
+              f"apagadas={apagadas} preservadas={preservadas}")
+    return 0
+
 # ------------------------------------------------------------------ ato: longjob
 def ato_longjob(resto: list[str]) -> int:
     """Contrato herdado de bin/longjob (spec_sessao §1): exec, sem reinterpretar."""
@@ -428,14 +491,15 @@ def ato_longjob(resto: list[str]) -> int:
 
 # ------------------------------------------------------------------ CLI
 USO = """uso:
-  sessao abrir     <cadeira> [--sessao-id <uuid>] [--json]   autoriza (acesso decidir), cunha e grava a chave viva
-  sessao ver       <sessao_id> [--json]                       a chave como esta: sujeito, cadeira, regra, ordem_id
-  sessao listar    [--cadeira <slug>] [--json]                as sessoes vivas
-  sessao encerrar  <sessao_id>                                apaga sessao:{id}, ledger:{id}, giro:{id}; o duravel fica
-  sessao longjob   <args...>                                  contrato herdado de bin/longjob
+  sessao abrir     <cadeira> [--sessao-id <uuid>] [--dry-run] [--json]  autoriza (acesso decidir), cunha e grava a chave viva
+  sessao ver       <sessao_id> [--json]                                  a chave como esta: sujeito, cadeira, regra, ordem_id
+  sessao listar    [--cadeira <slug>] [--json]                           as sessoes vivas
+  sessao encerrar  <sessao_id>                                           apaga sessao:{id}, ledger:{id}, giro:{id}; o duravel fica
+  sessao limpar    [--dry-run] [--json]                                  remove chaves-sonda acumuladas (sujeito ausente ou '-')
+  sessao longjob   <args...>                                             contrato herdado de bin/longjob
 
 exit (abrir): 0 cunhou · 2 uso/cadeira desconhecida · 3 sem sujeito/politica ausente/msg-mem mudo · 4 nao autorizado · 5 gravou e nao confirma
-exit (ver/listar/encerrar): 0 · 1 nao existe · 2 uso · 3 msg-mem mudo · 5 DEL sem confirmacao"""
+exit (ver/listar/encerrar/limpar): 0 · 1 nao existe · 2 uso · 3 msg-mem mudo · 5 DEL sem confirmacao"""
 
 def main(argv: list[str] | None = None) -> int:
     argv = list(sys.argv[1:] if argv is None else argv)
@@ -453,10 +517,13 @@ def main(argv: list[str] | None = None) -> int:
     if ato == "abrir":
         p.add_argument("cadeira", nargs="?")
         p.add_argument("--sessao-id", dest="sessao_id", default=None)
+        p.add_argument("--dry-run", action="store_true")
     elif ato in ("ver", "encerrar"):
         p.add_argument("sessao_id", nargs="?")
     elif ato == "listar":
         p.add_argument("--cadeira", default=None)
+    elif ato == "limpar":
+        p.add_argument("--dry-run", action="store_true")
     p.add_argument("--json", action="store_true")
     try:
         ns, sobra = p.parse_known_args(argv[1:])
@@ -465,12 +532,14 @@ def main(argv: list[str] | None = None) -> int:
     if sobra:
         return saida.erro(f"sessao {ato}: argumento desconhecido {sobra[0]!r}\n{USO}", 2)
     if ato == "abrir":
-        return ato_abrir(ns.cadeira or "", ns.sessao_id, saida)
+        return ato_abrir(ns.cadeira or "", ns.sessao_id, saida, dry_run=ns.dry_run)
     if ato == "ver":
         return ato_ver(ns.sessao_id or "", saida)
     if ato == "listar":
         return ato_listar(ns.cadeira, saida)
-    return ato_encerrar(ns.sessao_id or "", saida)
+    if ato == "encerrar":
+        return ato_encerrar(ns.sessao_id or "", saida)
+    return ato_limpar(dry_run=ns.dry_run, saida=saida)
 
 if __name__ == "__main__":
     sys.exit(main())
