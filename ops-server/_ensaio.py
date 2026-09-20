@@ -685,7 +685,12 @@ def test_cosmetica_nao_janela_a_linha_longa_que_e_o_retorno_inteiro():
     linha = '{"fontes":[' + ",".join(f'{{"n":{i},"trecho":"conteudo do trecho {i}"}}'
                                      for i in range(1, 40)) + "]}"
     assert len(linha) > _p.LINHA_LONGA
-    assert "<linha longa" in _p.lava(linha)[0], "hoje janela"
+    # 20/09: JSON valido em linha unica deixou de janelar em QUALQUER perfil (a forma
+    # curta `motor buscar` caia fora do escopo). A janela segue valendo para prosa.
+    assert _p.lava(linha)[0] == linha, "JSON de linha unica nao e blob"
+    prosa = " ".join(f"palavra{i % 7} de um log sem quebra" for i in range(80))
+    assert "<linha longa" in _p.lava(prosa)[0], "prosa longa ainda janela"
+    assert _p.lava(prosa, janela=False)[0] == prosa, "read_file nunca janela"
     fora, rel = _p.lava(linha, cosmetica=True)
     assert fora == linha and rel["classes"] == []
 
@@ -731,8 +736,10 @@ def test_eixo_poda_sai_do_cabecalho_e_o_escopo_por_ato_vale():
     bin_ = _Path(__file__).parent.parent / "bin"
     s._PERFIS.clear()
     motor = s._perfil_verbo("motor", str(bin_ / "motor"))
-    assert motor["poda"] == "cosmetica" and motor["poda_atos"] == ("rag", "casa")
+    assert motor["poda"] == "cosmetica" and motor["poda_atos"] == ("rag", "casa", "buscar")
     assert s._cosmetica(motor, "casa") and not s._cosmetica(motor, "listar")
+    # 20/09: a forma curta `motor buscar "..."` (sem instancia) tambem e recuperacao
+    assert s._cosmetica(motor, s._ato_efetivo(s._argv_verbo("bin/motor", "buscar", ["pergunta"])))
     s._PERFIS.clear()
     descobrir = s._perfil_verbo("descobrir", str(bin_ / "descobrir"))
     assert descobrir["poda_atos"] == () and s._cosmetica(descobrir, "qualquer assunto")
@@ -762,9 +769,9 @@ def test_escopo_cosmetico_decide_pelo_argv_e_nao_pelo_parametro_ato():
 def test_blob_abaixo_do_teto_deixa_o_cru_no_derrame_e_diz_onde():
     """Invariante (ii) da arq:0101. Medido em 18/09: linha longa janelada ABAIXO do teto
     nao derramava, e o `sha=` do marcador era alca morta — nada na porta desreferencia
-    sha. Classe que tira conteudo deixa o cru no derrame e o caminho nos dois niveis."""
-    linha = '{"fontes":[' + ",".join(f'{{"n":{i},"trecho":"conteudo do trecho {i}"}}'
-                                     for i in range(1, 40)) + "]}"
+    sha. Classe que tira conteudo deixa o cru no derrame e o caminho nos dois niveis.
+    (20/09: a linha do teste virou prosa — JSON de linha unica nao janela mais.)"""
+    linha = " ".join(f"palavra{i % 7} de um log sem quebra" for i in range(80))
     args = {"cap": 50_000, "cauda": False, "alca": "tarefas:listar --json",
             "sessao_id": _UUID_A, "giro": 1, "tool": "tarefas", "ledger": None,
             "nome_derrame": "g00001-stdout.txt"}
