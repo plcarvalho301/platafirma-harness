@@ -292,6 +292,22 @@ def _ato_efetivo(argv: list) -> str | None:
     return argv[1] if len(argv) > 1 else None
 
 
+# ALCA DE CONSTITUICAO (ordem do dono, 20/09/2026, insumo Hermes / arq:0061 par.5): estas
+# nunca viram ponteiro nem aviso em Ledger.olha(), no caminho do verbo -- mesma garantia
+# que _delta_pecas ja da na abertura (balde 1, #3067). alca aqui e a linha completa
+# (tool + ato + args); o ato e o segundo token.
+_ATOS_CONSTITUTIVOS = {
+    ("persona", "conduta"), ("persona", "ler"),
+    ("mesa", "caderno"), ("expediente", "montar"),
+}
+
+
+def _eh_constitutiva(tool: str, alca: str) -> bool:
+    partes = (alca or "").split()
+    ato = partes[1] if len(partes) > 1 else None
+    return (tool, ato) in _ATOS_CONSTITUTIVOS
+
+
 def _serve(r: dict, *, tool: str, alca: str, ident: dict, cauda: bool = False,
            cosmetica: bool = False) -> dict:
     """R8 — o único caminho por onde retorno de tool sai desta porta.
@@ -322,6 +338,7 @@ def _serve(r: dict, *, tool: str, alca: str, ident: dict, cauda: bool = False,
         servido, meta = _poda.poda_texto(
             texto, cap=cap_efetivo, cauda=cauda, alca=f"{tool}:{alca}", sessao_id=sessao_id,
             giro=giro, tool=tool, ledger=ledger, cosmetica=cosmetica,
+            constitutiva=_eh_constitutiva(tool, alca),
             nome_derrame=f"g{giro:05d}-{campo}.txt")
         if sub:
             r[campo] = {**alvo, sub: servido}

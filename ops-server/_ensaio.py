@@ -144,6 +144,10 @@ def _fake_redis_cls(kv=None, sets=None):
             _kv[k] = int(_kv.get(k, 0)) + 1
             return _kv[k]
 
+        def incrby(self, k, n):
+            _kv[k] = int(_kv.get(k, 0)) + n
+            return _kv[k]
+
         def delete(self, *ks):
             n = 0
             for k in ks:
@@ -502,6 +506,49 @@ def test_ledger_sem_sessao_roda_e_conta_nunca_recusa():
     led = _p.Ledger(None, "")
     d = led.olha("a", "texto", 0, "t")
     assert d["modo"] == "inteiro" and d["ledger"] == "sem_sessao"
+
+# --- insumo Hermes 20/09/2026 (arq:0061 §5): alça de constituição nunca vira ponteiro
+# no caminho do verbo, e ponteiro comum expira por distância -------------------
+def test_constitutiva_nunca_vira_ponteiro_no_caminho_do_verbo():
+    """persona/conduta/mesa-caderno/expediente: sempre inteiro, mesmo sha repetido —
+    é o canal que a superfície poda primeiro (benchmark Hermes); um aviso aqui
+    apontaria pra texto que já pode ter saído da janela."""
+    Fake = _fake_redis_cls()
+    led = _p.Ledger(Fake(), _UUID_A)
+    persona = "TEXTO DA PERSONA " * 50
+    r1 = led.olha("persona:persona conduta", persona, 1, "persona", constitutiva=True)
+    r2 = led.olha("persona:persona conduta", persona, 2, "persona", constitutiva=True)
+    assert r1["ledger"] == "novo" and r2["ledger"] == "constitutiva"
+    assert r1["modo"] == "inteiro" and r2["modo"] == "inteiro" and r2["texto"] == persona
+
+def test_eh_constitutiva_cobre_a_tabela_do_dono():
+    assert s._eh_constitutiva("persona", "persona conduta")
+    assert s._eh_constitutiva("persona", "persona ler")
+    assert s._eh_constitutiva("mesa", "mesa caderno engenharia-de-harness")
+    assert s._eh_constitutiva("expediente", "expediente montar")
+    assert not s._eh_constitutiva("mesa", "mesa ver")
+    assert not s._eh_constitutiva("motor", "motor rag buscar casa x")
+
+def test_ponteiro_comum_expira_pela_distancia_e_reenvia_inteiro():
+    """Giro não prediz distância (cinco giros lendo arquivo grande empurram mais que
+    quarenta de `git status`) — o medidor é bytes servidos na sessão."""
+    Fake = _fake_redis_cls()
+    led = _p.Ledger(Fake(), _UUID_A)
+    texto = "conteudo estavel " * 20
+    led.olha("motor:motor rag buscar", texto, 1, "motor")
+    grande = "x" * (_p.DISTANCIA_MAX_PONTEIRO + 1)
+    led.olha("outro:outro ato", grande, 2, "outro")
+    r3 = led.olha("motor:motor rag buscar", texto, 3, "motor")
+    assert r3["modo"] == "inteiro" and r3["ledger"] == "expirado"
+    assert r3["distancia"] > _p.DISTANCIA_MAX_PONTEIRO
+
+def test_ponteiro_comum_perto_ainda_serve_aviso():
+    Fake = _fake_redis_cls()
+    led = _p.Ledger(Fake(), _UUID_A)
+    texto = "conteudo estavel " * 20
+    r1 = led.olha("motor:motor rag buscar", texto, 1, "motor")
+    r2 = led.olha("motor:motor rag buscar", texto, 2, "motor")
+    assert r1["ledger"] == "novo" and r2["ledger"] == "igual" and r2["modo"] == "igual"
 
 
 # --- aceite 6: PF_PODA=0 + restart reverte -------------------------------------
