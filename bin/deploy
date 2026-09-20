@@ -127,7 +127,6 @@ fi
 REPO="$(campo "$STACK" repo)"
 [ -n "$REPO" ] || { echo "erro: stack \"$STACK\" nao declara repo no registro — nao sei de que familia da release ela sobe." >&2; exit 3; }
 CURTO="${REPO#platafirma-}"
-PRE_BUILD="$(campo "$STACK" pre_build)"
 OVERRIDE="$PLATAFIRMA_INSTANCIA/deploy/$STACK/compose.override.yaml"
 SEGREDOS_STACK="$PLATAFIRMA_INSTANCIA/segredos/$STACK"
 ENV_DIR="${DEPLOY_ENV_DIR:-${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/platafirma}"
@@ -295,36 +294,6 @@ exigir_segredos() {
   [ "$falta" -eq 0 ] || { echo "recusa: faltam $falta segredo(s) de \"$STACK\" — ver: deploy $STACK segredos" >&2; exit 1; }
 }
 
-# pre_build declarado no registro acervo.stack (#3075): comando a rodar na raiz da
-# arvore da release antes do compose build/up. Se falhar, nao sobe nada.
-rodar_pre_build() {
-  [ -n "$PRE_BUILD" ] || return 0
-  local rel cmd rc=0
-  case "$PRE_BUILD" in
-    "$PLATAFIRMA_RELEASE/$CURTO/"*)             rel="${PRE_BUILD#"$PLATAFIRMA_RELEASE/$CURTO/"}" ;;
-    "$PF_RELEASE_RAIZ/$REPO/current/"*) rel="${PRE_BUILD#"$PF_RELEASE_RAIZ/$REPO/current/"}" ;;
-    "$ARVORE/"*)                        rel="${PRE_BUILD#"$ARVORE/"}" ;;
-    "~"*|/*|*..*)
-      echo "recusa: pre_build de \"$STACK\" declarado fora da arvore da release: $PRE_BUILD" >&2
-      exit 3
-      ;;
-    *)
-      rel="${PRE_BUILD#./}"
-      ;;
-  esac
-  cmd="$ARVORE/$rel"
-  [ -x "$cmd" ] || {
-    echo "recusa: pre_build de \"$STACK\" nao e executavel: $PRE_BUILD" >&2
-    exit 3
-  }
-  ( cd "$ARVORE" && "./$rel" ) || rc=$?
-  if [ "$rc" -ne 0 ]; then
-    echo "recusa: pre_build de \"$STACK\" falhou (rc=$rc) — nada subiu" >&2
-    exit "$rc"
-  fi
-  return 0
-}
-
 compose() {
   local env_args=()
   [ -z "$ENV_FILE" ] || env_args=(--env-file "$ENV_FILE")
@@ -359,7 +328,6 @@ if [ $# -eq 0 ]; then
   printf 'sobrepoe: %s\n' "$([ -r "$OVERRIDE" ] && echo "$OVERRIDE" || echo "nenhuma ($OVERRIDE)")"
   printf 'perfis  : %s\n' "$(lista "$STACK" profiles | tr '\n' ' ')"
   printf 'critico : %s\n' "$(campo "$STACK" critico)"
-  printf 'pre_build: %s\n' "${PRE_BUILD:-nenhum}"
   if ARV="$(arvore_de "")"; then
     montar_compose "$ARV"
     PROJETO="$(projeto_declarado)"
@@ -571,7 +539,6 @@ if [ "$ACAO" = "promover" ]; then
       exit 1; }
   fi
   montar_compose "$ARV"; fixar_projeto; exigir_segredos; materializar_env
-  rodar_pre_build
   # Ponto de retorno ANTES de mexer: sem isto, `reverter` so funciona com o operador
   # lembrando de cor o SHA de onde saiu — e ninguem lembra as onze da noite, com o
   # servico fora. Erro reversivel e defeito; erro irreversivel e perda.
@@ -596,7 +563,6 @@ ARV="$(arvore_de "")" || {
 montar_compose "$ARV"; fixar_projeto
 [ "$ACAO" != "up" ] || exigir_segredos
 materializar_env
-[ "$ACAO" != "up" ] || rodar_pre_build
 cd "$(dirname "$COMPOSE")"
 rc=0; compose "$@" || rc=$?
 if [ "$rc" -eq 0 ] && [ "$ACAO" = "up" ]; then gravar_atual "$(basename "$ARVORE")"; fi
