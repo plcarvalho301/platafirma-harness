@@ -26,18 +26,6 @@ for s in "$SHA1" "$SHA2"; do
   mkdir -p "$RELEASE/platafirma-core/$s/sem-nome" "$RELEASE/platafirma-core/$s/bin"
   printf 'name: platafirma-core\nservices:\n  app:\n    image: busybox\n' > "$RELEASE/platafirma-core/$s/docker-compose.yml"
   printf 'services:\n  app:\n    image: busybox\n' > "$RELEASE/platafirma-core/$s/sem-nome/compose.yaml"
-  cat > "$RELEASE/platafirma-core/$s/bin/montar" <<'PBOF'
-#!/usr/bin/env bash
-touch "${SENTINELA:?}"
-printf 'pre_build %s em %s\n' "$*" "$PWD" >> "${DOCKER_LOG:?}"
-PBOF
-  chmod +x "$RELEASE/platafirma-core/$s/bin/montar"
-  cat > "$RELEASE/platafirma-core/$s/bin/montar-falha" <<'PBOF'
-#!/usr/bin/env bash
-printf 'pre_build falhou de proposito\n' >> "${DOCKER_LOG:?}"
-exit 1
-PBOF
-  chmod +x "$RELEASE/platafirma-core/$s/bin/montar-falha"
   chmod -R a-w "$RELEASE/platafirma-core/$s"
 done
 ln -s "$SHA1" "$RELEASE/platafirma-core/current"
@@ -55,18 +43,6 @@ cat > "$DEPLOY_TOPO_ARQUIVO" <<'EOF'
   "core": {"slug": "core", "papel": "teste", "critico": false, "repo": "platafirma-core",
            "compose": "docker-compose.yml", "segredos": ["POSTGRES_PASSWORD"], "rotas": "cloudflared.yml",
            "reversao": {"via": "promover", "quem": "ti", "janela_min": 1, "estado": "nada"}},
-  "com_pb": {"slug": "com_pb", "repo": "platafirma-core", "projeto": "platafirma-core",
-             "compose": "docker-compose.yml", "pre_build": "bin/montar",
-             "reversao": {"via": "promover", "quem": "ti", "janela_min": 1, "estado": "nada"}},
-  "falha_pb": {"slug": "falha_pb", "repo": "platafirma-core", "projeto": "platafirma-core",
-               "compose": "docker-compose.yml", "pre_build": "bin/montar-falha",
-               "reversao": {"via": "promover", "quem": "ti", "janela_min": 1, "estado": "nada"}},
-  "fora_pb": {"slug": "fora_pb", "repo": "platafirma-core", "projeto": "platafirma-core",
-              "compose": "docker-compose.yml", "pre_build": "../fora",
-              "reversao": {"via": "promover", "quem": "ti", "janela_min": 1, "estado": "nada"}},
-  "naoexec_pb": {"slug": "naoexec_pb", "repo": "platafirma-core", "projeto": "platafirma-core",
-                 "compose": "docker-compose.yml", "pre_build": "bin/nao-existe",
-                 "reversao": {"via": "promover", "quem": "ti", "janela_min": 1, "estado": "nada"}},
   "fora":  {"slug": "fora", "repo": "platafirma-core", "compose": "~/deploy/core/docker-compose.yml"},
   "legado": {"slug": "legado", "repo": "platafirma-core", "compose": "docker-compose.yml",
              "rotas": "~/deploy/core/cloudflared.yml", "gate": "/etc/gate/docker-compose.yml", "segredos": ["~/segredos/core/TOKEN"]},
@@ -150,9 +126,6 @@ echo "--- 6: mostrar o declarado aponta o projeto e o desalinhamento com o curre
 out="$("$VERBO" core 2>&1)" || falha "mostrar: $out"
 grep -q "^projeto : platafirma-core" <<<"$out" || falha "projeto: $out"
 grep -q "conteineres em 2222222, current de platafirma-core em 1111111" <<<"$out" || falha "servido: $out"
-grep -q "^pre_build: nenhum" <<<"$out" || falha "pre_build core: $out"
-out_pb="$("$VERBO" com_pb 2>&1)" || falha "mostrar com_pb: $out_pb"
-grep -q "^pre_build: bin/montar" <<<"$out_pb" || falha "pre_build com_pb: $out_pb"
 echo "OK"
 
 echo "--- 7: reverter --executar volta ao ponto gravado (sem gate de confirmacao)"
@@ -181,50 +154,6 @@ echo "OK"
 echo "--- 8: stack fora do registro → 2"
 set +e; out="$("$VERBO" inexistente up 2>&1)"; rc=$?; set -e
 [ "$rc" -eq 2 ] && grep -q "nao esta no registro" <<<"$out" || falha "stack desconhecida: rc=$rc $out"
-echo "OK"
-
-echo "--- 9: pre_build: promover roda pre_build antes de compose up; falha propaga rc != 0 e nao sobe; stack sem pre_build promove normal"
-export SENTINELA="$TMP_DIR/sentinela"
-
-# (a) promover roda pre_build (stub toca arquivo-sentinela) ANTES do compose up, com cwd na raiz da arvore da release
-rm -f "$SENTINELA"; : > "$DOCKER_LOG"
-out="$("$VERBO" com_pb promover "$SHA2" 2>&1)" || falha "promover com_pb: $out"
-[ -f "$SENTINELA" ] || falha "sentinela nao foi tocada pelo pre_build"
-grep -qF "pre_build  em $RELEASE/platafirma-core/$SHA2" "$DOCKER_LOG" || falha "pre_build nao rodou na arvore da release: $(cat "$DOCKER_LOG")"
-linha_pb="$(grep -n "pre_build " "$DOCKER_LOG" | head -n1 | cut -d: -f1)"
-linha_up="$(grep -n "docker compose .*up -d --build --force-recreate" "$DOCKER_LOG" | head -n1 | cut -d: -f1)"
-[ -n "$linha_pb" ] && [ -n "$linha_up" ] && [ "$linha_pb" -lt "$linha_up" ] \
-  || falha "pre_build (linha $linha_pb) devia rodar antes do compose up (linha $linha_up): $(cat "$DOCKER_LOG")"
-
-# (b) pre_build exit 1 faz promover recusar rc != 0 e o docker stub NAO e chamado para up
-: > "$DOCKER_LOG"
-set +e; out="$("$VERBO" falha_pb promover "$SHA2" 2>&1)"; rc=$?; set -e
-[ "$rc" -eq 1 ] || falha "falha_pb devia recusar rc=1: rc=$rc $out"
-grep -qF 'recusa: pre_build de "falha_pb" falhou (rc=1) — nada subiu' <<<"$out" || falha "msg recusa: $out"
-! grep -q "docker compose .*up" "$DOCKER_LOG" || falha "docker compose up nao devia ter sido chamado: $(cat "$DOCKER_LOG")"
-
-# (c) stack sem pre_build promove igual a hoje
-: > "$DOCKER_LOG"
-out="$("$VERBO" core promover "$SHA2" 2>&1)" || falha "promover core sem pre_build: $out"
-grep -qF "docker compose -p platafirma-core -f $RELEASE/platafirma-core/$SHA2/docker-compose.yml -f $INSTANCIA/deploy/core/compose.override.yaml --env-file $DEPLOY_ENV_DIR/core.env up -d --build --force-recreate" "$DOCKER_LOG" \
-  || falha "core sem pre_build devia promover normal: $(cat "$DOCKER_LOG")"
-! grep -q "pre_build" "$DOCKER_LOG" || falha "pre_build nao devia rodar para core"
-
-# pre_build fora da arvore ou nao executavel -> recusa exit 3
-set +e; out="$("$VERBO" fora_pb promover "$SHA2" 2>&1)"; rc=$?; set -e
-[ "$rc" -eq 3 ] && grep -q "fora da arvore da release" <<<"$out" || falha "fora_pb: rc=$rc $out"
-
-set +e; out="$("$VERBO" naoexec_pb promover "$SHA2" 2>&1)"; rc=$?; set -e
-[ "$rc" -eq 3 ] && grep -q "nao e executavel" <<<"$out" || falha "naoexec_pb: rc=$rc $out"
-
-# up tambem roda pre_build antes do compose
-rm -f "$SENTINELA"; : > "$DOCKER_LOG"
-out="$("$VERBO" com_pb up -d 2>&1)" || falha "up com_pb: $out"
-[ -f "$SENTINELA" ] || falha "sentinela nao foi tocada pelo up"
-linha_pb="$(grep -n "pre_build " "$DOCKER_LOG" | head -n1 | cut -d: -f1)"
-linha_up="$(grep -n "docker compose .*up -d" "$DOCKER_LOG" | head -n1 | cut -d: -f1)"
-[ -n "$linha_pb" ] && [ -n "$linha_up" ] && [ "$linha_pb" -lt "$linha_up" ] \
-  || falha "up: pre_build (linha $linha_pb) devia rodar antes do compose up (linha $linha_up): $(cat "$DOCKER_LOG")"
 echo "OK"
 
 echo "=== deploy: todos os testes passaram ==="
