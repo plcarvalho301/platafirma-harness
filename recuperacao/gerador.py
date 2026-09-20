@@ -3,6 +3,10 @@
 `spec_recuperador.md` §7: "Um gerador lê essa tabela e emite a descrição da tool no build.
 Fonte nova aparece no roteamento; fonte que sai, some. Nenhuma linha se escreve à mão
 antes de o gerador existir."
+
+A tabela (`docs/catalogo-de-fontes.md`) não é mais a fonte da verdade (arq:0076): esse
+lugar é `acervo.ferramental_fonte`, lida via GET /acervo/fontes por `fontes.py`. Este
+módulo segue vivo como parser do seed inicial e de `texto=` explícito nos testes.
 """
 
 from __future__ import annotations
@@ -46,7 +50,12 @@ def _acha_catalogo_padrao() -> Path:
 
 
 def le_tabela_fontes(caminho: Path | str | None = None, texto: str | None = None) -> list[FonteInfo]:
-    """Lê e valida estritamente a tabela `Fontes da plataforma` de docs/catalogo-de-fontes.md.
+    """Lê e valida estritamente a tabela `Fontes da plataforma` — do seed embutido
+    (`docs/catalogo-de-fontes.md`, se presente) ou de `texto=` explícito.
+
+    Não é mais a fonte da verdade (arq:0076): serve o parser do seed inicial e dos testes
+    por `texto=`; a leitura viva é `acervo.ferramental_fonte` via GET /acervo/fontes
+    (`fontes.py::_le_fontes_do_acervo`).
 
     Parser estrito: linha malformada, coluna a mais/menos, classe fora de exata|semantica
     falham levantando ErroTabelaFontes com o número da linha e o defeito identificado.

@@ -1,4 +1,4 @@
-"""Testes de aceite do gerador de fontes e derivação do enum (#2320).
+"""Testes de aceite do gerador de fontes e derivação do enum (#2320, arq:0076).
 
 Aceite (executável por terceiro):
 1. A tabela do catálogo tem as seis linhas do §5 da spec, e recuperacao/fontes.py
@@ -8,12 +8,21 @@ Aceite (executável por terceiro):
 3. Linha malformada falha o build nomeando o número da linha e o defeito.
 4. A suíte de contrato do F0 continua verde.
 5. O commit declara o tamanho da descrição gerada em tokens, medido.
+6. arq:0076 — com docs/catalogo-de-fontes.md ausente E RAG_API_URL inválido,
+   `import recuperacao.fontes` não estoura e Fonte/CLASSE têm as 6 do seed embutido.
+7. arq:0076 — com a API respondendo, `_constroi_fontes` monta o enum a partir DELA,
+   não do seed nem do .md.
 """
 
 from __future__ import annotations
 
-import pytest
+import ast
+import os
+import subprocess
+import sys
 from pathlib import Path
+
+import pytest
 
 from recuperacao.fontes import Classe, Fonte, CLASSE, _constroi_fontes
 from recuperacao.gerador import (
@@ -42,13 +51,19 @@ TABELA_6_FONTES = """## Fontes da plataforma
 
 
 def test_tabela_do_catalogo_populada_e_enum_derivado():
-    """Prova 1: Enum Fonte e mapa CLASSE construídos da tabela do catálogo."""
-    fontes = le_tabela_fontes()
+    """Prova 1: Enum Fonte e mapa CLASSE construídos da tabela do catálogo.
+
+    `texto=TABELA_6_FONTES` explícito — não depende de docs/catalogo-de-fontes.md, que
+    não é mais a fonte da verdade (arq:0076) e pode nem existir no checkout.
+    """
+    fontes = le_tabela_fontes(texto=TABELA_6_FONTES)
     assert len(fontes) == 6
     assert [f.slug for f in fontes] == ["board", "fila", "mesa", "registro", "wiki", "acervo"]
-    assert {f.value for f in Fonte} == {"board", "fila", "mesa", "registro", "wiki", "acervo"}
-    assert CLASSE[Fonte.ACERVO] is Classe.SEMANTICA
-    assert all(CLASSE[f] is Classe.EXATA for f in Fonte if f is not Fonte.ACERVO)
+
+    FonteX, ClasseX = _constroi_fontes(texto=TABELA_6_FONTES)
+    assert {f.value for f in FonteX} == {"board", "fila", "mesa", "registro", "wiki", "acervo"}
+    assert ClasseX[FonteX.ACERVO] is Classe.SEMANTICA
+    assert all(ClasseX[f] is Classe.EXATA for f in FonteX if f is not FonteX.ACERVO)
 
 
 def test_removida_uma_linha_da_tabela_fonte_some_da_descricao():
@@ -130,7 +145,7 @@ def test_linha_malformada_falha_nomeando_linha_e_defeito(texto_invalido, trecho_
 
 def test_teto_tokens_medido():
     """Prova 5: Medição de tokens da descrição gerada."""
-    fontes = le_tabela_fontes()
+    fontes = le_tabela_fontes(texto=TABELA_6_FONTES)
     desc = gera_descricao_tool(fontes)
     n = conta_tokens(desc)
     if n is not None:
@@ -138,3 +153,39 @@ def test_teto_tokens_medido():
         # existe justamente para receber fonte nova sem tocar em codigo. O numero de hoje
         # (165, seis fontes, dono pela cadeira) fica no commit, nao na assercao.
         assert n < 300
+
+
+def test_import_nao_estoura_sem_md_e_com_api_fora():
+    """Prova 6 (arq:0076): sem docs/catalogo-de-fontes.md (já ausente no checkout) e com
+    RAG_API_URL apontando para porta sem escuta, `import recuperacao.fontes` não estoura
+    e Fonte/CLASSE têm as 6 do seed embutido. Subprocesso: prova o import do zero, sem o
+    cache do módulo que a suíte já carregou.
+    """
+    raiz = Path(__file__).resolve().parent.parent
+    env = {**os.environ, "RAG_API_URL": "http://127.0.0.1:1"}
+    r = subprocess.run(
+        [sys.executable, "-c",
+         "import recuperacao.fontes as f; print(sorted(x.value for x in f.Fonte))"],
+        cwd=str(raiz), env=env, capture_output=True, text=True, timeout=30,
+    )
+    assert r.returncode == 0, f"import estourou: {r.stderr}"
+    slugs = ast.literal_eval(r.stdout.strip())
+    assert slugs == ["acervo", "board", "fila", "mesa", "registro", "wiki"]
+
+
+def test_repoint_monta_enum_a_partir_do_stub_da_api(monkeypatch):
+    """Prova 7 (arq:0076): com `_le_fontes_do_acervo` devolvendo linhas do golden record,
+    `_constroi_fontes()` monta o enum A PARTIR DELAS — não do seed nem do .md.
+
+    `cofre` não está no seed nem em TABELA_6_FONTES: só aparecer aqui prova que a fonte é
+    o stub da API, não um fallback disfarçado.
+    """
+    linhas = [
+        FonteInfo(slug="cofre", capacidade="seguranca", dono="claudinho-seguranca",
+                  transporte="vault", classe="exata", contrato_de_leitura="API do Vault",
+                  gold="nao-calibrada", linha_num=1),
+    ]
+    monkeypatch.setattr("recuperacao.fontes._le_fontes_do_acervo", lambda: linhas)
+    FonteX, ClasseX = _constroi_fontes()
+    assert {f.value for f in FonteX} == {"cofre"}
+    assert ClasseX[FonteX.COFRE] is Classe.EXATA

@@ -1,0 +1,11 @@
+# caderno — plataforma (ti)
+
+## Conhecimento curado
+
+- Promover código de uma unit de usuário (systemd --user) NÃO basta com `release promover`: ele materializa `current` e recria containers de STACK, mas não recarrega units de usuário. O systemd exige `systemctl --user daemon-reload` quando o `.service` mudou no disco, e `infra restart` não o faz — reexecuta o ExecStart mas o systemd mantém a definição velha em memória. Sintoma: unit segue no código antigo após promover + restart pela porta; o journal não registra start novo. Prova é medir o efeito, não confiar no "reiniciada: active" do verbo. Cura hoje é ato no host (fora da porta): `sudo -u <conta> XDG_RUNTIME_DIR=/run/user/$(id -u <conta>) systemctl --user daemon-reload && ...restart <unit>`. Mesma classe do pf-porta-watch que não reinicia a porta após promover.
+
+- Sonda de leitura que passa por `sessao abrir` cunha chave viva no msg-mem como efeito colateral — leitura com escrita escondida. Prova de disponibilidade de montagem deve usar leitura pura (`expediente montar --sem-acervo`), nunca `sessao abrir`/`monta-sessao`. Padrão a imitar: sondas infra_estado/conferir_* do agregador não cunham nada.
+
+## Diário de bordo
+
+2026-09-20 — card #3089, estancar cunhagem do agregador: promovi 169ef4d (release promover, gate verde) e a sonda seguiu cunhando ~1 chave-sonda/cadeira/min. Tentei `infra restart harness-agregador` 2x — retornou "reiniciada: active" com warning "changed on disk — run daemon-reload", mas o journal não registrou start novo e `sessao limpar --dry-run` seguiu contando sondas novas. Causa: unit de usuário não recarrega por `release promover` nem `infra restart`; systemd exige daemon-reload, sem verbo servido para ele. Contorno NA DATA: o dono rodou no host `sudo -u claudinho XDG_RUNTIME_DIR=/run/user/$(id -u claudinho) systemctl --user daemon-reload && ...restart`; depois disso, tick > 45s = 0 sondas novas. Encaminhado à mesa #19 (ampliar `infra restart` para dar daemon-reload quando a unit mudou no disco).

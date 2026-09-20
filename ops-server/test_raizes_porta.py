@@ -161,6 +161,14 @@ def test_write_file_nao_recria_bancada_nem_worktree(monkeypatch, tmp_path, sem_p
     assert not (viva / "wt" / "platafirma-core" / "outra-cadeira").exists()
 
 
+def test_write_file_aceita_fonte_de_diagrama(bancada, sem_pep):
+    """spec_porta-so-verbo §4.1: .mmd/.d2 sao fonte canonica de diagrama (ADR 0001/0051)."""
+    mmd = s.write_file(path="wt/platafirma-core/fabrica/x.mmd", content="graph TD; a-->b\n")
+    assert mmd.get("ok"), mmd
+    d2 = s.write_file(path="wt/platafirma-core/fabrica/x.d2", content="a -> b\n")
+    assert d2.get("ok"), d2
+
+
 def test_write_file_nega_release_e_log(bancada, sem_pep):
     rel = s.write_file(path=str(s.BIN_VERBOS / "x.md"), content="x\n")
     assert rel.get("recusado") and "release" in rel["motivo"]
