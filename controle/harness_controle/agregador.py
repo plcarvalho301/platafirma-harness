@@ -173,7 +173,8 @@ SONDAS: list[Sonda] = [
 SONDAS_GRUPO: list[SondaGrupo] = [
     SondaGrupo("cadeiras", _intervalo("CADEIRAS", 45), _timeout("CADEIRAS", 15),
                _cadeiras_disponiveis,
-               lambda c: ["monta-sessao", c, "--json", "--sem-atualizar"],
+               lambda c: ["expediente", "montar", c, "--sem-acervo", "--json"],
+               fabrica_env=lambda c: {**_env_padrao(), "PF_CADEIRA": c},
                chave_item="cadeira"),
     SondaGrupo("skills", _intervalo("SKILLS", 120), _timeout("SKILLS", 15),
                _skills_disponiveis,
