@@ -551,6 +551,23 @@ def test_ponteiro_comum_perto_ainda_serve_aviso():
     assert r1["ledger"] == "novo" and r2["ledger"] == "igual" and r2["modo"] == "igual"
 
 
+def test_distancia_conta_o_servido_nao_o_produzido():
+    """Medido no ar em 20/09 (#3092): treze releituras servidas como aviso de 68 bytes
+    somaram 30 kB cada no medidor, e o ponteiro expirou com ~26 kB entregues de fato.
+    Releitura que sai como aviso empurra so o tamanho do aviso."""
+    Fake = _fake_redis_cls()
+    led = _p.Ledger(Fake(), _UUID_A)
+    texto = "linha de arquivo grande\n" * 2_000            # ~48 kB
+    n = len(texto.encode())
+    assert led.olha("release:ler poda.py", texto, 1, "release")["ledger"] == "novo"
+    assert led.bytes_totais() == n
+    vezes = _p.DISTANCIA_MAX_PONTEIRO // n + 2              # no medidor velho, expirava
+    for giro in range(2, 2 + vezes):
+        r = led.olha("release:ler poda.py", texto, giro, "release")
+        assert r["ledger"] == "igual", f"giro {giro}: aviso nao entregue nao empurra distancia"
+    assert led.bytes_totais() < n + vezes * 200
+
+
 # --- aceite 6: PF_PODA=0 + restart reverte -------------------------------------
 def test_pf_poda_zero_reverte_a_porta_inteira():
     r = {"exit_code": 0, "stdout": {"texto": "\x1b[31mcor\x1b[0m\n" * 50, "bytes_total": 10}}
