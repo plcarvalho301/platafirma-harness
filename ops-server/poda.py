@@ -429,6 +429,21 @@ class Ledger:
 
     def olha(self, alca: str, lavado: str, giro: int, tool: str, *,
              constitutiva: bool = False) -> dict:
+        """Decide o que servir e conta, no medidor de distancia, o que de fato SAIU.
+
+        Medido em 20/09/2026 (sessao 066d161e, #3092): o medidor somava o `lavado`
+        antes da decisao, entao treze releituras de um arquivo de 30 kB — todas
+        servidas como aviso de 68 bytes — empurraram a distancia a 411.937 e o
+        ponteiro expirou com ~26 kB realmente entregues. Distancia e proxy do que
+        entrou na janela da cadeira; o que nao foi enviado nao empurra nada.
+        """
+        d = self._decide(alca, lavado, giro, tool, constitutiva=constitutiva)
+        if self.ativo:
+            self._soma_bytes(len((d.get("texto") or "").encode("utf-8", "replace")))
+        return d
+
+    def _decide(self, alca: str, lavado: str, giro: int, tool: str, *,
+                constitutiva: bool = False) -> dict:
         """Devolve o que servir: `{modo: inteiro|igual|diff, texto, ...}`.
 
         Quatro desfechos: nunca visto → inteiro; ALCA DE CONSTITUICAO (persona conduta,
@@ -442,8 +457,6 @@ class Ledger:
         inteiro.
         """
         sha = sha_servido(lavado)
-        if self.ativo:
-            self._soma_bytes(len(lavado.encode("utf-8", "replace")))
         if not self.ativo:
             return {"modo": "inteiro", "texto": lavado, "sha": sha, "ledger": "sem_sessao"}
         try:
@@ -508,10 +521,13 @@ class Ledger:
                 "ledger": "diff"}
 
     def _grava(self, alca: str, sha: str, giro: int, tool: str, lavado: str) -> None:
+        # `_grava` roda ANTES de `olha` somar este envio: o marco e o total ja com ele,
+        # para a distancia medir o que veio DEPOIS da peca, nao a propria peca.
+        marco = self.bytes_totais() + len(lavado.encode("utf-8", "replace"))
         try:
             self.rc.hset(self.chave, alca,
                          json.dumps({"sha": sha, "giro": giro, "tool": tool,
-                                    "bytes_no_envio": self.bytes_totais()},
+                                    "bytes_no_envio": marco},
                                     ensure_ascii=False))
             self.rc.expire(self.chave, self.ttl)
             self._arquivo(alca).write_text(lavado, encoding="utf-8", errors="replace")
