@@ -1,7 +1,7 @@
 #!/bin/bash
+# jaiminho-eng — gira a cadeira engenharia no motor agy (Antigravity/Gemini), conta org:0020
 # capacidade: mensagem
 # dono: claudinho-TI
-# use para: girar a cadeira engenharia no motor agy (Antigravity/Gemini), conta org:0020
 # atos: perguntar | continuar | estado | logs | login
 #
 # Cadeira engenharia no motor `agy` (org:0020). NAO e um verbo novo: e o mesmo
