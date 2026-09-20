@@ -2,11 +2,17 @@
 # capacidade: mensagem
 # dono: claudinho-TI
 #
-# Segunda conta da fabrica, motor `agy` (org:0020). NAO e um verbo novo: e o mesmo
+# Cadeira engenharia no motor `agy` (org:0020). NAO e um verbo novo: e o mesmo
 # `bin/jaiminho`, apontado por env para o container, a persona e o volume desta conta.
 # Existe como arquivo proprio porque `chat` roteia participante por NOME do binario
-# (VERBO_DO_PARTICIPANTE), e porque `jaiminho-fabrica perguntar` e o que a recepcao
-# chama — ninguem deveria precisar lembrar de exportar tres variaveis para girar.
+# (VERBO_DO_PARTICIPANTE), e porque `jaiminho-eng perguntar` e o que a recepcao
+# chama — ninguem deveria precisar lembrar de exportar variaveis para girar.
+#
+# NOME vs CONTA: o participante e `jaiminho-eng` na camada harness (persona, chat,
+# cadeiras.py). A service account subjacente segue sendo `jaiminho-fabrica` (client no
+# realm, sujeito no PAP, container, volumes, deploy em /srv/pf/agy/jaiminho-fabrica) ate
+# a reconformacao geral renomear a identidade — card #3106. Por isso PF_JAIMINHO_CONTAINER
+# aponta o container REAL (nome velho): renomear so a camada harness nao renomeia a conta.
 #
 # Sub-atos: os mesmos de `jaiminho` — perguntar | continuar | estado | logs | login.
 set -euo pipefail
@@ -20,6 +26,6 @@ export PF_JAIMINHO_CONTAINER="jaiminho-fabrica"
 # hoje isto NAO da alcance: da a RECUSA CERTA, com o endereco de quem alcanca.
 export PF_JAIMINHO_DOCKER_HOST="${PF_JAIMINHO_DOCKER_HOST:-unix:///run/user/1003/docker.sock}"
 export PF_JAIMINHO_DAEMON_DONO="jaiminho (uid 1003), deploy em /srv/pf/agy/jaiminho-fabrica"
-export PF_JAIMINHO_PERSONA="$HARNESS/personas/persona-jaiminho-fabrica.md"
+export PF_JAIMINHO_PERSONA="$HARNESS/personas/persona-jaiminho-eng.md"
 export PF_JAIMINHO_TRABALHO="/home/jaiminho/trabalho"
 exec "$HARNESS/bin/jaiminho" "$@"

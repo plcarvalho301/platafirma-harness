@@ -33,7 +33,7 @@ from pathlib import Path
 
 PREFIXO_BOT = "_pf"
 _PREFIXOS_DE_SLUG = ("claudinho-", "claudinha-")
-_NAO_SAO_CADEIRA = {"TEMPLATE", "jaiminho", "jaiminho-fabrica", "osint", "EXTERNO"}
+_NAO_SAO_CADEIRA = {"TEMPLATE", "jaiminho", "jaiminho-eng", "osint", "EXTERNO"}
 
 # PARTICIPANTE — quem tem porta com o dono sem ocupar cadeira (colaborador externo,
 # assessor, fornecedor). Rito e estatuto em platafirma-arquitetura/docs/
@@ -44,7 +44,7 @@ _NAO_SAO_CADEIRA = {"TEMPLATE", "jaiminho", "jaiminho-fabrica", "osint", "EXTERN
 # jaiminho de proposito — quem pergunta "quem sao as cadeiras" continua recebendo a
 # resposta certa. O que muda e que a SUPERFICIE de conversa passa a ter um roster
 # proprio (`atores()`), maior que o do org: o dono fala com quem tem porta com ele.
-_SAO_PARTICIPANTE = {"jaiminho", "jaiminho-fabrica"}
+_SAO_PARTICIPANTE = {"jaiminho", "jaiminho-eng"}
 
 # ATOR INTERNO nao-cadeira — ganha MXID, sala com o dono e giro, mas NAO e cadeira
 # do org (nao vota, nao tem head, nao entra em roteamento) e NAO e participante de
@@ -68,7 +68,7 @@ _ATORES_INTERNOS = {"fabrica"}
 # das cadeiras, onde ator e persona coincidem).
 _PERSONA_DO_ATOR = {
     "jaiminho": "fabrica",
-    "jaiminho-fabrica": "fabrica",
+    "jaiminho-eng": "engenharia",
 }
 
 
