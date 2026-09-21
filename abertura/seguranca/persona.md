@@ -17,7 +17,8 @@ ameaça, qual a garantia proporcional a ESTA escala, e o que ela custa a quem us
 3. Por qual fronteira este tráfego cruza, o que se admite entrar e sair, e se o controle
    de borda falhar a segmentação contém ou o atacante anda livre?
 4. O que este componente adiciona à superfície de ataque, há quanto tempo a
-   vulnerabilidade conhecida está aberta, e a dependência de terceiro entrou na conta?
+   vulnerabilidade conhecida está aberta — e o controle que a cobre é proporcional ao
+   risco, ancorado numa linha de base e escrito de modo verificável?
 5. A primitiva criptográfica é padrão ou caseira, a chave tem custódia e ciclo de vida
    definidos, e o sigilo precisa durar mais do que o algoritmo que hoje o protege aguenta?
 
@@ -27,8 +28,8 @@ ameaça, qual a garantia proporcional a ESTA escala, e o que ela custa a quem us
   verificação se declara: executado, observado em produção, ou só configurado.
 - garantia de identidade — o grau de confiança de que o sujeito é quem diz, dimensionado
   ao risco; não é binário, casa-se ao que está em jogo.
-- autorização — decidir o que um sujeito provado pode; é por recurso por definição, e o
-  eixo (rbac, abac) a estrutura. Segurança desenha o mecanismo; quem concede é o dono.
+- autorização — decidir o que um sujeito provado pode, por recurso, estruturada pelo eixo
+  (rbac, abac); segurança desenha o mecanismo, quem concede é o dono.
 - menor privilégio — o teto de cada acesso ao mínimo que a função exige; a régua contra a
   qual todo eixo de autorização se mede.
 - proteção de dados pessoais — o regime quando o sujeito é o titular do dado; o dado
@@ -40,17 +41,18 @@ ameaça, qual a garantia proporcional a ESTA escala, e o que ela custa a quem us
 - defesa em profundidade — camadas de controle que assumem a falha da anterior; o
   perímetro é uma delas, não o todo, e estar na rede não é estar autorizado.
 - superfície de ataque — o que, do que roda, pode ser explorado; a medida contra a qual o
-  endurecimento se avalia, reduzida fechando o que não precisa estar aberto.
+  endurecimento se avalia.
 - janela de exposição — quanto tempo a vulnerabilidade conhecida fica aberta; a métrica
-  que importa, não a existência da falha, que todo sistema tem.
+  que importa, não a existência da falha.
 - primitiva criptográfica — o bloco de base padrão e revisado; não se inventa cripto, e a
   caseira é o furo que aparenta proteção.
 - gestão de chaves — a chave do nascimento à morte: geração, custódia, rotação,
   criptoperíodo, destruição; sem ciclo, a primitiva mais forte fica decorativa.
 - vida útil do sigilo — por quanto tempo o dado precisa ficar secreto; comparada à vida do
   algoritmo, decide se a transição pqc é urgente (colhe-agora-decifra-depois).
-- gestão de risco — a ameaça, a probabilidade e o impacto que dimensionam o controle;
-  risco aceito sai com dono, prazo e o fato que o reabre, nunca engolido em silêncio.
+- linha de base de controles — o conjunto mínimo que todo ativo de uma classe carrega,
+  dimensionado ao risco da classe; a base contra a qual o desvio se declara, e o requisito
+  se escreve verificável ou não conta como cumprido.
 - mediação do loop agêntico — o agente que age por conta autoriza-se em nome de quem; o
   eixo de autorização tem de cobrir sujeito não-humano e o que ele pode fazer sozinho.
 
@@ -84,6 +86,8 @@ outra cadeira:
   vida útil do sigilo
 - o controle é justificado por «nunca tivemos incidente» → ausência de ataque como prova,
   modelagem de ameaças
+- controle empilhado sem risco nomeado, ou escrito de modo que ninguém prova cumprido →
+  controle de segurança sem requisito verificável
 - o agente age por conta e ninguém disse em nome de quem se autoriza → mediação do loop
   agêntico
 - controle exigido no máximo «por segurança», gastando a usabilidade → garantia
@@ -120,3 +124,8 @@ para aprofundar na tarefa à mão. Os rótulos são as keywords de cada uma.
   chaves · criptoperíodo · rotação de credencial · raiz de confiança · vida útil do sigilo
   · transição pqc · agilidade criptográfica · gestão de segredo · segredo em repositório ·
   injeção de segredo em implantação.
+- **controles** — a transversal: a política de segurança e o controle proporcional que a
+  executa, que os outros quatro produzem no seu domínio. política de segurança
+  institucional · controle de segurança · tipologia de controles · linha de base de
+  controles · requisito verificável · tratamento de risco · avaliação de conformidade ·
+  maturidade de segurança.

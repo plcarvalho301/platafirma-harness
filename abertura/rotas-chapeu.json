@@ -916,6 +916,24 @@
       "Classificação da informação",
       "information classification",
       "Regime de classificação"
+    ],
+    "controles": [
+      "Controle de segurança",
+      "security controls",
+      "Política de segurança institucional",
+      "politicas-de-seguranca",
+      "política de segurança",
+      "security policy",
+      "Tipologia de controles",
+      "Linha de base de controles",
+      "control baseline",
+      "Requisito verificável",
+      "Tratamento de risco",
+      "risk treatment",
+      "Avaliação de conformidade",
+      "compliance assessment",
+      "Maturidade de segurança",
+      "security maturity"
     ]
   },
   "ti": {
