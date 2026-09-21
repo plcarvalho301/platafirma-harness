@@ -26,6 +26,9 @@
     "Zero instancia nao e conector faltando. Deriva entre produtor e instancia viva",
     "sai como OBSERVACAO, com nome de arquivo, e nao reprova."
   ],
+  "azp_superficie": {
+    "jaiminho-fabrica": "fabrica"
+  },
   "superficies": {
     "claude.ai": {
       "papel": "sessao do dono no app",
@@ -54,6 +57,7 @@
       }
     },
     "fabrica": {
+      "azp": "jaiminho-fabrica",
       "papel": "Code na conta que roda a fabrica, em maquina qualquer; worktree wt-<card> sob card de claudinho-TI",
       "conectores": [
         "claudinho-mcp",
