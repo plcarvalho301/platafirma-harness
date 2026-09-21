@@ -499,7 +499,8 @@ def main():
             corpo = f.read()
         sha256 = hashlib.sha256(corpo).hexdigest()
 
-        subir_objeto(fp, sha256, args.colecao, headers)
+        if len(corpo) > 0:
+            subir_objeto(fp, sha256, args.colecao, headers)
 
         classif = sidecars.get(rel) or sidecars.get(os.path.basename(rel)) or {}
         classif = dict(classif)
