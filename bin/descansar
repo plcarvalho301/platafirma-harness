@@ -117,11 +117,52 @@ def conn():
     return redis.Redis(host=HOST, port=PORTA, decode_responses=True)
 
 
+def _sessoes_vivas():
+    """(sid, cadeira) das sessoes vivas no msg-mem, mais nova primeiro. Para quando o
+    PF_SESSAO recebido nao resolve cadeira: quase sempre o chamador mandou um uuid torto
+    (o id do Project em vez do sessao_id da fita) e o certo esta cunhado aqui do lado."""
+    achados = []
+    try:
+        rc = conn()
+        for k in rc.scan_iter(match="sessao:*", count=200):
+            sid = k.split(":", 1)[1]
+            try:
+                d = json.loads(rc.get(k) or "{}")
+            except (ValueError, TypeError):
+                continue
+            cad = (d.get("cadeira") or "").strip()
+            if cad:
+                achados.append((d.get("aberto_em") or "", sid, cad))
+    except Exception:
+        return []
+    achados.sort(reverse=True)
+    return [(sid, cad) for _, sid, cad in achados]
+
+
 def cadeira():
     c = os.environ.get("PF_CADEIRA", "").strip()
-    if not c:
-        sys.exit("erro: PF_CADEIRA nao definida — nao ha fita a fechar sem cadeira")
-    return c
+    if c:
+        return c
+    # PF_CADEIRA nao veio no ambiente. A porta a injeta a partir de sessao:{PF_SESSAO};
+    # se nao injetou, o PF_SESSAO recebido nao resolveu cadeira no msg-mem — quase sempre
+    # porque o chamador mandou um uuid torto (medido no claude.ai, 20/09/2026: o id do
+    # Project passado como sessao_id em vez do sessao_id da fita). Em vez de morrer seco,
+    # aponta as sessoes vivas e o ato que puxa a certa.
+    sid = os.environ.get("PF_SESSAO", "").strip()
+    vivas = _sessoes_vivas()
+    linhas = ["erro: PF_CADEIRA nao definida — nao ha fita a fechar sem cadeira."]
+    if sid:
+        linhas.append(f"  o PF_SESSAO recebido ({sid}) nao resolve cadeira no msg-mem:")
+        linhas.append("  ou expirou (TTL 48 h), ou e um uuid torto (ex.: id do Project,")
+        linhas.append("  nao o sessao_id da fita).")
+    if vivas:
+        linhas.append("  sessoes vivas com cadeira (mais nova primeiro) — passe o sessao_id de uma:")
+        for s, cad in vivas[:8]:
+            linhas.append(f"    {s}  {cad}")
+        linhas.append("  vizinho: `sessao listar` para a lista inteira.")
+    else:
+        linhas.append("  nenhuma sessao viva no msg-mem; abra uma com `monta_sessao`.")
+    sys.exit("\n".join(linhas))
 
 
 def resolve():
