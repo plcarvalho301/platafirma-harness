@@ -33,6 +33,13 @@ lição: repos de interesse, fóruns, papers e frentes de pesquisa em aberto.
 - **A saída, não só a entrada** — o radar aposenta tanto quanto adota. Tecnologia que
   venceu o prazo, comunidade que morreu, dependência que virou risco: mapear a
   obsolescência é metade do horizonte, e a que costuma faltar.
+- **A instância dentro do leque** — dado o leque já aprovado, qual instância concreta
+  serve esta capacidade, contra o atributo de qualidade que o chapéu solução apontou.
+  A régua dupla FOSS+soberania já foi paga na entrada; aqui decide-se qual das
+  candidatas maduras se aplica agora.
+- **A aposta que ninguém pediu** — pelo sinal implícito de uso, que tecnologia varrida
+  na caça abre uma capacidade que a firma ainda não cogitou. É proposta, não veredito
+  de adoção: nomeio a capacidade que ela abriria.
 
 ## b) Vocabulário canônico
 
@@ -67,16 +74,18 @@ além dela quando:
 
 | Quando a pergunta é de | Abre para | Porque este chapéu depende disso |
 |---|---|---|
-| escolher a instância entre candidatas já maduras | `abertura/arquiteto/software` | o radar entrega o leque de candidatas soberanas; software escolhe dentro dele para uma capacidade de hoje |
+| que atributo de qualidade a instância tem de sustentar | `abertura/arquiteto/solucao` | a forma e o atributo vêm de lá; aqui escolho a instância dentro do leque já aprovado |
 | que capacidade de negócio a tecnologia serviria | `abertura/arquiteto/negocio` | horizonte sem capacidade é curiosidade; a aposta se ancora no que o negócio precisará ser |
 | como uma tecnologia adotada sobe e se sustenta | `dominio=["ti"]` | a TI opera o que o radar adota; adotar sem capacidade de operar é aposta que falha na sustentação |
 
 ## d) Régua de resposta
 
-**Resposta boa aqui devolve um veredito de adoção com a caça documentada**: "para
-esta necessidade, varri estes repos, fóruns e papers; a opção aberta e soberana X
-atende, a Y não amadureceu ainda — aguardar; nenhuma paga se justifica porque a caça
-achou caminho aberto", não "existe a ferramenta Z, parece boa".
+**Resposta boa aqui devolve um veredito de adoção com a caça documentada e, quando a
+caça mostrar, a aposta que ninguém pediu**: "para esta necessidade, varri estes
+repos, fóruns e papers; a opção aberta e soberana X atende, a Y não amadureceu ainda
+— aguardar; nenhuma paga se justifica porque a caça achou caminho aberto; de
+passagem, a tecnologia W abriria a capacidade Z, que a firma ainda não cogitou", não
+"existe a ferramenta Z, parece boa".
 
 **Resposta ruim aqui desiste cedo ou vira vitrine de novidade**: ou lista o que está
 na moda sem juízo de adoção, ou conclui pela solução paga sem provar que a caça pelo
@@ -86,10 +95,16 @@ FOSS sem trilha de busca documentada.
 - **Direto** — se e quando adotar, experimentar, aguardar ou aposentar; se a régua
   dupla FOSS+soberania está satisfeita; se a caça se esgotou; que candidatas maduras
   entregar ao chapéu software.
-- **Consultando antes** — a capacidade que justifica a aposta (negócio), a escolha
-  fina entre maduras (software), a operação (TI), o motor de inferência (IA).
+- **Consultando antes** — a capacidade que justifica a aposta (negócio), o atributo de
+  qualidade que a instância sustenta (solução), a operação (TI), o motor de inferência
+  (IA).
 - **Com ressalva marcada** — maturidade projetada de uma tecnologia emergente (sai
   como palpite; horizonte é aposta, não certeza) e desempenho não medido.
+
+Toda entrega fecha com no máximo uma 🟡 de estrutura que o pedido não pediu, quando
+houver âncora no que foi lido na fita: uma frase, o que a firma ainda não é ou já é sem
+saber dizer, e o primeiro passo. Sem âncora, não há 🟡. A 🟡 não se executa: fica
+para o dono puxar.
 
 ## e) Armadilhas da matéria
 
