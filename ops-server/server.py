@@ -380,8 +380,9 @@ def _sha_publicado(pid: str, cadeira: str) -> str | None:
     if pid == "conduta":
         caminho = os.path.join(morada, "current", "abertura", "dono.md")
     elif pid == "persona":
-        cad = cadeira if cadeira and cadeira != "-" else "ia"
-        caminho = os.path.join(morada, "current", "abertura", cad, "persona.md")
+        if not cadeira or cadeira == "-":
+            return None
+        caminho = os.path.join(morada, "current", "abertura", cadeira, "persona.md")
     else:
         return None
     if not os.path.isfile(caminho):
@@ -389,9 +390,10 @@ def _sha_publicado(pid: str, cadeira: str) -> str | None:
     try:
         with open(caminho, "r", encoding="utf-8") as f:
             texto = f.read()
-        
         return _poda.sha_servido(texto)
-    except Exception:
+    except Exception as e:
+        import sys
+        print("DEBUG EXCEPTION in _sha_publicado:", e, file=sys.stderr)
         return None
 
 def _falha_sha(e: dict, r: dict, pid: str, sha_declarado: str, conteudo: str) -> bool:
@@ -419,6 +421,7 @@ def _delta_pecas(r: dict, sessao_id: str) -> dict:
     Conferência de sha: recomputa sha e recusa fail-closed se não bater.
     """
     pecas = r.get("pecas")
+
     if not _poda_ligada() or not isinstance(pecas, list) or not sessao_id or sessao_id == "-":
         return {"bytes_servidos": None}
     try:
@@ -439,16 +442,21 @@ def _delta_pecas(r: dict, sessao_id: str) -> dict:
                     continue
                 
                 cadeira = r.get("nome_canonico", "")
-                sha_pub = _sha_publicado(pid, cadeira) or sha
+                sha_pub = _sha_publicado(pid, cadeira)
+
                 
-                bytes_omitidos = len(conteudo.encode()) if isinstance(conteudo, str) else 0
-                e["regime"] = "ponteiro"
-                e["conteudo"] = None
-                e["tokens"] = 0
-                e["poda"] = {"ato": "monta_sessao", "modo": "ponteiro", "sha": sha_pub,
-                             "ref": e.get("ref"), "bytes_omitidos": bytes_omitidos}
-                deduplicadas += 1
-                continue
+                if sha_pub:
+                    bytes_omitidos = len(conteudo.encode()) if isinstance(conteudo, str) else 0
+                    e["regime"] = "ponteiro"
+                    e["conteudo"] = None
+                    e["tokens"] = 0
+                    e["poda"] = {"ato": "monta_sessao", "modo": "ponteiro", "sha": sha_pub,
+                                 "ref": e.get("ref"), "bytes_omitidos": bytes_omitidos}
+                    deduplicadas += 1
+                    continue
+                
+                # Se não temos o sha publicado (arquivo ausente ou cadeira irresolvida),
+                # degradamos de forma segura servindo a peça inteira. Fall-through para o comportamento padrão.
             
             # Balde 1 (outras superfícies): prefixo estável é cache, nunca ponteiro (#3067).
             servidos += len(conteudo.encode()) if isinstance(conteudo, str) else 0
