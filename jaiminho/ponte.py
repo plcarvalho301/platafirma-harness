@@ -63,7 +63,7 @@ CLIENT_SECRET = (os.environ.get("PONTE_CLIENT_SECRET")
 
 _tok = {"valor": None, "expira": 0}
 _cli = httpx.AsyncClient(timeout=httpx.Timeout(600.0, connect=15.0),
-                        headers={"User-Agent": _UA})
+                        headers={"User-Agent": _UA, "X-PF-Superficie": "fabrica"})
 
 
 async def _token():

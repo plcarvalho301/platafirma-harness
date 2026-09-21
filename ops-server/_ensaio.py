@@ -62,18 +62,21 @@ passo(7, "encerrar a fita", c.post("/sessao/encerrar", headers=H,
 passo(8, "sem token (deve dar 401)", c.get("/sessao"))
 
 # limpeza: o ensaio nao deixa lixo na caixa do Elias nem na mesa
-f = s._fila_mod()
-rc = f.r_conn()
-apagadas = 0
-for mid, campos in rc.xrange("caixa:ia"):
-    if campos.get("id") == msgid:
-        rc.xdel("caixa:ia", mid)
-        apagadas += 1
-print(f"\n[limpeza] mensagem de ensaio removida da caixa do Elias: {apagadas}")
-p = subprocess.run([str(s.BIN_VERBOS / "mesa"), "limpa", "jaiminho"],
-                   capture_output=True, text=True,
-                   env={**os.environ, "PF_CADEIRA": "jaiminho"})
-print("[limpeza] mesa:", (p.stdout or p.stderr).strip())
+try:
+    f = s._fila_mod()
+    rc = f.r_conn()
+    apagadas = 0
+    for mid, campos in rc.xrange("caixa:ia"):
+        if campos.get("id") == msgid:
+            rc.xdel("caixa:ia", mid)
+            apagadas += 1
+    print(f"\n[limpeza] mensagem de ensaio removida da caixa do Elias: {apagadas}")
+    p = subprocess.run([str(s.BIN_VERBOS / "mesa"), "limpa", "jaiminho"],
+                       capture_output=True, text=True,
+                       env={**os.environ, "PF_CADEIRA": "jaiminho"})
+    print("[limpeza] mesa:", (p.stdout or p.stderr).strip())
+except Exception as e:
+    print(f"\n[limpeza] pulada: {e}")
 
 
 # ======================================================================
@@ -874,7 +877,46 @@ import pytest
 from unittest.mock import patch, MagicMock
 
 
-@pytest.mark.asyncio
+@pytest.fixture
+def anyio_backend():
+    return "asyncio"
+
+
+def _fake_montar_superficie(cadeira, *args, **kwargs):
+    cad = cadeira if cadeira and cadeira != "-" else ""
+    p_dir = os.environ.get("PF_ABERTURA_DIR")
+    txt_p = "PERSONA FAKE"
+    txt_c = "CONDUTA FAKE"
+    if p_dir:
+        fp = _P(p_dir) / "current" / "abertura" / (cad or "ia") / "persona.md"
+        if fp.is_file():
+            txt_p = fp.read_text(encoding="utf-8")
+        fc = _P(p_dir) / "current" / "abertura" / "dono.md"
+        if fc.is_file():
+            txt_c = fc.read_text(encoding="utf-8")
+    sha_p = s._poda.sha_servido(txt_p)
+    sha_c = s._poda.sha_servido(txt_c)
+    return {
+        "cadeira": cad,
+        "nome_canonico": cad,
+        "sessao_id": "test-sessao-123",
+        "ordem_id": "test-ordem-123",
+        "chapeu": None,
+        "roteador": {"via": "fallback", "slug": None},
+        "pacote": {"pecas": 2, "tokens": 200},
+        "pecas": [
+            {"peca": "persona", "ref": f"abertura/{cad}/persona.md" if cad else "persona",
+             "sha": sha_p, "conteudo": txt_p, "tokens": 100},
+            {"peca": "conduta", "ref": "abertura/dono.md",
+             "sha": sha_c, "conteudo": txt_c, "tokens": 100},
+        ],
+        "avisos": [],
+    }
+
+
+# --- 4 testes do #3100 ---
+
+@pytest.mark.anyio
 async def test_superficie_claude_ai_arquivo_presente(tmp_path):
     ctx_mock = MagicMock()
     ctx_mock.request_context.request.headers = {"x-pf-superficie": "claude.ai", "mcp-session-id": "test-123"}
@@ -893,8 +935,9 @@ async def test_superficie_claude_ai_arquivo_presente(tmp_path):
     Fake = _fake_redis_cls()
     with patch.object(s.mcp, "get_context", return_value=ctx_mock), \
          patch.object(s, "_autoriza", return_value=None), \
-         patch.object(s, "_quem", return_value={"sub": "claudinho"}), \
+         patch.object(s, "_quem", return_value={"sub": "claudinho", "azp": "claudinho-mcp"}), \
          patch.object(s, "redis") as _rmod, \
+         patch.object(s, "_montar", side_effect=_fake_montar_superficie), \
          patch.dict("os.environ", {"PF_ABERTURA_DIR": str(tmp_path)}):
         _rmod.Redis = Fake
         r = await s.monta_sessao(cadeira="ia", pergunta="o que fazer?")
@@ -905,7 +948,8 @@ async def test_superficie_claude_ai_arquivo_presente(tmp_path):
         assert p_persona.get("regime") == "ponteiro"
         assert p_persona.get("poda", {}).get("sha") == sha_persona
 
-@pytest.mark.asyncio
+
+@pytest.mark.anyio
 async def test_superficie_claude_ai_arquivo_ausente(tmp_path):
     ctx_mock = MagicMock()
     ctx_mock.request_context.request.headers = {"x-pf-superficie": "claude.ai", "mcp-session-id": "test-124"}
@@ -914,8 +958,9 @@ async def test_superficie_claude_ai_arquivo_ausente(tmp_path):
     Fake = _fake_redis_cls()
     with patch.object(s.mcp, "get_context", return_value=ctx_mock), \
          patch.object(s, "_autoriza", return_value=None), \
-         patch.object(s, "_quem", return_value={"sub": "claudinho"}), \
+         patch.object(s, "_quem", return_value={"sub": "claudinho", "azp": "claudinho-mcp"}), \
          patch.object(s, "redis") as _rmod, \
+         patch.object(s, "_montar", side_effect=_fake_montar_superficie), \
          patch.dict("os.environ", {"PF_ABERTURA_DIR": str(tmp_path)}):
         _rmod.Redis = Fake
         r = await s.monta_sessao(cadeira="ia", pergunta="o que fazer?")
@@ -926,7 +971,8 @@ async def test_superficie_claude_ai_arquivo_ausente(tmp_path):
         assert p_persona.get("regime") != "ponteiro"
         assert p_persona.get("poda", {}).get("modo") != "ponteiro"
 
-@pytest.mark.asyncio
+
+@pytest.mark.anyio
 async def test_superficie_claude_ai_cadeira_ausente(tmp_path):
     ctx_mock = MagicMock()
     ctx_mock.request_context.request.headers = {"x-pf-superficie": "claude.ai", "mcp-session-id": "test-125"}
@@ -940,8 +986,9 @@ async def test_superficie_claude_ai_cadeira_ausente(tmp_path):
     Fake = _fake_redis_cls()
     with patch.object(s.mcp, "get_context", return_value=ctx_mock), \
          patch.object(s, "_autoriza", return_value=None), \
-         patch.object(s, "_quem", return_value={"sub": "claudinho"}), \
+         patch.object(s, "_quem", return_value={"sub": "claudinho", "azp": "claudinho-mcp"}), \
          patch.object(s, "redis") as _rmod, \
+         patch.object(s, "_montar", side_effect=_fake_montar_superficie), \
          patch.dict("os.environ", {"PF_ABERTURA_DIR": str(tmp_path)}):
         _rmod.Redis = Fake
         # cadeira="-" creates a situation where cadeira is unresolved
@@ -954,39 +1001,148 @@ async def test_superficie_claude_ai_cadeira_ausente(tmp_path):
             assert p_persona.get("poda", {}).get("modo") != "ponteiro"
 
 
-@pytest.mark.asyncio
+@pytest.mark.anyio
 async def test_superficie_code():
     ctx_mock = MagicMock()
     ctx_mock.request_context.request.headers = {"x-pf-superficie": "code", "mcp-session-id": "test-123"}
+    Fake = _fake_redis_cls()
     with patch.object(s.mcp, "get_context", return_value=ctx_mock), \
-         patch.object(s, "_autoriza", return_value=None), patch.object(s, "_quem", return_value={"sub": "claudinho"}):
+         patch.object(s, "_autoriza", return_value=None), \
+         patch.object(s, "_quem", return_value={"sub": "claudinho", "azp": "claudinho-mcp"}), \
+         patch.object(s, "redis") as _rmod, \
+         patch.object(s, "_montar", side_effect=_fake_montar_superficie):
+        _rmod.Redis = Fake
         r = await s.monta_sessao(cadeira="ia", pergunta="o que fazer?")
         pecas = r.get("pecas", [])
         persona = next((p for p in pecas if p.get("peca") == "persona"), None)
         assert persona is not None
         assert persona.get("regime") != "ponteiro"
 
-@pytest.mark.asyncio
-async def test_superficie_sem_header():
+
+# --- Novos casos: superfície por eliminação ---
+
+@pytest.mark.anyio
+async def test_superficie_sem_header_azp_fabrica(tmp_path):
+    """Sem header, azp jaiminho-fabrica -> fabrica -> inteiras."""
+    (tmp_path / "current" / "abertura" / "ia").mkdir(parents=True)
+    (tmp_path / "current" / "abertura" / "dono.md").write_text("CONDUTA FAKE")
+    (tmp_path / "current" / "abertura" / "ia" / "persona.md").write_text("PERSONA FAKE")
+
     ctx_mock = MagicMock()
-    ctx_mock.request_context.request.headers = {"mcp-session-id": "test-123"}
+    ctx_mock.request_context.request.headers = {"mcp-session-id": "test-fabrica"}
+    Fake = _fake_redis_cls()
     with patch.object(s.mcp, "get_context", return_value=ctx_mock), \
-         patch.object(s, "_autoriza", return_value=None), patch.object(s, "_quem", return_value={"sub": "claudinho"}):
+         patch.object(s, "_autoriza", return_value=None), \
+         patch.object(s, "_quem", return_value={"sub": "e57eadb1", "azp": "jaiminho-fabrica"}), \
+         patch.object(s, "redis") as _rmod, \
+         patch.object(s, "_montar", side_effect=_fake_montar_superficie), \
+         patch.dict("os.environ", {"PF_ABERTURA_DIR": str(tmp_path)}):
+        _rmod.Redis = Fake
+        assert s._superficie() == "fabrica"
         r = await s.monta_sessao(cadeira="ia", pergunta="o que fazer?")
         pecas = r.get("pecas", [])
         persona = next((p for p in pecas if p.get("peca") == "persona"), None)
         assert persona is not None
         assert persona.get("regime") != "ponteiro"
+        assert persona.get("conteudo") == "PERSONA FAKE"
 
-@pytest.mark.asyncio
+
+@pytest.mark.anyio
+async def test_superficie_sem_header_azp_claudinho_mcp(tmp_path):
+    """Sem header, azp claudinho-mcp -> claude.ai -> ponteiro com sha_pub."""
+    (tmp_path / "current" / "abertura" / "ia").mkdir(parents=True)
+    (tmp_path / "current" / "abertura" / "dono.md").write_text("CONDUTA FAKE")
+    (tmp_path / "current" / "abertura" / "ia" / "persona.md").write_text("PERSONA FAKE")
+    sha_persona = s._poda.sha_servido("PERSONA FAKE")
+
+    ctx_mock = MagicMock()
+    ctx_mock.request_context.request.headers = {"mcp-session-id": "test-claudinho-mcp"}
+    Fake = _fake_redis_cls()
+    with patch.object(s.mcp, "get_context", return_value=ctx_mock), \
+         patch.object(s, "_autoriza", return_value=None), \
+         patch.object(s, "_quem", return_value={"sub": "claudinho", "azp": "claudinho-mcp"}), \
+         patch.object(s, "redis") as _rmod, \
+         patch.object(s, "_montar", side_effect=_fake_montar_superficie), \
+         patch.dict("os.environ", {"PF_ABERTURA_DIR": str(tmp_path)}):
+        _rmod.Redis = Fake
+        assert s._superficie() == "claude.ai"
+        r = await s.monta_sessao(cadeira="ia", pergunta="o que fazer?")
+        pecas = r.get("pecas", [])
+        persona = next((p for p in pecas if p.get("peca") == "persona"), None)
+        assert persona is not None
+        assert persona.get("regime") == "ponteiro"
+        assert persona.get("poda", {}).get("sha") == sha_persona
+
+
+@pytest.mark.anyio
+async def test_superficie_header_code_vence_azp(tmp_path):
+    """Header x-pf-superficie: code com azp claudinho-mcp -> code -> inteiras (header vence azp)."""
+    (tmp_path / "current" / "abertura" / "ia").mkdir(parents=True)
+    (tmp_path / "current" / "abertura" / "dono.md").write_text("CONDUTA FAKE")
+    (tmp_path / "current" / "abertura" / "ia" / "persona.md").write_text("PERSONA FAKE")
+
+    ctx_mock = MagicMock()
+    ctx_mock.request_context.request.headers = {"x-pf-superficie": "code", "mcp-session-id": "test-code"}
+    Fake = _fake_redis_cls()
+    with patch.object(s.mcp, "get_context", return_value=ctx_mock), \
+         patch.object(s, "_autoriza", return_value=None), \
+         patch.object(s, "_quem", return_value={"sub": "claudinho", "azp": "claudinho-mcp"}), \
+         patch.object(s, "redis") as _rmod, \
+         patch.object(s, "_montar", side_effect=_fake_montar_superficie), \
+         patch.dict("os.environ", {"PF_ABERTURA_DIR": str(tmp_path)}):
+        _rmod.Redis = Fake
+        assert s._superficie() == "code"
+        r = await s.monta_sessao(cadeira="ia", pergunta="o que fazer?")
+        pecas = r.get("pecas", [])
+        persona = next((p for p in pecas if p.get("peca") == "persona"), None)
+        assert persona is not None
+        assert persona.get("regime") != "ponteiro"
+        assert persona.get("conteudo") == "PERSONA FAKE"
+
+
+@pytest.mark.anyio
 async def test_superficie_sem_request():
+    """Sem request -> desconhecida -> inteiras."""
     ctx_mock = MagicMock()
     ctx_mock.request_context.request = None
+    Fake = _fake_redis_cls()
     with patch.object(s.mcp, "get_context", return_value=ctx_mock), \
-         patch.object(s, "_autoriza", return_value=None), patch.object(s, "_quem", return_value={"sub": "claudinho"}), \
+         patch.object(s, "_autoriza", return_value=None), \
+         patch.object(s, "_quem", return_value={"sub": "claudinho"}), \
+         patch.object(s, "redis") as _rmod, \
+         patch.object(s, "_montar", side_effect=_fake_montar_superficie), \
          patch.dict("os.environ", {"PF_SUPERFICIE": "desconhecida"}):
+        _rmod.Redis = Fake
+        assert s._superficie() == "desconhecida"
         r = await s.monta_sessao(cadeira="ia", pergunta="o que fazer?")
         pecas = r.get("pecas", [])
         persona = next((p for p in pecas if p.get("peca") == "persona"), None)
         assert persona is not None
         assert persona.get("regime") != "ponteiro"
+
+
+@pytest.mark.anyio
+async def test_superficie_azp_desconhecido(tmp_path):
+    """azp fora do mapa e != claudinho-mcp -> desconhecida -> inteiras."""
+    (tmp_path / "current" / "abertura" / "ia").mkdir(parents=True)
+    (tmp_path / "current" / "abertura" / "dono.md").write_text("CONDUTA FAKE")
+    (tmp_path / "current" / "abertura" / "ia" / "persona.md").write_text("PERSONA FAKE")
+
+    ctx_mock = MagicMock()
+    ctx_mock.request_context.request.headers = {"mcp-session-id": "test-desconhecido"}
+    Fake = _fake_redis_cls()
+    with patch.object(s.mcp, "get_context", return_value=ctx_mock), \
+         patch.object(s, "_autoriza", return_value=None), \
+         patch.object(s, "_quem", return_value={"sub": "alheio", "azp": "azp-desconhecido-xyz"}), \
+         patch.object(s, "redis") as _rmod, \
+         patch.object(s, "_montar", side_effect=_fake_montar_superficie), \
+         patch.dict("os.environ", {"PF_SUPERFICIE": "desconhecida", "PF_ABERTURA_DIR": str(tmp_path)}):
+        _rmod.Redis = Fake
+        assert s._superficie() == "desconhecida"
+        r = await s.monta_sessao(cadeira="ia", pergunta="o que fazer?")
+        pecas = r.get("pecas", [])
+        persona = next((p for p in pecas if p.get("peca") == "persona"), None)
+        assert persona is not None
+        assert persona.get("regime") != "ponteiro"
+        assert persona.get("conteudo") == "PERSONA FAKE"
+

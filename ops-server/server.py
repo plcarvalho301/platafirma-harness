@@ -613,16 +613,68 @@ def _sessao_atual() -> str:
         return _sessao.get()
 
 
+def _mapa_azp_superficie() -> dict[str, str]:
+    """Lê o mapa azp -> superfície de registro/superficies.json (dado, não código)."""
+    caminhos = [
+        PF_HARNESS / "registro" / "superficies.json",
+        Path(__file__).resolve().parent.parent / "registro" / "superficies.json",
+    ]
+    for c in caminhos:
+        if c.is_file():
+            try:
+                with open(c, encoding="utf-8") as f:
+                    dados = json.load(f)
+                mapa = dados.get("azp_superficie")
+                if isinstance(mapa, dict):
+                    return mapa
+                ext = {}
+                for sup_nome, sup_info in dados.get("superficies", {}).items():
+                    if isinstance(sup_info, dict) and "azp" in sup_info:
+                        ext[sup_info["azp"]] = sup_nome
+                if ext:
+                    return ext
+            except Exception:
+                pass
+    return {"jaiminho-fabrica": "fabrica"}
+
+
 def _superficie() -> str:
-    """Superfície do request em curso, lida do header com fallback."""
+    """Superfície do request em curso, por eliminação com fallback."""
     try:
         ctx = mcp.get_context()
         req = getattr(getattr(ctx, "request_context", None), "request", None)
+        # Degrau 4: sem request (caminho stdio/ensaio) -> desconhecida
+        if req is None:
+            return os.environ.get("PF_SUPERFICIE", "desconhecida")
+
         cab = getattr(req, "headers", None)
         if cab is not None:
-            sup = cab.get("x-pf-superficie")
+            # Degrau 1: header x-pf-superficie presente -> vale o que veio
+            sup = None
+            if hasattr(cab, "get"):
+                sup = cab.get("x-pf-superficie") or cab.get("X-PF-Superficie")
+            if not sup and hasattr(cab, "items"):
+                for k, v in cab.items():
+                    if k.lower() == "x-pf-superficie":
+                        sup = v
+                        break
             if sup:
                 return sup
+
+        # Degraus 2 e 3: sem header, resolve por azp
+        ident = _quem()
+        azp = ident.get("azp") if isinstance(ident, dict) else None
+        if azp and azp != "-":
+            mapa = _mapa_azp_superficie()
+            # Degrau 2: mapa azp -> superfície lido de registro/superficies.json
+            if azp in mapa:
+                return mapa[azp]
+            # Degrau 3: sem header e azp == claudinho-mcp -> claude.ai
+            if azp == "claudinho-mcp":
+                return "claude.ai"
+
+        # azp fora do mapa e != claudinho-mcp -> desconhecida
+        return os.environ.get("PF_SUPERFICIE", "desconhecida")
     except Exception:                                       # noqa: BLE001
         pass
     return os.environ.get("PF_SUPERFICIE", "desconhecida")
