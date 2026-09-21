@@ -372,6 +372,44 @@ def _eh_balde_2(e: dict) -> bool:
     return False
 
 
+
+def _sha_publicado(pid: str, cadeira: str) -> str | None:
+    """Busca o sha do arquivo na morada publicada (dono.md, persona.md)."""
+    import os
+    morada = os.environ.get("PF_ABERTURA_DIR", "/srv/platafirma/casa/var/abertura-publicada")
+    if pid == "conduta":
+        caminho = os.path.join(morada, "current", "abertura", "dono.md")
+    elif pid == "persona":
+        if not cadeira or cadeira == "-":
+            return None
+        caminho = os.path.join(morada, "current", "abertura", cadeira, "persona.md")
+    else:
+        return None
+    if not os.path.isfile(caminho):
+        return None
+    try:
+        with open(caminho, "r", encoding="utf-8") as f:
+            texto = f.read()
+        return _poda.sha_servido(texto)
+    except Exception:
+        return None
+
+def _falha_sha(e: dict, r: dict, pid: str, sha_declarado: str, conteudo: str) -> bool:
+    """Recomputa o sha do que veio e compara; serve fail-closed em caso de divergência."""
+    if conteudo and isinstance(conteudo, str):
+        
+        sha_calc = _poda.sha_servido(conteudo)
+        if sha_declarado and sha_declarado != sha_calc:
+            e["conteudo"] = None
+            e["frescor"] = "indisponivel"
+            e["motivo"] = f"sha divergente: declarado {sha_declarado}, calculado {sha_calc} (fail-closed)"
+            e["recusa"] = "fail-closed"
+            r["erro"] = f"sha que não bate na peça `{pid}`: declarado {sha_declarado}, calculado {sha_calc} (recusa fail-closed)"
+            r["regra"] = "sha"
+            r.setdefault("avisos", []).append(f"peça `{pid}`: sha que não bate — recusa fail-closed")
+            return True
+    return False
+
 def _delta_pecas(r: dict, sessao_id: str) -> dict:
     """R2 na abertura — dedup por baldes (spec_contexto-na-porta §4, §5).
 
@@ -381,6 +419,7 @@ def _delta_pecas(r: dict, sessao_id: str) -> dict:
     Conferência de sha: recomputa sha e recusa fail-closed se não bater.
     """
     pecas = r.get("pecas")
+
     if not _poda_ligada() or not isinstance(pecas, list) or not sessao_id or sessao_id == "-":
         return {"bytes_servidos": None}
     try:
@@ -396,7 +435,28 @@ def _delta_pecas(r: dict, sessao_id: str) -> dict:
         if not sha or not pid:
             continue
         if pid in ("persona", "conduta"):
-            # Balde 1: prefixo estável é cache, nunca ponteiro (#3067).
+            if _superficie() == "claude.ai":
+                if _falha_sha(e, r, pid, sha, conteudo):
+                    continue
+                
+                cadeira = r.get("nome_canonico", "")
+                sha_pub = _sha_publicado(pid, cadeira)
+
+                
+                if sha_pub:
+                    bytes_omitidos = len(conteudo.encode()) if isinstance(conteudo, str) else 0
+                    e["regime"] = "ponteiro"
+                    e["conteudo"] = None
+                    e["tokens"] = 0
+                    e["poda"] = {"ato": "monta_sessao", "modo": "ponteiro", "sha": sha_pub,
+                                 "ref": e.get("ref"), "bytes_omitidos": bytes_omitidos}
+                    deduplicadas += 1
+                    continue
+                
+                # Se não temos o sha publicado (arquivo ausente ou cadeira irresolvida),
+                # degradamos de forma segura servindo a peça inteira. Fall-through para o comportamento padrão.
+            
+            # Balde 1 (outras superfícies): prefixo estável é cache, nunca ponteiro (#3067).
             servidos += len(conteudo.encode()) if isinstance(conteudo, str) else 0
             continue
         if not _eh_balde_2(e):
@@ -406,18 +466,8 @@ def _delta_pecas(r: dict, sessao_id: str) -> dict:
 
         # Balde 2: acervo-consultado e corpo de caderno
         # Conferência do sha de graça: recomputa o sha do que veio e compara; serve fail-closed
-        if conteudo and isinstance(conteudo, str):
-            sha_calc = _poda.sha_servido(conteudo)
-            if sha and sha != sha_calc:
-                e["conteudo"] = None
-                e["frescor"] = "indisponivel"
-                e["motivo"] = f"sha divergente: declarado {sha}, calculado {sha_calc} (fail-closed)"
-                e["recusa"] = "fail-closed"
-                r["erro"] = f"sha que não bate na peça `{pid}`: declarado {sha}, calculado {sha_calc} (recusa fail-closed)"
-                r["regra"] = "sha"
-                r.setdefault("avisos", []).append(
-                    f"peça `{pid}`: sha que não bate — recusa fail-closed")
-                continue
+        if _falha_sha(e, r, pid, sha, conteudo):
+            continue
 
         alca = f"peca:{pid}"
         antes = vistos.get(alca)
@@ -561,6 +611,21 @@ def _sessao_atual() -> str:
         return f"s{id(s):x}" if s is not None else _sessao.get()
     except Exception:                                       # noqa: BLE001
         return _sessao.get()
+
+
+def _superficie() -> str:
+    """Superfície do request em curso, lida do header com fallback."""
+    try:
+        ctx = mcp.get_context()
+        req = getattr(getattr(ctx, "request_context", None), "request", None)
+        cab = getattr(req, "headers", None)
+        if cab is not None:
+            sup = cab.get("x-pf-superficie")
+            if sup:
+                return sup
+    except Exception:                                       # noqa: BLE001
+        pass
+    return os.environ.get("PF_SUPERFICIE", "desconhecida")
 
 
 # GUARDA DE REENTRANCIA explicita (#2481, Onda 2). O ciclo `_audit`->`_quem`->
@@ -1555,7 +1620,7 @@ def _montar(cadeira: str, atualizar: bool = True, chapeu: str = "", pergunta: st
 
     env_abrir = {
         **_env_subprocesso(),
-        "PF_SUPERFICIE": os.environ.get("PF_SUPERFICIE", "claude.ai"),
+        "PF_SUPERFICIE": _superficie(),
     }
     if sub and sub != "-":
         env_abrir["PF_SUJEITO"] = sub
@@ -1625,7 +1690,7 @@ def _montar(cadeira: str, atualizar: bool = True, chapeu: str = "", pergunta: st
         "PF_CADEIRA": cad_slug,
         "PF_SESSAO": sid or "",
         "PF_ORDEM_ID": oid or "",
-        "PF_SUPERFICIE": os.environ.get("PF_SUPERFICIE", "claude.ai"),
+        "PF_SUPERFICIE": _superficie(),
     }
 
     try:
