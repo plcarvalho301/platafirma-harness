@@ -879,12 +879,15 @@ async def test_superficie_claude_ai():
     ctx_mock = MagicMock()
     ctx_mock.request_context.request.headers = {"x-pf-superficie": "claude.ai", "mcp-session-id": "test-123"}
     with patch.object(s.mcp, "get_context", return_value=ctx_mock), \
-         patch.object(s, "_autoriza", return_value=None), patch.object(s, "_quem", return_value={"sub": "claudinho"}):
+         patch.object(s, "_autoriza", return_value=None), \
+         patch.object(s, "_quem", return_value={"sub": "claudinho"}), \
+         patch.object(s, "_sha_publicado", return_value="sha_pub_mocked"):
         r = await s.monta_sessao(cadeira="ia", pergunta="o que fazer?")
         pecas = r.get("pecas", [])
         persona = next((p for p in pecas if p.get("peca") == "persona"), None)
         assert persona is not None
         assert persona.get("regime") == "ponteiro"
+        assert persona.get("poda", {}).get("sha") == "sha_pub_mocked"
 
 @pytest.mark.asyncio
 async def test_superficie_code():
