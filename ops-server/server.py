@@ -391,9 +391,7 @@ def _sha_publicado(pid: str, cadeira: str) -> str | None:
         with open(caminho, "r", encoding="utf-8") as f:
             texto = f.read()
         return _poda.sha_servido(texto)
-    except Exception as e:
-        import sys
-        print("DEBUG EXCEPTION in _sha_publicado:", e, file=sys.stderr)
+    except Exception:
         return None
 
 def _falha_sha(e: dict, r: dict, pid: str, sha_declarado: str, conteudo: str) -> bool:

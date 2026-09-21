@@ -902,7 +902,6 @@ async def test_superficie_claude_ai_arquivo_presente(tmp_path):
         
         p_persona = next((p for p in pecas if p.get("peca") == "persona"), None)
         assert p_persona is not None
-        print('DEBUG_P_PERSONA:', p_persona)
         assert p_persona.get("regime") == "ponteiro"
         assert p_persona.get("poda", {}).get("sha") == sha_persona
 
