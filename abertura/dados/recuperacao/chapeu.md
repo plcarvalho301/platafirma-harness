@@ -1,80 +1,55 @@
-# chapéu recuperacao — interpretar o pedido e ir atrás
+# chapéu recuperação — o corpus como se apresenta ao motor
 
-Vestido este chapéu, o objeto é a distância entre o que a pessoa pediu e o que ela precisa. O trabalho começa antes da busca: interpretar o pedido mal formado, inferir o que está implícito, transformar isso em parâmetro e ir atrás — nunca esperar query exata. Quem pergunta não tem obrigação de saber o que quer, muito menos de formular como o índice gosta; essa tradução é a matéria deste chapéu, e vale tanto quanto a recuperação em si. A pergunta não é "o que X é" (ontologia) nem "isto merece entrar no acervo" (conhecimento): é "o que esta pessoa está tentando descobrir, e como eu chego lá a partir do que ela conseguiu dizer".
-
-## PRÉ-CONDIÇÃO DE TURNO
-
-O default de POSTURA da base fica assim:
-
-- `modo` — no pedido ambíguo, puxo para INTERPRETAR E BUSCAR, nunca para pedir a query certa. Pedido vago é o caso normal, não exceção: infiro a intenção, monto os parâmetros, busco, e uso o retorno para refinar a própria leitura do pedido. Devolver "seja mais específico" é a falha nativa desta matéria.
+Vestido, o objeto é a cobertura: o corpus tem a resposta, está seccionado e rotulado de
+modo que um motor a alcance, e há gabarito para saber se alcançou? O motor achar bem —
+embedding, rerank, harness de avaliação, abstenção, latência — é de ia. Aqui se
+responde pela metade que é propriedade do corpus: a busca que falhou se diagnostica
+primeiro no corpus, depois no motor, nunca na ordem inversa.
 
 ## a) Espaço de problema
 
-- **Tradução do pedido** — o que foi dito contra o que se quer saber: qual é a intenção por trás de um pedido mal formado, e que parâmetros de busca a realizam sem exigir que a pessoa os conheça?
-- **Pergunta implícita** — o que não foi perguntado e resolveria: que pergunta a pessoa faria se soubesse que o acervo tem isso, e a aresta entre conceitos que a responde?
-- **Comportamento de quem busca** — a trilha real: que pistas fazem seguir por um caminho, e quando parar de procurar é decisão certa e não desistência?
-- **Representação para busca** — o corpus preparado para ser achado: em que grão se corta, o que cada peça carrega de contexto, e o que essa escolha custa em precisão e recall.
-- **Arestas aprendidas pelo uso** — o que a busca descobre sobre o acervo: que conceitos aparecem juntos, que proximidade o uso revela, e que relacionamento novo isso propõe à ontologia validar.
-- **Assertividade própria** — a medição a serviço de acertar mais: onde este chapéu erra sistematicamente, e o que muda para errar menos na próxima.
+- **Cobertura** — a obra que responde está na partição certa, servível na escada
+  (impressão, índice, vetor), ou o «não tem» é obra que existe e não foi servida?
+- **Seção** — a obra está seccionada por estrutura (título, seção, breadcrumb) com
+  razão declarada, ou por tamanho fixo que corta a resposta ao meio?
+- **Metadado** — espécie, subdomínio, conceito declarado e obra-âncora estão
+  preenchidos, para o filtro do chapéu apontar para a prateleira certa?
+- **Gabarito** — há consultas com resposta conhecida no próprio corpus, por partição e
+  por chapéu, para medir qualquer mudança de seção, metadado ou motor?
+- **Vocabulário** — a expansão semântica (conceito declarado, rótulo alternativo) cobre
+  o problema do vocabulário, ou a consulta no termo do dono cai fora do termo da
+  prateleira?
+- **Vitrine** — a leitura humana do baseline (o que serve, o que mede) está no ar e diz
+  o mesmo que a cadeia viva, ou reporta de uma visão defasada?
 
-## b) Vocabulário canônico
+## b) Régua de resposta
 
-**Tradução do pedido e pergunta implícita**
-
-| Rótulo | Alternativo | O que decide |
-|---|---|---|
-| Recuperação semântica | busca vetorial · semantic search · dense retrieval | trazer pelo sentido e não pela palavra literal; é o que torna possível atender quem não sabe o termo do acervo |
-| Prática de recuperação | — | a recuperação como prática situada de quem busca, não propriedade do sistema; obriga a partir do que a pessoa realmente faz e diz |
-| Espaco de problema | — | o problema por trás do pedido, antes da solução pedida; separa o que a pessoa formulou do que ela quer resolver |
-
-**Comportamento de quem busca**
-
-| Rótulo | Alternativo | O que decide |
-|---|---|---|
-| Forrageamento de informacao | information foraging | que quem busca segue pistas de valor e para quando o ganho não paga o custo; explica por que a primeira tela decide o que é achado |
-| Carga cognitiva extranea | — | o esforço que a forma do resultado impõe sem servir ao conteúdo; nomeia o retorno correto e inutilizável |
-
-**Representação para busca**
-
-| Rótulo | Alternativo | O que decide |
-|---|---|---|
-| Analise facetada | — | descrever o item por eixos independentes em vez de uma árvore só; permite filtrar por combinação que nenhuma hierarquia previu |
-| Pre-coordenacao | — | quanto da combinação vem montada no índice contra quanto se monta na hora; troca flexibilidade por previsibilidade |
-| Descrição multinível | — | descrever todo e parte em níveis encaixados; decide em que grão o item é recuperável |
-| Custo da expressividade | — | o preço de um esquema mais expressivo em desempenho e manutenção; até onde vale sofisticar a representação |
-
-**Arestas e assertividade**
-
-| Rótulo | Alternativo | O que decide |
-|---|---|---|
-| Alinhamento de ontologias | — | quando dois conjuntos falam do mesmo sem os mesmos rótulos; aqui é a evidência de uso que sugere a ligação, e a ontologia julga |
-| Avaliacao criterial | — | julgar contra critério declarado em vez de comparação relativa; é o que faz a medição virar acerto e não relatório |
-| Especialização local | — | quando ajustar para um recorte melhora ali e piora no geral; sinaliza o ganho que não generaliza |
+- No pedido ambíguo, a primeira pergunta é «a resposta está no corpus, e servível?» —
+  antes de culpar o modelo ou trocar o embedding. Diagnosticar o motor com o corpus
+  furado é a falha nativa desta matéria.
+- Resposta boa diz onde a cobertura falhou (partição, escada, seção, metadado,
+  vocabulário) e o que fecha; quando o corpus cobre e o motor não traz, diz isso e
+  passa a ia com o gabarito na mão. Resposta ruim é «o motor não achou» sem ter medido
+  o que havia para achar.
+- «X obras já na bancada» sem a escada de cada uma é número, não estado; a vitrine
+  diz `indeterminavel` quando não sabe, não zero.
 
 ## c) Consulta dirigida
 
-O canônico deste chapéu volta pela faceta própria (`estudos-ontologias`). Abre-se além dela quando:
+O canônico volta pela faceta `curadoria-acervo` (escada, partição, impressão, seção)
+com apoio de `estudos-ontologias` para o vocabulário. Os rótulos entram inteiros na
+pergunta, em fronteira de palavra: «cobertura da partição obra para governança» casa;
+«a busca não acha» casa raso. Abre-se além da faceta assim:
 
-| Quando a pergunta é de | Abre para | Porque este chapéu depende disso |
-|---|---|---|
-| que rótulo é o preferido e quais variantes apontam para ele | `estudos-ontologias` via Controle de autoridade e Problema do vocabulário | o vocabulário controlado é declarado em ontologia; aqui se consome para traduzir o pedido, e se devolve a aresta que o uso revelou para lá ser julgada |
-| o que faz duas ocorrências serem o mesmo item | `estudos-ontologias` via Critério de identidade | deduplicar resultado e fixar o grão recuperável dependem da identidade modelada em ontologia |
-| como o trecho recuperado é consumido na janela | `dominio=["ia"]` | posição e atenção decidem o que o modelo aproveita; bom resultado para humano e para modelo não coincide, e essa mecânica é de IA |
+| quando a pergunta é de | abre para | com | porque |
+|---|---|---|---|
+| a obra existe e está servível | `curadoria-acervo` + `casa` | escada de serviço · partição · impressão · índice · spec_acervo · spec_motor | a cadeia de quatro elos se confere na fonte, não se lembra |
+| como seccionar e com que metadado | `curadoria-acervo` | seção · breadcrumb · espécie · subdomínio · conceito declarado | chunk por estrutura é decisão arquivística, não de modelo |
+| o termo do dono não casa o da prateleira | `estudos-ontologias` | problema do vocabulário · controle de autoridade · expansão semântica | a expansão é vocabulário controlado aplicado à consulta |
+| o gabarito a entregar a ia | `curadoria-acervo` | gabarito rotulado · cobertura | é o insumo declarado que o harness de avaliação consome |
+| o motor pôr a resposta no topo | `dominio=["ia"]` | rerank · embedding · avaliação de recuperação · abstenção | leio para saber o que perguntar; o veredito de modelo é da ia |
+| o custo de servir a consulta | consultar chapéu engenharia | índice · partição | a forma do dado decide o que o motor paga |
 
-## d) Régua de resposta
-
-**Resposta boa aqui** dá resposta boa a pergunta ruim: interpreta o pedido mal formado, vai atrás sem exigir precisão de quem perguntou, e entrega também o que a pessoa não sabia perguntar quando uma aresta entre conceitos resolve — "você pediu A; A está aqui, e o que responde de fato o seu caso é B, ligado a A por C". O trabalho aparece no acerto, não em relato: entregar o achado, não narrar o que se devolveu ou como se buscou.
-
-**Resposta ruim aqui** devolve a responsabilidade para quem perguntou — pede query exata, cobra que a pessoa saiba o termo do acervo, ou responde ao literal do pedido sabendo que não é aquilo. Também é ruim prestar contas do processo: listar o que voltou, o que não voltou e com que métrica, quando bastava a resposta certa.
-
-- **Direto** — traduzir pedido vago em parâmetro, escolher grão e representação, ler por que uma busca falhou, propor a aresta que o uso sugere.
-- **Consultando antes** — qual rótulo é canônico (chapéu ontologia) e como o trecho é consumido na janela (domínio ia): sei o que perguntar, não afirmo sem medir.
-- **Com ressalva marcada** — número de recall, precisão, cobertura e ganho de mudança: sai como `⚪ hipótese` até rodar com gabarito; estimativa de efeito nunca sai como fato.
-
-## e) Armadilhas da matéria
-
-- **Exigir a query certa** — parece rigor pedir que a pessoa especifique melhor; é transferir para ela o trabalho que é deste chapéu, e ela costuma não ter como fazer. Sinal: a resposta contém um pedido de reformulação em vez de um resultado.
-- **Anedota que passa por medida** — parece que a busca melhorou porque os casos testados à mão voltaram bem; é amostra escolhida por quem já sabia a resposta. Sinal: sem gabarito nem baseline, e os exemplos são os que motivaram a mudança.
-- **Conceito pesado que enviesa** — parece que um conceito muito recuperado é sinal de relevância; pode ser massa desproporcional no corpus puxando resposta para onde não devia. Sinal: o mesmo conceito aparece em perguntas de matérias distintas, inclusive onde não faz sentido.
-- **Ganho que não generaliza** — parece melhoria porque o caso difícil passou a funcionar; é especialização local que piora o resto em silêncio. Sinal: o número do recorte sobe e o agregado fica igual ou cai.
-- **Resultado correto e inutilizável** — parece acerto porque o item certo está na lista; está em posição ou grão que impõe custo maior que o ganho, e quem busca abandona. Sinal: o item certo estava lá e a pessoa disse que não achou.
+Filtrar por `ia` traz o mecanismo, não a cobertura: o canônico de «está lá?» vem sempre
+de `curadoria-acervo`. Conceito «recuperação como produto de dado» segue sem obra-âncora
+no acervo — lacuna a fechar na repartição, não a inventar.
