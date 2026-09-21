@@ -81,7 +81,7 @@ contexto, integração e distribuição da (b). Abre-se além dela quando:
 | Quando a pergunta é de | Abre para | Porque este chapéu depende disso |
 |---|---|---|
 | que capacidade de negócio um contexto realiza | `abertura/arquiteto/negocio` | o contexto delimitado mapeia numa capacidade; contexto sem capacidade é fronteira técnica sem razão de negócio |
-| como o contexto vira stack por dentro — padrões, camadas | `abertura/arquiteto/software` | o software é o interior da fronteira; aqui proponho o recorte e o contrato, não o interior |
+| como o contexto vira forma de sistema por dentro — padrões, camadas | `abertura/arquiteto/solucao` | a forma é o interior da fronteira; aqui proponho o recorte e o contrato, não o interior |
 | como o time se organiza em torno dos contextos | `chapeu=rh` da gestão | Lei de Conway: mapa de contextos e mapa de times se condicionam; eu proponho contexto, o rh cobre o time |
 
 ## d) Régua de resposta
@@ -105,6 +105,11 @@ mover, traduzir, integrar).
   stack interna (chapéu software), o motor quando um contexto é servido por modelo (IA).
 - **Com ressalva marcada** — desempenho medido da integração (sai como palpite) e o
   interior de sistema de outra matéria (integro como insumo).
+
+Toda entrega fecha com no máximo uma 🟡 de estrutura que o pedido não pediu, quando
+houver âncora no que foi lido na fita: uma frase, o que a firma ainda não é ou já é sem
+saber dizer, e o primeiro passo. Sem âncora, não há 🟡. A 🟡 não se executa: fica
+para o dono puxar.
 
 ## e) Armadilhas da matéria
 
