@@ -696,31 +696,6 @@
     ]
   },
   "produto": {
-    "canais": [
-      "Renderização negociada",
-      "o agente do usuário decide o render",
-      "Backend for frontend",
-      "BFF",
-      "Microfront-end",
-      "micro frontend",
-      "Modelo de renderizacao",
-      "SSR",
-      "CSR",
-      "renderizacao hibrida",
-      "Contrato de interface",
-      "contrato tipado",
-      "versionamento",
-      "retorno de erro",
-      "Teste de contrato",
-      "contract test",
-      "consumer-driven contract",
-      "contract testing",
-      "Camada anticorrupcao",
-      "anticorruption layer",
-      "anti-corruption layer",
-      "Modulo profundo",
-      "deep module"
-    ],
     "design": [
       "Affordance",
       "Design centrado no humano",
@@ -729,38 +704,6 @@
       "Design system",
       "sistema de design",
       "Design token"
-    ],
-    "discovery": [
-      "Descoberta continua",
-      "continuous discovery",
-      "Product discovery",
-      "Espaco de problema",
-      "problem space",
-      "Entrevista por comportamento passado",
-      "behavioral interview",
-      "Job to be done",
-      "jtbd",
-      "trabalho-a-fazer",
-      "Desenvolvimento de clientes",
-      "customer development",
-      "Erro de tipo três"
-    ],
-    "produtizacao": [
-      "Posicionamento de produto",
-      "Armadilha da construcao",
-      "build trap",
-      "armadilha-da-entrega",
-      "Riscos de produto",
-      "Segmentacao de mercado",
-      "segmentacao-produto",
-      "Product-market fit",
-      "ajuste-produto-mercado",
-      "pmf",
-      "Fatiamento por jornada completa",
-      "fatiamento-por-jornada",
-      "Teto de compromisso",
-      "Estrategia de produto",
-      "product strategy"
     ]
   },
   "seguranca": {
