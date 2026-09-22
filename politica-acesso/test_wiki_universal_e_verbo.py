@@ -35,6 +35,15 @@ EXTERNO = "jaiminho"   # expurgado 02/09/2026: sujeito e papel fora do PDP, NEGA
 FABRICA = "jaiminho-fabrica"
 ESTRANHO = "cadeira-que-nao-existe"
 
+# A CONTA jaiminho-fabrica saiu do sujeitos.yaml em 22/09/2026 (conta-bot roda na
+# maquina do dono, authz de saida no forge). Mas o PAPEL `fornecedor` FICOU no PAP
+# para os terceiros do #180, e as regras dele seguem sendo aceite deste arquivo. Como
+# nao ha mais titular do papel na projecao viva, o teste injeta um titular sintetico
+# do papel `fornecedor` — o aceite e do PAPEL, nao da conta que um dia o portou.
+TITULAR_SINTETICO = {
+    FABRICA: {"natureza": "servico", "papeis": ["fornecedor"], "dominios": ["plataforma"]},
+}
+
 # (sujeito, acao, tipo, dominio, alvo, esperado, por que)
 CASOS = [
     # --- (e) wiki: leitura por sujeito, de qualquer servidor -------------------
@@ -98,7 +107,7 @@ def ambiente():
     pol = Politica.de_arquivo(AQUI / "politica.yaml")
     suj = (yaml.safe_load((AQUI / "sujeitos.yaml").read_text(encoding="utf-8"))
            or {}).get("sujeitos") or {}
-    return pol, suj
+    return pol, {**suj, **TITULAR_SINTETICO}
 
 
 def _sujeito(nome: str, projecao: dict) -> Sujeito:
@@ -129,8 +138,8 @@ def test_verbo_operacional_declarado_mas_inerte_ate_existir():
     passa a permitir — e ate la, nada muda para quem nao tem o tipo `operacao`.
     """
     pol, proj = (Politica.de_arquivo(AQUI / "politica.yaml"),
-                 (yaml.safe_load((AQUI / "sujeitos.yaml").read_text(encoding="utf-8"))
-                  or {}).get("sujeitos") or {})
+                 {**((yaml.safe_load((AQUI / "sujeitos.yaml").read_text(encoding="utf-8"))
+                     or {}).get("sujeitos") or {}), **TITULAR_SINTETICO})
     s = _sujeito(FABRICA, proj)
     permitido = decide(s, "repo_commitar",
                        Recurso(tipo="operacao", id="platafirma-harness/x",
