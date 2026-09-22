@@ -34,9 +34,7 @@ sujeitos:
   # Rota de emergência (22/09/2026): não há sujeito de emergência no PAP. Em sufoco
   # (MCP ou realm fora), o dono entra por ssh.platafirma.org e roda a cadeira direto
   # no host, sem MCP. Isso substituiu a antiga conta `claudinho` de token estático,
-  # removida nesta data junto com as contas-bot: conta-bot roda na máquina do dono e
-  # se autoriza na saída (chave no forge), não no PAP (desenho do dono, 22/09; a
-  # arquitetura de authn/authz de terceiros vai ao #180).
+  # removida nesta data (a arquitetura de authn/authz de terceiros vai ao #180).
 
 
   # --- Transição para chave por `sub` (#137, 25/08/2026) -----------------------
@@ -63,9 +61,18 @@ sujeitos:
     dominios: [plataforma]
     usuario: megafone
 
-  # As contas-bot (jaiminho-fabrica) e a rota de emergência por token estático
-  # (claudinho) foram removidas em 22/09/2026 (desenho do dono): conta-bot roda na
-  # máquina do dono e se autoriza na saída (forge), não no PAP; a emergência é SSH ao
-  # host. Resta um sujeito: o dono, por `preferred_username` (megafone) e por `sub`
-  # (b6986be0). A arquitetura de authn/authz de terceiros e o fim deste arquivo
-  # interino vão ao #180.
+  # A conta da fábrica (jaiminho-fabrica). Readmitida em 22/09/2026 por ordem do dono:
+  # a remoção do mesmo dia leu errado o pedido dele. O que o dono disse é que o modelo
+  # de acesso estava errado e que o controle desta conta se exerce FORA da segurança,
+  # por isolamento físico (a conta roda na máquina dele) — não que ela perdesse acesso.
+  # Esta linha só projeta o papel para o PDP; o teto é o que `fornecedor` alcança em
+  # politica.yaml. A arquitetura de authn/authz de terceiros vai ao #180.
+  e57eadb1-ec5d-41b5-a1be-e6d62196cff5:
+    natureza: servico
+    papeis: [fornecedor]
+    dominios: [plataforma]
+    client: jaiminho-fabrica
+    conta: jaiminho-fabrica
+
+  # A rota de emergência por token estático (claudinho) saiu em 22/09/2026; a
+  # emergência é SSH ao host.
