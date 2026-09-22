@@ -1329,8 +1329,12 @@ def read_file(path: str = "", offset: int = 0, max_bytes: int = 40000,
 # --- write_file: tipo x morada, sem symlink, atomico (spec_porta-so-verbo §4) ----
 TIPOS_TEXTO = {".py", ".md", ".mmd", ".d2", ".sh", ".sql", ".yaml", ".yml", ".json", ".toml",
                ".css", ".html", ".js", ".txt"}
+# platafirma-ui entrou em 22/09/2026 (hotfix): o clone existia na bancada e o front do
+# rastreador mora nele, mas a lista nomeada o deixava fora e a tela nao tinha como ser
+# corrigida pela porta.
 CLONES = ("platafirma-core", "platafirma-conhecimento", "platafirma-arquitetura",
-          "platafirma-harness", "platafirma-motor", "platafirma-posto", "modulo-osint")
+          "platafirma-harness", "platafirma-motor", "platafirma-posto", "platafirma-ui",
+          "modulo-osint")
 ESCRITA_TETO = 1_048_576
 TMP_FITA = INSTANCIA / "var" / "tmp"
 
