@@ -39,9 +39,8 @@ PERMITE, NEGA = True, False
 # Sujeitos reais de `sujeitos.yaml`, mais um que não existe. O que não está na projeção
 # não tem atributo, e atributo ausente nega — é a régua, não a exceção.
 DONO = "megafone"                  # operador, credencial própria no realm
-EMERGENCIA = "claudinho"           # operador, rota de token estático
 EXTERNO = "jaiminho"               # EX-pesquisador-externo: expurgado 02/09/2026 (11a7603 + papel removido). Sujeito e papel fora do PDP: NEGA tudo
-FABRICA = "jaiminho-fabrica"       # fornecedor (org:0020)
+FABRICA = "jaiminho-fabrica"       # fornecedor (org:0020): CONTA removida do sujeitos.yaml em 22/09/2026 (conta-bot roda na maquina do dono, authz de saida no forge). Papel `fornecedor` fica no PAP para terceiros do #180; sem titular hoje, NEGA por atributo ausente
 ESTRANHO = "cadeira-que-nao-existe"
 
 # (sujeito, fonte, alvo, esperado, por quê)
@@ -53,8 +52,6 @@ MATRIZ: list[tuple[str, str, str, bool, str]] = [
     (DONO, "registro", "adr:*", PERMITE, "operador-plataforma"),
     (DONO, "wiki", "wiki:PlataFirma/*", PERMITE, "a casa por dentro é dele"),
     (DONO, "acervo", "acervo:pessoal/*", PERMITE, "coleção pessoal é do titular"),
-    (EMERGENCIA, "wiki", "wiki:PlataFirma/*", PERMITE, "mesma mão, quando o realm cai"),
-    (EMERGENCIA, "acervo", "acervo:firma/*", PERMITE, "idem"),
 
     # --- o ex-externo: sujeito expurgado em 02/09/2026 — atributo ausente nega tudo --
     # O jaiminho OSINT saiu do realm (client L0R8OJ desabilitado), do sujeitos.yaml
@@ -71,19 +68,10 @@ MATRIZ: list[tuple[str, str, str, bool, str]] = [
     (EXTERNO, "mesa", "mem:*", NEGA, "nunca teve"),
     (EXTERNO, "registro", "*", NEGA, "sujeito fora do PDP"),
 
-    # --- a fábrica: executa card sobre repositório, e o recuperador não a amplia ----
-    (FABRICA, "board", "item:2303", NEGA, "`recuperar` não é verbo do fornecedor"),
-    (FABRICA, "mesa", "mem:*", NEGA, "idem"),
-    (FABRICA, "registro", "adr:*", NEGA, "idem"),
-    (FABRICA, "wiki", "wiki:principal/*", NEGA, "não há regra de wiki para fornecedor"),
-    (FABRICA, "wiki", "wiki:PlataFirma/*", NEGA, "idem, e esta é a casa por dentro"),
-    # DESATUALIZADO ATE 20/08/2026: a linha esperava NEGA, e a suite quebrou quando
-    # `fabrica-le-acervo-firma` entrou por ordem do dono na mesma data. Corrigida aqui,
-    # e a falha era do teste, não da política — o gabarito literal fez o trabalho dele.
-    (FABRICA, "acervo", "acervo:firma/*", PERMITE, "fabrica-le-acervo-inteiro, 20/08/2026"),
-    (FABRICA, "acervo", "acervo:*", PERMITE, "o alvo que o servidor submete hoje"),
-    (FABRICA, "acervo", "acervo:pessoal/*", PERMITE, "fabrica-le-acervo-inteiro, 20/08/2026"),
-    (FABRICA, "fila", "caixa:jaiminho-fabrica", NEGA, "a fábrica fala por card, não por caixa"),
+    # --- a fábrica: CONTA jaiminho-fabrica removida em 22/09/2026. O papel `fornecedor`
+    # fica no PAP (regras vivas para o #180), mas sem titular na projecao nao ha o que
+    # exercitar aqui: sujeito ausente cai em "atributo ausente nega", ja coberto por
+    # ESTRANHO abaixo. Quando um terceiro receber o papel, a matriz dele entra aqui.
 
     # --- quem não está na projeção ---------------------------------------------------
     (ESTRANHO, "acervo", "acervo:firma/*", NEGA, "atributo ausente nega"),
@@ -130,9 +118,6 @@ def test_vedado_nao_passa_nem_misturado_com_alvo_concedido(pep):
     n = pep.autoriza_fonte(DONO, Fonte("wiki"),
                            ["wiki:principal/*", "wiki:PlataFirma/*"])
     assert n is None, "o dono alcanca os dois: a prova de mistura precisa de um sujeito com concessao parcial"
-    n = pep.autoriza_fonte(FABRICA, Fonte("acervo"),
-                           ["acervo:firma/*", "acervo:pessoal/*"])
-    assert n is None, "fabrica-le-acervo-inteiro cobre os dois desde 20/08"
     # sujeito sem concessao alguma: a negativa e no primeiro alvo, nao no vedado
     n = pep.autoriza_fonte(EXTERNO, Fonte("wiki"),
                            ["wiki:principal/*", "wiki:PlataFirma/*"])
@@ -149,6 +134,6 @@ def test_toda_fonte_tem_caso_para_o_externo():
 
 
 def test_toda_fonte_tem_caso_para_o_dono():
-    cobertas = {f for s, f, *_ in MATRIZ if s in (DONO, EMERGENCIA)}
+    cobertas = {f for s, f, *_ in MATRIZ if s == DONO}
     faltam = {str(f) for f in Fonte} - cobertas
     assert not faltam, f"fonte sem caso de operador na matriz: {sorted(faltam)}"

@@ -368,7 +368,8 @@ regras:
     motivo: "porta unica da fabrica e o card (org:0003): le, lista, comenta, move e quebra em sub · ordem do dono em 18/08/2026 · vence 2026-11-18"
     quando: {papel: fornecedor, tipo: comando}
     acoes: [run_command]
-    sobre: ["tarefas ler*", "tarefas listar*", "tarefas comentar*", "tarefas mover*", "tarefas sub*", "tarefas criar*"]
+    sobre: ["tarefas ler*", "tarefas listar*", "tarefas comentar*", "tarefas mover*", "tarefas sub*", "tarefas criar*",
+            "fila status*", "fila ler*", "fila tipos*"]
 
   # Segundo cadeado, escrito em vez de deixado ao default: quem e julgado pela
   # politica nao edita a politica, nem a persona que o define, nem a conduta.
