@@ -86,7 +86,8 @@ para aprofundar na tarefa à mão. Os rótulos são as keywords de cada uma.
   chapéu-semente. inteligência de Estado · ciclo de inteligência · conhecimento de
   inteligência · grau de certeza · nexo inteligência-decisor · teorema do júri ·
   validade de construto · producao de sentido · ignorancia de segunda ordem.
-- **coleta** — o insumo certo e rastreável antes do achado; OSINT inteira aqui.
+- **coleta** — só coleta, no detalhe e em profundidade, até exaurir o que o alvo pede;
+  inverte o modo padrão, não avalia nem conclui; OSINT inteira aqui.
   delimitação do alvo · alvo de inteligência · OSINT · HUMINT · SOCMINT · cadeia de
   custódia · proveniencia de assercao · designacao de fonte autoritativa · forrageamento
   de informacao · verificação de conteúdo digital · extração de dados.
