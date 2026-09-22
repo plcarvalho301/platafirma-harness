@@ -107,7 +107,9 @@ aprofundar na tarefa à mão. Os rótulos são as keywords de cada uma.
   automatizada.
 - **direito-publico** — a firma-empresa diante do Estado: a norma que a obriga, a
   licitação por onde entra, a regulação do setor. princípio da legalidade · licitação ·
-  marco regulatório setorial · ato administrativo.
-- **direito-empresarial** — a firma como empresa: contrato, sociedade, propriedade
-  intelectual, licença. contrato · alocação de risco · sociedade · propriedade
-  intelectual · licença de software.
+  contratação de TI · marco regulatório setorial · avaliação de conformidade · ato
+  administrativo.
+- **direito-empresarial** — a firma como empresa: o contrato que assina, a licença sob que
+  publica ou compra, o que incorpora de terceiro. licença de software · software livre ·
+  fábrica de software · remuneração por resultado · governança corporativa · gestão de
+  risco.
