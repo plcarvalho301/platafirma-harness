@@ -35,6 +35,15 @@ class FonteInfo:
     contrato_de_leitura: str
     gold: str
     linha_num: int
+    # Facetas do golden record (arq:0076: acervo.ferramental_fonte). Opcionais: só a
+    # leitura por GET /acervo/fontes as preenche (fontes.py::_le_fontes_do_acervo). O
+    # parser do .md (seed) e o seed embutido não as carregam — ficam no default, e os
+    # mapas de fontes.py caem no valor fixo de contingência quando o campo vem vazio.
+    dominio: str = ""
+    tipo: str = ""
+    prefixo_sobre: str = ""
+    prefixo_chave: tuple[str, ...] = ()
+    timeout_ms: int = 0
 
 
 def _acha_catalogo_padrao() -> Path:
