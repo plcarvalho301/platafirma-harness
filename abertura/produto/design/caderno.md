@@ -3,7 +3,14 @@
 - Presenca/integridade na tela deriva do `frescor`/estado da peca servida, NUNCA de um campo de "digest" paralelo — digest que ninguem produz pinta tudo como saude falsa (foi o bug que deixou toda cadeira "ausente"). Corolario da regra da spec §3 (ausencia se desenha como ausencia).
 
 2b DIARIO DE BORDO (design)
+- 2026-09-22 — sem delta nesta fita. O verbete jornada-de-usuario tocou affordance e golfo-de-execucao como vizinhos de conceito, mas nada novo de design de tela se aprendeu; a materia foi lavratura (jornada), nao forma.
 - 2026-09-19 — run_command recusou rg/fd/cat ("sem verbo"; porta so-verbo agora), mas o CLAUDE.md do posto ainda promete rg/fd/cat via run_command. Contorno: descobrir / repo procurar <repo> --termo / read_file paths. (o CLAUDE.md do posto esta desatualizado nesse ponto.)
 - 2026-09-19 — read_file num JSON de UMA linha gigante (estado.json, ~378KB) volta lavado (blob): serve ~295 bytes de moldura, nao da pra inspecionar conteudo. Contorno: nenhum — confiei em logs do agregador + crescimento do arquivo + testes. Encaminhavel a dados/TI: verbo que leia uma chave de JSON grande.
 - 2026-09-19 — `release estado` (leitura) foi bloqueado pelo classificador de auto-mode; `release promover` (escrita) passou. Contorno: fui direto ao promover, e li o estado por `deploy <stack>` e logs.
 - 2026-09-19 — harness-agregador (systemd --user, fora do compose) nao reinicia no `release promover`; `infra restart harness-agregador` reinicia (avisa daemon-reload — conteudo do unit identico, cosmetico). Bati 3x na mesma fita. Ja virou incidente na mesa.
+
+2c ARMADILHAS DA MATERIA (design)
+- Aparencia tomada como o fim — parece que descrever a tela agradavel entrega design ("mais limpo", "cores combinam"); a materia de design e a acao que a forma induz, e a beleza serve a ela. Sinal: a resposta elogia a tela e fica muda sobre o que a pessoa faz diante dela.
+- Elevacao gratuita — parece que dar fundo e sombra a um controle o destaca e ajuda; isso faz o controle competir com o conteudo, e numa tela de cartoes o cartao e o conteudo. Sinal: elemento que fica no fluxo ganhou sombra ou fundo — o degrau de elevacao e so do que sai do fluxo (painel sobreposto).
+- Recuo pelo dado em vez da ancora — parece certo indentar pelo nivel logico na hierarquia de dados; a forma engana quando o pai foi desenhado noutra coluna (virou cabecalho, saiu do bloco). Sinal: filhos indentados sob um pai que nao esta mais na mesma coluna de texto.
+- Poda pelo meio da arvore — parece que esconder um item resolve; promove o que sobra embaixo, e o filho vivo vira raiz solta. Sinal: "sumiu tudo" ou "virou raiz solta" — cortar no meio promove o de baixo, entao a poda sobe da folha.
