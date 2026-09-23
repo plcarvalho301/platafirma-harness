@@ -43,6 +43,20 @@ def test_exportar_prefere_a_bancada_da_sessao(tmp_path, monkeypatch):
     assert mod.bancada_do_repo().name == "engenharia"
 
 
+def test_exportar_ambiente_cai_no_cofre_so_com_o_do_banco(tmp_path, monkeypatch):
+    cofre = tmp_path / "segredos" / "rag"
+    cofre.mkdir(parents=True)
+    for nome, valor in (("POSTGRES_PASSWORD", "x"), ("EMBED_MODEL", "m"), ("ANTHROPIC_API_KEY", "k")):
+        (cofre / nome).write_text(valor + "\n")
+    reg = tmp_path / "reg.json"
+    reg.write_text('{"rag": {"stack": "rag", "container": "",'
+                   ' "env_da_ingestao": "/srv/platafirma/casa/deploy/rag/ausente.env"}}')
+    monkeypatch.setenv("PLATAFIRMA_INSTANCIA", str(tmp_path))
+    monkeypatch.setenv("PF_MOTOR_REG", str(reg))
+    env = _carrega("exportar").ambiente_da_ingestao()
+    assert env == {"POSTGRES_PASSWORD": "x", "EMBED_MODEL": "m"}
+
+
 def test_extrato_limpa_caractere_de_controle():
     mod = _carrega("extrato")
     assert mod.limpa("a\x01b\x1fc\td\ne") == "abc\td\ne"

@@ -30,6 +30,7 @@ import raizes  # noqa: E402
 REPO = "platafirma-conhecimento"
 REG = os.environ.get("PF_MOTOR_REG") or str(_ARVORE / "registro" / "motor-instancias.json")
 CANON_INSTANCIA = "/srv/platafirma/casa/"
+DOCKER_HOST = "unix:///run/user/1001/docker.sock"  # o mesmo do bin/motor
 SPEC = "https://github.com/plcarvalho301/platafirma-arquitetura/blob/main/docs/spec_acervo.md"
 
 
@@ -69,27 +70,60 @@ def python_do_rag() -> str:
     morre("nenhum python do rag executavel (RAG_PYTHON ou <release>/venv/rag/bin/python)")
 
 
+def _vars_do_dir(caminho: Path) -> dict:
+    return {p.name: p.read_text(encoding="utf-8").strip()
+            for p in sorted(caminho.iterdir())
+            if p.is_file() and not p.name.endswith(".tmp")}
+
+
+def _env_do_container(container: str) -> dict:
+    """env efetivo do container servido (mesma leitura do `motor ... ajuste`)."""
+    r = subprocess.run(
+        ["docker", "inspect", container, "--format", "{{range .Config.Env}}{{println .}}{{end}}"],
+        capture_output=True, text=True,
+        env={**os.environ, "DOCKER_HOST": os.environ.get("DOCKER_HOST", DOCKER_HOST)})
+    if r.returncode != 0:
+        return {}
+    return dict(l.split("=", 1) for l in r.stdout.splitlines() if "=" in l)
+
+
 def ambiente_da_ingestao() -> dict:
-    """env_da_ingestao da instancia `rag`: arquivo NOME=valor (vai como RAG_ENV_FILE, que o
-    settings do motor_acervo carrega) ou diretorio segredos/<stack> (um arquivo por variavel)."""
+    """Ambiente do banco para o motor_acervo, da instancia `rag` do registro, nesta ordem:
+
+    1. `env_da_ingestao`, se existir: arquivo NOME=valor (vai como RAG_ENV_FILE, que o
+       settings carrega) ou diretorio (um arquivo por variavel);
+    2. senao o cofre da stack, segredos/<stack> (POSTGRES_PASSWORD e afins);
+    3. EMBED_MODEL, que o settings exige mesmo para so ler o banco, vem do container servido
+       quando nenhum dos dois o declara — o embedder e o do servico, nunca um default.
+    O banco e o publicado em 127.0.0.1:5432 pelo compose (default do settings).
+    """
     try:
         with open(REG, encoding="utf-8") as f:
-            valor = json.load(f)["rag"].get("env_da_ingestao", "")
+            inst = json.load(f)["rag"]
     except (OSError, KeyError, ValueError) as e:
         morre(f"registro de motor ilegivel ({REG}): {e}")
-    if valor.startswith(CANON_INSTANCIA):
-        caminho = raizes.instancia() / valor[len(CANON_INSTANCIA):]
-    elif valor and "/" not in valor and not valor.startswith("."):
-        caminho = raizes.instancia() / "segredos" / valor
+    valor = inst.get("env_da_ingestao", "")
+    caminho = (raizes.instancia() / valor[len(CANON_INSTANCIA):]
+               if valor.startswith(CANON_INSTANCIA) else None)
+    if caminho is not None and caminho.is_file():
+        env, fonte = {"RAG_ENV_FILE": str(caminho)}, str(caminho)
+    elif caminho is not None and caminho.is_dir():
+        env, fonte = _vars_do_dir(caminho), str(caminho)
     else:
-        morre(f"env_da_ingestao fora da instancia: {valor!r}")
-    if caminho.is_file():
-        return {"RAG_ENV_FILE": str(caminho)}
-    if caminho.is_dir():
-        return {p.name: p.read_text(encoding="utf-8").strip()
-                for p in sorted(caminho.iterdir())
-                if p.is_file() and not p.name.endswith(".tmp")}
-    morre(f"env da ingestao nao existe: {caminho}")
+        cofre = raizes.instancia() / "segredos" / inst.get("stack", "rag")
+        if not cofre.is_dir():
+            morre(f"sem ambiente do banco: nem {valor or 'env_da_ingestao'} nem {cofre}")
+        # so o que o banco pede: o cofre tambem guarda chave de API e do MinIO, que o export
+        # nao usa e nao tem por que herdar
+        env = {k: v for k, v in _vars_do_dir(cofre).items() if k.startswith("POSTGRES_") or k == "EMBED_MODEL"}
+        fonte = str(cofre)
+    if "RAG_ENV_FILE" not in env and "EMBED_MODEL" not in env:
+        embed = _env_do_container(inst.get("container", "")).get("EMBED_MODEL", "")
+        if not embed:
+            morre(f"EMBED_MODEL nem em {fonte} nem no container {inst.get('container')}")
+        env["EMBED_MODEL"] = embed
+    print(f"ambiente: {fonte} ({', '.join(sorted(env))})", file=sys.stderr)
+    return env
 
 
 def roda(titulo: str, cmd: list, cwd: Path, env: dict) -> None:
