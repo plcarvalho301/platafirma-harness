@@ -122,7 +122,7 @@ def validar_forma(classe, seletor):
 
     forma = FORMA_ADR if classe == "adr" else classes_info[0].get("forma_chave")
     s = seletor.strip()
-    if classe in ("adr", "minuta") and re.match(r"^\d+$", s):
+    if classe == "minuta" and re.match(r"^\d+$", s):
         s = f"arq:{s.zfill(4)}"
     if forma:
         m = re.match(forma, s)

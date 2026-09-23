@@ -262,11 +262,12 @@ def test_ler_casa_retirada_responde_sucessora():
     # sucessora, sem o texto. arq:0094 (superseded por arq:0112) sai do suporte na migracao, e
     # a retirada grava substituida_por = 'arq:0112' (servidor). Enquanto a linha nao existir
     # retirada (antes da 1a ingestao de platafirma-casa por arvore completa), nao ha o que medir.
-    ret = psql("SELECT coalesce(substituida_por, '') FROM acervo.casa "
-               "WHERE chave='arq:0094' AND retirada_em IS NOT NULL;")
-    if not ret:
+    n = psql("SELECT count(*) FROM acervo.casa WHERE chave='arq:0094' AND retirada_em IS NOT NULL;")
+    if n == "0":
         pytest.skip("arq:0094 ainda nao existe retirada em acervo.casa "
                     "(falta a 1a ingestao de platafirma-casa por arvore completa)")
+    ret = psql("SELECT coalesce(substituida_por, '(nula)') FROM acervo.casa "
+               "WHERE chave='arq:0094' AND retirada_em IS NOT NULL;")
     assert ret == "arq:0112", ret
     r = subprocess.run([BIN, "ler", "casa", "adr", "arq:0094"], capture_output=True, text=True)
     assert r.returncode == 0, r.stderr
