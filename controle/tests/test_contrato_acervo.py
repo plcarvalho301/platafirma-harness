@@ -243,7 +243,7 @@ def test_camada_d_recusa_ato_desconhecido():
     r = subprocess.run([BIN, "ato_inexistente"], capture_output=True, text=True)
     assert r.returncode == 2
     assert "acervo: ato 'ato_inexistente' desconhecido" in r.stderr
-    assert "Atos canonicos: ler, listar, resolver, escrever, ingerir, curar, extrato, psql" in r.stderr
+    assert "Atos canonicos: ler, listar, resolver, escrever, ingerir, curar, extrato, exportar, psql" in r.stderr
 
 
 def test_camada_d_aviso_uma_vez_por_sessao(tmp_path):
