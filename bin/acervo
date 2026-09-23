@@ -4,7 +4,7 @@
 # dono: dados
 # classe: B
 # use para: ler uma ADR/spec/pagina/obra que sabe onde esta (ler), listar o que ha de um tipo ou sobre um assunto pelo catalogo (listar --sobre), gravar uma pagina de wiki (escrever casa pagina), por um repo de doc no acervo (ingerir casa <repo>)
-# atos: ler (leitura, casa), listar (leitura, casa), resolver (leitura, casa), escrever (escrita, registro), ingerir (escrita, incorporacao), curar (escrita, curadoria), extrato (leitura, acervo), exportar (escrita, acervo), psql (escrita, acervo)
+# atos: ler (leitura, casa), listar (leitura, casa), resolver (leitura, casa), escrever (escrita, registro), ingerir (escrita, incorporacao), curar (escrita, curadoria), extrato (leitura, acervo), exportar (escrita, acervo), psql (escrita, acervo), balde (escrita, acervo)
 # forma: texto
 # le: ler=acervo.casa,acervo.obra,acervo.registro
 # le: listar=acervo.casa,acervo.obra,acervo.registro
@@ -15,6 +15,7 @@
 # le: extrato=acervo.*
 # le: exportar=acervo.*,repo
 # le: psql=acervo.*
+# le: balde=acervo.*,minio
 # escreve: ler=nada
 # escreve: listar=nada
 # escreve: resolver=nada
@@ -24,6 +25,7 @@
 # escreve: extrato=arquivo-local
 # escreve: exportar=repo
 # escreve: psql=acervo.*
+# escreve: balde=acervo.obra,minio
 # consome: motor_acervo_rest, rag_extractor_pg
 # ambiente: PLATAFIRMA_RELEASE[=/opt/platafirma/current] (opcional; ingerir casa le os repos da release, nunca clone), RAG_API_BASE (opcional, url do motor), RAG_API_TOKEN (opcional, auth do motor)
 # depende: docker, git, psql
@@ -66,9 +68,11 @@ uso (gramatica arq:0106 — acervo <ato> <particao> <entidade> [seletor]):
   acervo ingerir  <particao> <raiz> [--apply]
   acervo lote     <id>
   acervo curar    obra lote [dest] · casa alias <classe> <chave> <alias>
+  acervo curar    obra --situacao|--expurgar|--restaurar|--promover|--reclassificar|--conceito <...>
   acervo extrato  --todas [dest]
   acervo exportar                    regera ontologia/acervo/*.jsonl e vocabulario.json na bancada
   acervo psql     [--banco rag|motor]  <SQL por stdin>
+  acervo balde    listar|ler|copiar|mover|apagar <bucket|sha256> [...] [--apply]
 
 as particoes: obra, casa, registro (arq:0106 §3). conceito e transversal, vive em obra.
 leitura e anonima; escrever loga com a conta de bot. ato/particao/entidade desconhecidos
@@ -140,6 +144,10 @@ conforme() {
     listar:obra:conceito)   exec "$ATOS/listar" conceitos "$@" ;;
     ler:obra:objeto)        exec "$ATOS/baixar" "$@" ;;
     curar:obra:lote)        exec "$ATOS/bancada" "$@" ;;
+    # curadoria de UMA obra (#3126): entidade e a FLAG de bin/curar (--situacao, --expurgar,
+    # --restaurar, --promover, --reclassificar, --conceito, --relacionar...), nao um nome fixo
+    # -- repassa entidade + resto tal qual para _acervo/curar, que so encosta em bin/curar.
+    curar:obra:*)           exec "$ATOS/curar" obra "$entidade" "$@" ;;
     curar:casa:alias)       exec "$ATOS/curar" alias "$@" ;;
     bancada:obra:lote)      exec "$ATOS/bancada" "$@" ;;
     # --- ingerir por particao ---
@@ -239,6 +247,9 @@ case "$ATO" in
   # exportar: a cadeia derivada do vocabulario (export -> vocabulario.json) na bancada da
   # sessao. Contrato do export e de dados; o ato so expoe (pedido 20260922T220127-dados).
   exportar)        exec python3 "$ATOS/exportar" "$@" ;;
+  # balde: braco do curador sobre o store MinIO (#3126, pedido 20260922T180117-dados) --
+  # listar/ler/copiar/mover/apagar objeto de bucket, plano seco por padrao e --apply pra gravar.
+  balde)           exec python3 "$ATOS/balde" "$@" ;;
   psql)
     case "${1:-}" in
       --banco|--sql) ;;
@@ -272,7 +283,7 @@ case "$ATO" in
 
   -h|--help|ajuda) uso ;;
   *)
-    echo "acervo: ato '$ATO' desconhecido. Atos canonicos: ler, listar, resolver, escrever, ingerir, curar, extrato, exportar, psql." >&2
+    echo "acervo: ato '$ATO' desconhecido. Atos canonicos: ler, listar, resolver, escrever, ingerir, curar, extrato, exportar, psql, balde." >&2
     echo "  $SPEC" >&2
     exit 2 ;;
 esac

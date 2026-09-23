@@ -1,0 +1,260 @@
+#!/usr/bin/env python3
+# _acervo/balde — cliente fino do braço do curador sobre o store MinIO (card #3126)
+# atos: listar, ler, copiar, mover, apagar
+import argparse
+import json
+import os
+import re
+import secrets
+import sys
+import urllib.parse
+
+import requests
+
+HARNESS_DIR = os.path.dirname(os.path.dirname(os.path.realpath(__file__)))
+if HARNESS_DIR not in sys.path:
+    sys.path.insert(0, HARNESS_DIR)
+sys.path.insert(0, os.path.join(HARNESS_DIR, "lib"))
+
+try:
+    from recuperacao.adaptadores.motor_acervo_rest import BASE as DEFAULT_BASE, TOKEN as DEFAULT_TOKEN
+except ImportError:
+    DEFAULT_BASE = "http://127.0.0.1:8100"
+    DEFAULT_TOKEN = ""
+
+BASE = (os.environ.get("MOTOR_ACERVO_URL") or os.environ.get("RAG_API_URL")
+        or os.environ.get("RAG_API_BASE") or DEFAULT_BASE).rstrip("/")
+TOKEN = os.environ.get("RAG_API_TOKEN") or DEFAULT_TOKEN
+
+COLECOES = ("firma", "pessoal")
+_SHA_RE = re.compile(r"^[0-9a-f]{64}$", re.IGNORECASE)
+
+USO = """uso:
+  balde listar <colecao> [--prefixo <p>]               lista objetos do bucket (firma|pessoal)
+  balde ler <sha256> [--colecao <c>]                    metadados do objeto (bytes, content-type, obras)
+  balde copiar <sha256> --de <colecao> --para <colecao> [--apply]
+  balde mover  <sha256> --de <colecao> --para <colecao> [--apply]
+                                                         move atualiza objeto+coleção da obra no mesmo ato
+  balde apagar <sha256> --colecao <c> [--autor <slug>] [--sim]
+
+opções gerais:
+  --apply         aplica copiar/mover (default: plano seco)
+  --autor <slug>  curador responsável (default: cadeira da sessão ou 'dados')
+  --json          emite resultado em JSON
+  --sim, -y       confirma apagar sem prompt interativo
+"""
+
+
+def morre(msg, code=2):
+    sys.stderr.write(f"balde: {msg}\n")
+    sys.exit(code)
+
+
+def _headers():
+    h = {}
+    if TOKEN:
+        h["authorization"] = f"Bearer {TOKEN}"
+    h["traceparent"] = f"00-{secrets.token_hex(16)}-{secrets.token_hex(8)}-01"
+    return h
+
+
+def _autor_default():
+    cad = (os.environ.get("PF_CADEIRA") or os.environ.get("PF_CONTA") or "").strip().lower()
+    if cad:
+        return cad.removeprefix("claudinho-").removeprefix("claudinha-")
+    return "dados"
+
+
+def falha_indeterminavel(erro_ou_resp):
+    print("indeterminavel")
+    if isinstance(erro_ou_resp, requests.Response):
+        try:
+            print(json.dumps(erro_ou_resp.json(), indent=2, ensure_ascii=False))
+        except Exception:
+            print(json.dumps({
+                "type": "about:blank", "title": "FonteIndisponivel",
+                "status": erro_ou_resp.status_code, "detail": erro_ou_resp.text,
+            }, indent=2, ensure_ascii=False))
+    else:
+        print(json.dumps({
+            "type": "about:blank", "title": "FonteIndisponivel", "status": 503,
+            "detail": f"Motor acervo indisponível em {BASE}: {erro_ou_resp}",
+        }, indent=2, ensure_ascii=False))
+    sys.exit(1)
+
+
+def falha_problem(resp):
+    try:
+        pj = resp.json()
+        title = pj.get("title") or f"HTTP {resp.status_code}"
+        detail = pj.get("detail")
+        msg = f"{title}\n{detail}" if detail else f"{title}\n"
+    except Exception:
+        msg = f"HTTP {resp.status_code}\n{resp.text}"
+    sys.stderr.write(msg.rstrip() + "\n")
+    print(msg.rstrip())
+    sys.exit(1)
+
+
+def _colecao_valida(v, flag="--colecao"):
+    v = (v or "").strip()
+    if v not in COLECOES:
+        morre(f"{flag} inválida '{v}' (esperado: {'|'.join(COLECOES)})")
+    return v
+
+
+def _sha(v):
+    v = (v or "").strip().lower()
+    if not _SHA_RE.match(v):
+        morre(f"sha256 inválido: {v}")
+    return v
+
+
+def acao_listar(colecao, prefixo, como_json, headers):
+    colecao = _colecao_valida(colecao, "<colecao>")
+    url = f"{BASE}/acervo/baldes/{colecao}/objetos"
+    if prefixo:
+        url += f"?prefixo={urllib.parse.quote(prefixo)}"
+    try:
+        resp = requests.get(url, headers=headers)
+    except requests.exceptions.RequestException as e:
+        falha_indeterminavel(e)
+    if resp.status_code >= 500:
+        falha_indeterminavel(resp)
+    if resp.status_code != 200:
+        falha_problem(resp)
+    data = resp.json()
+    if como_json:
+        print(json.dumps(data, indent=2, ensure_ascii=False))
+        return 0
+    itens = data.get("itens", [])
+    print(f"balde {colecao}: {len(itens)} objeto(s)")
+    for it in itens:
+        print(f"  {it.get('objeto'):<70} {it.get('bytes'):>12}  {it.get('modificado_em') or '-'}")
+    return 0
+
+
+def acao_ler(sha256, colecao, como_json, headers):
+    sha256 = _sha(sha256)
+    url = f"{BASE}/acervo/objetos/{sha256}"
+    if colecao:
+        url += f"?colecao={_colecao_valida(colecao)}"
+    try:
+        resp = requests.get(url, headers=headers)
+    except requests.exceptions.RequestException as e:
+        falha_indeterminavel(e)
+    if resp.status_code >= 500:
+        falha_indeterminavel(resp)
+    if resp.status_code != 200:
+        falha_problem(resp)
+    data = resp.json()
+    if como_json:
+        print(json.dumps(data, indent=2, ensure_ascii=False))
+        return 0
+    print(f"objeto      : {data.get('objeto')}")
+    print(f"bytes       : {data.get('bytes')}")
+    print(f"content-type: {data.get('content_type')}")
+    obras_ref = data.get("obras") or []
+    print(f"obras       : {', '.join(obras_ref) if obras_ref else '(nenhuma)'}")
+    return 0
+
+
+def _mover_ou_copiar(modo, sha256, de, para, autor, aplicar, como_json, headers):
+    sha256 = _sha(sha256)
+    de = _colecao_valida(de, "--de")
+    para = _colecao_valida(para, "--para")
+    corpo = {"de": de, "para": para, "modo": modo, "autor": autor, "aplicar": aplicar}
+    url = f"{BASE}/acervo/objetos/{sha256}/mover"
+    try:
+        resp = requests.post(url, json=corpo, headers=headers)
+    except requests.exceptions.RequestException as e:
+        falha_indeterminavel(e)
+    if resp.status_code >= 500:
+        falha_indeterminavel(resp)
+    if resp.status_code != 200:
+        falha_problem(resp)
+    data = resp.json()
+    if como_json:
+        print(json.dumps(data, indent=2, ensure_ascii=False))
+        return 0
+    verbo = "Aplicado" if data.get("modo") == "aplicado" else "Plano"
+    print(f"{verbo} ({modo}): {data.get('objeto_de')} -> {data.get('objeto_para')}")
+    print(f"  bytes: {data.get('bytes')}  já no destino: {data.get('ja_no_destino')}")
+    obras_afetadas = data.get("obras_afetadas") or []
+    if obras_afetadas:
+        acao_obra = "atualizada(s)" if data.get("modo") == "aplicado" else "seria(m) atualizada(s)"
+        print(f"  obra(s) {acao_obra} (objeto + coleção -> {para}): {', '.join(obras_afetadas)}")
+    if not aplicar:
+        print("  (plano seco — repita com --apply para gravar)")
+    return 0
+
+
+def acao_apagar(sha256, colecao, autor, como_json, headers, confirmado):
+    colecao = _colecao_valida(colecao, "--colecao")
+    sha256 = _sha(sha256)
+    if not confirmado:
+        sys.stderr.write(f"Confirma apagar '{colecao}/{sha256}'? Digite 'sim' para confirmar: ")
+        sys.stderr.flush()
+        try:
+            resp_conf = input().strip()
+        except EOFError:
+            resp_conf = ""
+        if resp_conf.lower() != "sim":
+            sys.stderr.write("Cancelado.\n")
+            return 1
+    url = f"{BASE}/acervo/objetos/{sha256}?colecao={colecao}&autor={urllib.parse.quote(autor)}"
+    try:
+        resp = requests.delete(url, headers=headers)
+    except requests.exceptions.RequestException as e:
+        falha_indeterminavel(e)
+    if resp.status_code >= 500:
+        falha_indeterminavel(resp)
+    if resp.status_code != 204:
+        falha_problem(resp)
+    if como_json:
+        print(json.dumps({"apagado": f"{colecao}/{sha256}"}, indent=2, ensure_ascii=False))
+    else:
+        print(f"Objeto {colecao}/{sha256} apagado.")
+    return 0
+
+
+def main(argv):
+    if not argv or argv[0] in ("-h", "--help", "--ajuda", "ajuda"):
+        sys.stdout.write(USO)
+        return 0 if argv else 2
+
+    parser = argparse.ArgumentParser(prog="balde", add_help=False)
+    parser.add_argument("acao", choices=("listar", "ler", "copiar", "mover", "apagar"))
+    parser.add_argument("alvo")
+    parser.add_argument("--prefixo", default=None)
+    parser.add_argument("--colecao", default=None)
+    parser.add_argument("--de", default=None)
+    parser.add_argument("--para", default=None)
+    parser.add_argument("--autor", default=None)
+    parser.add_argument("--apply", action="store_true", default=False)
+    parser.add_argument("--json", dest="como_json", action="store_true", default=False)
+    parser.add_argument("--sim", "-y", dest="confirmado", action="store_true", default=False)
+
+    args, desconhecidos = parser.parse_known_args(argv)
+    if desconhecidos:
+        morre(f"argumento(s) não reconhecido(s): {' '.join(desconhecidos)}")
+
+    autor = args.autor or _autor_default()
+    headers = _headers()
+
+    if args.acao == "listar":
+        return acao_listar(args.alvo, args.prefixo, args.como_json, headers)
+    if args.acao == "ler":
+        return acao_ler(args.alvo, args.colecao, args.como_json, headers)
+    if args.acao in ("copiar", "mover"):
+        if not args.de or not args.para:
+            morre(f"{args.acao} exige --de <colecao> --para <colecao>")
+        return _mover_ou_copiar(args.acao, args.alvo, args.de, args.para, autor, args.apply,
+                                 args.como_json, headers)
+    if args.acao == "apagar":
+        return acao_apagar(args.alvo, args.colecao, autor, args.como_json, headers, args.confirmado)
+    morre(f"ação desconhecida: {args.acao}")
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))
