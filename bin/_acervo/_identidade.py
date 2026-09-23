@@ -5,6 +5,10 @@
 #   2. resolver_canon: busca exata em chave_humana; se 0, busca em entidade_alias
 #      (0 -> exit 1 com 4 linhas fixas; 1 -> uuid; >1 -> exit 2 com candidatos)
 #   3. obter_substrato: busca endereco (repo@path) em acervo.entidade_suporte
+# Documento de casa NAO passa mais por aqui para ser lido: `acervo ler casa` resolve a chave
+# em acervo.casa (arq:0115 §3, §11; _acervo/casa). Esta biblioteca segue servindo `resolver`,
+# `curar alias` e o Sobre: de `listar casa --sobre`, e a negativa de 4 linhas de todos.
+# Nenhum caminho de repo de release: o suporte da casa e um so (SUPORTE, arq:0115 §1.2).
 import json
 import os
 import re
@@ -20,6 +24,8 @@ except (AttributeError, ValueError):
 PG = "rag-extractor-pg"
 DB = "rag_extractor"
 USR = "rag"
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from _suporte import SUPORTE  # noqa: E402  (suporte da particao casa, arq:0115 §1.2)
 
 
 def morre(msg, code=2):
@@ -163,8 +169,32 @@ def resolver_canon(classe, canon, numero_sem_serie=None):
     return psql_json(sql, "resolver_canon")
 
 
-def gerar_negativa(classe, seletor):
-    """Gera as 4 linhas fixas da spec §4 para exit 1."""
+def _parecidos_casa(especie, seletor):
+    """Chaves parecidas DENTRO da especie, em acervo.casa (arq:0115 §3): pg_trgm sobre a
+    chave (ou repo@path, sem chave) e sobre o titulo."""
+    rows = psql_json(
+        """
+        select coalesce(json_agg(row_to_json(t) order by t.sim desc), '[]') from (
+          select u.candidato, u.sim from (
+            select coalesce(c.chave, c.repo || '@' || c.path) as candidato,
+                   greatest(similarity(coalesce(c.chave, c.path), {alvo}),
+                            similarity(coalesce(c.titulo, ''), {alvo})) as sim
+              from acervo.casa c
+              join acervo.especie_tipo e on e.id = c.especie_id
+             where e.slug = {especie}
+          ) u where u.sim > 0.2 order by u.sim desc, u.candidato limit 5
+        ) t;
+        """.format(alvo=_lit(seletor), especie=_lit(especie)), "parecidos"
+    )
+    return [r["candidato"] for r in rows[:5]]
+
+
+def gerar_negativa(classe, seletor, casa=False):
+    """Gera as 4 linhas fixas da spec §4 para exit 1.
+
+    casa=True: `classe` e especie de acervo.especie_tipo e o seletor e chave de documento
+    de casa (arq:0115 §3); parecidos vem das chaves de acervo.casa. Senao, `classe` e classe
+    da raiz e parecidos vem de chave_humana/alias."""
     # 1. varrido: um ponteiro por repositorio (spec_acervo §2): o ultimo sha ingerido de CADA
     # repo em casa_fonte. Sem linha nenhuma, o acervo declara que nao sabe de que sha veio.
     cf = psql_json(
@@ -176,12 +206,23 @@ def gerar_negativa(classe, seletor):
     if cf:
         varrido = "acervo.casa (" + "; ".join(
             f"{r['repo']}@{r['sha'][:12]}, ingerido {r['dt']}" for r in cf) + ")"
-        repos = [r["repo"] for r in cf]
     else:
         varrido = "acervo.casa (sem ponteiro de fonte: nenhuma ingestao registrou sha)"
-        repos = []
-    # O repo do vizinho: ADR mora num repo so; o resto aponta os repos varridos.
-    repo = "platafirma-arquitetura" if classe == "adr" else (repos[0] if len(repos) == 1 else "<repo>")
+
+    # 3 e 4. vizinho e cura: documento de casa mora no suporte platafirma-casa e entra pela
+    # ingestao por sha (arq:0115 §1.2, §8.1); nada de caminho de repo de release.
+    if casa:
+        top = _parecidos_casa(classe, seletor)
+        parecidos_str = ", ".join(top) if top else "(nenhuma chave parecida)"
+        vizinho = f"acervo listar casa {classe}"
+        cura = (f"documento de casa entra por git: PR em {SUPORTE} -> merge em main -> "
+                f"acervo ingerir casa {SUPORTE}")
+        return (
+            f"varrido:   {varrido}\n"
+            f"parecidos: {parecidos_str}\n"
+            f"vizinho:   {vizinho}\n"
+            f"cura:      {cura}"
+        )
 
     # 2. parecidos (pg_trgm)
     parecidos_rows = psql_json(
@@ -219,16 +260,16 @@ def gerar_negativa(classe, seletor):
     else:
         parecidos_str = "(nenhuma chave parecida)"
 
-    # 3. vizinho
-    m_num = re.search(r"\d{1,4}", seletor)
-    if classe == "adr" and m_num:
-        num4 = m_num.group(0).zfill(4)
-        vizinho = f"release ler {repo} macro-global/decisions/{num4}-"
+    # 3. vizinho: a ficha de documento de casa (adr, spec, parecer) se le pela chave em
+    # acervo.casa; as demais classes, pelo texto do suporte.
+    if classe in ("adr", "spec", "parecer"):
+        vizinho = f"acervo listar casa {classe}"
     else:
-        vizinho = f"repo procurar {repo} --termo {seletor}"
+        vizinho = f"repo procurar {SUPORTE} --termo {seletor}"
 
     # 4. cura
-    cura = f"doc de casa entra por git → release promover → acervo ingerir casa {repo}"
+    cura = (f"documento de casa entra por git: PR em {SUPORTE} -> merge em main -> "
+            f"acervo ingerir casa {SUPORTE}")
 
     return (
         f"varrido:   {varrido}\n"

@@ -1,23 +1,34 @@
 #!/usr/bin/env python3
-# acervo casa — leitura da partição casa a partir da tabela acervo.casa (rag_extractor).
+# acervo casa — leitura da partição casa pela CHAVE, da tabela acervo.casa (rag_extractor).
 # capacidade: conhecimento
 # dono: claudinho-dados
 #   (matéria/semântica: claudinho-dados · dono; mecanismo/harness: claudinho-TI · construcao)
 #
-# É o sub-ato genérico das espécies de `casa` que vivem na TABELA acervo.casa —
-# as espécies novas (caderno, persona, spec, minuta, cabecalho-de-verbo, automacao,
-# pagina) e qualquer outra de especie_tipo que não tenha sub-ato legado dedicado.
-# As espécies com fonte própria (adr → _acervo/adr, pagina-wiki → _acervo/wiki,
-# stack → _acervo/stack, ferramental → _acervo/ferramenta) continuam roteadas por
-# seus casos no despachante bin/acervo; só o que sobra cai aqui.
+# Documento de casa é ficha do acervo (arq:0115 §1): lê-se pela chave (§3), nunca pelo
+# caminho do suporte. É o sub-ato das espécies de `casa` que vivem na TABELA acervo.casa;
+# as de fonte própria (pagina, ferramental, stack, cargo, entidade) seguem nos seus casos do
+# despachante bin/acervo.
 #
-# Formas (arq:0106):
-#   acervo listar casa <especie> [--json]       linhas de acervo.casa daquela espécie
-#   acervo ler    casa <especie> <seletor>      uma linha, por path (identidade repo@path)
+# Formas (arq:0106, arq:0115 §4.3, §6.4, §11):
+#   acervo listar casa [--json]                        catálogo: espécies de casa com
+#                                                      projeção, regime e contagem
+#   acervo listar casa <especie> [--todas] [--dono <c>] [--situacao] [--json]
+#                                                      fichas da espécie, por chave
+#   acervo listar casa [<especie>] --sobre <classe> <chave>   (ou <classe>:<chave>)
+#                                                      documentos que declaram Sobre: a entidade
+#   acervo ler    casa <especie> <chave> [--situacao] [--json]
 #
-# A espécie é validada contra acervo.especie_tipo: espécie inexistente RECUSA com a
-# lista viva, em vez de servir vazio (a trava da spec_acervo-casa §Corte).
-# Read-only. Escrita é `acervo escrever/ingerir casa` (outro caminho).
+# Chave (§3): adr `<serie>:NNNN` (arq:75 -> arq:0075; número nu resolve se uma série só o
+# tiver, senão lista as opções, exit 2); minuta `NNNN`; datado `<AAAA-MM-DD>-<slug>` (o slug
+# sem a data resolve se for único); vivo `<slug>`. Depois: repo@path, path e, por fim, o
+# título. Documento RETIRADO (§3.5) segue resolvível: `ler` responde a data e a sucessora,
+# sem o texto (exit 0).
+# Primeira linha de `listar` (§11.2): o que veio e com que cobertura (fonte platafirma-casa@
+# <sha> ingerida em <ts>, projeção, regime, último número por série). psql que falha é
+# INDETERMINÁVEL (exit 5), nunca "0 linhas". `servido` compara o sha ingerido
+# (acervo.casa_fonte) com o main do espelho do suporte, nunca "(igual)" fixo.
+# Exit: 0 ok · 1 nada com essa chave (negativa de 4 linhas) · 2 uso/forma/ambíguo · 5 indeterminável.
+# Read-only. Escrita é `acervo ingerir casa platafirma-casa` (outro caminho).
 import json
 import os
 import re
@@ -30,9 +41,19 @@ try:
 except (AttributeError, ValueError):
     pass
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import _identidade  # noqa: E402
+import _suporte  # noqa: E402
+from _suporte import SUPORTE  # noqa: E402
+
 PG = "rag-extractor-pg"
 DB = "rag_extractor"
 USR = "rag"
+
+RE_ADR = re.compile(r"^(?:([a-z]+):)?(\d{1,4})$")
+RE_SLUG = re.compile(r"^[a-z0-9]+(-[a-z0-9]+)*$")
+RE_DATADO = re.compile(r"^\d{4}-\d{2}-\d{2}-")
+FORMA_ADR = "<serie>:NNNN ou NNNN (ex.: arq:0075, arq:75, 75)"
 
 
 def morre(msg, code=2):
@@ -40,175 +61,445 @@ def morre(msg, code=2):
     sys.exit(code)
 
 
-def _psql(sql):
-    """SQL no rag_extractor via docker exec; devolve stdout cru (-tAF|)."""
+def indeterminavel(motivo, detalhe=""):
+    """§11.2: fonte que não responde não é '0 linhas'. A primeira linha diz, exit 5."""
+    sys.stdout.write(f"indeterminável · {motivo}\n")
+    if detalhe:
+        sys.stderr.write(detalhe.rstrip("\n") + "\n")
+    sys.exit(5)
+
+
+def _q(sql, alvo="acervo.casa"):
+    """SELECT que devolve UM valor json (json_agg / json_build_object). None = sem linha."""
     env = dict(os.environ)
     env.setdefault("DOCKER_HOST", "unix:///run/user/1001/docker.sock")
     try:
-        return subprocess.run(
-            ["docker", "exec", "-i", PG, "psql", "-U", USR, "-d", DB, "-tAF|", "-c", sql],
-            capture_output=True, text=True, check=True, env=env).stdout
+        r = subprocess.run(
+            ["docker", "exec", "-i", PG, "psql", "-U", USR, "-d", DB, "-tAq",
+             "-v", "ON_ERROR_STOP=1", "-c", sql],
+            capture_output=True, env=env)
     except FileNotFoundError:
-        morre("acervo casa: 'docker' nao encontrado no PATH.", 3)
-    except subprocess.CalledProcessError as e:
-        morre("acervo casa: psql falhou (rc=%s):\n%s"
-              % (e.returncode, (e.stderr or "").strip()), 3)
+        indeterminavel("docker nao encontrado no PATH: acervo.casa inalcançável")
+    if r.returncode != 0:
+        indeterminavel(f"psql falhou lendo {alvo} (rc={r.returncode})",
+                       r.stderr.decode("utf-8", "replace"))
+    saida = r.stdout.decode("utf-8", "replace").strip()
+    if not saida:
+        return None
+    try:
+        return json.loads(saida)
+    except ValueError as e:
+        indeterminavel(f"psql devolveu json ilegível lendo {alvo} ({e})", saida[:300])
 
+
+def _lit(s):
+    return "'" + str(s).replace("'", "''") + "'"
+
+
+# ------------------------------------------------------------------ cobertura (§11.2)
 
 def _especies_vivas():
-    """Set de slugs de acervo.especie_tipo — o vocabulário fechado (arq:0059)."""
-    saida = _psql("select slug from acervo.especie_tipo order by slug;")
-    return [l.strip() for l in saida.splitlines() if l.strip()]
+    return _q("select coalesce(json_agg(slug order by slug), '[]') from acervo.especie_tipo;",
+              "acervo.especie_tipo") or []
 
 
-def _valida_especie(especie):
-    vivas = _especies_vivas()
-    if especie not in vivas:
+def _especie(especie):
+    """Espécie com projeção, regime e contagem; fora do vocabulário (arq:0059) recusa."""
+    info = _q(f"""
+      select json_build_object(
+        'slug', e.slug, 'projecao', e.projecao, 'regime', e.regime,
+        'vivas', (select count(*) from acervo.casa c
+                   where c.especie_id = e.id and c.retirada_em is null),
+        'retiradas', (select count(*) from acervo.casa c
+                       where c.especie_id = e.id and c.retirada_em is not null),
+        'sem_chave', (select count(*) from acervo.casa c
+                       where c.especie_id = e.id and c.retirada_em is null and c.chave is null),
+        'ultimo', (select json_object_agg(coalesce(t.serie, ''), t.ult order by t.serie)
+                     from (select serie, max(numero) as ult from acervo.casa
+                            where especie_id = e.id and numero is not null
+                            group by serie) t))
+        from acervo.especie_tipo e where e.slug = {_lit(especie)};""", "acervo.especie_tipo")
+    if not info:
         morre("acervo casa: especie '%s' nao existe em acervo.especie_tipo.\n"
-              "  especies vivas: %s" % (especie, ", ".join(vivas)), 2)
+              "  especies vivas: %s" % (especie, ", ".join(_especies_vivas())), 2)
+    return info
 
 
-# SQL parametrizado por espécie via literal seguro: a espécie já foi validada contra
-# a tabela (allowlist viva), então não há injeção — mas escapamos aspa simples por higiene.
-def _lit(s):
-    return "'" + s.replace("'", "''") + "'"
+def _fonte():
+    """Último sha do suporte ingerido (acervo.casa_fonte), ou None."""
+    return _q(f"""
+      select json_build_object('sha', f.sha,
+               'em', to_char(f.ingerido_em at time zone 'UTC', 'YYYY-MM-DD HH24:MI"Z"'))
+        from acervo.casa_fonte f where f.repo = {_lit(SUPORTE)}
+       order by f.ingerido_em desc limit 1;""", "acervo.casa_fonte")
 
 
-def listar(especie, quero_json, dono=None, situacao=False):
-    _valida_especie(especie)
-    cond_dono = (" and c.dono = %s" % _lit(dono)) if dono else ""
-    sql = (
-        "select c.repo, c.path, c.sha, c.dono, c.natureza, c.ciclo, coalesce(c.titulo,''), "
-        "       to_char(c.criado_em,'YYYY-MM-DD'), "
-        "       to_char(ci.criada_em,'YYYY-MM-DD') "
-        "from acervo.casa c "
-        "join acervo.especie_tipo e on e.id=c.especie_id "
-        "left join acervo.casa_impressao ci on ci.casa_id=c.id and ci.estado='servindo' "
-        "where e.slug=%s%s order by c.repo, c.path;" % (_lit(especie), cond_dono)
-    )
-    saida = _psql(sql)
-    linhas = [l for l in saida.splitlines() if l.strip()]
-    itens = []
-    for l in linhas:
-        campos = l.split("|")
-        if len(campos) < 8:
-            morre("acervo casa listar %s: linha com formato inesperado (%d campos):\n  %s"
-                  % (especie, len(campos), l), 3)
-        repo, path, sha, dono_doc, natureza, ciclo, titulo, criado = campos[:8]
-        vetorizado_em = campos[8] if len(campos) > 8 and campos[8] else None
-        item = {
-            "repo": repo, "path": path, "sha": sha, "dono": dono_doc,
-            "natureza": natureza, "ciclo": ciclo,
-            "titulo": titulo or None, "criado_em": criado,
-            "vetorizado_em": vetorizado_em,
-        }
-        if situacao:
-            item["situacao"] = {
-                "fonte": f"{repo}@{sha[:12]}",
-                "ingerido": criado,
-                "servido": f"{sha[:12]} (igual)",
-                "vetorizado": vetorizado_em or "não",
-                "status": ciclo,
-            }
-        itens.append(item)
+def txt_fonte(fonte):
+    if not fonte:
+        return f"fonte {SUPORTE}: nunca ingerida"
+    return f"fonte {SUPORTE}@{fonte['sha'][:12]} ingerida em {fonte['em']}"
+
+
+def txt_ultimo(ultimo):
+    """{'arq': 115, 'seg': 14} -> 'último: arq:0115 · seg:0014'; minuta ('' -> 38): '0038'."""
+    if not ultimo:
+        return None
+    partes = [f"{s}:{int(n):04d}" if s else f"{int(n):04d}" for s, n in sorted(ultimo.items())]
+    return "último: " + " · ".join(partes)
+
+
+def linha_cobertura(n, info, fonte, todas=False, dono=None):
+    partes = [f"{n} linha(s)", info["slug"], txt_fonte(fonte),
+              f"projeção {info.get('projecao') or '(nenhuma)'}",
+              f"regime {info.get('regime') or '(nenhum)'}"]
+    ult = txt_ultimo(info.get("ultimo"))
+    if ult:
+        partes.append(ult)
+    if info.get("sem_chave"):
+        partes.append(f"{info['sem_chave']} sem chave (id=repo@path)")
+    if todas:
+        partes.append("inclui retiradas")
+    elif info.get("retiradas"):
+        partes.append(f"{info['retiradas']} retirada(s) fora (--todas)")
+    if dono:
+        partes.append(f"dono={dono}")
+    return " · ".join(partes)
+
+
+def servido(repo, fonte, main_esp):
+    """Honesto (arq:0110 Q6): sha ingerido (casa_fonte) contra o main do espelho do suporte."""
+    if repo != SUPORTE:
+        return f"fora do suporte (legado de {repo})"
+    if not fonte:
+        return "nunca ingerido"
+    f12 = fonte["sha"][:12]
+    main, motivo = main_esp
+    if not main:
+        return f"{f12} (main do espelho indeterminável: {motivo})"
+    if main == fonte["sha"]:
+        return f"{f12} (= main do espelho)"
+    return f"{f12} (main do espelho em {main[:12]}: ingestão defasada)"
+
+
+# ------------------------------------------------------------------ linhas
+
+_CAMPOS = """
+    c.id::text as id, c.chave, c.serie, c.numero, c.repo, c.path, c.sha, c.dono,
+    c.natureza::text as natureza, c.ciclo::text as ciclo, coalesce(c.titulo, '') as titulo,
+    s.slug as subtipo, e.slug as especie, to_char(c.criado_em, 'YYYY-MM-DD') as criado_em,
+    to_char(c.retirada_em at time zone 'UTC', 'YYYY-MM-DD') as retirada_em, c.substituida_por,
+    to_char(ci.criada_em, 'YYYY-MM-DD') as vetorizado_em"""
+
+_ORDEM = "t.serie nulls last, t.numero nulls last, t.chave nulls last, t.repo, t.path"
+
+
+def _linhas(where, limite=None):
+    lim = f" limit {int(limite)}" if limite else ""
+    return _q(f"""
+      select coalesce(json_agg(row_to_json(t) order by {_ORDEM}), '[]') from (
+        select {_CAMPOS}
+          from acervo.casa c
+          join acervo.especie_tipo e on e.id = c.especie_id
+          left join acervo.especie_subtipo s on s.id = c.subtipo_id
+          left join acervo.casa_impressao ci on ci.casa_id = c.id and ci.estado = 'servindo'
+         where {where}
+         order by c.serie nulls last, c.numero nulls last, c.chave nulls last, c.repo, c.path
+         {lim}) t;""") or []
+
+
+def ident(linha):
+    """§11.1: a chave é o identificador; sem ela, repo@path (declarado na cobertura)."""
+    return linha.get("chave") or f"{linha['repo']}@{linha['path']}"
+
+
+def txt_retirada(linha):
+    suc = linha.get("substituida_por")
+    return (f"retirada em {linha['retirada_em']}; "
+            + (f"substituída por {suc}" if suc else "sem sucessora declarada"))
+
+
+def _situacao(linha, fonte, main_esp):
+    return {
+        "fonte": f"{linha['repo']}@{(linha.get('sha') or '')[:12]}",
+        "ingerido": linha.get("criado_em"),
+        "servido": servido(linha["repo"], fonte, main_esp),
+        "vetorizado": linha.get("vetorizado_em") or "não",
+        "status": txt_retirada(linha) if linha.get("retirada_em") else linha.get("ciclo"),
+    }
+
+
+def _item(linha):
+    return {k: linha.get(k) for k in (
+        "chave", "serie", "numero", "repo", "path", "sha", "dono", "natureza", "ciclo",
+        "subtipo", "criado_em", "retirada_em", "substituida_por")} | {
+        "id": ident(linha), "titulo": linha.get("titulo") or None,
+        "vetorizado_em": linha.get("vetorizado_em")}
+
+
+# ------------------------------------------------------------------ listar
+
+def catalogo(quero_json):
+    """`listar casa` sem espécie: as espécies de casa (regime declarado, arq:0115 §5) e as
+    que têm linha, com projeção, regime e contagem."""
+    linhas = _q("""
+      select coalesce(json_agg(row_to_json(t) order by t.regime nulls last, t.slug), '[]') from (
+        select e.slug, e.regime, e.projecao,
+               count(c.id) filter (where c.retirada_em is null) as vivas,
+               count(c.id) filter (where c.retirada_em is not null) as retiradas
+          from acervo.especie_tipo e
+          left join acervo.casa c on c.especie_id = e.id
+         where e.regime is not null or c.id is not null
+         group by e.slug, e.regime, e.projecao) t;""", "acervo.especie_tipo") or []
+    fonte = _fonte()
+    vivas = sum(int(l["vivas"]) for l in linhas)
+    cab = (f"{len(linhas)} espécie(s) de casa · {vivas} ficha(s) viva(s) · {txt_fonte(fonte)}"
+           f" · ler uma: acervo listar casa <especie>")
     if quero_json:
-        print(json.dumps(itens, ensure_ascii=False, indent=2))
+        sys.stderr.write(cab + "\n")
+        print(json.dumps(linhas, ensure_ascii=False, indent=2))
         return 0
-    if not itens:
-        filtro = f" (dono={dono})" if dono else ""
-        sys.stdout.write(f"motivo: nenhuma entidade da especie '{especie}' encontrada em acervo.casa{filtro}.\n")
+    print(cab)
+    if not linhas:
+        print("motivo: nenhuma espécie com regime em acervo.especie_tipo.")
         return 0
-    if situacao:
-        for i in itens:
-            rp = "%s@%s" % (i["repo"], i["path"])
-            sit = i["situacao"]
-            print(f"== {rp} ({i['titulo'] or '-'}) ==")
-            print(f"fonte: {sit['fonte']}   ingerido: {sit['ingerido']}   servido: {sit['servido']}")
-            print(f"vetorizado: {sit['vetorizado']}   status: {sit['status']}\n")
-        sys.stderr.write(f"\n{len(itens)} linha(s) da especie '{especie}' em acervo.casa.\n")
-        return 0
-
-    wr = max((len("%s@%s" % (i["repo"], i["path"])) for i in itens), default=10)
-    print("%-*s  %-12s  %-11s  %s" % (wr, "repo@path", "natureza", "ciclo", "titulo"))
-    print("%s  %-12s  %-11s  %s" % ("-" * wr, "-" * 12, "-" * 11, "-" * 6))
-    for i in itens:
-        rp = "%s@%s" % (i["repo"], i["path"])
-        print("%-*s  %-12s  %-11s  %s" % (wr, rp, i["natureza"], i["ciclo"], i["titulo"] or "-"))
-    sys.stderr.write("\n%d linha(s) da especie '%s' em acervo.casa.\n" % (len(itens), especie))
+    we = max(len(l["slug"]) for l in linhas)
+    wp = max(len(l["projecao"] or "-") for l in linhas)
+    print("%-*s  %-11s  %-*s  %6s  %9s" % (we, "especie", "regime", wp, "projecao", "vivas",
+                                          "retiradas"))
+    for l in linhas:
+        print("%-*s  %-11s  %-*s  %6s  %9s" % (we, l["slug"], l["regime"] or "-", wp,
+                                              l["projecao"] or "-", l["vivas"], l["retiradas"]))
     return 0
 
 
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-import _identidade
+def listar(especie, quero_json, dono=None, situacao=False, todas=False):
+    info = _especie(especie)
+    fonte = _fonte()
+    conds = [f"e.slug = {_lit(especie)}"]
+    if not todas:
+        conds.append("c.retirada_em is null")
+    if dono:
+        conds.append(f"c.dono = {_lit(dono)}")
+    linhas = _linhas(" and ".join(conds))
+    main_esp = _suporte.main_do_espelho()
+    cab = linha_cobertura(len(linhas), info, fonte, todas=todas, dono=dono)
+
+    if quero_json:
+        sys.stderr.write(cab + "\n")
+        itens = []
+        for l in linhas:
+            it = _item(l)
+            if situacao:
+                it["situacao"] = _situacao(l, fonte, main_esp)
+            itens.append(it)
+        print(json.dumps(itens, ensure_ascii=False, indent=2))
+        return 0
+
+    print(cab)
+    if not linhas:
+        filtro = f" (dono={dono})" if dono else ""
+        print(f"motivo: nenhuma ficha da especie '{especie}' em acervo.casa{filtro}.")
+        return 0
+    if situacao:
+        for l in linhas:
+            sit = _situacao(l, fonte, main_esp)
+            print(f"\n== {ident(l)} ({l.get('titulo') or '-'}) ==")
+            print(f"fonte: {sit['fonte']}   ingerido: {sit['ingerido']}   servido: {sit['servido']}")
+            print(f"vetorizado: {sit['vetorizado']}   status: {sit['status']}")
+        return 0
+
+    wi = max((len(ident(l)) for l in linhas), default=5)
+    print("%-*s  %-11s  %s" % (wi, "chave", "ciclo", "titulo"))
+    print("%s  %s  %s" % ("-" * wi, "-" * 11, "-" * 6))
+    for l in linhas:
+        titulo = l.get("titulo") or "-"
+        if l.get("subtipo"):
+            titulo = f"[{l['subtipo']}] {titulo}"
+        if l.get("retirada_em"):
+            titulo = f"{titulo}  ({txt_retirada(l)})"
+        print("%-*s  %-11s  %s" % (wi, ident(l), l.get("ciclo") or "-", titulo))
+    return 0
+
+
+def _entidade(classe, chave):
+    """Ficha da raiz (acervo.entidade) do referente de Sobre:. Com classe: o pipeline de
+    identidade (exato, alias; 0 -> negativa exit 1; >1 -> exit 2). Sem classe: procura a
+    chave em todas as classes e só aceita se for uma."""
+    if classe:
+        f = _identidade.resolver_identidade(classe, chave)
+        return classe, f["chave_humana"], f["id"]
+    cand = _q(f"""
+      select coalesce(json_agg(row_to_json(t)), '[]') from (
+        select e.id::text as id, e.classe, e.chave_humana from acervo.entidade e
+         where e.chave_humana = {_lit(chave)}
+        union
+        select e.id::text, e.classe, e.chave_humana from acervo.entidade e
+          join acervo.entidade_alias a on a.entidade_id = e.id
+         where a.alias = {_lit(chave)}
+           and not exists (select 1 from acervo.entidade e2 where e2.chave_humana = {_lit(chave)})
+      ) t;""", "acervo.entidade") or []
+    if not cand:
+        morre(f"acervo listar casa --sobre: nenhuma entidade com chave '{chave}' em classe "
+              f"nenhuma. Forma: --sobre <classe> <chave> (ex.: --sobre verbo acervo); "
+              f"classes: acervo listar entidade.", 1)
+    if len(cand) > 1:
+        ops = "\n".join(f"    --sobre {c['classe']} {c['chave_humana']}" for c in cand)
+        morre(f"acervo listar casa --sobre: '{chave}' ambiguo ({len(cand)} fichas); "
+              f"informe a classe:\n{ops}", 2)
+    return cand[0]["classe"], cand[0]["chave_humana"], cand[0]["id"]
+
+
+def sobre(classe, chave, especie, quero_json, todas=False):
+    """«A documentação de X» (arq:0115 §6.4): documentos cujo Sobre: resolve à ficha."""
+    if chave is None and classe and ":" in classe:
+        classe, chave = classe.split(":", 1)
+    elif chave is None:
+        classe, chave = None, classe
+    if especie:
+        _especie(especie)
+    classe, chave_humana, ent_id = _entidade(classe, chave)
+    conds = [f"r.ref = {_lit(ent_id)}::uuid"]
+    if not todas:
+        conds.append("c.retirada_em is null")
+    if especie:
+        conds.append(f"e.slug = {_lit(especie)}")
+    linhas = _q(f"""
+      select coalesce(json_agg(row_to_json(t) order by t.especie, t.serie nulls last,
+                               t.numero nulls last, t.chave nulls last, t.repo, t.path), '[]')
+        from (select e.slug as especie, c.chave, c.serie, c.numero, c.repo, c.path,
+                     coalesce(c.titulo, '') as titulo, c.ciclo::text as ciclo,
+                     to_char(c.retirada_em at time zone 'UTC', 'YYYY-MM-DD') as retirada_em,
+                     c.substituida_por
+                from acervo.casa_referente r
+                join acervo.casa c on c.id = r.casa_id
+                join acervo.especie_tipo e on e.id = c.especie_id
+               where {' and '.join(conds)}) t;""", "acervo.casa_referente") or []
+    cab = (f"{len(linhas)} documento(s) sobre {classe} {chave_humana} · {txt_fonte(_fonte())}"
+           + (f" · especie {especie}" if especie else "")
+           + (" · inclui retiradas" if todas else ""))
+    if quero_json:
+        sys.stderr.write(cab + "\n")
+        print(json.dumps([dict(l, id=ident(l)) for l in linhas], ensure_ascii=False, indent=2))
+        return 0
+    print(cab)
+    if not linhas:
+        print(f"motivo: nenhum documento de casa declara Sobre: {classe} {chave_humana}.")
+        return 0
+    we = max(len(l["especie"]) for l in linhas)
+    wi = max(len(ident(l)) for l in linhas)
+    for l in linhas:
+        extra = f"  ({txt_retirada(l)})" if l.get("retirada_em") else ""
+        print("%-*s  %-*s  %s%s" % (we, l["especie"], wi, ident(l), l["titulo"] or "-", extra))
+    return 0
+
+
+# ------------------------------------------------------------------ ler
+
+def normalizar(especie, seletor):
+    """Seletor -> chave canônica, sem banco (arq:0115 §3.4). None = não é chave de forma
+    fechada (número nu de adr, que resolve por série; ou texto, que cai no título).
+    adr fora da forma que parece chave (`arq:11O`, `12a`) recusa, exit 2."""
+    s = seletor.strip()
+    if especie == "adr":
+        m = RE_ADR.match(s)
+        if m:
+            return f"{m.group(1)}:{int(m.group(2)):04d}" if m.group(1) else None
+        if re.match(r"^[a-z]+:", s) or re.match(r"^\d", s):
+            morre(f"acervo ler casa adr: seletor '{s}' invalido. Forma esperada: {FORMA_ADR}", 2)
+        return None
+    if especie == "minuta" and re.fullmatch(r"\d{1,4}", s):
+        return f"{int(s):04d}"
+    return s
+
+
+def _ambiguo(especie, seletor, cands, porque):
+    ops = "\n".join(f"    acervo ler casa {especie} {ident(c)}   {c.get('titulo') or ''}".rstrip()
+                    for c in cands[:20])
+    morre(f"acervo ler casa {especie}: '{seletor}' ambiguo ({porque}, {len(cands)} fichas):\n{ops}", 2)
+
+
+def resolver(especie, seletor, info):
+    """A linha de acervo.casa do seletor, pela escada: chave -> número nu (adr) -> slug sem
+    data (datado) -> repo@path / path -> título. Nada: negativa, exit 1."""
+    s = seletor.strip()
+    base = f"e.slug = {_lit(especie)}"
+    if "@" in s and not s.startswith("@"):
+        repo, path = s.split("@", 1)
+        cands = _linhas(f"{base} and c.repo = {_lit(repo)} and c.path = {_lit(path)}")
+        if cands:
+            return cands[0]
+    else:
+        chave = normalizar(especie, s)
+        if chave:
+            cands = _linhas(f"{base} and c.chave = {_lit(chave)}")
+            if cands:
+                return cands[0]
+        m = RE_ADR.match(s) if especie == "adr" else None
+        if m and not m.group(1):
+            cands = _linhas(f"{base} and c.numero = {int(m.group(2))}", limite=50)
+            if len(cands) > 1:
+                _ambiguo(especie, s, cands, "o número existe em mais de uma série")
+            if cands:
+                return cands[0]
+        if info.get("regime") == "datado" and RE_SLUG.match(s) and not RE_DATADO.match(s):
+            rx = "^[0-9]{4}-[0-9]{2}-[0-9]{2}-" + s + "$"
+            cands = _linhas(f"{base} and c.chave ~ {_lit(rx)}", limite=50)
+            if len(cands) > 1:
+                _ambiguo(especie, s, cands, "o slug existe em mais de uma data")
+            if cands:
+                return cands[0]
+        cands = _linhas(f"{base} and c.path = {_lit(s)}", limite=50)
+        if len(cands) > 1:
+            _ambiguo(especie, s, cands, "o caminho existe em mais de um repo")
+        if cands:
+            return cands[0]
+        # Fallback final pelo título — nunca para o que já tem forma de chave de adr.
+        if not (especie == "adr" and RE_ADR.match(s)):
+            cands = _linhas(f"{base} and lower(c.titulo) = lower({_lit(s)})", limite=50)
+            if not cands and len(s) >= 3:
+                pat = s.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+                cands = _linhas(f"{base} and c.titulo ilike {_lit('%' + pat + '%')}", limite=50)
+            if len(cands) > 1:
+                _ambiguo(especie, s, cands, "o título casa com mais de uma ficha")
+            if cands:
+                return cands[0]
+    diag = _identidade.gerar_negativa(especie, seletor, casa=True)
+    morre("acervo casa: nada da especie '%s' com chave '%s' em acervo.casa.\n%s"
+          % (especie, seletor, diag), 1)
+
 
 def ler(especie, seletor, quero_json, situacao=False):
-    """Uma linha pela identidade: seletor casa com path (ou repo@path se vier o repo)."""
-    _valida_especie(especie)
-    if especie == "adr" and "@" not in seletor:
-        ficha = _identidade.resolver_identidade("adr", seletor)
-        substrato = _identidade.obter_substrato(ficha["id"])
-        if not substrato or not substrato.get("repo") or not substrato.get("path"):
-            morre("acervo casa: ficha '%s' (%s) sem substrato em acervo.entidade_suporte."
-                  % (ficha["id"], ficha.get("chave_humana", seletor)), 3)
-        repo = substrato["repo"]
-        path = substrato["path"]
-        cond = "c.repo=%s and c.path=%s" % (_lit(repo), _lit(path))
-    elif "@" in seletor:
-        repo, path = seletor.split("@", 1)
-        cond = "c.repo=%s and c.path=%s" % (_lit(repo), _lit(path))
-    else:
-        cond = "c.path=%s" % _lit(seletor)
-    # DUAS queries, de proposito. O corpo de um doc da casa e' multi-LINHA, e a saida do
-    # psql -tAF| e' quebrada por linha: trazer corpo junto fazia UM doc de 96 linhas parecer
-    # 96 registros, e toda leitura de doc longo morria em "seletor ambiguo". A contagem sai
-    # do metadado (uma linha por doc); o corpo vem depois, pela identidade ja resolvida.
-    sql_meta = (
-        "select c.repo, c.path, c.sha, c.dono, c.natureza, c.ciclo, coalesce(c.titulo,''), "
-        "       to_char(c.criado_em,'YYYY-MM-DD'), "
-        "       to_char(ci.criada_em,'YYYY-MM-DD') "
-        "from acervo.casa c "
-        "join acervo.especie_tipo e on e.id=c.especie_id "
-        "left join acervo.casa_impressao ci on ci.casa_id=c.id and ci.estado='servindo' "
-        "where e.slug=%s and %s order by c.repo, c.path;" % (_lit(especie), cond)
-    )
-    linhas = [l for l in _psql(sql_meta).splitlines() if l.strip()]
-    if not linhas:
-        diag = _identidade.gerar_negativa(especie, seletor)
-        morre("acervo casa: nada da especie '%s' com seletor '%s' em acervo.casa.\n%s"
-              % (especie, seletor, diag), 1)
-    if len(linhas) > 1:
-        achados = "\n".join("    - %s@%s" % tuple(l.split("|")[:2]) for l in linhas[:10])
-        morre("acervo casa: seletor '%s' ambiguo (%d docs); use repo@path:\n%s"
-              % (seletor, len(linhas), achados), 2)
-    campos = linhas[0].split("|")
-    repo, path, sha, dono, natureza, ciclo, titulo = campos[:7]
-    criado = campos[7] if len(campos) > 7 else ""
-    vetorizado_em = campos[8] if len(campos) > 8 and campos[8] else None
+    info = _especie(especie)
+    linha = resolver(especie, seletor, info)
+    fonte = _fonte()
+    main_esp = _suporte.main_do_espelho()
+    sit = _situacao(linha, fonte, main_esp)
 
-    corpo = _psql(
-        "select c.corpo from acervo.casa c where c.repo=%s and c.path=%s;"
-        % (_lit(repo), _lit(path))
-    )
-    sit_dict = {
-        "fonte": f"{repo}@{sha[:12]}",
-        "ingerido": criado,
-        "servido": f"{sha[:12]} (igual)",
-        "vetorizado": vetorizado_em or "não",
-        "status": ciclo,
-    }
+    if linha.get("retirada_em"):
+        # §3.5: a chave segue resolvível; responde a sucessora, sem o texto.
+        if quero_json:
+            doc = _item(linha) | {"corpo": None}
+            if situacao:
+                doc["situacao"] = sit
+            print(json.dumps(doc, ensure_ascii=False, indent=2))
+            return 0
+        print(f"{ident(linha)}: {txt_retirada(linha)}")
+        if linha.get("substituida_por"):
+            print(f"  a vigente: acervo ler casa {especie} {linha['substituida_por']}")
+        return 0
+
+    corpo = (_q(f"select json_build_object('corpo', c.corpo) from acervo.casa c "
+                f"where c.id = {_lit(linha['id'])}::uuid;") or {}).get("corpo") or ""
     if quero_json:
-        doc = {
-            "repo": repo, "path": path, "sha": sha, "dono": dono,
-            "natureza": natureza, "ciclo": ciclo, "titulo": titulo or None,
-            "corpo": corpo,
-        }
+        doc = _item(linha) | {"corpo": corpo}
         if situacao:
-            doc["situacao"] = sit_dict
+            doc["situacao"] = sit
         print(json.dumps(doc, ensure_ascii=False, indent=2))
         return 0
     if situacao:
-        sys.stdout.write(f"fonte: {sit_dict['fonte']}   ingerido: {sit_dict['ingerido']}   servido: {sit_dict['servido']}\n"
-                         f"vetorizado: {sit_dict['vetorizado']}   status: {sit_dict['status']}\n\n")
+        sys.stdout.write(f"{ident(linha)} · {linha.get('titulo') or '-'}\n"
+                         f"fonte: {sit['fonte']}   ingerido: {sit['ingerido']}   servido: {sit['servido']}\n"
+                         f"vetorizado: {sit['vetorizado']}   status: {sit['status']}\n\n")
     sys.stdout.write(corpo)
     if not corpo.endswith("\n"):
         sys.stdout.write("\n")
@@ -216,41 +507,66 @@ def ler(especie, seletor, quero_json, situacao=False):
 
 
 USO = """uso:
-  acervo listar casa <especie> [--dono <cadeira>] [--situacao] [--json]
-  acervo ler    casa <especie> <seletor> [--situacao] [--json]
+  acervo listar casa [--json]                              catálogo das espécies de casa
+  acervo listar casa <especie> [--todas] [--dono <cadeira>] [--situacao] [--json]
+  acervo listar casa [<especie>] --sobre <classe> <chave> [--todas] [--json]
+  acervo ler    casa <especie> <chave> [--situacao] [--json]
 
-<especie> e validada contra acervo.especie_tipo (vocabulario fechado, arq:0059).
-Read-only; a escrita e `acervo escrever/ingerir casa`."""
+<chave>: adr <serie>:NNNN (arq:0075; arq:75 e 75 resolvem se não houver ambiguidade),
+minuta NNNN, datado <AAAA-MM-DD>-<slug> (ou só o <slug>, se único), vivo <slug>.
+<especie> é validada contra acervo.especie_tipo (vocabulário fechado, arq:0059).
+exit: 0 ok · 1 nada · 2 uso/forma/ambíguo · 5 indeterminável.
+Read-only; a escrita é `acervo ingerir casa platafirma-casa`."""
 
 
 def main(argv):
-    # Invocado pelo despachante como: _acervo/casa <ato> <especie> [seletor] [--dono d] [--situacao] [--json]
+    # Invocado pelo despachante como: _acervo/casa <ato> [especie] [seletor] [--sobre c k]
+    #                                 [--dono d] [--todas] [--situacao] [--json]
     if not argv or argv[0] in ("-h", "--help", "ajuda"):
         morre(USO, 0 if argv else 2)
     ato = argv[0]
     resto = argv[1:]
     quero_json = "--json" in resto
     situacao = "--situacao" in resto
-    resto = [a for a in resto if a not in ("--json", "--situacao")]
+    todas = "--todas" in resto
+    resto = [a for a in resto if a not in ("--json", "--situacao", "--todas")]
 
     dono = None
+    sobre_args = None
     pos = []
     i = 0
     while i < len(resto):
         if resto[i] == "--dono" and i + 1 < len(resto):
             dono = resto[i + 1]
             i += 2
+        elif resto[i] == "--sobre":
+            # <classe> <chave> ou <classe>:<chave>; nunca engole a flag seguinte
+            sobre_args = []
+            i += 1
+            while (i < len(resto) and len(sobre_args) < 2 and not resto[i].startswith("--")
+                   and not (sobre_args and ":" in sobre_args[0])):
+                sobre_args.append(resto[i])
+                i += 1
         else:
             pos.append(resto[i])
             i += 1
 
     if ato == "listar":
+        if sobre_args is not None:
+            if not sobre_args or len(pos) > 1:
+                morre("acervo listar casa [<especie>] --sobre <classe> <chave>: faltam "
+                      "argumentos.\n\n%s" % USO, 2)
+            classe = sobre_args[0]
+            chave = sobre_args[1] if len(sobre_args) > 1 else None
+            return sobre(classe, chave, pos[0] if pos else None, quero_json, todas=todas)
+        if not pos:
+            return catalogo(quero_json)
         if len(pos) != 1:
-            morre("acervo listar casa: falta a especie.\n\n%s" % USO, 2)
-        return listar(pos[0], quero_json, dono=dono, situacao=situacao)
+            morre("acervo listar casa <especie>: argumentos demais.\n\n%s" % USO, 2)
+        return listar(pos[0], quero_json, dono=dono, situacao=situacao, todas=todas)
     if ato == "ler":
         if len(pos) != 2:
-            morre("acervo ler casa <especie> <seletor>: faltam argumentos.\n\n%s" % USO, 2)
+            morre("acervo ler casa <especie> <chave>: faltam argumentos.\n\n%s" % USO, 2)
         return ler(pos[0], pos[1], quero_json, situacao=situacao)
     morre("acervo casa: ato desconhecido '%s' (ler, listar).\n\n%s" % (ato, USO), 2)
 

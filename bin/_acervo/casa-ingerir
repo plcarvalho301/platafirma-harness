@@ -1,37 +1,35 @@
 #!/usr/bin/env python3
-# _acervo/casa-ingerir — cliente fino da rota de ingestao da particao `casa` (card #3027).
+# _acervo/casa-ingerir — cliente fino da ingestão da partição `casa` (card #3027, arq:0115).
 # capacidade: incorporacao
 # dono: claudinho-dados
-#   (recorte de dados: como a lista curada vira {repo,path,sha_ref,dono,tipo,natureza,ciclo}
-#    e' materia de dados · dono; o mecanismo HTTP espelha bin/ingerir de obra · construcao TI)
+#   (recorte de dados: o que vai no payload e o que o plano diz · dono; o mecanismo HTTP
+#    espelha bin/ingerir de obra · construcao TI)
 #
-# Doc de casa e' TEXTO DE GIT: identidade (repo,path), versao = sha do ref publicado do repo,
-# corpo no payload — sem MinIO, sem OCR, sem bancada (spec_ingestao-casa, decisao B). Este
-# cliente:
-#   1. le a lista curada (docs/varredura-casa-candidatos.md do platafirma-arquitetura):
-#      repo do titulo `## <repo>`, especie PROPOSTA de `### ... (<familia>)`, path dos bullets.
-#   2. resolve o sha_ref da familia na release no ar (<release>/<curto>, card #3010).
-#   3. le o corpo de cada doc da release.
-#   4. deriva dono (cadeira dona do repo), natureza (golden), ciclo (publicado) — default,
-#      sobrescrivivel por doc na propria lista via sufixo ` :: dono=<c> natureza=<n> ciclo=<c>`.
-#   5. POST /acervo/casa/lotes (dry-run) e .../aplicar (--apply), com poll — espelha ingerir.
-#
-# A especie e' PROPOSTA: quem decide e' o servidor contra acervo.especie_tipo. Doc cuja
-# especie proposta nao resolver REPROVA no dry-run, com o nome — e' o sinal de triagem fina
-# do passo (e), nao erro do cliente.
+# Documento de casa é ficha do acervo, e o arquivo em git é o suporte dela (arq:0115 §1).
+# O suporte é `platafirma-casa`, fora do release (§1.2); a ingestão lê o OBJETO GIT pelo sha
+# (§8.1), num espelho bare da instância (padrão do `.repo.git` de bin/release; ver
+# _acervo/_suporte.py). Este cliente:
+#   1. garante o espelho (clone --bare na 1ª vez) e busca o forge com a credencial da conta;
+#   2. resolve `platafirma-casa[@<rev>]` (sem @: origin/main; rev tem de ser ancestral dele);
+#   3. lista a árvore (`ls-tree -r`) e lê os corpos num processo só (`cat-file --batch`);
+#   4. manda todo `*.md` (menos README) como {repo, path, sha_ref, titulo, corpo} —
+#      espécie, subtipo, chave, ciclo, dono e Sobre: o SERVIDOR tira do corpo e do caminho,
+#      predicado único de admissão (§7, contrato de dados D5/D6);
+#   5. recusa AQUI a fonte de diagrama (.mmd/.d2) sem o documento que ilustra (§7, D5
+#      predicado 8): diagrama não vai ao servidor;
+#   6. POST /acervo/casa/lotes (dry-run) e .../aplicar (--apply), com poll — espelha ingerir.
+# Lote da árvore inteira leva `fonte.arvore_completa=true`: linha viva que saiu do suporte
+# ganha `retirar` no servidor (§3.5, D4). Recorte (--so/--limite) nunca retira.
 import argparse
-import fnmatch
 import json
 import os
 import re
-import subprocess
 import sys
 import time
 
-import requests
-
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-import _identidade
+import _suporte  # noqa: E402
+from _suporte import SUPORTE  # noqa: E402
 
 HARNESS_DIR = os.path.dirname(os.path.dirname(os.path.realpath(__file__)))
 if HARNESS_DIR not in sys.path:
@@ -46,452 +44,393 @@ except ImportError:
 BASE = (os.environ.get("RAG_API_BASE") or DEFAULT_BASE).rstrip("/")
 TOKEN = os.environ.get("RAG_API_TOKEN") or DEFAULT_TOKEN
 
-# Fonte de casa e a PRODUCAO, nunca a bancada (card #3010): a release no ar publica cada
-# familia em <release>/<curto> (platafirma-arquitetura -> arquitetura), estavel entre
-# promocoes. Override so para teste, por PLATAFIRMA_RELEASE/PF_RELEASE_RAIZ.
-sys.path.insert(0, os.path.join(os.path.dirname(HARNESS_DIR), "lib"))
-from raizes import release  # noqa: E402
-
-def dir_da_familia(repo):
-    """<release>/<curto> da familia `platafirma-<curto>` (ou do nome curto dado)."""
-    return os.path.join(str(release()), repo.removeprefix("platafirma-"))
-
-# git ABSOLUTO: sob a porta nao ha PATH, e `git` nu levanta FileNotFoundError — o que fazia
-# sha_do_repo devolver None e TODO item ser pulado calado. Mesmo padrao de bin/repo e
-# bin/publicar-abertura.
-GIT = next((p for p in ("/usr/bin/git", "/bin/git") if os.path.exists(p)), "git")
-
-# Familia da secao `### ... (<familia>)` -> especie PROPOSTA (slug de especie_tipo). A familia
-# e' grossa; a especie proposta e' a mais comum daquela familia na lista. Doc que fugir disso
-# reprova no dry-run e recebe override por linha.
-FAMILIA_ESPECIE = {
-    "instrumento-de-processo": "nota-tecnica",
-    "padrao-tecnico": "spec",
-    "autoral": "verbete-de-conceito",
-}
-# Palavra na linha do `###` -> especie proposta (vence a familia quando bate).
-PISTA_ESPECIE = {
-    "benchmark": "benchmark",
-    "spec": "spec",
-    "padrão": "spec",
-    "padrao": "spec",
-    "parecer": "parecer",
-    "nota-técnica": "nota-tecnica",
-    "nota-tecnica": "nota-tecnica",
-    "referência": "referencia",
-    "referencia": "referencia",
-    "guia": "guia",
-    "runbook": "runbook",
-    "glossário": "verbete-de-conceito",
-    "glossario": "verbete-de-conceito",
-    "ontologia": "verbete-de-conceito",
-    "medição": "nota-tecnica",
-    "medicao": "nota-tecnica",
-}
-# Repo -> cadeira dona (default do campo `dono`). Sobrescrivivel por doc.
-REPO_DONO = {
-    "platafirma-arquitetura": "arquiteto",
-    "platafirma-conhecimento": "dados",
-    "platafirma-core": "ti",
-    "platafirma-motor": "dados",
-}
-
-# --- fonte ADR (passo a, docs/nomenclatura-adr-em-acervo-casa.md) ---
-# ADR e' arquivo .md de platafirma-arquitetura/macro-global/, servida por `acervo ler casa
-# adr`. Toda ADR entra na casa sem filtro (decisao do dono, fita 09/09): sao as mais
-# importantes da particao. especie fixa 'adr', dono 'arquiteto', natureza 'golden'.
-ADR_REPO = "platafirma-arquitetura"
-ADR_DIR_GLOBAL = "macro-global/decisions"
-ADR_DIR_CAPS = "macro-global/capabilities"
-
-def _status_para_ciclo(status):
-    s = (status or "").lower()
-    if any(w in s for w in ("aceito", "aceita", "accepted")):
-        return "publicado"
-    if any(w in s for w in ("proposto", "proposta", "proposed")):
-        return "minuta"
-    if any(w in s for w in ("superado", "substitu", "superseded")):
-        return "superado"
-    return "publicado"
-
-def _campo_cabecalho(corpo, rotulo):
-    cabeca = corpo.split("\n##", 1)[0]
-    m = re.search(r"^-\s+\*\*\s*" + re.escape(rotulo) + r"\s*:\*\*\s*(.+)$",
-                  cabeca, re.M | re.I)
-    return m.group(1).strip() if m else ""
-
-def _titulo_adr(corpo):
-    linha = corpo.splitlines()[0] if corpo.splitlines() else ""
-    t = linha.lstrip("#").strip()
-    for sep in (" \u2014 ", " -- ", " - "):
-        if sep in t:
-            return t.split(sep, 1)[1].strip()
-    return t
-
-def _referentes_adr(corpo, registro, numero):
-    # Vocabulario FECHADO do enum acervo.casa_tipo_ref (045_acervo_casa.sql): o codigo da ADR
-    # e' um referente de classe `decisao`, e Capability e' `capacidade`. Os termos que a
-    # nomenclatura usava em prosa (`codigo`, `capability`) nao existem no enum e faziam o
-    # lote inteiro falhar em InvalidTextRepresentation na hora de gravar o referente.
-    refs = [{"tipo_ref": "decisao", "ref": f"{registro}:{numero}"}]
-    for rotulo, tipo_ref in (("Capability", "capacidade"), ("Stack", "stack")):
-        val = _campo_cabecalho(corpo, rotulo)
-        for v in re.split(r"[,;]+", val):
-            v = v.strip().lower()
-            if v:
-                refs.append({"tipo_ref": tipo_ref, "ref": v})
-    return refs
-
-def varre_adrs():
-    """Varre os dois layouts de ADR e devolve itens JA prontos (titulo/ciclo/referentes/corpo)."""
-    clone = dir_da_familia(ADR_REPO)
-    itens = []
-
-    def _um(caminho_abs, path_rel, registro):
-        base = os.path.basename(path_rel)
-        m = re.match(r"^(\d{3,4})-.+\.md$", base)
-        if not m:
-            return None
-        numero = m.group(1).zfill(4)
-        with open(caminho_abs, encoding="utf-8", errors="replace") as f:
-            corpo = f.read()
-        return {
-            "repo": ADR_REPO, "path": path_rel, "tipo": "adr", "dono": "arquiteto",
-            "natureza": "golden",
-            "ciclo": _status_para_ciclo(_campo_cabecalho(corpo, "Status")),
-            "titulo": _titulo_adr(corpo),
-            # DEBITO: casa_referente.ref virou FK para acervo.entidade(id) em 09/09
-            # (0108b-casa-referente-fk.sql) e o fichario da raiz esta VAZIO (0 fichas). Ate
-            # ele ser populado, referente de ADR nao tem alvo: emitir `arq:0001` como texto
-            # derruba o lote inteiro em InvalidTextRepresentation. Entra sem referente; o
-            # backfill liga (repo,path) -> ficha quando a raiz existir. _referentes_adr fica
-            # de pe, ja com o vocabulario certo do enum, para esse dia.
-            "referentes": [],
-            "corpo": corpo,
-        }
-
-    dglobal = os.path.join(clone, ADR_DIR_GLOBAL)
-    if os.path.isdir(dglobal):
-        for fn in sorted(os.listdir(dglobal)):
-            if fn.endswith(".md"):
-                it = _um(os.path.join(dglobal, fn), f"{ADR_DIR_GLOBAL}/{fn}", "arq")
-                if it:
-                    itens.append(it)
-
-    dcaps = os.path.join(clone, ADR_DIR_CAPS)
-    if os.path.isdir(dcaps):
-        for cap in sorted(os.listdir(dcaps)):
-            ddec = os.path.join(dcaps, cap, "decisions")
-            if not os.path.isdir(ddec):
-                continue
-            registro = "seg" if cap == "seguranca" else cap
-            for fn in sorted(os.listdir(ddec)):
-                if fn.endswith(".md"):
-                    it = _um(os.path.join(ddec, fn),
-                             f"{ADR_DIR_CAPS}/{cap}/decisions/{fn}", registro)
-                    if it:
-                        itens.append(it)
-    return itens
+TETO_ITENS = 500           # TETO_ITENS do servidor (casa_lotes.py); o suporte tem ~385 docs
+DEGRAUS = ("catalogar", "chunk", "embed", "vetor")
+VEREDITOS = ("criar", "edicao", "ja_ingerido", "reprovado", "retirar")
+RE_REV = re.compile(r"[A-Za-z0-9][A-Za-z0-9._/~^-]{0,199}")
+RE_DIAGRAMA = re.compile(r"(\.\d+)?\.(mmd|d2)$")
+MAIN = "refs/remotes/origin/main"
 
 USO = """uso:
-  acervo ingerir casa <repo> [--apply] [--motor rag] [--ate vetor]
-                             [--autor <slug>] [--limite N] [--so <substr>] [--json]
+  acervo ingerir casa platafirma-casa[@<rev>] [--apply] [--motor rag] [--ate vetor]
+                      [--autor <slug>] [--so <substr>] [--limite N] [--json]
 
-  <repo>       nome do repositorio de documentacao (default: platafirma-arquitetura).
-               Fonte: a release no ar, <release>/<curto> (ex.: /opt/platafirma/current/arquitetura);
-               sem a familia na release, recusa (nunca le bancada). Varre o repo inteiro e classifica a especie por
-               acervo.especie_tipo.padrao_path; o que nenhum glob cobre sai `reprovado` com motivo.
-  <lista.md>   (transicao) arquivo de lista curada no lugar de <repo>
-  --adr        (transicao) fonte = as ADRs de macro-global/
-  --limite N   ingere so os N primeiros itens
-  --so <s>     so itens cujo repo@path contem <s>
-  --apply      aplica (default: dry-run do plano, nada escrito)
+  platafirma-casa[@<rev>]  o suporte da particao casa (arq:0115 §1.2), unico repo aceito.
+               Sem @: origin/main do espelho, depois do fetch (o sha resolvido sai no stderr).
+               <rev> (sha ou tag) tem de ser ancestral de origin/main: so o que entrou em
+               main se ingere (§8.1).
+  fonte        espelho bare <instancia>/var/acervo/suporte/platafirma-casa.git
+               (PF_SUPORTE_ESPELHO), buscado do forge com a credencial da conta
+               (PF_SUPORTE_URL). Nunca release, nunca bancada.
+  o que vai    todo *.md da arvore (README fica fora) como {repo, path, sha_ref, titulo,
+               corpo}; especie, chave, ciclo, dono e Sobre: o servidor tira do corpo e do
+               caminho (§2, §3, §6, §7). Fonte de diagrama (.mmd/.d2) nao vai ao servidor:
+               sem o documento que ilustra, e recusada aqui (§7).
+  --so <s>     so documentos cujo caminho contem <s>   } recorte: o lote nao e a arvore
+  --limite N   so os N primeiros documentos           } completa, e nada se retira
+  --apply      aplica (default: dry-run do plano, nada escrito no acervo)
   --ate        catalogar | chunk | embed | vetor (default: vetor)
+  --json       o plano inteiro (lote do servidor + recusas locais) em JSON
 
-  Toda escrita e do servidor (POST /acervo/casa/lotes): casa, impressao, trechos, indices e
-  o ponteiro acervo.casa_fonte. Este cliente nao escreve no banco.
+  exit: 0 limpo · 3 com recusa (dry-run) · 1 erro (forge, rev, motor, lote falhou) · 2 uso
+
+  Toda escrita no acervo e do servidor (POST /acervo/casa/lotes): casa, impressao, trechos,
+  indices, retirada e acervo.casa_fonte. Este cliente so escreve o espelho da instancia.
 """
+
 
 def morre(msg, code=1):
     sys.stderr.write("acervo ingerir casa: " + msg.rstrip("\n") + "\n")
     sys.exit(code)
 
-def sha_do_repo(repo):
-    """sha da familia na release no ar. Familia ausente -> None (item pula com aviso)."""
-    dirf = dir_da_familia(repo)
-    if not os.path.isdir(dirf):
-        return None
-    return sha_do_repo_dir(dirf)
 
-def _override(cauda):
-    """`path :: dono=x natureza=y ciclo=z tipo=w` -> (path, dict). Sufixo opcional por linha."""
-    ov = {}
-    if "::" in cauda:
-        path, resto = cauda.split("::", 1)
-        for par in resto.split():
-            if "=" in par:
-                k, v = par.split("=", 1)
-                if k in ("dono", "natureza", "ciclo", "tipo"):
-                    ov[k] = v.strip()
-        return path.strip(), ov
-    return cauda.strip(), ov
+# ------------------------------------------------------------------ fonte: espelho e sha
 
-def parse_lista(caminho):
-    """Le a lista curada. Devolve itens {repo, path, tipo, dono, natureza, ciclo}."""
-    repo_atual = None
-    especie_atual = None
-    itens = []
-    with open(caminho, encoding="utf-8") as f:
-        for linha in f:
-            s = linha.rstrip("\n")
-            m_repo = re.match(r"^##\s+(\S+)\s*$", s)
-            if m_repo:
-                # `## platafirma-core / motor` -> primeiro token; docs trazem o repo no path.
-                repo_atual = m_repo.group(1).strip()
-                especie_atual = None
-                continue
-            m_sec = re.match(r"^###\s+(.+)$", s)
-            if m_sec:
-                rotulo = m_sec.group(1).lower()
-                especie_atual = None
-                for pista, esp in PISTA_ESPECIE.items():
-                    if pista in rotulo:
-                        especie_atual = esp
-                        break
-                if not especie_atual:
-                    m_fam = re.search(r"\(([a-z-]+)\)", rotulo)
-                    if m_fam:
-                        especie_atual = FAMILIA_ESPECIE.get(m_fam.group(1))
-                continue
-            m_item = re.match(r"^-\s+(.+)$", s)
-            if m_item and repo_atual:
-                cauda, ov = _override(m_item.group(1))
-                # path pode trazer o repo como prefixo (secao "core / motor"): se o primeiro
-                # segmento e' uma familia conhecida na release, ele e' o repo e sai do path.
-                repo = repo_atual
-                path = cauda
-                seg0 = cauda.split("/", 1)[0]
-                if seg0 in REPO_DONO and os.path.isdir(dir_da_familia(seg0)):
-                    repo = seg0
-                    path = cauda.split("/", 1)[1]
-                itens.append({
-                    "repo": repo,
-                    "path": path,
-                    "tipo": ov.get("tipo") or especie_atual,
-                    "dono": ov.get("dono") or REPO_DONO.get(repo, "arquiteto"),
-                    "natureza": ov.get("natureza") or "golden",
-                    "ciclo": ov.get("ciclo") or "publicado",
-                })
-    return itens
+def parse_fonte(arg):
+    """`platafirma-casa[@<rev>]` -> (repo, rev|None). Outro repo recusa (uso, exit 2)."""
+    arg = (arg or SUPORTE).strip()
+    repo, _, rev = arg.partition("@")
+    if repo != SUPORTE:
+        morre(f"fonte '{arg}' recusada: documento de casa mora so no suporte {SUPORTE} "
+              f"(arq:0115 §1.2, §10); a forma e `acervo ingerir casa {SUPORTE}[@<rev>]`.", 2)
+    if not rev:
+        return repo, None
+    if not RE_REV.fullmatch(rev):
+        morre(f"rev invalida: '{rev}' (sha, tag ou origin/<ramo>).", 2)
+    return repo, rev
 
-def montar_itens(curados, limite, so):
-    """Resolve sha e le corpo de cada item. Devolve (itens_payload, pulos)."""
-    itens, pulos = [], []
-    sha_cache = {}
-    for it in curados:
-        chave = f"{it['repo']}@{it['path']}"
-        if so and so not in chave:
-            continue
-        # Fonte ja resolvida (varre_repo / varre_adrs traz sha e corpo): respeita. Senao,
-        # lista curada: sha da familia na release e corpo lido de la.
-        sha = it.get("sha_ref")
-        corpo = it.get("corpo")
-        if not sha:
-            if it["repo"] not in sha_cache:
-                sha_cache[it["repo"]] = sha_do_repo(it["repo"])
-            sha = sha_cache[it["repo"]]
-        if not sha:
-            pulos.append((chave, "familia ausente na release: " + dir_da_familia(it["repo"])))
-            continue
-        if corpo is None:
-            fp = os.path.join(dir_da_familia(it["repo"]), it["path"])
-            if not os.path.isfile(fp):
-                pulos.append((chave, "arquivo nao existe na release"))
-                continue
-            try:
-                with open(fp, encoding="utf-8", errors="replace") as f:
-                    corpo = f.read()
-            except OSError as e:
-                pulos.append((chave, f"leitura falhou: {e}"))
-                continue
-        # Titulo: se o curado ja trouxe (fonte ADR), respeita; senao le o 1o `# ` do corpo.
-        titulo = it.get("titulo")
-        if not titulo:
-            for linha in corpo.splitlines()[:15]:
-                t = linha.strip()
-                if t.startswith("# ") and not t.startswith("##"):
-                    titulo = t.lstrip("#").strip()
-                    break
-        # Corpo: fonte ADR ja leu; lista curada le do disco aqui.
-        corpo_final = it.get("corpo") or corpo
-        itens.append({
-            "repo": it["repo"], "path": it["path"], "sha_ref": sha,
-            "dono": it["dono"], "tipo": it["tipo"] or "",
-            "natureza": it["natureza"], "ciclo": it["ciclo"],
-            "titulo": titulo or os.path.splitext(os.path.basename(it["path"]))[0],
-            "corpo": corpo_final, "referentes": it.get("referentes") or [],
-        })
-        if limite and len(itens) >= limite:
-            break
-    return itens, pulos
 
-def tabela_plano(lote, pulos):
-    L = []
-    total = len(lote.get("itens", []))
-    resumo = {}
-    for it in lote.get("itens", []):
-        resumo[it.get("veredito", "?")] = resumo.get(it.get("veredito", "?"), 0) + 1
-    L.append(f"Plano de ingestao casa: lote {lote.get('id')} (dry-run)")
-    L.append(f"Autor: {lote.get('autor')} · Motor: {lote.get('motor')} · Ate: {lote.get('ate')}")
-    L.append(f"Resumo: total={total} | " +
-             " | ".join(f"{k}={v}" for k, v in sorted(resumo.items())))
-    if pulos:
-        L.append(f"Pulados antes do envio: {len(pulos)}")
-        for chave, motivo in pulos:
-            L.append(f"    - {chave}: {motivo}")
-    L.append("")
-    L.append(f"{'#':<3} {'repo@path':<52} {'veredito':<12} portoes")
-    L.append("-" * 100)
-    for it in lote.get("itens", []):
-        pos = str(it.get("posicao", 0))
-        arq = it.get("arquivo") or "-"
-        if len(arq) > 50:
-            arq = "..." + arq[-47:]
-        ver = it.get("veredito") or "-"
-        reprova = [f"{p.get('portao')}:{p.get('detail', p.get('title', ''))}"
-                   for p in it.get("portoes", []) if p.get("resultado") == "reprovado"]
-        det = "; ".join(reprova) if reprova else "ok"
-        L.append(f"{pos:<3} {arq:<52} {ver:<12} {det}")
-    return "\n".join(L)
-
-def sha_do_repo_dir(repo_dir):
-    """sha do checkout. A release materializa <familia>/<sha> (checkout destacado) e o
-    atalho aponta para ele: sem git legivel ali, o proprio nome do diretorio e o sha."""
-    try:
-        r = subprocess.run([GIT, "-C", repo_dir, "rev-parse", "HEAD"],
-                           capture_output=True, text=True, check=True)
-        if r.stdout.strip():
-            return r.stdout.strip()
-    except Exception:
-        pass
-    nome = os.path.basename(os.path.realpath(repo_dir))
-    return nome if re.fullmatch(r"[0-9a-f]{7,40}", nome) else None
-
-def varre_repo(repo):
-    """Varre o SERVIDO (<release>/<curto>, arq:0097, card #3010) e classifica por padrao_path.
-
-    O atalho da release aponta para <familia>/current -> <sha>. Varre-se o destino
-    resolvido, nunca a raiz da familia: a raiz dava caminho relativo `<sha>/docs/...`, que
-    glob nenhum de padrao_path casa — e o verbo saia com "nenhum arquivo casa com
-    padrao_path" mesmo com o repo inteiro no ar (medido 14/09, dados). Sem a familia na
-    release, recusa: a bancada nao e fonte de casa.
-    """
-    caminho_prod = dir_da_familia(repo)
-    if os.path.isdir(caminho_prod):
-        repo_dir = os.path.realpath(caminho_prod)
+def garantir_espelho(esp, url):
+    """Espelho bare do suporte, no molde de `garantir_espelho` de bin/release: clona da URL
+    na 1ª vez, realinha o origin se divergir, busca refs/remotes/origin/* e tags, e expurga
+    refs/heads/* (fóssil do clone --bare, arq:0074). Forge fora do ar ou sem credencial: 1."""
+    if not os.path.isdir(esp):
+        try:
+            os.makedirs(os.path.dirname(esp), exist_ok=True)
+        except OSError as e:
+            morre(f"nao criei a morada do espelho {os.path.dirname(esp)}: {e}", 1)
+        r = _suporte.git_sem_dir("clone", "-q", "--bare", url, esp)
+        if r.returncode != 0:
+            morre(f"forge fora do ar ou sem credencial da conta: clone --bare de {url} em "
+                  f"{esp} falhou:\n{_suporte.texto(r.stderr)}", 1)
     else:
-        morre(f"repositorio '{repo}' nao encontrado na release: {caminho_prod}.", 1)
+        atual = _suporte.texto(_suporte.git(esp, "remote", "get-url", "origin").stdout)
+        if atual != url:
+            r = _suporte.git(esp, "remote", "set-url", "origin", url)
+            if r.returncode != 0:
+                _suporte.git(esp, "remote", "add", "origin", url)
+            sys.stderr.write(f"espelho: origin realinhado a {url}\n")
+    r = _suporte.git(esp, "fetch", "-q", "--prune", "origin",
+                     "+refs/heads/*:refs/remotes/origin/*", "+refs/tags/*:refs/tags/*")
+    if r.returncode != 0:
+        morre(f"forge fora do ar ou sem credencial da conta: fetch em {esp} falhou:\n"
+              f"{_suporte.texto(r.stderr)}", 1)
+    fosseis = _suporte.texto(_suporte.git(esp, "for-each-ref", "--format=%(refname)",
+                                          "refs/heads/").stdout)
+    for ref in fosseis.splitlines():
+        if ref.strip():
+            _suporte.git(esp, "update-ref", "-d", ref.strip())
 
-    sha = sha_do_repo_dir(repo_dir) or "desconhecido"
-    sql_esp = "select coalesce(json_agg(row_to_json(t)), '[]') from (select slug, padrao_path from acervo.especie_tipo where padrao_path is not null) t;"
-    especies = _identidade.psql_json(sql_esp, "especies")
 
-    itens_aprovados = []
-    itens_reprovados = []
+def resolver_rev(esp, rev):
+    """sha de 40 hex. Sem rev: origin/main. Com rev: tem de existir e ser ancestral de main."""
+    alvo = rev or MAIN
+    r = _suporte.git(esp, "rev-parse", "--verify", "-q", alvo + "^{commit}")
+    sha = _suporte.texto(r.stdout)
+    if r.returncode != 0 or not re.fullmatch(r"[0-9a-f]{40}", sha):
+        if rev:
+            morre(f"rev '{rev}' nao existe no espelho {esp} (depois do fetch).", 1)
+        morre(f"espelho {esp} sem {MAIN}: o forge nao tem main?", 1)
+    if rev:
+        r = _suporte.git(esp, "merge-base", "--is-ancestor", sha, MAIN)
+        if r.returncode == 1:
+            morre(f"{rev} ({sha[:12]}) nao e ancestral de origin/main: so o que entrou em "
+                  f"main do suporte se ingere (arq:0115 §8.1).", 1)
+        if r.returncode != 0:
+            morre(f"merge-base falhou no espelho {esp}:\n{_suporte.texto(r.stderr)}", 1)
+    return sha
 
-    # So documento de texto e candidato: doc de casa e markdown de git. Diretorio de
-    # ferramenta (node_modules, .git, venv) nem entra na conta de reprovados.
-    PULA_DIR = {".git", "node_modules", ".venv", "venv", "__pycache__", ".cache"}
-    for root, dirs, files in os.walk(repo_dir):
-        dirs[:] = [d for d in dirs if d not in PULA_DIR and not d.startswith(".")]
-        for f in sorted(files):
-            if not f.endswith(".md"):
-                continue
-            rel = os.path.relpath(os.path.join(root, f), repo_dir)
-            if f.upper().startswith(("README", "AGENTS", "CLAUDE")) or rel.startswith("abertura/"):
-                continue
 
-            match_esp = None
-            dono_padrao = REPO_DONO.get(repo, "arquiteto")
-            for esp in especies:
-                for pat in esp.get("padrao_path", []):
-                    if fnmatch.fnmatch(rel, pat):
-                        match_esp = esp["slug"]
-                        if esp.get("dono"):
-                            dono_padrao = esp["dono"]
-                        break
-                if match_esp:
-                    break
+def ler_arvore(esp, sha):
+    """Caminhos de blob da árvore do commit, na ordem do git (ls-tree -r -z)."""
+    r = _suporte.git(esp, "ls-tree", "-r", "-z", "--name-only", sha)
+    if r.returncode != 0:
+        morre(f"ls-tree de {sha[:12]} falhou:\n{_suporte.texto(r.stderr)}", 1)
+    return [p.decode("utf-8", "surrogateescape") for p in r.stdout.split(b"\0") if p]
 
-            if match_esp:
-                try:
-                    with open(os.path.join(repo_dir, rel), encoding="utf-8", errors="replace") as fh:
-                        corpo = fh.read()
-                except OSError:
-                    corpo = ""
-                titulo = None
-                for linha in corpo.splitlines()[:15]:
-                    t = linha.strip()
-                    if t.startswith("# ") and not t.startswith("##"):
-                        titulo = t.lstrip("#").strip()
-                        break
-                itens_aprovados.append({
-                    "repo": repo, "path": rel, "sha_ref": sha,
-                    "dono": dono_padrao, "tipo": match_esp,
-                    "natureza": "golden", "ciclo": "publicado",
-                    "titulo": titulo or os.path.splitext(os.path.basename(rel))[0],
-                    "corpo": corpo, "referentes": [],
-                    "veredito": "aprovado",
-                })
-            else:
-                itens_reprovados.append({
-                    "repo": repo, "path": rel, "sha_ref": sha,
-                    "veredito": "reprovado",
-                    "motivo": "nenhum padrao_path em acervo.especie_tipo cobre este caminho",
-                })
 
-    return repo, sha, repo_dir, itens_aprovados, itens_reprovados
+def classificar(arvore):
+    """(docs, diagramas, ignorados). Doc = *.md fora README; diagrama = .mmd/.d2."""
+    docs, diagramas, ignorados = [], [], []
+    for p in arvore:
+        base = p.rsplit("/", 1)[-1]
+        if "\n" in p:
+            ignorados.append(p)
+        elif base.endswith(".md"):
+            (ignorados if base.lower().startswith("readme") else docs).append(p)
+        elif RE_DIAGRAMA.search(base):
+            diagramas.append(p)
+        else:
+            ignorados.append(p)
+    return docs, diagramas, ignorados
 
-def tabela_plano_repo(repo, sha, aprovados, reprovados):
-    por_esp = {}
-    for it in aprovados:
-        esp = it["tipo"]
-        por_esp[esp] = por_esp.get(esp, 0) + 1
 
+def recusas_diagrama(diagramas, arvore):
+    """Predicado 8 (D5): a fonte de diagrama ilustra o documento de mesmo prefixo, sem o
+    sufixo `(.N).mmd|.d2` (arq:0115 §9.1: `spec/acervo.1.mmd` -> `spec/acervo.md`). Sem ele
+    na árvore, recusa local, com motivo; nada disso vai ao servidor."""
+    presentes = set(arvore)
+    recusas = []
+    for p in diagramas:
+        doc = RE_DIAGRAMA.sub(".md", p)
+        if doc not in presentes:
+            recusas.append({
+                "path": p, "portao": "diagrama", "resultado": "reprovado",
+                "motivo": f"fonte de diagrama sem documento: {doc} nao existe na arvore "
+                          f"(arq:0115 §7, §9.1)",
+            })
+    return recusas
+
+
+def ler_corpos(esp, sha, paths):
+    """Corpo de cada caminho num processo só: `cat-file --batch`, uma linha `<sha>:<path>`
+    por arquivo. Saída: `<obj> blob <tam>\\n<conteudo>\\n` ou `<nome> missing\\n`."""
+    if not paths:
+        return {}
+    entrada = "".join(f"{sha}:{p}\n" for p in paths).encode("utf-8", "surrogateescape")
+    r = _suporte.git(esp, "cat-file", "--batch", entrada=entrada)
+    if r.returncode != 0:
+        morre(f"cat-file --batch falhou:\n{_suporte.texto(r.stderr)}", 1)
+    out, pos, corpos = r.stdout, 0, {}
+    for p in paths:
+        nl = out.find(b"\n", pos)
+        if nl < 0:
+            morre(f"cat-file --batch cortou a saida em {p}", 1)
+        cab = out[pos:nl].decode("utf-8", "replace").split()
+        pos = nl + 1
+        if len(cab) != 3 or cab[1] != "blob":
+            morre(f"{p}: objeto ausente ou nao-blob em {sha[:12]} ({' '.join(cab)})", 1)
+        tam = int(cab[2])
+        corpos[p] = out[pos:pos + tam].decode("utf-8", "replace")
+        pos += tam + 1
+    return corpos
+
+
+def titulo_do_corpo(corpo, path):
+    """1º H1 (`# `, fora de bloco de código) sem o `#`; sem H1, o nome do arquivo."""
+    cerca = False
+    for linha in corpo.lstrip("﻿").splitlines():
+        s = linha.strip()
+        if s.startswith("```") or s.startswith("~~~"):
+            cerca = not cerca
+            continue
+        if not cerca and s.startswith("# "):
+            return s[2:].strip().rstrip("#").strip() or os.path.splitext(os.path.basename(path))[0]
+    return os.path.splitext(os.path.basename(path))[0]
+
+
+def montar_itens(sha, docs, corpos):
+    return [{
+        "repo": SUPORTE, "path": p, "sha_ref": sha,
+        "titulo": titulo_do_corpo(corpos[p], p), "corpo": corpos[p],
+    } for p in docs]
+
+
+def montar_payload(autor, motor, ate, fonte, itens):
+    """Payload D6: o servidor tira tudo o mais do corpo e do path (predicado único)."""
+    return {
+        "autor": autor, "motor": motor, "ate": ate,
+        "fonte": {"repo": fonte["repo"], "sha": fonte["sha"],
+                  "arvore_completa": bool(fonte["arvore_completa"])},
+        "itens": itens,
+    }
+
+
+# ------------------------------------------------------------------ HTTP
+
+def _http():
+    try:
+        import requests
+    except ImportError:
+        morre("python sem o modulo requests: o cliente nao fala com o motor acervo.", 1)
+    return requests
+
+
+def _headers():
+    return {"authorization": f"Bearer {TOKEN}"} if TOKEN else {}
+
+
+def _problema(resp):
+    try:
+        pj = resp.json()
+        return f"erro {resp.status_code} ({pj.get('title')}): {pj.get('detail', resp.text)}"
+    except ValueError:
+        return f"erro {resp.status_code}: {resp.text}"
+
+
+def postar_lote(payload):
+    requests = _http()
+    try:
+        resp = requests.post(f"{BASE}/acervo/casa/lotes", json=payload, headers=_headers())
+    except requests.exceptions.RequestException as e:
+        morre(f"motor acervo indisponivel em {BASE}: {e}", 1)
+    if resp.status_code != 201:
+        morre(_problema(resp), 1)
+    return resp.json()
+
+
+def aplicar_lote(lote_id):
+    requests = _http()
+    try:
+        ra = requests.post(f"{BASE}/acervo/casa/lotes/{lote_id}/aplicar", headers=_headers())
+    except requests.exceptions.RequestException as e:
+        morre(f"aplicar falhou: {e}", 1)
+    if ra.status_code not in (200, 202):
+        morre(f"aplicar {_problema(ra)}", 1)
+    while True:
+        time.sleep(1.0)
+        try:
+            rc = requests.get(f"{BASE}/acervo/lotes/{lote_id}", headers=_headers(), timeout=60)
+        except requests.exceptions.RequestException as e:
+            morre(f"poll falhou: {e}", 1)
+        if rc.status_code != 200:
+            continue
+        atual = rc.json()
+        if atual.get("estado") in ("concluido", "falhou"):
+            return atual
+
+
+# ------------------------------------------------------------------ plano
+
+def _curto(arquivo):
+    pre = SUPORTE + "@"
+    if not arquivo:
+        return "-"
+    return arquivo[len(pre):] if arquivo.startswith(pre) else arquivo
+
+
+def _portoes(it, resultado):
+    out = []
+    for p in it.get("portoes") or []:
+        if p.get("resultado") == resultado:
+            det = p.get("detail") or p.get("title") or ""
+            out.append(f"{p.get('portao')}: {det}" if det else str(p.get("portao")))
+    return out
+
+
+def _legado(it):
+    """Nova versão recusada de linha que já existe: a linha NÃO se retira, segue servindo a
+    versão anterior (D4). O servidor devolve casa_id da linha casada (D6) ou diz 'legado'."""
+    if it.get("veredito") != "reprovado":
+        return False
+    if it.get("casa_id"):
+        return True
+    return "legado" in json.dumps(it.get("portoes") or [], ensure_ascii=False).lower()
+
+
+def _linha_retirada(it):
+    classif = it.get("classificacao") or {}
+    origem = it.get("origem") or {}
+    chave = classif.get("chave") or origem.get("chave")
+    suc = classif.get("substituida_por") or origem.get("substituida_por")
+    s = it.get("arquivo") or "-"
+    if chave:
+        s = f"{chave} ({s})"
+    return s + (f" -> substituida por {suc}" if suc else " (sem sucessora declarada)")
+
+
+def contagem(lote, campo="veredito"):
+    cont = {}
+    for it in lote.get("itens") or []:
+        v = it.get(campo) or "?"
+        cont[v] = cont.get(v, 0) + 1
+    return cont
+
+
+def tem_recusa(lote, recusas_locais):
+    return bool(recusas_locais) or any(
+        it.get("veredito") == "reprovado" for it in lote.get("itens") or [])
+
+
+def plano(lote, fonte, recusas_locais, ignorados, aplicado=False):
+    """Resumo por veredito, recusas com motivo, avisos (estrato), retiradas, legado mantido."""
+    itens = lote.get("itens") or []
     L = []
-    L.append(f"Plano de ingestao casa: {repo}@{sha[:12]} (dry-run)")
-    L.append(f"Total escaneado: {len(aprovados) + len(reprovados)} arquivos")
-    L.append("Aprovados por espécie:")
-    for esp, cnt in sorted(por_esp.items()):
-        L.append(f"  - {esp:<20} : {cnt} doc(s)")
-    L.append(f"Reprovados sem cobertura : {len(reprovados)} arquivo(s)")
-    if reprovados:
-        L.append("\nExemplos de reprovados (com motivo):")
-        for r in reprovados[:10]:
-            L.append(f"  - {r['path']}: {r['motivo']}")
-        if len(reprovados) > 10:
-            L.append(f"  ... e mais {len(reprovados) - 10} arquivo(s)")
+    modo = "aplicado" if aplicado else "dry-run"
+    L.append(f"Plano de ingestao casa: {fonte['repo']}@{fonte['sha'][:12]} · "
+             f"lote {lote.get('id')} ({modo})")
+    escopo = ("arvore completa: linha viva fora da arvore sai por `retirar`"
+              if fonte["arvore_completa"] else "recorte (--so/--limite): nada se retira")
+    L.append(f"Fonte: espelho {fonte['espelho']} · {fonte['docs']} doc(s) enviado(s) · {escopo}")
+    L.append(f"Autor: {lote.get('autor')} · Motor: {lote.get('motor')} · Ate: {lote.get('ate')}")
+    cont = contagem(lote)
+    ordem = [v for v in VEREDITOS if v in cont] + sorted(v for v in cont if v not in VEREDITOS)
+    partes = [f"total={len(itens)}"] + [f"{v}={cont[v]}" for v in ordem]
+    if recusas_locais:
+        partes.append(f"recusa_local={len(recusas_locais)}")
+    L.append("Resumo: " + " | ".join(partes))
+    if aplicado:
+        est = contagem(lote, "estado")
+        L.append("Estado dos itens: " + " | ".join(f"{k}={v}" for k, v in sorted(est.items())))
+    if ignorados:
+        L.append(f"Ignorados (nao sao documento: README, .gitkeep, outros): {len(ignorados)}")
+
+    def secao(titulo, linhas):
+        if linhas:
+            L.append("")
+            L.append(f"{titulo} ({len(linhas)}):")
+            L.extend(f"  - {x}" for x in linhas)
+
+    reprov = [it for it in itens if it.get("veredito") == "reprovado"]
+    secao("Recusas", [f"{_curto(it.get('arquivo'))}: "
+                      f"{'; '.join(_portoes(it, 'reprovado')) or 'reprovado sem portao nomeado'}"
+                      for it in reprov])
+    secao("Recusas locais, nao enviadas (arq:0115 §7, diagrama)",
+          [f"{r['path']}: {r['motivo']}" for r in recusas_locais])
+    secao("Avisos", [f"{_curto(it.get('arquivo'))}: {'; '.join(_portoes(it, 'aviso'))}"
+                     for it in itens if _portoes(it, "aviso")])
+    secao("Retiradas", [_linha_retirada(it) for it in itens if it.get("veredito") == "retirar"])
+    secao("Legado mantido (nova versao recusada; a linha segue servindo a versao anterior)",
+          [_curto(it.get("arquivo")) for it in reprov if _legado(it)])
+    L.append("")
+    L.append("item a item: --json")
     return "\n".join(L)
 
-def main():
+
+def pos_lote(lote, fonte, recusas_locais, aplicado):
+    """PONTO DE EXTENSÃO (arq:0115 §7.4 e §8.1; item Aberto da TI). Aqui entram, quando
+    decididos: a notificação da admissão e da recusa a quem gravou, pela `fila`, com tipo
+    próprio `recusa`, motivo e caminho; e o gatilho da ingestão no merge em main do suporte.
+    Hoje não faz nada: o plano impresso é o único canal."""
+    return None
+
+
+# ------------------------------------------------------------------ main
+
+def main(argv=None):
     ap = argparse.ArgumentParser(add_help=False)
-    ap.add_argument("lista", nargs="?", default=None)
+    ap.add_argument("fonte", nargs="?", default=None)
     ap.add_argument("--apply", action="store_true", default=False)
     ap.add_argument("--motor", default="rag")
     ap.add_argument("--ate", default="vetor")
     ap.add_argument("--autor", default=None)
     ap.add_argument("--limite", type=int, default=0)
     ap.add_argument("--so", default=None)
-    ap.add_argument("--adr", action="store_true", default=False)
     ap.add_argument("--json", dest="como_json", action="store_true", default=False)
     ap.add_argument("-h", "--help", "--ajuda", dest="ajuda", action="store_true", default=False)
-    args, _ = ap.parse_known_args()
+    args, resto = ap.parse_known_args(argv)
 
     if args.ajuda:
         sys.stderr.write(USO)
         sys.exit(0)
-    if args.ate not in ("catalogar", "chunk", "embed", "vetor"):
-        morre(f"--ate invalido: {args.ate}", 2)
+    if resto:
+        morre(f"argumento(s) nao reconhecido(s): {' '.join(resto)} (lista curada, --adr e "
+              f"repo de release sairam com arq:0115).\n\n{USO}", 2)
+    if args.ate not in DEGRAUS:
+        morre(f"--ate invalido: {args.ate} ({', '.join(DEGRAUS)})", 2)
+    if args.limite < 0:
+        morre(f"--limite invalido: {args.limite}", 2)
+    repo, rev = parse_fonte(args.fonte)
 
     autor = args.autor
     if not autor:
@@ -499,98 +438,53 @@ def main():
         cad = cad.removeprefix("claudinho-").removeprefix("claudinha-")
         autor = cad or "dados"
 
-    # Fonte (spec_acervo §6): `acervo ingerir casa <repo>` varre o repositorio inteiro e
-    # classifica por especie_tipo.padrao_path. Toda ESCRITA vai pela rota do servidor
-    # (POST /acervo/casa/lotes + aplicar), que grava casa, impressao, trechos, indices e
-    # casa_fonte. O cliente nao toca o banco para escrever. Lista curada (arquivo) e --adr
-    # seguem aceitos como fonte de transicao, pela mesma rota.
-    pulos_previos = []
-    cabecalho_plano = None
-    if args.adr:
-        curados = varre_adrs()
-        if not curados:
-            morre("nenhuma ADR encontrada em macro-global/ de " + ADR_REPO, 1)
-    else:
-        lista = args.lista or "platafirma-arquitetura"
-        if os.path.isfile(lista):
-            curados = parse_lista(lista)
-            if not curados:
-                morre(f"nenhum item na lista {lista}", 1)
-        else:
-            repo, sha, repo_dir, aprovados, reprovados = varre_repo(lista)
-            curados = aprovados
-            pulos_previos = [(f"{repo}@{r['path']}", r["motivo"]) for r in reprovados]
-            cabecalho_plano = tabela_plano_repo(repo, sha, aprovados, reprovados)
-            if not curados:
-                morre(f"nenhum arquivo de {repo} casa com padrao_path de acervo.especie_tipo", 1)
-    itens, pulos = montar_itens(curados, args.limite, args.so)
-    # Reprovados da varredura ja saem resumidos no cabecalho do plano (contagem + 10
-    # exemplos); no --json vao inteiros. Nao se despejam um a um na tabela do lote.
-    if args.como_json:
-        pulos = pulos_previos + pulos
-    if cabecalho_plano and not args.como_json:
-        print(cabecalho_plano)
-        print()
-    if not itens:
-        # Os motivos saem AQUI: o caminho do --json fica depois do POST, entao mandar o dono
-        # "ver com --json" era um beco — nenhum item, nenhum lote, nenhuma saida.
-        detalhe = "\n".join(f"    - {chave}: {motivo}" for chave, motivo in pulos[:20])
-        extra = f"\n    ... e mais {len(pulos) - 20}" if len(pulos) > 20 else ""
-        morre(f"nenhum item ingerivel ({len(pulos)} pulados):\n{detalhe}{extra}", 1)
+    esp, url = _suporte.espelho(), _suporte.url()
+    garantir_espelho(esp, url)
+    sha = resolver_rev(esp, rev)
+    if rev is None:
+        sys.stderr.write(f"acervo ingerir casa: {repo} sem @<rev> = origin/main em {sha}\n")
 
-    headers = {}
-    if TOKEN:
-        headers["authorization"] = f"Bearer {TOKEN}"
-    payload = {"autor": autor, "motor": args.motor, "ate": args.ate, "itens": itens}
+    arvore = ler_arvore(esp, sha)
+    docs, diagramas, ignorados = classificar(arvore)
+    recusas_locais = recusas_diagrama(diagramas, arvore)
+    if args.so:
+        docs = [p for p in docs if args.so in p]
+        recusas_locais = [r for r in recusas_locais if args.so in r["path"]]
+    if args.limite:
+        docs = docs[:args.limite]
+    arvore_completa = not (args.so or args.limite)
+    if not docs:
+        # Árvore sem documento nunca vira lote: com arvore_completa, retiraria o acervo inteiro.
+        morre(f"nenhum documento .md em {repo}@{sha[:12]}"
+              + ("" if arvore_completa else " no recorte (--so/--limite)") + ".", 1)
+    if len(docs) > TETO_ITENS:
+        morre(f"{len(docs)} documentos passam do teto do servidor ({TETO_ITENS} por lote).", 1)
 
-    try:
-        resp = requests.post(f"{BASE}/acervo/casa/lotes", json=payload, headers=headers)
-    except requests.exceptions.RequestException as e:
-        morre(f"motor acervo indisponivel em {BASE}: {e}", 1)
-    if resp.status_code != 201:
-        try:
-            pj = resp.json()
-            morre(f"erro {resp.status_code} ({pj.get('title')}): {pj.get('detail', resp.text)}", 1)
-        except ValueError:
-            morre(f"erro {resp.status_code}: {resp.text}", 1)
+    corpos = ler_corpos(esp, sha, docs)
+    itens = montar_itens(sha, docs, corpos)
+    fonte = {"repo": repo, "sha": sha, "arvore_completa": arvore_completa}
+    info = dict(fonte, espelho=esp, docs=len(itens))
 
-    lote = resp.json()
-    lote_id = lote["id"]
+    lote = postar_lote(montar_payload(autor, args.motor, args.ate, fonte, itens))
 
     if not args.apply:
         if args.como_json:
-            print(json.dumps({"lote": lote, "pulos": pulos}, indent=2, ensure_ascii=False))
+            print(json.dumps({"fonte": info, "lote": lote, "recusas_locais": recusas_locais,
+                              "ignorados": ignorados}, indent=2, ensure_ascii=False))
         else:
-            print(tabela_plano(lote, pulos))
-        reprovados = sum(1 for it in lote.get("itens", []) if it.get("veredito") == "reprovado")
-        sys.exit(3 if reprovados else 0)
+            print(plano(lote, info, recusas_locais, ignorados))
+        sys.exit(3 if tem_recusa(lote, recusas_locais) else 0)
 
-    try:
-        ra = requests.post(f"{BASE}/acervo/casa/lotes/{lote_id}/aplicar", headers=headers)
-    except requests.exceptions.RequestException as e:
-        morre(f"aplicar falhou: {e}", 1)
-    if ra.status_code not in (200, 202):
-        morre(f"aplicar {ra.status_code}: {ra.text}", 1)
-
-    while True:
-        time.sleep(1.0)
-        try:
-            rc = requests.get(f"{BASE}/acervo/lotes/{lote_id}", headers=headers)
-        except requests.exceptions.RequestException as e:
-            morre(f"poll falhou: {e}", 1)
-        if rc.status_code != 200:
-            continue
-        atual = rc.json()
-        if atual.get("estado") in ("concluido", "falhou"):
-            lote = atual
-            break
-
+    lote = aplicar_lote(lote["id"])
+    pos_lote(lote, info, recusas_locais, aplicado=True)
     if args.como_json:
-        print(json.dumps({"lote": lote, "pulos": pulos}, indent=2, ensure_ascii=False))
+        print(json.dumps({"fonte": info, "lote": lote, "recusas_locais": recusas_locais,
+                          "ignorados": ignorados}, indent=2, ensure_ascii=False))
     else:
-        print(tabela_plano(lote, pulos))
+        print(plano(lote, info, recusas_locais, ignorados, aplicado=True))
         print(f"\nestado final do lote: {lote.get('estado')}")
     sys.exit(0 if lote.get("estado") == "concluido" else 1)
+
 
 if __name__ == "__main__":
     main()
