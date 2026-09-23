@@ -82,7 +82,10 @@ opções de alteração (--reclassificar):
   --substituir-trata-de <concs> substitui todo o conjunto de conceitos da obra
   --dominio <slug>              novo domínio da obra (ou 'null' para limpar)
   --subdominio <slug>           novo subdomínio da obra (ou 'null' para limpar)
-  --especie <slug>              nova espécie da obra (ou 'null' para limpar)
+  --especie <slug>              nova espécie da obra (ou 'null' para limpar); sem --subtipo, zera o subtipo
+  --subtipo <slug>              subtipo da espécie (exige --especie na mesma chamada; 'null' limpa)
+  --titulo <texto>              novo título da obra (único no acervo)
+  --emitido-por <a;b>           quem emitiu (autor, órgão); vários separados por ';'
   --anotacao <texto>            anotação textual da obra
 
 opções de seleção (--reclassificar em lote):
@@ -822,8 +825,15 @@ def acao_reclassificar(args, autor: str, como_json: bool, headers: dict) -> int:
         alteracao["subdominio"] = None if args.subdominio.lower() in ("null", "none", "") else args.subdominio
     if args.especie is not None:
         alteracao["especie"] = None if args.especie.lower() in ("null", "none", "") else args.especie
+    if args.subtipo is not None:
+        alteracao["subtipo"] = None if args.subtipo.lower() in ("null", "none", "") else args.subtipo
     if args.anotacao is not None:
         alteracao["anotacao"] = args.anotacao
+    if args.titulo is not None:
+        alteracao["titulo"] = args.titulo
+    if args.emitido_por is not None:
+        # emissor tem espaço no nome ("Conseil constitutionnel"): separa só por ';'
+        alteracao["emitido_por"] = [p.strip() for p in args.emitido_por.split(";") if p.strip()]
 
     trata_de = _parse_lista(args.trata_de) if args.trata_de else []
     remover_trata_de = _parse_lista(args.remover_trata_de) if args.remover_trata_de else []
@@ -984,6 +994,9 @@ def main(argv=None):
     parser.add_argument("--dominio", default=None)
     parser.add_argument("--subdominio", default=None)
     parser.add_argument("--especie", default=None)
+    parser.add_argument("--subtipo", default=None)
+    parser.add_argument("--titulo", default=None)
+    parser.add_argument("--emitido-por", dest="emitido_por", default=None)
     parser.add_argument("--anotacao", default=None)
 
     # Seleção
