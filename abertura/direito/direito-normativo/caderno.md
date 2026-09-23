@@ -28,6 +28,15 @@
 - Regra interna sigilosa impede o afetado de checar o desvio dela. Em política de
   órgão de inteligência, a norma nomeia quem confere o cumprimento no lugar de quem
   não pode ler a regra. Sinal: norma classificada sem instância de verificação.
+- Conflito de linha resolvido por lotação prova demais — quando toda unidade é
+  Proprietária de algum domínio, toda unidade é primeira linha, e «o gestor não pode
+  ficar em área X» barra todos. Cura: regra de impedimento (o gestor não avalia o domínio
+  da própria unidade) e contagem de assento, onde quer que ele esteja lotado. Sinal:
+  recomendação de lotação justificada por segregação de linhas.
+- Minuta de política não redesenha o organograma — estrutura, colegiado, composição e
+  lotação são dado de entrada; o que a política pode fazer com colegiado fora do
+  escopo autorizado é deixar de mencioná-lo. Sinal: proposta de extinguir, recompor ou
+  redistribuir função de colegiado que o dono não pôs na mesa.
 
 ## diario de bordo
 
@@ -40,3 +49,5 @@
 - 2026-09-23 — tentei conferir existe persona guara, erro de uso (tipos aceitos: cadeira|verbo|card|arquivo|mesa); tentei motor rag buscar casa "Guará persona cadeira", não trouxe o alias — contorno encontrado NA DATA 2026-09-23 foi persona foto (alias → slug).
 - 2026-09-23 — tentei run_command com lote de 6 motor buscar, 2 itens voltaram omitido_por_teto — contorno encontrado NA DATA 2026-09-23 foi reenviar os itens restantes em lote novo.
 - 2026-09-23 — tentei acrescentar à mesa com mesa anota, ele reescreve o slot inteiro (sem append) e avisa que ato pendente vai em mesa item — contorno encontrado NA DATA 2026-09-23 foi reenviar o slot completo e plantar a pendência com mesa item.
+- 2026-09-23 — tentei acervo ler obra fcb134a4 (IN GSI 1/2020, achada por motor rag buscar obra) para ler o texto integral, recusou «combinação nao servida»; motor devolve só o início da obra — contorno encontrado NA DATA 2026-09-23 foi web_fetch da IN consolidada no gov.br (redação da IN 9/2026 já incorporada).
+- 2026-09-23 — tentei motor rag buscar casa pela hierarquia/organograma do órgão, cobertura fraca (0,43, piso 0,5), sem retorno útil — contorno encontrado NA DATA 2026-09-23 foi perguntar ao dono (dado do órgão não mora no acervo).
