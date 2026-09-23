@@ -187,6 +187,16 @@ def test_write_file_aceita_fonte_de_diagrama(bancada, sem_pep):
     assert d2.get("ok"), d2
 
 
+def test_write_file_aceita_texto_de_build_por_nome(bancada, sem_pep):
+    """Dockerfile e .dockerignore pelo nome; conf do nginx pela extensao .conf."""
+    for nome in ("Dockerfile", ".dockerignore", "nginx.conf"):
+        r = s.write_file(path=f"wt/platafirma-core/fabrica/site/{nome}", content="x\n")
+        assert r.get("ok"), (nome, r)
+    # o nome casa inteiro: arquivo sem extensao qualquer segue recusado
+    outro = s.write_file(path="wt/platafirma-core/fabrica/site/Makefile", content="x\n")
+    assert outro.get("recusado") and "Dockerfile" in outro["motivo"], outro
+
+
 def test_write_file_nega_release_e_log(bancada, sem_pep):
     rel = s.write_file(path=str(s.BIN_VERBOS / "x.md"), content="x\n")
     assert rel.get("recusado") and "release" in rel["motivo"]

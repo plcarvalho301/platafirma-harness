@@ -1328,7 +1328,11 @@ def read_file(path: str = "", offset: int = 0, max_bytes: int = 40000,
 
 # --- write_file: tipo x morada, sem symlink, atomico (spec_porta-so-verbo §4) ----
 TIPOS_TEXTO = {".py", ".md", ".mmd", ".d2", ".sh", ".sql", ".yaml", ".yml", ".json", ".toml",
-               ".css", ".html", ".js", ".txt"}
+               ".css", ".html", ".js", ".txt", ".conf"}
+# Texto de build que se reconhece pelo nome, nao pela extensao. Entrou em 23/09/2026: sem
+# ele, stack nova com imagem propria (Dockerfile, conf do nginx) nao tinha como ser escrita
+# pela porta, e a saida era esconder o Dockerfile dentro do compose.
+NOMES_TEXTO = {"Dockerfile", ".dockerignore"}
 # platafirma-ui entrou em 22/09/2026 (hotfix): o clone existia na bancada e o front do
 # rastreador mora nele, mas a lista nomeada o deixava fora e a tela nao tinha como ser
 # corrigida pela porta.
@@ -1442,9 +1446,10 @@ def _resolve_escrita(path: str, ident: dict):
             continue
         if _em_bin_do_harness(real_pai):
             tipos = tipos | {""}
-        if ext not in tipos:
+        if ext not in tipos and alvo.name not in NOMES_TEXTO:
             return None, (f"tipo: '{ext or '(sem extensao)'}' fora de "
-                          f"{sorted(t or '(sem)' for t in tipos)} em {raiz}/")
+                          f"{sorted(t or '(sem)' for t in tipos)} (e dos nomes "
+                          f"{sorted(NOMES_TEXTO)}) em {raiz}/")
         if raiz == tmp_fita:
             rel = real_pai.relative_to(tmp_fita).parts
             if not rel:
