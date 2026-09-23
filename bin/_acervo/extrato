@@ -11,6 +11,7 @@ import sys
 from datetime import date
 
 from openpyxl import Workbook
+from openpyxl.cell.cell import ILLEGAL_CHARACTERS_RE
 from openpyxl.styles import Alignment, Font, PatternFill
 from openpyxl.utils import get_column_letter
 
@@ -23,6 +24,10 @@ OUT = f"/tmp/acervo-{date.today().isoformat()}.xlsx"
 HEADER_FILL = PatternFill("solid", fgColor="1F3864")
 HEADER_FONT = Font(bold=True, color="FFFFFF")
 
+
+def limpa(valor: str) -> str:
+    """Tira o caractere de controle que o formato xlsx recusa; o resto passa intacto."""
+    return ILLEGAL_CHARACTERS_RE.sub("", valor) if isinstance(valor, str) else valor
 
 def psql(sql: str) -> str:
     res = subprocess.run(
@@ -66,8 +71,10 @@ def main() -> int:
         aba = tabela[:31]
         ws = wb.create_sheet(aba)
 
+        # caractere de controle (\x00-\x1f fora de \t\n\r) nao cabe em celula xlsx: openpyxl
+        # estoura IllegalCharacterError e a foto inteira se perde por um corpo de casa.
         for linha in linhas:
-            ws.append(linha)
+            ws.append([limpa(v) for v in linha])
 
         # cabecalho
         for cell in ws[1]:

@@ -1,0 +1,129 @@
+#!/usr/bin/env python3
+"""acervo exportar — regera, na bancada da sessao, o que deriva do schema `acervo`.
+
+A cadeia (guia de evolucao da ontologia, §7) tem dois elos e nao para no meio:
+
+  1. `motor_acervo.cli exportar-acervo --out <bancada>/ontologia/acervo`
+     Postgres -> ontologia/acervo/*.jsonl (so LE o banco)
+  2. `scripts/gen_referencia_template.py --vocabulario`
+     export -> rag/docs/ontologia/vocabulario.json (offline, stdlib)
+
+Onde roda: o CODIGO e o da bancada de `platafirma-conhecimento` da sessao que chamou
+(wt/<repo>/<sessao>, senao wt/<repo>/<cadeira>, senao o clone), para o export sair coerente
+com o gerador da mesma versao. O PYTHON e o venv da release (venv de bancada nunca e
+runtime) e o AMBIENTE e o da ingestao declarado em registro/motor-instancias.json — o mesmo
+que `motor rag indexar` usa. Nao ha plano seco: o ato so grava arquivo derivado na bancada,
+que se le e se desfaz no git; o banco nao se toca.
+
+Contrato e conteudo do export sao de dados (Olga); este ato so expoe e instala.
+"""
+import json
+import os
+import subprocess
+import sys
+from pathlib import Path
+
+_ARVORE = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(_ARVORE / "lib"))
+import raizes  # noqa: E402
+
+REPO = "platafirma-conhecimento"
+REG = os.environ.get("PF_MOTOR_REG") or str(_ARVORE / "registro" / "motor-instancias.json")
+CANON_INSTANCIA = "/srv/platafirma/casa/"
+SPEC = "https://github.com/plcarvalho301/platafirma-arquitetura/blob/main/docs/spec_acervo.md"
+
+
+def morre(msg: str, cod: int = 3) -> None:
+    print(f"acervo exportar: {msg}", file=sys.stderr)
+    sys.exit(cod)
+
+
+def bancada_do_repo() -> Path:
+    """Mesma ordem do verbo `repo`: sessao, cadeira, clone."""
+    try:
+        raiz = raizes.bancada()
+    except raizes.BancadaNaoDeclarada as e:
+        morre(str(e))
+    cadeira = os.environ.get("PF_CADEIRA", "")
+    for prefixo in ("claudinho-", "claudinha-"):
+        if cadeira.startswith(prefixo):
+            cadeira = cadeira[len(prefixo):]
+    for chave in (os.environ.get("PF_SESSAO", ""), cadeira):
+        if chave:
+            wt = raiz / "wt" / REPO / chave
+            if (wt / ".git").exists():
+                return wt
+    clone = raiz / REPO
+    if (clone / ".git").exists():
+        print(f"acervo exportar: aviso: sem bancada da sessao; usando o clone {clone}",
+              file=sys.stderr)
+        return clone
+    morre(f"nao ha bancada de {REPO} — `repo abrir {REPO}` abre uma")
+
+
+def python_do_rag() -> str:
+    for c in (os.environ.get("RAG_PYTHON", ""),
+              str(raizes.release() / "venv" / "rag" / "bin" / "python")):
+        if c and os.access(c, os.X_OK):
+            return c
+    morre("nenhum python do rag executavel (RAG_PYTHON ou <release>/venv/rag/bin/python)")
+
+
+def ambiente_da_ingestao() -> dict:
+    """env_da_ingestao da instancia `rag`: arquivo NOME=valor (vai como RAG_ENV_FILE, que o
+    settings do motor_acervo carrega) ou diretorio segredos/<stack> (um arquivo por variavel)."""
+    try:
+        with open(REG, encoding="utf-8") as f:
+            valor = json.load(f)["rag"].get("env_da_ingestao", "")
+    except (OSError, KeyError, ValueError) as e:
+        morre(f"registro de motor ilegivel ({REG}): {e}")
+    if valor.startswith(CANON_INSTANCIA):
+        caminho = raizes.instancia() / valor[len(CANON_INSTANCIA):]
+    elif valor and "/" not in valor and not valor.startswith("."):
+        caminho = raizes.instancia() / "segredos" / valor
+    else:
+        morre(f"env_da_ingestao fora da instancia: {valor!r}")
+    if caminho.is_file():
+        return {"RAG_ENV_FILE": str(caminho)}
+    if caminho.is_dir():
+        return {p.name: p.read_text(encoding="utf-8").strip()
+                for p in sorted(caminho.iterdir())
+                if p.is_file() and not p.name.endswith(".tmp")}
+    morre(f"env da ingestao nao existe: {caminho}")
+
+
+def roda(titulo: str, cmd: list, cwd: Path, env: dict) -> None:
+    print(f"\n== {titulo}")
+    r = subprocess.run(cmd, cwd=cwd, env=env, capture_output=True, text=True)
+    saida = (r.stdout + r.stderr).strip()
+    if saida:
+        print(saida[-3000:])
+    if r.returncode != 0:
+        morre(f"parou em: {titulo} (exit {r.returncode})", 1)
+
+
+def main(argv: list) -> int:
+    if argv:
+        print(f"uso: acervo exportar   (sem argumentos)\n  {SPEC}", file=sys.stderr)
+        return 2
+    wt = bancada_do_repo()
+    py = python_do_rag()
+    env = {**os.environ, **ambiente_da_ingestao(), "PYTHONPATH": str(wt / "rag")}
+    destino = wt / "ontologia" / "acervo"
+    roda("1/2 export do schema acervo -> ontologia/acervo/*.jsonl",
+         [py, "-m", "motor_acervo.cli", "exportar-acervo", "--out", str(destino)],
+         wt / "rag", env)
+    roda("2/2 vocabulario.json a partir do export",
+         [py, str(wt / "scripts" / "gen_referencia_template.py"), "--vocabulario"],
+         wt, env)
+    r = subprocess.run(["git", "-C", str(wt), "status", "--short", "--",
+                        "ontologia/acervo", "rag/docs/ontologia/vocabulario.json"],
+                       capture_output=True, text=True)
+    mudou = r.stdout.strip()
+    print(f"\nbancada: {wt}")
+    print("mudou:\n" + mudou if mudou else "nada mudou: o export ja acompanhava o banco")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))
