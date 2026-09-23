@@ -31,15 +31,20 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import _suporte  # noqa: E402
 from _suporte import SUPORTE  # noqa: E402
 
-HARNESS_DIR = os.path.dirname(os.path.dirname(os.path.realpath(__file__)))
+# Raiz do repo (bin/_acervo/casa-ingerir -> três níveis acima), onde mora o pacote
+# `recuperacao`: o adaptador REST do motor acervo é a fonte de BASE/TOKEN (mesmo arranjo de
+# _acervo/escada). Com dois níveis o import caía calado no default.
+HARNESS_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.realpath(__file__))))
 if HARNESS_DIR not in sys.path:
     sys.path.insert(0, HARNESS_DIR)
 
 try:
     from recuperacao.adaptadores.motor_acervo_rest import BASE as DEFAULT_BASE, TOKEN as DEFAULT_TOKEN
+    ORIGEM_BASE = "recuperacao.adaptadores.motor_acervo_rest"
 except ImportError:
     DEFAULT_BASE = "http://127.0.0.1:8100"
     DEFAULT_TOKEN = ""
+    ORIGEM_BASE = "default (adaptador REST ausente)"
 
 BASE = (os.environ.get("RAG_API_BASE") or DEFAULT_BASE).rstrip("/")
 TOKEN = os.environ.get("RAG_API_TOKEN") or DEFAULT_TOKEN
@@ -309,23 +314,23 @@ def _curto(arquivo):
     return arquivo[len(pre):] if arquivo.startswith(pre) else arquivo
 
 
-def _portoes(it, resultado):
+PORTAO_LEGADO = "legado"   # portão que o servidor emite (resultado `aviso`) só com linha viva
+
+
+def _portoes(it, resultado, exceto=()):
     out = []
     for p in it.get("portoes") or []:
-        if p.get("resultado") == resultado:
+        if p.get("resultado") == resultado and p.get("portao") not in exceto:
             det = p.get("detail") or p.get("title") or ""
             out.append(f"{p.get('portao')}: {det}" if det else str(p.get("portao")))
     return out
 
 
 def _legado(it):
-    """Nova versão recusada de linha que já existe: a linha NÃO se retira, segue servindo a
-    versão anterior (D4). O servidor devolve casa_id da linha casada (D6) ou diz 'legado'."""
-    if it.get("veredito") != "reprovado":
-        return False
-    if it.get("casa_id"):
-        return True
-    return "legado" in json.dumps(it.get("portoes") or [], ensure_ascii=False).lower()
+    """Nova versão recusada de linha VIVA: a linha NÃO se retira, segue servindo a versão
+    anterior (D4). Decide só pelo portão nomeado `legado` que o servidor emite quando a linha
+    casada está viva — nunca por casa_id (vem também de linha retirada) nem por texto."""
+    return any(p.get("portao") == PORTAO_LEGADO for p in it.get("portoes") or [])
 
 
 def _linha_retirada(it):
@@ -387,8 +392,11 @@ def plano(lote, fonte, recusas_locais, ignorados, aplicado=False):
                       for it in reprov])
     secao("Recusas locais, nao enviadas (arq:0115 §7, diagrama)",
           [f"{r['path']}: {r['motivo']}" for r in recusas_locais])
-    secao("Avisos", [f"{_curto(it.get('arquivo'))}: {'; '.join(_portoes(it, 'aviso'))}"
-                     for it in itens if _portoes(it, "aviso")])
+    # o aviso `legado` tem seção própria (abaixo): não se repete em Avisos
+    sem_legado = (PORTAO_LEGADO,)
+    secao("Avisos", [f"{_curto(it.get('arquivo'))}: "
+                     f"{'; '.join(_portoes(it, 'aviso', exceto=sem_legado))}"
+                     for it in itens if _portoes(it, "aviso", exceto=sem_legado)])
     secao("Retiradas", [_linha_retirada(it) for it in itens if it.get("veredito") == "retirar"])
     secao("Legado mantido (nova versao recusada; a linha segue servindo a versao anterior)",
           [_curto(it.get("arquivo")) for it in reprov if _legado(it)])

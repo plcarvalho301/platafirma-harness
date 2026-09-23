@@ -27,6 +27,12 @@ USR = "rag"
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from _suporte import SUPORTE  # noqa: E402  (suporte da particao casa, arq:0115 §1.2)
 
+# Forma da chave de adr (arq:0115 §3.2): a mesma RE_ADR de _acervo/casa. Mora no cliente
+# porque a 060 tira adr de entidade_classe (§6.2).
+FORMA_ADR = r"^(?:([a-z]+):)?(\d{1,4})$"
+# Especies de documento de casa que ainda tem classe em entidade_classe ate a 060.
+DOC_CASA = ("adr", "spec", "parecer")
+
 
 def morre(msg, code=2):
     sys.stderr.write(msg.rstrip("\n") + "\n")
@@ -88,12 +94,24 @@ def validar_forma(classe, seletor):
     """Passo 1 da spec §3.
     Valida se a classe existe e se o seletor casa com forma_chave.
     Retorna (canonico, numero_sem_serie).
+
+    adr: a forma da chave mora AQUI (FORMA_ADR, a mesma de _acervo/casa), nao em
+    entidade_classe.forma_chave: a 060 tira adr/spec/parecer de entidade_classe (arq:0115
+    §6.2). Classe de documento de casa que ja saiu de entidade_classe recusa (exit 2)
+    apontando `acervo ler casa`, em vez de morrer com "classe nao existe".
     """
+    if classe == "adr" and not re.match(FORMA_ADR, seletor.strip()):
+        morre("acervo: seletor '%s' invalido para classe 'adr'. Forma esperada: %s"
+              % (seletor.strip(), FORMA_ADR), 2)
     classes_info = psql_json(
         "select coalesce(json_agg(row_to_json(t)), '[]') from ("
         "  select slug, forma_chave from acervo.entidade_classe where slug = %s"
         ") t;" % _lit(classe), "classe"
     )
+    if not classes_info and classe in DOC_CASA:
+        morre("acervo resolver: '%s' e especie de documento de casa, que se le pela chave em "
+              "acervo.casa (arq:0115 §6.2, §11):\n  acervo ler casa %s %s"
+              % (classe, classe, seletor.strip()), 2)
     if not classes_info:
         vivas = psql_json(
             "select coalesce(json_agg(slug order by slug),'[]') from acervo.entidade_classe;",
@@ -102,7 +120,7 @@ def validar_forma(classe, seletor):
         morre("acervo: classe '%s' nao existe em acervo.entidade_classe.\n"
               "  classes vivas: %s" % (classe, ", ".join(vivas)), 2)
 
-    forma = classes_info[0].get("forma_chave")
+    forma = FORMA_ADR if classe == "adr" else classes_info[0].get("forma_chave")
     s = seletor.strip()
     if classe in ("adr", "minuta") and re.match(r"^\d+$", s):
         s = f"arq:{s.zfill(4)}"
@@ -189,12 +207,47 @@ def _parecidos_casa(especie, seletor):
     return [r["candidato"] for r in rows[:5]]
 
 
+def _varrido_casa():
+    """Linha `varrido:` da leitura de casa: SO o ponteiro do suporte (arq:0115 §1.2) em
+    casa_fonte. As fontes de antes da arq:0115 (repos de release) seguem em casa_fonte, porque
+    o servidor so insere; nao se nomeiam aqui. Linhas vivas vindas delas entram como contagem."""
+    cf = psql_json(
+        "select coalesce(json_agg(row_to_json(t)), '[]') from ("
+        "  select sha, to_char(ingerido_em, 'DD/MM HH24:MI') as dt from acervo.casa_fonte"
+        "   where repo = %s order by ingerido_em desc limit 1"
+        ") t;" % _lit(SUPORTE), "casa_fonte"
+    )
+    legado = psql_json(
+        "select json_build_object('n', count(*)) from acervo.casa "
+        "where repo <> %s and retirada_em is null;" % _lit(SUPORTE), "legado"
+    )
+    fonte = (f"fonte {SUPORTE}@{cf[0]['sha'][:12]}, ingerido {cf[0]['dt']}" if cf
+             else f"fonte {SUPORTE}: nunca ingerida")
+    n = int(legado.get("n") or 0) if isinstance(legado, dict) else 0
+    extra = f"; {n} linha(s) viva(s) de antes do suporte (legado)" if n else ""
+    return f"acervo.casa ({fonte}{extra})"
+
 def gerar_negativa(classe, seletor, casa=False):
     """Gera as 4 linhas fixas da spec §4 para exit 1.
 
     casa=True: `classe` e especie de acervo.especie_tipo e o seletor e chave de documento
     de casa (arq:0115 §3); parecidos vem das chaves de acervo.casa. Senao, `classe` e classe
     da raiz e parecidos vem de chave_humana/alias."""
+    # 3 e 4. vizinho e cura: documento de casa mora no suporte platafirma-casa e entra pela
+    # ingestao por sha (arq:0115 §1.2, §8.1); nada de caminho de repo de release.
+    if casa:
+        top = _parecidos_casa(classe, seletor)
+        parecidos_str = ", ".join(top) if top else "(nenhuma chave parecida)"
+        vizinho = f"acervo listar casa {classe}"
+        cura = (f"documento de casa entra por git: PR em {SUPORTE} -> merge em main -> "
+                f"acervo ingerir casa {SUPORTE}")
+        return (
+            f"varrido:   {_varrido_casa()}\n"
+            f"parecidos: {parecidos_str}\n"
+            f"vizinho:   {vizinho}\n"
+            f"cura:      {cura}"
+        )
+
     # 1. varrido: um ponteiro por repositorio (spec_acervo §2): o ultimo sha ingerido de CADA
     # repo em casa_fonte. Sem linha nenhuma, o acervo declara que nao sabe de que sha veio.
     cf = psql_json(
@@ -208,21 +261,6 @@ def gerar_negativa(classe, seletor, casa=False):
             f"{r['repo']}@{r['sha'][:12]}, ingerido {r['dt']}" for r in cf) + ")"
     else:
         varrido = "acervo.casa (sem ponteiro de fonte: nenhuma ingestao registrou sha)"
-
-    # 3 e 4. vizinho e cura: documento de casa mora no suporte platafirma-casa e entra pela
-    # ingestao por sha (arq:0115 §1.2, §8.1); nada de caminho de repo de release.
-    if casa:
-        top = _parecidos_casa(classe, seletor)
-        parecidos_str = ", ".join(top) if top else "(nenhuma chave parecida)"
-        vizinho = f"acervo listar casa {classe}"
-        cura = (f"documento de casa entra por git: PR em {SUPORTE} -> merge em main -> "
-                f"acervo ingerir casa {SUPORTE}")
-        return (
-            f"varrido:   {varrido}\n"
-            f"parecidos: {parecidos_str}\n"
-            f"vizinho:   {vizinho}\n"
-            f"cura:      {cura}"
-        )
 
     # 2. parecidos (pg_trgm)
     parecidos_rows = psql_json(

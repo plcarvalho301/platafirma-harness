@@ -161,6 +161,24 @@ def test_write_file_nao_recria_bancada_nem_worktree(monkeypatch, tmp_path, sem_p
     assert not (viva / "wt" / "platafirma-core" / "outra-cadeira").exists()
 
 
+def test_write_file_aceita_o_suporte_platafirma_casa(bancada, sem_pep):
+    """arq:0115 §1.2: platafirma-casa e o suporte do documento de casa — worktree por cadeira
+    (wt/platafirma-casa/<cadeira>) e clone (<bancada>/platafirma-casa) sao morada de escrita."""
+    assert "platafirma-casa" in s.CLONES
+    (bancada / "wt" / "platafirma-casa" / "dados").mkdir(parents=True)
+    (bancada / "platafirma-casa").mkdir()
+    wt = s.write_file(path="wt/platafirma-casa/dados/spec/acervo.md", content="# Acervo\n")
+    assert wt.get("ok"), wt
+    assert (bancada / "wt/platafirma-casa/dados/spec/acervo.md").is_file()
+    diag = s.write_file(path="wt/platafirma-casa/dados/spec/acervo.1.mmd", content="graph TD; a-->b\n")
+    assert diag.get("ok"), diag
+    clone = s.write_file(path="platafirma-casa/adr/arq/0001-x.md", content="# 0001\n")
+    assert clone.get("ok"), clone
+    # worktree de cadeira que nao foi aberto segue recusado: write_file nao cria bancada
+    nunca = s.write_file(path="wt/platafirma-casa/outra/x.md", content="x\n")
+    assert nunca.get("recusado") and "repo abrir" in nunca["motivo"], nunca
+
+
 def test_write_file_aceita_fonte_de_diagrama(bancada, sem_pep):
     """spec_porta-so-verbo §4.1: .mmd/.d2 sao fonte canonica de diagrama (ADR 0001/0051)."""
     mmd = s.write_file(path="wt/platafirma-core/fabrica/x.mmd", content="graph TD; a-->b\n")

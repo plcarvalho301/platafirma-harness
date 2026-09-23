@@ -127,6 +127,8 @@ def test_identidade_adr_forma_invalida():
     assert "invalido" in r.stderr
     assert "Forma esperada" in r.stderr
 
+    # a forma de adr e do cliente (_identidade.FORMA_ADR), nao de entidade_classe: a recusa
+    # vale antes e depois da 060 (arq:0115 §6.2)
     r_res = subprocess.run([BIN, "resolver", "adr", "arq:11O"], capture_output=True, text=True)
     assert r_res.returncode == 2
     assert "invalido" in r_res.stderr
@@ -145,13 +147,23 @@ def test_identidade_alias_via_alias():
     assert d["via"] == "alias"
 
 def test_identidade_ambiguidade():
-    # arq:0115 §3.2: arq e ont compartilham numeros (arq:0075 e ont:0075). Numero nu que
-    # existe em mais de uma serie sai 2 com as opcoes, em vez de supor a serie arq.
-    r = subprocess.run([BIN, "ler", "casa", "adr", "75"], capture_output=True, text=True)
-    assert r.returncode == 2
+    # arq:0115 §3.2: series de adr compartilham numeros (arq:0075 e ont:0075). Numero nu que
+    # existe em mais de uma serie sai 2 com as opcoes, em vez de supor a serie arq. O numero
+    # vem do estado do banco: a serie ont so entra com a 1a ingestao da arvore completa de
+    # platafirma-casa; sem numero nenhum em duas series, nao ha o que medir.
+    out = psql("SELECT c.numero || '|' || string_agg(c.chave, ',' ORDER BY c.chave) "
+               "FROM acervo.casa c JOIN acervo.especie_tipo e ON e.id = c.especie_id "
+               "WHERE e.slug = 'adr' AND c.numero IS NOT NULL GROUP BY c.numero "
+               "HAVING count(DISTINCT c.serie) > 1 ORDER BY c.numero LIMIT 1;")
+    if not out:
+        pytest.skip("nenhum numero de adr em mais de uma serie em acervo.casa "
+                    "(serie ont ainda nao ingerida de platafirma-casa)")
+    numero, chaves = out.split("|", 1)
+    r = subprocess.run([BIN, "ler", "casa", "adr", numero], capture_output=True, text=True)
+    assert r.returncode == 2, r.stderr
     assert "ambiguo" in r.stderr
-    assert "arq:0075" in r.stderr
-    assert "ont:0075" in r.stderr
+    for chave in chaves.split(","):
+        assert chave in r.stderr, chave
 
 def test_identidade_inexistente_exit_1():
     # Seletor inexistente deve sair 1 com as 4 linhas fixas da spec §4, sem caminho de
@@ -167,13 +179,24 @@ def test_identidade_inexistente_exit_1():
     assert "platafirma-arquitetura" not in r.stderr
     assert "macro-global" not in r.stderr
     assert "release promover" not in r.stderr
+    # o varrido da leitura de casa e so o suporte: as fontes de antes da arq:0115 seguem em
+    # acervo.casa_fonte (o servidor so insere) e nao se nomeiam na negativa
+    varrido = next(l for l in r.stderr.splitlines() if l.startswith("varrido:"))
+    assert "fonte platafirma-casa" in varrido
 
+    # `resolver adr`: ate a 060, adr segue em entidade_classe e a negativa e a de 4 linhas;
+    # depois dela (arq:0115 §6.2), o ato recusa (exit 2) e aponta a leitura pela chave.
+    tem_classe = psql("SELECT count(*) FROM acervo.entidade_classe WHERE slug='adr';") != "0"
     r_res = subprocess.run([BIN, "resolver", "adr", "9999"], capture_output=True, text=True)
-    assert r_res.returncode == 1
-    assert "varrido:" in r_res.stderr
-    assert "parecidos:" in r_res.stderr
-    assert "vizinho:" in r_res.stderr
-    assert "cura:" in r_res.stderr
+    if tem_classe:
+        assert r_res.returncode == 1, r_res.stderr
+        assert "varrido:" in r_res.stderr
+        assert "parecidos:" in r_res.stderr
+        assert "vizinho:" in r_res.stderr
+        assert "cura:" in r_res.stderr
+    else:
+        assert r_res.returncode == 2, r_res.stderr
+        assert "acervo ler casa adr 9999" in r_res.stderr
 
 
 # --- Camada C: Contrato de Retorno ---
@@ -235,17 +258,28 @@ def test_listar_casa_sobre():
     assert r3.returncode == 1
 
 def test_ler_casa_retirada_responde_sucessora():
-    # arq:0115 §3.5: chave de documento retirado segue resolvivel e responde a sucessora, sem
-    # o texto. arq:0094 (superseded por arq:0112) sai do suporte na migracao; ate a 1a
-    # ingestao por arvore completa ela ainda esta viva, e o teste nao tem o que medir.
-    ret = psql("SELECT coalesce(to_char(retirada_em, 'YYYY'), '') FROM acervo.casa WHERE chave='arq:0094';")
+    # arq:0115 §3.5 (D4): chave de documento retirado segue resolvivel e responde a data e a
+    # sucessora, sem o texto. arq:0094 (superseded por arq:0112) sai do suporte na migracao, e
+    # a retirada grava substituida_por = 'arq:0112' (servidor). Enquanto a linha nao existir
+    # retirada (antes da 1a ingestao de platafirma-casa por arvore completa), nao ha o que medir.
+    ret = psql("SELECT coalesce(substituida_por, '') FROM acervo.casa "
+               "WHERE chave='arq:0094' AND retirada_em IS NOT NULL;")
     if not ret:
-        pytest.skip("arq:0094 ainda nao retirada (sem ingestao por arvore completa)")
+        pytest.skip("arq:0094 ainda nao existe retirada em acervo.casa "
+                    "(falta a 1a ingestao de platafirma-casa por arvore completa)")
+    assert ret == "arq:0112", ret
     r = subprocess.run([BIN, "ler", "casa", "adr", "arq:0094"], capture_output=True, text=True)
     assert r.returncode == 0, r.stderr
-    assert "retirada em" in r.stdout
-    assert "arq:0112" in r.stdout
-    assert len(r.stdout.splitlines()) <= 2
+    linhas = r.stdout.splitlines()
+    assert linhas[0].startswith("arq:0094: retirada em "), r.stdout
+    assert "substituída por arq:0112" in linhas[0]
+    assert "sem sucessora declarada" not in r.stdout
+    assert len(linhas) <= 2
+    rj = subprocess.run([BIN, "ler", "casa", "adr", "arq:0094", "--json"],
+                        capture_output=True, text=True)
+    assert rj.returncode == 0, rj.stderr
+    doc = json.loads(rj.stdout)
+    assert doc["corpo"] is None and doc["substituida_por"] == "arq:0112"
 
 def test_listar_obra_sobre_termo():
     r = subprocess.run([BIN, "listar", "obra", "obra", "--sobre", "mathematical"], capture_output=True, text=True)

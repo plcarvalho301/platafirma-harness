@@ -1332,9 +1332,12 @@ TIPOS_TEXTO = {".py", ".md", ".mmd", ".d2", ".sh", ".sql", ".yaml", ".yml", ".js
 # platafirma-ui entrou em 22/09/2026 (hotfix): o clone existia na bancada e o front do
 # rastreador mora nele, mas a lista nomeada o deixava fora e a tela nao tinha como ser
 # corrigida pela porta.
+# platafirma-casa entrou em 23/09/2026 (arq:0115 §1.2): e o suporte do documento de casa;
+# sem ele na lista, a bancada wt/platafirma-casa/<cadeira> e o clone <bancada>/platafirma-casa
+# recusavam write_file ("fora de morada") e o conteudo nao tinha como ser escrito pela porta.
 CLONES = ("platafirma-core", "platafirma-conhecimento", "platafirma-arquitetura",
           "platafirma-harness", "platafirma-motor", "platafirma-posto", "platafirma-ui",
-          "modulo-osint")
+          "platafirma-casa", "modulo-osint")
 ESCRITA_TETO = 1_048_576
 TMP_FITA = INSTANCIA / "var" / "tmp"
 

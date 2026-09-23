@@ -19,6 +19,7 @@ import os
 import pwd
 import subprocess
 import sys
+import time
 
 SUPORTE = "platafirma-casa"
 URL_PADRAO = "https://github.com/plcarvalho301/platafirma-casa.git"
@@ -85,3 +86,15 @@ def main_do_espelho(esp=None):
     if r.returncode != 0 or not sha:
         return None, f"espelho {esp} sem refs/remotes/origin/main"
     return sha, None
+
+
+def ultima_busca(esp=None):
+    """Quando o espelho foi buscado do forge pela última vez ('AAAA-MM-DD HH:MMZ', UTC), pelo
+    mtime do FETCH_HEAD que todo `fetch` regrava; None se nunca buscou. Leitura não busca:
+    o `servido` diz de quando é o main que ele compara (arq:0110 Q6)."""
+    esp = esp or espelho()
+    try:
+        t = os.stat(os.path.join(esp, "FETCH_HEAD")).st_mtime
+    except OSError:
+        return None
+    return time.strftime("%Y-%m-%d %H:%MZ", time.gmtime(t))

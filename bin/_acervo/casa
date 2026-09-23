@@ -25,8 +25,10 @@
 # sem o texto (exit 0).
 # Primeira linha de `listar` (§11.2): o que veio e com que cobertura (fonte platafirma-casa@
 # <sha> ingerida em <ts>, projeção, regime, último número por série). psql que falha é
-# INDETERMINÁVEL (exit 5), nunca "0 linhas". `servido` compara o sha ingerido
-# (acervo.casa_fonte) com o main do espelho do suporte, nunca "(igual)" fixo.
+# INDETERMINÁVEL (exit 5), nunca "0 linhas". `servido` é POR LINHA: o sha do texto que a
+# linha serve (acervo.casa.sha) contra o da última fonte ingerida (acervo.casa_fonte) e contra
+# o main do espelho do suporte, com a hora da última busca do espelho (ler/listar não buscam
+# no forge); nunca "(igual)" fixo. A cobertura conta as linhas com texto de outro sha.
 # Exit: 0 ok · 1 nada com essa chave (negativa de 4 linhas) · 2 uso/forma/ambíguo · 5 indeterminável.
 # Read-only. Escrita é `acervo ingerir casa platafirma-casa` (outro caminho).
 import json
@@ -54,6 +56,10 @@ RE_ADR = re.compile(r"^(?:([a-z]+):)?(\d{1,4})$")
 RE_SLUG = re.compile(r"^[a-z0-9]+(-[a-z0-9]+)*$")
 RE_DATADO = re.compile(r"^\d{4}-\d{2}-\d{2}-")
 FORMA_ADR = "<serie>:NNNN ou NNNN (ex.: arq:0075, arq:75, 75)"
+# Classes que podem ser referente de Sobre: (arq:0115 §6.2; contrato de dados D7): o fichário
+# da 059 (verbo, capacidade, stack, instancia, repositorio), as cadeiras já fichadas e risco.
+# conceito, adr, spec e parecer não são referente de Sobre:.
+CLASSES_SOBRE = ("verbo", "capacidade", "stack", "instancia", "repositorio", "cadeira", "risco")
 
 
 def morre(msg, code=2):
@@ -114,6 +120,16 @@ def _especie(especie):
                        where c.especie_id = e.id and c.retirada_em is not null),
         'sem_chave', (select count(*) from acervo.casa c
                        where c.especie_id = e.id and c.retirada_em is null and c.chave is null),
+        'fora_da_fonte', (select count(*) from acervo.casa c
+                           where c.especie_id = e.id and c.retirada_em is null
+                             and c.repo = {_lit(SUPORTE)}
+                             and c.sha is distinct from (
+                                 select f.sha from acervo.casa_fonte f
+                                  where f.repo = {_lit(SUPORTE)}
+                                  order by f.ingerido_em desc limit 1)),
+        'legado', (select count(*) from acervo.casa c
+                    where c.especie_id = e.id and c.retirada_em is null
+                      and c.repo <> {_lit(SUPORTE)}),
         'ultimo', (select json_object_agg(coalesce(t.serie, ''), t.ult order by t.serie)
                      from (select serie, max(numero) as ult from acervo.casa
                             where especie_id = e.id and numero is not null
@@ -148,15 +164,41 @@ def txt_ultimo(ultimo):
     return "último: " + " · ".join(partes)
 
 
-def linha_cobertura(n, info, fonte, todas=False, dono=None):
-    partes = [f"{n} linha(s)", info["slug"], txt_fonte(fonte),
-              f"projeção {info.get('projecao') or '(nenhuma)'}",
-              f"regime {info.get('regime') or '(nenhum)'}"]
+def _estado_espelho():
+    """(main, motivo, busca) do espelho do suporte: o origin/main JÁ buscado (ou None e o
+    motivo) e a hora da última busca. Leitura não busca no forge."""
+    main, motivo = _suporte.main_do_espelho()
+    return main, motivo, _suporte.ultima_busca() if main else None
+
+
+def txt_espelho(esp, sha=None):
+    """O main do espelho contra `sha`, dizendo de quando é a busca."""
+    main, motivo, busca = esp
+    if not main:
+        return f"main do espelho indeterminável: {motivo}"
+    quando = f", buscado em {busca}" if busca else ", sem registro de busca"
+    if sha and main == sha:
+        return f"= main do espelho{quando}"
+    return f"main do espelho em {main[:12]}{quando}"
+
+
+def linha_cobertura(n, info, fonte, esp=None, todas=False, dono=None):
+    partes = [f"{n} linha(s)", info["slug"], txt_fonte(fonte)]
+    if esp is not None and fonte:
+        partes.append(txt_espelho(esp, fonte["sha"])
+                      + ("" if not esp[0] or esp[0] == fonte["sha"] else ": ingestão defasada"))
+    partes += [f"projeção {info.get('projecao') or '(nenhuma)'}",
+               f"regime {info.get('regime') or '(nenhum)'}"]
     ult = txt_ultimo(info.get("ultimo"))
     if ult:
         partes.append(ult)
     if info.get("sem_chave"):
         partes.append(f"{info['sem_chave']} sem chave (id=repo@path)")
+    if fonte and info.get("fora_da_fonte"):
+        partes.append(f"{info['fora_da_fonte']} com texto de outro sha que a fonte "
+                      f"(versão nova recusada ou fora do recorte)")
+    if info.get("legado"):
+        partes.append(f"{info['legado']} fora do suporte (legado)")
     if todas:
         partes.append("inclui retiradas")
     elif info.get("retiradas"):
@@ -166,19 +208,26 @@ def linha_cobertura(n, info, fonte, todas=False, dono=None):
     return " · ".join(partes)
 
 
-def servido(repo, fonte, main_esp):
-    """Honesto (arq:0110 Q6): sha ingerido (casa_fonte) contra o main do espelho do suporte."""
+def servido(linha, fonte, esp):
+    """Honesto (arq:0110 Q6), POR LINHA: o sha do texto que a linha serve contra o sha da
+    última fonte ingerida (casa_fonte) e contra o main do espelho, com a hora da busca.
+    Linha com sha diferente do da fonte serve texto velho: a versão nova foi recusada
+    (legado mantido, D4) ou ficou fora do recorte (--so/--limite)."""
+    repo, sha = linha.get("repo"), linha.get("sha") or ""
+    if linha.get("retirada_em"):
+        return f"não servida: retirada em {linha['retirada_em']} (último texto de {sha[:12] or '?'})"
     if repo != SUPORTE:
         return f"fora do suporte (legado de {repo})"
     if not fonte:
         return "nunca ingerido"
-    f12 = fonte["sha"][:12]
-    main, motivo = main_esp
-    if not main:
-        return f"{f12} (main do espelho indeterminável: {motivo})"
-    if main == fonte["sha"]:
-        return f"{f12} (= main do espelho)"
-    return f"{f12} (main do espelho em {main[:12]}: ingestão defasada)"
+    l12, f12 = sha[:12] or "?", fonte["sha"][:12]
+    if sha != fonte["sha"]:
+        return (f"texto de {l12}; fonte em {f12}: versão nova recusada ou fora do recorte "
+                f"({txt_espelho(esp, sha)})")
+    main = esp[0]
+    if main and main != sha:
+        return f"{l12} ({txt_espelho(esp, sha)}: ingestão defasada)"
+    return f"{l12} ({txt_espelho(esp, sha)})"
 
 
 # ------------------------------------------------------------------ linhas
@@ -218,11 +267,11 @@ def txt_retirada(linha):
             + (f"substituída por {suc}" if suc else "sem sucessora declarada"))
 
 
-def _situacao(linha, fonte, main_esp):
+def _situacao(linha, fonte, esp):
     return {
         "fonte": f"{linha['repo']}@{(linha.get('sha') or '')[:12]}",
         "ingerido": linha.get("criado_em"),
-        "servido": servido(linha["repo"], fonte, main_esp),
+        "servido": servido(linha, fonte, esp),
         "vetorizado": linha.get("vetorizado_em") or "não",
         "status": txt_retirada(linha) if linha.get("retirada_em") else linha.get("ciclo"),
     }
@@ -281,8 +330,8 @@ def listar(especie, quero_json, dono=None, situacao=False, todas=False):
     if dono:
         conds.append(f"c.dono = {_lit(dono)}")
     linhas = _linhas(" and ".join(conds))
-    main_esp = _suporte.main_do_espelho()
-    cab = linha_cobertura(len(linhas), info, fonte, todas=todas, dono=dono)
+    esp = _estado_espelho()
+    cab = linha_cobertura(len(linhas), info, fonte, esp=esp, todas=todas, dono=dono)
 
     if quero_json:
         sys.stderr.write(cab + "\n")
@@ -290,7 +339,7 @@ def listar(especie, quero_json, dono=None, situacao=False, todas=False):
         for l in linhas:
             it = _item(l)
             if situacao:
-                it["situacao"] = _situacao(l, fonte, main_esp)
+                it["situacao"] = _situacao(l, fonte, esp)
             itens.append(it)
         print(json.dumps(itens, ensure_ascii=False, indent=2))
         return 0
@@ -302,7 +351,7 @@ def listar(especie, quero_json, dono=None, situacao=False, todas=False):
         return 0
     if situacao:
         for l in linhas:
-            sit = _situacao(l, fonte, main_esp)
+            sit = _situacao(l, fonte, esp)
             print(f"\n== {ident(l)} ({l.get('titulo') or '-'}) ==")
             print(f"fonte: {sit['fonte']}   ingerido: {sit['ingerido']}   servido: {sit['servido']}")
             print(f"vetorizado: {sit['vetorizado']}   status: {sit['status']}")
@@ -322,26 +371,47 @@ def listar(especie, quero_json, dono=None, situacao=False, todas=False):
 
 
 def _entidade(classe, chave):
-    """Ficha da raiz (acervo.entidade) do referente de Sobre:. Com classe: o pipeline de
-    identidade (exato, alias; 0 -> negativa exit 1; >1 -> exit 2). Sem classe: procura a
-    chave em todas as classes e só aceita se for uma."""
-    if classe:
-        f = _identidade.resolver_identidade(classe, chave)
-        return classe, f["chave_humana"], f["id"]
+    """Ficha ATIVA da raiz (acervo.entidade) do referente de Sobre:, pela regra da admissão
+    (D5 p7): (classe, chave_humana) exato, senão entidade_alias — e só nas classes que podem
+    ser referente de Sobre: (CLASSES_SOBRE). Com classe: ela tem de ser uma dessas. Sem
+    classe: procura em todas elas e só aceita se a chave cair numa ficha só.
+    0 -> negativa de 4 linhas, exit 1; >1 -> opções, exit 2."""
+    if classe and classe not in CLASSES_SOBRE:
+        morre(f"acervo listar casa --sobre: classe '{classe}' nao e referente de Sobre: "
+              f"(arq:0115 §6.2). Classes: {', '.join(CLASSES_SOBRE)}.", 2)
+    classes = [classe] if classe else list(CLASSES_SOBRE)
+    arr = "array[" + ", ".join(_lit(c) for c in classes) + "]::text[]"
+    k = _lit(chave)
     cand = _q(f"""
-      select coalesce(json_agg(row_to_json(t)), '[]') from (
-        select e.id::text as id, e.classe, e.chave_humana from acervo.entidade e
-         where e.chave_humana = {_lit(chave)}
+      select coalesce(json_agg(row_to_json(t) order by t.classe, t.chave_humana), '[]') from (
+        select e.id::text as id, e.classe, e.chave_humana
+          from acervo.entidade e
+         where e.classe = any({arr}) and e.estado = 'ativa' and e.chave_humana = {k}
         union
-        select e.id::text, e.classe, e.chave_humana from acervo.entidade e
-          join acervo.entidade_alias a on a.entidade_id = e.id
-         where a.alias = {_lit(chave)}
-           and not exists (select 1 from acervo.entidade e2 where e2.chave_humana = {_lit(chave)})
+        select e.id::text, e.classe, e.chave_humana
+          from acervo.entidade e join acervo.entidade_alias a on a.entidade_id = e.id
+         where e.classe = any({arr}) and e.estado = 'ativa' and a.alias = {k}
+           and not exists (select 1 from acervo.entidade e2
+                            where e2.classe = any({arr}) and e2.estado = 'ativa'
+                              and e2.chave_humana = {k})
       ) t;""", "acervo.entidade") or []
     if not cand:
-        morre(f"acervo listar casa --sobre: nenhuma entidade com chave '{chave}' em classe "
-              f"nenhuma. Forma: --sobre <classe> <chave> (ex.: --sobre verbo acervo); "
-              f"classes: acervo listar entidade.", 1)
+        parecidos = _q(f"""
+          select coalesce(json_agg(t.c order by t.sim desc, t.c), '[]') from (
+            select e.classe || ' ' || e.chave_humana as c,
+                   similarity(e.chave_humana, {k}) as sim
+              from acervo.entidade e
+             where e.classe = any({arr}) and e.estado = 'ativa'
+               and similarity(e.chave_humana, {k}) > 0.2
+             order by sim desc limit 5) t;""", "acervo.entidade") or []
+        onde = f"classe {classe}" if classe else f"classes {', '.join(CLASSES_SOBRE)}"
+        morre(f"acervo listar casa --sobre: nenhuma ficha ativa com chave '{chave}' "
+              f"({onde}; exato nem alias).\n"
+              f"varrido:   acervo.entidade ({onde}, estado ativa) e acervo.entidade_alias\n"
+              f"parecidos: {', '.join(parecidos) or '(nenhuma chave parecida)'}\n"
+              f"vizinho:   acervo listar entidade\n"
+              f"cura:      a ficha do referente nasce no fichário (migração/curadoria de "
+              f"dados), não no documento; o Sobre: só cita a chave (arq:0115 §6)", 1)
     if len(cand) > 1:
         ops = "\n".join(f"    --sobre {c['classe']} {c['chave_humana']}" for c in cand)
         morre(f"acervo listar casa --sobre: '{chave}' ambiguo ({len(cand)} fichas); "
@@ -469,11 +539,11 @@ def resolver(especie, seletor, info):
 
 
 def ler(especie, seletor, quero_json, situacao=False):
+    normalizar(especie, seletor)   # forma inválida é erro de uso (exit 2) antes de tocar o banco
     info = _especie(especie)
     linha = resolver(especie, seletor, info)
     fonte = _fonte()
-    main_esp = _suporte.main_do_espelho()
-    sit = _situacao(linha, fonte, main_esp)
+    sit = _situacao(linha, fonte, _estado_espelho())
 
     if linha.get("retirada_em"):
         # §3.5: a chave segue resolvível; responde a sucessora, sem o texto.

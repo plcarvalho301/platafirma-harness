@@ -31,7 +31,8 @@ REPO = "platafirma-conhecimento"
 REG = os.environ.get("PF_MOTOR_REG") or str(_ARVORE / "registro" / "motor-instancias.json")
 CANON_INSTANCIA = "/srv/platafirma/casa/"
 DOCKER_HOST = "unix:///run/user/1001/docker.sock"  # o mesmo do bin/motor
-SPEC = "https://github.com/plcarvalho301/platafirma-arquitetura/blob/main/docs/spec_acervo.md"
+# a spec do verbo mora no suporte da casa e se lê pela chave (arq:0115; mesmo SPEC de bin/acervo)
+SPEC = "spec acervo (acervo ler casa spec acervo)"
 
 
 def morre(msg: str, cod: int = 3) -> None:
