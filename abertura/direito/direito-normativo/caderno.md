@@ -15,6 +15,19 @@
   Sinal: colegiado com todas as unidades decidindo a fronteira entre elas.
 - Guia do órgão central lido como norma — é orientação e se declara adaptável; vincula
   o decreto ou a portaria que ele comenta. Sinal: «o guia exige».
+- Densidade da norma é escolha de capacidade — regra exige capacidade de executar;
+  padrão só se justifica se quem aplica está em melhor posição que o redator e tem
+  capacidade de julgar. Dispositivo que não é nem regra clara nem padrão confiado a
+  quem sabe julgar isenta o gestor: não há contra o que cobrar. Conduta frequente pede
+  regra, rara pede padrão. Sinal: dispositivo vago que não diz quem julga.
+- Norma interna de órgão cai fora do regime de qualidade regulatória (AIR só para
+  interesse geral de agentes econômicos ou usuários; linguagem simples só para texto
+  ao cidadão; consulta da LINDB ressalva organização interna). O que a rege é o
+  D12002, que alcança ato inferior a decreto. Sinal: «precisa de AIR» ou «a lei de
+  linguagem simples obriga» dito de portaria interna.
+- Regra interna sigilosa impede o afetado de checar o desvio dela. Em política de
+  órgão de inteligência, a norma nomeia quem confere o cumprimento no lugar de quem
+  não pode ler a regra. Sinal: norma classificada sem instância de verificação.
 
 ## diario de bordo
 
@@ -24,3 +37,6 @@
 - 2026-09-22 — tentei mesa anota com prosa no lugar do slot, recusou (slot: minúsculas, dígitos e hífen, até 24 chars); criei slots livres e descansar os marcou órfãos (slug não declarado na persona) — contorno encontrado NA DATA 2026-09-22 foi consolidar no slot do chapéu e limpar os órfãos.
 - 2026-09-22 — tentei ler os PDFs do Project do claude.ai com pdfinfo/pdftotext, falharam: são zip de jpeg+txt por página — contorno encontrado NA DATA 2026-09-22 foi unzip e ler os .txt.
 - 2026-09-22 — tentei escrever caderno por mesa caderno, é só leitura; o clone de fallback estava em ramo fabrica/180 — contorno encontrado NA DATA 2026-09-22 foi repo abrir (worktree destacado em origin/main) + write_file + commitar/empurrar.
+- 2026-09-23 — tentei conferir existe persona guara, erro de uso (tipos aceitos: cadeira|verbo|card|arquivo|mesa); tentei motor rag buscar casa "Guará persona cadeira", não trouxe o alias — contorno encontrado NA DATA 2026-09-23 foi persona foto (alias → slug).
+- 2026-09-23 — tentei run_command com lote de 6 motor buscar, 2 itens voltaram omitido_por_teto — contorno encontrado NA DATA 2026-09-23 foi reenviar os itens restantes em lote novo.
+- 2026-09-23 — tentei acrescentar à mesa com mesa anota, ele reescreve o slot inteiro (sem append) e avisa que ato pendente vai em mesa item — contorno encontrado NA DATA 2026-09-23 foi reenviar o slot completo e plantar a pendência com mesa item.
