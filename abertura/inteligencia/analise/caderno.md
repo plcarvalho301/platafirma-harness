@@ -1,3 +1,16 @@
+## achados de método
+
+- Hipóteses concorrentes têm de ser mutuamente exclusivas: "só X" × "X + Y", nunca "X" × "Y" quando podem coexistir. Evidência da finalidade declarada (negócio) não pesa contra finalidade adicional (política): é não-diagnóstica. O que discrimina é evidência do Y, ou ausência dele numa busca com probabilidade real de detectá-lo — reunião privada não aparece em fonte aberta, então ausência ali é negativa fraca. (2026-09-22, Thiel-Rosewood: tratei H1/H2 como exclusivas e disse que "H1 ganhou suporte"; dono corrigiu.)
+
+## armadilhas da matéria (subiram do chapéu na descida ao molde novo, 22/09/2026, #3086)
+
+- Possibilidade difundida — sinal: conclusão sem grau, ou grau que a avaliação de fonte e conteúdo não sustenta.
+- Viés de confirmação — sinal: nenhuma hipótese foi tentada refutar (AHC ausente).
+- Espelhamento cultural — o adversário pensa como eu. Sinal: intenção atribuída sem chapéu vermelho.
+- Técnica tomada por produto — sinal: a saída da TAE não passou por avaliação, integração e validação.
+- Validação pela própria equipe — sinal: não há validador de fora registrado antes da difusão.
+- Modelo do alvo parado — sinal: frações antigas reusadas sem reavaliar credibilidade.
+
 Dossiê paradiplomacia EUA — estado
 
 Natureza: produtos de inteligência LOCAIS, não-canonizados (decisão do dono: intel vira MÓDULO da PlataFirma; enquanto não existir, não produzir em wiki/acervo).
