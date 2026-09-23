@@ -10,10 +10,18 @@ import subprocess
 import sys
 from datetime import date
 
-from openpyxl import Workbook
-from openpyxl.cell.cell import ILLEGAL_CHARACTERS_RE
-from openpyxl.styles import Alignment, Font, PatternFill
-from openpyxl.utils import get_column_letter
+import re
+
+# o mesmo conjunto que o openpyxl recusa (\x00-\x1f menos \t \n \r), declarado aqui para a
+# limpeza nao depender de nome interno da biblioteca
+ILLEGAL_CHARACTERS_RE = re.compile(r"[\000-\010]|[\013-\014]|[\016-\037]")
+
+try:
+    from openpyxl import Workbook
+    from openpyxl.styles import Alignment, Font, PatternFill
+    from openpyxl.utils import get_column_letter
+except ImportError:  # so main() precisa; limpa() e testavel sem a biblioteca
+    Workbook = None
 
 CONTAINER = "rag-extractor-pg"
 DB = "rag_extractor"
@@ -21,8 +29,8 @@ USER = "rag"
 SCHEMA = "acervo"
 OUT = f"/tmp/acervo-{date.today().isoformat()}.xlsx"
 
-HEADER_FILL = PatternFill("solid", fgColor="1F3864")
-HEADER_FONT = Font(bold=True, color="FFFFFF")
+HEADER_FILL = PatternFill("solid", fgColor="1F3864") if Workbook else None
+HEADER_FONT = Font(bold=True, color="FFFFFF") if Workbook else None
 
 
 def limpa(valor: str) -> str:
@@ -57,6 +65,9 @@ def tabelas() -> list[str]:
 
 
 def main() -> int:
+    if Workbook is None:
+        print("acervo extrato: openpyxl ausente neste python", file=sys.stderr)
+        return 3
     wb = Workbook()
     wb.remove(wb.active)
     resumo = []
