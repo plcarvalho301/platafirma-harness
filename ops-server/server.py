@@ -1575,7 +1575,6 @@ PERSONAS = Path(os.environ.get(
     "PF_PERSONAS", INSTANCIA / "var/abertura-publicada/current/abertura"))
 ORG_CANONICO = Path(os.environ.get(
     "PF_ORG", raizes.release() / "arquitetura/docs/org-template-canonico.md"))
-MANIFESTO_GERAL = Path(os.environ.get("PF_MANIFESTO_GERAL", PERSONAS / "oficio.md"))
 
 
 RE_NOME = re.compile(r"^Você é ([A-Za-zÀ-ÿ][A-Za-zÀ-ÿ-]*)")
@@ -2311,10 +2310,6 @@ async def _sessao_abrir(req):
         pac["persona"] = {"ausente": True, "path": str(pf),
                           "aviso": "persona ainda nao escrita (RH). Ausencia declarada, "
                                    "nao omissao: opere pelo que o manifesto e a caixa dizem."}
-
-    mf = PF_HARNESS / "abertura/oficio.md"
-    pac["manifesto"] = ({"path": str(mf), "content": mf.read_text(encoding="utf-8")}
-                        if mf.is_file() else {"ausente": True, "path": str(mf)})
 
     pac["memoria"] = _memoria(quem)
     try:
