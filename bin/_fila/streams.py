@@ -69,7 +69,7 @@ ESPIA = "gestao-estrategica"
 # Pode so medir profundidade (status); qualquer outro verbo e negado em so_leitura().
 LEITOR = "sonda"
 GRUPO = "cadeira"
-TIPOS_VALIDOS = {"decisao", "resposta", "pedido", "minuta", "demanda", "handoff"}
+TIPOS_VALIDOS = {"decisao", "resposta", "pedido", "minuta", "demanda", "handoff", "recusa"}
 
 # Persona de classe externa (DMZ): tem caixa na malha, mas nao tem par livre. O
 # Jaiminho existe em PERSONAS_PARTICIPANTES para ser destinatario VALIDO do Elias — sem isso o
