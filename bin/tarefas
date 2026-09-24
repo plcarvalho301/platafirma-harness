@@ -621,7 +621,7 @@ apagar_comentario() {
 
 # --- débito técnico ---------------------------------------------------------
 
-# RITO DO DÉBITO TÉCNICO — platafirma-arquitetura/docs/rito-debito-tecnico.md, assinado
+# RITO DO DÉBITO TÉCNICO — padrao rito-debito-tecnico, assinado
 # pelo dono em 26/08/2026 (card #179, sucedido em execução pelo #2854). DT é defeito ou
 # dívida MEDIDA que não bloqueia ninguém hoje. O balde é um card task-pai FIXO (decisão 1
 # do dono): cada filho dele é um item de DT. Este verbo opera sobre os filhos desse pai —
@@ -765,7 +765,7 @@ uso:
   tarefas dt vencidos                     pauta da revisão: itens >30d ou sem medição (rito §2)
 
 O balde é o card task-pai #{TAREFAS_DT_PAI:-2856}; cada filho é um item de débito técnico.
-Rito: platafirma-arquitetura/docs/rito-debito-tecnico.md
+Rito: padrao rito-debito-tecnico
 FIM
       exit 2 ;;
   esac

@@ -79,7 +79,7 @@ ACEITE:
 6. `git grep` por localStorage, sessionStorage e nome de framework de front no diff volta
    vazio.
 
-## Spec (platafirma-arquitetura/docs/specs/spec_plano-de-controle-harness.md) — pontos que regem
+## Spec (spec plano-de-controle-harness) — pontos que regem
 o desenho de dado, não só de tela
 
 - Réguas de admissão: (1) espelho humano — todo elemento operável espelha um processo que

@@ -1,6 +1,6 @@
 """Harness de pesquisa web soberana — verbo `pesquisar`.
 
-spec: platafirma-arquitetura/docs/specs/spec_pesquisa-web.md
+spec: spec pesquisa-web
 capacidade: pesquisa-web  ·  dono: claudinha-inteligencia
 engenharia do verbo e do loop: ia (chapéu engenharia-de-harness)
 

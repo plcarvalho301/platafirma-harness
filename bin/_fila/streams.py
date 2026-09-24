@@ -14,7 +14,7 @@
 # escreve: malha msg — XADD na caixa do destinatario (enviar); XACK do ponteiro do grupo (ler quente); nada em status/tipos/ler frio
 # substitui: redis-cli XADD/XREADGROUP/XRANGE na caixa; o "cola a mensagem aqui" que a conduta do dono proibe
 # conforme: parcial (spec_fila §6)
-# spec: platafirma-arquitetura/docs/spec_fila.md
+# spec: spec fila
 #
 # Substrato: componente msg do motor (arq:0018, arq:0036). Stream por caixa,
 # "caixa:<persona>", com consumer group unico "cadeira" — a cadeira dona e o unico

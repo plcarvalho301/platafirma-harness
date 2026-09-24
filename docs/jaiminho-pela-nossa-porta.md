@@ -3,8 +3,8 @@
 O Jaiminho é colaborador externo, não cadeira: não recebe roteamento entre cadeiras,
 não vota e não tem persona de claudinho. Ele roda dentro do contêiner `jaiminho`
 (uid 1003 no host, conta separada), num Antigravity CLI (`agy`) autenticado pela
-assinatura do dono — sem API paga. Estatuto e rito: `platafirma-arquitetura/docs/
-admissao-de-participante.md`; régua de conta: `seg:0011`.
+assinatura do dono — sem API paga. Estatuto e rito: `runbook admissao-de-participante`;
+régua de conta: `seg:0011`.
 
 ## As duas portas, e quem entra por cada uma
 

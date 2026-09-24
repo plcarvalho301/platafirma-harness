@@ -31,7 +31,7 @@ BIN = os.environ.get("PF_BIN") or str(_ARVORE / "bin")
 DOCKER = {"DOCKER_HOST": "unix:///run/user/1001/docker.sock"}
 
 
-SPEC = "https://github.com/plcarvalho301/platafirma-arquitetura/blob/main/docs/spec_motor.md"
+SPEC = "spec motor (acervo ler casa spec motor)"
 PARTICOES = ("obra", "casa", "registro")
 
 def resolve_particao(argv, ato):
