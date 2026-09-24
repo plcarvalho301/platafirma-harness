@@ -60,7 +60,7 @@ def _gate(servindo: bool = True, historico: bool = True) -> Gate:
 def test_extrai_chave_de_cada_uma_das_seis_fontes():
     texto = (
         f"Ver {CHAVE}, o item:447, a carta caixa:claudinho-IA/1692-0, "
-        "a decisão adr:0064, a página wiki:1204#recuperador e mem:ia:harness#107."
+        "a decisão arq:0064, a página wiki:1204#recuperador e mem:ia:harness#107."
     )
     achadas = extrai_chaves(texto)
     assert len(achadas) == 6
@@ -69,7 +69,7 @@ def test_extrai_chave_de_cada_uma_das_seis_fontes():
 
 
 def test_pontuacao_final_nao_entra_na_chave():
-    assert extrai_chaves("a decisão adr:0064.") == ["adr:0064"]
+    assert extrai_chaves("a decisão arq:0064.") == ["arq:0064"]
 
 
 def test_chave_repetida_sai_uma_vez_so():

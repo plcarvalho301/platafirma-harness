@@ -127,7 +127,8 @@ _PREFIXO_CHAVE_SEED = {
     "board": ("item:",),
     "fila": ("caixa:",),
     "mesa": ("mem:",),
-    "registro": ("adr:", "seg:", "ont:"),
+    # arq:0111 §1: registro setorial cobre arq (canônico) + seg/ont/infra/integracao/org.
+    "registro": ("arq:", "seg:", "ont:", "infra:", "integracao:", "org:"),
     "wiki": ("wiki:",),
     "acervo": ("acervo:",),
 }
