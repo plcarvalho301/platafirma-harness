@@ -14,7 +14,7 @@
 # escreve: malha msg — XADD na caixa do destinatario (enviar); XACK do ponteiro do grupo (ler quente); nada em status/tipos/ler frio
 # substitui: redis-cli XADD/XREADGROUP/XRANGE na caixa; o "cola a mensagem aqui" que a conduta do dono proibe
 # conforme: parcial (spec_fila §6)
-# spec: platafirma-arquitetura/docs/spec_fila.md
+# spec: spec fila
 #
 # Shim: o cabecalho canonico (proposito/capacidade/dono/use para/atos) mora AQUI,
 # no binario que `conferir verbo`/`release conferir` leem, e nao so no modulo

@@ -18,7 +18,7 @@ publica. Não há figura em `docs/` nem em subpasta de assunto.
 - **Índice obrigatório:** diagrama novo entra na tabela abaixo no mesmo commit.
 - **Instrumento não mora aqui**: `tooling/diagramas/`.
 
-Régua de forma: `platafirma-arquitetura/design/diagramas.md`.
+Régua de forma: `padrao diagramas`.
 
 ## Índice
 
