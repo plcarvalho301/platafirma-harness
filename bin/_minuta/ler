@@ -2,7 +2,7 @@
 """minuta ler — sem argumento, as minutas abertas em que PF_CADEIRA está
 convocada (número, título, quem abriu, idade em dias, seção vazia ou não);
 com argumento, o arquivo inteiro. Leitura fria: não muda estado, não marca
-nada como visto. Protocolo: platafirma-arquitetura/minutas/PROTOCOLO.md.
+nada como visto. Protocolo: padrao protocolo-de-minuta.
 """
 import os
 import re
@@ -16,8 +16,8 @@ sys.path.insert(0, os.path.join(
     os.path.dirname(os.path.dirname(os.path.dirname(os.path.realpath(__file__)))), "lib"))
 from raizes import release  # noqa: E402
 
-REPO = os.environ.get("MINUTA_REPO") or str(release() / "arquitetura")
-DIR = os.path.join(REPO, "minutas")
+REPO = os.environ.get("MINUTA_REPO") or str(release() / "casa")
+DIR = os.path.join(REPO, "minuta")
 PLACEHOLDER_CONV = "<a preencher pela própria cadeira>"
 PLACEHOLDER_ABRE = "<escreva aqui antes de circular>"
 
