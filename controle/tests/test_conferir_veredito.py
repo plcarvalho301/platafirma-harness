@@ -1238,3 +1238,78 @@ def test_vocabulario_indeterminavel_quando_nao_consegue_ler_arquivo(monkeypatch,
     indeterminaveis = [it for it in dado["itens"] if it["estado"] == "indeterminavel"]
     assert len(indeterminaveis) == 1
     assert "nao consegui ler" in indeterminaveis[0]["motivo"]
+
+
+# --- conferir_diagrama (card #3142) --------------------------------------------
+
+class _RespostaKrokiFake:
+    def __init__(self, status):
+        self.status = status
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        return False
+
+
+def test_diagrama_conforme_quando_kroki_compila(monkeypatch, capsys, tmp_path):
+    alvo = tmp_path / "fluxo.mmd"
+    alvo.write_text("graph TD; a-->b;", encoding="utf-8")
+    monkeypatch.setenv("KROKI_URL", "http://kroki.test:8000")
+    monkeypatch.setattr(conferir, "_sha_release", lambda: "abc1234")
+    monkeypatch.setattr(conferir.urllib.request, "urlopen",
+                         lambda req, timeout=5: _RespostaKrokiFake(200))
+
+    exit_code = conferir.conferir_diagrama(str(alvo), como_json=True)
+    saida = capsys.readouterr()
+
+    assert exit_code == 0
+    dado = json.loads(saida.out)
+    item = dado["itens"][0]
+    assert item["nome"] == str(alvo)
+    assert item["estado"] == "conforme"
+
+
+def test_diagrama_divergente_quando_kroki_recusa_o_render(monkeypatch, capsys, tmp_path):
+    import io
+
+    alvo = tmp_path / "quebrado.mmd"
+    alvo.write_text("isto nao e mermaid valido", encoding="utf-8")
+    monkeypatch.setenv("KROKI_URL", "http://kroki.test:8000")
+    monkeypatch.setattr(conferir, "_sha_release", lambda: "abc1234")
+
+    def _urlopen(req, timeout=5):
+        raise conferir.urllib.error.HTTPError(
+            "http://kroki.test:8000/mermaid/svg", 400, "Bad Request",
+            {}, io.BytesIO(b"erro de sintaxe na linha 1"))
+    monkeypatch.setattr(conferir.urllib.request, "urlopen", _urlopen)
+
+    exit_code = conferir.conferir_diagrama(str(alvo), como_json=True)
+    saida = capsys.readouterr()
+
+    assert exit_code == 1
+    dado = json.loads(saida.out)
+    item = dado["itens"][0]
+    assert item["estado"] == "divergente"
+    assert "erro de sintaxe" in item["motivo"]
+
+
+def test_diagrama_indeterminavel_quando_kroki_inalcancavel(monkeypatch, capsys, tmp_path):
+    alvo = tmp_path / "fluxo.d2"
+    alvo.write_text("a -> b", encoding="utf-8")
+    monkeypatch.setenv("KROKI_URL", "http://kroki.test:8000")
+    monkeypatch.setattr(conferir, "_sha_release", lambda: "abc1234")
+
+    def _urlopen(req, timeout=5):
+        raise conferir.urllib.error.URLError("connection refused")
+    monkeypatch.setattr(conferir.urllib.request, "urlopen", _urlopen)
+
+    exit_code = conferir.conferir_diagrama(str(alvo), como_json=True)
+    saida = capsys.readouterr()
+
+    assert exit_code == 5
+    dado = json.loads(saida.out)
+    item = dado["itens"][0]
+    assert item["estado"] == "indeterminavel"
+    assert "connection refused" in item["motivo"]

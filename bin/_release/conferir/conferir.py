@@ -2925,36 +2925,41 @@ def conferir_diagrama(alvo, como_json=False):
         return 2
 
     req = urllib.request.Request(f"{endpoint}/{diagram_type}/svg", data=c.encode("utf-8"), headers={"Content-Type": "text/plain"}, method="POST")
+    itens = []
     try:
         with urllib.request.urlopen(req, timeout=5) as response:
             if response.status == 200:
-                if como_json:
-                    print(json.dumps({"arquivo": alvo, "status": "ok"}))
-                else:
+                if not como_json:
                     print(f"diagrama: ok ({diagram_type})")
-                return 0
+                itens.append((alvo, resultado.conforme()))
             else:
                 msg = f"Kroki retornou status {response.status}"
-                if como_json:
-                    print(json.dumps({"arquivo": alvo, "status": "erro", "erro": msg}))
-                else:
+                if not como_json:
                     print(f"erro na compilação: {msg}", file=sys.stderr)
-                return 1
+                itens.append((alvo, resultado.divergente(msg)))
     except urllib.error.HTTPError as e:
         erro_msg = e.read().decode('utf-8', errors='replace')
-        if como_json:
-            print(json.dumps({"arquivo": alvo, "status": "erro", "erro": erro_msg}))
-        else:
+        if not como_json:
             print(f"diagrama quebrado: {alvo}", file=sys.stderr)
             print(erro_msg, file=sys.stderr)
-        return 1
-    except Exception as e:
-        msg = f"falha ao falar com o Kroki em {endpoint}: {e}"
-        if como_json:
-            print(json.dumps({"arquivo": alvo, "status": "erro", "erro": msg}))
-        else:
+        itens.append((alvo, resultado.divergente(erro_msg)))
+    except (urllib.error.URLError, TimeoutError, OSError) as e:
+        # Kroki inalcancavel (conexao recusada, DNS, timeout de conexao) — nao
+        # consegui olhar, nao e defeito no diagrama: indeterminavel (card #3142).
+        msg = f"nao consegui falar com o Kroki em {endpoint}: {e}"
+        if not como_json:
             print(f"erro: {msg}", file=sys.stderr)
-        return 1
+        itens.append((alvo, resultado.indeterminavel(msg)))
+    except Exception as e:
+        # falha inesperada falando com o Kroki: tambem nao e defeito confirmado
+        # no diagrama — nao consegui olhar nunca vira conforme nem divergente
+        # por padrao aqui.
+        msg = f"falha ao falar com o Kroki em {endpoint}: {e}"
+        if not como_json:
+            print(f"erro: {msg}", file=sys.stderr)
+        itens.append((alvo, resultado.indeterminavel(msg)))
+
+    return resultado.relatorio("diagrama", alvo, itens, _sha_release(), como_json=como_json)
 
 
 def conferir_vocabulario(alvo=None, como_json=False):
