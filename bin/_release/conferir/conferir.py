@@ -2787,53 +2787,34 @@ def conferir_pdp(alvo=None, como_json=False):
         {"nome": "rastreador-api", "tipo": "compose", "esperado": "/opt/platafirma/current/politica-acesso"},
     ]
 
-    houve = False
-    resultados = []
+    if not como_json:
+        print(f"\n## conferir pdp — servidores com PEP × tag de release")
+        print(f"    metodo: compara tag de release em /opt/platafirma/current, nao md5")
+        print(f"    tag corrente: {tag_current or '(nenhuma)'}\n")
+
+    itens = []
     for s in servidores:
         nome = s["nome"]
         if alvo and alvo != nome:
             continue
         pdp_path = s["esperado"]
         tag_servidor = tag_current if tag_current else "(sem tag)"
-        divergente = False
+        # card #3142: release em current ausente/sem tag e "nao consegui medir a
+        # tag", nao "medi e diverge" — indeterminavel, nunca divergente por uma
+        # falha de leitura. Sem uma tag esperada distinta para comparar, tag
+        # encontrada so pode sair conforme (nao ha hoje caminho para divergente).
         if not tag_current:
-            divergente = True
-            detalhe = "release em current nao encontrada ou sem tag"
+            v = resultado.indeterminavel("release em current nao encontrada ou sem tag")
         else:
-            detalhe = f"aponta release tag={tag_current}"
+            v = resultado.conforme()
+        if not como_json:
+            marca = {"conforme": "ok ", "divergente": "NAO", "indeterminavel": "?? "}[v.estado]
+            print(f"    {marca}: {nome:<16} {pdp_path} (tag: {tag_servidor})")
+        itens.append((nome, v))
 
-        if divergente:
-            houve = True
-        resultados.append({
-            "servidor": nome,
-            "tipo": s["tipo"],
-            "pdp": pdp_path,
-            "tag": tag_servidor,
-            "status": "divergente" if divergente else "ok",
-            "detalhe": detalhe
-        })
-
-    if como_json:
-        print(json.dumps({
-            "resultado": "divergente" if houve else "ok",
-            "tag_current": tag_current,
-            "metodo": "comparacao por tag (nao md5)",
-            "servidores": resultados
-        }, indent=2, ensure_ascii=False))
-        return 1 if houve else 0
-
-    print(f"\n## conferir pdp — servidores com PEP × tag de release")
-    print(f"    metodo: compara tag de release em /opt/platafirma/current, nao md5")
-    print(f"    tag corrente: {tag_current or '(nenhuma)'}\n")
-    for r in resultados:
-        status_txt = "ok      " if r["status"] == "ok" else "DIVERGE "
-        print(f"    {status_txt}: {r['servidor']:<16} {r['pdp']} (tag: {r['tag']})")
-    print()
-    if houve:
-        print("    Divergencia encontrada nos servidores com PEP.")
-        return 1
-    print(f"    Todos os {len(resultados)} servidores com PEP conferem na tag {tag_current}.")
-    return 0
+    if not como_json:
+        print()
+    return resultado.relatorio("pdp", alvo, itens, _sha_release(), como_json=como_json)
 
 
 def carregar_verbos_e_atos(bin_dir):

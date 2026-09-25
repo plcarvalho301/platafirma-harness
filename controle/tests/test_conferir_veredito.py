@@ -1110,3 +1110,70 @@ def test_alcance_texto_preserva_saltos_detalhados(monkeypatch, capsys):
     assert "1 identidade" in saida.out
     assert "cadeia INTEIRA" in saida.out
     assert "release conferir alcance claudinho acervo: 1 conforme" in saida.out
+
+
+# --- conferir_pdp (card #3142) ---------------------------------------------
+
+def _pdp_current_com_release(tmp_path):
+    """Cria uma release fake e devolve o symlink current -> release, para testar
+    o caminho onde a tag corrente E encontrada."""
+    release = tmp_path / "rel-abc1234"
+    release.mkdir()
+    link = tmp_path / "current"
+    link.symlink_to(release)
+    return link
+
+
+def test_pdp_conforme_quando_tag_encontrada(monkeypatch, tmp_path, capsys):
+    link = _pdp_current_com_release(tmp_path)
+    monkeypatch.setenv("PF_CURRENT_LINK", str(link))
+    monkeypatch.setattr(conferir, "_sha_release", lambda: "abc1234")
+
+    exit_code = conferir.conferir_pdp("ops-server", como_json=True)
+    saida = capsys.readouterr()
+
+    assert exit_code == 0
+    dado = json.loads(saida.out)
+    assert len(dado["itens"]) == 1
+    item = dado["itens"][0]
+    assert item["nome"] == "ops-server"
+    assert item["estado"] == "conforme"
+    assert item["motivo"] is None
+
+
+def test_pdp_indeterminavel_quando_current_nao_encontrada(monkeypatch, tmp_path, capsys):
+    # card #3142: release em current ausente e "nao consegui medir a tag", nao
+    # "medi e diverge" — antes desta correcao isto marcava os 4 servidores como
+    # divergente (exit 1); agora sai indeterminavel (exit 5), sem mascarar a
+    # falha de leitura como defeito medido.
+    link_inexistente = tmp_path / "current-nao-existe"
+    monkeypatch.setenv("PF_CURRENT_LINK", str(link_inexistente))
+    monkeypatch.setattr(conferir, "_sha_release", lambda: "abc1234")
+
+    exit_code = conferir.conferir_pdp(None, como_json=True)
+    saida = capsys.readouterr()
+
+    assert exit_code == 5
+    dado = json.loads(saida.out)
+    assert len(dado["itens"]) == 4
+    assert all(item["estado"] == "indeterminavel" for item in dado["itens"])
+    assert all("nao encontrada" in item["motivo"] for item in dado["itens"])
+    assert "4 não consegui olhar" in dado["ancora"]
+
+
+def test_pdp_sem_caminho_de_divergencia_hoje(monkeypatch, tmp_path, capsys):
+    """Documenta o estado real da classe: sem uma tag 'esperada' distinta para
+    comparar, tag encontrada so pode sair conforme — nao ha hoje logica que
+    produza divergente para pdp. Se essa comparacao for adicionada depois, este
+    teste precisa mudar junto."""
+    link = _pdp_current_com_release(tmp_path)
+    monkeypatch.setenv("PF_CURRENT_LINK", str(link))
+    monkeypatch.setattr(conferir, "_sha_release", lambda: "abc1234")
+
+    exit_code = conferir.conferir_pdp(None, como_json=True)
+    saida = capsys.readouterr()
+
+    assert exit_code == 0
+    dado = json.loads(saida.out)
+    assert len(dado["itens"]) == 4
+    assert all(item["estado"] == "conforme" for item in dado["itens"])
