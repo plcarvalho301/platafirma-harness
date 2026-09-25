@@ -126,8 +126,9 @@ def test_chave_com_prefixo_de_outra_fonte_levanta():
         Procedencia(fonte=Fonte.WIKI, chave="acervo:df70f05c#x", versao=versao())
 
 
-def test_registro_aceita_as_tres_series():
-    for chave in ("adr:0064", "seg:0013", "ont:0001"):
+def test_registro_aceita_as_series_do_registro_setorial():
+    # arq:0111/0115: qualificador canônico é `arq:`, não `adr:` (espécie != série).
+    for chave in ("arq:0064", "seg:0013", "ont:0001", "infra:0001", "integracao:0001", "org:0001"):
         p = Procedencia(fonte=Fonte.REGISTRO, chave=chave, versao=versao(VersaoTipo.SHA, "18350e7"))
         assert p.chave == chave
 

@@ -61,6 +61,12 @@ bancada_de() {
   local cadeira="${PF_CADEIRA:-}"
   cadeira="${cadeira#claudinho-}"
   cadeira="${cadeira#claudinha-}"
+  # a bancada da SESSAO primeiro, como no `repo` (repo abrir cria wt/<repo>/<sessao>)
+  local sid="${PF_SESSAO:-}"
+  if [ -n "$sid" ] && [ -d "$BANCADA/wt/$nome/$sid" ] && [ -e "$BANCADA/wt/$nome/$sid/.git" ]; then
+    printf '%s/wt/%s/%s' "$BANCADA" "$nome" "$sid"
+    return 0
+  fi
   if [ -n "$cadeira" ] && [ -d "$BANCADA/wt/$nome/$cadeira" ] && [ -e "$BANCADA/wt/$nome/$cadeira/.git" ]; then
     printf '%s/wt/%s/%s' "$BANCADA" "$nome" "$cadeira"
     return 0

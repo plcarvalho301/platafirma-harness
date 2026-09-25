@@ -6,7 +6,7 @@ arquivo lossless; varredura no harness @5a8ce8c; triagem para expediente é pass
 
 O termo "capacidade" da lógica `capacidade : verbo : ferramenta` SEMPRE foi a
 **business capability do BIZBOK** — a mesma coisa do mapa em
-`platafirma-arquitetura/docs/arquitetura-negocio-operacao.md` (§1, 20 capacidades em
+`vocabulario arquitetura-negocio-operacao` (§1, 20 capacidades em
 4 tiers, régua `arq:0059`). Não é taxonomia própria do ferramental.
 
 - Diferença é só de nomenclatura, não de conceito: `iam == acesso`,
@@ -56,10 +56,10 @@ produzidos de volta. Nome humano (alias) sai de `abertura/aliases.json` (dado vi
 
 ## Fronteira instância-individual × instância-de-órgão vive no plano de acesso, não no de conhecimento
 
-Medido na fita 27/08/2026 (produtização #180). Registro canônico: `platafirma-arquitetura/docs/kernel-platafirma-rascunho.md` + `docs/fronteira-tecnica-produtizacao.md`.
+Medido na fita 27/08/2026 (produtização #180). Registro canônico: `nota-tecnica 2026-09-03-kernel-platafirma` + `nota-tecnica 2026-08-27-fronteira-tecnica-produtizacao`.
 
 - O módulo `conhecimento` (wiki+RAG+acervo+ontologia) e o MOTOR do harness são **invariantes** entre a instância-de-um e a de-órgão. O delta de órgão é inteiro no **plano de identidade/acesso**: Keycloak passa de emissor de token de cadeira a **IdP de gente**, a grade concessão/PDP acorda (hoje vazia por decisão — falha fechada), e entra o namespace/lockdown da F5.
-- O harness se parte **motor × personas** na MESMA linha MIREOT da ontologia (product-spec §4.2): motor (`ops-server`, `bin`, `mcp`, `sessao`, `politica-acesso`, `tooling`, `deploy-harness`) = plataforma; `abertura/<cadeira>`, `registro` (ledger), `sujeitos.yaml` = instância; `jaiminho` é motor (ponte de canal, `.env` fora); `distribuicao` é espólio, terceira classe que o corte binário não tinha (recorte arquivo a arquivo: `platafirma-arquitetura/docs/recorte-produto-x-instancia-por-diretorio.md`, 05/09). Corrigido 05/09 (minuta 0023): `chat/` NÃO é instância inteira — `chat/motores` (runner, `escolhe_motor`) é motor, o que torna o modelo trocável; salas, aliases e `MODELOS_LOCAIS` são instância. O corte às vezes passa POR DENTRO de um componente: `cadeiras.py` é motor, o ledger que ele lê é instância — produtizar o harness exige extrair o motor e tratar `abertura/`+`registro/` como pacote de instância.
+- O harness se parte **motor × personas** na MESMA linha MIREOT da ontologia (product-spec §4.2): motor (`ops-server`, `bin`, `mcp`, `sessao`, `politica-acesso`, `tooling`, `deploy-harness`) = plataforma; `abertura/<cadeira>`, `registro` (ledger), `sujeitos.yaml` = instância; `jaiminho` é motor (ponte de canal, `.env` fora); `distribuicao` é espólio, terceira classe que o corte binário não tinha (recorte arquivo a arquivo: `padrao recorte-produto-x-instancia-por-diretorio`, 05/09). Corrigido 05/09 (minuta 0023): `chat/` NÃO é instância inteira — `chat/motores` (runner, `escolhe_motor`) é motor, o que torna o modelo trocável; salas, aliases e `MODELOS_LOCAIS` são instância. O corte às vezes passa POR DENTRO de um componente: `cadeiras.py` é motor, o ledger que ele lê é instância — produtizar o harness exige extrair o motor e tratar `abertura/`+`registro/` como pacote de instância.
 - Keycloak no compose do core hoje só provisiona service accounts de cadeira (`client_credentials`, `provisiona-realm.sh`); o papel de IdP humano é o que o órgão exige. README do core chama IAM de "próximo épico" — scaffoldado, não vivo. Individual sobrevive sem Keycloak "de gente" (token de agente é até substituível por estático, product-spec §8).
 - Régua de produto da casa (dono, 27/08): **não há venda** (dono é servidor público estável); norte é **adoção como valor público, foco APF**. Consequência arquitetural: `canal` é adoção/distribuição, nunca funil comercial; a fronteira produto×vendas da gap-de-estrategia (16/08) se dissolve.
 

@@ -502,7 +502,7 @@ def bloco_caixas(bloco: dict, limiar_alert_seg: int = 3600) -> str:
         + campo_destino
         + '<label>Tipo <select name="tipo" required>'
         + "".join(f'<option value="{t}">{t}</option>' for t in
-                   ("decisao", "resposta", "pedido", "minuta", "demanda", "handoff"))
+                   ("decisao", "resposta", "pedido", "minuta", "demanda", "handoff", "recusa"))
         + "</select></label>"
         '<label>Assunto <input type="text" name="assunto" required></label>'
         '<label>Corpo <textarea name="corpo" required></textarea></label>'

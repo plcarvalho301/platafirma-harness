@@ -36,8 +36,8 @@ _PREFIXOS_DE_SLUG = ("claudinho-", "claudinha-")
 _NAO_SAO_CADEIRA = {"TEMPLATE", "jaiminho", "jaiminho-eng", "osint", "EXTERNO"}
 
 # PARTICIPANTE — quem tem porta com o dono sem ocupar cadeira (colaborador externo,
-# assessor, fornecedor). Rito e estatuto em platafirma-arquitetura/docs/
-# admissao-de-participante.md; quem declara o vinculo e RH, no org canonico.
+# assessor, fornecedor). Rito e estatuto em runbook admissao-de-participante;
+# quem declara o vinculo e RH, no org canonico.
 #
 # Esta lista NAO os promove a cadeira, e a diferenca e o card inteiro: cadeira tem
 # roteamento entre cadeiras e voto, participante nao. `cadeiras()` segue excluindo

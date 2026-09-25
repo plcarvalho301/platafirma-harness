@@ -1328,13 +1328,20 @@ def read_file(path: str = "", offset: int = 0, max_bytes: int = 40000,
 
 # --- write_file: tipo x morada, sem symlink, atomico (spec_porta-so-verbo §4) ----
 TIPOS_TEXTO = {".py", ".md", ".mmd", ".d2", ".sh", ".sql", ".yaml", ".yml", ".json", ".toml",
-               ".css", ".html", ".js", ".txt"}
+               ".css", ".html", ".js", ".txt", ".conf"}
+# Texto de build que se reconhece pelo nome, nao pela extensao. Entrou em 23/09/2026: sem
+# ele, stack nova com imagem propria (Dockerfile, conf do nginx) nao tinha como ser escrita
+# pela porta, e a saida era esconder o Dockerfile dentro do compose.
+NOMES_TEXTO = {"Dockerfile", ".dockerignore"}
 # platafirma-ui entrou em 22/09/2026 (hotfix): o clone existia na bancada e o front do
 # rastreador mora nele, mas a lista nomeada o deixava fora e a tela nao tinha como ser
 # corrigida pela porta.
+# platafirma-casa entrou em 23/09/2026 (arq:0115 §1.2): e o suporte do documento de casa;
+# sem ele na lista, a bancada wt/platafirma-casa/<cadeira> e o clone <bancada>/platafirma-casa
+# recusavam write_file ("fora de morada") e o conteudo nao tinha como ser escrito pela porta.
 CLONES = ("platafirma-core", "platafirma-conhecimento", "platafirma-arquitetura",
           "platafirma-harness", "platafirma-motor", "platafirma-posto", "platafirma-ui",
-          "modulo-osint")
+          "platafirma-casa", "modulo-osint")
 ESCRITA_TETO = 1_048_576
 TMP_FITA = INSTANCIA / "var" / "tmp"
 
@@ -1439,9 +1446,10 @@ def _resolve_escrita(path: str, ident: dict):
             continue
         if _em_bin_do_harness(real_pai):
             tipos = tipos | {""}
-        if ext not in tipos:
+        if ext not in tipos and alvo.name not in NOMES_TEXTO:
             return None, (f"tipo: '{ext or '(sem extensao)'}' fora de "
-                          f"{sorted(t or '(sem)' for t in tipos)} em {raiz}/")
+                          f"{sorted(t or '(sem)' for t in tipos)} (e dos nomes "
+                          f"{sorted(NOMES_TEXTO)}) em {raiz}/")
         if raiz == tmp_fita:
             rel = real_pai.relative_to(tmp_fita).parts
             if not rel:
@@ -1567,7 +1575,6 @@ PERSONAS = Path(os.environ.get(
     "PF_PERSONAS", INSTANCIA / "var/abertura-publicada/current/abertura"))
 ORG_CANONICO = Path(os.environ.get(
     "PF_ORG", raizes.release() / "arquitetura/docs/org-template-canonico.md"))
-MANIFESTO_GERAL = Path(os.environ.get("PF_MANIFESTO_GERAL", PERSONAS / "oficio.md"))
 
 
 RE_NOME = re.compile(r"^Você é ([A-Za-zÀ-ÿ][A-Za-zÀ-ÿ-]*)")
@@ -2303,10 +2310,6 @@ async def _sessao_abrir(req):
         pac["persona"] = {"ausente": True, "path": str(pf),
                           "aviso": "persona ainda nao escrita (RH). Ausencia declarada, "
                                    "nao omissao: opere pelo que o manifesto e a caixa dizem."}
-
-    mf = PF_HARNESS / "abertura/oficio.md"
-    pac["manifesto"] = ({"path": str(mf), "content": mf.read_text(encoding="utf-8")}
-                        if mf.is_file() else {"ausente": True, "path": str(mf)})
 
     pac["memoria"] = _memoria(quem)
     try:

@@ -43,7 +43,7 @@ from .verbos import BIN, HARNESS, chamar
 # release montada somente-leitura, no container.
 REPO_HARNESS = HARNESS
 
-TIPOS_VALIDOS = {"decisao", "resposta", "pedido", "minuta", "demanda", "handoff"}
+TIPOS_VALIDOS = {"decisao", "resposta", "pedido", "minuta", "demanda", "handoff", "recusa"}
 PF_CADEIRA_TELA = os.environ.get("PF_CADEIRA_TELA", "ti")
 TAREFAS_PROJETO_PADRAO = os.environ.get("TAREFAS_PROJETO_PADRAO", "46")
 

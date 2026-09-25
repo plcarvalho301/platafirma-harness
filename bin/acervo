@@ -4,26 +4,30 @@
 # dono: dados
 # classe: B
 # use para: ler uma ADR/spec/pagina/obra que sabe onde esta (ler), listar o que ha de um tipo ou sobre um assunto pelo catalogo (listar --sobre), gravar uma pagina de wiki (escrever casa pagina), por um repo de doc no acervo (ingerir casa <repo>)
-# atos: ler (leitura, casa), listar (leitura, casa), resolver (leitura, casa), escrever (escrita, registro), ingerir (escrita, incorporacao), curar (escrita, curadoria), extrato (leitura, acervo), psql (escrita, acervo)
+# atos: ler (leitura, casa), listar (leitura, casa), resolver (leitura, casa), escrever (escrita, registro), ingerir (escrita, incorporacao), curar (escrita, curadoria), extrato (leitura, acervo), exportar (escrita, acervo), psql (escrita, acervo), balde (escrita, acervo)
 # forma: texto
-# le: ler=acervo.casa,acervo.obra,acervo.registro
-# le: listar=acervo.casa,acervo.obra,acervo.registro
+# le: ler=acervo.casa,acervo.obra,acervo.registro,repo
+# le: listar=acervo.casa,acervo.obra,acervo.registro,repo
 # le: resolver=acervo.casa
 # le: escrever=nada
-# le: ingerir=release
+# le: ingerir=repo
 # le: curar=acervo.obra,acervo.casa
 # le: extrato=acervo.*
+# le: exportar=acervo.*,repo
 # le: psql=acervo.*
+# le: balde=acervo.*,minio
 # escreve: ler=nada
 # escreve: listar=nada
 # escreve: resolver=nada
 # escreve: escrever=acervo.casa
-# escreve: ingerir=acervo.casa,acervo.obra,acervo.registro,motor
+# escreve: ingerir=acervo.casa,acervo.obra,acervo.registro,motor,repo
 # escreve: curar=acervo.obra,acervo.casa
 # escreve: extrato=arquivo-local
+# escreve: exportar=repo
 # escreve: psql=acervo.*
+# escreve: balde=acervo.obra,minio
 # consome: motor_acervo_rest, rag_extractor_pg
-# ambiente: PLATAFIRMA_RELEASE[=/opt/platafirma/current] (opcional; ingerir casa le os repos da release, nunca clone), RAG_API_BASE (opcional, url do motor), RAG_API_TOKEN (opcional, auth do motor)
+# ambiente: PLATAFIRMA_INSTANCIA[=/srv/platafirma/casa] (ingerir casa le o suporte platafirma-casa pelo sha no espelho bare <instancia>/var/acervo/suporte/platafirma-casa.git, com a credencial da conta; nunca release, nunca clone de bancada; ler/listar casa so leem o origin/main ja buscado dele, para o campo servido), PF_SUPORTE_ESPELHO (opcional, override do espelho), PF_SUPORTE_URL[=https://github.com/plcarvalho301/platafirma-casa.git] (opcional, forge do suporte), RAG_API_BASE (opcional, url do motor), RAG_API_TOKEN (opcional, auth do motor)
 # depende: docker, git, psql
 # substitui: situacao, escada, descobrir, bancada
 #
@@ -31,12 +35,12 @@
 # em bin/_acervo/ e nao entram no PATH; a porta e esta.
 #
 # GRAMATICA (arq:0106): acervo <ato> <particao> <entidade> [seletor].
-# Doc de produto:
-#   https://github.com/plcarvalho301/platafirma-arquitetura/blob/main/docs/spec_acervo.md
+# Doc de produto: spec acervo, no suporte platafirma-casa, lido pela chave (arq:0115 §3.3):
+#   acervo ler casa spec acervo
 set -euo pipefail
 
 ATOS="$(dirname "$(readlink -f "$0")")/_acervo"
-SPEC="https://github.com/plcarvalho301/platafirma-arquitetura/blob/main/docs/spec_acervo.md"
+SPEC="spec acervo (acervo ler casa spec acervo)"
 
 # aviso de forma vigente/deprecada: uma vez por sessao (arq:0110 §11, spec_acervo §8)
 avisa() {
@@ -62,10 +66,17 @@ uso (gramatica arq:0106 — acervo <ato> <particao> <entidade> [seletor]):
   acervo resolver <classe> <string>
   acervo escrever <particao> <entidade> <seletor>
   acervo ingerir  <particao> <raiz> [--apply]
+  acervo ler      casa <especie> <chave>              pela chave (arq:0115 §3): acervo ler casa adr arq:0075
+  acervo listar   casa [<especie>] [--todas]          sem especie: o catalogo (projecao, regime, contagem)
+  acervo listar   casa [<especie>] --sobre <classe> <chave>   a documentacao de uma entidade
+  acervo ingerir  casa platafirma-casa[@<rev>] [--apply]      o suporte, pelo sha (arq:0115 §8.1)
   acervo lote     <id>
   acervo curar    obra lote [dest] · casa alias <classe> <chave> <alias>
+  acervo curar    obra --situacao|--expurgar|--restaurar|--promover|--reclassificar|--conceito <...>
   acervo extrato  --todas [dest]
+  acervo exportar                    regera ontologia/acervo/*.jsonl e vocabulario.json na bancada
   acervo psql     [--banco rag|motor]  <SQL por stdin>
+  acervo balde    listar|ler|copiar|mover|apagar <bucket|sha256> [...] [--apply]
 
 as particoes: obra, casa, registro (arq:0106 §3). conceito e transversal, vive em obra.
 leitura e anonima; escrever loga com a conta de bot. ato/particao/entidade desconhecidos
@@ -101,13 +112,18 @@ conforme() {
     *) echo "acervo $ato: particao '$particao' desconhecida (obra, casa, registro)." >&2
        echo "  $SPEC" >&2; exit 2 ;;
   esac
-  shift 2 || { echo "acervo $ato $particao: falta a entidade." >&2; echo "  $SPEC" >&2; exit 2; }
+  if [ $# -lt 2 ]; then
+    # `listar casa` sem especie e o catalogo das especies de casa (arq:0115 §4.3, §11)
+    [ "$ato:$particao" = "listar:casa" ] && exec "$ATOS/casa" listar
+    echo "acervo $ato $particao: falta a entidade." >&2; echo "  $SPEC" >&2; exit 2
+  fi
+  shift 2
   case "$ato:$particao:$entidade" in
     # --- casa: wiki, adr, golden records ---
     ler:casa:pagina)        exec "$ATOS/wiki" ler "$@" ;;
-    # ADR agora vive em acervo.casa (especie 'adr') como qualquer especie da tabela: cai no
-    # ramo generico `ler:casa:*` abaixo, que le de acervo.casa via _acervo/casa. O sub-ato
-    # _acervo/adr (que varria macro-global/) esta MORTO (arq:0106: `acervo adr` proscrito).
+    # ADR vive em acervo.casa (especie 'adr') como qualquer especie da tabela: cai no ramo
+    # generico `ler:casa:*` abaixo, que le a chave (arq:0075) via _acervo/casa. O sub-ato
+    # _acervo/adr, que varria o repo por caminho, esta MORTO (arq:0106: `acervo adr` proscrito).
     ler:casa:ferramental)   exec "$ATOS/ferramenta" "$@" ;;
     ler:casa:stack)         exec "$ATOS/stack" ver "$@" ;;
     ler:casa:cargo)         exec "$ATOS/wiki" cargo "$@" ;;
@@ -122,7 +138,7 @@ conforme() {
           *)    exec "$ATOS/stack" import "$@" ;;
         esac ;;
     escrever:casa:*)
-        echo "acervo escrever casa $entidade: $entidade nasce em git, não se escreve no acervo. Caminho: write_file → repo commitar → release promover → acervo ingerir casa <repo>. escrever grava só: pagina, arquivo, ferramental, stack." >&2
+        echo "acervo escrever casa $entidade: $entidade nasce em git, não se escreve no acervo. Caminho: write_file na bancada de platafirma-casa → PR → merge em main → acervo ingerir casa platafirma-casa. escrever grava só: pagina, arquivo, ferramental, stack." >&2
         exit 2 ;;
     escrever:obra:*)
         echo "acervo escrever obra: obra nasce fora e entra por acervo ingerir obra <raiz>, nunca por escrever." >&2
@@ -137,6 +153,10 @@ conforme() {
     listar:obra:conceito)   exec "$ATOS/listar" conceitos "$@" ;;
     ler:obra:objeto)        exec "$ATOS/baixar" "$@" ;;
     curar:obra:lote)        exec "$ATOS/bancada" "$@" ;;
+    # curadoria de UMA obra (#3126): entidade e a FLAG de bin/curar (--situacao, --expurgar,
+    # --restaurar, --promover, --reclassificar, --conceito, --relacionar...), nao um nome fixo
+    # -- repassa entidade + resto tal qual para _acervo/curar, que so encosta em bin/curar.
+    curar:obra:*)           exec "$ATOS/curar" obra "$entidade" "$@" ;;
     curar:casa:alias)       exec "$ATOS/curar" alias "$@" ;;
     bancada:obra:lote)      exec "$ATOS/bancada" "$@" ;;
     # --- ingerir por particao ---
@@ -152,18 +172,18 @@ conforme() {
             exec "$ATOS/../ingerir" --lote "$entidade" "$@"
         fi ;;
     ingerir:casa:*)
-        # $entidade e a <raiz> (lista curada ou clone). O cliente magro de casa (card #3027,
-        # rota POST /acervo/casa/lotes) parseia a lista, resolve sha por repo, le o corpo do
-        # git e sobe no payload -- sem MinIO, sem OCR. Nao passa pelo cliente de OBRA.
-        # $entidade repassa SEMPRE: quando e' flag (--adr), o ramo antigo a descartava, e
-        # `ingerir casa --adr` caia calado na lista curada default.
+        # $entidade e a fonte: platafirma-casa[@<rev>] (arq:0115 §8.1). O cliente magro de
+        # casa (card #3027, rota POST /acervo/casa/lotes) le o objeto git pelo sha no espelho
+        # bare do suporte, na instancia, e sobe {repo,path,sha_ref,titulo,corpo} no payload --
+        # sem MinIO, sem OCR, sem release, sem bancada. Nao passa pelo cliente de OBRA.
+        # $entidade repassa SEMPRE: flag solta (--apply) chega ao cliente, que a le.
         exec "$ATOS/casa-ingerir" "$entidade" "$@" ;;
-    # --- casa generico: especies que vivem na TABELA acervo.casa (arq:0106) ---
-    # As especies com fonte propria (adr, pagina-wiki, stack, ferramental) ja foram
+    # --- casa generico: especies que vivem na TABELA acervo.casa (arq:0106, arq:0115) ---
+    # As entidades com fonte propria (pagina, ferramental, stack, cargo, entidade) ja foram
     # capturadas acima. O que sobra em ler/listar casa <especie> vai ao sub-ato casa,
-    # que valida a especie contra acervo.especie_tipo e le de acervo.casa. Assim as
-    # especies novas (caderno, persona, spec, minuta, cabecalho-de-verbo, automacao)
-    # sao servidas sem hard-code, resolvendo contra a taxonomia viva.
+    # que valida a especie contra acervo.especie_tipo e le de acervo.casa PELA CHAVE
+    # (adr arq:0075, spec acervo, nota-tecnica 2026-09-08-...). `listar casa --sobre <classe>
+    # <chave>` chega aqui com --sobre no lugar da especie, e o sub-ato o trata.
     ler:casa:*)             exec "$ATOS/casa" ler "$entidade" "$@" ;;
     listar:casa:*)          exec "$ATOS/casa" listar "$entidade" "$@" ;;
     *) echo "acervo $ato $particao $entidade: combinacao nao servida." >&2
@@ -233,6 +253,12 @@ case "$ATO" in
       *) avisa "acervo extrato" "acervo extrato --todas" ;;
     esac
     exec "$ATOS/extrato" "$@" ;;
+  # exportar: a cadeia derivada do vocabulario (export -> vocabulario.json) na bancada da
+  # sessao. Contrato do export e de dados; o ato so expoe (pedido 20260922T220127-dados).
+  exportar)        exec python3 "$ATOS/exportar" "$@" ;;
+  # balde: braco do curador sobre o store MinIO (#3126, pedido 20260922T180117-dados) --
+  # listar/ler/copiar/mover/apagar objeto de bucket, plano seco por padrao e --apply pra gravar.
+  balde)           exec python3 "$ATOS/balde" "$@" ;;
   psql)
     case "${1:-}" in
       --banco|--sql) ;;
@@ -253,20 +279,16 @@ case "$ATO" in
   wiki)            avisa "acervo wiki <ato>" "acervo ler/listar/escrever casa pagina|arquivo|cargo"
                    exec "$ATOS/wiki"    "$@" ;;
 
+  # `acervo adr` esta proscrito (arq:0106) e o atalho supunha a serie arq para numero nu,
+  # o que arq:0115 §3.2 desfaz (arq e ont compartilham numeros): recusa com a forma certa.
   adr)
-    avisa "acervo adr <codigo>" "acervo ler casa adr <codigo>"
-    num="${1:-}"
-    if [ -z "$num" ]; then
-      exec "$ATOS/casa" listar adr
-    fi
-    if [[ "$num" =~ ^[0-9]+$ ]]; then
-      num="arq:$(printf '%04d' "$num")"
-    fi
-    exec "$ATOS/casa" ler adr "$num" "${@:2}" ;;
+    echo "acervo adr: ato deprecado e removido (arq:0106). Use \`acervo ler casa adr <chave>\` (ex.: arq:0075) ou \`acervo listar casa adr\`." >&2
+    echo "  $SPEC" >&2
+    exit 2 ;;
 
   -h|--help|ajuda) uso ;;
   *)
-    echo "acervo: ato '$ATO' desconhecido. Atos canonicos: ler, listar, resolver, escrever, ingerir, curar, extrato, psql." >&2
+    echo "acervo: ato '$ATO' desconhecido. Atos canonicos: ler, listar, resolver, escrever, ingerir, curar, extrato, exportar, psql, balde." >&2
     echo "  $SPEC" >&2
     exit 2 ;;
 esac

@@ -465,7 +465,7 @@ def test_tipo_continua_fechado():
     bloco = {"estado": "ok", "lido_em": 0, "dados": [{"persona": "claudinho-TI", "pendentes": 0, "estado": "vazia"}]}
     html = render.bloco_caixas(bloco)
     assert '<select name="tipo"' in html
-    for t in ("decisao", "resposta", "pedido", "minuta", "demanda", "handoff"):
+    for t in ("decisao", "resposta", "pedido", "minuta", "demanda", "handoff", "recusa"):
         assert f'value="{t}"' in html
 
 
