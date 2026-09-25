@@ -102,7 +102,7 @@ CADERNOS = os.path.join(
     "current", "abertura")
 LEDGER = os.path.join(HARNESS, "registro", "eventos-org.jsonl")
 SESSAO_SEGREDO = str(instancia() / "segredos" / "harness-sessao" / "SESSAO_PG_PASSWORD")
-SLOT_RE = re.compile(r"^[a-z0-9][a-z0-9-]{0,23}$")
+SLOT_RE = re.compile(r"^[a-z0-9][a-z0-9-]{0,40}$")
 
 # Slot de fita corrente (card 449). Fora do padrao `mem:<cadeira>:<slot>` de
 # proposito: `mesa ver` e a varredura de `descansar` varrem aquele padrao e
@@ -256,7 +256,7 @@ def valida_fita(fid):
 
 def valida_slot(slot):
     if not SLOT_RE.match(slot or ""):
-        sys.exit(f"erro: slot invalido {slot!r} — minusculas, digitos e hifen, ate 24 chars")
+        sys.exit(f"erro: slot invalido {slot!r} — minusculas, digitos e hifen, ate 41 chars")
     return slot
 
 
