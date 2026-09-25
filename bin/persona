@@ -451,6 +451,63 @@ sanear_clone() {
   return 0
 }
 
+# salvar — commit + push de abertura/ e do ledger, com o mesmo padrao de funcao que
+# abrir/sanear (card #3122): o corpo mora AQUI, dentro de funcao, para que os `local`
+# valham; o case final so despacha (`salvar) shift; salvar "$@" ;;`), nunca roda o
+# corpo no nivel do script.
+salvar() {
+  [ "${1:-}" = "-m" ] && [ -n "${2:-}" ] || uso
+  local msg="$2"
+  entra_no_clone
+  # o verbo versiona dois caminhos: o conteudo vivo (abertura/) e o ledger de
+  # organizacao (registro/eventos-org.jsonl), que _persona-org.py escreve sem commitar.
+  # Mudanca fora desses dois aborta em vez de entrar de carona.
+  local sujo
+  sujo=$(git status --porcelain | grep -v "^.. abertura/" \
+                                | grep -v "^.. registro/eventos-org.jsonl" || true)
+  if [ -n "$sujo" ]; then
+    echo "abortado: há mudança fora de abertura/ e do ledger — commite ou guarde antes." >&2
+    echo "$sujo" >&2
+    exit 1
+  fi
+  if ! git pull --ff-only -q origin HEAD 2>/dev/null; then
+    git pull --rebase --autostash -q origin HEAD 2>/dev/null || {
+      echo "abortado: divergência com origin que exige resolução manual." >&2
+      exit 1
+    }
+  fi
+
+  # Identifica quais personas foram modificadas / adicionadas
+  local mudados=()
+  while IFS= read -r f; do
+    [ -n "$f" ] && mudados+=("$f")
+  done < <(git status --porcelain abertura/ | awk '{print $NF}' | grep 'persona\.md$' || true)
+
+  # Também confere se foram modificados chapéus em abertura/<cad>/
+  while IFS= read -r cad; do
+    if [ -n "$cad" ] && [ -f "$REPO/$ALVO/$cad/persona.md" ]; then
+      local ja_tem
+      ja_tem=0
+      for m in "${mudados[@]}"; do
+        if [ "$m" = "abertura/$cad/persona.md" ] || [ "$m" = "$ALVO/$cad/persona.md" ]; then
+          ja_tem=1
+        fi
+      done
+      [ "$ja_tem" -eq 0 ] && mudados+=("$ALVO/$cad/persona.md")
+    fi
+  done < <(git status --porcelain abertura/ | awk '{print $NF}' | cut -d/ -f2 | sort -u || true)
+
+  if [ "${#mudados[@]}" -gt 0 ]; then
+    conferir "${mudados[@]}"
+  fi
+
+  git add abertura registro/eventos-org.jsonl
+  git diff --cached --quiet && { echo "nada a salvar"; exit 0; }
+  git commit -q -m "$msg"
+  git push -q origin HEAD
+  echo "salvo · $(idade)"
+}
+
 # --ajuda UNIVERSAL, sem efeito colateral (card #2868, ex-#2274 defeito 4). ANTES do
 # despacho, varrendo TODOS os argumentos: cobre `persona --ajuda` e `persona <sub> --ajuda`
 # — sem isto, `persona abrir --ajuda` dispararia o git pull de `abrir` e ignoraria a flag.
@@ -479,52 +536,7 @@ case "${1:-}" in
     ;;
   salvar)
     shift
-    [ "${1:-}" = "-m" ] && [ -n "${2:-}" ] || uso
-    msg="$2"
-    entra_no_clone
-    # o verbo versiona dois caminhos: o conteudo vivo (abertura/) e o ledger de
-    # organizacao (registro/eventos-org.jsonl), que _persona-org.py escreve sem commitar.
-    # Mudanca fora desses dois aborta em vez de entrar de carona.
-    sujo=$(git status --porcelain | grep -v "^.. abertura/" \
-                                  | grep -v "^.. registro/eventos-org.jsonl" || true)
-    if [ -n "$sujo" ]; then
-      echo "abortado: há mudança fora de abertura/ e do ledger — commite ou guarde antes." >&2
-      echo "$sujo" >&2
-      exit 1
-    fi
-    if ! git pull --ff-only -q origin HEAD 2>/dev/null; then
-      git pull --rebase --autostash -q origin HEAD 2>/dev/null || {
-        echo "abortado: divergência com origin que exige resolução manual." >&2
-        exit 1
-      }
-    fi
-
-    # Identifica quais personas foram modificadas / adicionadas
-    local mudados=()
-    while IFS= read -r f; do
-      [ -n "$f" ] && mudados+=("$f")
-    done < <(git status --porcelain abertura/ | awk '{print $NF}' | grep 'persona\.md$' || true)
-
-    # Também confere se foram modificados chapéus em abertura/<cad>/
-    while IFS= read -r cad; do
-      if [ -n "$cad" ] && [ -f "$REPO/$ALVO/$cad/persona.md" ]; then
-        local ja_tem=0
-        for m in "${mudados[@]}"; do
-          [ "$m" = "abertura/$cad/persona.md" ] || [ "$m" = "$ALVO/$cad/persona.md" ] && ja_tem=1
-        done
-        [ "$ja_tem" -eq 0 ] && mudados+=("$ALVO/$cad/persona.md")
-      fi
-    done < <(git status --porcelain abertura/ | awk '{print $NF}' | cut -d/ -f2 | sort -u || true)
-
-    if [ "${#mudados[@]}" -gt 0 ]; then
-      conferir "${mudados[@]}"
-    fi
-
-    git add abertura registro/eventos-org.jsonl
-    git diff --cached --quiet && { echo "nada a salvar"; exit 0; }
-    git commit -q -m "$msg"
-    git push -q origin HEAD
-    echo "salvo · $(idade)"
+    salvar "$@"
     ;;
   prover|designar|dispensar|remover)
     # LEMBRETE, NAO GATE (dono, 17/08/2026). Ato que cria ou move unidade organizacional
