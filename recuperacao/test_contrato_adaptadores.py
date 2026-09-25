@@ -12,6 +12,7 @@ Dois níveis, de propósito:
 
 from __future__ import annotations
 
+import json
 import os
 import subprocess
 
@@ -129,12 +130,12 @@ def test_fila_texto_nenhum_traz_ref_e_nao_conteudo():
 # ============================================================== 2. contrato — registro
 
 
-def test_registro_conhece_as_tres_series():
-    assert set(SERIES) == {"adr", "seg", "ont"}
+def test_registro_conhece_as_series_do_registro_setorial():
+    assert set(SERIES) == {"arq", "seg", "ont", "infra", "integracao", "org"}
 
 
-def test_registro_raiz_inexistente_vira_linha_declarada():
-    r = AdaptadorRegistro(raiz="/nao/existe").busca_declarada("adr:0064")
+def test_registro_container_inalcancavel_vira_linha_declarada():
+    r = AdaptadorRegistro(pg_container="pf-registro-container-inexistente").busca_declarada("arq:0064")
     assert r.linha.cobertura is Cobertura.FONTE_NAO_INDEXADA
     assert r.linha.causa is Causa.SEM_ROTA
 
@@ -237,7 +238,7 @@ def test_mesa_aceita_pf_cadeira_nas_duas_formas():
 
 
 def test_fonte_caida_no_meio_nao_derruba_as_outras():
-    reg = AdaptadorRegistro(raiz="/nao/existe").busca_declarada("adr:0064")
+    reg = AdaptadorRegistro(pg_container="pf-registro-container-inexistente").busca_declarada("arq:0064")
     fila = AdaptadorFila(cliente=FilaFalsa([CARTA])).busca_declarada("claudinho-IA")
     env = monta_envelope([reg, fila])
     d = env.para_json()
@@ -263,15 +264,29 @@ def _fila_no_ar() -> bool:
         return False
 
 
-@pytest.mark.skipif(not (RELEASE / "arquitetura").is_dir(),
-                    reason="clone de platafirma-arquitetura ausente nesta máquina")
-def test_conformidade_registro_bate_com_o_diretorio():
-    """§5 — o resultado bate com a fonte sobre o mesmo estado."""
-    d = RELEASE / "arquitetura" / "macro-global" / "decisions"
-    no_disco = {n[:4] for n in os.listdir(d) if n.endswith(".md") and n[:4].isdigit()}
-    r = AdaptadorRegistro().busca("", {"serie": ["adr"]}, k=1000, texto="nenhum")
-    do_adaptador = {i.procedencia.chave.split(":")[1] for i in r.itens}
-    assert do_adaptador == no_disco, "o adaptador viu conjunto diferente do que está no ref"
+def _acervo_casa_no_ar() -> bool:
+    try:
+        p = subprocess.run(["docker", "exec", "-i", "rag-extractor-pg", "true"],
+                           capture_output=True, timeout=5)
+        return p.returncode == 0
+    except Exception:  # noqa: BLE001
+        return False
+
+@pytest.mark.skipif(not _acervo_casa_no_ar(), reason="rag-extractor-pg (docker) não respondeu")
+def test_conformidade_registro_bate_com_acervo_listar_casa():
+    """§5 — o resultado bate com `acervo listar casa adr` sobre o mesmo estado —
+    arq:0111/0115: a fonte é a tabela acervo.casa, não mais um diretório de release."""
+    p = subprocess.run([str(RELEASE / "harness" / "bin" / "acervo"), "listar", "casa", "adr",
+                       "--json"], capture_output=True, text=True, timeout=30)
+    if p.returncode != 0:
+        pytest.skip(f"`acervo listar casa adr` não rodou: {p.stderr.strip()[:120]}")
+    do_verbo = {item["chave"] for item in json.loads(p.stdout) if not item.get("retirada_em")}
+    r = AdaptadorRegistro().busca("", {"serie": list(SERIES)}, k=100000, texto="nenhum")
+    do_adaptador = {i.procedencia.chave for i in r.itens}
+    assert do_adaptador == do_verbo, (
+        f"adaptador e verbo divergiram: só no adaptador {do_adaptador - do_verbo}, "
+        f"só no verbo {do_verbo - do_adaptador}"
+    )
 
 
 @pytest.mark.skipif(not _fila_no_ar(), reason="motor-msg (127.0.0.1:6379) não respondeu")

@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """minuta formalizar — fecha a minuta, exclusivamente. Cria o destino com o
-esqueleto do tipo (ADR ou spec), vazio de conteúdo, apaga minutas/NNNN-slug.md
+esqueleto do tipo (ADR ou spec), vazio de conteúdo, apaga minuta/NNNN-slug.md
 e commita a remoção junto, com o número da minuta na mensagem de commit — um
 ato só. Não redige o canônico: quem escreve é a cadeira, no prompt.
 Nada de texto fóssil: o destino não referencia o número da minuta removida.
-Protocolo: minutas/PROTOCOLO.md §5. Spec: docs/spec_verbo-minuta.md §5.
+Protocolo: padrao protocolo-de-minuta §5. Spec: spec verbo-minuta §5.
 """
 import os
 import re
@@ -18,7 +18,7 @@ sys.path.insert(0, os.path.join(
 from raizes import BancadaNaoDeclarada, bancada  # noqa: E402
 
 # Formalizar commita e empurra: roda no worktree da cadeira na bancada DECLARADA,
-# <bancada>/wt/platafirma-arquitetura/<cadeira> (arq:0109 §2, card #3010). Resolvido em
+# <bancada>/wt/platafirma-casa/<cadeira> (arq:0109 §2, card #3010). Resolvido em
 # main(); MINUTA_REPO aponta outro checkout (teste).
 REPO = DIR = DECISIONS = DOCS = None
 PLACEHOLDER_CONV = "<a preencher pela própria cadeira>"
@@ -30,7 +30,7 @@ def erro(msg, code=1):
 
 
 def worktree_da_cadeira(verbo):
-    """MINUTA_REPO, senao <bancada>/wt/platafirma-arquitetura/<cadeira>. Sem bancada
+    """MINUTA_REPO, senao <bancada>/wt/platafirma-casa/<cadeira>. Sem bancada
     declarada ou sem worktree: exit 3, nunca criacao silenciosa."""
     explicito = os.environ.get("MINUTA_REPO")
     if explicito:
@@ -43,9 +43,9 @@ def worktree_da_cadeira(verbo):
         raiz = bancada()
     except BancadaNaoDeclarada as e:
         erro(str(e), 3)
-    wt = os.path.join(str(raiz), "wt", "platafirma-arquitetura", cadeira)
+    wt = os.path.join(str(raiz), "wt", "platafirma-casa", cadeira)
     if not os.path.isdir(wt):
-        erro(f"worktree ausente: {wt} — rode `repo abrir platafirma-arquitetura` antes de {verbo}.", 3)
+        erro(f"worktree ausente: {wt} — rode `repo abrir platafirma-casa` antes de {verbo}.", 3)
     return wt
 
 
@@ -102,7 +102,7 @@ def main():
     if not args:
         erro("uso: minuta formalizar <n> --como adr|spec [--destino <slug>] [--vencido]", 2)
     REPO = worktree_da_cadeira("formalizar")
-    DIR = os.path.join(REPO, "minutas")
+    DIR = os.path.join(REPO, "minuta")
     DECISIONS = os.path.join(REPO, "macro-global", "decisions")
     DOCS = os.path.join(REPO, "docs")
     n = args[0]
