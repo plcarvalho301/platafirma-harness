@@ -192,6 +192,13 @@ def _run(args, raiz: Path, *, mesa_modo: str = "ok",
          caderno_modo: str = "ok") -> subprocess.CompletedProcess:
     env = dict(os.environ)
     env["PF_RAIZ"] = str(raiz)
+    # raizes.instancia() (lib/raizes.py, card #3010) le PLATAFIRMA_INSTANCIA, nao
+    # PF_RAIZ: sem esta linha o montador resolvia MORADA (e SESSAO_SEGREDO) contra
+    # a instancia REAL da conta (default /srv/platafirma/casa), e a hermeticidade
+    # que este arquivo promete no docstring era so promessa. Achado ao investigar o
+    # KeyError 'morada' e o 'cadeira desconhecida' falsos: os dois eram o montador
+    # lendo abertura-publicada de producao, onde 'teste' nao e cadeira.
+    env["PLATAFIRMA_INSTANCIA"] = str(raiz)
     # `git` do stub à frente do real: no caminho de serviço não deve haver git nenhum,
     # e o que houver fica registrado em PF_GIT_LOG.
     env["PATH"] = f"{raiz / 'bin'}{os.pathsep}" + env.get("PATH", "")
