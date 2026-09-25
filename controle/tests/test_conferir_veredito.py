@@ -620,3 +620,101 @@ def test_commit_nao_declarado_segue_exit_0_sem_veredito(tmp_path, monkeypatch, c
     assert dado["resultado"] == "nao-declarado"
     assert "veredito" not in dado
 
+# --- conferir_arranque (card #3142) --------------------------------------------
+
+def test_arranque_aponta_e_sem_arranque_contam_como_conforme(monkeypatch, tmp_path, capsys):
+    aponta = tmp_path / "aponta" / "CLAUDE.md"
+    aponta.parent.mkdir()
+    aponta.write_text("Arranque desta sessao: ver conduta/arranque.md.\n", encoding="utf-8")
+
+    sem_arranque = tmp_path / "sem-arranque" / "CLAUDE.md"
+    sem_arranque.parent.mkdir()
+    sem_arranque.write_text("Este posto de trabalho nao tem nada sobre arranque.\n", encoding="utf-8")
+
+    monkeypatch.setattr(conferir, "_claude_mds", lambda incluir_efemero=False: [str(aponta), str(sem_arranque)])
+    monkeypatch.setattr(conferir, "_sha_release", lambda: "abc1234")
+
+    exit_code = conferir.conferir_arranque(None, como_json=True)
+    saida = capsys.readouterr()
+
+    assert exit_code == 0
+    dado = json.loads(saida.out)
+    estados = {item["nome"]: item["estado"] for item in dado["itens"]}
+    assert set(estados.values()) == {"conforme"}
+    assert len(estados) == 2
+
+
+def test_arranque_copia_e_divergente(monkeypatch, tmp_path, capsys):
+    copia = tmp_path / "copia" / "CLAUDE.md"
+    copia.parent.mkdir()
+    # dois sinais de bloco proprio (monta_sessao + vasculha), sem o ponteiro.
+    copia.write_text(
+        "Aqui explicamos monta_sessao por conta propria e como vasculhar a mesa.\n",
+        encoding="utf-8",
+    )
+
+    monkeypatch.setattr(conferir, "_claude_mds", lambda incluir_efemero=False: [str(copia)])
+    monkeypatch.setattr(conferir, "_rastreado_em", lambda caminho: None)
+    monkeypatch.setattr(conferir, "_sha_release", lambda: "abc1234")
+
+    exit_code = conferir.conferir_arranque(None, como_json=True)
+    saida = capsys.readouterr()
+
+    assert exit_code == 1
+    dado = json.loads(saida.out)
+    assert len(dado["itens"]) == 1
+    item = dado["itens"][0]
+    assert item["estado"] == "divergente"
+    assert "bloco proprio" in item["motivo"]
+
+
+def test_arranque_erro_de_leitura_e_indeterminavel_nunca_conforme(monkeypatch, tmp_path, capsys):
+    aponta = tmp_path / "aponta" / "CLAUDE.md"
+    aponta.parent.mkdir()
+    aponta.write_text("ver conduta/arranque.md\n", encoding="utf-8")
+
+    # um "caminho" que nao e arquivo legivel: open() estoura IsADirectoryError (OSError),
+    # simulando falha de leitura sem depender de permissao de disco.
+    quebrado = tmp_path / "quebrado" / "CLAUDE.md"
+    quebrado.mkdir(parents=True)
+
+    monkeypatch.setattr(conferir, "_claude_mds", lambda incluir_efemero=False: [str(aponta), str(quebrado)])
+    monkeypatch.setattr(conferir, "_sha_release", lambda: "abc1234")
+
+    exit_code = conferir.conferir_arranque(None, como_json=True)
+    saida = capsys.readouterr()
+
+    # regra dura do card: "nao consegui olhar" nunca e conforme, e nunca some da lista.
+    assert exit_code == 5
+    dado = json.loads(saida.out)
+    assert len(dado["itens"]) == 2
+    estados = {item["nome"]: item["estado"] for item in dado["itens"]}
+    aponta_nome = next(n for n in estados if n.endswith("aponta/CLAUDE.md"))
+    assert estados[aponta_nome] == "conforme"
+    quebrado_nome = next(n for n in estados if n.endswith("quebrado/CLAUDE.md"))
+    assert estados[quebrado_nome] == "indeterminavel"
+    item_quebrado = next(i for i in dado["itens"] if i["nome"] == quebrado_nome)
+    assert "nao consegui ler" in item_quebrado["motivo"]
+
+
+def test_arranque_staged_preserva_modo_texto_do_pre_commit(monkeypatch, tmp_path, capsys):
+    claude_md = tmp_path / "CLAUDE.md"
+    claude_md.write_text("ver conduta/arranque.md\n", encoding="utf-8")
+
+    def _stub_sh(args):
+        if args[:3] == ["git", "diff", "--cached"]:
+            return (0, "CLAUDE.md\n", "")
+        if args[:2] == ["git", "rev-parse"]:
+            return (0, str(tmp_path), "")
+        raise AssertionError(f"sh() nao stubado para: {args}")
+
+    monkeypatch.setattr(conferir, "sh", _stub_sh)
+    monkeypatch.setattr(conferir, "_sha_release", lambda: "abc1234")
+
+    # --staged e chamado pelo pre-commit em TEXTO (nunca --json): so confere que o
+    # modo continua funcionando e devolvendo exit de veredito, nao a saida byte a byte.
+    exit_code = conferir.conferir_arranque(None, staged=True, como_json=False)
+    saida = capsys.readouterr()
+
+    assert exit_code == 0
+    assert "release conferir arranque" in saida.out

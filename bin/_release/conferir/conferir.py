@@ -1223,19 +1223,29 @@ def conferir_arranque(alvo=None, staged=False, como_json=False):
                 print(json.dumps({"erro": msg}, ensure_ascii=False) if como_json else msg)
                 return 2
 
-    linhas, copias = [], []
+    linhas, copias, itens = [], [], []
     for c in alvos:
+        rel = os.path.relpath(c, os.path.expanduser("~/AI"))
         try:
             with open(c, encoding="utf-8", errors="replace") as f:
                 texto = f.read()
-        except OSError:
+        except OSError as e:
+            # card #3142: nao conseguir ler o CLAUDE.md e indeterminavel, nunca
+            # ausencia silenciosa — sumir da lista mascararia a falha de olhar.
+            if not como_json:
+                print(f"  NAO CONSEGUI LER: {rel} — {e}")
+            itens.append((rel, resultado.indeterminavel(f"nao consegui ler o arquivo: {e}")))
             continue
         veredito, n = _julga_arranque(texto)
-        rel = os.path.relpath(c, os.path.expanduser("~/AI"))
         item = {"arquivo": rel, "veredito": veredito, "sinais": n}
         if veredito == "copia":
             item["rastreado_em"] = _rastreado_em(c)
             copias.append(item)
+            itens.append((rel, resultado.divergente(
+                f"bloco proprio, sem apontar ({n} sinais)"
+                + (f" — rastreado em {item['rastreado_em']}" if item["rastreado_em"] else " — nao rastreado"))))
+        else:
+            itens.append((rel, resultado.conforme()))
         linhas.append(item)
 
     # OBSERVACAO de deriva (nao veredito): a instancia efemera das fitas. So no passe amplo
@@ -1255,41 +1265,29 @@ def conferir_arranque(alvo=None, staged=False, como_json=False):
             if v2 != "aponta":
                 deriva.append({"arquivo": rel2, "veredito": v2, "sinais": n2})
 
-    ok = not copias
-    if como_json:
-        print(json.dumps({
-            "veredito": "em dia" if ok else "divergente",
-            "ponteiro": PONTEIRO_ARRANQUE,
-            "medidos": len(linhas),
-            "copias": copias,
-            "arquivos": linhas,
-            "produtor_fita": PRODUTOR_FITA,
-            "deriva_efemera": deriva,
-        }, ensure_ascii=False, indent=2))
-        return 0 if ok else 1
-
-    print(f"arranque em cwd (ponteiro: {PONTEIRO_ARRANQUE})")
-    print(f"  medidos                          : {len(linhas)}")
-    for e in ("aponta", "sem-arranque"):
-        print(f"  {e:<33}: {sum(1 for x in linhas if x['veredito'] == e)}")
-    print(f"  COPIA (bloco proprio, sem apontar): {len(copias)}")
-    for x in copias:
-        onde = f"rastreado em {x['rastreado_em']}" if x["rastreado_em"] else "nao rastreado"
-        print(f"      {x['arquivo']} — {onde}")
-    if copias:
-        print("  conserto: trocar o bloco pelo ponteiro. Onde e rastreado, o conserto e")
-        print("            commit no branch — escrever no cwd o proximo checkout desfaz.")
-    print(f"  veredito                         : {'em dia' if ok else 'divergente'}")
-    if not staged and not alvo:
-        print("  --- observacao (nao entra no veredito) ---")
-        print(f"  produtor das fitas               : {PRODUTOR_FITA}")
-        if deriva:
-            print(f"  fitas DERIVADAS do produtor      : {len(deriva)}")
-            for x in deriva:
-                print(f"      {x['arquivo']} — {x['veredito']} ({x['sinais']} sinais)")
-        else:
-            print("  fitas derivadas do produtor      : 0 (todas apontam)")
-    return 0 if ok else 1
+    if not como_json:
+        print(f"arranque em cwd (ponteiro: {PONTEIRO_ARRANQUE})")
+        print(f"  medidos                          : {len(linhas)}")
+        for e in ("aponta", "sem-arranque"):
+            print(f"  {e:<33}: {sum(1 for x in linhas if x['veredito'] == e)}")
+        print(f"  COPIA (bloco proprio, sem apontar): {len(copias)}")
+        for x in copias:
+            onde = f"rastreado em {x['rastreado_em']}" if x["rastreado_em"] else "nao rastreado"
+            print(f"      {x['arquivo']} — {onde}")
+        if copias:
+            print("  conserto: trocar o bloco pelo ponteiro. Onde e rastreado, o conserto e")
+            print("            commit no branch — escrever no cwd o proximo checkout desfaz.")
+        if not staged and not alvo:
+            print("  --- observacao (nao entra no veredito) ---")
+            print(f"  produtor das fitas               : {PRODUTOR_FITA}")
+            if deriva:
+                print(f"  fitas DERIVADAS do produtor      : {len(deriva)}")
+                for x in deriva:
+                    print(f"      {x['arquivo']} — {x['veredito']} ({x['sinais']} sinais)")
+            else:
+                print("  fitas derivadas do produtor      : 0 (todas apontam)")
+        print()
+    return resultado.relatorio("arranque", alvo, itens, _sha_release(), como_json=como_json)
 
 
 def _canonico_da_cadeira(cadeira):
