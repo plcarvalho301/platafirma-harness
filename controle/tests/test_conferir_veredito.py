@@ -523,3 +523,100 @@ def test_ferramental_indeterminavel_quando_acervo_inalcancavel(monkeypatch, caps
     assert all(item["estado"] == "indeterminavel" for item in dado["itens"])
     assert "acervo.ferramental" in dado["itens"][0]["motivo"]
 
+# --- conferir_commit (card #3142): fail-open documentado, veredito interno --------
+
+def _stub_git_toplevel(raiz):
+    return _stub_sh([
+        (lambda a: a == ["git", "rev-parse", "--show-toplevel"], (0, str(raiz), "")),
+    ])
+
+
+def test_commit_conforme_quando_rastreador_aceita(tmp_path, monkeypatch, capsys):
+    raiz = tmp_path
+    (raiz / ".conferir-commit").write_text("base: http://rastreador.teste\n", encoding="utf-8")
+    msg = tmp_path / "MSG"
+    msg.write_text("ajusta X\n\nItem: #42\n", encoding="utf-8")
+
+    monkeypatch.setattr(conferir, "sh", _stub_git_toplevel(raiz))
+    monkeypatch.setattr(
+        conferir, "pergunta_ao_rastreador",
+        lambda base, mensagem, timeout: ({"ids": ["42"], "recusas": [], "avisos": []}, None),
+    )
+
+    exit_code = conferir.conferir_commit(str(msg), como_json=True)
+    saida = capsys.readouterr()
+
+    assert exit_code == 0
+    dado = json.loads(saida.out)
+    assert dado["resultado"] == "ok"
+    assert dado["veredito"]["estado"] == "conforme"
+    assert dado["veredito"]["motivo"] is None
+
+
+def test_commit_divergente_quando_rastreador_recusa_id(tmp_path, monkeypatch, capsys):
+    raiz = tmp_path
+    (raiz / ".conferir-commit").write_text("base: http://rastreador.teste\n", encoding="utf-8")
+    msg = tmp_path / "MSG"
+    msg.write_text("ajusta Y\n\nItem: #7\n", encoding="utf-8")
+
+    monkeypatch.setattr(conferir, "sh", _stub_git_toplevel(raiz))
+    monkeypatch.setattr(
+        conferir, "pergunta_ao_rastreador",
+        lambda base, mensagem, timeout: (
+            {"ids": ["7"], "recusas": [{"id": "7", "texto": "item #7 esta fechado"}], "avisos": []},
+            None,
+        ),
+    )
+
+    exit_code = conferir.conferir_commit(str(msg), como_json=True)
+    saida = capsys.readouterr()
+
+    assert exit_code == 1
+    dado = json.loads(saida.out)
+    assert dado["resultado"] == "divergente"
+    assert dado["veredito"]["estado"] == "divergente"
+    assert "item #7 esta fechado" in dado["veredito"]["motivo"]
+
+
+def test_commit_indeterminavel_fail_open_quando_rastreador_nao_responde(tmp_path, monkeypatch, capsys):
+    """card #3142: rastreador fora do ar vira Veredito indeterminavel, NUNCA conforme
+    silencioso — mas o exit continua 0 (fail-open deliberado, limite 2/4 do cabecalho),
+    porque isto e o hook commit-msg ao vivo, nao o relatorio humano de release conferir."""
+    raiz = tmp_path
+    (raiz / ".conferir-commit").write_text("base: http://rastreador.teste\n", encoding="utf-8")
+    msg = tmp_path / "MSG"
+    msg.write_text("ajusta Z\n", encoding="utf-8")
+
+    monkeypatch.setattr(conferir, "sh", _stub_git_toplevel(raiz))
+    monkeypatch.setattr(
+        conferir, "pergunta_ao_rastreador",
+        lambda base, mensagem, timeout: (None, "http://rastreador.teste nao respondeu (timeout)"),
+    )
+
+    exit_code = conferir.conferir_commit(str(msg), como_json=True)
+    saida = capsys.readouterr()
+
+    assert exit_code == 0
+    dado = json.loads(saida.out)
+    assert dado["resultado"] == "sem-gate"
+    assert dado["veredito"]["estado"] == "indeterminavel"
+    assert "nao respondeu" in dado["veredito"]["motivo"]
+
+
+def test_commit_nao_declarado_segue_exit_0_sem_veredito(tmp_path, monkeypatch, capsys):
+    """Repo sem `.conferir-commit` nao e avaliado (opt-in por repo, limite 1): nao ha
+    Veredito para montar, e o exit fica 0 sem citar rastreador nenhum."""
+    raiz = tmp_path
+    msg = tmp_path / "MSG"
+    msg.write_text("ajusta W\n", encoding="utf-8")
+
+    monkeypatch.setattr(conferir, "sh", _stub_git_toplevel(raiz))
+
+    exit_code = conferir.conferir_commit(str(msg), como_json=True)
+    saida = capsys.readouterr()
+
+    assert exit_code == 0
+    dado = json.loads(saida.out)
+    assert dado["resultado"] == "nao-declarado"
+    assert "veredito" not in dado
+

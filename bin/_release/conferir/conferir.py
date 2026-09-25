@@ -870,7 +870,7 @@ def conferir_repo(alvo, staged=False, como_json=False):
 # diferentes divergem em silencio no primeiro ajuste que so um dos dois receber, e a
 # convencao de citacao e do produto, nao do harness.
 #
-# TRES LIMITES DECLARADOS, e cada um custou uma medicao:
+# QUATRO LIMITES DECLARADOS, e cada um custou uma medicao:
 #
 #   1. OPT-IN POR REPO, por `.conferir-commit` na raiz — mesmo padrao do `.conferir-repo`.
 #      `core.hooksPath` aponta um DIRETORIO: um arquivo novo em `hooks/` liga o gate no
@@ -890,6 +890,18 @@ def conferir_repo(alvo, staged=False, como_json=False):
 #      e id de item fechado — e nao ha terceiro. Medido: 332 dos 400 commits do harness
 #      desde 01/08 nao citam id nenhum. Gate que reprova o que ja estava la vira
 #      `--no-verify` por habito, e ai nao gateia mais nada.
+#
+#   4. NAO PASSA POR resultado.relatorio()/itens (card #3142). A regra geral do card —
+#      "nao consegui olhar" nunca sai conforme — vale aqui tambem, mas o EXIT desta
+#      classe e contrato do hook commit-msg AO VIVO (git decide bloquear o commit pelo
+#      exit, nao por relatorio humano de `release conferir`). Trocar o exit do
+#      fail-open de 0 para 5 reabriria o limite 2 como fail-closed e travaria commit
+#      normal toda vez que o rastreador cair — por isso o exit continua 0/1/2 de
+#      sempre. O que muda: cada desfecho real (ok, recusa, sem-gate) tambem monta um
+#      resultado.Veredito e o expoe em `veredito` no --json, para o vocabulario de 3
+#      estados ficar consistente com as demais classes sem tocar o contrato do hook.
+#      Excecao documentada no molde de CLASSES_ABERTAS, so que por exit-code em vez
+#      de por implementacao ausente.
 #
 # Limite que vale repetir, porque nenhuma metrica construida sobre este gate pode ignora-lo:
 # hook e local, `git commit --no-verify` passa por cima e nao ha gate no push do forge.
@@ -997,15 +1009,25 @@ def conferir_commit(alvo, como_json=False):
 
     veredito, erro = pergunta_ao_rastreador(decl["base"], mensagem, decl["timeout"])
     if veredito is None:
-        # FAIL-OPEN, com aviso. Ver o limite 2 no cabecalho desta classe.
+        # FAIL-OPEN, com aviso. Ver o limite 2 (e o limite 4) no cabecalho desta classe:
+        # o Veredito interno vira indeterminavel — nao consegui olhar nunca e conforme
+        # (card #3142) — mas o exit SEGUE 0 de proposito, nao o 5 de resultado.relatorio().
+        v = resultado.indeterminavel(erro)
         if como_json:
-            print(json.dumps({"resultado": "sem-gate", "motivo": erro}))
+            print(json.dumps({"resultado": "sem-gate", "motivo": erro, "veredito": v.dict()}))
         else:
             print(f"conferir commit: {erro} — commit segue sem gate de id.", file=sys.stderr)
         return 0
 
     recusas = veredito.get("recusas") or []
     avisos = veredito.get("avisos") or []
+    # Veredito interno so para o vocabulario de 3 estados no --json (limite 4 no
+    # cabecalho); o exit continua vindo de `recusas`, nao de resultado.relatorio().
+    if recusas:
+        motivo_v = "; ".join(r.get("texto") or f"item {r.get('id')}" for r in recusas)
+        v = resultado.divergente(motivo_v)
+    else:
+        v = resultado.conforme()
     if como_json:
         print(json.dumps({
             "resultado": "divergente" if recusas else "ok",
@@ -1014,6 +1036,7 @@ def conferir_commit(alvo, como_json=False):
             "ids": veredito.get("ids") or [],
             "recusas": recusas,
             "avisos": avisos,
+            "veredito": v.dict(),
         }, ensure_ascii=False))
     else:
         for a in avisos:
