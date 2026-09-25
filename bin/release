@@ -68,6 +68,7 @@ CLASSES_SERVIDO=(
   "chapeu"
   "pdp"
   "alcance"
+  "card"
 )
 
 uso_texto() {

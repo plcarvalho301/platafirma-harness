@@ -114,6 +114,12 @@ import sys
 import urllib.error
 import urllib.request
 
+# resultado.py mora ao lado deste arquivo; import por path, nao por sys.path do
+# processo-pai (card #3142 — este script tanto roda direto quanto carregado por
+# SourceFileLoader nos testes, e os dois precisam achar o modulo irmao).
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import resultado
+
 RAIZ = os.environ.get("PF_AI_DIR", os.path.expanduser("~/AI"))
 DEPLOY = os.environ.get("PF_DEPLOY_DIR", os.path.join(RAIZ, "deploy"))
 BIN = os.environ.get("PF_BIN_DIR", os.path.join(RAIZ, "bin"))
@@ -122,7 +128,14 @@ POLITICA_DIR = os.environ.get("PDP_DIR",
     os.path.join(RAIZ, "var", "politica-acesso"))  # dados fora do WT de fabrica (#2956)
 SUPERFICIES = os.path.join(POLITICA_DIR, "superficies.yaml")
 
-MAPA = os.path.join(RAIZ, "platafirma-arquitetura", "docs", "arquitetura-negocio-operacao.md")
+
+def _sha_release():
+    """sha curto do que HARNESS tem no HEAD — vai na ancora de `release conferir <classe>`
+    (card #3142). HARNESS e o checkout destacado da release (arq:0097); fora desse
+    contexto (bancada, teste) pode nao ser git ou nao ter HEAD, e a ancora degrada pra
+    'desconhecido' em vez de estourar."""
+    rc, out, _ = sh(["git", "-C", HARNESS, "rev-parse", "--short", "HEAD"])
+    return out.strip() if rc == 0 and out.strip() else "desconhecido"
 
 CLASSES_ABERTAS = {
     "canal": "regua do design system e de claudinha-produto e ainda nao existe",
@@ -135,7 +148,7 @@ def uso(erro=None):
         print(f"erro: {erro}\n", file=sys.stderr)
     print(__doc__.strip(), file=sys.stderr)
     print("\nuso: conferir <classe> [alvo]", file=sys.stderr)
-    print("     classes implementadas : servico . verbo . repo . skill . procedencia . superficie . commit . arranque . ferramental . front . existe . alcance . pdp . vocabulario", file=sys.stderr)
+    print("     classes implementadas : servico . verbo . repo . skill . procedencia . superficie . commit . arranque . ferramental . front . existe . alcance . pdp . vocabulario . card", file=sys.stderr)
     for c, motivo in CLASSES_ABERTAS.items():
         print(f"     classe declarada, sem implementacao : {c} — {motivo}", file=sys.stderr)
     sys.exit(2)
@@ -179,6 +192,7 @@ def containers(filtro=None):
             "working_dir": wd,
             "config_files": lab.get("com.docker.compose.project.config_files", ""),
             "env": {l.split("=", 1)[0]: l.split("=", 1)[1] for l in d["Config"]["Env"] if "=" in l},
+            "started_at": (d.get("State") or {}).get("StartedAt"),
         }
 
 
@@ -221,14 +235,14 @@ def env_declarado(c):
 
 
 def conferir_servico(alvo, como_json=False):
-    houve = False
     vistos = 0
-    servicos = []
+    itens = []
     for c in containers(alvo):
         vistos += 1
         dentro_de_deploy = os.path.realpath(c["working_dir"]).startswith(os.path.realpath(DEPLOY))
         g = git_estado(c["working_dir"])
         divergencias = []
+        nome_item = f"{c['nome']} (servico {c['servico']})"
         if not como_json:
             print(f"\n### {c['nome']}  (servico {c['servico']})")
             print(f"    sobe de : {c['working_dir']}")
@@ -238,14 +252,12 @@ def conferir_servico(alvo, como_json=False):
         # demais checagens abaixo — fora de deploy, env — seguem valendo, e a guarda em
         # sh() ja impede o FileNotFoundError que estourava aqui (#3057 item 5).
         if not os.path.isdir(c["working_dir"]):
-            houve = True
             divergencias.append(
                 f"working_dir nao existe no disco: {c['working_dir']} — "
                 "container servindo de diretorio removido")
             if not como_json:
                 print(f"    SUMIU   : working_dir nao existe no disco — container servindo de diretorio removido")
         if not dentro_de_deploy:
-            houve = True
             divergencias.append("nao e worktree de deploy — producao sobe de clone de trabalho")
             if not como_json:
                 print("    DERIVA  : nao e worktree de deploy — producao sobe de clone de trabalho")
@@ -255,7 +267,6 @@ def conferir_servico(alvo, como_json=False):
                 if g["atras"]:
                     print(f"    ATRAS   : {g['atras']} commits atras de origin/main")
             if g["modificado"]:
-                houve = True
                 divergencias.append(
                     f"{len(g['modificado'])} arquivo(s) rastreado(s) so existem aqui: "
                     + ", ".join(g["modificado"][:5])
@@ -267,30 +278,31 @@ def conferir_servico(alvo, como_json=False):
             if not como_json and g["nao_rastreado"]:
                 print(f"    lixo    : {g['nao_rastreado']} caminho(s) nao rastreado(s)")
 
+        # card #3142: nao conseguir renderizar o compose e indeterminavel, nao
+        # divergente — nao saber nao pode contar como "achei defeito".
         decl, erro = env_declarado(c)
         if decl is None:
-            houve = True
-            divergencias.append(f"nao consegui renderizar o compose — {erro}")
             if not como_json:
                 print(f"    ENV     : nao consegui renderizar o compose — {erro}")
-            servicos.append({"nome": c["nome"], "servico": c["servico"], "divergencias": divergencias})
+            motivo = "; ".join(divergencias + [f"nao consegui renderizar o compose — {erro}"])
+            itens.append((nome_item, resultado.indeterminavel(motivo, desde=c.get("started_at"))))
             continue
         servido = c["env"]
         for k in sorted(decl):
             if k not in servido:
-                houve = True
                 divergencias.append(f"{k} declarado e nao servido (declarado={decl[k]!r})")
                 if not como_json:
                     print(f"    AUSENTE : {k} declarado e nao servido (declarado={decl[k]!r})")
             elif servido[k] != decl[k]:
-                houve = True
                 divergencias.append(f"{k} declarado={decl[k]!r} servido={servido[k]!r}")
                 if not como_json:
                     print(f"    DIFERE  : {k} declarado={decl[k]!r} servido={servido[k]!r}")
-        if not any(k not in servido or servido[k] != decl[k] for k in decl):
-            if not como_json:
-                print(f"    env     : {len(decl)} variaveis, todas conferem")
-        servicos.append({"nome": c["nome"], "servico": c["servico"], "divergencias": divergencias})
+        if not divergencias and not como_json:
+            print(f"    env     : {len(decl)} variaveis, todas conferem")
+        if divergencias:
+            itens.append((nome_item, resultado.divergente("; ".join(divergencias), desde=c.get("started_at"))))
+        else:
+            itens.append((nome_item, resultado.conforme(desde=c.get("started_at"))))
     if alvo and vistos == 0:
         msg = f"nenhum container em execucao com o nome {alvo!r} — nao confundir com conferido"
         if como_json:
@@ -300,9 +312,7 @@ def conferir_servico(alvo, como_json=False):
         return 1
     if not como_json:
         print()
-    else:
-        print(json.dumps({"resultado": "divergente" if houve else "ok", "servicos": servicos}))
-    return 1 if houve else 0
+    return resultado.relatorio("servico", alvo, itens, _sha_release(), como_json=como_json)
 
 
 # --- classe: verbo ----------------------------------------------------------
@@ -359,6 +369,18 @@ def origem(nome, caminho):
     fam_bin = os.path.join(prod_raiz, "platafirma-harness")
     opt_dir = "/opt/platafirma"
     cand_release = os.path.join(fam_bin, "current", "bin", nome)
+    # arq:0097 + card #3142: o servido nao precisa ser symlink pra ser release — em
+    # producao o binario E o arquivo real sob a release (r-x), nao um link pra ela.
+    # Testar isso ANTES de cair no Candidato 2 evita o falso positivo medido em 25/09
+    # (`release conferir verbo` classificando infra/lint/teste/deploy/migrar como
+    # "copia-identica-ao-repo" so porque HARNESS, sob `release conferir`, ja aponta
+    # pra a propria release, e o arquivo la nao e link).
+    release_raiz = (os.environ.get("PLATAFIRMA_RELEASE")
+                     or os.environ.get("PF_RELEASE_RAIZ", "/opt/platafirma")).rstrip(os.sep)
+    caminho_real = os.path.realpath(caminho)
+    if (caminho_real.startswith(release_raiz + os.sep) or caminho_real.startswith(fam_bin + os.sep)
+            or caminho_real == os.path.realpath(cand_release)):
+        return "release", caminho_real
     if os.path.islink(caminho):
         destino = os.path.realpath(caminho)
         if (destino == os.path.realpath(cand_release) or destino.startswith(fam_bin + os.sep)
@@ -382,17 +404,6 @@ def origem(nome, caminho):
     return "so-no-host", "sem contraparte em repo"
 
 
-def capacidades_do_mapa():
-    """Le os nomes de capacidade da tabela do mapa da mesa. Fonte e o repo de
-    arquitetura; nao ha copia local — capacidade so existe se a mesa a lavrou."""
-    import re
-    try:
-        texto = open(MAPA, errors="replace").read()
-    except OSError:
-        return None
-    return set(re.findall(r"^\| `([a-z/-]+)` \|", texto, re.M))
-
-
 def normaliza(cap):
     """Formas equivalentes do mesmo termo. BizBOK nomeia a capacidade por extenso
     (`gestao-de-motores`); o mapa da mesa lavra a contracao (`motor`). As duas valem,
@@ -412,31 +423,52 @@ def normaliza(cap):
     return formas
 
 
-def canonica(cap, validas):
-    """Devolve o termo como o mapa o lavrou, ou None se nenhuma forma bater.
-    Folha declarada como `nivel1/folha` (arq:0110 §14: `infra/promocao-de-mudanca`)
-    vale quando o mapa lavra o nivel 1 E a folha: as tabelas de nivel 2 lavram a folha
-    pelo nome curto, e o cabecalho carrega o caminho inteiro para nao ser ambiguo entre
-    niveis. O termo canonico e o caminho declarado, nao a folha solta."""
-    if validas is None or not cap:
+def _capacidade_veredito(cap):
+    """Veredito da capacidade `cap`, via `acervo resolver capacidade <forma>` para cada
+    forma de normaliza() (card #3142, passo 4). Primeira forma que resolve (rc 0) ganha;
+    rc 1 em TODAS as formas = nao existe (divergente); rc 2 = ambigua (divergente, com a
+    lista no motivo); qualquer outro rc, ou o acervo fora do ar, e indeterminavel — nao
+    da pra afirmar que a capacidade nao existe so porque a consulta falhou."""
+    raiz_bin = os.path.join(RAIZ, "bin")
+    algum_rc1 = False
+    ultimo_rc, ultimo_saida = None, ""
+    for forma in sorted(normaliza(cap)):
+        rc, out, err = sh([os.path.join(raiz_bin, "acervo"), "resolver", "capacidade", forma])
+        if rc == 0:
+            return resultado.conforme()
+        if rc == 2:
+            return resultado.divergente(
+                f"{cap!r} e capacidade ambigua ({forma!r}): {(err or out).strip()[:200]}")
+        if rc == 1:
+            algum_rc1 = True
+            continue
+        ultimo_rc, ultimo_saida = rc, (err or out).strip()[:200]
+    if algum_rc1 and ultimo_rc is None:
+        return resultado.divergente(f"capacidade {cap!r} nao esta no acervo")
+    return resultado.indeterminavel(
+        f"acervo resolver capacidade saiu {ultimo_rc} para {cap!r}: {ultimo_saida}")
+
+
+def _desde_familia(familia):
+    """`no_ar_desde` de `release estado <familia> --json` — fonte de "desde" quando a
+    classe (verbo, hoje) nao tem data melhor por item (card #3142, passo 4)."""
+    raiz_bin = os.path.join(RAIZ, "bin")
+    rc, out, _ = sh([os.path.join(raiz_bin, "release"), "estado", familia, "--json"])
+    if rc != 0 or not out.strip():
         return None
-    minhas = normaliza(cap)
-    for v in validas:
-        if normaliza(v) & minhas:
-            return v
-    if "/" in cap:
-        nivel1, folha = cap.strip().lower().split("/", 1)
-        if canonica(nivel1, validas) and canonica(folha, validas):
-            return cap.strip().lower()
-    return None
+    try:
+        dado = json.loads(out)
+    except ValueError:
+        return None
+    return dado.get("no_ar_desde")
 
 
 def conferir_verbo(alvo, como_json=False):
-    houve = False
-    validas = capacidades_do_mapa()
+    desde_familia = _desde_familia("platafirma-harness")
+    cap_cache = {}
     porcapacidade = {}
     vistos = 0
-    verbos_json = []
+    itens = []
     for nome in sorted(os.listdir(BIN)):
         if nome.startswith("_"):
             continue
@@ -471,39 +503,34 @@ def conferir_verbo(alvo, como_json=False):
             if not como_json:
                 print(f"\n### {nome}")
                 print(f"    alias   : de {os.path.basename(destino_alias)} — nao conta na capacidade")
-            else:
-                verbos_json.append({
-                    "nome": nome, "origem": "alias", "capacidade": None,
-                    "conforme": True,
-                    "motivos": [f"alias de {os.path.basename(destino_alias)} — nao conta na capacidade"],
-                })
+            itens.append((nome, resultado.Veredito(
+                "conforme", desde=desde_familia,
+                motivo=f"alias de {os.path.basename(destino_alias)} — nao conta na capacidade")))
             continue
         vistos += 1
         cab = cabecalho(caminho)
         faltando = [k for k in ("proposito", "capacidade", "dono") if not cab[k]]
-        motivos = []
-        conforme = True
+        problemas = []
+        tem_divergencia = False
+        tem_indeterminavel = False
         if not como_json:
             print(f"\n### {nome}")
             print(f"    origem  : {classe} — {onde}")
         if classe in ("so-no-host", "divergente", "divergente-do-repo"):
-            houve = True
-            conforme = False
+            tem_divergencia = True
             msg_origem = "divergente do repo" if classe == "divergente-do-repo" else "sem origem unica — copia nao e forma valida de instalacao"
-            motivos.append(msg_origem)
+            problemas.append(msg_origem)
             if not como_json:
                 print(f"    ORIGEM  : {msg_origem}")
         elif classe in ("copia", "copia-identica-ao-repo"):
             # copia identica ainda e copia: instalacao e por release (arq:0110 §2)
-            houve = True
-            conforme = False
-            motivos.append("copia identica por sorte, nao por mecanismo — trocar por symlink")
+            tem_divergencia = True
+            problemas.append("copia identica por sorte, nao por mecanismo — trocar por symlink")
             if not como_json:
                 print("    ORIGEM  : copia identica por sorte, nao por mecanismo — trocar por symlink")
         if faltando:
-            houve = True
-            conforme = False
-            motivos.append(f"cabecalho incompleto: faltam {', '.join(faltando)}")
+            tem_divergencia = True
+            problemas.append(f"cabecalho incompleto: faltam {', '.join(faltando)}")
             if not como_json:
                 print(f"    CABECAL : faltam {', '.join(faltando)}")
         else:
@@ -511,28 +538,31 @@ def conferir_verbo(alvo, como_json=False):
                 comp = f" componente={cab['componente']}" if cab["componente"] else ""
                 print(f"    cabecal : capacidade={cab['capacidade']} dono={cab['dono']}{comp}")
         cap = cab["capacidade"]
-        canon = None
         if cap and cap != "orfa":
-            if validas is None:
+            if cap not in cap_cache:
+                cap_cache[cap] = _capacidade_veredito(cap)
+            cap_v = cap_cache[cap]
+            if cap_v.estado == "divergente":
+                tem_divergencia = True
+                problemas.append(f"capacidade {cap!r}: {cap_v.motivo}")
                 if not como_json:
-                    print("    aviso   : mapa de capacidades ilegivel — nao validei o nome")
+                    print(f"    CAPACID : {cap_v.motivo}")
+            elif cap_v.estado == "indeterminavel":
+                tem_indeterminavel = True
+                problemas.append(f"capacidade {cap!r}: {cap_v.motivo}")
+                if not como_json:
+                    print(f"    capacid?: {cap_v.motivo}")
             else:
-                canon = canonica(cap, validas)
-                if canon is None:
-                    houve = True
-                    conforme = False
-                    motivos.append(f"capacidade {cap!r} nao esta no mapa da mesa")
-                    if not como_json:
-                        print(f"    CAPACID : {cap!r} nao esta no mapa da mesa — capacidade nao se inventa no cabecalho")
-                elif canon != cap:
-                    if not como_json:
-                        print(f"    termo   : {cap!r} = {canon!r} no mapa (forma extensa e contracao valem)")
-        porcapacidade.setdefault(canon or cab["capacidade"] or "(nao declarada)", []).append(nome)
-        if como_json:
-            verbos_json.append({
-                "nome": nome, "origem": classe, "capacidade": canon or cab["capacidade"],
-                "conforme": conforme, "motivos": motivos,
-            })
+                if not como_json:
+                    print(f"    capacid : {cap!r} resolvida no acervo")
+        porcapacidade.setdefault(cap or "(nao declarada)", []).append(nome)
+        motivo = "; ".join(problemas) if problemas else None
+        if tem_divergencia:
+            itens.append((nome, resultado.divergente(motivo, desde=desde_familia)))
+        elif tem_indeterminavel:
+            itens.append((nome, resultado.indeterminavel(motivo, desde=desde_familia)))
+        else:
+            itens.append((nome, resultado.conforme(desde=desde_familia)))
 
     if alvo and vistos == 0:
         msg = f"{alvo!r} nao e verbo da plataforma em {BIN} — ou nao existe, ou e ferramenta de terceiro"
@@ -542,27 +572,31 @@ def conferir_verbo(alvo, como_json=False):
             print(f"\n{msg}")
         return 1
 
-    arq0037 = []
     if not alvo:
         if not como_json:
             print("\n## arq:0037 — um verbo por capacidade")
         for cap, verbos in sorted(porcapacidade.items()):
-            # `orfa` e capacidade declarada como ausente: conta como nao conforme, sempre.
-            fora_do_mapa = (validas is not None and cap not in ("(nao declarada)", "orfa")
-                            and canonica(cap, validas) is None)
-            conforme = len(verbos) == 1 and cap not in ("(nao declarada)", "orfa") and not fora_do_mapa
-            marca = "ok " if conforme else "NAO"
-            if marca == "NAO":
-                houve = True
+            nome_item = f"arq:0037 {cap}"
+            if cap in ("(nao declarada)", "orfa"):
+                v = resultado.divergente(f"{len(verbos)} verbo(s): {' '.join(verbos)}")
+            else:
+                cap_v = cap_cache.get(cap) or _capacidade_veredito(cap)
+                cap_cache[cap] = cap_v
+                if cap_v.estado == "divergente":
+                    v = resultado.divergente(f"capacidade nao resolvida no acervo: {cap_v.motivo}")
+                elif cap_v.estado == "indeterminavel":
+                    v = resultado.indeterminavel(cap_v.motivo)
+                elif len(verbos) != 1:
+                    v = resultado.divergente(f"{len(verbos)} verbos para a mesma capacidade: {' '.join(verbos)}")
+                else:
+                    v = resultado.conforme()
+            marca = {"conforme": "ok ", "divergente": "NAO", "indeterminavel": "?? "}[v.estado]
             if not como_json:
                 print(f"    {marca}  {cap:<16} {len(verbos)}  {' '.join(verbos)}")
-            else:
-                arq0037.append({"capacidade": cap, "conforme": conforme, "verbos": verbos})
+            itens.append((nome_item, v))
     if not como_json:
         print()
-    else:
-        print(json.dumps({"resultado": "divergente" if houve else "ok", "verbos": verbos_json, "arq0037": arq0037}))
-    return 1 if houve else 0
+    return resultado.relatorio("verbo", alvo, itens, _sha_release(), como_json=como_json)
 
 
 # --- classe: repo -----------------------------------------------------------
@@ -2354,7 +2388,11 @@ def conferir_existe(tipo, nome, como_json=False):
         else:
             print(linha)
             print("  nao saber e informacao — isto NAO ancora uma NEGATIVA.")
-        return 2
+        # card #3142, passo 7: indeterminavel epistemico ("nao consegui olhar") alinha
+        # com a regua nova de conferir (0/1/5), nao com o exit 2 de uso incorreto do
+        # bloco `if tipo not in EXISTE_TIPOS` acima — os dois sao "2" por acidente de
+        # historia, nao por serem a mesma coisa.
+        return 5
 
     if tipo not in EXISTE_TIPOS or not nome:
         print(f"uso: conferir existe <{'|'.join(EXISTE_TIPOS)}> <nome> [--json]",
@@ -2424,6 +2462,78 @@ def conferir_existe(tipo, nome, como_json=False):
                    % (n, os.environ.get("PF_CADEIRA", "?")))
 
     return 2
+
+
+def _card_avancou_alem_de_execucao(cabecalho):
+    """card #348: o estado do card, lido do cabecalho de `tarefas ler`, ja passou de
+    em-execucao? Os 6 estados do ciclo (arq citado no #348) sao em-lapidacao . em-parecer
+    . em-refinamento-tecnico . em-execucao . em-homologacao . entregue — qualquer um dos
+    tres primeiros e "nao andou ainda"; dai pra frente, o commit tem onde se apoiar."""
+    baixo = cabecalho.lower()
+    return any(s in baixo for s in ("execu", "homolog", "entreg", "encerr"))
+
+
+def conferir_card(alvo, como_json=False):
+    """card #3142, passo 6: commit em origin/main (familia platafirma-harness) citando
+    #N — na mensagem, ou num ramo fabrica/N-* ainda vivo — nos ultimos 14 dias, com o
+    card #N no rastreador ainda ANTES de em-execucao: item divergente. Fecha #348
+    ("conferir mede card citado em commit cujo estado nao andou").
+
+    Escopo desta primeira versao: so a familia platafirma-harness, porque e a unica cujo
+    checkout (HARNESS) este arquivo ja resolve com confianca (arq:0097). Estender as
+    demais familias da release exige confirmar a convencao de caminho do checkout de
+    cada uma — nao adivinhado aqui; ver nota na entrega do card.
+    """
+    if not alvo:
+        if como_json:
+            print(json.dumps({"erro": "uso: conferir card <n> [--json]"}))
+            return 2
+        uso("card exige o numero do card (ex.: conferir card 3142)")
+    ident = alvo.lstrip("#")
+    raiz_bin = os.path.join(RAIZ, "bin")
+
+    rc, out, _ = sh(["git", "-C", HARNESS, "log", "origin/main", "--since=14.days.ago",
+                      "-E", "--grep", rf"#{ident}\b", "--format=%H %cI"])
+    achados = []
+    if rc == 0:
+        for linha in out.splitlines():
+            linha = linha.strip()
+            if not linha:
+                continue
+            sha, _, quando = linha.partition(" ")
+            achados.append((sha, quando))
+    rc2, out2, _ = sh(["git", "-C", HARNESS, "branch", "-a", "--list", f"*fabrica/{ident}-*"])
+    ramos = [l.strip().lstrip("* ").strip() for l in out2.splitlines() if l.strip()] if rc2 == 0 else []
+
+    nome_item = f"#{ident}"
+    if not achados and not ramos:
+        itens = [(nome_item, resultado.conforme())]
+        return resultado.relatorio("card", alvo, itens, _sha_release(), como_json=como_json)
+
+    rc3, out3, err3 = sh([os.path.join(raiz_bin, "tarefas"), "ler", ident])
+    linhas_cab = [l.strip() for l in out3.splitlines() if l.strip()]
+    cab = next((l for l in linhas_cab if l.startswith(f"#{ident} ")), None)
+    if not cab:
+        msg = ((err3 or out3).strip().splitlines() or [f"exit {rc3}"])[0]
+        itens = [(nome_item, resultado.indeterminavel(
+            f"commit(s)/ramo citam #{ident}, mas tarefas ler nao devolveu cabecalho: {msg[:200]}"))]
+        return resultado.relatorio("card", alvo, itens, _sha_release(), como_json=como_json)
+
+    quando = achados[0][1] if achados else None
+    if not quando and ramos:
+        rcq, outq, _ = sh(["git", "-C", HARNESS, "log", "-1", "--format=%cI", ramos[0]])
+        quando = outq.strip() if rcq == 0 and outq.strip() else None
+
+    if _card_avancou_alem_de_execucao(cab):
+        itens = [(nome_item, resultado.conforme(desde=quando))]
+    else:
+        motivo = f"commit/ramo cita #{ident}, mas o rastreador ainda diz: {cab[:160]}"
+        if achados:
+            motivo += f" (sha {achados[0][0][:7]})"
+        if ramos:
+            motivo += f"; ramo(s): {', '.join(ramos[:3])}"
+        itens = [(nome_item, resultado.divergente(motivo, desde=quando))]
+    return resultado.relatorio("card", alvo, itens, _sha_release(), como_json=como_json)
 
 
 
@@ -3023,6 +3133,8 @@ def main(argv):
             if alvo == "--servido":
                 alvo = None
         return conferir_skill(alvo, servido, como_json=como_json)
+    if classe == "card":
+        return conferir_card(alvo, como_json=como_json)
     if como_json:
         print(json.dumps({"erro": f"classe desconhecida: {classe}"}))
     uso(f"classe desconhecida: {classe}")

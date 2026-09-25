@@ -53,7 +53,7 @@ BIN_DIR="${PF_BIN_DIR:-$HOME/AI/bin}"
 AQUI="$(dirname "$(readlink -f "$0")")"
 IMPL="$AQUI/_release/conferir/conferir.py"
 
-CLASSES_SERVIDO="verbo servico skill procedencia superficie ferramental front sessao chapeu pdp alcance"
+CLASSES_SERVIDO="verbo servico skill procedencia superficie ferramental front sessao chapeu pdp alcance card"
 CLASSES_BANCADA="existe repo commit arranque vocabulario diagrama"
 
 avisa_deprecado() {  # uma vez por sessao (arq:0110 §11)

@@ -61,25 +61,59 @@ def _git(cwd, *args):
 
 
 def test_servico_json_divergente(monkeypatch, capsys):
+    # card #3142: o contrato --json de `servico` trocou de {resultado, servicos:
+    # [{divergencias}]} pro Veredito comum de resultado.py — {ancora, itens:
+    # [{estado, desde, motivo}]}. Este teste prova o novo formato, nao o antigo.
     container = {
         "nome": "app-2", "servico": "app",
         "working_dir": "/nao/e/deploy",  # fora de DEPLOY -> DERIVA
-        "config_files": "", "env": {},
+        "config_files": "", "env": {}, "started_at": "2026-09-20T10:00:00Z",
     }
     monkeypatch.setattr(conferir, "containers", lambda alvo: [container])
     monkeypatch.setattr(conferir, "git_estado", lambda caminho: None)
     monkeypatch.setattr(conferir, "env_declarado", lambda c: ({"FOO": "bar"}, None))
+    monkeypatch.setattr(conferir, "_sha_release", lambda: "abc1234")
 
     exit_code = conferir.conferir_servico(None, como_json=True)
     saida = capsys.readouterr()
 
     assert exit_code == 1
     dado = json.loads(saida.out)
-    assert dado["resultado"] == "divergente"
-    assert len(dado["servicos"]) == 1
-    divergencias = dado["servicos"][0]["divergencias"]
-    assert any("worktree de deploy" in d for d in divergencias)
-    assert any("FOO" in d and "nao servido" in d for d in divergencias)
+    assert dado["classe"] == "servico"
+    assert dado["release"] == "abc1234"
+    assert "1 divergente" in dado["ancora"]
+    assert len(dado["itens"]) == 1
+    item = dado["itens"][0]
+    assert item["estado"] == "divergente"
+    assert "worktree de deploy" in item["motivo"]
+    assert "FOO" in item["motivo"] and "nao servido" in item["motivo"]
+
+
+def test_servico_json_indeterminavel_quando_compose_nao_renderiza(monkeypatch, capsys):
+    # card #3142, passo 3: falha de render do compose vira indeterminavel, nunca
+    # divergente — nao saber nao e a mesma coisa que achar defeito.
+    container = {
+        "nome": "app-3", "servico": "app",
+        "working_dir": "/opt/platafirma/deploy/app",
+        "config_files": "", "env": {}, "started_at": None,
+    }
+    monkeypatch.setattr(conferir, "DEPLOY", "/opt/platafirma/deploy")
+    monkeypatch.setattr(conferir, "containers", lambda alvo: [container])
+    monkeypatch.setattr(conferir, "git_estado", lambda caminho: None)
+    monkeypatch.setattr(conferir, "env_declarado", lambda c: (None, "docker compose config falhou"))
+    monkeypatch.setattr(conferir, "_sha_release", lambda: "abc1234")
+
+    exit_code = conferir.conferir_servico(None, como_json=True)
+    saida = capsys.readouterr()
+
+    assert exit_code == 5
+    dado = json.loads(saida.out)
+    assert "0 divergente" in dado["ancora"]
+    assert "1 não consegui olhar" in dado["ancora"]
+    item = dado["itens"][0]
+    assert item["estado"] == "indeterminavel"
+    assert item["desde"] == "indeterminavel"
+    assert "nao consegui renderizar o compose" in item["motivo"]
 
 
 # --- verbo ----------------------------------------------------------------
@@ -88,6 +122,9 @@ def test_servico_json_divergente(monkeypatch, capsys):
 # cabecalho de tres linhas e o que este teste de contrato quer provar.
 
 def test_verbo_json_formato_ok(tmp_path, monkeypatch, capsys):
+    # card #3142, passo 4: capacidades_do_mapa()/canonica() sairam; a validacao agora
+    # e por conferir._capacidade_veredito (acervo resolver capacidade <forma>), mockada
+    # aqui pra nao chamar o acervo de verdade num teste unitario.
     bin_dir = tmp_path / "bin"
     bin_dir.mkdir()
     verbo = bin_dir / "meuverbo"
@@ -101,7 +138,8 @@ def test_verbo_json_formato_ok(tmp_path, monkeypatch, capsys):
         encoding="utf-8",
     )
     monkeypatch.setattr(conferir, "BIN", str(bin_dir))
-    monkeypatch.setattr(conferir, "capacidades_do_mapa", lambda: None)
+    monkeypatch.setattr(conferir, "_capacidade_veredito", lambda cap: conferir.resultado.conforme())
+    monkeypatch.setattr(conferir, "_desde_familia", lambda familia: "2026-09-20T10:00:00Z")
     monkeypatch.setattr(
         conferir, "origem",
         lambda nome, caminho: ("symlink", str(bin_dir.parent / "origem-real" / nome)),
@@ -112,14 +150,11 @@ def test_verbo_json_formato_ok(tmp_path, monkeypatch, capsys):
 
     assert exit_code == 0
     dado = json.loads(saida.out)
-    assert dado["resultado"] == "ok"
-    assert dado["verbos"] == [{
-        "nome": "meuverbo", "origem": "symlink",
-        "capacidade": "verificacao-de-teste", "conforme": True, "motivos": [],
-    }]
-    assert dado["arq0037"] == [{
-        "capacidade": "verificacao-de-teste", "conforme": True, "verbos": ["meuverbo"],
-    }]
+    assert dado["classe"] == "verbo"
+    itens = {i["nome"]: i for i in dado["itens"]}
+    assert itens["meuverbo"]["estado"] == "conforme"
+    assert itens["meuverbo"]["desde"] == "2026-09-20T10:00:00Z"
+    assert itens["arq:0037 verificacao-de-teste"]["estado"] == "conforme"
 
 
 def test_verbo_json_divergente(tmp_path, monkeypatch, capsys):
@@ -129,7 +164,8 @@ def test_verbo_json_divergente(tmp_path, monkeypatch, capsys):
     # sem as tres linhas do cabecalho: proposito/capacidade/dono ficam faltando.
     verbo.write_text("#!/usr/bin/env bash\necho oi\n", encoding="utf-8")
     monkeypatch.setattr(conferir, "BIN", str(bin_dir))
-    monkeypatch.setattr(conferir, "capacidades_do_mapa", lambda: None)
+    monkeypatch.setattr(conferir, "_capacidade_veredito", lambda cap: conferir.resultado.conforme())
+    monkeypatch.setattr(conferir, "_desde_familia", lambda familia: None)
     monkeypatch.setattr(
         conferir, "origem",
         lambda nome, caminho: ("so-no-host", "sem contraparte em repo"),
@@ -140,13 +176,45 @@ def test_verbo_json_divergente(tmp_path, monkeypatch, capsys):
 
     assert exit_code == 1
     dado = json.loads(saida.out)
-    assert dado["resultado"] == "divergente"
-    assert len(dado["verbos"]) == 1
-    v = dado["verbos"][0]
-    assert v["nome"] == "verboquebrado"
-    assert v["conforme"] is False
-    assert any("sem origem unica" in m for m in v["motivos"])
-    assert any("cabecalho incompleto" in m for m in v["motivos"])
+    item = next(i for i in dado["itens"] if i["nome"] == "verboquebrado")
+    assert item["estado"] == "divergente"
+    assert item["desde"] == "indeterminavel"
+    assert "sem origem unica" in item["motivo"]
+    assert "cabecalho incompleto" in item["motivo"]
+
+
+def test_verbo_capacidade_ausente_e_indeterminavel_se_acervo_falha(tmp_path, monkeypatch, capsys):
+    # card #3142: rc fora de {0,1,2} do acervo resolver (ou acervo fora do ar) e
+    # indeterminavel, nao divergente — nao afirmar ausencia sem conseguir olhar.
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    verbo = bin_dir / "meuverbo"
+    verbo.write_text(
+        "#!/usr/bin/env bash\n"
+        "# meuverbo - verbo de teste\n"
+        "# capacidade: verificacao-de-teste\n"
+        "# dono: claudinho-TI\n"
+        "echo ok\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(conferir, "BIN", str(bin_dir))
+    monkeypatch.setattr(conferir, "_desde_familia", lambda familia: None)
+    monkeypatch.setattr(
+        conferir, "origem",
+        lambda nome, caminho: ("symlink", str(bin_dir.parent / "origem-real" / nome)),
+    )
+    monkeypatch.setattr(
+        conferir, "sh",
+        lambda args: (3, "", "dependencia ausente: acervo") if "resolver" in args else (0, "", ""),
+    )
+
+    exit_code = conferir.conferir_verbo("meuverbo", como_json=True)
+    saida = capsys.readouterr()
+
+    assert exit_code == 5
+    dado = json.loads(saida.out)
+    item = next(i for i in dado["itens"] if i["nome"] == "meuverbo")
+    assert item["estado"] == "indeterminavel"
 
 
 # --- skill ------------------------------------------------------------------
