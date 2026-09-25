@@ -246,26 +246,26 @@ def test_skill_json_em_dia(harness_fixture, monkeypatch, capsys):
 
     assert exit_code == 0
     dado = json.loads(saida.out)
-    assert dado["skill"] == "minhaskill"
-    assert dado["fonte_blob"] == fonte_blob
-    assert dado["veredito"] == "em_dia"
-    assert dado["detalhe"] is None
+    assert dado["classe"] == "skill"
+    item = next(i for i in dado["itens"] if i["nome"] == "minhaskill")
+    assert item["estado"] == "conforme"
+    assert item["motivo"] is None
 
 
-def test_skill_json_sem_servido_e_indeterminado(harness_fixture, monkeypatch, capsys):
-    # Card #390 e explicito: sem --servido o veredito e "indeterminado" com exit 2
-    # — e o comportamento correto (ausencia de dado), nao um bug a consertar.
+def test_skill_json_sem_servido_e_indeterminavel(harness_fixture, monkeypatch, capsys):
+    # Card #3142 substitui a regra do #390 ("indeterminado", exit 2): ausencia de
+    # --servido e o mesmo "nao consegui olhar" das demais classes agora, e por isso
+    # segue o Veredito comum — exit 5, nao 2. Continua NAO sendo bug a consertar.
     monkeypatch.setattr(conferir, "HARNESS", str(harness_fixture))
 
     exit_code = conferir.conferir_skill("minhaskill", servido=None, como_json=True)
     saida = capsys.readouterr()
 
-    assert exit_code == 2
+    assert exit_code == 5
     dado = json.loads(saida.out)
-    assert dado["skill"] == "minhaskill"
-    assert dado["servido_blob"] is None
-    assert dado["veredito"] == "indeterminado"
-    assert dado["detalhe"]
+    item = next(i for i in dado["itens"] if i["nome"] == "minhaskill")
+    assert item["estado"] == "indeterminavel"
+    assert item["motivo"]
 
 
 # --- repo ---------------------------------------------------------------------
@@ -288,12 +288,10 @@ def test_repo_json_formato_ok(tmp_path, monkeypatch, capsys):
 
     assert exit_code == 0
     dado = json.loads(saida.out)
-    assert dado["resultado"] == "ok"
-    assert len(dado["repos"]) == 1
-    r = dado["repos"][0]
-    assert r["nome"] == "meurepo"
-    assert r["readme_ok"] is True
-    assert r["achados"] == {"GERADO": [], "ACERVO": [], "GRANEL": [], "GORDO": [], "RENDER": []}
+    assert dado["classe"] == "repo"
+    item = next(i for i in dado["itens"] if i["nome"] == "meurepo")
+    assert item["estado"] == "conforme"
+    assert item["motivo"] is None
 
 
 def test_repo_json_divergente_sem_readme(tmp_path, monkeypatch, capsys):
@@ -310,6 +308,6 @@ def test_repo_json_divergente_sem_readme(tmp_path, monkeypatch, capsys):
 
     assert exit_code == 1
     dado = json.loads(saida.out)
-    assert dado["resultado"] == "divergente"
-    assert len(dado["repos"]) == 1
-    assert dado["repos"][0]["readme_ok"] is False
+    item = next(i for i in dado["itens"] if i["nome"] == "semreadme")
+    assert item["estado"] == "divergente"
+    assert "README ausente" in item["motivo"]
