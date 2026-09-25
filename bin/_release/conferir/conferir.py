@@ -2172,11 +2172,14 @@ def excecoes_de_procedencia(caminho=DOC_PROCEDENCIA):
 
 def conferir_procedencia(alvo, como_json=False):
     por_nome, por_classe, erros = excecoes_de_procedencia()
-    houve = bool(erros)
     raiz = os.path.realpath(HARNESS)
-    dentro = fora = coberto = 0
+    dentro = fora = coberto = quebrado = 0
     entradas = []
+    itens = []
     vistos = 0
+
+    for i, erro in enumerate(erros, 1):
+        itens.append((f"lista de exceções #{i}", resultado.divergente(erro)))
 
     for nome in sorted(os.listdir(BIN)):
         if alvo and alvo != nome:
@@ -2207,13 +2210,20 @@ def conferir_procedencia(alvo, como_json=False):
         else:
             veredito, detalhe = "fora", destino
 
+        # card #3142: "quebrado" (symlink sem destino) e "nao consegui resolver", nao
+        # "fora" — indeterminavel, nao divergente. So "fora" de fato e reprovacao.
         if veredito == "harness":
             dentro += 1
+            itens.append((nome, resultado.conforme()))
         elif veredito in ("excecao", "excecao-classe"):
             coberto += 1
+            itens.append((nome, resultado.conforme()))
+        elif veredito == "quebrado":
+            quebrado += 1
+            itens.append((nome, resultado.indeterminavel(detalhe)))
         else:
             fora += 1
-            houve = True
+            itens.append((nome, resultado.divergente(detalhe)))
         entradas.append({"nome": nome, "veredito": veredito, "destino": destino, "detalhe": detalhe})
 
     if alvo and vistos == 0:
@@ -2221,32 +2231,25 @@ def conferir_procedencia(alvo, como_json=False):
         print(json.dumps({"erro": msg}) if como_json else f"\n{msg}")
         return 1
 
-    if como_json:
-        print(json.dumps({
-            "resultado": "divergente" if houve else "ok",
-            "lista_de_excecoes": DOC_PROCEDENCIA,
-            "erros_da_lista": erros,
-            "entradas": entradas,
-            "conta": {"harness": dentro, "excecao": coberto, "fora": fora},
-        }))
-        return 1 if houve else 0
+    if not como_json:
+        print(f"\n## procedencia dos caminhos de execucao em {BIN}")
+        print(f"    lista de excecoes: {DOC_PROCEDENCIA}")
+        for e in erros:
+            print(f"    LISTA   : {e}")
+        for e in entradas:
+            if e["veredito"] == "harness" and not alvo:
+                continue
+            marca = {"harness": "ok      ", "excecao": "excecao ", "excecao-classe": "excecao ",
+                     "quebrado": "QUEBRADO", "fora": "FORA    "}[e["veredito"]]
+            print(f"    {marca}: {e['nome']:<16} {e['detalhe']}")
+        print(f"\n    {dentro} dentro do harness . {coberto} excecao declarada . {fora} fora . "
+              f"{quebrado} quebrado (nao consegui resolver)")
+        if fora:
+            print("    Caminho de execucao fora do harness sem linha em docs/procedencia-do-harness.md.")
+            print("    Ou o arquivo se muda para o harness, ou a excecao se declara la — com dono e motivo.")
+        print()
 
-    print(f"\n## procedencia dos caminhos de execucao em {BIN}")
-    print(f"    lista de excecoes: {DOC_PROCEDENCIA}")
-    for e in erros:
-        print(f"    LISTA   : {e}")
-    for e in entradas:
-        if e["veredito"] == "harness" and not alvo:
-            continue
-        marca = {"harness": "ok      ", "excecao": "excecao ", "excecao-classe": "excecao ",
-                 "quebrado": "QUEBRADO", "fora": "FORA    "}[e["veredito"]]
-        print(f"    {marca}: {e['nome']:<16} {e['detalhe']}")
-    print(f"\n    {dentro} dentro do harness . {coberto} excecao declarada . {fora} fora")
-    if fora:
-        print("    Caminho de execucao fora do harness sem linha em docs/procedencia-do-harness.md.")
-        print("    Ou o arquivo se muda para o harness, ou a excecao se declara la — com dono e motivo.")
-    print()
-    return 1 if houve else 0
+    return resultado.relatorio("procedencia", alvo, itens, _sha_release(), como_json=como_json)
 
 
 def _norm(texto):

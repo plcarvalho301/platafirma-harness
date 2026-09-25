@@ -235,3 +235,117 @@ def test_skill_indeterminavel_quando_git_log_falha(monkeypatch, capsys):
     item = dado["itens"][0]
     assert item["estado"] == "indeterminavel"
     assert "historico" in item["motivo"]
+
+# --- conferir_procedencia (card #3142) ------------------------------------------
+# harness/excecao/excecao-classe = conforme; fora = divergente; quebrado (symlink
+# sem destino) = indeterminavel; cada erro de excecoes_de_procedencia() vira item
+# divergente proprio ("lista de exceções #N"). Filesystem real em tmp_path — mais
+# fiel que stubar os.listdir/os.path.* aqui, e conferir_procedencia so faz IO real.
+
+def _preparar_bin_procedencia(tmp_path, monkeypatch):
+    harness_dir = tmp_path / "platafirma-harness"
+    harness_dir.mkdir()
+    (harness_dir / "verbo-real").write_text("#!/usr/bin/env bash\necho ok\n")
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    monkeypatch.setattr(conferir, "RAIZ", str(tmp_path))
+    monkeypatch.setattr(conferir, "HARNESS", str(harness_dir))
+    monkeypatch.setattr(conferir, "BIN", str(bin_dir))
+    monkeypatch.setattr(conferir, "_sha_release", lambda: "abc1234")
+    monkeypatch.delenv("PF_PROD_RAIZ", raising=False)
+    return harness_dir, bin_dir
+
+
+def test_procedencia_tres_estados_por_entrada(tmp_path, monkeypatch, capsys):
+    harness_dir, bin_dir = _preparar_bin_procedencia(tmp_path, monkeypatch)
+    monkeypatch.setattr(conferir, "excecoes_de_procedencia", lambda: ({}, {}, []))
+
+    (bin_dir / "verbo-do-harness").symlink_to(harness_dir / "verbo-real")
+    (bin_dir / "arquivo-solto").write_text("echo nao e do harness\n")
+    (bin_dir / "link-quebrado").symlink_to(tmp_path / "nao-existe")
+
+    exit_code = conferir.conferir_procedencia(None, como_json=True)
+    saida = capsys.readouterr()
+
+    assert exit_code == 1  # divergente pesa mais que indeterminavel
+    dado = json.loads(saida.out)
+    itens = {i["nome"]: i for i in dado["itens"]}
+    assert itens["verbo-do-harness"]["estado"] == "conforme"
+    assert itens["arquivo-solto"]["estado"] == "divergente"
+    assert "copia nao e forma valida" in itens["arquivo-solto"]["motivo"]
+    assert itens["link-quebrado"]["estado"] == "indeterminavel"
+    assert "symlink sem destino" in itens["link-quebrado"]["motivo"]
+
+
+def test_procedencia_so_quebrado_sai_5_nao_1(tmp_path, monkeypatch, capsys):
+    """A correcao do card: quebrado nao e mais contado junto com "fora" (que forcava
+    exit 1 como se fosse divergencia real) — vira indeterminavel isolado, exit 5."""
+    harness_dir, bin_dir = _preparar_bin_procedencia(tmp_path, monkeypatch)
+    monkeypatch.setattr(conferir, "excecoes_de_procedencia", lambda: ({}, {}, []))
+
+    (bin_dir / "verbo-do-harness").symlink_to(harness_dir / "verbo-real")
+    (bin_dir / "link-quebrado").symlink_to(tmp_path / "nao-existe")
+
+    exit_code = conferir.conferir_procedencia(None, como_json=True)
+    saida = capsys.readouterr()
+
+    assert exit_code == 5
+    dado = json.loads(saida.out)
+    itens = {i["nome"]: i for i in dado["itens"]}
+    assert itens["link-quebrado"]["estado"] == "indeterminavel"
+    assert itens["verbo-do-harness"]["estado"] == "conforme"
+
+
+def test_procedencia_excecao_declarada_e_conforme(tmp_path, monkeypatch, capsys):
+    harness_dir, bin_dir = _preparar_bin_procedencia(tmp_path, monkeypatch)
+    monkeypatch.setattr(
+        conferir, "excecoes_de_procedencia",
+        lambda: ({"ferramenta-terceira": ("claudinho-TI", "instalada por apt, nao pelo harness")}, {}, []))
+
+    (bin_dir / "ferramenta-terceira").write_text("binario qualquer\n")
+
+    exit_code = conferir.conferir_procedencia(None, como_json=True)
+    saida = capsys.readouterr()
+
+    assert exit_code == 0
+    dado = json.loads(saida.out)
+    assert dado["itens"][0]["nome"] == "ferramenta-terceira"
+    assert dado["itens"][0]["estado"] == "conforme"
+
+
+def test_procedencia_erro_na_lista_de_excecoes_vira_item_divergente_proprio(tmp_path, monkeypatch, capsys):
+    harness_dir, bin_dir = _preparar_bin_procedencia(tmp_path, monkeypatch)
+    monkeypatch.setattr(
+        conferir, "excecoes_de_procedencia",
+        lambda: ({}, {}, [
+            "linha 7: `permite:` sem nome",
+            "linha 12: excecao 'foo' sem dono e/ou motivo declarados",
+        ]))
+
+    (bin_dir / "verbo-do-harness").symlink_to(harness_dir / "verbo-real")
+
+    exit_code = conferir.conferir_procedencia(None, como_json=True)
+    saida = capsys.readouterr()
+
+    assert exit_code == 1
+    dado = json.loads(saida.out)
+    nomes = [i["nome"] for i in dado["itens"]]
+    assert "lista de exceções #1" in nomes
+    assert "lista de exceções #2" in nomes
+    erro1 = next(i for i in dado["itens"] if i["nome"] == "lista de exceções #1")
+    assert erro1["estado"] == "divergente"
+    assert erro1["motivo"] == "linha 7: `permite:` sem nome"
+
+
+def test_procedencia_alvo_ausente_em_bin_e_erro_de_uso(tmp_path, monkeypatch, capsys):
+    """Preservado sem mudanca: alvo que nao e entrada de BIN e erro de uso (exit 1,
+    fora do envelope de resultado.relatorio), igual ao padrao de conferir_servico/verbo."""
+    harness_dir, bin_dir = _preparar_bin_procedencia(tmp_path, monkeypatch)
+    monkeypatch.setattr(conferir, "excecoes_de_procedencia", lambda: ({}, {}, []))
+
+    exit_code = conferir.conferir_procedencia("nao-existe-no-bin", como_json=True)
+    saida = capsys.readouterr()
+
+    assert exit_code == 1
+    assert "nao e entrada de" in json.loads(saida.out)["erro"]
+
