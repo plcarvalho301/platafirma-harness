@@ -1,5 +1,8 @@
 2a CONHECIMENTO CURADO (jornada)
-(sem entradas)
+- `mesa anota` grava no Valkey (substrato velho, TTL 48h) — NAO e o caderno duravel, mesmo aparecendo no mesmo `mesa ver` sob o mesmo rotulo de slot. O caderno duravel so existe via `mesa escrever <chapeu>` (ramo, commit, push, PR) — e so fica achavel depois do merge. Confundir os dois foi o achado central do levantamento de rotinas de 24/09 (registrar).
+- `Sobre:` em documento de casa so aceita classe verbo, capacidade, stack, instancia, repositorio, cadeira ou risco (arq:0115 6.2) — NAO aceita `card` nem o nome de outra especie (ex.: `spec rotinas-e-ciclos`). Testar com uma dessas classes antes de escrever o cabecalho, nao depois.
+- Merge em main de platafirma-casa NAO dispara a ingestao sozinho (arq:0115 8.1 segue Aberto) — rodar `acervo ingerir casa platafirma-casa --apply` a mao depois de todo PR mesclado, e so dar a publicacao por fechada depois de reler pelo `acervo ler`.
+- `repo pr-merge <numero>` — o numero vem do retorno do `repo pr-abrir` da mesma fita; nunca adivinhar ou reusar de memoria (risco de mesclar PR alheio).
 
 2b DIARIO DE BORDO (jornada)
 - 2026-09-24 — tentei `acervo ler spec rotinas-e-ciclos`, deu "particao 'spec' desconhecida" — contorno encontrado NA DATA 2026-09-24 foi `acervo ler casa spec rotinas-e-ciclos` (a particao vem antes da especie).
@@ -8,4 +11,6 @@
 - 2026-09-24 — `repo ramo` criou o ramo de um origin/main velho (sem fetch depois de um merge da mesma fita); o arquivo lido era a rev anterior — contorno encontrado NA DATA 2026-09-24 foi `repo git fetch origin` + `repo git reset --hard origin/main` antes de editar.
 - 2026-09-24 — merge em main do platafirma-casa (PRs #10 e #11) nao disparou a ingestao prevista em arq:0115 8.1; `acervo ler casa` seguia servindo a revisao anterior — contorno encontrado NA DATA 2026-09-24 foi `acervo ingerir casa platafirma-casa --apply` na mao, depois de cada merge.
 - 2026-09-24 — `descobrir "recuperação por identidade"` voltou "sem concessao para acervo:*" — contorno encontrado NA DATA 2026-09-24 foi `motor rag buscar casa "<termo>"` e depois `acervo ler casa <especie> <chave>`. (dono: descobrir foi absorvido; nao usar.)
-- 2026-09-24 — `mesa caderno <chapeu>` so le; nao ha ato que escreva caderno — contorno encontrado NA DATA 2026-09-24 foi editar abertura/produto/<chapeu>/caderno.md no platafirma-harness por ramo caderno/produto/* e PR.
+- 2026-09-24 — `mesa caderno <chapeu>` so le; nao ha ato que escreva caderno — contorno encontrado NA DATA 2026-09-24 foi editar abertura/produto/<chapeu>/caderno.md no platafirma-harness por ramo caderno/produto/* e PR. (correcao 24/09, fita seguinte: o ato correto e `mesa escrever <chapeu>`, corpo em stdin — nao existe ramo/PR manual para isto.)
+- 2026-09-24 (fan-out rotinas-no-codigo, PRs #12/#13) — `acervo ingerir casa platafirma-casa --apply` recusou o levantamento publicado: `Sobre: card 3120; spec rotinas-e-ciclos (rev 3)` usa classe `card`, nao aceita (arq:0115 6.2; aceitas: verbo, capacidade, stack, instancia, repositorio, cadeira, risco) — contorno: `Sobre: cadeira produto`, PR de correcao (#13), reingestao com sucesso.
+- 2026-09-24 (mesma fita) — PR #13 deu "not mergeable... merge commit cannot be cleanly created" (add/add: o ramo de correcao foi criado de um `origin/main` local desatualizado, sem o squash-merge do PR #12) — contorno: `repo atualizar` (fetch) + `repo git merge origin/main -X ours` no ramo antes de reabrir o pr-merge.
