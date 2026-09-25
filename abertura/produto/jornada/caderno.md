@@ -1,5 +1,8 @@
 2a CONHECIMENTO CURADO (jornada)
-(sem entradas)
+- `mesa anota` grava no Valkey (substrato velho, TTL 48h) — NAO e o caderno duravel, mesmo aparecendo no mesmo `mesa ver` sob o mesmo rotulo de slot. O caderno duravel so existe via `mesa escrever <chapeu>` (ramo, commit, push, PR) — e so fica achavel depois do merge. Confundir os dois foi o achado central do levantamento de rotinas de 24/09 (registrar).
+- `Sobre:` em documento de casa so aceita classe verbo, capacidade, stack, instancia, repositorio, cadeira ou risco (arq:0115 6.2) — NAO aceita `card` nem o nome de outra especie (ex.: `spec rotinas-e-ciclos`). Testar com uma dessas classes antes de escrever o cabecalho, nao depois.
+- Merge em main de platafirma-casa NAO dispara a ingestao sozinho (arq:0115 8.1 segue Aberto) — rodar `acervo ingerir casa platafirma-casa --apply` a mao depois de todo PR mesclado, e so dar a publicacao por fechada depois de reler pelo `acervo ler`.
+- `repo pr-merge <numero>` — o numero vem do retorno do `repo pr-abrir` da mesma fita; nunca adivinhar ou reusar de memoria (risco de mesclar PR alheio).
 
 2b DIARIO DE BORDO (jornada)
 - 2026-09-24 — tentei `acervo ler spec rotinas-e-ciclos`, deu "particao 'spec' desconhecida" — contorno encontrado NA DATA 2026-09-24 foi `acervo ler casa spec rotinas-e-ciclos` (a particao vem antes da especie).
