@@ -2294,39 +2294,70 @@ def _ferramental_psql(sql):
 
 
 def conferir_ferramental(alvo, como_json=False):
-    achados = []  # (severidade, texto): 'FALHA' muda veredito; 'DERIVA' so observa.
+    itens = []
 
     # (0) 1:1 capacidade<->verbo integro (invariante de schema, arq:0037).
+    nome_1a1 = "arq:0037 1:1 capacidade<->verbo"
+    achados_1a1 = []  # (severidade, texto): 'FALHA' muda veredito; 'DERIVA' so observa.
     linhas, erro = _ferramental_psql(
         "select c.slug, v.slug from acervo.ferramental_capacidade c "
         "full outer join acervo.ferramental_verbo v on v.capacidade_id=c.id "
         "where c.id is null or v.id is null")
     if erro:
-        msg = f"nao consegui ler acervo.ferramental: {erro}"
-        if como_json:
-            print(json.dumps({"classe": "ferramental", "erro": msg}, ensure_ascii=False))
+        # card #3142: nao conseguir consultar o acervo e indeterminavel, nao um exit
+        # cedo — a outra checagem (bin) segue sendo tentada, e o motivo entra na lista.
+        motivo = f"nao consegui ler acervo.ferramental: {erro}"
+        if not como_json:
+            print(f"  ??  {nome_1a1}: {motivo}")
+        itens.append((nome_1a1, resultado.indeterminavel(motivo)))
+    else:
+        for l in linhas:
+            cap, vb = (l.split("|") + [""])[:2]
+            if not vb:
+                achados_1a1.append(("FALHA", f"capacidade {cap!r} sem verbo (quebra 1:1)"))
+            elif not cap:
+                achados_1a1.append(("FALHA", f"verbo {vb!r} sem capacidade (quebra 1:1)"))
+        falhas_1a1 = [t for sev, t in achados_1a1 if sev == "FALHA"]
+        derivas_1a1 = [t for sev, t in achados_1a1 if sev == "DERIVA"]
+        if not como_json:
+            for t in falhas_1a1:
+                print(f"  FALHA  {t}")
+            for t in derivas_1a1:
+                print(f"  deriva {t}")
+        if falhas_1a1:
+            itens.append((nome_1a1, resultado.divergente("; ".join(falhas_1a1))))
         else:
-            print(f"conferir ferramental: {msg}", file=sys.stderr)
-        return 2
-    for l in linhas:
-        cap, vb = (l.split("|") + [""])[:2]
-        if not vb:
-            achados.append(("FALHA", f"capacidade {cap!r} sem verbo (quebra 1:1)"))
-        elif not cap:
-            achados.append(("FALHA", f"verbo {vb!r} sem capacidade (quebra 1:1)"))
+            itens.append((nome_1a1, resultado.conforme()))
 
     # (a) cada verbo declarado resolve em ~/AI/bin.
+    nome_bin = "arq:0037 verbo resolve em ~/AI/bin"
+    achados_bin = []  # (severidade, texto): 'FALHA' muda veredito; 'DERIVA' so observa.
     verbos, erro = _ferramental_psql(
         "select slug, coalesce(sot,'') from acervo.ferramental_verbo order by slug")
     if erro:
-        return 2
-    for l in verbos:
-        slug, sot = (l.split("|") + [""])[:2]
-        # so cobra PATH de verbo cujo sot aponta bin/ (ollama/matrix tem sot em stacks.json).
-        if not sot.startswith("bin/"):
-            continue
-        if not os.path.exists(os.path.join(BIN, slug)):
-            achados.append(("FALHA", f"verbo {slug!r} declarado (sot={sot}) nao existe em ~/AI/bin"))
+        motivo = f"nao consegui ler acervo.ferramental: {erro}"
+        if not como_json:
+            print(f"  ??  {nome_bin}: {motivo}")
+        itens.append((nome_bin, resultado.indeterminavel(motivo)))
+    else:
+        for l in verbos:
+            slug, sot = (l.split("|") + [""])[:2]
+            # so cobra PATH de verbo cujo sot aponta bin/ (ollama/matrix tem sot em stacks.json).
+            if not sot.startswith("bin/"):
+                continue
+            if not os.path.exists(os.path.join(BIN, slug)):
+                achados_bin.append(("FALHA", f"verbo {slug!r} declarado (sot={sot}) nao existe em ~/AI/bin"))
+        falhas_bin = [t for sev, t in achados_bin if sev == "FALHA"]
+        derivas_bin = [t for sev, t in achados_bin if sev == "DERIVA"]
+        if not como_json:
+            for t in falhas_bin:
+                print(f"  FALHA  {t}")
+            for t in derivas_bin:
+                print(f"  deriva {t}")
+        if falhas_bin:
+            itens.append((nome_bin, resultado.divergente("; ".join(falhas_bin))))
+        else:
+            itens.append((nome_bin, resultado.conforme()))
 
     # instancia -> stack NAO se confere aqui: stack e recorte de conveniencia de
     # deploy (o que sobe junto num compose), arbitrario. Nao existe regra
@@ -2338,25 +2369,7 @@ def conferir_ferramental(alvo, como_json=False):
     #     (arq:0076: acervo.stack e a fonte-verdade, registro/stacks.json nao existe),
     #     entao a pre-condicao esta cumprida e nao ha mais nada a medir aqui.
 
-    falhas = [t for sev, t in achados if sev == "FALHA"]
-    derivas = [t for sev, t in achados if sev == "DERIVA"]
-
-    if como_json:
-        print(json.dumps({
-            "classe": "ferramental",
-            "veredito": "em dia" if not falhas else "divergente",
-            "falhas": falhas, "observacoes_deriva": derivas,
-        }, ensure_ascii=False, indent=2))
-    else:
-        if falhas:
-            print("conferir ferramental: DIVERGENTE")
-            for t in falhas:
-                print(f"  FALHA  {t}")
-        else:
-            print("conferir ferramental: em dia (espinha capacidade->verbo->instancia integra)")
-        for t in derivas:
-            print(f"  deriva {t}")
-    return 1 if falhas else 0
+    return resultado.relatorio("ferramental", alvo, itens, _sha_release(), como_json=como_json)
 
 
 EXISTE_TIPOS = ("cadeira", "verbo", "card", "arquivo", "mesa")

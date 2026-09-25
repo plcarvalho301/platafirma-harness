@@ -456,3 +456,70 @@ def test_repo_staged_divergente_ainda_sugere_no_verify(monkeypatch, capsys, tmp_
     assert exit_code == 1
     assert "git commit --no-verify" in saida.out
 
+# --- conferir_ferramental (card #3142, classe ferramental) --------------------
+
+def _stub_ferramental_psql(respostas):
+    """respostas: lista de (predicado(sql) -> bool, (linhas|None, erro|None)). Primeira que bate, vale."""
+    def _psql(sql):
+        for pred, resp in respostas:
+            if pred(sql):
+                return resp
+        raise AssertionError(f"_ferramental_psql nao stubado para: {sql}")
+    return _psql
+
+
+def test_ferramental_conforme_quando_1a1_integro_e_verbo_resolve_em_bin(monkeypatch, capsys, tmp_path):
+    (tmp_path / "meuverbo").write_text("#!/bin/sh\n")
+    monkeypatch.setattr(conferir, "BIN", str(tmp_path))
+    monkeypatch.setattr(conferir, "_ferramental_psql", _stub_ferramental_psql([
+        (lambda sql: "full outer join" in sql, ([], None)),
+        (lambda sql: "order by slug" in sql, (["meuverbo|bin/meuverbo"], None)),
+    ]))
+    monkeypatch.setattr(conferir, "_sha_release", lambda: "abc1234")
+
+    exit_code = conferir.conferir_ferramental(None, como_json=True)
+    saida = capsys.readouterr()
+
+    assert exit_code == 0
+    dado = json.loads(saida.out)
+    assert len(dado["itens"]) == 2
+    assert all(item["estado"] == "conforme" for item in dado["itens"])
+
+
+def test_ferramental_divergente_quando_quebra_1a1_capacidade_verbo(monkeypatch, capsys, tmp_path):
+    monkeypatch.setattr(conferir, "BIN", str(tmp_path))
+    monkeypatch.setattr(conferir, "_ferramental_psql", _stub_ferramental_psql([
+        (lambda sql: "full outer join" in sql, (["capX|"], None)),
+        (lambda sql: "order by slug" in sql, ([], None)),
+    ]))
+    monkeypatch.setattr(conferir, "_sha_release", lambda: "abc1234")
+
+    exit_code = conferir.conferir_ferramental(None, como_json=True)
+    saida = capsys.readouterr()
+
+    assert exit_code == 1
+    dado = json.loads(saida.out)
+    item_1a1 = next(i for i in dado["itens"] if "1:1" in i["nome"])
+    item_bin = next(i for i in dado["itens"] if "bin" in i["nome"])
+    assert item_1a1["estado"] == "divergente"
+    assert "capX" in item_1a1["motivo"]
+    assert item_bin["estado"] == "conforme"
+
+
+def test_ferramental_indeterminavel_quando_acervo_inalcancavel(monkeypatch, capsys, tmp_path):
+    # card #3142: acervo fora do ar NAO pode sair como conforme (exit 0) nem morrer
+    # cedo em exit 2 sem lista — vira item indeterminavel para cada checagem, exit 5.
+    monkeypatch.setattr(conferir, "BIN", str(tmp_path))
+    monkeypatch.setattr(conferir, "_ferramental_psql",
+                         lambda sql: (None, "psql saiu 2: connection refused"))
+    monkeypatch.setattr(conferir, "_sha_release", lambda: "abc1234")
+
+    exit_code = conferir.conferir_ferramental(None, como_json=True)
+    saida = capsys.readouterr()
+
+    assert exit_code == 5
+    dado = json.loads(saida.out)
+    assert len(dado["itens"]) == 2
+    assert all(item["estado"] == "indeterminavel" for item in dado["itens"])
+    assert "acervo.ferramental" in dado["itens"][0]["motivo"]
+
