@@ -151,3 +151,87 @@ def test_existe_indeterminavel_sai_5(monkeypatch, capsys):
     assert exit_code == 5
     dado = json.loads(saida.out)
     assert dado["existe"] is None
+
+
+# --- conferir_skill (card #3142) -----------------------------------------------
+
+def _stub_sh_skill(fonte_sha, log_linhas=None, blob_por_sha=None, log_rc=0):
+    """sh() stub para conferir_skill: rev-parse HEAD:<caminho> -> fonte_sha; git log
+    -- <caminho> -> log_linhas (ou rc=log_rc quando != 0, simulando git log falho);
+    rev-parse <sha>:<caminho> -> blob_por_sha.get(sha) (default: nao bate com nada)."""
+    log_linhas = log_linhas or []
+    blob_por_sha = blob_por_sha or {}
+
+    def sh(args):
+        if "rev-parse" in args and any(isinstance(a, str) and a.startswith("HEAD:") for a in args):
+            return (0, fonte_sha, "")
+        if "log" in args and "--" in args:
+            if log_rc != 0:
+                return (log_rc, "", "git log falhou (stub)")
+            return (0, "\n".join(log_linhas), "")
+        if "rev-parse" in args:
+            sha = args[-1].split(":", 1)[0]
+            return (0, blob_por_sha.get(sha, "0" * 40), "")
+        raise AssertionError(f"sh() nao stubado para: {args}")
+    return sh
+
+
+def test_skill_conforme_quando_fonte_bate_com_servido(monkeypatch, capsys):
+    fonte = "abc123def4567890abc123def4567890abc123d"
+    monkeypatch.setattr(conferir, "sh", _stub_sh_skill(fonte))
+    monkeypatch.setattr(conferir, "_sha_release", lambda: "abc1234")
+
+    exit_code = conferir.conferir_skill("minha-skill", servido=fonte[:12], como_json=True)
+    saida = capsys.readouterr()
+
+    assert exit_code == 0
+    dado = json.loads(saida.out)
+    assert dado["itens"][0]["estado"] == "conforme"
+
+
+def test_skill_divergente_quando_servido_nao_esta_na_historia(monkeypatch, capsys):
+    fonte = "1111111111111111111111111111111111aaaa"
+    log_linhas = ["2222222222222222222222222222222222bbbb 2222222 2026-09-20 10:00:00 -0300 msg"]
+    monkeypatch.setattr(conferir, "sh", _stub_sh_skill(fonte, log_linhas=log_linhas))
+    monkeypatch.setattr(conferir, "_sha_release", lambda: "abc1234")
+
+    exit_code = conferir.conferir_skill("minha-skill", servido="deadbeefcafe", como_json=True)
+    saida = capsys.readouterr()
+
+    assert exit_code == 1
+    dado = json.loads(saida.out)
+    item = dado["itens"][0]
+    assert item["estado"] == "divergente"
+    assert "nao existe na historia" in item["motivo"]
+
+
+def test_skill_indeterminavel_quando_servido_nao_informado(monkeypatch, capsys):
+    """card #3142: sem servido pra comparar e 'nao consegui olhar', nao sucesso — o exit
+    fixo 2 de antes vira 5 (o mesmo exit de qualquer indeterminavel, via agrega())."""
+    fonte = "1111111111111111111111111111111111aaaa"
+    monkeypatch.setattr(conferir, "sh", _stub_sh_skill(fonte))
+    monkeypatch.setattr(conferir, "_sha_release", lambda: "abc1234")
+
+    exit_code = conferir.conferir_skill("minha-skill", servido=None, como_json=True)
+    saida = capsys.readouterr()
+
+    assert exit_code == 5
+    dado = json.loads(saida.out)
+    assert dado["itens"][0]["estado"] == "indeterminavel"
+
+
+def test_skill_indeterminavel_quando_git_log_falha(monkeypatch, capsys):
+    """card #3142, regra dura: git log falhando (rc != 0) ao listar o historico nao pode
+    virar 'servido nao existe na historia' (falso divergente) — vira indeterminavel."""
+    fonte = "1111111111111111111111111111111111aaaa"
+    monkeypatch.setattr(conferir, "sh", _stub_sh_skill(fonte, log_rc=128))
+    monkeypatch.setattr(conferir, "_sha_release", lambda: "abc1234")
+
+    exit_code = conferir.conferir_skill("minha-skill", servido="deadbeefcafe", como_json=True)
+    saida = capsys.readouterr()
+
+    assert exit_code == 5
+    dado = json.loads(saida.out)
+    item = dado["itens"][0]
+    assert item["estado"] == "indeterminavel"
+    assert "historico" in item["motivo"]

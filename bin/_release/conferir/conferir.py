@@ -1862,37 +1862,32 @@ def conferir_skill(nome, servido=None, como_json=False):
         print(f"skill: {nome}")
         print(f"  fonte   : {fonte}  ({caminho} em HEAD do harness)")
     if not servido:
-        if como_json:
-            print(json.dumps({
-                "skill": nome, "fonte_blob": fonte, "servido_blob": None,
-                "veredito": "indeterminado",
-                "detalhe": ("servido nao informado — ler o campo `origem:` do front-matter em "
-                            "/mnt/skills/user/<nome>/SKILL.md e repassar em --servido"),
-            }))
-        else:
+        detalhe = ("servido nao informado — ler o campo `origem:` do front-matter em "
+                    "/mnt/skills/user/<nome>/SKILL.md e repassar em --servido")
+        if not como_json:
             print("  servido : NAO INFORMADO — ler o campo `origem:` do front-matter em")
             print("            /mnt/skills/user/<nome>/SKILL.md e repassar em --servido.")
-            print("  veredito: indeterminado (nao confundir com em dia)")
-        return 2
+        itens = [(nome, resultado.indeterminavel(detalhe))]
+        return resultado.relatorio("skill", nome, itens, _sha_release(), como_json=como_json)
 
     servido = servido.strip()
     curto = servido[:12]
-    if fonte.startswith(servido) or servido.startswith(fonte[:12]):
-        if como_json:
-            print(json.dumps({
-                "skill": nome, "fonte_blob": fonte, "servido_blob": curto,
-                "veredito": "em_dia", "detalhe": None,
-            }))
-        else:
-            print(f"  servido : {curto}")
-            print("  veredito: em dia")
-        return 0
-
     if not como_json:
         print(f"  servido : {curto}")
+    if fonte.startswith(servido) or servido.startswith(fonte[:12]):
+        itens = [(nome, resultado.conforme())]
+        return resultado.relatorio("skill", nome, itens, _sha_release(), como_json=como_json)
+
     # O carimbo grava o hash do BLOB, nao o do commit: `git log a..b` nao se aplica.
     # O atraso se mede achando o commit mais recente em que o blob ainda era o servido.
     rc, hist, _ = sh(["git", "-C", HARNESS, "log", "--format=%H %h %ci %s", "--", caminho])
+    if rc != 0:
+        # card #3142: nao conseguir listar o historico e indeterminavel, nao divergente —
+        # sem historico nao da pra afirmar que o blob servido "nao existe" nele.
+        detalhe = f"nao consegui listar o historico de {caminho} (git log saiu {rc})"
+        itens = [(nome, resultado.indeterminavel(detalhe))]
+        return resultado.relatorio("skill", nome, itens, _sha_release(), como_json=como_json)
+
     desde = None
     depois = []
     for linha in hist.splitlines():
@@ -1905,21 +1900,13 @@ def conferir_skill(nome, servido=None, como_json=False):
     if desde:
         detalhe = f"{len(depois)} commit(s) desde que o servido subiu; servido corresponde a: {desde}"
         if not como_json:
-            print(f"  veredito: DIVERGENTE — {len(depois)} commit(s) desde que o servido subiu")
-            print(f"            servido corresponde a: {desde}")
             for linha in depois[:6]:
                 print(f"            + {linha}")
     else:
         detalhe = "o blob servido nao existe na historia da fonte (copia editada a mao, ou historia reescrita)"
-        if not como_json:
-            print("  veredito: DIVERGENTE — o blob servido nao existe na historia da fonte")
-            print("            (copia editada a mao, ou historia reescrita)")
-    if como_json:
-        print(json.dumps({
-            "skill": nome, "fonte_blob": fonte, "servido_blob": curto,
-            "veredito": "divergente", "detalhe": detalhe,
-        }))
-    return 1
+
+    itens = [(nome, resultado.divergente(detalhe))]
+    return resultado.relatorio("skill", nome, itens, _sha_release(), como_json=como_json)
 
 
 # --- classe: front ----------------------------------------------------------
