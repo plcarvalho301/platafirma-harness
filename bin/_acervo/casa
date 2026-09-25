@@ -237,7 +237,12 @@ _CAMPOS = """
     c.natureza::text as natureza, c.ciclo::text as ciclo, coalesce(c.titulo, '') as titulo,
     s.slug as subtipo, e.slug as especie, to_char(c.criado_em, 'YYYY-MM-DD') as criado_em,
     to_char(c.retirada_em at time zone 'UTC', 'YYYY-MM-DD') as retirada_em, c.substituida_por,
-    to_char(ci.criada_em, 'YYYY-MM-DD') as vetorizado_em"""
+    to_char(ci.criada_em, 'YYYY-MM-DD') as vetorizado_em,
+    c.forca::text as forca, c.revisao, c.status_declarado"""
+
+# card #3139 item 1: rotulo de exibicao da forca (o slug do banco fica em _item()["forca"]).
+FORCA_ROTULO = {"decisao": "decisão", "proposta": "proposta", "registro": "registro",
+               "nao_declarada": "força não declarada"}
 
 _ORDEM = "t.serie nulls last, t.numero nulls last, t.chave nulls last, t.repo, t.path"
 
@@ -266,6 +271,27 @@ def txt_retirada(linha):
     return (f"retirada em {linha['retirada_em']}; "
             + (f"substituída por {suc}" if suc else "sem sucessora declarada"))
 
+def vigencia(linha):
+    """card #3139 item 1: vigente | substituída por <chave> | retirada em <data> sem sucessora."""
+    if not linha.get("retirada_em"):
+        return "vigente"
+    suc = linha.get("substituida_por")
+    if suc:
+        return f"substituída por {suc}"
+    return f"retirada em {linha['retirada_em']} sem sucessora"
+
+def forca_vigencia_txt(linha):
+    """`<força>[, rev N] · <vigência>` (card #3139 item 1/4)."""
+    txt = FORCA_ROTULO.get(linha.get("forca"), linha.get("forca") or "força não declarada")
+    if linha.get("revisao"):
+        txt += f", rev {linha['revisao']}"
+    return f"{txt} · {vigencia(linha)}"
+
+def marca_linha(linha, especie):
+    """A linha que `ler casa` escreve antes do corpo (card #3139 item 1)."""
+    return (f"{forca_vigencia_txt(linha)} — {especie} {ident(linha)} · "
+            f"{linha.get('titulo') or '-'}")
+
 
 def _situacao(linha, fonte, esp):
     return {
@@ -280,9 +306,12 @@ def _situacao(linha, fonte, esp):
 def _item(linha):
     return {k: linha.get(k) for k in (
         "chave", "serie", "numero", "repo", "path", "sha", "dono", "natureza", "ciclo",
-        "subtipo", "criado_em", "retirada_em", "substituida_por")} | {
+        "subtipo", "criado_em", "retirada_em", "substituida_por",
+        "forca", "revisao", "status_declarado")} | {
         "id": ident(linha), "titulo": linha.get("titulo") or None,
-        "vetorizado_em": linha.get("vetorizado_em")}
+        "vetorizado_em": linha.get("vetorizado_em"),
+        "vigencia": vigencia(linha),
+        "marca": marca_linha(linha, linha["especie"]) if linha.get("especie") else None}
 
 
 # ------------------------------------------------------------------ listar
@@ -358,15 +387,15 @@ def listar(especie, quero_json, dono=None, situacao=False, todas=False):
         return 0
 
     wi = max((len(ident(l)) for l in linhas), default=5)
-    print("%-*s  %-11s  %s" % (wi, "chave", "ciclo", "titulo"))
-    print("%s  %s  %s" % ("-" * wi, "-" * 11, "-" * 6))
+    wf = max((len(forca_vigencia_txt(l)) for l in linhas), default=17)
+    print("%-*s  %-*s  %s" % (wi, "chave", wf, "força · vigência", "titulo"))
+    print("%s  %s  %s" % ("-" * wi, "-" * wf, "-" * 6))
     for l in linhas:
         titulo = l.get("titulo") or "-"
         if l.get("subtipo"):
             titulo = f"[{l['subtipo']}] {titulo}"
-        if l.get("retirada_em"):
-            titulo = f"{titulo}  ({txt_retirada(l)})"
-        print("%-*s  %-11s  %s" % (wi, ident(l), l.get("ciclo") or "-", titulo))
+        # a vigência (coluna à esquerda) já diz retirada/sucessora; título não repete.
+        print("%-*s  %-*s  %s" % (wi, ident(l), wf, forca_vigencia_txt(l), titulo))
     return 0
 
 
@@ -553,6 +582,7 @@ def ler(especie, seletor, quero_json, situacao=False):
                 doc["situacao"] = sit
             print(json.dumps(doc, ensure_ascii=False, indent=2))
             return 0
+        print(marca_linha(linha, especie))
         print(f"{ident(linha)}: {txt_retirada(linha)}")
         if linha.get("substituida_por"):
             print(f"  a vigente: acervo ler casa {especie} {linha['substituida_por']}")
@@ -566,6 +596,7 @@ def ler(especie, seletor, quero_json, situacao=False):
             doc["situacao"] = sit
         print(json.dumps(doc, ensure_ascii=False, indent=2))
         return 0
+    print(marca_linha(linha, especie))
     if situacao:
         sys.stdout.write(f"{ident(linha)} · {linha.get('titulo') or '-'}\n"
                          f"fonte: {sit['fonte']}   ingerido: {sit['ingerido']}   servido: {sit['servido']}\n"
