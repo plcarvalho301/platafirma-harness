@@ -171,3 +171,106 @@ def test_abrir_e_sanear_recupera_divergencia(tmp_path):
     # Testa também o sub-ato explícito `persona sanear`
     proc_sanear = _run_persona(["sanear"], env_extra={"PERSONA_REPO": str(clone_trabalho)})
     assert proc_sanear.returncode == 0
+
+
+@pytest.fixture
+def clone_com_remoto(tmp_path):
+    """Bare remote + clone de trabalho com abertura/teste/persona.md inicial, git configurado.
+
+    Reaproveita o padrão de setup de test_abrir_e_sanear_recupera_divergencia (card #3105):
+    bare remote + orig (push inicial) + clone_trabalho (onde os atos de persona rodam).
+    """
+    remote_bare = tmp_path / "remote.git"
+    subprocess.run(["git", "init", "--bare", str(remote_bare)], check=True, capture_output=True)
+
+    orig = tmp_path / "orig"
+    subprocess.run(["git", "clone", str(remote_bare), str(orig)], check=True, capture_output=True)
+    subprocess.run(["git", "-C", str(orig), "config", "user.name", "Test"], check=True)
+    subprocess.run(["git", "-C", str(orig), "config", "user.email", "test@platafirma.org"], check=True)
+
+    (orig / "abertura").mkdir()
+    (orig / "abertura" / "teste").mkdir()
+    (orig / "abertura" / "teste" / "persona.md").write_text("persona\n")
+    (orig / "registro").mkdir()
+    (orig / "registro" / "eventos-org.jsonl").write_text("")
+    subprocess.run(["git", "-C", str(orig), "add", "."], check=True)
+    subprocess.run(["git", "-C", str(orig), "commit", "-m", "init"], check=True)
+    subprocess.run(["git", "-C", str(orig), "branch", "-M", "main"], check=True)
+    subprocess.run(["git", "-C", str(orig), "push", "-u", "origin", "main"], check=True)
+    subprocess.run(["git", "-C", str(remote_bare), "symbolic-ref", "HEAD", "refs/heads/main"], check=True)
+
+    clone_trabalho = tmp_path / "clone_trabalho"
+    subprocess.run(["git", "clone", "-b", "main", str(remote_bare), str(clone_trabalho)], check=True, capture_output=True)
+    subprocess.run(["git", "-C", str(clone_trabalho), "config", "user.name", "Test"], check=True)
+    subprocess.run(["git", "-C", str(clone_trabalho), "config", "user.email", "test@platafirma.org"], check=True)
+
+    return remote_bare, orig, clone_trabalho
+
+
+def _persona_molde_novo_valida() -> str:
+    return (
+        "Você é uma cadeira no molde novo da PlataFirma.\n"
+        "Linha 2 de introdução.\n\n"
+        "## Perguntas de competência\n\n1. Pergunta 1?\n\n"
+        "## Vocabulário canônico\n\n- termo: definicao\n\n"
+        "## Escopo\n\n- o que nao faz\n\n"
+        "## Sinais de reconhecimento\n\n- sinal 1\n\n"
+        "## Gerências\n\n- **teste** — linha de teste\n"
+    )
+
+
+def _persona_molde_velho_invalida() -> str:
+    return (
+        "POSTURA: cadeira no molde velho\n\n"
+        "Texto solto sem as seções do molde novo.\n"
+    )
+
+
+def test_salvar_persona_valida_commita_e_envia_ao_remoto(clone_com_remoto):
+    """Regressão #3122: `persona salvar` com persona válida faz rc==0, imprime 'salvo',
+    não vaza 'local: can only be used in a function' no stderr (o bug do ramo fora de
+    função) e o commit chega ao remoto."""
+    remote_bare, _orig, clone_trabalho = clone_com_remoto
+
+    (clone_trabalho / "abertura" / "teste").mkdir(parents=True, exist_ok=True)
+    (clone_trabalho / "abertura" / "teste" / "persona.md").write_text(_persona_molde_novo_valida())
+
+    proc = _run_persona(
+        ["salvar", "-m", "teste"],
+        env_extra={"PERSONA_REPO": str(clone_trabalho)},
+    )
+    assert proc.returncode == 0, f"persona salvar falhou: {proc.stderr}\n{proc.stdout}"
+    assert "salvo" in proc.stdout
+    assert "local:" not in proc.stderr
+
+    sha_remoto_msg = subprocess.run(
+        ["git", "--git-dir", str(remote_bare), "log", "-1", "--format=%s"],
+        check=True, capture_output=True, text=True,
+    ).stdout.strip()
+    assert sha_remoto_msg == "teste"
+
+
+def test_salvar_persona_molde_velho_bloqueia_sem_commit(clone_com_remoto):
+    """Persona no molde velho reprova em `conferir` dentro de `salvar`: rc==1 e nenhum
+    commit novo chega ao remoto — o gate do conferir não pode cair."""
+    remote_bare, _orig, clone_trabalho = clone_com_remoto
+
+    sha_antes = subprocess.run(
+        ["git", "--git-dir", str(remote_bare), "rev-parse", "HEAD"],
+        check=True, capture_output=True, text=True,
+    ).stdout.strip()
+
+    (clone_trabalho / "abertura" / "teste").mkdir(parents=True, exist_ok=True)
+    (clone_trabalho / "abertura" / "teste" / "persona.md").write_text(_persona_molde_velho_invalida())
+
+    proc = _run_persona(
+        ["salvar", "-m", "invalido"],
+        env_extra={"PERSONA_REPO": str(clone_trabalho)},
+    )
+    assert proc.returncode == 1, f"esperava rc==1, veio {proc.returncode}: {proc.stdout}"
+
+    sha_depois = subprocess.run(
+        ["git", "--git-dir", str(remote_bare), "rev-parse", "HEAD"],
+        check=True, capture_output=True, text=True,
+    ).stdout.strip()
+    assert sha_depois == sha_antes
