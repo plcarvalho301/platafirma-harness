@@ -459,6 +459,66 @@ def test_resolver_adr_forma_no_cliente_e_recusa_quando_a_classe_sai(monkeypatch,
     assert "acervo ler casa adr arq:0110" in capsys.readouterr().err
 
 
+def test_resolver_adr_por_slug_do_arquivo(monkeypatch):
+    # card #3121: sem chave nem numero, `ler casa adr <slug>` resolve pelo NNNN-<slug>.md do
+    # caminho — a adr e regime 'vivo' mas a CHAVE e <serie>:NNNN, nao o slug; sem este degrau
+    # o slug do arquivo nunca resolvia.
+    info = {"slug": "adr", "regime": "vivo"}
+    slug = "sessao-id-a-chave-nomeada-da-entidade-sessao-cunhada-na-borda-como-shadow-session"
+    achada = dict(LINHA_VIVA, chave="arq:0091", numero=91,
+                 path="adr/arq/0091-" + slug + ".md")
+    wheres = []
+
+    def linhas(where, limite=None):
+        wheres.append(where)
+        return [achada] if "c.path ~" in where else []
+
+    monkeypatch.setattr(casa, "_linhas", linhas)
+    assert casa.resolver("adr", slug, info) is achada
+    assert any("c.path ~" in w and slug in w for w in wheres)
+
+
+def test_resolver_adr_slug_ambiguo_lista_opcoes(monkeypatch, capsys):
+    info = {"slug": "adr", "regime": "vivo"}
+    duas = [dict(LINHA_VIVA, chave="arq:0091"), dict(LINHA_VIVA, chave="arq:0092")]
+    monkeypatch.setattr(casa, "_linhas", lambda where, limite=None:
+                        duas if "c.path ~" in where else [])
+    with pytest.raises(SystemExit) as e:
+        casa.resolver("adr", "slug-repetido", info)
+    assert e.value.code == 2
+    assert "ambiguo" in capsys.readouterr().err
+
+
+def test_resolver_adr_numero_puro_nao_cai_no_degrau_de_slug(monkeypatch):
+    # regressao: '0091' casa RE_ADR (numero nu) e resolve antes de chegar ao degrau de slug.
+    chamou_slug = []
+
+    def linhas(where, limite=None):
+        if "c.numero = 91" in where:
+            return [dict(LINHA_VIVA, chave="arq:0091", numero=91)]
+        if "c.path ~" in where:
+            chamou_slug.append(where)
+        return []
+
+    monkeypatch.setattr(casa, "_linhas", linhas)
+    achada = casa.resolver("adr", "0091", {"slug": "adr", "regime": "vivo"})
+    assert achada["chave"] == "arq:0091"
+    assert chamou_slug == []
+
+
+def test_resolver_adr_forma_invalida_nao_casa_slug_e_negativa_lista_formas(monkeypatch, capsys):
+    # 'arq-0091' nao e <serie>:NNNN (hifen, nao dois-pontos): normalizar() nao recusa (nao
+    # comeca com 'letras:' nem digito), mas nenhum degrau acha nada e a negativa final (exit
+    # 1) lista as formas aceitas, incluindo o slug do arquivo.
+    monkeypatch.setattr(casa, "_linhas", lambda where, limite=None: [])
+    monkeypatch.setattr(casa._identidade, "gerar_negativa", lambda *a, **k: "negativa")
+    with pytest.raises(SystemExit) as e:
+        casa.resolver("adr", "arq-0091", {"slug": "adr", "regime": "vivo"})
+    assert e.value.code == 1
+    err = capsys.readouterr().err
+    assert "formas:" in err and casa.FORMA_ADR in err and "<slug> do arquivo" in err
+
+
 # ------------------------------------------------------------------ despachante (sem banco)
 
 BIN = os.path.join(REPO, "bin", "acervo")

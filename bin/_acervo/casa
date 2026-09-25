@@ -19,10 +19,10 @@
 #   acervo ler    casa <especie> <chave> [--situacao] [--json]
 #
 # Chave (§3): adr `<serie>:NNNN` (arq:75 -> arq:0075; número nu resolve se uma série só o
-# tiver, senão lista as opções, exit 2); minuta `NNNN`; datado `<AAAA-MM-DD>-<slug>` (o slug
-# sem a data resolve se for único); vivo `<slug>`. Depois: repo@path, path e, por fim, o
-# título. Documento RETIRADO (§3.5) segue resolvível: `ler` responde a data e a sucessora,
-# sem o texto (exit 0).
+# tiver, senão lista as opções, exit 2; ou o <slug> do arquivo NNNN-<slug>.md, se único);
+# minuta `NNNN`; datado `<AAAA-MM-DD>-<slug>` (o slug sem a data resolve se for único); vivo
+# `<slug>`. Depois: repo@path, path e, por fim, o título. Documento RETIRADO (§3.5) segue
+# resolvível: `ler` responde a data e a sucessora, sem o texto (exit 0).
 # Primeira linha de `listar` (§11.2): o que veio e com que cobertura (fonte platafirma-casa@
 # <sha> ingerida em <ts>, projeção, regime, último número por série). psql que falha é
 # INDETERMINÁVEL (exit 5), nunca "0 linhas". `servido` é POR LINHA: o sha do texto que a
@@ -529,7 +529,8 @@ def _ambiguo(especie, seletor, cands, porque):
 
 def resolver(especie, seletor, info):
     """A linha de acervo.casa do seletor, pela escada: chave -> número nu (adr) -> slug sem
-    data (datado) -> repo@path / path -> título. Nada: negativa, exit 1."""
+    data (datado) -> slug de arquivo (adr) -> repo@path / path -> título. Nada: negativa,
+    exit 1."""
     s = seletor.strip()
     base = f"e.slug = {_lit(especie)}"
     if "@" in s and not s.startswith("@"):
@@ -557,6 +558,15 @@ def resolver(especie, seletor, info):
                 _ambiguo(especie, s, cands, "o slug existe em mais de uma data")
             if cands:
                 return cands[0]
+        # adr e regime 'vivo' (chave <serie>:NNNN, nao o slug) mas o arquivo ainda e
+        # NNNN-<slug>.md: sem este degrau, o slug do arquivo nunca resolvia (card #3121).
+        if especie == "adr" and RE_SLUG.match(s) and not RE_ADR.match(s):
+            rx = "/[0-9]{4}-" + s + r"\.md$"
+            cands = _linhas(f"{base} and c.path ~ {_lit(rx)}", limite=50)
+            if len(cands) > 1:
+                _ambiguo(especie, s, cands, "o slug existe em mais de um arquivo")
+            if cands:
+                return cands[0]
         cands = _linhas(f"{base} and c.path = {_lit(s)}", limite=50)
         if len(cands) > 1:
             _ambiguo(especie, s, cands, "o caminho existe em mais de um repo")
@@ -573,6 +583,8 @@ def resolver(especie, seletor, info):
             if cands:
                 return cands[0]
     diag = _identidade.gerar_negativa(especie, seletor, casa=True)
+    if especie == "adr":
+        diag += f"\nformas: {FORMA_ADR} ou <slug> do arquivo"
     morre("acervo casa: nada da especie '%s' com chave '%s' em acervo.casa.\n%s"
           % (especie, seletor, diag), 1)
 
@@ -623,8 +635,9 @@ USO = """uso:
   acervo listar casa [<especie>] --sobre <classe> <chave> [--todas] [--json]
   acervo ler    casa <especie> <chave> [--situacao] [--json]
 
-<chave>: adr <serie>:NNNN (arq:0075; arq:75 e 75 resolvem se não houver ambiguidade),
-minuta NNNN, datado <AAAA-MM-DD>-<slug> (ou só o <slug>, se único), vivo <slug>.
+<chave>: adr <serie>:NNNN (arq:0075; arq:75 e 75 resolvem se não houver ambiguidade) ou o
+<slug> do arquivo NNNN-<slug>.md (se único), minuta NNNN, datado <AAAA-MM-DD>-<slug> (ou só
+o <slug>, se único), vivo <slug>.
 <especie> é validada contra acervo.especie_tipo (vocabulário fechado, arq:0059).
 exit: 0 ok · 1 nada · 2 uso/forma/ambíguo · 5 indeterminável.
 Read-only; a escrita é `acervo ingerir casa platafirma-casa`."""
