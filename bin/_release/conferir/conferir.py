@@ -2996,13 +2996,15 @@ def conferir_vocabulario(alvo=None, como_json=False):
     padrao_crase = re.compile(r"`([^`\n]+)`")
     fora = []
     ok_count = 0
+    itens = []
 
     for arq in candidatos:
         rel = os.path.relpath(arq, repo_raiz)
         try:
             with open(arq, "r", encoding="utf-8", errors="replace") as fp:
                 linhas = fp.readlines()
-        except OSError:
+        except OSError as e:
+            itens.append((rel, resultado.indeterminavel(f"nao consegui ler {rel}: {e}")))
             continue
 
         for num_linha, linha in enumerate(linhas, 1):
@@ -3042,23 +3044,18 @@ def conferir_vocabulario(alvo=None, como_json=False):
                         "verbo": v,
                         "ato": ato,
                     })
+                    itens.append((f"{rel}:{num_linha}", resultado.divergente(
+                        f"{rel}:{num_linha} — `{expr}`: verbo '{v}' nao serve ato '{ato}'"
+                    )))
 
-    if como_json:
-        print(json.dumps({
-            "total_conferidos": ok_count + len(fora),
-            "total_fora": len(fora),
-            "fora": fora,
-        }, indent=2))
-        return 0 if not fora else 1
+    itens.append((f"{ok_count} referencia(s) conferida(s)", resultado.conforme()))
 
-    if fora:
+    if not como_json and fora:
         print(f"conferir vocabulario: {len(fora)} fora:")
         for item in fora:
             print(f"  {item['arquivo']}:{item['linha']} — `{item['expressao']}`: verbo '{item['verbo']}' nao serve ato '{item['ato']}'")
-        return 1
-    else:
-        print(f"conferir vocabulario: 0 fora ({ok_count} referencias conferidas)")
-        return 0
+
+    return resultado.relatorio("vocabulario", alvo, itens, _sha_release(), como_json=como_json)
 
 
 def main(argv):

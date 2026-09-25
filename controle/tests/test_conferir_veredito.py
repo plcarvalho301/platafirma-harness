@@ -1177,3 +1177,64 @@ def test_pdp_sem_caminho_de_divergencia_hoje(monkeypatch, tmp_path, capsys):
     dado = json.loads(saida.out)
     assert len(dado["itens"]) == 4
     assert all(item["estado"] == "conforme" for item in dado["itens"])
+
+
+# --- conferir_vocabulario (card #3142) ------------------------------------
+
+def test_vocabulario_conforme_quando_todas_as_referencias_estao_no_catalogo(monkeypatch, tmp_path, capsys):
+    alvo = tmp_path / "dono.md"
+    alvo.write_text("texto com `verboA acaoA` no meio da frase.\n", encoding="utf-8")
+    monkeypatch.setattr(conferir, "carregar_verbos_e_atos",
+                         lambda bin_dir: ({"verboA": {"acaoA"}}, {}))
+    monkeypatch.setattr(conferir, "_sha_release", lambda: "abc1234")
+
+    exit_code = conferir.conferir_vocabulario(str(alvo), como_json=True)
+    saida = capsys.readouterr()
+
+    assert exit_code == 0
+    dado = json.loads(saida.out)
+    assert len(dado["itens"]) == 1
+    item = dado["itens"][0]
+    assert item["estado"] == "conforme"
+    assert item["nome"] == "1 referencia(s) conferida(s)"
+
+
+def test_vocabulario_divergente_quando_ato_fora_do_catalogo(monkeypatch, tmp_path, capsys):
+    alvo = tmp_path / "dono.md"
+    alvo.write_text("usa `verboA acaoZ` que nao existe.\n", encoding="utf-8")
+    monkeypatch.setattr(conferir, "carregar_verbos_e_atos",
+                         lambda bin_dir: ({"verboA": {"acaoA"}}, {}))
+    monkeypatch.setattr(conferir, "_sha_release", lambda: "abc1234")
+
+    exit_code = conferir.conferir_vocabulario(str(alvo), como_json=True)
+    saida = capsys.readouterr()
+
+    assert exit_code == 1
+    dado = json.loads(saida.out)
+    divergentes = [it for it in dado["itens"] if it["estado"] == "divergente"]
+    assert len(divergentes) == 1
+    item = divergentes[0]
+    assert item["nome"].endswith("dono.md:1")
+    assert "verbo 'verboA' nao serve ato 'acaoZ'" in item["motivo"]
+    assert "dono.md:1" in item["motivo"]
+
+
+def test_vocabulario_indeterminavel_quando_nao_consegue_ler_arquivo(monkeypatch, tmp_path, capsys):
+    alvo = tmp_path / "dono.md"
+    alvo.write_text("`verboA acaoA`\n", encoding="utf-8")
+    monkeypatch.setattr(conferir, "carregar_verbos_e_atos",
+                         lambda bin_dir: ({"verboA": {"acaoA"}}, {}))
+    monkeypatch.setattr(conferir, "_sha_release", lambda: "abc1234")
+
+    def _open_falha(*a, **k):
+        raise OSError("entrada/saida: acervo indisponivel")
+    monkeypatch.setattr(conferir, "open", _open_falha, raising=False)
+
+    exit_code = conferir.conferir_vocabulario(str(alvo), como_json=True)
+    saida = capsys.readouterr()
+
+    assert exit_code == 5
+    dado = json.loads(saida.out)
+    indeterminaveis = [it for it in dado["itens"] if it["estado"] == "indeterminavel"]
+    assert len(indeterminaveis) == 1
+    assert "nao consegui ler" in indeterminaveis[0]["motivo"]
