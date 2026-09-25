@@ -65,6 +65,16 @@ SEM_SONDA = {
     "mcp": "sem rota de saude propria; sonda fica para quando houver",
 }
 
+# Servico -> unit systemd --user oneshot (disparada por timer, sem container e sem
+# healthcheck proprio, card #3141 passo 9). O veredito e o Result do ultimo start:
+# `systemctl --user show <unit> -p Result` == "success" e no-ar; qualquer outro
+# valor (exit-code, timeout, signal, ou vazio — nunca rodou) e fora, com o Result
+# como motivo.
+POR_SYSTEMD_RESULT = {
+    "casa-site-publicar": "casa-site-publicar.service",
+    "abertura-caderno": "abertura-caderno.service",
+}
+
 
 def agora():
     return datetime.now(timezone.utc).isoformat(timespec="seconds")
@@ -120,6 +130,19 @@ def do_sonda_externa(nome, posto, url, exige, proibido):
     return {"estado": "no-ar", "exercitado": onde}
 
 
+def do_systemd_result(nome, unit):
+    onde = f"systemctl --user show {unit} -p Result"
+    rc, out, err = roda(["systemctl", "--user", "show", unit, "-p", "Result"])
+    if rc != 0:
+        motivo = (err or out or f"systemctl saiu {rc}").splitlines()[0][:300]
+        return {"estado": "fora", "exercitado": onde, "motivo": motivo}
+    resultado = out.strip()
+    if resultado.startswith("Result="):
+        resultado = resultado[len("Result="):]
+    if resultado == "success":
+        return {"estado": "no-ar", "exercitado": onde}
+    return {"estado": "fora", "exercitado": onde, "motivo": f"Result={resultado or '(vazio)'}"}
+
 def do_runtime():
     """A classe de falha que healthcheck de servico nenhum pega: pacote de sistema
     atualizado com o processo vivo. Nada quebra ate alguem tentar CRIAR contendor —
@@ -145,6 +168,10 @@ def coleta():
     for nome, motivo in SEM_SONDA.items():
         servicos[nome] = {"estado": "sem-sinal", "exercitado": None,
                           "motivo": motivo, "lido_em": agora()}
+    for nome, unit in POR_SYSTEMD_RESULT.items():
+        e = do_systemd_result(nome, unit)
+        e["lido_em"] = agora()
+        servicos[nome] = e
     runtime = do_runtime()
     runtime["lido_em"] = agora()
     return {"gerado_em": agora(), "runtime": runtime, "servicos": servicos}
