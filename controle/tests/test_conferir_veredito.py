@@ -349,3 +349,110 @@ def test_procedencia_alvo_ausente_em_bin_e_erro_de_uso(tmp_path, monkeypatch, ca
     assert exit_code == 1
     assert "nao e entrada de" in json.loads(saida.out)["erro"]
 
+
+def _stub_sh_repo(respostas):
+    """Como _stub_sh, mas aceita cwd= (conferir_repo sempre chama sh(args, cwd=raiz))."""
+    def sh(args, cwd=None):
+        for pred, resp in respostas:
+            if pred(args):
+                return resp
+        raise AssertionError(f"sh() nao stubado para: {args} (cwd={cwd})")
+    return sh
+
+
+# --- conferir_repo (card #3142) -----------------------------------------------
+
+def test_repo_conforme_quando_nada_achado(monkeypatch, capsys, tmp_path):
+    raiz_repo = tmp_path / "casa-boa"
+    (raiz_repo / ".git").mkdir(parents=True)
+    (raiz_repo / "src").mkdir()
+    (raiz_repo / "src" / "oi.py").write_text("print('oi')\n", encoding="utf-8")
+    (raiz_repo / "README.md").write_text("# casa boa\n\nDiretorios: src/\n", encoding="utf-8")
+
+    monkeypatch.setattr(conferir, "RAIZ", str(tmp_path))
+    monkeypatch.setattr(conferir, "sh", _stub_sh_repo([
+        (lambda a: a[:2] == ["git", "ls-files"], (0, "src/oi.py\x00README.md\x00", "")),
+    ]))
+    monkeypatch.setattr(conferir, "_sha_release", lambda: "abc1234")
+
+    exit_code = conferir.conferir_repo("casa-boa", como_json=True)
+    saida = capsys.readouterr()
+
+    assert exit_code == 0
+    dado = json.loads(saida.out)
+    assert dado["itens"][0]["estado"] == "conforme"
+
+
+def test_repo_divergente_cita_gerado_e_readme_ausente(monkeypatch, capsys, tmp_path):
+    raiz_repo = tmp_path / "casa-suja"
+    (raiz_repo / ".git").mkdir(parents=True)
+    (raiz_repo / "modulo.pyc").write_bytes(b"fake-bytecode")
+
+    monkeypatch.setattr(conferir, "RAIZ", str(tmp_path))
+    monkeypatch.setattr(conferir, "sh", _stub_sh_repo([
+        (lambda a: a[:2] == ["git", "ls-files"], (0, "modulo.pyc\x00", "")),
+    ]))
+    monkeypatch.setattr(conferir, "_sha_release", lambda: "abc1234")
+
+    exit_code = conferir.conferir_repo("casa-suja", como_json=True)
+    saida = capsys.readouterr()
+
+    assert exit_code == 1
+    item = json.loads(saida.out)["itens"][0]
+    assert item["estado"] == "divergente"
+    assert "GERADO" in item["motivo"]
+    assert "README ausente" in item["motivo"]
+
+
+def test_repo_indeterminavel_quando_git_ls_files_falha(monkeypatch, capsys, tmp_path):
+    """card #3142: 'nao consegui olhar' nunca e conforme. Antes desta conversao o rc de
+    `sh()` era descartado (`_, out, _ = sh(...)`): git falhando virava lista vazia e o
+    repo caia no caminho de 'nada achado' — conforme por omissao. Aqui tem que sair
+    indeterminavel (exit 5), nunca 0."""
+    raiz_repo = tmp_path / "casa-quebrada"
+    (raiz_repo / ".git").mkdir(parents=True)
+
+    monkeypatch.setattr(conferir, "RAIZ", str(tmp_path))
+    monkeypatch.setattr(conferir, "sh", _stub_sh_repo([
+        (lambda a: a[:2] == ["git", "ls-files"],
+         (128, "", "fatal: not a git repository (disco indisponivel)")),
+    ]))
+    monkeypatch.setattr(conferir, "_sha_release", lambda: "abc1234")
+
+    exit_code = conferir.conferir_repo("casa-quebrada", como_json=True)
+    saida = capsys.readouterr()
+
+    assert exit_code == 5
+    item = json.loads(saida.out)["itens"][0]
+    assert item["estado"] == "indeterminavel"
+    assert "ls-files" in item["motivo"]
+
+
+def test_repo_staged_divergente_ainda_sugere_no_verify(monkeypatch, capsys, tmp_path):
+    """O hook de pre-commit chama `conferir repo --staged` em TEXTO, nao --json — este
+    caminho nao pode quebrar, e a dica de `git commit --no-verify` e o jeito declarado
+    de passar por cima (card #3142)."""
+    raiz_repo = tmp_path / "casa-staged"
+    (raiz_repo / ".git").mkdir(parents=True)
+    (raiz_repo / "modulo.pyc").write_bytes(b"x")
+
+    monkeypatch.setattr(conferir, "RAIZ", str(tmp_path))
+
+    def sh_staged(args, cwd=None):
+        if args[:2] == ["git", "rev-parse"]:
+            return (0, str(raiz_repo), "")
+        if args[:2] == ["git", "ls-files"]:
+            return (0, "modulo.pyc\x00", "")
+        if args[:2] == ["git", "diff"]:
+            return (0, "modulo.pyc\x00", "")
+        raise AssertionError(args)
+
+    monkeypatch.setattr(conferir, "sh", sh_staged)
+    monkeypatch.setattr(conferir, "_sha_release", lambda: "abc1234")
+
+    exit_code = conferir.conferir_repo(None, staged=True, como_json=False)
+    saida = capsys.readouterr()
+
+    assert exit_code == 1
+    assert "git commit --no-verify" in saida.out
+

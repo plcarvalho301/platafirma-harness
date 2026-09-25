@@ -708,13 +708,21 @@ def gerado_por_ferramenta(caminho):
 
 
 def conferir_repo(alvo, staged=False, como_json=False):
-    houve = False
     vistos = 0
-    repos_json = []
+    itens = []
     for nome, raiz in alvos_de_repo(alvo, staged):
         vistos += 1
         divergiu = False
-        _, out, _ = sh(["git", "ls-files", "-z"], cwd=raiz)
+        rc_ls, out, err_ls = sh(["git", "ls-files", "-z"], cwd=raiz)
+        if rc_ls != 0:
+            # nao consegui listar o rastreado deste repo — "nao olhei" nunca e "nada
+            # achado" (card #3142: falha de leitura nao vira conforme por omissao).
+            motivo_ls = f"git ls-files falhou (rc={rc_ls}): {err_ls or '(sem saida)'}"
+            if not como_json:
+                print(f"\n### {nome}")
+                print(f"    ERRO    : {motivo_ls}")
+            itens.append((nome, resultado.indeterminavel(motivo_ls)))
+            continue
         arquivos = [p for p in out.split("\0") if p]
         if staged:
             # Julga so o que este commit acrescenta ou muda. Divergencia preexistente
@@ -783,19 +791,28 @@ def conferir_repo(alvo, staged=False, como_json=False):
                 print(f"    commit  : {len(sob_juizo)} arquivo(s) sob juizo")
             else:
                 print(f"    peso    : {peso / 1048576:.1f} MB rastreados em {len(arquivos)} arquivos")
+        achados_motivo = []
         for rotulo in ("GERADO", "ACERVO", "GRANEL", "GORDO", "RENDER"):
-            itens = achados[rotulo]
-            if not itens:
+            lista = achados[rotulo]
+            if not lista:
                 continue
-            houve = divergiu = True
+            divergiu = True
+            nomes = ", ".join(rel for rel, _ in sorted(lista, key=lambda x: -x[1])[:5])
+            if len(lista) > 5:
+                nomes += f", +{len(lista) - 5} outro(s)"
+            achados_motivo.append(f"{rotulo}: {len(lista)} arquivo(s) — {nomes}")
             if not como_json:
-                for rel, tam in sorted(itens, key=lambda x: -x[1])[:8]:
+                for rel, tam in sorted(lista, key=lambda x: -x[1])[:8]:
                     print(f"    {rotulo:<8}: {tam / 1048576:>7.2f} MB  {rel}")
-                if len(itens) > 8:
-                    soma = sum(t for _, t in itens[8:]) / 1048576
-                    print(f"    {rotulo:<8}: + {len(itens) - 8} outros, {soma:.1f} MB")
+                if len(lista) > 8:
+                    soma = sum(t for _, t in lista[8:]) / 1048576
+                    print(f"    {rotulo:<8}: + {len(lista) - 8} outros, {soma:.1f} MB")
         if sem_cabecalho:
-            houve = divergiu = True
+            divergiu = True
+            nomes_cab = ", ".join(f"{r} ({m})" for r, m in sorted(sem_cabecalho)[:3])
+            if len(sem_cabecalho) > 3:
+                nomes_cab += f", +{len(sem_cabecalho) - 3} outro(s)"
+            achados_motivo.append(f"cabecalho de operacao ausente/incompleto: {nomes_cab}")
             if not como_json:
                 for rel, motivo in sorted(sem_cabecalho):
                     print(f"    CABECALHO: {rel} — {motivo}")
@@ -810,28 +827,27 @@ def conferir_repo(alvo, staged=False, como_json=False):
                 print("    Passar por cima: git commit --no-verify (fica so no teu terminal).")
         else:
             if readme is None:
-                houve = divergiu = True
+                divergiu = True
                 readme_ok = False
+                achados_motivo.append("README ausente")
                 if not como_json:
                     print("    README  : ausente — e nele que o conjunto dos diretorios de topo se declara")
             else:
                 mudos = sorted(t for t in topos if t not in readme)
                 if mudos:
-                    houve = divergiu = True
+                    divergiu = True
                     readme_ok = False
+                    achados_motivo.append(f"README desatualizado — nao declara: {' '.join(mudos)}")
                     if not como_json:
                         print(f"    TOPO    : nao declarado no README: {' '.join(mudos)}")
                 else:
                     readme_ok = True
             if not como_json and not divergiu:
                 print("    regua   : conforme a arq:0042")
-        if como_json:
-            repos_json.append({
-                "nome": nome,
-                "achados": {k: [{"caminho": r, "bytes": t} for r, t in v] for k, v in achados.items()},
-                "sem_cabecalho": [{"caminho": r, "motivo": m} for r, m in sem_cabecalho],
-                "readme_ok": readme_ok,
-            })
+        if divergiu:
+            itens.append((nome, resultado.divergente("; ".join(achados_motivo))))
+        else:
+            itens.append((nome, resultado.conforme()))
 
     if alvo and vistos == 0:
         msg = f"{alvo!r} nao e clone de trabalho em {RAIZ}"
@@ -842,9 +858,7 @@ def conferir_repo(alvo, staged=False, como_json=False):
         return 1
     if not como_json:
         print()
-    else:
-        print(json.dumps({"resultado": "divergente" if houve else "ok", "repos": repos_json}))
-    return 1 if houve else 0
+    return resultado.relatorio("repo", alvo, itens, _sha_release(), como_json=como_json)
 
 
 # --- classe: commit ---------------------------------------------------------
