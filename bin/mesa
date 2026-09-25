@@ -350,7 +350,8 @@ def ato_ver(args):
             prosa_expurgada += 1
             continue
         achou = True
-        print(f"[{slot}] (prosa, substrato velho) escrito ha {idade(time.time() - ts)}")
+        restante = TTL_MESA_S - (time.time() - ts)
+        print(f"[{slot}] anotação (expira em {idade(max(0, restante))})")
         print(texto.rstrip())
         print()
     if prosa_expurgada:
@@ -774,7 +775,7 @@ def ato_escrever(args):
             sys.stderr.write(f"mesa escrever: git push falhou: {proc_push.stderr.strip()}\n")
             return 3
 
-    pr_str = ""
+    pr_str, pr_url = "", None
     if gh_bin:
         pr_proc = subprocess.run(
             [gh_bin, "pr", "create", "--base", "main", "--head", ramo,
@@ -783,16 +784,21 @@ def ato_escrever(args):
             cwd=str(wt_dir), capture_output=True, text=True, env=env
         )
         if pr_proc.returncode == 0:
-            pr_str = f" · PR: {pr_proc.stdout.strip()}"
+            pr_url = pr_proc.stdout.strip()
         else:
             m_pr = re.search(r"https://github\.com/\S+/pull/\d+", pr_proc.stderr + pr_proc.stdout)
-            if m_pr:
-                pr_str = f" · PR: {m_pr.group(0)}"
-            else:
+            pr_url = m_pr.group(0) if m_pr else None
+            if not pr_url:
                 pr_str = f" · PR: {pr_proc.stderr.strip()}"
+        if pr_url:
+            pr_str = f" · PR: {pr_url}"
 
     tam = len(corpo.encode("utf-8"))
-    print(f"caderno {slot}: gravado ({tam} B em {cad_repo}) · ramo: {ramo}{pr_str}")
+    m_num = re.search(r"/pull/(\d+)", pr_url or "")
+    merge_de = f"do merge do PR #{m_num.group(1)}" if m_num else "do merge em main"
+    achavel = (f"achável por `mesa caderno {slot}` depois {merge_de}; "
+               "a abertura publica caderno sozinha em até 10 min")
+    print(f"caderno {slot}: gravado ({tam} B em {cad_repo}) · ramo: {ramo}{pr_str} · {achavel}")
     return 0
 
 
