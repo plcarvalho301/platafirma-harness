@@ -3,6 +3,9 @@
 - Refinamento pedido pelo dono comeca pelo mapa do problema e pelo vocabulario, mostrados a ele; story, corte de card e desenho de forma so depois que ele viu e fixou o mapa. Montar story no primeiro turno de um refinamento e tomado como execucao, e ele recusa.
 - Termo emprestado de outra cadeira (ex.: "oficio", do parecer de produto) entra com a origem e o sentido na primeira vez, ou nao entra; termo que colide com nome de arquivo da casa (abertura/oficio.md) sai.
 - Mapa de jornadas: o dono le jornada pelo que a cadeira tem na mao ao comecar e pelo que precisa no fim; duas jornadas com o mesmo par comeco/fim sao uma so. Ele fixou rotinas (ler, levantar, conferir, registrar, publicar, reportar) e ciclos (expediente, desenvolvimento, gestao do acervo, ops) em spec rotinas-e-ciclos.
+- Proposta de corte ao dono vai em linguagem de negocio: o que quebra hoje, com o caso que ele viveu, e o que passa a funcionar para quem usa. Jargao da casa (costura, dt, story, bateria) sem o nome comum ao lado ele nao le, e pede de novo.
+- Titulo de card se escreve para humano ler no board: diz o que passa a funcionar, na lingua de quem usa; codigo, flag e nome de verbo ficam no corpo.
+- Quando o levantamento mostra as pecas servindo isoladas e a quebra na passagem entre elas, o corte vai por passagem, uma story por passagem; corte por componente deixa o gargalo sem dono.
 
 ## diario de bordo
 
@@ -10,3 +13,7 @@
 2026-09-24 — acervo listar --sobre jornada recusou (alvo desconhecido --sobre; o uso vigente e acervo listar <particao> <entidade>) — contorno encontrado na data 2026-09-24 foi motor rag buscar casa com o tema.
 2026-09-24 — publicar spec em platafirma-casa: repo abrir --da-producao recusou (familia sem current), sem a flag abriu; acervo ingerir casa recusou Sobre: card (arq:0115 §6.2 so aceita verbo, capacidade, stack, instancia, repositorio, cadeira, risco) depois do merge, exigindo segundo PR; ingerir e dry-run por default e a flag e --apply (tentei --aplicar) — contorno encontrado na data 2026-09-24 foi Sobre: cadeira, novo ramo a partir de origin/main via repo git checkout -B, e acervo ingerir casa platafirma-casa --apply --so <chave>.
 2026-09-24 — metrica tateio existe no bin do harness mas a porta recusa (sem verbo) — contorno: nenhum, a frequencia de tateio por jornada fica sem contagem.
+2026-09-25 — tentei tarefas sub 3113 para listar as filhas do epico, saiu exit 1 com "bin/tarefas: line 800: 2: filho" (sub declara vinculo, nao lista) — contorno encontrado na data 2026-09-25 foi tarefas ler <pai> e tarefas listar.
+2026-09-25 — editar corpo e titulo do #3084: tarefas nao tem ato de edicao (#3134) — contorno encontrado na data 2026-09-25 foi run_command com item em objeto {verbo: tarefas, ato: api-corpo, args: [PATCH, /itens/<id>], stdin: JSON com titulo e descricao}; funcionou de primeira, conferido por tarefas ler; receita no comentario do #3124.
+2026-09-25 — quatro fila enviar no mesmo lote devolveram o mesmo msgid 20260925T101409-gestao-estrategica para destinatarios diferentes — contorno encontrado na data 2026-09-25 foi conferir cada caixa com fila ler <cadeira> --tudo gestao-estrategica; as quatro cartas chegaram.
+2026-09-25 — repo historico platafirma-casa avisou worktree wt/platafirma-casa/gestao-estrategica inexistente e caiu no fallback — contorno: nenhum preciso, o historico veio; e o #3104.
