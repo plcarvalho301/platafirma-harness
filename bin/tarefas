@@ -3,7 +3,7 @@
 # capacidade: trabalho
 # dono: gestao-estrategica
 # use para: card, board, carteira, épico/feature/story, mover estado, sign-off
-# atos: listar, listar-tudo, ler, criar, modelo, comentar, comentarios, mover, fechar, apagar, assinar, dt, estados, sub
+# atos: listar, listar-tudo, ler, criar, editar, modelo, comentar, comentarios, mover, fechar, apagar, assinar, dt, estados, sub
 # Backend: `platafirma-rastreador` (API própria), desde 16/08/2026. O Vikunja saiu.
 #
 # Loopback, e não a rota pública: `tarefas.platafirma.org` serve a superfície HUMANA
@@ -53,6 +53,9 @@ uso:
                                           default: story. task só por `dt admitir`.
                                           Nascer fora de `captada`, ou sair dela, exige o
                                           corpo no padrão do nível (arq:0096)
+  tarefas editar <id> [--titulo "<t>"] [--desc "<txt>"|--desc-stdin]
+                                          troca título e/ou corpo (substitui o corpo
+                                          inteiro); não mexe no estado — mover é `mover`
   tarefas modelo <épico|feature|story|task>
                                           esqueleto do corpo, com os rótulos que a API exige
   tarefas comentar <id> ["<txt>"]         cria comentário (entidade própria — card #390,
@@ -444,6 +447,41 @@ criar() {
     | jq -r '"item \(.id) criado: \(.titulo)"'
 }
 
+# EDITAR É O PATCH DO CORPO COM NOME DE ATO — card #3134 (dono, 25/09/2026): toda chamada
+# de API se encapsula em verbo. A rota sempre aceitou `titulo`/`descricao` no PATCH, mas a
+# única porta até ela era a escotilha `api-corpo`, e cadeira não achava nem essa.
+#
+# NUNCA manda `estado`: editar não move. Mover é `mover`, que carrega motivo e cascata; um
+# PATCH que trocasse corpo e estado juntos regrediria a coluna sem ninguém pedir. A régua do
+# corpo por nível (arq:0096) é da API, como em `criar` — este verbo não a duplica.
+editar() {
+  local id; id=$(so_id "${1:?uso: tarefas editar <id> [--titulo \"<t>\"] [--desc \"<txt>\"|--desc-stdin]}"); shift
+  local titulo="" desc="" tem_desc=""
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --titulo)     titulo="${2:?--titulo pede texto}"; shift 2 ;;
+      --desc)       desc="${2:?--desc pede texto}"; tem_desc=1; shift 2 ;;
+      --desc-stdin) desc="$(cat)"; tem_desc=1; shift ;;
+      *) echo "opção desconhecida: $1" >&2; exit 2 ;;
+    esac
+  done
+  if [ -z "$titulo" ] && [ -z "$tem_desc" ]; then
+    echo "uso: tarefas editar <id> [--titulo \"<t>\"] [--desc \"<txt>\"|--desc-stdin] — nada a editar" >&2
+    exit 2
+  fi
+  if [ -n "$tem_desc" ] && [ -z "$(printf '%s' "$desc" | tr -d '[:space:]')" ]; then
+    echo "recusado: corpo vazio apagaria a descrição do item. Para ver o esqueleto: tarefas modelo <nível>" >&2
+    exit 2
+  fi
+  local html=""
+  [ -n "$tem_desc" ] && html="$(printf '%s' "$desc" | para_html)"
+  jq -n --arg t "$titulo" --arg d "$html" \
+     '(if $t == "" then {} else {titulo:$t} end)
+      + (if $d == "" then {} else {descricao:$d} end)' \
+    | envia PATCH "/itens/$id" \
+    | jq -r '"item \(.id) editado: \(.titulo) · estado \(.estado_nome) (inalterado)"'
+}
+
 # COMENTÁRIO É TEXTO NO CORPO, por ordem do dono (16/08/2026). O modelo do rastreador não
 # tem entidade de comentário, e a migração do acervo já pôs os comentários velhos dentro de
 # `descricao` sob marcador. Escrever novo do mesmo jeito mantém uma forma só — e o dia em
@@ -790,6 +828,7 @@ case "$cmd" in
   listar-tudo) descarta_projeto "${1:-}" && shift; listar_tudo "$@" ;;
   ler|ver)     ler "${1:?uso: tarefas ler <id>}" ;;
   criar)       criar "$@" ;;
+  editar)      editar "$@" ;;
   comentar)    comentar "$@" ;;
   comentarios) comentarios "${1:?uso: tarefas comentarios <id>}" ;;
   mover)       mover "$@" ;;
