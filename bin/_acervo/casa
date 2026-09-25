@@ -241,8 +241,18 @@ _CAMPOS = """
     c.forca::text as forca, c.revisao, c.status_declarado"""
 
 # card #3139 item 1: rotulo de exibicao da forca (o slug do banco fica em _item()["forca"]).
-FORCA_ROTULO = {"decisao": "decisão", "proposta": "proposta", "registro": "registro",
+# `registro` leva a data embutida na chave datada (<AAAA-MM-DD>-<slug>): "registro de
+# AAAA-MM-DD", nao so "registro".
+FORCA_ROTULO = {"decisao": "decisão", "proposta": "proposta",
                "nao_declarada": "força não declarada"}
+_RE_DATA_CHAVE = re.compile(r"^(\d{4}-\d{2}-\d{2})")
+
+def _rotulo_forca(linha):
+    forca = linha.get("forca")
+    if forca == "registro":
+        m = _RE_DATA_CHAVE.match(linha.get("chave") or "")
+        return f"registro de {m.group(1)}" if m else "registro"
+    return FORCA_ROTULO.get(forca, forca or "força não declarada")
 
 _ORDEM = "t.serie nulls last, t.numero nulls last, t.chave nulls last, t.repo, t.path"
 
@@ -282,7 +292,7 @@ def vigencia(linha):
 
 def forca_vigencia_txt(linha):
     """`<força>[, rev N] · <vigência>` (card #3139 item 1/4)."""
-    txt = FORCA_ROTULO.get(linha.get("forca"), linha.get("forca") or "força não declarada")
+    txt = _rotulo_forca(linha)
     if linha.get("revisao"):
         txt += f", rev {linha['revisao']}"
     return f"{txt} · {vigencia(linha)}"

@@ -230,6 +230,17 @@ def test_plano_secoes_e_codigo_de_saida():
 
 # ------------------------------------------------------------------ chave e leitura (D9)
 
+def test_rotulo_forca_registro_leva_a_data_da_chave():
+    # card #3139 item 1: forca "registro" exibe "registro de AAAA-MM-DD" (a data da chave
+    # datada), nao so "registro" cru; decisao/proposta/nao_declarada nao levam data.
+    assert casa._rotulo_forca({"forca": "registro", "chave": "2026-09-24-descobrir-a-casa"}) \
+        == "registro de 2026-09-24"
+    assert casa._rotulo_forca({"forca": "registro", "chave": None}) == "registro"
+    assert casa._rotulo_forca({"forca": "decisao", "chave": "arq:0115"}) == "decisão"
+    assert casa._rotulo_forca({"forca": "proposta", "chave": "x"}) == "proposta"
+    assert casa._rotulo_forca({"forca": "nao_declarada", "chave": "x"}) == "força não declarada"
+
+
 def test_normalizar_chave():
     assert casa.normalizar("adr", "arq:75") == "arq:0075"
     assert casa.normalizar("adr", "seg:14") == "seg:0014"
