@@ -188,12 +188,21 @@ def resolver_canon(classe, canon, numero_sem_serie=None):
 
 
 # card #3139 item 1/2: mesmo rotulo de _acervo/casa.FORCA_ROTULO — duplicado de proposito
-# (o mesmo motivo de FORMA_ADR acima: estes clientes nao se importam entre si).
-_FORCA_ROTULO = {"decisao": "decisão", "proposta": "proposta", "registro": "registro",
+# (o mesmo motivo de FORMA_ADR acima: estes clientes nao se importam entre si). `registro`
+# leva a data embutida na chave datada (<AAAA-MM-DD>-<slug>): "registro de AAAA-MM-DD".
+_FORCA_ROTULO = {"decisao": "decisão", "proposta": "proposta",
                 "nao_declarada": "força não declarada"}
+_RE_DATA_CHAVE = re.compile(r"^(\d{4}-\d{2}-\d{2})")
+
+def _rotulo_forca(r):
+    forca = r.get("forca")
+    if forca == "registro":
+        m = _RE_DATA_CHAVE.match(r.get("chave") or "")
+        return f"registro de {m.group(1)}" if m else "registro"
+    return _FORCA_ROTULO.get(forca, forca or "força não declarada")
 
 def _forca_vigencia_txt(r):
-    txt = _FORCA_ROTULO.get(r.get("forca"), r.get("forca") or "força não declarada")
+    txt = _rotulo_forca(r)
     if r.get("revisao"):
         txt += f", rev {r['revisao']}"
     if not r.get("retirada_em"):
