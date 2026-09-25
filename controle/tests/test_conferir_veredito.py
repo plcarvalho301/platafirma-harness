@@ -1,9 +1,12 @@
 # test_conferir_veredito — o Veredito comum (resultado.py) e as classes que ja o usam:
 # card #3142. Stub de git/tarefas via monkeypatch de conferir.sh; nada toca rede ou disco
 # fora de tmp_path/monkeypatch.
+import enum
 import importlib.machinery
 import importlib.util
 import json
+import sys
+import types
 from pathlib import Path
 
 import pytest
@@ -937,3 +940,173 @@ def test_front_tela_aberta_fica_fora_da_lista_de_itens(monkeypatch, capsys):
 # conforme caso contrario) — nao ha, nesta conversao, um caminho que produza item
 # indeterminavel. Ver campo "decisao_dificil" do plano para a ressalva sobre
 # _le()/_viola_segredo_ou_api engolir OSError como "sem violacao".
+
+
+def _instalar_recuperacao_fake(monkeypatch, autoriza=None, acao="ler",
+                                fontes=("acervo", "board", "fila")):
+    """Instala recuperacao.pep/recuperacao.fontes falsos em sys.modules — conferir_alcance
+    faz `from recuperacao.pep import PEP` e `from recuperacao.fontes import Fonte` dentro
+    do corpo da função, então basta popular sys.modules antes da chamada."""
+    Fonte = enum.Enum("Fonte", {n: n for n in fontes})
+
+    class PEP:
+        def __init__(self):
+            pass
+
+        def autoriza_fonte(self, sujeito, fonte):
+            return autoriza
+
+        def acao(self, fonte):
+            return acao
+
+    mod_pep = types.ModuleType("recuperacao.pep")
+    mod_pep.PEP = PEP
+    mod_fontes = types.ModuleType("recuperacao.fontes")
+    mod_fontes.Fonte = Fonte
+    mod_pkg = types.ModuleType("recuperacao")
+    monkeypatch.setitem(sys.modules, "recuperacao", mod_pkg)
+    monkeypatch.setitem(sys.modules, "recuperacao.pep", mod_pep)
+    monkeypatch.setitem(sys.modules, "recuperacao.fontes", mod_fontes)
+    return Fonte
+
+
+def _quebrar_recuperacao(monkeypatch):
+    """Simula o maquinario de acesso ilegivel: modulo presente, mas sem PEP —
+    dispara ImportError determinístico em qualquer ambiente, sem depender do
+    disco real."""
+    mod_pep_quebrado = types.ModuleType("recuperacao.pep")
+    mod_pkg = types.ModuleType("recuperacao")
+    monkeypatch.setitem(sys.modules, "recuperacao", mod_pkg)
+    monkeypatch.setitem(sys.modules, "recuperacao.pep", mod_pep_quebrado)
+    monkeypatch.delitem(sys.modules, "recuperacao.fontes", raising=False)
+
+
+def _stub_carrega_yaml(monkeypatch, sujeitos=None, superficies=None):
+    def carrega(caminho):
+        if caminho.endswith("sujeitos.yaml"):
+            return (sujeitos or {}), None
+        if caminho.endswith("superficies.yaml"):
+            return (superficies or {}), None
+        return {}, None
+    monkeypatch.setattr(conferir, "_carrega_yaml", carrega)
+
+
+class _Neg:
+    def __init__(self, regra, motivo):
+        self.regra = regra
+        self.motivo = motivo
+
+
+# --- conferir_alcance (card #3142) ---------------------------------------------
+
+def test_alcance_uso_incorreto_sai_2_sem_medir(capsys):
+    exit_code = conferir.conferir_alcance(None, None, como_json=True)
+    saida = capsys.readouterr()
+    assert exit_code == 2
+    assert saida.out == ""  # uso vai por stderr, nao passa pelo Veredito
+
+
+def test_alcance_conforme_quando_cadeia_inteira_fecha(monkeypatch, capsys):
+    _instalar_recuperacao_fake(monkeypatch, autoriza=None, acao="ler")
+    _stub_carrega_yaml(
+        monkeypatch,
+        sujeitos={"sujeitos": {"claudinho": {"papeis": ["leitor"], "client": "cli-x"}}},
+        superficies={"superficies": {"acervo": {
+            "alcancavel": True, "ingress": "interno", "rede": "vpc",
+            "acl_canonica": True, "portao": "gate-acervo",
+        }}},
+    )
+    monkeypatch.setattr(conferir, "_sha_release", lambda: "abc1234")
+
+    exit_code = conferir.conferir_alcance("claudinho", "acervo", como_json=True)
+    saida = capsys.readouterr()
+
+    assert exit_code == 0
+    dado = json.loads(saida.out)
+    assert len(dado["itens"]) == 1
+    item = dado["itens"][0]
+    assert item["nome"] == "claudinho -> acervo"
+    assert item["estado"] == "conforme"
+    assert item["motivo"] is None
+
+
+def test_alcance_divergente_quando_pdp_nega(monkeypatch, capsys):
+    _instalar_recuperacao_fake(
+        monkeypatch,
+        autoriza=_Neg("politica-explicita", "regra nega escrita para este papel"),
+        acao="escrever",
+    )
+    _stub_carrega_yaml(
+        monkeypatch,
+        sujeitos={"sujeitos": {"claudinho": {"papeis": ["leitor"], "client": "cli-x"}}},
+        superficies={"superficies": {"acervo": {
+            "alcancavel": True, "ingress": "interno", "rede": "vpc",
+            "acl_canonica": True, "portao": "gate-acervo",
+        }}},
+    )
+    monkeypatch.setattr(conferir, "_sha_release", lambda: "abc1234")
+
+    exit_code = conferir.conferir_alcance("claudinho", "acervo", como_json=True)
+    saida = capsys.readouterr()
+
+    assert exit_code == 1
+    dado = json.loads(saida.out)
+    item = dado["itens"][0]
+    assert item["estado"] == "divergente"
+    assert "elo mais fraco: PDP" in item["motivo"]
+    assert "politica-explicita" in item["motivo"]
+
+
+def test_alcance_indeterminavel_quando_fonte_fora_do_catalogo(monkeypatch, capsys):
+    _instalar_recuperacao_fake(monkeypatch, autoriza=None, acao="ler")
+    _stub_carrega_yaml(
+        monkeypatch,
+        sujeitos={"sujeitos": {"claudinho": {"papeis": ["leitor"], "client": "cli-x"}}},
+        superficies={"superficies": {}},  # "acervo" ausente do catalogo
+    )
+    monkeypatch.setattr(conferir, "_sha_release", lambda: "abc1234")
+
+    exit_code = conferir.conferir_alcance("claudinho", "acervo", como_json=True)
+    saida = capsys.readouterr()
+
+    assert exit_code == 5
+    dado = json.loads(saida.out)
+    item = dado["itens"][0]
+    assert item["estado"] == "indeterminavel"
+    assert "nao esta no catalogo de superficies" in item["motivo"]
+
+
+def test_alcance_indeterminavel_quando_maquinario_ilegivel(monkeypatch, capsys):
+    _quebrar_recuperacao(monkeypatch)
+    monkeypatch.setattr(conferir, "_sha_release", lambda: "abc1234")
+
+    exit_code = conferir.conferir_alcance("claudinho", "acervo", como_json=True)
+    saida = capsys.readouterr()
+
+    assert exit_code == 5
+    dado = json.loads(saida.out)
+    item = dado["itens"][0]
+    assert item["estado"] == "indeterminavel"
+    assert "maquinario de acesso ilegivel" in item["motivo"]
+
+
+def test_alcance_texto_preserva_saltos_detalhados(monkeypatch, capsys):
+    _instalar_recuperacao_fake(monkeypatch, autoriza=None, acao="ler")
+    _stub_carrega_yaml(
+        monkeypatch,
+        sujeitos={"sujeitos": {"claudinho": {"papeis": ["leitor"], "client": "cli-x"}}},
+        superficies={"superficies": {"acervo": {
+            "alcancavel": True, "ingress": "interno", "rede": "vpc",
+            "acl_canonica": True, "portao": "gate-acervo",
+        }}},
+    )
+    monkeypatch.setattr(conferir, "_sha_release", lambda: "abc1234")
+
+    exit_code = conferir.conferir_alcance("claudinho", "acervo", como_json=False)
+    saida = capsys.readouterr()
+
+    assert exit_code == 0
+    assert "alcance: claudinho -> acervo" in saida.out
+    assert "1 identidade" in saida.out
+    assert "cadeia INTEIRA" in saida.out
+    assert "release conferir alcance claudinho acervo: 1 conforme" in saida.out

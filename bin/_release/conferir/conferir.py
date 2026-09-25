@@ -2616,6 +2616,8 @@ def conferir_alcance(sujeito, fonte, como_json=False):
         print("uso: conferir alcance <sujeito> <fonte>", file=sys.stderr)
         print("     fontes: board, fila, mesa, registro, wiki, acervo", file=sys.stderr)
         return 2
+    nome_item = f"{sujeito} -> {fonte}"
+    alvo = f"{sujeito} {fonte}"
     for p in (HARNESS, POLITICA_DIR):
         if p not in sys.path:
             sys.path.insert(0, p)
@@ -2623,16 +2625,16 @@ def conferir_alcance(sujeito, fonte, como_json=False):
         from recuperacao.pep import PEP
         from recuperacao.fontes import Fonte
     except Exception as e:                                       # noqa: BLE001
-        msg = f"indeterminavel: maquinario de acesso ilegivel — {type(e).__name__}: {e}"
-        print(json.dumps({"erro": msg}, ensure_ascii=False) if como_json else msg)
-        return 2
+        motivo = f"maquinario de acesso ilegivel — {type(e).__name__}: {e}"
+        itens = [(nome_item, resultado.indeterminavel(motivo))]
+        return resultado.relatorio("alcance", alvo, itens, _sha_release(), como_json=como_json)
     try:
         f = Fonte(fonte)
     except ValueError:
         validas = ", ".join(x.value for x in Fonte)
-        msg = f"indeterminavel: fonte {fonte!r} nao existe — validas: {validas}"
-        print(json.dumps({"erro": msg}, ensure_ascii=False) if como_json else msg)
-        return 2
+        motivo = f"fonte {fonte!r} nao existe — validas: {validas}"
+        itens = [(nome_item, resultado.indeterminavel(motivo))]
+        return resultado.relatorio("alcance", alvo, itens, _sha_release(), como_json=como_json)
 
     suj_doc, _ = _carrega_yaml(os.path.join(POLITICA_DIR, "sujeitos.yaml"))
     atrib = ((suj_doc or {}).get("sujeitos") or {}).get(sujeito) or {}
@@ -2729,11 +2731,13 @@ def conferir_alcance(sujeito, fonte, como_json=False):
         elo = ("rede", "fonte nao alcancavel")
 
     if rede_ok is None:
-        exit_code = 2
+        motivo = f"{fonte!r} nao esta no catalogo de superficies; a cadeia nao fecha."
+        veredito = resultado.indeterminavel(motivo)
     elif elo is None:
-        exit_code = 0
+        veredito = resultado.conforme()
     else:
-        exit_code = 1
+        motivo = f"elo mais fraco: {elo[0]} — {elo[1]}"
+        veredito = resultado.divergente(motivo)
 
     # nota de imposicao: divergencia entre o veredito do PDP e o que o portao impoe
     nota = None
@@ -2747,30 +2751,22 @@ def conferir_alcance(sujeito, fonte, como_json=False):
     elif acl is None:
         nota = "[AVISO] ACL do alvo A MEDIR: o gate do alvo existe mas nao foi lido (#191)."
 
-    if como_json:
-        print(json.dumps({
-            "sujeito": sujeito, "fonte": fonte,
-            "saltos": [{"salto": s, "veredito": v, "detalhe": d, "fonte_de_verdade": fv}
-                       for s, v, d, fv in saltos],
-            "elo_mais_fraco": elo[0] if elo else None,
-            "cadeia_inteira": exit_code == 0,
-            "nota": nota, "exit": exit_code,
-        }, ensure_ascii=False))
-        return exit_code
+    if not como_json:
+        print(f"alcance: {sujeito} -> {fonte}")
+        for i, (s, v, d, fv) in enumerate(saltos, 1):
+            print(f"  {i} {s:12}: {v} — {d}")
+            print(f"       fonte-de-verdade: {fv}")
+        if rede_ok is None:
+            print(f"  => indeterminavel: {fonte!r} nao esta no catalogo de superficies; a cadeia nao fecha.")
+        elif elo is None:
+            print(f"  => cadeia INTEIRA: {sujeito} alcanca {fonte} pela cadeia modelada.")
+        else:
+            print(f"  => elo mais fraco: {elo[0]} — {elo[1]}. {sujeito} NAO alcanca {fonte} pela cadeia modelada.")
+        if nota:
+            print(f"  {nota}")
 
-    print(f"alcance: {sujeito} -> {fonte}")
-    for i, (s, v, d, fv) in enumerate(saltos, 1):
-        print(f"  {i} {s:12}: {v} — {d}")
-        print(f"       fonte-de-verdade: {fv}")
-    if exit_code == 2:
-        print(f"  => indeterminavel: {fonte!r} nao esta no catalogo de superficies; a cadeia nao fecha.")
-    elif elo is None:
-        print(f"  => cadeia INTEIRA: {sujeito} alcanca {fonte} pela cadeia modelada.")
-    else:
-        print(f"  => elo mais fraco: {elo[0]} — {elo[1]}. {sujeito} NAO alcanca {fonte} pela cadeia modelada.")
-    if nota:
-        print(f"  {nota}")
-    return exit_code
+    itens = [(nome_item, veredito)]
+    return resultado.relatorio("alcance", alvo, itens, _sha_release(), como_json=como_json)
 
 
 def conferir_pdp(alvo=None, como_json=False):
