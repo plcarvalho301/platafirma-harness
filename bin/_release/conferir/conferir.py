@@ -2108,55 +2108,52 @@ def conferir_front(alvo=None, como_json=False):
     servem = []     # regra 2b: serve rota de API
     conformes = []
     abertas = []    # superficies que a 0057 declara ABERTAS: observacao, nao veredito
+    itens = []      # um item por tela medida; abertas fica fora — observacao, nao veredito
     for dir_rel, repo, _i, _d in telas:
         dir_abs = os.path.join(raiz, dir_rel)
         monta_segredo, serve_api, detalhe = _viola_segredo_ou_api(dir_abs)
         if repo in FRONT_ABERTAS:
             abertas.append({"tela": dir_rel, "repo": repo})
             continue  # arq:0057 "Aberto": nao inventariada contra este criterio
+        problemas = []
         if repo != UI_REPO:
             fora.append({"tela": dir_rel, "repo": repo})
+            problemas.append(f"mora em {repo}, nao em {UI_REPO}")
             # tela fora do UI ja reprova por (1); ainda assim medimos (2) para o relato.
         if monta_segredo:
             montam.append({"tela": dir_rel, "repo": repo, "detalhe": detalhe})
+            problemas.append("monta segredo de outra camada: " + ", ".join(detalhe))
         if serve_api:
             servem.append({"tela": dir_rel, "repo": repo, "detalhe": detalhe})
-        if repo == UI_REPO and not monta_segredo and not serve_api:
+            problemas.append("serve rota de API: " + ", ".join(detalhe))
+        if problemas:
+            itens.append((dir_rel, resultado.divergente("; ".join(problemas))))
+        else:
             conformes.append(dir_rel)
+            itens.append((dir_rel, resultado.conforme()))
 
     ok = not (fora or montam or servem)
-    if como_json:
-        print(json.dumps({
-            "veredito": "em dia" if ok else "divergente",
-            "regra_1_tela_fora_do_ui": fora,
-            "regra_2_monta_segredo": montam,
-            "regra_2_serve_rota_api": servem,
-            "telas_conformes": conformes,
-            "superficies_abertas_0057": abertas,
-            "medidas": len(telas),
-            "ui_repo": UI_REPO,
-        }, ensure_ascii=False, indent=2))
-        return 0 if ok else 1
-
-    print(f"front — conformidade de deploy (arq:0057), alem de arq:0056")
-    print(f"  telas de aplicacao medidas       : {len(telas)}")
-    print(f"  (1) TELA FORA de {UI_REPO:<16}: {len(fora)}")
-    for x in fora:
-        print(f"      {x['tela']} — mora em {x['repo']}, nao em {UI_REPO}")
-    print(f"  (2) MONTA SEGREDO de outra camada: {len(montam)}")
-    for x in montam:
-        print(f"      {x['tela']} — {', '.join(x['detalhe'])}")
-    print(f"  (2) SERVE ROTA DE API            : {len(servem)}")
-    for x in servem:
-        print(f"      {x['tela']} — {', '.join(x['detalhe'])}")
-    print(f"  conformes (em {UI_REPO}, sem segredo, sem proxy): {len(conformes)}")
-    print(f"  veredito                         : {'em dia' if ok else 'divergente'}")
-    if abertas:
-        print("  --- observacao (nao entra no veredito; arq:0057 secao Aberto) ---")
-        print(f"  superficies declaradas ABERTAS   : {len(abertas)} (vira card proprio, #197 item 3)")
-        for x in abertas:
-            print(f"      {x['tela']} — {x['repo']}")
-    return 0 if ok else 1
+    if not como_json:
+        print(f"front — conformidade de deploy (arq:0057), alem de arq:0056")
+        print(f"  telas de aplicacao medidas       : {len(telas)}")
+        print(f"  (1) TELA FORA de {UI_REPO:<16}: {len(fora)}")
+        for x in fora:
+            print(f"      {x['tela']} — mora em {x['repo']}, nao em {UI_REPO}")
+        print(f"  (2) MONTA SEGREDO de outra camada: {len(montam)}")
+        for x in montam:
+            print(f"      {x['tela']} — {', '.join(x['detalhe'])}")
+        print(f"  (2) SERVE ROTA DE API            : {len(servem)}")
+        for x in servem:
+            print(f"      {x['tela']} — {', '.join(x['detalhe'])}")
+        print(f"  conformes (em {UI_REPO}, sem segredo, sem proxy): {len(conformes)}")
+        print(f"  veredito                         : {'em dia' if ok else 'divergente'}")
+        if abertas:
+            print("  --- observacao (nao entra no veredito; arq:0057 secao Aberto) ---")
+            print(f"  superficies declaradas ABERTAS   : {len(abertas)} (vira card proprio, #197 item 3)")
+            for x in abertas:
+                print(f"      {x['tela']} — {x['repo']}")
+        print()
+    return resultado.relatorio("front", alvo, itens, _sha_release(), como_json=como_json)
 
 
 # --- classe: procedencia ----------------------------------------------------

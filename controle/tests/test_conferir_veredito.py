@@ -861,3 +861,79 @@ def test_superficie_descricao_mcp_fora_do_ar_sai_indeterminavel_nao_conforme(mon
 
     assert exit_code == 5
     assert dado["itens"][0]["estado"] == "indeterminavel"
+
+
+# --- conferir_front (card #3142): um item por tela; abertas so observam --------
+
+def test_front_conforme_tela_unica_sem_violacao(monkeypatch, capsys):
+    monkeypatch.setattr(conferir, "_telas_de_front",
+                         lambda: [("platafirma-ui/app/painel", "platafirma-ui", True, True)])
+    monkeypatch.setattr(conferir, "_viola_segredo_ou_api", lambda dir_abs: (False, False, []))
+    monkeypatch.setattr(conferir, "_sha_release", lambda: "abc1234")
+
+    exit_code = conferir.conferir_front(None, como_json=True)
+    saida = capsys.readouterr()
+
+    assert exit_code == 0
+    dado = json.loads(saida.out)
+    assert len(dado["itens"]) == 1
+    assert dado["itens"][0]["estado"] == "conforme"
+    assert dado["itens"][0]["nome"] == "platafirma-ui/app/painel"
+
+
+def test_front_divergente_tela_fora_do_ui_repo(monkeypatch, capsys):
+    monkeypatch.setattr(conferir, "_telas_de_front",
+                         lambda: [("platafirma-rastreador/tela", "platafirma-rastreador", True, True)])
+    monkeypatch.setattr(conferir, "_viola_segredo_ou_api", lambda dir_abs: (False, False, []))
+    monkeypatch.setattr(conferir, "_sha_release", lambda: "abc1234")
+
+    exit_code = conferir.conferir_front(None, como_json=True)
+    saida = capsys.readouterr()
+
+    assert exit_code == 1
+    item = json.loads(saida.out)["itens"][0]
+    assert item["estado"] == "divergente"
+    assert "platafirma-rastreador" in item["motivo"]
+
+
+def test_front_divergente_monta_segredo_e_serve_api_motivo_combinado(monkeypatch, capsys):
+    monkeypatch.setattr(conferir, "_telas_de_front",
+                         lambda: [("platafirma-ui/app/leak", "platafirma-ui", True, True)])
+    monkeypatch.setattr(
+        conferir, "_viola_segredo_ou_api",
+        lambda dir_abs: (True, True, ["docker-compose.yml: env_file", "nginx.conf: proxy_pass"]))
+    monkeypatch.setattr(conferir, "_sha_release", lambda: "abc1234")
+
+    exit_code = conferir.conferir_front(None, como_json=True)
+    saida = capsys.readouterr()
+
+    assert exit_code == 1
+    item = json.loads(saida.out)["itens"][0]
+    assert item["estado"] == "divergente"
+    assert "monta segredo" in item["motivo"]
+    assert "serve rota de API" in item["motivo"]
+
+
+def test_front_tela_aberta_fica_fora_da_lista_de_itens(monkeypatch, capsys):
+    # arq:0057 "Aberto": platafirma-core e observacao, nunca item — mesmo violando (2).
+    monkeypatch.setattr(conferir, "_telas_de_front", lambda: [
+        ("platafirma-core/app/legado", "platafirma-core", True, True),
+        ("platafirma-ui/app/painel", "platafirma-ui", True, True),
+    ])
+    monkeypatch.setattr(conferir, "_viola_segredo_ou_api", lambda dir_abs: (False, False, []))
+    monkeypatch.setattr(conferir, "_sha_release", lambda: "abc1234")
+
+    exit_code = conferir.conferir_front(None, como_json=True)
+    saida = capsys.readouterr()
+
+    assert exit_code == 0
+    dado = json.loads(saida.out)
+    assert len(dado["itens"]) == 1
+    assert dado["itens"][0]["nome"] == "platafirma-ui/app/painel"
+    assert all("core" not in item["nome"] for item in dado["itens"])
+
+# Nao ha teste de "indeterminavel": ao contrario de servico/verbo/card, a nota desta
+# tarefa define front com so 2 estados por item (divergente se fora/montam/servem;
+# conforme caso contrario) — nao ha, nesta conversao, um caminho que produza item
+# indeterminavel. Ver campo "decisao_dificil" do plano para a ressalva sobre
+# _le()/_viola_segredo_ou_api engolir OSError como "sem violacao".
