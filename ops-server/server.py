@@ -927,6 +927,32 @@ def _recusa(verbo: str, motivo: str) -> dict:
         r["golden"] = "<verbo> sem ato lista os atos, e a descricao da tool e o golden record"
     return r
 
+
+def _stdin_texto(v):
+    """Normaliza stdin de tool/lote pra string, ou None — nunca dict/list cru (#3124).
+
+    O transporte MCP desserializa um stdin que e JSON valido ANTES de chegar aqui; a
+    tool de verbo (`_faz_tool_verbo`) declarava `stdin: str | None` e o pydantic recusava
+    o pedido inteiro, sem rodar nada ("Input should be a valid string"). None passa. str
+    passa. dict/list vira `json.dumps` (o verbo que le stdin como JSON volta a funcionar
+    do outro lado do pipe). bytes decodifica. Resto vira `str(v)` — nunca estoura aqui.
+    """
+    if v is None or isinstance(v, str):
+        return v
+    if isinstance(v, (dict, list)):
+        return json.dumps(v, ensure_ascii=False)
+    if isinstance(v, bytes):
+        return v.decode("utf-8", "replace")
+    return str(v)
+
+
+def _eh_pipe_stdin(v) -> bool:
+    """So o marcador de pipe {"de": <int>} — chaves EXATAS, nada mais. Qualquer outro
+    dict/list e conteudo (JSON), nunca pipe; vira texto por `_stdin_texto` (#3124)."""
+    return (isinstance(v, dict) and set(v.keys()) == {"de"}
+            and isinstance(v.get("de"), int) and not isinstance(v.get("de"), bool))
+
+
 def _item_de_lote(x):
     """item de run_command -> (argv, stdin, recusa). argv[0] e o binario do whitelist."""
     stdin = None
@@ -960,6 +986,8 @@ def _item_de_lote(x):
                 verbo, "args deve ser lista de tokens, recebido string; use args: [ ... ]")
         resto = ([ato] if ato else []) + [str(a) for a in args]
         stdin = x.get("stdin")
+        if not _eh_pipe_stdin(stdin):
+            stdin = _stdin_texto(stdin)
     else:
         return None, None, _recusa(str(x)[:40], "item nem string nem {verbo, ato, args, stdin}")
     slug = verbo.split("/")[-1]
@@ -1011,7 +1039,7 @@ async def run_command(command: str = "", cwd: str = "", timeout: int = 120,
         elif isinstance(x, dict) and str(x.get("verbo") or "") == "run_command" and x.get("ato"):
             aviso_dup = True
         argv, stdin, recusa = _item_de_lote(x)
-        if recusa is None and isinstance(stdin, dict):
+        if recusa is None and _eh_pipe_stdin(stdin):
             n = stdin.get("de")
             slug0 = argv[0].rsplit("/", 1)[-1]
             if not isinstance(n, int) or n < 0 or n >= _i:
@@ -1947,7 +1975,7 @@ def _rlimits_filho():
 
 # Contrato item 2 (#3053): todo execve de verbo chamado com sessao_id válido injeta
 # PF_CADEIRA/PF_SESSAO/PF_ORDEM_ID lidos da chave pelo _sessao_resolve (linhas 1431-1450).
-def _run_verbo_blocking(argv: list, stdin: str | None, timeout: int, ident: dict) -> dict:
+def _run_verbo_blocking(argv: list, stdin: str | dict | list | None, timeout: int, ident: dict) -> dict:
     env = {**_env_subprocesso(), "PF_SESSAO": ident["sessao_id"], "PF_ORDEM_ID": ident["ordem_id"],
            "PF_CONTA": OPS_USER}
     if ident["cadeira"]:
@@ -1960,6 +1988,11 @@ def _run_verbo_blocking(argv: list, stdin: str | None, timeout: int, ident: dict
                              start_new_session=True)
     except OSError as e:
         return {"erro": str(e), "cwd": str(d_cwd)}
+    # Defesa extra (#3124): quem chega aqui deveria vir normalizado dos pontos de
+    # entrada (_stdin_texto na tool, no lote, em _item_de_lote) — mas se nao veio, nao
+    # estoura no .encode() de um dict/list.
+    if stdin is not None and not isinstance(stdin, str):
+        stdin = _stdin_texto(stdin)
     try:
         stdout, stderr = p.communicate(input=(stdin.encode() if stdin is not None else None),
                                        timeout=timeout)
@@ -1975,9 +2008,13 @@ def _run_verbo_blocking(argv: list, stdin: str | None, timeout: int, ident: dict
 
 
 def _faz_tool_verbo(slug: str, binario: str, descricao: str):
-    async def _tool(ato: str = "", args: list[str] | None = None, stdin: str | None = None,
+    async def _tool(ato: str = "", args: list[str] | None = None,
+                    stdin: str | dict | list | None = None,
                     sessao_id: str | None = None, timeout: int = 120,
                     lote: list[dict] | None = None) -> dict:
+        # #3124: o cliente MCP desserializa stdin JSON valido antes de chegar aqui; a
+        # anotacao velha (str | None) fazia o pydantic recusar sem rodar nada.
+        stdin = _stdin_texto(stdin)
         if lote and PF_TOOLS_LOTE:
             timeout = max(1, min(timeout, 600))
             ident = _sessao_resolve(sessao_id)
@@ -1991,7 +2028,7 @@ def _faz_tool_verbo(slug: str, binario: str, descricao: str):
                     break
                 _ato = item.get("ato", "")
                 _args = list(item.get("args") or [])
-                _stdin = item.get("stdin")
+                _stdin = _stdin_texto(item.get("stdin"))
                 _linha = " ".join([slug] + ([_ato] if _ato else []) + _args)
                 negado_item = _autoriza(slug, "run_command", "comando", _linha, DOM_RUNTIME)
                 if negado_item:
