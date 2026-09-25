@@ -179,6 +179,26 @@ def test_write_file_aceita_o_suporte_platafirma_casa(bancada, sem_pep):
     assert nunca.get("recusado") and "repo abrir" in nunca["motivo"], nunca
 
 
+def test_write_file_aceita_o_rastreador(bancada, sem_pep):
+    """#3132: platafirma-rastreador e morada de escrita como os demais clones da stack."""
+    assert "platafirma-rastreador" in s.CLONES
+    (bancada / "wt" / "platafirma-rastreador" / "engenharia").mkdir(parents=True)
+    (bancada / "platafirma-rastreador").mkdir()
+    wt = s.write_file(path="wt/platafirma-rastreador/engenharia/api/nota.md", content="x\n")
+    assert wt.get("ok"), wt
+    clone = s.write_file(path="platafirma-rastreador/api/app.py", content="x = 1\n")
+    assert clone.get("ok"), clone
+    nunca = s.write_file(path="wt/platafirma-rastreador/outra/x.md", content="x\n")
+    assert nunca.get("recusado") and "repo abrir" in nunca["motivo"], nunca
+
+def test_write_file_aceita_php_e_mjs(bancada, sem_pep):
+    """#3133: skin da wiki (.php) e provas do rastreador (.mjs) sao texto plano."""
+    for nome in ("SkinPlataFirma.php", "2751_hierarquia_do_cartao.mjs"):
+        r = s.write_file(path=f"wt/platafirma-core/fabrica/{nome}", content="x\n")
+        assert r.get("ok"), (nome, r)
+    binario = s.write_file(path="wt/platafirma-core/fabrica/x.exe", content="x\n")
+    assert binario.get("recusado"), binario
+
 def test_write_file_aceita_fonte_de_diagrama(bancada, sem_pep):
     """spec_porta-so-verbo §4.1: .mmd/.d2 sao fonte canonica de diagrama (ADR 0001/0051)."""
     mmd = s.write_file(path="wt/platafirma-core/fabrica/x.mmd", content="graph TD; a-->b\n")
