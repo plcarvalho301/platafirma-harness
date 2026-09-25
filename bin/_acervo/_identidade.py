@@ -187,24 +187,74 @@ def resolver_canon(classe, canon, numero_sem_serie=None):
     return psql_json(sql, "resolver_canon")
 
 
+# card #3139 item 1/2: mesmo rotulo de _acervo/casa.FORCA_ROTULO — duplicado de proposito
+# (o mesmo motivo de FORMA_ADR acima: estes clientes nao se importam entre si).
+_FORCA_ROTULO = {"decisao": "decisão", "proposta": "proposta", "registro": "registro",
+                "nao_declarada": "força não declarada"}
+
+def _forca_vigencia_txt(r):
+    txt = _FORCA_ROTULO.get(r.get("forca"), r.get("forca") or "força não declarada")
+    if r.get("revisao"):
+        txt += f", rev {r['revisao']}"
+    if not r.get("retirada_em"):
+        vig = "vigente"
+    elif r.get("substituida_por"):
+        vig = f"substituída por {r['substituida_por']}"
+    else:
+        vig = f"retirada em {r['retirada_em']} sem sucessora"
+    return f"{txt} · {vig}"
+
+_CAMPOS_PARECIDO = ("e.slug as especie, c.chave, c.repo, c.path, c.forca::text as forca, "
+                   "c.revisao, c.retirada_em, c.substituida_por")
+
 def _parecidos_casa(especie, seletor):
-    """Chaves parecidas DENTRO da especie, em acervo.casa (arq:0115 §3): pg_trgm sobre a
-    chave (ou repo@path, sem chave) e sobre o titulo."""
-    rows = psql_json(
-        """
-        select coalesce(json_agg(row_to_json(t) order by t.sim desc), '[]') from (
-          select u.candidato, u.sim from (
-            select coalesce(c.chave, c.repo || '@' || c.path) as candidato,
-                   greatest(similarity(coalesce(c.chave, c.path), {alvo}),
-                            similarity(coalesce(c.titulo, ''), {alvo})) as sim
-              from acervo.casa c
-              join acervo.especie_tipo e on e.id = c.especie_id
-             where e.slug = {especie}
-          ) u where u.sim > 0.2 order by u.sim desc, u.candidato limit 5
-        ) t;
-        """.format(alvo=_lit(seletor), especie=_lit(especie)), "parecidos"
-    )
-    return [r["candidato"] for r in rows[:5]]
+    """Card #3139 item 2: chaves parecidas em QUALQUER especie de acervo.casa (arq:0115 §3),
+    ate 5, na ordem chave exata em outra especie -> titulo que contem o termo -> pg_trgm em
+    chave e titulo. Cada candidato leva a forca e a vigencia do mesmo campo do catálogo
+    (`<especie> <chave> (<força> · <vigência>)`)."""
+    sel = seletor.strip()
+    vistos = set()
+    candidatos = []
+
+    def acrescenta(rows):
+        for r in rows:
+            chave_exib = r.get("chave") or f"{r['repo']}@{r['path']}"
+            marco = (r["especie"], chave_exib)
+            if marco in vistos:
+                continue
+            vistos.add(marco)
+            candidatos.append(f"{r['especie']} {chave_exib} ({_forca_vigencia_txt(r)})")
+
+    exatos = psql_json(
+        "select coalesce(json_agg(row_to_json(t) order by t.especie), '[]') from ("
+        "  select {campos} from acervo.casa c join acervo.especie_tipo e on e.id = c.especie_id"
+        "   where c.chave = {sel} limit 10) t;".format(
+            campos=_CAMPOS_PARECIDO, sel=_lit(sel)), "parecidos")
+    acrescenta(exatos)
+
+    if len(candidatos) < 5:
+        titulo = psql_json(
+            "select coalesce(json_agg(row_to_json(t) order by t.especie, t.chave nulls last), "
+            "'[]') from ("
+            "  select {campos} from acervo.casa c join acervo.especie_tipo e on e.id = c.especie_id"
+            "   where c.titulo ilike {termo} limit 10) t;".format(
+                campos=_CAMPOS_PARECIDO, termo=_lit("%" + sel + "%")), "parecidos")
+        acrescenta(titulo)
+
+    if len(candidatos) < 5:
+        trgm = psql_json(
+            "select coalesce(json_agg(row_to_json(t) order by t.sim desc), '[]') from ("
+            "  select u.especie, u.chave, u.repo, u.path, u.forca, u.revisao, u.retirada_em, "
+            "         u.substituida_por, u.sim from ("
+            "    select {campos}, "
+            "           greatest(similarity(coalesce(c.chave, c.path), {sel}), "
+            "                    similarity(coalesce(c.titulo, ''), {sel})) as sim"
+            "      from acervo.casa c join acervo.especie_tipo e on e.id = c.especie_id"
+            "  ) u where u.sim > 0.2 limit 10) t;".format(
+                campos=_CAMPOS_PARECIDO, sel=_lit(sel)), "parecidos")
+        acrescenta(trgm)
+
+    return candidatos[:5]
 
 
 def _varrido_casa():
@@ -238,7 +288,9 @@ def gerar_negativa(classe, seletor, casa=False):
     if casa:
         top = _parecidos_casa(classe, seletor)
         parecidos_str = ", ".join(top) if top else "(nenhuma chave parecida)"
-        vizinho = f"acervo listar casa {classe}"
+        # card #3139 item 2: vizinho vira busca semântica pelo termo como veio, nao mais um
+        # comando de listagem estático.
+        vizinho = f"motor rag buscar casa '{seletor}'"
         cura = (f"documento de casa entra por git: PR em {SUPORTE} -> merge em main -> "
                 f"acervo ingerir casa {SUPORTE}")
         return (

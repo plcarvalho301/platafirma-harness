@@ -451,39 +451,63 @@ def listar_obra(termo, eixo, situacao, quero_json):
             order by o.id, o.titulo;
             """.format(cond_c=cond_c)
         else:
+            # card #3139 item 5: uma linha por obra, no eixo MAIS FORTE (não mais uma linha
+            # por (obra, eixo) nem ordenado pelo id) — titulo igual ao termo (1) -> titulo que
+            # contem o termo (2) -> conceito, rotulo preferido ou alternativo (3) -> subdominio
+            # (4); empate por titulo. O DISTINCT ON interno escolhe a linha de menor `forca`
+            # por obra; o ORDER BY externo reordena o resultado por forca e titulo.
+            cond_t_exato = "lower(o.titulo) = lower(%s)" % _lit(termo)
+            cond_t_contem_so = "%s and lower(o.titulo) <> lower(%s)" % (cond_t, _lit(termo))
             sql = """
-            select distinct on (sub.id, sub.eixo) sub.id, sub.titulo, sub.objeto, sub.eixo, sub.subdominio, sub.conceito, sub.impressao_id, sub.impressao_estado from (
-              select o.id, o.titulo, o.objeto, 'titulo' as eixo,
-                     sd.slug as subdominio,
-                     (select c.rotulo from acervo.obra_trata_de ot join acervo.conceito c on c.id = ot.conceito_id where ot.obra_id = o.id limit 1) as conceito,
-                     imp.id as impressao_id, imp.estado as impressao_estado
-              from acervo.obra o
-              left join acervo.subdominio sd on sd.id = o.subdominio_id
-              left join acervo.impressao imp on imp.obra_id = o.id and imp.estado = 'servindo'
-              where {cond_t}
-              union all
-              select o.id, o.titulo, o.objeto, 'subdominio' as eixo,
-                     sd.slug as subdominio,
-                     (select c.rotulo from acervo.obra_trata_de ot join acervo.conceito c on c.id = ot.conceito_id where ot.obra_id = o.id limit 1) as conceito,
-                     imp.id as impressao_id, imp.estado as impressao_estado
-              from acervo.obra o
-              join acervo.subdominio sd on sd.id = o.subdominio_id
-              left join acervo.impressao imp on imp.obra_id = o.id and imp.estado = 'servindo'
-              where {cond_s}
-              union all
-              select o.id, o.titulo, o.objeto, 'conceito' as eixo,
-                     sd.slug as subdominio,
-                     cr.rotulo as conceito,
-                     imp.id as impressao_id, imp.estado as impressao_estado
-              from acervo.obra o
-              join acervo.obra_trata_de ot on ot.obra_id = o.id
-              join acervo.conceito_rotulo cr on cr.conceito_id = ot.conceito_id
-              left join acervo.subdominio sd on sd.id = o.subdominio_id
-              left join acervo.impressao imp on imp.obra_id = o.id and imp.estado = 'servindo'
-              where {cond_c}
-            ) sub
-            order by sub.id, sub.eixo, sub.titulo;
-            """.format(cond_t=cond_t, cond_s=cond_s, cond_c=cond_c)
+            select x.id, x.titulo, x.objeto, x.eixo, x.subdominio, x.conceito,
+                   x.impressao_id, x.impressao_estado
+              from (
+                select distinct on (sub.id) sub.id, sub.titulo, sub.objeto, sub.eixo, sub.forca,
+                       sub.subdominio, sub.conceito, sub.impressao_id, sub.impressao_estado
+                  from (
+                    select o.id, o.titulo, o.objeto, 'titulo' as eixo, 1 as forca,
+                           sd.slug as subdominio,
+                           (select c.rotulo from acervo.obra_trata_de ot join acervo.conceito c on c.id = ot.conceito_id where ot.obra_id = o.id limit 1) as conceito,
+                           imp.id as impressao_id, imp.estado as impressao_estado
+                      from acervo.obra o
+                      left join acervo.subdominio sd on sd.id = o.subdominio_id
+                      left join acervo.impressao imp on imp.obra_id = o.id and imp.estado = 'servindo'
+                     where {cond_t_exato}
+                    union all
+                    select o.id, o.titulo, o.objeto, 'titulo' as eixo, 2 as forca,
+                           sd.slug as subdominio,
+                           (select c.rotulo from acervo.obra_trata_de ot join acervo.conceito c on c.id = ot.conceito_id where ot.obra_id = o.id limit 1) as conceito,
+                           imp.id as impressao_id, imp.estado as impressao_estado
+                      from acervo.obra o
+                      left join acervo.subdominio sd on sd.id = o.subdominio_id
+                      left join acervo.impressao imp on imp.obra_id = o.id and imp.estado = 'servindo'
+                     where {cond_t_contem_so}
+                    union all
+                    select o.id, o.titulo, o.objeto, 'conceito' as eixo, 3 as forca,
+                           sd.slug as subdominio,
+                           cr.rotulo as conceito,
+                           imp.id as impressao_id, imp.estado as impressao_estado
+                      from acervo.obra o
+                      join acervo.obra_trata_de ot on ot.obra_id = o.id
+                      join acervo.conceito_rotulo cr on cr.conceito_id = ot.conceito_id
+                      left join acervo.subdominio sd on sd.id = o.subdominio_id
+                      left join acervo.impressao imp on imp.obra_id = o.id and imp.estado = 'servindo'
+                     where {cond_c}
+                    union all
+                    select o.id, o.titulo, o.objeto, 'subdominio' as eixo, 4 as forca,
+                           sd.slug as subdominio,
+                           (select c.rotulo from acervo.obra_trata_de ot join acervo.conceito c on c.id = ot.conceito_id where ot.obra_id = o.id limit 1) as conceito,
+                           imp.id as impressao_id, imp.estado as impressao_estado
+                      from acervo.obra o
+                      join acervo.subdominio sd on sd.id = o.subdominio_id
+                      left join acervo.impressao imp on imp.obra_id = o.id and imp.estado = 'servindo'
+                     where {cond_s}
+                  ) sub
+                 order by sub.id, sub.forca, sub.titulo
+              ) x
+             order by x.forca, x.titulo;
+            """.format(cond_t_exato=cond_t_exato, cond_t_contem_so=cond_t_contem_so,
+                       cond_s=cond_s, cond_c=cond_c)
     else:
         sql = """
         select o.id, o.titulo, o.objeto, 'obra' as eixo,

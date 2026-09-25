@@ -355,13 +355,20 @@ def banco_falso(monkeypatch):
 def test_ler_retirada_responde_data_e_sucessora_sem_texto(banco_falso, capsys, monkeypatch):
     assert casa.ler("adr", "arq:94", False) == 0
     out = capsys.readouterr().out.splitlines()
-    assert out == ["arq:0094: retirada em 2026-09-24; substituída por arq:0112",
-                   "  a vigente: acervo ler casa adr arq:0112"]
+    # card #3139 item 1: a marca (força não declarada, sem forca/revisao no banco_falso) abre a
+    # saída mesmo em documento retirado, sem corpo (§3.5).
+    assert out == [
+        "força não declarada · substituída por arq:0112 — adr arq:0094 · 0094 — ADR servida por verbo",
+        "arq:0094: retirada em 2026-09-24; substituída por arq:0112",
+        "  a vigente: acervo ler casa adr arq:0112"]
     # sem sucessora declarada: diz, e nao inventa a vigente
     sem_sucessora = dict(LINHA_RETIRADA, substituida_por=None)
     monkeypatch.setattr(casa, "_linhas", lambda where, limite=None: [sem_sucessora])
     assert casa.ler("adr", "arq:0094", False) == 0
-    assert capsys.readouterr().out == "arq:0094: retirada em 2026-09-24; sem sucessora declarada\n"
+    assert capsys.readouterr().out.splitlines() == [
+        "força não declarada · retirada em 2026-09-24 sem sucessora — adr arq:0094 · "
+        "0094 — ADR servida por verbo",
+        "arq:0094: retirada em 2026-09-24; sem sucessora declarada"]
 
 
 def test_ler_retirada_json_tem_corpo_none(banco_falso, capsys):
@@ -384,7 +391,10 @@ def test_listar_todas_inclui_retiradas(banco_falso, capsys):
     assert "retirada_em is null" not in banco_falso[-1]
     assert "inclui retiradas" in todas.splitlines()[0]
     linha = next(l for l in todas.splitlines() if l.startswith("arq:0094 "))
-    assert linha.endswith("(retirada em 2026-09-24; substituída por arq:0112)")
+    # card #3139 item 4: a coluna de texto mostra força · vigência no lugar de ciclo; o
+    # título não repete mais o "(retirada em ...)" que a vigência já diz.
+    assert "força não declarada · substituída por arq:0112" in linha
+    assert linha.endswith("0094 — ADR servida por verbo")
     assert casa.listar("adr", True, situacao=True, todas=True) == 0
     itens = {i["id"]: i for i in json.loads(capsys.readouterr().out)}
     assert itens["arq:0094"]["substituida_por"] == "arq:0112"
