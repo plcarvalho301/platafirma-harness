@@ -1,0 +1,11 @@
+[Unit]
+Description=Confere o diff de abertura/ a cada 5 minutos e promove se for so caderno.md
+
+[Timer]
+OnBootSec=5min
+OnUnitActiveSec=5min
+AccuracySec=30s
+Unit=abertura-caderno.service
+
+[Install]
+WantedBy=timers.target
