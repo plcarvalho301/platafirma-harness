@@ -2,7 +2,7 @@
 """minuta circular — despacha o ping tipo:minuta às convocadas.
 Recusa: seção de quem abriu vazia (pauta vazia não circula); minuta com
 mudança não commitada (o ping aponta um ref que o destinatário precisa
-conseguir ler). Protocolo: platafirma-arquitetura/minutas/PROTOCOLO.md §4.
+conseguir ler). Protocolo: padrao protocolo-de-minuta §4.
 """
 import os
 import re
@@ -15,7 +15,7 @@ sys.path.insert(0, os.path.join(
 from raizes import BancadaNaoDeclarada, bancada  # noqa: E402
 
 # Circular commita e empurra: roda no worktree da cadeira na bancada DECLARADA,
-# <bancada>/wt/platafirma-arquitetura/<cadeira> (arq:0109 §2, card #3010). Resolvido em
+# <bancada>/wt/platafirma-casa/<cadeira> (arq:0109 §2, card #3010). Resolvido em
 # main(); MINUTA_REPO aponta outro checkout (teste).
 REPO = None
 DIR = None
@@ -43,7 +43,7 @@ def erro(msg, code=1):
 
 
 def worktree_da_cadeira(verbo):
-    """MINUTA_REPO, senao <bancada>/wt/platafirma-arquitetura/<cadeira>. Sem bancada
+    """MINUTA_REPO, senao <bancada>/wt/platafirma-casa/<cadeira>. Sem bancada
     declarada ou sem worktree: exit 3, nunca criacao silenciosa."""
     explicito = os.environ.get("MINUTA_REPO")
     if explicito:
@@ -56,9 +56,9 @@ def worktree_da_cadeira(verbo):
         raiz = bancada()
     except BancadaNaoDeclarada as e:
         erro(str(e), 3)
-    wt = os.path.join(str(raiz), "wt", "platafirma-arquitetura", cadeira)
+    wt = os.path.join(str(raiz), "wt", "platafirma-casa", cadeira)
     if not os.path.isdir(wt):
-        erro(f"worktree ausente: {wt} — rode `repo abrir platafirma-arquitetura` antes de {verbo}.", 3)
+        erro(f"worktree ausente: {wt} — rode `repo abrir platafirma-casa` antes de {verbo}.", 3)
     return wt
 
 
@@ -93,7 +93,7 @@ def main():
     if not args:
         erro("uso: minuta circular <n> [<cadeira>...]", 2)
     REPO = worktree_da_cadeira("circular")
-    DIR = os.path.join(REPO, "minutas")
+    DIR = os.path.join(REPO, "minuta")
     n = args[0]
     alvos_pedidos = args[1:]
     num, caminho = resolve(n)

@@ -5,8 +5,8 @@
 # use para: deliberação entre cadeiras, parecer, circular pauta, formalizar em ADR/spec
 # atos: ler, escrever, circular, formalizar
 #
-# Externaliza platafirma-arquitetura/minutas/PROTOCOLO.md em verbo (spec:
-# platafirma-arquitetura/docs/spec_verbo-minuta.md). Ciclo de vida: escrever ->
+# Externaliza padrao protocolo-de-minuta em verbo (spec:
+# spec verbo-minuta). Ciclo de vida: escrever ->
 # (a cadeira escreve o mérito) -> circular -> (convocadas manifestam) ->
 # formalizar. Nunca é leitura automática — só roda chamada (ping tipo:minuta
 # na caixa, ou ordem do dono). Despachante (arq:0040): sub-atos em
@@ -31,8 +31,8 @@ ler        — sem argumento, as abertas em que PF_CADEIRA está convocada; com
 formalizar — cria o canônico vazio (ADR ou spec), apaga a minuta, um commit só.
              Recusa convocada com seção vazia, salvo --vencido.
 
-Protocolo: platafirma-arquitetura/minutas/PROTOCOLO.md
-Spec:      platafirma-arquitetura/docs/spec_verbo-minuta.md
+Protocolo: padrao protocolo-de-minuta
+Spec:      spec verbo-minuta
 FIM
   exit 2
 }
