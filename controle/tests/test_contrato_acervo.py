@@ -120,6 +120,25 @@ def test_identidade_adr_equivalencia():
     assert rs[0].stdout == rs[1].stdout == rs[2].stdout == rs[3].stdout
     assert len(rs[0].stdout) > 50
 
+    # card #3121: o seletor tambem resolve pelo SLUG do arquivo (NNNN-<slug>.md), sem chave
+    # nem numero — mesmo corpo que arq:0091. O slug e o do NOME DO ARQUIVO (path), que pode
+    # ser mais curto que o titulo por extenso (aqui, path=0091-sessao-id-chave-da-entidade-
+    # sessao.md); nao confundir com o slug derivado do titulo.
+    slug = "sessao-id-chave-da-entidade-sessao"
+    r_slug = subprocess.run([BIN, "ler", "casa", "adr", slug], capture_output=True, text=True)
+    assert r_slug.returncode == 0, r_slug.stderr
+    r_0091 = subprocess.run([BIN, "ler", "casa", "adr", "arq:0091"], capture_output=True,
+                            text=True)
+    assert r_0091.returncode == 0, r_0091.stderr
+    assert r_slug.stdout == r_0091.stdout
+
+    # forma invalida (hifen no lugar dos dois-pontos) nao casa nenhum degrau e recusa citando
+    # as formas aceitas, incluindo o slug do arquivo.
+    r_invalida = subprocess.run([BIN, "ler", "casa", "adr", "arq-0091"], capture_output=True,
+                                text=True)
+    assert r_invalida.returncode == 1, r_invalida.stdout
+    assert "formas:" in r_invalida.stderr
+
 def test_identidade_adr_forma_invalida():
     # arq:11O tem 'O' maiúsculo no lugar de zero; deve ser rejeitado com rc=2 e forma esperada
     r = subprocess.run([BIN, "ler", "casa", "adr", "arq:11O"], capture_output=True, text=True)
