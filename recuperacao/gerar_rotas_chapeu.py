@@ -275,19 +275,27 @@ def main() -> int:
         print(json.dumps(recorte, ensure_ascii=False, indent=2))
     else:
         if args.cadeira is not None:
+            # Carrega o existente preservando a ordem de chave tal como está no disco
+            # (json.load mantém a ordem de inserção) e só troca o bloco da cadeira
+            # pedida — nunca um sort_keys=True no dict inteiro aqui: isso resortiria
+            # as chaves aninhadas das OUTRAS cadeiras, mudando byte a byte um bloco
+            # que --cadeira prometeu não tocar (achado na materialização real do
+            # #3109). Só o bloco da própria cadeira, que é conteúdo novo, sai ordenado.
             final = {}
             if os.path.isfile(saida):
                 with open(saida, encoding="utf-8") as f:
                     final = json.load(f)
             if tabela.get(args.cadeira):
-                final[args.cadeira] = tabela[args.cadeira]
+                final[args.cadeira] = dict(sorted(tabela[args.cadeira].items()))
             else:
                 final.pop(args.cadeira, None)
+            sort_keys = False
         else:
             final = tabela
+            sort_keys = True
 
         with open(saida, "w", encoding="utf-8") as f:
-            json.dump(final, f, ensure_ascii=False, indent=2, sort_keys=True)
+            json.dump(final, f, ensure_ascii=False, indent=2, sort_keys=sort_keys)
             f.write("\n")
 
         n_cad = len(recorte) if args.cadeira is None else 1
