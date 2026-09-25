@@ -4,8 +4,8 @@
 # dono: gestao-estrategica
 # classe: B
 # use para: ler persona/chapeu/conduta/foto (o que o expediente serve), escrever/editar persona, designar, afastar, desligar, filme da cadeira
-# atos: ler, conduta, foto, abrir, salvar, conferir, sanear, prover, designar, afastar, dispensar, desligar, remover, reverter, filme, idade
-# folhas: ler|conduta|foto -> organizacao/leitura (serve o expediente) · abrir|salvar|conferir|sanear -> organizacao/redacao ·
+# atos: ler, conduta, foto, abrir, salvar, conferir, sanear, rotas, prover, designar, afastar, dispensar, desligar, remover, reverter, filme, idade
+# folhas: ler|conduta|foto -> organizacao/leitura (serve o expediente) · abrir|salvar|conferir|sanear|rotas -> organizacao/redacao ·
 #         prover|designar|dispensar|remover|afastar|reverter|desligar|filme -> organizacao/vinculo (ledger)
 # ambiente: PF_ABERTURA_DIR[=/srv/platafirma/casa/var/abertura-publicada] (leitura, arq:0097) · PLATAFIRMA_INSTANCIA[=/srv/platafirma/casa] · PLATAFIRMA_BANCADA[sem default; senao a linha de $HOME/.config/platafirma/bancada; ausente = exit 3] (escrita: <bancada>/wt/platafirma-harness/$PF_CADEIRA, senao <bancada>/platafirma-harness) · PERSONA_REPO (override de teste do clone de escrita) · PF_CADEIRA porta
 # depende: morada publicada (ler, conduta, foto); git + origin (abrir, salvar)
@@ -48,6 +48,7 @@ uso:
   persona idade              sha, data do último commit e idade do clone
   persona conferir [alvo]    roda os checks do molde novo (alvo: cadeira, arquivo ou dir)
   persona salvar -m "<msg>"  pull/rebase, confere, commit só de abertura/ e push
+  persona rotas [opções]     regenera abertura/rotas-chapeu.json (recuperacao/gerar_rotas_chapeu.py)
 
   atos de organização — ledger append-only em personas/eventos-org.jsonl:
   persona prover <cadeira> [--alias "<Nome>"]     abre cadeira
@@ -508,6 +509,14 @@ salvar() {
   echo "salvo · $(idade)"
 }
 
+# rotas — regenera abertura/rotas-chapeu.json a partir das personas do clone (card
+# #3110). Entra no clone porque o gerador le abertura/<cadeira>/persona.md do
+# WORKTREE (o que se esta editando), nao da morada publicada.
+rotas() {
+  entra_no_clone
+  python3 "$REPO/recuperacao/gerar_rotas_chapeu.py" --abertura "$REPO/abertura" "$@"
+}
+
 # --ajuda UNIVERSAL, sem efeito colateral (card #2868, ex-#2274 defeito 4). ANTES do
 # despacho, varrendo TODOS os argumentos: cobre `persona --ajuda` e `persona <sub> --ajuda`
 # — sem isto, `persona abrir --ajuda` dispararia o git pull de `abrir` e ignoraria a flag.
@@ -537,6 +546,10 @@ case "${1:-}" in
   salvar)
     shift
     salvar "$@"
+    ;;
+  rotas)
+    shift
+    rotas "$@"
     ;;
   prover|designar|dispensar|remover)
     # LEMBRETE, NAO GATE (dono, 17/08/2026). Ato que cria ou move unidade organizacional
