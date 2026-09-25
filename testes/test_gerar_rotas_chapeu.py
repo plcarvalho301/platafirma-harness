@@ -149,3 +149,53 @@ def test_main_cadeira_mescla_sem_tocar_outras(monkeypatch, abertura_fixture):
     assert final["outra-cadeira"] == existente["outra-cadeira"]
     assert "alfa" in final["testecadeira"]
     assert "governanca" in final["testecadeira"]
+
+
+def test_main_cadeira_preserva_ordem_de_chave_das_outras_byte_a_byte(monkeypatch, abertura_fixture):
+    """Regressão achada na materialização real do #3109: escrever com --cadeira usava
+    sort_keys=True no dict inteiro, o que resortia as chaves ANINHADAS de cadeiras que
+    --cadeira prometeu não tocar (ex. 'seguranca.controles' mudou de posição mesmo sem
+    ninguém tocar 'seguranca'). O arquivo pré-existente aqui tem 'outra-cadeira' com
+    chaves fora de ordem alfabética de propósito — se o bug voltar, este teste falha
+    porque o trecho de 'outra-cadeira' deixa de ser bytes idênticos."""
+    monkeypatch.setattr(grc, "_conceitos_http", lambda: {"itens": GOLDEN_FAKE})
+
+    saida = abertura_fixture / "rotas-chapeu.json"
+    # Escrito à mão, fora de ordem alfabética ('zulu' antes de 'alfa-chapeu'), como o
+    # arquivo publicado de verdade estava antes deste achado.
+    texto_original = (
+        "{\n"
+        '  "outra-cadeira": {\n'
+        '    "zulu-chapeu": [\n'
+        '      "gatilho-z"\n'
+        "    ],\n"
+        '    "alfa-chapeu": [\n'
+        '      "gatilho-a"\n'
+        "    ]\n"
+        "  }\n"
+        "}\n"
+    )
+    saida.write_text(texto_original, encoding="utf-8")
+
+    monkeypatch.setattr(
+        sys, "argv",
+        ["gerar_rotas_chapeu.py", "--abertura", str(abertura_fixture), "--cadeira", "testecadeira"],
+    )
+    rc = grc.main()
+    assert rc == 0
+
+    texto_depois = saida.read_text(encoding="utf-8")
+
+    # O trecho de 'outra-cadeira' sai byte a byte igual ao original: 'zulu-chapeu'
+    # continua ANTES de 'alfa-chapeu' — nada resortiu as chaves de quem nao foi tocado.
+    # 'testecadeira' e chave nova, entao entra DEPOIS de 'outra-cadeira' no dict; o
+    # trecho de 'outra-cadeira' e tudo antes do inicio de 'testecadeira'.
+    inicio = texto_depois.index('"outra-cadeira"')
+    fim = texto_depois.index('"testecadeira"')
+    trecho_outra_cadeira = texto_depois[inicio:fim]
+    assert trecho_outra_cadeira.index("zulu-chapeu") < trecho_outra_cadeira.index("alfa-chapeu")
+
+    final = json.loads(texto_depois)
+    assert final["outra-cadeira"] == {"zulu-chapeu": ["gatilho-z"], "alfa-chapeu": ["gatilho-a"]}
+    assert "alfa" in final["testecadeira"]
+    assert "governanca" in final["testecadeira"]
