@@ -82,6 +82,9 @@ uso:
   release reverter   <repo> [<rev>] [--ensaio]
   release promover   abertura [<rev>] [--ensaio]   publica a abertura do harness na rev (sem rev: origin/main)
   release reverter   abertura [<sha>] [--ensaio]   volta a abertura a um sha ja publicado (sem sha: o anterior)
+  release promover   abertura --so-caderno [--ensaio]   so promove se o diff current->origin/main
+                                                         em abertura/ for so caderno.md de cadeira/chapeu
+                                                         (gatilho automatico do timer abertura-caderno)
 
 raiz servida: PF_RELEASE_RAIZ[=/opt/platafirma] · instancia: PLATAFIRMA_INSTANCIA[=/srv/platafirma/casa]
 promover: <rev> (sha ou tag) obrigatória em família com stack; sem rev, avança para origin/main
@@ -1448,6 +1451,69 @@ promover_abertura() {  # $1=rev(opcional) $2=ensaio
   printf '%s\n' "$sha"
 }
 
+# --so-caderno (card #3141): gatilho AUTOMATICO (timer abertura-caderno), sem mao no meio.
+# So promove quando o diff current->origin/main, restrito a abertura/, e SO caderno.md de
+# cadeira/chapeu (abertura/<cadeira>/<chapeu>/caderno.md) — nunca decide sozinho quando o
+# diff toca persona, chapeu.md, dono.md ou o roteador: isso sobe por `release promover
+# abertura` a mao, ate a bateria #3090 (conferir de chapeu) existir.
+RE_SO_CADERNO='^abertura/[^/]+/[^/]+/caderno\.md$'
+
+promover_abertura_so_caderno() {  # $1=ensaio
+  local ensaio="$1" rc=0 esp sha antes
+  garantir_espelho "$FAMILIA_BIN" "$ensaio" || { rc=$?; return "$rc"; }
+  esp="$(espelho_de "$FAMILIA_BIN")"
+  if [ ! -d "$esp" ]; then
+    printf 'ensaio:    %s sem espelho; nada resolvido\n' "$FAMILIA_BIN"
+    return 0
+  fi
+  sha="$(resolver_rev "$FAMILIA_BIN" '')" || {
+    printf 'release: erro: origin/main não resolve no forge de %s\n' "$FAMILIA_BIN" >&2
+    return 2
+  }
+  exigir_descende_de_main "$FAMILIA_BIN" "$sha" 'promover' abertura || return $?
+  antes="$(sha_abertura_no_ar)"
+  if [ -z "$antes" ]; then
+    printf 'release: erro: abertura sem current — --so-caderno so promove em cima de uma abertura ja publicada; use release promover abertura\n' >&2
+    return 2
+  fi
+  if [ "$antes" = "$sha" ]; then
+    printf 'já no ar:  abertura current → %s — nada a mover\n' "${sha:0:7}"
+    return 0
+  fi
+
+  local caminhos=() c fora=()
+  while IFS= read -r c; do
+    [ -n "$c" ] || continue
+    caminhos+=("$c")
+  done < <("$GIT" --git-dir="$esp" diff --name-only "$antes" "$sha" -- abertura 2>/dev/null)
+
+  if [ "${#caminhos[@]}" -eq 0 ]; then
+    printf 'nada andou: %s → %s nao muda nada em abertura/ — nada a publicar\n' "${antes:0:7}" "${sha:0:7}"
+    return 0
+  fi
+
+  for c in "${caminhos[@]}"; do
+    [[ "$c" =~ $RE_SO_CADERNO ]] || fora+=("$c")
+  done
+  if [ "${#fora[@]}" -gt 0 ]; then
+    printf 'release: recusa: --so-caderno so promove diff que e so caderno.md de cadeira/chapeu; fora do padrao (%d):\n' "${#fora[@]}" >&2
+    printf '  %s\n' "${fora[@]}" >&2
+    printf 'suba com: release promover abertura %s\n' "${sha:0:7}" >&2
+    return 4
+  fi
+
+  printf '== release promover abertura --so-caderno %s ==\n' "${sha:0:7}"
+  printf 'de:        %s\n' "$(curto_ou "$antes" '(sem current)')"
+  printf 'so-caderno: %s caminho(s), todos caderno.md\n' "${#caminhos[@]}"
+  if [ "$ensaio" -eq 1 ]; then
+    printf 'ensaio:    nada tocado\n'
+    return 0
+  fi
+  publicar_abertura_da_familia "$FAMILIA_BIN" "$sha" || { rc=$?; return "$rc"; }
+  printf 'no ar:     abertura %s\n' "${sha:0:7}"
+  printf '%s\n' "$sha"
+}
+
 reverter_abertura() {  # $1=sha(opcional) $2=ensaio
   local rev="$1" ensaio="$2" alvo="" antes novo out rc=0
   if [ -n "$rev" ]; then
@@ -1538,10 +1604,11 @@ gate_conferir_verbo() {  # $1=repo $2=sha_candidato $3=sha_atual(ou vazio)
 
 # ---- ato: promover <repo> [<rev>] [--ensaio] --------------------------------------
 cmd_promover() {
-  local ensaio=0 repo="" rev=""
+  local ensaio=0 so_caderno=0 repo="" rev=""
   while [ $# -gt 0 ]; do
     case "$1" in
       --ensaio) ensaio=1; shift ;;
+      --so-caderno) so_caderno=1; shift ;;
       -*) printf 'release: erro: opção desconhecida: %s\n' "$1" >&2; uso_texto; exit 2 ;;
       *)
         if [ -z "$repo" ]; then repo="$1"
@@ -1552,9 +1619,17 @@ cmd_promover() {
   done
   [ -n "$repo" ] || { printf 'release: erro: repo obrigatório para promover\n' >&2; uso_texto; exit 2; }
   validar_repo_ou_sair "$repo"
+  if [ "$so_caderno" -eq 1 ] && [ "$repo" != "abertura" ]; then
+    printf 'release: erro: --so-caderno so existe em release promover abertura\n' >&2; exit 2
+  fi
   if [ "$repo" = "abertura" ]; then
     local rc_fam=0
-    promover_abertura "$rev" "$ensaio" || rc_fam=$?
+    if [ "$so_caderno" -eq 1 ]; then
+      [ -z "$rev" ] || { printf 'release: erro: --so-caderno nao aceita rev explicita (sempre origin/main)\n' >&2; exit 2; }
+      promover_abertura_so_caderno "$ensaio" || rc_fam=$?
+    else
+      promover_abertura "$rev" "$ensaio" || rc_fam=$?
+    fi
     exit "$rc_fam"
   fi
 

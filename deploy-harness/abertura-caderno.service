@@ -1,0 +1,21 @@
+[Unit]
+Description=Promove a abertura do harness quando o diff em abertura/ e so caderno.md (card #3141)
+Documentation=https://tarefas.platafirma.org/tasks/3141
+
+[Service]
+Type=oneshot
+# Mesmo ambiente do ops-mcp: verbos da release no PATH, git com a config da conta,
+# EnvironmentFile com o token do acervo para o gancho de reindexacao que
+# publicar-abertura dispara (a mesma falta que causou o 401 de casa-site-publicar,
+# arq:0115, card #3141 passo 2 — aqui entra desde o inicio, nao como remendo).
+Environment=PATH=/opt/platafirma/current/harness/bin:/usr/local/bin:/usr/bin:/bin
+Environment=HOME=/home/claudinho
+Environment=GIT_CONFIG_GLOBAL=/home/claudinho/.gitconfig
+EnvironmentFile=/home/claudinho/.config/ops/env
+WorkingDirectory=/opt/platafirma/current/harness
+ExecStart=/opt/platafirma/current/harness/bin/release promover abertura --so-caderno
+# exit 4 (diff toca algo alem de caderno.md — decisao de trilho, nao falha) e exit 0
+# (publicado, ja no ar ou nada andou) sao os dois desfechos normais deste gatilho
+# automatico; qualquer outro exit e falha de verdade (rede, git, gate).
+SuccessExitStatus=0 4
+TimeoutStartSec=180
