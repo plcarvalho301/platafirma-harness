@@ -1444,9 +1444,13 @@ def conferir_superficie(alvo=None, staged=False, como_json=False):
         with open(registro, encoding="utf-8") as f:
             reg = json.load(f)
     except (OSError, ValueError) as e:
+        # card #3142: registro ilegivel e "nao consegui olhar", nao divergencia —
+        # antes saia exit 1 (mesmo peso de achado real); agora e indeterminavel.
         msg = f"registro de superficies ilegivel ({registro}): {e}"
-        print(json.dumps({"erro": msg}) if como_json else msg)
-        return 1
+        if not como_json:
+            print(msg)
+        itens = [("registro de superficies", resultado.indeterminavel(msg))]
+        return resultado.relatorio("superficie", alvo, itens, _sha_release(), como_json=como_json)
 
     conectores = reg.get("conectores", {})
     servidas = {t for c in conectores.values() for t in c.get("serve", [])}
@@ -1549,9 +1553,14 @@ def conferir_superficie(alvo=None, staged=False, como_json=False):
     # Superficie que o host nao ve sai NOMEADA, do registro — nao hardcoded. Foi
     # registro com tres de quatro que deixou `code-seco` fora da conta enquanto o
     # veredito dizia "em dia": nao medido nao e em dia, e o que nao consta some.
-    nao_medido = [f"{n} — {d.get('porque', 'sem motivo declarado')}"
-                  for n, d in sorted(reg.get("superficies", {}).items())
-                  if not d.get("verificavel_do_host")]
+    #
+    # card #3142: "nao medido" vira item indeterminavel — nunca conforme, nunca
+    # omitido do veredito completo (antes so aparecia em texto/JSON informativo
+    # e nunca pesava no exit, nem mesmo avulso).
+    nao_medido_itens = [(n, d.get("porque", "sem motivo declarado"))
+                         for n, d in sorted(reg.get("superficies", {}).items())
+                         if not d.get("verificavel_do_host")]
+    nao_medido = [f"{n} — {motivo}" for n, motivo in nao_medido_itens]
 
     # GATE DE COMMIT vs SAUDE DE HOST (card #2823). So `quebradas` e incremental:
     # linhas ADICIONADAS pelo commit em curso. `nao_servidos/sem_meio/sem_produtor/
@@ -1560,30 +1569,49 @@ def conferir_superficie(alvo=None, staged=False, como_json=False):
     # saude de host segue computada e exibida, como OBSERVACAO, mas nao trava. Sem
     # --staged (rodado avulso), tudo trava como antes. Cumpre a promessa do hook
     # ("passivo herdado nao trava a casa") sem cegar `conferir superficie` avulso.
-    saude_host = bool(nao_servidos or sem_meio or sem_produtor or endpoints_falhos)
-    if staged:
-        ok = not quebradas
+    #
+    # card #3142: a trava agora vem do veredito agregado de `itens`
+    # (resultado.agrega). nao_servidos/endpoints_falhos/sem_produtor/sem_meio e
+    # nao_medido_itens sao TAMBEM passivo de host que o commit em curso nao
+    # criou (claude.ai, p.ex., e permanentemente "nao medido") — por isso, como
+    # o passivo ja fazia, SO entram em `itens` quando staged=False. Sob --staged
+    # seguem impressos como observacao (obs.), exatamente como antes; so deixam
+    # de pesar no exit. Isto e deliberado, nao descuido: hooks/pre-commit chama
+    # `"$CONFERIR" superficie --staged || exit 1` sem distinguir exit 1 (achado
+    # real) de exit 5 (nao consegui medir) — se nao_medido entrasse em `itens`
+    # incondicionalmente, todo commit travaria pra sempre, porque claude.ai
+    # nunca vira "medido do host". `quebradas`, que E o alvo incremental do
+    # commit, continua fora deste condicional e sempre entra em `itens`.
+    itens = []
+    if not staged:
+        if nao_servidos or endpoints_falhos or sem_produtor or sem_meio:
+            for s_, c in nao_servidos:
+                motivo = (c if c.startswith("produtor ilegivel")
+                          else f"conector prometido nao servido: {c}")
+                itens.append((s_, resultado.divergente(motivo)))
+            for s_, c, m in endpoints_falhos:
+                itens.append((f"{s_}.{c}", resultado.divergente(f"endpoint nao conectou: {m}")))
+            for n_ in sem_produtor:
+                itens.append((n_, resultado.divergente(
+                    "superficie verificavel do host e ninguem declara quem escreve o .mcp.json")))
+            for c in sem_meio:
+                itens.append((c, resultado.divergente(
+                    "capacidade nas_tres sem meio (tool) servido por conector nenhum")))
+        else:
+            itens.append(("conectores dos produtores declarados", resultado.conforme()))
+        for n_, motivo in nao_medido_itens:
+            itens.append((n_, resultado.indeterminavel(motivo)))
+    if quebradas:
+        for a, n, t in quebradas:
+            itens.append((f"{a}:{n}", resultado.divergente(f"tool fora de todo conector: {t}")))
     else:
-        ok = not (quebradas or saude_host)
+        itens.append(("tool citada fora de todo conector", resultado.conforme()))
+
     if como_json:
-        print(json.dumps({
-            "veredito": "em dia" if ok else "divergente",
-            "modo_gate": "incremental (--staged): saude de host nao trava" if staged
-                         else "completo: saude de host trava",
-            "saude_host_ok": not saude_host,
-            "conector_prometido_nao_servido": [
-                {"superficie": s_, "conector": c} for s_, c in nao_servidos],
-            "endpoint_nao_conectou": [
-                {"superficie": s_, "conector": c, "motivo": m} for s_, c, m in endpoints_falhos],
-            "capacidade_sem_meio": sem_meio,
-            "superficie_sem_produtor_declarado": sem_produtor,
-            "deriva_em_instancia_viva": [
-                {"arquivo": a, "falta": f, "sobra": so} for a, f, so in deriva],
-            "tool_fora_de_todo_conector": [
-                {"arquivo": a, "linha": n, "tool": t} for a, n, t in quebradas],
-            "nao_medido": nao_medido,
-        }, ensure_ascii=False, indent=2))
-        return 0 if ok else 1
+        # o detalhe rico (modo_gate, deriva_em_instancia_viva) some do --json: o
+        # contrato agora e o mesmo de toda classe `conferir` (ancora + itens); o
+        # motivo de cada item carrega o que antes ia em chave propria.
+        return resultado.relatorio("superficie", alvo, itens, _sha_release(), como_json=True)
 
     sups = " . ".join(sorted(reg.get("superficies", {})))
     obs = " (obs.)" if staged else ""
@@ -1614,8 +1642,8 @@ def conferir_superficie(alvo=None, staged=False, como_json=False):
     print(f"  NAO MEDIDO do host               : {len(nao_medido)}")
     for x in nao_medido:
         print(f"      {x.split(' — ')[0]} — {x.split(' — ', 1)[1][:96]}")
-    print(f"  veredito                         : {'em dia' if ok else 'divergente'}")
-    return 0 if ok else 1
+    print()
+    return resultado.relatorio("superficie", alvo, itens, _sha_release(), como_json=False)
 
 
 def _mcp_jsons_da_superficie(nome):
@@ -1798,21 +1826,13 @@ def conferir_superficie_descricao(alvo=None, como_json=False, caminho_catalogo=N
     """Caso 1 de conferir superficie: descrição de roteamento servida em runtime × tabela de fontes do índice."""
     slugs_indice, motivo_tabela = _fontes_da_tabela_catalogo(caminho_catalogo)
     if motivo_tabela:
-        if como_json:
-            print(json.dumps({
-                "caso": "descricao",
-                "veredito": "nao-medido",
-                "motivo": motivo_tabela,
-                "slugs_indice": [],
-                "slugs_servidos": [],
-                "so_no_indice": [],
-                "so_no_servido": [],
-            }, ensure_ascii=False, indent=2))
-        else:
+        # card #3142: nao ler a tabela do catalogo e "nao consegui olhar" — nunca
+        # sucesso silencioso; antes saia exit 0 tanto em texto quanto --json.
+        if not como_json:
             print("superficie (caso descricao):")
             print(f"  NAO MEDIDO: {motivo_tabela}")
-            print("  veredito  : nao-medido")
-        return 0
+        itens = [("tabela de fontes do catalogo", resultado.indeterminavel(motivo_tabela))]
+        return resultado.relatorio("superficie", alvo, itens, _sha_release(), como_json=como_json)
 
     if descricao_fornecida is not None:
         desc_servida, err_servido = descricao_fornecida, None
@@ -1820,51 +1840,44 @@ def conferir_superficie_descricao(alvo=None, como_json=False, caminho_catalogo=N
         desc_servida, err_servido = _obtem_descricao_servida_mcp(url=mcp_url)
 
     if err_servido:
-        if como_json:
-            print(json.dumps({
-                "caso": "descricao",
-                "veredito": "nao-medido",
-                "motivo": err_servido,
-                "slugs_indice": sorted(slugs_indice),
-                "slugs_servidos": [],
-                "so_no_indice": [],
-                "so_no_servido": [],
-            }, ensure_ascii=False, indent=2))
-        else:
+        # idem: MCP fora do ar e "nao consegui olhar", nunca "em dia" (exit 0).
+        if not como_json:
             print("superficie (caso descricao):")
             print(f"  NAO MEDIDO: {err_servido}")
-            print("  veredito  : nao-medido")
-        return 0
+        itens = [("descricao servida pelo MCP", resultado.indeterminavel(err_servido))]
+        return resultado.relatorio("superficie", alvo, itens, _sha_release(), como_json=como_json)
 
     slugs_servidos = _extrai_slugs_de_descricao(desc_servida)
     so_no_indice = sorted(slugs_indice - slugs_servidos)
     so_no_servido = sorted(slugs_servidos - slugs_indice)
     ok = (slugs_indice == slugs_servidos) and bool(slugs_indice)
 
-    if como_json:
-        print(json.dumps({
-            "caso": "descricao",
-            "veredito": "em dia" if ok else "divergente",
-            "slugs_indice": sorted(slugs_indice),
-            "slugs_servidos": sorted(slugs_servidos),
-            "so_no_indice": so_no_indice,
-            "so_no_servido": so_no_servido,
-        }, ensure_ascii=False, indent=2))
-        return 0 if ok else 1
+    if not como_json:
+        print("superficie (caso descricao):")
+        print(f"  fontes no índice : {len(slugs_indice)} ({', '.join(sorted(slugs_indice))})")
+        print(f"  fontes no servido: {len(slugs_servidos)} ({', '.join(sorted(slugs_servidos))})")
+        if so_no_indice:
+            print(f"  SÓ NO ÍNDICE     : {len(so_no_indice)} ({', '.join(so_no_indice)})")
+        else:
+            print("  só no índice     : 0")
+        if so_no_servido:
+            print(f"  SÓ NO SERVIDO    : {len(so_no_servido)} ({', '.join(so_no_servido)})")
+        else:
+            print("  só no servido    : 0")
 
-    print("superficie (caso descricao):")
-    print(f"  fontes no índice : {len(slugs_indice)} ({', '.join(sorted(slugs_indice))})")
-    print(f"  fontes no servido: {len(slugs_servidos)} ({', '.join(sorted(slugs_servidos))})")
-    if so_no_indice:
-        print(f"  SÓ NO ÍNDICE     : {len(so_no_indice)} ({', '.join(so_no_indice)})")
+    if ok:
+        itens = [("descricao × indice de fontes", resultado.conforme())]
     else:
-        print("  só no índice     : 0")
-    if so_no_servido:
-        print(f"  SÓ NO SERVIDO    : {len(so_no_servido)} ({', '.join(so_no_servido)})")
-    else:
-        print("  só no servido    : 0")
-    print(f"  veredito         : {'em dia' if ok else 'divergente'}")
-    return 0 if ok else 1
+        partes = []
+        if so_no_indice:
+            partes.append(f"só no índice: {', '.join(so_no_indice)}")
+        if so_no_servido:
+            partes.append(f"só no servido: {', '.join(so_no_servido)}")
+        if not slugs_indice:
+            partes.append("índice de fontes vazio")
+        itens = [("descricao × indice de fontes",
+                  resultado.divergente("; ".join(partes) or "descricao servida diverge do indice"))]
+    return resultado.relatorio("superficie", alvo, itens, _sha_release(), como_json=como_json)
 
 
 def conferir_skill(nome, servido=None, como_json=False):

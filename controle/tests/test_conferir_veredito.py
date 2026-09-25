@@ -718,3 +718,146 @@ def test_arranque_staged_preserva_modo_texto_do_pre_commit(monkeypatch, tmp_path
 
     assert exit_code == 0
     assert "release conferir arranque" in saida.out
+
+
+# --- conferir_superficie (card #3142) -----------------------------------------
+
+def _registro_superficie(tmp_path, dado):
+    reg_dir = tmp_path / "registro"
+    reg_dir.mkdir()
+    (reg_dir / "superficies.json").write_text(json.dumps(dado), encoding="utf-8")
+    return tmp_path
+
+
+def test_superficie_conforme_quando_tudo_servido(tmp_path, monkeypatch, capsys):
+    _registro_superficie(tmp_path, {
+        "conectores": {"claudinho-mcp": {"serve": ["conferir"]}},
+        "superficies": {
+            "fabrica": {"verificavel_do_host": True, "produtor": "fabrica_prod",
+                        "conectores": ["claudinho-mcp"]},
+        },
+        "capacidades": {},
+        "aposentadas": {"nomes": []},
+    })
+    monkeypatch.setattr(conferir, "HARNESS", str(tmp_path))
+    monkeypatch.setattr(conferir, "_conectores_do_produtor", lambda prod: ({"claudinho-mcp"}, None))
+    monkeypatch.setattr(conferir, "_mcp_jsons_da_superficie", lambda nome: [])
+    monkeypatch.setattr(conferir, "_texto_da_fita", lambda: [])
+    monkeypatch.setattr(conferir, "_sha_release", lambda: "abc1234")
+
+    exit_code = conferir.conferir_superficie(None, False, True)
+    dado = json.loads(capsys.readouterr().out)
+
+    assert exit_code == 0
+    assert dado["itens"] and all(i["estado"] == "conforme" for i in dado["itens"])
+
+
+def test_superficie_divergente_quando_conector_prometido_nao_servido(tmp_path, monkeypatch, capsys):
+    _registro_superficie(tmp_path, {
+        "conectores": {"claudinho-mcp": {"serve": ["conferir"]}},
+        "superficies": {
+            "fabrica": {"verificavel_do_host": True, "produtor": "fabrica_prod",
+                        "conectores": ["claudinho-mcp"]},
+        },
+        "capacidades": {},
+        "aposentadas": {"nomes": []},
+    })
+    monkeypatch.setattr(conferir, "HARNESS", str(tmp_path))
+    monkeypatch.setattr(conferir, "_conectores_do_produtor", lambda prod: (set(), None))
+    monkeypatch.setattr(conferir, "_mcp_jsons_da_superficie", lambda nome: [])
+    monkeypatch.setattr(conferir, "_texto_da_fita", lambda: [])
+    monkeypatch.setattr(conferir, "_sha_release", lambda: "abc1234")
+
+    exit_code = conferir.conferir_superficie(None, False, True)
+    dado = json.loads(capsys.readouterr().out)
+
+    assert exit_code == 1
+    item = next(i for i in dado["itens"] if i["nome"] == "fabrica")
+    assert item["estado"] == "divergente"
+    assert "claudinho-mcp" in item["motivo"]
+
+
+def test_superficie_registro_ilegivel_sai_indeterminavel_nao_conforme(tmp_path, monkeypatch, capsys):
+    # card #3142: registro que nao abre/parseia e "nao consegui olhar" — nunca
+    # sucesso silencioso, e nunca reprovacao disfarcada de "achado real" (exit 1
+    # de antes).
+    monkeypatch.setattr(conferir, "HARNESS", str(tmp_path))  # sem tmp_path/registro/*
+    monkeypatch.setattr(conferir, "_sha_release", lambda: "abc1234")
+
+    exit_code = conferir.conferir_superficie(None, False, True)
+    dado = json.loads(capsys.readouterr().out)
+
+    assert exit_code == 5
+    assert dado["itens"][0]["estado"] == "indeterminavel"
+
+
+def test_superficie_staged_nao_trava_por_nao_medido_herdado(tmp_path, monkeypatch, capsys):
+    # card #3142 + #2823: nao_medido (claude.ai, sempre "nao medido") e passivo de
+    # host que o commit em curso nao criou. Sob --staged tem de continuar so
+    # observacao — hooks/pre-commit chama `conferir superficie --staged || exit 1`
+    # sem distinguir exit 1 de exit 5; se nao_medido travasse, TODO commit
+    # reprovaria pra sempre so por claude.ai nunca ser "medido do host".
+    _registro_superficie(tmp_path, {
+        "conectores": {},
+        "superficies": {
+            "claude.ai": {"verificavel_do_host": False, "porque": "nao verificavel do host"},
+        },
+        "capacidades": {},
+        "aposentadas": {"nomes": []},
+    })
+    monkeypatch.setattr(conferir, "HARNESS", str(tmp_path))
+    monkeypatch.setattr(conferir, "_quebradas_no_staged", lambda padrao, servidas: [])
+    monkeypatch.setattr(conferir, "_sha_release", lambda: "abc1234")
+
+    exit_code = conferir.conferir_superficie(None, True, True)
+    dado = json.loads(capsys.readouterr().out)
+
+    assert exit_code == 0
+    assert dado["itens"] and all(i["estado"] == "conforme" for i in dado["itens"])
+
+
+# --- conferir_superficie_descricao (card #3142) -------------------------------
+
+def test_superficie_descricao_conforme_quando_indice_bate_com_servido(tmp_path, monkeypatch, capsys):
+    catalogo = tmp_path / "catalogo-de-fontes.md"
+    catalogo.write_text(
+        "## Fontes da plataforma\n\n| fonte | x |\n|---|---|\n| acervo | y |\n", encoding="utf-8")
+    monkeypatch.setattr(conferir, "_sha_release", lambda: "abc1234")
+
+    exit_code = conferir.conferir_superficie_descricao(
+        None, como_json=True, caminho_catalogo=str(catalogo),
+        descricao_fornecida="recuperar fontes:\n  - acervo (exata): ...\n")
+    dado = json.loads(capsys.readouterr().out)
+
+    assert exit_code == 0
+    assert dado["itens"][0]["estado"] == "conforme"
+
+
+def test_superficie_descricao_divergente_quando_servido_cita_fonte_fora_do_indice(tmp_path, monkeypatch, capsys):
+    catalogo = tmp_path / "catalogo-de-fontes.md"
+    catalogo.write_text(
+        "## Fontes da plataforma\n\n| fonte | x |\n|---|---|\n| acervo | y |\n", encoding="utf-8")
+    monkeypatch.setattr(conferir, "_sha_release", lambda: "abc1234")
+
+    exit_code = conferir.conferir_superficie_descricao(
+        None, como_json=True, caminho_catalogo=str(catalogo),
+        descricao_fornecida="recuperar fontes:\n  - fonte-fantasma (exata): ...\n")
+    dado = json.loads(capsys.readouterr().out)
+
+    assert exit_code == 1
+    assert dado["itens"][0]["estado"] == "divergente"
+
+
+def test_superficie_descricao_mcp_fora_do_ar_sai_indeterminavel_nao_conforme(monkeypatch, capsys):
+    # card #3142: antes saia exit 0 (sucesso silencioso) quando o MCP nao
+    # respondia ou a tabela do catalogo nao existia — exatamente o defeito que
+    # o card corrige.
+    monkeypatch.setattr(conferir, "_obtem_descricao_servida_mcp",
+                         lambda url=None: (None, "servidor MCP nao respondeu (timeout)"))
+    monkeypatch.setattr(conferir, "_sha_release", lambda: "abc1234")
+
+    exit_code = conferir.conferir_superficie_descricao(None, como_json=True)
+    dado = json.loads(capsys.readouterr().out)
+
+    assert exit_code == 5
+    assert dado["itens"][0]["estado"] == "indeterminavel"
