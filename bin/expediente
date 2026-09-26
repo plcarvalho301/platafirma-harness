@@ -22,6 +22,7 @@
 #   acervo-consultado  abertura, com pergunta   valor  volatil  motor rag buscar casa "{pergunta}" --k 6 --texto secao   dados (a partição)
 #   chapeu             chapeu                   valor  estavel  persona ler {cadeira} --chapeu {chapeu}        gestao-estrategica
 #   cadernos           abertura; com chapeu, o corpo dele  valor  volatil  mesa caderno --chapeu {chapeu}   gestao-estrategica
+#   rotinas            abertura                 valor  estavel  acervo listar casa guia --mapa                 gestao-estrategica
 #
 from __future__ import annotations
 
@@ -97,6 +98,16 @@ CATALOGO = [
         "regime": "valor",
         "volatilidade": "volatil",
         "chamada": "mesa caderno [--chapeu {chapeu}]",
+        "dono": "gestao-estrategica",
+    },
+    {
+        # #3084: o mapa das rotinas (pergunta -> chamada -> retorno), extraído da seção
+        # `## Mapa` dos guias de rotina. Fica no prefixo, logo depois da conduta/chapéu.
+        "peca": "rotinas",
+        "gatilho": "abertura",
+        "regime": "valor",
+        "volatilidade": "estavel",
+        "chamada": "acervo listar casa guia --mapa",
         "dono": "gestao-estrategica",
     },
 ]
@@ -489,6 +500,7 @@ def ato_montar(cadeira_arg: str | None = None, chapeu_forcado: str | None = None
     ordem_chaves = ["persona", "conduta"]
     if chapeu_slug:
         ordem_chaves.append("chapeu")
+    ordem_chaves.append("rotinas")
     ordem_chaves.append("alias-cadeiras")
     ordem_chaves.append("mesa")
     if pergunta and not sem_acervo:

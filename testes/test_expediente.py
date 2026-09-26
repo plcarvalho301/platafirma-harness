@@ -127,6 +127,15 @@ esac
 """
 
 
+ACERVO_STUB = """#!/bin/sh
+if [ "$*" = "listar casa guia --mapa" ]; then
+  printf "ROTINAS (stub)\\n\\nLER — sei a chave\\n"
+  exit 0
+fi
+echo "stub acervo: chamada inesperada '$*'" >&2
+exit 2
+"""
+
 def _executavel(caminho: Path) -> Path:
     caminho.chmod(caminho.stat().st_mode | stat.S_IEXEC | stat.S_IXGRP | stat.S_IXOTH)
     return caminho
@@ -150,6 +159,10 @@ def raiz_hermetica(tmp_path: Path) -> Path:
     p_motor = bin_dir / "motor"
     p_motor.write_text(MOTOR_STUB, encoding="utf-8")
     _executavel(p_motor)
+
+    p_acervo = bin_dir / "acervo"
+    p_acervo.write_text(ACERVO_STUB, encoding="utf-8")
+    _executavel(p_acervo)
 
     # Sub-ato roteador
     exp_dir = bin_dir / "_expediente"
@@ -248,13 +261,13 @@ def test_catalogo_na_transicao_nunca_ausente(raiz_hermetica):
     assert "transição" in proc_c.stdout
 
 
-def test_catalogo_lista_as_7(raiz_hermetica):
-    """Spec §7: catalogo lista as 7 peças com campos conformes."""
+def test_catalogo_lista_as_8(raiz_hermetica):
+    """Spec §7: catalogo lista as 8 peças com campos conformes (rotinas entrou no #3084)."""
     proc = _run_expediente(["catalogo", "--json"], raiz_hermetica)
     assert proc.returncode == 0
     dados = json.loads(proc.stdout)
     assert isinstance(dados, list)
-    assert len(dados) == 7
+    assert len(dados) == 8
 
     pecas_esperadas = [
         "conduta",
@@ -264,6 +277,7 @@ def test_catalogo_lista_as_7(raiz_hermetica):
         "acervo-consultado",
         "chapeu",
         "cadernos",
+        "rotinas",
     ]
     pecas_obtidas = [p["peca"] for p in dados]
     assert pecas_obtidas == pecas_esperadas
@@ -432,5 +446,30 @@ def test_mesa_sem_chapeu_fail_to_inteiro(raiz_hermetica):
     assert d["chapeu"] is None
     peca_mesa = next(p for p in d["pecas"] if p["peca"] == "mesa")
     assert peca_mesa["ref"] == "verbo:mesa ver"
+
+# ------------------------------------------------------------------------------
+# #3084: peça rotinas no prefixo, logo depois da conduta (ou do chapéu)
+# ------------------------------------------------------------------------------
+
+def test_rotinas_logo_apos_conduta_sem_chapeu(raiz_hermetica):
+    proc = _run_expediente(
+        ["montar", "--json"], raiz_hermetica, stdin_data="pergunta sem rotulo",
+        env_extra={"PF_CADEIRA": "ia", "PF_BIN": str(raiz_hermetica / "bin")},
+    )
+    assert proc.returncode == 0
+    pecas = json.loads(proc.stdout)["pecas"]
+    assert [p["peca"] for p in pecas[:3]] == ["persona", "conduta", "rotinas"]
+    assert pecas[2]["ref"] == "verbo:acervo listar casa guia --mapa"
+    assert pecas[2]["frescor"] == "fresco"
+    assert pecas[2]["conteudo"].startswith("ROTINAS")
+
+def test_rotinas_logo_apos_chapeu(raiz_hermetica):
+    proc = _run_expediente(
+        ["montar", "--chapeu", "contexto", "--json"], raiz_hermetica,
+        env_extra={"PF_CADEIRA": "ia", "PF_BIN": str(raiz_hermetica / "bin")},
+    )
+    assert proc.returncode == 0
+    pecas = json.loads(proc.stdout)["pecas"]
+    assert [p["peca"] for p in pecas[:4]] == ["persona", "conduta", "chapeu", "rotinas"]
 
 
