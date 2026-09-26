@@ -23,3 +23,4 @@ tests/test_contrato_infra.py
 tests/test_contrato_monta_sessao.py
 tests/test_conferir_veredito.py
 tests/test_contrato_repo_bancada.py
+tests/test_mesa.py
