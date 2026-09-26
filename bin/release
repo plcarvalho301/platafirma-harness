@@ -1265,6 +1265,9 @@ promover_stacks() {  # $1=sha ; usa STACKS_PROMOVER; devolve 0 ou o nome da stac
 # ops-mcp` despacha destacado e a chamada que o emite volta antes do restart (medido 15/09
 # pela porta). Chamado por último, depois de tudo relatado. PF_RELEASE_PORTA=0 desliga.
 reiniciar_porta() {
+  # O restart da porta mata o processo que a chamou (a chamada nao sobrevive): a tela da
+  # promocao tem de sair ANTES, senao quem promoveu recebe nada (medido em 26/09, a0c2108).
+  resumo_imprime
   local repo="$1"
   [ "$repo" = "$FAMILIA_BIN" ] || return 0
   if [ "${PF_RELEASE_PORTA:-1}" != "1" ]; then
@@ -1745,10 +1748,21 @@ abrir_log_promover() {  # $1=repo
 }
 
 resumo_promover() {  # $1=exit
-  local rc="$1" sha_final
+  local rc="$1"
+  resumo_imprime
+  exit "$rc"
+}
+
+# Imprime a tela e devolve stdout/stderr ao chamador. Idempotente: a segunda chamada
+# (o trap de EXIT depois de reiniciar_porta) nao faz nada.
+resumo_imprime() {
+  [ -n "$PROMO_LOG" ] || return 0
+  local sha_final log="$PROMO_LOG"
+  PROMO_LOG=""
   trap - EXIT
   exec 1>&3 2>&4 3>&- 4>&-
-  [ -f "$PROMO_LOG" ] || exit "$rc"
+  PROMO_LOG="$log"
+  [ -f "$PROMO_LOG" ] || { PROMO_LOG=""; return 0; }
   # grep sem casamento sai 1: com set -e/pipefail isso mataria o resumo e trocaria o exit
   { grep -E '^(== |de: |gate: |venv: |current: |no ar: |ambiente: |suite: |card: |ensaio: |já no ar: )' "$PROMO_LOG" \
       | grep -v 'NAO MEDIDA'; } || true
@@ -1757,7 +1771,8 @@ resumo_promover() {  # $1=exit
   printf 'log:       %s\n' "$PROMO_LOG"
   sha_final="$(grep -E '^[0-9a-f]{40}$' "$PROMO_LOG" | tail -n 1)" || sha_final=""
   [ -z "$sha_final" ] || printf '%s\n' "$sha_final"
-  exit "$rc"
+  PROMO_LOG=""
+  return 0
 }
 
 # ---- ato: promover <repo> [<rev>] [--ensaio] --------------------------------------
