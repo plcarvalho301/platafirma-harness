@@ -62,7 +62,7 @@ def run_acesso(*args, env=None) -> subprocess.CompletedProcess:
 def test_decidir_permitido_exit_0():
     """Exit 0: ação permitida por regra explícita no PAP."""
     r = run_acesso(
-        "decidir", "sessao_abrir", "sessao:fabrica",
+        "decidir", "sessao_abrir", "sessao:engenharia",
         "--papel", "fornecedor", "--dominio", "plataforma",
     )
     assert r.returncode == 0
@@ -140,7 +140,7 @@ def test_decidir_faltou_atributo_projecao_exit_5():
 def test_decidir_json_permitido_exit_0():
     """--json: objeto estruturado com permitido=True, regra, motivo, faltou, plano."""
     r = run_acesso(
-        "decidir", "sessao_abrir", "sessao:fabrica",
+        "decidir", "sessao_abrir", "sessao:engenharia",
         "--papel", "fornecedor", "--dominio", "plataforma",
         "--json",
     )
@@ -149,7 +149,7 @@ def test_decidir_json_permitido_exit_0():
     assert d["permitido"] is True
     assert d["regra"] == "fornecedor-abre-a-propria-sessao"
     assert d["acao"] == "sessao_abrir"
-    assert d["recurso"] == "sessao:fabrica"
+    assert d["recurso"] == "sessao:engenharia"
     assert d["faltou"] == []
     assert len(d["plano"]) == 8
 
@@ -291,10 +291,11 @@ def test_decidir_permissao_na_forma_nua():
     assert "regra=fornecedor-le-repo" in r.stdout
 
 def test_decidir_projecao_e_a_do_pep():
-    """`--sujeito` casa so a chave da tabela (username ou sub), como a porta."""
-    r = run_acesso("decidir", "sessao_abrir", "sessao:fabrica", "--sujeito", "jaiminho-fabrica")
-    assert r.returncode == 0
-    r2 = run_acesso("decidir", "sessao_abrir", "sessao:fabrica", "--sujeito", "e57eadb1-ec5d-41b5-a1be-e6d62196cff5")
+    """`--sujeito` casa so a chave da tabela, como a porta. A conta da fabrica e chaveada
+    so pelo `sub` desde 22/09/2026 (sujeitos.yaml): o username nao projeta, e isso e medido."""
+    r = run_acesso("decidir", "sessao_abrir", "sessao:engenharia", "--sujeito", "jaiminho-fabrica")
+    assert r.returncode == 5
+    r2 = run_acesso("decidir", "sessao_abrir", "sessao:engenharia", "--sujeito", "e57eadb1-ec5d-41b5-a1be-e6d62196cff5")
     assert r2.returncode == 0
 
 def test_decidir_argumento_nao_vira_codigo():
@@ -302,6 +303,56 @@ def test_decidir_argumento_nao_vira_codigo():
     r = run_acesso("decidir", "x'; import os; os.system('id') #", "sessao:fabrica", "--papel", "fornecedor", "--dominio", "plataforma")
     assert r.returncode == 1
     assert "Traceback" not in r.stderr
+
+
+# ==============================================================================
+# Regressao 26/09/2026: a conta da fabrica abre na cadeira que EXISTE
+# ==============================================================================
+# A cadeira `fabrica` saiu na reconformacao e o PAP seguiu nomeando `sessao:fabrica`:
+# `monta_sessao(cadeira="engenharia")` voltou 403 regra=default. Estes testes amarram o
+# recurso das tres regras de abertura do fornecedor a uma cadeira servida.
+# Sujeito pelo `sub`, a unica chave da conta em sujeitos.yaml desde 22/09/2026.
+FABRICA_SUB = "e57eadb1-ec5d-41b5-a1be-e6d62196cff5"
+
+# `monta_sessao` a porta submete como tipo documento: `documento:sessao:<cadeira>`.
+@pytest.mark.parametrize("acao,recurso", [
+    ("monta_sessao", "documento:sessao:engenharia"),
+    ("sessao_abrir", "sessao:engenharia"),
+    ("expediente_montar", "expediente:engenharia"),
+])
+def test_fornecedor_abre_na_cadeira_engenharia(acao, recurso):
+    r = run_acesso("decidir", acao, recurso, "--sujeito", FABRICA_SUB)
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert "PERMITIDO" in r.stdout
+
+
+@pytest.mark.parametrize("acao,recurso", [
+    ("monta_sessao", "documento:sessao:ia"),
+    ("monta_sessao", "documento:sessao:fabrica"),
+    ("sessao_abrir", "sessao:seguranca"),
+    ("expediente_montar", "expediente:ti"),
+])
+def test_fornecedor_nao_abre_cadeira_alheia(acao, recurso):
+    r = run_acesso("decidir", acao, recurso, "--sujeito", FABRICA_SUB)
+    assert r.returncode == 1
+    assert "regra=default" in r.stdout
+
+
+def test_pap_nao_nomeia_cadeira_inexistente():
+    """Todo `sessao:<cadeira>` e `expediente:<cadeira>` citado em regra e cadeira de abertura/."""
+    import re
+    import yaml
+    pap = yaml.safe_load((POLITICA_ORIGINAL / "politica.yaml").read_text(encoding="utf-8"))
+    cadeiras = {p.name for p in (REPO_ROOT / "abertura").iterdir() if p.is_dir()} if (REPO_ROOT / "abertura").is_dir() else None
+    if not cadeiras:
+        pytest.skip("abertura/ sem cadeiras nesta arvore")
+    citadas = set()
+    for regra in pap.get("regras", []):
+        for alvo in regra.get("sobre", []):
+            m = re.match(r"^(?:sessao|expediente):([a-z0-9-]+)(?:/|$)", alvo)
+            if m and m.group(1) != "*":
+                citadas.add(m.group(1))
+    assert citadas <= cadeiras, f"PAP cita cadeira que nao existe: {sorted(citadas - cadeiras)}"
 
 
 @pytest.mark.skipif(not TEM_BANCO, reason="exige contêiner de banco de dados identidade rodando")
