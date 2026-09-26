@@ -324,6 +324,49 @@ def _item(linha):
         "marca": marca_linha(linha, linha["especie"]) if linha.get("especie") else None}
 
 
+# ------------------------------------------------------------------ mapa das rotinas
+# Peça `rotinas` da abertura (#3084): cada guia de rotina abre com `## Mapa` e um bloco
+# cercado; `acervo listar casa guia --mapa` junta os blocos numa chamada só, em ordem fixa e
+# sem data nem sha no corpo, para o prefixo da abertura ficar byte-estável.
+
+ORDEM_MAPA = ("LER", "LEVANTAR", "CONFERIR", "REGISTRAR", "PUBLICAR", "REPORTAR")
+CAB_MAPA = "ROTINAS — pergunta → chamada → o que o retorno diz"
+_RE_MAPA = re.compile(r"^## Mapa[ \t]*\n.*?^```[^\n]*\n(?P<bloco>.*?)^```", re.M | re.S)
+
+def extrai_mapa(corpos):
+    """corpos -> (texto, faltam). Um bloco por rotina, pela primeira palavra; a primeira
+    ocorrência vence. Rotina fora de ORDEM_MAPA entra depois, em ordem alfabética."""
+    blocos = {}
+    for corpo in corpos:
+        m = _RE_MAPA.search(corpo or "")
+        if not m:
+            continue
+        for b in re.split(r"\n[ \t]*\n", m.group("bloco").strip("\n")):
+            b = b.rstrip()
+            if not b.strip():
+                continue
+            blocos.setdefault(b.split(None, 1)[0], b)
+    faltam = [n for n in ORDEM_MAPA if n not in blocos]
+    if not blocos:
+        return None, faltam
+    ordem = [n for n in ORDEM_MAPA if n in blocos] + sorted(n for n in blocos if n not in ORDEM_MAPA)
+    return "\n\n".join([CAB_MAPA] + [blocos[n] for n in ordem]), faltam
+
+def mapa(especie):
+    _especie(especie)
+    linhas = _q(f"""
+      select coalesce(json_agg(c.corpo order by c.chave), '[]')
+        from acervo.casa c join acervo.especie_tipo e on e.id = c.especie_id
+       where e.slug = {_lit(especie)} and c.retirada_em is null
+         and c.corpo like '%## Mapa%';""") or []
+    texto, faltam = extrai_mapa(linhas)
+    if faltam:
+        sys.stderr.write("aviso: sem linha de mapa para " + ", ".join(faltam) + "\n")
+    if not texto:
+        morre(f"acervo listar casa {especie} --mapa: nenhuma ficha viva com seção `## Mapa`.", 1)
+    print(texto)
+    return 0
+
 # ------------------------------------------------------------------ listar
 
 def catalogo(quero_json):
@@ -633,6 +676,7 @@ USO = """uso:
   acervo listar casa [--json]                              catálogo das espécies de casa
   acervo listar casa <especie> [--todas] [--dono <cadeira>] [--situacao] [--json]
   acervo listar casa [<especie>] --sobre <classe> <chave> [--todas] [--json]
+  acervo listar casa guia --mapa                          as linhas de mapa das rotinas (peça `rotinas`)
   acervo ler    casa <especie> <chave> [--situacao] [--json]
 
 <chave>: adr <serie>:NNNN (arq:0075; arq:75 e 75 resolvem se não houver ambiguidade) ou o
@@ -653,7 +697,8 @@ def main(argv):
     quero_json = "--json" in resto
     situacao = "--situacao" in resto
     todas = "--todas" in resto
-    resto = [a for a in resto if a not in ("--json", "--situacao", "--todas")]
+    quero_mapa = "--mapa" in resto
+    resto = [a for a in resto if a not in ("--json", "--situacao", "--todas", "--mapa")]
 
     dono = None
     sobre_args = None
@@ -685,6 +730,10 @@ def main(argv):
             return sobre(classe, chave, pos[0] if pos else None, quero_json, todas=todas)
         if not pos:
             return catalogo(quero_json)
+        if quero_mapa:
+            if len(pos) != 1:
+                morre("acervo listar casa <especie> --mapa: uma espécie só.\n\n%s" % USO, 2)
+            return mapa(pos[0])
         if len(pos) != 1:
             morre("acervo listar casa <especie>: argumentos demais.\n\n%s" % USO, 2)
         return listar(pos[0], quero_json, dono=dono, situacao=situacao, todas=todas)
