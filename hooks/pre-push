@@ -128,6 +128,13 @@ medir_rev() {  # $1=rev
   for arq in "${ARQUIVOS[@]}"; do
     [ -f "$arvore/controle/$arq" ] && alvos+=("$arq")
   done
+  # VERDES que aponta arquivo sumido e baseline que ninguem mede: aqui avisa (politica A2
+  # do pre-push); o gate de `release promover` barra com 5 a mesma arvore.
+  local sumidos; sumidos="$(verdes_ausentes "$arvore" | tr '\n' ' ')"
+  if [ -n "${sumidos// /}" ]; then
+    printf 'pre-push: AVISO — controle/tests/VERDES lista arquivo que nao existe na rev %s: %s(o gate da promocao vai barrar)\n' \
+      "${rev:0:7}" "$sumidos" >&2
+  fi
   [ "${#alvos[@]}" -gt 0 ] || return 0
 
   local arvore_hash
