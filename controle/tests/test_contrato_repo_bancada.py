@@ -9,6 +9,7 @@ a mesma bancada sem fallback. Nao prova: o forge (clone base ja existe; nao ha p
 """
 import os
 import subprocess
+import time
 from pathlib import Path
 
 REPO_BIN = Path(__file__).resolve().parents[2] / "bin" / "repo"
@@ -49,11 +50,14 @@ def _repo(tmp_path, bancada, sessao, *args):
     return subprocess.run([str(REPO_BIN), *args], env=env, capture_output=True, text=True)
 
 
-def test_abrir_cria_worktree_da_cadeira_e_nao_da_sessao(tmp_path):
+def test_abrir_cria_worktree_por_cadeira_e_card_nao_so_cadeira(tmp_path):
+    """card:3149 passo 3: a pasta e wt/<repo>/<cadeira>/<card>-<slug>, nao so
+    wt/<repo>/<cadeira> -- e o que deixa dois cards da mesma cadeira coexistirem."""
     bancada = _montar(tmp_path)
     r = _repo(tmp_path, bancada, "sessao-1", "abrir", "demo", "42", "--slug", "x")
     assert r.returncode == 0, r.stderr
-    assert (bancada / "wt" / "demo" / "ti" / ".git").exists()
+    assert (bancada / "wt" / "demo" / "ti" / "42-x" / ".git").exists()
+    assert not (bancada / "wt" / "demo" / "ti" / ".git").exists()
     assert not (bancada / "wt" / "demo" / "sessao-1").exists()
 
 
@@ -74,6 +78,41 @@ def test_worktree_legado_por_sessao_segue_legivel_ate_a_cadeira_ter_o_seu(tmp_pa
     assert r.returncode == 0, r.stderr
     assert "fabrica/7-legado" in r.stdout
     assert "fallback" not in r.stderr
+
+
+def test_abrir_dois_cards_da_mesma_cadeira_nao_colidem(tmp_path):
+    """card:3149 passo 3: o defeito medido ao vivo em 26/09 -- abrir um card enquanto
+    outro da mesma cadeira estava aberto caiu na MESMA pasta (wt/<repo>/<cadeira>, sem
+    card no caminho) e o segundo abrir so trocou o ramo debaixo do primeiro."""
+    bancada = _montar(tmp_path)
+    assert _repo(tmp_path, bancada, "s1", "abrir", "demo", "42", "--slug", "x").returncode == 0
+    r42 = _repo(tmp_path, bancada, "s1", "estado", "demo")
+    assert r42.returncode == 0, r42.stderr
+    assert "fabrica/42-x" in r42.stdout
+
+    assert _repo(tmp_path, bancada, "s2", "abrir", "demo", "43", "--slug", "y").returncode == 0
+    assert (bancada / "wt" / "demo" / "ti" / "42-x" / ".git").exists()
+    assert (bancada / "wt" / "demo" / "ti" / "43-y" / ".git").exists()
+
+    # ambiguo agora (2 worktrees da mesma cadeira, sem chave para 'estado' escolher):
+    # forca 42-x mais velho para o desempate por mtime ser deterministico no teste, nao
+    # na ordem em que o relogio da maquina serviu as duas chamadas.
+    velho = time.time() - 100
+    os.utime(bancada / "wt" / "demo" / "ti" / "42-x" / ".git", (velho, velho))
+    r43 = _repo(tmp_path, bancada, "s2", "estado", "demo")
+    assert r43.returncode == 0, r43.stderr
+    assert "fabrica/43-y" in r43.stdout
+
+
+def test_ler_sem_bancada_aberta_da_vizinho_nao_desconhecido(tmp_path):
+    """card:3149 passo 3: repo conhecido (clone base existe) mas sem worktree desta
+    cadeira -- exit 1 com 'vizinho: repo abrir', nunca 'repositorio desconhecido' nem
+    fallback silencioso para o cache (spec_ambiente-de-desenvolvimento §2)."""
+    bancada = _montar(tmp_path)
+    r = _repo(tmp_path, bancada, "sessao-1", "ler", "demo", "LEIA.md")
+    assert r.returncode == 1, r.stderr
+    assert "vizinho: repo abrir" in r.stderr
+    assert "desconhecido" not in r.stderr
 
 
 def test_sanear_enxerga_worktree_sob_wt_e_remove_ramo_entregue(tmp_path):

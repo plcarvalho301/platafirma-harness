@@ -46,7 +46,7 @@
 # escreve: git=repo
 # (recursos pelo enum de ferramental_recurso; o forge - origin, PR - pende id proprio, e ate la sai como repo; commitar le o log da porta em arquivo-local)
 # consome: porta@ops-log
-# ambiente: PLATAFIRMA_BANCADA[sem default; senao a linha de $HOME/.config/platafirma/bancada; ausente = exit 3] porta · PLATAFIRMA_ARQUIVO_BANCADA[=$HOME/.config/platafirma/bancada] porta · PF_RELEASE_RAIZ[=/opt/platafirma] porta (abrir --da-producao: sha de <raiz>/<repo>/current) · PLATAFIRMA_RELEASE[=$PF_RELEASE_RAIZ/current] porta (registro de familias: URL do forge em abrir/clonar) · PF_CADEIRA porta (lida) · PF_SESSAO porta (lida) · OPS_LOG_DIR[=$PLATAFIRMA_INSTANCIA/var/log/ops] porta (PF_OPS_LOG_DIR lido so como alias) · PLATAFIRMA_INSTANCIA[=/srv/platafirma/casa] porta · HOME
+# ambiente: PLATAFIRMA_BANCADA[sem default; senao a linha de $HOME/.config/platafirma/bancada] PLATAFIRMA_ARQUIVO_BANCADA[=$HOME/.config/platafirma/bancada] porta · PF_RELEASE_RAIZ[=/opt/platafirma] porta (abrir --da-producao: sha de <raiz>/<repo>/current) · PLATAFIRMA_RELEASE[=$PF_RELEASE_RAIZ/current] porta (registro de familias: URL do forge em abrir/clonar) · PF_CADEIRA porta (lida) · PF_SESSAO porta (lida) · OPS_LOG_DIR[=$PLATAFIRMA_INSTANCIA/var/log/ops] porta (PF_OPS_LOG_DIR lido so como alias) · PLATAFIRMA_INSTANCIA[=/srv/platafirma/casa] porta · HOME
 # depende: git · gh (pr-*, empurrar, atualizar, clonar) · rede ao forge
 # substitui: git -C … ls-files|grep|log|diff|show|status|checkout -b|commit|push|fetch · gh pr create|list|view|diff|merge
 # conforme: sim
@@ -168,32 +168,86 @@ if isinstance(e, str) and e:
   printf '%s' "$url"
 }
 
-# Resolução de bancada: <bancada>/wt/<repo>/<cadeira> (arq:0109, arq:0110).
-# Fallback a <bancada>/<repo> com aviso enquanto o worktree não existe.
+# chave_de <card> <slug> -- nome da pasta sob wt/<repo>/<cadeira>/ para este card/slug,
+# igual ao sufixo do ramo fabrica/<...> (card:3149 passo 3; exemplo do card: wt/demo/ti/42-x).
+chave_de() {
+  local card="$1" slug="$2"
+  if [ -n "$card" ]; then
+    local card_num="${card###}"
+    if [[ "$card_num" =~ ^[0-9]+$ ]]; then
+      if [ -n "$slug" ]; then printf '%s-%s' "$card_num" "$slug"; else printf '%s' "$card_num"; fi
+    else
+      if [ -n "$slug" ]; then printf '%s-%s' "$card" "$slug"; else printf '%s' "$card"; fi
+    fi
+  elif [ -n "$slug" ]; then
+    printf '%s' "$slug"
+  else
+    printf '_avulso'
+  fi
+}
+
+# Resolucao de bancada: <bancada>/wt/<repo>/<cadeira>/<card-ou-slug> (arq:0109, arq:0110,
+# card:3149 passo 3). Com $2 (chave): so aquele card/slug, sem varredura. Sem $2: a cadeira
+# normalmente trabalha um card por vez -- um worktree aninhado so, usa-o; mais de um, o mais
+# recentemente tocado decide (heuristica declarada; ambiguidade real pede a chave explicita).
+# Sem worktree aninhado: le, so leitura, o legado de antes do passo 3 (flat por cadeira, ou
+# por sessao) -- abrir novo sempre cria aninhado, nunca cai aqui. Nada encontrado: string
+# vazia e rc 1, sem fallback ao cache (quem chama decide o exit -- clone_de).
 bancada_de() {
   local nome="$1"
+  local chave="${2:-}"
   local cadeira="${PF_CADEIRA:-}"
   cadeira="${cadeira#claudinho-}"
   cadeira="${cadeira#claudinha-}"
   local sid="${PF_SESSAO:-}"
-  # arq:0109 §2: a bancada e da cadeira. O worktree por sessao e legado de antes da
-  # correcao do abrir; so e lido quando a cadeira ainda nao tem o seu.
-  if [ -n "$cadeira" ] && [ -d "$BANCADA/wt/$nome/$cadeira" ] && [ -e "$BANCADA/wt/$nome/$cadeira/.git" ]; then
-    printf '%s/wt/%s/%s' "$BANCADA" "$nome" "$cadeira"
-    return 0
+
+  if [ -n "$chave" ]; then
+    if [ -n "$cadeira" ] && [ -d "$BANCADA/wt/$nome/$cadeira/$chave" ] && [ -e "$BANCADA/wt/$nome/$cadeira/$chave/.git" ]; then
+      printf '%s/wt/%s/%s/%s' "$BANCADA" "$nome" "$cadeira" "$chave"
+      return 0
+    fi
+    return 1
   fi
+
+  if [ -n "$cadeira" ] && [ -d "$BANCADA/wt/$nome/$cadeira" ]; then
+    local lista="" d n_cand=0 melhor="" melhor_mtime=-1 mt
+    for d in "$BANCADA/wt/$nome/$cadeira"/*/; do
+      if [ -e "${d%/}/.git" ]; then
+        lista="$lista${d%/}"$'\n'
+        n_cand=$(( n_cand + 1 ))
+      fi
+    done
+    if [ "$n_cand" -eq 1 ]; then
+      printf '%s' "${lista%$'\n'}"
+      return 0
+    elif [ "$n_cand" -gt 1 ]; then
+      while IFS= read -r d; do
+        [ -n "$d" ] || continue
+        # .git da worktree e ARQUIVO (gitdir: ...), nao pasta -- ".git/HEAD" nunca
+        # existe e o stat sempre falhava, empatando tudo em mt=0. mtime de ".git" e o
+        # que existe e o teste (os.utime) mede.
+        mt="$(stat -c%Y "$d/.git" 2>/dev/null)"
+        [ -n "$mt" ] || mt=0
+        if [ "$mt" -gt "$melhor_mtime" ]; then
+          melhor_mtime="$mt"
+          melhor="$d"
+        fi
+      done <<< "$lista"
+      printf '%s' "$melhor"
+      return 0
+    fi
+    if [ -e "$BANCADA/wt/$nome/$cadeira/.git" ]; then
+      printf '%s/wt/%s/%s' "$BANCADA" "$nome" "$cadeira"
+      return 0
+    fi
+  fi
+
   if [ -n "$sid" ] && [ -d "$BANCADA/wt/$nome/$sid" ] && [ -e "$BANCADA/wt/$nome/$sid/.git" ]; then
     printf '%s/wt/%s/%s' "$BANCADA" "$nome" "$sid"
     return 0
   fi
-  if [ -d "$BANCADA/$nome" ]; then
-    if [ -n "$cadeira" ]; then
-      printf '%s: aviso: worktree wt/%s/%s nao existe — usando fallback %s/%s\n' "$VERBO" "$nome" "$cadeira" "$BANCADA" "$nome" >&2
-    else
-      printf '%s: aviso: PF_CADEIRA nao definida — usando fallback %s/%s\n' "$VERBO" "$BANCADA" "$nome" >&2
-    fi
-  fi
-  printf '%s/%s' "$BANCADA" "$nome"
+
+  return 1
 }
 
 listar_repos() {
@@ -246,7 +300,17 @@ clone_de() {
   esac
 
   local alvo; alvo="$(bancada_de "$nome")"
-  if [ ! -d "$alvo" ] || [ ! -e "$alvo/.git" ]; then
+  if [ -z "$alvo" ]; then
+    if [ -e "$BANCADA/$nome" ]; then
+      # card:3149 passo 3: clone base existe, so falta o worktree desta cadeira -- sem
+      # fallback ao cache (spec_ambiente-de-desenvolvimento §2).
+      if [ "$COMO_JSON" -eq 1 ]; then
+        morre "sem bancada aberta para '$nome' nesta cadeira" 1
+      fi
+      printf '%s: sem bancada aberta para '\''%s'\'' nesta cadeira\n' "$VERBO" "$nome" >&2
+      printf 'vizinho: repo abrir %s <card> --slug <s>\n' "$nome" >&2
+      exit 1
+    fi
     if [ "$COMO_JSON" -eq 1 ]; then
       morre "repositório desconhecido: '$nome'" 2
     fi
@@ -873,7 +937,8 @@ sha_de_producao() {
 abrir_da_producao() {
   local nome="$1" cadeira="$2" card="$3" slug="$4"
   local sha; sha="$(sha_de_producao "$nome")" || exit $?
-  local curto="${sha:0:7}" clone_raiz="$BANCADA/$nome" wt_dir="$BANCADA/wt/$nome/$cadeira"
+  local curto="${sha:0:7}" clone_raiz="$BANCADA/$nome"
+  local wt_dir="$BANCADA/wt/$nome/$cadeira/$(chave_de "$card" "$slug")"
 
   local ramo_alvo=""
   if [ -n "$card" ]; then
@@ -1019,14 +1084,26 @@ cmd_abrir() {
   fi
   [ -d "$clone_raiz" ] && [ -e "$clone_raiz/.git" ] || morre "repositório desconhecido: '$nome' — $clone_raiz existe e nao e clone" 2
 
-  # arq:0109 §2: worktree por CADEIRA (a sessao nao e eixo; a proxima sessao da mesma
-  # cadeira tem de achar a bancada, e bancada_de procura por cadeira).
-  local wt_dir="$BANCADA/wt/$nome/$cadeira"
+  # card:3149 passo 3: worktree por CADEIRA+CARD-OU-SLUG (arq:0109, spec_ambiente-de-
+  # desenvolvimento §2/§5) -- a proxima sessao da mesma cadeira NO MESMO card acha a
+  # bancada; em card diferente, pasta diferente (bancada_de por chave).
+  local chave; chave="$(chave_de "$card" "$slug")"
+  local wt_dir="$BANCADA/wt/$nome/$cadeira/$chave"
 
-  if [ -d "$wt_dir" ] && [ -e "$wt_dir/.git" ]; then
-    printf 'bancada já aberta: %s (@ %s)\n' "$wt_dir" "$(ramo_atual "$wt_dir")"
+  local ja; ja="$(bancada_de "$nome" "$chave")"
+  if [ -n "$ja" ]; then
+    env PATH="$PATH_FORGE" "$GIT" -C "$ja" fetch --prune origin >/dev/null 2>&1
+    local atras=0
+    read -r atras _ < <("$GIT" -C "$ja" rev-list --left-right --count "origin/main...HEAD" 2>/dev/null)
+    local sujo_qtd; sujo_qtd="$("$GIT" -C "$ja" status --porcelain 2>/dev/null | wc -l)"
+    local estado_arvore="arvore limpa"; [ "${sujo_qtd:-0}" -eq 0 ] || estado_arvore="arvore suja"
+    printf 'bancada já aberta: %s (ramo %s @ %s, atras de origin/main: %s, %s)\n' \
+      "$wt_dir" "$(ramo_atual "$ja")" "$("$GIT" -C "$ja" rev-parse --short HEAD)" "${atras:-0}" "$estado_arvore"
     return 0
   fi
+
+  env PATH="$PATH_FORGE" "$GIT" -C "$clone_raiz" fetch --prune origin >/dev/null 2>&1 \
+    || printf '%s: aviso: fetch do forge falhou -- abrindo sobre origin/main local\n' "$VERBO" >&2
 
   local base_ref="HEAD"
   if "$GIT" -C "$clone_raiz" rev-parse --verify origin/main >/dev/null 2>&1; then
@@ -1064,10 +1141,10 @@ cmd_abrir() {
     else
       "$GIT" -C "$clone_raiz" worktree add -b "$ramo_alvo" "$wt_dir" "$base_ref" || morre "git worktree add -b falhou" 3
     fi
-    printf 'bancada aberta: %s (ramo %s de %s)\n' "$wt_dir" "$ramo_alvo" "$base_ref"
+    printf 'bancada aberta: %s (ramo %s de %s, atras de origin/main: 0, arvore limpa)\n' "$wt_dir" "$ramo_alvo" "$base_ref"
   else
     "$GIT" -C "$clone_raiz" worktree add --detach "$wt_dir" "$base_ref" || morre "git worktree add falhou" 3
-    printf 'bancada aberta: %s (HEAD destacado em %s)\n' "$wt_dir" "$base_ref"
+    printf 'bancada aberta: %s (HEAD destacado em %s, atras de origin/main: 0, arvore limpa)\n' "$wt_dir" "$base_ref"
   fi
 }
 
@@ -1493,9 +1570,6 @@ ato_pr_merge() {
   printf 'PR #%s mesclado (%s)\n' "$num" "$modo"
 }
 
-# git de rede que nao engole erro em 2>&1->devnull: guarda a 1a linha de stderr em
-# REPLY e devolve o rc do git (comentario #939 card:3149 secao B1 -- fetch/ls-remote
-# calados deixam decisao destrutiva sobre estado velho).
 git_sem_engolir() {
   local c="$1"; shift
   local out; out="$(env PATH="$PATH_FORGE" "$GIT" -C "$c" "$@" 2>&1 1>/dev/null)"
@@ -1504,17 +1578,10 @@ git_sem_engolir() {
   return "$rc"
 }
 
-# worktrees_de <clone-base> -- cada worktree do clone pelo proprio git (git worktree
-# list --porcelain), a clone base incluida na 1a linha; nunca por glob de diretorio
-# (comentario #939 secao B4 -- glob nao desce em wt/).
 worktrees_de() {
   "$GIT" -C "$1" worktree list --porcelain 2>/dev/null | awk '/^worktree /{print substr($0,10)}'
 }
 
-# merged_heads_de <clone-base> <chave-cache> -- headRefName de todo PR mesclado do
-# repo, uma consulta ao forge por clone (nunca por merge-base --is-ancestor: squash
-# nao deixa ancestral -- comentario #939 secao B3). gh ausente ou consulta falha:
-# devolve vazio: a chamada decide so por ausencia no origin.
 declare -A _SANEAR_MERGED
 merged_heads_de() {
   local c="$1" chave="$2"
@@ -1604,17 +1671,13 @@ ato_sanear() {
         continue
       fi
 
-      # Entregue (nao-base): checa ANTES do upstream. O fetch --prune do topo do loop
-      # de base ja pode ter apagado o tracking ref de um ramo que sumiu do origin -- o
-      # proprio sinal que este bloco decide (comentario #939 secao B1/B3); esperar por
-      # "@{upstream}" depois do prune perderia exatamente esse sinal.
       local ja_mesclado=0
       if [ "$c" != "$base" ] && [ "$ramo" != "HEAD" ]; then
         env PATH="$PATH_FORGE" "$GIT" -C "$c" ls-remote --exit-code origin "refs/heads/$ramo" >/dev/null 2>&1
         local rc_ls=$? no_origin=0
         [ "$rc_ls" -eq 2 ] && no_origin=1
         local mesclado_pr=0
-        grep -Fxq "$ramo" <<<"$(merged_heads_de "$base" "$nome")" && mesclado_pr=1
+        grep -Fxq "$ramo" <<< "$(merged_heads_de "$base" "$nome")" && mesclado_pr=1
         if [ "$no_origin" -eq 1 ] || [ "$mesclado_pr" -eq 1 ]; then
           ja_mesclado=1
           local motivo; motivo="$([ "$no_origin" -eq 1 ] && echo 'sumiu do origin' || echo 'PR mesclado')"
@@ -1639,8 +1702,6 @@ ato_sanear() {
         continue
       fi
 
-      # Cache (worktree principal) preso num ramo sem commit proprio: destaca em
-      # origin/main (spec_ambiente-de-desenvolvimento SS2 -- "cache preso em ramo").
       if [ "$c" = "$base" ] && [ "$ramo" != "main" ]; then
         local a0 f0
         read -r a0 f0 < <("$GIT" -C "$c" rev-list --left-right --count "@{upstream}...HEAD" 2>/dev/null || echo "0 0")
