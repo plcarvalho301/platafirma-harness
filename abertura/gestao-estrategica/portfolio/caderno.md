@@ -6,6 +6,10 @@
 - Proposta de corte ao dono vai em linguagem de negocio: o que quebra hoje, com o caso que ele viveu, e o que passa a funcionar para quem usa. Jargao da casa (costura, dt, story, bateria) sem o nome comum ao lado ele nao le, e pede de novo.
 - Titulo de card se escreve para humano ler no board: diz o que passa a funcionar, na lingua de quem usa; codigo, flag e nome de verbo ficam no corpo.
 - Quando o levantamento mostra as pecas servindo isoladas e a quebra na passagem entre elas, o corte vai por passagem, uma story por passagem; corte por componente deixa o gargalo sem dono.
+- Recorte de entrega nao e recorte de leitura: guia se escreve por pergunta do leitor (uma rotina), mesmo quando a story juntou duas.
+- Parecer de outra cadeira que valida proposta minha e ordem de executar: pego e termino o que se desfaz, de qualquer mao; repassar a execucao por carta e devolucao. O expediente (pacote de abertura) e desta cadeira.
+- Ao dono chega estado em linguagem de negocio: pronto, falta, e o unico ato que so ele faz. «Fulano esta fazendo» so quando ha sessao trabalhando; carta parada na caixa nao e trabalho andando.
+- Mecanismo novo sobe documentado na spec do verbo dono no mesmo lote do codigo, nao quando ele pergunta onde esta.
 
 ## diario de bordo
 
@@ -17,3 +21,11 @@
 2026-09-25 — editar corpo e titulo do #3084: tarefas nao tem ato de edicao (#3134) — contorno encontrado na data 2026-09-25 foi run_command com item em objeto {verbo: tarefas, ato: api-corpo, args: [PATCH, /itens/<id>], stdin: JSON com titulo e descricao}; funcionou de primeira, conferido por tarefas ler; receita no comentario do #3124.
 2026-09-25 — quatro fila enviar no mesmo lote devolveram o mesmo msgid 20260925T101409-gestao-estrategica para destinatarios diferentes — contorno encontrado na data 2026-09-25 foi conferir cada caixa com fila ler <cadeira> --tudo gestao-estrategica; as quatro cartas chegaram.
 2026-09-25 — repo historico platafirma-casa avisou worktree wt/platafirma-casa/gestao-estrategica inexistente e caiu no fallback — contorno: nenhum preciso, o historico veio; e o #3104.
+2026-09-26 — mesa anota portfolio reescreveu o slot inteiro e apagou a anotacao de 25/09 — contorno encontrado na data 2026-09-26 foi regravar juntando o texto antigo (que eu tinha da abertura) com o novo.
+2026-09-26 — repo commitar recusou o ramo 3084-guias-por-rotina (pertence a outra cadeira; esperados <cadeira>/*, fabrica/*) — contorno encontrado na data 2026-09-26 foi repo git branch -m fabrica/3084-guias-por-rotina.
+2026-09-26 — repo commitar recusou caminho apagado por git rm (caminho nao existe na bancada) — contorno encontrado na data 2026-09-26 foi commitar so os caminhos vivos; a remocao ja staged entrou no mesmo commit.
+2026-09-26 — acervo resolver guia publicar recusou (classe guia desconhecida) — contorno encontrado na data 2026-09-26 foi acervo listar casa guia.
+2026-09-26 — tarefas sub nao desliga filho de pai — contorno encontrado na data 2026-09-26 foi tarefas sub <outro pai> <filho>, que re-pendura.
+2026-09-26 — chat despachar --cadeira dados: a cadeira headless nao conseguiu ler nada, PDP negou tudo (conta de SO claudinho sem sujeito no PAP) — contorno: nenhum; o dono vetou headless e mandou executar na fita.
+2026-09-26 — repo ramo platafirma-harness usou o worktree wt/platafirma-harness/gestao-estrategica, mas escrevi com write_file no clone principal (ramo de produto); teste rodar nao achou o arquivo; git diff --output falhou (dir var/tmp/<ordem> inexistente) e git apply do patch falhou (base diferente) — contorno encontrado na data 2026-09-26 foi desfazer no clone principal (checkout -- e clean -f do arquivo novo) e reescrever os trechos no worktree; conferir com repo git rev-parse --show-toplevel antes de escrever.
+2026-09-26 — teste rodar com dois arquivos de alvo rodou so o primeiro — contorno encontrado na data 2026-09-26 foi uma chamada por arquivo.
