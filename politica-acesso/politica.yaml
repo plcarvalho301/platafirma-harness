@@ -300,10 +300,13 @@ regras:
 
   - id: fornecedor-monta-a-propria-sessao
     efeito: permite
-    motivo: "a persona da conta manda montar a sessao da fabrica como PRIMEIRA acao de toda fita; sem isto a conta nao abre · ordem do dono em 18/08/2026 · vence 2026-11-18"
+    motivo: "a persona da conta manda montar a sessao da propria cadeira como PRIMEIRA acao de toda fita; sem isto a conta nao abre · ordem do dono em 18/08/2026 · recurso trocado de sessao:fabrica para sessao:engenharia em 26/09/2026 (seguranca): a cadeira fabrica saiu na reconformacao e a conta abre como engenharia · vence 2026-11-18"
     quando: {papel: fornecedor, dominio: plataforma, tipo: documento}
     acoes: [monta_sessao]
-    sobre: ["sessao:fabrica"]
+    # O recurso nomeia a CADEIRA, e cadeira muda de nome na reconformacao. Quem renomear
+    # ou fundir cadeira roda `acesso decidir` para o papel fornecedor sobre a nova antes
+    # do merge — foi a falta disso que deixou a conta em 403 em 26/09/2026.
+    sobre: ["sessao:engenharia"]
 
   # --- Onda 2 (card #3053): o arranque conforme — `sessao abrir` pergunta ao PDP ---
   # spec_acesso §7 / spec_sessao §0. Tipo `sessao`, dominio `plataforma` (carimbo do
@@ -318,7 +321,7 @@ regras:
   # merge que o retira.
   #
   # NAO HA negativa `fornecedor-nao-encerra-sessao-alheia` de proposito: negativa vence
-  # permissao, e `sobre: ["*"]` negaria tambem `sessao:fabrica/*`, a propria — o PDP nao
+  # permissao, e `sobre: ["*"]` negaria tambem `sessao:engenharia/*`, a propria — o PDP nao
   # expressa "todas menos a minha". Sessao alheia e negada pelo default, e a medida e
   # a ancora, nao a leitura: `acesso decidir --papel fornecedor --dominio plataforma
   # --tipo sessao --acao sessao_encerrar --recurso sessao:ia/x` -> NEGADO regra=default.
@@ -328,10 +331,10 @@ regras:
   # `sessao_abrir` — mesmo regime das regras de verbo operacional acima.
   - id: fornecedor-abre-a-propria-sessao
     efeito: permite
-    motivo: "a fabrica abre a fita na propria cadeira, e em nenhuma outra · spec_acesso §7, card #3053 · concedido por seguranca em 13/09/2026 · vence 2026-12-13"
+    motivo: "a fabrica abre a fita na propria cadeira, e em nenhuma outra · spec_acesso §7, card #3053 · concedido por seguranca em 13/09/2026; cadeira trocada de fabrica para engenharia em 26/09/2026 · vence 2026-12-13"
     quando: {papel: fornecedor, dominio: plataforma, tipo: sessao}
     acoes: [sessao_abrir, sessao_ver, sessao_listar, sessao_encerrar]
-    sobre: ["sessao:fabrica", "sessao:fabrica/*"]
+    sobre: ["sessao:engenharia", "sessao:engenharia/*"]
 
   # Expediente (spec_expediente §5): os tres atos sao (leitura, expediente); o nome do
   # tipo e de seguranca (14/09): `expediente`, dominio `plataforma`, recurso
@@ -345,7 +348,7 @@ regras:
     motivo: "o pacote de abertura da fabrica e da propria cadeira, e de nenhuma outra · spec_expediente §5, card #3053 · concedido por seguranca em 14/09/2026 · vence 2026-12-13"
     quando: {papel: fornecedor, dominio: plataforma, tipo: expediente}
     acoes: [expediente_montar, expediente_rotear, expediente_catalogo]
-    sobre: ["expediente:fabrica"]
+    sobre: ["expediente:engenharia"]
 
   # `cat *` ja e permitido em fornecedor-le-repo, e `cat > arquivo` escreve. Negar
   # write_file e permitir cat seria teatro: a regra nomeia o alcance de verdade, que
