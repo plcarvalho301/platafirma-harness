@@ -246,8 +246,8 @@ def monta(clone, cad, chapeu, pergunta, forcado):
         chapeu = d.slug
     avisos = [] if chapeu else [f"chapéu não roteado (fallback): {roteador['motivo']}"]
 
-    # Mesma ordem de bin/expediente montar: prefixo estável [persona, conduta] primeiro (#3067).
-    ordem = ["persona", "conduta"] + (["chapeu"] if chapeu else []) + ["alias-cadeiras", "mesa"]
+    # Mesma ordem de bin/expediente montar: persona → [chapeu] → conduta (spec expediente §2, §7; #3146).
+    ordem = ["persona"] + (["chapeu"] if chapeu else []) + ["conduta", "alias-cadeiras", "mesa"]
     ordem += (["acervo-consultado"] if pergunta else []) + ["cadernos"]
 
     pecas = []

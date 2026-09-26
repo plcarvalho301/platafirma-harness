@@ -383,9 +383,8 @@ def test_ordem_prefixo_estavel_persona_conduta_contiguo_sem_chapeu(raiz_hermetic
     assert pecas[1]["peca"] == "conduta"
 
 
-def test_ordem_prefixo_estavel_persona_conduta_contiguo_com_chapeu(raiz_hermetica):
-    """Passo 1 (#3067): com chapéu roteado, persona e conduta continuam contíguos no topo;
-    chapéu vem em 3º (logo após conduta, nunca intercalado entre persona e conduta)."""
+def test_ordem_persona_chapeu_conduta_com_chapeu(raiz_hermetica):
+    """Spec expediente §2, §7 (#3146): com chapéu roteado, chapéu vem em 2º (entre persona e conduta)."""
     proc = _run_expediente(
         ["montar", "--json"],
         raiz_hermetica,
@@ -398,8 +397,8 @@ def test_ordem_prefixo_estavel_persona_conduta_contiguo_com_chapeu(raiz_hermetic
     pecas = d["pecas"]
     assert len(pecas) >= 3
     assert pecas[0]["peca"] == "persona"
-    assert pecas[1]["peca"] == "conduta"
-    assert pecas[2]["peca"] == "chapeu"
+    assert pecas[1]["peca"] == "chapeu"
+    assert pecas[2]["peca"] == "conduta"
 
 
 def test_prefixo_byte_estavel_entre_aberturas(raiz_hermetica):
@@ -470,6 +469,6 @@ def test_rotinas_logo_apos_chapeu(raiz_hermetica):
     )
     assert proc.returncode == 0
     pecas = json.loads(proc.stdout)["pecas"]
-    assert [p["peca"] for p in pecas[:4]] == ["persona", "conduta", "chapeu", "rotinas"]
+    assert [p["peca"] for p in pecas[:4]] == ["persona", "chapeu", "conduta", "rotinas"]
 
 

@@ -494,12 +494,13 @@ def ato_montar(cadeira_arg: str | None = None, chapeu_forcado: str | None = None
 
     cat_por_id = {item["peca"]: item for item in CATALOGO}
 
-    # Prefixo estável [persona, conduta] primeiro, contíguo e byte-estável
-    # (spec_contexto-na-porta, #3067 balde 1): persona e conduta contíguos no topo,
-    # chapéu logo após conduta quando roteado (não intercalado entre persona e conduta).
-    ordem_chaves = ["persona", "conduta"]
+    # Ordem de injeção por saliência (spec expediente §2, §7; #3146):
+    # persona → [chapeu] → conduta → rotinas → alias-cadeiras → mesa → [acervo-consultado] → cadernos.
+    # Com chapéu roteado ou forçado, o chapéu vem em 2º, entre persona e conduta; sem chapéu, persona → conduta → rotinas.
+    ordem_chaves = ["persona"]
     if chapeu_slug:
         ordem_chaves.append("chapeu")
+    ordem_chaves.append("conduta")
     ordem_chaves.append("rotinas")
     ordem_chaves.append("alias-cadeiras")
     ordem_chaves.append("mesa")
