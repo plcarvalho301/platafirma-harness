@@ -262,6 +262,84 @@ detecta() {
   return 1
 }
 
+# --- retorno em bloco fixo e veredito reaproveitado (card #3150 passo 3) ------------
+# O pytest cru vai ao log da instancia; a tela recebe a contagem, ate cinco reprovados
+# nomeados pelo junit.xml e a alca do log. Veredito gravado por (arvore da bancada como
+# esta, sujeira inclusa; alvo; interpretador): a mesma arvore medida de novo reaproveita.
+# PF_TESTE_VERBOSO=1 devolve o pytest inteiro; PF_TESTE_SEM_MEMO=1 mede sempre.
+
+# arvore da bancada COMO ESTA (rastreado + sujo + nao rastreado nao ignorado), num indice
+# temporario: o indice da bancada nao se toca.
+arvore_da_bancada() {  # $1=clone
+  local c="$1" idx h
+  idx="$(mktemp "${TMPDIR:-/tmp}/teste-idx.XXXXXX")" || return 1
+  rm -f "$idx"
+  h="$(GIT_INDEX_FILE="$idx" git -C "$c" add -A . >/dev/null 2>&1 && GIT_INDEX_FILE="$idx" git -C "$c" write-tree 2>/dev/null)"
+  rm -f "$idx"
+  [ -n "$h" ] && printf '%s' "$h"
+}
+
+pytest_em_bloco() {  # $1=clone $2=raiz(cwd) $3=rotulo $4=modo(py:<python>|isolado|projeto) [$5=alvo]
+  local c="$1" raiz="$2" rotulo="$3" modo="$4" alvo="${5:-}" rc=0
+  local runner=()
+  case "$modo" in
+    py:*)    runner=(uv run --python "${modo#py:}" --with pytest pytest) ;;
+    isolado) runner=(uvx pytest) ;;
+    *)       runner=(uv run pytest) ;;
+  esac
+  if [ "${PF_TESTE_VERBOSO:-0}" = 1 ]; then
+    (cd "$raiz" && "${runner[@]}" ${alvo:+"$alvo"}) || rc=$?
+    if [ "$rc" -eq 0 ]; then printf 'suite VERDE: %s\n' "$rotulo"; else printf 'suite VERMELHA: %s — exit %s\n' "$rotulo" "$rc"; fi
+    return "$rc"
+  fi
+
+  local inst="${PLATAFIRMA_INSTANCIA:-/srv/platafirma/casa}" arvore chave="" memo=""
+  arvore="$(arvore_da_bancada "$c")" || arvore=""
+  if [ -n "$arvore" ]; then
+    chave="$(printf '%s|%s|%s' "$arvore" "${alvo#"$c"/}" "$modo" | sha256sum | cut -c1-16)"
+    memo="$inst/var/teste/vereditos/$chave.txt"
+    mkdir -p "$(dirname "$memo")" 2>/dev/null || memo=""
+  fi
+  if [ -n "$memo" ] && [ -f "$memo" ] && [ "${PF_TESTE_SEM_MEMO:-0}" != 1 ]; then
+    local v; v="$(head -n 1 "$memo")"
+    printf '%s — veredito reaproveitado (mesma arvore %s, medido %s)\n' \
+      "${v%%|*}" "${arvore:0:12}" "$(sed -n 2p "$memo")"
+    sed -n '3,$p' "$memo"
+    case "$v" in 'suite VERDE'*) return 0 ;; *) return 1 ;; esac
+  fi
+
+  local logd="$inst/var/log/teste" log xml
+  mkdir -p "$logd" 2>/dev/null || logd="${TMPDIR:-/tmp}"
+  log="$logd/$(date -u +%Y%m%dT%H%M%SZ)-${rotulo%% *}-$$.txt"
+  xml="$(mktemp "${TMPDIR:-/tmp}/teste-junit.XXXXXX.xml")"
+  (cd "$raiz" && "${runner[@]}" ${alvo:+"$alvo"} -q --junitxml="$xml") >"$log" 2>&1 || rc=$?
+  local resumo; resumo="$(grep -E '(passed|failed|error|no tests ran)' "$log" | tail -n 1 | sed 's/^=* *//; s/ *=*$//')"
+  local linha extra=""
+  if [ "$rc" -eq 0 ]; then
+    linha="suite VERDE: $rotulo — ${resumo:-sem contagem}"
+  else
+    linha="suite VERMELHA: $rotulo — exit $rc${resumo:+, $resumo}"
+    [ "$rc" -eq 1 ] && extra="$(nomear_reprovados "$xml" | sed 's/^/  reprovado: /')"
+    [ "$rc" -eq 1 ] || extra="$(tail -n 5 "$log" | sed 's/^/  | /')"
+  fi
+  rm -f "$xml"
+  printf '%s\n' "$linha"
+  [ -z "$extra" ] || printf '%s\n' "$extra"
+  printf 'saida inteira: %s\n' "$log"
+  # so o que foi medido (0 verde, 1 reprovado) vira veredito; uso/coleta/ambiente nao
+  # Grava tambem sob a arvore DEPOIS da rodada: o runner pode deixar arquivo novo nao
+  # ignorado (uv.lock criado pelo uv, por exemplo), e a proxima consulta ve essa arvore.
+  if [ -n "$memo" ] && { [ "$rc" -eq 0 ] || [ "$rc" -eq 1 ]; }; then
+    local depois m
+    depois="$(arvore_da_bancada "$c")" || depois=""
+    for m in "$memo" ${depois:+"$(dirname "$memo")/$(printf '%s|%s|%s' "$depois" "${alvo#"$c"/}" "$modo" | sha256sum | cut -c1-16).txt"}; do
+      { printf '%s|\n' "$linha"; date -u +%Y-%m-%dT%H:%M:%SZ; [ -z "$extra" ] || printf '%s\n' "$extra"
+        printf 'saida inteira: %s\n' "$log"; } > "$m.tmp" 2>/dev/null && mv -f "$m.tmp" "$m" 2>/dev/null
+    done
+  fi
+  return "$rc"
+}
+
 ato_detectar() {
   local nome="" chave="" c
   while [ $# -gt 0 ]; do
@@ -311,11 +389,8 @@ ato_rodar() {
     [ -n "$SUBARVORE_CHAVE" ] && raiz_chave="$c/$SUBARVORE_CHAVE"
     printf '# %s · chave %s-%s · uv run --python %s --with pytest pytest (raiz %s)\n' \
       "$nome" "$chave" "$CHAVE_HASH" "$CHAVE_PY" "$raiz_chave" >&2
-    ( cd "$raiz_chave" && uv run --python "$CHAVE_PY" --with pytest pytest ${alvo:+"$alvo"} )
-    rc=$?
-    if [ "$rc" -eq 0 ]; then printf 'suite VERDE: %s (chave %s)\n' "$nome" "$chave"
-    else printf 'suite VERMELHA: %s (chave %s) — exit %s\n' "$nome" "$chave" "$rc"; fi
-    return "$rc"
+    pytest_em_bloco "$c" "$raiz_chave" "$nome (chave $chave)" "py:$CHAVE_PY" "$alvo"
+    return $?
   fi
   detecta "$c" "$nome" || { printf '%s: indeterminavel — nenhuma stack de teste detectada em %s\n' \
                       "$VERBO" "$c" >&2; exit 5; }
@@ -325,13 +400,10 @@ ato_rodar() {
     python)
       # roda da RAIZ do projeto (a pasta do pyproject), que pode ser um subdir do clone.
       # o alvo ja e caminho absoluto (alvo_de -> realpath), entao vale de qualquer cwd.
-      if [ -n "$PY" ]; then
-        (cd "$RAIZPY" && uv run --python "$PY" --with pytest pytest ${alvo:+"$alvo"})
-      elif [ "$ISOLADO" -eq 1 ]; then
-        (cd "$RAIZPY" && uvx pytest ${alvo:+"$alvo"})
-      else
-        (cd "$RAIZPY" && uv run pytest ${alvo:+"$alvo"})
-      fi ;;
+      local modo="projeto"
+      if [ -n "$PY" ]; then modo="py:$PY"; elif [ "$ISOLADO" -eq 1 ]; then modo="isolado"; fi
+      pytest_em_bloco "$c" "$RAIZPY" "$nome ($STACK)" "$modo" "$alvo"
+      return $? ;;
     node)
       if [ -n "$alvo" ]; then (cd "$c" && npm test -- "$alvo"); else (cd "$c" && npm test); fi ;;
   esac
