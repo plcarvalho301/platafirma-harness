@@ -236,7 +236,8 @@ def _agrupa_busca(linhas: list[str]) -> tuple[list[str], int] | None:
 
 
 def lava(texto: str, cap: int = 50_000, *, cosmetica: bool = False,
-         preserva_branco: bool = False, janela: bool = True) -> tuple[str, dict]:
+         preserva_branco: bool = False, janela: bool = True,
+         curar: bool = True) -> tuple[str, dict]:
     """R1 — lavador determinístico, ANTES do teto. Devolve (lavado, relatório).
 
     Determinístico é o ponto: mascaramento por regra iguala resumo por LLM à metade do
@@ -266,7 +267,10 @@ def lava(texto: str, cap: int = 50_000, *, cosmetica: bool = False,
         classes.append("terminal")
     linhas = t.split("\n")
 
-    if not cosmetica:
+    # `curar=False` (read_file): a alca de restauracao devolve o arquivo como ele e.
+    # Medido em 26/09: `read_file` em bin/descansar voltou com `   × 4` no lugar de
+    # linhas repetidas — quem reconstroi o arquivo a partir do retorno o corrompe.
+    if not cosmetica and curar:
         limpas = [l for l in linhas if not _RASTRO.match(l) and not _PYTEST_DOTS.match(l)]
         if len(limpas) != len(linhas):
             classes.append("rastro")
@@ -283,7 +287,7 @@ def lava(texto: str, cap: int = 50_000, *, cosmetica: bool = False,
             classes.append("branco")
             linhas = enxutas
 
-    if not cosmetica:
+    if not cosmetica and curar:
         # As duas classes que RE-CURAM o conjunto — e por isso as duas que o regime
         # não-semântico pula. O top-k já vem curado do vetor (ver o docstring).
         busca = _agrupa_busca(linhas)
@@ -581,7 +585,7 @@ def poda_texto(texto: str, *, cap: int, cauda: bool, alca: str, sessao_id: str,
     # porque o JSON inteiro e uma linha so. Quem chama `read_file` ja limitou o tamanho
     # por `max_bytes`; linha longa ali e o conteudo pedido, nao ruido.
     lavado, rel = lava(texto, cap, cosmetica=cosmetica, preserva_branco=preserva_branco,
-                       janela=(tool != "read_file"))
+                       janela=(tool != "read_file"), curar=(tool != "read_file"))
     meta = {"ato": tool, "giro": giro, "sha": sha_servido(lavado),
             "lavado": rel["classes"], "bytes_produzidos": rel["bytes_antes"]}
     if cosmetica:
