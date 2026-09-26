@@ -1582,6 +1582,7 @@ gate_suite_verdes() {  # $1=repo $2=sha ; 0 verde ou n/a; 4 vermelho medido; 5 n
   local vereditos_dir="${PLATAFIRMA_INSTANCIA:-/srv/platafirma/casa}/var/pre-push/vereditos"
   mkdir -p "$vereditos_dir" 2>/dev/null || true
   local veredito_arq; veredito_arq="$(caminho_veredito "$vereditos_dir" "$arvore_hash" "$CHAVE_SUITE" "$chave_hash")"
+  GATE_MARCA="${veredito_arq%.json}.nao-medido"
   local vresultado; vresultado="$(ler_veredito "$veredito_arq")"
   case "$vresultado" in
     verde)
@@ -1612,6 +1613,40 @@ gate_suite_verdes() {  # $1=repo $2=sha ; 0 verde ou n/a; 4 vermelho medido; 5 n
   fi
   t1=$(date +%s 2>/dev/null || echo 0)
   GATE_AMBIENTE_SEGUNDOS=$((t1 - t0))
+
+  # Teto do gate sincrono (spec_ambiente-de-desenvolvimento §3 "Tempo"; card #3150): a
+  # suite roda como job (`sessao longjob`, fora do cgroup da porta) e o promover espera ate
+  # PF_GATE_TETO_S (90). Terminou antes: segue com o veredito que o job gravou. Nao
+  # terminou: "em andamento" com a unit e o log, e a mesma promocao chamada de novo acha
+  # o veredito gravado. Um caminho so de medicao: o job roda este mesmo trecho, sincrono.
+  if [ "${PF_GATE_SINCRONO:-0}" != 1 ]; then
+    local sessao_bin; sessao_bin="$(achar_verbo sessao)"
+    if [ -n "$sessao_bin" ]; then
+      local marca="${veredito_arq%.json}.nao-medido" job out_job unit log_job teto="${PF_GATE_TETO_S:-90}" t=0
+      rm -f "$marca"
+      out_job="$(PF_GATE_SINCRONO=1 "$sessao_bin" longjob run "gate-${sha:0:7}" "$AQUI/release" _medir-suite "$repo" "$sha" 2>&1)" || out_job=""
+      unit="$(printf '%s\n' "$out_job" | grep -oE 'platafirma-job-[A-Za-z0-9_.@-]+' | head -n 1)"
+      log_job="$(printf '%s\n' "$out_job" | grep -oE '/[^ ]+\.log' | head -n 1)"
+      if [ -n "$unit" ]; then
+        while [ "$t" -lt "$teto" ]; do
+          [ -f "$veredito_arq" ] || [ -f "$marca" ] && break
+          sleep 2; t=$((t + 2))
+        done
+        if [ -f "$marca" ]; then
+          GATE_SUITE_DETALHE="$(head -n 1 "$marca") (job $unit)"; rm -f "$marca"
+          return 5
+        fi
+        case "$(ler_veredito "$veredito_arq")" in
+          verde) GATE_SUITE_STATUS="verde"; GATE_SUITE_DETALHE="medido no job $unit, ${t}s"; return 0 ;;
+          vermelho) GATE_SUITE_STATUS="vermelho"; GATE_SUITE_DETALHE="medido no job $unit — ver ${log_job:-sessao longjob log $unit}"; return 4 ;;
+        esac
+        GATE_SUITE_STATUS="em andamento"
+        GATE_SUITE_DETALHE="job $unit passou de ${teto}s; log ${log_job:-sessao longjob log $unit}"
+        return 6
+      fi
+      # sem longjob (conta sem systemd --user, fixture de teste): mede aqui, sincrono
+    fi
+  fi
 
   local log_dir="${PLATAFIRMA_INSTANCIA:-/srv/platafirma/casa}/var/log/release-gate"
   mkdir -p "$log_dir" 2>/dev/null || true
@@ -1930,6 +1965,12 @@ cmd_promover() {
     GATE_SUITE_STATUS="nao-medida"
     GATE_SUITE_DETALHE="subiu por --aceitar-suite-indisponivel: $GATE_SUITE_DETALHE"
     printf 'suite:     NAO MEDIDA — %s\n' "$GATE_SUITE_DETALHE" >&2
+  elif [ "$rc_suite" -eq 6 ]; then
+    gravar_ultimo_gate "$repo" "$sha"
+    printf 'gate:      em andamento — %s\n' "$GATE_SUITE_DETALHE"
+    printf 'release: a suite ainda esta medindo; current segue em %s — repita: release promover %s %s\n' \
+      "$(curto_ou "$atual" '(nenhum)')" "$repo" "${sha:0:7}" >&2
+    exit 1
   elif [ "$rc_suite" -ne 0 ]; then
     gravar_ultimo_gate "$repo" "$sha"
     if [ "$rc_suite" -eq 5 ]; then
@@ -2191,6 +2232,18 @@ case "$cmd" in
   conferir) cmd_conferir "$@" ;;
   promover) cmd_promover "$@" ;;
   reverter) cmd_reverter "$@" ;;
+  _medir-suite)
+    # interno: o job que `release promover` dispara para medir a suite acima do teto.
+    # Mede sincrono, grava o veredito (verde|vermelho) ou a marca de nao medido.
+    [ $# -eq 2 ] || { printf 'release: _medir-suite <repo> <sha>\n' >&2; exit 2; }
+    GATE_MARCA=""; rc_m=0
+    PF_GATE_SINCRONO=1 gate_suite_verdes "$1" "$2" || rc_m=$?
+    gravar_ultimo_gate "$1" "$2"
+    if [ "$rc_m" -eq 5 ] && [ -n "$GATE_MARCA" ]; then
+      printf '%s\n' "$GATE_SUITE_DETALHE" > "$GATE_MARCA" 2>/dev/null || true
+    fi
+    printf 'suite: %s %s\n' "$GATE_SUITE_STATUS" "$GATE_SUITE_DETALHE"
+    exit "$rc_m" ;;
   *)
     printf 'release: erro: ato desconhecido '\''%s'\''\n' "$cmd" >&2
     printf 'atos: estado · listar · ler · procurar · conferir · promover · reverter\n' >&2

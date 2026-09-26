@@ -99,6 +99,10 @@ class Ambiente:
         self.env["PLATAFIRMA_TERCEIROS"] = str(tmp_path / "terceiros.json")
         self.env["PLATAFIRMA_PYTHON"] = python_exe
         self.env["PF_RELEASE_PORTA"] = "0"
+        # a suite mede aqui mesmo: sem isto, o `sessao` real do PATH dispararia um longjob
+        # de verdade, fora do ambiente da fixture (os testes do teto usam um sessao stub)
+        self.env["PF_GATE_SINCRONO"] = "1"
+        self.stub_bin = stub_bin
         Path(self.env["PLATAFIRMA_FAMILIAS"]).write_text(
             json.dumps({self.FAMILIA: str(self.forge)}), encoding="utf-8")
         Path(self.env["PLATAFIRMA_VENVS"]).write_text(
@@ -272,6 +276,51 @@ def test_verdes_com_arquivo_sumido_barra_com_5_e_nomeia(tmp_path):
     r = amb.run("promover", amb.FAMILIA)
     assert r.returncode == 5, r.stdout + r.stderr
     assert "tests/test_sumido.py" in r.stderr
+
+
+# --- teto de 90 s: a suite roda como job, e o promover espera ate o teto -------------
+
+def _sessao_stub(amb) -> None:
+    """`sessao longjob run <nome> <cmd...>`: roda o comando em segundo plano, com o
+    ambiente da fixture, e diz a unit e o log como o verbo real diz."""
+    log = amb.tmp / "job.log"
+    stub = amb.stub_bin / "sessao"
+    stub.write_text(
+        "#!/usr/bin/env bash\n"
+        "[ \"$1\" = longjob ] && [ \"$2\" = run ] || exit 2\n"
+        "shift 3\n"
+        f"nohup \"$@\" >'{log}' 2>&1 &\n"
+        f"echo 'unit: platafirma-job-gate-teste'\necho 'log: {log}'\n", encoding="utf-8")
+    stub.chmod(0o755)
+    del amb.env["PF_GATE_SINCRONO"]
+
+
+def test_suite_como_job_dentro_do_teto_segue(amb_verde):
+    _sessao_stub(amb_verde)
+    amb_verde.env["PF_GATE_TETO_S"] = "60"
+    r = amb_verde.run("promover", amb_verde.FAMILIA)
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert "medido no job platafirma-job-gate-teste" in r.stdout, r.stdout
+
+
+def test_suite_acima_do_teto_devolve_em_andamento_e_a_repeticao_acha_o_veredito(amb_verde):
+    import time
+    _sessao_stub(amb_verde)
+    amb_verde.env["PF_GATE_TETO_S"] = "0"
+    r = amb_verde.run("promover", amb_verde.FAMILIA)
+    assert r.returncode == 1, r.stdout + r.stderr
+    assert "em andamento" in r.stdout and "platafirma-job-gate-teste" in r.stdout
+    assert "repita: release promover" in r.stderr
+    est = amb_verde.run("estado", amb_verde.FAMILIA)
+    assert est.returncode == 1   # nada subiu
+    vereditos = Path(amb_verde.env["PLATAFIRMA_INSTANCIA"]) / "var" / "pre-push" / "vereditos"
+    for _ in range(60):
+        if vereditos.is_dir() and any(vereditos.glob("*.json")):
+            break
+        time.sleep(1)
+    r2 = amb_verde.run("promover", amb_verde.FAMILIA)
+    assert r2.returncode == 0, r2.stdout + r2.stderr
+    assert "suite:     verde (reaproveitado)" in r2.stdout
 
 
 def test_suite_nao_medida_so_sobe_com_a_flag_declarada(tmp_path):
