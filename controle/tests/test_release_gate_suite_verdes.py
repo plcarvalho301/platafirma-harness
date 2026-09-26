@@ -132,6 +132,20 @@ def test_promover_roda_a_suite_e_sobe_quando_verde(amb_verde):
     assert "gate: passou" in est.stdout
 
 
+def test_promover_cabe_numa_tela_e_aponta_o_log(amb_verde):
+    """card #3150: retorno de ate 15 linhas; build, atalhos e conferir por extenso vao
+    ao log da instancia, cuja alca vem na tela."""
+    r = amb_verde.run("promover", amb_verde.FAMILIA)
+    assert r.returncode == 0, r.stdout + r.stderr
+    linhas = r.stdout.strip().splitlines()
+    assert len(linhas) <= 15, r.stdout
+    assert "atalho:" not in r.stdout
+    log = [l for l in linhas if l.startswith("log:")]
+    assert log, r.stdout
+    caminho = Path(log[0].split(None, 1)[1])
+    assert "atalho:" in caminho.read_text(encoding="utf-8")
+
+
 def test_promover_barra_quando_suite_vermelha_current_intacto(amb_vermelho):
     r = amb_vermelho.run("promover", amb_vermelho.FAMILIA)
     assert r.returncode == 4, r.stdout + r.stderr

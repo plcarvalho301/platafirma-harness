@@ -1727,6 +1727,39 @@ estagio_card() {  # $1=repo $2=sha_de(ou vazio) $3=sha_para
 # stack. current e stack sao planos separados; stack que recusa vira incidente e o
 # current fica onde o gate o pos. A volta deliberada e `release reverter <repo> <sha>`.
 
+# ---- retorno de promover numa tela (card #3150, spec_ambiente-de-desenvolvimento §3) ----
+# Tela: veredito e estagio (linhas gate:/suite:), familia e sha de -> para (== / de: /
+# current:), ambiente, venvs, card, a linha da volta e a alca do log. Recusa e parada vao
+# ao stderr, como antes. O resto (docker build, conferir por extenso, atalhos, abertura,
+# restart) fica no log.
+PROMO_LOG=""; PROMO_VOLTA=""
+abrir_log_promover() {  # $1=repo
+  [ "${PF_PROMOVER_VERBOSO:-0}" = 1 ] && return 0
+  local dir="${PLATAFIRMA_INSTANCIA:-/srv/platafirma/casa}/var/log/release-promover"
+  mkdir -p "$dir" 2>/dev/null || return 0
+  local arq; arq="$dir/$(date -u +%Y%m%dT%H%M%SZ)-$1-$$.log"
+  : >"$arq" 2>/dev/null || return 0
+  PROMO_LOG="$arq"
+  exec 3>&1 4>&2 >>"$PROMO_LOG" 2>&1
+  trap 'resumo_promover $?' EXIT
+}
+
+resumo_promover() {  # $1=exit
+  local rc="$1" sha_final
+  trap - EXIT
+  exec 1>&3 2>&4 3>&- 4>&-
+  [ -f "$PROMO_LOG" ] || exit "$rc"
+  # grep sem casamento sai 1: com set -e/pipefail isso mataria o resumo e trocaria o exit
+  { grep -E '^(== |de: |gate: |venv: |current: |no ar: |ambiente: |suite: |card: |ensaio: |já no ar: )' "$PROMO_LOG" \
+      | grep -v 'NAO MEDIDA'; } || true
+  grep -E '^(release: |varrido: |saida inteira: )|NAO MEDIDA|PROMOCAO|RETOMAR|VOLTAR CODIGO' "$PROMO_LOG" >&2 || true
+  [ -z "$PROMO_VOLTA" ] || printf 'volta:     %s\n' "$PROMO_VOLTA"
+  printf 'log:       %s\n' "$PROMO_LOG"
+  sha_final="$(grep -E '^[0-9a-f]{40}$' "$PROMO_LOG" | tail -n 1)" || sha_final=""
+  [ -z "$sha_final" ] || printf '%s\n' "$sha_final"
+  exit "$rc"
+}
+
 # ---- ato: promover <repo> [<rev>] [--ensaio] --------------------------------------
 cmd_promover() {
   local ensaio=0 so_caderno=0 repo="" rev="" aceitar_suite=0
@@ -1758,6 +1791,12 @@ cmd_promover() {
     fi
     exit "$rc_fam"
   fi
+
+  # card #3150 (retorno numa tela, comentario C3): tudo o que a esteira imprime -- build,
+  # conferir por extenso, atalhos, restart -- vai ao log da instancia; a tela recebe so as
+  # linhas-chave, a volta e a alca do log, montadas no fim por resumo_promover (trap).
+  # PF_PROMOVER_VERBOSO=1 devolve a saida inteira na tela.
+  abrir_log_promover "$repo"
 
   # regime: família com stack no registro promove por rev explícita
   local rc=0
@@ -1844,6 +1883,7 @@ cmd_promover() {
   gravar_pontos "$repo" "$atual" "$sha"
   trocar_current "$repo" "$sha" "$atual"
   printf 'current:   %s → %s\n' "$(curto_ou "$atual" '(nenhum)')" "${sha:0:7}"
+  [ -z "$atual" ] || PROMO_VOLTA="release reverter $repo ${atual:0:7}"
   assentar_atalhos "$repo"
   local rc_ab=0
   publicar_abertura_da_familia "$repo" "$sha" || rc_ab=$?
