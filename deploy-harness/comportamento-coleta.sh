@@ -41,7 +41,8 @@ if [[ "$desde" > "$ontem" ]]; then
 fi
 
 out="$(metrica comportamento --desde "$desde" --ate "$ontem" --resumo)" || exit 1
-printf '%s\n' "$out" | fila enviar ia --de gestao-estrategica --tipo handoff \
+# Fora da porta nao ha sessao: a cadeira remetente vai em --eu (resolve_eu, bin/_fila).
+printf '%s\n' "$out" | fila enviar ia --eu gestao-estrategica --de gestao-estrategica --tipo handoff \
   --assunto "Coleta de comportamento das cadeiras (#3090)" --ref "#3090" || exit 1
 
 mkdir -p "$ESTADO_DIR"
