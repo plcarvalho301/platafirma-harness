@@ -890,16 +890,17 @@ garantir_espelho() {
     return 3
   fi
   if [ -d "$esp" ]; then
-    if [ "$ensaio" -eq 1 ]; then
-      printf 'espelho:   %s (sem fetch em ensaio)\n' "$esp"
-      return 0
-    fi
     # espelho nascido de outra origem (clone de bancada, forge antigo) volta ao que a release declara
     if [ -n "$url" ] && [ "$("$GIT" --git-dir="$esp" remote get-url origin 2>/dev/null || true)" != "$url" ]; then
       "$GIT" --git-dir="$esp" remote set-url origin "$url" 2>/dev/null \
         || "$GIT" --git-dir="$esp" remote add origin "$url" 2>/dev/null || true
       printf 'espelho:   origin realinhado ao registro de famílias (%s)\n' "$url"
     fi
+    # card #3150 comentario C7: o fetch entra ANTES de resolver a rev, tambem em
+    # ensaio (nao so na promocao real) — sha recem-mesclado so aparece depois do
+    # fetch, e sem ele o ensaio sempre dava "rev nao resolve no forge", medido 2x
+    # numa mesma promocao real (card #3150, comentario do passo 1). Ensaio nao troca
+    # current nem materializa nada; fetch e so leitura do espelho, sem risco.
     atualizar_espelho "$esp" || {
       printf 'release: dependência ausente: forge fora do ar (fetch em %s falhou)\n' "$esp" >&2
       return 3
@@ -1351,8 +1352,8 @@ promover_abertura() {  # $1=rev(opcional) $2=ensaio
     return 0
   fi
   sha="$(resolver_rev "$FAMILIA_BIN" "$rev")" || {
-    printf 'release: erro: rev '\''%s'\'' não resolve no forge de %s\n' "${rev:-origin/main}" "$FAMILIA_BIN" >&2
-    return 2
+    printf 'varrido:   %s no espelho de %s (fetch feito agora, sem achar)\n' "${rev:-origin/main}" "$FAMILIA_BIN" >&2
+    return 1
   }
   exigir_descende_de_main "$FAMILIA_BIN" "$sha" 'promover' abertura || return $?
   if ! rev_tem_abertura "$sha"; then
@@ -1391,8 +1392,8 @@ promover_abertura_so_caderno() {  # $1=ensaio
     return 0
   fi
   sha="$(resolver_rev "$FAMILIA_BIN" '')" || {
-    printf 'release: erro: origin/main não resolve no forge de %s\n' "$FAMILIA_BIN" >&2
-    return 2
+    printf 'varrido:   origin/main no espelho de %s (fetch feito agora, sem achar)\n' "$FAMILIA_BIN" >&2
+    return 1
   }
   exigir_descende_de_main "$FAMILIA_BIN" "$sha" 'promover' abertura || return $?
   antes="$(sha_abertura_no_ar)"
@@ -1620,10 +1621,14 @@ cmd_promover() {
 
   local sha
   sha="$(resolver_rev "$repo" "$rev")" || {
-    printf 'release: erro: rev '\''%s'\'' não resolve no forge de %s\n' "${rev:-origin/main}" "$repo" >&2
+    # card #3150 comentario C7: com o fetch de garantir_espelho ja feito (inclusive
+    # em ensaio, desde a correcao acima), rev que ainda nao resolve e "nao existe
+    # (por ora)", nao erro de uso — exit 1 (varrido), nao 2. O espelho acabou de
+    # ser atualizado, entao nao ha fetch a mais para tentar aqui.
+    printf 'varrido:   %s no espelho de %s (fetch feito agora, sem achar)\n' "${rev:-origin/main}" "$repo" >&2
     printf 'tags recentes:\n' >&2
     "$GIT" --git-dir="$esp" for-each-ref --sort=-creatordate --count=5 --format='  %(refname:short)  %(objectname:short)' refs/tags 2>/dev/null >&2 || true
-    exit 2
+    exit 1
   }
   exigir_descende_de_main "$repo" "$sha" promover "$repo" || exit $?
 
