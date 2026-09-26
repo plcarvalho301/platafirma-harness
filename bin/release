@@ -1730,6 +1730,54 @@ estagio_card() {  # $1=repo $2=sha_de(ou vazio) $3=sha_para
 # stack. current e stack sao planos separados; stack que recusa vira incidente e o
 # current fica onde o gate o pos. A volta deliberada e `release reverter <repo> <sha>`.
 
+# ---- estagio 3: conferencia no ar (card #3150) ----------------------------------
+# Cada stack que a promocao recriou passa por `conferir servico <stack>` do proprio sha
+# (projeto do compose; procedencia = current). Container ainda subindo nao e vermelho:
+# ate 6 tentativas, 3 s entre elas. Familia sem stack nao tem o que conferir aqui (os
+# verbos ja foram medidos na rev pelo gate, e o servido e a mesma arvore).
+# PF_RELEASE_CONFERENCIA_AR=<executavel>: gancho de teste que faz as vezes da conferencia
+# (0 conforme, 1 vermelho, 5 nao olhou); a primeira linha que ele imprime vira o detalhe.
+CONF_AR_DETALHE=""
+conferencia_no_ar() {  # $1=repo $2=sha ; 0 conforme ou nada a conferir · 1 vermelho · 5 nao olhou
+  local repo="$1" sha="$2" rc=0 st rc_st tent out ok=()
+  CONF_AR_DETALHE=""
+  if [ -n "${PF_RELEASE_CONFERENCIA_AR:-}" ]; then
+    out="$("$PF_RELEASE_CONFERENCIA_AR" "$repo" "$sha" 2>&1)" || rc=$?
+    CONF_AR_DETALHE="$(printf '%s' "$out" | head -n 1)"
+    case "$rc" in 0|5) return "$rc" ;; *) return 1 ;; esac
+  fi
+  [ "${#STACKS_PROMOVER[@]}" -gt 0 ] || return 0
+  local impl="$PROD_RAIZ/$repo/$sha/bin/_release/conferir/conferir.py"
+  [ -f "$impl" ] || { CONF_AR_DETALHE="rev ${sha:0:7} sem bin/_release/conferir"; return 5; }
+  for st in "${STACKS_PROMOVER[@]}"; do
+    rc_st=1
+    for tent in 1 2 3 4 5 6; do
+      out="$(PF_RELEASE_RAIZ="$PROD_RAIZ" python3 "$impl" servico "$st" 2>/dev/null)"; rc_st=$?
+      [ "$rc_st" -eq 0 ] && break
+      [ "$tent" -lt 6 ] && sleep 3
+    done
+    case "$rc_st" in
+      0) ok+=("$st") ;;
+      5) CONF_AR_DETALHE="servico $st: nao consegui olhar"; rc=5 ;;
+      *)
+        CONF_AR_DETALHE="servico $st: $(printf '%s\n' "$out" | grep -E 'nenhum container|^[[:space:]]+(DERIVA|SUMIU|EDITADO|ENV)|^[[:space:]]{8}' | head -n 1 | sed 's/^[[:space:]]*//')"
+        return 1 ;;
+    esac
+  done
+  [ "$rc" -ne 0 ] || CONF_AR_DETALHE="servico ${ok[*]} conforme"
+  return "$rc"
+}
+
+comentar_incidente_no_card() {  # $1=repo $2=sha $3=texto ; nunca derruba a promocao
+  local card tarefas_bin
+  card="$(resolver_card_do_sha "$1" "$2")" || return 0
+  [ -n "$card" ] || return 0
+  tarefas_bin="$(achar_verbo tarefas)"
+  [ -n "$tarefas_bin" ] || return 0
+  "$tarefas_bin" comentar "$card" <<<"release promover $1 ${2:0:7}: INCIDENTE — $3" >/dev/null 2>&1 || true
+  return 0
+}
+
 # ---- retorno de promover numa tela (card #3150, spec_ambiente-de-desenvolvimento §3) ----
 # Tela: veredito e estagio (linhas gate:/suite:), familia e sha de -> para (== / de: /
 # current:), ambiente, venvs, card, a linha da volta e a alca do log. Recusa e parada vao
@@ -1935,6 +1983,43 @@ cmd_promover() {
     reiniciar_porta "$repo"
     exit "$rc_st"
   fi
+
+  # Estagio 3 (spec_ambiente-de-desenvolvimento §3; card #3150, comentario C5):
+  # conferencia no ar. Vermelho -> volta automatica ao sha anterior, current relido;
+  # so se declara "revertido" com current relido igual ao anterior. Nao olhou (5) ->
+  # declara e nao reverte: volta por medicao que nao aconteceu e tao cega quanto subir.
+  local rc_ar=0
+  conferencia_no_ar "$repo" "$sha" || rc_ar=$?
+  case "$rc_ar" in
+    0) [ -z "$CONF_AR_DETALHE" ] || printf 'no ar:     conferido — %s\n' "$CONF_AR_DETALHE" ;;
+    5) printf 'no ar:     conferencia nao olhou (%s) — sem volta automatica; confira: release conferir servico\n' "$CONF_AR_DETALHE" ;;
+    *)
+      if [ -z "$atual" ]; then
+        printf 'release: conferencia no ar VERMELHA (%s) e nao ha sha anterior para voltar — incidente\n' "$CONF_AR_DETALHE" >&2
+        reiniciar_porta "$repo"
+        exit 4
+      fi
+      printf 'release: conferencia no ar VERMELHA na rev %s: %s — voltando a %s\n' "${sha:0:7}" "$CONF_AR_DETALHE" "${atual:0:7}" >&2
+      # restart da porta desligado no filho: quem reinicia e este processo, depois da tela
+      PF_RELEASE_PORTA=0 "$AQUI/release" reverter "$repo" "$atual" || true
+      local depois="" rc_id2=0
+      resolver_identidade "$repo" || rc_id2=$?
+      [ "$rc_id2" -eq 0 ] && depois="$SHA"
+      if [ "$depois" = "$atual" ]; then
+        PROMO_VOLTA=""
+        printf 'release: revertido: current de %s relido em %s; a rev %s nao ficou no ar\n' "$repo" "${atual:0:7}" "${sha:0:7}" >&2
+        comentar_incidente_no_card "$repo" "$sha" \
+          "conferencia no ar vermelha ($CONF_AR_DETALHE); revertido automaticamente a ${atual:0:7}, current relido"
+        reiniciar_porta "$repo"
+        exit 4
+      fi
+      printf 'release: INCIDENTE — a volta automatica falhou: current de %s esta em %s, nao em %s; volte a mao: release reverter %s %s\n' \
+        "$repo" "$(curto_ou "$depois" 'ilegivel')" "${atual:0:7}" "$repo" "${atual:0:7}" >&2
+      comentar_incidente_no_card "$repo" "$sha" \
+        "conferencia no ar vermelha ($CONF_AR_DETALHE) e a volta automatica FALHOU; current em $(curto_ou "$depois" 'ilegivel')"
+      reiniciar_porta "$repo"
+      exit 5 ;;
+  esac
 
   printf 'no ar:     %s %s%s\n' "$repo" "${sha:0:7}" "${tag:+ ($tag)}"
   [ -z "$GATE_AMBIENTE_CHAVE" ] || printf 'ambiente:  %s (%s%s)\n' "$GATE_AMBIENTE_CHAVE" "$GATE_AMBIENTE_STATUS" "${GATE_AMBIENTE_SEGUNDOS:+, ${GATE_AMBIENTE_SEGUNDOS}s}"

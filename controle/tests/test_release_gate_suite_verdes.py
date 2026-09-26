@@ -146,6 +146,48 @@ def test_promover_cabe_numa_tela_e_aponta_o_log(amb_verde):
     assert "atalho:" in caminho.read_text(encoding="utf-8")
 
 
+def _conferencia_stub(tmp: Path, rc: int, linha: str) -> str:
+    stub = tmp / f"conferencia-{rc}.sh"
+    stub.write_text(f"#!/usr/bin/env bash\necho '{linha}'\nexit {rc}\n", encoding="utf-8")
+    stub.chmod(0o755)
+    return str(stub)
+
+
+def _segundo_sha(amb) -> str:
+    _git(amb.wt, "commit", "-q", "--allow-empty", "-m", "fixture: segunda rev")
+    _git(amb.wt, "push", "-q", "origin", "main")
+    r = subprocess.run(["git", "-C", str(amb.wt), "rev-parse", "HEAD"],
+                        capture_output=True, text=True, check=True)
+    return r.stdout.strip()
+
+
+def test_conferencia_no_ar_vermelha_volta_sozinha_ao_anterior(amb_verde):
+    """card #3150 estagio 3: vermelho no ar -> reverter automatico, current relido."""
+    r1 = amb_verde.run("promover", amb_verde.FAMILIA)
+    assert r1.returncode == 0, r1.stdout + r1.stderr
+    sha2 = _segundo_sha(amb_verde)
+    amb_verde.env["PF_RELEASE_CONFERENCIA_AR"] = _conferencia_stub(
+        amb_verde.tmp, 1, "servico tela: DERIVA forcada no teste")
+    r2 = amb_verde.run("promover", amb_verde.FAMILIA, sha2)
+    assert r2.returncode == 4, r2.stdout + r2.stderr
+    assert "conferencia no ar VERMELHA" in r2.stderr
+    assert "revertido" in r2.stderr and amb_verde.sha1[:7] in r2.stderr
+    del amb_verde.env["PF_RELEASE_CONFERENCIA_AR"]
+    est = amb_verde.run("estado", amb_verde.FAMILIA)
+    assert amb_verde.sha1[:7] in est.stdout, est.stdout
+
+
+def test_conferencia_no_ar_que_nao_olhou_nao_reverte(amb_verde):
+    r1 = amb_verde.run("promover", amb_verde.FAMILIA)
+    assert r1.returncode == 0, r1.stdout + r1.stderr
+    sha2 = _segundo_sha(amb_verde)
+    amb_verde.env["PF_RELEASE_CONFERENCIA_AR"] = _conferencia_stub(amb_verde.tmp, 5, "docker fora")
+    r2 = amb_verde.run("promover", amb_verde.FAMILIA, sha2)
+    assert r2.returncode == 0, r2.stdout + r2.stderr
+    assert "conferencia nao olhou" in r2.stdout
+    assert sha2[:7] in r2.stdout
+
+
 def test_promover_barra_quando_suite_vermelha_current_intacto(amb_vermelho):
     r = amb_vermelho.run("promover", amb_vermelho.FAMILIA)
     assert r.returncode == 4, r.stdout + r.stderr
