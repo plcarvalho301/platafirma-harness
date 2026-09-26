@@ -74,6 +74,7 @@ import re
 import shutil
 import subprocess
 import sys
+import tempfile
 import time
 from pathlib import Path
 
@@ -708,8 +709,49 @@ def ato_escrever(args):
         return 2
 
     cad = cadeira()
-    wt_dir = _acha_worktree(cad)
+    clone = _acha_worktree(cad)
+    # Escreve-se em worktree EFEMERO a partir de origin/main, nunca no checkout do
+    # clone: o clone pode estar em qualquer ramo. 26/09: o compartilhado estava parado
+    # em caderno/produto/jornada (upstream apagado), o commit da ia regrediria 51
+    # arquivos de main e o pre-push barrou. Caderno e arquivo inteiro: a base e main.
+    wt_dir, ramo, erro = _worktree_de_main(clone, cad, slot)
+    if erro:
+        sys.stderr.write(f"mesa escrever: {erro}\n")
+        return 3
+    try:
+        return _escreve_e_publica(wt_dir, ramo, cad, slot, corpo)
+    finally:
+        _remove_worktree(clone, wt_dir)
 
+
+def _git_bin():
+    return next((p for p in ("/usr/bin/git", "/bin/git") if os.path.exists(p)), "git")
+
+
+def _worktree_de_main(clone, cad, slot):
+    """Worktree efemero em origin/main recem-buscado, com ramo novo por escrita.
+    Ramo com carimbo: reusar caderno/<cad>/<slot> herdaria base velha se existisse."""
+    git = _git_bin()
+    f = subprocess.run([git, "-C", str(clone), "fetch", "-q", "origin", "main"],
+                       capture_output=True, text=True)
+    if f.returncode != 0:
+        return None, None, f"fetch de origin/main falhou: {f.stderr.strip()[:200]}"
+    ramo = f"caderno/{cad}/{slot}-{time.strftime('%Y%m%dT%H%M%S')}"
+    wt = Path(tempfile.mkdtemp(prefix=f"mesa-escrever-{cad}-"))
+    wt.rmdir()
+    a = subprocess.run([git, "-C", str(clone), "worktree", "add", "--quiet", "--no-track",
+                        "-b", ramo, str(wt), "origin/main"], capture_output=True, text=True)
+    if a.returncode != 0:
+        return None, None, f"worktree de origin/main falhou: {a.stderr.strip()[:200]}"
+    return wt, ramo, None
+
+
+def _remove_worktree(clone, wt):
+    subprocess.run([_git_bin(), "-C", str(clone), "worktree", "remove", "--force", str(wt)],
+                   capture_output=True, text=True)
+
+
+def _escreve_e_publica(wt_dir, ramo, cad, slot, corpo):
     cad_repo = wt_dir / "abertura" / cad / slot / "caderno.md"
     cad_repo.parent.mkdir(parents=True, exist_ok=True)
     with open(cad_repo, "w", encoding="utf-8") as fh:
@@ -729,23 +771,6 @@ def ato_escrever(args):
         env["GIT_AUTHOR_EMAIL"] = f"{cad}@platafirma.org"
         env["GIT_COMMITTER_NAME"] = f"claudinho-{cad}"
         env["GIT_COMMITTER_EMAIL"] = f"{cad}@platafirma.org"
-
-    proc_ramo = subprocess.run(
-        [git_bin, "-C", str(wt_dir), "rev-parse", "--abbrev-ref", "HEAD"],
-        capture_output=True, text=True, env=env
-    )
-    ramo_atual = proc_ramo.stdout.strip()
-    ramo = ramo_atual
-    if not ramo or ramo in ("HEAD", "main", "master"):
-        ramo = f"caderno/{cad}/{slot}"
-        check_proc = subprocess.run(
-            [git_bin, "-C", str(wt_dir), "show-ref", "--verify", "--quiet", f"refs/heads/{ramo}"],
-            env=env
-        )
-        if check_proc.returncode == 0:
-            subprocess.run([git_bin, "-C", str(wt_dir), "checkout", ramo], check=True, capture_output=True, env=env)
-        else:
-            subprocess.run([git_bin, "-C", str(wt_dir), "checkout", "-b", ramo], check=True, capture_output=True, env=env)
 
     rel_caminho = os.path.relpath(cad_repo, wt_dir)
     subprocess.run([git_bin, "-C", str(wt_dir), "add", rel_caminho], check=True, capture_output=True, env=env)
@@ -798,7 +823,7 @@ def ato_escrever(args):
     merge_de = f"do merge do PR #{m_num.group(1)}" if m_num else "do merge em main"
     achavel = (f"achável por `mesa caderno {slot}` depois {merge_de}; "
                "a abertura publica caderno sozinha em até 10 min")
-    print(f"caderno {slot}: gravado ({tam} B em {cad_repo}) · ramo: {ramo}{pr_str} · {achavel}")
+    print(f"caderno {slot}: gravado ({tam} B em abertura/{cad}/{slot}/caderno.md, base origin/main) · ramo: {ramo}{pr_str} · {achavel}")
     return 0
 
 

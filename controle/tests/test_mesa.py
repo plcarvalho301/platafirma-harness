@@ -147,5 +147,63 @@ def test_ato_escrever_devolve_ramo_e_quando_fica_achavel(wt_harness, monkeypatch
     assert (f"achável por `mesa caderno {slot}` depois do merge em main; "
             "a abertura publica caderno sozinha em até 10 min") in saida
 
-    caderno = wt_harness / "abertura" / cad / slot / "caderno.md"
-    assert caderno.read_text(encoding="utf-8") == "corpo do caderno de teste\n"
+    ramo = _ramo_da_saida(saida)
+    assert _mostra(wt_harness, f"origin/{ramo}:abertura/{cad}/{slot}/caderno.md") == \
+        "corpo do caderno de teste\n"
+    # escreve em worktree efemero: o checkout do clone nao e tocado
+    assert not (wt_harness / "abertura").exists()
+
+
+def _ramo_da_saida(saida: str) -> str:
+    import re
+    return re.search(r"ramo: (\S+)", saida).group(1)
+
+
+def _mostra(cwd: Path, spec: str) -> str:
+    _git(cwd, "fetch", "-q", "origin")
+    return subprocess.run(["git", "show", spec], cwd=str(cwd), capture_output=True,
+                          text=True, check=True).stdout
+
+
+def test_ato_escrever_parte_de_origin_main_mesmo_com_clone_em_ramo_velho(
+        wt_harness, monkeypatch, capsys):
+    """Incidente 26/09 (fila 20260926T120002-ia): clone compartilhado parado em ramo
+    velho; `mesa escrever` commitava em cima dele e o push regrediria main. A escrita
+    tem de partir de origin/main, e o clone fica onde estava."""
+    mesa = carrega_mesa()
+    cad, slot = "mesateste", "construcao"
+    # clone parado num ramo velho com arquivo que main nao tem
+    _git(wt_harness, "checkout", "-q", "-b", "caderno/produto/jornada")
+    (wt_harness / "VELHO.md").write_text("so no ramo velho\n", encoding="utf-8")
+    _git(wt_harness, "add", "-A")
+    _git(wt_harness, "commit", "-q", "-m", "ramo velho")
+    # main andou na origem depois disso
+    _git(wt_harness, "checkout", "-q", "main")
+    (wt_harness / "README.md").write_text("v2\n", encoding="utf-8")
+    _git(wt_harness, "commit", "-q", "-am", "main anda")
+    _git(wt_harness, "push", "-q", "origin", "main")
+    _git(wt_harness, "checkout", "-q", "caderno/produto/jornada")
+
+    monkeypatch.setenv("PF_CADEIRA", cad)
+    monkeypatch.setattr("sys.stdin", io.StringIO("item novo\n"))
+    rc = mesa.ato_escrever(argparse.Namespace(slot=slot))
+    saida = capsys.readouterr().out
+    assert rc == 0
+
+    ramo = _ramo_da_saida(saida)
+    assert ramo.startswith(f"caderno/{cad}/{slot}-")
+    pai = subprocess.run(["git", "rev-parse", f"origin/{ramo}~1", "origin/main"],
+                         cwd=str(wt_harness), capture_output=True, text=True,
+                         check=True).stdout.split()
+    assert pai[0] == pai[1], "a escrita tem de ter origin/main como pai"
+    arquivos = subprocess.run(["git", "ls-tree", "-r", "--name-only", f"origin/{ramo}"],
+                              cwd=str(wt_harness), capture_output=True, text=True,
+                              check=True).stdout.split()
+    assert "VELHO.md" not in arquivos
+    # clone intacto e worktree efemero removido
+    atual = subprocess.run(["git", "rev-parse", "--abbrev-ref", "HEAD"], cwd=str(wt_harness),
+                           capture_output=True, text=True, check=True).stdout.strip()
+    assert atual == "caderno/produto/jornada"
+    wts = subprocess.run(["git", "worktree", "list"], cwd=str(wt_harness),
+                         capture_output=True, text=True, check=True).stdout.splitlines()
+    assert len(wts) == 1
