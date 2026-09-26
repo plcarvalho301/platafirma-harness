@@ -813,8 +813,9 @@ def verbos_texto(r):
 # Compara a JANELA (um dia; default ontem) com a BASE (os 7 dias anteriores), por
 # cadeira, em sinais de ATO: o que o log grava em toda superficie. Sinal de prosa
 # (devolucao ao dono, pergunta no fim) fica fora: o claude.ai nao grava prosa
-# (arq:0061 §5). O timer `comportamento.timer` roda isto todo dia e manda o texto a
-# ia pela fila.
+# (arq:0061 §5). O timer `comportamento.timer` roda isto as tercas e sabados 02h, com a
+# janela desde a coleta anterior (deploy-harness/comportamento-coleta.sh), e manda o
+# texto a ia pela fila.
 #
 # Taxa POR FITA (ordem_id), para o volume do dia nao virar sinal.
 # Heuristica declarada, nao veredito:
@@ -975,7 +976,7 @@ def uso(codigo=2):
   metrica tateio [<dia>] [--cadeira <slug>]
   metrica casos [<dia>] [--tool <verbo>] [--cadeira <slug>]
   metrica verbos [<dia>] [--desde AAAA-MM-DD] [--ate AAAA-MM-DD] [--cadeira <slug>] [--csv]
-  metrica comportamento [<dia>] [--resumo]
+  metrica comportamento [<dia> | --desde AAAA-MM-DD [--ate AAAA-MM-DD]] [--resumo]
 
 Agrega o ops log ($PLATAFIRMA_INSTANCIA/var/log/ops/ops-AAAA-MM-DD.jsonl, ou OPS_LOG_DIR) em eventos de uso do harness.
 <dia> e AAAA-MM-DD; sem ele, hoje. Saida JSON; --resumo imprime o sumario legivel.
@@ -988,7 +989,8 @@ tateio      separa tateio de GRAMATICA (exit 2, verbo nu, recusa da porta) de ta
 casos       o giro falhado com o que o log gravou (args, motivo); --agregado resume
 verbos      taxa de erro POR VERBO (erros/giros) numa janela de dias; --csv para planilha
 comportamento  sinais de ato por cadeira, taxa por fita: <dia> (default ontem) contra os
-            7 dias anteriores; marca o que piorou e melhorou (#3090). --resumo e o
+            7 dias anteriores; --desde/--ate abre a janela em varios dias, com a base
+            nos 7 dias antes de --desde; marca o que piorou e melhorou (#3090). --resumo e o
             texto que o timer manda a ia pela fila
 
 exit: 0 ok · 2 uso invalido · 4 nao ha log desse dia
@@ -1129,8 +1131,26 @@ def main(argv):
     if ato == "comportamento":
         # Sem <dia>, a janela e ONTEM: o timer roda de madrugada e o dia corrente esta
         # pela metade. A base sao os BASE_DIAS anteriores a janela.
-        dj = date.fromisoformat(args.dia_flag or args.dia) if (args.dia_flag or args.dia) \
-            else datetime.now().astimezone().date() - timedelta(1)
+        # Com --desde, a janela vira VARIOS dias (desde..ate, ate default ontem): o timer
+        # roda duas vezes por semana (dono, 26/09) e a janela cobre tudo desde a coleta
+        # anterior. A base continua sendo os BASE_DIAS anteriores ao inicio da janela.
+        # A taxa e por fita, entao janela de 4 dias contra base de 7 compara o mesmo.
+        ontem = datetime.now().astimezone().date() - timedelta(1)
+        try:
+            if args.desde:
+                d0 = date.fromisoformat(args.desde)
+                d1 = date.fromisoformat(args.ate) if args.ate else ontem
+            else:
+                d0 = d1 = date.fromisoformat(args.dia_flag or args.dia) \
+                    if (args.dia_flag or args.dia) else ontem
+        except ValueError:
+            return erro_gracioso(f"{VERBO}: --desde/--ate invalido",
+                                 ["o formato e AAAA-MM-DD"], 2)
+        if d1 < d0:
+            return erro_gracioso(f"{VERBO} comportamento: --desde {d0} depois de --ate {d1}",
+                                 ["a janela termina em --ate (default ontem)"], 2)
+        dias_janela = [(d0 + timedelta(n)).isoformat() for n in range((d1 - d0).days + 1)]
+        dj = d0
         dias_base = [(dj - timedelta(n)).isoformat() for n in range(BASE_DIAS, 0, -1)]
         fonte = FonteJsonl()
         sem_log = []
@@ -1147,12 +1167,14 @@ def main(argv):
                 cs.extend(c)
             return sinais_por_cadeira(gs, cs)
 
-        janela = _carrega([dj.isoformat()])
+        janela = _carrega(dias_janela)
         base = _carrega(dias_base)
         if not janela and not base:
             return erro_gracioso(f"{VERBO}: nao ha ops log na janela nem na base",
                                  [f"esperado em {fonte.diretorio}"], 4)
-        r = comportamento(janela, base, dj.isoformat(), dias_base, sem_log)
+        rotulo_janela = dias_janela[0] if len(dias_janela) == 1 \
+            else f"{dias_janela[0]}..{dias_janela[-1]}"
+        r = comportamento(janela, base, rotulo_janela, dias_base, sem_log)
         if args.resumo:
             for linha in comportamento_texto(r):
                 print(linha)

@@ -6,6 +6,8 @@ Type=oneshot
 # Da release, nunca de clone (card #3010): a unit sobrevive a bancada apagada.
 WorkingDirectory=/opt/platafirma/current/harness
 Environment=PATH=/opt/platafirma/current/harness/bin:/usr/local/bin:/usr/bin:/bin
-# Sem <dia>, `metrica comportamento` mede ONTEM contra os 7 dias anteriores.
-ExecStart=/bin/bash -c 'out="$(metrica comportamento --resumo)" || exit 1; printf "%%s\n" "$out" | fila enviar ia --de gestao-estrategica --tipo handoff --assunto "Coleta de comportamento das cadeiras (#3090)" --ref "#3090"'
+# Mesmo ambiente do ops-mcp: verbo que passa por API sem ele toma 401 (caderno release).
+EnvironmentFile=/home/claudinho/.config/ops/env
+# A janela vai da coleta anterior ate ontem; o estado mora na instancia.
+ExecStart=/bin/bash /opt/platafirma/current/harness/deploy-harness/comportamento-coleta.sh
 TimeoutStartSec=300
