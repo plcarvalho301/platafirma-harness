@@ -30,7 +30,10 @@
 # card #3150, comentário A: o mesmo construtor e a MESMA chave <nome>-hash(lock+
 # python) que release/teste usam (lib/venv.sh + bin/_release/registro.py) — nunca
 # mais uvx --with redis isolado. Veredito gravado e reaproveitado por (hash da
-# árvore, chave). Toda ref empurrada é medida, não só a primeira (A4).
+# árvore, chave) — o MESMO arquivo que o gate de `release promover` lê e grava
+# (lib/venv.sh: caminho_veredito/ler_veredito/gravar_veredito), então uma rev já
+# medida aqui não roda a suíte de novo na promoção. Toda ref empurrada é medida,
+# não só a primeira (A4).
 #
 # `uv run --python <venv> --with pytest pytest`, nao o python do venv direto: o
 # venv da chave (construir_venv) so instala o que o LOCK declara — "acervo" so tem
@@ -67,13 +70,12 @@ CHAVE="harness"
 VEREDITOS_DIR="${PLATAFIRMA_INSTANCIA:-/srv/platafirma/casa}/var/pre-push/vereditos"
 mkdir -p "$VEREDITOS_DIR" 2>/dev/null || true
 
-# ALVOS como array (A5): string splitting sem aspas era shellcheck SC2086 e quebrava
-# em nome de arquivo com espaço, que não existe hoje mas não precisa nascer aqui.
+# ALVOS como array (A5), lidos de controle/tests/VERDES pelo leitor compartilhado
+# (lib/venv.sh: listar_verdes) — mesmo shellcheck SC2086 que string sem aspas dava.
 ARQUIVOS=()
 while IFS= read -r linha; do
-  case "$linha" in ''|'#'*) continue ;; esac
-  [ -f "$RAIZ/controle/$linha" ] && ARQUIVOS+=("$linha")
-done < "$LISTA"
+  ARQUIVOS+=("$linha")
+done < <(listar_verdes "$RAIZ")
 [ "${#ARQUIVOS[@]}" -gt 0 ] || exit 0
 
 # A REV A JULGAR vem do stdin do hook: "<local_ref> <local_oid> <remote_ref> <remote_oid>".
@@ -105,48 +107,11 @@ limpa() {
 }
 trap limpa EXIT
 
-# Escrita atomica do veredito (A3): tmp no mesmo dir + mv. Leitura tolerante: linha
-# ilegivel ou arquivo ausente nunca sai "reaproveitado" — mede de novo.
-grava_veredito() {  # $1=arquivo $2=verde|vermelho $3=rev
-  local arq="$1" resultado="$2" rev="$3" tmp
-  tmp="$(mktemp "$(dirname "$arq")/.tmp.XXXXXX" 2>/dev/null)" || return 0
-  printf '{"resultado": "%s", "rev": "%s", "quando": "%s"}\n' \
-    "$resultado" "$rev" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > "$tmp" 2>/dev/null && mv -f "$tmp" "$arq" 2>/dev/null
-}
-
-# A6: reprovados nomeados pelo junit.xml (nome do teste + 1a linha da asserção),
-# nunca por `tail -n 15` — o tail corta no meio de traceback e não nomeia o teste.
-nomear_reprovados() {  # $1=junit.xml
-  local xml="$1"
-  [ -f "$xml" ] || { printf '  (sem junit.xml para nomear os reprovados)\n'; return; }
-  python3 - "$xml" <<'PY' 2>/dev/null
-import sys
-import xml.etree.ElementTree as ET
-try:
-    root = ET.parse(sys.argv[1]).getroot()
-except Exception:
-    sys.exit(0)
-n = 0
-for tc in root.iter("testcase"):
-    ruim = tc.find("failure")
-    if ruim is None:
-        ruim = tc.find("error")
-    if ruim is None:
-        continue
-    n += 1
-    if n > 5:
-        print("  ... e mais reprovados (saída inteira aponta o resto)")
-        break
-    nome = "%s::%s" % (tc.get("classname", ""), tc.get("name", ""))
-    msg = (ruim.get("message") or "").splitlines()[0] if ruim.get("message") else ""
-    print("  %s — %s" % (nome, msg))
-PY
-}
-
 # Mede UMA rev: 0 verde (ou reaproveitado verde), 1 vermelho real (barra o push),
 # 3 não medido (ambiente/coleta/timeout — avisa e deixa passar, nunca barra).
 medir_rev() {  # $1=rev
-  local rev="$1" arvore="$TMP/arvore-${rev:0:12}" log="$TMP/git-${rev:0:12}.txt"
+  local rev="$1"
+  local arvore="$TMP/arvore-${rev:0:12}" log="$TMP/git-${rev:0:12}.txt"  # "local a=$1 b=...$a" nao ve o $a recem-declarado: outro local
 
   if ! git worktree add --detach --no-checkout "$arvore" "$rev" >"$log" 2>&1; then
     printf 'pre-push: não consegui isolar a rev %s — não medido, deixando passar.\n' "$rev" >&2
@@ -199,10 +164,11 @@ medir_rev() {  # $1=rev
   local chave_hash
   chave_hash="$({ cat "$arvore/$lock"; printf '\npython=%s %s\n' "$py_real" "$py_ver"; } | sha256sum | cut -c1-12)"
 
-  local veredito_arq="$VEREDITOS_DIR/${arvore_hash}-${CHAVE}-${chave_hash}.json"
+  local veredito_arq
+  veredito_arq="$(caminho_veredito "$VEREDITOS_DIR" "$arvore_hash" "$CHAVE" "$chave_hash")"
   if [ -f "$veredito_arq" ]; then
     local vresultado
-    vresultado="$(sed -n 's/.*"resultado"[[:space:]]*:[[:space:]]*"\([a-z]*\)".*/\1/p' "$veredito_arq" 2>/dev/null | head -n 1)"
+    vresultado="$(ler_veredito "$veredito_arq")"
     case "$vresultado" in
       verde)
         printf 'pre-push: baseline de contrato — %s-%s reaproveitado (%s, verde)\n' "$CHAVE" "$chave_hash" "${rev:0:7}"
@@ -233,15 +199,15 @@ medir_rev() {  # $1=rev
 
   case "$rc_pytest" in
     0)
-      grava_veredito "$veredito_arq" verde "$rev"
+      gravar_veredito "$veredito_arq" verde "$rev"
       printf 'pre-push: baseline de contrato verde em %s (%s-%s, %s)\n' "${rev:0:7}" "$CHAVE" "$chave_hash" "$(tail -n 1 "$saida")"
       return 0 ;;
     1)
-      grava_veredito "$veredito_arq" vermelho "$rev"
+      gravar_veredito "$veredito_arq" vermelho "$rev"
       {
         echo
         printf 'pre-push: BASELINE VERDE QUEBROU na rev %s — push barrado.\n' "${rev:0:7}"
-        nomear_reprovados "$xml"
+        nomear_reprovados "$xml" | sed 's/^/  /'
         echo
         printf '  medido em worktree limpo da rev empurrada (%s-%s), não no seu clone.\n' "$CHAVE" "$chave_hash"
         printf '  saída inteira: %s\n' "$saida"

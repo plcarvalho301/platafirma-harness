@@ -98,3 +98,63 @@ construir_venv() {  # $1=lock $2=destino $3=uv $4=python $5=versão do python
     return 3
   fi
 }
+
+# --- veredito memoizado por (hash da árvore, chave, hash do ambiente) -------------
+# Convencão COMPARTILHADA entre hooks/pre-push e o gate de `release promover`
+# (card #3150): quem mediu primeiro grava, o outro reaproveita sem rodar de novo.
+# Nunca hash de commit (o squash muda o commit e mantém a árvore).
+caminho_veredito() {  # $1=vereditos_dir $2=arvore_hash $3=chave $4=chave_hash
+  printf '%s/%s-%s-%s.json' "$1" "$2" "$3" "$4"
+}
+
+ler_veredito() {  # $1=arquivo ; imprime verde|vermelho ; vazio = nao medido/ilegivel
+  [ -f "$1" ] || return 0
+  sed -n 's/.*"resultado"[[:space:]]*:[[:space:]]*"\([a-z]*\)".*/\1/p' "$1" 2>/dev/null | head -n 1
+}
+
+gravar_veredito() {  # $1=arquivo $2=verde|vermelho $3=rev
+  local arq="$1" resultado="$2" rev="$3" tmp
+  tmp="$(mktemp "$(dirname "$arq")/.tmp.XXXXXX" 2>/dev/null)" || return 0
+  printf '{"resultado": "%s", "rev": "%s", "quando": "%s"}\n' \
+    "$resultado" "$rev" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > "$tmp" 2>/dev/null && mv -f "$tmp" "$arq" 2>/dev/null
+}
+
+# controle/tests/VERDES da árvore em $1 (raiz do checkout) — caminhos que existem, um por linha.
+listar_verdes() {  # $1=raiz
+  local raiz="$1" lista="$1/controle/tests/VERDES" linha
+  [ -r "$lista" ] || return 0
+  while IFS= read -r linha; do
+    case "$linha" in ''|'#'*) continue ;; esac
+    [ -f "$raiz/controle/$linha" ] && printf '%s\n' "$linha"
+  done < "$lista"
+}
+
+# Reprovados nomeados pelo junit.xml (classe::teste + 1a linha da asserção), até 5.
+# Compartilhado (hooks/pre-push e o gate de release) para nunca dependerem de
+# `tail -n N`, que corta no meio de traceback e não nomeia o teste.
+nomear_reprovados() {  # $1=junit.xml
+  local xml="$1"
+  [ -f "$xml" ] || { printf '(sem junit.xml para nomear os reprovados)\n'; return; }
+  python3 - "$xml" <<'PY' 2>/dev/null
+import sys
+import xml.etree.ElementTree as ET
+try:
+    root = ET.parse(sys.argv[1]).getroot()
+except Exception:
+    sys.exit(0)
+n = 0
+for tc in root.iter("testcase"):
+    ruim = tc.find("failure")
+    if ruim is None:
+        ruim = tc.find("error")
+    if ruim is None:
+        continue
+    n += 1
+    if n > 5:
+        print("... e mais reprovados (saída inteira aponta o resto)")
+        break
+    nome = "%s::%s" % (tc.get("classname", ""), tc.get("name", ""))
+    msg = (ruim.get("message") or "").splitlines()[0] if ruim.get("message") else ""
+    print("%s — %s" % (nome, msg))
+PY
+}

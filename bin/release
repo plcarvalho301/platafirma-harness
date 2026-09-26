@@ -457,6 +457,10 @@ print(json.dumps({
           printf '  %s' "$anterior_str"
         fi
         echo
+        if [ "$f" = "$FAMILIA_BIN" ]; then
+          local gate_linha; gate_linha="$(ler_ultimo_gate "$f" "$SHA")"
+          [ -n "$gate_linha" ] && printf '%-24s   gate: %s\n' '' "$gate_linha"
+        fi
       fi
     fi
   done
@@ -1523,6 +1527,140 @@ gate_conferir_verbo() {  # $1=repo $2=sha_candidato $3=sha_atual(ou vazio)
   return 0
 }
 
+# Estagio 1b da esteira (card #3150, comentario C1): a MESMA suite que hooks/pre-push
+# mede, no MESMO venv da chave, com o MESMO veredito memoizado por (hash da arvore,
+# chave) — lib/venv.sh: caminho_veredito/ler_veredito/gravar_veredito. Se o push que
+# trouxe esta rev ja foi medido, a promocao reaproveita sem rodar nada de novo. So se
+# aplica a familia que serve verbos (FAMILIA_BIN); chave fixa "harness" (mesma razao
+# do pre-push: nenhum arquivo de VERDES hoje precisa de outra). Nunca barra por
+# ambiente/coleta indisponivel (comentario A2) — so por reprovado medido de verdade.
+CHAVE_SUITE="harness"
+GATE_SUITE_STATUS=""; GATE_SUITE_DETALHE=""; GATE_SUITE_LOG=""
+GATE_AMBIENTE_STATUS=""; GATE_AMBIENTE_SEGUNDOS=0; GATE_AMBIENTE_CHAVE=""
+
+gate_suite_verdes() {  # $1=repo $2=sha ; 0 nunca barra por infra, so por vermelho medido; 4 vermelho
+  local repo="$1" sha="$2"
+  local arvore="$PROD_RAIZ/$repo/$sha"  # "local a=$1 b=...$a" nao ve o $a recem-declarado: outro local
+  GATE_SUITE_STATUS="indisponivel"; GATE_SUITE_DETALHE=""; GATE_SUITE_LOG=""
+  GATE_AMBIENTE_STATUS="indisponivel"; GATE_AMBIENTE_SEGUNDOS=0; GATE_AMBIENTE_CHAVE=""
+  [ "$repo" = "$FAMILIA_BIN" ] || { GATE_SUITE_STATUS="n/a"; return 0; }
+
+  local alvos=() arq
+  while IFS= read -r arq; do alvos+=("$arq"); done < <(listar_verdes "$arvore")
+  if [ "${#alvos[@]}" -eq 0 ]; then GATE_SUITE_STATUS="sem-verdes"; return 0; fi
+
+  local venvs="${PLATAFIRMA_VENVS:-$arvore/registro/venvs.json}"
+  local out familia lock teste
+  out="$(PLATAFIRMA_VENVS="$venvs" python3 "$AQUI/_release/registro.py" "$CHAVE_SUITE" 2>/dev/null)" || return 0
+  IFS=$'\t' read -r familia lock teste <<<"$out"
+  [ -f "$arvore/$lock" ] || return 0
+
+  local pyid py py_real py_ver
+  pyid="$(resolver_python 2>/dev/null)" || return 0
+  IFS=$'\t' read -r py py_real py_ver <<<"$pyid"
+  local chave_hash
+  chave_hash="$({ cat "$arvore/$lock"; printf '\npython=%s %s\n' "$py_real" "$py_ver"; } | sha256sum | cut -c1-12)"
+  GATE_AMBIENTE_CHAVE="${CHAVE_SUITE}-${chave_hash}"
+
+  local arvore_hash
+  arvore_hash="$("$GIT" -C "$arvore" rev-parse 'HEAD^{tree}' 2>/dev/null)"
+  [ -n "$arvore_hash" ] || return 0
+
+  local vereditos_dir="${PLATAFIRMA_INSTANCIA:-/srv/platafirma/casa}/var/pre-push/vereditos"
+  mkdir -p "$vereditos_dir" 2>/dev/null || true
+  local veredito_arq; veredito_arq="$(caminho_veredito "$vereditos_dir" "$arvore_hash" "$CHAVE_SUITE" "$chave_hash")"
+  local vresultado; vresultado="$(ler_veredito "$veredito_arq")"
+  case "$vresultado" in
+    verde)
+      GATE_SUITE_STATUS="verde"; GATE_SUITE_DETALHE="reaproveitado"
+      GATE_AMBIENTE_STATUS="reaproveitado"
+      return 0 ;;
+    vermelho)
+      GATE_SUITE_STATUS="vermelho"
+      GATE_SUITE_DETALHE="reaproveitado (veredito ja gravado vermelho para esta arvore)"
+      return 4 ;;
+  esac
+
+  local uv; uv="$(resolver_uv 2>/dev/null)" || return 0
+  local dest="$PROD_RAIZ/venv/${CHAVE_SUITE}-${chave_hash}"
+  local t0 t1
+  t0=$(date +%s 2>/dev/null || echo 0)
+  if [ ! -f "$dest/.pronto" ]; then
+    mkdir -p "$(dirname "$dest")"
+    if ! construir_venv "$arvore/$lock" "$dest" "$uv" "$py" "$py_ver" 2>/dev/null; then
+      chmod -R u+w "$dest" 2>/dev/null || true; rm -rf "$dest"
+      return 0
+    fi
+    : > "$dest/.pronto"; chmod -R a-w "$dest"
+    GATE_AMBIENTE_STATUS="construido"
+  else
+    GATE_AMBIENTE_STATUS="reaproveitado"
+  fi
+  t1=$(date +%s 2>/dev/null || echo 0)
+  GATE_AMBIENTE_SEGUNDOS=$((t1 - t0))
+
+  local log_dir="${PLATAFIRMA_INSTANCIA:-/srv/platafirma/casa}/var/log/release-gate"
+  mkdir -p "$log_dir" 2>/dev/null || true
+  local saida="$log_dir/${sha}.txt" xml
+  xml="$(mktemp "${TMPDIR:-/tmp}/gate-junit.XXXXXX.xml")"
+  local rc_pytest=0
+  ( cd "$arvore/controle" && timeout 300 "$uv" run --python "$dest/bin/python" --with pytest \
+      pytest "${alvos[@]}" -q --junitxml="$xml" ) >"$saida" 2>&1 || rc_pytest=$?
+  GATE_SUITE_LOG="$saida"
+
+  case "$rc_pytest" in
+    0)
+      gravar_veredito "$veredito_arq" verde "$sha"
+      GATE_SUITE_STATUS="verde"; GATE_SUITE_DETALHE="$(tail -n 1 "$saida")"
+      rm -f "$xml"
+      return 0 ;;
+    1)
+      gravar_veredito "$veredito_arq" vermelho "$sha"
+      GATE_SUITE_STATUS="vermelho"
+      GATE_SUITE_DETALHE="$(nomear_reprovados "$xml" | head -n 1)"
+      rm -f "$xml"
+      return 4 ;;
+    *)
+      GATE_SUITE_STATUS="indisponivel"
+      GATE_SUITE_DETALHE="pytest saiu $rc_pytest (uso/coleta/timeout) — nao medido"
+      rm -f "$xml"
+      return 0 ;;
+  esac
+}
+
+# `release estado <familia>` mostra o ultimo veredito do gate (card #3150, "Tempo":
+# em andamento | passou | barrou <teste>) — gravado aqui, lido la. Chave do sha:
+# gate de uma rev que nao chegou a vingar (ensaio, ou promocao que falhou antes do
+# gate) nao se confunde com o gate da rev que de fato esta no ar.
+gravar_ultimo_gate() {  # $1=repo $2=sha
+  local repo="$1" sha="$2" tmp
+  local arq="$PONTOS/$repo/ultimo-gate.json"  # "local a=$1 b=$a" nao ve o $a recem-declarado: precisa de outro local
+  mkdir -p "$(dirname "$arq")" 2>/dev/null || true
+  tmp="$(mktemp "$(dirname "$arq")/.tmp.XXXXXX" 2>/dev/null)" || return 0
+  printf '{"sha": "%s", "suite": "%s", "detalhe": "%s", "ambiente": "%s", "quando": "%s"}\n' \
+    "$sha" "$GATE_SUITE_STATUS" "$(printf '%s' "$GATE_SUITE_DETALHE" | tr -d '"\\')" \
+    "$GATE_AMBIENTE_CHAVE" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > "$tmp" 2>/dev/null \
+    && mv -f "$tmp" "$arq" 2>/dev/null
+}
+
+ler_ultimo_gate() {  # $1=repo $2=sha_no_ar ; imprime uma linha resumida, ou nada
+  local repo="$1" sha_ar="$2"
+  local arq="$PONTOS/$repo/ultimo-gate.json"
+  [ -f "$arq" ] || return 0
+  local gsha gsuite gdet
+  gsha="$(sed -n 's/.*"sha"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$arq" 2>/dev/null | head -n 1)"
+  gsuite="$(sed -n 's/.*"suite"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$arq" 2>/dev/null | head -n 1)"
+  gdet="$(sed -n 's/.*"detalhe"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$arq" 2>/dev/null | head -n 1)"
+  [ -n "$gsuite" ] || return 0
+  local marca=""
+  [ "$gsha" = "$sha_ar" ] || marca=" (medido numa rev que nao ficou no ar: ${gsha:0:7})"
+  case "$gsuite" in
+    verde) printf 'passou%s' "$marca" ;;
+    vermelho) printf 'barrou: %s%s' "$gdet" "$marca" ;;
+    *) printf '%s%s' "$gsuite" "$marca" ;;
+  esac
+}
+
 # ---- estágio 4 (card #3150): card pelo PR do sha, cliente simples de tarefas ----
 # Trava do card: a particao promover x rastreador esta com o arquiteto (fila); SEM
 # resposta, este estagio implementa o caminho simples (release chama tarefas direto)
@@ -1662,6 +1800,15 @@ cmd_promover() {
   exigir_deploy_se_stack || { rc=$?; exit "$rc"; }
   materializar "$repo" "$sha" || { rc=$?; exit "$rc"; }
   materializar_terceiros "$repo" "$sha" || { rc=$?; exit "$rc"; }
+  gate_suite_verdes "$repo" "$sha" || {
+    rc=$?
+    gravar_ultimo_gate "$repo" "$sha"
+    printf 'release: recusa: rev %s reprova na suite VERDES: %s — current segue em %s\n' \
+      "${sha:0:7}" "$GATE_SUITE_DETALHE" "$(curto_ou "$atual" '(nenhum)')" >&2
+    [ -n "$GATE_SUITE_LOG" ] && printf 'saida inteira: %s\n' "$GATE_SUITE_LOG" >&2
+    exit "$rc"
+  }
+  gravar_ultimo_gate "$repo" "$sha"
   gate_conferir_verbo "$repo" "$sha" "$atual" || { rc=$?; exit "$rc"; }
   construir_venvs "$repo" "$sha" || { rc=$?; exit "$rc"; }
   gravar_pontos "$repo" "$atual" "$sha"
@@ -1705,6 +1852,10 @@ cmd_promover() {
   fi
 
   printf 'no ar:     %s %s%s\n' "$repo" "${sha:0:7}" "${tag:+ ($tag)}"
+  [ -z "$GATE_AMBIENTE_CHAVE" ] || printf 'ambiente:  %s (%s%s)\n' "$GATE_AMBIENTE_CHAVE" "$GATE_AMBIENTE_STATUS" "${GATE_AMBIENTE_SEGUNDOS:+, ${GATE_AMBIENTE_SEGUNDOS}s}"
+  if [ -n "$GATE_SUITE_STATUS" ] && [ "$GATE_SUITE_STATUS" != "n/a" ]; then
+    printf 'suite:     %s%s\n' "$GATE_SUITE_STATUS" "${GATE_SUITE_DETALHE:+ ($GATE_SUITE_DETALHE)}"
+  fi
   if [ "$rc_ab" -ne 0 ]; then
     printf 'release: PROMOCAO PARCIAL — codigo no ar em %s, abertura NAO publicada; retomar: release promover abertura %s\n' "${sha:0:7}" "${sha:0:7}" >&2
     reiniciar_porta "$repo"

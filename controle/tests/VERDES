@@ -29,3 +29,4 @@ tests/test_release_construir_venv_registro.py
 tests/test_release_estagio_card.py
 tests/test_release_ensaio_fetch.py
 tests/test_pre_push_chave.py
+tests/test_release_gate_suite_verdes.py
