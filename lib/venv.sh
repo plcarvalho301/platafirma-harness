@@ -129,6 +129,17 @@ listar_verdes() {  # $1=raiz
   done < "$lista"
 }
 
+# O avesso de listar_verdes: o que VERDES lista e nao existe na arvore. Lista que aponta
+# arquivo sumido e baseline que ninguem mede -- o gate barra (5), o pre-push avisa.
+verdes_ausentes() {  # $1=raiz
+  local raiz="$1" lista="$1/controle/tests/VERDES" linha
+  [ -r "$lista" ] || return 0
+  while IFS= read -r linha; do
+    case "$linha" in ''|'#'*) continue ;; esac
+    [ -f "$raiz/controle/$linha" ] || printf '%s\n' "$linha"
+  done < "$lista"
+}
+
 # Reprovados nomeados pelo junit.xml (classe::teste + 1a linha da asserção), até 5.
 # Compartilhado (hooks/pre-push e o gate de release) para nunca dependerem de
 # `tail -n N`, que corta no meio de traceback e não nomeia o teste.

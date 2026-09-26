@@ -1551,6 +1551,11 @@ gate_suite_verdes() {  # $1=repo $2=sha ; 0 verde ou n/a; 4 vermelho medido; 5 n
 
   local alvos=() arq
   while IFS= read -r arq; do alvos+=("$arq"); done < <(listar_verdes "$arvore")
+  local sumidos; sumidos="$(verdes_ausentes "$arvore" | tr '\n' ' ')"
+  if [ -n "${sumidos// /}" ]; then
+    GATE_SUITE_DETALHE="VERDES lista arquivo que nao existe na arvore: ${sumidos% }"
+    return 5
+  fi
   if [ "${#alvos[@]}" -eq 0 ]; then GATE_SUITE_STATUS="sem-verdes"; return 0; fi
 
   local venvs="${PLATAFIRMA_VENVS:-$arvore/registro/venvs.json}"

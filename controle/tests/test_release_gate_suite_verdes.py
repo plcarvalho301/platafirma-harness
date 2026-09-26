@@ -208,6 +208,16 @@ def test_suite_nao_medida_barra_com_5_e_current_intacto(tmp_path):
     assert est.returncode == 1, est.stdout + est.stderr  # nunca subiu
 
 
+def test_verdes_com_arquivo_sumido_barra_com_5_e_nomeia(tmp_path):
+    """26/09: listar_verdes descartava em silencio o que VERDES lista e nao existe; com
+    todos sumidos, virava "sem-verdes" e a promocao subia sem medir nada."""
+    amb = Ambiente(tmp_path, _python_de_sistema(), TESTE_OK,
+                   verdes="tests/test_fixture.py\ntests/test_sumido.py\n")
+    r = amb.run("promover", amb.FAMILIA)
+    assert r.returncode == 5, r.stdout + r.stderr
+    assert "tests/test_sumido.py" in r.stderr
+
+
 def test_suite_nao_medida_so_sobe_com_a_flag_declarada(tmp_path):
     amb = Ambiente(tmp_path, _python_de_sistema(), TESTE_NAO_COLETA)
     r = amb.run("promover", amb.FAMILIA, "--aceitar-suite-indisponivel")
