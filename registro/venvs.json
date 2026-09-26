@@ -9,7 +9,8 @@
   },
   "acervo": {
     "familia": "platafirma-harness",
-    "lock": "venvs/acervo/uv.lock"
+    "lock": "venvs/acervo/uv.lock",
+    "teste": "controle"
   },
   "ops": {
     "familia": "platafirma-harness",

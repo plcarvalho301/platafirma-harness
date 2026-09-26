@@ -1522,6 +1522,49 @@ gate_conferir_verbo() {  # $1=repo $2=sha_candidato $3=sha_atual(ou vazio)
   return 0
 }
 
+# ---- estágio 4 (card #3150): card pelo PR do sha, cliente simples de tarefas ----
+# Trava do card: a particao promover x rastreador esta com o arquiteto (fila); SEM
+# resposta, este estagio implementa o caminho simples (release chama tarefas direto)
+# e o comentario no card diz que a particao ainda pode mudar isso depois. Nunca
+# bloqueia a promocao: gh ou tarefas ausente, ou ramo sem card (nao fabrica/<n>-...),
+# so pula o estagio com um aviso.
+resolver_card_do_sha() {  # $1=repo $2=sha ; imprime NNNN (o card) ou nada, 1 se nao achou
+  local repo="$1" sha="$2" url owner_repo ramo
+  command -v gh >/dev/null 2>&1 || return 1
+  url="$(url_da_familia "$repo" 2>/dev/null)" || return 1
+  [ -n "$url" ] || return 1
+  # so sabe ler PR de forge no github.com; outro forge sai do mesmo jeito que gh ausente
+  owner_repo="$(printf '%s' "$url" | sed -n 's#.*github\.com[:/]\([^/]*/[^/.]*\)\(\.git\)\{0,1\}/*$#\1#p')"
+  [ -n "$owner_repo" ] || return 1
+  ramo="$(gh api "repos/$owner_repo/commits/$sha/pulls" --jq '.[0].head.ref // empty' 2>/dev/null)" || return 1
+  case "$ramo" in
+    fabrica/[0-9]*-*)
+      printf '%s' "${ramo#fabrica/}" | sed -n 's/^\([0-9]\{1,\}\)-.*/\1/p'
+      return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+estagio_card() {  # $1=repo $2=sha_de(ou vazio) $3=sha_para
+  local repo="$1" de="$2" para="$3" card tarefas_bin release_bin
+  card="$(resolver_card_do_sha "$repo" "$para")" || {
+    printf 'card:      ramo do PR nao e fabrica/<card>-... (ou gh/registro indisponivel) — estagio 4 pulado\n'
+    return 0
+  }
+  [ -n "$card" ] || { printf 'card:      PR sem ramo fabrica/<card>-... — estagio 4 pulado\n'; return 0; }
+  tarefas_bin="$(achar_verbo tarefas)"
+  if [ -z "$tarefas_bin" ]; then
+    printf 'card:      %s promovido (%s -> %s), mas tarefas nao encontrado — comente e mova a mao\n' "$card" "$(curto_ou "$de" '(novo)')" "${para:0:7}" >&2
+    return 0
+  fi
+  "$tarefas_bin" comentar "$card" <<<"release promover $repo: $(curto_ou "$de" '(novo)') -> ${para:0:7}, gate de verbo verde. Estagio 4 (card #3150) como cliente simples de tarefas — pendente da particao promover x rastreador com o arquiteto; comentario e movimento podem vir a mudar de dono." >/dev/null 2>&1
+  "$tarefas_bin" mover "$card" em-homologacao >/dev/null 2>&1
+  printf 'card:      %s comentado e movido para em-homologacao (estagio 4, cliente simples — pendente de particao)\n' "$card"
+  release_bin="$(achar_verbo release)"
+  [ -n "$release_bin" ] && "$release_bin" conferir card "$card" >/dev/null 2>&1
+  return 0
+}
+
 # NOTA (arq:0110 item 11c): nao ha mais reversao automatica de current na recusa de
 # stack. current e stack sao planos separados; stack que recusa vira incidente e o
 # current fica onde o gate o pos. A volta deliberada e `release reverter <repo> <sha>`.
@@ -1662,6 +1705,7 @@ cmd_promover() {
     reiniciar_porta "$repo"
     exit 5
   fi
+  estagio_card "$repo" "$atual" "$sha"
   reiniciar_porta "$repo"
   printf '%s\n' "$sha"
 }
