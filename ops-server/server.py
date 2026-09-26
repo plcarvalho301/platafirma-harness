@@ -1363,7 +1363,7 @@ TIPOS_TEXTO = {".py", ".md", ".mmd", ".d2", ".sh", ".sql", ".yaml", ".yml", ".js
 # Texto de build que se reconhece pelo nome, nao pela extensao. Entrou em 23/09/2026: sem
 # ele, stack nova com imagem propria (Dockerfile, conf do nginx) nao tinha como ser escrita
 # pela porta, e a saida era esconder o Dockerfile dentro do compose.
-NOMES_TEXTO = {"Dockerfile", ".dockerignore"}
+NOMES_TEXTO = {"Dockerfile", ".dockerignore", "VERDES"}  # VERDES: baseline do pre-push (guia portoes-do-codigo)
 # platafirma-ui entrou em 22/09/2026 (hotfix): o clone existia na bancada e o front do
 # rastreador mora nele, mas a lista nomeada o deixava fora e a tela nao tinha como ser
 # corrigida pela porta.
