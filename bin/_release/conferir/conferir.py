@@ -114,7 +114,36 @@ import sys
 import urllib.error
 import urllib.request
 
-RAIZ = os.environ.get("PF_AI_DIR", os.path.expanduser("~/AI"))
+# resultado.py mora ao lado deste arquivo; import por path, nao por sys.path do
+# processo-pai (card #3142 — este script tanto roda direto quanto carregado por
+# SourceFileLoader nos testes, e os dois precisam achar o modulo irmao).
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import resultado
+
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "..", "lib"))
+import raizes  # noqa: E402
+
+
+def _raiz_bancada():
+    """RAIZ e a bancada declarada da conta; PF_AI_DIR e override explicito e sai
+    declarado no stderr. RAIZ alimenta toda classe deste arquivo (card #3142 passo 2)
+    -- por isso a resolucao nunca pode estourar: bancada indeclarada degrada pra ~/AI
+    em vez de derrubar o processo pra quem so queria medir verbo ou servico."""
+    valor = os.environ.get("PF_AI_DIR")
+    if valor:
+        print(f"conferir: RAIZ={valor} (override PF_AI_DIR)", file=sys.stderr)
+        return valor
+    try:
+        raiz = str(raizes.bancada())
+    except raizes.BancadaNaoDeclarada:
+        raiz = os.path.expanduser("~/AI")
+        print(f"conferir: RAIZ={raiz} (bancada nao declarada, default ~/AI)", file=sys.stderr)
+        return raiz
+    print(f"conferir: RAIZ={raiz} (raizes.bancada())", file=sys.stderr)
+    return raiz
+
+
+RAIZ = _raiz_bancada()
 DEPLOY = os.environ.get("PF_DEPLOY_DIR", os.path.join(RAIZ, "deploy"))
 BIN = os.environ.get("PF_BIN_DIR", os.path.join(RAIZ, "bin"))
 HARNESS = os.environ.get("PF_HARNESS_DIR", os.path.join(RAIZ, "platafirma-harness"))
@@ -122,7 +151,14 @@ POLITICA_DIR = os.environ.get("PDP_DIR",
     os.path.join(RAIZ, "var", "politica-acesso"))  # dados fora do WT de fabrica (#2956)
 SUPERFICIES = os.path.join(POLITICA_DIR, "superficies.yaml")
 
-MAPA = os.path.join(RAIZ, "platafirma-arquitetura", "docs", "arquitetura-negocio-operacao.md")
+
+def _sha_release():
+    """sha curto do que HARNESS tem no HEAD — vai na ancora de `release conferir <classe>`
+    (card #3142). HARNESS e o checkout destacado da release (arq:0097); fora desse
+    contexto (bancada, teste) pode nao ser git ou nao ter HEAD, e a ancora degrada pra
+    'desconhecido' em vez de estourar."""
+    rc, out, _ = sh(["git", "-C", HARNESS, "rev-parse", "--short", "HEAD"])
+    return out.strip() if rc == 0 and out.strip() else "desconhecido"
 
 CLASSES_ABERTAS = {
     "canal": "regua do design system e de claudinha-produto e ainda nao existe",
@@ -135,7 +171,7 @@ def uso(erro=None):
         print(f"erro: {erro}\n", file=sys.stderr)
     print(__doc__.strip(), file=sys.stderr)
     print("\nuso: conferir <classe> [alvo]", file=sys.stderr)
-    print("     classes implementadas : servico . verbo . repo . skill . procedencia . superficie . commit . arranque . ferramental . front . existe . alcance . pdp . vocabulario", file=sys.stderr)
+    print("     classes implementadas : servico . verbo . repo . skill . procedencia . superficie . commit . arranque . ferramental . front . existe . alcance . pdp . vocabulario . card", file=sys.stderr)
     for c, motivo in CLASSES_ABERTAS.items():
         print(f"     classe declarada, sem implementacao : {c} — {motivo}", file=sys.stderr)
     sys.exit(2)
@@ -179,6 +215,7 @@ def containers(filtro=None):
             "working_dir": wd,
             "config_files": lab.get("com.docker.compose.project.config_files", ""),
             "env": {l.split("=", 1)[0]: l.split("=", 1)[1] for l in d["Config"]["Env"] if "=" in l},
+            "started_at": (d.get("State") or {}).get("StartedAt"),
         }
 
 
@@ -221,14 +258,14 @@ def env_declarado(c):
 
 
 def conferir_servico(alvo, como_json=False):
-    houve = False
     vistos = 0
-    servicos = []
+    itens = []
     for c in containers(alvo):
         vistos += 1
         dentro_de_deploy = os.path.realpath(c["working_dir"]).startswith(os.path.realpath(DEPLOY))
         g = git_estado(c["working_dir"])
         divergencias = []
+        nome_item = f"{c['nome']} (servico {c['servico']})"
         if not como_json:
             print(f"\n### {c['nome']}  (servico {c['servico']})")
             print(f"    sobe de : {c['working_dir']}")
@@ -238,14 +275,12 @@ def conferir_servico(alvo, como_json=False):
         # demais checagens abaixo — fora de deploy, env — seguem valendo, e a guarda em
         # sh() ja impede o FileNotFoundError que estourava aqui (#3057 item 5).
         if not os.path.isdir(c["working_dir"]):
-            houve = True
             divergencias.append(
                 f"working_dir nao existe no disco: {c['working_dir']} — "
                 "container servindo de diretorio removido")
             if not como_json:
                 print(f"    SUMIU   : working_dir nao existe no disco — container servindo de diretorio removido")
         if not dentro_de_deploy:
-            houve = True
             divergencias.append("nao e worktree de deploy — producao sobe de clone de trabalho")
             if not como_json:
                 print("    DERIVA  : nao e worktree de deploy — producao sobe de clone de trabalho")
@@ -255,7 +290,6 @@ def conferir_servico(alvo, como_json=False):
                 if g["atras"]:
                     print(f"    ATRAS   : {g['atras']} commits atras de origin/main")
             if g["modificado"]:
-                houve = True
                 divergencias.append(
                     f"{len(g['modificado'])} arquivo(s) rastreado(s) so existem aqui: "
                     + ", ".join(g["modificado"][:5])
@@ -267,30 +301,31 @@ def conferir_servico(alvo, como_json=False):
             if not como_json and g["nao_rastreado"]:
                 print(f"    lixo    : {g['nao_rastreado']} caminho(s) nao rastreado(s)")
 
+        # card #3142: nao conseguir renderizar o compose e indeterminavel, nao
+        # divergente — nao saber nao pode contar como "achei defeito".
         decl, erro = env_declarado(c)
         if decl is None:
-            houve = True
-            divergencias.append(f"nao consegui renderizar o compose — {erro}")
             if not como_json:
                 print(f"    ENV     : nao consegui renderizar o compose — {erro}")
-            servicos.append({"nome": c["nome"], "servico": c["servico"], "divergencias": divergencias})
+            motivo = "; ".join(divergencias + [f"nao consegui renderizar o compose — {erro}"])
+            itens.append((nome_item, resultado.indeterminavel(motivo, desde=c.get("started_at"))))
             continue
         servido = c["env"]
         for k in sorted(decl):
             if k not in servido:
-                houve = True
                 divergencias.append(f"{k} declarado e nao servido (declarado={decl[k]!r})")
                 if not como_json:
                     print(f"    AUSENTE : {k} declarado e nao servido (declarado={decl[k]!r})")
             elif servido[k] != decl[k]:
-                houve = True
                 divergencias.append(f"{k} declarado={decl[k]!r} servido={servido[k]!r}")
                 if not como_json:
                     print(f"    DIFERE  : {k} declarado={decl[k]!r} servido={servido[k]!r}")
-        if not any(k not in servido or servido[k] != decl[k] for k in decl):
-            if not como_json:
-                print(f"    env     : {len(decl)} variaveis, todas conferem")
-        servicos.append({"nome": c["nome"], "servico": c["servico"], "divergencias": divergencias})
+        if not divergencias and not como_json:
+            print(f"    env     : {len(decl)} variaveis, todas conferem")
+        if divergencias:
+            itens.append((nome_item, resultado.divergente("; ".join(divergencias), desde=c.get("started_at"))))
+        else:
+            itens.append((nome_item, resultado.conforme(desde=c.get("started_at"))))
     if alvo and vistos == 0:
         msg = f"nenhum container em execucao com o nome {alvo!r} — nao confundir com conferido"
         if como_json:
@@ -300,9 +335,7 @@ def conferir_servico(alvo, como_json=False):
         return 1
     if not como_json:
         print()
-    else:
-        print(json.dumps({"resultado": "divergente" if houve else "ok", "servicos": servicos}))
-    return 1 if houve else 0
+    return resultado.relatorio("servico", alvo, itens, _sha_release(), como_json=como_json)
 
 
 # --- classe: verbo ----------------------------------------------------------
@@ -359,6 +392,18 @@ def origem(nome, caminho):
     fam_bin = os.path.join(prod_raiz, "platafirma-harness")
     opt_dir = "/opt/platafirma"
     cand_release = os.path.join(fam_bin, "current", "bin", nome)
+    # arq:0097 + card #3142: o servido nao precisa ser symlink pra ser release — em
+    # producao o binario E o arquivo real sob a release (r-x), nao um link pra ela.
+    # Testar isso ANTES de cair no Candidato 2 evita o falso positivo medido em 25/09
+    # (`release conferir verbo` classificando infra/lint/teste/deploy/migrar como
+    # "copia-identica-ao-repo" so porque HARNESS, sob `release conferir`, ja aponta
+    # pra a propria release, e o arquivo la nao e link).
+    release_raiz = (os.environ.get("PLATAFIRMA_RELEASE")
+                     or os.environ.get("PF_RELEASE_RAIZ", "/opt/platafirma")).rstrip(os.sep)
+    caminho_real = os.path.realpath(caminho)
+    if (caminho_real.startswith(release_raiz + os.sep) or caminho_real.startswith(fam_bin + os.sep)
+            or caminho_real == os.path.realpath(cand_release)):
+        return "release", caminho_real
     if os.path.islink(caminho):
         destino = os.path.realpath(caminho)
         if (destino == os.path.realpath(cand_release) or destino.startswith(fam_bin + os.sep)
@@ -382,17 +427,6 @@ def origem(nome, caminho):
     return "so-no-host", "sem contraparte em repo"
 
 
-def capacidades_do_mapa():
-    """Le os nomes de capacidade da tabela do mapa da mesa. Fonte e o repo de
-    arquitetura; nao ha copia local — capacidade so existe se a mesa a lavrou."""
-    import re
-    try:
-        texto = open(MAPA, errors="replace").read()
-    except OSError:
-        return None
-    return set(re.findall(r"^\| `([a-z/-]+)` \|", texto, re.M))
-
-
 def normaliza(cap):
     """Formas equivalentes do mesmo termo. BizBOK nomeia a capacidade por extenso
     (`gestao-de-motores`); o mapa da mesa lavra a contracao (`motor`). As duas valem,
@@ -412,31 +446,52 @@ def normaliza(cap):
     return formas
 
 
-def canonica(cap, validas):
-    """Devolve o termo como o mapa o lavrou, ou None se nenhuma forma bater.
-    Folha declarada como `nivel1/folha` (arq:0110 §14: `infra/promocao-de-mudanca`)
-    vale quando o mapa lavra o nivel 1 E a folha: as tabelas de nivel 2 lavram a folha
-    pelo nome curto, e o cabecalho carrega o caminho inteiro para nao ser ambiguo entre
-    niveis. O termo canonico e o caminho declarado, nao a folha solta."""
-    if validas is None or not cap:
+def _capacidade_veredito(cap):
+    """Veredito da capacidade `cap`, via `acervo resolver capacidade <forma>` para cada
+    forma de normaliza() (card #3142, passo 4). Primeira forma que resolve (rc 0) ganha;
+    rc 1 em TODAS as formas = nao existe (divergente); rc 2 = ambigua (divergente, com a
+    lista no motivo); qualquer outro rc, ou o acervo fora do ar, e indeterminavel — nao
+    da pra afirmar que a capacidade nao existe so porque a consulta falhou."""
+    raiz_bin = os.path.join(RAIZ, "bin")
+    algum_rc1 = False
+    ultimo_rc, ultimo_saida = None, ""
+    for forma in sorted(normaliza(cap)):
+        rc, out, err = sh([os.path.join(raiz_bin, "acervo"), "resolver", "capacidade", forma])
+        if rc == 0:
+            return resultado.conforme()
+        if rc == 2:
+            return resultado.divergente(
+                f"{cap!r} e capacidade ambigua ({forma!r}): {(err or out).strip()[:200]}")
+        if rc == 1:
+            algum_rc1 = True
+            continue
+        ultimo_rc, ultimo_saida = rc, (err or out).strip()[:200]
+    if algum_rc1 and ultimo_rc is None:
+        return resultado.divergente(f"capacidade {cap!r} nao esta no acervo")
+    return resultado.indeterminavel(
+        f"acervo resolver capacidade saiu {ultimo_rc} para {cap!r}: {ultimo_saida}")
+
+
+def _desde_familia(familia):
+    """`no_ar_desde` de `release estado <familia> --json` — fonte de "desde" quando a
+    classe (verbo, hoje) nao tem data melhor por item (card #3142, passo 4)."""
+    raiz_bin = os.path.join(RAIZ, "bin")
+    rc, out, _ = sh([os.path.join(raiz_bin, "release"), "estado", familia, "--json"])
+    if rc != 0 or not out.strip():
         return None
-    minhas = normaliza(cap)
-    for v in validas:
-        if normaliza(v) & minhas:
-            return v
-    if "/" in cap:
-        nivel1, folha = cap.strip().lower().split("/", 1)
-        if canonica(nivel1, validas) and canonica(folha, validas):
-            return cap.strip().lower()
-    return None
+    try:
+        dado = json.loads(out)
+    except ValueError:
+        return None
+    return dado.get("no_ar_desde")
 
 
 def conferir_verbo(alvo, como_json=False):
-    houve = False
-    validas = capacidades_do_mapa()
+    desde_familia = _desde_familia("platafirma-harness")
+    cap_cache = {}
     porcapacidade = {}
     vistos = 0
-    verbos_json = []
+    itens = []
     for nome in sorted(os.listdir(BIN)):
         if nome.startswith("_"):
             continue
@@ -471,39 +526,34 @@ def conferir_verbo(alvo, como_json=False):
             if not como_json:
                 print(f"\n### {nome}")
                 print(f"    alias   : de {os.path.basename(destino_alias)} — nao conta na capacidade")
-            else:
-                verbos_json.append({
-                    "nome": nome, "origem": "alias", "capacidade": None,
-                    "conforme": True,
-                    "motivos": [f"alias de {os.path.basename(destino_alias)} — nao conta na capacidade"],
-                })
+            itens.append((nome, resultado.Veredito(
+                "conforme", desde=desde_familia,
+                motivo=f"alias de {os.path.basename(destino_alias)} — nao conta na capacidade")))
             continue
         vistos += 1
         cab = cabecalho(caminho)
         faltando = [k for k in ("proposito", "capacidade", "dono") if not cab[k]]
-        motivos = []
-        conforme = True
+        problemas = []
+        tem_divergencia = False
+        tem_indeterminavel = False
         if not como_json:
             print(f"\n### {nome}")
             print(f"    origem  : {classe} — {onde}")
         if classe in ("so-no-host", "divergente", "divergente-do-repo"):
-            houve = True
-            conforme = False
+            tem_divergencia = True
             msg_origem = "divergente do repo" if classe == "divergente-do-repo" else "sem origem unica — copia nao e forma valida de instalacao"
-            motivos.append(msg_origem)
+            problemas.append(msg_origem)
             if not como_json:
                 print(f"    ORIGEM  : {msg_origem}")
         elif classe in ("copia", "copia-identica-ao-repo"):
             # copia identica ainda e copia: instalacao e por release (arq:0110 §2)
-            houve = True
-            conforme = False
-            motivos.append("copia identica por sorte, nao por mecanismo — trocar por symlink")
+            tem_divergencia = True
+            problemas.append("copia identica por sorte, nao por mecanismo — trocar por symlink")
             if not como_json:
                 print("    ORIGEM  : copia identica por sorte, nao por mecanismo — trocar por symlink")
         if faltando:
-            houve = True
-            conforme = False
-            motivos.append(f"cabecalho incompleto: faltam {', '.join(faltando)}")
+            tem_divergencia = True
+            problemas.append(f"cabecalho incompleto: faltam {', '.join(faltando)}")
             if not como_json:
                 print(f"    CABECAL : faltam {', '.join(faltando)}")
         else:
@@ -511,28 +561,31 @@ def conferir_verbo(alvo, como_json=False):
                 comp = f" componente={cab['componente']}" if cab["componente"] else ""
                 print(f"    cabecal : capacidade={cab['capacidade']} dono={cab['dono']}{comp}")
         cap = cab["capacidade"]
-        canon = None
         if cap and cap != "orfa":
-            if validas is None:
+            if cap not in cap_cache:
+                cap_cache[cap] = _capacidade_veredito(cap)
+            cap_v = cap_cache[cap]
+            if cap_v.estado == "divergente":
+                tem_divergencia = True
+                problemas.append(f"capacidade {cap!r}: {cap_v.motivo}")
                 if not como_json:
-                    print("    aviso   : mapa de capacidades ilegivel — nao validei o nome")
+                    print(f"    CAPACID : {cap_v.motivo}")
+            elif cap_v.estado == "indeterminavel":
+                tem_indeterminavel = True
+                problemas.append(f"capacidade {cap!r}: {cap_v.motivo}")
+                if not como_json:
+                    print(f"    capacid?: {cap_v.motivo}")
             else:
-                canon = canonica(cap, validas)
-                if canon is None:
-                    houve = True
-                    conforme = False
-                    motivos.append(f"capacidade {cap!r} nao esta no mapa da mesa")
-                    if not como_json:
-                        print(f"    CAPACID : {cap!r} nao esta no mapa da mesa — capacidade nao se inventa no cabecalho")
-                elif canon != cap:
-                    if not como_json:
-                        print(f"    termo   : {cap!r} = {canon!r} no mapa (forma extensa e contracao valem)")
-        porcapacidade.setdefault(canon or cab["capacidade"] or "(nao declarada)", []).append(nome)
-        if como_json:
-            verbos_json.append({
-                "nome": nome, "origem": classe, "capacidade": canon or cab["capacidade"],
-                "conforme": conforme, "motivos": motivos,
-            })
+                if not como_json:
+                    print(f"    capacid : {cap!r} resolvida no acervo")
+        porcapacidade.setdefault(cap or "(nao declarada)", []).append(nome)
+        motivo = "; ".join(problemas) if problemas else None
+        if tem_divergencia:
+            itens.append((nome, resultado.divergente(motivo, desde=desde_familia)))
+        elif tem_indeterminavel:
+            itens.append((nome, resultado.indeterminavel(motivo, desde=desde_familia)))
+        else:
+            itens.append((nome, resultado.conforme(desde=desde_familia)))
 
     if alvo and vistos == 0:
         msg = f"{alvo!r} nao e verbo da plataforma em {BIN} — ou nao existe, ou e ferramenta de terceiro"
@@ -542,27 +595,31 @@ def conferir_verbo(alvo, como_json=False):
             print(f"\n{msg}")
         return 1
 
-    arq0037 = []
     if not alvo:
         if not como_json:
             print("\n## arq:0037 — um verbo por capacidade")
         for cap, verbos in sorted(porcapacidade.items()):
-            # `orfa` e capacidade declarada como ausente: conta como nao conforme, sempre.
-            fora_do_mapa = (validas is not None and cap not in ("(nao declarada)", "orfa")
-                            and canonica(cap, validas) is None)
-            conforme = len(verbos) == 1 and cap not in ("(nao declarada)", "orfa") and not fora_do_mapa
-            marca = "ok " if conforme else "NAO"
-            if marca == "NAO":
-                houve = True
+            nome_item = f"arq:0037 {cap}"
+            if cap in ("(nao declarada)", "orfa"):
+                v = resultado.divergente(f"{len(verbos)} verbo(s): {' '.join(verbos)}")
+            else:
+                cap_v = cap_cache.get(cap) or _capacidade_veredito(cap)
+                cap_cache[cap] = cap_v
+                if cap_v.estado == "divergente":
+                    v = resultado.divergente(f"capacidade nao resolvida no acervo: {cap_v.motivo}")
+                elif cap_v.estado == "indeterminavel":
+                    v = resultado.indeterminavel(cap_v.motivo)
+                elif len(verbos) != 1:
+                    v = resultado.divergente(f"{len(verbos)} verbos para a mesma capacidade: {' '.join(verbos)}")
+                else:
+                    v = resultado.conforme()
+            marca = {"conforme": "ok ", "divergente": "NAO", "indeterminavel": "?? "}[v.estado]
             if not como_json:
                 print(f"    {marca}  {cap:<16} {len(verbos)}  {' '.join(verbos)}")
-            else:
-                arq0037.append({"capacidade": cap, "conforme": conforme, "verbos": verbos})
+            itens.append((nome_item, v))
     if not como_json:
         print()
-    else:
-        print(json.dumps({"resultado": "divergente" if houve else "ok", "verbos": verbos_json, "arq0037": arq0037}))
-    return 1 if houve else 0
+    return resultado.relatorio("verbo", alvo, itens, _sha_release(), como_json=como_json)
 
 
 # --- classe: repo -----------------------------------------------------------
@@ -674,13 +731,21 @@ def gerado_por_ferramenta(caminho):
 
 
 def conferir_repo(alvo, staged=False, como_json=False):
-    houve = False
     vistos = 0
-    repos_json = []
+    itens = []
     for nome, raiz in alvos_de_repo(alvo, staged):
         vistos += 1
         divergiu = False
-        _, out, _ = sh(["git", "ls-files", "-z"], cwd=raiz)
+        rc_ls, out, err_ls = sh(["git", "ls-files", "-z"], cwd=raiz)
+        if rc_ls != 0:
+            # nao consegui listar o rastreado deste repo — "nao olhei" nunca e "nada
+            # achado" (card #3142: falha de leitura nao vira conforme por omissao).
+            motivo_ls = f"git ls-files falhou (rc={rc_ls}): {err_ls or '(sem saida)'}"
+            if not como_json:
+                print(f"\n### {nome}")
+                print(f"    ERRO    : {motivo_ls}")
+            itens.append((nome, resultado.indeterminavel(motivo_ls)))
+            continue
         arquivos = [p for p in out.split("\0") if p]
         if staged:
             # Julga so o que este commit acrescenta ou muda. Divergencia preexistente
@@ -749,19 +814,28 @@ def conferir_repo(alvo, staged=False, como_json=False):
                 print(f"    commit  : {len(sob_juizo)} arquivo(s) sob juizo")
             else:
                 print(f"    peso    : {peso / 1048576:.1f} MB rastreados em {len(arquivos)} arquivos")
+        achados_motivo = []
         for rotulo in ("GERADO", "ACERVO", "GRANEL", "GORDO", "RENDER"):
-            itens = achados[rotulo]
-            if not itens:
+            lista = achados[rotulo]
+            if not lista:
                 continue
-            houve = divergiu = True
+            divergiu = True
+            nomes = ", ".join(rel for rel, _ in sorted(lista, key=lambda x: -x[1])[:5])
+            if len(lista) > 5:
+                nomes += f", +{len(lista) - 5} outro(s)"
+            achados_motivo.append(f"{rotulo}: {len(lista)} arquivo(s) — {nomes}")
             if not como_json:
-                for rel, tam in sorted(itens, key=lambda x: -x[1])[:8]:
+                for rel, tam in sorted(lista, key=lambda x: -x[1])[:8]:
                     print(f"    {rotulo:<8}: {tam / 1048576:>7.2f} MB  {rel}")
-                if len(itens) > 8:
-                    soma = sum(t for _, t in itens[8:]) / 1048576
-                    print(f"    {rotulo:<8}: + {len(itens) - 8} outros, {soma:.1f} MB")
+                if len(lista) > 8:
+                    soma = sum(t for _, t in lista[8:]) / 1048576
+                    print(f"    {rotulo:<8}: + {len(lista) - 8} outros, {soma:.1f} MB")
         if sem_cabecalho:
-            houve = divergiu = True
+            divergiu = True
+            nomes_cab = ", ".join(f"{r} ({m})" for r, m in sorted(sem_cabecalho)[:3])
+            if len(sem_cabecalho) > 3:
+                nomes_cab += f", +{len(sem_cabecalho) - 3} outro(s)"
+            achados_motivo.append(f"cabecalho de operacao ausente/incompleto: {nomes_cab}")
             if not como_json:
                 for rel, motivo in sorted(sem_cabecalho):
                     print(f"    CABECALHO: {rel} — {motivo}")
@@ -776,28 +850,27 @@ def conferir_repo(alvo, staged=False, como_json=False):
                 print("    Passar por cima: git commit --no-verify (fica so no teu terminal).")
         else:
             if readme is None:
-                houve = divergiu = True
+                divergiu = True
                 readme_ok = False
+                achados_motivo.append("README ausente")
                 if not como_json:
                     print("    README  : ausente — e nele que o conjunto dos diretorios de topo se declara")
             else:
                 mudos = sorted(t for t in topos if t not in readme)
                 if mudos:
-                    houve = divergiu = True
+                    divergiu = True
                     readme_ok = False
+                    achados_motivo.append(f"README desatualizado — nao declara: {' '.join(mudos)}")
                     if not como_json:
                         print(f"    TOPO    : nao declarado no README: {' '.join(mudos)}")
                 else:
                     readme_ok = True
             if not como_json and not divergiu:
                 print("    regua   : conforme a arq:0042")
-        if como_json:
-            repos_json.append({
-                "nome": nome,
-                "achados": {k: [{"caminho": r, "bytes": t} for r, t in v] for k, v in achados.items()},
-                "sem_cabecalho": [{"caminho": r, "motivo": m} for r, m in sem_cabecalho],
-                "readme_ok": readme_ok,
-            })
+        if divergiu:
+            itens.append((nome, resultado.divergente("; ".join(achados_motivo))))
+        else:
+            itens.append((nome, resultado.conforme()))
 
     if alvo and vistos == 0:
         msg = f"{alvo!r} nao e clone de trabalho em {RAIZ}"
@@ -808,9 +881,7 @@ def conferir_repo(alvo, staged=False, como_json=False):
         return 1
     if not como_json:
         print()
-    else:
-        print(json.dumps({"resultado": "divergente" if houve else "ok", "repos": repos_json}))
-    return 1 if houve else 0
+    return resultado.relatorio("repo", alvo, itens, _sha_release(), como_json=como_json)
 
 
 # --- classe: commit ---------------------------------------------------------
@@ -822,7 +893,7 @@ def conferir_repo(alvo, staged=False, como_json=False):
 # diferentes divergem em silencio no primeiro ajuste que so um dos dois receber, e a
 # convencao de citacao e do produto, nao do harness.
 #
-# TRES LIMITES DECLARADOS, e cada um custou uma medicao:
+# QUATRO LIMITES DECLARADOS, e cada um custou uma medicao:
 #
 #   1. OPT-IN POR REPO, por `.conferir-commit` na raiz — mesmo padrao do `.conferir-repo`.
 #      `core.hooksPath` aponta um DIRETORIO: um arquivo novo em `hooks/` liga o gate no
@@ -842,6 +913,18 @@ def conferir_repo(alvo, staged=False, como_json=False):
 #      e id de item fechado — e nao ha terceiro. Medido: 332 dos 400 commits do harness
 #      desde 01/08 nao citam id nenhum. Gate que reprova o que ja estava la vira
 #      `--no-verify` por habito, e ai nao gateia mais nada.
+#
+#   4. NAO PASSA POR resultado.relatorio()/itens (card #3142). A regra geral do card —
+#      "nao consegui olhar" nunca sai conforme — vale aqui tambem, mas o EXIT desta
+#      classe e contrato do hook commit-msg AO VIVO (git decide bloquear o commit pelo
+#      exit, nao por relatorio humano de `release conferir`). Trocar o exit do
+#      fail-open de 0 para 5 reabriria o limite 2 como fail-closed e travaria commit
+#      normal toda vez que o rastreador cair — por isso o exit continua 0/1/2 de
+#      sempre. O que muda: cada desfecho real (ok, recusa, sem-gate) tambem monta um
+#      resultado.Veredito e o expoe em `veredito` no --json, para o vocabulario de 3
+#      estados ficar consistente com as demais classes sem tocar o contrato do hook.
+#      Excecao documentada no molde de CLASSES_ABERTAS, so que por exit-code em vez
+#      de por implementacao ausente.
 #
 # Limite que vale repetir, porque nenhuma metrica construida sobre este gate pode ignora-lo:
 # hook e local, `git commit --no-verify` passa por cima e nao ha gate no push do forge.
@@ -949,15 +1032,25 @@ def conferir_commit(alvo, como_json=False):
 
     veredito, erro = pergunta_ao_rastreador(decl["base"], mensagem, decl["timeout"])
     if veredito is None:
-        # FAIL-OPEN, com aviso. Ver o limite 2 no cabecalho desta classe.
+        # FAIL-OPEN, com aviso. Ver o limite 2 (e o limite 4) no cabecalho desta classe:
+        # o Veredito interno vira indeterminavel — nao consegui olhar nunca e conforme
+        # (card #3142) — mas o exit SEGUE 0 de proposito, nao o 5 de resultado.relatorio().
+        v = resultado.indeterminavel(erro)
         if como_json:
-            print(json.dumps({"resultado": "sem-gate", "motivo": erro}))
+            print(json.dumps({"resultado": "sem-gate", "motivo": erro, "veredito": v.dict()}))
         else:
             print(f"conferir commit: {erro} — commit segue sem gate de id.", file=sys.stderr)
         return 0
 
     recusas = veredito.get("recusas") or []
     avisos = veredito.get("avisos") or []
+    # Veredito interno so para o vocabulario de 3 estados no --json (limite 4 no
+    # cabecalho); o exit continua vindo de `recusas`, nao de resultado.relatorio().
+    if recusas:
+        motivo_v = "; ".join(r.get("texto") or f"item {r.get('id')}" for r in recusas)
+        v = resultado.divergente(motivo_v)
+    else:
+        v = resultado.conforme()
     if como_json:
         print(json.dumps({
             "resultado": "divergente" if recusas else "ok",
@@ -966,6 +1059,7 @@ def conferir_commit(alvo, como_json=False):
             "ids": veredito.get("ids") or [],
             "recusas": recusas,
             "avisos": avisos,
+            "veredito": v.dict(),
         }, ensure_ascii=False))
     else:
         for a in avisos:
@@ -1152,19 +1246,29 @@ def conferir_arranque(alvo=None, staged=False, como_json=False):
                 print(json.dumps({"erro": msg}, ensure_ascii=False) if como_json else msg)
                 return 2
 
-    linhas, copias = [], []
+    linhas, copias, itens = [], [], []
     for c in alvos:
+        rel = os.path.relpath(c, os.path.expanduser("~/AI"))
         try:
             with open(c, encoding="utf-8", errors="replace") as f:
                 texto = f.read()
-        except OSError:
+        except OSError as e:
+            # card #3142: nao conseguir ler o CLAUDE.md e indeterminavel, nunca
+            # ausencia silenciosa — sumir da lista mascararia a falha de olhar.
+            if not como_json:
+                print(f"  NAO CONSEGUI LER: {rel} — {e}")
+            itens.append((rel, resultado.indeterminavel(f"nao consegui ler o arquivo: {e}")))
             continue
         veredito, n = _julga_arranque(texto)
-        rel = os.path.relpath(c, os.path.expanduser("~/AI"))
         item = {"arquivo": rel, "veredito": veredito, "sinais": n}
         if veredito == "copia":
             item["rastreado_em"] = _rastreado_em(c)
             copias.append(item)
+            itens.append((rel, resultado.divergente(
+                f"bloco proprio, sem apontar ({n} sinais)"
+                + (f" — rastreado em {item['rastreado_em']}" if item["rastreado_em"] else " — nao rastreado"))))
+        else:
+            itens.append((rel, resultado.conforme()))
         linhas.append(item)
 
     # OBSERVACAO de deriva (nao veredito): a instancia efemera das fitas. So no passe amplo
@@ -1184,41 +1288,29 @@ def conferir_arranque(alvo=None, staged=False, como_json=False):
             if v2 != "aponta":
                 deriva.append({"arquivo": rel2, "veredito": v2, "sinais": n2})
 
-    ok = not copias
-    if como_json:
-        print(json.dumps({
-            "veredito": "em dia" if ok else "divergente",
-            "ponteiro": PONTEIRO_ARRANQUE,
-            "medidos": len(linhas),
-            "copias": copias,
-            "arquivos": linhas,
-            "produtor_fita": PRODUTOR_FITA,
-            "deriva_efemera": deriva,
-        }, ensure_ascii=False, indent=2))
-        return 0 if ok else 1
-
-    print(f"arranque em cwd (ponteiro: {PONTEIRO_ARRANQUE})")
-    print(f"  medidos                          : {len(linhas)}")
-    for e in ("aponta", "sem-arranque"):
-        print(f"  {e:<33}: {sum(1 for x in linhas if x['veredito'] == e)}")
-    print(f"  COPIA (bloco proprio, sem apontar): {len(copias)}")
-    for x in copias:
-        onde = f"rastreado em {x['rastreado_em']}" if x["rastreado_em"] else "nao rastreado"
-        print(f"      {x['arquivo']} — {onde}")
-    if copias:
-        print("  conserto: trocar o bloco pelo ponteiro. Onde e rastreado, o conserto e")
-        print("            commit no branch — escrever no cwd o proximo checkout desfaz.")
-    print(f"  veredito                         : {'em dia' if ok else 'divergente'}")
-    if not staged and not alvo:
-        print("  --- observacao (nao entra no veredito) ---")
-        print(f"  produtor das fitas               : {PRODUTOR_FITA}")
-        if deriva:
-            print(f"  fitas DERIVADAS do produtor      : {len(deriva)}")
-            for x in deriva:
-                print(f"      {x['arquivo']} — {x['veredito']} ({x['sinais']} sinais)")
-        else:
-            print("  fitas derivadas do produtor      : 0 (todas apontam)")
-    return 0 if ok else 1
+    if not como_json:
+        print(f"arranque em cwd (ponteiro: {PONTEIRO_ARRANQUE})")
+        print(f"  medidos                          : {len(linhas)}")
+        for e in ("aponta", "sem-arranque"):
+            print(f"  {e:<33}: {sum(1 for x in linhas if x['veredito'] == e)}")
+        print(f"  COPIA (bloco proprio, sem apontar): {len(copias)}")
+        for x in copias:
+            onde = f"rastreado em {x['rastreado_em']}" if x["rastreado_em"] else "nao rastreado"
+            print(f"      {x['arquivo']} — {onde}")
+        if copias:
+            print("  conserto: trocar o bloco pelo ponteiro. Onde e rastreado, o conserto e")
+            print("            commit no branch — escrever no cwd o proximo checkout desfaz.")
+        if not staged and not alvo:
+            print("  --- observacao (nao entra no veredito) ---")
+            print(f"  produtor das fitas               : {PRODUTOR_FITA}")
+            if deriva:
+                print(f"  fitas DERIVADAS do produtor      : {len(deriva)}")
+                for x in deriva:
+                    print(f"      {x['arquivo']} — {x['veredito']} ({x['sinais']} sinais)")
+            else:
+                print("  fitas derivadas do produtor      : 0 (todas apontam)")
+        print()
+    return resultado.relatorio("arranque", alvo, itens, _sha_release(), como_json=como_json)
 
 
 def _canonico_da_cadeira(cadeira):
@@ -1375,9 +1467,13 @@ def conferir_superficie(alvo=None, staged=False, como_json=False):
         with open(registro, encoding="utf-8") as f:
             reg = json.load(f)
     except (OSError, ValueError) as e:
+        # card #3142: registro ilegivel e "nao consegui olhar", nao divergencia —
+        # antes saia exit 1 (mesmo peso de achado real); agora e indeterminavel.
         msg = f"registro de superficies ilegivel ({registro}): {e}"
-        print(json.dumps({"erro": msg}) if como_json else msg)
-        return 1
+        if not como_json:
+            print(msg)
+        itens = [("registro de superficies", resultado.indeterminavel(msg))]
+        return resultado.relatorio("superficie", alvo, itens, _sha_release(), como_json=como_json)
 
     conectores = reg.get("conectores", {})
     servidas = {t for c in conectores.values() for t in c.get("serve", [])}
@@ -1480,9 +1576,14 @@ def conferir_superficie(alvo=None, staged=False, como_json=False):
     # Superficie que o host nao ve sai NOMEADA, do registro — nao hardcoded. Foi
     # registro com tres de quatro que deixou `code-seco` fora da conta enquanto o
     # veredito dizia "em dia": nao medido nao e em dia, e o que nao consta some.
-    nao_medido = [f"{n} — {d.get('porque', 'sem motivo declarado')}"
-                  for n, d in sorted(reg.get("superficies", {}).items())
-                  if not d.get("verificavel_do_host")]
+    #
+    # card #3142: "nao medido" vira item indeterminavel — nunca conforme, nunca
+    # omitido do veredito completo (antes so aparecia em texto/JSON informativo
+    # e nunca pesava no exit, nem mesmo avulso).
+    nao_medido_itens = [(n, d.get("porque", "sem motivo declarado"))
+                         for n, d in sorted(reg.get("superficies", {}).items())
+                         if not d.get("verificavel_do_host")]
+    nao_medido = [f"{n} — {motivo}" for n, motivo in nao_medido_itens]
 
     # GATE DE COMMIT vs SAUDE DE HOST (card #2823). So `quebradas` e incremental:
     # linhas ADICIONADAS pelo commit em curso. `nao_servidos/sem_meio/sem_produtor/
@@ -1491,30 +1592,49 @@ def conferir_superficie(alvo=None, staged=False, como_json=False):
     # saude de host segue computada e exibida, como OBSERVACAO, mas nao trava. Sem
     # --staged (rodado avulso), tudo trava como antes. Cumpre a promessa do hook
     # ("passivo herdado nao trava a casa") sem cegar `conferir superficie` avulso.
-    saude_host = bool(nao_servidos or sem_meio or sem_produtor or endpoints_falhos)
-    if staged:
-        ok = not quebradas
+    #
+    # card #3142: a trava agora vem do veredito agregado de `itens`
+    # (resultado.agrega). nao_servidos/endpoints_falhos/sem_produtor/sem_meio e
+    # nao_medido_itens sao TAMBEM passivo de host que o commit em curso nao
+    # criou (claude.ai, p.ex., e permanentemente "nao medido") — por isso, como
+    # o passivo ja fazia, SO entram em `itens` quando staged=False. Sob --staged
+    # seguem impressos como observacao (obs.), exatamente como antes; so deixam
+    # de pesar no exit. Isto e deliberado, nao descuido: hooks/pre-commit chama
+    # `"$CONFERIR" superficie --staged || exit 1` sem distinguir exit 1 (achado
+    # real) de exit 5 (nao consegui medir) — se nao_medido entrasse em `itens`
+    # incondicionalmente, todo commit travaria pra sempre, porque claude.ai
+    # nunca vira "medido do host". `quebradas`, que E o alvo incremental do
+    # commit, continua fora deste condicional e sempre entra em `itens`.
+    itens = []
+    if not staged:
+        if nao_servidos or endpoints_falhos or sem_produtor or sem_meio:
+            for s_, c in nao_servidos:
+                motivo = (c if c.startswith("produtor ilegivel")
+                          else f"conector prometido nao servido: {c}")
+                itens.append((s_, resultado.divergente(motivo)))
+            for s_, c, m in endpoints_falhos:
+                itens.append((f"{s_}.{c}", resultado.divergente(f"endpoint nao conectou: {m}")))
+            for n_ in sem_produtor:
+                itens.append((n_, resultado.divergente(
+                    "superficie verificavel do host e ninguem declara quem escreve o .mcp.json")))
+            for c in sem_meio:
+                itens.append((c, resultado.divergente(
+                    "capacidade nas_tres sem meio (tool) servido por conector nenhum")))
+        else:
+            itens.append(("conectores dos produtores declarados", resultado.conforme()))
+        for n_, motivo in nao_medido_itens:
+            itens.append((n_, resultado.indeterminavel(motivo)))
+    if quebradas:
+        for a, n, t in quebradas:
+            itens.append((f"{a}:{n}", resultado.divergente(f"tool fora de todo conector: {t}")))
     else:
-        ok = not (quebradas or saude_host)
+        itens.append(("tool citada fora de todo conector", resultado.conforme()))
+
     if como_json:
-        print(json.dumps({
-            "veredito": "em dia" if ok else "divergente",
-            "modo_gate": "incremental (--staged): saude de host nao trava" if staged
-                         else "completo: saude de host trava",
-            "saude_host_ok": not saude_host,
-            "conector_prometido_nao_servido": [
-                {"superficie": s_, "conector": c} for s_, c in nao_servidos],
-            "endpoint_nao_conectou": [
-                {"superficie": s_, "conector": c, "motivo": m} for s_, c, m in endpoints_falhos],
-            "capacidade_sem_meio": sem_meio,
-            "superficie_sem_produtor_declarado": sem_produtor,
-            "deriva_em_instancia_viva": [
-                {"arquivo": a, "falta": f, "sobra": so} for a, f, so in deriva],
-            "tool_fora_de_todo_conector": [
-                {"arquivo": a, "linha": n, "tool": t} for a, n, t in quebradas],
-            "nao_medido": nao_medido,
-        }, ensure_ascii=False, indent=2))
-        return 0 if ok else 1
+        # o detalhe rico (modo_gate, deriva_em_instancia_viva) some do --json: o
+        # contrato agora e o mesmo de toda classe `conferir` (ancora + itens); o
+        # motivo de cada item carrega o que antes ia em chave propria.
+        return resultado.relatorio("superficie", alvo, itens, _sha_release(), como_json=True)
 
     sups = " . ".join(sorted(reg.get("superficies", {})))
     obs = " (obs.)" if staged else ""
@@ -1545,8 +1665,8 @@ def conferir_superficie(alvo=None, staged=False, como_json=False):
     print(f"  NAO MEDIDO do host               : {len(nao_medido)}")
     for x in nao_medido:
         print(f"      {x.split(' — ')[0]} — {x.split(' — ', 1)[1][:96]}")
-    print(f"  veredito                         : {'em dia' if ok else 'divergente'}")
-    return 0 if ok else 1
+    print()
+    return resultado.relatorio("superficie", alvo, itens, _sha_release(), como_json=False)
 
 
 def _mcp_jsons_da_superficie(nome):
@@ -1729,21 +1849,13 @@ def conferir_superficie_descricao(alvo=None, como_json=False, caminho_catalogo=N
     """Caso 1 de conferir superficie: descrição de roteamento servida em runtime × tabela de fontes do índice."""
     slugs_indice, motivo_tabela = _fontes_da_tabela_catalogo(caminho_catalogo)
     if motivo_tabela:
-        if como_json:
-            print(json.dumps({
-                "caso": "descricao",
-                "veredito": "nao-medido",
-                "motivo": motivo_tabela,
-                "slugs_indice": [],
-                "slugs_servidos": [],
-                "so_no_indice": [],
-                "so_no_servido": [],
-            }, ensure_ascii=False, indent=2))
-        else:
+        # card #3142: nao ler a tabela do catalogo e "nao consegui olhar" — nunca
+        # sucesso silencioso; antes saia exit 0 tanto em texto quanto --json.
+        if not como_json:
             print("superficie (caso descricao):")
             print(f"  NAO MEDIDO: {motivo_tabela}")
-            print("  veredito  : nao-medido")
-        return 0
+        itens = [("tabela de fontes do catalogo", resultado.indeterminavel(motivo_tabela))]
+        return resultado.relatorio("superficie", alvo, itens, _sha_release(), como_json=como_json)
 
     if descricao_fornecida is not None:
         desc_servida, err_servido = descricao_fornecida, None
@@ -1751,51 +1863,44 @@ def conferir_superficie_descricao(alvo=None, como_json=False, caminho_catalogo=N
         desc_servida, err_servido = _obtem_descricao_servida_mcp(url=mcp_url)
 
     if err_servido:
-        if como_json:
-            print(json.dumps({
-                "caso": "descricao",
-                "veredito": "nao-medido",
-                "motivo": err_servido,
-                "slugs_indice": sorted(slugs_indice),
-                "slugs_servidos": [],
-                "so_no_indice": [],
-                "so_no_servido": [],
-            }, ensure_ascii=False, indent=2))
-        else:
+        # idem: MCP fora do ar e "nao consegui olhar", nunca "em dia" (exit 0).
+        if not como_json:
             print("superficie (caso descricao):")
             print(f"  NAO MEDIDO: {err_servido}")
-            print("  veredito  : nao-medido")
-        return 0
+        itens = [("descricao servida pelo MCP", resultado.indeterminavel(err_servido))]
+        return resultado.relatorio("superficie", alvo, itens, _sha_release(), como_json=como_json)
 
     slugs_servidos = _extrai_slugs_de_descricao(desc_servida)
     so_no_indice = sorted(slugs_indice - slugs_servidos)
     so_no_servido = sorted(slugs_servidos - slugs_indice)
     ok = (slugs_indice == slugs_servidos) and bool(slugs_indice)
 
-    if como_json:
-        print(json.dumps({
-            "caso": "descricao",
-            "veredito": "em dia" if ok else "divergente",
-            "slugs_indice": sorted(slugs_indice),
-            "slugs_servidos": sorted(slugs_servidos),
-            "so_no_indice": so_no_indice,
-            "so_no_servido": so_no_servido,
-        }, ensure_ascii=False, indent=2))
-        return 0 if ok else 1
+    if not como_json:
+        print("superficie (caso descricao):")
+        print(f"  fontes no índice : {len(slugs_indice)} ({', '.join(sorted(slugs_indice))})")
+        print(f"  fontes no servido: {len(slugs_servidos)} ({', '.join(sorted(slugs_servidos))})")
+        if so_no_indice:
+            print(f"  SÓ NO ÍNDICE     : {len(so_no_indice)} ({', '.join(so_no_indice)})")
+        else:
+            print("  só no índice     : 0")
+        if so_no_servido:
+            print(f"  SÓ NO SERVIDO    : {len(so_no_servido)} ({', '.join(so_no_servido)})")
+        else:
+            print("  só no servido    : 0")
 
-    print("superficie (caso descricao):")
-    print(f"  fontes no índice : {len(slugs_indice)} ({', '.join(sorted(slugs_indice))})")
-    print(f"  fontes no servido: {len(slugs_servidos)} ({', '.join(sorted(slugs_servidos))})")
-    if so_no_indice:
-        print(f"  SÓ NO ÍNDICE     : {len(so_no_indice)} ({', '.join(so_no_indice)})")
+    if ok:
+        itens = [("descricao × indice de fontes", resultado.conforme())]
     else:
-        print("  só no índice     : 0")
-    if so_no_servido:
-        print(f"  SÓ NO SERVIDO    : {len(so_no_servido)} ({', '.join(so_no_servido)})")
-    else:
-        print("  só no servido    : 0")
-    print(f"  veredito         : {'em dia' if ok else 'divergente'}")
-    return 0 if ok else 1
+        partes = []
+        if so_no_indice:
+            partes.append(f"só no índice: {', '.join(so_no_indice)}")
+        if so_no_servido:
+            partes.append(f"só no servido: {', '.join(so_no_servido)}")
+        if not slugs_indice:
+            partes.append("índice de fontes vazio")
+        itens = [("descricao × indice de fontes",
+                  resultado.divergente("; ".join(partes) or "descricao servida diverge do indice"))]
+    return resultado.relatorio("superficie", alvo, itens, _sha_release(), como_json=como_json)
 
 
 def conferir_skill(nome, servido=None, como_json=False):
@@ -1828,37 +1933,32 @@ def conferir_skill(nome, servido=None, como_json=False):
         print(f"skill: {nome}")
         print(f"  fonte   : {fonte}  ({caminho} em HEAD do harness)")
     if not servido:
-        if como_json:
-            print(json.dumps({
-                "skill": nome, "fonte_blob": fonte, "servido_blob": None,
-                "veredito": "indeterminado",
-                "detalhe": ("servido nao informado — ler o campo `origem:` do front-matter em "
-                            "/mnt/skills/user/<nome>/SKILL.md e repassar em --servido"),
-            }))
-        else:
+        detalhe = ("servido nao informado — ler o campo `origem:` do front-matter em "
+                    "/mnt/skills/user/<nome>/SKILL.md e repassar em --servido")
+        if not como_json:
             print("  servido : NAO INFORMADO — ler o campo `origem:` do front-matter em")
             print("            /mnt/skills/user/<nome>/SKILL.md e repassar em --servido.")
-            print("  veredito: indeterminado (nao confundir com em dia)")
-        return 2
+        itens = [(nome, resultado.indeterminavel(detalhe))]
+        return resultado.relatorio("skill", nome, itens, _sha_release(), como_json=como_json)
 
     servido = servido.strip()
     curto = servido[:12]
-    if fonte.startswith(servido) or servido.startswith(fonte[:12]):
-        if como_json:
-            print(json.dumps({
-                "skill": nome, "fonte_blob": fonte, "servido_blob": curto,
-                "veredito": "em_dia", "detalhe": None,
-            }))
-        else:
-            print(f"  servido : {curto}")
-            print("  veredito: em dia")
-        return 0
-
     if not como_json:
         print(f"  servido : {curto}")
+    if fonte.startswith(servido) or servido.startswith(fonte[:12]):
+        itens = [(nome, resultado.conforme())]
+        return resultado.relatorio("skill", nome, itens, _sha_release(), como_json=como_json)
+
     # O carimbo grava o hash do BLOB, nao o do commit: `git log a..b` nao se aplica.
     # O atraso se mede achando o commit mais recente em que o blob ainda era o servido.
     rc, hist, _ = sh(["git", "-C", HARNESS, "log", "--format=%H %h %ci %s", "--", caminho])
+    if rc != 0:
+        # card #3142: nao conseguir listar o historico e indeterminavel, nao divergente —
+        # sem historico nao da pra afirmar que o blob servido "nao existe" nele.
+        detalhe = f"nao consegui listar o historico de {caminho} (git log saiu {rc})"
+        itens = [(nome, resultado.indeterminavel(detalhe))]
+        return resultado.relatorio("skill", nome, itens, _sha_release(), como_json=como_json)
+
     desde = None
     depois = []
     for linha in hist.splitlines():
@@ -1871,21 +1971,13 @@ def conferir_skill(nome, servido=None, como_json=False):
     if desde:
         detalhe = f"{len(depois)} commit(s) desde que o servido subiu; servido corresponde a: {desde}"
         if not como_json:
-            print(f"  veredito: DIVERGENTE — {len(depois)} commit(s) desde que o servido subiu")
-            print(f"            servido corresponde a: {desde}")
             for linha in depois[:6]:
                 print(f"            + {linha}")
     else:
         detalhe = "o blob servido nao existe na historia da fonte (copia editada a mao, ou historia reescrita)"
-        if not como_json:
-            print("  veredito: DIVERGENTE — o blob servido nao existe na historia da fonte")
-            print("            (copia editada a mao, ou historia reescrita)")
-    if como_json:
-        print(json.dumps({
-            "skill": nome, "fonte_blob": fonte, "servido_blob": curto,
-            "veredito": "divergente", "detalhe": detalhe,
-        }))
-    return 1
+
+    itens = [(nome, resultado.divergente(detalhe))]
+    return resultado.relatorio("skill", nome, itens, _sha_release(), como_json=como_json)
 
 
 # --- classe: front ----------------------------------------------------------
@@ -2039,55 +2131,52 @@ def conferir_front(alvo=None, como_json=False):
     servem = []     # regra 2b: serve rota de API
     conformes = []
     abertas = []    # superficies que a 0057 declara ABERTAS: observacao, nao veredito
+    itens = []      # um item por tela medida; abertas fica fora — observacao, nao veredito
     for dir_rel, repo, _i, _d in telas:
         dir_abs = os.path.join(raiz, dir_rel)
         monta_segredo, serve_api, detalhe = _viola_segredo_ou_api(dir_abs)
         if repo in FRONT_ABERTAS:
             abertas.append({"tela": dir_rel, "repo": repo})
             continue  # arq:0057 "Aberto": nao inventariada contra este criterio
+        problemas = []
         if repo != UI_REPO:
             fora.append({"tela": dir_rel, "repo": repo})
+            problemas.append(f"mora em {repo}, nao em {UI_REPO}")
             # tela fora do UI ja reprova por (1); ainda assim medimos (2) para o relato.
         if monta_segredo:
             montam.append({"tela": dir_rel, "repo": repo, "detalhe": detalhe})
+            problemas.append("monta segredo de outra camada: " + ", ".join(detalhe))
         if serve_api:
             servem.append({"tela": dir_rel, "repo": repo, "detalhe": detalhe})
-        if repo == UI_REPO and not monta_segredo and not serve_api:
+            problemas.append("serve rota de API: " + ", ".join(detalhe))
+        if problemas:
+            itens.append((dir_rel, resultado.divergente("; ".join(problemas))))
+        else:
             conformes.append(dir_rel)
+            itens.append((dir_rel, resultado.conforme()))
 
     ok = not (fora or montam or servem)
-    if como_json:
-        print(json.dumps({
-            "veredito": "em dia" if ok else "divergente",
-            "regra_1_tela_fora_do_ui": fora,
-            "regra_2_monta_segredo": montam,
-            "regra_2_serve_rota_api": servem,
-            "telas_conformes": conformes,
-            "superficies_abertas_0057": abertas,
-            "medidas": len(telas),
-            "ui_repo": UI_REPO,
-        }, ensure_ascii=False, indent=2))
-        return 0 if ok else 1
-
-    print(f"front — conformidade de deploy (arq:0057), alem de arq:0056")
-    print(f"  telas de aplicacao medidas       : {len(telas)}")
-    print(f"  (1) TELA FORA de {UI_REPO:<16}: {len(fora)}")
-    for x in fora:
-        print(f"      {x['tela']} — mora em {x['repo']}, nao em {UI_REPO}")
-    print(f"  (2) MONTA SEGREDO de outra camada: {len(montam)}")
-    for x in montam:
-        print(f"      {x['tela']} — {', '.join(x['detalhe'])}")
-    print(f"  (2) SERVE ROTA DE API            : {len(servem)}")
-    for x in servem:
-        print(f"      {x['tela']} — {', '.join(x['detalhe'])}")
-    print(f"  conformes (em {UI_REPO}, sem segredo, sem proxy): {len(conformes)}")
-    print(f"  veredito                         : {'em dia' if ok else 'divergente'}")
-    if abertas:
-        print("  --- observacao (nao entra no veredito; arq:0057 secao Aberto) ---")
-        print(f"  superficies declaradas ABERTAS   : {len(abertas)} (vira card proprio, #197 item 3)")
-        for x in abertas:
-            print(f"      {x['tela']} — {x['repo']}")
-    return 0 if ok else 1
+    if not como_json:
+        print(f"front — conformidade de deploy (arq:0057), alem de arq:0056")
+        print(f"  telas de aplicacao medidas       : {len(telas)}")
+        print(f"  (1) TELA FORA de {UI_REPO:<16}: {len(fora)}")
+        for x in fora:
+            print(f"      {x['tela']} — mora em {x['repo']}, nao em {UI_REPO}")
+        print(f"  (2) MONTA SEGREDO de outra camada: {len(montam)}")
+        for x in montam:
+            print(f"      {x['tela']} — {', '.join(x['detalhe'])}")
+        print(f"  (2) SERVE ROTA DE API            : {len(servem)}")
+        for x in servem:
+            print(f"      {x['tela']} — {', '.join(x['detalhe'])}")
+        print(f"  conformes (em {UI_REPO}, sem segredo, sem proxy): {len(conformes)}")
+        print(f"  veredito                         : {'em dia' if ok else 'divergente'}")
+        if abertas:
+            print("  --- observacao (nao entra no veredito; arq:0057 secao Aberto) ---")
+            print(f"  superficies declaradas ABERTAS   : {len(abertas)} (vira card proprio, #197 item 3)")
+            for x in abertas:
+                print(f"      {x['tela']} — {x['repo']}")
+        print()
+    return resultado.relatorio("front", alvo, itens, _sha_release(), como_json=como_json)
 
 
 # --- classe: procedencia ----------------------------------------------------
@@ -2151,11 +2240,14 @@ def excecoes_de_procedencia(caminho=DOC_PROCEDENCIA):
 
 def conferir_procedencia(alvo, como_json=False):
     por_nome, por_classe, erros = excecoes_de_procedencia()
-    houve = bool(erros)
     raiz = os.path.realpath(HARNESS)
-    dentro = fora = coberto = 0
+    dentro = fora = coberto = quebrado = 0
     entradas = []
+    itens = []
     vistos = 0
+
+    for i, erro in enumerate(erros, 1):
+        itens.append((f"lista de exceções #{i}", resultado.divergente(erro)))
 
     for nome in sorted(os.listdir(BIN)):
         if alvo and alvo != nome:
@@ -2186,13 +2278,20 @@ def conferir_procedencia(alvo, como_json=False):
         else:
             veredito, detalhe = "fora", destino
 
+        # card #3142: "quebrado" (symlink sem destino) e "nao consegui resolver", nao
+        # "fora" — indeterminavel, nao divergente. So "fora" de fato e reprovacao.
         if veredito == "harness":
             dentro += 1
+            itens.append((nome, resultado.conforme()))
         elif veredito in ("excecao", "excecao-classe"):
             coberto += 1
+            itens.append((nome, resultado.conforme()))
+        elif veredito == "quebrado":
+            quebrado += 1
+            itens.append((nome, resultado.indeterminavel(detalhe)))
         else:
             fora += 1
-            houve = True
+            itens.append((nome, resultado.divergente(detalhe)))
         entradas.append({"nome": nome, "veredito": veredito, "destino": destino, "detalhe": detalhe})
 
     if alvo and vistos == 0:
@@ -2200,32 +2299,25 @@ def conferir_procedencia(alvo, como_json=False):
         print(json.dumps({"erro": msg}) if como_json else f"\n{msg}")
         return 1
 
-    if como_json:
-        print(json.dumps({
-            "resultado": "divergente" if houve else "ok",
-            "lista_de_excecoes": DOC_PROCEDENCIA,
-            "erros_da_lista": erros,
-            "entradas": entradas,
-            "conta": {"harness": dentro, "excecao": coberto, "fora": fora},
-        }))
-        return 1 if houve else 0
+    if not como_json:
+        print(f"\n## procedencia dos caminhos de execucao em {BIN}")
+        print(f"    lista de excecoes: {DOC_PROCEDENCIA}")
+        for e in erros:
+            print(f"    LISTA   : {e}")
+        for e in entradas:
+            if e["veredito"] == "harness" and not alvo:
+                continue
+            marca = {"harness": "ok      ", "excecao": "excecao ", "excecao-classe": "excecao ",
+                     "quebrado": "QUEBRADO", "fora": "FORA    "}[e["veredito"]]
+            print(f"    {marca}: {e['nome']:<16} {e['detalhe']}")
+        print(f"\n    {dentro} dentro do harness . {coberto} excecao declarada . {fora} fora . "
+              f"{quebrado} quebrado (nao consegui resolver)")
+        if fora:
+            print("    Caminho de execucao fora do harness sem linha em docs/procedencia-do-harness.md.")
+            print("    Ou o arquivo se muda para o harness, ou a excecao se declara la — com dono e motivo.")
+        print()
 
-    print(f"\n## procedencia dos caminhos de execucao em {BIN}")
-    print(f"    lista de excecoes: {DOC_PROCEDENCIA}")
-    for e in erros:
-        print(f"    LISTA   : {e}")
-    for e in entradas:
-        if e["veredito"] == "harness" and not alvo:
-            continue
-        marca = {"harness": "ok      ", "excecao": "excecao ", "excecao-classe": "excecao ",
-                 "quebrado": "QUEBRADO", "fora": "FORA    "}[e["veredito"]]
-        print(f"    {marca}: {e['nome']:<16} {e['detalhe']}")
-    print(f"\n    {dentro} dentro do harness . {coberto} excecao declarada . {fora} fora")
-    if fora:
-        print("    Caminho de execucao fora do harness sem linha em docs/procedencia-do-harness.md.")
-        print("    Ou o arquivo se muda para o harness, ou a excecao se declara la — com dono e motivo.")
-    print()
-    return 1 if houve else 0
+    return resultado.relatorio("procedencia", alvo, itens, _sha_release(), como_json=como_json)
 
 
 def _norm(texto):
@@ -2256,39 +2348,70 @@ def _ferramental_psql(sql):
 
 
 def conferir_ferramental(alvo, como_json=False):
-    achados = []  # (severidade, texto): 'FALHA' muda veredito; 'DERIVA' so observa.
+    itens = []
 
     # (0) 1:1 capacidade<->verbo integro (invariante de schema, arq:0037).
+    nome_1a1 = "arq:0037 1:1 capacidade<->verbo"
+    achados_1a1 = []  # (severidade, texto): 'FALHA' muda veredito; 'DERIVA' so observa.
     linhas, erro = _ferramental_psql(
         "select c.slug, v.slug from acervo.ferramental_capacidade c "
         "full outer join acervo.ferramental_verbo v on v.capacidade_id=c.id "
         "where c.id is null or v.id is null")
     if erro:
-        msg = f"nao consegui ler acervo.ferramental: {erro}"
-        if como_json:
-            print(json.dumps({"classe": "ferramental", "erro": msg}, ensure_ascii=False))
+        # card #3142: nao conseguir consultar o acervo e indeterminavel, nao um exit
+        # cedo — a outra checagem (bin) segue sendo tentada, e o motivo entra na lista.
+        motivo = f"nao consegui ler acervo.ferramental: {erro}"
+        if not como_json:
+            print(f"  ??  {nome_1a1}: {motivo}")
+        itens.append((nome_1a1, resultado.indeterminavel(motivo)))
+    else:
+        for l in linhas:
+            cap, vb = (l.split("|") + [""])[:2]
+            if not vb:
+                achados_1a1.append(("FALHA", f"capacidade {cap!r} sem verbo (quebra 1:1)"))
+            elif not cap:
+                achados_1a1.append(("FALHA", f"verbo {vb!r} sem capacidade (quebra 1:1)"))
+        falhas_1a1 = [t for sev, t in achados_1a1 if sev == "FALHA"]
+        derivas_1a1 = [t for sev, t in achados_1a1 if sev == "DERIVA"]
+        if not como_json:
+            for t in falhas_1a1:
+                print(f"  FALHA  {t}")
+            for t in derivas_1a1:
+                print(f"  deriva {t}")
+        if falhas_1a1:
+            itens.append((nome_1a1, resultado.divergente("; ".join(falhas_1a1))))
         else:
-            print(f"conferir ferramental: {msg}", file=sys.stderr)
-        return 2
-    for l in linhas:
-        cap, vb = (l.split("|") + [""])[:2]
-        if not vb:
-            achados.append(("FALHA", f"capacidade {cap!r} sem verbo (quebra 1:1)"))
-        elif not cap:
-            achados.append(("FALHA", f"verbo {vb!r} sem capacidade (quebra 1:1)"))
+            itens.append((nome_1a1, resultado.conforme()))
 
     # (a) cada verbo declarado resolve em ~/AI/bin.
+    nome_bin = "arq:0037 verbo resolve em ~/AI/bin"
+    achados_bin = []  # (severidade, texto): 'FALHA' muda veredito; 'DERIVA' so observa.
     verbos, erro = _ferramental_psql(
         "select slug, coalesce(sot,'') from acervo.ferramental_verbo order by slug")
     if erro:
-        return 2
-    for l in verbos:
-        slug, sot = (l.split("|") + [""])[:2]
-        # so cobra PATH de verbo cujo sot aponta bin/ (ollama/matrix tem sot em stacks.json).
-        if not sot.startswith("bin/"):
-            continue
-        if not os.path.exists(os.path.join(BIN, slug)):
-            achados.append(("FALHA", f"verbo {slug!r} declarado (sot={sot}) nao existe em ~/AI/bin"))
+        motivo = f"nao consegui ler acervo.ferramental: {erro}"
+        if not como_json:
+            print(f"  ??  {nome_bin}: {motivo}")
+        itens.append((nome_bin, resultado.indeterminavel(motivo)))
+    else:
+        for l in verbos:
+            slug, sot = (l.split("|") + [""])[:2]
+            # so cobra PATH de verbo cujo sot aponta bin/ (ollama/matrix tem sot em stacks.json).
+            if not sot.startswith("bin/"):
+                continue
+            if not os.path.exists(os.path.join(BIN, slug)):
+                achados_bin.append(("FALHA", f"verbo {slug!r} declarado (sot={sot}) nao existe em ~/AI/bin"))
+        falhas_bin = [t for sev, t in achados_bin if sev == "FALHA"]
+        derivas_bin = [t for sev, t in achados_bin if sev == "DERIVA"]
+        if not como_json:
+            for t in falhas_bin:
+                print(f"  FALHA  {t}")
+            for t in derivas_bin:
+                print(f"  deriva {t}")
+        if falhas_bin:
+            itens.append((nome_bin, resultado.divergente("; ".join(falhas_bin))))
+        else:
+            itens.append((nome_bin, resultado.conforme()))
 
     # instancia -> stack NAO se confere aqui: stack e recorte de conveniencia de
     # deploy (o que sobe junto num compose), arbitrario. Nao existe regra
@@ -2300,25 +2423,7 @@ def conferir_ferramental(alvo, como_json=False):
     #     (arq:0076: acervo.stack e a fonte-verdade, registro/stacks.json nao existe),
     #     entao a pre-condicao esta cumprida e nao ha mais nada a medir aqui.
 
-    falhas = [t for sev, t in achados if sev == "FALHA"]
-    derivas = [t for sev, t in achados if sev == "DERIVA"]
-
-    if como_json:
-        print(json.dumps({
-            "classe": "ferramental",
-            "veredito": "em dia" if not falhas else "divergente",
-            "falhas": falhas, "observacoes_deriva": derivas,
-        }, ensure_ascii=False, indent=2))
-    else:
-        if falhas:
-            print("conferir ferramental: DIVERGENTE")
-            for t in falhas:
-                print(f"  FALHA  {t}")
-        else:
-            print("conferir ferramental: em dia (espinha capacidade->verbo->instancia integra)")
-        for t in derivas:
-            print(f"  deriva {t}")
-    return 1 if falhas else 0
+    return resultado.relatorio("ferramental", alvo, itens, _sha_release(), como_json=como_json)
 
 
 EXISTE_TIPOS = ("cadeira", "verbo", "card", "arquivo", "mesa")
@@ -2354,7 +2459,11 @@ def conferir_existe(tipo, nome, como_json=False):
         else:
             print(linha)
             print("  nao saber e informacao — isto NAO ancora uma NEGATIVA.")
-        return 2
+        # card #3142, passo 7: indeterminavel epistemico ("nao consegui olhar") alinha
+        # com a regua nova de conferir (0/1/5), nao com o exit 2 de uso incorreto do
+        # bloco `if tipo not in EXISTE_TIPOS` acima — os dois sao "2" por acidente de
+        # historia, nao por serem a mesma coisa.
+        return 5
 
     if tipo not in EXISTE_TIPOS or not nome:
         print(f"uso: conferir existe <{'|'.join(EXISTE_TIPOS)}> <nome> [--json]",
@@ -2426,6 +2535,78 @@ def conferir_existe(tipo, nome, como_json=False):
     return 2
 
 
+def _card_avancou_alem_de_execucao(cabecalho):
+    """card #348: o estado do card, lido do cabecalho de `tarefas ler`, ja passou de
+    em-execucao? Os 6 estados do ciclo (arq citado no #348) sao em-lapidacao . em-parecer
+    . em-refinamento-tecnico . em-execucao . em-homologacao . entregue — qualquer um dos
+    tres primeiros e "nao andou ainda"; dai pra frente, o commit tem onde se apoiar."""
+    baixo = cabecalho.lower()
+    return any(s in baixo for s in ("execu", "homolog", "entreg", "encerr"))
+
+
+def conferir_card(alvo, como_json=False):
+    """card #3142, passo 6: commit em origin/main (familia platafirma-harness) citando
+    #N — na mensagem, ou num ramo fabrica/N-* ainda vivo — nos ultimos 14 dias, com o
+    card #N no rastreador ainda ANTES de em-execucao: item divergente. Fecha #348
+    ("conferir mede card citado em commit cujo estado nao andou").
+
+    Escopo desta primeira versao: so a familia platafirma-harness, porque e a unica cujo
+    checkout (HARNESS) este arquivo ja resolve com confianca (arq:0097). Estender as
+    demais familias da release exige confirmar a convencao de caminho do checkout de
+    cada uma — nao adivinhado aqui; ver nota na entrega do card.
+    """
+    if not alvo:
+        if como_json:
+            print(json.dumps({"erro": "uso: conferir card <n> [--json]"}))
+            return 2
+        uso("card exige o numero do card (ex.: conferir card 3142)")
+    ident = alvo.lstrip("#")
+    raiz_bin = os.path.join(RAIZ, "bin")
+
+    rc, out, _ = sh(["git", "-C", HARNESS, "log", "origin/main", "--since=14.days.ago",
+                      "-E", "--grep", rf"#{ident}\b", "--format=%H %cI"])
+    achados = []
+    if rc == 0:
+        for linha in out.splitlines():
+            linha = linha.strip()
+            if not linha:
+                continue
+            sha, _, quando = linha.partition(" ")
+            achados.append((sha, quando))
+    rc2, out2, _ = sh(["git", "-C", HARNESS, "branch", "-a", "--list", f"*fabrica/{ident}-*"])
+    ramos = [l.strip().lstrip("* ").strip() for l in out2.splitlines() if l.strip()] if rc2 == 0 else []
+
+    nome_item = f"#{ident}"
+    if not achados and not ramos:
+        itens = [(nome_item, resultado.conforme())]
+        return resultado.relatorio("card", alvo, itens, _sha_release(), como_json=como_json)
+
+    rc3, out3, err3 = sh([os.path.join(raiz_bin, "tarefas"), "ler", ident])
+    linhas_cab = [l.strip() for l in out3.splitlines() if l.strip()]
+    cab = next((l for l in linhas_cab if l.startswith(f"#{ident} ")), None)
+    if not cab:
+        msg = ((err3 or out3).strip().splitlines() or [f"exit {rc3}"])[0]
+        itens = [(nome_item, resultado.indeterminavel(
+            f"commit(s)/ramo citam #{ident}, mas tarefas ler nao devolveu cabecalho: {msg[:200]}"))]
+        return resultado.relatorio("card", alvo, itens, _sha_release(), como_json=como_json)
+
+    quando = achados[0][1] if achados else None
+    if not quando and ramos:
+        rcq, outq, _ = sh(["git", "-C", HARNESS, "log", "-1", "--format=%cI", ramos[0]])
+        quando = outq.strip() if rcq == 0 and outq.strip() else None
+
+    if _card_avancou_alem_de_execucao(cab):
+        itens = [(nome_item, resultado.conforme(desde=quando))]
+    else:
+        motivo = f"commit/ramo cita #{ident}, mas o rastreador ainda diz: {cab[:160]}"
+        if achados:
+            motivo += f" (sha {achados[0][0][:7]})"
+        if ramos:
+            motivo += f"; ramo(s): {', '.join(ramos[:3])}"
+        itens = [(nome_item, resultado.divergente(motivo, desde=quando))]
+    return resultado.relatorio("card", alvo, itens, _sha_release(), como_json=como_json)
+
+
 
 def _carrega_yaml(caminho):
     try:
@@ -2458,6 +2639,8 @@ def conferir_alcance(sujeito, fonte, como_json=False):
         print("uso: conferir alcance <sujeito> <fonte>", file=sys.stderr)
         print("     fontes: board, fila, mesa, registro, wiki, acervo", file=sys.stderr)
         return 2
+    nome_item = f"{sujeito} -> {fonte}"
+    alvo = f"{sujeito} {fonte}"
     for p in (HARNESS, POLITICA_DIR):
         if p not in sys.path:
             sys.path.insert(0, p)
@@ -2465,16 +2648,16 @@ def conferir_alcance(sujeito, fonte, como_json=False):
         from recuperacao.pep import PEP
         from recuperacao.fontes import Fonte
     except Exception as e:                                       # noqa: BLE001
-        msg = f"indeterminavel: maquinario de acesso ilegivel — {type(e).__name__}: {e}"
-        print(json.dumps({"erro": msg}, ensure_ascii=False) if como_json else msg)
-        return 2
+        motivo = f"maquinario de acesso ilegivel — {type(e).__name__}: {e}"
+        itens = [(nome_item, resultado.indeterminavel(motivo))]
+        return resultado.relatorio("alcance", alvo, itens, _sha_release(), como_json=como_json)
     try:
         f = Fonte(fonte)
     except ValueError:
         validas = ", ".join(x.value for x in Fonte)
-        msg = f"indeterminavel: fonte {fonte!r} nao existe — validas: {validas}"
-        print(json.dumps({"erro": msg}, ensure_ascii=False) if como_json else msg)
-        return 2
+        motivo = f"fonte {fonte!r} nao existe — validas: {validas}"
+        itens = [(nome_item, resultado.indeterminavel(motivo))]
+        return resultado.relatorio("alcance", alvo, itens, _sha_release(), como_json=como_json)
 
     suj_doc, _ = _carrega_yaml(os.path.join(POLITICA_DIR, "sujeitos.yaml"))
     atrib = ((suj_doc or {}).get("sujeitos") or {}).get(sujeito) or {}
@@ -2571,11 +2754,13 @@ def conferir_alcance(sujeito, fonte, como_json=False):
         elo = ("rede", "fonte nao alcancavel")
 
     if rede_ok is None:
-        exit_code = 2
+        motivo = f"{fonte!r} nao esta no catalogo de superficies; a cadeia nao fecha."
+        veredito = resultado.indeterminavel(motivo)
     elif elo is None:
-        exit_code = 0
+        veredito = resultado.conforme()
     else:
-        exit_code = 1
+        motivo = f"elo mais fraco: {elo[0]} — {elo[1]}"
+        veredito = resultado.divergente(motivo)
 
     # nota de imposicao: divergencia entre o veredito do PDP e o que o portao impoe
     nota = None
@@ -2589,30 +2774,22 @@ def conferir_alcance(sujeito, fonte, como_json=False):
     elif acl is None:
         nota = "[AVISO] ACL do alvo A MEDIR: o gate do alvo existe mas nao foi lido (#191)."
 
-    if como_json:
-        print(json.dumps({
-            "sujeito": sujeito, "fonte": fonte,
-            "saltos": [{"salto": s, "veredito": v, "detalhe": d, "fonte_de_verdade": fv}
-                       for s, v, d, fv in saltos],
-            "elo_mais_fraco": elo[0] if elo else None,
-            "cadeia_inteira": exit_code == 0,
-            "nota": nota, "exit": exit_code,
-        }, ensure_ascii=False))
-        return exit_code
+    if not como_json:
+        print(f"alcance: {sujeito} -> {fonte}")
+        for i, (s, v, d, fv) in enumerate(saltos, 1):
+            print(f"  {i} {s:12}: {v} — {d}")
+            print(f"       fonte-de-verdade: {fv}")
+        if rede_ok is None:
+            print(f"  => indeterminavel: {fonte!r} nao esta no catalogo de superficies; a cadeia nao fecha.")
+        elif elo is None:
+            print(f"  => cadeia INTEIRA: {sujeito} alcanca {fonte} pela cadeia modelada.")
+        else:
+            print(f"  => elo mais fraco: {elo[0]} — {elo[1]}. {sujeito} NAO alcanca {fonte} pela cadeia modelada.")
+        if nota:
+            print(f"  {nota}")
 
-    print(f"alcance: {sujeito} -> {fonte}")
-    for i, (s, v, d, fv) in enumerate(saltos, 1):
-        print(f"  {i} {s:12}: {v} — {d}")
-        print(f"       fonte-de-verdade: {fv}")
-    if exit_code == 2:
-        print(f"  => indeterminavel: {fonte!r} nao esta no catalogo de superficies; a cadeia nao fecha.")
-    elif elo is None:
-        print(f"  => cadeia INTEIRA: {sujeito} alcanca {fonte} pela cadeia modelada.")
-    else:
-        print(f"  => elo mais fraco: {elo[0]} — {elo[1]}. {sujeito} NAO alcanca {fonte} pela cadeia modelada.")
-    if nota:
-        print(f"  {nota}")
-    return exit_code
+    itens = [(nome_item, veredito)]
+    return resultado.relatorio("alcance", alvo, itens, _sha_release(), como_json=como_json)
 
 
 def conferir_pdp(alvo=None, como_json=False):
@@ -2633,53 +2810,34 @@ def conferir_pdp(alvo=None, como_json=False):
         {"nome": "rastreador-api", "tipo": "compose", "esperado": "/opt/platafirma/current/politica-acesso"},
     ]
 
-    houve = False
-    resultados = []
+    if not como_json:
+        print(f"\n## conferir pdp — servidores com PEP × tag de release")
+        print(f"    metodo: compara tag de release em /opt/platafirma/current, nao md5")
+        print(f"    tag corrente: {tag_current or '(nenhuma)'}\n")
+
+    itens = []
     for s in servidores:
         nome = s["nome"]
         if alvo and alvo != nome:
             continue
         pdp_path = s["esperado"]
         tag_servidor = tag_current if tag_current else "(sem tag)"
-        divergente = False
+        # card #3142: release em current ausente/sem tag e "nao consegui medir a
+        # tag", nao "medi e diverge" — indeterminavel, nunca divergente por uma
+        # falha de leitura. Sem uma tag esperada distinta para comparar, tag
+        # encontrada so pode sair conforme (nao ha hoje caminho para divergente).
         if not tag_current:
-            divergente = True
-            detalhe = "release em current nao encontrada ou sem tag"
+            v = resultado.indeterminavel("release em current nao encontrada ou sem tag")
         else:
-            detalhe = f"aponta release tag={tag_current}"
+            v = resultado.conforme()
+        if not como_json:
+            marca = {"conforme": "ok ", "divergente": "NAO", "indeterminavel": "?? "}[v.estado]
+            print(f"    {marca}: {nome:<16} {pdp_path} (tag: {tag_servidor})")
+        itens.append((nome, v))
 
-        if divergente:
-            houve = True
-        resultados.append({
-            "servidor": nome,
-            "tipo": s["tipo"],
-            "pdp": pdp_path,
-            "tag": tag_servidor,
-            "status": "divergente" if divergente else "ok",
-            "detalhe": detalhe
-        })
-
-    if como_json:
-        print(json.dumps({
-            "resultado": "divergente" if houve else "ok",
-            "tag_current": tag_current,
-            "metodo": "comparacao por tag (nao md5)",
-            "servidores": resultados
-        }, indent=2, ensure_ascii=False))
-        return 1 if houve else 0
-
-    print(f"\n## conferir pdp — servidores com PEP × tag de release")
-    print(f"    metodo: compara tag de release em /opt/platafirma/current, nao md5")
-    print(f"    tag corrente: {tag_current or '(nenhuma)'}\n")
-    for r in resultados:
-        status_txt = "ok      " if r["status"] == "ok" else "DIVERGE "
-        print(f"    {status_txt}: {r['servidor']:<16} {r['pdp']} (tag: {r['tag']})")
-    print()
-    if houve:
-        print("    Divergencia encontrada nos servidores com PEP.")
-        return 1
-    print(f"    Todos os {len(resultados)} servidores com PEP conferem na tag {tag_current}.")
-    return 0
+    if not como_json:
+        print()
+    return resultado.relatorio("pdp", alvo, itens, _sha_release(), como_json=como_json)
 
 
 def carregar_verbos_e_atos(bin_dir):
@@ -2790,36 +2948,41 @@ def conferir_diagrama(alvo, como_json=False):
         return 2
 
     req = urllib.request.Request(f"{endpoint}/{diagram_type}/svg", data=c.encode("utf-8"), headers={"Content-Type": "text/plain"}, method="POST")
+    itens = []
     try:
         with urllib.request.urlopen(req, timeout=5) as response:
             if response.status == 200:
-                if como_json:
-                    print(json.dumps({"arquivo": alvo, "status": "ok"}))
-                else:
+                if not como_json:
                     print(f"diagrama: ok ({diagram_type})")
-                return 0
+                itens.append((alvo, resultado.conforme()))
             else:
                 msg = f"Kroki retornou status {response.status}"
-                if como_json:
-                    print(json.dumps({"arquivo": alvo, "status": "erro", "erro": msg}))
-                else:
+                if not como_json:
                     print(f"erro na compilação: {msg}", file=sys.stderr)
-                return 1
+                itens.append((alvo, resultado.divergente(msg)))
     except urllib.error.HTTPError as e:
         erro_msg = e.read().decode('utf-8', errors='replace')
-        if como_json:
-            print(json.dumps({"arquivo": alvo, "status": "erro", "erro": erro_msg}))
-        else:
+        if not como_json:
             print(f"diagrama quebrado: {alvo}", file=sys.stderr)
             print(erro_msg, file=sys.stderr)
-        return 1
-    except Exception as e:
-        msg = f"falha ao falar com o Kroki em {endpoint}: {e}"
-        if como_json:
-            print(json.dumps({"arquivo": alvo, "status": "erro", "erro": msg}))
-        else:
+        itens.append((alvo, resultado.divergente(erro_msg)))
+    except (urllib.error.URLError, TimeoutError, OSError) as e:
+        # Kroki inalcancavel (conexao recusada, DNS, timeout de conexao) — nao
+        # consegui olhar, nao e defeito no diagrama: indeterminavel (card #3142).
+        msg = f"nao consegui falar com o Kroki em {endpoint}: {e}"
+        if not como_json:
             print(f"erro: {msg}", file=sys.stderr)
-        return 1
+        itens.append((alvo, resultado.indeterminavel(msg)))
+    except Exception as e:
+        # falha inesperada falando com o Kroki: tambem nao e defeito confirmado
+        # no diagrama — nao consegui olhar nunca vira conforme nem divergente
+        # por padrao aqui.
+        msg = f"falha ao falar com o Kroki em {endpoint}: {e}"
+        if not como_json:
+            print(f"erro: {msg}", file=sys.stderr)
+        itens.append((alvo, resultado.indeterminavel(msg)))
+
+    return resultado.relatorio("diagrama", alvo, itens, _sha_release(), como_json=como_json)
 
 
 def conferir_vocabulario(alvo=None, como_json=False):
@@ -2861,13 +3024,15 @@ def conferir_vocabulario(alvo=None, como_json=False):
     padrao_crase = re.compile(r"`([^`\n]+)`")
     fora = []
     ok_count = 0
+    itens = []
 
     for arq in candidatos:
         rel = os.path.relpath(arq, repo_raiz)
         try:
             with open(arq, "r", encoding="utf-8", errors="replace") as fp:
                 linhas = fp.readlines()
-        except OSError:
+        except OSError as e:
+            itens.append((rel, resultado.indeterminavel(f"nao consegui ler {rel}: {e}")))
             continue
 
         for num_linha, linha in enumerate(linhas, 1):
@@ -2907,23 +3072,18 @@ def conferir_vocabulario(alvo=None, como_json=False):
                         "verbo": v,
                         "ato": ato,
                     })
+                    itens.append((f"{rel}:{num_linha}", resultado.divergente(
+                        f"{rel}:{num_linha} — `{expr}`: verbo '{v}' nao serve ato '{ato}'"
+                    )))
 
-    if como_json:
-        print(json.dumps({
-            "total_conferidos": ok_count + len(fora),
-            "total_fora": len(fora),
-            "fora": fora,
-        }, indent=2))
-        return 0 if not fora else 1
+    itens.append((f"{ok_count} referencia(s) conferida(s)", resultado.conforme()))
 
-    if fora:
+    if not como_json and fora:
         print(f"conferir vocabulario: {len(fora)} fora:")
         for item in fora:
             print(f"  {item['arquivo']}:{item['linha']} — `{item['expressao']}`: verbo '{item['verbo']}' nao serve ato '{item['ato']}'")
-        return 1
-    else:
-        print(f"conferir vocabulario: 0 fora ({ok_count} referencias conferidas)")
-        return 0
+
+    return resultado.relatorio("vocabulario", alvo, itens, _sha_release(), como_json=como_json)
 
 
 def main(argv):
@@ -3023,6 +3183,8 @@ def main(argv):
             if alvo == "--servido":
                 alvo = None
         return conferir_skill(alvo, servido, como_json=como_json)
+    if classe == "card":
+        return conferir_card(alvo, como_json=como_json)
     if como_json:
         print(json.dumps({"erro": f"classe desconhecida: {classe}"}))
     uso(f"classe desconhecida: {classe}")

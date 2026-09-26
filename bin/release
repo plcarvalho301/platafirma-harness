@@ -68,6 +68,7 @@ CLASSES_SERVIDO=(
   "chapeu"
   "pdp"
   "alcance"
+  "card"
 )
 
 uso_texto() {
@@ -90,6 +91,14 @@ raiz servida: PF_RELEASE_RAIZ[=/opt/platafirma] · instancia: PLATAFIRMA_INSTANC
 promover: <rev> (sha ou tag) obrigatória em família com stack; sem rev, avança para origin/main
 main: promover E reverter só servem rev alcançável por origin/main (arq:0109 §1); fora dela, exit 4
 exit: 0 achou/fez · 1 nao existe · 2 uso · 3 dependencia · 4 politica · 5 indeterminavel
+conferir: cada classe conta uma LISTA de itens com veredito de 3 estados
+          (conforme/divergente/indeterminavel, com desde e motivo — arq:0110 par.4,
+          card #3142); o exit agrega essa lista e so entao pisa no 0/1/5 acima: 0
+          tudo conforme, 1 ha divergente (pesa mais que indeterminavel), 5 nenhum
+          divergente e ha indeterminavel. Classe desconhecida ou uso incorreto
+          segue saindo 2 antes de existir item nenhum. Contrato completo, linha-
+          ancora e a lista de classes que ja usam o Veredito comum (e as que ainda
+          nao): bin/_release/conferir/README.md
 FIM
 }
 
