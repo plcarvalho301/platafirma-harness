@@ -1313,3 +1313,29 @@ def test_diagrama_indeterminavel_quando_kroki_inalcancavel(monkeypatch, capsys, 
     item = dado["itens"][0]
     assert item["estado"] == "indeterminavel"
     assert "connection refused" in item["motivo"]
+
+
+# --- verbos irmaos saem do bin da release, nunca de RAIZ/bin (#3142) -------------
+# Regressao: o gate de `release promover` reprovou 746a69b porque o acervo era chamado
+# em ~/AI/bin/acervo (rc 127) — a bancada nao tem bin/ desde arq:0097.
+
+def test_capacidade_chama_acervo_do_bin_da_release(monkeypatch):
+    chamados = []
+
+    def sh(args):
+        chamados.append(args[0])
+        return (0, "", "")
+    monkeypatch.setattr(conferir, "sh", sh)
+    monkeypatch.setattr(conferir, "RAIZ", "/bancada-sem-bin")
+    monkeypatch.setattr(conferir, "BIN_IRMAOS", "/rel/harness/bin")
+
+    v = conferir._capacidade_veredito("verificacao")
+
+    assert v.estado == "conforme"
+    assert chamados and all(c == "/rel/harness/bin/acervo" for c in chamados)
+
+
+def test_bin_irmaos_segue_plataforma_release(monkeypatch):
+    monkeypatch.setenv("PLATAFIRMA_RELEASE", "/tmp/rel-x")
+    modulo = _carregar(CONFERIR_PATH, "conferir_bin_irmaos_teste")
+    assert modulo.BIN_IRMAOS == "/tmp/rel-x/harness/bin"
