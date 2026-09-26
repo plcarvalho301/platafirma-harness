@@ -273,6 +273,40 @@ def roda(rotulo, cmd, timeout=60):
         print(f"  NAO MEDIDO — {type(e).__name__}: {e}")
 
 
+def roda_fila_cabecalho(rotulo, cmd, timeout=90):
+    """Historico frio da fila so em CABECALHO: uma linha por carta
+    (`quando · de · tipo · assunto`). O corpo inteiro de 7 dias passava de 50 KB,
+    estourava o teto do retorno e cortava a cauda onde mora o roteiro (medido
+    26/09/2026). Corpo sob demanda: `fila ler <eu> --tudo <remetente>`."""
+    print(f"\n-- {rotulo}")
+    try:
+        p = subprocess.run(["bash", "-lc", cmd], capture_output=True, text=True,
+                           timeout=timeout, cwd=os.path.expanduser("~"))
+    except subprocess.SubprocessError as e:
+        print(f"  NAO MEDIDO — {type(e).__name__}: {e}")
+        return
+    cartas, atual = [], None
+    for linha in (p.stdout or "").splitlines():
+        m = re.match(r"^===MSG (\S+)===$", linha.strip())
+        if m:
+            atual = {"id": m.group(1)}
+            cartas.append(atual)
+            continue
+        if atual is None:
+            continue
+        for campo in ("de", "tipo", "assunto"):
+            if linha.startswith(campo + ":") and campo not in atual:
+                atual[campo] = linha.split(":", 1)[1].strip()
+    if not cartas:
+        saida = (p.stdout or p.stderr or "").strip()
+        print("  " + (saida.splitlines()[0] if saida else "(sem carta)"))
+        return
+    for c in cartas:
+        quando = c["id"][:13]
+        print(f"  {quando} · {c.get('de', '?')} · {c.get('tipo', '?')} · {c.get('assunto', '')[:110]}")
+    print(f"  {len(cartas)} carta(s); corpo: `fila ler <eu> --tudo <remetente>`")
+
+
 def _turnos_por_gap(tss, gap_s):
     """Turnos de uma fita por gap temporal entre registros de tool. Sem marca
     de turno no log (marca-la custaria 1 giro/turno, o oposto do que se corta),
@@ -553,8 +587,8 @@ def ato_fita(args):
         for rotulo, cmd in COMUM + POR_CADEIRA.get(curto.lower(), []):
             roda(rotulo, cmd)
         if canon:
-            roda(f"fila — historico frio dos 7 dias ({canon}); nao move o ponteiro",
-                 f"fila ler {canon} --tudo", timeout=90)
+            roda_fila_cabecalho(f"fila — historico frio dos 7 dias ({canon}), so cabecalho;"
+                                " nao move o ponteiro", f"fila ler {canon} --tudo")
         else:
             print(f"\n-- fila\n  NAO MEDIDO — PF_CADEIRA={alvo!r} nao casa com"
                   f" nenhuma persona em {ABERTURA}")
@@ -583,6 +617,11 @@ def ato_fita(args):
           "   Sintetize tambem o historico da fila impresso acima: o que ficou\n"
           "   DECIDIDO por outra cadeira, nao o tramite. Uma linha por decisao,\n"
           "   com quem decidiu. Carta ja superada pelo dossie nao entra.\n"
+          "   A fila vem so em cabecalho. Separe as cartas em tres: (i) DECISAO\n"
+          "   DO DONO — vai na tela dele no relato do descanso, como item de\n"
+          "   decisao, uma linha cada, com remetente e o que se decide; (ii) ATO\n"
+          "   DA CADEIRA pendente — `mesa item`; (iii) superada — so conta.\n"
+          "   Carta parada que ninguem apresenta ao dono e decisao que nao existe.\n"
           "\n"
           "2. delta de caderno, por chapeu tocado nesta fita — OBRIGATORIO, DUAS\n"
           "   partes, sempre as duas:\n"
