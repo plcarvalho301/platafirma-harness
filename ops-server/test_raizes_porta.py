@@ -144,6 +144,16 @@ def test_write_file_na_bancada_worktree_e_bin(bancada, sem_pep):
     assert fora.get("recusado") and "fora de morada" in fora["motivo"]
 
 
+def test_write_file_verbo_no_bin_da_bancada_por_cadeira_e_card(bancada, sem_pep):
+    """card:3149 passo 3: a bancada e wt/platafirma-harness/<cadeira>/<card>/; o bin/ dela e
+    morada de verbo como o do worktree plano (medido em 26/09: a porta recusava)."""
+    (bancada / "wt" / "platafirma-harness" / "ti" / "3150-x" / "bin").mkdir(parents=True)
+    r = s.write_file(path="wt/platafirma-harness/ti/3150-x/bin/verbo", content="#!/bin/sh\necho\n")
+    assert r.get("ok"), r
+    fora_do_bin = s.write_file(path="wt/platafirma-harness/ti/3150-x/deploy/unidade", content="x\n")
+    assert fora_do_bin.get("recusado") and "tipo" in fora_do_bin["motivo"]
+
+
 def test_write_file_nao_recria_bancada_nem_worktree(monkeypatch, tmp_path, sem_pep):
     """Bancada declarada e apagada (ou worktree nunca aberto): recusa, e nada nasce."""
     apagada = tmp_path / "bancada-apagada"

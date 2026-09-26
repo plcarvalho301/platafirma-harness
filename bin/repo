@@ -1293,7 +1293,9 @@ cmd_abrir() {
     if "$GIT" -C "$clone_raiz" show-ref --verify --quiet "refs/heads/$ramo_alvo"; then
       "$GIT" -C "$clone_raiz" worktree add -q "$wt_dir" "$ramo_alvo" >/dev/null 2>&1 || morre "git worktree add falhou (o ramo '$ramo_alvo' ja esta aberto em outra pasta?)" 3
     else
-      "$GIT" -C "$clone_raiz" worktree add -q -b "$ramo_alvo" "$wt_dir" "$base_ref" >/dev/null 2>&1 || morre "git worktree add -b falhou" 3
+      # --no-track: o upstream do ramo do card e o proprio ramo no origin (o primeiro push o
+      # poe), nunca origin/main -- senao estado/sanear leem "atras/a frente" contra main
+      "$GIT" -C "$clone_raiz" worktree add -q --no-track -b "$ramo_alvo" "$wt_dir" "$base_ref" >/dev/null 2>&1 || morre "git worktree add -b falhou" 3
     fi
     printf 'bancada aberta: %s (ramo %s @ %s, atras de origin/main: %s, arvore limpa)\n' "$wt_dir" "$ramo_alvo" \
       "$("$GIT" -C "$wt_dir" rev-parse --short HEAD)" "$("$GIT" -C "$wt_dir" rev-list --count HEAD..origin/main 2>/dev/null || echo '?')"
@@ -1306,7 +1308,7 @@ cmd_abrir() {
       if "$GIT" -C "$clone_raiz" show-ref --verify --quiet "refs/heads/$ramo_slug"; then
         "$GIT" -C "$clone_raiz" worktree add -q "$wt_dir" "$ramo_slug" >/dev/null 2>&1 || morre "git worktree add falhou (o ramo '$ramo_slug' ja esta aberto em outra pasta?)" 3
       else
-        "$GIT" -C "$clone_raiz" worktree add -q -b "$ramo_slug" "$wt_dir" "$base_ref" >/dev/null 2>&1 || morre "git worktree add -b falhou" 3
+        "$GIT" -C "$clone_raiz" worktree add -q --no-track -b "$ramo_slug" "$wt_dir" "$base_ref" >/dev/null 2>&1 || morre "git worktree add -b falhou" 3
       fi
       printf 'bancada aberta: %s (ramo %s @ %s, atras de origin/main: 0, arvore limpa)\n' "$wt_dir" "$ramo_slug" "$("$GIT" -C "$wt_dir" rev-parse --short HEAD)"
       return 0

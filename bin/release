@@ -80,7 +80,7 @@ uso:
   release ler        <repo> <caminho>
   release procurar   <repo> --termo <termo> [<prefixo>] [--json]
   release conferir   <classe> [<alvo>] [--ref <rev>] [--json]
-  release promover   <repo> [<rev>] [--ensaio]
+  release promover   <repo> [<rev>] [--ensaio] [--aceitar-suite-indisponivel]
   release reverter   <repo> [<rev>] [--ensaio]
   release promover   abertura [<rev>] [--ensaio]   publica a abertura do harness na rev (sem rev: origin/main)
   release reverter   abertura [<sha>] [--ensaio]   volta a abertura a um sha ja publicado (sem sha: o anterior)
@@ -1532,13 +1532,17 @@ gate_conferir_verbo() {  # $1=repo $2=sha_candidato $3=sha_atual(ou vazio)
 # chave) — lib/venv.sh: caminho_veredito/ler_veredito/gravar_veredito. Se o push que
 # trouxe esta rev ja foi medido, a promocao reaproveita sem rodar nada de novo. So se
 # aplica a familia que serve verbos (FAMILIA_BIN); chave fixa "harness" (mesma razao
-# do pre-push: nenhum arquivo de VERDES hoje precisa de outra). Nunca barra por
-# ambiente/coleta indisponivel (comentario A2) — so por reprovado medido de verdade.
+# do pre-push: nenhum arquivo de VERDES hoje precisa de outra).
+# Gate de bloqueio nao interpreta (spec_ambiente-de-desenvolvimento §3): suite que nao se
+# conseguiu medir sai 5 e BARRA, com o motivo nomeado; so sobe com a flag explicita
+# --aceitar-suite-indisponivel, declarada no retorno. Em 26/09 a regra antiga ("nunca barra
+# por ambiente") deixou a promocao subir sem suite: o uv tentava criar controle/.venv na
+# arvore materializada, que e so leitura. O pre-push (comentario A2) segue so avisando.
 CHAVE_SUITE="harness"
 GATE_SUITE_STATUS=""; GATE_SUITE_DETALHE=""; GATE_SUITE_LOG=""
 GATE_AMBIENTE_STATUS=""; GATE_AMBIENTE_SEGUNDOS=0; GATE_AMBIENTE_CHAVE=""
 
-gate_suite_verdes() {  # $1=repo $2=sha ; 0 nunca barra por infra, so por vermelho medido; 4 vermelho
+gate_suite_verdes() {  # $1=repo $2=sha ; 0 verde ou n/a; 4 vermelho medido; 5 nao medido (detalhe nomeia)
   local repo="$1" sha="$2"
   local arvore="$PROD_RAIZ/$repo/$sha"  # "local a=$1 b=...$a" nao ve o $a recem-declarado: outro local
   GATE_SUITE_STATUS="indisponivel"; GATE_SUITE_DETALHE=""; GATE_SUITE_LOG=""
@@ -1551,12 +1555,13 @@ gate_suite_verdes() {  # $1=repo $2=sha ; 0 nunca barra por infra, so por vermel
 
   local venvs="${PLATAFIRMA_VENVS:-$arvore/registro/venvs.json}"
   local out familia lock teste
-  out="$(PLATAFIRMA_VENVS="$venvs" python3 "$AQUI/_release/registro.py" "$CHAVE_SUITE" 2>/dev/null)" || return 0
+  out="$(PLATAFIRMA_VENVS="$venvs" python3 "$AQUI/_release/registro.py" "$CHAVE_SUITE" 2>/dev/null)" \
+    || { GATE_SUITE_DETALHE="registro de venvs sem a chave $CHAVE_SUITE"; return 5; }
   IFS=$'\t' read -r familia lock teste <<<"$out"
-  [ -f "$arvore/$lock" ] || return 0
+  [ -f "$arvore/$lock" ] || { GATE_SUITE_DETALHE="lock $lock ausente na arvore"; return 5; }
 
   local pyid py py_real py_ver
-  pyid="$(resolver_python 2>/dev/null)" || return 0
+  pyid="$(resolver_python 2>/dev/null)" || { GATE_SUITE_DETALHE="python de construcao nao resolvido"; return 5; }
   IFS=$'\t' read -r py py_real py_ver <<<"$pyid"
   local chave_hash
   chave_hash="$({ cat "$arvore/$lock"; printf '\npython=%s %s\n' "$py_real" "$py_ver"; } | sha256sum | cut -c1-12)"
@@ -1564,7 +1569,7 @@ gate_suite_verdes() {  # $1=repo $2=sha ; 0 nunca barra por infra, so por vermel
 
   local arvore_hash
   arvore_hash="$("$GIT" -C "$arvore" rev-parse 'HEAD^{tree}' 2>/dev/null)"
-  [ -n "$arvore_hash" ] || return 0
+  [ -n "$arvore_hash" ] || { GATE_SUITE_DETALHE="hash da arvore ilegivel"; return 5; }
 
   local vereditos_dir="${PLATAFIRMA_INSTANCIA:-/srv/platafirma/casa}/var/pre-push/vereditos"
   mkdir -p "$vereditos_dir" 2>/dev/null || true
@@ -1581,7 +1586,7 @@ gate_suite_verdes() {  # $1=repo $2=sha ; 0 nunca barra por infra, so por vermel
       return 4 ;;
   esac
 
-  local uv; uv="$(resolver_uv 2>/dev/null)" || return 0
+  local uv; uv="$(resolver_uv 2>/dev/null)" || { GATE_SUITE_DETALHE="uv ausente"; return 5; }
   local dest="$PROD_RAIZ/venv/${CHAVE_SUITE}-${chave_hash}"
   local t0 t1
   t0=$(date +%s 2>/dev/null || echo 0)
@@ -1589,7 +1594,8 @@ gate_suite_verdes() {  # $1=repo $2=sha ; 0 nunca barra por infra, so por vermel
     mkdir -p "$(dirname "$dest")"
     if ! construir_venv "$arvore/$lock" "$dest" "$uv" "$py" "$py_ver" 2>/dev/null; then
       chmod -R u+w "$dest" 2>/dev/null || true; rm -rf "$dest"
-      return 0
+      GATE_SUITE_DETALHE="venv da chave ${CHAVE_SUITE}-${chave_hash} nao construiu"
+      return 5
     fi
     : > "$dest/.pronto"; chmod -R a-w "$dest"
     GATE_AMBIENTE_STATUS="construido"
@@ -1603,9 +1609,17 @@ gate_suite_verdes() {  # $1=repo $2=sha ; 0 nunca barra por infra, so por vermel
   mkdir -p "$log_dir" 2>/dev/null || true
   local saida="$log_dir/${sha}.txt" xml
   xml="$(mktemp "${TMPDIR:-/tmp}/gate-junit.XXXXXX.xml")"
-  local rc_pytest=0
-  ( cd "$arvore/controle" && timeout 300 "$uv" run --python "$dest/bin/python" --with pytest \
-      pytest "${alvos[@]}" -q --junitxml="$xml" ) >"$saida" 2>&1 || rc_pytest=$?
+  # A arvore materializada e so leitura: o ambiente do projeto controle/ vai para um
+  # temporario (UV_PROJECT_ENVIRONMENT) em vez de controle/.venv, --frozen impede o uv de
+  # reescrever o uv.lock da arvore, e o cache do pytest fica desligado. O resto e a mesma
+  # linha do pre-push, para os dois medirem a mesma coisa.
+  local rc_pytest=0 envtmp frozen=()
+  envtmp="$(mktemp -d "${TMPDIR:-/tmp}/gate-env.XXXXXX")"
+  [ -f "$arvore/controle/uv.lock" ] && frozen=(--frozen)
+  ( cd "$arvore/controle" && UV_PROJECT_ENVIRONMENT="$envtmp/venv" timeout 300 "$uv" run "${frozen[@]}" \
+      --python "$dest/bin/python" --with pytest \
+      pytest "${alvos[@]}" -q -p no:cacheprovider --junitxml="$xml" ) >"$saida" 2>&1 || rc_pytest=$?
+  rm -rf "$envtmp"
   GATE_SUITE_LOG="$saida"
 
   case "$rc_pytest" in
@@ -1622,9 +1636,9 @@ gate_suite_verdes() {  # $1=repo $2=sha ; 0 nunca barra por infra, so por vermel
       return 4 ;;
     *)
       GATE_SUITE_STATUS="indisponivel"
-      GATE_SUITE_DETALHE="pytest saiu $rc_pytest (uso/coleta/timeout) — nao medido"
+      GATE_SUITE_DETALHE="pytest saiu $rc_pytest (uso/coleta/timeout) — nao medido; ver $saida"
       rm -f "$xml"
-      return 0 ;;
+      return 5 ;;
   esac
 }
 
@@ -1710,11 +1724,12 @@ estagio_card() {  # $1=repo $2=sha_de(ou vazio) $3=sha_para
 
 # ---- ato: promover <repo> [<rev>] [--ensaio] --------------------------------------
 cmd_promover() {
-  local ensaio=0 so_caderno=0 repo="" rev=""
+  local ensaio=0 so_caderno=0 repo="" rev="" aceitar_suite=0
   while [ $# -gt 0 ]; do
     case "$1" in
       --ensaio) ensaio=1; shift ;;
       --so-caderno) so_caderno=1; shift ;;
+      --aceitar-suite-indisponivel) aceitar_suite=1; shift ;;
       -*) printf 'release: erro: opção desconhecida: %s\n' "$1" >&2; uso_texto; exit 2 ;;
       *)
         if [ -z "$repo" ]; then repo="$1"
@@ -1800,14 +1815,24 @@ cmd_promover() {
   exigir_deploy_se_stack || { rc=$?; exit "$rc"; }
   materializar "$repo" "$sha" || { rc=$?; exit "$rc"; }
   materializar_terceiros "$repo" "$sha" || { rc=$?; exit "$rc"; }
-  gate_suite_verdes "$repo" "$sha" || {
-    rc=$?
+  local rc_suite=0
+  gate_suite_verdes "$repo" "$sha" || rc_suite=$?
+  if [ "$rc_suite" -eq 5 ] && [ "$aceitar_suite" -eq 1 ]; then
+    GATE_SUITE_STATUS="nao-medida"
+    GATE_SUITE_DETALHE="subiu por --aceitar-suite-indisponivel: $GATE_SUITE_DETALHE"
+    printf 'suite:     NAO MEDIDA — %s\n' "$GATE_SUITE_DETALHE" >&2
+  elif [ "$rc_suite" -ne 0 ]; then
     gravar_ultimo_gate "$repo" "$sha"
-    printf 'release: recusa: rev %s reprova na suite VERDES: %s — current segue em %s\n' \
-      "${sha:0:7}" "$GATE_SUITE_DETALHE" "$(curto_ou "$atual" '(nenhum)')" >&2
+    if [ "$rc_suite" -eq 5 ]; then
+      printf 'release: recusa: nao consegui medir a suite VERDES da rev %s: %s — current segue em %s; conserte e promova de novo, ou suba declarando --aceitar-suite-indisponivel\n' \
+        "${sha:0:7}" "$GATE_SUITE_DETALHE" "$(curto_ou "$atual" '(nenhum)')" >&2
+    else
+      printf 'release: recusa: rev %s reprova na suite VERDES: %s — current segue em %s\n' \
+        "${sha:0:7}" "$GATE_SUITE_DETALHE" "$(curto_ou "$atual" '(nenhum)')" >&2
+    fi
     [ -n "$GATE_SUITE_LOG" ] && printf 'saida inteira: %s\n' "$GATE_SUITE_LOG" >&2
-    exit "$rc"
-  }
+    exit "$rc_suite"
+  fi
   gravar_ultimo_gate "$repo" "$sha"
   gate_conferir_verbo "$repo" "$sha" "$atual" || { rc=$?; exit "$rc"; }
   construir_venvs "$repo" "$sha" || { rc=$?; exit "$rc"; }

@@ -61,7 +61,8 @@ def _commit(wt: Path, msg: str) -> str:
 class Ambiente:
     FAMILIA = "platafirma-harness"
 
-    def __init__(self, tmp_path: Path, python_exe: str, teste_conteudo: str):
+    def __init__(self, tmp_path: Path, python_exe: str, teste_conteudo: str,
+                 verdes: str = "tests/test_fixture.py\n", extra: dict | None = None):
         self.tmp = tmp_path
         self.wt = tmp_path / "wt" / self.FAMILIA
         self.forge = tmp_path / "forge" / f"{self.FAMILIA}.git"
@@ -73,8 +74,10 @@ class Ambiente:
         _git(self.wt, "config", "user.name", "fixture")
         _git(self.wt, "config", "user.email", "fixture@test.local")
         _escreve(self.wt, "lock.txt", LOCK_SEM_DEP)
-        _escreve(self.wt, "controle/tests/VERDES", "tests/test_fixture.py\n")
+        _escreve(self.wt, "controle/tests/VERDES", verdes)
         _escreve(self.wt, "controle/tests/test_fixture.py", teste_conteudo)
+        for rel, texto in (extra or {}).items():
+            _escreve(self.wt, rel, texto)
         self.sha1 = _commit(self.wt, "fixture inicial")
         _git(self.wt, "remote", "add", "origin", str(self.forge))
         _git(self.wt, "push", "-q", "-u", "origin", "main")
@@ -154,3 +157,60 @@ def test_segunda_promocao_mesma_arvore_reaproveita_veredito(amb_verde):
     r2 = amb_verde.run("promover", amb_verde.FAMILIA, sha2)
     assert r2.returncode == 0, r2.stdout + r2.stderr
     assert "suite:     verde (reaproveitado)" in r2.stdout
+
+
+# --- 26/09: a arvore materializada e so leitura -------------------------------------------
+# O defeito medido no ar: com controle/pyproject.toml na arvore (como no harness real), o
+# `uv run` entrava em modo projeto e tentava criar controle/.venv dentro de /opt, so
+# leitura; o pytest nem rodava, o gate dizia "nao medido" e a promocao subia. Os tres
+# testes acima nao pegavam: a fixture nao tinha pyproject em controle/.
+
+PYPROJECT_CONTROLE = (
+    "[project]\nname = \"fixture-controle\"\nversion = \"0\"\n"
+    "requires-python = \">=3.10\"\ndependencies = []\n"
+)
+
+
+def _uv_lock_de(pyproject: str, tmp: Path) -> str:
+    import shutil
+    uv = shutil.which("uv") or str(Path.home() / ".local" / "bin" / "uv")
+    if not os.access(uv, os.X_OK):
+        pytest.skip("uv ausente: o modo projeto do uv e o que se mede aqui")
+    d = tmp / "gera-lock"
+    d.mkdir()
+    (d / "pyproject.toml").write_text(pyproject, encoding="utf-8")
+    r = subprocess.run([uv, "lock", "--offline"], cwd=str(d), capture_output=True, text=True)
+    if r.returncode != 0:
+        pytest.skip(f"uv lock offline falhou na fixture: {r.stderr[-200:]}")
+    return (d / "uv.lock").read_text(encoding="utf-8")
+
+
+def test_suite_roda_com_projeto_em_controle_na_arvore_so_leitura(tmp_path):
+    extra = {"controle/pyproject.toml": PYPROJECT_CONTROLE,
+             "controle/uv.lock": _uv_lock_de(PYPROJECT_CONTROLE, tmp_path)}
+    amb = Ambiente(tmp_path, _python_de_sistema(), TESTE_OK, extra=extra)
+    r = amb.run("promover", amb.FAMILIA)
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert "suite:     verde" in r.stdout, r.stdout + r.stderr
+    arvore = Path(amb.env["PF_RELEASE_RAIZ"]) / amb.FAMILIA / amb.sha1
+    assert not (arvore / "controle" / ".venv").exists()
+
+
+TESTE_NAO_COLETA = "def test_ok(:\n    pass\n"  # erro de sintaxe: pytest sai 2, nada se mede
+
+
+def test_suite_nao_medida_barra_com_5_e_current_intacto(tmp_path):
+    amb = Ambiente(tmp_path, _python_de_sistema(), TESTE_NAO_COLETA)
+    r = amb.run("promover", amb.FAMILIA)
+    assert r.returncode == 5, r.stdout + r.stderr
+    assert "nao consegui medir a suite VERDES" in r.stderr
+    est = amb.run("estado", amb.FAMILIA)
+    assert est.returncode == 1, est.stdout + est.stderr  # nunca subiu
+
+
+def test_suite_nao_medida_so_sobe_com_a_flag_declarada(tmp_path):
+    amb = Ambiente(tmp_path, _python_de_sistema(), TESTE_NAO_COLETA)
+    r = amb.run("promover", amb.FAMILIA, "--aceitar-suite-indisponivel")
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert "NAO MEDIDA" in r.stderr
+    assert "no ar:" in r.stdout

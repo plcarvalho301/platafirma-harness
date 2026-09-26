@@ -1444,12 +1444,16 @@ def _em_bin_do_harness(real_pai: Path) -> bool:
     if b is None:
         return False
     b = _real(b)
-    for raiz_clone, prof in ((b / "platafirma-harness", 0), (b / "wt" / "platafirma-harness", 1)):
+    # profundidade do bin/ sob a raiz: clone base 0; worktree plano ou por sessao
+    # wt/platafirma-harness/<x>/bin 1; worktree por cadeira e card
+    # wt/platafirma-harness/<cadeira>/<card-ou-slug>/bin 2 (card:3149 passo 3)
+    for raiz_clone, profs in ((b / "platafirma-harness", (0,)),
+                              (b / "wt" / "platafirma-harness", (1, 2))):
         try:
             partes = real_pai.relative_to(raiz_clone).parts
         except ValueError:
             continue
-        if len(partes) > prof and partes[prof] == "bin":
+        if any(len(partes) > p and partes[p] == "bin" for p in profs):
             return True
     return False
 
