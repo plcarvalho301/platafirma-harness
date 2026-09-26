@@ -276,7 +276,9 @@ arvore_da_bancada() {  # $1=clone
   rm -f "$idx"
   h="$(GIT_INDEX_FILE="$idx" git -C "$c" add -A . >/dev/null 2>&1 && GIT_INDEX_FILE="$idx" git -C "$c" write-tree 2>/dev/null)"
   rm -f "$idx"
-  [ -n "$h" ] && printf '%s' "$h"
+  [ -n "$h" ] || return 1
+  printf '%s' "$h"
+  return 0
 }
 
 pytest_em_bloco() {  # $1=clone $2=raiz(cwd) $3=rotulo $4=modo(py:<python>|isolado|projeto) [$5=alvo]
