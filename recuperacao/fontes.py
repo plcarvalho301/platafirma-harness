@@ -60,7 +60,7 @@ def _le_fontes_do_acervo() -> list[FonteInfo] | None:
         return None
 
 
-def _constroi_fontes(caminho: Path | str | None = None, texto: str | None = None) -> tuple[type[StrEnum], dict[StrEnum, Classe], dict[str, FonteInfo]]:
+def _carrega_infos(caminho: Path | str | None = None, texto: str | None = None) -> list[FonteInfo]:
     # 1) golden record via API (arq:0076); 2) tabela do catálogo (.md, se alguém passar
     # caminho/texto explícito, ou existir na release); 3) seed embutido — banco e API
     # fora, ou .md ausente/malformado. Nunca estoura no import (arq:0076).
@@ -81,15 +81,25 @@ def _constroi_fontes(caminho: Path | str | None = None, texto: str | None = None
             FonteInfo("wiki", "conhecimento", "dados", "HTTP", "exata", "", "", 0),
             FonteInfo("acervo", "conhecimento", "dados", "HTTP", "semantica", "", "", 0),
         ]
+    return infos
 
+
+def _constroi_fontes(caminho: Path | str | None = None, texto: str | None = None) -> tuple[type[StrEnum], dict[StrEnum, Classe]]:
+    """Enum Fonte + mapa CLASSE, derivados da carga de fontes (golden > .md > seed)."""
+    infos = _carrega_infos(caminho=caminho, texto=texto)
     membros = {info.slug.upper().replace("-", "_"): info.slug for info in infos}
     _FonteEnum = StrEnum("Fonte", membros)
     _classes = {_FonteEnum(info.slug): Classe(info.classe) for info in infos}
-    _por_slug = {info.slug: info for info in infos}
-    return _FonteEnum, _classes, _por_slug
+    return _FonteEnum, _classes
 
 
-Fonte, CLASSE, _INFO = _constroi_fontes()
+# Uma carga de fontes no import (golden > .md > seed): enum, classe e facetas saem dela,
+# sem repetir a chamada à API. _constroi_fontes segue exposto para os testes (texto=).
+_INFOS_IMPORT = _carrega_infos()
+_membros_import = {i.slug.upper().replace("-", "_"): i.slug for i in _INFOS_IMPORT}
+Fonte = StrEnum("Fonte", _membros_import)
+CLASSE: dict[Fonte, Classe] = {Fonte(i.slug): Classe(i.classe) for i in _INFOS_IMPORT}
+_INFO: dict[str, FonteInfo] = {i.slug: i for i in _INFOS_IMPORT}
 
 # §5 — carimbo, domínio, tipo e prefixo de `sobre`, por fonte.
 # arq:0076: a fonte da verdade destas facetas é acervo.ferramental_fonte, lida via GET
