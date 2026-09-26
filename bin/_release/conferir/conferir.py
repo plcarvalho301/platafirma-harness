@@ -201,27 +201,58 @@ def sh(args, cwd=None):
 # --- classe: servico --------------------------------------------------------
 
 def containers(filtro=None):
+    """Containers de compose. `filtro` casa o nome do container OU o projeto do compose
+    (o nome da stack no registro: `harness-controle` e o projeto do container
+    harness-controle-tela-1). Card #3150: so pelo nome do container, a conferencia de
+    uma stack pelo nome da stack dizia "nenhum container" com o servico de pe."""
     _, out, _ = sh(["docker", "ps", "--format", "{{.Names}}"])
     for nome in out.splitlines():
-        if filtro and filtro != nome:
-            continue
         _, j, _ = sh(["docker", "inspect", nome])
         try:
             d = json.loads(j)[0]
         except Exception:
             continue
         lab = d["Config"].get("Labels") or {}
+        projeto = lab.get("com.docker.compose.project", "")
+        if filtro and filtro not in (nome, projeto):
+            continue
         wd = lab.get("com.docker.compose.project.working_dir")
         if not wd:
             continue
         yield {
             "nome": nome,
+            "projeto": projeto,
             "servico": lab.get("com.docker.compose.service", "?"),
             "working_dir": wd,
             "config_files": lab.get("com.docker.compose.project.config_files", ""),
             "env": {l.split("=", 1)[0]: l.split("=", 1)[1] for l in d["Config"]["Env"] if "=" in l},
             "started_at": (d.get("State") or {}).get("StartedAt"),
         }
+
+
+PROD_RAIZ = os.environ.get("PF_RELEASE_RAIZ", "/opt/platafirma")
+
+
+def origem_release(caminho):
+    """(familia, sha) quando `caminho` mora em <PROD_RAIZ>/<familia>/<sha de 40 hex>/;
+    senao None."""
+    real = os.path.realpath(caminho)
+    raiz = os.path.realpath(PROD_RAIZ)
+    if not real.startswith(raiz + os.sep):
+        return None
+    partes = real[len(raiz) + 1:].split(os.sep)
+    if len(partes) >= 2 and len(partes[1]) == 40 and all(ch in "0123456789abcdef" for ch in partes[1]):
+        return partes[0], partes[1]
+    return None
+
+
+def sha_current(familia):
+    """sha para onde <PROD_RAIZ>/<familia>/current aponta, ou None."""
+    try:
+        alvo = os.path.basename(os.readlink(os.path.join(PROD_RAIZ, familia, "current")))
+    except OSError:
+        return None
+    return alvo if len(alvo) == 40 else None
 
 
 def git_estado(caminho):
@@ -285,7 +316,25 @@ def conferir_servico(alvo, como_json=False):
                 "container servindo de diretorio removido")
             if not como_json:
                 print(f"    SUMIU   : working_dir nao existe no disco — container servindo de diretorio removido")
-        if not dentro_de_deploy:
+        # Procedencia (arq:0097, #3010): o servido sobe de /opt/platafirma/<familia>/<sha>/,
+        # a arvore que `release promover` materializa. Conforme = o sha dessa arvore e o
+        # current da familia; outro sha e stack atras (ou a frente) do codigo no ar. O
+        # worktree de deploy na bancada e a forma antiga, ainda aceita; qualquer outro
+        # lugar e producao subindo de clone de trabalho.
+        rel = origem_release(c["working_dir"])
+        if rel:
+            fam, sha_c = rel
+            atual = sha_current(fam)
+            if not como_json:
+                print(f"    release : {fam} @ {sha_c[:7]} (current {atual[:7] if atual else 'ilegivel'})")
+            if not atual:
+                divergencias.append(f"current da familia {fam} ilegivel — procedencia nao se confirma")
+            elif atual != sha_c:
+                divergencias.append(
+                    f"serve {sha_c[:7]} da release, mas o current de {fam} e {atual[:7]} — stack fora do current")
+                if not como_json:
+                    print(f"    DERIVA  : serve {sha_c[:7]}, current de {fam} e {atual[:7]}")
+        elif not dentro_de_deploy:
             divergencias.append("nao e worktree de deploy — producao sobe de clone de trabalho")
             if not como_json:
                 print("    DERIVA  : nao e worktree de deploy — producao sobe de clone de trabalho")
