@@ -1,5 +1,8 @@
 # BASELINE VERDE da suite de contrato — o que o `hooks/pre-push` julga.
 #
+# O que cada arquivo desta lista prova, e o que NAO prova, esta em
+# `acervo ler casa guia portoes-do-codigo`. Arquivo entra aqui e la no mesmo commit.
+#
 # Regra: so entra arquivo que passa INTEIRO. Arquivo consertado entra na lista no
 # mesmo commit que o conserta; a lista so cresce. Card #204 item 2.
 #
@@ -18,3 +21,4 @@
 tests/test_contrato_conferir.py
 tests/test_contrato_infra.py
 tests/test_contrato_monta_sessao.py
+tests/test_conferir_veredito.py
