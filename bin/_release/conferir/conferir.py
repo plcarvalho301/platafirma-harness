@@ -120,7 +120,30 @@ import urllib.request
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import resultado
 
-RAIZ = os.environ.get("PF_AI_DIR", os.path.expanduser("~/AI"))
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "..", "lib"))
+import raizes  # noqa: E402
+
+
+def _raiz_bancada():
+    """RAIZ e a bancada declarada da conta; PF_AI_DIR e override explicito e sai
+    declarado no stderr. RAIZ alimenta toda classe deste arquivo (card #3142 passo 2)
+    -- por isso a resolucao nunca pode estourar: bancada indeclarada degrada pra ~/AI
+    em vez de derrubar o processo pra quem so queria medir verbo ou servico."""
+    valor = os.environ.get("PF_AI_DIR")
+    if valor:
+        print(f"conferir: RAIZ={valor} (override PF_AI_DIR)", file=sys.stderr)
+        return valor
+    try:
+        raiz = str(raizes.bancada())
+    except raizes.BancadaNaoDeclarada:
+        raiz = os.path.expanduser("~/AI")
+        print(f"conferir: RAIZ={raiz} (bancada nao declarada, default ~/AI)", file=sys.stderr)
+        return raiz
+    print(f"conferir: RAIZ={raiz} (raizes.bancada())", file=sys.stderr)
+    return raiz
+
+
+RAIZ = _raiz_bancada()
 DEPLOY = os.environ.get("PF_DEPLOY_DIR", os.path.join(RAIZ, "deploy"))
 BIN = os.environ.get("PF_BIN_DIR", os.path.join(RAIZ, "bin"))
 HARNESS = os.environ.get("PF_HARNESS_DIR", os.path.join(RAIZ, "platafirma-harness"))
