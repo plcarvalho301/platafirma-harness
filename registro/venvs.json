@@ -1,20 +1,25 @@
 {
   "_leia": "Venvs de producao construidos pelo `release promover` a partir do lockfile da rev (desenho #3010 §2): /opt/platafirma/venv/<nome>-<hash-do-lock>, atalhado em /opt/platafirma/current/venv/<nome>. `familia` e a familia cuja promocao constroi o venv; `lock` e o caminho do lock dentro da arvore dela (uv.lock -> uv sync --frozen; outro nome -> requirements). Venv sem lock declarado aqui nao e construido: fica pendente, nunca inventado.",
   "_harness_acervo": "harness (shebang /opt/platafirma/current/venv/harness/bin/python dos verbos Python e ExecStart das units do harness) e acervo (bin/_acervo/bancada e bin/_acervo/baixar) tem projeto proprio em venvs/<nome>/pyproject.toml, dependencias medidas por import e pinadas em venvs/<nome>/uv.lock.",
+  "_teste": "campo opcional 'teste' (card #3150 passo 2): subarvore desta familia onde a suite que usa este venv mora. Lido por bin/_release/registro.py, usado por 'teste rodar <repo> <alvo> --chave <nome>' e por hooks/pre-push para reaproveitar o MESMO venv que release constroi (nunca outro construtor). Chave sem 'teste' declarado: teste rodar --chave roda da raiz do clone; nao e erro, e subarvore nao declarada.",
   "harness": {
     "familia": "platafirma-harness",
-    "lock": "venvs/harness/uv.lock"
+    "lock": "venvs/harness/uv.lock",
+    "teste": "controle"
   },
   "acervo": {
     "familia": "platafirma-harness",
-    "lock": "venvs/acervo/uv.lock"
+    "lock": "venvs/acervo/uv.lock",
+    "teste": "controle"
   },
   "ops": {
     "familia": "platafirma-harness",
-    "lock": "ops-server/requirements.txt"
+    "lock": "ops-server/requirements.txt",
+    "teste": "ops-server"
   },
   "rag": {
     "familia": "platafirma-conhecimento",
-    "lock": "rag/uv.lock"
+    "lock": "rag/uv.lock",
+    "teste": "rag"
   }
 }

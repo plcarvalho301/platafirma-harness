@@ -33,6 +33,7 @@ set -euo pipefail
 # deste verbo lê a bancada — nem para achar a URL de uma família nova.
 AQUI="$(dirname "$(readlink -f "$0")")"
 . "$AQUI/../lib/raizes.sh"
+. "$AQUI/../lib/venv.sh"   # resolver_uv, python_gerenciado, resolver_python, construir_venv (card #3150 passo 2: mesmo construtor para teste)
 
 PROD_RAIZ="$PF_RELEASE_RAIZ"                     # <familia>/{.repo.git,<sha>,current,anterior} e venv/
 ATALHOS="$PF_RELEASE_RAIZ/current"               # DIRETÓRIO de atalhos estáveis (arq:0102 D6)
@@ -456,6 +457,10 @@ print(json.dumps({
           printf '  %s' "$anterior_str"
         fi
         echo
+        if [ "$f" = "$FAMILIA_BIN" ]; then
+          local gate_linha; gate_linha="$(ler_ultimo_gate "$f" "$SHA")"
+          [ -n "$gate_linha" ] && printf '%-24s   gate: %s\n' '' "$gate_linha"
+        fi
       fi
     fi
   done
@@ -889,16 +894,17 @@ garantir_espelho() {
     return 3
   fi
   if [ -d "$esp" ]; then
-    if [ "$ensaio" -eq 1 ]; then
-      printf 'espelho:   %s (sem fetch em ensaio)\n' "$esp"
-      return 0
-    fi
     # espelho nascido de outra origem (clone de bancada, forge antigo) volta ao que a release declara
     if [ -n "$url" ] && [ "$("$GIT" --git-dir="$esp" remote get-url origin 2>/dev/null || true)" != "$url" ]; then
       "$GIT" --git-dir="$esp" remote set-url origin "$url" 2>/dev/null \
         || "$GIT" --git-dir="$esp" remote add origin "$url" 2>/dev/null || true
       printf 'espelho:   origin realinhado ao registro de famílias (%s)\n' "$url"
     fi
+    # card #3150 comentario C7: o fetch entra ANTES de resolver a rev, tambem em
+    # ensaio (nao so na promocao real) — sha recem-mesclado so aparece depois do
+    # fetch, e sem ele o ensaio sempre dava "rev nao resolve no forge", medido 2x
+    # numa mesma promocao real (card #3150, comentario do passo 1). Ensaio nao troca
+    # current nem materializa nada; fetch e so leitura do espelho, sem risco.
     atualizar_espelho "$esp" || {
       printf 'release: dependência ausente: forge fora do ar (fetch em %s falhou)\n' "$esp" >&2
       return 3
@@ -1067,108 +1073,22 @@ assentar_atalhos() {  # $1=repo
 # atalho só troca depois de pronto. Venv velho fica no disco, como a árvore de rev velha.
 VENVS_PRONTOS=()
 
-# uv por ordem explícita (cabeçalho): override, dois caminhos de sistema, PATH. A porta e o
-# wrapper não carregam ~/.local/bin, e o release não pode depender do PATH de quem o chama.
-resolver_uv() {  # imprime o caminho do uv; 3 ausente
-  local c
-  if [ -n "${PLATAFIRMA_UV:-}" ]; then
-    # absoluto: relativo resolveria contra o diretório de quem chama, não contra nada declarado
-    if [[ "$PLATAFIRMA_UV" == /* ]] && [ -x "$PLATAFIRMA_UV" ] && [ ! -d "$PLATAFIRMA_UV" ]; then printf '%s' "$PLATAFIRMA_UV"; return 0; fi
-    printf 'release: dependência ausente: PLATAFIRMA_UV=%s não é binário executável em caminho absoluto (override do uv)\n' "$PLATAFIRMA_UV" >&2
-    return 3
-  fi
-  for c in /usr/local/bin/uv /usr/bin/uv; do
-    if [ -x "$c" ] && [ ! -d "$c" ]; then printf '%s' "$c"; return 0; fi
-  done
-  c="$(command -v uv 2>/dev/null || true)"
-  if [ -n "$c" ] && [ -x "$c" ]; then printf '%s' "$c"; return 0; fi
-  {
-    printf 'release: dependência ausente: uv (constrói venv do lock) — procurado em $PLATAFIRMA_UV, /usr/local/bin/uv, /usr/bin/uv e no PATH\n'
-    printf '         instale uv de sistema, fora do home da conta: sudo install -m 0755 -o root -g root <binário uv> /usr/local/bin/uv\n'
-    printf '         (ou: curl -LsSf https://astral.sh/uv/install.sh | sudo env UV_INSTALL_DIR=/usr/local/bin UV_NO_MODIFY_PATH=1 sh), ou aponte PLATAFIRMA_UV\n'
-  } >&2
-  return 3
-}
-
-# 0 quando o caminho está sob o HOME da conta ou numa árvore de python gerenciado pelo uv
-python_gerenciado() {  # $1=caminho
-  local p="$1" casa="${HOME:-}"
-  casa="${casa%/}"
-  if [ -n "$casa" ] && { [ "$p" = "$casa" ] || [[ "$p" == "$casa"/* ]]; }; then return 0; fi
-  case "$p" in */uv/python/*) return 0 ;; esac
-  return 1
-}
-
-# python de sistema dos venvs. Imprime "<caminho>\t<caminho real>\t<major.minor>"; 3 ausente.
-resolver_python() {
-  local py="${PLATAFIRMA_PYTHON:-/usr/bin/python3.12}" real ver
-  if [[ "$py" != /* ]] || [ ! -x "$py" ] || [ -d "$py" ]; then
-    printf 'release: dependência ausente: python de sistema %s não existe ou não é executável (caminho absoluto) — venv de produção não se liga a python gerenciado no home da conta; instale python3.12 do sistema ou aponte PLATAFIRMA_PYTHON\n' "$py" >&2
-    return 3
-  fi
-  real="$(readlink -f "$py")"
-  # override também não liga venv de produção ao home da conta nem a python gerenciado pelo uv
-  # (um PLATAFIRMA_PYTHON que é o python de outro venv resolve, por readlink, para lá)
-  if python_gerenciado "$py" || python_gerenciado "$real"; then
-    printf 'release: dependência ausente: python %s (real %s) está no home da conta ou é gerenciado pelo uv — venv de produção só se liga a python de sistema; aponte PLATAFIRMA_PYTHON para um python do sistema\n' "$py" "$real" >&2
-    return 3
-  fi
-  ver="$("$py" -c 'import sys; print("%d.%d" % sys.version_info[:2])' 2>/dev/null </dev/null)" || ver=""
-  if ! [[ "$ver" =~ ^[0-9]+\.[0-9]+$ ]]; then
-    printf 'release: dependência ausente: python de sistema %s não roda (não disse a versão)\n' "$py" >&2
-    return 3
-  fi
-  printf '%s\t%s\t%s' "$py" "$real" "$ver"
-}
-
-construir_venv() {  # $1=lock $2=destino $3=uv $4=python $5=versão do python
-  local lock="$1" dest="$2" uv="$3" py="$4" ver="$5" rc=0 req home
-  # only-system: o uv não escolhe python gerenciado; never: não baixa um quando o de sistema não serve.
-  # Só no ambiente do uv (não vaza para deploy nem publicar-abertura). Variáveis de quem chama que
-  # brigam com isso saem: UV_MANAGED_PYTHON faz o uv sair 2 junto de --python-preference (medido
-  # com uv 0.12.1), e seria lido como lock incompatível; UV_PYTHON/UV_SYSTEM_PYTHON/VIRTUAL_ENV
-  # não escolhem interpretador aqui.
-  local -a uvenv=(env -u UV_MANAGED_PYTHON -u UV_NO_MANAGED_PYTHON -u UV_PYTHON -u UV_SYSTEM_PYTHON
-    -u VIRTUAL_ENV UV_PYTHON_PREFERENCE=only-system UV_PYTHON_DOWNLOADS=never)
-  case "$(basename "$lock")" in
-    uv.lock)
-      # --no-install-project: a árvore servida é r-x; o código roda dela, o venv só traz dependência.
-      # --python vence o .python-version do projeto (o do rag pede 3.14).
-      "${uvenv[@]}" UV_PROJECT_ENVIRONMENT="$dest" "$uv" sync -q --frozen --no-dev --no-install-project \
-        --python "$py" --project "$(dirname "$lock")" </dev/null >&2 || rc=$? ;;
-    *)
-      "${uvenv[@]}" "$uv" venv -q --python "$py" "$dest" </dev/null >&2 || rc=$?
-      if [ "$rc" -eq 0 ] && grep -qvE '^[[:space:]]*(#|$)' "$lock"; then
-        "${uvenv[@]}" "$uv" pip install -q --python "$dest/bin/python" -r "$lock" </dev/null >&2 || rc=$?
-      fi ;;
-  esac
-  if [ "$rc" -ne 0 ]; then
-    req="$(sed -n 's/^requires-python[[:space:]]*=[[:space:]]*"\(.*\)"[[:space:]]*$/\1/p' "$lock" 2>/dev/null | head -n 1)"
-    printf 'release: falha alta: uv saiu %s construindo do lock %s com o python de sistema %s (%s)%s — lock que exige outra versão não se contorna com python gerenciado; ajuste o requires-python/.python-version da família ou aponte PLATAFIRMA_PYTHON\n' \
-      "$rc" "$lock" "$py" "$ver" "${req:+; o lock pede requires-python $req}" >&2
-    return 3
-  fi
-  # confere a ligação: o venv tem de apontar para o python pedido, não para outro que o uv achou
-  home="$(sed -n 's/^home[[:space:]]*=[[:space:]]*//p' "$dest/pyvenv.cfg" 2>/dev/null | head -n 1)"
-  if [ -z "$home" ] || python_gerenciado "$home" \
-    || { [ "$home" != "$(dirname "$py")" ] && [ "$home" != "$(dirname "$(readlink -f "$py")")" ]; }; then
-    printf 'release: falha alta: venv %s ficou ligado a %s, não ao python de sistema %s\n' "$dest" "${home:-(sem pyvenv.cfg)}" "$py" >&2
-    return 3
-  fi
-}
+# resolver_uv, python_gerenciado, resolver_python, construir_venv: movidos para
+# lib/venv.sh (card #3150 passo 2) — teste passa a chamar o MESMO construtor, pela
+# mesma chave <nome>-<hash>, em vez de ter escada própria.
 
 construir_venvs() {  # $1=repo $2=sha ; enche VENVS_PRONTOS; 0 ok, 3 falhou
   local repo="$1" sha="$2" arvore linhas nome lock hash dest uv="" pyid="" py="" py_real="" py_ver=""
   arvore="$PROD_RAIZ/$repo/$sha"
   VENVS_PRONTOS=()
   [ -r "$VENVS" ] || return 0
-  linhas="$(jq -r --arg f "$repo" 'to_entries[] | select(.key | startswith("_") | not)
-            | select((.value | type) == "object" and .value.familia == $f)
-            | "\(.key)\t\(.value.lock)"' "$VENVS" 2>/dev/null)" || {
+  # leitor único (card #3150 passo 2, bin/_release/registro.py): mesma leitura que
+  # teste e, depois, pre-push vão usar pela chave — nenhum relê o JSON por conta própria
+  linhas="$(PLATAFIRMA_VENVS="$VENVS" python3 "$AQUI/_release/registro.py" --familia "$repo" 2>/dev/null)" || {
     printf 'release: dependência com outro contrato: registro de venvs não é JSON legível (%s)\n' "$VENVS" >&2
     return 3
   }
-  while IFS=$'\t' read -r nome lock; do
+  while IFS=$'\t' read -r nome lock _teste; do
     [ -n "$nome" ] || continue
     if ! validar_slug "$nome" || [[ "$lock" == /* ]] || [[ "$lock" == *..* ]]; then
       printf 'release: erro: venv mal declarado em %s: %s (%s)\n' "$VENVS" "$nome" "$lock" >&2
@@ -1436,8 +1356,8 @@ promover_abertura() {  # $1=rev(opcional) $2=ensaio
     return 0
   fi
   sha="$(resolver_rev "$FAMILIA_BIN" "$rev")" || {
-    printf 'release: erro: rev '\''%s'\'' não resolve no forge de %s\n' "${rev:-origin/main}" "$FAMILIA_BIN" >&2
-    return 2
+    printf 'varrido:   %s no espelho de %s (fetch feito agora, sem achar)\n' "${rev:-origin/main}" "$FAMILIA_BIN" >&2
+    return 1
   }
   exigir_descende_de_main "$FAMILIA_BIN" "$sha" 'promover' abertura || return $?
   if ! rev_tem_abertura "$sha"; then
@@ -1476,8 +1396,8 @@ promover_abertura_so_caderno() {  # $1=ensaio
     return 0
   fi
   sha="$(resolver_rev "$FAMILIA_BIN" '')" || {
-    printf 'release: erro: origin/main não resolve no forge de %s\n' "$FAMILIA_BIN" >&2
-    return 2
+    printf 'varrido:   origin/main no espelho de %s (fetch feito agora, sem achar)\n' "$FAMILIA_BIN" >&2
+    return 1
   }
   exigir_descende_de_main "$FAMILIA_BIN" "$sha" 'promover' abertura || return $?
   antes="$(sha_abertura_no_ar)"
@@ -1607,6 +1527,183 @@ gate_conferir_verbo() {  # $1=repo $2=sha_candidato $3=sha_atual(ou vazio)
   return 0
 }
 
+# Estagio 1b da esteira (card #3150, comentario C1): a MESMA suite que hooks/pre-push
+# mede, no MESMO venv da chave, com o MESMO veredito memoizado por (hash da arvore,
+# chave) — lib/venv.sh: caminho_veredito/ler_veredito/gravar_veredito. Se o push que
+# trouxe esta rev ja foi medido, a promocao reaproveita sem rodar nada de novo. So se
+# aplica a familia que serve verbos (FAMILIA_BIN); chave fixa "harness" (mesma razao
+# do pre-push: nenhum arquivo de VERDES hoje precisa de outra). Nunca barra por
+# ambiente/coleta indisponivel (comentario A2) — so por reprovado medido de verdade.
+CHAVE_SUITE="harness"
+GATE_SUITE_STATUS=""; GATE_SUITE_DETALHE=""; GATE_SUITE_LOG=""
+GATE_AMBIENTE_STATUS=""; GATE_AMBIENTE_SEGUNDOS=0; GATE_AMBIENTE_CHAVE=""
+
+gate_suite_verdes() {  # $1=repo $2=sha ; 0 nunca barra por infra, so por vermelho medido; 4 vermelho
+  local repo="$1" sha="$2"
+  local arvore="$PROD_RAIZ/$repo/$sha"  # "local a=$1 b=...$a" nao ve o $a recem-declarado: outro local
+  GATE_SUITE_STATUS="indisponivel"; GATE_SUITE_DETALHE=""; GATE_SUITE_LOG=""
+  GATE_AMBIENTE_STATUS="indisponivel"; GATE_AMBIENTE_SEGUNDOS=0; GATE_AMBIENTE_CHAVE=""
+  [ "$repo" = "$FAMILIA_BIN" ] || { GATE_SUITE_STATUS="n/a"; return 0; }
+
+  local alvos=() arq
+  while IFS= read -r arq; do alvos+=("$arq"); done < <(listar_verdes "$arvore")
+  if [ "${#alvos[@]}" -eq 0 ]; then GATE_SUITE_STATUS="sem-verdes"; return 0; fi
+
+  local venvs="${PLATAFIRMA_VENVS:-$arvore/registro/venvs.json}"
+  local out familia lock teste
+  out="$(PLATAFIRMA_VENVS="$venvs" python3 "$AQUI/_release/registro.py" "$CHAVE_SUITE" 2>/dev/null)" || return 0
+  IFS=$'\t' read -r familia lock teste <<<"$out"
+  [ -f "$arvore/$lock" ] || return 0
+
+  local pyid py py_real py_ver
+  pyid="$(resolver_python 2>/dev/null)" || return 0
+  IFS=$'\t' read -r py py_real py_ver <<<"$pyid"
+  local chave_hash
+  chave_hash="$({ cat "$arvore/$lock"; printf '\npython=%s %s\n' "$py_real" "$py_ver"; } | sha256sum | cut -c1-12)"
+  GATE_AMBIENTE_CHAVE="${CHAVE_SUITE}-${chave_hash}"
+
+  local arvore_hash
+  arvore_hash="$("$GIT" -C "$arvore" rev-parse 'HEAD^{tree}' 2>/dev/null)"
+  [ -n "$arvore_hash" ] || return 0
+
+  local vereditos_dir="${PLATAFIRMA_INSTANCIA:-/srv/platafirma/casa}/var/pre-push/vereditos"
+  mkdir -p "$vereditos_dir" 2>/dev/null || true
+  local veredito_arq; veredito_arq="$(caminho_veredito "$vereditos_dir" "$arvore_hash" "$CHAVE_SUITE" "$chave_hash")"
+  local vresultado; vresultado="$(ler_veredito "$veredito_arq")"
+  case "$vresultado" in
+    verde)
+      GATE_SUITE_STATUS="verde"; GATE_SUITE_DETALHE="reaproveitado"
+      GATE_AMBIENTE_STATUS="reaproveitado"
+      return 0 ;;
+    vermelho)
+      GATE_SUITE_STATUS="vermelho"
+      GATE_SUITE_DETALHE="reaproveitado (veredito ja gravado vermelho para esta arvore)"
+      return 4 ;;
+  esac
+
+  local uv; uv="$(resolver_uv 2>/dev/null)" || return 0
+  local dest="$PROD_RAIZ/venv/${CHAVE_SUITE}-${chave_hash}"
+  local t0 t1
+  t0=$(date +%s 2>/dev/null || echo 0)
+  if [ ! -f "$dest/.pronto" ]; then
+    mkdir -p "$(dirname "$dest")"
+    if ! construir_venv "$arvore/$lock" "$dest" "$uv" "$py" "$py_ver" 2>/dev/null; then
+      chmod -R u+w "$dest" 2>/dev/null || true; rm -rf "$dest"
+      return 0
+    fi
+    : > "$dest/.pronto"; chmod -R a-w "$dest"
+    GATE_AMBIENTE_STATUS="construido"
+  else
+    GATE_AMBIENTE_STATUS="reaproveitado"
+  fi
+  t1=$(date +%s 2>/dev/null || echo 0)
+  GATE_AMBIENTE_SEGUNDOS=$((t1 - t0))
+
+  local log_dir="${PLATAFIRMA_INSTANCIA:-/srv/platafirma/casa}/var/log/release-gate"
+  mkdir -p "$log_dir" 2>/dev/null || true
+  local saida="$log_dir/${sha}.txt" xml
+  xml="$(mktemp "${TMPDIR:-/tmp}/gate-junit.XXXXXX.xml")"
+  local rc_pytest=0
+  ( cd "$arvore/controle" && timeout 300 "$uv" run --python "$dest/bin/python" --with pytest \
+      pytest "${alvos[@]}" -q --junitxml="$xml" ) >"$saida" 2>&1 || rc_pytest=$?
+  GATE_SUITE_LOG="$saida"
+
+  case "$rc_pytest" in
+    0)
+      gravar_veredito "$veredito_arq" verde "$sha"
+      GATE_SUITE_STATUS="verde"; GATE_SUITE_DETALHE="$(tail -n 1 "$saida")"
+      rm -f "$xml"
+      return 0 ;;
+    1)
+      gravar_veredito "$veredito_arq" vermelho "$sha"
+      GATE_SUITE_STATUS="vermelho"
+      GATE_SUITE_DETALHE="$(nomear_reprovados "$xml" | head -n 1)"
+      rm -f "$xml"
+      return 4 ;;
+    *)
+      GATE_SUITE_STATUS="indisponivel"
+      GATE_SUITE_DETALHE="pytest saiu $rc_pytest (uso/coleta/timeout) — nao medido"
+      rm -f "$xml"
+      return 0 ;;
+  esac
+}
+
+# `release estado <familia>` mostra o ultimo veredito do gate (card #3150, "Tempo":
+# em andamento | passou | barrou <teste>) — gravado aqui, lido la. Chave do sha:
+# gate de uma rev que nao chegou a vingar (ensaio, ou promocao que falhou antes do
+# gate) nao se confunde com o gate da rev que de fato esta no ar.
+gravar_ultimo_gate() {  # $1=repo $2=sha
+  local repo="$1" sha="$2" tmp
+  local arq="$PONTOS/$repo/ultimo-gate.json"  # "local a=$1 b=$a" nao ve o $a recem-declarado: precisa de outro local
+  mkdir -p "$(dirname "$arq")" 2>/dev/null || true
+  tmp="$(mktemp "$(dirname "$arq")/.tmp.XXXXXX" 2>/dev/null)" || return 0
+  printf '{"sha": "%s", "suite": "%s", "detalhe": "%s", "ambiente": "%s", "quando": "%s"}\n' \
+    "$sha" "$GATE_SUITE_STATUS" "$(printf '%s' "$GATE_SUITE_DETALHE" | tr -d '"\\')" \
+    "$GATE_AMBIENTE_CHAVE" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > "$tmp" 2>/dev/null \
+    && mv -f "$tmp" "$arq" 2>/dev/null
+}
+
+ler_ultimo_gate() {  # $1=repo $2=sha_no_ar ; imprime uma linha resumida, ou nada
+  local repo="$1" sha_ar="$2"
+  local arq="$PONTOS/$repo/ultimo-gate.json"
+  [ -f "$arq" ] || return 0
+  local gsha gsuite gdet
+  gsha="$(sed -n 's/.*"sha"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$arq" 2>/dev/null | head -n 1)"
+  gsuite="$(sed -n 's/.*"suite"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$arq" 2>/dev/null | head -n 1)"
+  gdet="$(sed -n 's/.*"detalhe"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$arq" 2>/dev/null | head -n 1)"
+  [ -n "$gsuite" ] || return 0
+  local marca=""
+  [ "$gsha" = "$sha_ar" ] || marca=" (medido numa rev que nao ficou no ar: ${gsha:0:7})"
+  case "$gsuite" in
+    verde) printf 'passou%s' "$marca" ;;
+    vermelho) printf 'barrou: %s%s' "$gdet" "$marca" ;;
+    *) printf '%s%s' "$gsuite" "$marca" ;;
+  esac
+}
+
+# ---- estágio 4 (card #3150): card pelo PR do sha, cliente simples de tarefas ----
+# Trava do card: a particao promover x rastreador esta com o arquiteto (fila); SEM
+# resposta, este estagio implementa o caminho simples (release chama tarefas direto)
+# e o comentario no card diz que a particao ainda pode mudar isso depois. Nunca
+# bloqueia a promocao: gh ou tarefas ausente, ou ramo sem card (nao fabrica/<n>-...),
+# so pula o estagio com um aviso.
+resolver_card_do_sha() {  # $1=repo $2=sha ; imprime NNNN (o card) ou nada, 1 se nao achou
+  local repo="$1" sha="$2" url owner_repo ramo
+  command -v gh >/dev/null 2>&1 || return 1
+  url="$(url_da_familia "$repo" 2>/dev/null)" || return 1
+  [ -n "$url" ] || return 1
+  # so sabe ler PR de forge no github.com; outro forge sai do mesmo jeito que gh ausente
+  owner_repo="$(printf '%s' "$url" | sed -n 's#.*github\.com[:/]\([^/]*/[^/.]*\)\(\.git\)\{0,1\}/*$#\1#p')"
+  [ -n "$owner_repo" ] || return 1
+  ramo="$(gh api "repos/$owner_repo/commits/$sha/pulls" --jq '.[0].head.ref // empty' 2>/dev/null)" || return 1
+  case "$ramo" in
+    fabrica/[0-9]*-*)
+      printf '%s' "${ramo#fabrica/}" | sed -n 's/^\([0-9]\{1,\}\)-.*/\1/p'
+      return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+estagio_card() {  # $1=repo $2=sha_de(ou vazio) $3=sha_para
+  local repo="$1" de="$2" para="$3" card tarefas_bin release_bin
+  card="$(resolver_card_do_sha "$repo" "$para")" || {
+    printf 'card:      ramo do PR nao e fabrica/<card>-... (ou gh/registro indisponivel) — estagio 4 pulado\n'
+    return 0
+  }
+  [ -n "$card" ] || { printf 'card:      PR sem ramo fabrica/<card>-... — estagio 4 pulado\n'; return 0; }
+  tarefas_bin="$(achar_verbo tarefas)"
+  if [ -z "$tarefas_bin" ]; then
+    printf 'card:      %s promovido (%s -> %s), mas tarefas nao encontrado — comente e mova a mao\n' "$card" "$(curto_ou "$de" '(novo)')" "${para:0:7}" >&2
+    return 0
+  fi
+  "$tarefas_bin" comentar "$card" <<<"release promover $repo: $(curto_ou "$de" '(novo)') -> ${para:0:7}, gate de verbo verde. Estagio 4 (card #3150) como cliente simples de tarefas — pendente da particao promover x rastreador com o arquiteto; comentario e movimento podem vir a mudar de dono." >/dev/null 2>&1
+  "$tarefas_bin" mover "$card" em-homologacao >/dev/null 2>&1
+  printf 'card:      %s comentado e movido para em-homologacao (estagio 4, cliente simples — pendente de particao)\n' "$card"
+  release_bin="$(achar_verbo release)"
+  [ -n "$release_bin" ] && "$release_bin" conferir card "$card" >/dev/null 2>&1
+  return 0
+}
+
 # NOTA (arq:0110 item 11c): nao ha mais reversao automatica de current na recusa de
 # stack. current e stack sao planos separados; stack que recusa vira incidente e o
 # current fica onde o gate o pos. A volta deliberada e `release reverter <repo> <sha>`.
@@ -1662,10 +1759,14 @@ cmd_promover() {
 
   local sha
   sha="$(resolver_rev "$repo" "$rev")" || {
-    printf 'release: erro: rev '\''%s'\'' não resolve no forge de %s\n' "${rev:-origin/main}" "$repo" >&2
+    # card #3150 comentario C7: com o fetch de garantir_espelho ja feito (inclusive
+    # em ensaio, desde a correcao acima), rev que ainda nao resolve e "nao existe
+    # (por ora)", nao erro de uso — exit 1 (varrido), nao 2. O espelho acabou de
+    # ser atualizado, entao nao ha fetch a mais para tentar aqui.
+    printf 'varrido:   %s no espelho de %s (fetch feito agora, sem achar)\n' "${rev:-origin/main}" "$repo" >&2
     printf 'tags recentes:\n' >&2
     "$GIT" --git-dir="$esp" for-each-ref --sort=-creatordate --count=5 --format='  %(refname:short)  %(objectname:short)' refs/tags 2>/dev/null >&2 || true
-    exit 2
+    exit 1
   }
   exigir_descende_de_main "$repo" "$sha" promover "$repo" || exit $?
 
@@ -1699,6 +1800,15 @@ cmd_promover() {
   exigir_deploy_se_stack || { rc=$?; exit "$rc"; }
   materializar "$repo" "$sha" || { rc=$?; exit "$rc"; }
   materializar_terceiros "$repo" "$sha" || { rc=$?; exit "$rc"; }
+  gate_suite_verdes "$repo" "$sha" || {
+    rc=$?
+    gravar_ultimo_gate "$repo" "$sha"
+    printf 'release: recusa: rev %s reprova na suite VERDES: %s — current segue em %s\n' \
+      "${sha:0:7}" "$GATE_SUITE_DETALHE" "$(curto_ou "$atual" '(nenhum)')" >&2
+    [ -n "$GATE_SUITE_LOG" ] && printf 'saida inteira: %s\n' "$GATE_SUITE_LOG" >&2
+    exit "$rc"
+  }
+  gravar_ultimo_gate "$repo" "$sha"
   gate_conferir_verbo "$repo" "$sha" "$atual" || { rc=$?; exit "$rc"; }
   construir_venvs "$repo" "$sha" || { rc=$?; exit "$rc"; }
   gravar_pontos "$repo" "$atual" "$sha"
@@ -1742,11 +1852,16 @@ cmd_promover() {
   fi
 
   printf 'no ar:     %s %s%s\n' "$repo" "${sha:0:7}" "${tag:+ ($tag)}"
+  [ -z "$GATE_AMBIENTE_CHAVE" ] || printf 'ambiente:  %s (%s%s)\n' "$GATE_AMBIENTE_CHAVE" "$GATE_AMBIENTE_STATUS" "${GATE_AMBIENTE_SEGUNDOS:+, ${GATE_AMBIENTE_SEGUNDOS}s}"
+  if [ -n "$GATE_SUITE_STATUS" ] && [ "$GATE_SUITE_STATUS" != "n/a" ]; then
+    printf 'suite:     %s%s\n' "$GATE_SUITE_STATUS" "${GATE_SUITE_DETALHE:+ ($GATE_SUITE_DETALHE)}"
+  fi
   if [ "$rc_ab" -ne 0 ]; then
     printf 'release: PROMOCAO PARCIAL — codigo no ar em %s, abertura NAO publicada; retomar: release promover abertura %s\n' "${sha:0:7}" "${sha:0:7}" >&2
     reiniciar_porta "$repo"
     exit 5
   fi
+  estagio_card "$repo" "$atual" "$sha"
   reiniciar_porta "$repo"
   printf '%s\n' "$sha"
 }
