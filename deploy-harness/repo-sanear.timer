@@ -1,0 +1,11 @@
+[Unit]
+Description=Fim do dia da bancada -- repo sanear (arq:0109 §5: pasta entregue nao sobrevive ao dia)
+
+[Timer]
+OnCalendar=*-*-* 23:40:00
+# Pega a execucao perdida quando a maquina estava desligada na hora marcada.
+Persistent=true
+RandomizedDelaySec=5m
+
+[Install]
+WantedBy=timers.target

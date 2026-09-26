@@ -1,0 +1,14 @@
+[Unit]
+Description=Saneamento diario da bancada da conta (repo sanear): some o entregue e o fora do eixo, salvo em wip/
+Documentation=https://wiki.platafirma.org/index.php/Spec:ambiente-de-desenvolvimento
+
+[Service]
+Type=oneshot
+# Da release, nunca de clone (card #3010): a unit sobrevive a bancada apagada.
+WorkingDirectory=/opt/platafirma/current/harness
+Environment=PATH=/opt/platafirma/current/harness/bin:/usr/local/bin:/usr/bin:/bin
+# Dono do wip/ quando a pasta nao diz de quem e (bancada por sessao): a cadeira da esteira.
+Environment=PF_CADEIRA=ti
+ExecStart=/opt/platafirma/current/harness/bin/repo sanear
+# Exit 1 e "fez, mas sobrou incidente nomeado na saida", nao falha de execucao.
+SuccessExitStatus=0 1

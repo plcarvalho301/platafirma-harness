@@ -177,3 +177,30 @@ def test_operadores_como_token_recusam_e_regex_passa():
         assert rec is not None
         assert rec["sugestao"] == "é a própria tool que você está chamando"
 
+
+@pytest.mark.anyio
+async def test_run_command_encadeado_para_no_exit_4_e_declara_o_resto():
+    """card:3149 passo 7, aceite: [ok, exit 1, exit 4, ok] roda tres, para no terceiro e
+    devolve 'nao rodou' no quarto -- aqui pela fiacao da porta, nao so pelo lote.py."""
+    saidas = {"a": 0, "b": 1, "c": 4, "d": 0}
+    chamadas = []
+
+    def fake(argv, stdin, timeout, ident):
+        chamadas.append(argv[1])
+        e = saidas[argv[1]]
+        t = f"{argv[1]} saiu {e}"
+        return {"exit_code": e, "stdout": {"texto": t, "bytes_total": len(t), "truncado": False}}
+
+    with patch("server.SLUGS_SERVIDOS", {"repo"}), \
+         patch("server.BINARIOS", {"repo": "/opt/bin/repo"}), \
+         patch("server._autoriza", return_value=None), \
+         patch("server._audit"), \
+         patch("server._run_verbo_blocking", side_effect=fake):
+        res = await s.run_command(commands=["repo a", "repo b", "repo c", "repo d"],
+                                  encadeado=True)
+
+    assert chamadas == ["a", "b", "c"]
+    assert res["cadeia"]["parou_em"] == 2
+    assert res["cadeia"]["exit"] == 4
+    assert res["lote"][3]["nao_rodou"] is True
+
