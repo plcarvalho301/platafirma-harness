@@ -59,11 +59,30 @@ declara_bancada() {
 }
 
 bancada_de() {
-  local nome="$1"
+  local nome="$1" chave="${2:-}"
   local cadeira="${PF_CADEIRA:-}"
   cadeira="${cadeira#claudinho-}"
   cadeira="${cadeira#claudinha-}"
-  # a bancada da SESSAO primeiro, como no `repo` (repo abrir cria wt/<repo>/<sessao>)
+  # card:3149: a bancada e wt/<repo>/<cadeira>/<card-ou-slug>, a mesma regra do `repo` e
+  # do `teste`. Com chave (<repo>@<chave>): so ela. Sem chave: a unica aninhada; mais de
+  # uma e ambiguo (exit 2). Antes, o lint caia no clone base e media a copia errada.
+  if [ -n "$chave" ]; then
+    [ -n "$cadeira" ] && [ -e "$BANCADA/wt/$nome/$cadeira/$chave/.git" ] \
+      || morre "sem bancada '$nome@$chave' nesta cadeira — vizinho: repo abrir $nome <card> --slug <s>" 1
+    printf '%s/wt/%s/%s/%s' "$BANCADA" "$nome" "$cadeira" "$chave"
+    return 0
+  fi
+  if [ -n "$cadeira" ] && [ -d "$BANCADA/wt/$nome/$cadeira" ] && [ ! -e "$BANCADA/wt/$nome/$cadeira/.git" ]; then
+    local cands=() d
+    for d in "$BANCADA/wt/$nome/$cadeira"/*/; do [ -e "${d%/}/.git" ] && cands+=("${d%/}"); done
+    if [ "${#cands[@]}" -eq 1 ]; then printf '%s' "${cands[0]}"; return 0; fi
+    if [ "${#cands[@]}" -gt 1 ]; then
+      printf '%s: mais de uma bancada aberta de %s nesta cadeira — nomeie qual:\n' "$VERBO" "$nome" >&2
+      for d in "${cands[@]}"; do printf '  %s@%s\n' "$nome" "$(basename "$d")" >&2; done
+      exit 2
+    fi
+  fi
+  # legado: a bancada da SESSAO (wt/<repo>/<sessao>) e a plana da cadeira
   local sid="${PF_SESSAO:-}"
   if [ -n "$sid" ] && [ -d "$BANCADA/wt/$nome/$sid" ] && [ -e "$BANCADA/wt/$nome/$sid/.git" ]; then
     printf '%s/wt/%s/%s' "$BANCADA" "$nome" "$sid"
@@ -84,12 +103,14 @@ bancada_de() {
 }
 
 clone_de() {
-  local nome="$1" alvo real raiz_real
+  local nome="$1" alvo real raiz_real chave=""
   [ -n "$nome" ] || morre "falta o nome do repo" 2
+  case "$nome" in *@*) chave="${nome#*@}"; nome="${nome%%@*}" ;; esac
   case "$nome" in
     */*|.*|*..*|*[!A-Za-z0-9._-]*) morre "nome de repo invalido: '$nome' — e slug dentro da bancada $BANCADA" 4 ;;
   esac
-  alvo="$(bancada_de "$nome")"
+  case "$chave" in */*|.*|*..*|*[!A-Za-z0-9._-]*) morre "chave de bancada invalida: '$chave'" 2 ;; esac
+  alvo="$(bancada_de "$nome" "$chave")" || exit $?
   [ -d "$alvo" ] || morre "nao ha clone '$nome' na bancada $BANCADA — \`repo abrir $nome\` clona" 3
   real="$(realpath "$alvo" 2>/dev/null)" || morre "nao resolvi '$alvo'" 4
   raiz_real="$(realpath "$BANCADA" 2>/dev/null || printf '%s' "$BANCADA")"
