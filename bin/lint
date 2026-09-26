@@ -1,13 +1,15 @@
 #!/usr/bin/env bash
 # lint — roda o linter do clone local, detectando a stack do repo
-# capacidade: construcao/qualidade-do-codigo
+# capacidade: qualidade-do-codigo-lint
 # dono: claudinho-TI
 #
-# Por que essa capacidade: o mapa (arquitetura-negocio-operacao.md, construcao nivel 2) poe
-# `lint` e `teste` na folha `construcao/qualidade-do-codigo` desde 12/09/2026 — a L1
-# `verificacao` foi extinta e `conferir` desceu a `infra/promocao-de-mudanca`. DEBITO 1:1: a
-# folha carrega DOIS verbos (lint, teste), nao-conformidade com arq:0037 a refatorar em fita
-# propria (linter-e-ferramenta vs. segunda folha L2). Linha de corte: `conferir` verifica a
+# Por que essa capacidade: o levantamento de conformacao a arq:0110 (12/09/2026,
+# levantamento/2026-09-12-conformacao-verbos-arq0110.md) partiu a folha composta
+# `construcao/qualidade-do-codigo` (que `lint` e `teste` carregavam junto, DEBITO 1:1
+# com arq:0037) em duas folhas L2 proprias no golden record: `qualidade-do-codigo-lint`
+# (este verbo) e `qualidade-do-codigo-teste`. O cabecalho ficou parado na folha antiga;
+# corrigido aqui (card #3150) para bater com o que o acervo ja resolve. Averbacao formal
+# da folha composta segue Aberta no levantamento. Linha de corte: `conferir` verifica a
 # plataforma; `lint` verifica o codigo.
 # use para: lintar um repo, conferir estilo antes de commit/PR, ver o que o linter aponta
 # atos: rodar, detectar
