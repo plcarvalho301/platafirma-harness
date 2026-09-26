@@ -147,6 +147,11 @@ RAIZ = _raiz_bancada()
 DEPLOY = os.environ.get("PF_DEPLOY_DIR", os.path.join(RAIZ, "deploy"))
 BIN = os.environ.get("PF_BIN_DIR", os.path.join(RAIZ, "bin"))
 HARNESS = os.environ.get("PF_HARNESS_DIR", os.path.join(RAIZ, "platafirma-harness"))
+# Verbos irmaos (acervo, release, tarefas, mesa) saem so do bin da release no ar, como
+# o BIN_DIR do proprio bin/release: a bancada nao tem bin/ (arq:0097). Chamar por
+# RAIZ/bin fazia o gate de `release promover` sair 127 no acervo e reprovar (#3142).
+BIN_IRMAOS = os.path.join(os.environ.get("PLATAFIRMA_RELEASE", "/opt/platafirma/current"),
+                          "harness", "bin")
 POLITICA_DIR = os.environ.get("PDP_DIR",
     os.path.join(RAIZ, "var", "politica-acesso"))  # dados fora do WT de fabrica (#2956)
 SUPERFICIES = os.path.join(POLITICA_DIR, "superficies.yaml")
@@ -452,7 +457,7 @@ def _capacidade_veredito(cap):
     rc 1 em TODAS as formas = nao existe (divergente); rc 2 = ambigua (divergente, com a
     lista no motivo); qualquer outro rc, ou o acervo fora do ar, e indeterminavel — nao
     da pra afirmar que a capacidade nao existe so porque a consulta falhou."""
-    raiz_bin = os.path.join(RAIZ, "bin")
+    raiz_bin = BIN_IRMAOS
     algum_rc1 = False
     ultimo_rc, ultimo_saida = None, ""
     for forma in sorted(normaliza(cap)):
@@ -475,7 +480,7 @@ def _capacidade_veredito(cap):
 def _desde_familia(familia):
     """`no_ar_desde` de `release estado <familia> --json` — fonte de "desde" quando a
     classe (verbo, hoje) nao tem data melhor por item (card #3142, passo 4)."""
-    raiz_bin = os.path.join(RAIZ, "bin")
+    raiz_bin = BIN_IRMAOS
     rc, out, _ = sh([os.path.join(raiz_bin, "release"), "estado", familia, "--json"])
     if rc != 0 or not out.strip():
         return None
@@ -2437,7 +2442,7 @@ def conferir_existe(tipo, nome, como_json=False):
     indeterminavel — fonte fora do ar NUNCA vira 1: ausencia de resposta nao e
     evidencia de ausencia, e `indeterminavel` nao ancora negativa.
     """
-    raiz_bin = os.path.join(RAIZ, "bin")
+    raiz_bin = BIN_IRMAOS
 
     def sai(existe, evidencia, extra=None):
         marca = "existe" if existe else "nao-existe"
@@ -2486,8 +2491,8 @@ def conferir_existe(tipo, nome, como_json=False):
     if tipo == "verbo":
         caminho = os.path.join(raiz_bin, nome)
         if os.path.exists(caminho):
-            return sai(True, f"~/AI/bin/{nome} -> {os.path.realpath(caminho)}")
-        return sai(False, f"~/AI/bin nao resolve {nome!r}")
+            return sai(True, f"{caminho} -> {os.path.realpath(caminho)}")
+        return sai(False, f"{raiz_bin} nao resolve {nome!r}")
 
     if tipo == "card":
         ident = nome.lstrip("#")
@@ -2561,7 +2566,7 @@ def conferir_card(alvo, como_json=False):
             return 2
         uso("card exige o numero do card (ex.: conferir card 3142)")
     ident = alvo.lstrip("#")
-    raiz_bin = os.path.join(RAIZ, "bin")
+    raiz_bin = BIN_IRMAOS
 
     rc, out, _ = sh(["git", "-C", HARNESS, "log", "origin/main", "--since=14.days.ago",
                       "-E", "--grep", rf"#{ident}\b", "--format=%H %cI"])
