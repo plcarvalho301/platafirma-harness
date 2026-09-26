@@ -23,6 +23,7 @@ tests/test_contrato_infra.py
 tests/test_contrato_monta_sessao.py
 tests/test_conferir_veredito.py
 tests/test_contrato_repo_bancada.py
+tests/test_lote_encadeado.py
 tests/test_mesa.py
 tests/test_registro_chave.py
 tests/test_release_construir_venv_registro.py

@@ -222,6 +222,7 @@ def _cap(raw: bytes) -> dict:
 if str(Path(__file__).resolve().parent) not in sys.path:
     sys.path.insert(0, str(Path(__file__).resolve().parent))
 import poda as _poda                                          # noqa: E402
+import lote as _lote                                          # noqa: E402  (card:3149 passo 7)
 
 
 def _poda_ligada() -> bool:
@@ -999,7 +1000,8 @@ def _item_de_lote(x):
 
 async def run_command(command: str = "", cwd: str = "", timeout: int = 120,
                        sessao_id: str | None = None,
-                       commands: list | None = None) -> dict:
+                       commands: list | None = None,
+                       encadeado: bool = False) -> dict:
     """Lote entre verbos DISTINTOS numa chamada so — sem shell, sem fallback (spec_porta-so-verbo).
 
     `commands`: lista de itens, cada um `{verbo, ato, args, stdin}` ou a string
@@ -1013,6 +1015,10 @@ async def run_command(command: str = "", cwd: str = "", timeout: int = 120,
     `CAP` por lote com `omitido_por_teto`/`lote_next`. `command` escalar = lote de 1 e
     devolve o resultado do item. `sessao_id` e o do `monta_sessao`. AUDITORIA: um JSONL
     por item em @LOG@/ — nao e silenciavel. Rollback: PF_RUN_SO_VERBO=0 + restart.
+    `encadeado=true`: cadeia fixa — item com exit 0 ou 1 segue; qualquer outro (2..5,
+    recusa, negado, timeout, exit fora da tabela) PARA, e os seguintes voltam
+    `nao_rodou`; o bloco `cadeia` diz exit e primeira linha de cada item, `parou_em` e o
+    exit do topo. Retomar = rerodar a cadeia: o que ja fez devolve "ja feito".
     """
     if not PF_RUN_SO_VERBO:
         return await _run_command_legado(command, cwd, timeout, sessao_id, commands)
@@ -1022,82 +1028,102 @@ async def run_command(command: str = "", cwd: str = "", timeout: int = 120,
     timeout = max(1, min(timeout, 600))
     ident = _sessao_resolve(sessao_id)
     lote_id = uuid.uuid4().hex[:8]
-    resultados, brutos = [], []
-    acumulado, lote_next = 0, None
-    for _i, x in enumerate(itens):
-        if acumulado >= CAP:
-            lote_next = _i
-            break
-        aviso_dup = False
-        if isinstance(x, str):
-            try:
-                _t = shlex.split(x)
-                if _t and _t[0] == "run_command" and len(_t) > 1:
-                    aviso_dup = True
-            except Exception:
-                pass
-        elif isinstance(x, dict) and str(x.get("verbo") or "") == "run_command" and x.get("ato"):
-            aviso_dup = True
-        argv, stdin, recusa = _item_de_lote(x)
-        if recusa is None and _eh_pipe_stdin(stdin):
-            n = stdin.get("de")
-            slug0 = argv[0].rsplit("/", 1)[-1]
-            if not isinstance(n, int) or n < 0 or n >= _i:
-                recusa = _recusa(slug0, f"stdin.de={n!r} fora do lote (0..{_i - 1})")
-            elif resultados[n].get("recusado") or resultados[n].get("erro"):
-                recusa = _recusa(slug0, f"insumo do item {n} nao rodou")
-            else:
-                stdin = brutos[n]
-        if recusa:
-            _audit(tool="run_command", evento="sem_verbo", verbo=recusa["verbo"],
-                   item=str(x)[:CMD_CAP],
-                   motivo=recusa["motivo"], sugestao=recusa["sugestao"],
-                   cadeira=ident["cadeira"] or None, sessao_id=ident["sessao_id"],
-                   ordem_id=ident["ordem_id"], lote_id=lote_id, lote_n=_i)
-            resultados.append(recusa)
-            brutos.append("")
-            continue
-        slug = argv[0].rsplit("/", 1)[-1]
-        linha = " ".join([slug] + argv[1:])
-        negado = _autoriza(slug, "run_command", "comando", linha, DOM_RUNTIME)
-        if negado:
-            r = negado
-            brutos.append("")
-        else:
-            t0 = time.monotonic()
-            r = await anyio.to_thread.run_sync(_run_verbo_blocking, argv, stdin, timeout, ident)
-            so = r.get("stdout")
-            brutos.append(so.get("texto", "") if isinstance(so, dict) else "")
-            _perf = _perfil_verbo(slug, argv[0])
-            r = _serve(r, tool=slug, alca=linha, ident=ident, cauda=_perf["cauda"],
-                       cosmetica=_cosmetica(_perf, argv[1] if len(argv) > 1 else None))
-            if aviso_dup and isinstance(r, dict):
-                r.setdefault("avisos", []).append("run_command: primeiro token 'run_command' desduplicado com aviso")
-                if "aviso" not in r:
-                    r["aviso"] = "run_command: primeiro token 'run_command' desduplicado com aviso"
-            _audit(tool=slug, evento="verbo", via="run_command",
-                   ato=argv[1] if len(argv) > 1 else None, args=" ".join(argv[2:])[:CMD_CAP],
-                   cadeira=ident["cadeira"] or None, sessao_id=ident["sessao_id"],
-                   ordem_id=ident["ordem_id"], exit_code=r.get("exit_code"), erro=r.get("erro"),
-                   bytes_stdout=(r.get("stdout") or {}).get("bytes_total") if isinstance(r.get("stdout"), dict) else None,
-                   dur_ms=round((time.monotonic() - t0) * 1000),
-                   lote_id=lote_id, lote_n=_i, **_campos_poda(r))
-        so = r.get("stdout")
-        acumulado += so.get("bytes_total", 0) if isinstance(so, dict) else 0
-        resultados.append(r)
+    brutos: list = []
+    _estado = {"ident": ident}
+
+    async def _roda(_i, x, resultados):
+        ident = _estado["ident"]
+        r = await _roda_item_run_command(_i, x, resultados, brutos, ident, timeout,
+                                         lote_id, encadeado)
         # Injeção entre itens do lote (Aberto spec_sessao/expediente, #3053):
         # se o item executado foi sessao abrir com sucesso, extrai sessao_id e
         # chama ident = _sessao_resolve(sid_novo) antes do item seguinte (n+1)
-        ato = argv[1] if len(argv) > 1 else ""
-        if slug == "sessao" and ato == "abrir" and r.get("exit_code") == 0:
+        if r.pop("_sessao_abriu", False):
             sid_novo = _extrai_sessao_id(brutos[-1])
             if sid_novo:
-                ident = _sessao_resolve(sid_novo)
-    for _i in range(len(resultados), len(itens)):
-        resultados.append({"omitido_por_teto": True})
+                _estado["ident"] = _sessao_resolve(sid_novo)
+        return r
+
+    out = await _lote.itera(itens, _roda, encadeado=encadeado, cap=CAP,
+                            bytes_de=_lote.bytes_stdout)
+    if encadeado:
+        _c = out["cadeia"]
+        _audit(tool="run_command", evento="lote_encadeado", lote_id=lote_id,
+               lote_n=len(itens), parou_em=_c["parou_em"], exit_code=_c["exit"],
+               nao_rodou=len(_c["nao_rodou"]), cadeira=ident["cadeira"] or None,
+               sessao_id=ident["sessao_id"], ordem_id=ident["ordem_id"])
+        return out
     if len(itens) == 1:
-        return resultados[0]
-    return {"lote": resultados, "lote_n": len(itens), "lote_next": lote_next}
+        return out["lote"][0]
+    return out
+
+
+async def _roda_item_run_command(_i, x, resultados, brutos, ident, timeout, lote_id,
+                                 encadeado=False) -> dict:
+    """Um item de `run_command commands[]`: parte, confere stdin.de, autoriza, roda,
+    serve e audita. A ordem e a parada da cadeia sao de `lote.itera`."""
+    aviso_dup = False
+    if isinstance(x, str):
+        try:
+            _t = shlex.split(x)
+            if _t and _t[0] == "run_command" and len(_t) > 1:
+                aviso_dup = True
+        except Exception:
+            pass
+    elif isinstance(x, dict) and str(x.get("verbo") or "") == "run_command" and x.get("ato"):
+        aviso_dup = True
+    argv, stdin, recusa = _item_de_lote(x)
+    if recusa is None and _eh_pipe_stdin(stdin):
+        n = stdin.get("de")
+        slug0 = argv[0].rsplit("/", 1)[-1]
+        if not isinstance(n, int) or n < 0 or n >= _i:
+            recusa = _recusa(slug0, f"stdin.de={n!r} fora do lote (0..{_i - 1})")
+        elif resultados[n].get("recusado") or resultados[n].get("erro"):
+            recusa = _recusa(slug0, f"insumo do item {n} nao rodou")
+        elif encadeado and _lote.exit_do_item(resultados[n]) != 0:
+            # comentario #939 A4: na cadeia, insumo que saiu 1 ("nao existe") e vazio;
+            # rodar o seguinte sobre nada e efeito sobre entrada vazia.
+            recusa = _recusa(slug0, f"insumo do item {n} saiu {_lote.exit_do_item(resultados[n])}")
+        else:
+            stdin = brutos[n]
+    if recusa:
+        _audit(tool="run_command", evento="sem_verbo", verbo=recusa["verbo"],
+               item=str(x)[:CMD_CAP],
+               motivo=recusa["motivo"], sugestao=recusa["sugestao"],
+               cadeira=ident["cadeira"] or None, sessao_id=ident["sessao_id"],
+               ordem_id=ident["ordem_id"], lote_id=lote_id, lote_n=_i,
+               encadeado=encadeado or None)
+        brutos.append("")
+        return recusa
+    slug = argv[0].rsplit("/", 1)[-1]
+    linha = " ".join([slug] + argv[1:])
+    negado = _autoriza(slug, "run_command", "comando", linha, DOM_RUNTIME)
+    if negado:
+        r = negado
+        brutos.append("")
+    else:
+        t0 = time.monotonic()
+        r = await anyio.to_thread.run_sync(_run_verbo_blocking, argv, stdin, timeout, ident)
+        so = r.get("stdout")
+        brutos.append(so.get("texto", "") if isinstance(so, dict) else "")
+        _perf = _perfil_verbo(slug, argv[0])
+        r = _serve(r, tool=slug, alca=linha, ident=ident, cauda=_perf["cauda"],
+                   cosmetica=_cosmetica(_perf, argv[1] if len(argv) > 1 else None))
+        if aviso_dup and isinstance(r, dict):
+            r.setdefault("avisos", []).append("run_command: primeiro token 'run_command' desduplicado com aviso")
+            if "aviso" not in r:
+                r["aviso"] = "run_command: primeiro token 'run_command' desduplicado com aviso"
+        _audit(tool=slug, evento="verbo", via="run_command",
+               ato=argv[1] if len(argv) > 1 else None, args=" ".join(argv[2:])[:CMD_CAP],
+               cadeira=ident["cadeira"] or None, sessao_id=ident["sessao_id"],
+               ordem_id=ident["ordem_id"], exit_code=r.get("exit_code"), erro=r.get("erro"),
+               bytes_stdout=(r.get("stdout") or {}).get("bytes_total") if isinstance(r.get("stdout"), dict) else None,
+               dur_ms=round((time.monotonic() - t0) * 1000),
+               lote_id=lote_id, lote_n=_i, encadeado=encadeado or None, **_campos_poda(r))
+    ato = argv[1] if len(argv) > 1 else ""
+    if slug == "sessao" and ato == "abrir" and r.get("exit_code") == 0:
+        r["_sessao_abriu"] = True     # quem itera troca o ident antes do item n+1
+    return r
 
 async def _run_command_legado(command: str = "", cwd: str = "", timeout: int = 120,
                        sessao_id: str | None = None,
@@ -2021,7 +2047,7 @@ def _faz_tool_verbo(slug: str, binario: str, descricao: str):
     async def _tool(ato: str = "", args: list[str] | None = None,
                     stdin: str | dict | list | None = None,
                     sessao_id: str | None = None, timeout: int = 120,
-                    lote: list[dict] | None = None) -> dict:
+                    lote: list[dict] | None = None, encadeado: bool = False) -> dict:
         # #3124: o cliente MCP desserializa stdin JSON valido antes de chegar aqui; a
         # anotacao velha (str | None) fazia o pydantic recusar sem rodar nada.
         stdin = _stdin_texto(stdin)
@@ -2029,38 +2055,46 @@ def _faz_tool_verbo(slug: str, binario: str, descricao: str):
             timeout = max(1, min(timeout, 600))
             ident = _sessao_resolve(sessao_id)
             lote_id = uuid.uuid4().hex[:8]
-            resultados = []
-            acumulado = 0
-            lote_next = None
-            for _i, item in enumerate(lote):
-                if acumulado >= CAP:
-                    lote_next = _i
-                    break
+
+            # card:3149 passo 7: mesmo iterador de run_command; `encadeado` para a cadeia
+            # no primeiro item fora de exit 0/1 (lote.py tem a regra).
+            async def _roda(_i, item, _resultados):
+                if not isinstance(item, dict):
+                    return _recusa(slug, "item do lote deve ser {ato, args, stdin}")
                 _ato = item.get("ato", "")
-                _args = list(item.get("args") or [])
+                _args = item.get("args") or []
+                if isinstance(_args, (str, bytes)):
+                    return _recusa(slug, "args deve ser lista de tokens, recebido string; use args: [ ... ]")
+                _args = [str(a) for a in _args]
                 _stdin = _stdin_texto(item.get("stdin"))
                 _linha = " ".join([slug] + ([_ato] if _ato else []) + _args)
                 negado_item = _autoriza(slug, "run_command", "comando", _linha, DOM_RUNTIME)
                 if negado_item:
-                    r = negado_item
-                else:
-                    argv = _argv_verbo(binario, _ato, _args)
-                    t0 = time.monotonic()
-                    r = await anyio.to_thread.run_sync(_run_verbo_blocking, argv, _stdin, timeout, ident)
-                    _perf = _perfil_verbo(slug, binario)
-                    r = _serve(r, tool=slug, alca=_linha, ident=ident, cauda=_perf["cauda"],
-                               cosmetica=_cosmetica(_perf, _ato_efetivo(argv)))
-                    _audit(tool=slug, ato=_ato or None, args=" ".join(_args)[:CMD_CAP],
-                           cadeira=ident["cadeira"] or None, sessao_id=ident["sessao_id"],
-                           ordem_id=ident["ordem_id"], exit_code=r.get("exit_code"), erro=r.get("erro"),
-                           bytes_stdout=r.get("stdout", {}).get("bytes_total"),
-                           dur_ms=round((time.monotonic() - t0) * 1000),
-                           lote_id=lote_id, lote_n=_i, **_campos_poda(r))
-                acumulado += (r.get("stdout") or {}).get("bytes_total", 0)
-                resultados.append(r)
-            for _i in range(len(resultados), len(lote)):
-                resultados.append({"omitido_por_teto": True})
-            return {"lote": resultados, "lote_n": len(lote), "lote_next": lote_next}
+                    return negado_item
+                argv = _argv_verbo(binario, _ato, _args)
+                t0 = time.monotonic()
+                r = await anyio.to_thread.run_sync(_run_verbo_blocking, argv, _stdin, timeout, ident)
+                _perf = _perfil_verbo(slug, binario)
+                r = _serve(r, tool=slug, alca=_linha, ident=ident, cauda=_perf["cauda"],
+                           cosmetica=_cosmetica(_perf, _ato_efetivo(argv)))
+                _audit(tool=slug, ato=_ato or None, args=" ".join(_args)[:CMD_CAP],
+                       cadeira=ident["cadeira"] or None, sessao_id=ident["sessao_id"],
+                       ordem_id=ident["ordem_id"], exit_code=r.get("exit_code"), erro=r.get("erro"),
+                       bytes_stdout=(r.get("stdout") or {}).get("bytes_total"),
+                       dur_ms=round((time.monotonic() - t0) * 1000),
+                       lote_id=lote_id, lote_n=_i, encadeado=encadeado or None,
+                       **_campos_poda(r))
+                return r
+
+            out = await _lote.itera(list(lote), _roda, encadeado=encadeado, cap=CAP,
+                                    bytes_de=_lote.bytes_stdout)
+            if encadeado:
+                _c = out["cadeia"]
+                _audit(tool=slug, evento="lote_encadeado", lote_id=lote_id, lote_n=len(lote),
+                       parou_em=_c["parou_em"], exit_code=_c["exit"],
+                       nao_rodou=len(_c["nao_rodou"]), cadeira=ident["cadeira"] or None,
+                       sessao_id=ident["sessao_id"], ordem_id=ident["ordem_id"])
+            return out
         args = list(args or [])
         linha = " ".join([slug] + ([ato] if ato else []) + args)
         # Leva 1: mesma decisão do fallback (acao/tipo de run_command), auditada pelo
