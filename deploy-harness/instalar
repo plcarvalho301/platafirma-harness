@@ -154,6 +154,8 @@ UNITS=(
   "deploy-harness/descansar-varredura.timer|habilita"
   "deploy-harness/abertura-caderno.service|alvo-de-timer"
   "deploy-harness/abertura-caderno.timer|habilita"
+  "deploy-harness/comportamento.service|alvo-de-timer"
+  "deploy-harness/comportamento.timer|habilita"
 )
 if [ "$TEM_RELEASE" = 0 ]; then
   medido impossivel "(unit)" "release ausente — nenhuma unit do harness tem fonte"
