@@ -1823,14 +1823,24 @@ def _montar(cadeira: str, atualizar: bool = True, chapeu: str = "", pergunta: st
     resposta = {"sessao": abrir_json}
     resposta.update(exp_json)
 
-    # Porta marca o prefixo estável (persona+conduta) com cache_control (spec_contexto-na-porta, #3067)
+    # Porta marca o prefixo estável com cache_control (spec_contexto-na-porta, #3067).
+    # O prefixo e DERIVADO da ordem servida, nao lista fixa: a corrida contigua, desde
+    # a primeira peca, das pecas nomeadas estaveis pela spec expediente rev 1.2
+    # (persona, chapeu, conduta) ou declaradas `volatilidade: estavel` pelo expediente
+    # (ex.: rotinas). A primeira peca fora disso fecha o prefixo — cache de prefixo so
+    # vale ate o primeiro byte que muda. Lista fixa ficou velha duas vezes (#3146 poe o
+    # chapeu entre persona e conduta; #3084 poe rotinas logo depois).
+    prefixo = []
     for p in resposta.get("pecas", []):
-        if p.get("peca") in ("persona", "conduta"):
+        if p.get("peca") in ("persona", "chapeu", "conduta") or p.get("volatilidade") == "estavel":
             p["cache_control"] = {"type": "ephemeral"}
             p["cacheavel"] = True
+            prefixo.append(p.get("peca"))
+            continue
+        break
 
     if isinstance(resposta.get("pacote"), dict):
-        resposta["pacote"]["prefixo_cacheavel"] = ["persona", "conduta"]
+        resposta["pacote"]["prefixo_cacheavel"] = prefixo
         resposta["pacote"]["cache_control"] = {"type": "ephemeral"}
 
     return resposta
