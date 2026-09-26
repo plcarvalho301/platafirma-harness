@@ -33,6 +33,7 @@ set -euo pipefail
 # deste verbo lê a bancada — nem para achar a URL de uma família nova.
 AQUI="$(dirname "$(readlink -f "$0")")"
 . "$AQUI/../lib/raizes.sh"
+. "$AQUI/../lib/venv.sh"   # resolver_uv, python_gerenciado, resolver_python, construir_venv (card #3150 passo 2: mesmo construtor para teste)
 
 PROD_RAIZ="$PF_RELEASE_RAIZ"                     # <familia>/{.repo.git,<sha>,current,anterior} e venv/
 ATALHOS="$PF_RELEASE_RAIZ/current"               # DIRETÓRIO de atalhos estáveis (arq:0102 D6)
@@ -1067,108 +1068,22 @@ assentar_atalhos() {  # $1=repo
 # atalho só troca depois de pronto. Venv velho fica no disco, como a árvore de rev velha.
 VENVS_PRONTOS=()
 
-# uv por ordem explícita (cabeçalho): override, dois caminhos de sistema, PATH. A porta e o
-# wrapper não carregam ~/.local/bin, e o release não pode depender do PATH de quem o chama.
-resolver_uv() {  # imprime o caminho do uv; 3 ausente
-  local c
-  if [ -n "${PLATAFIRMA_UV:-}" ]; then
-    # absoluto: relativo resolveria contra o diretório de quem chama, não contra nada declarado
-    if [[ "$PLATAFIRMA_UV" == /* ]] && [ -x "$PLATAFIRMA_UV" ] && [ ! -d "$PLATAFIRMA_UV" ]; then printf '%s' "$PLATAFIRMA_UV"; return 0; fi
-    printf 'release: dependência ausente: PLATAFIRMA_UV=%s não é binário executável em caminho absoluto (override do uv)\n' "$PLATAFIRMA_UV" >&2
-    return 3
-  fi
-  for c in /usr/local/bin/uv /usr/bin/uv; do
-    if [ -x "$c" ] && [ ! -d "$c" ]; then printf '%s' "$c"; return 0; fi
-  done
-  c="$(command -v uv 2>/dev/null || true)"
-  if [ -n "$c" ] && [ -x "$c" ]; then printf '%s' "$c"; return 0; fi
-  {
-    printf 'release: dependência ausente: uv (constrói venv do lock) — procurado em $PLATAFIRMA_UV, /usr/local/bin/uv, /usr/bin/uv e no PATH\n'
-    printf '         instale uv de sistema, fora do home da conta: sudo install -m 0755 -o root -g root <binário uv> /usr/local/bin/uv\n'
-    printf '         (ou: curl -LsSf https://astral.sh/uv/install.sh | sudo env UV_INSTALL_DIR=/usr/local/bin UV_NO_MODIFY_PATH=1 sh), ou aponte PLATAFIRMA_UV\n'
-  } >&2
-  return 3
-}
-
-# 0 quando o caminho está sob o HOME da conta ou numa árvore de python gerenciado pelo uv
-python_gerenciado() {  # $1=caminho
-  local p="$1" casa="${HOME:-}"
-  casa="${casa%/}"
-  if [ -n "$casa" ] && { [ "$p" = "$casa" ] || [[ "$p" == "$casa"/* ]]; }; then return 0; fi
-  case "$p" in */uv/python/*) return 0 ;; esac
-  return 1
-}
-
-# python de sistema dos venvs. Imprime "<caminho>\t<caminho real>\t<major.minor>"; 3 ausente.
-resolver_python() {
-  local py="${PLATAFIRMA_PYTHON:-/usr/bin/python3.12}" real ver
-  if [[ "$py" != /* ]] || [ ! -x "$py" ] || [ -d "$py" ]; then
-    printf 'release: dependência ausente: python de sistema %s não existe ou não é executável (caminho absoluto) — venv de produção não se liga a python gerenciado no home da conta; instale python3.12 do sistema ou aponte PLATAFIRMA_PYTHON\n' "$py" >&2
-    return 3
-  fi
-  real="$(readlink -f "$py")"
-  # override também não liga venv de produção ao home da conta nem a python gerenciado pelo uv
-  # (um PLATAFIRMA_PYTHON que é o python de outro venv resolve, por readlink, para lá)
-  if python_gerenciado "$py" || python_gerenciado "$real"; then
-    printf 'release: dependência ausente: python %s (real %s) está no home da conta ou é gerenciado pelo uv — venv de produção só se liga a python de sistema; aponte PLATAFIRMA_PYTHON para um python do sistema\n' "$py" "$real" >&2
-    return 3
-  fi
-  ver="$("$py" -c 'import sys; print("%d.%d" % sys.version_info[:2])' 2>/dev/null </dev/null)" || ver=""
-  if ! [[ "$ver" =~ ^[0-9]+\.[0-9]+$ ]]; then
-    printf 'release: dependência ausente: python de sistema %s não roda (não disse a versão)\n' "$py" >&2
-    return 3
-  fi
-  printf '%s\t%s\t%s' "$py" "$real" "$ver"
-}
-
-construir_venv() {  # $1=lock $2=destino $3=uv $4=python $5=versão do python
-  local lock="$1" dest="$2" uv="$3" py="$4" ver="$5" rc=0 req home
-  # only-system: o uv não escolhe python gerenciado; never: não baixa um quando o de sistema não serve.
-  # Só no ambiente do uv (não vaza para deploy nem publicar-abertura). Variáveis de quem chama que
-  # brigam com isso saem: UV_MANAGED_PYTHON faz o uv sair 2 junto de --python-preference (medido
-  # com uv 0.12.1), e seria lido como lock incompatível; UV_PYTHON/UV_SYSTEM_PYTHON/VIRTUAL_ENV
-  # não escolhem interpretador aqui.
-  local -a uvenv=(env -u UV_MANAGED_PYTHON -u UV_NO_MANAGED_PYTHON -u UV_PYTHON -u UV_SYSTEM_PYTHON
-    -u VIRTUAL_ENV UV_PYTHON_PREFERENCE=only-system UV_PYTHON_DOWNLOADS=never)
-  case "$(basename "$lock")" in
-    uv.lock)
-      # --no-install-project: a árvore servida é r-x; o código roda dela, o venv só traz dependência.
-      # --python vence o .python-version do projeto (o do rag pede 3.14).
-      "${uvenv[@]}" UV_PROJECT_ENVIRONMENT="$dest" "$uv" sync -q --frozen --no-dev --no-install-project \
-        --python "$py" --project "$(dirname "$lock")" </dev/null >&2 || rc=$? ;;
-    *)
-      "${uvenv[@]}" "$uv" venv -q --python "$py" "$dest" </dev/null >&2 || rc=$?
-      if [ "$rc" -eq 0 ] && grep -qvE '^[[:space:]]*(#|$)' "$lock"; then
-        "${uvenv[@]}" "$uv" pip install -q --python "$dest/bin/python" -r "$lock" </dev/null >&2 || rc=$?
-      fi ;;
-  esac
-  if [ "$rc" -ne 0 ]; then
-    req="$(sed -n 's/^requires-python[[:space:]]*=[[:space:]]*"\(.*\)"[[:space:]]*$/\1/p' "$lock" 2>/dev/null | head -n 1)"
-    printf 'release: falha alta: uv saiu %s construindo do lock %s com o python de sistema %s (%s)%s — lock que exige outra versão não se contorna com python gerenciado; ajuste o requires-python/.python-version da família ou aponte PLATAFIRMA_PYTHON\n' \
-      "$rc" "$lock" "$py" "$ver" "${req:+; o lock pede requires-python $req}" >&2
-    return 3
-  fi
-  # confere a ligação: o venv tem de apontar para o python pedido, não para outro que o uv achou
-  home="$(sed -n 's/^home[[:space:]]*=[[:space:]]*//p' "$dest/pyvenv.cfg" 2>/dev/null | head -n 1)"
-  if [ -z "$home" ] || python_gerenciado "$home" \
-    || { [ "$home" != "$(dirname "$py")" ] && [ "$home" != "$(dirname "$(readlink -f "$py")")" ]; }; then
-    printf 'release: falha alta: venv %s ficou ligado a %s, não ao python de sistema %s\n' "$dest" "${home:-(sem pyvenv.cfg)}" "$py" >&2
-    return 3
-  fi
-}
+# resolver_uv, python_gerenciado, resolver_python, construir_venv: movidos para
+# lib/venv.sh (card #3150 passo 2) — teste passa a chamar o MESMO construtor, pela
+# mesma chave <nome>-<hash>, em vez de ter escada própria.
 
 construir_venvs() {  # $1=repo $2=sha ; enche VENVS_PRONTOS; 0 ok, 3 falhou
   local repo="$1" sha="$2" arvore linhas nome lock hash dest uv="" pyid="" py="" py_real="" py_ver=""
   arvore="$PROD_RAIZ/$repo/$sha"
   VENVS_PRONTOS=()
   [ -r "$VENVS" ] || return 0
-  linhas="$(jq -r --arg f "$repo" 'to_entries[] | select(.key | startswith("_") | not)
-            | select((.value | type) == "object" and .value.familia == $f)
-            | "\(.key)\t\(.value.lock)"' "$VENVS" 2>/dev/null)" || {
+  # leitor único (card #3150 passo 2, bin/_release/registro.py): mesma leitura que
+  # teste e, depois, pre-push vão usar pela chave — nenhum relê o JSON por conta própria
+  linhas="$(PLATAFIRMA_VENVS="$VENVS" python3 "$AQUI/_release/registro.py" --familia "$repo" 2>/dev/null)" || {
     printf 'release: dependência com outro contrato: registro de venvs não é JSON legível (%s)\n' "$VENVS" >&2
     return 3
   }
-  while IFS=$'\t' read -r nome lock; do
+  while IFS=$'\t' read -r nome lock _teste; do
     [ -n "$nome" ] || continue
     if ! validar_slug "$nome" || [[ "$lock" == /* ]] || [[ "$lock" == *..* ]]; then
       printf 'release: erro: venv mal declarado em %s: %s (%s)\n' "$VENVS" "$nome" "$lock" >&2
