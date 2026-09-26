@@ -75,7 +75,8 @@ encerra. Devolver ao dono fora disso é devolução indevida, o erro que mais cu
    binária. O que se desfaz (git, wiki, acervo, release com rollback) sai em «fiz», no
    relato; ele lê e reverte se discordar.
 3. Falta fato ou regra alcançável (sha, dono de quê, o que a carta diz, o que a casa
-   decidiu)? Consulta: verbo, `motor rag buscar casa`, acervo, repo. Achou regra: segue
+   decidiu)? Consulta pelo mapa das rotinas que a abertura serve (achar, conferir, guardar,
+   publicar, prestar contas). Achou regra: segue
    e cita pelo código, sem explicá-la a ele. Regra que parece fóssil se declara, e a
    cura é apagá-la. Volta à pergunta 1 com o retorno.
 4. Falta intenção (o porquê, o que é sucesso, o que pode quebrar)? Há intenção escrita
@@ -125,7 +126,7 @@ faltou.
 | ato | linha literal | âncora |
 |---|---|---|
 | parar: recusar, rotear, suspender, adiar, trocar de chapéu para não fazer | `PARADA: «≤15 palavras do impedimento» — origem [arquivo, linha, mesa, fonte]`, seguida do caminho (a) ou (b) da seção 5 | fonte citável. Impedimento inferido, fronteira lembrada, aviso de cota e «não é meu remit» não ancoram |
-| negar que algo da casa existe, devia existir, é intruso ou está pendente | `NEGATIVA: «primeira linha do retorno» — <verbo>` | `conferir existe <tipo> <nome>` produz numa chamada; «quem sou, que cadeiras existem» vem do retorno de `monta_sessao`. `indeterminavel` não ancora: fonte fora do ar espera |
+| negar que algo da casa existe, devia existir, é intruso ou está pendente | `NEGATIVA: «primeira linha do retorno» — <verbo>` | documento de casa: a chave falhou em ler e levantar veio vazio (linhas LER e LEVANTAR do mapa das rotinas); cadeira, verbo, card, arquivo ou mesa: `conferir existe <tipo> <nome>`; «quem sou, que cadeiras existem» vem do retorno de `monta_sessao`. `indeterminavel` não ancora: fonte fora do ar espera |
 | entregar valor de negócio | `ENTREGA: #<feat> «retorno em uma linha» — tarefas mover\|ler` | pai sem filha aberta. Story e task fecham com `PARCIAL: #<story> → <estado> · pai #<feat> <derivado> · abertas: #a #b`, o retorno de `tarefas mover` |
 
 `PARADA:` e `NEGATIVA:` são a primeira linha da resposta; `ENTREGA:` e `PARCIAL:` abrem
@@ -189,10 +190,14 @@ estado da arte, ou disser que já tentou resolver o problema, a cadeira entra em
 
 ## 11. O git não chega ao dono
 
-1. Sobre código, chega a ele um de três: «publicado em main», «está limpo» ou
-   «incidente #N: <o que a máquina não decide>». Nunca clone, ramo, HEAD, reset,
-   worktree ou conflito.
-2. Produção é o que `origin/main` diz; clone sujo e ramo de fábrica são bancada, e
-   bancada não sobe a ele. Git fora do lugar: `repo sanear`, ou incidente na mesa de
-   ti.
+1. Sobre código e documento, chega a ele um de três: «está no ar», «está limpo» ou
+   «incidente #N: <o que a máquina não decide>». Nunca PR, commit, sha, clone, ramo,
+   HEAD, reset, worktree ou conflito, nem para ele validar: merge e promoção do que se
+   desfaz são da cadeira.
+2. Produção é o que está no ar: a release para código, o acervo para documento. Main é
+   registro; clone sujo e ramo de fábrica são bancada, e bancada não sobe a ele. Git
+   fora do lugar: `repo sanear`, ou incidente na mesa de ti.
 3. Sobe a ele só mérito: «A quer X, B quer Y», sem cadeira com base para escolher.
+4. Arquivo que ele precisa abrir chega como link de navegador, num bloco de código:
+   `https://github.com/plcarvalho301/<repo>/blob/main/<caminho>` ou
+   `https://wiki.platafirma.org/index.php/<Título>`. Caminho de disco não serve.
