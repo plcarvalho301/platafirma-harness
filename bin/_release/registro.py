@@ -2,20 +2,21 @@
 # registro — leitor único de registro/venvs.json, para release, teste e pre-push
 # (card #3150, comentário B1: "release, teste e pre-push importam o mesmo leitor;
 # nenhum relê o JSON por conta própria").
-"""Registro stack -> (família, lock, subárvore de teste).
+"""Registro stack/repositório -> (família, lock, subárvore de teste, esteira, stack_real).
 
-Cada chave do JSON (exceto as que começam com "_", que são comentário) declara uma
-stack: {"familia": "<repo>", "lock": "<caminho do lock na árvore>", "teste":
+Cada chave do JSON (exceto as que começam com "_", que são comentário, e "repositorios")
+declara uma stack: {"familia": "<repo>", "lock": "<caminho do lock na árvore>", "teste":
 "<subárvore onde a suíte que usa este venv mora, opcional>"}. `lock` é o caminho
 lido por release para construir o venv (chave = <nome>-sha256(lock+python)) e por
 teste/pre-push para reaproveitar o mesmo venv, pela mesma chave.
 
 Uso:
-  registro.py <nome>              família, lock e subárvore de teste (TSV) da stack <nome>
+  registro.py <nome>              família, lock, subárvore, esteira e stack (TSV) de <nome>
   registro.py --familia <familia> uma linha TSV (nome, lock, teste) por stack da família
+  registro.py --all               uma linha TSV (nome, família, lock, teste, esteira) por stack
 
-exit: 0 achou · 2 stack desconhecida (lista as conhecidas) · 3 registro ausente ou
-      ilegível · 5 stack conhecida sem lock declarado
+exit: 0 achou · 2 stack/repositório desconhecido ou nome duplicado (stack = repo) ·
+      3 registro ausente ou ilegível · 5 stack conhecida sem lock declarado
 """
 from __future__ import annotations
 
@@ -41,12 +42,19 @@ class StackDesconhecida(RuntimeError):
 
 
 class StackSemLock(RuntimeError):
+    def __init__(self, nome: str, lock: str = ""):
+        super().__init__(nome)
+        self.nome = nome
+        self.lock = lock
+
+
+class NomeDuplicado(RuntimeError):
     def __init__(self, nome: str):
         super().__init__(nome)
         self.nome = nome
 
 
-def carregar(caminho: Path | None = None) -> dict:
+def carregar_tudo(caminho: Path | None = None) -> tuple[dict[str, dict], dict[str, dict]]:
     caminho = caminho or caminho_registro()
     try:
         bruto = caminho.read_text(encoding="utf-8")
@@ -58,39 +66,123 @@ def carregar(caminho: Path | None = None) -> dict:
         raise RegistroIlegivel(f"registro de venvs não é JSON válido ({caminho}): {exc}") from exc
     if not isinstance(dados, dict):
         raise RegistroIlegivel(f"registro de venvs não é um objeto ({caminho})")
-    return {k: v for k, v in dados.items() if not k.startswith("_")}
+
+    repos_raw = dados.get("repositorios") or dados.get("_repositorios") or {}
+    if not isinstance(repos_raw, dict):
+        repos_raw = {}
+
+    stacks_raw = dados.get("stacks") if isinstance(dados.get("stacks"), dict) else {
+        k: v for k, v in dados.items() if not k.startswith("_") and k != "repositorios"
+    }
+
+    repos: dict[str, dict] = {k: (dict(v) if isinstance(v, dict) else {}) for k, v in repos_raw.items()}
+    for s_nome, s_decl in stacks_raw.items():
+        if isinstance(s_decl, dict) and s_decl.get("familia"):
+            f = s_decl["familia"]
+            if f not in repos:
+                repos[f] = {"esteira": s_decl.get("esteira", "codigo")}
+
+    # Recusa na leitura de stack com nome igual a repositório (exit 2 nomeando os dois)
+    for s_nome in stacks_raw.keys():
+        if s_nome in repos:
+            raise NomeDuplicado(s_nome)
+
+    return stacks_raw, repos
+
+
+def carregar(caminho: Path | None = None) -> dict:
+    stacks, _ = carregar_tudo(caminho)
+    return stacks
 
 
 def stacks_da_familia(familia: str, caminho: Path | None = None) -> list[tuple[str, str, str]]:
     """[(nome, lock, subárvore de teste)] das stacks declaradas para <familia>."""
-    dados = carregar(caminho)
+    stacks, _ = carregar_tudo(caminho)
     saida = []
-    for nome, decl in dados.items():
+    for nome, decl in stacks.items():
         if not isinstance(decl, dict) or decl.get("familia") != familia:
             continue
         saida.append((nome, decl.get("lock", "") or "", decl.get("teste", "") or ""))
     return saida
 
 
+def resolver(nome: str, caminho: Path | None = None) -> tuple[str, str, str, str, str]:
+    """Resolve <nome> (stack ou repositório) -> (stack_real, família, lock, subárvore, esteira).
+
+    Levanta StackDesconhecida, StackSemLock ou NomeDuplicado.
+    """
+    stacks, repos = carregar_tudo(caminho)
+
+    if nome in stacks:
+        decl = stacks[nome]
+        if not isinstance(decl, dict):
+            raise StackDesconhecida(nome, sorted(list(stacks.keys()) + list(repos.keys())))
+        familia = decl.get("familia", "") or ""
+        lock = decl.get("lock", "") or ""
+        teste = decl.get("teste", "") or ""
+        esteira = decl.get("esteira") or repos.get(familia, {}).get("esteira", "codigo")
+        if not lock:
+            raise StackSemLock(nome, lock)
+        return nome, familia, lock, teste, esteira
+
+    if nome in repos:
+        repo_decl = repos[nome]
+        esteira = repo_decl.get("esteira", "codigo")
+        stack_alvo = repo_decl.get("stack")
+        if not stack_alvo:
+            cands = [s for s, d in stacks.items() if isinstance(d, dict) and d.get("familia") == nome]
+            sufixo = nome.replace("platafirma-", "")
+            if sufixo in cands:
+                stack_alvo = sufixo
+            elif cands:
+                stack_alvo = cands[0]
+        if stack_alvo and stack_alvo in stacks:
+            s_decl = stacks[stack_alvo]
+            lock = s_decl.get("lock", "") or ""
+            teste = s_decl.get("teste", "") or ""
+            esteira = s_decl.get("esteira") or esteira
+            if not lock:
+                raise StackSemLock(stack_alvo, lock)
+            return stack_alvo, nome, lock, teste, esteira
+        else:
+            lock = repo_decl.get("lock", "")
+            if not lock:
+                raise StackSemLock(nome, lock)
+            return nome, nome, lock, repo_decl.get("teste", ""), esteira
+
+    conhecidas = sorted(set(list(stacks.keys()) + list(repos.keys())))
+    raise StackDesconhecida(nome, conhecidas)
+
+
 def stack(nome: str, caminho: Path | None = None) -> tuple[str, str, str]:
     """(família, lock, subárvore de teste) da stack <nome>.
 
-    Levanta StackDesconhecida ou StackSemLock — o chamador decide o exit (2 ou 5);
-    RegistroIlegivel (registro ausente/ilegível) já é 3.
+    Compatibilidade com chamadores antigos.
     """
-    dados = carregar(caminho)
-    decl = dados.get(nome)
-    if not isinstance(decl, dict):
-        raise StackDesconhecida(nome, sorted(dados.keys()))
-    lock = decl.get("lock", "") or ""
-    if not lock:
-        raise StackSemLock(nome)
-    return decl.get("familia", "") or "", lock, decl.get("teste", "") or ""
+    stack_real, familia, lock, teste, esteira = resolver(nome, caminho)
+    return familia, lock, teste
 
 
 def _main(argv: list[str]) -> int:
     if not argv or argv[0] in ("-h", "--help", "--ajuda"):
         print(__doc__.strip())
+        return 0
+    if argv[0] == "--all":
+        try:
+            stacks, repos = carregar_tudo()
+        except RegistroIlegivel as exc:
+            print(f"registro: {exc}", file=sys.stderr)
+            return 3
+        except NomeDuplicado as exc:
+            print(f"registro: stack com nome igual a repositório: '{exc.nome}' (stack '{exc.nome}', repositório '{exc.nome}')", file=sys.stderr)
+            return 2
+        for s_nome, s_decl in sorted(stacks.items()):
+            fam = s_decl.get("familia", "")
+            lock = s_decl.get("lock", "")
+            teste = s_decl.get("teste", "")
+            t_s = teste if teste else "-"
+            esteira = s_decl.get("esteira") or repos.get(fam, {}).get("esteira", "codigo")
+            print(f"{s_nome}\t{fam}\t{lock}\t{t_s}\t{esteira}")
         return 0
     if argv[0] == "--familia":
         if len(argv) != 2:
@@ -101,25 +193,32 @@ def _main(argv: list[str]) -> int:
         except RegistroIlegivel as exc:
             print(f"registro: {exc}", file=sys.stderr)
             return 3
+        except NomeDuplicado as exc:
+            print(f"registro: stack com nome igual a repositório: '{exc.nome}' (stack '{exc.nome}', repositório '{exc.nome}')", file=sys.stderr)
+            return 2
         for nome, lock, teste in linhas:
             print(f"{nome}\t{lock}\t{teste}")
         return 0
     if len(argv) != 1:
-        print("erro: um nome de stack por chamada (ou --familia <familia>)", file=sys.stderr)
+        print("erro: um nome de stack ou repositório por chamada (ou --familia <familia>, --all)", file=sys.stderr)
         return 2
     try:
-        familia, lock, teste = stack(argv[0])
+        stack_real, familia, lock, teste, esteira = resolver(argv[0])
     except RegistroIlegivel as exc:
         print(f"registro: {exc}", file=sys.stderr)
         return 3
+    except NomeDuplicado as exc:
+        print(f"registro: stack com nome igual a repositório: '{exc.nome}' (stack '{exc.nome}', repositório '{exc.nome}')", file=sys.stderr)
+        return 2
     except StackDesconhecida as exc:
-        print(f"registro: stack desconhecida: {exc.nome}", file=sys.stderr)
-        print("stacks conhecidas: " + (", ".join(exc.conhecidas) or "(nenhuma)"), file=sys.stderr)
+        print(f"registro: stack ou repositório desconhecido: {exc.nome}", file=sys.stderr)
+        print("conhecidos: " + (", ".join(exc.conhecidas) or "(nenhum)"), file=sys.stderr)
         return 2
     except StackSemLock as exc:
         print(f"registro: stack '{exc.nome}' sem lock declarado em {caminho_registro()}", file=sys.stderr)
         return 5
-    print(f"{familia}\t{lock}\t{teste}")
+    t_val = teste if teste else "-"
+    print(f"{familia}\t{lock}\t{t_val}\t{esteira}\t{stack_real}")
     return 0
 
 

@@ -1,87 +1,74 @@
 #!/usr/bin/env bash
 # teste — roda a suite de teste do clone local, detectando a stack e o ambiente do repo
 # capacidade: qualidade-do-codigo-teste
-# dono: claudinho-TI
-#
-# Por que essa capacidade: o levantamento de conformacao a arq:0110 (12/09/2026,
-# levantamento/2026-09-12-conformacao-verbos-arq0110.md) partiu a folha composta
-# `construcao/qualidade-do-codigo` (que `lint` e `teste` carregavam junto, DEBITO 1:1
-# com arq:0037) em duas folhas L2 proprias no golden record: `qualidade-do-codigo-teste`
-# (este verbo) e `qualidade-do-codigo-lint`. O cabecalho ficou parado na folha antiga;
-# corrigido aqui (card #3150) para bater com o que o acervo ja resolve. Averbacao formal
-# da folha composta segue Aberta no levantamento.
-#
-# Linha de corte com `conferir`: `conferir` verifica a PLATAFORMA (declarado x servido —
-# verbo, superficie, servico). `teste` e `lint` verificam o CODIGO de um repo.
-# use para: rodar teste de um repo, suite verde/vermelha, conferir mudanca antes de PR
-# atos: rodar, detectar
+# dono: ti
+# classe: C
+# atos: rodar (leitura, operacao), detectar (leitura, operacao), inventario (leitura, operacao)
 # forma: predicado
 # cauda: sim
 #
-# Verbo-por-API do braco de teste (card #3004, feature #3003, invariante seg:0014).
-# Substitui `run_command "cd ... && pytest"` — a linha livre atravessava a allowlist de
-# prefixo por flag (`-p`, `--rootdir`) e o alcance real nao aparecia na decisao. Aqui o
-# chamador escolhe o REPO e, no maximo, um alvo DENTRO dele; a linha do runner e montada
-# pelo verbo, e nenhuma flag do chamador atravessa.
+# Verbo conforme a spec_teste (rev 3) e arq:0110.
+# A unidade de teste é a stack ou repositório resolvido pelo registro único
+# (bin/_release/registro.py, registro/venvs.json). Substitui a escada heurística
+# de interpretador pela resolução canônica.
 #
-# DETECCAO DO AMBIENTE, e nao so da stack. Medido em 05/09: `uvx pytest` num repo desta
-# casa da FALSO VERMELHO — monta ambiente isolado, o projeto perde as proprias
-# dependencias e a suite morre no import (`No module named yaml`), nao no teste. Suite
-# que nao chegou a rodar nao e suite vermelha. Por isso a escada abaixo procura o
-# interpretador do projeto ANTES de cair no isolado, e o ultimo degrau sai avisado.
+# Linha de corte com `conferir`: `conferir` verifica a PLATAFORMA (declarado x servido).
+# `teste` e `lint` verificam o CÓDIGO de um repositório ou stack.
 #
-#   python  interpretador, na ordem: PF_TESTE_PYTHON · <repo>/.venv · <bancada>/.venv-<sufixo>
-#           · $PLATAFIRMA_RELEASE/venv/<sufixo> (convencao da casa: platafirma-harness -> harness)
-#           ->  uv run --python <py> --with pytest pytest     (ve as deps do venv)
-#           pyproject.toml sem venv casado  ->  uv run pytest
-#           nenhum dos dois              ->  uvx pytest       (ISOLADO — avisa no stderr)
-#   node    package.json com scripts.test  ->  npm test
-#
-# Repo sem stack nenhuma responde INDETERMINAVEL (exit 5), nunca "verde": suite que nao
-# existe nao e suite que passou — a mesma regua de fonte inalcancavel dos verbos de
-# leitura (arq:0085).
+# Atos:
+#   rodar       roda a suite de teste (verde/vermelha, bloco fixo, veredito memoizado)
+#   detectar    mostra stack, runner, chave, caminho e a linha que rodaria
+#   inventario  lista arquivos de teste (em portão ou fora, fóssil: não medido)
 set -uo pipefail
 
-# Raizes da casa (card #3010): a bancada vem de pf_bancada, sem default.
 . "$(dirname "$(readlink -f "$0")")/../lib/raizes.sh"
-# resolver_uv, resolver_python, construir_venv: o MESMO construtor de release, pela
-# mesma chave <nome>-<hash> (card #3150 passo 2-3) — usado por `teste rodar --chave`.
 . "$(dirname "$(readlink -f "$0")")/../lib/venv.sh"
 PF_VENV_PREFIXO="teste"
 
-BANCADA=""   # preenchida por declara_bancada, depois de validado o ato
+BANCADA=""
 VERBO="$(basename "$0")"
+REGISTRO="$(dirname "$(readlink -f "$0")")/_release/registro.py"
 
-# preenchidos por detecta()
-STACK=""; LINHA=""; PY=""; ISOLADO=0; RAIZPY=""
-
-# preenchidos por ambiente_da_chave() — caminho --chave (registro/venvs.json)
-CHAVE_PY=""; CHAVE_HASH=""; SUBARVORE_CHAVE=""
+# Preenchidos pela resolução no registro
+REG_FAMILIA=""; REG_LOCK=""; REG_SUBARVORE=""; REG_ESTEIRA=""; REG_STACK=""
+CHAVE_PY=""; CHAVE_HASH=""
 
 uso() {
   cat >&2 <<EOF
 uso:
-  $VERBO rodar <repo> [<alvo>] [--chave <nome>]   roda a suite do clone
-  $VERBO detectar <repo> [--chave <nome>]         diz o ambiente e a linha que rodaria
+  $VERBO rodar <nome> [<alvo>] [--portao] [--arvore <caminho>] [--chave <nome>]
+  $VERBO detectar <nome> [--chave <nome>]
+  $VERBO inventario [<nome>|--all] [--json]
 
-  <alvo> = caminho dentro do repo (sem ele, a suite inteira)
-  --chave <nome>: usa o ambiente de registro/venvs.json (a MESMA chave e o mesmo
-    construtor de \`release promover\`, card #3150), em vez da escada heuristica
-    de interpretador; --chave desconhecida sai 2 com a lista, sem lock declarado
-    (ou lock ausente na arvore) sai 5
+  <nome> = nome de repositório ou stack registrado em registro/venvs.json
+  <alvo> = caminho dentro da subárvore de teste (sem ele, a suíte inteira)
+  --portao: roda só a lista do portão (controle/tests/VERDES)
+  --arvore <caminho>: roda a árvore materializada (exigida sob a raiz de release)
+  --chave <nome>: (deprecado) usa o ambiente de registro/venvs.json (arq:0110 §11)
 
-bancada: PLATAFIRMA_BANCADA, senao $PLATAFIRMA_ARQUIVO_BANCADA (sem default: exit 3)
-interpretador: PF_TESTE_PYTHON (ignorado com --chave, que usa o do registro)
-exit: 0 suite verde · 1 suite vermelha · 2 uso · 3 falha do runner · 4 alvo fora da raiz
-      5 indeterminavel (nenhuma stack de teste detectada, ou --chave sem lock)
+bancada: PLATAFIRMA_BANCADA, senão \$PLATAFIRMA_ARQUIVO_BANCADA (sem declaração: exit 3)
+interpretador: venv construído pelo registro
+exit: 0 suíte verde / inventário lido · 1 suíte vermelha / sem bancada
+      2 uso / nome desconhecido / nome duplicado / --ajuda · 3 dependência ausente
+      4 alvo fora da subárvore ou --arvore fora da raiz
+      5 indeterminável (nenhuma stack detectada ou stack sem lock)
 EOF
   exit 2
 }
 
 morre() { printf '%s: %s\n' "$VERBO" "$1" >&2; exit "${2:-3}"; }
 
-# Bancada declarada pela conta (card #3010): PLATAFIRMA_BANCADA, senao a linha de
-# ~/.config/platafirma/bancada. Sem declaracao: exit 3. Nunca cria diretorio.
+avisa_deprecado() {  # uma vez por sessão (arq:0110 §11)
+  local aviso="$1" chave="$2"
+  local sess_dir="/tmp/platafirma-avisos-${PF_SESSAO:-${USER:-default}}"
+  mkdir -p "$sess_dir" 2>/dev/null || true
+  local trava="$sess_dir/teste_$chave"
+  if [ ! -f "$trava" ]; then
+    touch "$trava" 2>/dev/null || true
+    printf '%s: aviso: %s\n' "$VERBO" "$aviso" >&2
+  fi
+}
+
 declara_bancada() {
   BANCADA="$(pf_bancada)" || exit 3
   case "$BANCADA" in
@@ -95,9 +82,7 @@ bancada_de() {
   local cadeira="${PF_CADEIRA:-}"
   cadeira="${cadeira#claudinho-}"
   cadeira="${cadeira#claudinha-}"
-  # card:3149: a bancada e wt/<repo>/<cadeira>/<card-ou-slug>, a mesma regra do `repo`.
-  # Com chave (<repo>@<chave>): so ela. Sem chave: a unica aninhada da cadeira; mais de
-  # uma e ambiguo (exit 2 com a lista), nunca escolha por heuristica.
+
   if [ -n "$chave" ]; then
     [ -n "$cadeira" ] && [ -e "$BANCADA/wt/$nome/$cadeira/$chave/.git" ] \
       || morre "sem bancada '$nome@$chave' nesta cadeira — vizinho: repo abrir $nome <card> --slug <s>" 1
@@ -114,7 +99,6 @@ bancada_de() {
       exit 2
     fi
   fi
-  # legado: a bancada da SESSAO (wt/<repo>/<sessao>) e a plana da cadeira
   local sid="${PF_SESSAO:-}"
   if [ -n "$sid" ] && [ -d "$BANCADA/wt/$nome/$sid" ] && [ -e "$BANCADA/wt/$nome/$sid/.git" ]; then
     printf '%s/wt/%s/%s' "$BANCADA" "$nome" "$sid"
@@ -124,14 +108,14 @@ bancada_de() {
     printf '%s/wt/%s/%s' "$BANCADA" "$nome" "$cadeira"
     return 0
   fi
-  if [ -d "$BANCADA/$nome" ]; then
-    if [ -n "$cadeira" ]; then
-      printf '%s: aviso: worktree wt/%s/%s nao existe — usando fallback %s/%s\n' "$VERBO" "$nome" "$cadeira" "$BANCADA" "$nome" >&2
-    else
-      printf '%s: aviso: PF_CADEIRA nao definida — usando fallback %s/%s\n' "$VERBO" "$BANCADA" "$nome" >&2
-    fi
-  fi
-  printf '%s/%s' "$BANCADA" "$nome"
+
+  # Sem bancada da cadeira para o repositório: exit 1 com varrido: e vizinho: repo abrir <repo>;
+  # o fallback para o clone base sai (Passo 4 do card #3152).
+  local varrido="$BANCADA/wt/$nome${cadeira:+/$cadeira}"
+  printf '%s: sem bancada da cadeira para o repositório '\''%s'\''\n' "$VERBO" "$nome" >&2
+  printf '  varrido: %s\n' "$varrido" >&2
+  printf '  vizinho: repo abrir %s\n' "$nome" >&2
+  exit 1
 }
 
 clone_de() {
@@ -143,14 +127,13 @@ clone_de() {
   esac
   case "$chave" in */*|.*|*..*|*[!A-Za-z0-9._-]*) morre "chave de bancada invalida: '$chave'" 2 ;; esac
   alvo="$(bancada_de "$nome" "$chave")" || exit $?
-  [ -d "$alvo" ] || morre "nao ha clone '$nome' na bancada $BANCADA — \`repo abrir $nome\` clona" 3
+  [ -d "$alvo" ] || morre "nao ha clone '$nome' na bancada $BANCADA — \`repo abrir $nome\` clona" 1
   real="$(realpath "$alvo" 2>/dev/null)" || morre "nao resolvi '$alvo'" 4
   raiz_real="$(realpath "$BANCADA" 2>/dev/null || printf '%s' "$BANCADA")"
   case "$real/" in "$BANCADA"/*|"$raiz_real"/*) : ;; *) morre "'$nome' resolve fora da bancada $BANCADA" 4 ;; esac
   printf '%s' "$real"
 }
 
-# Alvo opcional: caminho DENTRO do clone. Nao pode escapar nem virar flag.
 alvo_de() {
   local c="$1" a="$2" real
   case "$a" in
@@ -163,113 +146,64 @@ alvo_de() {
   printf '%s' "$real"
 }
 
-# --chave <nome> (card #3150 passos 2-3): ambiente por registro/venvs.json, pela
-# MESMA chave <nome>-sha256(lock+python) que release constroi — nao a escada
-# heuristica de detecta(). Leitor unico: bin/_release/registro.py (comentario B1).
-# Preenche CHAVE_PY (interpretador do venv) e SUBARVORE_CHAVE (pode ficar vazia).
-# Exit: 2 chave desconhecida (lista as conhecidas) · 3 registro ilegivel/falha do
-# construtor · 5 chave conhecida sem lock, ou lock ausente na arvore do clone.
-ambiente_da_chave() {  # $1=clone $2=chave
-  local c="$1" chave="$2" registro out familia lock teste rc=0
-  registro="$(dirname "$(readlink -f "$0")")/_release/registro.py"
-  out="$(PLATAFIRMA_VENVS="${PLATAFIRMA_VENVS:-$(dirname "$(readlink -f "$0")")/../registro/venvs.json}" \
-         python3 "$registro" "$chave")" || return $?
-  IFS=$'\t' read -r familia lock teste <<<"$out"
-  if [ ! -f "$c/$lock" ]; then
-    morre "chave '$chave' declara lock '$lock', ausente em $c — nada a medir" 5
+validar_arvore() {
+  local arv="$1" real_arv raiz_rel tmp_dir
+  [ -d "$arv" ] || morre "árvore materializada '$arv' não é diretório" 4
+  real_arv="$(realpath "$arv" 2>/dev/null)" || morre "não resolvi '$arv'" 4
+  raiz_rel="$(realpath "${PF_RELEASE_RAIZ:-/opt/platafirma}" 2>/dev/null || printf '%s' "${PF_RELEASE_RAIZ:-/opt/platafirma}")"
+  tmp_dir="$(realpath "${TMPDIR:-/tmp}" 2>/dev/null || printf '%s' "${TMPDIR:-/tmp}")"
+
+  case "$real_arv/" in
+    "$raiz_rel"/*|"$tmp_dir"/*|/tmp/*|/var/tmp/*) : ;;
+    *) morre "o caminho de --arvore só é aceito sob a raiz de árvores materializadas: '$arv'" 4 ;;
+  esac
+  printf '%s' "$real_arv"
+}
+
+resolver_registro() {  # $1=nome
+  local nome="$1" out rc=0
+  local venvs="${PLATAFIRMA_VENVS:-$(dirname "$(readlink -f "$0")")/../registro/venvs.json}"
+  out="$(PLATAFIRMA_VENVS="$venvs" python3 "$REGISTRO" "$nome")" || rc=$?
+  if [ "$rc" -ne 0 ]; then
+    [ -n "$out" ] && printf '%s\n' "$out" >&2
+    exit "$rc"
+  fi
+  REG_FAMILIA=""; REG_LOCK=""; REG_SUBARVORE=""; REG_ESTEIRA=""; REG_STACK=""
+  IFS=$'\t' read -r REG_FAMILIA REG_LOCK REG_SUBARVORE REG_ESTEIRA REG_STACK <<<"$out"
+  [ "$REG_SUBARVORE" = "-" ] && REG_SUBARVORE=""
+}
+
+ambiente_do_registro() {  # $1=clone
+  local c="$1"
+  if [ -z "$REG_LOCK" ]; then
+    morre "stack '$REG_STACK' sem lock declarado em registro/venvs.json" 5
+  fi
+  if [ ! -f "$c/$REG_LOCK" ]; then
+    morre "lock '$REG_LOCK' ausente em $c — nada a medir" 5
   fi
   local pyid py py_real py_ver hash dest uv t0 t1
   pyid="$(resolver_python)" || exit 3
   IFS=$'\t' read -r py py_real py_ver <<<"$pyid"
-  hash="$({ cat "$c/$lock"; printf '\npython=%s %s\n' "$py_real" "$py_ver"; } | sha256sum | cut -c1-12)"
-  dest="${PF_RELEASE_RAIZ}/venv/$chave-$hash"
+  hash="$({ cat "$c/$REG_LOCK"; printf '\npython=%s %s\n' "$py_real" "$py_ver"; } | sha256sum | cut -c1-12)"
+  dest="${PF_RELEASE_RAIZ}/venv/$REG_STACK-$hash"
   if [ -f "$dest/.pronto" ]; then
-    printf 'ambiente:  %s-%s ja construido (lock e python inalterados) — reaproveitado\n' "$chave" "$hash" >&2
+    printf 'ambiente:  %s-%s ja construido (lock e python inalterados) — reaproveitado\n' "$REG_STACK" "$hash" >&2
   else
     uv="$(resolver_uv)" || exit 3
     mkdir -p "$(dirname "$dest")"
     t0="$(date +%s 2>/dev/null || echo 0)"
-    if ! construir_venv "$c/$lock" "$dest" "$uv" "$py" "$py_ver"; then
+    if ! construir_venv "$c/$REG_LOCK" "$dest" "$uv" "$py" "$py_ver"; then
       chmod -R u+w "$dest" 2>/dev/null || true; rm -rf "$dest"
       exit 3
     fi
     : > "$dest/.pronto"; chmod -R a-w "$dest"
     t1="$(date +%s 2>/dev/null || echo 0)"
-    printf 'ambiente:  %s-%s construido (%s s)\n' "$chave" "$hash" "$((t1 - t0))" >&2
+    printf 'ambiente:  %s-%s construido (%s s)\n' "$REG_STACK" "$hash" "$((t1 - t0))" >&2
   fi
-  CHAVE_PY="$dest/bin/python"; CHAVE_HASH="$hash"; SUBARVORE_CHAVE="$teste"
+  CHAVE_PY="$dest/bin/python"; CHAVE_HASH="$hash"
   return 0
 }
 
-# Raiz do projeto Python DENTRO do clone: a pasta que tem o pyproject.toml. Quase sempre
-# e o proprio clone; mas ha repo (platafirma-conhecimento) cujo pacote mora num subdir
-# (rag/), e ai `uvx pytest` da raiz cai em ambiente isolado e a suite morre no import
-# (card #3074). Procura o pyproject na raiz e, senao, um nivel abaixo — sem descer a
-# arvore inteira, que acharia pyproject de fixture ou de vendored dep. Ecoa o subdir
-# achado (vazio = raiz), para o `cd` do runner e para o venv casarem no mesmo lugar.
-raiz_projeto_py() {
-  local c="$1"
-  [ -f "$c/pyproject.toml" ] && { printf '%s' "$c"; return 0; }
-  local p
-  for p in "$c"/*/pyproject.toml; do
-    [ -f "$p" ] && { printf '%s' "$(dirname "$p")"; return 0; }
-  done
-  printf '%s' "$c"
-}
-
-# Interpretador do projeto, ou vazio. Convencao da casa: venv fora do repo, em
-# <bancada>/.venv-<sufixo>, senao o venv da release ($PLATAFIRMA_RELEASE/venv/<sufixo>, o mesmo
-# do shebang dos verbos), com o sufixo = nome do repo sem o prefixo `platafirma-`.
-# `raiz` = a pasta do pyproject (pode ser um subdir do clone); o venv do projeto mora la.
-python_do_projeto() {
-  local c="$1" nome="${2:-}" raiz="${3:-$1}" sufixo
-  if [ -n "${PF_TESTE_PYTHON:-}" ]; then
-    [ -x "$PF_TESTE_PYTHON" ] || morre "PF_TESTE_PYTHON='$PF_TESTE_PYTHON' nao e executavel" 3
-    printf '%s' "$PF_TESTE_PYTHON"; return 0
-  fi
-  [ -x "$raiz/.venv/bin/python" ] && { printf '%s' "$raiz/.venv/bin/python"; return 0; }
-  [ -x "$c/.venv/bin/python" ] && { printf '%s' "$c/.venv/bin/python"; return 0; }
-  # sufixo pelo NOME do repo: no worktree wt/<repo>/<cadeira> o basename e a cadeira
-  sufixo="${nome:-$(basename "$c")}"; sufixo="${sufixo#platafirma-}"
-  [ -x "$BANCADA/.venv-$sufixo/bin/python" ] && { printf '%s' "$BANCADA/.venv-$sufixo/bin/python"; return 0; }
-  [ -x "$PLATAFIRMA_RELEASE/venv/$sufixo/bin/python" ] && { printf '%s' "$PLATAFIRMA_RELEASE/venv/$sufixo/bin/python"; return 0; }
-  return 1
-}
-
-detecta() {
-  local c="$1" nome="${2:-}"
-  STACK=""; LINHA=""; PY=""; ISOLADO=0; RAIZPY="$c"
-  if [ -f "$c/package.json" ] && grep -q '"test"[[:space:]]*:' "$c/package.json" 2>/dev/null \
-     && [ ! -f "$c/pyproject.toml" ]; then
-    STACK="node"; LINHA="npm test"; return 0
-  fi
-  RAIZPY="$(raiz_projeto_py "$c")"
-  if [ -f "$RAIZPY/pyproject.toml" ] || [ -d "$c/testes" ] \
-     || compgen -G "$c/test_*.py" >/dev/null 2>&1 || compgen -G "$c/*/test_*.py" >/dev/null 2>&1; then
-    STACK="python"
-    if PY="$(python_do_projeto "$c" "$nome" "$RAIZPY")"; then
-      LINHA="uv run --python $PY --with pytest pytest"
-    elif [ -f "$RAIZPY/pyproject.toml" ]; then
-      LINHA="uv run pytest"
-    else
-      LINHA="uvx pytest"; ISOLADO=1
-    fi
-    return 0
-  fi
-  if [ -f "$c/package.json" ] && grep -q '"test"[[:space:]]*:' "$c/package.json" 2>/dev/null; then
-    STACK="node"; LINHA="npm test"; return 0
-  fi
-  return 1
-}
-
-# --- retorno em bloco fixo e veredito reaproveitado (card #3150 passo 3) ------------
-# O pytest cru vai ao log da instancia; a tela recebe a contagem, ate cinco reprovados
-# nomeados pelo junit.xml e a alca do log. Veredito gravado por (arvore da bancada como
-# esta, sujeira inclusa; alvo; interpretador): a mesma arvore medida de novo reaproveita.
-# PF_TESTE_VERBOSO=1 devolve o pytest inteiro; PF_TESTE_SEM_MEMO=1 mede sempre.
-
-# arvore da bancada COMO ESTA (rastreado + sujo + nao rastreado nao ignorado), num indice
-# temporario: o indice da bancada nao se toca.
 arvore_da_bancada() {  # $1=clone
   local c="$1" idx h
   idx="$(mktemp "${TMPDIR:-/tmp}/teste-idx.XXXXXX")" || return 1
@@ -281,40 +215,88 @@ arvore_da_bancada() {  # $1=clone
   return 0
 }
 
-pytest_em_bloco() {  # $1=clone $2=raiz(cwd) $3=rotulo $4=modo(py:<python>|isolado|projeto) [$5=alvo]
-  local c="$1" raiz="$2" rotulo="$3" modo="$4" alvo="${5:-}" rc=0
+pytest_em_bloco() {  # $1=clone $2=raiz(cwd) $3=rotulo $4=modo(py:<python>|isolado|projeto) [$5=alvo...]
+  local c="$1" raiz="$2" rotulo="$3" modo="$4"; shift 4
+  local alvos=("$@") rc=0
   local runner=()
   case "$modo" in
-    py:*)    runner=(uv run --python "${modo#py:}" --with pytest pytest) ;;
+    py:*)
+      if [ -f "$raiz/uv.lock" ]; then
+        runner=(uv run --frozen --python "${modo#py:}" --with pytest pytest)
+      else
+        runner=(uv run --python "${modo#py:}" --with pytest pytest)
+      fi
+      ;;
     isolado) runner=(uvx pytest) ;;
     *)       runner=(uv run pytest) ;;
   esac
   if [ "${PF_TESTE_VERBOSO:-0}" = 1 ]; then
-    (cd "$raiz" && "${runner[@]}" ${alvo:+"$alvo"}) || rc=$?
+    (cd "$raiz" && "${runner[@]}" ${alvos:+"${alvos[@]}"}) || rc=$?
     if [ "$rc" -eq 0 ]; then printf 'suite VERDE: %s\n' "$rotulo"; else printf 'suite VERMELHA: %s — exit %s\n' "$rotulo" "$rc"; fi
     return "$rc"
   fi
 
   local inst="${PLATAFIRMA_INSTANCIA:-/srv/platafirma/casa}" arvore chave="" memo=""
-  arvore="$(arvore_da_bancada "$c")" || arvore=""
-  if [ -n "$arvore" ]; then
-    chave="$(printf '%s|%s|%s' "$arvore" "${alvo#"$c"/}" "$modo" | sha256sum | cut -c1-16)"
+  if [ "${EM_ARVORE:-0}" -eq 1 ]; then
+    arvore="$(git -C "$c" rev-parse 'HEAD^{tree}' 2>/dev/null || echo '')"
+  else
+    arvore="$(arvore_da_bancada "$c")" || arvore=""
+    if [ -z "$arvore" ]; then
+      arvore="$(git -C "$c" rev-parse 'HEAD^{tree}' 2>/dev/null || echo '')"
+    fi
+  fi
+  local vereditos_dir="$inst/var/pre-push/vereditos"
+  if [ -n "$arvore" ] && [ -n "${CHAVE_HASH:-}" ]; then
+    memo="$(caminho_veredito "$vereditos_dir" "$arvore" "$REG_STACK" "$CHAVE_HASH")"
+    mkdir -p "$(dirname "$memo")" 2>/dev/null || memo=""
+  elif [ -n "$arvore" ]; then
+    chave="$(printf '%s|%s|%s' "$arvore" "${alvos[*]}" "$modo" | sha256sum | cut -c1-16)"
     memo="$inst/var/teste/vereditos/$chave.txt"
     mkdir -p "$(dirname "$memo")" 2>/dev/null || memo=""
   fi
+
   if [ -n "$memo" ] && [ -f "$memo" ] && [ "${PF_TESTE_SEM_MEMO:-0}" != 1 ]; then
-    local v; v="$(head -n 1 "$memo")"
-    printf '%s — veredito reaproveitado (mesma arvore %s, medido %s)\n' \
-      "${v%%|*}" "${arvore:0:12}" "$(sed -n 2p "$memo")"
-    sed -n '3,$p' "$memo"
-    case "$v" in 'suite VERDE'*) return 0 ;; *) return 1 ;; esac
+    local v; v="$(ler_veredito "$memo")"
+    if [ -n "$v" ]; then
+      case "$v" in
+        verde)
+          printf 'suite VERDE: %s — veredito reaproveitado (mesma arvore %s, chave %s-%s)\n' \
+            "$rotulo" "${arvore:0:12}" "$REG_STACK" "$CHAVE_HASH"
+          return 0 ;;
+        vermelho)
+          printf 'suite VERMELHA: %s — veredito reaproveitado (mesma arvore %s, chave %s-%s)\n' \
+            "$rotulo" "${arvore:0:12}" "$REG_STACK" "$CHAVE_HASH" >&2
+          return 1 ;;
+      esac
+    else
+      local v_antigo; v_antigo="$(head -n 1 "$memo")"
+      printf '%s — veredito reaproveitado (mesma arvore %s, medido %s)\n' \
+        "${v_antigo%%|*}" "${arvore:0:12}" "$(sed -n 2p "$memo")"
+      sed -n '3,$p' "$memo"
+      case "$v_antigo" in 'suite VERDE'*) return 0 ;; *) return 1 ;; esac
+    fi
   fi
 
   local logd="$inst/var/log/teste" log xml
   mkdir -p "$logd" 2>/dev/null || logd="${TMPDIR:-/tmp}"
   log="$logd/$(date -u +%Y%m%dT%H%M%SZ)-${rotulo%% *}-$$.txt"
   xml="$(mktemp "${TMPDIR:-/tmp}/teste-junit.XXXXXX.xml")"
-  (cd "$raiz" && "${runner[@]}" ${alvo:+"$alvo"} -q --junitxml="$xml") >"$log" 2>&1 || rc=$?
+
+  # Suporte a árvore materializada (read-only): desliga cacheprovider do pytest
+  local pytest_flags=(-q --junitxml="$xml")
+  if [ "${EM_ARVORE:-0}" -eq 1 ]; then
+    pytest_flags+=(-p no:cacheprovider)
+  fi
+
+  local env_opts=()
+  if [ "${EM_ARVORE:-0}" -eq 1 ]; then
+    local envtmp; envtmp="$(mktemp -d "${TMPDIR:-/tmp}/teste-env.XXXXXX")"
+    env_opts=(UV_PROJECT_ENVIRONMENT="$envtmp/venv")
+  fi
+
+  (cd "$raiz" && env ${env_opts:+"${env_opts[@]}"} "${runner[@]}" ${alvos:+"${alvos[@]}"} "${pytest_flags[@]}") >"$log" 2>&1 || rc=$?
+  [ -n "${envtmp:-}" ] && rm -rf "$envtmp"
+
   local resumo; resumo="$(grep -E '(passed|failed|error|no tests ran)' "$log" | tail -n 1 | sed 's/^=* *//; s/ *=*$//')"
   local linha extra=""
   if [ "$rc" -eq 0 ]; then
@@ -328,16 +310,18 @@ pytest_em_bloco() {  # $1=clone $2=raiz(cwd) $3=rotulo $4=modo(py:<python>|isola
   printf '%s\n' "$linha"
   [ -z "$extra" ] || printf '%s\n' "$extra"
   printf 'saida inteira: %s\n' "$log"
-  # so o que foi medido (0 verde, 1 reprovado) vira veredito; uso/coleta/ambiente nao
-  # Grava tambem sob a arvore DEPOIS da rodada: o runner pode deixar arquivo novo nao
-  # ignorado (uv.lock criado pelo uv, por exemplo), e a proxima consulta ve essa arvore.
+
   if [ -n "$memo" ] && { [ "$rc" -eq 0 ] || [ "$rc" -eq 1 ]; }; then
-    local depois m
-    depois="$(arvore_da_bancada "$c")" || depois=""
-    for m in "$memo" ${depois:+"$(dirname "$memo")/$(printf '%s|%s|%s' "$depois" "${alvo#"$c"/}" "$modo" | sha256sum | cut -c1-16).txt"}; do
-      { printf '%s|\n' "$linha"; date -u +%Y-%m-%dT%H:%M:%SZ; [ -z "$extra" ] || printf '%s\n' "$extra"
-        printf 'saida inteira: %s\n' "$log"; } > "$m.tmp" 2>/dev/null && mv -f "$m.tmp" "$m" 2>/dev/null
-    done
+    local v_str="verde"
+    [ "$rc" -eq 1 ] && v_str="vermelho"
+    gravar_veredito "$memo" "$v_str" "${arvore:0:12}"
+    # Grava também formato legado de texto caso leitor simples consulte
+    local depois
+    depois="$(arvore_da_bancada "$c" 2>/dev/null || echo '')"
+    if [ -n "$depois" ] && [ "$depois" != "$arvore" ]; then
+      local memo_depois; memo_depois="$(caminho_veredito "$vereditos_dir" "$depois" "$REG_STACK" "$CHAVE_HASH")"
+      gravar_veredito "$memo_depois" "$v_str" "${depois:0:12}"
+    fi
   fi
   return "$rc"
 }
@@ -350,27 +334,105 @@ ato_detectar() {
       *) [ -z "$nome" ] && nome="$1" || morre "argumento extra: $1" 2; shift ;;
     esac
   done
-  c="$(clone_de "$nome")" || exit $?
-  nome="${nome%%@*}"
+  [ -n "$nome" ] || [ -n "$chave" ] || uso
   if [ -n "$chave" ]; then
-    ambiente_da_chave "$c" "$chave" || exit $?
-    printf '%s  ·  chave %s-%s  ·  interpretador: %s\n' "$nome" "$chave" "$CHAVE_HASH" "$CHAVE_PY"
-    [ -n "$SUBARVORE_CHAVE" ] && printf '  subarvore de teste: %s\n' "$SUBARVORE_CHAVE"
+    avisa_deprecado "--chave está deprecado (arq:0110 §11); aponte o nome da stack ou repositório no primeiro argumento" "chave"
+  fi
+
+  local alvo_resolver="${chave:-$nome}"
+  resolver_registro "$alvo_resolver"
+  declara_bancada
+  c="$(clone_de "$REG_FAMILIA")" || exit $?
+  ambiente_do_registro "$c" || exit $?
+
+  local raiz="$c"
+  [ -n "$REG_SUBARVORE" ] && raiz="$c/$REG_SUBARVORE"
+  local runner="pytest"
+  local linha_cmd="uv run --python $CHAVE_PY --with pytest pytest"
+  if [ "$REG_ESTEIRA" = "documento" ]; then
+    runner="documento"
+  fi
+
+  # Formato conforme: stack, runner, chave, caminho e a linha
+  printf '%s  ·  stack %s  ·  runner %s  ·  chave %s-%s  ·  caminho %s  ·  rodaria: %s\n' \
+    "$nome" "$REG_STACK" "$runner" "$REG_STACK" "$CHAVE_HASH" "$raiz" "$linha_cmd"
+  return 0
+}
+
+ato_inventario() {
+  local nome="" modo_all=0 json_out=0
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --all) modo_all=1; shift ;;
+      --json) json_out=1; shift ;;
+      *) [ -z "$nome" ] && nome="$1" || morre "argumento extra: $1" 2; shift ;;
+    esac
+  done
+
+  local venvs="${PLATAFIRMA_VENVS:-$(dirname "$(readlink -f "$0")")/../registro/venvs.json}"
+
+  if [ "$modo_all" -eq 1 ]; then
+    local linhas
+    linhas="$(PLATAFIRMA_VENVS="$venvs" python3 "$REGISTRO" --all)" || exit $?
+    while IFS=$'\t' read -r s_nome s_fam s_lock s_teste s_esteira; do
+      [ -n "$s_nome" ] || continue
+      printf '%s (%s): fóssil: não medido\n' "$s_nome" "$s_fam"
+    done <<<"$linhas"
     return 0
   fi
-  detecta "$c" "$nome" || { printf '%s: indeterminavel — nenhuma stack de teste detectada em %s\n' \
-                      "$VERBO" "$c" >&2; exit 5; }
-  printf '%s  ·  stack %s  ·  rodaria: %s\n' "$nome" "$STACK" "$LINHA"
-  [ -n "$PY" ] && printf '  interpretador do projeto: %s\n' "$PY"
-  [ "$ISOLADO" -eq 1 ] && printf '  AVISO: ambiente isolado — dependencia do projeto pode faltar e a suite morrer no import\n'
+
+  [ -n "$nome" ] || morre "inventario exige <nome> ou --all" 2
+  resolver_registro "$nome"
+  declara_bancada
+  local c; c="$(clone_de "$REG_FAMILIA")" || exit $?
+
+  local raiz="$c"
+  [ -n "$REG_SUBARVORE" ] && raiz="$c/$REG_SUBARVORE"
+
+  printf '# inventário de testes: %s (%s)\n' "$nome" "$REG_FAMILIA"
+  local achados=() arq
+  while IFS= read -r arq; do
+    [ -n "$arq" ] || continue
+    achados+=("$arq")
+  done < <(find "$raiz" -type f \( -name "test_*.py" -o -name "*_test.py" \) 2>/dev/null | sort)
+
+  if [ "${#achados[@]}" -eq 0 ]; then
+    printf 'nenhum arquivo de teste encontrado em %s\n' "$raiz"
+    return 0
+  fi
+
+  local verdes_lista=()
+  for cand in "$c/controle/tests/VERDES" "$c/$REG_SUBARVORE/tests/VERDES" "$c/tests/VERDES"; do
+    if [ -r "$cand" ]; then
+      while IFS= read -r l; do
+        case "$l" in ''|'#'*) continue ;; esac
+        verdes_lista+=("$l")
+      done < "$cand"
+      break
+    fi
+  done
+
+  for arq in "${achados[@]}"; do
+    local rel="${arq#"$raiz"/}" rel_c="${arq#"$c"/}"
+    local portao="fora"
+    for v in "${verdes_lista[@]}"; do
+      if [ "$rel" = "$v" ] || [ "$rel_c" = "$v" ] || [ "$rel_c" = "controle/$v" ]; then
+        portao="portão"
+        break
+      fi
+    done
+    printf '  %-50s  [%s]  fóssil: não medido\n' "$rel" "$portao"
+  done
   return 0
 }
 
 ato_rodar() {
-  local nome="" alvo="" chave="" c rc
+  local nome="" alvo="" chave="" arvore="" portao=0 EM_ARVORE=0 c rc
   while [ $# -gt 0 ]; do
     case "$1" in
       --chave) shift; [ $# -gt 0 ] || morre "--chave exige um valor" 2; chave="$1"; shift ;;
+      --portao) portao=1; shift ;;
+      --arvore) shift; [ $# -gt 0 ] || morre "--arvore exige um caminho" 2; arvore="$1"; shift ;;
       *)
         if [ -z "$nome" ]; then nome="$1"
         elif [ -z "$alvo" ]; then alvo="$1"
@@ -379,73 +441,84 @@ ato_rodar() {
         shift ;;
     esac
   done
-  c="$(clone_de "$nome")" || exit $?
-  nome="${nome%%@*}"
-  # `if`, e com `|| exit`: `alvo_de` recusa por `exit` DENTRO da substituicao de comando,
-  # que mata so o subshell. Sem propagar o codigo aqui, a recusa virava alvo vazio e o
-  # runner rodava o repo INTEIRO — contencao que avisa e deixa passar nao e contencao.
-  if [ -n "$alvo" ]; then alvo="$(alvo_de "$c" "$alvo")" || exit $?; fi
+
+  [ -n "$nome" ] || [ -n "$chave" ] || uso
   if [ -n "$chave" ]; then
-    ambiente_da_chave "$c" "$chave" || exit $?
-    local raiz_chave="$c"
-    [ -n "$SUBARVORE_CHAVE" ] && raiz_chave="$c/$SUBARVORE_CHAVE"
-    printf '# %s · chave %s-%s · uv run --python %s --with pytest pytest (raiz %s)\n' \
-      "$nome" "$chave" "$CHAVE_HASH" "$CHAVE_PY" "$raiz_chave" >&2
-    pytest_em_bloco "$c" "$raiz_chave" "$nome (chave $chave)" "py:$CHAVE_PY" "$alvo"
-    return $?
+    avisa_deprecado "--chave está deprecado (arq:0110 §11); aponte o nome da stack ou repositório no primeiro argumento" "chave"
   fi
-  detecta "$c" "$nome" || { printf '%s: indeterminavel — nenhuma stack de teste detectada em %s\n' \
-                      "$VERBO" "$c" >&2; exit 5; }
-  printf '# %s · stack %s · %s\n' "$nome" "$STACK" "$LINHA" >&2
-  [ "$ISOLADO" -eq 1 ] && printf '# AVISO: ambiente isolado — falha de import aqui e do ambiente, nao do codigo\n' >&2
-  case "$STACK" in
-    python)
-      # roda da RAIZ do projeto (a pasta do pyproject), que pode ser um subdir do clone.
-      # o alvo ja e caminho absoluto (alvo_de -> realpath), entao vale de qualquer cwd.
-      local modo="projeto"
-      if [ -n "$PY" ]; then modo="py:$PY"; elif [ "$ISOLADO" -eq 1 ]; then modo="isolado"; fi
-      pytest_em_bloco "$c" "$RAIZPY" "$nome ($STACK)" "$modo" "$alvo"
-      return $? ;;
-    node)
-      if [ -n "$alvo" ]; then (cd "$c" && npm test -- "$alvo"); else (cd "$c" && npm test); fi ;;
-  esac
-  rc=$?
-  if [ "$rc" -eq 0 ]; then printf 'suite VERDE: %s (%s)\n' "$nome" "$STACK"
-  else printf 'suite VERMELHA: %s (%s) — exit %s\n' "$nome" "$STACK" "$rc"; fi
-  return "$rc"
+
+  local alvo_resolver="${chave:-$nome}"
+  resolver_registro "$alvo_resolver"
+
+  if [ -n "$arvore" ]; then
+    c="$(validar_arvore "$arvore")" || exit $?
+    EM_ARVORE=1
+  else
+    declara_bancada
+    c="$(clone_de "$REG_FAMILIA")" || exit $?
+  fi
+
+  local raiz="$c"
+  [ -n "$REG_SUBARVORE" ] && raiz="$c/$REG_SUBARVORE"
+
+  if [ -n "$alvo" ]; then
+    alvo="$(alvo_de "$c" "$alvo")" || exit $?
+  fi
+
+  ambiente_do_registro "$c" || exit $?
+
+  local alvos=()
+  if [ "$portao" -eq 1 ]; then
+    local lista_portao=""
+    for cand in "$c/controle/tests/VERDES" "$c/$REG_SUBARVORE/tests/VERDES" "$c/tests/VERDES"; do
+      if [ -r "$cand" ]; then lista_portao="$cand"; break; fi
+    done
+    if [ -n "$lista_portao" ]; then
+      while IFS= read -r linha; do
+        case "$linha" in ''|'#'*) continue ;; esac
+        if [ -f "$raiz/$linha" ]; then
+          alvos+=("$linha")
+        elif [ -f "$c/$linha" ]; then
+          alvos+=("$c/$linha")
+        elif [ -f "$c/controle/$linha" ]; then
+          alvos+=("$c/controle/$linha")
+        fi
+      done < "$lista_portao"
+    fi
+  elif [ -n "$alvo" ]; then
+    alvos+=("$alvo")
+  fi
+
+  local rotulo="$nome"
+  [ -n "$chave" ] && rotulo="$nome (chave $chave)"
+  [ -z "$chave" ] && [ "$nome" != "$REG_STACK" ] && rotulo="$nome (chave $REG_STACK)"
+
+  printf '# %s · chave %s-%s · uv run --python %s --with pytest pytest (raiz %s)\n' \
+    "$nome" "$REG_STACK" "$CHAVE_HASH" "$CHAVE_PY" "$raiz" >&2
+
+  pytest_em_bloco "$c" "$raiz" "$rotulo" "py:$CHAVE_PY" ${alvos:+"${alvos[@]}"}
+  return $?
 }
 
-ato="${1:-}"; [ -n "$ato" ] && shift
+# Despacho de atos
+if [ $# -eq 0 ]; then
+  uso
+fi
+
+for _a in "$@"; do
+  case "$_a" in
+    --ajuda|-h|--help|ajuda) uso ;;
+  esac
+done
+
+ato="$1"
+shift
+
 case "$ato" in
-  ""|-h|--help|ajuda) uso ;;
-esac
-declara_bancada
-case "$ato" in
-  rodar)    ato_rodar "$@" ;;
-  detectar) ato_detectar "$@" ;;
-  ""|-h|--help|ajuda) uso ;;
+  rodar)      ato_rodar "$@" ;;
+  detectar)   ato_detectar "$@" ;;
+  inventario) ato_inventario "$@" ;;
   *)
-    # arq:0110 §3 Q9: teste <verbo>
-    c="$(clone_de "platafirma-harness")" || exit $?
-    if [ -f "$c/controle/tests/test_contrato_$ato.py" ]; then
-      ato_rodar "platafirma-harness" "controle/tests/test_contrato_$ato.py"
-    elif [ -f "$c/testes/test_contrato_$ato.py" ]; then
-      ato_rodar "platafirma-harness" "testes/test_contrato_$ato.py"
-    elif [ -f "$c/testes/test_$ato.sh" ]; then
-      printf '# %s · stack bash · %s\n' "$ato" "bash $c/testes/test_$ato.sh" >&2
-      (cd "$c" && bash "testes/test_$ato.sh")
-      rc=$?
-      if [ "$rc" -eq 0 ]; then printf 'suite VERDE: %s (bash)\n' "$ato"
-      else printf 'suite VERMELHA: %s (bash) — exit %s\n' "$ato" "$rc"; fi
-      exit "$rc"
-    elif [ -f "$c/testes/test_contrato_$ato.sh" ]; then
-      printf '# %s · stack bash · %s\n' "$ato" "bash $c/testes/test_contrato_$ato.sh" >&2
-      (cd "$c" && bash "testes/test_contrato_$ato.sh")
-      rc=$?
-      if [ "$rc" -eq 0 ]; then printf 'suite VERDE: %s (bash)\n' "$ato"
-      else printf 'suite VERMELHA: %s (bash) — exit %s\n' "$ato" "$rc"; fi
-      exit "$rc"
-    else
-      morre "ato desconhecido: '$ato' — atos: rodar, detectar (ou teste <verbo>)" 2
-    fi ;;
+    morre "ato desconhecido: '$ato' — atos: rodar, detectar, inventario" 2
+    ;;
 esac
