@@ -3,7 +3,7 @@
 # capacidade: verificacao
 # dono: ti
 # classe: C
-# use para: 'existe X?' (ancora de NEGATIVA), regua da bancada antes de commitar (repo --staged, commit, arranque); as classes do SERVIDO respondem aqui deprecadas e moram em `release conferir <classe>`
+# use para: 'existe X?' (ancora de NEGATIVA); as classes de bancada estao deprecadas e apontam para `lint <classe>`
 # atos: existe (leitura, operacao), repo (leitura, operacao), commit (leitura, operacao), arranque (leitura, operacao), verbo (leitura, operacao), servico (leitura, operacao), skill (leitura, operacao), procedencia (leitura, operacao), superficie (leitura, operacao), front (leitura, operacao), sessao (leitura, operacao), chapeu (leitura, operacao), ferramental (leitura, operacao), pdp (leitura, operacao), alcance (leitura, operacao), vocabulario (leitura, operacao)
 # forma: predicado
 # le: existe=repo,rastreador,arquivo-local
@@ -45,8 +45,8 @@
 #
 # Despachante (arq:0110 §1): a implementacao e sub-ato e mora em bin/_release/conferir/conferir.py,
 # fora do PATH. As classes do SERVIDO sao de `release conferir` (spec_release §4); aqui respondem
-# com aviso de deprecado, uma vez por sessao (arq:0110 §11), e delegam. As classes de BANCADA e
-# `existe` ficam aqui ate `spec_lint` existir.
+# com aviso de deprecado, uma vez por sessao (arq:0110 §11), e delegam. As classes de BANCADA
+# respondem com aviso de deprecado apontando `lint <classe>` (spec_lint / arq:0110 §11).
 set -euo pipefail
 
 BIN_DIR="${PF_BIN_DIR:-$HOME/AI/bin}"
@@ -64,6 +64,17 @@ avisa_deprecado() {  # uma vez por sessao (arq:0110 §11)
   if [ ! -f "$trava" ]; then
     touch "$trava" 2>/dev/null || true
     printf 'conferir: `conferir %s` esta deprecado; a forma conforme e `release conferir %s` (spec_release §8).\n' "$classe" "$classe" >&2
+  fi
+}
+
+avisa_deprecado_bancada() {  # uma vez por sessao (arq:0110 §11)
+  local classe="$1"
+  local sess_dir="/tmp/platafirma-avisos-${PF_SESSAO:-${USER:-default}}"
+  mkdir -p "$sess_dir" 2>/dev/null || true
+  local trava="$sess_dir/conferir_bancada_$classe"
+  if [ ! -f "$trava" ]; then
+    touch "$trava" 2>/dev/null || true
+    printf 'conferir: `conferir %s` esta deprecado; a forma conforme e `lint %s` (spec_lint / arq:0110 §11).\n' "$classe" "$classe" >&2
   fi
 }
 
@@ -89,16 +100,17 @@ for c in $CLASSES_SERVIDO; do
     elif [ -x "$BIN_DIR/release" ]; then
       exec "$BIN_DIR/release" conferir "$@"
     fi
-    # sem `release` no PATH: a implementacao ainda responde
     exec python3 "$IMPL" "$@"
   fi
 done
 
 for c in $CLASSES_BANCADA; do
   if [ "$classe" = "$c" ]; then
+    if [ "$classe" != "existe" ]; then
+      avisa_deprecado_bancada "$classe"
+    fi
     exec python3 "$IMPL" "$@"
   fi
 done
 
-# classe desconhecida ou declarada sem implementacao: a usage da implementacao decide
 exec python3 "$IMPL" "$@"
