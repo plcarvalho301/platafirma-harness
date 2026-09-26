@@ -3,7 +3,7 @@
 # capacidade: metrica
 # dono: claudinho-ia
 # use para: giros por fita, erros por verbo, giros-ate-acerto, profundidade de cadeia de erro
-# atos: eventos, dia, ate-acerto, tateio, casos, verbos
+# atos: eventos, dia, ate-acerto, tateio, casos, verbos, comportamento
 # forma: relatorio
 # cauda: nao
 #
@@ -49,7 +49,7 @@ LOG_OPS = (os.environ.get("OPS_LOG_DIR") or os.environ.get("PF_LOG_OPS")
            or str(instancia() / "var" / "log" / "ops"))
 
 VERBO = "metrica"
-ATOS = ("eventos", "dia", "ate-acerto", "tateio", "casos", "verbos")
+ATOS = ("eventos", "dia", "ate-acerto", "tateio", "casos", "verbos", "comportamento")
 TIPOS = ("giro", "erro", "ajuda", "help", "acerto", "cadeia", "lote", "veredito")
 
 # PEDIDO DE AJUDA NAO E ERRO (dono, 12/09/2026): verbo chamado sem ato lista os atos por
@@ -806,6 +806,164 @@ def verbos_texto(r):
             linhas.append(f"  {(v):14s} {d['giros']:6d} giros · {d['erros']:5d} recusa/erro")
     return linhas
 
+# --- camada 3e: COMPORTAMENTO (consumer-aligned) ---------------------------------
+#
+# Card #3090 (dono, 26/09/2026): a bateria de comportamento mede as FITAS REAIS pelo
+# log — sem gold set, sem rodada de teste, sem congelar abertura nem motor, sem gate.
+# Compara a JANELA (um dia; default ontem) com a BASE (os 7 dias anteriores), por
+# cadeira, em sinais de ATO: o que o log grava em toda superficie. Sinal de prosa
+# (devolucao ao dono, pergunta no fim) fica fora: o claude.ai nao grava prosa
+# (arq:0061 §5). O timer `comportamento.timer` roda isto todo dia e manda o texto a
+# ia pela fila.
+#
+# Taxa POR FITA (ordem_id), para o volume do dia nao virar sinal.
+# Heuristica declarada, nao veredito:
+#   piorou   taxa da janela >= FATOR x a da base, com ao menos PISO ocorrencias na janela
+#   melhorou taxa da janela <= base / FATOR, com ao menos PISO ocorrencias na base
+
+BASE_DIAS = 7
+PISO = 3
+FATOR = 1.5
+# Ato com efeito fora da fita, e o que conta como conferir o efeito depois dele.
+COM_EFEITO = (("release", "promover"), ("release", "reverter"), ("repo", "pr-merge"),
+              ("repo", "empurrar"), ("deploy", None))
+CONFERENCIA = (("release", "conferir"), ("release", "estado"), ("conferir", None),
+               ("infra", "estado"), ("infra", "saude"))
+# Sinais que medem tropeco (mais = pior). `abertura_remontada` e `giros` ficam no
+# relatorio como contexto: remontar e a cura da abertura evaporada, e volume nao e
+# comportamento.
+SINAIS = {
+    "erro": "giro que falhou (sem ajuda nem veredito)",
+    "gramatica": "falha de forma: exit 2, verbo nu, recusa da porta",
+    "cadeia_de_erro": "2+ erros seguidos no mesmo verbo antes de acertar",
+    "documento_nao_achado": "acervo ler/resolver com exit 1",
+    "conferir_existe": "conferir existe chamado (reflexo da conduta antiga)",
+    "efeito_sem_conferencia": "promover/merge/push/deploy sem conferir depois na fita",
+    "tecnica_sem_casa": "fita tecnica sem motor/acervo/descobrir",
+}
+CONTEXTO = ("fitas", "giros", "sessoes", "abertura_remontada")
+
+def _casa_par(g, pares):
+    return any(g["tool"] == t and (a is None or g["ato"] == a) for t, a in pares)
+
+def sinais_por_cadeira(giros, cadeias):
+    # Giro sem cadeira (transporte, sessao sem chave) nao tem a quem atribuir
+    # comportamento: medido em 25/09, ~1.400 ordens/dia sem cadeira, todas ruido.
+    por_cad = defaultdict(list)
+    for g in giros:
+        if not _nulo(g["cadeira"]):
+            por_cad[g["cadeira"]].append(g)
+    cad_cadeia = defaultdict(int)
+    for c in cadeias:
+        cad_cadeia[c["cadeira"] or "-"] += 1
+    saida = {}
+    for cad, gs in por_cad.items():
+        fitas = defaultdict(list)
+        for g in gs:
+            fitas[g["ordem_id"] or "-"].append(g)
+        montas = defaultdict(int)
+        for g in gs:
+            if g["tool"] in ("monta_sessao", "monta-sessao") and not _nulo(g["sessao_id"]):
+                montas[g["sessao_id"]] += 1
+        sem_conf = sem_casa = 0
+        for ordem, fg in fitas.items():
+            for i, g in enumerate(fg):
+                if g["falhou"] or not _casa_par(g, COM_EFEITO):
+                    continue
+                if not any(_casa_par(h, CONFERENCIA) for h in fg[i + 1:]):
+                    sem_conf += 1
+            if ordem == "-":
+                continue
+            if (sum(1 for g in fg if g["tool"] in CODIGO) >= PISO_TECNICA
+                    and not any(g["tool"] in CASA for g in fg)):
+                sem_casa += 1
+        saida[cad] = {
+            "fitas": len([o for o in fitas if o != "-"]),
+            "giros": len(gs),
+            "sessoes": len({g["sessao_id"] for g in gs if not _nulo(g["sessao_id"])}),
+            "abertura_remontada": sum(1 for n in montas.values() if n > 1),
+            "erro": sum(1 for g in gs if g["falhou"]),
+            "gramatica": sum(1 for g in gs if _e_gramatica(g)),
+            "cadeia_de_erro": cad_cadeia.get(cad, 0),
+            "documento_nao_achado": sum(1 for g in gs if g["tool"] == "acervo"
+                                        and g["ato"] in ("ler", "resolver")
+                                        and g["exit_code"] == 1),
+            "conferir_existe": sum(1 for g in gs if g["tool"] == "conferir"
+                                   and g["ato"] == "existe"),
+            "efeito_sem_conferencia": sem_conf,
+            "tecnica_sem_casa": sem_casa,
+        }
+    return saida
+
+def _taxa(n, fitas):
+    return round(n / fitas, 3) if fitas else None
+
+def comportamento(janela, base, dia_janela, dias_base, sem_log):
+    """janela/base: {cadeira: sinais}. Devolve por cadeira a taxa por fita de cada
+    sinal nos dois periodos e o veredito heuristico."""
+    cadeiras = sorted(set(janela) | set(base))
+    por_cad, piorou, melhorou = {}, [], []
+    for cad in cadeiras:
+        j, b = janela.get(cad, {}), base.get(cad, {})
+        fj, fb = j.get("fitas", 0), b.get("fitas", 0)
+        linha = {"contexto": {"janela": {k: j.get(k, 0) for k in CONTEXTO},
+                              "base": {k: b.get(k, 0) for k in CONTEXTO}},
+                 "sinais": {}}
+        for s in SINAIS:
+            nj, nb = j.get(s, 0), b.get(s, 0)
+            tj, tb = _taxa(nj, fj), _taxa(nb, fb)
+            est = "estavel"
+            if fj == 0:
+                est = "sem_fita"
+            elif tb is None:
+                est = "sem_base"       # cadeira sem fita na base: nada a comparar
+            elif nj >= PISO and (tb == 0 or tj >= FATOR * tb):
+                est = "piorou"
+            elif nb >= PISO and tj <= tb / FATOR:
+                est = "melhorou"
+            linha["sinais"][s] = {"janela": nj, "base": nb, "taxa_janela": tj,
+                                  "taxa_base": tb, "estado": est}
+            if est == "piorou":
+                piorou.append((cad, s))
+            elif est == "melhorou":
+                melhorou.append((cad, s))
+        por_cad[cad] = linha
+    return {"janela": dia_janela, "base": f"{dias_base[0]}..{dias_base[-1]}",
+            "dias_sem_log": sem_log,
+            "regra": {"fator": FATOR, "piso": PISO, "base_dias": BASE_DIAS},
+            "release": os.path.realpath(__file__).split("/harness/")[0],
+            "piorou": [f"{c}:{s}" for c, s in piorou],
+            "melhorou": [f"{c}:{s}" for c, s in melhorou],
+            "por_cadeira": por_cad}
+
+def comportamento_texto(r):
+    L = [f"Coleta de comportamento (#3090) — janela {r['janela']} contra base {r['base']}.",
+         f"Regra: piorou = taxa por fita >= {r['regra']['fator']}x a base, com {r['regra']['piso']}+ "
+         f"ocorrencias. Release: {r['release']}."]
+    if r["dias_sem_log"]:
+        L.append("Dias sem log: " + ", ".join(r["dias_sem_log"]) + ".")
+    L.append("")
+    L.append("PIOROU: " + (", ".join(r["piorou"]) if r["piorou"] else "nada."))
+    L.append("MELHOROU: " + (", ".join(r["melhorou"]) if r["melhorou"] else "nada."))
+    L.append("")
+    L.append("Por cadeira (fitas janela/base · sinal: janela/base por fita):")
+    for cad, d in r["por_cadeira"].items():
+        cj, cb = d["contexto"]["janela"], d["contexto"]["base"]
+        if not cj["fitas"]:
+            continue
+        partes = []
+        for s, v in d["sinais"].items():
+            if v["janela"] or v["base"]:
+                marca = {"piorou": " ▲", "melhorou": " ▼"}.get(v["estado"], "")
+                partes.append(f"{s} {v['taxa_janela']}/{v['taxa_base']}{marca}")
+        L.append(f"- {cad} · fitas {cj['fitas']}/{cb['fitas']} · remontou {cj['abertura_remontada']}"
+                 + (" · " + " · ".join(partes) if partes else " · nenhum tropeco"))
+    L.append("")
+    L.append("Sinais: " + "; ".join(f"{k} = {v}" for k, v in SINAIS.items()) + ".")
+    L.append("Fora: sinais de prosa (claude.ai nao grava prosa, arq:0061 §5). "
+             "O que fazer com um PIOROU e da ia: reverter a mudanca de abertura ou abrir caso.")
+    return L
+
 # --- borda ------------------------------------------------------------------------
 
 def uso(codigo=2):
@@ -817,6 +975,7 @@ def uso(codigo=2):
   metrica tateio [<dia>] [--cadeira <slug>]
   metrica casos [<dia>] [--tool <verbo>] [--cadeira <slug>]
   metrica verbos [<dia>] [--desde AAAA-MM-DD] [--ate AAAA-MM-DD] [--cadeira <slug>] [--csv]
+  metrica comportamento [<dia>] [--resumo]
 
 Agrega o ops log ($PLATAFIRMA_INSTANCIA/var/log/ops/ops-AAAA-MM-DD.jsonl, ou OPS_LOG_DIR) em eventos de uso do harness.
 <dia> e AAAA-MM-DD; sem ele, hoje. Saida JSON; --resumo imprime o sumario legivel.
@@ -828,6 +987,9 @@ tateio      separa tateio de GRAMATICA (exit 2, verbo nu, recusa da porta) de ta
             LEITURA (sessao tecnica sem motor/acervo/descobrir), e do erro de execucao
 casos       o giro falhado com o que o log gravou (args, motivo); --agregado resume
 verbos      taxa de erro POR VERBO (erros/giros) numa janela de dias; --csv para planilha
+comportamento  sinais de ato por cadeira, taxa por fita: <dia> (default ontem) contra os
+            7 dias anteriores; marca o que piorou e melhorou (#3090). --resumo e o
+            texto que o timer manda a ia pela fila
 
 exit: 0 ok · 2 uso invalido · 4 nao ha log desse dia
 """)
@@ -963,6 +1125,40 @@ def main(argv):
     if args.tipo and args.tipo not in TIPOS:
         return erro_gracioso(f"{VERBO}: tipo desconhecido '{args.tipo}'",
                              [f"os tipos: {', '.join(TIPOS)}"], 2)
+
+    if ato == "comportamento":
+        # Sem <dia>, a janela e ONTEM: o timer roda de madrugada e o dia corrente esta
+        # pela metade. A base sao os BASE_DIAS anteriores a janela.
+        dj = date.fromisoformat(args.dia_flag or args.dia) if (args.dia_flag or args.dia) \
+            else datetime.now().astimezone().date() - timedelta(1)
+        dias_base = [(dj - timedelta(n)).isoformat() for n in range(BASE_DIAS, 0, -1)]
+        fonte = FonteJsonl()
+        sem_log = []
+
+        def _carrega(dias_):
+            gs, cs = [], []
+            for d in dias_:
+                try:
+                    g, _p, c = classifica(fonte, d)
+                except FonteAusente:
+                    sem_log.append(d)
+                    continue
+                gs.extend(g)
+                cs.extend(c)
+            return sinais_por_cadeira(gs, cs)
+
+        janela = _carrega([dj.isoformat()])
+        base = _carrega(dias_base)
+        if not janela and not base:
+            return erro_gracioso(f"{VERBO}: nao ha ops log na janela nem na base",
+                                 [f"esperado em {fonte.diretorio}"], 4)
+        r = comportamento(janela, base, dj.isoformat(), dias_base, sem_log)
+        if args.resumo:
+            for linha in comportamento_texto(r):
+                print(linha)
+        else:
+            print(json.dumps(r, ensure_ascii=False, indent=2))
+        return 0
 
     # Janela de dias: so `verbos` agrega entre dias (acerto/cadeia/ate-acerto sao
     # intra-dia por construcao: o par (ordem_id, tool) nao atravessa a meia-noite).
