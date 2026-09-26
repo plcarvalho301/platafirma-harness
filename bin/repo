@@ -176,12 +176,14 @@ bancada_de() {
   cadeira="${cadeira#claudinho-}"
   cadeira="${cadeira#claudinha-}"
   local sid="${PF_SESSAO:-}"
-  if [ -n "$sid" ] && [ -d "$BANCADA/wt/$nome/$sid" ] && [ -e "$BANCADA/wt/$nome/$sid/.git" ]; then
-    printf '%s/wt/%s/%s' "$BANCADA" "$nome" "$sid"
-    return 0
-  fi
+  # arq:0109 §2: a bancada e da cadeira. O worktree por sessao e legado de antes da
+  # correcao do abrir; so e lido quando a cadeira ainda nao tem o seu.
   if [ -n "$cadeira" ] && [ -d "$BANCADA/wt/$nome/$cadeira" ] && [ -e "$BANCADA/wt/$nome/$cadeira/.git" ]; then
     printf '%s/wt/%s/%s' "$BANCADA" "$nome" "$cadeira"
+    return 0
+  fi
+  if [ -n "$sid" ] && [ -d "$BANCADA/wt/$nome/$sid" ] && [ -e "$BANCADA/wt/$nome/$sid/.git" ]; then
+    printf '%s/wt/%s/%s' "$BANCADA" "$nome" "$sid"
     return 0
   fi
   if [ -d "$BANCADA/$nome" ]; then
@@ -1017,7 +1019,9 @@ cmd_abrir() {
   fi
   [ -d "$clone_raiz" ] && [ -e "$clone_raiz/.git" ] || morre "repositório desconhecido: '$nome' — $clone_raiz existe e nao e clone" 2
 
-  local wt_dir="$BANCADA/wt/$nome/${PF_SESSAO:-$cadeira}"
+  # arq:0109 §2: worktree por CADEIRA (a sessao nao e eixo; a proxima sessao da mesma
+  # cadeira tem de achar a bancada, e bancada_de procura por cadeira).
+  local wt_dir="$BANCADA/wt/$nome/$cadeira"
 
   if [ -d "$wt_dir" ] && [ -e "$wt_dir/.git" ]; then
     printf 'bancada já aberta: %s (@ %s)\n' "$wt_dir" "$(ramo_atual "$wt_dir")"
