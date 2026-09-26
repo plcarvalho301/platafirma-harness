@@ -1493,6 +1493,41 @@ ato_pr_merge() {
   printf 'PR #%s mesclado (%s)\n' "$num" "$modo"
 }
 
+# git de rede que nao engole erro em 2>&1->devnull: guarda a 1a linha de stderr em
+# REPLY e devolve o rc do git (comentario #939 card:3149 secao B1 -- fetch/ls-remote
+# calados deixam decisao destrutiva sobre estado velho).
+git_sem_engolir() {
+  local c="$1"; shift
+  local out; out="$(env PATH="$PATH_FORGE" "$GIT" -C "$c" "$@" 2>&1 1>/dev/null)"
+  local rc=$?
+  REPLY="$(printf '%s' "$out" | head -1)"
+  return "$rc"
+}
+
+# worktrees_de <clone-base> -- cada worktree do clone pelo proprio git (git worktree
+# list --porcelain), a clone base incluida na 1a linha; nunca por glob de diretorio
+# (comentario #939 secao B4 -- glob nao desce em wt/).
+worktrees_de() {
+  "$GIT" -C "$1" worktree list --porcelain 2>/dev/null | awk '/^worktree /{print substr($0,10)}'
+}
+
+# merged_heads_de <clone-base> <chave-cache> -- headRefName de todo PR mesclado do
+# repo, uma consulta ao forge por clone (nunca por merge-base --is-ancestor: squash
+# nao deixa ancestral -- comentario #939 secao B3). gh ausente ou consulta falha:
+# devolve vazio: a chamada decide so por ausencia no origin.
+declare -A _SANEAR_MERGED
+merged_heads_de() {
+  local c="$1" chave="$2"
+  if [ -z "${_SANEAR_MERGED[$chave]+x}" ]; then
+    if [ -z "$GH" ] || [ ! -x "$GH" ]; then
+      _SANEAR_MERGED[$chave]=""
+      return 1
+    fi
+    _SANEAR_MERGED[$chave]="$(cd "$c" && env PATH="$PATH_FORGE" "$GH" pr list --state merged --limit 500 --json headRefName --jq '.[].headRefName' 2>/dev/null)"
+  fi
+  printf '%s\n' "${_SANEAR_MERGED[$chave]}"
+}
+
 ato_sanear() {
   local alvo="" relatar=0
   while [ $# -gt 0 ]; do
@@ -1503,99 +1538,147 @@ ato_sanear() {
     esac
   done
 
-  local dirs=()
+  local cadeira="${PF_CADEIRA:-sem-cadeira}"
+  cadeira="${cadeira#claudinho-}"; cadeira="${cadeira#claudinha-}"
+
+  local bases=()
   if [ -n "$alvo" ]; then
     local c; c="$(clone_de "$alvo")" || exit $?
-    dirs=("$c")
+    bases=("$c")
   else
     for d in "$BANCADA"/*/; do
-      [ -e "${d%/}/.git" ] && dirs+=("${d%/}")
+      [ -e "${d%/}/.git" ] && bases+=("${d%/}")
     done
   fi
 
-  local ts; ts="$(date -u +%Y%m%d-%H%M)"
+  local ts; ts="$(date -u +%Y%m%d-%H%M%S)"
   local incidentes=()
 
-  for c in "${dirs[@]}"; do
-    local nome; nome="$(basename "$c")"
+  for base in "${bases[@]}"; do
+    local nome; nome="$(basename "$base")"
 
-    if ! "$GIT" -C "$c" rev-parse --git-dir >/dev/null 2>&1; then
-      incidentes+=("$nome: indeterminavel -- $("$GIT" -C "$c" rev-parse --git-dir 2>&1 | head -1) (uid: $(stat -c%u "$c" 2>/dev/null))")
+    if ! "$GIT" -C "$base" rev-parse --git-dir >/dev/null 2>&1; then
+      incidentes+=("$nome: indeterminavel -- $("$GIT" -C "$base" rev-parse --git-dir 2>&1 | head -1) (uid: $(stat -c%u "$base" 2>/dev/null))")
       continue
     fi
 
-    local ramo; ramo="$(ramo_atual "$c")"
-    local sujo; sujo="$("$GIT" -C "$c" status --porcelain 2>/dev/null)"
-
-    if [ -n "$sujo" ] || [ "$ramo" = "HEAD" ]; then
-      local base_wip="${ramo:-HEAD}"; [ "$base_wip" = "HEAD" ] && base_wip="detached-$("$GIT" -C "$c" rev-parse --short HEAD 2>/dev/null)"
-      local ramo_wip="wip/${base_wip}-${ts}"
-      if [ "$relatar" -eq 1 ]; then
-        printf '%s: relataria wip -> %s (sujo=%s HEAD=%s)\n' "$nome" "$ramo_wip" "$([ -n "$sujo" ] && echo sim || echo nao)" "$ramo"
-        continue
-      fi
-      "$GIT" -C "$c" checkout -b "$ramo_wip" >/dev/null 2>&1 || { incidentes+=("$nome: falhou checkout -b $ramo_wip"); continue; }
-      [ -n "$sujo" ] && { "$GIT" -C "$c" add -A && "$GIT" -C "$c" commit -q -m "wip: sanear $ts" >/dev/null; }
-      if env PATH="$PATH_FORGE" "$GIT" -C "$c" push -u origin "$ramo_wip" >/dev/null 2>&1; then
-        printf '%s: salvo em wip -> origin/%s\n' "$nome" "$ramo_wip"
-      else
-        incidentes+=("$nome: wip $ramo_wip criado mas push falhou -- trabalho local, nao empurrado")
-      fi
+    local erro_fetch=""
+    git_sem_engolir "$base" fetch --prune origin || erro_fetch="$REPLY"
+    if [ -n "$erro_fetch" ]; then
+      incidentes+=("$nome: indeterminavel -- fetch falhou ($erro_fetch); nenhuma acao destrutiva neste clone")
       continue
     fi
 
-    local upstream; upstream="$("$GIT" -C "$c" rev-parse --abbrev-ref "@{upstream}" 2>/dev/null)"
-    if [ -z "$upstream" ]; then
-      if [ "$relatar" -eq 1 ]; then printf '%s: relataria push -u origin %s (sem upstream)\n' "$nome" "$ramo"; continue; fi
-      if env PATH="$PATH_FORGE" "$GIT" -C "$c" push -u origin "$ramo" >/dev/null 2>&1; then
-        printf '%s: empurrado -u origin/%s\n' "$nome" "$ramo"
-      else
-        incidentes+=("$nome: ramo '$ramo' sem upstream e push -u falhou")
-      fi
-      continue
-    fi
+    local worktrees=()
+    while IFS= read -r wt; do
+      [ -n "$wt" ] && [ -d "$wt" ] && worktrees+=("$wt")
+    done < <(worktrees_de "$base")
+    [ "${#worktrees[@]}" -gt 0 ] || worktrees=("$base")
 
-    env PATH="$PATH_FORGE" "$GIT" -C "$c" fetch --prune origin >/dev/null 2>&1
+    for c in "${worktrees[@]}"; do
+      local rotulo="$nome"
+      [ "$c" = "$base" ] || rotulo="$nome ($(basename "$c"))"
 
-    local ja_mesclado=0
-    if "$GIT" -C "$c" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
-      local wt_git; wt_git="$("$GIT" -C "$c" rev-parse --git-common-dir 2>/dev/null)"
-      local main_git; main_git="$("$GIT" -C "$c" rev-parse --git-dir 2>/dev/null)"
-      if [ -n "$wt_git" ] && [ "$wt_git" != "$main_git" ] && [ "$ramo" != "HEAD" ] \
-        && "$GIT" -C "$c" merge-base --is-ancestor "$ramo" origin/main 2>/dev/null; then
-        ja_mesclado=1
-        if [ "$relatar" -eq 1 ]; then printf '%s: relataria worktree remove + branch -d %s (ja mesclado)\n' "$nome" "$ramo"; continue; fi
-        "$GIT" -C "$c" worktree remove --force "$c" 2>/dev/null \
-          && printf '%s: worktree removido (%s ja mesclado em origin/main)\n' "$nome" "$ramo" \
-          || incidentes+=("$nome: ramo '$ramo' ja mesclado mas worktree remove falhou")
+      local ramo; ramo="$(ramo_atual "$c")"
+      local sujo; sujo="$("$GIT" -C "$c" status --porcelain 2>/dev/null)"
+
+      if [ -n "$sujo" ] || [ "$ramo" = "HEAD" ]; then
+        local base_wip="${ramo:-HEAD}"; [ "$base_wip" = "HEAD" ] && base_wip="detached-$("$GIT" -C "$c" rev-parse --short HEAD 2>/dev/null)"
+        local sha7; sha7="$("$GIT" -C "$c" rev-parse --short HEAD 2>/dev/null || echo "0000000")"
+        local ramo_wip="wip/${cadeira}/${base_wip}-${ts}-${sha7}"
+        if [ "$relatar" -eq 1 ]; then
+          printf '%s: relataria wip -> %s (sujo=%s HEAD=%s)\n' "$rotulo" "$ramo_wip" "$([ -n "$sujo" ] && echo sim || echo nao)" "$ramo"
+          continue
+        fi
+        "$GIT" -C "$c" checkout -b "$ramo_wip" >/dev/null 2>&1 || { incidentes+=("$rotulo: falhou checkout -b $ramo_wip"); continue; }
+        [ -n "$sujo" ] && { "$GIT" -C "$c" add -A && "$GIT" -C "$c" commit -q -m "wip: sanear $ts" >/dev/null; }
+        if env PATH="$PATH_FORGE" "$GIT" -C "$c" push -u origin "$ramo_wip" >/dev/null 2>&1; then
+          printf '%s: salvo em wip -> origin/%s\n' "$rotulo" "$ramo_wip"
+          if [ "$c" = "$base" ]; then
+            "$GIT" -C "$c" checkout --detach origin/main >/dev/null 2>&1 \
+              && printf '%s: cache destacado em origin/main\n' "$rotulo"
+          fi
+        else
+          incidentes+=("$rotulo: wip $ramo_wip criado mas push falhou -- trabalho local, nao empurrado")
+        fi
         continue
       fi
-    fi
 
-    local atras frente
-    read -r atras frente < <("$GIT" -C "$c" rev-list --left-right --count "@{upstream}...HEAD" 2>/dev/null || echo "0 0")
-
-    if [ "${atras:-0}" -gt 0 ] && [ "${frente:-0}" -eq 0 ]; then
-      if [ "$relatar" -eq 1 ]; then printf '%s: relataria merge --ff-only (%s atras)\n' "$nome" "$atras"; continue; fi
-      if "$GIT" -C "$c" merge --ff-only "@{upstream}" >/dev/null 2>&1; then
-        printf '%s: atualizado -> %s\n' "$nome" "$("$GIT" -C "$c" log -1 --format='%h %s')"
-      else
-        incidentes+=("$nome: ff-only falhou apesar de so-atras (${atras}) -- confira a mao")
+      # Entregue (nao-base): checa ANTES do upstream. O fetch --prune do topo do loop
+      # de base ja pode ter apagado o tracking ref de um ramo que sumiu do origin -- o
+      # proprio sinal que este bloco decide (comentario #939 secao B1/B3); esperar por
+      # "@{upstream}" depois do prune perderia exatamente esse sinal.
+      local ja_mesclado=0
+      if [ "$c" != "$base" ] && [ "$ramo" != "HEAD" ]; then
+        env PATH="$PATH_FORGE" "$GIT" -C "$c" ls-remote --exit-code origin "refs/heads/$ramo" >/dev/null 2>&1
+        local rc_ls=$? no_origin=0
+        [ "$rc_ls" -eq 2 ] && no_origin=1
+        local mesclado_pr=0
+        grep -Fxq "$ramo" <<<"$(merged_heads_de "$base" "$nome")" && mesclado_pr=1
+        if [ "$no_origin" -eq 1 ] || [ "$mesclado_pr" -eq 1 ]; then
+          ja_mesclado=1
+          local motivo; motivo="$([ "$no_origin" -eq 1 ] && echo 'sumiu do origin' || echo 'PR mesclado')"
+          if [ "$relatar" -eq 1 ]; then printf '%s: relataria worktree remove + branch -d %s (entregue: %s)\n' "$rotulo" "$ramo" "$motivo"; continue; fi
+          if "$GIT" -C "$base" worktree remove "$c" 2>/dev/null; then
+            printf '%s: worktree removido (%s entregue: %s)\n' "$rotulo" "$ramo" "$motivo"
+          else
+            incidentes+=("$rotulo: ramo '$ramo' entregue ($motivo) mas worktree remove falhou -- arvore sujou entre a checagem e agora? confira a mao")
+          fi
+          continue
+        fi
       fi
-    elif [ "${atras:-0}" -gt 0 ] && [ "${frente:-0}" -gt 0 ]; then
-      local ramo_wip="wip/${ramo}-${ts}"
-      if [ "$relatar" -eq 1 ]; then
-        printf '%s: relataria divergencia -> salvar wip/%s e reset a upstream (atras=%s frente=%s)\n' "$nome" "$ramo_wip" "$atras" "$frente"
+
+      local upstream; upstream="$("$GIT" -C "$c" rev-parse --abbrev-ref "@{upstream}" 2>/dev/null)"
+      if [ -z "$upstream" ]; then
+        if [ "$relatar" -eq 1 ]; then printf '%s: relataria push -u origin %s (sem upstream)\n' "$rotulo" "$ramo"; continue; fi
+        if env PATH="$PATH_FORGE" "$GIT" -C "$c" push -u origin "$ramo" >/dev/null 2>&1; then
+          printf '%s: empurrado -u origin/%s\n' "$rotulo" "$ramo"
+        else
+          incidentes+=("$rotulo: ramo '$ramo' sem upstream e push -u falhou")
+        fi
         continue
       fi
-      "$GIT" -C "$c" branch "$ramo_wip" "$ramo" >/dev/null 2>&1
-      if env PATH="$PATH_FORGE" "$GIT" -C "$c" push -u origin "$ramo_wip" >/dev/null 2>&1 \
-        && "$GIT" -C "$c" reset --hard "@{upstream}" >/dev/null 2>&1; then
-        incidentes+=("$nome: '$ramo' divergiu de upstream (atras=$atras frente=$frente) -- lado local salvo em wip/$ramo_wip (empurrado), checkout resetado a upstream. Cadeira dona do ramo rebaseia.")
-      else
-        incidentes+=("$nome: divergiu (atras=$atras frente=$frente) e falhei salvando/resetando -- NAO tocado, confira a mao")
+
+      # Cache (worktree principal) preso num ramo sem commit proprio: destaca em
+      # origin/main (spec_ambiente-de-desenvolvimento SS2 -- "cache preso em ramo").
+      if [ "$c" = "$base" ] && [ "$ramo" != "main" ]; then
+        local a0 f0
+        read -r a0 f0 < <("$GIT" -C "$c" rev-list --left-right --count "@{upstream}...HEAD" 2>/dev/null || echo "0 0")
+        if [ "${f0:-0}" -eq 0 ]; then
+          if [ "$relatar" -eq 1 ]; then printf '%s: relataria destacar em origin/main (cache preso em %s, sem commit unico)\n' "$rotulo" "$ramo"; continue; fi
+          "$GIT" -C "$c" checkout --detach origin/main >/dev/null 2>&1 \
+            && printf '%s: cache destacado em origin/main (estava em %s)\n' "$rotulo" "$ramo" \
+            || incidentes+=("$rotulo: preso em '$ramo', tentei destacar e falhou")
+          continue
+        fi
       fi
-    fi
+
+      local atras frente
+      read -r atras frente < <("$GIT" -C "$c" rev-list --left-right --count "@{upstream}...HEAD" 2>/dev/null || echo "0 0")
+
+      if [ "${atras:-0}" -gt 0 ] && [ "${frente:-0}" -eq 0 ]; then
+        if [ "$relatar" -eq 1 ]; then printf '%s: relataria merge --ff-only (%s atras)\n' "$rotulo" "$atras"; continue; fi
+        if "$GIT" -C "$c" merge --ff-only "@{upstream}" >/dev/null 2>&1; then
+          printf '%s: atualizado -> %s\n' "$rotulo" "$("$GIT" -C "$c" log -1 --format='%h %s')"
+        else
+          incidentes+=("$rotulo: ff-only falhou apesar de so-atras (${atras}) -- confira a mao")
+        fi
+      elif [ "${atras:-0}" -gt 0 ] && [ "${frente:-0}" -gt 0 ]; then
+        local sha7b; sha7b="$("$GIT" -C "$c" rev-parse --short HEAD 2>/dev/null || echo "0000000")"
+        local ramo_wip="wip/${cadeira}/${ramo}-${ts}-${sha7b}"
+        if [ "$relatar" -eq 1 ]; then
+          printf '%s: relataria divergencia -> salvar %s e reset a upstream (atras=%s frente=%s)\n' "$rotulo" "$ramo_wip" "$atras" "$frente"
+          continue
+        fi
+        "$GIT" -C "$c" branch "$ramo_wip" "$ramo" >/dev/null 2>&1
+        if env PATH="$PATH_FORGE" "$GIT" -C "$c" push -u origin "$ramo_wip" >/dev/null 2>&1 \
+          && "$GIT" -C "$c" reset --hard "@{upstream}" >/dev/null 2>&1; then
+          incidentes+=("$rotulo: '$ramo' divergiu de upstream (atras=$atras frente=$frente) -- lado local salvo em $ramo_wip (empurrado), checkout resetado a upstream. Cadeira dona do ramo rebaseia.")
+        else
+          incidentes+=("$rotulo: divergiu (atras=$atras frente=$frente) e falhei salvando/resetando -- NAO tocado, confira a mao")
+        fi
+      fi
+    done
   done
 
   if [ "${#incidentes[@]}" -eq 0 ]; then

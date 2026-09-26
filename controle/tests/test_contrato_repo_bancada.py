@@ -74,3 +74,40 @@ def test_worktree_legado_por_sessao_segue_legivel_ate_a_cadeira_ter_o_seu(tmp_pa
     assert r.returncode == 0, r.stderr
     assert "fabrica/7-legado" in r.stdout
     assert "fallback" not in r.stderr
+
+
+def test_sanear_enxerga_worktree_sob_wt_e_remove_ramo_entregue(tmp_path):
+    """card:3149 comentario #939 secao B4/B3: sanear tem de descer em wt/ (glob do topo
+    nao desce) e reconhecer ramo entregue pela ausencia no origin, nunca por
+    merge-base --is-ancestor (squash nao deixa ancestral)."""
+    bancada = _montar(tmp_path)
+    wt = bancada / "wt" / "demo" / "outra"
+    _git("worktree", "add", "-b", "fabrica/99-x", str(wt), "origin/main", cwd=bancada / "demo")
+    _git("push", "-u", "origin", "fabrica/99-x", cwd=wt)
+    _git("push", "origin", "--delete", "fabrica/99-x", cwd=wt)
+    r = _repo(tmp_path, bancada, "sessao-x", "sanear")
+    assert r.returncode == 0, r.stderr
+    assert not wt.exists()
+    assert "removido" in r.stdout
+
+
+def test_sanear_relatar_nao_apaga_e_nomeia_o_worktree_sob_wt(tmp_path):
+    bancada = _montar(tmp_path)
+    wt = bancada / "wt" / "demo" / "outra"
+    _git("worktree", "add", "-b", "fabrica/98-x", str(wt), "origin/main", cwd=bancada / "demo")
+    _git("push", "-u", "origin", "fabrica/98-x", cwd=wt)
+    _git("push", "origin", "--delete", "fabrica/98-x", cwd=wt)
+    r = _repo(tmp_path, bancada, "sessao-x", "sanear", "--relatar")
+    assert r.returncode == 0, r.stderr
+    assert wt.exists()
+    assert "relataria worktree remove" in r.stdout
+
+
+def test_sanear_wip_de_arvore_suja_nomeia_cadeira_e_nao_colide_por_minuto(tmp_path):
+    """card:3149 comentario #939 secao B6: o nome do wip carrega cadeira, segundos e
+    sha -- so o minuto (vigente) colide entre duas passadas no mesmo minuto."""
+    bancada = _montar(tmp_path)
+    (bancada / "demo" / "novo.txt").write_text("x\n")
+    r = _repo(tmp_path, bancada, "sessao-x", "sanear")
+    assert r.returncode == 0, r.stderr
+    assert "salvo em wip -> origin/wip/ti/" in r.stdout
