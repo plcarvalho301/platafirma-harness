@@ -1003,7 +1003,9 @@ ato_sincronizar() {
   fi
 
   # stderr do push segue visivel: e onde o pre-push diz o que barrou
-  env PATH="$PATH_FORGE" "$GIT" -C "$c" push -u origin "$ramo" >/dev/null
+  # o stdout do push e o do hook: a linha do pre-push (chave, rodou|reaproveitou) vai ao
+  # stderr, visivel, em vez de sumir em /dev/null (card #3150)
+  env PATH="$PATH_FORGE" "$GIT" -C "$c" push -u origin "$ramo" >&2
   fsha="$(forge_sha "$c" "$ramo")"; rc=$?
   if [ "$rc" -eq 0 ] && [ "$fsha" = "$head" ]; then
     if [ "$mesclou" -eq 1 ]; then
@@ -1670,7 +1672,7 @@ ato_empurrar() {
     return 0
   fi
   # stderr do push segue visivel: e onde o pre-push diz o que barrou
-  env PATH="$PATH_FORGE" "$GIT" -C "$c" push -u origin "$ramo" >/dev/null
+  env PATH="$PATH_FORGE" "$GIT" -C "$c" push -u origin "$ramo" >&2
   fsha="$(forge_sha "$c" "$ramo")"; rc=$?
   if [ "$rc" -eq 0 ] && [ "$fsha" = "$local_sha" ]; then
     printf 'empurrado: %s -> origin/%s = %s (%s) [lido do forge]\n' "$nome" "$ramo" "${fsha:0:7}" \

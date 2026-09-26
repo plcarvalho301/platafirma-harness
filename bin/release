@@ -1814,7 +1814,9 @@ resumo_imprime() {
   # grep sem casamento sai 1: com set -e/pipefail isso mataria o resumo e trocaria o exit
   { grep -E '^(== |de: |gate: |venv: |current: |no ar: |ambiente: |suite: |card: |ensaio: |já no ar: )' "$PROMO_LOG" \
       | grep -v 'NAO MEDIDA'; } || true
-  grep -E '^(release: |varrido: |saida inteira: )|NAO MEDIDA|PROMOCAO|RETOMAR|VOLTAR CODIGO' "$PROMO_LOG" >&2 || true
+  # "release: /opt/..." e o eco do deploy da stack, nao recusa: fica no log
+  { grep -E '^(release: |varrido: |saida inteira: )|NAO MEDIDA|PROMOCAO|RETOMAR|VOLTAR CODIGO' "$PROMO_LOG" \
+      | grep -v '^release: /'; } >&2 || true
   [ -z "$PROMO_VOLTA" ] || printf 'volta:     %s\n' "$PROMO_VOLTA"
   printf 'log:       %s\n' "$PROMO_LOG"
   sha_final="$(grep -E '^[0-9a-f]{40}$' "$PROMO_LOG" | tail -n 1)" || sha_final=""
