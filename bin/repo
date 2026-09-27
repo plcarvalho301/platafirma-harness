@@ -1492,9 +1492,13 @@ ato_commitar() {
   staged_diagrams=$("$GIT" -C "$c" diff --cached --name-only --diff-filter=ACM | grep -E '\.(mmd|d2)$' || true)
   if [ -n "$staged_diagrams" ]; then
     for arq in $staged_diagrams; do
-      if ! conferir diagrama "$c/$arq"; then
-        morre "diagrama $arq quebrado: Kroki recusou a compilacao." 1
-      fi
+      # 1 = o Kroki recusou, diagrama quebrado; outro exit = nao consegui olhar (#3099).
+      # Os dois barram: gate que nao mede e deixa passar e gate desligado.
+      local rc_d=0
+      conferir diagrama "$c/$arq" || rc_d=$?
+      [ "$rc_d" -eq 0 ] || [ "$rc_d" -ne 1 ] || morre "diagrama $arq quebrado: Kroki recusou a compilacao." 1
+      [ "$rc_d" -eq 0 ] || morre "diagrama $arq nao medido: conferir diagrama saiu $rc_d, Kroki fora de alcance? -- nada commitado" 5
+      :
     done
   fi
 
@@ -1614,9 +1618,13 @@ for p in sorted(caminhos):
   staged_diagrams=$("$GIT" -C "$c" diff --cached --name-only --diff-filter=ACM | grep -E '\.(mmd|d2)$' || true)
   if [ -n "$staged_diagrams" ]; then
     for arq in $staged_diagrams; do
-      if ! conferir diagrama "$c/$arq"; then
-        morre "diagrama $arq quebrado: Kroki recusou a compilacao." 1
-      fi
+      # 1 = o Kroki recusou, diagrama quebrado; outro exit = nao consegui olhar (#3099).
+      # Os dois barram: gate que nao mede e deixa passar e gate desligado.
+      local rc_d=0
+      conferir diagrama "$c/$arq" || rc_d=$?
+      [ "$rc_d" -eq 0 ] || [ "$rc_d" -ne 1 ] || morre "diagrama $arq quebrado: Kroki recusou a compilacao." 1
+      [ "$rc_d" -eq 0 ] || morre "diagrama $arq nao medido: conferir diagrama saiu $rc_d, Kroki fora de alcance? -- nada commitado" 5
+      :
     done
   fi
 
