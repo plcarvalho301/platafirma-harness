@@ -73,6 +73,8 @@ uso (gramatica arq:0106 — acervo <ato> <particao> <entidade> [seletor]):
   acervo lote     <id>
   acervo curar    obra lote [dest] · casa alias <classe> <chave> <alias>
   acervo curar    obra --situacao|--expurgar|--restaurar|--promover|--reclassificar|--conceito <...>
+  acervo curar    obra --relacionar <de> <para> --tipo <t> --garantia <g> --motivo <m> [--apply]
+                  obra --relacoes <conceito> · --desrelacionar <id>   a teia de conceitos (conceito vive em obra)
   acervo extrato  --todas [dest]
   acervo exportar                    regera ontologia/acervo/*.jsonl e vocabulario.json na bancada
   acervo psql     [--banco rag|motor]  <SQL por stdin>
