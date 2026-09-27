@@ -68,7 +68,8 @@ PF_VENV_PREFIXO="pre-push"
 REGISTRO="$AQUI/../bin/_release/registro.py"
 CHAVE="harness"
 VEREDITOS_DIR="${PLATAFIRMA_INSTANCIA:-/srv/platafirma/casa}/var/pre-push/vereditos"
-mkdir -p "$VEREDITOS_DIR" 2>/dev/null || true
+ARVORES_DIR="${PLATAFIRMA_INSTANCIA:-/srv/platafirma/casa}/var/pre-push/arvores"
+mkdir -p "$VEREDITOS_DIR" "$ARVORES_DIR" 2>/dev/null || true
 
 # ALVOS como array (A5), lidos de controle/tests/VERDES pelo leitor compartilhado
 # (lib/venv.sh: listar_verdes) — mesmo shellcheck SC2086 que string sem aspas dava.
@@ -95,7 +96,7 @@ if [ "${#REFS[@]}" -eq 0 ]; then
 fi
 [ "${#REFS[@]}" -gt 0 ] || exit 0
 
-TMP="$(mktemp -d "${TMPDIR:-/tmp}/pre-push.XXXXXX")" || exit 0
+TMP="$(mktemp -d "$ARVORES_DIR/pre-push.XXXXXX" 2>/dev/null || mktemp -d "${TMPDIR:-/tmp}/pre-push.XXXXXX")" || exit 0
 limpa() {
   local d
   for d in "$TMP"/arvore-*; do
@@ -145,6 +146,13 @@ medir_rev() {  # $1=rev
   # empurrada"), nunca do clone de quem esta empurrando; override so por env
   # explicita (PLATAFIRMA_VENVS), do mesmo jeito que release/teste aceitam.
   local venvs="${PLATAFIRMA_VENVS:-$arvore/registro/venvs.json}"
+  # Caminho novo: teste rodar ao lado do runner atual (trava do card #3152)
+  local teste_bin="$AQUI/../bin/teste"
+  local saida_teste="$TMP/teste-${rev:0:12}.txt" rc_teste=0
+  if [ -x "$teste_bin" ]; then
+    PLATAFIRMA_VENVS="$venvs" "$teste_bin" rodar "$CHAVE" --portao --arvore "$arvore" >"$saida_teste" 2>&1 || rc_teste=$?
+  fi
+
   local out familia lock teste
   out="$(PLATAFIRMA_VENVS="$venvs" python3 "$REGISTRO" "$CHAVE" 2>"$log")" || {
     printf 'pre-push: registro/chave "%s" indisponível — não medido, deixando passar.\n' "$CHAVE" >&2
@@ -178,10 +186,13 @@ medir_rev() {  # $1=rev
     vresultado="$(ler_veredito "$veredito_arq")"
     case "$vresultado" in
       verde)
-        printf 'pre-push: baseline de contrato — %s-%s reaproveitado (%s, verde)\n' "$CHAVE" "$chave_hash" "${rev:0:7}"
+        printf 'pre-push: baseline de contrato — %s-%s reaproveitado / reaproveitou (%s, verde)\n' "$CHAVE" "$chave_hash" "${rev:0:7}"
         return 0 ;;
       vermelho)
         printf 'pre-push: BASELINE VERDE QUEBROU na rev %s — veredito reaproveitado (%s-%s, mesma árvore já medida vermelha).\n' "${rev:0:7}" "$CHAVE" "$chave_hash" >&2
+        # o veredito pode ter sido gravado agora pelo caminho novo (teste rodar, acima):
+        # os reprovados que ele nomeou vão junto, para o push barrado dizer o porquê.
+        [ -s "$saida_teste" ] && grep -E '^[[:space:]]*reprovado:' "$saida_teste" | sed 's/^/  /' >&2
         return 1 ;;
     esac
   fi
@@ -207,7 +218,19 @@ medir_rev() {  # $1=rev
   case "$rc_pytest" in
     0)
       gravar_veredito "$veredito_arq" verde "$rev"
-      printf 'pre-push: baseline de contrato verde em %s (%s-%s, %s)\n' "${rev:0:7}" "$CHAVE" "$chave_hash" "$(tail -n 1 "$saida")"
+      if [ "$rc_teste" -eq 0 ] && [ -s "$saida_teste" ]; then
+        local chave_id="$CHAVE"
+        local achou_chave
+        achou_chave="$(grep -oE "$CHAVE-[0-9a-f]{12}" "$saida_teste" | head -n 1)"
+        [ -n "$achou_chave" ] && chave_id="$achou_chave"
+        if grep -q "reaproveitado" "$saida_teste"; then
+          printf 'pre-push: baseline de contrato — %s reaproveitado / reaproveitou (%s, verde)\n' "$chave_id" "${rev:0:7}"
+        else
+          printf 'pre-push: baseline de contrato verde em %s (%s, rodou)\n' "${rev:0:7}" "$chave_id"
+        fi
+      else
+        printf 'pre-push: baseline de contrato verde em %s (%s-%s, rodou)\n' "${rev:0:7}" "$CHAVE" "$chave_hash"
+      fi
       return 0 ;;
     1)
       gravar_veredito "$veredito_arq" vermelho "$rev"

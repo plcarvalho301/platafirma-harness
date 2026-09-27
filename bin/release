@@ -1650,37 +1650,27 @@ gate_suite_verdes() {  # $1=repo $2=sha ; 0 verde ou n/a; 4 vermelho medido; 5 n
 
   local log_dir="${PLATAFIRMA_INSTANCIA:-/srv/platafirma/casa}/var/log/release-gate"
   mkdir -p "$log_dir" 2>/dev/null || true
-  local saida="$log_dir/${sha}.txt" xml
-  xml="$(mktemp "${TMPDIR:-/tmp}/gate-junit.XXXXXX.xml")"
-  # A arvore materializada e so leitura: o ambiente do projeto controle/ vai para um
-  # temporario (UV_PROJECT_ENVIRONMENT) em vez de controle/.venv, --frozen impede o uv de
-  # reescrever o uv.lock da arvore, e o cache do pytest fica desligado. O resto e a mesma
-  # linha do pre-push, para os dois medirem a mesma coisa.
-  local rc_pytest=0 envtmp frozen=()
-  envtmp="$(mktemp -d "${TMPDIR:-/tmp}/gate-env.XXXXXX")"
-  [ -f "$arvore/controle/uv.lock" ] && frozen=(--frozen)
-  ( cd "$arvore/controle" && UV_PROJECT_ENVIRONMENT="$envtmp/venv" timeout 300 "$uv" run "${frozen[@]}" \
-      --python "$dest/bin/python" --with pytest \
-      pytest "${alvos[@]}" -q -p no:cacheprovider --junitxml="$xml" ) >"$saida" 2>&1 || rc_pytest=$?
-  rm -rf "$envtmp"
+  local saida="$log_dir/${sha}.txt" rc_teste=0
+  "$AQUI/teste" rodar "$CHAVE_SUITE" --portao --arvore "$arvore" >"$saida" 2>&1 || rc_teste=$?
   GATE_SUITE_LOG="$saida"
 
-  case "$rc_pytest" in
+  case "$rc_teste" in
     0)
-      gravar_veredito "$veredito_arq" verde "$sha"
-      GATE_SUITE_STATUS="verde"; GATE_SUITE_DETALHE="$(tail -n 1 "$saida")"
-      rm -f "$xml"
+      GATE_SUITE_STATUS="verde"
+      if grep -q "reaproveitado" "$saida"; then
+        GATE_SUITE_DETALHE="reaproveitado"
+      else
+        GATE_SUITE_DETALHE="$(tail -n 1 "$saida")"
+      fi
       return 0 ;;
     1)
-      gravar_veredito "$veredito_arq" vermelho "$sha"
       GATE_SUITE_STATUS="vermelho"
-      GATE_SUITE_DETALHE="$(nomear_reprovados "$xml" | head -n 1)"
-      rm -f "$xml"
+      GATE_SUITE_DETALHE="$(grep -E '^[[:space:]]*reprovado:' "$saida" | head -n 1 | sed 's/^[[:space:]]*reprovado:[[:space:]]*//')"
+      [ -n "$GATE_SUITE_DETALHE" ] || GATE_SUITE_DETALHE="$(grep -i "failed" "$saida" | head -n 1)"
       return 4 ;;
     *)
       GATE_SUITE_STATUS="indisponivel"
-      GATE_SUITE_DETALHE="pytest saiu $rc_pytest (uso/coleta/timeout) — nao medido; ver $saida"
-      rm -f "$xml"
+      GATE_SUITE_DETALHE="pytest saiu $rc_teste (uso/coleta/timeout) — nao medido; ver $saida"
       return 5 ;;
   esac
 }

@@ -44,10 +44,13 @@ def bancada(tmp_path):
     (base / ".gitignore").write_text(".venv/\n__pycache__/\n")
     (base / "tests").mkdir()
     (base / "tests" / "test_ok.py").write_text("def test_ok():\n    assert True\n")
+    (base / "lock.txt").write_text("# fixture: venv vazio, sem dependência\n")
     _git("add", "-A", cwd=base)
     _git("commit", "-q", "-m", "semente", cwd=base)
     wt = b / "wt" / "demo" / "ti" / "1-x"
     _git("worktree", "add", "-q", "-b", "fabrica/1-x", str(wt), cwd=base)
+    vjson = tmp_path / "venvs.json"
+    vjson.write_text('{"repositorios": {"demo": {"esteira": "codigo", "stack": "demo-stack"}}, "demo-stack": {"familia": "demo", "lock": "lock.txt"}}\n')
     return tmp_path, b, wt
 
 
@@ -57,6 +60,8 @@ def _teste(tmp_path, b, *args):
         "HOME": str(Path.home()),       # cache do uv (pytest ja baixado), nada mais
         "PLATAFIRMA_BANCADA": str(b),
         "PLATAFIRMA_INSTANCIA": str(tmp_path / "instancia"),
+        "PLATAFIRMA_VENVS": str(tmp_path / "venvs.json"),
+        "PLATAFIRMA_PYTHON": _python(),
         "PF_RELEASE_RAIZ": str(tmp_path / "release"),
         "PF_CADEIRA": "ti",
         "PF_TESTE_PYTHON": _python(),
@@ -71,7 +76,7 @@ def test_bloco_fixo_verde_e_reaproveitado_na_mesma_arvore(bancada):
     r = _teste(tmp_path, b, "rodar", "demo")
     assert r.returncode == 0, r.stdout + r.stderr
     linhas = r.stdout.strip().splitlines()
-    assert linhas[0].startswith("suite VERDE: demo (python)"), r.stdout
+    assert linhas[0].startswith("suite VERDE: demo"), r.stdout
     assert "passed" in linhas[0]
     assert any(l.startswith("saida inteira:") for l in linhas)
     assert len(linhas) <= 8, r.stdout
