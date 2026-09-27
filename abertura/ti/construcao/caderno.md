@@ -22,6 +22,8 @@
 - Extração de predicado se verifica pelo caller: o default do módulo extraído aponta para a árvore do próprio código, não para o alvo que o caller media. Costura explícita no caller, e o stub dos testes vai onde o predicado passou a morar.
 - Universo de repositórios para censo ou varredura sai do registro (`registro/venvs.json`, chave `repositorios`), nunca de lista lembrada: em 27/09 uma lista de memória incluiu o modulo-osint, fóssil.
 - Leitor de acervo dentro de verbo lê o formato que o `acervo ler` serve (markdown com linha de situação), não um formato suposto: em 27/09 o lint fazia `json.loads` da saída e toda classe com lista saía 5 desde que nasceu.
+- Classe de lint cujo detector é prosa na lista (não predicado executável): o predicado se escreve contra o TEXTO literal do detector na rev e confere o texto a cada rodada; texto mudado tira o critério da medida (exit 5) em vez de medir com régua velha. Dado de lista (organismos, palavras funcionais) se lê do corpo dela, para emenda valer sem código. Feito assim no `lint acervo` (#3161, 27/09).
+- Medida de card que já é do dono (número, contagem, preliminar contra final) não vai à tela dele como risco nem como achado: ele a conhece. Em 27/09 o 🔴 sobre os 121 de B1 foi ruído.
 
 ## Diário de bordo
 
@@ -68,3 +70,8 @@
 - 2026-09-27 — `repo commitar` com caminho já removido por `repo git rm` saiu 1 «caminho não existe». Contorno encontrado na data foi: commitar sem ele; a remoção staged entrou junto.
 - 2026-09-27 — `teste rodar ops@<bancada>` inteiro passou de 180 s (timeout da tool); `test_raizes_porta.py` sozinho leva 134 s. Contorno: nenhum, dono mandou não mexer.
 - 2026-09-27 — `release estado <repo> main` saiu 2 (argumento extra). Contorno encontrado na data foi: `release promover <repo> <sha>` direto.
+- 2026-09-27 — `repo git platafirma-harness -C <bancada> ...` saiu 2 «mais de uma bancada aberta» (três bancadas da cadeira). Contorno encontrado na data foi: `repo git platafirma-harness@<chave> ...`, sem `-C`.
+- 2026-09-27 — `teste rodar <repo>@<chave> <arq1> <arq2>` saiu 2 «argumento extra». Contorno encontrado na data foi: um `teste rodar` por arquivo, em `commands[]`.
+- 2026-09-27 — `repo` em lote encadeado (commitar, sincronizar, pr-abrir) estourou 60 s da tool, sem retorno; commit e push tinham passado. Contorno encontrado na data foi: `repo estado` para ver onde parou e `pr-abrir` separado.
+- 2026-09-27 — `repo pr-abrir` saiu 2 sem `--titulo`. Contorno encontrado na data foi: `--titulo "…"` obrigatório.
+- 2026-09-27 — o `lint` da bancada não roda pela porta (`run_command` executa o bin da release). Contorno encontrado na data foi: validar em fixture pelo `teste rodar`, promover e medir o real depois.
