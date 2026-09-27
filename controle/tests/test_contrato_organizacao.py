@@ -136,6 +136,14 @@ def test_apontamento_traz_a_cura_da_lista(tmp_path, bancada):
     assert ap2["arquivo"] == "b.txt" and "a.txt" in ap2["o_que_fere"]
 
 
+def test_lint_resumo_conta_por_regra(tmp_path, bancada):
+    r, d = _lint({**bancada, "PF_LINT_ACERVO": _acervo(tmp_path)}, "--todas", "--resumo")
+    assert r.returncode == 1
+    assert set(d["contagem"]) == AVISOS | BLOQUEANTES
+    assert d["contagem"]["AP4"] == {"n": 1, "severidade": "bloqueante"}
+    assert "apontamentos" not in d
+
+
 def test_lint_sem_lista_sai_5(tmp_path, bancada):
     r, _ = _lint({**bancada, "PF_LINT_ACERVO": _acervo(tmp_path, servida=False)})
     assert r.returncode == 5
