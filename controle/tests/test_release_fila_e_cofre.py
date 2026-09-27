@@ -91,12 +91,16 @@ def _conferir(monkeypatch, tmp_path):
 def test_stack_do_container_casa_pelo_caminho_relativo(monkeypatch, tmp_path):
     c = _conferir(monkeypatch, tmp_path)
     c._TOPO = [
+        # a raiz da familia vem ANTES: casar por sufixo a tomava pela rag (medido no ar 27/09)
+        {"slug": "conhecimento", "compose": ["/opt/platafirma/current/conhecimento/docker-compose.yml"]},
         {"slug": "rag", "compose": ["/opt/platafirma/current/conhecimento/rag/docker-compose.yml",
                                     "/opt/platafirma/current/conhecimento/rag/docker-compose.gpu.yml"]},
         {"slug": "acervo-api", "compose": "/opt/platafirma/current/conhecimento/acervo-api/docker-compose.yml"},
     ]
     cont = {"config_files": "/opt/platafirma/platafirma-conhecimento/" + "a" * 40 + "/rag/docker-compose.yml"}
     assert c.stack_do_container(cont) == "rag"
+    cont = {"config_files": "/opt/platafirma/platafirma-conhecimento/" + "a" * 40 + "/docker-compose.yml"}
+    assert c.stack_do_container(cont) == "conhecimento"
     cont = {"config_files": "/outro/lugar/docker-compose.yml"}
     assert c.stack_do_container(cont) is None
 

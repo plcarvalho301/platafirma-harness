@@ -322,13 +322,23 @@ def stack_do_container(c):
     """slug da stack (acervo.stack) cujo compose declarado e o do container. O declarado mora
     sob .../current/<familia curta>/<rel>; o container sobe de .../<familia>/<sha>/<rel>: casa
     pelo <rel>. Sem casamento, None — e o render segue sem cofre, como antes."""
-    arquivos = [f for f in c["config_files"].split(",") if f]
+    # caminho relativo EXATO dentro da arvore da familia: casar por sufixo confundia
+    # rag/docker-compose.yml com o docker-compose.yml da raiz (stack conhecimento).
+    rels = set()
+    for f in [f for f in c["config_files"].split(",") if f]:
+        partes = f.split(os.sep)
+        for i, p in enumerate(partes):
+            if len(p) == 40 and all(ch in "0123456789abcdef" for ch in p):
+                rels.add("/".join(partes[i + 1:]))
+                break
     for s in _topologia():
         for comp in _composes(s):
             if "/current/" not in comp:
                 continue
-            rel = comp.split("/current/", 1)[1].split("/", 1)[-1]
-            if any(f.endswith("/" + rel) for f in arquivos):
+            resto = comp.split("/current/", 1)[1]
+            if "/" not in resto:
+                continue
+            if resto.split("/", 1)[1] in rels:
                 return s.get("slug")
     return None
 
