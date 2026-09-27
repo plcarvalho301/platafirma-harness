@@ -32,6 +32,9 @@ USO = """uso:
   acervo registrar --todos     registra todos os verbos do nucleo (whitelist do oficio)
 
 ESCREVE em acervo.ferramental (capacidade + verbo + descricao). Idempotente por slug.
+`# regua: <ato> lista-de-verificacao <chave>` grava a lista do ato em ferramental_ato so
+se ela resolve no acervo agora; a que nao resolve sai em aviso, sem referencia pendurada.
+`# regua: <ato> repositorio` marca regua_propria (spec_lint §3, §6; migracao 062).
 Fonte = o cabecalho do script; a tabela e a projecao. Substitui a migration de seed
 na mao (migration fica so para DDL)."""
 
@@ -62,8 +65,39 @@ def _lit(v):
 
 CHAVES = (
     "capacidade", "dono", "componente", "use para", "atos", "classe",
-    "le", "escreve", "consome", "ambiente", "depende", "substitui"
+    "le", "escreve", "consome", "ambiente", "depende", "substitui", "regua"
 )
+# Chaves que se repetem, uma linha por ato, e acumulam em vez de sobrescrever.
+POR_ATO = ("le", "escreve", "regua")
+
+RE_SLUG = re.compile(r"^[a-z0-9]+(-[a-z0-9]+)*$")
+
+def _regua_por_ato(linhas, verbo):
+    """`# regua: <ato> repositorio` | `# regua: <ato> <especie> <chave>` (spec_lint §3, §6) ->
+    {ato: ("repositorio", None) | (especie, chave)}. Sem versao: resolve-se no servido."""
+    por_ato = {}
+    for linha in linhas or []:
+        partes = linha.split()
+        if len(partes) == 2 and partes[1] == "repositorio":
+            por_ato[partes[0]] = ("repositorio", None)
+        elif len(partes) == 3 and RE_SLUG.match(partes[1]) and RE_SLUG.match(partes[2]):
+            por_ato[partes[0]] = (partes[1], partes[2])
+        else:
+            morre("acervo registrar: bin/%s tem `# regua: %s` fora da forma "
+                  "`<ato> repositorio` ou `<ato> <especie> <chave>` (spec_lint §3)." % (verbo, linha), 3)
+    return por_ato
+
+def _listas_que_resolvem(pares):
+    """Das (especie, chave) pedidas, as que existem VIVAS no acervo casa agora. O golden record
+    nunca guarda referencia pendurada (spec_lint §3: lista antes da classe)."""
+    if not pares:
+        return set()
+    valores = ", ".join("(%s, %s)" % (_lit(e), _lit(c)) for e, c in sorted(pares))
+    out = _psql(
+        "select v.e, v.c from (values %s) as v(e, c) "
+        "join acervo.especie_tipo t on t.slug = v.e "
+        "join acervo.casa x on x.especie_id = t.id and x.chave = v.c and x.retirada_em is null;" % valores)
+    return {tuple(l.split("|", 1)) for l in out.splitlines() if "|" in l}
 
 
 def _le_cabecalho(path):
@@ -92,7 +126,7 @@ def _le_cabecalho(path):
             valor = s.split(":", 1)[1].strip()
             # `le:` e `escreve:` sao POR ATO (spec_acervo §1, §7): uma linha por ato,
             # `# le: <ato>=<recurso>[,<recurso>]`; chave repetida acumula, nao sobrescreve.
-            if chave in ("le", "escreve"):
+            if chave in POR_ATO:
                 campos.setdefault(chave, []).append(valor)
             else:
                 campos[chave] = valor
@@ -178,6 +212,28 @@ def registrar_um(verbo):
     le_por_ato = _acesso_por_ato(campos.get("le"))
     escreve_por_ato = _acesso_por_ato(campos.get("escreve"))
 
+    # Regua por ato (spec_lint §6): so grava a lista que resolve no acervo agora; a que nao
+    # resolve sai em aviso e fica sem referencia (nunca pendurada).
+    regua_por_ato = _regua_por_ato(campos.get("regua"), verbo)
+    nomes_atos = {a for a, _, _ in atos_info}
+    sem_ato = sorted(a for a in regua_por_ato if a not in nomes_atos)
+    if sem_ato:
+        morre("acervo registrar: bin/%s declara `# regua:` para ato que `# atos:` nao lista: %s"
+              % (verbo, ", ".join(sem_ato)), 3)
+    pedidas = {r for r in regua_por_ato.values() if r[0] != "repositorio"}
+    resolvem = _listas_que_resolvem(pedidas)
+    pendentes = []
+    def _regua_sql(ato_nome):
+        r = regua_por_ato.get(ato_nome)
+        if r is None:
+            return "null", "null", "false"
+        if r[0] == "repositorio":
+            return "null", "null", "true"
+        if r in resolvem:
+            return _lit(r[0]), _lit(r[1]), "false"
+        pendentes.append("%s -> %s %s" % (ato_nome, r[0], r[1]))
+        return "null", "null", "false"
+
     consome_raw = campos.get("consome", "")
     consumos = [c.strip() for c in consome_raw.split(",") if c.strip()]
 
@@ -211,12 +267,27 @@ def registrar_um(verbo):
     for ato_nome, op, subcap in atos_info:
         # (verbo, ato) -> folha: mapeamento em ferramental_ato; a tabela de capacidades
         # continua sendo so o mapa de folhas (spec_acervo §7).
-        sql_parts.append(
-            "insert into acervo.ferramental_ato (verbo, ato, capacidade, acao, tipo) "
-            "values (%s, %s, %s, %s, %s) on conflict (verbo, ato) do update set "
-            "capacidade=excluded.capacidade, acao=excluded.acao, tipo=excluded.tipo;\n"
-            % (_lit(verbo), _lit(ato_nome), _lit(subcap), _lit(op), _lit(subcap))
-        )
+        if regua_por_ato:
+            # Colunas de regua (062) so entram para verbo que declara `# regua:`: verbo sem a
+            # linha registra igual a antes, mesmo num banco que ainda nao tem as colunas.
+            re_esp, re_chave, re_propria = _regua_sql(ato_nome)
+            sql_parts.append(
+                "insert into acervo.ferramental_ato (verbo, ato, capacidade, acao, tipo, "
+                "regua_especie, regua_chave, regua_propria) "
+                "values (%s, %s, %s, %s, %s, %s, %s, %s) on conflict (verbo, ato) do update set "
+                "capacidade=excluded.capacidade, acao=excluded.acao, tipo=excluded.tipo, "
+                "regua_especie=excluded.regua_especie, regua_chave=excluded.regua_chave, "
+                "regua_propria=excluded.regua_propria;\n"
+                % (_lit(verbo), _lit(ato_nome), _lit(subcap), _lit(op), _lit(subcap),
+                   re_esp, re_chave, re_propria)
+            )
+        else:
+            sql_parts.append(
+                "insert into acervo.ferramental_ato (verbo, ato, capacidade, acao, tipo) "
+                "values (%s, %s, %s, %s, %s) on conflict (verbo, ato) do update set "
+                "capacidade=excluded.capacidade, acao=excluded.acao, tipo=excluded.tipo;\n"
+                % (_lit(verbo), _lit(ato_nome), _lit(subcap), _lit(op), _lit(subcap))
+            )
         for modo, por_ato in (("le", le_por_ato), ("escreve", escreve_por_ato)):
             if not le_por_ato and not escreve_por_ato:
                 break   # verbo ainda sem declaracao de acesso (pre-0110): registra sem acesso
@@ -248,6 +319,10 @@ def registrar_um(verbo):
 
     sql_parts.append("commit;\n")
     _psql("".join(sql_parts), escreve=True)
+    if pendentes:
+        sys.stderr.write("acervo registrar: %s: regua que ainda nao resolve no acervo, gravada sem "
+                         "referencia (lista antes da classe, spec_lint §3): %s\n"
+                         % (verbo, "; ".join(pendentes)))
     return cap, desc
 
 

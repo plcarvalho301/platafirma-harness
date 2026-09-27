@@ -21,6 +21,7 @@
 # Lote da árvore inteira leva `fonte.arvore_completa=true`: linha viva que saiu do suporte
 # ganha `retirar` no servidor (§3.5, D4). Recorte (--so/--limite) nunca retira.
 import argparse
+import hashlib
 import json
 import os
 import re
@@ -73,11 +74,17 @@ USO = """uso:
                sem o documento que ilustra, e recusada aqui (§7).
   --so <s>     so documentos cujo caminho contem <s>   } recorte: o lote nao e a arvore
   --limite N   so os N primeiros documentos           } completa, e nada se retira
+  --arvore <dir>  admissao de uma arvore MATERIALIZADA, fora de main (pre-push, gate, teste
+               rodar): so dry-run, --apply e @<rev> recusam (2); <dir> tem de estar sob a raiz
+               de release (PF_RELEASE_RAIZ) ou <instancia>/var/pre-push, senao 4. Nada se
+               retira (recorte). sha_ref = digest sha1 da arvore (caminho + corpo), estavel.
+               Mesmo detector da ingestao: os portoes do servidor, nenhuma regra copiada.
   --apply      aplica (default: dry-run do plano, nada escrito no acervo)
   --ate        catalogar | chunk | embed | vetor (default: vetor)
   --json       o plano inteiro (lote do servidor + recusas locais) em JSON
 
   exit: 0 limpo · 3 com recusa (dry-run) · 1 erro (forge, rev, motor, lote falhou) · 2 uso
+        · 4 --arvore fora da raiz de arvores materializadas
 
   Toda escrita no acervo e do servidor (POST /acervo/casa/lotes): casa, impressao, trechos,
   indices, retirada e acervo.casa_fonte. Este cliente so escreve o espelho da instancia.
@@ -220,6 +227,51 @@ def ler_corpos(esp, sha, paths):
         pos += tam + 1
     return corpos
 
+
+# ------------------------------------------------------------------ fonte: arvore materializada
+
+def raizes_de_arvore():
+    """As mesmas raizes que `teste --arvore` aceita (bin/teste validar_arvore): a release e as
+    arvores que o pre-push materializa na instancia."""
+    rel = os.environ.get("PF_RELEASE_RAIZ") or "/opt/platafirma"
+    inst = os.environ.get("PLATAFIRMA_INSTANCIA") or "/srv/platafirma/casa"
+    return [os.path.realpath(rel), os.path.realpath(os.path.join(inst, "var", "pre-push"))]
+
+def validar_arvore(arv):
+    if not os.path.isdir(arv):
+        morre(f"--arvore '{arv}' nao e diretorio.", 4)
+    real = os.path.realpath(arv)
+    if not any(real == r or real.startswith(r + os.sep) for r in raizes_de_arvore()):
+        morre(f"--arvore so e aceito sob a raiz de arvores materializadas "
+              f"({', '.join(raizes_de_arvore())}): '{arv}'", 4)
+    return real
+
+def ler_arvore_dir(raiz):
+    """Caminhos relativos de todo arquivo da arvore (fora .git), ordem estavel."""
+    out = []
+    for base, dirs, arqs in os.walk(raiz):
+        dirs[:] = sorted(d for d in dirs if d != ".git")
+        for a in sorted(arqs):
+            out.append(os.path.relpath(os.path.join(base, a), raiz).replace(os.sep, "/"))
+    return out
+
+def ler_corpos_dir(raiz, paths):
+    corpos = {}
+    for p in paths:
+        try:
+            with open(os.path.join(raiz, p), encoding="utf-8", errors="replace") as fh:
+                corpos[p] = fh.read()
+        except OSError as e:
+            morre(f"nao li {p} em {raiz}: {e}", 1)
+    return corpos
+
+def digest_arvore(corpos):
+    """sha1 de (caminho, corpo) em ordem: identifica a arvore sem ela ser commit."""
+    h = hashlib.sha1()
+    for p in sorted(corpos):
+        h.update(p.encode("utf-8", "surrogateescape") + b"\0")
+        h.update(corpos[p].encode("utf-8", "surrogateescape") + b"\0")
+    return h.hexdigest()
 
 def titulo_do_corpo(corpo, path):
     """1º H1 (`# `, fora de bloco de código) sem o `#`; sem H1, o nome do arquivo."""
@@ -424,6 +476,7 @@ def main(argv=None):
     ap.add_argument("--autor", default=None)
     ap.add_argument("--limite", type=int, default=0)
     ap.add_argument("--so", default=None)
+    ap.add_argument("--arvore", default=None)
     ap.add_argument("--json", dest="como_json", action="store_true", default=False)
     ap.add_argument("-h", "--help", "--ajuda", dest="ajuda", action="store_true", default=False)
     args, resto = ap.parse_known_args(argv)
@@ -445,6 +498,40 @@ def main(argv=None):
         cad = os.environ.get("PF_CADEIRA", "").strip().lower()
         cad = cad.removeprefix("claudinho-").removeprefix("claudinha-")
         autor = cad or "dados"
+
+    if args.arvore is not None:
+        # Admissao de arvore materializada (pre-push, gate, teste): o mesmo detector, sem main.
+        if args.apply:
+            morre("--arvore e so dry-run: --apply recusado (so o que entrou em main se ingere, "
+                  "arq:0115 §8.1).", 2)
+        if rev:
+            morre("--arvore e @<rev> se excluem: a arvore ja e a fonte.", 2)
+        raiz = validar_arvore(args.arvore)
+        arvore = ler_arvore_dir(raiz)
+        docs, diagramas, ignorados = classificar(arvore)
+        recusas_locais = recusas_diagrama(diagramas, arvore)
+        if args.so:
+            docs = [p for p in docs if args.so in p]
+            recusas_locais = [r for r in recusas_locais if args.so in r["path"]]
+        if args.limite:
+            docs = docs[:args.limite]
+        if not docs:
+            morre(f"nenhum documento .md em {raiz}.", 1)
+        if len(docs) > TETO_ITENS:
+            morre(f"{len(docs)} documentos passam do teto do servidor ({TETO_ITENS} por lote).", 1)
+        corpos = ler_corpos_dir(raiz, docs)
+        sha = digest_arvore(corpos)
+        itens = montar_itens(sha, docs, corpos)
+        # Nunca arvore_completa: checar uma arvore nao pode planejar retirada.
+        fonte = {"repo": repo, "sha": sha, "arvore_completa": False}
+        info = dict(fonte, espelho=raiz, docs=len(itens))
+        lote = postar_lote(montar_payload(autor, args.motor, args.ate, fonte, itens))
+        if args.como_json:
+            print(json.dumps({"fonte": info, "lote": lote, "recusas_locais": recusas_locais,
+                              "ignorados": ignorados}, indent=2, ensure_ascii=False))
+        else:
+            print(plano(lote, info, recusas_locais, ignorados))
+        sys.exit(3 if tem_recusa(lote, recusas_locais) else 0)
 
     esp, url = _suporte.espelho(), _suporte.url()
     garantir_espelho(esp, url)
