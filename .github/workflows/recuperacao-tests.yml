@@ -64,5 +64,9 @@ jobs:
       # Sem export de PF_RAIZ: a suite usa tempfile/fixtures quando a var nao aponta
       # pra uma arvore real. Setar PF_RAIZ pra um caminho meio-montado faz o registro.py
       # procurar macro-global/decisions inexistente e quebra 16 testes — pior que nao setar.
+      # O tokenizador baixado acima mora fora da arvore; `_raizes.TOKENIZADOR` procura em
+      # <arvore>/terceiros/tokenizers/ (onde a release o poe) salvo PLATAFIRMA_TOKENIZADOR,
+      # que existe para o CI apontar o arquivo baixado. Sem ela, os testes do teto de tokens
+      # nao acham o tokenizador e o job fica vermelho em todo PR que toca recuperacao/.
       - name: suite de recuperacao (contrato do envelope, disjuntor, PEP, catalogo)
-        run: uv run --group dev pytest . -q
+        run: PLATAFIRMA_TOKENIZADOR="$HOME/pf-raiz/opt/tokenizers/qwen2.5.json" uv run --group dev pytest . -q
