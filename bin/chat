@@ -263,10 +263,10 @@ def id_fita_novo():
 # recepcao roteia por NOME, e sem linha nesta tabela o giro morre em
 # "sem verbo declarado" — medido no chat em 18/08/2026, com o participante ja
 # admitido em cadeiras.py e sem rota nenhuma deste lado.
-VERBO_DO_PARTICIPANTE = {
-    "jaiminho": os.path.join(BIN, "jaiminho"),
-    "jaiminho-eng": os.path.join(BIN, "jaiminho-eng"),
-}
+# Vazia desde 27/09/2026 (#3117): jaiminho e jaiminho-eng foram aposentados por ordem
+# do dono e os verbos sairam de bin/. Participante sem linha aqui cai no erro limpo
+# "sem verbo declarado" abaixo, nunca num subprocess de binario inexistente.
+VERBO_DO_PARTICIPANTE = {}
 
 # `jaiminho perguntar` e sincrono e nao emite stream: ele volta quando o `agy`
 # terminou. O watchdog do worker mata por silencio de 300 s (e o daqui, por 240),
