@@ -427,7 +427,9 @@ def _hermit(de: str, para: str, tipo: str) -> dict | None:
 def _exportar(repo: str) -> str | None:
     """Regenera ontologia/acervo/*.jsonl no clone (cli exportar-acervo). Devolve os arquivos
     alterados segundo o git, ou None se não deu para rodar."""
-    py = os.environ.get("PF_EXPORT_PYTHON") or str(release() / "venv" / "acervo" / "bin" / "python")
+    # motor_acervo.cli importa dotenv, psycopg etc.: roda no venv rag, o mesmo de
+    # bin/_acervo/exportar. O venv acervo so tem boto3/owlready2/rdflib (#3130, 27/09).
+    py = os.environ.get("PF_EXPORT_PYTHON") or str(release() / "venv" / "rag" / "bin" / "python")
     if not os.path.isfile(py):
         return None
     r = subprocess.run([py, "-m", "motor_acervo.cli", "exportar-acervo"], capture_output=True, text=True,
