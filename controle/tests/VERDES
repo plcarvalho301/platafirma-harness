@@ -47,3 +47,4 @@ tests/test_sessao_reidratar.py
 tests/test_contrato_acervo_topologia.py
 tests/test_contrato_seg_segredo.py
 tests/test_publicar_abertura_rotas.py
+tests/test_contrato_lint_acervo.py
