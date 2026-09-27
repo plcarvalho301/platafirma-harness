@@ -2408,138 +2408,18 @@ def conferir_alcance(sujeito, fonte, como_json=False):
         return 2
     nome_item = f"{sujeito} -> {fonte}"
     alvo = f"{sujeito} {fonte}"
-    for p in (HARNESS, POLITICA_DIR):
-        if p not in sys.path:
-            sys.path.insert(0, p)
-    try:
-        from recuperacao.pep import PEP
-        from recuperacao.fontes import Fonte
-    except Exception as e:                                       # noqa: BLE001
-        motivo = f"maquinario de acesso ilegivel — {type(e).__name__}: {e}"
-        itens = [(nome_item, resultado.indeterminavel(motivo))]
+    # a cadeia mora em bin/_lint/alcance.py (card #3153); aqui so se imprime
+    from _lint.alcance import cadeia_de_alcance
+    c = cadeia_de_alcance(sujeito, fonte, HARNESS, POLITICA_DIR)
+    if not c["saltos"]:
+        itens = [(nome_item, resultado.indeterminavel(c["motivo"]))]
         return resultado.relatorio("alcance", alvo, itens, _sha_release(), como_json=como_json)
-    try:
-        f = Fonte(fonte)
-    except ValueError:
-        validas = ", ".join(x.value for x in Fonte)
-        motivo = f"fonte {fonte!r} nao existe — validas: {validas}"
-        itens = [(nome_item, resultado.indeterminavel(motivo))]
-        return resultado.relatorio("alcance", alvo, itens, _sha_release(), como_json=como_json)
-
-    suj_doc, _ = _carrega_yaml(os.path.join(POLITICA_DIR, "sujeitos.yaml"))
-    atrib = ((suj_doc or {}).get("sujeitos") or {}).get(sujeito) or {}
-    cat_doc, _ = _carrega_yaml(SUPERFICIES)
-    sup = ((cat_doc or {}).get("superficies") or {}).get(fonte)
-
-    pep = PEP()
-    neg = pep.autoriza_fonte(sujeito, f)
-    acao = pep.acao(f)
-
-    saltos = []
-
-    # 1 identidade
-    if atrib:
-        papeis = ",".join(atrib.get("papeis") or ()) or "(sem papel)"
-        saltos.append(("identidade", "PASSA",
-                       f"projetado em sujeitos.yaml (natureza={atrib.get('natureza', '?')}, papeis={papeis})",
-                       "politica-acesso/sujeitos.yaml"))
-        id_ok = True
-    else:
-        saltos.append(("identidade", "QUEBRA",
-                       f"sujeito {sujeito!r} ausente da projecao — fail-closed; o PDP nega por atributo ausente",
-                       "politica-acesso/sujeitos.yaml"))
-        id_ok = False
-
-    # 2 credencial
-    locus = [f"{k}={atrib[k]}" for k in ("client", "conta", "usuario", "segredos") if atrib.get(k)]
-    if not atrib:
-        saltos.append(("credencial", "n/a", "sujeito nao projetado — nada onde ancorar credencial",
-                       "politica-acesso/sujeitos.yaml (+ realm keycloak)"))
-        cred_ok = False
-    elif locus:
-        saltos.append(("credencial", "PASSA",
-                       "locus: " + ", ".join(locus) + " [realm keycloak: declarado, nao medido aqui]",
-                       "politica-acesso/sujeitos.yaml (+ realm keycloak)"))
-        cred_ok = True
-    else:
-        saltos.append(("credencial", "QUEBRA",
-                       "projetado sem client/conta/usuario/segredos — sem credencial para autenticar",
-                       "politica-acesso/sujeitos.yaml (+ realm keycloak)"))
-        cred_ok = False
-
-    # 3 PDP
-    if neg is None:
-        saltos.append(("PDP", "PERMITE", f"a regra permite; acao={acao}", "politica-acesso/politica.yaml"))
-        pdp_estado = "PERMITE"
-    elif neg.regra in ("projecao", "identidade"):
-        saltos.append(("PDP", "nao avaliado",
-                       f"sujeito ausente da projecao ({neg.regra}) — a decisao nem chega ao PDP",
-                       "politica-acesso/politica.yaml"))
-        pdp_estado = "nao avaliado"
-    else:
-        saltos.append(("PDP", "NEGA", f"regra={neg.regra}, acao={acao} — {neg.motivo}",
-                       "politica-acesso/politica.yaml"))
-        pdp_estado = "NEGA"
-
-    # 4 rede + 5 ACL do alvo
-    if sup is None:
-        saltos.append(("rede", "indeterminavel", f"fonte {fonte!r} ausente de superficies.yaml — a medir",
-                       "politica-acesso/superficies.yaml"))
-        saltos.append(("ACL do alvo", "indeterminavel", "sem entrada no catalogo de superficies",
-                       "politica-acesso/superficies.yaml"))
-        rede_ok = None
-        acl = "faltando"
-    else:
-        alc = sup.get("alcancavel")
-        detalhe_rede = f"{sup.get('ingress', '?')} — {sup.get('rede', '')}"
-        if alc is True or alc == "loopback":
-            marca = "ALCANCA (loopback)" if alc == "loopback" else "ALCANCA"
-            saltos.append(("rede", marca, detalhe_rede, "politica-acesso/superficies.yaml::ingress"))
-            rede_ok = True
-        else:
-            saltos.append(("rede", "BLOQUEIA", detalhe_rede, "politica-acesso/superficies.yaml::ingress"))
-            rede_ok = False
-        acl = sup.get("acl_canonica")
-        portao = sup.get("portao", "")
-        if acl is True:
-            saltos.append(("ACL do alvo", "CANONICA", portao, "politica-acesso/superficies.yaml::portao"))
-        elif acl is False:
-            saltos.append(("ACL do alvo", "FRACA", "portao paralelo, NAO impoe o PDP — " + portao,
-                           "politica-acesso/superficies.yaml::portao"))
-        else:
-            saltos.append(("ACL do alvo", "A MEDIR", portao, "politica-acesso/superficies.yaml::portao"))
-
-    # elo mais fraco da cadeia modelada: identidade -> credencial -> PDP -> rede
-    elo = None
-    if not id_ok:
-        elo = ("identidade", "sujeito ausente da projecao")
-    elif not cred_ok:
-        elo = ("credencial", "sem credencial declarada")
-    elif pdp_estado == "NEGA":
-        elo = ("PDP", f"regra {neg.regra} nega")
-    elif rede_ok is False:
-        elo = ("rede", "fonte nao alcancavel")
-
-    if rede_ok is None:
-        motivo = f"{fonte!r} nao esta no catalogo de superficies; a cadeia nao fecha."
-        veredito = resultado.indeterminavel(motivo)
-    elif elo is None:
-        veredito = resultado.conforme()
-    else:
-        motivo = f"elo mais fraco: {elo[0]} — {elo[1]}"
-        veredito = resultado.divergente(motivo)
-
-    # nota de imposicao: divergencia entre o veredito do PDP e o que o portao impoe
-    nota = None
-    if acl is False:
-        if pdp_estado == "NEGA":
-            nota = ("[RISCO] o PDP NEGA mas a ACL do alvo e FRACA (portao paralelo): a negativa "
-                    "pode NAO ser imposta no alvo — possivel bypass. Achado do #191.")
-        else:
-            nota = ("[AVISO] ACL do alvo FRACA: o portao nao impoe o PDP; o veredito acima nao e "
-                    "garantido pelo alvo. Achado do #191.")
-    elif acl is None:
-        nota = "[AVISO] ACL do alvo A MEDIR: o gate do alvo existe mas nao foi lido (#191)."
+    saltos, elo, nota = c["saltos"], c["elo"], c["nota"]
+    rede_ok = True if c["fechou"] else None
+    veredito = {"conforme": resultado.conforme,
+                "divergente": resultado.divergente,
+                "indeterminavel": resultado.indeterminavel}[c["estado"]](
+                    *([c["motivo"]] if c["motivo"] else []))
 
     if not como_json:
         print(f"alcance: {sujeito} -> {fonte}")
