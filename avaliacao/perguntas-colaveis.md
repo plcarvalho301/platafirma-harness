@@ -1,6 +1,6 @@
 # Perguntas do gabarito, em bloco colavel
 
-Derivado de `gabarito.jsonl` por `tooling/avaliacao/gerar_colaveis.py`.
+Derivado de `gabarito.jsonl` por `avaliacao/gerar_colaveis.py`.
 Nao editar aqui: pergunta se corrige no gabarito e este arquivo se regenera.
 
 Cada bloco e uma pergunta inteira, pronta para colar no prompt. O alvo nao entra:
