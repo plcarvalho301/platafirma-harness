@@ -9,7 +9,7 @@
 |---|---|---|---|---|
 | megafone | 1000 | **sudo + docker** | lingering | dono. sudo→root e docker→daemon de SISTEMA. Foi o vetor do vazamento de rebuild 25/08. |
 | claudinho | 1001 | dono do daemon rootless da prod | lingering | conta dos serviços; opera via `/run/user/1001/docker.sock`. Sem sudo. |
-| (conta uid 1003) | 1003 | rootless próprio | lingering | sem sujeito no PAP desde o #3117; acesso a redesenhar. |
+| (conta uid 1003) | 1003 | rootless próprio | lingering | fábrica: sujeito de serviço pelo `sub`, papel `fornecedor`, entra por `monta_sessao` (#3165). |
 | modulo-osint | 1002 | — | lingering | conta de SO órfã (achado do `acesso orfaos`, sem sujeito no PAP). |
 
 ## 2. Realm (Keycloak)
