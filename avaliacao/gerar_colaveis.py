@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Deriva avaliacao/perguntas-colaveis.md do gabarito. Regenera; nao se edita a mao.
 
-    python3 tooling/avaliacao/gerar_colaveis.py
+    python3 avaliacao/gerar_colaveis.py
 """
 import json
 from pathlib import Path
@@ -28,7 +28,7 @@ def main():
     L = [
         "# Perguntas do gabarito, em bloco colavel",
         "",
-        "Derivado de `gabarito.jsonl` por `tooling/avaliacao/gerar_colaveis.py`.",
+        "Derivado de `gabarito.jsonl` por `avaliacao/gerar_colaveis.py`.",
         "Nao editar aqui: pergunta se corrige no gabarito e este arquivo se regenera.",
         "",
         "Cada bloco e uma pergunta inteira, pronta para colar no prompt. O alvo nao entra:",
