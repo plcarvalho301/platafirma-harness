@@ -10,7 +10,6 @@ from typing import List, Optional, Tuple
 
 from .resultado import Apontamento
 
-
 def detectar_stack(raiz: Path) -> Optional[Tuple[str, str]]:
     """Detecta stack de linter do repo: (stack, comando).
     
@@ -41,6 +40,25 @@ def detectar_stack(raiz: Path) -> Optional[Tuple[str, str]]:
 
     return None
 
+def raiz_da_stack(raiz: Path, alvo: Optional[str] = None) -> Path:
+    """Projeto que contem o alvo: o diretorio mais proximo, do alvo ate a raiz, com
+    manifesto python ou node (card #3074).
+
+    Sem isso, um alvo em subprojeto (platafirma-conhecimento/rag, com pyproject so em
+    rag/) herdava a stack da raiz do clone (bash, por causa de bin/) e o ruff nunca
+    rodava: 0 apontamentos, verde falso. Sem alvo, ou alvo sem subprojeto, e a raiz.
+    """
+    raiz = raiz.resolve()
+    if not alvo:
+        return raiz
+    p = (raiz / alvo).resolve()
+    d = p if p.is_dir() else p.parent
+    while d != raiz and d.is_relative_to(raiz):
+        det = detectar_stack(d)
+        if det and det[0] in ("python", "node"):
+            return d
+        d = d.parent
+    return raiz
 
 def _lint_bash(raiz: Path, alvo: Optional[str] = None) -> list[Apontamento]:
     apontamentos: list[Apontamento] = []
@@ -95,7 +113,6 @@ def _lint_bash(raiz: Path, alvo: Optional[str] = None) -> list[Apontamento]:
 
     return apontamentos
 
-
 def verificar_codigo(
     raiz: Path | str,
     alvo: Optional[str] = None,
@@ -105,34 +122,42 @@ def verificar_codigo(
     Retorna (lista_apontamentos, stack).
     Lanca ValueError(exit_code, msg) se indeterminavel ou linter falhar.
     """
-    raiz = Path(raiz)
-    deteccao = detectar_stack(raiz)
+    raiz = Path(raiz).resolve()
+    # o linter roda no projeto que contem o alvo (subprojeto com manifesto proprio),
+    # com cwd la para o ruff achar a configuracao dele; os caminhos voltam relativos
+    # a raiz do clone
+    raiz_stack = raiz_da_stack(raiz, alvo)
+    prefixo = "" if raiz_stack == raiz else f"{raiz_stack.relative_to(raiz)}/"
+    deteccao = detectar_stack(raiz_stack)
     if not deteccao:
         # Exit 5: indeterminavel
-        raise ValueError(5, f"indeterminavel — nenhuma stack de lint detectada em {raiz}")
+        raise ValueError(5, f"indeterminavel — nenhuma stack de lint detectada em {raiz_stack}")
 
     stack, cmd = deteccao
     apontamentos: list[Apontamento] = []
 
-    alvo_path = (raiz / alvo).resolve() if alvo else raiz
-    alvo_rel = str(alvo_path.relative_to(raiz)) if alvo and alvo_path.is_relative_to(raiz) else (alvo or ".")
+    alvo_path = (raiz / alvo).resolve() if alvo else raiz_stack
+    alvo_rel = str(alvo_path.relative_to(raiz_stack)) if alvo and alvo_path.is_relative_to(raiz_stack) else (alvo or ".")
 
     if stack == "python":
         # Tenta ruff direto, senao uvx ruff, senao python3 -m ruff
+        # --output-format=concise: o parser abaixo le arquivo:linha:col: REGRA; o formato
+        # padrao do ruff desde 0.5 (full) quebra a linha e virava apontamento de lixo
+        check = ["check", "--output-format=concise", alvo_rel]
         linter_bin = shutil.which("ruff")
         if linter_bin:
-            cmd_args = [linter_bin, "check", alvo_rel]
+            cmd_args = [linter_bin, *check]
         elif shutil.which("uvx"):
-            cmd_args = ["uvx", "ruff", "check", alvo_rel]
+            cmd_args = ["uvx", "ruff", *check]
         elif shutil.which("python3"):
-            cmd_args = ["python3", "-m", "ruff", "check", alvo_rel]
+            cmd_args = ["python3", "-m", "ruff", *check]
         else:
             raise ValueError(3, "linter python (ruff) ausente no ambiente")
 
         try:
             proc = subprocess.run(
                 cmd_args,
-                cwd=str(raiz),
+                cwd=str(raiz_stack),
                 capture_output=True,
                 text=True,
             )
@@ -152,7 +177,7 @@ def verificar_codigo(
                         lin_num = 1
                     apontamentos.append(
                         Apontamento(
-                            arq,
+                            prefixo + arq,
                             lin_num,
                             resto,
                             "corrigir apontamento de estilo/qualidade indicado pelo linter",
@@ -167,7 +192,7 @@ def verificar_codigo(
                         lin_num = 1
                     apontamentos.append(
                         Apontamento(
-                            arq,
+                            prefixo + arq,
                             lin_num,
                             resto,
                             "corrigir apontamento indicado pelo linter",
@@ -176,8 +201,8 @@ def verificar_codigo(
                     )
 
         # Se houver bin/ com scripts bash e alvo nao restringe a arquivo python
-        if (raiz / "bin").is_dir() and (not alvo or not alvo.endswith(".py")):
-            apontamentos.extend(_lint_bash(raiz, alvo))
+        if (raiz_stack / "bin").is_dir() and (not alvo or not alvo.endswith(".py")):
+            apontamentos.extend(_lint_bash(raiz_stack, alvo_rel if alvo else None))
 
     elif stack == "node":
         if not shutil.which("npm"):
@@ -186,7 +211,7 @@ def verificar_codigo(
         if alvo:
             cmd_args.extend(["--", alvo_rel])
         try:
-            proc = subprocess.run(cmd_args, cwd=str(raiz), capture_output=True, text=True)
+            proc = subprocess.run(cmd_args, cwd=str(raiz_stack), capture_output=True, text=True)
             if proc.returncode != 0:
                 for l in (proc.stdout + "\n" + proc.stderr).splitlines():
                     if ":" in l:
