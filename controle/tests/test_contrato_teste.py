@@ -199,6 +199,50 @@ def test_portao_roda_apenas_a_lista_de_verdes(tmp_path):
     assert "test_vermelho" not in r.stdout
 
 
+def test_rodada_parcial_nao_grava_o_memo_do_portao(tmp_path):
+    """Um arquivo verde nao e a arvore verde: o memo que pre-push e gate leem so recebe a
+    rodada do portao inteiro. Antes, `teste rodar <stack> <um arquivo>` gravava verde ali,
+    e o push seguinte da mesma arvore passava sem medir o resto (medido em 27/09: tres
+    arquivos diferentes, um so rodou, os outros dois sairam "reaproveitado")."""
+    if not shutil.which("uv"):
+        pytest.skip("uv ausente")
+    release_raiz = tmp_path / "release"
+    arvore = release_raiz / "demo" / "rev1"
+    arvore.mkdir(parents=True)
+    _git("init", "-q", "-b", "main", cwd=arvore)
+    (arvore / "pyproject.toml").write_text(
+        '[project]\nname = "demo"\nversion = "0"\nrequires-python = ">=3.10"\ndependencies = []\n'
+    )
+    (arvore / "lock.txt").write_text("# fixture: venv vazio\n")
+    (arvore / "controle" / "tests").mkdir(parents=True)
+    (arvore / "controle" / "tests" / "test_verde.py").write_text("def test_v(): assert True\n")
+    (arvore / "controle" / "tests" / "test_vermelho.py").write_text("def test_f(): assert False\n")
+    (arvore / "controle" / "tests" / "VERDES").write_text("tests/test_verde.py\ntests/test_vermelho.py\n")
+    _git("add", "-A", cwd=arvore)
+    _git("commit", "-q", "-m", "semente", cwd=arvore)
+    vjson = tmp_path / "venvs.json"
+    vjson.write_text(json.dumps({
+        "repositorios": {"demo": {"esteira": "codigo", "stack": "demo-stack"}},
+        "demo-stack": {"familia": "demo", "lock": "lock.txt", "teste": "controle"},
+    }))
+    inst = tmp_path / "instancia"
+    env = {
+        "PF_RELEASE_RAIZ": str(release_raiz),
+        "PLATAFIRMA_INSTANCIA": str(inst),
+        "PLATAFIRMA_VENVS": str(vjson),
+        "PLATAFIRMA_PYTHON": _python(),
+        "PF_TESTE_PYTHON": _python(),
+    }
+    r = _run_teste(env, "rodar", "demo-stack", "controle/tests/test_verde.py", "--arvore", str(arvore))
+    assert r.returncode == 0, r.stdout + r.stderr
+    memo_portao = inst / "var" / "pre-push" / "vereditos"
+    assert not memo_portao.exists() or not any(memo_portao.rglob("*")), list(memo_portao.rglob("*"))
+
+    r2 = _run_teste(env, "rodar", "demo-stack", "--portao", "--arvore", str(arvore))
+    assert r2.returncode == 1, r2.stdout + r2.stderr
+    assert "reaproveitado" not in r2.stdout
+
+
 def test_ajuda_sai_2_sem_efeito_colateral(tmp_path):
     inst = tmp_path / "instancia"
     env = {

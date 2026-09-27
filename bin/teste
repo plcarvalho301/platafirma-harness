@@ -289,7 +289,11 @@ pytest_em_bloco() {  # $1=clone $2=raiz(cwd) $3=rotulo $4=modo(py:<python>|isola
     fi
   fi
   local vereditos_dir="$inst/var/pre-push/vereditos"
-  if [ -n "$arvore" ] && [ -n "${CHAVE_HASH:-}" ]; then
+  # O memo do portão (o mesmo que pre-push e gate leem) só recebe a rodada do portão
+  # inteiro: um arquivo só verde não é a árvore verde, e gravar ali abria o gate para
+  # quem rodasse um teste isolado antes do push. Rodada parcial vai ao memo próprio,
+  # com o alvo na chave.
+  if [ -n "$arvore" ] && [ -n "${CHAVE_HASH:-}" ] && [ "${portao:-0}" -eq 1 ]; then
     memo="$(caminho_veredito "$vereditos_dir" "$arvore" "$REG_STACK" "$CHAVE_HASH")"
     mkdir -p "$(dirname "$memo")" 2>/dev/null || memo=""
   elif [ -n "$arvore" ]; then
@@ -370,7 +374,7 @@ pytest_em_bloco() {  # $1=clone $2=raiz(cwd) $3=rotulo $4=modo(py:<python>|isola
     # Grava também formato legado de texto caso leitor simples consulte
     local depois
     depois="$(arvore_da_bancada "$c" 2>/dev/null || echo '')"
-    if [ -n "$depois" ] && [ "$depois" != "$arvore" ]; then
+    if [ "${portao:-0}" -eq 1 ] && [ -n "$depois" ] && [ "$depois" != "$arvore" ]; then
       local memo_depois; memo_depois="$(caminho_veredito "$vereditos_dir" "$depois" "$REG_STACK" "$CHAVE_HASH")"
       gravar_veredito "$memo_depois" "$v_str" "${depois:0:12}"
     fi

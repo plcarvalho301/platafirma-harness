@@ -16,8 +16,12 @@ BASE_RASTREADOR = os.environ.get("PF_RASTREADOR_BASE", "http://127.0.0.1:8120")
 TIMEOUT_RASTREADOR = 3.0
 
 
-def declaracao_de_commit(raiz: Path) -> Optional[dict]:
-    caminho = raiz / DECLARACAO_DE_COMMIT
+def declaracao_de_commit(raiz: Path | str) -> Optional[dict]:
+    """`.conferir-commit` na raiz do repo: opt-in do gate, e onde o rastreador responde.
+    None quando o arquivo nao existe: nao e erro, e "este repo nao pediu gate".
+    Modulo unico (card #3153): lint commit, o hook commit-msg e conferir commit leem daqui.
+    """
+    caminho = Path(raiz) / DECLARACAO_DE_COMMIT
     if not caminho.is_file():
         return None
     config = {"base": BASE_RASTREADOR, "timeout": TIMEOUT_RASTREADOR}
@@ -40,24 +44,23 @@ def declaracao_de_commit(raiz: Path) -> Optional[dict]:
 
 
 def pergunta_ao_rastreador(base: str, mensagem: str, timeout: float = TIMEOUT_RASTREADOR) -> tuple[Optional[dict], Optional[str]]:
-    url = f"{base}/commits/conferir"
+    """Manda a mensagem e devolve (veredito, erro). Um dos dois e None, nunca os dois."""
     corpo = json.dumps({"mensagem": mensagem}).encode("utf-8")
     req = urllib.request.Request(
-        url,
-        data=corpo,
-        headers={"Content-Type": "application/json", "Accept": "application/json"},
-        method="POST",
+        f"{base}/commits/conferir", data=corpo, method="POST",
+        headers={"content-type": "application/json"},
     )
     try:
-        with urllib.request.urlopen(req, timeout=timeout) as resp:
-            return json.loads(resp.read().decode("utf-8")), None
+        with urllib.request.urlopen(req, timeout=timeout) as r:  # noqa: S310 — loopback declarado
+            return json.loads(r.read().decode("utf-8")), None
     except urllib.error.HTTPError as e:
-        corpo_err = e.read().decode("utf-8", errors="replace")[:200]
-        return None, f"rastreador em {url} respondeu HTTP {e.code}: {corpo_err}"
-    except (urllib.error.URLError, TimeoutError, OSError) as e:
-        return None, f"nao consegui falar com o rastreador em {url}: {e}"
-    except ValueError as e:
-        return None, f"resposta do rastreador em {url} nao e JSON valido: {e}"
+        return None, f"{base} respondeu HTTP {e.code}"
+    except urllib.error.URLError as e:
+        return None, f"{base} nao respondeu ({e.reason})"
+    except (TimeoutError, OSError) as e:
+        return None, f"{base} nao respondeu ({type(e).__name__})"
+    except (ValueError, KeyError) as e:
+        return None, f"{base} respondeu o que nao e veredito ({type(e).__name__})"
 
 
 def verificar_commit(
