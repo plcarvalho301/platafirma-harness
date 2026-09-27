@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
-# quarentena-prune — apaga levas de quarentena que passaram da janela de arrependimento.
-# Chamado pelo cron do claudinho, sextas de madrugada.
-# capacidade: orfa
-# orfa por design: entra em gerenciamento de memoria (F3d), junto de ops-log-prune
-# dono: claudinho-TI
+# limpeza-quarentena — apaga levas de quarentena que passaram da janela de arrependimento.
+# Sub-ato de `infra` (arq:0110 §14, emenda 26/09/2026 — card #3145): fora do PATH e do
+# golden record, mora em bin/_infra/. Chamado por `infra limpeza quarentena [args]`, nunca
+# direto; o cron do claudinho, sextas de madrugada, passa a chamar `infra limpeza
+# quarentena` (ex-bin/quarentena-prune, movido daqui — a agenda do cron muda em PR de
+# platafirma-core).
 #
 # A quarentena existe para que apagar seja reversivel: o que entra la foi movido,
 # nao removido, e volta com um mv enquanto a leva viver. Este verbo e o fim dessa
@@ -15,8 +16,9 @@
 set -uo pipefail
 # ambiente: PLATAFIRMA_INSTANCIA[=/srv/platafirma/casa] · QUARENTENA_RETENCAO_DIAS[=7]
 
-# Raizes de producao (card #3010): quarentena, trava e log moram na instancia.
-. "$(dirname "$(readlink -f "$0")")/../lib/raizes.sh"
+# Raizes de producao (card #3010): quarentena, trava e log moram na instancia. Este
+# script mora em bin/_infra/, um nivel abaixo de bin/ — raizes.sh fica dois niveis acima.
+. "$(dirname "$(readlink -f "$0")")/../../lib/raizes.sh"
 
 RETENCAO_DIAS="${QUARENTENA_RETENCAO_DIAS:-7}"
 QUARENTENA="$PLATAFIRMA_INSTANCIA/var/quarentena"
@@ -29,11 +31,11 @@ mkdir -p "$(dirname "$MARCA")" "$(dirname "$TRAVA")"
 # Trava: sessao concorrente nao pode apagar a mesma leva duas vezes.
 exec 9>"$TRAVA"
 if ! flock -n 9; then
-  echo "$(ts) quarentena-prune: outra execucao em curso, saindo" >> "$MARCA"
+  echo "$(ts) limpeza-quarentena: outra execucao em curso, saindo" >> "$MARCA"
   exit 0
 fi
 
-[ -d "$QUARENTENA" ] || { echo "$(ts) quarentena-prune: sem $QUARENTENA, nada a fazer" >> "$MARCA"; exit 0; }
+[ -d "$QUARENTENA" ] || { echo "$(ts) limpeza-quarentena: sem $QUARENTENA, nada a fazer" >> "$MARCA"; exit 0; }
 # O cinto abaixo compara com readlink -f: a raiz tambem sai canonica, senao um symlink
 # no caminho da instancia faria recusar toda leva.
 QUARENTENA="$(readlink -f "$QUARENTENA")"
@@ -46,17 +48,17 @@ while IFS= read -r leva; do
   real=$(readlink -f "$leva")
   case "$real" in
     "$QUARENTENA"/*) : ;;
-    *) echo "$(ts) quarentena-prune: RECUSADO fora da quarentena: $real" >> "$MARCA"; continue ;;
+    *) echo "$(ts) limpeza-quarentena: RECUSADO fora da quarentena: $real" >> "$MARCA"; continue ;;
   esac
   b=$(du -sb "$real" 2>/dev/null | cut -f1)
   b="${b:-0}"
   if rm -rf -- "$real"; then
     total=$((total + 1))
     bytes=$((bytes + b))
-    echo "$(ts) quarentena-prune: apagada leva $(basename "$real") (${b} bytes)" >> "$MARCA"
+    echo "$(ts) limpeza-quarentena: apagada leva $(basename "$real") (${b} bytes)" >> "$MARCA"
   else
-    echo "$(ts) quarentena-prune: FALHOU ao apagar $real" >> "$MARCA"
+    echo "$(ts) limpeza-quarentena: FALHOU ao apagar $real" >> "$MARCA"
   fi
 done < <(find "$QUARENTENA" -mindepth 1 -maxdepth 1 -type d -mtime "+$RETENCAO_DIAS" 2>/dev/null)
 
-echo "$(ts) quarentena-prune: $total leva(s), $bytes bytes, retencao ${RETENCAO_DIAS}d" >> "$MARCA"
+echo "$(ts) limpeza-quarentena: $total leva(s), $bytes bytes, retencao ${RETENCAO_DIAS}d" >> "$MARCA"

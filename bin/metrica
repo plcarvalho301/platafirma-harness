@@ -3,7 +3,7 @@
 # capacidade: metrica
 # dono: claudinho-ia
 # use para: giros por fita, erros por verbo, giros-ate-acerto, profundidade de cadeia de erro
-# atos: eventos, dia, ate-acerto, tateio, casos, verbos, comportamento
+# atos: eventos, dia, ate-acerto, tateio, casos, verbos, comportamento, abertura (leitura, abertura)
 # forma: relatorio
 # cauda: nao
 #
@@ -43,13 +43,22 @@ from datetime import date, datetime, timedelta
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.realpath(__file__))), "lib"))
 from raizes import instancia  # noqa: E402
 
+# `abertura` mora em bin/_metrica/ (card #3145; ex bin/_conta/conta-abertura.py,
+# movido preservando historico): modulo importavel, nao verbo proprio. bin/ ja e o
+# dir deste arquivo quando executado direto, mas insere explicito (como bin/lint faz
+# com _lint) para o import valer tambem por outro caminho de carga (ex. teste).
+_BIN_DIR = os.path.dirname(os.path.realpath(__file__))
+if _BIN_DIR not in sys.path:
+    sys.path.insert(0, _BIN_DIR)
+from _metrica.abertura import main as _abertura_main  # noqa: E402
+
 # O ops log mora na instancia. OPS_LOG_DIR e o nome unico do diretorio (o mesmo da porta,
 # de repo, motor e descansar); PF_LOG_OPS segue lido so como alias antigo.
 LOG_OPS = (os.environ.get("OPS_LOG_DIR") or os.environ.get("PF_LOG_OPS")
            or str(instancia() / "var" / "log" / "ops"))
 
 VERBO = "metrica"
-ATOS = ("eventos", "dia", "ate-acerto", "tateio", "casos", "verbos", "comportamento")
+ATOS = ("eventos", "dia", "ate-acerto", "tateio", "casos", "verbos", "comportamento", "abertura")
 TIPOS = ("giro", "erro", "ajuda", "help", "acerto", "cadeia", "lote", "veredito")
 
 # PEDIDO DE AJUDA NAO E ERRO (dono, 12/09/2026): verbo chamado sem ato lista os atos por
@@ -1097,6 +1106,15 @@ def main(argv):
         return erro_gracioso(
             f"{VERBO}: ato desconhecido '{ato}'",
             [f"os atos: {', '.join(ATOS)}", f"a forma de cada um: {VERBO} --help"], 2)
+
+    # `abertura` tem args proprios (`<cadeira>`, `--tudo`, `--json`, `--chapeu`), nao
+    # os de `metrica` (`<dia>`, `--desde`, `--cadeira`...) — despacha ANTES do argparse
+    # comum, como `bin/sessao` faz com `longjob`, senao o parser abaixo tomaria
+    # `--tudo`/`--json` por lixo ou `<cadeira>` por `<dia>`. Saida propria (herdada de
+    # conta-abertura: default texto, `--json` pede maquina — o INVERSO do resto de
+    # metrica), por isso nao passa por `texto()` nem pelo bloco `r`/`--resumo` abaixo.
+    if ato == "abertura":
+        return _abertura_main(argv[2:])
 
     p = argparse.ArgumentParser(prog=f"{VERBO} {ato}", add_help=False)
     p.add_argument("dia", nargs="?", default="")

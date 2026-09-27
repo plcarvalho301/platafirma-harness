@@ -1,17 +1,17 @@
 #!/usr/bin/env bash
-# ops-log-prune — poda o registro de operação por retenção declarada.
-# Chamado pelo cron do claudinho, diariamente.
-# capacidade: orfa
-# orfa por design: entra em gerenciamento de memoria (F3d)
-# dono: claudinho-TI
-# Retenção declarada em RETENCAO_DIAS; alvos em ALVOS.
+# limpeza-logs — poda o registro de operação por retenção declarada.
+# Sub-ato de `infra` (arq:0110 §14, emenda 26/09/2026 — card #3145): fora do PATH e do
+# golden record, mora em bin/_infra/. Chamado por `infra limpeza logs [args]`, nunca
+# direto; o cron do claudinho, diariamente, passa a chamar `infra limpeza logs`
+# (ex-bin/ops-log-prune, movido daqui — a agenda do cron muda em PR de platafirma-core).
 # Não roda dentro do ops-mcp de propósito: processo que se auto-poda perde o log
 # justamente quando morre.
 set -uo pipefail
 # ambiente: PLATAFIRMA_INSTANCIA[=/srv/platafirma/casa] · OPS_LOG_DIR[=$PLATAFIRMA_INSTANCIA/var/log/ops] · LONGJOB_LOGDIR[=$PLATAFIRMA_INSTANCIA/var/log/jobs] · OPS_LOG_RETENCAO_DIAS[=90]
 
-# Raizes de producao (card #3010): os logs moram na instancia.
-. "$(dirname "$(readlink -f "$0")")/../lib/raizes.sh"
+# Raizes de producao (card #3010): os logs moram na instancia. Este script mora em
+# bin/_infra/, um nivel abaixo de bin/ — raizes.sh fica dois niveis acima.
+. "$(dirname "$(readlink -f "$0")")/../../lib/raizes.sh"
 
 RETENCAO_DIAS="${OPS_LOG_RETENCAO_DIAS:-90}"
 ALVOS=(

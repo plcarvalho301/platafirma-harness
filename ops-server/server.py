@@ -138,6 +138,39 @@ _sessao: ContextVar[str] = ContextVar("sessao", default="-")
 TTL_SESSAO_S = 172800          # 48 h — o mesmo de `sessao:{id}`, `ledger:` e `giro:`
 _ULTIMA_SESSAO_ID: str | None = None
 
+# Ajudante de reidratacao (bin/_sessao/reidratar.py, arq:0110 §1; card #3145 decisao
+# 1). A porta roda no venv ops, SEM driver de banco (mesma razao de
+# bin/_sessao/giro-carga.py) — nunca fala com o Postgres direto; quando `sessao:{id}`
+# falta, delega ao verbo `sessao ver --json`, que reidrata de `sessao.sessao` por
+# dentro. Import protegido: um ajudante ausente ou quebrado NUNCA derruba a porta —
+# uma falha de import aqui tiraria todas as ferramentas do ar depois da promocao, que
+# e exatamente o incidente que esta decisao fecha. Sem ele, cai no comportamento de
+# hoje (cadeira vazia) e loga.
+_AJUDANTE_SESSAO = str(BIN_VERBOS / "_sessao")
+if _AJUDANTE_SESSAO not in sys.path:
+    sys.path.insert(0, _AJUDANTE_SESSAO)
+try:
+    import reidratar as _reidratar_mod
+except ImportError as _e_reidratar:
+    _reidratar_mod = None
+    print(f"[capsula] bin/_sessao/reidratar indisponivel: {_e_reidratar!r} — "
+          "sessao_resolve sem reidratacao (comportamento atual)", file=sys.stderr, flush=True)
+
+
+def _reidratar_porta(sid: str) -> dict | None:
+    """`sessao:{sid}` ausente do msg-mem: pelo modulo comum (bin/_sessao/reidratar.py),
+    que chama `sessao ver --json` (reidrata de `sessao.sessao` por dentro — mesma
+    funcao que bin/sessao::ato_ver usa, so pelo verbo, nunca psycopg neste processo).
+    Ajudante ausente/quebrado, verbo ausente, ou qualquer outro desvio: None —
+    comportamento de hoje (cadeira vazia)."""
+    if _reidratar_mod is None:
+        return None
+    try:
+        return _reidratar_mod.reidratar_via_verbo(sid, _acha_bin("sessao"), _env_subprocesso())
+    except Exception as e:  # noqa: BLE001 — reidratar nunca pode travar a resolucao
+        print(f"[reidratar] sessao:{sid} via `sessao ver` falhou: {e!r}", file=sys.stderr, flush=True)
+        return None
+
 
 def _sessao_viva() -> str | None:
     """Busca o sessao_id vivo da porta: ContextVar, chave Redis 'sessao:viva', ou última montada."""
@@ -1784,17 +1817,18 @@ def _montar(cadeira: str, atualizar: bool = True, chapeu: str = "", pergunta: st
     if not isinstance(abrir_json, dict):
         return {"erro": f"sessao abrir saída inesperada: {proc_abrir.stdout[:200]}"}
 
-    # (b) Lê sessao_id do JSON de abrir; RELÊ sessao:{id} no msg-mem (arq:0110 §5)
+    # (b) Lê sessao_id do JSON de abrir; RELÊ sessao:{id} no msg-mem (arq:0110 §5) —
+    # ausente (promocao recriou o msg-mem vazio, card #3145 decisao 1): reidrata por
+    # `_reidratar_porta` antes de cair no cadeira/ordem_id do proprio abrir_json.
     sid = abrir_json.get("sessao_id")
     cad_slug = None
     oid = None
     if sid:
         try:
             raw = _rc().get(f"sessao:{sid}")
-            if raw:
-                dados_chave = json.loads(raw)
-                cad_slug = dados_chave.get("cadeira")
-                oid = dados_chave.get("ordem_id")
+            dados_chave = json.loads(raw) if raw else (_reidratar_porta(sid) or {})
+            cad_slug = dados_chave.get("cadeira")
+            oid = dados_chave.get("ordem_id")
         except Exception as e:
             print(f"[valkey] releitura sessao:{sid} falhou: {e!r}", file=sys.stderr, flush=True)
 
@@ -1983,7 +2017,9 @@ PF_TOOLS_LOTE = os.environ.get("PF_TOOLS_LOTE", "0") == "1" # chamada em lote (�
 def _sessao_resolve(sessao_id: str | None) -> dict:
     """cadeira/ordem da sessão: SÓ o `sessao_id` que a fita porta, cunhado por `monta_sessao`.
 
-    Se ausente/vazio/'-', tenta o default da sessão viva (Item 12 #3065).
+    Se ausente/vazio/'-', tenta o default da sessão viva (Item 12 #3065). `sessao:{id}`
+    ausente do msg-mem (promocao da stack motor recria o msg-mem vazio, card #3145
+    decisao 1): reidrata por `_reidratar_porta` antes de devolver cadeira vazia.
     """
     if not sessao_id or sessao_id == "-":
         sessao_id = _sessao_viva()
@@ -1994,8 +2030,8 @@ def _sessao_resolve(sessao_id: str | None) -> dict:
         return out
     try:
         raw = _rc().get(f"sessao:{sessao_id}")
-        if raw:
-            d = json.loads(raw)
+        d = json.loads(raw) if raw else _reidratar_porta(sessao_id)
+        if d:
             out["cadeira"] = d.get("cadeira") or ""
             out["ordem_id"] = d.get("ordem_id") or out["ordem_id"]
     except Exception as e:  # noqa: BLE001

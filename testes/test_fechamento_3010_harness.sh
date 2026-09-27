@@ -161,7 +161,7 @@ while IFS= read -r u; do
 done < <(find "$REPO_ROOT" -path "$REPO_ROOT/.git" -prune -o -type f \( -name '*.service' -o -name '*.timer' \) -print)
 grep -q '^ExecStart=/opt/platafirma/current/venv/harness/bin/python /opt/platafirma/current/harness/chat/worker/worker.py$' \
   "$REPO_ROOT/chat/systemd/chat-worker.service" || falha "chat-worker devia rodar no venv harness da release"
-! grep -qE '^[^#]*setenv=PATH=[^ ]*\.local/bin' "$REPO_ROOT/bin/longjob" || falha "longjob poe ~/.local/bin no PATH da unit"
+! grep -qE '^[^#]*setenv=PATH=[^ ]*\.local/bin' "$REPO_ROOT/bin/_sessao/longjob" || falha "longjob poe ~/.local/bin no PATH da unit"
 echo "OK"
 
 # ---------------------------------------------------------------- 7. segredo da sessao

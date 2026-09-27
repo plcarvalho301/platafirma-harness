@@ -16,7 +16,9 @@ BIN_DIR="$TMP_DIR/bin"; REPO_RAIZ="$TMP_DIR/clones"; STUBS="$TMP_DIR/stubs"; FOR
 mkdir -p "$PROD_RAIZ" "$PONTOS" "$ABERTURA_DIR" "$BIN_DIR" "$REPO_RAIZ" "$STUBS" "$FORGE"
 export PF_PROD_RAIZ="$PROD_RAIZ" PF_RELEASE_RAIZ="$PONTOS" PF_ABERTURA_RAIZ="$ABERTURA_DIR" PF_BIN_DIR="$BIN_DIR" PF_REPO_RAIZ="$REPO_RAIZ"
 
-# ---- stubs: acervo (registro de stacks), deploy (grava chamadas), systemd-run/systemctl (nunca tocam a porta real)
+# ---- stubs: acervo (registro de stacks), docker (o ajudante bin/_release/stack roda DE VERDADE
+# agora — achar_deploy nao resolve mais pelo PATH, entao nao ha 'deploy' pra stubar aqui; o que
+# se stuba e o docker, que o ajudante chama por baixo), systemd-run/systemctl (nunca tocam a porta real)
 cat > "$STUBS/acervo" <<'EOF'
 #!/usr/bin/env bash
 # stub: só `ler casa stack <slug> --json`; devolve o registro inteiro, como o verbo real hoje
@@ -24,14 +26,13 @@ cat <<'J'
 [
  {"slug": "harness-controle", "repo": "platafirma-harness", "reversao": {"via": "promover"}},
  {"slug": "chat", "repo": "platafirma-harness", "reversao": {"via": "up"}},
- {"slug": "core", "repo": "platafirma-core", "reversao": {"via": "promover"}}
+ {"slug": "core", "repo": "platafirma-core", "compose": "docker-compose.yml", "projeto": "platafirma-core", "reversao": {"via": "promover"}}
 ]
 J
 EOF
-cat > "$STUBS/deploy" <<'EOF'
+cat > "$STUBS/docker" <<'EOF'
 #!/usr/bin/env bash
-echo "deploy $*" >> "${DEPLOY_LOG:?}"
-if [ "${DEPLOY_FALHA:-}" = "$1" ]; then echo "deploy: $1 recusa" >&2; exit 1; fi
+echo "docker $*" >> "${DEPLOY_LOG:?}"
 exit 0
 EOF
 cat > "$STUBS/systemd-run" <<'EOF'
@@ -78,12 +79,26 @@ H_SHA2="$(git -C "$REPO_RAIZ/platafirma-harness" rev-parse HEAD)"
 A_SHA1="$(git -C "$REPO_RAIZ/platafirma-arquitetura" rev-parse HEAD~1)"
 A_SHA2="$(git -C "$REPO_RAIZ/platafirma-arquitetura" rev-parse HEAD)"
 
+# platafirma-core: familia com stack real de compose (casos 9-10) — prova que release chama
+# o AJUDANTE bin/_release/stack de verdade, nao mais 'deploy' resolvido pelo PATH.
+git init -q --bare "$FORGE/platafirma-core.git"
+mkdir -p "$REPO_RAIZ/platafirma-core"; git -C "$REPO_RAIZ/platafirma-core" init -q -b main
+git -C "$REPO_RAIZ/platafirma-core" config user.name t; git -C "$REPO_RAIZ/platafirma-core" config user.email t@t
+printf 'name: platafirma-core\nservices:\n  app:\n    image: busybox\n' > "$REPO_RAIZ/platafirma-core/docker-compose.yml"
+echo v1 > "$REPO_RAIZ/platafirma-core/README.md"
+git -C "$REPO_RAIZ/platafirma-core" add .; git -C "$REPO_RAIZ/platafirma-core" commit -q -m c1
+echo v2 > "$REPO_RAIZ/platafirma-core/README.md"; git -C "$REPO_RAIZ/platafirma-core" commit -q -am c2
+git -C "$REPO_RAIZ/platafirma-core" remote add origin "$FORGE/platafirma-core.git"
+git -C "$REPO_RAIZ/platafirma-core" push -q origin main
+C_SHA1="$(git -C "$REPO_RAIZ/platafirma-core" rev-parse HEAD~1)"
+
 # ---- registro de famílias, venvs e terceiros: só o forge local em /tmp. Nenhum caso toca
 # rede, a instância real nem o servido: PLATAFIRMA_INSTANCIA e PLATAFIRMA_RELEASE vão ao tmp.
 cat > "$TMP_DIR/familias.json" <<J
 {
   "platafirma-harness": "$FORGE/platafirma-harness.git",
-  "platafirma-arquitetura": "$FORGE/platafirma-arquitetura.git"
+  "platafirma-arquitetura": "$FORGE/platafirma-arquitetura.git",
+  "platafirma-core": "$FORGE/platafirma-core.git"
 }
 J
 echo '{}' > "$TMP_DIR/venvs.json"; echo '{}' > "$TMP_DIR/terceiros.json"
@@ -174,6 +189,34 @@ git -C "$REPO_RAIZ/platafirma-arquitetura" push -q origin main
 set +e; out="$("$VERBO" reverter platafirma-arquitetura "$A_SHA3" 2>&1)"; rc=$?; set -e
 [ "$rc" -eq 1 ] || falha "sha de main não materializado devia sair 1 (gate não pode fechar em espelho velho): rc=$rc $out"
 grep -q "não está materializado" <<<"$out" || falha "exit 1 perdeu a mensagem de sempre: $out"
+echo "OK"
+
+echo "--- 9: familia com stack (core) promove por rev explicita chamando o AJUDANTE de verdade (bin/_release/stack) — achar_deploy nao resolve mais pelo PATH"
+: > "$DEPLOY_LOG"
+out="$("$VERBO" promover platafirma-core "$C_SHA1" 2>&1)" || falha "promover core: $out"
+LOGARQ="$(sed -n 's/^log: *//p' <<<"$out" | tail -n 1)"
+[ -n "$LOGARQ" ] && [ -f "$LOGARQ" ] || falha "tela nao devolveu o log da promocao: $out"
+grep -q "bin/_release/stack promover core" "$LOGARQ" || falha "log nao mostra o ajudante chamado: $(cat "$LOGARQ")"
+grep -qF "docker compose -p platafirma-core -f $SERVIDO/platafirma-core/$C_SHA1/docker-compose.yml" "$DEPLOY_LOG" \
+  || falha "docker nao foi chamado pelo AJUDANTE com a arvore certa: $(cat "$DEPLOY_LOG")"
+grep -q -- "--build --force-recreate" "$DEPLOY_LOG" || falha "ajudante devia promover com --build --force-recreate: $(cat "$DEPLOY_LOG")"
+! grep -q "^deploy " "$DEPLOY_LOG" || falha "ainda chamou 'deploy' — achar_deploy nao pode resolver pelo PATH"
+[ "$(cat "$PLATAFIRMA_INSTANCIA/var/deploy/core.atual" 2>/dev/null)" = "$C_SHA1" ] || falha "ajudante devia gravar o ponto atual da stack"
+echo "OK"
+
+echo "--- 10: familia com stack, ajudante bin/_release/stack AUSENTE -> exit 3 antes de tocar current"
+COPIA_SEM_AJUDANTE="$TMP_DIR/copia-sem-ajudante"
+mkdir -p "$COPIA_SEM_AJUDANTE/bin" "$COPIA_SEM_AJUDANTE/lib"
+cp "$REPO_ROOT/bin/release" "$COPIA_SEM_AJUDANTE/bin/release"; chmod +x "$COPIA_SEM_AJUDANTE/bin/release"
+cp "$REPO_ROOT/lib/raizes.sh" "$COPIA_SEM_AJUDANTE/lib/raizes.sh"
+cp "$REPO_ROOT/lib/venv.sh" "$COPIA_SEM_AJUDANTE/lib/venv.sh"
+# de proposito: SEM bin/_release/stack nesta copia — achar_deploy acha pelo caminho fixo ao
+# lado do script que roda, nunca pelo PATH, entao nao ha como estubar a ausencia de outro jeito.
+set +e; out="$("$COPIA_SEM_AJUDANTE/bin/release" promover platafirma-harness "$H_SHA1" 2>&1)"; rc=$?; set -e
+[ "$rc" -eq 3 ] && grep -q "ajudante bin/_release/stack não encontrado" <<<"$out" \
+  || falha "ajudante ausente devia sair 3 com a cura: rc=$rc $out"
+[ ! -e "$SERVIDO/platafirma-harness/current" ] || falha "current nasceu com o ajudante ausente"
+[ ! -e "$SERVIDO/platafirma-harness/$H_SHA1" ] || falha "materializou a arvore mesmo com o ajudante ausente"
 echo "OK"
 
 echo "=== lote 2: todos os testes passaram ==="

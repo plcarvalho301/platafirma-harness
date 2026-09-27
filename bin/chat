@@ -264,8 +264,11 @@ def id_fita_novo():
 # "sem verbo declarado" — medido no chat em 18/08/2026, com o participante ja
 # admitido em cadeiras.py e sem rota nenhuma deste lado.
 # Vazia desde 27/09/2026 (#3117): jaiminho e jaiminho-eng foram aposentados por ordem
-# do dono e os verbos sairam de bin/. Participante sem linha aqui cai no erro limpo
-# "sem verbo declarado" abaixo, nunca num subprocess de binario inexistente.
+# do dono e os verbos sairam de bin/, sem entrada em _SAO_PARTICIPANTE (card #3145,
+# chat/comum/cadeiras.py) — eh_participante() nunca roteia para ca. Participante sem
+# linha aqui cai no erro limpo "sem verbo declarado" abaixo, nunca num subprocess de
+# binario inexistente. Fica declarado: e o mecanismo que o proximo participante
+# externo usa.
 VERBO_DO_PARTICIPANTE = {}
 
 # `jaiminho perguntar` e sincrono e nao emite stream: ele volta quando o `agy`

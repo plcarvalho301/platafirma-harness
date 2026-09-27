@@ -1,17 +1,33 @@
 #!/usr/bin/env bash
-# infra — estado e operação da infraestrutura local (contêiner, unit, timer).
-# capacidade: infra
-# dono: claudinho-TI
-# use para: contêiner, unit, timer, restart, logs, saúde, backup
-# atos: estado, saude, logs, restart, unit-env, backup, cache
+# infra — estado e operação da infraestrutura local: contêiner, unit, timer,
+# stack (compose) e a agenda do cron.
+# capacidade: infra/plataforma
+# dono: ti
+# componente: docker, systemd --user, cron
+# use para: ver contêiner/unit/timer de pé e a saúde da porta, "está no ar?" (estado,
+#   saude, logs), reiniciar contêiner/unit e (re)criar a stack por compose (restart,
+#   up, down, pull, build), convergir a agenda do cron e podar log/quarentena por
+#   retenção declarada (agenda, limpeza), liberar cache de VRAM e disco (cache)
+# atos: estado (leitura, operacao), saude (leitura, operacao), logs (leitura, operacao), restart (escrita, operacao), unit-env (escrita, operacao), cache (escrita, operacao), backup (leitura, operacao), up (escrita, operacao), down (escrita, operacao), ps (leitura, operacao), config (leitura, operacao), pull (escrita, operacao), build (escrita, operacao), limpeza (escrita, operacao), agenda (escrita, operacao)
 # forma: log
 # cauda: sim
+# classe: B
+# consome: nenhum
+# ambiente: DOCKER_HOST[=unix:///run/user/<uid>/docker.sock] porta · XDG_RUNTIME_DIR[=/run/user/<uid>] porta · DBUS_SESSION_BUS_ADDRESS[=unix:path=$XDG_RUNTIME_DIR/bus] porta (os dois só quando ausentes) · INFRA_OPS_HEALTH[=http://127.0.0.1:8010/health] porta · INFRA_UNIT_AUTO[=ops-mcp] porta · INFRA_BACKUPS[=$AQUI/../registro/backups.json] porta · INFRA_CRONTAB_SCRIPT[=$PLATAFIRMA_RELEASE/core/deploy/instala-crontab.sh] porta · PF_SUJEITO[obrigatória em up|down|pull|build] porta (sem fallback; entra na linha de log do ato quando presente) · PLATAFIRMA_INSTANCIA, PF_RELEASE_RAIZ, PLATAFIRMA_RELEASE (lib/raizes.sh)
+# depende: docker · systemctl --user · curl · jq (cache) · python3 · bin/_release/stack (ajudante de up/down/ps/config/pull/build, ao lado deste bin) · bin/_infra/limpeza-logs e bin/_infra/limpeza-quarentena (ajudantes de limpeza) · o script declarado em INFRA_CRONTAB_SCRIPT (agenda)
+# escreve: restart=contêiner/unit reiniciado (efeito, não arquivo) · unit-env=drop-in systemd ($HOME/.config/systemd/user/<unit>.service.d/zz-infra-env.conf) · cache=VRAM descarregada e cache local podado (vram, disco) · up/down/pull/build=contêineres e imagens da stack, via bin/_release/stack · limpeza=arquivos de log/quarentena da instância apagados · agenda=crontab do sistema (aplicar) · estado/saude/logs/ps/config/backup=nada
+# substitui: docker ps/restart/logs direto · systemctl --user status/restart/cat direto · deploy <stack> up|down|ps|config|pull|build (deploy apagado — decisão do dono, 27/09) · crontab -e a mão · ops-log-prune e quarentena-prune (movidos para bin/_infra/, atos de infra por arq:0110 §14 emenda 26/09/2026)
 # Encapsula as três pegadinhas conhecidas: DOCKER_HOST rootless, restart que
 # mata a própria chamada, e alvo que pode ser contêiner ou unit de usuário.
 set -euo pipefail
 
 AQUI="$(dirname "$(readlink -f "$0")")"
 . "$AQUI/../lib/raizes.sh"
+
+STACK_AJUDANTE="$AQUI/_release/stack"
+LIMPEZA_LOGS="$AQUI/_infra/limpeza-logs"
+LIMPEZA_QUARENTENA="$AQUI/_infra/limpeza-quarentena"
+CRONTAB_SCRIPT="${INFRA_CRONTAB_SCRIPT:-$PLATAFIRMA_RELEASE/core/deploy/instala-crontab.sh}"
 
 export DOCKER_HOST="${DOCKER_HOST:-unix:///run/user/$(id -u)/docker.sock}"
 # systemctl --user e systemd-run --user falam com o bus da conta. Pelo wrapper, runuser, cron
@@ -29,21 +45,51 @@ export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"
 export DBUS_SESSION_BUS_ADDRESS="${DBUS_SESSION_BUS_ADDRESS:-unix:path=$XDG_RUNTIME_DIR/bus}"
 OPS_HEALTH="${INFRA_OPS_HEALTH:-http://127.0.0.1:8010/health}"
 
-uso() {
+uso_texto() {
   cat >&2 <<'FIM'
 uso:
-  infra estado [alvo] [--json]   contêineres, units de usuário e timers, uma tela
-  infra saude  [alvo] [--json]   /health do ops, contêiner não-saudável, disco, RAM
-  infra logs   <alvo> [n]        alvo = nome de contêiner OU unit --user (default 50)
-  infra restart <alvo> [--nao-esperar]  contêiner ou unit --user; confere antes de dizer ok
-  infra unit-env <unit> [--ver | CHAVE=VALOR...]  drop-in de ambiente da unit --user (daemon-reload; restart e outro ato)
-  infra cache [ver|vram|disco]   ver o que ocupa VRAM e disco; liberar e explicito
-  infra backup [--json]          por alvo declarado: quando rodou, se saiu bem, quantas geracoes
+  infra estado   [alvo] [--json]                contêineres, units de usuário e timers, uma tela
+  infra saude    [alvo] [--json]                 /health do ops, contêiner não-saudável, disco, RAM
+  infra logs     <alvo> [n]                      alvo = contêiner OU unit --user (default 50)
+  infra restart  <alvo> [--nao-esperar]          contêiner ou unit --user; confere antes de dizer ok
+  infra unit-env <unit> [--ver | CHAVE=VALOR...] drop-in de ambiente da unit --user (daemon-reload)
+  infra cache    [ver|vram|disco]                o que ocupa VRAM e disco; liberar é explícito
+  infra backup   [--json]                        por alvo declarado: quando rodou, gerações
+  infra up       <stack> [args compose…] [<serviço>…]  bin/_release/stack compose … up
+  infra down     <stack> [args compose…] [<serviço>…]  … down
+  infra ps       <stack> [args compose…] [<serviço>…]  … ps
+  infra config   <stack> [args compose…] [<serviço>…]  … config
+  infra pull     <stack> [args compose…] [<serviço>…]  … pull
+  infra build    <stack> [args compose…] [<serviço>…]  … build
+  infra limpeza  logs|quarentena [args…]         despacha para bin/_infra/limpeza-{logs,quarentena}
+  infra agenda   conferir|aplicar                convergência do crontab (instala-crontab.sh)
 
-Leitura aceita alvo opcional; sem alvo, olha tudo. Mutação exige alvo explícito e
-recusa sem ele. Promover release não é daqui: `deploy <stack>`.
+Leitura aceita alvo opcional; sem alvo, olha tudo. Mutação exige alvo explícito.
+up, down, pull e build exigem identidade: variável PF_SUJEITO (sem fallback; a
+porta a injeta pelo fluxo OAuth). agenda conferir roda com --check (0 igual, 1
+divergente); agenda aplicar aplica de fato. Ajudante de compose localizado ao
+lado deste script (bin/_release/stack), nunca pelo PATH.
+
+exit: tabela arq:0110 §4 — 0 ok · 1 negativo de mérito (alvo/stack inexistente,
+      agenda divergente) · 2 uso · 3 dependência ausente (docker, systemctl,
+      ajudante, PF_SUJEITO) · 4 política/trava · 5 indeterminável
 FIM
+}
+
+uso() {
+  uso_texto
   exit 2
+}
+
+# Identidade (decisão 9, card #3145): só PF_SUJEITO, sem fallback para PF_CADEIRA/USER.
+# Exigida em up/down/pull/build; ausente = exit 3 com a cura. Presente, entra na linha
+# de status do ato (rastreio de quem pediu a operação).
+exigir_sujeito() {  # $1=rótulo do ato, só para a mensagem
+  if [ -z "${PF_SUJEITO:-}" ]; then
+    printf 'infra: erro: variável PF_SUJEITO: ausente — %s exige identidade; rode dentro da sessão (a porta a injeta pelo fluxo OAuth)\n' "$1" >&2
+    return 3
+  fi
+  return 0
 }
 
 # --- leituras elementares ---------------------------------------------------
@@ -520,6 +566,71 @@ backup() {
   INFRA_BACKUPS_REG="$reg" python3 "$AQUI/_infra/backup.py" "$@"
 }
 
+# Ato de compose de stack: `infra up|down|ps|config|pull|build <stack> [args…] [<serviço>…]`
+# repassa para `bin/_release/stack compose <stack> <acao> [args…] [<serviço>…]`. O ajudante
+# mora ao lado deste bin (nunca pelo PATH); identidade só nos atos de mutação (up/down/
+# pull/build), lida do §9 da decisão do card #3145.
+exigir_stack_ajudante() {
+  if [ ! -x "$STACK_AJUDANTE" ]; then
+    printf 'infra: erro: dependência bin/_release/stack: ausente (%s) — ajudante de compose não encontrado\n' "$STACK_AJUDANTE" >&2
+    return 3
+  fi
+  return 0
+}
+
+cmd_stack() {  # $1=acao ; resto: <stack> [args compose…] [<serviço>…]
+  local acao="$1"; shift
+  case "$acao" in
+    up|down|pull|build) exigir_sujeito "infra $acao" || return $? ;;
+  esac
+  exigir_stack_ajudante || return $?
+  local stack="${1:-}"
+  [ -n "$stack" ] || { printf 'infra: erro: %s exige <stack>\n' "$acao" >&2; uso; }
+  shift
+  local suf=""
+  [ -n "${PF_SUJEITO:-}" ] && suf=" sujeito=$PF_SUJEITO"
+  printf 'stack:     %s → %s compose %s %s%s\n' "$stack" "$(basename "$STACK_AJUDANTE")" "$stack" "$acao" "$suf"
+  "$STACK_AJUDANTE" compose "$stack" "$acao" "$@"
+}
+
+# `infra limpeza logs|quarentena [args…]` — sub-atos movidos de bin/ops-log-prune e
+# bin/quarentena-prune para bin/_infra/ (arq:0110 §14, emenda 26/09/2026): não exigem
+# PF_SUJEITO — já eram chamados por automação (cron), sem identidade humana no ato.
+cmd_limpeza() {
+  local alvo="${1:-}"; shift || true
+  case "$alvo" in
+    logs)
+      [ -x "$LIMPEZA_LOGS" ] || { printf 'infra: erro: dependência bin/_infra/limpeza-logs: ausente (%s)\n' "$LIMPEZA_LOGS" >&2; exit 3; }
+      exec "$LIMPEZA_LOGS" "$@"
+      ;;
+    quarentena)
+      [ -x "$LIMPEZA_QUARENTENA" ] || { printf 'infra: erro: dependência bin/_infra/limpeza-quarentena: ausente (%s)\n' "$LIMPEZA_QUARENTENA" >&2; exit 3; }
+      exec "$LIMPEZA_QUARENTENA" "$@"
+      ;;
+    "")
+      printf 'infra: erro: limpeza exige logs ou quarentena\n' >&2; uso ;;
+    *)
+      printf 'infra: erro: limpeza desconhecida: %s — valores válidos: logs, quarentena\n' "$alvo" >&2; uso ;;
+  esac
+}
+
+# `infra agenda conferir|aplicar` — convergência do crontab do claudinho (decisão 8,
+# card #3145): script único em INFRA_CRONTAB_SCRIPT, --check em conferir (0 igual, 1
+# divergente — mérito, não uso), sem --check em aplicar. Não exige PF_SUJEITO: já é
+# chamado por automação/gatilho, como restart/backup/cache/limpeza.
+cmd_agenda() {
+  local sub="${1:-}"; shift || true
+  [ -x "$CRONTAB_SCRIPT" ] || { printf 'infra: erro: dependência %s: ausente\n' "$CRONTAB_SCRIPT" >&2; exit 3; }
+  case "$sub" in
+    conferir) exec "$CRONTAB_SCRIPT" --check "$@" ;;
+    aplicar)  exec "$CRONTAB_SCRIPT" "$@" ;;
+    "")
+      printf 'infra: erro: agenda exige conferir ou aplicar\n' >&2; uso ;;
+    *)
+      printf 'infra: erro: agenda desconhecida: %s — valores válidos: conferir, aplicar\n' "$sub" >&2; uso ;;
+  esac
+}
+
 # `infra instalar` saiu (desenho #3010 §2; arq:0109 Consequencias): nao existe mais bin servido
 # por copia nem diretorio de symlinks de verbos. O PATH e a release no ar,
 # $PLATAFIRMA_RELEASE/harness/bin, e verbo novo chega ao ar por `release promover platafirma-harness <rev>`.
@@ -532,29 +643,41 @@ instalar() {
 
 # --- despacho ---------------------------------------------------------------
 
-# --ajuda UNIVERSAL, sem efeito colateral (card #2868, ex-#2274 defeito 4). ANTES do
-# despacho, varrendo TODOS os argumentos: cobre `infra --ajuda` e `infra <sub> --ajuda`.
-# `uso` ja sai 2.
+# Sem argumento nenhum: usage, exit 2, nada executado (Q2/Q9).
+if [ $# -eq 0 ]; then
+  uso
+fi
+
+# --ajuda UNIVERSAL, sem efeito colateral (card #2868, ex-#2274 defeito 4; Q2). ANTES do
+# despacho, varrendo TODOS os argumentos: cobre `infra --ajuda` e `infra <ato> --ajuda`
+# em qualquer posição. `uso` já sai 2.
 for _a in "$@"; do
   case "$_a" in
     --ajuda|--help|-h) uso ;;
   esac
 done
 
-cmd="${1:-}"; shift || uso
+cmd="$1"
+shift
 
 case "$cmd" in
-  estado)  estado "$@" ;;
-  saude)   saude "$@" ;;
-  logs)    logs "${1:?uso: infra logs <alvo> [n]}" "${2:-50}" ;;
+  estado)    estado "$@" ;;
+  saude)     saude "$@" ;;
+  logs)      logs "${1:?uso: infra logs <alvo> [n]}" "${2:-50}" ;;
   cache)     cache "${1:-ver}" ;;
   backup)    backup "$@" ;;
   unit-env)  unit_env "$@" ;;
   instalar)  instalar "$@" ;;
-  restart) [ $# -ge 1 ] || { echo "erro: restart exige alvo explícito — não reinicia tudo." >&2; exit 2; }
-           restart "$@" ;;
-  compose) echo "erro: promover release saiu do \`infra\` — capacidade \`mudanca\`, verbo \`deploy\`." >&2
-           echo "       use: deploy <stack> up -d   (stack e obrigatoria; nao ha alvo default)" >&2
-           exit 2 ;;
-  *)       uso ;;
+  restart)
+    [ $# -ge 1 ] || { echo "erro: restart exige alvo explícito — não reinicia tudo." >&2; exit 2; }
+    restart "$@" ;;
+  up|down|ps|config|pull|build) cmd_stack "$cmd" "$@" ;;
+  limpeza)   cmd_limpeza "$@" ;;
+  agenda)    cmd_agenda "$@" ;;
+  *)
+    printf 'infra: erro: ato desconhecido: %s\n' "$cmd" >&2
+    printf 'atos: estado, saude, logs, restart, unit-env, cache, backup, up, down, ps, config, pull, build, limpeza, agenda\n' >&2
+    uso_texto
+    exit 2
+    ;;
 esac

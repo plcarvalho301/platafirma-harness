@@ -16,7 +16,8 @@ sem conformar: o ledger guardava a forma antiga (`claudinho-IA`), o codigo vivo 
 e o slug fossil resolvia como vigente. A fonte viva agora e a arvore, so ela.
 
 Fonte da persona do ator: abertura/<persona>/persona.md, onde a persona
-sai de _PERSONA_DO_ATOR (ator != persona: jaiminho monta `fabrica`).
+sai de _PERSONA_DO_ATOR (ator != persona quando o ator monta persona diferente
+do proprio nome; vazio hoje — card #3145 tirou o unico caso, jaiminho/fabrica).
 Fonte do alias humano: abertura/aliases.json (mapa slug->nome afetivo, dado vivo).
 A morada sai de PF_ABERTURA_DIR, ou de $PLATAFIRMA_INSTANCIA/var/abertura-publicada (default
 /srv/platafirma/casa); no container da recepcao ela entra por bind mount ro, no mesmo
@@ -41,10 +42,15 @@ _NAO_SAO_CADEIRA = {"TEMPLATE", "jaiminho", "jaiminho-eng", "osint", "EXTERNO"}
 #
 # Esta lista NAO os promove a cadeira, e a diferenca e o card inteiro: cadeira tem
 # roteamento entre cadeiras e voto, participante nao. `cadeiras()` segue excluindo
-# jaiminho de proposito — quem pergunta "quem sao as cadeiras" continua recebendo a
-# resposta certa. O que muda e que a SUPERFICIE de conversa passa a ter um roster
-# proprio (`atores()`), maior que o do org: o dono fala com quem tem porta com ele.
-_SAO_PARTICIPANTE = {"jaiminho", "jaiminho-eng"}
+# quem so tem entrada aqui, de proposito — quem pergunta "quem sao as cadeiras"
+# continua recebendo a resposta certa. O que muda e que a SUPERFICIE de conversa
+# passa a ter um roster proprio (`atores()`), maior que o do org: o dono fala com
+# quem tem porta com ele.
+#
+# Vazio hoje: jaiminho e jaiminho-eng, os dois casos que existiam, sairam no card
+# #3145 (junto com a rota em bin/chat VERBO_DO_PARTICIPANTE). O balde fica — e o
+# mecanismo que o proximo colaborador externo usa.
+_SAO_PARTICIPANTE: set[str] = set()
 
 # ATOR INTERNO nao-cadeira — ganha MXID, sala com o dono e giro, mas NAO e cadeira
 # do org (nao vota, nao tem head, nao entra em roteamento) e NAO e participante de
@@ -62,14 +68,11 @@ _ATORES_INTERNOS = {"fabrica"}
 
 # ATOR de superficie -> PERSONA que a sessao dele monta.
 #
-# O ator jaiminho monta a persona `fabrica` (roteador de linha: devops/blueteam/
-# front-end). NAO ha mais "persona jaiminho": o provider e uma fabrica com outro
-# provider em outra conta. Ator sem entrada aqui monta a persona homonima (o caso
-# das cadeiras, onde ator e persona coincidem).
-_PERSONA_DO_ATOR = {
-    "jaiminho": "fabrica",
-    "jaiminho-eng": "engenharia",
-}
+# Vazio hoje: o unico caso (jaiminho -> fabrica, jaiminho-eng -> engenharia) saiu
+# no card #3145 junto com _SAO_PARTICIPANTE. Ator sem entrada aqui monta a persona
+# homonima (o caso das cadeiras, onde ator e persona coincidem) — o balde fica para
+# o proximo participante cujo ator monte persona diferente do proprio nome.
+_PERSONA_DO_ATOR: dict[str, str] = {}
 
 
 def _raiz_personas() -> Path:

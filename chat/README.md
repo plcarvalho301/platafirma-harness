@@ -18,7 +18,6 @@ O roster da superfície (`atores()`) tem três baldes, e a rota de motor sai do 
 |---|---|---|---|
 | cadeira | ledger de vínculo (`registro/eventos-org.jsonl`) | Claude Code no cwd da fita | TI, dados, produto |
 | ator interno | `_ATORES_INTERNOS` em `cadeiras.py` | Claude Code no cwd da fita | fabrica |
-| participante | `_SAO_PARTICIPANTE` em `cadeiras.py` | verbo próprio do motor externo | jaiminho (agy) |
 
 `eh_participante(ator)` decide a rota em `bin/chat`: verdadeiro gira pelo verbo do participante; falso gira por Claude Code. Cadeira e ator interno compartilham motor e caminho; separam-se em que a cadeira tem vínculo no org (voto, remit, roteamento) e o ator interno não.
 

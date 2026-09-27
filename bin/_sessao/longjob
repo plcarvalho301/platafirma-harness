@@ -22,20 +22,22 @@
 # (LONGJOB_CWD) ou faz `cd` dentro do proprio comando. O PATH da unit e o da release.
 set -euo pipefail
 
-. "$(dirname "$(readlink -f "$0")")/../lib/raizes.sh"
+# bin/_sessao/longjob (card #3145): um nivel a mais que bin/, entao lib/ fica dois
+# diretorios acima -- nao um.
+. "$(dirname "$(readlink -f "$0")")/../../lib/raizes.sh"
 
 LOGDIR="${LONGJOB_LOGDIR:-$PLATAFIRMA_INSTANCIA/var/log/jobs}"
 mkdir -p "$LOGDIR"
 
 uso() {
   cat >&2 <<'FIM'
-uso:
-  longjob run <nome> <comando> [args...]   dispara; devolve nome da unit e caminho do log
-  longjob list                             units platafirma-job-* ativas e falhadas
-  longjob logs                             arquivos de log mais recentes
-  longjob status <unit>                    estado da unit + últimas linhas do log
-  longjob log <unit> [n]                   últimas n linhas do log (default 40)
-  longjob stop <unit>                      encerra a unit
+uso: (contrato herdado -- invoque por `sessao longjob ...`, arq:0110 §14)
+  sessao longjob run <nome> <comando> [args...]   dispara; devolve nome da unit e caminho do log
+  sessao longjob list                             units platafirma-job-* ativas e falhadas
+  sessao longjob logs                             arquivos de log mais recentes
+  sessao longjob status <unit>                    estado da unit + últimas linhas do log
+  sessao longjob log <unit> [n]                   últimas n linhas do log (default 40)
+  sessao longjob stop <unit>                      encerra a unit
 FIM
   exit 2
 }
