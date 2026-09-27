@@ -1,7 +1,7 @@
 """Contrato do estágio 4 de `release promover` (card #3150, trava "sem resposta do
 arquiteto, implementar como cliente de tarefas"): depois de trocar current, resolve
 o card pelo PR que mesclou o sha (nunca da mensagem de commit), comenta e move para
-em-homologacao, e confere o card — tudo via `tarefas`/`release conferir card`
+entregue (dono, 27/09), e confere o card — tudo via `tarefas`/`release conferir card`
 diretos. Ramo fora do padrão `fabrica/<card>-...`, ou `gh`/registro indisponível,
 pula o estágio sem barrar a promoção.
 
@@ -98,7 +98,7 @@ class Ambiente:
             "  if [ \"$1\" = comentar ]; then printf 'STDIN: '; cat; printf '\\n'; fi\n"
             "  printf -- '---\\n'\n"
             "} >> \"$TAREFAS_LOG\"\n"
-            "exit 0\n", encoding="utf-8")
+            "exit \"${TAREFAS_RC:-0}\"\n", encoding="utf-8")
         tarefas_stub.chmod(0o755)
 
         release_stub = stub_bin / "release"
@@ -134,9 +134,10 @@ class Ambiente:
         Path(self.env["PLATAFIRMA_TERCEIROS"]).write_text("{}", encoding="utf-8")
         self.env["PATH"] = f"{stub_bin}{os.pathsep}" + self.env.get("PATH", "")
 
-    def run(self, *args: str, gh_ref: str = "") -> subprocess.CompletedProcess:
+    def run(self, *args: str, gh_ref: str = "", tarefas_rc: int = 0) -> subprocess.CompletedProcess:
         env = dict(self.env)
         env["GH_STUB_REF"] = gh_ref
+        env["TAREFAS_RC"] = str(tarefas_rc)
         return subprocess.run([str(SCRIPT), *args], env=env,
                                capture_output=True, text=True, timeout=90)
 
@@ -156,15 +157,25 @@ def amb(tmp_path):
 def test_estagio_card_resolve_e_comenta_e_move(amb):
     r = amb.run("promover", "fixture", gh_ref="fabrica/4242-teste-estagio")
     assert r.returncode == 0, r.stdout + r.stderr
-    assert "card:      4242 comentado" in r.stdout
+    assert "card:      4242 movido para entregue" in r.stdout
 
     log = amb.tarefas_log.read_text(encoding="utf-8")
     assert "ARGS: comentar 4242" in log
-    assert "Estagio 4" in log
-    assert "ARGS: mover 4242 em-homologacao" in log
+    assert "no ar" in log
+    # particao decidida pelo dono em 27/09 (arq:0095 regra 3): story no ar vai a entregue
+    assert "ARGS: mover 4242 entregue" in log
 
     release_log = amb.release_log.read_text(encoding="utf-8")
     assert "ARGS: conferir card 4242" in release_log
+
+
+def test_card_que_recusa_nao_derruba_a_promocao(amb):
+    # 27/09: sob set -e, a recusa do rastreador abortava o verbo com exit 1 depois do
+    # current trocado e ANTES do restart da porta, que ficava servindo o codigo anterior.
+    r = amb.run("promover", "fixture", gh_ref="fabrica/4242-teste-estagio", tarefas_rc=1)
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert "AVISO" in r.stderr and "4242" in r.stderr
+    assert r.stdout.strip().splitlines()[-1] == amb.sha1
 
 
 def test_estagio_card_pula_sem_pr_fabrica(amb):
