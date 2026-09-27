@@ -388,3 +388,50 @@ def test_exigidos_ajuda():
     res = _run_seg(["segredo", "exigidos", "--ajuda"])
     assert res.returncode == 2
     assert "segredo exigidos" in res.stdout
+
+
+# --- segredo apagar (card #3117): ensaio por default, --confirmar destroi -------
+def _cofre_com(tmp_path, stack, nomes):
+    d = tmp_path / "secrets" / stack
+    d.mkdir(parents=True)
+    for n in nomes:
+        (d / n).write_text("valor-que-nao-pode-aparecer")
+    return tmp_path / "secrets"
+
+
+def test_apagar_sem_confirmar_e_ensaio(tmp_path):
+    cofre = _cofre_com(tmp_path, "velha", ["A", "B"])
+    res = _run_seg(["segredo", "apagar", "velha/"], env_extra={"SEG_SECRETS_DIR": str(cofre)})
+    assert res.returncode == 0
+    assert "apagaria: velha/A" in res.stdout and "nada apagado" in res.stdout
+    assert (cofre / "velha" / "A").is_file()
+
+
+def test_apagar_stack_inteira_confirmado(tmp_path):
+    cofre = _cofre_com(tmp_path, "velha", ["A", "B"])
+    res = _run_seg(["segredo", "apagar", "velha/", "--confirmar"], env_extra={"SEG_SECRETS_DIR": str(cofre)})
+    assert res.returncode == 0, res.stderr
+    assert not (cofre / "velha").exists()
+    assert "valor-que-nao-pode-aparecer" not in res.stdout + res.stderr
+
+
+def test_apagar_um_segredo_mantem_o_resto(tmp_path):
+    cofre = _cofre_com(tmp_path, "velha", ["A", "B"])
+    res = _run_seg(["segredo", "apagar", "velha/A", "--confirmar"], env_extra={"SEG_SECRETS_DIR": str(cofre)})
+    assert res.returncode == 0
+    assert not (cofre / "velha" / "A").exists()
+    assert (cofre / "velha" / "B").is_file()
+
+
+@pytest.mark.parametrize("alvo", ["../x", "velha/../A", "velha/a/b", "semstack"])
+def test_apagar_recusa_alvo_fora_do_cofre(tmp_path, alvo):
+    cofre = _cofre_com(tmp_path, "velha", ["A"])
+    res = _run_seg(["segredo", "apagar", alvo, "--confirmar"], env_extra={"SEG_SECRETS_DIR": str(cofre)})
+    assert res.returncode == 2
+    assert (cofre / "velha" / "A").is_file()
+
+
+def test_apagar_inexistente_sai_1(tmp_path):
+    cofre = _cofre_com(tmp_path, "velha", ["A"])
+    res = _run_seg(["segredo", "apagar", "outra/", "--confirmar"], env_extra={"SEG_SECRETS_DIR": str(cofre)})
+    assert res.returncode == 1

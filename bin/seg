@@ -5,7 +5,7 @@
 # dono: claudinho-seguranca
 # classe: B
 # use para: openscap, keycloak, openssl pós-quântico, régua de segurança, segredos
-# atos: oscap (leitura, casco), ssg (escrita, regua), keycloak entrar (escrita, credencial), keycloak (escrita, realm), openssl (leitura, cripto), segredo ler (leitura, segredo), segredo listar (leitura, segredo), segredo gravar (escrita, segredo), segredo importar (escrita, segredo), segredo rotacionar (escrita, segredo), segredo exigidos (leitura, segredo)
+# atos: oscap (leitura, casco), ssg (escrita, regua), keycloak entrar (escrita, credencial), keycloak (escrita, realm), openssl (leitura, cripto), segredo ler (leitura, segredo), segredo listar (leitura, segredo), segredo gravar (escrita, segredo), segredo importar (escrita, segredo), segredo rotacionar (escrita, segredo), segredo exigidos (leitura, segredo), segredo apagar (escrita, segredo)
 # folhas: oscap|ssg -> politica/avaliacao · keycloak|openssl -> politica/acesso · segredo -> politica/segredo
 # escreve: $PLATAFIRMA_INSTANCIA/segredos/<stack>/<nome>
 # ambiente: SEG_SECRETS_DIR[=$PLATAFIRMA_INSTANCIA/segredos] · SEG_LOG_DIR[=$PLATAFIRMA_INSTANCIA/var/log/seg] · SEG_OSCAP_DIR[=$PLATAFIRMA_INSTANCIA/var/oscap] · SEG_SSG_DIR[=/opt/terceiros/ssg/current] · SEG_OQS_DIR[=/opt/terceiros/oqs/current] · PLATAFIRMA_INSTANCIA[=/srv/platafirma/casa]
@@ -24,6 +24,7 @@
 #   segredo importar  politica            importacao de .env
 #   segredo rotacionar politica           rotacao de client-secret no keycloak
 #   segredo exigidos  politica            exigido (acervo.stack.segredos) x presente (era `deploy <stack> segredos`)
+#   segredo apagar    politica            destruicao de segredo da instancia, com --confirmar (card #3117)
 #
 # NAO E GATE. Enquanto oscap, kcadm.sh e openssl seguirem alcancaveis fora deste
 # binario, ele e conveniencia e trilha: quem quiser desviar chama a ferramenta
@@ -73,6 +74,9 @@ seg — toolkit de seguranca da PlataFirma
                                   `acervo listar topologia --completo` usa) x presente em
                                   $SEG_SECRETS_DIR — so nomes, nunca valor. Sem <stack>: todas.
                                   Porta de `deploy <stack> segredos` (bin/deploy, deprecado).
+  seg segredo apagar <stack>/<nome>|<stack>/ --confirmar
+                                  destroi o segredo (shred) e, vazio, o diretorio da stack.
+                                  Sem volta: sem --confirmar so diz o que apagaria.
 
 Perfis de avaliacao:
   cis_level1_server  cis_level1_workstation  cis_level2_server
@@ -543,6 +547,54 @@ cmd_segredo_exigidos() {
   exit 0
 }
 
+# --- segredo apagar: destruicao sem volta, por isso ensaio e o default --------------
+# Alvo e <stack>/<nome> (um arquivo) ou <stack>/ (a stack inteira). Sem --confirmar,
+# lista o que apagaria e sai 0 sem tocar em nada. Com --confirmar, sobrescreve e remove
+# (shred -u; sem shred, rm) e tira o diretorio da stack se ficar vazio. Nunca le nem
+# imprime o conteudo. Nome com `..` ou barra extra e recusado: o alvo nao sai do cofre.
+cmd_segredo_apagar() {
+  local alvo="" confirmar=0 a
+  for a in "$@"; do
+    case "$a" in
+      --confirmar) confirmar=1 ;;
+      *) [ -z "$alvo" ] && alvo="$a" ;;
+    esac
+  done
+  if [ -z "$alvo" ] || [[ "$alvo" != *"/"* ]]; then
+    echo "uso: seg segredo apagar <stack>/<nome>|<stack>/ [--confirmar]" >&2
+    exit 2
+  fi
+  local stack="${alvo%%/*}" nome="${alvo#*/}"
+  if [ -z "$stack" ] || [[ "$stack" == *..* ]] || [[ "$nome" == *..* ]] || [[ "$nome" == */* ]]; then
+    echo "seg segredo apagar: alvo fora da forma <stack>/<nome> ou <stack>/: $alvo" >&2
+    exit 2
+  fi
+  local sdir="$SEG_SECRETS_DIR/$stack"
+  [ -d "$sdir" ] || { echo "stack sem segredo no cofre: $stack" >&2; exit 1; }
+
+  local alvos=() f
+  if [ -z "$nome" ]; then
+    shopt -s nullglob
+    for f in "$sdir"/*; do [ -f "$f" ] && alvos+=("$f"); done
+    shopt -u nullglob
+  else
+    [ -f "$sdir/$nome" ] || { echo "segredo nao encontrado: $stack/$nome" >&2; exit 1; }
+    alvos=("$sdir/$nome")
+  fi
+
+  if [ "$confirmar" -eq 0 ]; then
+    for f in "${alvos[@]}"; do echo "apagaria: $stack/$(basename "$f")"; done
+    echo "ensaio: nada apagado. Repita com --confirmar — nao tem volta."
+    exit 0
+  fi
+
+  for f in "${alvos[@]}"; do
+    if command -v shred >/dev/null 2>&1; then shred -u -z "$f"; else rm -f "$f"; fi
+    echo "apagado: $stack/$(basename "$f")"
+  done
+  rmdir "$sdir" 2>/dev/null && echo "apagado: $stack/ (diretorio vazio)" || true
+}
+
 # --- separa o que e nosso do que e repasse ---------------------------------
 ARGS=(); NATIVOS=(); TEM_BARREIRA=0
 for a in "$@"; do
@@ -662,6 +714,9 @@ case "$SUB" in
         ;;
       exigidos)
         cmd_segredo_exigidos "$ALVO"
+        ;;
+      apagar)
+        cmd_segredo_apagar "${ARGS[@]:2}"
         ;;
       *)
         uso
