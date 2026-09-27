@@ -58,11 +58,10 @@ from raizes import instancia  # noqa: E402
 ABERTURA = os.path.join(
     os.environ.get("PF_ABERTURA_DIR") or str(instancia() / "var" / "abertura-publicada"),
     "current", "abertura")
-# Participantes (DMZ): tem caixa na malha mas NAO sao cadeira. jaiminho e destinatario
-# valido do Elias (ver PARES_EXCLUSIVOS). Unificar TAMBEM esta lista com
-# comum/cadeiras.py::_SAO_PARTICIPANTE exige a lib compartilhada (colapso 3->1, adiado
-# pelo dono); ate la fica esta constante local.
-PERSONAS_PARTICIPANTES = ("jaiminho",)
+# Participantes (DMZ): teriam caixa na malha sem ser cadeira. Vazio desde o card
+# #3117 (27/09/2026). Unificar esta lista com comum/cadeiras.py::_SAO_PARTICIPANTE
+# exige a lib compartilhada (colapso 3->1, adiado pelo dono).
+PERSONAS_PARTICIPANTES: tuple = ()
 ESPIA = "gestao-estrategica"
 # Identidade de leitura automatica: processo sem sessao, sem caixa e sem mesa.
 # Nao entra no roster do ledger de proposito — assim nunca e destinatario valido.
@@ -71,11 +70,10 @@ LEITOR = "sonda"
 GRUPO = "cadeira"
 TIPOS_VALIDOS = {"decisao", "resposta", "pedido", "minuta", "demanda", "handoff", "recusa"}
 
-# Persona de classe externa (DMZ): tem caixa na malha, mas nao tem par livre. O
-# Jaiminho existe em PERSONAS_PARTICIPANTES para ser destinatario VALIDO do Elias — sem isso o
-# `fila enviar` dele falharia na validacao —, e a allowlist e o que impede que estar
-# na lista signifique estar aberto as sete. Vale nos dois sentidos.
-PARES_EXCLUSIVOS = {"jaiminho": {"ia"}}
+# Persona de classe externa (DMZ): tem caixa na malha, mas nao tem par livre. A
+# allowlist e o que impede que estar em PERSONAS_PARTICIPANTES signifique estar
+# aberto a todas as cadeiras. Vale nos dois sentidos. Vazia desde o card #3117.
+PARES_EXCLUSIVOS: dict = {}
 
 
 def so_par_permitido(de: str, para: str, json_mode: bool = False):

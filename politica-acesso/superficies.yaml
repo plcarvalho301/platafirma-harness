@@ -35,13 +35,13 @@ superficies:
     portao: oauth2-proxy + rastreador-api, que importa politica-acesso e consulta o PDP
     acl_canonica: true
   fila:
-    servico: jaiminho-server
-    ingress: canal da colaboracao externa (mensageria)
-    alcancavel: true
-    rede: canal exclusivo colaboracao<->claudinho-IA
-    pep: true
-    portao: jaiminho-server, PEP proprio consultando o PDP
-    acl_canonica: true
+    servico: malha msg (valkey/streams) via verbo fila
+    ingress: loopback
+    alcancavel: loopback
+    rede: so loopback; o canal externo que passava pelo jaiminho-server saiu (card #3117)
+    pep: false
+    portao: 'a medir: verbo fila valida destinatario pela arvore de personas, sem consulta ao PDP por sujeito'
+    acl_canonica: null
   wiki:
     servico: wiki (mediawiki) + wiki-mcp
     ingress: wiki.platafirma.org (HTTP); mcp.platafirma.org (MCP)

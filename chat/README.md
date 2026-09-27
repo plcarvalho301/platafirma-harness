@@ -9,7 +9,7 @@
 Três eixos independentes, resolvidos só por `comum/cadeiras.py`. Nenhum se calcula dos outros.
 
 - **conta** — o usuário do SO onde o ator roda. É o perímetro de segregação.
-- **provider** — a entidade por trás da conta, e o nome afetivo do ator: `claudinho` é o Claude, `jaiminho` é o Antigravity. É o que aparece na sala e o que o MXID carrega.
+- **provider** — a entidade por trás da conta, e o nome afetivo do ator: `claudinho` é o Claude. É o que aparece na sala e o que o MXID carrega.
 - **persona** — o que `monta-sessao` injeta na abertura, de `abertura/<persona>/persona.md`.
 
 O roster da superfície (`atores()`) tem três baldes, e a rota de motor sai do balde:
@@ -19,14 +19,13 @@ O roster da superfície (`atores()`) tem três baldes, e a rota de motor sai do 
 | cadeira | ledger de vínculo (`registro/eventos-org.jsonl`) | Claude Code no cwd da fita | TI, dados, produto |
 | ator interno | `_ATORES_INTERNOS` em `cadeiras.py` | Claude Code no cwd da fita | fabrica |
 
-`eh_participante(ator)` decide a rota em `bin/chat`: verdadeiro gira pelo verbo do participante; falso gira por Claude Code. Cadeira e ator interno compartilham motor e caminho; separam-se em que a cadeira tem vínculo no org (voto, remit, roteamento) e o ator interno não.
+`eh_participante(ator)` decide a rota em `bin/chat`: verdadeiro devolve erro limpo, porque participante não tem motor nesta superfície desde o card #3117; falso gira por Claude Code. Cadeira e ator interno compartilham motor e caminho; separam-se em que a cadeira tem vínculo no org (voto, remit, roteamento) e o ator interno não.
 
 ## A fábrica no chat
 
 A `fabrica` é uma persona fungível — roteador de linha (devops/blueteam/front-end) que recebe card e entrega código. Encarna uma vez por conta/provider, e todas as encarnações montam a mesma `abertura/fabrica/persona.md`.
 
-- **Encarnação `claude`, conta `claudinho`:** o ator interno `fabrica` (`_ATORES_INTERNOS`), sala `@_pf_fabrica`, gira por Claude Code. Serve pedido de qualquer origem, na conta do stack. Wiring em `9a79a8b`.
-- **Encarnação `agy`, conta `jaiminho`:** o participante `jaiminho-fabrica`, sala `@_pf_jaiminho-fabrica`, gira pelo `bin/jaiminho-fabrica`, na conta isolada uid 1003. A mesma persona, outro provider, outra conta, outro perímetro.
+- **Encarnação `claude`, conta `claudinho`:** o ator interno `fabrica` (`_ATORES_INTERNOS`), sala `@_pf_fabrica`, gira por Claude Code. Serve pedido de qualquer origem, na conta do stack. É a única encarnação com giro por esta superfície.
 
 O ator interno não entra em `cadeiras()` do org: a fábrica não tem head, não vota, não roteia. `slug_da_cadeira('fabrica')` devolve a persona homônima, que é a chave de mesa, fila e Project — sem prefixo `claudinho-`, porque fábrica é persona, não vínculo.
 

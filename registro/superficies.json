@@ -80,28 +80,6 @@
       "verificavel_do_host": false,
       "porque": "nao ha artefato que a identifique: e a ausencia que a define. Declarada aqui porque tres de quatro em registro fazia o gate sair 'em dia' ignorando a quarta — nao medido nao e em dia. NA CONTA claudinho ela nao existe: ~/.claude/CLAUDE.md da default `fabrica` a qualquer diretorio.",
       "arranque": "nao ha injecao de cadeira e nao ha `monta_sessao` a chamar. A sessao declara que esta fora da plataforma em vez de agir como cadeira. Regua em conduta/arranque.md."
-    },
-    "agy": {
-      "papel": "Jaiminho (Antigravity CLI), colaborador externo — conta segregada, contêiner próprio na rede saida",
-      "conectores": [
-        "platafirma",
-        "platafirma-conhecimento"
-      ],
-      "onde_declara": "contêiner jaiminho, /home/jaiminho/.gemini/config/mcp_config.json — escrito do zero a cada boot por jaiminho/entrada.sh, nunca editado por fora",
-      "verificavel_do_host": false,
-      "porque": "DEIXOU de ser verificavel deste host em 20/08/2026 (#2286): os dois bracos do agy passaram ao daemon rootless da conta jaiminho (uid 1003) e `docker exec` do claudinho nao os enxerga — outro daemon, outro netns, outro uid, e claudinho nao tem sudo. Ate existir caminho de alcance, medir daqui devolve 'No such container' e reprova o gate por uma ausencia que nao e defeito de conector. O produtor (jaiminho/entrada.sh) segue conferivel estruturalmente.",
-      "produtor": {
-        "tipo": "bash-heredoc-json",
-        "arquivo": "jaiminho/entrada.sh",
-        "marcador": "JSON",
-        "_": "reescrito a cada boot de propósito — contrato nosso, não arquivo dele. Medir o script é medir o que todo boot futuro grava, não uma amostra do contêiner vivo."
-      },
-      "verificacao_suspensa": {
-        "motivo": "container fora do daemon do claudinho desde #2286",
-        "como_era": "initialize MCP de dentro do conteiner jaiminho, por docker exec",
-        "quem_pode_medir": "quem alcanca o daemon do uid 1003 (dono, ou sudoers pontual ainda inexistente)",
-        "reabre_com": "o card dos verbos que aceitam DOCKER_HOST por env"
-      }
     }
   },
   "conectores": {
@@ -132,33 +110,6 @@
         "query_cargo",
         "upload_file",
         "platafirma_index"
-      ]
-    },
-    "platafirma": {
-      "url": "http://127.0.0.1:8022/mcp",
-      "_": "só de dentro do contêiner jaiminho — porta não publicada no host. jaiminho/ponte.py repassa autenticado (client_credentials, token de 600s) pra https://ops.platafirma.org/mcp. É o que o mcp_config.json do agy declara este conector como `platafirma` (jaiminho/entrada.sh) — nome mantido igual aqui de propósito: e o nome que a checagem estrutural do produtor compara.",
-      "serve": [
-        "run_command",
-        "read_file",
-        "write_file",
-        "monta_sessao"
-      ]
-    },
-    "platafirma-conhecimento": {
-      "url": "http://127.0.0.1:8022/acervo",
-      "_": "só de dentro do contêiner jaiminho. A ponte repassa autenticado pro jaiminho-server (rede saida, PEP próprio). É o que o mcp_config.json do agy declara este conector como `platafirma-conhecimento` (jaiminho/entrada.sh) — nome mantido igual aqui de propósito; a wiki entra pelas tools wiki_* deste MESMO conector, atrás do PDP — não tem rota própria (o conector `platafirma-wiki` que o agy tinha saiu em 16/08/2026, mesmo dia da medição do #165: eram três conectores no card original, hoje são dois — o wiki-mcp autentica por segredo estático sem PEP, e repassar esse segredo pela ponte poria a caneta da wiki na mão do externo).",
-      "serve": [
-        "rag_buscar",
-        "rag_facetas",
-        "wiki_buscar",
-        "wiki_ler",
-        "drive_listar",
-        "drive_ler",
-        "drive_criar",
-        "drive_editar",
-        "drive_apagar",
-        "sheets_ler",
-        "sheets_escrever"
       ]
     }
   },
