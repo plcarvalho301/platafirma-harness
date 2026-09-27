@@ -5,6 +5,7 @@
 - Validar PR — da fábrica OU da própria cadeira em outra fita — é medir, não confiar no relato: ler o diff inteiro contra as TRAVAS do card, e onde o card cita commit-por-passo, conferir com `repo git show <sha> --stat` que o commit muda o que diz mudar. Em 26/09 o PR 206 (desta cadeira) passava nos próprios testes e violava a trava «não apagar sem salvar»: tratava ramo ausente no origin como entregue, e ramo nunca empurrado também está ausente. O teste que faltava era o caso que a trava protege.
 - Aceite que só se mede pós-deploy (métrica sobre 24h de ops log) não bloqueia o merge — declarar como pendência de medição, não como verde. Distinguir do aceite que roda agora (suíte de contrato).
 - Aceite de conformação de verbo não é «`release conferir verbo` sai 0»: esse gate mede origem, cabeçalho e capacidade, não usage, `--ajuda`, exit nem erro com cura. Em 26/09 infra, teste, lint e migrar já saíam 0 sem estar na régua. Aceite de conformação é o teste de contrato por ato (arq:0110 Q9). Antes de escrever aceite, rodar o aceite contra o ar e ver se ele já passa.
+- Aceite de card que cita uma régua se confere contra o texto da régua antes de fixar: em 27/09 o #3118 pedia «lint organizacao platafirma-casa sai 0», e a própria lista diz que não se aplica ao suporte da casa (medido: 2262 apontamentos, todos esperados).
 - Gate de outra cadeira que vem com correção de fato: conferir a correção contra a fonte antes de aceitar, e devolver âncora onde ela erra.
 - `release promover <familia>` promove a família inteira, não o commit: toda stack registrada para aquela família sobe junto. O raio de ação real só se sabe lendo o registro de stacks da família antes.
 - Gatilho automático de infra (timer que decide sozinho) pede régua estreita e literal, não heurística. Vale para desempate também: sem chave, «o mais recente» por mtime escolhia pela hora do `worktree add`, não do uso — ambíguo sai 2 e pede a chave. Decide por forma comparável, nunca por inferência.
@@ -19,6 +20,8 @@
 - Detectar desfecho por palavra solta em saída misturada engana (a linha do venv também diz «reaproveitado»). Casa-se a frase do desfecho.
 - «Removido depois de passar num push real» só vale com o hook promovido: o push roda o hook da release no ar, não o do ramo. Transição de hook = lado a lado, promover, push real, remover.
 - Extração de predicado se verifica pelo caller: o default do módulo extraído aponta para a árvore do próprio código, não para o alvo que o caller media. Costura explícita no caller, e o stub dos testes vai onde o predicado passou a morar.
+- Universo de repositórios para censo ou varredura sai do registro (`registro/venvs.json`, chave `repositorios`), nunca de lista lembrada: em 27/09 uma lista de memória incluiu o modulo-osint, fóssil.
+- Leitor de acervo dentro de verbo lê o formato que o `acervo ler` serve (markdown com linha de situação), não um formato suposto: em 27/09 o lint fazia `json.loads` da saída e toda classe com lista saía 5 desde que nasceu.
 
 ## Diário de bordo
 
@@ -57,3 +60,11 @@
 - 2026-09-26 — `teste rodar` de um arquivo, com o teste no ar, gravou verde no memo do portão; o push seguinte da mesma árvore reaproveitaria. Contorno encontrado na data foi: mudar a árvore antes do push e corrigir bin/teste (518f19f).
 - 2026-09-26 — `fila enviar` saiu 2 sem `--assunto`. Contorno encontrado na data foi: `--assunto` obrigatório junto de `--tipo` e `--eu`.
 - 2026-09-27 — `mesa anota release` reescreveu o slot e apagou a linha da fita anterior (a lição acima valeu, não foi lida antes). Contorno: nenhum; a linha de 26/09 perdeu-se.
+- 2026-09-27 — `mesa anota construcao` reescreveu o slot de novo, mesma parede. Contorno encontrado na data foi: reanotar com a anotação anterior colada da abertura da fita.
+- 2026-09-27 — `mesa fez 14` marcou feito um item que não estava feito (erro da fita). Contorno encontrado na data foi: replantar com `mesa item` (#19).
+- 2026-09-27 — `lint organizacao <repo> --todas --json` de repo grande passou de 50 KB e a porta truncou. Contorno encontrado na data foi: `--resumo` novo no lint (888bdd1).
+- 2026-09-27 — `teste rodar --chave recuperacao` saiu 2 antes da promoção (o registro lido é o servido, não o da bancada). Contorno encontrado na data foi: promover o registro e rodar `teste rodar recuperacao@<bancada>`.
+- 2026-09-27 — `repo abrir modulo-osint` tentou clonar repositório inexistente (fóssil). Contorno encontrado na data foi: universo pelo registro de repositórios.
+- 2026-09-27 — `repo commitar` com caminho já removido por `repo git rm` saiu 1 «caminho não existe». Contorno encontrado na data foi: commitar sem ele; a remoção staged entrou junto.
+- 2026-09-27 — `teste rodar ops@<bancada>` inteiro passou de 180 s (timeout da tool); `test_raizes_porta.py` sozinho leva 134 s. Contorno: nenhum, dono mandou não mexer.
+- 2026-09-27 — `release estado <repo> main` saiu 2 (argumento extra). Contorno encontrado na data foi: `release promover <repo> <sha>` direto.
