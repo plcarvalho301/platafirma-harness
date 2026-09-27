@@ -310,40 +310,6 @@ def test_hit_de_acervo_com_cache_mudo_no_sismember_reprova(monkeypatch):
     assert veio is False
 
 
-# ================================================================= 7. conformidade
-
-
-def motor_cache_no_ar() -> bool:
-    try:
-        C.Cache().cliente.ping()
-    except Exception:  # noqa: BLE001
-        return False
-    return True
-
-
-@pytest.mark.skipif(not motor_cache_no_ar(), reason=f"motor-cache fora do ar em {C.HOST}:{C.PORTA}")
-def test_conformidade_instancia_e_a_de_cache_e_nao_a_de_memoria():
-    """§9 — `msg-mem` (6380) guarda `mem:*` e `fita:*`; `allkeys-lru` lá despejaria a
-    mesa. O que se confere é a política DA INSTÂNCIA servida, não a porta escrita aqui."""
-    c = C.Cache().cliente
-
-    def conf(nome: str) -> str:
-        d = c.config_get(nome)
-        v = d.get(nome) or d.get(nome.encode())
-        return v.decode() if isinstance(v, bytes) else v
-
-    assert C.PORTA == 6381
-    assert conf("maxmemory-policy") == "allkeys-lru"
-    assert int(conf("maxmemory")) >= 512 * 1024 * 1024
-    assert conf("appendonly") == "no"
-
-
-@pytest.mark.skipif(not motor_cache_no_ar(), reason="motor-cache fora do ar")
-def test_conformidade_ida_e_volta_no_valkey_vivo():
-    cache = C.Cache()
-    a = FonteFalsa(carimbo=f"conformidade-{int(time.time())}")
-    r1, veio1 = C.busca_com_cache(a, "item:2300", cache=cache)
-    r2, veio2 = C.busca_com_cache(a, "item:2300", cache=cache)
-    assert (veio1, veio2) == (False, True)
-    assert a.buscas == 1
-    assert r2.itens[0].procedencia.chave == r1.itens[0].procedencia.chave
+# A conformidade contra o motor-cache vivo (política allkeys-lru da instância 6381, ida e
+# volta gravando no valkey de produção) saiu daqui em 27/09/2026: é conferência de estado
+# de produção, não teste (guia portoes-do-codigo, «Teste não lê estado real»).

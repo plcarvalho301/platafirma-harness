@@ -134,7 +134,19 @@ def test_registro_conhece_as_series_do_registro_setorial():
     assert set(SERIES) == {"arq", "seg", "ont", "infra", "integracao", "org"}
 
 
-def test_registro_container_inalcancavel_vira_linha_declarada():
+@pytest.fixture
+def docker_sem_container(tmp_path, monkeypatch):
+    """O docker responde como o de verdade responde a um container que não existe — sem
+    depender de o host ter docker, nem de que container ele tem."""
+    d = tmp_path / "bin-docker"
+    d.mkdir()
+    p = d / "docker"
+    p.write_text('#!/bin/sh\necho "Error response from daemon: No such container: $3" >&2\nexit 1\n')
+    p.chmod(0o755)
+    monkeypatch.setenv("PATH", f"{d}{os.pathsep}{os.environ['PATH']}")
+
+
+def test_registro_container_inalcancavel_vira_linha_declarada(docker_sem_container):
     r = AdaptadorRegistro(pg_container="pf-registro-container-inexistente").busca_declarada("arq:0064")
     assert r.linha.cobertura is Cobertura.FONTE_NAO_INDEXADA
     assert r.linha.causa is Causa.SEM_ROTA
@@ -237,7 +249,7 @@ def test_mesa_aceita_pf_cadeira_nas_duas_formas():
 # ========================================== 4. o núcleo: N adaptadores → um envelope
 
 
-def test_fonte_caida_no_meio_nao_derruba_as_outras():
+def test_fonte_caida_no_meio_nao_derruba_as_outras(docker_sem_container):
     reg = AdaptadorRegistro(pg_container="pf-registro-container-inexistente").busca_declarada("arq:0064")
     fila = AdaptadorFila(cliente=FilaFalsa([CARTA])).busca_declarada("claudinho-IA")
     env = monta_envelope([reg, fila])
@@ -251,62 +263,7 @@ def test_busca_medida_devolve_latencia():
     assert ms >= 0.0
 
 
-# ================================================== 5. conformidade contra a fonte real
-
-
-def _fila_no_ar() -> bool:
-    try:
-        import redis
-
-        redis.Redis(host="127.0.0.1", port=6379, socket_timeout=0.5).ping()
-        return True
-    except Exception:  # noqa: BLE001
-        return False
-
-
-def _acervo_casa_no_ar() -> bool:
-    try:
-        p = subprocess.run(["docker", "exec", "-i", "rag-extractor-pg", "true"],
-                           capture_output=True, timeout=5)
-        return p.returncode == 0
-    except Exception:  # noqa: BLE001
-        return False
-
-@pytest.mark.skipif(not _acervo_casa_no_ar(), reason="rag-extractor-pg (docker) não respondeu")
-def test_conformidade_registro_bate_com_acervo_listar_casa():
-    """§5 — o resultado bate com `acervo listar casa adr` sobre o mesmo estado —
-    arq:0111/0115: a fonte é a tabela acervo.casa, não mais um diretório de release."""
-    p = subprocess.run([str(RELEASE / "harness" / "bin" / "acervo"), "listar", "casa", "adr",
-                       "--json"], capture_output=True, text=True, timeout=30)
-    if p.returncode != 0:
-        pytest.skip(f"`acervo listar casa adr` não rodou: {p.stderr.strip()[:120]}")
-    do_verbo = {item["chave"] for item in json.loads(p.stdout) if not item.get("retirada_em")}
-    r = AdaptadorRegistro().busca("", {"serie": list(SERIES)}, k=100000, texto="nenhum")
-    do_adaptador = {i.procedencia.chave for i in r.itens}
-    assert do_adaptador == do_verbo, (
-        f"adaptador e verbo divergiram: só no adaptador {do_adaptador - do_verbo}, "
-        f"só no verbo {do_verbo - do_adaptador}"
-    )
-
-
-@pytest.mark.skipif(not _fila_no_ar(), reason="motor-msg (127.0.0.1:6379) não respondeu")
-def test_conformidade_fila_bate_com_o_verbo_humano():
-    """Contra `fila ler --tudo`, sobre a mesma caixa e o mesmo estado."""
-    caixa = "claudinho-IA"
-    # `--tudo` é XRANGE, leitura FRIA: não move o ponteiro do grupo, e por isso a
-    # conformidade pode ser medida sem consumir a caixa de ninguém.
-    p = subprocess.run([str(RELEASE / "harness" / "bin" / "fila"), "ler", caixa, "--tudo"],
-                       capture_output=True, text=True, timeout=30,
-                       env={**os.environ, "PF_CADEIRA": caixa})
-    if p.returncode != 0:
-        pytest.skip(f"`fila ler --tudo` não rodou: {p.stderr.strip()[:120]}")
-    r = AdaptadorFila().busca(caixa, k=1000, texto="nenhum")
-    # O verbo imprime um bloco `===MSG <msgid>===` por carta. Régua do §5: mesmo estado,
-    # mesmo conjunto — e o msgid é o identificador que os dois lados carregam.
-    do_verbo = {l.split("===MSG ")[1].rstrip("=") for l in p.stdout.splitlines()
-                if l.startswith("===MSG ")}
-    do_adaptador = {it.ref.split(" · ")[0] for it in r.itens}
-    assert do_adaptador == do_verbo, (
-        f"adaptador e verbo divergiram: só no adaptador {do_adaptador - do_verbo}, "
-        f"só no verbo {do_verbo - do_adaptador}"
-    )
+# Conformidade adaptador x verbo humano sobre o estado vivo (registro contra `acervo
+# listar casa`, fila contra `fila ler --tudo`) saiu daqui em 27/09/2026: compara a
+# produção consigo mesma, e isso é conferência de estado, não teste (guia
+# portoes-do-codigo, «Teste não lê estado real»).
