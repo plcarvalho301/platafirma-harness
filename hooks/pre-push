@@ -190,6 +190,9 @@ medir_rev() {  # $1=rev
         return 0 ;;
       vermelho)
         printf 'pre-push: BASELINE VERDE QUEBROU na rev %s — veredito reaproveitado (%s-%s, mesma árvore já medida vermelha).\n' "${rev:0:7}" "$CHAVE" "$chave_hash" >&2
+        # o veredito pode ter sido gravado agora pelo caminho novo (teste rodar, acima):
+        # os reprovados que ele nomeou vão junto, para o push barrado dizer o porquê.
+        [ -s "$saida_teste" ] && grep -E '^[[:space:]]*reprovado:' "$saida_teste" | sed 's/^/  /' >&2
         return 1 ;;
     esac
   fi
