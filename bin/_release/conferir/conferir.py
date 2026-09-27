@@ -202,7 +202,7 @@ def uso(erro=None):
     sys.exit(2)
 
 
-def sh(args, cwd=None):
+def sh(args, cwd=None, env=None):
     # cwd inexistente faz subprocess.run levantar FileNotFoundError ANTES de rodar o
     # comando (o erro e do fork ao trocar de diretorio, nao do binario). Acontece quando
     # um container segue de pe apontando um working_dir (worktree de deploy) que ja foi
@@ -212,7 +212,7 @@ def sh(args, cwd=None):
     if cwd is not None and not os.path.isdir(cwd):
         return 127, "", f"diretorio de trabalho nao existe: {cwd}"
     try:
-        p = subprocess.run(args, capture_output=True, text=True, cwd=cwd)
+        p = subprocess.run(args, capture_output=True, text=True, cwd=cwd, env=env)
     except (FileNotFoundError, NotADirectoryError, PermissionError) as e:
         return 127, "", f"nao consegui executar em {cwd or os.getcwd()!r}: {e}"
     return p.returncode, p.stdout.strip(), p.stderr.strip()
@@ -291,16 +291,100 @@ def git_estado(caminho):
             "atras": int(atras) if atras.isdigit() else None}
 
 
+# --- cofre da stack para renderizar o compose (incidente 27/09) --------------
+# O compose interpola segredo do cofre (`${POSTGRES_PASSWORD:?defina segredos/rag/...}`), e
+# quem sobe a stack (bin/_release/stack) o materializa em env-file. Renderizar sem ele fazia
+# toda stack com segredo sair "nao consegui renderizar" — e a mensagem, lida como causa, mandou
+# um diagnostico de incidente para o lugar errado. Aqui o cofre entra no ambiente do `docker
+# compose config` (nunca em arquivo), com a mesma regra do ajudante: um arquivo por variavel,
+# nome valido, uma linha. Valor de segredo NUNCA sai no relato: `mascarar` troca por ***.
+INSTANCIA = os.environ.get("PLATAFIRMA_INSTANCIA", "/srv/platafirma/casa")
+_TOPO = None
+
+
+def _topologia():
+    global _TOPO
+    if _TOPO is None:
+        rc, out, _ = sh([os.path.join(BIN_IRMAOS, "acervo"), "stack", "ver", "--json"])
+        try:
+            _TOPO = json.loads(out) if rc == 0 and out else []
+        except ValueError:
+            _TOPO = []
+    return _TOPO
+
+
+def _composes(s):
+    v = s.get("compose") or []
+    return [v] if isinstance(v, str) else list(v)
+
+
+def stack_do_container(c):
+    """slug da stack (acervo.stack) cujo compose declarado e o do container. O declarado mora
+    sob .../current/<familia curta>/<rel>; o container sobe de .../<familia>/<sha>/<rel>: casa
+    pelo <rel>. Sem casamento, None — e o render segue sem cofre, como antes."""
+    arquivos = [f for f in c["config_files"].split(",") if f]
+    for s in _topologia():
+        for comp in _composes(s):
+            if "/current/" not in comp:
+                continue
+            rel = comp.split("/current/", 1)[1].split("/", 1)[-1]
+            if any(f.endswith("/" + rel) for f in arquivos):
+                return s.get("slug")
+    return None
+
+
+def segredos_da_stack(slug):
+    """{NOME: valor} de $PLATAFIRMA_INSTANCIA/segredos/<slug>/, pela regra do ajudante."""
+    if not slug:
+        return {}
+    pasta = os.path.join(INSTANCIA, "segredos", slug)
+    vals = {}
+    try:
+        nomes = sorted(os.listdir(pasta))
+    except OSError:
+        return {}
+    for nome in nomes:
+        f = os.path.join(pasta, nome)
+        if not os.path.isfile(f) or not re.match(r"^[A-Za-z_][A-Za-z0-9_]*$", nome):
+            continue
+        try:
+            with open(f) as fh:
+                v = fh.read()
+        except OSError:
+            continue
+        v = v[:-1] if v.endswith("\n") else v
+        if "\n" in v:
+            continue
+        vals[nome] = v
+    return vals
+
+
+_SEGREDOS_VISTOS = set()
+
+
+def mascarar(valor):
+    """Troca por *** todo trecho de `valor` que seja segredo lido do cofre nesta execucao."""
+    s = str(valor)
+    for seg in sorted(_SEGREDOS_VISTOS, key=len, reverse=True):
+        if len(seg) >= 4 and seg in s:
+            s = s.replace(seg, "***")
+    return s
+
+
 def env_declarado(c):
     arquivos = [f for f in c["config_files"].split(",") if f]
     base = ["docker", "compose"]
     for f in arquivos:
         base += ["-f", f]
+    cofre = segredos_da_stack(stack_do_container(c))
+    _SEGREDOS_VISTOS.update(cofre.values())
+    # so passa env quando ha cofre: stack sem segredo chama sh como sempre chamou
+    kw = {"env": dict(os.environ, **cofre)} if cofre else {}
     # `--profile "*"`: sem isso, servico sob profile (o rag-api esta em `serving`) some do
     # config renderizado e a conferencia acusa ausencia que nao existe.
-    rc, out, err = sh(base + ["--profile", "*", "config", "--format", "json"], cwd=c["working_dir"])
+    rc, out, err = sh(base + ["--profile", "*", "config", "--format", "json"], cwd=c["working_dir"], **kw)
     if rc != 0:
-        rc, out, err = sh(base + ["config", "--format", "json"], cwd=c["working_dir"])
+        rc, out, err = sh(base + ["config", "--format", "json"], cwd=c["working_dir"], **kw)
     if rc != 0:
         return None, err.splitlines()[-1] if err else "docker compose config falhou"
     try:
@@ -386,14 +470,18 @@ def conferir_servico(alvo, como_json=False):
             continue
         servido = c["env"]
         for k in sorted(decl):
+            d_m = mascarar(decl[k])
             if k not in servido:
-                divergencias.append(f"{k} declarado e nao servido (declarado={decl[k]!r})")
+                divergencias.append(f"{k} declarado e nao servido (declarado={d_m!r})")
                 if not como_json:
-                    print(f"    AUSENTE : {k} declarado e nao servido (declarado={decl[k]!r})")
+                    print(f"    AUSENTE : {k} declarado e nao servido (declarado={d_m!r})")
             elif servido[k] != decl[k]:
-                divergencias.append(f"{k} declarado={decl[k]!r} servido={servido[k]!r}")
+                # variavel que carrega segredo: o servido divergente pode ser o segredo
+                # anterior, que o cofre ja nao tem para mascarar — some inteiro.
+                s_m = "***" if d_m != decl[k] else mascarar(servido[k])
+                divergencias.append(f"{k} declarado={d_m!r} servido={s_m!r}")
                 if not como_json:
-                    print(f"    DIFERE  : {k} declarado={decl[k]!r} servido={servido[k]!r}")
+                    print(f"    DIFERE  : {k} declarado={d_m!r} servido={s_m!r}")
         if not divergencias and not como_json:
             print(f"    env     : {len(decl)} variaveis, todas conferem")
         if divergencias:
