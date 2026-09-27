@@ -55,6 +55,16 @@ def bancada_do_repo() -> Path:
             wt = raiz / "wt" / REPO / chave
             if (wt / ".git").exists():
                 return wt
+    # Layout do `repo abrir` desde o #3152: wt/<repo>/<cadeira>/<card-ou-slug>. Uma bancada so:
+    # e ela; mais de uma: ambiguo, recusa pedindo que feche as outras (nunca escolhe calado).
+    if cadeira:
+        base = raiz / "wt" / REPO / cadeira
+        achadas = sorted(p for p in base.glob("*") if (p / ".git").exists()) if base.is_dir() else []
+        if len(achadas) == 1:
+            return achadas[0]
+        if len(achadas) > 1:
+            morre(f"{len(achadas)} bancadas de {REPO} abertas para {cadeira} "
+                  f"({', '.join(p.name for p in achadas)}); feche as que nao sao desta tarefa.", 2)
     clone = raiz / REPO
     if (clone / ".git").exists():
         print(f"acervo exportar: aviso: sem bancada da sessao; usando o clone {clone}",
