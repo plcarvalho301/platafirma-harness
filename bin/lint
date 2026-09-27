@@ -1,211 +1,337 @@
-#!/usr/bin/env bash
-# lint — roda o linter do clone local, detectando a stack do repo
+#!/usr/bin/env python3
+# lint — aponta desvios em relacao a listas de verificacao e padroes de codigo
 # capacidade: qualidade-do-codigo-lint
-# dono: claudinho-TI
-#
-# Por que essa capacidade: o levantamento de conformacao a arq:0110 (12/09/2026,
-# levantamento/2026-09-12-conformacao-verbos-arq0110.md) partiu a folha composta
-# `construcao/qualidade-do-codigo` (que `lint` e `teste` carregavam junto, DEBITO 1:1
-# com arq:0037) em duas folhas L2 proprias no golden record: `qualidade-do-codigo-lint`
-# (este verbo) e `qualidade-do-codigo-teste`. O cabecalho ficou parado na folha antiga;
-# corrigido aqui (card #3150) para bater com o que o acervo ja resolve. Averbacao formal
-# da folha composta segue Aberta no levantamento. Linha de corte: `conferir` verifica a
-# plataforma; `lint` verifica o codigo.
-# use para: lintar um repo, conferir estilo antes de commit/PR, ver o que o linter aponta
-# atos: rodar, detectar
-# forma: predicado
+# dono: ti
+# classe: C
+# use para: verificar codigo antes de commit/PR, checar conformidade de regras e checklists
+# atos: rodar, detectar, codigo, fossil, repo, superficie, arranque, commit, vocabulario, alcance, chapeu, organizacao, card, prosa, testes
+# regua: codigo repositorio
+# regua: fossil repositorio
+# regua: repo lista-de-verificacao checklist-repo
+# regua: superficie lista-de-verificacao checklist-superficie
+# regua: arranque lista-de-verificacao checklist-arranque
+# regua: commit lista-de-verificacao checklist-commit
+# regua: vocabulario lista-de-verificacao checklist-vocabulario
+# regua: alcance lista-de-verificacao checklist-alcance
+# regua: chapeu lista-de-verificacao checklist-chapeu
+# regua: organizacao lista-de-verificacao checklist-antipadroes-organizacao-documental
+# regua: card lista-de-verificacao arq-0096
+# regua: prosa lista-de-verificacao styleguide-da-wiki
+# regua: testes lista-de-verificacao checklist-testes
+# forma: relatorio
 # cauda: sim
-#
-# Verbo-por-API do braco de lint (card #3004, feature #3003, invariante seg:0014).
-# Mesma regua do verbo `teste`: o chamador escolhe o REPO (e no maximo um alvo dentro
-# dele); a linha do linter e montada aqui. Nenhuma flag do chamador atravessa.
-#
-# Deteccao (nesta ordem; `detectar` mostra sem rodar):
-#   python  pyproject.toml | .ruff.toml | .ruff_cache  ->  uvx ruff check
-#   node    package.json com scripts.lint              ->  npm run lint
-# Repo sem nenhuma das duas responde INDETERMINAVEL (exit 5), nunca "limpo": linter que
-# nao existe nao e linter que passou.
-set -uo pipefail
+from __future__ import annotations
 
-# Raizes da casa (card #3010): a bancada vem de pf_bancada, sem default.
-. "$(dirname "$(readlink -f "$0")")/../lib/raizes.sh"
+import json
+import os
+import sys
+from pathlib import Path
 
-BANCADA=""   # preenchida por declara_bancada, depois de validado o ato
-VERBO="$(basename "$0")"
+# Configura importacao de _lint e lib
+AQUI = Path(__file__).resolve().parent
+HARNESS_DIR = AQUI.parent
+if str(AQUI) not in sys.path:
+    sys.path.insert(0, str(AQUI))
+if str(HARNESS_DIR) not in sys.path:
+    sys.path.insert(0, str(HARNESS_DIR))
 
-uso() {
-  cat >&2 <<EOF
-uso:
-  $VERBO rodar <repo> [<alvo>]   roda o linter do clone; <alvo> = caminho dentro do repo
-  $VERBO detectar <repo>         diz qual stack casou e que linha rodaria, sem rodar
+from _lint.alcance import verificar_alcance
+from _lint.arranque import verificar_arranque
+from _lint.bancada import ErroBancada, resolver_alvo, resolver_bancada
+from _lint.card import verificar_card
+from _lint.chapeu import verificar_chapeu
+from _lint.codigo import detectar_stack, verificar_codigo
+from _lint.commit import verificar_commit
+from _lint.fossil import verificar_fossil
+from _lint.lista import resolver_lista
+from _lint.organizacao import verificar_organizacao
+from _lint.prosa import verificar_prosa
+from _lint.repo import verificar_repo
+from _lint.resultado import Apontamento, relatorio_lint
+from _lint.superficie import verificar_superficie
+from _lint.testes import verificar_testes
 
-bancada: PLATAFIRMA_BANCADA, senao $PLATAFIRMA_ARQUIVO_BANCADA (sem default: exit 3)
-exit: 0 limpo · 1 apontamentos · 2 uso · 3 falha do linter · 4 alvo fora da raiz
-      5 indeterminavel (nenhuma stack de lint detectada)
-EOF
-  exit 2
+CLASSES_LINT = {
+    "codigo": {
+        "tipo": "repositorio",
+        "chave": "repositorio",
+        "detector": "ruff / npm / bash",
+        "descricao": "linter de linguagem da stack do clone",
+    },
+    "fossil": {
+        "tipo": "repositorio",
+        "chave": "repositorio",
+        "detector": "referencias orfas",
+        "descricao": "referencias a caminhos ou simbolos quebrados",
+    },
+    "repo": {
+        "tipo": "lista-de-verificacao",
+        "chave": "checklist-repo",
+        "detector": "predicados de repo (arq:0042)",
+        "descricao": "materia de acervo, blobs, gerados e cabecalhos de operacao",
+    },
+    "superficie": {
+        "tipo": "lista-de-verificacao",
+        "chave": "checklist-superficie",
+        "detector": "conectores e tools servidas",
+        "descricao": "equalizacao de superficies e tools validas",
+    },
+    "arranque": {
+        "tipo": "lista-de-verificacao",
+        "chave": "checklist-arranque",
+        "detector": "ponteiro de arranque em CLAUDE.md",
+        "descricao": "garantia de ponteiro para conduta/arranque.md",
+    },
+    "commit": {
+        "tipo": "lista-de-verificacao",
+        "chave": "checklist-commit",
+        "detector": "validacao de ids no rastreador",
+        "descricao": "referencias a ids de cards validos e abertos",
+    },
+    "vocabulario": {
+        "tipo": "lista-de-verificacao",
+        "chave": "checklist-vocabulario",
+        "detector": "verbos e atos citados no texto",
+        "descricao": "citacoes `verbo ato` entre crases contra bin/",
+    },
+    "alcance": {
+        "tipo": "lista-de-verificacao",
+        "chave": "checklist-alcance",
+        "detector": "cadeia de acesso sujeito->fonte",
+        "descricao": "saltos da cadeia de acesso e politicas de PEP",
+    },
+    "chapeu": {
+        "tipo": "lista-de-verificacao",
+        "chave": "checklist-chapeu",
+        "detector": "template de chapeu",
+        "descricao": "chapeu de camada C contra TEMPLATE-chapeu.md",
+    },
+    "organizacao": {
+        "tipo": "lista-de-verificacao",
+        "chave": "checklist-antipadroes-organizacao-documental",
+        "detector": "antipadroes documentais",
+        "descricao": "conformidade de organizacao documental",
+    },
+    "card": {
+        "tipo": "lista-de-verificacao",
+        "chave": "arq-0096",
+        "detector": "secoes obrigatorias de card (arq:0096)",
+        "descricao": "secoes obrigatorias por nivel de card",
+    },
+    "prosa": {
+        "tipo": "lista-de-verificacao",
+        "chave": "styleguide-da-wiki",
+        "detector": "regras de prosa e estilo",
+        "descricao": "regras de escrita da wiki e conduta",
+    },
+    "testes": {
+        "tipo": "lista-de-verificacao",
+        "chave": "checklist-testes",
+        "detector": "criterios de teste",
+        "descricao": "padroes e cobertura minima de suites de teste",
+    },
 }
 
-morre() { printf '%s: %s\n' "$VERBO" "$1" >&2; exit "${2:-3}"; }
 
-# Bancada declarada pela conta (card #3010): PLATAFIRMA_BANCADA, senao a linha de
-# ~/.config/platafirma/bancada. Sem declaracao: exit 3. Nunca cria diretorio.
-declara_bancada() {
-  BANCADA="$(pf_bancada)" || exit 3
-  case "$BANCADA" in
-    /*) BANCADA="${BANCADA%/}" ;;
-    *) morre "bancada declarada nao e caminho absoluto: $BANCADA" 3 ;;
-  esac
-}
+def imprimir_uso(stream=sys.stdout):
+    print("uso:", file=stream)
+    print("  lint <classe> <repo>[@<chave>] [<alvo>] [--staged] [--json]", file=stream)
+    print("  lint commit <arquivo>|- [--json]", file=stream)
+    print("  lint card <arquivo>|- [<repo>] [--json]\n", file=stream)
+    print("classes:", file=stream)
+    for c, info in CLASSES_LINT.items():
+        lista_desc = f"{info['tipo']} {info['chave']}" if info['tipo'] == 'lista-de-verificacao' else info['tipo']
+        print(f"  {c:<12} {lista_desc:<50} {info['detector']}", file=stream)
+    print("\nbancada: PLATAFIRMA_BANCADA, senao ~/.config/platafirma/bancada", file=stream)
+    print("exit: 0 limpo · 1 apontamentos · 2 uso · 3 falha do linter · 4 alvo fora da raiz", file=stream)
+    print("      5 indeterminavel (sem lista ou linter indeterminavel)", file=stream)
 
-bancada_de() {
-  local nome="$1" chave="${2:-}"
-  local cadeira="${PF_CADEIRA:-}"
-  cadeira="${cadeira#claudinho-}"
-  cadeira="${cadeira#claudinha-}"
-  # card:3149: a bancada e wt/<repo>/<cadeira>/<card-ou-slug>, a mesma regra do `repo` e
-  # do `teste`. Com chave (<repo>@<chave>): so ela. Sem chave: a unica aninhada; mais de
-  # uma e ambiguo (exit 2). Antes, o lint caia no clone base e media a copia errada.
-  if [ -n "$chave" ]; then
-    [ -n "$cadeira" ] && [ -e "$BANCADA/wt/$nome/$cadeira/$chave/.git" ] \
-      || morre "sem bancada '$nome@$chave' nesta cadeira — vizinho: repo abrir $nome <card> --slug <s>" 1
-    printf '%s/wt/%s/%s/%s' "$BANCADA" "$nome" "$cadeira" "$chave"
+
+def main() -> int:
+    argv = sys.argv[1:]
+    if not argv:
+        imprimir_uso(sys.stderr)
+        return 2
+
+    # Flags globais
+    como_json = "--json" in argv
+    staged = "--staged" in argv
+    argv = [a for a in argv if a not in ("--json", "--staged")]
+
+    if not argv:
+        imprimir_uso(sys.stderr)
+        return 2
+
+    primeiro = argv[0]
+    if primeiro in ("--ajuda", "--help", "-h", "ajuda"):
+        imprimir_uso(sys.stdout)
+        return 2
+
+    # Trata atos legados (rodar, detectar)
+    if primeiro == "rodar":
+        classe = "codigo"
+        args_resto = argv[1:]
+    elif primeiro == "detectar":
+        if len(argv) < 2:
+            print("lint: uso: lint detectar <repo>", file=sys.stderr)
+            return 2
+        nome_repo = argv[1]
+        try:
+            raiz, _ = resolver_bancada(nome_repo)
+            det = detectar_stack(raiz)
+            if not det:
+                print(f"lint: indeterminavel — nenhuma stack de lint detectada em {raiz}", file=sys.stderr)
+                return 5
+            stack, cmd = det
+            print(f"{raiz.name}  ·  stack {stack}  ·  rodaria: {cmd}")
+            return 0
+        except ErroBancada as e:
+            print(f"lint: {e.msg}", file=sys.stderr)
+            return e.exit_code
+    else:
+        classe = primeiro
+        args_resto = argv[1:]
+
+    if classe not in CLASSES_LINT:
+        print(f"lint: classe desconhecida: '{classe}' — use `lint --ajuda` para ver classes suportadas", file=sys.stderr)
+        return 2
+
+    info_classe = CLASSES_LINT[classe]
+    chave_lista = info_classe["chave"]
+    tipo_regua = info_classe["tipo"]
+
+    # 1. Classe CARD
+    if classe == "card":
+        alvo_card = args_resto[0] if args_resto else "-"
+        repo_card = args_resto[1] if len(args_resto) > 1 else None
+        raiz_repo = None
+        if repo_card:
+            try:
+                raiz_repo, _ = resolver_bancada(repo_card)
+            except ErroBancada:
+                pass
+        apontamentos = verificar_card(alvo=alvo_card, raiz=raiz_repo)
+        return relatorio_lint(classe, alvo_card, apontamentos, chave_lista, rev=1, como_json=como_json)
+
+    # 2. Classe COMMIT
+    if classe == "commit":
+        if not args_resto:
+            alvo_commit = "-"
+            raiz_repo = Path.cwd()
+        else:
+            # Pode ser 'commit <msg_file>' ou 'commit <repo> <msg_file>'
+            if len(args_resto) == 1:
+                alvo_commit = args_resto[0]
+                raiz_repo = Path.cwd()
+            else:
+                try:
+                    raiz_repo, _ = resolver_bancada(args_resto[0])
+                    alvo_commit = args_resto[1]
+                except ErroBancada:
+                    raiz_repo = Path.cwd()
+                    alvo_commit = args_resto[0]
+        apontamentos = verificar_commit(raiz_repo, alvo=alvo_commit)
+        return relatorio_lint(classe, alvo_commit, apontamentos, chave_lista, rev=1, como_json=como_json)
+
+    # Demais classes exigem <repo>
+    if not args_resto:
+        print(f"lint: classe '{classe}' exige o nome do repositorio (ex: lint {classe} platafirma-harness)", file=sys.stderr)
+        return 2
+
+    nome_repo = args_resto[0]
+    alvo = args_resto[1] if len(args_resto) > 1 else None
+
+    try:
+        raiz_repo, chave_bancada = resolver_bancada(nome_repo)
+    except ErroBancada as e:
+        print(f"lint: {e.msg}", file=sys.stderr)
+        return e.exit_code
+
+    if alvo:
+        try:
+            resolver_alvo(raiz_repo, alvo)
+        except ErroBancada as e:
+            print(f"lint: {e.msg}", file=sys.stderr)
+            return e.exit_code
+
+    # Monta identificador de alvo para a ancora
+    alvo_ancora = f"{nome_repo}/{alvo}" if alvo else nome_repo
+
+    # 3. Classes com lista que exigem acervo (organizacao, prosa, testes)
+    if classe == "organizacao":
+        try:
+            apontamentos, chv, rev = verificar_organizacao(raiz_repo, alvo=alvo)
+            return relatorio_lint(classe, alvo_ancora, apontamentos, chv, rev=rev, como_json=como_json)
+        except ValueError as e:
+            rc, msg = e.args
+            print(f"lint: {msg}", file=sys.stderr)
+            return rc
+
+    if classe == "prosa":
+        try:
+            apontamentos, chv, rev = verificar_prosa(raiz_repo, alvo=alvo)
+            return relatorio_lint(classe, alvo_ancora, apontamentos, chv, rev=rev, como_json=como_json)
+        except ValueError as e:
+            rc, msg = e.args
+            print(f"lint: {msg}", file=sys.stderr)
+            return rc
+
+    if classe == "testes":
+        try:
+            apontamentos, chv, rev = verificar_testes(raiz_repo, alvo=alvo)
+            return relatorio_lint(classe, alvo_ancora, apontamentos, chv, rev=rev, como_json=como_json)
+        except ValueError as e:
+            rc, msg = e.args
+            print(f"lint: {msg}", file=sys.stderr)
+            return rc
+
+    # 4. Classe CODIGO
+    if classe == "codigo":
+        try:
+            apontamentos, stack = verificar_codigo(raiz_repo, alvo=alvo)
+            return relatorio_lint(classe, alvo_ancora, apontamentos, "repositorio", rev=None, como_json=como_json)
+        except ValueError as e:
+            rc, msg = e.args
+            print(f"lint: {msg}", file=sys.stderr)
+            return rc
+
+    # 5. Classe FOSSIL
+    if classe == "fossil":
+        apontamentos = verificar_fossil(raiz_repo, alvo=alvo)
+        return relatorio_lint(classe, alvo_ancora, apontamentos, "repositorio", rev=None, como_json=como_json)
+
+    # 6. Classe REPO
+    if classe == "repo":
+        apontamentos = verificar_repo(raiz_repo, staged=staged, alvo=alvo)
+        return relatorio_lint(classe, alvo_ancora, apontamentos, chave_lista, rev=1, como_json=como_json)
+
+    # 7. Classe SUPERFICIE
+    if classe == "superficie":
+        apontamentos = verificar_superficie(raiz_repo, staged=staged, alvo=alvo)
+        return relatorio_lint(classe, alvo_ancora, apontamentos, chave_lista, rev=1, como_json=como_json)
+
+    # 8. Classe ARRANQUE
+    if classe == "arranque":
+        apontamentos = verificar_arranque(raiz_repo, staged=staged, alvo=alvo)
+        return relatorio_lint(classe, alvo_ancora, apontamentos, chave_lista, rev=1, como_json=como_json)
+
+    # 9. Classe VOCABULARIO
+    if classe == "vocabulario":
+        apontamentos = verificar_vocabulario(raiz_repo, alvo=alvo)
+        return relatorio_lint(classe, alvo_ancora, apontamentos, chave_lista, rev=1, como_json=como_json)
+
+    # 10. Classe ALCANCE
+    if classe == "alcance":
+        apontamentos = verificar_alcance(raiz_repo, alvo=alvo)
+        return relatorio_lint(classe, alvo_ancora, apontamentos, chave_lista, rev=1, como_json=como_json)
+
+    # 11. Classe CHAPEU
+    if classe == "chapeu":
+        apontamentos = verificar_chapeu(raiz_repo, alvo=alvo)
+        return relatorio_lint(classe, alvo_ancora, apontamentos, chave_lista, rev=1, como_json=como_json)
+
     return 0
-  fi
-  if [ -n "$cadeira" ] && [ -d "$BANCADA/wt/$nome/$cadeira" ] && [ ! -e "$BANCADA/wt/$nome/$cadeira/.git" ]; then
-    local cands=() d
-    for d in "$BANCADA/wt/$nome/$cadeira"/*/; do [ -e "${d%/}/.git" ] && cands+=("${d%/}"); done
-    if [ "${#cands[@]}" -eq 1 ]; then printf '%s' "${cands[0]}"; return 0; fi
-    if [ "${#cands[@]}" -gt 1 ]; then
-      printf '%s: mais de uma bancada aberta de %s nesta cadeira — nomeie qual:\n' "$VERBO" "$nome" >&2
-      for d in "${cands[@]}"; do printf '  %s@%s\n' "$nome" "$(basename "$d")" >&2; done
-      exit 2
-    fi
-  fi
-  # legado: a bancada da SESSAO (wt/<repo>/<sessao>) e a plana da cadeira
-  local sid="${PF_SESSAO:-}"
-  if [ -n "$sid" ] && [ -d "$BANCADA/wt/$nome/$sid" ] && [ -e "$BANCADA/wt/$nome/$sid/.git" ]; then
-    printf '%s/wt/%s/%s' "$BANCADA" "$nome" "$sid"
-    return 0
-  fi
-  if [ -n "$cadeira" ] && [ -d "$BANCADA/wt/$nome/$cadeira" ] && [ -e "$BANCADA/wt/$nome/$cadeira/.git" ]; then
-    printf '%s/wt/%s/%s' "$BANCADA" "$nome" "$cadeira"
-    return 0
-  fi
-  if [ -d "$BANCADA/$nome" ]; then
-    if [ -n "$cadeira" ]; then
-      printf '%s: aviso: worktree wt/%s/%s nao existe — usando fallback %s/%s\n' "$VERBO" "$nome" "$cadeira" "$BANCADA" "$nome" >&2
-    else
-      printf '%s: aviso: PF_CADEIRA nao definida — usando fallback %s/%s\n' "$VERBO" "$BANCADA" "$nome" >&2
-    fi
-  fi
-  printf '%s/%s' "$BANCADA" "$nome"
-}
 
-clone_de() {
-  local nome="$1" alvo real raiz_real chave=""
-  [ -n "$nome" ] || morre "falta o nome do repo" 2
-  case "$nome" in *@*) chave="${nome#*@}"; nome="${nome%%@*}" ;; esac
-  case "$nome" in
-    */*|.*|*..*|*[!A-Za-z0-9._-]*) morre "nome de repo invalido: '$nome' — e slug dentro da bancada $BANCADA" 4 ;;
-  esac
-  case "$chave" in */*|.*|*..*|*[!A-Za-z0-9._-]*) morre "chave de bancada invalida: '$chave'" 2 ;; esac
-  alvo="$(bancada_de "$nome" "$chave")" || exit $?
-  [ -d "$alvo" ] || morre "nao ha clone '$nome' na bancada $BANCADA — \`repo abrir $nome\` clona" 3
-  real="$(realpath "$alvo" 2>/dev/null)" || morre "nao resolvi '$alvo'" 4
-  raiz_real="$(realpath "$BANCADA" 2>/dev/null || printf '%s' "$BANCADA")"
-  case "$real/" in "$BANCADA"/*|"$raiz_real"/*) : ;; *) morre "'$nome' resolve fora da bancada $BANCADA" 4 ;; esac
-  printf '%s' "$real"
-}
 
-alvo_de() {
-  local c="$1" a="$2" real
-  case "$a" in
-    -*) morre "alvo nao pode comecar com '-': '$a'" 2 ;;
-    /*|*..*) morre "alvo tem de ser caminho dentro do repo: '$a'" 4 ;;
-  esac
-  [ -e "$c/$a" ] || morre "alvo '$a' nao existe em $c" 3
-  real="$(realpath "$c/$a")" || morre "nao resolvi o alvo" 4
-  case "$real/" in "$c"/*) : ;; *) morre "alvo '$a' resolve fora do clone" 4 ;; esac
-  printf '%s' "$real"
-}
-
-lint_bash() {
-  local c="$1"
-  local achados
-  achados=$(find "$c" -maxdepth 2 -type f \( -name "*.sh" -o -path "*/bin/*" \) ! -name "*.*" ! -path "*/.*" 2>/dev/null | xargs -r awk '
-    /^[a-zA-Z_0-9]+[ ]*\(\)[ ]*\{/ { in_func=1; func_name=$1; last_line="" }
-    in_func && /^\}/ {
-      if (last_line ~ /^[[:space:]]*\[.*\][[:space:]]*&&/ && last_line !~ /\|\|/) {
-        print FILENAME ":" NR-1 ": " func_name " termina com condicional sob set -e sem return/exit explicito"
-      }
-      in_func=0
-    }
-    in_func && NF && !/^[[:space:]]*#/ { last_line=$0 }
-  ')
-  if [ -n "$achados" ]; then
-    printf '%s\n' "$achados" >&2
-    return 1
-  fi
-  return 0
-}
-
-detecta() {
-  local c="$1"
-  if [ -f "$c/pyproject.toml" ] || [ -f "$c/.ruff.toml" ] || [ -f "$c/ruff.toml" ] \
-     || [ -d "$c/.ruff_cache" ]; then printf 'python|uvx ruff check'; return 0; fi
-  if [ -f "$c/package.json" ] && grep -q '"lint"[[:space:]]*:' "$c/package.json" 2>/dev/null; then
-    printf 'node|npm run lint'; return 0
-  fi
-  if [ -d "$c/bin" ] || compgen -G "$c/*.sh" >/dev/null 2>&1; then
-    printf 'bash|lint_bash'; return 0
-  fi
-  return 1
-}
-
-ato_detectar() {
-  local c d stack
-  c="$(clone_de "${1:-}")" || exit $?
-  if ! d="$(detecta "$c")"; then
-    printf '%s: indeterminavel — nenhuma stack de lint detectada em %s\n' "$VERBO" "$c" >&2
-    exit 5
-  fi
-  stack="${d%%|*}"
-  printf '%s  ·  stack %s  ·  rodaria: %s\n' "$(basename "$c")" "$stack" "${d#*|}"
-}
-
-ato_rodar() {
-  local nome="${1:-}" alvo="${2:-}" c d stack rc
-  c="$(clone_de "$nome")" || exit $?
-  if ! d="$(detecta "$c")"; then
-    printf '%s: indeterminavel — nenhuma stack de lint detectada em %s\n' "$VERBO" "$c" >&2
-    exit 5
-  fi
-  stack="${d%%|*}"
-  # `if`, e com `|| exit`: `alvo_de` recusa por `exit` DENTRO da substituicao de comando,
-  # que mata so o subshell. Sem propagar o codigo aqui, a recusa virava alvo vazio e o
-  # linter rodava o repo INTEIRO — contencao que avisa e deixa passar nao e contencao.
-  if [ -n "$alvo" ]; then alvo="$(alvo_de "$c" "$alvo")" || exit $?; fi
-  printf '# %s · stack %s · %s\n' "$nome" "$stack" "${d#*|}" >&2
-  case "$stack" in
-    python) (cd "$c" && uvx ruff check "${alvo:-.}") ;;
-    node)
-      if [ -n "$alvo" ]; then (cd "$c" && npm run lint -- "$alvo"); else (cd "$c" && npm run lint); fi ;;
-    bash) lint_bash "$c" ;;
-  esac
-  rc=$?
-  if [ -d "$c/bin" ] && [ "$stack" != "bash" ]; then
-    lint_bash "$c" || rc=$(( rc == 0 ? 1 : rc ))
-  fi
-  [ "$rc" -eq 0 ] && printf 'lint LIMPO: %s (%s)\n' "$nome" "$stack" \
-                  || printf 'lint com APONTAMENTOS: %s (%s) — exit %s\n' "$nome" "$stack" "$rc"
-  return "$rc"
-}
-
-ato="${1:-}"; [ -n "$ato" ] && shift
-case "$ato" in
-  rodar)    declara_bancada; ato_rodar "$@" ;;
-  detectar) declara_bancada; ato_detectar "$@" ;;
-  ""|-h|--help|ajuda) uso ;;
-  *) morre "ato desconhecido: '$ato' — atos: rodar, detectar" 2 ;;
-esac
+if __name__ == "__main__":
+    sys.exit(main())
