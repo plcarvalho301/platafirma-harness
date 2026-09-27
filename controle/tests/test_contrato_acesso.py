@@ -283,12 +283,10 @@ def test_decidir_permissao_na_forma_nua():
     assert "regra=fornecedor-le-repo" in r.stdout
 
 def test_decidir_projecao_e_a_do_pep():
-    """`--sujeito` casa so a chave da tabela, como a porta. A fabrica da conta uid 1003 e
-    chaveada so pelo `sub` (card #3165): o nome do client nao projeta, o sub projeta."""
-    r = run_acesso("decidir", "sessao_abrir", "sessao:engenharia", "--sujeito", "jaiminho-fabrica")
+    """`--sujeito` casa so a chave da tabela, como a porta. Conta de SO nao e sujeito
+    (card #3165): o sub do client apagado da conta 1003 nao projeta nada."""
+    r = run_acesso("decidir", "sessao_abrir", "sessao:engenharia", "--sujeito", "e57eadb1-ec5d-41b5-a1be-e6d62196cff5")
     assert r.returncode == 5
-    r2 = run_acesso("decidir", "sessao_abrir", "sessao:engenharia", "--sujeito", "e57eadb1-ec5d-41b5-a1be-e6d62196cff5")
-    assert r2.returncode == 0
 
 def test_decidir_argumento_nao_vira_codigo():
     """Acao com aspas e ponto-e-virgula chega ao PDP como texto: exit 1 (default), sem traceback."""

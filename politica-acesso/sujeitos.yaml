@@ -61,22 +61,12 @@ sujeitos:
     dominios: [plataforma]
     usuario: megafone
 
-  # A fábrica da conta uid 1003 (card #3165, 27/09/2026). Modelo: um sujeito de serviço,
-  # chaveado pelo `sub` do client dele no realm (o único nome que não muda quando o
-  # client muda de nome); papel `fornecedor`, cujo teto está em politica.yaml. Entra
-  # pela porta como qualquer sujeito, por `monta_sessao` — sem canal, rota ou servidor
-  # próprio (os que existiam saíram no #3117). A conta roda na máquina do dono: o
-  # isolamento físico é dele; aqui só se projeta o papel para o PDP.
-  # `client` e `conta` são o que `acesso desligar` alcança: o clientId no realm e o
-  # usuário de SO do uid 1003, os dois como estão hoje — dado medido, não escolha.
-  # Antes a linha apontava `conta` para o nome do client, e por isso `acesso orfaos`
-  # acusava a conta de SO sem sujeito.
-  e57eadb1-ec5d-41b5-a1be-e6d62196cff5:
-    natureza: servico
-    papeis: [fornecedor]
-    dominios: [plataforma]
-    client: jaiminho-fabrica
-    conta: jaiminho
+  # CONTA DE SO NAO E SUJEITO (dono, 27/09/2026, card #3165). A segregacao por conta
+  # (uid 1003, e qualquer outra) e eixo de EXECUCAO: onde o processo roda e o que o
+  # sistema operacional deixa ele alcancar. Nao e eixo de usuario. Quem se autentica
+  # na porta, em qualquer superficie, e a pessoa que abriu a sessao, com o login dela.
+  # Por isso nao ha aqui sujeito de servico para conta nenhuma, e o client que dava
+  # identidade propria a conta 1003 foi apagado do realm nesta data.
 
   # A rota de emergência por token estático (claudinho) saiu em 22/09/2026; a
   # emergência é SSH ao host.
