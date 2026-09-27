@@ -160,8 +160,12 @@ validar_arvore() {
   printf '%s' "$real_arv"
 }
 
-resolver_registro() {  # $1=nome
-  local nome="$1" out rc=0
+resolver_registro() {  # $1=nome[@<chave da bancada>]
+  # <repo>@<chave> escolhe a bancada (card:3149); o registro so conhece o nome. A chave
+  # volta em REG_BANCADA para o clone_de, nunca ao registro.
+  local nome="${1%%@*}" out rc=0
+  REG_BANCADA=""
+  case "$1" in *@*) REG_BANCADA="${1#*@}" ;; esac
   local venvs="${PLATAFIRMA_VENVS:-$(dirname "$(readlink -f "$0")")/../registro/venvs.json}"
   out="$(PLATAFIRMA_VENVS="$venvs" python3 "$REGISTRO" "$nome")" || rc=$?
   if [ "$rc" -ne 0 ]; then
@@ -171,6 +175,45 @@ resolver_registro() {  # $1=nome
   REG_FAMILIA=""; REG_LOCK=""; REG_SUBARVORE=""; REG_ESTEIRA=""; REG_STACK=""
   IFS=$'\t' read -r REG_FAMILIA REG_LOCK REG_SUBARVORE REG_ESTEIRA REG_STACK <<<"$out"
   [ "$REG_SUBARVORE" = "-" ] && REG_SUBARVORE=""
+  [ "$REG_LOCK" = "-" ] && REG_LOCK=""
+  return 0
+}
+
+# Esteira documento (spec_teste §1 e §4, card #3152 passo 6): o que a esteira aplica e
+# a admissao da ingestao, e quem a roda e o proprio detector dela, pelo verbo de dados
+# (`acervo ingerir casa <repo> --arvore <dir>`, so dry-run). Nenhuma regra copiada aqui.
+# A admissao so aceita arvore sob a raiz materializada; a bancada, como esta (sujeira
+# inclusa, ignorado fora), e copiada para la e apagada depois.
+rodar_documento() {  # $1=bancada ou arvore $2=repo $3=em_arvore(0|1)
+  local c="$1" repo="$2" em="$3" dir="" rc=0 saida f
+  local inst="${PLATAFIRMA_INSTANCIA:-/srv/platafirma/casa}"
+  local acervo_bin="${PF_ACERVO_BIN:-$(dirname "$(readlink -f "$0")")/acervo}"
+  [ -x "$acervo_bin" ] || morre "dependência ausente: $acervo_bin (acervo ingerir casa --arvore)" 3
+  if [ "$em" -eq 1 ]; then
+    dir="$c"
+  else
+    mkdir -p "$inst/var/pre-push/arvores" 2>/dev/null || true
+    dir="$(mktemp -d "$inst/var/pre-push/arvores/teste-doc.XXXXXX")" \
+      || morre "não criei a árvore de admissão sob $inst/var/pre-push/arvores" 3
+    while IFS= read -r -d '' f; do
+      [ -f "$c/$f" ] || continue
+      mkdir -p "$dir/$(dirname "$f")" && cp "$c/$f" "$dir/$f" \
+        || { rm -rf "$dir"; morre "não copiei a bancada para $dir" 3; }
+    done < <(git -C "$c" ls-files -co --exclude-standard -z)
+  fi
+  printf '# %s · esteira documento · acervo ingerir casa %s --arvore %s\n' "$repo" "$repo" "$dir" >&2
+  saida="$("$acervo_bin" ingerir casa "$repo" --arvore "$dir" 2>&1)" || rc=$?
+  [ "$em" -eq 1 ] || rm -rf "$dir"
+  case "$rc" in
+    0) printf 'suite VERDE: %s (admissão da ingestão)\n' "$repo"; return 0 ;;
+    3) printf 'suite VERMELHA: %s — a admissão da ingestão recusaria\n' "$repo"
+       printf '%s\n' "$saida" | tail -n 5 | sed 's/^/  reprovado: /'
+       return 1 ;;
+    4) printf '%s\n' "$saida" >&2; exit 4 ;;
+    *) printf 'suite INDISPONIVEL: %s — acervo ingerir saiu %s (não medido)\n' "$repo" "$rc"
+       printf '%s\n' "$saida" | tail -n 5 | sed 's/^/  /' >&2
+       return 5 ;;
+  esac
 }
 
 ambiente_do_registro() {  # $1=clone
@@ -350,8 +393,14 @@ ato_detectar() {
 
   local alvo_resolver="${chave:-$nome}"
   resolver_registro "$alvo_resolver"
+  case "$nome" in *@*) REG_BANCADA="${nome#*@}" ;; esac  # --chave nao apaga a bancada escolhida
   declara_bancada
-  c="$(clone_de "$REG_FAMILIA")" || exit $?
+  c="$(clone_de "$REG_FAMILIA${REG_BANCADA:+@$REG_BANCADA}")" || exit $?
+  if [ "$REG_ESTEIRA" = "documento" ]; then
+    printf '%s  ·  esteira documento  ·  runner admissão da ingestão  ·  caminho %s  ·  rodaria: acervo ingerir casa %s --arvore <cópia da bancada>\n' \
+      "$nome" "$c" "$REG_FAMILIA"
+    return 0
+  fi
   ambiente_do_registro "$c" || exit $?
 
   local raiz="$c"
@@ -393,7 +442,7 @@ ato_inventario() {
   [ -n "$nome" ] || morre "inventario exige <nome> ou --all" 2
   resolver_registro "$nome"
   declara_bancada
-  local c; c="$(clone_de "$REG_FAMILIA")" || exit $?
+  local c; c="$(clone_de "$REG_FAMILIA${REG_BANCADA:+@$REG_BANCADA}")" || exit $?
 
   local raiz="$c"
   [ -n "$REG_SUBARVORE" ] && raiz="$c/$REG_SUBARVORE"
@@ -458,17 +507,24 @@ ato_rodar() {
 
   local alvo_resolver="${chave:-$nome}"
   resolver_registro "$alvo_resolver"
+  case "$nome" in *@*) REG_BANCADA="${nome#*@}" ;; esac  # --chave nao apaga a bancada escolhida
 
   if [ -n "$arvore" ]; then
     c="$(validar_arvore "$arvore")" || exit $?
     EM_ARVORE=1
   else
     declara_bancada
-    c="$(clone_de "$REG_FAMILIA")" || exit $?
+    c="$(clone_de "$REG_FAMILIA${REG_BANCADA:+@$REG_BANCADA}")" || exit $?
   fi
 
   local raiz="$c"
   [ -n "$REG_SUBARVORE" ] && raiz="$c/$REG_SUBARVORE"
+
+  if [ "$REG_ESTEIRA" = "documento" ]; then
+    [ -z "$alvo" ] || morre "esteira documento mede a árvore inteira: <alvo> não se aplica" 2
+    rodar_documento "$c" "$REG_FAMILIA" "$EM_ARVORE"
+    return $?
+  fi
 
   if [ -n "$alvo" ]; then
     alvo="$(alvo_de "$c" "$alvo")" || exit $?

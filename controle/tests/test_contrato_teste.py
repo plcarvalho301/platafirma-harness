@@ -138,9 +138,7 @@ def test_sem_lock_declarado_ou_existente_sai_5(tmp_path):
 
 
 def test_arvore_fora_da_raiz_materializada_sai_4(tmp_path):
-    scratch = Path.home() / ".gemini" / "antigravity-cli" / "scratch"
-    scratch.mkdir(parents=True, exist_ok=True)
-    fora = scratch / "caminho_fora_teste"
+    fora = tmp_path / "caminho_fora_teste"
     fora.mkdir(exist_ok=True)
     try:
         release_raiz = tmp_path / "release"
@@ -217,3 +215,55 @@ def test_ajuda_sai_2_sem_efeito_colateral(tmp_path):
     assert "teste rodar" in (r2.stdout + r2.stderr)
 
     assert not inst.exists()
+
+
+# --- esteira documento (passo 6): teste chama a admissao da ingestao, nao a copia ------
+
+def _documento(tmp_path, rc_stub: int):
+    """Registro com repo de esteira documento, arvore sob a raiz de release e um
+    `acervo` de stub que grava os argumentos e sai com rc_stub."""
+    release_raiz = tmp_path / "release"
+    arvore = release_raiz / "casa" / "rev1"
+    (arvore / "guia").mkdir(parents=True)
+    (arvore / "guia" / "x.md").write_text("# x\n")
+    vjson = tmp_path / "venvs.json"
+    vjson.write_text('{"repositorios": {"casa-demo": {"esteira": "documento"}}}\n')
+    log = tmp_path / "acervo-args.txt"
+    stub = tmp_path / "acervo"
+    stub.write_text(
+        "#!/usr/bin/env bash\n"
+        f'printf "%s\\n" "$*" > "{log}"\n'
+        'echo "portao chave: recusado em guia/x.md"\n'
+        f"exit {rc_stub}\n"
+    )
+    stub.chmod(0o755)
+    env = {
+        "PF_RELEASE_RAIZ": str(release_raiz),
+        "PLATAFIRMA_INSTANCIA": str(tmp_path / "instancia"),
+        "PLATAFIRMA_VENVS": str(vjson),
+        "PF_ACERVO_BIN": str(stub),
+    }
+    return env, arvore, log
+
+
+def test_documento_limpo_sai_0_chamando_a_admissao(tmp_path):
+    env, arvore, log = _documento(tmp_path, 0)
+    r = _run_teste(env, "rodar", "casa-demo", "--arvore", str(arvore))
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert "suite VERDE" in r.stdout
+    assert log.read_text().split() == ["ingerir", "casa", "casa-demo", "--arvore", str(arvore)]
+
+
+def test_documento_recusado_pela_admissao_sai_1_nomeando(tmp_path):
+    env, arvore, _ = _documento(tmp_path, 3)
+    r = _run_teste(env, "rodar", "casa-demo", "--arvore", str(arvore))
+    assert r.returncode == 1, r.stdout + r.stderr
+    assert "suite VERMELHA" in r.stdout
+    assert "reprovado: portao chave" in r.stdout
+
+
+def test_documento_motor_fora_sai_5_nao_medido(tmp_path):
+    env, arvore, _ = _documento(tmp_path, 1)
+    r = _run_teste(env, "rodar", "casa-demo", "--arvore", str(arvore))
+    assert r.returncode == 5, r.stdout + r.stderr
+    assert "INDISPONIVEL" in r.stdout

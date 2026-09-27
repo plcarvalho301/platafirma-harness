@@ -146,7 +146,9 @@ def resolver(nome: str, caminho: Path | None = None) -> tuple[str, str, str, str
             return stack_alvo, nome, lock, teste, esteira
         else:
             lock = repo_decl.get("lock", "")
-            if not lock:
+            # esteira documento nao tem venv: quem mede e a admissao da ingestao
+            # (spec_teste §1, card #3152 passo 6), entao lock ausente nao e erro.
+            if not lock and esteira != "documento":
                 raise StackSemLock(nome, lock)
             return nome, nome, lock, repo_decl.get("teste", ""), esteira
 
@@ -218,7 +220,10 @@ def _main(argv: list[str]) -> int:
         print(f"registro: stack '{exc.nome}' sem lock declarado em {caminho_registro()}", file=sys.stderr)
         return 5
     t_val = teste if teste else "-"
-    print(f"{familia}\t{lock}\t{t_val}\t{esteira}\t{stack_real}")
+    # campo vazio vira "-": TAB e espaco em branco para o read do bash, e dois TABs
+    # seguidos colapsariam, deslocando esteira e stack para a coluna errada.
+    l_val = lock if lock else "-"
+    print(f"{familia}\t{l_val}\t{t_val}\t{esteira}\t{stack_real}")
     return 0
 
 
