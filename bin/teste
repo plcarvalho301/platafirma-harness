@@ -147,14 +147,14 @@ alvo_de() {
 }
 
 validar_arvore() {
-  local arv="$1" real_arv raiz_rel tmp_dir
+  local arv="$1" real_arv raiz_rel raiz_pre_push
   [ -d "$arv" ] || morre "árvore materializada '$arv' não é diretório" 4
   real_arv="$(realpath "$arv" 2>/dev/null)" || morre "não resolvi '$arv'" 4
   raiz_rel="$(realpath "${PF_RELEASE_RAIZ:-/opt/platafirma}" 2>/dev/null || printf '%s' "${PF_RELEASE_RAIZ:-/opt/platafirma}")"
-  tmp_dir="$(realpath "${TMPDIR:-/tmp}" 2>/dev/null || printf '%s' "${TMPDIR:-/tmp}")"
+  raiz_pre_push="$(realpath "${PLATAFIRMA_INSTANCIA:-/srv/platafirma/casa}/var/pre-push" 2>/dev/null || printf '%s' "${PLATAFIRMA_INSTANCIA:-/srv/platafirma/casa}/var/pre-push")"
 
   case "$real_arv/" in
-    "$raiz_rel"/*|"$tmp_dir"/*|/tmp/*|/var/tmp/*) : ;;
+    "$raiz_rel"/*|"$raiz_pre_push"/*) : ;;
     *) morre "o caminho de --arvore só é aceito sob a raiz de árvores materializadas: '$arv'" 4 ;;
   esac
   printf '%s' "$real_arv"
@@ -294,8 +294,17 @@ pytest_em_bloco() {  # $1=clone $2=raiz(cwd) $3=rotulo $4=modo(py:<python>|isola
     env_opts=(UV_PROJECT_ENVIRONMENT="$envtmp/venv")
   fi
 
-  (cd "$raiz" && env ${env_opts:+"${env_opts[@]}"} "${runner[@]}" ${alvos:+"${alvos[@]}"} "${pytest_flags[@]}") >"$log" 2>&1 || rc=$?
+  (cd "$raiz" && env ${env_opts:+"${env_opts[@]}"} timeout 300 "${runner[@]}" ${alvos:+"${alvos[@]}"} "${pytest_flags[@]}") >"$log" 2>&1 || rc=$?
   [ -n "${envtmp:-}" ] && rm -rf "$envtmp"
+
+  if [ "$rc" -eq 124 ] || [ "$rc" -eq 137 ]; then
+    rc=5
+    linha="suite INDISPONIVEL: $rotulo — timeout (300s excedidos)"
+    rm -f "$xml"
+    printf '%s\n' "$linha"
+    printf 'saida inteira: %s\n' "$log"
+    return 5
+  fi
 
   local resumo; resumo="$(grep -E '(passed|failed|error|no tests ran)' "$log" | tail -n 1 | sed 's/^=* *//; s/ *=*$//')"
   local linha extra=""
@@ -519,6 +528,28 @@ case "$ato" in
   detectar)   ato_detectar "$@" ;;
   inventario) ato_inventario "$@" ;;
   *)
-    morre "ato desconhecido: '$ato' — atos: rodar, detectar, inventario" 2
+    # arq:0110 §3 Q9: teste <verbo>
+    c="$(declara_bancada 2>/dev/null && clone_de "platafirma-harness" 2>/dev/null || true)"
+    if [ -n "$c" ] && [ -f "$c/controle/tests/test_contrato_$ato.py" ]; then
+      ato_rodar "platafirma-harness" "controle/tests/test_contrato_$ato.py"
+    elif [ -n "$c" ] && [ -f "$c/testes/test_contrato_$ato.py" ]; then
+      ato_rodar "platafirma-harness" "testes/test_contrato_$ato.py"
+    elif [ -n "$c" ] && [ -f "$c/testes/test_$ato.sh" ]; then
+      printf '# %s · stack bash · %s\n' "$ato" "bash $c/testes/test_$ato.sh" >&2
+      (cd "$c" && bash "testes/test_$ato.sh")
+      rc=$?
+      if [ "$rc" -eq 0 ]; then printf 'suite VERDE: %s (bash)\n' "$ato"
+      else printf 'suite VERMELHA: %s (bash) — exit %s\n' "$ato" "$rc"; fi
+      exit "$rc"
+    elif [ -n "$c" ] && [ -f "$c/testes/test_contrato_$ato.sh" ]; then
+      printf '# %s · stack bash · %s\n' "$ato" "bash $c/testes/test_contrato_$ato.sh" >&2
+      (cd "$c" && bash "testes/test_contrato_$ato.sh")
+      rc=$?
+      if [ "$rc" -eq 0 ]; then printf 'suite VERDE: %s (bash)\n' "$ato"
+      else printf 'suite VERMELHA: %s (bash) — exit %s\n' "$ato" "$rc"; fi
+      exit "$rc"
+    else
+      morre "ato desconhecido: '$ato' — atos: rodar, detectar, inventario" 2
+    fi
     ;;
 esac

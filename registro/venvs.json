@@ -11,8 +11,11 @@
       "esteira": "codigo"
     },
     "platafirma-conhecimento": {
-      "esteira": "documento",
+      "esteira": "codigo",
       "stack": "rag"
+    },
+    "platafirma-casa": {
+      "esteira": "documento"
     },
     "platafirma-motor": {
       "esteira": "codigo"
