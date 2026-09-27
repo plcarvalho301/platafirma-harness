@@ -4,8 +4,8 @@
 # dono: ti
 # classe: B
 # forma: predicado (estado, diff) / lista (listar, procurar, historico, pr-listar) / texto (ler, pr-diff) / fluxo (sanear)
-# use para: ler, listar ou procurar o que esta na bancada, ainda nao servido (ler, listar, procurar); historico de um caminho e diff contra origin/main (historico, diff); estado do clone; ramo por card; abrir o worktree da cadeira em origin/main ou no sha que esta em producao (abrir --da-producao); commitar so o que a sessao tocou; empurrar; PR de ponta a ponta (pr-abrir, pr-listar, pr-ver, pr-diff, pr-merge); atualizar e sanear o clone; git cru contido (git)
-# atos: estado (leitura, operacao), listar (leitura, operacao), ler (leitura, operacao), procurar (leitura, operacao), historico (leitura, operacao), diff (leitura, operacao), commitar (escrita, operacao), ramo (escrita, operacao), atualizar (escrita, operacao), sincronizar (escrita, forge), abrir (escrita, operacao), clonar (escrita, operacao), empurrar (escrita, forge), pr-abrir (escrita, forge), pr-listar (leitura, forge), pr-ver (leitura, forge), pr-diff (leitura, forge), pr-merge (escrita, forge), sanear (escrita, forge), git (escrita, operacao)
+# use para: ler, listar ou procurar o que esta na bancada, ainda nao servido (ler, listar, procurar); historico de um caminho e diff contra origin/main (historico, diff); estado do clone; ramo por card; abrir o worktree da cadeira em origin/main ou no sha que esta em producao (abrir --da-producao); commitar so o que a sessao tocou; empurrar; PR de ponta a ponta (pr-abrir, pr-listar, pr-ver, pr-diff, pr-merge); descartar PR sem merge, com ramo e bancadas (pr-fechar); atualizar e sanear o clone; git cru contido (git)
+# atos: estado (leitura, operacao), listar (leitura, operacao), ler (leitura, operacao), procurar (leitura, operacao), historico (leitura, operacao), diff (leitura, operacao), commitar (escrita, operacao), ramo (escrita, operacao), atualizar (escrita, operacao), sincronizar (escrita, forge), abrir (escrita, operacao), clonar (escrita, operacao), empurrar (escrita, forge), pr-abrir (escrita, forge), pr-listar (leitura, forge), pr-ver (leitura, forge), pr-diff (leitura, forge), pr-merge (escrita, forge), pr-fechar (escrita, forge), sanear (escrita, forge), git (escrita, operacao)
 # le: estado=repo
 # le: listar=repo
 # le: ler=repo
@@ -24,6 +24,7 @@
 # le: pr-ver=repo
 # le: pr-diff=repo
 # le: pr-merge=repo
+# le: pr-fechar=repo
 # le: sanear=repo
 # le: git=repo
 # escreve: estado=nada
@@ -44,13 +45,14 @@
 # escreve: pr-ver=nada
 # escreve: pr-diff=nada
 # escreve: pr-merge=repo
+# escreve: pr-fechar=repo
 # escreve: sanear=repo
 # escreve: git=repo
 # (recursos pelo enum de ferramental_recurso; o forge - origin, PR - pende id proprio, e ate la sai como repo; commitar le o log da porta em arquivo-local)
 # consome: porta@ops-log
-# ambiente: PLATAFIRMA_BANCADA[sem default; senao a linha de $HOME/.config/platafirma/bancada; ausente = exit 3] porta · PLATAFIRMA_ARQUIVO_BANCADA[=$HOME/.config/platafirma/bancada] porta · PF_RELEASE_RAIZ[=/opt/platafirma] porta (abrir --da-producao: sha de <raiz>/<repo>/current) · PLATAFIRMA_RELEASE[=$PF_RELEASE_RAIZ/current] porta (registro de familias: URL do forge em abrir/clonar) · PF_CADEIRA porta (lida) · PF_SESSAO porta (lida) · PF_TAREFAS_BIN[=<dir deste verbo>/tarefas] porta (abrir move o card) · OPS_LOG_DIR[=$PLATAFIRMA_INSTANCIA/var/log/ops] porta (PF_OPS_LOG_DIR lido so como alias) · PLATAFIRMA_INSTANCIA[=/srv/platafirma/casa] porta · HOME
+# ambiente: PLATAFIRMA_BANCADA[sem default; senao a linha de $HOME/.config/platafirma/bancada; ausente = exit 3] porta · PLATAFIRMA_ARQUIVO_BANCADA[=$HOME/.config/platafirma/bancada] porta · PF_RELEASE_RAIZ[=/opt/platafirma] porta (abrir --da-producao: sha de <raiz>/<repo>/current) · PLATAFIRMA_RELEASE[=$PF_RELEASE_RAIZ/current] porta (registro de familias: URL do forge em abrir/clonar) · PF_CADEIRA porta (lida) · PF_SESSAO porta (lida) · PF_TAREFAS_BIN[=<dir deste verbo>/tarefas] porta (abrir move o card) · OPS_LOG_DIR[=$PLATAFIRMA_INSTANCIA/var/log/ops] porta (PF_OPS_LOG_DIR lido so como alias) · PLATAFIRMA_INSTANCIA[=/srv/platafirma/casa] porta · PF_GH_BIN[=gh do sistema] teste · HOME
 # depende: git · gh (pr-*, empurrar, atualizar, clonar) · rede ao forge
-# substitui: git -C … ls-files|grep|log|diff|show|status|checkout -b|commit|push|fetch · gh pr create|list|view|diff|merge
+# substitui: git -C … ls-files|grep|log|diff|show|status|checkout -b|commit|push|fetch · gh pr create|list|view|diff|merge|close
 # conforme: sim
 set -uo pipefail
 
@@ -71,7 +73,7 @@ if [ ! -x "$GIT" ]; then
   exit 3
 fi
 
-GH="$(command -v /usr/bin/gh /bin/gh "$HOME/.local/bin/gh" 2>/dev/null | head -1)"
+GH="${PF_GH_BIN:-$(command -v /usr/bin/gh /bin/gh "$HOME/.local/bin/gh" 2>/dev/null | head -1)}"
 PATH_FORGE="$PATH"
 if [ -n "$GH" ] && [ -x "$GH" ]; then
   PATH_FORGE="$(dirname "$GH"):$PATH"
@@ -99,6 +101,7 @@ uso:
   repo pr-ver    <repo> <numero>
   repo pr-diff   <repo> <numero>
   repo pr-merge  <repo> <numero> [--squash|--merge|--rebase] [--forcar]
+  repo pr-fechar <repo> <numero> --motivo <texto>   (descarta sem merge; apaga ramo e bancadas)
   repo git       <repo> <args…>
 
 bancada: PLATAFIRMA_BANCADA[sem default] (exit 3)
@@ -1841,6 +1844,73 @@ ato_pr_merge() {
   env PATH="$PATH_FORGE" "$GIT" -C "$c" push -q origin --delete "$ramo_pr" >/dev/null 2>&1 || true
 }
 
+# pr-fechar (card #3072): descarta PR sem merge, com o motivo no forge. Depois do fechamento
+# confirmado no forge, some o que o PR deixou na bancada e no origin: as bancadas do ramo
+# (salvando em wip/ o que so existe nelas, como no pr-merge) e o ramo no origin, se ainda
+# aponta para a ponta do PR. O forge guarda a ponta em refs/pull/<n>/head: o descarte se
+# desfaz reabrindo o PR a partir dela. Nunca toca ramo de fork, main nem master.
+ato_pr_fechar() {
+  local nome="${1:-}" num="${2:-}" motivo="" c
+  shift 2 || uso
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --motivo) motivo="${2:-}"; shift 2 || uso ;;
+      -*) morre "argumento nao reconhecido: '$1'" 2 ;;
+      *) morre "argumento excedente: '$1'" 2 ;;
+    esac
+  done
+  [ -n "$num" ] || morre "falta o numero do PR" 2
+  case "$num" in *[!0-9]*) morre "numero de PR invalido: '$num'" 2 ;; esac
+  [ -n "$motivo" ] || morre "falta o motivo (--motivo <texto>): o descarte fica no forge com o porque" 2
+  tem_gh
+  c="$(base_de_repo "$nome")" || exit $?
+  local info st ramo_pr hoid cruzado
+  info="$(cd "$c" && env PATH="$PATH_FORGE" "$GH" pr view "$num" --json state,headRefName,headRefOid,isCrossRepository \
+          --jq '"\(.state) \(.headRefName) \(.headRefOid) \(.isCrossRepository)"' 2>/dev/null)" \
+    || morre "indeterminavel: nao li o PR #$num no forge" 5
+  read -r st ramo_pr hoid cruzado <<< "$info"
+  case "$st" in
+    MERGED) morre "PR #$num esta MERGED — mesclado nao se fecha; desfazer e reverter em main" 4 ;;
+    CLOSED) printf 'já feito: PR #%s CLOSED (%s)\n' "$num" "$ramo_pr" ;;
+    OPEN)
+      (cd "$c" && env PATH="$PATH_FORGE" "$GH" pr close "$num" --comment "$motivo" >/dev/null 2>&1)
+      # fecho pelo forge, nunca pelo exit do gh
+      st="$(cd "$c" && env PATH="$PATH_FORGE" "$GH" pr view "$num" --json state --jq .state 2>/dev/null)" \
+        || morre "indeterminavel: fechamento pedido, mas o forge nao respondeu o estado do PR #$num" 5
+      [ "$st" = CLOSED ] || morre "gh pr close falhou: PR #$num esta '${st:-desconhecido}', nao CLOSED" 3
+      printf 'PR #%s CLOSED (%s) [lido do forge] — motivo: %s\n' "$num" "$ramo_pr" "$motivo" ;;
+    *) morre "indeterminavel: PR #$num em estado '${st:-vazio}'" 5 ;;
+  esac
+
+  if [ "$cruzado" = true ]; then
+    printf 'ramo %s e de fork: nao toco\n' "$ramo_pr"; return 0
+  fi
+  case "$ramo_pr" in
+    ""|main|master) printf 'ramo %s protegido: nao toco\n' "${ramo_pr:-vazio}"; return 0 ;;
+  esac
+  limpa_ramo_entregue "$c" "$ramo_pr" "$hoid"
+
+  local fsha rc
+  fsha="$(forge_sha "$c" "$ramo_pr")"; rc=$?
+  case "$rc" in
+    1) printf 'origin/%s: ausente\n' "$ramo_pr" ;;
+    0)
+      if [ "$fsha" != "$hoid" ]; then
+        printf 'origin/%s: em %s, alem da ponta do PR (%s) — nao apago\n' "$ramo_pr" "${fsha:0:7}" "${hoid:0:7}"
+        return 0
+      fi
+      env PATH="$PATH_FORGE" "$GIT" -C "$c" push -q origin --delete "$ramo_pr" >/dev/null 2>&1
+      fsha="$(forge_sha "$c" "$ramo_pr")"; rc=$?
+      case "$rc" in
+        1) printf 'origin/%s: apagado (ponta %s guardada no forge em refs/pull/%s/head)\n' "$ramo_pr" "${hoid:0:7}" "$num" ;;
+        0) morre "origin/$ramo_pr nao saiu (push --delete recusado?)" 3 ;;
+        *) morre "indeterminavel: apagar origin/$ramo_pr — o forge nao respondeu ($fsha)" 5 ;;
+      esac ;;
+    *) morre "indeterminavel: nao li origin/$ramo_pr ($fsha)" 5 ;;
+  esac
+  return 0
+}
+
 git_sem_engolir() {
   local c="$1"; shift
   local out; out="$(env PATH="$PATH_FORGE" "$GIT" -C "$c" "$@" 2>&1 1>/dev/null)"
@@ -2148,7 +2218,7 @@ cmd="$1"
 shift
 
 case "$cmd" in
-  estado|listar|ler|procurar|historico|diff|ramo|commitar|empurrar|atualizar|sincronizar|abrir|clonar|sanear|pr-abrir|pr-listar|pr-ver|pr-diff|pr-merge|git)
+  estado|listar|ler|procurar|historico|diff|ramo|commitar|empurrar|atualizar|sincronizar|abrir|clonar|sanear|pr-abrir|pr-listar|pr-ver|pr-diff|pr-merge|pr-fechar|git)
     declara_bancada "$@" ;;
 esac
 
@@ -2172,10 +2242,11 @@ case "$cmd" in
   pr-ver)    ato_pr_ver "$@" ;;
   pr-diff)   ato_pr_diff "$@" ;;
   pr-merge)  ato_pr_merge "$@" ;;
+  pr-fechar) ato_pr_fechar "$@" ;;
   git)       ato_git "$@" ;;
   *)
     printf '%s: erro: ato desconhecido '\''%s'\''\n' "$VERBO" "$cmd" >&2
-    printf 'atos: estado · listar · ler · procurar · historico · diff · ramo · commitar · empurrar · atualizar · sincronizar · abrir · clonar · sanear · pr-abrir · pr-listar · pr-ver · pr-diff · pr-merge · git\n' >&2
+    printf 'atos: estado · listar · ler · procurar · historico · diff · ramo · commitar · empurrar · atualizar · sincronizar · abrir · clonar · sanear · pr-abrir · pr-listar · pr-ver · pr-diff · pr-merge · pr-fechar · git\n' >&2
     uso_texto
     exit 2
     ;;
