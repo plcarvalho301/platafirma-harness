@@ -564,3 +564,64 @@ def test_sem_caminho_fixo_de_platafirma_arquitetura():
         assert "platafirma-arquitetura" not in txt, rel
         assert "macro-global" not in txt, rel
         assert "padrao_path" not in txt, rel
+
+
+# ------------------------------------------------------------------ admissão no PR (#3136, §7.3)
+
+pr_conferir = _carrega("casa_pr_conferir", "casa-pr-conferir")
+
+PLANO = {
+    "lote": {"itens": [
+        {"arquivo": "platafirma-casa@spec/teste-ci.md", "veredito": "reprovado",
+         "portoes": [{"portao": "projecao", "resultado": "reprovado",
+                      "detail": "Espécie adr fora de adr/"},
+                     {"portao": "estrato", "resultado": "aviso", "detail": "x"}]},
+        {"arquivo": "platafirma-casa@adr/arq/0001-velho.md", "veredito": "reprovado",
+         "portoes": [{"portao": "sobre", "resultado": "reprovado", "title": "não resolve"}]},
+        {"arquivo": "platafirma-casa@spec/limpo.md", "veredito": "ja_ingerido"},
+    ]},
+    "recusas_locais": [{"path": "padrao/sem-doc.2.mmd", "motivo": "fonte de diagrama sem documento"}],
+}
+
+
+def test_pr_recusas_do_plano_le_servidor_e_locais():
+    assert pr_conferir.recusas_do_plano(PLANO) == [
+        ("spec/teste-ci.md", "projecao: Espécie adr fora de adr/"),
+        ("adr/arq/0001-velho.md", "sobre: não resolve"),
+        ("padrao/sem-doc.2.mmd", "fonte de diagrama sem documento"),
+    ]
+
+
+def test_pr_recusa_fora_do_diff_nao_pinta_o_pr():
+    # dívida de main (arquivo que o PR não toca) não é do PR: PR limpo fica verde
+    rec = pr_conferir.recusas_do_plano(PLANO)
+    assert pr_conferir.veredito(pr_conferir.no_diff(rec, ["spec/limpo.md"]))[0] == "success"
+    state, desc = pr_conferir.veredito(pr_conferir.no_diff(rec, ["spec/teste-ci.md"]))
+    assert state == "failure" and "spec/teste-ci.md" in desc
+
+
+def test_pr_descricao_cabe_no_status_do_forge():
+    muitas = [(f"spec/doc-{i}.md", "motivo " * 40) for i in range(3)]
+    state, desc = pr_conferir.veredito(muitas)
+    assert state == "failure" and "(+2)" in desc
+    assert len(desc) <= pr_conferir.TETO_DESCRICAO
+
+
+def test_pr_tocados_e_arvore_do_head(suporte, tmp_path):
+    esp = suporte["esp"]
+    head = subprocess.run([GIT, f"--git-dir={esp}", "rev-parse", "refs/remotes/origin/outro"],
+                          capture_output=True, text=True).stdout.strip()
+    assert pr_conferir.tocados(esp, head) == ["spec/fora-de-main.md"]
+    destino = tmp_path / "arvore"
+    destino.mkdir()
+    pr_conferir.materializar(esp, head, str(destino))
+    assert (destino / "spec" / "fora-de-main.md").read_text(encoding="utf-8") == "# Fora\n"
+    assert (destino / "adr" / "arq" / "0001-primeira.md").is_file()
+
+
+def test_publicar_do_site_chama_a_conferencia_e_nao_usa_identidade_de_cadeira():
+    # o gatilho de merge -> ingestão e o de PR -> status rodam no mesmo job do host
+    # (platafirma-conhecimento casa-site/publicar.py); aqui só o contrato do lado do harness
+    assert pr_conferir.AUTOR == "cron"
+    assert pr_conferir.CONTEXTO == "conferir"
+    assert os.path.basename(pr_conferir.INGERIR) == "casa-ingerir"
