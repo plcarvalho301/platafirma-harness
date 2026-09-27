@@ -125,12 +125,23 @@ import raizes  # noqa: E402
 
 # Predicados extraídos para bin/_lint (card #3153)
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", ".."))
-from _lint.superficie import (  # noqa: E402
-    _conectores_do_produtor,
-    _texto_da_fita,
-    _tools_citadas,
-    _quebradas_no_staged,
-)
+import _lint.superficie as _sup  # noqa: E402
+from _lint.superficie import _tools_citadas  # noqa: E402
+
+
+# Costura: o predicado mora em bin/_lint; aqui ele mede o HARNESS desta conferencia.
+# Sem ela o default do modulo e a arvore do PROPRIO codigo (a release), e `--staged`
+# leria o indice errado e passaria calado. HARNESS e lido na chamada, nao no import.
+def _conectores_do_produtor(prod):
+    return _sup._conectores_do_produtor(prod, HARNESS)
+
+
+def _texto_da_fita():
+    return _sup._texto_da_fita(HARNESS)
+
+
+def _quebradas_no_staged(padrao, servidas):
+    return _sup._quebradas_no_staged(padrao, servidas, HARNESS)
 
 
 def _raiz_bancada():
