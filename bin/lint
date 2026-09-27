@@ -50,6 +50,7 @@ from _lint.repo import verificar_repo
 from _lint.resultado import Apontamento, relatorio_lint
 from _lint.superficie import verificar_superficie
 from _lint.testes import verificar_testes
+from _lint.vocabulario import verificar_vocabulario
 
 CLASSES_LINT = {
     "codigo": {
