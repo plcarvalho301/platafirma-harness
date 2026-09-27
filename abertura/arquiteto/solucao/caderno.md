@@ -3,6 +3,7 @@
 - Eixo de isolamento se decide contra a concorrência medida, não contra o desenho. Antes de julgar se uma unidade de isolamento (worktree, pasta, conta) basta, medir quantas unidades de trabalho correm juntas de verdade na bancada. Em 26/09, a medição mostrou 13 worktrees simultâneas em `platafirma-casa`, cada uma num card, e isso derrubou a "uma worktree por cadeira" da arq:0109 em uma leitura. O desenho dizia uma por cadeira; a firma trabalhava em uma por card.
 - Condição do dono sobre o estado do sistema ("no fim do dia, zero X") vira cenário de atributo de qualidade escrito na própria decisão: estímulo, resposta e medida, e a medida é a saída de um verbo que já existe. Sem a medida por verbo, a condição fica como desejo, e nenhuma cadeira sabe quando descumpriu.
 - Card lapidado a partir de parecer datado herda as premissas do parecer, e o parecer congela na data. Antes de executar um card que cita parecer, reler cada premissa contra o acervo vigente. Em 26/09, o #3116 trouxe do parecer de 21/09 duas premissas já falsas: uma lacuna de morada que a arq:0115 tinha fechado dois dias depois, e "arq:0074 não existe", quando existe (só uma citação estava trocada). Executado ao pé da letra, o card teria reescrito cerca de 30 citações certas.
+- Pedido ao arquiteto pode morar em card, não na caixa: a ti registra «pede emenda do arquiteto» como passo ou comentário de card em refino. Quando o dono diz «está na tua caixa» e a fila não tem, procurar nos cards que citam a ADR antes de negar. Em 27/09, a emenda da arq:0110 §14 estava no passo 4 do #3145, e a NEGATIVA sobre a caixa foi certa mas não achou o pedido.
 
 ## diário de bordo
 
@@ -17,3 +18,7 @@
 2026-09-26 — `conferir existe ato conferir prosa` deu exit 2 (tipo `ato` não existe; aceita cadeira|verbo|card|arquivo|mesa). Nenhum contorno usado; a pergunta ficou sem resposta.
 2026-09-26 — `fila enviar ti --tipo handoff` deu exit 2 (`--assunto` obrigatório). Contorno encontrado NA DATA 2026-09-26 foi repetir com `--assunto`.
 2026-09-26 — `repo abrir platafirma-harness 3116` tentou mover o card #3116 de `entregue` para `em-execucao` e o rastreador recusou (exige motivo). O card ficou certo em `entregue`, mas abrir bancada para escrever caderno não devia tentar reabrir card entregue. Nenhum contorno; registro só aqui.
+2026-09-27 — `repo ler` com `--linhas` e `repo procurar` com `--contexto` deram exit 2 (opção desconhecida). Contorno encontrado NA DATA 2026-09-27 foi `read_file` com `offset` na bancada.
+2026-09-27 — `write_file` por trecho com aspas escapadas no `antes` deu «unbalanced parenthesis at position 123». Contorno encontrado NA DATA 2026-09-27 foi encurtar o `antes` para um trecho sem aspas.
+2026-09-27 — duas cartas de `fila enviar` no mesmo lote, para caixas diferentes (engenharia e gestao-estrategica), voltaram o mesmo id e o mesmo sha de poda; `fila status gestao-estrategica` recusou (caixa alheia). Nenhum contorno; a entrega da segunda não foi conferida.
+2026-09-27 — `mesa item <chapeu> "<texto>"` deu exit 2 (argumento não reconhecido). Contorno encontrado NA DATA 2026-09-27 foi `mesa item <chapeu> --ato <texto> --alvo <alvo>`.
