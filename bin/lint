@@ -247,7 +247,8 @@ def main() -> int:
         print(f"lint: {e.msg}", file=sys.stderr)
         return e.exit_code
 
-    if alvo:
+    # em alcance o alvo e "<sujeito> <fonte>", nao caminho: nao se resolve no repo
+    if alvo and classe != "alcance":
         try:
             resolver_alvo(raiz_repo, alvo)
         except ErroBancada as e:
