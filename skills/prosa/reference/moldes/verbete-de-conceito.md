@@ -1,6 +1,6 @@
 # molde — verbete de conceito
 
-Página de wiki (Inteligência de Base). Régua fina: `spec_styleguide-da-wiki.md` §3.2 (fonte).
+Página de wiki (conhecimento em geral). Régua fina: styleguide §3.2 (fonte: `acervo ler casa padrao styleguide-da-wiki`).
 
 Distintivo: define um conceito da casa; a 1ª frase é a definição. Molde já lavrado (minuta 0022).
 
