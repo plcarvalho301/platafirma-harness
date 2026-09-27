@@ -10,11 +10,11 @@
 -- segredos em /srv/platafirma/casa/segredos/jaiminho/: a ordem foi apagar o codigo, e a
 -- conta fica.
 --
--- Idempotente: delete por slug; rodar de novo nao acha nada. Sem instancia dependente
--- medida em 27/09/2026 (`acervo listar topologia jaiminho --completo`: instancias -).
+-- Idempotente: delete por slug; rodar de novo nao acha nada. A stack tinha uma linha
+-- dependente em acervo.capacidade_roda_em_stack (FK), que sai primeiro. `migrar aplicar`
+-- ja abre a transacao: sem begin/commit aqui. Aplicada em rag em 27/09/2026.
 
-begin;
+delete from acervo.capacidade_roda_em_stack
+ where stack_id in (select id from acervo.stack where slug = 'jaiminho');
 
 delete from acervo.stack where slug = 'jaiminho';
-
-commit;
