@@ -19,17 +19,27 @@ def _sh(args: list[str], cwd: Optional[str | Path] = None) -> tuple[int, str, st
         return 1, "", str(e)
 
 
-def _conectores_do_produtor(prod: dict, harness_dir: Path) -> tuple[set[str], Optional[str]]:
+def _obter_harness_dir(harness_dir: Optional[Path | str] = None) -> Path:
+    if harness_dir is not None:
+        return Path(harness_dir)
+    env_h = os.environ.get("PF_HARNESS_DIR")
+    if env_h:
+        return Path(env_h)
+    return Path(__file__).resolve().parents[2]
+
+
+def _conectores_do_produtor(prod: dict, harness_dir: Optional[Path | str] = None) -> tuple[set[str], Optional[str]]:
+    hdir = _obter_harness_dir(harness_dir)
     tipo = prod.get("tipo")
     if tipo == "arquivo-rastreado":
-        caminho = harness_dir / prod.get("caminho", ".mcp.json")
+        caminho = hdir / prod.get("caminho", ".mcp.json")
         try:
             with open(caminho, encoding="utf-8") as f:
                 return set(json.load(f).get("mcpServers", {})), None
         except (OSError, ValueError) as e:
             return set(), f"{prod.get('caminho')}: {e}"
     if tipo == "bash-heredoc-json":
-        caminho = harness_dir / prod.get("arquivo", "")
+        caminho = hdir / prod.get("arquivo", "")
         marcador = prod.get("marcador", "JSON")
         try:
             texto = open(caminho, encoding="utf-8").read()
@@ -55,7 +65,7 @@ def _conectores_do_produtor(prod: dict, harness_dir: Path) -> tuple[set[str], Op
             return set(), f"heredoc de {prod.get('arquivo')} nao e JSON valido: {e}"
         return set(dado.get("mcpServers", {})), None
     if tipo == "codigo":
-        caminho = harness_dir / prod.get("arquivo", "")
+        caminho = hdir / prod.get("arquivo", "")
         simbolo = prod.get("simbolo", "")
         try:
             import ast
@@ -78,16 +88,17 @@ def _conectores_do_produtor(prod: dict, harness_dir: Path) -> tuple[set[str], Op
     return set(), f"tipo de produtor desconhecido: {tipo!r}"
 
 
-def _texto_da_fita(harness_dir: Path) -> list[str]:
+def _texto_da_fita(harness_dir: Optional[Path | str] = None) -> list[str]:
+    hdir = _obter_harness_dir(harness_dir)
     alvos = []
     for sub in ("personas", "tool-manifest"):
-        d = harness_dir / sub
+        d = hdir / sub
         if not d.is_dir():
             continue
         for p in d.iterdir():
             if p.name.endswith(".md"):
                 alvos.append(str(p))
-    skills = harness_dir / "skills"
+    skills = hdir / "skills"
     if skills.is_dir():
         for sub in skills.iterdir():
             md = sub / "SKILL.md"
@@ -103,13 +114,15 @@ def _texto_da_fita(harness_dir: Path) -> list[str]:
     return alvos
 
 
-def _tools_citadas(linha: str, padrao: re.Pattern) -> list[str]:
-    return [m.group(1) or m.group(2) for m in padrao.finditer(linha) if m.group(1) or m.group(2)]
+def _tools_citadas(linha: str, padrao: re.Pattern):
+    for m in padrao.finditer(linha):
+        yield m.group(1) or m.group(2)
 
 
-def _quebradas_no_staged(harness_dir: Path, padrao: re.Pattern, servidas: set[str]) -> list[tuple[str, int, str]]:
-    carregados = {os.path.relpath(c, harness_dir) for c in _texto_da_fita(harness_dir)}
-    rc, saida, _ = _sh(["git", "diff", "--cached", "--unified=0"], cwd=harness_dir)
+def _quebradas_no_staged(padrao: re.Pattern, servidas: set[str], harness_dir: Optional[Path | str] = None) -> list[tuple[str, int, str]]:
+    hdir = _obter_harness_dir(harness_dir)
+    carregados = {os.path.relpath(c, hdir) for c in _texto_da_fita(hdir)}
+    rc, saida, _ = _sh(["git", "diff", "--cached", "--unified=0"], cwd=hdir)
     if rc != 0:
         return []
     achados, arquivo, linha_n = [], None, 0
@@ -225,7 +238,7 @@ def verificar_superficie(
 
     # 3. Quebradas (texto da fita citando tool fora de todo conector)
     if staged:
-        quebradas = _quebradas_no_staged(harness_dir, padrao, servidas)
+        quebradas = _quebradas_no_staged(padrao, servidas, harness_dir)
     else:
         quebradas = []
         for caminho in _texto_da_fita(harness_dir):

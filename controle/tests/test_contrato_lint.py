@@ -50,9 +50,9 @@ def test_lint_sem_argumentos_exit_2():
         assert classe in saida
 
 
-def test_lint_ajuda_exit_0():
+def test_lint_ajuda_exit_2():
     p = _rodar_lint("--ajuda")
-    assert p.returncode == 0
+    assert p.returncode == 2
     assert "uso:" in p.stdout
     assert "classes:" in p.stdout
 

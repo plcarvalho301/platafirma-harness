@@ -165,7 +165,7 @@ def main() -> int:
     primeiro = argv[0]
     if primeiro in ("--ajuda", "--help", "-h", "ajuda"):
         imprimir_uso(sys.stdout)
-        return 0
+        return 2
 
     # Trata atos legados (rodar, detectar)
     if primeiro == "rodar":

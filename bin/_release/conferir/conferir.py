@@ -123,6 +123,15 @@ import resultado
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "..", "lib"))
 import raizes  # noqa: E402
 
+# Predicados extraídos para bin/_lint (card #3153)
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", ".."))
+from _lint.superficie import (  # noqa: E402
+    _conectores_do_produtor,
+    _texto_da_fita,
+    _tools_citadas,
+    _quebradas_no_staged,
+)
+
 
 def _raiz_bancada():
     """RAIZ e a bancada declarada da conta; PF_AI_DIR e override explicito e sai
@@ -1138,59 +1147,6 @@ def conferir_commit(alvo, como_json=False):
 HARNESS = os.environ.get("PF_HARNESS_DIR", os.path.join(RAIZ, "platafirma-harness"))
 
 
-def _texto_da_fita():
-    """Arquivos que a FITA carrega: pacote de abertura mais skills plantadas.
-
-    Nao e a lista do que existe no harness — e a do que atravessa para o giro
-    headless. Texto que a fita nao carrega pode nomear tool MCP a vontade.
-    """
-    alvos = []
-    for sub in ("personas", "tool-manifest"):
-        d = os.path.join(HARNESS, sub)
-        if not os.path.isdir(d):
-            continue
-        for nome in sorted(os.listdir(d)):
-            if nome.endswith(".md"):
-                alvos.append(os.path.join(d, nome))
-    skills = os.path.join(HARNESS, "skills")
-    if os.path.isdir(skills):
-        for nome in sorted(os.listdir(skills)):
-            md = os.path.join(skills, nome, "SKILL.md")
-            if not os.path.isfile(md):
-                continue
-            with open(md, encoding="utf-8", errors="replace") as f:
-                cabeca = f.read(2000)
-            # So a skill plantada atravessa: `cadeiras:` ausente ou `nenhuma`
-            # significa que ela nunca chega na fita (bin/chat, planta_skills).
-            m = re.search(r"^cadeiras:\s*(.+)$", cabeca, re.M)
-            if m and "nenhuma" not in m.group(1).lower():
-                alvos.append(md)
-    return alvos
-
-
-def _quebradas_no_staged(padrao, servidas):
-    """Linhas ADICIONADAS pelo commit em curso, nos arquivos que a fita carrega."""
-    carregados = {os.path.relpath(c, HARNESS) for c in _texto_da_fita()}
-    rc, saida, _ = sh(["git", "-C", HARNESS, "diff", "--cached", "--unified=0"])
-    if rc != 0:
-        return []
-    achados, arquivo, linha_n = [], None, 0
-    for linha in saida.split("\n"):
-        if linha.startswith("+++ b/"):
-            arquivo = linha[6:].strip()
-            continue
-        if linha.startswith("@@"):
-            m = re.search(r"\+(\d+)", linha)
-            linha_n = int(m.group(1)) if m else 0
-            continue
-        if not linha.startswith("+") or linha.startswith("+++"):
-            continue
-        if arquivo in carregados:
-            for t in _tools_citadas(linha[1:], padrao):
-                if t not in servidas:
-                    achados.append((arquivo, linha_n, t))
-        linha_n += 1
-    return achados
 
 
 # --- arranque em cwd: ponteiro, nunca copia ---------------------------------
@@ -1384,79 +1340,6 @@ def _canonico_da_cadeira(cadeira):
     return m.group(1) if m else cadeira
 
 
-def _conectores_do_produtor(prod):
-    """Nomes de conector que o PRODUTOR de uma superficie escreve. (nomes, erro).
-
-    Dois tipos, e nenhum depende de haver cwd vivo:
-      codigo            — dict literal no fonte (ex. CONECTORES em bin/chat), lido
-                          por AST. Sem importar o modulo: `bin/chat` tem efeito no
-                          import e o gate nao pode dispara-lo.
-      arquivo-rastreado — o proprio `.mcp.json` da raiz do repo, que o git replica
-                          para cada worktree. O produtor, aqui, e o git.
-    """
-    tipo = prod.get("tipo")
-    if tipo == "arquivo-rastreado":
-        caminho = os.path.join(HARNESS, prod.get("caminho", ".mcp.json"))
-        try:
-            with open(caminho, encoding="utf-8") as f:
-                return set(json.load(f).get("mcpServers", {})), None
-        except (OSError, ValueError) as e:
-            return set(), f"{prod.get('caminho')}: {e}"
-    if tipo == "bash-heredoc-json":
-        # entrada.sh nao e Python: escreve o mcp_config.json do agy via heredoc bash
-        # (`cat > arquivo <<MARCADOR ... MARCADOR`), reescrito a cada boot. O parser
-        # aqui e do HEREDOC, nunca do mcp_config.json que ele produz dentro do
-        # conteiner — a distincao importa: medir o script e medir o que TODO boot
-        # futuro grava; ler o arquivo produzido seria medir uma instancia, e essa
-        # ja existe como o check de endpoint (#165), que prova mais (conecta de
-        # verdade) do que uma leitura de arquivo provaria.
-        caminho = os.path.join(HARNESS, prod.get("arquivo", ""))
-        marcador = prod.get("marcador", "JSON")
-        try:
-            texto = open(caminho, encoding="utf-8").read()
-        except OSError as e:
-            return set(), f"{prod.get('arquivo')}: {e}"
-        quebra = chr(10)
-        marca_abre = "<<" + marcador
-        pos = texto.find(marca_abre)
-        if pos == -1:
-            return set(), f"heredoc <<{marcador} nao encontrado em {prod.get('arquivo')}"
-        linhas_apos = texto[pos + len(marca_abre):].split(quebra)[1:]
-        corpo, fechou = [], False
-        for linha in linhas_apos:
-            if linha.strip() == marcador:
-                fechou = True
-                break
-            corpo.append(linha)
-        if not fechou:
-            return set(), f"heredoc <<{marcador} nao fechou em {prod.get('arquivo')}"
-        try:
-            dado = json.loads(quebra.join(corpo))
-        except ValueError as e:
-            return set(), f"heredoc de {prod.get('arquivo')} nao e JSON valido: {e}"
-        return set(dado.get("mcpServers", {})), None
-    if tipo == "codigo":
-        caminho = os.path.join(HARNESS, prod.get("arquivo", ""))
-        simbolo = prod.get("simbolo", "")
-        try:
-            import ast
-            arvore = ast.parse(open(caminho, encoding="utf-8").read())
-        except (OSError, SyntaxError) as e:
-            return set(), f"{prod.get('arquivo')}: {e}"
-        for no in ast.walk(arvore):
-            if not isinstance(no, ast.Assign):
-                continue
-            for alvo in no.targets:
-                if isinstance(alvo, ast.Name) and alvo.id == simbolo:
-                    if isinstance(no.value, ast.Dict):
-                        nomes = set()
-                        for k in no.value.keys:
-                            if isinstance(k, ast.Constant) and isinstance(k.value, str):
-                                nomes.add(k.value)
-                        return nomes, None
-                    return set(), f"{simbolo} nao e dict literal"
-        return set(), f"{simbolo} nao encontrado em {prod.get('arquivo')}"
-    return set(), f"tipo de produtor desconhecido: {tipo!r}"
 
 
 # CARD #165. `agy` (Jaiminho, Antigravity CLI) e a unica superficie cujo conector
@@ -1740,9 +1623,6 @@ def _mcp_jsons_da_superficie(nome):
     return []
 
 
-def _tools_citadas(linha, padrao):
-    for m in padrao.finditer(linha):
-        yield m.group(1) or m.group(2)
 
 
 
