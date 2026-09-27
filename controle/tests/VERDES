@@ -39,3 +39,4 @@ tests/test_casa_arvore.py
 tests/test_isolamento.py
 tests/test_contrato_acesso.py
 tests/test_contrato_acervo.py
+tests/test_contrato_organizacao.py

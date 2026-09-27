@@ -138,7 +138,8 @@ def imprimir_uso(stream=sys.stdout):
     print("uso:", file=stream)
     print("  lint <classe> <repo>[@<chave>] [<alvo>] [--staged] [--json]", file=stream)
     print("  lint commit <arquivo>|- [--json]", file=stream)
-    print("  lint card <arquivo>|- [<repo>] [--json]\n", file=stream)
+    print("  lint card <arquivo>|- [<repo>] [--json]", file=stream)
+    print("  lint organizacao <repo> [<alvo>] [--todas]   --todas inclui os bloqueantes no relatorio (contagem; quem barra e o pre-commit)\n", file=stream)
     print("classes:", file=stream)
     for c, info in CLASSES_LINT.items():
         lista_desc = f"{info['tipo']} {info['chave']}" if info['tipo'] == 'lista-de-verificacao' else info['tipo']
@@ -157,7 +158,8 @@ def main() -> int:
     # Flags globais
     como_json = "--json" in argv
     staged = "--staged" in argv
-    argv = [a for a in argv if a not in ("--json", "--staged")]
+    todas = "--todas" in argv
+    argv = [a for a in argv if a not in ("--json", "--staged", "--todas")]
 
     if not argv:
         imprimir_uso(sys.stderr)
@@ -262,7 +264,7 @@ def main() -> int:
     # 3. Classes com lista que exigem acervo (organizacao, prosa, testes)
     if classe == "organizacao":
         try:
-            apontamentos, chv, rev = verificar_organizacao(raiz_repo, alvo=alvo)
+            apontamentos, chv, rev = verificar_organizacao(raiz_repo, alvo=alvo, com_bloqueantes=todas)
             return relatorio_lint(classe, alvo_ancora, apontamentos, chv, rev=rev, como_json=como_json)
         except ValueError as e:
             rc, msg = e.args
