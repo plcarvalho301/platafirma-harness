@@ -1,7 +1,7 @@
 """PEP reutilizável — o mesmo ponto de decisão para qualquer servidor da casa.
 
-Extraído de `jaiminho-server/server.py` (20/08/2026, ordem do dono). Motivo: até
-hoje só UM servidor tinha PEP, e por isso só UM bot tinha acesso autorizado por
+Extraído do servidor do canal externo (20/08/2026, ordem do dono). Motivo: até
+então só UM servidor tinha PEP, e por isso só UM bot tinha acesso autorizado por
 sujeito. A ordem é outra — a wiki é alcançável por qualquer bot autenticado e
 autorizado no PAP, independente de onde ele roda. Autorização é por SUJEITO; conta
 de SO e rede não entram nesta conta.

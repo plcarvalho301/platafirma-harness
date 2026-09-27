@@ -38,7 +38,7 @@ superficies:
     servico: malha msg (valkey/streams) via verbo fila
     ingress: loopback
     alcancavel: loopback
-    rede: so loopback; o canal externo que passava pelo jaiminho-server saiu (card #3117)
+    rede: so loopback; o canal externo saiu (card #3117)
     pep: false
     portao: 'a medir: verbo fila valida destinatario pela arvore de personas, sem consulta ao PDP por sujeito'
     acl_canonica: null

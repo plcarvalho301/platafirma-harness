@@ -29,7 +29,7 @@ com o raio de dano (blast radius), e o que a containerização resolve — e o q
 | # | Vetor | Blast radius | Severidade |
 |---|-------|-------------|------------|
 | V1 | **Execução arbitrária** — `run_command` + interpretadores (`python3`/`perl`/`node`) | qualquer coisa sob `claudinho` | é o vetor-mãe; o #2436 ataca na raiz |
-| V2 | **Docker rootless → stack de produção** — o socket rootless controla `keycloak`, `oauth2-proxy`, `identidade-db`, `jaiminho`: `exec`, `inspect` (lê env/segredos), `stop`, recreate | **produção inteira + segredos dos containers**, sem virar root no host | **ALTO** (maior raio real) |
+| V2 | **Docker rootless → stack de produção** — o socket rootless controla `keycloak`, `oauth2-proxy`, `identidade-db`: `exec`, `inspect` (lê env/segredos), `stop`, recreate | **produção inteira + segredos dos containers**, sem virar root no host | **ALTO** (maior raio real) |
 | V3 | **Egresso irrestrito + transporte** — `curl`/`wget`/`nc`/`socat` e saída livre (`http=200` p/ internet) | download de payload, reverse shell, exfiltração | **ALTO** |
 | V4 | **Toolchain de compilação** — `gcc`/`cc`/`make` | compilar exploit / módulo | presente, **nunca usado** |
 | V5 | **Namespace/mount** — `nsenter`/`unshare`/`chroot`/`mount` | pouco sem cap root hoje; `nsenter` entra em ns de container rootless | presente, **nunca usado** |

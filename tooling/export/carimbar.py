@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Gera o artefato classe B (copiado-pra-fora) com carimbo de frescor — spec S2.
 
-    python3 tooling/export/carimbar.py skills/osint/SKILL.md [outra/SKILL.md ...]
+    python3 tooling/export/carimbar.py skills/prosa/SKILL.md [outra/SKILL.md ...]
 
 Saída: dist/<nome-da-skill>/ com o SKILL.md carimbado e os arquivos-irmãos da skill
 (ex.: reference/), mais dist/<nome-da-skill>.zip com a pasta inteira.

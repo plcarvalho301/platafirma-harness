@@ -81,9 +81,8 @@ def _cadeiras_disponiveis() -> list[str]:
     # registro/eventos-org.jsonl), nao varredura de diretorio de persona.
     # canone/organizacao.md: a lista de cadeiras ativas sai de `persona foto`,
     # a chave e o slug. Varrer personas/persona-*.md era layout morto (as
-    # cadeiras migraram para abertura/<cadeira>/persona.md) e listava
-    # jaiminho-fabrica, que nao e cadeira (organizacao.md: "nao tem cadeira
-    # nem vinculo"). Verbo por tras, nao substrato.
+    # cadeiras migraram para abertura/<cadeira>/persona.md) e listava persona de
+    # quem nao e cadeira. Verbo por tras, nao substrato.
     r = chamar(["persona", "foto", "--json"], timeout=15)
     if not r.ok or not isinstance(r.dados, dict):
         return []

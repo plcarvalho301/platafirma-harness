@@ -117,7 +117,7 @@ def manifesto(trab: "M.Trabalho", *, md: bool = False) -> dict[str, Any]:
 
 
 def render_md(slug: str, linhas: list[dict[str, Any]]) -> str:
-    """Vista humana (molde skills/osint §5). Uma fonte, duas vistas."""
+    """Vista humana. Uma fonte, duas vistas."""
     out = [f"# Manifesto de pesquisa — trabalho `{slug}`", "", f"{len(linhas)} atos.", ""]
     for i, ln in enumerate(linhas, 1):
         alvo = ln.get("url") or ln.get("consulta") or ln.get("identificador") or "—"

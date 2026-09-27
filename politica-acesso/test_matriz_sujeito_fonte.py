@@ -39,8 +39,8 @@ PERMITE, NEGA = True, False
 # Sujeitos reais de `sujeitos.yaml`, mais um que não existe. O que não está na projeção
 # não tem atributo, e atributo ausente nega — é a régua, não a exceção.
 DONO = "megafone"                  # operador, credencial própria no realm
-EXTERNO = "jaiminho"               # EX-pesquisador-externo: expurgado 02/09/2026 (11a7603 + papel removido). Sujeito e papel fora do PDP: NEGA tudo
-FABRICA = "jaiminho-fabrica"       # fornecedor (org:0020): CONTA removida do sujeitos.yaml em 22/09/2026 (conta-bot roda na maquina do dono, authz de saida no forge). Papel `fornecedor` fica no PAP para terceiros do #180; sem titular hoje, NEGA por atributo ausente
+EXTERNO = "ex-externo"             # sujeito sem projecao: o papel pesquisador-externo saiu do PDP em 02/09/2026. NEGA tudo
+FABRICA = "ex-fornecedor"          # sujeito sem projecao: nenhum titular do papel `fornecedor` em sujeitos.yaml desde o card #3117. NEGA por atributo ausente
 ESTRANHO = "cadeira-que-nao-existe"
 
 # (sujeito, fonte, alvo, esperado, por quê)
@@ -54,7 +54,7 @@ MATRIZ: list[tuple[str, str, str, bool, str]] = [
     (DONO, "acervo", "acervo:pessoal/*", PERMITE, "coleção pessoal é do titular"),
 
     # --- o ex-externo: sujeito expurgado em 02/09/2026 — atributo ausente nega tudo --
-    # O jaiminho OSINT saiu do realm (client L0R8OJ desabilitado), do sujeitos.yaml
+    # O braco OSINT saiu do realm (client L0R8OJ desabilitado), do sujeitos.yaml
     # (11a7603) e o papel `pesquisador-externo` saiu do PAP no mesmo dia. Estas linhas
     # sao a prova de que nada do que ele alcancava sobreviveu ao expurgo.
     (EXTERNO, "acervo", "acervo:firma/*", NEGA, "sujeito fora do PDP"),
@@ -62,13 +62,13 @@ MATRIZ: list[tuple[str, str, str, bool, str]] = [
     (EXTERNO, "wiki", "wiki:principal/*", NEGA, "concessao de wiki saiu com o papel"),
     (EXTERNO, "wiki", "wiki:PlataFirma/*", NEGA, "a casa por dentro segue vedada"),
     (EXTERNO, "wiki", "wiki:Operar/*", NEGA, "idem"),
-    (EXTERNO, "fila", "caixa:jaiminho", NEGA, "canal exclusivo removido em 11a7603"),
+    (EXTERNO, "fila", "caixa:ex-externo", NEGA, "canal exclusivo removido em 11a7603"),
     (EXTERNO, "fila", "caixa:claudinho-IA", NEGA, "idem, a outra ponta"),
     (EXTERNO, "board", "item:*", NEGA, "nunca teve"),
     (EXTERNO, "mesa", "mem:*", NEGA, "nunca teve"),
     (EXTERNO, "registro", "*", NEGA, "sujeito fora do PDP"),
 
-    # --- a fábrica: CONTA jaiminho-fabrica removida em 22/09/2026. O papel `fornecedor`
+    # --- a fábrica: sem titular do papel `fornecedor` desde o card #3117. O papel
     # fica no PAP (regras vivas para o #180), mas sem titular na projecao nao ha o que
     # exercitar aqui: sujeito ausente cai em "atributo ausente nega", ja coberto por
     # ESTRANHO abaixo. Quando um terceiro receber o papel, a matriz dele entra aqui.

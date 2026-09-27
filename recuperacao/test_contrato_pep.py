@@ -23,7 +23,7 @@ RAIZ = Path(__file__).resolve().parents[1]
 POLITICA = RAIZ / "politica-acesso"
 
 OPERADOR = "megafone"          # papel `operador`, dominio `plataforma`
-EXTERNO = "jaiminho"           # papel `pesquisador-externo`
+EXTERNO = "ex-externo"         # sujeito sem projecao (papel `pesquisador-externo` saiu)
 
 
 @pytest.fixture

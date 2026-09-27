@@ -1,92 +1,25 @@
-"""Ensaio fim a fim do canal mediado, com sujeito de mentira.
+"""Ensaio da porta (ops-server): testes hermeticos por leva, abaixo.
 
-Nao toca no realm: identidade e remit de claudinho-seguranca. O sujeito `jaiminho`
-entra pela rota de emergencia (token estatico + OPS_USER), que percorre exatamente
-o mesmo caminho de PEP, PDP, rotas e malha msg que o JWT percorreria.
+O roteiro fim a fim do canal mediado do colaborador externo que abria este arquivo
+saiu com as rotas /sessao (abertura) e /msg da porta, no card #3117.
 """
-import json
+import json  # noqa: F401 — blocos abaixo usam
 import os
-import subprocess
+import subprocess  # noqa: F401
 
-TOKEN = "ensaio-jaiminho-13082026"
-os.environ["OPS_USER"] = "jaiminho"
-os.environ["OPS_AUTH_TOKEN"] = TOKEN
+os.environ["OPS_USER"] = "ensaio"
+os.environ["OPS_AUTH_TOKEN"] = "ensaio-porta"
 os.environ["OPS_NAME"] = "ops-ensaio"
 os.environ["OPS_TOKEN_ESTATICO_ATE"] = "2026-09-30"
 
 import server as s                                          # noqa: E402
-from starlette.testclient import TestClient                 # noqa: E402
-
-H = {"Authorization": f"Bearer {TOKEN}"}
-c = TestClient(s.app)
-
-
-def passo(n, titulo, r, extrai=None):
-    tipo = r.headers.get("content-type", "")
-    corpo = r.json() if tipo.startswith("application/json") else r.text
-    if extrai and isinstance(corpo, dict):
-        corpo = extrai(corpo)
-    print(f"\n[{n}] {titulo}  -> HTTP {r.status_code}")
-    print(json.dumps(corpo, ensure_ascii=False, indent=1)[:900])
-    return r
-
-
-passo(1, "abrir sessao", c.get("/sessao", headers=H), lambda d: {
-    "sujeito": d.get("sujeito"),
-    "acoes": d.get("acoes"),
-    "persona": "ausente" if d.get("persona", {}).get("ausente") else "presente",
-    "manifesto_bytes": len(d.get("manifesto", {}).get("content", "")),
-    "fila": d.get("fila")})
-
-passo(2, "ler a propria caixa", c.get("/msg", headers=H))
-
-r = passo(3, "mandar recado ao Elias (permitido)", c.post("/msg", headers=H, json={
-    "para": "ia", "tipo": "handoff", "assunto": "ENSAIO — sera apagado",
-    "corpo": "ensaio fim a fim do canal mediado, 13/08. Mensagem de teste."}))
-msgid = r.json().get("msgid")
-
-passo(4, "mandar para ti (deve NEGAR)", c.post("/msg", headers=H, json={
-    "para": "ti", "tipo": "pedido", "assunto": "nao devia passar", "corpo": "x"}))
-
-passo(5, "ler caixa alheia por query string (nao ha parametro de caixa)",
-      c.get("/msg?caixa=ti", headers=H), lambda d: {"caixa_lida": d.get("caixa")})
-
-print("\n[6] tool run_command pelo PEP (deve NEGAR)")
-print(json.dumps(s._autoriza("run_command", "run_command", "comando", "id",
-                             s.DOM_RUNTIME, ident={"sujeito": "jaiminho"}),
-                 ensure_ascii=False, indent=1))
-
-passo(7, "encerrar a fita", c.post("/sessao/encerrar", headers=H,
-                                  json={"nota": "ensaio: canal e sessao verificados."}))
-
-passo(8, "sem token (deve dar 401)", c.get("/sessao"))
-
-# limpeza: o ensaio nao deixa lixo na caixa do Elias nem na mesa
-try:
-    f = s._fila_mod()
-    rc = f.r_conn()
-    apagadas = 0
-    for mid, campos in rc.xrange("caixa:ia"):
-        if campos.get("id") == msgid:
-            rc.xdel("caixa:ia", mid)
-            apagadas += 1
-    print(f"\n[limpeza] mensagem de ensaio removida da caixa do Elias: {apagadas}")
-    p = subprocess.run([str(s.BIN_VERBOS / "mesa"), "limpa", "jaiminho"],
-                       capture_output=True, text=True,
-                       env={**os.environ, "PF_CADEIRA": "jaiminho"})
-    print("[limpeza] mesa:", (p.stdout or p.stderr).strip())
-except Exception as e:
-    print(f"\n[limpeza] pulada: {e}")
 
 
 # ======================================================================
 # Leva 1 — economia de giro (docs/ordem-economia-de-giro.md, apagado na
 # Leva 2): sessao_id nas genericas + auditoria de
 # identidade (A2), gate transparente em run_command (A3), renome leva (A4).
-# Hermetico DAQUI PRA BAIXO: redis e _quem() sao dublados nestes testes novos,
-# nada deles toca o Valkey real. O script de ensaio ACIMA (linhas 1-76, canal
-# mediado do jaiminho) e preexistente, roda a importacao do modulo e toca
-# infra real (Valkey, fila) — nao foi tocado por esta leva.
+# Hermetico: redis e _quem() sao dublados nestes testes, nada toca o Valkey real.
 # ======================================================================
 import asyncio
 import json as _json
@@ -1023,7 +956,7 @@ async def test_superficie_code():
 
 @pytest.mark.anyio
 async def test_superficie_sem_header_azp_fabrica(tmp_path):
-    """Sem header, azp jaiminho-fabrica -> fabrica -> inteiras."""
+    """Sem header, azp mapeado para fabrica -> fabrica -> inteiras."""
     (tmp_path / "current" / "abertura" / "ia").mkdir(parents=True)
     (tmp_path / "current" / "abertura" / "dono.md").write_text("CONDUTA FAKE")
     (tmp_path / "current" / "abertura" / "ia" / "persona.md").write_text("PERSONA FAKE")
@@ -1033,7 +966,8 @@ async def test_superficie_sem_header_azp_fabrica(tmp_path):
     Fake = _fake_redis_cls()
     with patch.object(s.mcp, "get_context", return_value=ctx_mock), \
          patch.object(s, "_autoriza", return_value=None), \
-         patch.object(s, "_quem", return_value={"sub": "e57eadb1", "azp": "jaiminho-fabrica"}), \
+         patch.object(s, "_quem", return_value={"sub": "fab-teste", "azp": "fabrica-teste"}), \
+         patch.object(s, "_mapa_azp_superficie", return_value={"fabrica-teste": "fabrica"}), \
          patch.object(s, "redis") as _rmod, \
          patch.object(s, "_montar", side_effect=_fake_montar_superficie), \
          patch.dict("os.environ", {"PF_ABERTURA_DIR": str(tmp_path)}):
