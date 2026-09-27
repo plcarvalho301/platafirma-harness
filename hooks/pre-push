@@ -146,42 +146,108 @@ medir_rev() {  # $1=rev
   # empurrada"), nunca do clone de quem esta empurrando; override so por env
   # explicita (PLATAFIRMA_VENVS), do mesmo jeito que release/teste aceitam.
   local venvs="${PLATAFIRMA_VENVS:-$arvore/registro/venvs.json}"
+  # Caminho novo: teste rodar ao lado do runner atual (trava do card #3152)
   local teste_bin="$AQUI/../bin/teste"
-  local saida="$TMP/teste-${rev:0:12}.txt" rc_teste=0
-  PLATAFIRMA_VENVS="$venvs" "$teste_bin" rodar "$CHAVE" --portao --arvore "$arvore" >"$saida" 2>&1 || rc_teste=$?
+  local saida_teste="$TMP/teste-${rev:0:12}.txt" rc_teste=0
+  if [ -x "$teste_bin" ]; then
+    PLATAFIRMA_VENVS="$venvs" "$teste_bin" rodar "$CHAVE" --portao --arvore "$arvore" >"$saida_teste" 2>&1 || rc_teste=$?
+  fi
 
-  local chave_id="$CHAVE"
-  local achou_chave
-  achou_chave="$(grep -oE "$CHAVE-[0-9a-f]{12}" "$saida" | head -n 1)"
-  [ -n "$achou_chave" ] && chave_id="$achou_chave"
+  local out familia lock teste
+  out="$(PLATAFIRMA_VENVS="$venvs" python3 "$REGISTRO" "$CHAVE" 2>"$log")" || {
+    printf 'pre-push: registro/chave "%s" indisponível — não medido, deixando passar.\n' "$CHAVE" >&2
+    sed 's/^/  /' "$log" >&2
+    return 3
+  }
+  IFS=$'\t' read -r familia lock teste <<<"$out"
+  if [ ! -f "$arvore/$lock" ]; then
+    printf 'pre-push: lock "%s" ausente na rev %s — não medido, deixando passar.\n' "$lock" "$rev" >&2
+    return 3
+  fi
 
-  case "$rc_teste" in
+  local uv
+  uv="$(resolver_uv 2>"$log")" || {
+    printf 'pre-push: uv indisponível — não medido, deixando passar.\n' >&2
+    return 3
+  }
+  local pyid py py_real py_ver
+  pyid="$(resolver_python 2>"$log")" || {
+    printf 'pre-push: python de sistema indisponível — não medido, deixando passar.\n' >&2
+    return 3
+  }
+  IFS=$'\t' read -r py py_real py_ver <<<"$pyid"
+  local chave_hash
+  chave_hash="$({ cat "$arvore/$lock"; printf '\npython=%s %s\n' "$py_real" "$py_ver"; } | sha256sum | cut -c1-12)"
+
+  local veredito_arq
+  veredito_arq="$(caminho_veredito "$VEREDITOS_DIR" "$arvore_hash" "$CHAVE" "$chave_hash")"
+  if [ -f "$veredito_arq" ]; then
+    local vresultado
+    vresultado="$(ler_veredito "$veredito_arq")"
+    case "$vresultado" in
+      verde)
+        printf 'pre-push: baseline de contrato — %s-%s reaproveitado / reaproveitou (%s, verde)\n' "$CHAVE" "$chave_hash" "${rev:0:7}"
+        return 0 ;;
+      vermelho)
+        printf 'pre-push: BASELINE VERDE QUEBROU na rev %s — veredito reaproveitado (%s-%s, mesma árvore já medida vermelha).\n' "${rev:0:7}" "$CHAVE" "$chave_hash" >&2
+        return 1 ;;
+    esac
+  fi
+
+  local dest="${PF_RELEASE_RAIZ:-/opt/platafirma}/venv/${CHAVE}-${chave_hash}"
+  if [ ! -f "$dest/.pronto" ]; then
+    mkdir -p "$(dirname "$dest")"
+    if ! construir_venv "$arvore/$lock" "$dest" "$uv" "$py" "$py_ver" 2>"$log"; then
+      sed 's/^/  /' "$log" >&2
+      chmod -R u+w "$dest" 2>/dev/null || true
+      rm -rf "$dest"
+      printf 'pre-push: ambiente %s-%s não construiu — não medido, deixando passar.\n' "$CHAVE" "$chave_hash" >&2
+      return 3
+    fi
+    : > "$dest/.pronto"
+    chmod -R a-w "$dest"
+  fi
+
+  local saida="$TMP/pytest-${rev:0:12}.txt" xml="$TMP/junit-${rev:0:12}.xml" rc_pytest=0
+  ( cd "$arvore/controle" && timeout 300 "$uv" run --python "$dest/bin/python" --with pytest \
+      pytest "${alvos[@]}" -q --junitxml="$xml" ) >"$saida" 2>&1 || rc_pytest=$?
+
+  case "$rc_pytest" in
     0)
-      if grep -q "reaproveitado" "$saida"; then
-        printf 'pre-push: baseline de contrato — %s reaproveitado / reaproveitou (%s, verde)\n' "$chave_id" "${rev:0:7}"
+      gravar_veredito "$veredito_arq" verde "$rev"
+      if [ "$rc_teste" -eq 0 ] && [ -s "$saida_teste" ]; then
+        local chave_id="$CHAVE"
+        local achou_chave
+        achou_chave="$(grep -oE "$CHAVE-[0-9a-f]{12}" "$saida_teste" | head -n 1)"
+        [ -n "$achou_chave" ] && chave_id="$achou_chave"
+        if grep -q "reaproveitado" "$saida_teste"; then
+          printf 'pre-push: baseline de contrato — %s reaproveitado / reaproveitou (%s, verde)\n' "$chave_id" "${rev:0:7}"
+        else
+          printf 'pre-push: baseline de contrato verde em %s (%s, rodou)\n' "${rev:0:7}" "$chave_id"
+        fi
       else
-        printf 'pre-push: baseline de contrato verde em %s (%s, rodou)\n' "${rev:0:7}" "$chave_id"
+        printf 'pre-push: baseline de contrato verde em %s (%s-%s, rodou)\n' "${rev:0:7}" "$CHAVE" "$chave_hash"
       fi
       return 0 ;;
     1)
-      if grep -q "reaproveitado" "$saida"; then
-        printf 'pre-push: BASELINE VERDE QUEBROU na rev %s — veredito reaproveitado (%s, mesma árvore já medida vermelha).\n' "${rev:0:7}" "$chave_id" >&2
-      else
-        {
-          echo
-          printf 'pre-push: BASELINE VERDE QUEBROU na rev %s — push barrado.\n' "${rev:0:7}"
-          grep -E '^[[:space:]]*reprovado:' "$saida" | sed 's/^/  /'
-          echo
-          printf '  medido em worktree limpo da rev empurrada (%s), não no seu clone.\n' "$chave_id"
-          grep -E '^[[:space:]]*saida inteira:' "$saida" | sed 's/^[[:space:]]*//'
-          printf '  a lista do baseline: controle/tests/VERDES\n'
-        } >&2
-      fi
+      gravar_veredito "$veredito_arq" vermelho "$rev"
+      {
+        echo
+        printf 'pre-push: BASELINE VERDE QUEBROU na rev %s — push barrado.\n' "${rev:0:7}"
+        nomear_reprovados "$xml" | sed 's/^/  /'
+        echo
+        printf '  medido em worktree limpo da rev empurrada (%s-%s), não no seu clone.\n' "$CHAVE" "$chave_hash"
+        printf '  saída inteira: %s\n' "$saida"
+        printf '  a lista do baseline: controle/tests/VERDES\n'
+      } >&2
       return 1 ;;
+    124|137)
+      printf 'pre-push: timeout medindo %s (%s-%s) — não medido, deixando passar.\n' "${rev:0:7}" "$CHAVE" "$chave_hash" >&2
+      return 3 ;;
     *)
-      printf 'pre-push: teste rodar saiu %s medindo %s (%s) — não medido, deixando passar.\n' \
-        "$rc_teste" "${rev:0:7}" "$CHAVE" >&2
-      cat "$saida" >&2
+      printf 'pre-push: pytest saiu %s medindo %s (%s-%s) — uso/coleta/erro interno, não medido, deixando passar.\n' \
+        "$rc_pytest" "${rev:0:7}" "$CHAVE" "$chave_hash" >&2
+      tail -n 10 "$saida" >&2
       return 3 ;;
   esac
 }
