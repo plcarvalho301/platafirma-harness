@@ -24,8 +24,7 @@ Régua de forma: `padrao diagramas`.
 
 | Diagrama | Mostra | Fonte |
 |---|---|---|
-| `posse-de-mensagem.svg` | Posse e leitura de mensagem na fila | `.d2`, `.mmd` |
+| `posse-de-mensagem.mmd.svg` | Posse e leitura de mensagem na fila | `posse-de-mensagem.mmd` |
 | `topologia-camadas.d2.svg` | Camadas da plataforma | `topologia-camadas.d2` |
 | `topologia-estratos.d2.svg` | Estratos da plataforma | `topologia-estratos.d2` |
-| `topologia-estratos.mmd.svg` | Estratos da plataforma (render Mermaid) | `topologia-estratos.mmd` |
 | — | Atos do motor sobre trilho (sem render) | `motor-atos-sobre-trilho.mmd` |
