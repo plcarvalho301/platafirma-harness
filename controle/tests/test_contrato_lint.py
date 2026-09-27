@@ -210,6 +210,41 @@ def test_lint_codigo_alvo_arquivo(bancada):
     assert "— repositorio»" in linha1
 
 
+def test_lint_codigo_alvo_em_subprojeto_roda_ruff_do_subprojeto(tmp_path):
+    # card #3074: raiz com bin/ (stack bash) e pyproject so em rag/ -- o alvo rag/ tem de
+    # rodar o ruff do subprojeto, nao o lint bash da raiz (que dava 0 apontamentos)
+    if not (shutil.which("ruff") or shutil.which("uvx")):
+        pytest.skip("ruff/uvx ausente no ambiente")
+    wt = tmp_path / "bancada" / "wt" / "mono" / "ti" / "fixture"
+    (wt / "bin").mkdir(parents=True)
+    (wt / "bin" / "ferramenta").write_text("#!/bin/sh\necho oi\n")
+    (wt / "rag" / "pacote").mkdir(parents=True)
+    (wt / "rag" / "pyproject.toml").write_text("[project]\nname='rag'\nversion='0'\n")
+    (wt / "rag" / "pacote" / "modulo.py").write_text("import os\n")
+    (wt / ".git").mkdir()
+    env = {"PLATAFIRMA_BANCADA": str(tmp_path / "bancada"), "PF_CADEIRA": "ti", "PF_SESSAO": ""}
+    for alvo in ("rag", "rag/pacote/modulo.py"):
+        p = _rodar_lint("codigo", "mono", alvo, env_extra=env)
+        assert p.returncode == 1, p.stdout + p.stderr
+        assert "rag/pacote/modulo.py:1" in p.stdout, p.stdout
+        assert "F401" in p.stdout, p.stdout
+        assert "-->" not in p.stdout, p.stdout
+
+
+def test_raiz_da_stack_sobe_ate_o_manifesto(tmp_path):
+    sys.path.insert(0, str(HARNESS_ROOT / "bin"))
+    from _lint.codigo import raiz_da_stack
+    (tmp_path / "bin").mkdir()
+    (tmp_path / "rag" / "a" / "b").mkdir(parents=True)
+    (tmp_path / "rag" / "ruff.toml").write_text("")
+    (tmp_path / "rag" / "a" / "b" / "c.py").write_text("")
+    raiz = tmp_path.resolve()
+    assert raiz_da_stack(raiz, "rag/a/b/c.py") == raiz / "rag"
+    assert raiz_da_stack(raiz, "rag") == raiz / "rag"
+    assert raiz_da_stack(raiz, "bin") == raiz
+    assert raiz_da_stack(raiz, None) == raiz
+
+
 def test_lint_card_stdin_sem_aceite_exit_1():
     corpo_sem_aceite = """# Card de Teste
 Negócio: #3119
