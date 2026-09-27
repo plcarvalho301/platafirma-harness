@@ -7,6 +7,8 @@ Type=oneshot
 # Da release, nunca de clone (card #3010): a unit sobrevive a bancada apagada.
 WorkingDirectory=/opt/platafirma/current/harness
 Environment=PATH=/opt/platafirma/current/harness/bin:/usr/local/bin:/usr/bin:/bin
+# Mesmo ambiente do ops-mcp: verbo que passa por API sem ele toma 401 (card #3147).
+EnvironmentFile=/home/claudinho/.config/ops/env
 ExecStart=/opt/platafirma/current/harness/bin/sinal
 # O verbo sai 1 quando ha servico fora — que e informacao, nao falha da coleta.
 # Sem isto o systemd marcaria a unit como failed toda vez que a plataforma
