@@ -677,9 +677,6 @@ def test_eixo_poda_sai_do_cabecalho_e_o_escopo_por_ato_vale():
     # 20/09: a forma curta `motor buscar "..."` (sem instancia) tambem e recuperacao
     assert s._cosmetica(motor, s._ato_efetivo(s._argv_verbo("bin/motor", "buscar", ["pergunta"])))
     s._PERFIS.clear()
-    descobrir = s._perfil_verbo("descobrir", str(bin_ / "descobrir"))
-    assert descobrir["poda_atos"] == () and s._cosmetica(descobrir, "qualquer assunto")
-    s._PERFIS.clear()
     acervo = s._perfil_verbo("acervo", str(bin_ / "acervo"))
     assert s._cosmetica(acervo, "casa") and not s._cosmetica(acervo, "listar")
     s._PERFIS.clear()

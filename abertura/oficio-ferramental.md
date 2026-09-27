@@ -37,7 +37,6 @@ conferir
 acesso
 descansar
 encerrar apelido:descansar
-descobrir
 persona
 seg
 sinal

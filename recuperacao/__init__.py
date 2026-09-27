@@ -1,26 +1,26 @@
 """`recuperacao` — o Recuperador: envelope único de leitura das seis fontes.
 
 Biblioteca importada, nunca subprocess (`arq:0064` §1). Vive no `ops-mcp` e em nenhum
-outro consumidor (`arq:0067`, spec §2). Os verbos `bin/recuperar`, `bin/descobrir` e `bin/situacao`
-são finos e importam daqui (arq:0085 §2).
+outro consumidor (`arq:0067`, spec §2). Os verbos `bin/recuperar` e `bin/situacao`
+são finos e importam daqui (arq:0085 §2). `descobrir` saiu do ar em 27/09/2026 (ordem do
+dono); o sucessor é `acervo listar obra obra --sobre <termo>` e `motor rag buscar`.
 
 F0 (card #2291) entrega o núcleo: envelope, enums, disjuntor e os testes de contrato.
 F1 acrescenta os adaptadores (#2298 e seguintes) e o PEP por fonte (#2303). F2 traz o
 cache por fonte e a instrumentação `rec:stat` (#2308). Roteamento derivado (#2304) e gate
 (F3) seguem fora.
-Verbos de leitura do acervo (#2952, #2953, arq:0085): `descobrir` e `situacao`.
+Verbo de leitura do acervo (#2953, arq:0085): `situacao`.
 
     from recuperacao import Envelope, Item, Procedencia, Versao, LinhaFonte
     from recuperacao import Cobertura, Casamento, Causa, VersaoTipo, Fonte
     from recuperacao import Painel, Disjuntor
     from recuperacao import PEP, Negativa, recusa_por_concessao
     from recuperacao import Cache, busca_com_cache
-    from recuperacao import descobrir, situacao
+    from recuperacao import situacao
 """
 
 from .cache import Cache, SemCache, busca_com_cache
 from .catalogo import Catalogo, Custo, CustoProibido, Leitor, LinhaCatalogo, monta
-from .descobrir import EIXOS_PADRAO, EIXOS_VALIDOS, descobrir
 from .disparo import Disparo, FonteAlcancada, SemDenominador, delta, serie_disparo
 from .disjuntor import Disjuntor, EstadoDisjuntor, Painel
 from .envelope import (
@@ -63,8 +63,6 @@ __all__ = [
     "Degrau",
     "Disjuntor",
     "Disparo",
-    "EIXOS_PADRAO",
-    "EIXOS_VALIDOS",
     "Envelope",
     "EstadoConceito",
     "EstadoDisjuntor",
@@ -99,7 +97,6 @@ __all__ = [
     "busca_com_cache",
     "classe",
     "delta",
-    "descobrir",
     "extrai_chaves",
     "fontes_citadas",
     "instrumenta",

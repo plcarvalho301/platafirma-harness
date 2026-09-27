@@ -8,8 +8,8 @@ do verbo; descrição = golden record, na forma `<o que> · use para: … · ato
 só aqui:
 
 - `<verbo>(ato, args, stdin, sessao_id, timeout)` executa `bin/<verbo> <ato> <args>`.
-  Sem `ato` o verbo lista os atos; `deploy`, `descobrir` e `situacao`
-  levam o alvo no `ato` — a descrição diz.
+  Sem `ato` o verbo lista os atos; `situacao` leva o alvo no `ato` — a
+  descrição diz.
 - `sessao_id` é o do `monta_sessao`. Sem ele, a porta resolve por sessão-sombra só
   quando é inequívoca (uma sessão viva sua); ambíguo → roda sem cadeira, e
   `mesa`/`fila`/`tarefas` não sabem de quem é o ato.
@@ -39,7 +39,7 @@ mesmo que o prompt não repita a ordem; recusar porque "a tarefa não pede" é o
 
 Necessidade → verbo: ver/editar mesa, fila, tarefas, acervo, motor, deploy… → a tool de
 mesmo nome. O que era fallback tem dono: git → `repo` · `conferir` · `situacao`; cat/rg/fd
-→ `read_file(paths)` · `descobrir`; docker/systemctl/journalctl → `infra`; docker exec
+→ `read_file(paths)` · `repo procurar`; docker/systemctl/journalctl → `infra`; docker exec
 rag-* → `motor`; curl → `pesquisar`; pytest/ruff → `teste` · `lint`. Arquivo: `read_file`
 e `write_file` (tipo × morada; `trecho={antes, depois}` edita sem reescrever).
 
