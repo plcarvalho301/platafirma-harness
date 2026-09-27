@@ -91,7 +91,7 @@ def _conectores_do_produtor(prod: dict, harness_dir: Optional[Path | str] = None
 def _texto_da_fita(harness_dir: Optional[Path | str] = None) -> list[str]:
     hdir = _obter_harness_dir(harness_dir)
     alvos = []
-    for sub in ("personas", "tool-manifest"):
+    for sub in ("personas", "tool-manifest", "docs"):
         d = hdir / sub
         if not d.is_dir():
             continue
