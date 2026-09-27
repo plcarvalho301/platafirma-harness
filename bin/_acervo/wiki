@@ -301,6 +301,57 @@ def ato_subir(a):
     print(f"ok: Arquivo:{nome} → {info.get('url', '(sem url)')}")
 
 
+def ato_ocultar_revisao(a):
+    """Tira o texto (e o resumo) de revisões antigas do histórico público: Action API
+    `revisiondelete`. Com o direito `suppressrevision` o bot suprime (nem administrador lê
+    pela interface); sem ele, oculta (só quem tem `deletedtext` lê). Os bytes seguem no
+    banco da wiki: apagar de vez é manutenção do MediaWiki no contêiner, não API.
+    Recusa a revisão corrente (esvazie a página antes, com `escrever casa pagina`).
+    Sem --apply: só mostra o plano."""
+    revids = sorted({int(r) for r in a.revid})
+    q = _get({"action": "query", "prop": "info|revisions", "revids": "|".join(map(str, revids)),
+              "rvprop": "ids|timestamp|user|size", "formatversion": 2})
+    qq = q.get("query", {})
+    ruins = qq.get("badrevids") or {}
+    faltam = [r.get("revid") for r in (ruins.values() if isinstance(ruins, dict) else ruins)]
+    if faltam:
+        morre(f"revisão inexistente: {', '.join(map(str, faltam))}", 1)
+    plano = []
+    for p in qq.get("pages", []):
+        for r in p.get("revisions", []):
+            if r["revid"] == p.get("lastrevid"):
+                morre(f"rev {r['revid']} é a corrente de '{p['title']}': esvazie a página antes "
+                      "(acervo escrever casa pagina) e oculte a rev antiga.", 2)
+            plano.append((p["title"], r["revid"], r.get("timestamp", "?"), r.get("size", "?")))
+    for titulo, rid, ts, tam in plano:
+        print(f"rev {rid} · {titulo} · {ts} · {tam} B")
+    if not a.apply:
+        print("plano seco: nada ocultado. --apply executa.")
+        return
+    _login()
+    ui = _get({"action": "query", "meta": "userinfo", "uiprop": "rights"})
+    direitos = set(ui.get("query", {}).get("userinfo", {}).get("rights", []))
+    if "deleterevision" not in direitos:
+        morre("a conta de bot não tem o direito deleterevision na wiki: conceder ao grupo "
+              "do bot em LocalSettings ($wgGroupPermissions[...]['deleterevision']).", 4)
+    suprime = "suppressrevision" in direitos
+    token = _csrf()
+    for titulo in sorted({t for t, *_ in plano}):
+        ids = [str(rid) for t, rid, *_ in plano if t == titulo]
+        res = _post({"action": "revisiondelete", "type": "revision", "target": titulo,
+                     "ids": "|".join(ids), "hide": "content|comment",
+                     "suppress": "yes" if suprime else "nochange",
+                     "reason": a.motivo, "token": token})
+        if "error" in res:
+            err = res["error"]
+            morre(f"{titulo}: {err.get('code', 'erro')}: {err.get('info', err)}")
+        for item in res.get("revisiondelete", {}).get("items", []):
+            erros = item.get("errors") or []
+            if erros:
+                morre(f"{titulo} rev {item.get('id')}: {erros}")
+        modo = "suprimida" if suprime else "ocultada"
+        print(f"ok: {titulo} → rev {', '.join(ids)} {modo} (texto e resumo)")
+
 def ato_cargo(a):
     params = {"action": "cargoquery", "tables": a.tabela, "fields": a.campos,
               "limit": min(a.limite, 100)}
@@ -362,6 +413,13 @@ def build_parser():
     s.add_argument("--comentario", default="")
     s.add_argument("--ignorar-avisos", action="store_true", dest="ignorar_avisos")
     s.set_defaults(fn=ato_subir)
+
+    s = sub.add_parser("ocultar-revisao",
+                       help="tira texto e resumo de revisões antigas do histórico (revisiondelete)")
+    s.add_argument("revid", nargs="+", type=int)
+    s.add_argument("--motivo", required=True)
+    s.add_argument("--apply", action="store_true")
+    s.set_defaults(fn=ato_ocultar_revisao)
 
     s = sub.add_parser("cargo", help="consulta SQL sobre campos Cargo declarados")
     s.add_argument("tabela")
