@@ -1644,7 +1644,7 @@ gate_suite_verdes() {  # $1=repo $2=sha ; 0 verde ou n/a; 4 vermelho medido; 5 n
     if [ -n "$sessao_bin" ]; then
       local marca="${veredito_arq%.json}.nao-medido" job out_job unit log_job teto="${PF_GATE_TETO_S:-90}" t=0
       rm -f "$marca"
-      out_job="$(PF_GATE_SINCRONO=1 "$sessao_bin" longjob run "gate-${sha:0:7}" "$AQUI/release" _medir-suite "$repo" "$sha" 2>&1)" || out_job=""
+      out_job="$(PF_GATE_SINCRONO=1 "$sessao_bin" longjob run "gate-${sha:0:7}" "$AQUI/release" _medir-suite "$repo" "$sha" 2>&1 8>&-)" || out_job=""
       unit="$(printf '%s\n' "$out_job" | grep -oE 'platafirma-job-[A-Za-z0-9_.@-]+' | head -n 1)"
       log_job="$(printf '%s\n' "$out_job" | grep -oE '/[^ ]+\.log' | head -n 1)"
       if [ -n "$unit" ]; then
@@ -2239,6 +2239,34 @@ for _a in "$@"; do
   esac
 done
 
+# Fila de promocao (incidente de 27/09, 14:17): duas promocoes ao mesmo tempo se atropelam.
+# A do harness reinicia a porta, e o reinicio mata a outra no meio da recriacao da stack
+# (rag parou as 17:17:00 UTC, o mesmo segundo do restart). Promover e reverter passam por
+# UM lock da instancia: a segunda ESPERA a primeira terminar, em vez de recusar ou atropelar.
+# Quem espera nao tocou nada; se a porta reiniciar enquanto espera, morre sem estado partido.
+# --ensaio nao toca nada e nao entra na fila. Espera maxima: PF_PROMOCAO_ESPERA (s, default 900).
+entrar_na_fila_de_promocao() {  # $1=ato ; resto = args do ato
+  local ato="$1"; shift
+  local a
+  for a in "$@"; do [ "$a" = "--ensaio" ] && return 0; done
+  command -v flock >/dev/null || { printf 'release: dependência ausente: flock (util-linux) — a fila de promoção precisa dele\n' >&2; exit 3; }
+  local espera="${PF_PROMOCAO_ESPERA:-900}"
+  local lock="$PONTOS/.promocao.lock" dono="$PONTOS/.promocao.dono"
+  mkdir -p "$PONTOS"
+  exec 8>>"$lock"
+  if ! flock -n 8; then
+    printf 'fila:      promoção em andamento (%s) — aguardando a vez, até %ss\n' \
+      "$(cat "$dono" 2>/dev/null || printf 'dono desconhecido')" "$espera" >&2
+    if ! flock -w "$espera" 8; then
+      printf 'release: promoção em andamento há mais de %ss (%s) — nada tocado; rode de novo depois\n' \
+        "$espera" "$(cat "$dono" 2>/dev/null || printf 'dono desconhecido')" >&2
+      exit 3
+    fi
+    printf 'fila:      a vez chegou\n' >&2
+  fi
+  printf '%s %s · pid %s · cadeira %s · desde %s\n' "$ato" "$*" "$$" "${CADEIRA:-?}" "$(date -Is)" > "$dono"
+}
+
 cmd="$1"
 shift
 
@@ -2248,8 +2276,8 @@ case "$cmd" in
   ler)      cmd_ler "$@" ;;
   procurar) cmd_procurar "$@" ;;
   conferir) cmd_conferir "$@" ;;
-  promover) cmd_promover "$@" ;;
-  reverter) cmd_reverter "$@" ;;
+  promover) entrar_na_fila_de_promocao promover "$@"; cmd_promover "$@" ;;
+  reverter) entrar_na_fila_de_promocao reverter "$@"; cmd_reverter "$@" ;;
   _medir-suite)
     # interno: o job que `release promover` dispara para medir a suite acima do teto.
     # Mede sincrono, grava o veredito (verde|vermelho) ou a marca de nao medido.
