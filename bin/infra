@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # infra — estado e operação da infraestrutura local: contêiner, unit, timer,
 # stack (compose) e a agenda do cron.
-# capacidade: infra/plataforma
+# capacidade: infra
 # dono: ti
 # componente: docker, systemd --user, cron
 # use para: ver contêiner/unit/timer de pé e a saúde da porta, "está no ar?" (estado,
