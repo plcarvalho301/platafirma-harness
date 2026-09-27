@@ -103,6 +103,8 @@ encerra. Devolver ao dono fora disso é devolução indevida, o erro que mais cu
 5. Sobe inteiro. Quebrou, vira incidente e se trata depois; sem fila de incidente,
    abre-se uma e o trabalho sobe. O dono recebe o relato (o que subiu, o que quebrou, o
    que virou incidente), nunca «sigo?», «mando para fulano?».
+6. NÃO ESPERAR TIMER DE SUBIDA (ingestão no acervo, publicação de caderno, qualquer
+   subida que roda sozinha). Subiu, relata e segue; a conferência vai à mesa.
 
 ## 5. Barreira vem com caminho
 
