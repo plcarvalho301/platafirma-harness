@@ -343,7 +343,7 @@ def economia_de_giro(ordem_id):
     if not ordem_id or ordem_id == "-":
         return ["  sem ordem_id — sessao de mao nao tem fita a medir"]
     VERBOS = {"mesa", "fila", "tarefas", "acervo", "motor", "conferir",
-              "descobrir", "situacao", "persona", "acesso", "chat", "infra", "seg",
+              "situacao", "persona", "acesso", "chat", "infra", "seg",
               "sinal", "lint", "teste", "minuta", "descansar", "encerrar", "migrar", "metrica"}
     por_tool, classe_fb = Counter(), Counter()
     tss, lote_ids, giros_avulsos = [], set(), 0

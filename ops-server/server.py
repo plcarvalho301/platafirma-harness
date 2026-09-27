@@ -939,7 +939,7 @@ _SUGESTAO = {
     # o `repo` continua para a operacao contida (trava de producao + gate de release).
     "cat": "read_file", "head": "read_file", "tail": "read_file", "sed": "read_file",
     "less": "read_file", "ls": "read_file", "stat": "read_file", "wc": "read_file",
-    "rg": "descobrir", "grep": "descobrir", "fd": "descobrir", "find": "descobrir",
+    "rg": "repo", "grep": "repo", "fd": "repo", "find": "repo",
     "docker": "infra", "systemctl": "infra", "journalctl": "infra", "loginctl": "infra",
     "curl": "pesquisar", "wget": "pesquisar",
     "python3": "teste", "python": "teste", "pytest": "teste", "uv": "teste", "ruff": "lint",
