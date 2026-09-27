@@ -52,6 +52,29 @@ Gatilhos por chapéu: para cada rótulo da gerência que casou, o slug do concei
 rótulo canônico e cada `outros_rotulos`. Deduplicados, normalizados na leitura (não aqui
 — o roteador normaliza com a mesma régua na hora de casar). Contrato intacto desde a
 versão anterior (card #3105); só a FONTE do rótulo mudou.
+
+## Conferir: o gate de `publicar-abertura` (card #3143)
+
+`--conferir` gera a tabela em memória e a compara com o `rotas-chapeu.json` que já está
+na árvore, sem escrever nada. A comparação usa a régua de `casa()` do roteador
+(`bin/_expediente/rotear`): por chapéu, o CONJUNTO de gatilhos normalizados com 3+
+caracteres. Ordem e grafia que o roteador não distingue não divergem.
+
+    exit 0  conforme                      tabela gerada = arquivo; órfão de conceito só avisa
+    exit 1  divergente                    tabela ≠ arquivo, arquivo ilegível, ou órfão de CHAPÉU
+    exit 5  indeterminável                golden record fora de alcance: não conferiu
+
+A primeira linha do stdout é a âncora (`rotas: conforme|divergente|indeterminavel — ...`).
+Órfão de CONCEITO não reprova: é matéria de `dados`, e o que já casa segue roteando.
+
+`--anterior <abertura>` (a que está no ar) limita a reprovação às cadeiras que a
+publicação MUDA: `persona.md`, conjunto de diretórios de chapéu ou bloco do
+`rotas-chapeu.json` diferente entre as duas árvores. Nas outras, divergência é deriva
+anterior (conceito curado depois da última geração, cadeira ainda não rematerializada) e
+só avisa: quem publica responde pela rota do que mudou, não pela deriva que herdou.
+Sem `--anterior`, todas as cadeiras estão no escopo.
+`--golden <arquivo.json>` lê o golden record de um arquivo (lista, ou `{itens: [...]}`
+como a API serve) em vez da rede — teste e base sem motor.
 """
 
 from __future__ import annotations
@@ -79,9 +102,18 @@ _RE_BULLET = re.compile(r"^-\s+\*\*([^*]+)\*\*\s*[—–-]\s*(.*)$")
 _RE_GERENCIAS = re.compile(r"^##\s+Ger[êe]ncias\b.*?$(.*?)(?=^##\s+|\Z)", re.M | re.S)
 
 
-def golden_record() -> list[dict]:
+def golden_record(arquivo: str | None = None) -> list[dict]:
     """O golden record inteiro, via `GET /acervo/conceitos` (#2957, arq:0089 §2). Único
-    ponto que toca a rede; roda uma vez, fora da montagem."""
+    ponto que toca a rede; roda uma vez, fora da montagem. `arquivo` lê o mesmo payload
+    de um JSON local (lista, ou `{itens: [...]}`), sem rede."""
+    if arquivo is not None:
+        with open(arquivo, encoding="utf-8") as f:
+            payload = json.load(f)
+        itens = payload if isinstance(payload, list) else (
+            payload.get("itens") if isinstance(payload, dict) else None)
+        if not isinstance(itens, list):
+            raise ValueError(f"{arquivo}: golden sem lista de itens")
+        return itens
     payload = _conceitos_http()
     return payload.get("itens", [])
 
@@ -190,14 +222,24 @@ def gatilhos(conceito: dict) -> list[str]:
     return unicos
 
 
-def gerar(estrito: bool, abertura: str, apenas_cadeira: str | None = None) -> tuple[dict, list[str]]:
+def gerar(estrito: bool, abertura: str, apenas_cadeira: str | None = None,
+          golden: list[dict] | None = None) -> tuple[dict, list[str]]:
     """Varre `<abertura>/*/persona.md`. `apenas_cadeira` restringe a varredura a uma só
     cadeira (persona rotas --cadeira); `estrito` não filtra aqui — só o chamador decide
-    o código de saída a partir de `orfaos`."""
-    golden = golden_record()
+    o código de saída a partir de `orfaos`. `golden` já lido dispensa a rede."""
+    tabela, orfaos = _gerar(abertura, apenas_cadeira, golden)
+    return tabela, [msg for _, _, msg in orfaos]
+
+
+def _gerar(abertura: str, apenas_cadeira: str | None = None,
+           golden: list[dict] | None = None) -> tuple[dict, list[tuple[str, str, str]]]:
+    """O miolo de `gerar`, com o órfão tipado: `("chapeu"|"conceito", cadeira,
+    mensagem)`, na ordem em que aparece. O tipo separa recusa de aviso em `conferir`."""
+    if golden is None:
+        golden = golden_record()
     idx = indice_por_rotulo(golden)
     tabela: dict[str, dict[str, list[str]]] = {}
-    orfaos: list[str] = []
+    orfaos: list[tuple[str, str, str]] = []
 
     if not os.path.isdir(abertura):
         return tabela, orfaos
@@ -217,7 +259,7 @@ def gerar(estrito: bool, abertura: str, apenas_cadeira: str | None = None) -> tu
             texto = f.read()
 
         gerencias, orfaos_chapeu = rotulos_da_gerencias(texto, base)
-        orfaos.extend(f"{cadeira}: {msg}" for msg in orfaos_chapeu)
+        orfaos.extend(("chapeu", cadeira, f"{cadeira}: {msg}") for msg in orfaos_chapeu)
 
         for chapeu, rotulos in gerencias.items():
             disparadores: list[str] = []
@@ -225,8 +267,9 @@ def gerar(estrito: bool, abertura: str, apenas_cadeira: str | None = None) -> tu
             for rotulo in rotulos:
                 conceito = idx.get(_normaliza(rotulo))
                 if conceito is None:
-                    orfaos.append(f"{cadeira}/{chapeu}: rótulo '{rotulo}' "
-                                  f"não casa nenhum conceito do golden record")
+                    orfaos.append(("conceito", cadeira,
+                                   f"{cadeira}/{chapeu}: rótulo '{rotulo}' "
+                                   f"não casa nenhum conceito do golden record"))
                     continue
                 for g in gatilhos(conceito):
                     n = _normaliza(g)
@@ -237,6 +280,160 @@ def gerar(estrito: bool, abertura: str, apenas_cadeira: str | None = None) -> tu
                 tabela.setdefault(cadeira, {})[chapeu] = disparadores
 
     return tabela, orfaos
+
+
+def _casaveis(gats) -> dict[str, str]:
+    """A régua de `casa()` do roteador: gatilho normalizado, só com 3+ caracteres, sem
+    ordem. Duas listas com as mesmas chaves roteiam igual. O valor é a primeira grafia,
+    para o relato mostrar o gatilho como está escrito, não a forma normalizada."""
+    saida: dict[str, str] = {}
+    for g in gats:
+        n = _normaliza(g)
+        if len(n) >= 3:
+            saida.setdefault(n, g)
+    return saida
+
+
+def _amostra(itens: list[str], n: int = 5) -> str:
+    resto = len(itens) - n
+    return ", ".join(itens[:n]) + (f" (+{resto})" if resto > 0 else "")
+
+
+def comparar(gerada: dict, publicada: dict) -> list[tuple[str, str]]:
+    """`(cadeira, linha)` por chapéu cujo conjunto casável difere entre a tabela gerada
+    e a do arquivo. Cadeira ou chapéu ausente de um lado conta como conjunto vazio."""
+    difs: list[tuple[str, str]] = []
+    for cadeira in sorted(set(gerada) | set(publicada)):
+        g, p = gerada.get(cadeira, {}), publicada.get(cadeira, {})
+        for chapeu in sorted(set(g) | set(p)):
+            ng, np_ = _casaveis(g.get(chapeu, [])), _casaveis(p.get(chapeu, []))
+            if ng.keys() == np_.keys():
+                continue
+            partes = []
+            if ng.keys() - np_.keys():
+                falta = sorted(ng[n] for n in ng.keys() - np_.keys())
+                partes.append(f"falta no arquivo: {_amostra(falta)}")
+            if np_.keys() - ng.keys():
+                sobra = sorted(np_[n] for n in np_.keys() - ng.keys())
+                partes.append(f"sobra no arquivo: {_amostra(sobra)}")
+            difs.append((cadeira, f"{cadeira}/{chapeu}: " + "; ".join(partes)))
+    return difs
+
+
+def _le_tabela(caminho: str):
+    with open(caminho, encoding="utf-8") as f:
+        return json.load(f)
+
+
+def cadeiras_tocadas(abertura: str, anterior: str) -> set[str] | None:
+    """As cadeiras cuja rota esta publicação pode mudar: `persona.md`, conjunto de
+    diretórios de chapéu ou bloco do `rotas-chapeu.json` diferente entre `anterior` (a
+    abertura no ar) e `abertura`. `None` = anterior ausente ou ilegível: todas."""
+    if not os.path.isdir(anterior):
+        return None
+    try:
+        rotas_antes = _le_tabela(os.path.join(anterior, "rotas-chapeu.json"))
+        rotas_agora = _le_tabela(os.path.join(abertura, "rotas-chapeu.json"))
+    except (OSError, ValueError):
+        return None
+    if not isinstance(rotas_antes, dict) or not isinstance(rotas_agora, dict):
+        return None
+
+    def assinatura(raiz: str, cadeira: str):
+        base = os.path.join(raiz, cadeira)
+        if not os.path.isdir(base):
+            return None
+        try:
+            with open(os.path.join(base, "persona.md"), "rb") as f:
+                persona = f.read()
+        except OSError:
+            persona = None
+        chapeus = sorted(d for d in os.listdir(base) if os.path.isdir(os.path.join(base, d)))
+        return persona, chapeus
+
+    cadeiras = {c for raiz in (anterior, abertura) for c in os.listdir(raiz)
+                if os.path.isdir(os.path.join(raiz, c))}
+    return {c for c in cadeiras
+            if assinatura(anterior, c) != assinatura(abertura, c)
+            or rotas_antes.get(c) != rotas_agora.get(c)}
+
+
+def _forma_valida(tabela) -> bool:
+    """`{cadeira: {chapeu: [gatilho, ...]}}`, o contrato de saída."""
+    return isinstance(tabela, dict) and all(
+        isinstance(chapeus, dict) and all(
+            isinstance(gats, list) and all(isinstance(x, str) for x in gats)
+            for gats in chapeus.values())
+        for chapeus in tabela.values())
+
+
+def conferir(abertura: str, apenas_cadeira: str | None = None,
+             golden_arquivo: str | None = None, anterior: str | None = None) -> int:
+    """O gate de `publicar-abertura` (card #3143): compara a tabela gerada com o
+    `rotas-chapeu.json` de `abertura`, sem escrever. Exit 0/1/5, âncora e escopo de
+    `anterior` no docstring do módulo."""
+    caminho = os.path.join(abertura, "rotas-chapeu.json")
+    try:
+        golden = golden_record(golden_arquivo)
+    except Exception as e:  # noqa: BLE001 — FonteIndisponivel, OSError, JSON: não olhei
+        print(f"rotas: indeterminavel — golden record fora de alcance, nada conferido: {e}")
+        return 5
+    if not golden:
+        print("rotas: indeterminavel — golden record veio vazio, nada conferido")
+        return 5
+
+    try:
+        tabela, orfaos = _gerar(abertura, apenas_cadeira, golden)
+    except (KeyError, TypeError, AttributeError) as e:  # item do golden fora da forma
+        print(f"rotas: indeterminavel — golden record com item fora da forma, nada conferido: {e!r}")
+        return 5
+    escopo = cadeiras_tocadas(abertura, anterior) if anterior is not None else None
+
+    def no_escopo(cadeira: str) -> bool:
+        return escopo is None or cadeira in escopo
+
+    de_conceito = [m for t, _, m in orfaos if t == "conceito"]
+
+    try:
+        with open(caminho, encoding="utf-8") as f:
+            publicada = json.load(f)
+    except (OSError, ValueError) as e:
+        print(f"rotas: divergente — {caminho} ilegível: {e}")
+        return 1
+    if apenas_cadeira is not None and isinstance(publicada, dict):
+        publicada = {apenas_cadeira: publicada.get(apenas_cadeira, {})}
+    if not _forma_valida(publicada):
+        print(f"rotas: divergente — {caminho} fora da forma {{cadeira: {{chapeu: [gatilho]}}}}")
+        return 1
+
+    difs = comparar(tabela, publicada)
+    difs_escopo = [d for c, d in difs if no_escopo(c)]
+    deriva = [d for c, d in difs if not no_escopo(c)]
+    chapeu_escopo = [m for t, c, m in orfaos if t == "chapeu" and no_escopo(c)]
+    chapeu_deriva = [m for t, c, m in orfaos if t == "chapeu" and not no_escopo(c)]
+    alcance = ("todas as cadeiras" if escopo is None
+               else f"cadeiras que esta publicação muda: {', '.join(sorted(escopo)) or 'nenhuma'}")
+
+    if difs_escopo or chapeu_escopo:
+        print(f"rotas: divergente — {len(difs_escopo)} chapéu(s) diferem do gerado, "
+              f"{len(chapeu_escopo)} órfão(s) de chapéu ({alcance})")
+        for d in difs_escopo:
+            print(f"  diverge: {d}")
+        for o in chapeu_escopo:
+            print(f"  órfão de chapéu: {o}")
+        rc = 1
+    else:
+        cauda = (f"; deriva anterior em {len(deriva) + len(chapeu_deriva)} ponto(s) fora do escopo, aviso"
+                 if deriva or chapeu_deriva else "")
+        print(f"rotas: conforme — {alcance} iguais ao gerado{cauda}")
+        rc = 0
+    for d in deriva:
+        print(f"  aviso, deriva anterior: {d}")
+    for o in chapeu_deriva:
+        print(f"  aviso, deriva anterior (órfão de chapéu): {o}")
+    for o in de_conceito:
+        print(f"  aviso, órfão de conceito: {o}")
+    return rc
 
 
 def main() -> int:
@@ -251,6 +448,14 @@ def main() -> int:
     ap.add_argument("--cadeira", default=None,
                     help="regenera só o bloco desta cadeira, mesclando no "
                          "rotas-chapeu.json existente em vez de reescrever tudo")
+    ap.add_argument("--conferir", action="store_true",
+                    help="compara a tabela gerada com o rotas-chapeu.json, sem escrever: "
+                         "0 conforme, 1 divergente, 5 indeterminável (gate de publicar-abertura)")
+    ap.add_argument("--golden", default=None,
+                    help="lê o golden record deste arquivo JSON em vez da API (teste, base sem motor)")
+    ap.add_argument("--anterior", default=None,
+                    help="com --conferir: abertura no ar; só as cadeiras que mudam em relação a "
+                         "ela reprovam, a deriva das outras avisa")
     args = ap.parse_args()
 
     abertura = args.abertura
@@ -261,7 +466,11 @@ def main() -> int:
               file=sys.stderr)
         return 2
 
-    tabela, orfaos = gerar(args.estrito, abertura, apenas_cadeira=args.cadeira)
+    if args.conferir:
+        return conferir(abertura, args.cadeira, args.golden, args.anterior)
+
+    golden = golden_record(args.golden) if args.golden is not None else None
+    tabela, orfaos = gerar(args.estrito, abertura, apenas_cadeira=args.cadeira, golden=golden)
 
     for o in orfaos:
         print(f"AVISO órfão: {o}", file=sys.stderr)
