@@ -1158,10 +1158,11 @@ def test_pdp_indeterminavel_quando_current_nao_encontrada(monkeypatch, tmp_path,
 
     assert exit_code == 5
     dado = json.loads(saida.out)
-    assert len(dado["itens"]) == 4
+    # 3 servidores desde o card #3117 (jaiminho-server saiu do codigo)
+    assert len(dado["itens"]) == 3
     assert all(item["estado"] == "indeterminavel" for item in dado["itens"])
     assert all("nao encontrada" in item["motivo"] for item in dado["itens"])
-    assert "4 não consegui olhar" in dado["ancora"]
+    assert "3 não consegui olhar" in dado["ancora"]
 
 
 def test_pdp_sem_caminho_de_divergencia_hoje(monkeypatch, tmp_path, capsys):
@@ -1178,7 +1179,7 @@ def test_pdp_sem_caminho_de_divergencia_hoje(monkeypatch, tmp_path, capsys):
 
     assert exit_code == 0
     dado = json.loads(saida.out)
-    assert len(dado["itens"]) == 4
+    assert len(dado["itens"]) == 3
     assert all(item["estado"] == "conforme" for item in dado["itens"])
 
 

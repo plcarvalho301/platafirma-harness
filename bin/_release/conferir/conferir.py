@@ -2452,7 +2452,6 @@ def conferir_pdp(alvo=None, como_json=False):
 
     servidores = [
         {"nome": "ops-server", "tipo": "systemd", "esperado": "/opt/platafirma/current/politica-acesso"},
-        {"nome": "jaiminho-server", "tipo": "compose", "esperado": "/opt/platafirma/current/politica-acesso"},
         {"nome": "wiki-mcp", "tipo": "compose", "esperado": "/opt/platafirma/current/politica-acesso"},
         {"nome": "rastreador-api", "tipo": "compose", "esperado": "/opt/platafirma/current/politica-acesso"},
     ]

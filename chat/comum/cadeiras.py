@@ -17,7 +17,7 @@ e o slug fossil resolvia como vigente. A fonte viva agora e a arvore, so ela.
 
 Fonte da persona do ator: abertura/<persona>/persona.md, onde a persona
 sai de _PERSONA_DO_ATOR (ator != persona quando o ator monta persona diferente
-do proprio nome; vazio hoje — card #3145 tirou o unico caso, jaiminho/fabrica).
+do proprio nome; vazio hoje).
 Fonte do alias humano: abertura/aliases.json (mapa slug->nome afetivo, dado vivo).
 A morada sai de PF_ABERTURA_DIR, ou de $PLATAFIRMA_INSTANCIA/var/abertura-publicada (default
 /srv/platafirma/casa); no container da recepcao ela entra por bind mount ro, no mesmo
@@ -34,7 +34,7 @@ from pathlib import Path
 
 PREFIXO_BOT = "_pf"
 _PREFIXOS_DE_SLUG = ("claudinho-", "claudinha-")
-_NAO_SAO_CADEIRA = {"TEMPLATE", "jaiminho", "jaiminho-eng", "osint", "EXTERNO"}
+_NAO_SAO_CADEIRA = {"TEMPLATE", "osint", "EXTERNO"}
 
 # PARTICIPANTE — quem tem porta com o dono sem ocupar cadeira (colaborador externo,
 # assessor, fornecedor). Rito e estatuto em runbook admissao-de-participante;
@@ -47,9 +47,9 @@ _NAO_SAO_CADEIRA = {"TEMPLATE", "jaiminho", "jaiminho-eng", "osint", "EXTERNO"}
 # passa a ter um roster proprio (`atores()`), maior que o do org: o dono fala com
 # quem tem porta com ele.
 #
-# Vazio hoje: jaiminho e jaiminho-eng, os dois casos que existiam, sairam no card
-# #3145 (junto com a rota em bin/chat VERBO_DO_PARTICIPANTE). O balde fica — e o
-# mecanismo que o proximo colaborador externo usa.
+# Vazio hoje, e sem motor: a rota de participante saiu de bin/chat (card #3117,
+# ordem do dono 27/09/2026). Participante novo nasce com motor desenhado do zero;
+# o balde so separa o roster.
 _SAO_PARTICIPANTE: set[str] = set()
 
 # ATOR INTERNO nao-cadeira — ganha MXID, sala com o dono e giro, mas NAO e cadeira
@@ -57,9 +57,7 @@ _SAO_PARTICIPANTE: set[str] = set()
 # motor externo. O motor dele e o mesmo das cadeiras: Claude Code no cwd, conta
 # claudinho. E este terceiro balde que o modelo N-provider da fabrica exige: a
 # `fabrica` e uma PERSONA fungivel, encarnada uma vez por conta/provider. Esta e a
-# encarnacao `claude`/conta-claudinho; a encarnacao `agy` ja existe como o
-# participante `jaiminho-fabrica`. Generalizar provider->client e o card aberto
-# junto com esta fatia — aqui ha UMA encarnacao, sem a tabela generica ainda.
+# encarnacao `claude`/conta-claudinho, a unica com giro pela superficie de conversa.
 #
 # Fora de _SAO_PARTICIPANTE de proposito: `eh_participante('fabrica')` e False, e
 # por isso o giro cai no ramo MotorClaudeCode do bin/chat, nao no ramo do verbo
@@ -68,8 +66,7 @@ _ATORES_INTERNOS = {"fabrica"}
 
 # ATOR de superficie -> PERSONA que a sessao dele monta.
 #
-# Vazio hoje: o unico caso (jaiminho -> fabrica, jaiminho-eng -> engenharia) saiu
-# no card #3145 junto com _SAO_PARTICIPANTE. Ator sem entrada aqui monta a persona
+# Vazio hoje. Ator sem entrada aqui monta a persona
 # homonima (o caso das cadeiras, onde ator e persona coincidem) — o balde fica para
 # o proximo participante cujo ator monte persona diferente do proprio nome.
 _PERSONA_DO_ATOR: dict[str, str] = {}
@@ -266,7 +263,7 @@ def slug_da_cadeira(nome: str) -> str | None:
     Depois do expurgo do prefixo (ordem do dono), o slug do org e o proprio sufixo
     minusculo: nao ha mais `claudinho-<cadeira>`. Esta funcao sobrevive como a ponte
     para participante e ator interno, cujo slug e o da PERSONA que montam, nao o nome
-    do ator (jaiminho -> fabrica).
+    do ator.
 
     A caixa da fila, `PF_CADEIRA`, o arquivo de persona e o Project sao chaveados por
     este slug; `monta-sessao` e `--cadeira` querem a mesma forma. Uma forma so.
@@ -274,8 +271,8 @@ def slug_da_cadeira(nome: str) -> str | None:
     sufixo = sufixo_canonico(nome)
     if sufixo is None:
         return None
-    # Participante e ator interno: o slug e a PERSONA que montam (jaiminho -> fabrica),
-    # nao o nome do ator, para nao criar mem:jaiminho:* paralela. Cadeira: slug == sufixo.
+    # Participante e ator interno: o slug e a PERSONA que montam, nao o nome do ator,
+    # para nao criar mem:<ator>:* paralela. Cadeira: slug == sufixo.
     return _PERSONA_DO_ATOR.get(sufixo, sufixo)
 
 

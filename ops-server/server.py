@@ -2015,17 +2015,25 @@ PF_TOOLS_LOTE = os.environ.get("PF_TOOLS_LOTE", "0") == "1" # chamada em lote (�
 
 
 def _sessao_resolve(sessao_id: str | None) -> dict:
-    """cadeira/ordem da sessão: SÓ o `sessao_id` que a fita porta, cunhado por `monta_sessao`.
+    """cadeira/ordem/sujeito da sessão: SÓ o `sessao_id` que a fita porta, cunhado por
+    `monta_sessao`.
 
     Se ausente/vazio/'-', tenta o default da sessão viva (Item 12 #3065). `sessao:{id}`
     ausente do msg-mem (promocao da stack motor recria o msg-mem vazio, card #3145
     decisao 1): reidrata por `_reidratar_porta` antes de devolver cadeira vazia.
+
+    `sujeito` (card #3145, defeito pos-fita: PF_SUJEITO so chegava ao execve de
+    `sessao abrir`) vem do MESMO registro que ja da a cadeira — a chave viva grava
+    `sujeito` desde a cunhagem (bin/sessao::ato_abrir) e a reidratacao o devolve
+    quando a linha durável tem a coluna (bin/_sessao/reidratar.py, migracao 0094).
+    Ausente no registro: string vazia, nunca fallback para cadeira/USER/valor fixo —
+    quem injeta no execve (`_run_verbo_blocking`) trata vazio como "nao entra".
     """
     if not sessao_id or sessao_id == "-":
         sessao_id = _sessao_viva()
     if sessao_id:
         sessao_id = _uuid_valido(sessao_id) or sessao_id   # legado 32-hex normaliza
-    out = {"sessao_id": sessao_id or "-", "ordem_id": "-", "cadeira": ""}
+    out = {"sessao_id": sessao_id or "-", "ordem_id": "-", "cadeira": "", "sujeito": ""}
     if not sessao_id or sessao_id == "-":
         return out
     try:
@@ -2034,6 +2042,7 @@ def _sessao_resolve(sessao_id: str | None) -> dict:
         if d:
             out["cadeira"] = d.get("cadeira") or ""
             out["ordem_id"] = d.get("ordem_id") or out["ordem_id"]
+            out["sujeito"] = d.get("sujeito") or ""
     except Exception as e:  # noqa: BLE001
         print(f"[valkey] sessao:{sessao_id} nao resolvida: {e!r}", file=sys.stderr, flush=True)
     return out
@@ -2051,11 +2060,16 @@ def _rlimits_filho():
 
 # Contrato item 2 (#3053): todo execve de verbo chamado com sessao_id válido injeta
 # PF_CADEIRA/PF_SESSAO/PF_ORDEM_ID lidos da chave pelo _sessao_resolve (linhas 1431-1450).
+# PF_SUJEITO entra pelo mesmo ponto (card #3145, defeito pos-fita): so quando o
+# registro da sessao tem sujeito — sem fallback para cadeira/USER/valor fixo; campo
+# ausente e a variavel simplesmente nao entra no ambiente do verbo.
 def _run_verbo_blocking(argv: list, stdin: str | dict | list | None, timeout: int, ident: dict) -> dict:
     env = {**_env_subprocesso(), "PF_SESSAO": ident["sessao_id"], "PF_ORDEM_ID": ident["ordem_id"],
            "PF_CONTA": OPS_USER}
     if ident["cadeira"]:
         env["PF_CADEIRA"] = ident["cadeira"]
+    if ident.get("sujeito"):
+        env["PF_SUJEITO"] = ident["sujeito"]
     d_cwd = CASA if CASA.is_dir() else Path.cwd()
     try:
         p = subprocess.Popen(argv, cwd=d_cwd, env=env, preexec_fn=_rlimits_filho,
