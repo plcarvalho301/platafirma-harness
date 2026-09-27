@@ -988,6 +988,9 @@ def _stub_carrega_yaml(monkeypatch, sujeitos=None, superficies=None):
         if caminho.endswith("superficies.yaml"):
             return (superficies or {}), None
         return {}, None
+    # a cadeia mora em bin/_lint/alcance.py (card #3153): o stub vai onde o predicado le
+    import _lint.alcance as _alc
+    monkeypatch.setattr(_alc, "_carrega_yaml", carrega)
     monkeypatch.setattr(conferir, "_carrega_yaml", carrega)
 
 
