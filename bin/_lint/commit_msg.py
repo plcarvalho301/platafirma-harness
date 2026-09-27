@@ -15,9 +15,9 @@ if str(HARNESS_DIR) not in sys.path:
     sys.path.insert(0, str(HARNESS_DIR))
 
 try:
-    from _lint.commit import verificar_commit
+    from _lint.commit import declaracao_de_commit, verificar_commit
 except ImportError:
-    from commit import verificar_commit
+    from commit import declaracao_de_commit, verificar_commit
 
 
 def main() -> int:
@@ -35,6 +35,12 @@ def main() -> int:
         raiz = Path(p.stdout.strip())
     except Exception:
         raiz = Path.cwd()
+
+    # OPT-IN POR REPO (limite 1 da classe commit): sem `.conferir-commit` na raiz, o hook
+    # nao pergunta nada. O hook vale para todo clone que aponta o hooksPath; gatear quem
+    # nao pediu ligaria o gate em todos de uma vez, sem aviso e sem rollout.
+    if declaracao_de_commit(raiz) is None:
+        return 0
 
     apts = verificar_commit(raiz, alvo=arquivo_msg)
     bloqueantes = [a for a in apts if a.severidade == "bloqueante"]

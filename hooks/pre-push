@@ -157,14 +157,14 @@ medir_rev() {  # $1=rev
 
   case "$rc_teste" in
     0)
-      if grep -q "reaproveitado" "$saida"; then
+      if grep -q "veredito reaproveitado" "$saida"; then
         printf 'pre-push: baseline de contrato — %s reaproveitado / reaproveitou (%s, verde)\n' "$chave_id" "${rev:0:7}"
       else
         printf 'pre-push: baseline de contrato verde em %s (%s, rodou)\n' "${rev:0:7}" "$chave_id"
       fi
       return 0 ;;
     1)
-      if grep -q "reaproveitado" "$saida"; then
+      if grep -q "veredito reaproveitado" "$saida"; then
         printf 'pre-push: BASELINE VERDE QUEBROU na rev %s — veredito reaproveitado (%s, mesma árvore já medida vermelha).\n' "${rev:0:7}" "$chave_id" >&2
       else
         {
