@@ -24,6 +24,26 @@ except ImportError:
     from superficie import verificar_superficie
 
 
+def _nome_do_repo(raiz: Path) -> str:
+    p = subprocess.run(["git", "config", "--get", "remote.origin.url"],
+                       cwd=raiz, capture_output=True, text=True)
+    url = p.stdout.strip() if p.returncode == 0 else ""
+    nome = url.rstrip("/").rsplit("/", 1)[-1] if url else raiz.name
+    return nome[:-4] if nome.endswith(".git") else nome
+
+
+def _organizacao_habilitada(raiz: Path) -> bool:
+    """Repo declarado em registro/organizacao-bloqueia.json (da release que roda o hook)."""
+    import json
+    reg = os.environ.get("PF_ORGANIZACAO_BLOQUEIA") or str(HARNESS_DIR / "registro" / "organizacao-bloqueia.json")
+    try:
+        with open(reg, encoding="utf-8") as f:
+            habilitados = json.load(f).get("repositorios", [])
+    except (OSError, ValueError):
+        return False
+    return _nome_do_repo(raiz) in habilitados
+
+
 def main() -> int:
     try:
         p = subprocess.run(
@@ -52,6 +72,18 @@ def main() -> int:
     for apt in verificar_arranque(raiz, staged=True):
         if apt.severidade == "bloqueante":
             bloqueantes.append(("arranque", apt))
+
+    # 4. organizacao (staged), so em repositorio declarado (card #3118)
+    if _organizacao_habilitada(raiz):
+        try:
+            from _lint.organizacao import bloqueantes_no_stage
+        except ImportError:
+            from organizacao import bloqueantes_no_stage
+        achados, aviso = bloqueantes_no_stage(raiz)
+        if aviso:
+            print(f"pre-commit: aviso: {aviso}", file=sys.stderr)
+        for apt in achados:
+            bloqueantes.append(("organizacao", apt))
 
     if bloqueantes:
         print("pre-commit: commit bloqueado por violacao de regra bloqueante:\n", file=sys.stderr)
