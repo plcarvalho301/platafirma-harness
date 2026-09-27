@@ -262,12 +262,16 @@ def test_lint_staged_so_indice(bancada):
     assert "0 apontamentos" in p.stdout
 
 
-def test_conferir_repo_staged_aviso_deprecado():
+def test_conferir_repo_staged_aviso_deprecado(tmp_path):
+    # roda num repo vazio de fixture: no cwd do chamador, o que estivesse no stage da
+    # bancada real decidia a cor do caso
+    subprocess.run(["git", "init", "-q", "-b", "main"], cwd=tmp_path, check=True)
     sessao_id = f"test-sess-{os.getpid()}"
     p = subprocess.run(
         [str(CONFERIR_BIN), "repo", "--staged"],
         capture_output=True,
         text=True,
+        cwd=tmp_path,
         env={**os.environ, "PF_SESSAO": sessao_id},
     )
     assert p.returncode == 0
