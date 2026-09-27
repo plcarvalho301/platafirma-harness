@@ -35,3 +35,4 @@ tests/test_pre_push_chave.py
 tests/test_release_gate_suite_verdes.py
 tests/test_contrato_teste.py
 tests/test_contrato_lint.py
+tests/test_casa_arvore.py
