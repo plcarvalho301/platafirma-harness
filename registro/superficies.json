@@ -26,7 +26,9 @@
     "Zero instancia nao e conector faltando. Deriva entre produtor e instancia viva",
     "sai como OBSERVACAO, com nome de arquivo, e nao reprova."
   ],
-  "azp_superficie": {},
+  "azp_superficie": {
+    "jaiminho-fabrica": "fabrica"
+  },
   "superficies": {
     "claude.ai": {
       "papel": "sessao do dono no app",

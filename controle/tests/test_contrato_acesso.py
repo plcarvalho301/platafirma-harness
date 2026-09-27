@@ -283,10 +283,12 @@ def test_decidir_permissao_na_forma_nua():
     assert "regra=fornecedor-le-repo" in r.stdout
 
 def test_decidir_projecao_e_a_do_pep():
-    """`--sujeito` casa so a chave da tabela, como a porta. O `sub` da conta uid 1003 saiu
-    de sujeitos.yaml no card #3117: nao projeta papel, e o PDP nao decide sem projecao."""
-    r = run_acesso("decidir", "sessao_abrir", "sessao:engenharia", "--sujeito", "e57eadb1-ec5d-41b5-a1be-e6d62196cff5")
+    """`--sujeito` casa so a chave da tabela, como a porta. A fabrica da conta uid 1003 e
+    chaveada so pelo `sub` (card #3165): o nome do client nao projeta, o sub projeta."""
+    r = run_acesso("decidir", "sessao_abrir", "sessao:engenharia", "--sujeito", "jaiminho-fabrica")
     assert r.returncode == 5
+    r2 = run_acesso("decidir", "sessao_abrir", "sessao:engenharia", "--sujeito", "e57eadb1-ec5d-41b5-a1be-e6d62196cff5")
+    assert r2.returncode == 0
 
 def test_decidir_argumento_nao_vira_codigo():
     """Acao com aspas e ponto-e-virgula chega ao PDP como texto: exit 1 (default), sem traceback."""
