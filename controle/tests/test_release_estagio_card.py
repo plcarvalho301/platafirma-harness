@@ -174,7 +174,9 @@ def test_card_que_recusa_nao_derruba_a_promocao(amb):
     # current trocado e ANTES do restart da porta, que ficava servindo o codigo anterior.
     r = amb.run("promover", "fixture", gh_ref="fabrica/4242-teste-estagio", tarefas_rc=1)
     assert r.returncode == 0, r.stdout + r.stderr
-    assert "AVISO" in r.stderr and "4242" in r.stderr
+    # o promover desvia stderr para o log da promocao e resume na tela: o aviso sai em um dos dois
+    saida = r.stdout + r.stderr
+    assert "AVISO" in saida and "4242" in saida, saida
     assert r.stdout.strip().splitlines()[-1] == amb.sha1
 
 
