@@ -14,6 +14,11 @@
 - Mudar a resolução de bancada no `repo` muda para TODOS os leitores dela: `bin/teste`, `bin/lint` e a morada de escrita da porta (`_em_bin_do_harness`) tinham cópias próprias e ficaram para trás em 26/09 — a porta passou a recusar bin/ na bancada nova e teste/lint mediram o clone base, com aviso só em stderr. Antes de promover mudança de resolução, `repo procurar <repo> --termo bancada_de` em bin/ e a porta.
 - Ao revisar peça de outra cadeira, buscar no acervo a seção que decide a questão, não a que confirma a hipótese. Vale para a própria parada: em 26/09 parei por «revisão de par», e a mesma seção da spec diz que a revisão não aprova subida. Antes de `PARADA:`, ler a frase inteira da regra que ancora.
 - Antes de escrever spec que parte um domínio entre verbos, ler a fila das cadeiras que o dono ouviu na mesma fita: em 26/09 a spec de lint subiu com «lint determinístico pode barrar em hook», e o modelo que o dono já tinha fixado com o arquiteto era «o que barra é teste, lint nunca barra». Custou uma revisão.
+- Memo de veredito que o gate lê só recebe a rodada que o gate faria: chave por árvore sem o escopo da rodada deixa um arquivo verde valer pela árvore inteira. Rodada parcial vai a memo próprio, com o alvo na chave.
+- Caso de contrato que lê estado do host (bancada real da conta, acervo real), somado a memo por árvore, envenena o veredito: o vermelho do host vira vermelho da árvore e fica guardado. Contrato roda em fixture.
+- Detectar desfecho por palavra solta em saída misturada engana (a linha do venv também diz «reaproveitado»). Casa-se a frase do desfecho.
+- «Removido depois de passar num push real» só vale com o hook promovido: o push roda o hook da release no ar, não o do ramo. Transição de hook = lado a lado, promover, push real, remover.
+- Extração de predicado se verifica pelo caller: o default do módulo extraído aponta para a árvore do próprio código, não para o alvo que o caller media. Costura explícita no caller, e o stub dos testes vai onde o predicado passou a morar.
 
 ## Diário de bordo
 
@@ -41,7 +46,14 @@
 - 2026-09-26 — `tarefas sub 3119` para listar filhas saiu 1 com «line 839: 2: filho» (sub declara filho, não lista). Contorno encontrado na data foi: `tarefas listar ti` e ler o card pai.
 - 2026-09-26 — `motor` em lote pela tool com `ato: buscar` e `args: [rag, buscar, casa, …]` buscou em `obra` com aviso de partição ausente. Contorno encontrado na data foi: `run_command` com a string `motor rag buscar casa "…"`.
 - 2026-09-26 — `run_command` com cinco `motor … buscar` estourou o teto da tool e truncou o retorno. Contorno encontrado na data foi: menos buscas por lote e `--k` menor.
-- 2026-09-26 — `teste --ajuda`, `lint --ajuda`, `migrar --ajuda` saem 2 com «ato desconhecido». Contorno: nenhum, encaminhado aos #3152, #3153 e #3145.
+- 2026-09-26 — `teste --ajuda`, `lint --ajuda`, `migrar --ajuda` saem 2 com «ato desconhecido». Contorno: nenhum, encaminhado aos #3152, #3153 e #3145. (teste e lint conformes em d5c7376.)
 - 2026-09-26 — `metrica` recusado pela porta («sem verbo», sugestão null) embora esteja em bin/. Contorno: nenhum, entrou no #3145 (passo 3).
 - 2026-09-26 — `fila enviar --tipo informe` recusado (tipos: decisao, demanda, handoff, minuta, pedido, recusa, resposta). Contorno encontrado na data foi: não enviar; o card já é o registro.
 - 2026-09-26 — `mesa item <chapeu> "<texto>"` recusou o texto posicional. Contorno encontrado na data foi: `mesa item <chapeu> --ato "…" --alvo <alvo>`.
+- 2026-09-26 — `write_file` por trecho saiu «unbalanced parenthesis» num `depois` que abria com três quebras de linha. Contorno encontrado na data foi: `repo git reset` + patch em var/tmp aplicado com `repo git apply --recount`.
+- 2026-09-26 — `repo pr-diff` ignorou filtro de caminho e truncou em 50 KB. Contorno encontrado na data foi: `repo abrir` + `repo git diff origin/main...<ramo> -- <caminhos>` na bancada.
+- 2026-09-26 — `repo git grep` com muitas ocorrências voltou «lavado (busca)» escondendo linhas. Contorno encontrado na data foi: grep mais estreito ou `read_file` por offset.
+- 2026-09-26 — `teste rodar <repo>@<chave>` saía 2 (registro recebia o nome com a chave) depois de 37bd92e. Contorno encontrado na data foi: corrigir bin/teste (e34c1e4).
+- 2026-09-26 — `teste rodar` de um arquivo, com o teste no ar, gravou verde no memo do portão; o push seguinte da mesma árvore reaproveitaria. Contorno encontrado na data foi: mudar a árvore antes do push e corrigir bin/teste (518f19f).
+- 2026-09-26 — `fila enviar` saiu 2 sem `--assunto`. Contorno encontrado na data foi: `--assunto` obrigatório junto de `--tipo` e `--eu`.
+- 2026-09-27 — `mesa anota release` reescreveu o slot e apagou a linha da fita anterior (a lição acima valeu, não foi lida antes). Contorno: nenhum; a linha de 26/09 perdeu-se.
