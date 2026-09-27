@@ -5,6 +5,10 @@ CONHECIMENTO CURADO
 - Antes de tornar obrigatória uma variável de ambiente num verbo, conferir quem a injeta em cada caminho de chamada (porta, cron, esteira de promoção); exigir o que a porta não injeta deixa o verbo inutilizável para toda cadeira.
 - Mudança no próprio caminho de subida do harness (release, ajudante de stack) só vale da promoção seguinte: a promoção corrente roda com o release antigo já carregado e pode sair em estado partido; repetir a chamada confirma "já no ar".
 - Orquestrar sub-agentes no mesmo sessao_id: a poda é por sessão, então um agente recebe "igual ao giro N" do que só outro leu; o executor relê pela bancada (repo ler, read_file com offset).
+- Promover harness reinicia a porta e o conector cai por segundos: é esperado, não incidente; espera e confere o release estado, sem relatar "não sei se subiu".
+- A fita termina o próprio trabalho; tarefa agendada para retomar é recusada pelo dono. Pendência que não fecha na fita sai no relato.
+- Barreira de ferramenta (write_file recusando um tipo de arquivo) sobe como barreira no mesmo turno; não se contorna mudando o desenho do card calado.
+- Checagem nova vira aviso, não portão que trava merge: o dono recusa teste/portão obrigatório (medo de teste fóssil travando código); não propor nem cobrar ruleset.
 
 DIARIO DE BORDO
 2026-09-27 — release promover harness 47c8ce6 saiu 2 "família fora do registro"; li registro/familias.json — contorno encontrado NA DATA 2026-09-27 foi usar o nome platafirma-harness.
@@ -28,3 +32,9 @@ DIARIO DE BORDO
 2026-09-27 — (#3145) release promover platafirma-motor no sha no ar saiu 1 "já no ar" — contorno encontrado NA DATA 2026-09-27 foi infra restart motor-msg-mem para o aceite da sessão viva.
 2026-09-27 — (#3145) tarefas sub 3119 saiu 1 "line 880: 2: filho" — contorno encontrado NA DATA 2026-09-27 foi tarefas ler 3119 (lista as filhas).
 2026-09-27 — (#3145) fila enviar sem --assunto saiu 2 — contorno encontrado NA DATA 2026-09-27 foi --assunto.
+2026-09-27 — (#3136) write_file de deploy-harness/casa-pr-conferir.service recusado (tipo .service fora da lista) — nenhum; encaminhado ao #3147 (ti).
+2026-09-27 — (#3136) release promover harness/conhecimento (nome curto) saiu 2 "família fora do registro" — contorno encontrado NA DATA 2026-09-27 foi o nome platafirma-<família> (de novo).
+2026-09-27 — (#3136) infra log não existe; unit casa-site-publicar manda stdout a arquivo, infra logs só mostra systemd — contorno encontrado NA DATA 2026-09-27 foi read_file do publicar.log com offset.
+2026-09-27 — (#3136) repo pr-ver não mostra status de commit (conferir) — contorno encontrado NA DATA 2026-09-27 foi ler o publicar.log.
+2026-09-27 — (#3136) fechar PR sem merge: repo não tem ato — contorno encontrado NA DATA 2026-09-27 foi repo git push origin --delete <ramo> e repo sanear.
+2026-09-27 — (#3136) repo abrir com card em entregue saiu com recusa de mover (exige motivo), bancada aberta mesmo assim — contorno encontrado NA DATA 2026-09-27 foi ignorar o move.
