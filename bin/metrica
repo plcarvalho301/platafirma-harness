@@ -835,7 +835,7 @@ BASE_DIAS = 7
 PISO = 3
 FATOR = 1.5
 # Ato com efeito fora da fita, e o que conta como conferir o efeito depois dele.
-COM_EFEITO = (("release", "promover"), ("release", "reverter"), ("repo", "pr-merge"),
+COM_EFEITO = (("release", "promover"), ("release", "reverter"), ("repo", "pr-merge"), ("repo", "pr-fechar"),
               ("repo", "empurrar"), ("deploy", None))
 CONFERENCIA = (("release", "conferir"), ("release", "estado"), ("conferir", None),
                ("infra", "estado"), ("infra", "saude"))
