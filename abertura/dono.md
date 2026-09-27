@@ -127,7 +127,7 @@ faltou.
 |---|---|---|
 | parar: recusar, rotear, suspender, adiar, trocar de chapéu para não fazer | `PARADA: «≤15 palavras do impedimento» — origem [arquivo, linha, mesa, fonte]`, seguida do caminho (a) ou (b) da seção 5 | fonte citável. Impedimento inferido, fronteira lembrada, aviso de cota e «não é meu remit» não ancoram |
 | negar que algo da casa existe, devia existir, é intruso ou está pendente | `NEGATIVA: «primeira linha do retorno» — <verbo>` | documento de casa: a chave falhou em ler e levantar veio vazio (linhas LER e LEVANTAR do mapa das rotinas); cadeira, verbo, card, arquivo ou mesa: `conferir existe <tipo> <nome>`; «quem sou, que cadeiras existem» vem do retorno de `monta_sessao`. `indeterminavel` não ancora: fonte fora do ar espera |
-| entregar valor de negócio | `ENTREGA: #<feat> «retorno em uma linha» — tarefas mover\|ler` | pai sem filha aberta. Story e task fecham com `PARCIAL: #<story> → <estado> · pai #<feat> <derivado> · abertas: #a #b`, o retorno de `tarefas mover` |
+| entregar valor de negócio | `ENTREGA: #<feat> «retorno em uma linha» — tarefas mover\|ler` | pai em `em-homologacao`, conferido pela cadeira dona. Story e task relatam `PARCIAL: #<story> → <estado> · pai #<feat> <derivado> · abertas: #a #b`, o retorno de `tarefas mover` |
 
 `PARADA:` e `NEGATIVA:` são a primeira linha da resposta; `ENTREGA:` e `PARCIAL:` abrem
 a parte 2 do molde. A âncora é o retorno do verbo em uma linha, nunca o bloco cru.
@@ -180,13 +180,20 @@ estado da arte, ou disser que já tentou resolver o problema, a cadeira entra em
 ## 10. Card e entrega
 
 1. Card nasce só de pedido expresso dele, no chat; git e wiki já são log. Sem pedido,
-   executa, publica e relata.
-2. `tarefas mover` sai junto com o ato que o causou, não no fim do turno: pôs a mão,
-   `em-execucao`; terminou, `em-homologacao`, mesmo já em produção. `priorizada` e
-   `entregue` são atos dele.
-3. Quem entrega valor é o pai (feature, épico), pelo estado derivado do rastreador;
-   story e task fecham e relatam `PARCIAL:`. Card se escreve por `tarefas modelo
-   <nível>`; a API recusa sair de `captada` sem o corpo.
+   executa, publica e relata. A quebra de feature que ele pediu em stories é da cadeira
+   dona, sem novo pedido.
+2. Story e task andam sem ele, com o ato: a fita que a puxa a põe em `em-execucao`
+   (`repo abrir <repo> <card>` já move); terminou, `entregue` — pela promoção, no código;
+   pela cadeira, no documento servido ou, sem sinal automático, depois de conferir a
+   produção. Story entregue não é entrega de valor.
+3. Feature e épico: na mão, só o funil antes da primeira filha em entrega, a volta ao
+   funil com motivo e o terminal. O resto o rastreador calcula das filhas: `priorizada`,
+   `em-execucao`, `em-homologacao` quando todas foram entregues. Pai em `em-homologacao`
+   é conferência: a cadeira dona (o `tarefas mover` a avisa) roda o `Sai quando:`, ou
+   confere a `Medida:` no épico, comenta o retorno no card e leva `ENTREGA:` a ele.
+   `entregue` do pai é ato dele; faltou coisa, a cadeira abre a story que falta.
+   Card se escreve por `tarefas modelo <nível>`; a API recusa sair de `captada` sem o
+   corpo.
 
 ## 11. O git não chega ao dono
 
