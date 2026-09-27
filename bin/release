@@ -2249,6 +2249,9 @@ entrar_na_fila_de_promocao() {  # $1=ato ; resto = args do ato
   local ato="$1"; shift
   local a
   for a in "$@"; do [ "$a" = "--ensaio" ] && return 0; done
+  # reentrada: o promover que reverte sozinho chama `release reverter` como filho, e o pai ja
+  # tem a vez. Esperar aqui seria esperar por si mesmo ate estourar a espera.
+  [ -z "${PF_PROMOCAO_NA_FILA:-}" ] || return 0
   command -v flock >/dev/null || { printf 'release: dependência ausente: flock (util-linux) — a fila de promoção precisa dele\n' >&2; exit 3; }
   local espera="${PF_PROMOCAO_ESPERA:-900}"
   local lock="$PONTOS/.promocao.lock" dono="$PONTOS/.promocao.dono"
@@ -2265,6 +2268,7 @@ entrar_na_fila_de_promocao() {  # $1=ato ; resto = args do ato
     printf 'fila:      a vez chegou\n' >&2
   fi
   printf '%s %s · pid %s · cadeira %s · desde %s\n' "$ato" "$*" "$$" "${CADEIRA:-?}" "$(date -Is)" > "$dono"
+  export PF_PROMOCAO_NA_FILA="$$"
 }
 
 cmd="$1"

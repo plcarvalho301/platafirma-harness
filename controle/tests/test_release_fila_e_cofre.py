@@ -67,6 +67,17 @@ def test_ensaio_nao_entra_na_fila(tmp_path):
     assert "aguardando a vez" not in p.stderr
 
 
+def test_reentrada_do_reverter_automatico_nao_espera_por_si(tmp_path):
+    # o promover que reverte sozinho chama `release reverter` como filho, ja com a vez
+    env, lock = _ambiente(tmp_path)
+    env["PF_PROMOCAO_NA_FILA"] = "123"
+    with open(lock, "a") as fh:
+        fcntl.flock(fh, fcntl.LOCK_EX)
+        p = subprocess.run([RELEASE, "reverter", "familia-que-nao-existe"],
+                           capture_output=True, text=True, env=env, timeout=60)
+    assert "aguardando a vez" not in p.stderr
+
+
 def _conferir(monkeypatch, tmp_path):
     monkeypatch.setenv("PF_AI_DIR", str(tmp_path))
     monkeypatch.setenv("PLATAFIRMA_INSTANCIA", str(tmp_path / "inst"))

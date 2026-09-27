@@ -378,12 +378,13 @@ def env_declarado(c):
         base += ["-f", f]
     cofre = segredos_da_stack(stack_do_container(c))
     _SEGREDOS_VISTOS.update(cofre.values())
-    env = dict(os.environ, **cofre) if cofre else None
+    # so passa env quando ha cofre: stack sem segredo chama sh como sempre chamou
+    kw = {"env": dict(os.environ, **cofre)} if cofre else {}
     # `--profile "*"`: sem isso, servico sob profile (o rag-api esta em `serving`) some do
     # config renderizado e a conferencia acusa ausencia que nao existe.
-    rc, out, err = sh(base + ["--profile", "*", "config", "--format", "json"], cwd=c["working_dir"], env=env)
+    rc, out, err = sh(base + ["--profile", "*", "config", "--format", "json"], cwd=c["working_dir"], **kw)
     if rc != 0:
-        rc, out, err = sh(base + ["config", "--format", "json"], cwd=c["working_dir"], env=env)
+        rc, out, err = sh(base + ["config", "--format", "json"], cwd=c["working_dir"], **kw)
     if rc != 0:
         return None, err.splitlines()[-1] if err else "docker compose config falhou"
     try:
