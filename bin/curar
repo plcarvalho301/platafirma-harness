@@ -427,17 +427,18 @@ def _hermit(de: str, para: str, tipo: str) -> dict | None:
 def _exportar(repo: str) -> str | None:
     """Regenera ontologia/acervo/*.jsonl no clone (cli exportar-acervo). Devolve os arquivos
     alterados segundo o git, ou None se não deu para rodar."""
-    # motor_acervo.cli importa dotenv, psycopg etc.: roda no venv rag, o mesmo de
-    # bin/_acervo/exportar. O venv acervo so tem boto3/owlready2/rdflib (#3130, 27/09).
-    py = os.environ.get("PF_EXPORT_PYTHON") or str(release() / "venv" / "rag" / "bin" / "python")
-    if not os.path.isfile(py):
+    # Delega a `acervo exportar` (bin/_acervo/exportar), dono unico do export: venv rag,
+    # ambiente da ingestao (EMBED_MODEL, POSTGRES_*) e bancada da sessao. Chamar o cli direto
+    # daqui falhava por venv e por ambiente (#3130, 27/09). `repo` fica so pela assinatura.
+    acervo = os.path.join(os.path.dirname(os.path.realpath(__file__)), "acervo")
+    if not os.access(acervo, os.X_OK):
         return None
-    r = subprocess.run([py, "-m", "motor_acervo.cli", "exportar-acervo"], capture_output=True, text=True,
-                       cwd=os.path.join(repo, "rag"), check=False)
+    r = subprocess.run([acervo, "exportar"], capture_output=True, text=True, check=False)
+    saida = (r.stdout + r.stderr).strip()
     if r.returncode:
-        return f"exportar-acervo falhou: {(r.stderr or r.stdout).strip()[-300:]}"
-    g = subprocess.run(["git", "-C", repo, "status", "--short", "--", "ontologia/acervo"], capture_output=True, text=True, check=False)
-    return g.stdout.strip() or "(export igual ao versionado)"
+        return f"acervo exportar falhou: {saida[-300:]}"
+    i = saida.rfind("bancada:")
+    return saida[i:] if i >= 0 else (saida[-300:] or "(export sem saida)")
 
 
 def formatar_plano_relacao(p: dict, hermit: dict | None) -> str:
