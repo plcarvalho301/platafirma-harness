@@ -185,8 +185,13 @@ def _senha_pg() -> tuple[str | None, str | None]:
         return out.strip(), None
     return None, f"seg segredo ler harness-sessao/SESSAO_PG_PASSWORD: {(err or out).strip()[:120] or f'exit {rc}'}"
 
-def _registra_duravel(sid: str, slug: str) -> str | None:
-    """INSERT em sessao.sessao (arq:0091). Devolve o motivo quando nao grava; nunca trava."""
+def _registra_duravel(sid: str, slug: str, sujeito: str | None = None) -> str | None:
+    """INSERT em sessao.sessao (arq:0091). Devolve o motivo quando nao grava; nunca trava.
+
+    `sujeito` entra na coluna que a migracao 0094 acrescentou (card #3145, defeito
+    pos-fita): sem ela — banco ainda nao migrado — o INSERT falha e cai no mesmo
+    'nunca trava' de sempre; a chave viva (msg-mem) e quem carrega o sujeito nesse
+    intervalo, este INSERT so serve a reidratacao depois de uma promocao."""
     try:
         import psycopg
     except ImportError:
@@ -197,9 +202,9 @@ def _registra_duravel(sid: str, slug: str) -> str | None:
     dsn = f"host=127.0.0.1 port={PG_PORTA} dbname=sessao user=sessao password={senha}"
     try:
         with psycopg.connect(dsn, connect_timeout=3) as con, con.cursor() as cur:
-            cur.execute("INSERT INTO sessao.sessao (sessao_id, cadeira, chapeu, superficie) "
-                        "VALUES (%s,%s,%s,%s) ON CONFLICT (sessao_id) DO NOTHING",
-                        (sid, slug, None, _superficie()))
+            cur.execute("INSERT INTO sessao.sessao (sessao_id, cadeira, chapeu, superficie, sujeito) "
+                        "VALUES (%s,%s,%s,%s,%s) ON CONFLICT (sessao_id) DO NOTHING",
+                        (sid, slug, None, _superficie(), sujeito or None))
             con.commit()
     except Exception as e:  # noqa: BLE001 — banco mudo nao derruba a cunhagem
         return f"Postgres da sessao: {type(e).__name__}"
@@ -332,7 +337,7 @@ def ato_abrir(cadeira: str, sessao_id: str | None, saida: Saida, dry_run: bool =
         return saida.erro(f"{_cura_msgmem(type(e).__name__)} — sessao_id cunhado e NAO gravado: {sid}",
                           3, sessao_id=sid)
     # etapa 6 — registro duravel; nunca trava
-    motivo_dur = _registra_duravel(sid, slug)
+    motivo_dur = _registra_duravel(sid, slug, sujeito)
     # etapa 7 — releitura
     try:
         relida = _le_chave(rc_mem, sid) or {}

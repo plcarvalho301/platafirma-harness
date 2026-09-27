@@ -223,7 +223,8 @@ def _fake_psycopg_update_capturado(capturas: list):
 def test_reidratar_ausente_linha_valida_regrava_com_ttl_restante(monkeypatch):
     sid = str(uuid.uuid4())
     aberta_em = datetime.now(timezone.utc) - timedelta(hours=1)  # 47h de TTL ainda restam
-    row = ("ti", "devops", "code", aberta_em, None)  # encerrada_em None -- nunca encerrada
+    # encerrada_em None -- nunca encerrada; sujeito presente (migracao 0094, card #3145)
+    row = ("ti", "devops", "code", aberta_em, None, "user-abc")
     monkeypatch.setitem(sys.modules, "psycopg", _fake_psycopg(row))
     rc_mem = FakeMsgMem()
 
@@ -234,13 +235,31 @@ def test_reidratar_ausente_linha_valida_regrava_com_ttl_restante(monkeypatch):
     assert ch["chapeu"] == "devops"
     assert ch["superficie"] == "code"
     assert ch["origem"] == "reidratada"
+    assert ch["sujeito"] == "user-abc"
     # regravou sessao:{id} no msg-mem
     assert f"sessao:{sid}" in rc_mem.data
     gravado = json.loads(rc_mem.data[f"sessao:{sid}"])
     assert gravado["cadeira"] == "ti"
+    assert gravado["sujeito"] == "user-abc"
     # TTL que resta: ~47h, nunca os 48h inteiros de novo (nao reinicia a janela)
     restante = rc_mem.ex_gravado[f"sessao:{sid}"]
     assert 46 * 3600 < restante < 48 * 3600
+
+
+def test_reidratar_ausente_linha_valida_sem_sujeito_nao_inclui_chave(monkeypatch):
+    """Linha durável gravada antes da migração 0094 (ou sessão sem sujeito):
+    `sujeito IS NULL` -- `ch` sai SEM a chave `sujeito`, nunca com valor fabricado
+    (decisão 9: nada de fallback para cadeira/USER/valor fixo)."""
+    sid = str(uuid.uuid4())
+    aberta_em = datetime.now(timezone.utc) - timedelta(hours=1)
+    row = ("ti", "devops", "code", aberta_em, None, None)  # sujeito None
+    monkeypatch.setitem(sys.modules, "psycopg", _fake_psycopg(row))
+    rc_mem = FakeMsgMem()
+
+    ch = reidratar_mod.reidratar(sid, rc_mem, _roda_seg_ok)
+
+    assert ch is not None
+    assert "sujeito" not in ch
 
 
 def test_reidratar_ausente_sem_linha_nao_existe(monkeypatch):
@@ -257,7 +276,7 @@ def test_reidratar_ausente_sem_linha_nao_existe(monkeypatch):
 def test_reidratar_ausente_vencida_nao_existe(monkeypatch):
     sid = str(uuid.uuid4())
     aberta_em = datetime.now(timezone.utc) - timedelta(hours=50)  # > TTL_SESSAO_S (48h)
-    row = ("ti", None, "chat", aberta_em, None)
+    row = ("ti", None, "chat", aberta_em, None, "user-x")
     monkeypatch.setitem(sys.modules, "psycopg", _fake_psycopg(row))
     rc_mem = FakeMsgMem()
 
@@ -273,7 +292,7 @@ def test_reidratar_ausente_encerrada_nao_existe(monkeypatch):
     sid = str(uuid.uuid4())
     aberta_em = datetime.now(timezone.utc) - timedelta(hours=1)  # bem dentro do TTL
     encerrada_em = datetime.now(timezone.utc) - timedelta(minutes=5)
-    row = ("ti", None, "chat", aberta_em, encerrada_em)
+    row = ("ti", None, "chat", aberta_em, encerrada_em, "user-x")
     monkeypatch.setitem(sys.modules, "psycopg", _fake_psycopg(row))
     rc_mem = FakeMsgMem()
 
@@ -284,9 +303,10 @@ def test_reidratar_ausente_encerrada_nao_existe(monkeypatch):
 
 
 def test_reidratar_coluna_encerrada_em_ausente_comportamento_atual(monkeypatch):
-    """Migração 0092 ainda não aplicada (coluna `encerrada_em` não existe): tolera o
-    erro, cai na consulta antiga (4 colunas) e reidrata normalmente -- comportamento
-    de antes da 0092, nunca uma exceção."""
+    """Migrações 0092/0094 ainda não aplicadas (colunas `encerrada_em`/`sujeito` não
+    existem): tolera o erro, cai na consulta antiga (4 colunas) e reidrata normalmente
+    -- comportamento de antes das duas, nunca uma exceção. Sem a coluna, também sem
+    sujeito no resultado -- nada de fabricar valor (decisão 9)."""
     sid = str(uuid.uuid4())
     aberta_em = datetime.now(timezone.utc) - timedelta(hours=1)
     row_sem_encerrada_em = ("ti", "devops", "code", aberta_em)
@@ -297,6 +317,7 @@ def test_reidratar_coluna_encerrada_em_ausente_comportamento_atual(monkeypatch):
 
     assert ch is not None
     assert ch["cadeira"] == "ti"
+    assert "sujeito" not in ch
     assert f"sessao:{sid}" in rc_mem.data
 
 
