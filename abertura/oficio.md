@@ -80,7 +80,7 @@ gasto a toa.
 - **Todo verbo declara `capacidade:` e `dono:`** no cabeçalho, e a conta é um verbo
   por capacidade (`arq:0037`). `conferir verbo` mede.
 
-Clones de trabalho: `platafirma-{core,conhecimento,arquitetura,harness,motor,posto}`
-e `modulo-osint`, todos na bancada declarada pela conta (`~/.config/platafirma/bancada`),
+Clones de trabalho: `platafirma-{core,conhecimento,arquitetura,harness,motor,posto,ui,casa,rastreador}`,
+todos na bancada declarada pela conta (`~/.config/platafirma/bancada`),
 com worktree por cadeira em `<bancada>/wt/<repo>/<cadeira>`. O que está no ar é a release
 em `/opt/platafirma/current/`.
