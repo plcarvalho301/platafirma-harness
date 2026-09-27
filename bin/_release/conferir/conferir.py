@@ -2614,17 +2614,17 @@ def conferir_diagrama(alvo, como_json=False):
 
     # Kroki da casa
     # Endpoint padrao ou override
+    # Pela porta PUBLICADA, nunca pelo IP do conteiner: o docker da conta e rootless e o IP
+    # da rede do compose nao e roteavel do host («No route to host», card #3099). O compose
+    # do conhecimento publica o kroki em 127.0.0.1:8095; `docker port` le o que estiver la.
     endpoint = os.environ.get("KROKI_URL")
     if not endpoint:
-        try:
-            import subprocess
-            out = subprocess.check_output(["docker", "inspect", "-f", "{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}", "plataforma-wiki-kroki-1"], text=True).strip()
-            if out:
-                endpoint = f"http://{out}:8000"
-        except:
-            pass
+        rc_p, out_p, _ = sh(["docker", "port", "plataforma-wiki-kroki-1", "8000/tcp"])
+        linha = out_p.splitlines()[0].strip() if rc_p == 0 and out_p.strip() else ""
+        if linha:
+            endpoint = "http://" + linha.replace("0.0.0.0:", "127.0.0.1:")
     if not endpoint:
-        endpoint = "http://127.0.0.1:8000"
+        endpoint = "http://127.0.0.1:8095"
     
     ext = os.path.splitext(alvo)[1].lower()
     diagram_type = "mermaid" if ext == ".mmd" else "d2" if ext == ".d2" else None
