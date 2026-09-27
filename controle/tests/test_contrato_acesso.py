@@ -9,8 +9,8 @@
 #   exit 3: infraestrutura / PAP ausente / sintaxe corrompida
 #   exit 5: medição incompleta / faltou atributo na projeção / realm não medido
 #
-# Atos que dependem de banco (conceder, revogar, listar) declaram @pytest.mark.skip
-# na ausência do contêiner de banco de dados.
+# O registro de identidade (banco) nunca e o real: o caso que chega ao banco poe um
+# `docker` de fixture no PATH (conftest: teste nao le estado real).
 import json
 import os
 import shutil
@@ -22,21 +22,15 @@ import pytest
 REPO_ROOT = Path(__file__).resolve().parents[2]
 ACESSO_BIN = REPO_ROOT / "bin" / "acesso"
 POLITICA_ORIGINAL = REPO_ROOT / "politica-acesso"
-DB_CONTAINER = os.environ.get("ACESSO_DB_CONTAINER", "platafirma-core-identidade-db-1")
 
 
-def _docker_container_running(name: str) -> bool:
-    try:
-        r = subprocess.run(
-            ["docker", "inspect", "-f", "{{.State.Running}}", name],
-            capture_output=True, text=True, timeout=5,
-        )
-        return r.returncode == 0 and "true" in r.stdout.lower()
-    except Exception:
-        return False
-
-
-TEM_BANCO = _docker_container_running(DB_CONTAINER)
+def _docker_de_fixture(tmp_path, corpo):
+    d = tmp_path / "bin-docker"
+    d.mkdir()
+    p = d / "docker"
+    p.write_text("#!/bin/sh\n" + corpo)
+    p.chmod(0o755)
+    return {"PATH": f"{d}{os.pathsep}{os.environ['PATH']}"}
 
 
 def run_acesso(*args, env=None) -> subprocess.CompletedProcess:
@@ -250,7 +244,6 @@ def test_subcomando_desconhecido_exit_2():
 # Atos que dependem de banco de dados (conceder, revogar, listar)
 # ==============================================================================
 
-@pytest.mark.skipif(not TEM_BANCO, reason="exige contêiner de banco de dados identidade rodando")
 def test_conceder_sem_sujeito_exit_3():
     """Exit 3: conceder sem PF_SUJEITO nao chega ao banco. Ato de ESTADO nunca se testa
     contra o registro vivo (gravaria concessao real); o contrato provavel sem banco e o
@@ -264,7 +257,6 @@ def test_conceder_fundamento_trivial_exit_2():
     assert r.returncode == 2
 
 
-@pytest.mark.skipif(not TEM_BANCO, reason="exige contêiner de banco de dados identidade rodando")
 def test_revogar_sem_uuid_exit_2():
     r = run_acesso("revogar", "nao-e-uuid", "--fundamento", "revogacao de teste valida")
     assert r.returncode == 2
@@ -355,7 +347,15 @@ def test_pap_nao_nomeia_cadeira_inexistente():
     assert citadas <= cadeiras, f"PAP cita cadeira que nao existe: {sorted(citadas - cadeiras)}"
 
 
-@pytest.mark.skipif(not TEM_BANCO, reason="exige contêiner de banco de dados identidade rodando")
-def test_listar_com_banco():
-    r = run_acesso("listar")
-    assert r.returncode == 0
+def test_listar_devolve_o_que_o_registro_responde(tmp_path):
+    env = _docker_de_fixture(tmp_path, 'echo "G48UFN|papel|operador|concessao||ato-1"\n')
+    r = run_acesso("listar", env=env)
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert "G48UFN" in r.stdout
+
+
+def test_listar_registro_fora_do_ar_exit_3(tmp_path):
+    env = _docker_de_fixture(tmp_path, 'echo "Error: No such container" >&2; exit 1\n')
+    r = run_acesso("listar", env=env)
+    assert r.returncode == 3
+    assert "registro fora do ar" in r.stderr

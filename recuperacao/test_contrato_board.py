@@ -237,37 +237,6 @@ def test_board_manda_o_header_de_identidade_quando_ha_cadeira():
     assert vistos.get("X-auth-request-preferred-username") == "claudinho-IA"
 
 
-# ================================================================= 7. conformidade
-
-
-def rastreador_no_ar() -> bool:
-    try:
-        AdaptadorBoard()._carimbo()
-    except Exception:  # noqa: BLE001
-        return False
-    return True
-
-
-@pytest.mark.skipif(not rastreador_no_ar(), reason=f"rastreador fora do ar em {BASE}")
-def test_conformidade_board_bate_com_o_verbo_humano():
-    """§5: o resultado bate com o do verbo humano sobre o mesmo estado."""
-    p = subprocess.run(["tarefas", "listar", "--cadeira", "claudinho-IA",
-                        "--estado", "priorizada"],
-                       capture_output=True, text=True, timeout=30,
-                       env={**os.environ, "PF_CADEIRA": "claudinho-IA"})
-    if p.returncode != 0:
-        pytest.skip("verbo `tarefas` indisponível")
-    do_verbo = {linha.split("\t")[0].strip() for linha in p.stdout.splitlines() if linha.strip()}
-    r = AdaptadorBoard().busca("", filtros={"cadeira": "claudinho-IA",
-                                            "estado": "priorizada"}, k=100)
-    do_adaptador = {i.procedencia.chave.removeprefix("item:") for i in r.itens}
-    assert do_adaptador == do_verbo
-
-
-@pytest.mark.skipif(not rastreador_no_ar(), reason=f"rastreador fora do ar em {BASE}")
-def test_conformidade_carimbo_nao_muda_por_leitura():
-    """Aceite do #2307, do lado do consumidor: ler não move o ledger."""
-    a = AdaptadorBoard()
-    antes = a._carimbo()
-    a.busca("", k=5)
-    assert a._carimbo() == antes
+# A conformidade contra o rastreador vivo (adaptador x `tarefas listar`, carimbo que
+# não anda por leitura) saiu daqui em 27/09/2026: é conferência de estado de produção,
+# não teste (guia portoes-do-codigo, «Teste não lê estado real»).

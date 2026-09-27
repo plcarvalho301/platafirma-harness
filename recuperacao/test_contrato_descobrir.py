@@ -40,9 +40,18 @@ from recuperacao.pep import PEP
 
 from recuperacao._raizes import TOKENIZADOR
 BIN_DESCOBRIR = Path(__file__).resolve().parents[1] / "bin" / "descobrir"
-MOTOR_ACERVO_URL = os.environ.get(
-    "MOTOR_ACERVO_URL", os.environ.get("RAG_API_URL", "http://127.0.0.1:8100")).rstrip("/")
-RAG_API_TOKEN = os.environ.get("RAG_API_TOKEN", "")
+
+
+@pytest.fixture(autouse=True)
+def _pep_livre(monkeypatch):
+    """O PEP padrão resolve o sujeito pelo ambiente de quem roda e lê a política: o
+    resultado do caso dependia de quem rodava a suíte. Aqui o contrato é o de
+    `descobrir()`; a negação por concessão tem caso próprio, com PEP explícito."""
+    class PEPLivre(PEP):
+        def autoriza(self, *args, **kwargs):
+            return []
+    # o pacote exporta a função `descobrir` com o nome do módulo: vai-se ao módulo
+    monkeypatch.setattr(sys.modules["recuperacao.descobrir"], "PEP", PEPLivre)
 
 OBJETO_O1 = "acervo/1111111111111111111111111111111111111111111111111111111111111111"
 OBJETO_O2 = "acervo/2222222222222222222222222222222222222222222222222222222222222222"
@@ -242,25 +251,6 @@ def test_descobrir_disjuntor_aberto():
 # =============================================================================
 
 
-def _motor_acervo_com_rotas_novas() -> bool:
-    try:
-        req = urllib.request.Request(
-            f"{MOTOR_ACERVO_URL}/acervo/conceitos",
-            headers={"authorization": f"Bearer {RAG_API_TOKEN}"} if RAG_API_TOKEN else {})
-        with urllib.request.urlopen(req, timeout=3) as r:  # noqa: S310
-            return r.status < 500
-    except urllib.error.HTTPError as e:
-        return e.code != 404
-    except Exception:  # noqa: BLE001
-        return False
-
-
-motor_acervo_no_ar = pytest.mark.skipif(
-    not _motor_acervo_com_rotas_novas(),
-    reason=f"motor_acervo em {MOTOR_ACERVO_URL} sem as rotas /acervo/* (não redeployado "
-          "com #2957, ou fora do ar) — CLI pulado, não mascarado")
-
-
 def test_bin_descobrir_sem_argumento_sai_2():
     """Chamada sem argumentos imprime o uso e sai com código 2. Não toca a rede."""
     p = subprocess.run([sys.executable, str(BIN_DESCOBRIR)], capture_output=True, text=True)
@@ -275,17 +265,16 @@ def test_bin_descobrir_ajuda_sai_2():
     assert "uso:" in p.stderr
 
 
-@motor_acervo_no_ar
-def test_bin_descobrir_executa_e_emite_envelope():
-    """Execução com termo retorna envelope formatado, contra o serviço real."""
+def test_bin_descobrir_servico_fora_emite_envelope_declarado():
+    """Com o motor fora (conftest: porta 9), o CLI ainda emite envelope e nunca «zero»."""
     p = subprocess.run(
         [sys.executable, str(BIN_DESCOBRIR), "seguranca", "--json"],
         capture_output=True,
         text=True,
     )
-    assert p.returncode == 0
+    assert p.returncode == 0, p.stderr
     d = json.loads(p.stdout)
-    assert "cobertura" in d
+    assert d["cobertura"] != "vazia"
 
 
 # =============================================================================

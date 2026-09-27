@@ -214,22 +214,5 @@ def test_cli_fonte_sem_estado_falha_declarando_e_nao_apaga_o_resto(tmp_path, mon
     assert not (tmp_path / "gold-board.jsonl").exists()
 
 
-# ================================================================= 6. conformidade
-
-
-def fonte_no_ar(nome: str) -> bool:
-    try:
-        gold.gera(nome, casos=2, com_termo=False)
-    except Exception:  # noqa: BLE001
-        return False
-    return True
-
-
-@pytest.mark.parametrize("nome", ["board", "registro"])
-def test_conformidade_gera_contra_a_fonte_viva(nome):
-    if not fonte_no_ar(nome):
-        pytest.skip(f"{nome} não devolveu estado nesta bancada")
-    casos = gold.gera(nome, casos=3)
-    assert casos and all(c["fonte"] == nome for c in casos)
-    pontuaveis = [c for c in casos if c["pontuavel"]]
-    assert pontuaveis, "gold sem caso pontuável não calibra nada"
+# A geração contra board e registro vivos saiu daqui em 27/09/2026: é conferência de
+# estado, não teste (guia portoes-do-codigo, «Teste não lê estado real»).

@@ -60,7 +60,7 @@ def test_tabela_do_catalogo_populada_e_enum_derivado():
     assert len(fontes) == 6
     assert [f.slug for f in fontes] == ["board", "fila", "mesa", "registro", "wiki", "acervo"]
 
-    FonteX, ClasseX = _constroi_fontes(texto=TABELA_6_FONTES)
+    FonteX, ClasseX, _infos = _constroi_fontes(texto=TABELA_6_FONTES)
     assert {f.value for f in FonteX} == {"board", "fila", "mesa", "registro", "wiki", "acervo"}
     assert ClasseX[FonteX.ACERVO] is Classe.SEMANTICA
     assert all(ClasseX[f] is Classe.EXATA for f in FonteX if f is not FonteX.ACERVO)
@@ -186,6 +186,6 @@ def test_repoint_monta_enum_a_partir_do_stub_da_api(monkeypatch):
                   gold="nao-calibrada", linha_num=1),
     ]
     monkeypatch.setattr("recuperacao.fontes._le_fontes_do_acervo", lambda: linhas)
-    FonteX, ClasseX = _constroi_fontes()
+    FonteX, ClasseX, _infos = _constroi_fontes()
     assert {f.value for f in FonteX} == {"cofre"}
     assert ClasseX[FonteX.COFRE] is Classe.EXATA

@@ -1,8 +1,8 @@
 """metrica comportamento (#3090): sinais de ato por cadeira, janela contra base.
 
 Roda o verbo como a unit roda (subprocesso, OPS_LOG_DIR apontado), sobre log sintetico
-com um tropeco plantado na janela e ausente da base. E um smoke contra o log real,
-quando ele existe na maquina.
+com um tropeco plantado na janela e ausente da base. O smoke contra o log real saiu em
+27/09/2026: teste nao le estado real (guia portoes-do-codigo).
 """
 import json
 import os
@@ -80,12 +80,3 @@ def test_sem_log_nenhum_sai_4(tmp_path):
     assert r.returncode == 4
     assert "nao ha ops log" in r.stderr
 
-
-def test_log_real_roda(capsys):
-    real = Path(os.environ.get("OPS_LOG_DIR", "/srv/platafirma/casa/var/log/ops"))
-    if not real.is_dir():
-        return
-    r = _roda(real, "--resumo")
-    assert r.returncode in (0, 4), r.stderr
-    with capsys.disabled():
-        print("\n" + r.stdout)

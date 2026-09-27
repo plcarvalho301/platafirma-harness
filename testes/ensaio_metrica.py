@@ -1,16 +1,13 @@
 """Ensaio do verbo `metrica` — card #3017.
 
-Duas familias de teste, e a diferenca entre elas e o ponto:
+SINTETICO: eventos montados a mao, um por regra do card. Nao dependem de log nenhum.
+E aqui que cada uma das seis definicoes do card fica pregada; a forma dos erros reais
+de 2026-09-07 (cadeia de repo commitar, help de conferir chapeu) esta reproduzida nos
+casos sinteticos.
 
-SINTETICO  eventos montados a mao, um por regra do card. Nao dependem de log
-           nenhum, entao continuam verdes depois que o log de hoje rotacionar.
-           E aqui que cada uma das seis definicoes do card fica pregada.
-
-GABARITO   os erros REAIS de 2026-09-07, que o card fixou como SLO de acuracia do
-           verbo. Sao a prova de que a classificacao acerta o mundo, e nao so o
-           mundo que o teste inventou. `ops-log-prune` tem retencao: quando o
-           arquivo do dia sumir, o teste PULA — nao fica vermelho por falta de
-           insumo, e nao vira verde por baixo do pano (o skip aparece na suite).
+O GABARITO contra o ops log real de 2026-09-07 saiu em 27/09/2026: o arquivo ja tinha
+rotacionado e o caso pulava para sempre, e teste nao le estado real (guia
+portoes-do-codigo).
 """
 import importlib.machinery
 import importlib.util
@@ -344,63 +341,3 @@ def test_ajuda_sai_zero_no_stdout(capsys):
     assert m.main(["metrica", "--ajuda"]) == 0
     assert "uso:" in capsys.readouterr().out
 
-
-# --- GABARITO: os erros reais de 2026-09-07 ---------------------------------------
-
-@pytest.fixture(scope="module")
-def dia_real():
-    fonte = m.FonteJsonl()
-    alvo = fonte.caminho(DIA_GABARITO)
-    if not os.path.isfile(alvo):
-        pytest.skip(f"ops log de {DIA_GABARITO} ja rotacionado ({alvo}) — "
-                    "gabarito historico, ver #3017")
-    return m.classifica(fonte, DIA_GABARITO)
-
-
-def test_gabarito_cadeia_de_repo_commitar_da_ia(dia_real):
-    """O card mede na mao: profundidade 3, acerto no 4o giro, por volta das 15:03."""
-    _, _, cadeias = dia_real
-    alvo = [c for c in cadeias
-            if c["tool"] == "repo" and c["cadeira"] == "ia" and "commitar" in c["atos"]]
-    assert alvo, "a cadeia de repo commitar da ia sumiu da classificacao"
-    c = max(alvo, key=lambda x: x["profundidade"])
-    assert c["profundidade"] == 3
-    assert c["acerto_no_giro"] == 4
-    assert c["ts_acerto"][11:16] == "15:03"
-
-
-def test_gabarito_conferir_chapeu_da_ia_e_erro_e_help(dia_real):
-    """Chamadas exit 2 de `conferir chapeu` (classe declarada e sem implementacao).
-
-    O card conta DUAS, e eram duas quando ele foi escrito; a medicao aqui achou
-    tres — a terceira e das 15:38, depois do card. O dia de hoje ainda esta sendo
-    escrito, entao o gabarito e um PISO, nao uma igualdade: o que fica pregado e a
-    propriedade (exit 2 conta como erro E como help-pedido), nao a foto do contador.
-    """
-    giros, _, _ = dia_real
-    alvo = [g for g in giros
-            if g["tool"] == "conferir" and g["ato"] == "chapeu" and g["cadeira"] == "ia"]
-    assert len(alvo) >= 2
-    assert all(g["exit_code"] == 2 and g["falhou"] for g in alvo)
-    assert sum(1 for g in alvo if g["help"]) >= 2
-
-
-def test_gabarito_giros_de_help_de_repo_fila_minuta(dia_real):
-    """Os tres verbos que a fita chamou sem ato so para descobrir a forma."""
-    giros, _, cadeias = dia_real
-    help_por_verbo = m.resumo_do_dia(giros, cadeias)["giros_de_help"]
-    for verbo in ("repo", "fila", "minuta"):
-        assert help_por_verbo.get(verbo, 0) >= 1, f"{verbo} sem giro de help em {DIA_GABARITO}"
-
-
-def test_gabarito_as_tres_camadas_rodam_sobre_o_dia(dia_real):
-    """Aceite do card: as tres camadas sobre o log de 07/09, sem estourar."""
-    giros, par, cadeias = dia_real
-    evs = m.stream_eventos(giros, cadeias)
-    resumo = m.resumo_do_dia(giros, cadeias)
-    mae = m.ate_acerto(giros, par)
-    assert resumo["total"]["giros"] == len(giros) > 0
-    assert sum(1 for e in evs if e["tipo"] == "giro") == len(giros)
-    assert resumo["profundidade_de_cadeia"]["maior"] >= 3
-    assert mae["resumo"]["pares_com_acerto"] >= 1
-    json.dumps({"e": evs, "d": resumo, "m": mae}, ensure_ascii=False)   # serializavel

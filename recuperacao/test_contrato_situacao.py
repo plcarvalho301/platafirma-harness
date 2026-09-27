@@ -40,9 +40,18 @@ from recuperacao.situacao import situacao
 
 from recuperacao._raizes import TOKENIZADOR
 BIN_SITUACAO = Path(__file__).resolve().parents[1] / "bin" / "situacao"
-MOTOR_ACERVO_URL = os.environ.get(
-    "MOTOR_ACERVO_URL", os.environ.get("RAG_API_URL", "http://127.0.0.1:8100")).rstrip("/")
-RAG_API_TOKEN = os.environ.get("RAG_API_TOKEN", "")
+
+
+@pytest.fixture(autouse=True)
+def _pep_livre(monkeypatch):
+    """O PEP padrão resolve o sujeito pelo ambiente de quem roda e lê a política: o
+    resultado do caso dependia de quem rodava a suíte. Aqui o contrato é o de
+    `situacao()`; a negação por concessão tem caso próprio, com PEP explícito."""
+    class PEPLivre(PEP):
+        def autoriza(self, *args, **kwargs):
+            return []
+    # o pacote exporta a função `situacao` com o nome do módulo: vai-se ao módulo
+    monkeypatch.setattr(sys.modules["recuperacao.situacao"], "PEP", PEPLivre)
 
 
 # =============================================================================
@@ -190,27 +199,6 @@ def test_situacao_disjuntor_aberto():
 # =============================================================================
 
 
-def _motor_acervo_com_rotas_novas() -> bool:
-    """`/health` respondendo não basta: o serviço velho (pré-#2957) também responde.
-    Confere se a rota `/acervo/*` já existe (serviço redeployado)."""
-    try:
-        req = urllib.request.Request(
-            f"{MOTOR_ACERVO_URL}/acervo/conceitos",
-            headers={"authorization": f"Bearer {RAG_API_TOKEN}"} if RAG_API_TOKEN else {})
-        with urllib.request.urlopen(req, timeout=3) as r:  # noqa: S310
-            return r.status < 500
-    except urllib.error.HTTPError as e:
-        return e.code != 404
-    except Exception:  # noqa: BLE001
-        return False
-
-
-motor_acervo_no_ar = pytest.mark.skipif(
-    not _motor_acervo_com_rotas_novas(),
-    reason=f"motor_acervo em {MOTOR_ACERVO_URL} sem as rotas /acervo/* (não redeployado "
-          "com #2957, ou fora do ar) — CLI pulado, não mascarado")
-
-
 def test_bin_situacao_sem_argumento_sai_2():
     """Chamada sem argumentos imprime o uso e sai com código 2. Não toca a rede."""
     p = subprocess.run([sys.executable, str(BIN_SITUACAO)], capture_output=True, text=True)
@@ -225,7 +213,6 @@ def test_bin_situacao_ajuda_sai_2():
     assert "uso:" in p.stderr
 
 
-@motor_acervo_no_ar
 # =============================================================================
 # Regressão: ramo `cache is not None` chama a API real do Cache (le/grava).
 # Mesmo bug de `descobrir` — cache.obtem/grava-4-args escapavam do except

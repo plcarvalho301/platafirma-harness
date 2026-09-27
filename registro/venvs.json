@@ -42,6 +42,11 @@
     "lock": "venvs/acervo/uv.lock",
     "teste": "controle"
   },
+  "recuperacao": {
+    "familia": "platafirma-harness",
+    "lock": "recuperacao/uv.lock",
+    "teste": "recuperacao"
+  },
   "ops": {
     "familia": "platafirma-harness",
     "lock": "ops-server/requirements.txt",
