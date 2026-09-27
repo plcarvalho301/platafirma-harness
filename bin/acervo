@@ -72,6 +72,7 @@ uso (gramatica arq:0106 — acervo <ato> <particao> <entidade> [seletor]):
   acervo ingerir  casa platafirma-casa[@<rev>] [--apply]      o suporte, pelo sha (arq:0115 §8.1)
   acervo lote     <id>
   acervo curar    obra lote [dest] · casa alias <classe> <chave> <alias>
+  acervo curar    casa revisao <revid>... --motivo <m> [--apply]   tira texto antigo do historico da wiki
   acervo curar    obra --situacao|--expurgar|--restaurar|--promover|--reclassificar|--conceito <...>
   acervo curar    obra --relacionar <de> <para> --tipo <t> --garantia <g> --motivo <m> [--apply]
                   obra --relacoes <conceito> · --desrelacionar <id>   a teia de conceitos (conceito vive em obra)
@@ -160,6 +161,8 @@ conforme() {
     # -- repassa entidade + resto tal qual para _acervo/curar, que so encosta em bin/curar.
     curar:obra:*)           exec "$ATOS/curar" obra "$entidade" "$@" ;;
     curar:casa:alias)       exec "$ATOS/curar" alias "$@" ;;
+    # revisao antiga de pagina da wiki fora do historico publico (revisiondelete)
+    curar:casa:revisao)     exec "$ATOS/wiki" ocultar-revisao "$@" ;;
     bancada:obra:lote)      exec "$ATOS/bancada" "$@" ;;
     # --- ingerir por particao ---
     # Obra e registro seguem no cliente de obra (objeto-por-sha, MinIO, OCR, bancada).
