@@ -61,18 +61,10 @@ sujeitos:
     dominios: [plataforma]
     usuario: megafone
 
-  # A conta da fábrica (jaiminho-fabrica). Readmitida em 22/09/2026 por ordem do dono:
-  # a remoção do mesmo dia leu errado o pedido dele. O que o dono disse é que o modelo
-  # de acesso estava errado e que o controle desta conta se exerce FORA da segurança,
-  # por isolamento físico (a conta roda na máquina dele) — não que ela perdesse acesso.
-  # Esta linha só projeta o papel para o PDP; o teto é o que `fornecedor` alcança em
-  # politica.yaml. A arquitetura de authn/authz de terceiros vai ao #180.
-  e57eadb1-ec5d-41b5-a1be-e6d62196cff5:
-    natureza: servico
-    papeis: [fornecedor]
-    dominios: [plataforma]
-    client: jaiminho-fabrica
-    conta: jaiminho-fabrica
+  # A conta uid 1003 sai daqui em 27/09/2026 por ordem do dono (card #3117): todo o
+  # código com o nome antigo foi apagado. O acesso dela volta desenhado do zero, no
+  # modelo correto, pelo card de segurança que sucede o #3117 — não por restauração
+  # desta linha.
 
   # A rota de emergência por token estático (claudinho) saiu em 22/09/2026; a
   # emergência é SSH ao host.

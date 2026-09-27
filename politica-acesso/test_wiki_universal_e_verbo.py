@@ -31,15 +31,13 @@ from pdp import Politica, Recurso, Sujeito, decide  # noqa: E402
 PERMITE, NEGA = True, False
 
 DONO = "megafone"
-EXTERNO = "jaiminho"   # expurgado 02/09/2026: sujeito e papel fora do PDP, NEGA tudo
-FABRICA = "jaiminho-fabrica"
+EXTERNO = "ex-externo"  # sujeito sem projecao: o papel pesquisador-externo saiu em 02/09/2026, NEGA tudo
+FABRICA = "fornecedor-sintetico"
 ESTRANHO = "cadeira-que-nao-existe"
 
-# A CONTA jaiminho-fabrica saiu do sujeitos.yaml em 22/09/2026 (conta-bot roda na
-# maquina do dono, authz de saida no forge). Mas o PAPEL `fornecedor` FICOU no PAP
-# para os terceiros do #180, e as regras dele seguem sendo aceite deste arquivo. Como
-# nao ha mais titular do papel na projecao viva, o teste injeta um titular sintetico
-# do papel `fornecedor` — o aceite e do PAPEL, nao da conta que um dia o portou.
+# O PAPEL `fornecedor` fica no PAP para os terceiros do #180, e as regras dele seguem
+# sendo aceite deste arquivo. Sem titular na projecao viva (card #3117), o teste injeta
+# um titular sintetico — o aceite e do PAPEL, nao de uma conta.
 TITULAR_SINTETICO = {
     FABRICA: {"natureza": "servico", "papeis": ["fornecedor"], "dominios": ["plataforma"]},
 }
@@ -48,7 +46,7 @@ TITULAR_SINTETICO = {
 CASOS = [
     # --- (e) wiki: leitura por sujeito, de qualquer servidor -------------------
     (EXTERNO, "wiki_ler", "wiki", "plataforma-wiki", "wiki:principal/Ontologia",
-     NEGA, "jaiminho-le-wiki-conceito saiu com o papel em 02/09/2026"),
+     NEGA, "a leitura de wiki do externo saiu com o papel em 02/09/2026"),
     (EXTERNO, "wiki_buscar", "wiki", "plataforma-wiki", "wiki:principal/*",
      NEGA, "idem"),
     (EXTERNO, "wiki_listar", "wiki", "plataforma-wiki", "wiki:principal/*",

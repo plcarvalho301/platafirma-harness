@@ -1158,7 +1158,7 @@ def test_pdp_indeterminavel_quando_current_nao_encontrada(monkeypatch, tmp_path,
 
     assert exit_code == 5
     dado = json.loads(saida.out)
-    # 3 servidores desde o card #3117 (jaiminho-server saiu do codigo)
+    # 3 servidores desde o card #3117 (o servidor do canal externo saiu do codigo)
     assert len(dado["itens"]) == 3
     assert all(item["estado"] == "indeterminavel" for item in dado["itens"])
     assert all("nao encontrada" in item["motivo"] for item in dado["itens"])

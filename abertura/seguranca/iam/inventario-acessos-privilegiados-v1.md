@@ -9,13 +9,13 @@
 |---|---|---|---|---|
 | megafone | 1000 | **sudo + docker** | lingering | dono. sudo→root e docker→daemon de SISTEMA. Foi o vetor do vazamento de rebuild 25/08. |
 | claudinho | 1001 | dono do daemon rootless da prod | lingering | conta dos serviços; opera via `/run/user/1001/docker.sock`. Sem sudo. |
-| jaiminho | 1003 | rootless próprio | lingering | braço agy (migrado #2286). |
+| (conta uid 1003) | 1003 | rootless próprio | lingering | sem sujeito no PAP desde o #3117; acesso a redesenhar. |
 | modulo-osint | 1002 | — | lingering | conta de SO órfã (achado do `acesso orfaos`, sem sujeito no PAP). |
 
 ## 2. Realm (Keycloak)
 - **pedro-admin** — ÚNICO admin (realm master). Senha rotacionada 09/08 por exposição (#200).
 - platafirma: **nenhum** usuário com `realm-management` direto — admin só via master/pedro-admin. Sem admins espalhados (bom).
-- service accounts vivos: `jaiminho-fabrica` (fornecedor, ~9k calls/dia), `L0R8OJ`/jaiminho (pesquisador-externo). Os 7 por-cadeira foram extintos (#163) — privilégio ocioso zerado no realm.
+- service accounts de fornecedor e de externo: sem sujeito no PAP desde o #3117 (o do externo, desde 02/09); os clients no realm ainda nao foram medidos. Os 7 por-cadeira foram extintos (#163) — privilégio ocioso zerado no realm.
 
 ## 3. Credenciais com poder de alteração
 | segredo | onde vive | rotação | custódia |

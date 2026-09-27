@@ -283,12 +283,10 @@ def test_decidir_permissao_na_forma_nua():
     assert "regra=fornecedor-le-repo" in r.stdout
 
 def test_decidir_projecao_e_a_do_pep():
-    """`--sujeito` casa so a chave da tabela, como a porta. A conta da fabrica e chaveada
-    so pelo `sub` desde 22/09/2026 (sujeitos.yaml): o username nao projeta, e isso e medido."""
-    r = run_acesso("decidir", "sessao_abrir", "sessao:engenharia", "--sujeito", "jaiminho-fabrica")
+    """`--sujeito` casa so a chave da tabela, como a porta. O `sub` da conta uid 1003 saiu
+    de sujeitos.yaml no card #3117: nao projeta papel, e o PDP nao decide sem projecao."""
+    r = run_acesso("decidir", "sessao_abrir", "sessao:engenharia", "--sujeito", "e57eadb1-ec5d-41b5-a1be-e6d62196cff5")
     assert r.returncode == 5
-    r2 = run_acesso("decidir", "sessao_abrir", "sessao:engenharia", "--sujeito", "e57eadb1-ec5d-41b5-a1be-e6d62196cff5")
-    assert r2.returncode == 0
 
 def test_decidir_argumento_nao_vira_codigo():
     """Acao com aspas e ponto-e-virgula chega ao PDP como texto: exit 1 (default), sem traceback."""
@@ -303,8 +301,9 @@ def test_decidir_argumento_nao_vira_codigo():
 # A cadeira `fabrica` saiu na reconformacao e o PAP seguiu nomeando `sessao:fabrica`:
 # `monta_sessao(cadeira="engenharia")` voltou 403 regra=default. Estes testes amarram o
 # recurso das tres regras de abertura do fornecedor a uma cadeira servida.
-# Sujeito pelo `sub`, a unica chave da conta em sujeitos.yaml desde 22/09/2026.
-FABRICA_SUB = "e57eadb1-ec5d-41b5-a1be-e6d62196cff5"
+# Pelo papel `fornecedor`: desde o card #3117 nenhum sujeito o titula em sujeitos.yaml,
+# e o que se amarra aqui e a regra do PAP, nao a conta.
+FORNECEDOR = ("--papel", "fornecedor", "--dominio", "plataforma")
 
 # `monta_sessao` a porta submete como tipo documento: `documento:sessao:<cadeira>`.
 @pytest.mark.parametrize("acao,recurso", [
@@ -313,7 +312,7 @@ FABRICA_SUB = "e57eadb1-ec5d-41b5-a1be-e6d62196cff5"
     ("expediente_montar", "expediente:engenharia"),
 ])
 def test_fornecedor_abre_na_cadeira_engenharia(acao, recurso):
-    r = run_acesso("decidir", acao, recurso, "--sujeito", FABRICA_SUB)
+    r = run_acesso("decidir", acao, recurso, *FORNECEDOR)
     assert r.returncode == 0, r.stdout + r.stderr
     assert "PERMITIDO" in r.stdout
 
@@ -325,7 +324,7 @@ def test_fornecedor_abre_na_cadeira_engenharia(acao, recurso):
     ("expediente_montar", "expediente:ti"),
 ])
 def test_fornecedor_nao_abre_cadeira_alheia(acao, recurso):
-    r = run_acesso("decidir", acao, recurso, "--sujeito", FABRICA_SUB)
+    r = run_acesso("decidir", acao, recurso, *FORNECEDOR)
     assert r.returncode == 1
     assert "regra=default" in r.stdout
 

@@ -194,7 +194,7 @@ seguram sozinhos; o segundo cadeado só aparece quando alguém também alarga a 
 que é exatamente o cenário que `politica.yaml` descreve como "o dia em que uma tool nova
 esquecer o corte".
 
-**Achado, não defeito:** `jaiminho-fabrica` é negado nas seis fontes. O papel `fornecedor`
+**Achado, não defeito:** sujeito sem titular do papel `fornecedor` é negado nas seis fontes. O papel `fornecedor`
 não tem regra de leitura de acervo, wiki nem fila, e `recuperar` não é verbo dele — a
 fábrica fala por card. Está na matriz para que uma concessão futura apareça como
 mudança de linha, não como silêncio.

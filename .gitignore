@@ -3,11 +3,5 @@ dist/
 # materializa na árvore da release; nunca é versionado.
 /terceiros/
 __pycache__/
-jaiminho/.env
 chat/.env
-jaiminho-server/.env
-jaiminho-server/client_secret.json
-jaiminho-server/token.json
-jaiminho-server/.env
 sessao/.env
-jaiminho-fabrica/.env
