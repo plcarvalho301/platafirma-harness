@@ -202,9 +202,17 @@ def _registra_duravel(sid: str, slug: str, sujeito: str | None = None) -> str | 
     dsn = f"host=127.0.0.1 port={PG_PORTA} dbname=sessao user=sessao password={senha}"
     try:
         with psycopg.connect(dsn, connect_timeout=3) as con, con.cursor() as cur:
-            cur.execute("INSERT INTO sessao.sessao (sessao_id, cadeira, chapeu, superficie, sujeito) "
-                        "VALUES (%s,%s,%s,%s,%s) ON CONFLICT (sessao_id) DO NOTHING",
-                        (sid, slug, None, _superficie(), sujeito or None))
+            # ON CONFLICT preserva a linha (2a abertura da mesma conversa reusa, nunca
+            # recria), mas BACKFILLA sujeito quando a linha existente ainda nao tem --
+            # cobre a linha gravada antes da migracao 0094 (card #3145): sem isto, uma
+            # sessao antiga que perdeu a chave viva (promocao) e foi reidratada ficava
+            # PARA SEMPRE sem sujeito, mesmo depois da coluna existir. COALESCE nunca
+            # troca um sujeito ja gravado -- identidade nao muda por reabertura.
+            cur.execute(
+                "INSERT INTO sessao.sessao (sessao_id, cadeira, chapeu, superficie, sujeito) "
+                "VALUES (%s,%s,%s,%s,%s) ON CONFLICT (sessao_id) DO UPDATE SET "
+                "sujeito = COALESCE(sessao.sessao.sujeito, EXCLUDED.sujeito)",
+                (sid, slug, None, _superficie(), sujeito or None))
             con.commit()
     except Exception as e:  # noqa: BLE001 — banco mudo nao derruba a cunhagem
         return f"Postgres da sessao: {type(e).__name__}"
@@ -324,8 +332,14 @@ def ato_abrir(cadeira: str, sessao_id: str | None, saida: Saida, dry_run: bool =
     try:
         existente = _le_chave(rc_mem, sid) if sid_portado else None
         if existente:
-            # reabrir a mesma conversa: atualiza ordem_id e nada mais (§2)
+            # reabrir a mesma conversa: atualiza ordem_id e nada mais (§2), exceto
+            # sujeito AUSENTE (card #3145): backfill do PF_SUJEITO desta abertura --
+            # cobre a chave reidratada de um registro duravel anterior a migracao
+            # 0094 (ou qualquer sessao gravada sem sujeito). Nunca sobrescreve um
+            # sujeito ja presente: identidade nao muda por reabertura.
             existente["ordem_id"] = ordem_id
+            if not existente.get("sujeito"):
+                existente["sujeito"] = sujeito
             ch = existente
         else:
             ch = {"sujeito": sujeito, "cadeira": slug, "canonizada": canonizada,
