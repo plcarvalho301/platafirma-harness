@@ -2093,6 +2093,53 @@ sanear_cache() {
   return 0
 }
 
+# sanear_remotos <clone base> <repo> <relatar> -- ordem do dono 27/09/2026 (card #3072,
+# emenda da spec_saneamento-de-clones): ramo do origin sem PR aberto e com o ultimo commit
+# mais velho que PF_SANEAR_DIAS (7) some do forge -- wip/ inclusive. Nunca main/master,
+# ramo com PR aberto nem ramo de bancada viva na conta. PRs abertos ilegiveis: nada se apaga.
+# Cada apagado sai com sha e a linha da volta. rc 0 feito/nada · 1 pendente (relatar) · 3 falhou.
+sanear_remotos() {
+  local base="$1" nome="$2" relatar="$3" dias="${PF_SANEAR_DIAS:-7}" abertos vivos limite
+  case "$dias" in ''|*[!0-9]*) printf '%s: PF_SANEAR_DIAS invalido (%s) -- ramos remotos nao tocados\n' "$nome" "$dias"; return 3 ;; esac
+  if [ -z "$GH" ] || [ ! -x "$GH" ]; then
+    printf '%s: sem gh -- ramos remotos nao medidos\n' "$nome"; return 0
+  fi
+  abertos="$(cd "$base" && env PATH="$PATH_FORGE" "$GH" pr list --state open --limit 500 \
+             --json headRefName --jq '.[].headRefName' 2>/dev/null)" \
+    || { printf '%s: PRs abertos ilegiveis -- nenhum ramo remoto apagado\n' "$nome"; return 0; }
+  vivos="$(worktrees_tab "$base" | cut -f2 | sed -n 's#^refs/heads/##p')"
+  limite=$(( $(date +%s) - dias * 86400 ))
+  local r sha quando apagar=() linhas=()
+  while read -r r sha quando; do
+    case "$r" in origin|origin/HEAD|origin/main|origin/master) continue ;; esac
+    r="${r#origin/}"
+    grep -qxF -- "$r" <<<"$abertos" && continue
+    grep -qxF -- "$r" <<<"$vivos" && continue
+    [ "${quando:-0}" -lt "$limite" ] || continue
+    apagar+=("$r")
+    linhas+=("$r ${sha} $(date -d "@$quando" +%F 2>/dev/null || echo "$quando")")
+  done < <("$GIT" -C "$base" for-each-ref --format='%(refname:short) %(objectname) %(committerdate:unix)' refs/remotes/origin)
+  [ "${#apagar[@]}" -gt 0 ] || return 0
+  local l
+  if [ "$relatar" -eq 1 ]; then
+    for l in "${linhas[@]}"; do
+      set -- $l
+      printf '%s origin/%s: relataria apagar (sem PR aberto, ultimo commit %s, %s)\n' "$nome" "$1" "$3" "${2:0:7}"
+    done
+    return 1
+  fi
+  if ! env PATH="$PATH_FORGE" "$GIT" -C "$base" push -q --no-verify origin --delete "${apagar[@]}" >/dev/null 2>&1; then
+    printf '%s: push --delete recusado para %d ramo(s) -- nada garantido apagado\n' "$nome" "${#apagar[@]}"
+    return 3
+  fi
+  for l in "${linhas[@]}"; do
+    set -- $l
+    printf '%s origin/%s: apagado (sem PR aberto, ultimo commit %s; volta: git push origin %s:refs/heads/%s)\n' \
+      "$nome" "$1" "$3" "$2" "$1"
+  done
+  return 0
+}
+
 # sanear_conforme <alvo> <relatar> -- spec_ambiente-de-desenvolvimento §2; spec_saneamento-de-
 # clones §3.4. Por clone base: busca o forge (falhou: incidente, nada destrutivo nele); le do
 # forge os PRs mesclados (uma consulta por clone); enumera as worktrees pelo git, nunca por
@@ -2186,6 +2233,9 @@ sanear_conforme() {
           printf '%s: %s\n' "$rot" "$res" ;;
       esac
     done < <(worktrees_tab "$base")
+    # depois das bancadas: o ramo de bancada entregue ja saiu da lista de vivos
+    sanear_remotos "$base" "$nome" "$relatar"
+    case $? in 1) pend=1 ;; 3) incid+=("$nome: ramos remotos -- ver linha acima") ;; esac
   done
 
   if [ "$relatar" -eq 1 ]; then

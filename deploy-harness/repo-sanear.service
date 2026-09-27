@@ -11,6 +11,9 @@ Environment=PATH=/opt/platafirma/current/harness/bin:/usr/local/bin:/usr/bin:/bi
 EnvironmentFile=/home/claudinho/.config/ops/env
 # Dono do wip/ quando a pasta nao diz de quem e (bancada por sessao): a cadeira da esteira.
 Environment=PF_CADEIRA=ti
+# Ramo do origin sem PR aberto e parado ha mais destes dias sai do forge, wip/ inclusive
+# (ordem do dono 27/09/2026, emenda da spec saneamento-de-clones, card #3072).
+Environment=PF_SANEAR_DIAS=7
 ExecStart=/opt/platafirma/current/harness/bin/repo sanear
 # Exit 1 e "fez, mas sobrou incidente nomeado na saida", nao falha de execucao.
 SuccessExitStatus=0 1

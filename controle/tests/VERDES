@@ -26,6 +26,7 @@ tests/test_conferir_jobs.py
 tests/test_conferir_servico_release.py
 tests/test_contrato_repo_bancada.py
 tests/test_contrato_repo_pr_fechar.py
+tests/test_contrato_repo_sanear_remotos.py
 tests/test_contrato_teste_bloco.py
 tests/test_lote_encadeado.py
 tests/test_mesa.py
