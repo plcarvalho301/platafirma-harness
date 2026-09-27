@@ -203,7 +203,7 @@ def test_rodada_parcial_nao_grava_o_memo_do_portao(tmp_path):
     """Um arquivo verde nao e a arvore verde: o memo que pre-push e gate leem so recebe a
     rodada do portao inteiro. Antes, `teste rodar <stack> <um arquivo>` gravava verde ali,
     e o push seguinte da mesma arvore passava sem medir o resto (medido em 27/09: tres
-    arquivos diferentes, um so rodou, os outros dois sairam "reaproveitado")."""
+    arquivos diferentes, um so rodou, os outros dois sairam "reaproveitado"). """
     if not shutil.which("uv"):
         pytest.skip("uv ausente")
     release_raiz = tmp_path / "release"
