@@ -260,6 +260,9 @@ Pessoa também usa esses padrões. Nenhum, sozinho, prova IA:
 - **Aspa curva sozinha.** Editor curva por padrão.
 - **Uma frase curta de ênfase.** Só marque fileira de fragmentos.
 - **Abertura repetida deliberada, com ritmo.** «Vim. Vi. Venci.» fica.
+- **Termo e abertura repetidos em dispositivo de ato normativo.** A redação normativa
+  exige o mesmo termo em todo dispositivo; variar é o erro (ver a ponte com a
+  `redacao-normativa` no SKILL.md).
 - **«Sinceramente» ou «olha» no meio da frase.** O tell é o gancho teatral isolado, não a palavra.
 - **Ressalva útil.** Escopo, aviso legal, correção real, objeção nomeada, resposta de FAQ.
 - **Alternativa real** num documento de decisão, tutorial ou argumento.
@@ -283,7 +286,7 @@ Costumam carregar a voz de quem escreve. Mantenha, salvo se atrapalharem o senti
 ## Fonte
 
 Fork do blader/humanizer (MIT); padrões de «Signs of AI writing» (Wikipedia,
-WikiProject AI Cleanup), adaptados ao pt-BR e à voz da casa. A régua canônica é a
-spec (`platafirma-arquitetura/docs/spec_styleguide-da-wiki.md`); a servida é
+WikiProject AI Cleanup), adaptados ao pt-BR e à voz da casa. A régua canônica é o
+styleguide do acervo da casa (`acervo ler casa padrao styleguide-da-wiki`); a servida é
 `Operar:styleguide` na wiki viva. Este catálogo é o anexo de marcas que a spec §4
 manda morar na skill.

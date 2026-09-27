@@ -1400,7 +1400,7 @@ NOMES_TEXTO = {"Dockerfile", ".dockerignore", "VERDES"}  # VERDES: baseline do p
 # clone ja existia na bancada, mas ficava fora da lista — a Frente 2 do #3115 parou ai.
 CLONES = ("platafirma-core", "platafirma-conhecimento", "platafirma-arquitetura",
           "platafirma-harness", "platafirma-motor", "platafirma-posto", "platafirma-ui",
-          "platafirma-casa", "platafirma-rastreador", "modulo-osint")
+          "platafirma-casa", "platafirma-rastreador")
 ESCRITA_TETO = 1_048_576
 TMP_FITA = INSTANCIA / "var" / "tmp"
 
@@ -1561,7 +1561,7 @@ def write_file(path: str, content: str = "", sessao_id: str | None = None,
     """Escreve arquivo de TIPO declarado em MORADA declarada, atomico (spec_porta-so-verbo §4).
 
     `path` absoluto, ou relativo à bancada declarada (sem ela, recusa). Moradas: na
-    bancada, clones platafirma-*/modulo-osint e seus worktrees em wt/<repo>/<cadeira>
+    bancada, clones platafirma-* e seus worktrees em wt/<repo>/<cadeira>
     (working tree, fora de .git), com bin/ do harness aceitando verbo (sem extensao +
     shebang); na instancia, @TMP@/<ordem_id>/ (rascunho da fita). Tipos: .py .md .mmd .d2 .sh
     .sql .yaml .yml .json .toml .css .html .js .mjs .php .txt .conf. Fora disso volta
