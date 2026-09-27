@@ -89,9 +89,26 @@ def relatorio_lint(
     chave: str,
     rev: Optional[int | str] = None,
     como_json: bool = False,
+    resumo: bool = False,
 ) -> int:
     lista = list(apontamentos)
     linha, exit_code = linha_ancora_lint(classe, alvo, lista, chave, rev)
+    if resumo:
+        # contagem por regra, sem a lista: o que cabe numa tela quando o repo tem centenas
+        contagem: dict[str, list] = {}
+        for a in lista:
+            chave_id = a.id or "-"
+            contagem.setdefault(chave_id, [0, a.severidade])[0] += 1
+        if como_json:
+            print(json.dumps({"ancora": linha, "classe": classe, "alvo": alvo, "chave": chave,
+                              "rev": rev, "contagem": {k: {"n": n, "severidade": s}
+                                                        for k, (n, s) in contagem.items()}},
+                             ensure_ascii=False))
+            return exit_code
+        print(linha)
+        for k, (n, s) in sorted(contagem.items(), key=lambda kv: -kv[1][0]):
+            print(f"    {k:<8} {n:>5}  {s}")
+        return exit_code
     if como_json:
         payload = {
             "ancora": linha,
