@@ -1,0 +1,236 @@
+#!/usr/bin/env python3
+# _acervo/casa-pr-conferir — admissão de documento de casa no PR, antes do merge (card #3136,
+# arq:0115 §7.3). Rotina de host, disparada por timer (deploy-harness/casa-pr-conferir.timer).
+# capacidade: incorporacao
+# dono: claudinho-engenharia
+#
+# Trilho decidido pelo dono em 27/09/2026 (comentário #1048 do #3136): sem runner self-hosted
+# e sem webhook. Um ciclo:
+#   1. lista os PRs abertos contra main de platafirma-casa (`gh api`, credencial da conta);
+#   2. para cada head ainda não conferido: busca no espelho bare do suporte
+#      (refs/pull/<n>/head), materializa a árvore do head em <instancia>/var/pre-push/;
+#   3. roda a admissão da ingestão sobre ela: `casa-ingerir --arvore <dir> --json`, o mesmo
+#      detector do servidor, só dry-run (nada grava em acervo.casa);
+#   4. recorta as recusas pelo diff do PR (merge-base..head): recusa de arquivo que o PR não
+#      toca é dívida de main, não do PR, e não o pinta de vermelho;
+#   5. posta o commit status `conferir` no head: success, failure (com o caminho e o motivo)
+#      ou error (motor fora, árvore ilegível).
+# O head conferido fica em <espelho>/pr-conferidos.json: sem push novo, nada se reposta.
+# Identidade: o lote dry-run vai com autor `cron`, curador de serviço (decisão do dono,
+# mesma data; conformação das identidades de job fica para outro card).
+import argparse
+import io
+import json
+import os
+import re
+import shutil
+import subprocess
+import sys
+import tarfile
+import tempfile
+
+AQUI = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, AQUI)
+import _suporte  # noqa: E402
+from _suporte import SUPORTE  # noqa: E402
+
+OWNER = "plcarvalho301"
+CONTEXTO = "conferir"
+AUTOR = "cron"
+TETO_DESCRICAO = 140   # limite do campo description do commit status no GitHub
+INGERIR = os.path.join(AQUI, "casa-ingerir")
+MAIN = "refs/remotes/origin/main"
+
+USO = """uso:
+  casa-pr-conferir [--pr <n>] [--seco] [--refazer]
+
+  Um ciclo: todo PR aberto contra main de platafirma-casa cujo head ainda nao foi
+  conferido ganha o commit status 'conferir' (arq:0115 §7.3).
+  --pr <n>    so o PR <n>
+  --seco      nao posta status nem grava o estado; imprime o veredito
+  --refazer   confere de novo mesmo head ja conferido
+
+  exit: 0 ciclo feito (PR vermelho e resultado, nao falha) · 2 uso
+        · 3 dependencia (gh, forge, espelho)
+"""
+
+
+def log(msg):
+    print(f"casa-pr-conferir: {msg}", flush=True)
+
+
+# ------------------------------------------------------------------ puras (testadas)
+
+def _caminho(arquivo):
+    pre = SUPORTE + "@"
+    arquivo = arquivo or ""
+    return arquivo[len(pre):] if arquivo.startswith(pre) else arquivo
+
+
+def recusas_do_plano(plano):
+    """[(path, motivo)] do JSON de `casa-ingerir --json`: itens reprovados pelo servidor
+    e recusas locais (diagrama sem documento)."""
+    out = []
+    for it in (plano.get("lote") or {}).get("itens") or []:
+        if it.get("veredito") != "reprovado":
+            continue
+        motivos = [f"{p.get('portao')}: {p.get('detail') or p.get('title') or ''}".rstrip(": ")
+                   for p in it.get("portoes") or [] if p.get("resultado") == "reprovado"]
+        out.append((_caminho(it.get("arquivo") or it.get("path")),
+                    "; ".join(motivos) or "reprovado"))
+    for r in plano.get("recusas_locais") or []:
+        out.append((r.get("path") or "", r.get("motivo") or "reprovado"))
+    return out
+
+
+def no_diff(recusas, tocados):
+    """Só as recusas de arquivo que o PR toca."""
+    tocados = set(tocados)
+    return [(p, m) for p, m in recusas if p in tocados]
+
+
+def veredito(recusas_do_pr):
+    """(state, description) do commit status."""
+    if not recusas_do_pr:
+        return "success", "admissão da ingestão: nenhum arquivo do PR recusado"
+    p, m = recusas_do_pr[0]
+    resto = f" (+{len(recusas_do_pr) - 1})" if len(recusas_do_pr) > 1 else ""
+    desc = f"recusado{resto}: {p}: {m}"
+    if len(desc) > TETO_DESCRICAO:
+        desc = desc[:TETO_DESCRICAO - 1] + "…"
+    return "failure", desc
+
+
+# ------------------------------------------------------------------ forge
+
+def gh(*args):
+    exe = shutil.which("gh") or next(
+        (p for p in ("/usr/bin/gh", os.path.expanduser("~/.local/bin/gh")) if os.path.exists(p)),
+        None)
+    if not exe:
+        raise RuntimeError("gh ausente: sem cliente do forge")
+    r = subprocess.run([exe, "api", *args], capture_output=True, text=True, timeout=120)
+    if r.returncode != 0:
+        raise RuntimeError(f"gh api {' '.join(args[:3])} falhou: {r.stderr.strip()[:300]}")
+    return json.loads(r.stdout) if r.stdout.strip() else None
+
+
+def prs_abertos():
+    dados = gh(f"repos/{OWNER}/{SUPORTE}/pulls?state=open&base=main&per_page=100")
+    return [{"n": p["number"], "head": p["head"]["sha"]} for p in dados or []]
+
+
+def postar_status(sha, state, descricao):
+    gh("-X", "POST", f"repos/{OWNER}/{SUPORTE}/statuses/{sha}",
+       "-f", f"state={state}", "-f", f"context={CONTEXTO}", "-f", f"description={descricao}")
+
+
+# ------------------------------------------------------------------ espelho
+
+def buscar(esp, n=None):
+    """Busca main e os heads de PR no espelho (namespace próprio, fora de origin/*)."""
+    if not os.path.isdir(esp):
+        raise RuntimeError(f"espelho ausente em {esp}: a ingestão (acervo ingerir casa) o cria")
+    ref = f"+refs/pull/{n}/head:refs/remotes/pr/{n}" if n else "+refs/pull/*/head:refs/remotes/pr/*"
+    r = _suporte.git(esp, "fetch", "-q", "origin",
+                     "+refs/heads/main:refs/remotes/origin/main", ref)
+    if r.returncode != 0:
+        raise RuntimeError(f"fetch no espelho falhou: {_suporte.texto(r.stderr)[:300]}")
+
+
+def tocados(esp, head):
+    base = _suporte.texto(_suporte.git(esp, "merge-base", MAIN, head).stdout)
+    if not re.fullmatch(r"[0-9a-f]{40}", base):
+        raise RuntimeError(f"sem merge-base entre main e {head[:12]}")
+    r = _suporte.git(esp, "diff", "--name-only", "-z", base, head)
+    return [p.decode("utf-8", "surrogateescape") for p in r.stdout.split(b"\0") if p]
+
+
+def materializar(esp, head, destino):
+    r = _suporte.git(esp, "archive", "--format=tar", head)
+    if r.returncode != 0:
+        raise RuntimeError(f"archive de {head[:12]} falhou: {_suporte.texto(r.stderr)[:300]}")
+    with tarfile.open(fileobj=io.BytesIO(r.stdout)) as tar:
+        tar.extractall(destino, filter="data")
+
+
+def admitir(arvore):
+    r = subprocess.run([sys.executable, INGERIR, SUPORTE, "--arvore", arvore, "--json",
+                        "--autor", AUTOR], capture_output=True, text=True, timeout=900)
+    if r.returncode not in (0, 3):
+        raise RuntimeError(f"admissão saiu {r.returncode}: {r.stderr.strip()[-300:]}")
+    return json.loads(r.stdout)
+
+
+# ------------------------------------------------------------------ ciclo
+
+def raiz_pre_push():
+    inst = os.environ.get("PLATAFIRMA_INSTANCIA") or "/srv/platafirma/casa"
+    return os.path.join(inst, "var", "pre-push")
+
+
+def conferir_um(esp, pr, seco):
+    buscar(esp, pr["n"])
+    raiz = raiz_pre_push()
+    os.makedirs(raiz, exist_ok=True)
+    arv = tempfile.mkdtemp(prefix=f"casa-pr-{pr['n']}-{pr['head'][:12]}-", dir=raiz)
+    try:
+        try:
+            materializar(esp, pr["head"], arv)
+            recusas = no_diff(recusas_do_plano(admitir(arv)), tocados(esp, pr["head"]))
+            state, desc = veredito(recusas)
+        except RuntimeError as e:
+            state, desc = "error", str(e)[:TETO_DESCRICAO]
+    finally:
+        shutil.rmtree(arv, ignore_errors=True)
+    log(f"PR #{pr['n']} @ {pr['head'][:12]}: {state} — {desc}")
+    if not seco:
+        postar_status(pr["head"], state, desc)
+    return state
+
+
+def main(argv=None):
+    ap = argparse.ArgumentParser(add_help=False)
+    ap.add_argument("--pr", type=int, default=None)
+    ap.add_argument("--seco", action="store_true")
+    ap.add_argument("--refazer", action="store_true")
+    ap.add_argument("-h", "--help", "--ajuda", dest="ajuda", action="store_true")
+    args, resto = ap.parse_known_args(argv)
+    if args.ajuda or resto:
+        sys.stderr.write(USO)
+        return 0 if args.ajuda else 2
+
+    esp = _suporte.espelho()
+    estado_arq = os.path.join(esp, "pr-conferidos.json")
+    try:
+        with open(estado_arq, encoding="utf-8") as fh:
+            feitos = json.load(fh)
+    except (OSError, ValueError):
+        feitos = {}
+
+    try:
+        prs = prs_abertos()
+        if args.pr is not None:
+            prs = [p for p in prs if p["n"] == args.pr]
+            if not prs:
+                log(f"PR #{args.pr} não está aberto contra main")
+                return 0
+        for pr in prs:
+            if not args.refazer and feitos.get(pr["head"]) in ("success", "failure"):
+                continue
+            feitos[pr["head"]] = conferir_um(esp, pr, args.seco)
+    except RuntimeError as e:
+        log(str(e))
+        return 3
+
+    if not args.seco:
+        abertos = {p["head"] for p in prs} if args.pr is None else set(feitos)
+        feitos = {k: v for k, v in feitos.items() if k in abertos}
+        with open(estado_arq + ".tmp", "w", encoding="utf-8") as fh:
+            json.dump(feitos, fh)
+        os.replace(estado_arq + ".tmp", estado_arq)
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
