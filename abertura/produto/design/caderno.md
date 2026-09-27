@@ -7,6 +7,13 @@
 - 2026-09-19 — read_file num JSON de UMA linha gigante (estado.json, ~378KB) volta lavado (blob): serve ~295 bytes de moldura, nao da pra inspecionar conteudo. Contorno: nenhum — confiei em logs do agregador + crescimento do arquivo + testes. Encaminhavel a dados/TI: verbo que leia uma chave de JSON grande.
 - 2026-09-19 — `release estado` (leitura) foi bloqueado pelo classificador de auto-mode; `release promover` (escrita) passou. Contorno: fui direto ao promover, e li o estado por `deploy <stack>` e logs.
 - 2026-09-19 — harness-agregador (systemd --user, fora do compose) nao reinicia no `release promover`; `infra restart harness-agregador` reinicia (avisa daemon-reload — conteudo do unit identico, cosmetico). Bati 3x na mesma fita. Ja virou incidente na mesa.
+- 2026-09-27 — `repo procurar <repo> <termo>` saiu 2 («--termo e obrigatorio»); `repo procurar <repo> --termo <termo>` funcionou. Contorno na data: flag --termo.
+- 2026-09-27 — `repo procurar` e `repo historico` sem bancada aberta sairam 1 («sem bancada aberta»); abri bancada so para ler. Contorno na data: `repo abrir <repo> --slug <s>` antes de ler, ou `release procurar|ler` para o que esta no ar.
+- 2026-09-27 — `fila enviar <cadeira> --tipo pedido` saiu 2 («--assunto e obrigatorio»). Contorno na data: --assunto sempre.
+- 2026-09-27 — dois `fila enviar` no mesmo lote, a cadeiras diferentes, voltaram com o mesmo id (20260927T110027-produto); `fila ler|status <outra>` sai 1 (caixa alheia). Contorno na data: nenhum, nao da para confirmar a entrega; encaminhavel a ti (id por remetente+segundo colide).
+- 2026-09-27 — `release promover harness <sha>` saiu 2 («familia fora do registro»); o nome e o do repo. Contorno na data: `release promover platafirma-harness <sha>`.
+- 2026-09-27 — `acervo ler casa minuta 0022` saiu 1: minuta formalizada some do acervo e do repo. Contorno na data: `repo git platafirma-arquitetura grep ... <commit-da-formalizacao>^ -- minutas/<arq>` le a minuta no commit anterior.
+- 2026-09-27 — `acervo psql` com coluna chutada (especie_tipo.familia, especie_estrato.especie_slug) saiu com erro de coluna; o HINT do postgres deu o nome (familia_id, especie_id). Contorno na data: information_schema.columns antes de consultar.
 
 2c ARMADILHAS DA MATERIA (design) — vindas do chapeu do molde velho, 22/09
 - Aparencia tomada como o fim — parece que descrever a tela agradavel entrega design ("mais limpo", "cores combinam"); a materia de design e a acao que a forma induz, e a beleza serve a ela. Sinal: a resposta elogia a tela e fica muda sobre o que a pessoa faz diante dela.
