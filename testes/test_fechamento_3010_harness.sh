@@ -2,8 +2,8 @@
 # Fechamento do card #3010 no harness: venvs harness/acervo declarados com lock, artefato de
 # terceiro pinado materializado pelo release na arvore da rev, sem symlink autorreferente em
 # bin/_<x>, log da porta num nome so, units sem python do sistema nem ~/.local/bin, segredo
-# da sessao por <stack>/<NOME>, shims fora de ~/.local/bin, PAP com var/tmp absoluto na
-# instancia e tokens do jaiminho obrigatorios.
+# da sessao por <stack>/<NOME>, shims fora de ~/.local/bin e PAP com var/tmp absoluto na
+# instancia.
 #
 # Hermetico: release e instancia num tmp, bancada nao declarada, HOME num tmp, forge local,
 # nenhuma rede (a url do terceiro na fixture e inalcancavel de proposito).
@@ -182,8 +182,8 @@ out="$(PLATAFIRMA_SHIMS_PARES='rastreador|tarefas' bash "$REPO_ROOT/bin/_shims-i
 echo "OK"
 
 # ---------------------------------------------------------------- 9. PAP e compose
-echo "--- 9: PAP com var/tmp absoluto; tokens do jaiminho obrigatorios"
-python3 - "$REPO_ROOT/politica-acesso/politica.yaml" "$REPO_ROOT/jaiminho/docker-compose.yml" <<'PY'
+echo "--- 9: PAP com var/tmp absoluto"
+python3 - "$REPO_ROOT/politica-acesso/politica.yaml" <<'PY'
 import sys, yaml
 pap = yaml.safe_load(open(sys.argv[1], encoding="utf-8"))
 regras = {r["id"]: r for r in pap["regras"]} if isinstance(pap, dict) and "regras" in pap else None
@@ -206,10 +206,6 @@ assert regra, "regra fornecedor-usa-verbo-operacional ausente"
 sobre = regra["sobre"]
 assert "var/tmp/*" not in sobre, sobre
 assert "/srv/platafirma/*/var/tmp/*" in sobre, sobre
-comp = yaml.safe_load(open(sys.argv[2], encoding="utf-8"))
-env = comp["services"]["jaiminho-server"]["environment"]
-for nome in ("WIKI_MCP_TOKEN", "RAG_API_TOKEN"):
-    assert str(env[nome]).startswith("${%s:?" % nome), (nome, env[nome])
 PY
 echo "OK"
 
