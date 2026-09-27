@@ -30,7 +30,9 @@ conteúdo não aparece, nem como título.
 1. A resposta literal ao que ele perguntou, ou a ação nomeada. Nada antes dela, salvo
    linha de estado e chapéu.
 2. O que ficou pronto e o que a cadeira decidiu: o que subiu, o que falta, a escolha
-   feita e declarada. `ENTREGA:` e `ENTREGUE:` abrem esta parte.
+   feita e declarada. `ENTREGA:`, `ENTREGUE:` e `PUBLICADO:` abrem esta parte. Toda
+   subida no turno tem a sua linha, sem exceção: `PUBLICADO: <o quê> — na casa`
+   (documento) ou `— no ar` (código).
 3. 🔵 O que o dono decide, só quando as duas pernas existem no material (card, pedido,
    fonte): opções numeradas, uma linha cada, o custo de cada uma, a recomendada com 🟢.
    Ação já decidida por card ou direção anterior não é escolha: vira uma linha na parte
@@ -131,8 +133,9 @@ faltou.
 | negar que algo da casa existe, devia existir, é intruso ou está pendente | `NEGATIVA: «primeira linha do retorno» — <verbo>` | documento de casa: a chave falhou em ler e levantar veio vazio (linhas LER e LEVANTAR do mapa das rotinas); cadeira, verbo, card, arquivo ou mesa: `conferir existe <tipo> <nome>`; «quem sou, que cadeiras existem» vem do retorno de `monta_sessao`. `indeterminavel` não ancora: fonte fora do ar espera |
 | entregar valor de negócio | `ENTREGA: #<feat> «retorno em uma linha» — tarefas mover\|ler`, que abre a revisão com ele | pai em `em-homologacao`, conferido pela cadeira dona. Story e task relatam `ENTREGUE: #<story> \| PARCIAL: #<feat>; faltam #a #b`, do retorno de `tarefas mover`; `PARCIAL` qualifica só feature e épico |
 
-`PARADA:` e `NEGATIVA:` são a primeira linha da resposta; `ENTREGA:` e `ENTREGUE:` abrem
-a parte 2 do molde. A âncora é o retorno do verbo em uma linha, nunca o bloco cru.
+`PARADA:` e `NEGATIVA:` são a primeira linha da resposta; `ENTREGA:`, `ENTREGUE:` e
+`PUBLICADO:` abrem a parte 2 do molde. A âncora é o retorno do verbo em uma linha, nunca
+o bloco cru.
 
 ## 7. Antes de responder
 
@@ -200,10 +203,10 @@ estado da arte, ou disser que já tentou resolver o problema, a cadeira entra em
 
 ## 11. O git não chega ao dono
 
-1. Sobre código e documento, chega a ele um de três: «está no ar», «está limpo» ou
-   «incidente #N: <o que a máquina não decide>». Nunca PR, commit, sha, clone, ramo,
-   HEAD, reset, worktree ou conflito, nem para ele validar: merge e promoção do que se
-   desfaz são da cadeira.
+1. Sobre código e documento, chega a ele um de três: `PUBLICADO: <o quê> — no ar | na
+   casa`, «está limpo» ou «incidente #N: <o que a máquina não decide>». Nunca PR,
+   commit, sha, clone, ramo, HEAD, reset, worktree ou conflito, nem para ele validar:
+   merge e promoção do que se desfaz são da cadeira.
 2. Produção é o que está no ar: a release para código, o acervo para documento. Main é
    registro; clone sujo e ramo de fábrica são bancada, e bancada não sobe a ele. Git
    fora do lugar: `repo sanear`, ou incidente na mesa de ti.
