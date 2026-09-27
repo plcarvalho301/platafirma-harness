@@ -101,3 +101,135 @@ def test_reidratar_porta_propaga_excecao_como_none_e_loga(capsys):
     with patch.object(s, "_reidratar_mod", fake_mod):
         assert s._reidratar_porta("qualquer-sid") is None
     assert "reidratar" in capsys.readouterr().err
+
+
+# ---------------------------------------------------------------- PF_SUJEITO no execve (card #3145)
+# Contrato item 2 (#3053) estendido pelo card #3145: todo execve de verbo injeta
+# PF_SUJEITO quando o registro da sessao o tem -- mesmo ponto onde PF_CADEIRA ja entra
+# (_run_verbo_blocking), sem fallback para cadeira/USER/valor fixo (decisao 9).
+
+def test_sessao_resolve_traz_sujeito_da_chave_viva():
+    """`sessao:{id}` presente no msg-mem, com `sujeito` gravado na cunhagem
+    (bin/sessao::ato_abrir): `_sessao_resolve` devolve o mesmo valor."""
+    sid = "11111111-2222-3333-4444-555555555555"
+    mock_rc = MagicMock()
+    mock_rc.get.return_value = '{"cadeira": "ti", "ordem_id": "o1", "sujeito": "jose-123"}'
+
+    with patch.object(s, "_rc", return_value=mock_rc):
+        out = s._sessao_resolve(sid)
+
+    assert out["sujeito"] == "jose-123"
+
+
+def test_sessao_resolve_sem_sujeito_no_registro_devolve_vazio():
+    """Registro sem a chave `sujeito` (sessao antiga, ou sonda sem sujeito): string
+    vazia -- nunca fallback para cadeira/USER/valor fixo (decisao 9 do card #3145)."""
+    sid = "11111111-2222-3333-4444-555555555555"
+    mock_rc = MagicMock()
+    mock_rc.get.return_value = '{"cadeira": "ti", "ordem_id": "o1"}'
+
+    with patch.object(s, "_rc", return_value=mock_rc):
+        out = s._sessao_resolve(sid)
+
+    assert out["sujeito"] == ""
+
+
+def test_sessao_resolve_reidratada_traz_sujeito():
+    """`sessao:{id}` ausente -> reidrata via `_reidratar_porta`; quando o registro
+    duravel tem sujeito (migracao 0094), a reidratacao o devolve tambem -- "sessao
+    reidratada traz o sujeito" (item 4 do card #3145)."""
+    sid = "11111111-2222-3333-4444-555555555555"
+    mock_rc = MagicMock()
+    mock_rc.get.return_value = None  # sessao:{id} ausente
+
+    fake_mod = MagicMock()
+    fake_mod.reidratar_via_verbo.return_value = {
+        "cadeira": "ia", "ordem_id": "o-reidratado", "sujeito": "jose-123"}
+
+    with patch.object(s, "_rc", return_value=mock_rc), \
+         patch.object(s, "_reidratar_mod", fake_mod):
+        out = s._sessao_resolve(sid)
+
+    assert out["cadeira"] == "ia"
+    assert out["sujeito"] == "jose-123"
+
+
+def test_sessao_resolve_reidratada_sem_sujeito_devolve_vazio():
+    """Reidratacao de uma linha gravada antes da migracao 0094 (sem a coluna
+    `sujeito`): `_reidratar_mod.reidratar_via_verbo` nao devolve a chave -- porta nao
+    fabrica valor nenhum."""
+    sid = "11111111-2222-3333-4444-555555555555"
+    mock_rc = MagicMock()
+    mock_rc.get.return_value = None
+
+    fake_mod = MagicMock()
+    fake_mod.reidratar_via_verbo.return_value = {"cadeira": "ia", "ordem_id": "o-reidratado"}
+
+    with patch.object(s, "_rc", return_value=mock_rc), \
+         patch.object(s, "_reidratar_mod", fake_mod):
+        out = s._sessao_resolve(sid)
+
+    assert out["sujeito"] == ""
+
+
+class _ProcessoFake:
+    """Dublê de `subprocess.Popen`: comunica vazio e sai 0, sem tocar processo real."""
+
+    returncode = 0
+
+    def communicate(self, input=None, timeout=None):
+        return b"", b""
+
+
+def test_run_verbo_blocking_injeta_pf_sujeito_da_sessao():
+    """O env do execve do verbo despachado traz PF_SUJEITO igual ao da sessao -- mesmo
+    ponto onde PF_CADEIRA já entra (item 4 do card #3145)."""
+    ident = {"sessao_id": "sid-1", "ordem_id": "o-1", "cadeira": "ti", "sujeito": "jose-123"}
+    capturado = {}
+
+    def fake_popen(argv, **kw):
+        capturado["env"] = kw.get("env")
+        return _ProcessoFake()
+
+    with patch.object(s.subprocess, "Popen", side_effect=fake_popen):
+        r = s._run_verbo_blocking(["/bin/infra", "up"], None, 5, ident)
+
+    assert r["exit_code"] == 0
+    assert capturado["env"]["PF_SUJEITO"] == "jose-123"
+    assert capturado["env"]["PF_CADEIRA"] == "ti"
+
+
+def test_run_verbo_blocking_sem_sujeito_nao_injeta_variavel():
+    """Sessão sem sujeito no registro: PF_SUJEITO simplesmente não entra no ambiente
+    do verbo -- nunca fallback para cadeira/USER/valor fixo (decisão 9)."""
+    ident = {"sessao_id": "sid-1", "ordem_id": "o-1", "cadeira": "ti", "sujeito": ""}
+    capturado = {}
+
+    def fake_popen(argv, **kw):
+        capturado["env"] = kw.get("env")
+        return _ProcessoFake()
+
+    with patch.object(s.subprocess, "Popen", side_effect=fake_popen):
+        r = s._run_verbo_blocking(["/bin/infra", "up"], None, 5, ident)
+
+    assert r["exit_code"] == 0
+    assert "PF_SUJEITO" not in capturado["env"]
+    assert capturado["env"]["PF_CADEIRA"] == "ti"
+
+
+def test_run_verbo_blocking_sem_chave_sujeito_no_ident_nao_quebra():
+    """`ident` sem a chave `sujeito` (defensivo -- todo `_sessao_resolve` real a traz,
+    mas `_run_verbo_blocking` nao pode cair se algum chamador futuro nao trouxer):
+    `.get("sujeito")` nunca estoura KeyError."""
+    ident = {"sessao_id": "sid-1", "ordem_id": "o-1", "cadeira": ""}
+    capturado = {}
+
+    def fake_popen(argv, **kw):
+        capturado["env"] = kw.get("env")
+        return _ProcessoFake()
+
+    with patch.object(s.subprocess, "Popen", side_effect=fake_popen):
+        r = s._run_verbo_blocking(["/bin/infra", "up"], None, 5, ident)
+
+    assert r["exit_code"] == 0
+    assert "PF_SUJEITO" not in capturado["env"]

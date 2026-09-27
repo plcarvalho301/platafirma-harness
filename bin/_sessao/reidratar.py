@@ -70,18 +70,18 @@ def reidratar(sid: str, rc_mem, roda, pg_porta: str = "5437",
         return None
     dsn = f"host=127.0.0.1 port={pg_porta} dbname=sessao user=sessao password={senha}"
     row = None
-    tem_encerrada_em = True
+    tem_colunas_novas = True
     try:
         with psycopg.connect(dsn, connect_timeout=3) as con, con.cursor() as cur:
             try:
                 cur.execute(
-                    "SELECT cadeira, chapeu, superficie, aberta_em, encerrada_em "
+                    "SELECT cadeira, chapeu, superficie, aberta_em, encerrada_em, sujeito "
                     "FROM sessao.sessao WHERE sessao_id = %s", (sid,))
                 row = cur.fetchone()
-            except Exception:  # noqa: BLE001 — coluna ainda ausente (0092 nao aplicada
-                # apos a promocao): tolera, cai na forma de antes da migracao
+            except Exception:  # noqa: BLE001 — coluna ainda ausente (0092/0094 nao
+                # aplicadas apos a promocao): tolera, cai na forma de antes das duas
                 con.rollback()
-                tem_encerrada_em = False
+                tem_colunas_novas = False
                 cur.execute(
                     "SELECT cadeira, chapeu, superficie, aberta_em "
                     "FROM sessao.sessao WHERE sessao_id = %s", (sid,))
@@ -90,8 +90,9 @@ def reidratar(sid: str, rc_mem, roda, pg_porta: str = "5437",
         return None
     if row is None:
         return None
-    if tem_encerrada_em:
-        cadeira, chapeu, superficie, aberta_em, encerrada_em = row
+    sujeito = None
+    if tem_colunas_novas:
+        cadeira, chapeu, superficie, aberta_em, encerrada_em, sujeito = row
         if encerrada_em is not None:
             return None  # encerrada de proposito (sessao encerrar|limpar) -- nao reidrata
     else:
@@ -105,6 +106,11 @@ def reidratar(sid: str, rc_mem, roda, pg_porta: str = "5437",
         "cadeira": cadeira, "chapeu": chapeu, "superficie": superficie or "desconhecida",
         "ordem_id": "-", "aberto_em": aberta_em.isoformat(), "origem": "reidratada",
     }
+    # sujeito (card #3145, migracao 0094): so entra quando o registro duravel o tem --
+    # linha gravada antes da 0094, ou coluna ainda nao aplicada, fica sem a chave;
+    # nunca um valor fabricado (fallback de cadeira/USER e proibido pela decisao 9).
+    if sujeito:
+        ch["sujeito"] = sujeito
     try:
         rc_mem.set(f"sessao:{sid}", json.dumps(ch, ensure_ascii=False), ex=restante)
     except Exception:  # noqa: BLE001 — msg-mem mudo no regravar: devolve mesmo assim

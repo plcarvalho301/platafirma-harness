@@ -667,8 +667,8 @@ Ambiente: repo absoluto · como instalar · o que está de pé e não se derruba
 Onde: arquivo, função, linha aproximada · peça análoga a imitar, se existir
 Passos: numerados, um por ação, comando literal
 Aceite: o comando que prova + o número que tem de dar
-Travas: imperativo + motivo — o que não decidir, onde parar e comentar no card
-Entrega: branch fabrica/<card>-<slug> de main · SHA + saída do aceite no comentário · sem merge em main
+Travas: imperativo + motivo com fonte citada — o que não decidir, onde parar e comentar no card; merge e subida não são trava
+Entrega: branch fabrica/<card>-<slug> de main · quem escreveu mescla e sobe (código: release promover; documento: servido no acervo) · retorno no comentário
 M
     ;;
     task) cat <<'M'
