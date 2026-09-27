@@ -1765,11 +1765,21 @@ estagio_card() {  # $1=repo $2=sha_de(ou vazio) $3=sha_para
     printf 'card:      %s promovido (%s -> %s), mas tarefas nao encontrado — comente e mova a mao\n' "$card" "$(curto_ou "$de" '(novo)')" "${para:0:7}" >&2
     return 0
   fi
-  "$tarefas_bin" comentar "$card" <<<"release promover $repo: $(curto_ou "$de" '(novo)') -> ${para:0:7}, gate de verbo verde. Estagio 4 (card #3150) como cliente simples de tarefas — pendente da particao promover x rastreador com o arquiteto; comentario e movimento podem vir a mudar de dono." >/dev/null 2>&1
-  "$tarefas_bin" mover "$card" em-homologacao >/dev/null 2>&1
-  printf 'card:      %s comentado e movido para em-homologacao (estagio 4, cliente simples — pendente de particao)\n' "$card"
+  # Particao decidida pelo dono (27/09, carta 20260927T112612-arquiteto; arq:0095 regra 3):
+  # promover e cliente de tarefas e move a story DIRETO a entregue. Cada chamada ao
+  # rastreador e tolerada (|| rc): sob set -e, uma recusa do card abortava o verbo antes do
+  # restart da porta, com o codigo ja no ar.
+  local rc_c=0 rc_m=0
+  "$tarefas_bin" comentar "$card" <<<"release promover $repo: $(curto_ou "$de" '(novo)') -> ${para:0:7}, gate verde, no ar." >/dev/null 2>&1 || rc_c=$?
+  "$tarefas_bin" mover "$card" entregue >/dev/null 2>&1 || rc_m=$?
+  if [ "$rc_m" -eq 0 ]; then
+    printf 'card:      %s movido para entregue (estágio 4)\n' "$card"
+  else
+    printf 'card:      AVISO — %s não moveu para entregue (tarefas saiu %s); mova à mão\n' "$card" "$rc_m" >&2
+  fi
+  [ "$rc_c" -eq 0 ] || printf 'card:      AVISO — comentário em %s falhou (tarefas saiu %s)\n' "$card" "$rc_c" >&2
   release_bin="$(achar_verbo release)"
-  [ -n "$release_bin" ] && "$release_bin" conferir card "$card" >/dev/null 2>&1
+  if [ -n "$release_bin" ]; then "$release_bin" conferir card "$card" >/dev/null 2>&1 || true; fi
   return 0
 }
 
@@ -2090,7 +2100,12 @@ cmd_promover() {
     reiniciar_porta "$repo"
     exit 5
   fi
-  estagio_card "$repo" "$atual" "$sha"
+  # O card e registro, nao producao: falha dele nao pode abortar o verbo (set -e) antes do
+  # restart da porta. Foi o que houve em 27/09: toda promocao de ramo fabrica/<card> da
+  # seguranca saiu 1 com o current ja trocado e a porta servindo o codigo anterior.
+  local rc_card=0
+  estagio_card "$repo" "$atual" "$sha" || rc_card=$?
+  [ "$rc_card" -eq 0 ] || printf 'card:      AVISO — estágio 4 saiu %s; código no ar em %s, mova o card à mão\n' "$rc_card" "${sha:0:7}" >&2
   reiniciar_porta "$repo"
   printf '%s\n' "$sha"
 }
