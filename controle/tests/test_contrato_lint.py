@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -27,6 +28,27 @@ HARNESS_ROOT = Path(__file__).resolve().parents[2]
 LINT_BIN = HARNESS_ROOT / "bin" / "lint"
 CONFERIR_BIN = HARNESS_ROOT / "bin" / "conferir"
 PRE_COMMIT_SCRIPT = HARNESS_ROOT / "bin" / "_lint" / "pre_commit.py"
+
+
+@pytest.fixture
+def bancada(tmp_path):
+    """Bancada de fixture com uma so worktree de platafirma-harness da cadeira ti.
+
+    Sem ela, os casos liam a bancada REAL da conta: passavam com uma worktree aberta,
+    saiam 2 (ambiguo) com duas e quebravam com nenhuma -- e o veredito vermelho ficava
+    memoizado pela arvore, que nao mudou. Caso de contrato nao depende do host.
+    """
+    wt = tmp_path / "bancada" / "wt" / "platafirma-harness" / "ti" / "fixture"
+    (wt / "bin").mkdir(parents=True)
+    shutil.copy2(LINT_BIN, wt / "bin" / "lint")
+    for nome in ("pyproject.toml", "ruff.toml", ".ruff.toml"):
+        if (HARNESS_ROOT / nome).exists():
+            shutil.copy2(HARNESS_ROOT / nome, wt / nome)
+    ident = {**os.environ, "GIT_AUTHOR_NAME": "t", "GIT_AUTHOR_EMAIL": "t@t",
+             "GIT_COMMITTER_NAME": "t", "GIT_COMMITTER_EMAIL": "t@t"}
+    for args in (["init", "-q", "-b", "main"], ["add", "-A"], ["commit", "-q", "-m", "fixture"]):
+        subprocess.run(["git", *args], cwd=wt, check=True, capture_output=True, env=ident)
+    return {"PLATAFIRMA_BANCADA": str(tmp_path / "bancada"), "PF_CADEIRA": "ti", "PF_SESSAO": ""}
 
 
 def _rodar_lint(*args, env_extra=None, stdin_data=None):
@@ -71,9 +93,9 @@ def test_lint_sem_bancada_exit_1_com_vizinho(tmp_path):
     assert "vizinho: repo abrir repo-fantasma" in p.stderr
 
 
-def test_lint_lista_ausente_exit_5():
+def test_lint_lista_ausente_exit_5(bancada):
     # organizacao exige lista no acervo que nao existe -> exit 5
-    p = _rodar_lint("organizacao", "platafirma-harness")
+    p = _rodar_lint("organizacao", "platafirma-harness", env_extra=bancada)
     assert p.returncode == 5
     assert "indeterminavel" in p.stderr
     assert "checklist-antipadroes-organizacao-documental" in p.stderr
@@ -97,8 +119,8 @@ def test_lint_linter_ausente_exit_3(tmp_path):
     assert p.returncode in (0, 1, 3)
 
 
-def test_lint_codigo_alvo_arquivo():
-    p = _rodar_lint("codigo", "platafirma-harness", "bin/lint")
+def test_lint_codigo_alvo_arquivo(bancada):
+    p = _rodar_lint("codigo", "platafirma-harness", "bin/lint", env_extra=bancada)
     assert p.returncode in (0, 1)
     linha1 = p.stdout.splitlines()[0]
     assert linha1.startswith("«lint codigo platafirma-harness/bin/lint:")
@@ -141,8 +163,8 @@ Comportamento esperado: exit 0
     assert "0 apontamentos" in p.stdout
 
 
-def test_lint_json():
-    p = _rodar_lint("codigo", "platafirma-harness", "bin/lint", "--json")
+def test_lint_json(bancada):
+    p = _rodar_lint("codigo", "platafirma-harness", "bin/lint", "--json", env_extra=bancada)
     assert p.returncode in (0, 1)
     dado = json.loads(p.stdout)
     assert "ancora" in dado
@@ -151,8 +173,8 @@ def test_lint_json():
     assert isinstance(dado["apontamentos"], list)
 
 
-def test_lint_staged_so_indice():
-    p = _rodar_lint("repo", "platafirma-harness", "--staged")
+def test_lint_staged_so_indice(bancada):
+    p = _rodar_lint("repo", "platafirma-harness", "--staged", env_extra=bancada)
     assert p.returncode == 0
     assert "0 apontamentos" in p.stdout
 
