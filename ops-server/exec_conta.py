@@ -89,7 +89,7 @@ def env_sob_conta(env: dict, conta: str, home: str | None = None) -> dict:
     """Env a atravessar para `conta`: o da porta, menos o que e do uid da porta.
 
     `home` explicito quando a conta nao mora em /home/<conta> — o default cobre o caso
-    desta casa (`/home/jaiminho`, uid 1003) sem uma tabela nova para manter.
+    comum (`/home/<conta>`) sem uma tabela nova para manter.
 
     PATH: o bin da release (/opt/platafirma/current/harness/bin) FICA, porque e o
     ferramental da casa e e legivel; o `~/.local/bin` do uid da porta SAI e vira o da

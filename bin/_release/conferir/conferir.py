@@ -1175,7 +1175,7 @@ def _canonico_da_cadeira(cadeira):
 
 
 
-# CARD #165. `agy` (Jaiminho, Antigravity CLI) e a unica superficie cujo conector
+# CARD #165. `agy` (Antigravity CLI; superficie retirada no #3117) era a unica cujo conector
 # escrevemos NOS e le um CLI de TERCEIRO — o schema dele nao e o nosso, e chave
 # desconhecida ele descarta CALADA (nem sobe o servidor, nem loga erro). O achado
 # que originou o card: `httpUrl` (chave do gemini-cli) no lugar de `serverUrl`

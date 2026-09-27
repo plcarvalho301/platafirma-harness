@@ -93,8 +93,8 @@ exemplos:
   acesso listar G48UFN
   acesso politica conferir
   acesso orfaos
-  acesso desligar jaiminho
-  acesso desligar jaiminho --executar
+  acesso desligar <sujeito>
+  acesso desligar <sujeito> --executar
 FIM
 }
 

@@ -106,7 +106,7 @@ TIPOS = {".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg",
 # `atores()` levanta FileNotFoundError se personas/ nao esta la — ausencia se declara,
 # e provisionar zero ator em silencio seria pior que parar.
 #
-# ATORES, e nao cadeiras: participante (Jaiminho) tem porta com o dono pelo rito de
+# ATORES, e nao cadeiras: participante tem porta com o dono pelo rito de
 # admissao e portanto tem usuario, perfil e sala direta. O que ele NAO ganha e
 # roteamento e voto, e isso nao mora aqui — mora em `cadeiras()`, que segue sem ele.
 sufixos = atores()
@@ -165,7 +165,7 @@ for sufixo in sufixos:
         # numa corrida posterior — displayname e reversivel, MXID nao. Nenhum nome de
         # pessoa entra neste arquivo; a fonte e sempre o org.
         # Participante nao esta na tabela do org: «Os colaboradores externos respondem
-        # pelo proprio nome (Jaiminho)». O nome capitalizado e regra, nao tabela — pos
+        # pelo proprio nome». O nome capitalizado e regra, nao tabela — pos
         # tabela embutida aqui envelheceria em silencio, que e o defeito ja escrito no
         # cabecalho deste arquivo.
         "alias": alias_do_org.get(sufixo) or (

@@ -669,7 +669,7 @@ def _mapa_azp_superficie() -> dict[str, str]:
                     return ext
             except Exception:
                 pass
-    return {"jaiminho-fabrica": "fabrica"}
+    return {}
 
 
 def _superficie() -> str:
@@ -715,11 +715,11 @@ def _superficie() -> str:
 
 
 # GUARDA DE REENTRANCIA explicita (#2481, Onda 2). O ciclo `_audit`->`_quem`->
-# `_sujeito_do_jwt`->(recusa) `auditor=_audit` derrubava o jaiminho-server em todo
+# `_sujeito_do_jwt`->(recusa) `auditor=_audit` derrubava o servidor em todo
 # Bearer malformado (RecursionError, 25/08). Aqui `tool=="-"` ja evita resolver
 # identidade na recusa, mas 'acidente de formato nao e controle' (caderno iam 25/08):
 # a guarda torna o ciclo impossivel mesmo que um chamador futuro audite a recusa com
-# tool real. Par explicito do que o jaiminho-server ja tem.
+# tool real.
 _em_audit = False
 
 
@@ -2356,33 +2356,10 @@ async def _token(req):
     return RedirectResponse(destino, status_code=307)
 
 
-# --- Canal mediado da colaboracao externa (card 344, seg:0009) ---------------
-# O Jaiminho fala com claudinho-IA DENTRO da malha msg — mesmo broker, mesmo
-# envelope, mesma retencao —, mas nao recebe credencial do Valkey e nao alcanca
-# tool nenhuma. Estas duas rotas sao a superficie inteira dele: o PEP valida o JWT,
-# consulta o PDP e escreve na caixa EM NOME dele. Quem obedece e este servidor;
-# o broker nunca ve o externo.
-# Caminho proprio, nao derivado de PF_HARNESS: uma instancia que aponte PF_HARNESS
-# para um recorte do repo (persona e politica, sem `bin`) ficava sem o modulo da
-# fila e devolvia 500 sem dizer por que. Medido no ensaio de 13/08/2026. E o bin
-# servido (PF_BIN, default a release).
-FILA_BIN = BIN_VERBOS
-
-
-def _fila_mod():
-    """Levanta ModuleNotFoundError com o caminho tentado — quem chama devolve 503
-    nomeando o defeito, em vez de 500 nomeando nada."""
-    # arq:0110 §1: ajudante mora em bin/_<verbo>/ — o modulo e bin/_fila/streams.py.
-    fila_dir = str(FILA_BIN / "_fila")
-    if fila_dir not in sys.path:
-        sys.path.insert(0, fila_dir)
-    try:
-        import streams as fila_streams
-    except ImportError as e:
-        raise ModuleNotFoundError(
-            f"modulo da fila nao encontrado em {fila_dir} — aponte PF_BIN") from e
-    return fila_streams
-
+# --- Encerramento de fita por HTTP --------------------------------------------
+# O canal mediado da colaboracao externa (rotas /sessao e /msg, card 344) saiu no
+# card #3117. Fica o encerramento, que as superficies sem Code usam para a nota da
+# mesa e o auto-relato do giro.
 
 def _ident_req(req) -> dict:
     """Mesma cadeia do middleware: JWT do realm, ou rota de emergencia enquanto vigente."""
@@ -2393,89 +2370,6 @@ def _ident_req(req) -> dict:
         ident = {"sujeito": OPS_USER, "sub": "-", "username": OPS_USER,
                  "azp": "token-estatico", "sid": "-", "jti": "-"}
     return ident
-
-
-# Catalogo de atos candidatos do externo. Nao e a lista do que ele PODE: e a lista
-# do que existe para ser perguntado ao PDP. O que entra no pacote sai da decisao,
-# sujeito a sujeito, na hora — por isso conceder por merge no PAP muda o manifesto
-# sem tocar em documentacao.
-ATOS_EXTERNOS = (
-    ("msg_ler", "mensagem", DOM_MENSAGERIA, "caixa:{eu}",
-     "GET /msg", "le a propria caixa; so o que chegou desde a ultima leitura"),
-    ("msg_enviar", "mensagem", DOM_MENSAGERIA, "caixa:ia",
-     "POST /msg", "manda recado para ia (Elias Elefante)"),
-    ("rag_buscar", "acervo", "plataforma-acervo", "acervo:firma/*",
-     "-", "leitura do acervo de trabalho — concedida em 15/08/2026; sem rota que a sirva"),
-)
-
-
-def _acoes_permitidas(quem: str, est: dict) -> list:
-    from pdp import Recurso, Sujeito, decide
-    atrib = (est["sujeitos"] or {}).get(quem) or {}
-    s = Sujeito(id=quem, natureza=atrib.get("natureza"),
-                papeis=tuple(atrib.get("papeis") or ()),
-                dominios=tuple(atrib.get("dominios") or ()),
-                habilitacao=atrib.get("habilitacao", "publico"))
-    fora = []
-    for acao, tipo, dom, molde, como, oque in ATOS_EXTERNOS:
-        alvo = molde.format(eu=quem)
-        d = decide(s, acao, Recurso(tipo=tipo, id=alvo, dominio=dom), est["politica"])
-        if d.permitido:
-            fora.append({"acao": acao, "como": como, "sobre": alvo, "o_que_faz": oque})
-    return fora
-
-
-async def _sessao_abrir(req):
-    """Abertura de sessao de quem nao e cadeira. O equivalente de `monta_sessao`,
-    pela superficie que o externo alcanca — e com o catalogo de acoes resolvido do
-    token, nao escrito a mao (docs/fronteira-do-harness.md)."""
-    ident = _ident_req(req)
-    quem = ident.get("sujeito", "-")
-    est = _carrega_politica()
-    if est.get("erro"):
-        return JSONResponse({"erro": "politica de acesso indisponivel",
-                             "detalhe": est["erro"]}, status_code=503)
-    if not (est["sujeitos"] or {}).get(quem):
-        _audit(tool="sessao", evento="pep_negou", regra="projecao", sujeito=quem)
-        return JSONResponse(
-            {"erro": f"sujeito {quem!r} nao tem atributos declarados — nao abre sessao",
-             "regra": "projecao"}, status_code=403)
-
-    pac = {"sujeito": quem, "acoes": _acoes_permitidas(quem, est)}
-
-    pf = PERSONAS / quem / "persona.md"
-    if pf.is_file():
-        pac["persona"] = {"path": str(pf), "content": pf.read_text(encoding="utf-8")}
-    else:
-        pac["persona"] = {"ausente": True, "path": str(pf),
-                          "aviso": "persona ainda nao escrita (RH). Ausencia declarada, "
-                                   "nao omissao: opere pelo que o manifesto e a caixa dizem."}
-
-    pac["memoria"] = _memoria(quem)
-    try:
-        f = _fila_mod()
-        rc = f.r_conn()
-        f.garante_grupo(rc, quem)
-        novas, no_historico = f.conta_novas(rc, quem)
-        pac["fila"] = {"caixa": f"caixa:{quem}", "novas": novas,
-                       "no_historico": no_historico,
-                       "nota": "corpo por GET /msg — abrir sessao nao consome a caixa"}
-    except Exception as e:                                  # noqa: BLE001
-        pac["fila"] = {"indisponivel": True, "erro": f"{type(e).__name__}: {e}"}
-
-    # ROTA FOSSIL (arq:0101 §2): serve a classe «externo/DMZ» de um modelo de seguranca
-    # que o seg:0011 substituiu em 15/08 — sob ele a unidade de segregacao e a CONTA, a
-    # persona e inquilina dela, e nao ha eixo «externo». Sai quando quem a usa
-    # (jaiminho-fabrica) abrir por `monta_sessao`; migrar ANTES de remover, sob pena de
-    # 404 em 5.523 aberturas/periodo. Enquanto isso, NAO cunha entidade-sessao: devolve
-    # ordem_id ao chamador e nao escreve join nenhum — quem cunha sessao e monta_sessao.
-    _oid = "o" + datetime.now().astimezone().strftime("%Y%m%dT%H%M%S") + "-" + uuid.uuid4().hex[:6]
-    pac["ordem_id"] = _oid
-    pac["aviso_rota"] = ("rota fóssil (arq:0101 §2) — abra por `monta_sessao`, que cunha "
-                         "`sessao_id`; esta rota sai assim que o último cliente migrar")
-    _audit(tool="sessao", evento="sessao_aberta", sujeito=quem, ordem_id=_oid,
-           acoes=len(pac["acoes"]), persona_ausente=pac["persona"].get("ausente", False))
-    return JSONResponse(pac)
 
 
 async def _sessao_encerrar(req):
@@ -2540,68 +2434,6 @@ def _giro_carrega(sessao_id: str, cadeira: str, chapeu, giro: list) -> dict:
         return {"ok": False, "erro": f"{type(e).__name__}: {e}"}
 
 
-async def _msg_enviar(req):
-    ident = _ident_req(req)
-    try:
-        corpo = json.loads(await req.body() or b"{}")
-    except ValueError:
-        return JSONResponse({"erro": "corpo nao e JSON"}, status_code=400)
-    para = (corpo.get("para") or "").strip()
-    tipo = (corpo.get("tipo") or "").strip()
-    if not para or not tipo or not (corpo.get("corpo") or "").strip():
-        return JSONResponse(
-            {"erro": "campos obrigatorios: para, tipo, assunto, corpo"}, status_code=400)
-
-    negado = _autoriza("msg_enviar", "msg_enviar", "mensagem", f"caixa:{para}",
-                       DOM_MENSAGERIA, ident=ident)
-    if negado:
-        return JSONResponse(negado, status_code=403)
-
-    try:
-        f = _fila_mod()
-    except ModuleNotFoundError as e:
-        _audit(tool="msg_enviar", evento="malha_indisponivel", motivo=str(e))
-        return JSONResponse({"erro": "malha msg indisponivel", "detalhe": str(e)},
-                            status_code=503)
-    if tipo not in f.TIPOS_VALIDOS:
-        return JSONResponse({"erro": f"tipo invalido: {tipo}",
-                             "validos": sorted(f.TIPOS_VALIDOS)}, status_code=400)
-    de = ident.get("sujeito", "-")
-    rc = f.r_conn()
-    msgid = f.gerar_msgid(de, {m["msgid"] for m in f.frias(rc, para)})
-    rc.xadd(f.stream_key(para), {
-        "id": msgid, "de": de, "tipo": tipo,
-        "assunto": corpo.get("assunto", ""), "ref": corpo.get("ref", ""),
-        "responde": corpo.get("responde", ""), "corpo": corpo["corpo"],
-    })
-    _audit(tool="msg_enviar", evento="msg_enviada", sujeito=de, para=para,
-           tipo=tipo, msgid=msgid)
-    return JSONResponse({"ok": True, "msgid": msgid, "caixa": f"caixa:{para}"})
-
-
-async def _msg_ler(req):
-    """Le a PROPRIA caixa do chamador. Nao ha parametro de caixa por desenho: caixa
-    alheia nao se le por engano de query string."""
-    ident = _ident_req(req)
-    quem = ident.get("sujeito", "-")
-    negado = _autoriza("msg_ler", "msg_ler", "mensagem", f"caixa:{quem}",
-                       DOM_MENSAGERIA, ident=ident)
-    if negado:
-        return JSONResponse(negado, status_code=403)
-    try:
-        f = _fila_mod()
-    except ModuleNotFoundError as e:
-        _audit(tool="msg_ler", evento="malha_indisponivel", motivo=str(e))
-        return JSONResponse({"erro": "malha msg indisponivel", "detalhe": str(e)},
-                            status_code=503)
-    rc = f.r_conn()
-    f.garante_grupo(rc, quem)
-    msgs = f.novas(rc, quem)
-    _audit(tool="msg_ler", evento="msg_lida", sujeito=quem, quantas=len(msgs))
-    return JSONResponse({"caixa": f"caixa:{quem}", "novas": len(msgs),
-                         "mensagens": msgs})
-
-
 app = mcp.streamable_http_app()
 app.router.routes.append(Route("/health", _health))
 app.router.routes.append(Route("/.well-known/oauth-authorization-server", _as_metadata))
@@ -2611,8 +2443,5 @@ app.router.routes.append(Route("/authorize", _authorize))
 app.router.routes.append(Route("/token", _token, methods=["POST", "GET"]))
 app.router.routes.append(Route("/.well-known/oauth-protected-resource", _prm))
 app.router.routes.append(Route("/.well-known/oauth-protected-resource/mcp", _prm))
-app.router.routes.append(Route("/sessao", _sessao_abrir))
 app.router.routes.append(Route("/sessao/encerrar", _sessao_encerrar, methods=["POST"]))
-app.router.routes.append(Route("/msg", _msg_enviar, methods=["POST"]))
-app.router.routes.append(Route("/msg", _msg_ler, methods=["GET"]))
 app.add_middleware(BearerAuth)

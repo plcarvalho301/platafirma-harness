@@ -14,7 +14,7 @@ no arquivo, morto no uso. Authz para IA do dono é custo sem contrapartida.
 ## Emenda desta cadeira: procedência (e por que não repete o erro do #139)
 
 Blast radius limita o **dano**, mas não responde **qual modelo** produziu o ato. Com um só
-colaborador isso é irrelevante; com `chatgpt` + `kimi` + `jaiminho` atuando ao mesmo tempo, é
+colaborador isso é irrelevante; com `chatgpt` + `kimi` + o agente da conta uid 1003 atuando ao mesmo tempo, é
 o que decide se dá para **depurar e reverter**. É o defeito do #139 (portador indistinguível)
 um nível acima, e liga na mesa iam #165 (procedência como eixo da conta, emenda de seg:0011).
 
@@ -27,7 +27,7 @@ conta-por-modelo, não um controle à parte.** Isso mantém #139, #2488 e a 0068
 ## O que o recorte prescreve
 
 1. **Conta de SO própria por modelo** (uid dedicado, `home 700`) — não papel no PAP. É o que
-   já segura o `jaiminho` hoje e o que seg:0013 pediu para a fábrica e travou por exigir root.
+   já segura a conta uid 1003 hoje e o que seg:0013 pediu para a fábrica e travou por exigir root.
 2. **Área de transferência por modelo**, não compartilhada — pelo mesmo motivo: é raio de
    alcance, não permissão.
 3. **Procedência = `sub` garantido por (1)**. Ação de segurança: confirmar que a auditoria

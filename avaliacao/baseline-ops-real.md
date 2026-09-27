@@ -6,17 +6,17 @@ recuperacao sobre PROMPT REAL colhido de fonte (nao gold sintetico). Vinculada a
 
 ## Procedencia e curadoria
 
-Fonte: `candidatos-prompts-reais.jsonl` do jaiminho (fabrica), 498 candidatos. Auditados e
+Fonte: `candidatos-prompts-reais.jsonl` da fabrica (conta uid 1003), 498 candidatos. Auditados e
 CORTADOS por dados (fabrica e fonte nao-verificada):
 
 - **264 `ops`** (buscas reais contra o RAG) = o unico trigo. Diversos (9/264 no cluster
   TOGAF), mediana 76 chars.
 - Descartados: **200 `synapse`** (chit-chat de sala: "fala aranha", "Zerar") e **29 `typed`**
   (meta-operacional de bootstrap 01/08: "puxa sua fila", "como abro sessao na CLI").
-- Rotulos do jaiminho `tipo` e `ja_no_gold` sao NAO-CONFIAVEIS (486 "ordem-operacional"
+- Rotulos da extracao `tipo` e `ja_no_gold` sao NAO-CONFIAVEIS (486 "ordem-operacional"
   incluindo "fala aranha"; ja_no_gold todos false sem conferir). Descartados.
 
-**Bug de extracao do jaiminho:** muitos "ops" eram CACOS de frase explodida em tokens
+**Bug de extracao:** muitos "ops" eram CACOS de frase explodida em tokens
 ("the","user","query","embedding","similarity","route"...). Duas passadas de limpeza
 (meta + fragmento, protegendo interrogativas) baixaram 264 -> **200 buscas reais**.
 

@@ -208,7 +208,7 @@ regras:
             "rg *", "fd *", "python3 *", "uv *", "pytest*", "ls *"]
 
   # --- Verbo operacional no lugar de run_command (ordem do dono, 20/08/2026) ---
-  # O dono: o braco do jaiminho no deploy tem de ser um conjunto de VERBOS
+  # O dono: o braco do fornecedor no deploy tem de ser um conjunto de VERBOS
   # OPERACIONAIS, nao `run_command`. A razao e a de cima: allowlist de prefixo julga
   # o TEXTO do comando, e texto se contorna com uma flag. Verbo nomeado julga o ATO.
   #
@@ -280,19 +280,15 @@ regras:
   #     sobre: ["acervo:firma/<dominio-do-acervo>/*"]
   #
   # `sobre` NUNCA fica vazio: lista vazia vira "*" no PDP por acidente, e acidente
-  # nao concede. `acervo:*` so entra por ordem escrita do dono — hoje ha exatamente
-  # uma, `jaiminho-le-acervo-inteiro` (20/08/2026). Vencida a data do `motivo`, a
-  # regra sai por merge.
+  # nao concede. `acervo:*` so entra por ordem escrita do dono. Vencida a data do
+  # `motivo`, a regra sai por merge.
 
   # --- Externo (papel `pesquisador-externo`): REMOVIDO em 02/09/2026 -----------
-  # Saíram daqui, no mesmo ato que tirou o papel: jaiminho-le-acervo-inteiro,
-  # jaiminho-le-repo, jaiminho-usa-area-de-transferencia, externo-nao-alcanca-resto-
-  # do-drive, jaiminho-le-wiki-conceito, externo-nao-le-wiki-interna,
-  # externo-nao-executa-comando, externo-nao-toca-identidade. Historico em git
+  # As regras do papel saíram no mesmo ato. Historico em git
   # (`git log -S pesquisador-externo`). Externo novo entra por concessao nova, com
   # papel proprio e prazo — nao por ressurreicao destas.
 
-  # --- Fabrica: a conta jaiminho-fabrica precisa ABRIR --------------------------
+  # --- Fabrica: o papel fornecedor precisa ABRIR (sem titular desde o #3117) ----
   # Ordem direta do dono em 18/08/2026, contra o repasse a claudinho-seguranca que
   # `org:0020` previa. Escritas por claudinho-TI, no papel `fornecedor` que ja existia:
   # nenhum papel novo nasce aqui. O corte e o de sempre — a fabrica executa card sobre
@@ -401,7 +397,7 @@ regras:
   # Alargada em 20/08/2026, mesma ordem do dono que deu o acervo inteiro ao
   # `pesquisador-externo`: as duas contas do mesmo motor tem de enxergar igual, ou o
   # bracO que o dono usa no dia responde diferente do outro sem ninguem entender por
-  # que. O `sobre` acompanhou o alvo que o jaiminho-server passou a submeter depois
+  # que. O `sobre` acompanhou o alvo que o servidor do canal externo passou a submeter depois
   # do e5fd33a (`acervo:*`): concessao nominal a `acervo:firma/*` NAO casa o alvo
   # generico, e sem esta emenda a conta da fabrica caía em negativa total.
   - id: fabrica-le-acervo-inteiro
@@ -421,7 +417,7 @@ regras:
   # --- Wiki como superficie universal (ordem do dono, 20/08/2026) -------------
   # A wiki e alcancavel por qualquer bot autenticado e autorizado AQUI, seja qual for
   # o servidor por onde ele entra e a conta onde ele roda. Ate 20/08 a unica
-  # autorizacao por sujeito a wiki vivia DENTRO do jaiminho-server, feita para um bot
+  # autorizacao por sujeito a wiki vivia DENTRO do servidor do canal externo, feita para um bot
   # so; o `wiki-mcp` tinha um segredo compartilhado e mais nada, e quem o portava
   # tinha `edit_page` e `upload_file` junto. O PEP agora e o mesmo nos dois.
   #

@@ -5,6 +5,8 @@ Rodam SEM root e sem as dependencias do servidor — e por isso que a logica mor
 verdade) nao se testa aqui e nao se finge testar: e medicao de aceite no host, com a
 regra de sudoers no lugar.
 
+A conta de destino dos testes e um nome de fixture (`provedor`), nao uma conta da casa.
+
     python3 -m pytest ops-server/test_exec_conta.py -q
 """
 import pytest
@@ -18,6 +20,7 @@ from exec_conta import (
 )
 
 PORTA = "claudinho"
+OUTRA = "provedor"
 
 
 # --- quem troca de conta e quem nao troca ------------------------------------
@@ -43,7 +46,7 @@ def test_conta_so_igual_a_da_porta_nao_troca():
 
 
 def test_conta_so_diferente_troca():
-    assert conta_do_sujeito({"conta_so": "jaiminho"}, PORTA) == "jaiminho"
+    assert conta_do_sujeito({"conta_so": OUTRA}, PORTA) == OUTRA
 
 
 # --- o env que atravessa -----------------------------------------------------
@@ -53,7 +56,7 @@ def test_env_do_uid_da_porta_nao_atravessa():
     novo = env_sob_conta({"XDG_RUNTIME_DIR": "/run/user/1001",
                           "DOCKER_HOST": "unix:///run/user/1001/docker.sock",
                           "SSH_AUTH_SOCK": "/tmp/ssh-1001/agent",
-                          "PATH": "/x"}, "jaiminho")
+                          "PATH": "/x"}, OUTRA)
     assert "XDG_RUNTIME_DIR" not in novo
     assert "DOCKER_HOST" not in novo
     assert "SSH_AUTH_SOCK" not in novo
@@ -61,36 +64,36 @@ def test_env_do_uid_da_porta_nao_atravessa():
 
 def test_env_reescreve_identidade_e_casa():
     novo = env_sob_conta({"HOME": "/home/claudinho", "USER": PORTA,
-                          "LOGNAME": PORTA, "PATH": "/x"}, "jaiminho")
-    assert novo["HOME"] == "/home/jaiminho"
-    assert novo["USER"] == "jaiminho" and novo["LOGNAME"] == "jaiminho"
+                          "LOGNAME": PORTA, "PATH": "/x"}, OUTRA)
+    assert novo["HOME"] == f"/home/{OUTRA}"
+    assert novo["USER"] == OUTRA and novo["LOGNAME"] == OUTRA
 
 
 def test_env_troca_o_local_bin_e_preserva_o_ferramental_da_casa():
     novo = env_sob_conta(
-        {"PATH": "/opt/platafirma/current/harness/bin:/home/claudinho/.local/bin:/usr/bin"}, "jaiminho")
+        {"PATH": "/opt/platafirma/current/harness/bin:/home/claudinho/.local/bin:/usr/bin"}, OUTRA)
     caminhos = novo["PATH"].split(":")
-    assert caminhos[0] == "/home/jaiminho/.local/bin"
+    assert caminhos[0] == f"/home/{OUTRA}/.local/bin"
     assert "/home/claudinho/.local/bin" not in caminhos, "binario da casa alheia"
     assert "/opt/platafirma/current/harness/bin" in caminhos, "ferramental da plataforma e legivel"
 
 
 def test_env_home_explicito_vence_o_default():
-    novo = env_sob_conta({"PATH": "/x"}, "jaiminho", home="/srv/pf/jaiminho")
-    assert novo["HOME"] == "/srv/pf/jaiminho"
+    novo = env_sob_conta({"PATH": "/x"}, OUTRA, home=f"/srv/pf/{OUTRA}")
+    assert novo["HOME"] == f"/srv/pf/{OUTRA}"
 
 
 def test_pf_sessao_e_pf_ordem_id_atravessam():
     """A identidade da fita nao e do uid: se ela nao atravessar, a auditoria do outro
     lado perde o join de D (#2902)."""
-    novo = env_sob_conta({"PF_SESSAO": "abc", "PF_ORDEM_ID": "o1", "PATH": "/x"}, "jaiminho")
+    novo = env_sob_conta({"PF_SESSAO": "abc", "PF_ORDEM_ID": "o1", "PATH": "/x"}, OUTRA)
     assert novo["PF_SESSAO"] == "abc" and novo["PF_ORDEM_ID"] == "o1"
 
 
 # --- o argv que troca de conta ------------------------------------------------
 def test_argv_leva_o_wrapper_a_conta_e_o_env_explicito():
-    argv = argv_sob_conta(["bash", "-c", "id -u"], "jaiminho", {"PF_SESSAO": "abc"})
-    assert argv[:5] == ["sudo", "-n", "-u", "jaiminho", "--"]
+    argv = argv_sob_conta(["bash", "-c", "id -u"], OUTRA, {"PF_SESSAO": "abc"})
+    assert argv[:5] == ["sudo", "-n", "-u", OUTRA, "--"]
     # `env -` zera o herdado: sem ele o env_reset do sudo entregaria o env do sudoers.
     assert argv[5:7] == ["env", "-"]
     assert "PF_SESSAO=abc" in argv
@@ -100,13 +103,13 @@ def test_argv_leva_o_wrapper_a_conta_e_o_env_explicito():
 def test_argv_e_estavel_entre_chamadas():
     """Auditoria comparavel: mesmo env, mesmo argv, sempre."""
     env = {"B": "2", "A": "1", "C": "3"}
-    assert argv_sob_conta(["id"], "jaiminho", env) == argv_sob_conta(["id"], "jaiminho", env)
+    assert argv_sob_conta(["id"], OUTRA, env) == argv_sob_conta(["id"], OUTRA, env)
 
 
 def test_argv_descarta_chave_de_env_invalida():
     """Chave com '=' nao existe em env de processo; deixar passar quebraria o `env -`
     com um par que o kernel nunca aceitaria."""
-    argv = argv_sob_conta(["id"], "jaiminho", {"A=B": "x", "OK": "1"})
+    argv = argv_sob_conta(["id"], OUTRA, {"A=B": "x", "OK": "1"})
     assert "OK=1" in argv
     assert not any(a.startswith("A=B=") for a in argv)
 
@@ -115,13 +118,13 @@ def test_wrapper_sem_placeholder_e_recusado():
     """O modo de falha que este modulo existe para nao ter: wrapper mal configurado
     executando sob a conta da porta com cara de sucesso."""
     with pytest.raises(ContaNaoDespachavel):
-        argv_sob_conta(["id"], "jaiminho", {}, wrapper="sudo -n -u claudinho --")
+        argv_sob_conta(["id"], OUTRA, {}, wrapper="sudo -n -u claudinho --")
 
 
 def test_wrapper_alternativo_e_respeitado():
     """`runuser` e o caminho de quem roda como root; o default nao e, e a troca e env."""
-    argv = argv_sob_conta(["id"], "jaiminho", {}, wrapper="runuser -u {conta} --")
-    assert argv[:4] == ["runuser", "-u", "jaiminho", "--"]
+    argv = argv_sob_conta(["id"], OUTRA, {}, wrapper="runuser -u {conta} --")
+    assert argv[:4] == ["runuser", "-u", OUTRA, "--"]
 
 
 def test_conta_com_metacaractere_ocupa_uma_palavra_so():
@@ -130,8 +133,8 @@ def test_conta_com_metacaractere_ocupa_uma_palavra_so():
     exatamente uma posicao do argv, aconteca o que acontecer com o conteudo dele.
     Partido em duas palavras, `--` deixaria de ser o fim das opcoes do sudo e o resto
     da linha viraria opcao."""
-    argv = argv_sob_conta(["id"], "ja; rm -rf /", {})
-    assert argv[:5] == ["sudo", "-n", "-u", "ja; rm -rf /", "--"]
+    argv = argv_sob_conta(["id"], "pr; rm -rf /", {})
+    assert argv[:5] == ["sudo", "-n", "-u", "pr; rm -rf /", "--"]
 
 
 def test_argv_de_escrita_leva_o_caminho_por_argv_e_nao_no_script():
@@ -149,7 +152,7 @@ def test_falha_de_sudoers_e_nomeada_como_tal():
 
 
 def test_nao_autorizado_e_nomeado_como_tal():
-    msg = erro_de_conta(1, "claudinho is not allowed to execute '/bin/bash' as jaiminho")
+    msg = erro_de_conta(1, f"claudinho is not allowed to execute '/bin/bash' as {OUTRA}")
     assert msg and "sudoers" in msg
 
 

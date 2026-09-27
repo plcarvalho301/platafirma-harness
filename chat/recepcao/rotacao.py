@@ -35,7 +35,7 @@ log = logging.getLogger("chat-recepcao.rotacao")
 IDADE_S = float(os.environ.get("CHAT_ROTACAO_S", str(24 * 3600)))
 # Teto de espera do ritual antes de a degradacao ser declarada na sala nova.
 # 120 s, nao 20: o ritual de um participante que passa pelo agy leva 29-49 s
-# medidos, entao 20 s acusava degradacao em 100% das rotacoes do jaiminho —
+# medidos, entao 20 s acusava degradacao em 100% das rotacoes do participante —
 # inclusive nas que fecharam a mesa direitinho. Aviso que sempre dispara nao e
 # aviso, e ruido; o valor tem de ficar acima da duracao normal do ritual.
 TETO_RITUAL_S = float(os.environ.get("CHAT_TETO_RITUAL_S", "120"))

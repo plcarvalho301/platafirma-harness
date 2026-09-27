@@ -411,7 +411,7 @@ def economia_de_giro(ordem_id):
 
 def fabrica_pela_porta():
     """Serie da persona FABRICA, medida na PORTA (arq:0100). FABRICA e PERSONA de
-    agente, transversal ao provider de inferencia (claudinho, jaiminho): mede-se por
+    agente, transversal ao provider de inferencia: mede-se por
     cadeira=fabrica, nunca por provider. As chamadas da persona cruzam a porta do
     connector e viram linha no ops log. Le-se VOLUME de chamada e classe de
     desperdicio (run_command em fallback, verbo contornado), o alvo direto da
