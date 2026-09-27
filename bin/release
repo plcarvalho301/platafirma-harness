@@ -1325,7 +1325,13 @@ rodar_publicador() {  # $@=args do publicar-abertura
     printf 'release: dependência ausente: publicar-abertura não encontrado (motor da família abertura)\n' >&2
     return 3
   fi
+  # ROTAS_GATE: modo do gate de rotas do publicador (card #3143); "aviso" onde o
+  # rotas-chapeu.json do snapshot ja foi servido (--so-caderno, reverter da familia).
+  # PF_ROTAS_GATE=0 do operador vence: desligado e desligado em todo fluxo.
+  local gate="${ROTAS_GATE:-${PF_ROTAS_GATE:-1}}"
+  [ "${PF_ROTAS_GATE:-}" != 0 ] || gate=0
   PF_HARNESS="$(espelho_de "$FAMILIA_BIN")" PF_ABERTURA_DIR="$ABERTURA_DIR" \
+    PF_ROTAS_GATE="$gate" \
     PF_ACERVO="$(command -v "$(achar_verbo acervo)" 2>/dev/null || true)" "$pub" "$@"
 }
 
@@ -1451,6 +1457,10 @@ promover_abertura_so_caderno() {  # $1=ensaio
     printf 'ensaio:    nada tocado\n'
     return 0
   fi
+  # So caderno.md andou: rotas-chapeu.json e personas do snapshot sao os que ja estao no
+  # ar. Divergencia de rotas aqui e deriva anterior (curadoria no acervo) e nao se cura
+  # barrando caderno — o gate avisa, nao recusa (card #3143).
+  ROTAS_GATE=aviso
   publicar_abertura_da_familia "$FAMILIA_BIN" "$sha" || { rc=$?; return "$rc"; }
   printf 'no ar:     abertura %s\n' "${sha:0:7}"
   printf '%s\n' "$sha"
@@ -2176,6 +2186,8 @@ cmd_reverter() {
   printf 'current:   %s → %s\n' "$(curto_ou "$atual" '(nenhum)')" "${alvo:0:7}"
   assentar_atalhos "$repo"
   local rc_ab=0
+  # reverter volta a uma abertura ja servida: o gate de rotas avisa, nao barra (card #3143)
+  ROTAS_GATE=aviso
   publicar_abertura_da_familia "$repo" "$alvo" || rc_ab=$?
 
   local rc_st=0

@@ -52,7 +52,12 @@
 #   PF_CASA_REINDEXA=0   desliga o gancho
 #   PF_ACERVO=<caminho>  aponta outro verbo `acervo`
 #
-# ambiente: PF_HARNESS[=$PF_RELEASE_RAIZ/platafirma-harness/.repo.git] · PF_ABERTURA_DIR[=$PLATAFIRMA_INSTANCIA/var/abertura-publicada] · PF_ACERVO[=$PLATAFIRMA_RELEASE/harness/bin/acervo] · PF_CASA_REINDEXA[=1] · PF_RELEASE_RAIZ[=/opt/platafirma] · PLATAFIRMA_INSTANCIA[=/srv/platafirma/casa]
+# GATE DE ROTAS (card #3143): antes de mover current, rotas-chapeu.json do snapshot tem de
+# ser o que as personas do snapshot e o golden record geram; divergente recusa. Ver
+# conferir_rotas().
+#   PF_ROTAS_GATE=1|aviso|0   recusa (default) | so avisa | desligado
+#
+# ambiente: PF_HARNESS[=$PF_RELEASE_RAIZ/platafirma-harness/.repo.git] · PF_ABERTURA_DIR[=$PLATAFIRMA_INSTANCIA/var/abertura-publicada] · PF_ACERVO[=$PLATAFIRMA_RELEASE/harness/bin/acervo] · PF_CASA_REINDEXA[=1] · PF_ROTAS_GATE[=1] · PF_ROTAS_GOLDEN · PF_RELEASE_RAIZ[=/opt/platafirma] · PLATAFIRMA_INSTANCIA[=/srv/platafirma/casa]
 set -euo pipefail
 
 . "$(dirname "$(readlink -f "$0")")/../lib/raizes.sh"
@@ -90,6 +95,70 @@ validar_snapshot() {
     echo "recusa: snapshot incompleto, current NAO movido — falta: ${faltando[*]}" >&2
     return 1
   fi
+}
+
+# ---- gate: rotas-chapeu.json conforme ao que as personas geram (card #3143) ----
+# validar_snapshot so confere que rotas-chapeu.json EXISTE. Persona editada sem `persona
+# rotas`, ou conceito curado no acervo depois da ultima geracao, deixava o arquivo velho e
+# o snapshot passava: o rotulo novo nunca virava rota. Aqui o gerador do roteador roda em
+# modo --conferir sobre as personas DO SNAPSHOT contra o golden record, sem escrever, e
+# compara com o rotas-chapeu.json DO SNAPSHOT (regua de casa() do roteador: conjunto de
+# gatilhos normalizados por chapeu):
+#   0 conforme                                    publica
+#   1 divergente, ou orfao de CHAPEU              recusa; current NAO movido
+#   5 indeterminavel (golden fora de alcance)     avisa que NAO conferiu, e publica
+# Escopo: so reprova nas cadeiras que esta publicacao MUDA em relacao ao current (persona,
+# diretorios de chapeu ou bloco do rotas-chapeu.json); nas outras a divergencia e deriva
+# anterior e so avisa. Quem publica responde pela rota do que mudou; sem isso, a deriva
+# herdada (7 cadeiras ainda nao rematerializadas no molde novo, 27/09) barraria toda
+# publicacao. Sem current publicado, todas as cadeiras estao no escopo.
+# Orfao de CONCEITO (rotulo que dados ainda nao curou) so avisa: e materia de dados, e o
+# que ja casa segue roteando. Indeterminavel publica pelo motivo do gancho da casa: acervo
+# fora do ar nao pode tirar do ar a abertura que toda cadeira le.
+# Lacuna declarada: conceito curado no acervo para cadeira que ninguem republica so
+# aparece como aviso de deriva; nao barra nem vira rota sozinho.
+#   PF_ROTAS_GATE=1       (default) divergente recusa
+#   PF_ROTAS_GATE=aviso   divergente so avisa: `release` usa em --so-caderno e no reverter,
+#                         onde o rotas-chapeu.json do snapshot e o que ja foi servido
+#   PF_ROTAS_GATE=0       desliga (base sem motor, teste)
+#   PF_ROTAS_GOLDEN=<arq> golden record de arquivo JSON, sem rede (teste)
+conferir_rotas() {  # $1=dir do snapshot (contem $SUBARVORE/)
+  local dir="$1" modo="${PF_ROTAS_GATE:-1}" gerador out ancora rc=0 extra=()
+  if [ "$modo" = 0 ]; then
+    echo "rotas:     gate desligado (PF_ROTAS_GATE=0) — rotas-chapeu.json NAO conferido" >&2
+    return 0
+  fi
+  gerador="$(dirname "$(readlink -f "$0")")/../recuperacao/gerar_rotas_chapeu.py"
+  if [ ! -f "$gerador" ]; then
+    echo "rotas:     aviso — gerador ausente em $gerador; rotas-chapeu.json NAO conferido" >&2
+    return 0
+  fi
+  [ -z "${PF_ROTAS_GOLDEN:-}" ] || extra=(--golden "$PF_ROTAS_GOLDEN")
+  # escopo: so as cadeiras que esta publicacao muda em relacao ao que esta no ar reprovam
+  [ ! -d "$MORADA/current/$SUBARVORE" ] || extra+=(--anterior "$MORADA/current/$SUBARVORE")
+  out="$(PYTHONDONTWRITEBYTECODE=1 python3 "$gerador" --abertura "$dir/$SUBARVORE" --conferir \
+          ${extra[@]+"${extra[@]}"} 2>&1)" || rc=$?
+  # saida do conferir como vem: a ancora `rotas: ...` na coluna 0, o detalhe ja indentado
+  printf '%s\n' "$out"
+  # a ancora e a primeira linha `rotas: ...` do conferir; aviso de python no stderr pode vir antes
+  ancora="$(printf '%s\n' "$out" | grep -m1 '^rotas: ' || true)"
+  case "$rc:$ancora" in
+    0:*) return 0 ;;
+    "1:rotas: divergente"*)
+      if [ "$modo" = aviso ]; then
+        echo "rotas:     aviso — divergente, publicado assim mesmo (PF_ROTAS_GATE=aviso: este rotas-chapeu.json ja foi servido)" >&2
+        return 0
+      fi
+      echo "recusa: rotas-chapeu.json do snapshot diverge do que as personas e o golden record geram — current NAO movido" >&2
+      echo "        cura: \`persona rotas\` na bancada (regenera contra o golden de agora: a divergencia pode ser curadoria feita" >&2
+      echo "        depois do commit), commit do rotas-chapeu.json (ou da persona, se orfao de chapeu), merge e promover de novo" >&2
+      return 1 ;;
+    *)
+      # 5 (golden fora de alcance) ou saida que nao e a do conferir (gerador quebrado,
+      # gerador antigo sem --conferir): nao conferiu, e nao conferir nao e divergir.
+      echo "rotas:     aviso — conferencia nao concluiu (exit $rc); rotas-chapeu.json NAO conferido, publicacao segue" >&2
+      return 0 ;;
+  esac
 }
 
 manifest() {  # $1=dir_do_ref  $2=commit  $3=ref_pedido  $4=tree_sha
@@ -252,6 +321,7 @@ if [ "$atual" = "$SHA" ]; then
   echo "current:   ja em ${SHA:0:7} — nada a mover"
 else
   validar_snapshot "$DEST" || exit 1
+  conferir_rotas "$DEST" || exit 1
   apontar_current "$SHA"
   echo "current:   ${atual:0:7} -> ${SHA:0:7}"
   # So aqui: current mudou de sha, entao o indice da casa esta velho por definicao.
