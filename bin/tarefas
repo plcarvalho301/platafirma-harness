@@ -351,7 +351,7 @@ pai_e_irmas() { # pai_e_irmas <id-do-pai>
   if [ -n "$abertas" ]; then
     printf '  abertas no pai (entrega de negócio NÃO fechou):\n%s\n' "$abertas"
   else
-    printf '  nenhuma filha aberta no pai — conferência da cadeira dona, depois o dono dá entregue\n'
+    printf '  nenhuma filha aberta no pai — conferência da gestão estratégica ou da cadeira dona, depois o dono dá entregue\n'
   fi
 }
 
@@ -566,8 +566,8 @@ mover() {
   local pai; pai=$(printf '%s' "$resp" | jq -r '.pai // empty')
   [ -n "$pai" ] && pai_e_irmas "$pai"
   # AVISO À DONA (ordem do dono, 27/09/2026): fechou a última filha e o pai parou em
-  # `em-homologacao` — a conferência da feature/épico é da cadeira dona dele, e depois do
-  # dono. Quem executou a story nem sempre é a dona; sem o aviso, o dono pedia à mão.
+  # `em-homologacao` — a conferência da feature/épico é da gestão estratégica ou da cadeira
+  # dona dele, e depois do dono. Quem executou a story nem sempre é a dona; sem o aviso, o dono pedia à mão.
   if [ -n "$pai" ] && [ "$(printf '%s' "$resp" | jq -r '.estado_natureza // ""')" = "terminal" ]; then
     avisa_dona "$pai" "$id"
   fi
@@ -584,28 +584,31 @@ avisa_dona() {
   local dona; dona=$(printf '%s' "$j" | jq -r '.cadeira // ""')
   dona="${dona#claudinho-}"; dona="${dona#claudinha-}"; dona=$(printf '%s' "$dona" | tr 'A-Z' 'a-z')
   local eu="${QUEM#claudinho-}"; eu="${eu#claudinha-}"
-  if [ -z "$dona" ]; then
-    printf '  pai #%s homologável e sem cadeira dona: a conferência é de quem o puser na mão do dono\n' "$pai"
-    return 0
-  fi
   local nivel titulo; nivel=$(printf '%s' "$j" | jq -r '.nivel_nome'); titulo=$(printf '%s' "$j" | jq -r '.titulo')
-  if [ "$dona" = "$eu" ]; then
-    printf '  pai #%s em em-homologacao: a conferência é sua — rode o `Sai quando:` e leve a linha ENTREGA: ao dono\n' "$pai"
-    return 0
-  fi
+  # QUEM CONFERE (dono, 27/09/2026): a conferência do pai com o dono é da gestão
+  # estratégica, gestora do portfólio; a cadeira dona do card também pode, e nenhuma outra.
+  # O aviso vai às duas; quem chamou o `mover` lê a linha aqui mesmo, sem carta.
+  local destinos="gestao-estrategica"
+  [ -n "$dona" ] && [ "$dona" != "gestao-estrategica" ] && destinos="$destinos $dona"
   local fila_bin="${PF_FILA_BIN:-$(dirname "$(readlink -f "$0")")/fila}"
-  if [ ! -x "$fila_bin" ]; then
-    printf '  aviso à dona (%s) NÃO enviado: verbo fila ausente em %s\n' "$dona" "$fila_bin"
-    return 0
-  fi
-  local out
-  if out=$(printf 'A última filha aberta de #%s (%s: %s) fechou com #%s. %s está em em-homologacao e espera a conferência: rode o `Sai quando:` (feature) ou confira a `Medida:` (épico), comente o retorno no card e leve a linha ENTREGA: ao dono. Se faltar coisa, abra a story que falta — o pai volta a em-execucao sozinho.\n' \
-        "$pai" "$nivel" "$titulo" "$filha" "$([ "$nivel" = feature ] && echo "A feature" || echo "O $nivel")" \
-      | "$fila_bin" enviar "$dona" --tipo pedido --assunto "#$pai em homologação: conferência sua antes do dono" --ref "#$pai" 2>&1); then
-    printf '  aviso à dona enviado: %s (%s)\n' "$dona" "$(printf '%s' "$out" | head -1)"
-  else
-    printf '  aviso à dona (%s) NÃO enviado: %s\n' "$dona" "$(printf '%s' "$out" | head -1)"
-  fi
+  local d out
+  for d in $destinos; do
+    if [ "$d" = "$eu" ]; then
+      printf '  pai #%s em em-homologacao: a conferência é sua — rode o `Sai quando:` e leve a linha ENTREGA: ao dono\n' "$pai"
+      continue
+    fi
+    if [ ! -x "$fila_bin" ]; then
+      printf '  aviso de conferência (%s) NÃO enviado: verbo fila ausente em %s\n' "$d" "$fila_bin"
+      continue
+    fi
+    if out=$(printf 'A última filha aberta de #%s (%s: %s) fechou com #%s. %s está em em-homologacao e espera a conferência (gestão estratégica, ou a cadeira dona do card): rode o `Sai quando:` (feature) ou confira a `Medida:` (épico), comente o retorno no card e leve a linha ENTREGA: ao dono. Se faltar coisa, abra a story que falta — o pai volta a em-execucao sozinho.\n' \
+          "$pai" "$nivel" "$titulo" "$filha" "$([ "$nivel" = feature ] && echo "A feature" || echo "O $nivel")" \
+        | "$fila_bin" enviar "$d" --tipo pedido --assunto "#$pai em homologação: conferência antes do dono" --ref "#$pai" 2>&1); then
+      printf '  aviso de conferência enviado: %s (%s)\n' "$d" "$(printf '%s' "$out" | head -1)"
+    else
+      printf '  aviso de conferência (%s) NÃO enviado: %s\n' "$d" "$(printf '%s' "$out" | head -1)"
+    fi
+  done
   return 0
 }
 
