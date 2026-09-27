@@ -93,6 +93,13 @@ def test_lint_sem_bancada_exit_1_com_vizinho(tmp_path):
     assert "vizinho: repo abrir repo-fantasma" in p.stderr
 
 
+def test_lint_alcance_alvo_e_sujeito_e_fonte_nao_caminho(bancada):
+    # o alvo de alcance e "<sujeito> <fonte>": nao pode ser barrado como caminho inexistente
+    p = _rodar_lint("alcance", "platafirma-harness", "sujeito-inexistente board", env_extra=bancada)
+    assert "nao existe em" not in p.stderr, p.stdout + p.stderr
+    assert p.returncode != 3, p.stdout + p.stderr
+
+
 def test_lint_lista_ausente_exit_5(bancada):
     # organizacao exige lista no acervo que nao existe -> exit 5
     p = _rodar_lint("organizacao", "platafirma-harness", env_extra=bancada)
