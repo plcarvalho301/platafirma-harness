@@ -48,7 +48,9 @@ cat > "$STUBS/acervo" <<'EOF'
 #!/usr/bin/env bash
 echo '[]'
 EOF
-printf '#!/usr/bin/env bash\nexit 0\n' > "$STUBS/deploy"
+# achar_deploy nao resolve mais pelo PATH (bin/_release/stack e achado por caminho fixo
+# ao lado de bin/release) — nao ha mais 'deploy' pra estubar aqui, e este arquivo nunca
+# promove familia com stack (o acervo falso abaixo devolve [] sempre).
 # systemctl falso: sem XDG_RUNTIME_DIR (ou com FAKE_SEM_BUS) não há bus, como o real
 cat > "$STUBS/systemctl" <<'EOF'
 #!/usr/bin/env bash
@@ -101,7 +103,7 @@ case "$sub" in
 esac
 EOF
 for v in 12 13 14; do printf '#!/bin/sh\necho 3.%s\n' "$v" > "$TMP_DIR/py3$v/python3.$v"; done
-chmod +x "$STUBS"/acervo "$STUBS"/deploy "$STUBS"/systemctl "$STUBS"/systemd-run "$STUBS"/docker \
+chmod +x "$STUBS"/acervo "$STUBS"/systemctl "$STUBS"/systemd-run "$STUBS"/docker \
   "$UVDIR/uv" "$TMP_DIR"/py3*/python3.*
 UV_FALSO="$UVDIR/uv"; PY312="$TMP_DIR/py312/python3.12"; PY313="$TMP_DIR/py313/python3.13"; PY314="$TMP_DIR/py314/python3.14"
 

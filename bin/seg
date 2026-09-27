@@ -5,7 +5,7 @@
 # dono: claudinho-seguranca
 # classe: B
 # use para: openscap, keycloak, openssl pós-quântico, régua de segurança, segredos
-# atos: oscap (leitura, casco), ssg (escrita, regua), keycloak entrar (escrita, credencial), keycloak (escrita, realm), openssl (leitura, cripto), segredo ler (leitura, segredo), segredo listar (leitura, segredo), segredo gravar (escrita, segredo), segredo importar (escrita, segredo), segredo rotacionar (escrita, segredo)
+# atos: oscap (leitura, casco), ssg (escrita, regua), keycloak entrar (escrita, credencial), keycloak (escrita, realm), openssl (leitura, cripto), segredo ler (leitura, segredo), segredo listar (leitura, segredo), segredo gravar (escrita, segredo), segredo importar (escrita, segredo), segredo rotacionar (escrita, segredo), segredo exigidos (leitura, segredo)
 # folhas: oscap|ssg -> politica/avaliacao · keycloak|openssl -> politica/acesso · segredo -> politica/segredo
 # escreve: $PLATAFIRMA_INSTANCIA/segredos/<stack>/<nome>
 # ambiente: SEG_SECRETS_DIR[=$PLATAFIRMA_INSTANCIA/segredos] · SEG_LOG_DIR[=$PLATAFIRMA_INSTANCIA/var/log/seg] · SEG_OSCAP_DIR[=$PLATAFIRMA_INSTANCIA/var/oscap] · SEG_SSG_DIR[=/opt/terceiros/ssg/current] · SEG_OQS_DIR[=/opt/terceiros/oqs/current] · PLATAFIRMA_INSTANCIA[=/srv/platafirma/casa]
@@ -23,6 +23,7 @@
 #   segredo gravar    politica            escrita atomica de segredo
 #   segredo importar  politica            importacao de .env
 #   segredo rotacionar politica           rotacao de client-secret no keycloak
+#   segredo exigidos  politica            exigido (acervo.stack.segredos) x presente (era `deploy <stack> segredos`)
 #
 # NAO E GATE. Enquanto oscap, kcadm.sh e openssl seguirem alcancaveis fora deste
 # binario, ele e conveniencia e trilha: quem quiser desviar chama a ferramenta
@@ -68,6 +69,10 @@ seg — toolkit de seguranca da PlataFirma
                                   importa segredos de arquivo .env
   seg segredo rotacionar <stack>/<nome> --keycloak-client <clientId>
                                   rotaciona client-secret no keycloak
+  seg segredo exigidos [<stack>]  exigido (acervo.stack.segredos, mesma via que
+                                  `acervo listar topologia --completo` usa) x presente em
+                                  $SEG_SECRETS_DIR — so nomes, nunca valor. Sem <stack>: todas.
+                                  Porta de `deploy <stack> segredos` (bin/deploy, deprecado).
 
 Perfis de avaliacao:
   cis_level1_server  cis_level1_workstation  cis_level2_server
@@ -440,6 +445,104 @@ cmd_keycloak_entrar() {
   echo "sessao kcadm: ok"
 }
 
+# --- segredo exigidos: porta `deploy <stack> segredos` (bin/deploy ~435). Exigido vem
+# de acervo.stack.segredos, pela MESMA via que `acervo listar topologia --completo`
+# ja usa (bin/acervo ao lado deste, nunca psql direto daqui — um so dono da leitura do
+# golden record). Presente e o que ja mora em $SEG_SECRETS_DIR/<stack>/<nome>. So
+# nomes: nenhuma linha abaixo le o conteudo do segredo.
+_resolve_segredo() {  # $1=declarado $2=base ; imprime caminho ou falha (fora das raizes)
+  local d="$1" base="$2"
+  case "$d" in
+    "~"*|*..*) return 1 ;;
+    "$PLATAFIRMA_INSTANCIA/"*|"$PF_RELEASE_RAIZ/"*|"$PLATAFIRMA_RELEASE/"*) printf '%s\n' "$d" ;;
+    /*) return 1 ;;
+    *) printf '%s\n' "$base/$d" ;;
+  esac
+}
+
+cmd_segredo_exigidos() {
+  local stack="${1:-}"
+  command -v jq >/dev/null 2>&1 || { echo "seg segredo exigidos: jq ausente — dependencia obrigatoria." >&2; exit 3; }
+
+  local acervo_bin
+  acervo_bin="$(dirname "$(readlink -f "$0")")/acervo"
+  local args=(listar casa topologia --completo --json)
+  [ -n "$stack" ] && args=(listar casa topologia "$stack" --completo --json)
+
+  local out err rc
+  out="$(mktemp)"; err="$(mktemp)"
+  # `set -e` mataria o script aqui no primeiro exit != 0 sem o guard: precisa do
+  # && /|| pra rc=$? ser alcancado.
+  "$acervo_bin" "${args[@]}" >"$out" 2>"$err" && rc=0 || rc=$?
+  local saida erro
+  saida="$(cat "$out")"; erro="$(cat "$err")"
+  rm -f "$out" "$err"
+
+  if [ "$rc" -ne 0 ]; then
+    if [ "$rc" -eq 1 ] && [ -n "$stack" ]; then
+      [ -n "$erro" ] && printf '%s\n' "$erro" >&2
+      exit 1
+    fi
+    echo "seg segredo exigidos: acervo indisponivel (rc=$rc) — nao posso ler acervo.stack.segredos." >&2
+    [ -n "$erro" ] && printf '%s\n' "$erro" >&2
+    exit 3
+  fi
+
+  local slugs=()
+  while IFS= read -r s; do
+    [ -n "$s" ] && slugs+=("$s")
+  done < <(jq -r '.[].slug' <<<"$saida" 2>/dev/null)
+
+  if [ "${#slugs[@]}" -eq 0 ]; then
+    if [ -n "$stack" ]; then
+      echo "seg segredo exigidos: stack \"$stack\" nao esta no registro (acervo.stack)." >&2
+      exit 1
+    fi
+    echo "nenhuma stack no registro (acervo.stack)."
+    exit 0
+  fi
+
+  local falta_total=0 vistas=0 slug item alvo sdir
+  for slug in "${slugs[@]}"; do
+    vistas=$((vistas+1))
+    sdir="$SEG_SECRETS_DIR/$slug"
+    local exigidos=()
+    while IFS= read -r item; do
+      [ -n "$item" ] && exigidos+=("$item")
+    done < <(jq -r --arg s "$slug" \
+      '.[] | select(.slug==$s) | (.segredos // [] | if type=="array" then .[] else . end)' \
+      <<<"$saida" 2>/dev/null)
+
+    [ "${#exigidos[@]}" -eq 0 ] && continue
+
+    for item in "${exigidos[@]}"; do
+      if alvo="$(_resolve_segredo "$item" "$sdir")"; then
+        [ -e "$alvo" ] && continue
+      fi
+      echo "  AUSENTE : $slug/$item"
+      falta_total=$((falta_total+1))
+    done
+  done
+
+  if [ -n "$stack" ] && [ "$falta_total" -eq 0 ]; then
+    local tem_segredos
+    tem_segredos="$(jq -r --arg s "$stack" \
+      '.[] | select(.slug==$s) | ((.segredos // []) | length > 0)' <<<"$saida" 2>/dev/null || true)"
+    [ "$tem_segredos" = "false" ] && \
+      echo "  (stack \"$stack\" nao declara segredos no registro — nada exigido.)"
+  fi
+
+  echo
+  echo "cofre: $SEG_SECRETS_DIR"
+  echo "Nome e presenca, nunca valor: nenhuma linha deste ato le o conteudo."
+  if [ "$falta_total" -gt 0 ]; then
+    echo "faltam $falta_total segredo(s)." >&2
+    exit 1
+  fi
+  echo "todos os segredos exigidos estao presentes ($vistas stack(s) conferida(s))."
+  exit 0
+}
+
 # --- separa o que e nosso do que e repasse ---------------------------------
 ARGS=(); NATIVOS=(); TEM_BARREIRA=0
 for a in "$@"; do
@@ -556,6 +659,9 @@ case "$SUB" in
         ;;
       rotacionar)
         cmd_segredo_rotacionar "${ARGS[@]:2}"
+        ;;
+      exigidos)
+        cmd_segredo_exigidos "$ALVO"
         ;;
       *)
         uso

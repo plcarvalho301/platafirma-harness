@@ -24,8 +24,8 @@
 # ambiente: PF_RELEASE_RAIZ[=/opt/platafirma] porta · PLATAFIRMA_RELEASE[=$PF_RELEASE_RAIZ/current] porta (atalhos; verbos irmãos em harness/bin) · PLATAFIRMA_INSTANCIA[=/srv/platafirma/casa] porta (pontos em var/release/<familia>) · PF_ABERTURA_DIR[=$PLATAFIRMA_INSTANCIA/var/abertura-publicada] porta · PLATAFIRMA_FAMILIAS[=registro/familias.json desta árvore] porta · PLATAFIRMA_VENVS[=registro/venvs.json desta árvore] porta · PLATAFIRMA_TERCEIROS[=registro/terceiros.json desta árvore] porta · PLATAFIRMA_UV porta (override do binário do uv) · PLATAFIRMA_PYTHON[=/usr/bin/python3.12] porta (python de sistema dos venvs) · XDG_RUNTIME_DIR[=/run/user/<uid>] porta · DBUS_SESSION_BUS_ADDRESS[=unix:path=$XDG_RUNTIME_DIR/bus] porta (os dois só quando ausentes, para o infra achar a unit) · PF_CADEIRA porta (lida) · HOME
 # uv: resolvido nesta ordem, e só nela: $PLATAFIRMA_UV, /usr/local/bin/uv, /usr/bin/uv, `command -v uv`. Nenhum achado: exit 3 dizendo como instalar uv de sistema. O PATH do wrapper /usr/local/bin/platafirma não tem ~/.local/bin (medido 15/09).
 # python dos venvs: $PLATAFIRMA_PYTHON, default /usr/bin/python3.12, com UV_PYTHON_PREFERENCE=only-system e UV_PYTHON_DOWNLOADS=never; nunca o python gerenciado pelo uv no home da conta (caminho, caminho real ou home do venv sob $HOME ou em */uv/python/*: exit 3, override incluído). Ausente, ou lock que pede outra versão: exit 3, current intacto. PLATAFIRMA_UV e PLATAFIRMA_PYTHON só em caminho absoluto. XDG_RUNTIME_DIR herdado de outra conta (diretório existente que não é desta) é trocado pelo desta.
-# depende: git · deploy (promover/reverter de família com stack) · acervo (registro de stacks) · python3 · jq · uv (venv do lock; ordem acima) · python de sistema (venvs) · sha256sum + curl (artefato de terceiro pinado; curl só quando o cache em <release>/terceiros não tem) · rede ao forge (promover) · porta (hora de arranque) · infra (restart da porta, destacado) · publicar-abertura (motor da familia abertura, #3054). O restart da porta e deste verbo (spec_release §2, rev 6): o observador pf-porta-watch nao disparou em 15/09, 2 de 2 promocoes
-# substitui: readlink current · git -C /opt/platafirma/<familia>/… describe|rev-parse|ls-files|show|grep · git worktree add --detach · ln -sfn + mv -T · chmod -R a-w · conferir <classe> · deploy <stack> promover|reverter
+# depende: git · acervo (registro de stacks) · python3 · jq · uv (venv do lock; ordem acima) · python de sistema (venvs) · sha256sum + curl (artefato de terceiro pinado; curl só quando o cache em <release>/terceiros não tem) · rede ao forge (promover) · porta (hora de arranque) · infra (restart da porta, destacado) · publicar-abertura (motor da familia abertura, #3054). O restart da porta e deste verbo (spec_release §2, rev 6): o observador pf-porta-watch nao disparou em 15/09, 2 de 2 promocoes
+# substitui: readlink current · git -C /opt/platafirma/<familia>/… describe|rev-parse|ls-files|show|grep · git worktree add --detach · ln -sfn + mv -T · chmod -R a-w · conferir <classe> · bin/_release/stack promover
 # conforme: parcial
 set -euo pipefail
 
@@ -131,7 +131,9 @@ curto_ou() {  # $1=sha ou vazio  $2=texto quando vazio
 
 # verbos irmãos: só pelo PATH ou pelo bin da release no ar ($PLATAFIRMA_RELEASE/harness/bin) — nunca
 # pelo diretório deste script (na bancada, o vizinho seria o da bancada, e um teste chamaria o
-# deploy real)
+# verbo real). Exceção: achar_deploy (abaixo) NÃO usa esta função — o ajudante
+# bin/_release/stack é achado por caminho fixo ao lado deste script, exatamente para
+# um teste na bancada achar o ajudante da PRÓPRIA bancada, nunca o da release no ar.
 achar_verbo() {  # $1=nome ; imprime caminho ou nada
   if command -v "$1" >/dev/null 2>&1; then printf '%s' "$1"
   elif [ -x "$BIN_DIR/$1" ]; then printf '%s' "$BIN_DIR/$1"
@@ -816,7 +818,7 @@ cmd_conferir() {
 
 # ---- promoção: helpers -----------------------------------------------------------
 
-# stacks da família no registro (acervo.stack), só as que promovem por `deploy promover`.
+# stacks da família no registro (acervo.stack), só as que promovem por `bin/_release/stack promover`.
 # Sai em STACKS_PROMOVER (via promover) e STACKS_FORA (reversao declarada por outra via: fora da promocao).
 STACKS_PROMOVER=()
 STACKS_FORA=()
@@ -1211,13 +1213,21 @@ materializar_terceiros() {  # $1=repo $2=sha ; 0 ok, 3 dependência ausente, 4 c
   return 0
 }
 
-achar_deploy() { achar_verbo deploy; }
+# ajudante bin/_release/stack: sempre ao lado deste script (bin/_release/), NUNCA pelo
+# PATH nem pelo BIN_DIR da release (achar_verbo) — o mesmo motivo de
+# bin/_release/conferir/conferir.py: um teste na bancada tem de achar o ajudante da
+# PROPRIA bancada, nao o da release no ar.
+achar_deploy() {
+  local ajudante="$AQUI/_release/stack"
+  [ -x "$ajudante" ] && printf '%s' "$ajudante"
+  return 0
+}
 
-# dependência conferida ANTES de tocar current: família com stack exige deploy no PATH
+# dependência conferida ANTES de tocar current: família com stack exige o ajudante bin/_release/stack
 exigir_deploy_se_stack() {
   [ "${#STACKS_PROMOVER[@]}" -gt 0 ] || return 0
   [ -n "$(achar_deploy)" ] || {
-    printf 'release: dependência ausente: deploy não encontrado e a família tem stacks (%s)\n' "${STACKS_PROMOVER[*]}" >&2
+    printf 'release: dependência ausente: ajudante bin/_release/stack não encontrado e a família tem stacks (%s)\n' "${STACKS_PROMOVER[*]}" >&2
     return 3
   }
 }
@@ -1225,26 +1235,26 @@ exigir_deploy_se_stack() {
 promover_stacks() {  # $1=sha ; usa STACKS_PROMOVER; devolve 0 ou o nome da stack que recusou em STACK_FALHOU
   local sha="$1" s
   STACK_FALHOU=""
-  local deploy_bin; deploy_bin="$(achar_deploy)"
+  local ajudante_bin; ajudante_bin="$(achar_deploy)"
   if [ "${#STACKS_PROMOVER[@]}" -eq 0 ]; then
     return 0
   fi
-  if [ -z "$deploy_bin" ]; then
-    printf 'release: dependência ausente: deploy não encontrado e a família tem stacks (%s)\n' "${STACKS_PROMOVER[*]}" >&2
+  if [ -z "$ajudante_bin" ]; then
+    printf 'release: dependência ausente: ajudante bin/_release/stack não encontrado e a família tem stacks (%s)\n' "${STACKS_PROMOVER[*]}" >&2
     return 3
   fi
   local errf; errf="$(mktemp)"
   local rc_dep
   for s in "${STACKS_PROMOVER[@]}"; do
-    printf 'stack:     %s → deploy %s promover %s\n' "$s" "$s" "${sha:0:7}"
-    # stdout do deploy segue pro terminal (build log); stderr vai a um arquivo e e
+    printf 'stack:     %s → bin/_release/stack promover %s %s\n' "$s" "$s" "${sha:0:7}"
+    # stdout do ajudante segue pro terminal (build log); stderr vai a um arquivo e e
     # ecoado logo apos, para o motivo da recusa (ex.: segredo ausente na instancia)
     # sobreviver quando o release roda pela porta e o stderr solto se perderia.
     # Sem isto a saida dizia so "stack recusou a promocao", generica, apagando a
     # causa que tem conserto. Arquivo (nao process substitution) evita a corrida
-    # entre o tee e o tail quando o deploy recusa rapido.
+    # entre o tee e o tail quando o ajudante recusa rapido.
     rc_dep=0
-    "$deploy_bin" "$s" promover "$sha" 2>"$errf" || rc_dep=$?
+    "$ajudante_bin" promover "$s" "$sha" 2>"$errf" || rc_dep=$?
     cat "$errf" >&2
     if [ "$rc_dep" -ne 0 ]; then
       STACK_FALHOU="$s"
@@ -1830,6 +1840,10 @@ resumo_promover() {  # $1=exit
 
 # Imprime a tela e devolve stdout/stderr ao chamador. Idempotente: a segunda chamada
 # (o trap de EXIT depois de reiniciar_porta) nao faz nada.
+# Achado a parte (card #3145, fora do escopo dele): faltava espelho:/checkout:/stacks:/
+# terceiro:/porta:/caminho: no whitelist abaixo — a mensagem so ia pro log, nunca pra tela,
+# e testes que checavam essas linhas em $out ficavam vermelhos sem relacao com deploy/stack
+# (test_release_lote2.sh casos 2 e 4, test_fechamento_3010_harness.sh caso 3).
 resumo_imprime() {
   [ -n "$PROMO_LOG" ] || return 0
   local sha_final log="$PROMO_LOG"
@@ -1839,10 +1853,10 @@ resumo_imprime() {
   PROMO_LOG="$log"
   [ -f "$PROMO_LOG" ] || { PROMO_LOG=""; return 0; }
   # grep sem casamento sai 1: com set -e/pipefail isso mataria o resumo e trocaria o exit
-  { grep -E '^(== |de: |gate: |venv: |current: |no ar: |ambiente: |suite: |card: |ensaio: |já no ar: )' "$PROMO_LOG" \
+  { grep -E '^(== |de: |gate: |venv: |current: |no ar: |ambiente: |suite: |card: |ensaio: |já no ar: |espelho: |checkout: |stacks: |terceiro: |porta: )' "$PROMO_LOG" \
       | grep -v 'NAO MEDIDA'; } || true
-  # "release: /opt/..." e o eco do deploy da stack, nao recusa: fica no log
-  { grep -E '^(release: |varrido: |saida inteira: )|NAO MEDIDA|PROMOCAO|RETOMAR|VOLTAR CODIGO' "$PROMO_LOG" \
+  # "release: /opt/..." e o eco do ajudante da stack, nao recusa: fica no log
+  { grep -E '^(release: |varrido: |saida inteira: |caminho: )|NAO MEDIDA|PROMOCAO|RETOMAR|VOLTAR CODIGO' "$PROMO_LOG" \
       | grep -v '^release: /'; } >&2 || true
   [ -z "$PROMO_VOLTA" ] || printf 'volta:     %s\n' "$PROMO_VOLTA"
   printf 'log:       %s\n' "$PROMO_LOG"
@@ -1941,8 +1955,8 @@ cmd_promover() {
   printf 'de:        %s\n' "$(curto_ou "$atual" '(sem current)')"
   if [ -d "$PROD_RAIZ/$repo/$sha" ]; then printf 'checkout:  %s já materializado (imutável, não reescrito)\n' "${sha:0:7}"
   else printf 'checkout:  materializar %s/%s/%s\n' "$PROD_RAIZ" "$repo" "$sha"; fi
-  [ "${#STACKS_PROMOVER[@]}" -eq 0 ] || printf 'stacks:    %s (deploy promover)\n' "${STACKS_PROMOVER[*]}"
-  [ "${#STACKS_FORA[@]}" -eq 0 ]     || printf 'stacks:    fora da promoção por release — reversão declarada por outra via (deploy <stack> up): %s\n' "${STACKS_FORA[*]}"
+  [ "${#STACKS_PROMOVER[@]}" -eq 0 ] || printf 'stacks:    %s (bin/_release/stack promover)\n' "${STACKS_PROMOVER[*]}"
+  [ "${#STACKS_FORA[@]}" -eq 0 ]     || printf 'stacks:    fora da promoção por release — reversão declarada por outra via (infra up <stack>): %s\n' "${STACKS_FORA[*]}"
   if [ "$ensaio" -eq 1 ]; then
     printf 'ensaio:    nada tocado\n'
     exit 0
@@ -2008,11 +2022,11 @@ cmd_promover() {
         printf '  demais stacks   : as listadas antes de %s ja foram promovidas; as depois, nao\n' "$STACK_FALHOU"
       fi
       if [ -n "${STACK_MOTIVO:-}" ]; then
-        printf '  motivo (deploy %s):\n' "$STACK_FALHOU"
+        printf '  motivo (ajudante %s):\n' "$STACK_FALHOU"
         printf '%s\n' "$STACK_MOTIVO" | sed 's/^/    /'
       fi
-      printf '  RETOMAR         : conserte a causa acima e rode  deploy %s promover %s\n' "$STACK_FALHOU" "${sha:0:7}"
-      printf '  VOLTAR CODIGO   : release reverter %s %s  (devolve o current; a stack ainda depende do deploy subir)\n' "$repo" "$(curto_ou "$atual" '<sha-anterior>')"
+      printf '  RETOMAR         : conserte a causa acima e rode  bin/_release/stack promover %s %s\n' "$STACK_FALHOU" "${sha:0:7}"
+      printf '  VOLTAR CODIGO   : release reverter %s %s  (devolve o current; a stack ainda depende do ajudante subir)\n' "$repo" "$(curto_ou "$atual" '<sha-anterior>')"
       printf '=========================================================================\n'
     } >&2
     reiniciar_porta "$repo"
@@ -2147,8 +2161,8 @@ cmd_reverter() {
   ler_stacks_da_familia "$repo" || { rc=$?; exit "$rc"; }
 
   printf '== release reverter %s %s → %s ==\n' "$repo" "$(curto_ou "$atual" '(sem current)')" "${alvo:0:7}"
-  [ "${#STACKS_PROMOVER[@]}" -eq 0 ] || printf 'stacks:    %s (deploy promover %s)\n' "${STACKS_PROMOVER[*]}" "${alvo:0:7}"
-  [ "${#STACKS_FORA[@]}" -eq 0 ]     || printf 'stacks:    fora da reversão por release — reversão declarada por outra via (deploy <stack> up): %s\n' "${STACKS_FORA[*]}"
+  [ "${#STACKS_PROMOVER[@]}" -eq 0 ] || printf 'stacks:    %s (bin/_release/stack promover %s)\n' "${STACKS_PROMOVER[*]}" "${alvo:0:7}"
+  [ "${#STACKS_FORA[@]}" -eq 0 ]     || printf 'stacks:    fora da reversão por release — reversão declarada por outra via (infra up <stack>): %s\n' "${STACKS_FORA[*]}"
   if [ "$ensaio" -eq 1 ]; then
     printf 'ensaio:    nada tocado\n'
     exit 0
@@ -2181,10 +2195,10 @@ cmd_reverter() {
       printf '  codigo (current): REVERTIDO e no ar em %s — verbos ja servem esta rev\n' "${alvo:0:7}"
       printf '  stack recusada  : %s — NAO recriou; seus containers seguem em %s\n' "$STACK_FALHOU" "$(curto_ou "$atual" 'estado anterior')"
       if [ -n "${STACK_MOTIVO:-}" ]; then
-        printf '  motivo (deploy %s):\n' "$STACK_FALHOU"
+        printf '  motivo (ajudante %s):\n' "$STACK_FALHOU"
         printf '%s\n' "$STACK_MOTIVO" | sed 's/^/    /'
       fi
-      printf '  RETOMAR         : conserte a causa acima e rode  deploy %s promover %s\n' "$STACK_FALHOU" "${alvo:0:7}"
+      printf '  RETOMAR         : conserte a causa acima e rode  bin/_release/stack promover %s %s\n' "$STACK_FALHOU" "${alvo:0:7}"
       printf '=========================================================================\n'
     } >&2
     reiniciar_porta "$repo"

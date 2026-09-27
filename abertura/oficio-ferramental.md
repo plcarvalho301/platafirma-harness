@@ -32,7 +32,6 @@ tarefas
 acervo
 motor
 infra
-deploy
 release
 conferir
 acesso
@@ -48,6 +47,7 @@ teste
 lint
 pesquisar
 migrar
+metrica
 ```
 
 Os três últimos são o braço de repo/teste/lint/PR da #3004 (feature #3003, invariante

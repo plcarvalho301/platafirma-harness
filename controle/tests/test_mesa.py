@@ -8,7 +8,7 @@
     substrato velho)", confundia a anotação efêmera com o caderno durável.
 
 `bin/mesa` não tem sufixo .py (é despachado por shebang); carregado aqui por
-SourceFileLoader, mesmo padrão de bin/_conta/conta-abertura.py. `ato_ver` isola Redis
+SourceFileLoader, mesmo padrão de bin/_metrica/abertura.py. `ato_ver` isola Redis
 com um fake mínimo (só os métodos que a função usa: keys/get/delete) e desliga o
 substrato de item (`pg() -> None`) — a mesma régua "banco fora do ar se declara
 indisponível" que o próprio verbo já segue. `ato_escrever` roda contra um git real
@@ -36,7 +36,7 @@ MESA_PATH = REPO_ROOT / "bin" / "mesa"
 
 def carrega_mesa():
     """Importa bin/mesa como módulo (sem sufixo .py, spec_from_file_location não acha
-    loader sozinho — passa-se SourceFileLoader explícito, como conta-abertura.py)."""
+    loader sozinho — passa-se SourceFileLoader explícito, como bin/_metrica/abertura.py)."""
     loader = SourceFileLoader("_mesa", str(MESA_PATH))
     spec = spec_from_loader("_mesa", loader)
     mod = module_from_spec(spec)

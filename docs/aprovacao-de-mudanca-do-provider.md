@@ -17,8 +17,8 @@ na fase de bootstrap e concluir que "o gate está quebrado por auto-aprovação"
   como uma pessoa. A **chave privada do App (`.pem`) vive só no host**, em cofre 600
   (`/srv/platafirma/casa/segredos/<provider>-app/app.pem`); o braço recebe apenas um **token de
   instalação de ~1h**, entregue no volume da conta — nunca a chave. `APP_ID` e
-  `INSTALL_ID` são do App, não segredo. Ref: `bin/jaiminho-git-token-refresh.sh`
-  (cards #2899, #3012).
+  `INSTALL_ID` são do App, não segredo. Ref: script de refresh do token do App (**removido
+  em #3145**; cards #2899, #3012).
 - **Operador do host (aprovador).** A conta humana do dono (`plcarvalho301`), operada
   pela TI (claudinho) **em nome do dono**. É quem revisa e aprova o PR do provider.
   Aprovar merge de provider é o ato de autoridade que a TI exerce por delegação.

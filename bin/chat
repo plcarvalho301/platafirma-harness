@@ -263,10 +263,11 @@ def id_fita_novo():
 # recepcao roteia por NOME, e sem linha nesta tabela o giro morre em
 # "sem verbo declarado" — medido no chat em 18/08/2026, com o participante ja
 # admitido em cadeiras.py e sem rota nenhuma deste lado.
-VERBO_DO_PARTICIPANTE = {
-    "jaiminho": os.path.join(BIN, "jaiminho"),
-    "jaiminho-eng": os.path.join(BIN, "jaiminho-eng"),
-}
+# Vazio hoje (card #3145: jaiminho e jaiminho-eng saíram da família de
+# participantes, junto com _SAO_PARTICIPANTE em chat/comum/cadeiras.py — sem
+# entrada lá, `eh_participante()` nunca roteia para cá). Fica declarado, não
+# apagado: é o mecanismo que o próximo participante externo usa.
+VERBO_DO_PARTICIPANTE = {}
 
 # `jaiminho perguntar` e sincrono e nao emite stream: ele volta quando o `agy`
 # terminou. O watchdog do worker mata por silencio de 300 s (e o daqui, por 240),

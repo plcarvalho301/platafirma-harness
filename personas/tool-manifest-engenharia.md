@@ -37,10 +37,11 @@ journalctl · lnav · jq · yq · rg · fd · ts · sponge · parallel · awk ·
 docker 29.7.1 (rootless) · docker compose 5.3.1 · ctop · dive · hadolint · dockle
 systemctl --user · journalctl · systemd-run · systemd-analyze · loginctl · busctl
 → `ctop`: recurso por contêiner ao vivo. `dive`: camadas de imagem sem subir contêiner.
-→ `longjob`: job longo como unidade transiente em `app.slice/platafirma-job-*`, fora do
-  cgroup do ops-mcp. Log em `/srv/platafirma/casa/var/log/jobs/`. Fonte em
-  `platafirma-harness/bin/longjob`, servido no PATH da release
-  (`/opt/platafirma/current/harness/bin/longjob`).
+→ `sessao longjob`: job longo como unidade transiente em `app.slice/platafirma-job-*`,
+  fora do cgroup do ops-mcp. Log em `/srv/platafirma/casa/var/log/jobs/`. Fonte em
+  `platafirma-harness/bin/_sessao/longjob` (card #3145; corpo saiu de `bin/longjob`,
+  fora do PATH agora), chamado por `bin/sessao`, servido no PATH da release
+  (`/opt/platafirma/current/harness/bin/sessao`).
  
 ### Python e ambiente
 python3 3.12.3 · pip 24.0 · pip3 (=/usr/bin/pip3, são) · pipx · uv 0.12.1 · uvx
@@ -48,8 +49,9 @@ node 24.18.1 · npm 11.16.0 · make · gcc
 → `uv` para venv reprodutível.
  
 ### Scripts próprios fora de git (medido 03/08/2026 na pasta de trabalho da conta)
-longjob (em git) · ops-log-prune · acervo-get · acervo-pacote · exporta-acervo-xlsx.py
-→ **só o `longjob` está versionado.** Os outros quatro são exemplar único no host.
+sessao longjob (em git) · acervo-get · acervo-pacote · exporta-acervo-xlsx.py
+→ **`sessao longjob` está versionado; `ops-log-prune` virou `infra limpeza logs`
+  (card #3145), também versionado.** Os outros três seguem exemplar único no host.
  
 ### Segredo, sessão, cópia
 gpg · ssh · rsync · git · gh · git-lfs · tmux · age · sops · minisign · restic

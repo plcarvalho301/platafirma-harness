@@ -7,10 +7,10 @@
 # use para: abrir a fita autorizado e reconhecido pela porta (abrir), saber quem opera uma sessao e por qual regra abriu (ver), as sessoes vivas (listar), apagar a chave viva (encerrar), limpar chaves-sonda acumuladas (limpar), execucao que atravessa a fita (longjob)
 # atos: abrir (escrita, sessao), ver (leitura, sessao), listar (leitura, sessao), encerrar (escrita, sessao), limpar (escrita, sessao), longjob (herdado do alvo)
 # folhas: abrir|encerrar|limpar -> sessao/cunhagem · ver|listar -> sessao/estado · longjob -> sessao/execucao-longa
-# escreve: sessao:{id}, ledger:{id}, giro:{id} (msg-mem; DEL em encerrar|limpar), sessao.sessao (duravel); nada em ver|listar
+# escreve: sessao:{id}, ledger:{id}, giro:{id} (msg-mem; DEL em encerrar|limpar), sessao.sessao (duravel; encerrar|limpar tambem gravam encerrada_em=now(), migracao 0092); nada em ver|listar
 # consome: a API da entidade-sessao, quando houver (ate la: msg-mem e Postgres direto, declarados abaixo)
 # ambiente: PF_SUJEITO (obrigatoria em abrir; origem: fluxo OAuth, entregue pela porta), PF_SUPERFICIE[=desconhecida] (origem: superficie), PF_BIN[=<bin/ da propria arvore; na release /opt/platafirma/current/harness/bin>] (origem: teste); MEM_REDIS_HOST[=127.0.0.1], MEM_REDIS_PORT[=6380] e SESSAO_PG_PORT[=5437] sao endereco de servico, constantes do verbo; SESSAO_PG_PASSWORD nao e variavel: e segredo, obtido por `seg segredo ler` no processo. PF_CADEIRA, PF_SESSAO e PF_ORDEM_ID nao sao lidas — este verbo as origina
-# depende: msg-mem (modulo redis), Postgres da sessao (psycopg), persona (vocabulario: `persona foto --json`), acesso (`acesso decidir sessao_abrir sessao:<cadeira> --json`), seg (`seg segredo ler`), longjob (bin/longjob, contrato herdado)
+# depende: msg-mem (modulo redis), Postgres da sessao (psycopg), persona (vocabulario: `persona foto --json`), acesso (`acesso decidir sessao_abrir sessao:<cadeira> --json`), seg (`seg segredo ler`), longjob (bin/_sessao/longjob, contrato herdado), reidratar (bin/_sessao/reidratar.py, ajudante)
 # substitui: monta-sessao <cadeira> na parte que cunha; redis-cli SET sessao:*; psql -d sessao
 # conforme: parcial — chave viva e registro duravel gravados direto ate a API da entidade-sessao existir (spec_sessao §6)
 #
@@ -45,6 +45,17 @@ TTL_SESSAO_S = 172800          # 48 h — o mesmo da porta, para nao haver duas 
 ATOS = ("abrir", "ver", "listar", "encerrar", "limpar", "longjob")
 PREFIXOS_CADEIRA = ("claudinho-", "claudinha-")
 SUPERFICIES = ("claude.ai", "chat", "code", "desconhecida")
+
+# Ajudante de reidratacao (arq:0110 §1: mora em bin/_<verbo>/, card #3145 decisao 1).
+# Import protegido: sem ele, `ver` mantem o comportamento de hoje ("nao existe") —
+# nunca derruba o verbo por um ajudante ausente ou quebrado.
+_AJUDANTE_SESSAO = str(_REPO_REAL / "bin" / "_sessao")
+if _AJUDANTE_SESSAO not in sys.path:
+    sys.path.insert(0, _AJUDANTE_SESSAO)
+try:
+    import reidratar as _reidratar_mod
+except ImportError:
+    _reidratar_mod = None
 
 # ------------------------------------------------------------------ util
 def _agora_iso() -> str:
@@ -336,6 +347,36 @@ def ato_abrir(cadeira: str, sessao_id: str | None, saida: Saida, dry_run: bool =
     _imprime_abrir(relida, sid, cunhada, True, motivo_dur is None, motivo_dur, avisos, saida)
     return 0
 
+def _marca_encerrada(sids: list[str]) -> None:
+    """Grava `encerrada_em = now()` em sessao.sessao para os sids dados (migracao 0092,
+    card #3145 decisao sobre o item 5: sessao encerrada de proposito nao reidrata).
+    Melhor esforco: psycopg ausente, segredo indisponivel, coluna ainda ausente (a
+    migracao ainda nao rodou apos a promocao) ou banco mudo nunca travam
+    `encerrar`/`limpar` — so avisam em stderr, o mesmo regime do registro duravel em
+    `_registra_duravel` (o ato de msg-mem e o que decide o exit)."""
+    if not sids:
+        return
+    try:
+        import psycopg
+    except ImportError as e:
+        print(f"sessao.sessao.encerrada_em nao gravada: {type(e).__name__}", file=sys.stderr)
+        return
+    senha, motivo = _senha_pg()
+    if not senha:
+        print(f"sessao.sessao.encerrada_em nao gravada: {motivo}", file=sys.stderr)
+        return
+    dsn = f"host=127.0.0.1 port={PG_PORTA} dbname=sessao user=sessao password={senha}"
+    try:
+        with psycopg.connect(dsn, connect_timeout=3) as con, con.cursor() as cur:
+            cur.execute(
+                "UPDATE sessao.sessao SET encerrada_em = now() "
+                "WHERE sessao_id = ANY(%s::uuid[]) AND encerrada_em IS NULL",
+                (sids,))
+            con.commit()
+    except Exception as e:  # noqa: BLE001 — coluna ausente (0092 nao aplicada ainda) ou
+        # banco mudo: nunca trava encerrar/limpar, so avisa
+        print(f"sessao.sessao.encerrada_em nao gravada: {type(e).__name__}", file=sys.stderr)
+
 # ------------------------------------------------------------------ ato: ver
 def ato_ver(sessao_id: str, saida: Saida) -> int:
     sid = _uuid_valido(sessao_id)
@@ -348,6 +389,14 @@ def ato_ver(sessao_id: str, saida: Saida) -> int:
         ch = _le_chave(rc_mem, sid)
     except Exception as e:  # noqa: BLE001
         return saida.erro(_cura_msgmem(type(e).__name__), 3)
+    if ch is None and _reidratar_mod is not None:
+        # sessao:{id} ausente (promocao recriou o msg-mem vazio): relE sessao.sessao
+        # (Postgres, duravel) e regrava a chave com o TTL que resta (card #3145
+        # decisao 1; regra de validade em bin/_sessao/reidratar.py, arq:0091 §3).
+        try:
+            ch = _reidratar_mod.reidratar(sid, rc_mem, _roda, pg_porta=PG_PORTA)
+        except Exception:  # noqa: BLE001 — reidratar nunca pode travar `ver`
+            ch = None
     if ch is None:
         return saida.erro(f"sessao {sid} nao existe ou expirou — varrido: msg-mem "
                           f"{MEM_HOST}:{MEM_PORTA} (TTL {TTL_SESSAO_S // 3600} h); "
@@ -423,6 +472,7 @@ def ato_encerrar(sessao_id: str, saida: Saida) -> int:
             return saida.erro(f"DEL sem confirmacao: {chaves[0]} ainda existe", 5)
     except Exception as e:  # noqa: BLE001
         return saida.erro(_cura_msgmem(type(e).__name__), 3)
+    _marca_encerrada([sid])
     if saida.json:
         print(json.dumps({"encerrada": sid, "apagadas": apagadas,
                           "duravel": "sessao.sessao fica"}, ensure_ascii=False))
@@ -460,6 +510,7 @@ def ato_limpar(dry_run: bool, saida: Saida) -> int:
             for sid in chaves_para_apagar:
                 rc_mem.delete(f"sessao:{sid}", f"ledger:{sid}", f"giro:{sid}")
                 apagadas += 1
+            _marca_encerrada(chaves_para_apagar)
         else:
             apagadas = 0
     except Exception as e:  # noqa: BLE001
@@ -481,8 +532,8 @@ def ato_limpar(dry_run: bool, saida: Saida) -> int:
 
 # ------------------------------------------------------------------ ato: longjob
 def ato_longjob(resto: list[str]) -> int:
-    """Contrato herdado de bin/longjob (spec_sessao §1): exec, sem reinterpretar."""
-    alvo = _REPO_REAL / "bin" / "longjob"
+    """Contrato herdado de bin/_sessao/longjob (spec_sessao §1): exec, sem reinterpretar."""
+    alvo = _REPO_REAL / "bin" / "_sessao" / "longjob"
     if not alvo.is_file():
         print(f"longjob: nao existe {alvo}", file=sys.stderr)
         return 3
@@ -496,7 +547,7 @@ USO = """uso:
   sessao listar    [--cadeira <slug>] [--json]                           as sessoes vivas
   sessao encerrar  <sessao_id>                                           apaga sessao:{id}, ledger:{id}, giro:{id}; o duravel fica
   sessao limpar    [--dry-run] [--json]                                  remove chaves-sonda acumuladas (sujeito ausente ou '-')
-  sessao longjob   <args...>                                             contrato herdado de bin/longjob
+  sessao longjob   <args...>                                             contrato herdado de bin/_sessao/longjob
 
 exit (abrir): 0 cunhou · 2 uso/cadeira desconhecida · 3 sem sujeito/politica ausente/msg-mem mudo · 4 nao autorizado · 5 gravou e nao confirma
 exit (ver/listar/encerrar/limpar): 0 · 1 nao existe · 2 uso · 3 msg-mem mudo · 5 DEL sem confirmacao"""

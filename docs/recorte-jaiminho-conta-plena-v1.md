@@ -124,7 +124,7 @@ Referências ao split que resolvem como vigentes no estado vivo e saem no mesmo 
 | `bin/jaiminho-fabrica` | verbo da segunda conta | remover |
 | `bin/chat`, `chat/comum/cadeiras.py` | roteamento de participante `jaiminho-fabrica` | ajustar (matéria de claudinho-IA) |
 | `sessao/migracao/0076_acervo_ferramental_seed.sql` | seed do verbo fóssil | migração de expurgo |
-| `deploy-harness/migrar-agy-para-jaiminho.sh` **e** `bin/migrar-agy-para-jaiminho.sh` | **duas cópias divergentes** do mesmo script; migração moot sob o novo modelo | remover ambas |
+| scripts de migração `agy`→`jaiminho` (duas cópias divergentes, em `deploy-harness/` e `bin/`) | migração moot sob o novo modelo | **removidos em #3145** |
 | `migracao-2286/` (jaiminho-fabrica) | fonte do arm | remover no teardown |
 
 ## Medido (27/08/2026)

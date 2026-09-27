@@ -1,0 +1,323 @@
+#!/usr/bin/env bash
+# bin/_release/stack — ajudante interno: liga stack (acervo.stack) e release/instancia.
+# Chamado por bin/release, bin/infra e bin/motor, cada um localizando este arquivo por
+# caminho relativo a si proprio (ex.: "$(dirname "$0")/_release/stack") — nunca pelo
+# PATH: nao e verbo da porta, nao entra na whitelist, nao se chama a mao por engano.
+#
+# Extraido de bin/deploy no card #3145 (ORDEM DO DONO 27/09: bin/deploy apagado, sem
+# prazo de deprecado). Mapa de sucessores do que bin/deploy fazia e nao esta aqui:
+#   sem arg / rotas / acessos        -> acervo listar topologia [<stack>] [--rotas|--acessos]
+#   segredos                         -> seg segredo exigidos <stack>
+#   up/down/ps/config/pull/build     -> infra <acao> <stack> ...   (que chama este ajudante)
+#   promover (de familia)            -> release promover <familia> <sha>  (idem)
+#   reverter (de stack)              -> release reverter <familia> (idem; recria a stack no
+#                                        sha alvo chamando este ajudante de novo — nao ha
+#                                        `stack reverter` aqui)
+#
+# atos:
+#   stack promover <stack> [<rev>]           sobe da arvore da release nessa rev (sem rev:
+#                                             current da familia) — mesmo comportamento do
+#                                             extinto `deploy <stack> promover [<rev>]`
+#   stack compose  <stack> <acao> [args...]  acao = up | down | ps | logs | config | pull | build
+#                                             (passthrough ao docker compose; segredo exigido
+#                                             so antes de "up")
+#
+# ambiente: PF_RELEASE_RAIZ[=/opt/platafirma] · PLATAFIRMA_RELEASE[=$PF_RELEASE_RAIZ/current] ·
+#   PLATAFIRMA_INSTANCIA[=/srv/platafirma/casa] · DEPLOY_PONTOS[=$PLATAFIRMA_INSTANCIA/var/deploy] ·
+#   DEPLOY_ENV_DIR[=$XDG_RUNTIME_DIR/platafirma, /run/user/<uid>/platafirma] ·
+#   DEPLOY_TOPO_ARQUIVO (diagnostico) · DOCKER_HOST
+#
+# Onde cada pedaco mora (desenho #3010 §3-§4), igual ao que era bin/deploy:
+#   base do compose  release, arvore imutavel da familia: $PF_RELEASE_RAIZ/<familia>/<sha>/<caminho>
+#   sobreposicao     instancia: $PLATAFIRMA_INSTANCIA/deploy/<stack>/compose.override.yaml
+#   segredo          instancia: $PLATAFIRMA_INSTANCIA/segredos/<stack>/<NOME>, materializado em
+#                    --env-file no tmpfs ($DEPLOY_ENV_DIR/<stack>.env) so enquanto o compose roda
+#   projeto compose  campo `projeto` do registro, senao `name:` do compose base
+set -euo pipefail
+
+AQUI="$(cd "$(dirname "$(readlink -f "$0")")" && pwd)"
+. "$AQUI/../../lib/raizes.sh"
+
+export PF_RELEASE_RAIZ PLATAFIRMA_RELEASE PLATAFIRMA_INSTANCIA
+export DOCKER_HOST="${DOCKER_HOST:-unix:///run/user/$(id -u)/docker.sock}"
+
+# A topologia se le UMA vez e mora em memoria (mesma fonte-verdade que bin/deploy usava:
+# acervo.stack, servida por `acervo stack ver --json`). DEPLOY_TOPO_ARQUIVO so para diagnostico.
+if [ -n "${DEPLOY_TOPO_ARQUIVO:-}" ]; then
+  [ -r "$DEPLOY_TOPO_ARQUIVO" ] || { echo "arquivo de topologia ilegivel: $DEPLOY_TOPO_ARQUIVO" >&2; exit 1; }
+  TOPO_JSON="$(cat "$DEPLOY_TOPO_ARQUIVO")"
+else
+  TOPO_JSON="$(acervo stack ver --json 2>/dev/null \
+    | jq '{stacks: (map({key: .slug, value: .}) | from_entries)}')"
+  [ -n "$TOPO_JSON" ] && [ "$(jq -r '.stacks | length' <<<"$TOPO_JSON" 2>/dev/null)" -gt 0 ] \
+    || { echo "topologia vazia do verbo — acervo stack ver --json falhou" >&2; exit 1; }
+fi
+
+stacks()   { jq -r '.stacks | keys[]' <<<"$TOPO_JSON"; }
+campo()    { jq -r --arg s "$1" --arg c "$2" '.stacks[$s][$c] // empty' <<<"$TOPO_JSON"; }
+# `compose` e `profiles` aceitam string ou lista: uma linha por item, sempre.
+lista()    { jq -r --arg s "$1" --arg c "$2" \
+               '.stacks[$s][$c] // empty | if type=="array" then .[] else . end' <<<"$TOPO_JSON"; }
+
+uso() {
+  cat >&2 <<FIM
+uso:
+  stack promover <stack> [<rev>]              sobe da arvore da release nessa rev (sem rev: current da familia)
+  stack compose  <stack> <acao> [args...]     acao = up | down | ps | logs | config | pull | build
+
+base: $PF_RELEASE_RAIZ/<familia>/<sha>/<compose> · sobreposicao: $PLATAFIRMA_INSTANCIA/deploy/<stack>/compose.override.yaml
+segredos: $PLATAFIRMA_INSTANCIA/segredos/<stack>/ (env-file em tmpfs, apagado na saida)
+
+stacks registradas:
+FIM
+  while read -r s; do
+    printf '  %-14s %s\n' "$s" "$(campo "$s" papel)" >&2
+  done < <(stacks)
+  cat >&2 <<FIM
+
+Ajudante interno de release/infra/motor (fora do PATH; nao e verbo da porta).
+Fonte: acervo.stack (acervo stack ver); edicao: acervo stack import|def|rm
+FIM
+  exit 2
+}
+
+command -v jq >/dev/null || { echo "jq ausente — o registro e JSON e nao se le na mao" >&2; exit 1; }
+
+case "${1:-}" in --ajuda|--help|-h) uso ;; esac
+
+[ $# -ge 2 ] || uso
+ATO="$1"; STACK="$2"; shift 2 || true
+
+case "$ATO" in
+  promover|compose) ;;
+  *) echo "erro: ato desconhecido: '$ATO' (promover|compose)" >&2; uso ;;
+esac
+
+case "$STACK" in
+  */*|.*|*..*) echo "erro: '$STACK' e slug de stack, nao caminho" >&2; exit 4 ;;
+esac
+if ! jq -e --arg s "$STACK" '.stacks | has($s)' <<<"$TOPO_JSON" >/dev/null || [ -z "$(lista "$STACK" compose)" ]; then
+  echo "erro: stack \"$STACK\" nao esta no registro (ou nao declara compose) — nao invento caminho de compose." >&2
+  echo "      registradas: $(stacks | tr '\n' ' ')" >&2
+  exit 2
+fi
+
+REPO="$(campo "$STACK" repo)"
+[ -n "$REPO" ] || { echo "erro: stack \"$STACK\" nao declara repo no registro — nao sei de que familia da release ela sobe." >&2; exit 3; }
+CURTO="${REPO#platafirma-}"
+OVERRIDE="$PLATAFIRMA_INSTANCIA/deploy/$STACK/compose.override.yaml"
+SEGREDOS_STACK="$PLATAFIRMA_INSTANCIA/segredos/$STACK"
+ENV_DIR="${DEPLOY_ENV_DIR:-${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/platafirma}"
+ENV_FILE=""; ENV_TMP=""
+
+limpar_env() { rm -f ${ENV_FILE:+"$ENV_FILE"} ${ENV_TMP:+"$ENV_TMP"}; }
+trap limpar_env EXIT
+
+PONTOS="${DEPLOY_PONTOS:-$PLATAFIRMA_INSTANCIA/var/deploy}"
+
+# --- a release: de qual arvore imutavel a stack sobe ---------------------------
+arvore_de() {  # $1=sha ou vazio ; imprime a arvore ou falha
+  local sha="${1:-}"
+  if [ -z "$sha" ]; then
+    realpath -e "$PF_RELEASE_RAIZ/$REPO/current" 2>/dev/null
+  elif [ -d "$PF_RELEASE_RAIZ/$REPO/$sha" ]; then
+    printf '%s\n' "$PF_RELEASE_RAIZ/$REPO/$sha"
+  else
+    return 1
+  fi
+}
+
+# rev -> sha de 40 hex pelo espelho da familia (sha, tag, ramo do origin), como o release resolve.
+resolver_rev() {  # $1=rev ; imprime o sha ou falha
+  local rev="$1" esp="$PF_RELEASE_RAIZ/$REPO/.repo.git" sha="" r
+  if [[ "$rev" =~ ^[0-9a-f]{40}$ ]]; then printf '%s\n' "$rev"; return 0; fi
+  [ -d "$esp" ] || return 1
+  for r in "${rev}^{commit}" "refs/tags/${rev}^{commit}" "refs/remotes/origin/${rev#origin/}^{commit}"; do
+    sha="$(git --git-dir="$esp" rev-parse --verify -q "$r" 2>/dev/null || true)"
+    [ -z "$sha" ] || break
+  done
+  if [ -n "$sha" ]; then
+    printf '%s\n' "$sha"
+    return 0
+  fi
+  return 1
+}
+
+# Compose declarado -> caminho relativo a raiz da familia.
+rel_na_familia() {  # $1=declarado
+  case "$1" in
+    "$PLATAFIRMA_RELEASE/$CURTO/"*)     printf '%s\n' "${1#"$PLATAFIRMA_RELEASE/$CURTO/"}" ;;
+    "$PF_RELEASE_RAIZ/$REPO/current/"*) printf '%s\n' "${1#"$PF_RELEASE_RAIZ/$REPO/current/"}" ;;
+    "~"*|/*|*..*)                       return 1 ;;
+    *)                                  printf '%s\n' "$1" ;;
+  esac
+}
+
+COMPOSE_ARGS=(); COMPOSE=""; ARVORE=""
+montar_compose() {  # $1=arvore da release
+  ARVORE="$1"; COMPOSE_ARGS=(); COMPOSE=""
+  local c rel ov
+  while read -r c; do
+    [ -n "$c" ] || continue
+    rel="$(rel_na_familia "$c")" || {
+      echo "erro: compose declarado fora da release: $c" >&2
+      echo "      a base mora na release: caminho relativo a raiz de $REPO, ou sob $PLATAFIRMA_RELEASE/$CURTO/." >&2
+      echo "      config da instancia vai na sobreposicao: $OVERRIDE" >&2
+      exit 3; }
+    c="$ARVORE/$rel"
+    [ -r "$c" ] || { echo "erro: compose declarado e ilegivel: $c" >&2; exit 1; }
+    [ -n "$COMPOSE" ] || COMPOSE="$c"   # o primeiro manda no diretorio de projeto e no que se imprime
+    COMPOSE_ARGS+=(-f "$c")
+  done < <(lista "$STACK" compose)
+
+  # override existente e nao declarado no registro recusa aqui, em vez de virar incidente
+  # depois do `up` (com -f o docker compose NAO carrega docker-compose.override.yml sozinho).
+  for c in "${COMPOSE_ARGS[@]}"; do
+    [ "$c" = "-f" ] && continue
+    ov="$(dirname "$c")/docker-compose.override.yml"
+    [ -r "$ov" ] || continue
+    case " ${COMPOSE_ARGS[*]} " in *" $ov "*) continue;; esac
+    echo "erro: existe override nao declarado no registro: $ov" >&2
+    echo "      com -f o docker compose NAO o carrega sozinho, e o \"up\" subiria sem ele." >&2
+    echo "      conserto: declarar os dois no registro (acervo stack), campo compose (aceita lista)." >&2
+    exit 3
+  done
+
+  # a sobreposicao da instancia entra por ultimo: vence a base no que declara
+  [ ! -r "$OVERRIDE" ] || COMPOSE_ARGS+=(-f "$OVERRIDE")
+}
+
+projeto_declarado() {
+  local p; p="$(campo "$STACK" projeto)"
+  if [ -z "$p" ] && [ -n "$COMPOSE" ]; then
+    p="$(python3 -c 'import sys, yaml; print((yaml.safe_load(open(sys.argv[1])) or {}).get("name") or "")' "$COMPOSE" 2>/dev/null || true)"
+  fi
+  printf '%s' "$p"
+}
+
+PROJETO=""
+fixar_projeto() {
+  PROJETO="$(projeto_declarado)"
+  [ -n "$PROJETO" ] || {
+    echo "recusa: projeto compose de \"$STACK\" nao declarado (campo projeto no registro, ou name: em $COMPOSE)." >&2
+    echo "        sem ele o docker deriva o nome do diretorio da release, e os volumes nomeados viram outros." >&2
+    exit 3; }
+}
+
+# Caminho declarado de config da instancia: relativo e relativo a $2; absoluto so vale sob a
+# instancia ou a release. `~` e qualquer outro absoluto recusam (desenho #3010 §3-§4).
+resolve() {  # $1=declarado $2=base do relativo ; falha fora das raizes de producao
+  case "$1" in
+    "~"*|*..*)                                                              return 1 ;;
+    "$PLATAFIRMA_INSTANCIA/"*|"$PF_RELEASE_RAIZ/"*|"$PLATAFIRMA_RELEASE/"*) printf '%s\n' "$1" ;;
+    /*)                                                                     return 1 ;;
+    *)                                                                      printf '%s\n' "$2/$1" ;;
+  esac
+}
+
+fora_das_raizes() {  # $1=campo $2=declarado $3=base do relativo
+  echo "recusa: $1 de \"$STACK\" declarado fora das raizes de producao: $2" >&2
+  echo "        vale relativo a $3, ou absoluto sob $PLATAFIRMA_INSTANCIA ou $PF_RELEASE_RAIZ." >&2
+  echo "        conserto: reescrever pelo acervo stack def (nunca UPDATE a mao)." >&2
+  exit 3
+}
+
+# Segredo declarado e ausente para o `up` aqui: a stack nao sobe pela metade (falha alta).
+exigir_segredos() {
+  jq -e --arg s "$STACK" '.stacks[$s] | has("segredos")' <<<"$TOPO_JSON" >/dev/null || return 0
+  local item alvo falta=0
+  while read -r item; do
+    [ -n "$item" ] || continue
+    alvo="$(resolve "$item" "$SEGREDOS_STACK")" || fora_das_raizes segredo "$item" "$SEGREDOS_STACK"
+    [ -e "$alvo" ] && continue
+    echo "  AUSENTE : $item" >&2; falta=$((falta+1))
+  done < <(lista "$STACK" segredos)
+  [ "$falta" -eq 0 ] || { echo "recusa: faltam $falta segredo(s) de \"$STACK\" — ver: seg segredo exigidos $STACK" >&2; exit 1; }
+}
+
+compose() {
+  local env_args=()
+  [ -z "$ENV_FILE" ] || env_args=(--env-file "$ENV_FILE")
+  docker compose -p "$PROJETO" "${COMPOSE_ARGS[@]}" "${env_args[@]+"${env_args[@]}"}" \
+    "${PERFIL_ARGS[@]+"${PERFIL_ARGS[@]}"}" "$@"
+}
+
+# Segredo para compose: um arquivo por variavel em $SEGREDOS_STACK, escrito num env-file 0600
+# no tmpfs e apagado na saida (trap). Nenhum `.env` em arvore de repo. Nome e presenca, nunca
+# valor: nenhuma linha deste ajudante imprime o conteudo.
+materializar_env() {
+  local f nome valor
+  ( umask 077; mkdir -p "$ENV_DIR" )
+  chmod 700 "$ENV_DIR"
+  ENV_TMP="$(mktemp "$ENV_DIR/.$STACK.env.XXXXXX")"
+  if [ -d "$SEGREDOS_STACK" ]; then
+    for f in "$SEGREDOS_STACK"/*; do
+      [ -f "$f" ] || continue
+      nome="$(basename "$f")"
+      [[ "$nome" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]] || continue
+      valor="$(cat "$f")"
+      case "$valor" in
+        *$'\n'*) echo "aviso: segredo $STACK/$nome tem mais de uma linha — fica fora do env-file (e bind, nao variavel)" >&2; continue ;;
+        *"'"*)   echo "recusa: segredo $STACK/$nome tem aspas simples e nao cabe literal no env-file — nada subiu" >&2; exit 3 ;;
+      esac
+      printf "%s='%s'\n" "$nome" "$valor" >> "$ENV_TMP"
+    done
+  fi
+  ENV_FILE="$ENV_DIR/$STACK.env"
+  mv -f "$ENV_TMP" "$ENV_FILE"; ENV_TMP=""
+}
+
+gravar_atual() { mkdir -p "$PONTOS"; printf '%s\n' "$1" > "$PONTOS/$STACK.atual"; }
+
+PERFIL_ARGS=()
+while read -r pf; do
+  [ -n "$pf" ] || continue
+  PERFIL_ARGS+=(--profile "$pf")
+done < <(lista "$STACK" profiles)
+
+case "$ATO" in
+  # `promover` sobe a stack da arvore imutavel da release num ato so: config em bind mount de
+  # arquivo unico troca de inode entre arvores, entao recria sempre (--force-recreate).
+  promover)
+    REV=""
+    if [ $# -gt 0 ] && [[ "$1" != -* ]]; then REV="$1"; shift; fi
+    if [ -z "$REV" ]; then
+      ARV="$(arvore_de "")" || {
+        echo "recusa: familia $REPO sem current na release — promova antes: release promover $REPO <rev>" >&2; exit 1; }
+      SHA="$(basename "$ARV")"
+    else
+      SHA="$(resolver_rev "$REV")" && ARV="$(arvore_de "$SHA")" || {
+        echo "recusa: rev \"$REV\" nao esta materializada na release de $REPO." >&2
+        echo "        a arvore imutavel nasce do release: release promover $REPO $REV" >&2
+        exit 1; }
+    fi
+    montar_compose "$ARV"; fixar_projeto; exigir_segredos; materializar_env
+    ANTES=""
+    if [ -r "$PONTOS/$STACK.atual" ]; then ANTES="$(cat "$PONTOS/$STACK.atual")"; fi
+    mkdir -p "$PONTOS"
+    if [ -n "$ANTES" ] && [ "$ANTES" != "$SHA" ]; then echo "$ANTES" > "$PONTOS/$STACK.anterior"; fi
+    printf 'release: %s (projeto %s)\n  %s -> %s\n' "$ARVORE" "$PROJETO" "${ANTES:-(nenhum up gravado)}" "$SHA"
+    cd "$(dirname "$COMPOSE")"
+    rc=0; compose up -d --build --force-recreate "$@" || rc=$?
+    [ "$rc" -ne 0 ] || gravar_atual "$SHA"
+    exit "$rc"
+    ;;
+  compose)
+    ACAO="${1:-}"
+    [ -n "$ACAO" ] || { echo "erro: acao obrigatoria: stack compose $STACK <acao> [args...]" >&2; uso; }
+    case "$ACAO" in
+      up|down|ps|logs|config|pull|build) ;;
+      *) echo "erro: acao desconhecida: '$ACAO' (up|down|ps|logs|config|pull|build)" >&2; uso ;;
+    esac
+    ARV="$(arvore_de "")" || {
+      echo "erro: familia $REPO sem current na release ($PF_RELEASE_RAIZ/$REPO/current) — promova: release promover $REPO <rev>" >&2
+      exit 1; }
+    montar_compose "$ARV"; fixar_projeto
+    [ "$ACAO" != "up" ] || exigir_segredos
+    materializar_env
+    cd "$(dirname "$COMPOSE")"
+    rc=0; compose "$@" || rc=$?
+    if [ "$rc" -eq 0 ] && [ "$ACAO" = "up" ]; then gravar_atual "$(basename "$ARVORE")"; fi
+    exit "$rc"
+    ;;
+esac

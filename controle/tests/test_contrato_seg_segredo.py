@@ -23,6 +23,11 @@ Cobre:
 - `seg keycloak entrar`:
   - Falha com variaveis ausentes (mostra nomes com <oculto>)
   - Sucesso com variaveis presentes
+- `seg segredo exigidos` (card #3145 frente D, porta de `deploy <stack> segredos`):
+  - exigido (acervo.stack.segredos, via `bin/acervo` real ao lado de `bin/seg`) x
+    presente em $SEG_SECRETS_DIR, so nomes
+  - todos presentes -> 0 · falta algum -> 1, nomeando so o nome (nunca o valor) ·
+    stack inexistente -> 1 · acervo indisponivel (docker sem stub) -> 3
 """
 import os
 import pty
@@ -289,3 +294,97 @@ def test_keycloak_entrar(tmp_path, fake_docker):
     res_fail = _run_seg(["keycloak", "entrar"], env_extra=env_fail)
     assert res_fail.returncode == 1
     assert "KC_BOOTSTRAP_ADMIN_USERNAME=<oculto>" in res_fail.stderr
+
+
+# --- segredo exigidos (card #3145 frente D) ----------------------------------------
+# `seg segredo exigidos` chama o `bin/acervo` REAL ao lado de `bin/seg` (mesma via que
+# o golden record usa); o que se troca por fixture aqui e so o `docker` que ESSE acervo
+# chama por baixo (bin/_acervo/listar -> docker exec ... psql). Nunca psql/docker reais.
+
+def _docker_topologia(tmp_path, stacks_json):
+    d = tmp_path / "bin-docker-topologia"
+    d.mkdir()
+    p = d / "docker"
+    p.write_text(
+        "#!/bin/sh\n"
+        'if [ "$1" = "exec" ]; then\n'
+        f"  cat <<'JSON'\n{stacks_json}\nJSON\n"
+        "  exit 0\n"
+        "fi\n"
+        'echo "docker-stub: comando desconhecido: $*" >&2\n'
+        "exit 1\n"
+    )
+    p.chmod(0o755)
+    return d
+
+def test_exigidos_todos_presentes(tmp_path):
+    secrets_dir = tmp_path / "secrets"
+    _run_seg(["segredo", "gravar", "web/API_KEY"], stdin="chave-1",
+              env_extra={"SEG_SECRETS_DIR": str(secrets_dir)})
+    stacks = ('[{"slug":"web","segredos":["API_KEY"],"papel":null,"critico":false,'
+              '"repo":null,"compose":null,"rotas":null,"reversao":null,"gate":null,'
+              '"profiles":null,"nota":null,"instancias":null}]')
+    docker_dir = _docker_topologia(tmp_path, stacks)
+    env = {"SEG_SECRETS_DIR": str(secrets_dir),
+           "PATH": f"{docker_dir}{os.pathsep}{os.environ['PATH']}"}
+
+    res = _run_seg(["segredo", "exigidos", "web"], env_extra=env)
+    assert res.returncode == 0, res.stdout + res.stderr
+    assert "chave-1" not in res.stdout
+    assert "todos os segredos exigidos" in res.stdout
+
+def test_exigidos_falta_um_sem_vazar_valor(tmp_path):
+    secrets_dir = tmp_path / "secrets"
+    _run_seg(["segredo", "gravar", "web/API_KEY"], stdin="chave-secreta-xyz",
+              env_extra={"SEG_SECRETS_DIR": str(secrets_dir)})
+    stacks = ('[{"slug":"web","segredos":["API_KEY","DB_PASS"],"papel":null,"critico":false,'
+              '"repo":null,"compose":null,"rotas":null,"reversao":null,"gate":null,'
+              '"profiles":null,"nota":null,"instancias":null}]')
+    docker_dir = _docker_topologia(tmp_path, stacks)
+    env = {"SEG_SECRETS_DIR": str(secrets_dir),
+           "PATH": f"{docker_dir}{os.pathsep}{os.environ['PATH']}"}
+
+    res = _run_seg(["segredo", "exigidos", "web"], env_extra=env)
+    assert res.returncode == 1
+    assert "AUSENTE : web/DB_PASS" in res.stdout
+    assert "chave-secreta-xyz" not in res.stdout
+    assert "chave-secreta-xyz" not in res.stderr
+
+def test_exigidos_stack_inexistente(tmp_path):
+    docker_dir = _docker_topologia(tmp_path, "[]")
+    env = {"SEG_SECRETS_DIR": str(tmp_path / "secrets"),
+           "PATH": f"{docker_dir}{os.pathsep}{os.environ['PATH']}"}
+
+    res = _run_seg(["segredo", "exigidos", "naoexiste"], env_extra=env)
+    assert res.returncode == 1
+    assert "nao esta no registro" in res.stderr
+
+def test_exigidos_sem_stack_confere_todas(tmp_path):
+    secrets_dir = tmp_path / "secrets"
+    _run_seg(["segredo", "gravar", "web/API_KEY"], stdin="v1",
+              env_extra={"SEG_SECRETS_DIR": str(secrets_dir)})
+    stacks = ('[{"slug":"web","segredos":["API_KEY"],"papel":null,"critico":false,'
+              '"repo":null,"compose":null,"rotas":null,"reversao":null,"gate":null,'
+              '"profiles":null,"nota":null,"instancias":null},'
+              '{"slug":"gateway","segredos":[],"papel":null,"critico":true,'
+              '"repo":null,"compose":null,"rotas":null,"reversao":null,"gate":null,'
+              '"profiles":null,"nota":null,"instancias":null}]')
+    docker_dir = _docker_topologia(tmp_path, stacks)
+    env = {"SEG_SECRETS_DIR": str(secrets_dir),
+           "PATH": f"{docker_dir}{os.pathsep}{os.environ['PATH']}"}
+
+    res = _run_seg(["segredo", "exigidos"], env_extra=env)
+    assert res.returncode == 0, res.stdout + res.stderr
+    assert "2 stack(s) conferida(s)" in res.stdout
+
+def test_exigidos_dependencia_ausente_sem_docker(tmp_path):
+    # Sem fixture de `docker`: o delator do isolamento (lib/teste_isolado.py) responde
+    # exit 97 pra qualquer chamada real — bin/acervo repassa isso como dependencia.
+    res = _run_seg(["segredo", "exigidos"], env_extra={"SEG_SECRETS_DIR": str(tmp_path / "secrets")})
+    assert res.returncode == 3
+    assert "acervo indisponivel" in res.stderr
+
+def test_exigidos_ajuda():
+    res = _run_seg(["segredo", "exigidos", "--ajuda"])
+    assert res.returncode == 2
+    assert "segredo exigidos" in res.stdout

@@ -40,3 +40,8 @@ tests/test_isolamento.py
 tests/test_contrato_acesso.py
 tests/test_contrato_acervo.py
 tests/test_contrato_organizacao.py
+tests/test_contrato_migrar.py
+tests/test_contrato_metrica_abertura.py
+tests/test_sessao_reidratar.py
+tests/test_contrato_acervo_topologia.py
+tests/test_contrato_seg_segredo.py

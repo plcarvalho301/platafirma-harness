@@ -29,7 +29,14 @@ MIG="$REPO_ROOT/sessao/migracao/0091_acervo_stack_release_instancia.sql"
 DDL="$REPO_ROOT/sessao/migracao/0076c_acervo_stack.sql"
 FIXTURE="$SCRIPT_DIR/test_migracao_0091_linhas_medidas.json"
 STACK_PY="$REPO_ROOT/bin/_acervo/stack"
-DEPLOY="$REPO_ROOT/bin/deploy"
+INFRA="$REPO_ROOT/bin/infra"
+# bin/deploy foi apagado (#3145, ORDEM DO DONO 27/09). up/config passam por `infra`, que
+# despacha para o MESMO ajudante bin/_release/stack — inclusive o mesmo DEPLOY_TOPO_ARQUIVO
+# de override que este teste ja usa abaixo — e seguem cobertos linha a linha. ver/rotas/
+# acessos/segredos virariam `acervo listar topologia`/`seg segredo exigidos`, mas esses dois
+# verbos SEMPRE leem acervo.stack via `docker exec rag-extractor-pg` (sem variavel de
+# override equivalente): chama-los aqui furaria o isolamento do Postgres descartavel deste
+# teste. Ficam PULADOS (residuo do card #3145, relatado ao planejador na onda 2).
 
 falha() { echo "FALHA: $*" >&2; exit 1; }
 pulado() { echo "PULADO: $*"; }
@@ -41,9 +48,9 @@ if [ -z "$PG_BIN" ]; then
 fi
 [ -n "$PG_BIN" ] && [ -x "$PG_BIN/initdb" ] && [ -x "$PG_BIN/pg_ctl" ] && [ -x "$PG_BIN/psql" ] \
   || falha "sem Postgres local (initdb/pg_ctl/psql); aponte PLATAFIRMA_PG_BIN"
-command -v jq >/dev/null || falha "jq ausente (dependencia do bin/deploy)"
+command -v jq >/dev/null || falha "jq ausente (dependencia de bin/_release/stack, usado por infra up/config/etc)"
 command -v python3 >/dev/null || falha "python3 ausente"
-python3 -c 'import yaml' 2>/dev/null || falha "python3 sem yaml (o bin/deploy le name: do compose com ele)"
+python3 -c 'import yaml' 2>/dev/null || falha "python3 sem yaml (bin/_release/stack le name: do compose com ele)"
 
 TMP_DIR="$(mktemp -d /tmp/pf-migracao-0091.XXXXXX)"
 PGDATA_T="$TMP_DIR/pg"; SOCK="$TMP_DIR/sock"
@@ -59,7 +66,7 @@ SQL_TEM_PASTA="select count(*) from acervo.stack where concat_ws(' ',compose,rot
 retrato() { PSQL -d "$1" -tA -c "select coalesce(md5(string_agg(row_to_json(s)::text, E'\n' order by slug)),'vazia') from acervo.stack s"; }
 aplicar() { PSQL -d "$1" -v ON_ERROR_STOP=1 -1 -P pager=off -f - < "$MIG"; }   # como o bin/migrar
 
-echo "=== migracao 0091: Postgres descartavel + linhas medidas + bin/deploy ==="
+echo "=== migracao 0091: Postgres descartavel + linhas medidas + infra/acervo/seg ==="
 
 mkdir -p "$SOCK"
 "$PG_BIN/initdb" -D "$PGDATA_T" -A trust -U teste -E UTF8 --locale=C --no-sync >"$TMP_DIR/initdb.log" 2>&1 \
@@ -400,7 +407,7 @@ $out"
 echo "$out"
 echo "OK"
 
-echo "--- 6: bin/deploy real sobre a topologia migrada (release e instancia num tmp, docker stub)"
+echo "--- 6: infra (bin/_release/stack) real sobre a topologia migrada (release e instancia num tmp, docker stub)"
 RELEASE="$TMP_DIR/opt"; INSTANCIA="$TMP_DIR/srv"; STUBS="$TMP_DIR/stubs"
 SHA="3333333333333333333333333333333333333333"
 mkdir -p "$RELEASE" "$INSTANCIA" "$STUBS"
@@ -420,54 +427,43 @@ export PATH="$STUBS:$PATH"
 PLANO="$TMP_DIR/plano.tsv"
 python3 "$PY" palco "$TOPO" "$RELEASE" "$INSTANCIA" "$SHA" "$DEPLOY_ENV_DIR" "$DEPLOY_TOPO_ARQUIVO" > "$PLANO" || falha "palco"
 [ "$(wc -l < "$PLANO")" -eq 12 ] || falha "plano devia ter 12 stacks: $(cat "$PLANO")"
-TEM_YQ=1; command -v yq >/dev/null || { TEM_YQ=0; pulado "sem yq: 'deploy <stack> rotas' nao conferido"; }
 tudo=""
 while IFS=$'\t' read -r slug projeto invocacao tem_rotas gate; do
-  out="$("$DEPLOY" "$slug" 2>&1)" || falha "$slug (ver): $out"
-  grep -qx "projeto : $projeto" <<<"$out" || falha "$slug: projeto devia ser $projeto: $out"
-  tudo+="$out"
-
   : > "$DOCKER_LOG"
-  set +e; out="$("$DEPLOY" "$slug" config --quiet 2>&1)"; rc=$?; set -e
-  [ "$rc" -eq 0 ] || falha "$slug config --quiet rc=$rc: $out"
+  set +e; out="$("$INFRA" config "$slug" --quiet 2>&1)"; rc=$?; set -e
+  [ "$rc" -eq 0 ] || falha "$slug infra config --quiet rc=$rc: $out"
   [ "$(grep -c '^docker ' "$DOCKER_LOG")" -eq 1 ] && grep -qxF "$invocacao" "$DOCKER_LOG" \
     || falha "$slug: invocacao do compose
  esperada: $invocacao
  feita   : $(cat "$DOCKER_LOG")"
   tudo+="$out"
 
-  out="$("$DEPLOY" "$slug" segredos 2>&1)" || falha "$slug segredos: $out"
-  ! grep -q AUSENTE <<<"$out" || falha "$slug segredos acusou ausente: $out"
-  tudo+="$out"
-
-  if [ "$tem_rotas" = 1 ] && [ "$TEM_YQ" = 1 ]; then
-    out="$("$DEPLOY" "$slug" rotas 2>&1)" || falha "$slug rotas: $out"
-    grep -qF "ingress : $INSTANCIA/deploy/core/cloudflared.yml" <<<"$out" || falha "$slug rotas: $out"
-    tudo+="$out"
-  fi
-  if [ -n "$gate" ]; then
-    out="$("$DEPLOY" "$slug" acessos 2>&1)" || falha "$slug acessos: $out"
-    grep -qF "gate    : $gate" <<<"$out" || falha "$slug acessos devia ler o gate $gate: $out"
-    tudo+="$out"
-  fi
+  # ver/segredos/rotas/acessos: sucessores (`acervo listar topologia`, `seg segredo
+  # exigidos`) sempre leem acervo.stack do container real rag-extractor-pg, sem override
+  # equivalente a DEPLOY_TOPO_ARQUIVO — chama-los aqui sairia do Postgres descartavel deste
+  # teste. Pulado (nota no topo do arquivo); a invocacao do compose acima ja prova que
+  # `infra` leu a topologia migrada (projeto e caminhos inclusos em $invocacao).
+  pulado "$slug: ver/segredos/rotas/acessos (acervo listar topologia / seg segredo exigidos sem override de banco)"
 done < "$PLANO"
 ! grep -q "valor-falso-0091" <<<"$tudo" || falha "valor de segredo impresso pelo deploy"
 ! grep -q "fora da release\|fora das raizes" <<<"$tudo" || falha "deploy recusou caminho: $tudo"
 [ -z "$(ls -A "$DEPLOY_ENV_DIR")" ] || falha "sobrou env-file no tmpfs: $(ls -A "$DEPLOY_ENV_DIR")"
 find "$RELEASE" -name '.env' | grep -q . && falha ".env escrito na release"
-echo "OK (12 stacks: ver, config, segredos; rotas e acessos onde declarados)"
+echo "OK (12 stacks: infra config invoca o compose certo; ver/segredos/rotas/acessos pulados — nota acima)"
 
-echo "--- 7: chat com o cofre matrix incompleto (estado medido) -> segredos acusa 1, nunca 3"
+echo "--- 7: chat com o cofre matrix incompleto (estado medido) -> infra up recusa por segredo, nunca sobe pela metade"
 mv "$INSTANCIA/segredos/matrix/signing.key" "$TMP_DIR/guardado"
-set +e; out="$("$DEPLOY" chat segredos 2>&1)"; rc=$?; set -e
-[ "$rc" -eq 1 ] && grep -q "AUSENTE : $INSTANCIA/segredos/matrix/signing.key" <<<"$out" || falha "chat sem signing.key: rc=$rc $out"
+export PF_SUJEITO="teste-migracao-0091"   # infra up|down|pull|build exige identidade (decisao 9, #3145)
 : > "$DOCKER_LOG"
-set +e; out="$("$DEPLOY" chat up -d 2>&1)"; rc=$?; set -e
+set +e; out="$("$INFRA" up chat -d 2>&1)"; rc=$?; set -e
 [ "$rc" -eq 1 ] || falha "chat up sem signing.key devia recusar 1: rc=$rc $out"
 # rc 1 tem de ser a recusa por segredo, e nada pode ter chegado ao docker (up pela metade)
 grep -q "recusa: faltam 1 segredo" <<<"$out" || falha "chat up recusou 1 por outro motivo: $out"
 ! grep -q " up" "$DOCKER_LOG" || falha "chat up sem signing.key chamou o docker: $(cat "$DOCKER_LOG")"
 mv "$TMP_DIR/guardado" "$INSTANCIA/segredos/matrix/signing.key"
+# `seg segredo exigidos chat` (sucessor de `deploy chat segredos`) nao tem override de
+# banco: leria acervo.stack do container real. Pulado pelo mesmo motivo do passo 6.
+pulado "chat: seg segredo exigidos (sem override de banco, ver nota do passo 6)"
 echo "OK"
 
 echo "--- 8: banco novo (sem stack nenhuma): a migracao cria as 12 e as 4 ligacoes"

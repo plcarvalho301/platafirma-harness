@@ -1,29 +1,38 @@
 #!/usr/bin/env python3
-# capacidade: contar tokens servidos na abertura por cadeira e por peca/arquivo
+# capacidade: metrica
 # dono: claudinho-IA
-"""conta-abertura — tokens do pacote de abertura, por cadeira e por arquivo.
+"""abertura — tokens do pacote de abertura, por cadeira e por arquivo.
+
+Miolo de `metrica abertura` (card #3145; antes `bin/conta-abertura` + este arquivo
+sob `bin/_conta/`, movido preservando historico). MODULO IMPORTAVEL: `bin/metrica`
+importa `main` daqui e despacha `abertura` para ca antes do argparse comum, porque os
+args (`<cadeira>`, `--tudo`, `--json`, `--chapeu <s>`) nao sao os de `metrica` (`<dia>`).
 
 Nao reimplementa contagem: importa `monta-sessao` do repo real e usa o MESMO
 `monta()` (tokenizador qwen2.5, terceiros/tokenizers/qwen2.5.json da arvore da release,
 pinado por sha256 em registro/terceiros.json). O numero aqui bate
 com o que a mesa e `conferir sessao` mostram, por construcao — mesma funcao.
 
-Le sem rede: `atualizar=False`. Serve do clone; se quiser HEAD fresco, `repo_sync`
-antes. Peca indisponivel entra com tokens=0 e frescor declarado, nunca omitida.
+Le sem rede: `atualizar=False`. Serve da MORADA PUBLICADA (`PF_ABERTURA_DIR`, com
+default declarado em `monta-sessao`; e por essa variavel que o teste aponta para
+fixture — arq:0097). Peca indisponivel entra com tokens=0 e frescor declarado, nunca
+omitida.
 
 uso:
-  conta-abertura                     todas as cadeiras, uma linha de total cada
-  conta-abertura <cadeira>           quebra por peca/arquivo de uma cadeira
-  conta-abertura --tudo              quebra por peca de TODAS as cadeiras
-  conta-abertura [...] --json        idem, em json
-  conta-abertura [...] --chapeu <s>  inclui o chapeu <s> na conta (default: sem chapeu)
+  metrica abertura                     todas as cadeiras, uma linha de total cada
+  metrica abertura <cadeira>           quebra por peca/arquivo de uma cadeira
+  metrica abertura --tudo              quebra por peca de TODAS as cadeiras
+  metrica abertura [...] --json        idem, em json
+  metrica abertura [...] --chapeu <s>  inclui o chapeu <s> na conta (default: sem chapeu)
+
+exit: 0 ok · 1 cadeira desconhecida · 2 uso · 3 morada nao publicada (dependencia ausente)
 """
 import importlib.util
 import json
 import os
 import sys
 
-# miolo mora em bin/_conta/ -> sobe 2 niveis ate platafirma-harness/
+# miolo mora em bin/_metrica/ -> sobe 2 niveis ate platafirma-harness/
 RAIZ = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 MS = os.path.join(RAIZ, "bin", "monta-sessao")
 
@@ -40,9 +49,16 @@ def carrega_monta():
 
 
 def conta_cadeira(ms, cadeira, chapeu=None):
-    """Devolve (envelope_total, linhas_por_peca) para uma cadeira. Sem rede."""
+    """Devolve (envelope_total, linhas_por_peca) para uma cadeira. Sem rede.
+
+    `envelope_total` traz `erro` quando `monta()` nao resolveu a cadeira; o campo
+    `dependencia_ausente` (bool) distingue "morada nao publicada" (falta declarada
+    por `monta()` no campo `morada`, exit 3 no chamador) de "cadeira desconhecida"
+    (exit 1) sem o chamador reabrir a forma do dict de `monta()`.
+    """
     pac = ms.monta(cadeira, atualizar=False, forcado_chapeu=chapeu)
     if "erro" in pac:
+        pac["dependencia_ausente"] = "morada" in pac
         return pac, []
     linhas = []
     for e in pac["pecas"]:
@@ -61,7 +77,23 @@ def conta_cadeira(ms, cadeira, chapeu=None):
     return total, linhas
 
 
+USO = """uso:
+  metrica abertura                     todas as cadeiras, uma linha de total cada
+  metrica abertura <cadeira>           quebra por peca/arquivo de uma cadeira
+  metrica abertura --tudo              quebra por peca de TODAS as cadeiras
+  metrica abertura [...] --json        idem, em json
+  metrica abertura [...] --chapeu <s>  inclui o chapeu <s> na conta (default: sem chapeu)
+
+exit: 0 ok · 1 cadeira desconhecida · 3 morada nao publicada (dependencia ausente)
+"""
+
+
 def main(argv):
+    """`argv` e so o que vem DEPOIS de `abertura` — sem nome de programa nem ato,
+    no mesmo formato que `bin/conta-abertura` sempre aceitou (`sys.argv[1:]`)."""
+    if any(a in ("--ajuda", "--help", "-h", "ajuda") for a in argv):
+        print(USO)
+        return 0
     quer_json = "--json" in argv
     quer_tudo = "--tudo" in argv
     chapeu = None
@@ -81,13 +113,16 @@ def main(argv):
         cadeira = posicionais[0]
         total, linhas = conta_cadeira(ms, cadeira, chapeu)
         if "erro" in total:
+            # arq:0110 §4: cadeira que nao existe e resposta negativa de merito (1),
+            # nao uso invalido (2); morada nao publicada e dependencia ausente (3).
+            exit_code = 3 if total.get("dependencia_ausente") else 1
             saida = {"erro": total["erro"], "cadeiras_validas": total.get("cadeiras_validas", [])}
             if quer_json:
                 print(json.dumps(saida, ensure_ascii=False, indent=2))
             else:
                 print(total["erro"], file=sys.stderr)
                 print("validas: " + ", ".join(total.get("cadeiras_validas", [])), file=sys.stderr)
-            return 2
+            return exit_code
         if quer_json:
             print(json.dumps({"metodo_tokens": metodo, "total": total, "pecas": linhas},
                              ensure_ascii=False, indent=2))
@@ -132,4 +167,6 @@ def main(argv):
 
 
 if __name__ == "__main__":
+    # Uso direto (fora de `metrica abertura`), preservado para depuracao local — o
+    # ato de producao e sempre via `bin/metrica`, que passa `sys.argv[2:]`.
     sys.exit(main(sys.argv[1:]))

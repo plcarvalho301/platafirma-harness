@@ -20,7 +20,8 @@ DISTRIBUICAO = {"yaml": "pyyaml"}
 # chegam como dependencia de uma distribuicao declarada
 TRANSITIVOS = {"anyio": "mcp", "starlette": "mcp"}
 # modulos da propria arvore que a porta poe no sys.path
-LOCAIS_FORA_DO_DIRETORIO = {"hash_servido", "streams", "identidade", "pdp", "pep", "raizes"}
+LOCAIS_FORA_DO_DIRETORIO = {"hash_servido", "streams", "identidade", "pdp", "pep", "raizes",
+                            "reidratar"}  # bin/_sessao/reidratar.py (card #3145, Onda 1 Frente E)
 
 
 def _imports_de_terceiros(diretorio: Path) -> set[str]:

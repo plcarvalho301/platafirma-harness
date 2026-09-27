@@ -10,7 +10,12 @@
 #     Com --oficio, filtra pelos verbos do NÚCLEO de abertura (whitelist em
 #     abertura/oficio-ferramental.md), pra o oficio.md não duplicar a lista à mão.
 #     Com --tools, projeta o núcleo em tools MCP (consumidor: ops-server).
-# `acervo listar topologia [--json] [--completo]` — golden record acervo.stack (eixo irmão).
+# `acervo listar topologia [<stack>] [--json] [--completo]` — golden record acervo.stack (eixo
+#     irmão); com <stack>, filtra a uma só.
+# `acervo listar topologia <stack> --rotas`   — ingress do túnel que entra em cada serviço
+#     (porta de `deploy <stack> rotas`, bin/deploy ~347).
+# `acervo listar topologia <stack> --acessos` — superfície gateada (allowlist/OIDC) da stack
+#     (porta de `deploy <stack> acessos`, bin/deploy ~380).
 # Read-only. NÃO servido na montagem: é referência e fallback (D4 do ADR 0076).
 #
 # TRANSPORTE (arq:0106 seguido à risca): o psql devolve UMA linha, um array JSON, via
@@ -27,9 +32,11 @@
 #           0076-catalogo-de-ferramental-golden-record-relacional.md
 import json
 import os
+import re
 import signal
 import subprocess
 import sys
+import tempfile
 
 # Sai limpo quando o consumidor fecha o cano (| head, | jq -e). Sem isto, o print
 # num stdout já fechado estoura BrokenPipeError com traceback (medido no teste).
@@ -127,11 +134,15 @@ USO = """uso:
                                                 capacidade . verbo . sot . descricao . instancias
                                                 --oficio: so os verbos do nucleo de abertura
                                                 --tools: projecao do nucleo em tools MCP (JSON; spec capsula)
-  acervo listar topologia [--json] [--completo] topologia de deploy acervo.stack (eixo irmao):
-                                                stack . critico . instancias . papel
+  acervo listar topologia [<stack>] [--json] [--completo] topologia de deploy acervo.stack
+                                                (eixo irmao): stack . critico . instancias . papel
                                                 --completo: + repo, compose, rotas, gate,
                                                 segredos, reversao, profiles, nota (o que
-                                                `deploy` le do stacks.json)
+                                                `deploy` le do stacks.json); com <stack>, so ela
+  acervo listar topologia <stack> --rotas       ingress do tunel por servico
+                                                (porta de `deploy <stack> rotas`)
+  acervo listar topologia <stack> --acessos     allowlist/OIDC da superficie gateada
+                                                (porta de `deploy <stack> acessos`)
 
 Read-only. E o golden record: a lista (b) do chapeu e GERADA disto, nao editada a mao.
 """
@@ -225,6 +236,329 @@ def _psql_json(sql, alvo):
         morre("acervo listar %s: psql nao devolveu JSON parseavel (%s):\n  %s"
               % (alvo, e, saida[:200]), 3)
 
+# --- topologia --rotas / --acessos: porta de `deploy <stack> rotas|acessos` -----------
+# (bin/deploy, ~347-434, ADR do card #3145 frente D). Mesma resolucao de caminho
+# (raizes de producao) e mesma leitura de ingress/gate; a diferenca e que aqui e
+# Python nativo, nao um heredoc de shell chamando `yq`/`python3 -c`.
+
+class _Recusa(Exception):
+    """Falha de merito ou de dependencia ao portar rotas/acessos (arq:0110 §4: exit por classe)."""
+    def __init__(self, msg, code=1):
+        super().__init__(msg)
+        self.code = code
+
+def _raizes():
+    sys.path.insert(0, os.path.join(
+        os.path.dirname(os.path.dirname(os.path.dirname(os.path.realpath(__file__)))), "lib"))
+    from raizes import release_raiz, release, instancia
+    return release_raiz(), release(), instancia()
+
+def _resolve_caminho(declarado, base):
+    """Porta resolve() de bin/deploy: relativo a `base`, ou absoluto sob as raizes de producao."""
+    rraiz, rel, inst = _raizes()
+    if declarado.startswith("~") or ".." in declarado:
+        return None
+    for raiz in (str(inst), str(rraiz), str(rel)):
+        if declarado == raiz or declarado.startswith(raiz + "/"):
+            return declarado
+    if declarado.startswith("/"):
+        return None
+    return os.path.join(base, declarado)
+
+def _compose_lista(compose_bruto):
+    """compose e coluna text: string simples OU lista serializada em JSON (bin/_acervo/stack)."""
+    if not compose_bruto:
+        return []
+    if isinstance(compose_bruto, list):
+        return compose_bruto
+    s = str(compose_bruto).strip()
+    if s.startswith("["):
+        try:
+            v = json.loads(s)
+            if isinstance(v, list):
+                return v
+        except ValueError:
+            pass
+    return [s]
+
+def _arvore_de(repo):
+    """Porta arvore_de() de bin/deploy (sem rev): o current resolvido da familia, ou None."""
+    rraiz, _rel, _inst = _raizes()
+    caminho = os.path.join(str(rraiz), repo, "current")
+    if not os.path.exists(caminho):
+        return None
+    return os.path.realpath(caminho)
+
+def _rel_na_familia(declarado, curto, repo):
+    """Porta rel_na_familia() de bin/deploy: caminho relativo a raiz da familia na release."""
+    rraiz, rel, _inst = _raizes()
+    p1 = "%s/%s/" % (rel, curto)
+    p2 = "%s/%s/current/" % (rraiz, repo)
+    if declarado.startswith(p1):
+        return declarado[len(p1):]
+    if declarado.startswith(p2):
+        return declarado[len(p2):]
+    if declarado.startswith("~") or declarado.startswith("/") or ".." in declarado:
+        return None
+    return declarado
+
+def _montar_compose(stack_slug, compose_bruto, arvore, curto, repo, instancia_dir):
+    """Porta montar_compose() de bin/deploy: args -f pro `docker compose`, override incluso."""
+    args = []
+    primeiro = None
+    for c in _compose_lista(compose_bruto):
+        if not c:
+            continue
+        rel = _rel_na_familia(c, curto, repo)
+        if rel is None:
+            raise _Recusa("compose declarado fora da release: %s" % c, 3)
+        caminho = os.path.join(arvore, rel)
+        if not os.access(caminho, os.R_OK):
+            raise _Recusa("compose declarado e ilegivel: %s" % caminho, 1)
+        if primeiro is None:
+            primeiro = caminho
+        args += ["-f", caminho]
+    for c in list(args):
+        if c == "-f":
+            continue
+        ov = os.path.join(os.path.dirname(c), "docker-compose.override.yml")
+        if os.access(ov, os.R_OK) and ov not in args:
+            raise _Recusa(
+                "existe override nao declarado no registro: %s\n"
+                "      com -f o docker compose NAO o carrega sozinho, e a leitura sairia sem ele." % ov, 3)
+    override = os.path.join(instancia_dir, "deploy", stack_slug, "compose.override.yaml")
+    if os.access(override, os.R_OK) and override not in args:
+        args += ["-f", override]
+    return primeiro, args
+
+def _projeto_de(compose_path):
+    """Porta projeto_declarado() de bin/deploy: acervo.stack nao tem coluna `projeto`
+    (so o stacks.json antigo tinha); le `name:` do primeiro compose, como o deploy ja
+    fazia quando o registro nao declarava o campo."""
+    import yaml
+    try:
+        with open(compose_path, encoding="utf-8") as fh:
+            doc = yaml.safe_load(fh) or {}
+        return (doc.get("name") or "") if isinstance(doc, dict) else ""
+    except (OSError, yaml.YAMLError):
+        return ""
+
+def _materializar_env(stack_slug, instancia_dir):
+    """Porta materializar_env() de bin/deploy: um NOME='valor' por segredo, nunca o valor
+    em log; arquivo tmp 0600, apagado pelo chamador logo apos o `docker compose config`."""
+    segredos_dir = os.path.join(instancia_dir, "segredos", stack_slug)
+    linhas = []
+    if os.path.isdir(segredos_dir):
+        for nome in sorted(os.listdir(segredos_dir)):
+            caminho = os.path.join(segredos_dir, nome)
+            if not os.path.isfile(caminho):
+                continue
+            if not re.match(r"^[A-Za-z_][A-Za-z0-9_]*$", nome):
+                continue
+            with open(caminho, encoding="utf-8", errors="surrogateescape") as fh:
+                valor = fh.read()
+            # $(cat "$f") em bash despoja TODA quebra de linha final (substituicao de
+            # comando); sem isto, qualquer segredo gravado com \n de fim (o normal) cairia
+            # aqui como "multilinha" e sumiria do env-file por engano.
+            valor = valor.rstrip("\n")
+            if "\n" in valor:
+                sys.stderr.write(
+                    "aviso: segredo %s/%s tem mais de uma linha — fica fora do env-file\n"
+                    % (stack_slug, nome))
+                continue
+            if "'" in valor:
+                raise _Recusa(
+                    "segredo %s/%s tem aspas simples e nao cabe literal no env-file — nada lido"
+                    % (stack_slug, nome), 3)
+            linhas.append("%s='%s'\n" % (nome, valor))
+    fd, tmp = tempfile.mkstemp(prefix=".%s.env." % stack_slug)
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as fh:
+            fh.writelines(linhas)
+    except Exception:
+        os.unlink(tmp)
+        raise
+    return tmp
+
+def _compose_config(args_f, projeto, env_file, profiles):
+    """Roda `docker compose ... config` e devolve o YAML resolvido (variaveis substituidas),
+    do mesmo jeito que `deploy <stack> acessos` fazia antes de repassar ao parser python."""
+    cmd = ["docker", "compose"]
+    if projeto:
+        cmd += ["-p", projeto]
+    cmd += args_f
+    if env_file:
+        cmd += ["--env-file", env_file]
+    for p in (profiles or []):
+        if p:
+            cmd += ["--profile", p]
+    cmd += ["config"]
+    env = dict(os.environ)
+    env.setdefault("DOCKER_HOST", "unix:///run/user/1001/docker.sock")
+    try:
+        r = subprocess.run(cmd, capture_output=True, text=True, env=env)
+    except FileNotFoundError:
+        raise _Recusa("'docker' nao encontrado no PATH.", 3)
+    if r.returncode != 0:
+        raise _Recusa("docker compose config falhou (rc=%s):\n%s"
+                      % (r.returncode, (r.stderr or "").strip()), 3)
+    return r.stdout
+
+def _extrair_acessos(cfg_texto, filtro):
+    """Porta o heredoc python de `deploy <stack> acessos`: allowlist e OIDC por servico.
+
+    O compose resolvido normaliza volume para objeto (source/target); `filtro`, quando
+    vem do registro (campo `gate`), e o slug da stack — pra nao atribuir a ela o gate
+    de uma superficie vizinha declarada no MESMO compose (ex.: 3 oauth2-proxy no core).
+    """
+    import yaml
+    cfg = yaml.safe_load(cfg_texto) or {}
+    linhas = []
+    achou = False
+    servicos = cfg.get("services") or {}
+    for nome, sv in servicos.items():
+        if filtro and filtro not in nome:
+            continue
+        alvo = next((a.split("=", 1)[1] for a in (sv.get("command") or [])
+                     if isinstance(a, str) and "authenticated-emails-file" in a), None)
+        if not alvo:
+            continue
+        achou = True
+        host = next((v.get("source") for v in (sv.get("volumes") or [])
+                     if isinstance(v, dict) and v.get("target") == alvo), None)
+        linhas.append("superficie: %s  (allowlist)" % nome)
+        linhas.append("  arquivo : %s" % (host or alvo))
+        try:
+            with open(host, encoding="utf-8") as f:
+                entra = [l.strip() for l in f if l.strip() and not l.startswith("#")]
+            for e in entra:
+                linhas.append("  entra   : %s" % e)
+            if not entra:
+                linhas.append("  entra   : (arquivo vazio — o gate recusa todo mundo)")
+        except (OSError, TypeError):
+            linhas.append("  entra   : (arquivo nao legivel daqui)")
+    for nome, sv in servicos.items():
+        if filtro and filtro not in nome:
+            continue
+        amb = sv.get("environment") or {}
+        texto = (" ".join("%s=%s" % (k, v) for k, v in amb.items())
+                 if isinstance(amb, dict) else " ".join(map(str, amb)))
+        if "OIDC" in texto.upper() or "OPENID" in texto.upper():
+            achou = True
+            linhas.append("superficie: %s  (gate proprio: OIDC contra o realm)" % nome)
+            linhas.append("  entra   : quem o realm autorizar. Enumerar exige credencial de admin do")
+            linhas.append("            Keycloak, que este verbo nao usa — e a allowlist nao cobre esta.")
+    if not achou:
+        linhas.append("nenhuma superficie gateada declarada no compose desta stack.")
+    return linhas
+
+def _stack_completo(stack_slug):
+    """Uma linha de acervo.stack (via _psql_json) pelo slug, ou recusa exit 1 (nao existe)."""
+    for row in _psql_json(SQL_TOPOLOGIA_COMPLETA, "topologia --completo"):
+        if row.get("slug") == stack_slug:
+            return row
+    morre("acervo listar topologia: stack %r nao esta no registro (acervo.stack)." % stack_slug, 1)
+
+def listar_topologia_rotas(stack_slug):
+    """Porta `deploy <stack> rotas` (bin/deploy ~347-357): ingress do tunel por servico."""
+    row = _stack_completo(stack_slug)
+    ing = row.get("rotas")
+    if not ing:
+        print("stack %r nao declara ingress no registro (campo rotas)." % stack_slug)
+        return
+    rraiz, rel, inst = _raizes()
+    base = os.path.join(str(inst), "deploy", stack_slug)
+    try:
+        caminho = _resolve_caminho(ing, base)
+        if caminho is None:
+            raise _Recusa(
+                "rotas de %r declarado fora das raizes de producao: %s\n"
+                "      vale relativo a %s, ou absoluto sob %s, %s ou %s."
+                % (stack_slug, ing, base, inst, rraiz, rel), 3)
+        if not os.access(caminho, os.R_OK):
+            raise _Recusa("ingress declarado e ilegivel: %s" % caminho, 1)
+        import yaml
+        with open(caminho, encoding="utf-8") as fh:
+            doc = yaml.safe_load(fh) or {}
+    except _Recusa as e:
+        morre(str(e), e.code)
+        return
+    print("ingress : %s" % caminho)
+    for item in (doc.get("ingress") or []):
+        h = item.get("hostname") or "(catch-all)"
+        p = item.get("path") or "-"
+        sv = item.get("service")
+        print("  %-32s %-10s %s" % (h, p, sv))
+    print()
+    print("Rota fora deste arquivo nao aparece aqui: o tunel do ops-mcp e configurado no")
+    print("dashboard da Cloudflare, e nenhum arquivo do repositorio o descreve.")
+
+def listar_topologia_acessos(stack_slug):
+    """Porta `deploy <stack> acessos` (bin/deploy ~359-434): allowlist/OIDC da superficie gateada.
+
+    Gate declarado no registro (campo `gate`): resolve e le so aquele compose, filtrando
+    pelo slug da stack. Sem gate: monta o compose PROPRIO da stack (release + override +
+    segredos materializados em env-file tmp, nunca em log) e le dele.
+    """
+    row = _stack_completo(stack_slug)
+    rraiz, rel, inst = _raizes()
+    gate = row.get("gate")
+    cabecalho = []
+    filtro = ""
+    try:
+        if gate:
+            base = os.path.join(str(inst), "deploy", stack_slug)
+            caminho = _resolve_caminho(gate, base)
+            if caminho is None:
+                raise _Recusa(
+                    "gate de %r declarado fora das raizes de producao: %s\n"
+                    "      vale relativo a %s, ou absoluto sob %s, %s ou %s."
+                    % (stack_slug, gate, base, inst, rraiz, rel), 3)
+            if not os.access(caminho, os.R_OK):
+                raise _Recusa("gate declarado e ilegivel: %s" % caminho, 1)
+            cabecalho.append("gate    : %s" % caminho)
+            cabecalho.append("          (declarado no registro: o gate desta stack NAO mora no compose dela)")
+            cfg_texto = _compose_config(["-f", caminho], None, None, [])
+            filtro = stack_slug
+        else:
+            repo = row.get("repo")
+            if not repo:
+                raise _Recusa(
+                    "stack %r nao declara repo no registro — nao sei de que familia da release ela sobe."
+                    % stack_slug, 3)
+            curto = repo[len("platafirma-"):] if repo.startswith("platafirma-") else repo
+            arvore = _arvore_de(repo)
+            if not arvore:
+                raise _Recusa(
+                    "familia %s sem current na release (%s/%s/current) — nada a ler." % (repo, rraiz, repo), 3)
+            primeiro, args_f = _montar_compose(
+                stack_slug, row.get("compose"), arvore, curto, repo, str(inst))
+            if not args_f:
+                raise _Recusa("stack %r nao declara compose no registro." % stack_slug, 3)
+            projeto = _projeto_de(primeiro)
+            if not projeto:
+                raise _Recusa(
+                    "projeto compose de %r nao declarado (acervo.stack nao tem campo dedicado; "
+                    "e sem name: em %s)." % (stack_slug, primeiro), 3)
+            env_file = _materializar_env(stack_slug, str(inst))
+            try:
+                cfg_texto = _compose_config(args_f, projeto, env_file, row.get("profiles") or [])
+            finally:
+                try:
+                    os.unlink(env_file)
+                except OSError:
+                    pass
+        linhas = _extrair_acessos(cfg_texto, filtro)
+    except _Recusa as e:
+        morre(str(e), e.code)
+        return
+    for l in cabecalho:
+        print(l)
+    if cabecalho:
+        print()
+    for l in linhas:
+        print(l)
+
 def listar_conceitos(quero_json):
     conceitos = _psql_json(SQL_CONCEITOS, "conceitos")
     for c in conceitos:
@@ -316,7 +650,7 @@ def listar_ferramental(quero_json, so_oficio=False):
     rotulo = "acervo.ferramental, nucleo de abertura" if so_oficio else "acervo.ferramental"
     sys.stderr.write("\n%d capacidade(s) no golden record (%s).\n" % (len(itens), rotulo))
 
-def listar_topologia(quero_json, completo=False):
+def listar_topologia(quero_json, completo=False, stack_alvo=None):
     if not completo:
         stacks = []
         for row in _psql_json(SQL_TOPOLOGIA, "topologia"):
@@ -326,6 +660,11 @@ def listar_topologia(quero_json, completo=False):
                 "critico": bool(row.get("critico")),
                 "instancias": row.get("instancias") or None,
             })
+        if stack_alvo is not None:
+            stacks = [s for s in stacks if s["slug"] == stack_alvo]
+            if not stacks:
+                morre("acervo listar topologia: stack %r nao esta no registro (acervo.stack)."
+                      % stack_alvo, 1)
         if not stacks:
             if quero_json:
                 print("[]")
@@ -363,6 +702,11 @@ def listar_topologia(quero_json, completo=False):
             "nota": row.get("nota") or None,
             "instancias": row.get("instancias") or None,
         })
+    if stack_alvo is not None:
+        stacks = [s for s in stacks if s["slug"] == stack_alvo]
+        if not stacks:
+            morre("acervo listar topologia: stack %r nao esta no registro (acervo.stack)."
+                  % stack_alvo, 1)
     if not stacks:
         if quero_json:
             print("[]")
@@ -612,6 +956,9 @@ def main(argv):
     completo = False
     so_tools = False
     situacao = False
+    quero_rotas = False
+    quero_acessos = False
+    stack_alvo = None
     termo = None
     eixo = None
 
@@ -633,19 +980,38 @@ def main(argv):
         elif a == "--completo" and alvo == "topologia":
             completo = True
             i += 1
+        elif a == "--rotas" and alvo == "topologia":
+            quero_rotas = True
+            i += 1
+        elif a == "--acessos" and alvo == "topologia":
+            quero_acessos = True
+            i += 1
         elif a == "--sobre" and alvo == "obra" and i + 1 < len(resto):
             termo = resto[i + 1]
             i += 2
         elif a == "--eixo" and alvo == "obra" and i + 1 < len(resto):
             eixo = resto[i + 1]
             i += 2
+        elif alvo == "topologia" and not a.startswith("-") and stack_alvo is None:
+            stack_alvo = a
+            i += 1
         else:
             morre("acervo listar: opcao desconhecida %r\n\n%s" % (a, USO))
+
+    if quero_rotas and quero_acessos:
+        morre("acervo listar topologia: escolha --rotas OU --acessos, nao os dois.\n\n%s" % USO)
+    if (quero_rotas or quero_acessos) and not stack_alvo:
+        morre("acervo listar topologia --rotas/--acessos exige <stack>.\n\n%s" % USO)
 
     if alvo == "conceitos":
         listar_conceitos(quero_json)
     elif alvo == "topologia":
-        listar_topologia(quero_json, completo)
+        if quero_rotas:
+            listar_topologia_rotas(stack_alvo)
+        elif quero_acessos:
+            listar_topologia_acessos(stack_alvo)
+        else:
+            listar_topologia(quero_json, completo, stack_alvo)
     elif alvo == "obra":
         listar_obra(termo, eixo, situacao, quero_json)
     elif so_tools:

@@ -1,4 +1,5 @@
-"""Suites bash novas do card #3010: `deploy`, `seg`, `teste`/`lint` e o fechamento do harness.
+"""Suites bash novas do card #3010: bin/_release/stack (ex-`deploy`, card #3145), `seg`,
+`teste`/`lint` e o fechamento do harness.
 
 Rodam pelo `teste rodar platafirma-harness`. Cada suite monta a propria fixture em /tmp
 (release, instancia e tmpfs de env-file), com docker de stub, e nao toca producao nem bancada.
@@ -12,7 +13,7 @@ import pytest
 
 RAIZ = pathlib.Path(__file__).resolve().parent
 SUITES = [
-    "test_deploy.sh",
+    "test_release_stack.sh",
     "test_seg.sh",
     "test_teste.sh",
     "test_fechamento_3010_harness.sh",
