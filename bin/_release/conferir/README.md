@@ -61,7 +61,7 @@ exit vem de `agrega()`, restrito a 0/1/5.
 **Servido** (`release conferir <classe>`):
 
 - `servico`, `verbo`, `skill`, `procedencia`, `superficie` (`--caso conectores` e
-  `--caso descricao`), `ferramental`, `front`, `pdp`, `alcance`, `card` — todas via
+  `--caso descricao`), `ferramental`, `front`, `pdp`, `alcance`, `card`, `jobs` — todas via
   `resultado.relatorio()`, o Veredito comum de ponta a ponta.
 - `sessao`, `chapeu` — declaradas no docstring deste arquivo (mede tokens do pacote
   de abertura e o `chapeu.md` de camada C, as duas dependentes de um tokenizador

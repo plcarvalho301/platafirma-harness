@@ -93,6 +93,12 @@
                    errado; nunca colapsa em 1: ausencia de resposta nao e
                    evidencia de ausencia, e `indeterminavel` NAO ancora negativa).
 
+  jobs    [timer]  cada timer do systemd --user da conta: declarado (harness/instalar,
+                   core/units-da-instancia.json ou pacote do sistema), link pelo atalho
+                   estavel da release, nada da bancada, EnvironmentFile do ops-mcp
+                   quando chama verbo, habilitado, ultima execucao sem falha; e o
+                   timer que um instalador promete e nao esta agendado (card #3147).
+
    vocabulario [alvo]
                     varre `<verbo> <ato>` entre crases em dono.md, oficio.md,
                     skills/*/SKILL.md e docs/spec_*.md e confere contra os atos
@@ -196,7 +202,7 @@ def uso(erro=None):
         print(f"erro: {erro}\n", file=sys.stderr)
     print(__doc__.strip(), file=sys.stderr)
     print("\nuso: conferir <classe> [alvo]", file=sys.stderr)
-    print("     classes implementadas : servico . verbo . repo . skill . procedencia . superficie . commit . arranque . ferramental . front . existe . alcance . pdp . vocabulario . card", file=sys.stderr)
+    print("     classes implementadas : servico . verbo . repo . skill . procedencia . superficie . commit . arranque . ferramental . front . existe . alcance . pdp . vocabulario . card . jobs", file=sys.stderr)
     for c, motivo in CLASSES_ABERTAS.items():
         print(f"     classe declarada, sem implementacao : {c} — {motivo}", file=sys.stderr)
     sys.exit(2)
@@ -2761,6 +2767,127 @@ def conferir_vocabulario(alvo=None, como_json=False):
     return resultado.relatorio("vocabulario", alvo, itens, _sha_release(), como_json=como_json)
 
 
+# --- classe: jobs (card #3147) -------------------------------------------------
+#
+# Todo timer agendado no systemd --user da conta tem quem o declara, e o que ele roda
+# vem da release. Os declarantes sao os que a casa ja tem, lidos do SERVIDO:
+#   - harness  deploy-harness/instalar, lista UNITS (symlink em ~/.local/share)
+#   - core     deploy/units-da-instancia.json: `units` (instala-units.sh, symlink) e
+#              `_fora_deste_instalador` (setup-*.sh com sudo, copia em ~/.config)
+#   - sistema  unit de pacote do SO, em /usr/lib/systemd/user ou /lib/systemd/user
+# Nenhuma lista nova: a classe mede as que existem. Duas moradas e dois jeitos de
+# instalar seguem como estao -- unificar e decisao (card #3147, Travas).
+
+ENV_OPS = "/home/claudinho/.config/ops/env"
+UNIT_SISTEMA = ("/usr/lib/systemd/user/", "/lib/systemd/user/")
+
+
+def _systemctl_show(unit, props):
+    rc, out, err = sh(["systemctl", "--user", "show", unit, "-p", ",".join(props)])
+    if rc != 0:
+        return None, (err or out or f"systemctl saiu {rc}").splitlines()[0]
+    d = {}
+    for linha in out.splitlines():
+        k, _, v = linha.partition("=")
+        d[k] = v
+    return d, None
+
+
+def _declarantes_de_jobs(release):
+    """{unit: declarante} dos registros servidos e o conjunto de timers que um
+    instalador por symlink promete ligar. Registro ilegivel volta em `faltas`."""
+    decl, esperados, faltas = {}, set(), []
+    instalar = os.path.join(release, "harness", "deploy-harness", "instalar")
+    try:
+        with open(instalar, encoding="utf-8") as f:
+            texto = f.read()
+        bloco = re.search(r"^UNITS=\((.*?)^\)", texto, re.S | re.M)
+        for rel in re.findall(r'"([^"|]+)\|', bloco.group(1) if bloco else ""):
+            nome = os.path.basename(rel)
+            decl[nome] = "harness@deploy-harness/instalar"
+            if nome.endswith(".timer"):
+                esperados.add(nome)
+    except OSError as e:
+        faltas.append(f"harness@deploy-harness/instalar ilegivel: {e}")
+    reg = os.path.join(release, "core", "deploy", "units-da-instancia.json")
+    try:
+        with open(reg, encoding="utf-8") as f:
+            d = json.load(f)
+        for nome in d.get("units", {}):
+            decl.setdefault(nome, "core@deploy/instala-units.sh")
+            if nome.endswith(".timer"):
+                esperados.add(nome)
+        for chave, onde in d.get("_fora_deste_instalador", {}).items():
+            for nome in (n.strip() for n in chave.split(",")):
+                decl.setdefault(nome, "core@deploy/units-da-instancia.json: " + onde.split(" — ")[0])
+    except (OSError, ValueError) as e:
+        faltas.append(f"core@deploy/units-da-instancia.json ilegivel: {e}")
+    return decl, esperados, faltas
+
+
+def conferir_jobs(alvo=None, como_json=False):
+    """Um item por timer do systemd --user: declarado, da release, habilitado, sem
+    falha na ultima execucao, e com o ambiente do ops-mcp quando chama verbo."""
+    release = os.environ.get("PLATAFIRMA_RELEASE", "/opt/platafirma/current")
+    decl, esperados, faltas = _declarantes_de_jobs(release)
+    itens = [(f, resultado.indeterminavel(f)) for f in faltas]
+
+    rc, out, err = sh(["systemctl", "--user", "list-units", "--type=timer", "--all",
+                       "--plain", "--no-legend"])
+    if rc != 0:
+        itens.append(("(systemd --user)", resultado.indeterminavel(
+            f"nao listei os timers: {(err or out or str(rc)).splitlines()[0]}")))
+        return resultado.relatorio("jobs", alvo, itens, _sha_release(), como_json=como_json)
+    timers = [l.split()[0] for l in out.splitlines() if l.strip()]
+
+    for t in timers:
+        if alvo and alvo not in (t, t[:-len(".timer")]):
+            continue
+        dt, e1 = _systemctl_show(t, ["Unit", "FragmentPath", "UnitFileState", "ActiveState"])
+        svc = (dt or {}).get("Unit", "")
+        ds, e2 = _systemctl_show(svc, ["FragmentPath", "ExecStart", "EnvironmentFiles",
+                                       "WorkingDirectory", "Result"]) if svc else (None, "sem unit alvo")
+        if e1 or e2:
+            itens.append((t, resultado.indeterminavel(f"systemctl show: {e1 or e2}")))
+            continue
+        frag_t, frag_s = dt.get("FragmentPath", ""), ds.get("FragmentPath", "")
+        de_sistema = frag_t.startswith(UNIT_SISTEMA) and frag_s.startswith(UNIT_SISTEMA)
+        quem = "sistema (pacote do SO)" if de_sistema else decl.get(t)
+        faltou = []
+        if not quem:
+            faltou.append("sem declarante: nem harness/instalar, nem core/units-da-instancia.json, nem pacote do sistema")
+        elif svc not in decl and not de_sistema:
+            faltou.append(f"{svc} sem declarante (o timer tem: {quem})")
+        if not de_sistema:
+            # link instalado aponta para o atalho estavel da release, pelo TEXTO (como
+            # instala-units.sh compara): link direto para um <sha> fica velho na proxima
+            # promocao; link para fora de /opt e unit servida de outro lugar
+            for rot, frag in ((t, frag_t), (svc, frag_s)):
+                if frag and os.path.islink(frag):
+                    txt = os.readlink(frag)
+                    if not txt.startswith(release.rstrip("/") + "/"):
+                        faltou.append(f"{rot} e link para {txt}, fora do atalho estavel {release}")
+            corpo = " ".join([ds.get("ExecStart", ""), ds.get("WorkingDirectory", "")])
+            if RAIZ and (RAIZ.rstrip("/") + "/") in corpo + "/":
+                faltou.append(f"{svc} roda da bancada ({RAIZ}), nao da release")
+            if "/harness/bin/" in ds.get("ExecStart", "") and ENV_OPS not in ds.get("EnvironmentFiles", ""):
+                faltou.append(f"{svc} chama verbo sem EnvironmentFile={ENV_OPS}")
+        if dt.get("UnitFileState") != "enabled":
+            faltou.append(f"{t} {dt.get('UnitFileState') or 'sem estado'}: nao sobe no boot")
+        if ds.get("Result", "success") != "success":
+            faltou.append(f"{svc}: ultima execucao {ds.get('Result')}")
+        if faltou:
+            itens.append((t, resultado.divergente("; ".join(faltou))))
+        else:
+            itens.append((f"{t}  [{quem}]", resultado.conforme()))
+
+    if not alvo:
+        for t in sorted(esperados - set(timers)):
+            itens.append((t, resultado.divergente(f"declarado por {decl[t]} e nao agendado nesta conta")))
+
+    return resultado.relatorio("jobs", alvo, itens, _sha_release(), como_json=como_json)
+
+
 def main(argv):
     # --ajuda UNIVERSAL, sem efeito colateral (card #2868, ex-#2274 defeito 4): varre
     # todos os argumentos antes do despacho; nenhuma classe chega a rodar. uso() sai 2.
@@ -2860,6 +2987,8 @@ def main(argv):
         return conferir_skill(alvo, servido, como_json=como_json)
     if classe == "card":
         return conferir_card(alvo, como_json=como_json)
+    if classe == "jobs":
+        return conferir_jobs(alvo, como_json=como_json)
     if como_json:
         print(json.dumps({"erro": f"classe desconhecida: {classe}"}))
     uso(f"classe desconhecida: {classe}")
