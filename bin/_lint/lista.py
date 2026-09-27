@@ -113,8 +113,9 @@ def parse_lista(texto: str) -> Dict[str, Any]:
                 continue
         i += 1
 
+    # corpo inteiro: classe que le dado fora de tabela (contraponto, lista de termos) le daqui
     return {"titulo": titulo, "rev": rev, "metadados": metadados,
-            "situacao": situacao, "itens": itens}
+            "situacao": situacao, "itens": itens, "corpo": texto}
 
 
 def _acervo_bin() -> str:
