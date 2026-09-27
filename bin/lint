@@ -4,7 +4,7 @@
 # dono: ti
 # classe: C
 # use para: verificar codigo antes de commit/PR, checar conformidade de regras e checklists
-# atos: rodar, detectar, codigo, fossil, repo, superficie, arranque, commit, vocabulario, alcance, chapeu, organizacao, card, prosa, testes
+# atos: rodar, detectar, codigo, fossil, repo, superficie, arranque, commit, vocabulario, alcance, chapeu, organizacao, card, prosa, testes, acervo
 # regua: codigo repositorio
 # regua: fossil repositorio
 # regua: repo lista-de-verificacao checklist-repo
@@ -18,6 +18,7 @@
 # regua: card lista-de-verificacao arq-0096
 # regua: prosa lista-de-verificacao styleguide-da-wiki
 # regua: testes lista-de-verificacao checklist-testes
+# regua: acervo lista-de-verificacao antipadroes-do-acervo
 # forma: relatorio
 # cauda: sim
 from __future__ import annotations
@@ -35,6 +36,7 @@ if str(AQUI) not in sys.path:
 if str(HARNESS_DIR) not in sys.path:
     sys.path.insert(0, str(HARNESS_DIR))
 
+from _lint.acervo import ErroAcervo, verificar_acervo
 from _lint.alcance import verificar_alcance
 from _lint.arranque import verificar_arranque
 from _lint.bancada import ErroBancada, resolver_alvo, resolver_bancada
@@ -131,6 +133,12 @@ CLASSES_LINT = {
         "detector": "criterios de teste",
         "descricao": "padroes e cobertura minima de suites de teste",
     },
+    "acervo": {
+        "tipo": "lista-de-verificacao",
+        "chave": "antipadroes-do-acervo",
+        "detector": "predicados sobre acervo.obra e conceito",
+        "descricao": "antipadroes de obra (colecao firma) e conceito",
+    },
 }
 
 
@@ -139,6 +147,7 @@ def imprimir_uso(stream=sys.stdout):
     print("  lint <classe> <repo>[@<chave>] [<alvo>] [--staged] [--json]", file=stream)
     print("  lint commit <arquivo>|- [--json]", file=stream)
     print("  lint card <arquivo>|- [<repo>] [--json]", file=stream)
+    print("  lint acervo [--resumo] [--json]   antipadroes de obra (firma) e conceito; exit 1 so com bloqueante", file=stream)
     print("  lint organizacao <repo> [<alvo>] [--todas] [--resumo]   --todas inclui os bloqueantes (contagem; quem barra e o pre-commit); --resumo conta por regra\n", file=stream)
     print("classes:", file=stream)
     for c, info in CLASSES_LINT.items():
@@ -216,6 +225,14 @@ def main() -> int:
                 pass
         apontamentos = verificar_card(alvo=alvo_card, raiz=raiz_repo)
         return relatorio_lint(classe, alvo_card, apontamentos, chave_lista, rev=1, como_json=como_json)
+
+    # Classe ACERVO: le o banco do acervo, nao um repositorio
+    if classe == "acervo":
+        try:
+            return verificar_acervo(como_json=como_json, resumo=resumo)
+        except ErroAcervo as e:
+            print(f"lint: {e.msg}", file=sys.stderr)
+            return e.rc
 
     # 2. Classe COMMIT
     if classe == "commit":
