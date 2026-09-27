@@ -30,7 +30,7 @@ conteúdo não aparece, nem como título.
 1. A resposta literal ao que ele perguntou, ou a ação nomeada. Nada antes dela, salvo
    linha de estado e chapéu.
 2. O que ficou pronto e o que a cadeira decidiu: o que subiu, o que falta, a escolha
-   feita e declarada. `ENTREGA:` e `PARCIAL:` abrem esta parte.
+   feita e declarada. `ENTREGA:` e `ENTREGUE:` abrem esta parte.
 3. 🔵 O que o dono decide, só quando as duas pernas existem no material (card, pedido,
    fonte): opções numeradas, uma linha cada, o custo de cada uma, a recomendada com 🟢.
    Ação já decidida por card ou direção anterior não é escolha: vira uma linha na parte
@@ -129,9 +129,9 @@ faltou.
 |---|---|---|
 | parar: recusar, rotear, suspender, adiar, trocar de chapéu para não fazer | `PARADA: «≤15 palavras do impedimento» — origem [arquivo, linha, mesa, fonte]`, seguida do caminho (a) ou (b) da seção 5 | fonte citável. Impedimento inferido, fronteira lembrada, aviso de cota e «não é meu remit» não ancoram |
 | negar que algo da casa existe, devia existir, é intruso ou está pendente | `NEGATIVA: «primeira linha do retorno» — <verbo>` | documento de casa: a chave falhou em ler e levantar veio vazio (linhas LER e LEVANTAR do mapa das rotinas); cadeira, verbo, card, arquivo ou mesa: `conferir existe <tipo> <nome>`; «quem sou, que cadeiras existem» vem do retorno de `monta_sessao`. `indeterminavel` não ancora: fonte fora do ar espera |
-| entregar valor de negócio | `ENTREGA: #<feat> «retorno em uma linha» — tarefas mover\|ler` | pai em `em-homologacao`, conferido pela cadeira dona. Story e task relatam `PARCIAL: #<story> → <estado> · pai #<feat> <derivado> · abertas: #a #b`, o retorno de `tarefas mover` |
+| entregar valor de negócio | `ENTREGA: #<feat> «retorno em uma linha» — tarefas mover\|ler`, que abre a revisão com ele | pai em `em-homologacao`, conferido pela cadeira dona. Story e task relatam `ENTREGUE: #<story> \| PARCIAL: #<feat>; faltam #a #b`, do retorno de `tarefas mover`; `PARCIAL` qualifica só feature e épico |
 
-`PARADA:` e `NEGATIVA:` são a primeira linha da resposta; `ENTREGA:` e `PARCIAL:` abrem
+`PARADA:` e `NEGATIVA:` são a primeira linha da resposta; `ENTREGA:` e `ENTREGUE:` abrem
 a parte 2 do molde. A âncora é o retorno do verbo em uma linha, nunca o bloco cru.
 
 ## 7. Antes de responder
@@ -192,7 +192,8 @@ estado da arte, ou disser que já tentou resolver o problema, a cadeira entra em
    funil com motivo e o terminal. O resto o rastreador calcula das filhas: `priorizada`,
    `em-execucao`, `em-homologacao` quando todas foram entregues. Pai em `em-homologacao`
    é conferência: a cadeira dona (o `tarefas mover` a avisa) roda o `Sai quando:`, ou
-   confere a `Medida:` no épico, comenta o retorno no card e leva `ENTREGA:` a ele.
+   confere a `Medida:` no épico, e leva a ele a revisão, entrega a entrega, aberta pela
+   `ENTREGA:` (`guia expediente`, seção Revisar).
    `entregue` do pai é ato dele; faltou coisa, a cadeira abre a story que falta.
    Card se escreve por `tarefas modelo <nível>`; a API recusa sair de `captada` sem o
    corpo.
