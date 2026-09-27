@@ -2,8 +2,8 @@
 # curar — cliente fino da API de curadoria do acervo
 # capacidade: classificacao
 # dono: claudinho-dados
-# use para: curadoria do acervo, reclassificação em lote e avulsa, expurgo, restauração, promoção, criação de conceito (nó) e teia de conceitos (aresta entre conceitos)
-# atos: --reclassificar, --situacao, --expurgar, --restaurar, --promover, --conceito, --relacionar, --relacoes, --desrelacionar
+# use para: curadoria do acervo, reclassificação em lote e avulsa, expurgo, restauração, promoção, criação de conceito (nó), teia de conceitos (aresta entre conceitos), derivação entre obras e registro de obra não adquirida
+# atos: --reclassificar, --situacao, --expurgar, --restaurar, --promover, --conceito, --relacionar, --relacoes, --desrelacionar, --derivar, --derivacoes, --desderivar, --registrar-obra
 import argparse
 import json
 import os
@@ -43,6 +43,10 @@ USO = """uso:
   curar --relacionar --help     cartilha: as 11 famílias (frase-molde) e as 3 garantias
   curar --relacoes <conceito>   arestas de um conceito, coluna + tabela (o que já está lavrado)
   curar --desrelacionar <id>    desfaz UMA aresta lavrada (pede confirmação 'sim')
+  curar --derivar <obra> --de <origem> [--motivo \"…\"] [--apply]   a obra deriva da origem (ont:0092 §2)
+  curar --derivacoes <obra>     de onde a obra deriva e o que deriva dela
+  curar --desderivar <obra> --de <origem> [--sim]   desfaz UMA derivação
+  curar --registrar-obra \"<título>\" [--especie … --emitido-por … --id-canonico … --publicacao … --colecao firma] [--apply]
 
 ações principais:
   --reclassificar               reclassifica obra(s) em lote ou individualmente (default: plano seco)
@@ -986,6 +990,121 @@ def acao_reclassificar(args, autor: str, como_json: bool, headers: dict) -> int:
     return 0
 
 
+def _chamar(metodo: str, url: str, headers: dict, payload: dict | None = None, ok=(200,)) -> dict:
+    try:
+        resp = requests.request(metodo, url, json=payload, headers=headers)
+    except requests.exceptions.RequestException as e:
+        falha_indeterminavel(e)
+    if resp.status_code >= 500:
+        falha_indeterminavel(resp)
+    if resp.status_code not in ok:
+        falha_problem(resp)
+    return resp.json()
+
+
+def acao_derivar(args, autor: str, como_json: bool, headers: dict) -> int:
+    """ont:0092 §2: declara que a obra deriva da origem. Plano seco sem --apply (#3160)."""
+    if not args.de:
+        sys.stderr.write("curar: erro: --derivar exige --de <obra de origem> (uuid ou título exato)\n")
+        return 2
+    obra_id = resolver_obra_id(args.derivar, headers)
+    origem_id = resolver_obra_id(args.de, headers)
+    payload = {"autor": autor, "origem": origem_id, "motivo": args.motivo,
+               "modo": "aplicar" if args.apply else "plano"}
+    data = _chamar("POST", f"{BASE}/acervo/obras/{obra_id}/derivacoes", headers, payload)
+    if como_json:
+        print(json.dumps(data, indent=2, ensure_ascii=False))
+        return 0
+    o, g = data.get("obra", {}), data.get("origem", {})
+    titulo = "Derivação aplicada" if data.get("modo") == "aplicado" else "Plano de derivação"
+    print(f"{titulo}: {o.get('titulo')} ({o.get('id')})")
+    print(f"  deriva de : {g.get('titulo')} ({g.get('id')})" + ("  [não adquirida]" if g.get("nao_adquirida") else ""))
+    if data.get("motivo"):
+        print(f"  motivo    : {data['motivo']}")
+    if data.get("ja_existia"):
+        print("  já estava declarada: nada a gravar")
+    elif data.get("modo") != "aplicado":
+        print("  (plano seco — repita com --apply para gravar)")
+    return 0
+
+
+def acao_derivacoes(obra: str, como_json: bool, headers: dict) -> int:
+    obra_id = resolver_obra_id(obra, headers)
+    data = _chamar("GET", f"{BASE}/acervo/obras/{obra_id}/derivacoes", headers)
+    if como_json:
+        print(json.dumps(data, indent=2, ensure_ascii=False))
+        return 0
+    o = data.get("obra", {})
+    print(f"Derivações de {o.get('titulo')} ({o.get('id')})")
+    origens = data.get("origens", [])
+    print(f"  deriva de ({len(origens)}):")
+    for g in origens:
+        marca = "  [não adquirida]" if g.get("nao_adquirida") else ""
+        print(f"    {g.get('titulo')} ({g.get('id')}){marca}")
+    derivadas = data.get("derivadas", [])
+    print(f"  origina ({len(derivadas)}):")
+    for d in derivadas:
+        print(f"    {d.get('titulo')} ({d.get('id')})")
+    return 0
+
+
+def acao_desderivar(args, autor: str, como_json: bool, headers: dict) -> int:
+    if not args.de:
+        sys.stderr.write("curar: erro: --desderivar exige --de <obra de origem>\n")
+        return 2
+    obra_id = resolver_obra_id(args.desderivar, headers)
+    origem_id = resolver_obra_id(args.de, headers)
+    if not args.confirmado:
+        try:
+            ans = input(f"Desfazer a derivação {obra_id} <- {origem_id}? digite 'sim' para confirmar: ")
+        except EOFError:
+            ans = ""
+        if ans.strip().lower() != "sim":
+            print("cancelado")
+            return 1
+    url = f"{BASE}/acervo/obras/{obra_id}/derivacoes/{origem_id}?autor={urllib.parse.quote(autor)}"
+    data = _chamar("DELETE", url, headers)
+    if como_json:
+        print(json.dumps(data, indent=2, ensure_ascii=False))
+    else:
+        d = data.get("desfeita", {})
+        print(f"Derivação desfeita: {d.get('obra', {}).get('titulo')} <- {d.get('origem', {}).get('titulo')}")
+    return 0
+
+
+def acao_registrar_obra(args, autor: str, como_json: bool, headers: dict) -> int:
+    """Registra obra sem suporte (não adquirida, ont:0073 §9) pela regra de casamento (§7)."""
+    payload = {
+        "autor": autor,
+        "titulo": args.registrar_obra,
+        "colecao": args.colecao or "firma",
+        "especie": args.especie,
+        "emitido_por": [p.strip() for p in (args.emitido_por or "").split(";") if p.strip()],
+        "id_canonico": args.id_canonico,
+        "publicacao": args.publicacao,
+        "modo": "aplicar" if args.apply else "plano",
+    }
+    data = _chamar("POST", f"{BASE}/acervo/obras", headers, payload, ok=(200, 201))
+    if como_json:
+        print(json.dumps(data, indent=2, ensure_ascii=False))
+        return 0
+    if data.get("casou"):
+        c = data["casou"]
+        print(f"Já existe: {c.get('titulo')} ({c.get('id')}), casou pelo degrau {c.get('degrau')} — nada a gravar")
+        return 0
+    p = data.get("proposta", {})
+    if data.get("criada"):
+        print(f"Obra não adquirida registrada: {p.get('titulo')} ({data['criada'].get('id')})")
+    else:
+        print(f"Plano de registro: {p.get('titulo')}  [não adquirida, coleção {p.get('colecao')}]")
+    print(f"  espécie    : {p.get('especie')}")
+    print(f"  emitido por: {'; '.join(p.get('emitido_por') or [])}")
+    print(f"  id canônico: {p.get('id_canonico')} · publicação: {p.get('publicacao')}")
+    if not data.get("criada"):
+        print("  (plano seco — repita com --apply para gravar)")
+    return 0
+
+
 def main(argv=None):
     if argv is None:
         argv = sys.argv[1:]
@@ -1004,6 +1123,11 @@ def main(argv=None):
     parser.add_argument("--relacionar", nargs="*", default=None)
     parser.add_argument("--relacoes", default=None)
     parser.add_argument("--desrelacionar", default=None)
+    parser.add_argument("--derivar", default=None)
+    parser.add_argument("--derivacoes", default=None)
+    parser.add_argument("--desderivar", default=None)
+    parser.add_argument("--de", default=None)
+    parser.add_argument("--registrar-obra", dest="registrar_obra", default=None)
     parser.add_argument("--conceito", default=None)
     parser.add_argument("--rotulo", default=None)
     parser.add_argument("--definicao", default=None)
@@ -1036,6 +1160,7 @@ def main(argv=None):
     parser.add_argument("--publicacao", default=None)
     parser.add_argument("--emitido-por", dest="emitido_por", default=None)
     parser.add_argument("--anotacao", default=None)
+    parser.add_argument("--colecao", default=None)
 
     # Seleção
     parser.add_argument("--obras", nargs="*", default=None)
@@ -1081,6 +1206,14 @@ def main(argv=None):
 
     if args.conceito:
         return acao_conceito(args, autor, args.como_json, headers)
+    if args.derivar:
+        return acao_derivar(args, autor, args.como_json, headers)
+    if args.derivacoes:
+        return acao_derivacoes(args.derivacoes, args.como_json, headers)
+    if args.desderivar:
+        return acao_desderivar(args, autor, args.como_json, headers)
+    if args.registrar_obra:
+        return acao_registrar_obra(args, autor, args.como_json, headers)
     if args.relacionar is not None:
         return acao_relacionar(args, autor, args.como_json, headers)
     elif args.relacoes:
