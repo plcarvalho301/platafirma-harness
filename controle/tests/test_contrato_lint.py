@@ -100,12 +100,88 @@ def test_lint_alcance_alvo_e_sujeito_e_fonte_nao_caminho(bancada):
     assert p.returncode != 3, p.stdout + p.stderr
 
 
-def test_lint_lista_ausente_exit_5(bancada):
-    # organizacao exige lista no acervo que nao existe -> exit 5
-    p = _rodar_lint("organizacao", "platafirma-harness", env_extra=bancada)
-    assert p.returncode == 5
+LISTA_FIXTURE = """\
+força não declarada · vigente — lista-de-verificacao {chave} · Lista de fixture
+# Lista de fixture
+
+Espécie: lista-de-verificacao
+Rev: 7
+Dono: ti
+
+## Critérios
+
+| # | antipadrão | lei da casa | detector | classe | cura |
+|---|---|---|---|---|---|
+| AP1 | gênero misturado | `arq:0082` | data no nome em `docs/` | bloqueante | levar ao acervo |
+| AP2 | morada partida | sem lei direta | sha256 igual | aviso | apagar a cópia |
+| AP6 | conceito espalhado | sem lei direta | leitura | aviso | juntar |
+"""
+
+
+@pytest.fixture
+def acervo(tmp_path):
+    """Acervo de fixture: o lint consulta este, nunca o real (PF_LINT_ACERVO).
+
+    Serve uma lista para cada chave em `servidas`; qualquer outra sai 1, como o
+    acervo real faz com chave ausente. `retiradas` servem a linha de situacao de
+    documento retirado. O caso nao muda de cor quando o acervo real evolui.
+    """
+    def fazer(servidas=(), retiradas=()):
+        d = tmp_path / "acervo-fixture"
+        d.mkdir(exist_ok=True)
+        for chave in servidas:
+            (d / chave).write_text(LISTA_FIXTURE.format(chave=chave))
+        for chave in retiradas:
+            (d / chave).write_text(
+                f"força não declarada · retirada em 2026-09-27 sem sucessora — "
+                f"lista-de-verificacao {chave} · Velha\n{chave}: retirada\n")
+        stub = tmp_path / "acervo"
+        stub.write_text(
+            "#!/bin/sh\n"
+            f'f="{d}/$4"\n'
+            '[ "$1 $2 $3" = "ler casa lista-de-verificacao" ] && [ -f "$f" ] && exec cat "$f"\n'
+            'echo "acervo casa: nada com chave $4" >&2; exit 1\n')
+        stub.chmod(0o755)
+        return {"PF_LINT_ACERVO": str(stub)}
+    return fazer
+
+
+def test_lint_lista_ausente_exit_5(bancada, acervo):
+    p = _rodar_lint("organizacao", "platafirma-harness", env_extra={**bancada, **acervo()})
+    assert p.returncode == 5, p.stdout + p.stderr
     assert "indeterminavel" in p.stderr
     assert "checklist-antipadroes-organizacao-documental" in p.stderr
+
+
+def test_lint_lista_retirada_exit_5(bancada, acervo):
+    env = {**bancada, **acervo(retiradas=["checklist-antipadroes-organizacao-documental"])}
+    p = _rodar_lint("organizacao", "platafirma-harness", env_extra=env)
+    assert p.returncode == 5, p.stdout + p.stderr
+
+
+def test_lint_lista_servida_em_markdown_ancora_com_rev(bancada, acervo):
+    # o acervo serve markdown; o lint le a lista e ancora na rev do documento
+    env = {**bancada, **acervo(servidas=["checklist-antipadroes-organizacao-documental"])}
+    p = _rodar_lint("organizacao", "platafirma-harness", env_extra=env)
+    assert p.returncode in (0, 1), p.stdout + p.stderr
+    assert "checklist-antipadroes-organizacao-documental@rev7" in p.stdout.splitlines()[0]
+
+
+def test_parse_lista_le_tabela_e_cabecalho():
+    sys.path.insert(0, str(HARNESS_ROOT / "bin"))
+    from _lint.lista import parse_lista
+    lista = parse_lista(LISTA_FIXTURE.format(chave="x"))
+    assert lista["rev"] == 7
+    assert lista["titulo"] == "Lista de fixture"
+    assert [i["id"] for i in lista["itens"]] == ["AP1", "AP2", "AP6"]
+    assert [i["severidade"] for i in lista["itens"]] == ["bloqueante", "aviso", "aviso"]
+    assert lista["itens"][0]["cura"] == "levar ao acervo"
+    assert lista["itens"][2]["detector"] == "leitura"
+
+
+def test_lint_vocabulario_nao_quebra(bancada):
+    p = _rodar_lint("vocabulario", "platafirma-harness", env_extra=bancada)
+    assert "Traceback" not in p.stderr, p.stderr
 
 
 def test_lint_linter_ausente_exit_3(tmp_path):
