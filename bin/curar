@@ -85,6 +85,8 @@ opções de alteração (--reclassificar):
   --especie <slug>              nova espécie da obra (ou 'null' para limpar); sem --subtipo, zera o subtipo
   --subtipo <slug>              subtipo da espécie (exige --especie na mesma chamada; 'null' limpa)
   --titulo <texto>              novo título da obra (único no acervo)
+  --id-canonico <texto>         identificador canônico (ISBN, DOI, número do ato); 'null' limpa
+  --publicacao <texto>          dado de publicação (texto livre, como na fonte); 'null' limpa
   --emitido-por <a;b>           quem emitiu (autor, órgão); vários separados por ';'
   --anotacao <texto>            anotação textual da obra
 
@@ -834,6 +836,10 @@ def acao_reclassificar(args, autor: str, como_json: bool, headers: dict) -> int:
         alteracao["anotacao"] = args.anotacao
     if args.titulo is not None:
         alteracao["titulo"] = args.titulo
+    if args.id_canonico is not None:
+        alteracao["id_canonico"] = None if args.id_canonico.lower() in ("null", "none", "") else args.id_canonico
+    if args.publicacao is not None:
+        alteracao["publicacao"] = None if args.publicacao.lower() in ("null", "none", "") else args.publicacao
     if args.emitido_por is not None:
         # emissor tem espaço no nome ("Conseil constitutionnel"): separa só por ';'
         alteracao["emitido_por"] = [p.strip() for p in args.emitido_por.split(";") if p.strip()]
@@ -855,24 +861,49 @@ def acao_reclassificar(args, autor: str, como_json: bool, headers: dict) -> int:
 
     if args.obra:
         obra_id = resolver_obra_id(args.obra, headers)
+        if not alteracao:
+            sys.stderr.write("curar: erro: nenhuma alteração informada (--titulo, --especie, --id-canonico, etc.)\n")
+            sys.exit(2)
         if not args.apply:
-            payload = {
-                "autor": autor,
-                "selecao": {"ids": [obra_id]},
-                "alteracao": alteracao,
-                "modo": "plano",
-                "teto": args.teto,
-            }
-            url = f"{BASE}/acervo/obras"
-            try:
-                resp = requests.patch(url, json=payload, headers=headers)
-            except requests.exceptions.RequestException as e:
-                falha_indeterminavel(e)
-            if resp.status_code >= 500:
-                falha_indeterminavel(resp)
-            if resp.status_code != 200:
-                falha_problem(resp)
-            data = resp.json()
+            # titulo e id_canonico não cabem na rota de lote (patch_obras_lote recusa os dois;
+            # a rota da obra aceita). O plano deles é o valor lido da obra contra o pedido; o
+            # resto da alteração passa pelo plano do servidor, que valida slug e hierarquia (#3160).
+            locais = {k: alteracao[k] for k in ("titulo", "id_canonico") if k in alteracao}
+            resto = {k: v for k, v in alteracao.items() if k not in locais}
+            data = {"modo": "plano", "n": 1, "proximo": None,
+                    "itens": [{"obra_id": obra_id, "titulo": None, "antes": {}, "depois": {}}]}
+            if resto:
+                payload = {
+                    "autor": autor,
+                    "selecao": {"ids": [obra_id]},
+                    "alteracao": resto,
+                    "modo": "plano",
+                    "teto": args.teto,
+                }
+                try:
+                    resp = requests.patch(f"{BASE}/acervo/obras", json=payload, headers=headers)
+                except requests.exceptions.RequestException as e:
+                    falha_indeterminavel(e)
+                if resp.status_code >= 500:
+                    falha_indeterminavel(resp)
+                if resp.status_code != 200:
+                    falha_problem(resp)
+                data = resp.json()
+            if locais:
+                try:
+                    resp = requests.get(f"{BASE}/acervo/obras/{obra_id}", headers=headers)
+                except requests.exceptions.RequestException as e:
+                    falha_indeterminavel(e)
+                if resp.status_code >= 500:
+                    falha_indeterminavel(resp)
+                if resp.status_code != 200:
+                    falha_problem(resp)
+                atual = resp.json()
+                item = data["itens"][0]
+                item["titulo"] = item.get("titulo") or atual.get("titulo")
+                for k, v in locais.items():
+                    item.setdefault("antes", {})[k] = atual.get(k)
+                    item.setdefault("depois", {})[k] = v
             if como_json:
                 print(json.dumps(data, indent=2, ensure_ascii=False))
             else:
@@ -900,6 +931,8 @@ def acao_reclassificar(args, autor: str, como_json: bool, headers: dict) -> int:
                 print(f"  Título     : {data.get('titulo')}")
                 print(f"  Domínio    : {data.get('dominio')} / {data.get('subdominio')}")
                 print(f"  Espécie    : {data.get('especie')}")
+                print(f"  Emitido por: {'; '.join(data.get('emitido_por') or [])}")
+                print(f"  Publicação : {data.get('publicacao')} · id canônico: {data.get('id_canonico')}")
                 print(f"  Conceitos  : {', '.join(data.get('conceitos', []))}")
             return 0
 
@@ -999,6 +1032,8 @@ def main(argv=None):
     parser.add_argument("--especie", default=None)
     parser.add_argument("--subtipo", default=None)
     parser.add_argument("--titulo", default=None)
+    parser.add_argument("--id-canonico", dest="id_canonico", default=None)
+    parser.add_argument("--publicacao", default=None)
     parser.add_argument("--emitido-por", dest="emitido_por", default=None)
     parser.add_argument("--anotacao", default=None)
 
