@@ -447,6 +447,92 @@ def test_ver_ausente_reidratar_devolve_none_mantem_nao_existe():
     assert rc == 1
 
 
+# ---------------------------------------------------------------- _registra_duravel backfill de sujeito
+def test_registra_duravel_grava_sujeito_em_linha_nova(monkeypatch):
+    capturas: list = []
+    monkeypatch.setitem(sys.modules, "psycopg", _fake_psycopg_update_capturado(capturas))
+    with patch.object(sessao_mod, "_senha_pg", return_value=("senha-fake", None)):
+        motivo = sessao_mod._registra_duravel("sid-1", "ti", "jose-123")
+
+    assert motivo is None
+    assert len(capturas) == 1
+    sql, params = capturas[0]
+    assert "ON CONFLICT (sessao_id) DO UPDATE SET" in sql
+    assert "COALESCE(sessao.sessao.sujeito, EXCLUDED.sujeito)" in sql
+    assert params == ("sid-1", "ti", None, sessao_mod._superficie(), "jose-123")
+
+
+def test_registra_duravel_backfill_nunca_sobrescreve_via_coalesce(monkeypatch):
+    """A prova de que uma linha JA com sujeito nao troca de valor mora no SQL (COALESCE
+    do lado da linha existente primeiro) -- aqui so confere que TODA chamada (mesmo
+    reabertura, sujeito=None) manda o mesmo UPSERT, nunca um DO NOTHING que deixaria a
+    linha antiga presa para sempre sem sujeito."""
+    capturas: list = []
+    monkeypatch.setitem(sys.modules, "psycopg", _fake_psycopg_update_capturado(capturas))
+    with patch.object(sessao_mod, "_senha_pg", return_value=("senha-fake", None)):
+        sessao_mod._registra_duravel("sid-2", "ti", None)
+
+    assert len(capturas) == 1
+    sql, params = capturas[0]
+    assert "DO NOTHING" not in sql
+    assert params[-1] is None
+
+
+# ---------------------------------------------------------------- ato_abrir: reabertura backfilla sujeito
+def test_ato_abrir_reabertura_backfilla_sujeito_ausente(monkeypatch):
+    """Chave viva reidratada de um registro anterior a migracao 0094 (sem sujeito):
+    reabrir com PF_SUJEITO valido preenche a chave, sem tocar cadeira/ordem_id do
+    jeito errado nem recunhar a sessao (card #3145, deadlock do bootstrap)."""
+    sid = str(uuid.uuid4())
+    mem = FakeMsgMem({
+        f"sessao:{sid}": json.dumps({"cadeira": "ti", "ordem_id": "o-velho",
+                                     "origem": "reidratada"}),
+    })
+    monkeypatch.setenv("PF_SUJEITO", "jose-123")
+    capturas: list = []
+    monkeypatch.setitem(sys.modules, "psycopg", _fake_psycopg_update_capturado(capturas))
+    saida = sessao_mod.Saida(como_json=True)
+    f = io.StringIO()
+
+    with patch.object(sessao_mod, "_msgmem", return_value=(mem, None)), \
+         patch.object(sessao_mod, "_vocabulario", return_value=({"ti": {}}, None)), \
+         patch.object(sessao_mod, "_decidir", return_value=(0, {"regra": "default", "plano": "p1"}, "")), \
+         patch.object(sessao_mod, "_senha_pg", return_value=("senha-fake", None)):
+        with redirect_stdout(f):
+            rc = sessao_mod.ato_abrir("ti", sid, saida)
+
+    assert rc == 0
+    gravado = json.loads(mem.data[f"sessao:{sid}"])
+    assert gravado["sujeito"] == "jose-123"
+    assert gravado["cadeira"] == "ti"  # reabertura nao troca cadeira
+
+
+def test_ato_abrir_reabertura_nao_sobrescreve_sujeito_existente(monkeypatch):
+    """Chave viva JA com sujeito: reabrir com um PF_SUJEITO diferente nao troca --
+    identidade nao muda por reabertura (mesma regra que ja valia para cadeira)."""
+    sid = str(uuid.uuid4())
+    mem = FakeMsgMem({
+        f"sessao:{sid}": json.dumps({"cadeira": "ti", "ordem_id": "o-velho",
+                                     "sujeito": "sujeito-original"}),
+    })
+    monkeypatch.setenv("PF_SUJEITO", "outro-sujeito")
+    capturas: list = []
+    monkeypatch.setitem(sys.modules, "psycopg", _fake_psycopg_update_capturado(capturas))
+    saida = sessao_mod.Saida(como_json=True)
+    f = io.StringIO()
+
+    with patch.object(sessao_mod, "_msgmem", return_value=(mem, None)), \
+         patch.object(sessao_mod, "_vocabulario", return_value=({"ti": {}}, None)), \
+         patch.object(sessao_mod, "_decidir", return_value=(0, {"regra": "default", "plano": "p1"}, "")), \
+         patch.object(sessao_mod, "_senha_pg", return_value=("senha-fake", None)):
+        with redirect_stdout(f):
+            rc = sessao_mod.ato_abrir("ti", sid, saida)
+
+    assert rc == 0
+    gravado = json.loads(mem.data[f"sessao:{sid}"])
+    assert gravado["sujeito"] == "sujeito-original"
+
+
 # ---------------------------------------------------------------- encerrar/limpar marcam encerrada_em
 def test_ato_encerrar_marca_encerrada_em(monkeypatch):
     sid = str(uuid.uuid4())
