@@ -1,6 +1,6 @@
 ---
 name: prosa
-description: Use quando for ESCREVER ou REVISAR prosa que um humano vai ler em git ou na wiki, antes de publicar — página de wiki, benchmark, parecer, runbook, e a voz (não a forma) de adr/spec/atos normativos. Orienta o agente que escreve. O MOTOR (tira jargão de IA, faz entender, voz da casa, apara cosmético) é o mesmo pra todo tipo; o MOLDE vem do tipo (um molde por tipo em reference/moldes/); a lista de tipos é a taxonomia de acervo.especie_tipo, a skill não a hardcoda. Régua fina de cada molde na fonte de produto (docs/styleguide-moldes-por-tipo.md). NÃO dispare para: acervo cru (obra tem proveniência própria), mural/fila (régua própria), produtos de negócio de outra cadeira com régua própria (informe, apreciação, estimativa), nem resposta de chat (a régua do chat é a conduta do dono, abertura/dono.md). O par de lint que CONFERE o que já está escrito é matéria fora desta skill; esta skill ORIENTA quem escreve.
+description: Use quando for ESCREVER ou REVISAR prosa que um humano vai ler em git, na wiki ou no rastreador, antes de publicar — página de wiki, corpo de card (épico e feature, antes de `tarefas criar` ou `tarefas editar` com corpo), benchmark, parecer, runbook, e a voz (não a forma) de adr/spec/atos normativos. Orienta o agente que escreve. O MOTOR (tira jargão de IA, faz entender, voz da casa, apara cosmético) é o mesmo pra todo tipo; o MOLDE vem do tipo (um molde por tipo em reference/moldes/); a lista de tipos é a taxonomia de acervo.especie_tipo, a skill não a hardcoda. Régua na fonte de produto: acervo ler casa padrao styleguide-da-wiki e styleguide-moldes-por-tipo. NÃO dispare para: acervo cru (obra tem proveniência própria), mural/fila (régua própria), produtos de negócio de outra cadeira com régua própria (informe, apreciação, estimativa), nem resposta de chat (a régua do chat é a conduta do dono, abertura/dono.md). O par de lint que CONFERE o que já está escrito é matéria fora desta skill; esta skill ORIENTA quem escreve.
 cadeiras: todas (matéria de escrita legível por humano em git/wiki). Dona da régua é produto (spec §5 + anexo styleguide-moldes-por-tipo.md); dono da skill, como implementadora, é o arquiteto. A estrutura dos tipos é de dados (acervo.especie_tipo).
 compatibility: régua canônica na spec e no anexo de moldes; servida em Operar:styleguide (wiki viva). Motor agnóstico de superfície; molde por tipo em reference/moldes/. A conduta do dono (abertura/dono.md) é referência de voz, não isenção de regra. Catálogo de marcas por extenso em reference/marcas-pt-br.md.
 ---
@@ -10,8 +10,10 @@ compatibility: régua canônica na spec e no anexo de moldes; servida em Operar:
 A régua não é apagar marca de máquina. É fazer quem chega depois ler um artefato e
 fazer o que ele descreve sem falar com quem o escreveu.
 
-Escopo: prosa que um humano lê em git ou na wiki — página de Inteligência de Base,
-benchmark, parecer, runbook, e a voz (não a forma) de adr, spec e atos normativos.
+Escopo: prosa que um humano lê em git, na wiki ou no rastreador — página de wiki
+(conhecimento em geral: toda a parte conceitual do acervo), corpo de card de épico e
+feature, benchmark, parecer, runbook, e a voz (não a forma) de adr, spec e atos
+normativos.
 Não é acervo cru, não é mural, não é fila, não é produto de negócio de outra cadeira
 com régua própria.
 
@@ -89,8 +91,16 @@ espalhado e travessão de suspense fabricado (o que corta a frase pra criar dram
 Não confunda com o hífen de palavra composta. (Sim, a conduta abusa de travessão; a
 régua vale pra ela também.)
 
-## O núcleo — o que todo artefato cumpre (spec §3.1)
+## O núcleo — o que todo artefato cumpre (styleguide §3.1)
 
+- **Quebra de linha e lista.** Uma ideia por parágrafo, parágrafo de até quatro linhas
+  na tela. Três itens ou mais viram lista, um por linha. Campo com rótulo começa em
+  linha própria, com linha em branco antes do seguinte. Para quem escreve, a quebra é
+  um caractere; a falta dela custa a leitura inteira. Parede de texto é falta.
+- **Referência resolvida.** Código de ADR, número de card e seção de spec vêm com o
+  nome do que apontam, no ponto de leitura; onde a forma comporta rodapé, o código
+  desce ao rodapé (ADR 0098, ponteiro nu). Parênteses empilhados com códigos no meio
+  da frase são falta.
 - **Voz da casa.** Direta, começando pela coisa.
 - **Seção muda o que o leitor faz.** Senão, sai. É o teste mais barato contra a
   página de escritório que ninguém reabre.
@@ -129,6 +139,10 @@ fina no anexo de produto —, não de `especie_tipo`.
    prosa próprio; o roteador não os resolve como espécie do acervo. A minuta é
    deliberação em trânsito e vira adr ou spec ao formalizar.
 4. **Página de wiki** (verbete-de-conceito) → `reference/moldes/verbete-de-conceito.md`.
+5. **Corpo de card** (épico e feature, antes de `tarefas criar` ou `tarefas editar`
+   com corpo) → `reference/moldes/card.md`. A forma, os rótulos por nível, vem de
+   `tarefas modelo <nível>`; a skill rege a voz dentro do rótulo. Story e task: só o
+   núcleo.
 
 ## O molde vem do tipo — a régua fina mora no anexo
 
@@ -170,9 +184,11 @@ dúvida, procure vários padrões juntos.
 
 - Método: fork do blader/humanizer (https://github.com/blader/humanizer, MIT), cujos
   padrões vêm de «Signs of AI writing» (Wikipedia, WikiProject AI Cleanup).
-- Régua: **canônica** na spec (`platafirma-arquitetura/docs/spec_styleguide-da-wiki.md`);
-  **servida** na wiki viva, em `Operar:styleguide` (o «como»). A régua fina dos
-  moldes por tipo mora no anexo `docs/styleguide-moldes-por-tipo.md`. A régua é de
+- Régua: **canônica** no styleguide do acervo da casa (`acervo ler casa padrao
+  styleguide-da-wiki`); **servida** na wiki viva, em `Operar:styleguide` (o «como»). A
+  régua fina dos moldes por tipo mora no anexo (`acervo ler casa padrao
+  styleguide-moldes-por-tipo`). A cópia antiga em `platafirma-arquitetura/docs/` não
+  é fonte. A régua é de
   **produto** (§5); a **estrutura** dos tipos é de **dados** (`acervo.especie_tipo`);
   esta skill é **implementadora** (arquiteto). O par que confere o que já está escrito
   é o lint de prosa.
