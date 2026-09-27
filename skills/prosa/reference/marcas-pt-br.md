@@ -283,7 +283,7 @@ Costumam carregar a voz de quem escreve. Mantenha, salvo se atrapalharem o senti
 ## Fonte
 
 Fork do blader/humanizer (MIT); padrões de «Signs of AI writing» (Wikipedia,
-WikiProject AI Cleanup), adaptados ao pt-BR e à voz da casa. A régua canônica é a
-spec (`platafirma-arquitetura/docs/spec_styleguide-da-wiki.md`); a servida é
+WikiProject AI Cleanup), adaptados ao pt-BR e à voz da casa. A régua canônica é o
+styleguide do acervo da casa (`acervo ler casa padrao styleguide-da-wiki`); a servida é
 `Operar:styleguide` na wiki viva. Este catálogo é o anexo de marcas que a spec §4
 manda morar na skill.
