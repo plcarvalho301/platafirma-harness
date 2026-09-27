@@ -351,7 +351,7 @@ pai_e_irmas() { # pai_e_irmas <id-do-pai>
   if [ -n "$abertas" ]; then
     printf '  abertas no pai (entrega de negócio NÃO fechou):\n%s\n' "$abertas"
   else
-    printf '  nenhuma filha aberta no pai — o pai é homologável pelo dono\n'
+    printf '  nenhuma filha aberta no pai — conferência da cadeira dona, depois o dono dá entregue\n'
   fi
 }
 
@@ -565,6 +565,47 @@ mover() {
   # que entra em `em-execucao` também tem de saber quantas irmãs faltam.
   local pai; pai=$(printf '%s' "$resp" | jq -r '.pai // empty')
   [ -n "$pai" ] && pai_e_irmas "$pai"
+  # AVISO À DONA (ordem do dono, 27/09/2026): fechou a última filha e o pai parou em
+  # `em-homologacao` — a conferência da feature/épico é da cadeira dona dele, e depois do
+  # dono. Quem executou a story nem sempre é a dona; sem o aviso, o dono pedia à mão.
+  if [ -n "$pai" ] && [ "$(printf '%s' "$resp" | jq -r '.estado_natureza // ""')" = "terminal" ]; then
+    avisa_dona "$pai" "$id"
+  fi
+  return 0
+}
+
+# avisa_dona <pai> <filha> -- pai em `em-homologacao` derivado: manda à cadeira dona do pai
+# um pedido de conferência pela fila. Não derruba o `mover`: o card já andou; falha do aviso
+# se declara na saída.
+avisa_dona() {
+  local pai; pai=$(so_id "$1"); local filha="$2" j
+  j=$(busca GET "/itens/$pai") || return 0
+  [ "$(printf '%s' "$j" | jq -r '.estado_derivado // ""')" = "em-homologacao" ] || return 0
+  local dona; dona=$(printf '%s' "$j" | jq -r '.cadeira // ""')
+  dona="${dona#claudinho-}"; dona="${dona#claudinha-}"; dona=$(printf '%s' "$dona" | tr 'A-Z' 'a-z')
+  local eu="${QUEM#claudinho-}"; eu="${eu#claudinha-}"
+  if [ -z "$dona" ]; then
+    printf '  pai #%s homologável e sem cadeira dona: a conferência é de quem o puser na mão do dono\n' "$pai"
+    return 0
+  fi
+  local nivel titulo; nivel=$(printf '%s' "$j" | jq -r '.nivel_nome'); titulo=$(printf '%s' "$j" | jq -r '.titulo')
+  if [ "$dona" = "$eu" ]; then
+    printf '  pai #%s em em-homologacao: a conferência é sua — rode o `Sai quando:` e leve a linha ENTREGA: ao dono\n' "$pai"
+    return 0
+  fi
+  local fila_bin="${PF_FILA_BIN:-$(dirname "$(readlink -f "$0")")/fila}"
+  if [ ! -x "$fila_bin" ]; then
+    printf '  aviso à dona (%s) NÃO enviado: verbo fila ausente em %s\n' "$dona" "$fila_bin"
+    return 0
+  fi
+  local out
+  if out=$(printf 'A última filha aberta de #%s (%s: %s) fechou com #%s. %s está em em-homologacao e espera a conferência: rode o `Sai quando:` (feature) ou confira a `Medida:` (épico), comente o retorno no card e leve a linha ENTREGA: ao dono. Se faltar coisa, abra a story que falta — o pai volta a em-execucao sozinho.\n' \
+        "$pai" "$nivel" "$titulo" "$filha" "$([ "$nivel" = feature ] && echo "A feature" || echo "O $nivel")" \
+      | "$fila_bin" enviar "$dona" --tipo pedido --assunto "#$pai em homologação: conferência sua antes do dono" --ref "#$pai" 2>&1); then
+    printf '  aviso à dona enviado: %s (%s)\n' "$dona" "$(printf '%s' "$out" | head -1)"
+  else
+    printf '  aviso à dona (%s) NÃO enviado: %s\n' "$dona" "$(printf '%s' "$out" | head -1)"
+  fi
   return 0
 }
 
