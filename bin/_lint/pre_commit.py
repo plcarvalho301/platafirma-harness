@@ -98,6 +98,16 @@ def main() -> int:
     for apt in achados_diagrama:
         bloqueantes.append(("diagrama", apt))
 
+    # 6. canonico (staged): ADR ou spec que acrescenta citacao de minuta por numero ou pela
+    # decisao da minuta (ordem do dono, 28/09/2026; regua arq:0028).
+    try:
+        from _lint.canonico import bloqueantes_no_stage as canonico_bloqueantes_no_stage
+    except ImportError:
+        from canonico import bloqueantes_no_stage as canonico_bloqueantes_no_stage
+    achados_canonico, _ = canonico_bloqueantes_no_stage(raiz)
+    for apt in achados_canonico:
+        bloqueantes.append(("canonico", apt))
+
     if bloqueantes:
         print("pre-commit: commit bloqueado por violacao de regra bloqueante:\n", file=sys.stderr)
         for modulo, apt in bloqueantes:
