@@ -117,10 +117,22 @@ SLOT_RE = re.compile(r"^[a-z0-9][a-z0-9-]{0,40}$")
 # giro, pacote e peca-servida terem raiz), nao a guarda.
 FITA_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$")
 
-# CAS: escreve KEYS[2] so se KEYS[1] (fita corrente) ainda for ARGV[1].
+# ACRESCENTA, nao substitui (card #3166): guarda de fita e opt-in (ARGV[1] vazio pula o
+# compare-and-swap). Le o valor atual, junta o texto novo depois do velho com uma linha
+# '---' entre os dois, e grava a soma com TTL renovado -- leitura e escrita no MESMO eval,
+# nada entra entre as duas. string.char(10) evita escapar newline dentro da string Lua.
 LUA_ANOTA = """
-if redis.call('GET', KEYS[1]) ~= ARGV[1] then return 0 end
-redis.call('SET', KEYS[2], ARGV[2], 'EX', tonumber(ARGV[3]))
+if ARGV[1] ~= '' and redis.call('GET', KEYS[1]) ~= ARGV[1] then return 0 end
+local nl = string.char(10)
+local atual = redis.call('GET', KEYS[2])
+local texto_final = ARGV[2]
+if atual then
+  local ok, decoded = pcall(cjson.decode, atual)
+  if ok and decoded and decoded['x'] then
+    texto_final = decoded['x'] .. nl .. nl .. '---' .. nl .. nl .. ARGV[2]
+  end
+end
+redis.call('SET', KEYS[2], cjson.encode({t = tonumber(ARGV[4]), x = texto_final}), 'EX', tonumber(ARGV[3]))
 return 1
 """
 LUA_FECHA = """
@@ -486,8 +498,12 @@ def ato_legado(args):
 
 
 def ato_anota(args):
-    """FORMA VELHA, mantida porque `descansar`, os rituais do chat e o ops-server
-    ainda a chamam com prosa em stdin. Escreve no Valkey, nao no substrato de item."""
+    """Acrescenta prosa ao que ja estava no slot, sem apagar (card #3166): o texto novo
+    entra depois do antigo, separado por uma linha '---', e o TTL de tudo reinicia em
+    TTL_MESA_H. FORMA VELHA no nome (mantido porque `descansar`, os rituais do chat e o
+    ops-server ainda o chamam com prosa em stdin) -- SUBSTITUIA o slot inteiro ate 27/09,
+    silencioso; o contorno manual (colar o texto antigo antes do novo) que apareceu tres
+    vezes nos cadernos da cadeira agora e o proprio comportamento do ato."""
     slot = valida_slot(args.slot)
     texto = (getattr(args, "texto", None) or "").strip()
     if not texto and not sys.stdin.isatty():
@@ -506,22 +522,19 @@ def ato_anota(args):
             file=sys.stderr,
         )
     rc = conn()
-    valor = json.dumps({"t": int(time.time()), "x": texto})
-    fid = fita_do_ambiente(args.se_fita)
-    if fid is None:
-        rc.set(chave(slot), valor, ex=TTL_MESA_S)
-        print(f"mesa: slot {slot} reescrito ({len(texto.splitlines())} linhas)")
-        return 0
-    # Criterio 18 da minuta 0002: ritual que termina depois de a fita nova ter
-    # anotado descarta a PROPRIA escrita. Compare-and-swap, nao confianca em ordem.
-    valida_fita(fid)
-    ok = rc.eval(LUA_ANOTA, 2, chave_fita(), chave(slot), fid, valor, TTL_MESA_S)
+    fid = fita_do_ambiente(args.se_fita) or ""
+    if fid:
+        valida_fita(fid)
+    # Read-concat-write num eval so (LUA_ANOTA): nada entra entre ler o que ja tinha e
+    # gravar a soma. Guarda de fita e opt-in -- fid vazio pula o compare-and-swap.
+    ok = rc.eval(LUA_ANOTA, 2, chave_fita(), chave(slot), fid, texto, TTL_MESA_S, int(time.time()))
     if not ok:
         corrente = rc.get(chave_fita())
         print(f"mesa: escrita DESCARTADA no slot {slot} — a fita {fid} ja nao e a corrente "
               f"({corrente or 'nenhuma'}); a fita seguinte manda", file=sys.stderr)
         return 3
-    print(f"mesa: slot {slot} reescrito ({len(texto.splitlines())} linhas, fita {fid})")
+    sufixo_fita = f", fita {fid}" if fid else ""
+    print(f"mesa: slot {slot} acrescido ({len(texto.splitlines())} linha(s) nova(s){sufixo_fita})")
     return 0
 
 
@@ -692,6 +705,16 @@ def _acha_worktree(cad: str) -> Path:
     sys.exit(3)
 
 
+def _le_caderno_publicado(cad, slot):
+    """O que esta publicado agora, mesma morada de `mesa caderno` (card #3166): e o que
+    `escrever` apagaria gravando por cima sem olhar. Ausente: string vazia."""
+    caminho = os.path.join(CADERNOS, cad, slot, "caderno.md")
+    if not os.path.isfile(caminho):
+        return ""
+    with open(caminho, errors="replace") as fh:
+        return fh.read()
+
+
 def ato_escrever(args):
     """Escreve o caderno duravel do chapeu (spec_caderno).
     Corpo lido de STDIN. Morada duravel: abertura/<cadeira>/<chapeu>/caderno.md."""
@@ -709,6 +732,22 @@ def ato_escrever(args):
         return 2
 
     cad = cadeira()
+    # Nao apaga o que ja estava publicado sem dizer (card #3166): o defeito medido em
+    # 27/09 foi exatamente isto -- 6,4 KB por cima com 989 B, sem aviso. Corpo que ESTENDE
+    # o que ja tinha (comeca com ele) segue direto; qualquer outra troca pede --sobrescrever.
+    atual = _le_caderno_publicado(cad, slot)
+    if atual and not corpo.startswith(atual.rstrip("\n")) and not getattr(args, "sobrescrever", False):
+        sys.stderr.write(
+            f"mesa escrever: recuso -- o caderno {slot} tem {len(atual.encode('utf-8'))} B "
+            f"publicados e o corpo novo ({len(corpo.encode('utf-8'))} B) nao comeca com esse "
+            "texto; gravar apagaria o que ja estava la sem dizer.\n"
+            "  primeiras linhas do que se perderia:\n"
+        )
+        for linha in atual.splitlines()[:5]:
+            sys.stderr.write(f"    {linha}\n")
+        sys.stderr.write("  --sobrescrever confirma a troca do arquivo inteiro\n")
+        return 4
+
     clone = _acha_worktree(cad)
     # Escreve-se em worktree EFEMERO a partir de origin/main, nunca no checkout do
     # clone: o clone pode estar em qualquer ramo. 26/09: o compartilhado estava parado
@@ -847,6 +886,8 @@ def main():
 
     e = sub.add_parser("escrever", help="escreve o caderno duravel do chapeu; corpo em stdin")
     e.add_argument("slot", nargs="?", default=None, help="slug do chapeu (default: PF_CHAPEU)")
+    e.add_argument("--sobrescrever", action="store_true",
+                   help="confirma a troca do arquivo inteiro quando o corpo novo nao estende o que ja estava publicado")
     e.set_defaults(func=ato_escrever)
 
     f = sub.add_parser("fez", help="esvazia o item (pelo numero exibido) porque o ato foi executado")
@@ -858,7 +899,7 @@ def main():
     g.add_argument("--triado", metavar="CHAPEU", help="marca o chapeu como triado")
     g.set_defaults(func=ato_legado)
 
-    a = sub.add_parser("anota", help="forma velha: reescreve prosa num slot; corpo em stdin ou argumento")
+    a = sub.add_parser("anota", help="forma velha: acrescenta prosa a um slot sem apagar o que ja tinha; corpo em stdin ou argumento")
     a.add_argument("slot")
     a.add_argument("texto", nargs="?", default="", help="prosa a anotar; se omitido, le do stdin")
     a.add_argument("--se-fita", metavar="ID",
