@@ -16,7 +16,12 @@ redirecionamento), rede, status ausente ou fora de 2xx, corpo vazio, tipo sem co
 extração abaixo do piso levantam `FalhaFonte` com `causa` DEPOIS de gravar a linha de
 não-achado (§2.3: todo ato grava a linha). Corpo vazio e status ruim não deixam `bruto/`;
 tipo sem conversor e extração abaixo do piso guardam o bruto, que é real e se reprocessa.
+Falha de rede leva `detalhe`, a mensagem da biblioteca, que antes se perdia.
 O cache casa por (URL, sha256 do bruto, estratégia), nunca pelo hash do extraído.
+
+O tipo real sai no retorno como `tipo_real`: no envelope, `tipo` é a invariante `dado`
+(§2.4) e nenhum campo do ato pode sobrescrevê-la. No manifesto e no `resposta.json` a
+chave é `tipo`, como na spec espelho-de-leitura.
 
 Derivação, transitória até o serviço de conversão (#3183 passo 4): HTML e texto são
 decodificados pela ordem BOM → charset HTTP → meta → UTF-8 estrito → windows-1252, com a
@@ -350,14 +355,19 @@ def _confere(resp: Resposta) -> None:
 
 
 def _nao_achado(trab, url, estrategia, causa, *, resp: Resposta | None, extra: dict | None = None) -> FalhaFonte:
-    """Grava a linha de não-achado e devolve a FalhaFonte que o ato levanta (exit 1)."""
+    """Grava a linha de não-achado e devolve a FalhaFonte que o ato levanta (exit 1).
+
+    A linha leva `tipo` (vocabulário do manifesto); o envelope leva `tipo_real`, porque ali
+    `tipo` é a invariante `dado` e `bin/pesquisar` espalha o `extra` por cima dele.
+    """
     extra = {k: v for k, v in (extra or {}).items() if v is not None}
     campos = {"ato": "ler", "url": url, "estrategia": estrategia, "nao_achado": True, "causa": causa}
     if resp is not None:
         campos.update({"url_final": resp.url_final, "status": resp.status})
     campos.update(extra)
     linha = trab.grava_linha(campos)
-    return FalhaFonte(causa, **{**extra, "url": url, "manifesto": trab.ref_manifesto(linha)})
+    publico = {("tipo_real" if k == "tipo" else k): v for k, v in extra.items()}
+    return FalhaFonte(causa, **{**publico, "url": url, "manifesto": trab.ref_manifesto(linha)})
 
 
 def _resposta_json(resp: Resposta, sha: str, tipo: str, tipo_por: str) -> bytes:
@@ -438,7 +448,7 @@ def _retorno(*, n, url, resp, sha, bruto, tipo, estrategia, corpo, max_chars, of
         "n": n, "url": url, "url_final": resp.url_final, "conteudo": janela,
         "chars_total": chars_total, "truncado": truncado,
         "next_offset": (offset + max_chars) if truncado else None,
-        "estrategia": estrategia, "status": resp.status, "sha256": sha, "tipo": tipo,
+        "estrategia": estrategia, "status": resp.status, "sha256": sha, "tipo_real": tipo,
         "encoding": encoding, "caracteres_uteis": uteis, "idioma": idioma,
         "data_publicacao": datapub, "avisos": avisos, "bruto": bruto, "manifesto": manifesto,
     }
@@ -480,7 +490,8 @@ def _coletor_httpx(url: str, verifica: Callable[[str], None], *, transport=None)
                         url_pedida=url, url_final=str(r.url), hora=hora, redirecionamentos=saltos,
                     )
     except httpx.HTTPError as exc:
-        raise FalhaFonte(f"rede:{type(exc).__name__}") from exc
+        raise FalhaFonte(f"rede:{type(exc).__name__}", detalhe=str(exc)[:200],
+                         url_do_erro=atual) from exc
     raise FalhaFonte("redirecionamentos-demais", redirecionamentos=len(saltos))
 
 
@@ -532,7 +543,7 @@ async def _renderiza_async(url: str) -> dict[str, Any]:
         async with AsyncWebCrawler(crawler_strategy=AsyncPlaywrightCrawlerStrategy()) as crawler:
             r = await crawler.arun(url=url, config=cfg)
     except Exception as exc:  # noqa: BLE001
-        raise FalhaFonte(f"render:{type(exc).__name__}") from exc
+        raise FalhaFonte(f"render:{type(exc).__name__}", detalhe=str(exc)[:200]) from exc
     if not getattr(r, "success", True):
         raise FalhaFonte("render-falhou", detalhe=(getattr(r, "error_message", "") or "")[:160])
     md = r.markdown
