@@ -1,0 +1,19 @@
+# Lista de portão da chave recuperacao (arq:0116 §5): caminhos relativos a recuperacao/.
+# Arquivo consertado entra no mesmo commit que o conserta; a lista só cresce.
+test_contrato_adaptadores.py
+test_contrato_board.py
+test_contrato_cache.py
+test_contrato_catalogo.py
+test_contrato_disjuntor.py
+test_contrato_disparo.py
+test_contrato_envelope.py
+test_contrato_gate.py
+test_contrato_gold.py
+test_contrato_pep.py
+test_contrato_resolvedor.py
+test_contrato_roteador_chapeu.py
+test_contrato_situacao.py
+test_contrato_veredito.py
+test_contrato_wiki_acervo.py
+test_gerador_fontes.py
+test_ordem_id.py

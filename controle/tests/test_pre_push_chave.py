@@ -74,7 +74,8 @@ class Ambiente:
             "tests/test_fixture.py\n", encoding="utf-8")
         (self.wt / "controle" / "tests" / "test_fixture.py").write_text(TESTE_OK, encoding="utf-8")
         (self.wt / "venvs.json").write_text(
-            json.dumps({"harness": {"familia": "fixture", "lock": "lock.txt"}}), encoding="utf-8")
+            json.dumps({"harness": {"familia": "fixture", "lock": "lock.txt", "teste": "controle"}}),
+            encoding="utf-8")
         (self.wt / "lock.txt").write_text(LOCK_SEM_DEP, encoding="utf-8")
         _git(self.wt, "add", "-A")
         _git(self.wt, "commit", "-q", "-m", "fixture inicial")

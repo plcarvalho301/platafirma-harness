@@ -34,6 +34,7 @@ set -euo pipefail
 AQUI="$(dirname "$(readlink -f "$0")")"
 . "$AQUI/../lib/raizes.sh"
 . "$AQUI/../lib/venv.sh"   # resolver_uv, python_gerenciado, resolver_python, construir_venv (card #3150 passo 2: mesmo construtor para teste)
+. "$AQUI/../lib/terceiros.sh"   # materializar_terceiros_em, sha256_de (arq:0116 §7: mesmo construtor para teste)
 
 PROD_RAIZ="$PF_RELEASE_RAIZ"                     # <familia>/{.repo.git,<sha>,current,anterior} e venv/
 ATALHOS="$PF_RELEASE_RAIZ/current"               # DIRETÓRIO de atalhos estáveis (arq:0102 D6)
@@ -1141,77 +1142,10 @@ construir_venvs() {  # $1=repo $2=sha ; enche VENVS_PRONTOS; 0 ok, 3 falhou
 # conteúdo: o cache $PF_RELEASE_RAIZ/terceiros/sha256/<pino> (semeável à mão em host sem rede);
 # faltando, baixa da url. Conteúdo que não bate o pino é recusado e nada troca current.
 # A árvore é a-w: abre só os diretórios do caminho, põe o arquivo e fecha de novo.
-sha256_de() { sha256sum "$1" 2>/dev/null | cut -d' ' -f1; }
-
+# O corpo mora em lib/terceiros.sh (arq:0116 §7): o mesmo construtor serve o teste, que
+# materializa o artefato na árvore que mede (bancada, pre-push, gate).
 materializar_terceiros() {  # $1=repo $2=sha ; 0 ok, 3 dependência ausente, 4 conteúdo fora do pino
-  local repo="$1" sha="$2" arvore linhas nome destino pino url alvo cache tmp curl
-  arvore="$PROD_RAIZ/$repo/$sha"
-  [ -r "$TERCEIROS" ] || return 0
-  linhas="$(jq -r --arg f "$repo" 'to_entries[] | select(.key | startswith("_") | not)
-            | select((.value | type) == "object" and .value.familia == $f)
-            | "\(.key)\t\(.value.destino)\t\(.value.sha256)\t\(.value.url // "")"' "$TERCEIROS" 2>/dev/null)" || {
-    printf 'release: dependência com outro contrato: registro de terceiros não é JSON legível (%s)\n' "$TERCEIROS" >&2
-    return 3
-  }
-  while IFS=$'\t' read -r nome destino pino url; do
-    [ -n "$nome" ] || continue
-    if ! validar_slug "$nome" || [[ "$destino" == /* ]] || [[ "$destino" == *..* ]] || [ -z "$destino" ] \
-       || ! [[ "$pino" =~ ^[0-9a-f]{64}$ ]] || { [ -n "$url" ] && [[ "$url" != https://* ]]; }; then
-      printf 'release: erro: terceiro mal declarado em %s: %s (%s)\n' "$TERCEIROS" "$nome" "$destino" >&2
-      return 3
-    fi
-    alvo="$arvore/$destino"
-    if [ -f "$alvo" ] && [ "$(sha256_de "$alvo")" = "$pino" ]; then
-      printf 'terceiro:  %s já na árvore (sha256 %s)\n' "$nome" "${pino:0:12}"
-      continue
-    fi
-    cache="$TERCEIROS_CACHE/$pino"
-    if [ ! -f "$cache" ] || [ "$(sha256_de "$cache")" != "$pino" ]; then
-      curl="$(command -v curl 2>/dev/null || true)"
-      if [ -z "$url" ] || [ -z "$curl" ]; then
-        printf 'release: dependência ausente: terceiro %s fora do cache (%s) e sem %s para baixar — current intacto\n' \
-          "$nome" "$cache" "$([ -z "$url" ] && echo url || echo curl)" >&2
-        return 3
-      fi
-      mkdir -p "$TERCEIROS_CACHE"
-      tmp="$(mktemp "$TERCEIROS_CACHE/.baixando.XXXXXX")"
-      if ! "$curl" -fsSL --proto '=https' --max-time 600 -o "$tmp" "$url"; then
-        rm -f "$tmp"
-        printf 'release: dependência ausente: terceiro %s não baixou de %s — semeie %s e repita; current intacto\n' "$nome" "$url" "$cache" >&2
-        return 3
-      fi
-      local obtido; obtido="$(sha256_de "$tmp")"
-      if [ "$obtido" != "$pino" ]; then
-        rm -f "$tmp"
-        printf 'release: recusa: terceiro %s veio de %s com sha256 %s, pinado %s — current intacto\n' "$nome" "$url" "$obtido" "$pino" >&2
-        return 4
-      fi
-      chmod 444 "$tmp"; mv -f "$tmp" "$cache"
-      printf 'terceiro:  %s baixado para o cache (sha256 %s)\n' "$nome" "${pino:0:12}"
-    fi
-    local d="$arvore" parte abertos=()
-    local -a partes
-    IFS='/' read -ra partes <<<"$(dirname "$destino")"
-    chmod u+w "$d"; abertos+=("$d")
-    for parte in "${partes[@]}"; do
-      [ -n "$parte" ] && [ "$parte" != "." ] || continue
-      d="$d/$parte"
-      if [ -d "$d" ]; then chmod u+w "$d"; else mkdir "$d"; fi
-      abertos+=("$d")
-    done
-    rm -f "$alvo"
-    if cp "$cache" "$alvo.tmp" && mv -f "$alvo.tmp" "$alvo"; then
-      chmod 444 "$alvo"
-    else
-      rm -f "$alvo.tmp"
-      for d in "${abertos[@]}"; do chmod a-w "$d" 2>/dev/null || true; done
-      printf 'release: indeterminável: não consegui pôr o terceiro %s em %s\n' "$nome" "$alvo" >&2
-      return 5
-    fi
-    for d in "${abertos[@]}"; do chmod a-w "$d"; done
-    printf 'terceiro:  %s -> %s (sha256 %s)\n' "$nome" "$destino" "${pino:0:12}"
-  done <<<"$linhas"
-  return 0
+  materializar_terceiros_em "$1" "$PROD_RAIZ/$1/$2" "$TERCEIROS" "$TERCEIROS_CACHE"
 }
 
 # ajudante bin/_release/stack: sempre ao lado deste script (bin/_release/), NUNCA pelo
