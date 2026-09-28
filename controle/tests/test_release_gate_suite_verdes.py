@@ -106,7 +106,8 @@ class Ambiente:
         Path(self.env["PLATAFIRMA_FAMILIAS"]).write_text(
             json.dumps({self.FAMILIA: str(self.forge)}), encoding="utf-8")
         Path(self.env["PLATAFIRMA_VENVS"]).write_text(
-            json.dumps({"harness": {"familia": self.FAMILIA, "lock": "lock.txt"}}), encoding="utf-8")
+            json.dumps({"harness": {"familia": self.FAMILIA, "lock": "lock.txt", "teste": "controle"}}),
+            encoding="utf-8")
         Path(self.env["PLATAFIRMA_TERCEIROS"]).write_text("{}", encoding="utf-8")
         self.env["PATH"] = f"{stub_bin}{os.pathsep}" + self.env.get("PATH", "")
 

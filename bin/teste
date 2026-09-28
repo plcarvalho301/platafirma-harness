@@ -23,6 +23,7 @@ set -uo pipefail
 
 . "$(dirname "$(readlink -f "$0")")/../lib/raizes.sh"
 . "$(dirname "$(readlink -f "$0")")/../lib/venv.sh"
+. "$(dirname "$(readlink -f "$0")")/../lib/terceiros.sh"
 PF_VENV_PREFIXO="teste"
 
 BANCADA=""
@@ -42,7 +43,9 @@ uso:
 
   <nome> = nome de repositório ou stack registrado em registro/venvs.json
   <alvo> = caminho dentro da subárvore de teste (sem ele, a suíte inteira)
-  --portao: roda só a lista do portão (controle/tests/VERDES)
+  --portao: roda só a lista do portão da subárvore (<sub>/tests/VERDES ou <sub>/VERDES);
+            com <nome> = repositório e sem <alvo>, toda chave dele que declara
+            subárvore de teste, e passa quando todas passam (arq:0116 §6)
   --arvore <caminho>: roda a árvore materializada (exigida sob a raiz de release)
   --chave <nome>: (deprecado) usa o ambiente de registro/venvs.json (arq:0110 §11)
 
@@ -51,7 +54,8 @@ interpretador: venv construído pelo registro
 exit: 0 suíte verde / inventário lido · 1 suíte vermelha / sem bancada
       2 uso / nome desconhecido / nome duplicado / --ajuda · 3 dependência ausente
       4 alvo fora da subárvore ou --arvore fora da raiz
-      5 indeterminável (nenhuma stack detectada ou stack sem lock)
+      5 indeterminável (nenhuma stack detectada, stack sem lock, lista de portão ausente)
+      6 só com PF_TESTE_SO_MEMO=1: árvore ainda sem veredito gravado (nada rodou)
 EOF
   exit 2
 }
@@ -324,6 +328,13 @@ pytest_em_bloco() {  # $1=clone $2=raiz(cwd) $3=rotulo $4=modo(py:<python>|isola
     fi
   fi
 
+  # PF_TESTE_SO_MEMO=1: só o veredito gravado, nunca roda (o gate lê assim o repositório
+  # inteiro antes de medir, e enquanto o job mede). Sem veredito: 6.
+  if [ "${PF_TESTE_SO_MEMO:-0}" = 1 ]; then
+    printf 'suite AINDA NAO MEDIDA: %s — sem veredito gravado para a arvore %s\n' "$rotulo" "${arvore:0:12}"
+    return 6
+  fi
+
   local logd="$inst/var/log/teste" log xml
   mkdir -p "$logd" 2>/dev/null || logd="${TMPDIR:-/tmp}"
   log="$logd/$(date -u +%Y%m%dT%H%M%SZ)-${rotulo%% *}-$$.txt"
@@ -387,6 +398,80 @@ pytest_em_bloco() {  # $1=clone $2=raiz(cwd) $3=rotulo $4=modo(py:<python>|isola
     fi
   fi
   return "$rc"
+}
+
+# arq:0116 §7: artefato de terceiro pinado da família entra na árvore medida pelo mesmo
+# construtor da release (lib/terceiros.sh), do cache por sha256. O registro vem da própria
+# árvore quando ela o tem (bancada ou árvore materializada), senão o do verbo.
+terceiros_na_arvore() {  # $1=arvore
+  local c="$1" reg rc=0
+  reg="${PLATAFIRMA_TERCEIROS:-$c/registro/terceiros.json}"
+  [ -r "$reg" ] || reg="$(dirname "$(readlink -f "$0")")/../registro/terceiros.json"
+  materializar_terceiros_em "$REG_FAMILIA" "$c" "$reg" "$PF_RELEASE_RAIZ/terceiros/sha256" >&2 || rc=$?
+  case "$rc" in
+    0) return 0 ;;
+    5) exit 5 ;;
+    *) exit 3 ;;
+  esac
+}
+
+# arq:0116 §5: a lista de portão mora na própria subárvore de teste da chave, com os
+# caminhos relativos a ela: <sub>/tests/VERDES, senão <sub>/VERDES. Imprime o caminho;
+# vazio = lista ausente.
+lista_portao_de() {  # $1=clone $2=subarvore
+  local base="$1${2:+/$2}" cand
+  for cand in "$base/tests/VERDES" "$base/VERDES"; do
+    if [ -r "$cand" ]; then printf '%s' "$cand"; return 0; fi
+  done
+  return 0
+}
+
+# arq:0116 §6: `teste rodar <repositório> --portao` roda a lista de portão de toda chave do
+# repositório que declara subárvore de teste, cada uma no seu ambiente, e passa quando
+# todas passam. O registro das chaves vem da árvore medida (a que o push ou a promoção
+# leva), não do verbo no ar. Cada chave é um processo próprio (memo por árvore e chave).
+portao_da_familia() {  # $1=clone $2=familia $3=bancada(chave ou vazio) $4=arvore(ou vazio)
+  local c="$1" familia="$2" bancada="$3" arv="$4" venvs linhas chave lock sub
+  venvs="${PLATAFIRMA_VENVS:-$c/registro/venvs.json}"
+  [ -r "$venvs" ] || venvs="$(dirname "$(readlink -f "$0")")/../registro/venvs.json"
+  linhas="$(PLATAFIRMA_VENVS="$venvs" python3 "$REGISTRO" --familia "$familia")" || exit $?
+  local chaves=() rc rc_fam=0 vermelhas=() nao_medidas=() pendentes=()
+  while IFS=$'\t' read -r chave lock sub; do
+    [ -n "$chave" ] && [ -n "$sub" ] || continue
+    chaves+=("$chave")
+  done <<<"$linhas"
+  if [ "${#chaves[@]}" -eq 0 ]; then
+    printf 'suite VERDE: %s — nenhuma chave com subárvore de teste no registro (nada a medir)\n' "$familia"
+    return 0
+  fi
+  for chave in "${chaves[@]}"; do
+    rc=0
+    if [ -n "$arv" ]; then
+      PLATAFIRMA_VENVS="$venvs" "$0" rodar "$chave" --portao --arvore "$arv" || rc=$?
+    else
+      PLATAFIRMA_VENVS="$venvs" "$0" rodar "$chave${bancada:+@$bancada}" --portao || rc=$?
+    fi
+    case "$rc" in
+      0) : ;;
+      1) vermelhas+=("$chave") ;;
+      6) pendentes+=("$chave") ;;
+      *) nao_medidas+=("$chave (exit $rc)") ;;
+    esac
+  done
+  if [ "${#vermelhas[@]}" -gt 0 ]; then
+    printf 'portao %s: VERMELHO — %s\n' "$familia" "${vermelhas[*]}"
+    return 1
+  fi
+  if [ "${#nao_medidas[@]}" -gt 0 ]; then
+    printf 'portao %s: NAO MEDIDO — %s\n' "$familia" "${nao_medidas[*]}"
+    return 5
+  fi
+  if [ "${#pendentes[@]}" -gt 0 ]; then
+    printf 'portao %s: AINDA NAO MEDIDO — %s\n' "$familia" "${pendentes[*]}"
+    return 6
+  fi
+  printf 'portao %s: VERDE — %s\n' "$familia" "${chaves[*]}"
+  return "$rc_fam"
 }
 
 ato_detectar() {
@@ -470,16 +555,14 @@ ato_inventario() {
     return 0
   fi
 
-  local verdes_lista=()
-  for cand in "$c/controle/tests/VERDES" "$c/$REG_SUBARVORE/tests/VERDES" "$c/tests/VERDES"; do
-    if [ -r "$cand" ]; then
-      while IFS= read -r l; do
-        case "$l" in ''|'#'*) continue ;; esac
-        verdes_lista+=("$l")
-      done < "$cand"
-      break
-    fi
-  done
+  local verdes_lista=() cand
+  cand="$(lista_portao_de "$c" "$REG_SUBARVORE")"
+  if [ -n "$cand" ]; then
+    while IFS= read -r l; do
+      case "$l" in ''|'#'*) continue ;; esac
+      verdes_lista+=("$l")
+    done < "$cand"
+  fi
 
   for arq in "${achados[@]}"; do
     local rel="${arq#"$raiz"/}" rel_c="${arq#"$c"/}"
@@ -537,33 +620,52 @@ ato_rodar() {
     return $?
   fi
 
+  # arq:0116 §6: o repositório inteiro no portão — toda chave com subárvore de teste
+  if [ "$portao" -eq 1 ] && [ -z "$alvo" ] && [ -z "$chave" ] && [ "${nome%%@*}" = "$REG_FAMILIA" ]; then
+    local arv_fam=""
+    [ "$EM_ARVORE" -eq 1 ] && arv_fam="$c"
+    portao_da_familia "$c" "$REG_FAMILIA" "$REG_BANCADA" "$arv_fam"
+    return $?
+  fi
+
   if [ -n "$alvo" ]; then
     alvo="$(alvo_de "$c" "$alvo")" || exit $?
   fi
 
-  ambiente_do_registro "$c" || exit $?
-
-  local alvos=()
+  local alvos=() lista_portao="" ausentes=()
   if [ "$portao" -eq 1 ]; then
-    local lista_portao=""
-    for cand in "$c/controle/tests/VERDES" "$c/$REG_SUBARVORE/tests/VERDES" "$c/tests/VERDES"; do
-      if [ -r "$cand" ]; then lista_portao="$cand"; break; fi
-    done
-    if [ -n "$lista_portao" ]; then
-      while IFS= read -r linha; do
-        case "$linha" in ''|'#'*) continue ;; esac
-        if [ -f "$raiz/$linha" ]; then
-          alvos+=("$linha")
-        elif [ -f "$c/$linha" ]; then
-          alvos+=("$c/$linha")
-        elif [ -f "$c/controle/$linha" ]; then
-          alvos+=("$c/controle/$linha")
-        fi
-      done < "$lista_portao"
+    # arq:0116 §5: lista na própria subárvore; ausente é suíte não medida; vazia vale
+    lista_portao="$(lista_portao_de "$c" "$REG_SUBARVORE")"
+    if [ -z "$lista_portao" ]; then
+      printf 'suite INDISPONIVEL: %s — sem lista de portão em %s/ (tests/VERDES ou VERDES; arq:0116 §5: lista ausente é suíte não medida)\n' \
+        "$nome" "${REG_SUBARVORE:-.}"
+      exit 5
+    fi
+    while IFS= read -r linha; do
+      case "$linha" in ''|'#'*) continue ;; esac
+      if [ -f "$raiz/$linha" ]; then
+        alvos+=("$linha")
+      elif [ -f "$c/$linha" ]; then
+        alvos+=("$c/$linha")
+      else
+        ausentes+=("$linha")
+      fi
+    done < "$lista_portao"
+    if [ "${#ausentes[@]}" -gt 0 ]; then
+      printf 'suite INDISPONIVEL: %s — %s lista arquivo que não existe na árvore: %s\n' \
+        "$nome" "${lista_portao#"$c"/}" "${ausentes[*]}"
+      exit 5
+    fi
+    if [ "${#alvos[@]}" -eq 0 ]; then
+      printf 'suite VERDE: %s — lista de portão vazia, declarada em %s\n' "$nome" "${lista_portao#"$c"/}"
+      return 0
     fi
   elif [ -n "$alvo" ]; then
     alvos+=("$alvo")
   fi
+
+  ambiente_do_registro "$c" || exit $?
+  terceiros_na_arvore "$c"
 
   local rotulo="$nome"
   [ -n "$chave" ] && rotulo="$nome (chave $chave)"

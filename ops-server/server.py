@@ -1431,7 +1431,7 @@ NOMES_TEXTO = {"Dockerfile", ".dockerignore", "VERDES"}  # VERDES: baseline do p
 # recusavam write_file ("fora de morada") e o conteudo nao tinha como ser escrito pela porta.
 # platafirma-rastreador entrou em 25/09/2026 (#3132): a API do rastreador mora nele e o
 # clone ja existia na bancada, mas ficava fora da lista — a Frente 2 do #3115 parou ai.
-CLONES = ("platafirma-core", "platafirma-conhecimento", "platafirma-arquitetura",
+CLONES = ("platafirma-core", "platafirma-conhecimento",
           "platafirma-harness", "platafirma-motor", "platafirma-posto", "platafirma-ui",
           "platafirma-casa", "platafirma-rastreador")
 ESCRITA_TETO = 1_048_576

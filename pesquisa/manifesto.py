@@ -1,8 +1,8 @@
 """Manifesto por trabalho e layout em disco (spec §4.8, §2.3).
 
     /srv/platafirma/casa/var/pesquisa/<trabalho>/   ($PLATAFIRMA_INSTANCIA/var/pesquisa; override PF_PESQUISA_DIR)
-      bruto/          # imutável: byte como veio, nome de origem
-      derivado/       # .headers, .md, traduções — tudo que o verbo ou o modelo produziu
+      bruto/          # imutável: <n>.<ext> é o corpo como veio; <n>.resposta.json, status/cabeçalhos/URLs/hora
+      derivado/       # .md, .dom.html, .captura.png, traduções — tudo que o verbo ou o modelo produziu
       MANIFESTO.jsonl # fonte única; `manifesto --md` renderiza
 
 Consequência não depende de lembrança (§2.3): todo ato grava a linha SEM flag. O
@@ -32,18 +32,14 @@ from raizes import instancia  # noqa: E402
 RAIZ_VAR = Path(os.environ.get("PF_PESQUISA_DIR", str(instancia() / "var" / "pesquisa")))
 UA = "PlataFirma-pesquisa/1.0 (+https://platafirma.org; verbo pesquisar; robots respeitado)"
 
-
 def sha256_bytes(dados: bytes) -> str:
     return hashlib.sha256(dados).hexdigest()
-
 
 def sha256_texto(texto: str) -> str:
     return sha256_bytes(texto.encode("utf-8"))
 
-
 def agora_utc() -> str:
     return _dt.datetime.now(_dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
-
 
 def slug_trabalho(explicito: str | None) -> str:
     if explicito:
@@ -52,7 +48,6 @@ def slug_trabalho(explicito: str | None) -> str:
     if ordem:
         return ordem
     return "manual-" + _dt.date.today().isoformat()
-
 
 class Trabalho:
     """Uma pasta de trabalho: cria o layout, numera artefatos, escreve o manifesto."""

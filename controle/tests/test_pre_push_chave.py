@@ -47,7 +47,9 @@ class Ambiente:
     def __init__(self, tmp_path: Path, python_exe: str):
         self.tmp = tmp_path
         self.wt = tmp_path / "wt"
-        self.forge = tmp_path / "forge.git"
+        # o hook acha o repositório pelo nome do origin (arq:0116 §6): o forge se chama
+        # como a família que o registro da fixture declara
+        self.forge = tmp_path / "fixture.git"
         self.wt.mkdir()
         subprocess.run(["git", "init", "-q", "--bare", str(self.forge)],
                         check=True, capture_output=True)
@@ -74,7 +76,8 @@ class Ambiente:
             "tests/test_fixture.py\n", encoding="utf-8")
         (self.wt / "controle" / "tests" / "test_fixture.py").write_text(TESTE_OK, encoding="utf-8")
         (self.wt / "venvs.json").write_text(
-            json.dumps({"harness": {"familia": "fixture", "lock": "lock.txt"}}), encoding="utf-8")
+            json.dumps({"harness": {"familia": "fixture", "lock": "lock.txt", "teste": "controle"}}),
+            encoding="utf-8")
         (self.wt / "lock.txt").write_text(LOCK_SEM_DEP, encoding="utf-8")
         _git(self.wt, "add", "-A")
         _git(self.wt, "commit", "-q", "-m", "fixture inicial")
