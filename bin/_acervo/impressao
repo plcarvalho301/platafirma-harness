@@ -1,0 +1,261 @@
+#!/usr/bin/env python3
+# _acervo/impressao — `acervo ler obra impressao`: le o texto de uma obra pelo espelho de
+# leitura, por pagina ou capitulo, do comeco e em ordem (spec espelho-de-leitura §5.4; #3180).
+#
+# Cliente fino da rota GET /acervo/obras/{obra}/impressoes/{impressao} do motor. Nao converte
+# nem renderiza (arq:0117 §5.2): imprime a fatia de espelho.md como esta no arquivo, entre a
+# primeira linha (o que e, de onde veio, qualidade) e a ultima (`proximo:` ou `fim da obra`).
+# exit (arq:0110 §4): 0 leu · 1 obra sem impressao servindo · 2 uso · 3 rota fora · 5 indeterminavel
+import argparse
+import json
+import os
+import re
+import shlex
+import sys
+import urllib.parse
+from pathlib import Path
+
+HARNESS_DIR = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(HARNESS_DIR))
+sys.path.insert(0, str(HARNESS_DIR / "lib"))
+
+try:
+    from recuperacao.adaptadores.motor_acervo_rest import BASE as DEFAULT_BASE
+    from recuperacao.adaptadores.motor_acervo_rest import TOKEN as DEFAULT_TOKEN
+except ImportError:
+    DEFAULT_BASE, DEFAULT_TOKEN = "http://127.0.0.1:8100", ""
+
+BASE = (os.environ.get("MOTOR_ACERVO_URL") or os.environ.get("RAG_API_URL")
+        or os.environ.get("RAG_API_BASE") or DEFAULT_BASE).rstrip("/")
+TOKEN = os.environ.get("RAG_API_TOKEN") or DEFAULT_TOKEN
+
+USO = """uso: acervo ler obra impressao <obra> [--paginas a-b | --capitulo <ancora>]
+                                  [--formato md|blocos] [--papel corpo|todos]
+                                  [--limite n] [--cursor c] [--impressao <id>]
+                                  [--baixar [<pasta>]] [--json]
+  <obra>          uuid ou título exato (catálogo)
+  --paginas a-b   unidades do original (página, slide, planilha, capítulo do EPUB)
+  --capitulo <a>  seção pela âncora (`--formato blocos` e a 1ª leitura mostram as âncoras)
+  --formato       md (padrão: a fatia de espelho.md) · blocos (um bloco por linha, JSON)
+  --papel         corpo (padrão: sem cabeçalho, rodapé, navegação) · todos
+  --impressao     lê outra impressão da obra, aposentada inclusive (padrão: a servindo)
+  --baixar        grava espelho.md inteiro como <título>.md e imprime o caminho
+exit: 0 leu · 1 obra sem impressão servindo · 2 uso · 3 rota fora · 5 indeterminável
+spec: acervo ler casa spec espelho-de-leitura (§5.4)
+"""
+
+_NOMES_FORA = {"cabecalho-corrente": "cabeçalho", "rodape": "rodapé", "navegacao": "navegação",
+               "numero-de-pagina": "número de página", "oculto": "oculto"}
+
+
+class Falha(Exception):
+    def __init__(self, codigo: int, msg: str):
+        super().__init__(msg)
+        self.codigo = codigo
+
+
+def exit_de(status: int, titulo: str | None) -> int:
+    """Classe do erro HTTP da rota -> exit da arq:0110 §4."""
+    if status >= 500:
+        return 5
+    if status == 404:
+        return 1
+    if titulo == "EspelhoDivergente":
+        return 5
+    return 2
+
+
+def _numero(n) -> str:
+    return "?" if n is None else str(n)
+
+
+def primeira_linha(titulo: str, sumario: dict, unidades: str | None, fora: dict,
+                   papel: str, capitulo: str | None) -> str:
+    """O molde da casa (spec §5.4): o que é, de onde veio e a qualidade, numa linha."""
+    esp = sumario.get("espelho")
+    if not esp:
+        return f"{titulo} · qualidade suspeita · sem página"
+    unidade = esp.get("unidade") or "nenhuma"
+    total = sumario.get("unidades") or 0
+    if unidade != "nenhuma" and unidades:
+        a, _, b = unidades.partition("-")
+        faixa = f"{unidade} {a}–{b or a} de {total}"
+    elif capitulo:
+        faixa = f"capítulo {capitulo}"
+    else:
+        faixa = f"{unidade} {'de ' + str(total) if total else ''}".strip()
+    conv = ((esp.get("metodo") or {}).get("conversor") or {})
+    enc = esp.get("encoding") or {}
+    partes = [titulo, esp.get("tipo") or "?", faixa,
+              f"{conv.get('nome', '?')}@{conv.get('versao', '?')}",
+              f"{enc.get('decidido', '?')} ({enc.get('por', '?')})",
+              f"substituições {_numero(esp.get('substituicoes'))}"]
+    if papel == "corpo":
+        base = {k: fora.get(k, 0) for k in ("cabecalho-corrente", "rodape", "navegacao")}
+        extras = {k: v for k, v in fora.items() if k not in base and v}
+        itens = [f"{_NOMES_FORA.get(k, k)} {v}" for k, v in {**base, **extras}.items()]
+        partes.append("fora do corpo: " + ", ".join(itens))
+    qual = esp.get("qualidade") or "nao-julgada"
+    partes.append(f"qualidade {qual}" + (f" ({esp['motivo']})" if esp.get("motivo") else ""))
+    return " · ".join(partes)
+
+
+def _cmd(obra: str, **opcoes) -> str:
+    partes = ["acervo ler obra impressao", shlex.quote(obra)]
+    for k, v in opcoes.items():
+        if v not in (None, False, ""):
+            partes.append(f"--{k}" + ("" if v is True else f" {shlex.quote(str(v))}"))
+    return " ".join(partes)
+
+
+def ultima_linha(obra: str, args, proximo: str | None, sumario: dict) -> str:
+    """`proximo:` com o comando que continua, ou `fim da obra` (spec §5.4). Terminada a faixa
+    pedida, o próximo é a faixa seguinte: páginas seguintes, ou o capítulo seguinte."""
+    fixas = {"papel": args.papel if args.papel != "corpo" else None, "impressao": args.impressao,
+             "formato": args.formato if args.formato != "md" else None}
+    if proximo:
+        return "proximo: " + _cmd(obra, paginas=args.paginas, capitulo=args.capitulo,
+                                  **fixas, cursor=proximo)
+    total = sumario.get("unidades") or 0
+    if args.paginas:
+        m = re.fullmatch(r"\s*(\d+)\s*(?:[-–]\s*(\d+))?\s*", args.paginas)
+        a, b = (int(m.group(1)), int(m.group(2) or m.group(1))) if m else (0, 0)
+        if b < total:
+            largura = max(b - a, 0)
+            prox_b = min(b + 1 + largura, total)
+            return "proximo: " + _cmd(obra, paginas=f"{b + 1}-{prox_b}", **fixas)
+    elif args.capitulo:
+        ancoras = [s.get("ancora") for s in sumario.get("secoes") or []]
+        if args.capitulo in ancoras and ancoras.index(args.capitulo) + 1 < len(ancoras):
+            return "proximo: " + _cmd(obra, capitulo=ancoras[ancoras.index(args.capitulo) + 1], **fixas)
+    return "fim da obra"
+
+
+def _pasta_padrao() -> Path:
+    raiz = os.environ.get("PLATAFIRMA_BANCADA")
+    if not raiz:
+        cfg = Path.home() / ".config" / "platafirma" / "bancada"
+        raiz = cfg.read_text(encoding="utf-8").strip() if cfg.is_file() else os.getcwd()
+    return Path(raiz) / "leituras"
+
+
+def _nome_do_disposition(disp: str) -> str | None:
+    m = re.search(r"filename\*=UTF-8''([^;]+)", disp or "")
+    if m:
+        return urllib.parse.unquote(m.group(1))
+    m = re.search(r'filename="([^"]+)"', disp or "")
+    return m.group(1) if m else None
+
+
+def _get(caminho: str, params: dict | None = None, accept: str = "application/json"):
+    import requests
+
+    headers = {"accept": accept}
+    if TOKEN:
+        headers["authorization"] = f"Bearer {TOKEN}"
+    try:
+        resp = requests.get(f"{BASE}{caminho}", params=params or None, headers=headers, timeout=120)
+    except requests.exceptions.ConnectionError as e:
+        raise Falha(3, f"rota fora: motor do acervo não respondeu em {BASE} ({e.__class__.__name__})") from e
+    except requests.exceptions.RequestException as e:
+        raise Falha(5, f"indeterminavel: {e}") from e
+    if resp.status_code >= 400:
+        try:
+            pj = resp.json()
+        except ValueError:
+            pj = {"title": f"HTTP {resp.status_code}", "detail": resp.text[:300]}
+        titulo = pj.get("title")
+        raise Falha(exit_de(resp.status_code, titulo), f"{titulo}: {pj.get('detail')}")
+    return resp
+
+
+def _resolver(obra: str) -> tuple[str, str]:
+    q = urllib.parse.quote(obra, safe="")
+    data = _get(f"/acervo/obras/{q}/situacao").json()
+    if data.get("casamento") not in (None, "exato"):
+        sys.stderr.write(f"acervo ler obra impressao: '{obra}' casou aproximado com "
+                         f"{data.get('titulo')} ({data.get('obra_id')})\n")
+    return data["obra_id"], data.get("titulo") or obra
+
+
+def main(argv: list[str]) -> int:
+    p = argparse.ArgumentParser(prog="acervo ler obra impressao", add_help=False)
+    p.add_argument("obra", nargs="?")
+    faixa = p.add_mutually_exclusive_group()
+    faixa.add_argument("--paginas")
+    faixa.add_argument("--capitulo")
+    p.add_argument("--formato", choices=("md", "blocos"), default="md")
+    p.add_argument("--papel", default="corpo")
+    p.add_argument("--limite", type=int)
+    p.add_argument("--cursor")
+    p.add_argument("--impressao")
+    p.add_argument("--baixar", nargs="?", const="", default=None)
+    p.add_argument("--json", action="store_true")
+    p.add_argument("-h", "--help", "--ajuda", dest="ajuda", action="store_true")
+    try:
+        args, resto = p.parse_known_args(argv)
+    except SystemExit:
+        sys.stderr.write(USO)
+        return 2
+    if args.ajuda:
+        sys.stdout.write(USO)
+        return 0
+    if resto or not args.obra:
+        sys.stderr.write((f"argumento desconhecido: {' '.join(resto)}\n" if resto else "") + USO)
+        return 2
+
+    try:
+        obra_id, titulo = _resolver(args.obra)
+        imp = args.impressao or "servindo"
+        base = f"/acervo/obras/{obra_id}/impressoes/{urllib.parse.quote(imp, safe='')}"
+        sumario = _get(base, {"campos": "sumario"}).json()
+
+        if args.baixar is not None:
+            if not sumario.get("espelho"):
+                raise Falha(1, f"sem espelho; reextrair: acervo curar obra --reextrair {obra_id}")
+            resp = _get(f"{base}/espelho", accept="text/markdown")
+            pasta = Path(args.baixar) if args.baixar else _pasta_padrao()
+            pasta.mkdir(parents=True, exist_ok=True)
+            destino = pasta / (_nome_do_disposition(resp.headers.get("content-disposition")) or f"{titulo}.md")
+            destino.write_bytes(resp.content)
+            print(destino)
+            return 0
+
+        unidade = (sumario.get("espelho") or {}).get("unidade")
+        if args.paginas and sumario.get("espelho") and unidade == "nenhuma":
+            raise Falha(2, f"a obra não tem página (unidade: nenhuma); leia por capítulo: "
+                           f"{_cmd(args.obra, capitulo=(sumario.get('secoes') or [{}])[0].get('ancora'))}")
+
+        params = {"pagina": args.paginas, "secao": args.capitulo, "papel": args.papel,
+                  "limite": args.limite, "cursor": args.cursor}
+        params = {k: v for k, v in params.items() if v is not None}
+        quer_json = args.json or args.formato == "blocos"
+        resp = _get(base, params, accept="application/json" if quer_json else "text/markdown")
+    except Falha as f:
+        sys.stderr.write(f"acervo ler obra impressao: {f}\n")
+        return f.codigo
+
+    fora = json.loads(resp.headers.get("x-espelho-fora") or "{}")
+    proximo = resp.headers.get("x-espelho-proximo")
+    if args.json:
+        print(json.dumps(resp.json(), ensure_ascii=False, indent=2))
+        return 0
+    print(primeira_linha(titulo, sumario, resp.headers.get("x-espelho-unidades"), fora,
+                         args.papel, args.capitulo))
+    if args.formato == "blocos":
+        for bloco in resp.json().get("itens", []):
+            print(json.dumps(bloco, ensure_ascii=False))
+    else:
+        sys.stdout.write(resp.text if resp.text.endswith("\n") else resp.text + "\n")
+    if sumario.get("espelho"):
+        print(ultima_linha(args.obra, args, proximo, sumario))
+    else:
+        if proximo:
+            print("proximo: " + _cmd(args.obra, capitulo=args.capitulo, impressao=args.impressao,
+                                     cursor=proximo))
+        print(f"reextrair: acervo curar obra --reextrair {shlex.quote(args.obra)}")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))
