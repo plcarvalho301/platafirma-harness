@@ -44,12 +44,13 @@ from _lint.card import verificar_card
 from _lint.chapeu import verificar_chapeu
 from _lint.codigo import detectar_stack, verificar_codigo
 from _lint.commit import verificar_commit
+from _lint.diagrama import verificar_diagrama
 from _lint.fossil import verificar_fossil
 from _lint.lista import resolver_lista
 from _lint.organizacao import verificar_organizacao
 from _lint.prosa import verificar_prosa
 from _lint.repo import verificar_repo
-from _lint.resultado import Apontamento, relatorio_lint
+from _lint.resultado import Apontamento, linha_ancora_lint, relatorio_lint
 from _lint.superficie import verificar_superficie
 from _lint.testes import verificar_testes
 from _lint.vocabulario import verificar_vocabulario
@@ -66,6 +67,12 @@ CLASSES_LINT = {
         "chave": "repositorio",
         "detector": "referencias orfas",
         "descricao": "referencias a caminhos ou simbolos quebrados",
+    },
+    "diagrama": {
+        "tipo": "repositorio",
+        "chave": "repositorio",
+        "detector": "compilacao no Kroki da casa",
+        "descricao": "diagrama .mmd/.d2 que nao compila (exige <alvo>)",
     },
     "repo": {
         "tipo": "lista-de-verificacao",
@@ -148,7 +155,8 @@ def imprimir_uso(stream=sys.stdout):
     print("  lint commit <arquivo>|- [--json]", file=stream)
     print("  lint card <arquivo>|- [<repo>] [--json]", file=stream)
     print("  lint acervo [--resumo] [--json]   antipadroes de obra (firma) e conceito; exit 1 so com bloqueante", file=stream)
-    print("  lint organizacao <repo> [<alvo>] [--todas] [--resumo]   --todas inclui os bloqueantes (contagem; quem barra e o pre-commit); --resumo conta por regra\n", file=stream)
+    print("  lint organizacao <repo> [<alvo>] [--todas] [--resumo]   --todas inclui os bloqueantes (contagem; quem barra e o pre-commit); --resumo conta por regra", file=stream)
+    print("  lint diagrama <repo>[@<chave>] <alvo>   compila .mmd/.d2 no Kroki da casa; exit 0/1/5, Kroki fora do ar nao barra o pre-commit\n", file=stream)
     print("classes:", file=stream)
     for c, info in CLASSES_LINT.items():
         lista_desc = f"{info['tipo']} {info['chave']}" if info['tipo'] == 'lista-de-verificacao' else info['tipo']
@@ -262,6 +270,10 @@ def main() -> int:
     nome_repo = args_resto[0]
     alvo = args_resto[1] if len(args_resto) > 1 else None
 
+    if classe == "diagrama" and not alvo:
+        print("lint: classe 'diagrama' exige o alvo: lint diagrama <repo> <arquivo|pasta>", file=sys.stderr)
+        return 2
+
     try:
         raiz_repo, chave_bancada = resolver_bancada(nome_repo)
     except ErroBancada as e:
@@ -322,6 +334,22 @@ def main() -> int:
     if classe == "fossil":
         apontamentos = verificar_fossil(raiz_repo, alvo=alvo)
         return relatorio_lint(classe, alvo_ancora, apontamentos, "repositorio", rev=None, como_json=como_json)
+
+    # 5b. Classe DIAGRAMA (card #3096) -- exit propria (0/1/5), fora da regra 0/1 comum
+    # de relatorio_lint: Kroki fora de alcance e indeterminavel (5), nunca apontamento (1).
+    if classe == "diagrama":
+        apontamentos, rc = verificar_diagrama(raiz_repo, alvo)
+        linha, _ = linha_ancora_lint(classe, alvo_ancora, apontamentos, "repositorio", rev=None)
+        if como_json:
+            print(json.dumps({
+                "ancora": linha, "classe": classe, "alvo": alvo_ancora, "chave": "repositorio",
+                "rev": None, "apontamentos": [a.dict() for a in apontamentos],
+            }, ensure_ascii=False))
+        else:
+            print(linha)
+            for a in apontamentos:
+                print(f"    {a.arquivo}:{a.linha}: {a.o_que_fere} — cura: {a.cura}")
+        return rc
 
     # 6. Classe REPO
     if classe == "repo":
