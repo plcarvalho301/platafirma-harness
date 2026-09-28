@@ -50,10 +50,10 @@ lugar do repo (`platafirma-harness@<card>-<slug>`). Suítes com ambiente própri
 | `bin/` | os verbos de operação; sub-ato mora em `bin/_<verbo>/`, fora do PATH |
 | `abertura/` | persona, chapéu e caderno de cada cadeira, que `monta-sessao` injeta |
 | `agente/` | pacote da conta da fábrica: `CLAUDE.md`, `settings.json`, hook de porta e instalador |
-| `ops-server/` | o MCP de operação (`ops-mcp`), porta dos verbos para as superfícies; ver `docs/ops-server.md` |
+| `ops-server/` | o MCP de operação (`ops-mcp`), porta dos verbos para as superfícies; [README](ops-server/README.md) |
 | `controle/` | plano de controle: agregador de estado e tela; [README](controle/README.md) |
 | `recuperacao/` | biblioteca do Recuperador: envelope, adaptadores, disjuntor, PEP, cache; [README](recuperacao/README.md) |
-| `chat/` | superfície de conversa Matrix: stack `chat`, worker e provisionamento; ver `docs/chat.md` |
+| `chat/` | superfície de conversa Matrix: stack `chat`, worker e provisionamento; [README](chat/README.md) |
 | `politica-acesso/` | PDP, política e projeção de sujeitos, com a matriz sujeito × fonte |
 | `pesquisa/` | biblioteca do verbo `pesquisar` (SearXNG e extração) |
 | `sessao/` | stack `harness-sessao`: compose e DDL do banco de sessão e mesa |
