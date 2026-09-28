@@ -5,12 +5,18 @@
 # use para: curadoria do acervo, reclassificação em lote e avulsa, expurgo, restauração, promoção, criação de conceito (nó), teia de conceitos (aresta entre conceitos), derivação entre obras e registro de obra não adquirida
 # atos: --reclassificar, --situacao, --expurgar, --restaurar, --promover, --recortar, --reextrair, --conceito, --relacionar, --relacoes, --desrelacionar, --derivar, --derivacoes, --desderivar, --registrar-obra
 import argparse
+import contextlib
+import datetime
+import hashlib
+import io
 import json
 import os
 import re
 import secrets
 import subprocess
 import sys
+import tempfile
+import time
 import urllib.parse
 
 import requests
@@ -40,6 +46,8 @@ USO = """uso:
   curar --promover <obra> --impressao <id>
   curar --recortar <obra> [--corte <slug>] [--apply]          impressão nova sobre o mesmo espelho
   curar --reextrair <obra> [--metodo <slug|digest>] [--apply] espelho novo do próprio arquivo
+  curar --reextrair <id,id,…|@arquivo> --bancada <pasta> [--metodo <slug>] [--refazer] [--timeout-s <n>] [--json]
+                                                              converte em <pasta>/<metodo>/<obra_id>/, não escreve no acervo
   curar --expurgar --espelhos [--apply]                       espelho de impressão aposentada há +90 dias
   curar --restaurar --espelhos [<obra>] [--apply]             desfaz o expurgo de espelhos
   curar --conceito <slug> [--rotulo … --definicao … --natureza … --estatuto … --alt "rótulo@pt,…"] --pai <slug> --tipo <t> --garantia <g> --motivo "…" [--lastro …] [--apply]
@@ -109,6 +117,22 @@ opções de seleção (--reclassificar em lote):
   --expurgadas                  filtra obras expurgadas
   --teto <n>                    teto máximo de obras a alterar no lote (default: 200, máx: 5000)
 
+opções de --reextrair --bancada (card #3187; "bancada" aqui é só uma pasta de saída dada na linha de comando):
+  --bancada <pasta>             grava <pasta>/<metodo>/<obra_id>/{espelho.md,indice.json,relatorio.json}; não escreve no acervo
+                                (recusa --apply). --reextrair passa a aceitar 'id1,id2,…' ou '@arquivo' (um id por linha;
+                                vazias e '#' ignoradas). Retomável: obra com relatorio.json válido é pulada ('já feito')
+  --metodo <slug>               método e segmento de pasta (default: perfil)
+  --refazer                     refaz mesmo as obras já feitas
+  --timeout-s <n>               timeout da conversão no servidor (default 1800); o HTTP espera n+120
+  saída: uma linha por obra 'ok|reprovada|n/a|falha|erro|já feito  <obra>  <tipo>  classe=  blocos=  perda=  <ms>ms
+  [medida-indeterminada]  [causa]' e os totais. reprovada, n/a e falha são DADO (o servidor respondeu 200; grava
+  relatorio.json, conta como feita e a retomada a pula): 'falha' = o método falhou nesta obra (relatorio.erro com
+  erro_tipo conversao, timeout ou subprocesso); 'medida-indeterminada' = a conversão vale mas fidelidade.erro diz que a
+  medida falhou (refazer é decisão sua, com --refazer). 'erro' = a obra NÃO foi obtida (HTTP 4xx/5xx, rede, título que
+  não resolve, método indisponível no servidor, gravação ou conferência sha256/bytes): sem relatorio.json válido,
+  sem marcar feito; a conferência que falha deixa relatorio.invalido.json e erro.txt
+  exit 0 se todas foram obtidas, 1 se alguma não foi (erro), 2 uso errado (inclui pasta de saída sem escrita, antes de qualquer POST)
+
 opções gerais:
   --apply                       aplica as alterações (default: falso, dry-run do plano)
   --autor <slug>                curador responsável (default: cadeira da sessão ou 'dados')
@@ -168,14 +192,14 @@ def _parse_lista(vals) -> list[str]:
     return res
 
 
-def resolver_obra_id(obra: str, headers: dict, expurgadas: bool = False) -> str:
+def resolver_obra_id(obra: str, headers: dict, expurgadas: bool = False, timeout=None) -> str:
     obra = obra.strip()
     if _UUID_RE.match(obra):
         return obra
     qs = "?expurgadas=true" if expurgadas else ""
     url = f"{BASE}/acervo/obras/{urllib.parse.quote(obra, safe='')}/situacao{qs}"
     try:
-        resp = requests.get(url, headers=headers)
+        resp = requests.get(url, headers=headers, timeout=timeout)
     except requests.exceptions.RequestException as e:
         falha_indeterminavel(e)
     if resp.status_code >= 500:
@@ -1192,6 +1216,445 @@ def acao_espelhos(ato: str, obra: str | None, autor: str, aplicar: bool, como_js
     return 0
 
 
+# --- --reextrair ... --bancada <pasta>: conversão em lote para uma pasta (card #3187) -------------
+# "bancada" aqui é só a pasta de saída dada na linha de comando. Não toca o acervo: o servidor
+# converte e devolve; o cliente grava <pasta>/<metodo>/<obra_id>/{espelho.md,indice.json,relatorio.json}.
+
+_BANCADA_METODO_RE = re.compile(r"^[a-z0-9][a-z0-9._-]{0,63}$")
+_BANCADA_SEGURO_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
+_BANCADA_ARQUIVOS = (("espelho.md", "sha256_md", "bytes_md"),
+                     ("indice.json", "sha256_indice", "bytes_indice"))
+# erro_tipo do relatório v1 que significam "o MÉTODO falhou nesta obra" (dado). 'indisponivel' (o método
+# não roda no ambiente do servidor: não é resultado, refazer) e valor desconhecido ficam de fora: erro.
+_BANCADA_TIPOS_FALHA = ("conversao", "timeout", "subprocesso", "ausente")
+# POST: (conexão, leitura). A leitura espera o timeout da conversão no servidor + margem.
+_BANCADA_CONEXAO_S = 10
+_BANCADA_MARGEM_HTTP_S = 120
+_BANCADA_TIMEOUT_RESOLVER = (10, 60)   # GET que resolve título -> obra_id
+
+
+def _bancada_lista(valor: str) -> list[str]:
+    """`id1,id2,…` ou `@caminho` (um id por linha; vazias e '#' ignoradas). Sem repetição, na ordem."""
+    if valor.startswith("@"):
+        with open(valor[1:], encoding="utf-8-sig") as f:   # BOM de editor não vira parte do 1º id
+            itens = [linha.strip() for linha in f.read().splitlines()]
+        itens = [i for i in itens if i and not i.startswith("#")]
+    else:
+        itens = [p.strip() for p in valor.split(",") if p.strip()]
+    vistos, res = set(), []
+    for i in itens:
+        if _UUID_RE.match(i):
+            i = i.lower()   # o mesmo UUID em maiúsculas é a mesma obra (e a mesma pasta)
+        if i not in vistos:
+            vistos.add(i)
+            res.append(i)
+    return res
+
+
+def _bancada_modo() -> int:
+    """0644 & ~umask: o mkstemp nasce 0600, e o arquivo da pasta é para o time ler."""
+    umask = os.umask(0)
+    os.umask(umask)
+    return 0o644 & ~umask
+
+
+def _bancada_gravar(caminho: str, dados: bytes) -> None:
+    """Escrita atômica: tmp na mesma pasta + fsync + modo 0644 & ~umask + rename."""
+    pasta = os.path.dirname(caminho)
+    os.makedirs(pasta, exist_ok=True)
+    fd, tmp = tempfile.mkstemp(dir=pasta, prefix=".tmp-")
+    try:
+        with os.fdopen(fd, "wb") as f:
+            f.write(dados)
+            f.flush()
+            os.fchmod(f.fileno(), _bancada_modo())
+            os.fsync(f.fileno())
+        os.replace(tmp, caminho)
+    except BaseException:
+        try:
+            os.unlink(tmp)
+        except OSError:
+            pass
+        raise
+
+
+def _bancada_testar_escrita(destino: str) -> str | None:
+    """Cria a pasta e prova que se escreve nela (arquivo temporário, removido). None = ok; senão a
+    causa, já com o caminho."""
+    try:
+        os.makedirs(destino, exist_ok=True)
+        fd, tmp = tempfile.mkstemp(dir=destino, prefix=".tmp-teste-")
+        try:
+            os.write(fd, b"teste de escrita\n")
+            os.fsync(fd)
+        finally:
+            os.close(fd)
+            os.unlink(tmp)
+    except OSError as e:
+        return f"{destino}: {e.strerror or e}"
+    return None
+
+
+def _bancada_curta(texto, limite: int = 80) -> str:
+    t = " ".join(str(texto).split())
+    return t if len(t) <= limite else t[: limite - 1] + "…"
+
+
+def _bancada_n(v) -> str:
+    if v is None:
+        return "-"
+    if isinstance(v, float) and v == int(v):
+        return str(int(v))
+    return str(v)
+
+
+def _bancada_erro_tipo(rel: dict) -> str | None:
+    """erro_tipo do relatório: None sem erro; relatório antigo com 'erro' e sem 'erro_tipo' vale conversao."""
+    if not rel.get("erro"):
+        return None
+    return str(rel.get("erro_tipo") or "conversao")
+
+
+def _bancada_campos(rel: dict) -> dict:
+    """situacao (ok|reprovada|n/a|falha|erro) e os campos da linha, lidos do relatório v1 sem KeyError.
+    'falha' = o método falhou nesta obra (dado). 'erro' aqui só para erro_tipo que não é dado."""
+    fid = rel.get("fidelidade") if isinstance(rel.get("fidelidade"), dict) else {}
+    cab = rel.get("cabecalho") if isinstance(rel.get("cabecalho"), dict) else {}
+    tempos = rel.get("tempos_ms") if isinstance(rel.get("tempos_ms"), dict) else {}
+    erro_tipo = _bancada_erro_tipo(rel)
+    # precedência (a mesma do agregador): indisponivel > aplicavel false > falha do método
+    if erro_tipo is not None and erro_tipo not in _BANCADA_TIPOS_FALHA:
+        situacao, causa = "erro", _bancada_curta(f"método indisponível ({erro_tipo}): {rel['erro']}")
+    elif rel.get("aplicavel") is False:
+        situacao, causa = "n/a", "método não cobre o tipo"
+    elif erro_tipo is not None:
+        situacao, causa = "falha", _bancada_curta(f"{erro_tipo}: {rel['erro']}")
+    elif rel.get("reprovado"):
+        situacao, causa = "reprovada", _bancada_curta(rel.get("causa") or rel.get("criterio") or "reprovada")
+    else:
+        situacao, causa = "ok", None
+    perda = None
+    if isinstance(fid.get("perda"), dict) and not fid.get("erro"):
+        perda = sum(v for v in fid["perda"].values() if isinstance(v, (int, float)) and not isinstance(v, bool))
+    tipo = os.path.splitext(str(rel.get("arquivo") or ""))[1].lstrip(".").lower() \
+        or str(rel.get("tipo") or "-").rsplit("/", 1)[-1]
+    total = tempos.get("total")
+    # a MEDIDA falhou (fidelidade.erro), a conversão não: continua ok/reprovada, com a marca
+    medida_indeterminada = bool(fid.get("erro")) and erro_tipo is None and rel.get("aplicavel") is not False
+    return {"situacao": situacao, "causa": causa, "tipo": tipo or "-", "erro_tipo": erro_tipo,
+            "classe": rel.get("classe") or "-", "blocos": cab.get("blocos"), "perda": perda,
+            "medida_indeterminada": medida_indeterminada,
+            "total_ms": total if isinstance(total, (int, float)) and not isinstance(total, bool) else None}
+
+
+def _bancada_linha(item: dict) -> str:
+    partes = [item["situacao"].ljust(9), (item.get("obra_id") or item["entrada"])[:8], item["tipo"],
+              f"classe={item['classe']}", f"blocos={_bancada_n(item['blocos'])}",
+              f"perda={_bancada_n(item['perda']) if item['perda'] is not None else '-'}",
+              f"{_bancada_n(item['total_ms'])}ms"]
+    if item.get("medida_indeterminada"):
+        partes.append("medida-indeterminada")
+    if item.get("causa"):
+        partes.append(f"[{item['causa']}]")
+    return "  ".join(partes)
+
+
+def _bancada_relatorio_integro(pasta_obra: str) -> dict | None:
+    """relatorio.json VÁLIDO da pasta da obra, ou None. Válido: JSON objeto, versao_relatorio == 1,
+    'erro' (se houver) com erro_tipo que é DADO (a falha do método é dado; 'indisponivel' não é) e os
+    arquivos declarados presentes com o tamanho E o sha256 declarados."""
+    try:
+        with open(os.path.join(pasta_obra, "relatorio.json"), encoding="utf-8") as f:
+            rel = json.load(f)
+    except (OSError, ValueError):
+        return None
+    if not isinstance(rel, dict) or rel.get("versao_relatorio") != 1:
+        return None
+    erro_tipo = _bancada_erro_tipo(rel)
+    if erro_tipo is not None and erro_tipo not in _BANCADA_TIPOS_FALHA:
+        return None
+    for nome, chave_sha, chave_bytes in _BANCADA_ARQUIVOS:
+        esperado_sha, esperado_bytes = rel.get(chave_sha), rel.get(chave_bytes)
+        if esperado_sha is None and esperado_bytes is None:
+            continue
+        try:
+            with open(os.path.join(pasta_obra, nome), "rb") as f:
+                dados = f.read()
+        except OSError:
+            return None
+        if esperado_bytes is not None and len(dados) != esperado_bytes:
+            return None
+        if esperado_sha is not None and hashlib.sha256(dados).hexdigest() != str(esperado_sha).lower():
+            return None
+    return rel
+
+
+def _bancada_feito(pasta_obra: str) -> dict | None:
+    """relatorio.json de rodada anterior que dispensa refazer (retomada): válido e íntegro (tamanho e
+    sha256 dos arquivos contra o relatório) e sem erro.txt ao lado. Falha do método e medida
+    indeterminada são DADO: contam como feitas (refazer é decisão do operador, com --refazer)."""
+    if os.path.exists(os.path.join(pasta_obra, "erro.txt")):
+        return None
+    return _bancada_relatorio_integro(pasta_obra)
+
+
+def _bancada_resolver(entrada: str, headers: dict) -> tuple[str | None, str | None]:
+    """resolver_obra_id sem deixar o sys.exit dele derrubar o lote: (obra_id, None) ou (None, causa)."""
+    if _UUID_RE.match(entrada):
+        return entrada, None
+    sai, err = io.StringIO(), io.StringIO()
+    try:
+        with contextlib.redirect_stdout(sai), contextlib.redirect_stderr(err):
+            return resolver_obra_id(entrada, headers, timeout=_BANCADA_TIMEOUT_RESOLVER), None
+    except SystemExit as e:
+        detalhe = _bancada_curta(err.getvalue() or sai.getvalue() or f"exit {e.code}", 100)
+        return None, f"resolver: {detalhe}"
+    except Exception as e:  # noqa: BLE001 — uma obra ruim não derruba as demais
+        return None, f"resolver: {type(e).__name__}: {e}"
+
+
+def _bancada_causa_http(resp) -> str:
+    detalhe = ""
+    try:
+        pj = resp.json()
+        if isinstance(pj, dict):
+            detalhe = str(pj.get("detail") or pj.get("title") or "")
+    except ValueError:
+        detalhe = resp.text or ""
+    rotulo = {404: "obra inexistente", 422: "método indisponível"}.get(
+        resp.status_code, "erro do servidor" if resp.status_code >= 500 else "recusado")
+    return _bancada_curta(f"{rotulo} (HTTP {resp.status_code})" + (f": {detalhe}" if detalhe else ""), 160)
+
+
+def _bancada_obra(entrada: str, metodo: str, pasta: str, autor: str, timeout_s: int,
+                  refazer: bool, headers: dict) -> dict:
+    """UMA obra. Nunca levanta por causa dela (quem chama ainda protege); devolve o item do resumo."""
+    item = {"entrada": entrada, "obra_id": None, "situacao": "erro", "arquivo_relatorio": None,
+            "arquivos": [], "tipo": "-", "classe": "-", "blocos": None, "perda": None,
+            "total_ms": None, "causa": None, "origem_erro": None, "erro_tipo": None,
+            "medida_indeterminada": False}
+    oid, problema = _bancada_resolver(entrada, headers)
+    if problema:
+        item.update(causa=problema, origem_erro="cliente")
+        return item
+    if _UUID_RE.match(oid):
+        oid = oid.lower()   # pasta e POST sempre com o UUID normalizado
+    item["obra_id"] = oid
+    if not _BANCADA_SEGURO_RE.match(oid):
+        item.update(causa="obra_id impróprio como nome de pasta", origem_erro="cliente")
+        return item
+    pasta_obra = os.path.join(pasta, metodo, oid)
+    caminho_rel = os.path.join(pasta_obra, "relatorio.json")
+
+    def registrar_erro(causa: str) -> None:
+        """erro.txt na pasta da obra, sem apagar nada que já esteja lá."""
+        try:
+            agora = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+            _bancada_gravar(os.path.join(pasta_obra, "erro.txt"), f"{agora}\n{causa}\n".encode("utf-8"))
+        except OSError as e:
+            item["causa"] += f" (erro.txt não gravado: {e})"
+
+    def nao_obtida(causa: str, origem: str) -> dict:
+        """Falha ANTES de haver resposta 200 válida em mãos (HTTP, rede, corpo, método indisponível).
+        Não toca o que já está na pasta; erro.txt só nasce onde não há relatorio.json válido (com um
+        relatório antigo íntegro, --refazer que falha só reporta). Com um relatorio.json antigo que NÃO
+        é íntegro (sha/tamanho não conferem), ele vira relatorio.invalido.json antes do erro.txt: estado
+        A3 (sem relatorio.json válido; nunca relatorio.json + erro.txt lado a lado)."""
+        item.update(situacao="erro", causa=_bancada_curta(causa, 200), origem_erro=origem)
+        if _bancada_relatorio_integro(pasta_obra) is None:
+            if os.path.exists(caminho_rel):
+                try:
+                    os.replace(caminho_rel, os.path.join(pasta_obra, "relatorio.invalido.json"))
+                except OSError as e:
+                    item["causa"] += f" (relatorio.json não renomeado: {e})"
+            registrar_erro(causa)
+        return item
+
+    if not refazer:
+        rel = _bancada_feito(pasta_obra)
+        if rel is not None:
+            campos = _bancada_campos(rel)
+            item.update(campos, situacao="já feito", situacao_gravada=campos["situacao"],
+                        arquivo_relatorio=caminho_rel,
+                        arquivos=[n for n, _s, _b in _BANCADA_ARQUIVOS if rel.get(_b) is not None])
+            return item
+
+    try:
+        resp = requests.post(f"{BASE}/acervo/obras/{oid}/conversoes", headers=headers,
+                             json={"autor": autor, "metodo": metodo, "timeout_s": timeout_s},
+                             timeout=(_BANCADA_CONEXAO_S, timeout_s + _BANCADA_MARGEM_HTTP_S))
+    except requests.exceptions.RequestException as e:
+        return nao_obtida(f"rede: {type(e).__name__}: {e}", "servidor")
+    if resp.status_code != 200:
+        return nao_obtida(_bancada_causa_http(resp), "servidor")
+    try:
+        corpo = resp.json()
+    except ValueError:
+        return nao_obtida("HTTP 200 com corpo que não é JSON", "servidor")
+    rel = corpo.get("relatorio") if isinstance(corpo, dict) else None
+    if not isinstance(rel, dict):
+        return nao_obtida("HTTP 200 sem 'relatorio' no corpo", "servidor")
+    if rel.get("versao_relatorio") != 1:
+        return nao_obtida(f"relatório de versão {_bancada_curta(repr(rel.get('versao_relatorio')), 20)} (esperado 1)",
+                          "servidor")
+    erro_tipo = _bancada_erro_tipo(rel)
+    if erro_tipo is not None and erro_tipo not in _BANCADA_TIPOS_FALHA:
+        # 'indisponivel': o método não roda no ambiente do servidor — NÃO é resultado do método, refazer
+        return nao_obtida(f"método indisponível no servidor (erro_tipo={erro_tipo}): "
+                          f"{_bancada_curta(rel['erro'], 120)}", "servidor")
+    arquivos = corpo.get("arquivos") if isinstance(corpo.get("arquivos"), dict) else {}
+
+    # Há resposta 200 válida em mãos. Daí em diante o relatório antigo não vale mais: sai AGORA, antes
+    # de gravar os arquivos novos (rodada interrompida não deixa relatorio.json velho sobre arquivos
+    # novos), e o relatorio.json novo só nasce POR ÚLTIMO, depois da conferência.
+    texto_rel = (json.dumps(rel, indent=2, ensure_ascii=False) + "\n").encode("utf-8")
+    campos = _bancada_campos(rel)
+    item.update({k: v for k, v in campos.items() if k not in ("situacao", "causa")})
+    gravados, problemas = [], []
+
+    def invalidar(causa: str) -> dict:
+        """Gravação ou conferência falhou: NÃO há relatorio.json válido. O que já foi gravado fica; o
+        relatório recebido vai para relatorio.invalido.json (diagnóstico) e erro.txt diz o porquê."""
+        item.update(situacao="erro", causa=_bancada_curta(causa, 200), origem_erro="cliente",
+                    arquivos=list(gravados), arquivo_relatorio=None)
+        try:
+            _bancada_gravar(os.path.join(pasta_obra, "relatorio.invalido.json"), texto_rel)
+        except OSError as e:
+            item["causa"] += f" (relatorio.invalido.json não gravado: {e})"
+        try:
+            os.unlink(caminho_rel)
+        except FileNotFoundError:
+            pass
+        except OSError as e:
+            item["causa"] += f" (relatorio.json não removido: {e})"
+        registrar_erro(causa)
+        return item
+
+    try:
+        os.makedirs(pasta_obra, exist_ok=True)
+        with contextlib.suppress(FileNotFoundError):
+            os.unlink(caminho_rel)
+        for nome, _sha, _bytes in _BANCADA_ARQUIVOS:
+            texto = arquivos.get(nome)
+            if isinstance(texto, str):
+                _bancada_gravar(os.path.join(pasta_obra, nome), texto.encode("utf-8"))
+                gravados.append(nome)
+            else:
+                # a resposta nova não traz este arquivo: o da rodada anterior sai, para não ficar ao
+                # lado do relatório novo (falha do método, n/a)
+                with contextlib.suppress(FileNotFoundError):
+                    os.unlink(os.path.join(pasta_obra, nome))
+                if texto is not None:
+                    problemas.append(f"{nome}: não veio como texto")
+    except OSError as e:
+        return invalidar(f"gravar em {pasta_obra}: {e}")
+
+    if rel.get("metodo") not in (None, metodo):
+        problemas.append(f"relatório de outro método ({rel.get('metodo')!r} != {metodo!r})")
+    for nome, chave_sha, chave_bytes in _BANCADA_ARQUIVOS:
+        if nome not in gravados:
+            if rel.get(chave_sha):
+                problemas.append(f"{nome}: declarado no relatório e ausente da resposta")
+            continue
+        try:
+            with open(os.path.join(pasta_obra, nome), "rb") as f:
+                dados = f.read()
+        except OSError as e:
+            problemas.append(f"{nome}: não li de volta para conferir ({e})")
+            continue
+        esperado_sha, esperado_bytes = rel.get(chave_sha), rel.get(chave_bytes)
+        if esperado_sha is None and esperado_bytes is None:
+            problemas.append(f"{nome}: relatório sem {chave_sha}/{chave_bytes} para conferir")
+            continue
+        if esperado_bytes is not None and len(dados) != esperado_bytes:
+            problemas.append(f"{nome}: {len(dados)} bytes != {chave_bytes} {esperado_bytes}")
+        if esperado_sha is not None and hashlib.sha256(dados).hexdigest() != str(esperado_sha).lower():
+            problemas.append(f"{nome}: sha256 diverge de {chave_sha}")
+    if problemas:
+        return invalidar("conferência: " + "; ".join(problemas))
+    try:  # o relatório, por último: sua presença é a marca de 'feito'
+        _bancada_gravar(caminho_rel, texto_rel)
+    except OSError as e:
+        return invalidar(f"gravar {caminho_rel}: {e}")
+    item.update(campos, arquivo_relatorio=caminho_rel, arquivos=gravados)
+    for sobra in ("erro.txt", "relatorio.invalido.json"):   # de rodada anterior que não fechou
+        with contextlib.suppress(OSError):
+            os.unlink(os.path.join(pasta_obra, sobra))
+    return item
+
+
+def acao_reextrair_bancada(args, autor: str, como_json: bool, headers: dict) -> int:
+    """`curar --reextrair <lista> --bancada <pasta>`: converte no servidor (rota do contrato
+    POST /acervo/obras/{id}/conversoes) e grava em <pasta>/<metodo>/<obra_id>/. Retomável.
+    Exit 0: todas obtidas (reprovada, n/a, falha do método e medida indeterminada são dados); 1:
+    alguma NÃO pôde ser obtida (HTTP, rede, título, método indisponível, gravação, conferência);
+    2: uso errado, inclusive pasta de saída sem escrita (antes de qualquer POST)."""
+    def uso(msg: str) -> int:
+        sys.stderr.write(f"curar: erro: {msg}\n")
+        return 2
+
+    if args.bancada is None:
+        return uso("--refazer e --timeout-s acompanham --reextrair <lista> --bancada <pasta>")
+    if not args.bancada.strip():
+        return uso("--bancada exige uma pasta")
+    if not args.reextrair:
+        return uso("--bancada acompanha --reextrair <obra|id,id…|@arquivo>")
+    if args.apply:
+        return uso("bancada não escreve no acervo: --apply não vale com --bancada")
+    if args.recortar or args.corte:
+        return uso("--bancada não combina com --recortar/--corte")
+    metodo = args.metodo or "perfil"
+    if not _BANCADA_METODO_RE.match(metodo):
+        return uso(f"--metodo '{metodo}' não serve de nome de pasta (slug: a-z, 0-9, ponto, hífen, sublinhado)")
+    timeout_s = 1800 if args.timeout_s is None else args.timeout_s
+    if timeout_s <= 0:
+        return uso("--timeout-s deve ser positivo")
+    try:
+        entradas = _bancada_lista(args.reextrair)
+    except UnicodeDecodeError as e:
+        return uso(f"a lista '{args.reextrair}' não é texto utf-8 (byte inválido na posição {e.start}); "
+                   "salve como utf-8")
+    except OSError as e:
+        return uso(f"não li a lista '{args.reextrair}': {e}")
+    if not entradas:
+        return uso("a lista de obras está vazia")
+
+    pasta = args.bancada
+    # A pasta de saída tem de aceitar escrita ANTES de qualquer POST: senão o lote inteiro converteria
+    # (horas de servidor) para descartar tudo na gravação.
+    causa = _bancada_testar_escrita(os.path.join(pasta, metodo))
+    if causa:
+        return uso(f"não consigo escrever em {causa}")
+    saida = sys.stderr if como_json else sys.stdout  # com --json o stdout é só o resumo
+    t0 = time.monotonic()
+    itens = []
+    for entrada in entradas:
+        try:
+            item = _bancada_obra(entrada, metodo, pasta, autor, timeout_s, args.refazer, headers)
+        except Exception as e:  # noqa: BLE001 — falha de uma obra nunca derruba as demais
+            item = {"entrada": entrada, "obra_id": None, "situacao": "erro", "arquivo_relatorio": None,
+                    "arquivos": [], "tipo": "-", "classe": "-", "blocos": None, "perda": None,
+                    "total_ms": None, "causa": _bancada_curta(f"{type(e).__name__}: {e}"),
+                    "origem_erro": "cliente", "erro_tipo": None, "medida_indeterminada": False}
+        itens.append(item)
+        saida.write(_bancada_linha(item) + "\n")
+        saida.flush()
+    contagem = {k: sum(1 for i in itens if i["situacao"] == k)
+                for k in ("ok", "reprovada", "n/a", "falha", "erro", "já feito")}
+    decorrido = time.monotonic() - t0
+    saida.write(f"total  {len(itens)} obra(s)  ok={contagem['ok']}  reprovada={contagem['reprovada']}  "
+                f"n/a={contagem['n/a']}  falha={contagem['falha']}  erro={contagem['erro']}  "
+                f"já feito={contagem['já feito']}  "
+                f"{decorrido:.1f}s  {os.path.join(pasta, metodo)}\n")
+    saida.flush()
+    codigo = 1 if contagem["erro"] else 0
+    if como_json:
+        print(json.dumps({"ato": "converter-em-bancada-lote", "pasta": pasta, "metodo": metodo,
+                          "autor": autor, "total": len(itens), "contagem": contagem,
+                          "exit_code": codigo, "obras": itens}, indent=2, ensure_ascii=False))
+    return codigo
+
+
 def main(argv=None):
     if argv is None:
         argv = sys.argv[1:]
@@ -1210,6 +1673,11 @@ def main(argv=None):
     parser.add_argument("--espelhos", action="store_true", default=False)
     parser.add_argument("--recortar", default=None)
     parser.add_argument("--reextrair", default=None)
+    # --bancada <pasta>: pasta de SAÍDA da conversão em lote (card #3187); nada a ver com a raiz
+    # de lib/raizes.py nem com `acervo curar obra lote`
+    parser.add_argument("--bancada", default=None)
+    parser.add_argument("--refazer", action="store_true", default=False)
+    parser.add_argument("--timeout-s", dest="timeout_s", type=int, default=None)
     parser.add_argument("--metodo", default=None)
     parser.add_argument("--corte", default=None)
     parser.add_argument("--promover", default=None)
@@ -1304,6 +1772,8 @@ def main(argv=None):
     if args.espelhos:
         sys.stderr.write("curar: erro: --espelhos acompanha --expurgar ou --restaurar\n")
         return 2
+    if args.bancada is not None or args.refazer or args.timeout_s is not None:
+        return acao_reextrair_bancada(args, autor, args.como_json, headers)
     if args.recortar:
         return acao_recortar(args, autor, args.como_json, headers)
     if args.reextrair:

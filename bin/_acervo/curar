@@ -51,6 +51,9 @@ def main(argv):
               "     acervo curar obra --relacionar <de> <para> --tipo <t> --garantia <g> "
               "--motivo <m> [--apply]\n"
               "     acervo curar obra --relacoes <conceito> | --desrelacionar <id>\n"
+              "     acervo curar obra --reextrair <id,id...|@arquivo> --bancada <pasta> "
+              "[--metodo perfil|docling] [--refazer]   (converte em pasta de saida; nao escreve "
+              "no acervo; depois: acervo listar obra bancada <pasta>)\n"
               "     cartilha das familias e garantias: acervo curar obra --relacionar --help",
               0 if argv else 2)
     sub = argv[0]

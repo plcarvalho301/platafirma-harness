@@ -19,6 +19,11 @@
 # `acervo listar obra metodos [--json]` — método padrão de conversão por tipo real (spec
 #     espelho-de-leitura §4.3): configuração do ATO DE INGESTÃO, não linha de catálogo —
 #     constante declarada no próprio arquivo (METODOS_POR_TIPO), sem tabela golden record.
+# `acervo listar obra bancada <pasta> [--json] [--estratos <arquivo>]` — agregador da bancada de
+#     conversão (card #3187/#3181): lê <pasta>/{perfil,docling}/*/relatorio.json que `curar
+#     --reextrair … --bancada <pasta>` gravou, pareia por obra e aplica a regra do card #3181.
+#     Lógica em _acervo/bancada_conversao.py (só stdlib). "bancada" aqui é só a pasta de saída
+#     dada na linha de comando — não é a raiz de lib/raizes.py nem `acervo curar obra lote`.
 # Read-only. NÃO servido na montagem: é referência e fallback (D4 do ADR 0076).
 #
 # TRANSPORTE (arq:0106 seguido à risca): o psql devolve UMA linha, um array JSON, via
@@ -192,6 +197,19 @@ USO = """uso:
                                                 (spec espelho-de-leitura §4.3): configuracao
                                                 do ato de ingestao, NAO golden record (nao
                                                 consulta acervo.*; constante no arquivo)
+  acervo listar obra bancada <pasta> [--json] [--estratos <arquivo>]  perfil x docling por obra
+                                                (card #3187): le <pasta>/{perfil,docling}/*/
+                                                relatorio.json (o que `curar --reextrair --bancada`
+                                                grava), aplica a regra do card #3181 e imprime
+                                                Markdown: por obra, resumo por tipo, total.
+                                                --estratos: TSV obra_id<TAB>estrato (prefixo de 8
+                                                caracteres basta); rotula e agrupa os pdf.
+                                                So stdlib; nao decide nada, so mede e reporta.
+                                                <pasta>, --json e --estratos valem em qualquer
+                                                ordem depois de `bancada`; --sobre, --eixo e
+                                                --situacao recusam (exit 2), nao sao ignorados.
+                                                Pasta com obra sem relatorio.json valido = lado
+                                                PENDENTE (nao obtido), e o piloto sai INCOMPLETO.
 
 Read-only. E o golden record: a lista (b) do chapeu e GERADA disto, nao editada a mao.
 """
@@ -1033,6 +1051,9 @@ def main(argv):
     quero_rotas = False
     quero_acessos = False
     quero_metodos = False
+    quero_bancada = False
+    pasta_bancada = None
+    arquivo_estratos = None
     stack_alvo = None
     termo = None
     eixo = None
@@ -1067,15 +1088,37 @@ def main(argv):
         elif a == "--eixo" and alvo == "obra" and i + 1 < len(resto):
             eixo = resto[i + 1]
             i += 2
+        elif a == "bancada" and alvo == "obra" and not quero_bancada:
+            quero_bancada = True
+            i += 1
+        elif quero_bancada and alvo == "obra" and not a.startswith("-") and pasta_bancada is None:
+            # <pasta>, --json e --estratos <arquivo> valem em QUALQUER ordem depois de `bancada`.
+            # Vem ANTES das palavras reservadas: depois de `bancada`, o primeiro token sem '-' e
+            # a pasta, mesmo que se chame `metodos` (ou `bancada`).
+            pasta_bancada = a
+            i += 1
         elif a == "metodos" and alvo == "obra" and not quero_metodos:
             quero_metodos = True
             i += 1
+        elif a == "--estratos" and alvo == "obra" and i + 1 < len(resto):
+            arquivo_estratos = resto[i + 1]
+            i += 2
         elif alvo == "topologia" and not a.startswith("-") and stack_alvo is None:
             stack_alvo = a
             i += 1
         else:
             morre("acervo listar: opcao desconhecida %r\n\n%s" % (a, USO))
 
+    if quero_bancada and (situacao or termo is not None or eixo is not None):
+        # nao ignorar em silencio: o agregador nao filtra por assunto, eixo nem situacao
+        morre("acervo listar obra bancada: aceita so <pasta>, --json e --estratos <arquivo>; "
+              "--sobre, --eixo e --situacao nao valem aqui.\n\n%s" % USO)
+    if arquivo_estratos is not None and not quero_bancada:
+        morre("acervo listar: --estratos so vale em `acervo listar obra bancada <pasta>`.\n\n%s" % USO)
+    if quero_bancada and not pasta_bancada:
+        morre("acervo listar obra bancada: falta a <pasta> (a que `curar --reextrair --bancada` gravou).\n\n%s" % USO)
+    if quero_bancada and quero_metodos:
+        morre("acervo listar obra: escolha `metodos` OU `bancada`, nao os dois.\n\n%s" % USO)
     if quero_rotas and quero_acessos:
         morre("acervo listar topologia: escolha --rotas OU --acessos, nao os dois.\n\n%s" % USO)
     if (quero_rotas or quero_acessos) and not stack_alvo:
@@ -1091,6 +1134,11 @@ def main(argv):
         else:
             listar_topologia(quero_json, completo, stack_alvo)
     elif alvo == "obra":
+        if quero_bancada:
+            # so stdlib, sem banco: a logica mora ao lado (bancada_conversao.py)
+            sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+            import bancada_conversao
+            sys.exit(bancada_conversao.executar(pasta_bancada, quero_json, arquivo_estratos))
         if quero_metodos:
             listar_obra_metodos(quero_json)
         else:
