@@ -13,7 +13,7 @@ import re
 
 import pytest
 
-from pesquisa import extrator, manifesto as M
+from pesquisa import atos, extrator, manifesto as M
 from pesquisa.envelope import FalhaFonte
 
 PUB = lambda host: ["93.184.216.34"]  # resolvedor de guarda que devolve IP público
@@ -72,6 +72,7 @@ def test_bruto_e_o_corpo_como_veio_com_resposta_ao_lado(tmp_path):
     bruto = t.bruto / f"{r['n']}.html"
     assert bruto.read_bytes() == corpo  # byte como veio, sem recodificar
     assert r["sha256"] == hashlib.sha256(corpo).hexdigest()
+    assert r["tipo_real"] == "text/html" and "tipo" not in r
     meta = json.loads((t.bruto / f"{r['n']}.resposta.json").read_text(encoding="utf-8"))
     assert meta["status"] == 200 and meta["url_pedida"] == URL and meta["url_final"] == URL + "/final"
     assert meta["hora"] and ["content-type", "text/html; charset=ISO-8859-1"] in meta["cabecalhos"]
@@ -202,6 +203,21 @@ def test_guarda_recusa_url_privada(tmp_path):
     _ultima_nao_achado(t, e.value.causa)
 
 
+def test_falha_de_rede_leva_o_detalhe_da_biblioteca(tmp_path):
+    httpx = pytest.importorskip("httpx")
+    t = M.Trabalho("f9", raiz=tmp_path)
+
+    def handler(req):
+        raise httpx.RemoteProtocolError("Server disconnected without sending a response.", request=req)
+
+    col = functools.partial(extrator._coletor_httpx, transport=httpx.MockTransport(handler))
+    with pytest.raises(FalhaFonte) as e:
+        extrator.ler(URL, t, coletor=col, guarda_resolvedor=PUB)
+    assert e.value.causa == "rede:RemoteProtocolError"
+    assert "Server disconnected" in e.value.extra["detalhe"] and e.value.extra["url_do_erro"] == URL
+    assert "Server disconnected" in _ultima_nao_achado(t, "rede:RemoteProtocolError")["detalhe"]
+
+
 def test_extracao_abaixo_do_piso_falha_e_guarda_o_bruto_real(tmp_path):
     t = M.Trabalho("f5", raiz=tmp_path)
     with pytest.raises(FalhaFonte) as e:
@@ -224,11 +240,12 @@ def test_pdf_sem_conversor_falha_declarada_com_bruto_pdf(tmp_path):
     with pytest.raises(FalhaFonte) as e:
         ler(t, resposta(b"%PDF-1.7\n%...", ct="application/pdf"))
     assert e.value.causa == "tipo-sem-conversor:application/pdf"
+    assert e.value.extra["tipo_real"] == "application/pdf" and "tipo" not in e.value.extra
     ln = _ultima_nao_achado(t, "tipo-sem-conversor:application/pdf")
     assert ln["bruto"].endswith(f"{ln['n']}.pdf")  # nunca mais .html
 
 
-def test_derivador_que_devolve_erro_como_texto_vira_falha(tmp_path, monkeypatch):
+def test_derivador_que_devolve_erro_como_texto_vira_falha(tmp_path):
     t = M.Trabalho("f8", raiz=tmp_path)
 
     def estoura(html, base):
@@ -237,6 +254,23 @@ def test_derivador_que_devolve_erro_como_texto_vira_falha(tmp_path, monkeypatch)
     with pytest.raises(FalhaFonte) as e:
         ler(t, resposta(PAGINA.encode()), derivador=estoura)
     assert e.value.causa == "derivacao-falhou"
+
+
+# ------------------------------------------------------------------ envelope: tipo é sempre "dado" (§2.4)
+def test_envelope_do_ato_mantem_tipo_dado_no_sucesso_e_na_falha(tmp_path, monkeypatch):
+    t = M.Trabalho("e1", raiz=tmp_path)
+    monkeypatch.setattr(extrator, "_derivador_crawl4ai", derivador_texto)
+    monkeypatch.setattr(extrator, "_coletor_httpx", lambda url, verifica: resposta(PAGINA.encode()))
+    env = atos.ler(URL, foco=None, render=False, max_chars=6000, offset=0, trab=t)
+    assert env["tipo"] == "dado" and env["tipo_real"] == "text/html"
+
+    monkeypatch.setattr(extrator, "_coletor_httpx",
+                        lambda url, verifica: resposta(b"%PDF-1.7", ct="application/pdf", url=url))
+    with pytest.raises(FalhaFonte) as e:
+        atos.ler("http://93.184.216.34/doc.pdf", foco=None, render=False, max_chars=10, offset=0, trab=t)
+    falha = {"ok": False, "ato": "ler", "trabalho": t.slug, "tipo": "dado", "causa": e.value.causa,
+             **e.value.extra}  # o que bin/pesquisar imprime
+    assert falha["tipo"] == "dado"
 
 
 # ------------------------------------------------------------------ cache por URL e hash do bruto
