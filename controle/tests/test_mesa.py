@@ -165,6 +165,138 @@ def _mostra(cwd: Path, spec: str) -> str:
                           text=True, check=True).stdout
 
 
+# --- card #3166: anotar acrescenta, nunca apaga sem avisar -----------------------------
+
+class _FakeRedisComEval(_FakeRedis):
+    """Estende _FakeRedis com set/eval, o quanto basta pra exercitar LUA_ANOTA sem Redis
+    real -- regra do dono (27/09): teste nao depende de estado real; a suite roda com
+    MEM_REDIS_PORT apontado pra porta 9 de proposito (lib/teste_isolado.py). O eval aqui
+    espelha linha a linha o script Lua do verbo: prova o contrato que ato_anota espera
+    dele (CAS opcional, concatenacao, TTL), nao substitui a leitura do Lua real."""
+
+    def set(self, chave, valor, ex=None):
+        self._dados[chave] = valor
+        return True
+
+    def eval(self, script, numkeys, *args):
+        chave_fita, chave_slot, fid, texto_novo, ttl, ts = args
+        if fid and self._dados.get(chave_fita) != fid:
+            return 0
+        atual = self._dados.get(chave_slot)
+        texto_final = texto_novo
+        if atual:
+            try:
+                decodificado = json.loads(atual)
+            except ValueError:
+                decodificado = None
+            if decodificado and decodificado.get("x"):
+                texto_final = decodificado["x"] + "\n\n---\n\n" + texto_novo
+        self.set(chave_slot, json.dumps({"t": int(ts), "x": texto_final}), ex=ttl)
+        return 1
+
+
+def test_ato_anota_acrescenta_sem_apagar_e_ver_mostra_as_duas(monkeypatch, capsys):
+    """O defeito medido em 26 e 27/09 (tres vezes nos cadernos): `mesa anota` reescrevia
+    o slot inteiro. Duas anotacoes seguidas no mesmo slot tem de aparecer as DUAS em
+    `mesa ver`."""
+    mesa = carrega_mesa()
+    cad, slot = "mesateste", "acrescimo3166"
+    monkeypatch.setenv("PF_CADEIRA", cad)
+    fake = _FakeRedisComEval({})
+    monkeypatch.setattr(mesa, "conn", lambda: fake)
+
+    r1 = mesa.ato_anota(argparse.Namespace(slot=slot, texto="primeira nota", se_fita=None))
+    capsys.readouterr()
+    assert r1 == 0
+
+    r2 = mesa.ato_anota(argparse.Namespace(slot=slot, texto="segunda nota", se_fita=None))
+    capsys.readouterr()
+    assert r2 == 0
+
+    monkeypatch.setattr(mesa, "pg", lambda *a, **k: None)
+    rv = mesa.ato_ver(argparse.Namespace(slot=slot))
+    saida = capsys.readouterr().out
+    assert rv == 0
+    assert "primeira nota" in saida
+    assert "segunda nota" in saida
+
+
+def test_ato_anota_com_fita_errada_descarta_e_nao_acrescenta(monkeypatch, capsys):
+    """A guarda de fita (criterio 18 da minuta 0002) segue valendo: ritual de fita velha
+    nao acrescenta por cima da fita nova."""
+    mesa = carrega_mesa()
+    cad, slot = "mesateste", "guardafita3166"
+    monkeypatch.setenv("PF_CADEIRA", cad)
+    fake = _FakeRedisComEval({f"fita:{cad}": "fita-nova"})
+    monkeypatch.setattr(mesa, "conn", lambda: fake)
+
+    r = mesa.ato_anota(argparse.Namespace(slot=slot, texto="nota tardia", se_fita="fita-velha"))
+    erro = capsys.readouterr().err
+    assert r == 3
+    assert "DESCARTADA" in erro
+    assert fake._dados.get(f"mem:{cad}:{slot}") is None
+
+
+def test_ato_escrever_recusa_quando_apagaria_publicado(tmp_path, wt_harness, monkeypatch, capsys):
+    """O outro defeito do card: `mesa escrever` gravava o arquivo inteiro por cima sem
+    olhar o que ja tinha (27/09: 6,4 KB trocados por 989 B, sem aviso, PR aberto). Corpo
+    novo que nao estende o publicado recusa, mostrando o que se perderia. PF_ABERTURA_DIR
+    tem de estar no ambiente ANTES de carrega_mesa(): CADERNOS e constante de modulo."""
+    cad, slot = "mesateste", "recusa3166"
+    pub_dir = tmp_path / "abertura-pub"
+    caderno = pub_dir / "current" / "abertura" / cad / slot / "caderno.md"
+    caderno.parent.mkdir(parents=True)
+    caderno.write_text("CONHECIMENTO CURADO\n- linha antiga importante\n" * 50, encoding="utf-8")
+    monkeypatch.setenv("PF_ABERTURA_DIR", str(pub_dir))
+    mesa = carrega_mesa()
+
+    monkeypatch.setenv("PF_CADEIRA", cad)
+    monkeypatch.setattr("sys.stdin", io.StringIO("corpo novo, bem menor\n"))
+
+    rc = mesa.ato_escrever(argparse.Namespace(slot=slot, sobrescrever=False))
+    erro = capsys.readouterr().err
+
+    assert rc == 4
+    assert "recuso" in erro
+    assert "linha antiga importante" in erro
+
+
+def test_ato_escrever_que_estende_o_publicado_nao_precisa_de_sobrescrever(tmp_path, wt_harness, monkeypatch, capsys):
+    cad, slot = "mesateste", "estende3166"
+    pub_dir = tmp_path / "abertura-pub"
+    caderno = pub_dir / "current" / "abertura" / cad / slot / "caderno.md"
+    caderno.parent.mkdir(parents=True)
+    caderno.write_text("velho\n", encoding="utf-8")
+    monkeypatch.setenv("PF_ABERTURA_DIR", str(pub_dir))
+    mesa = carrega_mesa()
+
+    monkeypatch.setenv("PF_CADEIRA", cad)
+    monkeypatch.setattr("sys.stdin", io.StringIO("velho\nmais uma linha\n"))
+
+    rc = mesa.ato_escrever(argparse.Namespace(slot=slot, sobrescrever=False))
+    saida = capsys.readouterr().out
+    assert rc == 0, saida
+    assert f"caderno {slot}: gravado" in saida
+
+
+def test_ato_escrever_sobrescrever_confirma_a_troca(tmp_path, wt_harness, monkeypatch, capsys):
+    cad, slot = "mesateste", "sobrescrever3166"
+    pub_dir = tmp_path / "abertura-pub"
+    caderno = pub_dir / "current" / "abertura" / cad / slot / "caderno.md"
+    caderno.parent.mkdir(parents=True)
+    caderno.write_text("velho, sem nada em comum com o novo\n", encoding="utf-8")
+    monkeypatch.setenv("PF_ABERTURA_DIR", str(pub_dir))
+    mesa = carrega_mesa()
+
+    monkeypatch.setenv("PF_CADEIRA", cad)
+    monkeypatch.setattr("sys.stdin", io.StringIO("corpo totalmente novo\n"))
+
+    rc = mesa.ato_escrever(argparse.Namespace(slot=slot, sobrescrever=True))
+    saida = capsys.readouterr().out
+    assert rc == 0, saida
+    assert f"caderno {slot}: gravado" in saida
+
+
 def test_ato_escrever_parte_de_origin_main_mesmo_com_clone_em_ramo_velho(
         wt_harness, monkeypatch, capsys):
     """Incidente 26/09 (fila 20260926T120002-ia): clone compartilhado parado em ramo
