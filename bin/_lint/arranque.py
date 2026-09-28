@@ -20,7 +20,7 @@ SINAIS_ARRANQUE = (
     re.compile(r"PF_CADEIRA.{0,30}export", re.I | re.S),
 )
 
-FORA_DA_REGUA = ("archi_base", "ollama-orchestrator", "mdm_rh", "i-have-adhd")
+FORA_DA_REGUA = ("archi_base", "mdm_rh", "i-have-adhd")
 INSTANCIA_EFEMERA = ("fitas",)
 
 

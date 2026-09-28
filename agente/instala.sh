@@ -75,7 +75,7 @@ fi
 
 # Skills — lista explícita, nunca "tudo que houver no harness".
 # claudinha-fabrica não carrega `platafirma` (entrega o org chart, que o
-# contrato dela nega) nem `osint` (ambiente isolado, outra colaboradora).
+# contrato dela nega).
 SKILLS_DA_FABRICA=()   # vazio até existir skills/fabrica/
 
 SKILLS="$PLATAFIRMA_RELEASE/harness/skills"

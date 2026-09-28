@@ -3,8 +3,8 @@
 # dele.
 # capacidade: expediente
 # dono: claudinho-TI
-"""LOTE 3 do card #390. Starlette + uvicorn (mesmo stack de ops-server/
-osint-server em platafirma-core — precedente local, nao stack novo). Sem
+"""LOTE 3 do card #390. Starlette + uvicorn (mesmo stack de ops-server —
+precedente local, nao stack novo). Sem
 framework de front e sem build: o front vem pronto do release platafirma/ui,
 copiado para dentro da imagem (arq:0056) e servido por /estatico/pf-ui/.
 

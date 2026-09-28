@@ -52,7 +52,6 @@ dela quando:
 | Quando a pergunta é de | Abre para | Com | Porque |
 |---|---|---|---|
 | que origem responde a lacuna | `inteligencia` | OSINT · HUMINT · SOCMINT · delimitação do alvo | é o canônico deste chapéu |
-| execução de coleta em fonte aberta | `dominio=["osint"]`, skills `osint` e `modulo-osint-platafirma` | OSINT · verificação de conteúdo digital | a execução tem ferramenta própria na casa |
 | ingestão, extração, pipeline de dado | `dominio=["engenharia-software","ia"]` | extração de dados | o meio é de lá; aqui se diz o que extrair e com que metadado |
 | proveniência, autoridade de fonte | `dominio=["estudos-ontologias","capacidade-estatal"]` | proveniencia de assercao · designacao de fonte autoritativa · cadeia de custódia | a garantia de origem se explica lá |
 | onde cavar a seguir | `dominio=["gestao-organizacional"]` | forrageamento de informacao | a trilha de coleta segue o cheiro da informação |
