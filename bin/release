@@ -1770,12 +1770,23 @@ estagio_card() {  # $1=repo $2=sha_de(ou vazio) $3=sha_para
   # promover e cliente de tarefas e move a story DIRETO a entregue. Cada chamada ao
   # rastreador e tolerada (|| rc): sob set -e, uma recusa do card abortava o verbo antes do
   # restart da porta, com o codigo ja no ar.
-  local rc_c=0 rc_m=0
+  # So story e task andam aqui (DT 39, #2856): ramo fabrica/<feature>-... levava a feature
+  # a entregue e o rastreador encerrava as filhas em cascata. Entregue de feature e epico e
+  # ato do dono (arq:0095); nivel que nao se le tambem nao move.
+  local rc_c=0 rc_m=0 nivel
+  nivel="$("$tarefas_bin" ler "$card" 2>/dev/null | sed -n "s/^#$card · \([^ ]*\) · .*/\1/p" | head -n 1)" || nivel=""
   "$tarefas_bin" comentar "$card" <<<"release promover $repo: $(curto_ou "$de" '(novo)') -> ${para:0:7}, gate verde, no ar." >/dev/null 2>&1 || rc_c=$?
-  "$tarefas_bin" mover "$card" entregue >/dev/null 2>&1 || rc_m=$?
+  case "$nivel" in
+    story|task)
+      "$tarefas_bin" mover "$card" entregue >/dev/null 2>&1 || rc_m=$? ;;
+    *)
+      printf 'card:      %s é %s — entregue de feature ou épico é do dono; estágio 4 só comentou\n' \
+        "$card" "${nivel:-nível ilegível}"
+      rc_m=-1 ;;
+  esac
   if [ "$rc_m" -eq 0 ]; then
     printf 'card:      %s movido para entregue (estágio 4)\n' "$card"
-  else
+  elif [ "$rc_m" -gt 0 ]; then
     printf 'card:      AVISO — %s não moveu para entregue (tarefas saiu %s); mova à mão\n' "$card" "$rc_m" >&2
   fi
   [ "$rc_c" -eq 0 ] || printf 'card:      AVISO — comentário em %s falhou (tarefas saiu %s)\n' "$card" "$rc_c" >&2

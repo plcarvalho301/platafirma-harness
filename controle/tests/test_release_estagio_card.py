@@ -5,6 +5,10 @@ entregue (dono, 27/09), e confere o card — tudo via `tarefas`/`release conferi
 diretos. Ramo fora do padrão `fabrica/<card>-...`, ou `gh`/registro indisponível,
 pula o estágio sem barrar a promoção.
 
+Só story e task andam a entregue (DT 39, #2856): em 28/09 um ramo `fabrica/3060-...`
+levou a feature #3060 a entregue e o rastreador encerrou as cinco filhas em cascata.
+Feature, épico ou nível ilegível só recebem o comentário.
+
 Isola o mesmo Ambiente de test_release_construir_venv_registro.py, com um `gh` e um
 `tarefas` de mentira em PATH (gravam o que foram chamados; git redireciona a URL
 "github.com" declarada para o forge bare local via url.insteadOf — sem rede).
@@ -90,6 +94,8 @@ class Ambiente:
             "exit 1\n", encoding="utf-8")
         gh_stub.chmod(0o755)
 
+        # `ler` imprime o cabeçalho do item como o rastreador (2ª linha: `#N · nível · estado`)
+        # e sai 0 sempre: é leitura; TAREFAS_RC vale para comentar e mover.
         tarefas_stub = stub_bin / "tarefas"
         tarefas_stub.write_text(
             "#!/usr/bin/env bash\n"
@@ -98,6 +104,12 @@ class Ambiente:
             "  if [ \"$1\" = comentar ]; then printf 'STDIN: '; cat; printf '\\n'; fi\n"
             "  printf -- '---\\n'\n"
             "} >> \"$TAREFAS_LOG\"\n"
+            "if [ \"$1\" = ler ]; then\n"
+            "  if [ -n \"${TAREFAS_NIVEL:-}\" ]; then\n"
+            "    printf '# titulo de fixture\\n#%s · %s · priorizada · cadeira: engenharia\\n' \"$2\" \"$TAREFAS_NIVEL\"\n"
+            "  fi\n"
+            "  exit 0\n"
+            "fi\n"
             "exit \"${TAREFAS_RC:-0}\"\n", encoding="utf-8")
         tarefas_stub.chmod(0o755)
 
@@ -134,10 +146,12 @@ class Ambiente:
         Path(self.env["PLATAFIRMA_TERCEIROS"]).write_text("{}", encoding="utf-8")
         self.env["PATH"] = f"{stub_bin}{os.pathsep}" + self.env.get("PATH", "")
 
-    def run(self, *args: str, gh_ref: str = "", tarefas_rc: int = 0) -> subprocess.CompletedProcess:
+    def run(self, *args: str, gh_ref: str = "", tarefas_rc: int = 0,
+            nivel: str = "story") -> subprocess.CompletedProcess:
         env = dict(self.env)
         env["GH_STUB_REF"] = gh_ref
         env["TAREFAS_RC"] = str(tarefas_rc)
+        env["TAREFAS_NIVEL"] = nivel
         return subprocess.run([str(SCRIPT), *args], env=env,
                                capture_output=True, text=True, timeout=90)
 
@@ -167,6 +181,31 @@ def test_estagio_card_resolve_e_comenta_e_move(amb):
 
     release_log = amb.release_log.read_text(encoding="utf-8")
     assert "ARGS: conferir card 4242" in release_log
+
+
+def test_task_tambem_vai_a_entregue(amb):
+    r = amb.run("promover", "fixture", gh_ref="fabrica/4242-teste-estagio", nivel="task")
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert "ARGS: mover 4242 entregue" in amb.tarefas_log.read_text(encoding="utf-8")
+
+
+@pytest.mark.parametrize("nivel", ["feature", "épico"])
+def test_feature_e_epico_so_recebem_comentario(amb, nivel):
+    # DT 39: ramo fabrica/3060-... levou a feature #3060 a entregue e encerrou as filhas
+    r = amb.run("promover", "fixture", gh_ref="fabrica/4242-teste-estagio", nivel=nivel)
+    assert r.returncode == 0, r.stdout + r.stderr
+    log = amb.tarefas_log.read_text(encoding="utf-8")
+    assert "ARGS: comentar 4242" in log
+    assert "ARGS: mover" not in log
+    assert f"4242 é {nivel}" in r.stdout and "só comentou" in r.stdout
+    assert "AVISO" not in r.stdout + r.stderr
+
+
+def test_nivel_ilegivel_nao_move(amb):
+    r = amb.run("promover", "fixture", gh_ref="fabrica/4242-teste-estagio", nivel="")
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert "ARGS: mover" not in amb.tarefas_log.read_text(encoding="utf-8")
+    assert "nível ilegível" in r.stdout
 
 
 def test_card_que_recusa_nao_derruba_a_promocao(amb):
