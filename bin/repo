@@ -2063,6 +2063,7 @@ ato_pr_merge() {
   if [ "$st" = MERGED ]; then
     printf 'já feito: PR #%s MERGED em %s (%s)\n' "$num" "${moid:0:7}" "$ramo_pr"
     limpa_ramo_entregue "$c" "$ramo_pr" "$hoid"
+    declara_remocao_remota "$c" "$ramo_pr"
     return 0
   fi
   [ "$st" = OPEN ] || morre "PR #$num esta $st, nao OPEN — nada a mesclar" 4
@@ -2094,9 +2095,25 @@ ato_pr_merge() {
   printf 'PR #%s MERGED em %s (%s, %s) [lido do forge]\n' "$num" "${moid:0:7}" "$ramo_pr" "${modo#--}"
 
   # Bancadas do ramo entregue somem no mesmo ato, de qualquer cadeira, salvando antes o que
-  # so existe nelas (spec_ambiente-de-desenvolvimento §2, Fechar); depois o ramo no origin.
+  # so existe nelas (spec_ambiente-de-desenvolvimento §2, Fechar); depois o ramo no origin,
+  # com o resultado declarado (#3108): sem isto, quem le o retorno de pr-merge nao sabe se
+  # o remoto sumiu.
   limpa_ramo_entregue "$c" "$ramo_pr" "$hoid"
-  env PATH="$PATH_FORGE" "$GIT" -C "$c" push -q origin --delete "$ramo_pr" >/dev/null 2>&1 || true
+  declara_remocao_remota "$c" "$ramo_pr"
+}
+
+# declara_remocao_remota <clone> <ramo> -- apaga o ramo do PR no origin e diz o resultado
+# (#3108): push --delete e best-effort (o merge ja aconteceu; falha aqui nao desfaz nada),
+# mas nunca em silencio -- quem le o retorno sabe se o remoto sumiu ou nao.
+declara_remocao_remota() {
+  local c="$1" ramo="$2" fsha rc
+  env PATH="$PATH_FORGE" "$GIT" -C "$c" push -q origin --delete "$ramo" >/dev/null 2>&1
+  fsha="$(forge_sha "$c" "$ramo")"; rc=$?
+  case "$rc" in
+    1) printf 'origin/%s: apagado\n' "$ramo" ;;
+    0) printf 'origin/%s: ainda em %s -- push --delete nao surtiu efeito\n' "$ramo" "${fsha:0:7}" ;;
+    *) printf 'origin/%s: indeterminavel -- o forge nao respondeu (%s)\n' "$ramo" "$fsha" ;;
+  esac
 }
 
 # pr-fechar (card #3072): descarta PR sem merge, com o motivo no forge. Depois do fechamento
@@ -2395,6 +2412,52 @@ sanear_remotos() {
   return 0
 }
 
+# sanear_ramos_mesclados <base> <nome> <relatar> -- card #3108: ramos ja mesclados por PR
+# cuja ponta o pr-merge nao apagou (merge feito fora do verbo, ou de antes desta emenda).
+# So apaga quando a arvore da ponta atual bate com a do commit que o PR mesclou -- squash
+# nao deixa ancestral, entao a prova e a arvore, nao o parentesco; ramo com commit por cima
+# (arvore diferente) fica, nunca wip/*. rc 0 nada pendente · 1 --relatar achou · 3 falhou.
+sanear_ramos_mesclados() {
+  local base="$1" nome="$2" relatar="$3"
+  [ -n "$GH" ] && [ -x "$GH" ] || { printf '%s: sem gh -- ramos mesclados nao medidos\n' "$nome"; return 0; }
+  local lista r m
+  lista="$(cd "$base" && env PATH="$PATH_FORGE" "$GH" pr list --state merged --limit 500 \
+           --json headRefName,mergeCommit \
+           --jq '.[] | select(.mergeCommit.oid) | "\(.headRefName) \(.mergeCommit.oid)"' 2>/dev/null)" \
+    || { printf '%s: PRs mesclados ilegiveis -- ramos mesclados nao medidos\n' "$nome"; return 0; }
+  [ -n "$lista" ] || return 0
+  local apagar=() linhas=()
+  while read -r r m; do
+    [ -n "$r" ] || continue
+    case "$r" in wip/*|main|master) continue ;; esac
+    local ponta; ponta="$(forge_sha "$base" "$r")"
+    [ $? -eq 0 ] || continue
+    "$GIT" -C "$base" cat-file -e "${m}^{commit}" 2>/dev/null || continue
+    "$GIT" -C "$base" cat-file -e "${ponta}^{commit}" 2>/dev/null || continue
+    "$GIT" -C "$base" diff --quiet "$m" "$ponta" -- . 2>/dev/null || continue
+    apagar+=("$r")
+    linhas+=("$r $ponta")
+  done <<< "$lista"
+  [ "${#apagar[@]}" -gt 0 ] || return 0
+  local l
+  if [ "$relatar" -eq 1 ]; then
+    for l in "${linhas[@]}"; do
+      set -- $l
+      printf '%s origin/%s: relataria apagar (mesclado, ponta %s)\n' "$nome" "$1" "${2:0:7}"
+    done
+    return 1
+  fi
+  if ! env PATH="$PATH_FORGE" "$GIT" -C "$base" push -q --no-verify origin --delete "${apagar[@]}" >/dev/null 2>&1; then
+    printf '%s: push --delete recusado para %d ramo(s) mesclado(s) -- nada garantido apagado\n' "$nome" "${#apagar[@]}"
+    return 3
+  fi
+  for l in "${linhas[@]}"; do
+    set -- $l
+    printf '%s origin/%s: apagado (mesclado, ponta %s)\n' "$nome" "$1" "${2:0:7}"
+  done
+  return 0
+}
+
 # sanear_conforme <alvo> <relatar> -- spec_ambiente-de-desenvolvimento §2; spec_saneamento-de-
 # clones §3.4. Por clone base: busca o forge (falhou: incidente, nada destrutivo nele); le do
 # forge os PRs mesclados (uma consulta por clone); enumera as worktrees pelo git, nunca por
@@ -2491,6 +2554,10 @@ sanear_conforme() {
     # depois das bancadas: o ramo de bancada entregue ja saiu da lista de vivos
     sanear_remotos "$base" "$nome" "$relatar"
     case $? in 1) pend=1 ;; 3) incid+=("$nome: ramos remotos -- ver linha acima") ;; esac
+    # #3108: o que a limpeza do pr-merge nao alcancou (merge fora do verbo, ou de antes
+    # desta emenda) -- so quando a arvore da ponta bate com a do commit mesclado.
+    sanear_ramos_mesclados "$base" "$nome" "$relatar"
+    case $? in 1) pend=1 ;; 3) incid+=("$nome: ramos mesclados -- ver linha acima") ;; esac
   done
 
   if [ "$relatar" -eq 1 ]; then
