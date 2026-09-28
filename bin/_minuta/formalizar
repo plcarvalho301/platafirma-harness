@@ -13,13 +13,15 @@ import glob
 import subprocess
 import datetime
 
-sys.path.insert(0, os.path.join(
-    os.path.dirname(os.path.dirname(os.path.dirname(os.path.realpath(__file__)))), "lib"))
-from raizes import BancadaNaoDeclarada, bancada  # noqa: E402
+sys.path.insert(0, os.path.dirname(os.path.realpath(__file__)))
+import _casa as casa  # noqa: E402
 
-# Formalizar commita e empurra: roda no worktree da cadeira na bancada DECLARADA,
-# <bancada>/wt/platafirma-casa/<cadeira> (arq:0109 §2, card #3010). Resolvido em
-# main(); MINUTA_REPO aponta outro checkout (teste).
+# Formalizar edita, commita e empurra para main na worktree de main da cadeira em
+# platafirma-casa, repositorio de deliberacao que commita direto em main (arq:0083 §1;
+# ordem do dono de 28/09/2026): <bancada>/wt/platafirma-casa/<cadeira>/main, resolvida e
+# aberta por _casa.worktree, que tambem chama git e gh pelo caminho real (o shim de git
+# da porta sai 2). Puxa antes de numerar o ADR e de editar. MINUTA_REPO aponta outro
+# checkout (teste).
 REPO = DIR = DECISIONS = DOCS = None
 PLACEHOLDER_CONV = "<a preencher pela própria cadeira>"
 
@@ -29,48 +31,11 @@ def erro(msg, code=1):
     sys.exit(code)
 
 
-def worktree_da_cadeira(verbo):
-    """MINUTA_REPO, senao <bancada>/wt/platafirma-casa/<cadeira>. Sem bancada
-    declarada ou sem worktree: exit 3, nunca criacao silenciosa."""
-    explicito = os.environ.get("MINUTA_REPO")
-    if explicito:
-        return explicito
-    cadeira = os.environ.get("PF_CADEIRA", "").strip()
-    cadeira = cadeira.removeprefix("claudinho-").removeprefix("claudinha-")
-    if not cadeira:
-        erro("exporte PF_CADEIRA=<cadeira>: a minuta se edita no worktree da cadeira.", 2)
-    try:
-        raiz = bancada()
-    except BancadaNaoDeclarada as e:
-        erro(str(e), 3)
-    wt = os.path.join(str(raiz), "wt", "platafirma-casa", cadeira)
-    if not os.path.isdir(wt):
-        erro(f"worktree ausente: {wt} — rode `repo abrir platafirma-casa` antes de {verbo}.", 3)
-    return wt
-
-
-# git por caminho absoluto: o PATH da porta tem um shim `git` (bilhete que so sai 2) a frente
-# do git real no PATH da porta — chamar `git` nu aqui mata todo ato com exit 2 e sem
-# mensagem (capture_output engole o bilhete). Mesma cura de bin/repo.
-GIT = next((p for p in ("/usr/bin/git", "/bin/git") if os.path.exists(p)), "git")
-
-# ... e o mesmo vale para o `gh`, que e o credential helper do pull/push HTTPS: com o
-# shim a frente, a rede morre em "could not read Username". Poe-se o gh real na FRENTE
-# do PATH do subprocesso, como bin/repo faz nos atos que falam com o forge.
-_GH = next(
-    (p for p in ("/usr/bin/gh", "/bin/gh", os.path.expanduser("~/.local/bin/gh"))
-     if os.path.exists(p)),
-    None,
-)
-ENV = dict(os.environ)
-if _GH:
-    ENV["PATH"] = os.path.dirname(_GH) + ":" + ENV.get("PATH", "")
-
-
 def git(*args, check=True):
-    return subprocess.run(
-        [GIT, "-C", REPO, *args], capture_output=True, text=True, check=check, env=ENV
-    )
+    try:
+        return casa.git(REPO, *args, check=check)
+    except subprocess.CalledProcessError as e:
+        erro(f"git {args[0]} falhou em {REPO}: {(e.stderr or e.stdout or '').strip()}", 3)
 
 
 def resolve(n):
@@ -101,10 +66,6 @@ def main():
     args = sys.argv[1:]
     if not args:
         erro("uso: minuta formalizar <n> --como adr|spec [--destino <slug>] [--vencido]", 2)
-    REPO = worktree_da_cadeira("formalizar")
-    DIR = os.path.join(REPO, "minuta")
-    DECISIONS = os.path.join(REPO, "macro-global", "decisions")
-    DOCS = os.path.join(REPO, "docs")
     n = args[0]
     como = None
     destino_arg = None
@@ -125,6 +86,15 @@ def main():
             erro(f"opção desconhecida: {a}", 2)
     if como not in ("adr", "spec"):
         erro("uso: minuta formalizar <n> --como adr|spec [--destino <slug>] [--vencido]", 2)
+
+    try:
+        REPO = casa.worktree("formalizar")
+        casa.puxar(REPO)
+    except casa.Falha as f:
+        erro(f.msg, f.code)
+    DIR = os.path.join(REPO, "minuta")
+    DECISIONS = os.path.join(REPO, "macro-global", "decisions")
+    DOCS = os.path.join(REPO, "docs")
 
     num, caminho = resolve(n)
     relcaminho = os.path.relpath(caminho, REPO)
@@ -150,8 +120,6 @@ def main():
     if not slug:
         erro("slug de destino ficou vazio depois de normalizar — use --destino")
     hoje = datetime.date.today().isoformat()
-
-    git("pull", "--ff-only", "-q", "origin", "HEAD")
 
     aberto = ""
     if faltando:
@@ -190,10 +158,15 @@ def main():
     with open(destino, "w", encoding="utf-8") as f:
         f.write(conteudo)
 
-    git("rm", "-q", relcaminho)
-    git("add", os.path.relpath(destino, REPO))
-    git("commit", "-q", "-m", f"minuta {num}: formalizada como {como} ({os.path.basename(destino)})")
-    git("push", "-q", "origin", "HEAD")
+    reldestino = os.path.relpath(destino, REPO)
+    git("rm", "-q", "--", relcaminho)
+    git("add", "--", reldestino)
+    git("commit", "-q", "-m", f"minuta {num}: formalizada como {como} ({os.path.basename(destino)})",
+        "--", relcaminho, reldestino)
+    try:
+        casa.publicar(REPO)
+    except casa.Falha as f:
+        erro(f.msg, f.code)
 
     print(destino)
     if faltando:

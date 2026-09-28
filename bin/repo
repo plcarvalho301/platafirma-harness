@@ -79,6 +79,38 @@ if [ -n "$GH" ] && [ -x "$GH" ]; then
   PATH_FORGE="$(dirname "$GH"):$PATH"
 fi
 
+# --- regime "direto em main": repositorio de deliberacao --------------------------------
+# arq:0083 §1: repositorio de documentacao e deliberacao commita direto em main, sem ramo
+# nem PR ("sem producao, PR e atrito"); o alcance de arq:0109 (bancada por card) diz que
+# ela NAO vale para repositorio de deliberacao. Ordem do dono, 28/09/2026: "tem que tirar
+# o platafirma-casa todo das protecoes. A gente fez ele pra isso."
+# Esta lista e o UNICO lugar que declara o regime; minuta (bin/_minuta) chega a mesma
+# worktree chamando `repo abrir platafirma-casa`. Para estes repos:
+#   abrir       -> UMA worktree por cadeira, wt/<repo>/<cadeira>/main, no ramo local
+#                  <cadeira>/main que segue origin/main; card, se vier, so se move
+#   commitar    -> como sempre, so os caminhos nomeados
+#   sincronizar -> busca o forge, rebaseia sobre origin/main e empurra para main
+#   empurrar    -> e o sincronizar (nao ha ramo proprio no origin)
+#   pr-abrir, pr-merge -> recusam (2)
+# Bancada por card que ja existia segue resolvivel por <repo>@<chave> e se entrega pelo
+# mesmo sincronizar; nada se migra a forca. Repositorio de codigo nao muda em nada.
+REPOS_DIRETO_EM_MAIN=(platafirma-casa)
+PASTA_DIRETO_EM_MAIN="main"
+
+direto_em_main() {
+  local n="${1%%@*}" r
+  for r in "${REPOS_DIRETO_EM_MAIN[@]}"; do [ "$r" = "$n" ] && return 0; done
+  return 1
+}
+
+recusa_pr_direto_em_main() {
+  local n="${1%%@*}"
+  direto_em_main "$n" || return 0
+  printf '%s: repositório de deliberação: commit direto em main (arq:0083)\n' "$VERBO" >&2
+  printf 'vizinho: repo commitar %s -m <msg> <caminhos>, e repo sincronizar %s (empurra para main)\n' "$n" "$n" >&2
+  exit 2
+}
+
 uso_texto() {
   cat >&2 <<'EOF'
 uso:
@@ -105,6 +137,7 @@ uso:
   repo git       <repo> <args…>
 
 bancada: PLATAFIRMA_BANCADA[sem default] (exit 3)
+direto em main (arq:0083, platafirma-casa): abrir dá wt/<repo>/<cadeira>/main, sincronizar rebaseia e empurra para main, pr-abrir e pr-merge recusam (2)
 <repo> resolve wt/<repo>/<cadeira>/<card-ou-slug>; com mais de uma bancada aberta na
 cadeira, nomeie-a: <repo>@<card-ou-slug> (ex.: platafirma-harness@3149-bancada-por-card)
 exit: 0 achou/fez · 1 nao existe/negativo · 2 uso · 3 dependencia · 4 politica · 5 indeterminavel
@@ -313,6 +346,12 @@ clone_de() {
   case "$chave" in
     */*|.*|*..*|*[!A-Za-z0-9._-]*) morre "chave de bancada invalida: '$chave' — use <repo>@<card-ou-slug>" 2 ;;
   esac
+  # direto em main: sem chave, a worktree de main da cadeira quando ela existe; a bancada por
+  # card antiga do mesmo repo segue por <repo>@<chave>.
+  if [ -z "$chave" ] && direto_em_main "$nome" \
+     && [ -e "$BANCADA/wt/$nome/$(cadeira_da_sessao)/$PASTA_DIRETO_EM_MAIN/.git" ]; then
+    chave="$PASTA_DIRETO_EM_MAIN"
+  fi
 
   local alvo rc_b
   alvo="$(bancada_de "$nome" "$chave")"; rc_b=$?
@@ -953,6 +992,10 @@ ato_sincronizar() {
   [ -n "$nome" ] || uso
   [ $# -le 1 ] || morre "argumento excedente: '$2'" 2
   local c; c="$(clone_de "$nome")" || exit $?
+  if direto_em_main "$nome"; then
+    sincronizar_direto_em_main "$nome" "$c"
+    return $?
+  fi
   local ramo; ramo="$(ramo_atual "$c")"
   case "$ramo" in
     HEAD|main|master) morre "sincronizar e do ramo de card — '$ramo' nao se sincroniza" 4 ;;
@@ -1022,6 +1065,124 @@ ato_sincronizar() {
   fi
   [ "$rc" -eq 5 ] && morre "indeterminavel: empurrei? o forge nao respondeu ($fsha)" 5
   morre "push falhou: local ${head:0:7}, origin/$ramo $([ -n "$fsha" ] && echo "${fsha:0:7}" || echo ausente) (o pre-push barrou? ver acima)$([ "$mesclou" -eq 1 ] && echo ' — o merge local fica; rode de novo depois de corrigir')" 3
+}
+
+# abrir_direto_em_main <repo> <cadeira> <card> -- a worktree de main da cadeira (regime
+# direto em main, acima). Nasce do origin/main de agora (sem forge: 5, nada criado). Ja
+# aberta: busca o forge e anda em fast-forward quando esta limpa e sem commit local; com
+# commit local ou suja, so relata. O card, se vier, so se move a em-execucao.
+abrir_direto_em_main() {
+  local nome="$1" cadeira="$2" card="$3"
+  local clone_raiz="$BANCADA/$nome" wt_dir="$BANCADA/wt/$nome/$cadeira/$PASTA_DIRETO_EM_MAIN"
+  local ramo="$cadeira/$PASTA_DIRETO_EM_MAIN"
+  if [ ! -e "$clone_raiz" ]; then
+    local url; url="$(url_forge "$nome")"
+    clona_base "$url" "$nome"
+    printf 'clonado: %s -> %s\n' "$url" "$clone_raiz"
+  fi
+  [ -d "$clone_raiz" ] && [ -e "$clone_raiz/.git" ] || morre "repositório desconhecido: '$nome' — $clone_raiz existe e nao e clone" 2
+
+  local ja=0
+  if [ -e "$wt_dir/.git" ]; then
+    ja=1
+    git_sem_engolir "$wt_dir" fetch --prune origin \
+      || morre "indeterminavel: fetch do forge falhou ($REPLY) — a worktree de main segue como estava" 5
+  else
+    git_sem_engolir "$clone_raiz" fetch --prune origin \
+      || morre "indeterminavel: fetch do forge falhou ($REPLY) — nada criado" 5
+    "$GIT" -C "$clone_raiz" rev-parse --verify -q origin/main >/dev/null \
+      || morre "indeterminavel: $clone_raiz sem origin/main — nada criado" 5
+    migra_plana "$nome" "$cadeira" || exit $?
+    mkdir -p "$(dirname "$wt_dir")" || morre "falha ao criar diretório pai de $wt_dir" 3
+    if [ -d "$wt_dir" ]; then
+      rmdir "$wt_dir" 2>/dev/null || morre "$wt_dir existe e nao e worktree — nao sobrescrevo" 4
+    fi
+    "$GIT" -C "$clone_raiz" worktree prune >/dev/null 2>&1 || true
+    if "$GIT" -C "$clone_raiz" show-ref --verify --quiet "refs/heads/$ramo"; then
+      "$GIT" -C "$clone_raiz" worktree add -q "$wt_dir" "$ramo" >/dev/null 2>&1 \
+        || morre "git worktree add falhou (o ramo '$ramo' ja esta aberto em outra pasta?)" 3
+    else
+      "$GIT" -C "$clone_raiz" worktree add -q --track -b "$ramo" "$wt_dir" origin/main >/dev/null 2>&1 \
+        || morre "git worktree add -b falhou" 3
+    fi
+  fi
+  local atual; atual="$(ramo_atual "$wt_dir")"
+  [ "$atual" = "$ramo" ] || morre "a worktree de main $wt_dir esta em '$atual', nao em '$ramo' — nao mexo" 4
+  # o ramo da cadeira segue origin/main, sempre (ramo antigo sem upstream ganha o seu)
+  "$GIT" -C "$wt_dir" branch -q --set-upstream-to=origin/main "$ramo" >/dev/null 2>&1 || true
+
+  local st sujo=0 atras frente andou=""
+  st="$("$GIT" -C "$wt_dir" status --porcelain 2>/dev/null)" || morre "indeterminavel: git status falhou em $wt_dir" 5
+  [ -z "$st" ] || sujo="$(printf '%s\n' "$st" | wc -l)"
+  read -r atras frente < <("$GIT" -C "$wt_dir" rev-list --left-right --count origin/main...HEAD 2>/dev/null || echo "? ?")
+  if [ "$sujo" -eq 0 ] && [ "$frente" = 0 ] && [ "$atras" != 0 ] && [ "$atras" != "?" ]; then
+    "$GIT" -C "$wt_dir" merge -q --ff-only origin/main >/dev/null 2>&1 \
+      || morre "ff-only de origin/main falhou em $wt_dir" 3
+    andou=" (trouxe $atras commit(s) do forge)"
+    atras=0
+  fi
+  local estado_arvore="arvore limpa"; [ "$sujo" -eq 0 ] || estado_arvore="arvore suja ($sujo)"
+  local rotulo="bancada aberta"; [ "$ja" -eq 0 ] || rotulo="bancada já aberta"
+  printf '%s: %s (ramo %s @ %s, direto em main: atras de origin/main: %s, a frente: %s, %s)%s\n' \
+    "$rotulo" "$wt_dir" "$ramo" "$("$GIT" -C "$wt_dir" rev-parse --short HEAD)" "$atras" "$frente" \
+    "$estado_arvore" "$andou"
+  local card_num="${card###}"
+  if [[ "$card_num" =~ ^[0-9]+$ ]]; then move_card "$card_num"; fi
+  return 0
+}
+
+# sincronizar_direto_em_main <repo> <worktree> -- o sincronizar do regime direto em main:
+# busca o forge (falhou: 5) -> arvore suja: 4, vizinho commitar -> nada local: anda em
+# fast-forward, "já em dia" -> rebase sobre origin/main (conflito: aborta, bancada intacta,
+# 4 com a lista) -> empurra HEAD para main -> confirma o sha no forge (ls-remote). Vale para
+# a worktree de main e para a bancada por card antiga do mesmo repo, que assim se entrega.
+sincronizar_direto_em_main() {
+  local nome="$1" c="$2" ramo antes main head frente novos=0 fsha rc
+  ramo="$(ramo_atual "$c")"
+  [ "$ramo" != HEAD ] || morre "HEAD destacado em '$nome' — abra a worktree de main: repo abrir ${nome%%@*}" 4
+  git_sem_engolir "$c" fetch --prune origin || morre "indeterminavel: fetch do forge falhou ($REPLY)" 5
+  local st; st="$("$GIT" -C "$c" status --porcelain 2>/dev/null)" || morre "indeterminavel: git status falhou" 5
+  if [ -n "$st" ]; then
+    printf '%s: arvore com escrita nao commitada (%s) — nao rebaseio sobre ela\n' "$VERBO" "$(printf '%s\n' "$st" | wc -l) arquivo(s)" >&2
+    printf 'vizinho: repo commitar %s -m <msg> <caminhos>\n' "$nome" >&2
+    exit 4
+  fi
+  main="$("$GIT" -C "$c" rev-parse --verify -q origin/main)" || morre "indeterminavel: sem origin/main" 5
+  antes="$("$GIT" -C "$c" rev-parse HEAD)"
+  frente="$("$GIT" -C "$c" rev-list --count "$main..HEAD")" || morre "indeterminavel: rev-list falhou" 5
+  if [ "$frente" -eq 0 ]; then
+    if [ "$antes" != "$main" ]; then
+      "$GIT" -C "$c" merge -q --ff-only "$main" >/dev/null 2>&1 || morre "ff-only de origin/main falhou" 3
+    fi
+    printf 'já em dia: %s @ %s = origin/main (direto em main, nada local a empurrar)\n' "$ramo" "${main:0:7}"
+    return 0
+  fi
+  novos="$("$GIT" -C "$c" rev-list --count "HEAD..$main")"
+  if [ "$novos" -gt 0 ]; then
+    if ! "$GIT" -C "$c" rebase -q "$main" >/dev/null 2>&1; then
+      local conflito; conflito="$("$GIT" -C "$c" diff --name-only --diff-filter=U 2>/dev/null)"
+      "$GIT" -C "$c" rebase --abort >/dev/null 2>&1
+      if [ "$("$GIT" -C "$c" rev-parse HEAD)" != "$antes" ] || [ -n "$("$GIT" -C "$c" status --porcelain)" ]; then
+        morre "indeterminavel: o rebase falhou e a bancada nao voltou a ${antes:0:7} — confira a mao" 5
+      fi
+      printf '%s: conflito ao rebasear %s sobre origin/main (%s) — abortado, bancada intacta em %s\n' \
+        "$VERBO" "$ramo" "${main:0:7}" "${antes:0:7}" >&2
+      printf '%s\n' "$conflito" | sed 's/^/  conflito: /' >&2
+      printf 'vizinho: resolva os arquivos, repo commitar %s, e sincronizar de novo\n' "$nome" >&2
+      exit 4
+    fi
+  fi
+  head="$("$GIT" -C "$c" rev-parse HEAD)"
+  # stderr do push segue visivel: e onde o pre-push diz o que barrou
+  env PATH="$PATH_FORGE" "$GIT" -C "$c" push origin "HEAD:refs/heads/main" >&2
+  fsha="$(forge_sha "$c" main)"; rc=$?
+  if [ "$rc" -eq 0 ] && [ "$fsha" = "$head" ]; then
+    printf 'sincronizado: main = %s (%s commit(s) de %s%s); origin/main = %s [lido do forge]\n' \
+      "${head:0:7}" "$frente" "$ramo" "$([ "$novos" -gt 0 ] && printf ', rebaseado sobre origin/main %s' "${main:0:7}")" "${fsha:0:7}"
+    return 0
+  fi
+  [ "$rc" -eq 5 ] && morre "indeterminavel: empurrei? o forge nao respondeu ($fsha)" 5
+  morre "push para main falhou: local ${head:0:7}, origin/main ${fsha:0:7} (outra mao empurrou antes, ou o pre-push barrou? ver acima) — rode sincronizar de novo" 3
 }
 
 # Clone base <bancada>/<nome> a partir de <url>. Cria a bancada se ela nao existe
@@ -1211,6 +1372,13 @@ cmd_abrir() {
   cadeira="${cadeira#claudinho-}"
   cadeira="${cadeira#claudinha-}"
   [ -n "$cadeira" ] || morre "dependência ausente: PF_CADEIRA não definida — abrir exige cadeira" 3
+
+  if direto_em_main "$nome"; then
+    [ "$da_producao" -eq 0 ] \
+      || morre "repositório de deliberação: --da-producao nao se aplica, a bancada segue origin/main (arq:0083)" 2
+    abrir_direto_em_main "$nome" "$cadeira" "$card"
+    return $?
+  fi
 
   if [ "$da_producao" -eq 1 ]; then
     abrir_da_producao "$nome" "$cadeira" "$card" "$slug"
@@ -1655,11 +1823,14 @@ fecho_commit() {
   else
     printf 'commit em %s (%s): %s\n' "$nome" "$ramo" "$("$GIT" -C "$c" log -1 --format='%h %s')"
   fi
-  fsha="$(forge_sha "$c" "$ramo")"
+  # direto em main: o que conta no forge e main, nao o ramo local da cadeira
+  local alvo="$ramo"
+  direto_em_main "$nome" && alvo=main
+  fsha="$(forge_sha "$c" "$alvo")"
   case $? in
-    0) if [ "$fsha" = "$head" ]; then printf 'forge: origin/%s = %s (em dia)\n' "$ramo" "${fsha:0:7}"
-       else printf 'forge: origin/%s = %s (local a frente: empurrar ou sincronizar)\n' "$ramo" "${fsha:0:7}"; fi ;;
-    1) printf 'forge: origin/%s ausente (ramo nunca empurrado)\n' "$ramo" ;;
+    0) if [ "$fsha" = "$head" ]; then printf 'forge: origin/%s = %s (em dia)\n' "$alvo" "${fsha:0:7}"
+       else printf 'forge: origin/%s = %s (local a frente: empurrar ou sincronizar)\n' "$alvo" "${fsha:0:7}"; fi ;;
+    1) printf 'forge: origin/%s ausente (ramo nunca empurrado)\n' "$alvo" ;;
     *) printf 'forge: indeterminavel (%s)\n' "$fsha" ;;
   esac
 }
@@ -1667,6 +1838,11 @@ fecho_commit() {
 ato_empurrar() {
   local nome="${1:-}" ramo="${2:-}" c
   c="$(clone_de "$nome")" || exit $?
+  if direto_em_main "$nome"; then
+    printf 'direto em main (arq:0083): empurrar e o sincronizar — rebaseia sobre origin/main e empurra para main\n' >&2
+    sincronizar_direto_em_main "$nome" "$c"
+    return $?
+  fi
   [ -n "$ramo" ] || ramo="$(ramo_atual "$c")"
   case "$ramo" in
     HEAD) morre "HEAD solto — troque para um ramo antes de empurrar" 4 ;;
@@ -1705,6 +1881,7 @@ ato_pr_abrir() {
       *) morre "argumento nao reconhecido: '$1'" 2 ;;
     esac
   done
+  recusa_pr_direto_em_main "$nome"
   [ -n "$titulo" ] || morre "falta o titulo (--titulo)" 2
   case "$base" in -*|*' '*) morre "base invalida: '$base'" 2 ;; esac
   tem_gh
@@ -1803,6 +1980,7 @@ ato_pr_merge() {
       *) morre "argumento excedente: '$1'" 2 ;;
     esac
   done
+  recusa_pr_direto_em_main "$nome"
   [ -n "$num" ] || morre "falta o numero do PR" 2
   case "$num" in *[!0-9]*) morre "numero de PR invalido: '$num'" 2 ;; esac
   tem_gh
