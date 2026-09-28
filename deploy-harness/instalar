@@ -113,7 +113,9 @@ if [ "$TEM_RELEASE" = 0 ]; then
 elif [ -z "$BANCADA" ]; then
   medido impossivel "(hooks)" "bancada nao declarada (PLATAFIRMA_BANCADA ou $PLATAFIRMA_ARQUIVO_BANCADA) — sem clone a gatear"
 else
-  CLONES="platafirma-harness platafirma-core platafirma-conhecimento platafirma-arquitetura platafirma-motor platafirma-posto"
+  # platafirma-casa entrou em 28/09/2026: e onde moram ADR e spec (arq:0083); sem o hook
+  # a trava do canonico (ADR/spec nao cita minuta) nao pegava commit nenhum dali.
+  CLONES="platafirma-harness platafirma-core platafirma-conhecimento platafirma-arquitetura platafirma-motor platafirma-posto platafirma-casa"
   for c in $CLONES; do
     if [ ! -e "$BANCADA/$c/.git" ]; then
       medido impossivel "$c" "clone ausente em $BANCADA — \`repo clonar\` e ato de quem prepara a maquina"
