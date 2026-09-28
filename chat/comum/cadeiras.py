@@ -34,7 +34,7 @@ from pathlib import Path
 
 PREFIXO_BOT = "_pf"
 _PREFIXOS_DE_SLUG = ("claudinho-", "claudinha-")
-_NAO_SAO_CADEIRA = {"TEMPLATE", "osint", "EXTERNO"}
+_NAO_SAO_CADEIRA = {"TEMPLATE", "EXTERNO"}
 
 # PARTICIPANTE — quem tem porta com o dono sem ocupar cadeira (colaborador externo,
 # assessor, fornecedor). Rito e estatuto em runbook admissao-de-participante;

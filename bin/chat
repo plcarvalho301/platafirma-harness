@@ -381,8 +381,7 @@ def destinos_da_skill(caminho):
 
     FAIL-CLOSED de proposito: skill sem destino declarado NAO e plantada. O
     contrario faria arquivo novo no repo vazar para toda cadeira sem ninguem
-    decidir — e a `osint` ja e a prova de que "toda skill serve toda cadeira" e
-    falso: a propria descricao dela manda nao usar em cadeira interna.
+    decidir, e "toda skill serve toda cadeira" nao e premissa da casa.
     """
     try:
         with open(caminho, encoding="utf-8") as f:
@@ -424,8 +423,7 @@ def planta_skills(dot, cadeira):
             continue
         if "nenhuma" in cadeiras:
             # Desligamento explicito, e por isso vence qualquer outro valor na
-            # linha. `osint` usa este: vive em ambiente isolado e a propria
-            # descricao dela manda nao usar em cadeira interna.
+            # linha: a skill que nao deve chegar a cadeira interna nenhuma.
             continue
         if "todas" not in cadeiras and alvo not in cadeiras:
             continue

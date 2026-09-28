@@ -1983,7 +1983,7 @@ async def monta_sessao(cadeira: str = "", atualizar: bool = True, chapeu: str = 
 # usuário e os caminhos DESTA instância. Substituir depois de registrar não adianta — o
 # FastMCP copia a descrição no momento do mcp.tool().
 _TOOLS = [run_command, read_file, write_file]
-# monta_sessao só existe onde há personas: numa instância sem abertura publicada (osint)
+# monta_sessao só existe onde há personas: numa instância sem abertura publicada
 # a tool não teria o que montar, e tool inútil no catálogo é contexto desperdiçado.
 if PERSONAS.is_dir():
     _TOOLS.append(monta_sessao)
