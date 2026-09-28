@@ -31,6 +31,8 @@ ler        — sem argumento, as abertas em que PF_CADEIRA está convocada; com
 formalizar — cria o canônico vazio (ADR ou spec), apaga a minuta, um commit só.
              Recusa convocada com seção vazia, salvo --vencido.
 
+direto em main (arq:0083): escrever, circular e formalizar puxam, commitam e empurram para main na wt/platafirma-casa/<cadeira>/main (sem ela, abrem por repo abrir platafirma-casa).
+
 Protocolo: padrao protocolo-de-minuta
 Spec:      spec verbo-minuta
 FIM
