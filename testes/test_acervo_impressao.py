@@ -88,6 +88,14 @@ def test_primeira_linha_sem_espelho():
         "Obra velha · qualidade suspeita · sem página"
 
 
+def test_faixa_lida_declara_o_pedido_quando_lido_inteiro():
+    m = _mod()
+    assert m.faixa_lida("1-2", None, None, "1-1") == "1-2"   # página 2 sem texto
+    assert m.faixa_lida("1-6", None, "b9-abc", "1-3") == "1-3"
+    assert m.faixa_lida("1-6", "b9-abc", None, "4-5") == "4-6"
+    assert m.faixa_lida(None, None, None, "7-8") == "7-8"
+
+
 def test_ultima_linha_cursor_leva_o_filtro():
     m = _mod()
     linha = m.ultima_linha("Lei 14.133", _args(paginas="1-2"), "abc", SUMARIO)

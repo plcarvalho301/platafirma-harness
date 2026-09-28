@@ -100,6 +100,22 @@ def primeira_linha(titulo: str, sumario: dict, unidades: str | None, fora: dict,
     return " · ".join(partes)
 
 
+def faixa_lida(paginas: str | None, cursor: str | None, proximo: str | None,
+               emitidas: str | None) -> str | None:
+    """A faixa de unidades que a primeira linha declara. Pedido de páginas lido de ponta a
+    ponta declara o pedido (página sem texto não tem bloco e sumiria da faixa emitida); lido em
+    pedaços pelo cursor, declara o que saiu neste pedaço."""
+    if not paginas:
+        return emitidas
+    m = re.fullmatch(r"\s*(\d+)\s*(?:[-–]\s*(\d+))?\s*", paginas)
+    if not m:
+        return emitidas
+    a, b = m.group(1), m.group(2) or m.group(1)
+    de_a = emitidas.partition("-")[0] if (cursor and emitidas) else a
+    ate_b = emitidas.partition("-")[2] if (proximo and emitidas) else b
+    return f"{de_a}-{ate_b}"
+
+
 def _cmd(obra: str, **opcoes) -> str:
     partes = ["acervo ler obra impressao", shlex.quote(obra)]
     for k, v in opcoes.items():
@@ -222,8 +238,8 @@ def main(argv: list[str]) -> int:
             return 0
 
         unidade = (sumario.get("espelho") or {}).get("unidade")
-        if args.paginas and sumario.get("espelho") and unidade == "nenhuma":
-            raise Falha(2, f"a obra não tem página (unidade: nenhuma); leia por capítulo: "
+        if args.paginas and sumario.get("espelho") and (unidade == "nenhuma" or not sumario.get("unidades")):
+            raise Falha(2, f"a obra não tem página (unidade: {unidade}, {sumario.get('unidades') or 0} no índice); leia por capítulo: "
                            f"{_cmd(args.obra, capitulo=(sumario.get('secoes') or [{}])[0].get('ancora'))}")
 
         params = {"pagina": args.paginas, "secao": args.capitulo, "papel": args.papel,
@@ -237,11 +253,11 @@ def main(argv: list[str]) -> int:
 
     fora = json.loads(resp.headers.get("x-espelho-fora") or "{}")
     proximo = resp.headers.get("x-espelho-proximo")
+    unidades = faixa_lida(args.paginas, args.cursor, proximo, resp.headers.get("x-espelho-unidades"))
     if args.json:
         print(json.dumps(resp.json(), ensure_ascii=False, indent=2))
         return 0
-    print(primeira_linha(titulo, sumario, resp.headers.get("x-espelho-unidades"), fora,
-                         args.papel, args.capitulo))
+    print(primeira_linha(titulo, sumario, unidades, fora, args.papel, args.capitulo))
     if args.formato == "blocos":
         for bloco in resp.json().get("itens", []):
             print(json.dumps(bloco, ensure_ascii=False))
