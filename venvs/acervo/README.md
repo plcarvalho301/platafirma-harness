@@ -1,10 +1,8 @@
 # acervo
 
-Pasta de `venvs/` que declara o ambiente Python `acervo` da release: as bibliotecas de
-terceiro que os verbos do acervo importam (`boto3` para o objeto da obra no MinIO; `owlready2`
-e `rdflib` para a projeção formal da ontologia, com o HermiT). Não tem código: o projeto não
-se instala, só traz dependência. Os consumidores e o porquê de cada pacote estão no
-comentário de `pyproject.toml`.
+Pasta de `venvs/` que declara o ambiente Python `acervo` da release: as bibliotecas que os verbos do
+acervo importam (`boto3` para o objeto da obra no MinIO; `owlready2` e `rdflib` para a projeção
+formal da ontologia). Não tem código; consumidores e porquê de cada pacote no `pyproject.toml`.
 
 ## Como sobe
 
