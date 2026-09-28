@@ -53,9 +53,19 @@ case "$cmd" in
     cwd="${LONGJOB_CWD:-$PLATAFIRMA_INSTANCIA/var/tmp/jobs/$unit}"
     mkdir -p "$cwd"
     : > "$log"
-    printf '# unit=%s\n# inicio=%s\n# cwd=%s\n# comando=%s\n' \
-      "$unit" "$(date -Is)" "$cwd" "$*" >> "$log"
+    # Identidade da porta (mesa ti #21): o systemd --user nao herda o ambiente de quem
+    # chama, entao PF_SUJEITO e o resto da identidade injetada pela porta nao chegavam a
+    # unit, e verbo que exige identidade (infra up, migrar aplicar) recusava com
+    # «PF_SUJEITO ausente». Repassa so as variaveis presentes; ausente segue ausente (o
+    # verbo do job decide, sem fallback aqui).
+    ident=()
+    for v in PF_SUJEITO PF_CADEIRA PF_SESSAO PF_ORDEM_ID PF_SUPERFICIE; do
+      if [ -n "${!v:-}" ]; then ident+=("--setenv=$v=${!v}"); fi
+    done
+    printf '# unit=%s\n# inicio=%s\n# cwd=%s\n# sujeito=%s\n# comando=%s\n' \
+      "$unit" "$(date -Is)" "$cwd" "${PF_SUJEITO:-(ausente)}" "$*" >> "$log"
     systemd-run --user --unit="$unit" --quiet \
+      "${ident[@]}" \
       --property=WorkingDirectory="$cwd" \
       --property=StandardOutput="append:$log" \
       --property=StandardError="append:$log" \
