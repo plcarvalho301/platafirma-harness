@@ -93,7 +93,7 @@ uso:
   repo empurrar  <repo> [<ramo>]
   repo atualizar <repo>
   repo sincronizar <repo>
-  repo abrir     <repo> [<card>] [--slug <s>] [--da-producao]
+  repo abrir     <repo> [<card>] [--slug <s>] [--da-producao] [--assumir]
   repo clonar    <url|owner/nome> [<nome>]
   repo sanear    [<repo>] [--relatar]
   repo pr-abrir  <repo> --titulo <t> [--corpo <c>] [--base <ramo>]
@@ -1002,6 +1002,7 @@ ato_sincronizar() {
   local head; head="$("$GIT" -C "$c" rev-parse HEAD)"
   if [ "$mesclou" -eq 0 ] && [ "$rc" -eq 0 ] && [ "$(forge_sha "$c" "$ramo")" = "$head" ]; then
     printf 'já em dia: %s @ %s, origin/%s igual, origin/main %s ja contido\n' "$ramo" "${head:0:7}" "$ramo" "${main:0:7}"
+    printf 'próximo: repo pr-abrir %s --titulo <t> [--corpo <c>]\n' "$nome"
     return 0
   fi
 
@@ -1018,6 +1019,7 @@ ato_sincronizar() {
       printf 'sincronizado: %s = %s (main ja contido); origin/%s = %s [lido do forge]\n' \
         "$ramo" "${head:0:7}" "$ramo" "${fsha:0:7}"
     fi
+    printf 'próximo: repo pr-abrir %s --titulo <t> [--corpo <c>]\n' "$nome"
     return 0
   fi
   [ "$rc" -eq 5 ] && morre "indeterminavel: empurrei? o forge nao respondeu ($fsha)" 5
@@ -1076,7 +1078,7 @@ sha_de_producao() {
 # O sha tem de estar no clone base (fetch do forge se faltar) e descender de origin/main (exit 4).
 # Worktree ja aberto: no mesmo sha e limpo e conforme; em outro sha ou sujo, relata e nao mexe (4).
 abrir_da_producao() {
-  local nome="$1" cadeira="$2" card="$3" slug="$4"
+  local nome="$1" cadeira="$2" card="$3" slug="$4" assumir="${5:-0}"
   local sha; sha="$(sha_de_producao "$nome")" || exit $?
   local curto="${sha:0:7}" clone_raiz="$BANCADA/$nome"
   local wt_dir="$BANCADA/wt/$nome/$cadeira/$(chave_de "$card" "$slug")"
@@ -1110,7 +1112,9 @@ abrir_da_producao() {
     if [ -n "$ramo_alvo" ] && [ "$ramo" != "$ramo_alvo" ]; then
       morre "worktree ja aberto no sha de producao $curto em $ramo, nao em $ramo_alvo — nao mexo: $wt_dir" 4
     fi
+    guarda_sessao_viva "$wt_dir" "$assumir"
     printf 'conforme: %s (@ %s, sha de producao %s)\n' "$wt_dir" "$ramo" "$curto"
+    printf 'próximo: teste rodar %s <alvo>\n' "$nome"
     return 0
   fi
 
@@ -1165,6 +1169,51 @@ abrir_da_producao() {
       || morre "git worktree add falhou" 3
     printf 'bancada aberta: %s (HEAD destacado no sha de producao %s)\n' "$wt_dir" "$curto"
   fi
+  guarda_sessao_viva "$wt_dir" "$assumir"
+  printf 'próximo: teste rodar %s <alvo>\n' "$nome"
+}
+
+# [3096] marca de sessao viva: quem tem esta pasta aberta agora, e desde quando. Mora no
+# git-dir da PROPRIA worktree (nunca na arvore de trabalho -- apareceria como suja).
+# Nao mexe na pasta por cadeira e card do #3149: so acrescenta a marca sobre ela. Duas
+# sessoes da MESMA cadeira no MESMO card caindo na mesma pasta sem saber e o defeito;
+# abrir de novo com outra sessao pede --assumir (spec_ambiente-de-desenvolvimento §2).
+_git_dir_de() {
+  "$GIT" -C "$1" rev-parse --path-format=absolute --git-dir 2>/dev/null
+}
+
+_marca_sessao_ler() {
+  local gd; gd="$(_git_dir_de "$1")" || return 1
+  [ -f "$gd/pf-sessao-viva" ] && cat "$gd/pf-sessao-viva"
+  return 0
+}
+
+_marca_sessao_escrever() {
+  local gd; gd="$(_git_dir_de "$1")" || return 1
+  printf '%s\t%s\n' "${2:-}" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > "$gd/pf-sessao-viva"
+}
+
+# guarda_sessao_viva <worktree> <assumir 0|1> -- exit 0 segue (marca escrita ou renovada);
+# recusa com 4 quando outra sessao viva tem a pasta e nao veio --assumir. Sem PF_SESSAO
+# declarado, nao disputa pasta com ninguem (como ramo_da_cadeira: sessao anonima nao barra).
+guarda_sessao_viva() {
+  local wt="$1" assumir="${2:-0}" sid="${PF_SESSAO:-}"
+  [ -n "$sid" ] || return 0
+  local marca dono="" desde=""
+  marca="$(_marca_sessao_ler "$wt")"
+  if [ -n "$marca" ]; then
+    IFS=$'\t' read -r dono desde <<< "$marca"
+  fi
+  if [ -n "$dono" ] && [ "$dono" != "$sid" ]; then
+    if [ "$assumir" -eq 1 ]; then
+      _marca_sessao_escrever "$wt" "$sid"
+      printf 'assumida: pasta era da sessão %s desde %s — agora %s\n' "$dono" "$desde" "$sid" >&2
+      return 0
+    fi
+    morre "pasta de sessão viva: '${wt#"$BANCADA"/}' pertence à sessão $dono desde $desde — use --assumir para tomar" 4
+  fi
+  _marca_sessao_escrever "$wt" "$sid"
+  return 0
 }
 
 cmd_abrir() {
@@ -1177,10 +1226,11 @@ cmd_abrir() {
     *[!A-Za-z0-9._-]*) morre "nome de repo invalido: '$nome' — use [A-Za-z0-9._-]" 4 ;;
   esac
 
-  local card="" slug="" arg_cadeira="" da_producao=0
+  local card="" slug="" arg_cadeira="" da_producao=0 assumir=0
   while [ $# -gt 0 ]; do
     case "$1" in
       --da-producao) da_producao=1; shift ;;
+      --assumir) assumir=1; shift ;;
       --slug)
         shift
         [ $# -gt 0 ] || { printf '%s: erro: --slug exige um valor\n' "$VERBO" >&2; exit 2; }
@@ -1213,7 +1263,7 @@ cmd_abrir() {
   [ -n "$cadeira" ] || morre "dependência ausente: PF_CADEIRA não definida — abrir exige cadeira" 3
 
   if [ "$da_producao" -eq 1 ]; then
-    abrir_da_producao "$nome" "$cadeira" "$card" "$slug"
+    abrir_da_producao "$nome" "$cadeira" "$card" "$slug" "$assumir"
     return $?
   fi
 
@@ -1234,6 +1284,7 @@ cmd_abrir() {
 
   local ja; ja="$(bancada_de "$nome" "$chave")"
   if [ -n "$ja" ]; then
+    guarda_sessao_viva "$ja" "$assumir"
     local atras="?"
     if git_sem_engolir "$ja" fetch --prune origin; then
       atras="$("$GIT" -C "$ja" rev-list --count HEAD..origin/main 2>/dev/null || echo '?')"
@@ -1244,6 +1295,7 @@ cmd_abrir() {
     local estado_arvore="arvore limpa"; [ "${sujo_qtd:-0}" -eq 0 ] || estado_arvore="arvore suja"
     printf 'bancada já aberta: %s (ramo %s @ %s, atras de origin/main: %s, %s)\n' \
       "$wt_dir" "$(ramo_atual "$ja")" "$("$GIT" -C "$ja" rev-parse --short HEAD)" "$atras" "$estado_arvore"
+    printf 'próximo: teste rodar %s <alvo>\n' "$nome"
     return 0
   fi
 
@@ -1290,9 +1342,11 @@ cmd_abrir() {
 
     if [ -e "$wt_dir/.git" ]; then
       # a plana migrada era deste mesmo card
+      guarda_sessao_viva "$wt_dir" "$assumir"
       printf 'bancada já aberta: %s (ramo %s @ %s, migrada da pasta plana, atras de origin/main: %s)\n' \
         "$wt_dir" "$(ramo_atual "$wt_dir")" "$("$GIT" -C "$wt_dir" rev-parse --short HEAD)" \
         "$("$GIT" -C "$wt_dir" rev-list --count HEAD..origin/main 2>/dev/null || echo '?')"
+      printf 'próximo: teste rodar %s <alvo>\n' "$nome"
       return 0
     fi
     if "$GIT" -C "$clone_raiz" show-ref --verify --quiet "refs/heads/$ramo_alvo"; then
@@ -1305,6 +1359,8 @@ cmd_abrir() {
     printf 'bancada aberta: %s (ramo %s @ %s, atras de origin/main: %s, arvore limpa)\n' "$wt_dir" "$ramo_alvo" \
       "$("$GIT" -C "$wt_dir" rev-parse --short HEAD)" "$("$GIT" -C "$wt_dir" rev-list --count HEAD..origin/main 2>/dev/null || echo '?')"
     [[ "$card_num" =~ ^[0-9]+$ ]] && move_card "$card_num"
+    guarda_sessao_viva "$wt_dir" "$assumir"
+    printf 'próximo: teste rodar %s <alvo>\n' "$nome"
   else
     if [ -n "$slug" ]; then
       # sem card: ramo de uma cadeira so, <cadeira>/<slug> (spec_ambiente-de-desenvolvimento §2)
@@ -1316,10 +1372,14 @@ cmd_abrir() {
         "$GIT" -C "$clone_raiz" worktree add -q --no-track -b "$ramo_slug" "$wt_dir" "$base_ref" >/dev/null 2>&1 || morre "git worktree add -b falhou" 3
       fi
       printf 'bancada aberta: %s (ramo %s @ %s, atras de origin/main: 0, arvore limpa)\n' "$wt_dir" "$ramo_slug" "$("$GIT" -C "$wt_dir" rev-parse --short HEAD)"
+      guarda_sessao_viva "$wt_dir" "$assumir"
+      printf 'próximo: teste rodar %s <alvo>\n' "$nome"
       return 0
     fi
     "$GIT" -C "$clone_raiz" worktree add -q --detach "$wt_dir" "$base_ref" >/dev/null 2>&1 || morre "git worktree add falhou" 3
     printf 'bancada aberta: %s (HEAD destacado em %s, atras de origin/main: 0, arvore limpa)\n' "$wt_dir" "$base_ref"
+    guarda_sessao_viva "$wt_dir" "$assumir"
+    printf 'próximo: teste rodar %s <alvo>\n' "$nome"
   fi
 }
 
@@ -1662,6 +1722,9 @@ fecho_commit() {
     1) printf 'forge: origin/%s ausente (ramo nunca empurrado)\n' "$ramo" ;;
     *) printf 'forge: indeterminavel (%s)\n' "$fsha" ;;
   esac
+  # [3096] fecho de commitar cobre "ja" e "novo": o proximo passo do guia desenvolvimento
+  # e sempre sincronizar, comitado ou nao.
+  printf 'próximo: repo sincronizar %s\n' "$nome"
 }
 
 ato_empurrar() {
@@ -1680,6 +1743,7 @@ ato_empurrar() {
     env PATH="$PATH_FORGE" "$GIT" -C "$c" fetch -q origin "refs/heads/$ramo:refs/remotes/origin/$ramo" >/dev/null 2>&1
     "$GIT" -C "$c" branch -q --set-upstream-to="origin/$ramo" "$ramo" >/dev/null 2>&1
     printf 'já feito: origin/%s = %s (%s)\n' "$ramo" "${fsha:0:7}" "$("$GIT" -C "$c" log -1 --format='%s' "$local_sha")"
+    printf 'próximo: repo pr-abrir %s --titulo <t> [--corpo <c>]\n' "$nome"
     return 0
   fi
   # stderr do push segue visivel: e onde o pre-push diz o que barrou
@@ -1688,6 +1752,7 @@ ato_empurrar() {
   if [ "$rc" -eq 0 ] && [ "$fsha" = "$local_sha" ]; then
     printf 'empurrado: %s -> origin/%s = %s (%s) [lido do forge]\n' "$nome" "$ramo" "${fsha:0:7}" \
       "$("$GIT" -C "$c" log -1 --format='%s' "$local_sha")"
+    printf 'próximo: repo pr-abrir %s --titulo <t> [--corpo <c>]\n' "$nome"
     return 0
   fi
   [ "$rc" -eq 5 ] && morre "indeterminavel: push feito? o forge nao respondeu ($fsha)" 5
@@ -1723,6 +1788,8 @@ ato_pr_abrir() {
     || morre "indeterminavel: nao li os PRs do forge" 5
   if [ -n "$ja" ]; then
     printf 'já feito: PR %s aberto de %s\n' "$ja" "$ramo"
+    local numero_ja="${ja#\#}"; numero_ja="${numero_ja%% *}"
+    printf 'próximo: repo pr-merge %s %s\n' "$nome" "$numero_ja"
     return 0
   fi
   (cd "$c" && env PATH="$PATH_FORGE" "$GH" pr create --base "$base" --head "$ramo" --title "$titulo" --body "$corpo" >/dev/null) \
@@ -1732,6 +1799,8 @@ ato_pr_abrir() {
           --jq '"#\(.number) \(.state) \(.url) (head \(.headRefOid[0:7]))"' 2>/dev/null)" \
     || morre "indeterminavel: PR criado? o forge nao confirmou" 5
   printf 'PR %s de %s -> %s [lido do forge]\n' "$lido" "$ramo" "$base"
+  local numero="${lido#\#}"; numero="${numero%% *}"
+  printf 'próximo: repo pr-merge %s %s\n' "$nome" "$numero"
 }
 
 ato_pr_listar() {

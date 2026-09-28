@@ -5,9 +5,14 @@ Git real contra bare local, sem rede e sem gh. Prova: a pasta por cadeira E card
 resolucao sem fallback ao cache e sem heuristica (ambiguo pede <repo>@<chave>); a migracao
 da pasta plana legada; `sincronizar` nos cinco casos do card; o fecho idempotente de
 `empurrar` e `commitar`; e o `sanear` que so remove o entregue ou o fora do eixo, salvando
-antes em wip/ o que so existe na bancada. Nao prova: o forge de verdade (PR mesclado lido do
-gh -- aqui so o ramo apagado do origin), nem `pr-*`, nem o pre-push (os clones de teste nao
-tem hooksPath).
+antes em wip/ o que so existe na bancada. Alem disso (card #3096): a marca de sessao viva
+na pasta -- duas sessoes da MESMA cadeira no MESMO card, a segunda recusada nomeando a
+primeira, e --assumir tomando a pasta; e a linha "proximo:" no fim de abrir, commitar,
+sincronizar e empurrar -- inclusive na variante `abrir --da-producao` (revisao do PR
+#306), que tem a mesma guarda e o mesmo "proximo:" das tres formas (ramo novo, conforme
+na reabertura, e destacado sem card). Nao prova: o forge de verdade (PR mesclado lido do
+gh -- aqui so o ramo apagado do origin), nem `pr-*` de verdade (o "proximo:" de pr-abrir
+e so leitura de codigo), nem o pre-push (os clones de teste nao tem hooksPath).
 """
 import os
 import subprocess
@@ -51,7 +56,7 @@ def _repo(tmp_path, bancada, sessao, *args):
         "PF_TAREFAS_BIN": "/bin/true",
         **IDENT,
     }
-    return subprocess.run([str(REPO_BIN), *args], env=env, capture_output=True, text=True)
+    return subprocess.run([str(REPO_BIN), *args], env=env, capture_output=True, text=True, check=False)
 
 
 def _main_novo(tmp_path, arquivo="NOVO.md", texto="novo\n"):
@@ -89,10 +94,12 @@ def test_abrir_cria_worktree_por_cadeira_e_card_e_move_o_card(tmp_path):
 
 
 def test_abrir_de_novo_nao_move_nada_e_diz_o_atraso(tmp_path):
+    """Reabrir e idempotente para a MESMA sessao (a marca de sessao viva do #3096 nao muda
+    isso); sessao diferente no mesmo card e outro teste, abaixo."""
     bancada = _montar(tmp_path)
     _abrir_42(tmp_path, bancada)
     _main_novo(tmp_path)
-    r = _repo(tmp_path, bancada, "s2", "abrir", "demo", "42", "--slug", "x")
+    r = _repo(tmp_path, bancada, "s1", "abrir", "demo", "42", "--slug", "x")
     assert r.returncode == 0, r.stderr
     assert "bancada já aberta" in r.stdout
     assert "atras de origin/main: 1" in r.stdout
@@ -184,6 +191,116 @@ def test_abrir_recusa_aninhar_em_plana_suja(tmp_path):
     assert not (plana / "42-x").exists()
 
 
+# --- marca de sessao viva: pasta de uma sessao so (card #3096) ------------------------
+
+def test_abrir_recusa_segunda_sessao_no_mesmo_card_nomeando_a_primeira(tmp_path):
+    bancada = _montar(tmp_path)
+    _abrir_42(tmp_path, bancada)
+    r = _repo(tmp_path, bancada, "sessao-2", "abrir", "demo", "42", "--slug", "x")
+    assert r.returncode == 4, r.stdout
+    assert "s1" in r.stderr
+    assert "desde" in r.stderr
+
+
+def test_abrir_mesma_sessao_reabre_sem_recusa(tmp_path):
+    bancada = _montar(tmp_path)
+    _abrir_42(tmp_path, bancada)
+    r = _repo(tmp_path, bancada, "s1", "abrir", "demo", "42", "--slug", "x")
+    assert r.returncode == 0, r.stderr
+
+
+def test_abrir_assumir_toma_a_pasta_e_registra_a_troca(tmp_path):
+    bancada = _montar(tmp_path)
+    _abrir_42(tmp_path, bancada)
+    r = _repo(tmp_path, bancada, "sessao-2", "abrir", "demo", "42", "--slug", "x", "--assumir")
+    assert r.returncode == 0, r.stderr
+    assert "s1" in r.stderr
+
+    r2 = _repo(tmp_path, bancada, "s1", "abrir", "demo", "42", "--slug", "x")
+    assert r2.returncode == 4, r2.stdout
+    assert "sessao-2" in r2.stderr
+
+
+def test_abrir_cartoes_diferentes_da_mesma_sessao_nao_colidem(tmp_path):
+    """A marca de sessao e sobre a PASTA (card), nunca sobre a cadeira inteira: a mesma
+    sessao abrindo outro card nao encontra pasta de ninguem."""
+    bancada = _montar(tmp_path)
+    _abrir_42(tmp_path, bancada)
+    r = _repo(tmp_path, bancada, "s1", "abrir", "demo", "43", "--slug", "y")
+    assert r.returncode == 0, r.stderr
+
+
+# --- proximo: o passo seguinte do guia desenvolvimento (card #3096) --------------------
+
+def test_abrir_termina_com_proximo(tmp_path):
+    bancada = _montar(tmp_path)
+    r = _repo(tmp_path, bancada, "s1", "abrir", "demo", "42", "--slug", "x")
+    assert r.returncode == 0, r.stderr
+    assert r.stdout.strip().splitlines()[-1] == "próximo: teste rodar demo <alvo>"
+
+
+# --- abrir --da-producao (revisao do PR #306, card #3096): a mesma trava (a) e o
+# mesmo "proximo:" (d) valem para a variante que abre do sha de producao, nao so para
+# a que nasce de origin/main -- nenhum teste do PR original exercitava este caminho.
+
+def _publicar_producao(tmp_path, bancada, nome="demo"):
+    """Aponta PF_RELEASE_RAIZ/<nome>/current para o HEAD do clone, como release faria."""
+    sha = _git("rev-parse", "HEAD", cwd=bancada / nome)
+    fam = tmp_path / "release" / nome
+    (fam / sha).mkdir(parents=True)
+    (fam / "current").symlink_to(fam / sha)
+    return sha
+
+
+def test_abrir_da_producao_ramo_novo_guarda_sessao_e_termina_com_proximo(tmp_path):
+    bancada = _montar(tmp_path)
+    _publicar_producao(tmp_path, bancada)
+    r = _repo(tmp_path, bancada, "s1", "abrir", "demo", "--da-producao", "42", "--slug", "x")
+    assert r.returncode == 0, r.stderr
+    wt = bancada / "wt" / "demo" / "ti" / "42-x"
+    assert (wt / ".git").exists()
+    assert r.stdout.strip().splitlines()[-1] == "próximo: teste rodar demo <alvo>"
+    # a marca de sessao viva ficou escrita (guarda_sessao_viva rodou): outra sessao no
+    # mesmo card e recusada, exatamente como no caminho sem --da-producao.
+    r2 = _repo(tmp_path, bancada, "sessao-2", "abrir", "demo", "--da-producao", "42", "--slug", "x")
+    assert r2.returncode == 4, r2.stdout
+    assert "s1" in r2.stderr and "desde" in r2.stderr
+
+
+def test_abrir_da_producao_conforme_tambem_guarda_sessao_e_termina_com_proximo(tmp_path):
+    bancada = _montar(tmp_path)
+    _publicar_producao(tmp_path, bancada)
+    assert _repo(tmp_path, bancada, "s1", "abrir", "demo", "--da-producao", "42", "--slug", "x").returncode == 0
+    r = _repo(tmp_path, bancada, "s1", "abrir", "demo", "--da-producao", "42", "--slug", "x")
+    assert r.returncode == 0, r.stderr
+    assert "conforme:" in r.stdout
+    assert r.stdout.strip().splitlines()[-1] == "próximo: teste rodar demo <alvo>"
+    r2 = _repo(tmp_path, bancada, "sessao-2", "abrir", "demo", "--da-producao", "42", "--slug", "x")
+    assert r2.returncode == 4, r2.stdout
+    assert "s1" in r2.stderr
+
+
+def test_abrir_da_producao_assumir_toma_a_pasta(tmp_path):
+    bancada = _montar(tmp_path)
+    _publicar_producao(tmp_path, bancada)
+    assert _repo(tmp_path, bancada, "s1", "abrir", "demo", "--da-producao", "42", "--slug", "x").returncode == 0
+    r = _repo(tmp_path, bancada, "sessao-2", "abrir", "demo", "--da-producao", "42", "--slug", "x", "--assumir")
+    assert r.returncode == 0, r.stderr
+    assert "s1" in r.stderr
+    r2 = _repo(tmp_path, bancada, "s1", "abrir", "demo", "--da-producao", "42", "--slug", "x")
+    assert r2.returncode == 4, r2.stdout
+    assert "sessao-2" in r2.stderr
+
+
+def test_abrir_da_producao_sem_card_fica_destacado_e_tambem_termina_com_proximo(tmp_path):
+    bancada = _montar(tmp_path)
+    _publicar_producao(tmp_path, bancada)
+    r = _repo(tmp_path, bancada, "s1", "abrir", "demo", "--da-producao")
+    assert r.returncode == 0, r.stderr
+    assert "HEAD destacado" in r.stdout
+    assert r.stdout.strip().splitlines()[-1] == "próximo: teste rodar demo <alvo>"
+
+
 # --- sincronizar: os cinco casos do card ------------------------------------------------
 
 def test_sincronizar_em_dia_sai_0_ja_em_dia(tmp_path):
@@ -250,6 +367,15 @@ def test_sincronizar_ramo_divergido_do_proprio_upstream_sai_4(tmp_path):
     assert "vizinho: repo atualizar" in r.stderr
 
 
+def test_sincronizar_termina_com_proximo_pr_abrir(tmp_path):
+    bancada = _montar(tmp_path)
+    wt = _abrir_42(tmp_path, bancada)
+    _commit_em(wt, "card.md", "c\n")
+    r = _repo(tmp_path, bancada, "s1", "sincronizar", "demo")
+    assert r.returncode == 0, r.stderr
+    assert r.stdout.strip().splitlines()[-1] == "próximo: repo pr-abrir demo --titulo <t> [--corpo <c>]"
+
+
 # --- fecho idempotente ------------------------------------------------------------------
 
 def test_empurrar_repetido_devolve_ja_feito(tmp_path):
@@ -271,6 +397,25 @@ def test_commitar_sem_nada_novo_devolve_ja_feito_e_o_estado_do_forge(tmp_path):
     assert r.returncode == 0, r.stderr
     assert "já feito" in r.stdout
     assert "forge: origin/fabrica/42-x ausente" in r.stdout
+    assert r.stdout.strip().splitlines()[-1] == "próximo: repo sincronizar demo"
+
+
+def test_commitar_novo_tambem_termina_com_proximo_sincronizar(tmp_path):
+    bancada = _montar(tmp_path)
+    wt = _abrir_42(tmp_path, bancada)
+    (wt / "card.md").write_text("c\n")
+    r = _repo(tmp_path, bancada, "s1", "commitar", "demo", "-m", "card", "card.md")
+    assert r.returncode == 0, r.stderr
+    assert r.stdout.strip().splitlines()[-1] == "próximo: repo sincronizar demo"
+
+
+def test_empurrar_termina_com_proximo_pr_abrir(tmp_path):
+    bancada = _montar(tmp_path)
+    wt = _abrir_42(tmp_path, bancada)
+    _commit_em(wt, "card.md", "c\n")
+    r = _repo(tmp_path, bancada, "s1", "empurrar", "demo")
+    assert r.returncode == 0, r.stderr
+    assert r.stdout.strip().splitlines()[-1] == "próximo: repo pr-abrir demo --titulo <t> [--corpo <c>]"
 
 
 # --- sanear: so o entregue ou o fora do eixo some, e nada sem salvar ---------------------

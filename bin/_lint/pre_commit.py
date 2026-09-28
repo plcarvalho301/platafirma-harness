@@ -85,6 +85,19 @@ def main() -> int:
         for apt in achados:
             bloqueantes.append(("organizacao", apt))
 
+    # 5. diagrama (staged): .mmd/.d2 que nao compila no Kroki (card #3096). Kroki fora de
+    # alcance NAO barra -- so avisa; a trava desta story e essa (nunca bloqueante por 'nao
+    # consegui medir').
+    try:
+        from _lint.diagrama import bloqueantes_no_stage as diagrama_bloqueantes_no_stage
+    except ImportError:
+        from diagrama import bloqueantes_no_stage as diagrama_bloqueantes_no_stage
+    achados_diagrama, aviso_diagrama = diagrama_bloqueantes_no_stage(raiz)
+    if aviso_diagrama:
+        print(f"pre-commit: aviso: {aviso_diagrama}", file=sys.stderr)
+    for apt in achados_diagrama:
+        bloqueantes.append(("diagrama", apt))
+
     if bloqueantes:
         print("pre-commit: commit bloqueado por violacao de regra bloqueante:\n", file=sys.stderr)
         for modulo, apt in bloqueantes:
