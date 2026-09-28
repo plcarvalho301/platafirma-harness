@@ -7,7 +7,7 @@
 # atos: ler (leitura, casa), listar (leitura, casa), resolver (leitura, casa), escrever (escrita, registro), ingerir (escrita, incorporacao), curar (escrita, curadoria), extrato (leitura, acervo), exportar (escrita, acervo), psql (escrita, acervo), balde (escrita, acervo)
 # forma: texto
 # le: ler=acervo.casa,acervo.obra,acervo.registro,repo
-# le: listar=acervo.casa,acervo.obra,acervo.registro,repo
+# le: listar=acervo.casa,acervo.obra,acervo.registro,repo,arquivo-local
 # le: resolver=acervo.casa
 # le: escrever=nada
 # le: ingerir=repo
@@ -21,7 +21,7 @@
 # escreve: resolver=nada
 # escreve: escrever=acervo.casa
 # escreve: ingerir=acervo.casa,acervo.obra,acervo.registro,motor,repo
-# escreve: curar=acervo.obra,acervo.casa
+# escreve: curar=acervo.obra,acervo.casa,arquivo-local
 # escreve: extrato=arquivo-local
 # escreve: exportar=repo
 # escreve: psql=acervo.*
@@ -81,6 +81,9 @@ uso (gramatica arq:0106 — acervo <ato> <particao> <entidade> [seletor]):
                   o texto da obra pelo espelho de leitura, do comeco e em ordem
   acervo curar    obra --situacao|--expurgar|--restaurar|--promover|--reclassificar|--conceito <...>
   acervo curar    obra --recortar <obra> · --reextrair <obra> [--metodo <m>] · --expurgar|--restaurar --espelhos
+  acervo curar    obra --reextrair <id,id…|@arquivo> --bancada <pasta> [--metodo perfil|docling] [--refazer]
+                  converte em pasta de saida (nao escreve no acervo; retomavel); depois:
+  acervo listar   obra bancada <pasta> [--json] [--estratos <arquivo>]   perfil x docling por obra (card #3187)
   acervo curar    obra --relacionar <de> <para> --tipo <t> --garantia <g> --motivo <m> [--apply]
                   obra --relacoes <conceito> · --desrelacionar <id>   a teia de conceitos (conceito vive em obra)
   acervo extrato  --todas [dest]
@@ -165,6 +168,9 @@ conforme() {
     # --- obra: conceito, objeto, bancada, obra ---
     listar:obra:obra)       exec "$ATOS/listar" obra "$@" ;;
     listar:obra:metodos)    exec "$ATOS/listar" obra metodos "$@" ;;
+    # agregador perfil x docling da pasta que `curar --reextrair --bancada` gravou (card #3187):
+    # so stdlib, le arquivos, nao toca o acervo
+    listar:obra:bancada)    exec "$ATOS/listar" obra bancada "$@" ;;
     listar:obra:conceito)   exec "$ATOS/listar" conceitos "$@" ;;
     ler:obra:objeto)        exec "$ATOS/baixar" "$@" ;;
     # o texto da obra pelo espelho de leitura, por pagina ou capitulo (spec espelho-de-leitura
