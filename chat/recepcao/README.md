@@ -1,9 +1,8 @@
 # recepcao
 
-Pasta de `chat/` com a recepção do chat da PlataFirma: o Application Service Matrix, o único
-componente que fala com o Synapse. Recebe a mensagem da sala, enfileira o giro no journal,
-formata e fatia a resposta e a posta de volta. Roda como o contêiner `chat-recepcao` da stack
-`chat`. Não chama verbo nem gira motor: isso é do worker no host (`chat/worker/`).
+Pasta de `chat/` com o Application Service Matrix, o único componente que fala com o Synapse: recebe
+a mensagem da sala, enfileira o giro no journal, formata, fatia e posta a resposta. Roda como o
+contêiner `chat-recepcao` da stack `chat`. Não chama verbo nem gira motor: isso é do worker no host.
 
 ## Como sobe
 

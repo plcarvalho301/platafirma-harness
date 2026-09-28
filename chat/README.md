@@ -1,55 +1,57 @@
-# chat — superfície de conversa da PlataFirma
+# chat
 
-- **O que é:** a quarta superfície de acesso aos atores da casa, em `chat.platafirma.org` (Element/Matrix). Uma sala direta por ator, com o dono.
-- **Onde roda:** contêineres `chat-synapse` (8008/8448), `chat-recepcao` (8080), `chat-pg`, no daemon rootless da conta `claudinho`. Tunnel Cloudflare entra direto no `chat-synapse`; auth por OIDC/realm; Admin API fechada na borda.
-- **Componentes:** `recepcao/` (o Application Service, único que fala Matrix) → `comum/journal.py` (fila por sala) → `worker/worker.py` (host, systemd --user) → `bin/chat` (o verbo, que gira o motor). Contrato entre worker e verbo: uma linha JSON no stdout, uma por passo no stderr.
+Pasta de `platafirma-harness` com o chat da PlataFirma (`chat.platafirma.org`, Matrix): uma sala
+direta por ator com o dono, e o giro que leva a mensagem ao motor e traz a resposta. Roda como a
+stack `chat` (Synapse, banco e recepção) mais o worker `chat-worker` no host da conta `claudinho`.
 
-## Modelo de ator
+## Como sobe
 
-Três eixos independentes, resolvidos só por `comum/cadeiras.py`. Nenhum se calcula dos outros.
+Pré-requisitos na instância, fora do git:
 
-- **conta** — o usuário do SO onde o ator roda. É o perímetro de segregação.
-- **provider** — a entidade por trás da conta, e o nome afetivo do ator: `claudinho` é o Claude. É o que aparece na sala e o que o MXID carrega.
-- **persona** — o que `monta-sessao` injeta na abertura, de `abertura/<persona>/persona.md`.
+- o cofre `segredos/matrix/` com o `oidc-client-secret`, que é da cadeira de segurança;
+- os segredos da stack, cunhados uma vez por `chat/prepara.sh` (idempotente: o que já existe não é
+  recunhado);
+- a sobreposição `deploy/chat/compose.override.yaml`, na forma de `chat/compose.override.exemplo.yaml`.
 
-O roster da superfície (`atores()`) tem três baldes, e a rota de motor sai do balde:
+Da release:
 
-| balde | fonte | motor | exemplo |
-|---|---|---|---|
-| cadeira | ledger de vínculo (`registro/eventos-org.jsonl`) | Claude Code no cwd da fita | TI, dados, produto |
-| ator interno | `_ATORES_INTERNOS` em `cadeiras.py` | Claude Code no cwd da fita | fabrica |
+```
+release promover platafirma-harness <sha>
+infra build chat
+infra up chat -d
+/opt/platafirma/current/harness/deploy-harness/instalar
+```
 
-`eh_participante(ator)` decide a rota em `bin/chat`: verdadeiro devolve erro limpo, porque participante não tem motor nesta superfície desde o card #3117; falso gira por Claude Code. Cadeira e ator interno compartilham motor e caminho; separam-se em que a cadeira tem vínculo no org (voto, remit, roteamento) e o ator interno não.
+`instalar` liga o `chat-worker.service` à release. Subiu quando `infra ps chat` mostra
+`chat-synapse`, `chat-recepcao` e `chat-pg` de pé, `infra estado` lista `chat-worker.service`
+`running`, e uma mensagem na sala de um ator volta com resposta.
 
-## A fábrica no chat
+Ator novo na superfície: `chat/provisiona-cadeiras.sh @<dono>:<dominio>`, depois do primeiro login
+do dono. O locale do banco se decide na criação do volume (`C`): errado, só recriando o volume.
 
-A `fabrica` é uma persona fungível — roteador de linha (devops/blueteam/front-end) que recebe card e entrega código. Encarna uma vez por conta/provider, e todas as encarnações montam a mesma `abertura/fabrica/persona.md`.
+## Como se testa
 
-- **Encarnação `claude`, conta `claudinho`:** o ator interno `fabrica` (`_ATORES_INTERNOS`), sala `@_pf_fabrica`, gira por Claude Code. Serve pedido de qualquer origem, na conta do stack. É a única encarnação com giro por esta superfície.
+As provas rodam dentro da imagem da recepção. A do ciclo inteiro, com homeserver e verbo de
+mentira e receptor, worker e journal de verdade, a partir de `chat/`:
 
-O ator interno não entra em `cadeiras()` do org: a fábrica não tem head, não vota, não roteia. `slug_da_cadeira('fabrica')` devolve a persona homônima, que é a chave de mesa, fila e Project — sem prefixo `claudinho-`, porque fábrica é persona, não vínculo.
+```
+docker run --rm --network none -e PYTHONUNBUFFERED=1 \
+  -e PF_ABERTURA_DIR=/abertura-publicada \
+  -v "$PWD:/chat:ro" -v "<morada publicada da abertura>:/abertura-publicada:ro" \
+  --entrypoint python platafirma/chat-recepcao:local /chat/testes/prova-ponta-a-ponta.py
+```
 
-## Fluxo de abertura de um giro
+Passou quando cada critério imprime `ok` e sai com exit 0. A prova de formatação está no
+[README da recepção](recepcao/README.md).
 
-1. A recepção recebe a mensagem na sala, aprende de quem é a sala por `eh_de_ator`, e enfileira o job no journal daquela sala.
-2. O worker (host) reivindica o job — um em curso por sala, paralelismo entre salas — e chama `bin/chat despachar --cadeira <ator> --fita <id-ou-vazio>`, com o corpo no stdin.
-3. `bin/chat` ramifica por `eh_participante`. No ramo Claude Code:
-   - **fita nova** (`--fita ""`) → `monta-sessao <persona>` roda, e o pacote de abertura entra por `--append-system-prompt`, na mesma invocação. Uma chamada.
-   - **fita existente** → `--resume <id>`, sem reinjetar o pacote (já está na fita).
-4. O motor gira no cwd `/srv/platafirma/casa/var/fitas/<persona>` (fitas são estado da instância), emite um evento por passo (o worker observa por watchdog de silêncio), e devolve uma linha JSON de resultado.
-5. A recepção posta a resposta na sala.
+## Onde está o quê
 
-O pacote de `monta-sessao` não se replica no `CLAUDE.md` do cwd: fonte única, senão duas personas divergem no dia em que uma não for regenerada.
+| pasta | o que tem |
+|---|---|
+| `recepcao/` | o Application Service, único que fala Matrix; [README](recepcao/README.md) |
+| `worker/` | o worker do host, que reivindica o job e chama `bin/chat` |
+| `comum/` | journal, costura de cadeira e MXID, comuns a recepção e worker |
+| `conf/` | configuração versionada do Synapse, sem segredo |
+| `testes/` | as provas |
 
-## Provisionar um ator novo na superfície
-
-`./provisiona-cadeiras.sh @<dono>:<dominio>` — cria usuário no namespace da recepção, põe displayname e avatar, e abre a sala direta com o dono. Idempotente: rodar de novo não recria nada que já esteja no estado desejado.
-
-- Quem entra é `atores()` (cadeiras + participantes + atores internos), lido do harness. Ator novo com persona entra sozinho; sem lista de exceção neste script.
-- Displayname vem do alias do ledger; ator sem alias sobe pelo próprio sufixo, e o alias entra numa corrida posterior. Displayname é reversível, MXID não.
-
-## Autenticar o Claude Code da conta sem terminal local
-
-O motor Claude Code exige login OAuth na conta `claudinho`. Quando expira, o giro volta com `OAuth session expired`. O login é interativo (imprime URL, espera o código colado), e se conduz remotamente por um driver pty: sobe `claude auth login` num processo destacado, captura a URL de autorização num arquivo, e injeta no stdin o código que o dono cola de volta. O dono abre a URL no navegador dele, autoriza pela conta do stack, e devolve o código — sem precisar de terminal na máquina. O login `claude.ai` renova sozinho depois disso.
-
-O trust do cwd da fita é pré-requisito à parte: `projects["<cwd>"].hasTrustDialogAccepted: true` em `~/.claude.json`, senão o motor ignora a allowlist do `.claude/settings.json` da fita.
+Modelo de ator, fluxo do giro, avatares e login do motor: `docs/chat.md` na raiz do repositório.

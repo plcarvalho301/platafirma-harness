@@ -1,72 +1,36 @@
-# ops-server — o MCP de operação da PlataFirma (`ops-mcp`)
+# ops-server
 
-Servidor MCP que expõe os verbos de operação sob o usuário `claudinho`:
-`run_command`, `read_file`/`write_file`, e os verbos de cadeira (`monta_sessao`,
-`mesa`, `fila`, `tarefas`, `acervo`…). É a porta pela qual as três superfícies
-(claude.ai, fita do chat, Code) tocam o host. Código: `server.py`.
+Pasta de `platafirma-harness` com o MCP de operação (`ops-mcp`): a porta pela qual claude.ai, a fita
+do chat e o Code chamam os verbos da casa e leem e escrevem arquivo no host, sob a conta `claudinho`.
+Roda como a unit `ops-mcp.service` em `127.0.0.1:8010`, publicada em `ops.platafirma.org/mcp`.
 
-## Topologia (tudo na conta `claudinho`, uid 1001)
+## Como sobe
 
-- `ops-mcp.service` — uvicorn (`/opt/platafirma/current/venv/ops`, porta 127.0.0.1:8010).
-  **Roda da release** (`WorkingDirectory=/opt/platafirma/current/harness/ops-server`,
-  `uvicorn server:app`): o código novo chega por `release promover`, que troca `current`
-  e reinicia a porta. Nunca roda de clone de bancada.
-- Raízes: código em `/opt/platafirma` (`PF_RELEASE_RAIZ`), estado e log em
-  `/srv/platafirma/casa` (`PLATAFIRMA_INSTANCIA`). A porta sobe sem bancada declarada; caminho
-  relativo em `run_command`/`read_file`/`write_file` é relativo à bancada
-  (`PLATAFIRMA_BANCADA` ou `~/.config/platafirma/bancada`) e, sem ela, é recusado.
-- `ops-tunnel.service` — túnel Cloudflare que publica `ops.platafirma.org/mcp` → :8010.
-- `ops-healthcheck.service` + `.timer` — bate `/health` periodicamente e reinicia o
-  `ops-mcp` se ele parar de responder. É a rede de segurança de qualquer restart.
+Chega pela release, que constrói o ambiente `ops` de `requirements.txt` e reinicia a porta:
 
-O processo é **single-worker, single-thread** (asyncio cooperativo). Por isso
-`run_command` roda a parte bloqueante em thread do anyio e em process group próprio
-(`start_new_session=True`): sem isso, um comando longo travaria TODO o servidor.
+```
+release promover platafirma-harness <sha>
+```
 
-## Transporte: `stateless_http=True` (decisão do incidente #2890, 27/08/2026)
+Subiu quando `infra estado` lista `ops-mcp.service` `running` e a saúde responde:
 
-O FastMCP é instanciado com **`stateless_http=True`** (`server.py`, no `FastMCP(...)`).
-Cada POST `/mcp` é autossuficiente; **não existe sessão em memória**.
+```
+curl -s -o /dev/null -w '%{http_code}\n' http://127.0.0.1:8010/health
+```
 
-**Por quê.** No modo *stateful* (default), as sessões vivem no
-`StreamableHTTPSessionManager` chaveadas por `Mcp-Session-Id`. Numa fita **ociosa**, o
-túnel Cloudflare corta o stream SSE idle → o manager descarta a sessão → o próximo POST
-com a session id velha responde **`400 Bad Request`** → o cliente Claude larga o servidor
-inteiro da lista, e **todos os verbos somem de uma vez** (inclusive `monta_sessao`). O
-servidor nunca cai; quem morre é a sessão daquela fita. Fitas movimentadas nunca caem —
-renovam o stream antes do idle. Raio de dano medido: 1 fita ociosa por vez.
+devolve `200`. A unit e o instalador dela moram em platafirma-core.
 
-**O custo (e quando revisitar).** Stateless remove o canal server→client persistente
-(notificação/streaming de progresso, sampling, elicitation). O ops-mcp é request/resposta
-puro e não usa nada disso, então hoje é de graça. **Se algum verbo novo precisar mandar
-dado de volta por streaming, o stateless passa a atrapalhar — aí revisitar esta decisão.**
+Reiniciar o `ops-mcp` de dentro de uma chamada da própria porta derruba a chamada no meio: o
+restart vai em escopo separado, com atraso. O comando está em `docs/ops-server.md`.
 
-Laudo completo, evidências e commit: card **#2890** (comentários #501/#502). Fix em
-commit `24c9842`.
+## Como se testa
 
-## Restart seguro
+```
+teste rodar ops
+```
 
-O `ops-mcp` **não se reinicia de dentro de si** — é ato de terminal. E cuidado: reiniciar
-de dentro de um `run_command` mata o cgroup do próprio serviço no meio, podendo derrubar o
-comando antes do `systemctl` concluir. Despache o restart num **escopo transitório
-separado**, com um atraso curto para o `run_command` retornar antes da queda:
+Roda no ambiente `ops`, que tem o pacote `mcp`. Passou quando a primeira linha diz `suite VERDE` e
+sai com exit 0. Apontar a bancada e a pasta (`teste rodar platafirma-harness@<bancada> ops-server`)
+roda no ambiente `harness` e a coleta falha com `No module named 'mcp'`.
 
-    systemd-run --user --collect --unit=ops-mcp-restart \
-      bash -c 'sleep 2; systemctl --user restart ops-mcp.service'
-
-O `ops-healthcheck` cobre se algo sair torto. Verificar depois: `MainPID` novo,
-`ExecMainStartTimestamp` novo, e `curl -s -o /dev/null -w '%{http_code}' :8010/health` = 200.
-
-> **Rodar como `claudinho`, nunca como `megafone`.** `systemctl --user` só enxerga o unit
-> do próprio dono e o docker rootless vive em `/run/user/1001`. Sem shell interativo:
->
->     sudo -u claudinho env XDG_RUNTIME_DIR=/run/user/1001 \
->       DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1001/bus <comando>
->
-> Caminho de produção é sempre absoluto e não depende de `HOME` (`/opt/platafirma`,
-> `/srv/platafirma/casa`): o mesmo comando vale como `claudinho` ou como `megafone`.
-
-## Auditoria
-
-Toda chamada grava linha JSONL em `/srv/platafirma/casa/var/log/ops/` (comando, cwd, exit, duração,
-`mcp_session`, sujeito). Não é silenciável pelo chamador.
+Topologia, transporte sem estado e auditoria: `docs/ops-server.md` na raiz do repositório.

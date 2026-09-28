@@ -1,10 +1,8 @@
 # harness
 
-Pasta de `venvs/` que declara o ambiente Python `harness` da release: as bibliotecas de
-terceiro que os verbos em Python e as units do harness importam (banco de sessão, cache,
-tokenizador da abertura, política de acesso, pesquisa na web). Não tem código: o projeto não
-se instala, e o código roda da árvore servida. Os consumidores e o porquê de cada pacote estão
-no comentário de `pyproject.toml`.
+Pasta de `venvs/` que declara o ambiente Python `harness` da release: as bibliotecas que os verbos em
+Python e as units do harness importam (banco de sessão, cache, tokenizador, política de acesso,
+pesquisa). Não tem código; consumidores e porquê de cada pacote no `pyproject.toml`.
 
 ## Como sobe
 
