@@ -1496,7 +1496,9 @@ gate_conferir_verbo() {  # $1=repo $2=sha_candidato $3=sha_atual(ou vazio)
 # --aceitar-suite-indisponivel, declarada no retorno. Em 26/09 a regra antiga ("nunca barra
 # por ambiente") deixou a promocao subir sem suite: o uv tentava criar controle/.venv na
 # arvore materializada, que e so leitura. O pre-push (comentario A2) segue so avisando.
-CHAVE_SUITE="harness"
+# arq:0116 §6 (28/09): o gate mede o repositório inteiro, `teste rodar <familia> --portao
+# --arvore`, e liga para toda família que tem chave com subárvore de teste no registro —
+# não mais só platafirma-harness nem só a chave harness.
 GATE_SUITE_STATUS=""; GATE_SUITE_DETALHE=""; GATE_SUITE_LOG=""
 GATE_AMBIENTE_STATUS=""; GATE_AMBIENTE_SEGUNDOS=0; GATE_AMBIENTE_CHAVE=""
 
@@ -1505,69 +1507,42 @@ gate_suite_verdes() {  # $1=repo $2=sha ; 0 verde ou n/a; 4 vermelho medido; 5 n
   local arvore="$PROD_RAIZ/$repo/$sha"  # "local a=$1 b=...$a" nao ve o $a recem-declarado: outro local
   GATE_SUITE_STATUS="indisponivel"; GATE_SUITE_DETALHE=""; GATE_SUITE_LOG=""
   GATE_AMBIENTE_STATUS="indisponivel"; GATE_AMBIENTE_SEGUNDOS=0; GATE_AMBIENTE_CHAVE=""
-  [ "$repo" = "$FAMILIA_BIN" ] || { GATE_SUITE_STATUS="n/a"; return 0; }
-
-  local alvos=() arq
-  while IFS= read -r arq; do alvos+=("$arq"); done < <(listar_verdes "$arvore")
-  local sumidos; sumidos="$(verdes_ausentes "$arvore" | tr '\n' ' ')"
-  if [ -n "${sumidos// /}" ]; then
-    GATE_SUITE_DETALHE="VERDES lista arquivo que nao existe na arvore: ${sumidos% }"
-    return 5
-  fi
-  if [ "${#alvos[@]}" -eq 0 ]; then GATE_SUITE_STATUS="sem-verdes"; return 0; fi
-
+  # arq:0116 §6: o portão é o repositório inteiro — toda chave da família que declara
+  # subárvore de teste. Família sem nenhuma não tem suíte a medir (n/a).
   local venvs="${PLATAFIRMA_VENVS:-$arvore/registro/venvs.json}"
-  local out familia lock teste
-  out="$(PLATAFIRMA_VENVS="$venvs" python3 "$AQUI/_release/registro.py" "$CHAVE_SUITE" 2>/dev/null)" \
-    || { GATE_SUITE_DETALHE="registro de venvs sem a chave $CHAVE_SUITE"; return 5; }
-  IFS=$'\t' read -r familia lock teste <<<"$out"
-  [ -f "$arvore/$lock" ] || { GATE_SUITE_DETALHE="lock $lock ausente na arvore"; return 5; }
-
-  local pyid py py_real py_ver
-  pyid="$(resolver_python 2>/dev/null)" || { GATE_SUITE_DETALHE="python de construcao nao resolvido"; return 5; }
-  IFS=$'\t' read -r py py_real py_ver <<<"$pyid"
-  local chave_hash
-  chave_hash="$({ cat "$arvore/$lock"; printf '\npython=%s %s\n' "$py_real" "$py_ver"; } | sha256sum | cut -c1-12)"
-  GATE_AMBIENTE_CHAVE="${CHAVE_SUITE}-${chave_hash}"
-
-  local arvore_hash
-  arvore_hash="$("$GIT" -C "$arvore" rev-parse 'HEAD^{tree}' 2>/dev/null)"
-  [ -n "$arvore_hash" ] || { GATE_SUITE_DETALHE="hash da arvore ilegivel"; return 5; }
+  [ -r "$venvs" ] || venvs="$AQUI/../registro/venvs.json"
+  local n_chaves
+  n_chaves="$(PLATAFIRMA_VENVS="$venvs" python3 "$AQUI/_release/registro.py" --familia "$repo" 2>/dev/null \
+    | awk -F'\t' '$3 != ""' | wc -l)"
+  [ "${n_chaves:-0}" -gt 0 ] || { GATE_SUITE_STATUS="n/a"; return 0; }
+  GATE_AMBIENTE_CHAVE="$repo"
 
   local vereditos_dir="${PLATAFIRMA_INSTANCIA:-/srv/platafirma/casa}/var/pre-push/vereditos"
   mkdir -p "$vereditos_dir" 2>/dev/null || true
-  local veredito_arq; veredito_arq="$(caminho_veredito "$vereditos_dir" "$arvore_hash" "$CHAVE_SUITE" "$chave_hash")"
-  GATE_MARCA="${veredito_arq%.json}.nao-medido"
-  local vresultado; vresultado="$(ler_veredito "$veredito_arq")"
-  case "$vresultado" in
-    verde)
-      GATE_SUITE_STATUS="verde"; GATE_SUITE_DETALHE="reaproveitado"
-      GATE_AMBIENTE_STATUS="reaproveitado"
-      return 0 ;;
-    vermelho)
-      GATE_SUITE_STATUS="vermelho"
-      GATE_SUITE_DETALHE="reaproveitado (veredito ja gravado vermelho para esta arvore)"
-      return 4 ;;
-  esac
+  GATE_MARCA="$vereditos_dir/gate-$repo-$sha.nao-medido"
+  local log_dir="${PLATAFIRMA_INSTANCIA:-/srv/platafirma/casa}/var/log/release-gate"
+  mkdir -p "$log_dir" 2>/dev/null || true
+  local saida="$log_dir/${sha}.txt"
+  GATE_SUITE_LOG="$saida"
 
-  local uv; uv="$(resolver_uv 2>/dev/null)" || { GATE_SUITE_DETALHE="uv ausente"; return 5; }
-  local dest="$PROD_RAIZ/venv/${CHAVE_SUITE}-${chave_hash}"
-  local t0 t1
-  t0=$(date +%s 2>/dev/null || echo 0)
-  if [ ! -f "$dest/.pronto" ]; then
-    mkdir -p "$(dirname "$dest")"
-    if ! construir_venv "$arvore/$lock" "$dest" "$uv" "$py" "$py_ver" 2>/dev/null; then
-      chmod -R u+w "$dest" 2>/dev/null || true; rm -rf "$dest"
-      GATE_SUITE_DETALHE="venv da chave ${CHAVE_SUITE}-${chave_hash} nao construiu"
-      return 5
-    fi
-    : > "$dest/.pronto"; chmod -R a-w "$dest"
-    GATE_AMBIENTE_STATUS="construido"
-  else
-    GATE_AMBIENTE_STATUS="reaproveitado"
-  fi
-  t1=$(date +%s 2>/dev/null || echo 0)
-  GATE_AMBIENTE_SEGUNDOS=$((t1 - t0))
+  # 1) só o memo (PF_TESTE_SO_MEMO): cada chave devolve o veredito gravado por (árvore,
+  # chave) ou 6 ("ainda não medida"). Rev que o pre-push já mediu não roda de novo.
+  local rc_memo=0
+  PF_TESTE_SO_MEMO=1 PLATAFIRMA_VENVS="$venvs" "$AQUI/teste" rodar "$repo" --portao --arvore "$arvore" \
+    >"$saida" 2>&1 || rc_memo=$?
+  case "$rc_memo" in
+    0) GATE_SUITE_STATUS="verde"; GATE_SUITE_DETALHE="reaproveitado"; GATE_AMBIENTE_STATUS="reaproveitado"; return 0 ;;
+    1) GATE_SUITE_STATUS="vermelho"
+       GATE_SUITE_DETALHE="reaproveitado (veredito ja gravado vermelho para esta arvore)"
+       return 4 ;;
+    6) : ;;
+    *) GATE_SUITE_STATUS="indisponivel"
+       GATE_SUITE_DETALHE="$(grep -E '^(suite INDISPONIVEL|portao )' "$saida" | head -n 1)"
+       [ -n "$GATE_SUITE_DETALHE" ] || GATE_SUITE_DETALHE="teste saiu $rc_memo lendo o memo — ver $saida"
+       return 5 ;;
+  esac
+  GATE_AMBIENTE_STATUS="reaproveitado"
+  grep -q ' construido (' "$saida" && GATE_AMBIENTE_STATUS="construido"
 
   # Teto do gate sincrono (spec_ambiente-de-desenvolvimento §3 "Tempo"; card #3150): a
   # suite roda como job (`sessao longjob`, fora do cgroup da porta) e o promover espera ate
@@ -1577,23 +1552,29 @@ gate_suite_verdes() {  # $1=repo $2=sha ; 0 verde ou n/a; 4 vermelho medido; 5 n
   if [ "${PF_GATE_SINCRONO:-0}" != 1 ]; then
     local sessao_bin; sessao_bin="$(achar_verbo sessao)"
     if [ -n "$sessao_bin" ]; then
-      local marca="${veredito_arq%.json}.nao-medido" job out_job unit log_job teto="${PF_GATE_TETO_S:-90}" t=0
+      local marca="$GATE_MARCA" out_job unit log_job teto="${PF_GATE_TETO_S:-90}" t=0 rc_poll
       rm -f "$marca"
       out_job="$(PF_GATE_SINCRONO=1 "$sessao_bin" longjob run "gate-${sha:0:7}" "$AQUI/release" _medir-suite "$repo" "$sha" 2>&1 8>&-)" || out_job=""
       unit="$(printf '%s\n' "$out_job" | grep -oE 'platafirma-job-[A-Za-z0-9_.@-]+' | head -n 1)"
       log_job="$(printf '%s\n' "$out_job" | grep -oE '/[^ ]+\.log' | head -n 1)"
       if [ -n "$unit" ]; then
+        # o job grava o memo de cada chave; aqui só se lê o memo do repositório inteiro
+        rc_poll=6
         while [ "$t" -lt "$teto" ]; do
-          [ -f "$veredito_arq" ] || [ -f "$marca" ] && break
+          [ -f "$marca" ] && break
+          rc_poll=0
+          PF_TESTE_SO_MEMO=1 PLATAFIRMA_VENVS="$venvs" "$AQUI/teste" rodar "$repo" --portao --arvore "$arvore" \
+            >/dev/null 2>&1 || rc_poll=$?
+          [ "$rc_poll" -eq 6 ] || break
           sleep 2; t=$((t + 2))
         done
         if [ -f "$marca" ]; then
           GATE_SUITE_DETALHE="$(head -n 1 "$marca") (job $unit)"; rm -f "$marca"
           return 5
         fi
-        case "$(ler_veredito "$veredito_arq")" in
-          verde) GATE_SUITE_STATUS="verde"; GATE_SUITE_DETALHE="medido no job $unit, ${t}s"; return 0 ;;
-          vermelho) GATE_SUITE_STATUS="vermelho"; GATE_SUITE_DETALHE="medido no job $unit — ver ${log_job:-sessao longjob log $unit}"; return 4 ;;
+        case "$rc_poll" in
+          0) GATE_SUITE_STATUS="verde"; GATE_SUITE_DETALHE="medido no job $unit, ${t}s"; return 0 ;;
+          1) GATE_SUITE_STATUS="vermelho"; GATE_SUITE_DETALHE="medido no job $unit — ver ${log_job:-sessao longjob log $unit}"; return 4 ;;
         esac
         GATE_SUITE_STATUS="em andamento"
         GATE_SUITE_DETALHE="job $unit passou de ${teto}s; log ${log_job:-sessao longjob log $unit}"
@@ -1603,11 +1584,12 @@ gate_suite_verdes() {  # $1=repo $2=sha ; 0 verde ou n/a; 4 vermelho medido; 5 n
     fi
   fi
 
-  local log_dir="${PLATAFIRMA_INSTANCIA:-/srv/platafirma/casa}/var/log/release-gate"
-  mkdir -p "$log_dir" 2>/dev/null || true
-  local saida="$log_dir/${sha}.txt" rc_teste=0
-  "$AQUI/teste" rodar "$CHAVE_SUITE" --portao --arvore "$arvore" >"$saida" 2>&1 || rc_teste=$?
-  GATE_SUITE_LOG="$saida"
+  local rc_teste=0 t0 t1
+  t0=$(date +%s 2>/dev/null || echo 0)
+  PLATAFIRMA_VENVS="$venvs" "$AQUI/teste" rodar "$repo" --portao --arvore "$arvore" >"$saida" 2>&1 || rc_teste=$?
+  t1=$(date +%s 2>/dev/null || echo 0)
+  GATE_AMBIENTE_SEGUNDOS=$((t1 - t0))
+  grep -q ' construido (' "$saida" && GATE_AMBIENTE_STATUS="construido"
 
   case "$rc_teste" in
     0)
@@ -1627,7 +1609,8 @@ gate_suite_verdes() {  # $1=repo $2=sha ; 0 verde ou n/a; 4 vermelho medido; 5 n
       return 4 ;;
     *)
       GATE_SUITE_STATUS="indisponivel"
-      GATE_SUITE_DETALHE="pytest saiu $rc_teste (uso/coleta/timeout) — nao medido; ver $saida"
+      GATE_SUITE_DETALHE="$(grep -E '^suite (INDISPONIVEL|VERMELHA: .* exit [^1])' "$saida" | head -n 1)"
+      GATE_SUITE_DETALHE="${GATE_SUITE_DETALHE:-teste saiu $rc_teste} (uso/coleta/timeout) — nao medido; ver $saida"
       return 5 ;;
   esac
 }
