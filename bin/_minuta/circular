@@ -10,13 +10,14 @@ import sys
 import glob
 import subprocess
 
-sys.path.insert(0, os.path.join(
-    os.path.dirname(os.path.dirname(os.path.dirname(os.path.realpath(__file__)))), "lib"))
-from raizes import BancadaNaoDeclarada, bancada  # noqa: E402
+sys.path.insert(0, os.path.dirname(os.path.realpath(__file__)))
+import _casa as casa  # noqa: E402
 
-# Circular commita e empurra: roda no worktree da cadeira na bancada DECLARADA,
-# <bancada>/wt/platafirma-casa/<cadeira> (arq:0109 §2, card #3010). Resolvido em
-# main(); MINUTA_REPO aponta outro checkout (teste).
+# Circular edita, commita e empurra para main na worktree de main da cadeira em
+# platafirma-casa, repositorio de deliberacao que commita direto em main (arq:0083 §1;
+# ordem do dono de 28/09/2026): <bancada>/wt/platafirma-casa/<cadeira>/main, resolvida e
+# aberta por _casa.worktree. Puxa antes de ler: a minuta que outra cadeira ja empurrou
+# para main aparece aqui. MINUTA_REPO aponta outro checkout (teste).
 REPO = None
 DIR = None
 PLACEHOLDER_ABRE = "<escreva aqui antes de circular>"
@@ -42,30 +43,11 @@ def erro(msg, code=1):
     sys.exit(code)
 
 
-def worktree_da_cadeira(verbo):
-    """MINUTA_REPO, senao <bancada>/wt/platafirma-casa/<cadeira>. Sem bancada
-    declarada ou sem worktree: exit 3, nunca criacao silenciosa."""
-    explicito = os.environ.get("MINUTA_REPO")
-    if explicito:
-        return explicito
-    cadeira = os.environ.get("PF_CADEIRA", "").strip()
-    cadeira = cadeira.removeprefix("claudinho-").removeprefix("claudinha-")
-    if not cadeira:
-        erro("exporte PF_CADEIRA=<cadeira>: a minuta se edita no worktree da cadeira.", 2)
-    try:
-        raiz = bancada()
-    except BancadaNaoDeclarada as e:
-        erro(str(e), 3)
-    wt = os.path.join(str(raiz), "wt", "platafirma-casa", cadeira)
-    if not os.path.isdir(wt):
-        erro(f"worktree ausente: {wt} — rode `repo abrir platafirma-casa` antes de {verbo}.", 3)
-    return wt
-
-
 def git(*args, check=True):
-    return subprocess.run(
-        ["git", "-C", REPO, *args], capture_output=True, text=True, check=check
-    )
+    try:
+        return casa.git(REPO, *args, check=check)
+    except subprocess.CalledProcessError as e:
+        erro(f"git {args[0]} falhou em {REPO}: {(e.stderr or e.stdout or '').strip()}", 3)
 
 
 def resolve(n):
@@ -74,7 +56,7 @@ def resolve(n):
     num = f"{int(n):04d}"
     achados = glob.glob(os.path.join(DIR, f"{num}-*.md"))
     if not achados:
-        erro(f"minuta {num} não encontrada em {DIR}")
+        erro(f"minuta {num} não encontrada em {DIR} (main puxado do forge)")
     if len(achados) > 1:
         erro(f"mais de um arquivo casa com {num}: {achados}")
     return num, achados[0]
@@ -92,7 +74,11 @@ def main():
     args = sys.argv[1:]
     if not args:
         erro("uso: minuta circular <n> [<cadeira>...]", 2)
-    REPO = worktree_da_cadeira("circular")
+    try:
+        REPO = casa.worktree("circular")
+        casa.puxar(REPO)
+    except casa.Falha as f:
+        erro(f.msg, f.code)
     DIR = os.path.join(REPO, "minuta")
     n = args[0]
     alvos_pedidos = args[1:]
@@ -131,8 +117,6 @@ def main():
 
     novas = [c for c in alvos_pedidos if c not in convocadas]
     if novas:
-        git("pull", "--ff-only", "-q", "origin", "HEAD")
-        texto = open(caminho, encoding="utf-8").read()  # relê pós-pull
         convocadas_novas = convocadas + novas
         texto = re.sub(
             r"^Convocadas: .+$",
@@ -150,12 +134,18 @@ def main():
             texto = texto.rstrip("\n") + "\n\n" + novas_secoes
         with open(caminho, "w", encoding="utf-8") as f:
             f.write(texto)
-        git("add", relcaminho)
+        git("add", "--", relcaminho)
         diff = git("diff", "--cached", "--quiet", check=False)
         if diff.returncode != 0:
-            git("commit", "-q", "-m", f"minuta {num}: convoca {', '.join(novas)}")
-            git("push", "-q", "origin", "HEAD")
+            git("commit", "-q", "-m", f"minuta {num}: convoca {', '.join(novas)}", "--", relcaminho)
         convocadas = convocadas_novas
+
+    # O ping aponta um ref que o destinatario le em main: o merito commitado e a convocacao
+    # nova sobem antes do ping (direto em main, arq:0083).
+    try:
+        casa.publicar(REPO)
+    except casa.Falha as f:
+        erro(f.msg, f.code)
 
     alvos = alvos_pedidos if alvos_pedidos else convocadas
     if not alvos:
