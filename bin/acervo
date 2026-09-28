@@ -3,7 +3,7 @@
 # capacidade: conhecimento
 # dono: dados
 # classe: B
-# use para: ler uma ADR/spec/pagina/obra que sabe onde esta (ler), listar o que ha de um tipo ou sobre um assunto pelo catalogo (listar --sobre), gravar uma pagina de wiki (escrever casa pagina), por um repo de doc no acervo (ingerir casa <repo>)
+# use para: ler o texto de uma obra por pagina ou capitulo (ler obra impressao), ler uma ADR/spec/pagina/obra que sabe onde esta (ler), listar o que ha de um tipo ou sobre um assunto pelo catalogo (listar --sobre), gravar uma pagina de wiki (escrever casa pagina), por um repo de doc no acervo (ingerir casa <repo>)
 # atos: ler (leitura, casa), listar (leitura, casa), resolver (leitura, casa), escrever (escrita, registro), ingerir (escrita, incorporacao), curar (escrita, curadoria), extrato (leitura, acervo), exportar (escrita, acervo), psql (escrita, acervo), balde (escrita, acervo)
 # forma: texto
 # le: ler=acervo.casa,acervo.obra,acervo.registro,repo
@@ -76,7 +76,11 @@ uso (gramatica arq:0106 — acervo <ato> <particao> <entidade> [seletor]):
   acervo lote     <id>
   acervo curar    obra lote [dest] · casa alias <classe> <chave> <alias>
   acervo curar    casa revisao <revid>... --motivo <m> [--apply]   tira texto antigo do historico da wiki
+  acervo ler      obra impressao <obra> [--paginas a-b | --capitulo <ancora>] [--formato md|blocos]
+                  [--papel corpo|todos] [--cursor c] [--impressao <id>] [--baixar [<pasta>]]
+                  o texto da obra pelo espelho de leitura, do comeco e em ordem
   acervo curar    obra --situacao|--expurgar|--restaurar|--promover|--reclassificar|--conceito <...>
+  acervo curar    obra --recortar <obra> · --reextrair <obra> [--metodo <m>] · --expurgar|--restaurar --espelhos
   acervo curar    obra --relacionar <de> <para> --tipo <t> --garantia <g> --motivo <m> [--apply]
                   obra --relacoes <conceito> · --desrelacionar <id>   a teia de conceitos (conceito vive em obra)
   acervo extrato  --todas [dest]
@@ -163,6 +167,9 @@ conforme() {
     listar:obra:metodos)    exec "$ATOS/listar" obra metodos "$@" ;;
     listar:obra:conceito)   exec "$ATOS/listar" conceitos "$@" ;;
     ler:obra:objeto)        exec "$ATOS/baixar" "$@" ;;
+    # o texto da obra pelo espelho de leitura, por pagina ou capitulo (spec espelho-de-leitura
+    # §5.4; #3180): cliente fino da rota de leitura do motor, nunca converte nem renderiza
+    ler:obra:impressao)     exec python3 "$ATOS/impressao" "$@" ;;
     curar:obra:lote)        exec "$ATOS/bancada" "$@" ;;
     # curadoria de UMA obra (#3126): entidade e a FLAG de bin/curar (--situacao, --expurgar,
     # --restaurar, --promover, --reclassificar, --conceito, --relacionar...), nao um nome fixo

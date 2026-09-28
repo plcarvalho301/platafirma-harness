@@ -3,7 +3,7 @@
 # capacidade: classificacao
 # dono: claudinho-dados
 # use para: curadoria do acervo, reclassificação em lote e avulsa, expurgo, restauração, promoção, criação de conceito (nó), teia de conceitos (aresta entre conceitos), derivação entre obras e registro de obra não adquirida
-# atos: --reclassificar, --situacao, --expurgar, --restaurar, --promover, --conceito, --relacionar, --relacoes, --desrelacionar, --derivar, --derivacoes, --desderivar, --registrar-obra
+# atos: --reclassificar, --situacao, --expurgar, --restaurar, --promover, --recortar, --reextrair, --conceito, --relacionar, --relacoes, --desrelacionar, --derivar, --derivacoes, --desderivar, --registrar-obra
 import argparse
 import json
 import os
@@ -38,6 +38,10 @@ USO = """uso:
   curar --expurgar <obra> [--sim]
   curar --restaurar <obra>
   curar --promover <obra> --impressao <id>
+  curar --recortar <obra> [--corte <slug>] [--apply]          impressão nova sobre o mesmo espelho
+  curar --reextrair <obra> [--metodo <slug|digest>] [--apply] espelho novo do próprio arquivo
+  curar --expurgar --espelhos [--apply]                       espelho de impressão aposentada há +90 dias
+  curar --restaurar --espelhos [<obra>] [--apply]             desfaz o expurgo de espelhos
   curar --conceito <slug> [--rotulo … --definicao … --natureza … --estatuto … --alt "rótulo@pt,…"] --pai <slug> --tipo <t> --garantia <g> --motivo "…" [--lastro …] [--apply]
   curar --relacionar <de> <para> --tipo <t> --garantia <g> --motivo <m> [--lastro <obra>] [--apply]
   curar --relacionar --help     cartilha: as 11 famílias (frase-molde) e as 3 garantias
@@ -1105,6 +1109,89 @@ def acao_registrar_obra(args, autor: str, como_json: bool, headers: dict) -> int
     return 0
 
 
+# --- atos sobre o espelho de leitura (spec espelho-de-leitura §6.3, §9, §10; card #3180) ------
+
+
+def _linha_espelho(e: dict | None) -> str:
+    if not e:
+        return "(sem espelho)"
+    enc = e.get("encoding") or {}
+    conv = e.get("conversor") or {}
+    return (f"{conv.get('nome', '?')}@{conv.get('versao', '?')} · digest {str(e.get('digest'))[:12]} · "
+            f"{enc.get('decidido', '?')} ({enc.get('por', '?')}) · substituições {e.get('substituicoes')} · "
+            f"qualidade {e.get('qualidade')}" + (f" ({e['motivo']})" if e.get("motivo") else ""))
+
+
+def acao_recortar(args, autor: str, como_json: bool, headers: dict) -> int:
+    """Impressão nova sobre o MESMO espelho, sem tocar o balde (§6.3). Plano seco sem --apply."""
+    obra_id = resolver_obra_id(args.recortar, headers)
+    payload = {"autor": autor, "aplicar": args.apply, "corte": args.corte}
+    data = _chamar("POST", f"{BASE}/acervo/obras/{obra_id}/recortes", headers, payload)
+    if como_json:
+        print(json.dumps(data, indent=2, ensure_ascii=False))
+        return 0
+    titulo = "Recorte aplicado" if data.get("modo") == "aplicado" else "Plano de recorte"
+    print(f"{titulo}: {data.get('titulo')} ({data.get('obra_id')})")
+    print(f"  espelho   : {data.get('espelho')} (o mesmo; balde intocado)")
+    print(f"  corte     : {data.get('corte_atual')} -> {data.get('corte_alvo')} · "
+          f"{data.get('trechos')} trecho(s) em {data.get('secoes')} seção(ões)")
+    if data.get("modo") == "aplicado":
+        print(f"  impressão : {data.get('impressao_nova')} servindo; {data.get('aposentada')} aposentada")
+    else:
+        print(f"  impressão : {data.get('impressao_atual')} (servindo)")
+        print("  (plano seco — repita com --apply para gravar)")
+    return 0
+
+
+def acao_reextrair(args, autor: str, como_json: bool, headers: dict) -> int:
+    """Espelho novo do próprio arquivo e impressão nova sobre ele (§9 caso 2; com o digest de
+    um espelho atestado, regenera sob a mesma chave, §10.1). Plano seco sem --apply."""
+    obra_id = resolver_obra_id(args.reextrair, headers)
+    payload = {"autor": autor, "aplicar": args.apply, "metodo": args.metodo, "corte": args.corte}
+    data = _chamar("POST", f"{BASE}/acervo/obras/{obra_id}/reextracoes", headers, payload)
+    if como_json:
+        print(json.dumps(data, indent=2, ensure_ascii=False))
+        return 0
+    aplicado = data.get("modo") == "aplicado"
+    print(f"{'Reextração aplicada' if aplicado else 'Plano de reextração'}: {data.get('titulo')} ({data.get('obra_id')})")
+    print(f"  objeto    : {data.get('objeto')}")
+    print(f"  método    : {data.get('metodo_alvo')}" + (" (regenerar sob a mesma chave)" if data.get("regenerar") else ""))
+    print(f"  espelho   : atual {data.get('espelho_atual') or '(nenhum)'}")
+    if aplicado:
+        print(f"  novo      : {_linha_espelho(data.get('espelho'))}" + ("  [já existia]" if data.get("ja_existia") else ""))
+        print(f"  impressão : {data.get('impressao_nova')} servindo · {data.get('trechos')} trecho(s)"
+              + (f"; {data.get('aposentada')} aposentada" if data.get("aposentada") else ""))
+    else:
+        print("  (plano seco — repita com --apply para gravar)")
+    return 0
+
+
+def acao_espelhos(ato: str, obra: str | None, autor: str, aplicar: bool, como_json: bool, headers: dict) -> int:
+    """`--expurgar --espelhos` e `--restaurar --espelhos` (§10.2). Plano seco sem --apply."""
+    payload = {"autor": autor, "aplicar": aplicar}
+    if obra:
+        payload["obra"] = resolver_obra_id(obra, headers)
+    rota = "expurgo" if ato == "expurgar" else "restauro"
+    data = _chamar("POST", f"{BASE}/acervo/espelhos/{rota}", headers, payload)
+    if como_json:
+        print(json.dumps(data, indent=2, ensure_ascii=False))
+        return 0
+    verbo = "expurgado(s)" if ato == "expurgar" else "restaurado(s)"
+    cabeca = f"{data.get('n', 0)} espelho(s) {verbo}" if data.get("modo") == "aplicado" else \
+        f"Plano: {data.get('n', 0)} espelho(s) a {ato}"
+    if ato == "expurgar":
+        cabeca += f" (impressões todas aposentadas há mais de {data.get('prazo_dias', 90)} dias)"
+    print(cabeca)
+    for it in data.get("itens", []):
+        extra = ""
+        if ato == "expurgar":
+            extra = f"  aposentada em {it.get('aposentada_em')} · regenerável {'sim' if it.get('regeneravel') else 'não'}"
+        print(f"  {it.get('bucket')}/espelho/{str(it.get('fonte_versao')).split(':')[-1][:12]}…/{str(it.get('digest'))[:12]}{extra}")
+    if data.get("modo") != "aplicado":
+        print("  (plano seco — repita com --apply para gravar)")
+    return 0
+
+
 def main(argv=None):
     if argv is None:
         argv = sys.argv[1:]
@@ -1117,8 +1204,14 @@ def main(argv=None):
     # Ações
     parser.add_argument("--reclassificar", action="store_true", default=False)
     parser.add_argument("--situacao", default=None)
-    parser.add_argument("--expurgar", default=None)
-    parser.add_argument("--restaurar", default=None)
+    # nargs="?": `--expurgar --espelhos` e `--restaurar --espelhos` não levam obra (#3180)
+    parser.add_argument("--expurgar", nargs="?", const="", default=None)
+    parser.add_argument("--restaurar", nargs="?", const="", default=None)
+    parser.add_argument("--espelhos", action="store_true", default=False)
+    parser.add_argument("--recortar", default=None)
+    parser.add_argument("--reextrair", default=None)
+    parser.add_argument("--metodo", default=None)
+    parser.add_argument("--corte", default=None)
     parser.add_argument("--promover", default=None)
     parser.add_argument("--relacionar", nargs="*", default=None)
     parser.add_argument("--relacoes", default=None)
@@ -1204,6 +1297,17 @@ def main(argv=None):
     traceparent = f"00-{secrets.token_hex(16)}-{secrets.token_hex(8)}-01"
     headers["traceparent"] = traceparent
 
+    if args.espelhos and (args.expurgar is not None or args.restaurar is not None):
+        ato = "expurgar" if args.expurgar is not None else "restaurar"
+        obra = (args.expurgar if ato == "expurgar" else args.restaurar) or args.obra
+        return acao_espelhos(ato, obra, autor, args.apply, args.como_json, headers)
+    if args.espelhos:
+        sys.stderr.write("curar: erro: --espelhos acompanha --expurgar ou --restaurar\n")
+        return 2
+    if args.recortar:
+        return acao_recortar(args, autor, args.como_json, headers)
+    if args.reextrair:
+        return acao_reextrair(args, autor, args.como_json, headers)
     if args.conceito:
         return acao_conceito(args, autor, args.como_json, headers)
     if args.derivar:
