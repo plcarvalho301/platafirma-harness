@@ -9,6 +9,10 @@ CONHECIMENTO CURADO
 - A fita termina o próprio trabalho; tarefa agendada para retomar é recusada pelo dono. Pendência que não fecha na fita sai no relato.
 - Barreira de ferramenta (write_file recusando um tipo de arquivo) sobe como barreira no mesmo turno; não se contorna mudando o desenho do card calado.
 - Checagem nova vira aviso, não portão que trava merge: o dono recusa teste/portão obrigatório (medo de teste fóssil travando código); não propor nem cobrar ruleset.
+- README (padrao readme): em subpasta, o critério é «sobe ou testa sozinha»; o AP8 do lint só enxerga pyproject/package.json/Dockerfile/Makefile, então pasta com compose ou venv próprio leva README mesmo sem o lint acusar (DT 31). Revisão de README é de TODOS, raiz inclusa: trava de card que poupa raiz é erro de quem escreveu o card.
+- `lint organizacao <repo>` com nome nu mede a bancada aberta da cadeira, não main; com bancada velha aberta, medir numa bancada sincronizada com main.
+- Skill mora no harness (skills/<nome>/SKILL.md); atualizar lá é o ato inteiro. Cadeira não exporta skill nem abre card de skill para o dono.
+- Fóssil que o dono manda apagar se apaga inteiro, com as referências vivas nos outros repositórios; histórico (registro/, análise datada) fica. Em 27/09: Vikunja, platafirma-osint, platafirma-ollama-orchestrator. platafirma-cofre-backup NÃO é fóssil: fica.
 
 DIARIO DE BORDO
 2026-09-27 — release promover harness 47c8ce6 saiu 2 "família fora do registro"; li registro/familias.json — contorno encontrado NA DATA 2026-09-27 foi usar o nome platafirma-harness.
@@ -38,3 +42,8 @@ DIARIO DE BORDO
 2026-09-27 — (#3136) repo pr-ver não mostra status de commit (conferir) — contorno encontrado NA DATA 2026-09-27 foi ler o publicar.log.
 2026-09-27 — (#3136) fechar PR sem merge: repo não tem ato — contorno encontrado NA DATA 2026-09-27 foi repo git push origin --delete <ramo> e repo sanear.
 2026-09-27 — (#3136) repo abrir com card em entregue saiu com recusa de mover (exige motivo), bancada aberta mesmo assim — contorno encontrado NA DATA 2026-09-27 foi ignorar o move.
+2026-09-27 — (#3177) teste rodar <stack> recusa com mais de uma bancada do harness aberta e não aceita nomear a bancada; teste rodar <bancada> ops-server roda no venv harness (No module named mcp) — nenhum, DT 30.
+2026-09-27 — (#3177) repo não tem ato de fechar bancada; bancada só some no pr-merge — contorno encontrado NA DATA 2026-09-27 foi repo sincronizar na bancada velha antes de medir.
+2026-09-27 — (#3177) repo commitar recusa caminho apagado — contorno encontrado NA DATA 2026-09-27 foi repo git rm antes e commitar só os caminhos vivos (o stage leva a remoção).
+2026-09-27 — (#3177) nenhum verbo apaga repositório no forge; run_command gh recusado "sem verbo" — nenhum, o dono apagou pela mão.
+2026-09-27 — (#3177) write_file recusou wt/platafirma-osint e wt/platafirma-ollama-orchestrator "fora de morada" — nenhum, os repos eram fósseis e foram apagados.
