@@ -138,6 +138,23 @@ def test_artefato_pinado_entra_na_arvore_medida(tmp_path):
     assert "terceiro:  tok" in r.stderr
 
 
+def test_so_memo_nao_roda_e_devolve_6_ate_haver_veredito(tmp_path):
+    """O gate lê o repositório inteiro pelo memo (PF_TESTE_SO_MEMO) antes de medir e
+    enquanto o job mede: sem veredito, 6 e nada roda; depois da medição, o veredito."""
+    env, arv = _arvore(tmp_path, {"a": {"test_a.py": VERDE}, "b": {"test_b.py": VERMELHO}},
+                       {"a": "test_a.py\n", "b": "test_b.py\n"})
+    so_memo = dict(env, PF_TESTE_SO_MEMO="1")
+    r = _run(so_memo, "rodar", "demo", "--portao", "--arvore", str(arv))
+    assert r.returncode == 6, r.stdout + r.stderr
+    assert "AINDA NAO MEDIDO" in r.stdout
+    assert not (tmp_path / "instancia" / "var" / "log" / "teste").exists()
+    r = _run(env, "rodar", "demo", "--portao", "--arvore", str(arv))
+    assert r.returncode == 1, r.stdout + r.stderr
+    r = _run(so_memo, "rodar", "demo", "--portao", "--arvore", str(arv))
+    assert r.returncode == 1, r.stdout + r.stderr
+    assert "veredito reaproveitado" in r.stdout + r.stderr
+
+
 def test_artefato_fora_do_cache_e_sem_url_e_dependencia_ausente(tmp_path):
     env, arv = _arvore(tmp_path, {"a": {"test_a.py": VERDE}}, {"a": "test_a.py\n"})
     Path(env["PLATAFIRMA_TERCEIROS"]).write_text(json.dumps(

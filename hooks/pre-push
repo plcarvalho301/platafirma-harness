@@ -11,39 +11,34 @@
 #
 # BASELINE VERDE, e nao a suite inteira. Gate que nasce vermelho por falha que ja
 # existia e gate que alguem desliga na primeira vez. Entao ele julga so o que esta
-# verde HOJE, listado em `controle/tests/VERDES`, e arquivo consertado ENTRA na lista
-# no mesmo commit que o conserta. A lista so cresce.
+# verde HOJE, listado na lista de portao de cada subarvore de teste (controle/tests/
+# VERDES, recuperacao/VERDES, ops-server/VERDES...), e arquivo consertado ENTRA na
+# lista no mesmo commit que o conserta. A lista so cresce.
+#
+# O REPOSITORIO INTEIRO, nao uma chave (arq:0116 §6): `teste rodar <repositorio>
+# --portao --arvore` roda a lista de portao de toda chave do registro que declara
+# subarvore de teste, cada uma no seu venv, e passa quando todas passam. O nome do
+# repositorio e o do origin (ultimo segmento da url, sem .git). Repositorio de esteira
+# documento nao e medido aqui; repositorio que o registro nao conhece, ou sem chave
+# de teste, sai "nao medido" e deixa passar.
 #
 # JULGA A REV EMPURRADA, NAO O WORKING TREE (achado de claudinha-gestao-estrategica,
 # 04/09/2026). O clone da pasta de trabalho da conta era COMPARTILHADO entre
 # cadeiras: quando alguem esta com bin/monta-sessao modificado e nao commitado, quem
 # commita em abertura/ paga o vermelho alheio. Entao: worktree descartavel na rev
 # que o git esta empurrando, medida la, remocao no trap. O estado sujo do clone
-# deixa de ter voto. O REGISTRO DE VENVS TAMBEM VEM DA ARVORE EMPURRADA, pelo mesmo
-# motivo — nao do clone de quem esta empurrando.
+# deixa de ter voto. O REGISTRO DE VENVS TAMBEM VEM DA ARVORE EMPURRADA, quando ela
+# o tem — nao do clone de quem esta empurrando.
 #
 # NAO TRAVA POR AMBIENTE. Ambiente que nao constroi, ou pytest que nem coleta, nao
 # vira "BASELINE VERDE QUEBROU": avisa e deixa passar. Bloqueia so quando MEDIU e o
-# teste falhou de verdade (card #3150, comentário A2 — antes, qualquer exit != 0 do
-# pytest era tratado como vermelho, inclusive uso/coleta/timeout).
+# teste falhou de verdade (card #3150, comentário A2).
 #
 # card #3150, comentário A: o mesmo construtor e a MESMA chave <nome>-hash(lock+
-# python) que release/teste usam (lib/venv.sh + bin/_release/registro.py) — nunca
-# mais uvx --with redis isolado. Veredito gravado e reaproveitado por (hash da
-# árvore, chave) — o MESMO arquivo que o gate de `release promover` lê e grava
-# (lib/venv.sh: caminho_veredito/ler_veredito/gravar_veredito), então uma rev já
-# medida aqui não roda a suíte de novo na promoção. Toda ref empurrada é medida,
-# não só a primeira (A4).
-#
-# `uv run --python <venv> --with pytest pytest`, nao o python do venv direto: o
-# venv da chave (construir_venv) so instala o que o LOCK declara — "acervo" so tem
-# boto3, por exemplo — e pytest e ferramenta de quem mede, nao dependencia do
-# projeto. --with pytest injeta na hora, sem gravar no venv (mesma convencao de
-# `teste rodar --chave`, bin/teste).
-#
-# CHAVE fixa em "harness" porque hoje NENHUM arquivo de VERDES precisa de outro
-# venv (nenhum importa boto3, que é o que distingue a chave "acervo"). Arquivo que
-# precisar de outra chave é trabalho novo, nomeado, não resolvido aqui.
+# python) que release/teste usam (lib/venv.sh + bin/_release/registro.py). Veredito
+# gravado e reaproveitado por (hash da árvore, chave) — o MESMO arquivo que o gate
+# de `release promover` lê e grava, então uma rev já medida aqui não roda a suíte de
+# novo na promoção. Toda ref empurrada é medida, não só a primeira (A4).
 set -uo pipefail
 
 # O PROPRIO GIT injeta GIT_DIR/GIT_WORK_TREE (e primos) no ambiente deste hook — apontam
@@ -54,10 +49,7 @@ set -uo pipefail
 unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_OBJECT_DIRECTORY GIT_COMMON_DIR       GIT_CEILING_DIRECTORIES
 
 RAIZ="$(git rev-parse --show-toplevel)"
-LISTA="$RAIZ/controle/tests/VERDES"
 AQUI="$(cd "$(dirname "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd)"
-
-[ -r "$LISTA" ] || exit 0
 
 # shellcheck source=../lib/raizes.sh
 . "$AQUI/../lib/raizes.sh"
@@ -66,23 +58,34 @@ AQUI="$(cd "$(dirname "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd)"
 PF_VENV_PREFIXO="pre-push"
 
 REGISTRO="$AQUI/../bin/_release/registro.py"
-CHAVE="harness"
 VEREDITOS_DIR="${PLATAFIRMA_INSTANCIA:-/srv/platafirma/casa}/var/pre-push/vereditos"
 ARVORES_DIR="${PLATAFIRMA_INSTANCIA:-/srv/platafirma/casa}/var/pre-push/arvores"
 mkdir -p "$VEREDITOS_DIR" "$ARVORES_DIR" 2>/dev/null || true
 
-# ALVOS como array (A5), lidos de controle/tests/VERDES pelo leitor compartilhado
-# (lib/venv.sh: listar_verdes) — mesmo shellcheck SC2086 que string sem aspas dava.
-ARQUIVOS=()
-while IFS= read -r linha; do
-  ARQUIVOS+=("$linha")
-done < <(listar_verdes "$RAIZ")
-[ "${#ARQUIVOS[@]}" -gt 0 ] || exit 0
+# o repositorio que se empurra, pelo origin
+URL="$(git remote get-url origin 2>/dev/null || true)"
+REPO="$(basename "${URL%/}")"; REPO="${REPO%.git}"
+[ -n "$REPO" ] || REPO="$(basename "$RAIZ")"
+
+# registro de antes da rev (so para decidir se ha o que medir): o do clone, senao o do hook
+venvs_de() {  # $1=raiz de arvore ; imprime o registro a usar
+  if [ -n "${PLATAFIRMA_VENVS:-}" ]; then printf '%s' "$PLATAFIRMA_VENVS"
+  elif [ -r "$1/registro/venvs.json" ]; then printf '%s' "$1/registro/venvs.json"
+  else printf '%s' "$AQUI/../registro/venvs.json"; fi
+}
+VENVS_CLONE="$(venvs_de "$RAIZ")"
+res="$(PLATAFIRMA_VENVS="$VENVS_CLONE" python3 "$REGISTRO" "$REPO" 2>/dev/null)" || res=""
+esteira="$(printf '%s' "$res" | cut -f4)"
+[ "$esteira" = "documento" ] && exit 0
+chaves="$(PLATAFIRMA_VENVS="$VENVS_CLONE" python3 "$REGISTRO" --familia "$REPO" 2>/dev/null | awk -F'\t' '$3 != ""' | wc -l)"
+if [ "${chaves:-0}" -eq 0 ]; then
+  printf 'pre-push: %s sem chave de teste no registro — não medido, deixando passar.\n' "$REPO" >&2
+  exit 0
+fi
 
 # A REV A JULGAR vem do stdin do hook: "<local_ref> <local_oid> <remote_ref> <remote_oid>".
-# TODA linha e uma ref empurrada (A4 — o laço antigo pegava só a primeira e dava
-# break). local_oid todo-zero e delecao de ref: nao ha arvore a medir. stdin vazio
-# (invocacao a mao) cai no HEAD.
+# TODA linha e uma ref empurrada (A4). local_oid todo-zero e delecao de ref: nao ha
+# arvore a medir. stdin vazio (invocacao a mao) cai no HEAD.
 REFS=()
 while read -r _ local_oid _ _; do
   case "$local_oid" in
@@ -109,10 +112,10 @@ limpa() {
 trap limpa EXIT
 
 # Mede UMA rev: 0 verde (ou reaproveitado verde), 1 vermelho real (barra o push),
-# 3 não medido (ambiente/coleta/timeout — avisa e deixa passar, nunca barra).
+# 3 não medido (ambiente/coleta/timeout/lista — avisa e deixa passar, nunca barra).
 medir_rev() {  # $1=rev
   local rev="$1"
-  local arvore="$TMP/arvore-${rev:0:12}" log="$TMP/git-${rev:0:12}.txt"  # "local a=$1 b=...$a" nao ve o $a recem-declarado: outro local
+  local arvore="$TMP/arvore-${rev:0:12}" log="$TMP/git-${rev:0:12}.txt"
 
   if ! git worktree add --detach --no-checkout "$arvore" "$rev" >"$log" 2>&1; then
     printf 'pre-push: não consegui isolar a rev %s — não medido, deixando passar.\n' "$rev" >&2
@@ -125,62 +128,43 @@ medir_rev() {  # $1=rev
     return 3
   fi
 
-  local alvos=() arq
-  for arq in "${ARQUIVOS[@]}"; do
-    [ -f "$arvore/controle/$arq" ] && alvos+=("$arq")
-  done
-  # VERDES que aponta arquivo sumido e baseline que ninguem mede: aqui avisa (politica A2
-  # do pre-push); o gate de `release promover` barra com 5 a mesma arvore.
-  local sumidos; sumidos="$(verdes_ausentes "$arvore" | tr '\n' ' ')"
-  if [ -n "${sumidos// /}" ]; then
-    printf 'pre-push: AVISO — controle/tests/VERDES lista arquivo que nao existe na rev %s: %s(o gate da promocao vai barrar)\n' \
-      "${rev:0:7}" "$sumidos" >&2
-  fi
-  [ "${#alvos[@]}" -gt 0 ] || return 0
-
-  local arvore_hash
-  arvore_hash="$(git -C "$arvore" rev-parse "${rev}^{tree}" 2>/dev/null)"
-  [ -n "$arvore_hash" ] || { printf 'pre-push: não consegui medir a árvore de %s — não medido.\n' "$rev" >&2; return 3; }
-
-  # o registro vem da PROPRIA arvore empurrada (mesma regra do "julga a rev
-  # empurrada"), nunca do clone de quem esta empurrando; override so por env
-  # explicita (PLATAFIRMA_VENVS), do mesmo jeito que release/teste aceitam.
-  local venvs="${PLATAFIRMA_VENVS:-$arvore/registro/venvs.json}"
+  local venvs; venvs="$(venvs_de "$arvore")"
   local teste_bin="$AQUI/../bin/teste"
   local saida="$TMP/teste-${rev:0:12}.txt" rc_teste=0
-  PLATAFIRMA_VENVS="$venvs" "$teste_bin" rodar "$CHAVE" --portao --arvore "$arvore" >"$saida" 2>&1 || rc_teste=$?
+  PLATAFIRMA_VENVS="$venvs" "$teste_bin" rodar "$REPO" --portao --arvore "$arvore" >"$saida" 2>&1 || rc_teste=$?
 
-  local chave_id="$CHAVE"
-  local achou_chave
-  achou_chave="$(grep -oE "$CHAVE-[0-9a-f]{12}" "$saida" | head -n 1)"
-  [ -n "$achou_chave" ] && chave_id="$achou_chave"
+  local chaves_id
+  chaves_id="$(grep -oE 'chave [A-Za-z0-9._-]+-[0-9a-f]{12}' "$saida" | sed 's/^chave //' | sort -u | tr '\n' ' ')"
+  chaves_id="${chaves_id% }"
+  [ -n "$chaves_id" ] || chaves_id="$REPO"
 
   case "$rc_teste" in
     0)
-      if grep -q "veredito reaproveitado" "$saida"; then
-        printf 'pre-push: baseline de contrato — %s reaproveitado / reaproveitou (%s, verde)\n' "$chave_id" "${rev:0:7}"
+      if grep -q "veredito reaproveitado" "$saida" && ! grep -qE '^suite VERDE: .* — [0-9]+ passed' "$saida"; then
+        printf 'pre-push: baseline de contrato — %s reaproveitado / reaproveitou (%s, verde)\n' "$chaves_id" "${rev:0:7}"
       else
-        printf 'pre-push: baseline de contrato verde em %s (%s, rodou)\n' "${rev:0:7}" "$chave_id"
+        printf 'pre-push: baseline de contrato verde em %s (%s, rodou)\n' "${rev:0:7}" "$chaves_id"
       fi
       return 0 ;;
     1)
-      if grep -q "veredito reaproveitado" "$saida"; then
-        printf 'pre-push: BASELINE VERDE QUEBROU na rev %s — veredito reaproveitado (%s, mesma árvore já medida vermelha).\n' "${rev:0:7}" "$chave_id" >&2
+      if grep -q "veredito reaproveitado" "$saida" && ! grep -qE '^[[:space:]]*reprovado:' "$saida"; then
+        printf 'pre-push: BASELINE VERDE QUEBROU na rev %s — veredito reaproveitado (%s, mesma árvore já medida vermelha).\n' "${rev:0:7}" "$chaves_id" >&2
       else
         {
           echo
           printf 'pre-push: BASELINE VERDE QUEBROU na rev %s — push barrado.\n' "${rev:0:7}"
+          grep -E '^(portao |suite VERMELHA)' "$saida" | sed 's/^/  /'
           grep -E '^[[:space:]]*reprovado:' "$saida" | sed 's/^/  /'
           echo
-          printf '  medido em worktree limpo da rev empurrada (%s), não no seu clone.\n' "$chave_id"
+          printf '  medido em worktree limpo da rev empurrada (%s), não no seu clone.\n' "$chaves_id"
           grep -E '^[[:space:]]*saida inteira:' "$saida" | sed 's/^[[:space:]]*//'
-          printf '  a lista do baseline: controle/tests/VERDES\n'
+          printf '  as listas do baseline: a lista de portão de cada subárvore de teste (arq:0116 §5)\n'
         } >&2
       fi
       return 1 ;;
     *)
       printf 'pre-push: teste rodar saiu %s medindo %s (%s) — não medido, deixando passar.\n' \
-        "$rc_teste" "${rev:0:7}" "$CHAVE" >&2
+        "$rc_teste" "${rev:0:7}" "$REPO" >&2
       cat "$saida" >&2
       return 3 ;;
   esac

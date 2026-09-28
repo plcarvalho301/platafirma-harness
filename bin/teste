@@ -54,7 +54,8 @@ interpretador: venv construído pelo registro
 exit: 0 suíte verde / inventário lido · 1 suíte vermelha / sem bancada
       2 uso / nome desconhecido / nome duplicado / --ajuda · 3 dependência ausente
       4 alvo fora da subárvore ou --arvore fora da raiz
-      5 indeterminável (nenhuma stack detectada ou stack sem lock)
+      5 indeterminável (nenhuma stack detectada, stack sem lock, lista de portão ausente)
+      6 só com PF_TESTE_SO_MEMO=1: árvore ainda sem veredito gravado (nada rodou)
 EOF
   exit 2
 }
@@ -327,6 +328,13 @@ pytest_em_bloco() {  # $1=clone $2=raiz(cwd) $3=rotulo $4=modo(py:<python>|isola
     fi
   fi
 
+  # PF_TESTE_SO_MEMO=1: só o veredito gravado, nunca roda (o gate lê assim o repositório
+  # inteiro antes de medir, e enquanto o job mede). Sem veredito: 6.
+  if [ "${PF_TESTE_SO_MEMO:-0}" = 1 ]; then
+    printf 'suite AINDA NAO MEDIDA: %s — sem veredito gravado para a arvore %s\n' "$rotulo" "${arvore:0:12}"
+    return 6
+  fi
+
   local logd="$inst/var/log/teste" log xml
   mkdir -p "$logd" 2>/dev/null || logd="${TMPDIR:-/tmp}"
   log="$logd/$(date -u +%Y%m%dT%H%M%SZ)-${rotulo%% *}-$$.txt"
@@ -427,7 +435,7 @@ portao_da_familia() {  # $1=clone $2=familia $3=bancada(chave ou vazio) $4=arvor
   venvs="${PLATAFIRMA_VENVS:-$c/registro/venvs.json}"
   [ -r "$venvs" ] || venvs="$(dirname "$(readlink -f "$0")")/../registro/venvs.json"
   linhas="$(PLATAFIRMA_VENVS="$venvs" python3 "$REGISTRO" --familia "$familia")" || exit $?
-  local chaves=() rc rc_fam=0 vermelhas=() nao_medidas=()
+  local chaves=() rc rc_fam=0 vermelhas=() nao_medidas=() pendentes=()
   while IFS=$'\t' read -r chave lock sub; do
     [ -n "$chave" ] && [ -n "$sub" ] || continue
     chaves+=("$chave")
@@ -446,6 +454,7 @@ portao_da_familia() {  # $1=clone $2=familia $3=bancada(chave ou vazio) $4=arvor
     case "$rc" in
       0) : ;;
       1) vermelhas+=("$chave") ;;
+      6) pendentes+=("$chave") ;;
       *) nao_medidas+=("$chave (exit $rc)") ;;
     esac
   done
@@ -456,6 +465,10 @@ portao_da_familia() {  # $1=clone $2=familia $3=bancada(chave ou vazio) $4=arvor
   if [ "${#nao_medidas[@]}" -gt 0 ]; then
     printf 'portao %s: NAO MEDIDO — %s\n' "$familia" "${nao_medidas[*]}"
     return 5
+  fi
+  if [ "${#pendentes[@]}" -gt 0 ]; then
+    printf 'portao %s: AINDA NAO MEDIDO — %s\n' "$familia" "${pendentes[*]}"
+    return 6
   fi
   printf 'portao %s: VERDE — %s\n' "$familia" "${chaves[*]}"
   return "$rc_fam"
