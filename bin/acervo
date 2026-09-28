@@ -160,6 +160,7 @@ conforme() {
     ler:casa:entidade)      exec "$ATOS/entidade" listar "$@" ;;
     # --- obra: conceito, objeto, bancada, obra ---
     listar:obra:obra)       exec "$ATOS/listar" obra "$@" ;;
+    listar:obra:metodos)    exec "$ATOS/listar" obra metodos "$@" ;;
     listar:obra:conceito)   exec "$ATOS/listar" conceitos "$@" ;;
     ler:obra:objeto)        exec "$ATOS/baixar" "$@" ;;
     curar:obra:lote)        exec "$ATOS/bancada" "$@" ;;
