@@ -55,3 +55,5 @@ tests/test_publicar_abertura_rotas.py
 tests/test_contrato_lint_acervo.py
 tests/test_contrato_casa_direto_em_main.py
 tests/test_contrato_canonico.py
+tests/test_longjob_identidade.py
+tests/test_portao_familia.py
