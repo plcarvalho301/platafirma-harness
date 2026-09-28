@@ -11,6 +11,7 @@ NÃO barra (a trava desta story). Não prova: o Kroki real nem a rede da conta.
 from __future__ import annotations
 
 import http.server
+import json
 import os
 import socket
 import subprocess
@@ -116,6 +117,68 @@ def test_diagrama_kroki_fora_de_alcance_sai_5_e_nao_reprova(tmp_path):
     r = _lint_diagrama(bancada, "bom.mmd", _porta_livre())
     assert r.returncode == 5, r.stdout + r.stderr
     assert "nao consegui falar com o Kroki" in r.stdout + r.stderr
+
+
+# --- `lint diagrama ... --json` (card #3096, revisao do PR #306) --------------------
+# contrato de saida que muda pede teste de contrato (arq:0116 / guia portoes-do-codigo):
+# nem test_contrato_diagrama.py (so testava texto puro) nem test_contrato_lint.py (so
+# testa --json da classe 'codigo') mediam o {ancora, classe, alvo, chave, rev,
+# apontamentos} que bin/lint monta para a classe 'diagrama'.
+
+def _lint_diagrama_json(bancada, alvo, porta):
+    env = {**os.environ, "PLATAFIRMA_BANCADA": str(bancada), "PF_CADEIRA": "ti",
+           "KROKI_URL": _kroki_url(porta), "PYTHONDONTWRITEBYTECODE": "1"}
+    return subprocess.run([str(LINT), "diagrama", "demo-diag", alvo, "--json"],
+                          capture_output=True, text=True, env=env, check=False)
+
+
+def test_diagrama_json_bom_tem_as_seis_chaves_e_lista_vazia(tmp_path):
+    bancada = _bancada(tmp_path)
+    srv = _kroki()
+    try:
+        r = _lint_diagrama_json(bancada, "bom.mmd", srv.server_address[1])
+    finally:
+        srv.shutdown()
+    assert r.returncode == 0, r.stdout + r.stderr
+    dado = json.loads(r.stdout)
+    assert set(dado.keys()) == {"ancora", "classe", "alvo", "chave", "rev", "apontamentos"}
+    assert dado["classe"] == "diagrama"
+    assert dado["chave"] == "repositorio"
+    assert dado["alvo"] == "demo-diag/bom.mmd"
+    assert dado["rev"] is None
+    assert dado["apontamentos"] == []
+    assert "0 apontamentos" in dado["ancora"]
+
+
+def test_diagrama_json_quebrado_nomeia_arquivo_e_linha_no_apontamento(tmp_path):
+    bancada = _bancada(tmp_path)
+    srv = _kroki()
+    try:
+        r = _lint_diagrama_json(bancada, "quebrado.mmd", srv.server_address[1])
+    finally:
+        srv.shutdown()
+    assert r.returncode == 1, r.stdout + r.stderr
+    dado = json.loads(r.stdout)
+    assert dado["classe"] == "diagrama"
+    assert dado["alvo"] == "demo-diag/quebrado.mmd"
+    assert len(dado["apontamentos"]) == 1
+    apontamento = dado["apontamentos"][0]
+    assert apontamento["arquivo"] == "quebrado.mmd"
+    assert apontamento["linha"] == 2
+    assert apontamento["cura"]
+    assert apontamento["o_que_fere"]
+
+
+def test_diagrama_json_kroki_fora_de_alcance_sai_5_e_ainda_e_json_valido(tmp_path):
+    """Indeterminavel (#3099) tambem passa pelo bloco --json comum (nao ha caminho de
+    erro separado): o apontamento de aviso sobre o Kroki vai dentro de 'apontamentos'."""
+    bancada = _bancada(tmp_path)
+    r = _lint_diagrama_json(bancada, "bom.mmd", _porta_livre())
+    assert r.returncode == 5, r.stdout + r.stderr
+    dado = json.loads(r.stdout)
+    assert dado["classe"] == "diagrama"
+    assert len(dado["apontamentos"]) == 1
+    assert "nao consegui falar com o Kroki" in dado["apontamentos"][0]["o_que_fere"]
 
 
 # --- pre-commit: recusa o commit com diagrama quebrado no stage ----------------------

@@ -8,7 +8,9 @@ da pasta plana legada; `sincronizar` nos cinco casos do card; o fecho idempotent
 antes em wip/ o que so existe na bancada. Alem disso (card #3096): a marca de sessao viva
 na pasta -- duas sessoes da MESMA cadeira no MESMO card, a segunda recusada nomeando a
 primeira, e --assumir tomando a pasta; e a linha "proximo:" no fim de abrir, commitar,
-sincronizar e empurrar. Nao prova: o forge de verdade (PR mesclado lido do
+sincronizar e empurrar -- inclusive na variante `abrir --da-producao` (revisao do PR
+#306), que tem a mesma guarda e o mesmo "proximo:" das tres formas (ramo novo, conforme
+na reabertura, e destacado sem card). Nao prova: o forge de verdade (PR mesclado lido do
 gh -- aqui so o ramo apagado do origin), nem `pr-*` de verdade (o "proximo:" de pr-abrir
 e so leitura de codigo), nem o pre-push (os clones de teste nao tem hooksPath).
 """
@@ -234,6 +236,68 @@ def test_abrir_termina_com_proximo(tmp_path):
     bancada = _montar(tmp_path)
     r = _repo(tmp_path, bancada, "s1", "abrir", "demo", "42", "--slug", "x")
     assert r.returncode == 0, r.stderr
+    assert r.stdout.strip().splitlines()[-1] == "próximo: teste rodar demo <alvo>"
+
+
+# --- abrir --da-producao (revisao do PR #306, card #3096): a mesma trava (a) e o
+# mesmo "proximo:" (d) valem para a variante que abre do sha de producao, nao so para
+# a que nasce de origin/main -- nenhum teste do PR original exercitava este caminho.
+
+def _publicar_producao(tmp_path, bancada, nome="demo"):
+    """Aponta PF_RELEASE_RAIZ/<nome>/current para o HEAD do clone, como release faria."""
+    sha = _git("rev-parse", "HEAD", cwd=bancada / nome)
+    fam = tmp_path / "release" / nome
+    (fam / sha).mkdir(parents=True)
+    (fam / "current").symlink_to(fam / sha)
+    return sha
+
+
+def test_abrir_da_producao_ramo_novo_guarda_sessao_e_termina_com_proximo(tmp_path):
+    bancada = _montar(tmp_path)
+    _publicar_producao(tmp_path, bancada)
+    r = _repo(tmp_path, bancada, "s1", "abrir", "demo", "--da-producao", "42", "--slug", "x")
+    assert r.returncode == 0, r.stderr
+    wt = bancada / "wt" / "demo" / "ti" / "42-x"
+    assert (wt / ".git").exists()
+    assert r.stdout.strip().splitlines()[-1] == "próximo: teste rodar demo <alvo>"
+    # a marca de sessao viva ficou escrita (guarda_sessao_viva rodou): outra sessao no
+    # mesmo card e recusada, exatamente como no caminho sem --da-producao.
+    r2 = _repo(tmp_path, bancada, "sessao-2", "abrir", "demo", "--da-producao", "42", "--slug", "x")
+    assert r2.returncode == 4, r2.stdout
+    assert "s1" in r2.stderr and "desde" in r2.stderr
+
+
+def test_abrir_da_producao_conforme_tambem_guarda_sessao_e_termina_com_proximo(tmp_path):
+    bancada = _montar(tmp_path)
+    _publicar_producao(tmp_path, bancada)
+    assert _repo(tmp_path, bancada, "s1", "abrir", "demo", "--da-producao", "42", "--slug", "x").returncode == 0
+    r = _repo(tmp_path, bancada, "s1", "abrir", "demo", "--da-producao", "42", "--slug", "x")
+    assert r.returncode == 0, r.stderr
+    assert "conforme:" in r.stdout
+    assert r.stdout.strip().splitlines()[-1] == "próximo: teste rodar demo <alvo>"
+    r2 = _repo(tmp_path, bancada, "sessao-2", "abrir", "demo", "--da-producao", "42", "--slug", "x")
+    assert r2.returncode == 4, r2.stdout
+    assert "s1" in r2.stderr
+
+
+def test_abrir_da_producao_assumir_toma_a_pasta(tmp_path):
+    bancada = _montar(tmp_path)
+    _publicar_producao(tmp_path, bancada)
+    assert _repo(tmp_path, bancada, "s1", "abrir", "demo", "--da-producao", "42", "--slug", "x").returncode == 0
+    r = _repo(tmp_path, bancada, "sessao-2", "abrir", "demo", "--da-producao", "42", "--slug", "x", "--assumir")
+    assert r.returncode == 0, r.stderr
+    assert "s1" in r.stderr
+    r2 = _repo(tmp_path, bancada, "s1", "abrir", "demo", "--da-producao", "42", "--slug", "x")
+    assert r2.returncode == 4, r2.stdout
+    assert "sessao-2" in r2.stderr
+
+
+def test_abrir_da_producao_sem_card_fica_destacado_e_tambem_termina_com_proximo(tmp_path):
+    bancada = _montar(tmp_path)
+    _publicar_producao(tmp_path, bancada)
+    r = _repo(tmp_path, bancada, "s1", "abrir", "demo", "--da-producao")
+    assert r.returncode == 0, r.stderr
+    assert "HEAD destacado" in r.stdout
     assert r.stdout.strip().splitlines()[-1] == "próximo: teste rodar demo <alvo>"
 
 

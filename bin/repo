@@ -1078,7 +1078,7 @@ sha_de_producao() {
 # O sha tem de estar no clone base (fetch do forge se faltar) e descender de origin/main (exit 4).
 # Worktree ja aberto: no mesmo sha e limpo e conforme; em outro sha ou sujo, relata e nao mexe (4).
 abrir_da_producao() {
-  local nome="$1" cadeira="$2" card="$3" slug="$4"
+  local nome="$1" cadeira="$2" card="$3" slug="$4" assumir="${5:-0}"
   local sha; sha="$(sha_de_producao "$nome")" || exit $?
   local curto="${sha:0:7}" clone_raiz="$BANCADA/$nome"
   local wt_dir="$BANCADA/wt/$nome/$cadeira/$(chave_de "$card" "$slug")"
@@ -1112,7 +1112,9 @@ abrir_da_producao() {
     if [ -n "$ramo_alvo" ] && [ "$ramo" != "$ramo_alvo" ]; then
       morre "worktree ja aberto no sha de producao $curto em $ramo, nao em $ramo_alvo — nao mexo: $wt_dir" 4
     fi
+    guarda_sessao_viva "$wt_dir" "$assumir"
     printf 'conforme: %s (@ %s, sha de producao %s)\n' "$wt_dir" "$ramo" "$curto"
+    printf 'próximo: teste rodar %s <alvo>\n' "$nome"
     return 0
   fi
 
@@ -1167,6 +1169,8 @@ abrir_da_producao() {
       || morre "git worktree add falhou" 3
     printf 'bancada aberta: %s (HEAD destacado no sha de producao %s)\n' "$wt_dir" "$curto"
   fi
+  guarda_sessao_viva "$wt_dir" "$assumir"
+  printf 'próximo: teste rodar %s <alvo>\n' "$nome"
 }
 
 # [3096] marca de sessao viva: quem tem esta pasta aberta agora, e desde quando. Mora no
@@ -1259,7 +1263,7 @@ cmd_abrir() {
   [ -n "$cadeira" ] || morre "dependência ausente: PF_CADEIRA não definida — abrir exige cadeira" 3
 
   if [ "$da_producao" -eq 1 ]; then
-    abrir_da_producao "$nome" "$cadeira" "$card" "$slug"
+    abrir_da_producao "$nome" "$cadeira" "$card" "$slug" "$assumir"
     return $?
   fi
 
