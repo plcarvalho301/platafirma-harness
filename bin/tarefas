@@ -58,6 +58,9 @@ uso:
                                           inteiro); não mexe no estado — mover é `mover`
   tarefas modelo <épico|feature|story|task>
                                           esqueleto do corpo, com os rótulos que a API exige
+  tarefas modelo story refinada           o Plano: segunda camada da story, escrita pelo
+                                          executor em em-refinamento-tecnico, depois de ler
+                                          o código (arq:0096)
   tarefas comentar <id> ["<txt>"]         cria comentário (entidade própria — card #390,
                                           não altera o corpo do item); sem texto, lê stdin
   tarefas comentarios <id>                lista os comentários do item, em ordem
@@ -640,7 +643,34 @@ fechar() {
 # ESQUELETO DO CORPO POR NÍVEL — arq:0096. É o que a recusa da API manda imprimir
 # (`tarefas modelo <nível>`). Os rótulos aqui e em `logica.CAMPOS_DO_CORPO` são os
 # mesmos: a API é quem recusa; este verbo só evita que a cadeira adivinhe a grafia.
+#
+# A STORY TEM DUAS CAMADAS (arq:0096, emenda de 28/09/2026). O contrato se escreve na
+# lapidação; o Plano, o executor escreve em `em-refinamento-tecnico`, DEPOIS de ler o
+# código, e é o que leva a story a `refinada`. Os dois moldes saem separados de propósito:
+# impresso junto, o Plano seria preenchido na captação com palpite, e é justamente o que
+# apodrece antes da execução (estado medido, arquivos por unidade, premissas).
+# `tarefas modelo story refinada` imprime só o Plano; o aviso do `modelo story` vai a
+# stderr para não entrar no corpo de quem copia o esqueleto.
+modelo_plano() {
+  cat <<'M'
+Plano:
+Medido em: <repo>@<sha de main> · <AAAA-MM-DD> — o estado que este plano leu; main andou, relê antes de executar
+Estado medido: [executor] fato | valor | onde (repo@caminho:símbolo), uma linha cada — inclui o que o card supôs e o código desmente, o que não abriu, e a peça existente a reaproveitar
+Premissas: [executor] o que decidi onde a story era ambígua, uma linha cada, corrigível — só se houver; o que as Travas mandam não decidir continua parando no card
+Unidades: [executor] unidade | escreve (lista fechada repo@caminho) | depende de | fecha quando (comando + resultado esperado) — nenhum arquivo em duas unidades; unidade sem dependência corre em paralelo, e a linha é a mensagem de delegação do sub-agente
+Aceite × prova: [executor] cada linha do Aceite | o comando que a demonstra | o resultado que tem de dar
+Raio emendado: [executor] repo@caminho | por que — o que o plano toca além do Raio de ataque; só se houver
+Riscos: [executor] causa → saída, uma linha cada — só se houver
+M
+}
+
 modelo() {
+  if [ "${1:-}" = story ] && [ -n "${2:-}" ]; then
+    case "$2" in
+      refinada|em-refinamento-tecnico|plano) modelo_plano; return 0 ;;
+      *) echo "uso: tarefas modelo story [refinada]   (o molde muda só na saída de em-refinamento-tecnico)" >&2; exit 2 ;;
+    esac
+  fi
   case "${1:-}" in
     épico|epico) cat <<'M'
 Problema: como é hoje — o fato, sem número (o número vai em Medida)
@@ -672,6 +702,7 @@ Aceite: o comando que prova + o número que tem de dar
 Travas: imperativo + motivo com fonte citada — o que não decidir, onde parar e comentar no card; merge e subida não são trava
 Entrega: branch fabrica/<card>-<slug> de main · quem escreveu mescla e sobe (código: release promover; documento: servido no acervo) · retorno no comentário
 M
+    echo "segunda camada: o executor escreve o Plano em em-refinamento-tecnico, depois de ler o código — tarefas modelo story refinada" >&2
     ;;
     task) cat <<'M'
 Problema encontrado: o fato medido (verbo | arquivo:linha, data)
@@ -1009,7 +1040,7 @@ case "$cmd" in
   apagar-comentario) apagar_comentario "${1:?uso: tarefas apagar-comentario <id> <cid>}" "${2:?cid}" ;;
   assinar)     assinar "${1:?uso: tarefas assinar <id> --aprovador <cadeira> [--decisao aprovado|recusado] [--motivo \"<txt>\"]}" "${@:2}" ;;
   sub)         subtarefa "${1:?pai}" "${2:?filho}" ;;
-  modelo)      modelo "${1:-}" ;;
+  modelo)      modelo "${1:-}" "${2:-}" ;;
   estados)     estados ;;
   dt)          dt "$@" ;;
   projetos)    echo "não há projeto neste modelo: o recorte é por eixo (cadeira, estado, nível)." >&2; exit 2 ;;
