@@ -55,6 +55,22 @@ def parse_secoes(texto):
     return secoes
 
 
+def decisao_cita_minuta(texto):
+    """(linha, trecho) da primeira citação de minuta na seção de Decisão, ou None."""
+    sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.realpath(__file__))))
+    from _lint.canonico import citacao
+    dentro = False
+    for i, linha in enumerate(texto.splitlines(), 1):
+        if linha.startswith("## "):
+            dentro = linha[3:].strip().lower().startswith("decisão")
+            continue
+        if dentro:
+            trecho = citacao(linha)
+            if trecho:
+                return i, trecho
+    return None
+
+
 def slugify(s):
     s = s.strip().lower()
     s = re.sub(r"[^a-z0-9]+", "-", s)
@@ -109,6 +125,16 @@ def main():
 
     m_conv = re.search(r"^Convocadas: (.+)$", texto, re.M)
     convocadas = [c.strip() for c in m_conv.group(1).split(",") if c.strip()] if m_conv else []
+
+    # CANONICO NAO CITA MINUTA (ordem do dono, 28/09/2026; regua arq:0028): a Decisao da
+    # minuta e o texto que vira o canonico; se ela ja cita minuta por numero, o canonico
+    # nasceria apontando para um numero que se reusa. Recusa com a linha.
+    ruim = decisao_cita_minuta(texto)
+    if ruim:
+        n_linha, trecho = ruim
+        erro(f"Decisão da minuta {num} cita minuta («{trecho}», {relcaminho}:{n_linha}) — "
+             "canônico não carrega o log da própria mudança (arq:0028); tire a citação "
+             "e formalize de novo", 4)
 
     secoes = parse_secoes(texto)
     faltando = [c for c in convocadas
