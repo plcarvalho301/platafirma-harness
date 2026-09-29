@@ -4,7 +4,7 @@
 # dono: dados
 # classe: B
 # use para: ler o texto de uma obra por pagina ou capitulo (ler obra impressao), ler uma ADR/spec/pagina/obra que sabe onde esta (ler), listar o que ha de um tipo ou sobre um assunto pelo catalogo (listar --sobre), gravar uma pagina de wiki (escrever casa pagina), por um repo de doc no acervo (ingerir casa <repo>)
-# atos: ler (leitura, casa), listar (leitura, casa), resolver (leitura, casa), escrever (escrita, registro), ingerir (escrita, incorporacao), curar (escrita, curadoria), extrato (leitura, acervo), exportar (escrita, acervo), psql (escrita, acervo), balde (escrita, acervo)
+# atos: ler (leitura, casa), listar (leitura, casa), resolver (leitura, casa), escrever (escrita, registro), ingerir (escrita, incorporacao), curar (escrita, curadoria), extrato (leitura, acervo), exportar (escrita, acervo), psql (escrita, acervo), balde (escrita, acervo), censo (leitura, acervo)
 # forma: texto
 # le: ler=acervo.casa,acervo.obra,acervo.registro,repo
 # le: listar=acervo.casa,acervo.obra,acervo.registro,repo,arquivo-local
@@ -16,6 +16,7 @@
 # le: exportar=acervo.*,repo
 # le: psql=acervo.*
 # le: balde=acervo.*,minio
+# le: censo=acervo.obra,minio
 # escreve: ler=nada
 # escreve: listar=nada
 # escreve: resolver=nada
@@ -26,6 +27,7 @@
 # escreve: exportar=repo
 # escreve: psql=acervo.*
 # escreve: balde=acervo.obra,minio
+# escreve: censo=arquivo-local
 # consome: motor_acervo_rest, rag_extractor_pg
 # ambiente: PLATAFIRMA_INSTANCIA[=/srv/platafirma/casa] (ingerir casa le o suporte platafirma-casa pelo sha no espelho bare <instancia>/var/acervo/suporte/platafirma-casa.git, com a credencial da conta; nunca release, nunca clone de bancada; ler/listar casa so leem o origin/main ja buscado dele, para o campo servido), PF_SUPORTE_ESPELHO (opcional, override do espelho), PF_SUPORTE_URL[=https://github.com/plcarvalho301/platafirma-casa.git] (opcional, forge do suporte), RAG_API_BASE (opcional, url do motor), RAG_API_TOKEN (opcional, auth do motor)
 # depende: docker, git, psql
@@ -90,6 +92,7 @@ uso (gramatica arq:0106 — acervo <ato> <particao> <entidade> [seletor]):
   acervo exportar                    regera ontologia/acervo/*.jsonl e vocabulario.json na bancada
   acervo psql     [--banco rag|motor]  <SQL por stdin>
   acervo balde    listar|ler|copiar|mover|apagar <bucket|sha256> [...] [--apply]
+  acervo censo    obra --bancada <pasta> [--obras <id,id...|@arquivo>] [--status]   TEMPORARIO (#3189): ficha por obra, so leitura
 
 as particoes: obra, casa, registro (arq:0106 §3). conceito e transversal, vive em obra.
 leitura e anonima; escrever loga com a conta de bot. ato/particao/entidade desconhecidos
@@ -285,6 +288,9 @@ case "$ATO" in
   # balde: braco do curador sobre o store MinIO (#3126, pedido 20260922T180117-dados) --
   # listar/ler/copiar/mover/apagar objeto de bucket, plano seco por padrao e --apply pra gravar.
   balde)           exec python3 "$ATOS/balde" "$@" ;;
+  # censo: ATO TEMPORARIO (#3189, ordem do dono de 28/09 23h21). Sai no passo 4 da story.
+  censo)           [ "${1:-}" = "obra" ] && shift
+                   exec "$ATOS/censo" "$@" ;;
   psql)
     case "${1:-}" in
       --banco|--sql) ;;
