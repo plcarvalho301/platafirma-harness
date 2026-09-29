@@ -3,9 +3,9 @@
 # capacidade: construcao
 # dono: ti
 # classe: B
-# forma: predicado (estado, diff) / lista (listar, procurar, historico, pr-listar) / texto (ler, pr-diff) / fluxo (sanear)
-# use para: ler, listar ou procurar o que esta na bancada, ainda nao servido (ler, listar, procurar); historico de um caminho e diff contra origin/main (historico, diff); estado do clone; ramo por card; abrir o worktree da cadeira em origin/main ou no sha que esta em producao (abrir --da-producao); commitar so o que a sessao tocou; empurrar; PR de ponta a ponta (pr-abrir, pr-listar, pr-ver, pr-diff, pr-merge); descartar PR sem merge, com ramo e bancadas (pr-fechar); atualizar e sanear o clone; git cru contido (git)
-# atos: estado (leitura, operacao), listar (leitura, operacao), ler (leitura, operacao), procurar (leitura, operacao), historico (leitura, operacao), diff (leitura, operacao), commitar (escrita, operacao), ramo (escrita, operacao), atualizar (escrita, operacao), sincronizar (escrita, forge), abrir (escrita, operacao), clonar (escrita, operacao), empurrar (escrita, forge), pr-abrir (escrita, forge), pr-listar (leitura, forge), pr-ver (leitura, forge), pr-diff (leitura, forge), pr-merge (escrita, forge), pr-fechar (escrita, forge), sanear (escrita, forge), git (escrita, operacao)
+# forma: predicado (estado, diff) / lista (listar, procurar, historico, pr-listar) / texto (ler, pr-diff) / fluxo (sanear, lock)
+# use para: ler, listar ou procurar o que esta na bancada, ainda nao servido (ler, listar, procurar); historico de um caminho e diff contra origin/main (historico, diff); estado do clone; ramo por card; abrir o worktree da cadeira em origin/main ou no sha que esta em producao (abrir --da-producao); commitar so o que a sessao tocou; empurrar; PR de ponta a ponta (pr-abrir, pr-listar, pr-ver, pr-diff, pr-merge); descartar PR sem merge, com ramo e bancadas (pr-fechar); atualizar e sanear o clone; gerar ou conferir o uv.lock de um projeto Python da bancada com o uv e o python da release (lock); git cru contido (git)
+# atos: estado (leitura, operacao), listar (leitura, operacao), ler (leitura, operacao), procurar (leitura, operacao), historico (leitura, operacao), diff (leitura, operacao), commitar (escrita, operacao), ramo (escrita, operacao), atualizar (escrita, operacao), sincronizar (escrita, forge), abrir (escrita, operacao), clonar (escrita, operacao), empurrar (escrita, forge), pr-abrir (escrita, forge), pr-listar (leitura, forge), pr-ver (leitura, forge), pr-diff (leitura, forge), pr-merge (escrita, forge), pr-fechar (escrita, forge), sanear (escrita, forge), lock (escrita, operacao), git (escrita, operacao)
 # le: estado=repo
 # le: listar=repo
 # le: ler=repo
@@ -26,6 +26,7 @@
 # le: pr-merge=repo
 # le: pr-fechar=repo
 # le: sanear=repo
+# le: lock=repo
 # le: git=repo
 # escreve: estado=nada
 # escreve: listar=nada
@@ -47,11 +48,12 @@
 # escreve: pr-merge=repo
 # escreve: pr-fechar=repo
 # escreve: sanear=repo
+# escreve: lock=repo
 # escreve: git=repo
 # (recursos pelo enum de ferramental_recurso; o forge - origin, PR - pende id proprio, e ate la sai como repo; commitar le o log da porta em arquivo-local)
 # consome: porta@ops-log
 # ambiente: PLATAFIRMA_BANCADA[sem default; senao a linha de $HOME/.config/platafirma/bancada; ausente = exit 3] porta · PLATAFIRMA_ARQUIVO_BANCADA[=$HOME/.config/platafirma/bancada] porta · PF_RELEASE_RAIZ[=/opt/platafirma] porta (abrir --da-producao: sha de <raiz>/<repo>/current) · PLATAFIRMA_RELEASE[=$PF_RELEASE_RAIZ/current] porta (registro de familias: URL do forge em abrir/clonar) · PF_CADEIRA porta (lida) · PF_SESSAO porta (lida) · PF_TAREFAS_BIN[=<dir deste verbo>/tarefas] porta (abrir move o card) · OPS_LOG_DIR[=$PLATAFIRMA_INSTANCIA/var/log/ops] porta (PF_OPS_LOG_DIR lido so como alias) · PLATAFIRMA_INSTANCIA[=/srv/platafirma/casa] porta · PF_GH_BIN[=gh do sistema] teste · HOME
-# depende: git · gh (pr-*, empurrar, atualizar, clonar) · rede ao forge
+# depende: git · gh (pr-*, empurrar, atualizar, clonar) · rede ao forge · uv e python de sistema pelo lib/venv.sh (lock; PLATAFIRMA_UV e PLATAFIRMA_PYTHON lidos lá) e rede ao índice de pacotes (lock)
 # substitui: git -C … ls-files|grep|log|diff|show|status|checkout -b|commit|push|fetch · gh pr create|list|view|diff|merge|close
 # conforme: sim
 set -uo pipefail
@@ -134,6 +136,7 @@ uso:
   repo pr-diff   <repo> <numero>
   repo pr-merge  <repo> <numero> [--squash|--merge|--rebase] [--forcar]
   repo pr-fechar <repo> <numero> --motivo <texto>   (descarta sem merge; apaga ramo e bancadas)
+  repo lock      <repo> <projeto> [--conferir]      (uv.lock do <projeto>/pyproject.toml; nao commita)
   repo git       <repo> <args…>
 
 bancada: PLATAFIRMA_BANCADA[sem default] (exit 3)
@@ -2576,6 +2579,151 @@ sanear_conforme() {
   return 0
 }
 
+# ato_lock <repo>[@<chave>] <projeto> [--conferir] -- gera ou confere o uv.lock de um projeto
+# Python da bancada (mesa ti#3; cartas 20260928T104616-engenharia e 20260928T232833-dados:
+# nenhum verbo relockava, e o lock so saia de shell). Usa o MESMO uv e o MESMO python de
+# sistema com que a release constroi o venv (lib/venv.sh: resolver_uv, resolver_python,
+# only-system, sem download de python): o lock que sai daqui e o que `release promover`
+# sincroniza com --frozen. Escreve so <projeto>/uv.lock e nao commita (proximo: repo
+# commitar, nomeando pyproject e lock). --conferir so mede (uv lock --check), nada escrito.
+# Relata a diferenca de pacotes lida dos dois locks: + entrou, - saiu, ~ versao mudou.
+# exit: 0 feito ou em dia · 1 sem pyproject, lock defasado (--conferir) ou sem solucao ·
+#       2 uso · 3 uv, python, indice ou rede · 4 caminho que escapa da bancada
+ato_lock() {
+  local repo="" projeto="" conferir=0
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --conferir) conferir=1; shift ;;
+      -*) morre "opção desconhecida: '$1'" 2 ;;
+      *)
+        if [ -z "$repo" ]; then
+          repo="$1"
+        elif [ -z "$projeto" ]; then
+          projeto="$1"
+        else
+          morre "argumento excedente: '$1'" 2
+        fi
+        shift
+        ;;
+    esac
+  done
+  [ -n "$repo" ] && [ -n "$projeto" ] \
+    || morre "repo e projeto são obrigatórios para lock (ex.: repo lock platafirma-harness venvs/acervo)" 2
+  projeto="${projeto%/}"
+  case "$projeto" in
+    /*|*..*) morre "projeto fora da raiz ou símbolo que escapa: '$projeto'" 4 ;;
+  esac
+
+  local c; c="$(clone_de "$repo")" || exit $?
+  local dir="$c/$projeto" rel="$projeto/uv.lock"
+  if [ "$projeto" = "." ]; then dir="$c"; rel="uv.lock"; fi
+  local real_dir; real_dir="$(realpath "$dir" 2>/dev/null || true)"
+  if [ -n "$real_dir" ]; then
+    case "$real_dir/" in
+      "$c"/*) : ;;
+      *) morre "projeto '$projeto' resolve para $real_dir, fora da bancada $c" 4 ;;
+    esac
+  fi
+  if [ ! -f "$dir/pyproject.toml" ]; then
+    info_varrido "$c" "${repo%%@*}"
+    printf '%s: sem pyproject.toml em %s — o lock nasce do projeto; confira o caminho\n' "$VERBO" "$projeto" >&2
+    exit 1
+  fi
+
+  PF_VENV_PREFIXO="$VERBO lock"
+  # shellcheck source=../lib/venv.sh
+  . "$(dirname "$(readlink -f "$0")")/../lib/venv.sh" \
+    || morre "dependência ausente: lib/venv.sh ao lado do verbo" 3
+  local uv pyinfo py
+  uv="$(resolver_uv)" || exit 3
+  pyinfo="$(resolver_python)" || exit 3
+  py="${pyinfo%%$'\t'*}"
+  local -a uvenv=(env -u UV_MANAGED_PYTHON -u UV_NO_MANAGED_PYTHON -u UV_PYTHON -u UV_SYSTEM_PYTHON
+    -u VIRTUAL_ENV UV_PYTHON_PREFERENCE=only-system UV_PYTHON_DOWNLOADS=never)
+  local err rc=0
+  err="$(mktemp)" || morre "mktemp falhou" 3
+
+  if [ "$conferir" -eq 1 ]; then
+    "${uvenv[@]}" "$uv" lock --check --python "$py" --project "$dir" </dev/null >/dev/null 2>"$err" || rc=$?
+    if [ "$rc" -eq 0 ]; then
+      rm -f "$err"
+      printf 'em dia: %s bate com o pyproject.toml (nada escrito)\n' "$rel"
+      return 0
+    fi
+    if grep -qiE 'needs to be updated|unable to find lockfile|no solution found' "$err"; then
+      printf 'defasado: %s não bate com o pyproject.toml (nada escrito)\n' "$rel"
+      sed 's/^/  /' "$err" | tail -n 5
+      printf 'vizinho: repo lock %s %s\n' "$repo" "$projeto"
+      rm -f "$err"
+      exit 1
+    fi
+    printf '%s: uv lock --check saiu %s sem dizer se o lock está em dia (índice, rede ou uv):\n' "$VERBO" "$rc" >&2
+    sed 's/^/  /' "$err" | tail -n 20 >&2
+    rm -f "$err"
+    exit 3
+  fi
+
+  local lock="$dir/uv.lock" antes=""
+  if [ -f "$lock" ]; then
+    antes="$(mktemp)" && cp -p "$lock" "$antes" || morre "não guardei a cópia do lock anterior" 3
+  fi
+  "${uvenv[@]}" "$uv" lock --python "$py" --project "$dir" </dev/null >/dev/null 2>"$err" || rc=$?
+  if [ "$rc" -ne 0 ]; then
+    local cod=3 tipo="índice, rede ou uv"
+    if grep -qi 'no solution found' "$err"; then cod=1; tipo="sem solução para as dependências pedidas"; fi
+    printf '%s: uv lock saiu %s (%s); %s intocado:\n' "$VERBO" "$rc" "$tipo" "$rel" >&2
+    sed 's/^/  /' "$err" | tail -n 20 >&2
+    rm -f "$err" "$antes"
+    exit "$cod"
+  fi
+  rm -f "$err"
+  [ -f "$lock" ] || { rm -f "$antes"; morre "uv lock saiu 0 e não há $rel" 5; }
+
+  local sha_d sha_a="" mudou=1
+  sha_d="$(sha256sum "$lock" | cut -c1-12)"
+  if [ -n "$antes" ]; then
+    sha_a="$(sha256sum "$antes" | cut -c1-12)"
+    if cmp -s "$antes" "$lock"; then
+      mudou=0
+      printf 'lock: %s já em dia (sha256 %s), nada mudou\n' "$rel" "$sha_d"
+    else
+      printf 'lock: %s atualizado (sha256 %s -> %s)\n' "$rel" "$sha_a" "$sha_d"
+    fi
+  else
+    printf 'lock: %s criado (sha256 %s)\n' "$rel" "$sha_d"
+  fi
+  if [ "$mudou" -eq 1 ]; then
+    "$py" - "${antes:-/dev/null}" "$lock" <<'PY'
+import sys
+import tomllib
+
+
+def pacotes(caminho):
+    try:
+        with open(caminho, "rb") as f:
+            d = tomllib.load(f)
+    except (OSError, tomllib.TOMLDecodeError):
+        return {}
+    return {p.get("name", "?"): str(p.get("version", "")) for p in d.get("package", [])}
+
+
+a, d = pacotes(sys.argv[1]), pacotes(sys.argv[2])
+linhas = []
+for n in sorted(set(a) | set(d)):
+    if n not in a:
+        linhas.append("  + %s %s" % (n, d[n]))
+    elif n not in d:
+        linhas.append("  - %s %s" % (n, a[n]))
+    elif a[n] != d[n]:
+        linhas.append("  ~ %s %s -> %s" % (n, a[n], d[n]))
+print("\n".join(linhas) if linhas else "  pacotes: sem mudança (só metadado do lock)")
+PY
+    printf 'próximo: repo commitar %s -m "<o que muda>" %s/pyproject.toml %s\n' "$repo" "$projeto" "$rel"
+  fi
+  rm -f "$antes"
+  return 0
+}
+
 if [ $# -eq 0 ]; then
   uso
 fi
@@ -2590,7 +2738,7 @@ cmd="$1"
 shift
 
 case "$cmd" in
-  estado|listar|ler|procurar|historico|diff|ramo|commitar|empurrar|atualizar|sincronizar|abrir|clonar|sanear|pr-abrir|pr-listar|pr-ver|pr-diff|pr-merge|pr-fechar|git)
+  estado|listar|ler|procurar|historico|diff|ramo|commitar|empurrar|atualizar|sincronizar|abrir|clonar|sanear|pr-abrir|pr-listar|pr-ver|pr-diff|pr-merge|pr-fechar|lock|git)
     declara_bancada "$@" ;;
 esac
 
@@ -2615,10 +2763,11 @@ case "$cmd" in
   pr-diff)   ato_pr_diff "$@" ;;
   pr-merge)  ato_pr_merge "$@" ;;
   pr-fechar) ato_pr_fechar "$@" ;;
+  lock)      ato_lock "$@" ;;
   git)       ato_git "$@" ;;
   *)
     printf '%s: erro: ato desconhecido '\''%s'\''\n' "$VERBO" "$cmd" >&2
-    printf 'atos: estado · listar · ler · procurar · historico · diff · ramo · commitar · empurrar · atualizar · sincronizar · abrir · clonar · sanear · pr-abrir · pr-listar · pr-ver · pr-diff · pr-merge · pr-fechar · git\n' >&2
+    printf 'atos: estado · listar · ler · procurar · historico · diff · ramo · commitar · empurrar · atualizar · sincronizar · abrir · clonar · sanear · pr-abrir · pr-listar · pr-ver · pr-diff · pr-merge · pr-fechar · lock · git\n' >&2
     uso_texto
     exit 2
     ;;
