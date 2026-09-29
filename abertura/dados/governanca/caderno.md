@@ -35,3 +35,13 @@
 2026-09-26 — `release promover platafirma-harness` devolveu exit -15 depois de imprimir tudo: a porta reinicia e mata a chamada. Contorno na data: `release estado platafirma-harness` confirmou o current novo.
 
 2026-09-26 — `tarefas assinar 3077 aprovado`: exit 2. A forma é `tarefas assinar <id> --aprovador <cadeira> --decisao aprovado --motivo "<txt>"`. Contorno na data: a usage do exit 2.
+
+2026-09-29 — `repo sincronizar` + `pr-abrir` do harness numa chamada só: "timed out after 60s"; o verbo seguiu no host e o ramo subiu depois, mas o resultado não voltou. O pre-push roda o portão inteiro e estoura o corte do MCP. Contorno na data: `sessao longjob run <nome> teste rodar platafirma-harness --portao` aquece o veredito por hash de árvore; o `sincronizar` seguinte vira "já em dia" e cabe nos 60 s.
+
+2026-09-29 — o ato `censo` rodado direto pelo MCP no estrato de PDFs pesados: "timeout (58s) — grupo de processo morto", sem resto da medição. Contorno na data: `sessao longjob run` com o mesmo comando; o ato era retomável e continuou de onde parou.
+
+2026-09-29 — `repo commitar` sem `-m`, `repo pr-abrir` sem `--titulo` e `repo procurar` sem `--termo`: exit 2 nos três, a usage nomeia a flag. Contorno na data: a forma `repo commitar <repo> -m "<msg>" [caminhos]`, `repo pr-abrir <repo> --titulo <t> [--corpo <c>]`, `repo procurar <repo> --termo <t>`.
+
+2026-09-29 — `repo git <repo> rm <arquivos>` deixou as remoções staged; `repo commitar <repo> -m ... <caminhos removidos>`: exit 1, "caminho não existe na bancada". Sem caminhos, o `commitar` levou as remoções e o `pyproject.toml`, mas deixou de fora o `uv.lock` que o `repo lock` regerou (escrita do verbo, não da sessão), e o `sincronizar` recusou: "arvore com escrita nao commitada". Contorno na data: segundo `repo commitar <repo> -m ... venvs/acervo/uv.lock`, só com o caminho.
+
+2026-09-29 — `release promover platafirma-harness` sem rev: exit 2, "família de código promove por rev explícita". Contorno na data: `release promover platafirma-harness <sha do merge>`, com o sha que o `pr-merge` devolveu.
