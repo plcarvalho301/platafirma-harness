@@ -646,7 +646,8 @@ fechar() {
 #
 # A STORY TEM DUAS CAMADAS (arq:0096, emenda de 28/09/2026). O contrato se escreve na
 # lapidação; o Plano, o executor escreve em `em-refinamento-tecnico`, DEPOIS de ler o
-# código, e é o que leva a story a `refinada`. Os dois moldes saem separados de propósito:
+# código, e é o que a story precisa para entrar em `em-execucao` (a trava é nessa entrada, não
+# na saída do refinamento, para não quebrar a lapidação). Os dois moldes saem separados de propósito:
 # impresso junto, o Plano seria preenchido na captação com palpite, e é justamente o que
 # apodrece antes da execução (estado medido, arquivos por unidade, premissas).
 # `tarefas modelo story refinada` imprime só o Plano; o aviso do `modelo story` vai a
@@ -668,7 +669,7 @@ modelo() {
   if [ "${1:-}" = story ] && [ -n "${2:-}" ]; then
     case "$2" in
       refinada|em-refinamento-tecnico|plano) modelo_plano; return 0 ;;
-      *) echo "uso: tarefas modelo story [refinada]   (o molde muda só na saída de em-refinamento-tecnico)" >&2; exit 2 ;;
+      *) echo "uso: tarefas modelo story [refinada]   (o Plano é exigido na entrada de em-execucao)" >&2; exit 2 ;;
     esac
   fi
   case "${1:-}" in
