@@ -37,6 +37,11 @@
   lotação são dado de entrada; o que a política pode fazer com colegiado fora do
   escopo autorizado é deixar de mencioná-lo. Sinal: proposta de extinguir, recompor ou
   redistribuir função de colegiado que o dono não pôs na mesa.
+- Delegação exercida dentro do próprio ato normativo — parece cláusula de estilo e é
+  ato de delegação: leva o conteúdo da Lei 9.784, art. 14, § 1º (matérias, limites,
+  duração, objetivos, recurso), publica-se com o ato e não serve de fundamento às
+  políticas subordinadas, que delegam o que é delas pela lei. Sinal: «nos termos do
+  parágrafo único da política-mãe» em portaria que delega competência própria.
 
 ## diario de bordo
 
@@ -54,3 +59,4 @@
 - 2026-09-27 — tentei conferir existe skill redacao-normativa, erro de uso (skill não é tipo aceito: cadeira|verbo|card|arquivo|mesa) — contorno encontrado NA DATA 2026-09-27 foi ler o SKILL.md direto no disco da sessão (/mnt/skills/plugins/).
 - 2026-09-27 — tentei fila enviar produto --tipo pedido sem --assunto, recusou (--assunto é obrigatório) — contorno encontrado NA DATA 2026-09-27 foi reenviar com --assunto.
 - 2026-09-27 — tentei propose_skills para a prosa sem ter lido a cópia sincronizada (/root/.claude/skills/synced/…), recusou mesmo com o conteúdo idêntico ao de /mnt/skills/plugins — contorno encontrado NA DATA 2026-09-27 foi ler a cópia sincronizada inteira e repropor; o dono depois preferiu mandar a mudança a produto pela fila.
+- 2026-09-29 — tentei acervo ler casa guia expediente --secao Sair, erro de uso (ler pede só <especie> <chave>) — contorno encontrado NA DATA 2026-09-29 foi motor rag buscar casa com --texto secao.
