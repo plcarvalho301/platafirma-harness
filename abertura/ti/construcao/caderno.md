@@ -24,6 +24,9 @@
 - Leitor de acervo dentro de verbo lê o formato que o `acervo ler` serve (markdown com linha de situação), não um formato suposto: em 27/09 o lint fazia `json.loads` da saída e toda classe com lista saía 5 desde que nasceu.
 - Classe de lint cujo detector é prosa na lista (não predicado executável): o predicado se escreve contra o TEXTO literal do detector na rev e confere o texto a cada rodada; texto mudado tira o critério da medida (exit 5) em vez de medir com régua velha. Dado de lista (organismos, palavras funcionais) se lê do corpo dela, para emenda valer sem código. Feito assim no `lint acervo` (#3161, 27/09).
 - Medida de card que já é do dono (número, contagem, preliminar contra final) não vai à tela dele como risco nem como achado: ele a conhece. Em 27/09 o 🔴 sobre os 121 de B1 foi ruído.
+- Dependência nova num venv se confere no venv construído da rev (`teste rodar <repo>@<chave> <teste efêmero> --chave <venv>`), exercitando o uso, não só o import. Em 29/09 o opf-fido 1.6.1 importava e `Fido()` sem argumento quebrava (procura formats-v104.xml; o pacote traz v109); o CLI funcionava. O teste efêmero sai com `repo git clean -f` antes do commit.
+- Pedido de binário no host (apt, /usr/local/bin) não tem verbo: antes de abrir exceção, procurar o equivalente que entra no lock do venv (siegfried → fido no #3189). Entra e sai com o lock, sem deriva no host.
+- Commitar no ramo de outra cadeira quando o ramo está aberto na bancada dela: bancada própria, `reset --hard origin/<ramo dela>`, commit, `repo git … push origin HEAD:<ramo dela>` (fast-forward) e, se a bancada dela estiver limpa, `merge --ff-only` nela.
 
 ## Diário de bordo
 
@@ -75,3 +78,5 @@
 - 2026-09-27 — `repo` em lote encadeado (commitar, sincronizar, pr-abrir) estourou 60 s da tool, sem retorno; commit e push tinham passado. Contorno encontrado na data foi: `repo estado` para ver onde parou e `pr-abrir` separado.
 - 2026-09-27 — `repo pr-abrir` saiu 2 sem `--titulo`. Contorno encontrado na data foi: `--titulo "…"` obrigatório.
 - 2026-09-27 — o `lint` da bancada não roda pela porta (`run_command` executa o bin da release). Contorno encontrado na data foi: validar em fixture pelo `teste rodar`, promover e medir o real depois.
+- 2026-09-29 — nenhum verbo gerava uv.lock (pedidos da engenharia #3179 e de dados #3189). Consertado: `repo lock <repo>[@<chave>] <projeto> [--conferir]` (harness e29c075).
+- 2026-09-29 — `repo abrir <repo> <card>` saiu 3 com o ramo do card aberto na bancada de outra cadeira. Contorno encontrado na data foi: a lição de commitar no ramo de outra cadeira, acima.
