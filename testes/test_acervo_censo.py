@@ -457,6 +457,42 @@ def test_pool_grava_uma_linha_por_obra_e_a_pasta_e_retomavel(tmp_path, monkeypat
     assert len(fichas) == 7 and ruins == 1
 
 
+def test_mhtml_e_reconhecido_antes_do_html_que_mora_dentro_da_parte_mime():
+    mht = ("From: <Saved by Blink>\nSnapshot-Content-Location: https://x\nSubject: t\nDate: Mon\nMIME-Version: 1.0\n"
+           "Content-Type: multipart/related;\n\ttype=\"text/html\";\n\tboundary=\"----MultipartBoundary--abc\"\n\n"
+           "------MultipartBoundary--abc\nContent-Type: text/html\n\n<html><head></head><body>x</body></html>\n").encode()
+    assert fic.detectar(mht)[0][0]["formato_id"] == "mhtml"
+
+
+def test_chave_de_arquivo_vazio_com_objeto_ausente_marca_objeto_vazio():
+    f = fic.montar_ficha(_item("acervo/" + fic.SHA_VAZIO), lambda o: (None, "ausente"))
+    assert f["objeto_ausente"] is True and f["objeto_vazio"] is True
+    assert {c["regra"] for c in reg.avaliar_obra(f)} == {"R1", "R2"}      # desconhecido (R1) e vazio (R2)
+    assert fic.montar_ficha(_item("acervo/" + "1" * 64), lambda o: (None, "ausente"))["objeto_vazio"] is False
+
+
+def test_prefixo_do_texto_ignora_pontuacao_e_caixa_e_exige_texto_o_bastante():
+    a = "Modelo de Requisitos: para sistemas. " * 20
+    b = "modelo   de requisitos para SISTEMAS" * 20
+    assert fic.metricas_texto(a)["prefixo_sha1"] == fic.metricas_texto(b)["prefixo_sha1"] is not None
+    assert fic.metricas_texto("curto")["prefixo_sha1"] is None
+
+
+def test_r8_titulo_contido_e_inicio_de_texto_igual():
+    a = F(obra_id=ID1, nome_original="e-Arq-Brasil-v2.pdf", catalogo={"titulo": "e-Arq-Brasil-v2"})
+    b = F(obra_id=ID2, nome_original="EARQV203MAI2022.pdf",
+          catalogo={"titulo": "e-ARQ Brasil: Modelo de Requisitos para Sistemas Informatizados de Gestão, Versão 2"})
+    c = F(obra_id=ID3, nome_original="outro.epub", formato_id="epub", catalogo={"titulo": "e-ARQ Brasil Modelo"})
+    pares = {(x["obra_id"][:8], x["clausula"]) for x in reg.avaliar_identidade([a, b, c])}
+    assert ("aaaaaaaa", "e") in pares and ("bbbbbbbb", "e") in pares      # a mesma cláusula nas duas pontas
+    assert ("cccccccc", "e") not in pares                                   # formato diferente
+    x = F(obra_id=ID1, texto={"prefixo_sha1": "ab" * 20}, catalogo={"titulo": "Um"})
+    y = F(obra_id=ID2, texto={"prefixo_sha1": "ab" * 20}, catalogo={"titulo": "Outro nome qualquer"})
+    z = F(obra_id=ID3, texto={"prefixo_sha1": "cd" * 20}, catalogo={"titulo": "Terceiro"})
+    pares = {(o["obra_id"][:8], o["clausula"]) for o in reg.avaliar_identidade([x, y, z])}
+    assert ("aaaaaaaa", "d") in pares and ("bbbbbbbb", "d") in pares and ("cccccccc", "d") not in pares
+
+
 def test_main_sem_bancada_e_argumento_estranho():
     assert censo.main([]) == 2
     assert censo.main(["obra", "--bancada", "/tmp", "--tolice"]) == 2

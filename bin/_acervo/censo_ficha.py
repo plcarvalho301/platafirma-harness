@@ -169,6 +169,9 @@ def detectar(dados: bytes) -> tuple[list[dict], dict | None]:
     if amostra is None:
         return [], None
     topo = amostra.lstrip(chr(0xFEFF) + " \t\r\n")
+    if re.match(r"(?i)(mime-version:|content-type:\s*multipart/related|from:.*\n(?:.*\n){0,12}?mime-version:)", topo) \
+            and "boundary=" in topo[:4000]:                  # MHTML antes de HTML: o html mora dentro da parte MIME
+        return [_f("mhtml", "MHTML", None, "message/rfc822", "cabeçalho MIME com boundary")], None
     if topo.startswith("<?xml") and _RE_HTML.search(topo[:4000]):
         return [_f("html", "XHTML", None, "application/xhtml+xml", "declaração XML e marcas html")], None
     if _RE_HTML.search(topo[:2000]):
@@ -238,7 +241,7 @@ def _identificar_fido(dados: bytes) -> dict | None:
         return None
     try:
         with tempfile.TemporaryDirectory(prefix="censo-fido-") as d:
-            caminho = os.path.join(d, "objeto.bin")
+            caminho = os.path.join(d, "objeto")           # sem extensão: o fido não casa por extensão (.bin casava com MacBinary)
             with open(caminho, "wb") as f:
                 f.write(dados)
             r = subprocess.run([sys.executable, "-m", "fido.fido", "-q", caminho], capture_output=True, timeout=180)
@@ -295,8 +298,11 @@ def situacao_identificacao(cands: list[dict], ext: str, sf: dict | None = None) 
 # ---------------------------------------------------------------- C: texto
 
 def metricas_texto(texto: str) -> dict:
+    alnum = re.sub(r"[\W_]+", "", texto[:30000].lower())
     return {
         "caracteres": len(texto),
+        # início do texto sem pontuação nem caixa: candidato a «mesmo documento» (R8, cláusula d)
+        "prefixo_sha1": hashlib.sha1(alnum[:3000].encode()).hexdigest() if len(alnum) >= 300 else None,
         "normalizacao_unicode": {"nfc": unicodedata.is_normalized("NFC", texto),
                                  "nfd": unicodedata.is_normalized("NFD", texto)},
         "ligaduras": len(_RE_LIG.findall(texto)),
@@ -429,6 +435,7 @@ def montar_ficha(item: dict, buscar, prazo_s: float = PRAZO_OBRA_S) -> dict:
         if dados is None:
             if motivo == "ausente":
                 ficha["objeto_ausente"] = True
+                ficha["objeto_vazio"] = chave == SHA_VAZIO    # a chave é a do arquivo de 0 byte (Portigal)
                 ficha["situacao_identificacao"] = "desconhecido"
                 ficha["formatos"] = [{"nome": "unknown", "versao": None, "registro": None, "mime": None, "base": "objeto ausente"}]
             else:
