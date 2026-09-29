@@ -20,7 +20,8 @@ CLAUSULAS = {
     "R6": ("texto",),
     "R7": ("a expurgada com impressão servindo", "b servindo com 0 trecho",
            "c não expurgada sem impressão servindo", "d perfil 'pdf' em formato com perfil próprio"),
-    "R8": ("a mesmo nome_original", "b mesmo título normalizado e mesmo formato", "c título é nome de arquivo"),
+    "R8": ("a mesmo nome_original", "b mesmo título normalizado e mesmo formato", "c título é nome de arquivo",
+           "d mesmo início de texto", "e título contido no título de outra obra do mesmo formato"),
     "R9": ("inibidor",),
 }
 # limiares de partida, decisão de dados (⚪ a revisar na tabela)
@@ -177,8 +178,8 @@ def r6(f: dict) -> list[dict]:
     out = []
     enc = f.get("encoding") or {}
     if enc.get("declarado_bate") is False:
-        out.append(_c(f, "R6", "charset", f"declarado {enc.get('declarado')}", f"detectado {enc.get('detectado')}",
-                      "charset declarado diferente do detectado"))
+        out.append(_c(f, "R6", "charset", f"declarado {enc.get('declarado')}", f"codec usado {enc.get('detectado')}",
+                      "o charset declarado não confere com os bytes"))
     txt = f.get("texto") or {}
     if (txt.get("substituicao") or 0) > 0:
         out.append(_c(f, "R6", "substituicao", f"{txt['substituicao']} U+FFFD", "-", "caractere de substituição no texto"))
@@ -256,7 +257,45 @@ def avaliar_identidade(fichas: list[dict]) -> list[dict]:
             ids = ",".join(g["obra_id"][:8] for g in grupo)
             for g in grupo:
                 out.append(_c(g, "R8", "b", f"formato {fmt}", f"título '{t[:60]}' em {ids}", "mesmo título normalizado e mesmo formato"))
+    por_prefixo: dict[str, list[dict]] = defaultdict(list)
+    for f in fichas:
+        p = (f.get("texto") or {}).get("prefixo_sha1")
+        if p and not (f.get("catalogo") or {}).get("expurgada"):
+            por_prefixo[p].append(f)
+    for p, grupo in sorted(por_prefixo.items()):
+        if len(grupo) > 1:
+            ids = ",".join(g["obra_id"][:8] for g in grupo)
+            for g in grupo:
+                out.append(_c(g, "R8", "d", f"início do texto {p[:8]}", f"obras {ids}", "mesmo início de texto em obras diferentes"))
+    out += _titulos_contidos(fichas)
     return out
+
+
+def _tokens_titulo(t: str) -> frozenset:
+    return frozenset(x for x in _norm_titulo(t).split() if not re.fullmatch(r"v\d+", x))
+
+
+def _titulos_contidos(fichas: list[dict]) -> list[dict]:
+    """R8, cláusula e: todas as palavras (3 ou mais, sem marca de versão) de um título estão no título de outra obra do mesmo formato."""
+    por_formato: dict[str, list] = defaultdict(list)
+    for f in fichas:
+        cat = f.get("catalogo") or {}
+        if cat.get("expurgada") or not f.get("formato_id"):
+            continue
+        toks = _tokens_titulo(cat.get("titulo") or "")
+        if len(toks) >= 3:
+            por_formato[f["formato_id"]].append((f, toks))
+    achados: dict[str, set] = defaultdict(set)
+    for lista in por_formato.values():
+        for i, (fa, ta) in enumerate(lista):
+            for fb, tb in lista[i + 1:]:
+                if ta != tb and (ta <= tb or tb <= ta):
+                    achados[fa["obra_id"]].add(fb["obra_id"])
+                    achados[fb["obra_id"]].add(fa["obra_id"])
+    por_id = {f["obra_id"]: f for f in fichas}
+    return [_c(por_id[i], "R8", "e", f"título '{((por_id[i].get('catalogo') or {}).get('titulo') or '')[:60]}'",
+               "obras " + ",".join(o[:8] for o in sorted(outros)), "título contido no título de outra obra do mesmo formato")
+            for i, outros in sorted(achados.items())]
 
 
 # casos que o card manda o estágio 1 reproduzir: (nome, casamento por prefixo de obra_id ou regex do arquivo, regra)
