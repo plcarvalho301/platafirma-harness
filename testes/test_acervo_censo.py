@@ -271,6 +271,16 @@ def test_r5_ocr_glifos_e_marcado_e_o_caso_da_iti_nao_cai():
     assert _regras(F(pdf={"camada_texto": {"paginas_ocr": [], "paginas_glifos_sem_caminho_gt20": [], "marcado_com_fontes_sem_mapeamento": False}})) == set()
 
 
+def test_r5_e_tipo_de_pdf_com_camada_texto_em_contagens_como_o_leitor_entrega():
+    pdf = {"camada_texto": {"paginas_ocr": 3, "paginas_glifos_sem_caminho_gt20": 0, "marcado_com_fontes_sem_mapeamento": False},
+           "paginas": {"ocr": {"paginas": [1, 2, 3], "paginas_total": 3}}, "paginas_analisadas": 3}
+    assert ("R5", "ocr") in _regras(F(pdf=pdf)) and ("R5", "glifos") not in _regras(F(pdf=pdf))
+    assert reg._tipo_pdf(F(pdf=pdf)) == "escaneada"
+    assert reg._tipo_pdf(F(pdf={**pdf, "camada_texto": {"paginas_ocr": 1}, "paginas": {"ocr": {"paginas_total": 1}}, "paginas_analisadas": 10})) == "mista"
+    assert reg._tipo_pdf(F(pdf={"camada_texto": {"paginas_ocr": 0}, "paginas_analisadas": 5})) == "textual"
+    assert reg._tipo_pdf(F(pdf=None)) == "sem leitura"
+
+
 def test_r6_charset_substituicao_nfc_e_lingua():
     f = F(encoding={"declarado": "iso-8859-1", "detectado": "utf-8", "declarado_bate": False},
           texto={"substituicao": 3, "normalizacao_unicode": {"nfc": False}, "lingua_detectada": {"codigo": "en"}}, lingua_declarada="pt-BR")

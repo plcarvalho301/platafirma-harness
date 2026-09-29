@@ -145,20 +145,29 @@ def r4(f: dict) -> list[dict]:
     return out
 
 
+def _cont(v) -> int:
+    """Contagem de páginas: o leitor de PDF entrega número em `camada_texto` e lista em `paginas`; aceita os dois."""
+    return len(v) if isinstance(v, (list, tuple)) else int(v or 0)
+
+
 def r5(f: dict) -> list[dict]:
     cat = f.get("catalogo") or {}
-    ct = (f.get("pdf") or {}).get("camada_texto") or {}
+    pdf = f.get("pdf") or {}
+    ct, pgs = pdf.get("camada_texto") or {}, pdf.get("paginas") or {}
     out = []
-    ocr = ct.get("paginas_ocr") or []
-    if ocr and not cat.get("needs_ocr"):
-        out.append(_c(f, "R5", "ocr", f"{len(ocr)} páginas no critério de OCR (<500 caracteres úteis e imagem >50%)",
+    n_ocr = _cont(ct.get("paginas_ocr"))
+    if n_ocr and not cat.get("needs_ocr"):
+        ex = (pgs.get("ocr") or {}).get("paginas") or (ct.get("paginas_ocr") if isinstance(ct.get("paginas_ocr"), list) else [])
+        out.append(_c(f, "R5", "ocr", f"{n_ocr} páginas no critério de OCR (<500 caracteres úteis e imagem >50%)",
                       "needs_ocr=false", "páginas de imagem servidas como se tivessem texto; ex.: "
-                      + ",".join(str(p) for p in ocr[:10])))
-    gl = ct.get("paginas_glifos_sem_caminho_gt20") or []
-    if gl:
-        out.append(_c(f, "R5", "glifos", f"{len(gl)} páginas com >20% de glifos sem caminho para Unicode",
+                      + ",".join(str(p) for p in ex[:10])))
+    n_gl = _cont(ct.get("paginas_glifos_sem_caminho_gt20"))
+    if n_gl:
+        ex = (pgs.get("glifos_sem_caminho") or {}).get("paginas_gt20") or (
+            ct.get("paginas_glifos_sem_caminho_gt20") if isinstance(ct.get("paginas_glifos_sem_caminho_gt20"), list) else [])
+        out.append(_c(f, "R5", "glifos", f"{n_gl} páginas com >20% de glifos sem caminho para Unicode",
                       cat.get("metodo_perfil"), "camada de texto que sai lixo (⚪ limiar de partida); ex.: "
-                      + ",".join(str(p) for p in gl[:10])))
+                      + ",".join(str(p) for p in ex[:10])))
     if ct.get("marcado_com_fontes_sem_mapeamento"):
         out.append(_c(f, "R5", "marcado", "PDF marcado com fontes sem mapeamento", "-", "viola ISO 32000-2 14.8.2.6"))
     return out
@@ -327,7 +336,7 @@ def _tipo_pdf(f: dict) -> str:
     n = pdf.get("paginas_analisadas") or pdf.get("paginas_percorridas")
     if ct is None or not n:
         return "sem leitura"
-    ocr = (((pdf.get("paginas") or {}).get("ocr") or {}).get("paginas_total")) or len(ct.get("paginas_ocr") or [])
+    ocr = (((pdf.get("paginas") or {}).get("ocr") or {}).get("paginas_total")) or _cont(ct.get("paginas_ocr"))
     if ocr == 0:
         return "textual"
     return "escaneada" if ocr >= 0.9 * n else "mista"
