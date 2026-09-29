@@ -42,6 +42,15 @@
   duração, objetivos, recurso), publica-se com o ato e não serve de fundamento às
   políticas subordinadas, que delegam o que é delas pela lei. Sinal: «nos termos do
   parágrafo único da política-mãe» em portaria que delega competência própria.
+- Ofício de consulta de minuta que cria ou altera colegiado — parece só circulação e é
+  o pedido de anuência do D12002, art. 36: vai com a minuta, o parecer de mérito ou a
+  nota técnica e o parecer jurídico, e o silêncio de quinze dias úteis presume a
+  anuência (§ 6º). Sinal: ofício de consulta sem prazo, sem os anexos ou sem a
+  pergunta de anuência às unidades que integram o colegiado.
+- Análise de impacto do parecer de mérito lida como AIR — em portaria interna é o
+  D12002, art. 58, VI: meio ambiente e outras políticas públicas, inclusive interação
+  e sobreposição. Sinal: parecer de mérito de norma interna com seção de impacto
+  regulatório sobre agentes econômicos.
 
 ## diario de bordo
 
@@ -61,3 +70,4 @@
 - 2026-09-27 — tentei propose_skills para a prosa sem ter lido a cópia sincronizada (/root/.claude/skills/synced/…), recusou mesmo com o conteúdo idêntico ao de /mnt/skills/plugins — contorno encontrado NA DATA 2026-09-27 foi ler a cópia sincronizada inteira e repropor; o dono depois preferiu mandar a mudança a produto pela fila.
 - 2026-09-29 — tentei acervo ler casa guia expediente --secao Sair, erro de uso (ler pede só <especie> <chave>) — contorno encontrado NA DATA 2026-09-29 foi motor rag buscar casa com --texto secao.
 - 2026-09-29 — tentei mesa escrever direito-normativo com entrada nova de conhecimento curado no meio do corpo, recusou (exit 4: o corpo novo não começa com o publicado); a gravação aceita abre PR no platafirma-harness e o caderno só fica achável depois do merge — contorno encontrado NA DATA 2026-09-29 foi conferir que o corpo novo era o publicado mais os bytes novos, regravar com --sobrescrever e rodar repo pr-merge platafirma-harness <n>.
+- 2026-09-29 — tentei pesquisar ler em planalto.gov.br (D12002), caiu com RemoteProtocolError; tentei WebFetch na Câmara, pediu permissão que não foi respondida — contorno encontrado NA DATA 2026-09-29 foi pesquisar ler na publicação original da Câmara (www2.camara.leg.br) com --offset e --max-chars, e ler com read_file o retorno longo que a poda lavou para arquivo.
