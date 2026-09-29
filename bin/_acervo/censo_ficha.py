@@ -6,6 +6,7 @@ Só leitura: os bytes chegam por `buscar(objeto)`; nada é gravado. Não levanta
 """
 from __future__ import annotations
 
+import csv
 import hashlib
 import importlib
 import io
@@ -14,6 +15,7 @@ import os
 import re
 import shutil
 import subprocess
+import sys
 import tempfile
 import time
 import unicodedata
@@ -210,14 +212,70 @@ def _identificar_sf(dados: bytes) -> dict | None:
         return None
 
 
+def _info_fido() -> dict:
+    """Nome, versão e versão das assinaturas PRONOM do fido que está no venv (vai para o agente.json)."""
+    info = {"nome": "fido", "versao": None, "assinaturas": None}
+    try:
+        from importlib.metadata import version
+        info["versao"] = version("opf-fido")
+    except Exception:                                        # noqa: BLE001
+        pass
+    try:
+        import fido
+        with open(os.path.join(os.path.dirname(fido.__file__), "conf", "versions.xml"), encoding="utf-8") as f:
+            info["assinaturas"] = " ".join(f.read().split())[:400]
+    except Exception:                                        # noqa: BLE001
+        pass
+    return info
+
+
+def _identificar_fido(dados: bytes) -> dict | None:
+    """Fido (assinaturas PRONOM) pelo CLI do venv; None se o fido não está lá. O arquivo temporário não tem extensão:
+    a identificação é pelos bytes. O CLI, e não `Fido()`, porque `Fido()` procura um formats-v104.xml que o pacote não traz."""
+    try:
+        import fido  # noqa: F401
+    except ImportError:
+        return None
+    try:
+        with tempfile.TemporaryDirectory(prefix="censo-fido-") as d:
+            caminho = os.path.join(d, "objeto.bin")
+            with open(caminho, "wb") as f:
+                f.write(dados)
+            r = subprocess.run([sys.executable, "-m", "fido.fido", "-q", caminho], capture_output=True, timeout=180)
+    except (OSError, subprocess.TimeoutExpired):
+        return None
+    matches = []
+    for linha in r.stdout.decode("utf-8", "replace").splitlines():
+        if not linha.startswith("OK"):
+            continue
+        try:
+            campos = next(csv.reader([linha]))
+        except (csv.Error, StopIteration):
+            continue
+        puid = next((c for c in campos if re.fullmatch(r"(?:x-)?fmt/\d+", c)), None)
+        if not puid:
+            continue
+        i = campos.index(puid)
+        nome = campos[i + 1] if i + 1 < len(campos) else None
+        mime = next((c for c in campos if c != puid and not c.startswith(("fmt/", "x-fmt/"))
+                     and re.fullmatch(r"[a-z0-9.+-]+/[a-z0-9.+-]+", c)), None)
+        tipo = next((c for c in reversed(campos) if c in ("signature", "container", "extension")), None)
+        v = re.search(r"\b(\d+\.\d+(?:\.\d+)?)\b", nome or "")
+        matches.append({"nome": nome, "versao": v.group(1) if v else None, "registro": puid, "mime": mime,
+                        "base": f"{tipo or 'fido'} (fido)", "aviso": None, "tentativo": tipo == "extension", "namespace": "pronom"})
+    return {"ferramenta": _info_fido(), "matches": matches}
+
+
 def extensao_de(nome: str | None) -> str:
     e = os.path.splitext(nome or "")[1].lstrip(".").lower()
     return e
 
 
 def situacao_identificacao(cands: list[dict], ext: str, sf: dict | None = None) -> str:
+    tent_pronom = False
     if sf and sf["matches"]:
         ms = [m for m in sf["matches"] if m.get("registro") and m["registro"] != "UNKNOWN"]
+        tent_pronom = bool(ms and ms[0].get("tentativo"))
         if not ms and not cands:
             return "desconhecido"
         if len(ms) > 1:
@@ -231,7 +289,7 @@ def situacao_identificacao(cands: list[dict], ext: str, sf: dict | None = None) 
     c = cands[0]
     if _EXT_VALIDA.match(ext) and ext not in EXTENSOES.get(c["formato_id"], set()):
         return "extensao_diverge"
-    return "tentativo" if c["tentativo"] else "identificado"
+    return "tentativo" if c["tentativo"] or tent_pronom else "identificado"
 
 
 # ---------------------------------------------------------------- C: texto
@@ -382,16 +440,18 @@ def montar_ficha(item: dict, buscar, prazo_s: float = PRAZO_OBRA_S) -> dict:
         ficha["objeto_vazio"] = len(dados) == 0
         t1 = time.monotonic()
         cands, conteiner = detectar(dados)
-        sf = _identificar_sf(dados) if dados else None
+        sf = (_identificar_fido(dados) or _identificar_sf(dados)) if dados else None
         ficha["conteiner"] = conteiner
-        if sf and sf["matches"]:
+        if sf:
             ficha["identificador"] = sf["ferramenta"]
+        if sf and sf["matches"]:
             ficha["formatos"] = [{k: m[k] for k in ("nome", "versao", "registro", "mime", "base", "aviso")} for m in sf["matches"]]
         else:
             ficha["formatos"] = [{"nome": c["nome"], "versao": c["versao"], "registro": None, "mime": c["mime"],
                                   "base": c["base"]} for c in cands] or [
                 {"nome": "unknown", "versao": None, "registro": None, "mime": None, "base": "nenhuma assinatura reconhecida"}]
-            ficha["lacunas"]["registro_pronom"] = "sem siegfried/fido no host: identificação por assinatura própria, registro PRONOM nulo"
+            ficha["lacunas"]["registro_pronom"] = ("o fido não reconheceu o arquivo: registro PRONOM nulo, formato pela assinatura própria" if sf
+                                                     else "sem fido nem siegfried no ambiente: assinatura própria, registro PRONOM nulo")
         fid = cands[0]["formato_id"] if len(cands) >= 1 else None
         ficha["formato_id"] = fid
         ficha["situacao_identificacao"] = situacao_identificacao(cands, ficha["extensao"], sf)

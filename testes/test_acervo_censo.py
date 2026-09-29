@@ -150,6 +150,56 @@ def test_situacao_de_identificacao():
     assert fic.situacao_identificacao(txt, "md") == "tentativo"
 
 
+def _fido_falso(monkeypatch, saida: str):
+    import types
+    falso = types.ModuleType("fido")
+    falso.__file__ = "/nao/existe/fido/__init__.py"
+    monkeypatch.setitem(sys.modules, "fido", falso)
+
+    class R:
+        stdout = saida.encode()
+    monkeypatch.setattr(fic.subprocess, "run", lambda *a, **k: R())
+
+
+def test_fido_le_a_saida_do_cli_com_registro_pronom_e_marca_extensao_como_tentativo(monkeypatch):
+    _fido_falso(monkeypatch, 'OK,2,fmt/276,"Acrobat PDF 1.7 - Portable Document Format","Acrobat PDF 1.7",1234,"/tmp/x/objeto.bin","application/pdf","signature"\n')
+    r = fic._identificar_fido(b"%PDF-1.7")
+    m = r["matches"][0]
+    assert (m["registro"], m["versao"], m["mime"], m["tentativo"]) == ("fmt/276", "1.7", "application/pdf", False)
+    assert m["base"] == "signature (fido)" and r["ferramenta"]["nome"] == "fido"
+    _fido_falso(monkeypatch, 'OK,1,x-fmt/111,"Plain Text File","",10,"/tmp/x/objeto.bin","text/plain","extension"\n')
+    r2 = fic._identificar_fido(b"texto")
+    assert r2["matches"][0]["tentativo"] is True
+    txt = [fic._f("txt", "Plain text", None, "text/plain", "b", False)]
+    assert fic.situacao_identificacao(txt, "txt", r2) == "tentativo"
+    assert fic.situacao_identificacao(txt, "txt", r) == "identificado"
+
+
+def test_fido_sem_match_ausente_e_duas_respostas(monkeypatch):
+    _fido_falso(monkeypatch, 'KO,0,"","","",5,"/tmp/x/objeto.bin","",""\n')
+    assert fic._identificar_fido(b"abcde")["matches"] == []
+    _fido_falso(monkeypatch, 'OK,1,fmt/18,"PDF 1.4","s",5,"f","application/pdf","signature"\nOK,1,fmt/17,"PDF 1.3","s",5,"f","application/pdf","signature"\n')
+    dois = fic._identificar_fido(b"%PDF-1.4")
+    assert len(dois["matches"]) == 2
+    pdf = [fic._f("pdf", "PDF", "1.4", "application/pdf", "b")]
+    assert fic.situacao_identificacao(pdf, "pdf", dois) == "disjuncao"
+    monkeypatch.setitem(sys.modules, "fido", None)             # fido fora do ambiente: cai na assinatura própria
+    assert fic._identificar_fido(b"%PDF-1.4") is None
+
+
+def test_ficha_com_fido_guarda_o_registro_e_o_identificador(monkeypatch):
+    canned = {"ferramenta": {"nome": "fido", "versao": "1.6.1", "assinaturas": "v109"},
+              "matches": [{"nome": "PDF 1.4", "versao": "1.4", "registro": "fmt/18", "mime": "application/pdf",
+                           "base": "signature (fido)", "aviso": None, "tentativo": False, "namespace": "pronom"}]}
+    monkeypatch.setattr(fic, "_identificar_fido", lambda dados: canned)
+    dados = b"%PDF-1.4\n%%EOF"
+    item = {"obra_id": ID1, "arquivo": "a.pdf", "objeto": "acervo/" + hashlib.sha256(dados).hexdigest(), "titulo": "T", "expurgada": False,
+            "impressao": {"metodo": {}}, "n_servindo": 1, "secoes": []}
+    f = fic.montar_ficha(item, lambda o: (dados, None))
+    assert f["formatos"][0]["registro"] == "fmt/18" and f["identificador"]["nome"] == "fido"
+    assert "registro_pronom" not in f["lacunas"] and f["situacao_identificacao"] == "identificado"
+
+
 # ---------------------------------------------------------------- C e J
 
 def test_metricas_de_texto():

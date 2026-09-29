@@ -350,6 +350,11 @@ def _sha_arquivo(caminho: str) -> str | None:
 
 
 def _identificador() -> dict:
+    try:
+        import fido  # noqa: F401
+        return censo_ficha._info_fido()
+    except ImportError:
+        pass
     sf = os.environ.get("PLATAFIRMA_SF") or next((c for c in ("/usr/local/bin/sf", "/usr/bin/sf") if os.path.exists(c)), None)
     if sf:
         try:
