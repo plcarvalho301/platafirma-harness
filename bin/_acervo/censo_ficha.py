@@ -410,7 +410,7 @@ def montar_ficha(item: dict, buscar, prazo_s: float = PRAZO_OBRA_S) -> dict:
                 ficha["erro_leitor"] = motivo_leitor
             else:
                 bloco = LEITORES[fid][1]
-                ficha[bloco] = env.get(bloco)
+                ficha["texto_formato" if bloco == "texto" else bloco] = env.get(bloco)   # `texto` já é o bloco C da ficha
                 ficha["aplicacoes_criadoras"] = env.get("aplicacoes_criadoras") or []
                 ficha["inibidor"] = env.get("inibidor") or ficha["inibidor"]
                 ficha["lingua_declarada"] = env.get("lingua_declarada")

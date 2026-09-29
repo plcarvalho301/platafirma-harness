@@ -306,7 +306,7 @@ def test_r8_nome_igual_titulo_igual_e_titulo_nome_de_arquivo():
 def test_casos_conhecidos_e_resumo_e_tsv():
     e_arq = F(obra_id="0d9fc4f8-0000-4000-8000-000000000009", formato_id="pdf", catalogo={"secoes_n": 1},
               estrutura_declarada=[{"fonte": "pdf_outline", "entradas": 40, "profundidade": 2}])
-    iti = F(obra_id=ID2, nome_original="IN ITI 35.pdf", pdf={"camada_texto": {"paginas_ocr": []}})
+    iti = F(obra_id="8d2864b1-0000-4000-8000-00000000000a", nome_original="IN35 ITI.pdf", pdf={"camada_texto": {"paginas_ocr": []}})
     fichas = [e_arq, iti]
     contra = []
     for f in fichas:
@@ -376,6 +376,8 @@ def test_finalizar_grava_tsv_e_resumo(tmp_path):
     tsv = (tmp_path / "contradicoes.tsv").read_text().splitlines()
     assert tsv[0].startswith("obra_id\tregra") and any("\tR2\t" in l for l in tsv[1:])
     assert json.loads((tmp_path / "resumo.json").read_text())["universo"] == 2
+    base = (tmp_path / "levantamento-base.md").read_text()
+    assert "## Contagem por formato identificado" in base and "### R2" in base and "objeto_vazio" in base
 
 
 def _worker_falso(item):

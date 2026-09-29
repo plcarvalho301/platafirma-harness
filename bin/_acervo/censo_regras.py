@@ -150,7 +150,7 @@ def r5(f: dict) -> list[dict]:
     ct = (f.get("pdf") or {}).get("camada_texto") or {}
     out = []
     ocr = ct.get("paginas_ocr") or []
-    if ocr and cat.get("needs_ocr") is False:
+    if ocr and not cat.get("needs_ocr"):
         out.append(_c(f, "R5", "ocr", f"{len(ocr)} páginas no critério de OCR (<500 caracteres úteis e imagem >50%)",
                       "needs_ocr=false", "páginas de imagem servidas como se tivessem texto; ex.: "
                       + ",".join(str(p) for p in ocr[:10])))
@@ -259,11 +259,11 @@ CASOS_CONHECIDOS = (
     {"caso": "e-ARQ Brasil v2 (af864268): duas obras, um documento", "prefixo": "af864268", "regra": "R8"},
     {"caso": "Tschichold: 55 seções e caixa espaçada", "prefixo": "5ed120e6", "regra": "R4"},
     {"caso": "NBR 6029: 4.2.3.5 no nível 2 e Apêndice como seção", "prefixo": "46107bee", "regra": "R4"},
-    {"caso": "Portigal: objeto de 0 byte", "arquivo": r"interviewing users", "regra": "R2", "clausula_obra": "objeto_vazio"},
-    {"caso": "Condorcet: servindo com 0 trecho", "arquivo": r"condorcet", "regra": "R7"},
-    {"caso": "Alf Ross: servindo com 0 trecho", "arquivo": r"alf.?ross|state.and.state.organs", "regra": "R7"},
+    {"caso": "Portigal: objeto de 0 byte", "prefixo": "4a2b3811", "regra": "R2"},
+    {"caso": "Condorcet: servindo com 0 trecho", "prefixo": "eb95d9f4", "regra": "R7"},
+    {"caso": "Alf Ross: servindo com 0 trecho", "prefixo": "de1c6e97", "regra": "R7"},
     {"caso": "EPUB 3.3: título '1'", "prefixo": "7e752159", "regra": "R8"},
-    {"caso": "IN ITI nº 35: NÃO cai no critério de OCR", "arquivo": r"\bITI\b.*\b35\b|in.?iti.?0?35", "regra": "R5", "clausula": "ocr", "nao": True},
+    {"caso": "IN ITI nº 35: NÃO cai no critério de OCR", "prefixo": "8d2864b1", "regra": "R5", "clausula": "ocr", "nao": True},
 )
 
 
@@ -318,6 +318,63 @@ def resumir(fichas: list[dict], contradicoes: list[dict]) -> dict:
         "regras": regras,
         "casos_conhecidos": conferir_casos(fichas, contradicoes),
     }
+
+
+def _tipo_pdf(f: dict) -> str:
+    """textual, mista ou escaneada (por páginas no critério de OCR), ou sem leitura."""
+    pdf = f.get("pdf") or {}
+    ct = pdf.get("camada_texto")
+    n = pdf.get("paginas_analisadas") or pdf.get("paginas_percorridas")
+    if ct is None or not n:
+        return "sem leitura"
+    ocr = (((pdf.get("paginas") or {}).get("ocr") or {}).get("paginas_total")) or len(ct.get("paginas_ocr") or [])
+    if ocr == 0:
+        return "textual"
+    return "escaneada" if ocr >= 0.9 * n else "mista"
+
+
+def levantamento_base(fichas: list[dict], contradicoes: list[dict], resumo: dict, limite: int = 40) -> str:
+    """Tabelas do levantamento em Markdown (o que a casa serve depois, com a narrativa por cima)."""
+    def tab(cab, linhas):
+        return ["| " + " | ".join(cab) + " |", "|" + "---|" * len(cab)] + ["| " + " | ".join(str(x) for x in l) + " |" for l in linhas]
+    fmt = {f["obra_id"]: f.get("formato_id") or "desconhecido" for f in fichas}
+    nomes = defaultdict(Counter)
+    for f in fichas:
+        nomes[fmt[f["obra_id"]]][", ".join(x.get("nome") or "?" for x in f.get("formatos") or []) or "-"] += 1
+    out = ["## Contagem por formato identificado", ""]
+    out += tab(["formato (pelos bytes)", "obras", "nomes que a identificação deu"],
+               [(k, resumo["por_formato"][k], "; ".join(f"{n} ({c})" for n, c in nomes[k].most_common(3))) for k in resumo["por_formato"]])
+    out += ["", "Situação da identificação: " + ", ".join(f"{k} {v}" for k, v in resumo["situacao_identificacao"].items()) + ".", ""]
+    formatos = sorted(resumo["por_formato"])
+    out += ["## Contradições por regra e por formato (obras)", ""]
+    linhas = []
+    for r in REGRAS:
+        por = Counter(fmt.get(c["obra_id"], "desconhecido") for c in contradicoes if c["regra"] == r)
+        obras = len({c["obra_id"] for c in contradicoes if c["regra"] == r})
+        linhas.append([r, obras] + [por.get(k, 0) or "" for k in formatos])
+    out += tab(["regra", "obras"] + formatos, linhas)
+    out += ["", "## PDFs pela camada de texto", ""]
+    tipos = Counter(_tipo_pdf(f) for f in fichas if fmt[f["obra_id"]] == "pdf")
+    out += tab(["tipo", "PDFs"], sorted(tipos.items()))
+    out += ["", "textual: nenhuma página no critério de OCR; escaneada: 90% ou mais das páginas; mista: o resto. Critério: menos de 500 caracteres úteis e imagem em mais da metade da área.", ""]
+    out += ["## Obras de cada regra", ""]
+    for r in REGRAS:
+        cs = [c for c in contradicoes if c["regra"] == r]
+        out += [f"### {r} · {CLAUSULAS[r][0]}", "", f"{len(cs)} contradições em {len({c['obra_id'] for c in cs})} obras.", ""]
+        if not cs:
+            continue
+        nome = {f["obra_id"]: f.get("nome_original") for f in fichas}
+        out += tab(["obra", "cláusula", "arquivo", "valor no arquivo", "valor no catálogo"],
+                   [(c["obra_id"][:8], c["clausula"] or "-", (nome.get(c["obra_id"]) or "-")[:60].replace("|", "/"),
+                     c["arquivo"][:70].replace("|", "/"), c["catalogo"][:70].replace("|", "/")) for c in cs[:limite]])
+        if len(cs) > limite:
+            out += ["", f"(as {limite} primeiras; a tabela inteira está em contradicoes.tsv)"]
+        out.append("")
+    out += ["## Casos conhecidos", ""]
+    out += tab(["caso", "obras", "regra", "resultado"],
+               [(c["caso"], ",".join(c["obras"]) or "-", c.get("regra", "-"),
+                 {True: "ok", False: "não: " + c["nota"], None: c["nota"]}[c["ok"]]) for c in resumo["casos_conhecidos"]])
+    return "\n".join(out) + "\n"
 
 
 def linhas_tsv(contradicoes: list[dict], fichas_por_id: dict[str, dict]) -> list[str]:

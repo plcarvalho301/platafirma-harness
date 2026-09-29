@@ -397,6 +397,8 @@ def finalizar(pasta: str, execucao: dict) -> dict:
     with open(os.path.join(pasta, ARQ_RESUMO), "w", encoding="utf-8") as fh:
         json.dump(resumo, fh, ensure_ascii=False, indent=2, sort_keys=True)
         fh.write("\n")
+    with open(os.path.join(pasta, "levantamento-base.md"), "w", encoding="utf-8") as fh:
+        fh.write(censo_regras.levantamento_base(lista, contra, resumo))
     return resumo
 
 
