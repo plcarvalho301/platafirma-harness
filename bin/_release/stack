@@ -21,6 +21,25 @@
 #   stack compose  <stack> <acao> [args...]  acao = up | down | ps | logs | config | pull | build
 #                                             (passthrough ao docker compose; segredo exigido
 #                                             so antes de "up")
+#   stack testar   <stack> <rev>             passo de teste da imagem (spec conversor-pdf-combinado
+#                                             §13): constroi as imagens da rev e roda, dentro da
+#                                             imagem, cada servico do perfil `teste` do compose.
+#                                             0 verde ou nada a medir · 4 reprovou · 3 nao construiu
+#
+# Imagem pinada pelo sha (card #3192, spec conversor-pdf-combinado §2): promover, testar e
+# compose exportam PF_RELEASE_SHA (o sha da arvore que sobe). Stack cujo compose da a todo
+# servico com build: uma image: terminada em :${PF_RELEASE_SHA} sobe SEM --build quando a
+# imagem daquele sha ja existe no docker — voltar a um sha ja promovido nao reconstroi nada,
+# e o que o passo de teste mediu e o que sobe. Stack sem esse pino sobe como sempre subiu
+# (up --build).
+#
+# Recria so a stack cujo artefato mudou: promover compara, entre o sha que a stack tem no ar
+# ($DEPLOY_PONTOS/<stack>.atual) e o que sobe, os arquivos de compose, os contextos de build
+# (principal e adicionais), os dockerfiles e as origens de bind dentro da arvore. Nada mudou
+# e os conteineres estao de pe: nada se recria, o ponto da stack avanca. Fora da comparacao,
+# declarado: a sobreposicao da instancia e os segredos (mudanca neles se aplica com
+# `infra up <stack>`) e artefato de terceiro materializado (registro/terceiros.json, cujo pino
+# mora em outra familia). PF_STACK_RECRIAR=1 recria mesmo assim.
 #
 # ambiente: PF_RELEASE_RAIZ[=/opt/platafirma] · PLATAFIRMA_RELEASE[=$PF_RELEASE_RAIZ/current] ·
 #   PLATAFIRMA_INSTANCIA[=/srv/platafirma/casa] · DEPLOY_PONTOS[=$PLATAFIRMA_INSTANCIA/var/deploy] ·
@@ -64,6 +83,7 @@ uso() {
 uso:
   stack promover <stack> [<rev>]              sobe da arvore da release nessa rev (sem rev: current da familia)
   stack compose  <stack> <acao> [args...]     acao = up | down | ps | logs | config | pull | build
+  stack testar   <stack> <rev>                passo de teste da imagem da rev (servicos do perfil teste)
 
 base: $PF_RELEASE_RAIZ/<familia>/<sha>/<compose> · sobreposicao: $PLATAFIRMA_INSTANCIA/deploy/<stack>/compose.override.yaml
 segredos: $PLATAFIRMA_INSTANCIA/segredos/<stack>/ (env-file em tmpfs, apagado na saida)
@@ -89,8 +109,8 @@ case "${1:-}" in --ajuda|--help|-h) uso ;; esac
 ATO="$1"; STACK="$2"; shift 2 || true
 
 case "$ATO" in
-  promover|compose) ;;
-  *) echo "erro: ato desconhecido: '$ATO' (promover|compose)" >&2; uso ;;
+  promover|compose|testar) ;;
+  *) echo "erro: ato desconhecido: '$ATO' (promover|compose|testar)" >&2; uso ;;
 esac
 
 case "$STACK" in
@@ -269,6 +289,130 @@ materializar_env() {
 
 gravar_atual() { mkdir -p "$PONTOS"; printf '%s\n' "$1" > "$PONTOS/$STACK.atual"; }
 
+# --- imagem pinada, stack inalterada, passo de teste (card #3192) ------------------
+# Tudo le o `docker compose config --format json` ja interpolado (depois de materializar_env e
+# de exportar PF_RELEASE_SHA): o mesmo compose que o `up` usaria. Falha de leitura nunca
+# decide a favor de pular nada: volta 1 e a stack segue o caminho de sempre.
+config_json() {  # [--profile teste] ; imprime o JSON do compose montado
+  compose "$@" config --format json 2>/dev/null
+}
+
+# "servico<TAB>imagem" de cada servico com build: (dos perfis ativos, ou dos pedidos em $@)
+servicos_de_build() {
+  config_json "$@" | python3 -c '
+import json, sys
+d = json.load(sys.stdin)
+for nome, s in sorted((d.get("services") or {}).items()):
+    if s.get("build"):
+        print("%s\t%s" % (nome, s.get("image") or ""))
+'
+}
+
+# servicos do perfil `teste` (o passo de teste da imagem)
+servicos_de_teste() {
+  config_json --profile teste | python3 -c '
+import json, sys
+d = json.load(sys.stdin)
+for nome, s in sorted((d.get("services") or {}).items()):
+    if "teste" in (s.get("profiles") or []):
+        print(nome)
+'
+}
+
+# 0 quando todo servico com build tem image: terminada em :$PF_RELEASE_SHA (e ha ao menos um)
+imagem_pinada() {
+  local linhas nome img
+  linhas="$(servicos_de_build "$@")" || return 1
+  [ -n "$linhas" ] || return 1
+  while IFS=$'\t' read -r nome img; do
+    case "$img" in *":$PF_RELEASE_SHA") ;; *) return 1 ;; esac
+  done <<<"$linhas"
+  return 0
+}
+
+# constroi so a imagem que falta: a do sha que ja existe no docker nao se reconstroi
+garantir_imagens() {  # [--profile teste] ; 0 prontas, 3 build falhou
+  local linhas nome img faltam=()
+  linhas="$(servicos_de_build "$@")" || return 3
+  while IFS=$'\t' read -r nome img; do
+    [ -n "$nome" ] || continue
+    if docker image inspect "$img" >/dev/null 2>&1; then
+      printf 'imagem:    %s ja existe — sem build\n' "$img"
+    else
+      faltam+=("$nome")
+    fi
+  done <<<"$linhas"
+  [ "${#faltam[@]}" -gt 0 ] || return 0
+  printf 'imagem:    build de %s\n' "${faltam[*]}"
+  compose "$@" build "${faltam[@]}" || return 3
+}
+
+# caminhos, relativos a arvore da release, que fazem o artefato da stack: os compose da
+# base, os contextos de build (principal e adicionais), os dockerfiles e as origens de bind
+entradas_da_stack() {
+  local c
+  for c in "${COMPOSE_ARGS[@]}"; do
+    [ "$c" = "-f" ] && continue
+    case "$c" in "$ARVORE/"*) printf '%s\n' "${c#"$ARVORE/"}" ;; esac
+  done
+  config_json | python3 -c '
+import json, os, sys
+arvore = os.path.realpath(sys.argv[1])
+d = json.load(sys.stdin)
+def rel(p, base=None):
+    if not p or "://" in p:
+        return
+    if base and not os.path.isabs(p):
+        p = os.path.join(base, p)
+    p = os.path.realpath(p)
+    if p == arvore or p.startswith(arvore + os.sep):
+        print(os.path.relpath(p, arvore))
+for s in (d.get("services") or {}).values():
+    b = s.get("build") or {}
+    if b:
+        rel(b.get("context"))
+        rel(b.get("dockerfile"), b.get("context"))
+        for v in (b.get("additional_contexts") or {}).values():
+            rel(v)
+    for v in s.get("volumes") or []:
+        if isinstance(v, dict) and v.get("type") == "bind":
+            rel(v.get("source"))
+' "$ARVORE"
+}
+
+# 0 quando nada do que faz a stack mudou entre o sha que ela tem no ar ($1) e o que sobe
+# ($SHA), e os conteineres dela estao de pe. Qualquer duvida volta 1 (recria).
+inalterada_desde() {  # $1=sha no ar
+  local ant="$1" esp="$PF_RELEASE_RAIZ/$REPO/.repo.git" ents
+  [[ "$ant" =~ ^[0-9a-f]{40}$ ]] || return 1
+  [ "$ant" != "$SHA" ] || return 1          # repetir o mesmo sha e pedir para recriar
+  [ -d "$esp" ] || return 1
+  git --git-dir="$esp" cat-file -e "$ant^{commit}" 2>/dev/null || return 1
+  ents="$(entradas_da_stack)" || return 1
+  [ -n "$ents" ] || return 1
+  local -a lista; mapfile -t lista < <(printf '%s\n' "$ents" | sort -u)
+  local mudou
+  mudou="$(git --git-dir="$esp" diff --name-only "$ant" "$SHA" -- "${lista[@]}" 2>/dev/null)" || return 1
+  [ -z "$mudou" ] || return 1
+  [ -n "$(compose ps -q --status running 2>/dev/null)" ] || return 1
+  return 0
+}
+
+# ARV e SHA de uma rev (vazia: current da familia); falha com a recusa impressa
+resolver_arvore() {  # $1=rev ou vazio
+  local rev="$1"
+  if [ -z "$rev" ]; then
+    ARV="$(arvore_de "")" || {
+      echo "recusa: familia $REPO sem current na release — promova antes: release promover $REPO <rev>" >&2; exit 1; }
+    SHA="$(basename "$ARV")"
+  else
+    SHA="$(resolver_rev "$rev")" && ARV="$(arvore_de "$SHA")" || {
+      echo "recusa: rev \"$rev\" nao esta materializada na release de $REPO." >&2
+      echo "        a arvore imutavel nasce do release: release promover $REPO $rev" >&2
+      exit 1; }
+  fi
+}
+
 PERFIL_ARGS=()
 while read -r pf; do
   [ -n "$pf" ] || continue
@@ -281,26 +425,65 @@ case "$ATO" in
   promover)
     REV=""
     if [ $# -gt 0 ] && [[ "$1" != -* ]]; then REV="$1"; shift; fi
-    if [ -z "$REV" ]; then
-      ARV="$(arvore_de "")" || {
-        echo "recusa: familia $REPO sem current na release — promova antes: release promover $REPO <rev>" >&2; exit 1; }
-      SHA="$(basename "$ARV")"
-    else
-      SHA="$(resolver_rev "$REV")" && ARV="$(arvore_de "$SHA")" || {
-        echo "recusa: rev \"$REV\" nao esta materializada na release de $REPO." >&2
-        echo "        a arvore imutavel nasce do release: release promover $REPO $REV" >&2
-        exit 1; }
-    fi
+    resolver_arvore "$REV"
     montar_compose "$ARV"; fixar_projeto; exigir_segredos; materializar_env
+    export PF_RELEASE_SHA="$SHA"
     ANTES=""
     if [ -r "$PONTOS/$STACK.atual" ]; then ANTES="$(cat "$PONTOS/$STACK.atual")"; fi
     mkdir -p "$PONTOS"
-    if [ -n "$ANTES" ] && [ "$ANTES" != "$SHA" ]; then echo "$ANTES" > "$PONTOS/$STACK.anterior"; fi
     printf 'release: %s (projeto %s)\n  %s -> %s\n' "$ARVORE" "$PROJETO" "${ANTES:-(nenhum up gravado)}" "$SHA"
     cd "$(dirname "$COMPOSE")"
-    rc=0; compose up -d --build --force-recreate "$@" || rc=$?
+    if [ "${PF_STACK_RECRIAR:-0}" != 1 ] && [ -n "$ANTES" ] && inalterada_desde "$ANTES"; then
+      printf 'stack %s inalterada de %s a %s (compose, build e binds) — nada recriado\n' "$STACK" "${ANTES:0:7}" "${SHA:0:7}"
+      gravar_atual "$SHA"
+      exit 0
+    fi
+    if [ -n "$ANTES" ] && [ "$ANTES" != "$SHA" ]; then echo "$ANTES" > "$PONTOS/$STACK.anterior"; fi
+    rc=0
+    if imagem_pinada; then
+      # imagem do sha: a que o passo de teste mediu, ou a guardada de uma promocao anterior
+      garantir_imagens || rc=$?
+      [ "$rc" -ne 0 ] || compose up -d --no-build --force-recreate "$@" || rc=$?
+    else
+      compose up -d --build --force-recreate "$@" || rc=$?
+    fi
     [ "$rc" -ne 0 ] || gravar_atual "$SHA"
     exit "$rc"
+    ;;
+  # passo de teste da imagem: nada sobe, nada muda de ponto; so constroi e mede
+  testar)
+    REV="${1:-}"
+    [ -n "$REV" ] || { echo "erro: rev obrigatoria: stack testar $STACK <rev>" >&2; exit 2; }
+    resolver_arvore "$REV"
+    montar_compose "$ARV"; fixar_projeto; exigir_segredos; materializar_env
+    export PF_RELEASE_SHA="$SHA"
+    cd "$(dirname "$COMPOSE")"
+    TESTES="$(servicos_de_teste)" || {
+      echo "erro: compose de \"$STACK\" na rev ${SHA:0:7} nao se le (docker compose config)" >&2; exit 3; }
+    if [ -z "$TESTES" ]; then
+      printf 'teste imagem: %s sem servico no perfil teste — nada a medir\n' "$STACK"
+      exit 0
+    fi
+    ANTES=""
+    if [ -r "$PONTOS/$STACK.atual" ]; then ANTES="$(cat "$PONTOS/$STACK.atual")"; fi
+    if [ "${PF_STACK_RECRIAR:-0}" != 1 ] && [ -n "$ANTES" ] && inalterada_desde "$ANTES"; then
+      printf 'teste imagem: %s inalterada de %s a %s — a imagem no ar e a medida naquela promocao\n' "$STACK" "${ANTES:0:7}" "${SHA:0:7}"
+      exit 0
+    fi
+    garantir_imagens || { echo "teste imagem: build de $STACK na rev ${SHA:0:7} falhou" >&2; exit 3; }
+    garantir_imagens --profile teste || { echo "teste imagem: build do teste de $STACK na rev ${SHA:0:7} falhou" >&2; exit 3; }
+    FALHOU=()
+    while read -r t; do
+      [ -n "$t" ] || continue
+      printf 'teste imagem: %s → %s (%s)\n' "$STACK" "$t" "${SHA:0:7}"
+      compose --profile teste run --rm --no-deps -T "$t" </dev/null || FALHOU+=("$t")
+    done <<<"$TESTES"
+    if [ "${#FALHOU[@]}" -gt 0 ]; then
+      printf 'teste imagem: %s REPROVOU na rev %s: %s\n' "$STACK" "${SHA:0:7}" "${FALHOU[*]}" >&2
+      exit 4
+    fi
+    printf 'teste imagem: %s verde na rev %s\n' "$STACK" "${SHA:0:7}"
+    exit 0
     ;;
   compose)
     ACAO="${1:-}"
@@ -315,6 +498,7 @@ case "$ATO" in
     montar_compose "$ARV"; fixar_projeto
     [ "$ACAO" != "up" ] || exigir_segredos
     materializar_env
+    export PF_RELEASE_SHA="$(basename "$ARVORE")"
     cd "$(dirname "$COMPOSE")"
     rc=0; compose "$@" || rc=$?
     if [ "$rc" -eq 0 ] && [ "$ACAO" = "up" ]; then gravar_atual "$(basename "$ARVORE")"; fi

@@ -1167,6 +1167,33 @@ exigir_deploy_se_stack() {
   }
 }
 
+# Passo de teste da imagem (card #3192; spec conversor-pdf-combinado §13; guia portoes-do-codigo):
+# cada stack da familia que declara servico no perfil `teste` do compose constroi as imagens da
+# rev e roda esse servico dentro delas ANTES de trocar current. Reprovou: exit 4, current
+# intacto. Nao construiu: exit 3, current intacto. Stack sem perfil `teste`: nada a medir. A
+# imagem medida e a que sobe depois (marcada pelo sha; bin/_release/stack promover a reusa sem
+# build). Stack inalterada desde o sha que tem no ar nao se mede de novo.
+gate_imagem() {  # $1=repo $2=sha
+  local repo="$1" sha="$2" s rc ajudante_bin
+  [ "${#STACKS_PROMOVER[@]}" -gt 0 ] || return 0
+  ajudante_bin="$(achar_deploy)"
+  [ -n "$ajudante_bin" ] || {
+    printf 'release: dependência ausente: ajudante bin/_release/stack não encontrado e a família tem stacks (%s)\n' "${STACKS_PROMOVER[*]}" >&2
+    return 3; }
+  for s in "${STACKS_PROMOVER[@]}"; do
+    rc=0
+    "$ajudante_bin" testar "$s" "$sha" || rc=$?
+    case "$rc" in
+      0) ;;
+      4) printf 'release: recusa: passo de teste da imagem da stack %s reprovou na rev %s — current intacto\n' "$s" "${sha:0:7}" >&2
+         return 4 ;;
+      *) printf 'release: passo de teste da imagem da stack %s não rodou na rev %s (exit %s) — current intacto\n' "$s" "${sha:0:7}" "$rc" >&2
+         return 3 ;;
+    esac
+  done
+  return 0
+}
+
 promover_stacks() {  # $1=sha ; usa STACKS_PROMOVER; devolve 0 ou o nome da stack que recusou em STACK_FALHOU
   local sha="$1" s
   STACK_FALHOU=""
@@ -1941,6 +1968,7 @@ cmd_promover() {
   gravar_ultimo_gate "$repo" "$sha"
   gate_conferir_verbo "$repo" "$sha" "$atual" || { rc=$?; exit "$rc"; }
   construir_venvs "$repo" "$sha" || { rc=$?; exit "$rc"; }
+  gate_imagem "$repo" "$sha" || { rc=$?; exit "$rc"; }
   gravar_pontos "$repo" "$atual" "$sha"
   trocar_current "$repo" "$sha" "$atual"
   printf 'current:   %s → %s\n' "$(curto_ou "$atual" '(nenhum)')" "${sha:0:7}"
