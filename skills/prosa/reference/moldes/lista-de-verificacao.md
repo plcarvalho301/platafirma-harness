@@ -1,7 +1,7 @@
 # molde — lista de verificação
 
 Régua fina: anexo de moldes §6 (fonte: `acervo ler casa padrao styleguide-moldes-por-tipo`).
-Estrutura: `acervo.especie_estrato` (Derivação e objeto · Critérios). Exemplar no ar:
+Estrutura: `acervo.especie_estrato` (Derivação e objeto · Critérios · Contrapontos, opcional; migração 067). Exemplar no ar:
 `acervo ler casa lista-de-verificacao checklist-antipadroes-organizacao-documental`.
 
 Distintivo: cada critério passa ou falha sem julgamento de mérito, ou declara que depende
@@ -26,6 +26,14 @@ Nome fora desta lista faz a coluna sumir para a máquina:
 - `severidade` vale `bloqueante` ou `aviso`, e nada mais.
 - `Rev:` sai das linhas de metadado antes do primeiro `##`; é número inteiro.
 - Lista retirada some para a máquina; critério retirado fica na tabela, marcado.
+- Os títulos `## Critérios` e `## Contrapontos` são fixos, sem complemento. O montador
+  do agente (spec `cadeirinha` §4) serve só essas duas seções como régua; título
+  diferente faz a seção sumir para ele. Famílias de critério vão em `###` dentro de
+  `## Critérios`.
+- O `#` casa `[A-Z]{1,2}\d+`.
+- Cada contraponto abre com negrito que cita o `#` do critério que ele tempera. Regra
+  geral, que não tempera critério nenhum, vai em «Como se lê». Negrito que o `lint` lê
+  literal (os de T2 e D7 da lista do acervo) não se reescreve sem mudar o código junto.
 
 ## Estratos
 
@@ -39,8 +47,9 @@ Nome fora desta lista faz a coluna sumir para a máquina:
    - `cura`: imperativo.
    - O `#` não muda nunca; renumerar quebra quem cita.
 
-Opcionais, depois: **Contrapontos** (falsos positivos que o detector respeita) e
-**Mudança** (uma linha por rev). Prova de origem vai a rodapé, não à célula.
+Opcionais, depois: **Contrapontos** (falsos positivos que o detector respeita, cada um
+abrindo pelo `#` do critério em negrito) e **Mudança** (uma linha por rev). Curas
+compartilhadas, casos e rodapé ficam fora da régua que o agente recebe. Prova de origem vai a rodapé, não à célula.
 
 ## Esqueleto
 
@@ -71,7 +80,7 @@ Deriva de: <lei>; <lei>
 
 ## Contrapontos
 
-- <falso positivo que o detector já respeita>.
+- **<PFX>1 não pega <o caso>.** <Por quê, e o que o detector faz com ele.>
 
 ## Mudança
 
