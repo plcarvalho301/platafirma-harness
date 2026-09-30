@@ -37,7 +37,10 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from exec_conta import argv_escrita, argv_sob_conta, env_sob_conta, erro_de_conta  # noqa: E402
 
-CONTAS_PADRAO = ("jaiminho", "quinzinho", "modulo-osint")
+# As contas de modelo da spec agente §2 (Gemini sob jaiminho, Qwen sob quinzinho). Conta
+# segregada nova entra aqui no mesmo ato que a admite (seg:0011 item 6). Medido em
+# 30/09/2026: modulo-osint nao existe mais no host.
+CONTAS_PADRAO = ("jaiminho", "quinzinho")
 
 OK, FALHA, NAO_MEDIDO = "ok", "FALHA", "NAO MEDIDO"
 
