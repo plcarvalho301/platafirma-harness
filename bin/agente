@@ -6,7 +6,7 @@
 # atos: listar (leitura, construcao), ler (leitura, construcao), rodar (escrita, construcao), projetar (escrita, construcao)
 # ato: listar [--modelo <familia>] [--modo <modo>] [--json] — as declarações do posto, uma por linha
 # ato: ler <slug> — a declaração inteira de um especialista
-# ato: rodar <slug> [--cadeira <slug>] [--chapeu <slug>] [--json] — abre a sessão filha, monta a lente e chama o modelo na conta dele; a tarefa vem em stdin
+# ato: rodar <slug> [--cadeira <slug>] [--chapeu <slug>] [--json] — abre a sessão filha, monta a lente e chama o modelo na conta dele; a tarefa vem em stdin (no modo varrer o modelo a recebe com as linhas numeradas, `N |`)
 # ato: projetar [--conferir] [--base <ref>] — gera as projeções do provedor a partir das declarações; --conferir só mede
 # exit: 0 ok · 1 negativo de mérito (não existe, divergente, sem pessoa resolvida) · 2 uso · 3 dependência fora · 4 recusa de política · 5 indeterminável
 # le: listar=arquivo-local
@@ -18,7 +18,7 @@
 # escreve: rodar=arquivo-local,malha
 # escreve: projetar=arquivo-local
 # consome: sessao, expediente, seg, ollama
-# ambiente: PF_SUJEITO (a pessoa em nome de quem o agente roda; obrigatoria em rodar; porta) · PF_SESSAO (a sessao de quem chamou; obrigatoria em rodar; porta) · PF_CADEIRA (porta) · PF_ORDEM_ID (porta) · PF_POSTO[=<bancada>/platafirma-posto] (onde estao as declaracoes) · PF_BIN[=bin/ da propria arvore] (opcional; so teste com stub) · PF_CLAUDE_BIN[=claude no PATH] (opcional; so teste com stub) · OLLAMA_BASE_URL (opcional; o ollama local) · PLATAFIRMA_INSTANCIA[=/srv/platafirma/casa] (var/log/agente e var/log/seg)
+# ambiente: PF_SUJEITO (a pessoa em nome de quem o agente roda; obrigatoria em rodar; porta) · PF_SESSAO (a sessao de quem chamou; obrigatoria em rodar; porta) · PF_CADEIRA (porta) · PF_ORDEM_ID (porta) · PF_POSTO (opcional; padrao <bancada>/platafirma-posto, onde estao as declaracoes) · PF_BIN (opcional; padrao bin/ da propria arvore; so teste com stub) · PF_CLAUDE_BIN (opcional; padrao claude no PATH; so teste com stub) · OLLAMA_BASE_URL (opcional; o ollama local) · PLATAFIRMA_INSTANCIA (opcional; padrao /srv/platafirma/casa; var/log/agente e var/log/seg)
 # escrita: projetar grava .claude/agents/<slug>.md no posto; rodar grava a chave da sessao filha (sessao abrir) e uma linha em var/log/agente/; nada em listar|ler|projetar --conferir
 # depende: sessao, expediente, lib/raizes, lib/uso, pyyaml (venv harness)
 # conforme: parcial — a spec agente põe este verbo na capacidade `automacao` (nível 2), que o acervo ainda não tem (vocabulario arquitetura-negocio-operacao ingerido em 14/09): `construcao` até ela entrar, e a troca é esta linha; Gemini pelo `agy` ainda não roda (a execução sob jaiminho é da ti, spec agente §Aberto); agendado espera `sessao longjob` herdar os atributos (#3186)
@@ -498,6 +498,15 @@ def monta_lente(decl: dict, cadeira: str, chapeu: str, filha: dict, origem: str,
     return "\n\n---\n\n".join(pecas)
 
 
+def numera(texto: str) -> str:
+    """As linhas do texto com o número na frente (`  3 | ...`). No modo varrer a âncora é o número da linha
+    do texto recebido; o Qwen de 9 bilhões copia o número que lê e erra o que conta (medido em 30/09: sem
+    numeração as âncoras saíram deslocadas; com ela, 4 de 4 nas duas rodadas)."""
+    linhas = texto.splitlines()
+    largura = max(3, len(str(len(linhas))))
+    return "".join(f"{i:>{largura}} | {l}\n" for i, l in enumerate(linhas, 1))
+
+
 def _sistema(decl: dict, lente: str) -> str:
     f = decl["fecho"]
     return (f"{lente}\n\n---\n\nFECHO do agente `{decl['slug']}`: a resposta começa com {f['comeca_com'].strip()} "
@@ -625,7 +634,7 @@ def ato_rodar(slug: str, cadeira_arg: str | None, chapeu_arg: str | None, como_j
             chama_modelo(decl, "", "")                          # sai 3 antes de gastar sessão
         filha = abre_sessao(cadeira, origem, slug, conta)
         lente = monta_lente(decl, cadeira, chapeu, filha, origem, tarefa)
-        r = chama_modelo(decl, _sistema(decl, lente), tarefa)
+        r = chama_modelo(decl, _sistema(decl, lente), numera(tarefa) if decl["modo"] == "varrer" else tarefa)
     except Falha as f:
         if filha:
             _encerra(filha["sessao_id"])

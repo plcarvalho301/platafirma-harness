@@ -194,6 +194,13 @@ def test_declaracao_fora_do_molde_reprova(decl, trecho):
     assert any(trecho in a for a in achados), achados
 
 
+def test_numera_poe_o_numero_da_linha_na_frente_e_alarga_com_o_texto():
+    assert agente.numera("a\nb") == "  1 | a\n  2 | b\n"
+    assert agente.numera("") == ""
+    grande = agente.numera("x\n" * 1000).splitlines()
+    assert grande[0] == "   1 | x" and grande[-1] == "1000 | x"
+
+
 def test_contas_e_provedores_seguem_o_modelo():
     assert agente.conta_do_modelo(REVISOR["modelo"]) == "claudinho"
     assert agente.conta_do_modelo({"familia": "gemini", "versao": "agy"}) == "jaiminho"
@@ -437,7 +444,8 @@ def test_rodar_varredor_fixa_os_cinco_atributos_antes_de_chamar_o_modelo(mundo, 
     assert pedido["messages"][0]["role"] == "system"
     assert "LENTE-PERSONA" in pedido["messages"][0]["content"] and "LENTE-MODO" in pedido["messages"][0]["content"]
     assert "FECHO do agente `varredor`" in pedido["messages"][0]["content"]
-    assert pedido["messages"][1] == {"role": "user", "content": "linha 1\nlinha 3: erro de conexao"}
+    assert pedido["messages"][1] == {"role": "user", "content": "  1 | linha 1\n  2 | linha 3: erro de conexao\n"}, \
+        "no modo varrer o modelo recebe as linhas numeradas; a lente recebeu o texto como veio"
     (log,) = [json.loads(l) for f in (mundo.inst / "var" / "log" / "agente").glob("*.jsonl") for l in f.read_text().splitlines()]
     assert {k: log[k] for k in ("agente", "sujeito", "em_nome_de", "origem", "conta", "exit")} == {
         "agente": "varredor", "sujeito": "suj-1", "em_nome_de": "engenharia", "origem": ORQ, "conta": "claudinho", "exit": 0}
