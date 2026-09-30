@@ -51,6 +51,16 @@
   D12002, art. 58, VI: meio ambiente e outras políticas públicas, inclusive interação
   e sobreposição. Sinal: parecer de mérito de norma interna com seção de impacto
   regulatório sobre agentes econômicos.
+- Documento informal citado na instrução do ato — parece contexto e é motivação: se a
+  nota ou o parecer de mérito se apoiam nele, ele entra no processo assinado, ou sai do
+  texto. Citado sem juntar, a decisão se apoia no que o leitor do processo não lê;
+  juntado como está, entra com o que a minuta desmentiu. Existir no processo é ser
+  juntado e assinado, não aprovado. Sinal: «o Roadmap diz» num auxiliar, com o Roadmap
+  fora do SEI.
+- Ressalva de delegação sobre ato concreto — a lei veda delegar ato normativo, decisão
+  de recurso e competência exclusiva; designar unidade para uma função é ato concreto e
+  se delega. Ressalvar além disso contraria a decisão da autoridade sem base. Sinal:
+  lista de exceções à delegação que inclui designação ou indicação.
 
 ## diario de bordo
 
@@ -71,3 +81,5 @@
 - 2026-09-29 — tentei acervo ler casa guia expediente --secao Sair, erro de uso (ler pede só <especie> <chave>) — contorno encontrado NA DATA 2026-09-29 foi motor rag buscar casa com --texto secao.
 - 2026-09-29 — tentei mesa escrever direito-normativo com entrada nova de conhecimento curado no meio do corpo, recusou (exit 4: o corpo novo não começa com o publicado); a gravação aceita abre PR no platafirma-harness e o caderno só fica achável depois do merge — contorno encontrado NA DATA 2026-09-29 foi conferir que o corpo novo era o publicado mais os bytes novos, regravar com --sobrescrever e rodar repo pr-merge platafirma-harness <n>.
 - 2026-09-29 — tentei pesquisar ler em planalto.gov.br (D12002), caiu com RemoteProtocolError; tentei WebFetch na Câmara, pediu permissão que não foi respondida — contorno encontrado NA DATA 2026-09-29 foi pesquisar ler na publicação original da Câmara (www2.camara.leg.br) com --offset e --max-chars, e ler com read_file o retorno longo que a poda lavou para arquivo.
+- 2026-09-29 — tentei fila enviar com «enviar» também no primeiro arg, recusou «persona desconhecida: enviar» — contorno encontrado NA DATA 2026-09-29 foi ato=enviar e args=[<cadeira>, --tipo, <tipo>, --assunto, <assunto>], com o corpo no stdin.
+- 2026-09-29 — tentei replace de parágrafo dentro de célula de tabela no Claude Docs com o h da célula, recusou guard_mismatch; com o id do <text>, recusou wrong_kind — contorno encontrado NA DATA 2026-09-29 foi usar o id e o h do <paragraph>, nunca os da célula nem os do texto.
