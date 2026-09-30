@@ -99,6 +99,33 @@ def test_servido_de_outro_sha_e_divergente_e_nomeia(tmp_path, monkeypatch, capsy
     assert rc == 1
 
 
+def _pontos(tmp_path, monkeypatch, conferir, atual, servido):
+    """Os dois ponteiros que `stack promover` grava quando pula a recriacao (#3192)."""
+    pontos = tmp_path / "deploy"
+    pontos.mkdir()
+    (pontos / "harness-controle.atual").write_text(atual + "\n")
+    (pontos / "harness-controle.servido").write_text(servido + "\n")
+    monkeypatch.setenv("DEPLOY_PONTOS", str(pontos))
+    monkeypatch.setattr(conferir, "stack_do_container", lambda c: "harness-controle")
+
+def test_stack_inalterada_serve_arvore_anterior_por_desenho(tmp_path, monkeypatch, capsys):
+    """Debito 52 do #2856: promocao sem mudanca de stack nao recria, o conteiner segue na
+    arvore anterior, e isso nao e deriva quando os dois ponteiros o dizem."""
+    conferir = _montar(tmp_path, monkeypatch, SHA_VELHO)
+    _pontos(tmp_path, monkeypatch, conferir, SHA_NO_AR, SHA_VELHO)
+    rc = _roda(conferir, "harness-controle")
+    saida = capsys.readouterr().out
+    assert "por desenho" in saida and "stack fora do current" not in saida, saida
+    assert rc == 0
+
+def test_ponteiro_servido_diferente_segue_deriva(tmp_path, monkeypatch, capsys):
+    """`.servido` que nao e a arvore do conteiner nao absolve: e stack atras de verdade."""
+    conferir = _montar(tmp_path, monkeypatch, SHA_VELHO)
+    _pontos(tmp_path, monkeypatch, conferir, SHA_NO_AR, "c" * 40)
+    rc = _roda(conferir, "harness-controle")
+    assert "stack fora do current" in capsys.readouterr().out
+    assert rc == 1
+
 def _roda(conferir, alvo):
     try:
         r = conferir.conferir_servico(alvo)
