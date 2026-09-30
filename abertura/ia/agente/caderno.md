@@ -12,3 +12,12 @@
 - 27/09 — motor buscar casa "posto" voltou cobertura fraca (0.453), só o runbook estacao-emprestada; não há documento de casa sobre o posto em si — contorno encontrado NA DATA 27/09 foi ler o runbook inteiro.
 - 28/09 — sem conector de wiki no chat, a wiki cai no login; com o dono logado no navegador do app, a API da wiki aceita edição (sai como IP interno, não como bot) — contorno encontrado NA DATA 28/09 foi editar pela API via navegador; o conserto é o conector PlataFirma Wiki no projeto.
 - 28/09 — tarefas comentar via lote com --stdin gravou o literal «--stdin» (#1136, #1143 no #3155); texto posicional funciona — contorno encontrado NA DATA 28/09 foi comentar com o texto como argumento.
+- 28/09 — wiki (IA/agentes/agentes-o-leito-de-rocha) não se lê da sessão de chat: pesquisar ler cai no oauth2-proxy, não há conector de wiki no chat, e o objeto da obra no acervo tem 185 B (stub) — contorno encontrado NA DATA 28/09 foi nenhum; pedir ao dono o conector ou a página colada.
+- 28/09 — snapshots Anthropic Engineering no acervo (multi-agent-research-system, building-effective-agents, managed-agents…) vêm numa seção só sob 'Get the developer newsletter'; motor rag buscar obra devolve só o começo do artigo — contorno encontrado NA DATA 28/09 foi usar o conhecimento do texto e citar a URL; é seccionar, de dados.
+- 28/09 — pesquisar consultar: a consulta tem de vir entre aspas (senão só a primeira palavra entra) e -k, não --k; brave/ddg/startpage caídos, só google cse vivo.
+- 28/09 — mesa escrever <chapeu> só aceita corpo que COMEÇA com o texto publicado (prefixo); inserir no meio recusa com exit 4 — contorno encontrado NA DATA 28/09 foi anexar no fim.
+
+## conhecimento curado (28/09, #3155)
+- Duas formas de multiagente no Claude Code, e a diferença é onde mora o estado compartilhado: sub-agente é orquestração (hub; volta só o resumo; o lead sintetiza); agent team é coreografia (task list com dependências + mailbox; teammates se falam e se auto-atribuem). Times: experimental, lead fixo, sem aninhar, plan approval automático (doc oficial 28/09).
+- Fan-out vale quando o trabalho é paralelizável, excede uma janela ou toca muitas tools; não vale quando os agentes precisam do mesmo contexto ou há muita dependência (a maior parte do código). Custo: ~15x os tokens de um chat (Anthropic, multi-agent research system).
+- Ordem do modelo do sub-agente (v2.1.251+): parâmetro da chamada > model do arquivo > CLAUDE_CODE_SUBAGENT_MODEL > sessão; FORCE=1 iguala todos. Antes de 2.1.251 a variável vinha primeiro.
