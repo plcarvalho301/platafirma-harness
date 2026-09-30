@@ -74,6 +74,7 @@ import re
 import shutil
 import subprocess
 import sys
+import unicodedata
 import tempfile
 import time
 from pathlib import Path
@@ -590,16 +591,61 @@ def dir_caderno():
     return os.path.join(CADERNOS, cadeira())
 
 
-def _corpo_caderno(d, slot):
+def _slug_de_titulo(titulo):
+    """`## Conhecimento curado` -> `conhecimento-curado`: minuscula, sem acento, hifen no lugar do resto."""
+    sem = unicodedata.normalize("NFKD", titulo).encode("ascii", "ignore").decode()
+    return re.sub(r"[^a-z0-9]+", "-", sem.lower()).strip("-")
+
+
+def _abre_secao(linha):
+    """(nivel, titulo) quando a linha abre uma secao do caderno: `## titulo` (nivel = numero de #) ou
+    linha so de MAIUSCULAS (nivel 0: o caderno no formato antigo, `CONHECIMENTO CURADO`)."""
+    m = re.match(r"^(#{1,6})\s+(.+?)\s*$", linha)
+    if m:
+        return len(m.group(1)), m.group(2)
+    s = linha.strip()
+    if len(s) >= 4 and s == s.upper() and re.fullmatch(r"[A-ZÀ-Ý0-9 ]+", s) and any(c.isalpha() for c in s):
+        return 0, s
+    return None
+
+
+def _secao_do_caderno(texto, secao):
+    """As secoes do caderno cujo titulo tem este slug, na ordem em que aparecem, cada uma com o
+    proprio titulo. Uma secao `##` acaba no proximo titulo de nivel igual ou menor; a de titulo em
+    maiusculas acaba em qualquer titulo. None quando nenhuma casa (spec cadeirinha §3.1)."""
+    saida, aberto = [], None
+    for linha in texto.splitlines():
+        t = _abre_secao(linha)
+        if t:
+            nivel, titulo = t
+            if aberto is not None and (aberto == 0 or nivel <= aberto):
+                aberto = None
+            if aberto is None and _slug_de_titulo(titulo) == secao:
+                aberto = nivel
+        if aberto is not None:
+            saida.append(linha)
+    return "\n".join(saida).strip("\n") or None
+
+
+def _corpo_caderno(d, slot, secao=None):
     """Imprime o corpo do caderno de um slot. Ausencia se declara e sai 0: caderno
     que nao existe e resposta valida (arq:0041), nao erro."""
     caminho = os.path.join(d, slot, "caderno.md")
     if not os.path.isfile(caminho):
         print(f"caderno {slot}: nao existe ({caminho})")
         return 0
-    print(f"===== abertura/{cadeira()}/{slot}/caderno.md =====")
     with open(caminho, errors="replace") as fh:
-        sys.stdout.write(fh.read())
+        texto = fh.read()
+    if secao:
+        trecho = _secao_do_caderno(texto, secao)
+        if trecho is None:
+            print(f"caderno {slot}: sem a secao {secao}")      # peca vazia com aviso, nao erro
+            return 0
+        print(f"===== abertura/{cadeira()}/{slot}/caderno.md#{secao} =====")
+        print(trecho)
+        return 0
+    print(f"===== abertura/{cadeira()}/{slot}/caderno.md =====")
+    sys.stdout.write(texto)
     return 0
 
 def ato_caderno(args):
@@ -608,16 +654,18 @@ def ato_caderno(args):
     `cadernos` da abertura (spec_expediente §7), a ultima injetada.
     Morada arq:0073: abertura/<cadeira>/<slot>/caderno.md."""
     d = dir_caderno()
+    if args.secao and not (args.slot or args.chapeu):
+        sys.exit("erro: `--secao` pede o chapeu: `mesa caderno <chapeu> --secao <slug>`")
     if args.slot and args.chapeu:
         sys.exit("erro: `mesa caderno <slot>` OU `mesa caderno --chapeu <slug>` — "
                  "o segundo ja traz indice e corpo numa chamada")
     if args.slot:
-        return _corpo_caderno(d, valida_slot(args.slot))
+        return _corpo_caderno(d, valida_slot(args.slot), args.secao)
     chapeu = valida_slot(args.chapeu) if args.chapeu else None
     rc = _indice_cadernos(d)
     if chapeu:
         print()
-        rc = _corpo_caderno(d, chapeu) or rc
+        rc = _corpo_caderno(d, chapeu, args.secao) or rc
     return rc
 
 def _indice_cadernos(d):
@@ -920,6 +968,9 @@ def main():
     c.add_argument("slot", nargs="?")
     c.add_argument("--chapeu", metavar="SLUG",
                    help="indice da cadeira + corpo do caderno deste chapeu (a peca `cadernos` da abertura)")
+    c.add_argument("--secao", metavar="SLUG",
+                   help="so a secao do caderno com este titulo em slug (`conhecimento-curado`): o que o "
+                        "agente delegado le; o diario de bordo e da cadeira")
     c.set_defaults(func=ato_caderno)
 
     args = p.parse_args()
