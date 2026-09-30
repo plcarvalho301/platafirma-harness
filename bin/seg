@@ -5,8 +5,8 @@
 # dono: claudinho-seguranca
 # classe: B
 # use para: openscap, keycloak, openssl pós-quântico, régua de segurança, segredos
-# atos: oscap (leitura, casco), ssg (escrita, regua), keycloak entrar (escrita, credencial), keycloak (escrita, realm), openssl (leitura, cripto), segredo ler (leitura, segredo), segredo listar (leitura, segredo), segredo gravar (escrita, segredo), segredo importar (escrita, segredo), segredo rotacionar (escrita, segredo), segredo exigidos (leitura, segredo), segredo apagar (escrita, segredo)
-# folhas: oscap|ssg -> politica/avaliacao · keycloak|openssl -> politica/acesso · segredo -> politica/segredo
+# atos: oscap (leitura, casco), isolacao medir (leitura, casco), ssg (escrita, regua), keycloak entrar (escrita, credencial), keycloak (escrita, realm), openssl (leitura, cripto), segredo ler (leitura, segredo), segredo listar (leitura, segredo), segredo gravar (escrita, segredo), segredo importar (escrita, segredo), segredo rotacionar (escrita, segredo), segredo exigidos (leitura, segredo), segredo apagar (escrita, segredo)
+# folhas: oscap|ssg|isolacao -> politica/avaliacao · keycloak|openssl -> politica/acesso · segredo -> politica/segredo
 # escreve: $PLATAFIRMA_INSTANCIA/segredos/<stack>/<nome>
 # ambiente: SEG_SECRETS_DIR[=$PLATAFIRMA_INSTANCIA/segredos] · SEG_LOG_DIR[=$PLATAFIRMA_INSTANCIA/var/log/seg] · SEG_OSCAP_DIR[=$PLATAFIRMA_INSTANCIA/var/oscap] · SEG_SSG_DIR[=/opt/terceiros/ssg/current] · SEG_OQS_DIR[=/opt/terceiros/oqs/current] · PLATAFIRMA_INSTANCIA[=/srv/platafirma/casa]
 #
@@ -14,6 +14,7 @@
 #   oscap avaliar     politica            era oscap-casco
 #   oscap falhas      politica            era oscap-casco-falhas
 #   oscap --          politica            passthrough openscap
+#   isolacao medir    politica            era ops-server/test_exec_conta_host.py (#3007), tirado da suite em 27/09
 #   ssg derivar       politica            era ssg-deriva
 #   keycloak entrar   acesso              sessao kcadm dentro do conteiner
 #   keycloak --       acesso              passthrough kcadm.sh (era kcadm)
@@ -57,6 +58,10 @@ seg — toolkit de seguranca da PlataFirma
   seg oscap avaliar <perfil>      avalia o casco contra o datastream derivado
   seg oscap falhas <log>          lista as regras que falharam num log de avaliacao
   seg oscap -- <nativos>          repassa cru ao openscap
+  seg isolacao medir [<conta>...] mede no host a isolacao de cada conta segregada
+                                  (uid, owner, casa, lateral, env); 0 conforme,
+                                  1 quebrada, 5 incompleta. Registra em
+                                  $SEG_LOG_DIR/isolacao-<data>.jsonl
   seg ssg derivar <datastream>    compila a regua: remove o CPE de SO do datastream
   seg keycloak entrar             refaz a sessao do kcadm dentro do conteiner
   seg keycloak -- <nativos>       repassa cru ao kcadm.sh, no conteiner
@@ -643,6 +648,15 @@ case "$SUB" in
         N="$(tr -d '\r' < "$ALVO" | awk -F'\t' '/^Title/{t=$2} /^Rule/{r=$2} /^Result/{if($2=="fail"){printf "%s\n    %s\n", t, r; c++}} END{exit (c?0:1)}')" \
           && printf '%s\n' "$N" \
           || echo "nenhuma regra 'fail' NESTE log ($ALVO) — nao afirma nada sobre o que o log nao avaliou"
+        ;;
+      *) uso ;;
+    esac
+    ;;
+
+  isolacao)
+    case "$ATO" in
+      medir)
+        exec python3 "$(dirname "$(readlink -f "$0")")/../ops-server/medir_isolacao.py" "${ARGS[@]:2}"
         ;;
       *) uso ;;
     esac
