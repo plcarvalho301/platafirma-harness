@@ -723,6 +723,39 @@ def _superficie() -> str:
 _em_audit = False
 
 
+# Ligacao filha->mae (card #3158): `sessao abrir --origem` grava `origem_sessao` na chave viva e o
+# ops log a repete em TODA linha da sessao filha, para reconstruir a fita pela origem. Em cache
+# porque `_sessao_resolve` ja leu a chave na mesma chamada e a origem nao muda depois da
+# abertura; a sessao sem origem (a maioria) guarda o vazio por 60 s.
+_ORIGENS: dict[str, tuple[float, str | None]] = {}
+_ORIGENS_TETO = 2048
+_ORIGEM_VAZIA_S = 60.0
+
+
+def _guarda_origem(sessao_id: str, origem: str | None) -> None:
+    if len(_ORIGENS) >= _ORIGENS_TETO:
+        _ORIGENS.clear()
+    _ORIGENS[sessao_id] = (time.monotonic(), origem or None)
+
+
+def _origem_da_sessao(sessao_id) -> str | None:
+    """`origem_sessao` da chave `sessao:{id}`. None sem origem ou com o msg-mem mudo: a
+    auditoria nunca espera nem falha por causa dela."""
+    if not sessao_id or sessao_id == "-":
+        return None
+    visto = _ORIGENS.get(sessao_id)
+    if visto and (visto[1] or time.monotonic() - visto[0] < _ORIGEM_VAZIA_S):
+        return visto[1]
+    try:
+        raw = _rc().get(f"sessao:{sessao_id}")
+        d = json.loads(raw) if raw else {}
+        origem = _uuid_valido(d.get("origem_sessao")) if isinstance(d, dict) else None
+    except Exception:                                       # noqa: BLE001
+        origem = None
+    _guarda_origem(sessao_id, origem)
+    return origem
+
+
 def _audit(**campos) -> None:
     """Grava uma linha JSONL de auditoria. Nunca derruba a operação — mas falha de
     auditoria vai para o stderr (journal), porque auditoria que falha em silêncio é
@@ -745,6 +778,9 @@ def _audit(**campos) -> None:
         # quando tem valor obriga quem periciar a distinguir "nao havia sessao" de
         # "esta versao ainda nao gravava" — e as duas leituras dao numeros diferentes.
         reg.setdefault("sessao_id", "-")
+        origem = _origem_da_sessao(reg["sessao_id"])
+        if origem:
+            reg["origem_sessao"] = origem
         linha = (json.dumps(reg, ensure_ascii=False)[:LINHA_CAP] + "\n").encode()
         alvo = LOG_DIR / f"ops-{date.today().isoformat()}.jsonl"
         fd = os.open(alvo, os.O_WRONLY | os.O_APPEND | os.O_CREAT, 0o600)
@@ -2033,7 +2069,8 @@ def _sessao_resolve(sessao_id: str | None) -> dict:
         sessao_id = _sessao_viva()
     if sessao_id:
         sessao_id = _uuid_valido(sessao_id) or sessao_id   # legado 32-hex normaliza
-    out = {"sessao_id": sessao_id or "-", "ordem_id": "-", "cadeira": "", "sujeito": ""}
+    out = {"sessao_id": sessao_id or "-", "ordem_id": "-", "cadeira": "", "sujeito": "",
+           "origem_sessao": ""}
     if not sessao_id or sessao_id == "-":
         return out
     try:
@@ -2043,6 +2080,8 @@ def _sessao_resolve(sessao_id: str | None) -> dict:
             out["cadeira"] = d.get("cadeira") or ""
             out["ordem_id"] = d.get("ordem_id") or out["ordem_id"]
             out["sujeito"] = d.get("sujeito") or ""
+            out["origem_sessao"] = _uuid_valido(d.get("origem_sessao")) or ""
+            _guarda_origem(sessao_id, out["origem_sessao"])
     except Exception as e:  # noqa: BLE001
         print(f"[valkey] sessao:{sessao_id} nao resolvida: {e!r}", file=sys.stderr, flush=True)
     return out
@@ -2066,6 +2105,8 @@ def _rlimits_filho():
 def _run_verbo_blocking(argv: list, stdin: str | dict | list | None, timeout: int, ident: dict) -> dict:
     env = {**_env_subprocesso(), "PF_SESSAO": ident["sessao_id"], "PF_ORDEM_ID": ident["ordem_id"],
            "PF_CONTA": OPS_USER}
+    if ident.get("origem_sessao"):          # card #3158: so a sessao filha tem; ausente = nao entra
+        env["PF_ORIGEM_SESSAO"] = ident["origem_sessao"]
     if ident["cadeira"]:
         env["PF_CADEIRA"] = ident["cadeira"]
     if ident.get("sujeito"):

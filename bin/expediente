@@ -9,7 +9,7 @@
 # folhas: montar -> expediente/pacote · rotear -> expediente/chapeu · catalogo -> expediente/catalogo
 # escreve: registro do pacote servido (sessao.fita/pacote/peca_servida — transição, direto); nada em rotear|catalogo
 # consome: persona, mesa, motor, acervo
-# ambiente: PF_CADEIRA (obrigatória; origem: verbo `sessao abrir`, injetada pela porta), PF_SESSAO e PF_ORDEM_ID (origem: verbo `sessao abrir`), PF_SUPERFICIE[=desconhecida] e PF_FITA (origem: superfície), PF_PODA[=1] (origem: superfície; 0 desliga o portão de cobertura), PLATAFIRMA_INSTANCIA[=/srv/platafirma/casa] e PF_ABERTURA_DIR[=$PLATAFIRMA_INSTANCIA/var/abertura-publicada] (origem: superfície/instalação), PF_BIN[=bin/ da própria release] (só teste com stub), SESSAO_PG_PORT[=5437] (constante do verbo); SESSAO_PG_PASSWORD é segredo, entra por `seg segredo ler` no processo (transição Q11: aceita a variável só quando o verbo não responde)
+# ambiente: PF_CADEIRA (obrigatória; origem: verbo `sessao abrir`, injetada pela porta), PF_SESSAO e PF_ORDEM_ID (origem: verbo `sessao abrir`), PF_SUPERFICIE[=desconhecida] e PF_FITA (origem: superfície), PF_PODA[=1] (origem: superfície; 0 desliga o portão de cobertura), PLATAFIRMA_INSTANCIA[=/srv/platafirma/casa] e PF_ABERTURA_DIR[=$PLATAFIRMA_INSTANCIA/var/abertura-publicada] (origem: superfície/instalação), PF_BIN[=bin/ da própria release] (só teste com stub), PF_ORIGEM_SESSAO (origem: verbo `sessao abrir --origem`, injetada pela porta; só lida no perfil cadeirinha, para o aviso de sessão sem origem), SESSAO_PG_PORT[=5437] (constante do verbo); SESSAO_PG_PASSWORD é segredo, entra por `seg segredo ler` no processo (transição Q11: aceita a variável só quando o verbo não responde)
 # depende: persona, mesa, motor, seg (segredo do registro), comum/hash_servido, lib/uso, tokenizador da casa (terceiros/tokenizers da própria release, fallback bytes/4 declarado), Postgres da sessão (registro do pacote — transição até a API da entidade-sessão)
 # substitui: monta-sessao <cadeira> na parte que monta; a lib recuperacao/roteador_chapeu importada por caminho
 # conforme: parcial — catálogo no cabeçalho até dados averbar a espécie no acervo; registro direto no Postgres até a API da entidade-sessão; rotas de rotas-chapeu.json da morada publicada até virem do golden record de conceitos
@@ -404,19 +404,212 @@ def valida_chapeu(cadeira: str, slug: str) -> tuple[bool, str]:
     return True, ""
 
 
+# ------------------------------------------------------------------ perfil cadeirinha
+# O pacote de quem trabalha por delegacao e NAO responde ao dono (spec cadeirinha, card #3158):
+# a lente da cadeira e do chapeu, sem a conduta, mais o molde do modo. cadeirinha = f(cadeira,
+# chapeu, modo); a cadeira vem da SESSAO que o agente abriu, nunca de argumento. O perfil e
+# chave da linha do catalogo: cada linha leva a propria chamada, e peca nova entra por linha
+# nova, sem tocar no montador. Ordem de injecao = ordem das linhas; a mensagem de delegacao
+# (stdin) e o que muda a cada chamada e vem por ultimo, no prompt de quem chama.
+#
+# Transicao (Trava do card: o recorte e hipotese a medir, nao se decide antes da Medida): as
+# linhas de persona, rotinas e cadernos servem o que o verbo inteiro devolve hoje. O recorte da
+# spec (`persona ler --recorte`, `acervo listar ... --mapa --modo`, `mesa caderno --secao`) entra
+# por troca de UMA linha, quando o verbo correspondente subir e a Medida o confirmar.
+MODOS = ("varrer", "revisar", "avaliar", "testar", "executar", "consultar", "vigiar", "pesquisar")
+MODOS_COM_REGUA = ("revisar", "avaliar")
+ESPECIES_REGUA = ("lista-de-verificacao", "padrao")
+PERFIS = ("cadeira", "cadeirinha")
+SECOES_DA_REGUA = ("critérios", "criterios", "contrapontos")
+
+CATALOGO_CADEIRINHA = [
+    {"peca": "persona", "gatilho": "perfil cadeirinha", "regime": "valor", "volatilidade": "estavel",
+     "chamada": "persona ler {cadeira}", "dono": "gestao-estrategica"},
+    {"peca": "chapeu", "gatilho": "perfil cadeirinha", "regime": "valor", "volatilidade": "estavel",
+     "chamada": "persona ler {cadeira} --chapeu {chapeu}", "dono": "gestao-estrategica"},
+    {"peca": "modo", "gatilho": "perfil cadeirinha", "regime": "valor", "volatilidade": "estavel",
+     "chamada": "acervo ler casa modo {modo}", "dono": "gestao-estrategica"},
+    {"peca": "rotinas", "gatilho": "perfil cadeirinha", "regime": "valor", "volatilidade": "estavel",
+     "chamada": "acervo listar casa guia --mapa", "dono": "gestao-estrategica"},
+    {"peca": "regua", "gatilho": "perfil cadeirinha, com --regua", "regime": "valor",
+     "volatilidade": "estavel", "chamada": "acervo ler casa {regua}", "dono": "gestao-estrategica"},
+    {"peca": "acervo-consultado", "gatilho": "perfil cadeirinha, com mensagem", "regime": "valor",
+     "volatilidade": "volatil", "chamada": 'motor rag buscar casa "{pergunta}" --k 6 --texto secao',
+     "dono": "dados"},
+    {"peca": "cadernos", "gatilho": "perfil cadeirinha", "regime": "valor", "volatilidade": "volatil",
+     "chamada": "mesa caderno --chapeu {chapeu}", "dono": "gestao-estrategica"},
+]
+
+
+def _erro(msg: str, codigo: int, como_json: bool) -> int:
+    if como_json:
+        print(json.dumps({"erro": msg}, ensure_ascii=False))
+    else:
+        print(msg, file=sys.stderr)
+    return codigo
+
+
+def _argv_da_linha(chamada: str, valores: dict) -> list[str]:
+    """A chamada da linha do catalogo vira argv: cada `{campo}` e um token inteiro (a mensagem de
+    delegacao, texto livre, nunca passa por shlex) e `{regua}` vira dois: especie e chave."""
+    argv: list[str] = []
+    for tok in shlex.split(chamada):
+        if tok.startswith("{") and tok.endswith("}") and tok[1:-1] in valores:
+            v = valores[tok[1:-1]]
+            argv.extend(v if isinstance(v, list) else [v])
+        else:
+            argv.append(tok)
+    return argv
+
+
+def _ref_da_linha(chamada: str, valores: dict) -> str:
+    ref = chamada
+    for campo, v in valores.items():
+        ref = ref.replace("{%s}" % campo, " ".join(v) if isinstance(v, list) else v)
+    return f"verbo:{ref}"
+
+
+def _recorta_regua(texto: str, especie: str) -> str | None:
+    """Lista de verificacao: so `## Critérios` e `## Contrapontos` (o revisor aponta, nao conserta;
+    curas, casos e rodape ficam fora). Padrao segue inteiro, ate a espécie ganhar recorte proprio."""
+    if especie != "lista-de-verificacao":
+        return texto
+    saida: list[str] = []
+    dentro = False
+    for linha in texto.splitlines():
+        m = re.match(r"^##\s+(.+?)\s*$", linha)
+        if m:
+            dentro = m.group(1).strip().lower() in SECOES_DA_REGUA
+        if dentro:
+            saida.append(linha)
+    return "\n".join(saida).strip() or None
+
+
+def _peca_da_linha(linha: dict, ref: str, rc: int, stdout: str, stderr: str, pergunta: str,
+                   avisos: list[str], regua: list[str] | None) -> dict:
+    peca_id = linha["peca"]
+    env = {"peca": peca_id, "dono": linha["dono"], "ref": ref, "sha": None, "regime": linha["regime"],
+           "volatilidade": linha["volatilidade"], "tokens": 0, "frescor": "indisponivel",
+           "motivo": None, "conteudo": None}
+
+    def indisponivel(motivo: str) -> dict:
+        env["motivo"] = motivo[:200]
+        avisos.append(f"peça `{peca_id}` indisponível: {env['motivo']}")
+        return env
+
+    if rc != 0:
+        return indisponivel((stderr or stdout).strip() or f"exit {rc}")
+    conteudo = stdout.strip()
+    if peca_id == "acervo-consultado":
+        try:
+            d = json.loads(stdout)
+        except (ValueError, TypeError):
+            d = None
+        if isinstance(d, dict):
+            if d.get("erro"):
+                return indisponivel(str(d["erro"]))
+            conteudo = _portao_cobertura(d, pergunta, env)
+    elif peca_id == "regua":
+        conteudo = _recorta_regua(conteudo, (regua or [""])[0])
+        if not conteudo:
+            return indisponivel("regua sem `## Critérios` nem `## Contrapontos`")
+    env.update(frescor="fresco", conteudo=conteudo, tokens=conta_tokens(conteudo),
+               sha=sha_servido(conteudo))
+    return env
+
+
+def ato_montar_cadeirinha(cadeira_arg: str | None, chapeu: str | None, modo: str | None,
+                          regua: list[str] | None, perfil: str, sem_acervo: bool,
+                          como_json: bool) -> int:
+    # etapa 1 — uso (spec cadeirinha §5): combinacao invalida e exit 2, com a lista do que vale
+    if perfil != "cadeirinha":
+        return _erro("--modo e --regua so valem com --perfil cadeirinha", 2, como_json)
+    falta = [f for f, v in (("--chapeu", chapeu), ("--modo", modo)) if not v]
+    if falta:
+        return _erro(f"--perfil cadeirinha exige {' e '.join(falta)}: o roteador nao roda, quem "
+                     "chama sabe o que pede", 2, como_json)
+    if modo not in MODOS:
+        return _erro(f"modo '{modo}' fora do vocabulário — modos: {', '.join(MODOS)}", 2, como_json)
+    if regua:
+        if modo not in MODOS_COM_REGUA:
+            return _erro(f"--regua so vale em {' e '.join(MODOS_COM_REGUA)}; o modo '{modo}' nao a serve",
+                         2, como_json)
+        if regua[0] not in ESPECIES_REGUA:
+            return _erro(f"--regua '{regua[0]}' nao serve — especies: {', '.join(ESPECIES_REGUA)}",
+                         2, como_json)
+    if cadeira_arg:
+        return _erro("a cadeira da cadeirinha vem da sessao que o agente abriu (PF_CADEIRA), nunca de "
+                     "argumento: aberta na sessao de outra cadeira, a lente que sai e a dela", 2, como_json)
+    # etapa 2 — identidade
+    cadeira, erro_cad = valida_cadeira(None)
+    if not cadeira:
+        return _erro(erro_cad or "sem cadeira: a porta não injetou", 3, como_json)
+    valido, err_chapeu = valida_chapeu(cadeira, chapeu)
+    if not valido:
+        return _erro(f"erro: chapéu '{chapeu}' fora do vocabulário da cadeira '{cadeira}' — {err_chapeu}",
+                     2, como_json)
+    # o modo e documento de casa; o montador nao aceita modo sem documento
+    rc_modo, out_modo, err_modo = executa_verbo(["acervo", "ler", "casa", "modo", modo], cadeira)
+    if rc_modo == 1:
+        return _erro(f"modo '{modo}' sem documento na casa (`acervo ler casa modo {modo}`): "
+                     f"{(err_modo or out_modo).strip()[:160]}", 2, como_json)
+
+    pergunta = sys.stdin.read().strip()
+    avisos: list[str] = []
+    if not os.environ.get("PF_ORIGEM_SESSAO"):
+        avisos.append("sessao sem origem_sessao: a lente e a da cadeira da sessao em curso; o agente "
+                      "abre a propria (`sessao abrir <cadeira> --origem <sessao_id de quem chamou>`)")
+    valores = {"cadeira": cadeira, "chapeu": chapeu, "modo": modo, "regua": list(regua or []),
+               "pergunta": pergunta}
+    servidas: list[dict] = []
+    for linha in CATALOGO_CADEIRINHA:
+        peca_id = linha["peca"]
+        if (peca_id == "regua" and not regua) or (peca_id == "acervo-consultado" and (not pergunta or sem_acervo)):
+            continue
+        ref = _ref_da_linha(linha["chamada"], {**valores, "pergunta": pergunta[:40]})
+        if peca_id == "modo":
+            rc, out, err = rc_modo, out_modo, err_modo
+        else:
+            rc, out, err = executa_verbo(_argv_da_linha(linha["chamada"], valores), cadeira)
+        servidas.append(_peca_da_linha(linha, ref, rc, out, err, pergunta, avisos, regua))
+
+    montador_sha = resolve_montador_sha()
+    sessao_id = os.environ.get("PF_SESSAO") or None
+    ordem_id = os.environ.get("PF_ORDEM_ID") or None
+    reg_pacote = registra_pacote(cadeira, servidas, montador_sha, sid=sessao_id, oid=ordem_id)
+    if os.environ.get("PF_FITA") and not reg_pacote.get("registrado"):
+        avisos.append(f"registro do pacote não gravado: {reg_pacote.get('motivo')}")
+    resultado = {
+        "cadeira": cadeira, "nome_canonico": cadeira, "sessao_id": sessao_id, "ordem_id": ordem_id,
+        "perfil": "cadeirinha", "modo": modo, "regua": list(regua) if regua else None,
+        "chapeu": chapeu, "chapeus": chapeus_de(cadeira),
+        "roteador": {"via": "comando", "slug": chapeu, "acertos": {},
+                     "motivo": "perfil cadeirinha: chapéu dado por quem chama"},
+        "pacote": {"pecas": len(servidas), "tokens": sum(e["tokens"] for e in servidas),
+                   "metodo_tokens": medidor()[1], "montador_sha": montador_sha,
+                   "montado_em": int(time.time()), "registro": reg_pacote},
+        "pecas": servidas, "avisos": avisos,
+    }
+    if como_json:
+        print(json.dumps(resultado, ensure_ascii=False))
+        return 0
+    return imprime_texto(resultado)
+
+
 # ------------------------------------------------------------------ ato: catalogo
-def ato_catalogo(como_json: bool = False) -> int:
+def ato_catalogo(como_json: bool = False, perfil: str = "cadeira") -> int:
+    linhas = CATALOGO_CADEIRINHA if perfil == "cadeirinha" else CATALOGO
     # Etapa 3 (§4): "catalogo ausente" so existe quando o catalogo vier do acervo. Na
     # transicao ele mora neste arquivo e nao tem como faltar; a etapa e declarada, nao
     # simulada por variavel de ambiente (toda variavel lida tem origem nomeada).
     if como_json:
-        print(json.dumps(CATALOGO, ensure_ascii=False, indent=2))
+        print(json.dumps(linhas, ensure_ascii=False, indent=2))
         return 0
 
     print("# catálogo de peças (transição: declarado no verbo até averbação no acervo)")
     print(f"{'peça':<18} {'gatilho':<25} {'regime':<8} {'volatilidade':<12} {'dono':<20} chamada")
     print("-" * 110)
-    for p in CATALOGO:
+    for p in linhas:
         print(f"{p.get('peca', ''):<18} {p.get('gatilho', ''):<25} {p.get('regime', ''):<8} "
               f"{p.get('volatilidade', ''):<12} {p.get('dono', ''):<20} {p.get('chamada', '')}")
     return 0
@@ -452,7 +645,12 @@ def ato_rotear(como_json: bool = False) -> int:
 
 # ------------------------------------------------------------------ ato: montar
 def ato_montar(cadeira_arg: str | None = None, chapeu_forcado: str | None = None,
-               sem_acervo: bool = False, como_json: bool = False) -> int:
+               sem_acervo: bool = False, como_json: bool = False,
+               perfil: str = "cadeira", modo: str | None = None,
+               regua: list[str] | None = None) -> int:
+    if perfil != "cadeira" or modo or regua:
+        return ato_montar_cadeirinha(cadeira_arg, chapeu_forcado, modo, regua, perfil, sem_acervo,
+                                     como_json)
     cadeira, erro_cad = valida_cadeira(cadeira_arg)
     if not cadeira:
         if como_json:
@@ -649,6 +847,9 @@ def imprime_texto(pac: dict) -> int:
 
     print(f"cadeira: {cad}   sessao_id: {sid}   ordem_id: {oid}")
     print(f"chapeu: {chapeu}   roteador: {via}")
+    if pac.get("perfil"):
+        print(f"perfil: {pac['perfil']}   modo: {pac.get('modo')}"
+              + (f"   regua: {' '.join(pac['regua'])}" if pac.get("regua") else ""))
     print(f"pacote: {n_pecas} peças · {tokens} tokens · {metodo_tk}")
 
     for e in pac.get("pecas", []):
@@ -685,12 +886,18 @@ def main() -> int:
     p_montar.add_argument("cadeira", nargs="?", default=None, help="slug da cadeira (opcional; fallback PF_CADEIRA)")
     p_montar.add_argument("--chapeu", metavar="<slug>", help="força o slug do chapéu (ignora roteador)")
     p_montar.add_argument("--sem-acervo", action="store_true", help="omite a consulta ao acervo")
+    p_montar.add_argument("--perfil", choices=PERFIS, default="cadeira",
+                          help="cadeira (o padrão) ou cadeirinha: a lente sem a conduta, para quem trabalha por delegação")
+    p_montar.add_argument("--modo", metavar="<slug>", help="o modo do agente (só com --perfil cadeirinha)")
+    p_montar.add_argument("--regua", nargs=2, metavar=("<espécie>", "<chave>"),
+                          help="a régua que o agente aplica (só em revisar e avaliar)")
     p_montar.add_argument("--json", action="store_true", help="saída em formato JSON")
 
     p_rotear = atos.novo("rotear", "só o roteador: pergunta → chapéu, com via (determinístico, semântico, fallback)")
     p_rotear.add_argument("--json", action="store_true", help="saída em formato JSON")
 
     p_catalogo = atos.novo("catalogo", "as peças do catálogo e metadados")
+    p_catalogo.add_argument("--perfil", choices=PERFIS, default="cadeira", help="as linhas do perfil")
     p_catalogo.add_argument("--json", action="store_true", help="saída em formato JSON")
 
     if not argv:
@@ -710,7 +917,7 @@ def main() -> int:
     args = parser.parse_args()
 
     if args.ato == "catalogo":
-        return ato_catalogo(como_json=args.json)
+        return ato_catalogo(como_json=args.json, perfil=args.perfil)
     elif args.ato == "rotear":
         return ato_rotear(como_json=args.json)
     elif args.ato == "montar":
@@ -719,6 +926,9 @@ def main() -> int:
             chapeu_forcado=args.chapeu,
             sem_acervo=args.sem_acervo,
             como_json=args.json,
+            perfil=args.perfil,
+            modo=args.modo,
+            regua=args.regua,
         )
     return 2
 
