@@ -3,15 +3,23 @@
 # capacidade: construcao
 # dono: ia
 # use para: especialista, sub-agente, revisor, varredor, rodar um agente consultado, projeção .claude/agents, caixa de ferramentas
-# atos: listar (leitura, especialista), ler (leitura, especialista), rodar (escrita, especialista), projetar (escrita, especialista)
+# atos: listar (leitura, construcao), ler (leitura, construcao), rodar (escrita, construcao), projetar (escrita, construcao)
 # ato: listar [--modelo <familia>] [--modo <modo>] [--json] — as declarações do posto, uma por linha
 # ato: ler <slug> — a declaração inteira de um especialista
 # ato: rodar <slug> [--cadeira <slug>] [--chapeu <slug>] [--json] — abre a sessão filha, monta a lente e chama o modelo na conta dele; a tarefa vem em stdin
 # ato: projetar [--conferir] [--base <ref>] — gera as projeções do provedor a partir das declarações; --conferir só mede
 # exit: 0 ok · 1 negativo de mérito (não existe, divergente, sem pessoa resolvida) · 2 uso · 3 dependência fora · 4 recusa de política · 5 indeterminável
-# escreve: projetar grava .claude/agents/<slug>.md no posto; rodar grava a chave da sessão filha (sessao abrir) e uma linha em var/log/agente/; nada em listar|ler|projetar --conferir
-# consome: sessao (abrir, encerrar), expediente (montar --perfil cadeirinha), ollama local (qwen), CLI claude (modelo Claude), seg isolacao medir (o log, só leitura)
-# ambiente: PF_SUJEITO (a pessoa em nome de quem o agente roda; origem: fluxo OAuth, entregue pela porta), PF_SESSAO e PF_CADEIRA (origem: verbo `sessao abrir`, injetadas pela porta), PF_ORDEM_ID (idem), PF_POSTO[=<bancada>/platafirma-posto] (onde estão as declarações), PF_BIN[=bin/ da própria árvore] (só teste com stub), PF_CLAUDE_BIN[=claude no PATH] (só teste com stub), OLLAMA_BASE_URL[=http://localhost:11434], PLATAFIRMA_INSTANCIA[=/srv/platafirma/casa] (var/log/agente e var/log/seg)
+# le: listar=arquivo-local
+# le: ler=arquivo-local
+# le: rodar=arquivo-local
+# le: projetar=arquivo-local
+# escreve: listar=nada
+# escreve: ler=nada
+# escreve: rodar=arquivo-local,malha
+# escreve: projetar=arquivo-local
+# consome: sessao, expediente, seg, ollama
+# ambiente: PF_SUJEITO (a pessoa em nome de quem o agente roda; obrigatoria em rodar; porta) · PF_SESSAO (a sessao de quem chamou; obrigatoria em rodar; porta) · PF_CADEIRA (porta) · PF_ORDEM_ID (porta) · PF_POSTO[=<bancada>/platafirma-posto] (onde estao as declaracoes) · PF_BIN[=bin/ da propria arvore] (opcional; so teste com stub) · PF_CLAUDE_BIN[=claude no PATH] (opcional; so teste com stub) · OLLAMA_BASE_URL (opcional; o ollama local) · PLATAFIRMA_INSTANCIA[=/srv/platafirma/casa] (var/log/agente e var/log/seg)
+# escrita: projetar grava .claude/agents/<slug>.md no posto; rodar grava a chave da sessao filha (sessao abrir) e uma linha em var/log/agente/; nada em listar|ler|projetar --conferir
 # depende: sessao, expediente, lib/raizes, lib/uso, pyyaml (venv harness)
 # conforme: parcial — a spec agente põe este verbo na capacidade `automacao` (nível 2), que o acervo ainda não tem (vocabulario arquitetura-negocio-operacao ingerido em 14/09): `construcao` até ela entrar, e a troca é esta linha; Gemini pelo `agy` ainda não roda (a execução sob jaiminho é da ti, spec agente §Aberto); agendado espera `sessao longjob` herdar os atributos (#3186)
 #
