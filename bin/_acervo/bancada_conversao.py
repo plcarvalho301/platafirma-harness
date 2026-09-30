@@ -46,6 +46,8 @@ import os
 import sys
 
 METODOS = ("perfil", "docling")
+# versao_relatorio que o agregador lê: 1 (conversor em subprocesso) e 2 (conversor como serviço, #3205).
+VERSOES_RELATORIO = (1, 2)
 # Tipos em censo: não se sorteia, reporta-se (vitórias, empates, maior irrecuperável).
 TIPOS_CENSO = ("docx", "htm", "html", "mhtml", "txt", "xlsx", "mobi", "pptx")
 SEM_ESTRATO = "-"
@@ -142,7 +144,7 @@ def tipo_curto(*relatorios):
 
 def _ler_obra(pasta_obra):
     """(relatorio, None) se a pasta da obra tem relatorio.json VÁLIDO; senão (None, problema) =
-    lado PENDENTE. Válido: JSON objeto, versao_relatorio == 1 e nenhum erro.txt ao lado (o
+    lado PENDENTE. Válido: JSON objeto, versao_relatorio 1 ou 2 e nenhum erro.txt ao lado (o
     cliente só deixa erro.txt onde não há relatório válido; os dois juntos = rodada suspeita)."""
     tem_erro = os.path.isfile(os.path.join(pasta_obra, "erro.txt"))
     caminho = os.path.join(pasta_obra, "relatorio.json")
@@ -159,8 +161,8 @@ def _ler_obra(pasta_obra):
         return None, "relatório ilegível"
     if not isinstance(rel, dict):
         return None, "relatório ilegível"
-    if rel.get("versao_relatorio") != 1:
-        return None, "versão do relatório %s != 1" % _curto(repr(rel.get("versao_relatorio")), 20)
+    if rel.get("versao_relatorio") not in VERSOES_RELATORIO:
+        return None, "versão do relatório %s fora de 1 e 2" % _curto(repr(rel.get("versao_relatorio")), 20)
     if tem_erro:
         return None, "erro.txt ao lado do relatório (rodada não concluída)"
     return rel, None

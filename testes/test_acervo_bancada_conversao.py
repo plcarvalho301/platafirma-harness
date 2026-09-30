@@ -443,7 +443,7 @@ def test_b1_toda_forma_de_relatorio_nao_valido_e_pendente(tmp_path, como):
     elif como == "ilegivel":
         (pasta / "relatorio.json").write_text("{quebrado", encoding="utf-8")
     elif como == "versao":
-        (pasta / "relatorio.json").write_text(json.dumps(rel("docling", versao_relatorio=2)), encoding="utf-8")
+        (pasta / "relatorio.json").write_text(json.dumps(rel("docling", versao_relatorio=3)), encoding="utf-8")
     elif como == "erro_txt_ao_lado":                                  # relatório válido + erro.txt
         (pasta / "erro.txt").write_text("conferência: sha256\n", encoding="utf-8")
     elif como == "pasta_vazia":
@@ -459,6 +459,15 @@ def test_b1_toda_forma_de_relatorio_nao_valido_e_pendente(tmp_path, como):
     assert res["completo"] is False and res["total"]["pendentes"] == {"perfil": 0, "docling": 1}
     assert res["total"]["n_a"] == 0 and res["total"]["testadas"] == 0 and res["total"]["falhas"] == \
         {"perfil": 0, "docling": 0}
+
+
+def test_b1_relatorio_v2_do_servico_vale_como_v1(tmp_path):
+    # #3205: o conversor como serviço grava versao_relatorio 2 (mesmos campos, mais versao_imagem etc.)
+    grava(tmp_path, 1, rel(perda=1, versao_relatorio=2), rel("docling", perda=2, versao_relatorio=2))
+    res = bc.agregar(str(tmp_path))
+    (d,) = res["obras"]
+    assert d["perfil"]["estado"] == "medido" and d["docling"]["estado"] == "medido"
+    assert d["vencedor"] == "perfil" and res["completo"] is True
 
 
 def test_b1_so_erro_txt_nao_some_da_estatistica(tmp_path):

@@ -435,6 +435,12 @@ case "$ATO" in
     cd "$(dirname "$COMPOSE")"
     if [ "${PF_STACK_RECRIAR:-0}" != 1 ] && [ -n "$ANTES" ] && inalterada_desde "$ANTES"; then
       printf 'stack %s inalterada de %s a %s (compose, build e binds) — nada recriado\n' "$STACK" "${ANTES:0:7}" "${SHA:0:7}"
+      # Sem recriar, os conteineres seguem na arvore em que subiram. `.servido` guarda essa
+      # arvore para a conferencia no ar separar "inalterada por desenho" de "stack atras do
+      # current" (debito 52 do #2856: sem isto toda promocao sem mudanca de stack se revertia).
+      SERVIDO="$ANTES"
+      if [ -r "$PONTOS/$STACK.servido" ]; then SERVIDO="$(cat "$PONTOS/$STACK.servido")"; fi
+      printf '%s\n' "$SERVIDO" > "$PONTOS/$STACK.servido"
       gravar_atual "$SHA"
       exit 0
     fi
@@ -447,7 +453,7 @@ case "$ATO" in
     else
       compose up -d --build --force-recreate "$@" || rc=$?
     fi
-    [ "$rc" -ne 0 ] || gravar_atual "$SHA"
+    if [ "$rc" -eq 0 ]; then gravar_atual "$SHA"; printf '%s\n' "$SHA" > "$PONTOS/$STACK.servido"; fi
     exit "$rc"
     ;;
   # passo de teste da imagem: nada sobe, nada muda de ponto; so constroi e mede

@@ -418,11 +418,30 @@ def test_a1_erro_tipo_desconhecido_tambem_nao_e_dado(falso, tmp_path):
 def test_a1_relatorio_de_outra_versao_nao_e_obtido(falso, tmp_path):
     a = U(1)
     status, corpo = corpo_ok(a)
-    corpo["relatorio"]["versao_relatorio"] = 2
+    corpo["relatorio"]["versao_relatorio"] = 3
     falso.cenarios[a] = (status, corpo)
     r = curar(falso.url, "--reextrair", a, "--bancada", str(tmp_path))
     assert r.returncode == 1 and "versão" in por_obra(r)[a[:8]]
     assert not (tmp_path / "perfil" / a / "relatorio.json").exists()
+
+
+def test_a1_relatorio_v2_do_servico_e_obtido_e_relido_como_integro(falso, tmp_path):
+    # #3205: o conversor como serviço devolve versao_relatorio 2; é dado, grava e o refazer reconhece
+    a = U(1)
+    status, corpo = corpo_ok(a)
+    corpo["relatorio"]["versao_relatorio"] = 2
+    corpo["relatorio"].update(versao_imagem="b888ffa", paginas=3, prazo_s=150, pico_memoria_kb=1024)
+    falso.cenarios[a] = (status, corpo)
+    args = ("--reextrair", a, "--bancada", str(tmp_path))
+    r = curar(falso.url, *args)
+    assert r.returncode == 0 and por_obra(r)[a[:8]].startswith("ok")
+    rel = json.loads(ler(tmp_path / "perfil" / a / "relatorio.json"))
+    assert rel["versao_relatorio"] == 2 and rel["versao_imagem"] == "b888ffa"
+    # sem --refazer a obra já está feita: o cliente reconhece o relatório v2 como íntegro
+    r = curar(falso.url, *args)
+    assert r.returncode == 0 and por_obra(r)[a[:8]].startswith("já feito")
+    obra, = _agregador().agregar(str(tmp_path))["obras"]
+    assert obra["perfil"]["estado"] == "medido"
 
 
 # ------------------------------------------------------------------ A2: a medida falhou, a conversão não

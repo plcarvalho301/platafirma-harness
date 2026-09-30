@@ -1224,9 +1224,12 @@ _BANCADA_METODO_RE = re.compile(r"^[a-z0-9][a-z0-9._-]{0,63}$")
 _BANCADA_SEGURO_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
 _BANCADA_ARQUIVOS = (("espelho.md", "sha256_md", "bytes_md"),
                      ("indice.json", "sha256_indice", "bytes_indice"))
-# erro_tipo do relatório v1 que significam "o MÉTODO falhou nesta obra" (dado). 'indisponivel' (o método
+# erro_tipo do relatório v1 e v2 que significam "o MÉTODO falhou nesta obra" (dado). 'indisponivel' (o método
 # não roda no ambiente do servidor: não é resultado, refazer) e valor desconhecido ficam de fora: erro.
 _BANCADA_TIPOS_FALHA = ("conversao", "timeout", "subprocesso", "ausente")
+# versao_relatorio que o cliente aceita: 1 (conversor em subprocesso da API) e 2 (conversor como serviço,
+# #3205: mesmos campos, mais versao_imagem, paginas, prazo_s e pico_memoria_kb). Outra versão: não obtida.
+_BANCADA_VERSOES_RELATORIO = (1, 2)
 # POST: (conexão, leitura). A leitura espera o timeout da conversão no servidor + margem.
 _BANCADA_CONEXAO_S = 10
 _BANCADA_MARGEM_HTTP_S = 120
@@ -1360,7 +1363,7 @@ def _bancada_linha(item: dict) -> str:
 
 
 def _bancada_relatorio_integro(pasta_obra: str) -> dict | None:
-    """relatorio.json VÁLIDO da pasta da obra, ou None. Válido: JSON objeto, versao_relatorio == 1,
+    """relatorio.json VÁLIDO da pasta da obra, ou None. Válido: JSON objeto, versao_relatorio 1 ou 2,
     'erro' (se houver) com erro_tipo que é DADO (a falha do método é dado; 'indisponivel' não é) e os
     arquivos declarados presentes com o tamanho E o sha256 declarados."""
     try:
@@ -1368,7 +1371,7 @@ def _bancada_relatorio_integro(pasta_obra: str) -> dict | None:
             rel = json.load(f)
     except (OSError, ValueError):
         return None
-    if not isinstance(rel, dict) or rel.get("versao_relatorio") != 1:
+    if not isinstance(rel, dict) or rel.get("versao_relatorio") not in _BANCADA_VERSOES_RELATORIO:
         return None
     erro_tipo = _bancada_erro_tipo(rel)
     if erro_tipo is not None and erro_tipo not in _BANCADA_TIPOS_FALHA:
@@ -1494,8 +1497,8 @@ def _bancada_obra(entrada: str, metodo: str, pasta: str, autor: str, timeout_s: 
     rel = corpo.get("relatorio") if isinstance(corpo, dict) else None
     if not isinstance(rel, dict):
         return nao_obtida("HTTP 200 sem 'relatorio' no corpo", "servidor")
-    if rel.get("versao_relatorio") != 1:
-        return nao_obtida(f"relatório de versão {_bancada_curta(repr(rel.get('versao_relatorio')), 20)} (esperado 1)",
+    if rel.get("versao_relatorio") not in _BANCADA_VERSOES_RELATORIO:
+        return nao_obtida(f"relatório de versão {_bancada_curta(repr(rel.get('versao_relatorio')), 20)} (esperado 1 ou 2)",
                           "servidor")
     erro_tipo = _bancada_erro_tipo(rel)
     if erro_tipo is not None and erro_tipo not in _BANCADA_TIPOS_FALHA:
