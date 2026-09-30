@@ -413,6 +413,26 @@ def env_declarado(c):
     return {k: ("" if v is None else str(v)) for k, v in (svc.get("environment") or {}).items()}, None
 
 
+def _inalterada_por_desenho(c, atual, sha_c):
+    """True quando a stack foi promovida ao current SEM recriar (`stack promover` achou
+    compose, build e binds iguais, card #3192) e segue na arvore em que subiu. Prova pelos
+    dois pontos que o proprio `stack promover` grava: `.atual` no current e `.servido` na
+    arvore que o conteiner mostra. Qualquer um ausente ou diferente e deriva de verdade
+    (debito 52 do #2856: sem isto toda promocao sem mudanca de stack se revertia)."""
+    slug = stack_do_container(c)
+    if not slug:
+        return False
+    pontos = os.environ.get("DEPLOY_PONTOS") or os.path.join(INSTANCIA, "var", "deploy")
+    try:
+        with open(os.path.join(pontos, f"{slug}.atual")) as f:
+            ptr_atual = f.read().strip()
+        with open(os.path.join(pontos, f"{slug}.servido")) as f:
+            ptr_servido = f.read().strip()
+    except OSError:
+        return False
+    return ptr_atual == atual and ptr_servido == sha_c
+
+
 def conferir_servico(alvo, como_json=False):
     vistos = 0
     itens = []
@@ -449,6 +469,9 @@ def conferir_servico(alvo, como_json=False):
                 print(f"    release : {fam} @ {sha_c[:7]} (current {atual[:7] if atual else 'ilegivel'})")
             if not atual:
                 divergencias.append(f"current da familia {fam} ilegivel — procedencia nao se confirma")
+            elif atual != sha_c and _inalterada_por_desenho(c, atual, sha_c):
+                if not como_json:
+                    print(f"    inalterada: serve {sha_c[:7]} por desenho — stack sem mudanca ate o current {atual[:7]}")
             elif atual != sha_c:
                 divergencias.append(
                     f"serve {sha_c[:7]} da release, mas o current de {fam} e {atual[:7]} — stack fora do current")
