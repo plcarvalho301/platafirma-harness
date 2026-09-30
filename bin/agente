@@ -505,7 +505,10 @@ def chama_ollama(decl: dict, sistema: str, tarefa: str) -> dict:
     pedido = {"model": m["versao"], "stream": False, "think": False,
               "messages": [{"role": "system", "content": sistema}, {"role": "user", "content": tarefa}],
               "options": {"num_ctx": t["num_ctx"], "temperature": 0,
-                          "num_predict": max(256, min(t["tokens_execucao"], t["num_ctx"]) - estimado)}}
+                          # a saída tem teto próprio (`tokens_saida`, padrão 2048): sem ele, um modelo que não pára gera até
+                          # o que sobra da janela (13 mil tokens, minutos de placa compartilhada com o embedder)
+                          "num_predict": min(t.get("tokens_saida", 2048),
+                                             max(256, min(t["tokens_execucao"], t["num_ctx"]) - estimado))}}
     req = urllib.request.Request(f"{OLLAMA_URL}/api/chat", data=json.dumps(pedido).encode(),
                                  headers={"Content-Type": "application/json"})
     try:

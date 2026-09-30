@@ -433,6 +433,7 @@ def test_rodar_varredor_fixa_os_cinco_atributos_antes_de_chamar_o_modelo(mundo, 
     (pedido,) = ollama.pedidos
     assert pedido["model"] == "qwen3.5:9b" and pedido["stream"] is False
     assert pedido["options"]["num_ctx"] == 16384 and pedido["options"]["temperature"] == 0
+    assert pedido["options"]["num_predict"] == 2048, "a saída tem teto próprio, não o que sobra da janela"
     assert pedido["messages"][0]["role"] == "system"
     assert "LENTE-PERSONA" in pedido["messages"][0]["content"] and "LENTE-MODO" in pedido["messages"][0]["content"]
     assert "FECHO do agente `varredor`" in pedido["messages"][0]["content"]
