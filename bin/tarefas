@@ -656,9 +656,9 @@ modelo_plano() {
   cat <<'M'
 Plano:
 Medido em: <repo>@<sha de main> · <AAAA-MM-DD> — o estado que este plano leu; main andou, relê antes de executar
-Estado medido: [executor] fato | valor | onde (repo@caminho:símbolo), uma linha cada — inclui o que o card supôs e o código desmente, o que não abriu, e a peça existente a reaproveitar
+Estado medido: [executor] fato | valor | onde (repo@caminho:símbolo), uma linha cada — inclui o que o card supôs e o código desmente, o que não abriu, e a peça existente a reaproveitar · story que mede: a classe contada na população com a mesma régua do instrumento, antes de sortear (A2)
 Premissas: [executor] o que decidi onde a story era ambígua, uma linha cada, corrigível — só se houver; o que as Travas mandam não decidir continua parando no card
-Unidades: [executor] unidade | escreve (lista fechada repo@caminho) | depende de | fecha quando (comando + resultado esperado) — nenhum arquivo em duas unidades; unidade sem dependência corre em paralelo, e a linha é a mensagem de delegação do sub-agente
+Unidades: [executor] unidade | escreve (lista fechada repo@caminho) | depende de | fecha quando (comando + resultado esperado) — nenhum arquivo em duas unidades; unidade sem dependência corre em paralelo, e a linha é a mensagem de delegação do sub-agente · story que bloqueia outra: só as unidades que a outra chama (C2) · o que serve a dois consumidores roda uma vez, antes dos dois (C4) · C1–C5 e A2: lista antipadroes-de-quebra-de-execucao
 Aceite × prova: [executor] cada linha do Aceite | o comando que a demonstra | o resultado que tem de dar
 Raio emendado: [executor] repo@caminho | por que — o que o plano toca além do Raio de ataque; só se houver
 Riscos: [executor] causa → saída, uma linha cada — só se houver
@@ -696,10 +696,10 @@ Negócio: #<feature> — só o ponteiro; nada de contexto de negócio aqui
 Referencial: [agente] lista fechada das decisões que o agente consulta ANTES de mexer, por slug (arq:NNNN, spec_<slug>, minuta NNNN) — não é leitura recomendada
 Raio de ataque: [agente] lista literal dos arquivos a mexer, um por linha, repo@caminho — fora da lista não se toca
 Comportamento esperado: [agente] caminho feliz técnico, literal — recebe X, executa Y, sai 0; o estado de chegada que o Aceite prova
-Ambiente: repo absoluto · como instalar · o que está de pé e não se derruba · credenciais (nunca impressas)
+Ambiente: repo absoluto · como instalar · o que está de pé e não se derruba · credenciais (nunca impressas) · story que mede: o instrumento já no ar, ou o card dele como pré-requisito com dono e estimativa (C1)
 Onde: arquivo, função, linha aproximada · peça análoga a imitar, se existir
 Passos: numerados, um por ação, comando literal
-Aceite: o comando que prova + o número que tem de dar
+Aceite: o comando que prova + o número que tem de dar · story que mede: quem mede, quem decide e com que regra (C5) · story de instrumento: a chamada exata que o card consumidor fará (C3)
 Travas: imperativo + motivo com fonte citada — o que não decidir, onde parar e comentar no card; merge e subida não são trava
 Entrega: branch fabrica/<card>-<slug> de main · quem escreveu mescla e sobe (código: release promover; documento: servido no acervo) · retorno no comentário
 M
