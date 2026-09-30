@@ -1,6 +1,6 @@
 #!/opt/platafirma/current/venv/harness/bin/python
 # agente — a caixa de especialistas: lista, projeta e roda quem pensa, com modelo, ferramentas e teto fixos
-# capacidade: automacao
+# capacidade: construcao
 # dono: ia
 # use para: especialista, sub-agente, revisor, varredor, rodar um agente consultado, projeção .claude/agents, caixa de ferramentas
 # atos: listar (leitura, especialista), ler (leitura, especialista), rodar (escrita, especialista), projetar (escrita, especialista)
@@ -13,7 +13,7 @@
 # consome: sessao (abrir, encerrar), expediente (montar --perfil cadeirinha), ollama local (qwen), CLI claude (modelo Claude), seg isolacao medir (o log, só leitura)
 # ambiente: PF_SUJEITO (a pessoa em nome de quem o agente roda; origem: fluxo OAuth, entregue pela porta), PF_SESSAO e PF_CADEIRA (origem: verbo `sessao abrir`, injetadas pela porta), PF_ORDEM_ID (idem), PF_POSTO[=<bancada>/platafirma-posto] (onde estão as declarações), PF_BIN[=bin/ da própria árvore] (só teste com stub), PF_CLAUDE_BIN[=claude no PATH] (só teste com stub), OLLAMA_BASE_URL[=http://localhost:11434], PLATAFIRMA_INSTANCIA[=/srv/platafirma/casa] (var/log/agente e var/log/seg)
 # depende: sessao, expediente, lib/raizes, lib/uso, pyyaml (venv harness)
-# conforme: parcial — Gemini pelo `agy` ainda não roda (a execução sob jaiminho é da ti, spec agente §Aberto); agendado espera `sessao longjob` herdar os atributos (#3186)
+# conforme: parcial — a spec agente põe este verbo na capacidade `automacao` (nível 2), que o acervo ainda não tem (vocabulario arquitetura-negocio-operacao ingerido em 14/09): `construcao` até ela entrar, e a troca é esta linha; Gemini pelo `agy` ainda não roda (a execução sob jaiminho é da ti, spec agente §Aberto); agendado espera `sessao longjob` herdar os atributos (#3186)
 #
 # Spec: spec agente (§2 declaração, §3 projeções, §4 ligações, §10 o verbo, §11 piso de segurança)
 from __future__ import annotations
@@ -540,9 +540,12 @@ def chama_claude(decl: dict, sistema: str, tarefa: str) -> dict:
         motivo = (p.stderr.strip().splitlines() or [str(obj.get("result") or "sem retorno")])[0]
         raise Falha(5, f"claude -p não concluiu (saiu {p.returncode}): {motivo[:200]}")
     u = obj.get("usage") or {}
-    return {"retorno": obj["result"], "aviso": "",
-            "uso": {"entrada": u.get("input_tokens", 0), "saida": u.get("output_tokens", 0),
-                    "turnos": obj.get("num_turns")}}
+    entrada, saida = u.get("input_tokens", 0), u.get("output_tokens", 0)
+    aviso = ""
+    if entrada + saida > t["tokens_execucao"]:         # o CLI só corta por turnos: aqui se mede e se avisa
+        aviso = f"tokens da execução {entrada + saida} passaram de tokens_execucao {t['tokens_execucao']} (medido, não cortado)"
+    return {"retorno": obj["result"], "aviso": aviso,
+            "uso": {"entrada": entrada, "saida": saida, "turnos": obj.get("num_turns")}}
 
 
 def chama_modelo(decl: dict, sistema: str, tarefa: str) -> dict:

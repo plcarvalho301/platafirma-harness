@@ -540,3 +540,11 @@ def test_claude_monta_a_chamada_do_cli_com_modelo_teto_e_ferramentas(mundo, pess
     assert "mcp__claudinho-mcp__read_file" in argv[argv.index("--allowedTools") + 1]
     assert "LENTE-PERSONA" in argv[argv.index("--append-system-prompt") + 1]
     assert claude["stdin"] == "o que a ia acha?"
+
+
+def test_claude_acima_do_teto_de_tokens_avisa_e_nao_corta(mundo, pessoa, monkeypatch, capsys):
+    mundo.escreve(com(CONSULTOR, teto={"turnos": 30, "tokens_execucao": 50, "tokens_janela": 600000}))
+    assert roda(monkeypatch, "consultor", cadeira="ia", chapeu="agente") == 0
+    saida = capsys.readouterr()
+    assert "passaram de tokens_execucao 50 (medido, não cortado)" in saida.err
+    assert saida.out.strip() == "veredito: 0 — x@y"
