@@ -108,3 +108,94 @@ def test_porte_do_sessao_id_segue_como_antes(tmp_path):
                              "tool_name": "mcp__claudinho-mcp__mesa",
                              "tool_input": {"ato": "ver"}}, tmp_path))
     assert fora["hookSpecificOutput"]["updatedInput"] == {"ato": "ver", "sessao_id": SID}
+
+
+# ---------------------------------------------------------------- sub-agente (card #3158)
+# Dentro de sub-agente o Code dispara o MESMO hook, com o session_id do orquestrador e mais
+# `agent_id`. O sub-agente abre a propria sessao, ligada a do orquestrador por `--origem`.
+FILHA = "0a1b2c3d-9999-4222-8333-444455556666"
+OUTRA = "0a1b2c3d-7777-4222-8333-444455556666"
+
+
+def _pre(tmp: Path, tool: str, ti: dict, agente: str | None = None):
+    ev = {"hook_event_name": "PreToolUse", "session_id": "fita-1",
+          "tool_name": f"mcp__claudinho-mcp__{tool}", "tool_input": ti}
+    if agente:
+        ev["agent_id"] = agente
+        ev["agent_type"] = "general-purpose"
+    saida = _roda(ev, tmp)
+    return json.loads(saida)["hookSpecificOutput"]["updatedInput"] if saida else None
+
+
+def _abre_como(tmp: Path, sid: str, agente: str | None = None) -> None:
+    ev = {"hook_event_name": "PostToolUse", "session_id": "fita-1",
+          "tool_name": "mcp__claudinho-mcp__monta_sessao",
+          "tool_response": {"sessao": {"sessao_id": sid, "cadeira": "ia"}}}
+    if agente:
+        ev["agent_id"] = agente
+    _roda(ev, tmp)
+
+
+def test_subagente_sem_sessao_id_recebe_a_do_orquestrador(tmp_path):
+    _abre(tmp_path, {"sessao": {"sessao_id": SID, "cadeira": "ia"}})
+    assert _pre(tmp_path, "tarefas", {"ato": "ler"}, agente="a1") == {"ato": "ler", "sessao_id": SID}
+
+
+def test_sessao_do_subagente_nao_sobrescreve_a_do_orquestrador_nem_a_do_irmao(tmp_path):
+    _abre_como(tmp_path, SID)
+    _abre_como(tmp_path, FILHA, agente="a1")
+    assert _pre(tmp_path, "mesa", {"ato": "ver"})["sessao_id"] == SID                 # orquestrador
+    assert _pre(tmp_path, "mesa", {"ato": "ver"}, agente="a1")["sessao_id"] == FILHA  # a propria
+    assert _pre(tmp_path, "mesa", {"ato": "ver"}, agente="a2")["sessao_id"] == SID     # o irmao
+
+
+def test_sessao_id_explicito_do_subagente_vale(tmp_path):
+    _abre_como(tmp_path, SID)
+    assert _pre(tmp_path, "mesa", {"ato": "ver", "sessao_id": OUTRA}, agente="a1") is None
+
+
+def test_subagente_abrindo_sessao_leva_a_origem(tmp_path):
+    _abre_como(tmp_path, SID)
+    novo = _pre(tmp_path, "sessao", {"ato": "abrir", "args": ["engenharia"]}, agente="a1")
+    assert novo["args"] == ["engenharia", "--origem", SID]
+    assert novo["sessao_id"] == SID, "a chamada segue como sempre: o id do orquestrador vai junto"
+
+
+def test_origem_no_lote_do_sessao_e_no_run_command(tmp_path):
+    _abre_como(tmp_path, SID)
+    lote = _pre(tmp_path, "sessao", {"lote": [{"ato": "ver", "args": [SID]},
+                                               {"ato": "abrir", "args": ["ia"]}]}, agente="a1")
+    assert lote["lote"][0] == {"ato": "ver", "args": [SID]}, "so a abertura leva a origem"
+    assert lote["lote"][1]["args"] == ["ia", "--origem", SID]
+    cmds = _pre(tmp_path, "run_command",
+                {"commands": ["sessao abrir ia --json", "mesa ver",
+                              {"verbo": "sessao", "ato": "abrir", "args": ["ia"]}]}, agente="a1")
+    assert cmds["commands"][0] == f"sessao abrir ia --json --origem {SID}"
+    assert cmds["commands"][1] == "mesa ver"
+    assert cmds["commands"][2]["args"] == ["ia", "--origem", SID]
+    um = _pre(tmp_path, "run_command", {"command": "sessao abrir ia"}, agente="a1")
+    assert um["command"] == f"sessao abrir ia --origem {SID}"
+
+
+def test_origem_que_o_agente_ja_pos_vale_e_nao_duplica(tmp_path):
+    _abre_como(tmp_path, SID)
+    ti = {"ato": "abrir", "args": ["ia", "--origem", OUTRA], "sessao_id": SID}
+    assert _pre(tmp_path, "sessao", ti, agente="a1") is None
+    txt = {"command": f"sessao abrir ia --origem {OUTRA}", "sessao_id": SID}
+    assert _pre(tmp_path, "run_command", txt, agente="a1") is None
+
+
+def test_fio_principal_nunca_recebe_origem(tmp_path):
+    _abre_como(tmp_path, SID)
+    novo = _pre(tmp_path, "sessao", {"ato": "abrir", "args": ["ia"]})
+    assert novo == {"ato": "abrir", "args": ["ia"], "sessao_id": SID}
+
+
+def test_sem_origem_guardada_o_subagente_abre_como_antes(tmp_path):
+    assert _pre(tmp_path, "sessao", {"ato": "abrir", "args": ["ia"]}, agente="a1") is None
+
+
+def test_subagente_abrindo_por_monta_sessao_nao_recebe_nada(tmp_path):
+    """`sessao_id` no `monta_sessao` quer dizer «portado»; o hook nunca o preenche ali."""
+    _abre_como(tmp_path, SID)
+    assert _pre(tmp_path, "monta_sessao", {"cadeira": "ia"}, agente="a1") is None

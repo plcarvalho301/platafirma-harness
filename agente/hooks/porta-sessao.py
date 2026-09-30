@@ -128,6 +128,41 @@ def contexto_de_retomada(sid_code: str, origem: str) -> str | None:
         corpo = corpo[:TETO_CONTEXTO] + "\n[persona cortada pelo teto do hook — inteira por `persona ler`]"
     return corpo
 
+def _base(tool: str) -> str:
+    return tool.rsplit("__", 1)[-1]
+
+def _com_origem(args, origem: str) -> list:
+    args = list(args or [])
+    if any(str(a) == "--origem" or str(a).startswith("--origem=") for a in args):
+        return args                        # o que o agente ja pos vale
+    return args + ["--origem", origem]
+
+def liga_origem(tool: str, ti: dict, origem: str) -> dict:
+    """Sub-agente abrindo a PROPRIA sessao: `sessao abrir ... --origem <sessao do orquestrador>`.
+    Posto aqui para a linhagem nao depender de o modelo lembrar (card #3158, spec cadeirinha §5).
+    So toca abertura de sessao; o resto da chamada segue como veio."""
+    novo = dict(ti)
+    base = _base(tool)
+    if base == "sessao":
+        if novo.get("ato") == "abrir":
+            novo["args"] = _com_origem(novo.get("args"), origem)
+        if isinstance(novo.get("lote"), list):
+            novo["lote"] = [dict(i, args=_com_origem(i.get("args"), origem))
+                            if isinstance(i, dict) and i.get("ato") == "abrir" else i
+                            for i in novo["lote"]]
+    elif base == "run_command":
+        def item(x):
+            if isinstance(x, str) and x.lstrip().startswith("sessao abrir") and "--origem" not in x:
+                return f"{x} --origem {origem}"
+            if isinstance(x, dict) and x.get("verbo") == "sessao" and x.get("ato") == "abrir":
+                return dict(x, args=_com_origem(x.get("args"), origem))
+            return x
+        if isinstance(novo.get("commands"), list):
+            novo["commands"] = [item(x) for x in novo["commands"]]
+        if isinstance(novo.get("command"), str):
+            novo["command"] = item(novo["command"])
+    return novo
+
 def main():
     try:
         ev = json.load(sys.stdin)
@@ -136,6 +171,11 @@ def main():
     evento = ev.get("hook_event_name") or ev.get("hookEventName") or ""
     tool = ev.get("tool_name") or ev.get("toolName") or ""
     sid_code = ev.get("session_id") or ev.get("sessionId") or "sem"
+    # Dentro de sub-agente o Code dispara o mesmo hook com o MESMO session_id e acrescenta
+    # `agent_id` (hooks.md, campos comuns). A sessao que o sub-agente abre e guardada a parte,
+    # por `agent_id`, e nunca sobrescreve a do orquestrador (card #3158).
+    agente = ev.get("agent_id") or ev.get("agentId")
+    chave = f"{sid_code}__{agente}" if agente else sid_code
 
     if evento == "SessionStart":
         origem = ev.get("source") or ""
@@ -158,24 +198,28 @@ def main():
         texto = resp if isinstance(resp, str) else json.dumps(resp, ensure_ascii=False)
         m = re.search(r'"sessao_id"\s*:\s*"(' + UUID.pattern + r')"', texto) or UUID.search(texto)
         if m:
-            grava(sid_code, m.group(1) if m.lastindex else m.group(0))
+            grava(chave, m.group(1) if m.lastindex else m.group(0))
         c = CADEIRA.search(texto)
         if c:
-            grava(sid_code, c.group(1), "cadeira")
+            grava(chave, c.group(1), "cadeira")
         sys.exit(0)
 
     if evento == "PreToolUse":
         ti = ev.get("tool_input") or ev.get("toolInput") or {}
         if not isinstance(ti, dict):
             sys.exit(0)
-        if ti.get("sessao_id"):
+        novo = dict(ti)
+        if agente:                         # sub-agente abrindo a propria sessao: liga a do orquestrador
+            origem = le(sid_code)
+            if origem:
+                novo = liga_origem(tool, novo, origem)
+        if not novo.get("sessao_id") and not tool.endswith("monta_sessao"):
+            # sem id do agente: o da sessao propria dele (se ja abriu); senao o do orquestrador
+            sid = (le(chave) if agente else None) or le(sid_code)
+            if sid:                        # nada gravado ainda — roda sem sessao (contado)
+                novo["sessao_id"] = sid
+        if novo == ti:
             sys.exit(0)                    # o agente ja portou — respeita
-        if tool.endswith("monta_sessao"):
-            sys.exit(0)                    # abertura: quem cunha e o verbo
-        sid = le(sid_code)
-        if not sid:
-            sys.exit(0)                    # nada gravado ainda — roda sem sessao (contado)
-        novo = dict(ti); novo["sessao_id"] = sid
         print(json.dumps({"hookSpecificOutput": {
             "hookEventName": "PreToolUse", "updatedInput": novo}}))
         sys.exit(0)

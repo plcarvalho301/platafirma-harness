@@ -232,6 +232,8 @@ def _imprime_abrir(ch: dict, sid: str, cunhada: bool, registrada: bool, duravel:
         "registrada": registrada, "duravel": duravel,
         "porte": porte, "avisos": avisos,
     }
+    if ch.get("origem_sessao"):
+        obj["origem_sessao"] = ch["origem_sessao"]
     if motivo_duravel:
         obj["duravel_motivo"] = motivo_duravel
     if not ch.get("canonizada"):
@@ -246,6 +248,8 @@ def _imprime_abrir(ch: dict, sid: str, cunhada: bool, registrada: bool, duravel:
           f"{'true' if ch.get('canonizada') else 'false'}")
     print(f"autorizada_por: {ch.get('autorizada_por')}")
     print(f"ordem_id: {ch.get('ordem_id')}")
+    if ch.get("origem_sessao"):
+        print(f"origem_sessao: {ch['origem_sessao']}")
     dur = "true" if duravel else f"false ({motivo_duravel})"
     print(f"registrada: {'true' if registrada else 'false'}   duravel: {dur}")
     if not ch.get("canonizada"):
@@ -254,10 +258,11 @@ def _imprime_abrir(ch: dict, sid: str, cunhada: bool, registrada: bool, duravel:
     for a in avisos:
         print(f"(aviso: {a})")
 
-def ato_abrir(cadeira: str, sessao_id: str | None, saida: Saida, dry_run: bool = False) -> int:
+def ato_abrir(cadeira: str, sessao_id: str | None, saida: Saida, dry_run: bool = False,
+              origem: str | None = None) -> int:
     # etapa 1 — uso
     if not (cadeira or "").strip():
-        return saida.erro("uso: sessao abrir <cadeira> [--sessao-id <uuid>] [--dry-run] [--json]", 2)
+        return saida.erro("uso: sessao abrir <cadeira> [--sessao-id <uuid>] [--origem <uuid>] [--dry-run] [--json]", 2)
     sid_portado = None
     if sessao_id is not None:
         sid_portado = _uuid_valido(sessao_id)
@@ -265,6 +270,17 @@ def ato_abrir(cadeira: str, sessao_id: str | None, saida: Saida, dry_run: bool =
             return saida.erro(f"--sessao-id {sessao_id!r} nao e RFC-4122 — chame sem `--sessao-id` "
                               "para cunhar uma sessao nova; um id invalido nunca vira id novo "
                               "(arq:0101 §1)", 2)
+    # `--origem`: a sessao de quem chamou (o orquestrador). Liga a filha a mae para o ops log reconstruir
+    # a fita; nao concede nada (alcance e o da conta). Nome `origem_sessao` porque `origem` da chave
+    # ja e o marcador de como ela nasceu (`sessao abrir`, `reidratada`).
+    origem_sessao = None
+    if origem is not None:
+        origem_sessao = _uuid_valido(origem)
+        if not origem_sessao:
+            return saida.erro(f"--origem {origem!r} nao e RFC-4122 — passe o sessao_id da sessao de quem "
+                              "chamou; sem ele, abra sem `--origem`", 2)
+        if sid_portado and origem_sessao == sid_portado:
+            return saida.erro("--origem igual a --sessao-id: a sessao nao e origem de si mesma", 2)
     # etapa 2 — sujeito
     sujeito = (os.environ.get("PF_SUJEITO") or "").strip()
     if not sujeito:
@@ -320,6 +336,8 @@ def ato_abrir(cadeira: str, sessao_id: str | None, saida: Saida, dry_run: bool =
               "autorizada_por": autorizada_por, "ordem_id": ordem_id,
               "superficie": _superficie(), "aberto_em": _agora_iso(),
               "origem": "sessao abrir --dry-run"}
+        if origem_sessao:
+            ch["origem_sessao"] = origem_sessao
         motivo_dur = "dry-run: nao gravado"
         _imprime_abrir(ch, sid, cunhada, False, False, motivo_dur, avisos, saida)
         return 0
@@ -340,16 +358,27 @@ def ato_abrir(cadeira: str, sessao_id: str | None, saida: Saida, dry_run: bool =
             existente["ordem_id"] = ordem_id
             if not existente.get("sujeito"):
                 existente["sujeito"] = sujeito
+            if origem_sessao and not existente.get("origem_sessao"):
+                existente["origem_sessao"] = origem_sessao   # nunca troca a origem ja gravada
             ch = existente
         else:
             ch = {"sujeito": sujeito, "cadeira": slug, "canonizada": canonizada,
                   "autorizada_por": autorizada_por, "ordem_id": ordem_id,
                   "superficie": _superficie(), "aberto_em": _agora_iso(),
                   "origem": "sessao abrir"}
+            if origem_sessao:
+                ch["origem_sessao"] = origem_sessao
         rc_mem.set(chave, json.dumps(ch, ensure_ascii=False), ex=TTL_SESSAO_S)
     except Exception as e:  # noqa: BLE001
         return saida.erro(f"{_cura_msgmem(type(e).__name__)} — sessao_id cunhado e NAO gravado: {sid}",
                           3, sessao_id=sid)
+    if origem_sessao:
+        try:
+            viva = _le_chave(rc_mem, origem_sessao) is not None
+        except Exception:  # noqa: BLE001 — msg-mem mudo: nao acusa o que nao conferiu
+            viva = True
+        if not viva:
+            avisos.append(f"origem {origem_sessao} nao esta viva no msg-mem: ligada mesmo assim")
     # etapa 6 — registro duravel; nunca trava
     motivo_dur = _registra_duravel(sid, slug, sujeito)
     # etapa 7 — releitura
@@ -435,6 +464,8 @@ def ato_ver(sessao_id: str, saida: Saida) -> int:
     print(f"autorizada_por: {ch.get('autorizada_por') or '-'}")
     print(f"ordem_id: {ch.get('ordem_id') or '-'}   superficie: {ch.get('superficie') or '-'}"
           f"   aberto_em: {ch.get('aberto_em') or '-'}")
+    if ch.get("origem_sessao"):
+        print(f"origem_sessao: {ch['origem_sessao']}")
     if regime:
         print(f"regime: {regime}")
     return 0
@@ -456,7 +487,8 @@ def ato_listar(cadeira: str | None, saida: Saida) -> int:
                 continue
             linhas.append({"sessao_id": sid, "cadeira": ch.get("cadeira"),
                            "sujeito": ch.get("sujeito"), "aberto_em": ch.get("aberto_em"),
-                           "canonizada": ch.get("canonizada", True)})
+                           "canonizada": ch.get("canonizada", True),
+                           **({"origem_sessao": ch["origem_sessao"]} if ch.get("origem_sessao") else {})})
     except Exception as e:  # noqa: BLE001
         return saida.erro(_cura_msgmem(type(e).__name__), 3)
     linhas.sort(key=lambda l: (l.get("cadeira") or "", l.get("aberto_em") or ""))
@@ -561,7 +593,7 @@ def ato_longjob(resto: list[str]) -> int:
 
 # ------------------------------------------------------------------ CLI
 USO = """uso:
-  sessao abrir     <cadeira> [--sessao-id <uuid>] [--dry-run] [--json]  autoriza (acesso decidir), cunha e grava a chave viva
+  sessao abrir     <cadeira> [--sessao-id <uuid>] [--origem <uuid>] [--dry-run] [--json]  autoriza (acesso decidir), cunha e grava a chave viva; --origem liga a filha a sessao de quem chamou
   sessao ver       <sessao_id> [--json]                                  a chave como esta: sujeito, cadeira, regra, ordem_id
   sessao listar    [--cadeira <slug>] [--json]                           as sessoes vivas
   sessao encerrar  <sessao_id>                                           apaga sessao:{id}, ledger:{id}, giro:{id}; o duravel fica
@@ -587,6 +619,7 @@ def main(argv: list[str] | None = None) -> int:
     if ato == "abrir":
         p.add_argument("cadeira", nargs="?")
         p.add_argument("--sessao-id", dest="sessao_id", default=None)
+        p.add_argument("--origem", dest="origem", default=None)
         p.add_argument("--dry-run", action="store_true")
     elif ato in ("ver", "encerrar"):
         p.add_argument("sessao_id", nargs="?")
@@ -602,7 +635,7 @@ def main(argv: list[str] | None = None) -> int:
     if sobra:
         return saida.erro(f"sessao {ato}: argumento desconhecido {sobra[0]!r}\n{USO}", 2)
     if ato == "abrir":
-        return ato_abrir(ns.cadeira or "", ns.sessao_id, saida, dry_run=ns.dry_run)
+        return ato_abrir(ns.cadeira or "", ns.sessao_id, saida, dry_run=ns.dry_run, origem=ns.origem)
     if ato == "ver":
         return ato_ver(ns.sessao_id or "", saida)
     if ato == "listar":
