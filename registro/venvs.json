@@ -54,5 +54,10 @@
     "familia": "platafirma-conhecimento",
     "lock": "rag/uv.lock",
     "teste": "rag"
+  },
+  "conversor": {
+    "familia": "platafirma-conhecimento",
+    "lock": "conversor/uv.lock",
+    "teste": "conversor"
   }
 }

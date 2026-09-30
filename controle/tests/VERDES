@@ -58,3 +58,4 @@ tests/test_contrato_casa_direto_em_main.py
 tests/test_contrato_canonico.py
 tests/test_longjob_identidade.py
 tests/test_portao_familia.py
+tests/test_release_stack_imagem.py
