@@ -47,6 +47,7 @@ lint
 pesquisar
 migrar
 metrica
+agente
 ```
 
 Os três últimos são o braço de repo/teste/lint/PR da #3004 (feature #3003, invariante
@@ -55,6 +56,9 @@ DE STRING, que o próprio PAP marca como «mitigação, não controle». Entram 
 uma razão de mecânica, não de escopo: o whitelist daqui é a ÚNICA fonte da projeção de
 tools (`acervo listar ferramental --tools`), e verbo que não aparece no `tools/list` não
 serve ninguém. Recorte de QUEM usa é do `ferramental.md` do chapéu, não desta lista.
+
+`agente` (a caixa de especialistas, #3156) entra pela mesma mecânica: toda cadeira chama `agente rodar`
+(spec agente §4), e o verbo registrado em `acervo registrar agente` só aparece no `tools/list` quando está aqui.
 
 Fora do núcleo, de propósito: `ollama` (inferência-local) e `matrix` (mensagem-externa)
 — capacidades reais no golden record, mas não são abertura de toda cadeira.
