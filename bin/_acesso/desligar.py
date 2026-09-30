@@ -40,6 +40,7 @@ if not SEG.exists():
 # Trilha de auditoria da porta: estado da instancia.
 LOG_OPS = Path(os.environ.get("OPS_LOG_DIR") or instancia() / "var" / "log" / "ops")
 VENCE = re.compile(r"vence\s+(\d{4}-\d{2}-\d{2})")
+UUID = re.compile(r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}")
 
 
 def bancada_pap() -> Path:
@@ -128,16 +129,11 @@ def cmd_orfaos(argv: list[str]) -> int:
                 achados.append(("segredo declarado sem lastro",
                                 f"sujeito {nome} aponta {s}, que nao existe"))
 
-    # 4. Conta de SO sem sujeito. uid >= 1000, fora das de sistema.
-    try:
-        for linha in Path("/etc/passwd").read_text().splitlines():
-            c = linha.split(":")
-            if len(c) > 5 and c[0] != "nobody" and 1000 <= int(c[2]) < 65000:
-                if c[0] not in suj and not any((s or {}).get("conta") == c[0] for s in suj.values()):
-                    achados.append(("conta sem sujeito",
-                                    f"conta de SO {c[0]} (uid {c[2]}) nao tem sujeito no PAP"))
-    except (OSError, ValueError) as e:
-        achados.append(("nao medido", f"contas de SO: {e}"))
+    # 4. Conta de SO NAO e sujeito (dono, 27/09/2026, card #3165; seg:0011, emenda de
+    #    30/09/2026). Segregacao por conta e eixo de EXECUCAO; quem se autentica e a
+    #    pessoa que abriu a sessao. Conta de SO sem linha em sujeitos.yaml e o estado
+    #    correto, nao residuo, e por isso este verbo deixou de conta-la. A isolacao da
+    #    conta se mede em `seg isolacao medir`.
 
     # 5. Realm: client habilitado para sujeito que saiu do PAP.
     #    Realm nao alcancado NAO e "nada encontrado": e medicao incompleta, e reprova
@@ -172,7 +168,9 @@ def cmd_orfaos(argv: list[str]) -> int:
     #    funcao — um por baixo do PAP, outro sobrando no realm.
     import json as _json
     logs = sorted(LOG_OPS.glob("ops-*.jsonl"))[-int(os.environ.get("ACESSO_DIAS", 7)):]
-    vistos_sujeito, vistos_azp = set(), set()
+    # Cada achado leva o rastro (quando, quantas vezes, por onde): achado sem evidencia
+    # obriga quem o recebe a garimpar o log de novo para saber o que fazer.
+    vistos, vistos_azp = {}, set()
     for arq in logs:
         for linha in arq.read_text(errors="replace").splitlines():
             try:
@@ -180,13 +178,31 @@ def cmd_orfaos(argv: list[str]) -> int:
             except ValueError:
                 continue
             if d.get("sujeito"):
-                vistos_sujeito.add(str(d["sujeito"]).lower())
+                ts = str(d.get("ts") or "?")
+                v = vistos.setdefault(str(d["sujeito"]).lower(), [ts, ts, 0, None])
+                v[1] = ts
+                v[2] += 1
+                if v[3] is None:
+                    v[3] = ", ".join(f"{c}={d[c]}" for c in ("via", "azp", "username", "usuario", "tool", "path")
+                                     if d.get(c) not in (None, "-", ""))
             if d.get("azp"):
                 vistos_azp.add(str(d["azp"]))
     declarados = {n.lower() for n in suj}
-    for quem in sorted(vistos_sujeito - declarados - {"-", "desconhecido"}):
+    notas: list[tuple[str, str]] = []
+    for quem in sorted(set(vistos) - declarados - {"-", "desconhecido"}):
+        primeiro, ultimo, n, amostra = vistos[quem]
+        rastro = f"{n} evento(s), de {primeiro[:16]} a {ultimo[:16]}; {amostra or 'sem campo de origem'}"
+        # Identidade que o realm ja nao tem nao e superficie viva: e rastro de quem foi
+        # desligado, e sai da janela sozinho. So se afirma com o realm MEDIDO; sem ele,
+        # segue achado, porque ausencia de medida nao e ausencia de identidade.
+        if realm_medido and UUID.fullmatch(quem):
+            rc, saida = kcadm("get", f"users/{quem}", "-r", "platafirma", "--fields", "id")
+            if rc != 0 and "not found" in saida.lower():
+                notas.append(("identidade ja removida",
+                              f"{quem} nao existe mais no realm; so rastro no log ({rastro})"))
+                continue
         achados.append(("sujeito sem projecao",
-                        f"{quem} atuou nos ultimos {len(logs)} dia(s) e nao esta em sujeitos.yaml"))
+                        f"{quem} atuou nos ultimos {len(logs)} dia(s) e nao esta em sujeitos.yaml ({rastro})"))
     for nome, a in suj.items():
         cid = (a or {}).get("client")
         if cid and cid not in vistos_azp:
@@ -198,6 +214,8 @@ def cmd_orfaos(argv: list[str]) -> int:
         for classe, texto in achados:
             print(f"{classe.ljust(largura)}  {texto}")
         print(f"\n{len(achados)} achado(s) — cada um e ato pendente, nao aviso")
+    for classe, texto in notas:
+        print(f"nota: {classe}  {texto}")
     # Veredito no EXIT, nao no meio do relatorio: realm nao medido reprova duro.
     if not realm_medido:
         print("\nREPROVADO: realm NAO medido — resultado INCOMPLETO, nao vale como "
