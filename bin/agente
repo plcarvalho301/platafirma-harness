@@ -1,0 +1,683 @@
+#!/opt/platafirma/current/venv/harness/bin/python
+# agente — a caixa de especialistas: lista, projeta e roda quem pensa, com modelo, ferramentas e teto fixos
+# capacidade: automacao
+# dono: ia
+# use para: especialista, sub-agente, revisor, varredor, rodar um agente consultado, projeção .claude/agents, caixa de ferramentas
+# atos: listar (leitura, especialista), ler (leitura, especialista), rodar (escrita, especialista), projetar (escrita, especialista)
+# ato: listar [--modelo <familia>] [--modo <modo>] [--json] — as declarações do posto, uma por linha
+# ato: ler <slug> — a declaração inteira de um especialista
+# ato: rodar <slug> [--cadeira <slug>] [--chapeu <slug>] [--json] — abre a sessão filha, monta a lente e chama o modelo na conta dele; a tarefa vem em stdin
+# ato: projetar [--conferir] [--base <ref>] — gera as projeções do provedor a partir das declarações; --conferir só mede
+# exit: 0 ok · 1 negativo de mérito (não existe, divergente, sem pessoa resolvida) · 2 uso · 3 dependência fora · 4 recusa de política · 5 indeterminável
+# escreve: projetar grava .claude/agents/<slug>.md no posto; rodar grava a chave da sessão filha (sessao abrir) e uma linha em var/log/agente/; nada em listar|ler|projetar --conferir
+# consome: sessao (abrir, encerrar), expediente (montar --perfil cadeirinha), ollama local (qwen), CLI claude (modelo Claude), seg isolacao medir (o log, só leitura)
+# ambiente: PF_SUJEITO (a pessoa em nome de quem o agente roda; origem: fluxo OAuth, entregue pela porta), PF_SESSAO e PF_CADEIRA (origem: verbo `sessao abrir`, injetadas pela porta), PF_ORDEM_ID (idem), PF_POSTO[=<bancada>/platafirma-posto] (onde estão as declarações), PF_BIN[=bin/ da própria árvore] (só teste com stub), PF_CLAUDE_BIN[=claude no PATH] (só teste com stub), OLLAMA_BASE_URL[=http://localhost:11434], PLATAFIRMA_INSTANCIA[=/srv/platafirma/casa] (var/log/agente e var/log/seg)
+# depende: sessao, expediente, lib/raizes, lib/uso, pyyaml (venv harness)
+# conforme: parcial — Gemini pelo `agy` ainda não roda (a execução sob jaiminho é da ti, spec agente §Aberto); agendado espera `sessao longjob` herdar os atributos (#3186)
+#
+# Spec: spec agente (§2 declaração, §3 projeções, §4 ligações, §10 o verbo, §11 piso de segurança)
+from __future__ import annotations
+
+import difflib
+import json
+import os
+import re
+import subprocess
+import sys
+import time
+import urllib.error
+import urllib.request
+from datetime import datetime, timezone
+from pathlib import Path
+
+_AQUI = Path(__file__).resolve().parent
+sys.path.insert(0, str(_AQUI.parent / "lib"))
+import raizes  # noqa: E402
+import uso  # noqa: E402
+import yaml  # noqa: E402
+
+MODOS = ("varrer", "revisar", "avaliar", "testar", "executar", "consultar", "vigiar", "pesquisar")
+LIGACOES = ("consultado", "delegado", "agendado")
+FAMILIAS = ("claude", "gemini", "qwen")
+PERNAS = ("fonte_de_fora", "dado_pessoal", "muda_estado")
+PROIBIDAS = ("Bash", "Write", "Edit", "NotebookEdit")      # o posto já nega (spec agente §2)
+REGUA_ESPECIES = ("lista-de-verificacao", "padrao")
+MODOS_COM_REGUA = ("revisar", "avaliar")
+CONTAS_SEGREGADAS = ("jaiminho", "quinzinho")              # as que `seg isolacao medir` mede
+CABECALHO_GERADO = "# GERADO por agente — não editar"
+OLLAMA_URL = os.environ.get("OLLAMA_BASE_URL", "http://localhost:11434")
+
+
+# --- a declaração ---------------------------------------------------------------------------
+
+def conta_do_modelo(modelo: dict) -> str:
+    """O modelo fixa a conta unix (spec agente §2): Claude sob claudinho, Gemini sob jaiminho,
+    Qwen local na conta do host (claudinho), Qwen de fronteira sob quinzinho."""
+    familia = modelo.get("familia")
+    if familia == "gemini":
+        return "jaiminho"
+    if familia == "qwen" and not modelo.get("local"):
+        return "quinzinho"
+    return "claudinho"
+
+
+def provedor(modelo: dict) -> str:
+    """Quem lê o contexto. `host` é o ollama local; o resto sai do host."""
+    familia = modelo.get("familia")
+    if familia == "qwen":
+        return "host" if modelo.get("local") else "qwen-fronteira"
+    return str(familia)
+
+
+def familia_de(decl) -> str | None:
+    """A família do modelo de uma declaração, ou None se ela não for um mapa com modelo."""
+    m = decl.get("modelo") if isinstance(decl, dict) else None
+    return m.get("familia") if isinstance(m, dict) else None
+
+
+def _texto(v) -> bool:
+    return isinstance(v, str) and bool(v.strip())
+
+
+def valida(decl, stem: str) -> list[str]:
+    """Problemas de uma declaração, cada um uma frase. Lista vazia = no molde."""
+    if not isinstance(decl, dict):
+        return ["a declaração não é um mapa YAML"]
+    p: list[str] = []
+    slug = decl.get("slug")
+    if not (isinstance(slug, str) and re.fullmatch(r"[a-z][a-z0-9-]*", slug)):
+        p.append("slug ausente ou fora de [a-z][a-z0-9-]*")
+    elif slug != stem:
+        p.append(f"slug {slug!r} difere do nome do arquivo {stem!r}")
+    desc = decl.get("descricao")
+    if not _texto(desc) or "\n" in desc.strip():
+        p.append("descricao: uma linha que o orquestrador lê para escolher")
+    dono = decl.get("dono")
+    if not (isinstance(dono, dict) and _texto(dono.get("cadeira"))):
+        p.append("dono: precisa de cadeira (e chapeu)")
+    elif dono["cadeira"] != "{cadeira}" and not _texto(dono.get("chapeu")):
+        p.append("dono.chapeu: obrigatório quando a cadeira é fixa")
+    if decl.get("modo") not in MODOS:
+        p.append(f"modo: um de {', '.join(MODOS)}")
+    modelo = decl.get("modelo")
+    if not (isinstance(modelo, dict) and modelo.get("familia") in FAMILIAS and _texto(modelo.get("versao"))):
+        p.append(f"modelo: familia ({', '.join(FAMILIAS)}) e versao")
+    ferr = decl.get("ferramentas")
+    if not (isinstance(ferr, list) and all(_texto(f) for f in ferr)):
+        p.append("ferramentas: lista de nomes de tool (pode ser vazia)")
+    else:
+        for f in ferr:
+            if f in PROIBIDAS:
+                p.append(f"ferramenta proibida: {f}")
+    pernas = decl.get("pernas")
+    if not (isinstance(pernas, dict) and all(isinstance(pernas.get(k), bool) for k in PERNAS)):
+        p.append(f"pernas: {', '.join(PERNAS)}, cada uma true ou false")
+    else:
+        if all(pernas[k] for k in PERNAS):
+            p.append("pernas: as três juntas não sobem sem aprovação humana no fecho (spec agente §7)")
+        elif pernas["fonte_de_fora"] and pernas["dado_pessoal"]:
+            p.append("pernas: fonte de fora e dado pessoal juntos (spec agente §7)")
+    teto = decl.get("teto")
+    chaves = ["turnos", "tokens_execucao", "tokens_janela"]
+    if isinstance(modelo, dict) and modelo.get("familia") == "qwen" and modelo.get("local"):
+        chaves += ["num_ctx", "vram_max_mib", "prompt_eval_count_max"]
+    if not (isinstance(teto, dict) and all(isinstance(teto.get(k), int) and not isinstance(teto.get(k), bool)
+                                           and teto.get(k) > 0 for k in chaves)):
+        p.append(f"teto: {', '.join(chaves)}, inteiros positivos")
+    regua = decl.get("regua")
+    if regua is not None:
+        partes = regua.split() if isinstance(regua, str) else []
+        if len(partes) != 2 or partes[0] not in REGUA_ESPECIES:
+            p.append(f"regua: '<espécie> <chave>' com espécie {' ou '.join(REGUA_ESPECIES)}")
+        elif decl.get("modo") not in MODOS_COM_REGUA:
+            p.append("regua: só nos modos revisar e avaliar")
+    fecho = decl.get("fecho")
+    if not (isinstance(fecho, dict) and all(_texto(fecho.get(k)) for k in ("comeca_com", "termina_com", "recebe"))):
+        p.append("fecho: comeca_com, termina_com e recebe")
+    lig = decl.get("ligacoes")
+    if not (isinstance(lig, list) and lig and all(x in LIGACOES for x in lig)):
+        p.append(f"ligacoes: uma ou mais de {', '.join(LIGACOES)}")
+    elif "delegado" in lig and isinstance(modelo, dict) and modelo.get("familia") != "claude":
+        p.append("ligacoes: delegado só existe para modelo Claude (o arquivo de agente do Code não descreve outro)")
+    return p
+
+
+def posto_dir() -> Path:
+    v = os.environ.get("PF_POSTO", "").strip()
+    return Path(v) if v else raizes.bancada() / "platafirma-posto"
+
+
+def carrega(posto: Path) -> tuple[dict, dict]:
+    """(declarações válidas e inválidas por slug, problemas por arquivo). Só lê."""
+    decls: dict[str, dict] = {}
+    problemas: dict[str, list[str]] = {}
+    pasta = posto / "agentes"
+    for arq in sorted(pasta.glob("*.yaml")) if pasta.is_dir() else []:
+        try:
+            decl = yaml.safe_load(arq.read_text(encoding="utf-8"))
+        except (yaml.YAMLError, OSError) as e:
+            problemas[arq.stem] = [f"não lê: {type(e).__name__}"]
+            continue
+        achados = valida(decl, arq.stem)
+        if achados:
+            problemas[arq.stem] = achados
+        if isinstance(decl, dict):
+            decls[arq.stem] = decl
+    return decls, problemas
+
+
+# --- a projeção (Claude) --------------------------------------------------------------------
+
+def projecao_claude(decl: dict) -> str:
+    """O `.claude/agents/<slug>.md` da declaração. Determinístico: o --conferir compara byte a byte."""
+    slug, dono, modo = decl["slug"], decl["dono"], decl["modo"]
+    chapeu = dono.get("chapeu") or "<chapeu>"
+    cadeira = dono["cadeira"]
+    fixa = cadeira != "{cadeira}"
+    regua = decl.get("regua")
+    montar = f"expediente montar --perfil cadeirinha --chapeu {chapeu} --modo {modo}"
+    if regua:
+        montar += f" --regua {regua}"
+    fecho = decl["fecho"]
+    abrir = f"sessao abrir {cadeira}" if fixa else "sessao abrir <a cadeira que a delegação nomeia>"
+    lente = f"a lente da cadeira `{cadeira}`, chapéu `{chapeu}`" if fixa else "a lente da cadeira que a delegação nomeia"
+    return "\n".join([
+        "---",
+        f"{CABECALHO_GERADO} (fonte: agentes/{slug}.yaml; regerar: agente projetar)",
+        f"name: {slug}",
+        f"description: {json.dumps(decl['descricao'].strip(), ensure_ascii=False)}",
+        f"model: {decl['modelo']['versao']}",
+        f"tools: {', '.join(decl['ferramentas'])}",
+        f"maxTurns: {decl['teto']['turnos']}",
+        "---",
+        "",
+        f"Você é o agente `{slug}` da caixa de ferramentas da PlataFirma: modo `{modo}`, {lente}. "
+        "Não tem conduta nem dono: recebe uma tarefa e devolve um resultado.",
+        "",
+        "Primeira ação, antes de qualquer outra: abra a sua sessão e monte a lente.",
+        "",
+        f"1. `{abrir}` — a sessão é sua, da cadeira do agente. A origem (a sessão de quem te chamou) entra pelo hook do "
+        "posto; se faltar, passe `--origem <o sessao_id que a delegação trouxe>`. Se a porta não abrir a sessão, "
+        "siga com o session id do próprio Code, sem desligar a poda e sem bloquear.",
+        f"2. `{montar}`, com a mensagem de delegação em stdin. Leia o pacote devolvido e trabalhe por ele: "
+        "a peça `modo` diz o que fazer e o que devolver.",
+        "",
+        "Depois do pacote, o fecho:",
+        "",
+        f"- começa com: {fecho['comeca_com'].strip()}",
+        f"- termina com: {fecho['termina_com'].strip()}",
+        f"- quem recebe: {fecho['recebe'].strip()}",
+        "",
+        "Você registra e não publica: em código, abre PR e nunca mescla nem promove.",
+        "",
+    ])
+
+
+def _le_gerado(arq: Path) -> tuple[bool, str]:
+    try:
+        texto = arq.read_text(encoding="utf-8")
+    except OSError:
+        return False, ""
+    linhas = texto.splitlines()
+    return (len(linhas) > 1 and linhas[1].startswith(CABECALHO_GERADO)), texto
+
+
+def confere_projecoes(posto: Path, decls: dict, problemas: dict) -> list[str]:
+    """Divergências entre as declarações e .claude/agents/: órfão, projeção velha, projeção ausente."""
+    achados: list[str] = []
+    pasta = posto / ".claude" / "agents"
+    existentes = {a.stem: a for a in sorted(pasta.glob("*.md"))} if pasta.is_dir() else {}
+    for stem, arq in existentes.items():
+        gerado, texto = _le_gerado(arq)
+        decl = decls.get(stem)
+        if not gerado:
+            achados.append(f"órfão: .claude/agents/{stem}.md sem o cabeçalho de gerado (editado à mão)")
+        elif decl is None or familia_de(decl) != "claude":
+            achados.append(f"órfão: .claude/agents/{stem}.md sem declaração Claude em agentes/{stem}.yaml")
+        elif stem not in problemas and texto != projecao_claude(decl):
+            achados.append(f"projeção velha: .claude/agents/{stem}.md difere da declaração (agente projetar)")
+    for stem, decl in decls.items():
+        if stem in problemas or familia_de(decl) != "claude":
+            continue
+        if stem not in existentes:
+            achados.append(f"projeção ausente: .claude/agents/{stem}.md (agente projetar)")
+    return achados
+
+
+# --- o portão do PR que troca `modelo` (spec agente §11.2) -----------------------------------
+
+def isolacao_conforme(conta: str) -> tuple[bool, str]:
+    """A última `seg isolacao medir` que mediu a conta: conforme só se todas as verificações dela deram ok."""
+    pasta = raizes.instancia() / "var" / "log" / "seg"
+    if not pasta.is_dir():
+        return False, "sem medição registrada"
+    for arq in sorted(pasta.glob("isolacao-*.jsonl"), reverse=True):
+        for linha in reversed(arq.read_text(encoding="utf-8").splitlines()):
+            try:
+                reg = json.loads(linha)
+            except ValueError:
+                continue
+            ds = [r for r in reg.get("resultados", []) if r.get("conta") == conta]
+            if ds:
+                ruins = [r for r in ds if r.get("estado") != "ok"]
+                if ruins:
+                    return False, f"{ruins[0].get('estado')}: {str(ruins[0].get('detalhe', ''))[:90]}"
+                return True, ""
+    return False, "sem medição registrada"
+
+
+def portao_da_troca(slug: str, nova: dict, base: dict | None) -> list[str]:
+    """Só há troca onde o modelo mudou em relação à base. Agente novo não troca nada."""
+    if base is None:
+        return []
+    m_novo, m_base = nova.get("modelo", {}), base.get("modelo", {})
+    if (m_novo.get("familia"), bool(m_novo.get("local"))) == (m_base.get("familia"), bool(m_base.get("local"))):
+        return []
+    achados: list[str] = []
+    conta = conta_do_modelo(m_novo)
+    if conta in CONTAS_SEGREGADAS:
+        ok, motivo = isolacao_conforme(conta)
+        if not ok:
+            achados.append(f"caso 1: {slug} passa a rodar sob {conta}, sem isolação conforme na última "
+                           f"seg isolacao medir ({motivo})")
+    if nova.get("pernas", {}).get("dado_pessoal") and provedor(m_novo) not in ("host", provedor(m_base)):
+        achados.append(f"caso 2 — vai ao dono antes do merge: {slug} tem a perna dado pessoal e a troca manda o "
+                       f"contexto ao provedor {provedor(m_novo)}, que antes não o recebia")
+    return achados
+
+
+def _git(posto: Path, *args: str) -> tuple[int, str]:
+    try:
+        p = subprocess.run(["git", "-C", str(posto), *args], capture_output=True, text=True, timeout=30)
+    except (OSError, subprocess.SubprocessError) as e:
+        return 125, str(e)
+    return p.returncode, p.stdout
+
+
+def declaracoes_da_base(posto: Path, ref: str) -> dict | None:
+    """As declarações de `ref` (git show), por slug. None se a ref não existe."""
+    rc, _ = _git(posto, "rev-parse", "--verify", "--quiet", f"{ref}^{{commit}}")
+    if rc != 0:
+        return None
+    rc, nomes = _git(posto, "ls-tree", "--name-only", ref, "agentes/")
+    if rc != 0:
+        return {}
+    base: dict[str, dict] = {}
+    for nome in nomes.split():
+        if not nome.endswith(".yaml"):
+            continue
+        rc, texto = _git(posto, "show", f"{ref}:{nome}")
+        try:
+            decl = yaml.safe_load(texto) if rc == 0 else None
+        except yaml.YAMLError:
+            decl = None
+        if isinstance(decl, dict):
+            base[Path(nome).stem] = decl
+    return base
+
+
+# --- atos: listar, ler, projetar ------------------------------------------------------------
+
+def _erro(msg: str, codigo: int) -> int:
+    print(f"agente: {msg}", file=sys.stderr)
+    return codigo
+
+
+def _posto_ou_erro() -> tuple[Path | None, int]:
+    try:
+        return posto_dir(), 0
+    except raizes.BancadaNaoDeclarada as e:
+        return None, _erro(str(e), 3)
+
+
+def ato_listar(modelo: str | None, modo: str | None, como_json: bool) -> int:
+    posto, rc = _posto_ou_erro()
+    if posto is None:
+        return rc
+    decls, problemas = carrega(posto)
+    linhas = []
+    for stem, d in decls.items():
+        if stem in problemas:
+            continue
+        if modelo and d["modelo"]["familia"] != modelo:
+            continue
+        if modo and d["modo"] != modo:
+            continue
+        linhas.append({"slug": stem, "modo": d["modo"], "modelo": f"{d['modelo']['familia']}:{d['modelo']['versao']}",
+                       "ligacoes": d["ligacoes"], "dono": f"{d['dono']['cadeira']}/{d['dono'].get('chapeu') or '-'}"})
+    for stem, achados in problemas.items():
+        print(f"inválida: agentes/{stem}.yaml — {'; '.join(achados)}", file=sys.stderr)
+    if como_json:
+        print(json.dumps({"posto": str(posto), "agentes": linhas}, ensure_ascii=False))
+    else:
+        for l in linhas:
+            print(f"{l['slug']:<20} {l['modo']:<10} {l['modelo']:<22} {','.join(l['ligacoes']):<24} {l['dono']}")
+    if not linhas:
+        return _erro(f"nenhuma declaração{' com esse filtro' if modelo or modo else ''} em {posto}/agentes", 1)
+    return 0
+
+
+def ato_ler(slug: str) -> int:
+    posto, rc = _posto_ou_erro()
+    if posto is None:
+        return rc
+    arq = posto / "agentes" / f"{slug}.yaml"
+    if not arq.is_file():
+        conhecidos = sorted(a.stem for a in (posto / "agentes").glob("*.yaml"))
+        print(f"agente: sem declaração {slug!r} em {posto}/agentes", file=sys.stderr)
+        parecidos = difflib.get_close_matches(slug, conhecidos, n=3)
+        print(f"vizinho: agente ler {parecidos[0]}" if parecidos else "vizinho: agente listar", file=sys.stderr)
+        return 1
+    sys.stdout.write(arq.read_text(encoding="utf-8"))
+    return 0
+
+
+def ato_projetar(conferir: bool, base_ref: str | None) -> int:
+    posto, rc = _posto_ou_erro()
+    if posto is None:
+        return rc
+    if not (posto / "agentes").is_dir():
+        return _erro(f"{posto}/agentes não existe", 5 if conferir else 3)
+    decls, problemas = carrega(posto)
+    achados = [f"declaração inválida: agentes/{s}.yaml — {a}" for s, lista in problemas.items() for a in lista]
+    achados += confere_projecoes(posto, decls, problemas)
+    avisos: list[str] = []
+    for stem, d in decls.items():
+        if d.get("modo") in MODOS_COM_REGUA and not d.get("regua") and stem not in problemas:
+            avisos.append(f"{stem}: modo {d['modo']} sem regua; vale a régua do chapéu (modo revisar, «Sem régua servida»)")
+    ref = base_ref or "origin/main"
+    base = declaracoes_da_base(posto, ref)
+    if base is None:
+        if base_ref:
+            return _erro(f"--base {base_ref!r} não existe em {posto}", 5)
+        avisos.append("sem origin/main neste clone: o portão da troca de modelo (§11.2) não foi conferido")
+        base = {}
+    else:
+        for stem, d in decls.items():
+            if stem not in problemas:
+                achados += portao_da_troca(stem, d, base.get(stem))
+    if conferir:
+        for a in avisos:
+            print(f"aviso: {a}")
+        for a in achados:
+            print(f"divergente: {a}")
+        if not achados:
+            print(f"conforme: {len(decls)} declaração(ões), {sum(1 for d in decls.values() if familia_de(d) == 'claude')} projeção(ões) Claude")
+        return 1 if achados else 0
+    if problemas:
+        for a in achados:
+            print(f"divergente: {a}")
+        return _erro("há declaração inválida; nada foi gerado", 1)
+    pasta = posto / ".claude" / "agents"
+    pasta.mkdir(parents=True, exist_ok=True)
+    for stem, d in decls.items():
+        if d["modelo"]["familia"] != "claude":
+            continue
+        arq = pasta / f"{stem}.md"
+        novo = projecao_claude(d)
+        if not arq.exists() or arq.read_text(encoding="utf-8") != novo:
+            arq.write_text(novo, encoding="utf-8")
+            print(f"gerado: .claude/agents/{stem}.md")
+    for arq in sorted(pasta.glob("*.md")):
+        gerado, _ = _le_gerado(arq)
+        d = decls.get(arq.stem)
+        if gerado and (d is None or d["modelo"]["familia"] != "claude"):
+            arq.unlink()
+            print(f"removido: .claude/agents/{arq.name} (declaração aposentada)")
+        elif not gerado:
+            print(f"divergente: órfão: .claude/agents/{arq.name} sem o cabeçalho de gerado", file=sys.stderr)
+            return 1
+    for a in avisos:
+        print(f"aviso: {a}")
+    return 0
+
+
+# --- ato: rodar ------------------------------------------------------------------------------
+
+class Falha(Exception):
+    def __init__(self, codigo: int, msg: str):
+        super().__init__(msg)
+        self.codigo, self.msg = codigo, msg
+
+
+def _bin() -> Path:
+    return Path(os.environ.get("PF_BIN") or _AQUI)
+
+
+def _roda(argv: list[str], stdin: str | None = None, env: dict | None = None, timeout: int = 120):
+    try:
+        p = subprocess.run(argv, input=stdin, capture_output=True, text=True, timeout=timeout,
+                           env={**os.environ, **(env or {})})
+    except subprocess.TimeoutExpired:
+        raise Falha(5, f"{Path(argv[0]).name}: passou de {timeout}s sem resposta")
+    except OSError as e:
+        raise Falha(3, f"{Path(argv[0]).name}: não executou ({e})")
+    return p
+
+
+def abre_sessao(cadeira: str, origem: str, slug: str, conta: str) -> dict:
+    """A sessão filha, com os atributos fixados ANTES de chamar o modelo (spec agente §11.1)."""
+    p = _roda([str(_bin() / "sessao"), "abrir", cadeira, "--origem", origem, "--agente", slug,
+               "--em-nome-de", cadeira, "--conta", conta, "--json"])
+    try:
+        obj = json.loads(p.stdout or "{}")
+    except ValueError:
+        obj = {}
+    if p.returncode != 0 or not obj.get("sessao_id"):
+        motivo = obj.get("erro") or (p.stderr.strip().splitlines() or ["sem retorno"])[0]
+        raise Falha({4: 4, 2: 2}.get(p.returncode, 3), f"sessao abrir {cadeira} saiu {p.returncode}: {motivo}")
+    return obj
+
+
+def monta_lente(decl: dict, cadeira: str, chapeu: str, filha: dict, origem: str, tarefa: str) -> str:
+    argv = [str(_bin() / "expediente"), "montar", "--perfil", "cadeirinha", "--chapeu", chapeu,
+            "--modo", decl["modo"], "--json"]
+    if decl.get("regua"):
+        argv += ["--regua", *decl["regua"].split()]
+    env = {"PF_CADEIRA": cadeira, "PF_SESSAO": filha["sessao_id"], "PF_ORIGEM_SESSAO": origem,
+           "PF_ORDEM_ID": filha.get("ordem_id") or "-"}
+    p = _roda(argv, stdin=tarefa, env=env, timeout=180)
+    try:
+        obj = json.loads(p.stdout or "{}")
+    except ValueError:
+        obj = {}
+    if p.returncode != 0:
+        motivo = obj.get("erro") or (p.stderr.strip().splitlines() or ["sem retorno"])[0]
+        raise Falha(3, f"a lente não montou (expediente montar saiu {p.returncode}): {motivo[:300]}")
+    pecas = [x["conteudo"] for x in obj.get("pecas", []) if isinstance(x.get("conteudo"), str) and x["conteudo"].strip()]
+    if not pecas:
+        raise Falha(3, "a lente voltou sem peça servida")
+    return "\n\n---\n\n".join(pecas)
+
+
+def _sistema(decl: dict, lente: str) -> str:
+    f = decl["fecho"]
+    return (f"{lente}\n\n---\n\nFECHO do agente `{decl['slug']}`: a resposta começa com {f['comeca_com'].strip()} "
+            f"e termina com {f['termina_com'].strip()}. Quem recebe: {f['recebe'].strip()}.")
+
+
+def chama_ollama(decl: dict, sistema: str, tarefa: str) -> dict:
+    t, m = decl["teto"], decl["modelo"]
+    estimado = (len(sistema) + len(tarefa)) // 3                 # cauda alta: sobra para o lado seguro
+    if estimado > t["prompt_eval_count_max"]:
+        raise Falha(3, f"a lente mais a tarefa passam do teto (~{estimado} tokens > prompt_eval_count_max "
+                       f"{t['prompt_eval_count_max']}); encurte a tarefa")
+    pedido = {"model": m["versao"], "stream": False, "think": False,
+              "messages": [{"role": "system", "content": sistema}, {"role": "user", "content": tarefa}],
+              "options": {"num_ctx": t["num_ctx"], "temperature": 0,
+                          "num_predict": max(256, min(t["tokens_execucao"], t["num_ctx"]) - estimado)}}
+    req = urllib.request.Request(f"{OLLAMA_URL}/api/chat", data=json.dumps(pedido).encode(),
+                                 headers={"Content-Type": "application/json"})
+    try:
+        with urllib.request.urlopen(req, timeout=t.get("segundos", 600)) as r:
+            obj = json.loads(r.read())
+    except (urllib.error.URLError, OSError, ValueError) as e:
+        raise Falha(3, f"ollama em {OLLAMA_URL} não respondeu: {type(e).__name__}: {e}")
+    texto = (obj.get("message") or {}).get("content", "")
+    if not texto.strip():
+        raise Falha(5, "o modelo devolveu vazio: não se sabe se varreu")
+    entrada, saida = obj.get("prompt_eval_count") or 0, obj.get("eval_count") or 0
+    aviso = ""
+    if entrada > t["prompt_eval_count_max"]:
+        aviso = f"prompt_eval_count {entrada} passou de {t['prompt_eval_count_max']}"
+    return {"retorno": texto, "uso": {"entrada": entrada, "saida": saida}, "aviso": aviso}
+
+
+def chama_claude(decl: dict, sistema: str, tarefa: str) -> dict:
+    t = decl["teto"]
+    bin_claude = os.environ.get("PF_CLAUDE_BIN") or "claude"
+    argv = [bin_claude, "-p", "--model", decl["modelo"]["versao"], "--output-format", "json",
+            "--max-turns", str(t["turnos"]), "--append-system-prompt", sistema,
+            "--disallowedTools", ",".join(PROIBIDAS)]
+    if decl["ferramentas"]:
+        argv += ["--allowedTools", ",".join(decl["ferramentas"])]
+    p = _roda(argv, stdin=tarefa, timeout=t.get("segundos", 900))
+    try:
+        obj = json.loads(p.stdout or "{}")
+    except ValueError:
+        obj = {}
+    if p.returncode != 0 or obj.get("is_error") or not isinstance(obj.get("result"), str):
+        motivo = (p.stderr.strip().splitlines() or [str(obj.get("result") or "sem retorno")])[0]
+        raise Falha(5, f"claude -p não concluiu (saiu {p.returncode}): {motivo[:200]}")
+    u = obj.get("usage") or {}
+    return {"retorno": obj["result"], "aviso": "",
+            "uso": {"entrada": u.get("input_tokens", 0), "saida": u.get("output_tokens", 0),
+                    "turnos": obj.get("num_turns")}}
+
+
+def chama_modelo(decl: dict, sistema: str, tarefa: str) -> dict:
+    m = decl["modelo"]
+    if m["familia"] == "qwen" and m.get("local"):
+        return chama_ollama(decl, sistema, tarefa)
+    if m["familia"] == "claude":
+        return chama_claude(decl, sistema, tarefa)
+    raise Falha(3, f"a ligação {m['familia']} ainda não roda pelo agente rodar: a execução sob "
+                   f"{conta_do_modelo(m)} é da ti (spec agente §Aberto)")
+
+
+def registra(reg: dict) -> None:
+    """Uma linha por execução, com os cinco atributos. Nunca derruba a execução."""
+    try:
+        pasta = raizes.instancia() / "var" / "log" / "agente"
+        pasta.mkdir(parents=True, exist_ok=True)
+        with open(pasta / f"agente-{datetime.now().date().isoformat()}.jsonl", "a", encoding="utf-8") as f:
+            f.write(json.dumps(reg, ensure_ascii=False) + "\n")
+    except OSError as e:
+        print(f"agente: registro da execução não gravado ({e})", file=sys.stderr)
+
+
+def ato_rodar(slug: str, cadeira_arg: str | None, chapeu_arg: str | None, como_json: bool) -> int:
+    posto, rc = _posto_ou_erro()
+    if posto is None:
+        return rc
+    decls, problemas = carrega(posto)
+    if slug not in decls:
+        print(f"agente: sem declaração {slug!r} em {posto}/agentes", file=sys.stderr)
+        print("vizinho: agente listar", file=sys.stderr)
+        return 1
+    decl = decls[slug]
+    if slug in problemas:
+        return _erro(f"a declaração de {slug} está fora do molde ({'; '.join(problemas[slug])}); "
+                     "agente projetar --conferir diz o resto", 4)
+    tarefa = sys.stdin.read() if not sys.stdin.isatty() else ""
+    if not tarefa.strip():
+        return _erro("a tarefa vem em stdin: agente rodar <slug> < tarefa", 2)
+    dono = decl["dono"]
+    if dono["cadeira"] == "{cadeira}":
+        if not cadeira_arg:
+            return _erro(f"{slug} tem dono {{cadeira}}: passe --cadeira <slug>", 2)
+        cadeira, chapeu = cadeira_arg, chapeu_arg or dono.get("chapeu")
+        if not chapeu:
+            return _erro(f"{slug} tem dono {{cadeira}} sem chapéu fixo: passe --chapeu <slug>", 2)
+    else:
+        if cadeira_arg:
+            return _erro(f"--cadeira só vale no agente cujo dono é {{cadeira}}; o de {slug} é {dono['cadeira']}", 2)
+        cadeira, chapeu = dono["cadeira"], dono["chapeu"]
+    # §11.1: sem pessoa resolvida, nega antes de tudo — sem abrir sessão, sem chamar o modelo, sem cair para a conta.
+    sujeito = os.environ.get("PF_SUJEITO", "").strip()
+    origem = os.environ.get("PF_SESSAO", "").strip()
+    if not sujeito or not origem:
+        return _erro("sem pessoa resolvida (PF_SUJEITO) ou sem a sessão de quem chamou (PF_SESSAO): "
+                     "nega por padrão, sem cair para a conta (spec agente §11.1)", 1)
+    conta = conta_do_modelo(decl["modelo"])
+    filha = None
+    inicio = time.monotonic()
+    try:
+        if conta in CONTAS_SEGREGADAS:
+            ok, motivo = isolacao_conforme(conta)
+            if not ok:
+                raise Falha(4, f"a conta {conta} não está conforme na última seg isolacao medir ({motivo})")
+        if decl["modelo"]["familia"] == "gemini":
+            chama_modelo(decl, "", "")                          # sai 3 antes de gastar sessão
+        filha = abre_sessao(cadeira, origem, slug, conta)
+        lente = monta_lente(decl, cadeira, chapeu, filha, origem, tarefa)
+        r = chama_modelo(decl, _sistema(decl, lente), tarefa)
+    except Falha as f:
+        if filha:
+            _encerra(filha["sessao_id"])
+        registra({"ts": _agora(), "agente": slug, "sujeito": sujeito, "em_nome_de": cadeira, "origem": origem,
+                  "conta": conta, "sessao_id": (filha or {}).get("sessao_id"), "exit": f.codigo, "motivo": f.msg})
+        return _erro(f.msg, f.codigo)
+    _encerra(filha["sessao_id"])
+    duracao = round(time.monotonic() - inicio, 1)
+    registra({"ts": _agora(), "agente": slug, "sujeito": sujeito, "em_nome_de": cadeira, "origem": origem,
+              "conta": conta, "sessao_id": filha["sessao_id"], "modelo": f"{decl['modelo']['familia']}:{decl['modelo']['versao']}",
+              "uso": r["uso"], "segundos": duracao, "exit": 0})
+    if r["aviso"]:
+        print(f"aviso: {r['aviso']}", file=sys.stderr)
+    print(f"agente {slug}: sessao {filha['sessao_id']} origem {origem} conta {conta} "
+          f"uso {json.dumps(r['uso'])} em {duracao}s", file=sys.stderr)
+    if como_json:
+        print(json.dumps({"agente": slug, "sessao_id": filha["sessao_id"], "origem": origem, "sujeito": sujeito,
+                          "em_nome_de": cadeira, "conta": conta, "uso": r["uso"], "retorno": r["retorno"]},
+                         ensure_ascii=False))
+    else:
+        print(r["retorno"])
+    return 0
+
+
+def _agora() -> str:
+    return datetime.now(timezone.utc).isoformat(timespec="seconds")
+
+
+def _encerra(sessao_id: str) -> None:
+    """A filha não é para reabrir: sai da chave viva. O duradouro fica (sessao encerrar)."""
+    try:
+        _roda([str(_bin() / "sessao"), "encerrar", sessao_id], timeout=30)
+    except Falha:
+        pass
+
+
+# --- a linha de comando ----------------------------------------------------------------------
+
+def main(argv: list[str] | None = None) -> int:
+    argv = list(sys.argv[1:] if argv is None else argv)
+    uso.intercepta(argv, fonte=__file__)
+    p = uso.Uso(descricao="a caixa de especialistas: lista, projeta e roda quem pensa, com modelo, ferramentas e teto fixos")
+    atos = p.atos()
+    a = atos.novo("listar", "as declarações do posto, uma por linha")
+    a.add_argument("--modelo", choices=FAMILIAS, default=None)
+    a.add_argument("--modo", choices=MODOS, default=None)
+    a.add_argument("--json", action="store_true")
+    a = atos.novo("ler", "a declaração inteira de um especialista")
+    a.add_argument("slug")
+    a = atos.novo("rodar", "abre a sessão filha, monta a lente e chama o modelo na conta dele (tarefa em stdin)")
+    a.add_argument("slug")
+    a.add_argument("--cadeira", default=None)
+    a.add_argument("--chapeu", default=None)
+    a.add_argument("--json", action="store_true")
+    a = atos.novo("projetar", "gera as projeções do provedor; --conferir só mede")
+    a.add_argument("--conferir", action="store_true")
+    a.add_argument("--base", default=None)
+    ns = p.parse_args(argv)
+    if ns.ato == "listar":
+        return ato_listar(ns.modelo, ns.modo, ns.json)
+    if ns.ato == "ler":
+        return ato_ler(ns.slug)
+    if ns.ato == "rodar":
+        return ato_rodar(ns.slug, ns.cadeira, ns.chapeu, ns.json)
+    return ato_projetar(ns.conferir, ns.base)
+
+
+if __name__ == "__main__":
+    sys.exit(main())

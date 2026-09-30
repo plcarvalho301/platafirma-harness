@@ -43,6 +43,8 @@ MEM_PORTA = int(os.environ.get("MEM_REDIS_PORT", "6380"))
 PG_PORTA = os.environ.get("SESSAO_PG_PORT", "5437")
 TTL_SESSAO_S = 172800          # 48 h — o mesmo da porta, para nao haver duas verdades
 ATOS = ("abrir", "ver", "listar", "encerrar", "limpar", "longjob")
+# O que `--agente`/`--em-nome-de`/`--conta` gravam na chave viva (card #3156, spec agente §11.1).
+ATRIBUTOS_AGENTE = ("agente", "em_nome_de", "conta_agente")
 PREFIXOS_CADEIRA = ("claudinho-", "claudinha-")
 SUPERFICIES = ("claude.ai", "chat", "code", "desconhecida")
 
@@ -234,6 +236,9 @@ def _imprime_abrir(ch: dict, sid: str, cunhada: bool, registrada: bool, duravel:
     }
     if ch.get("origem_sessao"):
         obj["origem_sessao"] = ch["origem_sessao"]
+    for k in ATRIBUTOS_AGENTE:
+        if ch.get(k):
+            obj[k] = ch[k]
     if motivo_duravel:
         obj["duravel_motivo"] = motivo_duravel
     if not ch.get("canonizada"):
@@ -250,6 +255,9 @@ def _imprime_abrir(ch: dict, sid: str, cunhada: bool, registrada: bool, duravel:
     print(f"ordem_id: {ch.get('ordem_id')}")
     if ch.get("origem_sessao"):
         print(f"origem_sessao: {ch['origem_sessao']}")
+    for k in ATRIBUTOS_AGENTE:
+        if ch.get(k):
+            print(f"{k}: {ch[k]}")
     dur = "true" if duravel else f"false ({motivo_duravel})"
     print(f"registrada: {'true' if registrada else 'false'}   duravel: {dur}")
     if not ch.get("canonizada"):
@@ -259,7 +267,7 @@ def _imprime_abrir(ch: dict, sid: str, cunhada: bool, registrada: bool, duravel:
         print(f"(aviso: {a})")
 
 def ato_abrir(cadeira: str, sessao_id: str | None, saida: Saida, dry_run: bool = False,
-              origem: str | None = None) -> int:
+              origem: str | None = None, agente: dict | None = None) -> int:
     # etapa 1 — uso
     if not (cadeira or "").strip():
         return saida.erro("uso: sessao abrir <cadeira> [--sessao-id <uuid>] [--origem <uuid>] [--dry-run] [--json]", 2)
@@ -281,6 +289,15 @@ def ato_abrir(cadeira: str, sessao_id: str | None, saida: Saida, dry_run: bool =
                               "chamou; sem ele, abra sem `--origem`", 2)
         if sid_portado and origem_sessao == sid_portado:
             return saida.erro("--origem igual a --sessao-id: a sessao nao e origem de si mesma", 2)
+    # `--agente`, `--em-nome-de` e `--conta` (card #3156, spec agente §11.1): quem e o agente, que cadeira
+    # responde e em que conta de SO ele roda. Vao juntos, so descrevem (nao concedem nada: alcance e o da
+    # pessoa pela porta) e entram na chave para o ops log repeti-los em toda linha da sessao filha.
+    if agente is not None:
+        import re as _re
+        ruim = [k for k, v in agente.items() if not _re.fullmatch(r"[a-z][a-z0-9_-]*", v or "")]
+        if ruim:
+            return saida.erro("--agente, --em-nome-de e --conta vao juntos e cada um e um slug (minusculas, digitos, "
+                              "- e _); fora do molde: " + ", ".join(ruim), 2)
     # etapa 2 — sujeito
     sujeito = (os.environ.get("PF_SUJEITO") or "").strip()
     if not sujeito:
@@ -338,6 +355,8 @@ def ato_abrir(cadeira: str, sessao_id: str | None, saida: Saida, dry_run: bool =
               "origem": "sessao abrir --dry-run"}
         if origem_sessao:
             ch["origem_sessao"] = origem_sessao
+        if agente:
+            ch.update(agente)
         motivo_dur = "dry-run: nao gravado"
         _imprime_abrir(ch, sid, cunhada, False, False, motivo_dur, avisos, saida)
         return 0
@@ -360,6 +379,8 @@ def ato_abrir(cadeira: str, sessao_id: str | None, saida: Saida, dry_run: bool =
                 existente["sujeito"] = sujeito
             if origem_sessao and not existente.get("origem_sessao"):
                 existente["origem_sessao"] = origem_sessao   # nunca troca a origem ja gravada
+            for k, v in (agente or {}).items():
+                existente.setdefault(k, v)                    # idem os atributos do agente
             ch = existente
         else:
             ch = {"sujeito": sujeito, "cadeira": slug, "canonizada": canonizada,
@@ -368,6 +389,8 @@ def ato_abrir(cadeira: str, sessao_id: str | None, saida: Saida, dry_run: bool =
                   "origem": "sessao abrir"}
             if origem_sessao:
                 ch["origem_sessao"] = origem_sessao
+            if agente:
+                ch.update(agente)
         rc_mem.set(chave, json.dumps(ch, ensure_ascii=False), ex=TTL_SESSAO_S)
     except Exception as e:  # noqa: BLE001
         return saida.erro(f"{_cura_msgmem(type(e).__name__)} — sessao_id cunhado e NAO gravado: {sid}",
@@ -466,6 +489,9 @@ def ato_ver(sessao_id: str, saida: Saida) -> int:
           f"   aberto_em: {ch.get('aberto_em') or '-'}")
     if ch.get("origem_sessao"):
         print(f"origem_sessao: {ch['origem_sessao']}")
+    for k in ATRIBUTOS_AGENTE:
+        if ch.get(k):
+            print(f"{k}: {ch[k]}")
     if regime:
         print(f"regime: {regime}")
     return 0
@@ -593,7 +619,7 @@ def ato_longjob(resto: list[str]) -> int:
 
 # ------------------------------------------------------------------ CLI
 USO = """uso:
-  sessao abrir     <cadeira> [--sessao-id <uuid>] [--origem <uuid>] [--dry-run] [--json]  autoriza (acesso decidir), cunha e grava a chave viva; --origem liga a filha a sessao de quem chamou
+  sessao abrir     <cadeira> [--sessao-id <uuid>] [--origem <uuid>] [--agente <slug> --em-nome-de <cadeira> --conta <unix>] [--dry-run] [--json]  autoriza (acesso decidir), cunha e grava a chave viva; --origem liga a filha a sessao de quem chamou; --agente/--em-nome-de/--conta descrevem o agente que a abre (spec agente §11.1)
   sessao ver       <sessao_id> [--json]                                  a chave como esta: sujeito, cadeira, regra, ordem_id
   sessao listar    [--cadeira <slug>] [--json]                           as sessoes vivas
   sessao encerrar  <sessao_id>                                           apaga sessao:{id}, ledger:{id}, giro:{id}; o duravel fica
@@ -620,6 +646,9 @@ def main(argv: list[str] | None = None) -> int:
         p.add_argument("cadeira", nargs="?")
         p.add_argument("--sessao-id", dest="sessao_id", default=None)
         p.add_argument("--origem", dest="origem", default=None)
+        p.add_argument("--agente", dest="agente", default=None)
+        p.add_argument("--em-nome-de", dest="em_nome_de", default=None)
+        p.add_argument("--conta", dest="conta_agente", default=None)
         p.add_argument("--dry-run", action="store_true")
     elif ato in ("ver", "encerrar"):
         p.add_argument("sessao_id", nargs="?")
@@ -635,7 +664,12 @@ def main(argv: list[str] | None = None) -> int:
     if sobra:
         return saida.erro(f"sessao {ato}: argumento desconhecido {sobra[0]!r}\n{USO}", 2)
     if ato == "abrir":
-        return ato_abrir(ns.cadeira or "", ns.sessao_id, saida, dry_run=ns.dry_run, origem=ns.origem)
+        agente = None
+        if ns.agente or ns.em_nome_de or ns.conta_agente:
+            agente = {"agente": ns.agente or "", "em_nome_de": ns.em_nome_de or "",
+                      "conta_agente": ns.conta_agente or ""}
+        return ato_abrir(ns.cadeira or "", ns.sessao_id, saida, dry_run=ns.dry_run, origem=ns.origem,
+                         agente=agente)
     if ato == "ver":
         return ato_ver(ns.sessao_id or "", saida)
     if ato == "listar":

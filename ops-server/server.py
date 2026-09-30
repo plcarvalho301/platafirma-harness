@@ -756,6 +756,33 @@ def _origem_da_sessao(sessao_id) -> str | None:
     return origem
 
 
+# Atributos do agente (card #3156, spec agente §11.1): `sessao abrir --agente/--em-nome-de/--conta` os grava
+# na chave viva da sessao filha e o ops log os repete na linha, ao lado da origem. So a sessao COM origem e
+# consultada (toda filha de agente tem uma), entao a sessao comum nao paga leitura nova. Cache como o da origem:
+# o que tem valor fica; o vazio vence em 60 s.
+_ATRIBUTOS_AGENTE = ("agente", "em_nome_de", "conta_agente")
+_AGENTES: dict[str, tuple[float, dict]] = {}
+
+
+def _atributos_do_agente(sessao_id) -> dict:
+    if not sessao_id or sessao_id == "-":
+        return {}
+    visto = _AGENTES.get(sessao_id)
+    if visto and (visto[1] or time.monotonic() - visto[0] < _ORIGEM_VAZIA_S):
+        return visto[1]
+    try:
+        raw = _rc().get(f"sessao:{sessao_id}")
+        d = json.loads(raw) if raw else {}
+        attrs = ({k: d[k] for k in _ATRIBUTOS_AGENTE if isinstance(d.get(k), str) and d[k]}
+                 if isinstance(d, dict) else {})
+    except Exception:                                       # noqa: BLE001
+        attrs = {}
+    if len(_AGENTES) >= _ORIGENS_TETO:
+        _AGENTES.clear()
+    _AGENTES[sessao_id] = (time.monotonic(), attrs)
+    return attrs
+
+
 def _audit(**campos) -> None:
     """Grava uma linha JSONL de auditoria. Nunca derruba a operação — mas falha de
     auditoria vai para o stderr (journal), porque auditoria que falha em silêncio é
@@ -781,6 +808,7 @@ def _audit(**campos) -> None:
         origem = _origem_da_sessao(reg["sessao_id"])
         if origem:
             reg["origem_sessao"] = origem
+            reg.update(_atributos_do_agente(reg["sessao_id"]))
         linha = (json.dumps(reg, ensure_ascii=False)[:LINHA_CAP] + "\n").encode()
         alvo = LOG_DIR / f"ops-{date.today().isoformat()}.jsonl"
         fd = os.open(alvo, os.O_WRONLY | os.O_APPEND | os.O_CREAT, 0o600)
