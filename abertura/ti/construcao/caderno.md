@@ -27,6 +27,7 @@
 - Dependência nova num venv se confere no venv construído da rev (`teste rodar <repo>@<chave> <teste efêmero> --chave <venv>`), exercitando o uso, não só o import. Em 29/09 o opf-fido 1.6.1 importava e `Fido()` sem argumento quebrava (procura formats-v104.xml; o pacote traz v109); o CLI funcionava. O teste efêmero sai com `repo git clean -f` antes do commit.
 - Pedido de binário no host (apt, /usr/local/bin) não tem verbo: antes de abrir exceção, procurar o equivalente que entra no lock do venv (siegfried → fido no #3189). Entra e sai com o lock, sem deriva no host.
 - Commitar no ramo de outra cadeira quando o ramo está aberto na bancada dela: bancada própria, `reset --hard origin/<ramo dela>`, commit, `repo git … push origin HEAD:<ramo dela>` (fast-forward) e, se a bancada dela estiver limpa, `merge --ff-only` nela.
+- Teste marcado «só na imagem» não é trava até se achar quem o roda: o gate executa venvs do host feitos de lock (`registro/venvs.json`), onde o teste de modelo pula, e o `.dockerignore` pode tirar `tests/` da imagem. Em 30/09 o conversor tinha as duas coisas e nenhuma chave de registro. Antes de contar um teste como portão, achar a chave e a lista VERDES que o executam.
 
 ## Diário de bordo
 
@@ -80,3 +81,8 @@
 - 2026-09-27 — o `lint` da bancada não roda pela porta (`run_command` executa o bin da release). Contorno encontrado na data foi: validar em fixture pelo `teste rodar`, promover e medir o real depois.
 - 2026-09-29 — nenhum verbo gerava uv.lock (pedidos da engenharia #3179 e de dados #3189). Consertado: `repo lock <repo>[@<chave>] <projeto> [--conferir]` (harness e29c075).
 - 2026-09-29 — `repo abrir <repo> <card>` saiu 3 com o ramo do card aberto na bancada de outra cadeira. Contorno encontrado na data foi: a lição de commitar no ramo de outra cadeira, acima.
+- 2026-09-30 — `fila` e `acervo` chamados como tool própria (carregados pelo ToolSearch) voltaram «Unknown tool». Contorno encontrado na data foi: `run_command` com a string do verbo.
+- 2026-09-30 — `acervo ler casa nota-tecnica <chave>` de 123 KB truncou em 50 KB; `release estado platafirma-casa` saiu 1 (não é família); `repo estado platafirma-casa` mostrou a bancada 54 commits atrás. Contorno encontrado na data foi: `repo atualizar platafirma-casa` e `read_file` por offset no caminho da bancada.
+- 2026-09-30 — `repo atualizar platafirma-conhecimento` saiu 3 (bancada no ramo ti/censo, sem upstream) e o origin/main local estava velho (96d8f55 contra d87833f do forge). Contorno encontrado na data foi: `repo git platafirma-conhecimento fetch origin` antes de `log` e `diff`.
+- 2026-09-30 — `release listar platafirma-conhecimento rag/docker-compose` respondeu «nenhum arquivo» com rag/docker-compose.gpu.yml existindo (o prefixo é lido como diretório). Quase afirmei rag-api sem GPU. Contorno encontrado na data foi: `release ler` do caminho exato e `acervo stack ver --json` para a lista de compose da stack.
+- 2026-09-30 — escrevi em carta (20260930T120942-ti) que nenhum verbo relocka, com `repo lock` no ar desde 29/09 e registrado neste diário. Contorno encontrado na data foi: carta de correção e comentário no #3192.
