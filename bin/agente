@@ -1,9 +1,9 @@
 #!/opt/platafirma/current/venv/harness/bin/python
 # agente — a caixa de especialistas: lista, projeta e roda quem pensa, com modelo, ferramentas e teto fixos
-# capacidade: construcao
+# capacidade: especialista
 # dono: ia
 # use para: especialista, sub-agente, revisor, varredor, rodar um agente consultado, projeção .claude/agents, caixa de ferramentas
-# atos: listar (leitura, construcao), ler (leitura, construcao), rodar (escrita, construcao), projetar (escrita, construcao)
+# atos: listar (leitura, especialista), ler (leitura, especialista), rodar (escrita, especialista), projetar (escrita, especialista)
 # ato: listar [--modelo <familia>] [--modo <modo>] [--json] — as declarações do posto, uma por linha
 # ato: ler <slug> — a declaração inteira de um especialista
 # ato: rodar <slug> [--cadeira <slug>] [--chapeu <slug>] [--json] — abre a sessão filha, monta a lente e chama o modelo na conta dele; a tarefa vem em stdin (no modo varrer o modelo a recebe com as linhas numeradas, `N |`)
@@ -21,7 +21,7 @@
 # ambiente: PF_SUJEITO (a pessoa em nome de quem o agente roda; obrigatoria em rodar; porta) · PF_SESSAO (a sessao de quem chamou; obrigatoria em rodar; porta) · PF_CADEIRA (porta) · PF_ORDEM_ID (porta) · PF_POSTO (opcional; padrao <bancada>/platafirma-posto, onde estao as declaracoes) · PF_BIN (opcional; padrao bin/ da propria arvore; so teste com stub) · PF_CLAUDE_BIN (opcional; padrao claude no PATH; so teste com stub) · OLLAMA_BASE_URL (opcional; o ollama local) · PLATAFIRMA_INSTANCIA (opcional; padrao /srv/platafirma/casa; var/log/agente e var/log/seg)
 # escrita: projetar grava .claude/agents/<slug>.md no posto; rodar grava a chave da sessao filha (sessao abrir) e uma linha em var/log/agente/; nada em listar|ler|projetar --conferir
 # depende: sessao, expediente, lib/raizes, lib/uso, pyyaml (venv harness)
-# conforme: parcial — a spec agente põe este verbo na capacidade `automacao` (nível 2), que o acervo ainda não tem (vocabulario arquitetura-negocio-operacao ingerido em 14/09): `construcao` até ela entrar, e a troca é esta linha; Gemini pelo `agy` ainda não roda (a execução sob jaiminho é da ti, spec agente §Aberto); agendado espera o `bot --roda agente:<slug>` (#3186); `sessao longjob` ja herda os atributos da chave
+# conforme: parcial — Gemini pelo `agy` ainda não roda (a execução sob jaiminho é da ti, spec agente §Aberto); agendado espera o `bot --roda agente:<slug>` (#3186); `sessao longjob` ja herda os atributos da chave
 #
 # Spec: spec agente (§2 declaração, §3 projeções, §4 ligações, §10 o verbo, §11 piso de segurança)
 from __future__ import annotations
@@ -560,7 +560,9 @@ def chama_claude(decl: dict, sistema: str, tarefa: str) -> dict:
         motivo = (p.stderr.strip().splitlines() or [str(obj.get("result") or "sem retorno")])[0]
         raise Falha(5, f"claude -p não concluiu (saiu {p.returncode}): {motivo[:200]}")
     u = obj.get("usage") or {}
-    entrada, saida = u.get("input_tokens", 0), u.get("output_tokens", 0)
+    # o cache conta: sem ele a entrada saía 4 tokens numa revisão de 4 mil de saída (medido em 01/10)
+    entrada = sum(u.get(k, 0) for k in ("input_tokens", "cache_creation_input_tokens", "cache_read_input_tokens"))
+    saida = u.get("output_tokens", 0)
     aviso = ""
     if entrada + saida > t["tokens_execucao"]:         # o CLI só corta por turnos: aqui se mede e se avisa
         aviso = f"tokens da execução {entrada + saida} passaram de tokens_execucao {t['tokens_execucao']} (medido, não cortado)"

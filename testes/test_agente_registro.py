@@ -30,14 +30,14 @@ def sql(monkeypatch):
 
 def test_capacidade_e_descricao_saem_do_cabecalho(sql):
     cap, desc, _ = sql
-    assert cap == "construcao"
+    assert cap == "especialista"
     assert desc.startswith("a caixa de especialistas") and "use para: especialista" in desc
-    assert "atos: listar (leitura, construcao), ler (leitura, construcao)" in desc
+    assert "atos: listar (leitura, especialista), ler (leitura, especialista)" in desc
 
 
 @pytest.mark.parametrize("ato,op", [("listar", "leitura"), ("ler", "leitura"), ("rodar", "escrita"), ("projetar", "escrita")])
 def test_cada_ato_entra_com_a_acao_e_a_folha(sql, ato, op):
-    assert f"'agente', '{ato}', 'construcao', '{op}', 'construcao'" in sql[2]
+    assert f"'agente', '{ato}', 'especialista', '{op}', 'especialista'" in sql[2]
 
 
 def test_o_acesso_de_cada_ato_e_declarado(sql):
