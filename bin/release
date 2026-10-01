@@ -72,6 +72,7 @@ CLASSES_SERVIDO=(
   "alcance"
   "card"
   "jobs"
+  "acervo"
 )
 
 uso_texto() {

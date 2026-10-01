@@ -78,12 +78,17 @@ def linha_ancora(classe, alvo, itens, sha_release):
     return linha, exit_code
 
 
-def relatorio(classe, alvo, itens, sha_release, como_json=False):
+def relatorio(classe, alvo, itens, sha_release, como_json=False, extra=None):
     """Imprime o relatorio (texto ou --json) e devolve o exit code.
 
     `itens`: lista de (nome, Veredito). Texto: ancora + uma linha por item, com motivo
-    quando nao-conforme. JSON: {"ancora", "classe", "alvo", "release", "itens": [...]}."""
+    quando nao-conforme. JSON: {"ancora", "classe", "alvo", "release", "itens": [...]}.
+
+    `extra` (opcional): o que a classe diz alem dos itens e que NAO pesa no exit — hoje
+    `avisos` (lista de linhas) e `pendencias` (lista de dicts), da classe `acervo`. No JSON
+    entra como chaves de topo; no texto, as linhas de `avisos` saem depois dos itens."""
     linha, exit_code = linha_ancora(classe, alvo, itens, sha_release)
+    extra = extra or {}
     if como_json:
         print(json.dumps({
             "ancora": linha,
@@ -91,6 +96,7 @@ def relatorio(classe, alvo, itens, sha_release, como_json=False):
             "alvo": alvo,
             "release": sha_release,
             "itens": [{"nome": nome, **v.dict()} for nome, v in itens],
+            **{k: v for k, v in extra.items() if k not in ("ancora", "classe", "alvo", "release", "itens")},
         }, ensure_ascii=False))
         return exit_code
     print(linha)
@@ -100,4 +106,10 @@ def relatorio(classe, alvo, itens, sha_release, como_json=False):
         print(f"    {marca} {nome}{desde}")
         if v.motivo:
             print(f"        {v.motivo}")
+    for aviso in extra.get("avisos") or []:
+        print(f"    --  {aviso}")
+    for p in extra.get("pendencias") or []:
+        for imp in p.get("impressoes") or []:
+            print(f"        -> {p.get('para')}: {imp.get('impressao')} (obra {imp.get('obra')}, "
+                  f"{imp.get('titulo') or 'sem titulo'})")
     return exit_code

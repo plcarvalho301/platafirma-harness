@@ -100,6 +100,12 @@
                    quando chama verbo, habilitado, ultima execucao sem falha; e o
                    timer que um instalador promete e nao esta agendado (card #3147).
 
+  acervo           predicados de §11 da spec espelho-de-leitura sobre o catalogo e o motor
+                   servidos (bin/_release/conferir/predicados_acervo.py): hoje o 7
+                   (fidelidade, sem bloqueante de classe A em papel de corpo) e o 9
+                   (veredito da regua vigente), e a pendencia do motor de §4.2 item 6,
+                   dirigida a ia, que nao pesa no exit. Catalogo ou motor fora: sai 5.
+
    vocabulario [alvo]
                     varre `<verbo> <ato>` entre crases em dono.md, oficio.md,
                     skills/*/SKILL.md e docs/spec_*.md e confere contra os atos
@@ -3011,6 +3017,9 @@ def main(argv):
         return conferir_card(alvo, como_json=como_json)
     if classe == "jobs":
         return conferir_jobs(alvo, como_json=como_json)
+    if classe == "acervo":
+        import predicados_acervo
+        return predicados_acervo.conferir_acervo(alvo, _sha_release(), como_json=como_json)
     if como_json:
         print(json.dumps({"erro": f"classe desconhecida: {classe}"}))
     uso(f"classe desconhecida: {classe}")
