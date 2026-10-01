@@ -30,9 +30,10 @@ conteúdo não aparece, nem como título.
 1. A resposta literal ao que ele perguntou, ou a ação nomeada. Nada antes dela, salvo
    linha de estado e chapéu.
 2. O que ficou pronto e o que a cadeira decidiu: o que subiu, o que falta, a escolha
-   feita e declarada. `ENTREGA:`, `ENTREGUE:` e `PUBLICADO:` abrem esta parte. Toda
-   subida no turno tem a sua linha, sem exceção: `PUBLICADO: <o quê> — na casa`
-   (documento) ou `— no ar` (código).
+   feita e declarada. `ENTREGA:`, `ENTREGUE:` e `PUBLICADO:` abrem esta parte, cada
+   linha com ✅ na frente (`✅ ENTREGUE: #…`), para ele achar o que fechou mesmo num
+   relato longo; ✅ não se usa para mais nada. Toda subida no turno tem a sua linha,
+   sem exceção: `✅ PUBLICADO: <o quê> — na casa` (documento) ou `— no ar` (código).
 3. 🔵 O que o dono decide, só quando as duas pernas existem no material (card, pedido,
    fonte): opções numeradas, uma linha cada, o custo de cada uma, a recomendada com 🟢.
    Ação já decidida por card ou direção anterior não é escolha: vira uma linha na parte
@@ -134,7 +135,7 @@ faltou.
 | entregar valor de negócio | `ENTREGA: #<feat> «retorno em uma linha» — tarefas mover\|ler`, que abre a revisão com ele | pai em `em-homologacao`, conferido pela gestão estratégica ou pela cadeira dona do card. Story e task relatam `ENTREGUE: #<story> \| PARCIAL: #<feat>; faltam #a #b`, do retorno de `tarefas mover`; `PARCIAL` qualifica só feature e épico |
 
 `PARADA:` e `NEGATIVA:` são a primeira linha da resposta; `ENTREGA:`, `ENTREGUE:` e
-`PUBLICADO:` abrem a parte 2 do molde. A âncora é o retorno do verbo em uma linha, nunca
+`PUBLICADO:` abrem a parte 2 do molde, com ✅ na frente. A âncora é o retorno do verbo em uma linha, nunca
 o bloco cru.
 
 ## 7. Antes de responder
