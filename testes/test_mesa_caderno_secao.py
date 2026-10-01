@@ -1,6 +1,7 @@
 """`mesa caderno <chapeu> --secao <slug>`: so a secao do caderno que o agente delegado le (card #3158).
 
-O pacote cadeirinha pede a secao `conhecimento-curado`; o diario de bordo e da cadeira. Os cadernos
+O pacote cadeirinha pedia a secao `conhecimento-curado` ate a #3217, que o trocou por licao e premissa
+do banco (`--categoria licao,premissa`); o recorte segue para quem le o legado. Os cadernos
 da casa tem dois formatos de titulo, e o do devops mistura os dois no mesmo arquivo: `## titulo` e
 TITULO EM MAIUSCULAS (formato antigo). As duas secoes de mesmo slug saem juntas.
 
