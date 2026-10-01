@@ -58,12 +58,22 @@ case "$cmd" in
     # unit, e verbo que exige identidade (infra up, migrar aplicar) recusava com
     # «PF_SUJEITO ausente». Repassa so as variaveis presentes; ausente segue ausente (o
     # verbo do job decide, sem fallback aqui).
+    # Atributos do agente (card #3156, spec agente §11.1): `sessao longjob` os le da chave viva e
+    # os poe no ambiente antes do exec; aqui so seguem adiante e entram no cabecalho do log, que e
+    # onde a trilha do segundo plano diz quem agiu, por qual agente e em nome de que cadeira.
     ident=()
-    for v in PF_SUJEITO PF_CADEIRA PF_SESSAO PF_ORDEM_ID PF_SUPERFICIE; do
+    for v in PF_SUJEITO PF_CADEIRA PF_SESSAO PF_ORDEM_ID PF_SUPERFICIE \
+             PF_AGENTE PF_EM_NOME_DE PF_CONTA_AGENTE PF_ORIGEM_SESSAO; do
       if [ -n "${!v:-}" ]; then ident+=("--setenv=$v=${!v}"); fi
     done
-    printf '# unit=%s\n# inicio=%s\n# cwd=%s\n# sujeito=%s\n# comando=%s\n' \
-      "$unit" "$(date -Is)" "$cwd" "${PF_SUJEITO:-(ausente)}" "$*" >> "$log"
+    printf '# unit=%s\n# inicio=%s\n# cwd=%s\n# sujeito=%s\n' \
+      "$unit" "$(date -Is)" "$cwd" "${PF_SUJEITO:-(ausente)}" >> "$log"
+    if [ -n "${PF_AGENTE:-}" ]; then
+      printf '# agente=%s\n# em_nome_de=%s\n# origem=%s\n# conta=%s\n' \
+        "$PF_AGENTE" "${PF_EM_NOME_DE:-(ausente)}" "${PF_ORIGEM_SESSAO:-(ausente)}" \
+        "${PF_CONTA_AGENTE:-(ausente)}" >> "$log"
+    fi
+    printf '# comando=%s\n' "$*" >> "$log"
     systemd-run --user --unit="$unit" --quiet \
       "${ident[@]}" \
       --property=WorkingDirectory="$cwd" \
