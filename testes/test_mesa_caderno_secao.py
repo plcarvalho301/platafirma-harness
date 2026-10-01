@@ -3,14 +3,16 @@
 O pacote cadeirinha pede a secao `conhecimento-curado`; o diario de bordo e da cadeira. Os cadernos
 da casa tem dois formatos de titulo, e o do devops mistura os dois no mesmo arquivo: `## titulo` e
 TITULO EM MAIUSCULAS (formato antigo). As duas secoes de mesmo slug saem juntas.
+
+Desde a #3218 o caderno mora no banco, uma linha por entrada; o arquivo de antes chega como legado
+a triar (sessao.caderno_legado) e e nele que a secao se recorta, no corpo do chapeu.
 """
 
 from __future__ import annotations
 
 import importlib.util
-import io
 import os
-from contextlib import redirect_stdout
+from datetime import date
 from importlib.machinery import SourceFileLoader
 from pathlib import Path
 
@@ -99,46 +101,34 @@ def test_secao_inexistente_e_none():
     assert mesa._secao_do_caderno("", "conhecimento-curado") is None
 
 
-@pytest.fixture
-def caderno(tmp_path, monkeypatch):
-    slot = tmp_path / "devops"
-    slot.mkdir()
-    (slot / "caderno.md").write_text(MISTO, encoding="utf-8")
-    monkeypatch.setattr(mesa, "cadeira", lambda: "engenharia")
-    return tmp_path
+LEGADO = {"chave_origem": "abertura/engenharia/devops/caderno.md", "chapeu": "devops",
+          "bytes": len(MISTO.encode("utf-8")), "capturado_em": None, "texto": MISTO}
 
 
-def _corpo(d, slot, secao=None):
-    f = io.StringIO()
-    with redirect_stdout(f):
-        rc = mesa._corpo_caderno(str(d), slot, secao)
-    return rc, f.getvalue()
+def _corpo(secao=None):
+    """O corpo do chapeu sem entrada no banco e com o legado ainda nao triado."""
+    return mesa._corpo_texto("engenharia", "devops", [], [LEGADO], {}, date(2026, 10, 1),
+                             secao=secao)
 
 
-def test_corpo_com_secao_traz_so_ela_e_diz_qual(caderno):
-    rc, out = _corpo(caderno, "devops", "conhecimento-curado")
-    assert rc == 0
-    assert out.startswith("===== abertura/engenharia/devops/caderno.md#conhecimento-curado =====")
+def test_corpo_com_secao_traz_so_ela_do_legado_e_diz_qual():
+    out = _corpo("conhecimento-curado")
+    assert "===== legado a triar: abertura/engenharia/devops/caderno.md#conhecimento-curado (" in out
     assert "DIARIO DE BORDO" not in out and "Exit 1 tem sentido oposto" in out
 
 
-def test_corpo_sem_secao_segue_inteiro_como_antes(caderno):
-    rc, out = _corpo(caderno, "devops")
-    assert rc == 0
-    assert out.startswith("===== abertura/engenharia/devops/caderno.md =====\n")
-    assert out.endswith(MISTO)
+def test_corpo_sem_secao_traz_o_legado_inteiro():
+    out = _corpo()
+    assert "===== legado a triar: abertura/engenharia/devops/caderno.md (" in out
+    assert MISTO.rstrip("\n") in out
 
 
-def test_secao_ausente_e_peca_vazia_com_aviso_nao_erro(caderno):
-    rc, out = _corpo(caderno, "devops", "nao-tem")
-    assert rc == 0
-    assert out.strip() == "caderno devops: sem a secao nao-tem"
+def test_secao_ausente_no_legado_e_aviso_nao_erro():
+    assert "legado devops: sem a secao nao-tem" in _corpo("nao-tem")
 
 
-def test_a_secao_corta_o_tamanho(caderno):
-    _, inteiro = _corpo(caderno, "devops")
-    _, secao = _corpo(caderno, "devops", "conhecimento-curado")
-    assert len(secao) < len(inteiro)
+def test_a_secao_corta_o_tamanho():
+    assert len(_corpo("conhecimento-curado")) < len(_corpo())
 
 
 def test_cli_secao_sem_chapeu_e_erro_de_uso():
