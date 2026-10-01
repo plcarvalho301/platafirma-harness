@@ -81,7 +81,8 @@ uso (gramatica arq:0106 — acervo <ato> <particao> <entidade> [seletor]):
                   o texto da obra pelo espelho de leitura, do comeco e em ordem
   acervo curar    obra --situacao|--expurgar|--restaurar|--promover|--reclassificar|--conceito <...>
   acervo curar    obra --recortar <obra> · --reextrair <obra> [--metodo <m>] · --expurgar|--restaurar --espelhos
-  acervo curar    obra --reextrair <id,id…|@arquivo> --bancada <pasta> [--metodo perfil|docling] [--refazer]
+  acervo curar    obra --reextrair --lote [--ordem <lista>] [--apply] · --rejulgar --lote [--apply]
+  acervo curar    obra --reextrair <id,id…|@arquivo> --bancada <pasta> [--metodo <slug>] [--refazer]
                   converte em pasta de saida (nao escreve no acervo; retomavel); depois:
   acervo listar   obra bancada <pasta> [--json] [--estratos <arquivo>]   perfil x docling por obra (card #3187)
   acervo curar    obra --relacionar <de> <para> --tipo <t> --garantia <g> --motivo <m> [--apply]
