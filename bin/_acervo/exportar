@@ -153,7 +153,10 @@ def main(argv: list) -> int:
         return 2
     wt = bancada_do_repo()
     py = python_do_rag()
-    env = {**os.environ, **ambiente_da_ingestao(), "PYTHONPATH": str(wt / "rag")}
+    # rag/ e conversor/: desde a #3205 o motor_acervo importa o pacote `conversor`, que mora ao
+    # lado de rag/ na mesma árvore; sem ele o export morria no import (medido em 01/10, #3202)
+    env = {**os.environ, **ambiente_da_ingestao(),
+           "PYTHONPATH": os.pathsep.join([str(wt / "rag"), str(wt / "conversor")])}
     destino = wt / "ontologia" / "acervo"
     roda("1/2 export do schema acervo -> ontologia/acervo/*.jsonl",
          [py, "-m", "motor_acervo.cli", "exportar-acervo", "--out", str(destino)],
