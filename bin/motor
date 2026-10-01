@@ -4,15 +4,15 @@
 # dono: ia
 # componente: platafirma-motor
 # classe: B
-# use para: "o que o acervo diz sobre X" (buscar <particao>), medir a bateria de um motor (medir), reindexar uma particao (indexar), ler/mexer um ajuste (ajuste)
+# use para: "o que o acervo diz sobre X" (buscar <particao>), medir a bateria de um motor (medir), indexar a impressao selada da obra marcada para indexar (indexar biblioteca), ler/mexer um ajuste (ajuste)
 # atos: listar (leitura, texto), ajuste (leitura|escrita, config), buscar (leitura, busca), medir (leitura, medida), indexar (escrita, indice) — buscar/medir/indexar exigem particao: motor <inst> <ato> <particao> ...
 # forma: json
 # cauda: nao
 # poda: cosmetica@rag,casa,buscar
-# consome: rag-extractor-api@platafirma-conhecimento/rag/openapi.yaml >=1.0 (buscar, medir; endpoint por instancia em motor-instancias.json)
-# ambiente: RAG_PYTHON origem-shell RAG_PYTHON=<python-do-rag> (indexar; ausente cai em $PLATAFIRMA_RELEASE/venv/rag/bin/python); CORPUS_DIR origem-shell (indexar; ausente usa $PLATAFIRMA_INSTANCIA/dados/corpus); PLATAFIRMA_RELEASE origem-shell [=/opt/platafirma/current] (codigo do rag, gabarito); PLATAFIRMA_INSTANCIA origem-shell [=/srv/platafirma/casa] (segredos, log, medicoes, sobreposicao do compose); OPS_LOG_DIR origem-shell [=$PLATAFIRMA_INSTANCIA/var/log/ops]; PF_BIN origem-shell (teste; ausente e o bin/ da propria arvore); PF_SESSAO porta; PF_ORDEM_ID porta; PF_CADEIRA porta; PF_CHAPEU porta; OPS_NAME porta; USER shell
+# consome: rag-extractor-api@platafirma-conhecimento/rag/openapi.yaml >=1.0 (buscar, medir, indexar; endpoints por instancia em motor-instancias.json)
+# ambiente: PLATAFIRMA_RELEASE origem-shell [=/opt/platafirma/current] (gabarito); PLATAFIRMA_INSTANCIA origem-shell [=/srv/platafirma/casa] (segredos, log, medicoes, sobreposicao do compose); OPS_LOG_DIR origem-shell [=$PLATAFIRMA_INSTANCIA/var/log/ops]; PF_BIN origem-shell (teste; ausente e o bin/ da propria arvore); PF_SESSAO porta; PF_ORDEM_ID porta; PF_CADEIRA porta; PF_CHAPEU porta; OPS_NAME porta; USER shell
 # escreve: $PLATAFIRMA_INSTANCIA/var/log/ops/*.jsonl (evento consulta, best-effort); env da ingestao na instancia, arquivo NOME=valor ou $PLATAFIRMA_INSTANCIA/segredos/<stack>/<VAR> (ajuste de corte, via motor-instancias.json); $PLATAFIRMA_INSTANCIA/deploy/<stack>/compose.override.yaml (ajuste de container); $PLATAFIRMA_INSTANCIA/var/medicoes/*.json (medir)
-# depende: docker (ajuste servido, medir banco, indexar); ajudante bin/_release/stack (ajuste que promove); rede (consome a API do rag)
+# depende: docker (ajuste servido, medir banco); ajudante bin/_release/stack (ajuste que promove); rede (consome a API do rag)
 # substitui: docker exec rag-* ; curl ao endpoint de busca
 # O verbo e `motor`; a instancia e argumento (arq:0037; veto do verbo `rag`).
 # atos: a capacidade e do (verbo, ato) (arq:0110 §6). Transicao vigente->conforme em spec_motor §5.
@@ -32,19 +32,24 @@ DOCKER = {"DOCKER_HOST": "unix:///run/user/1001/docker.sock"}
 
 
 SPEC = "spec motor (acervo ler casa spec motor)"
-PARTICOES = ("obra", "casa", "registro")
+# arq:0106 §3: as particoes sao biblioteca, casa e registro. `obra` e o nome anterior da
+# biblioteca e segue aceito; a API do rag ainda chama a biblioteca de `obra` (_PARA_A_API).
+PARTICOES = ("biblioteca", "casa", "registro")
+_SINONIMOS = {"obra": "biblioteca"}
+_PARA_A_API = {"biblioteca": "obra"}
+_UUID = re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$", re.IGNORECASE)
 
 def resolve_particao(argv, ato):
     """Gramatica arq:0106: motor <inst> <ato> <particao>. Forma vigente sem particao
-    NAO some em silencio: cai em 'obra' com aviso ao stderr apontando a forma nova e
-    a spec (spec_motor §5). Enquanto so 'obra' esta povoada, o default e seguro."""
-    if argv and argv[0] in PARTICOES:
-        return argv[0], argv[1:]
+    NAO some em silencio: cai em 'biblioteca' com aviso ao stderr apontando a forma nova e
+    a spec (spec_motor §5). Enquanto so a biblioteca esta povoada, o default e seguro."""
+    if argv and (argv[0] in PARTICOES or argv[0] in _SINONIMOS):
+        return _SINONIMOS.get(argv[0], argv[0]), argv[1:]
     sys.stderr.write(
         f"motor {ato}: sem particao — a forma conforme e "
         f"`motor <inst> {ato} <particao> ...` (particoes: {', '.join(PARTICOES)}).\n"
-        f"  assumindo 'obra' (unica povoada hoje); declare a particao.\n  {SPEC}\n")
-    return "obra", argv
+        f"  assumindo 'biblioteca' (unica povoada hoje); declare a particao.\n  {SPEC}\n")
+    return "biblioteca", argv
 
 def sh(cmd, env_extra=None, **kw):
     env = {**os.environ, **(env_extra or {}), **DOCKER}
@@ -129,11 +134,15 @@ def uso(cod=2):
                      [--expansao [--peso-conceito X]]
                                         bateria no gold da particao, pela porta servida:
                                         as duas familias separadas + delta contra a ultima
-  motor <inst> indexar <particao> [--apply]  fases 2-5: materializa, chunka, embedda
-                                        (o que ENTRA no corpus e `acervo ingerir`)
+  motor <inst> indexar biblioteca [--obra <uuid>,…] [--promover] [--autor <slug>] [--apply] [--json]
+                                        indexa a impressao selada da obra marcada para
+                                        indexar, no rag-api, sem po-la no ar (plano sem --apply);
+                                        --promover poe impressao e indice no ar depois do gate
+  motor <inst> indexar biblioteca --relatorio <lote> [--json]
+                                        o lote aberto, impressao a impressao
 
 gramatica (arq:0106): motor <inst> <ato> <particao> [seletor]. instancia = quem
-busca (ortogonal a particao); particao = onde (obra, casa, registro).
+busca (ortogonal a particao); particao = onde (biblioteca, casa, registro; obra = biblioteca).
 doc de produto: """ + SPEC + """
 
 instancias: """ + ", ".join(reg().keys()))
@@ -176,7 +185,7 @@ def _grava_atomico(alvo, texto):
 
 def le_env_da_ingestao(inst):
     """Ajuste da metade OFFLINE. A ingestao nao roda em container: roda no host, com o venv do
-    rag, e recebe este env como ambiente (`indexar`). Ler o compose para dizer o valor de
+    rag, e recebe este env como ambiente (o corte de linha de comando). Ler o compose para dizer o valor de
     corte diria o que o servico de BUSCA carrega — e a busca nao corta nada."""
     caminho = caminho_env(inst)
     out = {}
@@ -322,60 +331,129 @@ def cmd_ajuste(nome, inst, argv):
         sys.exit(1)
 
 
-def python_do_rag():
-    # So o venv da release (construido do lock na promocao); venv de bancada nunca e runtime.
-    for c in [os.environ.get("RAG_PYTHON", ""),
-              str(raizes.release() / "venv" / "rag" / "bin" / "python")]:
-        if c and os.access(c, os.X_OK):
-            return c
-    print("motor rag indexar: nenhum python com rag_extractor executavel por este usuario.\n"
-          "  aponte um com:  RAG_PYTHON=/caminho/para/python motor rag indexar ...", file=sys.stderr)
-    sys.exit(1)
+# O lote de indexacao roda no rag-api (#3203): a API ja tem o embedder carregado, autentica pelo
+# mesmo token da busca e devolve o id em segundos. Erro do lote vira exit da tabela da casa.
+_EXIT_DO_LOTE = {404: 1, 409: 4, 422: 1}
+USO_INDEXAR = ("motor <inst> indexar biblioteca [--obra <uuid>[,<uuid>…]] [--promover] [--autor <slug>] "
+               "[--apply] [--json]\n  motor <inst> indexar biblioteca --relatorio <lote> [--json]")
+
+def _lote_indexacao(inst, tok, corpo=None, lote=""):
+    """POST do plano (o lote, com `aplicar`) ou GET do relatorio, na rota `indexacao` do registro."""
+    url = inst.get("indexacao") or ""
+    if not url:
+        print("motor indexar: a instancia nao declara `indexacao` em motor-instancias.json",
+              file=sys.stderr)
+        sys.exit(1)
+    if lote:
+        url = url.rstrip("/") + "/" + lote
+    req = urllib.request.Request(
+        url, data=json.dumps(corpo).encode() if corpo is not None else None,
+        headers={"Authorization": f"Bearer {tok}", "Content-Type": "application/json"})
+    try:
+        with urllib.request.urlopen(req, timeout=300) as r:
+            return json.loads(r.read().decode())
+    except urllib.error.HTTPError as e:
+        if e.code not in _EXIT_DO_LOTE:
+            _trata_erro_http(e, "motor indexar")
+        try:
+            pj = json.loads(e.read().decode("utf-8", "replace"))
+            motivo = f"{pj.get('title')}: {pj.get('detail')}"
+        except Exception:
+            motivo = f"HTTP {e.code}"
+        print(f"motor indexar: {motivo}", file=sys.stderr)
+        sys.exit(_EXIT_DO_LOTE[e.code])
+    except urllib.error.URLError as e:
+        _trata_erro_http(e, "motor indexar")
+
+def _texto_do_plano(p):
+    """Primeira linha: o que o plano (ou o lote aberto) faz; depois, impressao a impressao."""
+    conta = (f"{p.get('a_indexar', 0)} a indexar ({p.get('trechos_a_embedar', 0)} trechos a embedar) · "
+             f"{p.get('prontas', 0)} com indice aprovado"
+             + ("" if p.get("promover") else " (sobem com --promover)")
+             + f" · {p.get('fora_transcritas', 0)} transcrita(s) fora, o promover nao pede indice"
+             f" · {p.get('indexadas', 0)} de {p.get('seladas', 0)} seladas marcadas para indexar")
+    if p.get("modo") == "aplicado":
+        return (f"lote {p['lote']} aberto no rag-api, em segundo plano: {p.get('n', 0)} impressao(oes) · "
+                f"{conta}\nacompanhar: {p.get('acompanhar')}")
+    linhas = [f"plano: {p.get('n', 0)} impressao(oes) · {conta}"]
+    for it in (p.get("itens") or [])[:20]:
+        linhas.append(f"  {it['posicao']:>3}  {it['obra_id']}  {(it.get('titulo') or '')[:40]:<40}  "
+                      f"{it.get('vetores', 0)}/{it.get('elegiveis', 0)} vetores  {it['acao']}")
+    if p.get("n", 0) > 20:
+        linhas.append(f"  … +{p['n'] - 20}")
+    if p.get("n", 0):
+        linhas.append("para valer: o mesmo comando com --apply")
+    return "\n".join(linhas)
+
+def _texto_do_relatorio(r):
+    """Primeira linha: estado do lote e a contagem; depois os problemas, e os itens se forem poucos."""
+    estados = ", ".join(f"{k} {v}" for k, v in sorted((r.get("por_estado") or {}).items()))
+    linhas = [f"lote {r['lote']}: {r.get('estado')} · {estados or 'nada a fazer'} · "
+              f"{r.get('embedados', 0)} vetores de trecho · {round((r.get('ms') or 0) / 1000)} s"]
+    itens = r.get("itens") or []
+    mostrar = itens if len(itens) <= 30 else [i for i in itens if i.get("problema")]
+    for it in mostrar:
+        gate = it.get("gate") or {}
+        linhas.append(f"  {it.get('estado'):<13} {it['obra_id']}  {(it.get('titulo') or '')[:40]:<40}  "
+                      f"{gate.get('vetores', '-')}/{gate.get('elegiveis', '-')}  "
+                      f"{it.get('problema') or ('gate ok' if gate.get('aprovado') else '')}")
+    if len(itens) > 30:
+        linhas.append(f"  ({len(itens)} itens; --json traz todos)")
+    return "\n".join(linhas)
 
 
 def cmd_indexar(inst, argv):
-    """Fases 2-5 do trilho: materializa, chunka, embedda, propaga faceta, embedda meta.
-    Fase 1 (o que entra no corpus) e curadoria: fica em `acervo ingerir`."""
+    """O estagio Indexar da arq:0119 §2 (#3203): o motor recebe a impressao selada da obra marcada
+    «transcrita e indexada» e monta o indice dela (trecho e faceta) sem po-lo no ar; o `acervo
+    promover` poe impressao e indice em servico juntos, e `--promover` o encadeia depois do gate.
+    Roda no rag-api: plano, lote em segundo plano e relatorio. O trilho antigo, que materializava o
+    arquivo e cortava no motor, saiu: o motor nao corta a partir do arquivo (arq:0119, Consequencias)."""
     particao, argv = resolve_particao(argv, "indexar")
-    apply_ = "--apply" in argv
-    # codigo do rag: a arvore da release onde mora o compose da stack (so-leitura).
-    compose = na_release(inst.get("compose"))
-    if not compose:
-        print(f"motor indexar: compose do registro fora da release: {inst.get('compose')!r}",
-              file=sys.stderr)
-        sys.exit(1)
-    rag = os.path.dirname(compose)
-    py = python_do_rag()
-    # corpus materializado e dado da instancia; a release nao se escreve.
-    destino = os.environ.get("CORPUS_DIR", str(raizes.instancia() / "dados" / "corpus"))
-    # ambiente da ingestao: os segredos da stack, lidos por nome (nada de .env em arvore).
-    env_ing = le_env_da_ingestao(inst)
-    passos = [
-        ("materializacao — PDF e sidecar em " + destino,
-         f"{py} -m rag_extractor.cli materializar-acervo {destino}" + (" --apply" if apply_ else "")),
-        ("chunking  [degrau c]", f"{py} -m rag_extractor.cli ingest {destino}"),
-        ("vetor de texto  [degrau d]", f"{py} -m rag_extractor.cli embed"),
-        ("propagacao de faceta para documents/chunks",
-         f"{py} -m rag_extractor.cli sincronizar-acervo" + (" --apply" if apply_ else "")),
-        ("vetor de metadado  [degrau e]", f"{py} -m rag_extractor.cli embed-meta"),
-    ]
-    escada = os.path.join(BIN, "acervo")
-    print("\n== escada antes")
-    print(sh(f"{escada} escada").stdout)
-    for i, (titulo, cmd) in enumerate(passos, 1):
-        print(f"\n== {i}/{len(passos)}  {titulo}")
-        if not apply_ and (" embed" in cmd or " ingest " in cmd or "--apply" not in cmd):
-            print(f"   (dry-run) rodaria: {cmd.split('cli ',1)[1]}")
+    if particao != "biblioteca":
+        print(f"motor indexar {particao}: so a biblioteca indexa por este ato; a casa indexa na "
+              f"ingestao da casa.\n  {USO_INDEXAR}", file=sys.stderr)
+        sys.exit(2)
+    obras, lote, autor = [], "", os.environ.get("PF_CADEIRA") or "ia"
+    apply_ = promover = como_json = False
+    i = 0
+    while i < len(argv):
+        a = argv[i]
+        if a in ("--obra", "--obras", "--relatorio", "--autor"):
+            if i + 1 >= len(argv) or argv[i + 1].startswith("--"):
+                print(f"indexar: {a} exige um valor.\n  {USO_INDEXAR}", file=sys.stderr)
+                sys.exit(2)
+            v = argv[i + 1]
+            if a == "--relatorio":
+                lote = v
+            elif a == "--autor":
+                autor = v
+            else:
+                obras += [o.strip() for o in v.split(",") if o.strip()]
+            i += 2
             continue
-        r = sh(f"cd {rag} && PYTHONPATH={rag} {cmd}", env_extra=env_ing)
-        print((r.stdout or r.stderr).strip()[-1200:])
-        if r.returncode != 0:
-            print(f"\nPAROU no passo {i}: {titulo}", file=sys.stderr)
-            sys.exit(1)
-    print("\n== escada depois")
-    print(sh(f"{escada} escada").stdout)
-    if not apply_:
-        print("DRY-RUN — nada foi escrito. Para valer:  motor rag indexar --apply")
+        if a == "--apply":
+            apply_ = True
+        elif a == "--promover":
+            promover = True
+        elif a == "--json":
+            como_json = True
+        else:
+            print(f"indexar: argumento desconhecido {a!r}.\n  {USO_INDEXAR}", file=sys.stderr)
+            sys.exit(2)
+        i += 1
+    for valor in obras + ([lote] if lote else []):
+        if not _UUID.match(valor):
+            print(f"indexar: {valor!r} nao e uuid (obra e lote vao pelo uuid).\n  {USO_INDEXAR}",
+                  file=sys.stderr)
+            sys.exit(2)
+    tok = token_da(inst)
+    if lote:
+        r = _lote_indexacao(inst, tok, lote=lote)
+        print(json.dumps(r, ensure_ascii=False, indent=1) if como_json else _texto_do_relatorio(r))
+        return
+    r = _lote_indexacao(inst, tok, {"autor": autor, "aplicar": apply_, "obras": obras,
+                                    "promover": promover})
+    print(json.dumps(r, ensure_ascii=False, indent=1) if como_json else _texto_do_plano(r))
 
 
 # ---------------------------------------------------------------- evento 'consulta'
@@ -459,7 +537,7 @@ def cmd_buscar(nome_inst, inst, argv):
         sys.exit(2)
 
     particao, resto = resolve_particao(argv, "buscar")
-    corpo = {"particao": particao}
+    corpo = {"particao": _PARA_A_API.get(particao, particao)}
     conceitos = []
     palavras = []
     i = 0
@@ -694,8 +772,8 @@ def ultima_medicao(inst, gabarito):
 
 def cmd_medir(nome, inst, argv):
     particao, argv = resolve_particao(argv, "medir")
-    if particao != "obra" and "--gabarito" not in argv:
-        print(f"motor medir {particao}: sem gabarito para esta particao. So 'obra' tem\n"
+    if particao != "biblioteca" and "--gabarito" not in argv:
+        print(f"motor medir {particao}: sem gabarito para esta particao. So 'biblioteca' tem\n"
               f"  gabarito canonico hoje; passe --gabarito <arq> para as outras.\n  {SPEC}",
               file=sys.stderr)
         sys.exit(2)
