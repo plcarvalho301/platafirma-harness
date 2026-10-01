@@ -599,6 +599,16 @@ def test_projetar_gera_o_explore_e_o_conferir_conta_a_projecao(mundo, capsys):
     assert agente.ato_projetar(True, None) == 0
     assert "conforme: 2 declaração(ões), 2 projeção(ões) Claude" in capsys.readouterr().out
 
+def test_claude_so_consultado_segue_projetado_ao_lado_do_suplante(mundo, capsys):
+    """Regressão de 01/10: consultor e curador são Claude sem ligação delegada e têm projeção desde o #3156."""
+    mundo.escreve(REVISOR, CONSULTOR, EXPLORE)
+    assert agente.ato_projetar(False, None) == 0
+    gerados = sorted(p.name for p in (mundo.posto / ".claude" / "agents").glob("*.md"))
+    assert gerados == ["consultor.md", "revisor.md", "varredor.md"]
+    capsys.readouterr()
+    assert agente.ato_projetar(True, None) == 0
+    assert "3 projeção(ões) Claude" in capsys.readouterr().out
+
 def test_rodar_consultado_usa_o_qwen_mesmo_com_delegado_em_claude(mundo, ollama, pessoa, monkeypatch, capsys):
     mundo.escreve(EXPLORE)
     assert roda(monkeypatch, "varredor") == 0

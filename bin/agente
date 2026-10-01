@@ -98,9 +98,13 @@ def efetiva(decl, ligacao: str):
     return {**decl, **{k: extra[k] for k in SOBRESCREVE if k in extra}}
 
 def tem_projecao(decl) -> bool:
-    """Só a ligação delegada em Claude ganha `.claude/agents` (spec agente §3)."""
-    return (isinstance(decl, dict) and isinstance(decl.get("ligacoes"), list) and "delegado" in decl["ligacoes"]
-            and familia_de(efetiva(decl, "delegado")) == "claude")
+    """Ganha `.claude/agents` o agente que roda em Claude na execução delegada: a base, ou o
+    `por_ligacao.delegado` quando houver (spec agente §3). Consultor e curador, Claude só consultados,
+    seguem projetados como antes."""
+    return isinstance(decl, dict) and familia_de(efetiva(decl, "delegado")) == "claude"
+
+def delega_em_claude(decl) -> bool:
+    return (tem_projecao(decl) and isinstance(decl.get("ligacoes"), list) and "delegado" in decl["ligacoes"])
 
 def _texto(v) -> bool:
     return isinstance(v, str) and bool(v.strip())
@@ -186,7 +190,7 @@ def valida(decl, stem: str) -> list[str]:
     if sup is not None:
         if sup not in EMBUTIDOS:
             p.append(f"suplanta: um de {', '.join(EMBUTIDOS)}")
-        elif not tem_projecao(decl):
+        elif not delega_em_claude(decl):
             p.append("suplanta: só vale com a ligação delegada em Claude (spec agente §3)")
     return p
 
@@ -284,7 +288,7 @@ def confere_projecoes(posto: Path, decls: dict, problemas: dict) -> list[str]:
         if not gerado:
             achados.append(f"órfão: .claude/agents/{stem}.md sem o cabeçalho de gerado (editado à mão)")
         elif decl is None or not tem_projecao(decl):
-            achados.append(f"órfão: .claude/agents/{stem}.md sem ligação delegada em Claude em agentes/{stem}.yaml")
+            achados.append(f"órfão: .claude/agents/{stem}.md sem declaração Claude em agentes/{stem}.yaml")
         elif stem not in problemas and texto != projecao_claude(decl):
             achados.append(f"projeção velha: .claude/agents/{stem}.md difere da declaração (agente projetar)")
     for stem, decl in decls.items():
