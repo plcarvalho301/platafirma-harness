@@ -10,5 +10,3 @@
 - Dever setorial atribuído a quem não opera no setor — a resolução da agência obriga o
   prestador; o fornecedor só a herda pelo contrato. Sinal: «a Anatel exige» dito de quem
   não tem outorga.
-
-## diario de bordo
