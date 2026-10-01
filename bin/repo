@@ -425,8 +425,8 @@ ramo_atual() {
 }
 
 # [3096] Um ramo pertence a esta cadeira? Aceita main/master, o proprio prefixo
-# <cadeira>/*, os ramos de fabrica (fabrica/*) e o caderno da cadeira
-# (caderno/<cadeira>/*). Sem PF_CADEIRA, nao barra (exit 0). Retorna 1 se e ramo
+# <cadeira>/* e os ramos de fabrica (fabrica/*); o ramo caderno/<cadeira>/* saiu com o
+# caderno em arquivo (arq:0120, #3217). Sem PF_CADEIRA, nao barra (exit 0). Retorna 1 se e ramo
 # de outra cadeira.
 ramo_da_cadeira() {
   local ramo="$1"
@@ -438,7 +438,6 @@ ramo_da_cadeira() {
     main|master) return 0 ;;
     "$cad"/*) return 0 ;;
     fabrica/*) return 0 ;;
-    caderno/"$cad"/*) return 0 ;;
     *) return 1 ;;
   esac
 }
@@ -480,7 +479,7 @@ ato_git() {
   if [ "${1:-}" = "commit" ]; then
     local ramo_atual
     ramo_atual="$(ramo_atual "$c")"
-    ramo_da_cadeira "$ramo_atual" || morre "commit recusado: o ramo '$ramo_atual' pertence a outra cadeira (esperados: <cadeira>/*, fabrica/*, caderno/<cadeira>/*, main)." 3
+    ramo_da_cadeira "$ramo_atual" || morre "commit recusado: o ramo '$ramo_atual' pertence a outra cadeira (esperados: <cadeira>/*, fabrica/*, main)." 3
   fi
 
   if [ "${1:-}" = apply ]; then
@@ -1710,7 +1709,7 @@ ato_commitar() {
   # [3096] Recusa commit em ramo de outra cadeira
   local ramo
   ramo="$(ramo_atual "$c")"
-  ramo_da_cadeira "$ramo" || morre "commit recusado: o ramo '$ramo' pertence a outra cadeira (esperados: <cadeira>/*, fabrica/*, caderno/<cadeira>/*, main)." 3
+  ramo_da_cadeira "$ramo" || morre "commit recusado: o ramo '$ramo' pertence a outra cadeira (esperados: <cadeira>/*, fabrica/*, main)." 3
 
 
   if [ "$tudo" -eq 1 ]; then

@@ -21,9 +21,9 @@ está no disco agora (inclusive edição não commitada — é para isso que ser
             ex.: python3 abertura-ver.py "(IA, harness)" --md > ia-harness.md
   --clone <dir>         outro clone (default: o clone onde este arquivo mora)
 
-Ordem, cabeçalhos, ref, sha e contagem seguem `bin/expediente montar` do clone. Duas
+Ordem, cabeçalhos, ref, sha e contagem seguem `bin/expediente montar` do clone. Três
 peças dependem da instância e não do clone, e saem marcadas SIMULADA com o tamanho
-zero: `mesa` (banco da sessão) e `acervo-consultado` (motor). O `sessao` que a porta
+zero: `mesa` e `cadernos` (banco da sessão) e `acervo-consultado` (motor). O `sessao` que a porta
 cola no topo também fica de fora.
 """
 from __future__ import annotations
@@ -172,45 +172,10 @@ def peca_alias(arv, _cad, _ch):
     return "\n".join(f"{a} -> {s}" for a, s in sorted(linhas))
 
 
-def idade(seg: float) -> str:
-    seg = max(0, int(seg))
-    if seg < 3600:
-        return f"{seg // 60} min"
-    return f"{seg // 3600} h" if seg < 86400 else f"{seg // 86400} d"
-
-
-def peca_cadernos(arv, cad, chapeu):
-    """mesa caderno [--chapeu]: índice da cadeira e, com chapéu, o corpo dele."""
-    d = arv / cad
-    achados = sorted(x.name for x in d.iterdir() if (x / "caderno.md").is_file())
-    if not achados:
-        out = [f"cadernos: nenhum em {d}"]
-    else:
-        out = []
-        for slot in achados:
-            cam = d / slot / "caderno.md"
-            st = cam.stat()
-            try:
-                ts = int(subprocess.run(
-                    ["git", "-C", str(arv), "log", "-1", "--format=%ct", "--", str(cam)],
-                    capture_output=True, text=True, timeout=10).stdout.strip() or st.st_mtime)
-            except (OSError, ValueError, subprocess.SubprocessError):
-                ts = int(st.st_mtime)
-            out.append(f"  {slot:<16} {st.st_size:>6} B   ultima escrita ha "
-                       f"{idade(time.time() - ts)}")
-        out.append("  (corpo sob demanda: `mesa caderno <chapeu>`)")
-    if chapeu:
-        out.append("")
-        cam = d / chapeu / "caderno.md"
-        if cam.is_file():
-            out.append(f"===== abertura/{cad}/{chapeu}/caderno.md =====")
-            out.append(cam.read_text(encoding="utf-8", errors="replace"))
-        else:
-            out.append(f"caderno {chapeu}: nao existe ({cam})")
-    return "\n".join(out)
-
-
 SIMULADA = {
+    "cadernos": "(SIMULADA — `mesa caderno` lê o caderno no banco da sessão desde a #3217 "
+                "(arq:0120), fora do clone. Em produção entram aqui o índice da cadeira e, "
+                "com chapéu, o corpo dele por categoria.)",
     "mesa": "(SIMULADA — `mesa ver` lê o banco da sessão na instância, fora do clone. "
             "Em produção entram aqui os itens pendentes da cadeira, ou \"mesa vazia\".)",
     "acervo-consultado": "(SIMULADA — `motor rag buscar casa` consulta o acervo na "
@@ -226,7 +191,7 @@ CATALOGO = {  # peça -> (dono, volatilidade, ref, leitor)
     "mesa": ("gestao-estrategica", "volatil", "mesa ver{flag_mesa}", None),
     "acervo-consultado": ("dados", "volatil",
                           'motor rag buscar casa "{perg}" --k 6 --texto secao', None),
-    "cadernos": ("gestao-estrategica", "volatil", "mesa caderno{flag}", peca_cadernos),
+    "cadernos": ("gestao-estrategica", "volatil", "mesa caderno{flag}", None),
 }
 
 
