@@ -50,12 +50,12 @@ def _imp(i, tipo="text/html", espelho=True, fid=None, tem=True, regua="2"):
             "fidelidade": fid if tem else None, "tem_fidelidade": tem and espelho, "regua": regua}
 
 
-def _ler(servindo, seladas=(), aprovadas=(), tem_coluna=False, fora=()):
+def _ler(servindo, seladas=(), indices=(), tem_coluna=False, fora=()):
     def ler(banco, sql):
         if banco in fora:
             raise pa.Indeterminavel(f"{banco} fora")
         if banco == "motor":
-            return list(aprovadas)
+            return list(indices)
         if "information_schema" in sql:
             return {"tem": tem_coluna}
         if "em_construcao" in sql:
@@ -102,17 +102,21 @@ def test_p9_veredito_ausente_ou_regua_anterior(tmp_path):
 
 
 def test_pendencia_do_motor_nao_pesa_no_exit(tmp_path):
-    seladas = [
-        {"id": "00000010-0000-0000-0000-000000000000", "obra": "o1", "titulo": "A", "indexada": True},
-        {"id": "00000011-0000-0000-0000-000000000000", "obra": "o2", "titulo": "B", "indexada": True},
-        {"id": "00000012-0000-0000-0000-000000000000", "obra": "o3", "titulo": "C", "indexada": False},
-    ]
-    itens, avisos, pend = pa.medir(_regua(tmp_path), _ler(
-        [_imp(1, fid=_fid("A"))], seladas, aprovadas=["00000011-0000-0000-0000-000000000000"]))
+    """Pendente é a selada indexada fora do gate (#3203): índice pela metade, sem faceta ou sem índice."""
+    def selada(n, indexada=True):
+        return {"id": f"000000{n}-0000-0000-0000-000000000000", "obra": f"o{n}", "titulo": n,
+                "elegiveis": 3, "indexada": indexada}
+
+    seladas = [selada(10), selada(11), selada(12, indexada=False), selada(13), selada(14)]
+    indices = [{"impressao": seladas[0]["id"], "vetores": 1, "faceta": True},   # pela metade
+               {"impressao": seladas[1]["id"], "vetores": 3, "faceta": True},   # aprovada
+               {"impressao": seladas[3]["id"], "vetores": 3, "faceta": False}]  # sem faceta
+    itens, avisos, pend = pa.medir(_regua(tmp_path), _ler([_imp(1, fid=_fid("A"))], seladas, indices))
     assert resultado.agrega(itens)[0] == 0
-    assert [p["impressao"] for p in pend[0]["impressoes"]] == ["00000010-0000-0000-0000-000000000000"]
+    assert [p["impressao"] for p in pend[0]["impressoes"]] == [seladas[0]["id"], seladas[3]["id"],
+                                                               seladas[4]["id"]]
     assert pend[0]["para"] == "ia"
-    assert any("1 selada(s) de 3" in a for a in avisos)
+    assert any("3 selada(s) de 5" in a for a in avisos)
 
 
 def test_catalogo_fora_sai_5(tmp_path):

@@ -8,7 +8,7 @@ classe mede, por enquanto, dois predicados de §11 e aponta uma pendência:
   §11 predicado 9 — toda impressão `servindo` com espelho tem `veredito` da régua vigente; a
                     julgada por régua anterior é divergência até o rejulgar (§9, caso 8).
   §4.2 item 6     — a selada de obra marcada «transcrita e indexada» sem índice aprovado no
-                    motor. NÃO é divergência: sai à parte, como pendência dirigida à ia, e não
+                    motor (o gate do `motor indexar`, #3203, pela contagem). NÃO é divergência: sai à parte, como pendência dirigida à ia, e não
                     mexe no exit.
 
 Recorte do predicado 7 (decisão de ti, 01/10): mede as impressões `servindo` COM espelho. A
@@ -162,6 +162,7 @@ select json_build_object('tem', exists (select 1 from information_schema.columns
 SQL_SELADAS = """
 select coalesce(json_agg(json_build_object(
          'id', i.id::text, 'obra', i.obra_id::text, 'titulo', o.titulo,
+         'elegiveis', (select count(*) from acervo.trecho t where t.impressao_id = i.id and t.elegivel),
          'indexada', {indexada})), '[]'::json)
   from acervo.impressao i join acervo.obra o on o.id = i.obra_id
  where i.estado = 'em_construcao' and i.espelho is not null
@@ -171,14 +172,22 @@ INDEXADA_POR_COLUNA = "(o.marcacao = '" + MARCACAO_INDEXADA + "')"
 INDEXADA_POR_ESTOQUE = ("exists (select 1 from acervo.impressao s where s.obra_id = i.obra_id "
                         "and s.estado = 'servindo')")
 
-# escrita_nova.indices_aprovados: índice em construção ou servindo, com vetor, e ao menos um de
-# granularidade trecho. Quando o gate do `motor indexar` (#3203) gravar a aprovação, muda aqui.
-SQL_APROVADOS = """
-select coalesce(json_agg(distinct i.impressao_id::text), '[]'::json)
-  from motor.indice i
- where i.impressao_id = any(array[{ids}]::uuid[])
-   and i.estado in ('em_construcao', 'servindo') and i.granularidade = 'trecho'
-   and exists (select 1 from motor.vetor v where v.indice_id = i.id)
+# O gate do motor (escrita_nova.gate_indice, #3203): um vetor por trecho elegível no índice de trecho e
+# o vetor de faceta da impressão. Aqui pela contagem, que não pede o método (modelo e backend) do rag; o
+# gate exato, trecho a trecho, roda no `acervo promover`, contra a selada inteira (arq:0046).
+SQL_INDICES = """
+select coalesce(json_agg(json_build_object('impressao', x.imp, 'vetores', x.vetores,
+                                           'faceta', x.faceta)), '[]'::json)
+  from (select i.impressao_id::text as imp,
+               max(case when i.granularidade = 'trecho'
+                        then (select count(*) from motor.vetor v where v.indice_id = i.id)
+                        else 0 end) as vetores,
+               bool_or(i.remissao = 'faceta'
+                       and exists (select 1 from motor.vetor v where v.indice_id = i.id)) as faceta
+          from motor.indice i
+         where i.impressao_id = any(array[{ids}]::uuid[])
+           and i.estado in ('em_construcao', 'servindo')
+         group by i.impressao_id) x
 """
 
 
@@ -261,10 +270,17 @@ def predicado_9(servindo, versao):
     return resultado.conforme()
 
 
-def pendencia_motor(seladas, aprovadas):
-    """As seladas de obra marcada para indexar sem índice aprovado (§4.2 item 6)."""
-    aprovadas = set(aprovadas or [])
-    return [s for s in seladas if s.get("indexada") and s["id"] not in aprovadas]
+def pendencia_motor(seladas, indices):
+    """As seladas de obra marcada para indexar sem índice aprovado (§4.2 item 6): sem um vetor por
+    trecho elegível no índice de trecho, ou sem o vetor de faceta (o gate do motor, pela contagem)."""
+    por_impressao = {x.get("impressao"): x for x in (indices or []) if isinstance(x, dict)}
+
+    def pronta(s):
+        x = por_impressao.get(s["id"]) or {}
+        n = s.get("elegiveis") or 0
+        return n > 0 and x.get("vetores") == n and bool(x.get("faceta"))
+
+    return [s for s in seladas if s.get("indexada") and not pronta(s)]
 
 
 # --- a classe ------------------------------------------------------------------------------
@@ -304,9 +320,9 @@ def medir(regua_raiz=None, ler=psql_json):
         sql = SQL_SELADAS.format(indexada=INDEXADA_POR_COLUNA if tem_coluna else INDEXADA_POR_ESTOQUE)
         seladas = ler("rag", sql) or []
         ids = [s["id"] for s in seladas if s.get("indexada") and _UUID.match(s.get("id", ""))]
-        aprovadas = ler("motor", SQL_APROVADOS.format(
+        indices = ler("motor", SQL_INDICES.format(
             ids=", ".join(f"'{i}'" for i in ids))) if ids else []
-        pend = pendencia_motor(seladas, aprovadas)
+        pend = pendencia_motor(seladas, indices)
         regra = "coluna acervo.obra.marcacao" if tem_coluna else "regra do estoque (servindo = indexada)"
         if pend:
             pendencias.append({

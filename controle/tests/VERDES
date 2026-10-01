@@ -62,3 +62,4 @@ tests/test_longjob_identidade.py
 tests/test_portao_familia.py
 tests/test_release_stack_imagem.py
 tests/test_bot.py
+tests/test_motor_indexar.py
