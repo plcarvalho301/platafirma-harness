@@ -87,7 +87,8 @@ STUB_CLAUDE = """#!{py}
 import json, os, sys
 open(os.environ["STUB_LOG"], "a").write(json.dumps({{"verbo": "claude", "argv": sys.argv[1:], "stdin": sys.stdin.read()}}) + "\\n")
 print(json.dumps({{"type": "result", "is_error": False, "result": "veredito: 0 — x@y", "num_turns": 3,
-                   "usage": {{"input_tokens": 100, "output_tokens": 20}}}}))
+                   "usage": {{"input_tokens": 100, "cache_creation_input_tokens": 50,
+                   "cache_read_input_tokens": 1000, "output_tokens": 20}}}}))
 """
 
 
@@ -549,6 +550,11 @@ def test_claude_monta_a_chamada_do_cli_com_modelo_teto_e_ferramentas(mundo, pess
     assert "mcp__claudinho-mcp__read_file" in argv[argv.index("--allowedTools") + 1]
     assert "LENTE-PERSONA" in argv[argv.index("--append-system-prompt") + 1]
     assert claude["stdin"] == "o que a ia acha?"
+
+
+def test_claude_mede_a_entrada_com_o_cache(mundo):
+    r = agente.chama_claude(CONSULTOR, "sistema", "tarefa")
+    assert r["uso"] == {"entrada": 1150, "saida": 20, "turnos": 3}
 
 
 def test_claude_acima_do_teto_de_tokens_avisa_e_nao_corta(mundo, pessoa, monkeypatch, capsys):
