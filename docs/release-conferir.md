@@ -2,7 +2,7 @@
 
 `bin/_release/conferir/conferir.py` implementa as classes de conferência: sub-ato do verbo
 `release`, fora do PATH. As classes do servido (`verbo`, `servico`, `skill`, `procedencia`,
-`superficie`, `ferramental`, `front`, `sessao`, `chapeu`, `pdp`, `alcance`, `card`, `jobs`) se chamam
+`superficie`, `ferramental`, `front`, `sessao`, `chapeu`, `pdp`, `alcance`, `card`, `jobs`, `acervo`) se chamam
 por `release conferir <classe>`. `bin/conferir` ainda as aceita, com aviso de deprecado, e delega;
 as classes de bancada (`repo`, `commit`, `arranque`, `vocabulario`, `diagrama`) respondem com aviso
 apontando `lint <classe>`, e `existe` segue em `bin/conferir`.
@@ -59,8 +59,10 @@ itens o exit vem de `agrega()`, restrito a 0, 1 e 5. Classe conhecida e sem impl
 ## Quem usa o veredito comum
 
 - Servido: `servico`, `verbo`, `skill`, `procedencia`, `superficie` (`--caso conectores` e
-  `--caso descricao`), `ferramental`, `front`, `pdp`, `alcance`, `card`, `jobs` passam por
-  `resultado.relatorio()`. `sessao` é medição de tokens do pacote de abertura, não veredito.
+  `--caso descricao`), `ferramental`, `front`, `pdp`, `alcance`, `card`, `jobs`, `acervo` passam por
+  `resultado.relatorio()`. `acervo` usa o `extra` do relatorio para o que nao pesa no exit:
+  avisos (servindo sem espelho, predicados ainda fora da classe) e a pendencia do motor dirigida
+  a ia (spec espelho-de-leitura §4.2 item 6). `sessao` é medição de tokens do pacote de abertura, não veredito.
 - Bancada: `repo --staged` e `arranque --staged` usam o veredito comum. `commit` usa o vocabulário
   (estado, desde, motivo) sem passar por `agrega()`: o exit vem das recusas e fica 0 mesmo com
   veredito indeterminável. `existe` tem par próprio existe/não-existe, com exit 0/1/5, fora de
