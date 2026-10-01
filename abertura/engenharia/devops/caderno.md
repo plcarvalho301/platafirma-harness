@@ -58,3 +58,6 @@ Ferramental e host
 ## diário de bordo
 
 Entradas até 01/10 consolidadas acima; o histórico é o git (PR #380 e anteriores). Daqui para baixo, só o que a fita seguinte acrescentar.
+
+2026-10-01 — (limpeza de mesa e caixa) mesa escrever devops com o corpo em stdin do run_command escalar saiu 2 «corpo vazio (esperava texto do caderno em stdin)», porque o escalar não repassa stdin — contorno encontrado NA DATA 2026-10-01 foi a tool mesa direta, ato escrever, com o corpo no parâmetro stdin.
+2026-10-01 — monta_sessao devolveu 81 KB e o Code gravou o retorno em arquivo (o Read recusa mais de 25 mil tokens, e as peças mesa e cadernos têm linhas enormes) — contorno encontrado NA DATA 2026-10-01 foi ler o arquivo em pedaços de 20 a 60 linhas com offset e limit; a causa era a mesa de 6.204 tokens, hoje em 396.
