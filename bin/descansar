@@ -26,6 +26,13 @@
 #   3. carimbo            — `mem:<cadeira>` (sem slot: fora do padrao que `mesa
 #      ver` varre) guarda quando a cadeira descansou pela ultima vez.
 #
+# O CADERNO E A ARESTA (#3217, arq:0120). O caderno mora no banco e chega aqui pelo
+# mesmo verbo que a abertura usa (`mesa caderno`): o indice, com o que esta a revisar e o
+# legado a triar de cada chapeu. A aresta se marca no Sair, sobre a lista do que a fita
+# puxou de fora da cadeira, tirada do log de giro (o ops log da porta). O log e so lido —
+# a cadeira nao escreve nele (spec rotinas-e-ciclos, tipologia, decisao 1) — e a lista e
+# so a lista: marcar e da cadeira, e so o que entrou na resposta (#2947).
+#
 # O ultimo passo — triagem da memoria do Project — o verbo EMITE, nao executa, e
 # a razao nao e que a tool seja "da sessao" (`run_command` tambem e). E que a
 # memoria de Project do claude.ai tem DUAS portas e nenhuma e automatizavel: a UI
@@ -44,6 +51,7 @@ import argparse
 import json
 import os
 import re
+import shlex
 import subprocess
 import sys
 import time
@@ -243,22 +251,203 @@ def estado_memoria(curto, canon, rc):
                       f"  vence em {idade(ttl) if ttl and ttl > 0 else '—'}{marca}")
     if erro:
         linhas.append(f"  (aviso: {erro} — sem conferencia contra o remit)")
-    cad = os.path.join(ABERTURA, alvo.lower())
-    achou_caderno = False
-    if os.path.isdir(cad):
-        for slot in sorted(x for x in os.listdir(cad)
-                           if os.path.isfile(os.path.join(cad, x, "caderno.md"))):
-            achou_caderno = True
-            corpo = os.path.join(cad, slot, "caderno.md")
-            n = len(open(corpo, errors="replace").read().splitlines())
-            marca = "  ÓRFÃO — slug não declarado na persona" if (
-                declarados is not None and slot not in declarados) else ""
-            if declarados is not None and slot not in declarados:
-                orfaos.append(slot)
-            linhas.append(f"  caderno/{slot:<8} {n:>3} linhas{marca}")
-    if not achou_caderno:
-        linhas.append("  caderno vazio — nasce no primeiro delta, nunca de memoria")
+    linhas += caderno_do_banco(declarados)
     return linhas, orfaos
+
+
+# ------------------------------------------------------------------ o caderno no banco (#3217)
+RE_INDICE = re.compile(r"^  ([a-z0-9][a-z0-9-]*)\s+\d+ vigentes?\b")
+
+
+def _bin():
+    """Verbos irmaos: bin/ da propria release. PF_BIN so aponta outro diretorio (teste com stub)."""
+    return os.environ.get("PF_BIN") or os.path.join(HARNESS_DIR, "bin")
+
+
+def caderno_do_banco(declarados):
+    """O indice do caderno pelo verbo, o mesmo da abertura (`mesa caderno`): por chapeu,
+    vigentes, teto, idade real, a revisar, candidatas, legado a triar. O chapeu fora da
+    persona sai marcado; banco mudo sai declarado, nunca como caderno vazio (arq:0041)."""
+    try:
+        p = subprocess.run([os.path.join(_bin(), "mesa"), "caderno"], capture_output=True,
+                           text=True, timeout=30)
+    except (OSError, subprocess.SubprocessError) as e:
+        return [f"  caderno: NAO MEDIDO — {type(e).__name__}: {e}"]
+    saida = (p.stdout or "").rstrip("\n").splitlines()
+    if p.returncode != 0 or not saida:
+        motivo = (p.stdout or p.stderr or "").strip().splitlines()
+        return [f"  caderno: {motivo[0] if motivo else 'exit ' + str(p.returncode)}"]
+    linhas = []
+    for linha in saida:
+        m = RE_INDICE.match(linha)
+        if not m:
+            linhas.append(f"  {linha.strip()}")
+            continue
+        marca = ""
+        if declarados is not None and m.group(1) not in declarados:
+            marca = "  ÓRFÃO — chapéu fora da persona: retire as entradas (arq:0120 §8.5)"
+        linhas.append(f"  caderno/{linha.strip()}{marca}")
+    return linhas
+
+
+# ------------------------------------------------------------------ puxado de fora (#3217)
+# Do log de giro sai o que a fita leu PELA CHAVE fora da cadeira: documento de casa de outro
+# dono, chapeu de outra cadeira e obra de outro dominio. Busca no motor nao entra: o log
+# guarda a pergunta, nao o que voltou, e consultar nao e usar.
+UUID_RE = re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$")
+SLUG_PURO = re.compile(r"^[a-z0-9][a-z0-9-]*$")
+CHAVE_CASA = re.compile(r"^[A-Za-z0-9][A-Za-z0-9:._-]*$")  # a ponta casa: do `mesa aresta`
+ACERVO_PG = ("rag-extractor-pg", "rag", "rag_extractor")  # o transporte de `acervo listar`
+
+
+def _args(reg):
+    a = reg.get("args")
+    if isinstance(a, list):
+        return [str(x) for x in a]
+    try:
+        return shlex.split(a or "")
+    except ValueError:
+        return (a or "").split()
+
+
+def _sem_prefixo(cad):
+    c = (cad or "").strip().lower()
+    for pref in ("claudinho-", "claudinha-"):
+        if c.startswith(pref):
+            return c[len(pref):]
+    return c
+
+
+def giros_da_fita(sessao_id, ordem_id, diretorio=None):
+    """Os registros de verbo DESTA fita que deram certo, do log de giro. Fita e a sessao
+    (PF_SESSAO, a mesma chave da aresta onde a porta nao injeta PF_FITA) ou a ordem
+    (PF_ORDEM_ID). A substring filtra antes do json.loads: o log passa de 7 MB por dia e a
+    fita e uma fracao dele. None: sem chave, nao ha fita a ler."""
+    import glob
+    chaves = [c for c in (sessao_id, ordem_id) if c and c != "-"]
+    if not chaves:
+        return None
+    regs = []
+    for arq in sorted(glob.glob(os.path.join(diretorio or LOG_OPS, "ops-*.jsonl")))[-3:]:
+        try:
+            with open(arq, encoding="utf-8", errors="replace") as fh:
+                for linha in fh:
+                    if not any(c in linha for c in chaves):
+                        continue
+                    try:
+                        d = json.loads(linha)
+                    except ValueError:
+                        continue
+                    if d.get("sessao_id") not in chaves and d.get("ordem_id") not in chaves:
+                        continue
+                    if d.get("evento") in ("http_req", "sem_verbo") or d.get("erro"):
+                        continue
+                    if d.get("exit_code") not in (0, None):
+                        continue
+                    regs.append(d)
+        except OSError:
+            continue
+    return regs
+
+
+def puxados(regs, curto):
+    """{ponta: o que e} do que a fita leu pela chave, na forma de ponta do `mesa aresta`. O
+    chapeu da propria cadeira sai aqui; o dono do documento e o dominio da obra, no acervo."""
+    achados = {}
+    for d in regs:
+        tool, ato, args = d.get("tool"), d.get("ato"), _args(d)
+        if tool == "acervo" and ato == "ler" and args[:1] == ["casa"]:
+            pos = [x for x in args[1:] if not x.startswith("-")]
+            if len(pos) >= 2 and SLUG_PURO.match(pos[0]) and CHAVE_CASA.match(pos[1]):
+                achados.setdefault(f"casa:{pos[0]}/{pos[1]}",
+                                   {"tipo": "casa", "especie": pos[0], "chave": pos[1]})
+        elif tool == "acervo" and ato == "ler" and args[:1] == ["obra"]:
+            uuid = next((x for x in args[1:] if UUID_RE.match(x)), None)
+            if uuid:
+                achados.setdefault(f"obra:{uuid}", {"tipo": "obra", "uuid": uuid})
+        elif tool == "persona" and ato == "ler" and "--chapeu" in args:
+            i = args.index("--chapeu")
+            cad = _sem_prefixo(args[0]) if args and not args[0].startswith("-") else ""
+            chapeu = args[i + 1] if i + 1 < len(args) else ""
+            if cad and cad != curto and SLUG_PURO.match(cad) and SLUG_PURO.match(chapeu):
+                achados.setdefault(f"chapeu:{cad}/{chapeu}", {"tipo": "chapeu", "cadeira": cad})
+    return achados
+
+
+def _lit(s):
+    return "'" + str(s).replace("'", "''") + "'"
+
+
+def resolve_no_acervo(achados):
+    """{ponta: {dono, titulo}}: o dono do documento de casa (acervo.casa.dono) e o dominio da
+    obra, numa consulta. None quando o acervo nao responde: a lista diz que nao sabe o dono,
+    nunca o omite. So entram especie, chave e uuid que passaram pela regua da ponta."""
+    casas = [(v["especie"], v["chave"]) for v in achados.values() if v["tipo"] == "casa"]
+    obras = [v["uuid"] for v in achados.values() if v["tipo"] == "obra"]
+    partes = []
+    if casas:
+        valores = ", ".join(f"({_lit(e)}, {_lit(c)})" for e, c in casas)
+        partes.append(
+            "select 'casa:' || p.e || '/' || p.c as ponta, c.dono, c.titulo "
+            f"from (values {valores}) as p(e, c) join acervo.especie_tipo t on t.slug = p.e "
+            "join acervo.casa c on c.especie_id = t.id and c.chave = p.c and c.retirada_em is null")
+    if obras:
+        valores = ", ".join(f"({_lit(u)})" for u in obras)
+        partes.append(
+            "select 'obra:' || o.id::text as ponta, d.slug as dono, o.titulo "
+            f"from (values {valores}) as p(u) join acervo.obra o on o.id = p.u::uuid "
+            "left join acervo.dominio d on d.id = o.dominio_id")
+    if not partes:
+        return {}
+    sql = ("select coalesce(json_agg(row_to_json(t)), '[]') from ("
+           + " union all ".join(partes) + ") t;")
+    ctr, usr, base = ACERVO_PG
+    try:
+        r = subprocess.run(["docker", "exec", "-i", ctr, "psql", "-U", usr, "-d", base, "-tAq",
+                            "-v", "ON_ERROR_STOP=1", "-c", sql],
+                           capture_output=True, text=True, timeout=30)
+        linhas = json.loads(r.stdout.strip() or "null") if r.returncode == 0 else None
+    except (OSError, subprocess.SubprocessError, ValueError):
+        return None
+    if not isinstance(linhas, list):
+        return None
+    return {l["ponta"]: l for l in linhas if isinstance(l, dict) and l.get("ponta")}
+
+
+def puxado_de_fora(curto, sessao_id, ordem_id, diretorio=None, resolver=resolve_no_acervo):
+    """As linhas do Sair: o que a fita leu de fora da cadeira, cada uma com a ponta pronta
+    para `mesa aresta`. Documento da propria cadeira e obra do dominio de mesmo nome dela
+    ficam fora; dono que nao se resolve fica DENTRO, dito."""
+    regs = giros_da_fita(sessao_id, ordem_id, diretorio)
+    if regs is None:
+        return ["  sem PF_SESSAO nem PF_ORDEM_ID — sessao de mao nao tem log de giro a ler"]
+    achados = puxados(regs, curto)
+    meta = resolver(achados) if achados else {}
+    linhas = []
+    for ponta in sorted(achados):
+        v, m = achados[ponta], (meta or {}).get(ponta) or {}
+        titulo = f" · «{m['titulo']}»" if m.get("titulo") else ""
+        dono = _sem_prefixo(m.get("dono"))
+        if v["tipo"] == "chapeu":
+            o_que = f"chapéu de {v['cadeira']}"
+        elif meta is None:
+            o_que = "dono indeterminável: o acervo não respondeu"
+        elif v["tipo"] == "casa" and not m:
+            o_que = "documento sem ficha nesta chave: dono não resolvido"
+        elif dono == curto:
+            continue
+        elif v["tipo"] == "casa":
+            o_que = f"documento de {dono or 'dono não declarado'}"
+        else:
+            o_que = f"obra do domínio {dono or 'não declarado'}"
+        linhas.append(f"  {ponta:<40} {o_que}{titulo}")
+    if not linhas:
+        return [f"  nada de fora da cadeira lido pela chave nesta fita ({len(regs)} giro(s) lido(s))"]
+    chapeu = os.environ.get("PF_CHAPEU", "").strip() or "<chapeu>"
+    return ([f"  {len(linhas)} leitura(s) de fora da cadeira; marque so o que entrou na resposta"]
+            + linhas
+            + [f"  marcar: `mesa aresta {chapeu} --de conceito:<slug>|termo:<texto> "
+               "--para <ponta> --para-que \"<linha>\"`"])
 
 
 def roda(rotulo, cmd, timeout=60):
@@ -581,6 +770,11 @@ def ato_fita(args):
         print(f"\n  {len(orfaos)} orfao(s): {', '.join(sorted(set(orfaos)))}")
         print("  limpe com `mesa limpa <slot>` ou peca o slug ao RH — o verbo nao apaga.")
 
+    print("\n== puxado de fora da cadeira (log de giro desta fita) ==")
+    for _l in puxado_de_fora(curto, os.environ.get("PF_SESSAO", "").strip(),
+                             os.environ.get("PF_ORDEM_ID", "").strip()):
+        print(_l)
+
     if not args.so_memoria:
         print("\n== fatos volateis, medidos agora ==")
         print("Confira contra isto o que a fita afirmou de memoria de conversa.")
@@ -612,8 +806,10 @@ def ato_fita(args):
 
     rc.set(f"mem:{alvo.lower()}", int(time.time()))
     print("\n== proximo passo ==\n"
-          "1. escreva a mesa antes de a fita morrer: `mesa anota <chapeu>`\n"
-          "   (hipotese viva, beco descartado, proxima jogada, premissa a reconferir).\n"
+          "1. escreva a mesa antes de a fita morrer: `mesa item <chapeu> --ato ...\n"
+          "   --alvo ...` (repasse: a proxima jogada do que a fita nao fechou; guia\n"
+          "   registrar, secao Mesa). Premissa a reconferir e beco descartado vao\n"
+          "   ao caderno, no passo 2a, como premissa e licao.\n"
           "   Sintetize tambem o historico da fila impresso acima: o que ficou\n"
           "   DECIDIDO por outra cadeira, nao o tramite. Uma linha por decisao,\n"
           "   com quem decidiu. Carta ja superada pelo dossie nao entra.\n"
@@ -623,26 +819,25 @@ def ato_fita(args):
           "   DA CADEIRA pendente — `mesa item`; (iii) superada — so conta.\n"
           "   Carta parada que ninguem apresenta ao dono e decisao que nao existe.\n"
           "\n"
-          "2. por chapeu tocado nesta fita — OBRIGATORIO, DUAS partes, sempre as\n"
-          "   duas: o que se aprendeu vai ao caderno; o que a ferramenta fez\n"
-          "   errado vai ao debito tecnico. O caderno nao e diario de bordo.\n"
+          "2. por chapeu tocado nesta fita — OBRIGATORIO, TRES partes, sempre as\n"
+          "   tres: o que se aprendeu vai ao caderno; o que a ferramenta fez\n"
+          "   errado vai ao debito tecnico; o que se puxou de fora e se usou vai\n"
+          "   a aresta. O caderno nao e diario de bordo.\n"
           "\n"
-          "   2a. conhecimento curado — `mesa caderno <chapeu>`. \"sem delta\" e\n"
-          "   resposta valida, mas tem de ser dita; silencio nao e. ENTRA so o\n"
-          "   que passa nos dois: continua verdadeiro depois que o assunto\n"
-          "   morrer, E a proxima fita pagaria para re-derivar. NAO ENTRA: fato\n"
-          "   de negocio (card/commit/wiki), estado de runtime (o instrumento\n"
-          "   mede), decisao de outra cadeira ou remit (canonico), o que vale\n"
-          "   para toda cadeira (TODA-CADEIRA/RH), conhecimento com validade\n"
-          "   (mesa, que expira junto). Entrada nova SUBSTITUI a que contradiz\n"
-          "   — o historico e o git. Admissao e julgamento contra as seis\n"
-          "   heuristicas da 0072, NAO numero de linha: durabilidade,\n"
-          "   aprendizado (nao fato), do chapeu (nao da cadeira), principio\n"
-          "   (nao ato de ferramenta), nao-conceito-canonico, preferencia\n"
-          "   granular do dono. Caderno grande demais para ler de vez e\n"
-          "   sintoma de FALTA DE SUBSTITUICAO (entrada velha que devia ter\n"
-          "   saido quando a nova entrou), nao motivo para podar conteudo que\n"
-          "   ainda passa nas seis.\n"
+          "   2a. conhecimento curado — o caderno do chapeu, no banco, uma entrada\n"
+          "   por ato (arq:0120). ANTES de acrescentar, resolva o que o indice\n"
+          "   acima marca no chapeu tocado: a revisar (`mesa confirmar <id>` ou\n"
+          "   `mesa retirar <id> --motivo`), candidata, premissa vencida, e o\n"
+          "   legado a triar (o corpo por `mesa caderno <chapeu>`; o que vale vira\n"
+          "   entrada, e `mesa legado --caderno --triado <chapeu>` fecha). Depois,\n"
+          "   so o que passa no teste do guia registrar, secao Caderno:\n"
+          "     `mesa escrever <chapeu> --licao \"<texto>\" --caso <card|fita|data>`\n"
+          "     `mesa escrever <chapeu> --preferencia \"<texto>\" --dito-em AAAA-MM-DD\n"
+          "      --onde \"<onde o dono disse>\"`\n"
+          "     `mesa escrever <chapeu> --premissa \"<texto>\" --vale-ate AAAA-MM-DD`\n"
+          "      (ou `--ate-que \"<evento>\"`)\n"
+          "   Entrada que contradiz a vigente: `mesa substituir <id> \"<texto>\"`.\n"
+          "   \"sem delta\" e resposta valida, mas tem de ser dita; silencio nao e.\n"
           "\n"
           "   2b. contorno de ferramenta — rotina Triar (guia defeito), NUNCA o\n"
           "   caderno. Toda vez que a fita chamou um verbo e teve que chamar\n"
@@ -655,6 +850,14 @@ def ato_fita(args):
           "        --evidencia \"tentei X, deu Y; contorno W\"`;\n"
           "     - servico degradado agora: Incidente; alguem bloqueado: card.\n"
           "   Nenhuma linha de diario de bordo entra em caderno nenhum.\n"
+          "\n"
+          "   2c. aresta — a lista «puxado de fora da cadeira» acima. Marque so o\n"
+          "   que ENTROU na resposta (consultar nao e usar, #2947), uma vez por\n"
+          "   ponta, com o conceito da pergunta e uma linha de para que:\n"
+          "     `mesa aresta <chapeu> --de conceito:<slug>|termo:<texto>\n"
+          "      --para <ponta> --para-que \"<linha>\"`\n"
+          "   `--quem dono` quando o dono pediu; `--declarada` quando a ponta ja\n"
+          "   esta na consulta dirigida do chapeu. Nada usado: diga \"sem aresta\".\n"
           "\n"
           "3. triagem da memoria do Project — o host nao a alcanca; a tool e da sessao\n"
           "   (mcp__memory__*: arquivos sob /projects/<id>/; a memory_user_edits\n"
@@ -687,7 +890,7 @@ def ato_fita(args):
           "   `descansar fita --encerra-sessao`\n"
           "   (contrato de morte, arq:0101 §1: DEL sessao/ledger/giro + derrame).\n"
           "   E o ultimo ato da fita porque matar `sessao:{id}` tira a cadeira de\n"
-          "   toda tool seguinte — `mesa caderno` do passo 2 morre com\n"
+          "   toda tool seguinte — `mesa escrever` e `mesa aresta` do passo 2 morrem com\n"
           "   `PF_CADEIRA nao definida`. Esquecer nao vaza nada: o TTL de 48 h e o\n"
           "   segundo caminho de morte que a propria ADR escreve.")
     return 0

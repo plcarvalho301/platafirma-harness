@@ -96,6 +96,15 @@ def test_o_pacote_nao_traz_conduta_nem_alias_nem_mesa(raiz):
     assert pecas == ["persona", "chapeu", "modo", "rotinas", "acervo-consultado", "cadernos"]
 
 
+def test_o_caderno_do_agente_e_licao_e_premissa_do_banco(raiz):
+    """#3217: o agente delegado recebe so o que orienta o chapeu; preferencia do dono, aresta e o
+    legado a triar ficam com a cadeira (`--categoria` sem `--secao` nao serve o legado)."""
+    d = json.loads(_monta(raiz).stdout)
+    cadernos = next(p for p in d["pecas"] if p["peca"] == "cadernos")
+    assert cadernos["ref"] == "verbo:mesa caderno contexto --categoria licao,premissa"
+    assert cadernos["frescor"] == "fresco"
+
+
 def test_o_envelope_diz_perfil_modo_e_nao_roteia(raiz):
     d = json.loads(_monta(raiz).stdout)
     assert (d["perfil"], d["modo"], d["regua"], d["chapeu"]) == ("cadeirinha", "revisar", None, "contexto")
