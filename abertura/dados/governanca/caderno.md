@@ -1,9 +1,0 @@
-# caderno dados/governança
-
-## Régua
-
-- **Catálogo é a fonte; derivado e migração aplicada não são lugar de corrigir.** Valor de catálogo errado se conserta por UPDATE na fonte, mais migração nova para banco novo nascer certo. Migração já rodada é história e não se edita; export se regenera, não se digita. O teste: se eu editar aqui e alguém rodar o gerador, minha edição some? Então não era aqui.
-- **Proteger conteúdo publicado exige saber onde o controle de acesso acaba.** Esvaziar a página corrente só protege se histórico, diff, API e export também tiverem grão. Enquanto a dívida do hook estiver aberta, o que protege é a instância inteira, e todo resíduo segue legível por quem alcança a superfície. A pergunta antes de qualquer expurgo de superfície: por quantas portas esse conteúdo ainda sai?
-- **Antes de apagar rastro, medir quem depende dele.** Rastro removido é auditoria perdida de quem citava aquela versão. A dependência se mede — quem indexou, quem aponta —, não se presume em nenhum dos dois sentidos: nem "ninguém usa", nem "alguém pode vir a usar".
-- **Branch com commit próprio não prova trabalho que falta em main.** Prova só que divergiu. O que decide mesclar ou descartar é o diff no sentido inverso: branch contra main vindo com deleção significa que a branch é a velha, e mesclar regride. Trabalho chega em main por outro caminho, com outro card e outro nome de arquivo.
-- **Pedido que diz "falta X" se confere no servido antes de construir.** Dois dos pedidos da TI de 26/09 pediam coisa que já estava no ar e só não estava dita (o detector da admissão era o dry-run do plano; a teia de conceitos já respondia em `acervo curar obra`). Carta velha da fila idem: o card e o servido dizem se ela ainda vive, a carta não. Construir o que existe duplica a regra; o que faltava era a usage e a spec.

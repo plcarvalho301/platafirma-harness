@@ -200,7 +200,7 @@ def slugs_declarados(alvo):
     if not os.path.isdir(base):
         return None, f"abertura da cadeira nao encontrada em {base}"
     # Um slug e um SUBDIR de chapeu (plataforma, rh...), tenha ele chapeu.md,
-    # ferramental.md ou so caderno.md — a guarda ainda esta com chapeu.md em backfill.
+    # ou ferramental.md — a guarda ainda esta com chapeu.md em backfill.
     slugs = {n for n in os.listdir(base) if os.path.isdir(os.path.join(base, n))}
     return slugs, None
 
