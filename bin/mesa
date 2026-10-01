@@ -1,18 +1,23 @@
 #!/opt/platafirma/current/venv/harness/bin/python
 # mesa — memoria de trabalho da cadeira entre fitas, por chapeu
 # capacidade: trabalho
-# dono: gestao-estrategica (a forma: o que e mesa, o que e caderno) · ia (montador) · ti (substrato)
+# dono: gestao-estrategica (a forma: o que e mesa, o que e caderno) · ia (montador) · dados (substrato do caderno e forma da aresta, arq:0120) · ti (substrato da mesa)
 # classe: B
-# use para: pendência entre fitas, 'o que ficou na mesa', anotar, caderno do chapéu
-# atos: ver, item, fez, anota, fita, limpa, caderno, legado, escrever
-# folhas: ver|item|fez -> trabalho/mesa (o item com ato) · caderno|escrever -> expediente/caderno (o duravel) ·
+# use para: pendência entre fitas, 'o que ficou na mesa', anotar, caderno do chapéu por entrada (lição, preferência do dono, premissa, aresta)
+# atos: ver, item, fez, anota, fita, limpa, caderno, legado, escrever, substituir, confirmar, retirar, restaurar, tombar, apontar, aresta, colheita, veredito
+# folhas: ver|item|fez -> trabalho/mesa (o item com ato) · caderno|escrever|substituir|confirmar|retirar|restaurar|tombar|apontar|aresta|colheita|veredito -> expediente/caderno (o duravel) ·
 #         anota|limpa|legado -> trabalho/mesa, transicao · fita -> pende (guarda de fita e de sessao)
-# ambiente: PF_CADEIRA (obrigatoria, origem porta), PF_FITA, PF_SUPERFICIE[=desconhecida],
-#           MEM_REDIS_HOST[=127.0.0.1], MEM_REDIS_PORT[=6380], SESSAO_PG_PORT[=5437],
+# ambiente: PF_CADEIRA (obrigatoria, origem porta), PF_FITA, PF_SESSAO (a fita da aresta onde a porta nao injeta PF_FITA),
+#           PF_CHAPEU, PF_SUPERFICIE[=desconhecida],
+#           MEM_REDIS_HOST[=127.0.0.1], MEM_REDIS_PORT[=6380], SESSAO_PG_PORT[=5437], SESSAO_PG_DSN,
+#           MEM_MESA_TTL_HORAS[=48], MEM_FITA_TTL_DIAS[=14], PLATAFIRMA_TOKENIZADOR[=terceiros/tokenizers/qwen2.5.json],
 #           PLATAFIRMA_INSTANCIA[=/srv/platafirma/casa], PF_ABERTURA_DIR[=$PLATAFIRMA_INSTANCIA/var/abertura-publicada],
 #           SESSAO_PG_PASSWORD (segredo; lido de $PLATAFIRMA_INSTANCIA/segredos/harness-sessao/SESSAO_PG_PASSWORD, a variavel e transicao, nao forma)
-# depende: msg-mem (Valkey), Postgres da sessao, arvore abertura/ (cadernos)
-# escreve: sessao.mesa_item (item, fez), mem:<cadeira>:<slot> (anota, limpa), fita:<cadeira> (fita)
+# depende: msg-mem (Valkey), Postgres da sessao, abertura publicada (consulta dirigida dos chapeus; captura do legado),
+#          rag-extractor-pg (so a colheita: coocorrencia em obra e teia)
+# escreve: sessao.mesa_item (item, fez), sessao.caderno_entrada + caderno_evento (escrever e os atos de estado),
+#          sessao.caderno_aresta_uso (aresta), sessao.caderno_legado (legado --caderno), mem:<cadeira>:<slot> (anota, limpa),
+#          fita:<cadeira> (fita)
 #
 # A ABERTURA CHAMA DOIS ATOS, e so dois (spec_expediente §7): `mesa ver` (peca `mesa`,
 # o impedimento) e `mesa caderno --chapeu <slug>` (peca `cadernos`, a ultima injetada:
@@ -26,9 +31,11 @@
 #   mesa    (item)    tabela `sessao.mesa_item`, instancia harness-sessao. Item com
 #                     ATO e ALVO, que esvazia por execucao do ato. O que a fita de
 #                     hoje precisa que a fita de amanha FACA.
-#   caderno (duravel) arquivo `caderno/<cadeira>/<slot>.md` no repo do harness.
-#                     Versionado, com diff e revisao. O que a cadeira aprendeu do
-#                     proprio oficio e vale alem de um expediente.
+#   caderno (duravel) tabelas `sessao.caderno_*`, mesma instancia (arq:0120, #3218,
+#                     migracao 0097). Uma linha por entrada, com categoria e o campo
+#                     dela, historico por evento, saida por estado; nada se apaga e
+#                     nada se exporta ao git. O que o chapeu aprendeu do proprio oficio
+#                     e ainda nao virou norma.
 #
 # SUBSTRATO DA MESA TROCOU (fase 6 do card #189, spec_montagem-de-sessao §3): era
 # texto livre na classe `mem` do Valkey, e agora e entidade em Postgres. O que
@@ -64,20 +71,28 @@
 # BANCO FORA DO AR SE DECLARA INDISPONIVEL, nunca como mesa vazia: ausencia de
 # item e resposta valida (arq:0041) e seria indistinguivel de substrato mudo.
 #
-# CADERNO E CORPO SOB DEMANDA. A abertura entrega o INDICE (nome, idade, bytes);
-# o corpo so entra na fita que o pediu — mesma regra da fila (envelope, nunca
-# corpo) e da skill (descritor no contexto, corpo por ato).
+# CADERNO E CORPO SOB DEMANDA. A abertura entrega o INDICE (por chapeu: vigentes,
+# tokens contra o teto, idade real da ultima escrita, a revisar, retiradas, candidatas,
+# arestas, legado); o corpo so entra na fita que o pediu — mesma regra da fila
+# (envelope, nunca corpo) e da skill (descritor no contexto, corpo por ato).
+#
+# A GUARDA DO CADERNO MORA NO ATO DE ESCREVER (arq:0120 §5.3): sem categoria, sem o campo
+# dela, acima de 600 caracteres ou acima de 1.500 tokens vigentes no chapeu, recusa com a
+# instrucao. O banco repete as restricoes que cabem nele e recusa DELETE (0097).
+#
+# A ARESTA (forma fixada por dados, #3218) e a materia de fora da cadeira que a fita puxou
+# e usou: `aresta` marca, uma vez por fita; `colheita` junta por par de pontas, de todas as
+# cadeiras, para a curadoria; `veredito`, so de dados, devolve tombada ou retirada.
 import argparse
+import hashlib
 import json
 import os
 import re
-import shutil
 import subprocess
 import sys
 import unicodedata
-import tempfile
 import time
-from pathlib import Path
+from datetime import date, datetime, timedelta, timezone
 
 try:
     import redis
@@ -96,7 +111,7 @@ TETO_AVISO = 4000  # bytes; acima disto e sintoma de fato nao despachado
 # instancia, um arquivo por nome.
 HARNESS = os.path.dirname(os.path.dirname(os.path.realpath(__file__)))
 sys.path.insert(0, os.path.join(HARNESS, "lib"))
-from raizes import bancada, BancadaNaoDeclarada, instancia  # noqa: E402
+from raizes import instancia  # noqa: E402
 
 # arq:0073: caderno mora em abertura/<cadeira>/<slug>/
 CADERNOS = os.path.join(
@@ -467,7 +482,13 @@ def ato_fez(args):
 
 def ato_legado(args):
     """A mesa velha, capturada do Valkey na migracao da fase 6. Leitura, e um gesto
-    de triagem: o que ainda tem ato vira `mesa item`, o resto morre com o registro."""
+    de triagem: o que ainda tem ato vira `mesa item`, o resto morre com o registro.
+    Com --caderno, o legado de caderno (arq:0120 §11), outra tabela e outra triagem."""
+    if getattr(args, "caderno", False):
+        return _legado_caderno(args)
+    if getattr(args, "capturar", False):
+        sys.stderr.write("erro: --capturar e do legado de caderno: `mesa legado --caderno --capturar`\n")
+        return 2
     con = pg()
     if con is None:
         return 3
@@ -587,10 +608,6 @@ def ato_fita(args):
     return 0
 
 
-def dir_caderno():
-    return os.path.join(CADERNOS, cadeira())
-
-
 def _slug_de_titulo(titulo):
     """`## Conhecimento curado` -> `conhecimento-curado`: minuscula, sem acento, hifen no lugar do resto."""
     sem = unicodedata.normalize("NFKD", titulo).encode("ascii", "ignore").decode()
@@ -627,290 +644,1252 @@ def _secao_do_caderno(texto, secao):
     return "\n".join(saida).strip("\n") or None
 
 
-def _corpo_caderno(d, slot, secao=None):
-    """Imprime o corpo do caderno de um slot. Ausencia se declara e sai 0: caderno
-    que nao existe e resposta valida (arq:0041), nao erro."""
-    caminho = os.path.join(d, slot, "caderno.md")
-    if not os.path.isfile(caminho):
-        print(f"caderno {slot}: nao existe ({caminho})")
-        return 0
-    with open(caminho, errors="replace") as fh:
-        texto = fh.read()
-    if secao:
-        trecho = _secao_do_caderno(texto, secao)
-        if trecho is None:
-            print(f"caderno {slot}: sem a secao {secao}")      # peca vazia com aviso, nao erro
-            return 0
-        print(f"===== abertura/{cadeira()}/{slot}/caderno.md#{secao} =====")
-        print(trecho)
-        return 0
-    print(f"===== abertura/{cadeira()}/{slot}/caderno.md =====")
-    sys.stdout.write(texto)
+# ---------------------------------------------------------------------------------------
+# CADERNO POR ENTRADA (arq:0120, #3218). Uma linha por entrada em sessao.caderno_entrada,
+# historico em sessao.caderno_evento, prova de uso da aresta em sessao.caderno_aresta_uso,
+# os arquivos de antes em sessao.caderno_legado (migracao 0097). Nada se apaga: toda saida
+# e estado com evento, e o banco recusa DELETE. A guarda mora no ato de escrever: categoria,
+# campo obrigatorio, 600 caracteres por entrada e 1.500 tokens vigentes por chapeu.
+# ---------------------------------------------------------------------------------------
+
+CATEGORIAS = ("licao", "preferencia", "premissa", "aresta")
+ROTULO = {"licao": "lição", "preferencia": "preferência do dono", "premissa": "premissa",
+          "aresta": "aresta"}
+SECOES = (("licao", "lição"), ("preferencia", "preferência do dono"), ("premissa", "premissa"),
+          ("aresta", "aresta (acumula para a curadoria; fora do teto)"))
+TETO_ENTRADA = 600          # caracteres por entrada (arq:0120 §5.3)
+TETO_CHAPEU = 1500          # tokens vigentes por chapeu, fora a aresta (arq:0120 §5.3)
+PRAZO_LICAO = 90            # dias sem confirmacao ate «a revisar» (arq:0120 §7)
+PRAZO_PREMISSA = 60         # dias, no maximo, do «vale ate» (arq:0120 §2)
+LIMIAR_FITAS = 3            # a aresta vai a analise com 3 fitas distintas...
+LIMIAR_CADEIRAS = 2         # ...ou 2 cadeiras distintas (forma da aresta, #3218)
+JANELA_DECLARADAS = 15      # dias: a colheita olha a consulta dirigida sem uso nesta janela
+CURADORIA = "dados"         # quem da o veredito da aresta (arq:0120 §9)
+FUSO = "America/Sao_Paulo"  # o mesmo da restricao de 60 dias em 0097
+ACERVO_PG = ("rag-extractor-pg", "rag", "rag_extractor")  # o transporte de `acervo listar`
+TOKENIZADOR = (os.environ.get("PLATAFIRMA_TOKENIZADOR")
+               or os.path.join(HARNESS, "terceiros", "tokenizers", "qwen2.5.json"))
+PONTA_DE_RE = re.compile(r"^(conceito|termo):(\S.*)$")
+PONTA_PARA_RE = re.compile(r"^(conceito|obra|casa|chapeu):(\S.*)$")
+SLUG_RE = re.compile(r"^[a-z0-9][a-z0-9-]{0,120}$")
+UUID_RE = re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$")
+CASA_RE = re.compile(r"^[a-z0-9][a-z0-9-]*/[A-Za-z0-9][A-Za-z0-9:._-]*$")
+CHAPEU_PONTA_RE = re.compile(r"^([a-z0-9][a-z0-9-]*)/([a-z0-9][a-z0-9-]{0,40})$")
+COLUNAS = ("id", "cadeira", "chapeu", "categoria", "estado", "texto", "caso", "dito_em",
+           "dito_onde", "vale_ate", "ate_que", "de_ponta", "para_ponta", "em_tombamento",
+           "candidata", "destino", "motivo", "substituida_por", "criada_em", "confirmada_em")
+USO_ESCREVER = (
+    "  uso: mesa escrever <chapeu> --licao \"<texto>\" --caso <card, fita ou data>\n"
+    "       mesa escrever <chapeu> --preferencia \"<texto>\" --dito-em AAAA-MM-DD --onde \"<onde o dono disse>\"\n"
+    "       mesa escrever <chapeu> --premissa \"<texto>\" (--vale-ate AAAA-MM-DD | --ate-que \"<evento>\")\n"
+    "  a aresta se marca no Sair: mesa aresta <chapeu> --de <ponta> --para <ponta> --para-que \"<linha>\"\n")
+USO_ARESTA = (
+    "  uso: mesa aresta <chapeu> --de conceito:<slug>|termo:<texto>\n"
+    "         --para conceito:<slug>|obra:<uuid>|casa:<especie>/<chave>|chapeu:<cadeira>/<slug>\n"
+    "         --para-que \"<a relação que a fita viu, numa linha>\" [--quem dono|cadeira] [--declarada]\n")
+MSG_RESTRICAO = {
+    "caderno_licao_tem_caso": "lição sem o caso: --caso <card, fita ou data>",
+    "caderno_preferencia_tem_palavra": "preferência sem a palavra do dono: --dito-em AAAA-MM-DD e --onde",
+    "caderno_premissa_tem_validade": "premissa pede --vale-ate AAAA-MM-DD ou --ate-que \"<evento>\", um dos dois",
+    "caderno_premissa_ate_60_dias": f"premissa vale no máximo {PRAZO_PREMISSA} dias a partir de hoje",
+    "caderno_aresta_tem_pontas": "aresta pede as duas pontas, --de e --para, na forma tipada",
+    "caderno_aresta_vigente_uq": "já há aresta vigente com esse par neste chapéu; a marcação conta nela",
+    "caderno_entrada_texto_check": f"entrada vazia ou acima de {TETO_ENTRADA} caracteres",
+}
+
+
+def _hoje():
+    """A data de hoje no fuso da casa: a mesma regua da restricao de 60 dias (0097)."""
+    try:
+        from zoneinfo import ZoneInfo
+        return datetime.now(ZoneInfo(FUSO)).date()
+    except Exception:  # noqa: BLE001 — sem base de fusos, a data do host
+        return date.today()
+
+
+def _data(v):
+    """date de um timestamptz (no fuso da casa) ou de um date."""
+    if v is None:
+        return None
+    if isinstance(v, datetime):
+        try:
+            from zoneinfo import ZoneInfo
+            return v.astimezone(ZoneInfo(FUSO)).date()
+        except Exception:  # noqa: BLE001
+            return v.date()
+    return v
+
+
+def _br(d):
+    return d.strftime("%d/%m/%Y") if d else "?"
+
+
+def _data_arg(s, nome):
+    try:
+        return date.fromisoformat(s.strip())
+    except (AttributeError, ValueError):
+        sys.stderr.write(f"erro: {nome} espera AAAA-MM-DD, veio {s!r}\n")
+        sys.exit(2)
+
+
+_MEDIDOR = {}
+
+
+def _medidor():
+    """Tokenizador da casa (qwen2.5, o mesmo de `expediente` e `conferir sessao`). Sem ele,
+    estimativa por bytes/4, declarada na recusa: o teto nunca mede calado."""
+    if not _MEDIDOR:
+        motivo = None
+        try:
+            from tokenizers import Tokenizer
+            if os.path.isfile(TOKENIZADOR):
+                tk = Tokenizer.from_file(TOKENIZADOR)
+                _MEDIDOR.update(fn=lambda s: len(tk.encode(s).ids), metodo="tokenizador qwen2.5")
+            else:
+                motivo = f"tokenizador ausente: {TOKENIZADOR}"
+        except ImportError:
+            motivo = "modulo `tokenizers` ausente"
+        if motivo:
+            _MEDIDOR.update(fn=lambda s: max(1, len(s.encode("utf-8")) // 4),
+                            metodo=f"estimativa por bytes/4 ({motivo})")
+    return _MEDIDOR["fn"], _MEDIDOR["metodo"]
+
+
+def _cid(e):
+    return f"c{e['id']}" if e.get("id") else "c?"
+
+
+def _id_arg(s):
+    """`c12`, `#12` ou `12` -> 12: o id que o corpo mostra."""
+    m = re.fullmatch(r"[c#]?(\d+)", (s or "").strip().lower())
+    if not m:
+        sys.stderr.write(f"erro: id de entrada invalido {s!r} — o que o corpo mostra, como c12\n")
+        sys.exit(2)
+    return int(m.group(1))
+
+
+def _sessao_do_ato():
+    """A fita do ato: PF_FITA no chat; na porta, que nao injeta fita, o sessao_id."""
+    return (os.environ.get("PF_FITA") or os.environ.get("PF_SESSAO") or "").strip() or None
+
+
+def _servida(e, hoje):
+    """So a vigente se serve (arq:0120 §6). A premissa vencida sai do servido no dia
+    seguinte ao «vale ate», mesmo antes de a varredura a retirar."""
+    return e["estado"] == "vigente" and not _vencida(e, hoje)
+
+
+def _vencida(e, hoje):
+    return (e["estado"] == "vigente" and e["categoria"] == "premissa"
+            and bool(e.get("vale_ate")) and e["vale_ate"] < hoje)
+
+
+def _a_revisar(e, hoje):
+    """Licao vigente sem confirmacao ha mais de 90 dias (arq:0120 §7): servida com a marca."""
+    if e["estado"] != "vigente" or e["categoria"] != "licao":
+        return False
+    conf = _data(e.get("confirmada_em"))
+    return bool(conf) and (hoje - conf).days > PRAZO_LICAO
+
+
+def _linha(e, hoje, fitas=None):
+    """A entrada como o corpo a serve, numa linha. E tambem o que o teto mede."""
+    c = e["categoria"]
+    if c == "licao":
+        corpo = f"{e['texto']} (caso: {e['caso']})"
+    elif c == "preferencia":
+        corpo = f"{e['texto']} (o dono, {_br(e.get('dito_em'))}, {e['dito_onde']})"
+    elif c == "premissa":
+        validade = (f"vale até {_br(e['vale_ate'])}" if e.get("vale_ate")
+                    else f"até que {e['ate_que']}")
+        corpo = f"{e['texto']} ({validade})"
+    else:
+        corpo = f"{e['de_ponta']} → {e['para_ponta']}: {e['texto']}"
+        if fitas is not None:
+            corpo += f" ({fitas} fita{'s' if fitas != 1 else ''})"
+    marcas = []
+    if _a_revisar(e, hoje):
+        marcas.append(f"a revisar: não confirmada desde {_br(_data(e['confirmada_em']))}")
+    if _vencida(e, hoje):
+        marcas.append(f"vencida em {_br(e['vale_ate'])}: retire ou reconfirme")
+    if e.get("em_tombamento"):
+        marcas.append(f"em tombamento → {e['destino']}")
+    if e.get("candidata"):
+        marcas.append(f"candidata: {e['candidata']}")
+    if e["estado"] == "substituida":
+        marcas.append(f"substituída por c{e['substituida_por']}")
+    elif e["estado"] == "tombada":
+        marcas.append(f"tombada → {e['destino']}")
+    elif e["estado"] == "retirada":
+        marcas.append(f"retirada: {e['motivo']}")
+    return f"- [{_cid(e)}] {corpo}" + "".join(f" · {m}" for m in marcas)
+
+
+def _tokens(entradas, hoje, nova=None, sem=None):
+    """Tokens das entradas servidas do chapeu, fora a aresta (arq:0120 §5.3), com `nova` e
+    sem a de id `sem`. Mede a linha como o corpo a serve. Devolve (tokens, metodo)."""
+    medir, metodo = _medidor()
+    total = 0
+    for e in entradas:
+        if e.get("id") == sem or e["categoria"] == "aresta" or not _servida(e, hoje):
+            continue
+        total += medir(_linha(e, hoje))
+    if nova is not None:
+        total += medir(_linha(nova, hoje))
+    return total, metodo
+
+
+def _recusa_teto(chapeu, total, metodo, entradas, hoje):
+    medir, _ = _medidor()
+    sys.stderr.write(
+        f"mesa: recuso — o caderno {chapeu} passaria a {total} tokens vigentes, acima do teto de "
+        f"{TETO_CHAPEU} ({metodo}). Tombe ou retire antes de acrescentar (arq:0120 §5.3):\n"
+        "  mesa tombar <id> --destino <chave> · mesa retirar <id> --motivo \"<por quê>\"\n"
+        "  as vigentes, da confirmada há mais tempo:\n")
+    vig = sorted((e for e in entradas if e["categoria"] != "aresta" and _servida(e, hoje)),
+                 key=lambda e: e["confirmada_em"])
+    for e in vig[:6]:
+        linha = _linha(e, hoje)
+        sys.stderr.write(f"    {linha[:110]}  ({medir(linha)} tk)\n")
+    return 4
+
+
+def _texto_ok(texto):
+    """(texto, rc). Vazio e uso (2); acima de 600 caracteres e politica (4)."""
+    texto = (texto or "").strip()
+    if not texto:
+        sys.stderr.write("erro: entrada vazia\n" + USO_ESCREVER)
+        return None, 2
+    if len(texto) > TETO_ENTRADA:
+        sys.stderr.write(f"mesa: recuso — a entrada tem {len(texto)} caracteres; o teto é "
+                         f"{TETO_ENTRADA} por entrada (arq:0120 §5.3). Corte, ou divida em duas.\n")
+        return None, 4
+    return texto, 0
+
+
+def _campos(categoria, args, hoje, base=None):
+    """Os campos obrigatorios da categoria (arq:0120 §2), dos argumentos ou, na
+    substituicao, da entrada `base`. Devolve (campos, erro); erro e a instrucao do ato."""
+    base = base or {}
+
+    def arg(nome):
+        v = getattr(args, nome, None)
+        return v.strip() if isinstance(v, str) and v.strip() else None
+
+    alheios = {"licao": ("dito_em", "onde", "vale_ate", "ate_que"),
+               "preferencia": ("caso", "vale_ate", "ate_que"),
+               "premissa": ("caso", "dito_em", "onde")}[categoria]
+    sobra = ["--" + n.replace("_", "-") for n in alheios if arg(n)]
+    if sobra:
+        return None, f"{', '.join(sobra)} não é campo de {ROTULO[categoria]}"
+    if categoria == "licao":
+        caso = arg("caso") or base.get("caso")
+        if not caso:
+            return None, "lição sem o caso que a ensinou: --caso <card, fita ou data> (arq:0120 §2)"
+        return {"caso": caso}, None
+    if categoria == "preferencia":
+        dito_em = _data_arg(arg("dito_em"), "--dito-em") if arg("dito_em") else base.get("dito_em")
+        onde = arg("onde") or base.get("dito_onde")
+        if not dito_em or not onde:
+            return None, ("preferência do dono sem a palavra dele: --dito-em AAAA-MM-DD e "
+                          "--onde \"<fita, card ou mensagem>\" (arq:0120 §2)")
+        if dito_em > hoje:
+            return None, f"--dito-em {dito_em} está no futuro"
+        return {"dito_em": dito_em, "dito_onde": onde}, None
+    vale, ate = arg("vale_ate"), arg("ate_que")
+    if vale and ate:
+        return None, "premissa leva --vale-ate OU --ate-que, não os dois"
+    if vale or ate:
+        vale_ate, ate_que = (_data_arg(vale, "--vale-ate") if vale else None), ate
+    else:
+        vale_ate, ate_que = base.get("vale_ate"), base.get("ate_que")
+    if not vale_ate and not ate_que:
+        return None, (f"premissa sem validade: --vale-ate AAAA-MM-DD (até {PRAZO_PREMISSA} dias) "
+                      "ou --ate-que \"<evento que se confere>\" (arq:0120 §2)")
+    if vale_ate and vale_ate < hoje:
+        return None, f"--vale-ate {vale_ate} já passou"
+    if vale_ate and (vale_ate - hoje).days > PRAZO_PREMISSA:
+        return None, (f"premissa vale no máximo {PRAZO_PREMISSA} dias: --vale-ate até "
+                      f"{hoje + timedelta(days=PRAZO_PREMISSA)} (arq:0120 §2)")
+    return {"vale_ate": vale_ate, "ate_que": ate_que}, None
+
+
+def _campos_args(p):
+    p.add_argument("--caso", help="licao: o caso que a ensinou (card, fita ou data)")
+    p.add_argument("--dito-em", dest="dito_em", metavar="AAAA-MM-DD",
+                   help="preferencia do dono: quando ele disse")
+    p.add_argument("--onde", help="preferencia do dono: onde ele disse (fita, card, mensagem)")
+    p.add_argument("--vale-ate", dest="vale_ate", metavar="AAAA-MM-DD",
+                   help=f"premissa: ate quando vale (no maximo {PRAZO_PREMISSA} dias)")
+    p.add_argument("--ate-que", dest="ate_que", metavar="EVENTO",
+                   help="premissa: o evento que se confere e a derruba")
+
+
+def _valida_ponta(p, lado):
+    """None se a ponta esta na forma da curadoria (#3218); senao, a instrucao."""
+    m = (PONTA_DE_RE if lado == "de" else PONTA_PARA_RE).match(p or "")
+    if not m:
+        formas = ("conceito:<slug> ou termo:<texto>" if lado == "de" else
+                  "conceito:<slug>, obra:<uuid>, casa:<especie>/<chave> ou chapeu:<cadeira>/<slug>")
+        return f"--{lado} {p!r} fora da forma: {formas}"
+    tipo, valor = m.group(1), m.group(2).strip()
+    regua = {"conceito": (SLUG_RE, "o slug do acervo"), "obra": (UUID_RE, "o uuid da obra"),
+             "casa": (CASA_RE, "<especie>/<chave>"),
+             "chapeu": (CHAPEU_PONTA_RE, "<cadeira>/<slug>")}.get(tipo)
+    if regua and not regua[0].match(valor):
+        return f"--{lado} {p!r}: {tipo}: espera {regua[1]}"
+    return None
+
+
+def _como_dict(linha):
+    return dict(zip(COLUNAS, linha))
+
+
+def _entradas(cur, cad, chapeu=None):
+    cur.execute(
+        f"SELECT {', '.join(COLUNAS)} FROM sessao.caderno_entrada WHERE cadeira = %s "
+        + ("AND chapeu = %s " if chapeu else "") + "ORDER BY chapeu, id",
+        (cad, chapeu) if chapeu else (cad,))
+    return [_como_dict(l) for l in cur.fetchall()]
+
+
+def _entrada_da_cadeira(cur, eid):
+    """A entrada `eid` desta cadeira, travada para o ato. None: nao existe aqui. O caderno
+    e privado da cadeira (arq:0041); so o veredito da curadoria cruza cadeiras."""
+    cur.execute(f"SELECT {', '.join(COLUNAS)} FROM sessao.caderno_entrada "
+                "WHERE id = %s AND cadeira = %s FOR UPDATE", (eid, canonica()))
+    l = cur.fetchone()
+    return _como_dict(l) if l else None
+
+
+def _entrada_ou_recusa(cur, eid, ato, estados=("vigente",), aresta_ok=True):
+    e = _entrada_da_cadeira(cur, eid)
+    if e is None:
+        sys.stderr.write(f"mesa: c{eid} não existe no caderno de {canonica()}\n")
+        return None, 1
+    if e["estado"] not in estados:
+        sys.stderr.write(f"mesa: c{eid} está {e['estado']}; `{ato}` pede {' ou '.join(estados)}\n")
+        return None, 4
+    if e["categoria"] == "aresta" and not aresta_ok:
+        sys.stderr.write(f"mesa: aresta não passa por `{ato}`: o uso se marca por fita (`mesa "
+                         "aresta`), e o veredito é da curadoria (`mesa veredito`)\n")
+        return None, 4
+    return e, 0
+
+
+def _trava_chapeu(cur, cad, chapeu):
+    """Escritas no mesmo chapeu em fila: o teto se mede sem corrida."""
+    cur.execute("SELECT pg_advisory_xact_lock(hashtext(%s))", (f"caderno:{cad}/{chapeu}",))
+
+
+def _insere(cur, cad, chapeu, categoria, texto, campos):
+    cols = ["cadeira", "chapeu", "categoria", "texto", "criada_por"] + list(campos)
+    vals = [cad, chapeu, categoria, texto, _sessao_do_ato()] + list(campos.values())
+    cur.execute(f"INSERT INTO sessao.caderno_entrada ({', '.join(cols)}) "
+                f"VALUES ({', '.join(['%s'] * len(cols))}) RETURNING id", vals)
+    return cur.fetchone()[0]
+
+
+def _evento(cur, eid, ato, de, para, porque=None):
+    cur.execute("INSERT INTO sessao.caderno_evento (entrada_id, ato, de_estado, para_estado, por, "
+                "sessao, porque) VALUES (%s, %s, %s, %s, %s, %s, %s)",
+                (eid, ato, de, para, canonica(), _sessao_do_ato(), porque))
+
+
+def _erro_banco(e):
+    """A recusa do banco na lingua de quem escreve. So traduz erro do psycopg; o resto sobe
+    como esta: defeito de codigo nao se disfarca de recusa."""
+    if not type(e).__module__.startswith("psycopg"):
+        raise e
+    diag = getattr(e, "diag", None)
+    nome = getattr(diag, "constraint_name", None)
+    msg = MSG_RESTRICAO.get(nome) or getattr(diag, "message_primary", None) or str(e)
+    sys.stderr.write(f"mesa: o banco recusou — {msg}\n")
+    return 4 if str(getattr(e, "sqlstate", "") or "").startswith("23") else 3
+
+
+def ato_escrever(args):
+    """Escreve UMA entrada do caderno do chapeu, com a categoria e o campo dela (arq:0120
+    §2). O caderno inteiro em stdin, a forma de antes, nao se grava mais."""
+    chapeu = args.slot or os.environ.get("PF_CHAPEU")
+    if not chapeu:
+        sys.stderr.write("erro: chapeu obrigatorio (sem chapeu na sessao: passe <chapeu> ou "
+                         "defina PF_CHAPEU)\n" + USO_ESCREVER)
+        return 2
+    slot = valida_slot(chapeu)
+    dadas = [(c, getattr(args, c)) for c in ("licao", "preferencia", "premissa")
+             if getattr(args, c, None) is not None]
+    if len(dadas) != 1:
+        if not dadas and not sys.stdin.isatty() and sys.stdin.read().strip():
+            sys.stderr.write("erro: o caderno agora é por entrada (arq:0120): o corpo inteiro em "
+                             "stdin não se grava mais. Escreva cada entrada com a categoria.\n")
+        else:
+            sys.stderr.write("erro: a entrada declara uma categoria, e só uma: --licao, "
+                             "--preferencia ou --premissa (arq:0120 §2)\n")
+        sys.stderr.write(USO_ESCREVER)
+        return 2
+    categoria, texto = dadas[0]
+    hoje = _hoje()
+    campos, erro = _campos(categoria, args, hoje)
+    if erro:
+        sys.stderr.write(f"erro: {erro}\n" + USO_ESCREVER)
+        return 2
+    texto, rc = _texto_ok(texto)
+    if rc:
+        return rc
+    con = pg()
+    if con is None:
+        return 3
+    cad = canonica()
+    nova = dict(id=None, categoria=categoria, estado="vigente", texto=texto,
+                confirmada_em=datetime.now(timezone.utc), **campos)
+    try:
+        with con, con.cursor() as cur:
+            _trava_chapeu(cur, cad, slot)
+            atuais = _entradas(cur, cad, slot)
+            total, metodo = _tokens(atuais, hoje, nova=nova)
+            if total > TETO_CHAPEU:
+                return _recusa_teto(slot, total, metodo, atuais, hoje)
+            eid = _insere(cur, cad, slot, categoria, texto, campos)
+            _evento(cur, eid, "escrever", None, "vigente")
+    except Exception as ex:  # noqa: BLE001 — _erro_banco devolve o que nao e do banco
+        return _erro_banco(ex)
+    print(f"caderno {slot}: c{eid} escrita ({ROTULO[categoria]}) — {total}/{TETO_CHAPEU} tokens vigentes")
     return 0
 
+
+def ato_substituir(args):
+    """Entrada nova no lugar da vigente, mesma categoria, no mesmo ato (arq:0120 §6). O campo
+    obrigatorio passa da antiga se nao vier outro."""
+    eid = _id_arg(args.id)
+    texto, rc = _texto_ok(args.texto)
+    if rc:
+        return rc
+    hoje = _hoje()
+    con = pg()
+    if con is None:
+        return 3
+    cad = canonica()
+    try:
+        with con, con.cursor() as cur:
+            e, rc = _entrada_ou_recusa(cur, eid, "mesa substituir", aresta_ok=False)
+            if rc:
+                return rc
+            campos, erro = _campos(e["categoria"], args, hoje, base=e)
+            if erro:
+                sys.stderr.write(f"erro: {erro}\n")
+                return 2
+            _trava_chapeu(cur, cad, e["chapeu"])
+            atuais = _entradas(cur, cad, e["chapeu"])
+            nova = dict(id=None, categoria=e["categoria"], estado="vigente", texto=texto,
+                        confirmada_em=datetime.now(timezone.utc), **campos)
+            total, metodo = _tokens(atuais, hoje, nova=nova, sem=eid)
+            if total > TETO_CHAPEU:
+                return _recusa_teto(e["chapeu"], total, metodo, atuais, hoje)
+            nid = _insere(cur, cad, e["chapeu"], e["categoria"], texto, campos)
+            cur.execute("UPDATE sessao.caderno_entrada SET estado = 'substituida', "
+                        "substituida_por = %s WHERE id = %s", (nid, eid))
+            _evento(cur, nid, "escrever", None, "vigente", f"substitui c{eid}")
+            _evento(cur, eid, "substituir", "vigente", "substituida", f"por c{nid}")
+    except Exception as ex:  # noqa: BLE001
+        return _erro_banco(ex)
+    print(f"caderno {e['chapeu']}: c{eid} substituída por c{nid} — {total}/{TETO_CHAPEU} tokens vigentes")
+    return 0
+
+
+def ato_confirmar(args):
+    """Reconfirma a vigente (arq:0120 §7): a licao zera os 90 dias; a premissa so com data ou
+    evento novo; a marca de candidata sai, porque a cadeira olhou e manteve."""
+    eid = _id_arg(args.id)
+    hoje = _hoje()
+    con = pg()
+    if con is None:
+        return 3
+    try:
+        with con, con.cursor() as cur:
+            e, rc = _entrada_ou_recusa(cur, eid, "mesa confirmar", aresta_ok=False)
+            if rc:
+                return rc
+            novo_prazo = getattr(args, "vale_ate", None) or getattr(args, "ate_que", None)
+            if e["categoria"] == "premissa":
+                if not novo_prazo:
+                    sys.stderr.write("erro: premissa se reconfirma com prazo novo: --vale-ate "
+                                     "AAAA-MM-DD ou --ate-que \"<evento>\" (arq:0120 §7)\n")
+                    return 2
+                campos, erro = _campos("premissa", args, hoje)
+                if erro:
+                    sys.stderr.write(f"erro: {erro}\n")
+                    return 2
+            elif novo_prazo:
+                sys.stderr.write("erro: --vale-ate e --ate-que são da premissa\n")
+                return 2
+            else:
+                campos = {}
+            sets = "".join(f", {k} = %s" for k in campos)
+            cur.execute("UPDATE sessao.caderno_entrada SET confirmada_em = now(), candidata = NULL"
+                        + sets + " WHERE id = %s", (*campos.values(), eid))
+            porque = None
+            if campos:
+                porque = (f"vale até {campos['vale_ate']}" if campos.get("vale_ate")
+                          else f"até que {campos['ate_que']}")
+            _evento(cur, eid, "confirmar", "vigente", "vigente", porque)
+    except Exception as ex:  # noqa: BLE001
+        return _erro_banco(ex)
+    print(f"caderno {e['chapeu']}: c{eid} confirmada em {_br(hoje)}" + (f" — {porque}" if porque else ""))
+    return 0
+
+
+def ato_retirar(args):
+    """Tira a vigente do servido, com o motivo (arq:0120 §8). Nada se apaga: volta por
+    `mesa restaurar`."""
+    eid = _id_arg(args.id)
+    motivo = (args.motivo or "").strip()
+    if not motivo:
+        sys.stderr.write("erro: retirar pede --motivo \"<por quê>\"; duplicata leva a chave do "
+                         "cânone (arq:0120 §8)\n")
+        return 2
+    con = pg()
+    if con is None:
+        return 3
+    try:
+        with con, con.cursor() as cur:
+            e, rc = _entrada_ou_recusa(cur, eid, "mesa retirar")
+            if rc:
+                return rc
+            cur.execute("UPDATE sessao.caderno_entrada SET estado = 'retirada', motivo = %s "
+                        "WHERE id = %s", (motivo, eid))
+            _evento(cur, eid, "retirar", "vigente", "retirada", motivo)
+    except Exception as ex:  # noqa: BLE001
+        return _erro_banco(ex)
+    print(f"caderno {e['chapeu']}: c{eid} retirada — {motivo} (volta com `mesa restaurar c{eid}`)")
+    return 0
+
+
+def ato_restaurar(args):
+    """A retirada volta a vigente, se couber no teto (arq:0120 §6)."""
+    eid = _id_arg(args.id)
+    hoje = _hoje()
+    con = pg()
+    if con is None:
+        return 3
+    cad = canonica()
+    try:
+        with con, con.cursor() as cur:
+            e, rc = _entrada_ou_recusa(cur, eid, "mesa restaurar", estados=("retirada",))
+            if rc:
+                return rc
+            if e["categoria"] != "aresta":
+                _trava_chapeu(cur, cad, e["chapeu"])
+                atuais = _entradas(cur, cad, e["chapeu"])
+                total, metodo = _tokens(atuais, hoje, nova=dict(e, estado="vigente"), sem=eid)
+                if total > TETO_CHAPEU:
+                    return _recusa_teto(e["chapeu"], total, metodo, atuais, hoje)
+            cur.execute("UPDATE sessao.caderno_entrada SET estado = 'vigente', motivo = NULL "
+                        "WHERE id = %s", (eid,))
+            _evento(cur, eid, "restaurar", "retirada", "vigente",
+                    (getattr(args, "motivo", None) or "").strip() or None)
+    except Exception as ex:  # noqa: BLE001
+        return _erro_banco(ex)
+    print(f"caderno {e['chapeu']}: c{eid} restaurada")
+    return 0
+
+
+def ato_tombar(args):
+    """A licao ou preferencia que virou norma sai para o destino (arq:0120 §9). Com
+    --pendente fica «em tombamento», servida com a marca, ate o destino publicar."""
+    eid = _id_arg(args.id)
+    destino = (args.destino or "").strip()
+    if not destino:
+        sys.stderr.write("erro: tombar pede --destino <chave do que a recebeu: chapéu, documento "
+                         "de casa, ADR, conceito> (arq:0120 §9)\n")
+        return 2
+    con = pg()
+    if con is None:
+        return 3
+    try:
+        with con, con.cursor() as cur:
+            e, rc = _entrada_ou_recusa(cur, eid, "mesa tombar", aresta_ok=False)
+            if rc:
+                return rc
+            if args.pendente:
+                cur.execute("UPDATE sessao.caderno_entrada SET em_tombamento = true, destino = %s "
+                            "WHERE id = %s", (destino, eid))
+                _evento(cur, eid, "tombar", "vigente", "vigente", f"em tombamento → {destino}")
+            else:
+                cur.execute("UPDATE sessao.caderno_entrada SET estado = 'tombada', "
+                            "em_tombamento = false, destino = %s WHERE id = %s", (destino, eid))
+                _evento(cur, eid, "tombar", "vigente", "tombada", destino)
+    except Exception as ex:  # noqa: BLE001
+        return _erro_banco(ex)
+    feito = "em tombamento" if args.pendente else "tombada"
+    print(f"caderno {e['chapeu']}: c{eid} {feito} → {destino}")
+    return 0
+
+
+def ato_apontar(args):
+    """A marca de candidata que a varredura poe (arq:0120 §10): duplicata, fora de categoria,
+    referencia morta, orfa, tombamento. Nao decide: a cadeira confirma, tomba ou retira."""
+    eid = _id_arg(args.id)
+    motivo = (args.motivo or "").strip()
+    if not motivo:
+        sys.stderr.write("erro: apontar pede --motivo \"<duplicata de X | fora de categoria | "
+                         "referência morta | órfã | tombamento>\"\n")
+        return 2
+    con = pg()
+    if con is None:
+        return 3
+    try:
+        with con, con.cursor() as cur:
+            e, rc = _entrada_ou_recusa(cur, eid, "mesa apontar")
+            if rc:
+                return rc
+            cur.execute("UPDATE sessao.caderno_entrada SET candidata = %s WHERE id = %s",
+                        (motivo, eid))
+            _evento(cur, eid, "apontar", "vigente", "vigente", motivo)
+    except Exception as ex:  # noqa: BLE001
+        return _erro_banco(ex)
+    print(f"caderno {e['chapeu']}: c{eid} apontada — {motivo}")
+    return 0
+
+
+def ato_aresta(args):
+    """Marca, no Sair, a materia de fora da cadeira que a fita puxou e USOU na resposta
+    (arq:0120 §2; forma da aresta, #3218). Uma entrada vigente por chapeu e par de pontas;
+    cada fita conta uma vez. Fora do teto: a aresta nasce para sair na colheita."""
+    chapeu = args.chapeu or os.environ.get("PF_CHAPEU")
+    if not chapeu:
+        sys.stderr.write("erro: chapeu obrigatorio (passe <chapeu> ou defina PF_CHAPEU)\n" + USO_ARESTA)
+        return 2
+    slot = valida_slot(chapeu)
+    de, para = (args.de or "").strip(), (args.para or "").strip()
+    if not de or not para:
+        sys.stderr.write("erro: a aresta pede as duas pontas, --de e --para (forma da curadoria, "
+                         "#3218)\n" + USO_ARESTA)
+        return 2
+    for ponta, lado in ((de, "de"), (para, "para")):
+        erro = _valida_ponta(ponta, lado)
+        if erro:
+            sys.stderr.write(f"erro: {erro}\n" + USO_ARESTA)
+            return 2
+    m = CHAPEU_PONTA_RE.match(para[len("chapeu:"):]) if para.startswith("chapeu:") else None
+    if m and m.group(1) == canonica():
+        sys.stderr.write("mesa: recuso — chapéu da própria cadeira não é aresta: a aresta é "
+                         "matéria de fora da cadeira (arq:0120 §2)\n")
+        return 4
+    para_que = (args.para_que or "").strip()
+    if not para_que:
+        sys.stderr.write("erro: --para-que: a relação que a fita viu, numa linha\n" + USO_ARESTA)
+        return 2
+    if len(para_que) > TETO_ENTRADA:
+        sys.stderr.write(f"mesa: recuso — --para-que tem {len(para_que)} caracteres; o teto é "
+                         f"{TETO_ENTRADA}\n")
+        return 4
+    fita = _sessao_do_ato()
+    if not fita:
+        sys.stderr.write("mesa: recuso — a aresta conta uma vez por fita, e não há fita: nem "
+                         "PF_FITA nem PF_SESSAO no ambiente\n")
+        return 4
+    con = pg()
+    if con is None:
+        return 3
+    cad = canonica()
+    try:
+        with con, con.cursor() as cur:
+            cur.execute("SELECT pg_advisory_xact_lock(hashtext(%s))",
+                        (f"aresta:{cad}/{slot}/{de}/{para}",))
+            cur.execute("SELECT id FROM sessao.caderno_entrada WHERE cadeira = %s AND chapeu = %s "
+                        "AND categoria = 'aresta' AND estado = 'vigente' AND de_ponta = %s "
+                        "AND para_ponta = %s", (cad, slot, de, para))
+            achada = cur.fetchone()
+            if achada:
+                eid = achada[0]
+            else:
+                eid = _insere(cur, cad, slot, "aresta", para_que,
+                              {"de_ponta": de, "para_ponta": para})
+                _evento(cur, eid, "escrever", None, "vigente", f"{de} → {para}")
+            cur.execute("INSERT INTO sessao.caderno_aresta_uso (entrada_id, fita, para_que, quem, "
+                        "declarada) VALUES (%s, %s, %s, %s, %s) "
+                        "ON CONFLICT (entrada_id, fita) DO NOTHING RETURNING entrada_id",
+                        (eid, fita, para_que, args.quem, bool(args.declarada)))
+            contou = cur.fetchone() is not None
+            if contou:
+                _evento(cur, eid, "aresta", "vigente", "vigente", para_que)
+            cur.execute("SELECT count(*) FROM sessao.caderno_aresta_uso WHERE entrada_id = %s",
+                        (eid,))
+            n = cur.fetchone()[0]
+    except Exception as ex:  # noqa: BLE001
+        return _erro_banco(ex)
+    marca = "contada" if contou else "já contada nesta fita"
+    print(f"caderno {slot}: aresta c{eid} {de} → {para} — {marca}; {n} fita(s) até a colheita")
+    return 0
+
+
+# --- leitura: indice e corpo --------------------------------------------------------------
+
+def _legados(cur, cad, chapeu=None):
+    """O legado de caderno ainda nao triado da cadeira (arq:0120 §11)."""
+    cur.execute("SELECT chave_origem, chapeu, bytes, capturado_em, texto FROM sessao.caderno_legado "
+                "WHERE cadeira = %s AND triado_em IS NULL"
+                + (" AND chapeu = %s" if chapeu else "") + " ORDER BY chapeu",
+                (cad, chapeu) if chapeu else (cad,))
+    chaves = ("chave_origem", "chapeu", "bytes", "capturado_em", "texto")
+    return [dict(zip(chaves, l)) for l in cur.fetchall()]
+
+
+def _fitas_por_aresta(cur, ids):
+    if not ids:
+        return {}
+    cur.execute("SELECT entrada_id, count(*) FROM sessao.caderno_aresta_uso "
+                "WHERE entrada_id = ANY(%s) GROUP BY entrada_id", (list(ids),))
+    return dict(cur.fetchall())
+
+
+def _movimento(cur, cad):
+    """Por chapeu: o ultimo evento (a idade real da escrita) e as retiradas de 7 dias."""
+    cur.execute("SELECT e.chapeu, max(v.em), count(*) FILTER (WHERE v.para_estado = 'retirada' "
+                "AND v.de_estado = 'vigente' AND v.em >= now() - interval '7 days') "
+                "FROM sessao.caderno_evento v JOIN sessao.caderno_entrada e ON e.id = v.entrada_id "
+                "WHERE e.cadeira = %s GROUP BY e.chapeu", (cad,))
+    return {ch: (ult, ret) for ch, ult, ret in cur.fetchall()}
+
+
+def _indice_texto(entradas, legados, movimento, hoje, agora):
+    """O indice que a abertura serve: por chapeu, vigentes, tokens contra o teto, a idade
+    real da ultima escrita e os contadores (arq:0120 §10.5)."""
+    chapeus = sorted({e["chapeu"] for e in entradas} | {l["chapeu"] for l in legados})
+    if not chapeus:
+        return "cadernos: nenhum (sem entrada nem legado a triar)\n"
+    linhas = []
+    for ch in chapeus:
+        es = [e for e in entradas if e["chapeu"] == ch]
+        vig = [e for e in es if e["categoria"] != "aresta" and _servida(e, hoje)]
+        tk, _ = _tokens(es, hoje)
+        ult, retiradas = movimento.get(ch, (None, 0))
+        partes = [f"{len(vig)} vigente{'s' if len(vig) != 1 else ''}", f"{tk}/{TETO_CHAPEU} tk"]
+        if ult is not None:
+            partes.append(f"última escrita há {idade(agora - ult.timestamp())}")
+        contadores = (
+            (sum(_a_revisar(e, hoje) for e in es), "a revisar"),
+            (sum(_vencida(e, hoje) for e in es), "premissa(s) vencida(s)"),
+            (retiradas, "retirada(s) em 7 d"),
+            (sum(1 for e in es if e["estado"] == "vigente" and e.get("candidata")), "candidata(s)"),
+            (sum(1 for e in es if e["estado"] == "vigente" and e.get("em_tombamento")),
+             "em tombamento"),
+            (sum(1 for e in es if e["categoria"] == "aresta" and e["estado"] == "vigente"),
+             "aresta(s) acumulando"),
+        )
+        partes += [f"{n} {rotulo}" for n, rotulo in contadores if n]
+        partes += [f"legado {l['bytes']} B a triar" for l in legados if l["chapeu"] == ch]
+        linhas.append(f"  {ch:<16} " + " · ".join(partes))
+    linhas.append("  (corpo sob demanda: `mesa caderno <chapeu>`)")
+    return "\n".join(linhas) + "\n"
+
+
+def _corpo_texto(cad, chapeu, entradas, legados, fitas, hoje, categorias=None, todas=False,
+                 secao=None):
+    """O corpo do chapeu: so o vigente, por categoria (arq:0120 §6); com `todas`, tambem o
+    que saiu. Depois, o legado ainda nao triado, inteiro ou so a `secao` dele."""
+    es = [e for e in entradas if e["chapeu"] == chapeu]
+    tk, _ = _tokens(es, hoje)
+    n_vig = sum(1 for e in es if e["categoria"] != "aresta" and _servida(e, hoje))
+    out = [f"===== caderno {cad}/{chapeu} · {n_vig} vigente{'s' if n_vig != 1 else ''} · "
+           f"{tk}/{TETO_CHAPEU} tokens ====="]
+    algum = False
+    for cat, titulo in SECOES:
+        if categorias and cat not in categorias:
+            continue
+        itens = [e for e in es if e["categoria"] == cat and _servida(e, hoje)]
+        if itens:
+            algum = True
+            out.append(f"## {titulo}")
+            out += [_linha(e, hoje, fitas.get(e["id"]) if cat == "aresta" else None) for e in itens]
+    if todas:
+        fora = [e for e in es if not _servida(e, hoje)
+                and (not categorias or e["categoria"] in categorias)]
+        if fora:
+            algum = True
+            out.append("## fora do servido (substituídas, tombadas, retiradas, premissas vencidas)")
+            out += [_linha(e, hoje) for e in fora]
+    if not algum:
+        out.append(f"caderno {chapeu}: sem entrada vigente"
+                   + (f" em {', '.join(categorias)}" if categorias else ""))
+    if categorias and not secao:
+        return "\n".join(out) + "\n"
+    for l in legados:
+        if l["chapeu"] != chapeu:
+            continue
+        quando = _br(_data(l["capturado_em"]))
+        if secao:
+            trecho = _secao_do_caderno(l["texto"], secao)
+            if trecho is None:
+                out.append(f"legado {chapeu}: sem a secao {secao}")
+                continue
+            out.append(f"===== legado a triar: {l['chave_origem']}#{secao} ({l['bytes']} B, "
+                       f"capturado em {quando}) =====")
+            out.append(trecho)
+        else:
+            out.append(f"===== legado a triar: {l['chave_origem']} ({l['bytes']} B, capturado em "
+                       f"{quando}) =====")
+            out.append(l["texto"].rstrip("\n"))
+        out.append(f"  (triado? `mesa legado --caderno --triado {chapeu}`; o que vale vira entrada "
+                   "por `mesa escrever`)")
+    return "\n".join(out) + "\n"
+
+
 def ato_caderno(args):
-    """Sem slot: indice (o que entra na abertura). Com slot: corpo, sob demanda.
-    Com --chapeu: indice E corpo do chapeu, num giro so — e a chamada da peca
-    `cadernos` da abertura (spec_expediente §7), a ultima injetada.
-    Morada arq:0073: abertura/<cadeira>/<slot>/caderno.md."""
-    d = dir_caderno()
+    """Sem chapeu: o indice (o que entra na abertura). Com chapeu: o corpo, por categoria, e o
+    legado ainda nao triado. Com --chapeu: indice E corpo num giro — a chamada da peca
+    `cadernos` da abertura (spec_expediente §7), a ultima injetada. Fonte: o banco (arq:0120)."""
     if args.secao and not (args.slot or args.chapeu):
         sys.exit("erro: `--secao` pede o chapeu: `mesa caderno <chapeu> --secao <slug>`")
     if args.slot and args.chapeu:
         sys.exit("erro: `mesa caderno <slot>` OU `mesa caderno --chapeu <slug>` — "
                  "o segundo ja traz indice e corpo numa chamada")
-    if args.slot:
-        return _corpo_caderno(d, valida_slot(args.slot), args.secao)
-    chapeu = valida_slot(args.chapeu) if args.chapeu else None
-    rc = _indice_cadernos(d)
+    categorias = None
+    if getattr(args, "categoria", None):
+        categorias = [c.strip() for c in args.categoria.split(",") if c.strip()]
+        fora = [c for c in categorias if c not in CATEGORIAS]
+        if fora:
+            sys.exit(f"erro: categoria desconhecida {', '.join(fora)} — {', '.join(CATEGORIAS)}")
+    chapeu = valida_slot(args.slot or args.chapeu) if (args.slot or args.chapeu) else None
+    con = pg()
+    if con is None:
+        print("cadernos: indisponíveis — sessao-db não respondeu; não é caderno vazio")
+        return 3
+    cad = canonica()
+    hoje, agora = _hoje(), time.time()
+    with con, con.cursor() as cur:
+        entradas = _entradas(cur, cad)
+        legados = _legados(cur, cad)
+        fitas = _fitas_por_aresta(cur, [e["id"] for e in entradas
+                                        if e["categoria"] == "aresta" and e["estado"] == "vigente"])
+        movimento = {} if args.slot else _movimento(cur, cad)
+    if not args.slot:
+        sys.stdout.write(_indice_texto(entradas, legados, movimento, hoje, agora))
     if chapeu:
-        print()
-        rc = _corpo_caderno(d, chapeu, args.secao) or rc
-    return rc
-
-def _indice_cadernos(d):
-    if not os.path.isdir(d):
-        print(f"cadernos: nenhum ({d} nao existe)")
-        return 0
-    achados = sorted(x for x in os.listdir(d)
-                     if os.path.isfile(os.path.join(d, x, "caderno.md")))
-    if not achados:
-        print(f"cadernos: nenhum em {d}")
-        return 0
-    for slot in achados:
-        caminho = os.path.join(d, slot, "caderno.md")
-        st = os.stat(caminho)
-        # Idade e a do ultimo commit quando a arvore e git; a morada publicada nao e, e ali
-        # vale o mtime, que e a hora da publicacao.
-        try:
-            ts = int(subprocess.run(
-                ["git", "-C", os.path.dirname(CADERNOS), "log", "-1", "--format=%ct", "--", caminho],
-                capture_output=True, text=True, timeout=10).stdout.strip() or st.st_mtime)
-        except (OSError, ValueError, subprocess.SubprocessError):
-            ts = int(st.st_mtime)
-        print(f"  {slot:<16} {st.st_size:>6} B   ultima escrita ha {idade(time.time() - ts)}")
-    print(f"  (corpo sob demanda: `mesa caderno <chapeu>`)")
+        if not args.slot:
+            print()
+        sys.stdout.write(_corpo_texto(cad, chapeu, entradas, legados, fitas, hoje, categorias,
+                                      getattr(args, "todas", False), args.secao))
     return 0
 
 
-def _acha_worktree(cad: str) -> Path:
-    # 1. Determina a bancada
-    try:
-        raiz = bancada()
-    except BancadaNaoDeclarada:
-        fallback = Path.home() / "AI"
-        if fallback.is_dir() and os.access(fallback, os.W_OK):
-            raiz = fallback
-        else:
-            cand = Path(HARNESS).parent
-            if cand.is_dir() and (cand / "platafirma-harness").is_dir() and os.access(cand, os.W_OK):
-                raiz = cand
+# --- legado de caderno ---------------------------------------------------------------------
+
+def _cadernos_em_arquivo(raiz):
+    """Os caderno.md da arvore publicada: (achados, fora). Achado e o caderno de chapeu
+    declarado (com chapeu.md) e com texto; fora vai com o porque: vazio, orfao (pasta sem
+    chapeu.md) e cabeca (abertura/<cadeira>/caderno.md, que a arq:0120 §3 encerra)."""
+    achados, fora = [], {"vazio": [], "órfão": [], "cabeça": []}
+    if not os.path.isdir(raiz):
+        return achados, fora
+    for cad in sorted(os.listdir(raiz)):
+        base = os.path.join(raiz, cad)
+        if not os.path.isdir(base):
+            continue
+        if os.path.isfile(os.path.join(base, "caderno.md")):
+            fora["cabeça"].append(f"abertura/{cad}/caderno.md")
+        for ch in sorted(os.listdir(base)):
+            arq = os.path.join(base, ch, "caderno.md")
+            if not os.path.isfile(arq):
+                continue
+            chave_origem = f"abertura/{cad}/{ch}/caderno.md"
+            with open(arq, encoding="utf-8", errors="replace") as fh:
+                texto = fh.read()
+            if not os.path.isfile(os.path.join(base, ch, "chapeu.md")):
+                fora["órfão"].append(chave_origem)
+            elif not texto.strip():
+                fora["vazio"].append(chave_origem)
             else:
-                raiz = Path("/tmp/pf-runtime-bancada")
-                raiz.mkdir(parents=True, exist_ok=True)
+                b = texto.encode("utf-8")
+                achados.append((chave_origem, cad, ch, texto, len(b), hashlib.sha256(b).hexdigest()))
+    return achados, fora
 
-    # 2. Candidatos de worktree existente
-    candidatos = [
-        raiz / "var" / "wt" / cad / "platafirma-harness",
-        raiz / "wt" / "platafirma-harness" / cad,
-        raiz / "var" / "wt" / "platafirma-harness" / cad,
-        raiz / "platafirma-harness" / "wt" / cad,
-        raiz / "platafirma-harness",
-    ]
-    for c in candidatos:
-        if c.is_dir() and ((c / ".git").exists() or (c / ".git").is_file()):
-            return c
 
-    # 3. Criar via `repo abrir platafirma-harness` se ausente
-    repo_bin = os.environ.get("PF_BIN") and os.path.join(os.environ["PF_BIN"], "repo")
-    if not repo_bin or not os.path.isfile(repo_bin):
-        cand_repo = os.path.join(HARNESS, "bin", "repo")
-        if os.path.isfile(cand_repo):
-            repo_bin = cand_repo
+def _captura_cadernos():
+    """Captura os caderno.md da abertura publicada em sessao.caderno_legado (arq:0120 §11),
+    como a mesa velha foi capturada em sessao.mesa_legado. Idempotente: a recaptura so troca
+    o texto que mudou e cuja triagem nao fechou. Nao apaga nem move arquivo (#3217 tira)."""
+    achados, fora = _cadernos_em_arquivo(CADERNOS)
+    con = pg()
+    if con is None:
+        return 3
+    with con, con.cursor() as cur:
+        cur.execute("SELECT chave_origem, sha256, triado_em IS NOT NULL FROM sessao.caderno_legado")
+        antes = {c: (sha, triado) for c, sha, triado in cur.fetchall()}
+        cur.executemany(
+            "INSERT INTO sessao.caderno_legado AS l (chave_origem, cadeira, chapeu, texto, bytes, sha256) "
+            "VALUES (%s, %s, %s, %s, %s, %s) ON CONFLICT (chave_origem) DO UPDATE SET "
+            "texto = EXCLUDED.texto, bytes = EXCLUDED.bytes, sha256 = EXCLUDED.sha256, "
+            "capturado_em = now() WHERE l.triado_em IS NULL "
+            "AND l.sha256 <> EXCLUDED.sha256", achados)
+    novos = sum(1 for a in achados if a[0] not in antes)
+    trocados = sum(1 for a in achados if a[0] in antes and antes[a[0]][0] != a[5]
+                   and not antes[a[0]][1])
+    print(f"caderno legado: {len(achados)} caderno(s) de chapéu em {CADERNOS} — {novos} novo(s), "
+          f"{trocados} com texto novo, {len(achados) - novos - trocados} sem mudança")
+    for porque, lista in fora.items():
+        if lista:
+            print(f"  fora, {porque}: {len(lista)} — {', '.join(lista)}")
+    return 0
+
+
+def _legado_caderno(args):
+    """O legado de caderno da cadeira, e a triagem dele (arq:0120 §11)."""
+    if args.capturar:
+        return _captura_cadernos()
+    con = pg()
+    if con is None:
+        return 3
+    cad = canonica()
+    with con, con.cursor() as cur:
+        if args.triado:
+            ch = valida_slot(args.triado)
+            cur.execute("UPDATE sessao.caderno_legado SET triado_em = now() WHERE cadeira = %s "
+                        "AND chapeu = %s AND triado_em IS NULL RETURNING chave_origem", (cad, ch))
+            n = len(cur.fetchall())
+            print(f"caderno legado: [{ch}] " + ("triado" if n else "nada pendente de triagem"))
+            return 0
+        legados = _legados(cur, cad)
+    if not legados:
+        print("caderno legado: nada pendente de triagem")
+        return 0
+    for l in legados:
+        print(f"===== {l['chave_origem']}  [{l['chapeu']}] {l['bytes']} B, capturado em "
+              f"{_br(_data(l['capturado_em']))} =====")
+        print(l["texto"].rstrip() if args.corpo else "  (corpo por `mesa legado --caderno --corpo`)")
+        print()
+    print("  (triagem pela arq:0120: o que vale vira `mesa escrever <chapeu> --licao|--preferencia|"
+          "--premissa`, contorno vai ao débito técnico, o resto fica no git; fechou: "
+          "`mesa legado --caderno --triado <chapeu>`)")
+    return 0
+
+
+# --- colheita e veredito: a aresta para a curadoria (#3218) -----------------------------
+
+SQL_ROTULOS = ("select coalesce(json_agg(json_build_object('slug', c.slug, 'rotulos', "
+               "array_prepend(c.rotulo, c.outros_rotulos))), '[]') from acervo.conceito c;")
+_RE_CONSULTA = re.compile(r"^##\s+(?:c\)\s*)?consulta dirigida\b.*?$(.*?)(?=^##\s|\Z)",
+                          re.I | re.M | re.S)
+
+
+def _acervo_json(sql):
+    """Uma linha JSON do acervo (rag-extractor-pg), pelo transporte de `acervo listar`
+    (json_agg numa linha). None quando o acervo nao responde: a coluna sai indisponivel,
+    nunca zero (arq:0041)."""
+    ctr, usr, base = ACERVO_PG
+    try:
+        r = subprocess.run(["docker", "exec", "-i", ctr, "psql", "-U", usr, "-d", base, "-tA",
+                            "-v", "ON_ERROR_STOP=1", "-c", sql],
+                           capture_output=True, text=True, timeout=60)
+    except (OSError, subprocess.SubprocessError):
+        return None
+    if r.returncode != 0:
+        return None
+    try:
+        return json.loads(r.stdout.strip() or "null")
+    except ValueError:
+        return None
+
+
+def _sql_cruzamento(pares):
+    """O cruzamento dos pares com o acervo: coocorrencia em obra (conceito com conceito, obras
+    nao expurgadas que tratam dos dois; conceito com obra, se ela trata dele), a ligacao que ja
+    ha na teia e se as pontas existem. So entram slug e uuid que passaram pela regua da ponta:
+    texto livre nao chega ao SQL."""
+    cc, co = [], []
+    for p in pares:
+        de, para = p["de"], p["para"]
+        if not de.startswith("conceito:") or not SLUG_RE.match(de[9:]):
+            continue
+        if para.startswith("conceito:") and SLUG_RE.match(para[9:]):
+            cc.append((de[9:], para[9:]))
+        elif para.startswith("obra:") and UUID_RE.match(para[5:]):
+            co.append((de[9:], para[5:]))
+    partes = []
+    if cc:
+        valores = ", ".join(f"('{a}', '{b}')" for a, b in cc)
+        partes.append(
+            "select 'conceito:' || p.de as de, 'conceito:' || p.para as para, "
+            "(select count(distinct ta.obra_id) from acervo.conceito ca "
+            " join acervo.obra_trata_de ta on ta.conceito_id = ca.id "
+            " join acervo.obra_trata_de tb on tb.obra_id = ta.obra_id "
+            " join acervo.conceito cb on cb.id = tb.conceito_id "
+            " join acervo.obra o on o.id = ta.obra_id "
+            " where ca.slug = p.de and cb.slug = p.para and o.expurgada_em is null) as obras, "
+            "(select string_agg(r.tipo || '/' || r.garantia, ', ' order by r.tipo) "
+            " from acervo.conceito_relacao r "
+            " join acervo.conceito ca on ca.id = r.de_id join acervo.conceito cb on cb.id = r.para_id "
+            " where (ca.slug = p.de and cb.slug = p.para) or (ca.slug = p.para and cb.slug = p.de)"
+            ") as teia, "
+            "exists (select 1 from acervo.conceito ca join acervo.conceito cb "
+            " on (ca.mais_amplo_id = cb.id or cb.mais_amplo_id = ca.id) "
+            " where ca.slug = p.de and cb.slug = p.para) as hierarquia, "
+            "exists (select 1 from acervo.conceito where slug = p.de) as de_existe, "
+            "exists (select 1 from acervo.conceito where slug = p.para) as para_existe "
+            f"from (values {valores}) as p(de, para)")
+    if co:
+        valores = ", ".join(f"('{a}', '{b}')" for a, b in co)
+        partes.append(
+            "select 'conceito:' || p.de as de, 'obra:' || p.para as para, "
+            "(select count(*) from acervo.obra_trata_de t join acervo.conceito c "
+            " on c.id = t.conceito_id where c.slug = p.de and t.obra_id = p.para::uuid) as obras, "
+            "null::text as teia, false as hierarquia, "
+            "exists (select 1 from acervo.conceito where slug = p.de) as de_existe, "
+            "exists (select 1 from acervo.obra where id = p.para::uuid) as para_existe "
+            f"from (values {valores}) as p(de, para)")
+    if not partes:
+        return None
+    return ("select coalesce(json_agg(row_to_json(t)), '[]') from ("
+            + " union all ".join(partes) + ") t;")
+
+
+def _agrega_pares(linhas):
+    """Uma linha por par de pontas, de todas as cadeiras: fitas e cadeiras distintas, as linhas
+    de para que, quem puxou, quantas marcacoes dizem declarada e se passou o limiar."""
+    pares = {}
+    for (eid, cad, chapeu, de, para, em_tomb, destino, fita, para_que, quem, declarada,
+         em) in linhas:
+        p = pares.setdefault((de, para), {
+            "de": de, "para": para, "entradas": set(), "fitas": set(), "cadeiras": set(),
+            "chapeus": set(), "para_que": [], "quem": {"dono": 0, "cadeira": 0},
+            "declarada": 0, "marcacoes": 0, "primeira": em, "ultima": em, "em_tombamento": None})
+        p["entradas"].add(eid)
+        p["fitas"].add(fita)
+        p["cadeiras"].add(cad)
+        p["chapeus"].add(f"{cad}/{chapeu}")
+        if para_que not in p["para_que"]:
+            p["para_que"].append(para_que)
+        p["quem"][quem] = p["quem"].get(quem, 0) + 1
+        p["declarada"] += bool(declarada)
+        p["marcacoes"] += 1
+        p["primeira"], p["ultima"] = min(p["primeira"], em), max(p["ultima"], em)
+        if em_tomb:
+            p["em_tombamento"] = destino
+    saida = []
+    for p in pares.values():
+        p["limiar"] = len(p["fitas"]) >= LIMIAR_FITAS or len(p["cadeiras"]) >= LIMIAR_CADEIRAS
+        p["fitas"] = len(p["fitas"])
+        for k in ("entradas", "cadeiras", "chapeus"):
+            p[k] = sorted(p[k])
+        saida.append(p)
+    saida.sort(key=lambda p: (not p["limiar"], -p["fitas"], -len(p["cadeiras"]), p["de"], p["para"]))
+    return saida
+
+
+def _norm(s):
+    sem = unicodedata.normalize("NFKD", s or "").encode("ascii", "ignore").decode().lower()
+    return re.sub(r"[^a-z0-9]+", " ", sem).strip()
+
+
+def _rotulos_declarados(md):
+    """Os rotulos da coluna «com» da consulta dirigida (secao c) de um chapeu.md, na ordem.
+    O formato de tres colunas, sem «com», nao declara rotulo."""
+    m = _RE_CONSULTA.search(md)
+    if not m:
+        return []
+    linhas = [l.strip() for l in m.group(1).splitlines() if l.strip().startswith("|")]
+    if not linhas:
+        return []
+    cabecalho = [c.strip().lower() for c in linhas[0].strip("|").split("|")]
+    if "com" not in cabecalho:
+        return []
+    i = cabecalho.index("com")
+    rotulos = []
+    for l in linhas[1:]:
+        celulas = [c.strip() for c in l.strip("|").split("|")]
+        if i >= len(celulas) or not celulas[i].strip("-: "):
+            continue
+        for r in celulas[i].split("·"):
+            r = r.strip().strip("`").strip()
+            if r and r not in ("—", "-") and r not in rotulos:
+                rotulos.append(r)
+    return rotulos
+
+
+def _declaradas(raiz):
+    """{(cadeira, chapeu): [rotulo]} de todo chapeu.md publicado que declara rotulo."""
+    saida = {}
+    if not os.path.isdir(raiz):
+        return saida
+    for cad in sorted(os.listdir(raiz)):
+        base = os.path.join(raiz, cad)
+        if not os.path.isdir(base):
+            continue
+        for ch in sorted(os.listdir(base)):
+            arq = os.path.join(base, ch, "chapeu.md")
+            if os.path.isfile(arq):
+                with open(arq, encoding="utf-8", errors="replace") as fh:
+                    rotulos = _rotulos_declarados(fh.read())
+                if rotulos:
+                    saida[(cad, ch)] = rotulos
+    return saida
+
+
+def _declaradas_sem_uso(declaradas, usados, golden):
+    """Por chapeu, os rotulos declarados sem marcacao de aresta na janela. O rotulo casa com o
+    conceito pelo golden record (rotulo e outros_rotulos, normalizados); sem o acervo, pelo
+    slug do proprio rotulo, e o lote declara o casamento usado."""
+    idx = {}
+    for c in golden or []:
+        for r in list(c.get("rotulos") or []) + [c["slug"].replace("-", " ")]:
+            idx.setdefault(_norm(r), c["slug"])
+    casamento = ("golden record (rótulo e outros_rotulos)" if golden
+                 else "slug do próprio rótulo (acervo indisponível)")
+    usados_por = {}
+    for cad, ch, para in usados:
+        if para.startswith("conceito:"):
+            usados_por.setdefault((cad, ch), set()).add(para[len("conceito:"):])
+    saida = []
+    for (cad, ch), rotulos in sorted(declaradas.items()):
+        uso = usados_por.get((cad, ch), set())
+        sem = []
+        for r in rotulos:
+            slug = idx.get(_norm(r)) or _norm(r).replace(" ", "-")
+            if slug not in uso:
+                sem.append({"rotulo": r, "conceito": slug,
+                            "no_acervo": (_norm(r) in idx) if golden else None})
+        saida.append({"chapeu": f"{cad}/{ch}", "declaradas": len(rotulos),
+                      "usadas": len(rotulos) - len(sem), "sem_uso": sem})
+    return saida, casamento
+
+
+def _colheita_texto(lote):
+    pares = lote["pares"]
+    no_limiar = sum(1 for p in pares if p["limiar"])
+    out = [f"colheita de arestas — {len(pares)} par(es) acumulando, {no_limiar} no limiar "
+           f"({LIMIAR_FITAS} fitas ou {LIMIAR_CADEIRAS} cadeiras) · acervo: {lote['acervo']}"]
+    if not pares:
+        out.append("  nenhuma aresta vigente: lote vazio")
+    for p in pares:
+        a = p.get("cruzamento")
+        if lote["acervo"] != "ok":
+            cruz = "cruzamento indisponível"
+        elif a is None:
+            cruz = "sem cruzamento (ponta que não é conceito nem obra)"
+        elif p["para"].startswith("obra:"):
+            cruz = f"a obra trata do de: {'sim' if a.get('obras') else 'não'}"
         else:
-            repo_bin = shutil.which("repo") or "repo"
-
-    env = dict(os.environ)
-    env["PF_CADEIRA"] = cad
-    env["PLATAFIRMA_BANCADA"] = str(raiz)
-    cmd = [repo_bin, "abrir", "platafirma-harness", "--cadeira", cad]
-    res = subprocess.run(cmd, capture_output=True, text=True, env=env)
-    if res.returncode == 0:
-        m = re.search(r"bancada (?:já )?aberta:\s*(\S+)", res.stdout)
-        if m:
-            p = Path(m.group(1).split()[0])
-            if p.is_dir():
-                return p
-
-    for c in candidatos:
-        if c.is_dir() and ((c / ".git").exists() or (c / ".git").is_file()):
-            return c
-
-    sys.stderr.write(
-        f"mesa escrever: falha ao abrir worktree para a cadeira {cad!r}\n"
-        f"  detalhe: {res.stderr.strip() or res.stdout.strip()}\n"
-    )
-    sys.exit(3)
-
-
-def _le_caderno_publicado(cad, slot):
-    """O que esta publicado agora, mesma morada de `mesa caderno` (card #3166): e o que
-    `escrever` apagaria gravando por cima sem olhar. Ausente: string vazia."""
-    caminho = os.path.join(CADERNOS, cad, slot, "caderno.md")
-    if not os.path.isfile(caminho):
-        return ""
-    with open(caminho, errors="replace") as fh:
-        return fh.read()
+            cruz = f"coocorrência: {a.get('obras', 0)} obra(s)"
+            if a.get("teia"):
+                cruz += f" · na teia: {a['teia']}"
+            if a.get("hierarquia"):
+                cruz += " · na hierarquia (mais amplo)"
+        if a and (a.get("de_existe") is False or a.get("para_existe") is False):
+            cruz += " · ponta fora do acervo"
+        entradas = " ".join(f"c{i}" for i in p["entradas"])
+        quando = f"{_br(_data(p['primeira']))} a {_br(_data(p['ultima']))}"
+        out.append(f"{'●' if p['limiar'] else '○'} {p['de']} → {p['para']} · {p['fitas']} fita(s), "
+                   f"{quando} · cadeiras: {', '.join(p['cadeiras'])} · declarada {p['declarada']}"
+                   f"/{p['marcacoes']} · dono {p['quem'].get('dono', 0)}, cadeira "
+                   f"{p['quem'].get('cadeira', 0)} · {cruz} · entradas: {entradas}")
+        if p.get("em_tombamento"):
+            out.append(f"    em tombamento → {p['em_tombamento']}")
+        resto = len(p["para_que"]) - 5
+        out.append("    para quê: " + " | ".join(p["para_que"][:5]) + (f" (+{resto})" if resto > 0 else ""))
+    out.append(f"declaradas sem uso nos últimos {lote['janela_dias']} d (casamento: {lote['casamento']}):")
+    if not lote["declaradas_sem_uso"]:
+        out.append("  nenhum chapéu declara rótulo na consulta dirigida")
+    for c in lote["declaradas_sem_uso"]:
+        sem = [s["rotulo"] for s in c["sem_uso"]]
+        resto = len(sem) - 6
+        out.append(f"  {c['chapeu']}: {c['usadas']} de {c['declaradas']} usada(s)"
+                   + ("; sem uso: " + ", ".join(sem[:6]) + (f" (+{resto})" if resto > 0 else "") if sem else ""))
+    out.append("  (veredito da curadoria: `mesa veredito --de <ponta> --para <ponta> --tombar <chave> "
+               "[--pendente] | --retirar \"<motivo>\"`)")
+    return "\n".join(out) + "\n"
 
 
-def ato_escrever(args):
-    """Escreve o caderno duravel do chapeu (spec_caderno).
-    Corpo lido de STDIN. Morada duravel: abertura/<cadeira>/<chapeu>/caderno.md."""
-    chapeu = args.slot or os.environ.get("PF_CHAPEU")
-    if not chapeu:
-        sys.stderr.write(
-            "erro: chapeu obrigatorio (sem chapeu na sessao: passe <chapeu> ou defina PF_CHAPEU)\n"
-            "  uso: mesa escrever [<chapeu>]\n"
-        )
-        return 2
-    slot = valida_slot(chapeu)
-    corpo = sys.stdin.read()
-    if not corpo.strip():
-        sys.stderr.write("erro: corpo vazio (esperava texto do caderno em stdin)\n")
-        return 2
+def ato_colheita(args):
+    """O lote da curadoria (forma da aresta, #3218): por par de pontas, as fitas e cadeiras
+    distintas, as linhas de para que, quem puxou, se e declarada, a coocorrencia em obra e a
+    ligacao que ja ha na teia; a parte, a consulta dirigida sem uso na janela. Le todas as
+    cadeiras, porque a aresta nasce para a curadoria. Nao muda nada."""
+    janela = args.janela
+    con = pg()
+    if con is None:
+        return 3
+    with con, con.cursor() as cur:
+        cur.execute(
+            "SELECT e.id, e.cadeira, e.chapeu, e.de_ponta, e.para_ponta, e.em_tombamento, e.destino, "
+            "u.fita, u.para_que, u.quem, u.declarada, u.em FROM sessao.caderno_entrada e "
+            "JOIN sessao.caderno_aresta_uso u ON u.entrada_id = e.id "
+            "WHERE e.categoria = 'aresta' AND e.estado = 'vigente' ORDER BY u.em")
+        linhas = cur.fetchall()
+        cur.execute(
+            "SELECT DISTINCT e.cadeira, e.chapeu, e.para_ponta FROM sessao.caderno_entrada e "
+            "JOIN sessao.caderno_aresta_uso u ON u.entrada_id = e.id "
+            "WHERE e.categoria = 'aresta' AND u.em >= now() - make_interval(days => %s)", (janela,))
+        usados = cur.fetchall()
+    pares = _agrega_pares(linhas)
+    sql = _sql_cruzamento(pares)
+    cruzamento = _acervo_json(sql) if sql else []
+    if cruzamento is not None:
+        por_par = {(c["de"], c["para"]): c for c in cruzamento}
+        for p in pares:
+            p["cruzamento"] = por_par.get((p["de"], p["para"]))
+    sem_uso, casamento = _declaradas_sem_uso(_declaradas(CADERNOS), usados, _acervo_json(SQL_ROTULOS))
+    lote = {"limiar": {"fitas": LIMIAR_FITAS, "cadeiras": LIMIAR_CADEIRAS},
+            "acervo": "ok" if cruzamento is not None else "indisponível",
+            "pares": pares, "janela_dias": janela, "casamento": casamento,
+            "declaradas_sem_uso": sem_uso}
+    if args.json:
+        print(json.dumps(lote, ensure_ascii=False, indent=1, default=str))
+    else:
+        sys.stdout.write(_colheita_texto(lote))
+    return 0
 
-    cad = cadeira()
-    # Nao apaga o que ja estava publicado sem dizer (card #3166): o defeito medido em
-    # 27/09 foi exatamente isto -- 6,4 KB por cima com 989 B, sem aviso. Corpo que ESTENDE
-    # o que ja tinha (comeca com ele) segue direto; qualquer outra troca pede --sobrescrever.
-    atual = _le_caderno_publicado(cad, slot)
-    if atual and not corpo.startswith(atual.rstrip("\n")) and not getattr(args, "sobrescrever", False):
-        sys.stderr.write(
-            f"mesa escrever: recuso -- o caderno {slot} tem {len(atual.encode('utf-8'))} B "
-            f"publicados e o corpo novo ({len(corpo.encode('utf-8'))} B) nao comeca com esse "
-            "texto; gravar apagaria o que ja estava la sem dizer.\n"
-            "  primeiras linhas do que se perderia:\n"
-        )
-        for linha in atual.splitlines()[:5]:
-            sys.stderr.write(f"    {linha}\n")
-        sys.stderr.write("  --sobrescrever confirma a troca do arquivo inteiro\n")
+
+def ato_veredito(args):
+    """O veredito da curadoria sobre um par de pontas volta as entradas (arq:0120 §7 e §9):
+    tombada com a chave da aresta lavrada, em tombamento enquanto a cadeira dona do conceito
+    lavra, ou retirada com o motivo. Vale para toda aresta vigente do par, de toda cadeira."""
+    if canonica() != CURADORIA:
+        sys.stderr.write(f"mesa: recuso — o veredito da aresta é da curadoria ({CURADORIA}); "
+                         "a cadeira marca o uso com `mesa aresta`\n")
         return 4
-
-    clone = _acha_worktree(cad)
-    # Escreve-se em worktree EFEMERO a partir de origin/main, nunca no checkout do
-    # clone: o clone pode estar em qualquer ramo. 26/09: o compartilhado estava parado
-    # em caderno/produto/jornada (upstream apagado), o commit da ia regrediria 51
-    # arquivos de main e o pre-push barrou. Caderno e arquivo inteiro: a base e main.
-    wt_dir, ramo, erro = _worktree_de_main(clone, cad, slot)
-    if erro:
-        sys.stderr.write(f"mesa escrever: {erro}\n")
+    de, para = (args.de or "").strip(), (args.para or "").strip()
+    for ponta, lado in ((de, "de"), (para, "para")):
+        erro = _valida_ponta(ponta, lado)
+        if erro:
+            sys.stderr.write(f"erro: {erro}\n")
+            return 2
+    tombar, retirar = (args.tombar or "").strip(), (args.retirar or "").strip()
+    if bool(tombar) == bool(retirar) or (args.pendente and not tombar):
+        sys.stderr.write("erro: o veredito é um só: --tombar <chave da aresta> [--pendente] ou "
+                         "--retirar \"<motivo>\"\n")
+        return 2
+    con = pg()
+    if con is None:
         return 3
     try:
-        return _escreve_e_publica(wt_dir, ramo, cad, slot, corpo)
-    finally:
-        _remove_worktree(clone, wt_dir)
-
-
-def _git_bin():
-    return next((p for p in ("/usr/bin/git", "/bin/git") if os.path.exists(p)), "git")
-
-
-def _worktree_de_main(clone, cad, slot):
-    """Worktree efemero em origin/main recem-buscado, com ramo novo por escrita.
-    Ramo com carimbo: reusar caderno/<cad>/<slot> herdaria base velha se existisse."""
-    git = _git_bin()
-    f = subprocess.run([git, "-C", str(clone), "fetch", "-q", "origin", "main"],
-                       capture_output=True, text=True)
-    if f.returncode != 0:
-        return None, None, f"fetch de origin/main falhou: {f.stderr.strip()[:200]}"
-    ramo = f"caderno/{cad}/{slot}-{time.strftime('%Y%m%dT%H%M%S')}"
-    wt = Path(tempfile.mkdtemp(prefix=f"mesa-escrever-{cad}-"))
-    wt.rmdir()
-    a = subprocess.run([git, "-C", str(clone), "worktree", "add", "--quiet", "--no-track",
-                        "-b", ramo, str(wt), "origin/main"], capture_output=True, text=True)
-    if a.returncode != 0:
-        return None, None, f"worktree de origin/main falhou: {a.stderr.strip()[:200]}"
-    return wt, ramo, None
-
-
-def _remove_worktree(clone, wt):
-    subprocess.run([_git_bin(), "-C", str(clone), "worktree", "remove", "--force", str(wt)],
-                   capture_output=True, text=True)
-
-
-def _escreve_e_publica(wt_dir, ramo, cad, slot, corpo):
-    cad_repo = wt_dir / "abertura" / cad / slot / "caderno.md"
-    cad_repo.parent.mkdir(parents=True, exist_ok=True)
-    with open(cad_repo, "w", encoding="utf-8") as fh:
-        fh.write(corpo)
-
-    git_bin = next((p for p in ("/usr/bin/git", "/bin/git") if os.path.exists(p)), "git")
-    gh_bin = next(
-        (p for p in ("/usr/bin/gh", "/bin/gh", os.path.expanduser("~/.local/bin/gh"))
-         if os.path.exists(p)),
-        None,
-    )
-    env = dict(os.environ)
-    if gh_bin:
-        env["PATH"] = os.path.dirname(gh_bin) + ":" + env.get("PATH", "")
-    if "GIT_AUTHOR_NAME" not in env:
-        env["GIT_AUTHOR_NAME"] = f"claudinho-{cad}"
-        env["GIT_AUTHOR_EMAIL"] = f"{cad}@platafirma.org"
-        env["GIT_COMMITTER_NAME"] = f"claudinho-{cad}"
-        env["GIT_COMMITTER_EMAIL"] = f"{cad}@platafirma.org"
-
-    rel_caminho = os.path.relpath(cad_repo, wt_dir)
-    subprocess.run([git_bin, "-C", str(wt_dir), "add", rel_caminho], check=True, capture_output=True, env=env)
-    diff_cached = subprocess.run([git_bin, "-C", str(wt_dir), "diff", "--cached", "--quiet"], env=env)
-    if diff_cached.returncode != 0:
-        subprocess.run(
-            [git_bin, "-C", str(wt_dir), "commit", "-m", f"caderno({cad}): atualiza {slot}"],
-            check=True, capture_output=True, env=env
-        )
-
-    proc_push = subprocess.run(
-        [git_bin, "-C", str(wt_dir), "push", "-u", "origin", ramo],
-        capture_output=True, text=True, env=env
-    )
-    if proc_push.returncode != 0:
-        proc_remote = subprocess.run(
-            [git_bin, "-C", str(wt_dir), "ls-remote", "origin", f"refs/heads/{ramo}"],
-            capture_output=True, text=True, env=env
-        )
-        remote_sha = proc_remote.stdout.split()[0] if proc_remote.stdout.strip() else ""
-        proc_local = subprocess.run(
-            [git_bin, "-C", str(wt_dir), "rev-parse", f"refs/heads/{ramo}"],
-            capture_output=True, text=True, env=env
-        )
-        local_sha = proc_local.stdout.strip()
-        if not (remote_sha and remote_sha == local_sha):
-            sys.stderr.write(f"mesa escrever: git push falhou: {proc_push.stderr.strip()}\n")
-            return 3
-
-    pr_str, pr_url = "", None
-    if gh_bin:
-        pr_proc = subprocess.run(
-            [gh_bin, "pr", "create", "--base", "main", "--head", ramo,
-             "--title", f"caderno({cad}): atualiza {slot}",
-             "--body", f"Atualização do caderno durável de {cad}/{slot} via `mesa escrever`."],
-            cwd=str(wt_dir), capture_output=True, text=True, env=env
-        )
-        if pr_proc.returncode == 0:
-            pr_url = pr_proc.stdout.strip()
-        else:
-            m_pr = re.search(r"https://github\.com/\S+/pull/\d+", pr_proc.stderr + pr_proc.stdout)
-            pr_url = m_pr.group(0) if m_pr else None
-            if not pr_url:
-                pr_str = f" · PR: {pr_proc.stderr.strip()}"
-        if pr_url:
-            pr_str = f" · PR: {pr_url}"
-
-    tam = len(corpo.encode("utf-8"))
-    m_num = re.search(r"/pull/(\d+)", pr_url or "")
-    merge_de = f"do merge do PR #{m_num.group(1)}" if m_num else "do merge em main"
-    achavel = (f"achável por `mesa caderno {slot}` depois {merge_de}; "
-               "a abertura publica caderno sozinha em até 10 min")
-    print(f"caderno {slot}: gravado ({tam} B em abertura/{cad}/{slot}/caderno.md, base origin/main) · ramo: {ramo}{pr_str} · {achavel}")
+        with con, con.cursor() as cur:
+            cur.execute("SELECT id, cadeira, chapeu FROM sessao.caderno_entrada WHERE categoria = "
+                        "'aresta' AND estado = 'vigente' AND de_ponta = %s AND para_ponta = %s "
+                        "ORDER BY id FOR UPDATE", (de, para))
+            alvo = cur.fetchall()
+            if not alvo:
+                sys.stderr.write(f"mesa: nenhuma aresta vigente {de} → {para}\n")
+                return 1
+            for eid, _cad, _ch in alvo:
+                if tombar and args.pendente:
+                    cur.execute("UPDATE sessao.caderno_entrada SET em_tombamento = true, "
+                                "destino = %s WHERE id = %s", (tombar, eid))
+                    _evento(cur, eid, "veredito", "vigente", "vigente", f"em tombamento → {tombar}")
+                elif tombar:
+                    cur.execute("UPDATE sessao.caderno_entrada SET estado = 'tombada', "
+                                "em_tombamento = false, destino = %s WHERE id = %s", (tombar, eid))
+                    _evento(cur, eid, "veredito", "vigente", "tombada", tombar)
+                else:
+                    cur.execute("UPDATE sessao.caderno_entrada SET estado = 'retirada', motivo = %s "
+                                "WHERE id = %s", (retirar, eid))
+                    _evento(cur, eid, "veredito", "vigente", "retirada", retirar)
+    except Exception as ex:  # noqa: BLE001
+        return _erro_banco(ex)
+    feito = (f"em tombamento → {tombar}" if tombar and args.pendente
+             else f"tombada → {tombar}" if tombar else f"retirada: {retirar}")
+    quais = ", ".join(f"c{eid} ({c}/{h})" for eid, c, h in alvo)
+    print(f"veredito {de} → {para}: {len(alvo)} entrada(s) {feito} — {quais}")
     return 0
 
 
@@ -932,17 +1911,96 @@ def main():
     i.add_argument("--alvo", default=None, help="sobre o que: card, arquivo, servico, cadeira")
     i.set_defaults(func=ato_item)
 
-    e = sub.add_parser("escrever", help="escreve o caderno duravel do chapeu; corpo em stdin")
+    e = sub.add_parser("escrever", help="escreve UMA entrada do caderno do chapeu, com a categoria "
+                                        "e o campo dela (arq:0120)")
     e.add_argument("slot", nargs="?", default=None, help="slug do chapeu (default: PF_CHAPEU)")
-    e.add_argument("--sobrescrever", action="store_true",
-                   help="confirma a troca do arquivo inteiro quando o corpo novo nao estende o que ja estava publicado")
+    e.add_argument("--licao", metavar="TEXTO",
+                   help="licao: o que o uso deste chapeu ensinou; pede --caso")
+    e.add_argument("--preferencia", metavar="TEXTO",
+                   help="preferencia do dono na materia deste chapeu; pede --dito-em e --onde")
+    e.add_argument("--premissa", metavar="TEXTO",
+                   help="premissa: o que se toma por verdadeiro ate data ou evento; pede --vale-ate ou --ate-que")
+    _campos_args(e)
     e.set_defaults(func=ato_escrever)
+
+    s = sub.add_parser("substituir", help="entrada nova no lugar da vigente, mesma categoria; "
+                                          "a antiga fica substituida")
+    s.add_argument("id", help="a entrada, como o corpo mostra (c12)")
+    s.add_argument("texto", help=f"o texto novo, ate {TETO_ENTRADA} caracteres")
+    _campos_args(s)
+    s.set_defaults(func=ato_substituir)
+
+    cf = sub.add_parser("confirmar", help="reconfirma a vigente: licao zera os 90 dias; premissa "
+                                          "pede prazo novo; tira a marca de candidata")
+    cf.add_argument("id", help="a entrada (c12)")
+    cf.add_argument("--vale-ate", dest="vale_ate", metavar="AAAA-MM-DD",
+                    help=f"premissa: prazo novo (no maximo {PRAZO_PREMISSA} dias)")
+    cf.add_argument("--ate-que", dest="ate_que", metavar="EVENTO", help="premissa: evento novo")
+    cf.set_defaults(func=ato_confirmar)
+
+    rt = sub.add_parser("retirar", help="tira a vigente do servido, com o motivo; nada se apaga")
+    rt.add_argument("id", help="a entrada (c12)")
+    rt.add_argument("--motivo", help="por que sai; duplicata leva a chave do canone")
+    rt.set_defaults(func=ato_retirar)
+
+    rs = sub.add_parser("restaurar", help="a retirada volta a vigente, se couber no teto")
+    rs.add_argument("id", help="a entrada (c12)")
+    rs.add_argument("--motivo", help="por que volta (opcional)")
+    rs.set_defaults(func=ato_restaurar)
+
+    tb = sub.add_parser("tombar", help="a licao ou preferencia que virou norma sai para o destino")
+    tb.add_argument("id", help="a entrada (c12)")
+    tb.add_argument("--destino", help="a chave do que a recebeu: chapeu, documento de casa, ADR, conceito")
+    tb.add_argument("--pendente", action="store_true",
+                    help="fica em tombamento, servida com a marca, ate o destino publicar")
+    tb.set_defaults(func=ato_tombar)
+
+    ap = sub.add_parser("apontar", help="marca a vigente como candidata (a varredura): duplicata, "
+                                        "fora de categoria, referencia morta, orfa, tombamento")
+    ap.add_argument("id", help="a entrada (c12)")
+    ap.add_argument("--motivo", help="por que e candidata")
+    ap.set_defaults(func=ato_apontar)
+
+    ar = sub.add_parser("aresta", help="marca, no Sair, a materia de fora da cadeira que a fita "
+                                       "puxou e usou; conta uma vez por fita")
+    ar.add_argument("chapeu", nargs="?", default=None, help="slug do chapeu (default: PF_CHAPEU)")
+    ar.add_argument("--de", help="o conceito da pergunta: conceito:<slug> ou termo:<texto>")
+    ar.add_argument("--para", help="o que se puxou: conceito:<slug>, obra:<uuid>, "
+                                   "casa:<especie>/<chave> ou chapeu:<cadeira>/<slug>")
+    ar.add_argument("--para-que", dest="para_que", help="a relacao que a fita viu, numa linha")
+    ar.add_argument("--quem", choices=["dono", "cadeira"], default="cadeira",
+                    help="quem puxou: o dono pediu, ou a cadeira foi buscar (default: cadeira)")
+    ar.add_argument("--declarada", action="store_true",
+                    help="o destino ja esta na consulta dirigida (secao c) do chapeu")
+    ar.set_defaults(func=ato_aresta)
+
+    co = sub.add_parser("colheita", help="o lote da curadoria: arestas por par de pontas, e a "
+                                         "consulta dirigida sem uso na janela")
+    co.add_argument("--janela", type=int, default=JANELA_DECLARADAS, metavar="DIAS",
+                    help=f"dias para a declarada sem uso (default {JANELA_DECLARADAS})")
+    co.add_argument("--json", action="store_true", help="o lote em JSON (a varredura)")
+    co.set_defaults(func=ato_colheita)
+
+    vd = sub.add_parser("veredito", help="o veredito da curadoria volta as arestas vigentes de "
+                                         "um par: tombada, em tombamento ou retirada")
+    vd.add_argument("--de", help="a ponta de, como marcada")
+    vd.add_argument("--para", help="a ponta para, como marcada")
+    vd.add_argument("--tombar", metavar="CHAVE", help="a chave da aresta lavrada na teia")
+    vd.add_argument("--pendente", action="store_true",
+                    help="com --tombar: em tombamento ate a cadeira dona do conceito lavrar")
+    vd.add_argument("--retirar", metavar="MOTIVO", help="a curadoria recusa, com o motivo")
+    vd.set_defaults(func=ato_veredito)
 
     f = sub.add_parser("fez", help="esvazia o item (pelo numero exibido) porque o ato foi executado")
     f.add_argument("n", type=int, help="o numero exibido em `mesa ver` (#N), nao o id interno")
     f.set_defaults(func=ato_fez)
 
-    g = sub.add_parser("legado", help="a mesa velha capturada do Valkey, e a triagem dela")
+    g = sub.add_parser("legado", help="a mesa velha capturada do Valkey, e a triagem dela; com "
+                                      "--caderno, os cadernos em arquivo capturados (arq:0120)")
+    g.add_argument("--caderno", action="store_true",
+                   help="o legado de caderno (abertura/<cadeira>/<chapeu>/caderno.md), nao o da mesa")
+    g.add_argument("--capturar", action="store_true",
+                   help="com --caderno: captura os caderno.md da abertura publicada; idempotente")
     g.add_argument("--corpo", action="store_true", help="imprime o texto, nao so o cabecalho")
     g.add_argument("--triado", metavar="CHAPEU", help="marca o chapeu como triado")
     g.set_defaults(func=ato_legado)
@@ -968,9 +2026,14 @@ def main():
     c.add_argument("slot", nargs="?")
     c.add_argument("--chapeu", metavar="SLUG",
                    help="indice da cadeira + corpo do caderno deste chapeu (a peca `cadernos` da abertura)")
+    c.add_argument("--categoria", metavar="LISTA",
+                   help="so estas categorias no corpo, separadas por virgula (licao,premissa: o que o "
+                        "agente delegado le)")
+    c.add_argument("--todas", action="store_true",
+                   help="o corpo traz tambem o que saiu: substituidas, tombadas, retiradas, vencidas")
     c.add_argument("--secao", metavar="SLUG",
-                   help="so a secao do caderno com este titulo em slug (`conhecimento-curado`): o que o "
-                        "agente delegado le; o diario de bordo e da cadeira")
+                   help="do legado ainda nao triado, so a secao com este titulo em slug "
+                        "(`conhecimento-curado`)")
     c.set_defaults(func=ato_caderno)
 
     args = p.parse_args()
