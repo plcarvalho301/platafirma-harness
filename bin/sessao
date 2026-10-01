@@ -9,7 +9,7 @@
 # folhas: abrir|encerrar|limpar -> sessao/cunhagem · ver|listar -> sessao/estado · longjob -> sessao/execucao-longa
 # escreve: sessao:{id}, ledger:{id}, giro:{id} (msg-mem; DEL em encerrar|limpar), sessao.sessao (duravel; encerrar|limpar tambem gravam encerrada_em=now(), migracao 0092); nada em ver|listar
 # consome: a API da entidade-sessao, quando houver (ate la: msg-mem e Postgres direto, declarados abaixo)
-# ambiente: PF_SUJEITO (obrigatoria em abrir; origem: fluxo OAuth, entregue pela porta), PF_SUPERFICIE[=desconhecida] (origem: superficie), PF_BIN[=<bin/ da propria arvore; na release /opt/platafirma/current/harness/bin>] (origem: teste); MEM_REDIS_HOST[=127.0.0.1], MEM_REDIS_PORT[=6380] e SESSAO_PG_PORT[=5437] sao endereco de servico, constantes do verbo; SESSAO_PG_PASSWORD nao e variavel: e segredo, obtido por `seg segredo ler` no processo. PF_CADEIRA, PF_SESSAO e PF_ORDEM_ID nao sao lidas — este verbo as origina
+# ambiente: PF_SUJEITO (obrigatoria em abrir; origem: fluxo OAuth, entregue pela porta), PF_SUPERFICIE[=desconhecida] (origem: superficie), PF_BIN[=<bin/ da propria arvore; na release /opt/platafirma/current/harness/bin>] (origem: teste); MEM_REDIS_HOST[=127.0.0.1], MEM_REDIS_PORT[=6380] e SESSAO_PG_PORT[=5437] sao endereco de servico, constantes do verbo; SESSAO_PG_PASSWORD nao e variavel: e segredo, obtido por `seg segredo ler` no processo. PF_CADEIRA e PF_ORDEM_ID nao sao lidas — este verbo as origina; PF_SESSAO so e lida em `longjob run`, para herdar os atributos do agente da chave (card #3156)
 # depende: msg-mem (modulo redis), Postgres da sessao (psycopg), persona (vocabulario: `persona foto --json`), acesso (`acesso decidir sessao_abrir sessao:<cadeira> --json`), seg (`seg segredo ler`), longjob (bin/_sessao/longjob, contrato herdado), reidratar (bin/_sessao/reidratar.py, ajudante)
 # substitui: monta-sessao <cadeira> na parte que cunha; redis-cli SET sessao:*; psql -d sessao
 # conforme: parcial — chave viva e registro duravel gravados direto ate a API da entidade-sessao existir (spec_sessao §6)
@@ -608,13 +608,43 @@ def ato_limpar(dry_run: bool, saida: Saida) -> int:
     return 0
 
 # ------------------------------------------------------------------ ato: longjob
+# Atributos do agente que o job herda (card #3156, spec agente §11.1: «`sessao longjob` herda os cinco»).
+# sujeito ja chega por PF_SUJEITO (a porta o injeta; nunca sai da chave, spec_acesso §2); os outros quatro
+# moram na chave viva da sessao que dispara o job e viram ambiente aqui, porque o systemd --user nao herda
+# a sessao de quem chama. Chave da chave viva -> variavel do job.
+HERANCA_LONGJOB = (("agente", "PF_AGENTE"), ("em_nome_de", "PF_EM_NOME_DE"),
+                   ("conta_agente", "PF_CONTA_AGENTE"), ("origem_sessao", "PF_ORIGEM_SESSAO"))
+
+def _heranca_longjob(env: dict[str, str]) -> dict[str, str]:
+    """Le `sessao:{PF_SESSAO}` e devolve as variaveis do agente que faltam em `env`. Ambiente presente vence
+    (quem chama declarou); sem PF_SESSAO, sessao comum ou msg-mem mudo, devolve vazio e avisa no stderr: o
+    job sobe igual, e o verbo dentro dele decide o que fazer sem os atributos (sem fallback aqui)."""
+    sid = _uuid_valido(env.get("PF_SESSAO"))
+    if not sid:
+        return {}
+    rc_mem, motivo = _msgmem()
+    if rc_mem is None:
+        print(f"longjob: atributos do agente nao herdados — {_cura_msgmem(motivo)}", file=sys.stderr)
+        return {}
+    try:
+        ch = _le_chave(rc_mem, sid) or {}
+    except Exception as e:  # noqa: BLE001
+        print(f"longjob: atributos do agente nao herdados — {_cura_msgmem(type(e).__name__)}", file=sys.stderr)
+        return {}
+    return {var: ch[k] for k, var in HERANCA_LONGJOB
+            if isinstance(ch.get(k), str) and ch[k].strip() and not (env.get(var) or "").strip()}
+
 def ato_longjob(resto: list[str]) -> int:
-    """Contrato herdado de bin/_sessao/longjob (spec_sessao §1): exec, sem reinterpretar."""
+    """Contrato herdado de bin/_sessao/longjob (spec_sessao §1): exec, sem reinterpretar os argumentos. Em
+    `run`, o ambiente ganha antes os atributos do agente da sessao que dispara (_heranca_longjob)."""
     alvo = _REPO_REAL / "bin" / "_sessao" / "longjob"
     if not alvo.is_file():
         print(f"longjob: nao existe {alvo}", file=sys.stderr)
         return 3
-    os.execve(str(alvo), [str(alvo), *resto], _env_verbo())
+    env = _env_verbo()
+    if resto[:1] == ["run"]:
+        env.update(_heranca_longjob(env))
+    os.execve(str(alvo), [str(alvo), *resto], env)
     return 3  # pragma: no cover — execve nao volta
 
 # ------------------------------------------------------------------ CLI

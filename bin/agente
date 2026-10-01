@@ -21,7 +21,7 @@
 # ambiente: PF_SUJEITO (a pessoa em nome de quem o agente roda; obrigatoria em rodar; porta) · PF_SESSAO (a sessao de quem chamou; obrigatoria em rodar; porta) · PF_CADEIRA (porta) · PF_ORDEM_ID (porta) · PF_POSTO (opcional; padrao <bancada>/platafirma-posto, onde estao as declaracoes) · PF_BIN (opcional; padrao bin/ da propria arvore; so teste com stub) · PF_CLAUDE_BIN (opcional; padrao claude no PATH; so teste com stub) · OLLAMA_BASE_URL (opcional; o ollama local) · PLATAFIRMA_INSTANCIA (opcional; padrao /srv/platafirma/casa; var/log/agente e var/log/seg)
 # escrita: projetar grava .claude/agents/<slug>.md no posto; rodar grava a chave da sessao filha (sessao abrir) e uma linha em var/log/agente/; nada em listar|ler|projetar --conferir
 # depende: sessao, expediente, lib/raizes, lib/uso, pyyaml (venv harness)
-# conforme: parcial — a spec agente põe este verbo na capacidade `automacao` (nível 2), que o acervo ainda não tem (vocabulario arquitetura-negocio-operacao ingerido em 14/09): `construcao` até ela entrar, e a troca é esta linha; Gemini pelo `agy` ainda não roda (a execução sob jaiminho é da ti, spec agente §Aberto); agendado espera `sessao longjob` herdar os atributos (#3186)
+# conforme: parcial — a spec agente põe este verbo na capacidade `automacao` (nível 2), que o acervo ainda não tem (vocabulario arquitetura-negocio-operacao ingerido em 14/09): `construcao` até ela entrar, e a troca é esta linha; Gemini pelo `agy` ainda não roda (a execução sob jaiminho é da ti, spec agente §Aberto); agendado espera o `bot --roda agente:<slug>` (#3186); `sessao longjob` ja herda os atributos da chave
 #
 # Spec: spec agente (§2 declaração, §3 projeções, §4 ligações, §10 o verbo, §11 piso de segurança)
 from __future__ import annotations
