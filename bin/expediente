@@ -412,11 +412,12 @@ def valida_chapeu(cadeira: str, slug: str) -> tuple[bool, str]:
 # nova, sem tocar no montador. Ordem de injecao = ordem das linhas; a mensagem de delegacao
 # (stdin) e o que muda a cada chamada e vem por ultimo, no prompt de quem chama.
 #
-# Transicao (Trava do card: o recorte e hipotese a medir): o caderno sai so com a secao
-# `conhecimento-curado` (Medida de 30/09, revisor de README: o caderno inteiro era 8438 dos 18335
-# tokens do pacote, estourava os 50000 bytes que a porta serve e nao foi citado). As linhas de persona
-# e rotinas servem o que o verbo inteiro devolve hoje; o recorte da spec (`persona ler --recorte`,
-# `acervo listar ... --mapa --modo`) entra por troca de UMA linha quando o verbo subir.
+# O caderno sai do banco (arq:0120, #3217) so com licao e premissa: o que orienta o trabalho do
+# chapeu. Preferencia do dono e da cadeira que responde a ele; aresta acumula para a curadoria; o
+# legado a triar e da cadeira, e `--categoria` sem `--secao` nao o serve (o corpo inteiro do arquivo
+# era 8438 dos 18335 tokens do pacote na Medida de 30/09). As linhas de persona e rotinas servem o que
+# o verbo inteiro devolve hoje; o recorte da spec (`persona ler --recorte`, `acervo listar ... --mapa
+# --modo`) entra por troca de UMA linha quando o verbo subir.
 MODOS = ("varrer", "revisar", "avaliar", "testar", "executar", "consultar", "vigiar", "pesquisar")
 MODOS_COM_REGUA = ("revisar", "avaliar")
 ESPECIES_REGUA = ("lista-de-verificacao", "padrao")
@@ -438,7 +439,7 @@ CATALOGO_CADEIRINHA = [
      "volatilidade": "volatil", "chamada": 'motor rag buscar casa "{pergunta}" --k 6 --texto secao',
      "dono": "dados"},
     {"peca": "cadernos", "gatilho": "perfil cadeirinha", "regime": "valor", "volatilidade": "volatil",
-     "chamada": "mesa caderno {chapeu} --secao conhecimento-curado", "dono": "gestao-estrategica"},
+     "chamada": "mesa caderno {chapeu} --categoria licao,premissa", "dono": "gestao-estrategica"},
 ]
 
 

@@ -53,3 +53,30 @@ def test_resto_do_ritual_intacto():
     assert "2a. conhecimento curado" in texto
     assert "3. triagem da memoria do Project" in texto
     assert "descansar fita --encerra-sessao" in texto
+
+
+# ---------------------------------------------------------------- #3217: o caderno no banco
+def _passo(texto: str, ini: str, fim: str) -> str:
+    i = texto.index(ini)
+    return texto[i:texto.index(fim, i)]
+
+
+def test_2a_escreve_por_categoria_no_banco_e_resolve_antes_de_acrescentar():
+    p = _passo(_ritual(), "2a.", "2b.")
+    for categoria in ("--licao", "--preferencia", "--premissa"):
+        assert f"mesa escrever <chapeu> {categoria}" in p
+    assert "--caso" in p and "--dito-em" in p and "--vale-ate" in p, "o campo de cada categoria"
+    assert "guia\n   registrar" in p or "guia registrar" in p
+    assert "a revisar" in p and "legado" in p, "lembra o que esta a revisar e o legado"
+    assert "seis\n   heuristicas" not in p and "historico e o git" not in p, "a arq:0072 saiu"
+
+
+def test_2c_marca_a_aresta_so_do_que_entrou_na_resposta():
+    p = _passo(_ritual(), "2c.", "\n3. ")
+    assert "mesa aresta <chapeu>" in p and "--para <ponta>" in p and "--para-que" in p
+    assert "#2947" in p and "puxado de fora da cadeira" in p
+
+
+def test_a_mesa_do_passo_1_e_item_nao_prosa():
+    p = _passo(_ritual(), "1. ", "\n2. ")
+    assert "mesa item <chapeu>" in p and "mesa anota" not in p

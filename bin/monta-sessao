@@ -200,11 +200,12 @@ PECAS_CALCULADAS = [
 
 # id da peça-arquivo -> gatilho/regime/volatilidade, por posição na árvore abertura/.
 # raiz de abertura/ e nível de cadeira = camada abertura; nível de chapéu = camada chapéu.
+# caderno.md não é peça-arquivo desde a #3217: o caderno mora no banco (arq:0120) e entra pelas
+# peças-verbo `cadernos-indice` e `caderno-chapeu`; o caderno de head deixou de existir (§3).
 _ARQ_META = {
     "dono.md":            ("conduta-dono",   "abertura", "valor", "estavel"),
     "oficio.md":          ("oficio",         "abertura", "valor", "estavel"),
     "persona.md":         ("persona",        "abertura", "valor", "estavel"),
-    "caderno.md":         ("caderno-head",   "abertura", "valor", "volatil"),
     "chapeu.md":          ("chapeu",         "chapeu",   "valor", "estavel"),
     "ferramental.md":     ("ferramental",    "chapeu",   "valor", "estavel"),
 }

@@ -20,6 +20,9 @@
 #     espelho-de-leitura §4.3): configuração do ATO DE INGESTÃO, não linha de catálogo — a
 #     tabela única que o conversor aplica (conversor/conversor/padrao.py da release do
 #     conhecimento, ou de PF_CONHECIMENTO_DIR), sem tabela golden record (#3193).
+# `acervo listar obra obra [--sobre <termo>] [--eixo <e>] [--situacao] [--json]` — o catálogo da
+#     obra; --situacao traz servivel, degrau, store, impressao servindo e a marcação de uso
+#     (arq:0119 §6; spec acervo-obra §6; coluna acervo.obra.marcacao, migração 071, #3202).
 # `acervo listar obra bancada <pasta> [--json] [--estratos <arquivo>]` — agregador da bancada de
 #     conversão (card #3187/#3181): lê <pasta>/{perfil,docling}/*/relatorio.json que `curar
 #     --reextrair … --bancada <pasta>` gravou, pareia por obra e aplica a regra do card #3181.
@@ -959,6 +962,17 @@ def listar_obra(termo, eixo, situacao, quero_json):
         "listar obra"
     )
 
+    # Marcação de uso da obra (arq:0119 §6; spec acervo-obra §6; migração 071, #3202): só no
+    # --situacao, numa consulta à parte pelos ids, para não repetir a coluna nos seis SELECTs.
+    marcas = {}
+    if situacao and raw_itens:
+        ids = ",".join(_lit(r["id"]) for r in raw_itens)
+        for m in _psql_json(
+                "select coalesce(json_agg(row_to_json(t)), '[]') from ("
+                "  select id::text as id, marcacao from acervo.obra where id::text in (%s)"
+                ") t;" % ids, "marcacao"):
+            marcas[m["id"]] = m.get("marcacao")
+
     itens = []
     for row in raw_itens:
         obj = row.get("objeto")
@@ -992,6 +1006,7 @@ def listar_obra(termo, eixo, situacao, quero_json):
                 "store": store,
                 "impressao": imp_str,
                 "impressao_id": imp_id,
+                "marcacao": marcas.get(str(row["id"])),
             }
         itens.append(item)
 
@@ -1015,7 +1030,7 @@ def listar_obra(termo, eixo, situacao, quero_json):
             sit = i["situacao"]
             eixo_tag = f"[{i['eixo']}] " if i.get("eixo") and i['eixo'] != "obra" else ""
             print(f"{eixo_tag}{i['titulo']}")
-            print(f"  servivel: {sit['servivel']}   degrau: {sit['degrau']}   store: {sit['store']}   impressao: {sit['impressao']}\n")
+            print(f"  servivel: {sit['servivel']}   degrau: {sit['degrau']}   store: {sit['store']}   impressao: {sit['impressao']}   marcacao: {sit['marcacao'] or '-'}\n")
         sys.stderr.write(f"\n{len(itens)} obra(s) encontrada(s).\n")
         return 0
 
