@@ -17,8 +17,9 @@
 # `acervo listar topologia <stack> --acessos` — superfície gateada (allowlist/OIDC) da stack
 #     (porta de `deploy <stack> acessos`, bin/deploy ~380).
 # `acervo listar obra metodos [--json]` — método padrão de conversão por tipo real (spec
-#     espelho-de-leitura §4.3): configuração do ATO DE INGESTÃO, não linha de catálogo —
-#     constante declarada no próprio arquivo (METODOS_POR_TIPO), sem tabela golden record.
+#     espelho-de-leitura §4.3): configuração do ATO DE INGESTÃO, não linha de catálogo — a
+#     tabela única que o conversor aplica (conversor/conversor/padrao.py da release do
+#     conhecimento, ou de PF_CONHECIMENTO_DIR), sem tabela golden record (#3193).
 # `acervo listar obra bancada <pasta> [--json] [--estratos <arquivo>]` — agregador da bancada de
 #     conversão (card #3187/#3181): lê <pasta>/{perfil,docling}/*/relatorio.json que `curar
 #     --reextrair … --bancada <pasta>` gravou, pareia por obra e aplica a regra do card #3181.
@@ -135,47 +136,9 @@ from (
 ) t;
 """
 
-# Método padrão de conversão por tipo real (spec espelho-de-leitura §4.3): configuração do
-# ATO DE INGESTÃO, não linha do catálogo — o catálogo registra o que cada espelho USOU, não
-# o que se USARÁ. Não é consulta ao golden record relacional (não há tabela pra isto ainda);
-# é constante declarada aqui, no release do harness, até existir lugar melhor (nenhum outro
-# achado no harness hoje: nem deploy/, nem config de release — conferido por grep antes de
-# criar esta, spec 4.3 é quem manda declarar).
-#
-# Hoje (28/09/2026, arq:0117 vigente) o método padrão de TODO tipo é `perfil`: o adaptador
-# `perfil` do pacote `conversor` (platafirma-conhecimento/conversor/conversor/adaptadores/,
-# os extratores antigos movidos para dentro dele pela story #3179). O
-# Docling entra como método por tipo à medida que vence a bateria (spec §4.3, card #3182);
-# até lá é sempre `perfil`, e `desde` é a data em que ESTE PADRÃO passou a ser declarado
-# (a própria arq:0117 — antes dela não havia declaração formal de método por tipo).
-#
-# Os dez tipos de classe A (nota-tecnica 2026-09-28-fidelidade-do-texto-ao-original §1: o
-# texto nasce como caracteres, oito deles + HTML/MHTML na tabela de origem da spec §2.6) mais
-# application/pdf (classe B da mesma nota: camada de texto, sem caractere garantido linha a
-# linha). PDF sem camada de texto (classe C, escaneado) não é tipo à parte aqui: é o mesmo
-# application/pdf passando por OCR primeiro (spec §4.4).
-#
-# json e mobi: SEM ADAPTADOR hoje (lista-de-verificacao antipadroes-de-transcricao, critério
-# F3 — "formato sem adaptador (JSON, MOBI) lido por leitor genérico ou recusado sem motivo";
-# entram pela story 9 da spec §12, cura K15). `perfil` aqui é o padrão DECLARADO pela spec,
-# não uma promessa de que o ato de ingestão já sabe converter — hoje ele recusa os dois.
-#
-# Fonte: conversor/pyproject.toml (versões) e conversor/adaptadores/perfil_*.py. Quando o
-# Docling entrar como método de um tipo (#3182), a linha desse tipo muda aqui.
-METODOS_POR_TIPO = [
-    # tipo real         metodo    conversor                                          versao          desde
-    ("TXT",              "perfil", "perfil-texto (nativo, stdlib, sem lib externa)", "-",             "2026-09-28"),
-    ("Markdown",         "perfil", "perfil-texto (nativo, stdlib, sem lib externa)", "-",             "2026-09-28"),
-    ("JSON",             "perfil", "(sem adaptador — story 9, spec §12; F3)",        "-",             "2026-09-28"),
-    ("HTML",             "perfil", "beautifulsoup4+lxml",                            ">=4.12,>=5.2",  "2026-09-28"),
-    ("MHTML",            "perfil", "beautifulsoup4+lxml (email.parser desempacota)", ">=4.12,>=5.2",  "2026-09-28"),
-    ("DOCX",             "perfil", "python-docx",                                    ">=1.1",         "2026-09-28"),
-    ("PPTX",             "perfil", "lxml (zip nativo, sem python-pptx)",             ">=5.2",         "2026-09-28"),
-    ("XLSX",             "perfil", "openpyxl",                                       ">=3.1.5",       "2026-09-28"),
-    ("EPUB",             "perfil", "lxml (zip nativo, ordem pelo spine do .opf)",    ">=5.2",         "2026-09-28"),
-    ("MOBI",             "perfil", "(sem adaptador — story 9, spec §12; F3)",        "-",             "2026-09-28"),
-    ("application/pdf",  "perfil", "pymupdf (fitz)",                                 ">=1.24",        "2026-09-28"),
-]
+# O método padrão de conversão por tipo real (spec espelho-de-leitura §4.3) não mora aqui desde a
+# #3193: é a tabela única que o conversor aplica (conversor/conversor/padrao.py), e `acervo listar
+# obra metodos` a lê da árvore do conhecimento (`_padrao_do_conhecimento`).
 
 USO = """uso:
   acervo listar conceitos [--json]              golden record acervo.conceito:
@@ -196,7 +159,10 @@ USO = """uso:
   acervo listar obra metodos [--json]           metodo padrao de conversao por tipo real
                                                 (spec espelho-de-leitura §4.3): configuracao
                                                 do ato de ingestao, NAO golden record (nao
-                                                consulta acervo.*; constante no arquivo)
+                                                consulta acervo.*; le conversor/padrao.py da
+                                                release do conhecimento, ou de
+                                                PF_CONHECIMENTO_DIR); --json traz o mime e
+                                                se o tipo entra no lote de reextracao
   acervo listar obra bancada <pasta> [--json] [--estratos <arquivo>]  perfil x docling por obra
                                                 (card #3187): le <pasta>/{perfil,docling}/*/
                                                 relatorio.json (o que `curar --reextrair --bancada`
@@ -805,14 +771,44 @@ def listar_topologia(quero_json, completo=False, stack_alvo=None):
     sys.stderr.write("\n%d stack(s) na topologia completa (acervo.stack) — todos os campos que `deploy` le.\n" % len(stacks))
 
 
+def _padrao_do_conhecimento():
+    """O módulo da tabela única do método padrão por tipo (`conversor/conversor/padrao.py`, só
+    biblioteca padrão), da árvore do conhecimento: a declarada em PF_CONHECIMENTO_DIR (a bancada, o
+    teste), senão a release no ar. `None` quando nenhuma o tem."""
+    import importlib
+    from pathlib import Path
+
+    raizes = []
+    if os.environ.get("PF_CONHECIMENTO_DIR"):
+        raizes.append(Path(os.environ["PF_CONHECIMENTO_DIR"]))
+    raizes.append(Path(_raizes()[1]) / "conhecimento")
+    for raiz in raizes:
+        pacote = raiz / "conversor"
+        if not (pacote / "conversor" / "padrao.py").is_file():
+            continue
+        sys.path.insert(0, str(pacote))
+        try:
+            return importlib.import_module("conversor.padrao")
+        finally:
+            sys.path.remove(str(pacote))
+    return None
+
+
 def listar_obra_metodos(quero_json):
     """`acervo listar obra metodos`: metodo padrao de conversao por tipo real (spec
-    espelho-de-leitura §4.3). Le a constante METODOS_POR_TIPO declarada acima — nao consulta
-    acervo.* (nao ha golden record disto ainda; e configuracao do ato de ingestao).
+    espelho-de-leitura §4.3), com a data desde quando vale. Le a tabela unica que o conversor
+    aplica (`conversor/padrao.py` da arvore do conhecimento) — nao consulta acervo.* (e
+    configuracao do ato de ingestao, nao golden record).
     """
+    padrao = _padrao_do_conhecimento()
+    if padrao is None:
+        morre("acervo listar obra metodos: conversor/conversor/padrao.py nao achado na release do "
+              "conhecimento nem em PF_CONHECIMENTO_DIR", 3)
     itens = [
-        {"tipo": t, "metodo": m, "conversor": c, "versao": v, "desde": d}
-        for (t, m, c, v, d) in METODOS_POR_TIPO
+        {"tipo": linha["rotulo"], "mime": linha["tipo"], "metodo": linha["metodo"],
+         "conversor": linha["conversor"], "versao": linha["versao"], "desde": linha["desde"],
+         "lote": linha["lote"]}
+        for linha in padrao.linhas()
     ]
     if quero_json:
         print(json.dumps(itens, ensure_ascii=False, indent=2))
@@ -821,11 +817,13 @@ def listar_obra_metodos(quero_json):
     wm = max((len(i["metodo"]) for i in itens), default=6)
     wc = max((len(i["conversor"]) for i in itens), default=9)
     wv = max((len(i["versao"]) for i in itens), default=6)
-    print("%-*s  %-*s  %-*s  %-*s  %s" % (wt, "tipo", wm, "metodo", wc, "conversor", wv, "versao", "desde"))
-    print("%s  %s  %s  %s  %s" % ("-" * wt, "-" * wm, "-" * wc, "-" * wv, "-" * 5))
+    print("%-*s  %-*s  %-*s  %-*s  %-10s  %s" % (
+        wt, "tipo", wm, "metodo", wc, "conversor", wv, "versao", "desde", "lote"))
+    print("%s  %s  %s  %s  %s  %s" % ("-" * wt, "-" * wm, "-" * wc, "-" * wv, "-" * 10, "-" * 4))
     for i in itens:
-        print("%-*s  %-*s  %-*s  %-*s  %s" % (
-            wt, i["tipo"], wm, i["metodo"], wc, i["conversor"], wv, i["versao"], i["desde"]))
+        print("%-*s  %-*s  %-*s  %-*s  %-10s  %s" % (
+            wt, i["tipo"], wm, i["metodo"], wc, i["conversor"], wv, i["versao"], i["desde"],
+            "sim" if i["lote"] else "fora (inteira)"))
     sys.stderr.write(
         "\n%d tipo(s) real(is) conhecido(s) — configuracao do ato de ingestao "
         "(spec espelho-de-leitura §4.3), nao golden record.\n" % len(itens))

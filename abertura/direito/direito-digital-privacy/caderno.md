@@ -16,5 +16,3 @@
   de dados não fica na TIC. Proprietário e Custodiante juntos não são vedados por lei,
   mas são a falta de segregação que o controle externo aponta. Sinal: organograma de
   dados com um nome em duas linhas de defesa.
-
-## diario de bordo

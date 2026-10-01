@@ -51,8 +51,13 @@ def main(argv):
               "     acervo curar obra --relacionar <de> <para> --tipo <t> --garantia <g> "
               "--motivo <m> [--apply]\n"
               "     acervo curar obra --relacoes <conceito> | --desrelacionar <id>\n"
+              "     acervo curar obra --reextrair <obra> [--metodo <slug>] [--apply]   (termina na selada; "
+              "--promover a poe no ar)\n"
+              "     acervo curar obra --reextrair --lote [--ordem <lista>] [--apply] | "
+              "--reextrair --lote --relatorio <lote>\n"
+              "     acervo curar obra --rejulgar --lote [--apply]   (veredito pela regua vigente, sem reconverter)\n"
               "     acervo curar obra --reextrair <id,id...|@arquivo> --bancada <pasta> "
-              "[--metodo perfil|docling] [--refazer]   (converte em pasta de saida; nao escreve "
+              "[--metodo <slug>] [--refazer]   (converte em pasta de saida; nao escreve "
               "no acervo; depois: acervo listar obra bancada <pasta>)\n"
               "     cartilha das familias e garantias: acervo curar obra --relacionar --help",
               0 if argv else 2)

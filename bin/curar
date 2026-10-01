@@ -3,7 +3,7 @@
 # capacidade: classificacao
 # dono: claudinho-dados
 # use para: curadoria do acervo, reclassificação em lote e avulsa, expurgo, restauração, promoção, criação de conceito (nó), teia de conceitos (aresta entre conceitos), derivação entre obras e registro de obra não adquirida
-# atos: --reclassificar, --situacao, --expurgar, --restaurar, --promover, --recortar, --reextrair, --conceito, --relacionar, --relacoes, --desrelacionar, --derivar, --derivacoes, --desderivar, --registrar-obra
+# atos: --reclassificar, --situacao, --expurgar, --restaurar, --promover, --recortar, --reextrair, --rejulgar, --conceito, --relacionar, --relacoes, --desrelacionar, --derivar, --derivacoes, --desderivar, --registrar-obra
 import argparse
 import contextlib
 import datetime
@@ -44,8 +44,14 @@ USO = """uso:
   curar --expurgar <obra> [--sim]
   curar --restaurar <obra>
   curar --promover <obra> --impressao <id>
-  curar --recortar <obra> [--corte <slug>] [--apply]          impressão nova sobre o mesmo espelho
-  curar --reextrair <obra> [--metodo <slug|digest>] [--apply] espelho novo do próprio arquivo
+  curar --recortar <obra> [--corte <slug>] [--apply]          impressão nova sobre o mesmo espelho; termina na selada
+  curar --reextrair <obra> [--metodo <slug|digest>] [--apply] espelho novo do próprio arquivo; termina na selada
+                                                              (sem --metodo: o padrão do tipo, `acervo listar obra metodos`)
+  curar --reextrair --lote [--ordem <id,id,…|@arquivo>] [--metodo <slug>] [--apply]
+                                                              o estoque pelo padrão do tipo (spec espelho-de-leitura §4.2):
+                                                              plano = PORTÃO 1 com a contagem por tipo; --apply abre o lote
+  curar --reextrair --lote --relatorio <lote> [--json]         estado do lote, obra a obra
+  curar --rejulgar --lote [--apply]                           espelhos com régua antiga: o veredito de novo, sem reconverter
   curar --reextrair <id,id,…|@arquivo> --bancada <pasta> [--metodo <slug>] [--modo bancada|medida] [--refazer] [--timeout-s <n>] [--json]
                                                               converte em <pasta>/<metodo>/<obra_id>/, não escreve no acervo
   curar --expurgar --espelhos [--apply]                       espelho de impressão aposentada há +90 dias
@@ -65,7 +71,8 @@ ações principais:
   --situacao <obra>             consulta a situação viva de uma obra no acervo
   --expurgar <obra>             expurgo reversível de uma obra (pede confirmação 'sim')
   --restaurar <obra>            restaura obra expurgada (expurgada: false)
-  --promover <obra>             promove impressão de bancada para servindo (exige --impressao)
+  --promover <obra>             põe a impressão selada no ar (exige --impressao), pela marcação da obra (arq:0119 §5):
+                                inteira não promove; transcrita exige trechos; transcrita e indexada exige índice aprovado
   --relacionar <de> <para>      lavra UMA aresta em acervo.conceito_relacao (default: plano seco —
                                 conferências SQL com a aresta dentro + HermiT com diff de insatisfazíveis)
   --relacoes <conceito>         lista as arestas de um conceito (pai/filhos da coluna + tabela)
@@ -373,6 +380,14 @@ def acao_promover(obra: str, impressao_id: str, autor: str, como_json: bool, hea
         apos_str = f" (aposentada: {apos.get('id')})" if apos.get("id") else ""
         print(f"Impressão {prom.get('id')} promovida a servindo com sucesso{apos_str}.")
         print(f"Obra {data.get('obra_id')}: servível=sim, degrau={data.get('degrau')}")
+        # arq:0119 §5: a marcação diz o que subiu junto; só a indexada promove índice (#3193)
+        if data.get("marcacao"):
+            linha = f"  marcação {data['marcacao']}"
+            if data.get("indices_promovidos"):
+                linha += f" · índices no ar: {', '.join(map(str, data['indices_promovidos']))}"
+            if data.get("indices_aposentados"):
+                linha += f" · índices aposentados: {data['indices_aposentados']}"
+            print(linha)
     return 0
 
 
@@ -1146,9 +1161,12 @@ def _linha_espelho(e: dict | None) -> str:
         return "(sem espelho)"
     enc = e.get("encoding") or {}
     conv = e.get("conversor") or {}
+    motivo = e.get("motivo")
+    if isinstance(motivo, (list, tuple)):  # o veredito da régua 2 traz o motivo em lista (#3193)
+        motivo = "; ".join(str(m) for m in motivo if m)
     return (f"{conv.get('nome', '?')}@{conv.get('versao', '?')} · digest {str(e.get('digest'))[:12]} · "
             f"{enc.get('decidido', '?')} ({enc.get('por', '?')}) · substituições {e.get('substituicoes')} · "
-            f"qualidade {e.get('qualidade')}" + (f" ({e['motivo']})" if e.get("motivo") else ""))
+            f"qualidade {e.get('qualidade')}" + (f" ({motivo})" if motivo else ""))
 
 
 def acao_recortar(args, autor: str, como_json: bool, headers: dict) -> int:
@@ -1165,31 +1183,81 @@ def acao_recortar(args, autor: str, como_json: bool, headers: dict) -> int:
     print(f"  corte     : {data.get('corte_atual')} -> {data.get('corte_alvo')} · "
           f"{data.get('trechos')} trecho(s) em {data.get('secoes')} seção(ões)")
     if data.get("modo") == "aplicado":
-        print(f"  impressão : {data.get('impressao_nova')} servindo; {data.get('aposentada')} aposentada")
+        _linhas_selada(data, data.get("impressao_atual"))
     else:
         print(f"  impressão : {data.get('impressao_atual')} (servindo)")
         print("  (plano seco — repita com --apply para gravar)")
     return 0
 
 
+def _linhas_selada(data: dict, servindo: str | None) -> None:
+    """Recortar e reextrair terminam na impressão selada (arq:0119 §5, #3193): a anterior segue
+    servindo até o `--promover`, que a resposta traz pronto."""
+    print(f"  impressão : {data.get('impressao_nova')} selada" + (" (já existia)" if data.get("ja_selada") else "")
+          + (f"; {servindo} segue servindo" if servindo else ""))
+    if data.get("promover"):
+        print(f"  promover  : {data['promover']}")
+
+
+def _linhas_portoes(relatorio: dict | None) -> list[str]:
+    """Os portões do relatório, todos (spec espelho-de-leitura §4.1 passo 7): o reprovado primeiro."""
+    portoes = (relatorio or {}).get("portoes") or []
+    linhas = []
+    for p in sorted(portoes, key=lambda p: bool(p.get("ok"))):
+        marca = "ok" if p.get("ok") else ("REPROVA" if p.get("bloqueante", True) else "aviso")
+        causa = f"  {p['causa']}" if p.get("causa") else ""
+        criterio = f" [{p['criterio']}]" if p.get("criterio") else ""
+        linhas.append(f"    {marca:<8}{p.get('portao')}{criterio}{causa}")
+    return linhas
+
+
 def acao_reextrair(args, autor: str, como_json: bool, headers: dict) -> int:
     """Espelho novo do próprio arquivo e impressão nova sobre ele (§9 caso 2; com o digest de
     um espelho atestado, regenera sob a mesma chave, §10.1). Plano seco sem --apply."""
     obra_id = resolver_obra_id(args.reextrair, headers)
-    payload = {"autor": autor, "aplicar": args.apply, "metodo": args.metodo, "corte": args.corte}
-    data = _chamar("POST", f"{BASE}/acervo/obras/{obra_id}/reextracoes", headers, payload)
+    # sem --metodo, o servidor usa o padrão do tipo real (spec §4.3; `acervo listar obra metodos`)
+    payload = {"autor": autor, "aplicar": args.apply, "metodo": args.metodo or None, "corte": args.corte}
+    try:
+        resp = requests.post(f"{BASE}/acervo/obras/{obra_id}/reextracoes", json=payload, headers=headers)
+    except requests.exceptions.RequestException as e:
+        falha_indeterminavel(e)
+    if resp.status_code >= 500:
+        falha_indeterminavel(resp)
+    if resp.status_code == 422:
+        try:
+            problema = resp.json()
+        except ValueError:
+            problema = {}
+        if problema.get("title") == "ReextracaoReprovada":
+            # §4.1 passo 7: nada se sela, e o relatório traz todos os portões, não só o primeiro
+            if como_json:
+                print(json.dumps(problema, indent=2, ensure_ascii=False))
+            else:
+                print(f"Reextração reprovada: {obra_id}")
+                print(f"  causa     : {problema.get('detail')}")
+                linhas = _linhas_portoes(problema.get("relatorio"))
+                if linhas:
+                    print("  portões   :")
+                    print("\n".join(linhas))
+                print("  nada selado; a impressão que servia segue servindo")
+            return 1
+    if resp.status_code != 200:
+        falha_problem(resp)
+    data = resp.json()
     if como_json:
         print(json.dumps(data, indent=2, ensure_ascii=False))
         return 0
     aplicado = data.get("modo") == "aplicado"
     print(f"{'Reextração aplicada' if aplicado else 'Plano de reextração'}: {data.get('titulo')} ({data.get('obra_id')})")
     print(f"  objeto    : {data.get('objeto')}")
-    print(f"  método    : {data.get('metodo_alvo')}" + (" (regenerar sob a mesma chave)" if data.get("regenerar") else ""))
+    print(f"  método    : {data.get('metodo') or data.get('metodo_alvo')}"
+          + (" (regenerar sob a mesma chave)" if data.get("regenerar") else ""))
     print(f"  espelho   : atual {data.get('espelho_atual') or '(nenhum)'}")
     if aplicado:
         print(f"  novo      : {_linha_espelho(data.get('espelho'))}" + ("  [já existia]" if data.get("ja_existia") else ""))
-        print(f"  impressão : {data.get('impressao_nova')} servindo · {data.get('trechos')} trecho(s)"
-              + (f"; {data.get('aposentada')} aposentada" if data.get("aposentada") else ""))
+        if data.get("trechos") is not None:
+            print(f"  trechos   : {data.get('trechos')}")
+        _linhas_selada(data, data.get("impressao_atual"))
     else:
         print("  (plano seco — repita com --apply para gravar)")
     return 0
@@ -1218,6 +1286,104 @@ def acao_espelhos(ato: str, obra: str | None, autor: str, aplicar: bool, como_js
         print(f"  {it.get('bucket')}/espelho/{str(it.get('fonte_versao')).split(':')[-1][:12]}…/{str(it.get('digest'))[:12]}{extra}")
     if data.get("modo") != "aplicado":
         print("  (plano seco — repita com --apply para gravar)")
+    return 0
+
+
+# --- régua nova e lote de reextração (spec espelho-de-leitura §4.2, §9 caso 8; card #3193) ------
+
+
+_LOTE_LINHAS = 40   # obras que o plano do lote mostra em texto; --json traz todas
+
+
+def _mib(n) -> str:
+    return "-" if n is None else f"{n / 1048576:.1f} MiB"
+
+
+def acao_rejulgar(autor: str, aplicar: bool, como_json: bool, headers: dict) -> int:
+    """`--rejulgar --lote`: os espelhos com veredito de régua anterior à vigente. Plano lista; --apply
+    recalcula o veredito de cada um, sem reconverter (§9 caso 8). Depois do --apply, o plano volta vazio."""
+    data = _chamar("POST", f"{BASE}/acervo/espelhos/rejulgamento", headers, {"autor": autor, "aplicar": aplicar})
+    if como_json:
+        print(json.dumps(data, indent=2, ensure_ascii=False))
+        return 0
+    regua = data.get("regua")
+    if data.get("modo") == "aplicado":
+        print(f"{data.get('n', 0)} espelho(s) rejulgado(s) pela régua {regua}")
+    else:
+        print(f"Plano: {data.get('n', 0)} espelho(s) com régua anterior à {regua}")
+    for it in data.get("itens", []):
+        depois = ""
+        if "qualidade" in it:
+            motivo = "; ".join(map(str, it.get("motivo") or []))
+            depois = f" -> {it['qualidade']}" + (f" ({motivo})" if motivo else "")
+        print(f"  {it.get('impressao')}  {it.get('estado'):<13} régua {it.get('regua_atual')} "
+              f"{it.get('qualidade_atual')}{depois}  {it.get('titulo')}")
+    for it in data.get("falhas", []):
+        print(f"  FALHOU {it.get('impressao')}  {it.get('titulo')}: {it.get('erro')}")
+    if data.get("modo") != "aplicado":
+        print("  (plano seco — repita com --apply para gravar)")
+    return 1 if data.get("falhas") else 0
+
+
+def acao_reextrair_lote(args, autor: str, como_json: bool, headers: dict) -> int:
+    """`--reextrair --lote`: o plano é o PORTÃO 1 (a contagem por tipo, §4.2 item 1); --apply abre o lote,
+    que roda na API obra a obra e para na selada (§4.2 item 5). O verbo volta em segundos com o id."""
+    ordem = _bancada_lista(args.ordem) if args.ordem else []
+    payload = {"autor": autor, "aplicar": args.apply, "metodo": args.metodo or None, "ordem": ordem,
+               "corte": args.corte}
+    data = _chamar("POST", f"{BASE}/acervo/reextracoes/lote", headers, payload)
+    if como_json:
+        print(json.dumps(data, indent=2, ensure_ascii=False))
+        return 0
+    aplicado = data.get("modo") == "aplicado"
+    metodo = data.get("metodo") or "o padrão de cada tipo"
+    print(f"{'Lote aberto' if aplicado else 'PORTÃO 1 — plano do lote de reextração'}: {data.get('n', 0)} obra(s) "
+          f"· método {metodo} · corte {data.get('corte')}")
+    for t in data.get("totais", []):
+        print(f"  {t.get('tipo'):<10} {t.get('n'):>5} obra(s)  {_mib(t.get('bytes'))}")
+    fora = data.get("fora_do_lote") or {}
+    if fora:
+        print("  fora do lote (marcação inteira, §4.3): " + ", ".join(f"{k} {v}" for k, v in fora.items()))
+    print(f"  inteiras: {data.get('inteiras', 0)} · em dia: {data.get('em_dia', 0)} · "
+          f"seladas à espera do --promover: {data.get('seladas_a_promover', 0)}")
+    if aplicado:
+        print(f"  lote      : {data.get('lote')}")
+        print(f"  acompanhar: {data.get('acompanhar')}")
+        return 0
+    for it in data.get("itens", [])[:_LOTE_LINHAS]:
+        print(f"  {it.get('posicao'):>5}  {it.get('obra_id')}  {it.get('tipo'):<8} {_mib(it.get('bytes')):>10}  "
+              f"{it.get('metodo_atual')} -> {it.get('metodo_alvo')}  {it.get('marcacao')}"
+              + (f"  [fonte servindo em {it['servindo_da_fonte']}]" if (it.get("servindo_da_fonte") or 0) > 1 else "")
+              + f"  {_bancada_curta(it.get('titulo') or '', 60)}")
+    resto = len(data.get("itens", [])) - _LOTE_LINHAS
+    if resto > 0:
+        print(f"  … +{resto} obra(s) (--json traz todas)")
+    print("  (plano seco — repita com --apply para abrir o lote)")
+    return 0
+
+
+def acao_relatorio_lote(lote: str, como_json: bool, headers: dict) -> int:
+    """`--reextrair --lote --relatorio <lote>`: o estado do lote, as contagens e as reprovadas com as causas."""
+    qs = "?completo=true" if como_json else ""
+    data = _chamar("GET", f"{BASE}/acervo/reextracoes/lote/{urllib.parse.quote(lote, safe='')}{qs}", headers)
+    if como_json:
+        print(json.dumps(data, indent=2, ensure_ascii=False))
+        return 0
+    print(f"Lote {data.get('lote')} · {data.get('estado')} · aberto {data.get('criado_em')} por {data.get('autor')}"
+          + (f" · concluído {data['concluido_em']}" if data.get("concluido_em") else ""))
+    print("  por estado: " + ", ".join(f"{k} {v}" for k, v in sorted((data.get("por_estado") or {}).items())))
+    for t in data.get("por_tipo", []):
+        print(f"  {str(t.get('tipo')):<10} {t.get('n'):>5} obra(s)  conversão {t.get('conversao_ms', 0) / 1000:.0f} s  "
+              f"corte {t.get('corte_ms', 0) / 1000:.0f} s")
+    for nome, rotulo in (("reprovadas", "reprovadas"), ("prazo_insuficiente", "prazo insuficiente"),
+                         ("falha_de_maquina_repetida", "falha de máquina repetida")):
+        lista = data.get(nome) or []
+        if not lista:
+            continue
+        print(f"  {rotulo} ({len(lista)}):")
+        for it in lista:
+            causa = "; ".join(it.get("causas") or []) or it.get("detalhe") or ""
+            print(f"    {it.get('obra_id')}  {_bancada_curta(it.get('titulo') or '', 50)}  {_bancada_curta(causa, 120)}")
     return 0
 
 
@@ -1721,7 +1887,12 @@ def main(argv=None):
     parser.add_argument("--restaurar", nargs="?", const="", default=None)
     parser.add_argument("--espelhos", action="store_true", default=False)
     parser.add_argument("--recortar", default=None)
-    parser.add_argument("--reextrair", default=None)
+    # nargs="?": `--reextrair --lote` não leva obra (#3193)
+    parser.add_argument("--reextrair", nargs="?", const="", default=None)
+    parser.add_argument("--rejulgar", action="store_true", default=False)
+    parser.add_argument("--lote", action="store_true", default=False)
+    parser.add_argument("--ordem", default=None)
+    parser.add_argument("--relatorio", default=None)
     # --bancada <pasta>: pasta de SAÍDA da conversão em lote (card #3187); nada a ver com a raiz
     # de lib/raizes.py nem com `acervo curar obra lote`
     parser.add_argument("--bancada", default=None)
@@ -1821,6 +1992,22 @@ def main(argv=None):
         return acao_espelhos(ato, obra, autor, args.apply, args.como_json, headers)
     if args.espelhos:
         sys.stderr.write("curar: erro: --espelhos acompanha --expurgar ou --restaurar\n")
+        return 2
+    if args.lote or args.rejulgar or args.ordem is not None or args.relatorio is not None:
+        # spec espelho-de-leitura §4.2 e §9 caso 8 (#3193): os atos de lote sobre o estoque
+        if not args.lote:
+            sys.stderr.write("curar: erro: --rejulgar, --ordem e --relatorio acompanham --lote\n")
+            return 2
+        if args.bancada is not None or args.recortar:
+            sys.stderr.write("curar: erro: --lote não combina com --bancada nem com --recortar\n")
+            return 2
+        if args.rejulgar and args.reextrair is None:
+            return acao_rejulgar(autor, args.apply, args.como_json, headers)
+        if args.reextrair == "" and not args.rejulgar:
+            if args.relatorio is not None:
+                return acao_relatorio_lote(args.relatorio, args.como_json, headers)
+            return acao_reextrair_lote(args, autor, args.como_json, headers)
+        sys.stderr.write("curar: erro: --lote vai com --reextrair (sem obra) ou com --rejulgar\n")
         return 2
     if args.bancada is not None or args.refazer or args.timeout_s is not None or args.modo is not None:
         return acao_reextrair_bancada(args, autor, args.como_json, headers)

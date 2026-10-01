@@ -1,7 +1,8 @@
 """#3180: `acervo ler obra impressao` — contrato do verbo sem rede.
 
 Uso e ato desconhecido por subprocesso; exit por classe de erro, primeira e última linha pelas
-funções puras do sub-ato (spec espelho-de-leitura §5.4; arq:0110 §4).
+funções puras do sub-ato (spec espelho-de-leitura §5.4; arq:0110 §4). Desde a #3193 a qualidade e o
+motivo são do veredito da régua (o motivo é lista) e a linha de avisos tem a forma de §5.4.
 """
 
 from __future__ import annotations
@@ -35,7 +36,7 @@ SUMARIO = {
     "espelho": {"tipo": "application/pdf", "unidade": "pagina", "substituicoes": 0,
                 "encoding": {"decidido": "utf-8", "por": "binario"},
                 "metodo": {"conversor": {"nome": "perfil", "versao": "1"}},
-                "qualidade": "nao-julgada", "motivo": None},
+                "qualidade": "nao-julgada", "motivo": []},
     "unidades": 12,
     "secoes": [{"ancora": "_preambulo"}, {"ancora": "capitulo-i"}, {"ancora": "capitulo-ii"}],
 }
@@ -79,7 +80,7 @@ def test_primeira_linha_no_molde_da_casa():
     linha = m.primeira_linha("Lei 14.133", SUMARIO, "1-2", {"cabecalho-corrente": 3}, "corpo", None)
     assert linha == ("Lei 14.133 · application/pdf · pagina 1–2 de 12 · perfil@1 · utf-8 (binario) · "
                      "substituições 0 · fora do corpo: cabeçalho 3, rodapé 0, navegação 0 · "
-                     "qualidade nao-julgada")
+                     "qualidade nao-julgada · avisos: nenhum")
 
 
 def test_primeira_linha_sem_espelho():
@@ -88,7 +89,17 @@ def test_primeira_linha_sem_espelho():
         "Obra velha · qualidade suspeita · sem página"
 
 
-# --- a linha de avisos (spec conversor-pdf-combinado §11; card #3207) ------------------------------
+def test_o_motivo_do_veredito_e_lista_e_sai_numa_linha():
+    m = _mod()
+    sumario = {**SUMARIO, "espelho": {**SUMARIO["espelho"], "qualidade": "suspeita",
+                                      "motivo": ["substituições 3", "outro 0.01 > piso 0"]}}
+    linha = m.primeira_linha("Lei", sumario, "1-2", {}, "corpo", None)
+    assert "qualidade suspeita (substituições 3; outro 0.01 > piso 0) · avisos: nenhum" in linha
+    antigo = {**SUMARIO, "espelho": {**SUMARIO["espelho"], "qualidade": "suspeita", "motivo": "substituições > 0"}}
+    assert "qualidade suspeita (substituições > 0)" in m.primeira_linha("Lei", antigo, "1-2", {}, "corpo", None)
+
+
+# --- a linha de avisos (spec espelho-de-leitura §5.4; cards #3207 e #3193) -------------------------
 
 TABELA = "tabela com coluna suspeita"
 ORDEM = "ordem entre colunas suspeita"
@@ -104,13 +115,13 @@ AVISOS_DO_EXEMPLO = [_aviso("tabela_coluna", TABELA, (120, 131)), _aviso("ordem_
 def test_a_linha_de_avisos_do_exemplo_da_spec():
     m = _mod()
     assert m.linha_de_avisos(AVISOS_DO_EXEMPLO) == (
-        "avisos: p. 120–131 tabela com coluna suspeita; p. 3 ordem entre colunas suspeita")
+        "avisos: tabela com coluna suspeita p. 120–131; ordem entre colunas suspeita p. 3")
 
 
-def test_sem_aviso_nao_ha_linha():
+def test_sem_aviso_a_linha_diz_nenhum():
     m = _mod()
-    assert m.linha_de_avisos(None) is None and m.linha_de_avisos([]) is None
-    assert m.linha_de_avisos([{"codigo": "ocr", "rotulo": "texto por OCR", "paginas": []}, None]) is None
+    assert m.linha_de_avisos(None) == "avisos: nenhum" and m.linha_de_avisos([]) == "avisos: nenhum"
+    assert m.linha_de_avisos([{"codigo": "ocr", "rotulo": "texto por OCR", "paginas": []}, None]) == "avisos: nenhum"
 
 
 def test_a_primeira_linha_leva_os_avisos_depois_da_qualidade():
@@ -118,46 +129,47 @@ def test_a_primeira_linha_leva_os_avisos_depois_da_qualidade():
     sumario = {**SUMARIO, "espelho": {**SUMARIO["espelho"], "avisos": AVISOS_DO_EXEMPLO}}
     linha = m.primeira_linha("Lei 14.133", sumario, "1-2", {"cabecalho-corrente": 3}, "corpo", None)
     assert linha.endswith(
-        "qualidade nao-julgada · avisos: p. 120–131 tabela com coluna suspeita; p. 3 ordem entre colunas suspeita")
+        "qualidade nao-julgada · avisos: tabela com coluna suspeita p. 120–131; ordem entre colunas suspeita p. 3")
     assert "\n" not in linha and linha.count("avisos:") == 1
 
 
-def test_a_primeira_linha_sem_avisos_fica_como_antes():
+def test_a_pagina_sem_texto_extraido_aparece_com_o_rotulo():
     m = _mod()
-    com_lista_vazia = {**SUMARIO, "espelho": {**SUMARIO["espelho"], "avisos": []}}
-    sem_chave = m.primeira_linha("Lei", SUMARIO, "1-2", {}, "corpo", None)
-    assert m.primeira_linha("Lei", com_lista_vazia, "1-2", {}, "corpo", None) == sem_chave
-    assert "avisos" not in sem_chave
+    sumario = {**SUMARIO, "espelho": {**SUMARIO["espelho"], "avisos": [
+        _aviso("sem_bloco", "página sem texto extraído", (4, 4), (6, 6))]}}
+    linha = m.primeira_linha("Obra", sumario, "1-2", {}, "corpo", None)
+    assert linha.endswith("avisos: página sem texto extraído p. 4, 6")
 
 
 def test_o_que_nao_cabe_na_largura_entra_contado_no_fim():
     m = _mod()
     longos = [_aviso("tabela_coluna", TABELA, (10, 12)), _aviso("ordem_colunas", ORDEM, (3, 3)),
               _aviso("sem_texto", "escaneada sem texto", (20, 29))]
-    assert m.linha_de_avisos(longos, largura=70) == "avisos: p. 10–12 tabela com coluna suspeita; +11 páginas"
+    assert m.linha_de_avisos(longos, largura=70) == "avisos: tabela com coluna suspeita p. 10–12 +11"
     assert m.linha_de_avisos(longos, largura=78) == (
-        "avisos: p. 10–12 tabela com coluna suspeita; p. 3 ordem entre colunas suspeita; +10 páginas")
+        "avisos: tabela com coluna suspeita p. 10–12; ordem entre colunas suspeita p. 3 +10")
     assert m.linha_de_avisos(longos) == (
-        "avisos: p. 10–12 tabela com coluna suspeita; p. 3 ordem entre colunas suspeita; p. 20–29 escaneada sem texto")
-    assert m.linha_de_avisos(longos, largura=10) == "avisos: p. 10–12 tabela com coluna suspeita; +11 páginas"
+        "avisos: tabela com coluna suspeita p. 10–12; ordem entre colunas suspeita p. 3; "
+        "escaneada sem texto p. 20–29")
+    assert m.linha_de_avisos(longos, largura=10) == "avisos: tabela com coluna suspeita p. 10–12 +11"
 
 
 def test_no_maximo_tantas_faixas_por_aviso_e_o_resto_vira_mais_n():
     m = _mod()
     aviso = _aviso("tabela_coluna", TABELA, (1, 1), (3, 3), (5, 6), (9, 9))
-    assert m.linha_de_avisos([aviso], faixas_por_aviso=2) == "avisos: p. 1, 3 tabela com coluna suspeita; +3 páginas"
-    assert m.linha_de_avisos([aviso], faixas_por_aviso=3) == "avisos: p. 1, 3, 5–6 tabela com coluna suspeita; +1 página"
-    assert m.linha_de_avisos([aviso]) == "avisos: p. 1, 3, 5–6, 9 tabela com coluna suspeita"
+    assert m.linha_de_avisos([aviso], faixas_por_aviso=2) == "avisos: tabela com coluna suspeita p. 1, 3 +3"
+    assert m.linha_de_avisos([aviso], faixas_por_aviso=3) == "avisos: tabela com coluna suspeita p. 1, 3, 5–6 +1"
+    assert m.linha_de_avisos([aviso]) == "avisos: tabela com coluna suspeita p. 1, 3, 5–6, 9"
 
 
 def test_aviso_sem_rotulo_sai_com_o_codigo():
     m = _mod()
-    assert m.linha_de_avisos([{"codigo": "novo_aviso", "paginas": [[4, 4]]}]) == "avisos: p. 4 novo_aviso"
+    assert m.linha_de_avisos([{"codigo": "novo_aviso", "paginas": [[4, 4]]}]) == "avisos: novo_aviso p. 4"
 
 
 def test_a_ajuda_do_verbo_fala_dos_avisos():
     r = _roda("--ajuda")
-    assert r.returncode == 0 and "avisos: p. 120–131" in r.stdout
+    assert r.returncode == 0 and "tabela com coluna suspeita p. 120–131" in r.stdout and "avisos: nenhum" in r.stdout
 
 
 def test_faixa_lida_declara_o_pedido_quando_lido_inteiro():
@@ -195,9 +207,11 @@ def test_curar_declara_e_despacha_os_atos_do_espelho():
     fonte = CURAR.read_text(encoding="utf-8")
     uso = fonte.split('USO = """', 1)[1].split('"""', 1)[0]
     for ato in ("--recortar <obra>", "--reextrair <obra>", "--expurgar --espelhos",
-                "--restaurar --espelhos"):
-        assert ato in uso
-    for chamada in ("acao_recortar(", "acao_reextrair(", "acao_espelhos(",
+                "--restaurar --espelhos", "--reextrair --lote", "--rejulgar --lote", "--relatorio <lote>"):
+        assert ato in uso, ato
+    for chamada in ("acao_recortar(", "acao_reextrair(", "acao_espelhos(", "acao_rejulgar(",
+                    "acao_reextrair_lote(", "acao_relatorio_lote(",
                     "/acervo/obras/{obra_id}/recortes", "/acervo/obras/{obra_id}/reextracoes",
-                    "/acervo/espelhos/{rota}", "--espelhos acompanha --expurgar ou --restaurar"):
+                    "/acervo/espelhos/{rota}", "/acervo/espelhos/rejulgamento", "/acervo/reextracoes/lote",
+                    "--espelhos acompanha --expurgar ou --restaurar"):
         assert chamada in fonte, chamada
