@@ -1,1 +1,0 @@
-emendar spec economia-de-giro §5: lote encadeado (para no 1o exit!=0, exit por item, estado declarado) — parecer wiki 26/09, §7
