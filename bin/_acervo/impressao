@@ -40,8 +40,9 @@ USO = """uso: acervo ler obra impressao <obra> [--paginas a-b | --capitulo <anco
   --papel         corpo (padrão: sem cabeçalho, rodapé, navegação) · todos
   --impressao     lê outra impressão da obra, aposentada inclusive (padrão: a servindo)
   --baixar        grava espelho.md inteiro como <título>.md e imprime o caminho
-primeira linha: o que é, de onde veio e a qualidade; depois, se o conversor achou o que avisar, `avisos: p. 120–131
-  tabela com coluna suspeita; p. 3 ordem entre colunas suspeita` (página física; o que não cabe vem como `+N páginas`)
+primeira linha: o que é, de onde veio, a qualidade e o motivo do veredito, e os avisos página a página: `avisos:
+  tabela com coluna suspeita p. 120–131; página sem texto extraído p. 3` (página física; o que não cabe vem
+  contado como `+N`; sem aviso, `avisos: nenhum`)
 exit: 0 leu · 1 obra sem impressão servindo · 2 uso · 3 rota fora · 5 indeterminável
 spec: acervo ler casa spec espelho-de-leitura (§5.4)
 """
@@ -71,12 +72,12 @@ def _numero(n) -> str:
     return "?" if n is None else str(n)
 
 
-# A linha de avisos (spec conversor-pdf-combinado §11; card #3207): «avisos: p. 120–131 tabela com coluna
-# suspeita; p. 3 ordem entre colunas suspeita». A API devolve `espelho.avisos` (código, rótulo e faixas de
+# A linha de avisos (spec espelho-de-leitura §5.4; cards #3207 e #3193): «avisos: tabela com coluna suspeita
+# p. 120–131; ordem entre colunas suspeita p. 3». A API devolve `espelho.avisos` (código, rótulo e faixas de
 # página, na ordem de classe de falha); aqui só se escreve numa linha. Os rótulos moram na API
 # (`rag/motor_acervo/leitura/avisos.py`): dados os troca sem mexer no índice nem neste verbo. A mesma regra
 # de largura da API: o primeiro aviso sai sempre, os seguintes enquanto couberem, e o que não coube (mais
-# as faixas que passam de FAIXAS_POR_AVISO) entra contado no fim, «+N páginas».
+# as faixas que passam de FAIXAS_POR_AVISO) entra contado no fim, «+N» páginas; sem aviso, «avisos: nenhum».
 PREFIXO_DOS_AVISOS = "avisos: "
 LARGURA_DOS_AVISOS = 160
 FAIXAS_POR_AVISO = 6
@@ -88,18 +89,19 @@ def _paginas_nas_faixas(faixas: list) -> int:
     return sum(fim - ini + 1 for ini, fim in faixas)
 
 def linha_de_avisos(avisos: list | None, largura: int = LARGURA_DOS_AVISOS,
-                    faixas_por_aviso: int = FAIXAS_POR_AVISO) -> str | None:
-    """`avisos: p. 3–40 tabela com coluna suspeita; …` ou `None` se a obra não tem aviso."""
+                    faixas_por_aviso: int = FAIXAS_POR_AVISO) -> str:
+    """`avisos: tabela com coluna suspeita p. 3–40; … +N` (spec espelho-de-leitura §5.4: o rótulo e as
+    páginas; o que não coube, contado em páginas no fim), ou `avisos: nenhum`."""
     avisos = [a for a in (avisos or []) if isinstance(a, dict) and a.get("paginas")]
     if not avisos:
-        return None
+        return PREFIXO_DOS_AVISOS + "nenhum"
     partes: list[str] = []
     omitidas = 0
     usado = len(PREFIXO_DOS_AVISOS)
     for i, aviso in enumerate(avisos):
         faixas = aviso["paginas"]
         rotulo = aviso.get("rotulo") or aviso.get("codigo") or "?"
-        texto = f"p. {_faixas_em_texto(faixas[:faixas_por_aviso])} {rotulo}"
+        texto = f"{rotulo} p. {_faixas_em_texto(faixas[:faixas_por_aviso])}"
         custo = len(texto) + (2 if partes else 0)
         if partes and usado + custo > largura:
             omitidas += sum(_paginas_nas_faixas(restante["paginas"]) for restante in avisos[i:])
@@ -107,9 +109,15 @@ def linha_de_avisos(avisos: list | None, largura: int = LARGURA_DOS_AVISOS,
         partes.append(texto)
         usado += custo
         omitidas += _paginas_nas_faixas(faixas[faixas_por_aviso:])
-    if omitidas:
-        partes.append(f"+{omitidas} {'página' if omitidas == 1 else 'páginas'}")
-    return PREFIXO_DOS_AVISOS + "; ".join(partes)
+    linha = PREFIXO_DOS_AVISOS + "; ".join(partes)
+    return f"{linha} +{omitidas}" if omitidas else linha
+
+
+def _motivo(motivo) -> str:
+    """O motivo do veredito (lista, desde a régua 2; texto, antes dela) numa linha só."""
+    if isinstance(motivo, (list, tuple)):
+        return "; ".join(str(m) for m in motivo if m)
+    return str(motivo or "")
 
 def primeira_linha(titulo: str, sumario: dict, unidades: str | None, fora: dict,
                    papel: str, capitulo: str | None) -> str:
@@ -137,11 +145,11 @@ def primeira_linha(titulo: str, sumario: dict, unidades: str | None, fora: dict,
         extras = {k: v for k, v in fora.items() if k not in base and v}
         itens = [f"{_NOMES_FORA.get(k, k)} {v}" for k, v in {**base, **extras}.items()]
         partes.append("fora do corpo: " + ", ".join(itens))
+    # a qualidade e o motivo são do veredito da régua (spec §3.1, §5.4), que a rota põe no sumário
     qual = esp.get("qualidade") or "nao-julgada"
-    partes.append(f"qualidade {qual}" + (f" ({esp['motivo']})" if esp.get("motivo") else ""))
-    avisos = linha_de_avisos(esp.get("avisos"))
-    if avisos:
-        partes.append(avisos)
+    motivo = _motivo(esp.get("motivo"))
+    partes.append(f"qualidade {qual}" + (f" ({motivo})" if motivo else ""))
+    partes.append(linha_de_avisos(esp.get("avisos")))
     return " · ".join(partes)
 
 
