@@ -46,7 +46,7 @@ USO = """uso:
   curar --promover <obra> --impressao <id>
   curar --recortar <obra> [--corte <slug>] [--apply]          impressão nova sobre o mesmo espelho
   curar --reextrair <obra> [--metodo <slug|digest>] [--apply] espelho novo do próprio arquivo
-  curar --reextrair <id,id,…|@arquivo> --bancada <pasta> [--metodo <slug>] [--refazer] [--timeout-s <n>] [--json]
+  curar --reextrair <id,id,…|@arquivo> --bancada <pasta> [--metodo <slug>] [--modo bancada|medida] [--refazer] [--timeout-s <n>] [--json]
                                                               converte em <pasta>/<metodo>/<obra_id>/, não escreve no acervo
   curar --expurgar --espelhos [--apply]                       espelho de impressão aposentada há +90 dias
   curar --restaurar --espelhos [<obra>] [--apply]             desfaz o expurgo de espelhos
@@ -122,6 +122,11 @@ opções de --reextrair --bancada (card #3187; "bancada" aqui é só uma pasta d
                                 (recusa --apply). --reextrair passa a aceitar 'id1,id2,…' ou '@arquivo' (um id por linha;
                                 vazias e '#' ignoradas). Retomável: obra com relatorio.json válido é pulada ('já feito')
   --metodo <slug>               método e segmento de pasta (default: perfil)
+  --modo bancada|medida         bancada (padrão) converte e mede a fidelidade; medida (card #3207) só mede as calhas de duas
+                                colunas de cada PDF, pela porta ao MuPDF, sem modelo e sem espelho: grava só o relatorio.json
+                                (com `medida`: páginas, páginas com calha e as calhas por página). Use uma pasta só para a
+                                medida: a retomada pula obra com relatorio.json válido, de qualquer modo. Obra que não é PDF
+                                sai n/a; PDF que a porta não abre sai falha. O resumo ganha as obras e as páginas com calha
   --refazer                     refaz mesmo as obras já feitas
   --timeout-s <n>               timeout da conversão no servidor (default 1800); o HTTP espera n+120
   saída: uma linha por obra 'ok|reprovada|n/a|falha|erro|já feito  <obra>  <tipo>  classe=  blocos=  perda=  <ms>ms
@@ -1230,6 +1235,8 @@ _BANCADA_TIPOS_FALHA = ("conversao", "timeout", "subprocesso", "ausente")
 # versao_relatorio que o cliente aceita: 1 (conversor em subprocesso da API) e 2 (conversor como serviço,
 # #3205: mesmos campos, mais versao_imagem, paginas, prazo_s e pico_memoria_kb). Outra versão: não obtida.
 _BANCADA_VERSOES_RELATORIO = (1, 2)
+# `--modo` da bancada (card #3207): converte e mede a fidelidade, ou só mede as calhas de duas colunas
+_BANCADA_MODOS = ("bancada", "medida")
 # POST: (conexão, leitura). A leitura espera o timeout da conversão no servidor + margem.
 _BANCADA_CONEXAO_S = 10
 _BANCADA_MARGEM_HTTP_S = 120
@@ -1344,22 +1351,44 @@ def _bancada_campos(rel: dict) -> dict:
     total = tempos.get("total")
     # a MEDIDA falhou (fidelidade.erro), a conversão não: continua ok/reprovada, com a marca
     medida_indeterminada = bool(fid.get("erro")) and erro_tipo is None and rel.get("aplicavel") is not False
+    # a medida de duas colunas (modo `medida`, #3207): páginas e páginas com calha; None fora dele
+    med = rel.get("medida") if isinstance(rel.get("medida"), dict) else None
+    calhas = ({"paginas": med.get("paginas"), "com_calha": med.get("paginas_com_calha")}
+              if med is not None else None)
     return {"situacao": situacao, "causa": causa, "tipo": tipo or "-", "erro_tipo": erro_tipo,
             "classe": rel.get("classe") or "-", "blocos": cab.get("blocos"), "perda": perda,
-            "medida_indeterminada": medida_indeterminada,
+            "medida": calhas, "medida_indeterminada": medida_indeterminada,
             "total_ms": total if isinstance(total, (int, float)) and not isinstance(total, bool) else None}
 
 
 def _bancada_linha(item: dict) -> str:
-    partes = [item["situacao"].ljust(9), (item.get("obra_id") or item["entrada"])[:8], item["tipo"],
-              f"classe={item['classe']}", f"blocos={_bancada_n(item['blocos'])}",
-              f"perda={_bancada_n(item['perda']) if item['perda'] is not None else '-'}",
-              f"{_bancada_n(item['total_ms'])}ms"]
+    medida = item.get("medida")
+    if medida:  # modo medida: páginas e páginas com calha no lugar de classe, blocos e perda
+        partes = [item["situacao"].ljust(9), (item.get("obra_id") or item["entrada"])[:8], item["tipo"],
+                  f"paginas={_bancada_n(medida.get('paginas'))}", f"calha={_bancada_n(medida.get('com_calha'))}",
+                  f"{_bancada_n(item['total_ms'])}ms"]
+    else:
+        partes = [item["situacao"].ljust(9), (item.get("obra_id") or item["entrada"])[:8], item["tipo"],
+                  f"classe={item['classe']}", f"blocos={_bancada_n(item['blocos'])}",
+                  f"perda={_bancada_n(item['perda']) if item['perda'] is not None else '-'}",
+                  f"{_bancada_n(item['total_ms'])}ms"]
     if item.get("medida_indeterminada"):
         partes.append("medida-indeterminada")
     if item.get("causa"):
         partes.append(f"[{item['causa']}]")
     return "  ".join(partes)
+
+
+def _bancada_total_de_calhas(itens: list) -> dict | None:
+    """O total do modo `medida` (card #3207): obras medidas, obras com calha, páginas e páginas com calha.
+    None quando nenhuma obra do lote traz `medida` (fora do modo medida)."""
+    medidas = [i["medida"] for i in itens if i.get("medida")]
+    if not medidas:
+        return None
+    com_calha = [m for m in medidas if (m.get("com_calha") or 0) > 0]
+    return {"obras_medidas": len(medidas), "obras_com_calha": len(com_calha),
+            "paginas": sum(m.get("paginas") or 0 for m in medidas),
+            "paginas_com_calha": sum(m.get("com_calha") or 0 for m in com_calha)}
 
 
 def _bancada_relatorio_integro(pasta_obra: str) -> dict | None:
@@ -1430,12 +1459,13 @@ def _bancada_causa_http(resp) -> str:
 
 
 def _bancada_obra(entrada: str, metodo: str, pasta: str, autor: str, timeout_s: int,
-                  refazer: bool, headers: dict) -> dict:
-    """UMA obra. Nunca levanta por causa dela (quem chama ainda protege); devolve o item do resumo."""
+                  refazer: bool, headers: dict, modo: str | None = None) -> dict:
+    """UMA obra. Nunca levanta por causa dela (quem chama ainda protege); devolve o item do resumo.
+    `modo` (`bancada` ou `medida`) vai no corpo do POST só quando dado: sem ele o servidor assume `bancada`."""
     item = {"entrada": entrada, "obra_id": None, "situacao": "erro", "arquivo_relatorio": None,
             "arquivos": [], "tipo": "-", "classe": "-", "blocos": None, "perda": None,
             "total_ms": None, "causa": None, "origem_erro": None, "erro_tipo": None,
-            "medida_indeterminada": False}
+            "medida": None, "medida_indeterminada": False}
     oid, problema = _bancada_resolver(entrada, headers)
     if problema:
         item.update(causa=problema, origem_erro="cliente")
@@ -1482,9 +1512,11 @@ def _bancada_obra(entrada: str, metodo: str, pasta: str, autor: str, timeout_s: 
                         arquivos=[n for n, _s, _b in _BANCADA_ARQUIVOS if rel.get(_b) is not None])
             return item
 
+    pedido = {"autor": autor, "metodo": metodo, "timeout_s": timeout_s}
+    if modo:
+        pedido["modo"] = modo
     try:
-        resp = requests.post(f"{BASE}/acervo/obras/{oid}/conversoes", headers=headers,
-                             json={"autor": autor, "metodo": metodo, "timeout_s": timeout_s},
+        resp = requests.post(f"{BASE}/acervo/obras/{oid}/conversoes", headers=headers, json=pedido,
                              timeout=(_BANCADA_CONEXAO_S, timeout_s + _BANCADA_MARGEM_HTTP_S))
     except requests.exceptions.RequestException as e:
         return nao_obtida(f"rede: {type(e).__name__}: {e}", "servidor")
@@ -1597,7 +1629,7 @@ def acao_reextrair_bancada(args, autor: str, como_json: bool, headers: dict) -> 
         return 2
 
     if args.bancada is None:
-        return uso("--refazer e --timeout-s acompanham --reextrair <lista> --bancada <pasta>")
+        return uso("--refazer, --timeout-s e --modo acompanham --reextrair <lista> --bancada <pasta>")
     if not args.bancada.strip():
         return uso("--bancada exige uma pasta")
     if not args.reextrair:
@@ -1612,6 +1644,9 @@ def acao_reextrair_bancada(args, autor: str, como_json: bool, headers: dict) -> 
     timeout_s = 1800 if args.timeout_s is None else args.timeout_s
     if timeout_s <= 0:
         return uso("--timeout-s deve ser positivo")
+    modo = args.modo.strip() if args.modo is not None else None
+    if modo is not None and modo not in _BANCADA_MODOS:
+        return uso(f"--modo é {' ou '.join(_BANCADA_MODOS)}, veio '{args.modo}'")
     try:
         entradas = _bancada_lista(args.reextrair)
     except UnicodeDecodeError as e:
@@ -1633,12 +1668,13 @@ def acao_reextrair_bancada(args, autor: str, como_json: bool, headers: dict) -> 
     itens = []
     for entrada in entradas:
         try:
-            item = _bancada_obra(entrada, metodo, pasta, autor, timeout_s, args.refazer, headers)
+            item = _bancada_obra(entrada, metodo, pasta, autor, timeout_s, args.refazer, headers, modo)
         except Exception as e:  # noqa: BLE001 — falha de uma obra nunca derruba as demais
             item = {"entrada": entrada, "obra_id": None, "situacao": "erro", "arquivo_relatorio": None,
                     "arquivos": [], "tipo": "-", "classe": "-", "blocos": None, "perda": None,
                     "total_ms": None, "causa": _bancada_curta(f"{type(e).__name__}: {e}"),
-                    "origem_erro": "cliente", "erro_tipo": None, "medida_indeterminada": False}
+                    "origem_erro": "cliente", "erro_tipo": None, "medida": None,
+                    "medida_indeterminada": False}
         itens.append(item)
         saida.write(_bancada_linha(item) + "\n")
         saida.flush()
@@ -1650,11 +1686,21 @@ def acao_reextrair_bancada(args, autor: str, como_json: bool, headers: dict) -> 
                 f"já feito={contagem['já feito']}  "
                 f"{decorrido:.1f}s  {os.path.join(pasta, metodo)}\n")
     saida.flush()
+    calhas = _bancada_total_de_calhas(itens)
+    if calhas:
+        saida.write(f"medida  {calhas['obras_com_calha']} de {calhas['obras_medidas']} obra(s) com calha  "
+                    f"{calhas['paginas_com_calha']} de {calhas['paginas']} página(s) com calha\n")
+        saida.flush()
     codigo = 1 if contagem["erro"] else 0
     if como_json:
-        print(json.dumps({"ato": "converter-em-bancada-lote", "pasta": pasta, "metodo": metodo,
-                          "autor": autor, "total": len(itens), "contagem": contagem,
-                          "exit_code": codigo, "obras": itens}, indent=2, ensure_ascii=False))
+        resumo = {"ato": "converter-em-bancada-lote", "pasta": pasta, "metodo": metodo,
+                  "autor": autor, "total": len(itens), "contagem": contagem,
+                  "exit_code": codigo, "obras": itens}
+        if modo is not None:
+            resumo["modo"] = modo
+        if calhas:
+            resumo["medida"] = calhas
+        print(json.dumps(resumo, indent=2, ensure_ascii=False))
     return codigo
 
 
@@ -1681,6 +1727,7 @@ def main(argv=None):
     parser.add_argument("--bancada", default=None)
     parser.add_argument("--refazer", action="store_true", default=False)
     parser.add_argument("--timeout-s", dest="timeout_s", type=int, default=None)
+    parser.add_argument("--modo", default=None)
     parser.add_argument("--metodo", default=None)
     parser.add_argument("--corte", default=None)
     parser.add_argument("--promover", default=None)
@@ -1775,7 +1822,7 @@ def main(argv=None):
     if args.espelhos:
         sys.stderr.write("curar: erro: --espelhos acompanha --expurgar ou --restaurar\n")
         return 2
-    if args.bancada is not None or args.refazer or args.timeout_s is not None:
+    if args.bancada is not None or args.refazer or args.timeout_s is not None or args.modo is not None:
         return acao_reextrair_bancada(args, autor, args.como_json, headers)
     if args.recortar:
         return acao_recortar(args, autor, args.como_json, headers)
