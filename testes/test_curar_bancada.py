@@ -1041,3 +1041,94 @@ def test_ajuda_do_curar_descreve_o_lote_e_as_situacoes(falso):
     for trecho in ("--bancada <pasta>", "--refazer", "id1,id2", "@arquivo", "não escreve no acervo",
                    "ok|reprovada|n/a|falha|erro|já feito", "medida-indeterminada", "relatorio.invalido.json"):
         assert trecho in r.stdout, trecho
+
+
+# ------------------------------------------------------------------ --modo medida (#3207)
+
+def corpo_medida(oid, metodo="docling", paginas=12, com_calha=2, **over):
+    """200 do modo `medida`: só a porta ao MuPDF. Sem arquivos, sem fidelidade, sem blocos."""
+    medida = {"detectores": {"versao": 1}, "paginas": paginas, "paginas_com_calha": com_calha,
+              "calhas_por_pagina": {str(p): [[220.0, 320.0]] for p in range(3, 3 + com_calha)},
+              "paginas_ilegiveis": [], "tempo_ms": 300}
+    rel = _relatorio(oid, metodo, cabecalho=None, fidelidade=None, tempos_ms={"total": 340}, medida=medida, **over)
+    return 200, {"ato": "converter-em-bancada", "modo": "medida", "obra_id": oid, "titulo": "T",
+                 "objeto": "acervo/abc", "relatorio": rel}
+
+
+def test_modo_medida_vai_no_corpo_grava_so_o_relatorio_e_a_linha_traz_paginas_e_calha(falso, tmp_path):
+    a = U(1)
+    falso.cenarios[a] = corpo_medida(a, paginas=12, com_calha=2)
+    r = curar(falso.url, "--reextrair", a, "--bancada", str(tmp_path), "--metodo", "docling", "--modo", "medida",
+              "--autor", "engenharia")
+    assert r.returncode == 0, r.stdout + r.stderr
+    (_, caminho, corpo, _cab), = falso.posts()
+    assert caminho == f"/acervo/obras/{a}/conversoes"
+    assert corpo == {"autor": "engenharia", "metodo": "docling", "timeout_s": 1800, "modo": "medida"}
+    pasta = tmp_path / "docling" / a
+    assert (pasta / "relatorio.json").exists()
+    assert not (pasta / "espelho.md").exists() and not (pasta / "indice.json").exists()
+    assert json.loads(ler(pasta / "relatorio.json"))["medida"]["paginas_com_calha"] == 2
+    linha = r.stdout.splitlines()[0]
+    assert linha.startswith("ok ") and "paginas=12" in linha and "calha=2" in linha and "classe=" not in linha
+    assert "medida  1 de 1 obra(s) com calha  2 de 12 página(s) com calha" in r.stdout
+
+
+def test_a_retomada_da_medida_pula_a_obra_feita_e_mostra_a_medida_gravada(falso, tmp_path):
+    a = U(1)
+    falso.cenarios[a] = corpo_medida(a, paginas=12, com_calha=2)
+    argv = ("--reextrair", a, "--bancada", str(tmp_path), "--metodo", "docling", "--modo", "medida")
+    assert curar(falso.url, *argv).returncode == 0
+    r = curar(falso.url, *argv)
+    assert r.returncode == 0 and len(falso.posts()) == 1  # nenhum POST novo
+    linha = r.stdout.splitlines()[0]
+    assert linha.startswith("já feito") and "paginas=12" in linha and "calha=2" in linha
+
+
+def test_o_resumo_json_da_medida_conta_as_obras_e_as_paginas_com_calha(falso, tmp_path):
+    a, b = U(1), U(2)
+    falso.cenarios.update({a: corpo_medida(a, paginas=12, com_calha=2), b: corpo_medida(b, paginas=5, com_calha=0)})
+    r = curar(falso.url, "--reextrair", f"{a},{b}", "--bancada", str(tmp_path), "--metodo", "docling",
+              "--modo", "medida", "--json")
+    assert r.returncode == 0, r.stdout + r.stderr
+    resumo = json.loads(r.stdout)
+    assert resumo["modo"] == "medida"
+    assert resumo["medida"] == {"obras_medidas": 2, "obras_com_calha": 1, "paginas": 17, "paginas_com_calha": 2}
+    assert [o["medida"] for o in resumo["obras"]] == [{"paginas": 12, "com_calha": 2}, {"paginas": 5, "com_calha": 0}]
+
+
+def test_o_modo_bancada_explicito_vai_no_corpo_e_o_padrao_segue_sem_ele(falso, tmp_path):
+    a = U(1)
+    falso.cenarios[a] = corpo_ok(a)
+    curar(falso.url, "--reextrair", a, "--bancada", str(tmp_path), "--modo", "bancada", "--autor", "engenharia")
+    assert falso.posts()[0][2] == {"autor": "engenharia", "metodo": "perfil", "timeout_s": 1800, "modo": "bancada"}
+
+
+def test_a_bancada_sem_modo_nao_ganha_a_linha_de_medida(falso, tmp_path):
+    a = U(1)
+    falso.cenarios[a] = corpo_ok(a)
+    r = curar(falso.url, "--reextrair", a, "--bancada", str(tmp_path))
+    assert r.returncode == 0 and "calha" not in r.stdout and "medida  " not in r.stdout
+    assert "classe=B" in r.stdout
+
+
+@pytest.mark.parametrize("extra, trecho", [
+    (["--modo", "outro"], "--modo é bancada ou medida"),
+    (["--modo", ""], "--modo é bancada ou medida"),
+    (["--modo", "MEDIDA"], "--modo é bancada ou medida"),
+])
+def test_modo_invalido_e_uso_errado_sem_tocar_o_servidor(falso, tmp_path, extra, trecho):
+    r = curar(falso.url, "--reextrair", U(1), "--bancada", str(tmp_path), *extra)
+    assert r.returncode == 2 and trecho in r.stderr
+    assert falso.chamadas == [] and not (tmp_path / "perfil").exists()
+
+
+def test_modo_sem_bancada_e_uso_errado(falso):
+    r = curar(falso.url, "--reextrair", U(1), "--modo", "medida")
+    assert r.returncode == 2 and "--bancada" in r.stderr and falso.chamadas == []
+
+
+def test_ajuda_do_curar_descreve_o_modo_medida(falso):
+    r = curar(falso.url, "--ajuda")
+    assert r.returncode == 0
+    for trecho in ("--modo bancada|medida", "calhas de duas", "pela porta ao MuPDF", "páginas com calha"):
+        assert trecho in r.stdout, trecho
