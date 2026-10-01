@@ -395,6 +395,30 @@ def chapeus_de(cadeira: str) -> list[str]:
     return sorted(p.name for p in base.iterdir() if p.is_dir() and (p / "chapeu.md").is_file())
 
 
+def _sem_acento(s: str) -> str:
+    import unicodedata
+    return "".join(c for c in unicodedata.normalize("NFD", s)
+                   if unicodedata.category(c) != "Mn").lower().strip().replace(" ", "-")
+
+
+def resolve_chapeu(cadeira: str, dado: str) -> tuple[str, str | None, str | None]:
+    """(slug, aviso, erro). O dono nao decora slug: o nome exato passa; um pedaco que casa com
+    UM chapeu da cadeira vira o slug inteiro, com aviso (`harness` -> `engenharia-de-harness`);
+    pedaco que casa com mais de um recusa com as opcoes. Nada casou: segue como veio, e a
+    validacao de sempre recusa com a lista dos validos."""
+    validos = chapeus_de(cadeira)
+    alvo = _sem_acento(dado)
+    if not validos or alvo in validos:
+        return (alvo if alvo in validos else dado), None, None
+    casam = [c for c in validos if alvo and alvo in c]
+    if len(casam) == 1:
+        return casam[0], f"chapéu '{dado}' resolvido para '{casam[0]}'", None
+    if len(casam) > 1:
+        return dado, None, (f"erro: chapéu '{dado}' ambíguo na cadeira '{cadeira}' — "
+                            f"casa com {', '.join(casam)}")
+    return dado, None, None
+
+
 def valida_chapeu(cadeira: str, slug: str) -> tuple[bool, str]:
     """Etapa 1: --chapeu está no vocabulário de chapéus da cadeira."""
     rc, stdout, stderr = executa_verbo(f"persona ler {cadeira} --chapeu {slug}", cadeira)
@@ -546,6 +570,9 @@ def ato_montar_cadeirinha(cadeira_arg: str | None, chapeu: str | None, modo: str
     cadeira, erro_cad = valida_cadeira(None)
     if not cadeira:
         return _erro(erro_cad or "sem cadeira: a porta não injetou", 3, como_json)
+    chapeu, aviso_chapeu, erro_res = resolve_chapeu(cadeira, chapeu)
+    if erro_res:
+        return _erro(erro_res, 2, como_json)
     valido, err_chapeu = valida_chapeu(cadeira, chapeu)
     if not valido:
         return _erro(f"erro: chapéu '{chapeu}' fora do vocabulário da cadeira '{cadeira}' — {err_chapeu}",
@@ -557,7 +584,7 @@ def ato_montar_cadeirinha(cadeira_arg: str | None, chapeu: str | None, modo: str
                      f"{(err_modo or out_modo).strip()[:160]}", 2, como_json)
 
     pergunta = sys.stdin.read().strip()
-    avisos: list[str] = []
+    avisos: list[str] = [aviso_chapeu] if aviso_chapeu else []
     if not os.environ.get("PF_ORIGEM_SESSAO"):
         avisos.append("sessao sem origem_sessao: a lente e a da cadeira da sessao em curso; o agente "
                       "abre a propria (`sessao abrir <cadeira> --origem <sessao_id de quem chamou>`)")
@@ -661,7 +688,15 @@ def ato_montar(cadeira_arg: str | None = None, chapeu_forcado: str | None = None
             print(erro_cad, file=sys.stderr)
         return 3
 
+    aviso_chapeu = None
     if chapeu_forcado:
+        chapeu_forcado, aviso_chapeu, erro_res = resolve_chapeu(cadeira, chapeu_forcado)
+        if erro_res:
+            if como_json:
+                print(json.dumps({"erro": erro_res}, ensure_ascii=False))
+            else:
+                print(erro_res, file=sys.stderr)
+            return 2
         valido, err_chapeu = valida_chapeu(cadeira, chapeu_forcado)
         if not valido:
             msg = f"erro: chapéu '{chapeu_forcado}' fora do vocabulário da cadeira '{cadeira}' — {err_chapeu}"
@@ -686,7 +721,7 @@ def ato_montar(cadeira_arg: str | None = None, chapeu_forcado: str | None = None
         roteador_info, aviso_rot, _rc_rot = executa_roteador(pergunta, cadeira)
 
     chapeu_slug = roteador_info.get("slug")
-    avisos: list[str] = []
+    avisos: list[str] = [aviso_chapeu] if aviso_chapeu else []
     if aviso_rot:
         avisos.append(aviso_rot)
     elif not chapeu_slug:
