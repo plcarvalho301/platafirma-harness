@@ -557,6 +557,55 @@ def test_claude_mede_a_entrada_com_o_cache(mundo):
     assert r["uso"] == {"entrada": 1150, "saida": 20, "turnos": 3}
 
 
+# --- por ligação e suplanta (spec agente rev 3) --------------------------------------------------
+
+EXPLORE = com(VARREDOR, ligacoes=["delegado", "consultado", "agendado"], suplanta="Explore",
+              por_ligacao={"delegado": {"modelo": {"familia": "claude", "versao": "sonnet"},
+                                        "ferramentas": ["Read", "Grep", "Glob"],
+                                        "teto": {"turnos": 40, "tokens_execucao": 200000, "tokens_janela": 1000000}}})
+
+def test_varredor_com_delegado_em_claude_e_qwen_no_resto_passa():
+    assert agente.valida(EXPLORE, "varredor") == []
+    assert agente.tem_projecao(EXPLORE) and not agente.tem_projecao(VARREDOR)
+    assert agente.efetiva(EXPLORE, "consultado")["modelo"] == VARREDOR["modelo"]
+    assert agente.efetiva(EXPLORE, "delegado")["modelo"]["familia"] == "claude"
+
+@pytest.mark.parametrize("decl,trecho", [
+    (com(EXPLORE, suplanta="general-purpose"), "suplanta: um de"),
+    (com(VARREDOR, suplanta="Explore"), "suplanta: só vale com a ligação delegada"),
+    (com(EXPLORE, por_ligacao={"delegado": {"pernas": {}}}), "por_ligacao: mapa de"),
+    (com(EXPLORE, ligacoes=["consultado"], suplanta=None), "por_ligacao.delegado: a ligação não está em ligacoes"),
+    (com(EXPLORE, por_ligacao={"delegado": {"modelo": {"familia": "claude", "versao": "sonnet"},
+                                            "ferramentas": ["Bash"]}}), "por_ligacao.delegado: ferramenta proibida: Bash"),
+    (com(EXPLORE, por_ligacao={"delegado": {"modelo": {"familia": "qwen", "versao": "x", "local": True}}}),
+     "delegado só existe para modelo Claude"),
+])
+def test_por_ligacao_e_suplanta_fora_do_molde_reprovam(decl, trecho):
+    d = {k: v for k, v in decl.items() if v is not None}
+    achados = agente.valida(d, "varredor")
+    assert any(trecho in a for a in achados), achados
+
+def test_projecao_do_suplante_sai_com_o_nome_do_embutido_e_a_execucao_delegada():
+    linhas = agente.projecao_claude(EXPLORE).splitlines()
+    assert "name: Explore" in linhas and "model: sonnet" in linhas and "maxTurns: 40" in linhas
+    assert "tools: Read, Grep, Glob" in linhas
+
+def test_projetar_gera_o_explore_e_o_conferir_conta_a_projecao(mundo, capsys):
+    mundo.escreve(REVISOR, EXPLORE)
+    assert agente.ato_projetar(False, None) == 0
+    gerados = sorted(p.name for p in (mundo.posto / ".claude" / "agents").glob("*.md"))
+    assert gerados == ["revisor.md", "varredor.md"]
+    capsys.readouterr()
+    assert agente.ato_projetar(True, None) == 0
+    assert "conforme: 2 declaração(ões), 2 projeção(ões) Claude" in capsys.readouterr().out
+
+def test_rodar_consultado_usa_o_qwen_mesmo_com_delegado_em_claude(mundo, ollama, pessoa, monkeypatch, capsys):
+    mundo.escreve(EXPLORE)
+    assert roda(monkeypatch, "varredor") == 0
+    (pedido,) = ollama.pedidos
+    assert pedido["model"] == "qwen3.5:9b"
+    assert not [c for c in mundo.chamadas() if c["verbo"] == "claude"]
+
 def test_claude_acima_do_teto_de_tokens_avisa_e_nao_corta(mundo, pessoa, monkeypatch, capsys):
     mundo.escreve(com(CONSULTOR, teto={"turnos": 30, "tokens_execucao": 50, "tokens_janela": 600000}))
     assert roda(monkeypatch, "consultor", cadeira="ia", chapeu="agente") == 0

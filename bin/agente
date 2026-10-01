@@ -6,7 +6,7 @@
 # atos: listar (leitura, especialista), ler (leitura, especialista), rodar (escrita, especialista), projetar (escrita, especialista)
 # ato: listar [--modelo <familia>] [--modo <modo>] [--json] — as declarações do posto, uma por linha
 # ato: ler <slug> — a declaração inteira de um especialista
-# ato: rodar <slug> [--cadeira <slug>] [--chapeu <slug>] [--json] — abre a sessão filha, monta a lente e chama o modelo na conta dele; a tarefa vem em stdin (no modo varrer o modelo a recebe com as linhas numeradas, `N |`)
+# ato: rodar <slug> [--cadeira <slug>] [--chapeu <slug>] [--ligacao consultado|agendado] [--json] — modelo, ferramentas e teto saem da ligação (por_ligacao); abre a sessão filha, monta a lente e chama o modelo na conta dele; a tarefa vem em stdin (no modo varrer o modelo a recebe com as linhas numeradas, `N |`)
 # ato: projetar [--conferir] [--base <ref>] — gera as projeções do provedor a partir das declarações; --conferir só mede
 # exit: 0 ok · 1 negativo de mérito (não existe, divergente, sem pessoa resolvida) · 2 uso · 3 dependência fora · 4 recusa de política · 5 indeterminável
 # le: listar=arquivo-local
@@ -83,8 +83,49 @@ def familia_de(decl) -> str | None:
     return m.get("familia") if isinstance(m, dict) else None
 
 
+SOBRESCREVE = ("modelo", "ferramentas", "teto")             # o que varia pela ligação (spec agente §2, rev 3)
+EMBUTIDOS = ("Explore", "Plan")                             # sub-agentes do Code que um agente de projeto pode suplantar
+
+def efetiva(decl, ligacao: str):
+    """A declaração como roda naquela ligação: `por_ligacao.<ligação>` sobrescreve modelo, ferramentas e teto;
+    o resto vale para todas (spec agente §2, rev 3)."""
+    if not isinstance(decl, dict):
+        return decl
+    pl = decl.get("por_ligacao")
+    extra = pl.get(ligacao) if isinstance(pl, dict) else None
+    if not isinstance(extra, dict):
+        return decl
+    return {**decl, **{k: extra[k] for k in SOBRESCREVE if k in extra}}
+
+def tem_projecao(decl) -> bool:
+    """Só a ligação delegada em Claude ganha `.claude/agents` (spec agente §3)."""
+    return (isinstance(decl, dict) and isinstance(decl.get("ligacoes"), list) and "delegado" in decl["ligacoes"]
+            and familia_de(efetiva(decl, "delegado")) == "claude")
+
 def _texto(v) -> bool:
     return isinstance(v, str) and bool(v.strip())
+
+def _valida_execucao(d: dict, pre: str) -> list[str]:
+    """Modelo, ferramentas e teto de uma execução: a base, ou a base sobrescrita por uma ligação."""
+    p: list[str] = []
+    modelo = d.get("modelo")
+    if not (isinstance(modelo, dict) and modelo.get("familia") in FAMILIAS and _texto(modelo.get("versao"))):
+        p.append(f"{pre}modelo: familia ({', '.join(FAMILIAS)}) e versao")
+    ferr = d.get("ferramentas")
+    if not (isinstance(ferr, list) and all(_texto(f) for f in ferr)):
+        p.append(f"{pre}ferramentas: lista de nomes de tool (pode ser vazia)")
+    else:
+        for f in ferr:
+            if f in PROIBIDAS:
+                p.append(f"{pre}ferramenta proibida: {f}")
+    teto = d.get("teto")
+    chaves = ["turnos", "tokens_execucao", "tokens_janela"]
+    if isinstance(modelo, dict) and modelo.get("familia") == "qwen" and modelo.get("local"):
+        chaves += ["num_ctx", "vram_max_mib", "prompt_eval_count_max"]
+    if not (isinstance(teto, dict) and all(isinstance(teto.get(k), int) and not isinstance(teto.get(k), bool)
+                                           and teto.get(k) > 0 for k in chaves)):
+        p.append(f"{pre}teto: {', '.join(chaves)}, inteiros positivos")
+    return p
 
 
 def valida(decl, stem: str) -> list[str]:
@@ -107,16 +148,7 @@ def valida(decl, stem: str) -> list[str]:
         p.append("dono.chapeu: obrigatório quando a cadeira é fixa")
     if decl.get("modo") not in MODOS:
         p.append(f"modo: um de {', '.join(MODOS)}")
-    modelo = decl.get("modelo")
-    if not (isinstance(modelo, dict) and modelo.get("familia") in FAMILIAS and _texto(modelo.get("versao"))):
-        p.append(f"modelo: familia ({', '.join(FAMILIAS)}) e versao")
-    ferr = decl.get("ferramentas")
-    if not (isinstance(ferr, list) and all(_texto(f) for f in ferr)):
-        p.append("ferramentas: lista de nomes de tool (pode ser vazia)")
-    else:
-        for f in ferr:
-            if f in PROIBIDAS:
-                p.append(f"ferramenta proibida: {f}")
+    p += _valida_execucao(decl, "")
     pernas = decl.get("pernas")
     if not (isinstance(pernas, dict) and all(isinstance(pernas.get(k), bool) for k in PERNAS)):
         p.append(f"pernas: {', '.join(PERNAS)}, cada uma true ou false")
@@ -125,13 +157,6 @@ def valida(decl, stem: str) -> list[str]:
             p.append("pernas: as três juntas não sobem sem aprovação humana no fecho (spec agente §7)")
         elif pernas["fonte_de_fora"] and pernas["dado_pessoal"]:
             p.append("pernas: fonte de fora e dado pessoal juntos (spec agente §7)")
-    teto = decl.get("teto")
-    chaves = ["turnos", "tokens_execucao", "tokens_janela"]
-    if isinstance(modelo, dict) and modelo.get("familia") == "qwen" and modelo.get("local"):
-        chaves += ["num_ctx", "vram_max_mib", "prompt_eval_count_max"]
-    if not (isinstance(teto, dict) and all(isinstance(teto.get(k), int) and not isinstance(teto.get(k), bool)
-                                           and teto.get(k) > 0 for k in chaves)):
-        p.append(f"teto: {', '.join(chaves)}, inteiros positivos")
     regua = decl.get("regua")
     if regua is not None:
         partes = regua.split() if isinstance(regua, str) else []
@@ -145,8 +170,24 @@ def valida(decl, stem: str) -> list[str]:
     lig = decl.get("ligacoes")
     if not (isinstance(lig, list) and lig and all(x in LIGACOES for x in lig)):
         p.append(f"ligacoes: uma ou mais de {', '.join(LIGACOES)}")
-    elif "delegado" in lig and isinstance(modelo, dict) and modelo.get("familia") != "claude":
+    elif "delegado" in lig and familia_de(efetiva(decl, "delegado")) != "claude":
         p.append("ligacoes: delegado só existe para modelo Claude (o arquivo de agente do Code não descreve outro)")
+    pl = decl.get("por_ligacao")
+    if pl is not None:
+        if not (isinstance(pl, dict) and pl and all(k in LIGACOES for k in pl)
+                and all(isinstance(v, dict) and v and set(v) <= set(SOBRESCREVE) for v in pl.values())):
+            p.append(f"por_ligacao: mapa de {', '.join(LIGACOES)} para {', '.join(SOBRESCREVE)}")
+        else:
+            for k in pl:
+                if not (isinstance(lig, list) and k in lig):
+                    p.append(f"por_ligacao.{k}: a ligação não está em ligacoes")
+                p += _valida_execucao(efetiva(decl, k), f"por_ligacao.{k}: ")
+    sup = decl.get("suplanta")
+    if sup is not None:
+        if sup not in EMBUTIDOS:
+            p.append(f"suplanta: um de {', '.join(EMBUTIDOS)}")
+        elif not tem_projecao(decl):
+            p.append("suplanta: só vale com a ligação delegada em Claude (spec agente §3)")
     return p
 
 
@@ -179,6 +220,8 @@ def carrega(posto: Path) -> tuple[dict, dict]:
 def projecao_claude(decl: dict) -> str:
     """O `.claude/agents/<slug>.md` da declaração. Determinístico: o --conferir compara byte a byte."""
     slug, dono, modo = decl["slug"], decl["dono"], decl["modo"]
+    exe = efetiva(decl, "delegado")                      # a projeção é a ligação delegada (spec agente §3)
+    nome = decl.get("suplanta") or slug
     chapeu = dono.get("chapeu") or "<chapeu>"
     cadeira = dono["cadeira"]
     fixa = cadeira != "{cadeira}"
@@ -192,11 +235,11 @@ def projecao_claude(decl: dict) -> str:
     return "\n".join([
         "---",
         f"{CABECALHO_GERADO} (fonte: agentes/{slug}.yaml; regerar: agente projetar)",
-        f"name: {slug}",
+        f"name: {nome}",
         f"description: {json.dumps(decl['descricao'].strip(), ensure_ascii=False)}",
-        f"model: {decl['modelo']['versao']}",
-        f"tools: {', '.join(decl['ferramentas'])}",
-        f"maxTurns: {decl['teto']['turnos']}",
+        f"model: {exe['modelo']['versao']}",
+        f"tools: {', '.join(exe['ferramentas'])}",
+        f"maxTurns: {exe['teto']['turnos']}",
         "---",
         "",
         f"Você é o agente `{slug}` da caixa de ferramentas da PlataFirma: modo `{modo}`, {lente}. "
@@ -240,12 +283,12 @@ def confere_projecoes(posto: Path, decls: dict, problemas: dict) -> list[str]:
         decl = decls.get(stem)
         if not gerado:
             achados.append(f"órfão: .claude/agents/{stem}.md sem o cabeçalho de gerado (editado à mão)")
-        elif decl is None or familia_de(decl) != "claude":
-            achados.append(f"órfão: .claude/agents/{stem}.md sem declaração Claude em agentes/{stem}.yaml")
+        elif decl is None or not tem_projecao(decl):
+            achados.append(f"órfão: .claude/agents/{stem}.md sem ligação delegada em Claude em agentes/{stem}.yaml")
         elif stem not in problemas and texto != projecao_claude(decl):
             achados.append(f"projeção velha: .claude/agents/{stem}.md difere da declaração (agente projetar)")
     for stem, decl in decls.items():
-        if stem in problemas or familia_de(decl) != "claude":
+        if stem in problemas or not tem_projecao(decl):
             continue
         if stem not in existentes:
             achados.append(f"projeção ausente: .claude/agents/{stem}.md (agente projetar)")
@@ -410,7 +453,7 @@ def ato_projetar(conferir: bool, base_ref: str | None) -> int:
         for a in achados:
             print(f"divergente: {a}")
         if not achados:
-            print(f"conforme: {len(decls)} declaração(ões), {sum(1 for d in decls.values() if familia_de(d) == 'claude')} projeção(ões) Claude")
+            print(f"conforme: {len(decls)} declaração(ões), {sum(1 for d in decls.values() if tem_projecao(d))} projeção(ões) Claude")
         return 1 if achados else 0
     if problemas:
         for a in achados:
@@ -419,7 +462,7 @@ def ato_projetar(conferir: bool, base_ref: str | None) -> int:
     pasta = posto / ".claude" / "agents"
     pasta.mkdir(parents=True, exist_ok=True)
     for stem, d in decls.items():
-        if d["modelo"]["familia"] != "claude":
+        if not tem_projecao(d):
             continue
         arq = pasta / f"{stem}.md"
         novo = projecao_claude(d)
@@ -429,7 +472,7 @@ def ato_projetar(conferir: bool, base_ref: str | None) -> int:
     for arq in sorted(pasta.glob("*.md")):
         gerado, _ = _le_gerado(arq)
         d = decls.get(arq.stem)
-        if gerado and (d is None or d["modelo"]["familia"] != "claude"):
+        if gerado and (d is None or not tem_projecao(d)):
             arq.unlink()
             print(f"removido: .claude/agents/{arq.name} (declaração aposentada)")
         elif not gerado:
@@ -591,7 +634,8 @@ def registra(reg: dict) -> None:
         print(f"agente: registro da execução não gravado ({e})", file=sys.stderr)
 
 
-def ato_rodar(slug: str, cadeira_arg: str | None, chapeu_arg: str | None, como_json: bool) -> int:
+def ato_rodar(slug: str, cadeira_arg: str | None, chapeu_arg: str | None, como_json: bool,
+              ligacao: str = "consultado") -> int:
     posto, rc = _posto_ou_erro()
     if posto is None:
         return rc
@@ -604,6 +648,7 @@ def ato_rodar(slug: str, cadeira_arg: str | None, chapeu_arg: str | None, como_j
     if slug in problemas:
         return _erro(f"a declaração de {slug} está fora do molde ({'; '.join(problemas[slug])}); "
                      "agente projetar --conferir diz o resto", 4)
+    decl = efetiva(decl, ligacao)                          # modelo, ferramentas e teto da ligação (spec agente §2)
     tarefa = sys.stdin.read() if not sys.stdin.isatty() else ""
     if not tarefa.strip():
         return _erro("a tarefa vem em stdin: agente rodar <slug> < tarefa", 2)
@@ -690,6 +735,8 @@ def main(argv: list[str] | None = None) -> int:
     a.add_argument("slug")
     a.add_argument("--cadeira", default=None)
     a.add_argument("--chapeu", default=None)
+    a.add_argument("--ligacao", choices=("consultado", "agendado"), default="consultado",
+                   help="por onde a tarefa entra; o bot passa agendado (spec agente §4)")
     a.add_argument("--json", action="store_true")
     a = atos.novo("projetar", "gera as projeções do provedor; --conferir só mede")
     a.add_argument("--conferir", action="store_true")
@@ -700,7 +747,7 @@ def main(argv: list[str] | None = None) -> int:
     if ns.ato == "ler":
         return ato_ler(ns.slug)
     if ns.ato == "rodar":
-        return ato_rodar(ns.slug, ns.cadeira, ns.chapeu, ns.json)
+        return ato_rodar(ns.slug, ns.cadeira, ns.chapeu, ns.json, ns.ligacao)
     return ato_projetar(ns.conferir, ns.base)
 
 
