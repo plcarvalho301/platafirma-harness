@@ -48,6 +48,7 @@ pesquisar
 migrar
 metrica
 agente
+bot
 ```
 
 Os três últimos são o braço de repo/teste/lint/PR da #3004 (feature #3003, invariante
@@ -59,6 +60,10 @@ serve ninguém. Recorte de QUEM usa é do `ferramental.md` do chapéu, não dest
 
 `agente` (a caixa de especialistas, #3156) entra pela mesma mecânica: toda cadeira chama `agente rodar`
 (spec agente §4), e o verbo registrado em `acervo registrar agente` só aparece no `tools/list` quando está aqui.
+
+`bot` (a camada acima do systemd, #3186) entra pela mesma mecânica: `bot declarar` agenda o que roda sozinho e
+`bot caidas` abre o incidente do que caiu; o verbo registrado em acervo registrar bot só aparece no `tools/list`
+quando está aqui.
 
 Fora do núcleo, de propósito: `ollama` (inferência-local) e `matrix` (mensagem-externa)
 — capacidades reais no golden record, mas não são abertura de toda cadeira.

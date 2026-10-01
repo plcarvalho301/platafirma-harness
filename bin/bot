@@ -1,0 +1,762 @@
+#!/opt/platafirma/current/venv/harness/bin/python
+# bot — a camada acima do systemd: declara, agenda, lista e audita automação, com unit gerada e job caído virando incidente
+# capacidade: agendamento
+# dono: ti
+# classe: B
+# forma: objeto (declarar, desligar) / lista (listar) / fluxo (rodar) / predicado (caidas)
+# use para: automação, agendar um verbo, timer, unit systemd gerada, o que roda sozinho e quem responde, SLO de execução, job caído, incidente de automação
+# atos: declarar (escrita, agendamento), listar (leitura, agendamento), rodar (escrita, agendamento), desligar (escrita, agendamento), caidas (escrita, agendamento)
+# ato: declarar <slug> --roda "<verbo> [args]"|agente:<slug> --trigger timer:<calendario>|manual --dono <cadeira> [--slo <duracao>] [--autor <cadeira>] — grava a ficha pelo acervo (idempotente: igual é «já declarada», diferente é 409) e, com timer, escreve <slug>.service e <slug>.timer, habilita e agenda
+#  --slo é obrigatório com timer: 1d, 6h, 30m, 90s, 1d12h ou ISO 8601 (P1D); o bot guarda só o quando (gatilho, responsável, SLO), nunca modelo nem conta de agente
+#  evento:<tipo> e timer com agente saem 4 nesta story; mudar uma declaração é desligar e declarar de novo
+# ato: listar [--estado viva|caida|planejada] [--json] — uma linha por declaração (dono, gatilho, último evento, estado, rodando), numa chamada do usuário; o estado vem calculado do serviço
+# ato: rodar <slug> — grava inicio, executa o argv da ficha sem shell, grava fim com o exit do que rodou e sai com ele; é o ExecStart da unit gerada
+# ato: desligar <slug> [--autor <cadeira>] — para o timer e o service, tira o .wants, apaga as units do bot, reset-failed, daemon-reload e só então retira a ficha; é a volta de declarar e se repete sem dano
+# ato: caidas — cruza systemctl --user com as fichas e com os declarantes de `release conferir jobs`; unit do bot failed ou unit sem declarante abre incidente, sem duplicar
+# exit: 0 ok · 1 negativo de mérito (declaração divergente, verbo ou cadeira desconhecidos, slug não declarado, caidas com divergência) · 2 uso · 3 dependência fora (acervo sem a rota ou fora do ar, systemctl, .wants sem escrita) · 4 recusa de política (evento, timer com agente, unit homônima ou de manifesto, recursão do bot: --roda "bot rodar ...") · 5 indeterminável (não consegui olhar o systemd ou o serviço); rodar sai com o exit do que rodou
+# le: declarar=arquivo-local
+# le: listar=acervo.registro
+# le: rodar=acervo.registro
+# le: desligar=acervo.registro,arquivo-local
+# le: caidas=acervo.registro,arquivo-local
+# escreve: declarar=acervo.registro,arquivo-local
+# escreve: listar=nada
+# escreve: rodar=acervo.registro
+# escreve: desligar=acervo.registro,arquivo-local
+# escreve: caidas=rastreador
+# consome: motor_acervo@platafirma-conhecimento/rag/motor_acervo/openapi/acervo-escrita.yaml >=1.1.0, tarefas, agente
+# ambiente: MOTOR_ACERVO_URL (opcional; endereco do motor do acervo, vale a primeira entre esta, RAG_API_URL e RAG_API_BASE; padrao http://127.0.0.1:8100; verbo) · RAG_API_URL (opcional; idem; verbo) · RAG_API_BASE (opcional; idem; verbo) · RAG_TIMEOUT_S (opcional; segundos por chamada ao acervo, padrao 10; verbo) · RAG_API_TOKEN (opcional; segredo, nunca impresso; vem do EnvironmentFile do ops) · PF_CADEIRA (opcional; autor e ator quando o autor nao vem em --autor; porta) · PF_SESSAO (opcional; vira o sessao_id do evento quando e uuid; porta) · PF_ORDEM_ID (opcional; vira o ordem_id do evento; porta) · PF_SUJEITO (opcional; repassada ao agente rodar, que a exige; porta) · PF_BIN (opcional; padrao bin/ da propria arvore; so teste com stub) · PF_UNITS_DIR (opcional; pasta das units no lugar da morada real; so teste) · XDG_DATA_HOME (opcional; onde as units caem quando ~/.config/systemd/user nao grava; padrao ~/.local/share) · PLATAFIRMA_RELEASE (opcional; padrao /opt/platafirma/current; de onde saem o sha do evento e os declarantes dos timers) · PF_RELEASE_RAIZ (opcional; raiz das releases no lugar de /opt/platafirma; lida por lib/raizes; porta) · HOME (a morada do usuario; dali saem ~/.config/systemd/user e ~/.local/share; porta) · XDG_RUNTIME_DIR (opcional; pasta do arquivo de trava de declarar, desligar e caidas; sem ela vale o tmp da conta; porta) · PF_BOT_SLUGS (lista de slugs separada por virgula que o rodar poe no ambiente do filho; recusa a recursao; verbo)
+# escrita: declarar grava a ficha pela API do acervo e <slug>.service e <slug>.timer na morada das units, mais o link no timers.target.wants; desligar desfaz; rodar grava dois eventos pela API; caidas abre incidente por `tarefas criar`; nada em listar
+# depende: systemctl --user, systemd-analyze, tarefas, agente, lib/units, lib/raizes, lib/uso
+# conforme: parcial — evento:<tipo> fica recusado até a ligação na fila; timer com agente fica recusado até haver sujeito de máquina; parar e historico são de story nova; o .wants de ~/.config/systemd/user pode exigir o dono da máquina
+#
+# Spec: spec automacao-gestao (§2 três planos, §3 unit gerada, §6 atos), spec apis-escrita-acervo §C, spec agente §4
+from __future__ import annotations
+
+import contextlib
+import fcntl
+import http.client
+import json
+import os
+import re
+import shlex
+import signal
+import subprocess
+import sys
+import tempfile
+import time
+import urllib.error
+import urllib.parse
+import urllib.request
+from pathlib import Path
+
+_AQUI = Path(__file__).resolve().parent
+sys.path.insert(0, str(_AQUI.parent / "lib"))
+import raizes  # noqa: E402
+import units  # noqa: E402
+import uso  # noqa: E402
+
+ESTADOS = ("viva", "caida", "caída", "planejada")
+UUID = re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$", re.I)
+SHA = re.compile(r"^[0-9a-f]{7,40}$")
+REF = re.compile(r"^[a-z0-9][a-z0-9-]*$")
+NEGOCIO_404 = ("AutomacaoNaoDeclarada", "EventoNaoEncontrado")           # o 404 que o serviço decide
+JOB_DE_SESSAO = "platafirma-job-"                                        # sessao longjob: declarado por construção
+CADEIA = "PF_BOT_SLUGS"                                                  # os slugs que o rodar já atravessou (recursão)
+ESTADOS_ABERTOS = ("detectado", "em-mitigacao", "mitigado")             # o incidente ainda não terminou
+LIMITE_INCIDENTES = 10                                                   # criados por rodada de caidas (cabe nos 60 s)
+ESPERA_TRAVA_S = 30.0
+ACERVO_URL = (os.environ.get("MOTOR_ACERVO_URL") or os.environ.get("RAG_API_URL")
+              or os.environ.get("RAG_API_BASE") or "http://127.0.0.1:8100").rstrip("/")
+
+
+def _segundos() -> float:
+    try:
+        return float(os.environ.get("RAG_TIMEOUT_S") or "10")
+    except ValueError:
+        return 10.0
+
+
+TIMEOUT_S = _segundos()
+
+CURA = {
+    "DeclaracaoDivergente": "mudar é desligar e declarar de novo (bot desligar <slug>)",
+    "TimerSemSlo": "timer pede --slo",
+}
+
+
+class Falha(Exception):
+    def __init__(self, codigo: int, msg: str):
+        super().__init__(msg)
+        self.codigo, self.msg = codigo, msg
+
+
+def _erro(msg: str, codigo: int) -> int:
+    print(f"bot: {msg}", file=sys.stderr)
+    return codigo
+
+
+def _bin() -> Path:
+    return Path(os.environ.get("PF_BIN") or _AQUI)
+
+
+def _roda(argv: list[str], stdin: str | None = None, timeout: int = 120):
+    try:
+        return subprocess.run(argv, input=stdin, capture_output=True, text=True, timeout=timeout, check=False)
+    except subprocess.TimeoutExpired:
+        raise Falha(5, f"{Path(argv[0]).name}: passou de {timeout}s sem resposta") from None
+    except OSError as e:
+        raise Falha(3, f"{Path(argv[0]).name}: não executou ({e})") from None
+
+
+@contextlib.contextmanager
+def _trava(nome: str):
+    """Exclusão mútua leve entre execuções do bot (flock): declarar e desligar mexem no mesmo .wants, e duas caidas
+    leriam a mesma lista de incidentes e abririam dois. O arquivo mora sob XDG_RUNTIME_DIR (senão, o tmp da conta).
+    Sem conseguir abrir o arquivo, segue sem trava e avisa; trava presa além de ESPERA_TRAVA_S é indeterminável (5)."""
+    base = os.environ.get("XDG_RUNTIME_DIR", "").strip() or tempfile.gettempdir()
+    caminho = Path(base) / f"bot-{nome}.lock"
+    try:
+        fd = os.open(caminho, os.O_CREAT | os.O_RDWR, 0o600)
+    except OSError as e:
+        print(f"bot: aviso: sem trava em {caminho} ({e}); sigo sem exclusão mútua", file=sys.stderr)
+        yield
+        return
+    try:
+        limite = time.monotonic() + ESPERA_TRAVA_S
+        while True:
+            try:
+                fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                break
+            except BlockingIOError:
+                if time.monotonic() >= limite:
+                    raise Falha(5, f"outra execução do bot segura {caminho} há mais de {ESPERA_TRAVA_S:g}s") from None
+                time.sleep(0.05)
+        yield
+    finally:
+        os.close(fd)                                                # fechar solta a trava
+
+
+# --- o acervo, pela API (arq:0089: o bot não escreve por psql) -----------------------------------
+
+def _chama(metodo: str, caminho: str, corpo: dict | None = None, params: dict | None = None,
+           aceita: tuple = (200,)) -> tuple[int, object]:
+    """(status, objeto) de uma chamada ao acervo. O que não está em `aceita` vira Falha com o exit da tabela:
+    409/422 e o 404 do serviço = 1 · 503, rota ausente e conexão recusada = 3 (com o nome do recurso) ·
+    401/403 = 4 · outro 5xx e conexão que cai = 5 · outro 4xx = 2. HTTPError antes de URLError: é subclasse."""
+    recurso = caminho
+    url = ACERVO_URL + caminho + ("?" + urllib.parse.urlencode(params) if params else "")
+    cab = {"Accept": "application/json"}
+    dados = None
+    if corpo is not None:
+        dados = json.dumps(corpo).encode()
+        cab["Content-Type"] = "application/json"
+    token = os.environ.get("RAG_API_TOKEN", "").strip()
+    if token:
+        cab["Authorization"] = f"Bearer {token}"
+    req = urllib.request.Request(url, data=dados, method=metodo, headers=cab)
+    try:
+        with urllib.request.urlopen(req, timeout=TIMEOUT_S) as r:
+            status, bruto = r.status, r.read()
+    except urllib.error.HTTPError as e:
+        status, bruto = e.code, e.read()
+    except urllib.error.URLError as e:
+        if isinstance(e.reason, TimeoutError):
+            raise Falha(5, f"acervo {recurso}: {ACERVO_URL} passou de {TIMEOUT_S:g}s sem resposta") from None
+        raise Falha(3, f"acervo {recurso}: {ACERVO_URL} não respondeu ({e.reason})") from None
+    except (OSError, http.client.HTTPException) as e:
+        raise Falha(5, f"acervo {recurso}: a conexão caiu sem resposta ({type(e).__name__}); "
+                       f"não se sabe se o {metodo} valeu") from None
+    obj = None
+    if bruto:
+        try:
+            obj = json.loads(bruto)
+        except ValueError:
+            obj = None
+    titulo = obj.get("title") if isinstance(obj, dict) else None
+    detalhe = obj.get("detail") if isinstance(obj, dict) else None
+    if status in (404, 405) and titulo not in NEGOCIO_404:
+        raise Falha(3, f"acervo {recurso}: rota ausente em {ACERVO_URL} (HTTP {status}); "
+                       "o contrato acervo-escrita >=1.1.0 não está no ar")
+    if status in aceita:
+        return status, obj
+    msg = f"acervo {metodo} {recurso}: HTTP {status}" + (f" {titulo}" if titulo else "") + (f": {detalhe}" if detalhe else "")
+    if titulo in CURA:
+        msg += f" — {CURA[titulo]}"
+    if status == 503:
+        codigo = 3
+    elif status >= 500:
+        codigo = 5
+    elif status in (401, 403):
+        codigo = 4
+    elif status in (404, 409, 422):
+        codigo = 1
+    else:
+        codigo = 2
+    raise Falha(codigo, msg)
+
+
+def _todas(estado: str | None = None) -> list[dict]:
+    """As fichas ativas, seguindo `proximo` até acabar: uma chamada do usuário, N do cliente (§C2)."""
+    itens: list[dict] = []
+    cursor, vistos = None, set()
+    while True:
+        params = {k: v for k, v in (("estado", estado), ("cursor", cursor)) if v}
+        _, corpo = _chama("GET", "/acervo/automacoes", params=params or None)
+        if not isinstance(corpo, dict) or not isinstance(corpo.get("itens"), list):
+            raise Falha(5, "acervo /acervo/automacoes devolveu corpo fora do contrato (sem itens)")
+        itens += corpo["itens"]
+        cursor = corpo.get("proximo")
+        if not cursor:
+            return itens
+        if cursor in vistos:
+            raise Falha(5, "acervo /acervo/automacoes: a paginação voltou ao mesmo cursor")
+        vistos.add(cursor)
+
+
+def _sha_no_ar() -> str | None:
+    """O sha da release do harness no ar; sem resolver, sem campo (nunca se inventa)."""
+    alvo = raizes.release() / "harness"
+    nome = Path(os.path.realpath(alvo)).name if alvo.exists() else ""
+    return nome if SHA.fullmatch(nome) else None
+
+
+def _evento(slug: str, ficha: dict, tipo: str, exit_code: int | None = None) -> None:
+    """inicio ou fim (§C4). O `ts` nunca vai do cliente; falha ao gravar é aviso e não muda o exit de `rodar`."""
+    corpo = {"fonte": slug, "tipo": tipo, "unit": f"{slug}.service", "verbo": ficha.get("roda_ref"),
+             "ator": os.environ.get("PF_CADEIRA", "").strip() or f"bot:{slug}"}
+    sessao = os.environ.get("PF_SESSAO", "").strip()
+    if UUID.fullmatch(sessao):
+        corpo["sessao_id"] = sessao
+    ordem = os.environ.get("PF_ORDEM_ID", "").strip()
+    if ordem:
+        corpo["ordem_id"] = ordem
+    if tipo == "fim":
+        corpo["exit_code"] = exit_code
+        sha = _sha_no_ar()
+        if sha:
+            corpo["sha"] = sha
+    try:
+        _chama("POST", "/acervo/registro/eventos", corpo, aceita=(201,))
+    except Falha as f:
+        print(f"bot: aviso: o evento {tipo} de {slug} não foi gravado ({f.msg})", file=sys.stderr)
+
+
+# --- as units, no disco e no systemd --------------------------------------------------------------
+
+def _grava(destino: Path, texto: str) -> None:
+    """Escrita atômica: temporário no mesmo diretório, fsync, rename."""
+    fd, tmp = tempfile.mkstemp(dir=destino.parent, prefix=f".{destino.name}.")
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            f.write(texto)
+            f.flush()
+            os.fsync(f.fileno())
+        os.chmod(tmp, 0o644)
+        os.replace(tmp, destino)
+    except OSError:
+        with contextlib.suppress(OSError):
+            os.unlink(tmp)
+        raise
+
+
+def _ctl(*args: str, tolera: bool = False) -> None:
+    """`systemctl --user`. `tolera` deixa passar «not loaded»: parar ou limpar o que já não existe."""
+    rc, out, err = units.sh(["systemctl", "--user", *args], timeout=60)
+    if rc == 0 or (tolera and re.search(r"not loaded|not found|does not exist", err, re.I)):
+        return
+    motivo = (err or out or f"saiu {rc}").splitlines()[0]
+    raise Falha({124: 5}.get(rc, 3), f"systemctl --user {' '.join(args)}: {motivo}")
+
+
+def _aponta(link: Path) -> str | None:
+    """Para onde o symlink aponta, como foi gravado; None se não é symlink."""
+    return os.readlink(link) if link.is_symlink() else None
+
+
+def _valida_calendario(cal: str) -> None:
+    """O gerador só barra injeção; quem diz se o calendário vale é o systemd-analyze. Calendário que ele recusa deixa o
+    timer morto sem alarme: recusado = 2 antes do PUT; binário ausente = 3 nomeando-o; sem resposta = 5. Calendário que
+    começa com hífen o systemd-analyze leria como opção (`--help` sai 0 sem validar nada): recusado = 2, sem chamá-lo."""
+    if cal.startswith("-"):
+        raise Falha(2, f"calendário {cal!r} começa com hífen: o systemd-analyze o leria como opção e não o validaria")
+    rc, out, err = units.sh(["systemd-analyze", "--user", "calendar", cal], timeout=30)
+    if rc == 127:
+        raise Falha(3, f"systemd-analyze ausente ou sem executar: não consigo validar o calendário ({err})")
+    if rc == 124:
+        raise Falha(5, f"systemd-analyze passou de 30s sem resposta ao validar o calendário {cal!r}")
+    if rc != 0:
+        motivo = (err or out or f"saiu {rc}").splitlines()[0]
+        raise Falha(2, f"calendário {cal!r} recusado pelo systemd-analyze: {motivo}")
+
+
+def _guarda_unit_alheia(slug: str) -> None:
+    """Antes do PUT, só com timer: o que já é de outro não vira unit do bot. Recusa (4) slug de job de sessão, nome de
+    declarante de manifesto (em qualquer pasta, nas duas formas) e unit que o systemd já carregou de arquivo sem o
+    cabeçalho do bot; not-found é livre; systemctl ilegível ou declarantes ilegíveis = 5."""
+    servico, timer = units.nomes_da_unit(slug)
+    if slug.startswith(JOB_DE_SESSAO):
+        raise Falha(4, f"{slug}: o prefixo {JOB_DE_SESSAO} é dos jobs de sessão (sessao longjob), declarados por construção; "
+                       "não declaro")
+    decl, _, faltas = units.declarantes_de_jobs(str(raizes.release()))
+    if faltas:
+        raise Falha(5, "não consegui olhar os declarantes: " + "; ".join(faltas))
+    for nome in (timer, servico):
+        if nome in decl:
+            raise Falha(4, f"unit {slug} já existe e não é do bot: {nome} é declarada por {decl[nome]}; não declaro")
+    for nome in (timer, servico):
+        d, e = units.systemctl_show(nome, ["LoadState", "FragmentPath"])
+        if e:
+            raise Falha(5, f"systemctl --user show {nome}: {e}")
+        if d.get("LoadState") == "not-found":
+            continue
+        frag = d.get("FragmentPath", "")
+        if not (frag and units.eh_unit_do_bot(units.le_unit(frag))):
+            raise Falha(4, f"unit {slug} já existe e não é do bot: {nome} está carregada de {frag or 'nenhum arquivo'} "
+                           "sem o cabeçalho de gerado; não declaro")
+
+
+def _habilita(pasta: Path, timer: str) -> None:
+    """O enable é um symlink no timers.target.wants; onde a pasta é do dono da máquina, nomeia e sai 3."""
+    wants = units.dir_wants("timers.target")
+    link = wants / timer
+    alvo = str(pasta / timer)
+    try:
+        wants.mkdir(parents=True, exist_ok=True)
+        if _aponta(link) == alvo:
+            return
+        if os.path.lexists(link):
+            antigo = _aponta(link)
+            if antigo is None or not units.eh_unit_do_bot(units.le_unit(wants / antigo)):
+                raise Falha(4, f"{link} já existe e não é link para unit do bot ({antigo or 'arquivo comum'}): não troco; "
+                               f"a ficha {timer.rsplit('.', 1)[0]} ficou declarada")
+            link.unlink(missing_ok=True)
+        try:
+            link.symlink_to(alvo)
+        except FileExistsError:                                     # outra execução chegou antes: relê o link
+            if _aponta(link) != alvo:
+                raise Falha(4, f"{link} apareceu apontando para {_aponta(link) or 'arquivo comum'}: não troco") from None
+    except OSError as e:
+        raise Falha(3, f"não habilitei {timer}: {wants} não aceita escrita ({e}); habilitar exige o dono da máquina "
+                       "(como deploy-harness/instalar); a ficha e as units ficaram, e bot declarar de novo retoma") from None
+
+
+def _escreve_units(slug: str, calendario: str) -> None:
+    servico, timer = units.nomes_da_unit(slug)
+    texto_s, texto_t = units.gera_unit({"slug": slug, "trigger_tipo": "timer", "trigger_arg": calendario})
+    pasta = units.dir_units()
+    print(f"morada: {pasta}")
+    alvos = ((servico, texto_s), (timer, texto_t))
+    for nome, _ in alvos:
+        if os.path.lexists(pasta / nome) and not units.eh_unit_do_bot(units.le_unit(pasta / nome)):
+            raise Falha(4, f"unit {slug} já existe e não é do bot ({pasta / nome} sem o cabeçalho de gerado): "
+                           f"não sobrescrevo; a ficha {slug} ficou declarada, e bot desligar {slug} a retira")
+    try:
+        pasta.mkdir(parents=True, exist_ok=True)
+        for nome, texto in alvos:
+            if units.le_unit(pasta / nome) != texto:
+                _grava(pasta / nome, texto)
+                print(f"unit: {pasta / nome}")
+    except OSError as e:
+        raise Falha(3, f"não escrevi a unit de {slug} em {pasta}: {e}") from None
+    _habilita(pasta, timer)
+    _ctl("daemon-reload")
+    _ctl("start", timer)
+    print(f"agendada: {timer}")
+
+
+# --- atos --------------------------------------------------------------------------------------
+
+def _autor(arg: str | None) -> str:
+    return (arg or os.environ.get("PF_CADEIRA", "")).strip()
+
+
+def ato_declarar(slug: str, roda: str, trigger: str, dono: str, slo: str | None, autor_arg: str | None) -> int:
+    """Ordem fixa: valida o uso (nada toca o serviço), PUT, e só então a unit."""
+    if not units.SLUG.fullmatch(slug):
+        return _erro(f"slug inválido: {slug!r} (minúsculas, dígitos e hífen entre eles)", 2)
+    autor = _autor(autor_arg)
+    if not autor:
+        return _erro("sem autor: passe --autor <cadeira> ou rode com PF_CADEIRA", 2)
+    try:
+        tokens = shlex.split(roda)
+    except ValueError as e:
+        return _erro(f"--roda mal formado: {e}", 2)
+    if not tokens:
+        return _erro('--roda pede "<verbo> [args]" ou agente:<slug>', 2)
+    if tokens[0].startswith("agente:"):
+        ref = tokens[0].split(":", 1)[1]
+        if len(tokens) > 1 or not REF.fullmatch(ref):
+            return _erro("--roda agente:<slug> leva só o slug do agente, sem argumentos", 2)
+        roda_tipo, roda_ref, roda_args = "agente", ref, []
+    else:
+        roda_tipo, roda_ref, roda_args = "verbo", tokens[0], tokens[1:]
+    tipo, _, arg = trigger.partition(":")
+    if tipo == "evento":
+        return _erro("trigger evento:<tipo> ainda não liga: a ligação na fila é de story nova, e declaração "
+                     "que nunca roda não se grava", 4)
+    if tipo not in ("timer", "manual") or (tipo == "manual" and ":" in trigger):
+        return _erro(f"--trigger {trigger!r}: use timer:<calendário> ou manual", 2)
+    slo_iso = None
+    if tipo == "timer":
+        if not arg.strip():
+            return _erro("--trigger timer pede o calendário: timer:<calendário systemd>", 2)
+        if not slo:
+            return _erro("timer pede --slo (a janela máxima sem fim): 1d, 6h, 30m, 90s ou ISO 8601", 2)
+        try:
+            units.gera_unit({"slug": slug, "trigger_tipo": "timer", "trigger_arg": arg})
+        except ValueError as e:
+            return _erro(str(e), 2)
+    if slo:
+        try:
+            slo_iso = units.duracao_para_iso(slo)
+        except ValueError as e:
+            return _erro(str(e), 2)
+    if roda_tipo == "verbo" and os.path.basename(roda_ref) == "bot" and roda_args[:1] == ["rodar"]:
+        return _erro("--roda bot rodar ...: o bot não roda a si mesmo; cada disparo subiria outro bot, sem freio "
+                     "(bot caidas, bot listar e bot desligar passam)", 4)
+    if roda_tipo == "agente":
+        if tipo == "timer":
+            return _erro("timer que chama agente não liga: o trabalho em segundo plano ainda não tem sujeito de "
+                         "máquina (trava de segurança do card #3186)", 4)
+        p = _roda([str(_bin() / "agente"), "ler", roda_ref], timeout=30)
+        if p.returncode != 0:
+            motivo = (p.stderr.strip().splitlines() or ["sem retorno"])[0]
+            return _erro(f"agente ler {roda_ref} saiu {p.returncode}: {motivo}", {1: 1, 4: 4, 5: 5}.get(p.returncode, 3))
+    if tipo == "timer":
+        _valida_calendario(arg)                                    # 2 ou 3, antes de qualquer chamada ao serviço
+    corpo = {"autor": autor, "roda_tipo": roda_tipo, "roda_ref": roda_ref, "roda_args": roda_args,
+             "trigger_tipo": tipo, "dono": dono}
+    if tipo == "timer":
+        corpo["trigger_arg"] = arg
+    if slo_iso:
+        corpo["slo_janela_max"] = slo_iso
+    with _trava("units"):
+        if tipo == "timer":
+            _guarda_unit_alheia(slug)                              # 4 ou 5, antes do PUT: a ficha não nasce
+        status, _ = _chama("PUT", f"/acervo/automacoes/{slug}", corpo, aceita=(200, 201))
+        print(f"{'declarada' if status == 201 else 'já declarada'}: {slug}")
+        if tipo == "timer":
+            _escreve_units(slug, arg)
+    return 0
+
+
+def _linha(f: dict) -> str:
+    gatilho = "manual" if f.get("trigger_tipo") == "manual" else f"{f.get('trigger_tipo')}:{f.get('trigger_arg') or ''}"
+    ev = f.get("ultimo_evento")
+    if not ev:
+        ultimo = "—"
+    elif ev.get("tipo") == "fim":
+        ultimo = f"fim {ev.get('exit_code')} {ev.get('ts')}"
+    else:
+        ultimo = f"inicio {ev.get('ts')}"
+    return (f"{f.get('slug'):<24} {f.get('dono'):<18} {gatilho:<30} {ultimo:<40} "
+            f"{f.get('estado') or '—':<10} {'rodando' if f.get('rodando') else '-'}")
+
+
+def ato_listar(estado: str | None, como_json: bool) -> int:
+    try:
+        itens = _todas({"caída": "caida"}.get(estado, estado))
+    except Falha as f:
+        if como_json:
+            print(json.dumps({"erro": f.msg}, ensure_ascii=False))
+        return _erro(f.msg, f.codigo)
+    if como_json:
+        print(json.dumps(itens, ensure_ascii=False))
+    else:
+        for f in itens:
+            print(_linha(f))
+    return 0
+
+
+def ato_rodar(slug: str) -> int:
+    if not units.SLUG.fullmatch(slug):
+        return _erro(f"slug inválido: {slug!r}", 2)
+    cadeia = [s for s in os.environ.get(CADEIA, "").split(",") if s]
+    if slug in cadeia:                                              # antes de gravar inicio: nada se toca
+        return _erro(f"{slug} já está na cadeia de execução do bot ({','.join(cadeia)}): recursão; não executo", 4)
+    status, ficha = _chama("GET", f"/acervo/automacoes/{slug}", aceita=(200, 404))
+    if status == 404 or not isinstance(ficha, dict):
+        return _erro(f"{slug} não está declarada (sem ficha ativa); bot declarar {slug} ...", 1)
+    ref = str(ficha.get("roda_ref") or "")
+    if not REF.fullmatch(ref):
+        return _erro(f"a ficha de {slug} traz roda_ref {ref!r} fora do molde; não executo", 4)
+    if ficha.get("roda_tipo") == "agente":
+        if ficha.get("trigger_tipo") == "timer":
+            return _erro(f"{slug} é timer que chama agente: não há sujeito de máquina, não executo", 4)
+        argv = [str(_bin() / "agente"), "rodar", ref, "--ligacao", "agendado"]
+    else:
+        alvo = _bin() / ref
+        argv = [str(alvo) if alvo.is_file() else ref, *[str(a) for a in ficha.get("roda_args") or []]]
+    ambiente = {**os.environ, CADEIA: ",".join([*cadeia, slug])}   # o filho que chamar o bot de novo vê a cadeia
+    recebidos: list[int] = []
+    filhos: list[subprocess.Popen] = []
+
+    def repassa(signum, _quadro):
+        """SIGTERM (systemctl stop, timeout, reboot): o filho recebe o sinal, e o fim ainda se grava."""
+        recebidos.append(signum)
+        for f in filhos:
+            if f.poll() is None:
+                with contextlib.suppress(OSError):
+                    f.send_signal(signal.SIGTERM)
+
+    try:
+        anterior = signal.signal(signal.SIGTERM, repassa)
+        instalado = True
+    except ValueError:                                              # fora da thread principal: sem handler
+        anterior, instalado = None, False
+    try:
+        _evento(slug, ficha, "inicio")
+        sys.stdout.flush()
+        try:
+            filho = subprocess.Popen(argv, env=ambiente)             # sem shell; stdin herdado
+            filhos.append(filho)
+            if recebidos:                                           # o sinal chegou antes de o filho existir
+                repassa(recebidos[0], None)
+            rc = filho.wait()
+        except OSError as e:
+            print(f"bot: {Path(argv[0]).name}: não executou ({e})", file=sys.stderr)
+            rc = 127
+        if recebidos:
+            rc = 128 + signal.SIGTERM                               # 143
+        elif rc < 0:
+            rc = 128 - rc
+        _evento(slug, ficha, "fim", rc)
+    finally:
+        if instalado:
+            signal.signal(signal.SIGTERM, anterior if anterior is not None else signal.SIG_DFL)
+    return rc
+
+
+def _desfaz_units(slug: str) -> list[str]:
+    """Para, desabilita e apaga as units DO BOT; a que não tem o cabeçalho não se toca. Devolve o que removeu."""
+    servico, timer = units.nomes_da_unit(slug)
+    pastas = units.dirs_candidatas()                                # a morada mudou se o ~/.config passou a gravar
+    achadas = [p / n for p in pastas for n in (servico, timer) if os.path.lexists(p / n)]
+    do_bot = [a for a in achadas if units.eh_unit_do_bot(units.le_unit(a))]
+    for a in achadas:
+        if a not in do_bot:
+            print(f"bot: aviso: {a} não é do bot (sem o cabeçalho de gerado): não toquei", file=sys.stderr)
+    if not do_bot:
+        return []
+    nomes = {a.name for a in do_bot}
+    for n in (timer, servico):                                      # o service em curso também para (o job não fica órfão)
+        if n in nomes:
+            _ctl("stop", n, tolera=True)
+    alvos_do_timer = {str(a) for a in do_bot if a.name == timer}
+    try:
+        for p in pastas:
+            link = p / "timers.target.wants" / timer
+            if link.is_symlink() and os.readlink(link) in alvos_do_timer:
+                link.unlink()
+        for a in do_bot:
+            a.unlink()
+    except OSError as e:
+        raise Falha(3, f"não desfiz as units de {slug} em {', '.join(str(p) for p in pastas)}: {e}") from None
+    _ctl("reset-failed", servico, timer, tolera=True)
+    _ctl("daemon-reload")
+    return [n for n in (servico, timer) if n in nomes]
+
+
+def ato_desligar(slug: str, autor_arg: str | None) -> int:
+    if not units.SLUG.fullmatch(slug):
+        return _erro(f"slug inválido: {slug!r}", 2)
+    autor = _autor(autor_arg)
+    if not autor:
+        return _erro("sem autor: passe --autor <cadeira> ou rode com PF_CADEIRA", 2)
+    with _trava("units"):
+        return _desliga(slug, autor)
+
+
+def _desliga(slug: str, autor: str) -> int:
+    caminho = f"/acervo/automacoes/{slug}"
+    status, _ = _chama("GET", caminho, aceita=(200, 404))
+    removidas = _desfaz_units(slug)
+    if status == 404:
+        if removidas:
+            print(f"{slug}: sem ficha ativa; unit removida ({', '.join(removidas)})")
+            return 0
+        # sem ficha ativa e sem unit: a retirada anterior responde 204 (já desligada); slug nunca visto, 404
+        resposta, _ = _chama("DELETE", caminho, params={"autor": autor}, aceita=(204, 404))
+        if resposta == 404:
+            return _erro(f"{slug} nunca foi declarada", 1)
+        print(f"{slug}: já desligada")
+        return 0
+    _chama("DELETE", caminho, params={"autor": autor}, aceita=(204, 404))
+    print(f"desligada: {slug}" + (f" (units removidas: {', '.join(removidas)})" if removidas else ""))
+    return 0
+
+
+def _na_pasta_do_usuario(frag: str) -> bool:
+    """O arquivo da unit está numa das pastas de unit da conta (~/.config e $XDG_DATA_HOME, em systemd/user)."""
+    return any(frag == str(p) or frag.startswith(f"{p}/") for p in units.dirs_candidatas())
+
+
+def _lista_units(filtros: list[str]) -> list[str]:
+    rc, out, err = units.sh(["systemctl", "--user", "list-units", *filtros, "--plain", "--no-legend"], timeout=30)
+    if rc != 0:
+        raise Falha(5, f"systemctl --user list-units {' '.join(filtros)} saiu {rc}: "
+                       f"{(err or out or 'sem saída').splitlines()[0]}")
+    nomes = []
+    for linha in out.splitlines():
+        achado = re.sub(r"^[^0-9A-Za-z]+", "", linha).split()          # o glifo «●» das falhadas
+        if achado:
+            nomes.append(achado[0])
+    return nomes
+
+
+def _incidentes_abertos() -> set[str]:
+    """Títulos dos incidentes abertos (detectado, em-mitigacao, mitigado), sem `--cadeira`: a lista do bin diverge da API.
+    União de uma chamada por estado."""
+    titulos: set[str] = set()
+    for estado in ESTADOS_ABERTOS:                                  # uma chamada por estado: `--estado` repetido pode ser last-wins
+        p = _roda([str(_bin() / "tarefas"), "listar", "--estado", estado], timeout=60)
+        if p.returncode != 0:
+            motivo = (p.stderr.strip().splitlines() or ["sem retorno"])[0]
+            raise Falha(5, f"tarefas listar --estado {estado} saiu {p.returncode}: {motivo}")
+        titulos |= {linha.split("\t", 2)[2] for linha in p.stdout.splitlines() if linha.count("\t") >= 2}
+    return titulos
+
+
+def _olha_caidas() -> tuple[dict, list[str], int]:
+    """(achados {título: (cadeira, motivo)}, linhas informativas, nº de fichas). Falha de olhar = Falha 5."""
+    fichas = {f["slug"]: f for f in _todas() if f.get("slug")}
+    decl, _, faltas = units.declarantes_de_jobs(str(raizes.release()))
+    if faltas:
+        raise Falha(5, "não consegui olhar os declarantes: " + "; ".join(faltas))
+    falhadas = _lista_units(["--type=service,timer", "--state=failed"])
+    timers = _lista_units(["--type=timer", "--all"])
+
+    def quem(unit: str):
+        d, e = units.systemctl_show(unit, ["FragmentPath"])
+        if e:
+            raise Falha(5, f"systemctl show {unit}: {e}")
+        frag = d.get("FragmentPath", "")
+        slug = unit.rsplit(".", 1)[0]
+        if unit in decl:
+            return "manifesto", None
+        if frag and units.eh_unit_do_bot(units.le_unit(frag)):
+            return ("bot", fichas[slug]) if slug in fichas else ("orfa", None)
+        if frag and _na_pasta_do_usuario(frag):                  # unit solta na conta, sem declarante
+            return "orfa", None
+        return "fora", frag                                      # pacote do SO, /etc, /run ou transiente: não é do bot
+
+    achados: dict[str, tuple[str, str]] = {}
+    informativas: list[str] = []
+    orfas: set[str] = set()
+
+    def orfa(unit: str, motivo: str) -> None:
+        stem = unit.rsplit(".", 1)[0]
+        if stem not in orfas:                                   # timer e service da mesma unit são um achado só
+            orfas.add(stem)
+            achados[f"{unit}: caída"] = ("ti", motivo)
+
+    for t in timers:
+        if quem(t)[0] == "orfa":
+            orfa(t, f"timer {t} sem declarante: nem manifesto, nem ficha ativa do bot")
+    for u in falhadas:
+        if u.startswith(JOB_DE_SESSAO):
+            continue                                            # a falha é da sessão que disparou o job
+        q, extra = quem(u)
+        if q == "bot":
+            achados.setdefault(f"{u.rsplit('.', 1)[0]}: caída", (extra.get("dono") or "ti", f"unit {u} failed"))
+        elif q == "orfa":
+            orfa(u, f"unit {u} failed e sem declarante: nem manifesto, nem ficha ativa do bot")
+        elif q == "manifesto":
+            informativas.append(f"fora do bot: {u} failed (release conferir jobs mede)")
+        else:
+            informativas.append(f"fora do bot: {u} failed (FragmentPath {extra or 'vazio, transiente'}: "
+                                "nem unit do bot nem unit solta na pasta do usuário)")
+    for slug, f in fichas.items():
+        if f.get("estado") == "caida":                          # o bot lê o estado, não o recalcula
+            achados.setdefault(f"{slug}: caída", (f.get("dono") or "ti", "estado caida no acervo (último fim != 0 ou SLO vencido)"))
+    return achados, informativas, len(fichas)
+
+
+def ato_caidas() -> int:
+    with _trava("caidas"):                                          # duas rodadas juntas abririam o mesmo incidente duas vezes
+        return _caidas()
+
+
+def _caidas() -> int:
+    try:
+        achados, informativas, n_fichas = _olha_caidas()
+        for linha in informativas:
+            print(linha)
+        if not achados:
+            print(f"conforme: {n_fichas} ficha(s) ativa(s), nenhuma unit caída ou sem declarante")
+            return 0
+        abertos = _incidentes_abertos()
+    except Falha as f:
+        return _erro(f"não consegui olhar: {f.msg}", 5)
+    criados, sobra = 0, []
+    for titulo, (cadeira, motivo) in sorted(achados.items()):
+        if titulo in abertos:
+            print(f"divergente: {titulo} — {motivo}; incidente já aberto")
+            continue
+        if criados >= LIMITE_INCIDENTES:                            # `tarefas criar` leva até 60 s: a rodada tem de caber no conector
+            print(f"divergente: {titulo} — {motivo}; incidente fica para a próxima rodada (limite)")
+            sobra.append(titulo)
+            continue
+        criados += 1
+        corpo = f"{motivo}.\n\nAberto por `bot caidas`. Ver: `infra logs <unit>` e `bot listar`."
+        try:
+            p = _roda([str(_bin() / "tarefas"), "criar", titulo, "--incidente", "--cadeira", cadeira, "--desc-stdin"],
+                      stdin=corpo, timeout=60)
+        except Falha as f:
+            print(f"divergente: {titulo} — {motivo}; incidente não aberto", file=sys.stderr)
+            _erro(f.msg, f.codigo)
+            continue
+        if p.returncode == 0:
+            print(f"divergente: {titulo} — {motivo}; {p.stdout.strip() or 'incidente aberto'}")
+        else:
+            print(f"divergente: {titulo} — {motivo}; incidente não aberto", file=sys.stderr)
+            _erro(f"tarefas criar saiu {p.returncode}: {(p.stderr.strip().splitlines() or ['sem retorno'])[0]}", 5)
+    if sobra:
+        print(f"limite: {len(sobra)} achado(s) sem incidente nesta rodada (máximo {LIMITE_INCIDENTES} criados por rodada): "
+              + ", ".join(sobra))
+    return 1
+
+
+# --- a linha de comando ----------------------------------------------------------------------
+
+def main(argv: list[str] | None = None) -> int:
+    argv = list(sys.argv[1:] if argv is None else argv)
+    uso.intercepta(argv, fonte=__file__)
+    p = uso.Uso(descricao="a camada acima do systemd: declara, agenda, lista e audita automação",
+                saidas="0 ok · 1 negativo de mérito · 2 uso · 3 dependência fora · 4 recusa de política · "
+                       "5 indeterminável (rodar sai com o exit do que rodou)")
+    atos = p.atos()
+    a = atos.novo("declarar", "grava a ficha pelo acervo e, com timer, escreve, habilita e agenda a unit")
+    a.add_argument("slug")
+    a.add_argument("--roda", required=True, help='"<verbo> [args]" ou agente:<slug>')
+    a.add_argument("--trigger", required=True, help="timer:<calendário> ou manual")
+    a.add_argument("--dono", required=True, help="a cadeira que responde")
+    a.add_argument("--slo", default=None, help="janela máxima sem fim: 1d, 6h, 30m, 90s ou ISO 8601; obrigatório com timer")
+    a.add_argument("--autor", default=None, help="a cadeira que declara; padrão PF_CADEIRA")
+    a = atos.novo("listar", "uma linha por declaração, numa chamada ao acervo")
+    a.add_argument("--estado", choices=ESTADOS, default=None)
+    a.add_argument("--json", action="store_true")
+    a = atos.novo("rodar", "grava inicio, executa a ficha sem shell, grava fim e sai com o exit do que rodou")
+    a.add_argument("slug")
+    a = atos.novo("desligar", "para e apaga a unit, e só então retira a ficha; a volta de declarar")
+    a.add_argument("slug")
+    a.add_argument("--autor", default=None, help="a cadeira que retira; padrão PF_CADEIRA")
+    atos.novo("caidas", "unit do bot failed ou sem declarante abre incidente, sem duplicar")
+    ns = p.parse_args(argv)
+    try:
+        if ns.ato == "declarar":
+            return ato_declarar(ns.slug, ns.roda, ns.trigger, ns.dono, ns.slo, ns.autor)
+        if ns.ato == "listar":
+            return ato_listar(ns.estado, ns.json)
+        if ns.ato == "rodar":
+            return ato_rodar(ns.slug)
+        if ns.ato == "desligar":
+            return ato_desligar(ns.slug, ns.autor)
+        return ato_caidas()
+    except Falha as f:
+        return _erro(f.msg, f.codigo)
+
+
+if __name__ == "__main__":
+    sys.exit(main())

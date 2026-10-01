@@ -94,7 +94,8 @@
                    evidencia de ausencia, e `indeterminavel` NAO ancora negativa).
 
   jobs    [timer]  cada timer do systemd --user da conta: declarado (harness/instalar,
-                   core/units-da-instancia.json ou pacote do sistema), link pelo atalho
+                   core/units-da-instancia.json, unit do bot com ficha ativa ou pacote do
+                   sistema), link pelo atalho
                    estavel da release, nada da bancada, EnvironmentFile do ops-mcp
                    quando chama verbo, habilitado, ultima execucao sem falha; e o
                    timer que um instalador promete e nao esta agendado (card #3147).
@@ -128,6 +129,7 @@ import resultado
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "..", "lib"))
 import raizes  # noqa: E402
+import units  # noqa: E402
 
 # Predicados extraídos para bin/_lint (card #3153)
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", ".."))
@@ -2798,62 +2800,34 @@ def conferir_vocabulario(alvo=None, como_json=False):
 #   - core     deploy/units-da-instancia.json: `units` (instala-units.sh, symlink) e
 #              `_fora_deste_instalador` (setup-*.sh com sudo, copia em ~/.config)
 #   - sistema  unit de pacote do SO, em /usr/lib/systemd/user ou /lib/systemd/user
+#   - bot      unit com o cabecalho do bot (lib/units.py) E ficha ativa do slug no
+#              acervo, lida por `bot listar --json`; os dois nomes, .timer e .service.
+#              Cabecalho sem ficha e orfa; ficha de timer sem unit agendada diverge;
+#              ficha ilegivel com unit do bot na rodada e "nao consegui olhar"; sem unit do
+#              bot na rodada, so um aviso em stderr, o exit nao muda (card #3186)
 # Nenhuma lista nova: a classe mede as que existem. Duas moradas e dois jeitos de
 # instalar seguem como estao -- unificar e decisao (card #3147, Travas).
 
-ENV_OPS = "/home/claudinho/.config/ops/env"
-UNIT_SISTEMA = ("/usr/lib/systemd/user/", "/lib/systemd/user/")
-
-
-def _systemctl_show(unit, props):
-    rc, out, err = sh(["systemctl", "--user", "show", unit, "-p", ",".join(props)])
-    if rc != 0:
-        return None, (err or out or f"systemctl saiu {rc}").splitlines()[0]
-    d = {}
-    for linha in out.splitlines():
-        k, _, v = linha.partition("=")
-        d[k] = v
-    return d, None
-
-
-def _declarantes_de_jobs(release):
-    """{unit: declarante} dos registros servidos e o conjunto de timers que um
-    instalador por symlink promete ligar. Registro ilegivel volta em `faltas`."""
-    decl, esperados, faltas = {}, set(), []
-    instalar = os.path.join(release, "harness", "deploy-harness", "instalar")
-    try:
-        with open(instalar, encoding="utf-8") as f:
-            texto = f.read()
-        bloco = re.search(r"^UNITS=\((.*?)^\)", texto, re.S | re.M)
-        for rel in re.findall(r'"([^"|]+)\|', bloco.group(1) if bloco else ""):
-            nome = os.path.basename(rel)
-            decl[nome] = "harness@deploy-harness/instalar"
-            if nome.endswith(".timer"):
-                esperados.add(nome)
-    except OSError as e:
-        faltas.append(f"harness@deploy-harness/instalar ilegivel: {e}")
-    reg = os.path.join(release, "core", "deploy", "units-da-instancia.json")
-    try:
-        with open(reg, encoding="utf-8") as f:
-            d = json.load(f)
-        for nome in d.get("units", {}):
-            decl.setdefault(nome, "core@deploy/instala-units.sh")
-            if nome.endswith(".timer"):
-                esperados.add(nome)
-        for chave, onde in d.get("_fora_deste_instalador", {}).items():
-            for nome in (n.strip() for n in chave.split(",")):
-                decl.setdefault(nome, "core@deploy/units-da-instancia.json: " + onde.split(" — ")[0])
-    except (OSError, ValueError) as e:
-        faltas.append(f"core@deploy/units-da-instancia.json ilegivel: {e}")
-    return decl, esperados, faltas
+# ENV_OPS, UNIT_SISTEMA, systemctl_show e declarantes_de_jobs moram em lib/units.py,
+# que o bot tambem le (card #3186).
 
 
 def conferir_jobs(alvo=None, como_json=False):
-    """Um item por timer do systemd --user: declarado, da release, habilitado, sem
-    falha na ultima execucao, e com o ambiente do ops-mcp quando chama verbo."""
+    """Um item por timer do systemd --user: declarado (manifesto, unit do bot com ficha
+    ativa ou pacote do SO), da release, habilitado, sem falha na ultima execucao, e com
+    o ambiente do ops-mcp quando chama verbo."""
     release = os.environ.get("PLATAFIRMA_RELEASE", "/opt/platafirma/current")
-    decl, esperados, faltas = _declarantes_de_jobs(release)
+    decl, esperados, faltas = units.declarantes_de_jobs(release)
     itens = [(f, resultado.indeterminavel(f)) for f in faltas]
+    lidas = []
+
+    def fichas_ativas():
+        # uma consulta ao servico por rodada, e so quando alguem precisa
+        if not lidas:
+            lidas.append(units.fichas_do_bot(BIN_IRMAOS))
+        return lidas[0]
+
+    houve_bot = False                       # alguma unit da rodada tem o cabecalho do bot
 
     rc, out, err = sh(["systemctl", "--user", "list-units", "--type=timer", "--all",
                        "--plain", "--no-legend"])
@@ -2866,19 +2840,32 @@ def conferir_jobs(alvo=None, como_json=False):
     for t in timers:
         if alvo and alvo not in (t, t[:-len(".timer")]):
             continue
-        dt, e1 = _systemctl_show(t, ["Unit", "FragmentPath", "UnitFileState", "ActiveState"])
+        dt, e1 = units.systemctl_show(t, ["Unit", "FragmentPath", "UnitFileState", "ActiveState"])
         svc = (dt or {}).get("Unit", "")
-        ds, e2 = _systemctl_show(svc, ["FragmentPath", "ExecStart", "EnvironmentFiles",
+        ds, e2 = units.systemctl_show(svc, ["FragmentPath", "ExecStart", "EnvironmentFiles",
                                        "WorkingDirectory", "Result"]) if svc else (None, "sem unit alvo")
         if e1 or e2:
             itens.append((t, resultado.indeterminavel(f"systemctl show: {e1 or e2}")))
             continue
         frag_t, frag_s = dt.get("FragmentPath", ""), ds.get("FragmentPath", "")
-        de_sistema = frag_t.startswith(UNIT_SISTEMA) and frag_s.startswith(UNIT_SISTEMA)
+        de_sistema = frag_t.startswith(units.UNIT_SISTEMA) and frag_s.startswith(units.UNIT_SISTEMA)
+        # unit do bot: cabecalho no arquivo (onde quer que esteja) E ficha ativa do slug,
+        # um nome por vez, para o .timer e para o .service
+        do_bot = [(n, units.eh_unit_do_bot(units.le_unit(f))) for n, f in ((t, frag_t), (svc, frag_s))]
+        if any(eh for _, eh in do_bot):
+            houve_bot = True
+            fichas, e_fichas = fichas_ativas()
+            if e_fichas:
+                itens.append((t, resultado.indeterminavel(f"nao li as fichas do bot: {e_fichas}")))
+                continue
+            for nome, eh in do_bot:
+                slug = nome.rsplit(".", 1)[0]
+                if eh and slug in fichas:
+                    decl.setdefault(nome, f"bot@{slug}")
         quem = "sistema (pacote do SO)" if de_sistema else decl.get(t)
         faltou = []
         if not quem:
-            faltou.append("sem declarante: nem harness/instalar, nem core/units-da-instancia.json, nem pacote do sistema")
+            faltou.append("sem declarante: nem harness/instalar, nem core/units-da-instancia.json, nem unit do bot com ficha ativa, nem pacote do sistema")
         elif svc not in decl and not de_sistema:
             faltou.append(f"{svc} sem declarante (o timer tem: {quem})")
         if not de_sistema:
@@ -2893,8 +2880,8 @@ def conferir_jobs(alvo=None, como_json=False):
             corpo = " ".join([ds.get("ExecStart", ""), ds.get("WorkingDirectory", "")])
             if RAIZ and (RAIZ.rstrip("/") + "/") in corpo + "/":
                 faltou.append(f"{svc} roda da bancada ({RAIZ}), nao da release")
-            if "/harness/bin/" in ds.get("ExecStart", "") and ENV_OPS not in ds.get("EnvironmentFiles", ""):
-                faltou.append(f"{svc} chama verbo sem EnvironmentFile={ENV_OPS}")
+            if "/harness/bin/" in ds.get("ExecStart", "") and units.ENV_OPS not in ds.get("EnvironmentFiles", ""):
+                faltou.append(f"{svc} chama verbo sem EnvironmentFile={units.ENV_OPS}")
         if dt.get("UnitFileState") != "enabled":
             faltou.append(f"{t} {dt.get('UnitFileState') or 'sem estado'}: nao sobe no boot")
         if ds.get("Result", "success") != "success":
@@ -2907,6 +2894,18 @@ def conferir_jobs(alvo=None, como_json=False):
     if not alvo:
         for t in sorted(esperados - set(timers)):
             itens.append((t, resultado.divergente(f"declarado por {decl[t]} e nao agendado nesta conta")))
+        # ficha ativa de gatilho timer promete uma unit agendada; manual nao promete nada
+        fichas, e_fichas = fichas_ativas()
+        if e_fichas and not houve_bot:
+            # sem unit do bot na rodada, o servico de fichas fora do ar nao derruba a ronda do manifesto:
+            # segue sem fichas, o aviso vai a stderr (o exit e os itens ficam como estao). Com unit do bot,
+            # cada timer dela ja saiu indeterminavel no laco acima: nunca ok mudo.
+            print(f"release conferir jobs: aviso: nao li as fichas do bot ({e_fichas}); sigo sem elas, "
+                  "nenhuma unit do bot na rodada", file=sys.stderr)
+        for slug, ficha in sorted(fichas.items()):
+            if ficha.get("trigger_tipo") == "timer" and f"{slug}.timer" not in timers:
+                itens.append((f"{slug}.timer", resultado.divergente(
+                    f"declarado por bot@{slug} e nao agendado nesta conta")))
 
     return resultado.relatorio("jobs", alvo, itens, _sha_release(), como_json=como_json)
 
