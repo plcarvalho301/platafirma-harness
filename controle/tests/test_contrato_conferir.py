@@ -311,3 +311,56 @@ def test_repo_json_divergente_sem_readme(tmp_path, monkeypatch, capsys):
     item = next(i for i in dado["itens"] if i["nome"] == "semreadme")
     assert item["estado"] == "divergente"
     assert "README ausente" in item["motivo"]
+
+
+# --- existe chapeu | skill (#2856 linha 94) ------------------------------------------------
+
+def _abertura_de_fixture(tmp_path):
+    raiz = tmp_path / "raiz"
+    abertura = raiz / "platafirma-harness" / "abertura"
+    for caminho in ("engenharia/devops", "engenharia/front-end", "dados/ontologia"):
+        (abertura / caminho).mkdir(parents=True)
+        (abertura / caminho / "chapeu.md").write_text("# chapeu\n", encoding="utf-8")
+    (abertura / "dados" / "sem-chapeu-md").mkdir()
+    skills = raiz / "platafirma-harness" / "skills"
+    for nome in ("prosa", "diagrama"):
+        (skills / nome).mkdir(parents=True)
+        (skills / nome / "SKILL.md").write_text("---\nname: x\n---\n", encoding="utf-8")
+    (skills / "pasta-sem-skill-md").mkdir()
+    return raiz
+
+
+def test_existe_chapeu_acha_pelo_slug_e_por_cadeira_barra_chapeu(tmp_path, monkeypatch, capsys):
+    monkeypatch.setattr(conferir, "RAIZ", str(_abertura_de_fixture(tmp_path)))
+
+    assert conferir.conferir_existe("chapeu", "devops") == 0
+    assert capsys.readouterr().out.startswith("existe: chapeu devops — abertura/ tem engenharia/devops")
+    assert conferir.conferir_existe("chapeu", "engenharia/devops") == 0
+    assert conferir.conferir_existe("chapeu", "claudinho-engenharia/devops") == 0
+    capsys.readouterr()
+    # o chapéu existe, mas não nessa cadeira
+    assert conferir.conferir_existe("chapeu", "dados/devops") == 1
+    capsys.readouterr()
+
+
+def test_existe_chapeu_ausente_sai_1_com_a_lista_na_segunda_linha(tmp_path, monkeypatch, capsys):
+    monkeypatch.setattr(conferir, "RAIZ", str(_abertura_de_fixture(tmp_path)))
+
+    assert conferir.conferir_existe("chapeu", "sem-chapeu-md") == 1
+    linhas = capsys.readouterr().out.splitlines()
+    assert linhas[0].startswith("nao-existe: chapeu sem-chapeu-md — abertura/ lista 3 chapeus")
+    assert "dados/ontologia, engenharia/devops, engenharia/front-end" in linhas[1]
+
+
+def test_existe_skill_pede_o_skill_md_e_sem_pasta_e_indeterminavel(tmp_path, monkeypatch, capsys):
+    raiz = _abertura_de_fixture(tmp_path)
+    monkeypatch.setattr(conferir, "RAIZ", str(raiz))
+
+    assert conferir.conferir_existe("skill", "prosa") == 0
+    assert capsys.readouterr().out.startswith("existe: skill prosa — skills/ lista 2: diagrama, prosa")
+    assert conferir.conferir_existe("skill", "pasta-sem-skill-md") == 1
+    capsys.readouterr()
+
+    monkeypatch.setattr(conferir, "RAIZ", str(tmp_path / "vazia"))
+    assert conferir.conferir_existe("skill", "prosa") == 5
+    assert capsys.readouterr().out.startswith("indeterminavel: skill prosa")

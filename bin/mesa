@@ -416,14 +416,15 @@ def ato_item(args):
     if con is None:
         return 3
     with con, con.cursor() as cur:
-        # num: contador por (cadeira, ciclo) que reinicia toda segunda. ciclo vem do
+        # num: contador por cadeira sobre os itens VIVOS, de qualquer ciclo: o numero exibido nao repete
+        # enquanto o item mais velho existir (#2856 linha 91); com a mesa vazia volta a 1. ciclo vem do
         # DEFAULT da coluna. Escritor unico por cadeira; o indice unico (cadeira,
         # ciclo, num) e a rede contra corrida, nao a confianca na ausencia dela.
         cur.execute(
             "INSERT INTO sessao.mesa_item (cadeira, chapeu, ato, alvo, texto, plantado_por_fita, num) "
             "VALUES (%s, %s, %s, %s, %s, %s, "
             "  (SELECT coalesce(max(num), 0) + 1 FROM sessao.mesa_item "
-            "   WHERE cadeira = %s AND ciclo = date_trunc('week', now())::date)) "
+            "   WHERE cadeira = %s)) "
             "RETURNING num",
             (canonica(), slot, args.ato.strip(), args.alvo.strip(), texto or None,
              fita_registrada(con), canonica()),

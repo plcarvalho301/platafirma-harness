@@ -90,7 +90,7 @@ def main(argv):
         if ato == "consultar":
             if not resto:
                 uso()
-            env = atos.consultar(resto[0], k=args.k, categoria=args.cat,
+            env = atos.consultar(" ".join(resto), k=args.k, categoria=args.cat,
                                  desde=args.desde, idioma=args.idioma, trab=trab)
         elif ato == "resolver":
             if len(resto) < 2:

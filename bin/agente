@@ -423,9 +423,35 @@ def _erro(msg: str, codigo: int) -> int:
     return codigo
 
 
+def _avanca_posto(posto: Path) -> None:
+    """O clone do posto segue origin/main (#2856 linha 99): num sha velho, `projetar --conferir` reprovava
+    declaração já consertada em main. Só avança o que é seguro: clone git, árvore limpa, destacado ou em
+    main, e origin/main à frente (fast-forward). Sem rede, avisa e lê o clone como está."""
+    if not (posto / ".git").exists():
+        return
+    rc, _ = _git(posto, "fetch", "--quiet", "origin", "main")
+    if rc != 0:
+        print("agente: aviso: não busquei origin/main no posto; leio o clone como está", file=sys.stderr)
+        return
+    rc_sujo, sujo = _git(posto, "status", "--porcelain")
+    rc_ramo, ramo = _git(posto, "rev-parse", "--abbrev-ref", "HEAD")
+    ramo = ramo.strip()
+    if rc_sujo != 0 or rc_ramo != 0 or sujo.strip() or ramo not in ("HEAD", "main"):
+        return
+    rc, _ = _git(posto, "merge-base", "--is-ancestor", "HEAD", "origin/main")
+    if rc != 0:
+        return
+    if ramo == "main":
+        _git(posto, "merge", "--ff-only", "--quiet", "origin/main")
+    else:
+        _git(posto, "checkout", "--quiet", "--detach", "origin/main")
+
+
 def _posto_ou_erro() -> tuple[Path | None, int]:
     try:
-        return posto_dir(), 0
+        posto = posto_dir()
+        _avanca_posto(posto)
+        return posto, 0
     except raizes.BancadaNaoDeclarada as e:
         return None, _erro(str(e), 3)
 

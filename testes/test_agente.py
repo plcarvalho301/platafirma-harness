@@ -438,6 +438,48 @@ def test_listar_json(mundo, capsys):
     assert obj["agentes"][0]["slug"] == "revisor" and obj["agentes"][0]["dono"] == "engenharia/devops"
 
 
+def _git_na(cwd, *args):
+    subprocess.run(["git", "-c", "user.email=t@t", "-c", "user.name=t", *args], cwd=cwd, check=True,
+                   capture_output=True)
+
+
+def _posto_atras_de_origin(mundo, tmp_path):
+    """O posto vira um clone destacado em origin/main; depois a origem ganha a declaração `revisor`."""
+    import shutil
+    origem, semente = tmp_path / "origem.git", tmp_path / "semente"
+    subprocess.run(["git", "init", "-q", "--bare", "-b", "main", str(origem)], check=True)
+    (semente / "agentes").mkdir(parents=True)
+    _git_na(semente, "init", "-q", "-b", "main")
+    (semente / "agentes" / "varredor.yaml").write_text(yaml.safe_dump(VARREDOR, allow_unicode=True, sort_keys=False))
+    _git_na(semente, "add", "-A")
+    _git_na(semente, "commit", "-q", "-m", "varredor")
+    _git_na(semente, "remote", "add", "origin", str(origem))
+    _git_na(semente, "push", "-q", "origin", "main")
+    shutil.rmtree(mundo.posto)
+    _git_na(tmp_path, "clone", "-q", str(origem), str(mundo.posto))
+    _git_na(mundo.posto, "checkout", "-q", "--detach", "origin/main")
+    (semente / "agentes" / "revisor.yaml").write_text(yaml.safe_dump(REVISOR, allow_unicode=True, sort_keys=False))
+    _git_na(semente, "add", "-A")
+    _git_na(semente, "commit", "-q", "-m", "revisor")
+    _git_na(semente, "push", "-q", "origin", "main")
+
+
+def test_listar_avanca_o_clone_do_posto_para_origin_main(mundo, tmp_path, capsys):
+    """#2856 linha 99: o clone do posto ficava num sha velho e o verbo lia declaração já consertada."""
+    _posto_atras_de_origin(mundo, tmp_path)
+    assert agente.ato_listar(None, None, False) == 0
+    saida = capsys.readouterr().out
+    assert "revisor" in saida and "varredor" in saida
+
+
+def test_clone_do_posto_sujo_nao_e_mexido(mundo, tmp_path, capsys):
+    _posto_atras_de_origin(mundo, tmp_path)
+    (mundo.posto / "rascunho.txt").write_text("x")
+    assert agente.ato_listar(None, None, False) == 0
+    saida = capsys.readouterr().out
+    assert "varredor" in saida and "revisor" not in saida
+
+
 def test_ler_devolve_o_arquivo_e_o_inexistente_sai_1_com_vizinho(mundo, capsys):
     mundo.escreve(REVISOR)
     assert agente.ato_ler("revisor") == 0

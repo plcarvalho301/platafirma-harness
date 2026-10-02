@@ -178,6 +178,26 @@ def test_ato_anota_com_fita_errada_descarta_e_nao_acrescenta(monkeypatch, capsys
     assert fake._dados.get(f"mem:{cad}:{slot}") is None
 
 
+def test_item_novo_conta_os_vivos_de_qualquer_ciclo(monkeypatch, capsys):
+    """#2856 linha 91: item de semana anterior ainda vivo dividia o número com o item novo, e
+    `mesa fez <n>` apagava o mais recente. O número do novo sai do máximo dos vivos da cadeira."""
+    mesa = carrega_mesa()
+    monkeypatch.setenv("PF_CADEIRA", "mesateste")
+    monkeypatch.setenv("PF_CHAPEU", "devops")
+    monkeypatch.setattr("sys.stdin", io.StringIO(""))
+    cursor = _Cursor([[(22,)]])
+    monkeypatch.setattr(mesa, "pg", lambda *a, **k: _Conexao(cursor))
+    monkeypatch.setattr(mesa, "fita_registrada", lambda con: None)
+
+    rc = mesa.ato_item(argparse.Namespace(chapeu=None, ato="retomar", alvo="card:1"))
+
+    assert rc == 0
+    sql, _ = cursor.feitos[-1]
+    subconsulta = sql.split("SELECT", 1)[1]
+    assert "max(num)" in subconsulta and "ciclo" not in subconsulta
+    assert "item #22 plantado em [devops]" in capsys.readouterr().out
+
+
 # --- card #3218: o caderno por entrada (arq:0120) ---------------------------------------
 
 class _Cursor:
