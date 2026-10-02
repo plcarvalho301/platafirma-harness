@@ -236,13 +236,17 @@ def so_leitura(eu: str, verbo: str, json_mode: bool = False):
         sys.exit(1)
 
 
-def gerar_msgid(de: str, existentes) -> str:
+def gerar_msgid(de: str, existentes, rc=None) -> str:
+    """`<carimbo>-<remetente>`, único por carta (#2856 linha 79): não repete o que já está na caixa do
+    destino (`existentes`) nem, com `rc`, o que a mesma remetente mandou a outra caixa no mesmo
+    segundo: a reserva `SET NX` vale em todas as caixas e expira com a janela fria (8 dias)."""
     from datetime import timedelta, timezone
     agora = datetime.now(timezone.utc).astimezone()
     seg = 0
     while True:
         candidato = (agora + timedelta(seconds=seg)).strftime("%Y%m%dT%H%M%S") + f"-{de}"
-        if candidato not in existentes:
+        if candidato not in existentes and (
+                rc is None or rc.set(f"msgid:{candidato}", "1", nx=True, ex=8 * 86400)):
             return candidato
         seg += 1
 
@@ -554,7 +558,7 @@ def cmd_enviar(rc, eu: str, args):
 
     stream = stream_key(args.destinatario)
     existentes = {m["msgid"] for m in frias(rc, args.destinatario)}
-    msgid = gerar_msgid(de, existentes)
+    msgid = gerar_msgid(de, existentes, rc)
     rc.xadd(stream, {
         "id": msgid, "de": de, "tipo": args.tipo, "assunto": args.assunto,
         "ref": args.ref or "", "responde": args.responde or "", "corpo": corpo,

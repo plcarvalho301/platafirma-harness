@@ -828,6 +828,8 @@ def grava(ls):
 
 if op in ("listar", "vencidos"):
     sel = abertos if op == "listar" else [a for a in abertos if idade(a[2]) > 30]
+    if os.environ.get("DT_DESDE"):
+        sel = [a for a in sel if a[1] >= int(os.environ["DT_DESDE"])]
     if not sel:
         print("(balde vazio: nenhuma linha aberta em #%s)" % pai if op == "listar"
               else "pauta vazia: nenhuma linha acima de 30 dias em #%s" % pai)
@@ -836,6 +838,9 @@ if op in ("listar", "vencidos"):
         print("PAUTA DA REVISÃO: linhas acima de 30 dias (rito §2)")
     print("n\tidade\tdébito")
     for _, n, d, r in sel:
+        if os.environ.get("DT_CURTO") == "1":
+            r = r.split(" · ", 1)[0]
+            r = r if len(r) <= 200 else r[:199] + "…"
         print("%d\t%dd\t%s" % (n, idade(d), r))
     sys.exit(0)
 
@@ -899,8 +904,21 @@ _dt_escreve() { # _dt_escreve <ato>  (parâmetros do ato em DT_*)
 }
 
 dt_listar() {
+  # --desde <n> e --curto (#2856 linha 143): a lista inteira passa dos 50 KB que a porta serve.
+  local desde="" curto=0
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --desde) [ $# -ge 2 ] || { echo "--desde exige o número da linha: tarefas dt listar --desde <n>" >&2; exit 2; }; desde="$2"; shift 2 ;;
+      --curto) curto=1; shift ;;
+      *) echo "opção desconhecida: $1 (uso: tarefas dt listar [--desde <n>] [--curto])" >&2; exit 2 ;;
+    esac
+  done
+  case "$desde" in
+    '') ;;
+    *[!0-9]*) echo "--desde exige o número da linha: tarefas dt listar --desde <n>" >&2; exit 2 ;;
+  esac
   local corpo; corpo=$(_dt_corpo) || return 1
-  printf '%s' "$corpo" | DT_PAI="$DT_PAI" _dt_py listar
+  printf '%s' "$corpo" | DT_PAI="$DT_PAI" DT_DESDE="$desde" DT_CURTO="$curto" _dt_py listar
 }
 
 # `vencidos` É A PAUTA DA REVISÃO, GERADA (rito §2/§4): linhas acima de 30 dias pela data
@@ -1000,7 +1018,8 @@ dt() {
     ''|*)
       cat >&2 <<'FIM'
 uso:
-  tarefas dt listar                       linhas abertas do balde, com a idade em dias
+  tarefas dt listar                       linhas abertas do balde, com a idade em dias;
+                                          --desde <n> lê só da linha n em diante, --curto tira a evidência
   tarefas dt admitir "<o que falha>" --medido-em <AAAA-MM-DD> --evidencia <onde se mediu>
                 [--verbo <v>] [--solucao "<txt>"] [--cadeira <c>]
                                           acrescenta a linha numerada; SEM --evidencia ou
