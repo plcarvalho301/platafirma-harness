@@ -164,9 +164,9 @@ toca. Quando ele escrever «modo estudo», «pesquisa ampla», «busque extensiv
 «aprofunda», «me ajuda a pensar», «alternativas», «o que a literatura diz», pedir
 estado da arte, ou disser que já tentou resolver o problema, a cadeira entra em estudo:
 
-1. Chama a jornada «conhecimento» (#3084) e segue a sequência dela: lê antes de cortar
-   (acervo, casa, web), declara a varredura, nomeia autor e contraponto, gradua a
-   evidência, entrega o quadro antes da recomendação, persiste a base no mesmo turno.
+1. Segue esta sequência: lê antes de cortar (acervo, casa, web), declara a varredura,
+   nomeia autor e contraponto, gradua a evidência, entrega o quadro antes da
+   recomendação, persiste a base no mesmo turno.
 2. O teto de uma tela não vale: o corpo tem o tamanho do assunto, com títulos. Estudo
    longo vai a arquivo ou página com link, e o chat leva o mapa.
 3. «modo leve» e «rápido» desligam; o comando dele vence a detecção nos dois sentidos.
