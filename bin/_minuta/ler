@@ -1,23 +1,31 @@
 #!/usr/bin/env python3
 """minuta ler — sem argumento, as minutas abertas em que PF_CADEIRA está
 convocada (número, título, quem abriu, idade em dias, seção vazia ou não);
-com argumento, o arquivo inteiro. Leitura fria: não muda estado, não marca
-nada como visto. Protocolo: padrao protocolo-de-minuta.
+com argumento (número ou slug), o texto inteiro. Leitura fria: não muda estado,
+não marca nada como visto. Protocolo: padrao protocolo-de-minuta.
+
+Lê pelo ACERVO (arq:0115 §11.3; incidente #3225): a minuta é ficha da espécie
+`minuta` em acervo.casa, ingerida de platafirma-casa em até 10 min depois do
+push para main. platafirma-casa não é unidade de release (arq:0115 §1.2): o
+caminho antigo, <release>/casa/minuta, não existe, e a bancada nunca é fonte
+de leitura de produção (card #3010). MINUTA_REPO aponta um checkout no disco
+(teste) e substitui o acervo.
+
+exit: 0 ok · 1 nada (minuta não achada, ou nenhuma aberta para a cadeira) ·
+2 uso · 5 indeterminável (o acervo não respondeu).
 """
+import datetime
+import glob
+import json
 import os
 import re
+import subprocess
 import sys
-import glob
-import datetime
 
-# Leitura fria le a PRODUCAO: a familia arquitetura na release no ar (acompanha
-# origin/main), nunca a bancada (card #3010). MINUTA_REPO aponta outro checkout (teste).
-sys.path.insert(0, os.path.join(
-    os.path.dirname(os.path.dirname(os.path.dirname(os.path.realpath(__file__)))), "lib"))
-from raizes import release  # noqa: E402
-
-REPO = os.environ.get("MINUTA_REPO") or str(release() / "casa")
-DIR = os.path.join(REPO, "minuta")
+BIN = os.path.dirname(os.path.dirname(os.path.realpath(__file__)))
+# PF_ACERVO_BIN: o acervo de teste (stub); em produção, o verbo irmão da mesma release.
+ACERVO = os.environ.get("PF_ACERVO_BIN") or os.path.join(BIN, "acervo")
+REPO_TESTE = os.environ.get("MINUTA_REPO")
 PLACEHOLDER_CONV = "<a preencher pela própria cadeira>"
 PLACEHOLDER_ABRE = "<escreva aqui antes de circular>"
 
@@ -27,6 +35,71 @@ def erro(msg, code=1):
     sys.exit(code)
 
 
+def _ultima(texto):
+    linhas = [l for l in (texto or "").strip().splitlines() if l.strip()]
+    return linhas[-1] if linhas else "sem mensagem"
+
+
+def _acervo(*args):
+    """Roda `acervo <args>`; acervo que não roda ou não responde é indeterminável (5)."""
+    try:
+        return subprocess.run([ACERVO, *args], capture_output=True, text=True, timeout=120)
+    except (OSError, subprocess.TimeoutExpired) as e:
+        erro(f"indeterminável: `acervo {' '.join(args)}` não rodou ({e}).", 5)
+
+
+def _falha(r, chamada):
+    """Exit do acervo fora de 0/1 vira o mesmo exit aqui, com a última linha dele."""
+    code = r.returncode if r.returncode in (2, 5) else 5
+    erro(f"`{chamada}` saiu {r.returncode}: {_ultima(r.stderr or r.stdout)}", code)
+
+
+def fichas():
+    """[(chave, nome do arquivo)] das minutas abertas."""
+    if REPO_TESTE:
+        arqs = sorted(glob.glob(os.path.join(REPO_TESTE, "minuta", "[0-9][0-9][0-9][0-9]-*.md")))
+        return [(os.path.basename(a)[:4], os.path.basename(a)) for a in arqs]
+    chamada = "acervo listar casa minuta --json"
+    r = _acervo("listar", "casa", "minuta", "--json")
+    if r.returncode != 0:
+        _falha(r, chamada)
+    try:
+        linhas = json.loads(r.stdout or "[]")
+    except json.JSONDecodeError:
+        erro(f"indeterminável: `{chamada}` saiu 0 sem JSON: {_ultima(r.stdout)}", 5)
+    return [(l.get("chave") or l.get("id"), os.path.basename(l.get("path") or ""))
+            for l in linhas if not l.get("retirada_em")]
+
+
+def ficha(chave):
+    """O documento da minuta: {'corpo': texto | None, 'retirada_em', 'substituida_por'},
+    ou None quando o acervo não tem a chave."""
+    if REPO_TESTE:
+        for a in glob.glob(os.path.join(REPO_TESTE, "minuta", f"{chave}-*.md")):
+            return {"corpo": open(a, encoding="utf-8").read()}
+        return None
+    chamada = f"acervo ler casa minuta {chave} --json"
+    r = _acervo("ler", "casa", "minuta", chave, "--json")
+    if r.returncode == 1:
+        return None
+    if r.returncode != 0:
+        _falha(r, chamada)
+    try:
+        return json.loads(r.stdout)
+    except json.JSONDecodeError:
+        erro(f"indeterminável: `{chamada}` saiu 0 sem JSON: {_ultima(r.stdout)}", 5)
+
+
+def resolver(alvo):
+    """Número (41, 0041) vira a chave NNNN; slug casa com o nome do arquivo NNNN-<slug>.md."""
+    if alvo.isdigit():
+        return f"{int(alvo):04d}"
+    for chave, nome in fichas():
+        if alvo in nome:
+            return chave
+    return None
+
+
 def parse_secoes(texto):
     secoes = {}
     for m in re.finditer(r"^## Posição — (.+?)\s*$\n(.*?)(?=^## |\Z)", texto, re.M | re.S):
@@ -34,44 +107,33 @@ def parse_secoes(texto):
     return secoes
 
 
-def listar_arquivos():
-    return sorted(glob.glob(os.path.join(DIR, "[0-9][0-9][0-9][0-9]-*.md")))
-
-
-def main():
-    args = sys.argv[1:]
-    if args:
-        alvo = args[0]
-        achado = None
-        if alvo.isdigit():
-            num = f"{int(alvo):04d}"
-            for a in listar_arquivos():
-                if os.path.basename(a).startswith(num + "-"):
-                    achado = a
-                    break
-        else:
-            for a in listar_arquivos():
-                if alvo in os.path.basename(a):
-                    achado = a
-                    break
-        if not achado:
-            erro(f"minuta '{alvo}' não encontrada")
-        sys.stdout.write(open(achado, encoding="utf-8").read())
+def ler_uma(alvo):
+    chave = resolver(alvo)
+    doc = ficha(chave) if chave else None
+    if not doc:
+        erro(f"minuta '{alvo}' não encontrada no acervo (acervo listar casa minuta). "
+             f"Recém-publicada entra em até 10 min; recusada pela ingestão volta pela fila.")
+    if doc.get("corpo") is None:
+        print(f"minuta {chave}: retirada em {doc.get('retirada_em') or '?'} (formalizada)"
+              + (f"; a vigente: {doc['substituida_por']}" if doc.get("substituida_por") else ""))
         return
+    corpo = doc["corpo"]
+    sys.stdout.write(corpo if corpo.endswith("\n") else corpo + "\n")
 
-    cadeira = os.environ.get("PF_CADEIRA", "")
-    if not cadeira:
-        erro("exporte PF_CADEIRA=<cadeira>.")
 
+def listar(cadeira):
     hoje = datetime.date.today()
     linhas = []
-    for caminho in listar_arquivos():
-        texto = open(caminho, encoding="utf-8").read()
+    for chave, _nome in fichas():
+        doc = ficha(chave)
+        if not doc or doc.get("corpo") is None:
+            continue
+        texto = doc["corpo"]
         m_conv = re.search(r"^Convocadas: (.+)$", texto, re.M)
         convocadas = [c.strip() for c in m_conv.group(1).split(",")] if m_conv else []
-        m_titulo = re.match(r"^# (\d{4}) — (.+)$", texto, re.M)
-        num = m_titulo.group(1) if m_titulo else "????"
-        titulo = m_titulo.group(2).strip() if m_titulo else os.path.basename(caminho)
+        m_titulo = re.search(r"^# (\d{4}) — (.+)$", texto, re.M)
+        num = m_titulo.group(1) if m_titulo else chave
+        titulo = m_titulo.group(2).strip() if m_titulo else chave
         m_abre = re.search(r"^Aberta por: (.+?) · (\d{4}-\d{2}-\d{2})", texto, re.M)
         abridora = m_abre.group(1).strip() if m_abre else "?"
         # Quem abriu ve a propria minuta: a cobranca do 3o dia (protocolo §6) e dela.
@@ -80,22 +142,32 @@ def main():
         idade = "?"
         if m_abre:
             try:
-                d = datetime.date.fromisoformat(m_abre.group(2))
-                idade = str((hoje - d).days)
+                idade = str((hoje - datetime.date.fromisoformat(m_abre.group(2))).days)
             except ValueError:
                 pass
-        secoes = parse_secoes(texto)
-        body = secoes.get(cadeira, "")
+        body = parse_secoes(texto).get(cadeira, "")
         vazia = (not body) or PLACEHOLDER_CONV in body or PLACEHOLDER_ABRE in body
         papel = "abri" if cadeira == abridora else "convocada"
-        linhas.append(
-            f"{num}  {titulo}  aberta por {abridora}  {idade}d  {papel}  "
-            f"seção: {'vazia' if vazia else 'preenchida'}"
-        )
-
+        linhas.append(f"{num}  {titulo}  aberta por {abridora}  {idade}d  {papel}  "
+                      f"seção: {'vazia' if vazia else 'preenchida'}")
     if not linhas:
-        sys.exit(1)
+        erro(f"nenhuma minuta aberta no acervo convoca '{cadeira}' nem foi aberta por ela.", 1)
     print("\n".join(linhas))
+
+
+def main():
+    args = sys.argv[1:]
+    if args and args[0] in ("-h", "--help"):
+        print(__doc__.strip())
+        return
+    if args:
+        ler_uma(args[0])
+        return
+    cadeira = os.environ.get("PF_CADEIRA", "").strip()
+    cadeira = cadeira.removeprefix("claudinho-").removeprefix("claudinha-")
+    if not cadeira:
+        erro("exporte PF_CADEIRA=<cadeira>.", 2)
+    listar(cadeira)
 
 
 if __name__ == "__main__":

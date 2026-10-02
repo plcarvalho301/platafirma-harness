@@ -298,7 +298,10 @@ def test_minuta_escrever_puxa_antes_de_numerar_commita_e_empurra_para_main(tmp_p
     assert r.returncode == 0, r.stderr
     arq = wt / "minuta" / "0007-processamento-de-texto.md"
     assert r.stdout.strip() == str(arq)
-    assert "Card: #3060" in _no_origin(tmp_path, "minuta/0007-processamento-de-texto.md")
+    publicado = _no_origin(tmp_path, "minuta/0007-processamento-de-texto.md")
+    assert "Card: #3060" in publicado
+    # a ingestão recusa minuta sem Espécie: antes do primeiro ## (arq:0115 §7; #3225)
+    assert "\nEspécie: minuta\n" in publicado.split("\n## ", 1)[0]
     assert _main_do_origin(tmp_path) == _git("rev-parse", "HEAD", cwd=wt)
 
 

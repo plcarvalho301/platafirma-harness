@@ -110,6 +110,10 @@ done
 {
   echo "# ${N} — ${TITULO}"
   echo
+  # Espécie antes do primeiro ##: sem ela a ingestão recusa a minuta e ela não vira
+  # ficha do acervo, que é por onde `minuta ler` a lê (arq:0115 §2.1, §7; #3225).
+  echo "Espécie: minuta"
+  echo
   echo "Aberta por: ${CADEIRA} · $(date +%F)"
   echo "Convocadas: ${CONV_LINE}"
   echo "Fecha: ${FECHA}"
