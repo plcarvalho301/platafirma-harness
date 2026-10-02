@@ -153,6 +153,41 @@ def test_arvore_classifica_e_recusa_diagrama_sem_documento(suporte):
     assert all("sem documento" in r["motivo"] for r in recusas)
 
 
+def test_readme_com_especie_e_documento_e_o_resto_segue_ignorado(suporte):
+    """#2856 linha 24: `padrao/readme.md` com `Espécie:` ficava fora do acervo, em silêncio."""
+    forge, esp = suporte["forge"], suporte["esp"]
+    for p, txt in (("padrao/readme.md", "# Readme\n\nEspécie: padrao\n\n## Uso\n"),
+                   ("sub/README.md", "# so um leia-me\n")):
+        alvo = os.path.join(forge, p)
+        os.makedirs(os.path.dirname(alvo), exist_ok=True)
+        with open(alvo, "w", encoding="utf-8") as f:
+            f.write(txt)
+    _git(forge, "add", "-A")
+    _git(forge, "commit", "-q", "-m", "readmes")
+    ingerir.garantir_espelho(esp, forge)
+    sha = ingerir.resolver_rev(esp, None)
+    arvore = ingerir.ler_arvore(esp, sha)
+
+    docs, _, ignorados = ingerir.classificar(
+        arvore, lambda p: ingerir.declara_especie_no_espelho(esp, sha, p))
+    assert "padrao/readme.md" in docs
+    assert "README.md" in ignorados and "sub/README.md" in ignorados
+    # sem o leitor, todo README segue ignorado (o contrato antigo)
+    docs, _, ignorados = ingerir.classificar(arvore)
+    assert "padrao/readme.md" in ignorados and "padrao/readme.md" not in docs
+
+
+def test_readme_com_especie_na_arvore_de_pasta(tmp_path):
+    raiz = tmp_path / "arvore"
+    (raiz / "padrao").mkdir(parents=True)
+    (raiz / "padrao" / "readme.md").write_text("# R\n\nEspécie: padrao\n", encoding="utf-8")
+    (raiz / "README.md").write_text("# leia-me\n", encoding="utf-8")
+    arvore = ingerir.ler_arvore_dir(str(raiz))
+    docs, _, ignorados = ingerir.classificar(
+        arvore, lambda p: ingerir.declara_especie_na_pasta(str(raiz), p))
+    assert docs == ["padrao/readme.md"] and ignorados == ["README.md"]
+
+
 def test_corpos_por_sha_e_titulo(suporte):
     esp, sha = suporte["esp"], suporte["main"]
     docs, _, _ = ingerir.classificar(ingerir.ler_arvore(esp, sha))
