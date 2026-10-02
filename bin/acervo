@@ -80,6 +80,7 @@ uso (gramatica arq:0106 — acervo <ato> <particao> <entidade> [seletor]):
                   [--papel corpo|todos] [--cursor c] [--impressao <id>] [--baixar [<pasta>]]
                   o texto da obra pelo espelho de leitura, do comeco e em ordem
   acervo curar    obra --situacao|--expurgar|--restaurar|--promover|--reclassificar|--conceito <...>
+  acervo curar    obra --apagar <obra> [--apply]   tira do acervo, SEM VOLTA, a obra ja retirada (catalogo, motor, balde)
   acervo curar    obra --recortar <obra> · --reextrair <obra> [--metodo <m>] · --expurgar|--restaurar --espelhos
   acervo curar    obra --reextrair --lote [--ordem <lista>] [--apply] · --rejulgar --lote [--apply]
   acervo curar    obra --reextrair <id,id…|@arquivo> --bancada <pasta> [--metodo <slug>] [--refazer]

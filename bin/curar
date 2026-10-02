@@ -3,7 +3,7 @@
 # capacidade: classificacao
 # dono: claudinho-dados
 # use para: curadoria do acervo, reclassificação em lote e avulsa, expurgo, restauração, promoção, criação de conceito (nó), teia de conceitos (aresta entre conceitos), derivação entre obras e registro de obra não adquirida
-# atos: --reclassificar, --situacao, --expurgar, --restaurar, --promover, --recortar, --reextrair, --rejulgar, --conceito, --relacionar, --relacoes, --desrelacionar, --derivar, --derivacoes, --desderivar, --registrar-obra
+# atos: --reclassificar, --situacao, --expurgar, --restaurar, --apagar, --promover, --recortar, --reextrair, --rejulgar, --conceito, --relacionar, --relacoes, --desrelacionar, --derivar, --derivacoes, --desderivar, --registrar-obra
 import argparse
 import contextlib
 import datetime
@@ -43,6 +43,8 @@ USO = """uso:
   curar --situacao <obra>
   curar --expurgar <obra> [--sim]
   curar --restaurar <obra>
+  curar --apagar <obra> [--apply]                             tira do acervo, SEM VOLTA, a obra já retirada: catálogo,
+                                                              motor e balde (arq:0119 §9.2); sem --apply, o plano
   curar --promover <obra> --impressao <id>
   curar --recortar <obra> [--corte <slug>] [--apply]          impressão nova sobre o mesmo espelho; termina na selada
   curar --reextrair <obra> [--metodo <slug|digest>] [--apply] espelho novo do próprio arquivo; termina na selada
@@ -353,6 +355,48 @@ def acao_restaurar(obra: str, autor: str, como_json: bool, headers: dict) -> int
         print(json.dumps(data, indent=2, ensure_ascii=False))
     else:
         print(f"Obra {obra_id} restaurada com sucesso.")
+    return 0
+
+
+def acao_apagar(obra: str, autor: str, aplicar: bool, como_json: bool, headers: dict) -> int:
+    """`curar --apagar <obra> [--apply]`: tira do acervo, sem volta, a obra já retirada (arq:0119 §9.2;
+    #3191). Sai o catálogo (com impressões, seções, trechos e ligações), os índices do motor e, no
+    balde, o arquivo e os espelhos. Sem --apply, o plano. Exit 1 se algum objeto do balde não saiu."""
+    obra_id = resolver_obra_id(obra, headers, expurgadas=True)
+    url = f"{BASE}/acervo/obras/{obra_id}/apagar"
+    try:
+        resp = requests.post(url, json={"autor": autor, "aplicar": aplicar}, headers=headers)
+    except requests.exceptions.RequestException as e:
+        falha_indeterminavel(e)
+    if resp.status_code >= 500:
+        falha_indeterminavel(resp)
+    if resp.status_code != 200:
+        falha_problem(resp)
+    data = resp.json()
+    balde = data.get("balde") or {}
+    if como_json:
+        print(json.dumps(data, indent=2, ensure_ascii=False))
+        return 1 if balde.get("falhas") else 0
+    if data.get("modo") == "plano":
+        print(f"Plano: apagar a obra {data['obra_id']} ({data.get('titulo')}), SEM VOLTA")
+        print(f"  catálogo: {data['impressoes']} impressão(ões), {data['ligacoes_conceito']} ligação(ões) a "
+              f"conceito, {data['ligacoes_frente']} a frente, {data['itens_lote_reextracao']} item(ns) de lote "
+              f"de reextração, {data['itens_lote_ingestao']} de lote de ingestão")
+        print(f"  ponteiros de fora: {data['obras_fichadas_nela']} obra(s) fichada(s) nela, "
+              f"{data['derivacoes']} derivação(ões), {data['lastros_de_aresta']} lastro(s) de aresta")
+        mantido = " (fica: outra obra o usa)" if data.get("objeto_compartilhado") else ""
+        print(f"  balde: arquivo {data.get('objeto') or '-'}{mantido}, {data['espelhos']} espelho(s)")
+        print("  (plano seco — repita com --apply para apagar)")
+        return 0
+    print(f"Obra {data['obra_id']} apagada: catálogo, {len(data.get('indices_apagados') or [])} índice(s) "
+          f"no motor, {len(balde.get('apagados') or [])} objeto(s) no balde {balde.get('bucket')}")
+    if balde.get("mantidos"):
+        print(f"  ficaram no balde (outra obra usa): {', '.join(balde['mantidos'])}")
+    if balde.get("ausentes"):
+        print(f"  já ausentes do balde: {', '.join(balde['ausentes'])}")
+    if balde.get("falhas"):
+        print(f"  NÃO saíram do balde (o catálogo já saiu): {'; '.join(balde['falhas'])}")
+        return 1
     return 0
 
 
@@ -1886,6 +1930,7 @@ def main(argv=None):
     parser.add_argument("--expurgar", nargs="?", const="", default=None)
     parser.add_argument("--restaurar", nargs="?", const="", default=None)
     parser.add_argument("--espelhos", action="store_true", default=False)
+    parser.add_argument("--apagar", default=None)
     parser.add_argument("--recortar", default=None)
     # nargs="?": `--reextrair --lote` não leva obra (#3193)
     parser.add_argument("--reextrair", nargs="?", const="", default=None)
@@ -2037,6 +2082,8 @@ def main(argv=None):
         return acao_expurgar(args.expurgar, autor, args.como_json, headers, confirmado=args.confirmado)
     elif args.restaurar:
         return acao_restaurar(args.restaurar, autor, args.como_json, headers)
+    elif args.apagar:
+        return acao_apagar(args.apagar, autor, args.apply, args.como_json, headers)
     elif args.promover:
         if not args.impressao:
             sys.stderr.write("curar: erro: --promover exige --impressao <id>\n")
