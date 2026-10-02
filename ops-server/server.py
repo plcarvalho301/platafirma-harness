@@ -136,7 +136,6 @@ _sessao: ContextVar[str] = ContextVar("sessao", default="-")
 # vive no msg-mem (`sessao:{id}`), e por isso sobrevive ao restart da porta — fita viva
 # atravessa restart, e um join em RAM reabriria sessao nova do outro lado.
 TTL_SESSAO_S = 172800          # 48 h — o mesmo de `sessao:{id}`, `ledger:` e `giro:`
-_ULTIMA_SESSAO_ID: str | None = None
 
 # Ajudante de reidratacao (bin/_sessao/reidratar.py, arq:0110 §1; card #3145 decisao
 # 1). A porta roda no venv ops, SEM driver de banco (mesma razao de
@@ -170,23 +169,6 @@ def _reidratar_porta(sid: str) -> dict | None:
     except Exception as e:  # noqa: BLE001 — reidratar nunca pode travar a resolucao
         print(f"[reidratar] sessao:{sid} via `sessao ver` falhou: {e!r}", file=sys.stderr, flush=True)
         return None
-
-
-def _sessao_viva() -> str | None:
-    """Busca o sessao_id vivo da porta: ContextVar, chave Redis 'sessao:viva', ou última montada."""
-    try:
-        sid = _sessao.get()
-        if sid and sid != "-":
-            return sid
-    except Exception:
-        pass
-    try:
-        sid = _rc().get("sessao:viva")
-        if sid:
-            return str(sid)
-    except Exception:
-        pass
-    return _ULTIMA_SESSAO_ID
 
 
 def _rc():
@@ -2039,13 +2021,7 @@ async def monta_sessao(cadeira: str = "", atualizar: bool = True, chapeu: str = 
     _delta = None
 
     if not r.get("erro") and _sessao_id:
-        global _ULTIMA_SESSAO_ID
-        _ULTIMA_SESSAO_ID = _sessao_id
         _sessao.set(_sessao_id)
-        try:
-            _rc().set("sessao:viva", _sessao_id, ex=TTL_SESSAO_S)
-        except Exception:
-            pass
         _cunhou = bool((r.get("sessao") or {}).get("cunhada_agora"))
         _oid = r.get("ordem_id") or (r.get("sessao") or {}).get("ordem_id") or "-"
         _audit(tool="sessao", evento="sessao_aberta",
@@ -2103,7 +2079,7 @@ def _sessao_resolve(sessao_id: str | None) -> dict:
     """cadeira/ordem/sujeito da sessão: SÓ o `sessao_id` que a fita porta, cunhado por
     `monta_sessao`.
 
-    Se ausente/vazio/'-', tenta o default da sessão viva (Item 12 #3065). `sessao:{id}`
+    Se ausente/vazio/'-', NAO ha default: cadeira vazia (#3236; arq:0101 §1). `sessao:{id}`
     ausente do msg-mem (promocao da stack motor recria o msg-mem vazio, card #3145
     decisao 1): reidrata por `_reidratar_porta` antes de devolver cadeira vazia.
 
@@ -2114,8 +2090,11 @@ def _sessao_resolve(sessao_id: str | None) -> dict:
     Ausente no registro: string vazia, nunca fallback para cadeira/USER/valor fixo —
     quem injeta no execve (`_run_verbo_blocking`) trata vazio como "nao entra".
     """
-    if not sessao_id or sessao_id == "-":
-        sessao_id = _sessao_viva()
+    # Sem `sessao_id` a porta NAO adivinha (arq:0101 §1, regra (c); incidente #3236,
+    # decisao do dono de 02/10/2026). O default da "sessao viva" (item 12 da #3065) lia
+    # uma chave global, gravada por qualquer monta_sessao de qualquer cadeira: a ultima a
+    # abrir virava a sessao de todas, e `descansar fita --encerra-sessao` apagava a sessao
+    # de outra fita. Agora sai cadeira vazia e o verbo recusa alto.
     if sessao_id:
         sessao_id = _uuid_valido(sessao_id) or sessao_id   # legado 32-hex normaliza
     out = {"sessao_id": sessao_id or "-", "ordem_id": "-", "cadeira": "", "sujeito": "",
