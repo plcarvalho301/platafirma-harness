@@ -118,3 +118,25 @@ def test_recusa_da_api_sai_1_com_a_mensagem(tmp_path):
     proc, _, _ = _run(["editar", "42", "--titulo", "t"], tmp_path, recusa=True)
     assert proc.returncode == 1
     assert "recusado pela maquina" in proc.stderr
+
+
+def test_comentar_com_a_opcao_stdin_le_o_corpo_do_stdin(tmp_path):
+    """#2856 linhas 49 e 50: `comentar <id> --stdin` gravava «--stdin» como o corpo do comentário."""
+    proc, chamadas, corpo = _run(["comentar", "42", "--stdin"], tmp_path, stdin="o texto vem do stdin\n")
+    assert proc.returncode == 0, proc.stderr
+    assert chamadas == ["POST http://127.0.0.1:9/api/itens/42/comentarios"]
+    assert corpo == {"corpo": "<p>o texto vem do stdin</p>"}
+
+
+def test_comentar_recusa_opcao_desconhecida_sem_chamar_api(tmp_path):
+    proc, chamadas, _ = _run(["comentar", "42", "--sem-isso"], tmp_path, stdin="x\n")
+    assert proc.returncode == 2
+    assert "opção desconhecida '--sem-isso'" in proc.stderr
+    assert chamadas == []
+
+
+def test_comentar_texto_de_varias_palavras_com_travessao_segue_sendo_corpo(tmp_path):
+    proc, chamadas, corpo = _run(["comentar", "42", "--versão 2 saiu"], tmp_path)
+    assert proc.returncode == 0, proc.stderr
+    assert chamadas == ["POST http://127.0.0.1:9/api/itens/42/comentarios"]
+    assert corpo == {"corpo": "<p>--versão 2 saiu</p>"}

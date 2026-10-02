@@ -502,3 +502,18 @@ def test_sanear_cache_sujo_salva_em_wip_e_destaca_uma_vez_so(tmp_path):
     r = _repo(tmp_path, bancada, "s9", "sanear", "--relatar")
     assert r.returncode == 0, r.stdout
     assert "conforme:" in r.stdout
+
+
+def test_procurar_aceita_o_termo_posicional_e_o_prefixo_depois(tmp_path):
+    """#2856 linha 82: `repo procurar <repo> <termo>` recusava o termo posicional (exit 2)."""
+    bancada = _montar(tmp_path)
+    _abrir_42(tmp_path, bancada)
+    posicional = _repo(tmp_path, bancada, "s1", "procurar", "demo", "x")
+    com_flag = _repo(tmp_path, bancada, "s1", "procurar", "demo", "--termo", "x")
+    assert posicional.returncode == 0, posicional.stderr
+    assert "LEIA.md" in posicional.stdout and posicional.stdout == com_flag.stdout
+    com_prefixo = _repo(tmp_path, bancada, "s1", "procurar", "demo", "x", "LEIA.md")
+    assert com_prefixo.returncode == 0 and "LEIA.md" in com_prefixo.stdout
+    assert _repo(tmp_path, bancada, "s1", "procurar", "demo", "x", "LEIA.md", "sobra").returncode == 2
+    sem_termo = _repo(tmp_path, bancada, "s1", "procurar", "demo")
+    assert sem_termo.returncode == 2 and "termo obrigat" in sem_termo.stderr
