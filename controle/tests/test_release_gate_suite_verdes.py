@@ -339,3 +339,14 @@ def test_estado_sem_familia_relata_sem_current_e_nao_sai_1(amb_vermelho):
     est = amb_vermelho.run("estado")
     assert est.returncode == 0, est.stdout + est.stderr
     assert "sem current" in est.stdout
+
+
+def test_listar_casa_prefixo_de_caminho_e_nao_so_diretorio(tmp_path):
+    """#2856 linha 86: `release listar <familia> rag/docker-compose` respondia «nenhum arquivo»."""
+    amb = Ambiente(tmp_path, _python_de_sistema(), TESTE_OK,
+                   extra={"rag/docker-compose.gpu.yml": "services: {}\n"})
+    assert amb.run("promover", amb.FAMILIA).returncode == 0
+    parcial = amb.run("listar", amb.FAMILIA, "rag/docker-compose")
+    assert parcial.returncode == 0, parcial.stdout + parcial.stderr
+    assert "rag/docker-compose.gpu.yml" in parcial.stdout
+    assert "nenhum arquivo" not in parcial.stdout

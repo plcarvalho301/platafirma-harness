@@ -548,7 +548,7 @@ cmd_listar() {
 
   local files
   if [ -n "$prefixo" ]; then
-    files="$("$GIT" -C "$TARGET_DIR" ls-files -- "$prefixo" 2>/dev/null || true)"
+    files="$("$GIT" -C "$TARGET_DIR" ls-files -- "$prefixo" "$prefixo*" 2>/dev/null || true)"
   else
     files="$("$GIT" -C "$TARGET_DIR" ls-files 2>/dev/null || true)"
   fi

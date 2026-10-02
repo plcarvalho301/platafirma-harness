@@ -262,6 +262,13 @@ def test_estado_texto_sem_flag_nao_muda(path_ok):
         json.loads(r.stdout)
 
 
+def test_estado_de_alvo_sem_conteiner_nem_unit_diz_que_nao_ha(path_ok):
+    # #2856 linha 88: depois de `infra down`, `estado <stack>` só devolvia «Unit … could not be found»
+    r = _roda("estado", "conversor", path_dir=path_ok, checa_exit=0)
+    assert "conversor: sem contêiner" in r.stdout
+    assert "could not be found" not in r.stdout + r.stderr
+
+
 # --- infra saude --json --------------------------------------------------
 
 def test_saude_json_formato(path_ok):

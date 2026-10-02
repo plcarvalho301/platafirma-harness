@@ -306,6 +306,7 @@ _estado_texto() {
   local alvo="${1:-}"
   if [ -n "$alvo" ]; then
     e_conteiner "$alvo" && { docker ps -a --format '{{.Names}}\t{{.Status}}' | grep -E "^$alvo\\s" || echo "$alvo: não está em execução"; return; }
+    e_unit "$alvo" || { echo "$alvo: sem contêiner (parado ou removido) e sem unit de usuário com esse nome"; return; }
     systemctl --user status "$alvo" --no-pager -n 0 || true
     return
   fi
