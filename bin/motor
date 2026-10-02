@@ -889,6 +889,11 @@ def main():
     elif a and a[0] == "buscar":
         sys.stderr.write("motor: assumindo instancia 'rag' para `buscar` com aviso\n")
         a = ["rag"] + a
+        # Lote pela tool (`ato: buscar`, args [rag, buscar, casa, ...]): a instancia e o ato chegam
+        # repetidos atras do `buscar` que a tool ja pos na frente (#2856 linha 23).
+        if len(a) >= 4 and a[2] in d and a[3] == "buscar":
+            sys.stderr.write("motor: `buscar <inst> buscar` desduplicado com aviso\n")
+            a = a[2:]
     if not a:
         uso()
     if a[0] == "listar":
