@@ -330,3 +330,12 @@ def test_suite_nao_medida_so_sobe_com_a_flag_declarada(tmp_path):
     assert r.returncode == 0, r.stdout + r.stderr
     assert "NAO MEDIDA" in r.stderr
     assert "no ar:" in r.stdout
+
+
+def test_estado_sem_familia_relata_sem_current_e_nao_sai_1(amb_vermelho):
+    """#2856 linha 3: `estado` le e nao julga; familia sem current e uma linha, nao exit 1."""
+    r = amb_vermelho.run("promover", amb_vermelho.FAMILIA)
+    assert r.returncode == 4, r.stdout + r.stderr
+    est = amb_vermelho.run("estado")
+    assert est.returncode == 0, est.stdout + est.stderr
+    assert "sem current" in est.stdout

@@ -377,7 +377,7 @@ cmd_estado() {
       fi
     else
       if [ "$rc" -eq 1 ]; then
-        if [ "$pior_exit" -lt 1 ]; then pior_exit=1; fi
+        # familia sem current e estado a relatar, nao julgamento: `estado` le e nao sai 1 por isso (#2856 linha 3)
         if [ "$como_json" -eq 1 ]; then
           json_records+=("$(python3 -c 'import sys, json; print(json.dumps({"familia": sys.argv[1], "estado": "sem current"}))' "$f")")
         else
