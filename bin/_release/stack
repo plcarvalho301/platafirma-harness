@@ -238,7 +238,7 @@ resolve() {  # $1=declarado $2=base do relativo ; falha fora das raizes de produ
 fora_das_raizes() {  # $1=campo $2=declarado $3=base do relativo
   echo "recusa: $1 de \"$STACK\" declarado fora das raizes de producao: $2" >&2
   echo "        vale relativo a $3, ou absoluto sob $PLATAFIRMA_INSTANCIA ou $PF_RELEASE_RAIZ." >&2
-  echo "        conserto: reescrever pelo acervo stack def (nunca UPDATE a mao)." >&2
+  echo "        conserto: reescrever pelo acervo stack import (nunca UPDATE a mao)." >&2
   exit 3
 }
 

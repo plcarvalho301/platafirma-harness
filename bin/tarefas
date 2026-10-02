@@ -49,7 +49,7 @@ uso:
   tarefas ler|ver <id>                    item em texto: cabeçalho, ancestrais,
                                           corpo e filhas diretas
   tarefas criar "<título>" [--desc "<txt>"|--desc-stdin]
-                [--nivel épico|feature|story] [--cadeira <c>] [--pai <id>]
+                [--nivel épico|feature|story] [--cadeira <c>] [--pai <id>] [--incidente]
                                           default: story. Débito técnico não é card: `dt admitir`.
                                           Nascer fora de `captada`, ou sair dela, exige o
                                           corpo no padrão do nível (arq:0096)
@@ -499,6 +499,12 @@ comentar() {
   [ -z "$id" ] && { echo "uso: tarefas comentar <id> [\"<txt>\"] (ou corpo em stdin)" >&2; exit 2; }
   id=$(so_id "$id") || exit 2
   local txt="${2:-}"
+  # Opção no lugar do texto não é corpo (#2856 linhas 49 e 50): `--stdin` manda ler o stdin; outra
+  # opção de uma palavra só é recusada, em vez de gravada como comentário.
+  if [[ "$txt" =~ ^--[a-zA-Z][a-zA-Z0-9-]*$ ]]; then
+    [ "$txt" = "--stdin" ] || { echo "erro: tarefas comentar: opção desconhecida '$txt'; o corpo vai entre aspas ou em stdin." >&2; exit 2; }
+    txt=""
+  fi
   if [ -z "$txt" ] && [ ! -t 0 ]; then
     txt="$(cat)"
   fi

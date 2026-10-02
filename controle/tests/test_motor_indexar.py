@@ -79,10 +79,11 @@ def api(tmp_path):
         "ajustes": [], "nao_e_ajuste": {}}}))
     _API.pedidos = []
 
-    def roda(*args):
+    def roda(*args, sem_instancia=False):
         env = {**os.environ, "PF_MOTOR_REG": str(registro), "PLATAFIRMA_INSTANCIA": str(instancia),
                "OPS_LOG_DIR": str(tmp_path / "ops"), "PF_CADEIRA": "ia"}
-        return subprocess.run([sys.executable, str(MOTOR), "rag", *args], capture_output=True, text=True,
+        inicio = [] if sem_instancia else ["rag"]
+        return subprocess.run([sys.executable, str(MOTOR), *inicio, *args], capture_output=True, text=True,
                               env=env, timeout=60, check=False)
 
     yield roda, _API.pedidos
@@ -134,3 +135,13 @@ def test_biblioteca_e_obra_sao_a_mesma_particao_e_a_api_recebe_obra(api):
         assert r.returncode == 0, r.stderr
         assert pedidos[-1][1] == "/search" and pedidos[-1][3]["particao"] == "obra"
         assert pedidos[-1][3]["pergunta"] == "pergunta"
+
+
+def test_lote_pela_tool_com_instancia_e_ato_repetidos_busca_na_particao_pedida(api):
+    # #2856 linha 23: `ato: buscar` com args [rag, buscar, casa, ...] chegava como
+    # `motor buscar rag buscar casa ...`: buscava em biblioteca, com a pergunta «rag buscar casa ...».
+    roda, pedidos = api
+    r = roda("buscar", "rag", "buscar", "casa", "pergunta", sem_instancia=True)
+    assert r.returncode == 0, r.stderr
+    assert "sem particao" not in r.stderr
+    assert pedidos[-1][3]["particao"] == "casa" and pedidos[-1][3]["pergunta"] == "pergunta"

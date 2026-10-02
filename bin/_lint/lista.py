@@ -129,7 +129,19 @@ def _acervo_bin() -> str:
     return str(local) if local.exists() else "acervo"
 
 
-def resolver_lista(chave: str) -> Optional[Dict[str, Any]]:
+def resolver_lista(chave: str, especies: tuple = (ESPECIE,)) -> Optional[Dict[str, Any]]:
+    """Obtem a regua `chave` do acervo, ja lida, na primeira de `especies` que a serve.
+
+    Regua que mora no acervo como `padrao` (styleguide-da-wiki) le-se pelo mesmo parse.
+    """
+    for especie in especies:
+        lista = _resolver_na_especie(chave, especie)
+        if lista:
+            return lista
+    return None
+
+
+def _resolver_na_especie(chave: str, especie: str) -> Optional[Dict[str, Any]]:
     """Obtem a lista de verificacao `chave` do acervo, ja lida.
 
     Devolve o dict de parse_lista acrescido de `id` (= chave), ou None se a lista nao
@@ -139,7 +151,7 @@ def resolver_lista(chave: str) -> Optional[Dict[str, Any]]:
         return None
     try:
         proc = subprocess.run(
-            [_acervo_bin(), "ler", "casa", ESPECIE, chave],
+            [_acervo_bin(), "ler", "casa", especie, chave],
             capture_output=True, text=True, timeout=30,
         )
     except (subprocess.SubprocessError, OSError):

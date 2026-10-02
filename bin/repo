@@ -119,7 +119,7 @@ uso:
   repo estado    [<repo>] [--json]
   repo listar    <repo> [<prefixo>] [--json]
   repo ler       <repo> <caminho>
-  repo procurar  <repo> --termo <termo> [<prefixo>] [--json]
+  repo procurar  <repo> <termo> [<prefixo>] [--json]   (a forma --termo <termo> segue valendo)
   repo historico <repo> [<caminho>] [--n <N>] [--json]
   repo diff      <repo> [<caminho>] [--staged]
   repo ramo      <repo> [<card>] [--slug <slug>]
@@ -741,7 +741,7 @@ cmd_ler() {
 }
 
 cmd_procurar() {
-  local como_json=0 repo="" termo="" prefixo=""
+  local como_json=0 repo="" termo="" prefixo="" extra=""
   while [ $# -gt 0 ]; do
     case "$1" in
       --json) como_json=1; COMO_JSON=1; shift ;;
@@ -757,6 +757,8 @@ cmd_procurar() {
           repo="$1"
         elif [ -z "$prefixo" ]; then
           prefixo="$1"
+        elif [ -z "$extra" ]; then
+          extra="$1"
         else
           morre "argumento excedente: '$1'" 2
         fi
@@ -766,7 +768,13 @@ cmd_procurar() {
   done
 
   [ -n "$repo" ] || morre "repo obrigatório para procurar" 2
-  [ -n "$termo" ] || morre "--termo <termo> é obrigatório para procurar" 2
+  # O termo também vai posicional: repo procurar <repo> <termo> [<prefixo>] (#2856 linha 82).
+  # Com --termo dado, o primeiro posicional depois do repo segue sendo o prefixo.
+  if [ -z "$termo" ] && [ -n "$prefixo" ]; then
+    termo="$prefixo"; prefixo="$extra"; extra=""
+  fi
+  [ -z "$extra" ] || morre "argumento excedente: '$extra'" 2
+  [ -n "$termo" ] || morre "termo obrigatório: repo procurar <repo> <termo> [<prefixo>]" 2
 
   local c; c="$(clone_de "$repo")" || exit $?
 
