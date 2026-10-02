@@ -67,4 +67,9 @@ def verificar_fossil(
                                     )
                                 )
 
+    # Documento de casa lido por caminho (arq:0115 §11.3; pós-morte do #3225): o estoque,
+    # sobre todo arquivo rastreado (instrução de agente inclusive), como aviso.
+    from .casa_por_caminho import varrer
+    apontamentos.extend(varrer(raiz, alvo))
+
     return apontamentos
