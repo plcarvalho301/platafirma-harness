@@ -53,6 +53,12 @@ REGUA_ESPECIES = ("lista-de-verificacao", "padrao")
 MODOS_COM_REGUA = ("revisar", "avaliar")
 CONTAS_SEGREGADAS = ("jaiminho", "quinzinho")              # as que `seg isolacao medir` mede
 CABECALHO_GERADO = "# GERADO por agente — não editar"
+# A porta (incidente #3223, ordem do dono 01/10/2026): o agente declara tools com o MESMO nome que o conector
+# publica à cadeira, escopadas pelo agente, e abre a sessão pela mesma tool (`monta_sessao`).
+PORTA = "mcp__claudinho-mcp__"
+PORTA_BASE = ("run_command", "read_file", "write_file", "monta_sessao")   # as que a porta publica fora do ferramental
+ABRE = PORTA + "monta_sessao"
+SEM_ESCOPO = PORTA + "run_command"      # alcança todo verbo: o agente perderia o escopo da declaração
 OLLAMA_URL = os.environ.get("OLLAMA_BASE_URL", "http://localhost:11434")
 
 
@@ -122,6 +128,8 @@ def _valida_execucao(d: dict, pre: str) -> list[str]:
         for f in ferr:
             if f in PROIBIDAS:
                 p.append(f"{pre}ferramenta proibida: {f}")
+            elif f == SEM_ESCOPO:
+                p.append(f"{pre}ferramenta sem escopo: {f} alcança todo verbo; declare as tools de verbo do agente")
     teto = d.get("teto")
     chaves = ["turnos", "tokens_execucao", "tokens_janela"]
     if isinstance(modelo, dict) and modelo.get("familia") == "qwen" and modelo.get("local"):
@@ -186,6 +194,10 @@ def valida(decl, stem: str) -> list[str]:
                 if not (isinstance(lig, list) and k in lig):
                     p.append(f"por_ligacao.{k}: a ligação não está em ligacoes")
                 p += _valida_execucao(efetiva(decl, k), f"por_ligacao.{k}: ")
+    if tem_projecao(decl):
+        ferr_proj = efetiva(decl, "delegado").get("ferramentas")
+        if isinstance(ferr_proj, list) and ferr_proj and ABRE not in ferr_proj:
+            p.append(f"ferramentas da projeção: falta {ABRE}, a tool com que o agente abre a sessão (a mesma da cadeira)")
     sup = decl.get("suplanta")
     if sup is not None:
         if sup not in EMBUTIDOS:
@@ -230,11 +242,15 @@ def projecao_claude(decl: dict) -> str:
     cadeira = dono["cadeira"]
     fixa = cadeira != "{cadeira}"
     regua = decl.get("regua")
-    montar = f"expediente montar --perfil cadeirinha --chapeu {chapeu} --modo {modo}"
-    if regua:
-        montar += f" --regua {regua}"
     fecho = decl["fecho"]
-    abrir = f"sessao abrir {cadeira}" if fixa else "sessao abrir <a cadeira que a delegação nomeia>"
+    args = [f'cadeira="{cadeira}"' if fixa else "cadeira=<a cadeira que a delegação nomeia>",
+            f'chapeu="{chapeu}"' if dono.get("chapeu") else "chapeu=<o chapéu que a delegação nomeia>",
+            'perfil="cadeirinha"', f'modo="{modo}"']
+    if regua:
+        args.append(f'regua="{regua}"')
+    args += [f'agente="{slug}"', "origem=<o sessao_id que a delegação trouxe>",
+             "pergunta=<a mensagem de delegação, literal>"]
+    abrir = ", ".join(f"`{a}`" for a in args)
     lente = f"a lente da cadeira `{cadeira}`, chapéu `{chapeu}`" if fixa else "a lente da cadeira que a delegação nomeia"
     return "\n".join([
         "---",
@@ -249,13 +265,14 @@ def projecao_claude(decl: dict) -> str:
         f"Você é o agente `{slug}` da caixa de ferramentas da PlataFirma: modo `{modo}`, {lente}. "
         "Não tem conduta nem dono: recebe uma tarefa e devolve um resultado.",
         "",
-        "Primeira ação, antes de qualquer outra: abra a sua sessão e monte a lente.",
+        "Primeira ação, antes de qualquer outra: abra a sua sessão pela mesma tool da cadeira, `monta_sessao`.",
         "",
-        f"1. `{abrir}` — a sessão é sua, da cadeira do agente. A origem (a sessão de quem te chamou) entra pelo hook do "
-        "posto; se faltar, passe `--origem <o sessao_id que a delegação trouxe>`. Se a porta não abrir a sessão, "
-        "siga com o session id do próprio Code, sem desligar a poda e sem bloquear.",
-        f"2. `{montar}`, com a mensagem de delegação em stdin. Leia o pacote devolvido e trabalhe por ele: "
-        "a peça `modo` diz o que fazer e o que devolver.",
+        f"1. `monta_sessao` com {abrir}. A sessão é sua, da cadeira do agente, ligada à de quem te chamou.",
+        "2. Passe o `sessao_id` que ela devolve em toda chamada de tool seguinte. Leia o pacote devolvido e trabalhe "
+        "por ele: a peça `modo` diz o que fazer e o que devolver.",
+        "",
+        "Se `monta_sessao` ou outra tool da sua lista faltar, ou se `monta_sessao` voltar erro, pare antes do trabalho "
+        "e devolva só a lista do que faltou ou o erro.",
         "",
         "Depois do pacote, o fecho:",
         "",
@@ -296,6 +313,34 @@ def confere_projecoes(posto: Path, decls: dict, problemas: dict) -> list[str]:
             continue
         if stem not in existentes:
             achados.append(f"projeção ausente: .claude/agents/{stem}.md (agente projetar)")
+    return achados
+
+
+# --- as tools contra o conector (incidente #3223) --------------------------------------------
+
+def tools_do_conector() -> set[str] | None:
+    """Os nomes que a porta publica à cadeira: as de base mais uma por verbo do ferramental, pela mesma lista que
+    a porta projeta (`acervo listar ferramental --tools`). None quando o acervo não responde."""
+    try:
+        p = subprocess.run([str(Path(os.environ.get("PF_BIN") or _AQUI) / "acervo"), "listar", "ferramental", "--tools"],
+                           capture_output=True, text=True, timeout=60)
+        linhas = json.loads(p.stdout) if p.returncode == 0 else None
+    except (OSError, subprocess.SubprocessError, ValueError):
+        return None
+    if not isinstance(linhas, list):
+        return None
+    return {PORTA + t for t in PORTA_BASE} | {PORTA + str(l["tool"]) for l in linhas if isinstance(l, dict) and l.get("tool")}
+
+
+def fora_do_conector(stem: str, decl: dict, conector: set[str]) -> list[str]:
+    """Tool de porta declarada que o conector não publica, em qualquer ligação."""
+    achados: list[str] = []
+    for lig in [None, *(decl.get("por_ligacao") or {})]:
+        exe = efetiva(decl, lig) if lig else decl
+        for f in exe.get("ferramentas") or []:
+            if isinstance(f, str) and f.startswith(PORTA) and f not in conector:
+                achados.append(f"fora do conector: agentes/{stem}.yaml{' por_ligacao.' + lig if lig else ''} "
+                               f"declara {f}, que a porta não publica")
     return achados
 
 
@@ -437,6 +482,13 @@ def ato_projetar(conferir: bool, base_ref: str | None) -> int:
     achados = [f"declaração inválida: agentes/{s}.yaml — {a}" for s, lista in problemas.items() for a in lista]
     achados += confere_projecoes(posto, decls, problemas)
     avisos: list[str] = []
+    conector = tools_do_conector()
+    if conector is None:
+        avisos.append("acervo listar ferramental --tools não respondeu: as tools não foram conferidas contra o conector")
+    else:
+        for stem, d in decls.items():
+            if stem not in problemas:
+                achados += fora_do_conector(stem, d, conector)
     for stem, d in decls.items():
         if d.get("modo") in MODOS_COM_REGUA and not d.get("regua") and stem not in problemas:
             avisos.append(f"{stem}: modo {d['modo']} sem regua; vale a régua do chapéu (modo revisar, «Sem régua servida»)")
