@@ -255,6 +255,14 @@ exigir_segredos() {
   [ "$falta" -eq 0 ] || { echo "recusa: faltam $falta segredo(s) de \"$STACK\" — ver: seg segredo exigidos $STACK" >&2; exit 1; }
 }
 
+# `config` imprime o ambiente ja interpolado: o valor de variavel de segredo iria parar no transcrito
+# da sessao (#2856 linha 76). Mascara o valor quando o NOME sugere segredo; o nome e o resto ficam.
+mascara_segredos() {
+  sed -E \
+    -e 's/^([[:space:]]*(- +)?[A-Za-z0-9_]*(SECRET|TOKEN|PASSWORD|PASSWD|CREDENTIAL|API_?KEY|PRIVATE_?KEY|_KEY|COOKIE)[A-Za-z0-9_]*[[:space:]]*[:=][[:space:]]*).+$/\1***/I' \
+    -e 's/^([[:space:]]*"[A-Za-z0-9_]*(SECRET|TOKEN|PASSWORD|PASSWD|CREDENTIAL|API_?KEY|PRIVATE_?KEY|_KEY|COOKIE)[A-Za-z0-9_]*"[[:space:]]*:[[:space:]]*)"[^"]*"/\1"***"/I'
+}
+
 compose() {
   local env_args=()
   [ -z "$ENV_FILE" ] || env_args=(--env-file "$ENV_FILE")
@@ -506,7 +514,12 @@ case "$ATO" in
     materializar_env
     export PF_RELEASE_SHA="$(basename "$ARVORE")"
     cd "$(dirname "$COMPOSE")"
-    rc=0; compose "$@" || rc=$?
+    rc=0
+    if [ "$ACAO" = "config" ]; then
+      compose "$@" | mascara_segredos || rc=$?
+    else
+      compose "$@" || rc=$?
+    fi
     if [ "$rc" -eq 0 ] && [ "$ACAO" = "up" ]; then gravar_atual "$(basename "$ARVORE")"; fi
     exit "$rc"
     ;;
