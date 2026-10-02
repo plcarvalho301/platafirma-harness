@@ -108,6 +108,16 @@ def main() -> int:
     for apt in achados_canonico:
         bloqueantes.append(("canonico", apt))
 
+    # 7. casa por caminho (staged): linha acrescentada que lê documento de casa pelo caminho
+    # do arquivo em vez do acervo (arq:0115 §11.3; pós-morte do incidente #3225).
+    try:
+        from _lint.casa_por_caminho import bloqueantes_no_stage as casa_bloqueantes_no_stage
+    except ImportError:
+        from casa_por_caminho import bloqueantes_no_stage as casa_bloqueantes_no_stage
+    achados_casa, _ = casa_bloqueantes_no_stage(raiz)
+    for apt in achados_casa:
+        bloqueantes.append(("casa-por-caminho", apt))
+
     if bloqueantes:
         print("pre-commit: commit bloqueado por violacao de regra bloqueante:\n", file=sys.stderr)
         for modulo, apt in bloqueantes:
