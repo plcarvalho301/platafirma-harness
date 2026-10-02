@@ -171,15 +171,39 @@ def ler_arvore(esp, sha):
     return [p.decode("utf-8", "surrogateescape") for p in r.stdout.split(b"\0") if p]
 
 
-def classificar(arvore):
-    """(docs, diagramas, ignorados). Doc = *.md fora README; diagrama = .mmd/.d2."""
+RE_ESPECIE_CABECALHO = re.compile(r"^Espécie:[ \t]*\S", re.MULTILINE)
+
+
+def _declara_especie(texto):
+    """`Espécie:` antes do primeiro `## ` (o cabeçalho do documento de casa, arq:0115 §6)."""
+    return bool(RE_ESPECIE_CABECALHO.search(texto.split("\n## ", 1)[0]))
+
+
+def declara_especie_no_espelho(esp, sha, caminho):
+    r = _suporte.git(esp, "show", f"{sha}:{caminho}")
+    return r.returncode == 0 and _declara_especie(r.stdout.decode("utf-8", "replace"))
+
+
+def declara_especie_na_pasta(raiz, caminho):
+    try:
+        with open(os.path.join(raiz, caminho), encoding="utf-8", errors="replace") as f:
+            return _declara_especie(f.read())
+    except OSError:
+        return False
+
+
+def classificar(arvore, declara_especie=None):
+    """(docs, diagramas, ignorados). Doc = *.md fora README; diagrama = .mmd/.d2.
+    README é ignorado, salvo o que declara `Espécie:` no cabeçalho (`padrao/readme.md` é documento de
+    casa, #2856 linha 24). `declara_especie(caminho)` lê o blob; sem ela, todo README segue ignorado."""
     docs, diagramas, ignorados = [], [], []
     for p in arvore:
         base = p.rsplit("/", 1)[-1]
         if "\n" in p:
             ignorados.append(p)
         elif base.endswith(".md"):
-            (ignorados if base.lower().startswith("readme") else docs).append(p)
+            readme = base.lower().startswith("readme") and not (declara_especie and declara_especie(p))
+            (ignorados if readme else docs).append(p)
         elif RE_DIAGRAMA.search(base):
             diagramas.append(p)
         else:
@@ -508,7 +532,7 @@ def main(argv=None):
             morre("--arvore e @<rev> se excluem: a arvore ja e a fonte.", 2)
         raiz = validar_arvore(args.arvore)
         arvore = ler_arvore_dir(raiz)
-        docs, diagramas, ignorados = classificar(arvore)
+        docs, diagramas, ignorados = classificar(arvore, lambda p: declara_especie_na_pasta(raiz, p))
         recusas_locais = recusas_diagrama(diagramas, arvore)
         if args.so:
             docs = [p for p in docs if args.so in p]
@@ -540,7 +564,7 @@ def main(argv=None):
         sys.stderr.write(f"acervo ingerir casa: {repo} sem @<rev> = origin/main em {sha}\n")
 
     arvore = ler_arvore(esp, sha)
-    docs, diagramas, ignorados = classificar(arvore)
+    docs, diagramas, ignorados = classificar(arvore, lambda p: declara_especie_no_espelho(esp, sha, p))
     recusas_locais = recusas_diagrama(diagramas, arvore)
     if args.so:
         docs = [p for p in docs if args.so in p]
