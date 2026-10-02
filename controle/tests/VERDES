@@ -65,5 +65,7 @@ tests/test_bot.py
 tests/test_motor_indexar.py
 tests/test_stack_mascara_segredos.py
 tests/test_pesquisar_consultar_palavras.py
+tests/test_acervo_psql_c.py
+tests/test_fila_msgid.py
 tests/test_contrato_minuta_ler.py
 tests/test_contrato_casa_por_caminho.py

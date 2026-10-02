@@ -37,12 +37,12 @@ CHAVE_PY=""; CHAVE_HASH=""
 uso() {
   cat >&2 <<EOF
 uso:
-  $VERBO rodar <nome> [<alvo>] [--portao] [--arvore <caminho>] [--chave <nome>]
+  $VERBO rodar <nome> [<alvo>...] [--portao] [--arvore <caminho>] [--chave <nome>]
   $VERBO detectar <nome> [--chave <nome>]
   $VERBO inventario [<nome>|--all] [--json]
 
   <nome> = nome de repositório ou stack registrado em registro/venvs.json
-  <alvo> = caminho dentro da subárvore de teste (sem ele, a suíte inteira)
+  <alvo> = caminho dentro da subárvore de teste, um ou mais (sem ele, a suíte inteira)
   --portao: roda só a lista do portão da subárvore (<sub>/tests/VERDES ou <sub>/VERDES);
             com <nome> = repositório e sem <alvo>, toda chave dele que declara
             subárvore de teste, e passa quando todas passam (arq:0116 §6)
@@ -579,7 +579,7 @@ ato_inventario() {
 }
 
 ato_rodar() {
-  local nome="" alvo="" chave="" arvore="" portao=0 EM_ARVORE=0 c rc
+  local nome="" alvo="" chave="" arvore="" portao=0 EM_ARVORE=0 c rc extras=() extras_resolvidos=()
   while [ $# -gt 0 ]; do
     case "$1" in
       --chave) shift; [ $# -gt 0 ] || morre "--chave exige um valor" 2; chave="$1"; shift ;;
@@ -588,7 +588,7 @@ ato_rodar() {
       *)
         if [ -z "$nome" ]; then nome="$1"
         elif [ -z "$alvo" ]; then alvo="$1"
-        else morre "argumento extra: $1" 2
+        else extras+=("$1")   # mais de um alvo (#2856 linha 11)
         fi
         shift ;;
     esac
@@ -630,6 +630,11 @@ ato_rodar() {
 
   if [ -n "$alvo" ]; then
     alvo="$(alvo_de "$c" "$alvo")" || exit $?
+    local resolvido x
+    for x in ${extras[@]+"${extras[@]}"}; do
+      resolvido="$(alvo_de "$c" "$x")" || exit $?
+      extras_resolvidos+=("$resolvido")
+    done
   fi
 
   local alvos=() lista_portao="" ausentes=()
@@ -661,7 +666,7 @@ ato_rodar() {
       return 0
     fi
   elif [ -n "$alvo" ]; then
-    alvos+=("$alvo")
+    alvos+=("$alvo" ${extras_resolvidos[@]+"${extras_resolvidos[@]}"})
   fi
 
   ambiente_do_registro "$c" || exit $?

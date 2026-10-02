@@ -107,6 +107,32 @@ def test_vencidos_so_acima_de_30_dias(tmp_path):
     assert "falha nova" not in proc.stdout
 
 
+def test_listar_desde_pula_as_linhas_antes_do_numero(tmp_path):
+    """#2856 linha 143: a lista inteira passa dos 50 KB que a porta serve; --desde lê só o fim."""
+    proc, _, _ = _run(["dt", "listar", "--desde", "2"], tmp_path)
+    assert proc.returncode == 0, proc.stderr
+    assert "falha velha" not in proc.stdout
+    assert "3\t7d\tteste — falha nova · teste rodar exit 2" in proc.stdout
+
+
+def test_listar_curto_tira_a_evidencia(tmp_path):
+    proc, _, _ = _run(["dt", "listar", "--curto"], tmp_path)
+    assert proc.returncode == 0, proc.stderr
+    assert "1\t57d\trepo — falha velha\n" in proc.stdout
+    assert "repo commitar exit 1" not in proc.stdout
+
+
+@pytest.mark.parametrize("args", [
+    ["dt", "listar", "--sem-isso"],
+    ["dt", "listar", "--desde", "x"],
+    ["dt", "listar", "--desde"],
+])
+def test_listar_com_opcao_ruim_recusa_sem_chamar_a_api(tmp_path, args):
+    proc, chamadas, _ = _run(args, tmp_path)
+    assert proc.returncode == 2
+    assert chamadas == []
+
+
 def test_admitir_numera_pelo_maior_e_grava_um_patch(tmp_path):
     corpo = CORPO.replace("<p>(nenhuma desde a mudança de regime)</p>",
                           "<p>7. [2026-08-02] velha → morre por obsolescência em 2026-09-01: x</p>")

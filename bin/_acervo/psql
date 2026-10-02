@@ -33,7 +33,7 @@ declare -A BANCOS=(
 uso() {
   cat >&2 <<EOF
 uso:
-  acervo psql [--banco <banco>] [--sql <query>]   roda SQL no <banco>, resultado cru de volta
+  acervo psql [--banco <banco>] [--sql <query> | -c <query>]   roda SQL no <banco>, resultado cru de volta
                              banco default: rag (schema acervo.*).
                              query pode vir via --sql "<query>", argumento posicional ou STDIN.
                              forma vigente (posicional, \`acervo psql <banco>\`) ainda responde.
@@ -58,7 +58,7 @@ while [ $# -gt 0 ]; do
       banco="${1:-}"
       [ -n "$banco" ] || morre "--banco exige um valor" 2
       ;;
-    --sql)
+    -c|--sql)
       shift
       sql="${1:-}"
       [ -n "$sql" ] || morre "--sql exige uma query" 2
