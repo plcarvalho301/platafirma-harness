@@ -36,7 +36,7 @@ REVISOR = {
     "slug": "revisor", "descricao": "Revisa código e devolve veredito na primeira linha.",
     "dono": {"cadeira": "engenharia", "chapeu": "devops"}, "modo": "revisar",
     "modelo": {"familia": "claude", "versao": "sonnet"}, "ligacoes": ["delegado", "agendado"],
-    "ferramentas": ["Read", "Grep", "mcp__claudinho-mcp__read_file"],
+    "ferramentas": ["Read", "Grep", "mcp__claudinho-mcp__read_file", "mcp__claudinho-mcp__monta_sessao"],
     "pernas": {"fonte_de_fora": False, "dado_pessoal": False, "muda_estado": False},
     "teto": {"turnos": 40, "tokens_execucao": 200000, "tokens_janela": 1000000},
     "fecho": {"comeca_com": "veredito: <0|1|5>", "termina_com": "o último achado", "recebe": "quem delegou"},
@@ -83,6 +83,10 @@ if os.environ.get("STUB_EXPEDIENTE_EXIT"):
 print(json.dumps({{"pecas": [{{"peca": "persona", "conteudo": "LENTE-PERSONA"}}, {{"peca": "modo", "conteudo": "LENTE-MODO"}},
                               {{"peca": "mesa", "conteudo": None}}]}}))
 """
+STUB_ACERVO = """#!{py}
+import json
+print(json.dumps([{{"tool": "acervo"}}, {{"tool": "repo"}}, {{"tool": "motor"}}]))
+"""
 STUB_CLAUDE = """#!{py}
 import json, os, sys
 open(os.environ["STUB_LOG"], "a").write(json.dumps({{"verbo": "claude", "argv": sys.argv[1:], "stdin": sys.stdin.read()}}) + "\\n")
@@ -123,6 +127,7 @@ def mundo(tmp_path, monkeypatch):
     bin_.mkdir()
     _stub(bin_, "sessao", STUB_SESSAO)
     _stub(bin_, "expediente", STUB_EXPEDIENTE)
+    _stub(bin_, "acervo", STUB_ACERVO)
     _stub(tmp_path, "claude", STUB_CLAUDE)
     for k, v in (("PF_POSTO", posto), ("PLATAFIRMA_INSTANCIA", inst), ("PF_BIN", bin_),
                  ("PF_CLAUDE_BIN", tmp_path / "claude"), ("STUB_LOG", stub_log)):
@@ -218,9 +223,11 @@ def test_projecao_claude_leva_cabecalho_modelo_ferramentas_e_o_lote_de_abertura(
     linhas = texto.splitlines()
     assert linhas[0] == "---" and linhas[1].startswith(agente.CABECALHO_GERADO)
     assert "name: revisor" in linhas and "model: sonnet" in linhas and "maxTurns: 40" in linhas
-    assert "tools: Read, Grep, mcp__claudinho-mcp__read_file" in linhas
-    assert "sessao abrir engenharia" in texto
-    assert "expediente montar --perfil cadeirinha --chapeu devops --modo revisar" in texto
+    assert "tools: Read, Grep, mcp__claudinho-mcp__read_file, mcp__claudinho-mcp__monta_sessao" in linhas
+    assert ('1. `monta_sessao` com `cadeira="engenharia"`, `chapeu="devops"`, `perfil="cadeirinha"`, '
+            '`modo="revisar"`, `agente="revisor"`, `origem=<o sessao_id que a delegação trouxe>`') in texto
+    assert "sessao abrir" not in texto and "expediente montar" not in texto, "abre pela mesma tool da cadeira"
+    assert "pare antes do trabalho" in texto
     for proibida in agente.PROIBIDAS:
         assert f"{proibida}," not in texto and f", {proibida}" not in texto
     assert texto == agente.projecao_claude(REVISOR), "determinística: o --conferir compara byte a byte"
@@ -228,7 +235,32 @@ def test_projecao_claude_leva_cabecalho_modelo_ferramentas_e_o_lote_de_abertura(
 
 def test_projecao_do_consultor_nao_fixa_cadeira():
     texto = agente.projecao_claude(CONSULTOR)
-    assert "sessao abrir <a cadeira que a delegação nomeia>" in texto
+    assert "`cadeira=<a cadeira que a delegação nomeia>`, `chapeu=<o chapéu que a delegação nomeia>`" in texto
+
+
+def test_projetada_sem_monta_sessao_e_com_run_command_reprova():
+    sem = com(REVISOR, ferramentas=["Read", "mcp__claudinho-mcp__read_file"])
+    assert any("falta mcp__claudinho-mcp__monta_sessao" in a for a in agente.valida(sem, "revisor"))
+    largo = com(REVISOR, ferramentas=[*REVISOR["ferramentas"], "mcp__claudinho-mcp__run_command"])
+    assert any("ferramenta sem escopo: mcp__claudinho-mcp__run_command" in a for a in agente.valida(largo, "revisor"))
+    assert agente.valida(VARREDOR, "varredor") == [], "sem projeção no Code, não abre por monta_sessao"
+
+
+def test_conferir_acusa_tool_que_o_conector_nao_publica(mundo, capsys):
+    mundo.escreve(com(REVISOR, ferramentas=[*REVISOR["ferramentas"], "mcp__claudinho-mcp__inventada"]))
+    agente.ato_projetar(False, None)
+    capsys.readouterr()
+    assert agente.ato_projetar(True, None) == 1
+    assert "fora do conector: agentes/revisor.yaml declara mcp__claudinho-mcp__inventada" in capsys.readouterr().out
+
+
+def test_conferir_com_acervo_fora_avisa_e_nao_reprova(mundo, capsys, monkeypatch):
+    mundo.escreve(REVISOR)
+    agente.ato_projetar(False, None)
+    monkeypatch.setattr(agente, "tools_do_conector", lambda: None)
+    capsys.readouterr()
+    assert agente.ato_projetar(True, None) == 0
+    assert "não foram conferidas contra o conector" in capsys.readouterr().out
 
 
 def test_projetar_gera_so_as_de_claude_e_o_conferir_sai_0(mundo, capsys):
@@ -561,7 +593,7 @@ def test_claude_mede_a_entrada_com_o_cache(mundo):
 
 EXPLORE = com(VARREDOR, ligacoes=["delegado", "consultado", "agendado"], suplanta="Explore",
               por_ligacao={"delegado": {"modelo": {"familia": "claude", "versao": "sonnet"},
-                                        "ferramentas": ["Read", "Grep", "Glob"],
+                                        "ferramentas": ["Read", "Grep", "Glob", "mcp__claudinho-mcp__monta_sessao"],
                                         "teto": {"turnos": 40, "tokens_execucao": 200000, "tokens_janela": 1000000}}})
 
 def test_varredor_com_delegado_em_claude_e_qwen_no_resto_passa():
@@ -588,7 +620,7 @@ def test_por_ligacao_e_suplanta_fora_do_molde_reprovam(decl, trecho):
 def test_projecao_do_suplante_sai_com_o_nome_do_embutido_e_a_execucao_delegada():
     linhas = agente.projecao_claude(EXPLORE).splitlines()
     assert "name: Explore" in linhas and "model: sonnet" in linhas and "maxTurns: 40" in linhas
-    assert "tools: Read, Grep, Glob" in linhas
+    assert "tools: Read, Grep, Glob, mcp__claudinho-mcp__monta_sessao" in linhas
 
 def test_projetar_gera_o_explore_e_o_conferir_conta_a_projecao(mundo, capsys):
     mundo.escreve(REVISOR, EXPLORE)

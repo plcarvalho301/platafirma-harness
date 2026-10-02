@@ -1809,8 +1809,14 @@ def _exec_argv(binario: str, *args) -> list[str]:
 
 
 def _montar(cadeira: str, atualizar: bool = True, chapeu: str = "", pergunta: str = "",
-            sessao_id: str | None = None, sub: str | None = None) -> dict:
+            sessao_id: str | None = None, sub: str | None = None, perfil: str = "",
+            modo: str = "", regua: str = "", origem: str = "", agente: str = "") -> dict:
     """Projeção do lote sessao abrir -> expediente montar (spec_sessao §6, #3053).
+
+    O agente delegado abre pela MESMA tool que a cadeira (incidente #3223, ordem do dono
+    01/10/2026): `origem` e `agente` vão a `sessao abrir --origem/--agente/--em-nome-de/--conta`;
+    `perfil`, `modo` e `regua` vão a `expediente montar`, que recusa modo e régua fora do perfil
+    cadeirinha. A porta só repassa; quem valida é o verbo.
 
     (a) execve `bin/sessao abrir <slug> [--sessao-id <uuid>] --json` com PF_SUJEITO = o `sub`
         do token validado. Sem sub -> execve roda sem PF_SUJEITO e devolve o exit 3 de abrir
@@ -1839,6 +1845,10 @@ def _montar(cadeira: str, atualizar: bool = True, chapeu: str = "", pergunta: st
         argv_abrir.append(slug)
     if sessao_id:
         argv_abrir += ["--sessao-id", sessao_id]
+    if origem:
+        argv_abrir += ["--origem", origem]
+    if agente:
+        argv_abrir += ["--agente", agente, "--em-nome-de", slug, "--conta", OPS_USER]
     argv_abrir.append("--json")
 
     env_abrir = {
@@ -1908,6 +1918,12 @@ def _montar(cadeira: str, atualizar: bool = True, chapeu: str = "", pergunta: st
     argv_exp = _exec_argv(bin_expediente, "montar", "--json")
     if chapeu:
         argv_exp += ["--chapeu", chapeu]
+    if perfil:
+        argv_exp += ["--perfil", perfil]
+    if modo:
+        argv_exp += ["--modo", modo]
+    if regua:
+        argv_exp += ["--regua", *regua.split()]
 
     env_exp = {
         **_env_subprocesso(),
@@ -1916,6 +1932,8 @@ def _montar(cadeira: str, atualizar: bool = True, chapeu: str = "", pergunta: st
         "PF_ORDEM_ID": oid or "",
         "PF_SUPERFICIE": _superficie(),
     }
+    if origem:
+        env_exp["PF_ORIGEM_SESSAO"] = origem
 
     try:
         proc_exp = subprocess.run(
@@ -1980,7 +1998,8 @@ def _primeiro_giro(pergunta: str) -> bool:
 
 
 async def monta_sessao(cadeira: str = "", atualizar: bool = True, chapeu: str = "",
-                        pergunta: str = "", sessao_id: str | None = None) -> dict:
+                        pergunta: str = "", sessao_id: str | None = None, perfil: str = "",
+                        modo: str = "", regua: str = "", origem: str = "", agente: str = "") -> dict:
     """Abre a sessão de uma cadeira numa chamada (projeção do lote sessao abrir -> expediente montar).
 
     Devolve o pacote de expediente com o bloco `sessao` no topo.
@@ -1989,6 +2008,8 @@ async def monta_sessao(cadeira: str = "", atualizar: bool = True, chapeu: str = 
     `chapeu`: força o slug do chapéu (ignora o roteador).
     `atualizar`: aceito e sem efeito desde arq:0097.
     `sessao_id`: uuid da sessão quando portado da conversa anterior; sem ele, sessao abrir cunha um novo.
+    Agente delegado (a mesma tool, #3223): `perfil`="cadeirinha", `modo`, `regua` ("<espécie> <chave>"),
+    `origem` (o sessao_id de quem delegou) e `agente` (o slug do agente); a mensagem de delegação vai em `pergunta`.
     """
     negado = _autoriza("monta_sessao", "monta_sessao", "documento",
                        f"sessao:{cadeira or '-'}", DOM_PLATAFORMA)
@@ -2011,7 +2032,7 @@ async def monta_sessao(cadeira: str = "", atualizar: bool = True, chapeu: str = 
         _sub = None
 
     r = await anyio.to_thread.run_sync(_montar, cadeira, atualizar, chapeu, pergunta,
-                                       sessao_id, _sub)
+                                       sessao_id, _sub, perfil, modo, regua, origem, agente)
 
     _rot = (r.get("roteador") or {})
     _sessao_id = r.get("sessao_id") or (r.get("sessao") or {}).get("sessao_id")
