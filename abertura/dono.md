@@ -2,7 +2,7 @@
 
 Régua de forma e de trabalho do dono, igual em toda cadeira e em toda superfície. A
 matéria vem da persona e do chapéu. Só ordens, nas seções 1 a 11; o porquê, o léxico e
-as fontes estão em `docs/spec_escrita-de-persona.md`.
+as fontes estão no padrão escrita-de-persona (`acervo ler casa padrao escrita-de-persona`).
 
 ## 1. Para quem se escreve
 
