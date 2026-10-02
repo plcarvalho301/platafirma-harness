@@ -2328,7 +2328,7 @@ def conferir_ferramental(alvo, como_json=False):
     return resultado.relatorio("ferramental", alvo, itens, _sha_release(), como_json=como_json)
 
 
-EXISTE_TIPOS = ("cadeira", "verbo", "card", "arquivo", "mesa")
+EXISTE_TIPOS = ("cadeira", "chapeu", "skill", "verbo", "card", "arquivo", "mesa")
 
 
 def conferir_existe(tipo, nome, como_json=False):
@@ -2384,6 +2384,35 @@ def conferir_existe(tipo, nome, como_json=False):
                           if os.path.isdir(os.path.join(aber, p)))
         return sai(alvo in cadeiras,
                    f"abertura/ lista {len(cadeiras)}: {', '.join(cadeiras)}")
+
+    if tipo == "chapeu":
+        # <chapeu> ou <cadeira>/<chapeu>: abertura/<cadeira>/<chapeu>/chapeu.md (#2856 linha 94)
+        aber = os.path.join(RAIZ, "platafirma-harness", "abertura")
+        if not os.path.isdir(aber):
+            return indeterminavel(f"{aber} inacessivel")
+        cadeira_pedida, _, chapeu_pedido = nome.rpartition("/")
+        for pref in ("claudinho-", "claudinha-"):
+            if cadeira_pedida.lower().startswith(pref):
+                cadeira_pedida = cadeira_pedida[len(pref):]
+        chapeus = sorted(f"{c}/{h}" for c in os.listdir(aber)
+                         if os.path.isdir(os.path.join(aber, c))
+                         for h in os.listdir(os.path.join(aber, c))
+                         if os.path.isfile(os.path.join(aber, c, h, "chapeu.md")))
+        achados = [x for x in chapeus
+                   if x.endswith("/" + chapeu_pedido)
+                   and (not cadeira_pedida or x.startswith(cadeira_pedida + "/"))]
+        if achados:
+            return sai(True, f"abertura/ tem {', '.join(achados)}")
+        return sai(False, f"abertura/ lista {len(chapeus)} chapeus e nenhum casa com {nome!r}",
+                   ", ".join(chapeus))
+
+    if tipo == "skill":
+        pasta = os.path.join(RAIZ, "platafirma-harness", "skills")
+        if not os.path.isdir(pasta):
+            return indeterminavel(f"{pasta} inacessivel")
+        skills = sorted(p for p in os.listdir(pasta)
+                        if os.path.isfile(os.path.join(pasta, p, "SKILL.md")))
+        return sai(nome in skills, f"skills/ lista {len(skills)}: {', '.join(skills)}")
 
     if tipo == "verbo":
         caminho = os.path.join(raiz_bin, nome)
