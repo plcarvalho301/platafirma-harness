@@ -54,6 +54,7 @@ import resource
 import subprocess
 import tempfile
 import sys
+import threading
 import time
 from contextvars import ContextVar
 from datetime import date, datetime
@@ -1105,6 +1106,7 @@ async def run_command(command: str = "", cwd: str = "", timeout: int = 120,
     if not itens:
         return {"recusado": True, "motivo": "sem item", "verbos_servidos": sorted(SLUGS_SERVIDOS)}
     timeout = max(1, min(timeout, 600))
+    fim = _prazo_da_chamada()          # #3249: o prazo e da chamada, nao do item
     ident = _sessao_resolve(sessao_id)
     lote_id = uuid.uuid4().hex[:8]
     brutos: list = []
@@ -1112,8 +1114,12 @@ async def run_command(command: str = "", cwd: str = "", timeout: int = 120,
 
     async def _roda(_i, x, resultados):
         ident = _estado["ident"]
+        esgotado = _prazo_esgotado(fim)
+        if esgotado:
+            brutos.append("")
+            return esgotado
         r = await _roda_item_run_command(_i, x, resultados, brutos, ident, timeout,
-                                         lote_id, encadeado)
+                                         lote_id, encadeado, fim)
         # Injeção entre itens do lote (Aberto spec_sessao/expediente, #3053):
         # se o item executado foi sessao abrir com sucesso, extrai sessao_id e
         # chama ident = _sessao_resolve(sid_novo) antes do item seguinte (n+1)
@@ -1138,7 +1144,7 @@ async def run_command(command: str = "", cwd: str = "", timeout: int = 120,
 
 
 async def _roda_item_run_command(_i, x, resultados, brutos, ident, timeout, lote_id,
-                                 encadeado=False) -> dict:
+                                 encadeado=False, fim=None) -> dict:
     """Um item de `run_command commands[]`: parte, confere stdin.de, autoriza, roda,
     serve e audita. A ordem e a parada da cadeia sao de `lote.itera`."""
     aviso_dup = False
@@ -1157,8 +1163,12 @@ async def _roda_item_run_command(_i, x, resultados, brutos, ident, timeout, lote
         slug0 = argv[0].rsplit("/", 1)[-1]
         if not isinstance(n, int) or n < 0 or n >= _i:
             recusa = _recusa(slug0, f"stdin.de={n!r} fora do lote (0..{_i - 1})")
-        elif resultados[n].get("recusado") or resultados[n].get("erro"):
+        elif (resultados[n].get("recusado") or resultados[n].get("erro")
+              or resultados[n].get("nao_rodou")):
             recusa = _recusa(slug0, f"insumo do item {n} nao rodou")
+        elif resultados[n].get("em_andamento"):
+            recusa = _recusa(slug0, f"insumo do item {n} ainda em andamento "
+                                    f"(resultado em {resultados[n].get('resultado')})")
         elif encadeado and _lote.exit_do_item(resultados[n]) != 0:
             # comentario #939 A4: na cadeia, insumo que saiu 1 ("nao existe") e vazio;
             # rodar o seguinte sobre nada e efeito sobre entrada vazia.
@@ -1182,7 +1192,8 @@ async def _roda_item_run_command(_i, x, resultados, brutos, ident, timeout, lote
         brutos.append("")
     else:
         t0 = time.monotonic()
-        r = await anyio.to_thread.run_sync(_run_verbo_blocking, argv, stdin, timeout, ident)
+        r = await anyio.to_thread.run_sync(_run_verbo_blocking, argv, stdin, timeout, ident,
+                                           _prazo_restante(fim))
         so = r.get("stdout")
         brutos.append(so.get("texto", "") if isinstance(so, dict) else "")
         _perf = _perfil_verbo(slug, argv[0])
@@ -1198,7 +1209,8 @@ async def _roda_item_run_command(_i, x, resultados, brutos, ident, timeout, lote
                ordem_id=ident["ordem_id"], exit_code=r.get("exit_code"), erro=r.get("erro"),
                bytes_stdout=(r.get("stdout") or {}).get("bytes_total") if isinstance(r.get("stdout"), dict) else None,
                dur_ms=round((time.monotonic() - t0) * 1000),
-               lote_id=lote_id, lote_n=_i, encadeado=encadeado or None, **_campos_poda(r))
+               lote_id=lote_id, lote_n=_i, encadeado=encadeado or None, **_campo_prazo(r),
+               **_campos_poda(r))
     ato = argv[1] if len(argv) > 1 else ""
     if slug == "sessao" and ato == "abrir" and r.get("exit_code") == 0:
         r["_sessao_abriu"] = True     # quem itera troca o ident antes do item n+1
@@ -2130,7 +2142,125 @@ def _rlimits_filho():
 # PF_SUJEITO entra pelo mesmo ponto (card #3145, defeito pos-fita): so quando o
 # registro da sessao tem sujeito — sem fallback para cadeira/USER/valor fixo; campo
 # ausente e a variavel simplesmente nao entra no ambiente do verbo.
-def _run_verbo_blocking(argv: list, stdin: str | dict | list | None, timeout: int, ident: dict) -> dict:
+# PRAZO DA CHAMADA (#3249). Quem corta em ~60 s e o cliente MCP, nao a porta: medido em
+# 03/10/2026 no ops log de 23/09 a 03/10, 213 chamadas passaram de 65 s aqui dentro e
+# varias sairam 0 (release promover de 347 s, acervo curar de 405 s), com o retorno
+# perdido do outro lado. Por isso a cadeira pedia timeout 50-58 e matava o proprio ato
+# (44 "timeout (55s)" no periodo). Passado o prazo, o verbo NAO morre: a chamada devolve
+# `em_andamento` com o caminho do resultado, e uma thread segue no communicate ate o
+# timeout pedido e grava o retorno final la. Em lote o prazo e da chamada inteira.
+# timeout pedido <= prazo: mata no timeout, como antes. PF_PORTA_PRAZO_S=0 desliga.
+PRAZO_S = float(os.environ.get("PF_PORTA_PRAZO_S", "50") or 0)
+RESULTADO_DIR = INSTANCIA / "var" / "log" / "porta"
+RESULTADO_RETENCAO_S = 7 * 86400
+
+
+def _prazo_da_chamada() -> float | None:
+    """Instante (monotonic) em que a chamada devolve em_andamento; None = sem prazo."""
+    return time.monotonic() + PRAZO_S if PRAZO_S > 0 else None
+
+
+def _prazo_restante(fim: float | None) -> float | None:
+    return None if fim is None else fim - time.monotonic()
+
+
+def _prazo_esgotado(fim: float | None) -> dict | None:
+    """Item de lote que nem comecou porque a chamada ja passou do prazo."""
+    resto = _prazo_restante(fim)
+    if resto is None or resto > 0:
+        return None
+    return {"nao_rodou": True,
+            "motivo": f"prazo da chamada ({PRAZO_S:g}s) esgotado antes deste item — rode-o de novo"}
+
+
+def _campo_prazo(r: dict) -> dict:
+    """Campo de auditoria: o id do resultado quando o verbo passou do prazo."""
+    return {"em_andamento": r.get("id")} if isinstance(r, dict) and r.get("em_andamento") else {}
+
+
+def _grava_resultado(caminho: Path, r: dict) -> None:
+    try:
+        caminho.parent.mkdir(parents=True, exist_ok=True)
+        tmp = caminho.with_suffix(".tmp")
+        tmp.write_text(json.dumps(r, ensure_ascii=False), encoding="utf-8")
+        os.replace(tmp, caminho)
+    except OSError as e:
+        print(f"[prazo] resultado {caminho} nao gravado: {e!r}", file=sys.stderr, flush=True)
+
+
+def _segue_apos_prazo(p: subprocess.Popen, argv: list, timeout: int, t0: float, ident: dict,
+                      d_cwd: Path) -> dict:
+    """O verbo passou do prazo da chamada: segue rodando, e esta chamada devolve onde o
+    retorno final vai estar. Quem espera e uma thread daemon, fora do limitador do anyio."""
+    rid = uuid.uuid4().hex[:12]
+    caminho = RESULTADO_DIR / f"{rid}.json"
+    slug = Path(argv[0]).name
+    linha = " ".join([slug] + [str(a) for a in argv[1:]])[:CMD_CAP]
+    inicio = datetime.now().astimezone().isoformat(timespec="seconds")
+    base = {"id": rid, "verbo": linha, "inicio": inicio, "timeout": timeout}
+    _grava_resultado(caminho, {"em_andamento": True, **base, "pid": p.pid})
+
+    def _espera():
+        try:
+            # retry de communicate nao perde saida; input so na primeira chamada
+            so, se = p.communicate(timeout=max(1.0, timeout - (time.monotonic() - t0)))
+            r = {"exit_code": p.returncode, "stdout": _cap(so), "stderr": _cap(se)}
+        except subprocess.TimeoutExpired:
+            try:
+                os.killpg(os.getpgid(p.pid), signal.SIGKILL)
+            except ProcessLookupError:
+                pass
+            p.wait()
+            r = {"erro": f"timeout ({timeout}s) — grupo de processo morto"}
+        except Exception as e:                              # noqa: BLE001
+            r = {"erro": f"espera apos o prazo falhou: {e!r}"}
+        dur_ms = round((time.monotonic() - t0) * 1000)
+        _grava_resultado(caminho, {**base, "dur_ms": dur_ms, **r, "cwd": str(d_cwd)})
+        _audit(tool=slug, evento="verbo_concluido_apos_prazo", id=rid,
+               ato=argv[1] if len(argv) > 1 else None, args=" ".join(map(str, argv[2:]))[:CMD_CAP],
+               cadeira=ident.get("cadeira") or None, sessao_id=ident.get("sessao_id"),
+               ordem_id=ident.get("ordem_id"), exit_code=r.get("exit_code"), erro=r.get("erro"),
+               dur_ms=dur_ms)
+
+    threading.Thread(target=_espera, name=f"prazo-{rid}", daemon=True).start()
+    return {"em_andamento": True, "id": rid, "resultado": str(caminho),
+            "motivo": (f"em andamento: {slug} passou do prazo da chamada e segue no host ate "
+                       f"{timeout}s; o retorno final sera gravado em {caminho}"),
+            "como_ler": (f'read_file(path="{caminho}") — com em_andamento ainda roda; sem ele, '
+                         "e o retorno final (exit_code, stdout, stderr)"),
+            "cwd": str(d_cwd)}
+
+
+def _fecha_orfaos_do_prazo() -> None:
+    """Na subida: resultado que ficou em_andamento e da porta anterior. O verbo morreu com
+    ela (estava no cgroup da unit) e a thread que gravaria o fim tambem; vira
+    `interrompido`, nunca em andamento para sempre. Resultado velho sai pela retencao."""
+    try:
+        arquivos = list(RESULTADO_DIR.glob("*.json"))
+    except OSError:
+        return
+    agora = time.time()
+    for f in arquivos:
+        try:
+            if agora - f.stat().st_mtime > RESULTADO_RETENCAO_S:
+                f.unlink()
+                continue
+            d = json.loads(f.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            continue
+        if isinstance(d, dict) and d.pop("em_andamento", None):
+            d.update(interrompido=True,
+                     motivo="a porta reiniciou antes do fim do verbo; o ato pode ter sido "
+                            "feito em parte — confira o efeito antes de repetir")
+            _grava_resultado(f, d)
+
+
+_fecha_orfaos_do_prazo()
+
+
+def _run_verbo_blocking(argv: list, stdin: str | dict | list | None, timeout: int, ident: dict,
+                        prazo: float | None = None) -> dict:
+    """`prazo`: segundos ate a chamada devolver em_andamento (#3249); None = sem prazo."""
     env = {**_env_subprocesso(), "PF_SESSAO": ident["sessao_id"], "PF_ORDEM_ID": ident["ordem_id"],
            "PF_CONTA": OPS_USER}
     if ident.get("origem_sessao"):          # card #3158: so a sessao filha tem; ausente = nao entra
@@ -2152,10 +2282,14 @@ def _run_verbo_blocking(argv: list, stdin: str | dict | list | None, timeout: in
     # estoura no .encode() de um dict/list.
     if stdin is not None and not isinstance(stdin, str):
         stdin = _stdin_texto(stdin)
+    t0 = time.monotonic()
+    espera = timeout if prazo is None or prazo >= timeout else max(0.0, prazo)
     try:
         stdout, stderr = p.communicate(input=(stdin.encode() if stdin is not None else None),
-                                       timeout=timeout)
+                                       timeout=espera)
     except subprocess.TimeoutExpired:
+        if espera < timeout:
+            return _segue_apos_prazo(p, argv, timeout, t0, ident, d_cwd)
         try:
             os.killpg(os.getpgid(p.pid), signal.SIGKILL)
         except ProcessLookupError:
@@ -2174,6 +2308,7 @@ def _faz_tool_verbo(slug: str, binario: str, descricao: str):
         # #3124: o cliente MCP desserializa stdin JSON valido antes de chegar aqui; a
         # anotacao velha (str | None) fazia o pydantic recusar sem rodar nada.
         stdin = _stdin_texto(stdin)
+        fim = _prazo_da_chamada()          # #3249: o prazo e da chamada, nao do item
         if lote and PF_TOOLS_LOTE:
             timeout = max(1, min(timeout, 600))
             ident = _sessao_resolve(sessao_id)
@@ -2184,6 +2319,9 @@ def _faz_tool_verbo(slug: str, binario: str, descricao: str):
             async def _roda(_i, item, _resultados):
                 if not isinstance(item, dict):
                     return _recusa(slug, "item do lote deve ser {ato, args, stdin}")
+                esgotado = _prazo_esgotado(fim)
+                if esgotado:
+                    return esgotado
                 _ato = item.get("ato", "")
                 _args = item.get("args") or []
                 if isinstance(_args, (str, bytes)):
@@ -2196,7 +2334,8 @@ def _faz_tool_verbo(slug: str, binario: str, descricao: str):
                     return negado_item
                 argv = _argv_verbo(binario, _ato, _args)
                 t0 = time.monotonic()
-                r = await anyio.to_thread.run_sync(_run_verbo_blocking, argv, _stdin, timeout, ident)
+                r = await anyio.to_thread.run_sync(_run_verbo_blocking, argv, _stdin, timeout,
+                                                   ident, _prazo_restante(fim))
                 _perf = _perfil_verbo(slug, binario)
                 r = _serve(r, tool=slug, alca=_linha, ident=ident, cauda=_perf["cauda"],
                            cosmetica=_cosmetica(_perf, _ato_efetivo(argv)))
@@ -2206,7 +2345,7 @@ def _faz_tool_verbo(slug: str, binario: str, descricao: str):
                        bytes_stdout=(r.get("stdout") or {}).get("bytes_total"),
                        dur_ms=round((time.monotonic() - t0) * 1000),
                        lote_id=lote_id, lote_n=_i, encadeado=encadeado or None,
-                       **_campos_poda(r))
+                       **_campo_prazo(r), **_campos_poda(r))
                 return r
 
             out = await _lote.itera(list(lote), _roda, encadeado=encadeado, cap=CAP,
@@ -2229,7 +2368,8 @@ def _faz_tool_verbo(slug: str, binario: str, descricao: str):
         ident = _sessao_resolve(sessao_id)  # aqui: dentro da task da tool (#2911)
         argv = _argv_verbo(binario, ato, args)
         t0 = time.monotonic()
-        r = await anyio.to_thread.run_sync(_run_verbo_blocking, argv, stdin, timeout, ident)
+        r = await anyio.to_thread.run_sync(_run_verbo_blocking, argv, stdin, timeout, ident,
+                                           _prazo_restante(fim))
         # R4: a forma e a cauda saem do cabeçalho DESTE verbo. `descansar` é o caso que
         # nomeia a regra — batia o teto e era cortado só na cabeça, perdendo o veredito.
         _perf = _perfil_verbo(slug, binario)
@@ -2239,7 +2379,8 @@ def _faz_tool_verbo(slug: str, binario: str, descricao: str):
                cadeira=ident["cadeira"] or None, sessao_id=ident["sessao_id"],
                ordem_id=ident["ordem_id"], exit_code=r.get("exit_code"), erro=r.get("erro"),
                bytes_stdout=r.get("stdout", {}).get("bytes_total"),
-               dur_ms=round((time.monotonic() - t0) * 1000), **_campos_poda(r))
+               dur_ms=round((time.monotonic() - t0) * 1000), **_campo_prazo(r),
+               **_campos_poda(r))
         return r
     _tool.__name__ = slug.replace("-", "_")
     _tool.__doc__ = descricao
