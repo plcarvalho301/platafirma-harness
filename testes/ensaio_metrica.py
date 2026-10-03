@@ -298,6 +298,70 @@ def test_casos_preserva_path_e_item():
     assert r_rc.get("item") == "run_command git status"
 
 
+# --- SINTETICO: filtro por sessao e azp, antes de truncar (#2856 linha 159) -------
+
+def _duas_sessoes():
+    """Duas sessoes e dois clientes OAuth misturados no mesmo dia, como no log real."""
+    return [
+        reg("10:00:00.000", "mesa", "ver", sessao_id="f5d37db6-aaaa", azp="agy-cli", cadeira="ti"),
+        reg("10:00:01.000", "mesa", "ver", sessao_id="f5d37db6-aaaa", azp="agy-cli", cadeira="ia"),
+        reg("10:00:02.000", "fila", "ler", sessao_id="0a1b2c3d-bbbb", azp="agy-cli", cadeira="ti"),
+        reg("10:00:03.000", "fila", "ler", sessao_id="9e8d7c6b-cccc", azp="claudinho-mcp", cadeira="ti"),
+        reg("10:00:04.000", "fila", "ler", cadeira="ti"),          # sem azp no log
+    ]
+
+def _roda_eventos(monkeypatch, capsys, *flags):
+    monkeypatch.setattr(m, "FonteJsonl", lambda: FonteFake(_duas_sessoes()))
+    codigo = m.main(["metrica", "eventos", DIA_GABARITO, *flags])
+    saida = capsys.readouterr()
+    return codigo, saida
+
+def test_sessao_casa_por_prefixo_ou_id_inteiro():
+    por_prefixo, _, _ = m.classifica(FonteFake(_duas_sessoes()), DIA_GABARITO, sessao="f5d37db6")
+    por_id, _, _ = m.classifica(FonteFake(_duas_sessoes()), DIA_GABARITO, sessao="f5d37db6-aaaa")
+    assert len(por_prefixo) == len(por_id) == 2
+    assert {g["sessao_id"] for g in por_prefixo} == {"f5d37db6-aaaa"}
+
+def test_azp_casa_por_igualdade_nao_por_prefixo():
+    giros, _, _ = m.classifica(FonteFake(_duas_sessoes()), DIA_GABARITO, azp="agy-cli")
+    assert len(giros) == 3
+    sem, _, _ = m.classifica(FonteFake(_duas_sessoes()), DIA_GABARITO, azp="agy")
+    assert sem == []
+
+def test_sessao_azp_e_cadeira_se_combinam():
+    giros, _, _ = m.classifica(FonteFake(_duas_sessoes()), DIA_GABARITO,
+                               cadeira="ti", sessao="f5d37db6", azp="agy-cli")
+    assert [g["ts"][11:19] for g in giros] == ["10:00:00"]
+
+def test_eventos_diz_quantos_casaram_e_zero_omitidos_sem_teto(monkeypatch, capsys):
+    codigo, saida = _roda_eventos(monkeypatch, capsys, "--sessao", "f5d37db6")
+    r = json.loads(saida.out)
+    assert codigo == 0
+    assert r["casaram"] == 2 and r["omitidos"] == 0
+    assert [e["sessao_id"] for e in r["eventos"]] == ["f5d37db6-aaaa"] * 2
+    assert r["sessao"] == "f5d37db6"
+
+def test_teto_corta_depois_do_filtro_e_declara_os_omitidos(monkeypatch, capsys):
+    """O defeito: filtrar depois de truncar perde o evento da sessao pedida. O unico
+    giro do azp `claudinho-mcp` e o 4o do dia; com teto 1 ele tem de sair, e nao o 1o."""
+    codigo, saida = _roda_eventos(monkeypatch, capsys, "--azp", "claudinho-mcp", "--limite", "1")
+    r = json.loads(saida.out)
+    assert codigo == 0
+    assert [e["sessao_id"] for e in r["eventos"]] == ["9e8d7c6b-cccc"]
+    assert r["casaram"] == 1 and r["omitidos"] == 0
+    _, saida = _roda_eventos(monkeypatch, capsys, "--azp", "agy-cli", "--limite", "2")
+    r = json.loads(saida.out)
+    assert len(r["eventos"]) == 2 and r["casaram"] == 3 and r["omitidos"] == 1
+
+def test_sessao_e_limite_invalidos_sao_uso_exit_2(monkeypatch, capsys):
+    monkeypatch.setattr(m, "FonteJsonl", lambda: FonteFake(_duas_sessoes()))
+    assert m.main(["metrica", "eventos", DIA_GABARITO, "--limite", "muitos"]) == 2
+    assert "--limite" in capsys.readouterr().err
+    assert m.main(["metrica", "eventos", DIA_GABARITO, "--limite", "-3"]) == 2
+    capsys.readouterr()
+    assert m.main(["metrica", "comportamento", "--sessao", "f5d37db6"]) == 2
+    assert "--sessao" in capsys.readouterr().err
+
 # --- borda: uso, erro gracioso, saida ---------------------------------------------
 
 def test_saida_e_json_por_default(capsys):
