@@ -140,6 +140,28 @@ def _acha_peca(idx: dict, candidatos: tuple[str, ...]) -> dict | None:
 
 
 
+def _render_chapeu_doc(estado: dict, slug_l: str, chapeu: str) -> str:
+    """Documento Chapeu: o texto do chapeu escolhido, lido pelo agregador de `persona ler
+    <cadeira> --chapeu <slug>`. Sem leitura e indisponivel se declaram — nunca somem."""
+    chave = f"{slug_l}/{chapeu}".lower()
+    item = next((i for i in (estado.get("chapeus", {}).get("itens") or [])
+                 if (i.get("chapeu") or "").lower() == chave), None)
+    if item is None:
+        return ('<div class="leitura"><p class="indisponivel">Chapéu sem leitura — o agregador '
+                'ainda não serve o texto deste chapéu.</p></div>')
+    if item.get("estado") != "ok":
+        return (f'<div class="leitura"><p class="indisponivel">Chapéu indisponível: '
+                f'{_esc(item.get("motivo") or "motivo desconhecido")}.</p></div>')
+    carimbo = (
+        '<div class="carimbo">'
+        f'<span><b>ref</b> <span class="mono">persona ler {_esc(slug_l)} --chapeu {_esc(chapeu)}</span></span>'
+        f'<span><b>lido há</b> {idade_desde(item.get("lido_em"))}</span>'
+        "</div>"
+    )
+    texto = (item.get("dados") or {}).get("texto")
+    return f'<div class="leitura">{carimbo}<div class="corpo md">{md_seguro(texto)}</div></div>'
+
+
 def _render_caixa_doc(estado: dict, slug_l: str) -> str:
     """Documento Caixa: as cartas da caixa da cadeira, lidas a FRIO pelo agregador
     (`fila ler --tudo`), mais nova primeiro. Caixa vazia, sem leitura e
@@ -185,6 +207,9 @@ def _render_caixa_doc(estado: dict, slug_l: str) -> str:
 # `fila ler --tudo`), tratada a parte na leitura — candidatos vazios de proposito.
 _DOCS_CADEIRA = [
     ("persona",  "Persona",  ("persona",)),
+    # texto do chapeu escolhido (chapeu.md + ferramental.md); vem do bloco `chapeus`, a parte,
+    # como a caixa, e so aparece como aba com um chapeu escolhido.
+    ("chapeu",   "Chapéu",   ()),
     ("geral",    "GERAL",    ("conduta-dono", "conduta")),
     ("org",      "Org",      ("alias-cadeiras",)),
     ("mesa",     "Mesa",     ("mesa",)),
@@ -700,14 +725,20 @@ def render_cadeira(estado: dict, slug: str | None = None, doc: str | None = None
     chapeu_sel = chapeu if chapeu in chapeus else None
 
     # seletor de documento — abas por link (sem JS): ?doc=<chave>. Com chapeu
-    # escolhido, o doc que faz sentido e a mesa (unica com rotulo [chapeu]); senao,
-    # default persona.
+    # escolhido, o doc que faz sentido e o texto dele; senao, default persona. A aba
+    # Chapeu so existe com um chapeu escolhido, e o chapeu segue nas abas que se
+    # dividem por ele (chapeu, mesa, cadernos).
     docs_validos = {k for k, _r, _c in _DOCS_CADEIRA}
-    doc_sel = doc if doc in docs_validos else ("mesa" if chapeu_sel else _DOCS_CADEIRA[0][0])
+    doc_sel = doc if doc in docs_validos else ("chapeu" if chapeu_sel else _DOCS_CADEIRA[0][0])
+    if doc_sel == "chapeu" and not chapeu_sel:
+        doc_sel = _DOCS_CADEIRA[0][0]
     tabs = []
     for chave, rotulo, _cands in _DOCS_CADEIRA:
+        if chave == "chapeu" and not chapeu_sel:
+            continue
         aria = ' aria-current="page"' if chave == doc_sel else ""
-        tabs.append(f'<a href="/cadeira/{_esc(slug_disp)}?doc={chave}"{aria}>{_esc(rotulo)}</a>')
+        com_chapeu = f"&amp;chapeu={_esc(chapeu_sel)}" if chapeu_sel and chave in ("chapeu", "mesa", "cadernos") else ""
+        tabs.append(f'<a href="/cadeira/{_esc(slug_disp)}?doc={chave}{com_chapeu}"{aria}>{_esc(rotulo)}</a>')
     docs_html = f'<div class="docs">{"".join(tabs)}</div>'
 
     # seletor de chapeu — filtra a mesa e os cadernos (os dois docs que se dividem
@@ -716,22 +747,27 @@ def render_cadeira(estado: dict, slug: str | None = None, doc: str | None = None
     # chapeu traz quantos itens tem, inclusive 0 — chapeu vazio se ve antes do clique.
     chapeus_html = ""
     if chapeus:
-        doc_alvo = doc_sel if doc_sel in ("mesa", "cadernos") else "mesa"
+        doc_alvo = doc_sel if doc_sel in ("chapeu", "mesa", "cadernos") else "chapeu"
+        doc_todos = doc_sel if doc_sel in ("mesa", "cadernos") else _DOCS_CADEIRA[0][0]
         n_mesa = contagem_mesa((idx.get("mesa") or {}).get("conteudo"))
-        base = f'/cadeira/{_esc(slug_disp)}?doc={doc_alvo}'
         aria_todos = ' aria-current="page"' if not chapeu_sel else ""
-        links = ['<span class="rotulo">Chapéu (filtra mesa e cadernos):</span>',
-                 f'<a href="{base}"{aria_todos}>Todos</a>']
+        links = ['<span class="rotulo">Chapéu:</span>',
+                 f'<a href="/cadeira/{_esc(slug_disp)}?doc={doc_todos}"{aria_todos}>Todos</a>']
         for c in chapeus:
             aria = ' aria-current="page"' if c == chapeu_sel else ""
-            n = (f' <span class="n num">{n_mesa.get(c, 0)}</span>' if doc_alvo == "mesa" else "")
-            links.append(f'<a href="{base}&amp;chapeu={_esc(c)}"{aria}>{_esc(c)}{n}</a>')
+            n = n_mesa.get(c, 0)
+            titulo = f'{n} item(ns) na mesa' if n else 'nenhum item na mesa'
+            links.append(
+                f'<a href="/cadeira/{_esc(slug_disp)}?doc={doc_alvo}&amp;chapeu={_esc(c)}"{aria}'
+                f' title="{titulo}">{_esc(c)} <span class="n num">{n}</span></a>')
         chapeus_html = f'<nav class="docs chapeus" aria-label="Chapéu">{"".join(links)}</nav>'
 
     # leitura do documento selecionado, com carimbo de procedencia no topo.
     # A caixa nao e peca de monta-sessao: vem do bloco `caixa_conteudo`, a parte.
     if doc_sel == "caixa":
         leitura = _render_caixa_doc(estado, slug_l)
+    elif doc_sel == "chapeu":
+        leitura = _render_chapeu_doc(estado, slug_l, chapeu_sel)
     else:
         cands = next(c for k, _r, c in _DOCS_CADEIRA if k == doc_sel)
         peca = _acha_peca(idx, cands)

@@ -305,6 +305,51 @@ def test_render_cadeira_seletor_de_documento_e_chapeu():
     assert "linha 2" not in html_g1
 
 
+def test_chamar_texto_devolve_texto_cru_e_falha_com_motivo(tmp_path, monkeypatch):
+    """`persona ler` nao tem --json: sucesso e exit 0 com texto; o resto e falha com motivo."""
+    from harness_controle import verbos
+
+    def verbo(nome, corpo):
+        (tmp_path / nome).write_text(f"#!/bin/sh\n{corpo}\n")
+        (tmp_path / nome).chmod(0o755)
+
+    verbo("fala", "echo '# ola'")
+    verbo("mudo", "exit 0")
+    verbo("quebra", "echo nao >&2; exit 3")
+    monkeypatch.setattr(verbos, "BIN", tmp_path)
+    r = verbos.chamar_texto(["fala"])
+    assert r.ok and r.dados == {"texto": "# ola"}
+    r = verbos.chamar_texto(["mudo"])
+    assert not r.ok and "stdout vazio" in r.motivo
+    r = verbos.chamar_texto(["quebra"])
+    assert not r.ok and r.motivo == "nao"
+
+
+def test_sonda_chapeus_le_o_texto_de_cada_chapeu(tmp_path, monkeypatch):
+    """Um item por `<cadeira>/<chapeu>`, lido por `persona ler <cadeira> --chapeu <slug>` em
+    modo texto; item indisponivel declara o motivo e nao derruba os outros."""
+    from dataclasses import replace
+
+    from harness_controle.agregador import SONDAS_GRUPO, Agregador
+    from harness_controle.verbos import ResultadoVerbo
+
+    g = next(s for s in SONDAS_GRUPO if s.nome == "chapeus")
+    assert g.texto is True and g.chave_item == "chapeu"
+    assert g.fabrica_argv("ti/release") == ["persona", "ler", "ti", "--chapeu", "release"]
+
+    def falso(argv, **_):
+        if argv[-1] == "canais":
+            return ResultadoVerbo(False, None, "timeout apos 15s", None, 15)
+        return ResultadoVerbo(True, {"texto": "# chapeu " + argv[-1]}, None, 0, 0.01)
+
+    monkeypatch.setattr("harness_controle.agregador.chamar_texto", falso)
+    ag = Agregador(estado_path=tmp_path / "estado.json", sondas=[], sondas_grupo=[])
+    ag._ciclo_sonda_grupo(replace(g, fabrica_itens=lambda: ["ti/canais", "ti/release"]))
+    itens = {i["chapeu"]: i for i in ag._estado["chapeus"]["itens"]}
+    assert itens["ti/release"]["estado"] == "ok" and itens["ti/release"]["dados"] == {"texto": "# chapeu release"}
+    assert itens["ti/canais"]["estado"] == "indisponivel" and "timeout" in itens["ti/canais"]["motivo"]
+
+
 def test_fix_nome_verbo_fila():
     from harness_controle.agregador import SONDAS
     sonda_fila = next(s for s in SONDAS if s.nome == "fila_status")
