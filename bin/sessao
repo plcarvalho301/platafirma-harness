@@ -4,12 +4,12 @@
 # dono: ia
 # classe: A
 # forma: objeto (abrir, ver, limpar) / lista (listar) / predicado (encerrar) / fluxo (longjob)
-# use para: abrir a fita autorizado e reconhecido pela porta (abrir), saber quem opera uma sessao e por qual regra abriu (ver), as sessoes vivas (listar), apagar a chave viva (encerrar), limpar chaves-sonda acumuladas (limpar), execucao que atravessa a fita (longjob)
+# use para: abrir a fita autorizado e reconhecido pela porta (abrir), saber quem opera uma sessao e por qual regra abriu (ver), as sessoes vivas (listar), apagar a chave viva (encerrar), limpar chaves-sonda acumuladas ou, com --rascunho, apagar o rascunho que a propria fita deixou em var/tmp/<ordem_id> (limpar), execucao que atravessa a fita (longjob)
 # atos: abrir (escrita, sessao), ver (leitura, sessao), listar (leitura, sessao), encerrar (escrita, sessao), limpar (escrita, sessao), longjob (herdado do alvo)
 # folhas: abrir|encerrar|limpar -> sessao/cunhagem · ver|listar -> sessao/estado · longjob -> sessao/execucao-longa
-# escreve: sessao:{id}, ledger:{id}, giro:{id} (msg-mem; DEL em encerrar|limpar), sessao.sessao (duravel; encerrar|limpar tambem gravam encerrada_em=now(), migracao 0092); nada em ver|listar
+# escreve: sessao:{id}, ledger:{id}, giro:{id} (msg-mem; DEL em encerrar|limpar), sessao.sessao (duravel; encerrar|limpar tambem gravam encerrada_em=now(), migracao 0092); <instancia>/var/tmp/<PF_ORDEM_ID>/<subpasta> (so `limpar --rascunho --apply`: apaga, e so, o que mora ali); nada em ver|listar
 # consome: a API da entidade-sessao, quando houver (ate la: msg-mem e Postgres direto, declarados abaixo)
-# ambiente: PF_SUJEITO (obrigatoria em abrir; origem: fluxo OAuth, entregue pela porta), PF_SUPERFICIE[=desconhecida] (origem: superficie), PF_BIN[=<bin/ da propria arvore; na release /opt/platafirma/current/harness/bin>] (origem: teste); MEM_REDIS_HOST[=127.0.0.1], MEM_REDIS_PORT[=6380] e SESSAO_PG_PORT[=5437] sao endereco de servico, constantes do verbo; SESSAO_PG_PASSWORD nao e variavel: e segredo, obtido por `seg segredo ler` no processo. PF_CADEIRA e PF_ORDEM_ID nao sao lidas — este verbo as origina; PF_SESSAO so e lida em `longjob run`, para herdar os atributos do agente da chave (card #3156)
+# ambiente: PF_SUJEITO (obrigatoria em abrir; origem: fluxo OAuth, entregue pela porta), PF_SUPERFICIE[=desconhecida] (origem: superficie), PF_BIN[=<bin/ da propria arvore; na release /opt/platafirma/current/harness/bin>] (origem: teste); MEM_REDIS_HOST[=127.0.0.1], MEM_REDIS_PORT[=6380] e SESSAO_PG_PORT[=5437] sao endereco de servico, constantes do verbo; SESSAO_PG_PASSWORD nao e variavel: e segredo, obtido por `seg segredo ler` no processo. PF_ORDEM_ID (origem: verbo `sessao abrir`, injetada pela porta; so lida em `limpar --rascunho`, onde define a unica raiz apagavel) e PLATAFIRMA_INSTANCIA[=/srv/platafirma/casa] (origem: superficie/instalacao; so `limpar --rascunho`); PF_CADEIRA nao e lida — este verbo a origina; PF_SESSAO so e lida em `longjob run`, para herdar os atributos do agente da chave (card #3156)
 # depende: msg-mem (modulo redis), Postgres da sessao (psycopg), persona (vocabulario: `persona foto --json`), acesso (`acesso decidir sessao_abrir sessao:<cadeira> --json`), seg (`seg segredo ler`), longjob (bin/_sessao/longjob, contrato herdado), reidratar (bin/_sessao/reidratar.py, ajudante)
 # substitui: monta-sessao <cadeira> na parte que cunha; redis-cli SET sessao:*; psql -d sessao
 # conforme: parcial — chave viva e registro duravel gravados direto ate a API da entidade-sessao existir (spec_sessao §6)
@@ -29,6 +29,8 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
+import shutil
 import subprocess
 import sys
 import time
@@ -607,6 +609,77 @@ def ato_limpar(dry_run: bool, saida: Saida) -> int:
               f"apagadas={apagadas} preservadas={preservadas}")
     return 0
 
+# ------------------------------------------------------------------ ato: limpar --rascunho
+# Balde #2856, linha 152 (card #3162): a fita grava rascunho em <instancia>/var/tmp/<ordem_id> (ex.:
+# `acervo curar obra --reextrair --bancada <pasta>`) e nao havia verbo que o apagasse. A raiz e UMA: a pasta
+# da propria ordem (PF_ORDEM_ID da chamada). Resolve `..` e link simbolico antes de decidir; o que sai da
+# raiz, ou e a raiz inteira, recusa com exit 4 e nada e apagado. Sem --apply so mostra o plano.
+# Fora do ato (pendencia): apagar na bancada declarada (ex. dt153-aceite) — so a raiz de var/tmp e deste verbo.
+ORDEM_VALIDA = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]*")
+PLANO_MAX = 40   # linhas do plano mostradas; o total vai nos numeros
+
+def _instancia() -> Path:
+    return Path(os.environ.get("PLATAFIRMA_INSTANCIA") or "/srv/platafirma/casa")
+
+def _inventario(alvo: Path) -> list[tuple[Path, int]]:
+    """(caminho, bytes) de cada arquivo ou link sob `alvo`, sem seguir link simbolico."""
+    if not alvo.is_dir():
+        return [(alvo, alvo.lstat().st_size)]
+    itens: list[tuple[Path, int]] = []
+    for pai, dirs, arqs in os.walk(alvo, followlinks=False):
+        for nome in arqs + [d for d in dirs if (Path(pai) / d).is_symlink()]:
+            p = Path(pai) / nome
+            try:
+                itens.append((p, p.lstat().st_size))
+            except OSError:
+                itens.append((p, 0))
+    return sorted(itens)
+
+def ato_limpar_rascunho(subpasta: str, apply: bool, saida: Saida) -> int:
+    ordem = (os.environ.get("PF_ORDEM_ID") or "").strip()
+    if not ORDEM_VALIDA.fullmatch(ordem):
+        return saida.erro(f"sem PF_ORDEM_ID valido ({ordem!r}): a raiz do rascunho e "
+                          "<instancia>/var/tmp/<PF_ORDEM_ID da chamada>; sem ela nada e apagado", 4)
+    tmp = Path(os.path.realpath(_instancia() / "var" / "tmp"))
+    raiz = tmp / ordem
+    if raiz.is_symlink():
+        return saida.erro(f"{raiz} e link simbolico: a raiz do rascunho nao pode apontar para fora de "
+                          f"{tmp}; nada apagado", 4)
+    sub = (subpasta or "").strip()
+    alvo = Path(os.path.realpath(raiz / sub)) if sub else raiz
+    if alvo == raiz:
+        return saida.erro(f"recusado: {sub!r} resolve para a raiz inteira do rascunho ({raiz}); nomeie "
+                          "uma subpasta (ex.: `sessao limpar --rascunho reextrair`); nada apagado", 4)
+    if raiz not in alvo.parents:
+        return saida.erro(f"recusado: {sub!r} resolve para {alvo}, fora da raiz do rascunho ({raiz}); "
+                          "`..`, caminho absoluto e link simbolico que saem da raiz nao valem; nada apagado", 4)
+    if not os.path.lexists(alvo):
+        return saida.erro(f"{alvo} nao existe; nada a apagar (raiz do rascunho: {raiz})", 1)
+    itens = _inventario(alvo)
+    total = sum(b for _, b in itens)
+    rel = [str(p.relative_to(raiz)) for p, _ in itens]
+    if apply:
+        try:
+            shutil.rmtree(alvo) if alvo.is_dir() else alvo.unlink()
+        except OSError as e:
+            return saida.erro(f"falhou ao apagar {alvo}: {type(e).__name__}: {e}", 5)
+        if os.path.lexists(alvo):
+            return saida.erro(f"apagou sem confirmacao: {alvo} ainda existe", 5)
+    if saida.json:
+        print(json.dumps({"rascunho": str(alvo.relative_to(raiz)), "raiz": str(raiz), "alvo": str(alvo),
+                          "apagado": apply, "arquivos": len(itens), "bytes": total,
+                          "plano": rel[:PLANO_MAX], "omitidos": max(0, len(rel) - PLANO_MAX)},
+                         ensure_ascii=False))
+        return 0
+    print(f"rascunho: {'apagou' if apply else 'plano (nada apagado)'} {alvo}")
+    for r in rel[:PLANO_MAX]:
+        print(f"  {r}")
+    if len(rel) > PLANO_MAX:
+        print(f"  ... e mais {len(rel) - PLANO_MAX}")
+    print(f"total: {len(itens)} arquivo(s), {total} bytes"
+          + ("" if apply else f" — para apagar: sessao limpar --rascunho {sub} --apply"))
+    return 0
+
 # ------------------------------------------------------------------ ato: longjob
 # Atributos do agente que o job herda (card #3156, spec agente §11.1: «`sessao longjob` herda os cinco»).
 # sujeito ja chega por PF_SUJEITO (a porta o injeta; nunca sai da chave, spec_acesso §2); os outros quatro
@@ -654,10 +727,12 @@ USO = """uso:
   sessao listar    [--cadeira <slug>] [--json]                           as sessoes vivas
   sessao encerrar  <sessao_id>                                           apaga sessao:{id}, ledger:{id}, giro:{id}; o duravel fica
   sessao limpar    [--dry-run] [--json]                                  remove chaves-sonda acumuladas (sujeito ausente ou '-')
+  sessao limpar    --rascunho <subpasta> [--apply] [--json]              apaga, e so, <instancia>/var/tmp/<PF_ORDEM_ID>/<subpasta> (rascunho da propria fita); sem --apply mostra o plano e os bytes; recusa a raiz inteira e o que sai dela
   sessao longjob   <args...>                                             contrato herdado de bin/_sessao/longjob
 
 exit (abrir): 0 cunhou · 2 uso/cadeira desconhecida · 3 sem sujeito/politica ausente/msg-mem mudo · 4 nao autorizado · 5 gravou e nao confirma
-exit (ver/listar/encerrar/limpar): 0 · 1 nao existe · 2 uso · 3 msg-mem mudo · 5 DEL sem confirmacao"""
+exit (ver/listar/encerrar/limpar): 0 · 1 nao existe · 2 uso · 3 msg-mem mudo · 5 DEL sem confirmacao
+exit (limpar --rascunho): 0 plano ou apagado · 1 subpasta nao existe · 2 uso · 4 sem PF_ORDEM_ID, raiz inteira ou fora da raiz (nada apagado) · 5 apagou sem confirmacao"""
 
 def main(argv: list[str] | None = None) -> int:
     argv = list(sys.argv[1:] if argv is None else argv)
@@ -686,6 +761,8 @@ def main(argv: list[str] | None = None) -> int:
         p.add_argument("--cadeira", default=None)
     elif ato == "limpar":
         p.add_argument("--dry-run", action="store_true")
+        p.add_argument("--rascunho", nargs="?", const="", default=None)
+        p.add_argument("--apply", action="store_true")
     p.add_argument("--json", action="store_true")
     try:
         ns, sobra = p.parse_known_args(argv[1:])
@@ -706,6 +783,14 @@ def main(argv: list[str] | None = None) -> int:
         return ato_listar(ns.cadeira, saida)
     if ato == "encerrar":
         return ato_encerrar(ns.sessao_id or "", saida)
+    if ns.rascunho is not None:
+        if ns.apply and ns.dry_run:
+            return saida.erro("sessao limpar --rascunho: --apply e --dry-run se contradizem; sem --apply "
+                              "ja e plano", 2)
+        return ato_limpar_rascunho(ns.rascunho, ns.apply, saida)
+    if ns.apply:
+        return saida.erro("sessao limpar: --apply so vale com --rascunho <subpasta>; o limpar de "
+                          "sondas apaga sem ele (use --dry-run para ver)", 2)
     return ato_limpar(dry_run=ns.dry_run, saida=saida)
 
 if __name__ == "__main__":
