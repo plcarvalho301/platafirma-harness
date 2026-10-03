@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
-# acervo — opera o acervo da plataforma (casa, obra, registro)
+# acervo — opera o acervo da plataforma (biblioteca, casa, registro)
 # capacidade: conhecimento
 # dono: dados
 # classe: B
-# use para: ler o texto de uma obra por pagina ou capitulo (ler obra impressao), ler uma ADR/spec/pagina/obra que sabe onde esta (ler), listar o que ha de um tipo ou sobre um assunto pelo catalogo (listar --sobre), gravar uma pagina de wiki (escrever casa pagina), por um repo de doc no acervo (ingerir casa <repo>)
+# use para: ler o texto de uma obra por pagina ou capitulo (ler biblioteca impressao), ler uma ADR/spec/pagina/obra que sabe onde esta (ler), listar o que ha de um tipo ou sobre um assunto pelo catalogo (listar --sobre), gravar uma pagina de wiki (escrever casa pagina), por um repo de doc no acervo (ingerir casa <repo>)
 # atos: ler (leitura, casa), listar (leitura, casa), resolver (leitura, casa), escrever (escrita, registro), ingerir (escrita, incorporacao), curar (escrita, curadoria), extrato (leitura, acervo), exportar (escrita, acervo), psql (escrita, acervo), balde (escrita, acervo)
 # forma: texto
 # le: ler=acervo.casa,acervo.obra,acervo.registro,repo
@@ -74,28 +74,29 @@ uso (gramatica arq:0106 — acervo <ato> <particao> <entidade> [seletor]):
                   (sucessora de \`deploy <stack> rotas|acessos\`; segredos: \`seg segredo exigidos\`)
   acervo ingerir  casa platafirma-casa[@<rev>] [--apply]      o suporte, pelo sha (arq:0115 §8.1)
   acervo lote     <id>
-  acervo curar    obra lote [dest] · casa alias <classe> <chave> <alias>
+  acervo curar    biblioteca lote [dest] · casa alias <classe> <chave> <alias>
   acervo curar    casa revisao <revid>... --motivo <m> [--apply]   tira texto antigo do historico da wiki
-  acervo ler      obra impressao <obra> [--paginas a-b | --capitulo <ancora>] [--formato md|blocos]
+  acervo ler      biblioteca impressao <obra> [--paginas a-b | --capitulo <ancora>] [--formato md|blocos]
                   [--papel corpo|todos] [--cursor c] [--impressao <id>] [--baixar [<pasta>]]
                   o texto da obra pelo espelho de leitura, do comeco e em ordem
-  acervo curar    obra --situacao|--expurgar|--restaurar|--promover|--reclassificar|--conceito <...>
-  acervo curar    obra --conceito <slug> --renomear <slug-novo> --motivo "…" [--apply]   troca o slug (cura K15); o velho vira
+  acervo curar    biblioteca --situacao|--expurgar|--restaurar|--promover|--reclassificar|--conceito <...>
+  acervo curar    biblioteca --conceito <slug> --renomear <slug-novo> --motivo "…" [--apply]   troca o slug (cura K15); o velho vira
                   termo de entrada; plano seco sem --apply, com a varredura de quem aponta, D7 e D8 do novo e o HermiT
-  acervo curar    obra --apagar <obra> [--apply]   tira do acervo, SEM VOLTA, a obra ja retirada (catalogo, motor, balde)
-  acervo curar    obra --recortar <obra> · --reextrair <obra> [--metodo <m>] · --expurgar|--restaurar --espelhos
-  acervo curar    obra --reextrair --lote [--ordem <lista>] [--apply] · --rejulgar --lote [--apply]
-  acervo curar    obra --reextrair <id,id…|@arquivo> --bancada <pasta> [--metodo <slug>] [--refazer]
+  acervo curar    biblioteca --apagar <obra> [--apply]   tira do acervo, SEM VOLTA, a obra ja retirada (catalogo, motor, balde)
+  acervo curar    biblioteca --recortar <obra> · --reextrair <obra> [--metodo <m>] · --expurgar|--restaurar --espelhos
+  acervo curar    biblioteca --reextrair --lote [--ordem <lista>] [--apply] · --rejulgar --lote [--apply]
+  acervo curar    biblioteca --reextrair <id,id…|@arquivo> --bancada <pasta> [--metodo <slug>] [--refazer]
                   converte em pasta de saida (nao escreve no acervo; retomavel); depois:
-  acervo listar   obra bancada <pasta> [--json] [--estratos <arquivo>]   perfil x docling por obra (card #3187)
-  acervo curar    obra --relacionar <de> <para> --tipo <t> --garantia <g> --motivo <m> [--apply]
-                  obra --relacoes <conceito> · --desrelacionar <id>   a teia de conceitos (conceito vive em obra)
+  acervo listar   biblioteca bancada <pasta> [--json] [--estratos <arquivo>]   perfil x docling por obra (card #3187)
+  acervo curar    biblioteca --relacionar <de> <para> --tipo <t> --garantia <g> --motivo <m> [--apply]
+                  biblioteca --relacoes <conceito> · --desrelacionar <id>   a teia de conceitos (conceito vive na biblioteca)
   acervo extrato  --todas [dest]
   acervo exportar                    regera ontologia/acervo/*.jsonl e vocabulario.json na bancada
   acervo psql     [--banco rag|motor]  <SQL por stdin>
   acervo balde    listar|ler|copiar|mover|apagar <bucket|sha256> [...] [--apply]
 
-as particoes: obra, casa, registro (arq:0106 §3). conceito e transversal, vive em obra.
+as particoes: biblioteca, casa, registro (arq:0106 §2-3). conceito e transversal, vive na biblioteca.
+'obra' como particao e a forma velha: segue servindo com aviso que aponta 'biblioteca' (arq:0084).
 leitura e anonima; escrever loga com a conta de bot. ato/particao/entidade desconhecidos
 recusam em vez de adivinhar — errar a chamada devolve o vocabulario certo.
 
@@ -124,9 +125,15 @@ ATO="$1"; shift
 conforme() {
   local ato="$1"; shift
   local particao="${1:-}"; local entidade="${2:-}"
+  # `obra` como particao e a forma velha (arq:0106 §2, emendada em 29/09): serve com aviso
+  # e cai na `biblioteca` (arq:0084). A tabela acervo.obra e a entidade `obra` nao mudam.
+  if [ "$particao" = "obra" ]; then
+    avisa "acervo $ato obra" "acervo $ato biblioteca"
+    particao="biblioteca"
+  fi
   case "$particao" in
-    obra|casa|registro) ;;
-    *) echo "acervo $ato: particao '$particao' desconhecida (obra, casa, registro)." >&2
+    biblioteca|casa|registro) ;;
+    *) echo "acervo $ato: particao '$particao' desconhecida (biblioteca, casa, registro)." >&2
        echo "  $SPEC" >&2; exit 2 ;;
   esac
   if [ $# -lt 2 ]; then
@@ -161,41 +168,41 @@ conforme() {
     escrever:casa:*)
         echo "acervo escrever casa $entidade: $entidade nasce em git, não se escreve no acervo. Caminho: write_file na bancada de platafirma-casa → PR → merge em main → acervo ingerir casa platafirma-casa. escrever grava só: pagina, arquivo, ferramental, stack." >&2
         exit 2 ;;
-    escrever:obra:*)
-        echo "acervo escrever obra: obra nasce fora e entra por acervo ingerir obra <raiz>, nunca por escrever." >&2
+    escrever:biblioteca:*)
+        echo "acervo escrever biblioteca: obra nasce fora e entra por acervo ingerir biblioteca <raiz>, nunca por escrever." >&2
         exit 2 ;;
     # --- casa: raiz de entidades (arq:0108) ---
     # A raiz vive na particao casa. `listar casa entidade` e a forma conforme;
     # o atalho `listar entidade` (sem particao) e tratado no case de $ATO abaixo.
     listar:casa:entidade)   exec "$ATOS/entidade" listar "$@" ;;
     ler:casa:entidade)      exec "$ATOS/entidade" listar "$@" ;;
-    # --- obra: conceito, objeto, bancada, obra ---
-    listar:obra:obra)       exec "$ATOS/listar" obra "$@" ;;
-    listar:obra:metodos)    exec "$ATOS/listar" obra metodos "$@" ;;
+    # --- biblioteca (cabeçada pela tabela acervo.obra): conceito, objeto, bancada, obra ---
+    listar:biblioteca:obra)       exec "$ATOS/listar" obra "$@" ;;
+    listar:biblioteca:metodos)    exec "$ATOS/listar" obra metodos "$@" ;;
     # agregador perfil x docling da pasta que `curar --reextrair --bancada` gravou (card #3187):
     # so stdlib, le arquivos, nao toca o acervo
-    listar:obra:bancada)    exec "$ATOS/listar" obra bancada "$@" ;;
-    listar:obra:conceito)   exec "$ATOS/listar" conceitos "$@" ;;
-    ler:obra:objeto)        exec "$ATOS/baixar" "$@" ;;
+    listar:biblioteca:bancada)    exec "$ATOS/listar" obra bancada "$@" ;;
+    listar:biblioteca:conceito)   exec "$ATOS/listar" conceitos "$@" ;;
+    ler:biblioteca:objeto)        exec "$ATOS/baixar" "$@" ;;
     # o texto da obra pelo espelho de leitura, por pagina ou capitulo (spec espelho-de-leitura
     # §5.4; #3180): cliente fino da rota de leitura do motor, nunca converte nem renderiza
-    ler:obra:impressao)     exec python3 "$ATOS/impressao" "$@" ;;
-    curar:obra:lote)        exec "$ATOS/bancada" "$@" ;;
+    ler:biblioteca:impressao)     exec python3 "$ATOS/impressao" "$@" ;;
+    curar:biblioteca:lote)        exec "$ATOS/bancada" "$@" ;;
     # curadoria de UMA obra (#3126): entidade e a FLAG de bin/curar (--situacao, --expurgar,
     # --restaurar, --promover, --reclassificar, --conceito, --relacionar...), nao um nome fixo
     # -- repassa entidade + resto tal qual para _acervo/curar, que so encosta em bin/curar.
-    curar:obra:*)           exec "$ATOS/curar" obra "$entidade" "$@" ;;
+    curar:biblioteca:*)     exec "$ATOS/curar" obra "$entidade" "$@" ;;
     curar:casa:alias)       exec "$ATOS/curar" alias "$@" ;;
     # revisao antiga de pagina da wiki fora do historico publico (revisiondelete)
     curar:casa:revisao)     exec "$ATOS/wiki" ocultar-revisao "$@" ;;
-    bancada:obra:lote)      exec "$ATOS/bancada" "$@" ;;
+    bancada:biblioteca:lote) exec "$ATOS/bancada" "$@" ;;
     # --- ingerir por particao ---
-    # Obra e registro seguem no cliente de obra (objeto-por-sha, MinIO, OCR, bancada).
+    # Biblioteca e registro seguem no cliente de obra (objeto-por-sha, MinIO, OCR, bancada).
     # Casa NAO: doc de casa e texto de git — identidade (repo,path), corpo no payload, sem
     # objeto e sem OCR — e o servidor separa os dois caminhos desde o #3027
     # (POST /acervo/casa/lotes). Deixar casa cair aqui SUBIA o .md da casa ao MinIO e criava
     # uma OBRA no lugar de uma linha em acervo.casa: falha silenciosa, que e pior que recusa.
-    ingerir:obra:*|ingerir:registro:*)
+    ingerir:biblioteca:*|ingerir:registro:*)
         if [[ "$entidade" == --* ]]; then
             exec "$ATOS/../ingerir" "$entidade" "$@"
         else
@@ -244,7 +251,7 @@ case "$ATO" in
       exec "$ATOS/entidade" listar "$@"
     fi
     case "${1:-}" in
-      obra|casa|registro) conforme "$ATO" "$@" ;;
+      biblioteca|obra|casa|registro) conforme "$ATO" "$@" ;;
       *)
         avisa "acervo listar <entidade>" "acervo listar <particao> <entidade>"
         exec "$ATOS/listar" "$@" ;;
@@ -257,29 +264,29 @@ case "$ATO" in
   ingerir)
     # conforme: ingerir <particao> <raiz>; vigente: ingerir <raiz> (alias de `ingerir --lote`)
     case "${1:-}" in
-      obra|casa|registro) conforme ingerir "$@" ;;
+      biblioteca|obra|casa|registro) conforme ingerir "$@" ;;
       *) avisa "acervo ingerir <raiz>" "acervo ingerir <particao> <raiz>"
          exec "$ATOS/ingerir" "$@" ;;
     esac ;;
   escada)
-    avisa "acervo escada" "acervo listar obra obra --situacao"
+    avisa "acervo escada" "acervo listar biblioteca obra --situacao"
     case "${1:-}" in
       --todas) shift ;;
-      obra|casa|registro) ;;
+      biblioteca|obra|casa|registro) ;;
     esac
     exec "$ATOS/escada" "$@" ;;
-  baixar)          avisa "acervo baixar \"<titulo>\"" "acervo ler obra objeto \"<titulo>\""
+  baixar)          avisa "acervo baixar \"<titulo>\"" "acervo ler biblioteca objeto \"<titulo>\""
                    exec "$ATOS/baixar"  "$@" ;;
   bancada)
-    avisa "acervo bancada" "acervo curar obra lote"
+    avisa "acervo bancada" "acervo curar biblioteca lote"
     case "${1:-}" in
-      obra) conforme bancada "$@" ;;
+      biblioteca|obra) conforme bancada "$@" ;;
       *) exec "$ATOS/bancada" "$@" ;;
     esac ;;
   extrato)
     case "${1:-}" in
       --todas) shift ;;
-      obra|casa|registro) ;;
+      biblioteca|obra|casa|registro) ;;
       *) avisa "acervo extrato" "acervo extrato --todas" ;;
     esac
     exec "$ATOS/extrato" "$@" ;;
