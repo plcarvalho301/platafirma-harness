@@ -14,10 +14,10 @@ decidir "isso é caveat ou alert" é problema de quem renderiza (LOTE 3).
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 import time
 from dataclasses import dataclass
-import os
 from pathlib import Path
 from typing import Any
 
@@ -86,3 +86,33 @@ def chamar(
         )
 
     return ResultadoVerbo(True, dados, None, r.returncode, duracao)
+
+
+def chamar_texto(
+    argv: list[str],
+    *,
+    timeout: float = 20.0,
+    env: dict[str, str] | None = None,
+) -> ResultadoVerbo:
+    """Para o verbo de leitura que devolve texto cru e nao tem `--json` (`persona ler`).
+    Sucesso e exit 0 com stdout nao vazio, e `dados` e `{"texto": <stdout>}`; o resto
+    (timeout, crash, exit != 0, stdout vazio) e falha de EXECUCAO com o motivo, como em
+    `chamar` — texto ausente nunca vira texto vazio."""
+    t0 = time.monotonic()
+    try:
+        r = subprocess.run(
+            [str(BIN / argv[0]), *argv[1:]],
+            capture_output=True, text=True, encoding="utf-8", timeout=timeout, env=env, check=False,
+        )
+    except subprocess.TimeoutExpired:
+        return ResultadoVerbo(False, None, f"timeout apos {timeout:g}s", None, timeout)
+    except OSError as e:
+        return ResultadoVerbo(
+            False, None, f"nao foi possivel executar {argv[0]}: {e}", None, time.monotonic() - t0
+        )
+    duracao = time.monotonic() - t0
+    texto = r.stdout.strip()
+    if r.returncode != 0 or not texto:
+        motivo = r.stderr.strip() or f"stdout vazio (exit {r.returncode})"
+        return ResultadoVerbo(False, None, motivo, r.returncode, duracao)
+    return ResultadoVerbo(True, {"texto": texto}, None, r.returncode, duracao)

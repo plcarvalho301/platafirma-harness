@@ -58,6 +58,17 @@ ESTADO_OK = {
     "conferir_verbo": bloco_de(ResultadoVerbo(True, {"resultado": "ok", "verbos": [], "arq0037": []}, None, 0, 0.01), agora=1000.0),
     "conferir_repo": bloco_de(ResultadoVerbo(True, {"resultado": "ok", "repos": []}, None, 0, 0.01), agora=1000.0),
     "skills": {"lido_em": 1000.0, "estado": "ok", "motivo": None, "itens": []},
+    # texto de cada chapeu (`persona ler <cadeira> --chapeu <slug>`), lido pelo agregador
+    "chapeus": {
+        "lido_em": 1000.0, "estado": "ok", "motivo": None,
+        "itens": [
+            {"chapeu": "ti/design", "lido_em": 1000.0, "estado": "ok", "motivo": None, "dados": {
+                "texto": "# chapeu design — o desenho\n\n## Espaço de problema\n\n- **Estados** da tela\n\n"
+                         "| quando | abre |\n|---|---|\n| a | b |"}},
+            {"chapeu": "ti/canais", "lido_em": 1000.0, "estado": "indisponivel",
+             "motivo": "timeout apos 15s", "dados": None},
+        ],
+    },
     # conteudo das caixas, lido a frio pelo agregador (`fila ler --tudo --json`)
     "caixa_conteudo": {
         "lido_em": 1000.0, "estado": "ok", "motivo": None,
@@ -684,3 +695,40 @@ def test_cadeira_seletor_de_chapeu_conta_itens_da_mesa_e_segue_o_documento(clien
     assert "construcao" in nos_cadernos and "release" in nos_cadernos
     filtrado = cliente.get("/cadeira/TI?doc=cadernos&chapeu=design").text
     assert "Nenhum caderno indexado" in filtrado
+
+# --- o texto do chapeu em si: clicar no chapeu abre o chapeu, nao so a mesa dele ---
+
+def test_clicar_no_chapeu_abre_o_texto_do_chapeu(cliente):
+    # o chip leva ao documento Chapeu (antes levava sempre a mesa)
+    persona = cliente.get("/cadeira/TI").text
+    assert "?doc=chapeu&amp;chapeu=design" in persona
+    corpo = cliente.get("/cadeira/TI?doc=chapeu&chapeu=design").text
+    assert "o desenho" in corpo                          # h1 do chapeu.md
+    assert "<h2>Espaço de problema</h2>" in corpo
+    assert "<strong>Estados</strong>" in corpo
+    assert "<table>" in corpo                            # tabela do chapeu renderizada
+    assert "persona ler ti --chapeu design" in corpo     # procedencia no carimbo
+    assert "Oswaldo Aranha" not in corpo                 # nao e a persona
+
+def test_chapeu_escolhido_sem_doc_abre_o_texto_dele(cliente):
+    corpo = cliente.get("/cadeira/TI?chapeu=design").text
+    assert "o desenho" in corpo
+
+def test_aba_chapeu_so_existe_com_chapeu_escolhido_e_o_chapeu_segue_nas_abas(cliente):
+    sem = cliente.get("/cadeira/TI").text
+    assert ">Chapéu<" not in sem.split('class="docs chapeus"')[0]       # nenhuma aba antes do seletor
+    com = cliente.get("/cadeira/TI?doc=chapeu&chapeu=design").text
+    abas = com.split('class="docs chapeus"')[0]
+    assert ">Chapéu<" in abas
+    assert "?doc=mesa&amp;chapeu=design" in abas and "?doc=cadernos&amp;chapeu=design" in abas
+    assert "?doc=persona" in abas and "?doc=persona&amp;chapeu" not in abas
+
+def test_chapeu_sem_texto_lido_ou_indisponivel_se_declara(cliente):
+    ausente = cliente.get("/cadeira/TI?doc=chapeu&chapeu=discovery").text
+    assert "Chapéu sem leitura" in ausente
+    indisp = cliente.get("/cadeira/TI?doc=chapeu&chapeu=canais").text
+    assert "Chapéu indisponível: timeout apos 15s" in indisp
+
+def test_chapeu_que_nao_e_da_cadeira_cai_na_persona(cliente):
+    corpo = cliente.get("/cadeira/TI?doc=chapeu&chapeu=nao-existe").text
+    assert "Oswaldo Aranha" in corpo
