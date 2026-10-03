@@ -723,18 +723,22 @@ def render_cadeira(estado: dict, slug: str | None = None, doc: str | None = None
     # (agregador em codigo velho, antes do restart) o seletor some, nao mente.
     chapeus = [c for c in (dados.get("chapeus") or []) if c]
     chapeu_sel = chapeu if chapeu in chapeus else None
+    # A aba Chapeu sem chapeu escolhido abre o primeiro da cadeira; chapeu nomeado que a
+    # cadeira nao tem NAO cai em outro (mostrar o chapeu errado seria mentir): vai a persona.
+    if doc == "chapeu" and not chapeu and chapeus:
+        chapeu_sel = chapeus[0]
 
     # seletor de documento — abas por link (sem JS): ?doc=<chave>. Com chapeu
     # escolhido, o doc que faz sentido e o texto dele; senao, default persona. A aba
-    # Chapeu so existe com um chapeu escolhido, e o chapeu segue nas abas que se
-    # dividem por ele (chapeu, mesa, cadernos).
+    # Chapeu esta sempre la quando a cadeira tem chapeu, e o chapeu escolhido segue nas
+    # abas que se dividem por ele (chapeu, mesa, cadernos).
     docs_validos = {k for k, _r, _c in _DOCS_CADEIRA}
     doc_sel = doc if doc in docs_validos else ("chapeu" if chapeu_sel else _DOCS_CADEIRA[0][0])
     if doc_sel == "chapeu" and not chapeu_sel:
         doc_sel = _DOCS_CADEIRA[0][0]
     tabs = []
     for chave, rotulo, _cands in _DOCS_CADEIRA:
-        if chave == "chapeu" and not chapeu_sel:
+        if chave == "chapeu" and not chapeus:
             continue
         aria = ' aria-current="page"' if chave == doc_sel else ""
         com_chapeu = f"&amp;chapeu={_esc(chapeu_sel)}" if chapeu_sel and chave in ("chapeu", "mesa", "cadernos") else ""
