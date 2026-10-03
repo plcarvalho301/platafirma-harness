@@ -223,7 +223,8 @@ def test_projecao_claude_leva_cabecalho_modelo_ferramentas_e_o_lote_de_abertura(
     linhas = texto.splitlines()
     assert linhas[0] == "---" and linhas[1].startswith(agente.CABECALHO_GERADO)
     assert "name: revisor" in linhas and "model: sonnet" in linhas and "maxTurns: 40" in linhas
-    assert "tools: Read, Grep, mcp__claudinho-mcp__read_file, mcp__claudinho-mcp__monta_sessao" in linhas
+    assert ("tools: Read, Grep, " + ", ".join(g + "read_file" for g in agente.GRAFIAS) + ", "
+            + ", ".join(g + "monta_sessao" for g in agente.GRAFIAS)) in linhas
     assert ('1. `monta_sessao` com `cadeira="engenharia"`, `chapeu="devops"`, `perfil="cadeirinha"`, '
             '`modo="revisar"`, `agente="revisor"`, `origem=<o sessao_id que a delegação trouxe>`') in texto
     assert "sessao abrir" not in texto and "expediente montar" not in texto, "abre pela mesma tool da cadeira"
@@ -662,7 +663,18 @@ def test_por_ligacao_e_suplanta_fora_do_molde_reprovam(decl, trecho):
 def test_projecao_do_suplante_sai_com_o_nome_do_embutido_e_a_execucao_delegada():
     linhas = agente.projecao_claude(EXPLORE).splitlines()
     assert "name: Explore" in linhas and "model: sonnet" in linhas and "maxTurns: 40" in linhas
-    assert "tools: Read, Grep, Glob, mcp__claudinho-mcp__monta_sessao" in linhas
+    assert "tools: Read, Grep, Glob, " + ", ".join(g + "monta_sessao" for g in agente.GRAFIAS) in linhas
+
+def test_projecao_lista_a_porta_nas_tres_grafias_e_a_declaracao_segue_canonica():
+    """#3255: no Code Desktop do posto o conector chega pelo uuid; no CLI, como claude_ai_claudinho-mcp."""
+    (tools,) = [l for l in agente.projecao_claude(CONSULTOR).splitlines() if l.startswith("tools: ")]
+    nomes = tools[len("tools: "):].split(", ")
+    for esperado in ("mcp__claudinho-mcp__monta_sessao", "mcp__claude_ai_claudinho-mcp__monta_sessao",
+                     "mcp__f40dcc0d-abeb-4254-8b3d-34d33a57565d__monta_sessao"):
+        assert esperado in nomes
+    assert nomes[:2] == ["Read", "Grep"] and len(nomes) == len(set(nomes)), "embutidas passam como vieram, sem repetir"
+    assert agente.grafias("Read") == ["Read"]
+    assert agente.valida(CONSULTOR, "consultor") == [], "a declaração não muda: o conector confere o canônico"
 
 def test_projetar_gera_o_explore_e_o_conferir_conta_a_projecao(mundo, capsys):
     mundo.escreve(REVISOR, EXPLORE)

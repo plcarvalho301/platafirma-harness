@@ -59,6 +59,18 @@ PORTA = "mcp__claudinho-mcp__"
 PORTA_BASE = ("run_command", "read_file", "write_file", "monta_sessao")   # as que a porta publica fora do ferramental
 ABRE = PORTA + "monta_sessao"
 SEM_ESCOPO = PORTA + "run_command"      # alcança todo verbo: o agente perderia o escopo da declaração
+# A mesma porta chega com outro prefixo conforme a superfície (#3255): o Code CLI publica o conector do claude.ai
+# como `claude_ai_claudinho-mcp`, e o Code Desktop pelo uuid do conector (medido 03/10/2026 no posto). A declaração
+# segue com o nome canônico (PORTA); a projeção lista cada tool de porta nas três grafias, e o Code dá ao
+# subagente as que existem na superfície. Conector recriado no claude.ai troca o uuid: a linha muda aqui.
+GRAFIAS = (PORTA, "mcp__claude_ai_claudinho-mcp__", "mcp__f40dcc0d-abeb-4254-8b3d-34d33a57565d__")
+
+def grafias(tool: str) -> list[str]:
+    """A tool de porta em todas as grafias da superfície; qualquer outra tool passa como veio."""
+    if not tool.startswith(PORTA):
+        return [tool]
+    nome = tool[len(PORTA):]
+    return [g + nome for g in GRAFIAS]
 OLLAMA_URL = os.environ.get("OLLAMA_BASE_URL", "http://localhost:11434")
 
 
@@ -258,7 +270,7 @@ def projecao_claude(decl: dict) -> str:
         f"name: {nome}",
         f"description: {json.dumps(decl['descricao'].strip(), ensure_ascii=False)}",
         f"model: {exe['modelo']['versao']}",
-        f"tools: {', '.join(exe['ferramentas'])}",
+        f"tools: {', '.join(g for f in exe['ferramentas'] for g in grafias(f))}",
         f"maxTurns: {exe['teto']['turnos']}",
         "---",
         "",
