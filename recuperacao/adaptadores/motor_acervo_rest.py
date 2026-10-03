@@ -3,7 +3,7 @@
 Distinto de `AdaptadorAcervo` (fala com o arquétipo CONSULTA — `/acervo/trechos/consulta`
 e as facetas, via a classe `Adaptador`, com carimbo memoizado por sessão): este módulo
 fala com as rotas de GOLDEN RECORD do mesmo `motor_acervo` — situação e descoberta.
-`situacao.py` e `descobrir.py` chamam por aqui em vez de ler `ontologia/acervo/*.jsonl`
+`situacao.py` chama por aqui em vez de ler `ontologia/acervo/*.jsonl`
 do disco, que era o que `acervo_leitor.py::carrega_catalogo` fazia (arq:0085 §4 — retrato,
 não vivo). O módulo foi removido; a escada de degraus e o casamento de obra por
 título/arquivo moraram para `motor_acervo/acervo_consulta.py`, do outro lado do HTTP.

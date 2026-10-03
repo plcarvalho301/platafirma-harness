@@ -10,7 +10,7 @@ Regras duras (arq:0085 §4 + §2):
 2. Fonte que não alcança o vivo responde indeterminavel/fonte-nao-indexada, NUNCA zero (§4).
 3. degrau mapeia na tabela de estados do conceito (spec §10.6: ancorado ·
    declarado-não-servindo · sem-obra-não-julgado · órfão).
-4. Mais leve que descobrir; mesma biblioteca, mesmo envelope.
+4. Mesma biblioteca e mesmo envelope das outras leituras do conhecimento.
 
 Verbo fino desde #2957 (arq:0089 §2, arq:0090): a escada de degraus e o casamento de
 obra por título/arquivo migraram para `motor_acervo/acervo_consulta.py`, do outro lado

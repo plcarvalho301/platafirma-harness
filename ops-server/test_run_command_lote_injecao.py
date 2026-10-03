@@ -178,6 +178,24 @@ def test_operadores_como_token_recusam_e_regex_passa():
         assert rec["sugestao"] == "é a própria tool que você está chamando"
 
 
+def test_verbo_retirado_aponta_o_sucessor():
+    """#3262: verbo retirado nunca sai com `sugestao: null`, que se lê como "verbo que
+    falta, vira card" e convida a recriar o que o dono tirou do ar."""
+    with patch("server.SLUGS_SERVIDOS", {"repo"}), \
+         patch("server.BINARIOS", {"repo": "/opt/bin/repo"}):
+        _, _, rec = s._item_de_lote("descobrir ontologia")
+        assert rec["recusado"] is True and rec["motivo"] == "sem verbo"
+        assert "acervo listar biblioteca obra --sobre" in rec["sugestao"]
+        assert "motor rag buscar" in rec["sugestao"]
+        assert "verbos_servidos" not in rec
+
+        _, _, rec = s._item_de_lote("recuperar 'o que é X'")
+        assert "motor rag buscar" in rec["sugestao"]
+
+        _, _, rec = s._item_de_lote("deploy core up")
+        assert "release promover" in rec["sugestao"]
+
+
 @pytest.mark.anyio
 async def test_run_command_encadeado_para_no_exit_4_e_declara_o_resto():
     """card:3149 passo 7, aceite: [ok, exit 1, exit 4, ok] roda tres, para no terceiro e

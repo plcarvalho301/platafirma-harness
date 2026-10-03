@@ -484,7 +484,8 @@ def ate_acerto(giros, par):
 
 # Ferramentas de codigo: onde a bisseccao acontece.
 CODIGO = ("read_file", "write_file", "run_command", "repo", "git", "lint", "teste")
-# Leitura da casa: o que responde "o que a casa decidiu" numa chamada.
+# Leitura da casa: o que responde "o que a casa decidiu" numa chamada. `descobrir` saiu do ar
+# em 27/09/2026 e fica aqui so para contar a leitura no log anterior a essa data.
 CASA = ("motor", "acervo", "descobrir")
 # Piso de uma sessao "tecnica": abaixo disso nao ha bisseccao, ha uma consulta solta.
 PISO_TECNICA = 5
@@ -861,7 +862,7 @@ SINAIS = {
     "documento_nao_achado": "acervo ler/resolver com exit 1",
     "conferir_existe": "conferir existe chamado (reflexo da conduta antiga)",
     "efeito_sem_conferencia": "promover/merge/push/deploy sem conferir depois na fita",
-    "tecnica_sem_casa": "fita tecnica sem motor/acervo/descobrir",
+    "tecnica_sem_casa": "fita tecnica sem motor/acervo",
 }
 CONTEXTO = ("fitas", "giros", "sessoes", "abertura_remontada")
 
@@ -1012,7 +1013,7 @@ eventos     stream cru, um objeto por evento (giro, erro, help, acerto, cadeia, 
 dia         resumo: giros por fita, erros por verbo, profundidade de cadeia, help
 ate-acerto  a metrica-mae: giros-ate-acerto por (ordem_id, tool)
 tateio      separa tateio de GRAMATICA (exit 2, verbo nu, recusa da porta) de tateio de
-            LEITURA (sessao tecnica sem motor/acervo/descobrir), e do erro de execucao
+            LEITURA (sessao tecnica sem motor/acervo), e do erro de execucao
 casos       o giro falhado com o que o log gravou (args, motivo); --agregado resume
 verbos      taxa de erro POR VERBO (erros/giros) numa janela de dias; --csv para planilha
 comportamento  sinais de ato por cadeira, taxa por fita: <dia> (default ontem) contra os
@@ -1079,7 +1080,7 @@ def texto(ato, r):
         lt = r["leitura"]
         linhas.append("")
         linhas.append(f"(2) leitura — {lt['sem_leitura_da_casa']} de "
-                      f"{lt['sessoes_tecnicas']} sessoes tecnicas sem motor/acervo/descobrir:")
+                      f"{lt['sessoes_tecnicas']} sessoes tecnicas sem motor/acervo:")
         for x in lt["onde"][:8]:
             linhas.append(f"  {x['giros_de_codigo']:4d} giros de codigo  "
                           f"{(x['cadeira'] or '-'):20s} {x['ordem_id']}")

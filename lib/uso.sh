@@ -212,7 +212,7 @@ uso_erro_ato() {
 # Chamado ANTES de qualquer posicional. Nunca erra: pedido de ajuda que nao casa
 # com ato declarado cai no mapa, exit 0.
 #   USO_SEM_ATO=passa  -> verbo cujo "sem ato" e chamada valida (sinal, motor,
-#                         descobrir, situacao) nao tem o vazio sequestrado.
+#                         situacao) nao tem o vazio sequestrado.
 uso_intercepta() {
   case "${1:-}" in
     -h|--help|--ajuda|ajuda) uso_mapa; exit 0 ;;
@@ -230,7 +230,7 @@ uso_intercepta() {
   # em toda a casa, e verbo nenhum precisa lembrar de escreve-la.
   #   USO_ATO_LIVRE=1 -> o primeiro argumento nao e ato de conjunto fechado, e sim
   #                      alvo do chamador (motor <instancia>,
-  #                      descobrir <assunto>, situacao <obra>, ingerir <pasta>).
+  #                      situacao <obra>, ingerir <pasta>).
   if [ -z "${USO_ATO_LIVRE:-}" ] && [ -n "$(uso_atos)" ] && ! uso_tem_ato "$1"; then
     uso_erro_ato "$1"
   fi
