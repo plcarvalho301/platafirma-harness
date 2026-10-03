@@ -336,7 +336,7 @@ def test_argv_de_listar_e_ler(monkeypatch):
                         chamadas.append(("listar", e, dono, todas)) or 0)
     monkeypatch.setattr(casa, "sobre", lambda c, k, e, j, todas=False:
                         chamadas.append(("sobre", c, k, e, todas)) or 0)
-    monkeypatch.setattr(casa, "ler", lambda e, s, j, situacao=False:
+    monkeypatch.setattr(casa, "ler", lambda e, s, j, situacao=False, offset=0:
                         chamadas.append(("ler", e, s, situacao)) or 0)
     casa.main(["listar"])
     casa.main(["listar", "--json"])
@@ -447,6 +447,112 @@ def test_listar_todas_inclui_retiradas(banco_falso, capsys):
     assert itens["arq:0094"]["situacao"]["servido"].startswith("não servida")
     assert itens["arq:0112"]["situacao"]["servido"] == (
         "aaaaaaaaaaaa (= main do espelho, buscado em 2026-09-24 11:59Z)")
+
+
+# ------------------------------------------------------------------ ler com --offset (#2856 linha 161)
+
+@pytest.fixture
+def banco_com_corpo(monkeypatch):
+    """acervo.casa de mentira com UMA linha viva cujo corpo o teste escolhe."""
+    corpo = {"texto": ""}
+    info = {"slug": "levantamento", "projecao": "levantamento/<data>-<slug>.md", "regime": "datado",
+            "vivas": 1, "retiradas": 0, "sem_chave": 0, "fora_da_fonte": 0, "legado": 0,
+            "ultimo": {}}
+    linha = dict(LINHA_VIVA, chave="2026-09-29-conformacao-0118-0119", serie=None, numero=None,
+                 especie="levantamento", titulo="Conformação 0118 e 0119")
+    monkeypatch.setattr(casa, "_especie", lambda especie: info)
+    monkeypatch.setattr(casa, "_linhas", lambda where, limite=None: [linha])
+    monkeypatch.setattr(casa, "_fonte", lambda: {"sha": "a" * 40, "em": "2026-09-24 12:00Z"})
+    monkeypatch.setattr(casa._suporte, "main_do_espelho", lambda esp=None: ("a" * 40, None))
+    monkeypatch.setattr(casa._suporte, "ultima_busca", lambda esp=None: "2026-09-24 11:59Z")
+    monkeypatch.setattr(casa, "_q", lambda sql, alvo="": {"corpo": corpo["texto"]})
+    return corpo
+
+
+CHAVE_LONGA = "2026-09-29-conformacao-0118-0119"
+
+
+def test_ler_documento_longo_trunca_e_diz_como_continuar(banco_com_corpo, monkeypatch, capsys):
+    # a porta corta em 50 KB sem aviso: o verbo tem de paginar ANTES e dizer o que falta
+    assert casa.PAGINA < 50_000
+    monkeypatch.setattr(casa, "PAGINA", 100)
+    banco_com_corpo["texto"] = "".join(f"ponto {i:03d}\n" for i in range(40))   # 400 bytes
+    assert casa.ler("levantamento", CHAVE_LONGA, False) == 0
+    out = capsys.readouterr().out
+    assert "ponto 000" in out and "ponto 039" not in out
+    assert out.rstrip("\n").splitlines()[-1].startswith(
+        "truncado em 100 de 400 bytes; continue com --offset 100")
+    # a última página não leva aviso
+    assert casa.ler("levantamento", CHAVE_LONGA, False, offset=300) == 0
+    out = capsys.readouterr().out
+    assert "ponto 039" in out and "truncado em" not in out
+
+
+def test_ler_por_offset_reconstroi_o_documento_inteiro(banco_com_corpo, monkeypatch, capsys):
+    # texto com multibyte (ç, ã, —): o corte cai na fronteira de caractere, nada se perde nem repete
+    original = "".join(f"ponto {i:02d} — ação, conformação e decisão\n" for i in range(18))
+    banco_com_corpo["texto"] = original
+    monkeypatch.setattr(casa, "PAGINA", 97)
+    pedacos, avisos, offset = [], [], 0
+    for _ in range(100):
+        assert casa.ler("levantamento", CHAVE_LONGA, False, offset=offset) == 0
+        linhas = capsys.readouterr().out.split("\n")[1:]          # sem a marca
+        aviso = [l for l in linhas if l.startswith("truncado em ")]
+        pedacos.append("\n".join(l for l in linhas if l not in aviso).rstrip("\n"))
+        if not aviso:
+            break
+        avisos.append(aviso[0])
+        offset = int(aviso[0].split("--offset ")[1].split()[0])
+    else:
+        raise AssertionError("paginacao nao termina")
+    assert len(pedacos) > 3 and len(avisos) == len(pedacos) - 1
+    assert "".join(pedacos).replace("\n", "") == original.replace("\n", "")
+    total = len(original.encode("utf-8"))
+    assert all(f" de {total} bytes; continue com --offset " in a for a in avisos)
+    # o next_offset é byte de verdade: cada trecho cabe na página
+    assert all(len(p.encode("utf-8")) <= 97 for p in pedacos)
+
+
+def test_ler_json_traz_next_offset_como_o_read_file(banco_com_corpo, monkeypatch, capsys):
+    monkeypatch.setattr(casa, "PAGINA", 50)
+    banco_com_corpo["texto"] = "x" * 120
+    assert casa.ler("levantamento", CHAVE_LONGA, True) == 0
+    doc = json.loads(capsys.readouterr().out)
+    assert doc["corpo"] == "x" * 50 and doc["truncado"] is True
+    assert doc["bytes_total"] == 120 and doc["next_offset"] == 50
+    assert casa.ler("levantamento", CHAVE_LONGA, True, offset=100) == 0
+    doc = json.loads(capsys.readouterr().out)
+    assert doc["corpo"] == "x" * 20 and doc["truncado"] is False and doc["next_offset"] is None
+
+
+def test_ler_offset_alem_do_fim_sai_2(banco_com_corpo, capsys):
+    banco_com_corpo["texto"] = "curto\n"
+    with pytest.raises(SystemExit) as e:
+        casa.ler("levantamento", CHAVE_LONGA, False, offset=99)
+    assert e.value.code == 2
+    assert "--offset 99" in capsys.readouterr().err
+
+
+def test_ler_documento_curto_sai_igual_a_antes(banco_com_corpo, capsys):
+    banco_com_corpo["texto"] = "# curto\n\ncorpo\n"
+    assert casa.ler("levantamento", CHAVE_LONGA, False) == 0
+    assert capsys.readouterr().out.split("\n", 1)[1] == "# curto\n\ncorpo\n"
+
+
+def test_main_ler_aceita_offset_e_recusa_o_malformado(monkeypatch):
+    chamadas = []
+    monkeypatch.setattr(casa, "ler", lambda e, s, j, situacao=False, offset=0:
+                        chamadas.append((e, s, j, offset)) or 0)
+    casa.main(["ler", "levantamento", "2026-09-29-x", "--offset", "45000"])
+    casa.main(["ler", "--offset", "7", "levantamento", "2026-09-29-x", "--json"])
+    assert chamadas == [("levantamento", "2026-09-29-x", False, 45000),
+                        ("levantamento", "2026-09-29-x", True, 7)]
+    for ruim in (["ler", "a", "b", "--offset"], ["ler", "a", "b", "--offset", "x"],
+                 ["ler", "a", "b", "--offset", "-1"], ["listar", "a", "--offset", "1"]):
+        with pytest.raises(SystemExit) as e:
+            casa.main(ruim)
+        assert e.value.code == 2, ruim
+    assert len(chamadas) == 2
 
 
 # ------------------------------------------------------------------ Sobre: e resolver (sem banco)
