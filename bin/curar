@@ -62,6 +62,9 @@ USO = """uso:
   curar --expurgar --espelhos [--apply]                       espelho de impressão aposentada há +90 dias
   curar --restaurar --espelhos [<obra>] [--apply]             desfaz o expurgo de espelhos
   curar --conceito <slug> [--rotulo … --definicao … --natureza … --estatuto … --alt "rótulo@pt,…"] --pai <slug> --tipo <t> --garantia <g> --motivo "…" [--lastro …] [--apply]
+  curar --conceito <slug> --renomear <slug-novo> --motivo "…" [--sem-hermit] [--apply]
+                                troca o slug (cura K15): o velho vira termo de entrada; o plano traz a varredura de quem
+                                aponta, D7 e D8 do slug novo e o HermiT
   curar --relacionar <de> <para> --tipo <t> --garantia <g> --motivo <m> [--lastro <obra>] [--apply]
   curar --relacionar --help     cartilha: as 11 famílias (frase-molde) e as 3 garantias
   curar --relacoes <conceito>   arestas de um conceito, coluna + tabela (o que já está lavrado)
@@ -95,6 +98,15 @@ opções de --conceito:
   --endereco <texto>            endereço/URI canônico (opcional)
   --filhos-exclusivos           filhos mutuamente exclusivos
   --trata-de <obras>            obra(s) de lastro literário (uuid/título, vírgula)
+
+opções de --conceito --renomear (cura K15; não combina com as de criar nem com --pai):
+  --renomear <slug-novo>        slug novo; o velho (o do --conceito) vira termo de entrada em acervo.conceito_rotulo
+                                (papel alternativo, língua zxx) e a ficha do conceito na raiz o acompanha
+  --motivo <texto>              por que o slug muda (obrigatório)
+  --sem-hermit                  pula a projeção formal (só com --apply se o HermiT estiver fora)
+  o plano mostra: slug, outros_rotulos, varredura de quem aponta (banco, por id: relações, obras, filhos; e o
+  texto que cita o velho nos repositórios servidos), D7 e D8 do slug novo e HermiT. Slug novo que já existe sai 1
+  com ConceitoDuplicado e o id do que existe; slug velho que não existe, 1 com ConceitoNaoEncontrado
 
 opções de --relacionar:
   --tipo <família>              generica|partitiva|instancia|instrumental|condicional|tematica|
@@ -502,6 +514,19 @@ def _arvore_projecao() -> str | None:
 def _hermit(de: str, para: str, tipo: str) -> dict | None:
     """Projeção formal duas vezes (sem e com a aresta em memória) e diff de insatisfazíveis.
     Devolve None quando não dá para rodar (sem árvore de conhecimento, sem venv, script falhou)."""
+    return _hermit_com(["--mais", f"{de}:{para}:{tipo}"])
+
+
+def _hermit_renomear(velho: str, novo: str) -> dict | None:
+    """O mesmo diff para a troca de slug (`--renomear VELHO:NOVO` do gerador, card #3239). O gerador no
+    ar só aceita a opção depois do `release promover platafirma-conhecimento`; antes, volta `{"erro": …}`."""
+    return _hermit_com(["--renomear", f"{velho}:{novo}"], renomeia=(velho, novo))
+
+
+def _hermit_com(mudanca: list[str], renomeia: tuple[str, str] | None = None) -> dict | None:
+    """Projeta a base e a base com `mudanca` (flags do gerador que a aplicam em memória) e compara.
+    `renomeia` = (velho, novo): a classe insatisfazível que já existia volta com o nome novo (o IRI troca
+    `.` por `_`), e não conta como insatisfazível nova da troca."""
     repo = _arvore_projecao()
     py = os.environ.get("PF_PROJECAO_PYTHON") or str(release() / "venv" / "acervo" / "bin" / "python")
     if not repo or not os.path.isfile(py):
@@ -517,10 +542,13 @@ def _hermit(de: str, para: str, tipo: str) -> dict | None:
         return json.loads(r.stdout.strip().splitlines()[-1])
     try:
         base = roda([], os.path.join(tmp, "projecao-base.ttl"))
-        com = roda(["--mais", f"{de}:{para}:{tipo}"], os.path.join(tmp, "projecao-plano.ttl"))
+        com = roda(mudanca, os.path.join(tmp, "projecao-plano.ttl"))
     except (RuntimeError, ValueError, OSError) as e:
         return {"erro": str(e)}
     b, c = set(base["insatisfaziveis"]), set(com["insatisfaziveis"])
+    if renomeia:
+        velho_iri, novo_iri = (s.replace(".", "_") for s in renomeia)
+        b = {novo_iri if nome == velho_iri else nome for nome in b}
     return {"antes": len(b), "depois": len(c), "novos": sorted(c - b), "saem": sorted(b - c),
             "triplas": (base["triplas"], com["triplas"]), "repo": repo}
 
@@ -608,6 +636,8 @@ def formatar_plano_conceito(p: dict) -> str:
 
 
 def acao_conceito(args, autor: str, como_json: bool, headers: dict) -> int:
+    if args.renomear is not None:
+        return acao_conceito_renomear(args, autor, como_json, headers)
     slug = args.conceito.strip()
     pai_slug = (getattr(args, "pai", None) or args.mais_amplo or "").strip()
     tipo = args.tipo or args.mais_amplo_tipo
@@ -784,6 +814,312 @@ def acao_conceito(args, autor: str, como_json: bool, headers: dict) -> int:
         else:
             print(f"  export : regenerado no clone — commit e push são seus:\n    {export.replace(chr(10), chr(10) + '    ')}")
     return 0
+
+
+# --- --conceito <slug> --renomear <slug-novo> (card #3239, cura K15) ------------------------------
+# Irmão da troca de pai: plano seco por padrão, conferências, HermiT, --apply e export. O que a
+# renomeação acrescenta é o que o card pede antes de gravar: a varredura de quem aponta para o slug
+# velho (no banco, o servidor conta; fora do banco, este verbo procura o texto) e D7/D8 sobre o novo.
+
+_VARREDURA_EXEMPLOS = 5
+_VARREDURA_TIMEOUT_S = 60
+# derivados do export, que o --apply regera (o jsonl) ou a regeração do vocabulário refaz: não são texto à mão
+_VARREDURA_FORA = ("ontologia/acervo/", "rag/docs/ontologia/vocabulario.json")
+_VARREDURA_SEM_RAIZ = ("venv", "terceiros")    # em release(): ambientes e artefato de terceiro, não repositório
+_RENOMEAR_NAO_COMBINA = ("pai", "mais_amplo", "mais_amplo_tipo", "rotulo", "definicao", "natureza", "estatuto",
+                         "alt", "rotulo_alt", "endereco", "lingua", "tipo", "garantia", "lastro",
+                         "filhos_exclusivos")
+# opções de OUTRO ato: a escada de despacho do `main` entregaria o pedido a esse ato e calaria o --renomear
+_RENOMEAR_OUTROS_ATOS = ("reclassificar", "situacao", "expurgar", "restaurar", "espelhos", "apagar", "recortar",
+                         "reextrair", "rejulgar", "lote", "ordem", "relatorio", "medida", "replicas", "bancada",
+                         "refazer", "timeout_s", "modo", "metodo", "corte", "promover", "impressao", "relacionar",
+                         "relacoes", "desrelacionar", "derivar", "derivacoes", "desderivar", "de", "registrar_obra",
+                         "obra", "obras", "de_dominio", "de_subdominio", "de_conceito", "de_colecao", "sem_dominio",
+                         "expurgadas", "trata_de", "remover_trata_de", "substituir_trata_de", "dominio", "subdominio",
+                         "especie", "subtipo", "titulo", "id_canonico", "publicacao", "emitido_por", "anotacao",
+                         "colecao")
+
+
+def _renomear_incompativeis(args) -> list[str]:
+    """As opções de criar conceito, de trocar o pai e de qualquer outro ato que vieram junto do --renomear."""
+    return ["--" + n.replace("_", "-") for n in _RENOMEAR_NAO_COMBINA + _RENOMEAR_OUTROS_ATOS
+            if getattr(args, n, None) not in (None, False)]
+
+
+def _ere_escape(texto: str) -> str:
+    return re.sub(r"([.\[\]()*+?{}|^$\\])", r"\\\1", texto)
+
+
+def _padrao_do_slug(slug: str) -> str:
+    """Palavra inteira de slug, em ERE: colada a letra, dígito ou hífen não vale (`tool` não é `tool-use`)."""
+    return "(^|[^a-z0-9-])" + _ere_escape(slug) + "($|[^a-z0-9-])"
+
+
+def _achados(saida: str, com_rev: bool) -> dict:
+    """`grep -rn` (`./caminho:linha:texto`) ou `git grep -n <rev>` (`rev:caminho:linha:texto`): contagem e
+    exemplos, sem o que mora em `ontologia/acervo/` (o export, que o --apply regera)."""
+    arquivos, n_linhas, exemplos = set(), 0, []
+    for ln in saida.splitlines():
+        partes = ln.split(":", 3 if com_rev else 2)
+        if com_rev:
+            partes = partes[1:]
+        if len(partes) < 2 or not partes[1].isdigit():
+            continue
+        caminho = partes[0][2:] if partes[0].startswith("./") else partes[0]
+        if caminho.startswith(_VARREDURA_FORA):
+            continue
+        arquivos.add(caminho)
+        n_linhas += 1
+        if len(exemplos) < _VARREDURA_EXEMPLOS:
+            exemplos.append(f"{caminho}:{partes[1]}")
+    return {"arquivos": len(arquivos), "linhas": n_linhas, "exemplos": exemplos}
+
+
+def _varredura_literal(slug: str, raiz=None, espelho=None) -> dict:
+    """O texto que cita o slug velho pelo nome e NÃO segue a renomeação sozinho: palavra inteira nos
+    repositórios servidos (um diretório por repositório em `release()`) e no espelho do suporte
+    platafirma-casa (origin/main). Devolve {"repos": {nome: {arquivos, linhas, exemplos}}, "nao_varrido":
+    {nome: motivo}}: o que não se conseguiu olhar fica dito e nunca vira «nenhuma ocorrência».
+    `grep -m 20` põe teto por arquivo: `linhas` é piso em arquivo que o atinge."""
+    raiz = raiz if raiz is not None else release()
+    padrao = _padrao_do_slug(slug)
+    repos, nao = {}, {}
+    try:
+        dirs = sorted(p for p in raiz.iterdir() if p.is_dir() and p.name not in _VARREDURA_SEM_RAIZ)
+    except OSError as e:
+        dirs = []
+        nao[str(raiz)] = f"não li o diretório: {e.strerror or e}"
+    for d in dirs:
+        try:
+            r = subprocess.run(
+                ["grep", "-rIEn", "-m", "20", "--exclude-dir=.git", "--exclude-dir=node_modules",
+                 "--exclude-dir=__pycache__", "-e", padrao, "."],
+                cwd=str(d), capture_output=True, text=True, errors="replace",
+                timeout=_VARREDURA_TIMEOUT_S, check=False)
+        except subprocess.TimeoutExpired:
+            nao[d.name] = f"passou de {_VARREDURA_TIMEOUT_S} s"
+            continue
+        except OSError as e:
+            nao[d.name] = f"grep não rodou: {e.strerror or e}"
+            continue
+        if r.returncode not in (0, 1):
+            nao[d.name] = f"grep saiu {r.returncode}: {(r.stderr or '').strip()[:100]}"
+            continue
+        achados = _achados(r.stdout, False)
+        if achados["linhas"]:
+            repos[d.name] = achados
+    nome_casa = "platafirma-casa (espelho, origin/main)"
+    esp = espelho if espelho is not None else (
+        os.environ.get("PF_SUPORTE_ESPELHO") or str(instancia() / "var" / "acervo" / "suporte" / "platafirma-casa.git"))
+    if not os.path.isdir(esp):
+        nao[nome_casa] = f"espelho ausente ({esp})"
+    else:
+        try:
+            r = subprocess.run(["git", "--git-dir", esp, "grep", "-InE", "-e", padrao, "origin/main", "--"],
+                               capture_output=True, text=True, errors="replace",
+                               timeout=_VARREDURA_TIMEOUT_S, check=False)
+        except subprocess.TimeoutExpired:
+            nao[nome_casa] = f"passou de {_VARREDURA_TIMEOUT_S} s"
+        except OSError as e:
+            nao[nome_casa] = f"git não rodou: {e.strerror or e}"
+        else:
+            if r.returncode not in (0, 1):
+                nao[nome_casa] = f"git grep saiu {r.returncode}: {(r.stderr or '').strip()[:100]}"
+            else:
+                achados = _achados(r.stdout, True)
+                if achados["linhas"]:
+                    repos[nome_casa] = achados
+    return {"repos": repos, "nao_varrido": nao}
+
+
+def _conferir_slug(slug: str) -> dict:
+    """D7 e D8 da lista antipadroes-do-acervo sobre o slug NOVO, pelos predicados do próprio lint
+    (bin/_lint/acervo.py): a cura não pode gerar o slug que o lint acusa. Cada uma volta `ok`, `reprova` ou
+    `indeterminavel` (o lint não carregou, ou a lista não se resolveu ou não traz o contraponto de D7)."""
+    bin_dir = os.path.join(HARNESS_DIR, "bin")
+    if bin_dir not in sys.path:
+        sys.path.insert(0, bin_dir)
+    try:
+        from _lint import acervo as lint
+    except Exception as e:  # noqa: BLE001 — sem o lint, nenhuma das duas se mede
+        quebra = {"estado": "indeterminavel", "detalhe": f"lint indisponível ({type(e).__name__}: {e})"}
+        return {"D7": dict(quebra), "D8": dict(quebra)}
+    c = {"slug": slug}
+    if lint.d8(c):
+        achado = [x for x in ("-vs-", "-versus-", "-antes-de-", "-depois-de-") if x in slug]
+        d8 = {"estado": "reprova", "detalhe": "slug contém " + ", ".join(f"`{x}`" for x in achado)}
+    else:
+        d8 = {"estado": "ok", "detalhe": ""}
+    try:
+        lista = lint.resolver_lista(lint.CHAVE_LISTA)
+    except Exception:  # noqa: BLE001
+        lista = None
+    funcionais = lint.palavras_funcionais(lista.get("corpo", "")) if lista else None
+    if not funcionais:
+        d7 = {"estado": "indeterminavel",
+              "detalhe": "a lista antipadroes-do-acervo não se resolveu ou não traz as palavras funcionais (Contrapontos)"}
+    elif lint.d7(c, funcionais):
+        fora_da_lista = {x.lower() for x in funcionais}
+        fora = [p for p in slug.split("-") if p and p.lower() not in fora_da_lista]
+        d7 = {"estado": "reprova",
+              "detalhe": f"{len(fora)} partes fora das palavras funcionais ({', '.join(fora)}); o teto é três"}
+    else:
+        d7 = {"estado": "ok", "detalhe": ""}
+    return {"D7": d7, "D8": d8}
+
+
+def formatar_plano_renomear(p: dict, varredura: dict | None, conf_slug: dict | None, hermit: dict | None,
+                            aprovado: bool) -> str:
+    s = p.get("slug") or {}
+    c = p.get("conceito") or {}
+    titulo = "Renomeação aplicada" if p.get("modo") == "aplicado" else "Plano de renomeação"
+    lin = [f"{titulo}: {s.get('de')} -> {s.get('para')}  [«{c.get('rotulo')}»; curador {p.get('emitido_por')}]",
+           f"  slug: {s.get('de')} -> {s.get('para')}"]
+    o = p.get("outros_rotulos") or {}
+    if o.get("acrescenta"):
+        lin.append(f"  outros_rotulos: + {o['acrescenta']}  (termo de entrada, língua {o.get('lingua')})")
+    else:
+        lin.append(f"  outros_rotulos: o slug velho já era rótulo do conceito ({o.get('ja_era')}); nada a acrescentar")
+    f = p.get("ficha")
+    if f:
+        lin.append(f"  ficha na raiz : chave_humana {f['chave_humana']['de']} -> {f['chave_humana']['para']}; alias + {f['alias']}")
+    else:
+        lin.append("  ficha na raiz : o conceito não tem ficha em acervo.entidade; nada a mover")
+    lin.append(f"  motivo : {p.get('motivo')}")
+    v = p.get("varredura") or {}
+    lin.append("  varredura de quem aponta, no banco (por id: segue o conceito, não muda)")
+    lin.append(f"    relações em conceito_relacao : {v.get('relacoes')}")
+    lin.append(f"    obras em obra_trata_de       : {v.get('obras')} (vivas {v.get('obras_vivas')})")
+    lin.append(f"    filhos por mais_amplo_id     : {v.get('filhos')}")
+    e = v.get("endereco") or {}
+    lin.append(f"    endereço                     : {e.get('valor') or '—'}" + ("  (cita o slug velho)" if e.get("cita_o_slug") else ""))
+    if varredura is not None:
+        lin.append("  varredura do texto que cita o slug velho (fora do banco: não segue sozinho; sem os derivados do export)")
+        repos = varredura.get("repos") or {}
+        nao = varredura.get("nao_varrido") or {}
+        for nome, a in repos.items():
+            lin.append(f"    {nome}: {a['arquivos']} arquivo(s), {a['linhas']} linha(s) — {', '.join(a['exemplos'])}")
+        for nome, motivo in nao.items():
+            lin.append(f"    não varrido: {nome} ({motivo})")
+        if not repos and not nao:
+            lin.append("    nenhuma ocorrência")
+    for nome, cs in (conf_slug or {}).items():
+        marca = {"ok": "OK", "reprova": "REPROVA", "indeterminavel": "INDETERMINÁVEL"}[cs["estado"]]
+        lin.append(f"  conferência {nome} (slug novo): {marca}" + (f" — {cs['detalhe']}" if cs.get("detalhe") else ""))
+    for nome, cf in (p.get("conferencias") or {}).items():
+        novas = cf.get("novas") or []
+        tag = "OK" if not novas else f"REPROVA +{len(novas)}"
+        lin.append(f"  conferência {nome:<14} {cf.get('antes')} -> {cf.get('depois')}  {tag}")
+        for r in novas[:5]:
+            lin.append(f"      + {r}")
+    if hermit is None:
+        lin.append("  HermiT: indisponível (árvore de conhecimento na release ou em PF_CONHECIMENTO_DIR + venv acervo da release não achados)")
+    elif hermit.get("pulado"):
+        lin.append("  HermiT: pulado (--sem-hermit)")
+    elif hermit.get("naorodou"):
+        lin.append("  HermiT: não rodou (a API recusou o plano antes)")
+    elif hermit.get("erro"):
+        lin.append(f"  HermiT: falhou — {hermit['erro']}")
+    else:
+        tag = "OK" if not hermit["novos"] else f"REPROVA +{len(hermit['novos'])}"
+        lin.append(f"  HermiT insatisfazíveis {hermit['antes']} -> {hermit['depois']}  {tag}"
+                   + (f"  novos: {', '.join(hermit['novos'])}" if hermit["novos"] else "")
+                   + (f"  saem: {', '.join(hermit['saem'])}" if hermit["saem"] else ""))
+    if p.get("modo") == "aplicado":
+        lin.append(f"  id     : {p.get('id')}   (o id do conceito não muda)")
+    else:
+        lin.append("  veredito: " + ("APROVADO — repita com --apply para gravar" if aprovado else "REPROVADO — nada gravado"))
+    return "\n".join(lin)
+
+
+def acao_conceito_renomear(args, autor: str, como_json: bool, headers: dict) -> int:
+    velho = args.conceito.strip()
+    novo = (args.renomear or "").strip()
+    if not novo:
+        sys.stderr.write("curar: erro: --renomear exige o slug novo\n")
+        return 2
+    if not args.motivo or not args.motivo.strip():
+        sys.stderr.write("curar: erro: renomear exige --motivo\n")
+        return 2
+    # a combinação com opção de outro ato já foi recusada no `main`, antes da escada de despacho
+
+    url = f"{BASE}/acervo/conceitos/{urllib.parse.quote(velho, safe='')}"
+    corpo = {"slug": novo, "motivo": args.motivo.strip(), "autor": autor}
+
+    def envia(aplicar: bool):
+        try:
+            r = requests.patch(url, json={**corpo, "aplicar": aplicar}, headers=headers)
+        except requests.exceptions.RequestException as e:
+            falha_indeterminavel(e)
+        if r.status_code >= 500:
+            falha_indeterminavel(r)
+        return r
+
+    # 1. plano seco na API: valida (404 ConceitoNaoEncontrado, 409 ConceitoDuplicado, 422), conta quem aponta
+    #    e roda as conferências SQL com o slug novo dentro, sem gravar
+    resp = envia(False)
+    if resp.status_code != 200:
+        try:
+            pj = resp.json()
+        except ValueError:
+            pj = {}
+        if isinstance(pj, dict) and pj.get("plano"):
+            print(formatar_plano_renomear(pj["plano"], None, None, {"naorodou": True}, False))
+        falha_problem(resp)
+    plano = resp.json()
+
+    # 2. o que é do cliente: forma do slug novo (D7, D8), o texto que cita o velho, o HermiT
+    conf_slug = _conferir_slug(novo)
+    varredura = _varredura_literal(velho)
+    hermit = {"pulado": True} if args.sem_hermit else _hermit_renomear(velho, novo)
+    hermit_ok = hermit is not None and (bool(hermit.get("pulado")) or (not hermit.get("erro") and not hermit.get("novos")))
+    forma_ok = all(cs["estado"] == "ok" for cs in conf_slug.values())
+    aprovado = bool(plano.get("aprovado")) and forma_ok and hermit_ok
+
+    if not args.apply:
+        if como_json:
+            print(json.dumps({"plano": plano, "conferencia_slug": conf_slug, "varredura_texto": varredura,
+                              "hermit": hermit, "aprovado": aprovado}, indent=2, ensure_ascii=False))
+        else:
+            print(formatar_plano_renomear(plano, varredura, conf_slug, hermit, aprovado))
+        return 0 if aprovado else 1
+
+    if not aprovado:
+        if como_json:
+            print(json.dumps({"plano": plano, "conferencia_slug": conf_slug, "varredura_texto": varredura,
+                              "hermit": hermit, "aprovado": False}, indent=2, ensure_ascii=False))
+        else:
+            print(formatar_plano_renomear(plano, varredura, conf_slug, hermit, aprovado))
+        if not plano.get("aprovado"):
+            sys.stderr.write("curar: conferência SQL reprovou; nada gravado\n")
+        elif not forma_ok:
+            sys.stderr.write("curar: a forma do slug novo reprova (D7/D8) ou não se mediu; nada gravado\n")
+        elif hermit is None or hermit.get("erro"):
+            sys.stderr.write("curar: HermiT não rodou; para gravar mesmo assim passe --sem-hermit\n")
+        else:
+            sys.stderr.write("curar: HermiT reprovou (insatisfazíveis novos); nada gravado\n")
+        return 1
+
+    # 3. grava
+    resp = envia(True)
+    if resp.status_code != 200:
+        falha_problem(resp)
+    feito = resp.json()
+    repo_conh = hermit.get("repo") if isinstance(hermit, dict) else None
+    # `_exportar` delega a `acervo exportar` (o repo fica só pela assinatura): roda sempre, com ou sem clone declarado
+    export = _exportar(repo_conh or _repo_conhecimento() or "")
+    export_ok = export is not None and not export.startswith("acervo exportar falhou")
+    if como_json:
+        print(json.dumps({"aplicado": feito, "conferencia_slug": conf_slug, "varredura_texto": varredura,
+                          "hermit": hermit, "export": export, "export_ok": export_ok}, indent=2, ensure_ascii=False))
+    else:
+        print(formatar_plano_renomear(feito, varredura, conf_slug, hermit, True))
+        if export_ok:
+            print(f"  export : regenerado no clone — commit e push são seus:\n    {export.replace(chr(10), chr(10) + '    ')}")
+        else:
+            print(f"  export : NÃO regenerado ({export or '`acervo exportar` não achado'}) — o slug JÁ foi renomeado: "
+                  "não repita o --apply; rode `acervo exportar` e commite")
+    return 0 if export_ok else 1
 
 
 def acao_relacionar(args, autor: str, como_json: bool, headers: dict) -> int:
@@ -1973,6 +2309,7 @@ def main(argv=None):
     parser.add_argument("--natureza", default=None)
     parser.add_argument("--estatuto", default=None)
     parser.add_argument("--pai", default=None)
+    parser.add_argument("--renomear", default=None)
     parser.add_argument("--alt", default=None)
     parser.add_argument("--endereco", default=None)
     parser.add_argument("--lingua", default=None)
@@ -2043,6 +2380,16 @@ def main(argv=None):
     traceparent = f"00-{secrets.token_hex(16)}-{secrets.token_hex(8)}-01"
     headers["traceparent"] = traceparent
 
+    if args.renomear is not None:
+        # antes da escada de despacho: senão `--conceito x --renomear y --recortar z` seguiria para o recorte
+        if not args.conceito:
+            sys.stderr.write("curar: erro: --renomear acompanha --conceito <slug>\n")
+            return 2
+        incompativeis = _renomear_incompativeis(args)
+        if incompativeis:
+            sys.stderr.write(f"curar: erro: --renomear não combina com {' '.join(incompativeis)}: "
+                             "criar conceito, trocar o pai e os outros atos são chamadas à parte\n")
+            return 2
     if args.espelhos and (args.expurgar is not None or args.restaurar is not None):
         ato = "expurgar" if args.expurgar is not None else "restaurar"
         obra = (args.expurgar if ato == "expurgar" else args.restaurar) or args.obra
