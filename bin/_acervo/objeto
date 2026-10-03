@@ -1,5 +1,5 @@
 #!/opt/platafirma/current/venv/acervo/bin/python
-# _acervo/objeto — `acervo ler obra objeto`: baixa o arquivo original da obra (o objeto do store).
+# _acervo/objeto — `acervo ler biblioteca objeto` (antes `ler obra objeto`, ainda aceito): baixa o arquivo original da obra (o objeto do store).
 # Sucede o antigo _acervo/baixar (bash, so titulo, so diretorio corrente; balde #2856 linhas 153 e 96).
 #
 # A obra se acha por uuid inteiro, prefixo unico de uuid ou titulo (busca parcial, sem acento
@@ -27,7 +27,7 @@ MINIO_ENDPOINT = "http://127.0.0.1:9000"
 MIN_PREFIXO = 6          # abaixo disso um termo hex-e-hifen e titulo, nao prefixo de uuid
 TETO_CANDIDATOS = 20
 
-USO = """uso: acervo ler obra objeto <uuid|prefixo-de-uuid|titulo> [--destino <pasta>]
+USO = """uso: acervo ler biblioteca objeto <uuid|prefixo-de-uuid|titulo> [--destino <pasta>]
   <obra>            uuid inteiro, prefixo único de uuid (6+ hex) ou trecho do título (sem acento sensível)
   --destino <pasta> grava o arquivo original lá (criada se faltar); só dentro da bancada declarada ou de
                     <instância>/var/tmp/<ordem_id>; fora disso recusa com exit 4. Sem a flag, grava no
@@ -239,7 +239,7 @@ def gravar(obra: dict, pasta: Path) -> str:
 
 
 def main(argv: list) -> int:
-    p = argparse.ArgumentParser(prog="acervo ler obra objeto", add_help=False)
+    p = argparse.ArgumentParser(prog="acervo ler biblioteca objeto", add_help=False)
     p.add_argument("obra", nargs="?")
     p.add_argument("pasta_legada", nargs="?")
     p.add_argument("--destino")
@@ -256,7 +256,7 @@ def main(argv: list) -> int:
         sys.stderr.write((f"argumento desconhecido: {' '.join(resto)}\n" if resto else "") + USO)
         return 2
     if args.destino is not None and args.pasta_legada is not None:
-        sys.stderr.write("acervo ler obra objeto: pasta posicional e --destino juntos; use só --destino\n")
+        sys.stderr.write("acervo ler biblioteca objeto: pasta posicional e --destino juntos; use só --destino\n")
         return 2
     try:
         if args.destino is not None:
@@ -268,7 +268,7 @@ def main(argv: list) -> int:
         return 0
     except Falha as f:
         if str(f):
-            sys.stderr.write(f"acervo ler obra objeto: {f}\n")
+            sys.stderr.write(f"acervo ler biblioteca objeto: {f}\n")
         return f.codigo
 
 

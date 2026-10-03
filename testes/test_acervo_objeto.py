@@ -1,4 +1,4 @@
-"""#2856 (linhas 153 e 96): `acervo ler obra objeto` — resolve por uuid e grava em --destino.
+"""#2856 (linhas 153 e 96): `acervo ler biblioteca objeto` — resolve por uuid e grava em --destino.
 
 Sem rede, sem docker, sem MinIO: a consulta ao catalogo (`_consultar`) e o download do store
 (`_baixar_do_store`) sao os dois pontos de contato do sub-ato com o mundo e saem trocados aqui.
@@ -223,7 +223,7 @@ def test_destino_posicional_legado_continua_valendo(mundo, capsys, tmp_path):
 
 def test_sem_termo_e_uso_exit_2(mundo, capsys):
     rc, out, err = _roda(mundo, capsys)
-    assert rc == 2 and "uso: acervo ler obra objeto" in err
+    assert rc == 2 and "uso: acervo ler biblioteca objeto" in err
 
 
 def test_ajuda_exit_0(mundo, capsys):

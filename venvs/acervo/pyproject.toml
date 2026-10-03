@@ -4,7 +4,7 @@
 #
 # Dependencias MEDIDAS por import dos consumidores do venv acervo:
 #   boto3      bin/_acervo/bancada (shebang /opt/platafirma/current/venv/acervo/bin/python)
-#              bin/_acervo/objeto (shebang e bin/acervo: "$PLATAFIRMA_RELEASE/venv/acervo/bin/python"; `acervo ler obra objeto`)
+#              bin/_acervo/objeto (shebang e bin/acervo: "$PLATAFIRMA_RELEASE/venv/acervo/bin/python"; `acervo ler biblioteca objeto`)
 #   owlready2  conhecimento/ontologia/projecao/gerar-e-raciocinar.py:272-273 (World,
 #              sync_reasoner_hermit), chamado por bin/curar (_hermit) com este python.
 #              O HermiT vem dentro do owlready2 e roda no java do sistema (/usr/bin/java).

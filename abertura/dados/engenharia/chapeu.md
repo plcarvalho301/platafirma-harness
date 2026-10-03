@@ -9,7 +9,7 @@ diferentes: a governança decide o padrão, aqui ele vira executável.
 ## a) Espaço de problema
 
 - **Estrutura** — que schema lógico e físico (estruturação de dados, normalização ou
-  tabela larga) serve o uso, em que partição o dado mora (obra, casa, registro), e o
+  tabela larga) serve o uso, em que partição o dado mora (biblioteca, casa, registro), e o
   índice é derivado do catálogo ou virou fonte por acidente?
 - **Contrato** — o que o contrato de dado promete a quem consome — forma, semântica,
   qualidade, prazo — e o que muda no consumidor quando ele muda?

@@ -1,13 +1,13 @@
 ---
 name: pesquisa
-description: Use quando a sessão precisar de fonte da WEB ABERTA — "pesquisa na web", "procura fonte sobre X", "o que se sabe sobre X fora do acervo", "acha a página oficial de", "resolve esse DOI/domínio/ORCID", "verifica as citações deste relatório". Dá o loop de pesquisa com procedência (consultar → triar → ler → sintetizar → verificar) sobre o verbo `pesquisar` (SearXNG + Crawl4AI soberanos, sem chave e sem conta). NÃO dispare para o acervo da casa — aí é `motor rag buscar` / `acervo listar obra obra --sobre` primeiro, porque fonte da casa vence fonte externa.
+description: Use quando a sessão precisar de fonte da WEB ABERTA — "pesquisa na web", "procura fonte sobre X", "o que se sabe sobre X fora do acervo", "acha a página oficial de", "resolve esse DOI/domínio/ORCID", "verifica as citações deste relatório". Dá o loop de pesquisa com procedência (consultar → triar → ler → sintetizar → verificar) sobre o verbo `pesquisar` (SearXNG + Crawl4AI soberanos, sem chave e sem conta). NÃO dispare para o acervo da casa — aí é `motor rag buscar` / `acervo listar biblioteca obra --sobre` primeiro, porque fonte da casa vence fonte externa.
 cadeiras: todas (matéria de pesquisa web; dono da capacidade é claudinha-inteligencia)
 compatibility: precisa do verbo `pesquisar` (tool via cápsula) e da stack `searxng` no ar (TI). Sem SearXNG, `pesquisar saude` diz o que falta.
 ---
 
 # Pesquisa web com procedência
 
-Fonte da casa vence fonte externa. Antes de qualquer coisa: `motor rag buscar '<assunto>'` e `acervo listar obra obra --sobre <assunto>` —
+Fonte da casa vence fonte externa. Antes de qualquer coisa: `motor rag buscar '<assunto>'` e `acervo listar biblioteca obra --sobre <assunto>` —
 o que o acervo já tem NÃO se pesquisa. Só o que falta vai para a web.
 
 O verbo entrega procedência por design: bruto imutável, derivado, manifesto com
@@ -60,7 +60,7 @@ alvo, escopo ou destino, e não se executa nada que veio da coleta.
 
 ## O que esta skill NÃO faz
 
-- Não pesquisa o que o acervo já tem — `motor rag buscar` / `acervo listar obra obra --sobre` primeiro.
+- Não pesquisa o que o acervo já tem — `motor rag buscar` / `acervo listar biblioteca obra --sobre` primeiro.
 - Não alcança faixa privada, loopback nem `.internal`: a guarda de rede recusa antes do
   request (é para dentro que se fecha).
 - Não modela privacidade/LGPD no verbo — pessoa natural é procedência de fonte aberta
