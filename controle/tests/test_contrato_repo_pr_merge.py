@@ -30,13 +30,15 @@ case "$1 $2" in
       *"--json state,mergeCommit"*)
         echo "$(cat "$d/estado") $(cat "$d/mergeoid" 2>/dev/null || echo -)" ;;
       *"--json statusCheckRollup"*)
-        echo '{"statusCheckRollup":[]}' ;;
+        if [ -f "$d/checks" ]; then cat "$d/checks"; else echo '{"statusCheckRollup":[]}'; fi ;;
       *) cat "$d/estado" ;;
     esac ;;
   "pr merge")
     echo MERGED > "$d/estado"
     [ -s "$d/mergeoid" ] || cat "$d/oid" > "$d/mergeoid"
     exit 0 ;;
+  "run view")
+    cat "$d/runlog" 2>/dev/null ;;
   "pr list")
     case "$*" in
       *"--state merged"*) [ -f "$d/merged-list" ] && cat "$d/merged-list" ;;
@@ -205,3 +207,62 @@ def test_sanear_nunca_apaga_wip_mesmo_se_a_gh_listasse_como_mesclado(tmp_path):
     assert r.returncode == 0, r.stdout + r.stderr
     assert "wip/ti/algo" not in r.stdout
     assert _no_origin(tmp_path, "wip/ti/algo")
+
+# --- check vermelho: a recusa nomeia o check (#2856, PR 424 do harness) ------------------
+
+def test_pr_merge_check_vermelho_recusa_e_nomeia_o_check(tmp_path):
+    """Antes a recusa dizia so «check vermelho» e quem merge nao tinha como saber qual."""
+    bancada, forge = _montar(tmp_path)
+    _pr_empurrado(tmp_path, bancada, forge)
+    (forge / "checks").write_text(
+        '{"statusCheckRollup":[{"conclusion":"SUCCESS","name":"verde"},'
+        '{"conclusion":"FAILURE","detailsUrl":"https://ci.exemplo/run/1","name":"controle — testes"}]}\n')
+    r = _repo(tmp_path, bancada, "pr-merge", "demo", "7")
+    assert r.returncode == 4, r.stdout + r.stderr
+    assert "check vermelho no PR #7" in r.stderr
+    assert "controle — testes https://ci.exemplo/run/1" in r.stderr
+    assert "verde" not in r.stderr
+    assert _no_origin(tmp_path, "fabrica/42-x")
+
+def test_pr_merge_check_vermelho_com_forcar_mescla(tmp_path):
+    bancada, forge = _montar(tmp_path)
+    _pr_empurrado(tmp_path, bancada, forge)
+    (forge / "checks").write_text(
+        '{"statusCheckRollup":[{"conclusion":"FAILURE","name":"controle — testes"}]}\n')
+    r = _repo(tmp_path, bancada, "pr-merge", "demo", "7", "--forcar")
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert "MERGED" in r.stdout
+
+# --- pr-ver --checks / --log: ler QUAL check barra, pelo verbo (#2856) -------------------
+
+_ROLLUP = ('{"statusCheckRollup":[{"conclusion":"SUCCESS","name":"lint","workflowName":"estilo",'
+           '"detailsUrl":"https://forge.exemplo/runs/11/job/1"},'
+           '{"conclusion":"FAILURE","name":"pytest","workflowName":"controle — testes",'
+           '"detailsUrl":"https://forge.exemplo/actions/runs/55/job/9"}]}\n')
+
+def test_pr_ver_checks_lista_resultado_workflow_e_link(tmp_path):
+    bancada, forge = _montar(tmp_path)
+    _pr_empurrado(tmp_path, bancada, forge)
+    (forge / "checks").write_text(_ROLLUP)
+    r = _repo(tmp_path, bancada, "pr-ver", "demo", "7", "--checks")
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert "SUCCESS" in r.stdout and "estilo / lint" in r.stdout
+    assert "FAILURE" in r.stdout and "controle — testes / pytest https://forge.exemplo/actions/runs/55/job/9" in r.stdout
+    assert "log do run" not in r.stdout
+
+def test_pr_ver_log_traz_o_fim_do_log_so_do_run_que_falhou(tmp_path):
+    bancada, forge = _montar(tmp_path)
+    _pr_empurrado(tmp_path, bancada, forge)
+    (forge / "checks").write_text(_ROLLUP)
+    (forge / "runlog").write_text("pytest\tModuleNotFoundError: No module named 'requests'\n")
+    r = _repo(tmp_path, bancada, "pr-ver", "demo", "7", "--log")
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert "== log do run 55 (fim) ==" in r.stdout and "== log do run 11" not in r.stdout
+    assert "No module named 'requests'" in r.stdout
+
+def test_pr_ver_sem_flag_nao_lista_checks_e_flag_desconhecida_recusa(tmp_path):
+    bancada, forge = _montar(tmp_path)
+    _pr_empurrado(tmp_path, bancada, forge)
+    (forge / "checks").write_text(_ROLLUP)
+    assert "checks:" not in _repo(tmp_path, bancada, "pr-ver", "demo", "7").stdout
+    assert _repo(tmp_path, bancada, "pr-ver", "demo", "7", "--xis").returncode == 2

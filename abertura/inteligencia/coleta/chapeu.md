@@ -55,5 +55,5 @@ dela quando:
 | ingestão, extração, pipeline de dado | `dominio=["engenharia-software","ia"]` | extração de dados | o meio é de lá; aqui se diz o que extrair e com que metadado |
 | proveniência, autoridade de fonte | `dominio=["estudos-ontologias","capacidade-estatal"]` | proveniencia de assercao · designacao de fonte autoritativa · cadeia de custódia | a garantia de origem se explica lá |
 | onde cavar a seguir | `dominio=["gestao-organizacional"]` | forrageamento de informacao | a trilha de coleta segue o cheiro da informação |
-| o que o acervo já tem sobre o alvo | `inteligencia`, `acervo listar obra obra --sobre <termo>` | alvo de inteligência | não se coleta de novo o que já está na casa |
+| o que o acervo já tem sobre o alvo | `inteligencia`, `acervo listar biblioteca obra --sobre <termo>` | alvo de inteligência | não se coleta de novo o que já está na casa |
 | Techint, Sigint, plano de reunião | `inteligencia` em linguagem natural | — | hoje volta raso: sem conceito no acervo |

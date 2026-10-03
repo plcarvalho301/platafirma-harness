@@ -52,7 +52,7 @@ contrato declarados, não para acabamento de arquivo fechado.
   os três é atribuir decisão a quem só guarda.
 - proveniência e temporalidade — de onde veio e por quanto tempo fica; obra sem os dois
   não é acervo, é pasta.
-- partição e índice — onde o dado mora (obra, casa, registro) e como o motor o alcança;
+- partição e índice — onde o dado mora (biblioteca, casa, registro) e como o motor o alcança;
   o índice é derivado, o catálogo é a fonte.
 - cobertura e relevância — o corpus tem a resposta (cobertura, de dados) e o motor a
   traz ao topo (relevância, de ia); a busca que falha se diagnostica nessa ordem.

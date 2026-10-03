@@ -228,6 +228,31 @@ def test_write_file_aceita_texto_de_build_por_nome(bancada, sem_pep):
     assert outro.get("recusado") and "Dockerfile" in outro["motivo"], outro
 
 
+def test_write_file_aceita_unit_systemd(bancada, sem_pep):
+    """#2856 linha 160 (card #3252): unit systemd nova (.service, .timer, .path, .socket) e
+    texto plano de deploy; entrava so por write .txt + `repo git mv`."""
+    for nome in ("cdi-gpu.service", "cdi-gpu.timer", "cdi-gpu.path", "cdi-gpu.socket"):
+        r = s.write_file(path=f"wt/platafirma-core/fabrica/deploy/{nome}", content="[Unit]\n")
+        assert r.get("ok"), (nome, r)
+        assert (bancada / "wt/platafirma-core/fabrica/deploy" / nome).is_file()
+    # maiuscula na extensao segue a mesma regra (ext e comparada em minuscula)
+    assert s.write_file(path="wt/platafirma-core/fabrica/deploy/X.SERVICE", content="x\n").get("ok")
+    # a lista cresceu so nessas quatro: outra extensao de unit segue recusada
+    mount = s.write_file(path="wt/platafirma-core/fabrica/deploy/x.mount", content="x\n")
+    assert mount.get("recusado") and "tipo" in mount["motivo"], mount
+
+
+def test_write_file_aceita_dockerfile_com_sufixo(bancada, sem_pep):
+    """#2856 linha 40: Dockerfile.<sufixo> (Dockerfile.gpu, Dockerfile.dev) e o mesmo texto
+    de build do Dockerfile; o ponto exige sufixo, e outro nome segue recusado."""
+    for nome in ("Dockerfile.gpu", "Dockerfile.dev"):
+        r = s.write_file(path=f"wt/platafirma-core/fabrica/site/{nome}", content="FROM x\n")
+        assert r.get("ok"), (nome, r)
+    for nome in ("Dockerfile.", "Dockerfilex", "dockerfile.gpu", "Makefile.gpu"):
+        r = s.write_file(path=f"wt/platafirma-core/fabrica/site/{nome}", content="x\n")
+        assert r.get("recusado") and "tipo" in r["motivo"], (nome, r)
+
+
 def test_write_file_nega_release_e_log(bancada, sem_pep):
     rel = s.write_file(path=str(s.BIN_VERBOS / "x.md"), content="x\n")
     assert rel.get("recusado") and "release" in rel["motivo"]

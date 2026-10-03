@@ -132,7 +132,7 @@ uso:
   repo sanear    [<repo>] [--relatar]
   repo pr-abrir  <repo> --titulo <t> [--corpo <c>] [--base <ramo>]
   repo pr-listar <repo> [--todos]
-  repo pr-ver    <repo> <numero>
+  repo pr-ver    <repo> <numero> [--checks] [--log]
   repo pr-diff   <repo> <numero>
   repo pr-merge  <repo> <numero> [--squash|--merge|--rebase] [--forcar]
   repo pr-fechar <repo> <numero> --motivo <texto>   (descarta sem merge; apaga ramo e bancadas)
@@ -2009,9 +2009,17 @@ ato_pr_listar() {
 }
 
 ato_pr_ver() {
-  local nome="${1:-}" num="${2:-}" c
+  local nome="${1:-}" num="${2:-}" c checks=0 log=0
   [ -n "$num" ] || morre "falta o numero do PR" 2
   case "$num" in *[!0-9]*) morre "numero de PR invalido: '$num'" 2 ;; esac
+  shift 2
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --checks) checks=1; shift ;;
+      --log) checks=1; log=1; shift ;;
+      *) morre "argumento nao reconhecido: '$1'" 2 ;;
+    esac
+  done
   tem_gh
   c="$(base_de_repo "$nome")" || exit $?
   # `gh pr view <num>` sem --json puxa TODOS os campos, inclusive projectCards, que o
@@ -2036,6 +2044,33 @@ ato_pr_ver() {
     :
   else
     morre "gh pr view falhou" 3
+  fi
+  # --checks: um check por linha (resultado, workflow / job, link), para quem for mesclar saber
+  # QUAL check barra. --log: o fim do log de cada run que falhou (gh run view --log-failed).
+  if [ "$checks" -eq 1 ]; then
+    local rollup out
+    rollup="$(cd "$c" && env PATH="$PATH_FORGE" "$GH" pr view "$num" --json statusCheckRollup 2>/dev/null || true)"
+    out="$(printf '%s' "$rollup" | python3 -c 'import json, re, sys
+d = json.load(sys.stdin)
+ids = []
+print("checks:")
+for c in d.get("statusCheckRollup") or []:
+    res = c.get("conclusion") or c.get("state") or c.get("status") or "?"
+    nome = " / ".join(x for x in (c.get("workflowName"), c.get("name") or c.get("context")) if x)
+    url = c.get("detailsUrl") or c.get("targetUrl") or ""
+    print("  %-10s %s %s" % (res, nome, url))
+    m = re.search(r"/runs/([0-9]+)", url)
+    if res in ("FAILURE", "ERROR") and m and m.group(1) not in ids:
+        ids.append(m.group(1))
+for i in ids:
+    print("@run " + i)' 2>/dev/null || true)"
+    printf '%s\n' "$out" | grep -v '^@run ' || true
+    if [ "$log" -eq 1 ]; then
+      printf '%s\n' "$out" | sed -n 's/^@run //p' | while read -r rid; do
+        echo "== log do run $rid (fim) =="
+        (cd "$c" && env PATH="$PATH_FORGE" "$GH" run view "$rid" --log-failed 2>&1 | tail -n 80) || true
+      done
+    fi
   fi
 }
 
@@ -2081,7 +2116,9 @@ ato_pr_merge() {
     local status_checks
     status_checks="$(cd "$c" && env PATH="$PATH_FORGE" "$GH" pr view "$num" --json statusCheckRollup 2>/dev/null || true)"
     if echo "$status_checks" | grep -q '"conclusion":"FAILURE"'; then
-      morre "recusa de política: check vermelho no PR #$num (use --forcar para ignorar)" 4
+      local nomes
+      nomes="$(printf '%s' "$status_checks" | python3 -c 'import json,sys; d=json.load(sys.stdin); print("; ".join(((c.get("name") or c.get("context") or "?") + " " + (c.get("detailsUrl") or c.get("targetUrl") or "")).strip() for c in (d.get("statusCheckRollup") or []) if c.get("conclusion") == "FAILURE" or c.get("state") in ("FAILURE", "ERROR")))' 2>/dev/null || true)"
+      morre "recusa de política: check vermelho no PR #$num${nomes:+: $nomes} (use --forcar para ignorar)" 4
     fi
   fi
   # O merge remoto e a poda do ramo local sao dois atos. --delete-branch tenta apagar
