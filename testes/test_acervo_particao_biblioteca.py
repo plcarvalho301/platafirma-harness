@@ -1,7 +1,7 @@
 """#3197: a partição `obra` passa a `biblioteca` (arq:0106 §2, emendada em 29/09).
 
-A forma nova roteia; `obra` como partição segue servindo, com aviso em stderr que nomeia
-`biblioteca` (arq:0084). Os casos usam ramos do despachante que não chamam o motor nem o
+A forma nova roteia; `obra` como partição recusa (exit 2) com a chamada em `biblioteca`:
+a forma velha servia só até a nova subir (arq:0106, Consequências), e ela subiu em 03/10. Os casos usam ramos do despachante que não chamam o motor nem o
 banco: a ajuda, a recusa de partição desconhecida e a recusa de `escrever` na biblioteca.
 """
 
@@ -43,10 +43,13 @@ def test_forma_nova_roteia_sem_aviso(tmp_path):
     assert "forma vigente" not in r.stderr
 
 
-def test_forma_velha_serve_com_aviso_que_nomeia_biblioteca(tmp_path):
-    r = _acervo("escrever", "obra", "obra", "x", sessao=f"t-velha-{tmp_path.name}")
-    assert r.returncode == 2
-    assert "`acervo escrever obra` e a forma vigente" in r.stderr
-    assert "`acervo escrever biblioteca`" in r.stderr
-    # caiu no mesmo ramo da forma nova
-    assert "acervo ingerir biblioteca <raiz>" in r.stderr
+def test_particao_obra_recusa_com_a_chamada_em_biblioteca(tmp_path):
+    """A forma velha servia so ate a nova subir (arq:0106, Consequencias); subiu em 03/10."""
+    for argv in (("listar", "obra", "obra", "--sobre", "x"), ("ler", "obra", "impressao", "y"),
+                 ("curar", "obra", "--situacao", "z"), ("ingerir", "obra", "/tmp/p")):
+        r = _acervo(*argv, sessao=f"t-velha-{tmp_path.name}")
+        assert r.returncode == 2, (argv, r.stderr)
+        assert "a particao 'obra' saiu em 03/10/2026" in r.stderr
+        resto = " ".join(argv[2:])
+        assert f"`acervo {argv[0]} biblioteca {resto}`" in r.stderr
+        assert r.stdout == ""

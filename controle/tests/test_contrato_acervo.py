@@ -75,7 +75,7 @@ def test_escrever_recusa_de_fronteira():
 @pytest.mark.parametrize("args", [
     ("ler", "casa", "adr", "arq:0110"),
     ("listar", "casa", "adr"),
-    ("listar", "obra", "obra", "--sobre", "qualquer"),
+    ("listar", "biblioteca", "obra", "--sobre", "qualquer"),
 ])
 def test_registro_fora_do_ar_nao_responde_vazio(tmp_path, args):
     env = _docker_de_fixture(tmp_path, 'echo "Error: No such container" >&2; exit 1\n')
@@ -122,8 +122,8 @@ def test_camada_d_recusa_ato_desconhecido():
 def test_camada_d_aviso_uma_vez_por_sessao():
     sess_id = f"test-sess-{os.getpid()}"
     env = {"PF_SESSAO_ID": sess_id}
-    r1 = _acervo("bancada", "obra", "lote", env=env)
+    r1 = _acervo("bancada", "biblioteca", "lote", env=env)
     assert "acervo: `acervo bancada` e a forma vigente" in r1.stderr
-    r2 = _acervo("bancada", "obra", "lote", env=env)
+    r2 = _acervo("bancada", "biblioteca", "lote", env=env)
     assert "acervo: `acervo bancada` e a forma vigente" not in r2.stderr
     shutil.rmtree(f"/tmp/platafirma-avisos-{sess_id}", ignore_errors=True)

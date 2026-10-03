@@ -1028,7 +1028,7 @@ def test_acervo_curar_obra_repassa_o_lote_para_o_curar(falso, tmp_path):
     fio.mkdir()
     (fio / "python3").symlink_to(PY)
     env = {**_env(falso.url), "PATH": f"{fio}{os.pathsep}{os.environ.get('PATH', '')}"}
-    r = subprocess.run(["bash", str(RAIZ / "bin" / "acervo"), "curar", "obra", "--reextrair", a,
+    r = subprocess.run(["bash", str(RAIZ / "bin" / "acervo"), "curar", "biblioteca", "--reextrair", a,
                         "--bancada", str(tmp_path)], capture_output=True, text=True, env=env,
                        timeout=120, check=False)
     assert r.returncode == 0, r.stdout + r.stderr

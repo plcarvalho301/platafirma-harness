@@ -75,9 +75,9 @@ def test_acervo_ingerir_dispatch_drive(env_py):
     assert r.returncode == 2
     assert "mutuamente exclusivos" in r.stderr
 
-    r_obra = _roda([BIN_ACERVO, "ingerir", "obra", "--drive", "--lote", "x"], env_py)
-    assert r_obra.returncode == 2
-    assert "mutuamente exclusivos" in r_obra.stderr
+    r_bib = _roda([BIN_ACERVO, "ingerir", "biblioteca", "--drive", "--lote", "x"], env_py)
+    assert r_bib.returncode == 2
+    assert "mutuamente exclusivos" in r_bib.stderr
 
 
 def test_portao_1_divergencia_aborta(tmp_path, env_py):
