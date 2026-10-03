@@ -79,6 +79,8 @@ uso (gramatica arq:0106 — acervo <ato> <particao> <entidade> [seletor]):
   acervo ler      obra impressao <obra> [--paginas a-b | --capitulo <ancora>] [--formato md|blocos]
                   [--papel corpo|todos] [--cursor c] [--impressao <id>] [--baixar [<pasta>]]
                   o texto da obra pelo espelho de leitura, do comeco e em ordem
+  acervo ler      obra objeto <uuid|prefixo|titulo> [--destino <pasta>]
+                  o arquivo original da obra; --destino so na bancada ou var/tmp/<ordem_id> (exit 4 fora); diz caminho e sha256
   acervo curar    obra --situacao|--expurgar|--restaurar|--promover|--reclassificar|--conceito <...>
   acervo curar    obra --conceito <slug> --renomear <slug-novo> --motivo "…" [--apply]   troca o slug (cura K15); o velho vira
                   termo de entrada; plano seco sem --apply, com a varredura de quem aponta, D7 e D8 do novo e o HermiT
@@ -176,7 +178,9 @@ conforme() {
     # so stdlib, le arquivos, nao toca o acervo
     listar:obra:bancada)    exec "$ATOS/listar" obra bancada "$@" ;;
     listar:obra:conceito)   exec "$ATOS/listar" conceitos "$@" ;;
-    ler:obra:objeto)        exec "$ATOS/baixar" "$@" ;;
+    # o arquivo original da obra, por uuid (inteiro ou prefixo) ou titulo, em --destino (#2856 l.153/96):
+    # precisa de boto3, que so o venv acervo da release tem
+    ler:obra:objeto)        exec "${PLATAFIRMA_RELEASE:-/opt/platafirma/current}/venv/acervo/bin/python" "$ATOS/objeto" "$@" ;;
     # o texto da obra pelo espelho de leitura, por pagina ou capitulo (spec espelho-de-leitura
     # §5.4; #3180): cliente fino da rota de leitura do motor, nunca converte nem renderiza
     ler:obra:impressao)     exec python3 "$ATOS/impressao" "$@" ;;
@@ -269,7 +273,7 @@ case "$ATO" in
     esac
     exec "$ATOS/escada" "$@" ;;
   baixar)          avisa "acervo baixar \"<titulo>\"" "acervo ler obra objeto \"<titulo>\""
-                   exec "$ATOS/baixar"  "$@" ;;
+                   exec "${PLATAFIRMA_RELEASE:-/opt/platafirma/current}/venv/acervo/bin/python" "$ATOS/objeto" "$@" ;;
   bancada)
     avisa "acervo bancada" "acervo curar obra lote"
     case "${1:-}" in
