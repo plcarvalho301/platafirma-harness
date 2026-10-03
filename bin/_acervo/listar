@@ -16,21 +16,22 @@
 #     (porta de `deploy <stack> rotas`, bin/deploy ~347).
 # `acervo listar topologia <stack> --acessos` — superfície gateada (allowlist/OIDC) da stack
 #     (porta de `deploy <stack> acessos`, bin/deploy ~380).
-# `acervo listar obra metodos [--json]` — método padrão de conversão por tipo real (spec
+# `acervo listar biblioteca metodos [--json]` — método padrão de conversão por tipo real (spec
 #     espelho-de-leitura §4.3): configuração do ATO DE INGESTÃO, não linha de catálogo — a
 #     tabela única que o conversor aplica (conversor/conversor/padrao.py da release do
 #     conhecimento, ou de PF_CONHECIMENTO_DIR), sem tabela golden record (#3193).
-# `acervo listar obra obra [--sobre <termo>] [--eixo <e>] [--situacao] [--json]` — o catálogo da
+# `acervo listar biblioteca obra [--sobre <termo>] [--eixo <e>] [--situacao] [--json]` — o catálogo da
 #     obra; --situacao traz servivel, degrau, store, impressao servindo e a marcação de uso
 #     (arq:0119 §6; spec acervo-obra §6; coluna acervo.obra.marcacao, migração 071, #3202).
-# `acervo listar obra --qualidade [--por-obra] [--json]` — a qualidade (veredito da régua) dos espelhos
-#     servindo, por classe (ok / suspeita / nao-julgada); --por-obra, uma linha por obra (#2856 l.156).
-#     Lê acervo.impressao.espelho->veredito; a margem do piso é definição de dados e sai como pendência.
-# `acervo listar obra bancada <pasta> [--json] [--estratos <arquivo>]` — agregador da bancada de
+# `acervo listar biblioteca obra --qualidade [--por-obra] [--json]` — a qualidade (veredito da régua) dos
+#     espelhos servindo, por classe (ok / suspeita / nao-julgada); --por-obra, uma linha por obra
+#     (#2856 l.156). Lê acervo.impressao.espelho->veredito; a margem do piso é definição de dados e sai
+#     como pendência.
+# `acervo listar biblioteca bancada <pasta> [--json] [--estratos <arquivo>]` — agregador da bancada de
 #     conversão (card #3187/#3181): lê <pasta>/{perfil,docling}/*/relatorio.json que `curar
 #     --reextrair … --bancada <pasta>` gravou, pareia por obra e aplica a regra do card #3181.
 #     Lógica em _acervo/bancada_conversao.py (só stdlib). "bancada" aqui é só a pasta de saída
-#     dada na linha de comando — não é a raiz de lib/raizes.py nem `acervo curar obra lote`.
+#     dada na linha de comando — não é a raiz de lib/raizes.py nem `acervo curar biblioteca lote`.
 # Read-only. NÃO servido na montagem: é referência e fallback (D4 do ADR 0076).
 #
 # TRANSPORTE (arq:0106 seguido à risca): o psql devolve UMA linha, um array JSON, via
@@ -169,7 +170,7 @@ USO = """uso:
                                                 release do conhecimento, ou de
                                                 PF_CONHECIMENTO_DIR); --json traz o mime e
                                                 se o tipo entra no lote de reextracao
-  acervo listar obra --qualidade [--por-obra] [--json]  qualidade dos espelhos servindo, por classe
+  acervo listar biblioteca obra --qualidade [--por-obra] [--json]  qualidade dos espelhos servindo, por classe
                                                 (ok / suspeita / nao-julgada): a primeira linha traz
                                                 o total e o criterio em palavras; --por-obra, uma
                                                 linha por obra com a classe. Le o veredito da regua
@@ -853,7 +854,7 @@ def listar_obra(termo, eixo, situacao, quero_json):
     data_cat = cat_info[0]["data"] if cat_info else ""
 
     if eixo and eixo not in ("titulo", "conceito", "subdominio"):
-        morre("acervo listar obra obra: --eixo invalido '%s' (titulo, conceito, subdominio)." % eixo, 2)
+        morre("acervo listar biblioteca obra: --eixo invalido '%s' (titulo, conceito, subdominio)." % eixo, 2)
 
     if termo:
         cond_t = "o.titulo ilike %s" % _lit("%" + termo + "%")
@@ -1084,7 +1085,7 @@ from (
 """
 
 def listar_obra_qualidade(por_obra, quero_json):
-    """`acervo listar obra --qualidade [--por-obra] [--json]`: a contagem, por classe, da qualidade dos
+    """`acervo listar biblioteca obra --qualidade [--por-obra] [--json]`: a contagem, por classe, da qualidade dos
     espelhos servindo; com --por-obra, uma linha por obra. Só leitura. Espelho sem veredito conta como
     nao-julgada (o mesmo que a primeira linha de `acervo ler obra impressao` diz)."""
     linhas = _psql_json(SQL_QUALIDADE_ESPELHO, "qualidade_espelho")
@@ -1210,11 +1211,11 @@ def main(argv):
         morre("acervo listar obra bancada: aceita so <pasta>, --json e --estratos <arquivo>; "
               "--sobre, --eixo e --situacao nao valem aqui.\n\n%s" % USO)
     if por_obra and not quero_qualidade:
-        morre("acervo listar obra: --por-obra so vale com --qualidade.\n\n%s" % USO)
+        morre("acervo listar biblioteca obra: --por-obra so vale com --qualidade.\n\n%s" % USO)
     if quero_qualidade and (situacao or termo is not None or eixo is not None
                             or quero_bancada or quero_metodos):
         # nao ignorar em silencio: a agregacao cobre todos os espelhos servindo, sem filtro
-        morre("acervo listar obra --qualidade: aceita so --por-obra e --json; --sobre, --eixo, "
+        morre("acervo listar biblioteca obra --qualidade: aceita so --por-obra e --json; --sobre, --eixo, "
               "--situacao, bancada e metodos nao valem aqui.\n\n%s" % USO)
     if arquivo_estratos is not None and not quero_bancada:
         morre("acervo listar: --estratos so vale em `acervo listar obra bancada <pasta>`.\n\n%s" % USO)
