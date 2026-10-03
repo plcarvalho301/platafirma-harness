@@ -1475,12 +1475,17 @@ def read_file(path: str = "", offset: int = 0, max_bytes: int = 40000,
 # .php e .mjs entraram em 25/09/2026 (#3133): a skin da wiki (platafirma-conhecimento, .php)
 # e as provas do rastreador (platafirma-ui, .mjs) sao texto plano da mesma classe de .js e
 # .html, e ficavam sem porta — citacao a corrigir neles nao tinha como ser escrita.
+# .service/.timer/.path/.socket entraram em 03/10/2026 (#2856 linha 160, card #3252): unit
+# systemd e texto plano de deploy; sem eles a unit nova so entrava por write .txt + git mv.
 TIPOS_TEXTO = {".py", ".md", ".mmd", ".d2", ".sh", ".sql", ".yaml", ".yml", ".json", ".toml",
-               ".css", ".html", ".js", ".mjs", ".php", ".txt", ".conf"}
+               ".css", ".html", ".js", ".mjs", ".php", ".txt", ".conf",
+               ".service", ".timer", ".path", ".socket"}
 # Texto de build que se reconhece pelo nome, nao pela extensao. Entrou em 23/09/2026: sem
 # ele, stack nova com imagem propria (Dockerfile, conf do nginx) nao tinha como ser escrita
 # pela porta, e a saida era esconder o Dockerfile dentro do compose.
 NOMES_TEXTO = {"Dockerfile", ".dockerignore", "VERDES"}  # VERDES: baseline do pre-push (guia portoes-do-codigo)
+# Dockerfile.<sufixo> (Dockerfile.gpu, Dockerfile.dev): o mesmo texto de build, #2856 linha 40.
+PREFIXO_DOCKERFILE = "Dockerfile."
 # platafirma-ui entrou em 22/09/2026 (hotfix): o clone existia na bancada e o front do
 # rastreador mora nele, mas a lista nomeada o deixava fora e a tela nao tinha como ser
 # corrigida pela porta.
@@ -1494,6 +1499,12 @@ CLONES = ("platafirma-core", "platafirma-conhecimento",
           "platafirma-casa", "platafirma-rastreador")
 ESCRITA_TETO = 1_048_576
 TMP_FITA = INSTANCIA / "var" / "tmp"
+
+
+def _nome_texto(nome: str) -> bool:
+    """Nome que se reconhece como texto de build: exato (NOMES_TEXTO) ou Dockerfile.<sufixo>."""
+    return nome in NOMES_TEXTO or (nome.startswith(PREFIXO_DOCKERFILE)
+                                   and len(nome) > len(PREFIXO_DOCKERFILE))
 
 
 def _negadas_escrita() -> dict:
@@ -1600,10 +1611,10 @@ def _resolve_escrita(path: str, ident: dict):
             continue
         if _em_bin_do_harness(real_pai):
             tipos = tipos | {""}
-        if ext not in tipos and alvo.name not in NOMES_TEXTO:
+        if ext not in tipos and not _nome_texto(alvo.name):
             return None, (f"tipo: '{ext or '(sem extensao)'}' fora de "
                           f"{sorted(t or '(sem)' for t in tipos)} (e dos nomes "
-                          f"{sorted(NOMES_TEXTO)}) em {raiz}/")
+                          f"{sorted(NOMES_TEXTO)} e {PREFIXO_DOCKERFILE}<sufixo>) em {raiz}/")
         if raiz == tmp_fita:
             rel = real_pai.relative_to(tmp_fita).parts
             if not rel:
@@ -1655,7 +1666,8 @@ def write_file(path: str, content: str = "", sessao_id: str | None = None,
     bancada, clones platafirma-* e seus worktrees em wt/<repo>/<cadeira>
     (working tree, fora de .git), com bin/ do harness aceitando verbo (sem extensao +
     shebang); na instancia, @TMP@/<ordem_id>/ (rascunho da fita). Tipos: .py .md .mmd .d2 .sh
-    .sql .yaml .yml .json .toml .css .html .js .mjs .php .txt .conf. Fora disso volta
+    .sql .yaml .yml .json .toml .css .html .js .mjs .php .txt .conf .service .timer .path
+    .socket, e os nomes Dockerfile, Dockerfile.<sufixo>, .dockerignore, VERDES. Fora disso volta
     `{recusado, motivo}` nomeando o porque (release, fila, abertura publicada, log, segredos, .git, symlink,
     tipo, tamanho). `content` = arquivo
     INTEIRO (teto 1 MiB). `trecho={"antes","depois"}` = edicao por trecho: `antes` tem de

@@ -16,18 +16,18 @@
 #     (porta de `deploy <stack> rotas`, bin/deploy ~347).
 # `acervo listar topologia <stack> --acessos` — superfície gateada (allowlist/OIDC) da stack
 #     (porta de `deploy <stack> acessos`, bin/deploy ~380).
-# `acervo listar obra metodos [--json]` — método padrão de conversão por tipo real (spec
+# `acervo listar biblioteca metodos [--json]` — método padrão de conversão por tipo real (spec
 #     espelho-de-leitura §4.3): configuração do ATO DE INGESTÃO, não linha de catálogo — a
 #     tabela única que o conversor aplica (conversor/conversor/padrao.py da release do
 #     conhecimento, ou de PF_CONHECIMENTO_DIR), sem tabela golden record (#3193).
-# `acervo listar obra obra [--sobre <termo>] [--eixo <e>] [--situacao] [--json]` — o catálogo da
+# `acervo listar biblioteca obra [--sobre <termo>] [--eixo <e>] [--situacao] [--json]` — o catálogo da
 #     obra; --situacao traz servivel, degrau, store, impressao servindo e a marcação de uso
 #     (arq:0119 §6; spec acervo-obra §6; coluna acervo.obra.marcacao, migração 071, #3202).
-# `acervo listar obra bancada <pasta> [--json] [--estratos <arquivo>]` — agregador da bancada de
+# `acervo listar biblioteca bancada <pasta> [--json] [--estratos <arquivo>]` — agregador da bancada de
 #     conversão (card #3187/#3181): lê <pasta>/{perfil,docling}/*/relatorio.json que `curar
 #     --reextrair … --bancada <pasta>` gravou, pareia por obra e aplica a regra do card #3181.
 #     Lógica em _acervo/bancada_conversao.py (só stdlib). "bancada" aqui é só a pasta de saída
-#     dada na linha de comando — não é a raiz de lib/raizes.py nem `acervo curar obra lote`.
+#     dada na linha de comando — não é a raiz de lib/raizes.py nem `acervo curar biblioteca lote`.
 # Read-only. NÃO servido na montagem: é referência e fallback (D4 do ADR 0076).
 #
 # TRANSPORTE (arq:0106 seguido à risca): o psql devolve UMA linha, um array JSON, via
@@ -842,7 +842,7 @@ def listar_obra(termo, eixo, situacao, quero_json):
     data_cat = cat_info[0]["data"] if cat_info else ""
 
     if eixo and eixo not in ("titulo", "conceito", "subdominio"):
-        morre("acervo listar obra obra: --eixo invalido '%s' (titulo, conceito, subdominio)." % eixo, 2)
+        morre("acervo listar biblioteca obra: --eixo invalido '%s' (titulo, conceito, subdominio)." % eixo, 2)
 
     if termo:
         cond_t = "o.titulo ilike %s" % _lit("%" + termo + "%")
