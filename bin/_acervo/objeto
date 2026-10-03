@@ -1,0 +1,276 @@
+#!/opt/platafirma/current/venv/acervo/bin/python
+# _acervo/objeto — `acervo ler biblioteca objeto` (antes `ler obra objeto`, ainda aceito): baixa o arquivo original da obra (o objeto do store).
+# Sucede o antigo _acervo/baixar (bash, so titulo, so diretorio corrente; balde #2856 linhas 153 e 96).
+#
+# A obra se acha por uuid inteiro, prefixo unico de uuid ou titulo (busca parcial, sem acento
+# sensivel, como sempre). --destino <pasta> grava la (criada se faltar), so dentro de raiz permitida:
+# a bancada declarada ou <instancia>/var/tmp/<ordem_id>. O retorno diz o caminho e o sha256 de cada
+# arquivo gravado. Sem --destino grava no diretorio corrente, como antes, e diz onde.
+# exit: 0 gravou · 1 nada encontrado · 2 uso ou termo ambiguo · 3 catalogo/store fora ·
+#       4 destino fora das raizes permitidas · 5 indeterminavel (download falhou)
+import argparse
+import hashlib
+import os
+import re
+import subprocess
+import sys
+import unicodedata
+from pathlib import Path
+
+HARNESS_DIR = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(HARNESS_DIR / "lib"))
+from raizes import BancadaNaoDeclarada, bancada, instancia  # noqa: E402
+
+PG_CONTAINER = "rag-extractor-pg"
+MINIO_CONTAINER = "rag-extractor-minio"
+MINIO_ENDPOINT = "http://127.0.0.1:9000"
+MIN_PREFIXO = 6          # abaixo disso um termo hex-e-hifen e titulo, nao prefixo de uuid
+TETO_CANDIDATOS = 20
+
+USO = """uso: acervo ler biblioteca objeto <uuid|prefixo-de-uuid|titulo> [--destino <pasta>]
+  <obra>            uuid inteiro, prefixo único de uuid (6+ hex) ou trecho do título (sem acento sensível)
+  --destino <pasta> grava o arquivo original lá (criada se faltar); só dentro da bancada declarada ou de
+                    <instância>/var/tmp/<ordem_id>; fora disso recusa com exit 4. Sem a flag, grava no
+                    diretório corrente.
+retorno: uma linha por arquivo gravado: gravado <caminho> sha256 <hex> (<n> bytes)
+exit: 0 gravou · 1 nada encontrado · 2 uso ou termo ambíguo · 3 catálogo/store fora ·
+      4 destino fora das raízes permitidas · 5 indeterminável
+forma antiga `acervo baixar "<título>" [pasta]` segue valendo (a pasta posicional não tem raiz imposta)
+"""
+
+
+class Falha(Exception):
+    def __init__(self, codigo: int, msg: str):
+        super().__init__(msg)
+        self.codigo = codigo
+
+
+# --- o mundo de fora: catalogo (psql no container) e store (MinIO) -------------------------------
+
+def _env_do_container(nome: str, chaves: set) -> dict:
+    fmt = "{{range .Config.Env}}{{println .}}{{end}}"
+    try:
+        saida = subprocess.run(["docker", "inspect", nome, "--format", fmt],
+                               capture_output=True, text=True, check=True).stdout
+    except (OSError, subprocess.CalledProcessError) as e:
+        raise Falha(3, f"catálogo/store fora: docker inspect {nome} falhou ({e.__class__.__name__})") from e
+    achado = {}
+    for linha in saida.splitlines():
+        if "=" in linha:
+            k, v = linha.split("=", 1)
+            if k in chaves:
+                achado[k] = v
+    faltando = chaves - set(achado)
+    if faltando:
+        raise Falha(3, f"credencial ausente em {nome}: {sorted(faltando)}")
+    return achado
+
+
+def _consultar(sql: str) -> str:
+    """Roda o SELECT no catalogo e devolve as linhas tab-separadas."""
+    cred = _env_do_container(PG_CONTAINER, {"POSTGRES_USER", "POSTGRES_DB"})
+    try:
+        r = subprocess.run(["docker", "exec", PG_CONTAINER, "psql", "-U", cred["POSTGRES_USER"],
+                            "-d", cred["POSTGRES_DB"], "-At", "-F", "\t", "-c", sql],
+                           capture_output=True, text=True, check=True)
+    except (OSError, subprocess.CalledProcessError) as e:
+        detalhe = (getattr(e, "stderr", "") or "").strip()[:200]
+        raise Falha(3, f"catálogo fora: psql falhou {detalhe}".strip()) from e
+    return r.stdout
+
+
+def _baixar_do_store(bucket: str, sha: str, destino: Path) -> None:
+    import boto3  # só o venv acervo da release tem; o teste troca esta função
+
+    cred = _env_do_container(MINIO_CONTAINER, {"MINIO_ROOT_USER", "MINIO_ROOT_PASSWORD"})
+    boto3.client("s3", endpoint_url=MINIO_ENDPOINT,
+                 aws_access_key_id=cred["MINIO_ROOT_USER"],
+                 aws_secret_access_key=cred["MINIO_ROOT_PASSWORD"]).download_file(bucket, sha, str(destino))
+
+
+# --- resolver a obra ----------------------------------------------------------------------------
+
+def classificar(termo: str) -> tuple:
+    """('id', <uuid ou prefixo em minusculas>) quando o termo e hex-e-hifen de 6+ digitos; senao ('titulo', termo)."""
+    s = (termo or "").strip().lower()
+    if re.fullmatch(r"[0-9a-f]+(?:-[0-9a-f]+)*", s) and len(s.replace("-", "")) >= MIN_PREFIXO and len(s) <= 36:
+        return "id", s
+    return "titulo", termo
+
+
+def _sql_por_id(prefixo: str) -> str:
+    # prefixo e so [0-9a-f-]: nada a escapar
+    return ("select coalesce(titulo,arquivo), arquivo, objeto, id::text from acervo.obra "
+            f"where objeto is not null and id::text like '{prefixo}%' order by id limit {TETO_CANDIDATOS}")
+
+
+def _sql_por_titulo(termo: str) -> str:
+    q = termo.replace("'", "''")
+    # Normaliza no Postgres (unaccent + hifen/espaco equivalentes) para o filtro grosso; o fino
+    # (colapsar runs de hifen/espaco) e `casar_titulo`. Ordem por id (uuid estavel), nunca por arquivo.
+    return ("select coalesce(titulo,arquivo), arquivo, objeto, id::text from acervo.obra "
+            "where objeto is not null "
+            f"and (translate(unaccent(lower(coalesce(titulo,''))),'-',' ') like translate(unaccent(lower('%{q}%')),'-',' ') "
+            f"or translate(unaccent(lower(arquivo)),'-',' ') like translate(unaccent(lower('%{q}%')),'-',' ')) "
+            "order by id limit 200")
+
+
+def _norm(t) -> str:
+    if not t:
+        return ""
+    nfkd = unicodedata.normalize("NFKD", str(t))
+    sem = "".join(c for c in nfkd if not unicodedata.combining(c))
+    return re.sub(r"[-\s]+", " ", sem.lower()).strip()
+
+
+def _linhas(saida: str) -> list:
+    achados = []
+    for linha in (saida or "").splitlines():
+        campos = linha.rstrip("\r").split("\t")
+        if len(campos) >= 4 and campos[2]:
+            achados.append({"titulo": campos[0], "arquivo": campos[1], "objeto": campos[2], "id": campos[3]})
+    return achados
+
+
+def casar_titulo(linhas: list, termo: str) -> list:
+    alvo = _norm(termo)
+    if not alvo:
+        return []
+    hits = [o for o in linhas if alvo in _norm(o["titulo"]) or alvo in _norm(o["arquivo"])]
+    hits.sort(key=lambda o: (len(_norm(o["titulo"])), o["id"]))
+    return hits[:TETO_CANDIDATOS]
+
+
+def resolver(termo: str) -> list:
+    """Candidatos pela ordem da casa: uuid (inteiro ou prefixo) primeiro; sem achado, titulo."""
+    classe, valor = classificar(termo)
+    if classe == "id":
+        achados = _linhas(_consultar(_sql_por_id(valor)))
+        if achados:
+            return achados
+    return casar_titulo(_linhas(_consultar(_sql_por_titulo(termo))), termo)
+
+
+def _descricao(o: dict) -> str:
+    return f"{o['id']}  {o['titulo']}  [{o['arquivo']}]"[:140]
+
+
+def escolher(candidatos: list, termo: str) -> dict:
+    if not candidatos:
+        raise Falha(1, f"nada encontrado para: {termo}")
+    if len(candidatos) == 1:
+        return candidatos[0]
+    lista = "\n".join(f"  {i}) {_descricao(o)}" for i, o in enumerate(candidatos, 1))
+    if sys.stdin.isatty():
+        sys.stderr.write(f"{len(candidatos)} resultados — refine o termo ou escolha:\n{lista}\n")
+        try:
+            resposta = input("número (enter cancela): ").strip()
+        except EOFError:
+            resposta = ""
+        if not resposta:
+            raise Falha(0, "")
+        if resposta.isdigit() and 1 <= int(resposta) <= len(candidatos):
+            return candidatos[int(resposta) - 1]
+        raise Falha(2, f"escolha inválida: {resposta}")
+    raise Falha(2, f"{len(candidatos)} resultados para '{termo}' — refine com o uuid (ou prefixo mais longo) da obra:\n{lista}")
+
+
+# --- o destino ----------------------------------------------------------------------------------
+
+def raizes_permitidas() -> list:
+    """Bancada declarada e <instancia>/var/tmp/<ordem_id> da ordem em curso. Resolvidas (link simbolico)."""
+    raizes = []
+    try:
+        raizes.append(("a bancada declarada", Path(os.path.realpath(bancada()))))
+    except BancadaNaoDeclarada:
+        pass
+    ordem = os.environ.get("PF_ORDEM_ID", "").strip()
+    if ordem and ordem != "-" and "/" not in ordem:
+        raizes.append(("var/tmp/<ordem_id>", Path(os.path.realpath(instancia() / "var" / "tmp" / ordem))))
+    return raizes
+
+
+def conferir_destino(pasta: str) -> Path:
+    p = Path(pasta).expanduser()
+    if not p.is_absolute():
+        p = Path.cwd() / p
+    real = Path(os.path.realpath(p))   # segue link simbolico e '..' mesmo em pasta que ainda nao existe
+    raizes = raizes_permitidas()
+    for _, raiz in raizes:
+        if real == raiz or raiz in real.parents:
+            return real
+    onde = "; ".join(f"{nome}: {raiz}" for nome, raiz in raizes) or "nenhuma raiz declarada (sem bancada, sem PF_ORDEM_ID)"
+    raise Falha(4, f"destino {pasta} (resolvido: {real}) fora das raizes permitidas — {onde}")
+
+
+def _nome_do_arquivo(arquivo: str, sha: str) -> str:
+    nome = Path((arquivo or "").replace("\\", "/")).name
+    return nome if nome not in ("", ".", "..") else sha
+
+
+def _sha256_do_arquivo(caminho: Path) -> tuple:
+    h, n = hashlib.sha256(), 0
+    with caminho.open("rb") as fh:
+        for bloco in iter(lambda: fh.read(1 << 20), b""):
+            h.update(bloco)
+            n += len(bloco)
+    return h.hexdigest(), n
+
+
+def gravar(obra: dict, pasta: Path) -> str:
+    bucket, _, sha = obra["objeto"].partition("/")
+    if not sha:
+        raise Falha(5, f"objeto da obra {obra['id']} sem sha ({obra['objeto']})")
+    pasta.mkdir(parents=True, exist_ok=True)
+    final = pasta / _nome_do_arquivo(obra["arquivo"], sha)
+    parcial = final.with_name(final.name + ".parte")
+    try:
+        _baixar_do_store(bucket, sha, parcial)
+        soma, n = _sha256_do_arquivo(parcial)
+        os.replace(parcial, final)
+    except Falha:
+        raise
+    except Exception as e:  # noqa: BLE001 — store fora, objeto ausente, disco: nenhum vira traceback
+        raise Falha(5, f"indeterminável: download de {obra['objeto']} falhou ({e.__class__.__name__}: {e})") from e
+    finally:
+        parcial.unlink(missing_ok=True)
+    nota = f" (difere do objeto {sha})" if re.fullmatch(r"[0-9a-f]{64}", sha) and soma != sha else ""
+    return f"gravado {final} sha256 {soma} ({n} bytes){nota}"
+
+
+def main(argv: list) -> int:
+    p = argparse.ArgumentParser(prog="acervo ler biblioteca objeto", add_help=False)
+    p.add_argument("obra", nargs="?")
+    p.add_argument("pasta_legada", nargs="?")
+    p.add_argument("--destino")
+    p.add_argument("-h", "--help", "--ajuda", dest="ajuda", action="store_true")
+    try:
+        args, resto = p.parse_known_args(argv)
+    except SystemExit:
+        sys.stderr.write(USO)
+        return 2
+    if args.ajuda:
+        sys.stdout.write(USO)
+        return 0
+    if resto or not args.obra:
+        sys.stderr.write((f"argumento desconhecido: {' '.join(resto)}\n" if resto else "") + USO)
+        return 2
+    if args.destino is not None and args.pasta_legada is not None:
+        sys.stderr.write("acervo ler biblioteca objeto: pasta posicional e --destino juntos; use só --destino\n")
+        return 2
+    try:
+        if args.destino is not None:
+            pasta = conferir_destino(args.destino)     # antes de tocar no catalogo: recusa barato
+        else:
+            pasta = Path(os.path.abspath(args.pasta_legada or "."))   # diz onde gravou, caminho inteiro
+        obra = escolher(resolver(args.obra), args.obra)
+        print(gravar(obra, pasta))
+        return 0
+    except Falha as f:
+        if str(f):
+            sys.stderr.write(f"acervo ler biblioteca objeto: {f}\n")
+        return f.codigo
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))
