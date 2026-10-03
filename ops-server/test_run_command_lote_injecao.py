@@ -48,7 +48,7 @@ async def test_run_command_injecao_entre_itens_lote():
     mock_rc.hget.return_value = None
 
     chamadas = []
-    def fake_run_verbo_blocking(argv, stdin, timeout, ident):
+    def fake_run_verbo_blocking(argv, stdin, timeout, ident, prazo=None):
         chamadas.append({"argv": list(argv), "ident": dict(ident)})
         slug = argv[0].rsplit("/", 1)[-1]
         ato = argv[1] if len(argv) > 1 else ""
@@ -185,7 +185,7 @@ async def test_run_command_encadeado_para_no_exit_4_e_declara_o_resto():
     saidas = {"a": 0, "b": 1, "c": 4, "d": 0}
     chamadas = []
 
-    def fake(argv, stdin, timeout, ident):
+    def fake(argv, stdin, timeout, ident, prazo=None):
         chamadas.append(argv[1])
         e = saidas[argv[1]]
         t = f"{argv[1]} saiu {e}"

@@ -153,7 +153,7 @@ def test_item_de_lote_stdin_pipe_de_int_nao_vira_texto():
 async def test_run_command_lote_stdin_de_continua_pipe():
     chamadas = []
 
-    def fake_run_verbo_blocking(argv, stdin, timeout, ident):
+    def fake_run_verbo_blocking(argv, stdin, timeout, ident, prazo=None):
         chamadas.append(stdin)
         if len(chamadas) == 1:
             out = "saida-do-item-0"
@@ -185,7 +185,7 @@ async def test_run_command_lote_stdin_de_continua_pipe():
 async def test_run_command_lote_stdin_dict_nao_pipe_vira_texto_sem_recusa():
     chamadas = []
 
-    def fake_run_verbo_blocking(argv, stdin, timeout, ident):
+    def fake_run_verbo_blocking(argv, stdin, timeout, ident, prazo=None):
         chamadas.append(stdin)
         return {"exit_code": 0, "stdout": {"texto": "ok", "bytes_total": 2, "truncado": False}}
 
@@ -217,7 +217,7 @@ async def test_run_command_lote_stdin_dict_nao_pipe_vira_texto_sem_recusa():
 async def test_faz_tool_verbo_stdin_dict_top_level_vira_texto():
     chamadas = []
 
-    def fake_run_verbo_blocking(argv, stdin, timeout, ident):
+    def fake_run_verbo_blocking(argv, stdin, timeout, ident, prazo=None):
         chamadas.append(stdin)
         return {"exit_code": 0, "stdout": {"texto": "ok", "bytes_total": 2, "truncado": False}}
 
@@ -240,7 +240,7 @@ async def test_faz_tool_verbo_stdin_dict_top_level_vira_texto():
 async def test_faz_tool_verbo_stdin_list_lote_vira_texto():
     chamadas = []
 
-    def fake_run_verbo_blocking(argv, stdin, timeout, ident):
+    def fake_run_verbo_blocking(argv, stdin, timeout, ident, prazo=None):
         chamadas.append(stdin)
         return {"exit_code": 0, "stdout": {"texto": "ok", "bytes_total": 2, "truncado": False}}
 
