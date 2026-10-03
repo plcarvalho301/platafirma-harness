@@ -111,6 +111,7 @@ def test_status_json_persona_unica_com_pendente(monkeypatch, capsys):
     assert item == {
         "persona": "ti",
         "pendentes": 2,
+        "penduradas": 0,
         "total_historico": 5,
         "estado": "parada",
         "ultima_leitura_seg": 45,
@@ -153,6 +154,7 @@ def test_status_json_todas_mistura_vazia_e_parada(monkeypatch, capsys):
     assert por_persona["produto"] == {
         "persona": "produto",
         "pendentes": 0,
+        "penduradas": 0,
         "total_historico": 0,
         "estado": "vazia",
         "idade_mais_antiga_seg": None,
@@ -182,6 +184,7 @@ def test_status_json_caixa_em_dia_sem_pendente(monkeypatch, capsys):
     assert saida == [{
         "persona": "ti",
         "pendentes": 0,
+        "penduradas": 0,
         "total_historico": 3,
         "estado": "em_dia",
         "idade_mais_antiga_seg": None,
@@ -295,6 +298,7 @@ def test_status_todas_via_cli_de_verdade(monkeypatch, capsys):
     assert saida == [{
         "persona": "ti",
         "pendentes": 0,
+        "penduradas": 0,
         "total_historico": 0,
         "estado": "vazia",
         "idade_mais_antiga_seg": None,

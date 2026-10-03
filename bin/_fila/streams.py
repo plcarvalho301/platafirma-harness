@@ -4,14 +4,14 @@
 # dono: ia
 # componente: harness
 # use para: caixa, carta, recado, handoff, 'o que chegou', mandar para outra cadeira
-# atos: status (leitura, mensagem) · ler (leitura, mensagem) · enviar (escrita, mensagem) · tipos (leitura, mensagem)
-# forma: status,tipos=lista · ler=texto · enviar=objeto
+# atos: status (leitura, mensagem) · ler (leitura, mensagem) · tratar (escrita, mensagem) · enviar (escrita, mensagem) · tipos (leitura, mensagem)
+# forma: status,tipos=lista · ler=texto · tratar=lista · enviar=objeto
 # cauda: nao
 # classe: B
 # consome: valkey@streams (protocolo redis — sem OpenAPI)
 # ambiente: FILA_REDIS_HOST[=127.0.0.1] · FILA_REDIS_PORT[=6379] · PF_ABERTURA_DIR[=/srv/platafirma/casa/var/abertura-publicada] (morada publicada, arvore current/abertura/) · PF_CADEIRA (obrigatoria em enviar e em ler/status sem persona; porta) · PF_SESSAO (porta, so log)
 # depende: modulo redis no venv; arvore abertura/<cadeira>/persona.md (fonte de destinatario); rede ao loopback da malha
-# escreve: malha msg — XADD na caixa do destinatario (enviar); XACK do ponteiro do grupo (ler quente); nada em status/tipos/ler frio
+# escreve: malha msg — XADD na caixa do destinatario (enviar); entrega no grupo (ler quente: move o ponteiro, carta fica pendurada); XACK (tratar); nada em status/tipos/ler frio/--penduradas
 # substitui: redis-cli XADD/XREADGROUP/XRANGE na caixa; o "cola a mensagem aqui" que a conduta do dono proibe
 # conforme: parcial (spec_fila §6)
 # spec: spec fila
@@ -20,18 +20,26 @@
 # "caixa:<persona>", com consumer group unico "cadeira" — a cadeira dona e o unico
 # consumidor. Envelope inalterado: de/tipo/assunto/ref/responde + corpo auto-contido.
 #
-# LEITURA E PONTEIRO (decisao do dono, 09/08/2026)
-# `ler` e XREADGROUP ">" seguido de XACK na entrega: confirma ao entregar, como o
-# auto-commit do Kafka. O ponteiro (last-delivered-id) vive no grupo, dentro do
-# servidor — a sessao nao carrega estado nenhum entre fitas, so o proprio nome.
-# Nada e apagado na leitura: o historico segue no stream ate o trim.
+# LEITURA, PONTEIRO E ACK (decisao do dono, 03/10/2026; revoga a de 09/08)
+# Tres estados, os de toda mensageria de producao (Streams, Kafka, RabbitMQ, SQS):
+#   nao lida   — depois do ponteiro do grupo (last-delivered-id);
+#   pendurada  — entregue e sem XACK: esta na PEL do grupo;
+#   tratada    — XACK feito.
+# `ler` e XREADGROUP ">": entrega e move o ponteiro, SEM XACK. `tratar <id>` e o
+# XACK, depois que a carta virou ato (resposta, card, mesa) ou foi superada. Antes
+# o ack vinha na entrega (o auto-commit do Kafka), e a carta lida pela metade
+# sumia sem ninguem ter tratado; por isso o `descansar` relia os 7 dias inteiros.
+# Agora o `descansar` le `--penduradas` (PEL + nao lidas), sem mover nada — o
+# equivalente da reentrega do que nao teve ack (XAUTOCLAIM, visibility timeout).
 #
 # `--tudo` e `--desde` sao leitura FRIA (XRANGE): nao movem o ponteiro, entao
 # reler historico nunca queima carta nova.
 #
-# RETENCAO: 7 dias, por XTRIM MINID no timer do motor (ti, arq:0024).
-# E a unica coisa que apaga carta. Mensagem e consumo curto; o que tem permanencia
-# vira card, commit ou wiki antes de vencer.
+# RETENCAO: 7 dias por idade, tratada ou nao, por XTRIM MINID no timer do motor
+# (ti, arq:0024), como a retencao do Kafka e o XTRIM do proprio Valkey. E a unica
+# coisa que apaga carta; a pendurada vencida sai tambem da PEL no mesmo timer. O
+# `descansar` avisa a pendurada com mais de 5 dias. Mensagem e consumo curto; o
+# que tem permanencia vira card, commit ou wiki antes de vencer.
 import argparse
 import json
 import os
@@ -285,15 +293,87 @@ def frias(rc, persona: str, desde: str = None):
 
 
 def novas(rc, persona: str, quantas: int = 500):
-    """XREADGROUP '>' + XACK: so o que a cadeira ainda nao viu, confirmado na entrega."""
+    """XREADGROUP '>': so o que a cadeira ainda nao viu. Entrega e move o ponteiro,
+    SEM XACK — a carta fica pendurada ate `tratar`."""
     garante_grupo(rc, persona)
     resp = rc.xreadgroup(GRUPO, persona, {stream_key(persona): ">"}, count=quantas)
     if not resp:
         return []
+    return [_campos(plano, tecnico) for tecnico, plano in resp[0][1]]
+
+def _ids_pendurados(rc, persona: str):
+    """Ids tecnicos na PEL do grupo (entregues e sem XACK), mais antigo primeiro."""
+    chave = stream_key(persona)
+    try:
+        bruto = rc.xpending_range(chave, GRUPO, min="-", max="+", count=10_000)
+    except AttributeError:
+        bruto = rc.execute_command("XPENDING", chave, GRUPO, "-", "+", 10_000)
+    except redis.exceptions.ResponseError:
+        return []
+    ids = []
+    for item in bruto or []:
+        if isinstance(item, dict):
+            ids.append(item.get("message_id"))
+        else:
+            ids.append(item[0])
+    return [i for i in ids if i]
+
+def penduradas(rc, persona: str):
+    """Leitura FRIA do que nao foi tratado: as penduradas (PEL) e as nao lidas
+    (depois do ponteiro). Nao entrega, nao move ponteiro, nao confirma. Cada carta
+    leva `estado` ('pendurada' | 'nao lida'). Id na PEL cuja entrada o trim ja
+    cortou nao volta (o trim tira da PEL no mesmo passo)."""
+    garante_grupo(rc, persona)
+    chave = stream_key(persona)
     saida = []
-    for tecnico, plano in resp[0][1]:
-        rc.xack(stream_key(persona), GRUPO, tecnico)
-        saida.append(_campos(plano, tecnico))
+    for tecnico in _ids_pendurados(rc, persona):
+        for t, plano in rc.xrange(chave, min=tecnico, max=tecnico):
+            m = _campos(plano, t)
+            m["estado"] = "pendurada"
+            saida.append(m)
+    ponteiro = "0-0"
+    for g in rc.xinfo_groups(chave):
+        if g["name"] == GRUPO:
+            ponteiro = g.get("last-delivered-id", "0-0")
+            break
+    for t, plano in rc.xrange(chave, min=f"({ponteiro}", max="+"):
+        m = _campos(plano, t)
+        m["estado"] = "nao lida"
+        saida.append(m)
+    return saida
+
+def tratar(rc, persona: str, msgids):
+    """XACK por msgid. Devolve [(msgid, resultado)] com resultado em
+    'tratada' | 'ja tratada' | 'nao lida' | 'nao existe'. Nao se trata carta nao
+    lida: em mensageria de producao o ack vem depois da entrega."""
+    garante_grupo(rc, persona)
+    chave = stream_key(persona)
+    por_msgid = {}
+    for t, plano in rc.xrange(chave, min="-", max="+"):
+        por_msgid.setdefault(plano.get("id", t), t)
+    pend = set(_ids_pendurados(rc, persona))
+    ponteiro = "0-0"
+    for g in rc.xinfo_groups(chave):
+        if g["name"] == GRUPO:
+            ponteiro = g.get("last-delivered-id", "0-0")
+            break
+
+    def _id(x):
+        ms, _, seq = x.partition("-")
+        return (int(ms), int(seq or 0))
+
+    saida = []
+    for mid in msgids:
+        tecnico = por_msgid.get(mid) or (mid if mid in pend else None)
+        if tecnico is None:
+            saida.append((mid, "nao existe"))
+        elif tecnico in pend:
+            rc.xack(chave, GRUPO, tecnico)
+            saida.append((mid, "tratada"))
+        elif _id(tecnico) > _id(ponteiro):
+            saida.append((mid, "nao lida"))
+        else:
+            saida.append((mid, "ja tratada"))
     return saida
 
 
@@ -364,13 +444,14 @@ def conta_novas(rc, persona: str, detalhado: bool = False):
     for g in rc.xinfo_groups(chave):
         if g["name"] != GRUPO:
             continue
-        pendentes = g.get("pending", 0)
+        # So o que nao foi entregue. A pendurada (PEL) conta a parte, em
+        # conta_penduradas: lida e nao tratada nao e carta nova.
         ponteiro = g.get("last-delivered-id", "0-0")
         if g.get("lag") is not None:
-            n = g["lag"] + pendentes
+            n = g["lag"]
         else:
             depois = rc.xrange(chave, min=f"({ponteiro}", max="+")
-            n = len(depois) + pendentes
+            n = len(depois)
         break
 
     if not detalhado:
@@ -387,10 +468,20 @@ def conta_novas(rc, persona: str, detalhado: bool = False):
     return n, total, idade_mais_antiga_seg, ultima_leitura_seg
 
 
+def conta_penduradas(rc, persona: str) -> int:
+    """Entregues e sem XACK (PEL do grupo): lidas e ainda nao tratadas."""
+    garante_grupo(rc, persona)
+    for g in rc.xinfo_groups(stream_key(persona)):
+        if g["name"] == GRUPO:
+            return int(g.get("pending", 0) or 0)
+    return 0
+
 def imprime(m: dict):
     print(f"===MSG {m['msgid']}===")
     print(f"de: {m['de']}")
     print(f"tipo: {m['tipo']}")
+    if m.get("estado"):
+        print(f"estado: {m['estado']}")
     print(f"assunto: {m['assunto']}")
     if m["ref"]:
         print(f"ref: {m['ref']}")
@@ -417,6 +508,7 @@ def detalhe_status(rc, persona: str) -> dict:
     return {
         "persona": persona,
         "pendentes": n,
+        "penduradas": conta_penduradas(rc, persona),
         "total_historico": total,
         "estado": estado,
         "idade_mais_antiga_seg": idade_mais_antiga_seg,
@@ -451,8 +543,12 @@ def cmd_status(rc, eu: str, args):
 
     for p in personas:
         n, total = conta_novas(rc, p)
+        pend = conta_penduradas(rc, p) if total else 0
+        trecho_pend = f"{pend} pendurada(s) · " if pend else ""
         if n:
-            print(f"{p}: {n} nova(s) · {total} no historico (7 dias)")
+            print(f"{p}: {n} nova(s) · {trecho_pend}{total} no historico (7 dias)")
+        elif pend:
+            print(f"{p}: nada novo · {trecho_pend}{total} no historico (7 dias)")
         elif total:
             print(f"{p}: caixa em dia · {total} no historico (7 dias)")
         else:
@@ -476,13 +572,20 @@ def cmd_ler(rc, eu: str, args):
         so_minha(eu, alvo, json_mode=json_mode)
         personas = [alvo]
 
-    frio = args.tudo or args.desde
+    pend = bool(getattr(args, "penduradas", False))
+    frio = args.tudo or args.desde or pend
+
+    def _carrega(p):
+        if pend:
+            return penduradas(rc, p)
+        return frias(rc, p, args.desde) if (args.tudo or args.desde) else novas(rc, p)
+
     if args.remetente and not frio:
         if json_mode:
             _falha_json("filtrar por remetente so vale em leitura fria (--tudo ou --desde)", 2)
         sys.stderr.write(
             "erro: filtrar por remetente so vale em leitura fria (--tudo ou --desde).\n"
-            "  no modo normal a entrega e confirmada, e filtrar esconderia carta ja confirmada.\n"
+            "  no modo normal a leitura entrega (move o ponteiro), e filtrar esconderia carta ja entregue.\n"
         )
         sys.exit(2)
 
@@ -491,9 +594,11 @@ def cmd_ler(rc, eu: str, args):
         # (mais nova primeiro); erro ja saiu por _falha_json acima. Cada carta
         # leva idade_seg do carimbo do msgid, como a mesa/status.
         chaves = ("msgid", "de", "tipo", "assunto", "ref", "responde", "corpo")
+        if pend:
+            chaves = chaves + ("estado",)
         saida = []
         for p in personas:
-            msgs = frias(rc, p, args.desde) if frio else novas(rc, p)
+            msgs = _carrega(p)
             if args.remetente:
                 msgs = [m for m in msgs if m["de"] == args.remetente]
             for m in reversed(msgs):
@@ -507,7 +612,7 @@ def cmd_ler(rc, eu: str, args):
 
     vazio = True
     for p in personas:
-        msgs = frias(rc, p, args.desde) if frio else novas(rc, p)
+        msgs = _carrega(p)
         if args.remetente:
             msgs = [m for m in msgs if m["de"] == args.remetente]
         if not msgs:
@@ -518,11 +623,33 @@ def cmd_ler(rc, eu: str, args):
         for m in reversed(msgs):
             imprime(m)
     if vazio:
-        if frio:
+        if pend:
+            print("nada pendurado")
+        elif frio:
             print("nada no historico com esse recorte")
         else:
             print("caixa em dia")
 
+
+# ---------- tratar ----------
+def cmd_tratar(rc, eu: str, args):
+    """XACK: a carta virou ato (resposta, card, mesa) ou foi superada. Uma linha
+    por msgid. Exit 0 se todas trataram (ou ja estavam), 1 se alguma nao existe
+    ou ainda nao foi lida."""
+    alvo = args.persona or eu
+    valida_persona(alvo)
+    alvo = canoniza_persona(alvo)
+    so_minha(eu, alvo)
+    if not args.msgids:
+        sys.stderr.write("erro: passe ao menos um msgid (o que `fila ler` imprime em ===MSG <id>===)\n")
+        sys.exit(2)
+    falhou = False
+    for mid, res in tratar(rc, alvo, args.msgids):
+        print(f"{mid}: {res}")
+        if res in ("nao existe", "nao lida"):
+            falhou = True
+    if falhou:
+        sys.exit(1)
 
 # ---------- enviar ----------
 def cmd_enviar(rc, eu: str, args):
@@ -582,8 +709,14 @@ def build_parser():
     p_ler.add_argument("remetente", nargs="?", default=None)
     p_ler.add_argument("--tudo", nargs="?", const=True, default=False)
     p_ler.add_argument("--desde", default=None)
+    p_ler.add_argument("--penduradas", action="store_true")
     p_ler.add_argument("--json", action="store_true")
     p_ler.add_argument("--eu", default=None)
+
+    p_tratar = sub.add_parser("tratar", add_help=False)
+    p_tratar.add_argument("msgids", nargs="*")
+    p_tratar.add_argument("--caixa", dest="persona", default=None)
+    p_tratar.add_argument("--eu", default=None)
 
     p_tipos = sub.add_parser("tipos", add_help=False)
     p_tipos.add_argument("--eu", default=None)
@@ -604,7 +737,9 @@ def uso():
     sys.stderr.write(
         "uso:\n"
         "  fila status [<persona>] | --todas\n"
-        "  fila ler [<persona>]                     so o que chegou desde a ultima leitura\n"
+        "  fila ler [<persona>]                     so o que chegou desde a ultima leitura (fica pendurada ate tratar)\n"
+        "  fila ler [<persona>] --penduradas        o que nao foi tratado: lidas sem ack + nao lidas; nao move nada\n"
+        "  fila tratar <msgid>...                   ack: a carta virou ato (resposta, card, mesa) ou foi superada\n"
         "  fila ler [<persona>] --tudo [remetente]  historico dos 7 dias, nao move o ponteiro\n"
         "  fila ler [<persona>] --desde <data> [remetente]\n"
         "  fila enviar <destinatario> --tipo <t> --assunto <a> [--ref <r>] [--responde <id>]\n"
@@ -667,6 +802,8 @@ def main():
         cmd_status(rc, eu, args)
     elif args.verbo == "ler":
         cmd_ler(rc, eu, args)
+    elif args.verbo == "tratar":
+        cmd_tratar(rc, eu, args)
     elif args.verbo == "enviar":
         cmd_enviar(rc, eu, args)
     else:

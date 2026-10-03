@@ -67,6 +67,7 @@ tests/test_stack_mascara_segredos.py
 tests/test_pesquisar_consultar_palavras.py
 tests/test_acervo_psql_c.py
 tests/test_fila_msgid.py
+tests/test_fila_ack.py
 tests/test_contrato_minuta_ler.py
 tests/test_contrato_casa_por_caminho.py
 # Medido em 03/10/2026 (card #3239): `curar --conceito --renomear`, contra um servidor HTTP falso do contrato
