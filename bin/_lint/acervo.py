@@ -365,9 +365,34 @@ def relatorio(medida: dict, rev: Any, como_json: bool = False, resumo: bool = Fa
     return rc
 
 
-def verificar_acervo(como_json: bool = False, resumo: bool = False) -> int:
+def filtrar(medida: dict, criterios: Optional[List[str]] = None, so_bloqueantes: bool = False) -> dict:
+    """Recorta a medida: so os criterios pedidos (`--criterio`) e/ou so os bloqueantes
+    (`--so-bloqueantes`). Criterio que a medida nao conhece e uso errado (exit 2), nunca
+    recorte vazio calado (#2856 linha 154: a flag ignorada devolvia 384 KB)."""
+    if not criterios and not so_bloqueantes:
+        return medida
+    conhecidos = set(medida["criterios"]) | {x["id"] for x in medida["nao_rodou"]}
+    pedidos = {c.strip().upper() for c in (criterios or []) if c.strip()}
+    desconhecidos = sorted(pedidos - conhecidos, key=_ordem)
+    if desconhecidos:
+        raise ErroAcervo(2, f"criterio fora da medida: {', '.join(desconhecidos)} "
+                            f"(da lista: {', '.join(sorted(conhecidos, key=_ordem))})")
+
+    def fica(cid: str, severidade: Optional[str]) -> bool:
+        return (not pedidos or cid in pedidos) and (not so_bloqueantes or severidade == "bloqueante")
+
+    return {
+        "criterios": {k: v for k, v in medida["criterios"].items() if fica(k, v["severidade"])},
+        "nao_rodou": [x for x in medida["nao_rodou"] if fica(x["id"], x.get("severidade"))],
+        "apontamentos": [a for a in medida["apontamentos"] if fica(a["id"], a["severidade"])],
+    }
+
+
+def verificar_acervo(como_json: bool = False, resumo: bool = False,
+                     criterios: Optional[List[str]] = None, so_bloqueantes: bool = False) -> int:
     lista = resolver_lista(CHAVE_LISTA)
     if not lista:
         raise ErroAcervo(5, f"indeterminavel — lista de verificacao '{CHAVE_LISTA}' nao encontrada no acervo")
     esquema, obras, conceitos = ler_acervo()
-    return relatorio(medir(lista, esquema, obras, conceitos), lista.get("rev"), como_json, resumo)
+    medida = filtrar(medir(lista, esquema, obras, conceitos), criterios, so_bloqueantes)
+    return relatorio(medida, lista.get("rev"), como_json, resumo)

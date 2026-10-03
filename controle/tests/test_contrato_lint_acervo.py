@@ -230,6 +230,38 @@ def test_cli_acervo_lista_ausente_exit_5(ambiente, tmp_path):
     assert p.returncode == 5 and "antipadroes-do-acervo" in p.stderr
 
 
+def test_cli_acervo_criterio_recorta_a_medida(ambiente):
+    """#2856 linha 154: --criterio era ignorado e a saida inteira estourava o teto da porta."""
+    p = _lint("acervo", "--criterio", "A3", env=ambiente)
+    linhas = p.stdout.splitlines()
+    assert p.returncode == 1, p.stdout + p.stderr
+    assert linhas[0].startswith("«lint acervo firma: 1 apontamentos, 1 bloqueantes")
+    assert [ln.split()[0] for ln in linhas[1:] if ln.startswith("    ")] == ["A3", "A3:"]
+    d = json.loads(_lint("acervo", "--json", "--criterio=A3,d8", env=ambiente).stdout)
+    assert sorted(d["criterios"]) == ["A3", "D8"]
+    assert sorted(a["id"] for a in d["apontamentos"]) == ["A3", "D8"]
+
+
+def test_cli_acervo_so_bloqueantes_tira_o_aviso(ambiente):
+    todos = json.loads(_lint("acervo", "--json", env=ambiente).stdout)
+    so = json.loads(_lint("acervo", "--json", "--so-bloqueantes", env=ambiente).stdout)
+    assert any(c["severidade"] == "aviso" for c in todos["criterios"].values())
+    assert so["criterios"] and all(c["severidade"] == "bloqueante" for c in so["criterios"].values())
+    assert all(a["severidade"] == "bloqueante" for a in so["apontamentos"])
+
+
+def test_cli_acervo_criterio_desconhecido_exit_2(ambiente):
+    p = _lint("acervo", "--criterio", "Z9", env=ambiente)
+    assert p.returncode == 2 and "Z9" in p.stderr and p.stdout == ""
+    p = _lint("acervo", "--criterio", env=ambiente)
+    assert p.returncode == 2 and "--criterio pede o id" in p.stderr
+
+
+def test_cli_criterio_fora_do_acervo_exit_2(ambiente):
+    p = _lint("card", "-", "--criterio", "A3", env=ambiente)
+    assert p.returncode == 2 and "so valem em `lint acervo`" in p.stderr
+
+
 def test_cli_acervo_sem_transporte_exit_3(ambiente):
     p = _lint("acervo", env={**ambiente, "PF_LINT_ACERVO_PSQL": "/nao/existe"})
     assert p.returncode == 3 and "transporte" in p.stderr

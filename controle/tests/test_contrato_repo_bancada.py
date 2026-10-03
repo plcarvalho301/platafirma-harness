@@ -439,7 +439,8 @@ def test_sanear_nunca_remove_bancada_de_ramo_nunca_empurrado(tmp_path):
     r = _repo(tmp_path, bancada, "s9", "sanear")
     assert r.returncode == 0, r.stderr + r.stdout
     assert (wt / "card.md").exists()
-    assert "42-x" not in r.stdout
+    assert "removida" not in r.stdout
+    assert "viva (fabrica/42-x, " in r.stdout and "nao toco" in r.stdout
 
 
 def test_sanear_nao_toca_bancada_viva_suja(tmp_path):

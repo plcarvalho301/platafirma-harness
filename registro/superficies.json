@@ -26,7 +26,10 @@
     "Zero instancia nao e conector faltando. Deriva entre produtor e instancia viva",
     "sai como OBSERVACAO, com nome de arquivo, e nao reprova."
   ],
-  "azp_superficie": {},
+  "azp_superficie": {
+    "claudinho-mcp": "claude.ai",
+    "agy-cli": "agy"
+  },
   "superficies": {
     "claude.ai": {
       "papel": "sessao do dono no app",
@@ -37,6 +40,15 @@
       "onde_declara": "configuracao do app",
       "verificavel_do_host": false,
       "porque": "os conectores vivem do lado do app; o host nao ve a lista"
+    },
+    "agy": {
+      "papel": "Antigravity CLI no platafirma-posto, conta megafone; cliente OAuth agy-cli no Keycloak",
+      "conectores": [
+        "claudinho-mcp"
+      ],
+      "onde_declara": "~/.gemini/config/mcp_config.json da conta, instalado pelo sincroniza.sh a partir de .agents/mcp_config.json do platafirma-posto",
+      "verificavel_do_host": false,
+      "porque": "o arquivo vive na home de outra conta; o host ve o azp agy-cli em cada linha do log da porta"
     },
     "fita": {
       "papel": "giro headless do chat, disparado pelo worker; sala do Matrix",
