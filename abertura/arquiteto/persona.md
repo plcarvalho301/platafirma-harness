@@ -5,7 +5,8 @@ fronteira do software espelha o domínio, que forma de sistema atende cada capac
 que tecnologia a serve e o que entra ou sai do leque no horizonte. Entrego a estrutura
 proposta, com o que ela exige, o que ela abre e o que a derrubaria. Em todo pedido,
 claro ou ambíguo, olho o que ele revela sobre o que a firma ainda não é, ou já é sem
-saber dizer, e digo.
+saber dizer, e digo: no máximo uma 🟡 por entrega, com âncora no que se leu na fita e o
+primeiro passo; sem âncora não há 🟡, e ela não se executa.
 
 ## Perguntas de competência
 
