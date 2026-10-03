@@ -22,108 +22,22 @@ desenha como ausência, nunca como saúde. `0` e `—` nunca colapsam.
 from __future__ import annotations
 
 import html
-import re
 import time
 from pathlib import Path
 from typing import Any
 
-# Conteudo LIVRE (corpo de mesa, caderno, fila) escrito pela cadeira em
-# Markdown. `_esc()` cru despejava esse texto grudado, sem heading nem
-# separador — a "linguica" da tela no celular. `md_seguro()` faz o parse do
-# subconjunto de Markdown que a mesa/caderno usa (heading, separador, lista,
-# enfase, codigo inline), SEM dependencia externa.
-#
-# Seguro por construcao: escapa TODO o texto com html.escape ANTES de
-# introduzir qualquer tag — nenhum HTML do conteudo sobrevive, so as tags que
-# este codigo emite. Nao precisa de sanitizador: nada de fora vira tag.
-# So para conteudo livre: rotulo de sistema (nome, chip, caminho, sha, numero)
-# segue por `_esc()` cru.
-_MD_INLINE = (
-    (re.compile(r"`([^`]+)`"), r"<code>\1</code>"),          # `codigo`
-    (re.compile(r"\*\*([^*]+)\*\*"), r"<strong>\1</strong>"),  # **negrito**
-    (re.compile(r"(?<!\*)\*([^*]+)\*(?!\*)"), r"<em>\1</em>"),  # *italico*
+from harness_controle.md_render import (
+    contagem_mesa,
+    md_seguro,
+    render_cadernos,
+    render_mesa,
 )
 
-def _md_inline(texto_escapado: str) -> str:
-    """Enfase e codigo inline sobre texto JA escapado."""
-    for rx, repl in _MD_INLINE:
-        texto_escapado = rx.sub(repl, texto_escapado)
-    return texto_escapado
-
-def md_seguro(texto: Any) -> str:
-    """Markdown -> HTML, sem lib. String vazia/None vira vazio, nunca vira saude
-    (mesma regra do resto do render: ausencia se desenha como ausencia).
-
-    Cobre o que a mesa/caderno de fato usa: '## '..'###### ' (heading),
-    linha '---'/'***' (separador), '- '/'* ' e '1. ' (lista), paragrafo, e
-    enfase/codigo inline. O resto do Markdown cai como paragrafo de texto
-    escapado — nunca some, nunca vira tag alheia.
-    """
-    if not texto:
-        return ""
-    linhas = str(texto).replace("\r\n", "\n").split("\n")
-    out: list[str] = []
-    lista: str | None = None  # "ul" | "ol" | None
-    paragrafo: list[str] = []
-
-    def fecha_paragrafo():
-        if paragrafo:
-            out.append("<p>" + _md_inline(" ".join(paragrafo)) + "</p>")
-            paragrafo.clear()
-
-    def fecha_lista():
-        nonlocal lista
-        if lista:
-            out.append(f"</{lista}>")
-            lista = None
-
-    for linha in linhas:
-        crua = linha.strip()
-        if not crua:
-            fecha_paragrafo()
-            fecha_lista()
-            continue
-        # separador
-        if crua in ("---", "***", "___"):
-            fecha_paragrafo()
-            fecha_lista()
-            out.append("<hr>")
-            continue
-        # heading
-        m = re.match(r"^(#{1,6})\s+(.*)$", crua)
-        if m:
-            fecha_paragrafo()
-            fecha_lista()
-            nivel = len(m.group(1))
-            out.append(f"<h{nivel}>{_md_inline(html.escape(m.group(2)))}</h{nivel}>")
-            continue
-        # item de lista nao-ordenada
-        m = re.match(r"^[-*]\s+(.*)$", crua)
-        if m:
-            fecha_paragrafo()
-            if lista != "ul":
-                fecha_lista()
-                out.append("<ul>")
-                lista = "ul"
-            out.append(f"<li>{_md_inline(html.escape(m.group(1)))}</li>")
-            continue
-        # item de lista ordenada
-        m = re.match(r"^\d+\.\s+(.*)$", crua)
-        if m:
-            fecha_paragrafo()
-            if lista != "ol":
-                fecha_lista()
-                out.append("<ol>")
-                lista = "ol"
-            out.append(f"<li>{_md_inline(html.escape(m.group(1)))}</li>")
-            continue
-        # texto de paragrafo (escapa aqui; inline aplica no fecha_paragrafo)
-        fecha_lista()
-        paragrafo.append(html.escape(crua))
-
-    fecha_paragrafo()
-    fecha_lista()
-    return "".join(out)
+# Conteudo LIVRE (persona, mesa, caderno), escrito pela cadeira, nao passa por
+# `_esc()` cru — despejava tudo grudado, a "linguica" da tela no celular. O parse
+# (Markdown, item de mesa, indice e corpo de caderno) vem de `md_render`, que
+# escapa TODO o texto antes de emitir qualquer tag. Rotulo de sistema (nome, chip,
+# caminho, sha, numero) segue por `_esc()` cru.
 
 # Camada 1 — o front da PlataFirma, copiado do release platafirma/ui para
 # dentro da imagem em tempo de build (arq:0056, ver Dockerfile). pf-ui.css ja
@@ -224,19 +138,6 @@ def _acha_peca(idx: dict, candidatos: tuple[str, ...]) -> dict | None:
     return None
 
 
-def _filtra_mesa_por_chapeu(conteudo: str, chapeu: str) -> str:
-    """Mantem as linhas da mesa sob o [chapeu] escolhido. Cada item da mesa abre
-    com um rotulo `[<chapeu>]`; as linhas seguintes sem rotulo sao continuacao do
-    item e vao junto, ate o proximo rotulo. Sem item do chapeu, diz que nao ha —
-    ausencia se declara."""
-    linhas, saida, mantem = conteudo.split("\n"), [], False
-    for linha in linhas:
-        m = re.search(r"\[([^\]]+)\]", linha)
-        if m:
-            mantem = m.group(1) == chapeu
-        if mantem:
-            saida.append(linha)
-    return "\n".join(saida) if saida else f"Nenhum item da mesa para o chapeu [{chapeu}]."
 
 
 def _render_caixa_doc(estado: dict, slug_l: str) -> str:
@@ -809,17 +710,23 @@ def render_cadeira(estado: dict, slug: str | None = None, doc: str | None = None
         tabs.append(f'<a href="/cadeira/{_esc(slug_disp)}?doc={chave}"{aria}>{_esc(rotulo)}</a>')
     docs_html = f'<div class="docs">{"".join(tabs)}</div>'
 
-    # seletor de chapeu — filtra a mesa (unico doc com rotulo [chapeu]). Sempre
-    # visivel quando a cadeira tem chapeu, pra achar sem garimpar; leva a doc=mesa.
+    # seletor de chapeu — filtra a mesa e os cadernos (os dois docs que se dividem
+    # por chapeu). Sempre visivel quando a cadeira tem chapeu; o link fica no doc em
+    # que o leitor esta (mesa ou cadernos) e, nos demais, leva a mesa. Na mesa cada
+    # chapeu traz quantos itens tem, inclusive 0 — chapeu vazio se ve antes do clique.
     chapeus_html = ""
     if chapeus:
-        links = ['<span class="rotulo">Chapéu (filtra a mesa):</span>']
+        doc_alvo = doc_sel if doc_sel in ("mesa", "cadernos") else "mesa"
+        n_mesa = contagem_mesa((idx.get("mesa") or {}).get("conteudo"))
+        base = f'/cadeira/{_esc(slug_disp)}?doc={doc_alvo}'
         aria_todos = ' aria-current="page"' if not chapeu_sel else ""
-        links.append(f'<a href="/cadeira/{_esc(slug_disp)}?doc=mesa"{aria_todos}>Todos</a>')
+        links = ['<span class="rotulo">Chapéu (filtra mesa e cadernos):</span>',
+                 f'<a href="{base}"{aria_todos}>Todos</a>']
         for c in chapeus:
             aria = ' aria-current="page"' if c == chapeu_sel else ""
-            links.append(f'<a href="/cadeira/{_esc(slug_disp)}?doc=mesa&amp;chapeu={_esc(c)}"{aria}>{_esc(c)}</a>')
-        chapeus_html = f'<div class="docs chapeus">{"".join(links)}</div>'
+            n = (f' <span class="n num">{n_mesa.get(c, 0)}</span>' if doc_alvo == "mesa" else "")
+            links.append(f'<a href="{base}&amp;chapeu={_esc(c)}"{aria}>{_esc(c)}{n}</a>')
+        chapeus_html = f'<nav class="docs chapeus" aria-label="Chapéu">{"".join(links)}</nav>'
 
     # leitura do documento selecionado, com carimbo de procedencia no topo.
     # A caixa nao e peca de monta-sessao: vem do bloco `caixa_conteudo`, a parte.
@@ -832,20 +739,24 @@ def render_cadeira(estado: dict, slug: str | None = None, doc: str | None = None
             leitura = ('<div class="leitura"><p class="indisponivel">Documento não servido '
                        'nesta abertura (a sonda abre a cadeira sem chapéu).</p></div>')
         elif peca.get("conteudo"):
-            corpo = peca.get("conteudo")
-            if doc_sel == "mesa" and chapeu_sel:
-                corpo = _filtra_mesa_por_chapeu(corpo, chapeu_sel)
+            conteudo = peca.get("conteudo")
+            if doc_sel == "mesa":
+                corpo_html = render_mesa(conteudo, chapeu_sel)
+            elif doc_sel == "cadernos":
+                corpo_html = render_cadernos(conteudo, chapeu_sel)
+            else:
+                corpo_html = md_seguro(conteudo)
             carimbo = (
                 '<div class="carimbo">'
                 f'<span><b>ref</b> <span class="mono">{_esc(peca.get("ref") or "—")}</span></span>'
                 f'<span><b>blob</b> <span class="mono">{_esc(peca.get("sha") or "—")}</span></span>'
                 f'<span><b>frescor</b> {_esc(peca.get("frescor") or "—")}</span>'
                 + (f'<span><b>chapéu</b> {_esc(chapeu_sel)}</span>'
-                   if doc_sel == "mesa" and chapeu_sel
+                   if doc_sel in ("mesa", "cadernos") and chapeu_sel
                    else f'<span class="num"><b>tokens</b> {_num(peca.get("tokens"))}</span>')
                 + "</div>"
             )
-            leitura = f'<div class="leitura">{carimbo}<div class="corpo">{md_seguro(corpo)}</div></div>'
+            leitura = f'<div class="leitura">{carimbo}<div class="corpo md">{corpo_html}</div></div>'
         else:
             leitura = ('<div class="leitura"><p class="indisponivel">'
                        f'Indisponível: {_esc(peca.get("motivo") or "sem conteúdo")}.</p></div>')

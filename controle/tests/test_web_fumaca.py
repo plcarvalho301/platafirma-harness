@@ -593,3 +593,94 @@ def test_md_seguro_vazio_e_vazio():
     from harness_controle.render import md_seguro
     assert md_seguro("") == ""
     assert md_seguro(None) == ""
+
+def test_md_seguro_tabela_codigo_citacao_e_continuacao_de_lista():
+    from harness_controle.render import md_seguro
+    saida = md_seguro(
+        "| Quando | Abre para |\n|---|---|\n| `a` | b |\n\n"
+        "```\n<b>cru</b>\n```\n\n> citado\n\n- item um\n  continua aqui\n- item dois"
+    )
+    assert "<table>" in saida and "<th>Quando</th>" in saida and "<td><code>a</code></td>" in saida
+    assert "<pre><code>&lt;b&gt;cru&lt;/b&gt;</code></pre>" in saida
+    assert "<blockquote>" in saida
+    assert saida.count("<li>") == 2 and "item um continua aqui" in saida
+
+def test_md_seguro_link_so_http_e_numero_de_item_nao_e_heading():
+    from harness_controle.render import md_seguro
+    saida = md_seguro("[ok](https://exemplo.org/x) [mau](javascript:alert(1))\n\n#25 [engenharia] item")
+    assert '<a href="https://exemplo.org/x"' in saida
+    assert "<a href=\"javascript" not in saida
+    assert "<h1>" not in saida
+
+# --- mesa e cadernos: formato proprio, nao paragrafo corrido; chapeu filtra certo ---
+
+MESA_REAL = (
+    "#25 [engenharia] expurgar o espelho da impressão aposentada 9267200e → acervo obra b54742c   (plantado ha 1 d)\n"
+    "#22 [governanca] commitar ou devolver à fita → platafirma-casa   (plantado ha 1 d)\n"
+    "#39 [ontologia] refinar a #3159 e varrer quem lê acervo.obra.forca → #3159   (plantado ha 3 h)\n"
+    "#40 [ontologia] regerar o vetor; conferir publicação [conf: media] das IN GSI/PR → #3162   (plantado ha 3 h)\n"
+    "#41 [ontologia] triar a caixa de dados → fila dados   (plantado ha 3 h)\n"
+    "#35 [recuperacao] depois do lote 3af876f5 → #3194   (plantado ha 19 h)"
+)
+
+def test_render_mesa_agrupa_por_chapeu_em_cartoes():
+    from harness_controle.render import render_mesa
+    saida = render_mesa(MESA_REAL)
+    assert saida.count('class="mesa-grupo"') == 4
+    assert saida.count('class="mesa-item"') == 6
+    assert "<h1>" not in saida                      # '#25' nao e heading
+    assert 'plantado há 1 d' in saida and 'class="mesa-alvo"' in saida
+    assert "acervo obra b54742c" in saida           # o alvo sai separado do ato
+
+def test_render_mesa_filtro_de_chapeu_so_olha_o_cabecalho_do_item():
+    """[conf: media] no meio do texto nao e chapeu: nao corta nem troca de item."""
+    from harness_controle.render import render_mesa
+    saida = render_mesa(MESA_REAL, "ontologia")
+    assert saida.count('class="mesa-item"') == 3
+    assert "[conf: media]" in saida
+    assert "#35" not in saida and "#25" not in saida
+
+def test_render_mesa_chapeu_sem_item_declara_a_ausencia():
+    from harness_controle.render import render_mesa
+    assert "Nenhum item da mesa para o chapéu" in render_mesa(MESA_REAL, "nao-existe")
+
+def test_render_mesa_vazia_mostra_o_texto_do_verbo():
+    from harness_controle.render import render_mesa
+    assert "slot dados: vazio" in render_mesa("slot dados: vazio")
+
+CADERNOS_REAL = (
+    "devops           9 vigentes · 953/1500 tk · última escrita há 21 h · 2 aresta(s) acumulando\n"
+    "  front-end        1 vigente · 152/1500 tk · 1 aresta(s) acumulando\n"
+    "  (corpo sob demanda: `mesa caderno <chapeu>`)\n\n"
+    "===== caderno engenharia/front-end · 1 vigente · 152/1500 tokens =====\n"
+    "## lição\n- [c77] Na tela do rastreador, o estado calculado do pai.\n"
+    "## aresta (acumula para a curadoria)\n- [c78] termo:ciclo → casa:guia/desenvolvimento"
+)
+
+def test_render_cadernos_indice_em_linhas_com_chips_e_corpo_por_categoria():
+    from harness_controle.render import render_cadernos
+    saida = render_cadernos(CADERNOS_REAL)
+    assert saida.count("<li><span class=\"cad-chapeu\">") == 2
+    assert '<span class="chip caveat">2 aresta(s) acumulando</span>' in saida
+    assert '<span class="chip calmo">9 vigentes</span>' in saida
+    assert "<h2>lição</h2>" in saida
+    assert '<span class="ref mono">c77</span>' in saida
+    assert "<code>mesa caderno &lt;chapeu&gt;</code>" in saida
+
+def test_render_cadernos_filtra_pelo_chapeu():
+    from harness_controle.render import render_cadernos
+    saida = render_cadernos(CADERNOS_REAL, "front-end")
+    assert "devops" not in saida
+    assert "c77" in saida
+    assert "Nenhum caderno indexado" in render_cadernos(CADERNOS_REAL, "nao-existe")
+
+def test_cadeira_seletor_de_chapeu_conta_itens_da_mesa_e_segue_o_documento(cliente):
+    corpo = cliente.get("/cadeira/TI?doc=mesa").text
+    assert 'class="docs chapeus"' in corpo
+    assert 'chapeu=design"' in corpo and '<span class="n num">1</span>' in corpo
+    assert '<span class="n num">0</span>' in corpo         # discovery: chapeu sem item, visivel
+    nos_cadernos = cliente.get("/cadeira/TI?doc=cadernos").text
+    assert "doc=cadernos&amp;chapeu=design" in nos_cadernos
+    assert "construcao" in nos_cadernos and "release" in nos_cadernos
+    filtrado = cliente.get("/cadeira/TI?doc=cadernos&chapeu=design").text
+    assert "Nenhum caderno indexado" in filtrado
