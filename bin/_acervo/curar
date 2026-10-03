@@ -48,6 +48,8 @@ def main(argv):
         morre("uso: acervo curar casa alias <classe> <chave> <alias>\n"
               "     acervo curar obra --situacao|--expurgar|--restaurar|--promover|"
               "--reclassificar|--conceito ...   (repassa para bin/curar)\n"
+              "     acervo curar obra --conceito <slug> --renomear <slug-novo> --motivo \"…\" [--apply]   "
+              "(troca o slug, cura K15: o velho vira termo de entrada; plano seco sem --apply)\n"
               "     acervo curar obra --relacionar <de> <para> --tipo <t> --garantia <g> "
               "--motivo <m> [--apply]\n"
               "     acervo curar obra --relacoes <conceito> | --desrelacionar <id>\n"
