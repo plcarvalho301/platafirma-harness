@@ -228,7 +228,17 @@ def em_lote(reg):
     return not _nulo(reg.get("lote_id"))
 
 
-def giros_do_dia(fonte, dia, cadeira=None):
+def _casa_origem(reg, sessao, azp):
+    """`--sessao` casa por PREFIXO do `sessao_id` (o id inteiro e o prefixo mais longo);
+    `--azp` casa por igualdade, porque e um nome de cliente OAuth e nao um id. Filtro
+    vazio nao filtra; linha sem o campo nao casa com filtro que o pede."""
+    if sessao and not str(reg.get("sessao_id") or "").startswith(sessao):
+        return False
+    if azp and reg.get("azp") != azp:
+        return False
+    return True
+
+def giros_do_dia(fonte, dia, cadeira=None, sessao=None, azp=None):
     """O atomo: um dicionario por chamada de verbo, em ordem estavel.
 
     Ordem importa para tudo que se deriva abaixo (acerto, cadeia, ate-acerto), e o log
@@ -240,6 +250,8 @@ def giros_do_dia(fonte, dia, cadeira=None):
         if not e_giro(reg):
             continue
         if cadeira and reg.get("cadeira") != cadeira:
+            continue
+        if not _casa_origem(reg, sessao, azp):
             continue
         g = {c: reg.get(c) for c in CAMPOS_GIRO}
         # FORA de CAMPOS_GIRO de proposito: `evento` e `motivo` nao saem no stream de
@@ -339,9 +351,9 @@ def marca_acerto_e_cadeias(giros, par):
     return cadeias
 
 
-def classifica(fonte, dia, cadeira=None):
+def classifica(fonte, dia, cadeira=None, sessao=None, azp=None):
     """Uma passada: giros + as marcacoes derivadas + as cadeias. Tudo abaixo le daqui."""
-    giros = giros_do_dia(fonte, dia, cadeira)
+    giros = giros_do_dia(fonte, dia, cadeira, sessao, azp)
     par = _por_par(giros)
     marca_help(giros, par)
     cadeias = marca_acerto_e_cadeias(giros, par)
@@ -980,6 +992,7 @@ def uso(codigo=2):
     saida = sys.stdout if codigo == 0 else sys.stderr
     saida.write("""uso:
   metrica eventos [<dia>] [--tipo giro|erro|help|acerto|cadeia|lote] [--cadeira <slug>]
+                  [--sessao <prefixo-ou-id>] [--azp <valor>] [--limite N]
   metrica dia [<dia>] [--cadeira <slug>]
   metrica ate-acerto [<dia>] [--cadeira <slug>]
   metrica tateio [<dia>] [--cadeira <slug>]
@@ -990,7 +1003,12 @@ def uso(codigo=2):
 Agrega o ops log ($PLATAFIRMA_INSTANCIA/var/log/ops/ops-AAAA-MM-DD.jsonl, ou OPS_LOG_DIR) em eventos de uso do harness.
 <dia> e AAAA-MM-DD; sem ele, hoje. Saida JSON; --resumo imprime o sumario legivel.
 
-eventos     stream cru, um objeto por evento (giro, erro, help, acerto, cadeia, lote)
+eventos     stream cru, um objeto por evento (giro, erro, help, acerto, cadeia, lote);
+            devolve `casaram` (eventos depois dos filtros) e `omitidos` (cortados por --limite)
+--sessao    so as chamadas cujo sessao_id comeca por <prefixo-ou-id> (vale nos atos de um dia,
+--azp       menos `comportamento`); --azp casa o cliente OAuth por igualdade. Filtram ANTES
+            de classificar e de truncar, e se combinam entre si e com --cadeira
+--limite    so em `eventos`: teto de eventos devolvidos, depois dos filtros (sem ele, sem teto)
 dia         resumo: giros por fita, erros por verbo, profundidade de cadeia, help
 ate-acerto  a metrica-mae: giros-ate-acerto por (ordem_id, tool)
 tateio      separa tateio de GRAMATICA (exit 2, verbo nu, recusa da porta) de tateio de
@@ -1121,6 +1139,9 @@ def main(argv):
     p.add_argument("--dia", dest="dia_flag", default="")
     p.add_argument("--cadeira", default="")
     p.add_argument("--tipo", default="")
+    p.add_argument("--sessao", default="")
+    p.add_argument("--azp", default="")
+    p.add_argument("--limite", default="")
     p.add_argument("--tool", default="")
     p.add_argument("--agregado", action="store_true")
     p.add_argument("--desde", default="")
@@ -1145,6 +1166,24 @@ def main(argv):
     if args.tipo and args.tipo not in TIPOS:
         return erro_gracioso(f"{VERBO}: tipo desconhecido '{args.tipo}'",
                              [f"os tipos: {', '.join(TIPOS)}"], 2)
+    if (args.sessao or args.azp) and ato == "comportamento":
+        return erro_gracioso(f"{VERBO} {ato}: --sessao/--azp nao valem em `{ato}`",
+                             ["comportamento mede a cadeira em varios dias, nao uma sessao",
+                              f"para ler uma sessao: {VERBO} eventos AAAA-MM-DD --sessao <prefixo>"], 2)
+    # `--limite N`: teto de eventos devolvidos por `eventos`, aplicado DEPOIS de todos os
+    # filtros. Sem ele nao ha teto no verbo (o corte de 50 KB e da porta, calado).
+    limite = None
+    if args.limite != "":
+        if ato != "eventos":
+            return erro_gracioso(f"{VERBO} {ato}: --limite so vale em `eventos`",
+                                 [f"o teto de eventos: {VERBO} eventos AAAA-MM-DD --limite N"], 2)
+        try:
+            limite = int(args.limite)
+            if limite < 1:
+                raise ValueError
+        except ValueError:
+            return erro_gracioso(f"{VERBO}: --limite invalido '{args.limite}'",
+                                 ["--limite e um inteiro maior que zero"], 2)
 
     if ato == "comportamento":
         # Sem <dia>, a janela e ONTEM: o timer roda de madrugada e o dia corrente esta
@@ -1222,7 +1261,8 @@ def main(argv):
     giros, cadeias, sem_log = [], [], []
     for d in dias:
         try:
-            g, _p, c = classifica(fonte, d, args.cadeira or None)
+            g, _p, c = classifica(fonte, d, args.cadeira or None,
+                             args.sessao or None, args.azp or None)
         except FonteAusente as e:
             if len(dias) == 1:
                 return erro_gracioso(
@@ -1240,7 +1280,11 @@ def main(argv):
     par = _por_par(giros)
 
     if ato == "eventos":
-        r = {"dia": dia, "eventos": stream_eventos(giros, cadeias, args.tipo or None)}
+        evs = stream_eventos(giros, cadeias, args.tipo or None)
+        # `casaram` conta depois de tipo/cadeira/sessao/azp e ANTES do teto; `omitidos`
+        # e o que o teto cortou: quem le sabe se a lista esta inteira.
+        r = {"dia": dia, "eventos": evs[:limite] if limite else evs,
+             "casaram": len(evs), "omitidos": max(0, len(evs) - limite) if limite else 0}
     elif ato == "dia":
         r = {"dia": dia, **resumo_do_dia(giros, cadeias)}
     elif ato == "tateio":
@@ -1261,6 +1305,10 @@ def main(argv):
         r = {"dia": dia, **ate_acerto(giros, par)}
     if args.cadeira:
         r["cadeira"] = args.cadeira
+    if args.sessao:
+        r["sessao"] = args.sessao
+    if args.azp:
+        r["azp"] = args.azp
     if fonte.ilegiveis:
         r["linhas_ilegiveis"] = fonte.ilegiveis   # cortadas por LINHA_CAP, nao contadas
 

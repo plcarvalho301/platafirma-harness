@@ -16,7 +16,11 @@
 #                                                      fichas da espécie, por chave
 #   acervo listar casa [<especie>] --sobre <classe> <chave>   (ou <classe>:<chave>)
 #                                                      documentos que declaram Sobre: a entidade
-#   acervo ler    casa <especie> <chave> [--situacao] [--json]
+#   acervo ler    casa <especie> <chave> [--situacao] [--json] [--offset <bytes>]
+#                                                      o corpo vem em paginas de PAGINA bytes
+#                                                      (abaixo dos 50 KB da porta); a ultima linha
+#                                                      diz `truncado em N de M bytes; continue com
+#                                                      --offset N` (--json: bytes_total/next_offset)
 #
 # Chave (§3): adr `<serie>:NNNN` (arq:75 -> arq:0075; número nu resolve se uma série só o
 # tiver, senão lista as opções, exit 2; ou o <slug> do arquivo NNNN-<slug>.md, se único);
@@ -632,7 +636,29 @@ def resolver(especie, seletor, info):
           % (especie, seletor, diag), 1)
 
 
-def ler(especie, seletor, quero_json, situacao=False):
+# Página do corpo em bytes: a porta corta a saída em 50 KB sem dizer o quê ficou de fora
+# (#2856 linha 161); o verbo pagina antes, abaixo do teto (cabe a marca e o aviso), e diz o
+# next_offset — o idioma do `read_file` (truncated/bytes_total/next_offset).
+PAGINA = 45000
+
+def pagina(corpo, offset=0, limite=None):
+    """(trecho, bytes_total, next_offset) do corpo, em BYTES utf-8 a partir de `offset`.
+    O corte cai na fronteira de caractere (nunca parte um multibyte); next_offset é None na
+    última página. offset além do fim recusa, exit 2."""
+    limite = limite or PAGINA
+    bruto = corpo.encode("utf-8")
+    total = len(bruto)
+    if offset > total:
+        morre(f"acervo ler casa: --offset {offset} passa do fim do documento ({total} bytes).", 2)
+    ini, fim = offset, min(offset + limite, total)
+    while ini < fim and (bruto[ini] & 0xC0) == 0x80:       # offset caiu no meio de um caractere
+        ini += 1
+    if fim < total:
+        while fim > ini and (bruto[fim] & 0xC0) == 0x80:   # recua até o começo de um caractere
+            fim -= 1
+    return bruto[ini:fim].decode("utf-8", "replace"), total, (fim if fim < total else None)
+
+def ler(especie, seletor, quero_json, situacao=False, offset=0):
     normalizar(especie, seletor)   # forma inválida é erro de uso (exit 2) antes de tocar o banco
     info = _especie(especie)
     linha = resolver(especie, seletor, info)
@@ -655,8 +681,10 @@ def ler(especie, seletor, quero_json, situacao=False):
 
     corpo = (_q(f"select json_build_object('corpo', c.corpo) from acervo.casa c "
                 f"where c.id = {_lit(linha['id'])}::uuid;") or {}).get("corpo") or ""
+    corpo, total, proximo = pagina(corpo, offset)
     if quero_json:
-        doc = _item(linha) | {"corpo": corpo}
+        doc = _item(linha) | {"corpo": corpo, "bytes_total": total, "offset": offset,
+                              "truncado": proximo is not None, "next_offset": proximo}
         if situacao:
             doc["situacao"] = sit
         print(json.dumps(doc, ensure_ascii=False, indent=2))
@@ -669,6 +697,9 @@ def ler(especie, seletor, quero_json, situacao=False):
     sys.stdout.write(corpo)
     if not corpo.endswith("\n"):
         sys.stdout.write("\n")
+    if proximo is not None:
+        sys.stdout.write(f"truncado em {proximo} de {total} bytes; continue com --offset {proximo}"
+                         f" (acervo ler casa {especie} {ident(linha)} --offset {proximo})\n")
     return 0
 
 
@@ -677,7 +708,9 @@ USO = """uso:
   acervo listar casa <especie> [--todas] [--dono <cadeira>] [--situacao] [--json]
   acervo listar casa [<especie>] --sobre <classe> <chave> [--todas] [--json]
   acervo listar casa guia --mapa                          as linhas de mapa das rotinas (peça `rotinas`)
-  acervo ler    casa <especie> <chave> [--situacao] [--json]
+  acervo ler    casa <especie> <chave> [--situacao] [--json] [--offset <bytes>]
+                                                          documento longo vem em páginas de 45000 bytes:
+                                                          "truncado em N de M bytes; continue com --offset N"
 
 <chave>: adr <serie>:NNNN (arq:0075; arq:75 e 75 resolvem se não houver ambiguidade) ou o
 <slug> do arquivo NNNN-<slug>.md (se único), minuta NNNN, datado <AAAA-MM-DD>-<slug> (ou só
@@ -701,12 +734,20 @@ def main(argv):
     resto = [a for a in resto if a not in ("--json", "--situacao", "--todas", "--mapa")]
 
     dono = None
+    offset = 0
     sobre_args = None
     pos = []
     i = 0
     while i < len(resto):
         if resto[i] == "--dono" and i + 1 < len(resto):
             dono = resto[i + 1]
+            i += 2
+        elif resto[i] == "--offset":
+            if ato != "ler":
+                morre("acervo %s casa: --offset só vale em `ler`.\n\n%s" % (ato, USO), 2)
+            if i + 1 >= len(resto) or not resto[i + 1].isdigit():
+                morre("acervo ler casa: --offset pede um número de bytes (>= 0).\n\n%s" % USO, 2)
+            offset = int(resto[i + 1])
             i += 2
         elif resto[i] == "--sobre":
             # <classe> <chave> ou <classe>:<chave>; nunca engole a flag seguinte
@@ -740,7 +781,7 @@ def main(argv):
     if ato == "ler":
         if len(pos) != 2:
             morre("acervo ler casa <especie> <chave>: faltam argumentos.\n\n%s" % USO, 2)
-        return ler(pos[0], pos[1], quero_json, situacao=situacao)
+        return ler(pos[0], pos[1], quero_json, situacao=situacao, offset=offset)
     morre("acervo casa: ato desconhecido '%s' (ler, listar).\n\n%s" % (ato, USO), 2)
 
 

@@ -66,7 +66,8 @@ uso (gramatica arq:0106 — acervo <ato> <particao> <entidade> [seletor]):
   acervo resolver <classe> <string>
   acervo escrever <particao> <entidade> <seletor>
   acervo ingerir  <particao> <raiz> [--apply]
-  acervo ler      casa <especie> <chave>              pela chave (arq:0115 §3): acervo ler casa adr arq:0075
+  acervo ler      casa <especie> <chave> [--offset <bytes>]   pela chave (arq:0115 §3): acervo ler casa adr arq:0075
+                  documento longo vem em paginas; o fim diz `continue com --offset N`
   acervo listar   casa [<especie>] [--todas]          sem especie: o catalogo (projecao, regime, contagem)
   acervo listar   casa [<especie>] --sobre <classe> <chave>   a documentacao de uma entidade
   acervo listar   casa topologia [<stack>] [--completo] [--json]   golden record acervo.stack
