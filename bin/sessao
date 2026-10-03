@@ -189,9 +189,13 @@ def _senha_pg() -> tuple[str | None, str | None]:
         return out.strip(), None
     return None, f"seg segredo ler harness-sessao/SESSAO_PG_PASSWORD: {(err or out).strip()[:120] or f'exit {rc}'}"
 
-def _registra_duravel(sid: str, slug: str, sujeito: str | None = None) -> str | None:
+def _registra_duravel(sid: str, slug: str, sujeito: str | None = None,
+                      ordem_id: str | None = None) -> str | None:
     """INSERT em sessao.sessao (arq:0091). Devolve o motivo quando nao grava; nunca trava.
 
+    `ordem_id` (migracao 0098, balde #2856 linha 152) e a ordem da ULTIMA abertura: a
+    reidratacao a devolve, em vez de «-», depois que a chave viva some numa promocao.
+    Coluna ainda ausente: o INSERT novo falha e cai na forma de antes, sem ela.
     `sujeito` entra na coluna que a migracao 0094 acrescentou (card #3145, defeito
     pos-fita): sem ela — banco ainda nao migrado — o INSERT falha e cai no mesmo
     'nunca trava' de sempre; a chave viva (msg-mem) e quem carrega o sujeito nesse
@@ -212,6 +216,18 @@ def _registra_duravel(sid: str, slug: str, sujeito: str | None = None) -> str | 
             # sessao antiga que perdeu a chave viva (promocao) e foi reidratada ficava
             # PARA SEMPRE sem sujeito, mesmo depois da coluna existir. COALESCE nunca
             # troca um sujeito ja gravado -- identidade nao muda por reabertura.
+            if ordem_id:
+                try:
+                    cur.execute(
+                        "INSERT INTO sessao.sessao (sessao_id, cadeira, chapeu, superficie, sujeito, ordem_id) "
+                        "VALUES (%s,%s,%s,%s,%s,%s) ON CONFLICT (sessao_id) DO UPDATE SET "
+                        "sujeito = COALESCE(sessao.sessao.sujeito, EXCLUDED.sujeito), "
+                        "ordem_id = COALESCE(EXCLUDED.ordem_id, sessao.sessao.ordem_id)",
+                        (sid, slug, None, _superficie(), sujeito or None, ordem_id))
+                    con.commit()
+                    return None
+                except Exception:  # noqa: BLE001 — 0098 nao aplicada: forma de antes, abaixo
+                    con.rollback()
             cur.execute(
                 "INSERT INTO sessao.sessao (sessao_id, cadeira, chapeu, superficie, sujeito) "
                 "VALUES (%s,%s,%s,%s,%s) ON CONFLICT (sessao_id) DO UPDATE SET "
@@ -405,7 +421,7 @@ def ato_abrir(cadeira: str, sessao_id: str | None, saida: Saida, dry_run: bool =
         if not viva:
             avisos.append(f"origem {origem_sessao} nao esta viva no msg-mem: ligada mesmo assim")
     # etapa 6 — registro duravel; nunca trava
-    motivo_dur = _registra_duravel(sid, slug, sujeito)
+    motivo_dur = _registra_duravel(sid, slug, sujeito, ordem_id)
     # etapa 7 — releitura
     try:
         relida = _le_chave(rc_mem, sid) or {}
