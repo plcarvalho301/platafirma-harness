@@ -41,9 +41,9 @@ def test_acervo_ingerir_dispatch_drive():
     assert r.returncode == 2
     assert "mutuamente exclusivos" in r.stderr
 
-    r_obra = subprocess.run([BIN_ACERVO, "ingerir", "obra", "--drive", "--lote", "x"], capture_output=True, text=True)
-    assert r_obra.returncode == 2
-    assert "mutuamente exclusivos" in r_obra.stderr
+    r_bib = subprocess.run([BIN_ACERVO, "ingerir", "biblioteca", "--drive", "--lote", "x"], capture_output=True, text=True)
+    assert r_bib.returncode == 2
+    assert "mutuamente exclusivos" in r_bib.stderr
 
 
 def test_portao_1_divergencia_aborta(tmp_path):

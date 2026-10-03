@@ -48,7 +48,7 @@ USO = """uso:
   curar --promover <obra> --impressao <id>
   curar --recortar <obra> [--corte <slug>] [--apply]          impressão nova sobre o mesmo espelho; termina na selada
   curar --reextrair <obra> [--metodo <slug|digest>] [--apply] espelho novo do próprio arquivo; termina na selada
-                                                              (sem --metodo: o padrão do tipo, `acervo listar obra metodos`)
+                                                              (sem --metodo: o padrão do tipo, `acervo listar biblioteca metodos`)
   curar --reextrair --lote [--ordem <id,id,…|@arquivo>] [--metodo <slug>] [--apply]
                                                               o estoque pelo padrão do tipo (spec espelho-de-leitura §4.2):
                                                               plano = PORTÃO 1 com a contagem por tipo; --apply abre o lote
@@ -1598,7 +1598,7 @@ def acao_reextrair(args, autor: str, como_json: bool, headers: dict) -> int:
     """Espelho novo do próprio arquivo e impressão nova sobre ele (§9 caso 2; com o digest de
     um espelho atestado, regenera sob a mesma chave, §10.1). Plano seco sem --apply."""
     obra_id = resolver_obra_id(args.reextrair, headers)
-    # sem --metodo, o servidor usa o padrão do tipo real (spec §4.3; `acervo listar obra metodos`)
+    # sem --metodo, o servidor usa o padrão do tipo real (spec §4.3; `acervo listar biblioteca metodos`)
     payload = {"autor": autor, "aplicar": args.apply, "metodo": args.metodo or None, "corte": args.corte}
     try:
         resp = requests.post(f"{BASE}/acervo/obras/{obra_id}/reextracoes", json=payload, headers=headers)
@@ -2287,7 +2287,7 @@ def main(argv=None):
     parser.add_argument("--medida", action="store_true", default=False)
     parser.add_argument("--replicas", type=int, default=None)
     # --bancada <pasta>: pasta de SAÍDA da conversão em lote (card #3187); nada a ver com a raiz
-    # de lib/raizes.py nem com `acervo curar obra lote`
+    # de lib/raizes.py nem com `acervo curar biblioteca lote`
     parser.add_argument("--bancada", default=None)
     parser.add_argument("--refazer", action="store_true", default=False)
     parser.add_argument("--timeout-s", dest="timeout_s", type=int, default=None)
@@ -2375,7 +2375,7 @@ def main(argv=None):
             dica = f" (a grafia é {sugestao})" if sugestao in conhecidas else ""
             linhas.append(f"  {tok}{dica}")
         sys.stderr.write("curar: erro: argumento que o verbo não lê:\n" + "\n".join(linhas) + "\n"
-                         "  veja `acervo curar obra --ajuda`; nada foi chamado\n")
+                         "  veja `acervo curar biblioteca --ajuda`; nada foi chamado\n")
         sys.exit(2)
 
     autor = args.autor

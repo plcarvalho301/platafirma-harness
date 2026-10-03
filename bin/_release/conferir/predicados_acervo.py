@@ -266,7 +266,7 @@ def predicado_9(servindo, versao):
         partes.append(f"{len(velhas)} julgadas por régua anterior à {versao} ({_lista(velhas)})")
     if partes:
         return resultado.divergente(f"de {len(com)} servindo com espelho: " + " · ".join(partes)
-                                    + " — cura: acervo curar obra --rejulgar --lote --apply")
+                                    + " — cura: acervo curar biblioteca --rejulgar --lote --apply")
     return resultado.conforme()
 
 

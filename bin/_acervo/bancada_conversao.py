@@ -1,6 +1,6 @@
 """Agregador da bancada de conversão (card #3187, a serviço do piloto do #3181).
 
-`acervo listar obra bancada <pasta> [--json] [--estratos <arquivo>]` lê o que `curar --reextrair
+`acervo listar biblioteca bancada <pasta> [--json] [--estratos <arquivo>]` lê o que `curar --reextrair
 … --bancada <pasta>` gravou — `<pasta>/perfil/<obra_id>/relatorio.json` e
 `<pasta>/docling/<obra_id>/relatorio.json` —, pareia por obra_id e aplica a regra escrita pelo
 card #3181 ANTES de rodar:
@@ -596,22 +596,22 @@ def render_json(res):
 
 
 def executar(pasta, quero_json=False, arquivo_estratos=None, out=None, err=None):
-    """Ponto de entrada de `acervo listar obra bancada`. Devolve o exit code."""
+    """Ponto de entrada de `acervo listar biblioteca bancada`. Devolve o exit code."""
     out = out or sys.stdout
     err = err or sys.stderr
     if not os.path.isdir(pasta):
-        err.write("acervo listar obra bancada: pasta inexistente: %s\n" % pasta)
+        err.write("acervo listar biblioteca bancada: pasta inexistente: %s\n" % pasta)
         return 2
     estratos = None
     if arquivo_estratos is not None:
         try:
             estratos = ler_estratos(arquivo_estratos)
         except (OSError, ValueError) as e:
-            err.write("acervo listar obra bancada: --estratos: %s\n" % e)
+            err.write("acervo listar biblioteca bancada: --estratos: %s\n" % e)
             return 2
     res = agregar(pasta, estratos)
     if not res["obras"]:
-        err.write("acervo listar obra bancada: nenhum relatorio.json em %s/perfil nem em "
+        err.write("acervo listar biblioteca bancada: nenhum relatorio.json em %s/perfil nem em "
                   "%s/docling\n" % (pasta, pasta))
         return 1
     out.write(render_json(res) if quero_json else render_markdown(res))

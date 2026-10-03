@@ -97,7 +97,7 @@ uso (gramatica arq:0106 — acervo <ato> <particao> <entidade> [seletor]):
   acervo balde    listar|ler|copiar|mover|apagar <bucket|sha256> [...] [--apply]
 
 as particoes: biblioteca, casa, registro (arq:0106 §2-3). conceito e transversal, vive na biblioteca.
-'obra' como particao e a forma velha: segue servindo com aviso que aponta 'biblioteca' (arq:0084).
+'obra' como particao saiu em 03/10/2026: recusa (exit 2) com a chamada em 'biblioteca'.
 leitura e anonima; escrever loga com a conta de bot. ato/particao/entidade desconhecidos
 recusam em vez de adivinhar — errar a chamada devolve o vocabulario certo.
 
@@ -126,11 +126,14 @@ ATO="$1"; shift
 conforme() {
   local ato="$1"; shift
   local particao="${1:-}"; local entidade="${2:-}"
-  # `obra` como particao e a forma velha (arq:0106 §2, emendada em 29/09): serve com aviso
-  # e cai na `biblioteca` (arq:0084). A tabela acervo.obra e a entidade `obra` nao mudam.
+  # `obra` como particao saiu (arq:0106 §2, emendada em 29/09): a forma velha servia so
+  # enquanto a nova nao subia (arq:0106, Consequencias), e a nova subiu em 03/10 (#3197).
+  # Recusa com a chamada certa. A tabela acervo.obra e a entidade `obra` nao mudam.
   if [ "$particao" = "obra" ]; then
-    avisa "acervo $ato obra" "acervo $ato biblioteca"
-    particao="biblioteca"
+    shift
+    echo "acervo $ato obra: a particao 'obra' saiu em 03/10/2026; chame \`acervo $ato biblioteca $*\` (arq:0106 §2)." >&2
+    echo "  $SPEC" >&2
+    exit 2
   fi
   case "$particao" in
     biblioteca|casa|registro) ;;

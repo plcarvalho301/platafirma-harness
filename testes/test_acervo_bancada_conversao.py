@@ -915,7 +915,7 @@ def test_a8_depois_de_bancada_o_primeiro_token_sem_hifen_e_a_pasta_mesmo_reserva
     grava(tmp_path / nome, 1, rel(perda=2), rel("docling", perda=1))
     for cmd in ([sys.executable, str(LISTAR), "obra", "bancada", nome, "--json"],
                 [sys.executable, str(LISTAR), "obra", "bancada", "--json", nome],
-                ["bash", str(ACERVO), "listar", "obra", "bancada", nome, "--json"]):
+                ["bash", str(ACERVO), "listar", "biblioteca", "bancada", nome, "--json"]):
         r = subprocess.run(cmd, capture_output=True, text=True, check=False, cwd=tmp_path)
         assert r.returncode == 0, (cmd, r.stdout, r.stderr)
         res = json.loads(r.stdout)
@@ -955,16 +955,16 @@ def test_verbo_uso_errado_exit_2_e_pasta_sem_relatorio_exit_1(tmp_path):
     assert r.returncode == 2 and "--estratos" in r.stderr
 
 
-def test_acervo_listar_obra_bancada_despacha_ate_o_agregador(tmp_path):
+def test_acervo_listar_biblioteca_bancada_despacha_ate_o_agregador(tmp_path):
     grava(tmp_path, 1, rel(perda=2), rel("docling", perda=1))
-    r = subprocess.run(["bash", str(ACERVO), "listar", "obra", "bancada", str(tmp_path), "--json"],
+    r = subprocess.run(["bash", str(ACERVO), "listar", "biblioteca", "bancada", str(tmp_path), "--json"],
                        capture_output=True, text=True, check=False)
     assert r.returncode == 0, r.stdout + r.stderr
     assert json.loads(r.stdout)["obras"][0]["vencedor"] == "docling"
-    r = subprocess.run(["bash", str(ACERVO), "listar", "obra", "bancada", "--json", str(tmp_path)],
+    r = subprocess.run(["bash", str(ACERVO), "listar", "biblioteca", "bancada", "--json", str(tmp_path)],
                        capture_output=True, text=True, check=False)
     assert r.returncode == 0, r.stdout + r.stderr
-    r = subprocess.run(["bash", str(ACERVO), "listar", "obra", "bancada", str(tmp_path), "--sobre", "x"],
+    r = subprocess.run(["bash", str(ACERVO), "listar", "biblioteca", "bancada", str(tmp_path), "--sobre", "x"],
                        capture_output=True, text=True, check=False)
     assert r.returncode == 2
 
@@ -972,10 +972,10 @@ def test_acervo_listar_obra_bancada_despacha_ate_o_agregador(tmp_path):
 def test_ajuda_e_despacho_declaram_o_ato():
     listar = LISTAR.read_text(encoding="utf-8")
     uso = listar.split('USO = """', 1)[1].split('"""', 1)[0]
-    assert "acervo listar obra bancada <pasta> [--json] [--estratos <arquivo>]" in uso
+    assert "acervo listar biblioteca bancada <pasta> [--json] [--estratos <arquivo>]" in uso
     acervo = ACERVO.read_text(encoding="utf-8")
-    assert 'listar:obra:bancada)    exec "$ATOS/listar" obra bancada "$@"' in acervo
-    assert "acervo listar   obra bancada <pasta> [--json] [--estratos <arquivo>]" in acervo
+    assert 'listar:biblioteca:bancada)    exec "$ATOS/listar" obra bancada "$@"' in acervo
+    assert "acervo listar   biblioteca bancada <pasta> [--json] [--estratos <arquivo>]" in acervo
 
 
 def test_so_stdlib():
