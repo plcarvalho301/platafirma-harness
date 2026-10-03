@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
-# _acervo/curar — atos de curadoria da particao casa e obra (spec_acervo.md §6).
+# _acervo/curar — atos de curadoria das particoes casa e biblioteca (spec_acervo.md §6).
 # acervo curar casa alias <classe> <chave> <alias>
+# Chega aqui como `curar obra ...`: `obra` e o nome interno do sub-ato que bin/acervo usa
+# para a particao biblioteca, nao a particao (que saiu em 03/10/2026, #3197).
 import json
 import os
 import signal
@@ -35,7 +37,7 @@ def curar_alias(classe, chave, alias):
     return 0
 
 def curar_obra(argv):
-    """`acervo curar obra ...` — repassa para bin/curar (cliente REST completo: --situacao,
+    """`acervo curar biblioteca ...` — repassa para bin/curar (cliente REST completo: --situacao,
     --expurgar, --restaurar, --promover, --reclassificar, --conceito, --relacionar/--relacoes/
     --desrelacionar). Existe aqui só porque `curar` não é verbo servido pela porta (#3126) —
     a lógica inteira, incluindo HermiT e export, já é a de bin/curar; nada se duplica.
@@ -46,22 +48,22 @@ def curar_obra(argv):
 def main(argv):
     if not argv or argv[0] in ("-h", "--help", "ajuda"):
         morre("uso: acervo curar casa alias <classe> <chave> <alias>\n"
-              "     acervo curar obra --situacao|--expurgar|--restaurar|--promover|"
+              "     acervo curar biblioteca --situacao|--expurgar|--restaurar|--promover|"
               "--reclassificar|--conceito ...   (repassa para bin/curar)\n"
-              "     acervo curar obra --conceito <slug> --renomear <slug-novo> --motivo \"…\" [--apply]   "
+              "     acervo curar biblioteca --conceito <slug> --renomear <slug-novo> --motivo \"…\" [--apply]   "
               "(troca o slug, cura K15: o velho vira termo de entrada; plano seco sem --apply)\n"
-              "     acervo curar obra --relacionar <de> <para> --tipo <t> --garantia <g> "
+              "     acervo curar biblioteca --relacionar <de> <para> --tipo <t> --garantia <g> "
               "--motivo <m> [--apply]\n"
-              "     acervo curar obra --relacoes <conceito> | --desrelacionar <id>\n"
-              "     acervo curar obra --reextrair <obra> [--metodo <slug>] [--apply]   (termina na selada; "
+              "     acervo curar biblioteca --relacoes <conceito> | --desrelacionar <id>\n"
+              "     acervo curar biblioteca --reextrair <obra> [--metodo <slug>] [--apply]   (termina na selada; "
               "--promover a poe no ar)\n"
-              "     acervo curar obra --reextrair --lote [--ordem <lista>] [--apply] | "
+              "     acervo curar biblioteca --reextrair --lote [--ordem <lista>] [--apply] | "
               "--reextrair --lote --relatorio <lote>\n"
-              "     acervo curar obra --rejulgar --lote [--apply]   (veredito pela regua vigente, sem reconverter)\n"
-              "     acervo curar obra --reextrair <id,id...|@arquivo> --bancada <pasta> "
+              "     acervo curar biblioteca --rejulgar --lote [--apply]   (veredito pela regua vigente, sem reconverter)\n"
+              "     acervo curar biblioteca --reextrair <id,id...|@arquivo> --bancada <pasta> "
               "[--metodo <slug>] [--refazer]   (converte em pasta de saida; nao escreve "
-              "no acervo; depois: acervo listar obra bancada <pasta>)\n"
-              "     cartilha das familias e garantias: acervo curar obra --relacionar --help",
+              "no acervo; depois: acervo listar biblioteca bancada <pasta>)\n"
+              "     cartilha das familias e garantias: acervo curar biblioteca --relacionar --help",
               0 if argv else 2)
     sub = argv[0]
     if sub == "alias":

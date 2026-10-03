@@ -49,7 +49,7 @@ def _args(**kw):
 
 def test_sem_obra_e_uso_exit_2():
     r = _roda()
-    assert r.returncode == 2 and "uso: acervo ler obra impressao" in r.stderr
+    assert r.returncode == 2 and "uso: acervo ler biblioteca impressao" in r.stderr
 
 
 def test_ajuda_exit_0():
@@ -183,20 +183,20 @@ def test_faixa_lida_declara_o_pedido_quando_lido_inteiro():
 def test_ultima_linha_cursor_leva_o_filtro():
     m = _mod()
     linha = m.ultima_linha("Lei 14.133", _args(paginas="1-2"), "abc", SUMARIO)
-    assert linha == "proximo: acervo ler obra impressao 'Lei 14.133' --paginas 1-2 --cursor abc"
+    assert linha == "proximo: acervo ler biblioteca impressao 'Lei 14.133' --paginas 1-2 --cursor abc"
 
 
 def test_ultima_linha_faixa_acabou_aponta_as_paginas_seguintes():
     m = _mod()
     assert m.ultima_linha("x", _args(paginas="1-2"), None, SUMARIO) == \
-        "proximo: acervo ler obra impressao x --paginas 3-4"
+        "proximo: acervo ler biblioteca impressao x --paginas 3-4"
     assert m.ultima_linha("x", _args(paginas="11-12"), None, SUMARIO) == "fim da obra"
 
 
 def test_ultima_linha_capitulo_aponta_o_seguinte_e_fim_da_obra():
     m = _mod()
     assert m.ultima_linha("x", _args(capitulo="capitulo-i"), None, SUMARIO) == \
-        "proximo: acervo ler obra impressao x --capitulo capitulo-ii"
+        "proximo: acervo ler biblioteca impressao x --capitulo capitulo-ii"
     assert m.ultima_linha("x", _args(capitulo="capitulo-ii"), None, SUMARIO) == "fim da obra"
     assert m.ultima_linha("x", _args(), None, SUMARIO) == "fim da obra"
 

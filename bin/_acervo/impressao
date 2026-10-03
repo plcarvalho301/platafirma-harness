@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# _acervo/impressao — `acervo ler obra impressao`: le o texto de uma obra pelo espelho de
+# _acervo/impressao — `acervo ler biblioteca impressao`: le o texto de uma obra pelo espelho de
 # leitura, por pagina ou capitulo, do comeco e em ordem (spec espelho-de-leitura §5.4; #3180).
 #
 # Cliente fino da rota GET /acervo/obras/{obra}/impressoes/{impressao} do motor. Nao converte
@@ -29,7 +29,7 @@ BASE = (os.environ.get("MOTOR_ACERVO_URL") or os.environ.get("RAG_API_URL")
         or os.environ.get("RAG_API_BASE") or DEFAULT_BASE).rstrip("/")
 TOKEN = os.environ.get("RAG_API_TOKEN") or DEFAULT_TOKEN
 
-USO = """uso: acervo ler obra impressao <obra> [--paginas a-b | --capitulo <ancora>]
+USO = """uso: acervo ler biblioteca impressao <obra> [--paginas a-b | --capitulo <ancora>]
                                   [--formato md|blocos] [--papel corpo|todos]
                                   [--limite n] [--cursor c] [--impressao <id>]
                                   [--baixar [<pasta>]] [--json]
@@ -170,7 +170,7 @@ def faixa_lida(paginas: str | None, cursor: str | None, proximo: str | None,
 
 
 def _cmd(obra: str, **opcoes) -> str:
-    partes = ["acervo ler obra impressao", shlex.quote(obra)]
+    partes = ["acervo ler biblioteca impressao", shlex.quote(obra)]
     for k, v in opcoes.items():
         if v not in (None, False, ""):
             partes.append(f"--{k}" + ("" if v is True else f" {shlex.quote(str(v))}"))
@@ -242,13 +242,13 @@ def _resolver(obra: str) -> tuple[str, str]:
     q = urllib.parse.quote(obra, safe="")
     data = _get(f"/acervo/obras/{q}/situacao").json()
     if data.get("casamento") not in (None, "exato"):
-        sys.stderr.write(f"acervo ler obra impressao: '{obra}' casou aproximado com "
+        sys.stderr.write(f"acervo ler biblioteca impressao: '{obra}' casou aproximado com "
                          f"{data.get('titulo')} ({data.get('obra_id')})\n")
     return data["obra_id"], data.get("titulo") or obra
 
 
 def main(argv: list[str]) -> int:
-    p = argparse.ArgumentParser(prog="acervo ler obra impressao", add_help=False)
+    p = argparse.ArgumentParser(prog="acervo ler biblioteca impressao", add_help=False)
     p.add_argument("obra", nargs="?")
     faixa = p.add_mutually_exclusive_group()
     faixa.add_argument("--paginas")
@@ -281,7 +281,7 @@ def main(argv: list[str]) -> int:
 
         if args.baixar is not None:
             if not sumario.get("espelho"):
-                raise Falha(1, f"sem espelho; reextrair: acervo curar obra --reextrair {obra_id}")
+                raise Falha(1, f"sem espelho; reextrair: acervo curar biblioteca --reextrair {obra_id}")
             resp = _get(f"{base}/espelho", accept="text/markdown")
             pasta = Path(args.baixar) if args.baixar else _pasta_padrao()
             pasta.mkdir(parents=True, exist_ok=True)
@@ -301,7 +301,7 @@ def main(argv: list[str]) -> int:
         quer_json = args.json or args.formato == "blocos"
         resp = _get(base, params, accept="application/json" if quer_json else "text/markdown")
     except Falha as f:
-        sys.stderr.write(f"acervo ler obra impressao: {f}\n")
+        sys.stderr.write(f"acervo ler biblioteca impressao: {f}\n")
         return f.codigo
 
     fora = json.loads(resp.headers.get("x-espelho-fora") or "{}")
@@ -322,7 +322,7 @@ def main(argv: list[str]) -> int:
         if proximo:
             print("proximo: " + _cmd(args.obra, capitulo=args.capitulo, impressao=args.impressao,
                                      cursor=proximo))
-        print(f"reextrair: acervo curar obra --reextrair {shlex.quote(args.obra)}")
+        print(f"reextrair: acervo curar biblioteca --reextrair {shlex.quote(args.obra)}")
     return 0
 
 

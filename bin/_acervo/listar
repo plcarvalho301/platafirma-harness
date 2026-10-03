@@ -145,7 +145,7 @@ from (
 
 # O método padrão de conversão por tipo real (spec espelho-de-leitura §4.3) não mora aqui desde a
 # #3193: é a tabela única que o conversor aplica (conversor/conversor/padrao.py), e `acervo listar
-# obra metodos` a lê da árvore do conhecimento (`_padrao_do_conhecimento`).
+# biblioteca metodos` a lê da árvore do conhecimento (`_padrao_do_conhecimento`).
 
 USO = """uso:
   acervo listar conceitos [--json]              golden record acervo.conceito:
@@ -163,7 +163,7 @@ USO = """uso:
                                                 (porta de `deploy <stack> rotas`)
   acervo listar topologia <stack> --acessos     allowlist/OIDC da superficie gateada
                                                 (porta de `deploy <stack> acessos`)
-  acervo listar obra metodos [--json]           metodo padrao de conversao por tipo real
+  acervo listar biblioteca metodos [--json]     metodo padrao de conversao por tipo real
                                                 (spec espelho-de-leitura §4.3): configuracao
                                                 do ato de ingestao, NAO golden record (nao
                                                 consulta acervo.*; le conversor/padrao.py da
@@ -178,7 +178,7 @@ USO = """uso:
                                                 piso nao tem fonte unica: sai como pendencia
                                                 (definicao de dados), nao como numero. --sobre,
                                                 --eixo e --situacao recusam (exit 2).
-  acervo listar obra bancada <pasta> [--json] [--estratos <arquivo>]  perfil x docling por obra
+  acervo listar biblioteca bancada <pasta> [--json] [--estratos <arquivo>]  perfil x docling por obra
                                                 (card #3187): le <pasta>/{perfil,docling}/*/
                                                 relatorio.json (o que `curar --reextrair --bancada`
                                                 grava), aplica a regra do card #3181 e imprime
@@ -810,14 +810,14 @@ def _padrao_do_conhecimento():
 
 
 def listar_obra_metodos(quero_json):
-    """`acervo listar obra metodos`: metodo padrao de conversao por tipo real (spec
+    """`acervo listar biblioteca metodos`: metodo padrao de conversao por tipo real (spec
     espelho-de-leitura §4.3), com a data desde quando vale. Le a tabela unica que o conversor
     aplica (`conversor/padrao.py` da arvore do conhecimento) — nao consulta acervo.* (e
     configuracao do ato de ingestao, nao golden record).
     """
     padrao = _padrao_do_conhecimento()
     if padrao is None:
-        morre("acervo listar obra metodos: conversor/conversor/padrao.py nao achado na release do "
+        morre("acervo listar biblioteca metodos: conversor/conversor/padrao.py nao achado na release do "
               "conhecimento nem em PF_CONHECIMENTO_DIR", 3)
     itens = [
         {"tipo": linha["rotulo"], "mime": linha["tipo"], "metodo": linha["metodo"],
@@ -1087,7 +1087,7 @@ from (
 def listar_obra_qualidade(por_obra, quero_json):
     """`acervo listar biblioteca obra --qualidade [--por-obra] [--json]`: a contagem, por classe, da qualidade dos
     espelhos servindo; com --por-obra, uma linha por obra. Só leitura. Espelho sem veredito conta como
-    nao-julgada (o mesmo que a primeira linha de `acervo ler obra impressao` diz)."""
+    nao-julgada (o mesmo que a primeira linha de `acervo ler biblioteca impressao` diz)."""
     linhas = _psql_json(SQL_QUALIDADE_ESPELHO, "qualidade_espelho")
     com_espelho = [l for l in linhas if l.get("tem_espelho")]
     sem_espelho = len(linhas) - len(com_espelho)
@@ -1208,7 +1208,7 @@ def main(argv):
 
     if quero_bancada and (situacao or termo is not None or eixo is not None):
         # nao ignorar em silencio: o agregador nao filtra por assunto, eixo nem situacao
-        morre("acervo listar obra bancada: aceita so <pasta>, --json e --estratos <arquivo>; "
+        morre("acervo listar biblioteca bancada: aceita so <pasta>, --json e --estratos <arquivo>; "
               "--sobre, --eixo e --situacao nao valem aqui.\n\n%s" % USO)
     if por_obra and not quero_qualidade:
         morre("acervo listar biblioteca obra: --por-obra so vale com --qualidade.\n\n%s" % USO)
@@ -1218,9 +1218,9 @@ def main(argv):
         morre("acervo listar biblioteca obra --qualidade: aceita so --por-obra e --json; --sobre, --eixo, "
               "--situacao, bancada e metodos nao valem aqui.\n\n%s" % USO)
     if arquivo_estratos is not None and not quero_bancada:
-        morre("acervo listar: --estratos so vale em `acervo listar obra bancada <pasta>`.\n\n%s" % USO)
+        morre("acervo listar: --estratos so vale em `acervo listar biblioteca bancada <pasta>`.\n\n%s" % USO)
     if quero_bancada and not pasta_bancada:
-        morre("acervo listar obra bancada: falta a <pasta> (a que `curar --reextrair --bancada` gravou).\n\n%s" % USO)
+        morre("acervo listar biblioteca bancada: falta a <pasta> (a que `curar --reextrair --bancada` gravou).\n\n%s" % USO)
     if quero_bancada and quero_metodos:
         morre("acervo listar obra: escolha `metodos` OU `bancada`, nao os dois.\n\n%s" % USO)
     if quero_rotas and quero_acessos:

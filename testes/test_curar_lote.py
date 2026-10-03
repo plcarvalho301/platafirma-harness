@@ -98,7 +98,7 @@ class Falso:
                     if corpo.get("aplicar"):
                         resumo = {k: v for k, v in PLANO.items() if k != "itens"}
                         return self._resp(200, {**resumo, "modo": "aplicado", "lote": LOTE,
-                                                "acompanhar": f"acervo curar obra --reextrair --lote --relatorio {LOTE}"})
+                                                "acompanhar": f"acervo curar biblioteca --reextrair --lote --relatorio {LOTE}"})
                     return self._resp(200, PLANO)
                 if self.path == "/acervo/espelhos/rejulgamento":
                     item = {"impressao": "imp-1", "obra_id": OBRA, "titulo": "Lei 14.133", "estado": "servindo",
@@ -118,7 +118,7 @@ class Falso:
                         "objeto": "acervo/abc", "impressao_atual": "imp-velha", "espelho_atual": "d" * 64,
                         "metodo_alvo": "combinado", "metodo": "combinado", "regenerar": False, "trechos": 12,
                         "impressao_nova": "imp-nova", "selada": True, "ja_selada": False, "ja_existia": False,
-                        "promover": f"acervo curar obra --promover {OBRA} --impressao imp-nova",
+                        "promover": f"acervo curar biblioteca --promover {OBRA} --impressao imp-nova",
                         "espelho": {"digest": "e" * 64, "qualidade": "boa", "motivo": [],
                                     "conversor": {"nome": "combinado", "versao": "1"}}})
                 return self._resp(404, {"title": "Nada", "detail": self.path})
