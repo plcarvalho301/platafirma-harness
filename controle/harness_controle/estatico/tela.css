@@ -357,6 +357,110 @@ form#despachar button { justify-self: start; }
   color: var(--platafirma-fg-default);
 }
 
+/* --- corpo em Markdown (persona, GERAL, org, mesa, cadernos): estrutura, nao texto grudado --- */
+.leitura .corpo.md { white-space: normal; }
+.corpo.md > :first-child { margin-top: 0; }
+.corpo.md h1, .corpo.md h2, .corpo.md h3, .corpo.md h5, .corpo.md h6 {
+  margin: var(--platafirma-space-5) 0 var(--platafirma-space-2);
+  line-height: var(--platafirma-leading-tight);
+  color: var(--platafirma-fg-default);
+}
+.corpo.md h1 { font-size: var(--platafirma-text-section); }
+.corpo.md h2, .corpo.md h3 { font-size: var(--platafirma-text-body); font-weight: var(--platafirma-weight-semibold); }
+.corpo.md h2 {
+  padding-bottom: var(--platafirma-space-1);
+  border-bottom: var(--platafirma-border-width) solid var(--platafirma-border-default);
+}
+.corpo.md h5, .corpo.md h6 { font-size: var(--platafirma-text-meta); color: var(--platafirma-fg-muted); }
+.corpo.md p { margin: 0 0 var(--platafirma-space-3); }
+.corpo.md ul, .corpo.md ol { margin: 0 0 var(--platafirma-space-3); padding-left: var(--platafirma-space-6); }
+.corpo.md li { margin-bottom: var(--platafirma-space-1); line-height: var(--platafirma-leading-snug); }
+.corpo.md hr {
+  margin: var(--platafirma-space-5) 0; border: 0;
+  border-top: var(--platafirma-border-width) solid var(--platafirma-border-default);
+}
+.corpo.md code {
+  padding: 0 var(--platafirma-space-1);
+  background: var(--platafirma-bg-sunken); border-radius: var(--platafirma-radius-sm);
+  font-size: var(--platafirma-text-meta);
+}
+.corpo.md pre {
+  margin: 0 0 var(--platafirma-space-3); padding: var(--platafirma-space-3);
+  background: var(--platafirma-bg-sunken); border-radius: var(--platafirma-radius-sm);
+  overflow-x: auto; white-space: pre;
+}
+.corpo.md pre code { padding: 0; background: none; }
+.corpo.md blockquote {
+  margin: 0 0 var(--platafirma-space-3); padding-left: var(--platafirma-space-4);
+  border-left: var(--platafirma-line-strong) solid var(--platafirma-border-strong);
+  color: var(--platafirma-fg-muted);
+}
+.corpo.md a { color: var(--platafirma-fg-accent); overflow-wrap: anywhere; }
+.corpo.md .tabela-md { margin: 0 0 var(--platafirma-space-3); overflow-x: auto; }
+.corpo.md td { vertical-align: top; }
+.corpo.md .ref {
+  margin-right: var(--platafirma-space-1);
+  font-size: var(--platafirma-text-label); color: var(--platafirma-fg-accent);
+}
+.leitura .vazio { margin: 0; color: var(--platafirma-fg-muted); font-size: var(--platafirma-text-meta); }
+
+/* mesa: um cartao por item, agrupado por chapeu */
+.mesa-grupo { margin-bottom: var(--platafirma-space-5); }
+.corpo.md .mesa-grupo > h3 {
+  display: flex; align-items: baseline; gap: var(--platafirma-space-2);
+  margin: 0 0 var(--platafirma-space-2);
+  font-size: var(--platafirma-text-label);
+  letter-spacing: var(--platafirma-tracking-wide); text-transform: uppercase;
+  color: var(--platafirma-fg-muted);
+}
+.mesa-grupo .n, .docs.chapeus .n { font-weight: var(--platafirma-weight-regular); color: var(--platafirma-fg-muted); }
+.corpo.md .mesa-itens {
+  list-style: none; margin: 0; padding: 0;
+  display: flex; flex-direction: column; gap: var(--platafirma-space-3);
+}
+.mesa-item {
+  margin: 0;
+  padding: var(--platafirma-space-3) var(--platafirma-space-4);
+  border: var(--platafirma-border-width) solid var(--platafirma-border-default);
+  border-radius: var(--platafirma-radius-sm);
+}
+.mesa-cab {
+  display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--platafirma-space-3);
+  font-size: var(--platafirma-text-meta); color: var(--platafirma-fg-muted);
+}
+.mesa-cab .num { font-weight: var(--platafirma-weight-semibold); color: var(--platafirma-fg-default); }
+.mesa-cab .idade { margin-left: auto; }
+.corpo.md .mesa-ato { margin: var(--platafirma-space-2) 0 0; color: var(--platafirma-fg-default); }
+.corpo.md .mesa-alvo {
+  margin: var(--platafirma-space-2) 0 0;
+  font-size: var(--platafirma-text-meta); color: var(--platafirma-fg-muted);
+}
+.mesa-alvo .rot, .cad-indice .cad-chapeu { font-weight: var(--platafirma-weight-semibold); }
+.mesa-alvo .rot {
+  margin-right: var(--platafirma-space-1);
+  font-size: var(--platafirma-text-label);
+  letter-spacing: var(--platafirma-tracking-wide); text-transform: uppercase;
+}
+.mesa-extra { margin-top: var(--platafirma-space-2); font-size: var(--platafirma-text-meta); }
+
+/* cadernos: indice (uma linha por chapeu) e corpo por categoria */
+.corpo.md .cad-indice { list-style: none; margin: 0 0 var(--platafirma-space-4); padding: 0; }
+.cad-indice li {
+  display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--platafirma-space-3);
+  padding: var(--platafirma-space-2) 0;
+  border-bottom: var(--platafirma-border-width) solid var(--platafirma-border-default);
+}
+.cad-indice li:last-child { border-bottom: 0; }
+.cad-indice .cad-chapeu { min-width: 9em; }
+.cad-metricas { display: flex; flex-wrap: wrap; gap: var(--platafirma-space-2); }
+.corpo.md .nota-indice { margin: 0 0 var(--platafirma-space-3); font-size: var(--platafirma-text-meta); color: var(--platafirma-fg-muted); }
+.cad-secao { margin-top: var(--platafirma-space-5); }
+.corpo.md .cad-titulo { margin: 0 0 var(--platafirma-space-2); }
+
+/* seletor de chapeu: pilulas, distintas das abas de documento */
+.docs.chapeus a { border-radius: var(--platafirma-radius-pill); }
+.docs.chapeus a[aria-current] .n { color: inherit; }
+
 /* documento Caixa: uma carta por bloco, mais nova primeiro */
 .caixa-lida { display: flex; flex-direction: column; gap: var(--platafirma-space-4); }
 .caixa-lida .msg {

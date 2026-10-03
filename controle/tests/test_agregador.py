@@ -296,13 +296,13 @@ def test_render_cadeira_seletor_de_documento_e_chapeu():
 
     # sem chapeu: mesa INTEIRA
     html_mesa = render_cadeira(estado, slug="design", doc="mesa")
-    assert "#1 [g1] linha 1" in html_mesa
-    assert "#2 [g2] linha 2" in html_mesa
+    assert "linha 1" in html_mesa
+    assert "linha 2" in html_mesa
 
     # com chapeu: filtra a mesa ao [g1]
     html_g1 = render_cadeira(estado, slug="design", doc="mesa", chapeu="g1")
-    assert "#1 [g1] linha 1" in html_g1
-    assert "#2 [g2] linha 2" not in html_g1
+    assert "linha 1" in html_g1
+    assert "linha 2" not in html_g1
 
 
 def test_fix_nome_verbo_fila():
