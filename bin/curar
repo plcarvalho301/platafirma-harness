@@ -52,6 +52,9 @@ USO = """uso:
   curar --reextrair --lote [--ordem <id,id,…|@arquivo>] [--metodo <slug>] [--apply]
                                                               o estoque pelo padrão do tipo (spec espelho-de-leitura §4.2):
                                                               plano = PORTÃO 1 com a contagem por tipo; --apply abre o lote
+  curar --reextrair --lote --medida --replicas <n> --ordem <id,id,…|@arquivo> [--metodo <slug>] [--apply]
+                                                              só converte e mede a lista em até <n> réplicas (#3228);
+                                                              nada no acervo: o item sai `medida` com o relatório
   curar --reextrair --lote --relatorio <lote> [--json]         estado do lote, obra a obra
   curar --rejulgar --lote [--apply]                           espelhos com régua antiga: o veredito de novo, sem reconverter
   curar --reextrair <id,id,…|@arquivo> --bancada <pasta> [--metodo <slug>] [--modo bancada|medida] [--refazer] [--timeout-s <n>] [--json]
@@ -1375,6 +1378,12 @@ def acao_reextrair_lote(args, autor: str, como_json: bool, headers: dict) -> int
     ordem = _bancada_lista(args.ordem) if args.ordem else []
     payload = {"autor": autor, "aplicar": args.apply, "metodo": args.metodo or None, "ordem": ordem,
                "corte": args.corte}
+    if args.medida or args.replicas is not None:
+        # #3228 passo 2: a medida roda só a lista dada, em até <n> réplicas, e não grava no acervo
+        if not args.medida or not ordem:
+            sys.stderr.write("curar: erro: --medida vai com --replicas <n> e --ordem <lista>; --replicas só com --medida\n")
+            return 2
+        payload.update(medida=True, replicas=args.replicas)
     data = _chamar("POST", f"{BASE}/acervo/reextracoes/lote", headers, payload)
     if como_json:
         print(json.dumps(data, indent=2, ensure_ascii=False))
@@ -1938,6 +1947,9 @@ def main(argv=None):
     parser.add_argument("--lote", action="store_true", default=False)
     parser.add_argument("--ordem", default=None)
     parser.add_argument("--relatorio", default=None)
+    # --medida --replicas <n>: o lote de medida do #3228 (só converte e mede; nada no acervo)
+    parser.add_argument("--medida", action="store_true", default=False)
+    parser.add_argument("--replicas", type=int, default=None)
     # --bancada <pasta>: pasta de SAÍDA da conversão em lote (card #3187); nada a ver com a raiz
     # de lib/raizes.py nem com `acervo curar obra lote`
     parser.add_argument("--bancada", default=None)

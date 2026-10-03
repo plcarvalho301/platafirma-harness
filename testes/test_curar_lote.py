@@ -170,6 +170,22 @@ def test_lote_apply_devolve_o_id_e_como_acompanhar(falso):
 
 
 @precisa_requests
+def test_lote_de_medida_leva_replicas_e_a_lista(falso):
+    r = _curar(falso, "--reextrair", "--lote", "--medida", "--replicas", "2", "--ordem", "de1c6e97", "--apply")
+    assert r.returncode == 0, r.stderr
+    corpo = falso.chamadas[-1][2]
+    assert corpo["medida"] is True and corpo["replicas"] == 2 and corpo["ordem"] == ["de1c6e97"]
+
+
+@precisa_requests
+def test_lote_de_medida_sem_lista_recusa_antes_de_chamar(falso):
+    antes = len(falso.chamadas)
+    r = _curar(falso, "--reextrair", "--lote", "--medida", "--replicas", "2", "--apply")
+    assert r.returncode == 2 and "--ordem" in r.stderr
+    assert len(falso.chamadas) == antes
+
+
+@precisa_requests
 def test_relatorio_do_lote_lista_as_reprovadas_com_a_causa(falso):
     r = _curar(falso, "--reextrair", "--lote", "--relatorio", LOTE)
     assert r.returncode == 0, r.stderr
