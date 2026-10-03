@@ -714,9 +714,13 @@ def test_chapeu_escolhido_sem_doc_abre_o_texto_dele(cliente):
     corpo = cliente.get("/cadeira/TI?chapeu=design").text
     assert "o desenho" in corpo
 
-def test_aba_chapeu_so_existe_com_chapeu_escolhido_e_o_chapeu_segue_nas_abas(cliente):
-    sem = cliente.get("/cadeira/TI").text
-    assert ">Chapéu<" not in sem.split('class="docs chapeus"')[0]       # nenhuma aba antes do seletor
+def test_aba_chapeu_esta_sempre_la_e_o_chapeu_escolhido_segue_nas_abas(cliente):
+    # na Persona, sem chapeu escolhido, a aba ja esta la e abre o primeiro chapeu
+    sem = cliente.get("/cadeira/TI").text.split('class="docs chapeus"')[0]
+    assert ">Chapéu<" in sem and '?doc=chapeu"' in sem
+    primeiro = cliente.get("/cadeira/TI?doc=chapeu").text
+    assert "persona ler ti --chapeu canais" in primeiro or "Chapéu indisponível: timeout apos 15s" in primeiro
+    assert 'aria-current="page" title="1 item(ns) na mesa">canais' in primeiro   # o chip do primeiro marcado
     com = cliente.get("/cadeira/TI?doc=chapeu&chapeu=design").text
     abas = com.split('class="docs chapeus"')[0]
     assert ">Chapéu<" in abas
