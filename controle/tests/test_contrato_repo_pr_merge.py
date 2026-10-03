@@ -30,7 +30,7 @@ case "$1 $2" in
       *"--json state,mergeCommit"*)
         echo "$(cat "$d/estado") $(cat "$d/mergeoid" 2>/dev/null || echo -)" ;;
       *"--json statusCheckRollup"*)
-        echo '{"statusCheckRollup":[]}' ;;
+        if [ -f "$d/checks" ]; then cat "$d/checks"; else echo '{"statusCheckRollup":[]}'; fi ;;
       *) cat "$d/estado" ;;
     esac ;;
   "pr merge")
@@ -205,3 +205,28 @@ def test_sanear_nunca_apaga_wip_mesmo_se_a_gh_listasse_como_mesclado(tmp_path):
     assert r.returncode == 0, r.stdout + r.stderr
     assert "wip/ti/algo" not in r.stdout
     assert _no_origin(tmp_path, "wip/ti/algo")
+
+# --- check vermelho: a recusa nomeia o check (#2856, PR 424 do harness) ------------------
+
+def test_pr_merge_check_vermelho_recusa_e_nomeia_o_check(tmp_path):
+    """Antes a recusa dizia so «check vermelho» e quem merge nao tinha como saber qual."""
+    bancada, forge = _montar(tmp_path)
+    _pr_empurrado(tmp_path, bancada, forge)
+    (forge / "checks").write_text(
+        '{"statusCheckRollup":[{"conclusion":"SUCCESS","name":"verde"},'
+        '{"conclusion":"FAILURE","detailsUrl":"https://ci.exemplo/run/1","name":"controle — testes"}]}\n')
+    r = _repo(tmp_path, bancada, "pr-merge", "demo", "7")
+    assert r.returncode == 4, r.stdout + r.stderr
+    assert "check vermelho no PR #7" in r.stderr
+    assert "controle — testes https://ci.exemplo/run/1" in r.stderr
+    assert "verde" not in r.stderr
+    assert _no_origin(tmp_path, "fabrica/42-x")
+
+def test_pr_merge_check_vermelho_com_forcar_mescla(tmp_path):
+    bancada, forge = _montar(tmp_path)
+    _pr_empurrado(tmp_path, bancada, forge)
+    (forge / "checks").write_text(
+        '{"statusCheckRollup":[{"conclusion":"FAILURE","name":"controle — testes"}]}\n')
+    r = _repo(tmp_path, bancada, "pr-merge", "demo", "7", "--forcar")
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert "MERGED" in r.stdout
