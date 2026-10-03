@@ -7,15 +7,17 @@
 # use para: ver contêiner/unit/timer de pé e a saúde da porta, "está no ar?" (estado,
 #   saude, logs), reiniciar contêiner/unit e (re)criar a stack por compose (restart,
 #   up, down, pull, build), convergir a agenda do cron e podar log/quarentena por
-#   retenção declarada (agenda, limpeza), liberar cache de VRAM e disco (cache)
-# atos: estado (leitura, operacao), saude (leitura, operacao), logs (leitura, operacao), restart (escrita, operacao), unit-env (escrita, operacao), cache (escrita, operacao), backup (leitura, operacao), up (escrita, operacao), down (escrita, operacao), ps (leitura, operacao), config (leitura, operacao), pull (escrita, operacao), build (escrita, operacao), limpeza (escrita, operacao), agenda (escrita, operacao)
+#   retenção declarada (agenda, limpeza), liberar cache de VRAM e disco (cache), que
+#   hardware é este e quanto consome em W agora (hardware), a GPU ao vivo: uso, VRAM,
+#   temperatura, W e processos (gpu)
+# atos: estado (leitura, operacao), saude (leitura, operacao), logs (leitura, operacao), restart (escrita, operacao), unit-env (escrita, operacao), cache (escrita, operacao), hardware (leitura, operacao), gpu (leitura, operacao), backup (leitura, operacao), up (escrita, operacao), down (escrita, operacao), ps (leitura, operacao), config (leitura, operacao), pull (escrita, operacao), build (escrita, operacao), limpeza (escrita, operacao), agenda (escrita, operacao)
 # forma: log
 # cauda: sim
 # classe: B
 # consome: nenhum
-# ambiente: DOCKER_HOST[=unix:///run/user/<uid>/docker.sock] porta · XDG_RUNTIME_DIR[=/run/user/<uid>] porta · DBUS_SESSION_BUS_ADDRESS[=unix:path=$XDG_RUNTIME_DIR/bus] porta (os dois só quando ausentes) · INFRA_OPS_HEALTH[=http://127.0.0.1:8010/health] porta · INFRA_UNIT_AUTO[=ops-mcp] porta · INFRA_BACKUPS[=$AQUI/../registro/backups.json] porta · INFRA_CRONTAB_SCRIPT[=$PLATAFIRMA_RELEASE/core/deploy/instala-crontab.sh] porta · PF_SUJEITO[obrigatória em up|down|pull|build] porta (sem fallback; entra na linha de log do ato quando presente) · PLATAFIRMA_INSTANCIA, PF_RELEASE_RAIZ, PLATAFIRMA_RELEASE (lib/raizes.sh)
-# depende: docker · systemctl --user · curl · jq (cache) · python3 · bin/_release/stack (ajudante de up/down/ps/config/pull/build, ao lado deste bin) · bin/_infra/limpeza-logs e bin/_infra/limpeza-quarentena (ajudantes de limpeza) · o script declarado em INFRA_CRONTAB_SCRIPT (agenda)
-# escreve: restart=contêiner/unit reiniciado (efeito, não arquivo) · unit-env=drop-in systemd ($HOME/.config/systemd/user/<unit>.service.d/zz-infra-env.conf) · cache=VRAM descarregada e cache local podado (vram, disco) · up/down/pull/build=contêineres e imagens da stack, via bin/_release/stack · limpeza=arquivos de log/quarentena da instância apagados · agenda=crontab do sistema (aplicar) · estado/saude/logs/ps/config/backup=nada
+# ambiente: DOCKER_HOST[=unix:///run/user/<uid>/docker.sock] porta · XDG_RUNTIME_DIR[=/run/user/<uid>] porta · DBUS_SESSION_BUS_ADDRESS[=unix:path=$XDG_RUNTIME_DIR/bus] porta (os dois só quando ausentes) · INFRA_OPS_HEALTH[=http://127.0.0.1:8010/health] porta · INFRA_RAPL[=/sys/class/powercap/intel-rapl:0/energy_uj] porta · INFRA_CPUINFO[=/proc/cpuinfo] porta · INFRA_MEMINFO[=/proc/meminfo] porta · INFRA_UNIT_AUTO[=ops-mcp] porta · INFRA_BACKUPS[=$AQUI/../registro/backups.json] porta · INFRA_CRONTAB_SCRIPT[=$PLATAFIRMA_RELEASE/core/deploy/instala-crontab.sh] porta · PF_SUJEITO[obrigatória em up|down|pull|build] porta (sem fallback; entra na linha de log do ato quando presente) · PLATAFIRMA_INSTANCIA, PF_RELEASE_RAIZ, PLATAFIRMA_RELEASE (lib/raizes.sh)
+# depende: docker · systemctl --user · curl · jq (cache) · nvidia-smi (cache ver, hardware, gpu) · python3 · bin/_release/stack (ajudante de up/down/ps/config/pull/build, ao lado deste bin) · bin/_infra/limpeza-logs e bin/_infra/limpeza-quarentena (ajudantes de limpeza) · o script declarado em INFRA_CRONTAB_SCRIPT (agenda)
+# escreve: restart=contêiner/unit reiniciado (efeito, não arquivo) · unit-env=drop-in systemd ($HOME/.config/systemd/user/<unit>.service.d/zz-infra-env.conf) · cache=VRAM descarregada e cache local podado (vram, disco) · up/down/pull/build=contêineres e imagens da stack, via bin/_release/stack · limpeza=arquivos de log/quarentena da instância apagados · agenda=crontab do sistema (aplicar) · estado/saude/logs/ps/config/backup/hardware/gpu=nada
 # substitui: docker ps/restart/logs direto · systemctl --user status/restart/cat direto · deploy <stack> up|down|ps|config|pull|build (deploy apagado — decisão do dono, 27/09) · crontab -e a mão · ops-log-prune e quarentena-prune (movidos para bin/_infra/, atos de infra por arq:0110 §14 emenda 26/09/2026)
 # Encapsula as três pegadinhas conhecidas: DOCKER_HOST rootless, restart que
 # mata a própria chamada, e alvo que pode ser contêiner ou unit de usuário.
@@ -54,6 +56,8 @@ uso:
   infra restart  <alvo> [--nao-esperar]          contêiner ou unit --user; confere antes de dizer ok
   infra unit-env <unit> [--ver | CHAVE=VALOR...] drop-in de ambiente da unit --user (daemon-reload)
   infra cache    [ver|vram|disco]                o que ocupa VRAM e disco; liberar é explícito
+  infra hardware [--json]                        CPU, RAM, GPU e consumo em W agora; a fonte (PSU) não se lê
+  infra gpu      [--json]                        GPU ao vivo: uso, VRAM, temperatura, W e processos
   infra backup   [--json]                        por alvo declarado: quando rodou, gerações
   infra up       <stack> [args compose…] [<serviço>…]  bin/_release/stack compose … up
   infra down     <stack> [args compose…] [<serviço>…]  … down
@@ -456,6 +460,193 @@ cache() {
   esac
 }
 
+# Hardware e GPU: leitura, nunca mutação. nvidia-smi é a fonte da GPU; CPU e RAM vêm de
+# /proc. A potência da CPU vem do RAPL (amostra de 1 s), que desde o CVE-2020-8694 costuma
+# ser só do root: ilegível sai dito, nunca como 0 W. A fonte de alimentação (PSU) não se
+# informa ao sistema; o ato diz isso em vez de calar, porque é a pergunta que o traz aqui
+# (dimensionar nobreak, 03/10/2026). Sem nvidia-smi: exit 3; nvidia-smi que falha: exit 5.
+exigir_nvidia_smi() {
+  command -v nvidia-smi >/dev/null 2>&1 && return 0
+  echo "infra: erro: dependência nvidia-smi: ausente — sem leitura de GPU" >&2
+  return 3
+}
+
+_rapl_watts() {  # potência do pacote da CPU em W inteiros; vazio quando ilegível
+  local f="${INFRA_RAPL:-/sys/class/powercap/intel-rapl:0/energy_uj}" a b
+  a=$(cat "$f" 2>/dev/null) || return 0
+  sleep 1
+  b=$(cat "$f" 2>/dev/null) || return 0
+  case "$a$b" in *[!0-9]*|"") return 0 ;; esac
+  [ "$b" -ge "$a" ] || return 0   # contador deu a volta: sem leitura honesta nesta amostra
+  echo $(( (b - a) / 1000000 ))
+}
+
+hardware() {
+  local json=0 a gpus cpu_w
+  for a in "$@"; do
+    case "$a" in
+      --json) json=1 ;;
+      *) echo "uso: infra hardware [--json]" >&2; exit 2 ;;
+    esac
+  done
+  exigir_nvidia_smi || exit 3
+  gpus=$(nvidia-smi --query-gpu=name,memory.total,power.draw,power.limit,power.max_limit,driver_version \
+           --format=csv,noheader,nounits) \
+    || { echo "infra: erro: nvidia-smi falhou — GPU não lida" >&2; exit 5; }
+  cpu_w=$(_rapl_watts)
+  INFRA_HW_GPUS="$gpus" INFRA_HW_CPUW="$cpu_w" INFRA_HW_JSON="$json" \
+  INFRA_HW_CPUINFO="${INFRA_CPUINFO:-/proc/cpuinfo}" INFRA_HW_MEMINFO="${INFRA_MEMINFO:-/proc/meminfo}" \
+  python3 - <<'PY'
+import csv, io, json, os
+
+def num(s):
+    try:
+        return round(float(s), 1)
+    except (TypeError, ValueError):
+        return None
+
+def cpu():
+    modelo, nucleos, threads, bloco = None, set(), 0, {}
+    def fecha(b):
+        nonlocal modelo, threads
+        if b.get("processor") is None:
+            return
+        threads += 1
+        nucleos.add((b.get("physical id"), b.get("core id")))
+        modelo = modelo or b.get("model name")
+    try:
+        for l in open(os.environ["INFRA_HW_CPUINFO"]):
+            if not l.strip():
+                fecha(bloco); bloco = {}; continue
+            k, _, v = l.partition(":")
+            bloco[k.strip()] = v.strip()
+        fecha(bloco)
+    except OSError:
+        pass
+    n = len(nucleos) if nucleos and (None, None) not in nucleos else None
+    return {"modelo": modelo, "nucleos": n, "threads": threads or None}
+
+def ram_gib():
+    try:
+        for l in open(os.environ["INFRA_HW_MEMINFO"]):
+            if l.startswith("MemTotal:"):
+                return round(int(l.split()[1]) / 1048576, 1)
+    except (OSError, ValueError, IndexError):
+        pass
+    return None
+
+gpus = []
+for r in csv.reader(io.StringIO(os.environ["INFRA_HW_GPUS"]), skipinitialspace=True):
+    if not r:
+        continue
+    r += [None] * (6 - len(r))
+    gpus.append({"nome": r[0], "vram_mib": num(r[1]), "watts": num(r[2]),
+                 "teto_w": num(r[3]), "teto_max_w": num(r[4]), "driver": r[5]})
+
+c = cpu()
+c["watts"] = int(os.environ["INFRA_HW_CPUW"]) if os.environ["INFRA_HW_CPUW"] else None
+psu = {"legivel": False, "motivo": "a fonte não se informa ao sistema; a potência está na etiqueta dela"}
+soma = None
+if c["watts"] is not None and gpus and all(g["watts"] is not None for g in gpus):
+    soma = round(c["watts"] + sum(g["watts"] for g in gpus))
+
+if os.environ["INFRA_HW_JSON"] == "1":
+    print(json.dumps({"cpu": c, "ram_gib": ram_gib(), "gpus": gpus, "psu": psu,
+                      "soma_cpu_gpu_w": soma}, ensure_ascii=False))
+    raise SystemExit(0)
+
+def w(v):
+    return "—" if v is None else f"{v:g} W"
+
+print("== CPU")
+nuc = f"{c['nucleos']} núcleos / " if c["nucleos"] else ""
+thr = f"{c['threads']} threads" if c["threads"] else "threads não lidas"
+print(f"  {c['modelo'] or 'modelo não lido'} · {nuc}{thr}")
+if c["watts"] is None:
+    print("  consumo agora: não legível desta conta (RAPL é do root)")
+else:
+    print(f"  consumo agora: {c['watts']} W (pacote, amostra de 1 s)")
+print(); print("== RAM")
+r = ram_gib()
+print(f"  {r:g} GiB" if r is not None else "  não lida")
+for i, g in enumerate(gpus):
+    print(); print(f"== GPU {i}")
+    vram = f"{g['vram_mib'] / 1024:.0f} GiB" if g["vram_mib"] else "VRAM não lida"
+    print(f"  {g['nome']} · {vram} · driver {g['driver']}")
+    print(f"  consumo agora: {w(g['watts'])} · teto configurado: {w(g['teto_w'])} · teto máximo da placa: {w(g['teto_max_w'])}")
+if not gpus:
+    print(); print("== GPU"); print("  nenhuma listada pelo nvidia-smi")
+print(); print("== fonte de alimentação (PSU)")
+print(f"  não lida: {psu['motivo']}")
+if soma is not None:
+    print(); print("== soma medida agora")
+    print(f"  CPU + GPU = {soma} W (fora placa-mãe, discos, ventoinhas e monitor)")
+PY
+}
+
+gpu() {
+  local json=0 a q p apps_ok=1
+  for a in "$@"; do
+    case "$a" in
+      --json) json=1 ;;
+      *) echo "uso: infra gpu [--json]" >&2; exit 2 ;;
+    esac
+  done
+  exigir_nvidia_smi || exit 3
+  q=$(nvidia-smi --query-gpu=index,name,utilization.gpu,memory.used,memory.total,temperature.gpu,power.draw,power.limit,clocks.sm,pstate \
+        --format=csv,noheader,nounits) \
+    || { echo "infra: erro: nvidia-smi falhou — GPU não lida" >&2; exit 5; }
+  p=$(nvidia-smi --query-compute-apps=gpu_bus_id,pid,process_name,used_memory --format=csv,noheader,nounits 2>/dev/null) \
+    || { p=""; apps_ok=0; }
+  INFRA_GPU_Q="$q" INFRA_GPU_P="$p" INFRA_GPU_APPS_OK="$apps_ok" INFRA_GPU_JSON="$json" python3 - <<'PY'
+import csv, io, json, os
+
+def num(s):
+    try:
+        return round(float(s), 1)
+    except (TypeError, ValueError):
+        return None
+
+def linhas(var):
+    return [r for r in csv.reader(io.StringIO(os.environ[var]), skipinitialspace=True) if r]
+
+gpus = []
+for r in linhas("INFRA_GPU_Q"):
+    r += [None] * (10 - len(r))
+    gpus.append({"indice": r[0], "nome": r[1], "uso_pct": num(r[2]), "vram_usada_mib": num(r[3]),
+                 "vram_total_mib": num(r[4]), "temp_c": num(r[5]), "watts": num(r[6]),
+                 "teto_w": num(r[7]), "clock_mhz": num(r[8]), "pstate": r[9]})
+apps_ok = os.environ["INFRA_GPU_APPS_OK"] == "1"
+procs = []
+for r in linhas("INFRA_GPU_P"):
+    r += [None] * (4 - len(r))
+    procs.append({"pid": r[1], "processo": r[2], "vram_mib": num(r[3])})
+
+if os.environ["INFRA_GPU_JSON"] == "1":
+    print(json.dumps({"gpus": gpus, "processos": procs if apps_ok else None,
+                      "processos_motivo": None if apps_ok else "nvidia-smi não listou processos"},
+                     ensure_ascii=False))
+    raise SystemExit(0)
+
+def f(v, u):
+    return "—" if v is None else f"{v:g}{u}"
+
+for g in gpus:
+    print(f"== GPU {g['indice']}: {g['nome']} ({g['pstate'] or '—'})")
+    print(f"  uso {f(g['uso_pct'], '%')} · VRAM {f(g['vram_usada_mib'], '')} / {f(g['vram_total_mib'], ' MiB')}"
+          f" · {f(g['temp_c'], ' °C')} · {f(g['watts'], '')} / {f(g['teto_w'], ' W')} · {f(g['clock_mhz'], ' MHz')}")
+if not gpus:
+    print("== GPU"); print("  nenhuma listada pelo nvidia-smi")
+print(); print("== processos na GPU")
+if not apps_ok:
+    print("  não listados: nvidia-smi recusou a consulta de processos")
+elif not procs:
+    print("  (nenhum)")
+for p in procs:
+    print(f"  {p['pid']}  {p['processo']}  {f(p['vram_mib'], ' MiB')}")
+PY
+}
+
 # Alvo pode ser contêiner OU unit --user, e o ato ramifica: nome de contêiner
 # passado a `systemctl --user restart` falha DENTRO da unit destacada, o
 # --collect recolhe a falha e o echo de sucesso já saiu no processo de fora,
@@ -679,6 +870,8 @@ case "$cmd" in
   saude)     saude "$@" ;;
   logs)      logs "${1:?uso: infra logs <alvo> [n]}" "${2:-50}" ;;
   cache)     cache "${1:-ver}" ;;
+  hardware)  hardware "$@" ;;
+  gpu)       gpu "$@" ;;
   backup)    backup "$@" ;;
   unit-env)  unit_env "$@" ;;
   instalar)  instalar "$@" ;;
@@ -690,7 +883,7 @@ case "$cmd" in
   agenda)    cmd_agenda "$@" ;;
   *)
     printf 'infra: erro: ato desconhecido: %s\n' "$cmd" >&2
-    printf 'atos: estado, saude, logs, restart, unit-env, cache, backup, up, down, ps, config, pull, build, limpeza, agenda\n' >&2
+    printf 'atos: estado, saude, logs, restart, unit-env, cache, hardware, gpu, backup, up, down, ps, config, pull, build, limpeza, agenda\n' >&2
     uso_texto
     exit 2
     ;;
