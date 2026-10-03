@@ -17,12 +17,11 @@
 #   2. dossie volatil     — os numeros e o estado que envelhecem entre fitas,
 #      medidos AGORA pelo verbo canonico de cada um. E contra esta lista que a
 #      sessao confere afirmacao vinda de memoria de conversa (classe C). Fecha
-#      com o historico frio da fila (7 dias, XRANGE): decisao de outra cadeira
-#      envelhece como numero envelhece, e a carta que chegou DEPOIS da abertura
-#      nunca passou por esta fita. Frio de proposito — `fila ler` normal
-#      confirmaria a entrega a uma fita que esta morrendo, e a carta some do
-#      novo sem ninguem ter tratado. Janela e a retencao inteira, nao a da fita:
-#      o que se quer reter e a decisao mais atual, nao de qual sessao ela saiu.
+#      com as cartas PENDURADAS da caixa (`fila ler --penduradas`): lidas e sem
+#      ack, mais as nao lidas, entradas antes ou depois desta fita. Le frio, sem
+#      entregar nem confirmar: quem confirma e `fila tratar`, quando a carta
+#      vira ato. Antes (ack na entrega) a fila nao sabia o que estava tratado e
+#      este passo relia os 7 dias inteiros (decisao do dono, 03/10/2026).
 #   3. carimbo            — `mem:<cadeira>` (sem slot: fora do padrao que `mesa
 #      ver` varre) guarda quando a cadeira descansou pela ultima vez.
 #
@@ -462,11 +461,25 @@ def roda(rotulo, cmd, timeout=60):
         print(f"  NAO MEDIDO — {type(e).__name__}: {e}")
 
 
+AVISO_VENCE_DIAS = 5   # retencao da caixa e 7 dias por idade, tratada ou nao (trim do motor)
+
+
+def _idade_dias_msgid(msgid):
+    """Dias desde o carimbo do msgid (AAAAMMDDTHHMMSS-<de>), hora local; None se nao casa."""
+    from datetime import datetime
+    try:
+        ts = datetime.strptime(msgid[:15], "%Y%m%dT%H%M%S").timestamp()
+    except (ValueError, TypeError):
+        return None
+    return (time.time() - ts) / 86400
+
+
 def roda_fila_cabecalho(rotulo, cmd, timeout=90):
-    """Historico frio da fila so em CABECALHO: uma linha por carta
-    (`quando · de · tipo · assunto`). O corpo inteiro de 7 dias passava de 50 KB,
-    estourava o teto do retorno e cortava a cauda onde mora o roteiro (medido
-    26/09/2026). Corpo sob demanda: `fila ler <eu> --tudo <remetente>`."""
+    """Cartas penduradas so em CABECALHO: uma linha por carta
+    (`quando · estado · de · tipo · assunto`), com aviso na que passa de
+    AVISO_VENCE_DIAS (o trim a corta aos 7). Corpo inteiro estourava o teto do
+    retorno e cortava a cauda onde mora o roteiro (medido 26/09/2026). Corpo sob
+    demanda: `fila ler <eu> --tudo <remetente>`."""
     print(f"\n-- {rotulo}")
     try:
         p = subprocess.run(["bash", "-lc", cmd], capture_output=True, text=True,
@@ -483,17 +496,27 @@ def roda_fila_cabecalho(rotulo, cmd, timeout=90):
             continue
         if atual is None:
             continue
-        for campo in ("de", "tipo", "assunto"):
+        for campo in ("de", "tipo", "estado", "assunto"):
             if linha.startswith(campo + ":") and campo not in atual:
                 atual[campo] = linha.split(":", 1)[1].strip()
     if not cartas:
         saida = (p.stdout or p.stderr or "").strip()
         print("  " + (saida.splitlines()[0] if saida else "(sem carta)"))
         return
+    vencendo = 0
     for c in cartas:
         quando = c["id"][:13]
-        print(f"  {quando} · {c.get('de', '?')} · {c.get('tipo', '?')} · {c.get('assunto', '')[:110]}")
-    print(f"  {len(cartas)} carta(s); corpo: `fila ler <eu> --tudo <remetente>`")
+        dias = _idade_dias_msgid(c["id"])
+        aviso = ""
+        if dias is not None and dias >= AVISO_VENCE_DIAS:
+            vencendo += 1
+            aviso = f"  ⚠ VENCE — {dias:.0f} d; o trim corta aos 7"
+        estado = c.get("estado") or "?"
+        print(f"  {quando} · {c['id']} · {estado} · {c.get('de', '?')} · {c.get('tipo', '?')}"
+              f" · {c.get('assunto', '')[:100]}{aviso}")
+    print(f"  {len(cartas)} carta(s) pendurada(s) ou nao lida(s)"
+          + (f", {vencendo} perto de vencer" if vencendo else "")
+          + "; corpo: `fila ler <eu> --tudo <remetente>`; ack: `fila tratar <msgid>...`")
 
 
 def _turnos_por_gap(tss, gap_s):
@@ -781,8 +804,8 @@ def ato_fita(args):
         for rotulo, cmd in COMUM + POR_CADEIRA.get(curto.lower(), []):
             roda(rotulo, cmd)
         if canon:
-            roda_fila_cabecalho(f"fila — historico frio dos 7 dias ({canon}), so cabecalho;"
-                                " nao move o ponteiro", f"fila ler {canon} --tudo")
+            roda_fila_cabecalho(f"fila — cartas penduradas e nao lidas ({canon}), so cabecalho;"
+                                " nao entrega nem confirma", f"fila ler {canon} --penduradas")
         else:
             print(f"\n-- fila\n  NAO MEDIDO — PF_CADEIRA={alvo!r} nao casa com"
                   f" nenhuma persona em {ABERTURA}")
@@ -810,13 +833,15 @@ def ato_fita(args):
           "   --alvo ...` (repasse: a proxima jogada do que a fita nao fechou; guia\n"
           "   registrar, secao Mesa). Premissa a reconferir e beco descartado vao\n"
           "   ao caderno, no passo 2a, como premissa e licao.\n"
-          "   Sintetize tambem o historico da fila impresso acima: o que ficou\n"
-          "   DECIDIDO por outra cadeira, nao o tramite. Uma linha por decisao,\n"
-          "   com quem decidiu. Carta ja superada pelo dossie nao entra.\n"
-          "   A fila vem so em cabecalho. Separe as cartas em tres: (i) DECISAO\n"
-          "   DO DONO — vai na tela dele no relato do descanso, como item de\n"
-          "   decisao, uma linha cada, com remetente e o que se decide; (ii) ATO\n"
-          "   DA CADEIRA pendente — `mesa item`; (iii) superada — so conta.\n"
+          "   Trate as cartas penduradas listadas acima (lidas sem ack e nao\n"
+          "   lidas; so cabecalho, corpo por `fila ler <eu> --tudo <remetente>`).\n"
+          "   Separe em tres: (i) DECISAO DO DONO — vai na tela dele no relato\n"
+          "   do descanso, uma linha cada, com remetente e o que se decide; fica\n"
+          "   pendurada ate a decisao dele virar ato; (ii) ATO DA CADEIRA pendente\n"
+          "   — `mesa item` e depois `fila tratar <msgid>`; (iii) ja respondida ou\n"
+          "   superada — `fila tratar <msgid>`. Carta nao lida se le antes de\n"
+          "   tratar (`fila ler`). A marcada VENCE sai da caixa aos 7 dias,\n"
+          "   tratada ou nao: o que tem de durar vira card ou mesa antes.\n"
           "   Carta parada que ninguem apresenta ao dono e decisao que nao existe.\n"
           "\n"
           "2. por chapeu tocado nesta fita — OBRIGATORIO, TRES partes, sempre as\n"

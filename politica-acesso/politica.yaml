@@ -368,7 +368,10 @@ regras:
     quando: {papel: fornecedor, tipo: comando}
     acoes: [run_command]
     sobre: ["tarefas ler*", "tarefas listar*", "tarefas comentar*", "tarefas mover*", "tarefas sub*", "tarefas criar*",
-            "fila status*", "fila ler*", "fila tipos*"]
+            "fila status*", "fila ler*", "fila tipos*", "fila tratar*"]
+    # `fila tratar` (03/10/2026, ti, decisao do dono): o XACK que antes vinha dentro do
+    # `fila ler` virou ato proprio. Nao amplia alcance: e a mesma confirmacao, separada
+    # da entrega; sem ela a caixa da conta acumularia carta pendurada.
 
   # Segundo cadeado, escrito em vez de deixado ao default: quem e julgado pela
   # politica nao edita a politica, nem a persona que o define, nem a conduta.
