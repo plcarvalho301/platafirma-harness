@@ -2028,6 +2028,18 @@ def main(argv=None):
     if args.ajuda or (not argv):
         sys.stdout.write(USO)
         sys.exit(0 if args.ajuda else 2)
+    if desconhecidos:
+        # #2856 linha 151: o parse_known_args deixava `--emitido_por` e `--id_canonico` passarem com
+        # exit 0 e o plano os ignorava; flag que o verbo nao le e recusa (exit 2), com a grafia certa.
+        conhecidas = set(parser._option_string_actions)
+        linhas = []
+        for tok in desconhecidos:
+            sugestao = tok.split("=", 1)[0].replace("_", "-")
+            dica = f" (a grafia é {sugestao})" if sugestao in conhecidas else ""
+            linhas.append(f"  {tok}{dica}")
+        sys.stderr.write("curar: erro: argumento que o verbo não lê:\n" + "\n".join(linhas) + "\n"
+                         "  veja `acervo curar obra --ajuda`; nada foi chamado\n")
+        sys.exit(2)
 
     autor = args.autor
     if not autor:

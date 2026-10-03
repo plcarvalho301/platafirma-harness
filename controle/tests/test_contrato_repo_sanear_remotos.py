@@ -19,7 +19,7 @@ GH_FIXTURE = """#!/bin/sh
 d="$(dirname "$0")"
 case "$*" in
   *"--state open"*) [ -f "$d/quebrado" ] && exit 1; cat "$d/abertos" ;;
-  *"--state merged"*) : ;;
+  *"--state merged"*) [ -f "$d/mesclados" ] && cat "$d/mesclados" ;;
   *) exit 9 ;;
 esac
 """
@@ -68,7 +68,7 @@ def _montar(tmp_path):
     return bancada, forge, origem
 
 
-def _repo(tmp_path, bancada, *args):
+def _repo(tmp_path, bancada, *args, extra=None):
     env = {
         "PATH": os.environ.get("PATH", "/usr/bin:/bin"),
         "HOME": str(tmp_path),
@@ -80,6 +80,7 @@ def _repo(tmp_path, bancada, *args):
         "PF_TAREFAS_BIN": "/bin/true",
         "PF_GH_BIN": str(tmp_path / "forge" / "gh"),
         **IDENT,
+        **(extra or {}),
     }
     return subprocess.run([str(REPO_BIN), *args], env=env, capture_output=True, text=True)
 
@@ -120,6 +121,37 @@ def test_prazo_maior_nao_apaga(tmp_path):
                             "PF_GH_BIN": str(tmp_path / "forge" / "gh"), "PF_SANEAR_DIAS": "100000"})
     assert r.returncode == 0, r.stdout + r.stderr
     assert _no_origin(origem) == antes
+
+
+def test_mesclados_nao_vao_ao_forge_um_a_um(tmp_path):
+    """#2856 linha 157: 1 PR mesclado de verdade e 200 cujo ramo ja nao existe no origin.
+    Antes, cada um custava um ls-remote (ate 500 por clone) e o sanear passava dos 120 s."""
+    bancada, forge, origem = _montar(tmp_path)
+    semente = tmp_path / "semente"
+    _ramo(semente, "fabrica/5-mesclado", velho=False)
+    # o squash em main: mesma arvore da ponta do ramo, commit novo
+    (semente / "fabrica_5-mesclado.md").write_text("fabrica/5-mesclado\n")
+    _git("add", "-A", cwd=semente)
+    _git("commit", "-q", "-m", "squash", cwd=semente)
+    _git("push", "-q", "origin", "main", cwd=semente)
+    m = _git("rev-parse", "HEAD", cwd=semente)
+    linhas = [f"fabrica/5-mesclado {m}"] + [f"fabrica/fantasma-{i} {m}" for i in range(200)]
+    (forge / "mesclados").write_text("\n".join(linhas) + "\n")
+    traco = tmp_path / "trace.txt"
+    r = _repo(tmp_path, bancada, "sanear", "demo", extra={"GIT_TRACE": str(traco)})
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert "origin/fabrica/5-mesclado: apagado (mesclado" in r.stdout
+    assert "fabrica/5-mesclado" not in _no_origin(origem)
+    idas_ao_forge = sum("ls-remote" in l for l in traco.read_text().splitlines())
+    assert idas_ao_forge <= 5, idas_ao_forge
+
+
+def test_bancada_viva_diz_porque_nao_e_tocada(tmp_path):
+    """#2856 linha 157: eixo nao entregue nao se alinha por aqui, e o retorno diz isso."""
+    bancada, _, _ = _montar(tmp_path)
+    r = _repo(tmp_path, bancada, "sanear", "demo")
+    assert "viva (ti/vivo, " in r.stdout
+    assert "nao toco" in r.stdout
 
 
 def test_prs_abertos_ilegiveis_nao_apaga_nada(tmp_path):

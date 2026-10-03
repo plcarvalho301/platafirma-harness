@@ -2440,11 +2440,14 @@ sanear_ramos_mesclados() {
   while read -r r m; do
     [ -n "$r" ] || continue
     case "$r" in wip/*|main|master) continue ;; esac
-    local ponta; ponta="$(forge_sha "$base" "$r")"
-    [ $? -eq 0 ] || continue
+    # #2856 linha 157: um ls-remote por PR mesclado (ate 500) passava dos 120 s. A ponta vem
+    # primeiro da ref local, que o fetch --prune de sanear_conforme acabou de renovar; o forge
+    # so confirma o que passou na prova da arvore (ramo ja apagado do origin nao custa rede).
+    local ponta; ponta="$("$GIT" -C "$base" rev-parse --verify -q "refs/remotes/origin/$r")" || continue
     "$GIT" -C "$base" cat-file -e "${m}^{commit}" 2>/dev/null || continue
     "$GIT" -C "$base" cat-file -e "${ponta}^{commit}" 2>/dev/null || continue
     "$GIT" -C "$base" diff --quiet "$m" "$ponta" -- . 2>/dev/null || continue
+    local fsha; fsha="$(forge_sha "$base" "$r")" && [ "$fsha" = "$ponta" ] || continue
     apagar+=("$r")
     linhas+=("$r $ponta")
   done <<< "$lista"
@@ -2544,6 +2547,11 @@ sanear_conforme() {
         fi
         acao="migrar ao eixo"
       else
+        # #2856 linha 157: bancada viva (eixo, nao entregue) nunca e alinhada por aqui; calar
+        # fazia parecer que o sanear falhou. Diz o porque e quanto esta atras de origin/main.
+        local atras; atras="$("$GIT" -C "$wt" rev-list --count HEAD..origin/main 2>/dev/null || echo ?)"
+        printf '%s: viva (%s, %s atras de origin/main, dono %s), nao toco -- quem a usa traz main com repo sincronizar\n' \
+          "$rot" "${ramo:-destacado}" "$atras" "$dono"
         continue
       fi
       pend=1

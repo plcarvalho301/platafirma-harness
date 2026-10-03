@@ -428,11 +428,24 @@ cache() {
       docker system df 2>/dev/null | sed -n '1,5p'
       ;;
     vram)
-      curl -sf --max-time 5 127.0.0.1:11434/api/ps | jq -r '.models[]?.name' \
-        | while read -r m; do
-            curl -sf 127.0.0.1:11434/api/generate -d "{\"model\":\"$m\",\"keep_alive\":0}" >/dev/null
-            echo "descarregado: $m"
-          done
+      # #2856 linha 142: `vram` DESCARREGA o modelo residente (nao mede; medir e `cache ver`) e
+      # saia 0 sem uma linha quando nao havia nada ou o ollama nao respondia.
+      local ps nomes m falhou=0
+      ps="$(curl -sf --max-time 5 127.0.0.1:11434/api/ps)" \
+        || { echo "infra cache vram: o ollama nao respondeu em 127.0.0.1:11434 — nada descarregado" >&2; exit 3; }
+      nomes="$(printf '%s' "$ps" | jq -r '.models[]?.name')"
+      if [ -z "$nomes" ]; then
+        echo "nada residente em VRAM (ollama): nada a descarregar; para medir a VRAM, infra cache ver"
+        return 0
+      fi
+      while read -r m; do
+        if curl -sf --max-time 30 127.0.0.1:11434/api/generate -d "{\"model\":\"$m\",\"keep_alive\":0}" >/dev/null; then
+          echo "descarregado: $m"
+        else
+          echo "infra cache vram: nao consegui descarregar $m" >&2; falhou=1
+        fi
+      done <<< "$nomes"
+      [ "$falhou" -eq 0 ] || exit 3
       ;;
     disco)
       docker builder prune -f

@@ -154,7 +154,7 @@ def imprimir_uso(stream=sys.stdout):
     print("  lint <classe> <repo>[@<chave>] [<alvo>] [--staged] [--json]", file=stream)
     print("  lint commit <arquivo>|- [--json]", file=stream)
     print("  lint card <arquivo>|- [<repo>] [--json]", file=stream)
-    print("  lint acervo [--resumo] [--json]   antipadroes de obra (firma) e conceito; exit 1 so com bloqueante", file=stream)
+    print("  lint acervo [--resumo] [--json] [--criterio <id>[,<id>]] [--so-bloqueantes]   antipadroes de obra (firma) e conceito; exit 1 so com bloqueante", file=stream)
     print("  lint organizacao <repo> [<alvo>] [--todas] [--resumo]   --todas inclui os bloqueantes (contagem; quem barra e o pre-commit); --resumo conta por regra", file=stream)
     print("  lint diagrama <repo>[@<chave>] <alvo>   compila .mmd/.d2 no Kroki da casa; exit 0/1/5, Kroki fora do ar nao barra o pre-commit\n", file=stream)
     print("classes:", file=stream)
@@ -177,7 +177,24 @@ def main() -> int:
     staged = "--staged" in argv
     todas = "--todas" in argv
     resumo = "--resumo" in argv
-    argv = [a for a in argv if a not in ("--json", "--staged", "--todas", "--resumo")]
+    so_bloqueantes = "--so-bloqueantes" in argv
+    argv = [a for a in argv if a not in ("--json", "--staged", "--todas", "--resumo", "--so-bloqueantes")]
+    # --criterio <id>[,<id>] (ou --criterio=<id>), repetivel: so vale em `lint acervo` (#2856 linha 154)
+    criterios: list = []
+    resto: list = []
+    _it = iter(argv)
+    for _a in _it:
+        if _a == "--criterio":
+            _v = next(_it, "")
+            if not _v or _v.startswith("--"):
+                print("lint: --criterio pede o id do criterio (ex.: lint acervo --criterio T2,A1)", file=sys.stderr)
+                return 2
+            criterios += _v.split(",")
+        elif _a.startswith("--criterio="):
+            criterios += _a.split("=", 1)[1].split(",")
+        else:
+            resto.append(_a)
+    argv = resto
 
     if not argv:
         imprimir_uso(sys.stderr)
@@ -217,6 +234,10 @@ def main() -> int:
         print(f"lint: classe desconhecida: '{classe}' — use `lint --ajuda` para ver classes suportadas", file=sys.stderr)
         return 2
 
+    if (criterios or so_bloqueantes) and classe != "acervo":
+        print(f"lint: --criterio e --so-bloqueantes so valem em `lint acervo`; a classe '{classe}' nao os le", file=sys.stderr)
+        return 2
+
     info_classe = CLASSES_LINT[classe]
     chave_lista = info_classe["chave"]
     tipo_regua = info_classe["tipo"]
@@ -237,7 +258,8 @@ def main() -> int:
     # Classe ACERVO: le o banco do acervo, nao um repositorio
     if classe == "acervo":
         try:
-            return verificar_acervo(como_json=como_json, resumo=resumo)
+            return verificar_acervo(como_json=como_json, resumo=resumo, criterios=criterios,
+                                    so_bloqueantes=so_bloqueantes)
         except ErroAcervo as e:
             print(f"lint: {e.msg}", file=sys.stderr)
             return e.rc
