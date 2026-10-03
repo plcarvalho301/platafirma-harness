@@ -282,8 +282,8 @@ def _cosmetica(perfil: dict, ato: str | None) -> bool:
 
     O escopo por ato existe porque verbo MISTO não cabe num perfil só: `acervo casa` é
     recuperação semântica e `acervo listar` é listagem estruturada, e listagem sem teto
-    derrama a fita. Sem `@`, o verbo inteiro é semântico — caso de `descobrir`, cujo ato
-    é o próprio assunto consultado, e não haveria o que enumerar.
+    derrama a fita. Sem `@`, o verbo inteiro é semântico — o caso de verbo cujo primeiro
+    argumento é o próprio assunto consultado, em que não haveria ato a enumerar.
     """
     if perfil.get("poda") != "cosmetica":
         return False
@@ -996,6 +996,12 @@ _SUGESTAO = {
     "monta_sessao": "é tool, não verbo: monta_sessao(cadeira=...)",
     "monta-sessao": "é tool, não verbo: monta_sessao(cadeira=...)",
     "run_command": "é a própria tool que você está chamando",
+    # Verbo retirado (arq:0110 §1) aponta o sucessor: sem a linha, a recusa sai com
+    # `sugestao: null`, que se lê como "verbo que falta, vira card" e convida a recriar.
+    "descobrir": "verbo retirado em 27/09/2026: acervo listar biblioteca obra --sobre <termo> "
+                 "(o que o acervo tem) · motor rag buscar <partição> \"<pergunta>\" (trechos)",
+    "recuperar": "verbo nunca servido: motor rag buscar <partição> \"<pergunta>\"",
+    "deploy": "verbo retirado: release promover <família> <rev> · infra up <stack>",
 }
 
 def _recusa(verbo: str, motivo: str) -> dict:
