@@ -2081,7 +2081,9 @@ ato_pr_merge() {
     local status_checks
     status_checks="$(cd "$c" && env PATH="$PATH_FORGE" "$GH" pr view "$num" --json statusCheckRollup 2>/dev/null || true)"
     if echo "$status_checks" | grep -q '"conclusion":"FAILURE"'; then
-      morre "recusa de política: check vermelho no PR #$num (use --forcar para ignorar)" 4
+      local nomes
+      nomes="$(printf '%s' "$status_checks" | python3 -c 'import json,sys; d=json.load(sys.stdin); print("; ".join(((c.get("name") or c.get("context") or "?") + " " + (c.get("detailsUrl") or c.get("targetUrl") or "")).strip() for c in (d.get("statusCheckRollup") or []) if c.get("conclusion") == "FAILURE" or c.get("state") in ("FAILURE", "ERROR")))' 2>/dev/null || true)"
+      morre "recusa de política: check vermelho no PR #$num${nomes:+: $nomes} (use --forcar para ignorar)" 4
     fi
   fi
   # O merge remoto e a poda do ramo local sao dois atos. --delete-branch tenta apagar
