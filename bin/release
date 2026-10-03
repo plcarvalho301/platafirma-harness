@@ -26,6 +26,7 @@
 # python dos venvs: $PLATAFIRMA_PYTHON, default /usr/bin/python3.12, com UV_PYTHON_PREFERENCE=only-system e UV_PYTHON_DOWNLOADS=never; nunca o python gerenciado pelo uv no home da conta (caminho, caminho real ou home do venv sob $HOME ou em */uv/python/*: exit 3, override incluído). Ausente, ou lock que pede outra versão: exit 3, current intacto. PLATAFIRMA_UV e PLATAFIRMA_PYTHON só em caminho absoluto. XDG_RUNTIME_DIR herdado de outra conta (diretório existente que não é desta) é trocado pelo desta.
 # depende: git · acervo (registro de stacks) · python3 · jq · uv (venv do lock; ordem acima) · python de sistema (venvs) · sha256sum + curl (artefato de terceiro pinado; curl só quando o cache em <release>/terceiros não tem) · rede ao forge (promover) · porta (hora de arranque) · infra (restart da porta, destacado) · publicar-abertura (motor da familia abertura, #3054). O restart da porta e deste verbo (spec_release §2, rev 6): o observador pf-porta-watch nao disparou em 15/09, 2 de 2 promocoes
 # substitui: readlink current · git -C /opt/platafirma/<familia>/… describe|rev-parse|ls-files|show|grep · git worktree add --detach · ln -sfn + mv -T · chmod -R a-w · conferir <classe> · bin/_release/stack promover
+# paginacao do ler: `release ler <repo> <caminho> [--offset <bytes>]` entrega paginas de 45000 bytes (abaixo dos 50 KB da porta, que corta sem dizer o que ficou de fora; #2856 linha 146), corte na fronteira de caractere utf-8; a ultima linha diz `truncado em N de M bytes; continue com --offset N`, e a ultima pagina nao avisa. --offset malformado, negativo ou alem do fim: exit 2. Arquivo de ate 45000 bytes sai byte a byte como antes. Mesmo idioma de `acervo ler casa --offset`.
 # conforme: parcial
 set -euo pipefail
 
@@ -80,7 +81,9 @@ uso_texto() {
 uso:
   release estado     [<repo>] [--json]
   release listar     <repo> [<prefixo>] [--json]
-  release ler        <repo> <caminho>
+  release ler        <repo> <caminho> [--offset <bytes>]
+                                              arquivo maior que 45000 bytes vem em paginas; a ultima linha diz
+                                              `truncado em N de M bytes; continue com --offset N`
   release procurar   <repo> --termo <termo> [<prefixo>] [--json]
   release conferir   <classe> [<alvo>] [--ref <rev>] [--json]
   release promover   <repo> [<rev>] [--ensaio] [--aceitar-suite-indisponivel]
@@ -570,12 +573,28 @@ cmd_listar() {
   return 0
 }
 
+# Página em bytes (#2856 linha 146): a porta (ops-server) corta a saída em 50 KB sem next_offset e
+# devolve «[igual ao giro N]» ao reler; o verbo pagina antes, no idioma de `acervo ler casa --offset`.
+# A poda da porta não é deste verbo: `read_file` com offset=1 segue sendo o contorno dela.
+LER_PAGINA=45000
+
 cmd_ler() {
   local repo=""
   local caminho=""
+  local offset=0
 
   while [ $# -gt 0 ]; do
     case "$1" in
+      --offset)
+        shift
+        if [ $# -eq 0 ] || ! [[ "$1" =~ ^[0-9]+$ ]]; then
+          printf 'release: erro: --offset pede um número de bytes (>= 0)\n' >&2
+          uso_texto
+          exit 2
+        fi
+        offset="$((10#$1))"
+        shift
+        ;;
       -*)
         printf 'release: erro: opção desconhecida: %s\n' "$1" >&2
         uso_texto
@@ -631,7 +650,31 @@ cmd_ler() {
     exit 1
   fi
 
-  cat "$alvo_arquivo"
+  python3 - "$alvo_arquivo" "$offset" "$LER_PAGINA" "$repo" "$caminho" <<'PY' || exit $?
+import sys
+arq, offset, pagina, repo, caminho = sys.argv[1], int(sys.argv[2]), int(sys.argv[3]), sys.argv[4], sys.argv[5]
+with open(arq, "rb") as f:
+    bruto = f.read()
+total = len(bruto)
+if offset > total:
+    sys.stderr.write(f"release: erro: --offset {offset} passa do fim do arquivo ({total} bytes)\n")
+    sys.exit(2)
+ini, fim = offset, min(offset + pagina, total)
+while offset > 0 and ini < fim and (bruto[ini] & 0xC0) == 0x80:   # offset caiu no meio de um caractere
+    ini += 1
+if fim < total:
+    while fim > ini and (bruto[fim] & 0xC0) == 0x80:              # recua até o começo de um caractere
+        fim -= 1
+corpo = bruto[ini:fim]
+out = sys.stdout.buffer
+out.write(corpo)
+if fim < total:
+    if corpo and not corpo.endswith(b"\n"):
+        out.write(b"\n")
+    out.write((f"truncado em {fim} de {total} bytes; continue com --offset {fim}"
+               f" (release ler {repo} {caminho} --offset {fim})\n").encode("utf-8"))
+out.flush()
+PY
   if [ -n "$TAG" ]; then
     printf 'versão: current@%s (%s)\n' "$SHA_CURTO" "$TAG" >&2
   else
