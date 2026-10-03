@@ -70,33 +70,41 @@ def reidratar(sid: str, rc_mem, roda, pg_porta: str = "5437",
         return None
     dsn = f"host=127.0.0.1 port={pg_porta} dbname=sessao user=sessao password={senha}"
     row = None
-    tem_colunas_novas = True
     try:
         with psycopg.connect(dsn, connect_timeout=3) as con, con.cursor() as cur:
-            try:
-                cur.execute(
-                    "SELECT cadeira, chapeu, superficie, aberta_em, encerrada_em, sujeito "
-                    "FROM sessao.sessao WHERE sessao_id = %s", (sid,))
-                row = cur.fetchone()
-            except Exception:  # noqa: BLE001 — coluna ainda ausente (0092/0094 nao
-                # aplicadas apos a promocao): tolera, cai na forma de antes das duas
-                con.rollback()
-                tem_colunas_novas = False
-                cur.execute(
-                    "SELECT cadeira, chapeu, superficie, aberta_em "
-                    "FROM sessao.sessao WHERE sessao_id = %s", (sid,))
-                row = cur.fetchone()
+            # Do mais novo ao mais antigo: 0098 (ordem_id), 0092/0094 (encerrada_em, sujeito),
+            # forma original. Coluna ainda ausente (migracao nao aplicada apos a promocao):
+            # tolera, desce um degrau -- nunca uma excecao. O ultimo degrau nao tem rede.
+            consultas = (
+                "SELECT cadeira, chapeu, superficie, aberta_em, encerrada_em, sujeito, ordem_id "
+                "FROM sessao.sessao WHERE sessao_id = %s",
+                "SELECT cadeira, chapeu, superficie, aberta_em, encerrada_em, sujeito "
+                "FROM sessao.sessao WHERE sessao_id = %s",
+                "SELECT cadeira, chapeu, superficie, aberta_em "
+                "FROM sessao.sessao WHERE sessao_id = %s",
+            )
+            for i, sql in enumerate(consultas):
+                try:
+                    cur.execute(sql, (sid,))
+                    row = cur.fetchone()
+                    break
+                except Exception:  # noqa: BLE001
+                    if i == len(consultas) - 1:
+                        raise
+                    con.rollback()
     except Exception:  # noqa: BLE001 — banco inalcançável: "nao existe", como hoje
         return None
     if row is None:
         return None
-    sujeito = None
-    if tem_colunas_novas:
-        cadeira, chapeu, superficie, aberta_em, encerrada_em, sujeito = row
-        if encerrada_em is not None:
-            return None  # encerrada de proposito (sessao encerrar|limpar) -- nao reidrata
+    sujeito = ordem_id = encerrada_em = None
+    if len(row) >= 7:
+        cadeira, chapeu, superficie, aberta_em, encerrada_em, sujeito, ordem_id = row[:7]
+    elif len(row) >= 6:
+        cadeira, chapeu, superficie, aberta_em, encerrada_em, sujeito = row[:6]
     else:
-        cadeira, chapeu, superficie, aberta_em = row
+        cadeira, chapeu, superficie, aberta_em = row[:4]
+    if encerrada_em is not None:
+        return None  # encerrada de proposito (sessao encerrar|limpar) -- nao reidrata
     if aberta_em.tzinfo is None:
         aberta_em = aberta_em.replace(tzinfo=timezone.utc)
     restante = int(ttl_padrao - (datetime.now(timezone.utc) - aberta_em).total_seconds())
@@ -104,7 +112,7 @@ def reidratar(sid: str, rc_mem, roda, pg_porta: str = "5437",
         return None  # fora da janela de validade (arq:0091 §3) — vencida, nao reidrata
     ch = {
         "cadeira": cadeira, "chapeu": chapeu, "superficie": superficie or "desconhecida",
-        "ordem_id": "-", "aberto_em": aberta_em.isoformat(), "origem": "reidratada",
+        "ordem_id": ordem_id or "-", "aberto_em": aberta_em.isoformat(), "origem": "reidratada",
     }
     # sujeito (card #3145, migracao 0094): so entra quando o registro duravel o tem --
     # linha gravada antes da 0094, ou coluna ainda nao aplicada, fica sem a chave;

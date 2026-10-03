@@ -629,3 +629,142 @@ def test_sessao_longjob_execve_caminho_novo():
     argv_chamado = execve_espiao.call_args[0]
     assert argv_chamado[0] == alvo_esperado
     assert argv_chamado[1] == [alvo_esperado, "run", "nome", "true"]
+
+# ---------------------------------------------------------------- ordem_id duravel (0098, balde #2856 l.152)
+ORDEM = "o20261003T192754-2d029d"
+
+def _fake_psycopg_sem_ordem_id(row_sem_ordem, capturas: list):
+    """Migracao 0098 ainda nao aplicada: todo SQL que cita `ordem_id` levanta (coluna
+    inexistente); o resto roda. Registra os execute que deram certo em `capturas`."""
+    modulo = types.ModuleType("psycopg")
+
+    class _Cursor:
+        def execute(self, sql, params=None):
+            if "ordem_id" in sql:
+                raise RuntimeError('column "ordem_id" does not exist')
+            capturas.append((sql, params))
+
+        def fetchone(self):
+            return row_sem_ordem
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return False
+
+    class _Conexao:
+        def cursor(self):
+            return _Cursor()
+
+        def rollback(self):
+            pass
+
+        def commit(self):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return False
+
+    modulo.connect = lambda dsn, connect_timeout=3: _Conexao()
+    return modulo
+
+def test_reidratar_devolve_o_ordem_id_duravel_e_regrava_na_chave(monkeypatch):
+    """O defeito: a chave reidratada saia com ordem_id «-» e a sessao perdia o
+    var/tmp/<ordem_id> (sessao limpar --rascunho recusava com PF_ORDEM_ID invalido)."""
+    sid = str(uuid.uuid4())
+    aberta_em = datetime.now(timezone.utc) - timedelta(hours=1)
+    row = ("engenharia", "devops", "claude.ai", aberta_em, None, "user-abc", ORDEM)
+    monkeypatch.setitem(sys.modules, "psycopg", _fake_psycopg(row))
+    rc_mem = FakeMsgMem()
+
+    ch = reidratar_mod.reidratar(sid, rc_mem, _roda_seg_ok)
+
+    assert ch is not None
+    assert ch["ordem_id"] == ORDEM
+    assert ch["sujeito"] == "user-abc"
+    assert json.loads(rc_mem.data[f"sessao:{sid}"])["ordem_id"] == ORDEM
+
+def test_reidratar_linha_anterior_a_0098_reidrata_com_traco(monkeypatch):
+    """Coluna existe mas a linha e velha (ordem_id NULL): «-», como sempre foi."""
+    sid = str(uuid.uuid4())
+    aberta_em = datetime.now(timezone.utc) - timedelta(hours=1)
+    row = ("engenharia", None, "claude.ai", aberta_em, None, "user-abc", None)
+    monkeypatch.setitem(sys.modules, "psycopg", _fake_psycopg(row))
+
+    ch = reidratar_mod.reidratar(sid, FakeMsgMem(), _roda_seg_ok)
+
+    assert ch is not None and ch["ordem_id"] == "-"
+
+def test_reidratar_0098_nao_aplicada_cai_na_forma_de_antes_e_mantem_o_sujeito(monkeypatch):
+    sid = str(uuid.uuid4())
+    aberta_em = datetime.now(timezone.utc) - timedelta(hours=1)
+    row_sem_ordem = ("engenharia", "devops", "claude.ai", aberta_em, None, "user-abc")
+    monkeypatch.setitem(sys.modules, "psycopg", _fake_psycopg_sem_ordem_id(row_sem_ordem, []))
+
+    ch = reidratar_mod.reidratar(sid, FakeMsgMem(), _roda_seg_ok)
+
+    assert ch is not None
+    assert ch["ordem_id"] == "-"
+    assert ch["sujeito"] == "user-abc"
+
+def test_reidratar_ordem_id_de_sessao_encerrada_continua_nao_reidratando(monkeypatch):
+    sid = str(uuid.uuid4())
+    aberta_em = datetime.now(timezone.utc) - timedelta(hours=1)
+    encerrada_em = datetime.now(timezone.utc) - timedelta(minutes=5)
+    row = ("engenharia", None, "chat", aberta_em, encerrada_em, "user-x", ORDEM)
+    monkeypatch.setitem(sys.modules, "psycopg", _fake_psycopg(row))
+
+    assert reidratar_mod.reidratar(sid, FakeMsgMem(), _roda_seg_ok) is None
+
+def test_registra_duravel_grava_o_ordem_id_da_abertura(monkeypatch):
+    capturas: list = []
+    monkeypatch.setitem(sys.modules, "psycopg", _fake_psycopg_update_capturado(capturas))
+    with patch.object(sessao_mod, "_senha_pg", return_value=("senha-fake", None)):
+        motivo = sessao_mod._registra_duravel("sid-3", "engenharia", "jose-123", ORDEM)
+
+    assert motivo is None
+    assert len(capturas) == 1
+    sql, params = capturas[0]
+    assert "ordem_id" in sql
+    assert "ordem_id = COALESCE(EXCLUDED.ordem_id, sessao.sessao.ordem_id)" in sql
+    assert "COALESCE(sessao.sessao.sujeito, EXCLUDED.sujeito)" in sql
+    assert params == ("sid-3", "engenharia", None, sessao_mod._superficie(), "jose-123", ORDEM)
+
+def test_registra_duravel_0098_nao_aplicada_cai_no_insert_de_antes(monkeypatch):
+    """Sem a coluna o INSERT novo levanta: a forma antiga grava, o sujeito nao se perde."""
+    capturas: list = []
+    monkeypatch.setitem(sys.modules, "psycopg", _fake_psycopg_sem_ordem_id(None, capturas))
+    with patch.object(sessao_mod, "_senha_pg", return_value=("senha-fake", None)):
+        motivo = sessao_mod._registra_duravel("sid-4", "engenharia", "jose-123", ORDEM)
+
+    assert motivo is None
+    assert len(capturas) == 1
+    sql, params = capturas[0]
+    assert "ordem_id" not in sql
+    assert params == ("sid-4", "engenharia", None, sessao_mod._superficie(), "jose-123")
+
+def test_ato_abrir_passa_a_ordem_da_abertura_ao_registro_duravel(monkeypatch):
+    sid = str(uuid.uuid4())
+    mem = FakeMsgMem({f"sessao:{sid}": json.dumps({"cadeira": "ti", "ordem_id": "o-velho",
+                                                   "sujeito": "jose-123"})})
+    monkeypatch.setenv("PF_SUJEITO", "jose-123")
+    capturas: list = []
+    monkeypatch.setitem(sys.modules, "psycopg", _fake_psycopg_update_capturado(capturas))
+    saida = sessao_mod.Saida(como_json=True)
+    f = io.StringIO()
+
+    with patch.object(sessao_mod, "_msgmem", return_value=(mem, None)), \
+         patch.object(sessao_mod, "_vocabulario", return_value=({"ti": {}}, None)), \
+         patch.object(sessao_mod, "_decidir", return_value=(0, {"regra": "default", "plano": "p1"}, "")), \
+         patch.object(sessao_mod, "_senha_pg", return_value=("senha-fake", None)):
+        with redirect_stdout(f):
+            rc = sessao_mod.ato_abrir("ti", sid, saida)
+
+    assert rc == 0
+    nova = json.loads(mem.data[f"sessao:{sid}"])["ordem_id"]
+    assert nova != "o-velho"
+    assert capturas and capturas[-1][1][-1] == nova   # o durável recebe a MESMA ordem da chave viva
