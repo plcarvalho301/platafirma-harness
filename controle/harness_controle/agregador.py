@@ -30,7 +30,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from ._raizes import instancia
-from .verbos import HARNESS, ResultadoVerbo, chamar
+from .verbos import HARNESS, ResultadoVerbo, chamar, chamar_texto
 
 log = logging.getLogger("agregador")
 
@@ -87,6 +87,19 @@ def _cadeiras_disponiveis() -> list[str]:
     if not r.ok or not isinstance(r.dados, dict):
         return []
     return sorted(r.dados)
+
+
+def _chapeus_disponiveis() -> list[str]:
+    """`<cadeira>/<chapeu>` de todo chapeu publicado, da mesma `persona foto` das cadeiras
+    (cada cadeira traz a lista dos seus chapeus)."""
+    r = chamar(["persona", "foto", "--json"], timeout=15)
+    if not r.ok or not isinstance(r.dados, dict):
+        return []
+    return sorted(
+        f"{cad}/{ch}"
+        for cad, info in r.dados.items()
+        for ch in (info.get("chapeus") or [])
+    )
 
 
 def _skills_disponiveis() -> list[str]:
@@ -152,6 +165,8 @@ class SondaGrupo:
     fabrica_argv: Callable[[str], list[str]]
     fabrica_env: Callable[[str], dict[str, str]] = lambda _item: _env_padrao()
     chave_item: str = "item"
+    # verbo de leitura que devolve texto cru, sem --json (`persona ler`): dados = {"texto": ...}
+    texto: bool = False
 
 
 SONDAS: list[Sonda] = [
@@ -175,6 +190,12 @@ SONDAS_GRUPO: list[SondaGrupo] = [
                lambda c: ["expediente", "montar", c, "--sem-acervo", "--json"],
                fabrica_env=lambda c: {**_env_padrao(), "PF_CADEIRA": c},
                chave_item="cadeira"),
+    # O texto de cada chapeu (chapeu.md + ferramental.md, crus, da morada publicada), pra tela
+    # ter onde LER o chapeu e nao so a mesa e o caderno dele. Um item por `<cadeira>/<chapeu>`.
+    SondaGrupo("chapeus", _intervalo("CHAPEUS", 120), _timeout("CHAPEUS", 15),
+               _chapeus_disponiveis,
+               lambda it: ["persona", "ler", it.split("/", 1)[0], "--chapeu", it.split("/", 1)[1]],
+               chave_item="chapeu", texto=True),
     SondaGrupo("skills", _intervalo("SKILLS", 120), _timeout("SKILLS", 15),
                _skills_disponiveis,
                lambda s: ["conferir", "skill", s, "--json"],
@@ -251,7 +272,8 @@ class Agregador:
 
         blocos = []
         for item in itens:
-            resultado = chamar(g.fabrica_argv(item), timeout=g.timeout_seg, env=g.fabrica_env(item))
+            leitor = chamar_texto if g.texto else chamar
+            resultado = leitor(g.fabrica_argv(item), timeout=g.timeout_seg, env=g.fabrica_env(item))
             bloco = bloco_de(resultado)
             bloco[g.chave_item] = item
             blocos.append(bloco)
