@@ -15,5 +15,10 @@ def pytest_configure(config):
     _RAIZ = teste_isolado.isolar()
 
 
+def pytest_runtest_logstart(nodeid, location):  # TRACE TEMPORARIO #3274: nao vai para a main
+    sys.__stderr__.write("TRACE " + nodeid + "\n")
+    sys.__stderr__.flush()
+
+
 def pytest_unconfigure(config):
     teste_isolado.desfazer(_RAIZ)
