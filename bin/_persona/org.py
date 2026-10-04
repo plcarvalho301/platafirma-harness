@@ -8,7 +8,7 @@ import json, os, pathlib, sys, datetime as dt
 
 # Raiz = a propria arvore (realpath): na producao, a release no ar, onde o ledger se LE.
 # PERSONA_REPO, quando dado, aponta o worktree de bancada onde o ato de org ESCREVE e
-# depois sai por `persona salvar` (commit). Sem default de bancada (card #3010).
+# depois se confere por `persona salvar` e sai por PR da bancada (#3273). Sem default de bancada (card #3010).
 RAIZ = pathlib.Path(os.environ.get("PERSONA_REPO") or pathlib.Path(__file__).resolve().parents[2])
 # registro/, nao personas/: a arvore personas/ foi tombada (arq:0073 §7). Este e o
 # ESCRITOR do ledger (ato de org) e o leitor de `filme`/`foto` (consulta historica);
@@ -65,7 +65,7 @@ def grava(reg):
             f.write(json.dumps(reg, ensure_ascii=False, sort_keys=True) + "\n")
     except OSError as e:
         sai(f"ledger {LEDGER} nao aceita escrita ({e.strerror}): a release e somente leitura — "
-            "o ato de org roda no worktree da bancada (PERSONA_REPO) e sai por `persona salvar`", 3)
+            "o ato de org roda na bancada de card (PERSONA_REPO) e sai por PR (persona salvar confere)", 3)
 
 
 def foto(ev):
