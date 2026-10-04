@@ -1170,7 +1170,7 @@ async def _malote(nome: str, command: str, cwd: str, timeout: int, sessao_id: st
         return r
 
     out = await _lote.itera(itens, _roda, encadeado=encadeado, cap=CAP,
-                            bytes_de=_lote.bytes_stdout)
+                            bytes_de=_lote.bytes_stdout, brutos=brutos)
     if encadeado:
         _c = out["cadeia"]
         _audit(tool=nome, evento="lote_encadeado", lote_id=lote_id,

@@ -3,6 +3,7 @@
 # Fora, medido em 28/09: test_raizes_porta.py passa de 300 s com o isolamento de
 # lib/teste_isolado.py; test_run_command_lote_injecao.py passa sozinho e reprova 2 casos
 # rodado junto dos outros (id de sessão vazado de outro módulo). Débitos no balde #2856.
+test_cadeia_linha_real.py
 test_exec_conta.py
 test_formatos.py
 test_ledger_distancia.py

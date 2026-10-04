@@ -55,7 +55,23 @@ def linha_do_item(r: Any) -> str:
     return ""
 
 
-def resumo_cadeia(resultados: list, parou_em: int | None) -> dict:
+def _primeira_linha(texto: Any) -> str:
+    for linha in str(texto or "").splitlines():
+        if linha.strip():
+            return linha.strip()[:200]
+    return ""
+
+def _servido_como_igual(r: Any) -> bool:
+    """A poda (arq:0101) trocou o corpo por «igual ao giro N»: o texto do resultado e o
+    marcador, nao o que o item disse."""
+    poda = r.get("poda") if isinstance(r, dict) else None
+    return isinstance(poda, dict) and poda.get("modo") == "igual"
+
+def resumo_cadeia(resultados: list, parou_em: int | None,
+                  brutos: list | None = None) -> dict:
+    """`brutos[i]` e o stdout cru do item i, antes da poda. So entra quando a poda serviu o
+    item como «igual»: ai a linha e o motivo da parada levam a primeira linha real, nao o
+    marcador. Sem `brutos`, ou sem texto cru, a linha sai do resultado como sempre."""
     itens, nao_rodou = [], []
     for i, r in enumerate(resultados):
         if isinstance(r, dict) and r.get("nao_rodou"):
@@ -64,7 +80,10 @@ def resumo_cadeia(resultados: list, parou_em: int | None) -> dict:
         elif isinstance(r, dict) and r.get("omitido_por_teto"):
             itens.append({"n": i, "exit": None, "linha": "omitido por teto"})
         else:
-            itens.append({"n": i, "exit": exit_do_item(r), "linha": linha_do_item(r)})
+            linha = linha_do_item(r)
+            if brutos is not None and i < len(brutos) and _servido_como_igual(r):
+                linha = _primeira_linha(brutos[i]) or linha
+            itens.append({"n": i, "exit": exit_do_item(r), "linha": linha})
     if parou_em is not None:
         topo = itens[parou_em]["exit"]
         motivo = f"parou em {parou_em}: {itens[parou_em]['linha']}"
@@ -78,7 +97,8 @@ def resumo_cadeia(resultados: list, parou_em: int | None) -> dict:
 
 async def itera(itens: list, roda: Callable[[int, Any, list], Awaitable[dict]], *,
                 encadeado: bool = False, cap: int | None = None,
-                bytes_de: Callable[[dict], int] | None = None) -> dict:
+                bytes_de: Callable[[dict], int] | None = None,
+                brutos: list | None = None) -> dict:
     """Roda os itens em ordem. `roda(i, item, resultados_ate_aqui)` devolve o resultado do
     item. Sem `encadeado`, erro num item nao derruba os outros (comportamento de sempre)."""
     resultados: list = []
@@ -101,7 +121,7 @@ async def itera(itens: list, roda: Callable[[int, Any, list], Awaitable[dict]], 
             resultados.append({"omitido_por_teto": True})
     out = {"lote": resultados, "lote_n": len(itens), "lote_next": lote_next}
     if encadeado:
-        out["cadeia"] = resumo_cadeia(resultados, parou_em)
+        out["cadeia"] = resumo_cadeia(resultados, parou_em, brutos)
     return out
 
 
