@@ -5,8 +5,12 @@ de cada criterio diz quem o mede, em tres formas:
   `ruff <codigo>`        regra selecionada no ruff;
   `ruff padrão`          as regras que o ruff liga por padrao, alem das nomeadas;
   `shellcheck <codigo>`  regra selecionada no shellcheck;
-  `predicado <NOME>`     detector da casa (predicados.py), onde nenhum analisador pronto chega.
-O apontamento sai com o `#`, o texto e a cura do criterio. Criterio de leitura nao aponta.
+  `predicado <NOME>`     detector da casa (predicados.py, predicados_stack.py), onde nenhum
+                         analisador pronto chega; os de stack leem o repositorio inteiro;
+  `leitura <NOME>`       a maquina junta a evidencia na stack e o modelo local julga
+                         (leitura.py); roda so com `--leitura`.
+O apontamento sai com o `#`, o texto e a cura do criterio. Criterio so de leitura humana
+(«leitura» sem nome) nao aponta.
 
 O arquivo se classifica pelo que e, nao pela raiz em que esta: `.py`, ou sem extensao com
 shebang de python, e Python; `.sh`, ou shebang de shell, e shell; `.service` e unit. Antes
@@ -20,16 +24,30 @@ e o que deixou de medir vai em aviso, nunca em silencio.
 from __future__ import annotations
 
 import json
+import os
 import re
 import shutil
 import subprocess
 from collections.abc import Iterable
 from dataclasses import dataclass, field
+from itertools import zip_longest
 from pathlib import Path
 
+from .leitura import (
+    LEITURA_DO_REPOSITORIO,
+    LEITURAS,
+    ModeloIndisponivel,
+    Pergunta,
+    perguntar,
+)
 from .lista import resolver_lista
 from .predicados import DO_REPOSITORIO, PREDICADOS, Contexto, e_teste
+from .predicados_stack import DO_REPOSITORIO_STACK, PREDICADOS_STACK
 from .resultado import Apontamento
+
+TODOS_PREDICADOS = {**PREDICADOS, **PREDICADOS_STACK}
+LEEM_O_REPOSITORIO = DO_REPOSITORIO | DO_REPOSITORIO_STACK
+TETO_PERGUNTAS = 400
 
 CHAVE_LISTA = "antipadroes-de-codigo"
 
@@ -44,6 +62,7 @@ _RE_RUFF = re.compile(r"\bruff\s+([A-Z]+[0-9]+)\b")
 _RE_RUFF_PADRAO = re.compile(r"\bruff\s+padr[aã]o\b")
 _RE_SHELLCHECK = re.compile(r"\bshellcheck\s+(SC[0-9]{4})\b")
 _RE_PREDICADO = re.compile(r"\bpredicado\s+([A-Z][A-Z_]+)\b")
+_RE_LEITURA = re.compile(r"\bleitura\s+([A-Z][A-Z_]+)\b")
 _RE_SHEBANG_PY = re.compile(r"^#!.*\bpython[0-9.]*\b")
 _RE_SHEBANG_SH = re.compile(r"^#!.*\b(ba|da|k)?sh\b")
 
@@ -64,6 +83,7 @@ class Regua:
     ruff_padrao: dict | None = None
     shellcheck: dict[str, dict] = field(default_factory=dict)
     predicados: dict[str, dict] = field(default_factory=dict)
+    leituras: dict[str, dict] = field(default_factory=dict)
 
 
 def ler_regua(lista: dict) -> Regua:
@@ -80,6 +100,8 @@ def ler_regua(lista: dict) -> Regua:
             regua.shellcheck.setdefault(cod, item)
         for nome in _RE_PREDICADO.findall(detector):
             regua.predicados.setdefault(nome, item)
+        for nome in _RE_LEITURA.findall(detector):
+            regua.leituras.setdefault(nome, item)
         if "contagem de linhas" in detector:  # forma da rev 1 e 2 da lista
             regua.predicados.setdefault("LINHAS_SHELL", item)
     return regua
@@ -264,20 +286,76 @@ def _shellcheck(raiz: Path, arquivos: list[Path], regua: Regua, avisos: list[str
 
 
 def _predicados(ctx: Contexto, regua: Regua, avisos: list[str]) -> list[Apontamento]:
-    desconhecidos = sorted(set(regua.predicados) - set(PREDICADOS))
+    desconhecidos = sorted(set(regua.predicados) - set(TODOS_PREDICADOS))
     if desconhecidos:
         avisos.append(f"predicados que a lista nomeia e o lint nao tem, fora da medida: {', '.join(desconhecidos)}")
     achados: list[Apontamento] = []
     for nome, item in regua.predicados.items():
-        if nome not in PREDICADOS:
+        if nome not in TODOS_PREDICADOS:
             continue
-        funcao, candidata = PREDICADOS[nome]
+        funcao, candidata = TODOS_PREDICADOS[nome]
         try:
             for a in funcao(ctx, item):
                 detalhe = f"{a.detalhe} — candidata, confirme lendo" if candidata else a.detalhe
                 achados.append(_apontar(a.arquivo, a.linha, item, nome, detalhe))
         except Exception as e:  # noqa: BLE001 — borda: um predicado quebrado nao derruba os outros; vai em aviso
             avisos.append(f"predicado {nome} falhou e ficou fora da medida: {type(e).__name__}: {e}")
+    return achados
+
+
+def _teto_perguntas() -> int:
+    try:
+        return int(os.environ.get("PF_LINT_LEITURA_MAX", TETO_PERGUNTAS))
+    except ValueError:
+        return TETO_PERGUNTAS
+
+
+def _perguntas(ctx: Contexto, regua: Regua, avisos: list[str]) -> list[tuple[str, dict, Pergunta]]:
+    desconhecidas = sorted(set(regua.leituras) - set(LEITURAS))
+    if desconhecidas:
+        avisos.append(f"leituras que a lista nomeia e o lint nao tem, fora da medida: {', '.join(desconhecidas)}")
+    por_criterio: list[list[tuple[str, dict, Pergunta]]] = []
+    for nome, item in regua.leituras.items():
+        if nome not in LEITURAS:
+            continue
+        try:
+            por_criterio.append([(nome, item, p) for p in LEITURAS[nome](ctx)])
+        except Exception as e:  # noqa: BLE001 — borda: um gerador quebrado nao derruba os outros; vai em aviso
+            avisos.append(f"leitura {nome} falhou ao juntar a evidência: {type(e).__name__}: {e}")
+    # intercaladas: com teto, cada criterio tem a sua parte, nenhum fica de fora
+    return [p for volta in zip_longest(*por_criterio) for p in volta if p is not None]
+
+
+def _leituras(ctx: Contexto, regua: Regua, avisos: list[str], *, ligada: bool) -> list[Apontamento]:
+    """Pergunta ao modelo local o que os geradores juntaram. Desligada, so conta o que ficou de fora."""
+    if not regua.leituras:
+        return []
+    if not ligada:
+        avisos.append(f"{len(regua.leituras)} critérios de leitura não rodados: use --leitura (o modelo local "
+                      "julga a evidência; a stack inteira leva minutos, rode por sessao longjob)")
+        return []
+    perguntas = _perguntas(ctx, regua, avisos)
+    teto = _teto_perguntas()
+    if len(perguntas) > teto:
+        avisos.append(f"leitura: {len(perguntas)} perguntas, {len(perguntas) - teto} passaram do teto e não "
+                      "foram julgadas (PF_LINT_LEITURA_MAX)")
+    achados: list[Apontamento] = []
+    sem_veredito = 0
+    for nome, item, p in perguntas[:teto]:
+        try:
+            j = perguntar(p)
+        except ModeloIndisponivel as e:
+            avisos.append(f"leitura parou: o modelo não respondeu ({e}); {len(perguntas)} perguntas não julgadas")
+            return achados
+        if j is None:
+            sem_veredito += 1
+            continue
+        if j.fere:
+            linhas = [p.linhas_itens[i - 1] for i in j.itens if 0 < i <= len(p.linhas_itens)] or [p.linha]
+            achados += [_apontar(p.arquivo, ln, item, nome, f"{j.porque} — leitura do modelo, confirme")
+                        for ln in linhas]
+    if sem_veredito:
+        avisos.append(f"leitura: {sem_veredito} respostas do modelo não se leram e ficaram sem veredito")
     return achados
 
 
@@ -316,11 +394,29 @@ def raiz_da_stack(raiz: Path, alvo: str | None = None) -> Path:
 # ------------------------------------------------------------------ a classe
 
 
+def _contexto(raiz: Path, alvo: str | None, regua: Regua, *, leitura: bool,
+              extras: dict[Path, str]) -> tuple[Contexto, dict[str, list[Path]]]:
+    """Escopo do alvo e, quando algum detector cruza a stack, o repositorio inteiro e os de --com."""
+    escopo = _por_lingua(_listar(raiz, alvo))
+    cruza = (set(regua.predicados) & LEEM_O_REPOSITORIO
+             or (leitura and set(regua.leituras) & LEITURA_DO_REPOSITORIO) or extras)
+    py_repo = _por_lingua(_listar(raiz, None))["python"] if alvo and cruza else list(escopo["python"])
+    for outra in extras:
+        py_repo += _por_lingua(_listar(outra, None))["python"]
+    return Contexto(raiz, escopo["python"], escopo["shell"], escopo["unit"], py_repo, extras), escopo
+
+
 def verificar_codigo(
     raiz: Path | str,
     alvo: str | None = None,
+    *,
+    leitura: bool = False,
+    extras: dict[Path, str] | None = None,
 ) -> tuple[list[Apontamento], str, int, list[str]]:
     """Aplica a lista ao alvo. Devolve (apontamentos, chave, rev, avisos).
+
+    `leitura` liga os criterios que o modelo local julga; `extras` (raiz -> nome) poe outros
+    repositorios no indice da stack, para os detectores que cruzam servicos.
 
     Levanta ValueError(exit, msg): 5 sem a lista no acervo, 3 com o analisador necessario
     ausente ou quebrado.
@@ -330,17 +426,13 @@ def verificar_codigo(
         raise ValueError(5, f"indeterminavel — lista de verificacao '{CHAVE_LISTA}' nao encontrada no acervo")
     regua = ler_regua(lista)
     raiz = Path(raiz).resolve()
-
-    escopo = _por_lingua(_listar(raiz, alvo))
-    py_repo = escopo["python"]
-    if alvo and set(regua.predicados) & DO_REPOSITORIO:
-        py_repo = _por_lingua(_listar(raiz, None))["python"]
-    ctx = Contexto(raiz, escopo["python"], escopo["shell"], escopo["unit"], py_repo)
+    ctx, escopo = _contexto(raiz, alvo, regua, leitura=leitura, extras=extras or {})
 
     avisos: list[str] = []
     achados = _ruff(raiz, escopo["python"], regua, avisos)
     achados += _shellcheck(raiz, escopo["shell"], regua, avisos)
     achados += _predicados(ctx, regua, avisos)
+    achados += _leituras(ctx, regua, avisos, ligada=leitura)
 
     unicos: dict[tuple[str, int, str, str], Apontamento] = {}
     for a in achados:

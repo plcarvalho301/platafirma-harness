@@ -469,17 +469,23 @@ def test_lint_prosa_sem_a_regua_em_nenhuma_especie_exit_5(bancada, acervo):
 
 def _achados(tmp_path, nome_predicado, arquivos, item=None):
     sys.path.insert(0, str(HARNESS_ROOT / "bin"))
+    from _lint.codigo import TODOS_PREDICADOS
+    ctx = _ctx(tmp_path, arquivos)
+    funcao, _ = TODOS_PREDICADOS[nome_predicado]
+    return sorted((a.arquivo, a.linha) for a in funcao(ctx, item or {}))
+
+
+def _ctx(tmp_path, arquivos):
+    sys.path.insert(0, str(HARNESS_ROOT / "bin"))
     from _lint.codigo import _por_lingua
-    from _lint.predicados import PREDICADOS, Contexto
+    from _lint.predicados import Contexto
     raiz = (tmp_path / "repo").resolve()
     for rel, texto in arquivos.items():
         (raiz / rel).parent.mkdir(parents=True, exist_ok=True)
         (raiz / rel).write_text(texto)
     todos = sorted(p for p in raiz.rglob("*") if p.is_file())
     por = _por_lingua(todos)
-    ctx = Contexto(raiz, por["python"], por["shell"], por["unit"], por["python"])
-    funcao, _ = PREDICADOS[nome_predicado]
-    return sorted((a.arquivo, a.linha) for a in funcao(ctx, item or {}))
+    return Contexto(raiz, por["python"], por["shell"], por["unit"], por["python"])
 
 
 def test_predicado_prazo_externo(tmp_path):
@@ -666,11 +672,14 @@ def test_predicado_eval_shell(tmp_path):
 def test_todo_predicado_tem_caso(tmp_path):
     # predicado novo sem caso de teste quebra aqui
     sys.path.insert(0, str(HARNESS_ROOT / "bin"))
-    from _lint.predicados import PREDICADOS
+    from _lint.codigo import TODOS_PREDICADOS
+    from _lint.leitura import LEITURAS
     fonte = Path(__file__).read_text()
-    # BASH_SET_E e LINHAS_SHELL tem caso no teste de shell pela CLI (S6 e S14)
-    sem_caso = [n for n in PREDICADOS
-                if f'"{n}"' not in fonte and n not in ("BASH_SET_E", "LINHAS_SHELL")]
+    # BASH_SET_E e LINHAS_SHELL tem caso no teste de shell pela CLI (S6 e S14); as cinco de fila
+    # dividem o caso de _modulos_de_fila
+    sem_caso = [n for n in [*TODOS_PREDICADOS, *LEITURAS]
+                if f'"{n}"' not in fonte and n not in ("BASH_SET_E", "LINHAS_SHELL")
+                and not n.startswith("FILA_")]
     assert sem_caso == [], sem_caso
 
 
@@ -706,3 +715,287 @@ def test_lint_codigo_predicado_candidato_diz_que_e_candidato(tmp_path, acervo):
     p = _rodar_lint("codigo", "mono", "t.py", env_extra=env)
     assert "t.py:2: R4" in p.stdout and "candidata, confirme lendo" in p.stdout, p.stdout + p.stderr
     assert "NAO_EXISTE" in p.stderr, p.stderr
+
+
+# ------------------------------------------------------------------ predicados de stack
+# Um caso por detector que cruza arquivos: a forma em dois modulos aponta; num so, nao.
+
+
+SERVIDOR = (
+    "import subprocess\n"
+    "@app.post('/conversoes')\n"
+    "def converter(pedido):\n"
+    "    return processar(pedido)\n"
+    "def processar(pedido):\n"
+    "    for _ in range(3):\n"
+    "        try:\n"
+    "            return subprocess.run(['docling'], timeout=900, check=True)\n"
+    "        except subprocess.CalledProcessError:\n"
+    "            pass\n")
+CLIENTE = (
+    "import requests\n"
+    "def pedir(base, dados):\n"
+    "    for _ in range(5):\n"
+    "        try:\n"
+    "            return requests.post(f'{base}/conversoes', data=dados, timeout=(5, 600))\n"
+    "        except requests.RequestException:\n"
+    "            pass\n")
+
+
+def test_predicado_prazo_invertido_entre_servicos(tmp_path):
+    assert _achados(tmp_path, "PRAZO_INVERTIDO", {"srv/api.py": SERVIDOR, "cli/cliente.py": CLIENTE}) == [
+        ("cli/cliente.py", 5)]
+
+
+def test_predicado_prazo_invertido_com_route_do_starlette_e_constante(tmp_path):
+    # a forma do conversor: Route("/conversoes", tratador), prazo em constante de modulo
+    servidor = ("import subprocess\nTETO_S = 900\n"
+                "async def conversoes(pedido):\n    return subprocess.run(['docling'], timeout=TETO_S, check=True)\n"
+                "rotas = [Route('/conversoes', conversoes, methods=['POST']), Route('/saude', conversoes)]\n")
+    cliente = ("import requests\nPRAZO_S = 600\n"
+               "def pedir(base, oid):\n    return requests.post(base + '/conversoes', timeout=PRAZO_S)\n"
+               "def saude(base):\n    return requests.get(f'{base}/obras/{1}', timeout=PRAZO_S)\n")
+    assert _achados(tmp_path, "PRAZO_INVERTIDO", {"srv/app.py": servidor, "cli/c.py": cliente}) == [
+        ("cli/c.py", 4)]
+
+
+def test_predicado_repeticao_em_camadas_pela_rota(tmp_path):
+    assert _achados(tmp_path, "REPETICAO_EM_CAMADAS", {"srv/api.py": SERVIDOR, "cli/cliente.py": CLIENTE}) == [
+        ("cli/cliente.py", 5)]
+
+
+def test_predicado_listas_gemeas(tmp_path):
+    assert _achados(tmp_path, "LISTAS_GEMEAS", {
+        "a.py": "EXT = ['pdf', 'epub', 'docx', 'html', 'md']\n",
+        "b.py": "FORMATOS = {'pdf', 'epub', 'docx', 'html', 'txt'}\n",
+        "c.py": "CORES = ['azul', 'verde', 'roxo', 'preto']\n"}) == [("a.py", 1), ("b.py", 1)]
+
+
+def test_predicado_idioma_da_stack(tmp_path):
+    fonte = {f"m{i}.py": "import httpx\n" for i in range(5)}
+    fonte["velho.py"] = "import requests\n"
+    assert _achados(tmp_path, "IDIOMA_DA_STACK", fonte) == [("velho.py", 1)]
+
+
+def test_predicado_forma_repetida(tmp_path):
+    forma = "    return {'obra': o, 'estado': e, 'inicio': i, 'fim': f}\n"
+    assert _achados(tmp_path, "FORMA_REPETIDA", {
+        "a.py": "def a(o, e, i, f):\n" + forma + "def b(o, e, i, f):\n" + forma,
+        "b.py": "def c(o, e, i, f):\n" + forma}) == [("a.py", 2), ("a.py", 4), ("b.py", 2)]
+
+
+def test_predicado_reivindica_sem_trava(tmp_path):
+    assert _achados(tmp_path, "REIVINDICA_SEM_TRAVA", {"a.py": (
+        "def pega(cur):\n"
+        "    cur.execute(\"UPDATE fila SET estado = 'em_execucao' WHERE id = %s\")\n"
+        "def pega_bem(cur):\n"
+        "    cur.execute(\"UPDATE fila SET estado = 'x' WHERE id = (SELECT id FROM fila FOR UPDATE SKIP LOCKED LIMIT 1)\")\n")}
+    ) == [("a.py", 2)]
+
+
+def test_predicado_concorrencia_sem_teto(tmp_path):
+    assert _achados(tmp_path, "CONCORRENCIA_SEM_TETO", {"a.py": (
+        "import threading, asyncio\n"
+        "from concurrent.futures import ThreadPoolExecutor\n"
+        "def a(itens):\n"
+        "    with ThreadPoolExecutor() as ex:\n"
+        "        pass\n"
+        "    for i in itens:\n"
+        "        threading.Thread(target=print).start()\n"
+        "async def b(itens):\n"
+        "    await asyncio.gather(*[f(i) for i in itens])\n")}) == [("a.py", 4), ("a.py", 6), ("a.py", 9)]
+
+
+def test_predicado_corrotina_sem_await_e_cancela_thread(tmp_path):
+    fonte = {"a.py": (
+        "import asyncio\n"
+        "async def grava():\n"
+        "    pass\n"
+        "async def a():\n"
+        "    grava()\n"
+        "    await grava()\n"
+        "    await asyncio.wait_for(asyncio.to_thread(sum, [1]), 5)\n")}
+    assert _achados(tmp_path, "CORROTINA_SEM_AWAIT", fonte) == [("a.py", 5)]
+    assert _achados(tmp_path, "CANCELA_THREAD", fonte) == [("a.py", 7)]
+
+
+def test_predicados_de_erro_e_saida(tmp_path):
+    fonte = {"a.py": (
+        "import sys\n"
+        "def a(x):\n"
+        "    try:\n"
+        "        return int(x)\n"
+        "    except ValueError:\n"
+        "        return None\n"
+        "def b(x):\n"
+        "    try:\n"
+        "        x()\n"
+        "    except OSError:\n"
+        "        return True\n"
+        "def c(x):\n"
+        "    try:\n"
+        "        return int(x)\n"
+        "    except ValueError as e:\n"
+        "        raise SystemExit(f'x: {e}') from e\n")}
+    assert _achados(tmp_path, "ERRO_VIRA_VAZIO", fonte) == [("a.py", 5)]
+    assert _achados(tmp_path, "VERDE_NA_FALHA", fonte) == [("a.py", 11)]
+
+
+def test_predicados_de_processo(tmp_path):
+    fonte = {"a.py": (
+        "import subprocess, time, json\n"
+        "def a():\n"
+        "    p = subprocess.Popen(['x'], close_fds=False)\n"
+        "    q = subprocess.Popen(['y'])\n"
+        "    q.wait()\n"
+        "def servir():\n"
+        "    while True:\n"
+        "        time.sleep(1)\n"
+        "def grava(estado_json, dado):\n"
+        "    with open(estado_json, 'w') as f:\n"
+        "        json.dump(dado, f)\n")}
+    assert _achados(tmp_path, "FILHO_SEM_ESPERA", fonte) == [("a.py", 3)]
+    assert _achados(tmp_path, "FD_HERDADO", fonte) == [("a.py", 3)]
+    assert _achados(tmp_path, "SERVICO_SEM_SIGTERM", fonte) == [("a.py", 7)]
+    assert _achados(tmp_path, "ESCRITA_NO_LUGAR", fonte) == [("a.py", 10)]
+
+
+def test_predicados_de_fronteira(tmp_path):
+    fonte = {"a.py": (
+        "import subprocess, requests\n"
+        "def a():\n"
+        "    r = requests.get('http://x/y', timeout=5)\n"
+        "    return r.json()\n"
+        "def b():\n"
+        "    r = requests.get('http://x/y', timeout=5)\n"
+        "    r.raise_for_status()\n"
+        "    return r.json()\n"
+        "def c():\n"
+        "    out = subprocess.run(['git', 'status'], capture_output=True, text=True, check=True).stdout\n"
+        "    return out.splitlines()\n"
+        "def d():\n"
+        "    out = subprocess.run(['git', 'status', '--porcelain'], capture_output=True, text=True, check=True)\n"
+        "    return out.stdout.splitlines()\n"
+        "@app.get('/obras')\n"
+        "def listar(cur):\n"
+        "    cur.execute('SELECT 1')\n"
+        "    return cur.fetchall()\n")}
+    assert _achados(tmp_path, "RESPOSTA_SEM_STATUS", fonte) == [("a.py", 3)]
+    assert _achados(tmp_path, "SAIDA_RECORTADA", fonte) == [("a.py", 10)]
+    assert _achados(tmp_path, "TRATADOR_NO_BANCO", fonte) == [("a.py", 17)]
+
+
+def test_predicados_de_desenho_e_teste(tmp_path):
+    preparo = "".join(f"    v{i} = {i}\n" for i in range(16))
+    fonte = {
+        "a.py": ("def ler(caminho, modo):\n    return abrir(caminho, modo)\n"
+                 "def ler2(caminho):\n    return abrir(caminho, 'r')\n"
+                 "import os\nMODO = os.environ.get('PYTEST_CURRENT_TEST')\n"
+                 "def todos(cur, ids):\n    for i in ids:\n        cur.execute('SELECT 1 WHERE id=%s', (i,))\n"),
+        "tests/test_a.py": "def test_a():\n" + preparo + "    assert v0 == 0\n"}
+    assert _achados(tmp_path, "REPASSE", fonte) == [("a.py", 1)]
+    assert _achados(tmp_path, "PREPARACAO_LONGA", fonte) == [("tests/test_a.py", 1)]
+    assert _achados(tmp_path, "TESTE_EM_PRODUCAO", fonte) == [("a.py", 6)]
+    assert _achados(tmp_path, "IDA_POR_ITEM", fonte) == [("a.py", 8)]
+
+
+# ------------------------------------------------------------------ leitura (modelo local)
+# O gerador junta a evidencia certa; o julgamento vem de um duble no lugar do modelo.
+
+
+def _perguntas(tmp_path, nome_leitura, arquivos):
+    from _lint.leitura import LEITURAS
+    ctx = _ctx(tmp_path, arquivos)
+    return list(LEITURAS[nome_leitura](ctx))
+
+
+def test_leitura_instancias_divergentes_cruza_a_stack(tmp_path):
+    perguntas = _perguntas(tmp_path, "INSTANCIAS_DIVERGENTES", {
+        "a.py": "def a():\n    return Cliente(timeout=30, base='http://c')\n",
+        "b.py": "def b():\n    return Cliente(timeout=600, base='http://c')\n",
+        "c.py": "def c():\n    return Outro(n=1)\n"})
+    (p,) = perguntas
+    assert (p.arquivo, p.linha) == ("a.py", 2)
+    assert "timeout" in p.questao and "base" not in p.questao.split("diferentes em")[1]
+    assert "a.py:2" in p.evidencia and "b.py:2" in p.evidencia and "600" in p.evidencia
+
+
+def test_leitura_inveja_deposito_comentario_e_temporal(tmp_path):
+    inveja = "def pagar(self, e):\n    return e.a + e.b + e.c + e.d + e.f\n"
+    muitos = "".join(f"def f{i}():\n    pass\n" for i in range(15))
+    fonte = {"a.py": inveja, "dep.py": muitos,
+             "c.py": "# soma um\nx = x + 1\n",
+             **{f"pac/passo{i}.py": f'"""Passo {i}."""\n' for i in range(4)}}
+    assert [(p.arquivo, p.linha) for p in _perguntas(tmp_path, "INVEJA_DE_DADOS", fonte)] == [("a.py", 1)]
+    assert [p.arquivo for p in _perguntas(tmp_path, "ARQUIVO_DEPOSITO", fonte)] == ["dep.py"]
+    (com,) = _perguntas(tmp_path, "COMENTARIO_REDUNDANTE", fonte)
+    assert com.linhas_itens == (1,) and "soma um" in com.evidencia
+    assert len(_perguntas(tmp_path, "DECOMPOSICAO_TEMPORAL", fonte)) == 1
+
+
+def test_leitura_concorrencia_falha_fila_teste_e_rota(tmp_path):
+    fonte = {"a.py": (
+        "import requests\n"
+        "from concurrent.futures import ThreadPoolExecutor\n"
+        "def soma(xs):\n    return sum(x * x for x in xs)\n"
+        "def disparar(lotes):\n"
+        "    with ThreadPoolExecutor(4) as ex:\n"
+        "        return list(ex.map(soma, lotes))\n"
+        "def pedir(u):\n"
+        "    for _ in range(3):\n"
+        "        try:\n"
+        "            return requests.get(u, timeout=5)\n"
+        "        except requests.RequestException:\n"
+        "            pass\n"
+        "def listar(cur):\n"
+        "    cur.execute('SELECT * FROM obra')\n"
+        "    return cur.fetchall()\n"
+        "FILA = 'INSERT INTO fila (alvo, estado) VALUES (%s, %s)'\n"
+        "@app.get('/obras')\n"
+        "def rota():\n    return {'n': 1}\n"),
+        "tests/test_a.py": ("def test_a():\n    assert 1\n"
+                            "def test_b(p):\n    assert p.stdout.splitlines()[0] == 'x'\n")}
+    assert [p.arquivo for p in _perguntas(tmp_path, "THREAD_PARA_CPU", fonte)] == ["a.py"]
+    assert [p.linha for p in _perguntas(tmp_path, "ESTADO_SEM_TRAVA", fonte)] == [3]
+    assert [p.linha for p in _perguntas(tmp_path, "REPETE_PERMANENTE", fonte)] == [9]
+    assert [p.linha for p in _perguntas(tmp_path, "CONSULTA_SEM_LIMITE", fonte)] == [15]
+    assert all(len(_perguntas(tmp_path, f, fonte)) == 1 for f in (
+        "FILA_RETOMA", "FILA_ESTADO_DAS_LINHAS", "FILA_IDEMPOTENTE", "FILA_TETO", "FILA_IDADE"))
+    assert [p.linha for p in _perguntas(tmp_path, "TESTE_FRAGIL", fonte)] == [3]
+    assert [p.linha for p in _perguntas(tmp_path, "ROTA_SEM_CONTRATO", fonte)] == [19]
+
+
+def test_leituras_julgam_com_o_modelo_e_apontam_itens(tmp_path, monkeypatch):
+    from _lint import codigo
+    from _lint.leitura import Julgamento
+    ctx = _ctx(tmp_path, {"c.py": "# soma um\nx = x + 1\n# porque o indice e base 1\ny = x\n"})
+    monkeypatch.setattr(codigo, "perguntar", lambda p: Julgamento(True, "repete a linha", [1]))
+    regua = codigo.Regua(rev=1, leituras={"COMENTARIO_REDUNDANTE": {"id": "D13", "o_que_fere": "x", "cura": "y"}})
+    avisos = []
+    (ap,) = codigo._leituras(ctx, regua, avisos, ligada=True)
+    assert (ap.arquivo, ap.linha, ap.id) == ("c.py", 1, "D13") and "leitura do modelo" in ap.o_que_fere
+    assert codigo._leituras(ctx, regua, avisos, ligada=False) == []
+    assert "--leitura" in avisos[-1]
+
+
+def test_leitura_para_com_aviso_quando_o_modelo_nao_responde(tmp_path, monkeypatch):
+    from _lint import codigo
+    from _lint.leitura import ModeloIndisponivel
+    ctx = _ctx(tmp_path, {"c.py": "# soma um\nx = x + 1\n"})
+
+    def fora(p):
+        raise ModeloIndisponivel("recusado")
+    monkeypatch.setattr(codigo, "perguntar", fora)
+    regua = codigo.Regua(rev=1, leituras={"COMENTARIO_REDUNDANTE": {"id": "D13"}})
+    avisos = []
+    assert codigo._leituras(ctx, regua, avisos, ligada=True) == []
+    assert "leitura parou" in avisos[-1]
+
+
+def test_leitura_cache_pela_evidencia(tmp_path, monkeypatch):
+    from _lint import leitura
+    monkeypatch.setenv("PLATAFIRMA_INSTANCIA", str(tmp_path))
+    p = leitura.Pergunta("a.py", 1, "q", "e")
+    leitura._ao_cache(leitura._chave(p), leitura.Julgamento(True, "ok", [2]))
+    monkeypatch.setattr(leitura.urllib.request, "urlopen", lambda *a, **k: (_ for _ in ()).throw(AssertionError))
+    assert leitura.perguntar(p) == leitura.Julgamento(True, "ok", [2])

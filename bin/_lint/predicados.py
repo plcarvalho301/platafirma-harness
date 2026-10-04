@@ -36,11 +36,18 @@ class Contexto:
     sh: list[Path]
     units: list[Path]
     py_repo: list[Path]
+    extras: dict[Path, str] = field(default_factory=dict)   # raiz de outro repositorio -> nome (--com)
     _arvores: dict[Path, ast.Module | None] = field(default_factory=dict)
     _textos: dict[Path, str] = field(default_factory=dict)
 
     def rel(self, p: Path) -> str:
-        return str(p.relative_to(self.raiz))
+        """Caminho relativo ao repositorio do lint; de outro repositorio, com o nome dele na frente."""
+        if p.is_relative_to(self.raiz):
+            return str(p.relative_to(self.raiz))
+        for raiz, nome_repo in self.extras.items():
+            if p.is_relative_to(raiz):
+                return f"{nome_repo}:{p.relative_to(raiz)}"
+        return str(p)
 
     def texto(self, p: Path) -> str:
         if p not in self._textos:
@@ -124,7 +131,10 @@ def externa(chamada: ast.Call) -> bool:
 
 
 def e_sono(chamada: ast.Call) -> bool:
-    return nome(chamada.func) in ("time.sleep", "asyncio.sleep", "sleep")
+    """Espera por tempo: `time.sleep`, `asyncio.sleep` e o apelido da casa para o teste trocar
+    (`_dormir = time.sleep`)."""
+    curto = nome(chamada.func).rsplit(".", 1)[-1]
+    return curto == "sleep" or "dormir" in curto
 
 
 def _lacos(arvore: ast.Module):
