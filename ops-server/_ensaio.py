@@ -31,10 +31,15 @@ import server as s                                          # noqa: E402
 # identidade (A2), gate transparente em run_command (A3), renome leva (A4).
 # Hermetico: redis e _quem() sao dublados nestes testes, nada toca o Valkey real.
 # ======================================================================
+import ast
 import asyncio
 import json as _json
+import shutil
+import socket
 import sys
+import time
 from pathlib import Path as _P
+from contextlib import ExitStack
 from unittest.mock import patch
 
 # Caminhos do ensaio vem da PROPRIA arvore (absolutos): read_file relativo resolve na
@@ -107,46 +112,64 @@ def _fake_redis_cls(kv=None, sets=None):
     return _FakeRedis
 
 
+def _ramo_legado():
+    """O ramo de rollback de `run_command`/`malote` (`PF_RUN_SO_VERBO=0`, spec porta-so-verbo
+    §3.7): gate transparente + fallback `bash -c`. No ar o padrao e o so-verbo; estes
+    testes medem o ramo que a volta liga, e por isso o ligam. O so-verbo e medido em
+    test_malote_apelido.py, test_run_command_lote_injecao.py e test_prazo_porta.py."""
+    pilha = ExitStack()
+    pilha.enter_context(patch.object(s, "PF_RUN_SO_VERBO", False))
+    pilha.enter_context(patch.object(s, "PF_GATE", True))
+    return pilha
+
+
 def test_gate_verbo_roteado_traz_aviso():
-    with patch.object(s, "_autoriza", return_value=None):
+    with patch.object(s, "_autoriza", return_value=None), _ramo_legado():
         r = asyncio.run(s.run_command(command="mesa ver"))
     assert "aviso" in r
 
 
 def test_gate_fallback_sem_verbo():
-    with patch.object(s, "_autoriza", return_value=None):
+    with patch.object(s, "_autoriza", return_value=None), _ramo_legado():
         r = asyncio.run(s.run_command(command="git status", cwd=str(_AQUI)))
     assert "aviso" not in r and "lote" not in r
     assert r.get("exit_code") == 0
 
 
 def test_gate_lote_dois_segs_roteados():
-    with patch.object(s, "_autoriza", return_value=None):
+    with patch.object(s, "_autoriza", return_value=None), _ramo_legado():
         r = asyncio.run(s.run_command(command="mesa ver; fila status"))
     assert "lote" in r and len(r["lote"]) == 2
 
 
 def test_gate_pipe_cai_no_fallback():
-    with patch.object(s, "_autoriza", return_value=None):
+    with patch.object(s, "_autoriza", return_value=None), _ramo_legado():
         r = asyncio.run(s.run_command(command="rg x | wc -l"))
     assert "aviso" not in r and "lote" not in r
     assert r.get("exit_code") == 0
 
 
 def test_renome_leva_campo_json_e_retencao():
-    import subprocess
-    cp = subprocess.run(["acervo", "listar", "ferramental", "--tools"],
-                        capture_output=True, text=True, timeout=30, cwd=str(s.CASA),
-                        env=s._env_subprocesso())
-    assert cp.returncode == 0, cp.stderr
-    itens = _json.loads(cp.stdout)
-    by_tool = {i["tool"]: i for i in itens}
-    assert "repo" in by_tool, "verbo repo sumiu da projecao apos o renome"
-    assert "leva" in by_tool["repo"], "campo JSON deveria ser 'leva', nao 'lote'"
-    assert by_tool["repo"]["leva"] == 2
-    assert all("lote" not in i for i in itens), "campo antigo 'lote' nao deveria sobreviver"
-    retidas_leva2 = {t for t, i in by_tool.items() if int(i.get("leva") or 1) >= 2}
-    assert "repo" in retidas_leva2
+    """A porta le o campo `leva` da projecao `acervo listar ferramental --tools` (nao o
+    antigo `lote`) e retem a leva 2 enquanto `TOOLS_LEVA2` esta desligado. A projecao e
+    dublada: ler o catalogo real e ler o banco (docker/psql), e teste nao depende de
+    estado real (regra de 27/09, lib/teste_isolado.py). O lado do verbo (que `acervo
+    listar` emite `leva`) mora no banco e sai do portao."""
+    itens = [{"tool": "leva2", "binario": "/x/leva2", "leva": 2, "descricao": "d"},
+             {"tool": "leva1", "binario": "/x/leva1", "leva": 1, "descricao": "d"},
+             {"tool": "semleva", "binario": "/x/semleva", "descricao": "d"},
+             {"tool": "antigo", "binario": "/x/antigo", "lote": 2, "descricao": "d"}]
+    cp = subprocess.CompletedProcess([], 0, stdout=_json.dumps(itens), stderr="")
+    retidos = set()
+    with patch.object(s, "TOOLS_VERBOS", True), patch.object(s, "TOOLS_LEVA2", False), \
+         patch.object(s, "PERSONAS") as _pers, patch.object(s, "SLUGS_RETIDOS", retidos), \
+         patch.object(s, "mcp"), patch.object(s, "_faz_tool_verbo", return_value=lambda: None), \
+         patch.dict(s.BINARIOS, {}), patch("server.subprocess.run", return_value=cp):
+        _pers.is_dir.return_value = True
+        servidas = s._gera_tools_verbos()
+    assert servidas == ["leva1", "semleva", "antigo"], "leva 2 fica retida; sem `leva` = leva 1"
+    assert retidos == {"leva2"}
+    assert "antigo" in servidas, "o campo antigo `lote` nao retem: so `leva` conta"
 
 
 def test_audit_run_command_carrega_identidade():
@@ -217,7 +240,8 @@ def test_lote_verbo_off_ignora_campo():
 
 
 def test_lote_run_command_dois_itens_erro_nao_derruba():
-    with patch.object(s, "PF_TOOLS_LOTE", True), patch.object(s, "_autoriza", return_value=None):
+    with patch.object(s, "PF_TOOLS_LOTE", True), patch.object(s, "_autoriza", return_value=None), \
+         _ramo_legado():
         r = asyncio.run(s.run_command(commands=["echo a", "false"], cwd=str(_AQUI)))
     assert r["lote_n"] == 2
     assert r["lote"][0]["exit_code"] == 0
@@ -226,14 +250,15 @@ def test_lote_run_command_dois_itens_erro_nao_derruba():
 
 def test_lote_run_command_teto_corta_e_devolve_lote_next():
     with patch.object(s, "PF_TOOLS_LOTE", True), patch.object(s, "_autoriza", return_value=None), \
-         patch.object(s, "CAP", 1):
+         patch.object(s, "CAP", 1), _ramo_legado():
         r = asyncio.run(s.run_command(commands=["echo a", "echo b", "echo c"], cwd=str(_AQUI)))
     assert r["lote_next"] is not None
     assert any(item.get("omitido_por_teto") for item in r["lote"])
 
 
 def test_pf_tools_lote_off_ignora_commands():
-    with patch.object(s, "PF_TOOLS_LOTE", False), patch.object(s, "_autoriza", return_value=None):
+    with patch.object(s, "PF_TOOLS_LOTE", False), patch.object(s, "_autoriza", return_value=None), \
+         _ramo_legado():
         r = asyncio.run(s.run_command(command="echo ok", commands=["echo a", "echo b"], cwd=str(_AQUI)))
     assert "lote" not in r
     assert r.get("exit_code") == 0
@@ -290,20 +315,22 @@ def test_abertura_cunha_rfc4122_uma_vez_e_segunda_nao_recunha():
          patch.object(s, "_montar", side_effect=lambda *a: _pacote_falso(a[4] or None)), \
          patch.object(s, "redis") as _rmod:
         _rmod.Redis = Fake
-        r1 = asyncio.run(s.monta_sessao(cadeira="fabrica"))
+        # regra (c) da porta: a primeira abertura traz a pergunta do dono e nao traz id
+        r1 = asyncio.run(s.monta_sessao(cadeira="fabrica", pergunta="oi"))
         sid = r1["sessao_id"]
         r2 = asyncio.run(s.monta_sessao(cadeira="fabrica", sessao_id=sid))
     assert str(_uuid.UUID(sid)) == sid and sid.count("-") == 4, "formato voltou ao RFC-4122 (0091 §4)"
     assert r1["sessao"]["cunhada_agora"] is True
     assert r2["sessao_id"] == sid and r2["sessao"]["cunhada_agora"] is False
-    assert r1["ordem_id"] != r2["ordem_id"], "ordem_id e por ordem; sessao_id e por conversa"
+    # ordem_id por ordem (e nao por conversa) e do montador desde que a porta parou de
+    # cunhar: test_monta_sessao_lote.py::test_sessao_id_portado_ordem_id_novo_id_igual
 
 
 def test_porta_repassa_o_portado_ao_verbo_e_nao_cunha():
     """QUEM CUNHA E O MONTADOR. A porta nao tem gerador — repassa e persiste."""
     Fake, visto = _fake_redis_cls(), {}
 
-    def _duble(cadeira, atualizar, chapeu, pergunta, sessao_id):
+    def _duble(cadeira, atualizar, chapeu, pergunta, sessao_id, *resto):
         visto["sessao_id"] = sessao_id
         return _pacote_falso(sessao_id or None)
 
@@ -323,32 +350,34 @@ def test_porta_repassa_o_portado_ao_verbo_e_nao_cunha():
                                                             "pecas": []}), \
          patch.object(s, "redis") as _rmod:
         _rmod.Redis = _fake_redis_cls()
-        r = asyncio.run(s.monta_sessao(cadeira="fabrica"))
+        r = asyncio.run(s.monta_sessao(cadeira="fabrica", pergunta="oi"))
     assert not r.get("sessao_id"), "porta sem gerador proprio"
-    assert any("sessao_id" in a for a in r.get("avisos", [])), "ausencia se declara"
-    assert r.get("ordem_id"), "ordem_id continua sendo da porta"
 
 
 def test_montador_e_o_unico_gerador_de_sessao_id():
     """Cunho e reuso medidos no VERBO, por subprocesso — e ele o ponto por onde toda
     superficie abre (a fabrica chama `bin/monta-sessao` direto, sem porta)."""
-    verbo = str(_Path(__file__).parent.parent / "bin/monta-sessao")
-    import subprocess as _sp
+    # O gerador e `cunha_sessao` do proprio verbo, extraido da fonte por AST e rodado
+    # sozinho: o verbo inteiro precisa da abertura publicada na morada (estado real, que o
+    # isolamento esvazia — `sessao nao aberta: pacote de abertura nao publicado`), e a
+    # cunhagem acontece antes desse portao, entao a funcao e o que da para medir sem ele.
+    # `bin/monta-sessao` e deprecado (sucessor: sessao abrir + expediente montar); o que
+    # `sessao abrir` faz com id portado malformado e medido em testes/test_sessao_origem.py.
+    fonte = (_Path(__file__).parent.parent / "bin/monta-sessao").read_text(encoding="utf-8")
+    no = next(n for n in ast.walk(ast.parse(fonte))
+              if isinstance(n, ast.FunctionDef) and n.name == "cunha_sessao")
+    ns: dict = {}
+    exec(compile(ast.Module([no], []), "bin/monta-sessao", "exec"), ns)   # noqa: S102
+    cunha = ns["cunha_sessao"]
 
-    def _abre(*flags):
-        cp = _sp.run([verbo, "fabrica", "--json", "--so-chapeu", *flags],
-                     capture_output=True, text=True, timeout=120)
-        return _json.loads(cp.stdout)
-
-    p1 = _abre()
-    assert _uuid.UUID(p1["sessao_id"]) and p1["sessao"]["cunhada_agora"] is True
-    p2 = _abre("--sessao-id", p1["sessao_id"])
-    assert p2["sessao_id"] == p1["sessao_id"] and p2["sessao"]["cunhada_agora"] is False
-    p3 = _abre("--sessao-id", _UUID_A.replace("-", ""))          # 32-hex legado
-    assert p3["sessao_id"] == _UUID_A
-    p4 = _abre("--sessao-id", "nao-e-uuid")
-    assert p4["sessao_id"] != "nao-e-uuid"
-    assert any("RFC-4122" in a for a in p4.get("avisos", []))
+    sid1, cunhada1, aviso1 = cunha(None)
+    assert _uuid.UUID(sid1) and cunhada1 is True and aviso1 is None
+    sid2, cunhada2, _ = cunha(sid1)
+    assert sid2 == sid1 and cunhada2 is False, "portado valido nao recunha"
+    sid3, cunhada3, _ = cunha(_UUID_A.replace("-", ""))          # 32-hex legado
+    assert sid3 == _UUID_A and cunhada3 is False
+    sid4, cunhada4, aviso4 = cunha("nao-e-uuid")
+    assert sid4 != "nao-e-uuid" and cunhada4 is True and "RFC-4122" in aviso4
 
 
 
@@ -743,9 +772,21 @@ def test_eixo_poda_sai_do_cabecalho_e_o_escopo_por_ato_vale():
     assert s._cosmetica(motor, "casa") and not s._cosmetica(motor, "listar")
     # 20/09: a forma curta `motor buscar "..."` (sem instancia) tambem e recuperacao
     assert s._cosmetica(motor, s._ato_efetivo(s._argv_verbo("bin/motor", "buscar", ["pergunta"])))
-    s._PERFIS.clear()
-    acervo = s._perfil_verbo("acervo", str(bin_ / "acervo"))
-    assert s._cosmetica(acervo, "casa") and not s._cosmetica(acervo, "listar")
+    # O escopo por ato vale para QUALQUER verbo que o declare no cabecalho, nao so para o
+    # `motor`: cabecalho sintetico (o `acervo` real nao declara `# poda:` hoje, e o teste
+    # nao pode depender de qual verbo declara o que).
+    with tempfile.TemporaryDirectory(prefix="poda-cab-") as d:
+        sint = _Path(d) / "sintetico"
+        sint.write_text("#!/usr/bin/env python3\n# forma: listagem\n"
+                        "# poda: cosmetica@casa,buscar\n", encoding="utf-8")
+        sem = _Path(d) / "semdecl"
+        sem.write_text("#!/usr/bin/env python3\n# forma: listagem\n", encoding="utf-8")
+        s._PERFIS.clear()
+        perfil = s._perfil_verbo("sintetico", str(sint))
+        assert perfil["poda"] == "cosmetica" and perfil["poda_atos"] == ("casa", "buscar")
+        assert s._cosmetica(perfil, "casa") and not s._cosmetica(perfil, "listar")
+        padrao = s._perfil_verbo("semdecl", str(sem))
+        assert padrao["poda"] == "inteira" and not s._cosmetica(padrao, "casa")
     s._PERFIS.clear()
 
 
@@ -803,17 +844,29 @@ def test_hash_unico_porta_e_montador():
 
 # --- R2 na abertura: peca ja servida nesta sessao volta como aviso -------------
 def test_peca_de_abertura_repetida_vira_aviso_na_segunda_abertura():
+    """Balde 2 (acervo-consultado, corpo de caderno) vira ponteiro (ref, sha) na segunda
+    abertura; balde 1 (persona, conduta) nunca: prefixo estavel e cache (#3067). A regra
+    do balde 1 na superficie claude.ai e outra (ponteiro pelo sha publicado) e fica fora
+    daqui: a superficie e fixada em `cli`."""
     Fake = _fake_redis_cls()
-    peca = {"peca": "persona", "sha": "abc123abc123", "conteudo": "TEXTO DA PERSONA " * 50}
-    with patch.object(s, "redis") as _rmod:
+    corpo = "TRECHOS DO ACERVO " * 50
+    acervo = {"peca": "acervo-consultado", "ref": "verbo:acervo", "conteudo": corpo,
+              "sha": _p.sha_servido(corpo)}
+    texto = "TEXTO DA PERSONA " * 50
+    persona = {"peca": "persona", "sha": _p.sha_servido(texto), "conteudo": texto}
+    with patch.object(s, "redis") as _rmod, patch.object(s, "_superficie", return_value="cli"):
         _rmod.Redis = Fake
-        r1 = {"pecas": [dict(peca)]}
+        r1 = {"pecas": [dict(acervo), dict(persona)]}
         s._delta_pecas(r1, _UUID_A)
-        r2 = {"pecas": [dict(peca)]}
+        r2 = {"pecas": [dict(acervo), dict(persona)]}
         conta = s._delta_pecas(r2, _UUID_A)
-    assert r1["pecas"][0]["conteudo"].startswith("TEXTO DA PERSONA")
-    assert "já servido nesta sessão" in r2["pecas"][0]["conteudo"]
+    assert r1["pecas"][0]["conteudo"].startswith("TRECHOS DO ACERVO")
+    a2, p2 = r2["pecas"]
+    assert a2["conteudo"] is None and a2["regime"] == "ponteiro"
+    assert a2["poda"]["modo"] == "ponteiro" and a2["poda"]["sha"] == acervo["sha"]
+    assert p2["conteudo"] == texto, "balde 1 nunca vira ponteiro fora do claude.ai"
     assert conta["pecas_dedup"] == 1
+    assert any("ponteiro" in a for a in r2["avisos"])
 
 
 # --- regressao medida no ar (06/09, primeiro retorno depois de subir) ----------
@@ -853,21 +906,46 @@ def test_contrato_de_morte_e_o_ultimo_ato_nao_o_do_meio():
     cadeira dos passos que o proprio verbo manda executar em seguida (medido 06/09)."""
     import subprocess as _sp
     verbo = str(_Path(__file__).parent.parent / "bin/descansar")
-    env = {**os.environ, "PF_CADEIRA": "fabrica",
-           "PF_SESSAO": "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee"}
+    sid = "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee"
     # O EFEITO, nao a string: "contrato de morte" aparece no roteiro do passo 4 mesmo
     # quando nada morreu — assert de texto aqui passaria verde com a chave apagada.
-    sid = "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee"
-    rc_real = s._rc()
-    rc_real.set(f"sessao:{sid}", "{}", ex=120)
-    rc_real.set(f"ledger:{sid}", "{}", ex=120)
-    sem = _sp.run([verbo, "fita", "--so-memoria"], capture_output=True, text=True,
-                  timeout=120, env=env).stdout
-    assert "descansar fita --encerra-sessao" in sem, "o rito nomeia o passo 4"
-    assert rc_real.exists(f"sessao:{sid}"), "sem a flag, a sessao SOBREVIVE ao rito"
-    _sp.run([verbo, "fita", "--encerra-sessao"], capture_output=True, text=True,
-            timeout=120, env=env)
-    assert not rc_real.exists(f"sessao:{sid}") and not rc_real.exists(f"ledger:{sid}")
+    # O efeito pede um Valkey de verdade; o isolamento aponta o msg-mem para a porta 9, e
+    # o teste nao usa o da casa: sobe um proprio, efemero, numa porta livre. Sem o
+    # binario no PATH a medida nao existe e o teste se declara pulado, nao verde.
+    exe = shutil.which("valkey-server") or shutil.which("redis-server")
+    if not exe:
+        pytest.skip("sem valkey-server/redis-server no PATH: o efeito sobre a chave nao se mede")
+    with socket.socket() as _sk:
+        _sk.bind(("127.0.0.1", 0))
+        porta = _sk.getsockname()[1]
+    srv = _sp.Popen([exe, "--port", str(porta), "--bind", "127.0.0.1", "--save", "",
+                     "--appendonly", "no"], stdout=_sp.DEVNULL, stderr=_sp.DEVNULL)
+    try:
+        import redis as _redis
+        rc_real = _redis.Redis(host="127.0.0.1", port=porta, decode_responses=True,
+                               socket_connect_timeout=2)
+        for _ in range(50):
+            try:
+                if rc_real.ping():
+                    break
+            except _redis.exceptions.ConnectionError:
+                time.sleep(0.1)
+        else:
+            raise AssertionError(f"{exe} nao subiu na porta {porta}")
+        env = {**os.environ, "PF_CADEIRA": "fabrica", "PF_SESSAO": sid,
+               "MEM_REDIS_HOST": "127.0.0.1", "MEM_REDIS_PORT": str(porta)}
+        rc_real.set(f"sessao:{sid}", "{}", ex=120)
+        rc_real.set(f"ledger:{sid}", "{}", ex=120)
+        sem = _sp.run([verbo, "fita", "--so-memoria"], capture_output=True, text=True,
+                      timeout=120, env=env).stdout
+        assert "descansar fita --encerra-sessao" in sem, "o rito nomeia o passo 4"
+        assert rc_real.exists(f"sessao:{sid}"), "sem a flag, a sessao SOBREVIVE ao rito"
+        _sp.run([verbo, "fita", "--encerra-sessao"], capture_output=True, text=True,
+                timeout=120, env=env)
+        assert not rc_real.exists(f"sessao:{sid}") and not rc_real.exists(f"ledger:{sid}")
+    finally:
+        srv.terminate()
+        srv.wait(timeout=10)
 
 import json
 import pytest
