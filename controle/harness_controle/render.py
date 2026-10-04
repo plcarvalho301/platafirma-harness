@@ -500,29 +500,32 @@ def _predicado(nome_verbo: str, bloco: dict) -> str:
             f'<div class="pred"><span class="verbo mono">{_esc(nome_verbo)}</span>'
             f'<span class="valor mal">—</span>{chip("sem leitura", "caveat")}</div>'
         )
-    dados = bloco.get("dados") or {}
-    resultado = dados.get("resultado")
-    itens = dados.get("servicos") or dados.get("verbos") or dados.get("repos") or []
-    n_divergencias = sum(1 for i in itens if _item_diverge(i))
-    if resultado == "divergente":
+    # Veredito comum (#3142): {ancora, classe, alvo, release, itens: [{nome, estado, desde,
+    # motivo}]}, estado em conforme | divergente | indeterminavel. Sem a lista `itens` o
+    # formato nao e o que esta tela le: ausencia de leitura, nunca "sem divergencia".
+    itens = (bloco.get("dados") or {}).get("itens")
+    if not isinstance(itens, list):
         return (
             f'<div class="pred"><span class="verbo mono">{_esc(nome_verbo)}</span>'
-            f'<span class="valor mal num">{n_divergencias}</span>{chip("divergem", "alert")}</div>'
+            f'<span class="valor mal">—</span>{chip("sem leitura", "caveat")}</div>'
+        )
+    divergentes = sum(1 for i in itens if i.get("estado") == "divergente")
+    indeterminados = sum(1 for i in itens if i.get("estado") == "indeterminavel")
+    sem_leitura = chip(f"{indeterminados} sem leitura", "caveat") if indeterminados else ""
+    if divergentes:
+        return (
+            f'<div class="pred"><span class="verbo mono">{_esc(nome_verbo)}</span>'
+            f'<span class="valor mal num">{divergentes}</span>{chip("divergem", "alert")}{sem_leitura}</div>'
+        )
+    if indeterminados:
+        return (
+            f'<div class="pred"><span class="verbo mono">{_esc(nome_verbo)}</span>'
+            f'<span class="valor num">{indeterminados}</span>{sem_leitura}</div>'
         )
     return (
         f'<div class="pred"><span class="verbo mono">{_esc(nome_verbo)}</span>'
         f'<span class="valor num">0</span>{chip("sem divergência", "calmo")}</div>'
     )
-
-
-def _item_diverge(item: dict) -> bool:
-    if "divergencias" in item:
-        return bool(item["divergencias"])
-    if "motivos" in item:
-        return bool(item["motivos"]) or not item.get("conforme", True)
-    if "achados" in item:
-        return any(item["achados"].get(k) for k in item["achados"])
-    return False
 
 
 def _predicado_skills(bloco_skills: dict) -> str:
