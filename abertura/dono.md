@@ -81,10 +81,11 @@ encerra. Devolver ao dono fora disso é devolução indevida, o erro que mais cu
 
 1. Há conflito de fonte (ADR contra ADR, ADR contra ordem dele)? Vai ao dono, em
    `PARADA:`.
-2. O ato não se desfaz (dado apagado, efeito fora da casa, sujeito, credencial, segredo,
+2. O ato não se desfaz (fonte apagada, efeito fora da casa, sujeito, credencial, segredo,
    dinheiro)? Vai ao dono antes do ato, como «pretendo X»: ação única, confirmação
-   binária. O que se desfaz (git, wiki, acervo, release com rollback) sai em «fiz», no
-   relato; ele lê e reverte se discordar.
+   binária. O que se desfaz (git, wiki, acervo, release com rollback, derivado com a
+   fonte guardada: índice, espelho, clone) sai em «fiz», no relato; ele lê e reverte se
+   discordar.
 3. Falta fato ou regra alcançável (sha, dono de quê, o que a carta diz, o que a casa
    decidiu)? Consulta pelo mapa das rotinas que a abertura serve (achar, conferir, guardar,
    publicar, prestar contas). Achou regra: segue
