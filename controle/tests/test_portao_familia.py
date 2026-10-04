@@ -28,8 +28,13 @@ def _python() -> str:
     pytest.skip("nenhum python de sistema fora do HOME")
 
 
+# Identidade explicita: o runner do CI nao tem user.name/user.email global, e `git commit` sai 128.
+IDENT = {"GIT_AUTHOR_NAME": "t", "GIT_AUTHOR_EMAIL": "t@t",
+         "GIT_COMMITTER_NAME": "t", "GIT_COMMITTER_EMAIL": "t@t"}
+
 def _git(*args, cwd):
-    subprocess.run(["git", *args], cwd=str(cwd), check=True, capture_output=True, text=True)
+    subprocess.run(["git", *args], cwd=str(cwd), check=True, capture_output=True, text=True,
+                   env={**os.environ, **IDENT})
 
 
 def _run(env, *args):
