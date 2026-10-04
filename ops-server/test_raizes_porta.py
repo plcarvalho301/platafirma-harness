@@ -107,9 +107,11 @@ def test_run_command_cwd_relativo_e_na_bancada(bancada, sem_pep):
     assert r["stdout"]["texto"].strip() == str((bancada / "platafirma-harness").resolve())
 
 
-def test_read_file_relativo_sem_bancada_recusa_e_absoluto_le(sem_bancada, sem_pep):
+def test_read_file_relativo_sem_bancada_recusa_e_absoluto_le(sem_bancada, sem_pep, monkeypatch):
     r = s.read_file(path="platafirma-harness/ops-server/requirements.txt")
     assert r.get("recusado") and "bancada" in r["motivo"]
+    # a árvore em teste entra na morada de leitura (card #3279): sem isto o absoluto recusa
+    monkeypatch.setattr(s, "_MORADAS_LEITURA", (*s._MORADAS_LEITURA, str(OPS_SERVER_DIR)))
     r = s.read_file(path=str(OPS_SERVER_DIR / "requirements.txt"))
     assert "mcp==" in r["content"]
 
