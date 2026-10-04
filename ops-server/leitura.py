@@ -23,6 +23,11 @@ Custo de disco, que é o que o bench mede (§16.5):
 
 Biblioteca padrão só (§13.1): o venv `ops` não tem detector de encoding, e a regra da §7.3
 não precisa de um.
+
+Emenda de 04/10/2026 (§7.2, §7.4): binário de tipo que o acervo guarda se lê pelo leitor do
+formato (`formatos.py`) — texto por unidade do original (`paginas`), imagem da página
+(`modo="pagina"`), membro de ZIP por `caminho!membro`. Só o binário fora da tabela recusa, com
+nome (`sem_leitor`).
 """
 from __future__ import annotations
 
@@ -30,6 +35,7 @@ import ast
 import bisect
 import codecs
 import difflib
+import gzip
 import hashlib
 import io
 import json
@@ -37,10 +43,13 @@ import os
 import re
 import stat as _stat
 import threading
+import zlib
 from collections import OrderedDict
 from dataclasses import dataclass, field
 from itertools import islice
 from pathlib import Path
+
+import formatos as _formatos
 
 # --- réguas da spec (§13.1). Mudar qualquer uma muda o contrato: emenda da spec antes.
 ORCAMENTO_PADRAO = 40_000
@@ -59,6 +68,8 @@ POSICOES_MAX = 4_096                 # posições aprendidas por índice
 
 FIM = "fim do arquivo"
 TOOL = "ler_arquivo"
+MODOS = ("texto", "sumario", "pagina", "visivel")
+ENC_BINARIO = {"decidido": "utf-8", "por": "binario", "invalidos": 0, "julgado": True}
 
 _NL = re.compile(b"\n")
 _SURROGATO = re.compile("[\udc80-\udcff]")       # byte inválido sob surrogateescape
@@ -77,6 +88,8 @@ _ASSINATURAS = (
     (b"\x7fELF", "application/x-elf"),
     (b"SQLite format 3\x00", "application/vnd.sqlite3"),
 )
+# Assinaturas fora da cabeça do arquivo: MOBI (PalmDOC) e WEBP (RIFF).
+_MOBI_MARCA = (60, b"BOOKMOBI")
 _ESCRITORIO = {".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
                ".xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                ".pptx": "application/vnd.openxmlformats-officedocument.presentationml.presentation",
@@ -94,7 +107,9 @@ _TIPO_POR_EXT = {".py": "text/x-python", ".md": "text/markdown", ".markdown": "t
                  ".yml": "application/yaml", ".toml": "application/toml",
                  ".sh": "text/x-shellscript", ".sql": "application/sql", ".html": "text/html",
                  ".css": "text/css", ".js": "text/javascript", ".mjs": "text/javascript",
-                 ".csv": "text/csv", ".xml": "application/xml", ".php": "text/x-php"}
+                 ".csv": "text/csv", ".xml": "application/xml", ".php": "text/x-php",
+                 ".htm": "text/html", ".xhtml": "text/html", ".mhtml": _formatos.MHTML,
+                 ".mht": _formatos.MHTML}
 _ANALISADOR = {"text/markdown": "markdown", "text/x-python": "python",
                "application/json": "json"}
 
@@ -253,19 +268,35 @@ def _sumario_na_varredura(idx: Indice, nome: str, dados: bytes) -> None:
 
 # ============================================================== tipo e encoding (§7.2, §7.3)
 def tipo_real(cabeca: bytes, nome: str) -> dict:
-    """Decide pelos bytes; a extensão só dá nome ao tipo de texto."""
+    """Decide pelos bytes; a extensão só dá nome ao tipo de texto (§7.2, §7.4.4). HTML e MHTML
+    sem extensão saem pelos bytes também (`formatos.tipo_texto`); o que um ZIP é por dentro se
+    decide com o arquivo aberto (`afina_tipo`)."""
     ext = Path(nome).suffix.lower()
     for bom, enc in _BOMS:
         if cabeca.startswith(bom):
-            return {"tipo": _TIPO_POR_EXT.get(ext, "text/plain"), "binario": False, "bom": enc}
+            tipo = _formatos.tipo_texto(cabeca, _TIPO_POR_EXT.get(ext, "text/plain"))
+            return {"tipo": tipo, "binario": False, "bom": enc}
     for assinatura, tipo in _ASSINATURAS:
         if cabeca.startswith(assinatura):
             if tipo == "application/zip":
                 tipo = _ESCRITORIO.get(ext, tipo)
             return {"tipo": tipo, "binario": True, "bom": None}
+    if _formatos.e_webp(cabeca):
+        return {"tipo": _formatos.WEBP, "binario": True, "bom": None}
+    if cabeca[_MOBI_MARCA[0]:_MOBI_MARCA[0] + 8] == _MOBI_MARCA[1]:
+        return {"tipo": _formatos.MOBI, "binario": True, "bom": None}
     if b"\x00" in cabeca:
         return {"tipo": "application/octet-stream", "binario": True, "bom": None}
-    return {"tipo": _TIPO_POR_EXT.get(ext, "text/plain"), "binario": False, "bom": None}
+    tipo = _formatos.tipo_texto(cabeca, _TIPO_POR_EXT.get(ext, "text/plain"))
+    return {"tipo": tipo, "binario": False, "bom": None}
+
+
+def afina_tipo(tp: dict, fh) -> dict:
+    """ZIP se decide pelo que há dentro (EPUB, DOCX, PPTX, XLSX ou ZIP de outro tipo), nunca
+    pelo nome: F2 da lista antipadroes-de-transcricao."""
+    if tp["binario"] and (tp["tipo"] == "application/zip" or tp["tipo"] in _ESCRITORIO.values()):
+        return {**tp, "tipo": _formatos.tipo_do_zip(fh)}
+    return tp
 
 
 def decide_encoding(indice: Indice, tipo: dict, pedido: str | None = None,
@@ -742,22 +773,36 @@ def _alem_do_fim(p: Path, total) -> dict:
 # ============================================================== a leitura (§13.1, `le`)
 def le(p, *, linhas=None, modo: str = "texto", max_bytes: int = ORCAMENTO_PADRAO,
        versao: str | None = None, offset: int | None = None, encoding: str | None = None,
-       nega=None, curto: str | None = None, abre=open) -> dict:
+       nega=None, curto: str | None = None, abre=open, paginas=None,
+       dpi: int = _formatos.DPI_PADRAO, membro: str | None = None) -> dict:
     """O retorno da §3.2, sem poda.
 
     `nega(Path) -> bool` é a negativa da porta, aplicada a entrada de diretório e a
     ancestral; o próprio `p` já chega autorizado. `abre` é o `open` (o bench conta por ele
     os bytes lidos). Erro volta com `classe_erro` (caminho, faixa, binario, gramatica,
     recusado), que a porta tira do retorno e grava na auditoria.
+
+    §7.4: `paginas` ("a-b", base 1) escolhe as unidades do original nos formatos que as têm;
+    `modo="pagina"` devolve a unidade como imagem (`imagens`, PNG em bytes); `modo="visivel"`
+    é o texto visível de HTML e MHTML (o `texto` deles segue sendo o fonte, como a `read_file`
+    servia); `membro` lê um membro de ZIP, EPUB ou OOXML (`caminho!membro` na porta).
     """
     p = Path(p)
     curto = curto or str(p)
-    if modo not in ("texto", "sumario"):
-        return _erro(f'modo={modo!r}: use "texto" ou "sumario"', "gramatica")
+    if membro:
+        curto = f"{curto}!{membro}"
+    if modo not in MODOS:
+        return _erro(f'modo={modo!r}: use "texto", "sumario", "pagina" ou "visivel"', "gramatica")
     if modo == "sumario" and (linhas not in (None, "") or offset is not None):
         return _erro('modo="sumario" não aceita linhas nem offset: o sumário é do arquivo '
                      "inteiro, e a faixa de cada item se lê depois por linhas", "gramatica",
                      cura=f'{TOOL}(caminho="{p}", modo="sumario")')
+    if paginas not in (None, "") and (offset is not None or modo == "sumario"):
+        return _erro("paginas não vai com offset nem com sumário: a unidade se lê por linhas "
+                     "dentro do texto devolvido (§7.4.1)", "gramatica",
+                     cura=f'{TOOL}(caminho="{p}", paginas="{paginas}")')
+    if isinstance(dpi, bool) or not isinstance(dpi, int) or dpi < 1:
+        return _erro(f"dpi={dpi!r}: inteiro de 36 a {_formatos.DPI_MAX}", "gramatica")
     faixa = None
     if offset is None:
         faixa = _faixa(linhas)
@@ -790,7 +835,8 @@ def le(p, *, linhas=None, modo: str = "texto", max_bytes: int = ORCAMENTO_PADRAO
             st0 = os.fstat(fh.fileno())
             r = _le_arquivo(fh, p, st0, curto=curto, faixa=faixa, modo=modo,
                             orcamento=orcamento, versao=versao, offset=offset,
-                            pedido=encoding, pedido_bytes=pedido_bytes)
+                            pedido=encoding, pedido_bytes=pedido_bytes, paginas=paginas,
+                            dpi=dpi, membro=membro)
             st1 = os.fstat(fh.fileno())
             if (st0.st_size, st0.st_mtime_ns) == (st1.st_size, st1.st_mtime_ns):
                 break
@@ -857,19 +903,129 @@ def _transcodifica(fh, enc: str) -> tuple[bytes, int]:
 
 
 def _le_arquivo(fh, p: Path, st, *, curto, faixa, modo, orcamento, versao, offset, pedido,
-                pedido_bytes) -> dict:
+                pedido_bytes, paginas=None, dpi=_formatos.DPI_PADRAO, membro=None) -> dict:
     if st.st_size > VARREDURA_MAX:
         idx, dados = _indice_grande(fh, st, (faixa[0] or 1) if faixa else 1), None
     else:
         idx, dados = _indice(p, fh, st)
-    tp = tipo_real(idx.cabeca, p.name)
+    tp = afina_tipo(tipo_real(idx.cabeca, p.name), fh)
+    if membro:
+        return _le_membro(fh, p, idx, tp, membro, curto=curto, faixa=faixa, modo=modo,
+                          orcamento=orcamento, versao=versao, offset=offset, pedido=pedido,
+                          pedido_bytes=pedido_bytes, paginas=paginas, dpi=dpi)
+    return _le_corpo(fh, p, idx, tp, dados, curto=curto, faixa=faixa, modo=modo,
+                     orcamento=orcamento, versao=versao, offset=offset, pedido=pedido,
+                     pedido_bytes=pedido_bytes, paginas=paginas, dpi=dpi)
+
+
+def _le_membro(fh, p: Path, idx: Indice, tp: dict, membro: str, **kw) -> dict:
+    """`caminho!membro`: o membro de um ZIP (EPUB, OOXML ou ZIP de outro tipo) lido como se
+    fosse um arquivo — texto pelas seções 4 a 7.3, formato do acervo pelo leitor dele."""
+    if tp["tipo"] not in (_formatos.ZIP, _formatos.EPUB, _formatos.DOCX, _formatos.PPTX,
+                          _formatos.XLSX):
+        return _erro(f"{tp['tipo']} não tem membro: `!` só se aplica a ZIP, EPUB e OOXML",
+                     "gramatica", caminho=str(p))
+    try:
+        doc = _formatos.abre(tp["tipo"], fh=fh, caminho=p)
+    except Exception as e:                                    # noqa: BLE001
+        return _erro(f"não abre: {e}", "binario", caminho=str(p), tipo=tp["tipo"])
+    try:
+        dados = _formatos.membro_de(doc, membro)
+    except KeyError:
+        nomes = [n for n, _t in doc.membros]
+        return _erro("membro não existe", "caminho", caminho=f"{p}!{membro}",
+                     la_tem=nomes[:LA_TEM_MAX], la_tem_total=len(nomes),
+                     parecidos=difflib.get_close_matches(membro, nomes, n=3),
+                     cura=f'{TOOL}(caminho="{p}")')
+    except ValueError as e:
+        return {"recusado": True, "motivo": str(e), "caminho": f"{p}!{membro}",
+                "classe_erro": "recusado"}
+    finally:
+        doc.fecha()
+    chave = (f"{p}!{membro}", len(dados), idx.versao, 0)
+    with _TRAVA:
+        midx = _INDICES.get(chave)
+    if midx is None:
+        midx = varre(io.BytesIO(dados))
+        with _TRAVA:
+            _INDICES[chave] = midx
+            while len(_INDICES) > INDICES_MAX:
+                _INDICES.popitem(last=False)
+    fonte = io.BytesIO(dados)
+    mtp = afina_tipo(tipo_real(midx.cabeca, membro), fonte)
+    return _le_corpo(fonte, Path(f"{p}!{membro}"), midx, mtp, dados, **kw)
+
+
+def _le_gzip(fh, p: Path, idx: Indice, **kw) -> dict:
+    """GZIP guardado no acervo (o censo achou um com nome `.pdf`): descomprime em memória,
+    até MEMBRO_MAX, e lê o que há dentro pelo leitor do tipo real dos bytes internos. A
+    continuação usa o mesmo caminho: cada chamada descomprime de novo (§7.4.4)."""
+    fh.seek(0)
+    try:
+        dados = gzip.decompress(fh.read())
+    except (OSError, EOFError, zlib.error) as e:
+        return _erro(f"gzip não abre: {type(e).__name__}: {str(e)[:160]}", "binario",
+                     caminho=str(p), tipo="application/gzip", bytes_total=idx.tamanho,
+                     versao=idx.versao)
+    if len(dados) > _formatos.MEMBRO_MAX:
+        return {"recusado": True, "motivo": "gzip acima de 64 MiB descomprimido",
+                "caminho": str(p), "bytes_total": idx.tamanho, "versao": idx.versao,
+                "classe_erro": "recusado"}
+    chave = (f"{p}!gunzip", len(dados), idx.versao, 0)
+    with _TRAVA:
+        midx = _INDICES.get(chave)
+    if midx is None:
+        midx = varre(io.BytesIO(dados))
+        midx.versao = idx.versao                 # a versão é a do arquivo em disco
+        with _TRAVA:
+            _INDICES[chave] = midx
+            while len(_INDICES) > INDICES_MAX:
+                _INDICES.popitem(last=False)
+    fonte = io.BytesIO(dados)
+    nome = p.name[:-3] if p.name.lower().endswith(".gz") else p.name
+    mtp = afina_tipo(tipo_real(midx.cabeca, nome), fonte)
+    r = _le_corpo(fonte, p, midx, mtp, dados, **kw)
+    if "cabecalho" in r:
+        r["cabecalho"] += f" · descomprimido de gzip ({_n(idx.tamanho)} bytes)"
+    if "recusado" not in r and "erro" not in r:
+        r["gzip"] = {"bytes_comprimidos": idx.tamanho, "bytes": len(dados)}
+    return r
+
+
+def _le_corpo(fh, p: Path, idx: Indice, tp: dict, dados, *, curto, faixa, modo, orcamento,
+              versao, offset, pedido, pedido_bytes, paginas=None,
+              dpi=_formatos.DPI_PADRAO) -> dict:
+    tipo = tp["tipo"]
     if tp["binario"]:
-        return {"recusado": True, "motivo": "binario", "tipo": tp["tipo"], "caminho": str(p),
+        if tipo == "application/gzip":
+            return _le_gzip(fh, p, idx, curto=curto, faixa=faixa, modo=modo, orcamento=orcamento,
+                            versao=versao, offset=offset, pedido=pedido,
+                            pedido_bytes=pedido_bytes, paginas=paginas, dpi=dpi)
+        if tipo in _formatos.LEITORES:
+            return _le_formato(fh, p, idx, tp, curto=curto, faixa=faixa, modo=modo,
+                               orcamento=orcamento, versao=versao, paginas=paginas, dpi=dpi,
+                               offset=offset, pedido_bytes=pedido_bytes)
+        # §7.2.2: só o binário fora da tabela da §7.4 recusa, e com nome.
+        return {"recusado": True, "motivo": "sem_leitor", "tipo": tipo, "caminho": str(p),
                 "bytes_total": idx.tamanho, "versao": idx.versao,
-                "cura": (f"{tp['tipo']} não se lê como texto pela porta, e a porta não converte "
-                         "formato. Obra do acervo se lê por `acervo ler biblioteca impressao "
-                         "<obra>`."),
+                "cura": (f"{tipo} não está na tabela de formatos do acervo (spec ler-arquivo "
+                         "§7.4) e não se lê como texto. Tipo do acervo que cai aqui é defeito "
+                         "da tool: abra incidente."),
                 "classe_erro": "binario"}
+    if modo == "visivel" and tipo in (_formatos.HTML, _formatos.MHTML):
+        return _le_formato(fh, p, idx, tp, curto=curto, faixa=faixa, modo=modo,
+                           orcamento=orcamento, versao=versao, paginas=paginas, dpi=dpi,
+                           offset=offset, pedido_bytes=pedido_bytes, dados=dados, pedido=pedido)
+    if modo == "pagina":
+        return _erro(f'modo="pagina" é imagem da unidade: {tipo} não tem página nem imagem; '
+                     'leia com modo="texto"', "gramatica", caminho=str(p),
+                     cura=f'{TOOL}(caminho="{p}")')
+    if modo == "visivel":
+        modo = "texto"                      # texto plano já é o visível
+    if paginas not in (None, ""):
+        return _erro(f"paginas só vale em formato com unidade fixa (PDF, EPUB, PPTX, XLSX): "
+                     f"{tipo} se lê por linhas", "gramatica", caminho=str(p),
+                     cura=f'{TOOL}(caminho="{p}", linhas="1-")')
 
     # Fonte das páginas: os bytes que a varredura acabou de ler (a frio), o próprio arquivo
     # (a quente), ou o UTF-8 transcodificado de UTF-16/32.
@@ -901,7 +1057,7 @@ def _le_arquivo(fh, p: Path, st, *, curto, faixa, modo, orcamento, versao, offse
     if not enc["julgado"]:
         avisos.append("NÃO JULGADO")
     base = {"caminho": str(p), "bytes_total": idx.tamanho, "versao": idx.versao,
-            "encoding": enc}
+            "encoding": enc, "tipo": tp["tipo"]}
     extra_args = {}
     if pedido_bytes:
         extra_args["max_bytes"] = orcamento
@@ -1058,15 +1214,285 @@ def _le_sumario(fh, idx: Indice, tp: dict, curto: str, orcamento: int, enc_leitu
     return _com_mudou(r, mudou)
 
 
+# ============================================================== formatos do acervo (§7.4)
+def _faixa_unidades(paginas, n: int, p: Path):
+    """(a, b) das unidades pedidas, base 1, extremos incluídos; `b` None é «até o fim»."""
+    if paginas in (None, ""):
+        return 1, None
+    f = _faixa(paginas)
+    if isinstance(f, dict):
+        f["erro"] = f["erro"].replace("linhas=", "paginas=", 1)
+        f["cura"] = f'{TOOL}(caminho="{p}", paginas="1-")'
+        return f
+    a, b, cauda = f
+    if cauda:
+        return max(1, n - cauda + 1), None
+    if a > n:
+        return _erro("página além do fim", "faixa", caminho=str(p), paginas_total=n,
+                     cura=f'{TOOL}(caminho="{p}", paginas="{n}-{n}")')
+    return a, (min(b, n) if b else None)
+
+
+def _marca(doc, u: int) -> str:
+    return f"<!-- p. {u} -->"
+
+
+def _unidade_texto(doc, cache: dict, u: int) -> tuple[str, bool]:
+    """(texto da unidade com a marca, sem camada de texto?). Memoizado por arquivo (versão)."""
+    if u in cache:
+        return cache[u]
+    try:
+        corpo = doc.texto(u)
+    except Exception as e:                                    # noqa: BLE001 — unidade corrompida
+        corpo = f'<!-- unidade não lida: {type(e).__name__}: {str(e)[:120]} -->\n'
+    vazia = not corpo.strip()
+    if doc.unidade == "nenhuma":
+        texto = corpo
+    elif vazia and doc.unidade == "pagina":
+        texto = (f'{_marca(doc, u)}\n<!-- sem camada de texto: leia com modo="pagina", '
+                 f'paginas="{u}-{u}" -->\n\n')
+    else:
+        texto = f"{_marca(doc, u)}\n{corpo}\n"
+    cache[u] = (texto, vazia and doc.unidade == "pagina")
+    return cache[u]
+
+
+def _le_formato(fh, p: Path, idx: Indice, tp: dict, *, curto, faixa, modo, orcamento, versao,
+                paginas, dpi, offset, pedido_bytes, dados=None, pedido=None) -> dict:
+    """A leitura de um formato do acervo (§7.4): texto por unidade, imagem da unidade, ou a
+    recusa nomeada quando falta renderizador. A página da tool são unidades inteiras enquanto
+    cabem no orçamento; a unidade maior que ele sai por linhas, e `linhas` conta dentro do
+    texto da faixa pedida. Seguindo `proximo_args` até `fim do arquivo`, toda unidade da faixa
+    aparece uma vez (§7.4.6)."""
+    tipo = tp["tipo"]
+    if offset is not None:
+        return _erro(f"offset não se aplica a {tipo}: a unidade se lê por paginas e linhas",
+                     "gramatica", caminho=str(p), cura=f'{TOOL}(caminho="{p}")')
+    base = {"caminho": str(p), "bytes_total": idx.tamanho, "versao": idx.versao, "tipo": tipo}
+    avisos, mudou = [], None
+    if versao and versao != idx.versao:
+        mudou = {"de": versao, "para": idx.versao}
+        avisos.append(f"ARQUIVO MUDOU desde a versão {versao} · as páginas lidas antes podem "
+                      "ter mudado")
+    if modo == "sumario":
+        return _com_mudou({"cabecalho": " · ".join([*avisos, curto, tipo, "sumário",
+                                                    f"sem sumário: sem analisador de sumário para {tipo}",
+                                                    f"versão {idx.versao}"]),
+                           "sumario": None, "sumario_por": None,
+                           "motivo": f"sem analisador de sumário para {tipo}", **base}, mudou)
+    enc = dict(ENC_BINARIO)
+    try:
+        if not tp["binario"] and tipo in (_formatos.HTML, _formatos.MHTML):
+            if dados is None:
+                fh.seek(0)
+                dados = fh.read()
+            doc = _formatos.abre(tipo, dados=dados, encoding=pedido)
+            enc = decide_encoding(idx, tp, pedido)
+        else:
+            doc = _formatos.abre(tipo, fh=fh, caminho=None if "!" in str(p) else p,
+                                 dados=(fh.getvalue() if isinstance(fh, io.BytesIO) else None))
+    except Exception as e:                                    # noqa: BLE001
+        return _erro(f"{tipo} não abre: {type(e).__name__}: {str(e)[:200]}", "binario",
+                     caminho=str(p), tipo=tipo, bytes_total=idx.tamanho, versao=idx.versao,
+                     cura=("arquivo corrompido ou cifrado: confira o objeto no balde "
+                           "(`acervo ler biblioteca objeto`)"))
+    try:
+        return _pagina_formato(doc, p, idx, tp, enc, curto=curto, faixa=faixa, modo=modo,
+                               orcamento=orcamento, paginas=paginas, dpi=dpi, base=base,
+                               avisos=avisos, mudou=mudou, pedido_bytes=pedido_bytes,
+                               pedido=pedido)
+    finally:
+        doc.fecha()
+
+
+def _pagina_formato(doc, p: Path, idx: Indice, tp: dict, enc: dict, *, curto, faixa, modo,
+                    orcamento, paginas, dpi, base, avisos, mudou, pedido_bytes, pedido) -> dict:
+    tipo = tp["tipo"]
+    n = max(1, doc.n)
+    com_unidade = doc.unidade not in ("nenhuma", "imagem")
+    extra_args = {}
+    if pedido_bytes:
+        extra_args["max_bytes"] = orcamento
+    if pedido:
+        extra_args["encoding"] = pedido
+    if modo == "visivel":
+        extra_args["modo"] = "visivel"
+    if paginas not in (None, "") and not com_unidade:
+        return _erro(f"{tipo} não tem unidade fixa ({doc.unidade}): leia por linhas; a página "
+                     "do DOCX é do renderizador (spec espelho-de-leitura §2.6)", "gramatica",
+                     caminho=str(p), cura=f'{TOOL}(caminho="{p}", linhas="1-")')
+    fu = _faixa_unidades(paginas, n, p)
+    if isinstance(fu, dict):
+        return fu
+    a, b = fu
+    b_fim = b if b is not None else n
+    rotulo = _formatos.ROTULO.get(doc.unidade, "unidade")
+    base = {**base, "unidade": doc.unidade}
+    if com_unidade:
+        base["paginas_total"] = n
+    if doc.nomes:
+        base["nomes"] = doc.nomes[a - 1:b_fim][:200]
+    if doc.membros and tipo in (_formatos.ZIP, _formatos.EPUB):
+        base["membros_total"] = len(doc.membros)
+
+    # --- imagem da unidade (§7.4.2)
+    if modo == "pagina":
+        if doc.unidade == "imagem":
+            png, mime, ex = doc.imagem(1)
+            dim = ex.get("dimensoes")
+            cab = [*avisos, curto, tipo, "imagem" + (f" · {dim[0]}×{dim[1]} px" if dim else ""),
+                   f"{_n(len(png))} bytes", f"versão {idx.versao}"]
+            return _com_mudou({"cabecalho": " · ".join(cab), "proximo": FIM,
+                               "imagens": [{"pagina": 1, "png": png, "mime": mime,
+                                            "largura": dim[0] if dim else None,
+                                            "altura": dim[1] if dim else None}], **base}, mudou)
+        if not doc.render:
+            return {"recusado": True, "motivo": "sem_render", "tipo": tipo, "caminho": str(p),
+                    "bytes_total": idx.tamanho, "versao": idx.versao,
+                    "cura": (f"{tipo} ainda não tem renderizador livre na imagem da porta "
+                             f'(spec ler-arquivo §7.4.2); o texto vale: {TOOL}(caminho="{p}"'
+                             + (f', paginas="{a}-{b_fim}")' if com_unidade else ")")),
+                    "classe_erro": "recusado"}
+        imagens, total, u = [], 0, a
+        while u <= b_fim and (not imagens or total < _formatos.IMAGEM_TETO):
+            try:
+                png, mime, ex = doc.imagem(u, dpi)
+            except Exception as e:                            # noqa: BLE001
+                return _erro(f"{rotulo} {u} não renderiza: {type(e).__name__}: {str(e)[:160]}",
+                             "binario", caminho=str(p), **base)
+            dim = ex.get("dimensoes") or (None, None)
+            imagens.append({"pagina": u, "png": png, "mime": mime, "largura": dim[0],
+                            "altura": dim[1], "dpi": ex.get("dpi")})
+            total += len(png)
+            u += 1
+        ult = u - 1
+        prox = None
+        if ult < b_fim:
+            prox = {"caminho": str(p), "paginas": f"{ult + 1}-{b}" if b else f"{ult + 1}-",
+                    "modo": "pagina", "versao": idx.versao}
+            if dpi != _formatos.DPI_PADRAO:
+                prox["dpi"] = dpi
+        proximo, proximo_args = continuacao(prox)
+        cab = [*avisos, curto, tipo, f"{rotulo} {_n(a)}–{_n(ult)} de {_n(n)} · imagem",
+               f"{len(imagens)} PNG · {_n(total)} bytes · {imagens[0].get('dpi') or ''} dpi".replace(" ·  dpi", ""),
+               f"versão {idx.versao}"]
+        r = {"cabecalho": " · ".join(cab), "proximo": proximo, "proximo_args": proximo_args,
+             "imagens": imagens, "paginas": [a, ult], **base}
+        return _com_mudou({k: v for k, v in r.items() if v is not None}, mudou)
+
+    # --- a própria imagem em modo texto: não recusa, aponta a cura (§7.4, linha das imagens)
+    if doc.unidade == "imagem":
+        dim = doc.dimensoes
+        cab = ["IMAGEM", *avisos, curto, tipo, "imagem" + (f" · {dim[0]}×{dim[1]} px" if dim else ""),
+               f"0 de {_n(idx.tamanho)} bytes", f"versão {idx.versao}"]
+        return _com_mudou({"cabecalho": " · ".join(cab), "conteudo": "", "proximo": FIM,
+                           "aviso": 'imagem não tem texto: leia com modo="pagina"',
+                           "cura": f'{TOOL}(caminho="{p}", modo="pagina")', **base,
+                           "linhas_total": 0}, mudou)
+
+    # --- texto por unidade (§7.4.1, §7.4.3)
+    cache = idx.extra.setdefault(("unidades", tipo), {})
+    if faixa and faixa[2]:
+        return _erro('linhas="-n" não se aplica a formato do acervo: use paginas', "gramatica",
+                     caminho=str(p), cura=f'{TOOL}(caminho="{p}", paginas="{n}-{n}")')
+    la = (faixa[0] if faixa else 1) or 1
+    lb_pedido = faixa[1] if faixa else None
+    # anda até a unidade que contém a linha `la` da faixa pedida
+    linha, u = 1, a
+    while u <= b_fim:
+        k = _unidade_texto(doc, cache, u)[0].count("\n")
+        if linha + k > la:
+            break
+        linha, u = linha + k, u + 1
+    if u > b_fim:
+        return _alem_do_fim(p, linha - 1)
+    buf, acum, lb, longa, sem_camada = [], 0, la - 1, None, []
+    primeira_u = ultima_u = u
+    pulo = la - linha
+    while u <= b_fim:
+        texto, vazia = _unidade_texto(doc, cache, u)
+        partes, pulo = texto.splitlines(keepends=True)[pulo:], 0
+        tam = sum(len(x.encode("utf-8")) for x in partes)
+        if buf and acum + tam > orcamento:
+            break                                      # a próxima página começa nesta unidade
+        if vazia:
+            sem_camada.append(u)
+        ultima_u = u
+        if not buf and tam > orcamento:                # unidade maior que o orçamento: por linhas
+            for x in partes:
+                bx = len(x.encode("utf-8"))
+                if buf and acum + bx > orcamento:
+                    break
+                if not buf and bx > orcamento:
+                    longa = {"linha": lb + 1, "bytes": bx}
+                buf.append(x)
+                acum += bx
+                lb += 1
+            if len(buf) == len(partes):
+                u += 1                                 # a unidade coube inteira afinal
+            break
+        buf.extend(partes)
+        acum, lb, u = acum + tam, lb + len(partes), u + 1
+    acabou = u > b_fim
+    if lb_pedido and lb >= lb_pedido:
+        buf, lb, acabou = buf[:len(buf) - (lb - lb_pedido)], lb_pedido, True
+    conteudo = "".join(buf)
+    prox = None
+    if not acabou:
+        prox = {"caminho": str(p)}
+        if com_unidade:
+            prox["paginas"] = f"{a}-{b}" if b else f"{a}-"
+        prox["linhas"] = f"{lb + 1}-{lb_pedido}" if lb_pedido else f"{lb + 1}-"
+        prox["versao"] = idx.versao
+        prox.update(extra_args)
+    proximo, proximo_args = continuacao(prox)
+    if sem_camada:
+        lista = ", ".join(str(x) for x in sem_camada[:8])
+        if len(sem_camada) > 8:
+            lista += f" +{len(sem_camada) - 8}"
+        avisos = [*avisos, f"SEM CAMADA DE TEXTO p. {lista}"]
+    if longa:
+        avisos = [*avisos, "LINHA LONGA"]
+    faixa_txt = (f"{rotulo} {_n(primeira_u)}–{_n(ultima_u)} de {_n(n)} · " if com_unidade else "") \
+        + f"linhas {_n(la)}–{_n(lb)}"
+    total_linhas = _total_linhas(cache, a, b_fim)
+    if total_linhas is not None:
+        faixa_txt += f" de {_n(total_linhas)}"
+    cab = cabecalho(curto=curto, tipo=tipo, faixa=faixa_txt, servidos=acum, total=idx.tamanho,
+                    encoding=enc, substituicoes=conteudo.count("�"), versao=idx.versao,
+                    avisos=tuple(avisos))
+    r = {"cabecalho": cab, "conteudo": conteudo, "proximo": proximo, "proximo_args": proximo_args,
+         **base, "encoding": enc, "linhas": [la, lb], "linhas_total": total_linhas,
+         "bytes_servidos": acum}
+    if com_unidade:
+        r["paginas"] = [primeira_u, ultima_u]
+    if sem_camada:
+        r["sem_texto"] = sem_camada
+        r["cura"] = (f'{TOOL}(caminho="{p}", modo="pagina", '
+                     f'paginas="{sem_camada[0]}-{sem_camada[0]}")')
+    if longa:
+        r["linha_longa"] = longa
+    return _com_mudou({k: v for k, v in r.items() if v is not None or k == "linhas_total"}, mudou)
+
+
+def _total_linhas(cache: dict, a: int, b: int) -> int | None:
+    """Total de linhas da faixa, só quando toda unidade dela já foi extraída."""
+    if all(k in cache for k in range(a, b + 1)):
+        return sum(cache[k][0].count("\n") for k in range(a, b + 1))
+    return None
+
+
 # ============================================================== lote (§10) e apelido (§12)
 def servidos(r: dict) -> int:
-    """Bytes que o item serviu à fita: o texto da página, não o tamanho do arquivo."""
+    """Bytes que o item serviu à fita: o texto da página, não o tamanho do arquivo; a imagem
+    conta pelos bytes do PNG (§7.4.5)."""
+    n = sum(len(i.get("png") or b"") for i in r.get("imagens") or ())
     t = r.get("conteudo", r.get("content"))
     if isinstance(t, str):
-        return len(t.encode("utf-8", "replace"))
+        return n + len(t.encode("utf-8", "replace"))
     if isinstance(r.get("sumario"), list):
-        return len(json.dumps(r["sumario"], ensure_ascii=False).encode())
-    return 0
+        return n + len(json.dumps(r["sumario"], ensure_ascii=False).encode())
+    return n
 
 
 def lote(itens: list, le_item, teto: int) -> dict:
@@ -1110,9 +1536,12 @@ def como_read_file(r: dict) -> dict:
         r["path"] = r.pop("caminho")
     if "conteudo" not in r:
         return r
-    ini, fim = r["bytes"]
     acabou = r.get("proximo_args") is None
     r["content"] = r.pop("conteudo")
+    if "bytes" not in r:                   # página de formato do acervo (§7.4): sem byte do arquivo
+        r.update(truncated=not acabou, next_offset=None)
+        return r
+    ini, fim = r["bytes"]
     r.update(truncated=not acabou, next_offset=None if acabou else fim,
              bytes_lidos=fim - ini, offset=ini)
     return r

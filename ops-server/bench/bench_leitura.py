@@ -526,7 +526,8 @@ def t6(tool, ctx: Ctx, arq, orc: Oraculo, caso: str) -> dict:
                 "extra": {"ok": ok, "conteudo_bytes": len((texto or "").encode("utf-8"))}}
     r = ctx.ler_cand(str(arq.caminho), linhas="1-")
     if caso == "binario":
-        ok = bool(r.get("recusado")) and r.get("motivo") == "binario" and "conteudo" not in r
+        ok = bool(r.get("recusado")) and r.get("motivo") in ("binario", "sem_leitor") \
+            and "conteudo" not in r
         defeitos = [] if ok else ["binario: o binário foi servido como texto"]
     elif caso == "linha_longa":
         # Emenda de 04/10/2026 (§4.3): a página de linha longa já traz o primeiro pedaço.
