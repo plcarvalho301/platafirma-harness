@@ -26,7 +26,7 @@ fronteiras da org, memória e fila — e vence este arquivo em qualquer conflito
 conteúdo. Não vasculhe repositório, wiki ou disco para descobrir o que fazer no
 arranque: leitura de descoberta é contexto gasto para chegar ao mesmo lugar.
 
-**A conduta não se chama.** `conduta/dono.md` é peça de abertura do catálogo e vem
+**A conduta não se chama.** `abertura/dono.md` é peça de abertura do catálogo e vem
 dentro do pacote (medido: 1.460 tokens). Linha mandando lê-la seria segunda fonte
 da mesma régua.
 
