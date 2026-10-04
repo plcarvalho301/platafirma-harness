@@ -320,6 +320,18 @@ def test_c17_apelido_read_file_coerente_com_os_campos_novos(tmp_path):
     assert erro["path"] == str(tmp_path / "nao")
 
 
+def test_releitura_igual_sai_so_com_aviso_e_alca(tmp_path):
+    p = tmp_path / "a.txt"
+    p.write_text("x\n" * 100)
+    r = L.le(p)
+    r.update(conteudo="[igual ao giro 3 — sha abc, 200 bytes não reenviados; inteiro=true reenvia]",
+             poda={"modo": "igual"})
+    magro = L.enxuga_releitura(dict(r))
+    assert set(magro) == {"conteudo", "caminho", "versao", "poda"}
+    inteiro = L.le(p)
+    assert L.enxuga_releitura(dict(inteiro)) == inteiro, "página servida não perde campo"
+
+
 # --- índice: marcos e cache ------------------------------------------------------------------------
 def test_marco_acha_a_linha_a_frio_e_a_quente(tmp_path):
     p = tmp_path / "muitas.txt"

@@ -469,7 +469,7 @@ def test_c16_releitura_igual_avisa_e_inteiro_reenvia(tmp_path):
         r3 = s.ler_arquivo(caminho=str(alvo), sessao_id=_UUID_A, inteiro=True)
         r4 = s.read_file(path=str(alvo), sessao_id=_UUID_A)
     assert r1["poda"]["ledger"] == "novo" and r1["conteudo"] == alvo.read_text()
-    assert r2["poda"]["modo"] == "igual"
+    assert r2["poda"]["modo"] == "igual" and "cabecalho" not in r2 and r2["versao"]
     assert r2["conteudo"].endswith("bytes não reenviados; inteiro=true reenvia]")
     assert r3["conteudo"] == alvo.read_text() and r3["poda"]["ledger"] == "novo"
     assert r4["poda"]["modo"] == "igual", "apelido e nova dividem a alça"

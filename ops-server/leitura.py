@@ -1073,6 +1073,21 @@ def lote(itens: list, le_item, teto: int) -> dict:
     return {"lote": resultados, "lote_n": len(itens), "lote_next": lote_next}
 
 
+# O que fica no retorno quando o registro de releitura responde "igual" (spec §11): o
+# aviso, o arquivo, a versão e a poda. A página não foi servida — o que a fita já tem é a
+# página do giro citado no aviso, com o cabeçalho e a continuação dela —, e o envelope da
+# §3.2 sobre um aviso de cem bytes custaria três vezes o aviso a cada releitura.
+_NA_RELEITURA = ("conteudo", "content", "caminho", "path", "versao", "truncated",
+                 "next_offset", "poda", "poda_aviso")
+
+
+def enxuga_releitura(r: dict) -> dict:
+    """Releitura igual sai só com o aviso e a alça; o resto segue inteiro."""
+    if (r.get("poda") or {}).get("modo") != "igual":
+        return r
+    return {k: r[k] for k in _NA_RELEITURA if k in r}
+
+
 def como_read_file(r: dict) -> dict:
     """O retorno da `ler_arquivo` nas chaves do apelido `read_file` (§12.2).
 

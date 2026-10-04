@@ -167,7 +167,7 @@ def serve_candidata(caminho, *, ledger, abre, curto=None, **kw) -> dict:
     aviso = poda.linha_humana(meta)
     if aviso:
         r["poda_aviso"] = aviso
-    return r
+    return leitura.enxuga_releitura(r)            # como `_le_um_arquivo` em server.py
 
 
 class Ctx:

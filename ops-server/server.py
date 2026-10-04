@@ -1482,7 +1482,9 @@ def _le_um_arquivo(caminho: str, args: dict, ident: dict, tool: str,
            bytes_total=r.get("bytes_total"), classe_erro=classe,
            erro=(r.get("erro") or r.get("motivo")) if classe else None,
            **quem, **_campos_poda(r))
-    return r
+    if tool == "read_file":
+        r = _leitura.como_read_file(r)
+    return _leitura.enxuga_releitura(r)
 
 
 def ler_arquivo(caminho: str = "", linhas: str = "", modo: str = "texto",
@@ -1534,6 +1536,7 @@ def read_file(path: str = "", offset: int = 0, max_bytes: int = 40000,
         lote_id = uuid.uuid4().hex[:8]
         return _leitura.lote(paths, lambda i, c: _leitura.como_read_file(
             _le_um_arquivo(str(c), args, ident, "read_file", lote_id, i)), CAP)
+    # Idempotente: a costura já traduziu a página; aqui pega a recusa que saiu antes dela.
     return _leitura.como_read_file(_le_um_arquivo(path, args, ident, "read_file"))
 
 
