@@ -40,9 +40,9 @@ USO = """uso: acervo ler biblioteca impressao <obra> [--paginas a-b | --capitulo
   --papel         corpo (padrão: sem cabeçalho, rodapé, navegação) · todos
   --impressao     lê outra impressão da obra, aposentada inclusive (padrão: a servindo)
   --baixar        grava espelho.md inteiro como <título>.md e imprime o caminho
-primeira linha: o que é, de onde veio, a qualidade e o motivo do veredito, e os avisos página a página: `avisos:
-  tabela com coluna suspeita p. 120–131; página sem texto extraído p. 3` (página física; o que não cabe vem
-  contado como `+N`; sem aviso, `avisos: nenhum`)
+primeira linha: o que é, de onde veio, a qualidade e o motivo do veredito, e os avisos das páginas lidas: `avisos:
+  tabela com coluna suspeita p. 120–131; página sem texto extraído p. 3` (página física; o aviso da obra inteira
+  sai como `<rótulo> na obra`; o que não cabe vem contado como `+N`; sem aviso, `avisos: nenhum`)
 exit: 0 leu · 1 obra sem impressão servindo · 2 uso · 3 rota fora · 5 indeterminável
 spec: acervo ler casa spec espelho-de-leitura (§5.4)
 """
@@ -88,23 +88,50 @@ def _faixas_em_texto(faixas: list) -> str:
 def _paginas_nas_faixas(faixas: list) -> int:
     return sum(fim - ini + 1 for ini, fim in faixas)
 
+def _da_obra(aviso: dict) -> bool:
+    """Aviso da obra inteira (régua 3: `razao_texto_bytes`, `quase_vazio` da obra): sai sem página, com o
+    `detalhe`, e vale para qualquer faixa lida."""
+    return not aviso.get("paginas") and "detalhe" in aviso
+
+def avisos_da_faixa(avisos: list | None, unidades: str | None) -> list:
+    """Só os avisos das páginas lidas (spec espelho-de-leitura §4.5, «Aviso dentro da página», item 2; régua 3,
+    #3240): cada faixa de página cortada em `unidades` (`a-b`, a faixa que a primeira linha declara); aviso que
+    fica sem página sai, salvo o da obra inteira. Sem faixa (obra sem página), a lista como veio."""
+    avisos = [a for a in (avisos or []) if isinstance(a, dict)]
+    m = re.fullmatch(r"\s*(\d+)\s*(?:[-–]\s*(\d+))?\s*", unidades or "")
+    if not m:
+        return avisos
+    a, b = int(m.group(1)), int(m.group(2) or m.group(1))
+    saida = []
+    for aviso in avisos:
+        if _da_obra(aviso):
+            saida.append(aviso)
+            continue
+        faixas = [[max(ini, a), min(fim, b)] for ini, fim in aviso.get("paginas") or ()
+                  if ini <= b and fim >= a]
+        if faixas:
+            saida.append({**aviso, "paginas": faixas})
+    return saida
+
 def linha_de_avisos(avisos: list | None, largura: int = LARGURA_DOS_AVISOS,
                     faixas_por_aviso: int = FAIXAS_POR_AVISO) -> str:
     """`avisos: tabela com coluna suspeita p. 3–40; … +N` (spec espelho-de-leitura §5.4: o rótulo e as
-    páginas; o que não coube, contado em páginas no fim), ou `avisos: nenhum`."""
-    avisos = [a for a in (avisos or []) if isinstance(a, dict) and a.get("paginas")]
+    páginas; o que não coube, contado em páginas no fim), ou `avisos: nenhum`. O aviso da obra inteira sai
+    como `<rótulo> na obra`."""
+    avisos = [a for a in (avisos or []) if isinstance(a, dict) and (a.get("paginas") or _da_obra(a))]
     if not avisos:
         return PREFIXO_DOS_AVISOS + "nenhum"
     partes: list[str] = []
     omitidas = 0
     usado = len(PREFIXO_DOS_AVISOS)
     for i, aviso in enumerate(avisos):
-        faixas = aviso["paginas"]
+        faixas = aviso.get("paginas") or []
         rotulo = aviso.get("rotulo") or aviso.get("codigo") or "?"
-        texto = f"{rotulo} p. {_faixas_em_texto(faixas[:faixas_por_aviso])}"
+        texto = (f"{rotulo} p. {_faixas_em_texto(faixas[:faixas_por_aviso])}" if faixas
+                 else f"{rotulo} na obra")
         custo = len(texto) + (2 if partes else 0)
         if partes and usado + custo > largura:
-            omitidas += sum(_paginas_nas_faixas(restante["paginas"]) for restante in avisos[i:])
+            omitidas += sum(_paginas_nas_faixas(restante.get("paginas") or []) for restante in avisos[i:])
             break
         partes.append(texto)
         usado += custo
@@ -149,7 +176,8 @@ def primeira_linha(titulo: str, sumario: dict, unidades: str | None, fora: dict,
     qual = esp.get("qualidade") or "nao-julgada"
     motivo = _motivo(esp.get("motivo"))
     partes.append(f"qualidade {qual}" + (f" ({motivo})" if motivo else ""))
-    partes.append(linha_de_avisos(esp.get("avisos")))
+    # só os avisos das páginas lidas (régua 3, §4.5 e §5.4); o da obra inteira fica
+    partes.append(linha_de_avisos(avisos_da_faixa(esp.get("avisos"), unidades if unidade != "nenhuma" else None)))
     return " · ".join(partes)
 
 

@@ -127,7 +127,7 @@ def test_sem_aviso_a_linha_diz_nenhum():
 def test_a_primeira_linha_leva_os_avisos_depois_da_qualidade():
     m = _mod()
     sumario = {**SUMARIO, "espelho": {**SUMARIO["espelho"], "avisos": AVISOS_DO_EXEMPLO}}
-    linha = m.primeira_linha("Lei 14.133", sumario, "1-2", {"cabecalho-corrente": 3}, "corpo", None)
+    linha = m.primeira_linha("Lei 14.133", sumario, "1-131", {"cabecalho-corrente": 3}, "corpo", None)
     assert linha.endswith(
         "qualidade nao-julgada · avisos: tabela com coluna suspeita p. 120–131; ordem entre colunas suspeita p. 3")
     assert "\n" not in linha and linha.count("avisos:") == 1
@@ -137,8 +137,41 @@ def test_a_pagina_sem_texto_extraido_aparece_com_o_rotulo():
     m = _mod()
     sumario = {**SUMARIO, "espelho": {**SUMARIO["espelho"], "avisos": [
         _aviso("sem_bloco", "página sem texto extraído", (4, 4), (6, 6))]}}
-    linha = m.primeira_linha("Obra", sumario, "1-2", {}, "corpo", None)
+    linha = m.primeira_linha("Obra", sumario, "1-6", {}, "corpo", None)
     assert linha.endswith("avisos: página sem texto extraído p. 4, 6")
+
+
+# --- só os avisos das páginas lidas (régua 3, #3240; spec §4.5 «Aviso dentro da página», §5.4) -------
+
+RAZAO = {"codigo": "razao_texto_bytes", "rotulo": "razão texto/bytes baixa", "paginas": [],
+         "detalhe": "0.71 < piso 0.92"}
+
+
+def test_a_primeira_linha_so_traz_os_avisos_das_paginas_lidas():
+    m = _mod()
+    sumario = {**SUMARIO, "espelho": {**SUMARIO["espelho"], "avisos": AVISOS_DO_EXEMPLO}}
+    assert m.primeira_linha("x", sumario, "1-5", {}, "corpo", None).endswith(
+        "avisos: ordem entre colunas suspeita p. 3")
+    assert m.primeira_linha("x", sumario, "125-140", {}, "corpo", None).endswith(
+        "avisos: tabela com coluna suspeita p. 125–131")
+    assert m.primeira_linha("x", sumario, "7-9", {}, "corpo", None).endswith("avisos: nenhum")
+
+
+def test_o_aviso_da_obra_inteira_sai_em_qualquer_faixa():
+    m = _mod()
+    sumario = {**SUMARIO, "espelho": {**SUMARIO["espelho"], "avisos": [*AVISOS_DO_EXEMPLO, RAZAO]}}
+    assert m.primeira_linha("x", sumario, "7-9", {}, "corpo", None).endswith(
+        "avisos: razão texto/bytes baixa na obra")
+    assert m.linha_de_avisos(m.avisos_da_faixa([*AVISOS_DO_EXEMPLO, RAZAO], "3-3")) == (
+        "avisos: ordem entre colunas suspeita p. 3; razão texto/bytes baixa na obra")
+
+
+def test_sem_faixa_os_avisos_vem_como_estao():
+    m = _mod()
+    assert m.avisos_da_faixa(AVISOS_DO_EXEMPLO, None) == AVISOS_DO_EXEMPLO
+    sumario = {**SUMARIO, "espelho": {**SUMARIO["espelho"], "unidade": "nenhuma", "avisos": AVISOS_DO_EXEMPLO}}
+    assert m.primeira_linha("x", sumario, None, {}, "corpo", "capitulo-i").endswith(
+        "avisos: tabela com coluna suspeita p. 120–131; ordem entre colunas suspeita p. 3")
 
 
 def test_o_que_nao_cabe_na_largura_entra_contado_no_fim():
