@@ -461,3 +461,228 @@ def test_lint_prosa_sem_a_regua_em_nenhuma_especie_exit_5(bancada, acervo):
     assert p.returncode == 5, p.stdout + p.stderr
     assert "indeterminavel" in p.stderr
     assert "styleguide-da-wiki" in p.stderr
+
+
+# ------------------------------------------------------------------ predicados da casa
+# Um caso por predicado: o codigo que tem a forma aponta, e o vizinho que nao tem, nao.
+
+
+def _achados(tmp_path, nome_predicado, arquivos, item=None):
+    sys.path.insert(0, str(HARNESS_ROOT / "bin"))
+    from _lint.codigo import _por_lingua
+    from _lint.predicados import PREDICADOS, Contexto
+    raiz = (tmp_path / "repo").resolve()
+    for rel, texto in arquivos.items():
+        (raiz / rel).parent.mkdir(parents=True, exist_ok=True)
+        (raiz / rel).write_text(texto)
+    todos = sorted(p for p in raiz.rglob("*") if p.is_file())
+    por = _por_lingua(todos)
+    ctx = Contexto(raiz, por["python"], por["shell"], por["unit"], por["python"])
+    funcao, _ = PREDICADOS[nome_predicado]
+    return sorted((a.arquivo, a.linha) for a in funcao(ctx, item or {}))
+
+
+def test_predicado_prazo_externo(tmp_path):
+    assert _achados(tmp_path, "PRAZO_EXTERNO", {"a.py": (
+        "import subprocess\n"
+        "subprocess.run(['ls'])\n"
+        "subprocess.run(['ls'], timeout=5)\n"
+        "p = subprocess.Popen(['ls'])\n"
+        "p.communicate()\n")}) == [("a.py", 2), ("a.py", 5)]
+
+
+def test_predicado_lote_sem_fila(tmp_path):
+    # o formato do #3194: laco sobre obras, chamada externa e repeticao dentro
+    assert _achados(tmp_path, "LOTE_SEM_FILA", {"a.py": (
+        "import time, httpx\n"
+        "def lote(obras, cliente):\n"
+        "    for obra in obras:\n"
+        "        for tentativa in range(3):\n"
+        "            try:\n"
+        "                cliente.post('/converter', json=obra)\n"
+        "                break\n"
+        "            except httpx.HTTPError:\n"
+        "                time.sleep(30)\n"
+        "def soma(xs):\n"
+        "    for x in xs:\n"
+        "        try:\n"
+        "            print(int(x))\n"
+        "        except ValueError:\n"
+        "            pass\n")}) == [("a.py", 3)]
+
+
+def test_predicado_recuo_fixo_e_repete_sem_teto(tmp_path):
+    fonte = {"a.py": (
+        "import time, random\n"
+        "def a(f):\n"
+        "    while True:\n"
+        "        try:\n"
+        "            return f()\n"
+        "        except OSError:\n"
+        "            time.sleep(2)\n"
+        "def b(f):\n"
+        "    for i in range(5):\n"
+        "        try:\n"
+        "            return f()\n"
+        "        except OSError:\n"
+        "            time.sleep(random.uniform(0, 2 ** i))\n")}
+    assert _achados(tmp_path, "RECUO_FIXO", fonte) == [("a.py", 7)]
+    assert _achados(tmp_path, "REPETE_SEM_TETO", fonte) == [("a.py", 3)]
+
+
+def test_predicado_erro_sem_causa(tmp_path):
+    assert _achados(tmp_path, "ERRO_SEM_CAUSA", {"a.py": (
+        "import sys\n"
+        "def a(x):\n"
+        "    if not x:\n"
+        "        sys.exit(2)\n"
+        "    if x < 0:\n"
+        "        print('negativo', file=sys.stderr)\n"
+        "        sys.exit(1)\n"
+        "    sys.exit(0)\n")}) == [("a.py", 4)]
+
+
+def test_predicado_popen_wait(tmp_path):
+    assert _achados(tmp_path, "POPEN_WAIT", {"a.py": (
+        "import subprocess\n"
+        "def a():\n"
+        "    p = subprocess.Popen(['ls'], stdout=subprocess.PIPE)\n"
+        "    p.wait()\n"
+        "    q = subprocess.Popen(['ls'])\n"
+        "    q.wait()\n")}) == [("a.py", 4)]
+
+
+def test_predicado_ambiente_na_importacao(tmp_path):
+    assert _achados(tmp_path, "AMBIENTE_NA_IMPORTACAO", {"a.py": (
+        "import os\n"
+        "RAIZ = os.environ.get('RAIZ', '/tmp')\n"
+        "def raiz():\n"
+        "    return os.environ.get('RAIZ', '/tmp')\n")}) == [("a.py", 2)]
+
+
+def test_predicado_trava_com_io(tmp_path):
+    assert _achados(tmp_path, "TRAVA_COM_IO", {"a.py": (
+        "import subprocess\n"
+        "def a(self):\n"
+        "    with self._lock:\n"
+        "        subprocess.run(['ls'], timeout=1)\n"
+        "    with self._lock:\n"
+        "        self.n += 1\n")}) == [("a.py", 4)]
+
+
+def test_predicado_escada_isinstance(tmp_path):
+    assert _achados(tmp_path, "ESCADA_ISINSTANCE", {"a.py": (
+        "def a(x):\n"
+        "    if isinstance(x, int):\n"
+        "        return 1\n"
+        "    elif isinstance(x, str):\n"
+        "        return 2\n"
+        "    elif isinstance(x, list):\n"
+        "        return 3\n"
+        "def b(x):\n"
+        "    if isinstance(x, int):\n"
+        "        return 1\n"
+        "    elif isinstance(x, str):\n"
+        "        return 2\n")}) == [("a.py", 2)]
+
+
+def test_predicado_confere_e_usa(tmp_path):
+    assert _achados(tmp_path, "CONFERE_E_USA", {"a.py": (
+        "import os\n"
+        "def a(f, p):\n"
+        "    if os.path.exists(f):\n"
+        "        os.remove(f)\n"
+        "    if p.exists():\n"
+        "        return p.read_text()\n"
+        "    if os.path.exists(f):\n"
+        "        print(f)\n")}) == [("a.py", 4), ("a.py", 6)]
+
+
+def test_predicado_unit_segundo_plano(tmp_path):
+    assert _achados(tmp_path, "UNIT_SEGUNDO_PLANO", {
+        "a.service": "[Service]\nType=forking\nPIDFile=/run/a.pid\n",
+        "b.service": "[Service]\nType=simple\n"}) == [("a.service", 2), ("a.service", 3)]
+
+
+def test_predicado_import_ciclico(tmp_path):
+    assert _achados(tmp_path, "IMPORT_CICLICO", {
+        "pkg/__init__.py": "",
+        "pkg/a.py": "from . import b\n",
+        "pkg/b.py": "import os\nfrom pkg import a\n",
+        "pkg/c.py": "from . import a\n"}) == [("pkg/a.py", 1), ("pkg/b.py", 2)]
+
+
+def test_predicado_duplicacao(tmp_path):
+    bloco = "".join(f"    v{i} = carregar('{i}')\n" for i in range(9))
+    achados = _achados(tmp_path, "DUPLICACAO", {
+        "a.py": "def f():\n" + bloco,
+        "b.py": "def g():\n" + bloco,
+        "c.py": "def h():\n    return 1\n"})
+    assert achados == [("a.py", 2), ("b.py", 2)]
+
+
+def test_predicados_de_teste(tmp_path):
+    fonte = {"tests/test_a.py": (
+        "import time, pytest, shutil\n"
+        "def test_a():\n"
+        "    if not shutil.which('x'):\n"
+        "        pytest.skip('sem x')\n"
+        "    if time.time() > 0:\n"
+        "        assert open('/srv/platafirma/casa/x')\n"),
+        "prod.py": "import time\nT = time.time()\nC = '/srv/platafirma/casa'\n"}
+    assert _achados(tmp_path, "TESTE_CONDICIONAL", fonte) == [("tests/test_a.py", 5)]
+    assert _achados(tmp_path, "TESTE_ERRATICO", fonte) == [("tests/test_a.py", 5)]
+    assert _achados(tmp_path, "TESTE_ESTADO_REAL", fonte) == [("tests/test_a.py", 6)]
+
+
+def test_predicado_eval_shell(tmp_path):
+    assert _achados(tmp_path, "EVAL_SHELL", {"a.sh": (
+        "#!/bin/bash\n"
+        "# eval aqui e comentario\n"
+        "eval \"$cmd\"\n"
+        "echo avaliar\n")}) == [("a.sh", 3)]
+
+
+def test_todo_predicado_tem_caso(tmp_path):
+    # predicado novo sem caso de teste quebra aqui
+    sys.path.insert(0, str(HARNESS_ROOT / "bin"))
+    from _lint.predicados import PREDICADOS
+    fonte = Path(__file__).read_text()
+    # BASH_SET_E e LINHAS_SHELL tem caso no teste de shell pela CLI (S6 e S14)
+    sem_caso = [n for n in PREDICADOS
+                if f'"{n}"' not in fonte and n not in ("BASH_SET_E", "LINHAS_SHELL")]
+    assert sem_caso == [], sem_caso
+
+
+LISTA_RUFF_PADRAO = LISTA_CODIGO.replace(
+    "| F1 | lote sem fila |",
+    "| P19 | regra padrão do ruff | ruff | `ruff padrão` | aviso | Siga a regra. |\n| F1 | lote sem fila |")
+
+
+def test_lint_codigo_ruff_padrao_soma_as_regras_do_ruff(tmp_path, acervo):
+    _precisa_ruff()
+    wt, env = _wt(tmp_path)
+    # F541 (f-string sem campo) esta no padrao do ruff e nao e nomeado pela lista
+    (wt / "m.py").write_text("x = f'abc'\ndef f(a=[]):\n    return a\n")
+    env_sem = {**env, **acervo(textos={"antipadroes-de-codigo": LISTA_CODIGO})}
+    p = _rodar_lint("codigo", "mono", "m.py", env_extra=env_sem)
+    assert "F541" not in p.stdout and "m.py:2: P1" in p.stdout, p.stdout + p.stderr
+    env_com = {**env, **acervo(textos={"antipadroes-de-codigo": LISTA_RUFF_PADRAO})}
+    p = _rodar_lint("codigo", "mono", "m.py", env_extra=env_com)
+    assert "m.py:1: P19" in p.stdout and "F541" in p.stdout, p.stdout + p.stderr
+    assert "m.py:2: P1" in p.stdout, p.stdout
+
+
+def test_lint_codigo_predicado_candidato_diz_que_e_candidato(tmp_path, acervo):
+    _precisa_ruff()
+    wt, env = _wt(tmp_path)
+    (wt / "t.py").write_text("import time\nwhile True:\n    try:\n        x = 1\n    except OSError:\n        time.sleep(1)\n")
+    lista = LISTA_CODIGO.replace(
+        "| F1 | lote sem fila |",
+        "| R4 | repetição sem teto | SRE | `predicado REPETE_SEM_TETO` (candidata) | aviso | Fixe o teto. |\n"
+        "| P98 | predicado que o lint não tem | fixture | `predicado NAO_EXISTE` | aviso | nada |\n"
+        "| F1 | lote sem fila |")
+    env = {**env, **acervo(textos={"antipadroes-de-codigo": lista})}
+    p = _rodar_lint("codigo", "mono", "t.py", env_extra=env)
+    assert "t.py:2: R4" in p.stdout and "candidata, confirme lendo" in p.stdout, p.stdout + p.stderr
+    assert "NAO_EXISTE" in p.stderr, p.stderr
