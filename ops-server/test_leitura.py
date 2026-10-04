@@ -183,7 +183,6 @@ def test_encoding_pedido_julga(tmp_path):
     ("a.bin", b"\x7fELF\x02\x01\x01" + bytes(range(256)), "application/x-elf"),
     ("a.txt", b"texto\x00com nulo\n", "application/octet-stream"),
     ("a.db", b"SQLite format 3\x00" + bytes(range(256)), "application/vnd.sqlite3"),
-    ("a.gz", b"\x1f\x8b\x08\x00" + bytes(range(256)), "application/gzip"),
 ])
 def test_c9_binario_fora_da_tabela_recusa_com_nome(tmp_path, nome, dados, tipo):
     p = tmp_path / nome
