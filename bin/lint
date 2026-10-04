@@ -156,7 +156,8 @@ def imprimir_uso(stream=sys.stdout):
     print("  lint card <arquivo>|- [<repo>] [--json]", file=stream)
     print("  lint acervo [--resumo] [--json] [--criterio <id>[,<id>]] [--so-bloqueantes]   antipadroes de obra (firma) e conceito; exit 1 so com bloqueante", file=stream)
     print("  lint organizacao <repo> [<alvo>] [--todas] [--resumo]   --todas inclui os bloqueantes (contagem; quem barra e o pre-commit); --resumo conta por regra", file=stream)
-    print("  lint diagrama <repo>[@<chave>] <alvo>   compila .mmd/.d2 no Kroki da casa; exit 0/1/5, Kroki fora do ar nao barra o pre-commit\n", file=stream)
+    print("  lint diagrama <repo>[@<chave>] <alvo>   compila .mmd/.d2 no Kroki da casa; exit 0/1/5, Kroki fora do ar nao barra o pre-commit", file=stream)
+    print("  lint codigo <repo>[@<chave>] [<alvo>] [--leitura] [--com <repo>[,<repo>]] [--resumo]   --leitura: o modelo local julga os criterios de leitura (minutos na stack inteira); --com: outros repositorios no indice da stack\n", file=stream)
     print("classes:", file=stream)
     for c, info in CLASSES_LINT.items():
         lista_desc = f"{info['tipo']} {info['chave']}" if info['tipo'] == 'lista-de-verificacao' else info['tipo']
@@ -178,20 +179,26 @@ def main() -> int:
     todas = "--todas" in argv
     resumo = "--resumo" in argv
     so_bloqueantes = "--so-bloqueantes" in argv
-    argv = [a for a in argv if a not in ("--json", "--staged", "--todas", "--resumo", "--so-bloqueantes")]
+    leitura = "--leitura" in argv
+    argv = [a for a in argv if a not in ("--json", "--staged", "--todas", "--resumo", "--so-bloqueantes", "--leitura")]
     # --criterio <id>[,<id>] (ou --criterio=<id>), repetivel: so vale em `lint acervo` (#2856 linha 154)
+    # --com <repo>[,<repo>]: so vale em `lint codigo`; poe outros repositorios no indice da stack
     criterios: list = []
+    com: list = []
     resto: list = []
     _it = iter(argv)
     for _a in _it:
-        if _a == "--criterio":
+        if _a in ("--criterio", "--com"):
             _v = next(_it, "")
             if not _v or _v.startswith("--"):
-                print("lint: --criterio pede o id do criterio (ex.: lint acervo --criterio T2,A1)", file=sys.stderr)
+                print(f"lint: {_a} pede um valor (ex.: lint acervo --criterio T2,A1; "
+                      "lint codigo platafirma-harness --com platafirma-conhecimento)", file=sys.stderr)
                 return 2
-            criterios += _v.split(",")
+            (criterios if _a == "--criterio" else com).extend(_v.split(","))
         elif _a.startswith("--criterio="):
             criterios += _a.split("=", 1)[1].split(",")
+        elif _a.startswith("--com="):
+            com += _a.split("=", 1)[1].split(",")
         else:
             resto.append(_a)
     argv = resto
@@ -236,6 +243,9 @@ def main() -> int:
 
     if (criterios or so_bloqueantes) and classe != "acervo":
         print(f"lint: --criterio e --so-bloqueantes so valem em `lint acervo`; a classe '{classe}' nao os le", file=sys.stderr)
+        return 2
+    if (leitura or com) and classe != "codigo":
+        print(f"lint: --leitura e --com so valem em `lint codigo`; a classe '{classe}' nao os le", file=sys.stderr)
         return 2
 
     info_classe = CLASSES_LINT[classe]
@@ -344,8 +354,15 @@ def main() -> int:
 
     # 4. Classe CODIGO
     if classe == "codigo":
+        extras = {}
+        for outro in com:
+            try:
+                extras[resolver_bancada(outro)[0]] = outro
+            except ErroBancada as e:
+                print(f"lint: --com {outro}: {e.msg}", file=sys.stderr)
+                return e.exit_code
         try:
-            apontamentos, chv, rev, avisos = verificar_codigo(raiz_repo, alvo=alvo)
+            apontamentos, chv, rev, avisos = verificar_codigo(raiz_repo, alvo=alvo, leitura=leitura, extras=extras)
             # o que ficou sem medir vai ao stderr: verde com parte nao medida nao e verde
             for aviso in avisos:
                 print(f"lint codigo: {aviso}", file=sys.stderr)
