@@ -17,7 +17,19 @@ from pathlib import Path
 REPO_BIN = Path(__file__).resolve().parents[2] / "bin" / "repo"
 IDENT = {"GIT_AUTHOR_NAME": "t", "GIT_AUTHOR_EMAIL": "t@t",
          "GIT_COMMITTER_NAME": "t", "GIT_COMMITTER_EMAIL": "t@t"}
-PY = os.path.realpath(sys.executable)
+
+def _python_de_sistema() -> str:
+    """Um python de sistema fora do HOME: `resolver_python` (lib/venv.sh) recusa, com exit 3,
+    interpretador sob $HOME ou em */uv/python/*. `sys.executable` e o python do pytest, e
+    sob `uv run` pode ser o gerenciado pelo uv (CI, bancada limpa) -- por isso nao serve."""
+    casa = str(Path.home())
+    for candidato in ("/usr/bin/python3.12", "/usr/bin/python3", sys.executable):
+        real = os.path.realpath(candidato)
+        if os.access(real, os.X_OK) and not real.startswith(casa) and "/uv/python/" not in real:
+            return real
+    return os.path.realpath(sys.executable)
+
+PY = _python_de_sistema()
 
 UV_FIXTURE = """#!/bin/sh
 d="$(dirname "$0")"
