@@ -357,6 +357,12 @@ def pagina_linhas(fh, indice: Indice, a: int, b: int | None, orcamento: int) -> 
     """
     linha, byte = _ancora(indice, a)
     ini, sobra = _anda_linhas(fh, byte, a - linha, indice.tamanho)
+    fim = _fim_conhecido(indice, a)
+    if fim is not None and fim - ini > orcamento:
+        # Linha longa que o índice já mede (a última do arquivo, ou a que precede uma
+        # posição conhecida): a página sai sem ler nada.
+        return Fatia(b"", None, ini, ini,
+                     linha_longa={"linha": a, "bytes": fim - ini, "byte_ini": ini})
     buf = bytearray(sobra[:orcamento])
     fh.seek(ini + len(buf))
     pedidas = (b - a + 1) if b else None
@@ -384,7 +390,8 @@ def pagina_linhas(fh, indice: Indice, a: int, b: int | None, orcamento: int) -> 
     if corte == 0:
         if ini >= indice.tamanho:
             return Fatia(b"", None, ini, ini)
-        fim = _fim_da_linha(fh, ini, indice.tamanho)
+        # O buffer inteiro é a linha `a`, sem `\n`: o fim dela se procura dali em diante.
+        fim = _fim_da_linha(fh, ini + len(buf), indice.tamanho)
         return Fatia(b"", None, ini, ini,
                      linha_longa={"linha": a, "bytes": fim - ini, "byte_ini": ini})
     dados = bytes(buf[:corte])
@@ -392,8 +399,20 @@ def pagina_linhas(fh, indice: Indice, a: int, b: int | None, orcamento: int) -> 
     return Fatia(dados, (a, a + n - 1), ini, ini + corte)
 
 
+def _fim_conhecido(indice: Indice, a: int) -> int | None:
+    """Byte em que a linha `a` termina, se o índice já sabe sem ler."""
+    if indice.linhas_total is not None and a == indice.linhas_total:
+        return indice.tamanho
+    with _TRAVA:
+        seguinte = indice.inicios.get(a + 1)
+    if seguinte is not None:
+        return seguinte
+    k, resto = divmod(a, MARCO)
+    return indice.marcos[k] if resto == 0 and k < len(indice.marcos) else None
+
+
 def _fim_da_linha(fh, ini: int, tamanho: int) -> int:
-    """Byte depois do `\\n` da linha que começa em `ini` (ou `tamanho`, se não tem)."""
+    """Byte depois do primeiro `\\n` a partir de `ini` (ou `tamanho`, se não há)."""
     fh.seek(ini)
     pos = ini
     while True:
@@ -447,33 +466,44 @@ def _e_continuacao(b: int) -> bool:
     return 0x80 <= b <= 0xBF
 
 
-def pagina_bytes(fh, offset: int, orcamento: int, encoding: str) -> Fatia:
+def _tamanho_da_sequencia(lider: int) -> int:
+    return 4 if lider >= 0xF0 else 3 if lider >= 0xE0 else 2 if lider >= 0xC0 else 1
+
+
+def _continuacoes(buf, i: int) -> int:
+    """Bytes de continuação seguidos a partir de `i`, até 3 (o máximo em UTF-8 válido)."""
+    n = 0
+    while n < 3 and i + n < len(buf) and _e_continuacao(buf[i + n]):
+        n += 1
+    return n
+
+
+def pagina_bytes(fh, offset: int, orcamento: int, encoding: str, tamanho: int) -> Fatia:
     """De `offset` até o orçamento, alinhado a caractere em UTF-8 (§5).
 
-    Lê 6 bytes além do orçamento: até 3 para pular continuação no começo (§5.2), 1 para
-    saber se o corte cai em fronteira e até 3 para completar o caractere quando o orçamento
-    é menor que ele. Em UTF-8 válido nunca há mais de 3 bytes de continuação seguidos;
-    sequência maior é inválida, e o corte nela não fabrica nada que já não estivesse lá.
+    Lê exatamente o orçamento. O começo pula continuação (§5.2); o fim recua até a
+    fronteira, e a sequência que não coube vai inteira para a página seguinte. Só lê além
+    do orçamento quando ele é menor que um caractere, e então serve o caractere inteiro
+    (até 3 bytes acima), para a leitura andar. Sequência de mais de 3 continuações é
+    inválida: o corte nela não fabrica nada que já não estivesse lá, e o fim do arquivo
+    nunca se corta.
     """
     fh.seek(offset)
-    buf = fh.read(orcamento + 6)
+    buf = fh.read(orcamento)
     if encoding.replace("_", "-").lower() not in ("utf-8", "utf8"):
-        dados = buf[:orcamento]
-        return Fatia(dados, None, offset, offset + len(dados))
-    pulados = 0
-    while pulados < min(3, len(buf)) and _e_continuacao(buf[pulados]):
-        pulados += 1
-    j = min(len(buf), pulados + orcamento)
-    if j < len(buf) and _e_continuacao(buf[j]):
-        k = j
-        while k > max(pulados, j - 3) and _e_continuacao(buf[k]):
+        return Fatia(buf, None, offset, offset + len(buf))
+    pulados = _continuacoes(buf, 0)
+    j = len(buf)
+    if offset + len(buf) < tamanho:
+        k = len(buf) - 1
+        while k > pulados and len(buf) - 1 - k < 3 and _e_continuacao(buf[k]):
             k -= 1
-        if not _e_continuacao(buf[k]):
-            j = k                     # o caractere que começa em k vai inteiro para a seguinte
-        if j == pulados:              # orçamento menor que um caractere: serve-o inteiro
-            j = pulados + 1
-            while j < len(buf) and j < pulados + 4 and _e_continuacao(buf[j]):
-                j += 1
+        if k >= pulados and buf[k] >= 0xC0 and k + _tamanho_da_sequencia(buf[k]) > len(buf):
+            j = k
+        if j <= pulados:
+            buf += fh.read(7)
+            pulados = _continuacoes(buf, 0)
+            j = min(len(buf), pulados + 1 + _continuacoes(buf, pulados + 1))
     ini = offset + pulados
     return Fatia(buf[pulados:j], None, ini, offset + j, pulados=pulados)
 
@@ -885,7 +915,7 @@ def _le_arquivo(fh, p: Path, st, *, curto, faixa, modo, orcamento, versao, offse
         if offset > fidx.tamanho:
             return _erro("offset além do fim", "faixa", caminho=str(p),
                          bytes_total=fidx.tamanho, cura=f'{TOOL}(caminho="{p}", linhas="-100")')
-        f = pagina_bytes(fonte, offset, orcamento, leitura_enc)
+        f = pagina_bytes(fonte, offset, orcamento, leitura_enc, fidx.tamanho)
         f.linha_inicio = _linha_do_byte(fonte, fidx, f.ini)
     else:
         a, b, cauda = faixa
