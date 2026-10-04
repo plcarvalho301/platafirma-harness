@@ -628,7 +628,7 @@ def test_commit_nao_declarado_segue_exit_0_sem_veredito(tmp_path, monkeypatch, c
 def test_arranque_aponta_e_sem_arranque_contam_como_conforme(monkeypatch, tmp_path, capsys):
     aponta = tmp_path / "aponta" / "CLAUDE.md"
     aponta.parent.mkdir()
-    aponta.write_text("Arranque desta sessao: ver conduta/arranque.md.\n", encoding="utf-8")
+    aponta.write_text("Arranque desta sessao: ver abertura/arranque.md.\n", encoding="utf-8")
 
     sem_arranque = tmp_path / "sem-arranque" / "CLAUDE.md"
     sem_arranque.parent.mkdir()
@@ -674,7 +674,7 @@ def test_arranque_copia_e_divergente(monkeypatch, tmp_path, capsys):
 def test_arranque_erro_de_leitura_e_indeterminavel_nunca_conforme(monkeypatch, tmp_path, capsys):
     aponta = tmp_path / "aponta" / "CLAUDE.md"
     aponta.parent.mkdir()
-    aponta.write_text("ver conduta/arranque.md\n", encoding="utf-8")
+    aponta.write_text("ver abertura/arranque.md\n", encoding="utf-8")
 
     # um "caminho" que nao e arquivo legivel: open() estoura IsADirectoryError (OSError),
     # simulando falha de leitura sem depender de permissao de disco.
@@ -702,7 +702,7 @@ def test_arranque_erro_de_leitura_e_indeterminavel_nunca_conforme(monkeypatch, t
 
 def test_arranque_staged_preserva_modo_texto_do_pre_commit(monkeypatch, tmp_path, capsys):
     claude_md = tmp_path / "CLAUDE.md"
-    claude_md.write_text("ver conduta/arranque.md\n", encoding="utf-8")
+    claude_md.write_text("ver abertura/arranque.md\n", encoding="utf-8")
 
     def _stub_sh(args):
         if args[:3] == ["git", "diff", "--cached"]:

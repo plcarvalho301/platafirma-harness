@@ -54,7 +54,7 @@
                    da tela) OU sirva rota de API (`proxy_pass` no nginx da tela). Nao
                    e a classe `superficie`, que mede produtor de `.mcp.json`.
   arranque [nome]  texto de arranque em cwd (`CLAUDE.md` sob ~/AI): e PONTEIRO para
-                   `conduta/arranque.md`, ou copia com bloco proprio? Reprova so a
+                   `abertura/arranque.md`, ou copia com bloco proprio? Reprova so a
                    copia; nao julga a redacao do arranque, que e da dona do texto.
                    Com `--staged`, julga so o CLAUDE.md do commit em curso.
   chapeu  [<cadeira>[/<slug>]]
@@ -1130,7 +1130,7 @@ HARNESS = os.environ.get("PF_HARNESS_DIR", os.path.join(RAIZ, "platafirma-harnes
 
 
 # --- arranque em cwd: ponteiro, nunca copia ---------------------------------
-# Regua de claudinha-gestao-estrategica, escrita em conduta/arranque.md. Aqui so
+# Regua de claudinha-gestao-estrategica, escrita em abertura/arranque.md. Aqui so
 # o mecanismo. Existe porque regua descritiva nao dispara: foi copia por habito
 # que produziu as 27 worktrees divergentes, e nada impedia a proxima de recomecar
 # a serie sem ninguem medir quando recomecou.

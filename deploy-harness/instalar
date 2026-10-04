@@ -241,7 +241,7 @@ fi
 # Antes de sobrescrever, guarda o anterior em CLAUDE.md.antes-do-ponteiro: erro
 # reversivel e defeito, erro irreversivel e perda.
 echo
-echo "== texto de arranque em cwd (ponteiro para conduta/arranque.md)"
+echo "== texto de arranque em cwd (ponteiro para abertura/arranque.md)"
 CONFERIR_BIN="${CONFERIR:-$HARNESS/bin/conferir}"
 if [ -z "$BANCADA" ]; then
   medido impossivel "(arranque)" "bancada nao declarada — copias de arranque moram nela"
