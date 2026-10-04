@@ -82,3 +82,6 @@ tests/test_render_procedencia.py
 # Medido em 04/10/2026 (incidente #3273): `persona salvar` confere na bancada de card, sem commit e sem push, e
 # nunca escreve no clone-cache destacado (9 passam; com o bin/persona antigo, os 9 ficam vermelhos).
 tests/test_contrato_persona_bancada.py
+# Medido em 04/10/2026 (incidente #3274): guarda de SIGPIPE da suite (3 passam; sem o fixture do conftest o 2o falha e
+# o 3o mata o pytest com exit 141, o sintoma que deixou o pre-push "nao medido").
+tests/test_guarda_sigpipe.py
