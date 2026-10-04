@@ -28,7 +28,8 @@
   ],
   "azp_superficie": {
     "claudinho-mcp": "claude.ai",
-    "agy-cli": "agy"
+    "agy-cli": "agy",
+    "cursor-cli": "cursor"
   },
   "superficies": {
     "claude.ai": {
@@ -49,6 +50,15 @@
       "onde_declara": "~/.gemini/config/mcp_config.json da conta, instalado pelo sincroniza.sh a partir de .agents/mcp_config.json do platafirma-posto",
       "verificavel_do_host": false,
       "porque": "o arquivo vive na home de outra conta; o host ve o azp agy-cli em cada linha do log da porta"
+    },
+    "cursor": {
+      "papel": "Cursor (CLI agent e app desktop) no platafirma-posto, conta megafone; cliente OAuth publico cursor-cli no Keycloak",
+      "conectores": [
+        "claudinho-mcp"
+      ],
+      "onde_declara": ".cursor/mcp.json do platafirma-posto, lido direto da pasta do projeto (sem sincroniza.sh)",
+      "verificavel_do_host": false,
+      "porque": "o arquivo vive no clone de outra conta; o host ve o azp cursor-cli em cada linha do log da porta"
     },
     "fita": {
       "papel": "giro headless do chat, disparado pelo worker; sala do Matrix",
