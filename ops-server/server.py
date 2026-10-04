@@ -2426,9 +2426,25 @@ def _fecha_orfaos_do_prazo() -> None:
 _fecha_orfaos_do_prazo()
 
 
+# PISO DE TIMEOUT por verbo+ato (balde #2856, linha 185). O `timeout` pedido e o instante em
+# que o grupo de processo morre; a chamada ja devolveu `em_andamento` antes (PRAZO_S). Ato
+# cujo gate leva mais que o padrao de 120 s da assinatura morria no meio: medido em
+# 04/10/2026, `repo sincronizar` com o pre-push (baseline de contrato) levou 127 s e saiu
+# `timeout (120s) — grupo de processo morto`; com timeout 600 saiu 0. O piso so SOBE o
+# timeout (nunca o encurta) e o teto de 600 s das tools segue valendo.
+TIMEOUT_PISO = {("repo", "sincronizar"): 600}
+
+
+def _timeout_com_piso(argv: list, timeout: int) -> int:
+    slug = Path(str(argv[0])).name if argv else ""
+    ato = str(argv[1]) if len(argv) > 1 else ""
+    return max(timeout, TIMEOUT_PISO.get((slug, ato), 0))
+
+
 def _run_verbo_blocking(argv: list, stdin: str | dict | list | None, timeout: int, ident: dict,
                         prazo: float | None = None) -> dict:
     """`prazo`: segundos ate a chamada devolver em_andamento (#3249); None = sem prazo."""
+    timeout = _timeout_com_piso(argv, timeout)
     env = {**_env_subprocesso(), "PF_SESSAO": ident["sessao_id"], "PF_ORDEM_ID": ident["ordem_id"],
            "PF_CONTA": OPS_USER}
     if ident.get("origem_sessao"):          # card #3158: so a sessao filha tem; ausente = nao entra
