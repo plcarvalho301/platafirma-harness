@@ -187,13 +187,8 @@ def _apontar(rel: str, linha: int, item: dict, origem: str, msg: str) -> Apontam
     )
 
 
-def _ruff(raiz: Path, arquivos: List[Path], regua: Regua, avisos: List[str]) -> List[Apontamento]:
-    if not arquivos or not (regua.ruff or regua.ruff_padrao):
-        return []
-    ruff = _binario("ruff", RUFF_UVX)
-    if not ruff:
-        raise ValueError(3, "linter python (ruff) ausente: nem `ruff` no PATH nem `uvx`")
-
+def _selecao_ruff(ruff: List[str], raiz: Path, regua: Regua, avisos: List[str]) -> Optional[List[str]]:
+    """Argumentos de selecao do ruff, ou None se nada da lista se mede com ele."""
     conhecidas = _rodar([*ruff, "rule", "--all", "--output-format", "json"], raiz)
     try:
         existentes = {r["code"] for r in json.loads(conhecidas.stdout)}
@@ -205,10 +200,18 @@ def _ruff(raiz: Path, arquivos: List[Path], regua: Regua, avisos: List[str]) -> 
         avisos.append(f"codigos da lista que o ruff instalado nao conhece, fora da medida: {', '.join(fora)}")
     if regua.ruff_padrao:
         # sem --select vale o padrao do ruff; as nomeadas entram por cima
-        selecao = ["--extend-select", ",".join(nomeadas)] if nomeadas else []
-    elif nomeadas:
-        selecao = ["--select", ",".join(nomeadas)]
-    else:
+        return ["--extend-select", ",".join(nomeadas)] if nomeadas else []
+    return ["--select", ",".join(nomeadas)] if nomeadas else None
+
+
+def _ruff(raiz: Path, arquivos: List[Path], regua: Regua, avisos: List[str]) -> List[Apontamento]:
+    if not arquivos or not (regua.ruff or regua.ruff_padrao):
+        return []
+    ruff = _binario("ruff", RUFF_UVX)
+    if not ruff:
+        raise ValueError(3, "linter python (ruff) ausente: nem `ruff` no PATH nem `uvx`")
+    selecao = _selecao_ruff(ruff, raiz, regua, avisos)
+    if selecao is None:
         return []
 
     rels = [str(a.relative_to(raiz)) for a in arquivos]

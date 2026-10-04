@@ -119,8 +119,8 @@ def externa(chamada: ast.Call) -> bool:
     partes = n.split(".")
     if partes[-1] == "communicate":
         return True
-    return (len(partes) >= 2 and partes[-1] in _METODO_REDE
-            and bool(_RECEPTOR_REDE.search(partes[-2])))
+    receptor = partes[-2] if len(partes) > 1 else ""
+    return partes[-1] in _METODO_REDE and bool(_RECEPTOR_REDE.search(receptor))
 
 
 def e_sono(chamada: ast.Call) -> bool:
@@ -307,6 +307,9 @@ def trava_com_io(ctx: Contexto, item: dict) -> Iterator[Achado]:
                     break
 
 
+DEGRAUS_ESCADA = 3
+
+
 def escada_isinstance(ctx: Contexto, item: dict) -> Iterator[Achado]:
     """Cadeia if/elif com tres ou mais `isinstance` sobre a mesma expressao."""
     for rel, _, arvore in ctx.arvores(ctx.py):
@@ -322,7 +325,7 @@ def escada_isinstance(ctx: Contexto, item: dict) -> Iterator[Achado]:
             alvos = [ast.unparse(t.args[0]) for t in testes
                      if isinstance(t, ast.Call) and nome(t.func) == "isinstance" and t.args]
             mais = Counter(alvos).most_common(1)
-            if mais and mais[0][1] >= 3:
+            if mais and mais[0][1] >= DEGRAUS_ESCADA:
                 yield Achado(rel, n.lineno, f"escada de {mais[0][1]} isinstance sobre {mais[0][0]}")
 
 
@@ -334,29 +337,35 @@ _USA_OS = {"open", "os.remove", "os.unlink", "os.rename", "os.replace", "shutil.
 _USA_PATH = {"open", "unlink", "read_text", "read_bytes", "write_text", "write_bytes", "rename", "replace"}
 
 
+def _conferidos(teste: ast.expr) -> Set[str]:
+    """Expressoes cuja existencia o teste do `if` confere."""
+    alvos: Set[str] = set()
+    for c in (n for n in ast.walk(teste) if isinstance(n, ast.Call)):
+        if nome(c.func) in _EXISTE_OS and c.args:
+            alvos.add(ast.unparse(c.args[0]))
+        elif isinstance(c.func, ast.Attribute) and c.func.attr in ("exists", "is_file"):
+            alvos.add(ast.unparse(c.func.value))
+    return alvos
+
+
+def _usa(c: ast.Call, alvos: Set[str]) -> bool:
+    if nome(c.func) in _USA_OS and c.args:
+        return ast.unparse(c.args[0]) in alvos
+    return (isinstance(c.func, ast.Attribute) and c.func.attr in _USA_PATH
+            and ast.unparse(c.func.value) in alvos)
+
+
 def confere_e_usa(ctx: Contexto, item: dict) -> Iterator[Achado]:
     """`if <existe>(x):` seguido de usar x no corpo: entre conferir e usar, o arquivo muda."""
     for rel, _, arvore in ctx.arvores(ctx.py):
-        for se in ast.walk(arvore):
-            if not isinstance(se, ast.If):
-                continue
-            alvos: Set[str] = set()
-            for c in (n for n in ast.walk(se.test) if isinstance(n, ast.Call)):
-                nm = nome(c.func)
-                if nm in _EXISTE_OS and c.args:
-                    alvos.add(ast.unparse(c.args[0]))
-                elif isinstance(c.func, ast.Attribute) and c.func.attr in ("exists", "is_file"):
-                    alvos.add(ast.unparse(c.func.value))
+        for se in (n for n in ast.walk(arvore) if isinstance(n, ast.If)):
+            alvos = _conferidos(se.test)
             if not alvos:
                 continue
             for st in se.body:
                 for c in (n for n in ast.walk(st) if isinstance(n, ast.Call)):
-                    nm = nome(c.func)
-                    usa = ((nm in _USA_OS and c.args and ast.unparse(c.args[0]) in alvos)
-                           or (isinstance(c.func, ast.Attribute) and c.func.attr in _USA_PATH
-                               and ast.unparse(c.func.value) in alvos))
-                    if usa:
-                        yield Achado(rel, c.lineno, f"{nm} depois de conferir que existe")
+                    if _usa(c, alvos):
+                        yield Achado(rel, c.lineno, f"{nome(c.func)} depois de conferir que existe")
 
 
 def unit_segundo_plano(ctx: Contexto, item: dict) -> Iterator[Achado]:
@@ -414,17 +423,34 @@ def _importados(st: ast.stmt, p: Path, raiz: Path) -> List[Path]:
     return achados
 
 
-def import_ciclico(ctx: Contexto, item: dict) -> Iterator[Achado]:
-    """Ciclo entre modulos pelos imports de topo (import local dentro de funcao fica fora)."""
+Arestas = Dict[Path, List[Tuple[Path, int]]]
+
+
+def _grafo_de_imports(ctx: Contexto) -> Arestas:
     no_repo = set(ctx.py_repo)
-    arestas: Dict[Path, List[Tuple[Path, int]]] = defaultdict(list)
+    arestas: Arestas = defaultdict(list)
     for _, p, arvore in ctx.arvores(ctx.py_repo):
         for st in arvore.body:
             for alvo in _importados(st, p, ctx.raiz):
                 if alvo in no_repo and alvo != p:
                     arestas[p].append((alvo, st.lineno))
+    return arestas
 
-    # Tarjan, iterativo: componente fortemente conexa com mais de um modulo e ciclo
+
+def import_ciclico(ctx: Contexto, item: dict) -> Iterator[Achado]:
+    """Ciclo entre modulos pelos imports de topo (import local dentro de funcao fica fora)."""
+    arestas = _grafo_de_imports(ctx)
+    escopo = set(ctx.py)
+    for comp in _ciclos(arestas):
+        for a in comp & escopo:
+            for b, linha in arestas[a]:
+                if b in comp:
+                    yield Achado(ctx.rel(a), linha, f"importa {ctx.rel(b)}, e o ciclo volta a este "
+                                                    f"módulo ({len(comp)} módulos no ciclo)")
+
+
+def _ciclos(arestas: Arestas) -> List[Set[Path]]:  # noqa: C901 — Tarjan iterativo; partido, nao se confere contra a referencia
+    """Componentes fortemente conexas com mais de um modulo (Tarjan, iterativo)."""
     indice: Dict[Path, int] = {}
     baixo: Dict[Path, int] = {}
     pilha: List[Path] = []
@@ -468,14 +494,7 @@ def import_ciclico(ctx: Contexto, item: dict) -> Iterator[Achado]:
                         break
                 if len(comp) > 1:
                     componentes.append(comp)
-
-    escopo = set(ctx.py)
-    for comp in componentes:
-        for a in comp & escopo:
-            for b, linha in arestas[a]:
-                if b in comp:
-                    yield Achado(ctx.rel(a), linha, f"importa {ctx.rel(b)}, e o ciclo volta a este "
-                                                    f"módulo ({len(comp)} módulos no ciclo)")
+    return componentes
 
 
 JANELA_DUPLICACAO = 8
@@ -523,7 +542,7 @@ def duplicacao(ctx: Contexto, item: dict) -> Iterator[Achado]:
             yield _bloco(rel, norm, bloco, j)
 
 
-def _bloco(rel: str, norm: List[Tuple[int, str]], bloco, j: int) -> Achado:
+def _bloco(rel: str, norm: List[Tuple[int, str]], bloco: Tuple[int, int, Tuple[str, int]], j: int) -> Achado:
     inicio, fim, (outro, linha_outro) = bloco
     linhas = norm[fim + j - 1][0] - norm[inicio][0] + 1
     return Achado(rel, norm[inicio][0], f"bloco de {linhas} linhas igual a {outro}:{linha_outro}")
