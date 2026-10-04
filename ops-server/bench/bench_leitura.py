@@ -51,6 +51,10 @@ LIMITE_IO_T1_FRIO = 2.1         # §16.5 critério 8: T1, bytes lidos a frio ≤
 LIMITE_IO_T1_QUENTE = 1.05      # §16.5 critério 8: T1, bytes lidos a quente ≤ 1,05 × referência
 LIMITE_IO_T23_FRIO = 2          # §16.5 critério 8: T2 e T3, a frio ≤ 2 × referência em toda tarefa
 LIMITE_IO_T23_QUENTE = 1        # §16.5 critério 8: T2 e T3, a quente ≤ a referência (razão 1)
+# Emenda de 04/10/2026 (rodada 1, à vista do dono): os dois custos conhecidos do critério 6
+# e T3 a frio só no relatório, no critério 8.
+LIMITE_BYTES_LINHA_LONGA = 1.05  # §16.5 critério 6: arquivo com linha maior que o orçamento
+FOLGA_CHAMADAS_T3 = 1           # §16.5 critério 6: T3 com o item na 1ª página da referência
 
 # ----------------------------------------------------------------------------- réguas do bench
 PAGINA = 40_000                 # §16.3 T1: páginas de 40.000 bytes
@@ -213,6 +217,8 @@ class Oraculo:
         self.nl = [m.end() for m in re.finditer(rb"\n", self.dados)]
         self.total_linhas = len(self.nl) + (1 if self.dados and not self.dados.endswith(b"\n")
                                             else 0)
+        limites = [0, *self.nl, len(self.dados)]
+        self.linha_longa = max((b - a for a, b in zip(limites, limites[1:])), default=0) > PAGINA
 
     def ini_linha(self, a: int) -> int:
         """Byte em que a linha `a` (base 1) começa."""
@@ -434,11 +440,12 @@ def t2(tool, ctx: Ctx, arq, orc: Oraculo) -> dict:
         pags = segue_cand(ctx, {"caminho": str(arq.caminho), "linhas": f"{n}-{ate}"}, cobre=fim)
         defeitos = _trecho_certo(orc, pags, ini, fim)
     return {"defeitos": defeitos, "recusou": any(recusou(p) for p in pags),
-            "extra": {"linha": n, "ate": ate, "fim_byte": fim}}
+            "extra": {"linha": n, "ate": ate, "fim_byte": fim, "linha_longa": orc.linha_longa}}
 
 
 def t3(tool, ctx: Ctx, arq, orc: Oraculo, item: dict) -> dict:
-    defeitos, extra = [], {"item": item["titulo"], "fim_byte": item["fim_byte"]}
+    defeitos, extra = [], {"item": item["titulo"], "fim_byte": item["fim_byte"],
+                           "linha_longa": orc.linha_longa}
     if tool == "ref":
         pags = cabeca_ref(ctx, arq.caminho, cobre=item["fim_byte"])
     elif item["ini"] is None:
@@ -522,8 +529,9 @@ def t6(tool, ctx: Ctx, arq, orc: Oraculo, caso: str) -> dict:
         ok = bool(r.get("recusado")) and r.get("motivo") == "binario" and "conteudo" not in r
         defeitos = [] if ok else ["binario: o binário foi servido como texto"]
     elif caso == "linha_longa":
+        # Emenda de 04/10/2026 (§4.3): a página de linha longa já traz o primeiro pedaço.
         ok = bool(r.get("linha_longa")) and "LINHA LONGA" in r.get("cabecalho", "") \
-            and not r.get("conteudo")
+            and bool(r.get("conteudo"))
         defeitos = []
     else:
         ok = r.get("proximo") == leitura.FIM and r.get("conteudo") == "" \
@@ -714,18 +722,28 @@ def criterios(linhas: list) -> list[dict]:
                         f"≤ {LIMITE_CHAMADAS_T1}", f"{_n(cc)} / {_n(cr)} = {_fr(r5)}",
                         [] if r5 is None or r5 <= LIMITE_CHAMADAS_T1 else [f"razão {_fr(r5)}"]))
     # 6. T2 e T3: chamadas e bytes ≤ referência em toda tarefa; mediana da razão < 1
-    viol6, partes6 = [], []
+    viol6, partes6, custos6 = [], [], []
     for tarefa in ("T2", "T3"):
         rb, rc_ = [], []
         for ref, frio, _q in _instancias(linhas, tarefa):
             if frio is None:
                 continue
-            if frio["chamadas"] > ref["chamadas"]:
+            # Os dois custos conhecidos da emenda de 04/10/2026, mostrados com o número.
+            folga = FOLGA_CHAMADAS_T3 if tarefa == "T3" and ref["chamadas"] == 1 else 0
+            longa = bool(ref["extra"].get("linha_longa"))
+            teto = ref["servidos"] * (LIMITE_BYTES_LINHA_LONGA if longa else 1)
+            if folga and frio["chamadas"] > ref["chamadas"]:
+                custos6.append(f"{tarefa} {ref['arquivo']}: chamadas {frio['chamadas']} contra "
+                               f"{ref['chamadas']} (item na 1ª página da referência)")
+            if longa and frio["servidos"] > ref["servidos"]:
+                custos6.append(f"{tarefa} {ref['arquivo']}: bytes {_fr(frio['servidos'] / ref['servidos'])}"
+                               f" × (linha maior que o orçamento)")
+            if frio["chamadas"] > ref["chamadas"] + folga:
                 viol6.append(f"{tarefa} {ref['arquivo']}: chamadas {frio['chamadas']} > "
-                             f"{ref['chamadas']}")
-            if frio["servidos"] > ref["servidos"]:
+                             f"{ref['chamadas'] + folga}")
+            if frio["servidos"] > teto:
                 viol6.append(f"{tarefa} {ref['arquivo']}: bytes servidos {_n(frio['servidos'])} > "
-                             f"{_n(ref['servidos'])}")
+                             f"{_n(int(teto))}")
             rb.append(_razao(frio["servidos"], ref["servidos"]))
             rc_.append(_razao(frio["chamadas"], ref["chamadas"]))
         if rb:
@@ -736,8 +754,13 @@ def criterios(linhas: list) -> list[dict]:
             if not mb < 1:
                 viol6.append(f"{tarefa}: mediana da razão de bytes servidos {_fr(mb)} não é < 1")
     cs.append(_criterio(6, "T2 e T3: chamadas e bytes servidos ≤ referência em toda tarefa, e a "
-                        "mediana da razão (de bytes servidos) < 1", "≤ 1 por tarefa; mediana < 1",
-                        "; ".join(partes6) + f"; {len(viol6)} violação(ões)", viol6))
+                        "mediana da razão (de bytes servidos) < 1; custos conhecidos da emenda de "
+                        "04/10/2026: linha maior que o orçamento (bytes ≤ 1,05 ×) e item de T3 na "
+                        "1ª página da referência (chamadas ≤ + 1)",
+                        "≤ 1 por tarefa (1,05 × e + 1 nos custos conhecidos); mediana < 1",
+                        "; ".join(partes6) + f"; {len(viol6)} violação(ões)"
+                        + ("; custos conhecidos: " + "; ".join(custos6) if custos6 else ""),
+                        viol6))
     # 7. T4: bytes servidos da segunda leitura (somados)
     s4r, s4c = _soma(linhas, "T4", "ref", "unico", "segunda"), \
         _soma(linhas, "T4", "cand", "unico", "segunda")
@@ -750,7 +773,7 @@ def criterios(linhas: list) -> list[dict]:
                         f"{por_arquivo} de {n_t4} arquivos acima da referência, um a um",
                         [] if s4c <= s4r else [f"segunda leitura {_n(s4c)} > {_n(s4r)}"]))
     # 8. I/O em bytes lidos
-    viol8, partes8 = [], []
+    viol8, partes8, relatado8 = [], [], []
     lr = _soma(linhas, "T1", "ref", "unico", "lidos")
     lf, lq = _soma(linhas, "T1", "cand", "frio", "lidos"), \
         _soma(linhas, "T1", "cand", "quente", "lidos")
@@ -773,7 +796,8 @@ def criterios(linhas: list) -> list[dict]:
                 pf = max(pf, f)
                 if f > LIMITE_IO_T23_FRIO:
                     pior_f += 1
-                    viol8.append(f"{tarefa} {ref['arquivo']} a frio: {_n(frio['lidos'])} / "
+                    # T3 a frio só vai ao relatório (emenda de 04/10/2026, critério 8).
+                    (viol8 if tarefa == "T2" else relatado8).append(f"{tarefa} {ref['arquivo']} a frio: {_n(frio['lidos'])} / "
                                  f"{_n(ref['lidos'])} = {_fr(f)} > {LIMITE_IO_T23_FRIO}")
             if q is not None:
                 pq = max(pq, q)
@@ -784,9 +808,11 @@ def criterios(linhas: list) -> list[dict]:
         partes8.append(f"{tarefa}: n {n}, pior razão a frio {_fr(pf)} ({pior_f} acima de "
                        f"{LIMITE_IO_T23_FRIO}), a quente {_fr(pq)} ({pior_q} acima de "
                        f"{LIMITE_IO_T23_QUENTE})")
-    cs.append(_criterio(8, "I/O em bytes lidos: T1 frio ≤ 2,1 × e quente ≤ 1,05 × (soma); T2 e T3 "
-                        "frio ≤ 2 × e quente ≤ referência em toda tarefa",
-                        "2,1 / 1,05 ; 2 / 1", "; ".join(partes8), viol8))
+    cs.append(_criterio(8, "I/O em bytes lidos: T1 frio ≤ 2,1 × e quente ≤ 1,05 × (soma); T2 frio ≤ "
+                        "2 × em toda tarefa; T2 e T3 quente ≤ referência; T3 frio só relatado "
+                        "(emenda de 04/10/2026)",
+                        "2,1 / 1,05 ; 2 / 1", "; ".join(partes8)
+                        + ("; relatado: " + "; ".join(relatado8) if relatado8 else ""), viol8))
     # 9. T7
     t7c = [x for x in cand if x["tarefa"] == "T7"]
     viol9 = [f"{x['tipo']}: {json.dumps(x['extra'], ensure_ascii=False)}" for x in t7c

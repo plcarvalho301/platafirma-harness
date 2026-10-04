@@ -93,10 +93,11 @@ def test_c4_linha_longa_vira_continuacao_por_bytes(tmp_path):
     p = tmp_path / "uma.json"
     p.write_text(json.dumps({"k": "v" * 60_000}), encoding="utf-8")
     pg = L.le(p)
-    assert pg["conteudo"] == ""
+    assert pg["conteudo"].encode() == p.read_bytes()[:L.ORCAMENTO_PADRAO], "já traz o 1º pedaço"
     assert pg["linha_longa"] == {"linha": 1, "bytes": p.stat().st_size, "byte_ini": 0}
     assert pg["cabecalho"].startswith("LINHA LONGA")
-    assert pg["proximo_args"]["offset"] == 0
+    assert pg["proximo_args"]["offset"] == L.ORCAMENTO_PADRAO
+    assert len(_segue(p)) == 2, "60 kB em duas páginas, sem página vazia"
     assert _soma(_segue(p)).encode() == p.read_bytes()
 
 
@@ -104,7 +105,8 @@ def test_c4_linha_longa_no_meio_comeca_no_byte_certo(tmp_path):
     p = tmp_path / "meio.txt"
     p.write_text("um\ndois\n" + "x" * 500 + "\nfim\n", encoding="utf-8")
     pg = L.le(p, linhas="3-", max_bytes=100)
-    assert pg["linha_longa"]["byte_ini"] == len("um\ndois\n")
+    assert pg["linha_longa"]["byte_ini"] == len("um\ndois\n") and pg["conteudo"] == "x" * 100
+    assert "começa na linha 3" in pg["cabecalho"]
     assert _soma(_segue(p, max_bytes=100)).encode() == p.read_bytes()
 
 

@@ -315,6 +315,7 @@ class Fatia:
     linha_longa: dict | None = None
     pulados: int = 0                  # bytes pulados até a fronteira de caractere
     linha_inicio: int | None = None   # leitura por bytes: a linha em que a página começa
+    lido: bytes = b""                # linha longa: o que já se leu a partir de `ini`
 
 
 def _anda_linhas(fh, pos: int, n: int, tamanho: int) -> tuple[int, bytes]:
@@ -392,7 +393,7 @@ def pagina_linhas(fh, indice: Indice, a: int, b: int | None, orcamento: int) -> 
             return Fatia(b"", None, ini, ini)
         # O buffer inteiro é a linha `a`, sem `\n`: o fim dela se procura dali em diante.
         fim = _fim_da_linha(fh, ini + len(buf), indice.tamanho)
-        return Fatia(b"", None, ini, ini,
+        return Fatia(b"", None, ini, ini, lido=bytes(buf),
                      linha_longa={"linha": a, "bytes": fim - ini, "byte_ini": ini})
     dados = bytes(buf[:corte])
     n = dados.count(b"\n") + (0 if dados.endswith(b"\n") else 1)
@@ -489,7 +490,12 @@ def pagina_bytes(fh, offset: int, orcamento: int, encoding: str, tamanho: int) -
     nunca se corta.
     """
     fh.seek(offset)
-    buf = fh.read(orcamento)
+    return _fatia_de_bytes(fh, fh.read(orcamento), offset, encoding, tamanho)
+
+
+def _fatia_de_bytes(fh, buf: bytes, offset: int, encoding: str, tamanho: int) -> Fatia:
+    """A página por bytes sobre o que já se leu de `offset`; `fh` só se lê de novo para
+    completar um caractere maior que o orçamento."""
     if encoding.replace("_", "-").lower() not in ("utf-8", "utf8"):
         return Fatia(buf, None, offset, offset + len(buf))
     pulados = _continuacoes(buf, 0)
@@ -501,6 +507,7 @@ def pagina_bytes(fh, offset: int, orcamento: int, encoding: str, tamanho: int) -
         if k >= pulados and buf[k] >= 0xC0 and k + _tamanho_da_sequencia(buf[k]) > len(buf):
             j = k
         if j <= pulados:
+            fh.seek(offset + len(buf))
             buf += fh.read(7)
             pulados = _continuacoes(buf, 0)
             j = min(len(buf), pulados + 1 + _continuacoes(buf, pulados + 1))
@@ -927,6 +934,16 @@ def _le_arquivo(fh, p: Path, st, *, curto, faixa, modo, orcamento, versao, offse
             f = pagina_linhas(fonte, fidx, a, b, orcamento)
             if f.ini >= fidx.tamanho and not f.dados and not f.linha_longa:
                 return _alem_do_fim(p, None)
+        if f.linha_longa:
+            # A linha sozinha passa do orçamento: a página já traz o primeiro pedaço dela,
+            # por bytes, e a continuação segue por bytes (§4.3). Página vazia custava um giro.
+            ll = f.linha_longa
+            if f.lido:
+                f = _fatia_de_bytes(fonte, f.lido[:orcamento], ll["byte_ini"], leitura_enc,
+                                    fidx.tamanho)
+            else:
+                f = pagina_bytes(fonte, ll["byte_ini"], orcamento, leitura_enc, fidx.tamanho)
+            f.linha_longa, f.linha_inicio = ll, ll["linha"]
     return _monta_pagina(f, fidx, tp, p, curto, faixa, enc, leitura_enc, base, avisos,
                          depois, mudou, extra_args)
 
@@ -941,21 +958,10 @@ def _monta_pagina(f: Fatia, idx: Indice, tp: dict, p: Path, curto: str, faixa, e
                   leitura_enc: str, base: dict, avisos: list, depois: tuple, mudou,
                   extra_args: dict) -> dict:
     total_l = idx.linhas_total
-    if f.linha_longa:
-        ll = f.linha_longa
+    ll = f.linha_longa
+    if ll:
         idx.aprende(ll["linha"], ll["byte_ini"], inicio=True)
-        cab = cabecalho(curto=curto, tipo=tp["tipo"],
-                        faixa=(f"linha {_n(ll['linha'])} tem {_n(ll['bytes'])} bytes, acima "
-                               "do orçamento · continua por bytes"),
-                        servidos=0, total=idx.tamanho, encoding=enc, substituicoes=0,
-                        versao=idx.versao, por_stat=idx.por_stat,
-                        avisos=(*avisos, "LINHA LONGA"), depois=depois)
-        proximo, proximo_args = continuacao({"caminho": str(p), "offset": ll["byte_ini"],
-                                             "versao": idx.versao, **extra_args})
-        return _com_mudou({"cabecalho": cab, "conteudo": "", "proximo": proximo,
-                           "proximo_args": proximo_args, **base, "linhas_total": total_l,
-                           "bytes": [ll["byte_ini"], ll["byte_ini"]], "linha_longa": ll},
-                          mudou)
+        avisos = [*avisos, "LINHA LONGA"]
 
     texto = f.dados.decode(leitura_enc, "replace")
     no_fim = f.fim >= idx.tamanho
@@ -974,6 +980,9 @@ def _monta_pagina(f: Fatia, idx: Indice, tp: dict, p: Path, curto: str, faixa, e
         linhas_campo = [a, b_real]
     else:                                                     # por bytes (§5)
         faixa_txt = f"bytes {_n(f.ini)}–{_n(f.fim)} de {_n(idx.tamanho)}"
+        if ll:
+            faixa_txt = (f"linha {_n(ll['linha'])} tem {_n(ll['bytes'])} bytes, acima do "
+                         f"orçamento · {faixa_txt}")
         if f.linha_inicio is not None:
             faixa_txt += f" · começa na linha {_n(f.linha_inicio)}"
             idx.aprende(f.linha_inicio + f.dados.count(b"\n"), f.fim,
@@ -993,6 +1002,8 @@ def _monta_pagina(f: Fatia, idx: Indice, tp: dict, p: Path, curto: str, faixa, e
     r = {"cabecalho": cab, "conteudo": texto, "proximo": proximo,
          "proximo_args": proximo_args, **base, "linhas": linhas_campo,
          "linhas_total": total_l, "bytes": [f.ini, f.fim]}
+    if ll:
+        r["linha_longa"] = ll
     if (f.ini > 0 or not no_fim) and tp["tipo"] in _ANALISADOR and idx.tamanho <= SUMARIO_MAX:
         r["sumario"] = f'{TOOL}(caminho="{p}", modo="sumario")'
     return _com_mudou({k: v for k, v in r.items() if v is not None or k == "linhas_total"},
