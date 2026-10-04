@@ -50,36 +50,74 @@ def _em_escopo(ctx: Contexto) -> set[Path]:
 # ------------------------------------------------------------------ prazo e repeticao entre servicos
 
 
-def _numero(no: ast.AST | None) -> float | None:
-    """Prazo literal: numero, ou o ultimo de uma tupla (conexao, leitura)."""
+def constantes(arvore: ast.Module) -> dict[str, float]:
+    """Constantes numericas de topo de modulo: o prazo escrito como `PRAZO_S = 600`."""
+    saida: dict[str, float] = {}
+    for st in arvore.body:
+        if (isinstance(st, ast.Assign) and len(st.targets) == 1 and isinstance(st.targets[0], ast.Name)
+                and (v := _numero(st.value, {})) is not None):
+            saida[st.targets[0].id] = v
+    return saida
+
+
+def _numero(no: ast.AST | None, nomes: dict[str, float]) -> float | None:
+    """Prazo legivel sem rodar: numero, constante do modulo, ou o ultimo de uma tupla
+    (conexao, leitura)."""
     if isinstance(no, ast.Constant) and isinstance(no.value, (int, float)) and not isinstance(no.value, bool):
         return float(no.value)
+    if isinstance(no, ast.Name):
+        return nomes.get(no.id)
     if isinstance(no, ast.Tuple) and no.elts:
-        return _numero(no.elts[-1])
+        return _numero(no.elts[-1], nomes)
     return None
 
 
-def prazo_da_chamada(c: ast.Call) -> float | None:
+def prazo_da_chamada(c: ast.Call, nomes: dict[str, float] | None = None) -> float | None:
     for k in c.keywords:
         if k.arg == "timeout":
-            return _numero(k.value)
+            return _numero(k.value, nomes or {})
     return None
 
 
 _ROTA = re.compile(r"^/[\w/{}<>:.-]*$")
 _METODOS_ROTA = {"get", "post", "put", "patch", "delete", "route", "api_route", "websocket"}
+_REGISTRA_ROTA = {"Route", "add_route", "add_api_route", "WebSocketRoute"}
+
+
+def _caminho_literal(no: ast.AST | None) -> str | None:
+    if isinstance(no, ast.Constant) and isinstance(no.value, str) and _ROTA.match(no.value):
+        return no.value
+    return None
+
+
+def _rotas_do_modulo(ctx: Contexto, p: Path, arvore: ast.Module,
+                     globais: dict[str, list[Def]]) -> Iterator[tuple[str, Def]]:
+    """Rotas do modulo: decorador `@app.post("/x")` e registro `Route("/x", tratador)`. O
+    tratador importado de outro modulo se acha pelo nome na stack."""
+    rel = ctx.rel(p)
+    defs = {n.name: Def(rel, p, n) for n in ast.walk(arvore) if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef))}
+    defs = {**{k: v[0] for k, v in globais.items() if len(v) == 1}, **defs}
+    for d in defs.values():
+        for dec in d.no.decorator_list:
+            if (isinstance(dec, ast.Call) and isinstance(dec.func, ast.Attribute) and dec.func.attr in _METODOS_ROTA
+                    and dec.args and (caminho := _caminho_literal(dec.args[0]))):
+                yield caminho, d
+    for c in (n for n in ast.walk(arvore) if isinstance(n, ast.Call)):
+        if nome(c.func).rsplit(".", 1)[-1] not in _REGISTRA_ROTA or not c.args:
+            continue
+        tratador = c.args[1] if len(c.args) > 1 else next((k.value for k in c.keywords if k.arg == "endpoint"), None)
+        caminho = _caminho_literal(c.args[0])
+        if caminho and tratador is not None and (d := defs.get(nome(tratador).rsplit(".", 1)[-1])):
+            yield caminho, d
 
 
 def rotas(ctx: Contexto) -> dict[str, Def]:
-    """Caminho HTTP servido -> funcao que o trata, pelos decoradores `@app.post("/x")`."""
+    """Caminho HTTP servido (com `*` no lugar do parametro) -> funcao que o trata."""
     achadas: dict[str, Def] = {}
-    for d in funcoes(ctx, ctx.py_repo):
-        for dec in d.no.decorator_list:
-            if (isinstance(dec, ast.Call) and isinstance(dec.func, ast.Attribute)
-                    and dec.func.attr in _METODOS_ROTA and dec.args
-                    and isinstance(dec.args[0], ast.Constant) and isinstance(dec.args[0].value, str)
-                    and _ROTA.match(dec.args[0].value)):
-                achadas[_normal_rota(dec.args[0].value)] = d
+    globais = _por_nome(ctx)
+    for _, p, arvore in ctx.arvores(ctx.py_repo):
+        for caminho, d in _rotas_do_modulo(ctx, p, arvore, globais):
+            achadas[_normal_rota(caminho)] = d
     return achadas
 
 
@@ -88,31 +126,58 @@ def _normal_rota(caminho: str) -> str:
 
 
 def _texto_url(no: ast.AST) -> str:
-    """O que se le de literal numa URL montada por f-string, + ou constante."""
-    partes = [v.value for v in ast.walk(no) if isinstance(v, ast.Constant) and isinstance(v.value, str)]
-    return "*".join(partes)
+    """A URL montada por f-string, + ou constante, com `*` onde entra valor de fora."""
+    if isinstance(no, ast.Constant) and isinstance(no.value, str):
+        return no.value
+    if isinstance(no, ast.JoinedStr):
+        return "".join(v.value if isinstance(v, ast.Constant) else "*" for v in no.values)
+    if isinstance(no, ast.BinOp) and isinstance(no.op, ast.Add):
+        return _texto_url(no.left) + _texto_url(no.right)
+    return "*"
+
+
+def _casa_rota(rota: str, url: str) -> bool:
+    """A URL termina no caminho da rota, segmento a segmento, `*` casando qualquer um."""
+    r = [s for s in rota.split("/") if s]
+    u = [s for s in url.split("?")[0].split("/") if s]
+    if not r or len(u) < len(r):
+        return False
+    pares = list(zip(r, u[-len(r):], strict=True))
+    # ao menos um segmento literal igual dos dois lados: URL toda desconhecida nao casa nada
+    return (all(a == "*" or b == "*" or a == b for a, b in pares)
+            and any(a == b != "*" for a, b in pares))
 
 
 def rota_chamada(c: ast.Call, servidas: dict[str, Def]) -> Def | None:
-    if not (externa(c) and c.args):
+    """A rota da stack que a chamada HTTP alcanca: a de mais segmentos literais que casa."""
+    if not (externa(c) and c.args and nome(c.func).rsplit(".", 1)[-1] in _METODO_HTTP):
         return None
     url = _texto_url(c.args[0])
-    for caminho, d in servidas.items():
-        literal = caminho.split("*")[0]
-        if len(literal) > 1 and literal in url:
-            return d
-    return None
+    casadas = [(len([s for s in caminho.split("/") if s and s != "*"]), caminho)
+               for caminho in servidas if _casa_rota(caminho, url)]
+    return servidas[max(casadas)[1]] if casadas else None
 
 
-def _maior_prazo(fn: ast.AST, defs: dict[str, list[Def]], profundidade: int = 2) -> float | None:
-    """Maior prazo literal de chamada externa na funcao e nas que ela chama, ate a profundidade."""
-    prazos = [p for _, c in chamados(fn) if externa(c) and (p := prazo_da_chamada(c)) is not None]
+def _maior_prazo(ctx: Contexto, d: Def, defs: dict[str, list[Def]], profundidade: int = 2) -> float | None:
+    """Maior prazo legivel de chamada externa na funcao e nas que ela chama, ate a profundidade."""
+    arvore = ctx.arvore(d.caminho)
+    nomes = constantes(arvore) if arvore else {}
+    prazos = [p for _, c in chamados(d.no) if externa(c) and (p := prazo_da_chamada(c, nomes)) is not None]
     if profundidade:
-        for curto, _ in chamados(fn):
-            for d in defs.get(curto, []):
-                if d.no is not fn and (p := _maior_prazo(d.no, defs, profundidade - 1)) is not None:
+        for curto, _ in chamados(d.no):
+            for x in resolver(curto, d, defs):
+                if (p := _maior_prazo(ctx, x, defs, profundidade - 1)) is not None:
                     prazos.append(p)
     return max(prazos, default=None)
+
+
+def resolver(curto: str, de: Def, defs: dict[str, list[Def]]) -> list[Def]:
+    """A funcao que a chamada `curto(...)` alcanca: a do mesmo arquivo, ou a unica com esse nome
+    na stack. Nome repetido em arquivos diferentes (`main`, `ler`) nao se resolve: chutar um
+    deles produz achado falso."""
+    candidatos = [x for x in defs.get(curto, []) if x.no is not de.no]
+    mesmo = [x for x in candidatos if x.caminho == de.caminho]
+    return mesmo or (candidatos if len(candidatos) == 1 else [])
 
 
 def _por_nome(ctx: Contexto) -> dict[str, list[Def]]:
@@ -130,35 +195,46 @@ def prazo_invertido(ctx: Contexto, item: dict) -> Iterator[Achado]:
         return
     defs = _por_nome(ctx)
     for d in funcoes(ctx, ctx.py):
+        arvore = ctx.arvore(d.caminho)
+        nomes = constantes(arvore) if arvore else {}
         for _, c in chamados(d.no):
             alvo = rota_chamada(c, servidas)
-            cliente = prazo_da_chamada(c)
+            cliente = prazo_da_chamada(c, nomes)
             if alvo is None or cliente is None:
                 continue
-            servidor = _maior_prazo(alvo.no, defs)
+            servidor = _maior_prazo(ctx, alvo, defs)
             if servidor is not None and servidor >= cliente:
                 yield Achado(d.rel, c.lineno, f"o cliente desiste em {cliente:g} s e o servidor "
                                               f"({alvo.rel}:{alvo.no.lineno}) espera até {servidor:g} s")
 
 
-def _repete(fn: ast.AST) -> bool:
-    """A funcao tem laco que dorme ou trata excecao em volta de chamada externa."""
+def fazem_io(ctx: Contexto) -> frozenset[str]:
+    """Nomes das funcoes da stack que chamam o mundo de fora direto: o `_enviar` que embrulha
+    o httpx conta como chamada externa para quem o chama."""
+    return frozenset(d.no.name for d in funcoes(ctx, ctx.py_repo)
+                     if any(isinstance(n, ast.Call) and externa(n) for n in sem_aninhadas(d.no)))
+
+
+def _repete(fn: ast.AST, io: frozenset[str] = frozenset()) -> bool:
+    """A funcao tem laco que dorme ou trata excecao em volta de chamada externa (direta, ou
+    por funcao da stack que faz I/O)."""
     for laco in (n for n in sem_aninhadas(fn) if isinstance(n, (ast.For, ast.While, ast.AsyncFor))):
         corpo = list(sem_aninhadas(laco))
         tenta = any(isinstance(n, ast.ExceptHandler) or (isinstance(n, ast.Call) and e_sono(n)) for n in corpo)
-        if tenta and any(isinstance(n, ast.Call) and externa(n) for n in corpo):
+        if tenta and any(isinstance(n, ast.Call) and (externa(n) or nome(n.func).rsplit(".", 1)[-1] in io)
+                         for n in corpo):
             return True
     return False
 
 
-def _repete_ate(d: Def, defs: dict[str, list[Def]], profundidade: int = 2) -> Def | None:
+def _repete_ate(d: Def, defs: dict[str, list[Def]], io: frozenset[str], profundidade: int = 2) -> Def | None:
     """A funcao, ou alguma que ela chama ate a profundidade, que repete."""
-    if _repete(d.no):
+    if _repete(d.no, io):
         return d
     if profundidade:
         for curto, _ in chamados(d.no):
-            for x in defs.get(curto, []):
-                if x.no is not d.no and (achada := _repete_ate(x, defs, profundidade - 1)):
+            for x in resolver(curto, d, defs):
+                if (achada := _repete_ate(x, defs, io, profundidade - 1)):
                     return achada
     return None
 
@@ -168,15 +244,16 @@ def repeticao_em_camadas(ctx: Contexto, item: dict) -> Iterator[Achado]:
     servidor: as tentativas multiplicam (R5)."""
     defs = _por_nome(ctx)
     servidas = rotas(ctx)
+    io = fazem_io(ctx)
     for d in funcoes(ctx, ctx.py):
-        if not _repete(d.no):
+        if not _repete(d.no, io):
             continue
         for curto, c in chamados(d.no):
-            alvos = [x for x in defs.get(curto, []) if x.no is not d.no]
+            alvos = resolver(curto, d, defs)
             rota = rota_chamada(c, servidas)
             alvos += [rota] if rota else []
             for chamado in alvos:
-                if (alvo := _repete_ate(chamado, defs)):
+                if (alvo := _repete_ate(chamado, defs, io)):
                     yield Achado(d.rel, c.lineno, f"repete e chama {alvo.no.name} "
                                                   f"({alvo.rel}:{alvo.no.lineno}), que também repete")
                     break
@@ -272,6 +349,8 @@ def forma_repetida(ctx: Contexto, item: dict) -> Iterator[Achado]:
     nome (D11)."""
     sitios: dict[frozenset[str], list[tuple[str, int, str]]] = defaultdict(list)
     for d in funcoes(ctx, ctx.py_repo):
+        if e_teste(d.rel):
+            continue  # o teste monta o mesmo dado de proposito, para afirmar sobre ele
         for n in sem_aninhadas(d.no):
             if isinstance(n, ast.Dict) and len(n.keys) >= MINIMO_CHAVES and all(
                     isinstance(k, ast.Constant) and isinstance(k.value, str) for k in n.keys):
@@ -563,7 +642,15 @@ def preparacao_longa(ctx: Contexto, item: dict) -> Iterator[Achado]:
 
 
 def _pergunta_por_teste(n: ast.AST) -> str | None:
-    if isinstance(n, ast.Constant) and n.value == "PYTEST_CURRENT_TEST":
+    """O ambiente lido em busca do pytest: `os.environ.get("PYTEST_CURRENT_TEST")`,
+    `"PYTEST_CURRENT_TEST" in os.environ`, `"pytest" in sys.modules`. A constante solta nao
+    conta: ela pode ser so o texto de quem procura a forma (como este detector)."""
+    if (isinstance(n, ast.Call) and nome(n.func).endswith(("environ.get", "getenv")) and n.args
+            and isinstance(n.args[0], ast.Constant) and n.args[0].value == "PYTEST_CURRENT_TEST"):
+        return "PYTEST_CURRENT_TEST"
+    lados = [n.left, *n.comparators] if isinstance(n, ast.Compare) else []
+    if (any(isinstance(v, ast.Constant) and v.value == "PYTEST_CURRENT_TEST" for v in lados)
+            and any(nome(v).endswith("environ") for v in lados)):
         return "PYTEST_CURRENT_TEST"
     if isinstance(n, ast.Compare) and any(
             isinstance(v, ast.Constant) and v.value == "pytest" for v in [n.left, *n.comparators]) and any(

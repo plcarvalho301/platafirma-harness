@@ -747,6 +747,18 @@ def test_predicado_prazo_invertido_entre_servicos(tmp_path):
         ("cli/cliente.py", 5)]
 
 
+def test_predicado_prazo_invertido_com_route_do_starlette_e_constante(tmp_path):
+    # a forma do conversor: Route("/conversoes", tratador), prazo em constante de modulo
+    servidor = ("import subprocess\nTETO_S = 900\n"
+                "async def conversoes(pedido):\n    return subprocess.run(['docling'], timeout=TETO_S, check=True)\n"
+                "rotas = [Route('/conversoes', conversoes, methods=['POST']), Route('/saude', conversoes)]\n")
+    cliente = ("import requests\nPRAZO_S = 600\n"
+               "def pedir(base, oid):\n    return requests.post(base + '/conversoes', timeout=PRAZO_S)\n"
+               "def saude(base):\n    return requests.get(f'{base}/obras/{1}', timeout=PRAZO_S)\n")
+    assert _achados(tmp_path, "PRAZO_INVERTIDO", {"srv/app.py": servidor, "cli/c.py": cliente}) == [
+        ("cli/c.py", 4)]
+
+
 def test_predicado_repeticao_em_camadas_pela_rota(tmp_path):
     assert _achados(tmp_path, "REPETICAO_EM_CAMADAS", {"srv/api.py": SERVIDOR, "cli/cliente.py": CLIENTE}) == [
         ("cli/cliente.py", 5)]

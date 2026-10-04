@@ -131,7 +131,10 @@ def externa(chamada: ast.Call) -> bool:
 
 
 def e_sono(chamada: ast.Call) -> bool:
-    return nome(chamada.func) in ("time.sleep", "asyncio.sleep", "sleep")
+    """Espera por tempo: `time.sleep`, `asyncio.sleep` e o apelido da casa para o teste trocar
+    (`_dormir = time.sleep`)."""
+    curto = nome(chamada.func).rsplit(".", 1)[-1]
+    return curto == "sleep" or "dormir" in curto
 
 
 def _lacos(arvore: ast.Module):
