@@ -54,9 +54,10 @@ ESTADO_OK = {
             }},
         ],
     },
-    "conferir_servico": bloco_de(ResultadoVerbo(True, {"resultado": "ok", "servicos": []}, None, 0, 0.01), agora=1000.0),
-    "conferir_verbo": bloco_de(ResultadoVerbo(True, {"resultado": "ok", "verbos": [], "arq0037": []}, None, 0, 0.01), agora=1000.0),
-    "conferir_repo": bloco_de(ResultadoVerbo(True, {"resultado": "ok", "repos": []}, None, 0, 0.01), agora=1000.0),
+    # veredito comum (#3142): {ancora, classe, alvo, release, itens:[{nome, estado, desde, motivo}]}
+    "conferir_servico": bloco_de(ResultadoVerbo(True, {"ancora": "a", "classe": "servico", "alvo": None, "release": "abc1234", "itens": []}, None, 0, 0.01), agora=1000.0),
+    "conferir_verbo": bloco_de(ResultadoVerbo(True, {"ancora": "a", "classe": "verbo", "alvo": None, "release": "abc1234", "itens": []}, None, 0, 0.01), agora=1000.0),
+    "conferir_repo": bloco_de(ResultadoVerbo(True, {"ancora": "a", "classe": "repo", "alvo": None, "release": "abc1234", "itens": []}, None, 0, 0.01), agora=1000.0),
     "skills": {"lido_em": 1000.0, "estado": "ok", "motivo": None, "itens": []},
     # texto de cada chapeu (`persona ler <cadeira> --chapeu <slug>`), lido pelo agregador
     "chapeus": {
