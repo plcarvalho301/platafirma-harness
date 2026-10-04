@@ -1,7 +1,7 @@
 # ops-server
 
 `ops-server/` é o fonte do MCP de operação (`ops-mcp`): expõe, sob a conta `claudinho`,
-`run_command`, `read_file`/`write_file` e as tools de verbo (`monta_sessao`, `mesa`, `fila`,
+`run_command`, `ler_arquivo` (e o apelido `read_file`)/`write_file` e as tools de verbo (`monta_sessao`, `mesa`, `fila`,
 `tarefas`, `acervo`…). É a porta pela qual as três superfícies (claude.ai, fita do chat, Code)
 tocam o host. Código: `ops-server/server.py`.
 
@@ -15,7 +15,7 @@ Tudo na conta `claudinho` (uid 1001):
   unit e o `setup-ops.sh` que a instala moram em platafirma-core.
 - Raízes: código em `/opt/platafirma` (`PF_RELEASE_RAIZ`), estado e log em `/srv/platafirma/casa`
   (`PLATAFIRMA_INSTANCIA`). A porta sobe sem bancada declarada; caminho relativo em
-  `run_command`/`read_file`/`write_file` é relativo à bancada (`PLATAFIRMA_BANCADA` ou
+  `run_command`/`ler_arquivo`/`write_file` é relativo à bancada (`PLATAFIRMA_BANCADA` ou
   `~/.config/platafirma/bancada`) e, sem ela, é recusado.
 - `ops-tunnel.service`: túnel Cloudflare que publica `ops.platafirma.org/mcp` → `:8010`.
 - `ops-healthcheck.service` + `.timer`: bate `/health` e reinicia o `ops-mcp` se ele parar de responder.

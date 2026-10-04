@@ -362,6 +362,73 @@ def test_sessao_e_limite_invalidos_sao_uso_exit_2(monkeypatch, capsys):
     assert m.main(["metrica", "comportamento", "--sessao", "f5d37db6"]) == 2
     assert "--sessao" in capsys.readouterr().err
 
+# --- SINTETICO: tools de leitura (#3263, spec ler-arquivo 9.3 e 13.4.1) -----------
+
+def leitura(ts, tool="ler_arquivo", classe=None, **extra):
+    """Erro de tool de leitura: grava `erro` (e `classe_erro` se a porta ja sobe com ela),
+    nunca `exit_code`."""
+    linha = reg(ts, tool, exit_code=None, erro="nao existe ou nao e arquivo", **extra)
+    if classe:
+        linha["classe_erro"] = classe
+    return linha
+
+
+def test_erro_de_ler_arquivo_com_classe_caminho_nao_conta_em_gramatica():
+    giros, par, _ = classifica([
+        leitura("10:00:00.000", classe="caminho"),
+        leitura("10:00:01.000", classe="gramatica"),
+    ])
+    t = m.tateio(giros, par)
+    assert t["gramatica"]["total"] == 1 and t["gramatica"]["por_verbo"] == {"ler_arquivo": 1}
+    assert t["execucao"]["total"] == 0
+    assert t["erro_de_leitura"] == {"total": 1, "por_classe": {"caminho": 1}}
+    assert t["total"]["erros"] == 2           # erros = gramatica + execucao + leitura
+    d = m.verbos(giros)["transporte"]["ler_arquivo"]
+    assert (d["erros"], d["gramatica"], d["execucao"]) == (2, 1, 0)
+    assert d["por_classe"] == {"caminho": 1, "gramatica": 1}
+
+
+def test_read_file_antigo_sem_classe_erro_segue_em_gramatica():
+    """Registro anterior a subida da ler_arquivo nao tem `classe_erro`: regra de hoje."""
+    giros, par, _ = classifica([leitura("10:00:00.000", tool="read_file")])
+    t = m.tateio(giros, par)
+    assert t["gramatica"]["por_verbo"] == {"read_file": 1}
+    assert t["erro_de_leitura"]["total"] == 0
+    d = m.verbos(giros)["transporte"]["read_file"]
+    assert (d["gramatica"], d["execucao"], d["por_classe"]) == (1, 0, {})
+
+
+def test_transporte_soma_bytes_servidos_e_conta_poda_modos():
+    giros, _, _ = classifica([
+        reg("10:00:00.000", "ler_arquivo", bytes_servidos=100, poda_modo=None),     # pagina inteira
+        reg("10:00:01.000", "ler_arquivo", bytes_servidos=200, poda_modo="igual"),
+        leitura("10:00:02.000", classe="caminho", bytes_servidos=50, poda_modo="intocavel"),
+        reg("10:00:03.000", "read_file", bytes_produzidos=30),                      # sem poda
+    ])
+    tr = m.verbos(giros)["transporte"]
+    assert tr["ler_arquivo"]["bytes_servidos"] == 350
+    assert tr["ler_arquivo"]["poda_modos"] == {"inteiro": 1, "igual": 1, "intocavel": 1}
+    assert tr["read_file"]["bytes_servidos"] == 30        # fallback: bytes_produzidos
+    assert tr["read_file"]["poda_modos"] == {"inteiro": 1}
+    linhas = m.verbos_texto({"dia": "d", "total": {"giros": 4, "erros": 0, "taxa": 0, "verbos": 0},
+                             "por_verbo": {}, "transporte": tr})
+    assert any("350 B servidos" in x for x in linhas)
+
+
+def test_casos_de_ler_arquivo_devolve_a_classe_do_erro():
+    giros, _, _ = classifica([
+        leitura("10:00:00.000", classe="caminho", path="/nao/existe"),
+        leitura("10:00:01.000", classe="faixa", path="/x"),
+        leitura("10:00:02.000", tool="read_file", path="/velho"),        # sem classe_erro
+        reg("10:00:03.000", "repo", "commitar", exit_code=3),
+    ])
+    c = m.casos(giros, "ler_arquivo")
+    assert [x["classe"] for x in c["casos"]] == ["caminho", "faixa"]
+    assert c["por_classe"] == {"caminho": 1, "faixa": 1}
+    assert c["agregado"]["por_tool"] == {"ler_arquivo": {"caminho": 1, "faixa": 1}}
+    assert m.casos(giros, "read_file")["casos"][0]["classe"] == "arquivo"   # heuristica de antes
+
+
 # --- borda: uso, erro gracioso, saida ---------------------------------------------
 
 def test_saida_e_json_por_default(capsys):

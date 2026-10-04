@@ -239,6 +239,7 @@ if str(Path(__file__).resolve().parent) not in sys.path:
     sys.path.insert(0, str(Path(__file__).resolve().parent))
 import poda as _poda                                          # noqa: E402
 import lote as _lote                                          # noqa: E402  (card:3149 passo 7)
+import leitura as _leitura                                    # noqa: E402  (card:3263)
 
 
 def _poda_ligada() -> bool:
@@ -326,7 +327,7 @@ def _eh_constitutiva(tool: str, alca: str) -> bool:
 
 
 def _serve(r: dict, *, tool: str, alca: str, ident: dict, cauda: bool = False,
-           cosmetica: bool = False) -> dict:
+           cosmetica: bool = False, esquece: bool = False) -> dict:
     """R8 — o único caminho por onde retorno de tool sai desta porta.
 
     Erro e `exit != 0` passam intocados (invariante iii): o diagnóstico inteiro vale
@@ -336,22 +337,30 @@ def _serve(r: dict, *, tool: str, alca: str, ident: dict, cauda: bool = False,
 
     `cosmetica` vem do cabeçalho do verbo (`_cosmetica`) e vale só para retorno de
     recuperação semântica: lava o cosmético, deduplica igual, e NUNCA corta miolo.
+
+    `esquece` é o `inteiro=true` da leitura de arquivo: apaga a alça antes de servir, e a
+    página sai inteira mesmo que o registro a tivesse por servida (spec ler-arquivo §11.4).
     """
     if not isinstance(r, dict) or not _poda_ligada() or _poda.intocavel(r):
         return r
     sessao_id = ident.get("sessao_id") or "-"
     try:
         ledger = _poda.Ledger(_rc(), sessao_id, TTL_SESSAO_S)
+        if esquece:
+            ledger.esquece(f"{tool}:{alca}")
         giro = ledger.giro()
     except Exception:                                         # noqa: BLE001
         ledger, giro = None, 0
     metas = []
-    for campo, sub in (("stdout", "texto"), ("content", None)):
+    for campo, sub in (("stdout", "texto"), ("conteudo", None), ("content", None)):
         alvo = r.get(campo)
         texto = (alvo or {}).get(sub) if sub else alvo
         if not isinstance(texto, str) or not texto:
             continue
-        cap_efetivo = max(CAP, len(texto.encode("utf-8", "replace"))) if tool == "read_file" else CAP
+        # A leitura de arquivo nunca se corta pelo teto: a página já vem limitada por
+        # `max_bytes`, e cortar quebraria a soma das páginas (spec ler-arquivo §6).
+        cap_efetivo = (max(CAP, len(texto.encode("utf-8", "replace")))
+                       if tool in _poda.TOOLS_LEITURA else CAP)
         servido, meta = _poda.poda_texto(
             texto, cap=cap_efetivo, cauda=cauda, alca=f"{tool}:{alca}", sessao_id=sessao_id,
             giro=giro, tool=tool, ledger=ledger, cosmetica=cosmetica,
@@ -542,8 +551,8 @@ def _bytes_crus(r: dict) -> int | None:
     if not isinstance(r, dict):
         return None
     total = 0
-    for campo, sub in (("stdout", "texto"), ("stderr", "texto"), ("content", None),
-                       ("erro", None)):
+    for campo, sub in (("stdout", "texto"), ("stderr", "texto"), ("conteudo", None),
+                       ("content", None), ("erro", None)):
         alvo = r.get(campo)
         texto = (alvo or {}).get(sub) if sub else alvo
         if isinstance(texto, str):
@@ -984,14 +993,15 @@ _SUGESTAO = {
     # capsula (decisao 2b do dono, 07/09/2026). Verbo servido nao tem sugestao de
     # substituto — ele proprio roda. O shim git nega `push` e aponta `repo empurrar`;
     # o `repo` continua para a operacao contida (trava de producao + gate de release).
-    "cat": "read_file", "head": "read_file", "tail": "read_file", "sed": "read_file",
-    "less": "read_file", "ls": "read_file", "stat": "read_file", "wc": "read_file",
+    "cat": "ler_arquivo", "head": "ler_arquivo", "tail": "ler_arquivo", "sed": "ler_arquivo",
+    "less": "ler_arquivo", "ls": "ler_arquivo", "stat": "ler_arquivo", "wc": "ler_arquivo",
     "rg": "repo", "grep": "repo", "fd": "repo", "find": "repo",
     "docker": "infra", "systemctl": "infra", "journalctl": "infra", "loginctl": "infra",
     "curl": "pesquisar", "wget": "pesquisar",
     "python3": "teste", "python": "teste", "pytest": "teste", "uv": "teste", "ruff": "lint",
     "psql": "motor", "tee": "write_file", "cp": "write_file", "mv": "write_file",
     "read_file": "é tool, não verbo: read_file(path=...)",
+    "ler_arquivo": "é tool, não verbo: ler_arquivo(caminho=...)",
     "write_file": "é tool, não verbo: write_file(path=..., content=...)",
     "monta_sessao": "é tool, não verbo: monta_sessao(cadeira=...)",
     "monta-sessao": "é tool, não verbo: monta_sessao(cadeira=...)",
@@ -1347,14 +1357,22 @@ async def _run_command_legado(command: str = "", cwd: str = "", timeout: int = 1
 FILA_RAIZ = Path(os.environ.get("PF_FILA", INSTANCIA / "var" / "fila")).resolve()
 
 
-def _nega_fila(p: Path, tool: str):
+def _sob_fila(p: Path) -> bool:
     try:
         alvo = p.resolve()
     except OSError:
-        return None
-    if alvo == FILA_RAIZ or FILA_RAIZ in alvo.parents:
-        _audit(tool=tool, path=str(p), erro="fila: use o verbo `fila`")
-        return {"erro": "caminho sob a fila — read_file/write_file nao operam ai. "
+        return False
+    return alvo == FILA_RAIZ or FILA_RAIZ in alvo.parents
+
+
+def _classe_recusa(tool: str) -> dict:
+    return {"classe_erro": "recusado"} if tool in _poda.TOOLS_LEITURA else {}
+
+
+def _nega_fila(p: Path, tool: str):
+    if _sob_fila(p):
+        _audit(tool=tool, path=str(p), erro="fila: use o verbo `fila`", **_classe_recusa(tool))
+        return {"erro": "caminho sob a fila — ler_arquivo/write_file nao operam ai. "
                         "Use o verbo: `fila status|ler|consumir|enviar` (append sob "
                         "flock, com identidade). Motivo: write_file substitui.",
                 "path": str(p)}
@@ -1380,101 +1398,146 @@ def _sob_segredos_de_instancia(alvo: Path) -> bool:
     return False
 
 
-def _nega_segredo(p: Path, tool: str):
+def _e_segredo(p: Path) -> bool:
     """spec_porta-so-verbo §4.6: .env*, *.key|*.pem, .credentials.json, <instancia>/segredos/, PDP_DIR."""
     try:
         alvo = p.resolve()
     except OSError:
-        return None
+        return False
     nome = alvo.name
-    if (nome.startswith(".env") or alvo.suffix in (".key", ".pem") or nome == ".credentials.json"
-            or _sob_segredos_de_instancia(alvo) or _sob_segredos_de_instancia(p.absolute())
-            or any(d == alvo or d in alvo.parents for d in _SEGREDO_DIRS)):
-        _audit(tool=tool, evento="leitura_recusada", path=str(p), motivo="segredo")
+    return bool(nome.startswith(".env") or alvo.suffix in (".key", ".pem")
+                or nome == ".credentials.json"
+                or _sob_segredos_de_instancia(alvo) or _sob_segredos_de_instancia(p.absolute())
+                or any(d == alvo or d in alvo.parents for d in _SEGREDO_DIRS))
+
+
+def _nega_segredo(p: Path, tool: str):
+    if _e_segredo(p):
+        _audit(tool=tool, evento="leitura_recusada", path=str(p), motivo="segredo",
+               **_classe_recusa(tool))
         return {"recusado": True, "path": str(p),
-                "motivo": "segredo: fora do alcance de read_file (spec_porta-so-verbo §4.6)"}
+                "motivo": "segredo: fora do alcance da leitura de arquivo (spec_porta-so-verbo §4.6)"}
     return None
 
-def _le_um_arquivo(path: str, offset: int, max_bytes: int, ident: dict,
+
+def _nega_leitura(p: Path) -> bool:
+    """A negativa do arquivo, sem auditoria, para cada entrada de diretório e para o
+    ancestral de caminho ausente: não se lista o que a leitura não deixaria ler
+    (spec ler-arquivo §9)."""
+    return _sob_fila(p) or _e_segredo(p)
+
+
+def _curto(p: Path) -> str:
+    """O caminho do cabeçalho: relativo à release, à bancada ou à instância, quando cabe."""
+    for base in (Path("/opt/platafirma/current"), _bancada(), INSTANCIA):
+        if base is not None:
+            try:
+                return str(p.relative_to(base))
+            except ValueError:
+                continue
+    return str(p)
+
+
+def _le_um_arquivo(caminho: str, args: dict, ident: dict, tool: str,
                    lote_id: str | None = None, lote_n: int | None = None) -> dict:
-    negado = _autoriza("read_file", "read_file", "documento", path, DOM_PLATAFORMA)
+    """A costura da leitura (spec ler-arquivo §13.2): autoriza, resolve e nega — nessa
+    ordem, a de sempre —, lê por `leitura.le`, serve pela poda e audita com a classe do
+    erro. `tool` é o nome chamado (`ler_arquivo` ou o apelido `read_file`): a auditoria o
+    grava, e é por ele que a regra de saída do apelido conta (§12.3)."""
+    quem = {"cadeira": ident["cadeira"] or None, "sessao_id": ident["sessao_id"],
+            "ordem_id": ident["ordem_id"], "lote_id": lote_id, "lote_n": lote_n}
+    if not caminho:
+        _audit(tool=tool, erro="caminho vazio", classe_erro="gramatica", **quem)
+        return {"erro": "caminho vazio", "cura": 'ler_arquivo(caminho="/caminho/absoluto")'}
+    # A ação do PDP segue `read_file` para as duas tools: é a capacidade de ler documento, e
+    # a política (politica-acesso, da segurança) não muda por causa do nome da tool.
+    negado = _autoriza(tool, "read_file", "documento", caminho, DOM_PLATAFORMA)
     if negado:
         return negado
-    p, erro_caminho = _resolve_relativo(path)
+    p, erro_caminho = _resolve_relativo(caminho)
     if erro_caminho:
-        _audit(tool="read_file", evento="leitura_recusada", path=path, motivo=erro_caminho,
-               cadeira=ident["cadeira"] or None, sessao_id=ident["sessao_id"],
-               ordem_id=ident["ordem_id"], lote_id=lote_id, lote_n=lote_n)
-        return {"recusado": True, "path": path, "motivo": erro_caminho}
-    bloqueio = _nega_fila(p, "read_file") or _nega_segredo(p, "read_file")
+        _audit(tool=tool, evento="leitura_recusada", path=caminho, motivo=erro_caminho,
+               erro=erro_caminho, classe_erro="recusado", **quem)
+        return {"recusado": True, "caminho": caminho, "motivo": erro_caminho}
+    bloqueio = _nega_fila(p, tool) or _nega_segredo(p, tool)
     if bloqueio:
+        bloqueio["caminho"] = bloqueio.pop("path", str(p))
         return bloqueio
-    if not p.is_file():
-        # A mensagem distingue os tres casos que antes colapsavam numa frase so
-        # (diagnostico invertido custou 4 giros na fita o20260909T163333-79b32d):
-        # diretorio existente != caminho ausente != no de outro tipo (socket, fifo).
-        if p.is_dir():
-            erro = "é um diretório, não um arquivo — read_file só lê arquivo"
-        elif p.exists():
-            erro = "existe mas não é arquivo comum (socket, fifo ou dispositivo)"
-        else:
-            erro = "não existe"
-        _audit(tool="read_file", path=str(p), erro=erro,
-               cadeira=ident["cadeira"] or None, sessao_id=ident["sessao_id"], ordem_id=ident["ordem_id"],
-               lote_id=lote_id, lote_n=lote_n)
-        return {"erro": erro, "path": str(p)}
-    tamanho_total = p.stat().st_size
-    offset = max(0, offset)
-    max_bytes = max(1, min(max_bytes, 200000))
-    with open(p, "rb") as fh:
-        if offset > 0:
-            fh.seek(offset)
-        chunk = fh.read(max_bytes)
-    fim = offset + len(chunk)
-    truncated = fim < tamanho_total
-    next_offset = fim if truncated else None
-    r = {"content": chunk.decode("utf-8", "replace"), "bytes_total": tamanho_total,
-         "offset": offset, "bytes_lidos": len(chunk),
-         "truncated": truncated, "next_offset": next_offset,
-         "path": str(p)}
-    # O dup exato mais caro medido na perícia de 5 dias é o MESMO caminho relido: a alça
-    # é (path, offset), e é por ela que a releitura idêntica sai como aviso e a mudada
-    # sai como diff. `path` é identificador exato — nunca entra na poda (invariante iv).
-    r = _serve(r, tool="read_file", alca=f"{p}|{offset}", ident=ident)
-    _audit(tool="read_file", path=str(p), bytes_lidos=len(chunk), bytes_total=tamanho_total,
-           cadeira=ident["cadeira"] or None, sessao_id=ident["sessao_id"], ordem_id=ident["ordem_id"],
-           lote_id=lote_id, lote_n=lote_n, **_campos_poda(r))
-    return r
+    offset, modo = args.get("offset"), args.get("modo") or "texto"
+    r = _leitura.le(p, linhas=args.get("linhas") or None, modo=modo,
+                    max_bytes=args.get("max_bytes") or _leitura.ORCAMENTO_PADRAO,
+                    versao=args.get("versao") or None, offset=offset,
+                    encoding=args.get("encoding") or None, nega=_nega_leitura, curto=_curto(p))
+    classe = r.pop("classe_erro", None)
+    # A alça é o pedido (§11.2), a mesma para as duas tools: releitura pelo apelido e pela
+    # nova deduplicam juntas. `caminho` é identificador exato — nunca entra na poda (iv).
+    faixa = f"b{offset}" if offset is not None else (args.get("linhas") or "1-")
+    r = _serve(r, tool="ler_arquivo", alca=f"{p}|{modo}|{faixa}", ident=ident,
+               esquece=bool(args.get("inteiro")))
+    enc, servidas = r.get("encoding") or {}, r.get("linhas")
+    _audit(tool=tool, path=str(p),
+           modo="diretorio" if r.get("diretorio") else "bytes" if offset is not None else modo,
+           linhas=f"{servidas[0]}-{servidas[1]}" if servidas else None,
+           versao=r.get("versao"), encoding_por=enc.get("por"), invalidos=enc.get("invalidos"),
+           bytes_total=r.get("bytes_total"), classe_erro=classe,
+           erro=(r.get("erro") or r.get("motivo")) if classe else None,
+           **quem, **_campos_poda(r))
+    if tool == "read_file":
+        r = _leitura.como_read_file(r)
+    return _leitura.enxuga_releitura(r)
+
+
+def ler_arquivo(caminho: str = "", linhas: str = "", modo: str = "texto",
+                max_bytes: int = 40000, versao: str = "", offset: int | None = None,
+                encoding: str = "", inteiro: bool = False, sessao_id: str | None = None,
+                caminhos: list[str | dict] | None = None) -> dict:
+    """Lê arquivo de texto por linhas. `caminho` absoluto, ou relativo à bancada declarada.
+
+    `linhas`: "a-b", "a-" ou "-n" (as últimas n), base 1; sem ela, do começo. A página
+    termina em fim de linha e cabe em `max_bytes` (40000, até 200000). `cabecalho` diz o
+    que veio (faixa, total, encoding, versão); `proximo_args` é a chamada da página
+    seguinte, e `proximo` diz "fim do arquivo" no fim.
+    `modo="sumario"`: a estrutura (títulos de Markdown, class/def de Python, chaves de
+    JSON) com a faixa de linhas de cada item, para ler só o item por `linhas`.
+    `offset`: lê por bytes a partir dele (linha longa). `versao`: a de uma página anterior;
+    se o arquivo mudou, o cabeçalho abre com ARQUIVO MUDOU. `encoding`: força a decodificação
+    quando o cabeçalho diz NÃO JULGADO. `inteiro=true`: reenvia a página que a porta tinha
+    por já servida.
+    Diretório devolve a listagem; caminho que não existe devolve `existe_ate`, `la_tem` e
+    `parecidos`; binário recusa com o tipo.
+    `caminhos`: várias leituras num giro (cada item um caminho ou {"caminho", "linhas"}); o
+    teto do lote conta bytes servidos, e o item que não coube volta `omitido_por_teto`.
+    """
+    ident = _sessao_resolve(sessao_id)
+    comuns = {"linhas": linhas, "modo": modo, "max_bytes": max_bytes, "versao": versao,
+              "offset": offset, "encoding": encoding, "inteiro": inteiro}
+    if caminhos and PF_TOOLS_LOTE:
+        lote_id = uuid.uuid4().hex[:8]
+
+        def _item(i, it):
+            if isinstance(it, dict):
+                return _le_um_arquivo(str(it.get("caminho") or ""),
+                                      {**comuns, "linhas": it.get("linhas") or linhas},
+                                      ident, "ler_arquivo", lote_id, i)
+            return _le_um_arquivo(str(it), comuns, ident, "ler_arquivo", lote_id, i)
+        return _leitura.lote(caminhos, _item, CAP)
+    return _le_um_arquivo(caminho, comuns, ident, "ler_arquivo")
 
 
 def read_file(path: str = "", offset: int = 0, max_bytes: int = 40000,
               sessao_id: str | None = None, paths: list[str] | None = None) -> dict:
-    """Lê um arquivo: `path` absoluto, ou relativo à bancada declarada (sem ela, recusa).
-
-    Truncagem sempre declarada: truncated/bytes_total/next_offset para paginar.
-    Inexistente volta com erro preenchido, nunca exceção.
-
-    `paths`: lista de caminhos, um item por leitura, atrás de `PF_TOOLS_LOTE` (§5c);
-    teto de bytes do lote = `CAP` (D4), item excedente volta `{"omitido_por_teto": True}`
-    com `lote_next`. `path` escalar segue válido quando `paths` não vem.
+    """Apelido de `ler_arquivo` (spec ler-arquivo §12): a mesma leitura, com `path`,
+    `paths` e `offset`. Sem `offset`, lê por linhas; o retorno traz `content`, `truncated`
+    e `next_offset` (byte) além dos campos novos. Sai quando ninguém mais a chamar.
     """
     ident = _sessao_resolve(sessao_id)
+    args = {"max_bytes": max_bytes, "offset": offset or None}
     if paths and PF_TOOLS_LOTE:
         lote_id = uuid.uuid4().hex[:8]
-        resultados = []
-        acumulado = 0
-        lote_next = None
-        for _i, pth in enumerate(paths):
-            if acumulado >= CAP:
-                lote_next = _i
-                break
-            r = _le_um_arquivo(pth, offset, max_bytes, ident, lote_id, _i)
-            acumulado += r.get("bytes_total", 0)
-            resultados.append(r)
-        for _i in range(len(resultados), len(paths)):
-            resultados.append({"omitido_por_teto": True})
-        return {"lote": resultados, "lote_n": len(paths), "lote_next": lote_next}
-    return _le_um_arquivo(path, offset, max_bytes, ident)
+        return _leitura.lote(paths, lambda i, c: _leitura.como_read_file(
+            _le_um_arquivo(str(c), args, ident, "read_file", lote_id, i)), CAP)
+    # Idempotente: a costura já traduziu a página; aqui pega a recusa que saiu antes dela.
+    return _leitura.como_read_file(_le_um_arquivo(path, args, ident, "read_file"))
 
 
 # --- write_file: tipo x morada, sem symlink, atomico (spec_porta-so-verbo §4) ----
@@ -2073,7 +2136,7 @@ async def monta_sessao(cadeira: str = "", atualizar: bool = True, chapeu: str = 
 # Registro tardio: o __doc__ é a descrição que o cliente lê, e ela precisa nomear o
 # usuário e os caminhos DESTA instância. Substituir depois de registrar não adianta — o
 # FastMCP copia a descrição no momento do mcp.tool().
-_TOOLS = [run_command, read_file, write_file]
+_TOOLS = [run_command, ler_arquivo, read_file, write_file]
 # monta_sessao só existe onde há personas: numa instância sem abertura publicada
 # a tool não teria o que montar, e tool inútil no catálogo é contexto desperdiçado.
 if PERSONAS.is_dir():
@@ -2244,7 +2307,7 @@ def _segue_apos_prazo(p: subprocess.Popen, argv: list, timeout: int, t0: float, 
     return {"em_andamento": True, "id": rid, "resultado": str(caminho),
             "motivo": (f"em andamento: {slug} passou do prazo da chamada e segue no host ate "
                        f"{timeout}s; o retorno final sera gravado em {caminho}"),
-            "como_ler": (f'read_file(path="{caminho}") — com em_andamento ainda roda; sem ele, '
+            "como_ler": (f'ler_arquivo(caminho="{caminho}") — com em_andamento ainda roda; sem ele, '
                          "e o retorno final (exit_code, stdout, stderr)"),
             "cwd": str(d_cwd)}
 

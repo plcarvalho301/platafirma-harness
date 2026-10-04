@@ -67,7 +67,10 @@ TIPOS = ("giro", "erro", "ajuda", "help", "acerto", "cadeia", "lote", "veredito"
 # segrega: ajuda sai de `erro` e conta em `ajuda`, em `dia`, `tateio`, `ate-acerto` e `casos`.
 AJUDA = ("--help", "-h", "--ajuda", "ajuda", "help", "--ajuda-flags", "--usage")
 # Tools sem a nocao de ato: chamada sem ato nelas nao e pedido de ajuda.
-SEM_ATO = ("read_file", "write_file", "monta_sessao", "monta-sessao", "sessao", "run_command")
+# As duas tools de leitura da porta: `ler_arquivo` e `read_file`, apelido da mesma funcao.
+# O log grava o nome chamado em `tool`; aqui as duas contam como uma so.
+LEITURA = ("ler_arquivo", "read_file")
+SEM_ATO = (*LEITURA, "write_file", "monta_sessao", "monta-sessao", "sessao", "run_command")
 
 def e_ajuda(reg):
     """Verbo nu so e ajuda quando devolveu o uso (exit 2): `rag_buscar` da abertura e o
@@ -265,6 +268,9 @@ def giros_do_dia(fonte, dia, cadeira=None, sessao=None, azp=None):
         if b is None:
             b = reg.get("bytes_produzidos")
         g["bytes"] = b if isinstance(b, int) else None
+        # Tool de leitura grava `classe_erro` no erro (caminho/faixa/binario/gramatica/
+        # recusado); registro anterior a subida da `ler_arquivo` nao tem.
+        g["classe_erro"] = reg.get("classe_erro")
         g["pos"] = pos
         g["bruto"] = reg          # so `casos` le; nunca sai no stream (CAMPOS_GIRO)
         g["ajuda"] = e_ajuda(reg)
@@ -483,29 +489,47 @@ def ate_acerto(giros, par):
 # eram execucao produtiva. Aqui so entra giro que FALHOU.
 
 # Ferramentas de codigo: onde a bisseccao acontece.
-CODIGO = ("read_file", "write_file", "run_command", "repo", "git", "lint", "teste")
+CODIGO = (*LEITURA, "write_file", "run_command", "repo", "git", "lint", "teste")
 # Leitura da casa: o que responde "o que a casa decidiu" numa chamada. `descobrir` saiu do ar
 # em 27/09/2026 e fica aqui so para contar a leitura no log anterior a essa data.
 CASA = ("motor", "acervo", "descobrir")
 # Piso de uma sessao "tecnica": abaixo disso nao ha bisseccao, ha uma consulta solta.
 PISO_TECNICA = 5
 
+def _classe_de_leitura(g):
+    """`classe_erro` do erro de tool de leitura; None se a porta nao classificou (registro
+    antigo, ou tool que nao e de leitura)."""
+    c = g.get("classe_erro")
+    return c if g["tool"] in LEITURA and not _nulo(c) else None
+
 def _e_gramatica(g):
-    """Falha de FORMA: exit 2, verbo nu, ou recusa da porta."""
+    """Falha de FORMA: exit 2, verbo nu, ou recusa da porta. Erro de leitura que a porta
+    classificou so e gramatica quando a classe e `gramatica`: caminho que nao existe nao
+    e forma errada (medido: 61 de 73 `read_file` eram caminho, 12 diretorio)."""
     if not g["falhou"]:
         return False
+    classe = _classe_de_leitura(g)
+    if classe:
+        return classe == "gramatica"
     return (g["exit_code"] == 2 or _nulo(g["ato"]) or g.get("evento") == "sem_verbo")
 
 def tateio(giros, par):
     gram_verbo = defaultdict(int)
     exec_verbo = defaultdict(int)
     gram_cadeira = defaultdict(int)
+    leit_classe = defaultdict(int)
     for g in giros:
         if not g["falhou"]:
             continue
+        classe = _classe_de_leitura(g)
         if _e_gramatica(g):
             gram_verbo[g["tool"]] += 1
             gram_cadeira[g["cadeira"] or "-"] += 1
+        elif classe:
+            # Erro de leitura classificado fora de gramatica (caminho, faixa, binario,
+            # recusado): nao e falha de forma nem de execucao do verbo. Terceiro balde
+            # `leitura`, para `erros = gramatica + execucao + leitura` fechar.
+            leit_classe[classe] += 1
         else:
             exec_verbo[g["tool"]] += 1
 
@@ -566,6 +590,8 @@ def tateio(giros, par):
 
     n_gram = sum(gram_verbo.values())
     n_exec = sum(exec_verbo.values())
+    n_leit = sum(leit_classe.values())
+    n_erros = n_gram + n_exec + n_leit
     tecnicas = len(sem_casa) + com_casa
     return {
         "gramatica": {
@@ -578,6 +604,10 @@ def tateio(giros, par):
             "total": n_exec,
             "por_verbo": dict(sorted(exec_verbo.items(), key=lambda kv: -kv[1])),
         },
+        "erro_de_leitura": {
+            "total": n_leit,
+            "por_classe": dict(sorted(leit_classe.items(), key=lambda kv: -kv[1])),
+        },
         "leitura": {
             "sessoes_tecnicas": tecnicas,
             "sem_leitura_da_casa": len(sem_casa),
@@ -587,11 +617,11 @@ def tateio(giros, par):
         "custo": custo,
         "total": {
             "giros": len(giros),
-            "erros": n_gram + n_exec,
+            "erros": n_erros,
             "ajuda": sum(1 for g in giros if g["ajuda"]),
             "veredito": sum(1 for g in giros if g.get("veredito")),
-            "taxa_erro": round((n_gram + n_exec) / len(giros), 4) if giros else 0,
-            "fracao_gramatica": round(n_gram / (n_gram + n_exec), 4) if (n_gram + n_exec) else 0,
+            "taxa_erro": round(n_erros / len(giros), 4) if giros else 0,
+            "fracao_gramatica": round(n_gram / n_erros, 4) if n_erros else 0,
         },
     }
 
@@ -622,7 +652,9 @@ def _classe(g, texto_livre):
     ev, ec, dur = g.get("evento"), g["exit_code"], g["dur_ms"]
     if ev == "sem_verbo":
         return "recusa-da-porta"
-    if g["tool"] in ("read_file", "write_file") and ec is None:
+    if _classe_de_leitura(g):
+        return g["classe_erro"]          # a porta ja classificou; heuristica so sem ela
+    if g["tool"] in (*LEITURA, "write_file") and ec is None:
         return "arquivo"
     if ec == 2 and _nulo(g["ato"]):
         return "verbo-nu"
@@ -670,7 +702,7 @@ def casos(giros, tool=None):
         por_tool[c["tool"]][c["classe"]] += 1
         if c["classe"] == "recusa-da-porta":
             recusados[c.get("verbo") or "(vazio)"] += 1
-        if c["tool"] not in ("run_command", "read_file"):
+        if c["tool"] not in ("run_command", *LEITURA):
             atos_falhos[c["tool"]][(c["ato"] or "\u2205") + f":{c['exit_code']}"] += 1
     agregado = {
         "por_tool": {t: dict(sorted(d.items(), key=lambda kv: -kv[1]))
@@ -759,16 +791,26 @@ def casos_texto(r, agregado=False):
 # via=run_command (ops-server/server.py). Somar transporte ao ranking de verbos compara
 # despachante com carga, e antes de 06/09 run_command carregava todo o shell (regime
 # _run_command_legado). read_file/write_file sao leitura/escrita, nao verbo servido.
-TRANSPORTE = ("run_command", "read_file", "write_file")
+TRANSPORTE = ("run_command", *LEITURA, "write_file")
 
 def verbos(giros):
     por = defaultdict(lambda: {"giros": 0, "erros": 0, "ajuda": 0,
                                "gramatica": 0, "execucao": 0})
     chaves_g, chaves_e = defaultdict(set), defaultdict(set)
+    # So o transporte: bytes servidos, modo da poda (ausente = pagina inteira) e classe
+    # do erro de leitura. O `verbo` da planilha nao ganha coluna.
+    extra = defaultdict(lambda: {"bytes_servidos": 0, "poda_modos": defaultdict(int),
+                                 "por_classe": defaultdict(int)})
     for g in giros:
         t = g["tool"]
         d = por[t]
         d["giros"] += 1
+        if t in TRANSPORTE:
+            x = extra[t]
+            x["bytes_servidos"] += g["bytes"] or 0
+            x["poda_modos"][g["bruto"].get("poda_modo") or "inteiro"] += 1
+            if g["falhou"] and _classe_de_leitura(g):
+                x["por_classe"][g["classe_erro"]] += 1
         k = (g["lote_id"] or g["ts"] or g["pos"], g["ato"], g["exit_code"], bool(g["falhou"]))
         chaves_g[t].add(k)
         if g["ajuda"]:
@@ -776,9 +818,12 @@ def verbos(giros):
         if g["falhou"]:
             d["erros"] += 1
             chaves_e[t].add(k)
+            # Erro de leitura classificado fora de gramatica nao e gramatica nem execucao:
+            # fica so em `por_classe`. Fecha assim: erros = gramatica + execucao + (soma de
+            # por_classe sem a classe gramatica).
             if _e_gramatica(g):
                 d["gramatica"] += 1
-            else:
+            elif not _classe_de_leitura(g):
                 d["execucao"] += 1
     saida = {}
     for t, d in por.items():
@@ -787,6 +832,11 @@ def verbos(giros):
                     "giros_distintos": gd, "erros_distintos": ed,
                     "taxa": round(d["erros"] / d["giros"], 4) if d["giros"] else 0,
                     "taxa_distinta": round(ed / gd, 4) if gd else 0}
+        if t in extra:
+            x = extra[t]
+            saida[t].update(bytes_servidos=x["bytes_servidos"],
+                            poda_modos=dict(sorted(x["poda_modos"].items(), key=lambda kv: -kv[1])),
+                            por_classe=dict(sorted(x["por_classe"].items(), key=lambda kv: -kv[1])))
     verbo = {t: d for t, d in saida.items() if t not in TRANSPORTE}
     transp = {t: saida[t] for t in TRANSPORTE if t in saida}
     ordenado = dict(sorted(verbo.items(),
@@ -825,7 +875,8 @@ def verbos_texto(r):
         linhas.append("")
         linhas.append("transporte (nao e verbo da planilha — run_command so loga recusa):")
         for v, d in r["transporte"].items():
-            linhas.append(f"  {(v):14s} {d['giros']:6d} giros · {d['erros']:5d} recusa/erro")
+            servidos = f" · {d['bytes_servidos']} B servidos" if d.get("bytes_servidos") else ""
+            linhas.append(f"  {(v):14s} {d['giros']:6d} giros · {d['erros']:5d} recusa/erro{servidos}")
     return linhas
 
 # --- camada 3e: COMPORTAMENTO (consumer-aligned) ---------------------------------
