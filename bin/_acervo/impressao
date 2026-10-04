@@ -4,7 +4,7 @@
 #
 # Cliente fino da rota GET /acervo/obras/{obra}/impressoes/{impressao} do motor. Nao converte
 # nem renderiza (arq:0117 §5.2): imprime a fatia de espelho.md como esta no arquivo, entre a
-# primeira linha (o que e, de onde veio, qualidade) e a ultima (`proximo:` ou `fim da obra`).
+# primeira linha (o que e, de onde veio, servivel) e a ultima (`proximo:` ou `fim da obra`).
 # exit (arq:0110 §4): 0 leu · 1 obra sem impressao servindo · 2 uso · 3 rota fora · 5 indeterminavel
 import argparse
 import json
@@ -40,7 +40,8 @@ USO = """uso: acervo ler biblioteca impressao <obra> [--paginas a-b | --capitulo
   --papel         corpo (padrão: sem cabeçalho, rodapé, navegação) · todos
   --impressao     lê outra impressão da obra, aposentada inclusive (padrão: a servindo)
   --baixar        grava espelho.md inteiro como <título>.md e imprime o caminho
-primeira linha: o que é, de onde veio, a qualidade e o motivo do veredito, e os avisos das páginas lidas: `avisos:
+primeira linha: o que é, de onde veio, o julgamento (servível, servível imperfeito, não servível) e o motivo
+  (a perda líquida), e os avisos das páginas lidas: `avisos:
   tabela com coluna suspeita p. 120–131; página sem texto extraído p. 3` (página física; o aviso da obra inteira
   sai como `<rótulo> na obra`; o que não cabe vem contado como `+N`; sem aviso, `avisos: nenhum`)
 exit: 0 leu · 1 obra sem impressão servindo · 2 uso · 3 rota fora · 5 indeterminável
@@ -148,10 +149,10 @@ def _motivo(motivo) -> str:
 
 def primeira_linha(titulo: str, sumario: dict, unidades: str | None, fora: dict,
                    papel: str, capitulo: str | None) -> str:
-    """O molde da casa (spec §5.4): o que é, de onde veio, a qualidade e, se houver, os avisos, numa linha."""
+    """O molde da casa (spec §5.4): o que é, de onde veio, o julgamento e, se houver, os avisos, numa linha."""
     esp = sumario.get("espelho")
     if not esp:
-        return f"{titulo} · qualidade suspeita · sem página"
+        return f"{titulo} · não servível (sem espelho) · sem página"
     unidade = esp.get("unidade") or "nenhuma"
     total = sumario.get("unidades") or 0
     if unidade != "nenhuma" and unidades:
@@ -172,10 +173,11 @@ def primeira_linha(titulo: str, sumario: dict, unidades: str | None, fora: dict,
         extras = {k: v for k, v in fora.items() if k not in base and v}
         itens = [f"{_NOMES_FORA.get(k, k)} {v}" for k, v in {**base, **extras}.items()]
         partes.append("fora do corpo: " + ", ".join(itens))
-    # a qualidade e o motivo são do veredito da régua (spec §3.1, §5.4), que a rota põe no sumário
-    qual = esp.get("qualidade") or "nao-julgada"
+    # o julgamento e o motivo são do veredito da régua (spec §3.1, §5.4; régua 6, #3282), que a rota põe no
+    # sumário: «servível», «servível imperfeito», «não servível» ou «não julgado», com a perda líquida
+    julgamento = esp.get("julgamento") or "não julgado"
     motivo = _motivo(esp.get("motivo"))
-    partes.append(f"qualidade {qual}" + (f" ({motivo})" if motivo else ""))
+    partes.append(julgamento + (f" ({motivo})" if motivo else ""))
     # só os avisos das páginas lidas (régua 3, §4.5 e §5.4); o da obra inteira fica
     partes.append(linha_de_avisos(avisos_da_faixa(esp.get("avisos"), unidades if unidade != "nenhuma" else None)))
     return " · ".join(partes)

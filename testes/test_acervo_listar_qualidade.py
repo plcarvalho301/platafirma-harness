@@ -1,9 +1,11 @@
-"""#2856 linha 156 (caso #3240): `acervo listar obra --qualidade` agrega, por classe (ok / suspeita /
-nao-julgada), a qualidade dos espelhos servindo; com `--por-obra`, uma linha por obra.
+"""#2856 linha 156 (casos #3240 e #3282): `acervo listar obra --qualidade` agrega, por classe (servível /
+servível imperfeito / não servível / não julgado), o julgamento dos espelhos servindo; com `--por-obra`, uma
+linha por obra.
 
-A qualidade é o veredito da régua, gravado em `acervo.impressao.espelho -> veredito` (conhecimento,
-`conversor/regua.py`). Sem banco: o módulo `bin/_acervo/listar` se carrega como fonte e `_psql_json` é
-trocado por uma função que responde pela consulta que o ato faz (só leitura).
+O julgamento é o veredito da régua 6, gravado em `acervo.impressao.espelho -> veredito` (conhecimento,
+`conversor/regua.py`): `servivel` e `imperfeita`; o veredito de régua anterior, sem `servivel`, é «não
+julgado». Sem banco: o módulo `bin/_acervo/listar` se carrega como fonte e `_psql_json` é trocado por uma
+função que responde pela consulta que o ato faz (só leitura).
 """
 
 from __future__ import annotations
@@ -25,17 +27,19 @@ def _modulo():
     loader.exec_module(mod)
     return mod
 
-def _linha(n, titulo, qualidade, regua=2, tem_espelho=True):
+def _linha(n, titulo, servivel, imperfeita=False, regua=6, tem_espelho=True):
     return {"id": f"{n:08x}-0000-4000-8000-000000000000", "titulo": titulo,
-            "tem_espelho": tem_espelho, "qualidade": qualidade, "regua": regua}
+            "tem_espelho": tem_espelho, "servivel": servivel, "imperfeita": imperfeita, "regua": regua}
 
 LINHAS = [
-    _linha(1, "Lei 14.133", "ok"),
-    _linha(2, "Manual de Redes", "suspeita"),
-    _linha(3, "Anuário", "suspeita"),
-    _linha(4, "Livro EPUB", "nao-julgada"),
+    _linha(1, "Lei 14.133", True),
+    _linha(2, "Manual de Redes", True, imperfeita=True),
+    _linha(3, "Anuário", False),
+    _linha(4, "Livro EPUB", None, regua=5),
     _linha(5, "Sem espelho ainda", None, regua=None, tem_espelho=False),
 ]
+
+CLASSES = ("servível", "servível imperfeito", "não servível", "não julgado")
 
 @pytest.fixture
 def listar(monkeypatch):
@@ -51,21 +55,29 @@ def listar(monkeypatch):
     monkeypatch.setattr(mod, "_psql_json", falso)
     return mod, consultas
 
+def _classe_da_linha(linha: str) -> str | None:
+    for classe in sorted(CLASSES, key=len, reverse=True):
+        if linha.startswith(classe + " "):
+            return classe
+    return None
+
 def test_primeira_linha_traz_o_total_e_o_criterio_em_palavras(listar, capsys):
     mod, _ = listar
     mod.listar_obra_qualidade(False, False)
     primeira = capsys.readouterr().out.splitlines()[0]
     assert primeira.startswith("4 espelhos servindo")
-    for palavra in ("suspeita", "nao-julgada", "ok", "piso"):
+    for palavra in ("perda líquida", "servível", "8%", "1%"):
         assert palavra in primeira
 
 def test_agrega_por_classe_a_contagem_dos_espelhos_servindo(listar, capsys):
     mod, _ = listar
     mod.listar_obra_qualidade(False, False)
-    linhas = capsys.readouterr().out.splitlines()
-    contagem = {l.split()[0]: int(l.split()[1]) for l in linhas
-                if l.split() and l.split()[0] in ("ok", "suspeita", "nao-julgada")}
-    assert contagem == {"ok": 1, "suspeita": 2, "nao-julgada": 1}
+    contagem = {}
+    for l in capsys.readouterr().out.splitlines()[1:]:
+        classe = _classe_da_linha(l)
+        if classe:
+            contagem[classe] = int(l[len(classe):].split()[0])
+    assert contagem == {"servível": 1, "servível imperfeito": 1, "não servível": 1, "não julgado": 1}
 
 def test_sem_por_obra_nao_lista_obra(listar, capsys):
     mod, _ = listar
@@ -81,34 +93,26 @@ def test_por_obra_traz_uma_linha_por_obra_com_a_classe(listar, capsys):
     for l in saida.splitlines():
         for t in ("Lei 14.133", "Manual de Redes", "Anuário", "Livro EPUB"):
             if l.rstrip().endswith(t):
-                por_titulo[t] = l.split()[0]
-    assert por_titulo == {"Lei 14.133": "ok", "Manual de Redes": "suspeita",
-                          "Anuário": "suspeita", "Livro EPUB": "nao-julgada"}
+                por_titulo[t] = _classe_da_linha(l)
+    assert por_titulo == {"Lei 14.133": "servível", "Manual de Redes": "servível imperfeito",
+                          "Anuário": "não servível", "Livro EPUB": "não julgado"}
     assert "Sem espelho ainda" not in saida
-
-def test_a_margem_do_piso_nao_e_inventada_e_a_pendencia_vai_numa_linha(listar, capsys):
-    mod, _ = listar
-    mod.listar_obra_qualidade(False, False)
-    saida = capsys.readouterr().out
-    pendencias = [l for l in saida.splitlines() if "margem do piso: definição de dados" in l]
-    assert len(pendencias) == 1
-    assert not any(ch.isdigit() for ch in pendencias[0].replace("#2856", ""))
 
 def test_obras_servindo_sem_espelho_saem_contadas_a_parte(listar, capsys):
     mod, _ = listar
     mod.listar_obra_qualidade(False, False)
     assert "sem espelho 1" in capsys.readouterr().out
 
-def test_json_traz_total_classes_criterio_e_pendencia(listar, capsys):
+def test_json_traz_total_classes_e_criterio(listar, capsys):
     mod, _ = listar
     mod.listar_obra_qualidade(True, True)
     doc = json.loads(capsys.readouterr().out)
     assert doc["total"] == 4
     assert doc["sem_espelho"] == 1
-    assert doc["classes"] == {"ok": 1, "suspeita": 2, "nao-julgada": 1}
-    assert "piso" in doc["criterio"]
-    assert doc["pendencia"] == "margem do piso: definição de dados"
-    assert {o["classe"] for o in doc["obras"]} == {"ok", "suspeita", "nao-julgada"}
+    assert doc["classes"] == {"servível": 1, "servível imperfeito": 1, "não servível": 1, "não julgado": 1}
+    assert "perda líquida" in doc["criterio"]
+    assert "pendencia" not in doc
+    assert {o["classe"] for o in doc["obras"]} == set(CLASSES)
     assert len(doc["obras"]) == 4
 
 def test_json_sem_por_obra_nao_traz_obras(listar, capsys):
@@ -121,15 +125,15 @@ def test_a_consulta_e_so_leitura_no_catalogo(listar, capsys):
     mod.listar_obra_qualidade(False, False)
     capsys.readouterr()
     sql = next(sql for alvo, sql in consultas if alvo == "qualidade_espelho").lower()
-    assert "acervo.impressao" in sql and "servindo" in sql and "veredito" in sql
+    assert "acervo.impressao" in sql and "servindo" in sql and "veredito" in sql and "servivel" in sql
     for escrita in ("insert", "update", "delete", "drop", "alter"):
         assert escrita not in sql
 
-def test_veredito_ausente_conta_como_nao_julgada(listar, monkeypatch, capsys):
+def test_veredito_de_regua_anterior_conta_como_nao_julgado(listar, monkeypatch, capsys):
     mod, _ = listar
-    monkeypatch.setattr(mod, "_psql_json", lambda sql, alvo: [_linha(9, "Velho", None)])
+    monkeypatch.setattr(mod, "_psql_json", lambda sql, alvo: [_linha(9, "Velho", None, regua=5)])
     mod.listar_obra_qualidade(False, True)
-    assert json.loads(capsys.readouterr().out)["classes"]["nao-julgada"] == 1
+    assert json.loads(capsys.readouterr().out)["classes"]["não julgado"] == 1
 
 def test_cli_qualidade_chama_o_ato(listar, capsys):
     mod, _ = listar
