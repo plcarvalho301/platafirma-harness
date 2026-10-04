@@ -19,7 +19,7 @@ sessão sem cadeira nenhuma não é opção. Slug dado vence o default sempre; n
 mais nesta conta declara identidade.
 
 **`PF_CADEIRA` não serve aqui, e isto foi medido.** Na estação emprestada o
-`Bash` está negado, e `run_command` executa no ops-server — ambiente do serviço,
+`Bash` está negado, e `malote` executa no ops-server — ambiente do serviço,
 não do terminal em que o Code abriu. Variável exportada no shell da sessão é
 ilegível de dentro dela. O que atravessa é o slug dito na abertura.
 

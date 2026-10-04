@@ -56,9 +56,11 @@ CABECALHO_GERADO = "# GERADO por agente — não editar"
 # A porta (incidente #3223, ordem do dono 01/10/2026): o agente declara tools com o MESMO nome que o conector
 # publica à cadeira, escopadas pelo agente, e abre a sessão pela mesma tool (`monta_sessao`).
 PORTA = "mcp__claudinho-mcp__"
-PORTA_BASE = ("run_command", "ler_arquivo", "read_file", "write_file", "monta_sessao")   # as que a porta publica fora do ferramental
+PORTA_BASE = ("malote", "run_command", "ler_arquivo", "read_file", "write_file", "monta_sessao")   # as que a porta publica fora do ferramental
 ABRE = PORTA + "monta_sessao"
-SEM_ESCOPO = PORTA + "run_command"      # alcança todo verbo: o agente perderia o escopo da declaração
+# Alcançam todo verbo: o agente perderia o escopo da declaração. `run_command` é apelido de
+# `malote` (#3270); os dois nomes ficam de fora, senão o apelido vira a porta dos fundos.
+SEM_ESCOPO = (PORTA + "malote", PORTA + "run_command")
 # A mesma porta chega com outro prefixo conforme a superfície (#3255): o Code CLI publica o conector do claude.ai
 # como `claude_ai_claudinho-mcp`, e o Code Desktop pelo uuid do conector (medido 03/10/2026 no posto). A declaração
 # segue com o nome canônico (PORTA); a projeção lista cada tool de porta nas três grafias, e o Code dá ao
@@ -140,7 +142,7 @@ def _valida_execucao(d: dict, pre: str) -> list[str]:
         for f in ferr:
             if f in PROIBIDAS:
                 p.append(f"{pre}ferramenta proibida: {f}")
-            elif f == SEM_ESCOPO:
+            elif f in SEM_ESCOPO:
                 p.append(f"{pre}ferramenta sem escopo: {f} alcança todo verbo; declare as tools de verbo do agente")
     teto = d.get("teto")
     chaves = ["turnos", "tokens_execucao", "tokens_janela"]

@@ -156,6 +156,13 @@ def test_audit_run_command_carrega_identidade():
     assert achou and all(("sessao_id" in kw and "ordem_id" in kw and "cadeira" in kw) for kw in achou)
 
 
+def test_audit_malote_carrega_identidade():
+    with patch.object(s, "_audit") as _aud, patch.object(s, "_autoriza", return_value=None):
+        asyncio.run(s.malote(command="git status", sessao_id="ensaio-sid-abc"))
+    achou = [c.kwargs for c in _aud.call_args_list if c.kwargs.get("tool") == "malote"]
+    assert achou and all(("sessao_id" in kw and "ordem_id" in kw and "cadeira" in kw) for kw in achou)
+
+
 def test_audit_read_file_carrega_identidade():
     with patch.object(s, "_audit") as _aud, patch.object(s, "_autoriza", return_value=None):
         s.read_file(path=_REQ, sessao_id="ensaio-sid-abc")

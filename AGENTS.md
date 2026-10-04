@@ -10,6 +10,6 @@ Verbo se chama por `platafirma <verbo>` (qualquer conta) ou pelo nome (conta dos
 ## Não fazer
 
 - Não carimbar à mão a cópia de skill entregue ao claude.ai: o carimbo sai de `tooling/export/carimbar.py`, e carimbo à mão mente por construção.
-- Não reiniciar o `ops-mcp` direto de dentro de um `run_command`: o restart vai em escopo transitório separado (`docs/ops-server.md`, "Restart").
+- Não reiniciar o `ops-mcp` direto de dentro de um `malote`: o restart vai em escopo transitório separado (`docs/ops-server.md`, "Restart").
 - Não produzir retrato de ator para `chat/avatares/`: é identidade visual, e vem de quem cuida dela, não da fábrica.
 - Não pôr diagrama em `diagramas/` sem a linha dele no índice de `docs/diagramas.md`, no mesmo commit; nem instrumento de diagrama em `diagramas/` (mora em `tooling/diagramas/`).

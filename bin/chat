@@ -277,11 +277,12 @@ def settings_da_fita(modelo="", cadeira=""):
             # "mcp__claudinho-mcp" nao libera nada) — so nome de tool inteiro. Por
             # isso ENUMERA as tools de trabalho. Admin de infra/governanca fica fora
             # (deploy, release, infra, persona, acesso, seg, migrar); a cadeira as
-            # alcanca por run_command, onde o PDP da porta decide por recurso.
+            # alcanca por malote (apelido run_command), onde o PDP da porta decide por recurso.
             "allow": [
                 "mcp__claudinho-mcp__ler_arquivo",
                 "mcp__claudinho-mcp__read_file",
                 "mcp__claudinho-mcp__write_file",
+                "mcp__claudinho-mcp__malote",
                 "mcp__claudinho-mcp__run_command",
                 "mcp__claudinho-mcp__repo",
                 "mcp__claudinho-mcp__fila",

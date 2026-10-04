@@ -581,7 +581,7 @@ def economia_de_giro(ordem_id):
                         lote_ids.add(_lid)
                     else:
                         giros_avulsos += 1
-                    if tool == "run_command" and d.get("evento") == "fallback":
+                    if tool in ("malote", "run_command") and d.get("evento") == "fallback":
                         cmd = (d.get("comando") or "").strip()
                         prim = cmd.split()[0] if cmd else ""
                         if "PF_CADEIRA" in cmd[:80]:
@@ -601,7 +601,7 @@ def economia_de_giro(ordem_id):
         linhas.append(f"    {tool:<16} {n:>4}")
     giros = len(lote_ids) + giros_avulsos
     linhas.append(f"  {giros} giro(s) na fita (lote_id conta 1; registro sem lote_id conta 1)")
-    if giros_avulsos and por_tool.get("run_command"):
+    if giros_avulsos and (por_tool.get("malote") or por_tool.get("run_command")):
         linhas.append("    run_command/read_file em lote so carimbam lote_id apos o restart")
         linhas.append("    do server -> ate la giro=registro nesses dois (sobreconta giro).")
     gap_s = int(os.environ.get("PF_TURNO_GAP_S", "60"))
@@ -610,9 +610,9 @@ def economia_de_giro(ordem_id):
         linhas.append(f"  turnos ~= {turnos}  (ESTIMATIVA por gap > {gap_s}s; em sessao de mao o")
         linhas.append("    gap confunde rodada-de-tool com turno — o /turno abaixo e so ordem de grandeza)")
         linhas.append(f"    giros/turno ~= {giros / turnos:.1f}  ·  registros/turno ~= {total / turnos:.1f}")
-    fb = por_tool.get("run_command", 0)
+    fb = por_tool.get("malote", 0) + por_tool.get("run_command", 0)
     if fb:
-        linhas.append(f"  fallback run_command: {fb} ({100 * fb // total}% dos registros)")
+        linhas.append(f"  fallback malote/run_command: {fb} ({100 * fb // total}% dos registros)")
         for cl, n in classe_fb.most_common():
             linhas.append(f"    {n:>4}  {cl}")
         evitaveis = sum(n for c, n in classe_fb.items() if "legitimo" not in c)
@@ -650,8 +650,8 @@ def fabrica_pela_porta():
                     total += 1
                     por_tool[tool] += 1
                     ev = d.get("evento")
-                    if ev == "fallback" and tool == "run_command":
-                        desperdicio["run_command em fallback (encadeado sem verbo?)"] += 1
+                    if ev == "fallback" and tool in ("malote", "run_command"):
+                        desperdicio[f"{tool} em fallback (encadeado sem verbo?)"] += 1
                     elif ev == "verbo_contornado":
                         desperdicio[f"verbo contornado ({tool})"] += 1
                     if d.get("ts"):

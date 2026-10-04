@@ -70,7 +70,10 @@ AJUDA = ("--help", "-h", "--ajuda", "ajuda", "help", "--ajuda-flags", "--usage")
 # As duas tools de leitura da porta: `ler_arquivo` e `read_file`, apelido da mesma funcao.
 # O log grava o nome chamado em `tool`; aqui as duas contam como uma so.
 LEITURA = ("ler_arquivo", "read_file")
-SEM_ATO = (*LEITURA, "write_file", "monta_sessao", "monta-sessao", "sessao", "run_command")
+# As duas tools de lote da porta (#3270): `malote` e `run_command`, apelido da mesma funcao.
+# O log grava o nome chamado em `tool` (recusa, lote encadeado) e em `via` (item despachado).
+LOTE = ("malote", "run_command")
+SEM_ATO = (*LEITURA, "write_file", "monta_sessao", "monta-sessao", "sessao", *LOTE)
 
 def e_ajuda(reg):
     """Verbo nu so e ajuda quando devolveu o uso (exit 2): `rag_buscar` da abertura e o
@@ -489,7 +492,7 @@ def ate_acerto(giros, par):
 # eram execucao produtiva. Aqui so entra giro que FALHOU.
 
 # Ferramentas de codigo: onde a bisseccao acontece.
-CODIGO = (*LEITURA, "write_file", "run_command", "repo", "git", "lint", "teste")
+CODIGO = (*LEITURA, "write_file", *LOTE, "repo", "git", "lint", "teste")
 # Leitura da casa: o que responde "o que a casa decidiu" numa chamada. `descobrir` saiu do ar
 # em 27/09/2026 e fica aqui so para contar a leitura no log anterior a essa data.
 CASA = ("motor", "acervo", "descobrir")
@@ -702,7 +705,7 @@ def casos(giros, tool=None):
         por_tool[c["tool"]][c["classe"]] += 1
         if c["classe"] == "recusa-da-porta":
             recusados[c.get("verbo") or "(vazio)"] += 1
-        if c["tool"] not in ("run_command", *LEITURA):
+        if c["tool"] not in (*LOTE, *LEITURA):
             atos_falhos[c["tool"]][(c["ato"] or "\u2205") + f":{c['exit_code']}"] += 1
     agregado = {
         "por_tool": {t: dict(sorted(d.items(), key=lambda kv: -kv[1]))
@@ -791,7 +794,11 @@ def casos_texto(r, agregado=False):
 # via=run_command (ops-server/server.py). Somar transporte ao ranking de verbos compara
 # despachante com carga, e antes de 06/09 run_command carregava todo o shell (regime
 # _run_command_legado). read_file/write_file sao leitura/escrita, nao verbo servido.
-TRANSPORTE = ("run_command", *LEITURA, "write_file")
+# Desde o #3270 a tool de lote e `malote`, com `run_command` de apelido: a linha despachada
+# sai com via=<nome chamado>. Por isso o lote conta tambem `itens` (linhas com `via` = nome)
+# e `lotes` (lote_id distintos) — e o que a regra de saida do apelido le (spec
+# porta-so-verbo §3.7). `lote (soma)` junta os dois nomes.
+TRANSPORTE = (*LOTE, *LEITURA, "write_file")
 
 def verbos(giros):
     por = defaultdict(lambda: {"giros": 0, "erros": 0, "ajuda": 0,
@@ -801,8 +808,17 @@ def verbos(giros):
     # do erro de leitura. O `verbo` da planilha nao ganha coluna.
     extra = defaultdict(lambda: {"bytes_servidos": 0, "poda_modos": defaultdict(int),
                                  "por_classe": defaultdict(int)})
+    lote = {n: {"itens": 0, "recusas": 0, "lotes": set()} for n in LOTE}
     for g in giros:
         t = g["tool"]
+        via = (g.get("bruto") or {}).get("via")
+        if via in lote:
+            lote[via]["itens"] += 1
+            lote[via]["lotes"].add(g["lote_id"] or g["ts"] or g["pos"])
+        elif t in lote:
+            if g.get("evento") == "sem_verbo":
+                lote[t]["recusas"] += 1
+            lote[t]["lotes"].add(g["lote_id"] or g["ts"] or g["pos"])
         d = por[t]
         d["giros"] += 1
         if t in TRANSPORTE:
@@ -839,6 +855,14 @@ def verbos(giros):
                             por_classe=dict(sorted(x["por_classe"].items(), key=lambda kv: -kv[1])))
     verbo = {t: d for t, d in saida.items() if t not in TRANSPORTE}
     transp = {t: saida[t] for t in TRANSPORTE if t in saida}
+    for n, x in lote.items():
+        if x["itens"] or x["recusas"] or n in transp:
+            base = transp.get(n) or {"giros": 0, "erros": 0}
+            transp[n] = {**base, "itens": x["itens"], "recusas": x["recusas"],
+                         "lotes": len(x["lotes"])}
+    if any(n in transp for n in LOTE):
+        transp["lote (soma)"] = {k: sum(transp[n].get(k, 0) for n in LOTE if n in transp)
+                                 for k in ("giros", "erros", "itens", "recusas", "lotes")}
     ordenado = dict(sorted(verbo.items(),
                            key=lambda kv: (-kv[1]["erros"], -kv[1]["giros"], kv[0] or "")))
     tg = sum(d["giros"] for d in verbo.values())
@@ -873,10 +897,11 @@ def verbos_texto(r):
                       f"{d['gramatica']:5d} {d['execucao']:5d} {d['ajuda']:5d}")
     if r.get("transporte"):
         linhas.append("")
-        linhas.append("transporte (nao e verbo da planilha — run_command so loga recusa):")
+        linhas.append("transporte (nao e verbo da planilha — o lote loga recusa; item despachado vai em itens):")
         for v, d in r["transporte"].items():
             servidos = f" · {d['bytes_servidos']} B servidos" if d.get("bytes_servidos") else ""
-            linhas.append(f"  {(v):14s} {d['giros']:6d} giros · {d['erros']:5d} recusa/erro{servidos}")
+            itens = f" · {d['itens']} itens em {d['lotes']} lotes" if "itens" in d else ""
+            linhas.append(f"  {(v):14s} {d['giros']:6d} giros · {d['erros']:5d} recusa/erro{servidos}{itens}")
     return linhas
 
 # --- camada 3e: COMPORTAMENTO (consumer-aligned) ---------------------------------

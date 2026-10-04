@@ -244,6 +244,9 @@ def test_projetada_sem_monta_sessao_e_com_run_command_reprova():
     assert any("falta mcp__claudinho-mcp__monta_sessao" in a for a in agente.valida(sem, "revisor"))
     largo = com(REVISOR, ferramentas=[*REVISOR["ferramentas"], "mcp__claudinho-mcp__run_command"])
     assert any("ferramenta sem escopo: mcp__claudinho-mcp__run_command" in a for a in agente.valida(largo, "revisor"))
+    # #3270: `malote` e o nome novo da mesma tool; declarar qualquer dos dois reprova.
+    malote = com(REVISOR, ferramentas=[*REVISOR["ferramentas"], "mcp__claudinho-mcp__malote"])
+    assert any("ferramenta sem escopo: mcp__claudinho-mcp__malote" in a for a in agente.valida(malote, "revisor"))
     assert agente.valida(VARREDOR, "varredor") == [], "sem projeção no Code, não abre por monta_sessao"
 
 

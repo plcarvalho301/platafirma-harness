@@ -1,4 +1,4 @@
-"""MCP de operação — run_command genérico + arquivo, sob um usuário do host.
+"""MCP de operação — malote (lote de verbos, apelido run_command) + arquivo, sob um usuário do host.
 
 Roda FORA do compose (systemd user service) de propósito: é a mão que sobe o compose
 de volta — não pode morar dentro do raio de explosão. A fronteira dura é o usuário do
@@ -1005,7 +1005,8 @@ _SUGESTAO = {
     "write_file": "é tool, não verbo: write_file(path=..., content=...)",
     "monta_sessao": "é tool, não verbo: monta_sessao(cadeira=...)",
     "monta-sessao": "é tool, não verbo: monta_sessao(cadeira=...)",
-    "run_command": "é a própria tool que você está chamando",
+    "malote": "é a própria tool que você está chamando",
+    "run_command": "é apelido de malote, a tool que você está chamando",
     # Verbo retirado (arq:0110 §1) aponta o sucessor: sem a linha, a recusa sai com
     # `sugestao: null`, que se lê como "verbo que falta, vira card" e convida a recriar.
     "descobrir": "verbo retirado em 27/09/2026: acervo listar biblioteca obra --sobre <termo> "
@@ -1050,8 +1051,13 @@ def _eh_pipe_stdin(v) -> bool:
             and isinstance(v.get("de"), int) and not isinstance(v.get("de"), bool))
 
 
+# As duas tools de lote (#3270): `malote` e o apelido `run_command`. Primeiro token com
+# um dos dois nomes e desduplicado, nas duas tools.
+TOOLS_LOTE = ("malote", "run_command")
+
+
 def _item_de_lote(x):
-    """item de run_command -> (argv, stdin, recusa). argv[0] e o binario do whitelist."""
+    """item de malote -> (argv, stdin, recusa). argv[0] e o binario do whitelist."""
     stdin = None
     if isinstance(x, str):
         try:
@@ -1060,7 +1066,7 @@ def _item_de_lote(x):
             return None, None, _recusa(x, f"nao parte: {e}")
         if not toks:
             return None, None, _recusa("", "item vazio")
-        if toks[0] == "run_command" and len(toks) > 1:
+        if toks[0] in TOOLS_LOTE and len(toks) > 1:
             toks = toks[1:]
         for t in toks:
             if t in _OPERADORES_SHELL:
@@ -1071,7 +1077,7 @@ def _item_de_lote(x):
         verbo = str(x.get("verbo") or "")
         ato = str(x.get("ato") or "")
         args = x.get("args") or []
-        if verbo == "run_command" and ato:
+        if verbo in TOOLS_LOTE and ato:
             verbo = ato
             ato = str(args[0]) if args else ""
             args = args[1:] if args else []
@@ -1094,10 +1100,10 @@ def _item_de_lote(x):
         return None, None, _recusa(slug, "sem verbo")
     return [BINARIOS[slug]] + resto, stdin, None
 
-async def run_command(command: str = "", cwd: str = "", timeout: int = 120,
-                       sessao_id: str | None = None,
-                       commands: list | None = None,
-                       encadeado: bool = False) -> dict:
+async def malote(command: str = "", cwd: str = "", timeout: int = 120,
+                 sessao_id: str | None = None,
+                 commands: list | None = None,
+                 encadeado: bool = False) -> dict:
     """Lote entre verbos DISTINTOS numa chamada so — sem shell, sem fallback (spec_porta-so-verbo).
 
     `commands`: lista de itens, cada um `{verbo, ato, args, stdin}` ou a string
@@ -1116,8 +1122,26 @@ async def run_command(command: str = "", cwd: str = "", timeout: int = 120,
     `nao_rodou`; o bloco `cadeia` diz exit e primeira linha de cada item, `parou_em` e o
     exit do topo. Retomar = rerodar a cadeia: o que ja fez devolve "ja feito".
     """
+    return await _malote("malote", command, cwd, timeout, sessao_id, commands, encadeado)
+
+
+async def run_command(command: str = "", cwd: str = "", timeout: int = 120,
+                      sessao_id: str | None = None,
+                      commands: list | None = None,
+                      encadeado: bool = False) -> dict:
+    """Apelido de `malote`: mesma assinatura e mesmo retorno. Sai pela regra da spec
+    porta-so-verbo §3.7 (zero chamadas por sete dias seguidos).
+    """
+    return await _malote("run_command", command, cwd, timeout, sessao_id, commands, encadeado)
+
+
+async def _malote(nome: str, command: str, cwd: str, timeout: int, sessao_id: str | None,
+                  commands: list | None, encadeado: bool) -> dict:
+    """O lote das duas tools (#3270). `nome` e o nome chamado: a auditoria o grava em `tool`
+    na recusa e no lote encadeado, e em `via` no item despachado, e a regra de saida do
+    apelido conta os dois (spec porta-so-verbo §3.7). A acao do PDP segue `run_command`."""
     if not PF_RUN_SO_VERBO:
-        return await _run_command_legado(command, cwd, timeout, sessao_id, commands)
+        return await _run_command_legado(command, cwd, timeout, sessao_id, commands, nome=nome)
     itens = list(commands) if commands else ([command] if command else [])
     if not itens:
         return {"recusado": True, "motivo": "sem item", "verbos_servidos": sorted(SLUGS_SERVIDOS)}
@@ -1135,7 +1159,7 @@ async def run_command(command: str = "", cwd: str = "", timeout: int = 120,
             brutos.append("")
             return esgotado
         r = await _roda_item_run_command(_i, x, resultados, brutos, ident, timeout,
-                                         lote_id, encadeado, fim)
+                                         lote_id, encadeado, fim, nome=nome)
         # Injeção entre itens do lote (Aberto spec_sessao/expediente, #3053):
         # se o item executado foi sessao abrir com sucesso, extrai sessao_id e
         # chama ident = _sessao_resolve(sid_novo) antes do item seguinte (n+1)
@@ -1149,7 +1173,7 @@ async def run_command(command: str = "", cwd: str = "", timeout: int = 120,
                             bytes_de=_lote.bytes_stdout)
     if encadeado:
         _c = out["cadeia"]
-        _audit(tool="run_command", evento="lote_encadeado", lote_id=lote_id,
+        _audit(tool=nome, evento="lote_encadeado", lote_id=lote_id,
                lote_n=len(itens), parou_em=_c["parou_em"], exit_code=_c["exit"],
                nao_rodou=len(_c["nao_rodou"]), cadeira=ident["cadeira"] or None,
                sessao_id=ident["sessao_id"], ordem_id=ident["ordem_id"])
@@ -1160,19 +1184,20 @@ async def run_command(command: str = "", cwd: str = "", timeout: int = 120,
 
 
 async def _roda_item_run_command(_i, x, resultados, brutos, ident, timeout, lote_id,
-                                 encadeado=False, fim=None) -> dict:
-    """Um item de `run_command commands[]`: parte, confere stdin.de, autoriza, roda,
-    serve e audita. A ordem e a parada da cadeia sao de `lote.itera`."""
-    aviso_dup = False
+                                 encadeado=False, fim=None, nome="run_command") -> dict:
+    """Um item de `malote commands[]` (ou do apelido `run_command`): parte, confere
+    stdin.de, autoriza, roda, serve e audita. A ordem e a parada da cadeia sao de
+    `lote.itera`. `nome` e a tool chamada, gravada em `tool` (recusa) e `via` (item)."""
+    aviso_dup = None
     if isinstance(x, str):
         try:
             _t = shlex.split(x)
-            if _t and _t[0] == "run_command" and len(_t) > 1:
-                aviso_dup = True
+            if _t and _t[0] in TOOLS_LOTE and len(_t) > 1:
+                aviso_dup = _t[0]
         except Exception:
             pass
-    elif isinstance(x, dict) and str(x.get("verbo") or "") == "run_command" and x.get("ato"):
-        aviso_dup = True
+    elif isinstance(x, dict) and str(x.get("verbo") or "") in TOOLS_LOTE and x.get("ato"):
+        aviso_dup = str(x.get("verbo"))
     argv, stdin, recusa = _item_de_lote(x)
     if recusa is None and _eh_pipe_stdin(stdin):
         n = stdin.get("de")
@@ -1192,7 +1217,7 @@ async def _roda_item_run_command(_i, x, resultados, brutos, ident, timeout, lote
         else:
             stdin = brutos[n]
     if recusa:
-        _audit(tool="run_command", evento="sem_verbo", verbo=recusa["verbo"],
+        _audit(tool=nome, evento="sem_verbo", verbo=recusa["verbo"],
                item=str(x)[:CMD_CAP],
                motivo=recusa["motivo"], sugestao=recusa["sugestao"],
                cadeira=ident["cadeira"] or None, sessao_id=ident["sessao_id"],
@@ -1216,10 +1241,11 @@ async def _roda_item_run_command(_i, x, resultados, brutos, ident, timeout, lote
         r = _serve(r, tool=slug, alca=linha, ident=ident, cauda=_perf["cauda"],
                    cosmetica=_cosmetica(_perf, argv[1] if len(argv) > 1 else None))
         if aviso_dup and isinstance(r, dict):
-            r.setdefault("avisos", []).append("run_command: primeiro token 'run_command' desduplicado com aviso")
+            _aviso = f"{nome}: primeiro token '{aviso_dup}' desduplicado com aviso"
+            r.setdefault("avisos", []).append(_aviso)
             if "aviso" not in r:
-                r["aviso"] = "run_command: primeiro token 'run_command' desduplicado com aviso"
-        _audit(tool=slug, evento="verbo", via="run_command",
+                r["aviso"] = _aviso
+        _audit(tool=slug, evento="verbo", via=nome,
                ato=argv[1] if len(argv) > 1 else None, args=" ".join(argv[2:])[:CMD_CAP],
                cadeira=ident["cadeira"] or None, sessao_id=ident["sessao_id"],
                ordem_id=ident["ordem_id"], exit_code=r.get("exit_code"), erro=r.get("erro"),
@@ -1234,7 +1260,8 @@ async def _roda_item_run_command(_i, x, resultados, brutos, ident, timeout, lote
 
 async def _run_command_legado(command: str = "", cwd: str = "", timeout: int = 120,
                        sessao_id: str | None = None,
-                       commands: list[str] | None = None) -> dict:
+                       commands: list[str] | None = None,
+                       nome: str = "run_command") -> dict:
     """FALLBACK: executa um comando shell (`bash -c`) como o usuário @USER@, para o que
     não tem verbo — git, docker (rootless), systemctl --user, rg, fluxo de dado entre
     verbos. Verbo do núcleo tem tool própria (nome = slug); usá-lo por aqui é medido.
@@ -1256,7 +1283,7 @@ async def _run_command_legado(command: str = "", cwd: str = "", timeout: int = 1
     """
     d, erro_cwd = _cwd_de(cwd)
     if erro_cwd:
-        _audit(tool="run_command", evento="cwd_recusado", cwd=cwd, motivo=erro_cwd)
+        _audit(tool=nome, evento="cwd_recusado", cwd=cwd, motivo=erro_cwd)
         return {"recusado": True, "cwd": cwd, "motivo": erro_cwd}
     if commands and PF_TOOLS_LOTE:
         timeout = max(1, min(timeout, 600))
@@ -1269,7 +1296,7 @@ async def _run_command_legado(command: str = "", cwd: str = "", timeout: int = 1
             if acumulado >= CAP:
                 lote_next = _i
                 break
-            negado_item = _autoriza("run_command", "run_command", "comando", cmd, DOM_RUNTIME)
+            negado_item = _autoriza(nome, "run_command", "comando", cmd, DOM_RUNTIME)
             if negado_item:
                 r = negado_item
             else:
@@ -1279,7 +1306,7 @@ async def _run_command_legado(command: str = "", cwd: str = "", timeout: int = 1
                 so = r.get("stdout")
                 txt_bruto = so.get("texto", "") if isinstance(so, dict) else (so if isinstance(so, str) else "")
                 r = _serve(r, tool="run_command", alca=f"{d}|{cmd}", ident=ident)
-                _audit(tool="run_command", comando=cmd[:CMD_CAP], evento="fallback",
+                _audit(tool=nome, comando=cmd[:CMD_CAP], evento="fallback",
                        cadeira=ident["cadeira"] or None, sessao_id=ident["sessao_id"],
                        ordem_id=ident["ordem_id"], exit_code=r.get("exit_code"), erro=r.get("erro"),
                        bytes_stdout=r.get("stdout", {}).get("bytes_total"),
@@ -1294,7 +1321,7 @@ async def _run_command_legado(command: str = "", cwd: str = "", timeout: int = 1
         for _i in range(len(resultados), len(commands)):
             resultados.append({"omitido_por_teto": True})
         return {"lote": resultados, "lote_n": len(commands), "lote_next": lote_next}
-    negado = _autoriza("run_command", "run_command", "comando", command,
+    negado = _autoriza(nome, "run_command", "comando", command,
                        DOM_RUNTIME)
     if negado:
         return negado
@@ -1340,7 +1367,7 @@ async def _run_command_legado(command: str = "", cwd: str = "", timeout: int = 1
     r = await anyio.to_thread.run_sync(_run_blocking, command, d, timeout,
                                        ident["sessao_id"], ident["ordem_id"], ident["cadeira"])
     r = _serve(r, tool="run_command", alca=f"{d}|{command}", ident=ident)
-    _audit(tool="run_command", comando=command[:CMD_CAP], evento="fallback",
+    _audit(tool=nome, comando=command[:CMD_CAP], evento="fallback",
            comando_truncado=len(command) > CMD_CAP, cwd=str(d),
            cadeira=ident["cadeira"] or None, sessao_id=ident["sessao_id"], ordem_id=ident["ordem_id"],
            exit_code=r.get("exit_code"), erro=r.get("erro"),
@@ -2196,7 +2223,7 @@ async def monta_sessao(cadeira: str = "", atualizar: bool = True, chapeu: str = 
 # Registro tardio: o __doc__ é a descrição que o cliente lê, e ela precisa nomear o
 # usuário e os caminhos DESTA instância. Substituir depois de registrar não adianta — o
 # FastMCP copia a descrição no momento do mcp.tool().
-_TOOLS = [run_command, ler_arquivo, read_file, write_file]
+_TOOLS = [malote, run_command, ler_arquivo, read_file, write_file]
 # monta_sessao só existe onde há personas: numa instância sem abertura publicada
 # a tool não teria o que montar, e tool inútil no catálogo é contexto desperdiçado.
 if PERSONAS.is_dir():

@@ -7,6 +7,7 @@ test_exec_conta.py
 test_formatos.py
 test_ledger_distancia.py
 test_leitura.py
+test_malote_apelido.py
 test_monta_sessao_agente.py
 test_monta_sessao_lote.py
 test_prazo_porta.py

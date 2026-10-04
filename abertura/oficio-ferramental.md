@@ -8,7 +8,7 @@ Recorte por chapéu NÃO mora aqui — vai no `ferramental.md` de cada chapéu.
 
 `leva:2` foi retirado em 02/09 (retinha acesso/infra/deploy/chat atrás de uma régua
 acao/tipo por tool que nunca chegou a ser pedida — `_autoriza` já cobre essas quatro
-pelo mesmo PEP genérico que cobre as outras treze e o `run_command`, então a retenção
+pelo mesmo PEP genérico que cobre as outras treze e o `malote`, então a retenção
 não protegia nada) e **volta em 05/09 para `repo` e `pr`**, por pedido escrito no
 refinamento da #3004: são os verbos que MUDAM repo e forge, e tool de escrita a um
 clique do claude.ai é risco de outra ordem que `tarefas ler`. Diferença do caso de

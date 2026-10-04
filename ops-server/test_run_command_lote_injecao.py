@@ -175,6 +175,10 @@ def test_operadores_como_token_recusam_e_regex_passa():
 
         _, _, rec = s._item_de_lote("run_command")
         assert rec is not None
+        assert rec["sugestao"] == "é apelido de malote, a tool que você está chamando"
+
+        _, _, rec = s._item_de_lote("malote")
+        assert rec is not None
         assert rec["sugestao"] == "é a própria tool que você está chamando"
 
 
