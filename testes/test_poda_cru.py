@@ -84,11 +84,14 @@ def test_read_file_nunca_janela_nem_fragmento_do_cru(tmp_path, monkeypatch):
         assert fora == texto and "blob" not in meta["lavado"] and "cru" not in meta
 
 
-def test_read_file_ainda_marca_base64(tmp_path, monkeypatch):
+def test_leitura_de_arquivo_serve_base64_como_esta(tmp_path, monkeypatch):
+    """Base64 do arquivo é conteúdo do arquivo: as páginas somadas têm de dar os bytes
+    (spec ler-arquivo §6, #3263). Até e9eaea5 a leitura o trocava por marcador."""
     monkeypatch.setattr(_p, "DERRAME", tmp_path)
     texto = "chave: " + "QUJD" * 100
-    fora, meta = _p.poda_texto(texto, **_args(tool="read_file", alca="read_file:/x"))
-    assert "<blob tipo=base64" in fora and "blob" in meta["lavado"]
+    for tool in sorted(_p.TOOLS_LEITURA):
+        fora, meta = _p.poda_texto(texto, **_args(tool=tool, alca=f"{tool}:/x"))
+        assert fora == texto and "blob" not in meta["lavado"] and "cru" not in meta
 
 
 def test_regime_cosmetico_serve_a_linha_inteira_e_nao_derrama(tmp_path, monkeypatch):

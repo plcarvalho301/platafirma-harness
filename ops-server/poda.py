@@ -68,6 +68,12 @@ TTL_DERRAME_S = 48 * 3600
 # medida: 100_000 tokens ~= 400_000 bytes. Fecha com a bateria de sessao longa
 # -- «quem e voce e qual a sua regua» no giro N -- que mede o de verdade.
 DISTANCIA_MAX_PONTEIRO = 400_000
+# As tools de leitura de arquivo (spec ler-arquivo §11): `ler_arquivo` e o apelido
+# `read_file`, a mesma função. O retorno delas É o arquivo — nenhuma classe que altera
+# conteúdo passa, porque as páginas somadas têm de dar os bytes (spec §6).
+TOOLS_LEITURA = frozenset({"ler_arquivo", "read_file"})
+# Texto fixo, para o aviso de releitura não virar conteúdo novo a cada giro (spec §11.3).
+SUFIXO_REENVIO = "; inteiro=true reenvia"
 
 # Derrame e estado da instancia (card #3010): mesmo default que `descansar` apaga.
 DERRAME = Path(os.environ.get("PF_DERRAME", raizes.instancia() / "var/tmp/retornos"))
@@ -117,8 +123,8 @@ def _eh_estruturada(linha: str) -> bool:
     estruturada — serve inteiro, e o teto (`corta`) continua sendo o unico limite.
 
     `json.loads` so roda em linha acima de LINHA_LONGA que abre com `{`/`[` e fecha com
-    `}`/`]`: custo desprezivel, e fragmento (janela de `read_file offset=`) nao passa —
-    por isso `read_file` tem a sua propria guarda em `poda_texto`.
+    `}`/`]`: custo desprezivel, e fragmento (pagina por bytes de `ler_arquivo`) nao passa —
+    por isso a leitura de arquivo tem a sua propria guarda em `poda_texto`.
     """
     s = linha.strip()
     if len(s) < 2 or s[0] not in "{[" or s[-1] not in "}]":
@@ -237,7 +243,8 @@ def _agrupa_busca(linhas: list[str]) -> tuple[list[str], int] | None:
 
 def lava(texto: str, cap: int = 50_000, *, cosmetica: bool = False,
          preserva_branco: bool = False, janela: bool = True,
-         curar: bool = True) -> tuple[str, dict]:
+         curar: bool = True, blob: bool = True,
+         terminal: bool = True) -> tuple[str, dict]:
     """R1 — lavador determinístico, ANTES do teto. Devolve (lavado, relatório).
 
     Determinístico é o ponto: mascaramento por regra iguala resumo por LLM à metade do
@@ -251,6 +258,10 @@ def lava(texto: str, cap: int = 50_000, *, cosmetica: bool = False,
     `_colapsa_repeticao` funde N trechos parecidos num molde. A curadoria já aconteceu
     no espaço vetorial: dobrá-la com heurística de string a jusante é trocar o filtro
     do vetor por um pior. Não conserte de volta.
+
+    `blob=False` e `terminal=False` são da leitura de arquivo (spec ler-arquivo §6 e §11):
+    base64 do arquivo é conteúdo do arquivo, e `_sem_ansi` apaga o que vem antes do último
+    `\r` da linha — um arquivo CRLF voltava com as linhas vazias.
     """
     if not texto:
         return texto or "", {"classes": [], "bytes_antes": 0, "bytes_depois": 0}
@@ -262,13 +273,13 @@ def lava(texto: str, cap: int = 50_000, *, cosmetica: bool = False,
     antes = len(bruto.encode("utf-8", "replace"))
     classes: list[str] = []
 
-    t = _sem_ansi(bruto)
+    t = _sem_ansi(bruto) if terminal else bruto
     if t != bruto:
         classes.append("terminal")
     linhas = t.split("\n")
 
-    # `curar=False` (read_file): a alca de restauracao devolve o arquivo como ele e.
-    # Medido em 26/09: `read_file` em bin/descansar voltou com `   × 4` no lugar de
+    # `curar=False` (leitura de arquivo): a alca de restauracao devolve o arquivo como ele
+    # e. Medido em 26/09: `read_file` em bin/descansar voltou com `   × 4` no lugar de
     # linhas repetidas — quem reconstroi o arquivo a partir do retorno o corrompe.
     if not cosmetica and curar:
         limpas = [l for l in linhas if not _RASTRO.match(l) and not _PYTEST_DOTS.match(l)]
@@ -276,7 +287,7 @@ def lava(texto: str, cap: int = 50_000, *, cosmetica: bool = False,
             classes.append("rastro")
             linhas = limpas
 
-    # vazias consecutivas → uma só (não lava em read_file para preservar âncoras)
+    # vazias consecutivas → uma só (não lava na leitura de arquivo, para preservar âncoras)
     if not preserva_branco:
         enxutas: list[str] = []
         for l in linhas:
@@ -300,11 +311,13 @@ def lava(texto: str, cap: int = 50_000, *, cosmetica: bool = False,
                 classes.append("repeticao")
 
     houve_blob = False
-    fora = []
-    for l in linhas:
-        nova, marcou = _marca_blob(l, janela=janela and not cosmetica)
-        houve_blob = houve_blob or marcou
-        fora.append(nova)
+    fora = linhas
+    if blob:
+        fora = []
+        for l in linhas:
+            nova, marcou = _marca_blob(l, janela=janela and not cosmetica)
+            houve_blob = houve_blob or marcou
+            fora.append(nova)
     if houve_blob:
         classes.append("blob")
 
@@ -344,9 +357,9 @@ def _dir_derrame(sessao_id: str) -> Path:
 def derrama(sessao_id: str, nome: str, texto: str) -> str | None:
     """Grava o inteiro cru, sob TTL de 48 h, e devolve o caminho ABSOLUTO.
 
-    Absoluto porque `read_file` resolve relativo na bancada, e o derrame mora na
+    Absoluto porque `ler_arquivo` resolve relativo na bancada, e o derrame mora na
     instância: caminho relativo apontaria para o lugar errado. Cru de propósito: o
-    derrame é o que se lê de volta com `read_file offset=`, e formatação adicional ali
+    derrame é o que se lê de volta com `ler_arquivo`, e formatação adicional ali
     é ruído a mais no giro que for buscá-lo.
     """
     try:
@@ -393,7 +406,7 @@ def corta(texto: str, cap: int, *, cauda: bool, alca: str | None) -> tuple[str, 
         cab, cau = dados[:cap].decode("utf-8", "replace"), ""
     omitido = len(dados) - len(cab.encode()) - len(cau.encode())
     miolo = f"\n[… {omitido} bytes omitidos"
-    miolo += f" — inteiro em {alca}; `read_file offset=`]" if alca else " — sem alça]"
+    miolo += f" — inteiro em {alca}; `ler_arquivo`]" if alca else " — sem alça]"
     return cab + miolo + ("\n" + cau if cau else ""), {
         "cortado": True, "bytes_omitidos": omitido, "alca": alca, "cauda": cauda}
 
@@ -455,8 +468,20 @@ class Ledger:
     def _arquivo(self, alca: str) -> Path:
         return _dir_derrame(self.sessao_id) / f"lg-{sha_servido(alca)}.txt"
 
+    def esquece(self, alca: str) -> None:
+        """Apaga a alça: a próxima leitura dela sai inteira. É o `inteiro=true` da leitura
+        de arquivo (spec ler-arquivo §11.4) — o retorno que se perdeu no transporte e que o
+        registro tinha por servido."""
+        if not self.ativo:
+            return
+        try:
+            self.rc.hdel(self.chave, alca)
+            self._arquivo(alca).unlink(missing_ok=True)
+        except Exception as e:                                # noqa: BLE001
+            print(f"[poda] ledger nao esqueceu: {e!r}", file=sys.stderr, flush=True)
+
     def olha(self, alca: str, lavado: str, giro: int, tool: str, *,
-             constitutiva: bool = False) -> dict:
+             constitutiva: bool = False, sufixo: str = "") -> dict:
         """Decide o que servir e conta, no medidor de distancia, o que de fato SAIU.
 
         Medido em 20/09/2026 (sessao 066d161e, #3092): o medidor somava o `lavado`
@@ -465,13 +490,13 @@ class Ledger:
         ponteiro expirou com ~26 kB realmente entregues. Distancia e proxy do que
         entrou na janela da cadeira; o que nao foi enviado nao empurra nada.
         """
-        d = self._decide(alca, lavado, giro, tool, constitutiva=constitutiva)
+        d = self._decide(alca, lavado, giro, tool, constitutiva=constitutiva, sufixo=sufixo)
         if self.ativo:
             self._soma_bytes(len((d.get("texto") or "").encode("utf-8", "replace")))
         return d
 
     def _decide(self, alca: str, lavado: str, giro: int, tool: str, *,
-                constitutiva: bool = False) -> dict:
+                constitutiva: bool = False, sufixo: str = "") -> dict:
         """Devolve o que servir: `{modo: inteiro|igual|diff, texto, ...}`.
 
         Quatro desfechos: nunca visto → inteiro; ALCA DE CONSTITUICAO (persona conduta,
@@ -514,7 +539,7 @@ class Ledger:
             # cada giro é conteúdo novo disfarçado — volta a custar o que se poupou.
             n = len(lavado.encode("utf-8", "replace"))
             aviso = (f"[igual ao giro {antes.get('giro')} — sha {sha}, "
-                     f"{n} bytes não reenviados]")
+                     f"{n} bytes não reenviados{sufixo}]")
             # Poda que engorda o retorno não é poda: retorno curto (um `git rev-parse`,
             # duas linhas de requirements) cabe inteiro por menos que o aviso custaria.
             if len(aviso.encode("utf-8", "replace")) >= n:
@@ -538,7 +563,7 @@ class Ledger:
         corpo = "\n".join(d)
         if not d:                     # mesmo texto a menos do strip: trata como igual
             return {"modo": "igual", "sha": sha, "giro_ref": antes.get("giro"),
-                    "texto": f"[igual ao giro {antes.get('giro')} — sha {sha}]",
+                    "texto": f"[igual ao giro {antes.get('giro')} — sha {sha}{sufixo}]",
                     "ledger": "igual"}
         if len(d) > DIFF_MAX_LINHAS or len(corpo) >= len(lavado):
             return {"modo": "inteiro", "texto": lavado, "sha": sha, "ledger": "diff_maior"}
@@ -578,14 +603,15 @@ def poda_texto(texto: str, *, cap: int, cauda: bool, alca: str, sessao_id: str,
                nome_derrame: str, cosmetica: bool = False,
                constitutiva: bool = False) -> tuple[str, dict]:
     """Um retorno textual, a régua inteira na ordem do R8. Devolve (texto, campo `poda`)."""
-    preserva_branco = (tool == "read_file")
-    # `read_file` E a alca de restauracao (invariante ii): o aviso de poda manda reler o
-    # cru com `read_file offset=`. Janelar aqui fecha a unica porta de volta — medido em
-    # 20/09: reler o cru de 20.886 bytes servia os mesmos 289, e nenhum offset escapava
-    # porque o JSON inteiro e uma linha so. Quem chama `read_file` ja limitou o tamanho
-    # por `max_bytes`; linha longa ali e o conteudo pedido, nao ruido.
-    lavado, rel = lava(texto, cap, cosmetica=cosmetica, preserva_branco=preserva_branco,
-                       janela=(tool != "read_file"), curar=(tool != "read_file"))
+    # A leitura de arquivo E a alca de restauracao (invariante ii): o aviso de poda manda
+    # reler o cru com ela. Janelar aqui fecha a unica porta de volta — medido em 20/09:
+    # reler o cru de 20.886 bytes servia os mesmos 289, e nenhum offset escapava porque o
+    # JSON inteiro e uma linha so. Quem le ja limitou o tamanho por `max_bytes`; linha
+    # longa, base64 e `\r` ali sao o conteudo pedido, nao ruido (spec ler-arquivo §6, §11).
+    leitura = tool in TOOLS_LEITURA
+    lavado, rel = lava(texto, cap, cosmetica=cosmetica, preserva_branco=leitura,
+                       janela=not leitura, curar=not leitura, blob=not leitura,
+                       terminal=not leitura)
     meta = {"ato": tool, "giro": giro, "sha": sha_servido(lavado),
             "lavado": rel["classes"], "bytes_produzidos": rel["bytes_antes"]}
     if cosmetica:
@@ -600,7 +626,8 @@ def poda_texto(texto: str, *, cap: int, cauda: bool, alca: str, sessao_id: str,
         meta["cru"] = cru
     servir = lavado
     if ledger is not None:
-        d = ledger.olha(alca, lavado, giro, tool, constitutiva=constitutiva)
+        d = ledger.olha(alca, lavado, giro, tool, constitutiva=constitutiva,
+                        sufixo=SUFIXO_REENVIO if leitura else "")
         servir = d["texto"]
         meta["ledger"] = d.get("ledger")
         if d.get("distancia") is not None:
@@ -621,7 +648,7 @@ def poda_texto(texto: str, *, cap: int, cauda: bool, alca: str, sessao_id: str,
         if caminho:
             meta.update(modo="derrame", alca=caminho)
             servir += (f"\n[retorno semântico servido inteiro — sem corte de miolo; "
-                       f"cru em {caminho}; `read_file offset=`]")
+                       f"cru em {caminho}; `ler_arquivo`]")
     else:
         servir, cm = corta(servir, cap, cauda=cauda, alca=caminho)
         if cm.get("cortado"):
@@ -658,7 +685,7 @@ def linha_humana(meta: dict) -> str:
         if "blob" in meta["lavado"]:
             cru = meta.get("cru")
             linha += (" — blob/linha longa saiu do retorno; cru em "
-                      f"{cru}; `read_file offset=`" if cru
+                      f"{cru}; `ler_arquivo`" if cru
                       else " — blob/linha longa saiu do retorno; sem alca")
         return linha
     return ""

@@ -6,7 +6,17 @@ saiu com as rotas /sessao (abertura) e /msg da porta, no card #3117.
 import json  # noqa: F401 — blocos abaixo usam
 import os
 import subprocess  # noqa: F401
+import sys as _sys
+from pathlib import Path as _Arvore
 
+# A árvore em teste, não a release: sem isto `server` procura `identidade` em
+# raizes.release()/harness, que o isolamento de teste não tem (mesma costura do
+# test_prazo_porta.py, que está no portão).
+_HARNESS = _Arvore(__file__).resolve().parent.parent
+for _d in (_HARNESS / "ops-server", _HARNESS / "politica-acesso"):
+    if str(_d) not in _sys.path:
+        _sys.path.insert(0, str(_d))
+os.environ["PF_HARNESS"] = str(_HARNESS)
 os.environ["OPS_USER"] = "ensaio"
 os.environ["OPS_AUTH_TOKEN"] = "ensaio-porta"
 os.environ["OPS_NAME"] = "ops-ensaio"
@@ -89,6 +99,10 @@ def _fake_redis_cls(kv=None, sets=None):
             for k in ks:
                 n += 1 if _kv.pop(k, None) is not None or _hash.pop(k, None) is not None else 0
             return n
+
+        def hdel(self, k, *campos):
+            d = _hash.get(k, {})
+            return sum(1 for c in campos if d.pop(c, None) is not None)
 
     return _FakeRedis
 
@@ -425,6 +439,52 @@ def test_retorno_curto_nao_deduplica_porque_o_aviso_custaria_mais():
         s.read_file(path=alvo, sessao_id=_UUID_A)
         r2 = s.read_file(path=alvo, sessao_id=_UUID_A)
     assert r2["poda"]["ledger"] == "curto" and "mcp==" in r2["content"]
+
+
+# --- card #3263: ler_arquivo pela poda (spec ler-arquivo §14, C15 e C16) ----------------
+def test_c15_leitura_serve_blob_e_crlf_como_estao(tmp_path):
+    """Base64/hex e `\\r` são conteúdo do arquivo: a página volta byte a byte (spec §6)."""
+    texto = "chave: " + "0123456789abcdef" * 25 + "\r\nlinha dois\r\n" + "QUJD" * 100 + "\n"
+    alvo = tmp_path / "blob.txt"
+    alvo.write_bytes(texto.encode())
+    Fake = _fake_redis_cls()
+    with _derrame_tmp(), patch.object(s, "_autoriza", return_value=None), \
+         patch.object(s, "redis") as _rmod:
+        _rmod.Redis = Fake
+        r = s.ler_arquivo(caminho=str(alvo), sessao_id=_UUID_A)
+        velho = s.read_file(path=str(alvo))
+    assert r["conteudo"] == texto and r["poda"]["lavado"] == []
+    assert velho["content"] == texto, "o apelido serve o mesmo texto"
+
+
+def test_c16_releitura_igual_avisa_e_inteiro_reenvia(tmp_path):
+    alvo = tmp_path / "relido.txt"
+    alvo.write_text("".join(f"linha {i} de um arquivo relido\n" for i in range(200)))
+    Fake = _fake_redis_cls()
+    with _derrame_tmp(), patch.object(s, "_autoriza", return_value=None), \
+         patch.object(s, "redis") as _rmod:
+        _rmod.Redis = Fake
+        r1 = s.ler_arquivo(caminho=str(alvo), sessao_id=_UUID_A)
+        r2 = s.ler_arquivo(caminho=str(alvo), sessao_id=_UUID_A)
+        r3 = s.ler_arquivo(caminho=str(alvo), sessao_id=_UUID_A, inteiro=True)
+        r4 = s.read_file(path=str(alvo), sessao_id=_UUID_A)
+    assert r1["poda"]["ledger"] == "novo" and r1["conteudo"] == alvo.read_text()
+    assert r2["poda"]["modo"] == "igual"
+    assert r2["conteudo"].endswith("bytes não reenviados; inteiro=true reenvia]")
+    assert r3["conteudo"] == alvo.read_text() and r3["poda"]["ledger"] == "novo"
+    assert r4["poda"]["modo"] == "igual", "apelido e nova dividem a alça"
+
+
+def test_ler_arquivo_audita_classe_do_erro(tmp_path):
+    Fake = _fake_redis_cls()
+    with _derrame_tmp(), patch.object(s, "_autoriza", return_value=None), \
+         patch.object(s, "redis") as _rmod, patch.object(s, "_audit") as aud:
+        _rmod.Redis = Fake
+        r = s.ler_arquivo(caminho=str(tmp_path / "nao" / "existe.py"), sessao_id=_UUID_A)
+    assert r["erro"] == "não existe" and r["existe_ate"] == str(tmp_path)
+    assert "classe_erro" not in r, "a classe vai à auditoria, não ao retorno"
+    campos = aud.call_args.kwargs
+    assert campos["tool"] == "ler_arquivo" and campos["classe_erro"] == "caminho"
 
 
 def test_releitura_de_arquivo_mudado_serve_diff():
