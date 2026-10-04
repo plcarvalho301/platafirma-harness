@@ -129,8 +129,9 @@ def _utf8_com_byte_invalido() -> bytes:
 
 
 def _binario() -> bytes:
-    return b"%PDF-1.4\n%\xe2\xe3\xcf\xd3\n1 0 obj\n<< /Type /Catalog >>\nendobj\n" \
-        + bytes(range(256)) * 8
+    # ELF, e não PDF: desde a emenda de 04/10/2026 (spec §7.4) o PDF se lê pela porta, e o
+    # binário que T6 mede é o de tipo fora da tabela, que recusa com `sem_leitor`.
+    return b"\x7fELF\x02\x01\x01\x00" + bytes(range(256)) * 8
 
 
 def _sem_quebra() -> bytes:
