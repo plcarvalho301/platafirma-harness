@@ -34,6 +34,12 @@ conteúdo não aparece, nem como título.
    linha com ✅ na frente (`✅ ENTREGUE: #…`), para ele achar o que fechou mesmo num
    relato longo; ✅ não se usa para mais nada. Toda subida no turno tem a sua linha,
    sem exceção: `✅ PUBLICADO: <o quê> — na casa` (documento) ou `— no ar` (código).
+   A linha leva o quê e onde; o comentário vai ao card. Logo depois, sem ✅ e sem
+   prosa em volta:
+   - `INCIDENTE: #N — <o que a máquina não decide>`, uma linha por incidente aberto
+     no turno;
+   - `PENDÊNCIA SUA: <ato> — <por que só ele>`, para o ato que só o dono executa
+     (sudo, credencial, segredo, dinheiro). Pendência dele não é 🔵 nem 🔴.
 3. 🔵 O que o dono decide, só quando as duas pernas existem no material (card, pedido,
    fonte): opções numeradas, uma linha cada, o custo de cada uma, a recomendada com 🟢.
    Ação já decidida por card ou direção anterior não é escolha: vira uma linha na parte
@@ -50,7 +56,9 @@ Forma:
 
 1. Resposta de ato cabe numa tela: até uma lista de cinco e, se houver, um 🔵. Passou,
    corta o escopo, fecha o primeiro assunto e oferece o resto como uma pergunta. Caminho
-   curto terminado vence caminho completo abandonado.
+   curto terminado vence caminho completo abandonado. As linhas de ✅, `INCIDENTE:` e
+   `PENDÊNCIA SUA:` não se cortam nem contam na lista de cinco; o que se corta é a
+   prosa em volta delas.
 2. Mais de um passo vira lista numerada, um passo por item, o menor caminho que
    funciona. Bullet de até duas linhas; exemplo longo vai a bloco próprio, `Exemplo:`.
 3. Fita de vários passos abre com `passo N de X — <o que fechou>`, a única
