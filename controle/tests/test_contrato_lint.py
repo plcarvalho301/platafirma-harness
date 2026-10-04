@@ -126,11 +126,13 @@ def acervo(tmp_path):
     acervo real faz com chave ausente. `retiradas` servem a linha de situacao de
     documento retirado. O caso nao muda de cor quando o acervo real evolui.
     """
-    def fazer(servidas=(), retiradas=()):
+    def fazer(servidas=(), retiradas=(), textos=None):
         d = tmp_path / "acervo-fixture"
         d.mkdir(exist_ok=True)
         for chave in servidas:
             (d / chave).write_text(LISTA_FIXTURE.format(chave=chave))
+        for chave, texto in (textos or {}).items():
+            (d / chave).write_text(texto)
         for chave in retiradas:
             (d / chave).write_text(
                 f"força não declarada · retirada em 2026-09-27 sem sucessora — "
@@ -184,45 +186,146 @@ def test_lint_vocabulario_nao_quebra(bancada):
     assert "Traceback" not in p.stderr, p.stderr
 
 
-def test_lint_linter_ausente_exit_3(tmp_path):
-    # Cria clone com pyproject.toml mas PATH sem ruff nem uvx
-    (tmp_path / "pyproject.toml").write_text("[project]\nname='dummy'\n")
-    (tmp_path / ".git").mkdir()
-    p = _rodar_lint(
-        "codigo",
-        "dummy",
-        env_extra={
-            "PLATAFIRMA_BANCADA": str(tmp_path.parent),
-            "PATH": "/bin:/usr/bin",
-            "PF_CADEIRA": "",
-        },
-    )
-    # Se ruff nao estiver no PATH /bin:/usr/bin, sai 3
-    # Nota: se ruff estiver instalado globalmente em /usr/bin, o teste passa se rodar com sucesso
-    assert p.returncode in (0, 1, 3)
+LISTA_CODIGO = """\
+força não declarada · vigente — lista-de-verificacao antipadroes-de-codigo · Antipadrões de código
+# Antipadrões de código
+
+Espécie: lista-de-verificacao
+Rev: 3
+Dono: engenharia
+
+## Critérios
+
+| # | antipadrão | fonte | detector | severidade | cura |
+|---|---|---|---|---|---|
+| P1 | argumento padrão mutável | Ramalho | `ruff B006` | aviso | Use `None` e crie dentro. |
+| P12 | `assert` em produção | ruff | `ruff S101` | aviso | Levante exceção. |
+| P99 | regra que o ruff instalado não conhece | fixture | `ruff ZZZ999` | aviso | nada |
+| D14 | código morto | Martin | `ruff F401` | aviso | Apague. |
+| S1 | expansão sem aspas | BashPitfalls | `shellcheck SC2086` | aviso | Ponha aspas duplas. |
+| S6 | `set -e` como único tratamento | BashFAQ 105 | `lint codigo`, predicado BASH_SET_E | aviso | Confira a saída. |
+| S14 | script de shell com mais de 5 linhas | Google Shell | contagem de linhas em arquivo com shebang de shell | aviso | Reescreva em Python. |
+| F1 | lote sem fila | ordem | leitura | aviso | Fila. |
+"""
 
 
-def test_lint_codigo_alvo_arquivo(bancada):
-    p = _rodar_lint("codigo", "platafirma-harness", "bin/lint", env_extra=bancada)
-    assert p.returncode in (0, 1)
-    linha1 = p.stdout.splitlines()[0]
-    assert linha1.startswith("«lint codigo platafirma-harness/bin/lint:")
-    assert "— repositorio»" in linha1
+def _wt(tmp_path, nome="mono"):
+    wt = tmp_path / "bancada" / "wt" / nome / "ti" / "fixture"
+    wt.mkdir(parents=True)
+    (wt / ".git").mkdir()
+    env = {"PLATAFIRMA_BANCADA": str(tmp_path / "bancada"), "PF_CADEIRA": "ti", "PF_SESSAO": ""}
+    return wt, env
 
 
-def test_lint_codigo_alvo_em_subprojeto_roda_ruff_do_subprojeto(tmp_path):
-    # card #3074: raiz com bin/ (stack bash) e pyproject so em rag/ -- o alvo rag/ tem de
-    # rodar o ruff do subprojeto, nao o lint bash da raiz (que dava 0 apontamentos)
+def _precisa_ruff():
     if not (shutil.which("ruff") or shutil.which("uvx")):
         pytest.skip("ruff/uvx ausente no ambiente")
-    wt = tmp_path / "bancada" / "wt" / "mono" / "ti" / "fixture"
-    (wt / "bin").mkdir(parents=True)
+
+
+def test_lint_codigo_sem_a_lista_exit_5(tmp_path, acervo):
+    wt, env = _wt(tmp_path)
+    (wt / "m.py").write_text("import os\n")
+    p = _rodar_lint("codigo", "mono", env_extra={**env, **acervo()})
+    assert p.returncode == 5, p.stdout + p.stderr
+    assert "antipadroes-de-codigo" in p.stderr
+
+
+def test_lint_linter_ausente_exit_3(tmp_path, acervo):
+    # PATH sem ruff e sem uvx, com arquivo python no alvo: o analisador necessario falta
+    wt, env = _wt(tmp_path)
+    (wt / "m.py").write_text("import os\n")
+    env = {**env, **acervo(textos={"antipadroes-de-codigo": LISTA_CODIGO}), "PATH": "/bin:/usr/bin"}
+    if shutil.which("ruff", path="/bin:/usr/bin") or shutil.which("uvx", path="/bin:/usr/bin"):
+        pytest.skip("ruff ou uvx instalado no sistema")
+    p = _rodar_lint("codigo", "mono", env_extra=env)
+    assert p.returncode == 3, p.stdout + p.stderr
+    assert "ruff" in p.stderr
+
+
+def test_lint_codigo_ancora_na_lista(tmp_path, acervo):
+    _precisa_ruff()
+    wt, env = _wt(tmp_path)
+    (wt / "m.py").write_text("x = 1\n")
+    env = {**env, **acervo(textos={"antipadroes-de-codigo": LISTA_CODIGO})}
+    p = _rodar_lint("codigo", "mono", "m.py", env_extra=env)
+    assert p.returncode == 0, p.stdout + p.stderr
+    assert p.stdout.splitlines()[0] == "«lint codigo mono/m.py: 0 apontamentos — antipadroes-de-codigo@rev3»"
+
+
+def test_lint_codigo_python_sem_extensao_em_raiz_sem_manifesto(tmp_path, acervo):
+    # #2856 linha 190: raiz com bin/ e sem pyproject caia no ramo de shell; o ruff nao rodava
+    _precisa_ruff()
+    wt, env = _wt(tmp_path)
+    (wt / "bin").mkdir()
+    (wt / "bin" / "verbo").write_text("#!/usr/bin/env python3\ndef f(a=[]):\n    return a\n")
+    env = {**env, **acervo(textos={"antipadroes-de-codigo": LISTA_CODIGO})}
+    p = _rodar_lint("codigo", "mono", "bin/verbo", "--json", env_extra=env)
+    assert p.returncode == 1, p.stdout + p.stderr
+    dado = json.loads(p.stdout)
+    assert dado["chave"] == "antipadroes-de-codigo" and dado["rev"] == 3
+    (ap,) = dado["apontamentos"]
+    assert (ap["arquivo"], ap["linha"], ap["id"]) == ("bin/verbo", 2, "P1")
+    assert "B006" in ap["o_que_fere"] and ap["cura"] == "Use `None` e crie dentro."
+
+
+def test_lint_codigo_regra_desconhecida_vira_aviso_e_o_resto_mede(tmp_path, acervo):
+    # selecionar codigo que o ruff nao conhece faz ele sair 2 e nao medir nada
+    _precisa_ruff()
+    wt, env = _wt(tmp_path)
+    (wt / "m.py").write_text("import os\n")
+    env = {**env, **acervo(textos={"antipadroes-de-codigo": LISTA_CODIGO})}
+    p = _rodar_lint("codigo", "mono", env_extra=env)
+    assert p.returncode == 1, p.stdout + p.stderr
+    assert "ZZZ999" in p.stderr
+    assert "m.py:1: D14" in p.stdout
+
+
+def test_lint_codigo_assert_em_teste_nao_aponta(tmp_path, acervo):
+    _precisa_ruff()
+    wt, env = _wt(tmp_path)
+    (wt / "tests").mkdir()
+    (wt / "tests" / "test_x.py").write_text("def test_a():\n    assert 1\n")
+    (wt / "prod.py").write_text("def f(x):\n    assert x\n    return x\n")
+    env = {**env, **acervo(textos={"antipadroes-de-codigo": LISTA_CODIGO})}
+    p = _rodar_lint("codigo", "mono", env_extra=env)
+    assert "prod.py:2: P12" in p.stdout, p.stdout + p.stderr
+    assert "test_x.py" not in p.stdout
+
+
+def test_lint_codigo_shell_pelos_predicados_e_pelo_shellcheck(tmp_path, acervo):
+    wt, env = _wt(tmp_path)
+    (wt / "s.sh").write_text("#!/bin/bash\nset -e\nf() {\n  [ -n \"$1\" ] && echo ok\n}\necho $HOME\nf\n")
+    env = {**env, **acervo(textos={"antipadroes-de-codigo": LISTA_CODIGO})}
+    p = _rodar_lint("codigo", "mono", "s.sh", env_extra=env)
+    assert p.returncode == 1, p.stdout + p.stderr
+    assert "s.sh:4: S6" in p.stdout, p.stdout
+    assert "s.sh:1: S14" in p.stdout, p.stdout
+    if shutil.which("shellcheck") or shutil.which("uvx"):
+        assert "s.sh:6: S1" in p.stdout and "SC2086" in p.stdout, p.stdout + p.stderr
+    else:
+        assert "shellcheck ausente" in p.stderr
+
+
+def test_lint_codigo_alvo_arquivo(bancada, acervo):
+    _precisa_ruff()
+    env = {**bancada, **acervo(textos={"antipadroes-de-codigo": LISTA_CODIGO})}
+    p = _rodar_lint("codigo", "platafirma-harness", "bin/lint", env_extra=env)
+    assert p.returncode in (0, 1), p.stdout + p.stderr
+    linha1 = p.stdout.splitlines()[0]
+    assert linha1.startswith("«lint codigo platafirma-harness/bin/lint:")
+    assert "— antipadroes-de-codigo@rev3»" in linha1
+
+
+def test_lint_codigo_alvo_em_subprojeto_roda_ruff_do_subprojeto(tmp_path, acervo):
+    # card #3074: raiz com bin/ e pyproject so em rag/ -- o alvo rag/ tem de rodar o ruff
+    _precisa_ruff()
+    wt, env = _wt(tmp_path)
+    (wt / "bin").mkdir()
     (wt / "bin" / "ferramenta").write_text("#!/bin/sh\necho oi\n")
     (wt / "rag" / "pacote").mkdir(parents=True)
     (wt / "rag" / "pyproject.toml").write_text("[project]\nname='rag'\nversion='0'\n")
     (wt / "rag" / "pacote" / "modulo.py").write_text("import os\n")
-    (wt / ".git").mkdir()
-    env = {"PLATAFIRMA_BANCADA": str(tmp_path / "bancada"), "PF_CADEIRA": "ti", "PF_SESSAO": ""}
+    env = {**env, **acervo(textos={"antipadroes-de-codigo": LISTA_CODIGO})}
     for alvo in ("rag", "rag/pacote/modulo.py"):
         p = _rodar_lint("codigo", "mono", alvo, env_extra=env)
         assert p.returncode == 1, p.stdout + p.stderr
@@ -281,13 +384,15 @@ Comportamento esperado: exit 0
     assert "0 apontamentos" in p.stdout
 
 
-def test_lint_json(bancada):
-    p = _rodar_lint("codigo", "platafirma-harness", "bin/lint", "--json", env_extra=bancada)
-    assert p.returncode in (0, 1)
+def test_lint_json(bancada, acervo):
+    _precisa_ruff()
+    env = {**bancada, **acervo(textos={"antipadroes-de-codigo": LISTA_CODIGO})}
+    p = _rodar_lint("codigo", "platafirma-harness", "bin/lint", "--json", env_extra=env)
+    assert p.returncode in (0, 1), p.stdout + p.stderr
     dado = json.loads(p.stdout)
     assert "ancora" in dado
     assert dado["classe"] == "codigo"
-    assert dado["chave"] == "repositorio"
+    assert dado["chave"] == "antipadroes-de-codigo"
     assert isinstance(dado["apontamentos"], list)
 
 
