@@ -16,6 +16,12 @@ O tamanho e medido pelo CONTEUDO real, recursivo: o mirror do minio guarda os ob
 subdirs por bucket, entao somar so a entrada de topo (o diretorio) media ~0 e assinava
 "ok, 0 MB" para um backup que podia estar vazio. `_bytes` desce na arvore; conteudo real
 zero cai em `vazio` e falha ruidoso, em vez de assinar ok. Card #2987 / DT #2861.
+
+`abaixo-do-piso`: alvo com `piso_bytes` declarado no registro cuja ULTIMA geracao (a mais
+nova por mtime) pesa menos que o piso. Incidente #3222: de 16/09 a 02/10 o dump da wiki saiu
+com 320 bytes toda noite e este verbo o contou como `ok`, porque so media presenca e idade
+(e `bytes` soma todas as geracoes, entao uma geracao boa escondia as vazias). O piso e opt-in
+por alvo: sem `piso_bytes` o alvo se mede como antes. `ultimo_bytes` sai sempre no --json.
 """
 import glob
 import json
@@ -42,6 +48,13 @@ def _bytes(p):
         return 0
 
 
+def _h(n):
+    """Tamanho legivel (320 B, 4.5 MiB). `{:.0f} MB` mostrava 0 MB para 320 bytes."""
+    for u in ("B", "KiB", "MiB", "GiB"):
+        if n < 1024 or u == "GiB":
+            return "{:.0f} B".format(n) if u == "B" else "{:.1f} {}".format(n, u)
+        n /= 1024
+
 reg = json.load(open(os.environ["INFRA_BACKUPS_REG"], encoding="utf-8"))
 como_json = "--json" in sys.argv
 saida, ruim, agora = [], 0, time.time()
@@ -64,12 +77,21 @@ for nome, a in sorted((reg.get("alvos") or {}).items()):
             if not os.path.exists(prova):
                 prova = arqs[-1]
             idade = (agora - os.path.getmtime(prova)) / 86400
+            ultimo_bytes = _bytes(arqs[-1])
+            piso = int(a.get("piso_bytes") or 0)
             item.update(geracoes=len(arqs), idade_dias=round(idade, 1),
                         ultimo=os.path.basename(arqs[-1]),
-                        bytes=total)
-            item["estado"] = "ok" if idade < 2 else "atrasado"
-            if idade >= 2:
+                        bytes=total, ultimo_bytes=ultimo_bytes)
+            if piso:
+                item["piso_bytes"] = piso
+            if piso and ultimo_bytes < piso:
+                item["estado"] = "abaixo-do-piso"
                 ruim += 1
+            elif idade >= 2:
+                item["estado"] = "atrasado"
+                ruim += 1
+            else:
+                item["estado"] = "ok"
     saida.append(item)
 
 if como_json:
@@ -78,9 +100,11 @@ else:
     for i in saida:
         estado = i["estado"]
         if estado in ("ok", "atrasado"):
-            mb = i["bytes"] / 1048576
-            det = "{} geracoes, ultima ha {}d, {:.0f} MB".format(
-                i["geracoes"], i["idade_dias"], mb)
+            det = "{} geracoes, ultima ha {}d com {} (soma {})".format(
+                i["geracoes"], i["idade_dias"], _h(i["ultimo_bytes"]), _h(i["bytes"]))
+        elif estado == "abaixo-do-piso":
+            det = "ultima geracao {} com {}, abaixo do piso de {}".format(
+                i["ultimo"], _h(i["ultimo_bytes"]), _h(i["piso_bytes"]))
         elif estado == "sem-backup":
             det = "declarado sem cobertura — nao propor rotina, ver card #176"
         elif estado == "nao-medivel-daqui":

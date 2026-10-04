@@ -1,5 +1,6 @@
 {
   "_leia": "Registro de backup da PlataFirma — o DECLARADO, nao o servido. Fonte do sub-ato `infra backup`, que mede presenca, idade e numero de geracoes; nao roda backup e nao propoe rotina. Alvo com \"cobertura\": \"nenhuma\" fica na lista de proposito: alvo que some da lista deixa de ser medido e vira surpresa. `padrao` e glob dentro de `diretorio`; `alcance: fora` marca alvo cujo backup roda em conta que o claudinho nao alcanca — nesse caso o verbo declara que nao consegue medir, em vez de reportar zero. `log` opcional: havendo, a IDADE sai do log (prova de execucao) e o glob so conta o volume — espelho com --remove nao muda mtime quando nada mudou, e medir idade pelo arquivo diria 'atrasado' num backup que rodou hoje.",
+  "_piso": "`piso_bytes` (opcional, por alvo com glob): a ultima geracao abaixo dele sai `abaixo-do-piso` e faz `infra backup` sair 1. E o piso do dump QUEBRADO, nao o tamanho esperado: o da wiki repete o do scripts/backup-db.sh (100 KiB); o do rag-db (1 MiB) e palpite declarado, bem abaixo do menor dump valido. Incidente #3222: dump de 320 bytes contado como ok por 16 dias.",
   "_capacidade": "ativo",
   "_dono": "claudinho-TI",
   "alvos": {
@@ -8,6 +9,7 @@
       "cobertura": "cron do claudinho, 03:00",
       "diretorio": "/srv/platafirma/casa/dados/backups/wiki",
       "padrao": "*.sql.gz",
+      "piso_bytes": 102400,
       "alcance": "aqui"
     },
     "rag-db": {
@@ -15,6 +17,7 @@
       "cobertura": "cron do claudinho, 03:30",
       "diretorio": "/srv/platafirma/casa/dados/backups/rag",
       "padrao": "acervo-*.sql.gz",
+      "piso_bytes": 1048576,
       "alcance": "aqui"
     },
     "rag-minio": {
