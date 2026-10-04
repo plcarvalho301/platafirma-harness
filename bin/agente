@@ -56,7 +56,7 @@ CABECALHO_GERADO = "# GERADO por agente — não editar"
 # A porta (incidente #3223, ordem do dono 01/10/2026): o agente declara tools com o MESMO nome que o conector
 # publica à cadeira, escopadas pelo agente, e abre a sessão pela mesma tool (`monta_sessao`).
 PORTA = "mcp__claudinho-mcp__"
-PORTA_BASE = ("run_command", "read_file", "write_file", "monta_sessao")   # as que a porta publica fora do ferramental
+PORTA_BASE = ("run_command", "ler_arquivo", "read_file", "write_file", "monta_sessao")   # as que a porta publica fora do ferramental
 ABRE = PORTA + "monta_sessao"
 SEM_ESCOPO = PORTA + "run_command"      # alcança todo verbo: o agente perderia o escopo da declaração
 # A mesma porta chega com outro prefixo conforme a superfície (#3255): o Code CLI publica o conector do claude.ai

@@ -187,7 +187,7 @@ def main():
                 "hookEventName": "SessionStart", "additionalContext": ctx}}, ensure_ascii=False))
         sys.exit(0)
 
-    if not (tool.endswith("run_command") or tool.endswith("read_file") or
+    if not (tool.endswith("run_command") or tool.endswith("read_file") or tool.endswith("ler_arquivo") or
             tool.endswith("write_file") or tool.endswith("mesa") or tool.endswith("fila") or
             tool.endswith("tarefas") or tool.endswith("motor") or tool.endswith("descansar") or
             tool.endswith("monta_sessao") or ("claudinho-mcp" in tool) or ("platafirma-ops" in tool)):

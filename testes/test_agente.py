@@ -36,7 +36,7 @@ REVISOR = {
     "slug": "revisor", "descricao": "Revisa código e devolve veredito na primeira linha.",
     "dono": {"cadeira": "engenharia", "chapeu": "devops"}, "modo": "revisar",
     "modelo": {"familia": "claude", "versao": "sonnet"}, "ligacoes": ["delegado", "agendado"],
-    "ferramentas": ["Read", "Grep", "mcp__claudinho-mcp__read_file", "mcp__claudinho-mcp__monta_sessao"],
+    "ferramentas": ["Read", "Grep", "mcp__claudinho-mcp__ler_arquivo", "mcp__claudinho-mcp__monta_sessao"],
     "pernas": {"fonte_de_fora": False, "dado_pessoal": False, "muda_estado": False},
     "teto": {"turnos": 40, "tokens_execucao": 200000, "tokens_janela": 1000000},
     "fecho": {"comeca_com": "veredito: <0|1|5>", "termina_com": "o último achado", "recebe": "quem delegou"},
@@ -223,7 +223,7 @@ def test_projecao_claude_leva_cabecalho_modelo_ferramentas_e_o_lote_de_abertura(
     linhas = texto.splitlines()
     assert linhas[0] == "---" and linhas[1].startswith(agente.CABECALHO_GERADO)
     assert "name: revisor" in linhas and "model: sonnet" in linhas and "maxTurns: 40" in linhas
-    assert ("tools: Read, Grep, " + ", ".join(g + "read_file" for g in agente.GRAFIAS) + ", "
+    assert ("tools: Read, Grep, " + ", ".join(g + "ler_arquivo" for g in agente.GRAFIAS) + ", "
             + ", ".join(g + "monta_sessao" for g in agente.GRAFIAS)) in linhas
     assert ('1. `monta_sessao` com `cadeira="engenharia"`, `chapeu="devops"`, `perfil="cadeirinha"`, '
             '`modo="revisar"`, `agente="revisor"`, `origem=<o sessao_id que a delegação trouxe>`') in texto
@@ -240,11 +240,17 @@ def test_projecao_do_consultor_nao_fixa_cadeira():
 
 
 def test_projetada_sem_monta_sessao_e_com_run_command_reprova():
-    sem = com(REVISOR, ferramentas=["Read", "mcp__claudinho-mcp__read_file"])
+    sem = com(REVISOR, ferramentas=["Read", "mcp__claudinho-mcp__ler_arquivo"])
     assert any("falta mcp__claudinho-mcp__monta_sessao" in a for a in agente.valida(sem, "revisor"))
     largo = com(REVISOR, ferramentas=[*REVISOR["ferramentas"], "mcp__claudinho-mcp__run_command"])
     assert any("ferramenta sem escopo: mcp__claudinho-mcp__run_command" in a for a in agente.valida(largo, "revisor"))
     assert agente.valida(VARREDOR, "varredor") == [], "sem projeção no Code, não abre por monta_sessao"
+
+
+
+def test_conector_publica_ler_arquivo_e_mantem_o_apelido_read_file(mundo):
+    publicadas = agente.tools_do_conector()
+    assert agente.PORTA + "ler_arquivo" in publicadas and agente.PORTA + "read_file" in publicadas
 
 
 def test_conferir_acusa_tool_que_o_conector_nao_publica(mundo, capsys):
@@ -622,7 +628,7 @@ def test_claude_monta_a_chamada_do_cli_com_modelo_teto_e_ferramentas(mundo, pess
     assert argv[argv.index("--model") + 1] == "sonnet"
     assert argv[argv.index("--max-turns") + 1] == "40"
     assert argv[argv.index("--disallowedTools") + 1] == "Bash,Write,Edit,NotebookEdit"
-    assert "mcp__claudinho-mcp__read_file" in argv[argv.index("--allowedTools") + 1]
+    assert "mcp__claudinho-mcp__ler_arquivo" in argv[argv.index("--allowedTools") + 1]
     assert "LENTE-PERSONA" in argv[argv.index("--append-system-prompt") + 1]
     assert claude["stdin"] == "o que a ia acha?"
 

@@ -39,9 +39,10 @@ mesmo que o prompt não repita a ordem; recusar porque "a tarefa não pede" é o
 
 Necessidade → verbo: ver/editar mesa, fila, tarefas, acervo, motor, deploy… → a tool de
 mesmo nome. O que era fallback tem dono: git → `repo` · `conferir` · `situacao`; cat/rg/fd
-→ `read_file(paths)` · `repo procurar`; docker/systemctl/journalctl → `infra`; docker exec
-rag-* → `motor`; curl → `pesquisar`; pytest/ruff → `teste` · `lint`. Arquivo: `read_file`
+→ `ler_arquivo(caminhos)` · `repo procurar`; docker/systemctl/journalctl → `infra`; docker exec
+rag-* → `motor`; curl → `pesquisar`; pytest/ruff → `teste` · `lint`. Arquivo: `ler_arquivo`
 e `write_file` (tipo × morada; `trecho={antes, depois}` edita sem reescrever).
+`ler_arquivo` lê por linhas (`linhas="a-b"`), continua em `proximo_args` e dá a estrutura com `modo="sumario"`.
 
 ## Um giro carrega o independente — agrupe, nao encadeie
 
@@ -51,7 +52,7 @@ um do outro.
 
 - `run_command(commands=[...])`: varios shells num giro so; cada item roda em seu
   proprio `bash -c`, erro num nao derruba os outros, resultado por item.
-- `read_file(paths=[...])`: varias leituras num giro so.
+- `ler_arquivo(caminhos=[...])`: varias leituras num giro so.
 
 A regua e a DEPENDENCIA, nao o gosto: so encadeia (um giro por vez) quando o
 proximo comando PRECISA do resultado do anterior. Antes de disparar o segundo

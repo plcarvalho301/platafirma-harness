@@ -279,6 +279,7 @@ def settings_da_fita(modelo="", cadeira=""):
             # (deploy, release, infra, persona, acesso, seg, migrar); a cadeira as
             # alcanca por run_command, onde o PDP da porta decide por recurso.
             "allow": [
+                "mcp__claudinho-mcp__ler_arquivo",
                 "mcp__claudinho-mcp__read_file",
                 "mcp__claudinho-mcp__write_file",
                 "mcp__claudinho-mcp__run_command",
