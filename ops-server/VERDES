@@ -11,6 +11,7 @@ test_leitura.py
 test_malote_apelido.py
 test_monta_sessao_agente.py
 test_monta_sessao_lote.py
+test_piso_timeout.py
 test_prazo_porta.py
 test_sessao_reidratar_porta.py
 test_stdin_json_porta.py
