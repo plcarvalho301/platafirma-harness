@@ -145,6 +145,9 @@ opções de --reextrair --bancada (card #3187; "bancada" aqui é só uma pasta d
   --bancada <pasta>             grava <pasta>/<metodo>/<obra_id>/{espelho.md,indice.json,relatorio.json}; não escreve no acervo
                                 (recusa --apply). --reextrair passa a aceitar 'id1,id2,…' ou '@arquivo' (um id por linha;
                                 vazias e '#' ignoradas). Retomável: obra com relatorio.json válido é pulada ('já feito')
+                                Item que é um arquivo local (caminho que existe) vai direto ao serviço do conversor,
+                                sem a rag-api e sem credencial (PF_CONVERSOR_URL, padrão http://127.0.0.1:8200; #3276);
+                                a pasta da obra leva o nome do arquivo sem extensão
   --metodo <slug>               método e segmento de pasta (default: perfil)
   --modo bancada|medida         bancada (padrão) converte e mede a fidelidade; medida (card #3207) só mede as calhas de duas
                                 colunas de cada PDF, pela porta ao MuPDF, sem modelo e sem espelho: grava só o relatorio.json
@@ -1796,6 +1799,11 @@ _BANCADA_MODOS = ("bancada", "medida")
 _BANCADA_CONEXAO_S = 10
 _BANCADA_MARGEM_HTTP_S = 120
 _BANCADA_TIMEOUT_RESOLVER = (10, 60)   # GET que resolve título -> obra_id
+# Entrada que é um ARQUIVO local vai direto ao serviço do conversor (#3276): sem a rag-api, sem credencial
+# (o serviço não tem segredo, spec conversor-pdf-combinado §2) e sem o prazo da porta. A rota do host é a
+# porta publicada pela stack conversor (127.0.0.1:8200, #3276 c.1537).
+CONVERSOR_URL_BANCADA = (os.environ.get("PF_CONVERSOR_URL") or "http://127.0.0.1:8200").rstrip("/")
+_BANCADA_OCUPADO_TENTATIVAS = 20        # 409 do serviço: espera o Retry-After e tenta de novo (spec §4.2)
 
 
 def _bancada_lista(valor: str) -> list[str]:
@@ -2021,7 +2029,13 @@ def _bancada_obra(entrada: str, metodo: str, pasta: str, autor: str, timeout_s: 
             "arquivos": [], "tipo": "-", "classe": "-", "blocos": None, "perda": None,
             "total_ms": None, "causa": None, "origem_erro": None, "erro_tipo": None,
             "medida": None, "medida_indeterminada": False}
-    oid, problema = _bancada_resolver(entrada, headers)
+    arquivo_local = entrada if os.path.isfile(entrada) else None
+    if arquivo_local:
+        # a pasta leva o nome do arquivo sem extensão, só com os caracteres que servem de nome de pasta
+        oid = re.sub(r"[^A-Za-z0-9._-]+", "_", os.path.splitext(os.path.basename(arquivo_local))[0]).strip("._-")
+        problema = None if oid else "arquivo sem nome que sirva de pasta"
+    else:
+        oid, problema = _bancada_resolver(entrada, headers)
     if problema:
         item.update(causa=problema, origem_erro="cliente")
         return item
@@ -2067,16 +2081,39 @@ def _bancada_obra(entrada: str, metodo: str, pasta: str, autor: str, timeout_s: 
                         arquivos=[n for n, _s, _b in _BANCADA_ARQUIVOS if rel.get(_b) is not None])
             return item
 
-    pedido = {"autor": autor, "metodo": metodo, "timeout_s": timeout_s}
-    if modo:
-        pedido["modo"] = modo
-    try:
-        resp = requests.post(f"{BASE}/acervo/obras/{oid}/conversoes", headers=headers, json=pedido,
-                             timeout=(_BANCADA_CONEXAO_S, timeout_s + _BANCADA_MARGEM_HTTP_S))
-    except requests.exceptions.RequestException as e:
-        return nao_obtida(f"rede: {type(e).__name__}: {e}", "servidor")
-    if resp.status_code != 200:
-        return nao_obtida(_bancada_causa_http(resp), "servidor")
+    if arquivo_local:
+        # direto ao serviço (spec conversor-pdf-combinado §3.3): os bytes no corpo, o prazo pedido como teto
+        try:
+            with open(arquivo_local, "rb") as f:
+                dados = f.read()
+        except OSError as e:
+            return nao_obtida(f"ler {arquivo_local}: {e}", "cliente")
+        params = {"metodo": metodo, "modo": modo or "bancada", "prazo_s": timeout_s,
+                  "extensao": os.path.splitext(arquivo_local)[1].lstrip(".").lower()}
+        try:
+            for _ in range(_BANCADA_OCUPADO_TENTATIVAS):
+                resp = requests.post(f"{CONVERSOR_URL_BANCADA}/conversoes", params=params, data=dados,
+                                     headers={"Content-Type": "application/octet-stream"},
+                                     timeout=(_BANCADA_CONEXAO_S, timeout_s + _BANCADA_MARGEM_HTTP_S))
+                if resp.status_code != 409:
+                    break
+                time.sleep(int(resp.headers.get("Retry-After") or 30))
+        except requests.exceptions.RequestException as e:
+            return nao_obtida(f"rede ({CONVERSOR_URL_BANCADA}): {type(e).__name__}: {e}", "servidor")
+        # 504 (prazo) e 500 trazem o relatório com erro_tipo: o 504 é dado (timeout), o 500 não
+        if resp.status_code not in (200, 504, 500):
+            return nao_obtida(_bancada_causa_http(resp), "servidor")
+    else:
+        pedido = {"autor": autor, "metodo": metodo, "timeout_s": timeout_s}
+        if modo:
+            pedido["modo"] = modo
+        try:
+            resp = requests.post(f"{BASE}/acervo/obras/{oid}/conversoes", headers=headers, json=pedido,
+                                 timeout=(_BANCADA_CONEXAO_S, timeout_s + _BANCADA_MARGEM_HTTP_S))
+        except requests.exceptions.RequestException as e:
+            return nao_obtida(f"rede: {type(e).__name__}: {e}", "servidor")
+        if resp.status_code != 200:
+            return nao_obtida(_bancada_causa_http(resp), "servidor")
     try:
         corpo = resp.json()
     except ValueError:
@@ -2093,6 +2130,8 @@ def _bancada_obra(entrada: str, metodo: str, pasta: str, autor: str, timeout_s: 
         return nao_obtida(f"método indisponível no servidor (erro_tipo={erro_tipo}): "
                           f"{_bancada_curta(rel['erro'], 120)}", "servidor")
     arquivos = corpo.get("arquivos") if isinstance(corpo.get("arquivos"), dict) else {}
+    if arquivo_local:
+        rel.setdefault("arquivo", os.path.basename(arquivo_local))   # o serviço recebe só os bytes
 
     # Há resposta 200 válida em mãos. Daí em diante o relatório antigo não vale mais: sai AGORA, antes
     # de gravar os arquivos novos (rodada interrompida não deixa relatorio.json velho sobre arquivos
