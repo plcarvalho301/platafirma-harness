@@ -405,6 +405,26 @@ def test_c18_zip_lista_e_membro_se_le(fx):
     assert falta["erro"] == "membro não existe" and falta["la_tem"] == ["a/leia.txt", "b.md"]
 
 
+def test_c18_gzip_le_o_que_ha_dentro(fx, tmp_path):
+    """O censo do arquivo-raiz achou um GZIP com nome `.pdf` no acervo: lê-se o conteúdo
+    pelo leitor do tipo real dos bytes internos, e a continuação usa o mesmo caminho."""
+    import gzip
+    g = tmp_path / "prova.pdf.gz"
+    g.write_bytes(gzip.compress(fx["pdf"].read_bytes()))
+    r = L.le(g)
+    assert "recusado" not in r and r["tipo"] == F.PDF and r["gzip"]["bytes_comprimidos"] == g.stat().st_size
+    assert "descomprimido de gzip" in r["cabecalho"] and "<!-- p. 1 -->" in r["conteudo"]
+    L.esvazia_cache()
+    assert _soma(_segue(g, max_bytes=64)) == _soma(_segue(fx["pdf"], max_bytes=64))
+    t = tmp_path / "texto.txt.gz"
+    t.write_bytes(gzip.compress("linha um\nlinha dois\n".encode()))
+    assert L.le(t)["conteudo"] == "linha um\nlinha dois\n"
+    assert L.le(t, modo="pagina")["classe_erro"] == "gramatica"
+    ruim = tmp_path / "ruim.gz"
+    ruim.write_bytes(b"\x1f\x8b\x08\x00" + b"\x00" * 20)
+    assert L.le(ruim)["classe_erro"] == "binario" and "gzip não abre" in L.le(ruim)["erro"]
+
+
 def test_c18_binario_fora_da_tabela_recusa_sem_leitor(fx):
     r = L.le(fx["elf"])
     assert r["recusado"] is True and r["motivo"] == "sem_leitor" and r["tipo"] == "application/x-elf"

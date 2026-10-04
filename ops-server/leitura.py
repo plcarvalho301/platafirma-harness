@@ -35,6 +35,7 @@ import ast
 import bisect
 import codecs
 import difflib
+import gzip
 import hashlib
 import io
 import json
@@ -42,6 +43,7 @@ import os
 import re
 import stat as _stat
 import threading
+import zlib
 from collections import OrderedDict
 from dataclasses import dataclass, field
 from itertools import islice
@@ -954,11 +956,51 @@ def _le_membro(fh, p: Path, idx: Indice, tp: dict, membro: str, **kw) -> dict:
     return _le_corpo(fonte, Path(f"{p}!{membro}"), midx, mtp, dados, **kw)
 
 
+def _le_gzip(fh, p: Path, idx: Indice, **kw) -> dict:
+    """GZIP guardado no acervo (o censo achou um com nome `.pdf`): descomprime em memória,
+    até MEMBRO_MAX, e lê o que há dentro pelo leitor do tipo real dos bytes internos. A
+    continuação usa o mesmo caminho: cada chamada descomprime de novo (§7.4.4)."""
+    fh.seek(0)
+    try:
+        dados = gzip.decompress(fh.read())
+    except (OSError, EOFError, zlib.error) as e:
+        return _erro(f"gzip não abre: {type(e).__name__}: {str(e)[:160]}", "binario",
+                     caminho=str(p), tipo="application/gzip", bytes_total=idx.tamanho,
+                     versao=idx.versao)
+    if len(dados) > _formatos.MEMBRO_MAX:
+        return {"recusado": True, "motivo": "gzip acima de 64 MiB descomprimido",
+                "caminho": str(p), "bytes_total": idx.tamanho, "versao": idx.versao,
+                "classe_erro": "recusado"}
+    chave = (f"{p}!gunzip", len(dados), idx.versao, 0)
+    with _TRAVA:
+        midx = _INDICES.get(chave)
+    if midx is None:
+        midx = varre(io.BytesIO(dados))
+        midx.versao = idx.versao                 # a versão é a do arquivo em disco
+        with _TRAVA:
+            _INDICES[chave] = midx
+            while len(_INDICES) > INDICES_MAX:
+                _INDICES.popitem(last=False)
+    fonte = io.BytesIO(dados)
+    nome = p.name[:-3] if p.name.lower().endswith(".gz") else p.name
+    mtp = afina_tipo(tipo_real(midx.cabeca, nome), fonte)
+    r = _le_corpo(fonte, p, midx, mtp, dados, **kw)
+    if "cabecalho" in r:
+        r["cabecalho"] += f" · descomprimido de gzip ({_n(idx.tamanho)} bytes)"
+    if "recusado" not in r and "erro" not in r:
+        r["gzip"] = {"bytes_comprimidos": idx.tamanho, "bytes": len(dados)}
+    return r
+
+
 def _le_corpo(fh, p: Path, idx: Indice, tp: dict, dados, *, curto, faixa, modo, orcamento,
               versao, offset, pedido, pedido_bytes, paginas=None,
               dpi=_formatos.DPI_PADRAO) -> dict:
     tipo = tp["tipo"]
     if tp["binario"]:
+        if tipo == "application/gzip":
+            return _le_gzip(fh, p, idx, curto=curto, faixa=faixa, modo=modo, orcamento=orcamento,
+                            versao=versao, offset=offset, pedido=pedido,
+                            pedido_bytes=pedido_bytes, paginas=paginas, dpi=dpi)
         if tipo in _formatos.LEITORES:
             return _le_formato(fh, p, idx, tp, curto=curto, faixa=faixa, modo=modo,
                                orcamento=orcamento, versao=versao, paginas=paginas, dpi=dpi,

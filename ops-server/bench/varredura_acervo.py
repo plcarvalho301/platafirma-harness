@@ -21,7 +21,14 @@ import sys
 import time
 from pathlib import Path
 
-import pytest
+try:
+    import pytest
+except ImportError:                       # como script, fora do pytest (venv ops sem pytest)
+    class pytest:                         # noqa: N801 — só o decorador que o módulo usa
+        class mark:
+            @staticmethod
+            def skipif(_cond, reason=""):
+                return lambda f: f
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import leitura as L                                            # noqa: E402
@@ -161,3 +168,16 @@ def test_varredura_toda_obra_viva_le_pela_primeira_pagina():
     (PASTA / "relatorio.md").write_text("\n".join(md) + "\n", encoding="utf-8")
     assert not recusas, f"{len(recusas)} recusa(s) do leitor — ver relatorio.md"
     assert not imagens_ruins, f"{len(imagens_ruins)} PDF sem imagem legível — ver relatorio.md"
+
+
+if __name__ == "__main__":
+    # Como script, com o python do venv `ops` (o `teste rodar` tem prazo de 300 s e a varredura
+    # inteira passa dele): `sessao longjob run varredura <venv>/bin/python <este arquivo>`.
+    if not PASTA.is_dir():
+        sys.exit("sem pasta da varredura: " + str(PASTA))
+    try:
+        test_varredura_toda_obra_viva_le_pela_primeira_pagina()
+    except AssertionError as e:
+        print(f"VARREDURA REPROVADA: {e}")
+        sys.exit(1)
+    print("VARREDURA PASSOU: zero recusa; relatório em", PASTA / "relatorio.md")
