@@ -1449,6 +1449,8 @@ def _le_um_arquivo(caminho: str, args: dict, ident: dict, tool: str,
     if not caminho:
         _audit(tool=tool, erro="caminho vazio", classe_erro="gramatica", **quem)
         return {"erro": "caminho vazio", "cura": 'ler_arquivo(caminho="/caminho/absoluto")'}
+    # `caminho!membro`: autoriza e nega pelo arquivo; o membro é leitura dentro dele (§7.4).
+    caminho, membro = _separa_membro(caminho)
     # A ação do PDP segue `read_file` para as duas tools: é a capacidade de ler documento, e
     # a política (politica-acesso, da segurança) não muda por causa do nome da tool.
     negado = _autoriza(tool, "read_file", "documento", caminho, DOM_PLATAFORMA)
@@ -1464,20 +1466,31 @@ def _le_um_arquivo(caminho: str, args: dict, ident: dict, tool: str,
         bloqueio["caminho"] = bloqueio.pop("path", str(p))
         return bloqueio
     offset, modo = args.get("offset"), args.get("modo") or "texto"
+    paginas = args.get("paginas") or None
+    try:
+        dpi = int(args.get("dpi") or 150)
+    except (TypeError, ValueError):
+        dpi = 0
     r = _leitura.le(p, linhas=args.get("linhas") or None, modo=modo,
                     max_bytes=args.get("max_bytes") or _leitura.ORCAMENTO_PADRAO,
                     versao=args.get("versao") or None, offset=offset,
-                    encoding=args.get("encoding") or None, nega=_nega_leitura, curto=_curto(p))
+                    encoding=args.get("encoding") or None, nega=_nega_leitura, curto=_curto(p),
+                    paginas=paginas, dpi=dpi, membro=membro)
     classe = r.pop("classe_erro", None)
     # A alça é o pedido (§11.2), a mesma para as duas tools: releitura pelo apelido e pela
     # nova deduplicam juntas. `caminho` é identificador exato — nunca entra na poda (iv).
     faixa = f"b{offset}" if offset is not None else (args.get("linhas") or "1-")
-    r = _serve(r, tool="ler_arquivo", alca=f"{p}|{modo}|{faixa}", ident=ident,
+    alvo = f"{p}!{membro}" if membro else str(p)
+    r = _serve(r, tool="ler_arquivo", alca=f"{alvo}|{modo}|{paginas or ''}|{faixa}", ident=ident,
                esquece=bool(args.get("inteiro")))
     enc, servidas = r.get("encoding") or {}, r.get("linhas")
-    _audit(tool=tool, path=str(p),
+    unidades = r.get("paginas")
+    _audit(tool=tool, path=alvo,
            modo="diretorio" if r.get("diretorio") else "bytes" if offset is not None else modo,
            linhas=f"{servidas[0]}-{servidas[1]}" if servidas else None,
+           paginas=f"{unidades[0]}-{unidades[1]}" if unidades else None,
+           unidade=r.get("unidade"), imagens=len(r.get("imagens") or ()) or None,
+           dpi=dpi if modo == "pagina" else None, tipo=r.get("tipo"),
            versao=r.get("versao"), encoding_por=enc.get("por"), invalidos=enc.get("invalidos"),
            bytes_total=r.get("bytes_total"), classe_erro=classe,
            erro=(r.get("erro") or r.get("motivo")) if classe else None,
@@ -1490,7 +1503,8 @@ def _le_um_arquivo(caminho: str, args: dict, ident: dict, tool: str,
 def ler_arquivo(caminho: str = "", linhas: str = "", modo: str = "texto",
                 max_bytes: int = 40000, versao: str = "", offset: int | None = None,
                 encoding: str = "", inteiro: bool = False, sessao_id: str | None = None,
-                caminhos: list[str | dict] | None = None) -> dict:
+                caminhos: list[str | dict] | None = None, paginas: str = "",
+                dpi: int = 150) -> dict:
     """Lê arquivo de texto por linhas. `caminho` absoluto, ou relativo à bancada declarada.
 
     `linhas`: "a-b", "a-" ou "-n" (as últimas n), base 1; sem ela, do começo. A página
@@ -1504,24 +1518,70 @@ def ler_arquivo(caminho: str = "", linhas: str = "", modo: str = "texto",
     quando o cabeçalho diz NÃO JULGADO. `inteiro=true`: reenvia a página que a porta tinha
     por já servida.
     Diretório devolve a listagem; caminho que não existe devolve `existe_ate`, `la_tem` e
-    `parecidos`; binário recusa com o tipo.
+    `parecidos`.
+    Formatos do acervo (PDF, EPUB, DOCX, PPTX, XLSX, MOBI, HTML, MHTML, imagem, ZIP) se leem
+    pelo leitor do formato: `paginas="a-b"` escolhe a unidade do original (página, item do
+    spine, slide, planilha), cada uma aberta por `<!-- p. N -->`; `modo="pagina"` devolve a
+    página como imagem PNG (`dpi` até 300; obrigatório em PDF escaneado, aviso SEM CAMADA DE
+    TEXTO); `modo="visivel"` é o texto visível de HTML e MHTML; `caminho!membro` lê um membro
+    de ZIP, EPUB ou OOXML. Só binário fora dessa tabela recusa (`sem_leitor`).
     `caminhos`: várias leituras num giro (cada item um caminho ou {"caminho", "linhas"}); o
-    teto do lote conta bytes servidos, e o item que não coube volta `omitido_por_teto`.
+    teto do lote conta bytes servidos (a imagem, pelos bytes do PNG), e o item que não coube
+    volta `omitido_por_teto`.
     """
     ident = _sessao_resolve(sessao_id)
     comuns = {"linhas": linhas, "modo": modo, "max_bytes": max_bytes, "versao": versao,
-              "offset": offset, "encoding": encoding, "inteiro": inteiro}
+              "offset": offset, "encoding": encoding, "inteiro": inteiro, "paginas": paginas,
+              "dpi": dpi}
     if caminhos and PF_TOOLS_LOTE:
         lote_id = uuid.uuid4().hex[:8]
 
         def _item(i, it):
             if isinstance(it, dict):
                 return _le_um_arquivo(str(it.get("caminho") or ""),
-                                      {**comuns, "linhas": it.get("linhas") or linhas},
+                                      {**comuns, "linhas": it.get("linhas") or linhas,
+                                       "paginas": it.get("paginas") or paginas},
                                       ident, "ler_arquivo", lote_id, i)
             return _le_um_arquivo(str(it), comuns, ident, "ler_arquivo", lote_id, i)
-        return _leitura.lote(caminhos, _item, CAP)
-    return _le_um_arquivo(caminho, comuns, ident, "ler_arquivo")
+        return _com_imagens(_leitura.lote(caminhos, _item, CAP))
+    return _com_imagens(_le_um_arquivo(caminho, comuns, ident, "ler_arquivo"))
+
+
+def _com_imagens(r):
+    """A imagem da página (spec ler-arquivo §7.4.2) sai como conteúdo de imagem do MCP, ao lado
+    do JSON: o FastMCP converte cada `Image` em `ImageContent` e o dict em texto. No JSON, o
+    PNG dá lugar ao tamanho em bytes. Sem imagem, o retorno é o dict de sempre."""
+    from mcp.server.fastmcp.utilities.types import Image
+
+    imagens = []
+
+    def _colhe(d):
+        for i in d.get("imagens") or ():
+            png = i.pop("png", None)
+            if png:
+                imagens.append(Image(data=png, format=(i.get("mime") or "image/png").split("/")[-1]))
+                i["bytes"] = len(png)
+    if isinstance(r, dict):
+        _colhe(r)
+        for item in r.get("lote") or ():
+            if isinstance(item, dict):
+                _colhe(item)
+    return [r, *imagens] if imagens else r
+
+
+def _separa_membro(caminho: str) -> tuple[str, str | None]:
+    """`caminho!membro` (spec ler-arquivo §7.4): o membro de um ZIP, EPUB ou OOXML. Só separa
+    quando o caminho inteiro não existe e a parte antes do primeiro `!` é arquivo."""
+    if "!" not in caminho:
+        return caminho, None
+    p_todo, erro = _resolve_relativo(caminho)
+    if not erro and p_todo.exists():
+        return caminho, None
+    arquivo, _sep, membro = caminho.partition("!")
+    p, erro = _resolve_relativo(arquivo)
+    if not erro and membro and p.is_file():
+        return arquivo, membro
+    return caminho, None
 
 
 def read_file(path: str = "", offset: int = 0, max_bytes: int = 40000,

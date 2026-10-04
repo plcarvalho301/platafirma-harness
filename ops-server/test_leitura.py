@@ -177,20 +177,21 @@ def test_encoding_pedido_julga(tmp_path):
 
 
 # --- C9 binário ----------------------------------------------------------------------------------
+# Emenda de 04/10/2026 (§7.2.2, §7.4): binário de tipo que o acervo guarda se lê pelo leitor do
+# formato (C18, test_formatos.py); só o de tipo fora da tabela recusa, com nome e `sem_leitor`.
 @pytest.mark.parametrize("nome,dados,tipo", [
-    ("a.pdf", b"%PDF-1.7\n%\xe2\xe3\xcf\xd3\n1 0 obj\n", "application/pdf"),
-    ("a.png", b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR", "image/png"),
+    ("a.bin", b"\x7fELF\x02\x01\x01" + bytes(range(256)), "application/x-elf"),
     ("a.txt", b"texto\x00com nulo\n", "application/octet-stream"),
-    ("a.docx", b"PK\x03\x04\x14\x00\x06\x00", "application/vnd.openxmlformats-officedocument"
-                                              ".wordprocessingml.document"),
+    ("a.db", b"SQLite format 3\x00" + bytes(range(256)), "application/vnd.sqlite3"),
+    ("a.gz", b"\x1f\x8b\x08\x00" + bytes(range(256)), "application/gzip"),
 ])
-def test_c9_binario_recusa_com_nome(tmp_path, nome, dados, tipo):
+def test_c9_binario_fora_da_tabela_recusa_com_nome(tmp_path, nome, dados, tipo):
     p = tmp_path / nome
     p.write_bytes(dados)
     r = L.le(p)
-    assert r["recusado"] is True and r["motivo"] == "binario" and r["tipo"] == tipo
+    assert r["recusado"] is True and r["motivo"] == "sem_leitor" and r["tipo"] == tipo
     assert "conteudo" not in r and r["versao"] and r["classe_erro"] == "binario"
-    assert "acervo ler biblioteca impressao" in r["cura"]
+    assert "§7.4" in r["cura"]
 
 
 # --- C10 sumário Markdown · C11 sumário Python -----------------------------------------------------

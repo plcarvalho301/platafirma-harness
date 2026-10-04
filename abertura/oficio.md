@@ -43,6 +43,9 @@ mesmo nome. O que era fallback tem dono: git → `repo` · `conferir` · `situac
 rag-* → `motor`; curl → `pesquisar`; pytest/ruff → `teste` · `lint`. Arquivo: `ler_arquivo`
 e `write_file` (tipo × morada; `trecho={antes, depois}` edita sem reescrever).
 `ler_arquivo` lê por linhas (`linhas="a-b"`), continua em `proximo_args` e dá a estrutura com `modo="sumario"`.
+PDF, EPUB, DOCX, PPTX, XLSX e os demais formatos do acervo se leem por ela: `paginas="a-b"` é a unidade do
+original (página, item, slide, planilha), `modo="pagina"` é a imagem da página (PDF), `modo="visivel"` o texto
+visível de HTML e MHTML, e `caminho!membro` abre membro de ZIP. Nada se converte nem se guarda (spec ler-arquivo §7.4).
 
 ## Um giro carrega o independente — agrupe, nao encadeie
 
