@@ -177,6 +177,18 @@ def test_origem_no_lote_do_sessao_e_no_run_command(tmp_path):
     assert um["command"] == f"sessao abrir ia --origem {SID}"
 
 
+def test_origem_no_malote_como_no_apelido(tmp_path):
+    """#3270: `malote` e o nome novo de `run_command`; a origem entra igual."""
+    _abre_como(tmp_path, SID)
+    cmds = _pre(tmp_path, "malote",
+                {"commands": ["sessao abrir ia --json",
+                              {"verbo": "sessao", "ato": "abrir", "args": ["ia"]}]}, agente="a1")
+    assert cmds["commands"][0] == f"sessao abrir ia --json --origem {SID}"
+    assert cmds["commands"][1]["args"] == ["ia", "--origem", SID]
+    um = _pre(tmp_path, "malote", {"command": "sessao abrir ia"}, agente="a1")
+    assert um["command"] == f"sessao abrir ia --origem {SID}"
+
+
 def test_origem_que_o_agente_ja_pos_vale_e_nao_duplica(tmp_path):
     _abre_como(tmp_path, SID)
     ti = {"ato": "abrir", "args": ["ia", "--origem", OUTRA], "sessao_id": SID}

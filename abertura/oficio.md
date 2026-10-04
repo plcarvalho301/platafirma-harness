@@ -13,9 +13,10 @@ só aqui:
 - `sessao_id` é o do `monta_sessao`. Sem ele, a porta resolve por sessão-sombra só
   quando é inequívoca (uma sessão viva sua); ambíguo → roda sem cadeira, e
   `mesa`/`fila`/`tarefas` não sabem de quem é o ato.
-- `run_command` é lote entre verbos DISTINTOS numa chamada só, sem shell e sem
+- `malote` é lote entre verbos DISTINTOS numa chamada só, sem shell e sem
   fallback: programa que não é verbo não roda — a recusa diz qual verbo usar, e
-  `sugestao: null` é card de verbo novo (spec_porta-so-verbo).
+  `sugestao: null` é card de verbo novo (spec_porta-so-verbo). `run_command` é apelido
+  dele e sai quando ninguém mais o chamar.
 
 ## Abertura: `monta_sessao` é a PRIMEIRA ação, em toda cadeira
 
@@ -53,23 +54,24 @@ Cada chamada de tool e um giro, e giro custa token. O que mais infla giro/turno 
 disparar comandos em cadeia — roda um, le, roda outro — quando eles nao dependiam
 um do outro.
 
-- `run_command(commands=[...])`: varios shells num giro so; cada item roda em seu
-  proprio `bash -c`, erro num nao derruba os outros, resultado por item.
+- `malote(commands=[...])`: varios verbos distintos num giro so; um `execve` por item,
+  erro num nao derruba os outros, resultado por item.
 - `ler_arquivo(caminhos=[...])`: varias leituras num giro so.
 
 A regua e a DEPENDENCIA, nao o gosto: so encadeia (um giro por vez) quando o
 proximo comando PRECISA do resultado do anterior. Antes de disparar o segundo
-`run_command`, pergunte se ele ja nao cabia no primeiro.
+`malote`, pergunte se ele ja nao cabia no primeiro.
 
 E antes de sondar o host, leia a memoria que ja veio na abertura — mesa e caderno
-(`mesa caderno <chapeu>`). Sondar com `run_command` o que a mesa ja diz e giro
+(`mesa caderno <chapeu>`). Sondar com `malote` o que a mesa ja diz e giro
 gasto a toa.
 
 ## Cinco armadilhas que mordem toda cadeira
 
-- **Espelho de repo serve o SHA velho depois do push** — `repo_sync`, ou ler o clone
-  local por `run_command`.
-- **`&&` no `run_command` some com o erro** — usar `;` ou chamadas separadas.
+- **Espelho de repo serve o SHA velho depois do push** — `repo atualizar`, ou ler o
+  clone por `repo ler`.
+- **Metacaractere no item do `malote` recusa o item inteiro** — pipe vira
+  `stdin: {"de": n}`, e `;` ou `&&` viram dois itens.
 - **Faceta válida e despovoada devolve zero sem erro** — `rag_facets` antes de filtrar.
 - **`longjob` não herda o ambiente da sessão** — `bash -lc 'export VAR=x PATH=...; <verbo>'`.
 - **`edit_page` substitui a página inteira** — `get_page` antes, sempre.

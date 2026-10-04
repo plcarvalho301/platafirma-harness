@@ -56,14 +56,18 @@ CABECALHO_GERADO = "# GERADO por agente — não editar"
 # A porta (incidente #3223, ordem do dono 01/10/2026): o agente declara tools com o MESMO nome que o conector
 # publica à cadeira, escopadas pelo agente, e abre a sessão pela mesma tool (`monta_sessao`).
 PORTA = "mcp__claudinho-mcp__"
-PORTA_BASE = ("run_command", "ler_arquivo", "read_file", "write_file", "monta_sessao")   # as que a porta publica fora do ferramental
+PORTA_BASE = ("malote", "run_command", "ler_arquivo", "read_file", "write_file", "monta_sessao")   # as que a porta publica fora do ferramental
 ABRE = PORTA + "monta_sessao"
-SEM_ESCOPO = PORTA + "run_command"      # alcança todo verbo: o agente perderia o escopo da declaração
 # A mesma porta chega com outro prefixo conforme a superfície (#3255): o Code CLI publica o conector do claude.ai
 # como `claude_ai_claudinho-mcp`, e o Code Desktop pelo uuid do conector (medido 03/10/2026 no posto). A declaração
 # segue com o nome canônico (PORTA); a projeção lista cada tool de porta nas três grafias, e o Code dá ao
 # subagente as que existem na superfície. Conector recriado no claude.ai troca o uuid: a linha muda aqui.
 GRAFIAS = (PORTA, "mcp__claude_ai_claudinho-mcp__", "mcp__f40dcc0d-abeb-4254-8b3d-34d33a57565d__")
+# Alcançam todo verbo: o agente perderia o escopo da declaração. `run_command` é apelido de
+# `malote` (#3270); os dois nomes ficam de fora, senão o apelido vira a porta dos fundos. Em
+# TODAS as grafias: comparar só a canônica deixava `mcp__claude_ai_claudinho-mcp__run_command` e
+# a grafia por uuid passarem, porque nem `grafias()` nem `fora_do_conector` olham outro prefixo.
+SEM_ESCOPO = tuple(g + nome for g in GRAFIAS for nome in ("malote", "run_command"))
 
 def grafias(tool: str) -> list[str]:
     """A tool de porta em todas as grafias da superfície; qualquer outra tool passa como veio."""
@@ -140,7 +144,7 @@ def _valida_execucao(d: dict, pre: str) -> list[str]:
         for f in ferr:
             if f in PROIBIDAS:
                 p.append(f"{pre}ferramenta proibida: {f}")
-            elif f == SEM_ESCOPO:
+            elif f in SEM_ESCOPO:
                 p.append(f"{pre}ferramenta sem escopo: {f} alcança todo verbo; declare as tools de verbo do agente")
     teto = d.get("teto")
     chaves = ["turnos", "tokens_execucao", "tokens_janela"]

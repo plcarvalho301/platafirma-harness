@@ -415,6 +415,28 @@ def test_transporte_soma_bytes_servidos_e_conta_poda_modos():
     assert any("350 B servidos" in x for x in linhas)
 
 
+def test_lote_conta_itens_por_via_recusas_por_tool_e_soma_os_dois_nomes():
+    """#3270: o item despachado sai com tool=<verbo>, via=<nome chamado>; `tool` = nome do
+    lote so na recusa. Contar so `tool` daria zero com a tool em uso (spec porta-so-verbo
+    §3.7, regra de saida do apelido)."""
+    giros, _, _ = classifica([
+        reg("10:00:00.000", "repo", "estado", via="malote", lote_id="a1"),
+        reg("10:00:01.000", "tarefas", "ler", via="malote", lote_id="a1"),
+        reg("10:00:02.000", "malote", evento="sem_verbo", exit_code=None, lote_id="a2",
+            motivo="sem verbo"),
+        reg("10:00:03.000", "repo", "estado", via="run_command", lote_id="b1"),
+    ])
+    r = m.verbos(giros)
+    tr = r["transporte"]
+    assert (tr["malote"]["itens"], tr["malote"]["recusas"], tr["malote"]["lotes"]) == (2, 1, 2)
+    assert (tr["run_command"]["itens"], tr["run_command"]["recusas"]) == (1, 0)
+    assert tr["run_command"]["giros"] == 0          # so via: nenhuma linha com tool=run_command
+    assert tr["lote (soma)"]["itens"] == 3 and tr["lote (soma)"]["lotes"] == 3
+    assert r["por_verbo"]["repo"]["giros"] == 2     # o verbo segue no ranking por verbo
+    linhas = m.verbos_texto({**r, "dia": "d"})
+    assert any("run_command" in x and "1 itens em 1 lotes" in x for x in linhas)
+
+
 def test_casos_de_ler_arquivo_devolve_a_classe_do_erro():
     giros, _, _ = classifica([
         leitura("10:00:00.000", classe="caminho", path="/nao/existe"),

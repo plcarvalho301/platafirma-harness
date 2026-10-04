@@ -150,7 +150,7 @@ def liga_origem(tool: str, ti: dict, origem: str) -> dict:
             novo["lote"] = [dict(i, args=_com_origem(i.get("args"), origem))
                             if isinstance(i, dict) and i.get("ato") == "abrir" else i
                             for i in novo["lote"]]
-    elif base == "run_command":
+    elif base in ("malote", "run_command"):            # run_command: apelido de malote (#3270)
         def item(x):
             if isinstance(x, str) and x.lstrip().startswith("sessao abrir") and "--origem" not in x:
                 return f"{x} --origem {origem}"
@@ -187,7 +187,7 @@ def main():
                 "hookEventName": "SessionStart", "additionalContext": ctx}}, ensure_ascii=False))
         sys.exit(0)
 
-    if not (tool.endswith("run_command") or tool.endswith("read_file") or tool.endswith("ler_arquivo") or
+    if not (tool.endswith("malote") or tool.endswith("run_command") or tool.endswith("read_file") or tool.endswith("ler_arquivo") or
             tool.endswith("write_file") or tool.endswith("mesa") or tool.endswith("fila") or
             tool.endswith("tarefas") or tool.endswith("motor") or tool.endswith("descansar") or
             tool.endswith("monta_sessao") or ("claudinho-mcp" in tool) or ("platafirma-ops" in tool)):

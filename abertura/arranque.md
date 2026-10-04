@@ -61,10 +61,10 @@ arquivo não se lê antes de a sessão abrir. Mudou aqui, muda lá no mesmo ato.
 - **Worktree não injeta nada.** Ela isola branch, que é o que git worktree faz bem;
   identidade lida de dentro dela é a cópia congelada que este arquivo elimina.
 - **`PF_CADEIRA` não atravessa no Code, e isto foi medido (TI, 16/08):** `Bash` está
-  negado na estação e `run_command` executa no ops-server, cujo ambiente não é o do
+  negado na estação e `malote` executa no ops-server, cujo ambiente não é o do
   terminal onde o Code abriu. Variável exportada ali é ilegível de dentro da sessão.
   O que atravessa é o slug dito na abertura. `PF_CADEIRA` segue valendo no host, para
-  verbo chamado por `run_command`.
+  verbo chamado por `malote`.
 - **Code sem injeção só existe em conta onde o arranque não foi instalado.** Rodado o
   posto ou o instalador, o arranque de conta (`agente/CLAUDE.md`, escopo de usuário)
   alcança qualquer diretório: com slug dito, vale o slug; sem slug, abre
