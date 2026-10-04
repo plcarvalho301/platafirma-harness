@@ -36,7 +36,7 @@ SUMARIO = {
     "espelho": {"tipo": "application/pdf", "unidade": "pagina", "substituicoes": 0,
                 "encoding": {"decidido": "utf-8", "por": "binario"},
                 "metodo": {"conversor": {"nome": "perfil", "versao": "1"}},
-                "qualidade": "nao-julgada", "motivo": []},
+                "julgamento": "não julgado", "motivo": []},
     "unidades": 12,
     "secoes": [{"ancora": "_preambulo"}, {"ancora": "capitulo-i"}, {"ancora": "capitulo-ii"}],
 }
@@ -80,23 +80,24 @@ def test_primeira_linha_no_molde_da_casa():
     linha = m.primeira_linha("Lei 14.133", SUMARIO, "1-2", {"cabecalho-corrente": 3}, "corpo", None)
     assert linha == ("Lei 14.133 · application/pdf · pagina 1–2 de 12 · perfil@1 · utf-8 (binario) · "
                      "substituições 0 · fora do corpo: cabeçalho 3, rodapé 0, navegação 0 · "
-                     "qualidade nao-julgada · avisos: nenhum")
+                     "não julgado · avisos: nenhum")
 
 
 def test_primeira_linha_sem_espelho():
     m = _mod()
     assert m.primeira_linha("Obra velha", {"espelho": None}, None, {}, "corpo", None) == \
-        "Obra velha · qualidade suspeita · sem página"
+        "Obra velha · não servível (sem espelho) · sem página"
 
 
-def test_o_motivo_do_veredito_e_lista_e_sai_numa_linha():
+def test_o_julgamento_da_regua_6_e_a_perda_liquida_saem_numa_linha():
     m = _mod()
-    sumario = {**SUMARIO, "espelho": {**SUMARIO["espelho"], "qualidade": "suspeita",
-                                      "motivo": ["substituições 3", "outro 0.01 > piso 0"]}}
+    sumario = {**SUMARIO, "espelho": {**SUMARIO["espelho"], "julgamento": "servível imperfeito",
+                                      "motivo": ["perda líquida 2.31% ≤ 8%"]}}
     linha = m.primeira_linha("Lei", sumario, "1-2", {}, "corpo", None)
-    assert "qualidade suspeita (substituições 3; outro 0.01 > piso 0) · avisos: nenhum" in linha
-    antigo = {**SUMARIO, "espelho": {**SUMARIO["espelho"], "qualidade": "suspeita", "motivo": "substituições > 0"}}
-    assert "qualidade suspeita (substituições > 0)" in m.primeira_linha("Lei", antigo, "1-2", {}, "corpo", None)
+    assert "servível imperfeito (perda líquida 2.31% ≤ 8%) · avisos: nenhum" in linha
+    assert "qualidade" not in linha
+    nao = {**SUMARIO, "espelho": {**SUMARIO["espelho"], "julgamento": "não servível", "motivo": ["sem medida"]}}
+    assert "não servível (sem medida)" in m.primeira_linha("Lei", nao, "1-2", {}, "corpo", None)
 
 
 # --- a linha de avisos (spec espelho-de-leitura §5.4; cards #3207 e #3193) -------------------------
@@ -124,12 +125,12 @@ def test_sem_aviso_a_linha_diz_nenhum():
     assert m.linha_de_avisos([{"codigo": "ocr", "rotulo": "texto por OCR", "paginas": []}, None]) == "avisos: nenhum"
 
 
-def test_a_primeira_linha_leva_os_avisos_depois_da_qualidade():
+def test_a_primeira_linha_leva_os_avisos_depois_do_julgamento():
     m = _mod()
     sumario = {**SUMARIO, "espelho": {**SUMARIO["espelho"], "avisos": AVISOS_DO_EXEMPLO}}
     linha = m.primeira_linha("Lei 14.133", sumario, "1-131", {"cabecalho-corrente": 3}, "corpo", None)
     assert linha.endswith(
-        "qualidade nao-julgada · avisos: tabela com coluna suspeita p. 120–131; ordem entre colunas suspeita p. 3")
+        "não julgado · avisos: tabela com coluna suspeita p. 120–131; ordem entre colunas suspeita p. 3")
     assert "\n" not in linha and linha.count("avisos:") == 1
 
 

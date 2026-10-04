@@ -102,12 +102,14 @@ class Falso:
                     return self._resp(200, PLANO)
                 if self.path == "/acervo/espelhos/rejulgamento":
                     item = {"impressao": "imp-1", "obra_id": OBRA, "titulo": "Lei 14.133", "estado": "servindo",
-                            "regua_atual": 1, "qualidade_atual": "boa"}
+                            "regua_atual": 5, "julgamento_atual": "não julgado"}
                     if corpo.get("aplicar"):
-                        return self._resp(200, {"modo": "aplicado", "regua": 2, "n": 1, "falhas": [],
-                                                "itens": [{**item, "qualidade": "suspeita",
-                                                           "motivo": ["substituições 3"]}]})
-                    return self._resp(200, {"modo": "plano", "regua": 2, "n": 1, "itens": [item]})
+                        return self._resp(200, {"modo": "aplicado", "regua": 6, "n": 1, "falhas": [],
+                                                "contagem": {"servível imperfeito": 1},
+                                                "itens": [{**item, "julgamento": "servível imperfeito",
+                                                           "servivel": True, "imperfeita": True,
+                                                           "motivo": ["perda líquida 2.31% ≤ 8%"]}]})
+                    return self._resp(200, {"modo": "plano", "regua": 6, "n": 1, "itens": [item]})
                 if self.path == f"/acervo/obras/{OBRA}/reextracoes":
                     if corpo.get("metodo") == "perfil":
                         return self._resp(422, {"type": "about:blank", "title": "ReextracaoReprovada",
@@ -200,7 +202,8 @@ def test_rejulgar_lote_plano_e_apply(falso):
     assert "Plano: 1 espelho(s)" in r.stdout and falso.chamadas[-1][2]["aplicar"] is False
     r = _curar(falso, "--rejulgar", "--lote", "--apply")
     assert r.returncode == 0, r.stderr
-    assert "rejulgado(s) pela régua 2" in r.stdout and "suspeita (substituições 3)" in r.stdout
+    assert "rejulgado(s) pela régua 6: 0 servível, 1 servível imperfeito, 0 não servível" in r.stdout
+    assert "não julgado -> servível imperfeito (perda líquida 2.31% ≤ 8%)" in r.stdout
 
 
 @precisa_requests

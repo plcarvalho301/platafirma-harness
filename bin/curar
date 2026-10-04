@@ -1552,7 +1552,7 @@ def _linha_espelho(e: dict | None) -> str:
         motivo = "; ".join(str(m) for m in motivo if m)
     return (f"{conv.get('nome', '?')}@{conv.get('versao', '?')} · digest {str(e.get('digest'))[:12]} · "
             f"{enc.get('decidido', '?')} ({enc.get('por', '?')}) · substituições {e.get('substituicoes')} · "
-            f"qualidade {e.get('qualidade')}" + (f" ({motivo})" if motivo else ""))
+            f"{e.get('julgamento') or 'não julgado'}" + (f" ({motivo})" if motivo else ""))
 
 
 def acao_recortar(args, autor: str, como_json: bool, headers: dict) -> int:
@@ -1694,16 +1694,19 @@ def acao_rejulgar(autor: str, aplicar: bool, como_json: bool, headers: dict) -> 
         return 0
     regua = data.get("regua")
     if data.get("modo") == "aplicado":
-        print(f"{data.get('n', 0)} espelho(s) rejulgado(s) pela régua {regua}")
+        # régua 6 (#3282): a contagem servível / servível imperfeito / não servível vai ao card
+        contagem = data.get("contagem") or {}
+        resumo = ", ".join(f"{contagem.get(k, 0)} {k}" for k in ("servível", "servível imperfeito", "não servível"))
+        print(f"{data.get('n', 0)} espelho(s) rejulgado(s) pela régua {regua}: {resumo}")
     else:
         print(f"Plano: {data.get('n', 0)} espelho(s) com régua anterior à {regua}")
     for it in data.get("itens", []):
         depois = ""
-        if "qualidade" in it:
+        if "julgamento" in it:
             motivo = "; ".join(map(str, it.get("motivo") or []))
-            depois = f" -> {it['qualidade']}" + (f" ({motivo})" if motivo else "")
+            depois = f" -> {it['julgamento']}" + (f" ({motivo})" if motivo else "")
         print(f"  {it.get('impressao')}  {it.get('estado'):<13} régua {it.get('regua_atual')} "
-              f"{it.get('qualidade_atual')}{depois}  {it.get('titulo')}")
+              f"{it.get('julgamento_atual')}{depois}  {it.get('titulo')}")
     for it in data.get("falhas", []):
         print(f"  FALHOU {it.get('impressao')}  {it.get('titulo')}: {it.get('erro')}")
     if data.get("modo") != "aplicado":
