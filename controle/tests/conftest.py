@@ -1,7 +1,7 @@
 """Isolamento da suíte: teste não lê nem escreve estado real (lib/teste_isolado.py).
 
-E guarda de SIGPIPE (#3274): `bin/_acervo/registrar` e irmãos fazem
-`signal(SIGPIPE, SIG_DFL)` ao serem importados, e o fixture `acervo` de test_bot.py restaura
+E guarda de SIGPIPE (#3274): `bin/_acervo/registrar` e irmãos faziam
+`signal(SIGPIPE, SIG_DFL)` ao serem importados (agora só na execução direta, test_guarda_sigpipe.py), e o fixture `acervo` de test_bot.py restaura
 esse valor ao terminar. Com SIG_DFL, uma thread de servidor falso que ainda escreve num
 socket fechado pelo cliente mata o pytest inteiro (exit 141) em vez de dar BrokenPipeError;
 sob carga, no pre-push, isso virou "suite nao medida" e o push passou. A suíte roda com

@@ -21,11 +21,6 @@ import signal
 import subprocess
 import sys
 
-try:
-    signal.signal(signal.SIGPIPE, signal.SIG_DFL)
-except (AttributeError, ValueError):
-    pass
-
 PG = "rag-extractor-pg"; DB = "rag_extractor"; USR = "rag"
 
 USO = """uso:
@@ -127,4 +122,9 @@ def main(argv):
 
 
 if __name__ == "__main__":
+    # Sai limpo no `| head`. So na execucao direta: no import o processo do chamador nao muda (#3274).
+    try:
+        signal.signal(signal.SIGPIPE, signal.SIG_DFL)
+    except (AttributeError, ValueError):
+        pass
     sys.exit(main(sys.argv[1:]))

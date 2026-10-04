@@ -9,11 +9,6 @@ import signal
 import subprocess
 import sys
 
-try:
-    signal.signal(signal.SIGPIPE, signal.SIG_DFL)
-except (AttributeError, ValueError):
-    pass
-
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import _identidade
 
@@ -75,4 +70,9 @@ def main(argv):
     morre(f"acervo curar: sub-ato desconhecido '{sub}' (alias, obra)", 2)
 
 if __name__ == "__main__":
+    # Sai limpo no `| head`. So na execucao direta: no import o processo do chamador nao muda (#3274).
+    try:
+        signal.signal(signal.SIGPIPE, signal.SIG_DFL)
+    except (AttributeError, ValueError):
+        pass
     sys.exit(main(sys.argv[1:]))
