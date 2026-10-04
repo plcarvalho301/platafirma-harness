@@ -191,8 +191,9 @@ def main() -> int:
         if _a in ("--criterio", "--com"):
             _v = next(_it, "")
             if not _v or _v.startswith("--"):
-                print(f"lint: {_a} pede um valor (ex.: lint acervo --criterio T2,A1; "
-                      "lint codigo platafirma-harness --com platafirma-conhecimento)", file=sys.stderr)
+                exemplo = ("pede o id do criterio (ex.: lint acervo --criterio T2,A1)" if _a == "--criterio"
+                           else "pede o repositorio (ex.: lint codigo platafirma-harness --com platafirma-conhecimento)")
+                print(f"lint: {_a} {exemplo}", file=sys.stderr)
                 return 2
             (criterios if _a == "--criterio" else com).extend(_v.split(","))
         elif _a.startswith("--criterio="):
