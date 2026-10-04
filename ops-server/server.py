@@ -439,7 +439,9 @@ def _falha_sha(e: dict, r: dict, pid: str, sha_declarado: str, conteudo: str) ->
 def _delta_pecas(r: dict, sessao_id: str) -> dict:
     """R2 na abertura — dedup por baldes (spec_contexto-na-porta §4, §5).
 
-    Balde 1: persona, conduta -> NUNCA ponteiro (#3067).
+    Balde 1: persona, conduta -> cache de prefixo, inteiras (#3067). Única exceção: no claude.ai,
+    que já as carrega (instruções do projeto e preferências), saem como ponteiro (ref, sha
+    publicado) se o sha publicado existe; sem ele, inteiras (spec §3.1, #3247).
     Balde 2: acervo-consultado, corpo de caderno -> vira ponteiro (ref, sha) do 2º giro em diante.
     Balde 3: mesa do chapéu ativo, alias-cadeiras, índice de cadernos, turno, erro -> SEMPRE inteiro.
     Conferência de sha: recomputa sha e recusa fail-closed se não bater.
@@ -454,6 +456,7 @@ def _delta_pecas(r: dict, sessao_id: str) -> dict:
     except Exception:                                         # noqa: BLE001
         return {"bytes_servidos": None, "ledger": "indisponivel"}
     servidos = deduplicadas = 0
+    espelhadas = []      # persona/conduta que o claude.ai ja carrega (spec §3.1)
     novos = {}
     for e in pecas:
         sha, pid = e.get("sha"), e.get("peca")
@@ -476,7 +479,7 @@ def _delta_pecas(r: dict, sessao_id: str) -> dict:
                     e["tokens"] = 0
                     e["poda"] = {"ato": "monta_sessao", "modo": "ponteiro", "sha": sha_pub,
                                  "ref": e.get("ref"), "bytes_omitidos": bytes_omitidos}
-                    deduplicadas += 1
+                    espelhadas.append(pid)
                     continue
                 
                 # Se não temos o sha publicado (arquivo ausente ou cadeira irresolvida),
@@ -520,10 +523,16 @@ def _delta_pecas(r: dict, sessao_id: str) -> dict:
         rc.expire(chave, TTL_SESSAO_S)
     except Exception:                                         # noqa: BLE001
         pass
+    if espelhadas:
+        r.setdefault("avisos", []).append(
+            f"{' e '.join(espelhadas)} vieram como ponteiro: o claude.ai já as carrega "
+            "(instruções do projeto e preferências) — spec contexto-na-porta §3.1")
     if deduplicadas:
         r.setdefault("avisos", []).append(
             f"{deduplicadas} peça(s) já servidas nesta sessão vieram como ponteiro (arq:0101 R2)")
-    return {"bytes_servidos": servidos, "pecas_dedup": deduplicadas or None}
+    return {"bytes_servidos": servidos,
+            "pecas_dedup": (deduplicadas + len(espelhadas)) or None,
+            "pecas_espelhadas": len(espelhadas) or None}
 
 
 def _campos_poda(r: dict) -> dict:

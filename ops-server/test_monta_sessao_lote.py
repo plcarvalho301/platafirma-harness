@@ -675,4 +675,91 @@ async def test_audit_sessao_aberta_sujeito_do_token_e_slug_da_cadeira():
     assert call["via"] == "tool"
 
 
+# --- #3265: aviso verdadeiro quando o claude.ai recebe persona e conduta como ponteiro ---
+
+_UUID_3265 = "33333333-2222-4333-8444-555555555555"
+
+
+def _redis_com_estado():
+    """Valkey minimo com estado: o ledger sobrevive entre duas chamadas de _delta_pecas."""
+    guardado = {}
+
+    class FakeRedis:
+        def hgetall(self, key):
+            return dict(guardado.get(key, {}))
+        def hset(self, key, mapping=None):
+            guardado.setdefault(key, {}).update(mapping or {})
+        def expire(self, key, ttl):
+            pass
+
+    return FakeRedis()
+
+
+def _peca(nome, corpo, ref=None):
+    return {"peca": nome, "ref": ref or f"verbo:{nome}", "conteudo": corpo,
+            "sha": s._poda.sha_servido(corpo), "tokens": 100}
+
+
+def _pacote_3265():
+    return {"nome_canonico": "ti", "pecas": [
+        _peca("persona", "PERSONA " * 40), _peca("conduta", "CONDUTA " * 40),
+        _peca("acervo-consultado", "TRECHOS " * 40)]}
+
+
+def _delta_3265(superficie, sha_publicado, giros=1):
+    """Roda _delta_pecas `giros` vezes na mesma sessao; devolve o ultimo retorno e a conta."""
+    rc = _redis_com_estado()
+    with patch.object(s, "_rc", return_value=rc), \
+         patch.object(s, "_poda_ligada", return_value=True), \
+         patch.object(s, "_superficie", return_value=superficie), \
+         patch.object(s, "_sha_publicado", return_value=sha_publicado):
+        for _ in range(giros):
+            r = _pacote_3265()
+            conta = s._delta_pecas(r, _UUID_3265)
+    return r, conta
+
+
+def test_claude_ai_sessao_nova_aviso_diz_o_motivo_verdadeiro():
+    r, conta = _delta_3265("claude.ai", "abc123def456")
+    persona, conduta, acervo = r["pecas"]
+    assert persona["regime"] == conduta["regime"] == "ponteiro"
+    assert persona["poda"]["sha"] == "abc123def456"
+    assert acervo.get("regime") != "ponteiro", "1o giro: o acervo-consultado vem inteiro"
+    avisos = " | ".join(r.get("avisos", []))
+    assert "persona e conduta" in avisos and "claude.ai já as carrega" in avisos
+    assert "já servidas nesta sessão" not in avisos, "sessao nova nao tem peca repetida"
+    assert conta["pecas_espelhadas"] == 2
+
+
+def test_claude_ai_sem_sha_publicado_serve_inteiras_e_sem_aviso_de_ponteiro():
+    r, conta = _delta_3265("claude.ai", None)
+    persona, conduta, _ = r["pecas"]
+    assert persona["conteudo"] and conduta["conteudo"]
+    assert persona.get("regime") != "ponteiro" and conduta.get("regime") != "ponteiro"
+    assert not r.get("avisos")
+    assert conta["pecas_espelhadas"] is None
+
+
+@pytest.mark.parametrize("superficie", ["code", "chat", "cli", "desconhecida"])
+def test_fora_do_claude_ai_persona_e_conduta_seguem_inteiras(superficie):
+    """Trava do #3265 (spec contexto-na-porta §3): so o claude.ai tem a excecao."""
+    r, conta = _delta_3265(superficie, "abc123def456")
+    persona, conduta, _ = r["pecas"]
+    assert persona["conteudo"] and conduta["conteudo"]
+    assert persona.get("regime") != "ponteiro" and conduta.get("regime") != "ponteiro"
+    assert not r.get("avisos")
+    assert conta["pecas_espelhadas"] is None
+
+
+def test_claude_ai_segundo_giro_mantem_o_aviso_r2_so_para_o_balde_2():
+    r, conta = _delta_3265("claude.ai", "abc123def456", giros=2)
+    avisos = r.get("avisos", [])
+    assert any("claude.ai já as carrega" in a for a in avisos)
+    r2 = [a for a in avisos if "já servidas nesta sessão" in a]
+    assert r2 == ["1 peça(s) já servidas nesta sessão vieram como ponteiro (arq:0101 R2)"]
+    assert r["pecas"][2]["regime"] == "ponteiro"
+    assert conta["pecas_dedup"] == 3, "a metrica segue somando as tres pecas em ponteiro"
+    assert conta["pecas_espelhadas"] == 2
+
+
 
