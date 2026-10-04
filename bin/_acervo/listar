@@ -54,13 +54,6 @@ import subprocess
 import sys
 import tempfile
 
-# Sai limpo quando o consumidor fecha o cano (| head, | jq -e). Sem isto, o print
-# num stdout já fechado estoura BrokenPipeError com traceback (medido no teste).
-try:
-    signal.signal(signal.SIGPIPE, signal.SIG_DFL)
-except (AttributeError, ValueError):
-    pass
-
 PG = "rag-extractor-pg"
 DB = "rag_extractor"
 USR = "rag"
@@ -1256,4 +1249,11 @@ def main(argv):
 
 
 if __name__ == "__main__":
+    # Sai limpo quando o consumidor fecha o cano (| head, | jq -e). Sem isto, o print
+    # num stdout já fechado estoura BrokenPipeError com traceback (medido no teste).
+    # So na execucao direta: no import o processo do chamador nao muda (#3274).
+    try:
+        signal.signal(signal.SIGPIPE, signal.SIG_DFL)
+    except (AttributeError, ValueError):
+        pass
     main(sys.argv[1:])

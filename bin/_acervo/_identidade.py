@@ -12,14 +12,11 @@
 import json
 import os
 import re
-import signal
 import subprocess
 import sys
 
-try:
-    signal.signal(signal.SIGPIPE, signal.SIG_DFL)
-except (AttributeError, ValueError):
-    pass
+# Biblioteca: nao mexe em SIGPIPE no import (#3274). Quem sai limpo no `| head` e o main()
+# de cada script que a usa (casa, curar, entidade).
 
 PG = "rag-extractor-pg"
 DB = "rag_extractor"
