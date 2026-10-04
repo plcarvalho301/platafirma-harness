@@ -7,9 +7,9 @@
 # atos: ler, conduta, foto, abrir, salvar, conferir, sanear, rotas, prover, designar, afastar, dispensar, desligar, remover, reverter, filme, idade
 # folhas: ler|conduta|foto -> organizacao/leitura (serve o expediente) · abrir|salvar|conferir|sanear|rotas -> organizacao/redacao ·
 #         prover|designar|dispensar|remover|afastar|reverter|desligar|filme -> organizacao/vinculo (ledger)
-# ambiente: PF_ABERTURA_DIR[=/srv/platafirma/casa/var/abertura-publicada] (leitura, arq:0097) · PLATAFIRMA_INSTANCIA[=/srv/platafirma/casa] · PLATAFIRMA_BANCADA[sem default; senao a linha de $HOME/.config/platafirma/bancada; ausente = exit 3] (escrita: <bancada>/wt/platafirma-harness/$PF_CADEIRA, senao <bancada>/platafirma-harness) · PERSONA_REPO (override de teste do clone de escrita) · PF_CADEIRA porta
-# depende: morada publicada (ler, conduta, foto); git + origin (abrir, salvar)
-# escreve: abertura/ e registro/eventos-org.jsonl do clone de bancada (salvar); nada em ler|conduta|foto|filme
+# ambiente: PF_ABERTURA_DIR[=/srv/platafirma/casa/var/abertura-publicada] (leitura, arq:0097) · PLATAFIRMA_INSTANCIA[=/srv/platafirma/casa] · PLATAFIRMA_BANCADA[sem default; senao a linha de $HOME/.config/platafirma/bancada; ausente = exit 3] (escrita: bancada de card <bancada>/wt/platafirma-harness/$PF_CADEIRA/<card-slug>; nunca o clone-cache) · PERSONA_REPO (override de teste do clone de escrita) · PF_CADEIRA porta
+# depende: morada publicada (ler, conduta, foto); bancada de card (conferir de alvo no clone, salvar, rotas, ledger)
+# escreve: nada em git (#3273: o verbo confere, nao commita nem empurra); o ledger escreve registro/eventos-org.jsonl na bancada
 #
 # LEITURA E DA MORADA PUBLICADA, nunca do clone (arq:0097): `ler`, `conduta` e `foto`
 # servem a arvore imutavel sob $PF_ABERTURA_DIR/current/abertura — e o que o expediente
@@ -29,6 +29,21 @@ MORADA="${PF_ABERTURA_DIR:-$PLATAFIRMA_INSTANCIA/var/abertura-publicada}"
 # toca a bancada — sem ela declarada, ler/conduta/foto/conferir seguem servindo.
 REPO="${PERSONA_REPO:-}"
 ARVORE="$MORADA/current/abertura"
+
+# --bancada <card-slug>: opcao global; escolhe a bancada de card quando ha mais de uma aberta
+# (#3273). Sai da lista de argumentos antes do despacho.
+BANCADA_SLUG=""
+_args=()
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --bancada)
+      BANCADA_SLUG="${2:-}"
+      [ -n "$BANCADA_SLUG" ] || { echo "persona: --bancada exige <card-slug>" >&2; exit 2; }
+      shift 2 ;;
+    *) _args+=("$1"); shift ;;
+  esac
+done
+set -- ${_args[@]+"${_args[@]}"}
 # conteudo vivo mora na arvore de abertura (um dir por cadeira, persona.md + chapeus).
 # o ledger de organizacao mora em registro/eventos-org.jsonl (ato proprio, _persona-org.py).
 ALVO="abertura"
@@ -42,13 +57,15 @@ uso:
   persona conduta                       dono.md — a conduta do dono, igual em toda cadeira
   persona foto [--json]                 vocabulário de cadeiras e aliases da morada publicada
 
-  redacao, no clone:
-  persona abrir              pull antes de editar (recupera divergência); diz o sha e a idade
-  persona sanear             recupera clone divergente ou com commits pendentes
-  persona idade              sha, data do último commit e idade do clone
+  redacao, na bancada de card (repo abrir platafirma-harness <card> --slug persona-<tema>):
+  persona abrir | sanear     aposentados (#3273): saem 2 com o caminho; persona nao faz git
+  persona idade              sha, data do último commit e idade da bancada
   persona conferir [alvo]    roda os checks do molde novo (alvo: cadeira, arquivo ou dir)
-  persona salvar -m "<msg>"  pull/rebase, confere, commit só de abertura/ e push
+  persona salvar -m "<msg>"  confere o que mudou em abertura/ e no ledger; NAO commita nem
+                             empurra — diz o fluxo de entrega (commitar, sincronizar, pr-abrir)
   persona rotas [opções]     regenera abertura/rotas-chapeu.json (recuperacao/gerar_rotas_chapeu.py)
+  --bancada <card-slug>      (global) escolhe a bancada quando ha mais de uma aberta; com uma so,
+                             ela e usada; nunca o clone-cache, nunca HEAD destacado
 
   atos de organização — ledger append-only em personas/eventos-org.jsonl:
   persona prover <cadeira> [--alias "<Nome>"]     abre cadeira
@@ -244,19 +261,42 @@ esac
 # declarada sai 3; clone ausente sai 3 com a cura, nunca criacao silenciosa.
 entra_no_clone() {
   if [ -z "$REPO" ]; then
-    local b
+    local b base d cands=()
     b="$(pf_bancada)" || exit 3
-    if [ -n "${PF_CADEIRA:-}" ] && [ -e "$b/wt/platafirma-harness/$PF_CADEIRA/.git" ]; then
-      REPO="$b/wt/platafirma-harness/$PF_CADEIRA"
+    base="$b/wt/platafirma-harness/${PF_CADEIRA:-}"
+    # bancada de card (arq:0109): wt/<repo>/<cadeira>/<card-slug>. NUNCA o clone-cache
+    # <bancada>/platafirma-harness: o `repo sanear` o deixa destacado e nele nada sobe (#3273).
+    if [ -n "${PF_CADEIRA:-}" ] && [ -d "$base" ]; then
+      for d in "$base"/*/; do
+        [ -e "${d}.git" ] && cands+=("${d%/}")
+      done
+    fi
+    if [ -n "$BANCADA_SLUG" ]; then
+      [ -e "$base/$BANCADA_SLUG/.git" ] || {
+        echo "persona: bancada '$BANCADA_SLUG' nao existe — abertas: $(printf '%s ' "${cands[@]##*/}")" >&2
+        exit 3
+      }
+      REPO="$base/$BANCADA_SLUG"
+    elif [ "${#cands[@]}" -eq 1 ]; then
+      REPO="${cands[0]}"
+    elif [ "${#cands[@]}" -eq 0 ]; then
+      echo "persona: sem bancada de card para ${PF_CADEIRA:-a cadeira} — a cura e \`repo abrir platafirma-harness <card> --slug persona-<tema>\`" >&2
+      exit 3
     else
-      REPO="$b/platafirma-harness"
+      echo "persona: ${#cands[@]} bancadas abertas — diga qual com --bancada <card-slug>: $(printf '%s ' "${cands[@]##*/}")" >&2
+      exit 3
     fi
   fi
   if [ ! -d "$REPO" ]; then
-    echo "persona: clone de escrita ausente em $REPO — a cura e \`repo abrir platafirma-harness\`" >&2
+    echo "persona: clone de escrita ausente em $REPO — a cura e \`repo abrir platafirma-harness <card> --slug persona-<tema>\`" >&2
     exit 3
   fi
   cd "$REPO"
+  # clone destacado nao e bancada de card: nada que se escreva nele sobe.
+  git symbolic-ref -q HEAD >/dev/null || {
+    echo "persona: $REPO esta em HEAD destacado — nao e bancada de card; \`repo abrir platafirma-harness <card> --slug persona-<tema>\`" >&2
+    exit 3
+  }
   # o sub-ato de ledger escreve no MESMO clone que o salvar versiona
   export PERSONA_REPO="$REPO"
 }
@@ -413,47 +453,19 @@ sys.exit(1 if erros else 0)
 PY
 }
 
-sanear_clone() {
-  entra_no_clone
-  # Tenta fast-forward normal primeiro
-  if git pull --ff-only -q origin HEAD 2>/dev/null; then
-    echo "clone em dia · $(idade)"
-    return 0
-  fi
-
-  # Divergência detectada — recupera sem erro (card #3105)
-  echo "persona: divergência com origin detectada no clone — recuperando..." >&2
-  git fetch -q origin 2>/dev/null || true
-
-  # 1. Tenta rebase com autostash (preserva commits locais se rebase for limpo)
-  if git pull --rebase --autostash -q origin HEAD 2>/dev/null; then
-    echo "clone em dia (rebase com upstream) · $(idade)"
-    return 0
-  fi
-
-  # 2. Se rebase falhar (conflito), aborta rebase
-  git rebase --abort 2>/dev/null || true
-
-  # 3. Salva os commits locais divergentes em branch wip para não perder nada
-  local ts ramo ramo_wip
-  ts="$(date -u +%Y%m%d-%H%M%S)"
-  ramo="$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "HEAD")"
-  ramo_wip="wip/${ramo#wip/}-${ts}"
-  git branch "$ramo_wip" HEAD 2>/dev/null || true
-  git push -u origin "$ramo_wip" 2>/dev/null || true
-
-  # 4. Reseta para o HEAD remoto limpo
-  local remoto_ref="origin/HEAD"
-  git rev-parse --verify origin/HEAD >/dev/null 2>&1 || remoto_ref="origin/main"
-  git reset --hard "$remoto_ref" >/dev/null 2>&1
-  git clean -fd abertura/ registro/ 2>/dev/null || true
-
-  echo "clone recuperado de divergência (wip salvo em $ramo_wip) · $(idade)"
-  return 0
+# abrir e sanear foram aposentados (#3273): puxavam, resetavam e empurravam no clone-cache
+# <bancada>/platafirma-harness, que fica destacado e onde nada sobe. A redacao de persona
+# e conduta e edicao de arquivo numa bancada de card; a bancada se atualiza por `repo atualizar`.
+aposentado() {
+  echo "persona $1: aposentado (#3273) — persona nao mexe mais em git." >&2
+  echo "  1. repo abrir platafirma-harness <card> --slug persona-<tema>" >&2
+  echo "  2. edite abertura/ na bancada (write_file) e rode: persona conferir / persona salvar -m \"<msg>\"" >&2
+  echo "  3. entregue: repo commitar → sincronizar → pr-abrir → pr-merge → release promover" >&2
+  exit 2
 }
 
-# salvar — commit + push de abertura/ e do ledger, com o mesmo padrao de funcao que
-# abrir/sanear (card #3122): o corpo mora AQUI, dentro de funcao, para que os `local`
+# salvar — confere abertura/ e o ledger na bancada de card, sem commit e sem push (#3273;
+# a entrega e commitar/sincronizar/pr-abrir). Corpo em funcao (card #3122): o corpo mora AQUI, dentro de funcao, para que os `local`
 # valham; o case final so despacha (`salvar) shift; salvar "$@" ;;`), nunca roda o
 # corpo no nivel do script.
 salvar() {
@@ -471,18 +483,12 @@ salvar() {
     echo "$sujo" >&2
     exit 1
   fi
-  if ! git pull --ff-only -q origin HEAD 2>/dev/null; then
-    git pull --rebase --autostash -q origin HEAD 2>/dev/null || {
-      echo "abortado: divergência com origin que exige resolução manual." >&2
-      exit 1
-    }
-  fi
 
   # Identifica quais personas foram modificadas / adicionadas
   local mudados=()
   while IFS= read -r f; do
     [ -n "$f" ] && mudados+=("$f")
-  done < <(git status --porcelain abertura/ | awk '{print $NF}' | grep 'persona\.md$' || true)
+  done < <(git status --porcelain -uall abertura/ | awk '{print $NF}' | grep 'persona\.md$' || true)
 
   # Também confere se foram modificados chapéus em abertura/<cad>/
   while IFS= read -r cad; do
@@ -496,17 +502,22 @@ salvar() {
       done
       [ "$ja_tem" -eq 0 ] && mudados+=("$ALVO/$cad/persona.md")
     fi
-  done < <(git status --porcelain abertura/ | awk '{print $NF}' | cut -d/ -f2 | sort -u || true)
+  done < <(git status --porcelain -uall abertura/ | awk '{print $NF}' | cut -d/ -f2 | sort -u || true)
 
   if [ "${#mudados[@]}" -gt 0 ]; then
     conferir "${mudados[@]}"
   fi
 
-  git add abertura registro/eventos-org.jsonl
-  git diff --cached --quiet && { echo "nada a salvar"; exit 0; }
-  git commit -q -m "$msg"
-  git push -q origin HEAD
-  echo "salvo · $(idade)"
+  # SEM git (#3273): o verbo confere e para aqui. Commit, push e PR sao do fluxo de
+  # bancada de card (repo commitar / sincronizar / pr-abrir), com o pre-push do harness.
+  if [ -z "$(git status --porcelain abertura registro/eventos-org.jsonl)" ]; then
+    echo "nada a salvar"
+    exit 0
+  fi
+  local slug
+  slug="$(basename "$REPO")"
+  echo "conferido · nada commitado nem empurrado (persona nao faz mais git) · bancada $slug"
+  echo "entrega: repo commitar platafirma-harness@$slug -m \"$msg\" → repo sincronizar → repo pr-abrir → repo pr-merge → release promover platafirma-harness <sha>"
 }
 
 # rotas — regenera abertura/rotas-chapeu.json a partir das personas do clone (card
@@ -527,13 +538,8 @@ for _a in "$@"; do
 done
 
 case "${1:-}" in
-  abrir)
-    entra_no_clone
-    sanear_clone
-    ;;
-  sanear)
-    entra_no_clone
-    sanear_clone
+  abrir|sanear)
+    aposentado "$1"
     ;;
   idade)
     entra_no_clone

@@ -29,7 +29,9 @@ def _python() -> str:
 
 
 def _git(*args, cwd):
-    subprocess.run(["git", *args], cwd=str(cwd), check=True, capture_output=True, text=True)
+    # identidade explicita: o runner do CI nao tem user.name/email global e o `commit` saia 128
+    ident = ["-c", "user.name=Teste", "-c", "user.email=teste@platafirma.org"]
+    subprocess.run(["git", *ident, *args], cwd=str(cwd), check=True, capture_output=True, text=True)
 
 
 def _run(env, *args):
