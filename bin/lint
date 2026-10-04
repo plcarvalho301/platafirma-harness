@@ -90,7 +90,7 @@ CLASSES_LINT = {
         "tipo": "lista-de-verificacao",
         "chave": "checklist-arranque",
         "detector": "ponteiro de arranque em CLAUDE.md",
-        "descricao": "garantia de ponteiro para conduta/arranque.md",
+        "descricao": "garantia de ponteiro para abertura/arranque.md",
     },
     "commit": {
         "tipo": "lista-de-verificacao",

@@ -356,7 +356,7 @@ def claude_md_da_fita(cadeira, anexos):
         f"**Cadeira desta fita: `{cadeira}`.** Chumbada aqui por `chat --cadeira`; nao\n"
         "se infere e nao se pergunta.\n"
         "\n"
-        "Arranque: `platafirma-harness/conduta/arranque.md` — fonte unica das quatro\n"
+        "Arranque: `platafirma-harness/abertura/arranque.md` — fonte unica das quatro\n"
         "superficies. Nao se copia para ca: copia congela no diretorio em que nasceu.\n"
         "NESTA superficie o pacote de `monta-sessao` ja vem injetado na abertura, entao\n"
         "nao ha o que chamar; fita retomada nao reinjeta. Identidade — persona,\n"

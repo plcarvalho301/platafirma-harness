@@ -6,7 +6,7 @@ existe para carregar configuração — não para ser explorado.
 
 ## Arranque
 
-**Fonte única: `platafirma-harness/conduta/arranque.md`.** Leia lá as duas linhas
+**Fonte única: `platafirma-harness/abertura/arranque.md`.** Leia lá as duas linhas
 que abrem qualquer sessão e a tabela de injeção por superfície.
 
 Aqui não se copia o texto de arranque, e isto não é preferência de estilo: este

@@ -1,4 +1,4 @@
-"""arranque — verificacao de texto de arranque (CLAUDE.md) apontando para conduta/arranque.md."""
+"""arranque — verificacao de texto de arranque (CLAUDE.md) apontando para abertura/arranque.md."""
 from __future__ import annotations
 
 import os
@@ -9,7 +9,7 @@ from typing import List, Optional, Tuple
 
 from .resultado import Apontamento
 
-PONTEIRO_ARRANQUE = "conduta/arranque.md"
+PONTEIRO_ARRANQUE = "abertura/arranque.md"  # conduta/ virou abertura/ no tombamento de 22/08 (arq:0073)
 
 SINAIS_ARRANQUE = (
     re.compile(r"monta[_-]sessao", re.I),
@@ -64,7 +64,7 @@ def verificar_arranque(
     staged: bool = False,
     alvo: Optional[str] = None,
 ) -> list[Apontamento]:
-    """Verifica se CLAUDE.md aponta para conduta/arranque.md sem copiar redacao."""
+    """Verifica se CLAUDE.md aponta para abertura/arranque.md sem copiar redacao."""
     raiz = Path(raiz)
     alvos: list[Path] = []
 

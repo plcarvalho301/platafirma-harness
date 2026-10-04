@@ -24,7 +24,7 @@ não do terminal em que o Code abriu. Variável exportada no shell da sessão é
 ilegível de dentro dela. O que atravessa é o slug dito na abertura.
 
 Arranque canônico das quatro superfícies, e a tabela de injeção de cada uma:
-`platafirma-harness/conduta/arranque.md`. Aqui não se copia o texto de lá.
+`platafirma-harness/abertura/arranque.md` (era `conduta/arranque.md` até o tombamento de 22/08, arq:0073). Aqui não se copia o texto de lá.
 
 Pacote não chegou: declare que não chegou, não escreva em repo, wiki nem fila, e
 responda só o que não depende de remit. Não improvise cadeira.
