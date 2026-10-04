@@ -1,18 +1,21 @@
 """codigo — a classe `codigo` do lint: aplica a lista `antipadroes-de-codigo` ao codigo da bancada.
 
-A regua e a lista, nao a configuracao de cada repositorio (spec_lint §3). Cada criterio cujo
-detector diz `ruff <codigo>` ou `shellcheck <codigo>` vira regra selecionada no analisador da
-linguagem; o apontamento sai com o `#`, o texto e a cura do criterio. Predicados da casa: o
-BASH_SET_E e a contagem de linhas de script de shell. Criterio de leitura nao gera apontamento.
+A regua e a lista, nao a configuracao de cada repositorio (spec_lint §3). A coluna detector
+de cada criterio diz quem o mede, em tres formas:
+  `ruff <codigo>`        regra selecionada no ruff;
+  `ruff padrão`          as regras que o ruff liga por padrao, alem das nomeadas;
+  `shellcheck <codigo>`  regra selecionada no shellcheck;
+  `predicado <NOME>`     detector da casa (predicados.py), onde nenhum analisador pronto chega.
+O apontamento sai com o `#`, o texto e a cura do criterio. Criterio de leitura nao aponta.
 
 O arquivo se classifica pelo que e, nao pela raiz em que esta: `.py`, ou sem extensao com
-shebang de python, vai ao ruff; `.sh`, ou shebang de shell, ao shellcheck. Antes (#2856 linha
-190) a raiz sem manifesto python caia no ramo de shell e o ruff nao rodava: verde falso.
+shebang de python, e Python; `.sh`, ou shebang de shell, e shell; `.service` e unit. Antes
+(#2856 linha 190) a raiz sem manifesto python caia no ramo de shell e o ruff nao rodava.
 
-Modos de falha que este modulo trata: lista ausente sai 5; ruff necessario e ausente sai 3;
-codigo da lista que o ruff instalado nao conhece fica fora da selecao e vira aviso (selecionar
-codigo desconhecido faz o ruff sair 2 e nao medir nada); shellcheck ausente nao derruba a
-medida do python, e o que deixou de medir vai em aviso, nunca em silencio.
+Modos de falha: lista ausente sai 5; ruff necessario e ausente sai 3; codigo que o ruff
+instalado nao conhece fica fora da selecao e vira aviso (selecionar codigo desconhecido faz o
+ruff sair 2 e nao medir nada); shellcheck ausente e predicado que quebra nao derrubam o resto,
+e o que deixou de medir vai em aviso, nunca em silencio.
 """
 from __future__ import annotations
 
@@ -25,6 +28,7 @@ from pathlib import Path
 from typing import Dict, Iterable, List, Optional, Tuple
 
 from .lista import resolver_lista
+from .predicados import DO_REPOSITORIO, PREDICADOS, Contexto, e_teste
 from .resultado import Apontamento
 
 CHAVE_LISTA = "antipadroes-de-codigo"
@@ -37,8 +41,9 @@ PRAZO_ANALISADOR_S = 300
 LOTE_ARQUIVOS = 400
 
 _RE_RUFF = re.compile(r"\bruff\s+([A-Z]+[0-9]+)\b")
+_RE_RUFF_PADRAO = re.compile(r"\bruff\s+padr[aã]o\b")
 _RE_SHELLCHECK = re.compile(r"\bshellcheck\s+(SC[0-9]{4})\b")
-_RE_PISO_LINHAS = re.compile(r"mais de (\d+) linhas")
+_RE_PREDICADO = re.compile(r"\bpredicado\s+([A-Z][A-Z_]+)\b")
 _RE_SHEBANG_PY = re.compile(r"^#!.*\bpython[0-9.]*\b")
 _RE_SHEBANG_SH = re.compile(r"^#!.*\b(ba|da|k)?sh\b")
 
@@ -56,25 +61,27 @@ class Regua:
     """O que a lista manda medir, por analisador."""
     rev: int
     ruff: Dict[str, dict] = field(default_factory=dict)
+    ruff_padrao: Optional[dict] = None
     shellcheck: Dict[str, dict] = field(default_factory=dict)
-    set_e: Optional[dict] = None
-    linhas_shell: Optional[Tuple[dict, int]] = None
+    predicados: Dict[str, dict] = field(default_factory=dict)
 
 
 def ler_regua(lista: dict) -> Regua:
-    """Le os detectores mecanicos dos criterios da lista."""
+    """Le os detectores mecanicos dos criterios da lista. O primeiro criterio que nomeia
+    um codigo ou predicado fica com ele."""
     regua = Regua(rev=lista.get("rev") or 1)
     for item in lista.get("itens", []):
         detector = item.get("detector", "")
         for cod in _RE_RUFF.findall(detector):
             regua.ruff.setdefault(cod, item)
+        if _RE_RUFF_PADRAO.search(detector) and regua.ruff_padrao is None:
+            regua.ruff_padrao = item
         for cod in _RE_SHELLCHECK.findall(detector):
             regua.shellcheck.setdefault(cod, item)
-        if "BASH_SET_E" in detector:
-            regua.set_e = item
-        if "contagem de linhas" in detector:
-            m = _RE_PISO_LINHAS.search(item.get("o_que_fere", ""))
-            regua.linhas_shell = (item, int(m.group(1)) if m else 100)
+        for nome in _RE_PREDICADO.findall(detector):
+            regua.predicados.setdefault(nome, item)
+        if "contagem de linhas" in detector:  # forma da rev 1 e 2 da lista
+            regua.predicados.setdefault("LINHAS_SHELL", item)
     return regua
 
 
@@ -90,12 +97,14 @@ def _cabeca(p: Path) -> str:
 
 
 def linguagem(p: Path) -> Optional[str]:
-    """'python', 'shell' ou None, pela extensao ou, sem extensao, pelo shebang."""
+    """'python', 'shell', 'unit' ou None, pela extensao ou, sem extensao, pelo shebang."""
     suf = p.suffix.lower()
     if suf in (".py", ".pyi"):
         return "python"
     if suf in (".sh", ".bash"):
         return "shell"
+    if suf == ".service":
+        return "unit"
     if suf:
         return None
     cab = _cabeca(p)
@@ -125,11 +134,13 @@ def _listar(raiz: Path, alvo: Optional[str]) -> List[Path]:
             if p.is_file() and not (set(p.relative_to(raiz).parts) & _PASTAS_FORA)]
 
 
-def _e_teste(rel: str) -> bool:
-    partes = Path(rel).parts
-    nome = partes[-1]
-    return (nome.startswith("test_") or nome == "conftest.py"
-            or any(x in ("tests", "testes", "test") for x in partes[:-1]))
+def _por_lingua(arquivos: Iterable[Path]) -> Dict[str, List[Path]]:
+    saida: Dict[str, List[Path]] = {"python": [], "shell": [], "unit": []}
+    for arq in arquivos:
+        lingua = linguagem(arq)
+        if lingua:
+            saida[lingua].append(arq)
+    return saida
 
 
 def _e_entrada(rel: str, arquivo: Path) -> bool:
@@ -166,10 +177,10 @@ def _em_lotes(seq: List[str]) -> Iterable[List[str]]:
         yield seq[i:i + LOTE_ARQUIVOS]
 
 
-def _apontar(rel: str, linha: int, item: dict, cod: str, msg: str) -> Apontamento:
+def _apontar(rel: str, linha: int, item: dict, origem: str, msg: str) -> Apontamento:
     return Apontamento(
         rel, linha,
-        f"{item.get('id', '?')} {item.get('o_que_fere', '')} [{cod}: {msg}]",
+        f"{item.get('id', '?')} {item.get('o_que_fere', '')} [{origem}: {msg}]",
         item.get("cura", "corrigir conforme a lista"),
         severidade=item.get("severidade", "aviso"),
         id=item.get("id"),
@@ -177,7 +188,7 @@ def _apontar(rel: str, linha: int, item: dict, cod: str, msg: str) -> Apontament
 
 
 def _ruff(raiz: Path, arquivos: List[Path], regua: Regua, avisos: List[str]) -> List[Apontamento]:
-    if not arquivos or not regua.ruff:
+    if not arquivos or not (regua.ruff or regua.ruff_padrao):
         return []
     ruff = _binario("ruff", RUFF_UVX)
     if not ruff:
@@ -188,28 +199,33 @@ def _ruff(raiz: Path, arquivos: List[Path], regua: Regua, avisos: List[str]) -> 
         existentes = {r["code"] for r in json.loads(conhecidas.stdout)}
     except (json.JSONDecodeError, KeyError, TypeError) as e:
         raise ValueError(3, f"ruff nao listou as regras: {conhecidas.stderr.strip()[:300]}") from e
-    selecao = sorted(c for c in regua.ruff if c in existentes)
+    nomeadas = sorted(c for c in regua.ruff if c in existentes)
     fora = sorted(set(regua.ruff) - existentes)
     if fora:
         avisos.append(f"codigos da lista que o ruff instalado nao conhece, fora da medida: {', '.join(fora)}")
-    if not selecao:
+    if regua.ruff_padrao:
+        # sem --select vale o padrao do ruff; as nomeadas entram por cima
+        selecao = ["--extend-select", ",".join(nomeadas)] if nomeadas else []
+    elif nomeadas:
+        selecao = ["--select", ",".join(nomeadas)]
+    else:
         return []
 
     rels = [str(a.relative_to(raiz)) for a in arquivos]
     achados: List[Apontamento] = []
     for lote in _em_lotes(rels):
         proc = _rodar([*ruff, "check", "--isolated", "--no-cache", "--output-format", "json",
-                       "--select", ",".join(selecao), *lote], raiz)
+                       *selecao, *lote], raiz)
         if proc.returncode not in (0, 1):
             raise ValueError(3, f"ruff saiu {proc.returncode}: {proc.stderr.strip()[:400]}")
         for d in json.loads(proc.stdout or "[]"):
-            cod = d.get("code") or ""
-            item = regua.ruff.get(cod)
+            cod = d.get("code") or "sintaxe"
+            item = regua.ruff.get(cod) or regua.ruff_padrao
             if not item:
                 continue
             caminho = Path(d["filename"])
             rel = str(caminho.relative_to(raiz)) if caminho.is_absolute() else str(caminho)
-            if cod in _FORA_EM_TESTE and _e_teste(rel):
+            if cod in _FORA_EM_TESTE and e_teste(rel):
                 continue
             if cod in _FORA_EM_ENTRADA and _e_entrada(rel, raiz / rel):
                 continue
@@ -244,39 +260,21 @@ def _shellcheck(raiz: Path, arquivos: List[Path], regua: Regua, avisos: List[str
     return achados
 
 
-def _set_e(raiz: Path, arquivos: List[Path], item: dict) -> List[Apontamento]:
-    """Funcao que termina num `[ ... ] && ...` sob `set -e`: o status falso vaza como erro."""
+def _predicados(ctx: Contexto, regua: Regua, avisos: List[str]) -> List[Apontamento]:
+    desconhecidos = sorted(set(regua.predicados) - set(PREDICADOS))
+    if desconhecidos:
+        avisos.append(f"predicados que a lista nomeia e o lint nao tem, fora da medida: {', '.join(desconhecidos)}")
     achados: List[Apontamento] = []
-    for f in arquivos:
-        try:
-            linhas = f.read_text(encoding="utf-8", errors="replace").splitlines()
-        except OSError:
+    for nome, item in regua.predicados.items():
+        if nome not in PREDICADOS:
             continue
-        rel = str(f.relative_to(raiz))
-        nome, ultima, dentro = "", "", False
-        for i, linha in enumerate(linhas, 1):
-            if re.match(r"^[a-zA-Z_0-9]+ *\(\) *\{", linha):
-                dentro, nome, ultima = True, linha.split("(", 1)[0].strip(), ""
-            elif dentro and linha.strip() == "}":
-                if re.match(r"^[ \t]*\[.*\][ \t]*&&", ultima) and "||" not in ultima:
-                    achados.append(_apontar(rel, i - 1, item, "BASH_SET_E",
-                                            f"{nome} termina com condicional sob set -e sem return/exit"))
-                dentro = False
-            elif dentro and linha.strip() and not linha.strip().startswith("#"):
-                ultima = linha
-    return achados
-
-
-def _linhas_shell(raiz: Path, arquivos: List[Path], item: dict, piso: int) -> List[Apontamento]:
-    achados: List[Apontamento] = []
-    for f in arquivos:
+        funcao, candidata = PREDICADOS[nome]
         try:
-            n = sum(1 for _ in f.open("rb"))
-        except OSError:
-            continue
-        if n > piso:
-            achados.append(_apontar(str(f.relative_to(raiz)), 1, item, "linhas",
-                                    f"{n} linhas, piso {piso}"))
+            for a in funcao(ctx, item):
+                detalhe = f"{a.detalhe} — candidata, confirme lendo" if candidata else a.detalhe
+                achados.append(_apontar(a.arquivo, a.linha, item, nome, detalhe))
+        except Exception as e:  # noqa: BLE001 — borda: um predicado quebrado nao derruba os outros; vai em aviso
+            avisos.append(f"predicado {nome} falhou e ficou fora da medida: {type(e).__name__}: {e}")
     return achados
 
 
@@ -332,19 +330,18 @@ def verificar_codigo(
     regua = ler_regua(lista)
     raiz = Path(raiz).resolve()
 
-    por_lingua: Dict[str, List[Path]] = {"python": [], "shell": []}
-    for arq in _listar(raiz, alvo):
-        lingua = linguagem(arq)
-        if lingua:
-            por_lingua[lingua].append(arq)
+    escopo = _por_lingua(_listar(raiz, alvo))
+    py_repo = escopo["python"]
+    if alvo and set(regua.predicados) & DO_REPOSITORIO:
+        py_repo = _por_lingua(_listar(raiz, None))["python"]
+    ctx = Contexto(raiz, escopo["python"], escopo["shell"], escopo["unit"], py_repo)
 
     avisos: List[str] = []
-    achados = _ruff(raiz, por_lingua["python"], regua, avisos)
-    achados += _shellcheck(raiz, por_lingua["shell"], regua, avisos)
-    if regua.set_e:
-        achados += _set_e(raiz, por_lingua["shell"], regua.set_e)
-    if regua.linhas_shell:
-        item, piso = regua.linhas_shell
-        achados += _linhas_shell(raiz, por_lingua["shell"], item, piso)
-    achados.sort(key=lambda a: (a.arquivo, a.linha, a.id or ""))
-    return achados, CHAVE_LISTA, regua.rev, avisos
+    achados = _ruff(raiz, escopo["python"], regua, avisos)
+    achados += _shellcheck(raiz, escopo["shell"], regua, avisos)
+    achados += _predicados(ctx, regua, avisos)
+
+    unicos: Dict[Tuple[str, int, str, str], Apontamento] = {}
+    for a in achados:
+        unicos.setdefault((a.arquivo, a.linha, a.id or "", a.o_que_fere), a)
+    return sorted(unicos.values(), key=lambda a: (a.arquivo, a.linha, a.id or "")), CHAVE_LISTA, regua.rev, avisos
