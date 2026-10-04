@@ -588,12 +588,16 @@ _SEM_BANCADA = ("caminho relativo pede bancada declarada (PLATAFIRMA_BANCADA ou 
                 "~/.config/platafirma/bancada) — sem ela, use caminho absoluto")
 
 
-def _resolve_relativo(caminho: str) -> tuple[Path | None, str | None]:
-    """(caminho, erro). Absoluto vale como está; relativo é relativo à bancada declarada."""
+_SEM_BANCADA_DADA = object()
+
+
+def _resolve_relativo(caminho: str, bancada=_SEM_BANCADA_DADA) -> tuple[Path | None, str | None]:
+    """(caminho, erro). Absoluto vale como está; relativo é relativo à bancada declarada.
+    `bancada` já lida por quem chama poupa a leitura do disco nesta chamada."""
     p = Path(caminho)
     if p.is_absolute():
         return p, None
-    b = _bancada()
+    b = _bancada() if bancada is _SEM_BANCADA_DADA else bancada
     if b is None:
         return None, _SEM_BANCADA
     return b / p, None
@@ -1384,11 +1388,10 @@ async def _run_command_legado(command: str = "", cwd: str = "", timeout: int = 1
 FILA_RAIZ = Path(os.environ.get("PF_FILA", INSTANCIA / "var" / "fila")).resolve()
 
 
-def _sob_fila(p: Path) -> bool:
-    try:
-        alvo = p.resolve()
-    except OSError:
-        return False
+def _sob_fila(p: Path, alvo: Path | None = None) -> bool:
+    """`alvo` é o realpath de `p` quando quem chama já o pagou (a costura da leitura)."""
+    if alvo is None:
+        alvo = _real(p)
     return alvo == FILA_RAIZ or FILA_RAIZ in alvo.parents
 
 
@@ -1396,8 +1399,8 @@ def _classe_recusa(tool: str) -> dict:
     return {"classe_erro": "recusado"} if tool in _poda.TOOLS_LEITURA else {}
 
 
-def _nega_fila(p: Path, tool: str):
-    if _sob_fila(p):
+def _nega_fila(p: Path, tool: str, alvo: Path | None = None):
+    if _sob_fila(p, alvo):
         _audit(tool=tool, path=str(p), erro="fila: use o verbo `fila`", **_classe_recusa(tool))
         return {"erro": "caminho sob a fila — ler_arquivo/write_file nao operam ai. "
                         "Use o verbo: `fila status|ler|consumir|enviar` (append sob "
@@ -1425,21 +1428,28 @@ def _sob_segredos_de_instancia(alvo: Path) -> bool:
     return False
 
 
-def _e_segredo(p: Path) -> bool:
-    """spec_porta-so-verbo §4.6: .env*, *.key|*.pem, .credentials.json, <instancia>/segredos/, PDP_DIR."""
-    try:
-        alvo = p.resolve()
-    except OSError:
-        return False
+# Chave privada e credencial reconhecidas pelo nome (card #3279, F2): o arquivo pode nem existir
+# na morada e a negativa vale igual — o retorno é «segredo», não «não existe». id_ecdsa entra
+# junto das três da lista do card: é a quarta chave padrão do ssh-keygen.
+_NOMES_SEGREDO = frozenset({".credentials.json", "id_rsa", "id_dsa", "id_ecdsa", "id_ed25519",
+                            "authorized_keys", ".netrc", ".pgpass", ".git-credentials"})
+_SUFIXOS_SEGREDO = frozenset({".key", ".pem", ".asc", ".kdbx"})
+
+
+def _e_segredo(p: Path, alvo: Path | None = None) -> bool:
+    """spec_porta-so-verbo §4.6: .env*, *.key|*.pem|*.asc|*.kdbx, chave privada e credencial por
+    nome, <instancia>/segredos/, PDP_DIR. `alvo` é o realpath de `p` quando já foi pago."""
+    if alvo is None:
+        alvo = _real(p)
     nome = alvo.name
-    return bool(nome.startswith(".env") or alvo.suffix in (".key", ".pem")
-                or nome == ".credentials.json"
+    return bool(nome.startswith(".env") or alvo.suffix.lower() in _SUFIXOS_SEGREDO
+                or nome in _NOMES_SEGREDO
                 or _sob_segredos_de_instancia(alvo) or _sob_segredos_de_instancia(p.absolute())
                 or any(d == alvo or d in alvo.parents for d in _SEGREDO_DIRS))
 
 
-def _nega_segredo(p: Path, tool: str):
-    if _e_segredo(p):
+def _nega_segredo(p: Path, tool: str, alvo: Path | None = None):
+    if _e_segredo(p, alvo):
         _audit(tool=tool, evento="leitura_recusada", path=str(p), motivo="segredo",
                **_classe_recusa(tool))
         return {"recusado": True, "path": str(p),
@@ -1451,12 +1461,44 @@ def _nega_leitura(p: Path) -> bool:
     """A negativa do arquivo, sem auditoria, para cada entrada de diretório e para o
     ancestral de caminho ausente: não se lista o que a leitura não deixaria ler
     (spec ler-arquivo §9)."""
-    return _sob_fila(p) or _e_segredo(p)
+    alvo = _real(p)
+    return _sob_fila(p, alvo) or _e_segredo(p, alvo)
 
 
-def _curto(p: Path) -> str:
-    """O caminho do cabeçalho: relativo à release, à bancada ou à instância, quando cabe."""
-    for base in (Path("/opt/platafirma/current"), _bancada(), INSTANCIA):
+# Morada de LEITURA (card #3279, F1; spec_porta-so-verbo §8): a release, a instância e a bancada
+# declarada INTEIRA, de todas as cadeiras — mais larga que a de escrita de propósito. A release
+# entra pela raiz (`current/<repo>` é symlink e o realpath cai em <raiz>/<repo>/<sha>). A lista
+# é estática, em string, e a comparação é de prefixo sobre o realpath que as negativas já pagam;
+# só a bancada entra por chamada, porque é declarada pela conta e não existe no arranque.
+# As negativas (fila, segredo) vencem a morada: a ordem é a da costura da leitura.
+_MORADAS_LEITURA = tuple(dict.fromkeys(os.path.realpath(r) for r in (
+    raizes.release_raiz(), raizes.release(), INSTANCIA)))
+
+
+def _sob(alvo: str, raiz: str) -> bool:
+    return alvo == raiz or alvo.startswith(raiz.rstrip(os.sep) + os.sep)
+
+
+def _nega_morada(p: Path, tool: str, alvo: Path, bancada: Path | None):
+    """`alvo` é o realpath de `p`; `bancada` é a declarada, lida uma vez pela costura."""
+    alvo_s = str(alvo)
+    raiz_bancada = os.path.realpath(bancada) if bancada is not None else None
+    if any(_sob(alvo_s, r) for r in _MORADAS_LEITURA) or (
+            raiz_bancada is not None and _sob(alvo_s, raiz_bancada)):
+        return None
+    moradas = ", ".join((*_MORADAS_LEITURA, raiz_bancada or "(bancada nao declarada)"))
+    _audit(tool=tool, evento="leitura_recusada", path=str(p), motivo="fora de morada",
+           **_classe_recusa(tool))
+    return {"recusado": True, "path": str(p),
+            "motivo": f"fora de morada: ler_arquivo alcanca so {moradas} (spec_porta-so-verbo §8)"}
+
+
+def _curto(p: Path, bancada=_SEM_BANCADA_DADA) -> str:
+    """O caminho do cabeçalho: relativo à release, à bancada ou à instância, quando cabe.
+    `bancada` já lida pela costura evita um segundo acesso a disco na mesma chamada."""
+    if bancada is _SEM_BANCADA_DADA:
+        bancada = _bancada()
+    for base in (Path("/opt/platafirma/current"), bancada, INSTANCIA):
         if base is not None:
             try:
                 return str(p.relative_to(base))
@@ -1483,12 +1525,15 @@ def _le_um_arquivo(caminho: str, args: dict, ident: dict, tool: str,
     negado = _autoriza(tool, "read_file", "documento", caminho, DOM_PLATAFORMA)
     if negado:
         return negado
-    p, erro_caminho = _resolve_relativo(caminho)
+    bancada = _bancada()   # uma leitura do disco por chamada: serve ao relativo, à morada e ao cabeçalho
+    p, erro_caminho = _resolve_relativo(caminho, bancada)
     if erro_caminho:
         _audit(tool=tool, evento="leitura_recusada", path=caminho, motivo=erro_caminho,
                erro=erro_caminho, classe_erro="recusado", **quem)
         return {"recusado": True, "caminho": caminho, "motivo": erro_caminho}
-    bloqueio = _nega_fila(p, tool) or _nega_segredo(p, tool)
+    alvo = _real(p)   # o único realpath do alvo: fila, segredo e morada leem este
+    bloqueio = (_nega_fila(p, tool, alvo) or _nega_segredo(p, tool, alvo)
+                or _nega_morada(p, tool, alvo, bancada))
     if bloqueio:
         bloqueio["caminho"] = bloqueio.pop("path", str(p))
         return bloqueio
@@ -1501,7 +1546,7 @@ def _le_um_arquivo(caminho: str, args: dict, ident: dict, tool: str,
     r = _leitura.le(p, linhas=args.get("linhas") or None, modo=modo,
                     max_bytes=args.get("max_bytes") or _leitura.ORCAMENTO_PADRAO,
                     versao=args.get("versao") or None, offset=offset,
-                    encoding=args.get("encoding") or None, nega=_nega_leitura, curto=_curto(p),
+                    encoding=args.get("encoding") or None, nega=_nega_leitura, curto=_curto(p, bancada),
                     paginas=paginas, dpi=dpi, membro=membro)
     classe = r.pop("classe_erro", None)
     # A alça é o pedido (§11.2), a mesma para as duas tools: releitura pelo apelido e pela

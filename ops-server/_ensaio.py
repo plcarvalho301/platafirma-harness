@@ -23,6 +23,13 @@ os.environ["OPS_NAME"] = "ops-ensaio"
 os.environ["OPS_TOKEN_ESTATICO_ATE"] = "2026-09-30"
 
 import server as s                                          # noqa: E402
+# A árvore em teste lê pela porta: entra na morada de leitura (card #3279), que fora dela recusa.
+s._MORADAS_LEITURA += (str(_HARNESS),)
+
+
+def _na_morada(monkeypatch, pasta):
+    """Teste que lê de um tmp_path: a pasta entra na morada de leitura só dentro do teste."""
+    monkeypatch.setattr(s, "_MORADAS_LEITURA", (*s._MORADAS_LEITURA, str(pasta.resolve())))
 
 
 # ======================================================================
@@ -478,8 +485,9 @@ def test_retorno_curto_nao_deduplica_porque_o_aviso_custaria_mais():
 
 
 # --- card #3263: ler_arquivo pela poda (spec ler-arquivo §14, C15 e C16) ----------------
-def test_c15_leitura_serve_blob_e_crlf_como_estao(tmp_path):
+def test_c15_leitura_serve_blob_e_crlf_como_estao(tmp_path, monkeypatch):
     """Base64/hex e `\\r` são conteúdo do arquivo: a página volta byte a byte (spec §6)."""
+    _na_morada(monkeypatch, tmp_path)
     texto = "chave: " + "0123456789abcdef" * 25 + "\r\nlinha dois\r\n" + "QUJD" * 100 + "\n"
     alvo = tmp_path / "blob.txt"
     alvo.write_bytes(texto.encode())
@@ -493,7 +501,8 @@ def test_c15_leitura_serve_blob_e_crlf_como_estao(tmp_path):
     assert velho["content"] == texto, "o apelido serve o mesmo texto"
 
 
-def test_c16_releitura_igual_avisa_e_inteiro_reenvia(tmp_path):
+def test_c16_releitura_igual_avisa_e_inteiro_reenvia(tmp_path, monkeypatch):
+    _na_morada(monkeypatch, tmp_path)
     alvo = tmp_path / "relido.txt"
     alvo.write_text("".join(f"linha {i} de um arquivo relido\n" for i in range(200)))
     Fake = _fake_redis_cls()
@@ -511,7 +520,8 @@ def test_c16_releitura_igual_avisa_e_inteiro_reenvia(tmp_path):
     assert r4["poda"]["modo"] == "igual", "apelido e nova dividem a alça"
 
 
-def test_ler_arquivo_audita_classe_do_erro(tmp_path):
+def test_ler_arquivo_audita_classe_do_erro(tmp_path, monkeypatch):
+    _na_morada(monkeypatch, tmp_path)
     Fake = _fake_redis_cls()
     with _derrame_tmp(), patch.object(s, "_autoriza", return_value=None), \
          patch.object(s, "redis") as _rmod, patch.object(s, "_audit") as aud:
