@@ -247,6 +247,11 @@ def test_projetada_sem_monta_sessao_e_com_run_command_reprova():
     # #3270: `malote` e o nome novo da mesma tool; declarar qualquer dos dois reprova.
     malote = com(REVISOR, ferramentas=[*REVISOR["ferramentas"], "mcp__claudinho-mcp__malote"])
     assert any("ferramenta sem escopo: mcp__claudinho-mcp__malote" in a for a in agente.valida(malote, "revisor"))
+    # ...em qualquer grafia da porta (#3255): o prefixo do claude.ai e o do uuid tambem reprovam.
+    for g in agente.GRAFIAS[1:]:
+        for nome in ("malote", "run_command"):
+            outra = com(REVISOR, ferramentas=[*REVISOR["ferramentas"], g + nome])
+            assert any(f"ferramenta sem escopo: {g}{nome}" in a for a in agente.valida(outra, "revisor")), g + nome
     assert agente.valida(VARREDOR, "varredor") == [], "sem projeção no Code, não abre por monta_sessao"
 
 

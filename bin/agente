@@ -58,14 +58,16 @@ CABECALHO_GERADO = "# GERADO por agente — não editar"
 PORTA = "mcp__claudinho-mcp__"
 PORTA_BASE = ("malote", "run_command", "ler_arquivo", "read_file", "write_file", "monta_sessao")   # as que a porta publica fora do ferramental
 ABRE = PORTA + "monta_sessao"
-# Alcançam todo verbo: o agente perderia o escopo da declaração. `run_command` é apelido de
-# `malote` (#3270); os dois nomes ficam de fora, senão o apelido vira a porta dos fundos.
-SEM_ESCOPO = (PORTA + "malote", PORTA + "run_command")
 # A mesma porta chega com outro prefixo conforme a superfície (#3255): o Code CLI publica o conector do claude.ai
 # como `claude_ai_claudinho-mcp`, e o Code Desktop pelo uuid do conector (medido 03/10/2026 no posto). A declaração
 # segue com o nome canônico (PORTA); a projeção lista cada tool de porta nas três grafias, e o Code dá ao
 # subagente as que existem na superfície. Conector recriado no claude.ai troca o uuid: a linha muda aqui.
 GRAFIAS = (PORTA, "mcp__claude_ai_claudinho-mcp__", "mcp__f40dcc0d-abeb-4254-8b3d-34d33a57565d__")
+# Alcançam todo verbo: o agente perderia o escopo da declaração. `run_command` é apelido de
+# `malote` (#3270); os dois nomes ficam de fora, senão o apelido vira a porta dos fundos. Em
+# TODAS as grafias: comparar só a canônica deixava `mcp__claude_ai_claudinho-mcp__run_command` e
+# a grafia por uuid passarem, porque nem `grafias()` nem `fora_do_conector` olham outro prefixo.
+SEM_ESCOPO = tuple(g + nome for g in GRAFIAS for nome in ("malote", "run_command"))
 
 def grafias(tool: str) -> list[str]:
     """A tool de porta em todas as grafias da superfície; qualquer outra tool passa como veio."""
