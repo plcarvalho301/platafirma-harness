@@ -23,9 +23,9 @@ import json
 import re
 import shutil
 import subprocess
+from collections.abc import Iterable
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Dict, Iterable, List, Optional, Tuple
 
 from .lista import resolver_lista
 from .predicados import DO_REPOSITORIO, PREDICADOS, Contexto, e_teste
@@ -60,10 +60,10 @@ _FORA_EM_ENTRADA = {"T201"}
 class Regua:
     """O que a lista manda medir, por analisador."""
     rev: int
-    ruff: Dict[str, dict] = field(default_factory=dict)
-    ruff_padrao: Optional[dict] = None
-    shellcheck: Dict[str, dict] = field(default_factory=dict)
-    predicados: Dict[str, dict] = field(default_factory=dict)
+    ruff: dict[str, dict] = field(default_factory=dict)
+    ruff_padrao: dict | None = None
+    shellcheck: dict[str, dict] = field(default_factory=dict)
+    predicados: dict[str, dict] = field(default_factory=dict)
 
 
 def ler_regua(lista: dict) -> Regua:
@@ -96,7 +96,7 @@ def _cabeca(p: Path) -> str:
         return ""
 
 
-def linguagem(p: Path) -> Optional[str]:
+def linguagem(p: Path) -> str | None:
     """'python', 'shell', 'unit' ou None, pela extensao ou, sem extensao, pelo shebang."""
     suf = p.suffix.lower()
     if suf in (".py", ".pyi"):
@@ -115,7 +115,7 @@ def linguagem(p: Path) -> Optional[str]:
     return None
 
 
-def _listar(raiz: Path, alvo: Optional[str]) -> List[Path]:
+def _listar(raiz: Path, alvo: str | None) -> list[Path]:
     """Arquivos do alvo: os do git (rastreados e novos, sem ignorados), senao a arvore."""
     base = (raiz / alvo).resolve() if alvo else raiz
     if base.is_file():
@@ -134,8 +134,8 @@ def _listar(raiz: Path, alvo: Optional[str]) -> List[Path]:
             if p.is_file() and not (set(p.relative_to(raiz).parts) & _PASTAS_FORA)]
 
 
-def _por_lingua(arquivos: Iterable[Path]) -> Dict[str, List[Path]]:
-    saida: Dict[str, List[Path]] = {"python": [], "shell": [], "unit": []}
+def _por_lingua(arquivos: Iterable[Path]) -> dict[str, list[Path]]:
+    saida: dict[str, list[Path]] = {"python": [], "shell": [], "unit": []}
     for arq in arquivos:
         lingua = linguagem(arq)
         if lingua:
@@ -152,7 +152,7 @@ def _e_entrada(rel: str, arquivo: Path) -> bool:
 # ------------------------------------------------------------------ analisadores
 
 
-def _binario(nome: str, via_uvx: List[str]) -> Optional[List[str]]:
+def _binario(nome: str, via_uvx: list[str]) -> list[str] | None:
     achado = shutil.which(nome)
     if achado:
         return [achado]
@@ -162,7 +162,7 @@ def _binario(nome: str, via_uvx: List[str]) -> Optional[List[str]]:
     return None
 
 
-def _rodar(cmd: List[str], raiz: Path) -> subprocess.CompletedProcess:
+def _rodar(cmd: list[str], raiz: Path) -> subprocess.CompletedProcess:
     try:
         return subprocess.run(cmd, cwd=raiz, capture_output=True, text=True,
                               timeout=PRAZO_ANALISADOR_S, check=False)
@@ -172,7 +172,7 @@ def _rodar(cmd: List[str], raiz: Path) -> subprocess.CompletedProcess:
         raise ValueError(3, f"falha ao executar {cmd[0]}: {e}") from e
 
 
-def _em_lotes(seq: List[str]) -> Iterable[List[str]]:
+def _em_lotes(seq: list[str]) -> Iterable[list[str]]:
     for i in range(0, len(seq), LOTE_ARQUIVOS):
         yield seq[i:i + LOTE_ARQUIVOS]
 
@@ -187,7 +187,7 @@ def _apontar(rel: str, linha: int, item: dict, origem: str, msg: str) -> Apontam
     )
 
 
-def _selecao_ruff(ruff: List[str], raiz: Path, regua: Regua, avisos: List[str]) -> Optional[List[str]]:
+def _selecao_ruff(ruff: list[str], raiz: Path, regua: Regua, avisos: list[str]) -> list[str] | None:
     """Argumentos de selecao do ruff, ou None se nada da lista se mede com ele."""
     conhecidas = _rodar([*ruff, "rule", "--all", "--output-format", "json"], raiz)
     try:
@@ -204,7 +204,7 @@ def _selecao_ruff(ruff: List[str], raiz: Path, regua: Regua, avisos: List[str]) 
     return ["--select", ",".join(nomeadas)] if nomeadas else None
 
 
-def _ruff(raiz: Path, arquivos: List[Path], regua: Regua, avisos: List[str]) -> List[Apontamento]:
+def _ruff(raiz: Path, arquivos: list[Path], regua: Regua, avisos: list[str]) -> list[Apontamento]:
     if not arquivos or not (regua.ruff or regua.ruff_padrao):
         return []
     ruff = _binario("ruff", RUFF_UVX)
@@ -215,7 +215,7 @@ def _ruff(raiz: Path, arquivos: List[Path], regua: Regua, avisos: List[str]) -> 
         return []
 
     rels = [str(a.relative_to(raiz)) for a in arquivos]
-    achados: List[Apontamento] = []
+    achados: list[Apontamento] = []
     for lote in _em_lotes(rels):
         proc = _rodar([*ruff, "check", "--isolated", "--no-cache", "--output-format", "json",
                        *selecao, *lote], raiz)
@@ -237,7 +237,7 @@ def _ruff(raiz: Path, arquivos: List[Path], regua: Regua, avisos: List[str]) -> 
     return achados
 
 
-def _shellcheck(raiz: Path, arquivos: List[Path], regua: Regua, avisos: List[str]) -> List[Apontamento]:
+def _shellcheck(raiz: Path, arquivos: list[Path], regua: Regua, avisos: list[str]) -> list[Apontamento]:
     if not arquivos or not regua.shellcheck:
         return []
     sc = _binario("shellcheck", SHELLCHECK_UVX)
@@ -247,7 +247,7 @@ def _shellcheck(raiz: Path, arquivos: List[Path], regua: Regua, avisos: List[str
         return []
     rels = [str(a.relative_to(raiz)) for a in arquivos]
     incluir = ",".join(sorted(regua.shellcheck))
-    achados: List[Apontamento] = []
+    achados: list[Apontamento] = []
     for lote in _em_lotes(rels):
         proc = _rodar([*sc, "-f", "json1", "-S", "style", f"--include={incluir}", *lote], raiz)
         if proc.returncode not in (0, 1):
@@ -263,11 +263,11 @@ def _shellcheck(raiz: Path, arquivos: List[Path], regua: Regua, avisos: List[str
     return achados
 
 
-def _predicados(ctx: Contexto, regua: Regua, avisos: List[str]) -> List[Apontamento]:
+def _predicados(ctx: Contexto, regua: Regua, avisos: list[str]) -> list[Apontamento]:
     desconhecidos = sorted(set(regua.predicados) - set(PREDICADOS))
     if desconhecidos:
         avisos.append(f"predicados que a lista nomeia e o lint nao tem, fora da medida: {', '.join(desconhecidos)}")
-    achados: List[Apontamento] = []
+    achados: list[Apontamento] = []
     for nome, item in regua.predicados.items():
         if nome not in PREDICADOS:
             continue
@@ -284,23 +284,21 @@ def _predicados(ctx: Contexto, regua: Regua, avisos: List[str]) -> List[Apontame
 # ------------------------------------------------------------------ stack (lint detectar)
 
 
-def detectar_stack(raiz: Path) -> Optional[Tuple[str, str]]:
+def detectar_stack(raiz: Path) -> tuple[str, str] | None:
     """Stack do repositorio para `lint detectar`: (stack, comando)."""
     if any((raiz / n).exists() for n in ("pyproject.toml", ".ruff.toml", "ruff.toml", ".ruff_cache")):
         return "python", "ruff check"
-    pkg = raiz / "package.json"
-    if pkg.is_file():
-        try:
-            if '"lint"' in pkg.read_text(encoding="utf-8", errors="replace"):
-                return "node", "npm run lint"
-        except OSError:
-            pass
+    try:
+        if '"lint"' in (raiz / "package.json").read_text(encoding="utf-8", errors="replace"):
+            return "node", "npm run lint"
+    except OSError:  # sem package.json, ou ilegivel: nao e stack node
+        pass
     if (raiz / "bin").is_dir() or any(raiz.glob("*.sh")):
         return "bash", "shellcheck"
     return None
 
 
-def raiz_da_stack(raiz: Path, alvo: Optional[str] = None) -> Path:
+def raiz_da_stack(raiz: Path, alvo: str | None = None) -> Path:
     """Projeto que contem o alvo: o diretorio mais proximo com manifesto python ou node (#3074)."""
     raiz = raiz.resolve()
     if not alvo:
@@ -320,8 +318,8 @@ def raiz_da_stack(raiz: Path, alvo: Optional[str] = None) -> Path:
 
 def verificar_codigo(
     raiz: Path | str,
-    alvo: Optional[str] = None,
-) -> Tuple[List[Apontamento], str, int, List[str]]:
+    alvo: str | None = None,
+) -> tuple[list[Apontamento], str, int, list[str]]:
     """Aplica a lista ao alvo. Devolve (apontamentos, chave, rev, avisos).
 
     Levanta ValueError(exit, msg): 5 sem a lista no acervo, 3 com o analisador necessario
@@ -339,12 +337,12 @@ def verificar_codigo(
         py_repo = _por_lingua(_listar(raiz, None))["python"]
     ctx = Contexto(raiz, escopo["python"], escopo["shell"], escopo["unit"], py_repo)
 
-    avisos: List[str] = []
+    avisos: list[str] = []
     achados = _ruff(raiz, escopo["python"], regua, avisos)
     achados += _shellcheck(raiz, escopo["shell"], regua, avisos)
     achados += _predicados(ctx, regua, avisos)
 
-    unicos: Dict[Tuple[str, int, str, str], Apontamento] = {}
+    unicos: dict[tuple[str, int, str, str], Apontamento] = {}
     for a in achados:
         unicos.setdefault((a.arquivo, a.linha, a.id or "", a.o_que_fere), a)
     return sorted(unicos.values(), key=lambda a: (a.arquivo, a.linha, a.id or "")), CHAVE_LISTA, regua.rev, avisos

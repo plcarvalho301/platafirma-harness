@@ -511,6 +511,26 @@ def test_predicado_lote_sem_fila(tmp_path):
         "            pass\n")}) == [("a.py", 3)]
 
 
+def test_predicado_lote_sem_fila_pela_funcao_chamada_e_ocupado_repetido(tmp_path):
+    # a forma do bin/curar no lote 91feb40b: a funcao da obra repete o 409, o laco a chama
+    fonte = {"a.py": (
+        "import time, requests\n"
+        "def converter(obra):\n"
+        "    for _ in range(20):\n"
+        "        resp = requests.post('http://c/conversoes', data=obra, timeout=5)\n"
+        "        if resp.status_code != 409:\n"
+        "            break\n"
+        "        time.sleep(30)\n"
+        "    return resp\n"
+        "def lote(obras):\n"
+        "    return [converter(o) for o in obras]\n"
+        "def lote_em_laco(obras):\n"
+        "    for o in obras:\n"
+        "        converter(o)\n")}
+    assert _achados(tmp_path, "LOTE_SEM_FILA", fonte) == [("a.py", 10), ("a.py", 12)]
+    assert _achados(tmp_path, "OCUPADO_REPETIDO", fonte) == [("a.py", 5)]
+
+
 def test_predicado_recuo_fixo_e_repete_sem_teto(tmp_path):
     fonte = {"a.py": (
         "import time, random\n"

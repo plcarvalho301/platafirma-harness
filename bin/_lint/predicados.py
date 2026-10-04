@@ -15,9 +15,9 @@ from __future__ import annotations
 import ast
 import re
 from collections import Counter, defaultdict
+from collections.abc import Callable, Iterator
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Callable, Dict, Iterator, List, Optional, Set, Tuple
 
 
 @dataclass(frozen=True)
@@ -32,12 +32,12 @@ class Contexto:
     """O que os predicados leem: os arquivos em escopo e, para os que olham o repositorio
     inteiro (duplicacao, ciclo de import), todos os arquivos Python dele."""
     raiz: Path
-    py: List[Path]
-    sh: List[Path]
-    units: List[Path]
-    py_repo: List[Path]
-    _arvores: Dict[Path, Optional[ast.Module]] = field(default_factory=dict)
-    _textos: Dict[Path, str] = field(default_factory=dict)
+    py: list[Path]
+    sh: list[Path]
+    units: list[Path]
+    py_repo: list[Path]
+    _arvores: dict[Path, ast.Module | None] = field(default_factory=dict)
+    _textos: dict[Path, str] = field(default_factory=dict)
 
     def rel(self, p: Path) -> str:
         return str(p.relative_to(self.raiz))
@@ -50,7 +50,7 @@ class Contexto:
                 self._textos[p] = ""
         return self._textos[p]
 
-    def arvore(self, p: Path) -> Optional[ast.Module]:
+    def arvore(self, p: Path) -> ast.Module | None:
         """Arvore sintatica, ou None se o arquivo nao compila (o ruff ja acusa a sintaxe)."""
         if p not in self._arvores:
             try:
@@ -59,7 +59,7 @@ class Contexto:
                 self._arvores[p] = None
         return self._arvores[p]
 
-    def arvores(self, arquivos: List[Path]) -> Iterator[Tuple[str, Path, ast.Module]]:
+    def arvores(self, arquivos: list[Path]) -> Iterator[tuple[str, Path, ast.Module]]:
         for p in arquivos:
             arvore = self.arvore(p)
             if arvore is not None:
@@ -101,14 +101,14 @@ def sem_aninhadas(no: ast.AST) -> Iterator[ast.AST]:
             pilha.extend(ast.iter_child_nodes(filho))
 
 
-def _chamadas(no: ast.AST) -> List[ast.Call]:
+def _chamadas(no: ast.AST) -> list[ast.Call]:
     return [n for n in sem_aninhadas(no) if isinstance(n, ast.Call)]
 
 
 _EXTERNA = re.compile(r"^(subprocess\.(run|call|check_call|check_output|Popen)|requests\.\w+|"
                       r"httpx\.\w+|urllib\.request\.urlopen|urlopen|socket\.\w+)$")
 _METODO_REDE = {"get", "post", "put", "patch", "delete", "request", "send", "stream"}
-_RECEPTOR_REDE = re.compile(r"client|cliente|sess|http|api", re.I)
+_RECEPTOR_REDE = re.compile(r"client|cliente|sess|http|api", re.IGNORECASE)
 
 
 def externa(chamada: ast.Call) -> bool:
@@ -188,24 +188,73 @@ def repete_sem_teto(ctx: Contexto, item: dict) -> Iterator[Achado]:
             yield Achado(rel, laco.lineno, "while True que repete na falha sem teto de tentativas")
 
 
+def _chama_e_espera(no: ast.AST) -> str | None:
+    """Nome da chamada externa, se `no` chama o mundo de fora e dorme ou repete na falha."""
+    corpo = list(sem_aninhadas(no))
+    de_fora = [n for n in corpo if isinstance(n, ast.Call) and externa(n)]
+    if not de_fora:
+        return None
+    espera = any(isinstance(n, ast.Call) and e_sono(n) for n in corpo)
+    repete = any(isinstance(n, (ast.While, ast.For, ast.AsyncFor)) and n is not no
+                 and any(isinstance(m, ast.ExceptHandler) for m in sem_aninhadas(n))
+                 for n in corpo)
+    return nome(de_fora[0].func) if espera or repete else None
+
+
+def _por_item(laco: ast.AST) -> bool:
+    """`for` que percorre itens. `for _ in range(n)` conta tentativas: e a repeticao, nao o lote."""
+    return (isinstance(laco, (ast.For, ast.AsyncFor))
+            and not (isinstance(laco.iter, ast.Call) and nome(laco.iter.func) == "range"))
+
+
 def lote_sem_fila(ctx: Contexto, item: dict) -> Iterator[Achado]:
-    """`for` sobre itens que chama o mundo de fora e espera ou repete dentro: o formato do #3194."""
+    """`for` sobre itens que chama o mundo de fora e espera ou repete, no proprio corpo ou numa
+    funcao do mesmo modulo que ele chama: o formato do #3194, em que a funcao da obra repete o
+    409 com sleep e o laco das obras a chama."""
+    for rel, _, arvore in ctx.arvores(ctx.py):
+        repetidoras: dict[str, str] = {}
+        for fn in ast.walk(arvore):
+            if isinstance(fn, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                chamada = _chama_e_espera(fn)
+                if chamada:
+                    repetidoras[fn.name] = chamada
+        for laco in filter(_por_item, _lacos(arvore)):
+            direta = _chama_e_espera(laco)
+            if direta:
+                yield Achado(rel, laco.lineno, f"laço sobre itens chama {direta} e espera ou repete dentro dele")
+                continue
+            yield from _chama_repetidora(rel, laco, repetidoras)
+        compreensoes = (ast.ListComp, ast.SetComp, ast.DictComp, ast.GeneratorExp)
+        for comp in (n for n in ast.walk(arvore) if isinstance(n, compreensoes)):
+            yield from _chama_repetidora(rel, comp, repetidoras)
+
+
+def _chama_repetidora(rel: str, laco: ast.AST, repetidoras: dict[str, str]) -> Iterator[Achado]:
+    for c in (n for n in ast.walk(laco) if isinstance(n, ast.Call)):
+        alvo = nome(c.func).rsplit(".", 1)[-1]
+        if alvo in repetidoras:
+            yield Achado(rel, laco.lineno, f"laço sobre itens chama {alvo}(), que chama "
+                                           f"{repetidoras[alvo]} e espera ou repete")
+            return
+
+
+_OCUPADO = {409, 423, 429, 503}
+
+
+def ocupado_repetido(ctx: Contexto, item: dict) -> Iterator[Achado]:
+    """Status de recurso ocupado (409, 423, 429, 503) comparado num laco que dorme: a espera
+    da vez virou repeticao com teto, e esgotado o teto o item sai como falha."""
     for rel, _, arvore in ctx.arvores(ctx.py):
         for laco in _lacos(arvore):
-            # `for _ in range(n)` conta tentativas, nao percorre itens: e a repeticao, nao o lote
-            if isinstance(laco, ast.While) or (isinstance(laco.iter, ast.Call) and nome(laco.iter.func) == "range"):
-                continue
             corpo = list(sem_aninhadas(laco))
-            de_fora = [n for n in corpo if isinstance(n, ast.Call) and externa(n)]
-            if not de_fora:
+            if not any(isinstance(n, ast.Call) and e_sono(n) for n in corpo):
                 continue
-            espera = any(isinstance(n, ast.Call) and e_sono(n) for n in corpo)
-            repete = any(isinstance(n, (ast.While, ast.For, ast.AsyncFor)) and n is not laco
-                         and any(isinstance(m, ast.ExceptHandler) for m in sem_aninhadas(n))
-                         for n in corpo)
-            if espera or repete:
-                yield Achado(rel, laco.lineno, f"laço sobre itens chama {nome(de_fora[0].func)} "
-                                               f"e {'espera' if espera else 'repete'} dentro dele")
+            for n in corpo:
+                if isinstance(n, ast.Compare) and any(
+                        isinstance(v, ast.Constant) and v.value in _OCUPADO
+                        for v in [n.left, *n.comparators]):
+                    yield Achado(rel, n.lineno, "recurso ocupado tratado por repetição com espera")
+                    break
 
 
 def _escreve_erro(st: ast.stmt) -> bool:
@@ -218,7 +267,7 @@ def _escreve_erro(st: ast.stmt) -> bool:
         return True
     if nm == "sys.stderr.write" or ultimo in ("error", "exception", "critical", "warning", "fatal"):
         return True
-    return bool(re.search(r"morre|die|erro|falha|uso|usage|aviso|fail", ultimo, re.I))
+    return bool(re.search(r"morre|die|erro|falha|uso|usage|aviso|fail", ultimo, re.IGNORECASE))
 
 
 def _saida_com_erro(st: ast.stmt) -> bool:
@@ -256,7 +305,7 @@ def popen_wait(ctx: Contexto, item: dict) -> Iterator[Achado]:
         escopos = [arvore] + [n for n in ast.walk(arvore) if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef))]
         for escopo in escopos:
             nos = list(sem_aninhadas(escopo))
-            com_pipe: Set[str] = set()
+            com_pipe: set[str] = set()
             for n in nos:
                 if isinstance(n, ast.Assign) and len(n.targets) == 1 and isinstance(n.targets[0], ast.Name):
                     alvo, valor = n.targets[0].id, n.value
@@ -299,7 +348,7 @@ def trava_com_io(ctx: Contexto, item: dict) -> Iterator[Achado]:
         for w in ast.walk(arvore):
             if not isinstance(w, (ast.With, ast.AsyncWith)):
                 continue
-            if not any(re.search(r"lock|trava|mutex", nome(i.context_expr), re.I) for i in w.items):
+            if not any(re.search(r"lock|trava|mutex", nome(i.context_expr), re.IGNORECASE) for i in w.items):
                 continue
             for c in _chamadas(w):
                 if externa(c) or e_sono(c) or nome(c.func) == "open":
@@ -313,7 +362,7 @@ DEGRAUS_ESCADA = 3
 def escada_isinstance(ctx: Contexto, item: dict) -> Iterator[Achado]:
     """Cadeia if/elif com tres ou mais `isinstance` sobre a mesma expressao."""
     for rel, _, arvore in ctx.arvores(ctx.py):
-        vistos: Set[int] = set()
+        vistos: set[int] = set()
         for n in ast.walk(arvore):
             if not isinstance(n, ast.If) or id(n) in vistos:
                 continue
@@ -337,9 +386,9 @@ _USA_OS = {"open", "os.remove", "os.unlink", "os.rename", "os.replace", "shutil.
 _USA_PATH = {"open", "unlink", "read_text", "read_bytes", "write_text", "write_bytes", "rename", "replace"}
 
 
-def _conferidos(teste: ast.expr) -> Set[str]:
+def _conferidos(teste: ast.expr) -> set[str]:
     """Expressoes cuja existencia o teste do `if` confere."""
-    alvos: Set[str] = set()
+    alvos: set[str] = set()
     for c in (n for n in ast.walk(teste) if isinstance(n, ast.Call)):
         if nome(c.func) in _EXISTE_OS and c.args:
             alvos.add(ast.unparse(c.args[0]))
@@ -348,7 +397,7 @@ def _conferidos(teste: ast.expr) -> Set[str]:
     return alvos
 
 
-def _usa(c: ast.Call, alvos: Set[str]) -> bool:
+def _usa(c: ast.Call, alvos: set[str]) -> bool:
     if nome(c.func) in _USA_OS and c.args:
         return ast.unparse(c.args[0]) in alvos
     return (isinstance(c.func, ast.Attribute) and c.func.attr in _USA_PATH
@@ -380,14 +429,14 @@ def unit_segundo_plano(ctx: Contexto, item: dict) -> Iterator[Achado]:
 # ------------------------------------------------------------------ desenho e fronteira
 
 
-def _raizes_import(p: Path, raiz: Path) -> List[Path]:
+def _raizes_import(p: Path, raiz: Path) -> list[Path]:
     d, topo = p.parent, None
     while (d / "__init__.py").exists() and d != raiz:
         topo, d = d, d.parent
     return ([topo.parent] if topo else []) + [p.parent]
 
 
-def _modulo(partes: List[str], bases: List[Path]) -> Optional[Path]:
+def _modulo(partes: list[str], bases: list[Path]) -> Path | None:
     for base in bases:
         alvo = base.joinpath(*partes) if partes else base
         if partes and alvo.with_name(alvo.name + ".py").is_file():
@@ -397,9 +446,9 @@ def _modulo(partes: List[str], bases: List[Path]) -> Optional[Path]:
     return None
 
 
-def _importados(st: ast.stmt, p: Path, raiz: Path) -> List[Path]:
+def _importados(st: ast.stmt, p: Path, raiz: Path) -> list[Path]:
     bases = _raizes_import(p, raiz)
-    achados: List[Path] = []
+    achados: list[Path] = []
     if isinstance(st, ast.Import):
         for a in st.names:
             alvo = _modulo(a.name.split("."), bases)
@@ -423,7 +472,7 @@ def _importados(st: ast.stmt, p: Path, raiz: Path) -> List[Path]:
     return achados
 
 
-Arestas = Dict[Path, List[Tuple[Path, int]]]
+Arestas = dict[Path, list[tuple[Path, int]]]
 
 
 def _grafo_de_imports(ctx: Contexto) -> Arestas:
@@ -449,13 +498,14 @@ def import_ciclico(ctx: Contexto, item: dict) -> Iterator[Achado]:
                                                     f"módulo ({len(comp)} módulos no ciclo)")
 
 
-def _ciclos(arestas: Arestas) -> List[Set[Path]]:  # noqa: C901 — Tarjan iterativo; partido, nao se confere contra a referencia
+# Tarjan iterativo: a complexidade e a do algoritmo; partido, ele nao se confere contra a referencia
+def _ciclos(arestas: Arestas) -> list[set[Path]]:  # noqa: C901
     """Componentes fortemente conexas com mais de um modulo (Tarjan, iterativo)."""
-    indice: Dict[Path, int] = {}
-    baixo: Dict[Path, int] = {}
-    pilha: List[Path] = []
-    na_pilha: Set[Path] = set()
-    componentes: List[Set[Path]] = []
+    indice: dict[Path, int] = {}
+    baixo: dict[Path, int] = {}
+    pilha: list[Path] = []
+    na_pilha: set[Path] = set()
+    componentes: list[set[Path]] = []
     contador = 0
     for inicio in list(arestas):
         if inicio in indice:
@@ -485,7 +535,7 @@ def _ciclos(arestas: Arestas) -> List[Set[Path]]:  # noqa: C901 — Tarjan itera
             if trabalho:
                 baixo[trabalho[-1][0]] = min(baixo[trabalho[-1][0]], baixo[v])
             if baixo[v] == indice[v]:
-                comp: Set[Path] = set()
+                comp: set[Path] = set()
                 while True:
                     w = pilha.pop()
                     na_pilha.discard(w)
@@ -501,11 +551,11 @@ JANELA_DUPLICACAO = 8
 _LINHA_VAZIA = {")", "]", "}", "),", "],", "},", "pass", '"""', "'''", "else:", "try:", "finally:"}
 
 
-def _normalizadas(texto: str) -> List[Tuple[int, str]]:
+def _normalizadas(texto: str) -> list[tuple[int, str]]:
     saida = []
     for i, linha in enumerate(texto.splitlines(), 1):
         s = linha.strip()
-        if not s or s.startswith("#") or s.startswith(("import ", "from ")) or s in _LINHA_VAZIA:
+        if not s or s.startswith(("#", "import ", "from ")) or s in _LINHA_VAZIA:
             continue
         saida.append((i, s))
     return saida
@@ -514,8 +564,8 @@ def _normalizadas(texto: str) -> List[Tuple[int, str]]:
 def duplicacao(ctx: Contexto, item: dict) -> Iterator[Achado]:
     """Bloco de oito linhas significativas iguais em outro lugar do repositorio."""
     j = JANELA_DUPLICACAO
-    indice: Dict[int, List[Tuple[str, int, int]]] = defaultdict(list)
-    normais: Dict[Path, List[Tuple[int, str]]] = {}
+    indice: dict[int, list[tuple[str, int, int]]] = defaultdict(list)
+    normais: dict[Path, list[tuple[int, str]]] = {}
     for p in ctx.py_repo:
         norm = _normalizadas(ctx.texto(p))
         normais[p] = norm
@@ -526,7 +576,7 @@ def duplicacao(ctx: Contexto, item: dict) -> Iterator[Achado]:
     for p in ctx.py:
         rel = ctx.rel(p)
         norm = normais.get(p) or _normalizadas(ctx.texto(p))
-        bloco: Optional[Tuple[int, int, Tuple[str, int]]] = None
+        bloco: tuple[int, int, tuple[str, int]] | None = None
         for k in range(len(norm) - j + 1):
             outros = [(r, ln) for r, ln, ix in indice[hash(tuple(s for _, s in norm[k:k + j]))]
                       if r != rel or abs(ix - k) >= j]
@@ -542,7 +592,7 @@ def duplicacao(ctx: Contexto, item: dict) -> Iterator[Achado]:
             yield _bloco(rel, norm, bloco, j)
 
 
-def _bloco(rel: str, norm: List[Tuple[int, str]], bloco: Tuple[int, int, Tuple[str, int]], j: int) -> Achado:
+def _bloco(rel: str, norm: list[tuple[int, str]], bloco: tuple[int, int, tuple[str, int]], j: int) -> Achado:
     inicio, fim, (outro, linha_outro) = bloco
     linhas = norm[fim + j - 1][0] - norm[inicio][0] + 1
     return Achado(rel, norm[inicio][0], f"bloco de {linhas} linhas igual a {outro}:{linha_outro}")
@@ -635,11 +685,12 @@ def linhas_shell(ctx: Contexto, item: dict) -> Iterator[Achado]:
 # ------------------------------------------------------------------ registro
 
 # nome na lista -> (funcao, candidata). Candidata: forma suspeita, a leitura confirma.
-PREDICADOS: Dict[str, Tuple[Callable[[Contexto, dict], Iterator[Achado]], bool]] = {
+PREDICADOS: dict[str, tuple[Callable[[Contexto, dict], Iterator[Achado]], bool]] = {
     "PRAZO_EXTERNO": (prazo_externo, False),
     "RECUO_FIXO": (recuo_fixo, True),
     "REPETE_SEM_TETO": (repete_sem_teto, True),
     "LOTE_SEM_FILA": (lote_sem_fila, True),
+    "OCUPADO_REPETIDO": (ocupado_repetido, True),
     "ERRO_SEM_CAUSA": (erro_sem_causa, True),
     "POPEN_WAIT": (popen_wait, False),
     "AMBIENTE_NA_IMPORTACAO": (ambiente_na_importacao, False),
