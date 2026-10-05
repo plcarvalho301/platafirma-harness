@@ -122,7 +122,8 @@ uso (gramatica arq:0106 — acervo <ato> <particao> <entidade> [seletor]):
                        [--especie|--subtipo|--dominio|--subdominio|--trata-de|--remover-trata-de|--titulo … ] [--apply]
                        espécie, domínio, subdomínio, conceitos e dados de catálogo da obra (classificacao)
   acervo definir       biblioteca conceito <slug> --rotulo … --definicao … --natureza … --estatuto … --pai <slug> --tipo <t>
-                       --garantia <g> --motivo "…" [--apply] · <slug> --renomear <slug-novo> --motivo "…"   (tesauro)
+                       --garantia <g> --motivo "…" [--apply] · <slug> --renomear <slug-novo> --motivo "…"
+                       · <slug> --natureza <n> --motivo "…" (conceito existente: reclassifica)   (tesauro)
   acervo relacionar    biblioteca conceito <de> <para> --tipo <t> --garantia <g> --motivo <m> [--lastro <obra>] [--apply]
                        a aresta da teia (tesauro); --ajuda traz as famílias e as garantias
   acervo desrelacionar biblioteca relacao <id> [--sim]                desfaz uma aresta (tesauro)
@@ -156,7 +157,7 @@ uso (gramatica arq:0106 — acervo <ato> <particao> <entidade> [seletor]):
   acervo retirar       casa revisao <revid>... --motivo <m> [--apply]   tira texto antigo do historico da wiki
   acervo restaurar     casa revisao <revid>... --motivo <m> [--apply]   devolve ao historico
   acervo extrato  --todas [dest]
-  acervo exportar                    regera ontologia/acervo/*.jsonl e vocabulario.json na bancada
+  acervo exportar [--bancada <chave>] regera ontologia/acervo/*.jsonl e vocabulario.json na bancada
   acervo psql     [--banco rag|motor]  <SQL por stdin>
   acervo balde    listar|ler|copiar|mover|apagar <bucket|sha256> [...] [--apply]
 
