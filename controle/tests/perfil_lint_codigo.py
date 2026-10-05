@@ -129,7 +129,7 @@ def _sha() -> str:
 
 # O codigo do proprio lint muda enquanto se mede (as linhas andam); o que aponta nele, ou cita
 # linha dele, fica fora da comparacao.
-_FORA_DO_DIFF = ("bin/_lint/", "controle/tests/perfil_lint_codigo.py")
+_FORA_DO_DIFF = ("bin/_lint/", "bin/lint", "controle/tests/perfil_lint_codigo.py")
 
 
 def _chave(ap: dict) -> tuple:
