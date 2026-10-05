@@ -689,7 +689,8 @@ def test_despachante_recusas_sem_banco():
 
 def test_cabecalho_do_verbo_aponta_o_suporte():
     with open(BIN, encoding="utf-8") as f:
-        cab = "".join(f.readline() for _ in range(45))
+        # 70: o cabecalho cresceu com as linhas de acesso dos atos de Transcrever (#3297), e SPEC= vem depois dele
+        cab = "".join(f.readline() for _ in range(70))
     assert "# le: ingerir=repo" in cab
     assert "PLATAFIRMA_INSTANCIA" in cab and "platafirma-casa.git" in cab
     assert "PLATAFIRMA_RELEASE" not in cab

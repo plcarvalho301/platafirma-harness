@@ -130,5 +130,7 @@ def test_forma_velha_implicita_avisa_reclassificar(tmp_path):
     ("--registrar-obra", "Titulo"),
 ])
 def test_opcao_de_outro_estagio_nao_avisa_classificar(tmp_path, opcoes):
+    # opcao de Transcrever avisa o ato dela (#3297); o que se fixa aqui e que nao avisa Classificar
     r = _acervo("curar", "biblioteca", *opcoes, sessao=f"t-outro-{tmp_path.name}")
-    assert "arq:0119 §2" not in r.stderr, r.stderr
+    for ato in ("catalogar", "definir", "relacionar", "derivar", "desderivar", "listar biblioteca"):
+        assert f"`acervo {ato} " not in r.stderr, r.stderr

@@ -4,7 +4,7 @@
 # dono: dados
 # classe: B
 # use para: ler o texto de uma obra por pagina ou capitulo (ler biblioteca impressao), ler uma ADR/spec/pagina/obra que sabe onde esta (ler), listar o que ha de um tipo ou sobre um assunto pelo catalogo (listar --sobre), gravar uma pagina de wiki (escrever casa pagina), por um repo de doc no acervo (ingerir casa <repo>)
-# atos: ler (leitura, casa), listar (leitura, casa), resolver (leitura, casa), escrever (escrita, registro), ingerir (escrita, incorporacao), curar (escrita, curadoria), catalogar (escrita, classificacao), definir (escrita, tesauro), relacionar (escrita, tesauro), desrelacionar (escrita, tesauro), derivar (escrita, classificacao), desderivar (escrita, classificacao), empacotar (leitura, classificacao), extrato (leitura, acervo), exportar (escrita, acervo), psql (escrita, acervo), balde (escrita, acervo)
+# atos: ler (leitura, casa), listar (leitura, casa), resolver (leitura, casa), escrever (escrita, registro), ingerir (escrita, incorporacao), curar (escrita, curadoria), catalogar (escrita, classificacao), definir (escrita, tesauro), relacionar (escrita, tesauro), desrelacionar (escrita, tesauro), derivar (escrita, classificacao), desderivar (escrita, classificacao), empacotar (leitura, classificacao), espelhar (escrita, transcricao), recortar (escrita, transcricao), promover (escrita, transcricao), julgar (escrita, transcricao), converter (escrita, transcricao), extrato (leitura, acervo), exportar (escrita, acervo), psql (escrita, acervo), balde (escrita, acervo)
 # forma: texto
 # le: ler=acervo.casa,acervo.obra,acervo.registro,repo
 # le: listar=acervo.casa,acervo.obra,acervo.registro,repo,arquivo-local
@@ -19,6 +19,11 @@
 # le: derivar=acervo.obra
 # le: desderivar=acervo.obra
 # le: empacotar=acervo.obra,minio
+# le: espelhar=acervo.obra,minio
+# le: recortar=acervo.obra
+# le: promover=acervo.obra
+# le: julgar=acervo.obra
+# le: converter=acervo.obra,minio
 # le: extrato=acervo.*
 # le: exportar=acervo.*,repo
 # le: psql=acervo.*
@@ -36,6 +41,11 @@
 # escreve: derivar=acervo.obra
 # escreve: desderivar=acervo.obra
 # escreve: empacotar=arquivo-local
+# escreve: espelhar=acervo.obra,minio
+# escreve: recortar=acervo.obra
+# escreve: promover=acervo.obra
+# escreve: julgar=acervo.obra
+# escreve: converter=arquivo-local
 # escreve: extrato=arquivo-local
 # escreve: exportar=repo
 # escreve: psql=acervo.*
@@ -114,10 +124,15 @@ uso (gramatica arq:0106 — acervo <ato> <particao> <entidade> [seletor]):
                   (--reclassificar, --conceito, --relacionar, --relacoes, --desrelacionar, --derivar, --derivacoes e
                   --desderivar ainda respondem, com aviso: sao os atos de Classificar acima)
   acervo curar    biblioteca --apagar <obra> [--apply]   tira do acervo, SEM VOLTA, a obra ja retirada (catalogo, motor, balde)
-  acervo curar    biblioteca --recortar <obra> · --reextrair <obra> [--metodo <m>] · --expurgar|--restaurar --espelhos
-  acervo curar    biblioteca --reextrair --lote [--ordem <lista>] [--apply] · --rejulgar --lote [--apply]
-  acervo curar    biblioteca --reextrair <id,id…|@arquivo> --bancada <pasta> [--metodo <slug>] [--refazer]
-                  converte em pasta de saida (nao escreve no acervo; retomavel); depois:
+  Transcrever (arq:0119 §2, §5) — opcional; o texto fiel ao arquivo, em impressao selada:
+  acervo espelhar      biblioteca obra <obra> [--metodo <slug>] [--apply]   espelho novo do proprio arquivo; termina na selada
+  acervo espelhar      biblioteca lote [--ordem <lista>] [--medida --replicas <n>] [--apply]   o mesmo, em lote
+  acervo ler           biblioteca lote <lote> [--json]   estado do lote de espelhar, obra a obra
+  acervo recortar      biblioteca obra <obra>   corte novo sobre o mesmo espelho, em impressao nova
+  acervo promover      biblioteca obra <obra> --impressao <id>   poe a impressao selada em servico, pela marcacao
+  acervo julgar        biblioteca lote [--apply]   veredito pela regua vigente, sem reconverter
+  acervo converter     biblioteca obra <id,id…|@arquivo> --bancada <pasta> [--metodo <slug>] [--refazer]
+                       converte em pasta de saida (nao escreve no acervo; retomavel); depois:
   acervo listar   biblioteca bancada <pasta> [--json] [--estratos <arquivo>]   perfil x docling por obra (card #3187)
   acervo extrato  --todas [dest]
   acervo exportar                    regera ontologia/acervo/*.jsonl e vocabulario.json na bancada
@@ -231,12 +246,15 @@ conforme() {
     ler:biblioteca:obra)
         args=(); for a in "$@"; do [[ "$a" == --situacao ]] || args+=("$a"); done
         exec "$ATOS/curar" obra --situacao "${args[@]}" ;;
+    # o estado de um lote de espelhar, obra a obra (Transcrever, #3297)
+    ler:biblioteca:lote)          exec "$ATOS/curar" obra --reextrair --lote --relatorio "$@" ;;
     curar:biblioteca:lote)        avisa "acervo curar biblioteca lote" "acervo empacotar biblioteca obra [dest]" "arq:0119 §2"
                                   exec "$ATOS/bancada" "$@" ;;
     # curadoria de UMA obra (#3126): entidade e a FLAG de bin/curar (--situacao, --expurgar,
     # --restaurar, --promover, --reclassificar, --conceito, --relacionar...), nao um nome fixo
     # -- repassa entidade + resto tal qual para _acervo/curar, que so encosta em bin/curar.
     curar:biblioteca:*)     forma_velha_classificar "$entidade" "$@"
+                            forma_velha_transcrever "$entidade" "$@"
                             exec "$ATOS/curar" obra "$entidade" "$@" ;;
     curar:casa:alias)       exec "$ATOS/curar" alias "$@" ;;
     # revisao antiga de pagina da wiki fora do historico publico (revisiondelete)
@@ -348,8 +366,64 @@ forma_velha_classificar() {
   avisa "acervo curar biblioteca $velha" "$nova" "arq:0119 §2"
 }
 
+# ---- atos de Transcrever (arq:0119 §2, §5; #3297) ----
+# Mesmo desenho do Classificar: o ato tem o nome do que faz, o trabalho segue em bin/curar pela
+# opcao que ja o fazia. `converter` nao e `espelhar` porque nao escreve no acervo (arq:0118 §4);
+# `julgar` e o `--rejulgar`, sem o prefixo, que o ato nao precisa. De-para: spec acervo, secao 10.
+transcrever() {
+  local ato="$1"; shift
+  local particao="${1:-}" entidade="${2:-}" esperada
+  case "$ato" in
+    recortar|promover|converter) esperada=obra ;;
+    julgar)                      esperada=lote ;;
+    espelhar)                    esperada="$entidade"
+                                 [ "$entidade" = obra ] || [ "$entidade" = lote ] || esperada="obra|lote" ;;
+  esac
+  if [ "$particao" != "biblioteca" ] || [ "$entidade" != "$esperada" ]; then
+    echo "acervo $ato: a forma e \`acervo $ato biblioteca $esperada …\`; veio \`acervo $ato $*\`." >&2
+    echo "  $SPEC" >&2
+    exit 2
+  fi
+  shift 2
+  case "$ato:$entidade" in
+    espelhar:obra)  exec "$ATOS/curar" obra --reextrair "$@" ;;
+    espelhar:lote)  exec "$ATOS/curar" obra --reextrair --lote "$@" ;;
+    recortar:obra)  exec "$ATOS/curar" obra --recortar "$@" ;;
+    promover:obra)  exec "$ATOS/curar" obra --promover "$@" ;;
+    julgar:lote)    exec "$ATOS/curar" obra --rejulgar --lote "$@" ;;
+    converter:obra)
+      local a
+      for a in "$@"; do [ "$a" = --bancada ] && exec "$ATOS/curar" obra --reextrair "$@"; done
+      echo "acervo converter: falta --bancada <pasta>; converter nao escreve no acervo (o que escreve e \`acervo espelhar\`)." >&2
+      exit 2 ;;
+  esac
+}
+
+# A forma velha de Transcrever (`acervo curar biblioteca --reextrair|--recortar|--promover|--rejulgar`)
+# segue rodando e saindo como sempre (o lote da #3194 roda por ela), com aviso que nomeia o ato novo.
+forma_velha_transcrever() {
+  local tem=" " a velha="" nova=""
+  for a in "$@"; do
+    case "$a" in --*) tem+="${a%%=*} " ;; esac
+  done
+  if   [[ "$tem" == *" --rejulgar "* ]];  then velha="--rejulgar --lote"; nova="acervo julgar biblioteca lote"
+  elif [[ "$tem" == *" --reextrair "* ]]; then
+    if   [[ "$tem" == *" --bancada "* ]];   then velha="--reextrair --bancada"; nova="acervo converter biblioteca obra <ids> --bancada <pasta>"
+    elif [[ "$tem" == *" --relatorio "* ]]; then velha="--reextrair --lote --relatorio"; nova="acervo ler biblioteca lote <lote>"
+    elif [[ "$tem" == *" --lote "* ]];      then velha="--reextrair --lote"; nova="acervo espelhar biblioteca lote"
+    else velha=--reextrair; nova="acervo espelhar biblioteca obra <obra>"
+    fi
+  elif [[ "$tem" == *" --espelhos "* ]];  then return 0
+  elif [[ "$tem" == *" --recortar "* ]];  then velha=--recortar; nova="acervo recortar biblioteca obra <obra>"
+  elif [[ "$tem" == *" --promover "* ]];  then velha=--promover; nova="acervo promover biblioteca obra <obra> --impressao <id>"
+  else return 0
+  fi
+  avisa "acervo curar biblioteca $velha" "$nova" "arq:0119 §2"
+}
+
 case "$ATO" in
   catalogar|definir|relacionar|desrelacionar|derivar|desderivar|empacotar) classificar "$ATO" "$@" ;;
+  espelhar|recortar|promover|julgar|converter) transcrever "$ATO" "$@" ;;
 
   # resolver <classe> <string>: o ato de resolucao de identidade da raiz (arq:0108
   # §5, arq:0022). Nao segue a gramatica ato-particao-entidade: a raiz e uma so
@@ -447,7 +521,7 @@ case "$ATO" in
 
   -h|--help|ajuda) uso ;;
   *)
-    echo "acervo: ato '$ATO' desconhecido. Atos canonicos: ler, listar, resolver, escrever, ingerir, curar, extrato, exportar, psql, balde, catalogar, definir, relacionar, desrelacionar, derivar, desderivar, empacotar." >&2
+    echo "acervo: ato '$ATO' desconhecido. Atos canonicos: ler, listar, resolver, escrever, ingerir, curar, extrato, exportar, psql, balde, catalogar, definir, relacionar, desrelacionar, derivar, desderivar, empacotar, espelhar, recortar, promover, julgar, converter." >&2
     echo "  $SPEC" >&2
     exit 2 ;;
 esac
