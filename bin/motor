@@ -16,7 +16,7 @@
 # substitui: docker exec rag-* ; curl ao endpoint de busca
 # O verbo e `motor`; a instancia e argumento (arq:0037; veto do verbo `rag`).
 # atos: a capacidade e do (verbo, ato) (arq:0110 §6). Transicao vigente->conforme em spec_motor §5.
-import json, os, re, subprocess, sys, time, urllib.error, urllib.request
+import json, os, re, shlex, subprocess, sys, time, urllib.error, urllib.request
 from pathlib import Path
 
 # Raizes da casa (card #3010). Codigo, registro e verbos irmaos vem da PROPRIA arvore
@@ -134,6 +134,12 @@ def uso(cod=2):
                      [--expansao [--peso-conceito X]]
                                         bateria no gold da particao, pela porta servida:
                                         as duas familias separadas + delta contra a ultima
+  motor <inst> medir  <particao> --sombra <modelo>[,<modelo>] [--particoes biblioteca,casa]
+                     [--k N] [--perguntas N]
+                                        braco-sombra do embedder (guia escolha-de-llm §11):
+                                        reembeda a particao em memoria, fora do servido, e
+                                        mede contra o servido no gabarito e no replay do log
+  motor <inst> medir  <particao> --sombra-ver <id>   progresso e resultado da sombra
   motor <inst> indexar biblioteca [--obra <uuid>,…] [--promover] [--autor <slug>] [--apply] [--json]
                                         indexa a impressao selada da obra marcada para
                                         indexar, no rag-api, sem po-la no ar (plano sem --apply);
@@ -781,6 +787,10 @@ def ultima_medicao(inst, gabarito):
 
 def cmd_medir(nome, inst, argv):
     particao, argv = resolve_particao(argv, "medir")
+    if "--sombra-ver" in argv:
+        return cmd_sombra_ver(inst, _valor(argv, "--sombra-ver", "medir"))
+    if "--sombra" in argv:
+        return cmd_sombra(inst, particao, argv)
     if particao != "biblioteca" and "--gabarito" not in argv:
         print(f"motor medir {particao}: sem gabarito para esta particao. So 'biblioteca' tem\n"
               f"  gabarito canonico hoje; passe --gabarito <arq> para as outras.\n  {SPEC}",
@@ -880,6 +890,110 @@ def cmd_medir(nome, inst, argv):
     else:
         print("\n  primeira medicao: nao ha baseline. Meca de novo depois de mexer.")
     print(f"\n  salvo em {arq}")
+
+
+# ---------------------------------------------------------------- braco-sombra do embedder
+# Guia escolha-de-llm §11 e spec motor §2a: braco-sombra so para bench, fora de servico. E a
+# unica medida deste verbo que NAO passa pela porta servida, e por desenho: o candidato nao esta
+# no ar. O que roda e bin/_motor/sombra.py, copiado para dentro do conteiner do rag e lancado em
+# segundo plano, num venv que herda o torch da imagem; nada do servido e escrito.
+SOMBRA_SCRIPT = str(_ARVORE / "bin" / "_motor" / "sombra.py")
+
+
+def _valor(argv, flag, ato):
+    i = argv.index(flag)
+    if i + 1 >= len(argv) or argv[i + 1].startswith("--"):
+        print(f"{ato}: a flag {flag} exige um valor.", file=sys.stderr)
+        sys.exit(2)
+    return argv[i + 1]
+
+
+def cmd_sombra(inst, particao, argv):
+    modelos = [m for m in _valor(argv, "--sombra", "medir").split(",") if m]
+    particoes = ([p for p in _valor(argv, "--particoes", "medir").split(",") if p]
+                 if "--particoes" in argv else [particao])
+    for p in particoes:
+        if p not in ("biblioteca", "casa"):
+            print(f"medir --sombra: particao {p!r} sem indice vetorial servido (biblioteca, casa)",
+                  file=sys.stderr)
+            sys.exit(2)
+    k = int(_valor(argv, "--k", "medir")) if "--k" in argv else 8
+    n = int(_valor(argv, "--perguntas", "medir")) if "--perguntas" in argv else 1000
+    c = inst.get("container")
+    gab = na_release(inst.get("gabarito", ""))
+    if not c or not gab or not os.path.isfile(gab):
+        print(f"medir --sombra: falta conteiner ({c}) ou gabarito ({gab})", file=sys.stderr)
+        sys.exit(1)
+    sid = time.strftime("%Y%m%dT%H%M%S")
+    dentro = f"/tmp/sombra-{sid}"
+    args = {"id": sid, "saida": dentro, "modelos": modelos, "particoes": particoes, "k": k,
+            "max_perguntas": n, "gabarito": f"{dentro}/gabarito.jsonl"}
+    for passo in (f"docker exec {c} mkdir -p {dentro}",
+                  f"docker cp {shlex.quote(SOMBRA_SCRIPT)} {c}:{dentro}/sombra.py",
+                  f"docker cp {shlex.quote(gab)} {c}:{dentro}/gabarito.jsonl"):
+        r = sh(passo)
+        if r.returncode != 0:
+            print(f"medir --sombra: falhou `{passo}`: {r.stderr.strip()[-300:]}", file=sys.stderr)
+            sys.exit(3)
+    corpo = (f"cd {dentro} && (python -m venv --system-site-packages venv && "
+             f"venv/bin/pip install -q -U 'transformers>=5.2' 'sentence-transformers>=5.4.1') "
+             f"> pip.log 2>&1; PY=venv/bin/python; [ -x $PY ] || PY=python; "
+             f"PYTHONPATH=/app HF_HUB_OFFLINE=0 TRANSFORMERS_OFFLINE=0 $PY sombra.py >> log.txt 2>&1; "
+             f"echo $? > fim")
+    r = sh(f"docker exec -d -e SOMBRA_ARGS={shlex.quote(json.dumps(args))} {c} sh -c {shlex.quote(corpo)}")
+    if r.returncode != 0:
+        print(f"medir --sombra: nao lancou: {r.stderr.strip()[-300:]}", file=sys.stderr)
+        sys.exit(3)
+    print(f"sombra {sid} lancada em {c} (fora do servido): {', '.join(modelos)} | "
+          f"particoes {', '.join(particoes)} | k={k} | ate {n} perguntas do log\n"
+          f"  acompanhe: motor rag medir {particao} --sombra-ver {sid}")
+
+
+def cmd_sombra_ver(inst, sid):
+    if not re.fullmatch(r"\d{8}T\d{6}", sid or ""):
+        print(f"medir --sombra-ver: id invalido {sid!r} (forma AAAAMMDDTHHMMSS)", file=sys.stderr)
+        sys.exit(2)
+    c = inst.get("container")
+    dentro = f"/tmp/sombra-{sid}"
+    estado = sh(f"docker exec {c} sh -c " + shlex.quote(
+        f"tail -n 12 {dentro}/log.txt 2>/dev/null; echo '--- pip:'; tail -n 3 {dentro}/pip.log "
+        f"2>/dev/null; echo '--- fim:'; cat {dentro}/fim 2>/dev/null || echo rodando"))
+    if estado.returncode != 0:
+        print(f"medir --sombra-ver: {estado.stderr.strip()[-300:]}", file=sys.stderr)
+        sys.exit(1)
+    print(estado.stdout.rstrip())
+    r = sh(f"docker exec {c} cat {dentro}/resultado.json")
+    if r.returncode != 0:
+        return
+    res = json.loads(r.stdout)
+    arq = os.path.join(dir_medicoes(inst), f"{sid}-sombra.json")
+    with open(arq, "w") as f:
+        json.dump(res, f, ensure_ascii=False, indent=1)
+    _resumo_sombra(res)
+    print(f"\n  salvo em {arq}")
+
+
+def _resumo_sombra(res):
+    k = res.get("k")
+    print(f"\nsombra {res['id']} | corpus {res.get('corpus')} | perguntas {res.get('perguntas')}")
+    for nome, info in res.get("modelos", {}).items():
+        if "erro" in info:
+            print(f"  ERRO {nome}: {info['erro']}")
+    if res.get("gabarito"):
+        print(f"\n  gabarito (biblioteca, braco de significado isolado, k={k})")
+        print(f"  {'variante':<34} {'cod h@1':>7} {'cod mrr':>7} {'sen h@1':>7} {'sen h@5':>7} {'sen mrr':>7} {'abst erro':>9} {'piso':>6}")
+        for v, g in res["gabarito"].items():
+            a = g.get("abstencao") or {}
+            print(f"  {v:<34} {g['codigo']['hit@1']:>7} {g['codigo']['mrr']:>7} {g['sentido']['hit@1']:>7} "
+                  f"{g['sentido']['hit@5']:>7} {g['sentido']['mrr']:>7} {a.get('erro', '-'):>9} {a.get('piso', '-'):>6}")
+    for p, tab in (res.get("replay") or {}).items():
+        print(f"\n  replay do log em {p} (juiz {res.get('juiz', {}).get('modelo')}, nDCG@{k})")
+        print(f"  {'variante':<34} {'nDCG':>7} {'V':>5} {'E':>5} {'D':>5} {'jacc':>6}")
+        for v, t in tab.items():
+            print(f"  {v:<34} {t['ndcg_medio']:>7} {t['vitorias']:>5} {t['empates']:>5} {t['derrotas']:>5} {t['jaccard_com_servido']:>6}")
+    conc = (res.get("juiz") or {}).get("concordancia_com_gabarito") or {}
+    for v, cc in conc.items():
+        print(f"  juiz x gabarito ({v}): {cc['concordam']}/{cc['comparaveis']} = {cc['taxa']}")
 
 
 def main():
