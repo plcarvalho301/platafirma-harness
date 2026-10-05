@@ -4,7 +4,7 @@
 # dono: dados
 # classe: B
 # use para: ler o texto de uma obra por pagina ou capitulo (ler biblioteca impressao), ler uma ADR/spec/pagina/obra que sabe onde esta (ler), listar o que ha de um tipo ou sobre um assunto pelo catalogo (listar --sobre), gravar uma pagina de wiki (escrever casa pagina), por um repo de doc no acervo (ingerir casa <repo>)
-# atos: ler (leitura, casa), listar (leitura, casa), resolver (leitura, casa), escrever (escrita, registro), ingerir (escrita, incorporacao), curar (escrita, curadoria), catalogar (escrita, classificacao), definir (escrita, tesauro), relacionar (escrita, tesauro), desrelacionar (escrita, tesauro), derivar (escrita, classificacao), desderivar (escrita, classificacao), empacotar (leitura, classificacao), espelhar (escrita, transcricao), recortar (escrita, transcricao), promover (escrita, transcricao), julgar (escrita, transcricao), converter (escrita, transcricao), extrato (leitura, acervo), exportar (escrita, acervo), psql (escrita, acervo), balde (escrita, acervo)
+# atos: ler (leitura, casa), listar (leitura, casa), resolver (leitura, casa), escrever (escrita, registro), ingerir (escrita, incorporacao), curar (escrita, curadoria), catalogar (escrita, classificacao), definir (escrita, tesauro), relacionar (escrita, tesauro), desrelacionar (escrita, tesauro), derivar (escrita, classificacao), desderivar (escrita, classificacao), empacotar (leitura, classificacao), espelhar (escrita, transcricao), recortar (escrita, transcricao), promover (escrita, transcricao), julgar (escrita, transcricao), converter (escrita, transcricao), recolher (escrita, transcricao), repor (escrita, transcricao), retirar (escrita, retirada), restaurar (escrita, retirada), apagar (escrita, retirada), extrato (leitura, acervo), exportar (escrita, acervo), psql (escrita, acervo), balde (escrita, acervo)
 # forma: texto
 # le: ler=acervo.casa,acervo.obra,acervo.registro,repo
 # le: listar=acervo.casa,acervo.obra,acervo.registro,repo,arquivo-local
@@ -24,6 +24,11 @@
 # le: promover=acervo.obra
 # le: julgar=acervo.obra
 # le: converter=acervo.obra,minio
+# le: recolher=acervo.obra,minio
+# le: repor=acervo.obra,minio
+# le: retirar=acervo.obra,acervo.casa
+# le: restaurar=acervo.obra,acervo.casa
+# le: apagar=acervo.obra,minio
 # le: extrato=acervo.*
 # le: exportar=acervo.*,repo
 # le: psql=acervo.*
@@ -46,6 +51,11 @@
 # escreve: promover=acervo.obra
 # escreve: julgar=acervo.obra
 # escreve: converter=arquivo-local
+# escreve: recolher=minio
+# escreve: repor=minio
+# escreve: retirar=acervo.obra,acervo.casa,motor,repo
+# escreve: restaurar=acervo.obra,acervo.casa,repo
+# escreve: apagar=acervo.obra,motor,minio
 # escreve: extrato=arquivo-local
 # escreve: exportar=repo
 # escreve: psql=acervo.*
@@ -120,10 +130,10 @@ uso (gramatica arq:0106 — acervo <ato> <particao> <entidade> [seletor]):
   acervo desderivar    biblioteca obra <obra> --de <origem> [--sim]  desfaz uma derivacao (classificacao)
   acervo listar        biblioteca relacao <conceito> · biblioteca derivacao <obra>
   acervo empacotar     biblioteca obra [dest]   planilha e capas das obras sem espécie, para classificar fora (classificacao)
-  acervo curar    biblioteca --situacao|--expurgar|--restaurar|--promover <...>
+  acervo curar    biblioteca --situacao <...>
                   (--reclassificar, --conceito, --relacionar, --relacoes, --desrelacionar, --derivar, --derivacoes e
-                  --desderivar ainda respondem, com aviso: sao os atos de Classificar acima)
-  acervo curar    biblioteca --apagar <obra> [--apply]   tira do acervo, SEM VOLTA, a obra ja retirada (catalogo, motor, balde)
+                  --desderivar ainda respondem, com aviso: sao os atos de Classificar acima; --expurgar, --restaurar
+                  e --apagar, com aviso: sao os atos de Retirar abaixo)
   Transcrever (arq:0119 §2, §5) — opcional; o texto fiel ao arquivo, em impressao selada:
   acervo espelhar      biblioteca obra <obra> [--metodo <slug>] [--apply]   espelho novo do proprio arquivo; termina na selada
   acervo espelhar      biblioteca lote [--ordem <lista>] [--medida --replicas <n>] [--apply]   o mesmo, em lote
@@ -134,6 +144,17 @@ uso (gramatica arq:0106 — acervo <ato> <particao> <entidade> [seletor]):
   acervo converter     biblioteca obra <id,id…|@arquivo> --bancada <pasta> [--metodo <slug>] [--refazer]
                        converte em pasta de saida (nao escreve no acervo; retomavel); depois:
   acervo listar   biblioteca bancada <pasta> [--json] [--estratos <arquivo>]   perfil x docling por obra (card #3187)
+  acervo recolher      biblioteca espelho [<obra>] [--apply]   tira do balde vivo o espelho de impressao aposentada
+                       (vai a expurgado/, com volta; o catalogo fica)
+  acervo repor         biblioteca espelho [<obra>] [--apply]   a volta de recolher
+  Retirar (arq:0119 §2, §9) — plano seco sem --apply:
+  acervo retirar       biblioteca obra <obra> --motivo <m> [--apply]    fora de servico, com volta, em cascata (catalogo, impressao, indice)
+  acervo restaurar     biblioteca obra <obra> --motivo <m> [--apply]    a obra retirada volta ao catalogo
+                       (--motivo e obrigatorio nos dois: fica com a obra, com o autor e a data; sem ele sai 2)
+  acervo apagar        biblioteca obra <obra> [--apply]    SEM VOLTA, so a obra ja retirada (catalogo, motor, balde);
+                       vai ao dono antes do --apply
+  acervo retirar       casa revisao <revid>... --motivo <m> [--apply]   tira texto antigo do historico da wiki
+  acervo restaurar     casa revisao <revid>... --motivo <m> [--apply]   devolve ao historico
   acervo extrato  --todas [dest]
   acervo exportar                    regera ontologia/acervo/*.jsonl e vocabulario.json na bancada
   acervo psql     [--banco rag|motor]  <SQL por stdin>
@@ -255,10 +276,12 @@ conforme() {
     # -- repassa entidade + resto tal qual para _acervo/curar, que so encosta em bin/curar.
     curar:biblioteca:*)     forma_velha_classificar "$entidade" "$@"
                             forma_velha_transcrever "$entidade" "$@"
+                            forma_velha_retirar "$entidade" "$@"
                             exec "$ATOS/curar" obra "$entidade" "$@" ;;
     curar:casa:alias)       exec "$ATOS/curar" alias "$@" ;;
     # revisao antiga de pagina da wiki fora do historico publico (revisiondelete)
-    curar:casa:revisao)     exec "$ATOS/wiki" ocultar-revisao "$@" ;;
+    curar:casa:revisao)     avisa "acervo curar casa revisao" "acervo retirar casa revisao <revid>" "arq:0119 §9.1"
+                            exec "$ATOS/wiki" ocultar-revisao "$@" ;;
     bancada:biblioteca:lote) exec "$ATOS/bancada" "$@" ;;
     # --- ingerir por particao ---
     # Biblioteca e registro seguem no cliente de obra (objeto-por-sha, MinIO, OCR, bancada).
@@ -421,9 +444,65 @@ forma_velha_transcrever() {
   avisa "acervo curar biblioteca $velha" "$nova" "arq:0119 §2"
 }
 
+# ---- atos de Retirar (arq:0119 §2, §9; #3298) ----
+# Mesmo desenho: o ato tem o nome do que faz, o trabalho segue em bin/curar (obra) e em _acervo/wiki
+# (revisao). retirar e restaurar tem volta; apagar nao tem, e so vale para a obra ja retirada.
+# recolher e repor agem sobre o espelho de impressao aposentada, nao sobre a obra: nome proprio, para
+# que a mesma raiz nao tenha efeito diferente conforme o objeto (arq:0118 §4). De-para: spec acervo, secao 10.
+retirada() {
+  local ato="$1"; shift
+  local particao="${1:-}" entidade="${2:-}"
+  case "$ato:$particao:$entidade" in
+    retirar:biblioteca:obra|restaurar:biblioteca:obra|apagar:biblioteca:obra) ;;
+    retirar:casa:revisao|restaurar:casa:revisao) ;;
+    recolher:biblioteca:espelho|repor:biblioteca:espelho) ;;
+    *)
+      local forma="biblioteca obra <obra>"
+      case "$ato" in
+        retirar|restaurar) forma="biblioteca obra <obra>\` ou \`acervo $ato casa revisao <revid>" ;;
+        recolher|repor)    forma="biblioteca espelho [<obra>]" ;;
+      esac
+      echo "acervo $ato: a forma e \`acervo $ato $forma\`; veio \`acervo $ato $*\`." >&2
+      echo "  $SPEC" >&2
+      exit 2 ;;
+  esac
+  shift 2
+  case "$ato:$entidade" in
+    retirar:obra)     exec "$ATOS/curar" obra --expurgar "$@" ;;
+    restaurar:obra)   exec "$ATOS/curar" obra --restaurar "$@" ;;
+    apagar:obra)      exec "$ATOS/curar" obra --apagar "$@" ;;
+    retirar:revisao)  exec "$ATOS/wiki" ocultar-revisao "$@" ;;
+    restaurar:revisao) exec "$ATOS/wiki" mostrar-revisao "$@" ;;
+    # --espelhos antes: a obra opcional cai no --expurgar|--restaurar, que a lê como valor
+    recolher:espelho) exec "$ATOS/curar" obra --espelhos --expurgar "$@" ;;
+    repor:espelho)    exec "$ATOS/curar" obra --espelhos --restaurar "$@" ;;
+  esac
+}
+
+# A forma velha de Retirar (`acervo curar biblioteca --expurgar|--restaurar|--apagar`, com ou sem
+# --espelhos) segue rodando e saindo como sempre, com aviso que nomeia o ato novo.
+forma_velha_retirar() {
+  local tem=" " a velha="" nova=""
+  for a in "$@"; do
+    case "$a" in --*) tem+="${a%%=*} " ;; esac
+  done
+  if [[ "$tem" == *" --espelhos "* ]]; then
+    if   [[ "$tem" == *" --expurgar "* ]];  then velha="--expurgar --espelhos";  nova="acervo recolher biblioteca espelho [<obra>]"
+    elif [[ "$tem" == *" --restaurar "* ]]; then velha="--restaurar --espelhos"; nova="acervo repor biblioteca espelho [<obra>]"
+    else return 0
+    fi
+  elif [[ "$tem" == *" --expurgar "* ]];  then velha=--expurgar;  nova="acervo retirar biblioteca obra <obra>"
+  elif [[ "$tem" == *" --restaurar "* ]]; then velha=--restaurar; nova="acervo restaurar biblioteca obra <obra>"
+  elif [[ "$tem" == *" --apagar "* ]];    then velha=--apagar;    nova="acervo apagar biblioteca obra <obra>"
+  else return 0
+  fi
+  avisa "acervo curar biblioteca $velha" "$nova" "arq:0119 §9"
+}
+
 case "$ATO" in
   catalogar|definir|relacionar|desrelacionar|derivar|desderivar|empacotar) classificar "$ATO" "$@" ;;
   espelhar|recortar|promover|julgar|converter) transcrever "$ATO" "$@" ;;
+  retirar|restaurar|apagar|recolher|repor) retirada "$ATO" "$@" ;;
 
   # resolver <classe> <string>: o ato de resolucao de identidade da raiz (arq:0108
   # §5, arq:0022). Nao segue a gramatica ato-particao-entidade: a raiz e uma so
@@ -521,7 +600,7 @@ case "$ATO" in
 
   -h|--help|ajuda) uso ;;
   *)
-    echo "acervo: ato '$ATO' desconhecido. Atos canonicos: ler, listar, resolver, escrever, ingerir, curar, extrato, exportar, psql, balde, catalogar, definir, relacionar, desrelacionar, derivar, desderivar, empacotar, espelhar, recortar, promover, julgar, converter." >&2
+    echo "acervo: ato '$ATO' desconhecido. Atos canonicos: ler, listar, resolver, escrever, ingerir, curar, extrato, exportar, psql, balde, catalogar, definir, relacionar, desrelacionar, derivar, desderivar, empacotar, espelhar, recortar, promover, julgar, converter, recolher, repor, retirar, restaurar, apagar." >&2
     echo "  $SPEC" >&2
     exit 2 ;;
 esac

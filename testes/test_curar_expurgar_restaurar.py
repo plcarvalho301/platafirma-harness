@@ -1,9 +1,9 @@
-"""#3238: `curar --expurgar <obra> [--apply]` e `curar --restaurar <obra> [--apply]` com plano seco.
+"""#3238, #3298: `curar --expurgar <obra> [--apply]` (retirar) e `curar --restaurar <obra> [--apply]`.
 #3301: os dois exigem `--motivo`; sem ele saem 2, no plano e no --apply, sem falar com o servidor.
 
-Sem --apply: mostram o plano (o que muda na obra e no export) e saem 0 sem gravar nada.
-Com --apply: executam DELETE/PATCH e regeneram o export.
-Sem pergunta interativa no terminal (input() removido).
+Sem --apply: mostram o plano (o que muda na obra, na impressão, no índice e no export) e saem 0 sem
+gravar nada. Com --apply: chamam `POST /retirada` e `POST /restauracao`, com o motivo no corpo, e
+regeneram o export. Sem pergunta interativa no terminal (input() removido).
 """
 
 from __future__ import annotations
@@ -14,7 +14,6 @@ import shutil
 import subprocess
 import sys
 import threading
-import urllib.parse
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
@@ -74,25 +73,16 @@ class _FalsoHandler(BaseHTTPRequestHandler):
             })
         return self._resp(404, {"title": "NaoEncontrada", "detail": self.path})
 
-    def do_DELETE(self):
-        self.falso.chamadas.append(("DELETE", self.path, None))
-        if self.path.startswith(f"/acervo/obras/{VIVA}") or self.path.startswith(f"/acervo/obras/{EXPURGADA}"):
-            return self._resp(204)
-        return self._resp(404, {"title": "NaoEncontrada", "detail": self.path})
-
-    def do_PATCH(self):
+    def do_POST(self):
         n = int(self.headers.get("content-length") or 0)
         corpo = json.loads(self.rfile.read(n) or b"{}")
-        self.falso.chamadas.append(("PATCH", self.path, corpo))
-        if self.path in (f"/acervo/obras/{EXPURGADA}", f"/acervo/obras/{VIVA}"):
-            oid = EXPURGADA if EXPURGADA in self.path else VIVA
-            tit = "Obra Expurgada" if oid == EXPURGADA else "Obra Viva"
-            return self._resp(200, {
-                "id": oid,
-                "titulo": tit,
-                "expurgada": False,
-                "expurgada_em": None,
-            })
+        self.falso.chamadas.append(("POST", self.path, corpo))
+        if self.path == f"/acervo/obras/{VIVA}/retirada":
+            return self._resp(200, {"expurgada_agora": True, "motivo_gravado": True,
+                                    "impressoes_aposentadas": ["imp-1"], "indices_aposentados": []})
+        if self.path == f"/acervo/obras/{EXPURGADA}/restauracao":
+            return self._resp(200, {"id": EXPURGADA, "titulo": "Obra Expurgada",
+                                    "expurgada": False, "expurgada_em": None})
         return self._resp(404, {"title": "NaoEncontrada", "detail": self.path})
 
 
@@ -119,6 +109,9 @@ class Falso:
             check=False,
         )
 
+    def escritas(self) -> list[tuple[str, str, dict | None]]:
+        return [c for c in self.chamadas if c[0] != "GET"]
+
 
 @pytest.fixture
 def servidor_falso():
@@ -136,27 +129,25 @@ precisa_requests = pytest.mark.skipif(PY is None, reason="nenhum python com `req
 def test_expurgar_sem_apply_e_plano_seco_sem_prompt(servidor_falso):
     r = servidor_falso.rodar("--expurgar", VIVA, "--motivo", MOTIVO)
     assert r.returncode == 0, r.stderr
-    assert "Plano: expurgar a obra" in r.stdout
+    assert "Plano: retirar a obra" in r.stdout
     assert f"motivo   : {MOTIVO}" in r.stdout
     assert "expurgada_em: None -> now()" in r.stdout
     assert "sai de ontologia/acervo/obra.jsonl" in r.stdout
     assert "plano seco — repita com --apply para gravar" in r.stdout
 
-    metodos = [metodo for metodo, _, _ in servidor_falso.chamadas]
-    assert "DELETE" not in metodos
+    assert servidor_falso.escritas() == []
     assert ("GET", f"/acervo/obras/{VIVA}", None) in servidor_falso.chamadas
 
 
 @precisa_requests
-def test_expurgar_com_apply_executa_e_relata(servidor_falso):
+def test_expurgar_com_apply_chama_a_retirada_com_o_motivo(servidor_falso):
     r = servidor_falso.rodar("--expurgar", VIVA, "--motivo", MOTIVO, "--apply")
     assert r.returncode == 0, r.stderr
-    assert f"Obra {VIVA} expurgada com sucesso" in r.stdout
+    assert f"Obra {VIVA} retirada (Obra Viva)" in r.stdout
+    assert "1 impressão(ões) aposentada(s)" in r.stdout
 
-    deletes = [(m, p) for m, p, _ in servidor_falso.chamadas if m == "DELETE"]
-    assert len(deletes) == 1
-    assert deletes[0][1].startswith(f"/acervo/obras/{VIVA}?autor=")
-    assert f"motivo={urllib.parse.quote(MOTIVO)}" in deletes[0][1]
+    assert servidor_falso.escritas() == [
+        ("POST", f"/acervo/obras/{VIVA}/retirada", {"autor": "dados", "motivo": MOTIVO})]
 
 
 @precisa_requests
@@ -169,21 +160,18 @@ def test_restaurar_sem_apply_e_plano_seco(servidor_falso):
     assert "entra em ontologia/acervo/obra.jsonl" in r.stdout
     assert "plano seco — repita com --apply para gravar" in r.stdout
 
-    metodos = [metodo for metodo, _, _ in servidor_falso.chamadas]
-    assert "PATCH" not in metodos
+    assert servidor_falso.escritas() == []
     assert ("GET", f"/acervo/obras/{EXPURGADA}", None) in servidor_falso.chamadas
 
 
 @precisa_requests
-def test_restaurar_com_apply_executa_e_relata(servidor_falso):
+def test_restaurar_com_apply_chama_a_restauracao_com_o_motivo(servidor_falso):
     r = servidor_falso.rodar("--restaurar", EXPURGADA, "--motivo", MOTIVO, "--apply")
     assert r.returncode == 0, r.stderr
-    assert f"Obra {EXPURGADA} restaurada com sucesso" in r.stdout
+    assert f"Obra {EXPURGADA} restaurada (Obra Expurgada)" in r.stdout
 
-    patches = [(m, p, c) for m, p, c in servidor_falso.chamadas if m == "PATCH"]
-    assert len(patches) == 1
-    assert patches[0][1] == f"/acervo/obras/{EXPURGADA}"
-    assert patches[0][2] == {"autor": "dados", "expurgada": False, "motivo": MOTIVO}
+    assert servidor_falso.escritas() == [
+        ("POST", f"/acervo/obras/{EXPURGADA}/restauracao", {"autor": "dados", "motivo": MOTIVO})]
 
 
 @precisa_requests
@@ -192,7 +180,7 @@ def test_expurgar_restaurar_json_modo(servidor_falso):
     assert r_exp_plano.returncode == 0
     d_exp_plano = json.loads(r_exp_plano.stdout)
     assert d_exp_plano["modo"] == "plano"
-    assert d_exp_plano["ato"] == "expurgar"
+    assert d_exp_plano["ato"] == "retirar"
     assert d_exp_plano["motivo"] == MOTIVO
     assert d_exp_plano["antes"]["expurgada"] is False
     assert d_exp_plano["depois"]["expurgada"] is True
@@ -212,6 +200,7 @@ def test_expurgar_restaurar_json_modo(servidor_falso):
     assert d_exp_app["modo"] == "aplicado"
     assert d_exp_app["expurgada"] is True
     assert d_exp_app["motivo"] == MOTIVO
+    assert d_exp_app["motivo_gravado"] is True
 
     r_res_app = servidor_falso.rodar("--restaurar", EXPURGADA, "--motivo", MOTIVO, "--apply", "--json")
     assert r_res_app.returncode == 0
@@ -221,19 +210,19 @@ def test_expurgar_restaurar_json_modo(servidor_falso):
 
 
 @precisa_requests
-def test_idempotencia_plano_obra_ja_expurgada(servidor_falso):
+def test_idempotencia_plano_obra_ja_retirada(servidor_falso):
     r = servidor_falso.rodar("--expurgar", EXPURGADA, "--motivo", MOTIVO)
     assert r.returncode == 0
-    assert "já estava expurgada" in r.stdout
-    assert "já ausente" in r.stdout
+    assert "já retirada em" in r.stdout
+    assert "idempotente" in r.stdout
 
 
 @precisa_requests
 def test_idempotencia_plano_obra_ja_ativa(servidor_falso):
     r = servidor_falso.rodar("--restaurar", VIVA, "--motivo", MOTIVO)
     assert r.returncode == 0
-    assert "já estava ativa" in r.stdout
-    assert "já presente" in r.stdout
+    assert "já estava em serviço" in r.stdout
+    assert "entra em ontologia/acervo/obra.jsonl" in r.stdout
 
 
 @precisa_requests
