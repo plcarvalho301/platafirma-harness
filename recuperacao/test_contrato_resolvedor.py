@@ -175,10 +175,10 @@ def test_degrau_sem_hierarquia_falha_o_build():
     ("kw", "esperado"),
     [
         ({}, EstadoConceito.ANCORADO),
-        ({"obras": 2, "obras_servindo": 0}, EstadoConceito.DECLARADO_NAO_SERVINDO),
-        ({"obras": 0, "obras_servindo": 0}, EstadoConceito.SEM_OBRA_NAO_JULGADO),
+        ({"obras": 2, "obras_servidas": 0}, EstadoConceito.DECLARADO_NAO_SERVINDO),
+        ({"obras": 0, "obras_servidas": 0}, EstadoConceito.SEM_OBRA_NAO_JULGADO),
         ({"classificado": False}, EstadoConceito.ORFAO),
-        ({"lacuna": True, "obras": 0, "obras_servindo": 0}, EstadoConceito.LACUNA),
+        ({"lacuna": True, "obras": 0, "obras_servidas": 0}, EstadoConceito.LACUNA),
     ],
 )
 def test_tabela_de_estados(kw, esperado):
@@ -187,7 +187,23 @@ def test_tabela_de_estados(kw, esperado):
 
 def test_lacuna_nao_se_deriva_da_ausencia_de_obra():
     """Juízo não se deriva: sem obra e sem linha de lacuna é `sem-obra-não-julgado`."""
-    assert Resolvedor.estado(_secao(obras=0, obras_servindo=0)) is not EstadoConceito.LACUNA
+    assert Resolvedor.estado(_secao(obras=0, obras_servidas=0)) is not EstadoConceito.LACUNA
+
+
+# ------------------------------------------- obra servida inteira (sem impressão)
+
+def test_obra_servida_inteira_sem_impressao_ancora_o_conceito():
+    """Obra classificada, com cópia e não retirada conta como servida, sem impressão."""
+    s = _secao(obras=1, obras_servidas=1, servindo=False)
+    assert Resolvedor.estado(s) is EstadoConceito.ANCORADO
+
+
+def test_obra_servida_por_trecho_ancora_o_conceito():
+    assert Resolvedor.estado(_secao(obras=3, obras_servidas=2)) is EstadoConceito.ANCORADO
+
+
+def test_so_obra_toda_retirada_declara_nao_servindo():
+    assert Resolvedor.estado(_secao(obras=2, obras_servidas=0)) is EstadoConceito.DECLARADO_NAO_SERVINDO
 
 
 # ------------------------------------------------------------ erro que instrui
