@@ -21,7 +21,7 @@ print()
 print("FUGA POR DEGRAU (0 em tudo = escada sem vazamento)")
 for rot, ch in [
     ("catálogo aponta pro vazio", "catalogo_aponta_pro_vazio"),
-    ("objeto sem documento", "objeto_sem_documento"),
+    ("objeto sem classificação", "objeto_sem_classificacao"),
     ("impressão sem trecho", "impressao_sem_trecho"),
     ("embedding parcial", "embedding_parcial"),
     ("sem vetor de faceta", "sem_vetor_de_faceta"),
