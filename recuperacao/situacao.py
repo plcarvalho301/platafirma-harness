@@ -3,7 +3,7 @@
 `spec_leitura-do-conhecimento.md` §0, §2, §4, §10.6.
 
 Contrato:
-  situacao(obra: str) -> Envelope   # payload {servivel, desde, impressao_id, degrau}
+  situacao(obra: str) -> Envelope   # payload {servida_inteira, servivel, desde, impressao_id, degrau}
 
 Regras duras (arq:0085 §4 + §2):
 1. Lê a CADEIA VIVA (impressão → estado de serviço), não retrato agregado.
@@ -123,6 +123,8 @@ def situacao(
 
     # 6. Empacota o payload já resolvido no Envelope
     conteudo = {
+        # estado da obra pela regra única do motor (#3294); `.get` porque o motor anterior não o manda
+        "servida_inteira": bool(payload.get("servida_inteira")),
         "servivel": payload["servivel"],
         "desde": payload["desde"],
         "impressao_id": payload["impressao_id"],
