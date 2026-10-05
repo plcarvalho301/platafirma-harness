@@ -18,6 +18,9 @@ from collections import Counter, defaultdict
 from collections.abc import Callable, Iterator
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import TypeVar
+
+T = TypeVar("T")
 
 
 @dataclass(frozen=True)
@@ -39,6 +42,14 @@ class Contexto:
     extras: dict[Path, str] = field(default_factory=dict)   # raiz de outro repositorio -> nome (--com)
     _arvores: dict[Path, ast.Module | None] = field(default_factory=dict)
     _textos: dict[Path, str] = field(default_factory=dict)
+    _indices: dict[str, object] = field(default_factory=dict)
+
+    def indice(self, chave: str, montar: Callable[[], T]) -> T:
+        """Indice da stack (rotas, funcoes por nome, funcoes que fazem I/O) montado uma vez por
+        rodada: o primeiro predicado que pede monta, os seguintes leem o mesmo objeto."""
+        if chave not in self._indices:
+            self._indices[chave] = montar()
+        return self._indices[chave]  # type: ignore[return-value]  # a chave fixa o tipo
 
     def rel(self, p: Path) -> str:
         """Caminho relativo ao repositorio do lint; de outro repositorio, com o nome dele na frente."""

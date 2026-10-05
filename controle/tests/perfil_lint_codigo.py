@@ -127,8 +127,18 @@ def _sha() -> str:
     return git("rev-parse", "--short=12", "HEAD") + ("-sujo" if sujo else "")
 
 
+# O codigo do proprio lint muda enquanto se mede (as linhas andam); o que aponta nele, ou cita
+# linha dele, fica fora da comparacao.
+_FORA_DO_DIFF = ("bin/_lint/", "controle/tests/perfil_lint_codigo.py")
+
+
 def _chave(ap: dict) -> tuple:
     return (ap["arquivo"], ap["linha"], ap.get("id") or "", ap["o_que_fere"], ap["cura"])
+
+
+def _comparaveis(apontamentos: list[dict]) -> set[tuple]:
+    return {_chave(a) for a in apontamentos
+            if not a["arquivo"].startswith(_FORA_DO_DIFF) and not any(f in a["o_que_fere"] for f in _FORA_DO_DIFF)}
 
 
 @pytest.mark.parametrize("alvo", ["bin/curar", ""], ids=["arquivo-unico", "repositorio"])
@@ -151,8 +161,8 @@ def test_perfil(alvo: str) -> None:
         referencia.parent.mkdir(parents=True, exist_ok=True)
         referencia.write_text(json.dumps(apontamentos, ensure_ascii=False), encoding="utf-8")
 
-    antes = {_chave(a) for a in json.loads(referencia.read_text(encoding="utf-8"))}
-    agora = {_chave(a) for a in apontamentos}
+    antes = _comparaveis(json.loads(referencia.read_text(encoding="utf-8")))
+    agora = _comparaveis(apontamentos)
     falhas = []
     if antes != agora:
         sumiram, surgiram = sorted(antes - agora)[:5], sorted(agora - antes)[:5]

@@ -11,7 +11,7 @@ from __future__ import annotations
 import ast
 import re
 from collections import Counter, defaultdict
-from collections.abc import Iterator
+from collections.abc import Iterable, Iterator
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -90,33 +90,47 @@ def _caminho_literal(no: ast.AST | None) -> str | None:
     return None
 
 
-def _rotas_do_modulo(ctx: Contexto, p: Path, arvore: ast.Module,
-                     globais: dict[str, list[Def]]) -> Iterator[tuple[str, Def]]:
-    """Rotas do modulo: decorador `@app.post("/x")` e registro `Route("/x", tratador)`. O
-    tratador importado de outro modulo se acha pelo nome na stack."""
-    rel = ctx.rel(p)
-    defs = {n.name: Def(rel, p, n) for n in ast.walk(arvore) if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef))}
-    defs = {**{k: v[0] for k, v in globais.items() if len(v) == 1}, **defs}
-    for d in defs.values():
+def _decoradas(defs: Iterable[Def]) -> Iterator[tuple[str, Def]]:
+    """Rotas por decorador: `@app.post("/x")`."""
+    for d in defs:
         for dec in d.no.decorator_list:
             if (isinstance(dec, ast.Call) and isinstance(dec.func, ast.Attribute) and dec.func.attr in _METODOS_ROTA
                     and dec.args and (caminho := _caminho_literal(dec.args[0]))):
                 yield caminho, d
+
+
+def _rotas_do_modulo(ctx: Contexto, p: Path, arvore: ast.Module, unicas: dict[str, Def],
+                     decoradas_unicas: list[tuple[str, Def]]) -> Iterator[tuple[str, Def]]:
+    """Rotas do modulo: decorador `@app.post("/x")` e registro `Route("/x", tratador)`. O
+    tratador importado de outro modulo se acha pelo nome na stack.
+
+    Le-se como se as funcoes de nome unico na stack fossem do modulo, na frente das dele:
+    `unicas` e `decoradas_unicas` se calculam uma vez em `rotas`, nao a cada modulo."""
+    rel = ctx.rel(p)
+    locais = {n.name: Def(rel, p, n) for n in ast.walk(arvore) if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef))}
+    yield from decoradas_unicas
+    yield from _decoradas(d for k, d in locais.items() if k not in unicas)
     for c in (n for n in ast.walk(arvore) if isinstance(n, ast.Call)):
         if nome(c.func).rsplit(".", 1)[-1] not in _REGISTRA_ROTA or not c.args:
             continue
         tratador = c.args[1] if len(c.args) > 1 else next((k.value for k in c.keywords if k.arg == "endpoint"), None)
         caminho = _caminho_literal(c.args[0])
-        if caminho and tratador is not None and (d := defs.get(nome(tratador).rsplit(".", 1)[-1])):
+        curto = nome(tratador).rsplit(".", 1)[-1] if tratador is not None else ""
+        if caminho and tratador is not None and (d := locais.get(curto) or unicas.get(curto)):
             yield caminho, d
 
 
 def rotas(ctx: Contexto) -> dict[str, Def]:
     """Caminho HTTP servido (com `*` no lugar do parametro) -> funcao que o trata."""
+    return ctx.indice("rotas", lambda: _montar_rotas(ctx))
+
+
+def _montar_rotas(ctx: Contexto) -> dict[str, Def]:
+    unicas = {k: v[0] for k, v in _por_nome(ctx).items() if len(v) == 1}
+    decoradas_unicas = list(_decoradas(unicas.values()))
     achadas: dict[str, Def] = {}
-    globais = _por_nome(ctx)
     for _, p, arvore in ctx.arvores(ctx.py_repo):
-        for caminho, d in _rotas_do_modulo(ctx, p, arvore, globais):
+        for caminho, d in _rotas_do_modulo(ctx, p, arvore, unicas, decoradas_unicas):
             achadas[_normal_rota(caminho)] = d
     return achadas
 
@@ -181,6 +195,10 @@ def resolver(curto: str, de: Def, defs: dict[str, list[Def]]) -> list[Def]:
 
 
 def _por_nome(ctx: Contexto) -> dict[str, list[Def]]:
+    return ctx.indice("por_nome", lambda: _montar_por_nome(ctx))
+
+
+def _montar_por_nome(ctx: Contexto) -> dict[str, list[Def]]:
     indice: dict[str, list[Def]] = defaultdict(list)
     for d in funcoes(ctx, ctx.py_repo):
         indice[d.no.name].append(d)
@@ -211,6 +229,10 @@ def prazo_invertido(ctx: Contexto, item: dict) -> Iterator[Achado]:
 def fazem_io(ctx: Contexto) -> frozenset[str]:
     """Nomes das funcoes da stack que chamam o mundo de fora direto: o `_enviar` que embrulha
     o httpx conta como chamada externa para quem o chama."""
+    return ctx.indice("fazem_io", lambda: _montar_fazem_io(ctx))
+
+
+def _montar_fazem_io(ctx: Contexto) -> frozenset[str]:
     return frozenset(d.no.name for d in funcoes(ctx, ctx.py_repo)
                      if any(isinstance(n, ast.Call) and externa(n) for n in sem_aninhadas(d.no)))
 
