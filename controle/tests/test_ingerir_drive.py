@@ -52,6 +52,39 @@ def test_ingerir_ajuda_mostra_drive_e_bucket(env_py):
     assert "--colecao, --bucket" in r.stderr
 
 
+def test_ingerir_para_em_catalogar_sem_motor(env_py):
+    # Incorporar (#3295; arq:0119 §2): --ate padrão catalogar, --motor fora do uso obrigatório
+    r = _roda([BIN_INGERIR, "--ajuda"], env_py)
+    assert "(default: catalogar)" in r.stderr
+    assert "--motor <inst>]" not in r.stderr.splitlines()[1]
+
+
+def _lote_sem_servidor(tmp_path, env_py, *extra):
+    pasta = tmp_path / "lote"
+    pasta.mkdir()
+    (pasta / "obra.md").write_text("# Obra\n")
+    env = dict(env_py, RAG_API_BASE="http://127.0.0.1:9")
+    return _roda([BIN_INGERIR, "--lote", str(pasta), *extra], env)
+
+
+def test_ingerir_sem_motor_nao_recusa_por_uso(tmp_path, env_py):
+    r = _lote_sem_servidor(tmp_path, env_py)
+    assert r.returncode != 2
+    assert "obrigatório" not in r.stderr
+    assert "aviso" not in r.stderr
+
+
+def test_ingerir_ate_vetor_avisa_transcrever_e_indexar(tmp_path, env_py):
+    r = _lote_sem_servidor(tmp_path, env_py, "--ate", "vetor")
+    assert r.returncode != 2
+    assert "Transcrever" in r.stderr and "motor indexar" in r.stderr
+
+
+def test_ingerir_motor_em_catalogar_e_ignorado(tmp_path, env_py):
+    r = _lote_sem_servidor(tmp_path, env_py, "--motor", "rag")
+    assert "--motor e --ocr só valem com --ate além de catalogar" in r.stderr
+
+
 def test_ingerir_exclusividade_fontes(env_py):
     # lote + drive
     r = _roda([BIN_INGERIR, "--lote", "/tmp/a", "--drive"], env_py)

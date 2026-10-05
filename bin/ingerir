@@ -3,7 +3,7 @@
 # capacidade: incorporacao
 # dono: claudinho-dados
 # use para: ingestão em lote de obras e páginas wiki datadas
-# atos: ato=<pasta> (via --lote) ou pasta do Drive (via --origem); flags --apply, --motor, --ate, --ocr, --autor, --colecao, --json
+# atos: ato=<pasta> (via --lote) ou pasta do Drive (via --origem); flags --apply, --ate (padrão catalogar), --motor e --ocr (só além de catalogar), --autor, --colecao, --json
 import argparse
 import csv
 import hashlib
@@ -45,7 +45,11 @@ _FANTASMA_NAMES = {
 _RE_WIKI_DATADO = re.compile(r"^(?:wiki/)?(.+?)@(\d{4}-\d{2}-\d{2})\.md$", re.IGNORECASE)
 
 USO = """uso:
-  ingerir (--lote <pasta> | --origem <gdrive:pasta|url> | --drive [<pasta>]) --motor <inst> [opções]
+  ingerir (--lote <pasta> | --origem <gdrive:pasta|url> | --drive [<pasta>]) [opções]
+
+Incorporar (arq:0119 §2): sem --ate, o lote para na obra catalogada com a cópia sob guarda.
+Texto e índice são outros estágios: Transcrever (acervo curar obra --reextrair) e Indexar
+(motor indexar, da ia).
 
 opções de fonte (uma das opções):
   --lote <pasta>         pasta local com arquivos do lote a ingerir
@@ -53,12 +57,14 @@ opções de fonte (uma das opções):
                          aceita 'gdrive:<caminho>' ou URL drive/.../folders/<ID>
   --drive [<pasta>]      espelha pasta do Drive para staging local (~/AI/entrada/drive-<AAAAMMDD>-<rotulo>)
                          antes de ingerir (default: PlataFirma/entrada)
-  --motor <inst>         instância do motor (ex: --motor rag)
 
 opções adicionais:
   --apply                aplica o lote (default: falso, dry-run do plano)
-  --ate <degrau>         degrau alvo: catalogar | chunk | embed | vetor (default: vetor)
-  --ocr                  autoriza extração OCR em arquivos escaneados (default: false)
+  --ate <degrau>         degrau alvo: catalogar | chunk | embed | vetor (default: catalogar);
+                         além de catalogar, transcreve e indexa no mesmo lote (com aviso)
+  --motor <inst>         instância do motor (ex: --motor rag); só com --ate além de catalogar
+  --ocr                  autoriza extração OCR em arquivos escaneados (default: false);
+                         só com --ate além de catalogar
   --semantico            corte semântico por Orçamento de Fronteiras na seção sem heading que
                          estoura o teto (causa A, card #3073); default: false (corte por tamanho)
   --autor <slug>         curador do lote (default: cadeira da sessão ou 'dados')
@@ -364,7 +370,7 @@ def formatar_tabela_plano(lote: dict) -> str:
     resumo = lote.get("resumo", {})
     total = len(lote.get("itens", []))
     linhas.append(f"Plano de Ingestão: lote {lote.get('id')} (dry-run)")
-    linhas.append(f"Autor: {lote.get('autor')} · Motor: {lote.get('motor')} · Até: {lote.get('ate')} · OCR: {lote.get('ocr')} · Coleção: {lote.get('colecao')}")
+    linhas.append(f"Autor: {lote.get('autor')} · Motor: {lote.get('motor') or '-'} · Até: {lote.get('ate')} · OCR: {lote.get('ocr')} · Coleção: {lote.get('colecao')}")
     linhas.append(f"Resumo: total={total} | criar={resumo.get('criar', 0)} | edicao={resumo.get('edicao', 0)} | ja_ingerido={resumo.get('ja_ingerido', 0)} | bloqueada={resumo.get('bloqueada', 0)} | reprovado={resumo.get('reprovado', 0)}")
     linhas.append("")
     linhas.append(f"{'#':<3} {'Arquivo':<40} {'Título':<45} {'Veredito':<14} {'Portões / Detalhe'}")
@@ -397,7 +403,7 @@ def formatar_tabela_aplicado(lote: dict) -> str:
     edicao = resumo.get("edicao", 0)
     pulado = sum(1 for it in lote.get("itens", []) if it.get("estado") in ("pulado", "parado"))
     linhas.append(f"Execução de Ingestão: lote {lote.get('id')}")
-    linhas.append(f"Estado: {lote.get('estado')} · Autor: {lote.get('autor')} · Motor: {lote.get('motor')} · Até: {lote.get('ate')}")
+    linhas.append(f"Estado: {lote.get('estado')} · Autor: {lote.get('autor')} · Motor: {lote.get('motor') or '-'} · Até: {lote.get('ate')}")
     linhas.append(f"Resumo: total={total} | feito={feito} | edicao={edicao} | bloqueada={bloqueada} | pulado={pulado} | falhou={falhou}")
     linhas.append("")
     linhas.append(f"{'#':<3} {'Arquivo':<40} {'Título':<45} {'Veredito':<12} {'Estado':<12} {'Degrau':<12} {'Detalhe'}")
@@ -432,7 +438,7 @@ def main():
     parser.add_argument("--drive", dest="drive", nargs="?", const="PlataFirma/entrada", default=None)
     parser.add_argument("--motor", dest="motor", default=None)
     parser.add_argument("--apply", dest="apply", action="store_true", default=False)
-    parser.add_argument("--ate", dest="ate", default="vetor")
+    parser.add_argument("--ate", dest="ate", default="catalogar")
     parser.add_argument("--ocr", dest="ocr", action="store_true", default=False)
     parser.add_argument("--semantico", dest="semantico", action="store_true", default=False)
     parser.add_argument("--autor", dest="autor", default=None)
@@ -462,11 +468,6 @@ def main():
     elif args.origem:
         args.lote = aterrissar_origem(args.origem)
 
-    if not args.motor:
-        sys.stderr.write(USO + "\n")
-        sys.stderr.write("ingerir: erro: --motor <inst> é obrigatório (ex: --motor rag)\n")
-        sys.exit(2)
-
     if not os.path.isdir(args.lote):
         sys.stderr.write(f"ingerir: erro: pasta de lote não encontrada: {args.lote}\n")
         sys.exit(1)
@@ -474,6 +475,16 @@ def main():
     if args.ate not in ("catalogar", "chunk", "embed", "vetor"):
         sys.stderr.write(f"ingerir: erro: degrau --ate inválido: {args.ate}\n")
         sys.exit(2)
+
+    if args.ate != "catalogar":
+        sys.stderr.write(
+            f"ingerir: aviso: --ate {args.ate} passa de Incorporar (arq:0119 §2). O texto da obra é o "
+            "estágio Transcrever (acervo curar obra --reextrair) e o índice é o Indexar (motor indexar, "
+            "da ia); este caminho fica até os dois terem ato próprio.\n"
+        )
+    elif args.motor or args.ocr:
+        sys.stderr.write("ingerir: aviso: --motor e --ocr só valem com --ate além de catalogar; ignorados\n")
+        args.motor, args.ocr = None, False
 
     autor = args.autor
     if not autor:
@@ -537,13 +548,14 @@ def main():
 
     payload = {
         "autor": autor,
-        "motor": args.motor,
         "ate": args.ate,
         "ocr": args.ocr,
         "semantico": args.semantico,
         "colecao": args.colecao,
         "itens": itens,
     }
+    if args.motor:
+        payload["motor"] = args.motor
 
     try:
         resp = requests.post(f"{BASE}/acervo/lotes", json=payload, headers=headers)
