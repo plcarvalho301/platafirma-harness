@@ -352,6 +352,49 @@ def ato_ocultar_revisao(a):
         modo = "suprimida" if suprime else "ocultada"
         print(f"ok: {titulo} → rev {', '.join(ids)} {modo} (texto e resumo)")
 
+def ato_mostrar_revisao(a):
+    """A volta do `ocultar-revisao` (`acervo restaurar casa revisao`, arq:0119 §9.1; #3298): devolve
+    texto e resumo das revisões ao histórico público (`revisiondelete` com `show`). Revisão suprimida
+    só volta com o direito `suppressrevision`. Sem --apply: só mostra o plano."""
+    revids = sorted({int(r) for r in a.revid})
+    q = _get({"action": "query", "prop": "info|revisions", "revids": "|".join(map(str, revids)),
+              "rvprop": "ids|timestamp|user|size", "formatversion": 2})
+    qq = q.get("query", {})
+    ruins = qq.get("badrevids") or {}
+    faltam = [r.get("revid") for r in (ruins.values() if isinstance(ruins, dict) else ruins)]
+    if faltam:
+        morre(f"revisão inexistente: {', '.join(map(str, faltam))}", 1)
+    plano = [(p["title"], r["revid"], r.get("timestamp", "?"))
+             for p in qq.get("pages", []) for r in p.get("revisions", [])]
+    for titulo, rid, ts in plano:
+        print(f"rev {rid} · {titulo} · {ts} · texto e resumo voltam ao histórico")
+    if not a.apply:
+        print("plano seco: nada restaurado. --apply executa.")
+        return
+    _login()
+    ui = _get({"action": "query", "meta": "userinfo", "uiprop": "rights"})
+    direitos = set(ui.get("query", {}).get("userinfo", {}).get("rights", []))
+    if "deleterevision" not in direitos:
+        morre("a conta de bot não tem o direito deleterevision na wiki: conceder ao grupo "
+              "do bot em LocalSettings ($wgGroupPermissions[...]['deleterevision']).", 4)
+    suprime = "suppressrevision" in direitos
+    token = _csrf()
+    for titulo in sorted({t for t, *_ in plano}):
+        ids = [str(rid) for t, rid, *_ in plano if t == titulo]
+        res = _post({"action": "revisiondelete", "type": "revision", "target": titulo,
+                     "ids": "|".join(ids), "show": "content|comment",
+                     "suppress": "no" if suprime else "nochange",
+                     "reason": a.motivo, "token": token})
+        if "error" in res:
+            err = res["error"]
+            morre(f"{titulo}: {err.get('code', 'erro')}: {err.get('info', err)}")
+        for item in res.get("revisiondelete", {}).get("items", []):
+            erros = item.get("errors") or []
+            if erros:
+                morre(f"{titulo} rev {item.get('id')}: {erros}")
+        print(f"ok: {titulo} → rev {', '.join(ids)} restaurada (texto e resumo)")
+
+
 def ato_cargo(a):
     params = {"action": "cargoquery", "tables": a.tabela, "fields": a.campos,
               "limit": min(a.limite, 100)}
@@ -420,6 +463,13 @@ def build_parser():
     s.add_argument("--motivo", required=True)
     s.add_argument("--apply", action="store_true")
     s.set_defaults(fn=ato_ocultar_revisao)
+
+    s = sub.add_parser("mostrar-revisao",
+                       help="devolve texto e resumo de revisões ocultadas ao histórico (a volta de ocultar-revisao)")
+    s.add_argument("revid", nargs="+", type=int)
+    s.add_argument("--motivo", required=True)
+    s.add_argument("--apply", action="store_true")
+    s.set_defaults(fn=ato_mostrar_revisao)
 
     s = sub.add_parser("cargo", help="consulta SQL sobre campos Cargo declarados")
     s.add_argument("tabela")

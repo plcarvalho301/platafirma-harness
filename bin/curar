@@ -350,10 +350,13 @@ def acao_expurgar(obra: str, autor: str, aplicar: bool, como_json: bool, headers
     titulo = obra_dados.get("titulo") or "-"
     expurgada_em_atual = obra_dados.get("expurgada_em")
 
+    servindo = [i.get("id") for i in (obra_dados.get("impressoes") or []) if i.get("estado") == "servindo"]
+
     if not aplicar:
+        # arq:0119 §9.1 (#3298): o plano nomeia o que sai de serviço — catálogo, impressão e índice
         plano = {
             "modo": "plano",
-            "ato": "expurgar",
+            "ato": "retirar",
             "obra_id": obra_id,
             "titulo": titulo,
             "antes": {
@@ -364,46 +367,49 @@ def acao_expurgar(obra: str, autor: str, aplicar: bool, como_json: bool, headers
                 "expurgada": True,
                 "expurgada_em": "now()",
             },
+            "muda": {
+                "catalogo": "fica, marcado retirado (expurgada_em); nenhuma linha se apaga",
+                "impressao": {"aposenta": servindo},
+                "indice": "o do motor que serve a obra sai (volta por nova indexação)",
+            },
+            "volta": f"acervo restaurar biblioteca obra {obra_id}",
             "export": "sai de ontologia/acervo/obra.jsonl",
             "autor": autor,
         }
         if como_json:
             print(json.dumps(plano, indent=2, ensure_ascii=False))
         else:
-            print(f"Plano: expurgar a obra {obra_id} ({titulo})")
+            print(f"Plano: retirar a obra {obra_id} ({titulo}), com volta")
             if expurgada_em_atual is not None:
-                print(f"  alteração: obra já estava expurgada em {expurgada_em_atual} (idempotente)")
-                print("  export   : já ausente de ontologia/acervo/obra.jsonl")
+                print(f"  catálogo : já retirada em {expurgada_em_atual} (idempotente: só limpa o que ficou servindo)")
             else:
-                print("  alteração: expurgada_em: None -> now() (expurgada)")
-                print("  export   : sai de ontologia/acervo/obra.jsonl")
+                print("  catálogo : fica, marcada retirada (expurgada_em: None -> now()); nenhuma linha se apaga")
+            print(f"  impressão: {', '.join(servindo) + ' aposenta' if servindo else 'nenhuma servindo'}")
+            print("  índice   : o do motor que serve a obra sai (volta por nova indexação)")
+            print("  export   : sai de ontologia/acervo/obra.jsonl")
+            print(f"  volta    : acervo restaurar biblioteca obra {obra_id}")
             print("  (plano seco — repita com --apply para gravar)")
         return 0
 
-    url = f"{BASE}/acervo/obras/{obra_id}?autor={urllib.parse.quote(autor)}"
-    try:
-        resp = requests.delete(url, headers=headers)
-    except requests.exceptions.RequestException as e:
-        falha_indeterminavel(e)
-    if resp.status_code >= 500:
-        falha_indeterminavel(resp)
-    if resp.status_code != 204:
-        falha_problem(resp)
+    resultado = _chamar("POST", f"{BASE}/acervo/obras/{obra_id}/retirada", headers, {"autor": autor})
 
     repo_conh = _repo_conhecimento()
     export = _exportar(repo_conh or "")
     if como_json:
         print(json.dumps({
             "modo": "aplicado",
-            "ato": "expurgar",
+            "ato": "retirar",
             "expurgada": True,
             "obra_id": obra_id,
             "titulo": titulo,
             "autor": autor,
+            **(resultado or {}),
             "export": export,
         }, indent=2, ensure_ascii=False))
     else:
-        print(f"Obra {obra_id} expurgada com sucesso ({titulo}).")
+        r = resultado or {}
+        print(f"Obra {obra_id} retirada ({titulo}): {len(r.get('impressoes_aposentadas') or [])} impressão(ões) "
+              f"aposentada(s), {len(r.get('indices_aposentados') or [])} índice(s) fora do motor.")
         if export is None:
             print("  export : NÃO regenerado (clone de conhecimento em main / venv não achados) — rode `exportar-acervo` e commite")
         else:
@@ -440,6 +446,11 @@ def acao_restaurar(obra: str, autor: str, aplicar: bool, como_json: bool, header
                 "expurgada": False,
                 "expurgada_em": None,
             },
+            "muda": {
+                "catalogo": "volta ao serviço (expurgada_em -> nulo)",
+                "impressao": "não volta sozinha: a aposentada fica; o texto volta por acervo espelhar|promover",
+                "indice": "não volta sozinho: volta por motor indexar sobre a impressão servindo",
+            },
             "export": "entra em ontologia/acervo/obra.jsonl",
             "autor": autor,
         }
@@ -448,28 +459,16 @@ def acao_restaurar(obra: str, autor: str, aplicar: bool, como_json: bool, header
         else:
             print(f"Plano: restaurar a obra {obra_id} ({titulo})")
             if expurgada_em_atual is None:
-                print("  alteração: obra já estava ativa (expurgada_em é nulo)")
-                print("  export   : já presente em ontologia/acervo/obra.jsonl")
+                print("  catálogo : obra já estava em serviço (expurgada_em é nulo)")
             else:
-                print(f"  alteração: expurgada_em: {expurgada_em_atual} -> None (ativa)")
-                print("  export   : entra em ontologia/acervo/obra.jsonl")
+                print(f"  catálogo : volta ao serviço (expurgada_em: {expurgada_em_atual} -> None)")
+            print("  impressão: não volta sozinha; o texto volta por acervo espelhar|promover biblioteca obra")
+            print("  índice   : não volta sozinho; volta por motor indexar sobre a impressão servindo")
+            print("  export   : entra em ontologia/acervo/obra.jsonl")
             print("  (plano seco — repita com --apply para gravar)")
         return 0
 
-    url = f"{BASE}/acervo/obras/{obra_id}"
-    payload = {
-        "autor": autor,
-        "expurgada": False,
-    }
-    try:
-        resp = requests.patch(url, json=payload, headers=headers)
-    except requests.exceptions.RequestException as e:
-        falha_indeterminavel(e)
-    if resp.status_code >= 500:
-        falha_indeterminavel(resp)
-    if resp.status_code != 200:
-        falha_problem(resp)
-    data = resp.json()
+    data = _chamar("POST", f"{BASE}/acervo/obras/{obra_id}/restauracao", headers, {"autor": autor})
 
     repo_conh = _repo_conhecimento()
     export = _exportar(repo_conh or "")
@@ -481,7 +480,7 @@ def acao_restaurar(obra: str, autor: str, aplicar: bool, como_json: bool, header
             "export": export,
         }, indent=2, ensure_ascii=False))
     else:
-        print(f"Obra {obra_id} restaurada com sucesso ({titulo}).")
+        print(f"Obra {obra_id} restaurada ({titulo}).")
         if export is None:
             print("  export : NÃO regenerado (clone de conhecimento em main / venv não achados) — rode `exportar-acervo` e commite")
         else:

@@ -115,6 +115,6 @@ def test_forma_velha_avisa_o_ato_novo(tmp_path, opcoes, velha, nova):
 
 
 def test_espelhos_de_retirar_nao_avisa_transcrever(tmp_path):
-    # `--expurgar|--restaurar --espelhos` e de Retirar (#3298)
+    # `--expurgar|--restaurar --espelhos` avisa `recolher|repor` (#3298), nunca um ato de Transcrever
     r = _acervo("curar", "biblioteca", "--expurgar", "--espelhos", sessao=f"t-esp-{tmp_path.name}")
-    assert "forma vigente" not in r.stderr, r.stderr
+    assert "arq:0119 §2" not in r.stderr, r.stderr
