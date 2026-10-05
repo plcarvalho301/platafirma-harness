@@ -252,6 +252,22 @@ def test_lint_codigo_ancora_na_lista(tmp_path, acervo):
     assert p.stdout.splitlines()[0] == "«lint codigo mono/m.py: 0 apontamentos — antipadroes-de-codigo@rev3»"
 
 
+def _plano(saida: str) -> str:
+    """A saida agrupada (arquivo, criterio, linhas) achatada em `arquivo:linha: criterio [detalhe]`,
+    uma por apontamento, para afirmar o local sem depender da indentacao."""
+    planas, arquivo, criterio = [], "", ""
+    for linha in saida.splitlines():
+        recuo = len(linha) - len(linha.lstrip(" "))
+        if recuo == 2:
+            arquivo = linha.strip()
+        elif recuo == 4:
+            criterio = linha.strip().split(" — cura: ", 1)[0]
+        elif recuo == 6:
+            numeros, _, detalhe = linha.strip().partition(": ")
+            planas += [f"{arquivo}:{n}: {criterio} [{detalhe}]" for n in numeros.split(", ")]
+    return "\n".join(planas)
+
+
 def test_lint_codigo_python_sem_extensao_em_raiz_sem_manifesto(tmp_path, acervo):
     # #2856 linha 190: raiz com bin/ e sem pyproject caia no ramo de shell; o ruff nao rodava
     _precisa_ruff()
@@ -277,7 +293,7 @@ def test_lint_codigo_regra_desconhecida_vira_aviso_e_o_resto_mede(tmp_path, acer
     p = _rodar_lint("codigo", "mono", env_extra=env)
     assert p.returncode == 1, p.stdout + p.stderr
     assert "ZZZ999" in p.stderr
-    assert "m.py:1: D14" in p.stdout
+    assert "m.py:1: D14" in _plano(p.stdout)
 
 
 def test_lint_codigo_assert_em_teste_nao_aponta(tmp_path, acervo):
@@ -288,7 +304,7 @@ def test_lint_codigo_assert_em_teste_nao_aponta(tmp_path, acervo):
     (wt / "prod.py").write_text("def f(x):\n    assert x\n    return x\n")
     env = {**env, **acervo(textos={"antipadroes-de-codigo": LISTA_CODIGO})}
     p = _rodar_lint("codigo", "mono", env_extra=env)
-    assert "prod.py:2: P12" in p.stdout, p.stdout + p.stderr
+    assert "prod.py:2: P12" in _plano(p.stdout), p.stdout + p.stderr
     assert "test_x.py" not in p.stdout
 
 
@@ -298,10 +314,10 @@ def test_lint_codigo_shell_pelos_predicados_e_pelo_shellcheck(tmp_path, acervo):
     env = {**env, **acervo(textos={"antipadroes-de-codigo": LISTA_CODIGO})}
     p = _rodar_lint("codigo", "mono", "s.sh", env_extra=env)
     assert p.returncode == 1, p.stdout + p.stderr
-    assert "s.sh:4: S6" in p.stdout, p.stdout
-    assert "s.sh:1: S14" in p.stdout, p.stdout
+    assert "s.sh:4: S6" in _plano(p.stdout), p.stdout
+    assert "s.sh:1: S14" in _plano(p.stdout), p.stdout
     if shutil.which("shellcheck") or shutil.which("uvx"):
-        assert "s.sh:6: S1" in p.stdout and "SC2086" in p.stdout, p.stdout + p.stderr
+        assert "s.sh:6: S1" in _plano(p.stdout) and "SC2086" in p.stdout, p.stdout + p.stderr
     else:
         assert "shellcheck ausente" in p.stderr
 
@@ -329,7 +345,7 @@ def test_lint_codigo_alvo_em_subprojeto_roda_ruff_do_subprojeto(tmp_path, acervo
     for alvo in ("rag", "rag/pacote/modulo.py"):
         p = _rodar_lint("codigo", "mono", alvo, env_extra=env)
         assert p.returncode == 1, p.stdout + p.stderr
-        assert "rag/pacote/modulo.py:1" in p.stdout, p.stdout
+        assert "rag/pacote/modulo.py:1" in _plano(p.stdout), p.stdout
         assert "F401" in p.stdout, p.stdout
         assert "-->" not in p.stdout, p.stdout
 
@@ -695,11 +711,11 @@ def test_lint_codigo_ruff_padrao_soma_as_regras_do_ruff(tmp_path, acervo):
     (wt / "m.py").write_text("x = f'abc'\ndef f(a=[]):\n    return a\n")
     env_sem = {**env, **acervo(textos={"antipadroes-de-codigo": LISTA_CODIGO})}
     p = _rodar_lint("codigo", "mono", "m.py", env_extra=env_sem)
-    assert "F541" not in p.stdout and "m.py:2: P1" in p.stdout, p.stdout + p.stderr
+    assert "F541" not in p.stdout and "m.py:2: P1" in _plano(p.stdout), p.stdout + p.stderr
     env_com = {**env, **acervo(textos={"antipadroes-de-codigo": LISTA_RUFF_PADRAO})}
     p = _rodar_lint("codigo", "mono", "m.py", env_extra=env_com)
-    assert "m.py:1: P19" in p.stdout and "F541" in p.stdout, p.stdout + p.stderr
-    assert "m.py:2: P1" in p.stdout, p.stdout
+    assert "m.py:1: P19" in _plano(p.stdout) and "F541" in p.stdout, p.stdout + p.stderr
+    assert "m.py:2: P1" in _plano(p.stdout), p.stdout
 
 
 def test_lint_codigo_predicado_candidato_diz_que_e_candidato(tmp_path, acervo):
@@ -713,7 +729,7 @@ def test_lint_codigo_predicado_candidato_diz_que_e_candidato(tmp_path, acervo):
         "| F1 | lote sem fila |")
     env = {**env, **acervo(textos={"antipadroes-de-codigo": lista})}
     p = _rodar_lint("codigo", "mono", "t.py", env_extra=env)
-    assert "t.py:2: R4" in p.stdout and "candidata, confirme lendo" in p.stdout, p.stdout + p.stderr
+    assert "t.py:2: R4" in _plano(p.stdout) and "candidata, confirme lendo" in p.stdout, p.stdout + p.stderr
     assert "NAO_EXISTE" in p.stderr, p.stderr
 
 
