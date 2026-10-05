@@ -222,8 +222,12 @@ class Secao:
     pagina: int | None = None
     qualidade: str | None = None
     servindo: bool = True
+    #: Obras vivas que tratam o conceito, e as servidas entre elas. Servida é a obra
+    #: classificada, com cópia sob guarda e não retirada: serve inteira pelo arquivo, com
+    #: ou sem impressão. Ter impressão servindo não é condição; só diz se serve também por
+    #: trecho.
     obras: int = 1
-    obras_servindo: int = 1
+    obras_servidas: int = 1
     classificado: bool = True
     lacuna: bool = False
     ancestrais: tuple[str, ...] = field(default_factory=tuple)
@@ -242,9 +246,10 @@ class Resolvedor:
             return EstadoConceito.LACUNA          # juízo declarado, nunca derivado
         if not s.classificado:
             return EstadoConceito.ORFAO
-        if s.obras >= 1 and s.obras_servindo >= 1:
+        if s.obras >= 1 and s.obras_servidas >= 1:
             return EstadoConceito.ANCORADO
         if s.obras >= 1:
+            # toda obra do conceito está retirada: a falta de impressão não chega aqui
             return EstadoConceito.DECLARADO_NAO_SERVINDO
         return EstadoConceito.SEM_OBRA_NAO_JULGADO
 

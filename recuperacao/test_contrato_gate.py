@@ -11,7 +11,7 @@ import pytest
 from .adaptadores.base import monta_envelope
 from .envelope import Cobertura, Item, LinhaFonte, Procedencia, Sinal, Versao, VersaoTipo
 from .fontes import Fonte
-from .gate import Gate, Julgamento, extrai_chaves, fontes_citadas
+from .gate import OBRA_RETIRADA, OBRA_SERVIDA, Gate, Julgamento, extrai_chaves, fontes_citadas
 from .resolvedor import Resolvedor, Secao
 from .adaptadores.base import Resultado
 
@@ -143,6 +143,50 @@ def test_chave_de_outra_secao_no_envelope_nao_confirma_a_citada():
     outra = f"acervo:{SHA}#circuit-breaker"
     gate = Gate(lambda c, servindo=True: _envelope_com(outra), Resolvedor(lambda _: _secao()))
     assert gate.confere(CHAVE).julgamento is Julgamento.FABRICADA
+
+
+# ------------------------------------------------- chave de obra, pelo catálogo
+
+OBRA = f"acervo:{SHA}"
+
+
+def _gate_obra(estado):
+    chamadas = []
+
+    def recuperar(chave, servindo=True):  # noqa: FBT002
+        chamadas.append(servindo)
+        return _envelope_vazio()
+
+    return Gate(recuperar, Resolvedor(lambda _: _secao()), catalogo=lambda _o: estado), chamadas
+
+
+def test_obra_servida_inteira_e_citavel_sem_impressao():
+    gate, chamadas = _gate_obra(OBRA_SERVIDA)
+    v = gate.confere(OBRA)
+    assert v.julgamento is Julgamento.CITAVEL
+    assert not v.recusa
+    assert chamadas == []  # obra não passa pelo índice
+
+
+def test_obra_retirada_e_aposentada_nao_fabricada():
+    v = _gate_obra(OBRA_RETIRADA)[0].confere(OBRA)
+    assert v.julgamento is Julgamento.APOSENTADA
+    assert not v.recusa
+
+
+def test_obra_fora_do_catalogo_e_recusada_e_aponta_o_catalogo():
+    v = _gate_obra(None)[0].confere(OBRA)
+    assert v.julgamento is Julgamento.FABRICADA
+    assert "catálogo" in v.falta and "impressão" not in v.falta
+    assert v.proximo.startswith("acervo ler biblioteca obra")
+
+
+def test_chave_de_trecho_segue_pelo_indice_mesmo_com_catalogo():
+    def recuperar(chave, servindo=True):  # noqa: FBT002
+        return _envelope_com(chave)
+
+    gate = Gate(recuperar, Resolvedor(lambda _: _secao()), catalogo=lambda _o: None)
+    assert gate.confere(CHAVE).julgamento is Julgamento.CITAVEL
 
 
 # ---------------------------------------------------------- grava e é idempotente

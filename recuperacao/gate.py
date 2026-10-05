@@ -8,8 +8,15 @@ biblioteca deste mesmo pacote, e no teste é uma função.
 
 ## Predicado em dois passos, e por que são dois
 
-    (a) a chave resolve em QUALQUER impressão?  → procedência válida
-    (b) está servindo?                          → citável hoje
+Chave de trecho (`acervo:<objeto>#<âncora>`, e as das outras fontes):
+
+    (a) a chave resolve em alguma impressão, servindo ou não?  → procedência válida
+    (b) está servindo?                                        → citável hoje
+
+Chave de obra do acervo (`acervo:<objeto>`, sem âncora) não passa por impressão: a obra
+classificada, com cópia sob guarda e não retirada se serve inteira pelo arquivo. Ela se
+confere no catálogo do acervo, que entra injetado como `recuperar`: servida é citável,
+retirada é aposentada, ausente do catálogo é fabricada.
 
 Colapsar os dois num só reprovaria citação legítima de impressão aposentada como se fosse
 chave fabricada — que é o erro caro, porque manda o autor reescrever uma citação correta.
@@ -116,12 +123,23 @@ class Parecer:
 
 # ---------------------------------------------------------------------- gate
 
-class Gate:
-    """`recuperar(chave, servindo=True) -> Envelope` entra injetado (§10.2)."""
+#: O que o catálogo do acervo diz de uma obra, pela chave de obra.
+OBRA_SERVIDA = "servida"    # classificada, com cópia sob guarda, não retirada
+OBRA_RETIRADA = "retirada"  # existe no catálogo, fora de serviço, com volta
 
-    def __init__(self, recuperar, resolvedor: Resolvedor) -> None:
+
+class Gate:
+    """`recuperar(chave, servindo=True) -> Envelope` entra injetado (§10.2).
+
+    `catalogo(objeto) -> "servida" | "retirada" | None` também entra injetado, pela mesma
+    razão: o gate não abre conexão própria. Sem ele, chave de obra cai no predicado de
+    trecho e não resolve em impressão nenhuma.
+    """
+
+    def __init__(self, recuperar, resolvedor: Resolvedor, catalogo=None) -> None:
         self._recuperar = recuperar
         self._resolvedor = resolvedor
+        self._catalogo = catalogo
 
     # -- passo (a) e (b) ---------------------------------------------------
     def _procedencia(self, chave: str, *, servindo: bool) -> Procedencia | None:
@@ -137,7 +155,23 @@ class Gate:
                 return item.procedencia
         return None
 
+    def _confere_obra(self, chave: str, objeto: str) -> Veredito:
+        estado = self._catalogo(objeto)
+        if estado == OBRA_SERVIDA:
+            return Veredito(chave=chave, julgamento=Julgamento.CITAVEL)
+        if estado == OBRA_RETIRADA:
+            return Veredito(chave=chave, julgamento=Julgamento.APOSENTADA)
+        return Veredito(
+            chave=chave,
+            julgamento=Julgamento.FABRICADA,
+            falta="a obra não está no catálogo do acervo",
+            proximo=f"acervo ler biblioteca obra {objeto}",
+        )
+
     def confere(self, chave: str) -> Veredito:
+        lida = le_chave(chave)
+        if self._catalogo is not None and lida.fonte == Fonte("acervo") and lida.ancora is None:
+            return self._confere_obra(chave, lida.objeto)
         if proc := self._procedencia(chave, servindo=True):
             return self._com_coordenada(chave, proc, Julgamento.CITAVEL)
         if proc := self._procedencia(chave, servindo=False):
