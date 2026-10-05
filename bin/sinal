@@ -21,6 +21,8 @@ e sondado daqui, de fora, por um contendor-posto que esta na mesma rede.
 
 import json
 import os
+import re
+import shutil
 import subprocess
 import sys
 import time
@@ -33,6 +35,8 @@ import raizes  # noqa: E402
 
 # ambiente: PLATAFIRMA_INSTANCIA[=/srv/platafirma/casa] (grava var/sinal/servicos.json; override so para teste)
 SAIDA = str(raizes.instancia() / "var" / "sinal" / "servicos.json")
+# Limiar para abertura de incidente (card #3253, pós-morte do #3251): 10 min (600s) por padrão.
+LIMIAR_INCIDENTE_SEGUNDOS = int(os.environ.get("SINAL_INCIDENTE_LIMIAR_SEGUNDOS", "600"))
 # POSTO: contêiner COM curl e NA rede `conhecimento` (plataforma-wiki_default), que é
 # onde os oauth2-proxy vivem. Era `platafirma-core-vikunja-proxy-1`, desligado com o
 # Vikunja (#172): a sonda passou a devolver "No such container" e os dois proxies saíam
@@ -155,6 +159,109 @@ def do_runtime():
             "motivo": motivo or "criacao de contendor falhou"}
 
 
+def parse_dt(iso_str: str) -> datetime:
+    if iso_str.endswith("Z"):
+        iso_str = iso_str[:-1] + "+00:00"
+    return datetime.fromisoformat(iso_str)
+
+
+def abre_incidente(nome: str, info: dict) -> str | None:
+    motivo = (info.get("motivo") or "serviço com sonda fora há mais de 10 min").strip()
+    sintoma = motivo.splitlines()[0][:100]
+    titulo = f"{nome}: {sintoma}"
+    desc = (
+        f"Detectado por sinal: serviço '{nome}' fora há mais de 10 min.\n\n"
+        f"- Serviço: {nome}\n"
+        f"- Fora desde: {info.get('fora_desde')}\n"
+        f"- Exercitado: {info.get('exercitado')}\n"
+        f"- Motivo: {info.get('motivo')}\n"
+    )
+    tarefas_bin = shutil.which("tarefas")
+    if not tarefas_bin:
+        candidato = raizes.release() / "harness" / "bin" / "tarefas"
+        if candidato.is_file() and os.access(candidato, os.X_OK):
+            tarefas_bin = str(candidato)
+    if not tarefas_bin:
+        sys.stderr.write("sinal: binario 'tarefas' nao encontrado no PATH nem na release; incidente nao aberto\n")
+        return None
+
+    cmd = [tarefas_bin, "criar", titulo, "--incidente", "--cadeira", "ti", "--desc", desc]
+    rc, out, err = roda(cmd, timeout=30)
+    if rc != 0:
+        sys.stderr.write(f"sinal: falha ao abrir incidente para {nome}: {err or out} (exit {rc})\n")
+        return None
+    m = re.search(r"item\s+(\d+)\s+criado", out)
+    incidente_id = m.group(1) if m else "criado"
+    print(f"INCIDENTE: #{incidente_id} — {titulo}")
+    return incidente_id
+
+
+def processa_estado_item(
+    nome: str,
+    item: dict,
+    anterior_item: dict | None,
+    agora_dt: datetime,
+    abre_incidente_fn=abre_incidente,
+    limiar_segundos: int = LIMIAR_INCIDENTE_SEGUNDOS,
+) -> None:
+    estado = item.get("estado")
+    if estado == "fora":
+        if anterior_item and anterior_item.get("estado") == "fora":
+            fora_desde_str = anterior_item.get("fora_desde") or anterior_item.get("lido_em")
+            incidente_id = anterior_item.get("incidente_id")
+        else:
+            fora_desde_str = item.get("lido_em") or agora_dt.isoformat(timespec="seconds")
+            incidente_id = None
+
+        item["fora_desde"] = fora_desde_str
+        if incidente_id:
+            item["incidente_id"] = incidente_id
+
+        try:
+            inicio = parse_dt(fora_desde_str)
+            segundos_fora = (agora_dt - inicio).total_seconds()
+        except Exception:
+            segundos_fora = 0
+
+        if segundos_fora >= limiar_segundos and not item.get("incidente_id"):
+            novo_id = abre_incidente_fn(nome, item)
+            if novo_id:
+                item["incidente_id"] = novo_id
+    else:
+        item.pop("fora_desde", None)
+        item.pop("incidente_id", None)
+
+
+def reconcilia_com_anterior(
+    dados: dict,
+    anterior: dict | None,
+    agora_dt: datetime | None = None,
+    abre_incidente_fn=abre_incidente,
+    limiar_segundos: int = LIMIAR_INCIDENTE_SEGUNDOS,
+) -> dict:
+    if agora_dt is None:
+        agora_dt = datetime.now(timezone.utc)
+    anterior_servicos = (anterior or {}).get("servicos", {})
+    anterior_runtime = (anterior or {}).get("runtime")
+
+    for nome, item in dados.get("servicos", {}).items():
+        ant_item = anterior_servicos.get(nome)
+        processa_estado_item(
+            nome, item, ant_item, agora_dt,
+            abre_incidente_fn=abre_incidente_fn,
+            limiar_segundos=limiar_segundos,
+        )
+
+    if "runtime" in dados:
+        processa_estado_item(
+            "runtime", dados["runtime"], anterior_runtime, agora_dt,
+            abre_incidente_fn=abre_incidente_fn,
+            limiar_segundos=limiar_segundos,
+        )
+
+    return dados
+
+
 def coleta():
     servicos = {}
     for nome, contendor in POR_HEALTHCHECK.items():
@@ -191,13 +298,24 @@ def main():
                               "motivo": f"{SAIDA} nao existe: nenhuma coleta ate agora"},
                              ensure_ascii=False, indent=2))
             return 1
-        print(open(SAIDA).read())
+        with open(SAIDA, "r", encoding="utf-8") as f:
+            print(f.read())
         return 0
 
+    anterior = None
+    if os.path.exists(SAIDA):
+        try:
+            with open(SAIDA, "r", encoding="utf-8") as f:
+                anterior = json.load(f)
+        except Exception as e:
+            sys.stderr.write(f"sinal: aviso lendo anterior ({SAIDA}): {e}\n")
+
     dados = coleta()
+    reconcilia_com_anterior(dados, anterior)
+
     os.makedirs(os.path.dirname(SAIDA), exist_ok=True)
     tmp = SAIDA + ".tmp"
-    with open(tmp, "w") as f:                   # escrita atomica: quem le nunca ve meia coleta
+    with open(tmp, "w", encoding="utf-8") as f:                   # escrita atomica: quem le nunca ve meia coleta
         json.dump(dados, f, ensure_ascii=False, indent=2)
         f.write("\n")
     os.replace(tmp, SAIDA)
@@ -206,9 +324,25 @@ def main():
     if dados["runtime"]["estado"] == "fora":
         fora.append("RUNTIME")
     for nome, e in sorted(dados["servicos"].items()):
-        print(f"{e['estado']:10} {nome}" + (f"  — {e.get('motivo')}" if e.get("motivo") else ""))
+        extra = []
+        if e.get("motivo"):
+            extra.append(e["motivo"])
+        if e.get("fora_desde"):
+            extra.append(f"fora desde {e['fora_desde']}")
+        if e.get("incidente_id"):
+            extra.append(f"incidente #{e['incidente_id']}")
+        sufixo = f"  — {'; '.join(extra)}" if extra else ""
+        print(f"{e['estado']:10} {nome}{sufixo}")
     r = dados["runtime"]
-    print(f"{r['estado']:10} (runtime)" + (f"  — {r.get('motivo')}" if r.get("motivo") else ""))
+    extra_r = []
+    if r.get("motivo"):
+        extra_r.append(r["motivo"])
+    if r.get("fora_desde"):
+        extra_r.append(f"fora desde {r['fora_desde']}")
+    if r.get("incidente_id"):
+        extra_r.append(f"incidente #{r['incidente_id']}")
+    sufixo_r = f"  — {'; '.join(extra_r)}" if extra_r else ""
+    print(f"{r['estado']:10} (runtime){sufixo_r}")
     return 1 if fora else 0
 
 

@@ -88,3 +88,6 @@ tests/test_contrato_persona_bancada.py
 # no estado antigo, os 16 casos de import e de guard ficam vermelhos).
 # O guard fecha a causa de fundo: signal(SIGPIPE, SIG_DFL) so na execucao direta dos scripts.
 tests/test_guarda_sigpipe.py
+# Medido em 05/10/2026 (card #3253): `sinal` abre incidente após 10 min de serviço fora (8 passam;
+# idempotente, limpa ao recuperar e ignora degradado/sem-sinal).
+tests/test_contrato_sinal.py
