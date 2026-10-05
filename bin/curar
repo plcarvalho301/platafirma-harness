@@ -41,8 +41,8 @@ _UUID_RE = re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f
 USO = """uso:
   curar --reclassificar [opções de alteração] [opções de seleção]
   curar --situacao <obra>
-  curar --expurgar <obra> [--sim]
-  curar --restaurar <obra>
+  curar --expurgar <obra> [--apply]
+  curar --restaurar <obra> [--apply]
   curar --apagar <obra> [--apply]                             tira do acervo, SEM VOLTA, a obra já retirada: catálogo,
                                                               motor e balde (arq:0119 §9.2); sem --apply, o plano
   curar --promover <obra> --impressao <id>
@@ -77,8 +77,8 @@ USO = """uso:
 ações principais:
   --reclassificar               reclassifica obra(s) em lote ou individualmente (default: plano seco)
   --situacao <obra>             consulta a situação viva de uma obra no acervo
-  --expurgar <obra>             expurgo reversível de uma obra (pede confirmação 'sim')
-  --restaurar <obra>            restaura obra expurgada (expurgada: false)
+  --expurgar <obra>             expurgo reversível de uma obra (default: plano seco; --apply executa)
+  --restaurar <obra>            restaura obra expurgada (default: plano seco; --apply executa)
   --promover <obra>             põe a impressão selada no ar (exige --impressao), pela marcação da obra (arq:0119 §5):
                                 inteira não promove; transcrita exige trechos; transcrita e indexada exige índice aprovado
   --relacionar <de> <para>      lavra UMA aresta em acervo.conceito_relacao (default: plano seco —
@@ -228,15 +228,19 @@ def resolver_obra_id(obra: str, headers: dict, expurgadas: bool = False, timeout
     obra = obra.strip()
     if _UUID_RE.match(obra):
         return obra
-    qs = "?expurgadas=true" if expurgadas else ""
-    url = f"{BASE}/acervo/obras/{urllib.parse.quote(obra, safe='')}/situacao{qs}"
-    try:
-        resp = requests.get(url, headers=headers, timeout=timeout)
-    except requests.exceptions.RequestException as e:
-        falha_indeterminavel(e)
-    if resp.status_code >= 500:
-        falha_indeterminavel(resp)
-    if resp.status_code != 200:
+    ordem_qs = ("?expurgadas=true", "") if expurgadas else ("", "?expurgadas=true")
+    resp = None
+    for qs in ordem_qs:
+        url = f"{BASE}/acervo/obras/{urllib.parse.quote(obra, safe='')}/situacao{qs}"
+        try:
+            resp = requests.get(url, headers=headers, timeout=timeout)
+        except requests.exceptions.RequestException as e:
+            falha_indeterminavel(e)
+        if resp.status_code >= 500:
+            falha_indeterminavel(resp)
+        if resp.status_code == 200:
+            break
+    if resp is None or resp.status_code != 200:
         falha_problem(resp)
     data = resp.json()
     oid = data.get("obra_id")
@@ -323,18 +327,50 @@ def acao_situacao(obra: str, como_json: bool, headers: dict) -> int:
     return 0
 
 
-def acao_expurgar(obra: str, autor: str, como_json: bool, headers: dict, confirmado: bool = False) -> int:
-    obra_id = resolver_obra_id(obra, headers)
-    if not confirmado:
-        sys.stderr.write(f"Confirma expurgo da obra '{obra}' ({obra_id})? Digite 'sim' para confirmar: ")
-        sys.stderr.flush()
-        try:
-            resp_conf = input().strip()
-        except EOFError:
-            resp_conf = ""
-        if resp_conf.lower() != "sim":
-            sys.stderr.write("Expurgo cancelado.\n")
-            return 1
+def acao_expurgar(obra: str, autor: str, aplicar: bool, como_json: bool, headers: dict) -> int:
+    obra_id = resolver_obra_id(obra, headers, expurgadas=False)
+    url_obra = f"{BASE}/acervo/obras/{obra_id}"
+    try:
+        resp_obra = requests.get(url_obra, headers=headers)
+    except requests.exceptions.RequestException as e:
+        falha_indeterminavel(e)
+    if resp_obra.status_code >= 500:
+        falha_indeterminavel(resp_obra)
+    if resp_obra.status_code != 200:
+        falha_problem(resp_obra)
+    obra_dados = resp_obra.json()
+    titulo = obra_dados.get("titulo") or "-"
+    expurgada_em_atual = obra_dados.get("expurgada_em")
+
+    if not aplicar:
+        plano = {
+            "modo": "plano",
+            "ato": "expurgar",
+            "obra_id": obra_id,
+            "titulo": titulo,
+            "antes": {
+                "expurgada": expurgada_em_atual is not None,
+                "expurgada_em": expurgada_em_atual,
+            },
+            "depois": {
+                "expurgada": True,
+                "expurgada_em": "now()",
+            },
+            "export": "sai de ontologia/acervo/obra.jsonl",
+            "autor": autor,
+        }
+        if como_json:
+            print(json.dumps(plano, indent=2, ensure_ascii=False))
+        else:
+            print(f"Plano: expurgar a obra {obra_id} ({titulo})")
+            if expurgada_em_atual is not None:
+                print(f"  alteração: obra já estava expurgada em {expurgada_em_atual} (idempotente)")
+                print("  export   : já ausente de ontologia/acervo/obra.jsonl")
+            else:
+                print("  alteração: expurgada_em: None -> now() (expurgada)")
+                print("  export   : sai de ontologia/acervo/obra.jsonl")
+            print("  (plano seco — repita com --apply para gravar)")
+        return 0
 
     url = f"{BASE}/acervo/obras/{obra_id}?autor={urllib.parse.quote(autor)}"
     try:
@@ -346,15 +382,72 @@ def acao_expurgar(obra: str, autor: str, como_json: bool, headers: dict, confirm
     if resp.status_code != 204:
         falha_problem(resp)
 
+    repo_conh = _repo_conhecimento()
+    export = _exportar(repo_conh or "")
     if como_json:
-        print(json.dumps({"expurgada": True, "obra_id": obra_id, "autor": autor}, indent=2, ensure_ascii=False))
+        print(json.dumps({
+            "modo": "aplicado",
+            "ato": "expurgar",
+            "expurgada": True,
+            "obra_id": obra_id,
+            "titulo": titulo,
+            "autor": autor,
+            "export": export,
+        }, indent=2, ensure_ascii=False))
     else:
-        print(f"Obra {obra_id} expurgada com sucesso.")
+        print(f"Obra {obra_id} expurgada com sucesso ({titulo}).")
+        if export is None:
+            print("  export : NÃO regenerado (clone de conhecimento em main / venv não achados) — rode `exportar-acervo` e commite")
+        else:
+            print(f"  export : regenerado no clone — commit e push são seus:\n    {export.replace(chr(10), chr(10) + '    ')}")
     return 0
 
 
-def acao_restaurar(obra: str, autor: str, como_json: bool, headers: dict) -> int:
+def acao_restaurar(obra: str, autor: str, aplicar: bool, como_json: bool, headers: dict) -> int:
     obra_id = resolver_obra_id(obra, headers, expurgadas=True)
+    url_obra = f"{BASE}/acervo/obras/{obra_id}"
+    try:
+        resp_obra = requests.get(url_obra, headers=headers)
+    except requests.exceptions.RequestException as e:
+        falha_indeterminavel(e)
+    if resp_obra.status_code >= 500:
+        falha_indeterminavel(resp_obra)
+    if resp_obra.status_code != 200:
+        falha_problem(resp_obra)
+    obra_dados = resp_obra.json()
+    titulo = obra_dados.get("titulo") or "-"
+    expurgada_em_atual = obra_dados.get("expurgada_em")
+
+    if not aplicar:
+        plano = {
+            "modo": "plano",
+            "ato": "restaurar",
+            "obra_id": obra_id,
+            "titulo": titulo,
+            "antes": {
+                "expurgada": expurgada_em_atual is not None,
+                "expurgada_em": expurgada_em_atual,
+            },
+            "depois": {
+                "expurgada": False,
+                "expurgada_em": None,
+            },
+            "export": "entra em ontologia/acervo/obra.jsonl",
+            "autor": autor,
+        }
+        if como_json:
+            print(json.dumps(plano, indent=2, ensure_ascii=False))
+        else:
+            print(f"Plano: restaurar a obra {obra_id} ({titulo})")
+            if expurgada_em_atual is None:
+                print("  alteração: obra já estava ativa (expurgada_em é nulo)")
+                print("  export   : já presente em ontologia/acervo/obra.jsonl")
+            else:
+                print(f"  alteração: expurgada_em: {expurgada_em_atual} -> None (ativa)")
+                print("  export   : entra em ontologia/acervo/obra.jsonl")
+            print("  (plano seco — repita com --apply para gravar)")
+        return 0
+
     url = f"{BASE}/acervo/obras/{obra_id}"
     payload = {
         "autor": autor,
@@ -369,10 +462,22 @@ def acao_restaurar(obra: str, autor: str, como_json: bool, headers: dict) -> int
     if resp.status_code != 200:
         falha_problem(resp)
     data = resp.json()
+
+    repo_conh = _repo_conhecimento()
+    export = _exportar(repo_conh or "")
     if como_json:
-        print(json.dumps(data, indent=2, ensure_ascii=False))
+        print(json.dumps({
+            "modo": "aplicado",
+            "ato": "restaurar",
+            **data,
+            "export": export,
+        }, indent=2, ensure_ascii=False))
     else:
-        print(f"Obra {obra_id} restaurada com sucesso.")
+        print(f"Obra {obra_id} restaurada com sucesso ({titulo}).")
+        if export is None:
+            print("  export : NÃO regenerado (clone de conhecimento em main / venv não achados) — rode `exportar-acervo` e commite")
+        else:
+            print(f"  export : regenerado no clone — commit e push são seus:\n    {export.replace(chr(10), chr(10) + '    ')}")
     return 0
 
 
@@ -2491,10 +2596,18 @@ def main(argv=None):
         return acao_desrelacionar(args.desrelacionar, autor, args.como_json, headers, confirmado=args.confirmado)
     elif args.situacao:
         return acao_situacao(args.situacao, args.como_json, headers)
-    elif args.expurgar:
-        return acao_expurgar(args.expurgar, autor, args.como_json, headers, confirmado=args.confirmado)
-    elif args.restaurar:
-        return acao_restaurar(args.restaurar, autor, args.como_json, headers)
+    elif args.expurgar is not None:
+        obra = args.expurgar or args.obra
+        if not obra:
+            sys.stderr.write("curar: erro: --expurgar exige <obra> ou --obra <id>\n")
+            return 2
+        return acao_expurgar(obra, autor, args.apply, args.como_json, headers)
+    elif args.restaurar is not None:
+        obra = args.restaurar or args.obra
+        if not obra:
+            sys.stderr.write("curar: erro: --restaurar exige <obra> ou --obra <id>\n")
+            return 2
+        return acao_restaurar(obra, autor, args.apply, args.como_json, headers)
     elif args.apagar:
         return acao_apagar(args.apagar, autor, args.apply, args.como_json, headers)
     elif args.promover:
