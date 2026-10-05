@@ -35,13 +35,17 @@ USO = """uso:
   balde copiar <sha256> --de <colecao> --para <colecao> [--apply]
   balde mover  <sha256> --de <colecao> --para <colecao> [--apply]
                                                          move atualiza objeto+coleção da obra no mesmo ato
-  balde apagar <sha256> --colecao <c> [--autor <slug>] [--sim]
+  balde apagar <sha256> --colecao <c> [--motivo <m>] [--autor <slug>] [--apply]
+                                                         SEM VOLTA. Plano: o que sai do balde e as obras
+                                                         retiradas que perdem o apontamento (objeto nulo);
+                                                         obra viva que o referencia recusa (exit 1)
 
 opções gerais:
-  --apply         aplica copiar/mover (default: plano seco)
+  --apply         aplica copiar/mover/apagar (default: plano seco)
   --autor <slug>  curador responsável (default: cadeira da sessão ou 'dados')
+  --motivo <m>    só no apagar, quando o plano diz que alguma obra retirada está sem motivo: fica com ela
   --json          emite resultado em JSON
-  --sim, -y       confirma apagar sem prompt interativo
+  --sim, -y       forma antiga de --apply no apagar (aviso); sem prompt interativo
 """
 
 
@@ -189,32 +193,47 @@ def _mover_ou_copiar(modo, sha256, de, para, autor, aplicar, como_json, headers)
     return 0
 
 
-def acao_apagar(sha256, colecao, autor, como_json, headers, confirmado):
+def acao_apagar(sha256, colecao, autor, motivo, aplicar, como_json, headers):
+    """`balde apagar <sha256> --colecao <c> [--motivo <m>] [--apply]` (#3302; arq:0119 §9.2): apaga o
+    arquivo do balde, SEM VOLTA, e tira o apontamento das obras retiradas que o tinham. Sem --apply, o
+    plano. Obra viva que o referencia recusa (409, exit 1)."""
     colecao = _colecao_valida(colecao, "--colecao")
     sha256 = _sha(sha256)
-    if not confirmado:
-        sys.stderr.write(f"Confirma apagar '{colecao}/{sha256}'? Digite 'sim' para confirmar: ")
-        sys.stderr.flush()
-        try:
-            resp_conf = input().strip()
-        except EOFError:
-            resp_conf = ""
-        if resp_conf.lower() != "sim":
-            sys.stderr.write("Cancelado.\n")
-            return 1
-    url = f"{BASE}/acervo/objetos/{sha256}?colecao={colecao}&autor={urllib.parse.quote(autor)}"
+    corpo = {"autor": autor, "colecao": colecao, "aplicar": aplicar}
+    if motivo and motivo.strip():
+        corpo["motivo"] = motivo.strip()
+    url = f"{BASE}/acervo/objetos/{sha256}/apagar"
     try:
-        resp = requests.delete(url, headers=headers)
+        resp = requests.post(url, json=corpo, headers=headers)
     except requests.exceptions.RequestException as e:
         falha_indeterminavel(e)
     if resp.status_code >= 500:
         falha_indeterminavel(resp)
-    if resp.status_code != 204:
+    if resp.status_code != 200:
         falha_problem(resp)
+    data = resp.json()
     if como_json:
-        print(json.dumps({"apagado": f"{colecao}/{sha256}"}, indent=2, ensure_ascii=False))
-    else:
-        print(f"Objeto {colecao}/{sha256} apagado.")
+        print(json.dumps(data, indent=2, ensure_ascii=False))
+        return 0
+    perdem = data.get("obras_que_perdem_o_apontamento") or []
+    sem_motivo = set(data.get("obras_sem_motivo") or [])
+    if data.get("modo") == "plano":
+        print(f"Plano: apagar {data.get('objeto')} do balde, SEM VOLTA")
+        print(f"  balde  : {'o arquivo sai' if data.get('no_balde') else 'o arquivo já não está no balde'}")
+        if not perdem:
+            print("  obras  : nenhuma aponta para ele")
+        for o in perdem:
+            m = o.get("retirada_motivo") or "SEM MOTIVO: o plano pede --motivo"
+            print(f"  obra   : {o['obra_id']} «{o.get('titulo')}» perde o apontamento — motivo da retirada: {m}")
+        if sem_motivo and not (motivo and motivo.strip()):
+            print(f"  falta  : --motivo \"<por que>\" para {len(sem_motivo)} obra(s) retirada(s) sem motivo")
+        print("  (plano seco — repita com --apply para apagar; vai ao dono antes)")
+        return 0
+    apagado = data.get("apagado")
+    print(f"Objeto {apagado} apagado do balde." if apagado else
+          f"Objeto {data.get('objeto')} já não estava no balde; só o apontamento saiu.")
+    for o in perdem:
+        print(f"  obra {o['obra_id']} «{o.get('titulo')}» ficou sem apontamento (objeto nulo)")
     return 0
 
 
@@ -231,6 +250,7 @@ def main(argv):
     parser.add_argument("--de", default=None)
     parser.add_argument("--para", default=None)
     parser.add_argument("--autor", default=None)
+    parser.add_argument("--motivo", default=None)
     parser.add_argument("--apply", action="store_true", default=False)
     parser.add_argument("--json", dest="como_json", action="store_true", default=False)
     parser.add_argument("--sim", "-y", dest="confirmado", action="store_true", default=False)
@@ -252,7 +272,10 @@ def main(argv):
         return _mover_ou_copiar(args.acao, args.alvo, args.de, args.para, autor, args.apply,
                                  args.como_json, headers)
     if args.acao == "apagar":
-        return acao_apagar(args.alvo, args.colecao, autor, args.como_json, headers, args.confirmado)
+        if args.confirmado and not args.apply:
+            sys.stderr.write("balde: --sim e a forma antiga de --apply no apagar; use --apply\n")
+        return acao_apagar(args.alvo, args.colecao, autor, args.motivo, args.apply or args.confirmado,
+                           args.como_json, headers)
     morre(f"ação desconhecida: {args.acao}")
 
 
