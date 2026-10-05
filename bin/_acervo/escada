@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # acervo escada — estado corrente do acervo por PARTIÇÃO (blob-minio | wiki), nos cinco
-# degraus do fluxo.
+# degraus do ciclo de vida da obra (o fluxo de valor e os estágios estão na arq:0119 §2).
 #
 # CLIENTE FINO de `GET /acervo/particao` (arq:0089: a rota é a única fonte). O que este
 # script fazia até 02/09/2026 — `mc ls` nos buckets, `docker cp` do resultado para dentro
