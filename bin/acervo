@@ -157,7 +157,7 @@ uso (gramatica arq:0106 — acervo <ato> <particao> <entidade> [seletor]):
   acervo retirar       casa revisao <revid>... --motivo <m> [--apply]   tira texto antigo do historico da wiki
   acervo restaurar     casa revisao <revid>... --motivo <m> [--apply]   devolve ao historico
   acervo extrato  --todas [dest]
-  acervo exportar                    regera ontologia/acervo/*.jsonl e vocabulario.json na bancada
+  acervo exportar [--bancada <chave>] regera ontologia/acervo/*.jsonl e vocabulario.json na bancada
   acervo psql     [--banco rag|motor]  <SQL por stdin>
   acervo balde    listar|ler|copiar|mover|apagar <bucket|sha256> [...] [--apply]
 
