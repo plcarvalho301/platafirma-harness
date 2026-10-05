@@ -41,8 +41,8 @@ _UUID_RE = re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f
 USO = """uso:
   curar --reclassificar [opções de alteração] [opções de seleção]
   curar --situacao <obra>
-  curar --expurgar <obra> [--apply]
-  curar --restaurar <obra> [--apply]
+  curar --expurgar <obra> --motivo "<por que>" [--apply]     o motivo é obrigatório (#3301); fica com a obra, com o autor e a data
+  curar --restaurar <obra> --motivo "<por que>" [--apply]
   curar --apagar <obra> [--apply]                             tira do acervo, SEM VOLTA, a obra já retirada: catálogo,
                                                               motor e balde (arq:0119 §9.2); sem --apply, o plano
   curar --promover <obra> --impressao <id>
@@ -77,8 +77,9 @@ USO = """uso:
 ações principais:
   --reclassificar               reclassifica obra(s) em lote ou individualmente (default: plano seco)
   --situacao <obra>             consulta a situação viva de uma obra no acervo
-  --expurgar <obra>             expurgo reversível de uma obra (default: plano seco; --apply executa)
-  --restaurar <obra>            restaura obra expurgada (default: plano seco; --apply executa)
+  --expurgar <obra>             expurgo reversível de uma obra (default: plano seco; --apply executa); exige --motivo
+  --restaurar <obra>            restaura obra expurgada (default: plano seco; --apply executa); exige --motivo
+                                (na obra já retirada sem motivo, --expurgar --motivo preenche o que falta)
   --promover <obra>             põe a impressão selada no ar (exige --impressao), pela marcação da obra (arq:0119 §5):
                                 inteira não promove; transcrita exige trechos; transcrita e indexada exige índice aprovado
   --relacionar <de> <para>      lavra UMA aresta em acervo.conceito_relacao (default: plano seco —
@@ -335,7 +336,19 @@ def acao_situacao(obra: str, como_json: bool, headers: dict) -> int:
     return 0
 
 
-def acao_expurgar(obra: str, autor: str, aplicar: bool, como_json: bool, headers: dict) -> int:
+def _motivo_de_retirada(ato: str, motivo: str | None) -> str | None:
+    """O motivo de retirar ou restaurar (#3301; arq:0119 §9): texto não vazio, ou recusa com a cura.
+    Vale no plano e no --apply: quem lê o plano já vê o motivo que vai ficar com a obra."""
+    if motivo and motivo.strip():
+        return motivo.strip()
+    sys.stderr.write(
+        f"curar: erro: --{ato} exige --motivo \"<por que>\" (fica com a obra, com o autor e a data)\n"
+        f"  cura: repita com --motivo, por exemplo: curar --{ato} <obra> --motivo \"substituída pela versão em Markdown\"\n"
+    )
+    return None
+
+
+def acao_expurgar(obra: str, autor: str, motivo: str, aplicar: bool, como_json: bool, headers: dict) -> int:
     obra_id = resolver_obra_id(obra, headers, expurgadas=False)
     url_obra = f"{BASE}/acervo/obras/{obra_id}"
     try:
@@ -366,11 +379,13 @@ def acao_expurgar(obra: str, autor: str, aplicar: bool, como_json: bool, headers
             },
             "export": "sai de ontologia/acervo/obra.jsonl",
             "autor": autor,
+            "motivo": motivo,
         }
         if como_json:
             print(json.dumps(plano, indent=2, ensure_ascii=False))
         else:
             print(f"Plano: expurgar a obra {obra_id} ({titulo})")
+            print(f"  motivo   : {motivo}")
             if expurgada_em_atual is not None:
                 print(f"  alteração: obra já estava expurgada em {expurgada_em_atual} (idempotente)")
                 print("  export   : já ausente de ontologia/acervo/obra.jsonl")
@@ -380,7 +395,7 @@ def acao_expurgar(obra: str, autor: str, aplicar: bool, como_json: bool, headers
             print("  (plano seco — repita com --apply para gravar)")
         return 0
 
-    url = f"{BASE}/acervo/obras/{obra_id}?autor={urllib.parse.quote(autor)}"
+    url = f"{BASE}/acervo/obras/{obra_id}?autor={urllib.parse.quote(autor)}&motivo={urllib.parse.quote(motivo)}"
     try:
         resp = requests.delete(url, headers=headers)
     except requests.exceptions.RequestException as e:
@@ -400,6 +415,7 @@ def acao_expurgar(obra: str, autor: str, aplicar: bool, como_json: bool, headers
             "obra_id": obra_id,
             "titulo": titulo,
             "autor": autor,
+            "motivo": motivo,
             "export": export,
         }, indent=2, ensure_ascii=False))
     else:
@@ -411,7 +427,7 @@ def acao_expurgar(obra: str, autor: str, aplicar: bool, como_json: bool, headers
     return 0
 
 
-def acao_restaurar(obra: str, autor: str, aplicar: bool, como_json: bool, headers: dict) -> int:
+def acao_restaurar(obra: str, autor: str, motivo: str, aplicar: bool, como_json: bool, headers: dict) -> int:
     obra_id = resolver_obra_id(obra, headers, expurgadas=True)
     url_obra = f"{BASE}/acervo/obras/{obra_id}"
     try:
@@ -442,11 +458,13 @@ def acao_restaurar(obra: str, autor: str, aplicar: bool, como_json: bool, header
             },
             "export": "entra em ontologia/acervo/obra.jsonl",
             "autor": autor,
+            "motivo": motivo,
         }
         if como_json:
             print(json.dumps(plano, indent=2, ensure_ascii=False))
         else:
             print(f"Plano: restaurar a obra {obra_id} ({titulo})")
+            print(f"  motivo   : {motivo}")
             if expurgada_em_atual is None:
                 print("  alteração: obra já estava ativa (expurgada_em é nulo)")
                 print("  export   : já presente em ontologia/acervo/obra.jsonl")
@@ -460,6 +478,7 @@ def acao_restaurar(obra: str, autor: str, aplicar: bool, como_json: bool, header
     payload = {
         "autor": autor,
         "expurgada": False,
+        "motivo": motivo,
     }
     try:
         resp = requests.patch(url, json=payload, headers=headers)
@@ -2613,13 +2632,19 @@ def main(argv=None):
         if not obra:
             sys.stderr.write("curar: erro: --expurgar exige <obra> ou --obra <id>\n")
             return 2
-        return acao_expurgar(obra, autor, args.apply, args.como_json, headers)
+        motivo = _motivo_de_retirada("expurgar", args.motivo)
+        if motivo is None:
+            return 2
+        return acao_expurgar(obra, autor, motivo, args.apply, args.como_json, headers)
     elif args.restaurar is not None:
         obra = args.restaurar or args.obra
         if not obra:
             sys.stderr.write("curar: erro: --restaurar exige <obra> ou --obra <id>\n")
             return 2
-        return acao_restaurar(obra, autor, args.apply, args.como_json, headers)
+        motivo = _motivo_de_retirada("restaurar", args.motivo)
+        if motivo is None:
+            return 2
+        return acao_restaurar(obra, autor, motivo, args.apply, args.como_json, headers)
     elif args.apagar:
         return acao_apagar(args.apagar, autor, args.apply, args.como_json, headers)
     elif args.promover:

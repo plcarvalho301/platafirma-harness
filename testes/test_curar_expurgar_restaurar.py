@@ -1,4 +1,5 @@
 """#3238: `curar --expurgar <obra> [--apply]` e `curar --restaurar <obra> [--apply]` com plano seco.
+#3301: os dois exigem `--motivo`; sem ele saem 2, no plano e no --apply, sem falar com o servidor.
 
 Sem --apply: mostram o plano (o que muda na obra e no export) e saem 0 sem gravar nada.
 Com --apply: executam DELETE/PATCH e regeneram o export.
@@ -13,6 +14,7 @@ import shutil
 import subprocess
 import sys
 import threading
+import urllib.parse
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
@@ -22,6 +24,7 @@ RAIZ = Path(__file__).resolve().parents[1]
 CURAR = RAIZ / "bin" / "curar"
 VIVA = "0000a1fe-0000-4000-8000-000000000000"
 EXPURGADA = "0000f055-0000-4000-8000-000000000000"
+MOTIVO = "substituída pela versão em Markdown"
 
 
 def _acha_python() -> str | None:
@@ -131,9 +134,10 @@ precisa_requests = pytest.mark.skipif(PY is None, reason="nenhum python com `req
 
 @precisa_requests
 def test_expurgar_sem_apply_e_plano_seco_sem_prompt(servidor_falso):
-    r = servidor_falso.rodar("--expurgar", VIVA)
+    r = servidor_falso.rodar("--expurgar", VIVA, "--motivo", MOTIVO)
     assert r.returncode == 0, r.stderr
     assert "Plano: expurgar a obra" in r.stdout
+    assert f"motivo   : {MOTIVO}" in r.stdout
     assert "expurgada_em: None -> now()" in r.stdout
     assert "sai de ontologia/acervo/obra.jsonl" in r.stdout
     assert "plano seco — repita com --apply para gravar" in r.stdout
@@ -145,20 +149,22 @@ def test_expurgar_sem_apply_e_plano_seco_sem_prompt(servidor_falso):
 
 @precisa_requests
 def test_expurgar_com_apply_executa_e_relata(servidor_falso):
-    r = servidor_falso.rodar("--expurgar", VIVA, "--apply")
+    r = servidor_falso.rodar("--expurgar", VIVA, "--motivo", MOTIVO, "--apply")
     assert r.returncode == 0, r.stderr
     assert f"Obra {VIVA} expurgada com sucesso" in r.stdout
 
     deletes = [(m, p) for m, p, _ in servidor_falso.chamadas if m == "DELETE"]
     assert len(deletes) == 1
     assert deletes[0][1].startswith(f"/acervo/obras/{VIVA}?autor=")
+    assert f"motivo={urllib.parse.quote(MOTIVO)}" in deletes[0][1]
 
 
 @precisa_requests
 def test_restaurar_sem_apply_e_plano_seco(servidor_falso):
-    r = servidor_falso.rodar("--restaurar", EXPURGADA)
+    r = servidor_falso.rodar("--restaurar", EXPURGADA, "--motivo", MOTIVO)
     assert r.returncode == 0, r.stderr
     assert "Plano: restaurar a obra" in r.stdout
+    assert f"motivo   : {MOTIVO}" in r.stdout
     assert "2026-10-01T12:00:00Z -> None" in r.stdout
     assert "entra em ontologia/acervo/obra.jsonl" in r.stdout
     assert "plano seco — repita com --apply para gravar" in r.stdout
@@ -170,41 +176,44 @@ def test_restaurar_sem_apply_e_plano_seco(servidor_falso):
 
 @precisa_requests
 def test_restaurar_com_apply_executa_e_relata(servidor_falso):
-    r = servidor_falso.rodar("--restaurar", EXPURGADA, "--apply")
+    r = servidor_falso.rodar("--restaurar", EXPURGADA, "--motivo", MOTIVO, "--apply")
     assert r.returncode == 0, r.stderr
     assert f"Obra {EXPURGADA} restaurada com sucesso" in r.stdout
 
     patches = [(m, p, c) for m, p, c in servidor_falso.chamadas if m == "PATCH"]
     assert len(patches) == 1
     assert patches[0][1] == f"/acervo/obras/{EXPURGADA}"
-    assert patches[0][2] == {"autor": "dados", "expurgada": False}
+    assert patches[0][2] == {"autor": "dados", "expurgada": False, "motivo": MOTIVO}
 
 
 @precisa_requests
 def test_expurgar_restaurar_json_modo(servidor_falso):
-    r_exp_plano = servidor_falso.rodar("--expurgar", VIVA, "--json")
+    r_exp_plano = servidor_falso.rodar("--expurgar", VIVA, "--motivo", MOTIVO, "--json")
     assert r_exp_plano.returncode == 0
     d_exp_plano = json.loads(r_exp_plano.stdout)
     assert d_exp_plano["modo"] == "plano"
     assert d_exp_plano["ato"] == "expurgar"
+    assert d_exp_plano["motivo"] == MOTIVO
     assert d_exp_plano["antes"]["expurgada"] is False
     assert d_exp_plano["depois"]["expurgada"] is True
 
-    r_res_plano = servidor_falso.rodar("--restaurar", EXPURGADA, "--json")
+    r_res_plano = servidor_falso.rodar("--restaurar", EXPURGADA, "--motivo", MOTIVO, "--json")
     assert r_res_plano.returncode == 0
     d_res_plano = json.loads(r_res_plano.stdout)
     assert d_res_plano["modo"] == "plano"
     assert d_res_plano["ato"] == "restaurar"
+    assert d_res_plano["motivo"] == MOTIVO
     assert d_res_plano["antes"]["expurgada"] is True
     assert d_res_plano["depois"]["expurgada"] is False
 
-    r_exp_app = servidor_falso.rodar("--expurgar", VIVA, "--apply", "--json")
+    r_exp_app = servidor_falso.rodar("--expurgar", VIVA, "--motivo", MOTIVO, "--apply", "--json")
     assert r_exp_app.returncode == 0
     d_exp_app = json.loads(r_exp_app.stdout)
     assert d_exp_app["modo"] == "aplicado"
     assert d_exp_app["expurgada"] is True
+    assert d_exp_app["motivo"] == MOTIVO
 
-    r_res_app = servidor_falso.rodar("--restaurar", EXPURGADA, "--apply", "--json")
+    r_res_app = servidor_falso.rodar("--restaurar", EXPURGADA, "--motivo", MOTIVO, "--apply", "--json")
     assert r_res_app.returncode == 0
     d_res_app = json.loads(r_res_app.stdout)
     assert d_res_app["modo"] == "aplicado"
@@ -213,7 +222,7 @@ def test_expurgar_restaurar_json_modo(servidor_falso):
 
 @precisa_requests
 def test_idempotencia_plano_obra_ja_expurgada(servidor_falso):
-    r = servidor_falso.rodar("--expurgar", EXPURGADA)
+    r = servidor_falso.rodar("--expurgar", EXPURGADA, "--motivo", MOTIVO)
     assert r.returncode == 0
     assert "já estava expurgada" in r.stdout
     assert "já ausente" in r.stdout
@@ -221,7 +230,26 @@ def test_idempotencia_plano_obra_ja_expurgada(servidor_falso):
 
 @precisa_requests
 def test_idempotencia_plano_obra_ja_ativa(servidor_falso):
-    r = servidor_falso.rodar("--restaurar", VIVA)
+    r = servidor_falso.rodar("--restaurar", VIVA, "--motivo", MOTIVO)
     assert r.returncode == 0
     assert "já estava ativa" in r.stdout
     assert "já presente" in r.stdout
+
+
+@precisa_requests
+@pytest.mark.parametrize("ato,obra", [("--expurgar", VIVA), ("--restaurar", EXPURGADA)])
+@pytest.mark.parametrize("extra", [[], ["--apply"], ["--json"]])
+def test_sem_motivo_sai_2_com_a_cura_e_nao_toca_o_servidor(servidor_falso, ato, obra, extra):
+    r = servidor_falso.rodar(ato, obra, *extra)
+    assert r.returncode == 2, r.stdout + r.stderr
+    assert f"{ato} exige --motivo" in r.stderr
+    assert "cura: repita com --motivo" in r.stderr
+    assert servidor_falso.chamadas == []
+
+
+@precisa_requests
+@pytest.mark.parametrize("motivo", ["", "   "])
+def test_motivo_em_branco_vale_como_sem_motivo(servidor_falso, motivo):
+    r = servidor_falso.rodar("--expurgar", VIVA, "--motivo", motivo, "--apply")
+    assert r.returncode == 2
+    assert servidor_falso.chamadas == []

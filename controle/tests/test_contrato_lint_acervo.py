@@ -63,12 +63,18 @@ def conceito(**kw):
     return base
 
 
-ESQUEMA = {"incidencia": True, "derivacao": True}
+ESQUEMA = {"incidencia": True, "derivacao": True, "motivo_retirada": True}
 
 
-def _medir(obras=(), conceitos=(), esquema=ESQUEMA, texto=None):
+def retirada(**kw):
+    base = {"id": "r1", "titulo": "Obra retirada", "tem_motivo": True}
+    base.update(kw)
+    return base
+
+
+def _medir(obras=(), conceitos=(), esquema=ESQUEMA, texto=None, retiradas=()):
     lista = parse_lista(texto or lista_texto())
-    return ac.medir(lista, esquema, list(obras), list(conceitos))
+    return ac.medir(lista, esquema, list(obras), list(conceitos), list(retiradas))
 
 
 def _ids(m, cid):
@@ -131,6 +137,11 @@ def test_b6_lista_sem_derivacao():
     assert not ac.b6(obra(especie="lista-de-verificacao", deriva=True))
 
 
+def test_g6_retirada_sem_motivo():
+    assert ac.g6(retirada(tem_motivo=False))
+    assert not ac.g6(retirada(tem_motivo=True))
+
+
 def test_d7_d8_slug():
     funcionais = ac.palavras_funcionais(lista_texto())
     assert ac.d7(conceito(slug="indice-de-maturidade-de-governanca-digital"), funcionais)
@@ -161,6 +172,19 @@ def test_b1_b2_b6_acusam_zero_sem_o_esquema():
         assert m["criterios"][cid]["n"] == 0 and "schema" in m["criterios"][cid]["nota"]
 
 
+def test_g6_mede_so_as_retiradas_e_vem_como_aviso_da_lista():
+    m = _medir(obras=[obra(id="viva")],
+               retiradas=[retirada(id="sem", tem_motivo=False), retirada(id="com")])
+    assert _ids(m, "G6") == ["sem"]
+    assert m["criterios"]["G6"]["n"] == 1 and m["criterios"]["G6"]["severidade"] == "aviso"
+    assert ac.relatorio(m, 4) == 0  # aviso nao reprova
+
+
+def test_g6_acusa_zero_enquanto_a_coluna_nao_existe():
+    m = _medir(esquema={**ESQUEMA, "motivo_retirada": False}, retiradas=[retirada(tem_motivo=False)])
+    assert m["criterios"]["G6"]["n"] == 0 and "078" in m["criterios"]["G6"]["nota"]
+
+
 def test_detector_divergente_da_lista_nao_roda_e_torna_indeterminavel(capsys):
     texto = lista_texto(trocar={"A1": "`titulo` sem espaço"})
     m = _medir(obras=[obra(titulo="x_y")], texto=texto)
@@ -189,13 +213,14 @@ def ambiente(tmp_path):
     acervo.chmod(0o755)
     dados = {"esquema": ESQUEMA,
              "obras": [obra(id="o-a", titulo="COBIT2019"), obra(id="o-b")],
-             "conceitos": [conceito(slug="antes-vs-depois")]}
+             "conceitos": [conceito(slug="antes-vs-depois")], "retiradas": []}
     (tmp_path / "dados.json").write_text(json.dumps(dados))
     psql = tmp_path / "psql"
     psql.write_text(
         f"#!{sys.executable}\nimport json, sys\n"
         f"d = json.load(open({str(tmp_path / 'dados.json')!r}))\nsql = sys.stdin.read()\n"
-        "k = 'esquema' if 'information_schema' in sql else 'obras' if 'from acervo.obra o' in sql else 'conceitos'\n"
+        "k = ('esquema' if 'information_schema' in sql else 'retiradas' if 'tem_motivo' in sql\n"
+        "     else 'obras' if 'from acervo.obra o' in sql else 'conceitos')\n"
         "print(json.dumps(d[k]))\n")
     psql.chmod(0o755)
     return {"PF_LINT_ACERVO": str(acervo), "PF_LINT_ACERVO_PSQL": str(psql)}
@@ -213,6 +238,17 @@ def test_cli_acervo_ancora_contagem_e_exit(ambiente):
     assert linhas[0] == "«lint acervo firma: 2 apontamentos, 2 bloqueantes — antipadroes-do-acervo@rev4»"
     assert any(ln.split()[:3] == ["A3", "bloqueante", "1"] for ln in linhas)
     assert any(ln.split()[:3] == ["D8", "bloqueante", "1"] for ln in linhas)
+
+
+def test_cli_acervo_g6_aponta_a_retirada_sem_motivo(ambiente):
+    """#3301: a consulta das retiradas sem motivo, pelo lint; aviso, exit segue o dos bloqueantes."""
+    dados = Path(ambiente["PF_LINT_ACERVO_PSQL"]).parent / "dados.json"
+    d = json.loads(dados.read_text())
+    d["retiradas"] = [retirada(id="r-sem", titulo="Fóssil", tem_motivo=False), retirada(id="r-com")]
+    dados.write_text(json.dumps(d))
+    saida = json.loads(_lint("acervo", "--json", "--criterio", "G6", env=ambiente).stdout)
+    assert saida["criterios"]["G6"]["n"] == 1
+    assert [a["alvo"] for a in saida["apontamentos"]] == ["r-sem"]
 
 
 def test_cli_acervo_json_resumo(ambiente):

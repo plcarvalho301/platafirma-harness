@@ -37,6 +37,7 @@ DETECTORES = {
     "B3": "`dominio_id` nulo",
     "B4": "`dominio_id` preenchido e `subdominio_id` nulo",
     "B6": "obra da espécie `lista-de-verificacao` sem linha de derivação",
+    "G6": "obra com `expurgada_em` preenchido e `retirada_motivo` nulo",
     "C1": "obra com 0 ou 1 linha em `obra_trata_de`",
     "D3": "`outros_rotulos` vazio",
     "D4": "conceito com 0 ou 1 obra viva em `obra_trata_de`",
@@ -59,7 +60,19 @@ select json_build_object(
   'incidencia', (select count(*) = 3 from information_schema.columns
                  where table_schema = 'acervo' and table_name = 'especie_tipo'
                    and column_name in ('incide_emitido_por','incide_publicacao','incide_id_canonico')),
-  'derivacao', to_regclass('acervo.obra_deriva_de') is not null);
+  'derivacao', to_regclass('acervo.obra_deriva_de') is not null,
+  'motivo_retirada', exists (select 1 from information_schema.columns
+                 where table_schema = 'acervo' and table_name = 'obra'
+                   and column_name = 'retirada_motivo'));
+"""
+
+# toda obra retirada, de qualquer colecao: G vale tambem para a pessoal (a lista, "Como se le")
+SQL_RETIRADA = """
+select coalesce(json_agg(row_to_json(t) order by t.id), '[]') from (
+  select r.id, r.titulo, r.retirada_motivo is not null as tem_motivo
+  from acervo.obra r
+  where r.expurgada_em is not null
+) t;
 """
 
 # obra viva da colecao firma; incide_* por to_jsonb, que devolve nulo se a coluna faltar
@@ -130,13 +143,14 @@ def _psql_json(sql: str) -> Any:
         raise ErroAcervo(3, f"acervo nao devolveu JSON: {proc.stdout.strip()[:200]}")
 
 
-def ler_acervo() -> Tuple[Dict[str, bool], List[dict], List[dict]]:
+def ler_acervo() -> Tuple[Dict[str, bool], List[dict], List[dict], List[dict]]:
     esquema = _psql_json(SQL_ESQUEMA)
     derivacao = ("exists (select 1 from acervo.obra_deriva_de d where d.obra_id = o.id)"
                  if esquema.get("derivacao") else "null::boolean")
     obras = _psql_json(SQL_OBRA.replace("{derivacao}", derivacao))
     conceitos = _psql_json(SQL_CONCEITO)
-    return esquema, obras, conceitos
+    retiradas = _psql_json(SQL_RETIRADA) if esquema.get("motivo_retirada") else []
+    return esquema, obras, conceitos, retiradas
 
 
 # ---------- contrapontos da lista ----------
@@ -224,6 +238,11 @@ def b6(o):
     return o.get("especie") == "lista-de-verificacao" and o.get("deriva") is False
 
 
+def g6(o):
+    """Obra retirada sem motivo (#3301): o universo de G6 so tem obras retiradas."""
+    return not o.get("tem_motivo")
+
+
 def d7(c, funcionais):
     fora = {x.lower() for x in funcionais}
     return len([p for p in (c.get("slug") or "").split("-") if p and p not in fora]) > 3
@@ -242,8 +261,10 @@ def _rotulo_obra(o: dict, extra: str = "") -> str:
     return f"obra {o['id']} «{t}»" + (f" [{extra}]" if extra else "")
 
 
-def medir(lista: dict, esquema: Dict[str, bool], obras: List[dict], conceitos: List[dict]) -> dict:
-    """Roda os detectores mecanicos da lista. Devolve {criterios, nao_rodou, apontamentos}."""
+def medir(lista: dict, esquema: Dict[str, bool], obras: List[dict], conceitos: List[dict],
+          retiradas: Optional[List[dict]] = None) -> dict:
+    """Roda os detectores mecanicos da lista. Devolve {criterios, nao_rodou, apontamentos}.
+    `retiradas` e o universo de G6: toda obra retirada, de qualquer colecao."""
     corpo = lista.get("corpo", "")
     itens = {i["id"]: i for i in lista.get("itens", []) if i.get("id")}
     orgs = organismos(corpo)
@@ -256,6 +277,7 @@ def medir(lista: dict, esquema: Dict[str, bool], obras: List[dict], conceitos: L
         "B4": lambda o: o.get("tem_dominio") and not o.get("tem_subdominio"),
         "C1": lambda o: (o.get("n_conceitos") or 0) <= 1,
     }
+    por_retirada: Dict[str, Callable[[dict], Any]] = {"G6": g6}
     por_conceito: Dict[str, Callable[[dict], Any]] = {
         "D3": lambda c: _vazio(c.get("outros_rotulos")),
         "D4": lambda c: (c.get("n_obras_vivas") or 0) <= 1,
@@ -282,6 +304,8 @@ def medir(lista: dict, esquema: Dict[str, bool], obras: List[dict], conceitos: L
         por_obra["B6"] = b6
     else:
         esperam_esquema.add("B6")
+    if not esquema.get("motivo_retirada"):
+        esperam_esquema.add("G6")
 
     criterios: Dict[str, dict] = {}
     apontamentos: List[dict] = []
@@ -303,11 +327,14 @@ def medir(lista: dict, esquema: Dict[str, bool], obras: List[dict], conceitos: L
                               "motivo": "o texto do detector na lista mudou; o lint implementa o da rev 4"})
             continue
         if cid in esperam_esquema:
-            base["nota"] = "espera o schema da ont:0092; acusa 0 ate ele existir"
+            base["nota"] = ("espera a coluna retirada_motivo (migracao 078); acusa 0 ate ela existir"
+                            if cid == "G6" else "espera o schema da ont:0092; acusa 0 ate ele existir")
             criterios[cid] = base
             continue
         if cid in por_obra:
             f, universo, rot = por_obra[cid], obras, "obra"
+        elif cid in por_retirada:
+            f, universo, rot = por_retirada[cid], retiradas or [], "obra"
         elif cid in por_conceito:
             f, universo, rot = por_conceito[cid], conceitos, "conceito"
         else:
@@ -393,6 +420,6 @@ def verificar_acervo(como_json: bool = False, resumo: bool = False,
     lista = resolver_lista(CHAVE_LISTA)
     if not lista:
         raise ErroAcervo(5, f"indeterminavel — lista de verificacao '{CHAVE_LISTA}' nao encontrada no acervo")
-    esquema, obras, conceitos = ler_acervo()
-    medida = filtrar(medir(lista, esquema, obras, conceitos), criterios, so_bloqueantes)
+    esquema, obras, conceitos, retiradas = ler_acervo()
+    medida = filtrar(medir(lista, esquema, obras, conceitos, retiradas), criterios, so_bloqueantes)
     return relatorio(medida, lista.get("rev"), como_json, resumo)
