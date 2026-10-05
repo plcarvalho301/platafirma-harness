@@ -58,7 +58,10 @@ def main(argv):
               "     acervo curar biblioteca --reextrair <id,id...|@arquivo> --bancada <pasta> "
               "[--metodo <slug>] [--refazer]   (converte em pasta de saida; nao escreve "
               "no acervo; depois: acervo listar biblioteca bancada <pasta>)\n"
-              "     cartilha das familias e garantias: acervo curar biblioteca --relacionar --help",
+              "     cartilha das familias e garantias: acervo relacionar biblioteca conceito --ajuda\n"
+              "     --reclassificar, --conceito, --relacionar, --relacoes, --desrelacionar, --derivar, --derivacoes e "
+              "--desderivar respondem com aviso: os atos de Classificar sao acervo catalogar, definir, relacionar, "
+              "desrelacionar, derivar e desderivar (spec acervo, secao 10; #3296)",
               0 if argv else 2)
     sub = argv[0]
     if sub == "alias":

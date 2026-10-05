@@ -2578,6 +2578,10 @@ def main(argv=None):
         return acao_recortar(args, autor, args.como_json, headers)
     if args.reextrair:
         return acao_reextrair(args, autor, args.como_json, headers)
+    # Classificar (#3296): cada ramo abaixo e o trabalho de um ato do acervo, que o chama pela
+    # opcao (bin/acervo, classificar): definir -> --conceito, derivar|desderivar -> --derivar|
+    # --desderivar, relacionar|desrelacionar -> --relacionar|--desrelacionar, catalogar ->
+    # --reclassificar; `listar biblioteca relacao|derivacao` -> --relacoes|--derivacoes.
     if args.conceito:
         return acao_conceito(args, autor, args.como_json, headers)
     if args.derivar:
