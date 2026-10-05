@@ -15,7 +15,7 @@ from collections.abc import Iterable, Iterator
 from dataclasses import dataclass
 from pathlib import Path
 
-from .predicados import Achado, Contexto, e_sono, e_teste, externa, nome, sem_aninhadas
+from .predicados import Achado, Contexto, e_sono, e_teste, externa, nome, passeio, sem_aninhadas
 
 Funcao = ast.FunctionDef | ast.AsyncFunctionDef
 
@@ -29,7 +29,7 @@ class Def:
 
 def funcoes(ctx: Contexto, arquivos: list[Path]) -> Iterator[Def]:
     for rel, p, arvore in ctx.arvores(arquivos):
-        for n in ast.walk(arvore):
+        for n in passeio(arvore):
             if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef)):
                 yield Def(rel, p, n)
 
@@ -107,10 +107,10 @@ def _rotas_do_modulo(ctx: Contexto, p: Path, arvore: ast.Module, unicas: dict[st
     Le-se como se as funcoes de nome unico na stack fossem do modulo, na frente das dele:
     `unicas` e `decoradas_unicas` se calculam uma vez em `rotas`, nao a cada modulo."""
     rel = ctx.rel(p)
-    locais = {n.name: Def(rel, p, n) for n in ast.walk(arvore) if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef))}
+    locais = {n.name: Def(rel, p, n) for n in passeio(arvore) if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef))}
     yield from decoradas_unicas
     yield from _decoradas(d for k, d in locais.items() if k not in unicas)
-    for c in (n for n in ast.walk(arvore) if isinstance(n, ast.Call)):
+    for c in (n for n in passeio(arvore) if isinstance(n, ast.Call)):
         if nome(c.func).rsplit(".", 1)[-1] not in _REGISTRA_ROTA or not c.args:
             continue
         tratador = c.args[1] if len(c.args) > 1 else next((k.value for k in c.keywords if k.arg == "endpoint"), None)
@@ -332,7 +332,7 @@ MINIMO_MODULOS = 5
 
 def _usos(arvore: ast.Module) -> set[str]:
     usos: set[str] = set()
-    for n in ast.walk(arvore):
+    for n in passeio(arvore):
         if isinstance(n, ast.Import):
             usos |= {a.name for a in n.names}
         elif isinstance(n, ast.ImportFrom) and n.module:
@@ -428,8 +428,8 @@ def concorrencia_sem_teto(ctx: Contexto, item: dict) -> Iterator[Achado]:
 def corrotina_sem_await(ctx: Contexto, item: dict) -> Iterator[Achado]:
     """Chamada de `async def` do mesmo modulo como comando solto: a corrotina nunca roda (C2)."""
     for rel, _, arvore in ctx.arvores(ctx.py):
-        assincronas = {n.name for n in ast.walk(arvore) if isinstance(n, ast.AsyncFunctionDef)}
-        for n in ast.walk(arvore):
+        assincronas = {n.name for n in passeio(arvore) if isinstance(n, ast.AsyncFunctionDef)}
+        for n in passeio(arvore):
             if (isinstance(n, ast.Expr) and isinstance(n.value, ast.Call)
                     and nome(n.value.func).rsplit(".", 1)[-1] in assincronas):
                 yield Achado(rel, n.lineno, f"{nome(n.value.func)}() sem await")
@@ -439,10 +439,10 @@ def cancela_thread(ctx: Contexto, item: dict) -> Iterator[Achado]:
     """`wait_for` sobre `to_thread` ou `run_in_executor`: o prazo cancela a espera, a thread
     continua rodando (C5)."""
     for rel, _, arvore in ctx.arvores(ctx.py):
-        for n in ast.walk(arvore):
+        for n in passeio(arvore):
             if isinstance(n, ast.Call) and nome(n.func).endswith("wait_for") and any(
                     isinstance(m, ast.Call) and nome(m.func).endswith(("to_thread", "run_in_executor"))
-                    for m in ast.walk(n)):
+                    for m in passeio(n)):
                 yield Achado(rel, n.lineno, "wait_for sobre thread: a thread não é cancelada")
 
 
@@ -465,7 +465,7 @@ def _devolve_vazio(handler: ast.ExceptHandler) -> bool:
 def erro_vira_vazio(ctx: Contexto, item: dict) -> Iterator[Achado]:
     """`except` cujo corpo so devolve None, 0, False ou vazio: o chamador nao sabe que falhou (R11)."""
     for rel, _, arvore in ctx.arvores(ctx.py):
-        for h in ast.walk(arvore):
+        for h in passeio(arvore):
             if isinstance(h, ast.ExceptHandler) and _devolve_vazio(h):
                 yield Achado(rel, h.lineno, "a falha vira valor vazio, sem causa")
 
@@ -482,7 +482,7 @@ def _sucesso(st: ast.stmt) -> str | None:
 def verde_na_falha(ctx: Contexto, item: dict) -> Iterator[Achado]:
     """`except` que devolve sucesso: `return True` ou `sys.exit(0)` (R13, L6)."""
     for rel, _, arvore in ctx.arvores(ctx.py):
-        for h in ast.walk(arvore):
+        for h in passeio(arvore):
             if isinstance(h, ast.ExceptHandler):
                 for st in h.body:
                     if (forma := _sucesso(st)):
@@ -490,7 +490,7 @@ def verde_na_falha(ctx: Contexto, item: dict) -> Iterator[Achado]:
 
 
 def _usos_do_nome(fn: ast.AST, alvo: str) -> list[ast.AST]:
-    return [n for n in ast.walk(fn) if isinstance(n, ast.Name) and n.id == alvo]
+    return [n for n in passeio(fn) if isinstance(n, ast.Name) and n.id == alvo]
 
 
 def filho_sem_espera(ctx: Contexto, item: dict) -> Iterator[Achado]:
@@ -509,12 +509,12 @@ def _espera(fn: ast.AST, proc: str) -> bool:
     return any(isinstance(n, ast.Call) and isinstance(n.func, ast.Attribute)
                and isinstance(n.func.value, ast.Name) and n.func.value.id == proc
                and n.func.attr in ("wait", "communicate", "kill", "terminate", "poll")
-               for n in ast.walk(fn))
+               for n in passeio(fn))
 
 
 def _entregue(fn: ast.AST, proc: str) -> bool:
     """O processo sai da funcao: devolvido, guardado em atributo ou passado adiante."""
-    for n in ast.walk(fn):
+    for n in passeio(fn):
         if isinstance(n, ast.Return) and n.value is not None and _usos_do_nome(n.value, proc):
             return True
         if isinstance(n, ast.Assign) and any(isinstance(t, ast.Attribute) for t in n.targets) and _usos_do_nome(n.value, proc):
@@ -532,7 +532,7 @@ def servico_sem_sigterm(ctx: Contexto, item: dict) -> Iterator[Achado]:
     for rel, p, arvore in ctx.arvores(ctx.py):
         if e_teste(rel) or "SIGTERM" in ctx.texto(p):
             continue
-        for n in ast.walk(arvore):
+        for n in passeio(arvore):
             serve = isinstance(n, ast.Call) and nome(n.func).endswith(_SERVE)
             laco = (isinstance(n, ast.While) and isinstance(n.test, ast.Constant) and n.test.value
                     and any(isinstance(m, ast.Call) and e_sono(m) for m in sem_aninhadas(n)))
@@ -544,7 +544,7 @@ def servico_sem_sigterm(ctx: Contexto, item: dict) -> Iterator[Achado]:
 def fd_herdado(ctx: Contexto, item: dict) -> Iterator[Achado]:
     """Subprocesso com `close_fds=False`: o filho herda todo descritor aberto (L8)."""
     for rel, _, arvore in ctx.arvores(ctx.py):
-        for n in ast.walk(arvore):
+        for n in passeio(arvore):
             if isinstance(n, ast.Call) and any(
                     k.arg == "close_fds" and isinstance(k.value, ast.Constant) and k.value.value is False
                     for k in n.keywords):
@@ -581,7 +581,7 @@ def resposta_sem_status(ctx: Contexto, item: dict) -> Iterator[Achado]:
     """Resposta HTTP guardada e usada sem a funcao conferir o status: o erro do servidor vira
     dado (G2)."""
     for d in funcoes(ctx, ctx.py):
-        atributos = {n.attr for n in ast.walk(d.no) if isinstance(n, ast.Attribute)}
+        atributos = {n.attr for n in passeio(d.no) if isinstance(n, ast.Attribute)}
         if atributos & _CONFERE_STATUS:
             continue
         for n in sem_aninhadas(d.no):
@@ -656,7 +656,7 @@ def preparacao_longa(ctx: Contexto, item: dict) -> Iterator[Achado]:
             continue
         antes = 0
         for st in d.no.body:
-            if isinstance(st, ast.Assert) or any(isinstance(n, ast.Assert) for n in ast.walk(st)):
+            if isinstance(st, ast.Assert) or any(isinstance(n, ast.Assert) for n in passeio(st)):
                 break
             antes += 1
         if antes > PREPARACAO_MAXIMA:
@@ -686,7 +686,7 @@ def teste_em_producao(ctx: Contexto, item: dict) -> Iterator[Achado]:
     for rel, _, arvore in ctx.arvores(ctx.py):
         if e_teste(rel):
             continue
-        for n in ast.walk(arvore):
+        for n in passeio(arvore):
             if (forma := _pergunta_por_teste(n)):
                 yield Achado(rel, n.lineno, f"código de produção pergunta se está sob teste ({forma})")
 

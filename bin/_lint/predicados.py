@@ -44,6 +44,9 @@ class Contexto:
     _textos: dict[Path, str] = field(default_factory=dict)
     _indices: dict[str, object] = field(default_factory=dict)
 
+    def __post_init__(self) -> None:
+        _esvaziar_passeios()
+
     def indice(self, chave: str, montar: Callable[[], T]) -> T:
         """Indice da stack (rotas, funcoes por nome, funcoes que fazem I/O) montado uma vez por
         rodada: o primeiro predicado que pede monta, os seguintes leem o mesmo objeto."""
@@ -108,15 +111,41 @@ def nome(no: ast.AST) -> str:
 
 _ESCOPO = (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda, ast.ClassDef)
 
+# Os passeios pela arvore guardados: cada no se percorre uma vez por rodada, e os predicados
+# releem a lista. A chave e o id do no, e o proprio no fica guardado ao lado para o id nao ser
+# reaproveitado por outro objeto. Vale uma rodada: o Contexto novo esvazia.
+_PASSEIOS: dict[int, tuple[ast.AST, list[ast.AST]]] = {}
+_SEM_ANINHADAS: dict[int, tuple[ast.AST, list[ast.AST]]] = {}
 
-def sem_aninhadas(no: ast.AST) -> Iterator[ast.AST]:
+
+def _esvaziar_passeios() -> None:
+    _PASSEIOS.clear()
+    _SEM_ANINHADAS.clear()
+
+
+def passeio(no: ast.AST) -> list[ast.AST]:
+    """`ast.walk(no)` guardado: os mesmos nos, na mesma ordem."""
+    guardado = _PASSEIOS.get(id(no))
+    if guardado is None or guardado[0] is not no:
+        guardado = (no, list(ast.walk(no)))
+        _PASSEIOS[id(no)] = guardado
+    return guardado[1]
+
+
+def sem_aninhadas(no: ast.AST) -> list[ast.AST]:
     """Descendentes de `no` sem entrar em funcao, lambda ou classe definidas dentro dele."""
+    guardado = _SEM_ANINHADAS.get(id(no))
+    if guardado is not None and guardado[0] is no:
+        return guardado[1]
+    saida: list[ast.AST] = []
     pilha = list(ast.iter_child_nodes(no))
     while pilha:
         filho = pilha.pop()
-        yield filho
+        saida.append(filho)
         if not isinstance(filho, _ESCOPO):
             pilha.extend(ast.iter_child_nodes(filho))
+    _SEM_ANINHADAS[id(no)] = (no, saida)
+    return saida
 
 
 def _chamadas(no: ast.AST) -> list[ast.Call]:
@@ -149,7 +178,7 @@ def e_sono(chamada: ast.Call) -> bool:
 
 
 def _lacos(arvore: ast.Module):
-    return (n for n in ast.walk(arvore) if isinstance(n, (ast.For, ast.AsyncFor, ast.While)))
+    return (n for n in passeio(arvore) if isinstance(n, (ast.For, ast.AsyncFor, ast.While)))
 
 
 # ------------------------------------------------------------------ falha, tempo, repeticao
@@ -163,7 +192,7 @@ _SEM_PRAZO = {"subprocess.run", "subprocess.call", "subprocess.check_call",
 def prazo_externo(ctx: Contexto, item: dict) -> Iterator[Achado]:
     """Chamada externa sem `timeout=`. Argumento por `**kw` nao se julga."""
     for rel, _, arvore in ctx.arvores(ctx.py):
-        for n in ast.walk(arvore):
+        for n in passeio(arvore):
             if not isinstance(n, ast.Call):
                 continue
             nm = nome(n.func)
@@ -234,7 +263,7 @@ def lote_sem_fila(ctx: Contexto, item: dict) -> Iterator[Achado]:
     409 com sleep e o laco das obras a chama."""
     for rel, _, arvore in ctx.arvores(ctx.py):
         repetidoras: dict[str, str] = {}
-        for fn in ast.walk(arvore):
+        for fn in passeio(arvore):
             if isinstance(fn, (ast.FunctionDef, ast.AsyncFunctionDef)):
                 chamada = _chama_e_espera(fn)
                 if chamada:
@@ -246,12 +275,12 @@ def lote_sem_fila(ctx: Contexto, item: dict) -> Iterator[Achado]:
                 continue
             yield from _chama_repetidora(rel, laco, repetidoras)
         compreensoes = (ast.ListComp, ast.SetComp, ast.DictComp, ast.GeneratorExp)
-        for comp in (n for n in ast.walk(arvore) if isinstance(n, compreensoes)):
+        for comp in (n for n in passeio(arvore) if isinstance(n, compreensoes)):
             yield from _chama_repetidora(rel, comp, repetidoras)
 
 
 def _chama_repetidora(rel: str, laco: ast.AST, repetidoras: dict[str, str]) -> Iterator[Achado]:
-    for c in (n for n in ast.walk(laco) if isinstance(n, ast.Call)):
+    for c in (n for n in passeio(laco) if isinstance(n, ast.Call)):
         alvo = nome(c.func).rsplit(".", 1)[-1]
         if alvo in repetidoras:
             yield Achado(rel, laco.lineno, f"laço sobre itens chama {alvo}(), que chama "
@@ -307,7 +336,7 @@ def _saida_com_erro(st: ast.stmt) -> bool:
 def erro_sem_causa(ctx: Contexto, item: dict) -> Iterator[Achado]:
     """`sys.exit(n)` com n diferente de zero sem escrever a causa no comando anterior."""
     for rel, _, arvore in ctx.arvores(ctx.py):
-        for pai in ast.walk(arvore):
+        for pai in passeio(arvore):
             for campo in ("body", "orelse", "finalbody"):
                 bloco = getattr(pai, campo, None)
                 if not isinstance(bloco, list):
@@ -323,7 +352,7 @@ def erro_sem_causa(ctx: Contexto, item: dict) -> Iterator[Achado]:
 def popen_wait(ctx: Contexto, item: dict) -> Iterator[Achado]:
     """`Popen` com stdout ou stderr em PIPE esperado por `wait()`: o pipe enche e trava."""
     for rel, _, arvore in ctx.arvores(ctx.py):
-        escopos = [arvore] + [n for n in ast.walk(arvore) if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef))]
+        escopos = [arvore] + [n for n in passeio(arvore) if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef))]
         for escopo in escopos:
             nos = list(sem_aninhadas(escopo))
             com_pipe: set[str] = set()
@@ -345,7 +374,7 @@ def popen_wait(ctx: Contexto, item: dict) -> Iterator[Achado]:
 
 
 def _le_ambiente(no: ast.AST) -> bool:
-    for n in ast.walk(no):
+    for n in passeio(no):
         if isinstance(n, ast.Attribute) and nome(n) == "os.environ":
             return True
         if isinstance(n, ast.Call) and nome(n.func) in ("os.getenv", "getenv", "environ.get"):
@@ -366,7 +395,7 @@ def ambiente_na_importacao(ctx: Contexto, item: dict) -> Iterator[Achado]:
 def trava_com_io(ctx: Contexto, item: dict) -> Iterator[Achado]:
     """Chamada externa, espera ou `open` dentro de `with <trava>:`."""
     for rel, _, arvore in ctx.arvores(ctx.py):
-        for w in ast.walk(arvore):
+        for w in passeio(arvore):
             if not isinstance(w, (ast.With, ast.AsyncWith)):
                 continue
             if not any(re.search(r"lock|trava|mutex", nome(i.context_expr), re.IGNORECASE) for i in w.items):
@@ -384,7 +413,7 @@ def escada_isinstance(ctx: Contexto, item: dict) -> Iterator[Achado]:
     """Cadeia if/elif com tres ou mais `isinstance` sobre a mesma expressao."""
     for rel, _, arvore in ctx.arvores(ctx.py):
         vistos: set[int] = set()
-        for n in ast.walk(arvore):
+        for n in passeio(arvore):
             if not isinstance(n, ast.If) or id(n) in vistos:
                 continue
             testes, atual = [], n
@@ -410,7 +439,7 @@ _USA_PATH = {"open", "unlink", "read_text", "read_bytes", "write_text", "write_b
 def _conferidos(teste: ast.expr) -> set[str]:
     """Expressoes cuja existencia o teste do `if` confere."""
     alvos: set[str] = set()
-    for c in (n for n in ast.walk(teste) if isinstance(n, ast.Call)):
+    for c in (n for n in passeio(teste) if isinstance(n, ast.Call)):
         if nome(c.func) in _EXISTE_OS and c.args:
             alvos.add(ast.unparse(c.args[0]))
         elif isinstance(c.func, ast.Attribute) and c.func.attr in ("exists", "is_file"):
@@ -428,12 +457,12 @@ def _usa(c: ast.Call, alvos: set[str]) -> bool:
 def confere_e_usa(ctx: Contexto, item: dict) -> Iterator[Achado]:
     """`if <existe>(x):` seguido de usar x no corpo: entre conferir e usar, o arquivo muda."""
     for rel, _, arvore in ctx.arvores(ctx.py):
-        for se in (n for n in ast.walk(arvore) if isinstance(n, ast.If)):
+        for se in (n for n in passeio(arvore) if isinstance(n, ast.If)):
             alvos = _conferidos(se.test)
             if not alvos:
                 continue
             for st in se.body:
-                for c in (n for n in ast.walk(st) if isinstance(n, ast.Call)):
+                for c in (n for n in passeio(st) if isinstance(n, ast.Call)):
                     if _usa(c, alvos):
                         yield Achado(rel, c.lineno, f"{nome(c.func)} depois de conferir que existe")
 
@@ -629,7 +658,7 @@ def _testes(ctx: Contexto):
 def teste_condicional(ctx: Contexto, item: dict) -> Iterator[Achado]:
     """`if` dentro de funcao de teste. O `if` que so pula o teste (skip, xfail) nao conta."""
     for rel, _, arvore in _testes(ctx):
-        for fn in ast.walk(arvore):
+        for fn in passeio(arvore):
             if not (isinstance(fn, (ast.FunctionDef, ast.AsyncFunctionDef)) and fn.name.startswith("test")):
                 continue
             for n in sem_aninhadas(fn):
@@ -649,7 +678,7 @@ _ERRATICO = re.compile(r"^(time\.(time|sleep|monotonic)|(datetime\.)?datetime\.(
 def teste_erratico(ctx: Contexto, item: dict) -> Iterator[Achado]:
     """Relogio, sorteio ou rede dentro de teste."""
     for rel, _, arvore in _testes(ctx):
-        for n in ast.walk(arvore):
+        for n in passeio(arvore):
             if isinstance(n, ast.Call) and _ERRATICO.match(nome(n.func)):
                 yield Achado(rel, n.lineno, f"{nome(n.func)} em teste")
 
@@ -660,7 +689,7 @@ _ESTADO_REAL = ("/srv/platafirma", "/opt/platafirma", "/home/claudinho")
 def teste_estado_real(ctx: Contexto, item: dict) -> Iterator[Achado]:
     """Caminho do host de producao escrito no teste."""
     for rel, _, arvore in _testes(ctx):
-        for n in ast.walk(arvore):
+        for n in passeio(arvore):
             if isinstance(n, ast.Constant) and isinstance(n.value, str) and n.value.startswith(_ESTADO_REAL):
                 yield Achado(rel, n.lineno, f"caminho real em teste: {n.value[:60]}")
 
