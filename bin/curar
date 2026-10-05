@@ -65,6 +65,9 @@ USO = """uso:
   curar --conceito <slug> --renomear <slug-novo> --motivo "…" [--sem-hermit] [--apply]
                                 troca o slug (cura K15): o velho vira termo de entrada; o plano traz a varredura de quem
                                 aponta, D7 e D8 do slug novo e o HermiT
+  curar --conceito <slug> --natureza <n> --motivo "…" [--sem-hermit] [--apply]
+                                conceito que já existe: reclassifica a natureza (cura K19); o plano traz os vizinhos
+                                genéricos, as conferências SQL e o HermiT
   curar --relacionar <de> <para> --tipo <t> --garantia <g> --motivo <m> [--lastro <obra>] [--apply]
   curar --relacionar --help     cartilha: as 11 famílias (frase-molde) e as 3 garantias
   curar --relacoes <conceito>   arestas de um conceito, coluna + tabela (o que já está lavrado)
@@ -834,6 +837,9 @@ def acao_conceito(args, autor: str, como_json: bool, headers: dict) -> int:
 
         url_alvo = f"{BASE}/acervo/conceitos"
         metodo = "POST"
+    elif args.natureza and not pai_slug:
+        # PATCH /acervo/conceitos/{id} {natureza} — reclassificar (cura K19, card #3163)
+        return acao_conceito_natureza(args, autor, como_json, headers)
     else:
         # PATCH /acervo/conceitos/{id}/pai (trocar pai)
         if not pai_slug:
@@ -1145,6 +1151,95 @@ def formatar_plano_renomear(p: dict, varredura: dict | None, conf_slug: dict | N
     else:
         lin.append("  veredito: " + ("APROVADO — repita com --apply para gravar" if aprovado else "REPROVADO — nada gravado"))
     return "\n".join(lin)
+
+
+def _hermit_natureza(slug: str, natureza: str) -> dict | None:
+    """O mesmo diff para a troca de natureza (`--natureza SLUG:NAT` do gerador, card #3163)."""
+    return _hermit_com(["--natureza", f"{slug}:{natureza}"])
+
+
+def formatar_plano_natureza(p: dict, hermit: dict | None, aprovado: bool) -> str:
+    c = p.get("conceito", {})
+    n = p.get("natureza", {})
+    titulo = "Natureza reclassificada" if p.get("modo") == "aplicado" else "Plano de natureza"
+    lin = [f"{titulo}: {c.get('slug')}  «{c.get('rotulo')}»  [curador {p.get('emitido_por')}]",
+           f"  natureza: {n.get('de')} -> {n.get('para')}",
+           f"  motivo  : {p.get('motivo')}"]
+    for v in p.get("vizinhos_genericos") or []:
+        lin.append(f"  {v['papel']:<5} genérico: {v['slug']} ({v['natureza']})")
+    for nome, cf in (p.get("conferencias") or {}).items():
+        novas = cf.get("novas") or []
+        tag = "OK" if not novas else f"REPROVA +{len(novas)}"
+        lin.append(f"  conferência {nome:<14} {cf.get('antes')} -> {cf.get('depois')}  {tag}")
+        for r in novas[:5]:
+            lin.append(f"      + {r}")
+    if hermit is None:
+        lin.append("  HermiT: indisponível")
+    elif hermit.get("pulado"):
+        lin.append("  HermiT: pulado (--sem-hermit)")
+    elif hermit.get("erro"):
+        lin.append(f"  HermiT: falhou — {hermit['erro']}")
+    else:
+        tag = "OK" if not hermit["novos"] else f"REPROVA +{len(hermit['novos'])}"
+        lin.append(f"  HermiT insatisfazíveis {hermit['antes']} -> {hermit['depois']}  {tag}"
+                   + (f"  novos: {', '.join(hermit['novos'])}" if hermit["novos"] else "")
+                   + (f"  saem: {', '.join(hermit['saem'])}" if hermit["saem"] else ""))
+    if p.get("modo") == "aplicado":
+        lin.append(f"  id     : {p.get('id')}")
+    else:
+        lin.append("  veredito: " + ("APROVADO — repita com --apply para gravar" if aprovado else "REPROVADO — nada gravado"))
+    return "\n".join(lin)
+
+
+def acao_conceito_natureza(args, autor: str, como_json: bool, headers: dict) -> int:
+    slug = args.conceito.strip()
+    nat = args.natureza.strip()
+    if not args.motivo or not args.motivo.strip():
+        sys.stderr.write("curar: erro: reclassificar natureza exige --motivo\n")
+        return 2
+    url = f"{BASE}/acervo/conceitos/{urllib.parse.quote(slug, safe='')}"
+    corpo = {"natureza": nat, "motivo": args.motivo.strip(), "autor": autor}
+
+    def envia(aplicar: bool):
+        try:
+            r = requests.patch(url, json={**corpo, "aplicar": aplicar}, headers=headers)
+        except requests.exceptions.RequestException as e:
+            falha_indeterminavel(e)
+        if r.status_code >= 500:
+            falha_indeterminavel(r)
+        return r
+
+    resp = envia(False)
+    if resp.status_code != 200:
+        falha_problem(resp)
+    plano = resp.json()
+    hermit = {"pulado": True} if args.sem_hermit else _hermit_natureza(slug, nat)
+    hermit_ok = hermit is not None and (bool(hermit.get("pulado")) or (not hermit.get("erro") and not hermit.get("novos")))
+    aprovado = bool(plano.get("aprovado")) and hermit_ok
+
+    if not args.apply or not aprovado:
+        if como_json:
+            print(json.dumps({"plano": plano, "hermit": hermit, "aprovado": aprovado}, indent=2, ensure_ascii=False))
+        else:
+            print(formatar_plano_natureza(plano, hermit, aprovado))
+        if args.apply:
+            sys.stderr.write("curar: reprovado (conferência SQL ou HermiT); nada gravado\n")
+            return 1
+        return 0 if aprovado else 1
+
+    resp = envia(True)
+    if resp.status_code != 200:
+        falha_problem(resp)
+    feito = resp.json()
+    export = _exportar(_repo_conhecimento() or "")
+    export_ok = export is not None and not export.startswith("acervo exportar falhou")
+    if como_json:
+        print(json.dumps({"aplicado": feito, "hermit": hermit, "export": export, "export_ok": export_ok},
+                         indent=2, ensure_ascii=False))
+    else:
+        print(formatar_plano_natureza(feito, hermit, True))
+        print(f"  export : {'regenerado no clone' if export_ok else 'NÃO regenerado: rode `acervo exportar`'}")
+    return 0 if export_ok else 1
 
 
 def acao_conceito_renomear(args, autor: str, como_json: bool, headers: dict) -> int:

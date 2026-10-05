@@ -73,6 +73,8 @@ tests/test_contrato_casa_por_caminho.py
 # Medido em 03/10/2026 (card #3239): `curar --conceito --renomear`, contra um servidor HTTP falso do contrato
 # (24 passam; com a forma do slug ou o HermiT quebrados de propósito, a suite fica vermelha).
 tests/test_curar_renomear.py
+# Medido em 05/10/2026 (card #3163): `curar --conceito --natureza` (reclassificar, K19), mesmo servidor falso.
+tests/test_curar_natureza.py
 # Medido em 04/10/2026 (incidente #3222): `infra backup` com `piso_bytes` (7 passam; com a condicao do piso
 # desligada, 3 ficam vermelhos — o dump de 320 bytes volta a sair ok).
 tests/test_contrato_infra_backup_piso.py
