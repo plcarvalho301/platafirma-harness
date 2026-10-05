@@ -67,6 +67,7 @@ PAYLOAD_ANCORADO = {
 PAYLOAD_DECLARADO_NAO_SERVINDO = {
     "obra_id": "o2", "titulo": "Legacy Code",
     "objeto": "acervo/2222222222222222222222222222222222222222222222222222222222222222",
+    "servida_inteira": True,
     "servivel": False, "desde": None, "impressao_id": "imp-002",
     "degrau": "declarado-nao-servindo", "carimbo": "carimbo-o2", "casamento": "exato",
 }
@@ -118,6 +119,14 @@ def test_situacao_declarado_nao_servindo():
     assert payload["servivel"] is False
     assert payload["desde"] is None
     assert payload["degrau"] == "declarado-nao-servindo"
+    # sem impressão servindo a obra classificada e com cópia segue servida inteira (#3294)
+    assert payload["servida_inteira"] is True
+
+
+def test_situacao_motor_anterior_sem_servida_inteira():
+    """Motor que ainda não manda `servida_inteira` (promoção fora de ordem) dá False, não KeyError."""
+    env = situacao("Clean Architecture", http=http_fixo(PAYLOAD_ANCORADO))
+    assert json.loads(env.itens[0].conteudo)["servida_inteira"] is False
 
 
 def test_situacao_orfao():

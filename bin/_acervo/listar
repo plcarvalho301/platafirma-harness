@@ -21,7 +21,7 @@
 #     tabela única que o conversor aplica (conversor/conversor/padrao.py da release do
 #     conhecimento, ou de PF_CONHECIMENTO_DIR), sem tabela golden record (#3193).
 # `acervo listar biblioteca obra [--sobre <termo>] [--eixo <e>] [--situacao] [--json]` — o catálogo da
-#     obra; --situacao traz servivel, degrau, store, impressao servindo e a marcação de uso
+#     obra; --situacao traz servida inteira, servivel, degrau, store, impressao servindo e a marcação de uso
 #     (arq:0119 §6; spec acervo-obra §6; coluna acervo.obra.marcacao, migração 071, #3202).
 # `acervo listar biblioteca obra --qualidade [--por-obra] [--json]` — o julgamento (veredito da régua 6) dos
 #     espelhos servindo, por classe (servível / servível imperfeito / não servível / não julgado); --por-obra,
@@ -975,17 +975,20 @@ def listar_obra(termo, eixo, situacao, quero_json):
                 "  select id::text as id, marcacao from acervo.obra where id::text in (%s)"
                 ") t;" % ids, "marcacao"):
             marcas[m["id"]] = m.get("marcacao")
-    # régua 6 (#3282): servível é a impressão servindo de espelho servível (`acervo.indexavel`, 073), não só
-    # ter impressão servindo; o estado dela segue `servindo`
-    indexaveis = set()
+    # O estado da obra vem do motor, pela regra única (`estado_da_obra`, #3294): servida inteira
+    # (classificada, com cópia, não retirada; arq:0119 §1.4) e servível (o espelho da impressão que
+    # serve, régua 6, #3282). Obra retirada não vem na projeção: não é servida nem servível.
+    estados = {}
     if situacao and raw_itens:
-        ids = ",".join(_lit(r["id"]) for r in raw_itens)
-        for m in _psql_json(
-                "select coalesce(json_agg(row_to_json(t)), '[]') from ("
-                "  select i.id::text as id from acervo.impressao i"
-                "   where i.estado = 'servindo' and acervo.indexavel(i) and i.obra_id::text in (%s)"
-                ") t;" % ids, "indexavel"):
-            indexaveis.add(m["id"])
+        sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.realpath(__file__)))))
+        from recuperacao.adaptadores import motor_acervo_rest
+        from recuperacao.adaptadores.base import FonteIndisponivel
+        try:
+            proj = motor_acervo_rest.obras(["obra_id", "servida_inteira", "servivel"])
+        except FonteIndisponivel as e:
+            sys.stderr.write(f"indeterminável: estado das obras fora do ar ({e})\n")
+            return 5
+        estados = {o["obra_id"]: o for o in proj.get("itens", [])}
 
     itens = []
     for row in raw_itens:
@@ -1002,7 +1005,9 @@ def listar_obra(termo, eixo, situacao, quero_json):
         else:
             degrau = "vetorizada"
 
-        servivel = "sim" if imp_st == "servindo" and imp_id in indexaveis else "nao"
+        estado = estados.get(str(row["id"]), {})
+        servida = "sim" if estado.get("servida_inteira") else "nao"
+        servivel = "sim" if estado.get("servivel") else "nao"
         store = "acervo" if (obj and obj.startswith("acervo/")) else ("pessoal" if (obj and obj.startswith("pessoal/")) else "-")
         imp_str = imp_id[:8] if imp_id else "-"
 
@@ -1015,6 +1020,7 @@ def listar_obra(termo, eixo, situacao, quero_json):
         }
         if situacao:
             item["situacao"] = {
+                "servida_inteira": servida,
                 "servivel": servivel,
                 "degrau": degrau,
                 "store": store,
@@ -1044,7 +1050,7 @@ def listar_obra(termo, eixo, situacao, quero_json):
             sit = i["situacao"]
             eixo_tag = f"[{i['eixo']}] " if i.get("eixo") and i['eixo'] != "obra" else ""
             print(f"{eixo_tag}{i['titulo']}")
-            print(f"  servivel: {sit['servivel']}   degrau: {sit['degrau']}   store: {sit['store']}   impressao: {sit['impressao']}   marcacao: {sit['marcacao'] or '-'}\n")
+            print(f"  servida inteira: {sit['servida_inteira']}   servivel: {sit['servivel']}   degrau: {sit['degrau']}   store: {sit['store']}   impressao: {sit['impressao']}   marcacao: {sit['marcacao'] or '-'}\n")
         sys.stderr.write(f"\n{len(itens)} obra(s) encontrada(s).\n")
         return 0
 

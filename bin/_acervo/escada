@@ -47,7 +47,7 @@ DEGRAUS = [
 ]
 FUGAS = [
     ("catálogo aponta pro vazio", "catalogo_aponta_pro_vazio"),
-    ("objeto sem documento", "objeto_sem_documento"),
+    ("objeto sem classificação", "objeto_sem_classificacao"),   # #3294: sem impressão não é fuga
     ("impressão sem trecho", "impressao_sem_trecho"),
     ("embedding parcial", "embedding_parcial"),
     ("sem vetor de faceta", "sem_vetor_de_faceta"),
