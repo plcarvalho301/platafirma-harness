@@ -54,7 +54,7 @@ def test_ajuda_lista_os_atos_de_classificar(tmp_path):
     for ato in ("catalogar     biblioteca obra", "definir       biblioteca conceito",
                 "relacionar    biblioteca conceito", "desrelacionar biblioteca relacao",
                 "derivar       biblioteca obra", "desderivar    biblioteca obra",
-                "listar        biblioteca relacao <conceito>"):
+                "listar        biblioteca relacao <conceito>", "empacotar     biblioteca obra [dest]"):
         assert f"acervo {ato}" in r.stderr, ato
     # a crase solta na ajuda virava substituicao de comando (`continue com --offset N`)
     assert "only meaningful" not in r.stderr
@@ -73,6 +73,7 @@ def test_particao_ou_entidade_errada_recusa_com_a_forma(tmp_path):
         (("catalogar", "casa", "obra", "x"), "acervo catalogar biblioteca obra"),
         (("definir", "biblioteca", "obra", "x"), "acervo definir biblioteca conceito"),
         (("desrelacionar", "biblioteca", "conceito", "7"), "acervo desrelacionar biblioteca relacao"),
+        (("empacotar", "casa", "obra"), "acervo empacotar biblioteca obra"),
     ):
         r = _acervo(*argv, sessao=f"t-forma-{tmp_path.name}")
         assert r.returncode == 2, (argv, r.stderr)

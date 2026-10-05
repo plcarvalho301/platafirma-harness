@@ -4,7 +4,7 @@
 # dono: dados
 # classe: B
 # use para: ler o texto de uma obra por pagina ou capitulo (ler biblioteca impressao), ler uma ADR/spec/pagina/obra que sabe onde esta (ler), listar o que ha de um tipo ou sobre um assunto pelo catalogo (listar --sobre), gravar uma pagina de wiki (escrever casa pagina), por um repo de doc no acervo (ingerir casa <repo>)
-# atos: ler (leitura, casa), listar (leitura, casa), resolver (leitura, casa), escrever (escrita, registro), ingerir (escrita, incorporacao), curar (escrita, curadoria), catalogar (escrita, classificacao), definir (escrita, tesauro), relacionar (escrita, tesauro), desrelacionar (escrita, tesauro), derivar (escrita, classificacao), desderivar (escrita, classificacao), extrato (leitura, acervo), exportar (escrita, acervo), psql (escrita, acervo), balde (escrita, acervo)
+# atos: ler (leitura, casa), listar (leitura, casa), resolver (leitura, casa), escrever (escrita, registro), ingerir (escrita, incorporacao), curar (escrita, curadoria), catalogar (escrita, classificacao), definir (escrita, tesauro), relacionar (escrita, tesauro), desrelacionar (escrita, tesauro), derivar (escrita, classificacao), desderivar (escrita, classificacao), empacotar (leitura, classificacao), extrato (leitura, acervo), exportar (escrita, acervo), psql (escrita, acervo), balde (escrita, acervo)
 # forma: texto
 # le: ler=acervo.casa,acervo.obra,acervo.registro,repo
 # le: listar=acervo.casa,acervo.obra,acervo.registro,repo,arquivo-local
@@ -18,6 +18,7 @@
 # le: desrelacionar=acervo.obra
 # le: derivar=acervo.obra
 # le: desderivar=acervo.obra
+# le: empacotar=acervo.obra,minio
 # le: extrato=acervo.*
 # le: exportar=acervo.*,repo
 # le: psql=acervo.*
@@ -34,6 +35,7 @@
 # escreve: desrelacionar=acervo.obra
 # escreve: derivar=acervo.obra
 # escreve: desderivar=acervo.obra
+# escreve: empacotar=arquivo-local
 # escreve: extrato=arquivo-local
 # escreve: exportar=repo
 # escreve: psql=acervo.*
@@ -88,7 +90,7 @@ uso (gramatica arq:0106 — acervo <ato> <particao> <entidade> [seletor]):
                   (sucessora de \`deploy <stack> rotas|acessos\`; segredos: \`seg segredo exigidos\`)
   acervo ingerir  casa platafirma-casa[@<rev>] [--apply]      o suporte, pelo sha (arq:0115 §8.1)
   acervo lote     <id>
-  acervo curar    biblioteca lote [dest] · casa alias <classe> <chave> <alias>
+  acervo curar    casa alias <classe> <chave> <alias>
   acervo curar    casa revisao <revid>... --motivo <m> [--apply]   tira texto antigo do historico da wiki
   acervo ler      biblioteca impressao <obra> [--paginas a-b | --capitulo <ancora>] [--formato md|blocos]
                   [--papel corpo|todos] [--cursor c] [--impressao <id>] [--baixar [<pasta>]]
@@ -107,6 +109,7 @@ uso (gramatica arq:0106 — acervo <ato> <particao> <entidade> [seletor]):
   acervo derivar       biblioteca obra <obra> --de <origem> [--motivo "…"] [--apply]   a obra deriva da origem (classificacao)
   acervo desderivar    biblioteca obra <obra> --de <origem> [--sim]  desfaz uma derivacao (classificacao)
   acervo listar        biblioteca relacao <conceito> · biblioteca derivacao <obra>
+  acervo empacotar     biblioteca obra [dest]   planilha e capas das obras sem espécie, para classificar fora (classificacao)
   acervo curar    biblioteca --situacao|--expurgar|--restaurar|--promover <...>
                   (--reclassificar, --conceito, --relacionar, --relacoes, --desrelacionar, --derivar, --derivacoes e
                   --desderivar ainda respondem, com aviso: sao os atos de Classificar acima)
@@ -222,7 +225,8 @@ conforme() {
     # o texto da obra pelo espelho de leitura, por pagina ou capitulo (spec espelho-de-leitura
     # §5.4; #3180): cliente fino da rota de leitura do motor, nunca converte nem renderiza
     ler:biblioteca:impressao)     exec python3 "$ATOS/impressao" "$@" ;;
-    curar:biblioteca:lote)        exec "$ATOS/bancada" "$@" ;;
+    curar:biblioteca:lote)        avisa "acervo curar biblioteca lote" "acervo empacotar biblioteca obra [dest]" "arq:0119 §2"
+                                  exec "$ATOS/bancada" "$@" ;;
     # curadoria de UMA obra (#3126): entidade e a FLAG de bin/curar (--situacao, --expurgar,
     # --restaurar, --promover, --reclassificar, --conceito, --relacionar...), nao um nome fixo
     # -- repassa entidade + resto tal qual para _acervo/curar, que so encosta em bin/curar.
@@ -276,7 +280,7 @@ classificar() {
   fi
   local particao="${1:-}" entidade="${2:-}" esperada
   case "$ato" in
-    catalogar|derivar|desderivar) esperada=obra ;;
+    catalogar|derivar|desderivar|empacotar) esperada=obra ;;
     definir|relacionar)           esperada=conceito ;;
     desrelacionar)                esperada=relacao ;;
   esac
@@ -299,6 +303,8 @@ classificar() {
     desrelacionar) exec "$ATOS/curar" obra --desrelacionar "$@" ;;
     derivar)       exec "$ATOS/curar" obra --derivar "$@" ;;
     desderivar)    exec "$ATOS/curar" obra --desderivar "$@" ;;
+    # o pacote de classificacao externa (planilha e capas das obras sem especie, card 258)
+    empacotar)     exec "$ATOS/bancada" "$@" ;;
   esac
 }
 
@@ -337,7 +343,7 @@ forma_velha_classificar() {
 }
 
 case "$ATO" in
-  catalogar|definir|relacionar|desrelacionar|derivar|desderivar) classificar "$ATO" "$@" ;;
+  catalogar|definir|relacionar|desrelacionar|derivar|desderivar|empacotar) classificar "$ATO" "$@" ;;
 
   # resolver <classe> <string>: o ato de resolucao de identidade da raiz (arq:0108
   # §5, arq:0022). Nao segue a gramatica ato-particao-entidade: a raiz e uma so
@@ -388,7 +394,7 @@ case "$ATO" in
   baixar)          avisa "acervo baixar \"<titulo>\"" "acervo ler biblioteca objeto \"<titulo>\""
                    exec "${PLATAFIRMA_RELEASE:-/opt/platafirma/current}/venv/acervo/bin/python" "$ATOS/objeto" "$@" ;;
   bancada)
-    avisa "acervo bancada" "acervo curar biblioteca lote"
+    avisa "acervo bancada" "acervo empacotar biblioteca obra [dest]" "arq:0119 §2"
     case "${1:-}" in
       biblioteca|obra) conforme bancada "$@" ;;
       *) exec "$ATOS/bancada" "$@" ;;
@@ -435,7 +441,7 @@ case "$ATO" in
 
   -h|--help|ajuda) uso ;;
   *)
-    echo "acervo: ato '$ATO' desconhecido. Atos canonicos: ler, listar, resolver, escrever, ingerir, catalogar, definir, relacionar, desrelacionar, derivar, desderivar, curar, extrato, exportar, psql, balde." >&2
+    echo "acervo: ato '$ATO' desconhecido. Atos canonicos: ler, listar, resolver, escrever, ingerir, curar, extrato, exportar, psql, balde, catalogar, definir, relacionar, desrelacionar, derivar, desderivar, empacotar." >&2
     echo "  $SPEC" >&2
     exit 2 ;;
 esac
