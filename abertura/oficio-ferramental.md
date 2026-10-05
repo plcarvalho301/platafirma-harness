@@ -45,7 +45,6 @@ repo leva:2
 teste
 lint
 pesquisar
-migrar
 metrica
 agente
 bot
