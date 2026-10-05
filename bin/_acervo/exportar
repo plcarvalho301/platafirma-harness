@@ -40,8 +40,10 @@ def morre(msg: str, cod: int = 3) -> None:
     sys.exit(cod)
 
 
-def bancada_do_repo() -> Path:
-    """Mesma ordem do verbo `repo`: sessao, cadeira, clone."""
+def bancada_do_repo(chave: str = "") -> Path:
+    """Mesma ordem do verbo `repo`: sessao, cadeira, clone. `chave` (de `--bancada <card-slug>`,
+    a mesma do `repo <ato> platafirma-conhecimento@<chave>`) escolhe entre várias bancadas abertas da
+    cadeira — sessões simultâneas da mesma cadeira deixam mais de uma, e fechá-las não é de quem exporta."""
     try:
         raiz = raizes.bancada()
     except raizes.BancadaNaoDeclarada as e:
@@ -50,6 +52,11 @@ def bancada_do_repo() -> Path:
     for prefixo in ("claudinho-", "claudinha-"):
         if cadeira.startswith(prefixo):
             cadeira = cadeira[len(prefixo):]
+    if chave:
+        achadas = sorted(p for p in (raiz / "wt" / REPO).glob(f"*/{chave}") if (p / ".git").exists())
+        if len(achadas) != 1:
+            morre(f"--bancada {chave}: {len(achadas)} bancada(s) de {REPO} com essa chave", 2)
+        return achadas[0]
     for chave in (os.environ.get("PF_SESSAO", ""), cadeira):
         if chave:
             wt = raiz / "wt" / REPO / chave
@@ -64,7 +71,7 @@ def bancada_do_repo() -> Path:
             return achadas[0]
         if len(achadas) > 1:
             morre(f"{len(achadas)} bancadas de {REPO} abertas para {cadeira} "
-                  f"({', '.join(p.name for p in achadas)}); feche as que nao sao desta tarefa.", 2)
+                  f"({', '.join(p.name for p in achadas)}); diga qual com --bancada <chave>.", 2)
     clone = raiz / REPO
     if (clone / ".git").exists():
         print(f"acervo exportar: aviso: sem bancada da sessao; usando o clone {clone}",
@@ -148,10 +155,13 @@ def roda(titulo: str, cmd: list, cwd: Path, env: dict) -> None:
 
 
 def main(argv: list) -> int:
-    if argv:
-        print(f"uso: acervo exportar   (sem argumentos)\n  {SPEC}", file=sys.stderr)
+    chave = ""
+    if len(argv) == 2 and argv[0] == "--bancada" and argv[1]:
+        chave = argv[1]
+    elif argv:
+        print(f"uso: acervo exportar [--bancada <card-slug>]\n  {SPEC}", file=sys.stderr)
         return 2
-    wt = bancada_do_repo()
+    wt = bancada_do_repo(chave)
     py = python_do_rag()
     # rag/ e conversor/: desde a #3205 o motor_acervo importa o pacote `conversor`, que mora ao
     # lado de rag/ na mesma árvore; sem ele o export morria no import (medido em 01/10, #3202)
