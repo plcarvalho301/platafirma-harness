@@ -1829,7 +1829,11 @@ def _resolve_escrita(path: str, ident: dict):
             rel = real_pai.relative_to(tmp_fita).parts
             if not rel:
                 return None, f"morada: {TMP_FITA}/<ordem_id>/<arquivo> — subpasta da fita e obrigatoria"
-            if ident["ordem_id"] not in ("-", rel[0]):
+            if ident["ordem_id"] in ("", "-"):
+                # ordem "-" e a chamada sem fita (sessao_id ausente): sem dono da subpasta, nao ha
+                # confinamento a conferir, entao nao escreve (#3280, F4 do pentest #3277).
+                return None, f"morada: {TMP_FITA}/<ordem_id>/ exige fita declarada — chame com o sessao_id de monta_sessao"
+            if ident["ordem_id"] != rel[0]:
                 return None, f"morada: {TMP_FITA}/{rel[0]}/ nao e a pasta desta fita ({ident['ordem_id']})"
         else:
             erro_clone = _clone_ausente(raiz, real_pai)
