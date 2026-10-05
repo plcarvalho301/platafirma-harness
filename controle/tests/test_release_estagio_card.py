@@ -90,6 +90,7 @@ class Ambiente:
         gh_stub = stub_bin / "gh"
         gh_stub.write_text(
             "#!/usr/bin/env bash\n"
+            "case \"$*\" in *.title*) printf '%s\\n' \"${GH_STUB_TEXTO:-}\"; exit 0 ;; esac\n"
             "if [ \"$1\" = api ]; then printf '%s\\n' \"${GH_STUB_REF:-}\"; exit 0; fi\n"
             "exit 1\n", encoding="utf-8")
         gh_stub.chmod(0o755)
@@ -147,9 +148,11 @@ class Ambiente:
         self.env["PATH"] = f"{stub_bin}{os.pathsep}" + self.env.get("PATH", "")
 
     def run(self, *args: str, gh_ref: str = "", tarefas_rc: int = 0,
-            nivel: str = "story") -> subprocess.CompletedProcess:
+            nivel: str = "story",
+            gh_texto: str = "titulo do PR\nfecha #4242") -> subprocess.CompletedProcess:
         env = dict(self.env)
         env["GH_STUB_REF"] = gh_ref
+        env["GH_STUB_TEXTO"] = gh_texto
         env["TAREFAS_RC"] = str(tarefas_rc)
         env["TAREFAS_NIVEL"] = nivel
         return subprocess.run([str(SCRIPT), *args], env=env,
@@ -181,6 +184,25 @@ def test_estagio_card_resolve_e_comenta_e_move(amb):
 
     release_log = amb.release_log.read_text(encoding="utf-8")
     assert "ARGS: conferir card 4242" in release_log
+
+
+@pytest.mark.parametrize("texto", ["titulo do PR\nsem a linha", "fecha #42420", "refecha #4242"])
+def test_pr_sem_fecha_deixa_em_execucao(amb, texto):
+    # #3260: o PR do ato novo levou o card a entregue com a retirada ainda por fazer
+    r = amb.run("promover", "fixture", gh_ref="fabrica/4242-teste-estagio", gh_texto=texto)
+    assert r.returncode == 0, r.stdout + r.stderr
+    log = amb.tarefas_log.read_text(encoding="utf-8")
+    assert "ARGS: comentar 4242" in log
+    assert "ARGS: mover" not in log
+    assert "4242 segue em execução" in r.stdout
+    assert "AVISO" not in r.stdout + r.stderr
+
+
+def test_fecha_no_titulo_tambem_move(amb):
+    r = amb.run("promover", "fixture", gh_ref="fabrica/4242-teste-estagio",
+                gh_texto="Retira X (Fecha #4242)\n")
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert "ARGS: mover 4242 entregue" in amb.tarefas_log.read_text(encoding="utf-8")
 
 
 def test_task_tambem_vai_a_entregue(amb):
