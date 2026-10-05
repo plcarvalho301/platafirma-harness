@@ -150,10 +150,33 @@ envia() { # envia MÉTODO /caminho  (corpo JSON em stdin)
 
 # --- corpo: o rastreador guarda HTML, como o Vikunja guardava ---------------
 
+# Os rotulos dos modelos (`tarefas modelo`, todos os niveis e o Plano) saem em negrito e cada
+# campo abre o proprio paragrafo; as linhas que seguem o rotulo (listas, passos) ficam no
+# paragrafo dele, separadas por <br>. A validacao da API tira as tags e acha o rotulo no
+# comeco da linha, entao `<strong>Negocio:</strong>` segue valendo. Linha em branco ainda
+# separa paragrafo.
 para_html() {
-  python3 -c 'import html,sys
-t = html.escape(sys.stdin.read().strip())
-print("".join("<p>%s</p>" % b.replace("\n", "<br>") for b in t.split("\n\n") if b.strip()))'
+  python3 -c 'import html,re,sys
+R = ["Problema encontrado", "Solução proposta", "Aceite × prova", "Raio de ataque", "Raio emendado", "Comportamento esperado", "Sai quando", "Continuidade", "Estado medido", "Medido em", "Referencial", "Premissas", "Unidades", "Problema", "Resultado", "Medida", "Fora", "Quebra", "Negócio", "Ambiente", "Onde", "Passos", "Aceite", "Travas", "Entrega", "Plano", "Riscos"]
+R.sort(key=len, reverse=True)
+L = re.compile("^(" + "|".join(map(re.escape, R)) + "):", re.I)
+ps, p = [], []
+for l in html.escape(sys.stdin.read().strip()).split("\n"):
+    if not l.strip():
+        if p:
+            ps.append(p)
+            p = []
+        continue
+    m = L.match(l)
+    if m:
+        if p:
+            ps.append(p)
+        p = ["<strong>%s:</strong>%s" % (m.group(1), l[m.end():])]
+    else:
+        p.append(l)
+if p:
+    ps.append(p)
+print("".join("<p>%s</p>" % "<br>".join(x) for x in ps))'
 }
 
 para_texto() {

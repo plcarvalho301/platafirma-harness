@@ -80,9 +80,25 @@ def test_desc_stdin_manda_patch_so_do_corpo(tmp_path):
     assert proc.returncode == 0, proc.stderr
     assert chamadas == ["PATCH http://127.0.0.1:9/api/itens/42"]
     assert set(corpo) == {"descricao"}
-    assert corpo["descricao"] == "<p>Negócio: #1</p><p>Aceite: &lt;sai 0&gt;</p>"
+    assert corpo["descricao"] == ("<p><strong>Negócio:</strong> #1</p>"
+                                   "<p><strong>Aceite:</strong> &lt;sai 0&gt;</p>")
     assert "item 42 editado: card de teste" in proc.stdout
     assert "(inalterado)" in proc.stdout
+
+
+def test_rotulo_do_modelo_sai_em_negrito_e_cada_campo_abre_paragrafo(tmp_path):
+    """Campos colados em linhas seguidas viram um parágrafo cada; as linhas de lista e de
+    passo ficam no parágrafo do rótulo; rótulo de dois termos não é partido pelo menor."""
+    corpo_in = ("Negócio: #3196\nRaio de ataque:\n- repo@a.py\n- repo@b.py\n"
+                "Aceite × prova: x | y\nAceite: ok\n\nTexto livre: sem rótulo\n")
+    proc, _, corpo = _run(["editar", "42", "--desc-stdin"], tmp_path, stdin=corpo_in)
+    assert proc.returncode == 0, proc.stderr
+    assert corpo["descricao"] == (
+        "<p><strong>Negócio:</strong> #3196</p>"
+        "<p><strong>Raio de ataque:</strong><br>- repo@a.py<br>- repo@b.py</p>"
+        "<p><strong>Aceite × prova:</strong> x | y</p>"
+        "<p><strong>Aceite:</strong> ok</p>"
+        "<p>Texto livre: sem rótulo</p>")
 
 
 def test_titulo_sozinho_manda_so_titulo(tmp_path):
