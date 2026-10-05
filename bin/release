@@ -1749,6 +1749,16 @@ resolver_card_do_sha() {  # $1=repo $2=sha ; imprime NNNN (o card) ou nada, 1 se
   esac
 }
 
+pr_fecha_card() {  # $1=repo $2=sha $3=card ; 0 se o PR do sha diz `fecha #<card>` (titulo ou corpo)
+  local repo="$1" sha="$2" card="$3" url owner_repo texto
+  command -v gh >/dev/null 2>&1 || return 1
+  url="$(url_da_familia "$repo" 2>/dev/null)" || return 1
+  owner_repo="$(printf '%s' "$url" | sed -n 's#.*github\.com[:/]\([^/]*/[^/.]*\)\(\.git\)\{0,1\}/*$#\1#p')"
+  [ -n "$owner_repo" ] || return 1
+  texto="$(gh api "repos/$owner_repo/commits/$sha/pulls" --jq '.[0] | (.title // "") + "\n" + (.body // "")' 2>/dev/null)" || return 1
+  printf '%s' "$texto" | grep -qiE "(^|[^[:alnum:]])fecha #$card([^0-9]|$)"
+}
+
 estagio_card() {  # $1=repo $2=sha_de(ou vazio) $3=sha_para
   local repo="$1" de="$2" para="$3" card tarefas_bin release_bin
   card="$(resolver_card_do_sha "$repo" "$para")" || {
@@ -1768,12 +1778,22 @@ estagio_card() {  # $1=repo $2=sha_de(ou vazio) $3=sha_para
   # So story e task andam aqui (DT 39, #2856): ramo fabrica/<feature>-... levava a feature
   # a entregue e o rastreador encerrava as filhas em cascata. Entregue de feature e epico e
   # ato do dono (arq:0095); nivel que nao se le tambem nao move.
-  local rc_c=0 rc_m=0 nivel
+  # Card de varias subidas (#3260: o PR do ato novo fechou o card com a retirada por fazer):
+  # promover so move a entregue quando o PR declara que fecha o card, `fecha #<card>` no
+  # titulo ou no corpo. Sem a linha, comenta e deixa em execucao. Regra deterministica,
+  # lida do PR; quem abre o PR sabe se e a ultima subida.
+  local rc_c=0 rc_m=0 nivel fecha=0
+  if pr_fecha_card "$repo" "$para" "$card"; then fecha=1; fi
   nivel="$("$tarefas_bin" ler "$card" 2>/dev/null | sed -n "s/^#$card · \([^ ]*\) · .*/\1/p" | head -n 1)" || nivel=""
   "$tarefas_bin" comentar "$card" <<<"release promover $repo: $(curto_ou "$de" '(novo)') -> ${para:0:7}, gate verde, no ar." >/dev/null 2>&1 || rc_c=$?
   case "$nivel" in
     story|task)
-      "$tarefas_bin" mover "$card" entregue >/dev/null 2>&1 || rc_m=$? ;;
+      if [ "$fecha" -eq 1 ]; then
+        "$tarefas_bin" mover "$card" entregue >/dev/null 2>&1 || rc_m=$?
+      else
+        printf 'card:      %s segue em execução — o PR não diz `fecha #%s`; mova a entregue quando o aceite fechar\n' "$card" "$card"
+        rc_m=-1
+      fi ;;
     *)
       printf 'card:      %s é %s — entregue de feature ou épico é do dono; estágio 4 só comentou\n' \
         "$card" "${nivel:-nível ilegível}"
