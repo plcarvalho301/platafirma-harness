@@ -4,7 +4,7 @@
 # dono: ia
 # componente: platafirma-motor
 # classe: B
-# use para: "o que o acervo diz sobre X" (buscar <particao>), medir a bateria de um motor (medir), indexar a impressao selada da obra marcada para indexar (indexar biblioteca), ler/mexer um ajuste (ajuste)
+# use para: achar pelo sentido o trecho que responde a X (buscar <particao>; o que o acervo tem sobre X se acha tambem pelo catalogo, `acervo listar --sobre`), medir a bateria de um motor (medir), indexar a impressao selada da obra marcada para indexar (indexar biblioteca), ler/mexer um ajuste (ajuste)
 # atos: listar (leitura, texto), ajuste (leitura|escrita, config), buscar (leitura, busca), medir (leitura, medida), indexar (escrita, indice) — buscar/medir/indexar exigem particao: motor <inst> <ato> <particao> ...
 # forma: json
 # cauda: nao
@@ -371,14 +371,20 @@ def _texto_do_plano(p):
              f"{p.get('prontas', 0)} com indice aprovado"
              + ("" if p.get("promover") else " (sobem com --promover)")
              + f" · {p.get('fora_transcritas', 0)} transcrita(s) fora, o promover nao pede indice"
-             f" · {p.get('indexadas', 0)} de {p.get('seladas', 0)} seladas marcadas para indexar")
+             f" · {p.get('fora_nao_indexaveis', 0)} nao indexavel(is) fora (espelho nao servivel)"
+             f" · {p.get('indexadas', 0)} de {p.get('seladas', 0)} seladas marcadas para indexar"
+             f" · {p.get('facetas_defasadas', 0)} faceta(s) a refazer no ar")
     if p.get("modo") == "aplicado":
         return (f"lote {p['lote']} aberto no rag-api, em segundo plano: {p.get('n', 0)} impressao(oes) · "
                 f"{conta}\nacompanhar: {p.get('acompanhar')}")
     linhas = [f"plano: {p.get('n', 0)} impressao(oes) · {conta}"]
     for it in (p.get("itens") or [])[:20]:
+        if it["acao"] == "refazer_faceta":
+            situacao = "faceta defasada" if it.get("faceta") else "faceta ausente"
+        else:
+            situacao = f"{it.get('vetores', 0)}/{it.get('elegiveis', 0)} vetores"
         linhas.append(f"  {it['posicao']:>3}  {it['obra_id']}  {(it.get('titulo') or '')[:40]:<40}  "
-                      f"{it.get('vetores', 0)}/{it.get('elegiveis', 0)} vetores  {it['acao']}")
+                      f"{situacao}  {it['acao']}")
     if p.get("n", 0) > 20:
         linhas.append(f"  … +{p['n'] - 20}")
     if p.get("n", 0):
@@ -407,7 +413,10 @@ def cmd_indexar(inst, argv):
     «transcrita e indexada» e monta o indice dela (trecho e faceta) sem po-lo no ar; o `acervo
     promover` poe impressao e indice em servico juntos, e `--promover` o encadeia depois do gate.
     Roda no rag-api: plano, lote em segundo plano e relatorio. O trilho antigo, que materializava o
-    arquivo e cortava no motor, saiu: o motor nao corta a partir do arquivo (arq:0119, Consequencias)."""
+    arquivo e cortava no motor, saiu: o motor nao corta a partir do arquivo (arq:0119, Consequencias).
+    So a selada indexavel entra (#3282: espelho servivel pela regua 6). O plano traz tambem a faceta
+    no ar que falta ou veio de outro cabecalho (titulo, emissor, dominio ou conceito trocado depois
+    de indexar) e a refaz no --apply (#3309)."""
     particao, argv = resolve_particao(argv, "indexar")
     if particao != "biblioteca":
         print(f"motor indexar {particao}: so a biblioteca indexa por este ato; a casa indexa na "
@@ -877,7 +886,7 @@ def main():
     d = reg()
     a = sys.argv[1:]
     # --ajuda UNIVERSAL, sem efeito colateral (card #2868, ex-#2274 defeito 4): varre
-    # todos os argumentos antes do despacho; nenhum sub-ato chega a rodar. uso() sai 2.
+    # todos os argumentos antes do despacho; nenhum ato chega a rodar. uso() sai 2.
     if any(x in ("--ajuda", "--help", "-h") for x in a):
         uso()
     if a and a[0] == "motor":
