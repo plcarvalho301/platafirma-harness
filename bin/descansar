@@ -556,7 +556,7 @@ def economia_de_giro(ordem_id):
         return ["  sem ordem_id — sessao de mao nao tem fita a medir"]
     VERBOS = {"mesa", "fila", "tarefas", "acervo", "motor", "conferir",
               "situacao", "persona", "acesso", "chat", "infra", "seg",
-              "sinal", "lint", "teste", "minuta", "descansar", "encerrar", "migrar", "metrica"}
+              "sinal", "lint", "teste", "minuta", "descansar", "encerrar", "metrica"}
     por_tool, classe_fb = Counter(), Counter()
     tss, lote_ids, giros_avulsos = [], set(), 0
     for arq in sorted(glob.glob(os.path.join(LOG_OPS, "ops-*.jsonl")))[-3:]:
