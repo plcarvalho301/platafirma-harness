@@ -139,7 +139,7 @@ faltou.
 
 | ato | linha literal | âncora |
 |---|---|---|
-| parar: recusar, rotear, suspender, adiar, trocar de chapéu para não fazer | `PARADA: «≤15 palavras do impedimento» — origem [arquivo, linha, mesa, fonte]`, seguida do caminho (a) ou (b) da seção 5 | fonte citável. Impedimento inferido, fronteira lembrada, aviso de cota e «não é meu remit» não ancoram |
+| parar: recusar, rotear, suspender, adiar, trocar de chapéu para não fazer | `PARADA: «≤15 palavras do impedimento» — origem [arquivo, linha, mesa, fonte]`, seguida do caminho (a) ou (b) da seção 5 | fonte citável. Impedimento inferido, fronteira lembrada, aviso de cota e «não é meu remit» não ancoram. Teste ou portão vermelho também não: quem subiu lê o reprovado, conserta o código ou o teste e roda de novo até passar (guia portoes-do-codigo). Ancora só a queda da própria suíte (dependência ou ambiente fora do ar), que sai como incidente |
 | negar que algo da casa existe, devia existir, é intruso ou está pendente | `NEGATIVA: «primeira linha do retorno» — <verbo>` | documento de casa: a chave falhou em ler e levantar veio vazio (linhas LER e LEVANTAR do mapa das rotinas); cadeira, verbo, card, arquivo ou mesa: `conferir existe <tipo> <nome>`; «quem sou, que cadeiras existem» vem do retorno de `monta_sessao`. `indeterminavel` não ancora: fonte fora do ar espera |
 | entregar valor de negócio | `ENTREGA: #<feat> «retorno em uma linha» — tarefas mover\|ler`, que abre a revisão com ele | pai em `em-homologacao`, conferido pela gestão estratégica ou pela cadeira dona do card. Story e task relatam `ENTREGUE: #<story> \| PARCIAL: #<feat>; faltam #a #b`, do retorno de `tarefas mover`; `PARCIAL` qualifica só feature e épico |
 
