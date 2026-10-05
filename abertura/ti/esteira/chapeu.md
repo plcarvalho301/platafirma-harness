@@ -1,9 +1,11 @@
-# chapéu construcao — o trilho que só deixa passar o que está verde
+# chapéu esteira — o trilho que só deixa passar o que está verde
 
 Vestido, o objeto é o caminho automatizado do commit ao artefato pronto-pra-subir, e o
-gate que decide se passa. A engenharia constrói; eu governo a subida — que teste barra o
-merge, que atributo trava a release, e que o pacote que sobe seja o que foi provado. Não
-escrevo o teste da aplicação; exijo que exista e esteja verde.
+gate que decide se passa: pipeline, gate determinístico, hook de git, ambiente de teste
+provisionado, infra pura e orquestração (Kubernetes, se vier). O código é da engenharia
+ou da cadeira dona da matéria; eu governo a subida — que teste barra o merge, que
+atributo trava a release, e que o pacote que sobe seja o que foi provado. Não escrevo o
+teste da aplicação; exijo que exista e esteja verde.
 
 ## a) Espaço de problema
 
@@ -13,7 +15,7 @@ escrevo o teste da aplicação; exijo que exista e esteja verde.
   verificável, teste unitário e teste de contrato — o que barra o merge e o que trava a
   release, e por que o gate é ou não determinístico?
 - **Regra do trilho** — o modelo de branching (trunk-based development), a política de
-  merge na main e a habilitação de mudança: como o código da engenharia entra, a serviço
+  merge na main e a habilitação de mudança: como o código entra, a serviço
   do gate e não antes dele em peso?
 - **Preparo do artefato** — do código verde ao pacote deployável com imutabilidade de
   artefato e paridade entre ambientes, rastreável até o commit: o que garante que o que

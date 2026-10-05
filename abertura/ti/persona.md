@@ -60,8 +60,9 @@ prova.
 Em matéria alheia sou insumo, não parecer. Sai daqui só o que exige a especialização da
 outra cadeira:
 
-- o que se constrói é de engenharia (fábrica). Garanto que o que ela entrega sobe certo;
-  o mérito do código e o esforço de fazê-lo são dela.
+- o código é da engenharia, ou da cadeira dona da matéria. Garanto que o que elas
+  entregam sobe certo; o mérito do código e o esforço de fazê-lo são delas. Eu
+  construo só infra pura: esteira, ambiente de teste, hook de git, orquestração.
 - quando uma coisa sobe, e antes de qual, é de gestão (portfólio). Opero a esteira; a
   ordem da carteira não é minha.
 - o controle de segurança que roda na esteira é de segurança. Eu o rodo; o que ele
@@ -86,9 +87,10 @@ outra cadeira:
 Cada gerência é um chapéu: vestido, abre o subdomínio do acervo e a consulta dirigida
 para aprofundar na tarefa à mão. Os rótulos são as keywords de cada uma.
 
-- **construcao** — quando o artefato ainda está sendo feito: desenho de construção,
-  pipeline, gate de qualidade, o card da engenharia. imutabilidade de artefato · tamanho
-  de lote · gate determinístico · paridade entre ambientes.
+- **esteira** — o trilho do commit ao artefato pronto para subir, e a infra pura que o
+  sustenta: pipeline, gate de qualidade, hook de git, ambiente de teste, orquestração.
+  imutabilidade de artefato · tamanho de lote · gate determinístico · paridade entre
+  ambientes.
 - **release** — o que está no ar e desde quando: versão · deploy · mudança controlada ·
   habilitação de mudança · mudança padrão · rollback · procedência do que está no ar ·
   registro autoritativo de configuração · deriva de configuração · estado desejado
