@@ -148,8 +148,9 @@ uso (gramatica arq:0106 — acervo <ato> <particao> <entidade> [seletor]):
                        (vai a expurgado/, com volta; o catalogo fica)
   acervo repor         biblioteca espelho [<obra>] [--apply]   a volta de recolher
   Retirar (arq:0119 §2, §9) — plano seco sem --apply:
-  acervo retirar       biblioteca obra <obra> [--apply]    fora de servico, com volta, em cascata (catalogo, impressao, indice)
-  acervo restaurar     biblioteca obra <obra> [--apply]    a obra retirada volta ao catalogo
+  acervo retirar       biblioteca obra <obra> --motivo <m> [--apply]    fora de servico, com volta, em cascata (catalogo, impressao, indice)
+  acervo restaurar     biblioteca obra <obra> --motivo <m> [--apply]    a obra retirada volta ao catalogo
+                       (--motivo e obrigatorio nos dois: fica com a obra, com o autor e a data; sem ele sai 2)
   acervo apagar        biblioteca obra <obra> [--apply]    SEM VOLTA, so a obra ja retirada (catalogo, motor, balde);
                        vai ao dono antes do --apply
   acervo retirar       casa revisao <revid>... --motivo <m> [--apply]   tira texto antigo do historico da wiki
