@@ -112,13 +112,17 @@ def test_caminho_relativo_e_na_bancada(morada):
     assert "oi" in r["conteudo"]
 
 
-def test_markdown_recem_escrito_se_relê(morada):
+def test_markdown_recem_escrito_se_relê(morada, monkeypatch):
+    # rascunho de var/tmp so se escreve com fita declarada (#3280): a fita deste teste e ordem-9
+    monkeypatch.setattr(s, "_sessao_resolve", lambda sid: {
+        "sessao_id": "sid-teste", "ordem_id": "ordem-9", "cadeira": "engenharia",
+        "sujeito": "", "origem_sessao": ""})
     caminho = "wt/platafirma-core/outra-cadeira/aux.md"
     ok = s.write_file(path=caminho, content="auxiliar\n")
     assert ok.get("ok"), ok
     assert "auxiliar" in _le(morada["bancada"] / caminho)["conteudo"]
     rascunho = morada["instancia"] / "var" / "tmp" / "ordem-9" / "aux.md"
-    assert s.write_file(path=str(rascunho), content="rascunho\n").get("ok")
+    assert s.write_file(path=str(rascunho), content="rascunho\n", sessao_id="sid-teste").get("ok")
     assert "rascunho" in _le(rascunho)["conteudo"]
 
 

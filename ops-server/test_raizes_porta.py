@@ -126,8 +126,37 @@ def test_read_file_nega_segredos_de_qualquer_instancia(tmp_path, monkeypatch, se
     assert s._sob_segredos_de_instancia(Path("/srv/platafirma/casa/segredos/x/Y"))
 
 
-def test_write_file_sem_bancada_so_rascunho(sem_bancada, sem_pep):
-    ok = s.write_file(path=str(s.TMP_FITA / "o-teste" / "nota.md"), content="x\n")
+@pytest.fixture
+def fita(monkeypatch):
+    """Declara a fita da chamada: a porta resolve o sessao_id para esta ordem_id."""
+    def _declara(ordem):
+        monkeypatch.setattr(s, "_sessao_resolve", lambda sid: {
+            "sessao_id": "sid-teste", "ordem_id": ordem, "cadeira": "engenharia",
+            "sujeito": "", "origem_sessao": ""})
+    return _declara
+
+
+def test_write_file_rascunho_sem_sessao_id_recusa(sem_bancada, sem_pep):
+    """#3280 (F4 do #3277): sem sessao_id a ordem_id resolve a \"-\", e o \"-\" nao pode
+    derrotar o confinamento por fita: recusa, e nenhuma subpasta nasce."""
+    r = s.write_file(path=str(s.TMP_FITA / "o-SEM-SESSAO-x" / "probe.txt"), content="x\n")
+    assert r.get("recusado") and "fita declarada" in r["motivo"], r
+    r = s.write_file(path=str(s.TMP_FITA / "-" / "probe.txt"), content="x\n")
+    assert r.get("recusado") and "fita declarada" in r["motivo"], r
+    assert not (s.TMP_FITA / "o-SEM-SESSAO-x").exists()
+
+
+def test_write_file_rascunho_com_fita_so_na_propria_subpasta(sem_bancada, sem_pep, fita):
+    fita("o-minha")
+    ok = s.write_file(path=str(s.TMP_FITA / "o-minha" / "probe.txt"), content="x\n", sessao_id="sid-teste")
+    assert ok.get("ok"), ok
+    alheia = s.write_file(path=str(s.TMP_FITA / "o-outra" / "probe.txt"), content="x\n", sessao_id="sid-teste")
+    assert alheia.get("recusado") and "nao e a pasta desta fita" in alheia["motivo"], alheia
+
+
+def test_write_file_sem_bancada_so_rascunho(sem_bancada, sem_pep, fita):
+    fita("o-teste")
+    ok = s.write_file(path=str(s.TMP_FITA / "o-teste" / "nota.md"), content="x\n", sessao_id="sid-teste")
     assert ok.get("ok"), ok
     r = s.write_file(path="platafirma-core/README.md", content="x\n")
     assert r.get("recusado") and "bancada" in r["motivo"]
