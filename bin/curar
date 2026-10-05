@@ -288,19 +288,27 @@ def formatar_lote_resultado(res: dict) -> str:
 def formatar_situacao(payload: dict) -> str:
     oid = payload.get("obra_id", "-")
     tit = payload.get("titulo", "-")
+    # servida inteira é o estado da obra (arq:0119 §1.4, #3294); servível é o espelho da impressão (#3282)
+    servida = "sim" if payload.get("servida_inteira") else "não"
     servivel = "sim" if payload.get("servivel") else "não"
     degrau = payload.get("degrau", "-")
     desde = payload.get("desde") or "-"
     imp = payload.get("impressao_id") or "-"
     obj = payload.get("objeto") or "-"
-    return (
-        f"Situação da obra: {tit} ({oid})\n"
-        f"  Servível   : {servivel}\n"
-        f"  Degrau     : {degrau}\n"
-        f"  Desde      : {desde}\n"
-        f"  Impressão  : {imp}\n"
-        f"  Objeto     : {obj}"
-    )
+    linhas = [
+        f"Situação da obra: {tit} ({oid})",
+        f"  Servida inteira : {servida}",
+        f"  Servível        : {servivel}",
+        f"  Degrau          : {degrau}",
+        f"  Desde           : {desde}",
+        f"  Impressão       : {imp}",
+        f"  Objeto          : {obj}",
+    ]
+    if payload.get("servida_inteira"):
+        linhas.append(f"  arquivo: acervo ler biblioteca objeto {oid}")
+    if payload.get("impressao_id") and degrau == "ancorado":
+        linhas.append(f"  trecho : acervo ler biblioteca impressao {oid}")
+    return "\n".join(linhas)
 
 
 def acao_situacao(obra: str, como_json: bool, headers: dict) -> int:
