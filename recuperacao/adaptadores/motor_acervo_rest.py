@@ -61,6 +61,13 @@ def situacao_obra(obra: str, *, http=None) -> dict | None:
                     aceita_ausente=True)
 
 
+def obras(campos: list[str], *, http=None) -> dict:
+    """`GET /acervo/obras?campos=...` — o estado de todas as obras vivas pela regra única do motor
+    (`estado_da_obra`, #3294); coleção `{itens, proximo}`."""
+    chamador = http or _chama_real
+    return chamador(f"/acervo/obras?{urllib.parse.urlencode({'campos': ','.join(campos)})}")
+
+
 def descoberta(assunto: str, eixos: list[str], k: int, *, http=None) -> dict:
     """`GET /acervo/descoberta?assunto=&eixo=...&k=...`."""
     chamador = http or _chama_real

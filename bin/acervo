@@ -195,6 +195,12 @@ conforme() {
     # o texto da obra pelo espelho de leitura, por pagina ou capitulo (spec espelho-de-leitura
     # §5.4; #3180): cliente fino da rota de leitura do motor, nunca converte nem renderiza
     ler:biblioteca:impressao)     exec python3 "$ATOS/impressao" "$@" ;;
+    # o estado da obra e onde ela se lê (arq:0119 §8.3: `curar --situacao` passa a `ler obra --situacao`;
+    # #3294): servida inteira aponta o arquivo, com impressão servindo aponta também o trecho.
+    # `--situacao` é aceito e não muda nada: a leitura da obra é a situação dela.
+    ler:biblioteca:obra)
+        args=(); for a in "$@"; do [[ "$a" == --situacao ]] || args+=("$a"); done
+        exec "$ATOS/curar" obra --situacao "${args[@]}" ;;
     curar:biblioteca:lote)        exec "$ATOS/bancada" "$@" ;;
     # curadoria de UMA obra (#3126): entidade e a FLAG de bin/curar (--situacao, --expurgar,
     # --restaurar, --promover, --reclassificar, --conceito, --relacionar...), nao um nome fixo
