@@ -29,6 +29,7 @@ import re
 import shutil
 import subprocess
 from collections.abc import Iterable
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from itertools import zip_longest
 from pathlib import Path
@@ -57,6 +58,7 @@ RUFF_UVX = ["uvx", "ruff@0.16.10"]
 SHELLCHECK_UVX = ["uvx", "--from", "shellcheck-py>=0.11,<0.12", "shellcheck"]
 PRAZO_ANALISADOR_S = 300
 LOTE_ARQUIVOS = 400
+LOTE_SHELL = 10
 
 _RE_RUFF = re.compile(r"\bruff\s+([A-Z]+[0-9]+)\b")
 _RE_RUFF_PADRAO = re.compile(r"\bruff\s+padr[aã]o\b")
@@ -269,9 +271,15 @@ def _shellcheck(raiz: Path, arquivos: list[Path], regua: Regua, avisos: list[str
         return []
     rels = [str(a.relative_to(raiz)) for a in arquivos]
     incluir = ",".join(sorted(regua.shellcheck))
+    # o shellcheck usa um nucleo por processo: lotes pequenos, um processo por nucleo; o
+    # resultado se le na ordem dos lotes, como se fosse um so
+    lotes = [rels[i:i + LOTE_SHELL] for i in range(0, len(rels), LOTE_SHELL)]
+    with ThreadPoolExecutor(max_workers=max(1, min(len(lotes), os.cpu_count() or 1))) as pool:
+        procs = list(pool.map(
+            lambda lote: _rodar([*sc, "-f", "json1", "-S", "style", f"--include={incluir}", *lote], raiz),
+            lotes))
     achados: list[Apontamento] = []
-    for lote in _em_lotes(rels):
-        proc = _rodar([*sc, "-f", "json1", "-S", "style", f"--include={incluir}", *lote], raiz)
+    for lote, proc in zip(lotes, procs, strict=True):
         if proc.returncode not in (0, 1):
             avisos.append(f"shellcheck saiu {proc.returncode} num lote de {len(lote)} arquivos: "
                           f"{proc.stderr.strip()[:300]}")

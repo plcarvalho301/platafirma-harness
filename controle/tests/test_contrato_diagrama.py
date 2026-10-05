@@ -109,7 +109,8 @@ def test_diagrama_quebrado_sai_1_com_arquivo_e_linha(tmp_path):
         srv.shutdown()
     assert r.returncode == 1, r.stdout + r.stderr
     assert "quebrado.mmd" in r.stdout
-    assert "quebrado.mmd:2:" in r.stdout
+    # saida agrupada: o arquivo numa linha, a linha do erro embaixo do criterio
+    assert "\n  quebrado.mmd\n" in r.stdout and "\n      2\n" in r.stdout, r.stdout
 
 
 def test_diagrama_kroki_fora_de_alcance_sai_5_e_nao_reprova(tmp_path):
