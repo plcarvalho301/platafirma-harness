@@ -61,7 +61,10 @@ def main(argv):
               "     cartilha das familias e garantias: acervo relacionar biblioteca conceito --ajuda\n"
               "     --reclassificar, --conceito, --relacionar, --relacoes, --desrelacionar, --derivar, --derivacoes e "
               "--desderivar respondem com aviso: os atos de Classificar sao acervo catalogar, definir, relacionar, "
-              "desrelacionar, derivar e desderivar (spec acervo, secao 10; #3296)",
+              "desrelacionar, derivar e desderivar (spec acervo, secao 10; #3296)\n"
+              "     --reextrair, --recortar, --promover e --rejulgar respondem com aviso: os atos de Transcrever sao "
+              "acervo espelhar, recortar, promover, julgar e converter, e o relatorio do lote e acervo ler "
+              "biblioteca lote (spec acervo, secao 10; #3297)",
               0 if argv else 2)
     sub = argv[0]
     if sub == "alias":
