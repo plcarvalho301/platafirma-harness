@@ -50,7 +50,12 @@ from _lint.lista import resolver_lista
 from _lint.organizacao import verificar_organizacao
 from _lint.prosa import verificar_prosa
 from _lint.repo import verificar_repo
-from _lint.resultado import Apontamento, linha_ancora_lint, relatorio_lint
+from _lint.resultado import (
+    Apontamento,
+    linha_ancora_lint,
+    linhas_agrupadas,
+    relatorio_lint,
+)
 from _lint.superficie import verificar_superficie
 from _lint.testes import verificar_testes
 from _lint.vocabulario import verificar_vocabulario
@@ -391,8 +396,8 @@ def main() -> int:
             }, ensure_ascii=False))
         else:
             print(linha)
-            for a in apontamentos:
-                print(f"    {a.arquivo}:{a.linha}: {a.o_que_fere} — cura: {a.cura}")
+            for texto in linhas_agrupadas(apontamentos):
+                print(texto)
         return rc
 
     # 6. Classe REPO

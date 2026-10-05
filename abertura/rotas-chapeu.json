@@ -1030,7 +1030,7 @@
     ]
   },
   "ti": {
-    "construcao": [
+    "esteira": [
       "Imutabilidade de artefato",
       "Tamanho de lote",
       "batch size",

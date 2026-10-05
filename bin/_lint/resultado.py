@@ -13,13 +13,15 @@ Formato de 1a linha (ancora):
   «lint <classe> <alvo>: N apontamentos — <chave>@rev<N>»
   (ou «lint <classe> <alvo>: N apontamentos — repositorio»)
 
-Linha de apontamento:
-    <arquivo>:<linha>: <o_que_fere> — cura: <cura>
+Apontamentos, agrupados (linhas_agrupadas):
+      <arquivo>
+        <criterio> — cura: <cura>
+          <linha>[, <linha>...]: <detalhe do detector>
 """
 from __future__ import annotations
 
 import json
-from typing import Any, Iterable, List, Optional
+from typing import Any, Iterable, Iterator, List, Optional
 
 
 class Apontamento:
@@ -122,6 +124,43 @@ def relatorio_lint(
         return exit_code
 
     print(linha)
-    for a in lista:
-        print(f"    {a.arquivo}:{a.linha}: {a.o_que_fere} — cura: {a.cura}")
+    for texto in linhas_agrupadas(lista):
+        print(texto)
     return exit_code
+
+
+def _partes(o_que_fere: str) -> tuple[str, str]:
+    """(criterio, detalhe): o detalhe e o colchete do fim, `[ERA001: ...]`, quando ha."""
+    if o_que_fere.endswith("]") and " [" in o_que_fere:
+        criterio, detalhe = o_que_fere.rsplit(" [", 1)
+        return criterio, detalhe[:-1]
+    return o_que_fere, ""
+
+
+def linhas_agrupadas(apontamentos: Iterable[Apontamento]) -> Iterator[str]:
+    """A lista em texto, sem repetir o que se repete: o arquivo aparece uma vez; dentro dele,
+    cada criterio uma vez, com a cura; embaixo, as linhas do arquivo com o detalhe do detector.
+    Detalhes da mesma linha se juntam com « · », e linhas com o mesmo detalhe, numa so.
+
+        bin/curar
+          D15 numero ou texto magico — cura: De nome a constante.
+            237: PLR2004: Magic value used in comparison, ...
+          R1 chamada que sai do processo sem prazo — cura: De prazo a toda chamada externa.
+            309, 341, 364: S113: Probable use of `requests` call without timeout
+    """
+    arquivos: dict[str, dict[tuple[str, str], dict[int, list[str]]]] = {}
+    for a in apontamentos:
+        criterio, detalhe = _partes(a.o_que_fere)
+        detalhes = arquivos.setdefault(a.arquivo, {}).setdefault((criterio, a.cura), {}).setdefault(a.linha, [])
+        if detalhe and detalhe not in detalhes:
+            detalhes.append(detalhe)
+    for arquivo, criterios in arquivos.items():
+        yield f"  {arquivo}"
+        for (criterio, cura), por_linha in criterios.items():
+            yield f"    {criterio} — cura: {cura}"
+            por_detalhe: dict[str, list[int]] = {}
+            for ln in sorted(por_linha):
+                por_detalhe.setdefault(" · ".join(por_linha[ln]), []).append(ln)
+            for detalhe, linhas in por_detalhe.items():
+                numeros = ", ".join(str(ln) for ln in linhas)
+                yield f"      {numeros}: {detalhe}" if detalhe else f"      {numeros}"

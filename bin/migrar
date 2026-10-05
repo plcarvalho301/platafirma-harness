@@ -9,130 +9,47 @@
 # cauda: nao
 # classe: B
 # consome: nenhum
-# ambiente: PF_SUJEITO[obrigatória em aplicar] porta (identidade; sem fallback; entra na linha de log do ato quando presente)
-# depende: docker · o contêiner do banco (allowlist BANCOS, abaixo) de pé · psql dentro do contêiner
+# ambiente: PF_SUJEITO[obrigatória em aplicar] porta (identidade; sem fallback; entra na linha de log do ato quando presente) · PF_SESSAO porta (lida, chave do aviso de deprecado)
+# depende: docker · o contêiner do banco (allowlist BANCOS) de pé · psql dentro do contêiner · a implementacao em bin/_release/migrar
 # escreve: aplicar=schema do banco-alvo, via docker exec psql (nao e arquivo local; nao e segredo) · bancos=nada
 # substitui: docker exec -i <ctr> psql -f - direto · psql -h ... -f <arquivo> direto no host
-#
-# Por que existe: o schema `acervo` (rag-extractor-pg) e o do motor evoluem por ARQUIVO
-# versionado (rag/db/init/NNN_*.sql), nao DDL solta. `docker-entrypoint-initdb.d` so roda
-# em volume vazio; base viva precisa de `psql -f`. Isso e `docker exec -i <ctr> psql` com
-# o arquivo no stdin — pipe entrando noutro contêiner, exatamente o que a porta so-verbo
-# corta, e nenhum verbo encapsulava. A carta da fabrica bateu nesse teto (#3019): "a porta
-# nao serve psql, aceites embutidos na migracao, quem aplicar mede no ato". Este verbo e o
-# ato de aplicar — mede no ato, com ON_ERROR_STOP, e a transacao da propria migracao aborta
-# se um aceite falhar. Sem ele, migracao de schema nao e homologavel por aplicacao.
-#
-# Contencao ESTRUTURAL, no molde do `repo`:
-#   1. ALVO por allowlist de contêiner (BANCOS, abaixo) — slug simples, nunca caminho,
-#      nunca string arbitraria para o docker. Fora da lista, recusa antes do docker.
-#   2. O SQL vem por STDIN, sempre. Nao ha ato que receba caminho de arquivo do host e o
-#      leia: quem chama entrega o texto (a tool passa `stdin`), o verbo nao abre arquivo.
-#   3. psql roda com ON_ERROR_STOP=1 e -1 (transacao unica): a migracao inteira aplica ou
-#      nada aplica. O que sai da migracao (COMMIT/ROLLBACK) e da migracao, nao do verbo.
-#   4. Nenhuma flag do chamador atravessa para o psql. Banco e slug conferido; o corpo e
-#      dado no stdin, nao comando.
-#
-# NAO decide autorizacao (o PEP decide no caminho da chamada). NAO promove release
-# (`deploy`). NAO roda SQL ad-hoc de leitura — isto e para migracao versionada, com
-# aceite embutido; consulta de leitura e outro verbo se um dia fizer falta.
-#
-# Identidade (decisao 9, card #3145): so PF_SUJEITO, sem fallback para PF_CADEIRA/USER.
-# Exigida em `aplicar` (ausente -> exit 3, com a cura); `bancos` e leitura e nao exige.
+# deprecado: 2026-10-05 sucessor: release migrar (arq:0110 §1, §7, §11, card #3260)
+# conforme: parcial
 set -uo pipefail
 
-VERBO="$(basename "$0")"
+AQUI="${BASH_SOURCE[0]%/*}"
+[ "$AQUI" = "${BASH_SOURCE[0]}" ] && AQUI="."
+IMPL="$AQUI/_release/migrar"
+BASH_BIN="${BASH:-/bin/bash}"
 
-# Allowlist de bancos: slug -> "contêiner:usuario:base". Cresce por acrescimo, aqui,
-# sob revisao — nao por argumento do chamador. Os dois Postgres versionados da casa hoje.
-declare -A BANCOS=(
-  [rag]="rag-extractor-pg:rag:rag_extractor"
-  [motor]="motor-pg:motor:motor"
-  [sessao]="harness-sessao-db:sessao:sessao"
-)
-
-uso_texto() {
-  cat >&2 <<EOF
-uso:
-  $VERBO aplicar <banco>     aplica no <banco> a migracao SQL lida do STDIN
-                             (transacao unica, ON_ERROR_STOP; aborta inteira no 1o erro;
-                             exige identidade: variavel PF_SUJEITO)
-  $VERBO bancos              lista os bancos declarados (slug -> contêiner/base)
-
-bancos declarados: ${!BANCOS[*]}
-o SQL entra SEMPRE por stdin — a tool passa \`stdin=<corpo da migracao>\`.
-
-exit: tabela arq:0110 §4 — 0 ok · 1 negativo de mérito (psql abortou: a migracao em si
-      falhou, transacao nao commitou) · 2 uso · 3 dependência ausente (docker, contêiner
-      fora do ar, PF_SUJEITO) · 4 política/trava (banco fora da allowlist) · 5 indeterminável
-EOF
-}
-
-uso() {
-  uso_texto
-  exit 2
-}
-
-morre() { printf '%s: %s\n' "$VERBO" "$1" >&2; exit "${2:-3}"; }
-
-exigir_sujeito() {  # $1=rótulo do ato, só para a mensagem
-  if [ -z "${PF_SUJEITO:-}" ]; then
-    morre "erro: variável PF_SUJEITO: ausente — $1 exige identidade; rode dentro da sessão (a porta a injeta pelo fluxo OAuth)" 3
+avisa_deprecado() {  # uma vez por sessao (arq:0110 §11)
+  local trava="/tmp/platafirma-avisos-${PF_SESSAO:-${USER:-default}}-migrar"
+  if [ ! -f "$trava" ]; then
+    : > "$trava" 2>/dev/null || true
+    printf 'migrar: aviso: `migrar` está deprecado (arq:0110 §11); a forma conforme é `release migrar` (card #3260).\n' >&2
   fi
 }
 
-# Sem argumento nenhum: usage, exit 2, nada executado (Q2/Q9).
+[ -f "$IMPL" ] || {
+  printf 'migrar: dependência ausente: implementacao %s nao encontrada\n' "$IMPL" >&2
+  exit 3
+}
+
+# Sem argumento nenhum ou --ajuda: despacha sem efeito colateral (Q2)
 if [ $# -eq 0 ]; then
-  uso
+  export PF_VERBO_NOME="migrar"
+  exec "$BASH_BIN" "$IMPL"
 fi
 
-# --ajuda UNIVERSAL, sem efeito colateral: varre TODOS os argumentos antes do despacho.
 for _a in "$@"; do
   case "$_a" in
-    --ajuda|--help|-h|ajuda) uso ;;
+    --ajuda|--help|-h|ajuda)
+      export PF_VERBO_NOME="migrar"
+      exec "$BASH_BIN" "$IMPL" "$@"
+      ;;
   esac
 done
 
-ato="$1"; shift
-
-case "$ato" in
-  bancos)
-    printf 'bancos declarados (allowlist):\n'
-    for s in "${!BANCOS[@]}"; do
-      IFS=: read -r ctr usr base <<<"${BANCOS[$s]}"
-      printf '  %-8s -> %s  (psql -U %s -d %s)\n' "$s" "$ctr" "$usr" "$base"
-    done
-    ;;
-  aplicar)
-    banco="${1:-}"
-    [ -n "$banco" ] || morre "erro: falta o banco — \`$VERBO bancos\` lista os validos" 2
-    [ -n "${BANCOS[$banco]:-}" ] || morre "erro: banco '$banco' fora da allowlist — validos: ${!BANCOS[*]}" 4
-    exigir_sujeito "$VERBO aplicar"
-    IFS=: read -r ctr usr base <<<"${BANCOS[$banco]}"
-
-    command -v docker >/dev/null 2>&1 || morre "erro: dependência docker: ausente — 'docker' nao esta no PATH desta conta" 3
-    docker inspect -f '{{.State.Running}}' "$ctr" 2>/dev/null | grep -qx true \
-      || morre "erro: dependência $ctr: ausente — contêiner nao esta de pe; \`infra estado\`" 3
-
-    # -T sem tty; -i para o stdin fluir. ON_ERROR_STOP + -1: aplica inteira ou nada.
-    # -e ecoa cada comando e -P pager=off; NOTICE dos aceites vao a stderr do psql.
-    # stdout do psql (linhas de SELECT/aceite) SOBE para o chamador: e a prova que o
-    # card #3019 pede no comentario. Sem isto o veredito seria "nao deu erro", nao "os
-    # aceites passaram" — e o dono homologaria no escuro.
-    if docker exec -i "$ctr" psql -U "$usr" -d "$base" -v ON_ERROR_STOP=1 -1 -P pager=off -f -; then
-      printf '%s: migracao aplicada em %s (%s/%s)%s\n' "$VERBO" "$banco" "$ctr" "$base" \
-        "${PF_SUJEITO:+ (sujeito=$PF_SUJEITO)}" >&2
-    else
-      # psql abortou: falha de MERITO da propria migracao (a transacao nao commitou),
-      # nao dependencia ausente — arq:0110 §4, exit 1 (decisao explicita do card #3145,
-      # onda 1 frente B; a rev anterior deste verbo usava 3 aqui, incorretamente).
-      morre "erro: psql abortou em '$banco' — a transacao nao commitou; corrija a migracao e repita" 1
-    fi
-    ;;
-  *)
-    printf '%s: erro: ato desconhecido: %s\n' "$VERBO" "$ato" >&2
-    printf 'atos: aplicar, bancos\n' >&2
-    uso_texto
-    exit 2
-    ;;
-esac
+avisa_deprecado
+export PF_VERBO_NOME="migrar"
+exec "$BASH_BIN" "$IMPL" "$@"
