@@ -838,7 +838,7 @@ def listar_obra(termo, eixo, situacao, quero_json):
     cat_info = _psql_json(
         "select coalesce(json_agg(row_to_json(t)), '[]') from ("
         "  select count(*) as total, to_char(max(coalesce(classificado_em, now())), 'YYYY-MM-DD') as data "
-        "  from acervo.obra"
+        "  from acervo.obra where expurgada_em is null"
         ") t;", "catalogo_obra"
     )
     total_obras = cat_info[0]["total"] if cat_info else 0
@@ -960,8 +960,13 @@ def listar_obra(termo, eixo, situacao, quero_json):
         order by o.titulo;
         """
 
+    # Obra retirada (expurgada_em preenchido) não é achada pelo catálogo: sai de todos os eixos, com
+    # ou sem --situacao (arq:0119 §1.4, §9; #3317). Filtro único sobre o resultado, para não repetir
+    # a condição nos sete SELECTs; quem quer ver a retirada usa `acervo curar biblioteca --expurgadas`.
     raw_itens = _psql_json(
-        "select coalesce(json_agg(row_to_json(t)), '[]') from (%s) t;" % sql.strip().rstrip(";"),
+        "select coalesce(json_agg(row_to_json(t)), '[]') from (%s) t "
+        "where t.id not in (select id from acervo.obra where expurgada_em is not null);"
+        % sql.strip().rstrip(";"),
         "listar obra"
     )
 
