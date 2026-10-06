@@ -17,6 +17,9 @@ SUITES = [
     "test_seg.sh",
     "test_teste.sh",
     "test_fechamento_3010_harness.sh",
+    # sem dono ate o #3326: nenhum gate rodava
+    "test_puxar_bancada.sh",
+    "test_repo.sh",
 ]
 
 

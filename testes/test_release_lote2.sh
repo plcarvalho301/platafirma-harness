@@ -33,6 +33,9 @@ EOF
 cat > "$STUBS/docker" <<'EOF'
 #!/usr/bin/env bash
 echo "docker $*" >> "${DEPLOY_LOG:?}"
+# `compose config --format json` (passo de teste da imagem, #3192): compose sem servico,
+# entao nada a medir e nada pinado; o resto do stub so grava
+case " $* " in *" config "*) echo '{"services": {}}' ;; esac
 exit 0
 EOF
 cat > "$STUBS/systemd-run" <<'EOF'
@@ -208,8 +211,8 @@ echo "--- 10: familia com stack, ajudante bin/_release/stack AUSENTE -> exit 3 a
 COPIA_SEM_AJUDANTE="$TMP_DIR/copia-sem-ajudante"
 mkdir -p "$COPIA_SEM_AJUDANTE/bin" "$COPIA_SEM_AJUDANTE/lib"
 cp "$REPO_ROOT/bin/release" "$COPIA_SEM_AJUDANTE/bin/release"; chmod +x "$COPIA_SEM_AJUDANTE/bin/release"
-cp "$REPO_ROOT/lib/raizes.sh" "$COPIA_SEM_AJUDANTE/lib/raizes.sh"
-cp "$REPO_ROOT/lib/venv.sh" "$COPIA_SEM_AJUDANTE/lib/venv.sh"
+# lib/ inteira: o release carrega o que precisar dela (raizes, venv, terceiros desde arq:0116 §7)
+cp "$REPO_ROOT"/lib/*.sh "$REPO_ROOT"/lib/*.py "$COPIA_SEM_AJUDANTE/lib/"
 # de proposito: SEM bin/_release/stack nesta copia — achar_deploy acha pelo caminho fixo ao
 # lado do script que roda, nunca pelo PATH, entao nao ha como estubar a ausencia de outro jeito.
 set +e; out="$("$COPIA_SEM_AJUDANTE/bin/release" promover platafirma-harness "$H_SHA1" 2>&1)"; rc=$?; set -e

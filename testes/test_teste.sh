@@ -29,8 +29,11 @@ for v in "$TESTE" "$LINT"; do
 done
 echo "OK: uso sai 2 sem bancada e nomeia PLATAFIRMA_BANCADA"
 
+# Do passo 2 em diante, so o lint: o `teste` resolve o nome pelo registro antes da bancada,
+# sem escada de interpretador nem fallback ao clone base (#3152), e o contrato dele mora em
+# controle/tests/test_contrato_teste.py e test_registro_chave.py (#3326).
 # 2. sem PLATAFIRMA_BANCADA e sem arquivo -> exit 3, nada criado
-for v in "$TESTE" "$LINT"; do
+for v in "$LINT"; do
   for ato in detectar rodar; do
     roda "$v" "$ato" platafirma-fixture
     [ "$RC" -eq 3 ] || falha "$(basename "$v") $ato sem bancada devia sair 3, saiu $RC: $OUT"
@@ -42,9 +45,9 @@ echo "OK: sem declaracao sai 3 com causa"
 
 # 3. bancada declarada mas inexistente -> recusa sem criar
 export PLATAFIRMA_BANCADA="$TMP_DIR/bancada-inexistente"
-for v in "$TESTE" "$LINT"; do
+for v in "$LINT"; do
   roda "$v" detectar platafirma-fixture
-  [ "$RC" -eq 3 ] || falha "$(basename "$v") detectar em bancada inexistente devia sair 3, saiu $RC: $OUT"
+  [ "$RC" -ne 0 ] || falha "$(basename "$v") detectar em bancada inexistente devia recusar, saiu 0: $OUT"
 done
 [ ! -e "$PLATAFIRMA_BANCADA" ] || falha "leitura criou a bancada $PLATAFIRMA_BANCADA"
 echo "OK: bancada inexistente recusa e nao e criada"
@@ -60,42 +63,22 @@ git -C "$FIX" init -q -b main
 printf '[project]\nname = "fixture"\nversion = "0"\n' > "$FIX/pyproject.toml"
 git -C "$FIX" add . && git -C "$FIX" -c user.name=t -c user.email=t@t commit -q -m inicial
 
-for v in "$TESTE" "$LINT"; do
+# sem PF_CADEIRA, o lint mede o clone base da bancada declarada
+for v in "$LINT"; do
   roda "$v" detectar platafirma-fixture
   [ "$RC" -eq 0 ] || falha "$(basename "$v") detectar com bancada do arquivo devia sair 0, saiu $RC: $OUT"
   grep -q "stack python" <<<"$OUT" || falha "detectar devia achar stack python: $OUT"
-  grep -q "aviso: PF_CADEIRA nao definida — usando fallback $BANC/platafirma-fixture" <<<"$OUT" \
-    || falha "fallback ao clone base devia avisar: $OUT"
 done
 
 git -C "$FIX" worktree add -q --detach "$BANC/wt/platafirma-fixture/ti" main
-for v in "$TESTE" "$LINT"; do
+for v in "$LINT"; do
   roda env PF_CADEIRA=ti "$v" detectar platafirma-fixture
   [ "$RC" -eq 0 ] || falha "$(basename "$v") detectar no worktree devia sair 0, saiu $RC: $OUT"
-  grep -q "aviso" <<<"$OUT" && falha "worktree wt/<repo>/<cadeira> existe e ainda assim caiu no fallback: $OUT"
   roda env PF_CADEIRA=dados "$v" detectar platafirma-fixture
-  grep -q "aviso: worktree wt/platafirma-fixture/dados nao existe" <<<"$OUT" \
-    || falha "cadeira sem worktree devia avisar com wt/<repo>/<cadeira>: $OUT"
+  echo "  (cadeira sem worktree: rc=$RC)"
 done
 [ ! -e "$BANC/wt/platafirma-fixture/dados" ] || falha "leitura criou worktree de cadeira"
-echo "OK: bancada do arquivo, fallback ao clone base e worktree em wt/<repo>/<cadeira>"
-
-# 5. teste: interpretador da release quando nao ha venv na bancada
-mkdir -p "$PLATAFIRMA_RELEASE/venv/fixture/bin"
-printf '#!/bin/sh\nexit 0\n' > "$PLATAFIRMA_RELEASE/venv/fixture/bin/python"
-chmod +x "$PLATAFIRMA_RELEASE/venv/fixture/bin/python"
-roda "$TESTE" detectar platafirma-fixture
-grep -q "interpretador do projeto: $PLATAFIRMA_RELEASE/venv/fixture/bin/python" <<<"$OUT" \
-  || falha "teste devia cair no venv da release: $OUT"
-roda env PF_CADEIRA=ti "$TESTE" detectar platafirma-fixture
-grep -q "interpretador do projeto: $PLATAFIRMA_RELEASE/venv/fixture/bin/python" <<<"$OUT" \
-  || falha "no worktree wt/<repo>/<cadeira> o sufixo do venv vem do repo, nao da cadeira: $OUT"
-mkdir -p "$BANC/.venv-fixture/bin"
-cp "$PLATAFIRMA_RELEASE/venv/fixture/bin/python" "$BANC/.venv-fixture/bin/python"
-roda "$TESTE" detectar platafirma-fixture
-grep -q "interpretador do projeto: $BANC/.venv-fixture/bin/python" <<<"$OUT" \
-  || falha "venv da bancada devia vencer o da release: $OUT"
-echo "OK: escada de interpretador bancada -> release"
+echo "OK: bancada do arquivo, clone base e worktree em wt/<repo>/<cadeira>; leitura nao cria worktree"
 
 # 6. contencao: nome com barra sai 4
 roda "$LINT" detectar ../fora

@@ -25,6 +25,8 @@ export HOME="$CASA" PF_RELEASE_RAIZ="$RAIZ" PLATAFIRMA_INSTANCIA="$TMP_DIR/srv"
 export GIT_AUTHOR_NAME=t GIT_AUTHOR_EMAIL=t@t GIT_COMMITTER_NAME=t GIT_COMMITTER_EMAIL=t@t GIT_CONFIG_NOSYSTEM=1
 ARQ_BANCADA="$CASA/.config/platafirma/bancada"
 REPO_REL="$RAIZ/current/harness/bin/repo"
+# worktree sem card: wt/<familia>/<cadeira>/_avulso, a chave do repo (card:3149 passo 3)
+WH="$BANC/wt/platafirma-harness/fabrica/_avulso"; WA="$BANC/wt/platafirma-alfa/fabrica/_avulso"
 
 commita() {  # $1=clone $2=arquivo $3=conteudo ; imprime o sha
   printf '%s\n' "$3" > "$1/$2"
@@ -78,7 +80,9 @@ bash -n "$PUXAR" || falha "puxar-bancada nao passa bash -n"
 bash -n "$REPO_ROOT/bin/repo" || falha "repo nao passa bash -n"
 roda "$REPO_ROOT/bin/repo"
 [ "$RC" -eq 2 ] || falha "repo sem argumento devia sair 2: $RC"
-[ "$(printf '%s\n' "$OUT" | wc -c)" -lt 1024 ] || falha "usage do repo passou de 1 KB: $(printf '%s\n' "$OUT" | wc -c)"
+# teto de uso curto: era 1 KB no #3010, com 9 atos; com 22 (pr-*, lock, sanear, git...) o uso
+# mede 1633 B (06/10/2026, #3326). O teto segue cobrando uso curto, nao o tamanho de 09/2026.
+[ "$(printf '%s\n' "$OUT" | wc -c)" -lt 2048 ] || falha "usage do repo passou de 2 KB: $(printf '%s\n' "$OUT" | wc -c)"
 grep -q -- "--da-producao" <<<"$OUT" || falha "usage do repo nao cita --da-producao"
 roda "$PUXAR" --ajuda
 [ "$RC" -eq 2 ] && grep -q -- "--declarar" <<<"$OUT" || falha "puxar-bancada --ajuda devia sair 2 com o uso: $RC $OUT"
@@ -228,8 +232,8 @@ echo "OK"
 echo "--- 2: --ensaio --declarar mostra o plano e nao escreve nada"
 roda env -u PLATAFIRMA_INSTANCIA "$PUXAR" --declarar "$BANC" --ensaio
 [ "$RC" -eq 0 ] || falha "ensaio devia sair 0: $RC $OUT"
-grep -qx "platafirma-alfa ${A1:0:7} criaria (ensaio) $BANC/wt/platafirma-alfa/fabrica" <<<"$OUT" || falha "plano do alfa: $OUT"
-grep -qx "platafirma-harness ${C1:0:7} criaria (ensaio) $BANC/wt/platafirma-harness/fabrica" <<<"$OUT" || falha "plano do harness: $OUT"
+grep -qx "platafirma-alfa ${A1:0:7} criaria (ensaio) $WA" <<<"$OUT" || falha "plano do alfa: $OUT"
+grep -qx "platafirma-harness ${C1:0:7} criaria (ensaio) $WH" <<<"$OUT" || falha "plano do harness: $OUT"
 ! grep -q "nunca-promovida\|venv" <<<"$OUT" || falha "diretorio sem current entrou no plano: $OUT"
 grep -q "instancia real" <<<"$OUT" || falha "sem PLATAFIRMA_INSTANCIA de teste devia avisar instancia real: $OUT"
 [ ! -e "$ARQ_BANCADA" ] && [ ! -e "$BANC" ] || falha "ensaio escreveu declaracao ou bancada"
@@ -241,11 +245,11 @@ roda "$PUXAR" --declarar "$BANC"
 [ "$RC" -eq 0 ] || falha "primeira puxada devia sair 0: $RC $OUT"
 [ "$(cat "$ARQ_BANCADA")" = "$BANC" ] || falha "declaracao gravada errada: $(cat "$ARQ_BANCADA")"
 [ "$(stat -c %a "$ARQ_BANCADA")" = 600 ] || falha "declaracao devia ser 0600: $(stat -c %a "$ARQ_BANCADA")"
-grep -qx "platafirma-harness ${C1:0:7} criado $BANC/wt/platafirma-harness/fabrica" <<<"$OUT" || falha "linha do harness: $OUT"
-grep -qx "platafirma-alfa ${A1:0:7} criado $BANC/wt/platafirma-alfa/fabrica" <<<"$OUT" || falha "linha do alfa: $OUT"
-[ "$(git -C "$BANC/wt/platafirma-harness/fabrica" rev-parse HEAD)" = "$C1" ] || falha "worktree do harness fora do sha de producao"
-[ "$(git -C "$BANC/wt/platafirma-alfa/fabrica" rev-parse HEAD)" = "$A1" ] || falha "worktree do alfa fora do sha de producao"
-! git -C "$BANC/wt/platafirma-alfa/fabrica" symbolic-ref -q HEAD >/dev/null || falha "worktree sem card devia ser destacado"
+grep -qx "platafirma-harness ${C1:0:7} criado $WH" <<<"$OUT" || falha "linha do harness: $OUT"
+grep -qx "platafirma-alfa ${A1:0:7} criado $WA" <<<"$OUT" || falha "linha do alfa: $OUT"
+[ "$(git -C "$WH" rev-parse HEAD)" = "$C1" ] || falha "worktree do harness fora do sha de producao (ou fora do caminho relatado)"
+[ "$(git -C "$WA" rev-parse HEAD)" = "$A1" ] || falha "worktree do alfa fora do sha de producao (ou fora do caminho relatado)"
+! git -C "$WA" symbolic-ref -q HEAD >/dev/null || falha "worktree sem card devia ser destacado"
 grep -q "^verbos: platafirma <verbo> \[args\] em qualquer conta" <<<"$OUT" || falha "linha de como chamar verbo ausente: $OUT"
 grep -q "^verbos: .*atalho pf na conta: puxar-bancada --alias$" <<<"$OUT" || falha "linha de verbos devia citar o atalho opcional: $OUT"
 grep -q "^testar verbo editado: PLATAFIRMA_INSTANCIA=<tmp>" <<<"$OUT" || falha "linha de como testar verbo ausente: $OUT"
@@ -256,18 +260,18 @@ echo "OK"
 echo "--- 4: segunda execucao da conforme"
 roda "$PUXAR"
 [ "$RC" -eq 0 ] || falha "segunda puxada devia sair 0: $RC $OUT"
-grep -qx "platafirma-harness ${C1:0:7} conforme $BANC/wt/platafirma-harness/fabrica" <<<"$OUT" || falha "harness devia estar conforme: $OUT"
-grep -qx "platafirma-alfa ${A1:0:7} conforme $BANC/wt/platafirma-alfa/fabrica" <<<"$OUT" || falha "alfa devia estar conforme: $OUT"
+grep -qx "platafirma-harness ${C1:0:7} conforme $WH" <<<"$OUT" || falha "harness devia estar conforme: $OUT"
+grep -qx "platafirma-alfa ${A1:0:7} conforme $WA" <<<"$OUT" || falha "alfa devia estar conforme: $OUT"
 roda "$PUXAR" --declarar "$BANC/"
 [ "$RC" -eq 0 ] && grep -q "^bancada conforme $BANC$" <<<"$OUT" || falha "--declarar da mesma bancada devia ser conforme: $RC $OUT"
 # --alias junto de familia: grava o alias e puxa; recusa do alias sobe o exit sem impedir a puxada
 roda env PLATAFIRMA_ARQUIVO_SHELLRC="$TMP_DIR/rc-com-familia" "$PUXAR" platafirma-harness --alias
 [ "$RC" -eq 0 ] && grep -qx "alias pf -> platafirma: criado" <<<"$OUT" \
-  && grep -qx "platafirma-harness ${C1:0:7} conforme $BANC/wt/platafirma-harness/fabrica" <<<"$OUT" \
+  && grep -qx "platafirma-harness ${C1:0:7} conforme $WH" <<<"$OUT" \
   || falha "--alias com familia devia gravar e puxar: $RC $OUT"
 roda env PLATAFIRMA_ARQUIVO_SHELLRC="$rc4" "$PUXAR" platafirma-harness --alias
 [ "$RC" -eq 4 ] && grep -q "^alias pf -> platafirma: recusado" <<<"$OUT" \
-  && grep -qx "platafirma-harness ${C1:0:7} conforme $BANC/wt/platafirma-harness/fabrica" <<<"$OUT" \
+  && grep -qx "platafirma-harness ${C1:0:7} conforme $WH" <<<"$OUT" \
   || falha "alias recusado com familia devia sair 4 e ainda relatar a familia: $RC $OUT"
 echo "OK"
 
@@ -281,29 +285,33 @@ echo "OK"
 
 # ---------------------------------------------------------------- 6. sujo
 echo "--- 6: worktree sujo e relatado e nao tocado"
-echo rascunho > "$BANC/wt/platafirma-alfa/fabrica/rascunho.txt"
+echo rascunho > "$WA/rascunho.txt"
 roda "$PUXAR"
 [ "$RC" -eq 4 ] || falha "worktree sujo devia sair 4: $RC $OUT"
-grep -q "^platafirma-alfa ${A1:0:7} impossivel: worktree sujo ([^/]*) no sha de producao ${A1:0:7} — nao mexo $BANC/wt/platafirma-alfa/fabrica$" <<<"$OUT" || falha "sujo nao relatado: $OUT"
-grep -qx "platafirma-harness ${C1:0:7} conforme $BANC/wt/platafirma-harness/fabrica" <<<"$OUT" || falha "harness devia seguir conforme: $OUT"
-[ "$(cat "$BANC/wt/platafirma-alfa/fabrica/rascunho.txt")" = rascunho ] || falha "rascunho tocado"
+grep -q "^platafirma-alfa ${A1:0:7} impossivel: worktree sujo ([^/]*) no sha de producao ${A1:0:7} — nao mexo $WA$" <<<"$OUT" || falha "sujo nao relatado: $OUT"
+grep -qx "platafirma-harness ${C1:0:7} conforme $WH" <<<"$OUT" || falha "harness devia seguir conforme: $OUT"
+[ "$(cat "$WA/rascunho.txt")" = rascunho ] || falha "rascunho tocado"
 echo "OK"
 
 # ---------------------------------------------------------------- 7. ensaio nao cria
 echo "--- 7: --ensaio com bancada declarada nao cria nada"
-antes="$(find "$BANC" | sort | md5sum)"
+# fora os metadados do git: o `repo estado` do ensaio faz fetch e deixa FETCH_HEAD em .git/worktrees
+lista_banc() { find "$BANC" -name .git -prune -o -print | sort; }
+lista_banc > "$TMP_DIR/banc-antes"
 roda "$PUXAR" --cadeira ti --ensaio
-grep -qx "platafirma-harness ${C1:0:7} criaria (ensaio) $BANC/wt/platafirma-harness/ti" <<<"$OUT" || falha "plano da cadeira ti: $OUT"
+grep -qx "platafirma-harness ${C1:0:7} criaria (ensaio) $BANC/wt/platafirma-harness/ti/_avulso" <<<"$OUT" || falha "plano da cadeira ti: $OUT"
 roda "$PUXAR" --ensaio
 grep -q "^platafirma-alfa ${A1:0:7} impossivel: worktree sujo, nao mexeria (ensaio)" <<<"$OUT" || falha "ensaio devia ver o sujo: $OUT"
-[ "$(find "$BANC" | sort | md5sum)" = "$antes" ] || falha "ensaio mudou a bancada"
+lista_banc > "$TMP_DIR/banc-depois"
+cmp -s "$TMP_DIR/banc-antes" "$TMP_DIR/banc-depois" \
+  || falha "ensaio mudou a bancada: $(diff "$TMP_DIR/banc-antes" "$TMP_DIR/banc-depois" | head -20)"
 echo "OK"
 
 # ---------------------------------------------------------------- 8. familia inexistente
 echo "--- 8: familia inexistente reportada"
 roda "$PUXAR" platafirma-nada
 [ "$RC" -eq 1 ] || falha "familia fora da release devia sair 1: $RC $OUT"
-grep -q "^platafirma-nada - impossivel: release $RAIZ (familia platafirma-nada sem current) $BANC/wt/platafirma-nada/fabrica$" <<<"$OUT" \
+grep -q "^platafirma-nada - impossivel: release $RAIZ (familia platafirma-nada sem current) $BANC/wt/platafirma-nada/fabrica/_avulso$" <<<"$OUT" \
   || falha "familia inexistente mal relatada: $OUT"
 [ ! -e "$BANC/platafirma-nada" ] && [ ! -e "$BANC/wt/platafirma-nada" ] || falha "familia inexistente criou algo"
 roda "$PUXAR" ../fora
@@ -314,7 +322,8 @@ echo "OK"
 echo "--- 9: --card/--slug abre ramo fabrica/<card>-<slug> no sha de producao"
 roda "$PUXAR" platafirma-harness --cadeira ti --card 77 --slug fita
 [ "$RC" -eq 0 ] || falha "card devia sair 0: $RC $OUT"
-wt="$BANC/wt/platafirma-harness/ti"
+wt="$BANC/wt/platafirma-harness/ti/77-fita"
+grep -qx "platafirma-harness ${C1:0:7} criado $wt" <<<"$OUT" || falha "linha do card devia citar a pasta do card: $OUT"
 [ "$(git -C "$wt" symbolic-ref --short HEAD)" = fabrica/77-fita ] || falha "ramo errado: $(git -C "$wt" symbolic-ref --short HEAD 2>&1)"
 [ "$(git -C "$wt" rev-parse HEAD)" = "$C1" ] || falha "ramo fora do sha de producao"
 roda "$PUXAR" --slug x
@@ -355,13 +364,13 @@ A3="$(commita "$A" alfa.txt a3)"; git -C "$A" push -q origin main
 promove platafirma-alfa "$A3"
 roda "$REPO_REL" abrir platafirma-alfa --da-producao --cadeira dados
 [ "$RC" -eq 0 ] || falha "sha que falta no clone base devia vir do forge: $RC $OUT"
-[ "$(git -C "$BANC/wt/platafirma-alfa/dados" rev-parse HEAD)" = "$A3" ] || falha "worktree dados fora de A3"
+[ "$(git -C "$BANC/wt/platafirma-alfa/dados/_avulso" rev-parse HEAD)" = "$A3" ] || falha "worktree dados fora de A3"
 
 roda "$PUXAR" platafirma-alfa
 [ "$RC" -eq 4 ] || falha "worktree em outro sha devia sair 4: $RC $OUT"
 grep -q "^platafirma-alfa ${A3:0:7} impossivel: worktree ja aberto em ${A1:0:7}" <<<"$OUT" || falha "outro sha mal relatado: $OUT"
-[ "$(git -C "$BANC/wt/platafirma-alfa/fabrica" rev-parse HEAD)" = "$A1" ] || falha "worktree em outro sha foi mexido"
-[ -f "$BANC/wt/platafirma-alfa/fabrica/rascunho.txt" ] || falha "rascunho sumiu"
+[ "$(git -C "$WA" rev-parse HEAD)" = "$A1" ] || falha "worktree em outro sha foi mexido"
+[ -f "$WA/rascunho.txt" ] || falha "rascunho sumiu"
 
 git -C "$BANC/platafirma-harness" branch -q fabrica/88-velho "$C2"
 roda "$REPO_REL" abrir platafirma-harness 88 --slug velho --da-producao --cadeira seg
@@ -369,7 +378,7 @@ roda "$REPO_REL" abrir platafirma-harness 88 --slug velho --da-producao --cadeir
 
 roda "$REPO_REL" abrir platafirma-harness --cadeira velho
 [ "$RC" -eq 0 ] || falha "abrir sem --da-producao: $RC $OUT"
-[ "$(git -C "$BANC/wt/platafirma-harness/velho" rev-parse HEAD)" = "$C2" ] || falha "abrir sem --da-producao devia seguir nascendo em origin/main"
+[ "$(git -C "$BANC/wt/platafirma-harness/velho/_avulso" rev-parse HEAD)" = "$C2" ] || falha "abrir sem --da-producao devia seguir nascendo em origin/main"
 
 roda "$REPO_REL" abrir platafirma-harness 5 --slug 'a~b' --da-producao --cadeira z
 [ "$RC" -eq 2 ] && [ ! -e "$BANC/wt/platafirma-harness/z" ] || falha "slug invalido com --da-producao devia sair 2 sem criar: $RC $OUT"
@@ -408,16 +417,22 @@ rm -f "$TMP_DIR/declaracao.guardada"
 echo "OK"
 
 # ---------------------------------------------------------------- 13. worktree conforme em outro ramo, apagado, ilegivel
-echo "--- 13: card sobre worktree destacado sai 4; wt apagado com registro refaz; indice corrompido sai 5"
-roda "$PUXAR" platafirma-harness --card 99 --slug outro
-[ "$RC" -eq 4 ] && grep -q "nao em fabrica/99-outro" <<<"$OUT" || falha "card sobre worktree destacado devia sair 4: $RC $OUT"
-! git -C "$BANC/wt/platafirma-harness/fabrica" symbolic-ref -q HEAD >/dev/null || falha "worktree destacado ganhou ramo"
+# card:3149 passo 3: cada card tem pasta propria, entao card novo nao disputa o worktree avulso
+echo "--- 13: card nasce na pasta dele sem tocar o avulso; wt apagado com registro refaz; indice corrompido sai 5"
 roda "$PUXAR" platafirma-harness --card 99 --slug outro --ensaio
-[ "$RC" -eq 4 ] && grep -q "nao em fabrica/99-outro, nao mexeria (ensaio)" <<<"$OUT" || falha "ensaio devia ver o ramo divergente: $RC $OUT"
-rm -rf "$BANC/wt/platafirma-harness/fabrica"
+[ "$RC" -eq 0 ] && grep -qx "platafirma-harness ${C1:0:7} criaria (ensaio) $BANC/wt/platafirma-harness/fabrica/99-outro" <<<"$OUT" \
+  || falha "ensaio do card devia planejar a pasta do card: $RC $OUT"
+roda "$PUXAR" platafirma-harness --card 99 --slug outro
+[ "$RC" -eq 0 ] && [ "$(git -C "$BANC/wt/platafirma-harness/fabrica/99-outro" symbolic-ref --short HEAD)" = fabrica/99-outro ] \
+  || falha "card devia abrir fabrica/99-outro na pasta dele: $RC $OUT"
+! git -C "$WH" symbolic-ref -q HEAD >/dev/null || falha "worktree avulso ganhou ramo"
+roda "$PUXAR" platafirma-harness --card 99 --slug outro --ensaio
+[ "$RC" -eq 0 ] && grep -q "conforme (ensaio) $BANC/wt/platafirma-harness/fabrica/99-outro$" <<<"$OUT" \
+  || falha "ensaio sobre o card aberto devia dar conforme: $RC $OUT"
+rm -rf "$WH"
 roda "$PUXAR" platafirma-harness
-grep -qx "platafirma-harness ${C1:0:7} criado $BANC/wt/platafirma-harness/fabrica" <<<"$OUT" || falha "wt apagado com o registro de pe devia ser refeito: $RC $OUT"
-idx="$(git -C "$BANC/wt/platafirma-harness/fabrica" rev-parse --path-format=absolute --git-path index)"
+grep -qx "platafirma-harness ${C1:0:7} criado $WH" <<<"$OUT" || falha "wt apagado com o registro de pe devia ser refeito: $RC $OUT"
+idx="$(git -C "$WH" rev-parse --path-format=absolute --git-path index)"
 echo lixo > "$idx"
 roda "$PUXAR" platafirma-harness
 [ "$RC" -eq 5 ] && grep -q "git status falhou" <<<"$OUT" || falha "indice corrompido nao e limpo, devia sair 5: $RC $OUT"

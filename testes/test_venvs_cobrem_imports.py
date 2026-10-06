@@ -28,7 +28,8 @@ def _imports_de_terceiros(diretorio: Path) -> set[str]:
     locais = {p.stem for p in diretorio.glob("*.py")} | LOCAIS_FORA_DO_DIRETORIO
     achados: set[str] = set()
     for arquivo in diretorio.glob("*.py"):
-        if arquivo.name.startswith("test_"):
+        # teste e ensaio nao sobem com a porta: rodam no venv de teste (pytest, teste_isolado)
+        if arquivo.name.startswith("test_") or arquivo.name in {"conftest.py", "_ensaio.py"}:
             continue
         for no in ast.walk(ast.parse(arquivo.read_text(encoding="utf-8"))):
             if isinstance(no, ast.Import):

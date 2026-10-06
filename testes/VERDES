@@ -1,0 +1,31 @@
+# Lista de portão da chave `acervo` (arq:0116 §5): a subárvore desta chave é testes/, e só os
+# arquivos da stack acervo moram aqui (globs `testes` em registro/venvs.json, #3316). Os demais
+# arquivos de testes/ são da chave harness e estão em controle/tests/VERDES, pelo caminho a
+# partir da raiz do repositório.
+#
+# Regra: só entra arquivo que passa INTEIRO, e entra no mesmo commit que o cria ou conserta.
+# controle/tests/test_portao_cobre_testes.py reprova o arquivo de testes/ que não estiver em
+# lista nenhuma.
+#
+# Medido em 06/10/2026 (card #3326): 389 passam no venv acervo (`teste rodar acervo`).
+test_acervo_atos_classificar.py
+test_acervo_atos_retirar.py
+test_acervo_atos_transcrever.py
+test_acervo_bancada_conversao.py
+test_acervo_exportar_pythonpath.py
+test_acervo_impressao.py
+test_acervo_ler_secao.py
+test_acervo_listar_marcacao.py
+test_acervo_listar_qualidade.py
+test_acervo_listar_retirada.py
+test_acervo_mapa.py
+test_acervo_objeto.py
+test_acervo_particao_biblioteca.py
+test_balde_apagar_3302.py
+test_curar_apagar.py
+test_curar_bancada.py
+test_curar_bancada_conversor.py
+test_curar_expurgar_restaurar.py
+test_curar_flag_desconhecida.py
+test_curar_lote.py
+test_curar_vinculacao.py

@@ -40,7 +40,8 @@
   "acervo": {
     "familia": "platafirma-harness",
     "lock": "venvs/acervo/uv.lock",
-    "testes": ["testes/test_acervo_*.py", "testes/test_curar_*.py", "testes/test_balde_*.py"]
+    "teste": "testes",
+    "testes": ["test_acervo_*.py", "test_curar_*.py", "test_balde_*.py"]
   },
   "recuperacao": {
     "familia": "platafirma-harness",
