@@ -126,10 +126,9 @@ def extrair_classificacao_de_dict(r: dict) -> dict:
         c["publicacao"] = r["publicacao"]
     if r.get("id_canonico"):
         c["id_canonico"] = r["id_canonico"]
-    if r.get("forca"):
-        fo = [x.strip() for x in re.split(r"[,;]", r["forca"]) if x.strip()]
-        if fo:
-            c["forca"] = fo
+    if r.get("vinculacao"):
+        # ont:0071: valor posto por quem classifica no sidecar; a ingestão não o infere de nada
+        c["vinculacao"] = r["vinculacao"].strip()
     return c
 
 

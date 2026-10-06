@@ -121,8 +121,8 @@ uso (gramatica arq:0106 — acervo <ato> <particao> <entidade> [seletor]):
                   o arquivo original da obra; --destino so na bancada ou var/tmp/<ordem_id> (exit 4 fora); diz caminho e sha256
   Classificar (arq:0119 §2, §7) — plano seco sem --apply:
   acervo catalogar     biblioteca obra [<obra>] [--obras …|--de-dominio …|--de-conceito …|--sem-dominio]
-                       [--especie|--subtipo|--dominio|--subdominio|--trata-de|--remover-trata-de|--titulo … ] [--apply]
-                       espécie, domínio, subdomínio, conceitos e dados de catálogo da obra (classificacao)
+                       [--especie|--subtipo|--dominio|--subdominio|--trata-de|--remover-trata-de|--titulo|--vinculacao … ] [--apply]
+                       espécie, domínio, subdomínio, conceitos, vinculação e dados de catálogo da obra (classificacao)
   acervo definir       biblioteca conceito <slug> --rotulo … --definicao … --natureza … --estatuto … --pai <slug> --tipo <t>
                        --garantia <g> --motivo "…" [--apply] · <slug> --renomear <slug-novo> --motivo "…"
                        · <slug> --natureza <n> --motivo "…" (conceito existente: reclassifica)   (tesauro)
