@@ -1621,7 +1621,7 @@ def acao_reclassificar(args, autor: str, como_json: bool, headers: dict) -> int:
     elif args.sem_dominio:
         selecao["sem_dominio"] = True
     elif args.expurgadas:
-        selecao["expurgadas"] = True
+        selecao["retiradas"] = True
     else:
         sys.stderr.write("curar: erro: reclassificação exige seleção (--obras, --de-dominio, etc.) ou --obra\n")
         sys.exit(2)
