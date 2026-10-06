@@ -3,7 +3,8 @@
 # capacidade: construcao
 # dono: ti
 # use para: primeiro passo de quem vai codar (inclusive depois de a bancada ter sido apagada):
-#           declarar a bancada da conta, abrir <bancada>/wt/<familia>/<cadeira> no sha que
+#           declarar a bancada da conta, abrir <bancada>/wt/<familia>/<cadeira>/<card-ou-slug>
+#           (sem card: _avulso, a chave do repo) no sha que
 #           /opt/platafirma/<familia>/current aponta, e saber como chamar (platafirma <verbo>) e
 #           testar verbo; com --alias, gravar na conta o atalho de shell pf -> platafirma
 # ambiente: PF_RELEASE_RAIZ[=/opt/platafirma] (familias com current) · PLATAFIRMA_RELEASE[=$PF_RELEASE_RAIZ/current]
@@ -429,9 +430,14 @@ ARGS_RAMO=()
 [ -z "$CARD" ] || ARGS_RAMO+=("$CARD")
 [ -z "$SLUG" ] || ARGS_RAMO+=(--slug "$SLUG")
 
+# pasta do worktree sob wt/<familia>/<cadeira>/: a mesma chave do `repo` (chave_de, card:3149
+# passo 3) -- <card>[-<slug>], sem card _avulso. Relatar outro caminho e relatar onde nada ha.
+CHAVE="_avulso"
+[ -z "$CARD" ] || CHAVE="${CARD#\#}${SLUG:+-$SLUG}"
+
 for fam in "${FAMILIAS[@]}"; do
   sha="$(sha_exibido "$fam")"
-  wt="$BANCADA/wt/$fam/$CADEIRA"
+  wt="$BANCADA/wt/$fam/$CADEIRA/$CHAVE"
 
   if [ "$ENSAIO" -eq 1 ]; then
     if [ "$sha" = - ]; then
@@ -441,7 +447,7 @@ for fam in "${FAMILIAS[@]}"; do
         linha "$fam" - "impossivel: familia sem current em $PF_RELEASE_RAIZ (ensaio)" "$wt"; pior 1
       fi
     elif [ -e "$wt/.git" ]; then
-      est="$(PLATAFIRMA_BANCADA="$BANCADA" PF_CADEIRA="$CADEIRA" "$REPO_REL" estado "$fam" --json 2>/dev/null \
+      est="$(PLATAFIRMA_BANCADA="$BANCADA" PF_CADEIRA="$CADEIRA" "$REPO_REL" estado "$fam@$CHAVE" --json 2>/dev/null \
         | python3 -c 'import sys, json
 try:
     d = json.load(sys.stdin)
@@ -472,10 +478,12 @@ except Exception:
   rc=$?
   err="$(cat "$err_arq")"; rm -f "$err_arq"
   if [ "$rc" -eq 0 ]; then
-    case "$(printf '%s\n' "$out" | tail -1)" in
-      conforme:*) linha "$fam" "$sha" conforme "$wt" ;;
-      *)          linha "$fam" "$sha" criado "$wt" ;;
-    esac
+    # a linha `conforme:` em qualquer posicao: o repo fecha com `próximo: ...` depois dela
+    if printf '%s\n' "$out" | grep -q '^conforme:'; then
+      linha "$fam" "$sha" conforme "$wt"
+    else
+      linha "$fam" "$sha" criado "$wt"
+    fi
   else
     linha "$fam" "$sha" "impossivel: $(motivo_de "$err" "$wt")" "$wt"
     pior "$rc"
@@ -484,7 +492,7 @@ done
 
 # --- como chamar e como testar -------------------------------------------------------------
 printf 'verbos: platafirma <verbo> [args] em qualquer conta (platafirma sem argumento lista); na conta dos servicos, o nome direto (PATH %s/harness/bin); atalho pf na conta: puxar-bancada --alias\n' "$PLATAFIRMA_RELEASE"
-printf 'testar verbo editado: PLATAFIRMA_INSTANCIA=<tmp> PF_RELEASE_RAIZ=<tmp> %s/wt/<familia>/%s/bin/<verbo> … — a producao segue servida pela release\n' "$BANCADA" "$CADEIRA"
+printf 'testar verbo editado: PLATAFIRMA_INSTANCIA=<tmp> PF_RELEASE_RAIZ=<tmp> %s/wt/<familia>/%s/%s/bin/<verbo> … — a producao segue servida pela release\n' "$BANCADA" "$CADEIRA" "$CHAVE"
 # O aviso e sobre o verbo da bancada, nao sobre o ambiente deste script: sai sempre.
 printf 'aviso: verbo da bancada chamado sem PLATAFIRMA_INSTANCIA de teste executa contra a instancia real (%s)\n' "$INSTANCIA_REAL"
 

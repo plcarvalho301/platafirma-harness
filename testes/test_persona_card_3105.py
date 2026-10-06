@@ -39,9 +39,18 @@ def test_conferir_molde_novo_cadeiras_vivas():
         assert "0 erro(s)" in proc.stdout
 
 
-def test_conferir_reprova_molde_velho():
-    """Personas no molde velho (como arquiteto) reprovam com exit 1 e listam as seções que faltam."""
-    proc = _run_persona(["conferir", "arquiteto"])
+def test_conferir_reprova_molde_velho(tmp_path):
+    """Persona no molde velho reprova com exit 1 e lista as seções que faltam. Fixture, e não
+    uma cadeira real: o arquiteto, que servia de exemplo, já migrou para o molde novo."""
+    p_dir = tmp_path / "cadeira-velha"
+    p_dir.mkdir()
+    p_file = p_dir / "persona.md"
+    p_file.write_text(
+        "Você é uma cadeira no molde velho da PlataFirma.\n\n"
+        "## POSTURA\n\n- assessor do dono\n\n"
+        "## Escopo\n\n- o que nao faz\n"
+    )
+    proc = _run_persona(["conferir", str(p_file)])
     assert proc.returncode == 1
     assert "falta a secao Perguntas de competência" in proc.stdout
     assert "falta a secao Vocabulário canônico" in proc.stdout

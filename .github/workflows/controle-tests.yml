@@ -32,8 +32,12 @@ jobs:
       # a ignorar em uma semana. Roda o que `tests/VERDES` lista — mesma lista do
       # hooks/pre-push, uma fonte so — e arquivo consertado entra na lista no commit que
       # o conserta. A lista so cresce, e o dia em que ela cobrir tudo, isto vira `tests/`.
+      # So as entradas da subarvore controle/ (tests/...). As de testes/ da raiz (card #3326)
+      # precisam do venv harness do host (redis e o resto do venvs/harness/uv.lock), que este
+      # job nao tem: aqui o venv e o do projeto controle. Quem as mede e o pre-push e o gate de
+      # promocao, pelo `teste rodar platafirma-harness --portao`.
       - name: suite de controle (baseline verde; modelo em controle/tests/MODELO-SUITE.md)
         run: |
-          arquivos=$(grep -v '^\s*#' tests/VERDES | grep -v '^\s*$' | tr '\n' ' ')
+          arquivos=$(grep -v '^\s*#' tests/VERDES | grep -v '^\s*$' | grep -v '^testes/' | tr '\n' ' ')
           echo "baseline: $arquivos"
           uv run pytest $arquivos -q

@@ -155,7 +155,9 @@ FAM=platafirma-arquitetura
 echo "--- 1: ordem do uv declarada no cabecalho e seguida no codigo"
 head -n 40 "$VERBO" | grep -qF '$PLATAFIRMA_UV, /usr/local/bin/uv, /usr/bin/uv, `command -v uv`' \
   || falha "cabecalho do release nao declara a ordem do uv"
-grep -q 'for c in /usr/local/bin/uv /usr/bin/uv; do' "$VERBO" || falha "codigo nao segue a ordem de sistema declarada"
+# a resolucao saiu do release para lib/venv.sh (resolver_uv, #3150), que o release importa
+grep -q '\. "$AQUI/../lib/venv.sh"' "$VERBO" || falha "release nao importa lib/venv.sh (resolver_uv)"
+grep -q 'for c in /usr/local/bin/uv /usr/bin/uv; do' "$REPO_ROOT/lib/venv.sh" || falha "codigo nao segue a ordem de sistema declarada"
 echo OK
 
 echo "--- 1a: nenhum uv (sem override, sem uv de sistema, PATH sem uv) sai 3 dizendo como instalar"
