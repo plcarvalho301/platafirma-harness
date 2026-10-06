@@ -6,8 +6,8 @@
 #      (0 -> exit 1 com 4 linhas fixas; 1 -> uuid; >1 -> exit 2 com candidatos)
 #   3. obter_substrato: busca endereco (repo@path) em acervo.entidade_suporte
 # Documento de casa NAO passa mais por aqui para ser lido: `acervo ler casa` resolve a chave
-# em acervo.casa (arq:0115 §3, §11; _acervo/casa). Esta biblioteca segue servindo `resolver`,
-# `curar alias` e o Sobre: de `listar casa --sobre`, e a negativa de 4 linhas de todos.
+# em acervo.casa (arq:0115 §3, §11; _acervo/casa). Esta biblioteca segue servindo a capacidade
+# do `conferir verbo`, `curar alias` e o Sobre: de `listar casa --sobre`, e a negativa de 4 linhas de todos.
 # Nenhum caminho de repo de release: o suporte da casa e um so (SUPORTE, arq:0115 §1.2).
 import json
 import os
@@ -106,7 +106,7 @@ def validar_forma(classe, seletor):
         ") t;" % _lit(classe), "classe"
     )
     if not classes_info and classe in DOC_CASA:
-        morre("acervo resolver: '%s' e especie de documento de casa, que se le pela chave em "
+        morre("acervo identidade: '%s' e especie de documento de casa, que se le pela chave em "
               "acervo.casa (arq:0115 §6.2, §11):\n  acervo ler casa %s %s"
               % (classe, classe, seletor.strip()), 2)
     if not classes_info:
@@ -415,10 +415,10 @@ def resolver_identidade(classe, seletor):
     cand = resolver_canon(classe, canon, num_sem_serie)
     if not cand:
         diag = gerar_negativa(classe, seletor)
-        morre("acervo resolver: '%s' nao existe em '%s'.\n%s"
+        morre("acervo identidade: '%s' nao existe em '%s'.\n%s"
               % (seletor, classe, diag), 1)
     if len(cand) > 1:
         linhas = [f"  {c['id']}  (via {c['via']}, chave_humana={c['chave_humana']})" for c in cand]
-        morre("acervo resolver: '%s' ambiguo em '%s' (%d fichas):\n%s"
+        morre("acervo identidade: '%s' ambiguo em '%s' (%d fichas):\n%s"
               % (seletor, classe, len(cand), "\n".join(linhas)), 2)
     return cand[0]

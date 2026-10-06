@@ -935,7 +935,7 @@ SINAIS = {
     "erro": "giro que falhou (sem ajuda nem veredito)",
     "gramatica": "falha de forma: exit 2, verbo nu, recusa da porta",
     "cadeia_de_erro": "2+ erros seguidos no mesmo verbo antes de acertar",
-    "documento_nao_achado": "acervo ler/resolver com exit 1",
+    "documento_nao_achado": "acervo ler com exit 1 (e o ato extinto resolver, no historico)",
     "conferir_existe": "conferir existe chamado (reflexo da conduta antiga)",
     "efeito_sem_conferencia": "promover/merge/push/deploy sem conferir depois na fita",
     "tecnica_sem_casa": "fita tecnica sem motor/acervo",
@@ -985,6 +985,7 @@ def sinais_por_cadeira(giros, cadeias):
             "gramatica": sum(1 for g in gs if _e_gramatica(g)),
             "cadeia_de_erro": cad_cadeia.get(cad, 0),
             "documento_nao_achado": sum(1 for g in gs if g["tool"] == "acervo"
+                                        # resolver: ato extinto (#3259), fica para o historico
                                         and g["ato"] in ("ler", "resolver")
                                         and g["exit_code"] == 1),
             "conferir_existe": sum(1 for g in gs if g["tool"] == "conferir"

@@ -123,7 +123,7 @@ def test_servico_json_indeterminavel_quando_compose_nao_renderiza(monkeypatch, c
 
 def test_verbo_json_formato_ok(tmp_path, monkeypatch, capsys):
     # card #3142, passo 4: capacidades_do_mapa()/canonica() sairam; a validacao agora
-    # e por conferir._capacidade_veredito (acervo resolver capacidade <forma>), mockada
+    # e por conferir._capacidade_veredito (biblioteca _identidade, classe capacidade), mockada
     # aqui pra nao chamar o acervo de verdade num teste unitario.
     bin_dir = tmp_path / "bin"
     bin_dir.mkdir()
@@ -184,7 +184,7 @@ def test_verbo_json_divergente(tmp_path, monkeypatch, capsys):
 
 
 def test_verbo_capacidade_ausente_e_indeterminavel_se_acervo_falha(tmp_path, monkeypatch, capsys):
-    # card #3142: rc fora de {0,1,2} do acervo resolver (ou acervo fora do ar) e
+    # card #3142: rc fora de {0,1,2} da resolucao (ou acervo fora do ar) e
     # indeterminavel, nao divergente — nao afirmar ausencia sem conseguir olhar.
     bin_dir = tmp_path / "bin"
     bin_dir.mkdir()
@@ -204,8 +204,8 @@ def test_verbo_capacidade_ausente_e_indeterminavel_se_acervo_falha(tmp_path, mon
         lambda nome, caminho: ("symlink", str(bin_dir.parent / "origem-real" / nome)),
     )
     monkeypatch.setattr(
-        conferir, "sh",
-        lambda args: (3, "", "dependencia ausente: acervo") if "resolver" in args else (0, "", ""),
+        conferir, "_resolver_capacidade_forma",
+        lambda forma: (3, "dependencia ausente: acervo"),
     )
 
     exit_code = conferir.conferir_verbo("meuverbo", como_json=True)

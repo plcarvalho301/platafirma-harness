@@ -56,9 +56,15 @@ def test_identidade_adr_forma_invalida():
     assert r.returncode == 2
     assert "invalido" in r.stderr
     assert "Forma esperada" in r.stderr
-    r_res = _acervo("resolver", "adr", "arq:11O")
-    assert r_res.returncode == 2
-    assert "invalido" in r_res.stderr
+
+
+def test_resolver_e_ato_extinto():
+    # #3259: o ato morreu inteiro; a recusa ensina a leitura pela chave
+    r = _acervo("resolver", "adr", "arq:0002")
+    assert r.returncode == 2
+    assert "acervo resolver: ato extinto" in r.stderr
+    assert "acervo ler casa <espécie> <chave>" in r.stderr
+    assert "acervo listar casa <espécie>" in r.stderr
 
 
 def test_escrever_recusa_de_fronteira():
@@ -96,10 +102,12 @@ def test_camada_d_cabecalho_q1():
     with open(BIN, "r", encoding="utf-8") as f:
         # 70: o cabecalho cresceu com as linhas de acesso dos atos de Transcrever (#3297) e de Retirar (#3298)
         text = "".join(f.readline() for _ in range(70))
-    # acesso e POR ATO: uma linha `# le:`/`# escreve:` para cada um dos oito atos
-    for ato in ("ler", "listar", "resolver", "escrever", "ingerir", "curar", "extrato", "psql"):
+    # acesso e POR ATO: uma linha `# le:`/`# escreve:` para cada um destes atos
+    for ato in ("ler", "listar", "escrever", "ingerir", "curar", "extrato", "psql"):
         assert f"# le: {ato}=" in text
         assert f"# escreve: {ato}=" in text
+    # ato extinto (#3259) nao declara acesso nem aparece em `atos:`
+    assert "# le: resolver=" not in text and "resolver (leitura" not in text
     # ato que escreve declara escrita (Q12): psql escreve, logo nao e 'leitura'
     assert "psql (escrita, acervo)" in text
     assert "# escreve: ler=nada" in text
@@ -117,7 +125,7 @@ def test_camada_d_recusa_ato_desconhecido():
     r = _acervo("ato_inexistente")
     assert r.returncode == 2
     assert "acervo: ato 'ato_inexistente' desconhecido" in r.stderr
-    assert "Atos canonicos: ler, listar, resolver, escrever, ingerir, curar, extrato, exportar, psql" in r.stderr
+    assert "Atos canonicos: ler, listar, escrever, ingerir, curar, extrato, exportar, psql" in r.stderr
 
 
 def test_camada_d_aviso_uma_vez_por_sessao():
