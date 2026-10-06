@@ -21,6 +21,7 @@ import json
 import os
 import re
 import subprocess
+from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
 from .lista import resolver_lista
@@ -41,7 +42,8 @@ DETECTORES = {
     "B3": "`dominio_id` nulo",
     "B4": "`dominio_id` preenchido e `subdominio_id` nulo",
     "B6": "obra da espécie `lista-de-verificacao` sem linha de derivação",
-    "G6": "obra com `expurgada_em` preenchido e `retirada_motivo` nulo",
+    "G6": "obra com `retirada_em` preenchido e `retirada_motivo` nulo",
+    "S12": "obra com `retirada_em` preenchido que `acervo listar biblioteca obra --sobre <título da obra>` devolve",
     "C1": "obra com 0 ou 1 linha em `obra_trata_de`",
     "D3": "`outros_rotulos` vazio",
     "D4": "conceito com 0 ou 1 obra viva em `obra_trata_de`",
@@ -180,6 +182,34 @@ def ler_projecao() -> dict:
     except (ValueError, IndexError):
         return {"erro": f"gerador nao devolveu JSON: {proc.stdout.strip()[-200:]}"}
 
+
+def ler_achadas(retiradas: List[dict]) -> Tuple[Optional[Dict[str, bool]], str]:
+    """S12 (#3317): roda o `acervo listar biblioteca obra --sobre <título> --json` de verdade para cada
+    obra retirada e diz se o id dela volta. Mede o verbo servido, não uma cópia do SQL dele. Devolve
+    ({id: achada}, "") ou (None, motivo) quando o verbo não respondeu: sem medida nunca vira zero.
+    PF_LINT_ACERVO_LISTAR troca o verbo por fixture."""
+    exe = os.environ.get("PF_LINT_ACERVO_LISTAR") or str(Path(__file__).resolve().parents[1] / "acervo")
+    achadas: Dict[str, bool] = {}
+    for r in retiradas:
+        titulo = r.get("titulo") or ""
+        if not titulo.strip():
+            return None, f"obra retirada {r.get('id')} sem título para o --sobre"
+        try:
+            p = subprocess.run([exe, "listar", "biblioteca", "obra", "--sobre", titulo, "--json"],
+                               capture_output=True, text=True, timeout=120, check=False)
+        except (OSError, subprocess.TimeoutExpired) as e:
+            return None, f"acervo listar não respondeu: {e}"
+        if p.returncode != 0:
+            return None, f"acervo listar saiu {p.returncode}: {(p.stderr or p.stdout).strip()[:200]}"
+        try:
+            linhas = json.loads(p.stdout.strip() or "[]")
+        except ValueError:
+            if "nenhuma obra encontrada" in p.stdout:
+                linhas = []
+            else:
+                return None, f"acervo listar --json não devolveu JSON: {p.stdout.strip()[:200]}"
+        achadas[r["id"]] = any(str(x.get("id")) == str(r["id"]) for x in linhas if isinstance(x, dict))
+    return achadas, ""
 
 def ler_acervo() -> Tuple[Dict[str, bool], List[dict], List[dict], List[dict]]:
     esquema = _psql_json(SQL_ESQUEMA)
@@ -329,10 +359,12 @@ def _rotulo_obra(o: dict, extra: str = "") -> str:
 
 
 def medir(lista: dict, esquema: Dict[str, bool], obras: List[dict], conceitos: List[dict],
-          retiradas: Optional[List[dict]] = None, projecao: Optional[dict] = None) -> dict:
+          retiradas: Optional[List[dict]] = None, projecao: Optional[dict] = None,
+          achadas: Optional[Dict[str, bool]] = None, sem_achadas: str = "") -> dict:
     """Roda os detectores mecanicos da lista. Devolve {criterios, nao_rodou, apontamentos}.
-    `retiradas` e o universo de G6: toda obra retirada, de qualquer colecao. `projecao` e o
-    JSON do gerador da projecao formal (D11); sem ele, o D11 sai em `nao_rodou`."""
+    `retiradas` e o universo de G6 e S12: toda obra retirada, de qualquer colecao. `projecao` e o
+    JSON do gerador da projecao formal (D11); sem ele, o D11 sai em `nao_rodou`. `achadas` e o
+    retorno de `ler_achadas` (S12); None sai em `nao_rodou` com `sem_achadas` de motivo."""
     corpo = lista.get("corpo", "")
     itens = {i["id"]: i for i in lista.get("itens", []) if i.get("id")}
     orgs = organismos(corpo)
@@ -345,7 +377,10 @@ def medir(lista: dict, esquema: Dict[str, bool], obras: List[dict], conceitos: L
         "B4": lambda o: o.get("tem_dominio") and not o.get("tem_subdominio"),
         "C1": lambda o: (o.get("n_conceitos") or 0) <= 1,
     }
-    por_retirada: Dict[str, Callable[[dict], Any]] = {"G6": g6}
+    por_retirada: Dict[str, Callable[[dict], Any]] = {
+        "G6": g6,
+        "S12": lambda o: bool((achadas or {}).get(o["id"])),  # o catalogo ainda acha a retirada
+    }
     por_conceito: Dict[str, Callable[[dict], Any]] = {
         "D3": lambda c: _vazio(c.get("outros_rotulos")),
         "D4": lambda c: (c.get("n_obras_vivas") or 0) <= 1,
@@ -398,6 +433,10 @@ def medir(lista: dict, esquema: Dict[str, bool], obras: List[dict], conceitos: L
             base["nota"] = ("espera a coluna retirada_motivo (migracao 078); acusa 0 ate ela existir"
                             if cid == "G6" else "espera o schema da ont:0092; acusa 0 ate ele existir")
             criterios[cid] = base
+            continue
+        if cid == "S12" and achadas is None:  # o verbo listar nao respondeu ou nao foi chamado
+            nao_rodou.append({"id": cid, "severidade": base["severidade"],
+                              "motivo": sem_achadas or "acervo listar nao foi chamado nesta medida"})
             continue
         if cid == "D11":  # o universo e a saida do HermiT, nao uma consulta
             falta = d11_sem_medida(projecao, conceitos)
@@ -504,5 +543,10 @@ def verificar_acervo(como_json: bool = False, resumo: bool = False,
     quer_d11 = (any(i.get("id") == "D11" for i in lista.get("itens", []))
                 and (not criterios or "D11" in {c.strip().upper() for c in criterios}))
     projecao = ler_projecao() if quer_d11 else None
-    medida = filtrar(medir(lista, esquema, obras, conceitos, retiradas, projecao), criterios, so_bloqueantes)
+    # S12 chama o verbo listar uma vez por obra retirada: so quando a lista o tem e a chamada o pede
+    quer_s12 = (any(i.get("id") == "S12" for i in lista.get("itens", []))
+                and (not criterios or "S12" in {c.strip().upper() for c in criterios}))
+    achadas, sem_achadas = ler_achadas(retiradas) if quer_s12 else (None, "")
+    medida = filtrar(medir(lista, esquema, obras, conceitos, retiradas, projecao, achadas, sem_achadas),
+                     criterios, so_bloqueantes)
     return relatorio(medida, lista.get("rev"), como_json, resumo)
