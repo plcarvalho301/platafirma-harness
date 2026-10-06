@@ -55,9 +55,22 @@ class Bancada:
         (sub / "test_fixture_vermelho.py").write_text(
             "def test_falha():\n    assert False\n", encoding="utf-8")
 
+        # card #3316: testes/ na raiz mistura stacks; o veneno cai na coleta como o
+        # test_descansar_puxado.py sem redis no venv do acervo (06/10)
+        testes = self.clone / "testes"
+        testes.mkdir()
+        (testes / "test_a_ok.py").write_text("def test_ok():\n    assert True\n", encoding="utf-8")
+        (testes / "test_veneno.py").write_text(
+            "import sys\nsys.exit('modulo de outra stack')\n", encoding="utf-8")
+
         registro = {
             "chave-fixture": {"familia": "alvo", "lock": "subarvore/lock.txt", "teste": "subarvore"},
             "sem-lock": {"familia": "alvo", "lock": ""},
+            "chave-globs": {"familia": "alvo", "lock": "subarvore/lock.txt",
+                            "testes": ["testes/test_a_*.py"]},
+            "chave-glob-vazio": {"familia": "alvo", "lock": "subarvore/lock.txt",
+                                 "testes": ["testes/test_nada_*.py"]},
+            "sem-suite": {"familia": "alvo", "lock": "subarvore/lock.txt"},
         }
         self.venvs_json = tmp_path / "venvs.json"
         self.venvs_json.write_text(json.dumps(registro), encoding="utf-8")
@@ -119,6 +132,32 @@ def test_rodar_chave_suite_vermelha(banc):
     assert "suite VERMELHA" in r.stdout
 
 
+def test_rodar_sem_alvo_coleta_so_os_globs_da_stack(banc):
+    """#3316: a suíte da stack é a dela; o veneno de outra stack na mesma pasta não entra."""
+    r = banc.rodar("chave-globs")
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert "suite VERDE" in r.stdout
+    assert "1 passed" in r.stdout
+
+
+def test_rodar_sem_alvo_stack_sem_suite_em_familia_compartilhada_sai_5(banc):
+    r = banc.rodar("sem-suite")
+    assert r.returncode == 5, r.stdout + r.stderr
+    assert "sem suíte declarada" in r.stderr
+
+
+def test_rodar_globs_que_nao_casam_sai_5(banc):
+    r = banc.rodar("chave-glob-vazio")
+    assert r.returncode == 5, r.stdout + r.stderr
+    assert "não casam" in r.stderr
+
+
+def test_rodar_com_alvo_ignora_os_globs(banc):
+    r = banc.rodar("chave-globs", "subarvore/test_fixture.py")
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert "1 passed" in r.stdout
+
+
 def _env_registro(tmp_path: Path, dados: dict) -> dict:
     caminho = tmp_path / "v.json"
     caminho.write_text(json.dumps(dados), encoding="utf-8")
@@ -159,3 +198,22 @@ def test_registro_familia_lista_stacks(tmp_path):
                         capture_output=True, text=True)
     assert r.returncode == 0
     assert r.stdout.strip() == "a\tx\tsub"
+
+
+def test_registro_sexta_coluna_globs_de_teste(tmp_path):
+    env = _env_registro(tmp_path, {
+        "a": {"familia": "f", "lock": "x", "testes": ["t/test_a_*.py", "t/test_b_*.py"]},
+        "b": {"familia": "f", "lock": "y"},
+    })
+    ra = subprocess.run([sys.executable, str(REGISTRO), "a"], env=env, capture_output=True, text=True)
+    assert ra.returncode == 0, ra.stderr
+    assert ra.stdout.rstrip("\n").split("\t")[5] == "t/test_a_*.py,t/test_b_*.py"
+    rb = subprocess.run([sys.executable, str(REGISTRO), "b"], env=env, capture_output=True, text=True)
+    assert rb.stdout.rstrip("\n").split("\t")[5] == "-"
+
+
+@pytest.mark.parametrize("glob", ["../fora/test_*.py", "/abs/test_*.py", "t/a b.py", "t/a,b.py"])
+def test_registro_glob_invalido_sai_3(tmp_path, glob):
+    env = _env_registro(tmp_path, {"a": {"familia": "f", "lock": "x", "testes": [glob]}})
+    r = subprocess.run([sys.executable, str(REGISTRO), "a"], env=env, capture_output=True, text=True)
+    assert r.returncode == 3, r.stdout + r.stderr

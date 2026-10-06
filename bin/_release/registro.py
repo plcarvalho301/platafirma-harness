@@ -10,8 +10,14 @@ declara uma stack: {"familia": "<repo>", "lock": "<caminho do lock na árvore>",
 lido por release para construir o venv (chave = <nome>-sha256(lock+python)) e por
 teste/pre-push para reaproveitar o mesmo venv, pela mesma chave.
 
+Campo opcional "testes" (card #3316): lista de globs, relativos à raiz de teste da stack
+(a subárvore, senão a raiz do clone), que é a suíte da stack quando `teste rodar` vem sem
+alvo. Sem ele, a stack que divide repositório com outra e não declara subárvore não tem
+suíte própria: rodar da raiz coletaria o repositório inteiro.
+
 Uso:
-  registro.py <nome>              família, lock, subárvore, esteira e stack (TSV) de <nome>
+  registro.py <nome>              família, lock, subárvore, esteira, stack e globs de teste
+                                  (TSV; globs separados por vírgula, "-" sem declaração)
   registro.py --familia <familia> uma linha TSV (nome, lock, teste) por stack da família
   registro.py --all               uma linha TSV (nome, família, lock, teste, esteira) por stack
 
@@ -156,6 +162,25 @@ def resolver(nome: str, caminho: Path | None = None) -> tuple[str, str, str, str
     raise StackDesconhecida(nome, conhecidas)
 
 
+def coleta(stack_real: str, caminho: Path | None = None) -> list[str]:
+    """Globs de teste declarados em "testes" da stack (card #3316); [] sem declaração.
+
+    Glob absoluto, com "..", com espaço ou vírgula, ou campo que não é lista de texto
+    tornam o registro ilegível: a coleta errada não pode virar coleta do repositório.
+    """
+    stacks, _ = carregar_tudo(caminho)
+    decl = stacks.get(stack_real)
+    if not isinstance(decl, dict) or "testes" not in decl:
+        return []
+    globs = decl["testes"]
+    if not isinstance(globs, list) or not all(isinstance(g, str) and g for g in globs):
+        raise RegistroIlegivel(f"'testes' de '{stack_real}' não é lista de globs")
+    for g in globs:
+        if g.startswith("/") or ".." in g.split("/") or any(ch in g for ch in " \t,"):
+            raise RegistroIlegivel(f"glob de teste inválido em '{stack_real}': '{g}'")
+    return globs
+
+
 def stack(nome: str, caminho: Path | None = None) -> tuple[str, str, str]:
     """(família, lock, subárvore de teste) da stack <nome>.
 
@@ -206,6 +231,7 @@ def _main(argv: list[str]) -> int:
         return 2
     try:
         stack_real, familia, lock, teste, esteira = resolver(argv[0])
+        globs = coleta(stack_real)
     except RegistroIlegivel as exc:
         print(f"registro: {exc}", file=sys.stderr)
         return 3
@@ -223,7 +249,8 @@ def _main(argv: list[str]) -> int:
     # campo vazio vira "-": TAB e espaco em branco para o read do bash, e dois TABs
     # seguidos colapsariam, deslocando esteira e stack para a coluna errada.
     l_val = lock if lock else "-"
-    print(f"{familia}\t{l_val}\t{t_val}\t{esteira}\t{stack_real}")
+    g_val = ",".join(globs) if globs else "-"
+    print(f"{familia}\t{l_val}\t{t_val}\t{esteira}\t{stack_real}\t{g_val}")
     return 0
 
 
