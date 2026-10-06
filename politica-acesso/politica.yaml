@@ -480,7 +480,13 @@ regras:
     efeito: permite
     motivo: "perimetro de inferencia local responde na fita citando o acervo em vez de memoria de treino · admissao-quinzinho.md item 2, OK de claudinho-seguranca em 04/09/2026 · vence 2026-12-04"
     quando: {papel: inferencia-escopada, dominio: plataforma-acervo, tipo: acervo}
-    acoes: [rag_buscar, rag_facetas]
+    # `acervo_ler` (06/10/2026, seguranca, pedido do arquiteto na fila 20261006T183850, #3333,
+    # card #3334): o Recuperador passa a pedir o texto e a situacao pelo acervo (arq:0119 §1.2),
+    # e sem a acao este perimetro perderia a fonte que le hoje por `rag_buscar`. E leitura pura
+    # do MESMO recurso `acervo:*` que `rag_buscar` ja alcanca, no mesmo dominio nomeado
+    # `plataforma-acervo`: nao amplia alcance, nao cita o pai, nao muda o vence. As negativas
+    # `inferencia-nao-*` seguem de pe, e nenhuma delas toca `acervo_ler`.
+    acoes: [rag_buscar, rag_facetas, acervo_ler]
     sobre: ["acervo:*"]
 
   - id: inferencia-le-wiki
