@@ -77,7 +77,7 @@ SQL_RETIRADA = """
 select coalesce(json_agg(row_to_json(t) order by t.id), '[]') from (
   select r.id, r.titulo, r.retirada_motivo is not null as tem_motivo
   from acervo.obra r
-  where r.expurgada_em is not null
+  where r.retirada_em is not null
 ) t;
 """
 
@@ -98,7 +98,7 @@ select coalesce(json_agg(row_to_json(t) order by t.id), '[]') from (
   join acervo.colecao c on c.id = o.colecao_id and c.slug = 'firma'
   left join acervo.especie_tipo e on e.id = o.especie_id
   left join acervo.familia_tipo f on f.id = e.familia_id
-  where o.expurgada_em is null
+  where o.retirada_em is null
 ) t;
 """
 
@@ -111,7 +111,7 @@ select coalesce(json_agg(row_to_json(t) order by t.slug), '[]') from (
                  where r.de_id = c.id or r.para_id = c.id) as tem_aresta,
          (select count(*) from acervo.obra_trata_de tr
           join acervo.obra o on o.id = tr.obra_id
-          where tr.conceito_id = c.id and o.expurgada_em is null) as n_obras_vivas
+          where tr.conceito_id = c.id and o.retirada_em is null) as n_obras_vivas
   from acervo.conceito c
 ) t;
 """

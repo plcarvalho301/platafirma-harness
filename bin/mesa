@@ -1617,7 +1617,7 @@ def _sql_cruzamento(pares):
             " join acervo.obra_trata_de tb on tb.obra_id = ta.obra_id "
             " join acervo.conceito cb on cb.id = tb.conceito_id "
             " join acervo.obra o on o.id = ta.obra_id "
-            " where ca.slug = p.de and cb.slug = p.para and o.expurgada_em is null) as obras, "
+            " where ca.slug = p.de and cb.slug = p.para and o.retirada_em is null) as obras, "
             "(select string_agg(r.tipo || '/' || r.garantia, ', ' order by r.tipo) "
             " from acervo.conceito_relacao r "
             " join acervo.conceito ca on ca.id = r.de_id join acervo.conceito cb on cb.id = r.para_id "
