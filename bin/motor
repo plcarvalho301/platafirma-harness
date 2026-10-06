@@ -140,6 +140,7 @@ def uso(cod=2):
                                         reembeda a particao em memoria, fora do servido, e
                                         mede contra o servido no gabarito e no replay do log
   motor <inst> medir  <particao> --sombra-ver <id>   progresso e resultado da sombra
+  motor <inst> medir  <particao> --sombra-parar <id> encerra a sombra em curso
   motor <inst> indexar biblioteca [--obra <uuid>,…] [--promover] [--autor <slug>] [--apply] [--json]
                                         indexa a impressao selada da obra marcada para
                                         indexar, no rag-api, sem po-la no ar (plano sem --apply);
@@ -789,6 +790,8 @@ def cmd_medir(nome, inst, argv):
     particao, argv = resolve_particao(argv, "medir")
     if "--sombra-ver" in argv:
         return cmd_sombra_ver(inst, _valor(argv, "--sombra-ver", "medir"))
+    if "--sombra-parar" in argv:
+        return cmd_sombra_parar(inst, _valor(argv, "--sombra-parar", "medir"))
     if "--sombra" in argv:
         return cmd_sombra(inst, particao, argv)
     if particao != "biblioteca" and "--gabarito" not in argv:
@@ -971,6 +974,32 @@ def cmd_sombra_ver(inst, sid):
         json.dump(res, f, ensure_ascii=False, indent=1)
     _resumo_sombra(res)
     print(f"\n  salvo em {arq}")
+
+
+def cmd_sombra_parar(inst, sid):
+    """Encerra a sombra <sid> dentro do conteiner. A imagem nao tem procps: varre /proc em Python
+    e manda SIGTERM a todo processo cuja linha de comando cita /tmp/sombra-<sid>/."""
+    if not re.fullmatch(r"\d{8}T\d{6}", sid or ""):
+        print(f"medir --sombra-parar: id invalido {sid!r} (forma AAAAMMDDTHHMMSS)", file=sys.stderr)
+        sys.exit(2)
+    c = inst.get("container")
+    alvo = f"/tmp/sombra-{sid}/"
+    py = ("import os,signal\n"
+          "n=0\n"
+          "for p in os.listdir('/proc'):\n"
+          "    if not p.isdigit() or int(p)==os.getpid(): continue\n"
+          "    try: cmd=open('/proc/'+p+'/cmdline','rb').read().decode(errors='ignore')\n"
+          "    except OSError: continue\n"
+          f"    if {alvo!r} in cmd or 'sombra-{sid}' in cmd:\n"
+          "        os.kill(int(p),signal.SIGTERM); n+=1\n"
+          "print(n)\n")
+    r = sh(f"docker exec -i {c} python3 -", input=py)
+    if r.returncode != 0:
+        print(f"medir --sombra-parar: {r.stderr.strip()[-300:]}", file=sys.stderr)
+        sys.exit(3)
+    n = r.stdout.strip() or "0"
+    print(f"sombra {sid}: {n} processo(s) encerrado(s)" if n != "0"
+          else f"sombra {sid}: nada rodando")
 
 
 def _resumo_sombra(res):
