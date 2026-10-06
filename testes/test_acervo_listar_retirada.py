@@ -1,4 +1,4 @@
-"""#3317: `acervo listar biblioteca obra` não lista obra retirada (expurgada_em preenchido), em nenhum eixo
+"""#3317: `acervo listar biblioteca obra` não lista obra retirada (retirada_em preenchido), em nenhum eixo
 de --sobre e na listagem sem termo, com ou sem --situacao. Sem banco: o módulo `bin/_acervo/listar` se
 carrega como fonte e `_psql_json` é trocado por uma função que guarda o SQL que o ato manda.
 """
@@ -44,7 +44,7 @@ def test_a_consulta_de_obra_tira_a_retirada(listar, termo, eixo, situacao, capsy
     mod.listar_obra(termo, eixo, situacao, False)
     capsys.readouterr()
     sql = next(sql for alvo, sql in consultas if alvo == "listar obra")
-    assert "expurgada_em is not null" in sql
+    assert "retirada_em is not null" in sql
     assert "t.id not in" in sql
 
 def test_o_total_do_catalogo_conta_so_obra_viva(listar, capsys):
@@ -52,4 +52,4 @@ def test_o_total_do_catalogo_conta_so_obra_viva(listar, capsys):
     mod.listar_obra("x", None, False, False)
     capsys.readouterr()
     sql = next(sql for alvo, sql in consultas if alvo == "catalogo_obra")
-    assert "expurgada_em is null" in sql
+    assert "retirada_em is null" in sql
