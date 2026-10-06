@@ -31,7 +31,7 @@ def lista_texto(trocar=None):
     trocar = trocar or {}
     sev = {"A1": "bloqueante", "A2": "bloqueante", "A3": "bloqueante", "A4": "bloqueante",
            "T2": "bloqueante", "B1": "bloqueante", "B2": "bloqueante", "B6": "bloqueante",
-           "D7": "bloqueante", "D8": "bloqueante"}
+           "D7": "bloqueante", "D8": "bloqueante", "D11": "bloqueante"}
     linhas = [_linha(c, f"fere {c}", trocar.get(c, d), sev.get(c, "aviso"), "K1")
               for c, d in ac.DETECTORES.items()]
     linhas += [_linha("C2", "sem lastro", "nenhum trecho da obra casa o rótulo", "aviso", "K9"),
@@ -72,9 +72,18 @@ def retirada(**kw):
     return base
 
 
-def _medir(obras=(), conceitos=(), esquema=ESQUEMA, texto=None, retiradas=()):
+def projecao_ok(n_conceitos, insatisfaziveis=()):
+    """O JSON do gerador da projecao formal quando o HermiT rodou e a ontologia fecha."""
+    return {"consistente": True, "levantou": None, "insatisfaziveis": list(insatisfaziveis),
+            "resumo": {"conceitos": n_conceitos}}
+
+
+def _medir(obras=(), conceitos=(), esquema=ESQUEMA, texto=None, retiradas=(), projecao=...):
+    """`projecao` omitida = HermiT limpo sobre os `conceitos`; None = a projecao nao foi pedida."""
     lista = parse_lista(texto or lista_texto())
-    return ac.medir(lista, esquema, list(obras), list(conceitos), list(retiradas))
+    if projecao is ...:
+        projecao = projecao_ok(len(conceitos))
+    return ac.medir(lista, esquema, list(obras), list(conceitos), list(retiradas), projecao)
 
 
 def _ids(m, cid):
@@ -200,6 +209,52 @@ def test_relatorio_exit_1_so_com_bloqueante(capsys):
     assert saida[-1].strip().startswith("A1: obra o1")
 
 
+# ---------- D11 (#3318): o HermiT sobre a projecao formal ----------
+
+def test_d11_conta_o_referente_insatisfazivel_pelo_slug_e_e_bloqueante(capsys):
+    cs = [conceito(slug="a-b"), conceito(slug="v1.2-x"), conceito(slug="c-d")]
+    m = _medir(conceitos=cs, projecao=projecao_ok(3, ["v1_2-x", "a-b"]))  # o IRI troca `.` por `_`
+    assert sorted(_ids(m, "D11")) == ["a-b", "v1.2-x"]
+    assert m["criterios"]["D11"]["n"] == 2 and m["criterios"]["D11"]["severidade"] == "bloqueante"
+    assert not [x for x in m["nao_rodou"] if x["id"] == "D11"]
+    assert ac.relatorio(m, 10) == 1
+
+
+def test_d11_limpo_aparece_com_zero_e_nao_reprova():
+    m = _medir(conceitos=[conceito()])
+    assert m["criterios"]["D11"]["n"] == 0 and _ids(m, "D11") == []
+    assert ac.relatorio(m, 10) == 0
+
+
+def test_d11_ontologia_inconsistente_e_um_apontamento_so_porque_derruba_toda_classe():
+    p = {**projecao_ok(2), "consistente": False, "levantou": "OwlReadyInconsistentOntologyError: ABox"}
+    m = _medir(conceitos=[conceito(slug="a-b"), conceito(slug="c-d")], projecao=p)
+    assert _ids(m, "D11") == ["ontologia"] and m["criterios"]["D11"]["n"] == 1
+    assert "ABox" in m["apontamentos"][0]["descricao"]
+    assert ac.relatorio(m, 10) == 1
+
+
+@pytest.mark.parametrize("projecao,trecho", [
+    (None, "nao foi pedida"),
+    ({"erro": "sem o gerador"}, "HermiT indisponivel: sem o gerador"),
+    ({"insatisfaziveis": [], "resumo": {"conceitos": 1}}, "promover platafirma-conhecimento"),
+    ({"consistente": None, "levantou": "RuntimeError: java", "insatisfaziveis": [], "resumo": {"conceitos": 1}},
+     "o HermiT nao rodou: RuntimeError: java"),
+    (projecao_ok(7), "leu 7 conceitos e o banco tem 1"),
+])
+def test_d11_sem_medida_nao_vira_zero_e_torna_a_chamada_indeterminavel(projecao, trecho):
+    m = _medir(conceitos=[conceito()], projecao=projecao)
+    assert "D11" not in m["criterios"]
+    nr = [x for x in m["nao_rodou"] if x["id"] == "D11"]
+    assert len(nr) == 1 and trecho in nr[0]["motivo"] and nr[0]["severidade"] == "bloqueante"
+    assert ac.relatorio(m, 10) == 5
+
+
+def test_d11_com_o_texto_do_detector_mudado_na_lista_nao_roda():
+    m = _medir(conceitos=[conceito()], texto=lista_texto(trocar={"D11": "outro texto"}))
+    assert any(x["id"] == "D11" and "mudou" in x["motivo"] for x in m["nao_rodou"])
+
+
 # ---------- CLI ----------
 
 @pytest.fixture
@@ -214,7 +269,12 @@ def ambiente(tmp_path):
     dados = {"esquema": ESQUEMA,
              "obras": [obra(id="o-a", titulo="COBIT2019"), obra(id="o-b")],
              "conceitos": [conceito(slug="antes-vs-depois")], "retiradas": []}
+    dados["projecao"] = projecao_ok(len(dados["conceitos"]))
     (tmp_path / "dados.json").write_text(json.dumps(dados))
+    hermit = tmp_path / "hermit"
+    hermit.write_text(f"#!{sys.executable}\nimport json\n"
+                      f"print(json.dumps(json.load(open({str(tmp_path / 'dados.json')!r}))['projecao']))\n")
+    hermit.chmod(0o755)
     psql = tmp_path / "psql"
     psql.write_text(
         f"#!{sys.executable}\nimport json, sys\n"
@@ -223,7 +283,8 @@ def ambiente(tmp_path):
         "     else 'obras' if 'from acervo.obra o' in sql else 'conceitos')\n"
         "print(json.dumps(d[k]))\n")
     psql.chmod(0o755)
-    return {"PF_LINT_ACERVO": str(acervo), "PF_LINT_ACERVO_PSQL": str(psql)}
+    return {"PF_LINT_ACERVO": str(acervo), "PF_LINT_ACERVO_PSQL": str(psql),
+            "PF_LINT_ACERVO_HERMIT": str(hermit)}
 
 
 def _lint(*args, env):
@@ -301,3 +362,41 @@ def test_cli_criterio_fora_do_acervo_exit_2(ambiente):
 def test_cli_acervo_sem_transporte_exit_3(ambiente):
     p = _lint("acervo", env={**ambiente, "PF_LINT_ACERVO_PSQL": "/nao/existe"})
     assert p.returncode == 3 and "transporte" in p.stderr
+
+
+def _projecao_no_ambiente(ambiente, **mudanca):
+    dados = Path(ambiente["PF_LINT_ACERVO_PSQL"]).parent / "dados.json"
+    d = json.loads(dados.read_text())
+    d["projecao"].update(mudanca)
+    dados.write_text(json.dumps(d))
+
+
+def test_cli_acervo_d11_traz_a_linha_com_numero_e_sai_0_com_hermit_limpo(ambiente):
+    """#3318: D11 deixa de ser `nao rodou`; o fixture tem so bloqueante de titulo e de slug."""
+    d = json.loads(_lint("acervo", "--json", "--criterio", "D11", env=ambiente).stdout)
+    assert d["criterios"]["D11"]["n"] == 0 and d["nao_rodou"] == [] and d["exit"] == 0
+    p = _lint("acervo", "--criterio", "D11", env=ambiente)
+    assert p.returncode == 0 and any(ln.split()[:3] == ["D11", "bloqueante", "0"] for ln in p.stdout.splitlines())
+
+
+def test_cli_acervo_d11_reprova_o_referente_insatisfazivel(ambiente):
+    _projecao_no_ambiente(ambiente, insatisfaziveis=["antes-vs-depois"])
+    p = _lint("acervo", "--criterio", "D11", env=ambiente)
+    assert p.returncode == 1, p.stdout + p.stderr
+    assert p.stdout.splitlines()[0].startswith("«lint acervo firma: 1 apontamentos, 1 bloqueantes")
+    assert "D11: conceito antes-vs-depois" in p.stdout
+
+
+def test_cli_acervo_d11_sem_hermit_e_indeterminavel_exit_5_e_o_resto_segue(ambiente):
+    p = _lint("acervo", "--json", env={**ambiente, "PF_LINT_ACERVO_HERMIT": "/nao/existe"})
+    d = json.loads(p.stdout)
+    assert p.returncode == 5 and d["exit"] == 5
+    d11 = [x for x in d["nao_rodou"] if x["id"] == "D11"]
+    assert len(d11) == 1 and "nao encontrado" in d11[0]["motivo"]
+    assert d["criterios"]["A3"]["n"] == 1  # a medida dos outros criterios nao se perde
+
+
+def test_cli_acervo_criterio_fora_do_d11_nao_sobe_o_hermit(ambiente):
+    """O HermiT e um Java: `--criterio A3` com o gerador quebrado segue como antes, exit 1."""
+    p = _lint("acervo", "--criterio", "A3", env={**ambiente, "PF_LINT_ACERVO_HERMIT": "/nao/existe"})
+    assert p.returncode == 1 and "nao rodou" not in p.stdout
