@@ -3,7 +3,7 @@
 # capacidade: conhecimento
 # dono: dados
 # classe: B
-# use para: ler o texto de uma obra por pagina ou capitulo (ler biblioteca impressao), ler uma ADR/spec/pagina/obra que sabe onde esta (ler), listar o que ha de um tipo ou sobre um assunto pelo catalogo (listar --sobre), gravar uma pagina de wiki (escrever casa pagina), por um repo de doc no acervo (ingerir casa <repo>)
+# use para: ler o texto de uma obra por pagina ou capitulo (ler biblioteca impressao), ler o texto da secao pelo secao_id que a busca devolve (ler casa|biblioteca secao), ler uma ADR/spec/pagina/obra que sabe onde esta (ler), listar o que ha de um tipo ou sobre um assunto pelo catalogo (listar --sobre), gravar uma pagina de wiki (escrever casa pagina), por um repo de doc no acervo (ingerir casa <repo>)
 # atos: ler (leitura, casa), listar (leitura, casa), resolver (leitura, casa), escrever (escrita, registro), ingerir (escrita, incorporacao), curar (escrita, curadoria), catalogar (escrita, classificacao), definir (escrita, tesauro), relacionar (escrita, tesauro), desrelacionar (escrita, tesauro), derivar (escrita, classificacao), desderivar (escrita, classificacao), empacotar (leitura, classificacao), espelhar (escrita, transcricao), recortar (escrita, transcricao), promover (escrita, transcricao), julgar (escrita, transcricao), converter (escrita, transcricao), recolher (escrita, transcricao), repor (escrita, transcricao), retirar (escrita, retirada), restaurar (escrita, retirada), apagar (escrita, retirada), extrato (leitura, acervo), exportar (escrita, acervo), psql (escrita, acervo), balde (escrita, acervo)
 # forma: texto
 # le: ler=acervo.casa,acervo.obra,acervo.registro,repo
@@ -103,6 +103,8 @@ uso (gramatica arq:0106 — acervo <ato> <particao> <entidade> [seletor]):
   acervo ingerir  <particao> <raiz> [--apply]
   acervo ler      casa <especie> <chave> [--offset <bytes>]   pela chave (arq:0115 §3): acervo ler casa adr arq:0075
                   documento longo vem em paginas; o fim diz \`continue com --offset N\`
+  acervo ler      casa|biblioteca secao <secao_id> [<secao_id> ...] [--json]
+                  o texto da secao pelo endereco que a busca devolve (motor ... --texto nenhum)
   acervo listar   casa [<especie>] [--todas]          sem especie: o catalogo (projecao, regime, contagem)
   acervo listar   casa [<especie>] --sobre <classe> <chave>   a documentacao de uma entidade
   acervo listar   casa topologia [<stack>] [--completo] [--json]   golden record acervo.stack
@@ -221,6 +223,9 @@ conforme() {
     ler:casa:ferramental)   exec "$ATOS/ferramenta" "$@" ;;
     ler:casa:stack)         exec "$ATOS/stack" ver "$@" ;;
     ler:casa:cargo)         exec "$ATOS/wiki" cargo "$@" ;;
+    # o texto da seção pelo endereço que a busca devolve (arq:0119 §1.2, §3; #3312): o motor
+    # acha o secao_id, o acervo entrega o texto. Antes do ramo generico `ler:casa:*`.
+    ler:casa:secao|ler:biblioteca:secao) exec python3 "$ATOS/secao" "$particao" "$@" ;;
     listar:casa:pagina)     exec "$ATOS/wiki" listar "$@" ;;
     listar:casa:ferramental) exec "$ATOS/listar" ferramental "$@" ;;
     # topologia (golden record acervo.stack): forma conforme da porta de `deploy <stack>
