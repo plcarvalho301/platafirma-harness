@@ -71,7 +71,9 @@ def situacao(
         return Envelope(linhas=[linha_disjuntor_aberto(Fonte.ACERVO)])
 
     # 2. PEP por fonte
-    sujeito_resolvido = sujeito or os.environ.get("PF_CADEIRA") or os.environ.get("USER") or "claudinho"
+    # Sujeito é a pessoa autenticada (PF_SUJEITO, decisão 9 do #3145). Sem ela o PEP nega
+    # por identidade; a biblioteca não inventa sujeito a partir de cadeira ou conta.
+    sujeito_resolvido = (sujeito or os.environ.get("PF_SUJEITO") or "").strip()
     _pep = pep or PEP()
     # situação é leitura do acervo, não busca pelo sentido (arq:0119 §4, #3312)
     negativas = _pep.autoriza(sujeito=sujeito_resolvido, pedidos=[Fonte.ACERVO],
