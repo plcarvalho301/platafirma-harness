@@ -81,7 +81,7 @@ ações principais:
   --reclassificar               reclassifica obra(s) em lote ou individualmente (default: plano seco)
   --situacao <obra>             consulta a situação viva de uma obra no acervo
   --expurgar <obra>             expurgo reversível de uma obra (default: plano seco; --apply executa); exige --motivo
-  --restaurar <obra>            restaura obra expurgada (default: plano seco; --apply executa); exige --motivo
+  --restaurar <obra>            restaura obra retirada (default: plano seco; --apply executa); exige --motivo
                                 (na obra já retirada sem motivo, --expurgar --motivo preenche o que falta)
   --promover <obra>             põe a impressão selada no ar (exige --impressao), pela marcação da obra (arq:0119 §5):
                                 inteira não promove; transcrita exige trechos; transcrita e indexada exige índice aprovado
@@ -144,7 +144,7 @@ opções de seleção (--reclassificar em lote):
   --de-conceito <slug>          filtra obras pelo conceito de origem
   --de-colecao <slug>           filtra obras pela coleção (firma | pessoal)
   --sem-dominio                 filtra obras sem domínio atribuído
-  --expurgadas                  filtra obras expurgadas
+  --expurgadas                  filtra obras retiradas
   --teto <n>                    teto máximo de obras a alterar no lote (default: 200, máx: 5000)
 
 opções de --reextrair --bancada (card #3187; "bancada" aqui é só uma pasta de saída dada na linha de comando):
@@ -230,11 +230,11 @@ def _parse_lista(vals) -> list[str]:
     return res
 
 
-def resolver_obra_id(obra: str, headers: dict, expurgadas: bool = False, timeout=None) -> str:
+def resolver_obra_id(obra: str, headers: dict, retiradas: bool = False, timeout=None) -> str:
     obra = obra.strip()
     if _UUID_RE.match(obra):
         return obra
-    ordem_qs = ("?expurgadas=true", "") if expurgadas else ("", "?expurgadas=true")
+    ordem_qs = ("?retiradas=true", "") if retiradas else ("", "?retiradas=true")
     resp = None
     for qs in ordem_qs:
         url = f"{BASE}/acervo/obras/{urllib.parse.quote(obra, safe='')}/situacao{qs}"
@@ -318,11 +318,11 @@ def formatar_situacao(payload: dict) -> str:
 
 
 def acao_situacao(obra: str, como_json: bool, headers: dict) -> int:
-    # `?expurgadas=true` carrega SÓ o catálogo das expurgadas (servidor): obra viva vira 404.
-    # Primeiro o catálogo vivo; expurgada só no 404, como segunda leitura.
+    # `?retiradas=true` carrega SÓ o catálogo das retiradas (servidor): obra viva vira 404.
+    # Primeiro o catálogo vivo; retirada só no 404, como segunda leitura.
     base_url = f"{BASE}/acervo/obras/{urllib.parse.quote(obra, safe='')}/situacao"
     resp = None
-    for qs in ("", "?expurgadas=true"):
+    for qs in ("", "?retiradas=true"):
         try:
             resp = requests.get(base_url + qs, headers=headers)
         except requests.exceptions.RequestException as e:
@@ -354,7 +354,7 @@ def _motivo_de_retirada(ato: str, motivo: str | None) -> str | None:
 
 
 def acao_expurgar(obra: str, autor: str, motivo: str, aplicar: bool, como_json: bool, headers: dict) -> int:
-    obra_id = resolver_obra_id(obra, headers, expurgadas=False)
+    obra_id = resolver_obra_id(obra, headers, retiradas=False)
     url_obra = f"{BASE}/acervo/obras/{obra_id}"
     try:
         resp_obra = requests.get(url_obra, headers=headers)
@@ -366,7 +366,7 @@ def acao_expurgar(obra: str, autor: str, motivo: str, aplicar: bool, como_json: 
         falha_problem(resp_obra)
     obra_dados = resp_obra.json()
     titulo = obra_dados.get("titulo") or "-"
-    expurgada_em_atual = obra_dados.get("expurgada_em")
+    retirada_em_atual = obra_dados.get("retirada_em")
 
     servindo = [i.get("id") for i in (obra_dados.get("impressoes") or []) if i.get("estado") == "servindo"]
 
@@ -378,15 +378,15 @@ def acao_expurgar(obra: str, autor: str, motivo: str, aplicar: bool, como_json: 
             "obra_id": obra_id,
             "titulo": titulo,
             "antes": {
-                "expurgada": expurgada_em_atual is not None,
-                "expurgada_em": expurgada_em_atual,
+                "retirada": retirada_em_atual is not None,
+                "retirada_em": retirada_em_atual,
             },
             "depois": {
-                "expurgada": True,
-                "expurgada_em": "now()",
+                "retirada": True,
+                "retirada_em": "now()",
             },
             "muda": {
-                "catalogo": "fica, marcado retirado (expurgada_em); nenhuma linha se apaga",
+                "catalogo": "fica, marcado retirado (retirada_em); nenhuma linha se apaga",
                 "impressao": {"aposenta": servindo},
                 "indice": "o do motor que serve a obra sai (volta por nova indexação)",
             },
@@ -400,10 +400,10 @@ def acao_expurgar(obra: str, autor: str, motivo: str, aplicar: bool, como_json: 
         else:
             print(f"Plano: retirar a obra {obra_id} ({titulo}), com volta")
             print(f"  motivo   : {motivo}")
-            if expurgada_em_atual is not None:
-                print(f"  catálogo : já retirada em {expurgada_em_atual} (idempotente: só limpa o que ficou servindo)")
+            if retirada_em_atual is not None:
+                print(f"  catálogo : já retirada em {retirada_em_atual} (idempotente: só limpa o que ficou servindo)")
             else:
-                print("  catálogo : fica, marcada retirada (expurgada_em: None -> now()); nenhuma linha se apaga")
+                print("  catálogo : fica, marcada retirada (retirada_em: None -> now()); nenhuma linha se apaga")
             print(f"  impressão: {', '.join(servindo) + ' aposenta' if servindo else 'nenhuma servindo'}")
             print("  índice   : o do motor que serve a obra sai (volta por nova indexação)")
             print("  export   : sai de ontologia/acervo/obra.jsonl")
@@ -420,7 +420,7 @@ def acao_expurgar(obra: str, autor: str, motivo: str, aplicar: bool, como_json: 
         print(json.dumps({
             "modo": "aplicado",
             "ato": "retirar",
-            "expurgada": True,
+            "retirada": True,
             "obra_id": obra_id,
             "titulo": titulo,
             "autor": autor,
@@ -440,7 +440,7 @@ def acao_expurgar(obra: str, autor: str, motivo: str, aplicar: bool, como_json: 
 
 
 def acao_restaurar(obra: str, autor: str, motivo: str, aplicar: bool, como_json: bool, headers: dict) -> int:
-    obra_id = resolver_obra_id(obra, headers, expurgadas=True)
+    obra_id = resolver_obra_id(obra, headers, retiradas=True)
     url_obra = f"{BASE}/acervo/obras/{obra_id}"
     try:
         resp_obra = requests.get(url_obra, headers=headers)
@@ -452,7 +452,7 @@ def acao_restaurar(obra: str, autor: str, motivo: str, aplicar: bool, como_json:
         falha_problem(resp_obra)
     obra_dados = resp_obra.json()
     titulo = obra_dados.get("titulo") or "-"
-    expurgada_em_atual = obra_dados.get("expurgada_em")
+    retirada_em_atual = obra_dados.get("retirada_em")
 
     if not aplicar:
         plano = {
@@ -461,15 +461,15 @@ def acao_restaurar(obra: str, autor: str, motivo: str, aplicar: bool, como_json:
             "obra_id": obra_id,
             "titulo": titulo,
             "antes": {
-                "expurgada": expurgada_em_atual is not None,
-                "expurgada_em": expurgada_em_atual,
+                "retirada": retirada_em_atual is not None,
+                "retirada_em": retirada_em_atual,
             },
             "depois": {
-                "expurgada": False,
-                "expurgada_em": None,
+                "retirada": False,
+                "retirada_em": None,
             },
             "muda": {
-                "catalogo": "volta ao serviço (expurgada_em -> nulo)",
+                "catalogo": "volta ao serviço (retirada_em -> nulo)",
                 "impressao": "não volta sozinha: a aposentada fica; o texto volta por acervo espelhar|promover",
                 "indice": "não volta sozinho: volta por motor indexar sobre a impressão servindo",
             },
@@ -482,10 +482,10 @@ def acao_restaurar(obra: str, autor: str, motivo: str, aplicar: bool, como_json:
         else:
             print(f"Plano: restaurar a obra {obra_id} ({titulo})")
             print(f"  motivo   : {motivo}")
-            if expurgada_em_atual is None:
-                print("  catálogo : obra já estava em serviço (expurgada_em é nulo)")
+            if retirada_em_atual is None:
+                print("  catálogo : obra já estava em serviço (retirada_em é nulo)")
             else:
-                print(f"  catálogo : volta ao serviço (expurgada_em: {expurgada_em_atual} -> None)")
+                print(f"  catálogo : volta ao serviço (retirada_em: {retirada_em_atual} -> None)")
             print("  impressão: não volta sozinha; o texto volta por acervo espelhar|promover biblioteca obra")
             print("  índice   : não volta sozinho; volta por motor indexar sobre a impressão servindo")
             print("  export   : entra em ontologia/acervo/obra.jsonl")
@@ -517,7 +517,7 @@ def acao_apagar(obra: str, autor: str, aplicar: bool, como_json: bool, headers: 
     """`curar --apagar <obra> [--apply]`: tira do acervo, sem volta, a obra já retirada (arq:0119 §9.2;
     #3191). Sai o catálogo (com impressões, seções, trechos e ligações), os índices do motor e, no
     balde, o arquivo e os espelhos. Sem --apply, o plano. Exit 1 se algum objeto do balde não saiu."""
-    obra_id = resolver_obra_id(obra, headers, expurgadas=True)
+    obra_id = resolver_obra_id(obra, headers, retiradas=True)
     url = f"{BASE}/acervo/obras/{obra_id}/apagar"
     try:
         resp = requests.post(url, json={"autor": autor, "aplicar": aplicar}, headers=headers)
@@ -610,7 +610,7 @@ simétricas (gravam uma vez, ordem canônica de uuid):
   disjunta      A e B nunca são a mesma coisa (owl:disjointWith, ont:0086 4b) — homonímia ou exclusão
 
 garantias (Z39.19 §5.3.5; caderno de ontologia 02/09):
-  literaria     obra do acervo sustenta — exige --lastro (obra não expurgada)
+  literaria     obra do acervo sustenta — exige --lastro (obra não retirada)
   de-uso        pergunta feita ao motor sustenta (evento_recuperacao)
   instituida    dono ou cadeira afirma — não precisa de trecho (ont:0078)
 
