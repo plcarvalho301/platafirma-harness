@@ -51,6 +51,10 @@ Incorporar (arq:0119 §2): sem --ate, o lote para na obra catalogada com a cópi
 Texto e índice são outros estágios: Transcrever (acervo curar obra --reextrair) e Indexar
 (motor indexar, da ia).
 
+Todo arquivo que entra ganha a ficha no mesmo ato (#3306): o formato lido nos bytes, não no nome. O plano
+mostra o que a ficha leu na coluna Formato (um `.pdf` que é JSON sai JSON, um `.pdf` que é GZIP sai GZIP);
+`?` é arquivo que o conversor não leu no plano, e o aplicar lê de novo.
+
 opções de fonte (uma das opções):
   --lote <pasta>         pasta local com arquivos do lote a ingerir
   --origem <o>           pasta do Drive a espelhar para $PLATAFIRMA_INSTANCIA/var/entrada antes de ingerir;
@@ -364,6 +368,25 @@ def subir_objeto(caminho: str, sha256: str, colecao: str, headers: dict) -> None
         sys.exit(1)
 
 
+def descrever_ficha(item: dict) -> str:
+    """O que a ficha do arquivo leu nos bytes (#3306), numa célula: formato, versão, páginas e quantas
+    pedem OCR. Item sem portão `ficha` (já ingerido, reprovado) fica em `-`; ficha que o conversor não leu
+    no plano, em `?` (o aplicar lê de novo)."""
+    for p in item.get("portoes") or []:
+        if p.get("portao") != "ficha":
+            continue
+        ficha = p.get("ficha")
+        if not ficha:
+            return "?"
+        nome = ficha.get("formato") or "desconhecido"
+        partes = [f"{nome} {ficha['versao']}" if ficha.get("versao") else nome]
+        if ficha.get("paginas") is not None:
+            partes.append(f"{ficha['paginas']}p")
+        if ficha.get("paginas_ocr"):
+            partes.append(f"{ficha['paginas_ocr']} OCR")
+        return " · ".join(partes)
+    return "-"
+
 def formatar_tabela_plano(lote: dict) -> str:
     linhas = []
     resumo = lote.get("resumo", {})
@@ -372,8 +395,8 @@ def formatar_tabela_plano(lote: dict) -> str:
     linhas.append(f"Autor: {lote.get('autor')} · Motor: {lote.get('motor') or '-'} · Até: {lote.get('ate')} · OCR: {lote.get('ocr')} · Coleção: {lote.get('colecao')}")
     linhas.append(f"Resumo: total={total} | criar={resumo.get('criar', 0)} | edicao={resumo.get('edicao', 0)} | ja_ingerido={resumo.get('ja_ingerido', 0)} | bloqueada={resumo.get('bloqueada', 0)} | reprovado={resumo.get('reprovado', 0)}")
     linhas.append("")
-    linhas.append(f"{'#':<3} {'Arquivo':<40} {'Título':<45} {'Veredito':<14} {'Portões / Detalhe'}")
-    linhas.append("-" * 130)
+    linhas.append(f"{'#':<3} {'Arquivo':<40} {'Formato (ficha)':<24} {'Título':<45} {'Veredito':<14} {'Portões / Detalhe'}")
+    linhas.append("-" * 155)
     for it in lote.get("itens", []):
         pos = str(it.get("posicao", 0))
         arq = it.get("arquivo") or "-"
@@ -388,7 +411,10 @@ def formatar_tabela_plano(lote: dict) -> str:
             if p.get("resultado") != "aprovado":
                 detalhes.append(f"{p.get('portao')}:{p.get('title', p.get('resultado'))}")
         det = ", ".join(detalhes) if detalhes else "todos aprovados"
-        linhas.append(f"{pos:<3} {arq:<40} {tit:<45} {ver:<14} {det}")
+        fmt = descrever_ficha(it)
+        if len(fmt) > 22:
+            fmt = fmt[:21] + "…"
+        linhas.append(f"{pos:<3} {arq:<40} {fmt:<24} {tit:<45} {ver:<14} {det}")
     return "\n".join(linhas)
 
 

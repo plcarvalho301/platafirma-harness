@@ -118,7 +118,7 @@ def imprimir(d, colecao):
     print()
     fora = d.get("fora_da_particao", {})
     print(f'  fora da partição: {fora.get("objeto_no_store_sem_obra", 0)} objeto(s) no store sem obra')
-    print(f'  expurgadas (reversível, fora da medição): {d.get("expurgadas", 0)}')
+    print(f'  retiradas (reversível, fora da medição): {d.get("retiradas", 0)}')
     print()
 
     inv = d["invariante"]

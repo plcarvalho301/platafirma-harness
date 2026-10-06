@@ -36,7 +36,7 @@ import leitura as L                                            # noqa: E402
 PASTA = Path("/home/claudinho/AI/varredura-ler-formatos")
 ACERVO = Path("/opt/platafirma/current/harness/bin/acervo")
 SQL = ("select id||E'\\t'||coalesce(arquivo,'')||E'\\t'||objeto from acervo.obra "
-       "where expurgada_em is null and objeto is not null order by id")
+       "where retirada_em is null and objeto is not null order by id")
 # a saída alinhada do psql expande o tab em espaços: o objeto (`<balde>/<sha256>`) fecha a linha
 _UUID = re.compile(r"^\s*([0-9a-f-]{36})\s+(.*?)\s+(\S+/[0-9a-f]{64})\s*$")
 AMOSTRA_PDF = 20
