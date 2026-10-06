@@ -1,26 +1,20 @@
 #!/usr/bin/env python3
-# acervo entidade — leitura e resolucao da raiz da casa (acervo.entidade*, arq:0108).
+# acervo entidade — leitura do indice da raiz da casa (acervo.entidade*, arq:0108).
 # capacidade: conhecimento
 # dono: claudinho-dados
 #   (materia/semantica: claudinho-dados · dono; mecanismo/harness: claudinho-TI · construcao)
 #
-# Serve os dois atos da raiz que a ordem de 0108 pede, sobre as tabelas
-# acervo.entidade_classe / acervo.entidade (rag_extractor):
+# Serve o ato de leitura da raiz, sobre as tabelas acervo.entidade_classe /
+# acervo.entidade (rag_extractor). O ato `acervo resolver` morreu (#3259): quem
+# confirma documento le `acervo ler casa <especie> <chave>`, e a
+# resolucao que codigo ainda precisa (curar alias, conferir capacidade) vai direto a
+# biblioteca _identidade (validar_forma, resolver_canon).
 #
 #   acervo listar  entidade [--especie <e>] [--dona <cadeira>] [--json]
 #       Lista o INDICE de classes (acervo.entidade_classe): slug · especie · dona ·
 #       chave_humana · substrato_golden · regime. Filtros opcionais por especie
 #       (categoria da classe) e por dona (cadeira no array `dona`). E o golden record
 #       do fichario: a lista viva de arq:0108 §2, nao um .md a mao.
-#
-#   acervo resolver <classe> <string> [--json]
-#       O UNICO ato de resolucao de identidade da raiz (arq:0022, arq:0108 §5).
-#       Recebe a classe (slug de entidade_classe) e uma string humana; devolve o
-#       entidade.id (uuid opaco) da ficha cuja chave_humana casa, dentro da classe.
-#       Resolver por parsing de string em outro lugar e violacao (arq:0022): a
-#       identidade se pede a este ato, nunca se deduz. Casa exato primeiro; se nada,
-#       tenta alias (acervo.entidade_alias). Zero -> rc 1 (nao encontrado); mais de
-#       um -> rc 2 (ambiguo, lista os candidatos). Um -> imprime o uuid, rc 0.
 #
 # Read-only. A escrita da raiz e a carga/backfill (migrar/psql), outro caminho.
 import json
@@ -110,56 +104,16 @@ def listar_entidade(especie, dona, quero_json):
                      % len(classes))
     return 0
 
-# --------------------------------------------------------------------- resolver
-
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-import _identidade
-
-def resolver(classe, alvo, quero_json):
-    canon, num_sem_serie = _identidade.validar_forma(classe, alvo)
-    cand = _identidade.resolver_canon(classe, canon, num_sem_serie)
-    if not cand:
-        if quero_json:
-            print(json.dumps({"classe": classe, "chave": alvo, "id": None,
-                              "achou": False}, ensure_ascii=False))
-        else:
-            diag = _identidade.gerar_negativa(classe, alvo)
-            sys.stderr.write("acervo resolver: '%s' nao existe em '%s'.\n%s\n"
-                             % (alvo, classe, diag))
-        return 1
-    if len(cand) > 1:
-        sys.stderr.write("acervo resolver: '%s' ambiguo em '%s' (%d fichas):\n"
-                         % (alvo, classe, len(cand)))
-        for c in cand:
-            sys.stderr.write("  %s  (via %s, chave_humana=%s)\n"
-                             % (c["id"], c["via"], c["chave_humana"]))
-        return 2
-    c = cand[0]
-    if quero_json:
-        print(json.dumps({"classe": classe, "chave": alvo, "id": c["id"],
-                          "chave_humana": c["chave_humana"],
-                          "via": c["via"], "achou": True}, ensure_ascii=False))
-    else:
-        print(c["id"])
-        if c.get("via") == "alias":
-            print("via: alias")
-    return 0
-
 USO = """uso:
   acervo listar entidade [--especie <e>] [--dona <cadeira>] [--json]
       indice de classes da raiz (acervo.entidade_classe): slug · especie · dona ·
       chave_humana · substrato_golden · regime. Filtra por especie ou por dona.
-  acervo resolver <classe> <string> [--json]
-      resolve a string para o entidade.id (uuid) da ficha, dentro da classe.
-      O UNICO ato de resolucao de identidade da raiz (arq:0022). Casa exato,
-      depois alias. rc: 0 achou (imprime uuid) · 1 nada · 2 ambiguo (lista).
 
-Read-only sobre a raiz da casa (arq:0108)."""
+Read-only sobre a raiz da casa (arq:0108). `acervo resolver` e ato extinto (#3259)."""
 
 def main(argv):
     # Invocado pelo despachante como:
     #   _acervo/entidade listar [--especie e] [--dona d] [--json]
-    #   _acervo/entidade resolver <classe> <string> [--json]
     if not argv or argv[0] in ("-h", "--help", "ajuda"):
         morre(USO, 0 if argv else 2)
     ato = argv[0]
@@ -180,13 +134,7 @@ def main(argv):
                       % (resto[i], USO), 2)
         return listar_entidade(especie, dona, quero_json)
 
-    if ato == "resolver":
-        if len(resto) != 2:
-            morre("acervo resolver <classe> <string>: preciso de exatamente dois "
-                  "argumentos.\n\n%s" % USO, 2)
-        return resolver(resto[0], resto[1], quero_json)
-
-    morre("acervo entidade: ato desconhecido '%s' (listar, resolver).\n\n%s"
+    morre("acervo entidade: ato desconhecido '%s' (listar).\n\n%s"
           % (ato, USO), 2)
 
 if __name__ == "__main__":

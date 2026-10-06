@@ -166,8 +166,8 @@ conduta() {
 foto() {
   exige_morada
   python3 - "$ARVORE" "$@" <<'PY'
-# Transição declarada no ato: quando `acervo resolver` (feature #3032, dados)
-# existir, `foto` o consome e a leitura de aliases.json sai.
+# A foto le aliases.json da morada publicada. A transicao para um ato de resolucao do
+# acervo (#3032) caiu: o ato morreu (#3259).
 import json, os, pathlib, sys
 
 arvore = pathlib.Path(sys.argv[1])

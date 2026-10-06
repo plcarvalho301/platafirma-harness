@@ -4,11 +4,10 @@
 # dono: dados
 # classe: B
 # use para: ler o texto de uma obra por pagina ou capitulo (ler biblioteca impressao), ler o texto da secao pelo secao_id que a busca devolve (ler casa|biblioteca secao), ler uma ADR/spec/pagina/obra que sabe onde esta (ler), listar o que ha de um tipo ou sobre um assunto pelo catalogo (listar --sobre), gravar uma pagina de wiki (escrever casa pagina), por um repo de doc no acervo (ingerir casa <repo>)
-# atos: ler (leitura, casa), listar (leitura, casa), resolver (leitura, casa), escrever (escrita, registro), ingerir (escrita, incorporacao), curar (escrita, curadoria), catalogar (escrita, classificacao), definir (escrita, tesauro), relacionar (escrita, tesauro), desrelacionar (escrita, tesauro), derivar (escrita, classificacao), desderivar (escrita, classificacao), empacotar (leitura, classificacao), espelhar (escrita, transcricao), recortar (escrita, transcricao), promover (escrita, transcricao), julgar (escrita, transcricao), converter (escrita, transcricao), recolher (escrita, transcricao), repor (escrita, transcricao), retirar (escrita, retirada), restaurar (escrita, retirada), apagar (escrita, retirada), extrato (leitura, acervo), exportar (escrita, acervo), psql (escrita, acervo), balde (escrita, acervo)
+# atos: ler (leitura, casa), listar (leitura, casa), escrever (escrita, registro), ingerir (escrita, incorporacao), curar (escrita, curadoria), catalogar (escrita, classificacao), definir (escrita, tesauro), relacionar (escrita, tesauro), desrelacionar (escrita, tesauro), derivar (escrita, classificacao), desderivar (escrita, classificacao), empacotar (leitura, classificacao), espelhar (escrita, transcricao), recortar (escrita, transcricao), promover (escrita, transcricao), julgar (escrita, transcricao), converter (escrita, transcricao), recolher (escrita, transcricao), repor (escrita, transcricao), retirar (escrita, retirada), restaurar (escrita, retirada), apagar (escrita, retirada), extrato (leitura, acervo), exportar (escrita, acervo), psql (escrita, acervo), balde (escrita, acervo)
 # forma: texto
 # le: ler=acervo.casa,acervo.obra,acervo.registro,repo
 # le: listar=acervo.casa,acervo.obra,acervo.registro,repo,arquivo-local
-# le: resolver=acervo.casa
 # le: escrever=nada
 # le: ingerir=repo
 # le: curar=acervo.obra,acervo.casa
@@ -35,7 +34,6 @@
 # le: balde=acervo.*,minio
 # escreve: ler=nada
 # escreve: listar=nada
-# escreve: resolver=nada
 # escreve: escrever=acervo.casa
 # escreve: ingerir=acervo.casa,acervo.obra,acervo.registro,motor,repo
 # escreve: curar=acervo.obra,acervo.casa,arquivo-local
@@ -98,7 +96,6 @@ uso() {
 uso (gramatica arq:0106 — acervo <ato> <particao> <entidade> [seletor]):
   acervo ler      <particao> <entidade> <seletor> [--situacao]
   acervo listar   <particao> <entidade> [--sobre <termo>] [--eixo <eixo>] [--situacao] [--dono <cadeira>] [--json]
-  acervo resolver <classe> <string>
   acervo escrever <particao> <entidade> <seletor>
   acervo ingerir  <particao> <raiz> [--apply]
   acervo ler      casa <especie> <chave> [--offset <bytes>]   pela chave (arq:0115 §3): acervo ler casa adr arq:0075
@@ -522,10 +519,13 @@ case "$ATO" in
   espelhar|recortar|promover|julgar|converter) transcrever "$ATO" "$@" ;;
   retirar|restaurar|apagar|recolher|repor) retirada "$ATO" "$@" ;;
 
-  # resolver <classe> <string>: o ato de resolucao de identidade da raiz (arq:0108
-  # §5, arq:0022). Nao segue a gramatica ato-particao-entidade: a raiz e uma so
-  # (acervo.entidade), a classe ja diz o recorte. Vai direto ao sub-ato.
-  resolver)             exec "$ATOS/entidade" resolver "$@" ;;
+  # resolver: ato extinto (#3259, ordem do dono em 03/10/2026). Traduzia
+  # nome em uuid, so conhecia a serie arq e dava negativa falsa em documento servido. A
+  # biblioteca _acervo/_identidade fica (curar alias, conferir capacidade); o ato nao volta.
+  resolver)
+    echo "acervo resolver: ato extinto: confirmar documento é \`acervo ler casa <espécie> <chave>\`; listar uma espécie é \`acervo listar casa <espécie>\`." >&2
+    echo "  $SPEC" >&2
+    exit 2 ;;
 
   # listar/ler com alvo `entidade` SEM particao explicita: atalho para a raiz.
   # `listar entidade [--especie|--dona]` e a forma que a ordem de 0108 pediu; a
@@ -618,7 +618,7 @@ case "$ATO" in
 
   -h|--help|ajuda) uso ;;
   *)
-    echo "acervo: ato '$ATO' desconhecido. Atos canonicos: ler, listar, resolver, escrever, ingerir, curar, extrato, exportar, psql, balde, catalogar, definir, relacionar, desrelacionar, derivar, desderivar, empacotar, espelhar, recortar, promover, julgar, converter, recolher, repor, retirar, restaurar, apagar." >&2
+    echo "acervo: ato '$ATO' desconhecido. Atos canonicos: ler, listar, escrever, ingerir, curar, extrato, exportar, psql, balde, catalogar, definir, relacionar, desrelacionar, derivar, desderivar, empacotar, espelhar, recortar, promover, julgar, converter, recolher, repor, retirar, restaurar, apagar." >&2
     echo "  $SPEC" >&2
     exit 2 ;;
 esac

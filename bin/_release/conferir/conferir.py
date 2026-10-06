@@ -655,30 +655,72 @@ def normaliza(cap):
     return formas
 
 
+_IDENTIDADE = {}
+
+
+def _identidade_da_release():
+    """A biblioteca de identidade da raiz (bin/_acervo/_identidade.py) do bin da release
+    no ar, nunca de RAIZ/bin (#3142). Carregada por caminho e guardada por caminho."""
+    caminho = os.path.join(BIN_IRMAOS, "_acervo", "_identidade.py")
+    if caminho not in _IDENTIDADE:
+        import importlib.util
+        spec = importlib.util.spec_from_file_location("_identidade_release", caminho)
+        if spec is None or spec.loader is None:
+            raise ImportError(f"biblioteca de identidade ausente: {caminho}")
+        modulo = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(modulo)
+        _IDENTIDADE[caminho] = modulo
+    return _IDENTIDADE[caminho]
+
+
+def _resolver_capacidade_forma(forma):
+    """(rc, saida) de uma forma na classe `capacidade` da raiz, pela biblioteca
+    _identidade (validar_forma + resolver_canon). O ato `acervo resolver` morreu (#3259);
+    a biblioteca fica. rc no contrato de antes: 0 uma ficha · 1 nenhuma · 2 ambigua ou
+    forma invalida · 3/5 banco fora do ar ou biblioteca ausente (ela sai por morre())."""
+    import contextlib
+    import io
+    err = io.StringIO()
+    try:
+        ident = _identidade_da_release()
+        with contextlib.redirect_stderr(err):
+            canon, num = ident.validar_forma("capacidade", forma)
+            cand = ident.resolver_canon("capacidade", canon, num)
+    except SystemExit as e:
+        return (e.code if isinstance(e.code, int) else 3), err.getvalue()
+    except Exception as e:  # biblioteca ausente ou quebrada: nao da pra olhar
+        return 3, f"{type(e).__name__}: {e}"
+    if not cand:
+        return 1, ""
+    if len(cand) > 1:
+        return 2, "; ".join(f"{c['id']} ({c['chave_humana']})" for c in cand)
+    return 0, cand[0]["id"]
+
+
 def _capacidade_veredito(cap):
-    """Veredito da capacidade `cap`, via `acervo resolver capacidade <forma>` para cada
-    forma de normaliza() (card #3142, passo 4). Primeira forma que resolve (rc 0) ganha;
-    rc 1 em TODAS as formas = nao existe (divergente); rc 2 = ambigua (divergente, com a
-    lista no motivo); qualquer outro rc, ou o acervo fora do ar, e indeterminavel — nao
-    da pra afirmar que a capacidade nao existe so porque a consulta falhou."""
-    raiz_bin = BIN_IRMAOS
+    """Veredito da capacidade `cap`, resolvendo cada forma de normaliza() na classe
+    `capacidade` da raiz (card #3142, passo 4; pela biblioteca desde #3259). Primeira forma
+    que resolve (rc 0) ganha; rc 1 em TODAS as formas = nao existe (divergente); rc 2 =
+    ambigua (divergente, com a lista no motivo); qualquer outro rc, ou o acervo fora do ar,
+    e indeterminavel — nao da pra afirmar que a capacidade nao existe so porque a consulta
+    falhou."""
     algum_rc1 = False
     ultimo_rc, ultimo_saida = None, ""
     for forma in sorted(normaliza(cap)):
-        rc, out, err = sh([os.path.join(raiz_bin, "acervo"), "resolver", "capacidade", forma])
+        rc, saida = _resolver_capacidade_forma(forma)
         if rc == 0:
             return resultado.conforme()
         if rc == 2:
             return resultado.divergente(
-                f"{cap!r} e capacidade ambigua ({forma!r}): {(err or out).strip()[:200]}")
+                f"{cap!r} e capacidade ambigua ({forma!r}): {saida.strip()[:200]}")
         if rc == 1:
             algum_rc1 = True
             continue
-        ultimo_rc, ultimo_saida = rc, (err or out).strip()[:200]
+        ultimo_rc, ultimo_saida = rc, saida.strip()[:200]
     if algum_rc1 and ultimo_rc is None:
         return resultado.divergente(f"capacidade {cap!r} nao esta no acervo")
     return resultado.indeterminavel(
-        f"acervo resolver capacidade saiu {ultimo_rc} para {cap!r}: {ultimo_saida}")
+        f"resolucao da capacidade saiu {ultimo_rc} para {cap!r}: {ultimo_saida}")
 
 
 def _desde_familia(familia):
