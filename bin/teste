@@ -301,12 +301,26 @@ pytest_em_bloco() {  # $1=clone $2=raiz(cwd) $3=rotulo $4=modo(py:<python>|isola
   local c="$1" raiz="$2" rotulo="$3" modo="$4"; shift 4
   local alvos=("$@") rc=0
   local runner=()
+  # Portão em paralelo (incidente #3335): a lista do portão roda com pytest-xdist, um
+  # processo por arquivo (--dist loadfile: fixture de módulo e servidor falso ficam no
+  # mesmo trabalhador). Trabalhadores = PF_TESTE_PARALELO (padrão: metade dos núcleos),
+  # nunca mais que o número de arquivos; 0 ou 1 roda em série. Medido em 06/10: as quatro
+  # chaves do harness de 291 s em série para 54 s, mesma contagem de testes.
+  local xdist=() trab
+  if [ "${portao:-0}" -eq 1 ] && [ "${modo%%:*}" = py ]; then
+    trab="${PF_TESTE_PARALELO:-$(( $(nproc 2>/dev/null || echo 2) / 2 ))}"
+    case "$trab" in ''|*[!0-9]*) trab=1 ;; esac
+    [ "$trab" -gt "${#alvos[@]}" ] && trab="${#alvos[@]}"
+    [ "$trab" -gt 1 ] && xdist=(-n "$trab" --dist loadfile)
+  fi
   case "$modo" in
     py:*)
+      local com=(--with pytest)
+      [ "${#xdist[@]}" -gt 0 ] && com+=(--with pytest-xdist)
       if [ -f "$raiz/uv.lock" ]; then
-        runner=(uv run --frozen --python "${modo#py:}" --with pytest pytest)
+        runner=(uv run --frozen --python "${modo#py:}" "${com[@]}" pytest)
       else
-        runner=(uv run --python "${modo#py:}" --with pytest pytest)
+        runner=(uv run --python "${modo#py:}" "${com[@]}" pytest)
       fi
       ;;
     isolado) runner=(uvx pytest) ;;
@@ -376,7 +390,7 @@ pytest_em_bloco() {  # $1=clone $2=raiz(cwd) $3=rotulo $4=modo(py:<python>|isola
   xml="$(mktemp "${TMPDIR:-/tmp}/teste-junit.XXXXXX.xml")"
 
   # Suporte a árvore materializada (read-only): desliga cacheprovider do pytest
-  local pytest_flags=(-q --junitxml="$xml")
+  local pytest_flags=(-q --junitxml="$xml" ${xdist[@]+"${xdist[@]}"})
   if [ "${EM_ARVORE:-0}" -eq 1 ]; then
     pytest_flags+=(-p no:cacheprovider)
   fi
@@ -479,13 +493,28 @@ portao_da_familia() {  # $1=clone $2=familia $3=bancada(chave ou vazio) $4=arvor
     printf 'suite VERDE: %s — nenhuma chave com subárvore de teste no registro (nada a medir)\n' "$familia"
     return 0
   fi
-  for chave in "${chaves[@]}"; do
-    rc=0
+  # As chaves rodam ao mesmo tempo (incidente #3335): cada uma é processo próprio, com
+  # venv e memo próprios, e a saída de cada uma sai inteira, na ordem do registro. O
+  # artefato pinado entra na árvore uma vez, antes: as chaves o achariam ao mesmo tempo e
+  # o construtor escreve no mesmo destino. Só a leitura do memo dispensa isso.
+  [ "${PF_TESTE_SO_MEMO:-0}" = 1 ] || terceiros_na_arvore "$c"
+  local tmpd i pids=()
+  tmpd="$(mktemp -d "${TMPDIR:-/tmp}/teste-portao.XXXXXX")" || morre "não criei o diretório de saída do portão" 3
+  for i in "${!chaves[@]}"; do
+    chave="${chaves[$i]}"
     if [ -n "$arv" ]; then
-      PLATAFIRMA_VENVS="$venvs" "$0" rodar "$chave" --portao --arvore "$arv" || rc=$?
+      PLATAFIRMA_VENVS="$venvs" "$0" rodar "$chave" --portao --arvore "$arv" >"$tmpd/$i.out" 2>"$tmpd/$i.err" &
     else
-      PLATAFIRMA_VENVS="$venvs" "$0" rodar "$chave${bancada:+@$bancada}" --portao || rc=$?
+      PLATAFIRMA_VENVS="$venvs" "$0" rodar "$chave${bancada:+@$bancada}" --portao >"$tmpd/$i.out" 2>"$tmpd/$i.err" &
     fi
+    pids+=("$!")
+  done
+  for i in "${!chaves[@]}"; do
+    chave="${chaves[$i]}"
+    rc=0
+    wait "${pids[$i]}" || rc=$?
+    cat "$tmpd/$i.err" >&2
+    cat "$tmpd/$i.out"
     case "$rc" in
       0) : ;;
       1) vermelhas+=("$chave") ;;
@@ -493,6 +522,7 @@ portao_da_familia() {  # $1=clone $2=familia $3=bancada(chave ou vazio) $4=arvor
       *) nao_medidas+=("$chave (exit $rc)") ;;
     esac
   done
+  rm -rf "$tmpd"
   if [ "${#vermelhas[@]}" -gt 0 ]; then
     printf 'portao %s: VERMELHO — %s\n' "$familia" "${vermelhas[*]}"
     return 1

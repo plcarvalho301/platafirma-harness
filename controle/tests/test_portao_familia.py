@@ -157,6 +157,57 @@ def test_so_memo_nao_roda_e_devolve_6_ate_haver_veredito(tmp_path):
     assert "veredito reaproveitado" in r.stdout + r.stderr
 
 
+def _marca(arquivo: Path, rotulo: str, dormir: float = 0.0) -> str:
+    """Caso que grava rótulo, trabalhador do xdist e instante de início e fim."""
+    return ("import os, time\n"
+            f"def test_{rotulo}():\n"
+            "    t0 = time.time()\n"
+            f"    time.sleep({dormir})\n"
+            f"    with open({str(arquivo)!r}, 'a') as f:\n"
+            f"        f.write('{rotulo} ' + os.environ.get('PYTEST_XDIST_WORKER', '-')"
+            " + f' {t0} {time.time()}\\n')\n")
+
+
+def _marcas(arquivo: Path) -> dict[str, tuple[str, float, float]]:
+    out = {}
+    for linha in arquivo.read_text().splitlines():
+        rotulo, trab, t0, t1 = linha.split()
+        out[rotulo] = (trab, float(t0), float(t1))
+    return out
+
+
+def test_chaves_do_portao_rodam_ao_mesmo_tempo(tmp_path):
+    """Incidente #3335: as chaves do repositório rodam juntas, não uma depois da outra;
+    a saída de cada uma sai inteira, na ordem do registro."""
+    marcas = tmp_path / "marcas.txt"
+    env, arv = _arvore(tmp_path, {"a": {"test_a.py": _marca(marcas, "a", 3)},
+                                  "b": {"test_b.py": _marca(marcas, "b", 3)}},
+                       {"a": "test_a.py\n", "b": "test_b.py\n"})
+    r = _run(env, "rodar", "demo", "--portao", "--arvore", str(arv))
+    assert r.returncode == 0, r.stdout + r.stderr
+    m = _marcas(marcas)
+    assert m["b"][1] < m["a"][2] and m["a"][1] < m["b"][2], m
+    assert r.stdout.index("suite VERDE: k-a") < r.stdout.index("suite VERDE: k-b"), r.stdout
+
+
+def test_lista_do_portao_roda_com_xdist_por_arquivo(tmp_path):
+    """Incidente #3335: a lista do portão roda em trabalhadores do pytest-xdist, nunca
+    mais que os arquivos da lista; PF_TESTE_PARALELO=1 roda em série."""
+    marcas = tmp_path / "marcas.txt"
+    env, arv = _arvore(tmp_path, {"a": {"test_a1.py": _marca(marcas, "a1"),
+                                        "test_a2.py": _marca(marcas, "a2")}},
+                       {"a": "test_a1.py\ntest_a2.py\n"})
+    r = _run(dict(env, PF_TESTE_PARALELO="8"), "rodar", "k-a", "--portao", "--arvore", str(arv))
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert "2 passed" in r.stdout, r.stdout
+    assert {t for t, _, _ in _marcas(marcas).values()} <= {"gw0", "gw1"}, _marcas(marcas)
+    marcas.unlink()
+    r = _run(dict(env, PF_TESTE_PARALELO="1", PF_TESTE_SEM_MEMO="1"),
+             "rodar", "k-a", "--portao", "--arvore", str(arv))
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert {t for t, _, _ in _marcas(marcas).values()} == {"-"}, _marcas(marcas)
+
+
 def test_artefato_fora_do_cache_e_sem_url_e_dependencia_ausente(tmp_path):
     env, arv = _arvore(tmp_path, {"a": {"test_a.py": VERDE}}, {"a": "test_a.py\n"})
     Path(env["PLATAFIRMA_TERCEIROS"]).write_text(json.dumps(
