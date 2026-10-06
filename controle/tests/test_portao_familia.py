@@ -35,7 +35,9 @@ def _git(*args, cwd):
 
 
 def _run(env, *args):
-    e = {k: v for k, v in os.environ.items() if not k.startswith(("PF_", "PLATAFIRMA_"))}
+    # PYTEST_ fora: rodando sob o xdist do portão, PYTEST_XDIST_WORKER do trabalhador vazava
+    # para o pytest da fixture e a rodada em série parecia paralela (#3335)
+    e = {k: v for k, v in os.environ.items() if not k.startswith(("PF_", "PLATAFIRMA_", "PYTEST_"))}
     e.update(env)
     return subprocess.run([str(TESTE), *args], env=e, capture_output=True, text=True, timeout=240)
 
