@@ -78,12 +78,17 @@ def projecao_ok(n_conceitos, insatisfaziveis=()):
             "resumo": {"conceitos": n_conceitos}}
 
 
-def _medir(obras=(), conceitos=(), esquema=ESQUEMA, texto=None, retiradas=(), projecao=...):
-    """`projecao` omitida = HermiT limpo sobre os `conceitos`; None = a projecao nao foi pedida."""
+def _medir(obras=(), conceitos=(), esquema=ESQUEMA, texto=None, retiradas=(), projecao=..., achadas=...,
+           sem_achadas=""):
+    """`projecao` omitida = HermiT limpo sobre os `conceitos`; None = a projecao nao foi pedida.
+    `achadas` omitida = o listar nao acha nenhuma retirada (S12 limpo); None = o listar nao respondeu."""
     lista = parse_lista(texto or lista_texto())
     if projecao is ...:
         projecao = projecao_ok(len(conceitos))
-    return ac.medir(lista, esquema, list(obras), list(conceitos), list(retiradas), projecao)
+    if achadas is ...:
+        achadas = {r["id"]: False for r in retiradas}
+    return ac.medir(lista, esquema, list(obras), list(conceitos), list(retiradas), projecao, achadas,
+                    sem_achadas)
 
 
 def _ids(m, cid):
@@ -193,6 +198,48 @@ def test_g6_acusa_zero_enquanto_a_coluna_nao_existe():
     m = _medir(esquema={**ESQUEMA, "motivo_retirada": False}, retiradas=[retirada(tem_motivo=False)])
     assert m["criterios"]["G6"]["n"] == 0 and "078" in m["criterios"]["G6"]["nota"]
 
+
+# ---------- S12 (#3317): obra retirada que o catalogo ainda acha ----------
+
+def _lista_s12_bloqueante():
+    return lista_texto().replace(f"| {ac.DETECTORES['S12']} | aviso |", f"| {ac.DETECTORES['S12']} | bloqueante |")
+
+def test_s12_aponta_a_retirada_que_o_listar_devolve_e_reprova():
+    m = _medir(retiradas=[retirada(id="achada"), retirada(id="some")],
+               achadas={"achada": True, "some": False}, texto=_lista_s12_bloqueante())
+    assert _ids(m, "S12") == ["achada"]
+    assert m["criterios"]["S12"]["severidade"] == "bloqueante"
+    assert ac.relatorio(m, 11) == 1
+
+def test_s12_limpo_aparece_com_zero():
+    m = _medir(retiradas=[retirada(id="r")], texto=_lista_s12_bloqueante())
+    assert m["criterios"]["S12"]["n"] == 0 and ac.relatorio(m, 11) == 0
+
+def test_s12_sem_resposta_do_listar_nao_vira_zero():
+    m = _medir(retiradas=[retirada(id="r")], achadas=None, sem_achadas="acervo listar saiu 5: fora",
+               texto=_lista_s12_bloqueante())
+    assert "S12" not in m["criterios"]
+    nr = [x for x in m["nao_rodou"] if x["id"] == "S12"]
+    assert nr and "saiu 5" in nr[0]["motivo"] and ac.relatorio(m, 11) == 5
+
+def _listar_falso(tmp_path, monkeypatch, corpo, rc=0):
+    exe = tmp_path / "acervo"
+    exe.write_text(f"#!{sys.executable}\nimport sys\nsys.stdout.write({corpo!r})\nsys.exit({rc})\n")
+    exe.chmod(0o755)
+    monkeypatch.setenv("PF_LINT_ACERVO_LISTAR", str(exe))
+
+def test_ler_achadas_casa_o_id_na_saida_json_do_listar(tmp_path, monkeypatch):
+    _listar_falso(tmp_path, monkeypatch, json.dumps([{"id": "viva"}, {"id": "r1"}]))
+    assert ac.ler_achadas([retirada(id="r1"), retirada(id="r2")]) == ({"r1": True, "r2": False}, "")
+
+def test_ler_achadas_vazio_do_listar_e_nao_achada(tmp_path, monkeypatch):
+    _listar_falso(tmp_path, monkeypatch, "motivo: nenhuma obra encontrada para --sobre 'x'\n")
+    assert ac.ler_achadas([retirada(id="r1")]) == ({"r1": False}, "")
+
+def test_ler_achadas_listar_quebrado_devolve_motivo(tmp_path, monkeypatch):
+    _listar_falso(tmp_path, monkeypatch, "", rc=5)
+    achadas, motivo = ac.ler_achadas([retirada(id="r1")])
+    assert achadas is None and "saiu 5" in motivo
 
 def test_detector_divergente_da_lista_nao_roda_e_torna_indeterminavel(capsys):
     texto = lista_texto(trocar={"A1": "`titulo` sem espaço"})
