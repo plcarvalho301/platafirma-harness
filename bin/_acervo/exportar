@@ -40,6 +40,18 @@ def morre(msg: str, cod: int = 3) -> None:
     sys.exit(cod)
 
 
+def _dono_da_bancada(wt: Path) -> str:
+    """Sessão que marcou a bancada (`pf-sessao-viva` no git dir, escrita por `repo abrir`), ou \"\".
+    Com várias bancadas abertas, a marca distingue a da sessão que chamou sem escolher calado."""
+    g = wt / ".git"
+    try:
+        if g.is_file():
+            txt = g.read_text(encoding="utf-8").strip()
+            g = (wt / txt[len("gitdir:"):].strip()) if txt.startswith("gitdir:") else g
+        return (g / "pf-sessao-viva").read_text(encoding="utf-8").split("\t")[0].strip()
+    except OSError:
+        return ""
+
 def bancada_do_repo(chave: str = "") -> Path:
     """Mesma ordem do verbo `repo`: sessao, cadeira, clone. `chave` (de `--bancada <card-slug>`,
     a mesma do `repo <ato> platafirma-conhecimento@<chave>`) escolhe entre várias bancadas abertas da
@@ -70,6 +82,9 @@ def bancada_do_repo(chave: str = "") -> Path:
         if len(achadas) == 1:
             return achadas[0]
         if len(achadas) > 1:
+            minhas = [p for p in achadas if _dono_da_bancada(p) == os.environ.get("PF_SESSAO", "")]
+            if os.environ.get("PF_SESSAO") and len(minhas) == 1:
+                return minhas[0]
             morre(f"{len(achadas)} bancadas de {REPO} abertas para {cadeira} "
                   f"({', '.join(p.name for p in achadas)}); diga qual com --bancada <chave>.", 2)
     clone = raiz / REPO
