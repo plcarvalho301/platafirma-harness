@@ -1,5 +1,5 @@
-"""acervo ler <particao> secao — o texto pelo endereço da busca (#3312). Sem banco: o psql é
-injetado; o que se prova é a validação, o SQL montado e a forma da saída."""
+"""acervo ler <particao> secao — cliente da rota POST /acervo/secoes/consulta (#3312). Sem rede:
+o POST é injetado; o que se prova é a validação, o corpo enviado e a forma da saída."""
 import importlib.machinery
 import importlib.util
 import json
@@ -19,46 +19,35 @@ SID = "8cc00b2e-5280-52bc-b230-232d157ac62c"
 OUTRO = "bfe93174-298e-56bd-ad2e-181bde227c2f"
 
 
-def _psql_fake(linhas):
-    vistos = []
+def _post_fake(resposta):
+    enviados = []
 
-    def f(sql):
-        vistos.append(sql)
-        return linhas
-    return f, vistos
-
-
-def test_sql_por_particao_usa_a_tabela_certa_e_so_o_servido():
-    casa = secao.montar_sql("casa", [SID])
-    bib = secao.montar_sql("biblioteca", [SID.upper()])
-    assert "acervo.casa_trecho" in casa and "i.estado = 'servindo'" in casa
-    assert "c.retirada_em is null" in casa
-    assert "acervo.trecho " in bib and "o.expurgada_em is null" in bib
-    assert "'{" + SID + "}'" in bib  # uuid normalizado em minúscula
+    def f(corpo):
+        enviados.append(corpo)
+        return resposta
+    return f, enviados
 
 
-def test_ordem_do_texto_igual_a_do_motor():
-    for p in ("casa", "biblioteca"):
-        sql = secao.montar_sql(p, [SID])
-        assert "order by t.part_idx nulls first, t.ordem_leitura nulls first" in sql
-        assert "filter (where not t.is_not_text)" in sql
+def test_le_pela_rota_nao_pelo_banco():
+    corpo = ARQ.read_text()
+    assert "/acervo/secoes/consulta" in corpo
+    assert "docker" not in corpo and "psql" not in corpo
 
 
 def test_achada_e_nao_achada_saem_com_exit_1(capsys):
-    f, _ = _psql_fake([{"secao_id": SID, "arquivo": "guia ddl-e-migracao", "ancora": "x#mapa",
-                        "breadcrumb": ["a"], "texto": "corpo"}])
-    rc = secao.ler("casa", [SID, OUTRO], True, psql=f)
-    out = json.loads(capsys.readouterr().out)
+    achada = {"secao_id": SID, "arquivo": "guia ddl-e-migracao", "ancora": "x#mapa",
+              "breadcrumb": ["a"], "texto": "corpo", "particao": "casa"}
+    f, enviados = _post_fake({"secoes": [achada], "nao_achadas": [OUTRO]})
+    rc = secao.ler("casa", [SID, OUTRO], True, post=f)
+    assert enviados == [{"particao": "casa", "secao_ids": [SID, OUTRO]}]
     assert rc == 1
-    assert [s["secao_id"] for s in out["secoes"]] == [SID]
-    assert out["secoes"][0]["texto"] == "corpo" and out["secoes"][0]["particao"] == "casa"
-    assert out["nao_achadas"] == [OUTRO]
+    assert json.loads(capsys.readouterr().out) == {"secoes": [achada], "nao_achadas": [OUTRO]}
 
 
 def test_todas_achadas_texto_cru_exit_0(capsys):
-    f, _ = _psql_fake([{"secao_id": SID, "arquivo": "a", "ancora": "b", "breadcrumb": [],
-                        "texto": "linha 1\nlinha 2"}])
-    assert secao.ler("biblioteca", [SID], False, psql=f) == 0
+    f, _ = _post_fake({"secoes": [{"secao_id": SID, "arquivo": "a", "ancora": "b",
+                                   "breadcrumb": [], "texto": "linha 1\nlinha 2"}], "nao_achadas": []})
+    assert secao.ler("biblioteca", [SID], False, post=f) == 0
     saida = capsys.readouterr().out
     assert saida.startswith("== " + SID) and "linha 1\nlinha 2" in saida
 
@@ -76,6 +65,4 @@ def test_uso_recusa(args, rc):
 
 def test_despachante_roteia_secao_antes_do_generico():
     corpo = (RAIZ / "bin" / "acervo").read_text()
-    rota = corpo.index("ler:casa:secao|ler:biblioteca:secao)")
-    generico = corpo.index("ler:casa:*)")
-    assert rota < generico
+    assert corpo.index("ler:casa:secao|ler:biblioteca:secao)") < corpo.index("ler:casa:*)")
