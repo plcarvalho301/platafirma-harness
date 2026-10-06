@@ -10,6 +10,7 @@ from __future__ import annotations
 import importlib.machinery
 import importlib.util
 import json
+import sys
 from pathlib import Path
 
 import pytest
@@ -50,6 +51,11 @@ def listar(monkeypatch):
         raise AssertionError(f"consulta inesperada: {alvo}")
 
     monkeypatch.setattr(mod, "_psql_json", falso)
+    # --situacao pede o estado das obras ao motor por REST (#3294); sem dublê, a fonte fica
+    # indisponível e o ato sai 5 sem imprimir nada.
+    sys.path.insert(0, str(RAIZ))
+    from recuperacao.adaptadores import motor_acervo_rest
+    monkeypatch.setattr(motor_acervo_rest, "obras", lambda campos: {"itens": []})
     return mod, consultas
 
 
