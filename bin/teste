@@ -31,7 +31,7 @@ VERBO="$(basename "$0")"
 REGISTRO="$(dirname "$(readlink -f "$0")")/_release/registro.py"
 
 # Preenchidos pela resolução no registro
-REG_FAMILIA=""; REG_LOCK=""; REG_SUBARVORE=""; REG_ESTEIRA=""; REG_STACK=""
+REG_FAMILIA=""; REG_LOCK=""; REG_SUBARVORE=""; REG_ESTEIRA=""; REG_STACK=""; REG_TESTES=""
 CHAVE_PY=""; CHAVE_HASH=""
 
 uso() {
@@ -42,7 +42,9 @@ uso:
   $VERBO inventario [<nome>|--all] [--json]
 
   <nome> = nome de repositório ou stack registrado em registro/venvs.json
-  <alvo> = caminho dentro da subárvore de teste, um ou mais (sem ele, a suíte inteira)
+  <alvo> = caminho dentro da subárvore de teste, um ou mais (sem ele, a suíte da stack:
+           os globs de "testes" no registro, senão a subárvore; stack sem nenhum dos dois
+           que divide repositório sai 5, card #3316)
   --portao: roda só a lista do portão da subárvore (<sub>/tests/VERDES ou <sub>/VERDES);
             com <nome> = repositório e sem <alvo>, toda chave dele que declara
             subárvore de teste, e passa quando todas passam (arq:0116 §6)
@@ -176,11 +178,44 @@ resolver_registro() {  # $1=nome[@<chave da bancada>]
     [ -n "$out" ] && printf '%s\n' "$out" >&2
     exit "$rc"
   fi
-  REG_FAMILIA=""; REG_LOCK=""; REG_SUBARVORE=""; REG_ESTEIRA=""; REG_STACK=""
-  IFS=$'\t' read -r REG_FAMILIA REG_LOCK REG_SUBARVORE REG_ESTEIRA REG_STACK <<<"$out"
+  REG_FAMILIA=""; REG_LOCK=""; REG_SUBARVORE=""; REG_ESTEIRA=""; REG_STACK=""; REG_TESTES=""
+  IFS=$'\t' read -r REG_FAMILIA REG_LOCK REG_SUBARVORE REG_ESTEIRA REG_STACK REG_TESTES <<<"$out"
   [ "$REG_SUBARVORE" = "-" ] && REG_SUBARVORE=""
   [ "$REG_LOCK" = "-" ] && REG_LOCK=""
+  [ "$REG_TESTES" = "-" ] && REG_TESTES=""
   return 0
+}
+
+# Card #3316: a suíte de uma stack sem alvo é a dela, não o repositório. Com "testes" no
+# registro, os arquivos que os globs casam sob a raiz de teste (um por linha, ordenados);
+# sem "testes" e sem subárvore, numa família de mais de uma stack, a stack não tem suíte
+# declarada e sai 5 — rodar da raiz coletaria os testes das outras (vermelho falso por
+# dependência que a stack não usa). Sem "testes" e com subárvore, ou família de uma stack
+# só, não imprime nada: o pytest coleta a raiz, como antes.
+coleta_da_stack() {  # $1=raiz de teste ; imprime os arquivos ; exit 5 sem suíte declarada
+  local raiz="$1" g f n venvs
+  if [ -z "$REG_TESTES" ]; then
+    [ -n "$REG_SUBARVORE" ] && return 0
+    venvs="${PLATAFIRMA_VENVS:-$(dirname "$(readlink -f "$0")")/../registro/venvs.json}"
+    n="$(PLATAFIRMA_VENVS="$venvs" python3 "$REGISTRO" --familia "$REG_FAMILIA" | grep -c .)"
+    [ "${n:-0}" -le 1 ] && return 0
+    printf 'suite INDISPONIVEL: %s — stack sem suíte declarada: %s tem %s stacks e esta não declara "teste" nem "testes" em registro/venvs.json; rodar da raiz coletaria o repositório inteiro (alvo explícito roda)\n' \
+      "$REG_STACK" "$REG_FAMILIA" "$n" >&2
+    exit 5
+  fi
+  local achados=() globs=()
+  IFS=',' read -r -a globs <<<"$REG_TESTES"
+  for g in "${globs[@]}"; do
+    while IFS= read -r f; do
+      [ -n "$f" ] && [ -f "$raiz/$f" ] && achados+=("$f")
+    done < <(cd "$raiz" && compgen -G "$g")
+  done
+  if [ "${#achados[@]}" -eq 0 ]; then
+    printf 'suite INDISPONIVEL: %s — os globs de "testes" (%s) não casam arquivo nenhum sob %s\n' \
+      "$REG_STACK" "$REG_TESTES" "$raiz" >&2
+    exit 5
+  fi
+  printf '%s\n' "${achados[@]}" | sort -u
 }
 
 # Esteira documento (spec_teste §1 e §4, card #3152 passo 6): o que a esteira aplica e
@@ -508,8 +543,8 @@ ato_detectar() {
   fi
 
   # Formato conforme: stack, runner, chave, caminho e a linha
-  printf '%s  ·  stack %s  ·  runner %s  ·  chave %s-%s  ·  caminho %s  ·  rodaria: %s\n' \
-    "$nome" "$REG_STACK" "$runner" "$REG_STACK" "$CHAVE_HASH" "$raiz" "$linha_cmd"
+  printf '%s  ·  stack %s  ·  runner %s  ·  chave %s-%s  ·  caminho %s  ·  coleta %s  ·  rodaria: %s\n' \
+    "$nome" "$REG_STACK" "$runner" "$REG_STACK" "$CHAVE_HASH" "$raiz" "${REG_TESTES:-raiz}" "$linha_cmd"
   return 0
 }
 
@@ -545,10 +580,15 @@ ato_inventario() {
 
   printf '# inventário de testes: %s (%s)\n' "$nome" "$REG_FAMILIA"
   local achados=() arq
-  while IFS= read -r arq; do
-    [ -n "$arq" ] || continue
-    achados+=("$arq")
-  done < <(find "$raiz" -type f \( -name "test_*.py" -o -name "*_test.py" \) 2>/dev/null | sort)
+  if [ -n "$REG_TESTES" ]; then  # card #3316: só o que a stack coleta
+    local col; col="$(coleta_da_stack "$raiz" 2>/dev/null)" || col=""
+    while IFS= read -r arq; do [ -n "$arq" ] && achados+=("$raiz/$arq"); done <<<"$col"
+  else
+    while IFS= read -r arq; do
+      [ -n "$arq" ] || continue
+      achados+=("$arq")
+    done < <(find "$raiz" -type f \( -name "test_*.py" -o -name "*_test.py" \) 2>/dev/null | sort)
+  fi
 
   if [ "${#achados[@]}" -eq 0 ]; then
     printf 'nenhum arquivo de teste encontrado em %s\n' "$raiz"
@@ -667,6 +707,11 @@ ato_rodar() {
     fi
   elif [ -n "$alvo" ]; then
     alvos+=("$alvo" ${extras_resolvidos[@]+"${extras_resolvidos[@]}"})
+  else
+    local col rc_col=0 f
+    col="$(coleta_da_stack "$raiz")" || rc_col=$?
+    [ "$rc_col" -eq 0 ] || exit "$rc_col"
+    while IFS= read -r f; do [ -n "$f" ] && alvos+=("$f"); done <<<"$col"
   fi
 
   ambiente_do_registro "$c" || exit $?
