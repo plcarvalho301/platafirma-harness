@@ -407,7 +407,12 @@ regras:
     efeito: permite
     motivo: "a fabrica constroi contra criterio citavel do acervo em vez de memoria de treino · ordem do dono em 20/08/2026, alargada ao acervo inteiro na mesma data · vence 2026-11-20"
     quando: {papel: fornecedor, dominio: plataforma-acervo, tipo: acervo}
-    acoes: [rag_buscar, rag_facetas]
+    # `acervo_ler` (06/10/2026, ti, nome escolhido pelo dono, card #3312 do arquiteto): leitura
+    # do catalogo e da situacao do acervo, separada de `rag_buscar`, que fica so para a busca
+    # pelo sentido (arq:0119 §4). Mesmo recurso `acervo:*` que `rag_buscar` ja alcanca: nao
+    # amplia o alcance. `inferencia-le-acervo` NAO ganha a acao: alargar aquele papel volta a
+    # seguranca (comentario da secao Inferencia escopada).
+    acoes: [rag_buscar, rag_facetas, acervo_ler]
     sobre: ["acervo:*"]
 
   # Espelha `externo-nunca-alcanca-acervo-pessoal` para o papel da fabrica. Escrita, e
