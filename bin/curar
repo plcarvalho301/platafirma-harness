@@ -133,6 +133,8 @@ opções de alteração (--reclassificar):
   --publicacao <texto>          dado de publicação (texto livre, como na fonte); 'null' limpa
   --emitido-por <a;b>           quem emitiu (autor, órgão); vários separados por ';'
   --anotacao <texto>            anotação textual da obra
+  --vinculacao <valor>          quanto a obra obriga um ente da APF (ont:0071): hard-law | soft-law | convencao | nenhuma;
+                                'null' volta a «ninguém olhou». Juízo de quem classifica, nunca derivado de espécie, domínio ou emissor
 
 opções de seleção (--reclassificar em lote):
   --obras <id1,id2,...>         lista de IDs ou títulos de obras a alterar
@@ -978,7 +980,7 @@ _RENOMEAR_OUTROS_ATOS = ("reclassificar", "situacao", "expurgar", "restaurar", "
                          "obra", "obras", "de_dominio", "de_subdominio", "de_conceito", "de_colecao", "sem_dominio",
                          "expurgadas", "trata_de", "remover_trata_de", "substituir_trata_de", "dominio", "subdominio",
                          "especie", "subtipo", "titulo", "id_canonico", "publicacao", "emitido_por", "anotacao",
-                         "colecao")
+                         "vinculacao", "colecao")
 
 
 def _renomear_incompativeis(args) -> list[str]:
@@ -1499,6 +1501,8 @@ def acao_reclassificar(args, autor: str, como_json: bool, headers: dict) -> int:
         alteracao["subtipo"] = None if args.subtipo.lower() in ("null", "none", "") else args.subtipo
     if args.anotacao is not None:
         alteracao["anotacao"] = args.anotacao
+    if args.vinculacao is not None:
+        alteracao["vinculacao"] = None if args.vinculacao.lower() in ("null", "none", "") else args.vinculacao
     if args.titulo is not None:
         alteracao["titulo"] = args.titulo
     if args.id_canonico is not None:
@@ -2605,6 +2609,7 @@ def main(argv=None):
     parser.add_argument("--publicacao", default=None)
     parser.add_argument("--emitido-por", dest="emitido_por", default=None)
     parser.add_argument("--anotacao", default=None)
+    parser.add_argument("--vinculacao", default=None)
     parser.add_argument("--colecao", default=None)
 
     # Seleção
