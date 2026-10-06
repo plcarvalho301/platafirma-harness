@@ -92,3 +92,9 @@ tests/test_guarda_sigpipe.py
 # Medido em 05/10/2026 (card #3253): `sinal` abre incidente após 10 min de serviço fora (8 passam;
 # idempotente, limpa ao recuperar e ignora degradado/sem-sinal).
 tests/test_contrato_sinal.py
+# Medido em 06/10/2026 (card #3305): `acervo ler|ingerir biblioteca ficha`, cliente fino das rotas da ficha (80 passam; com o
+# plano gravando sempre, o laço sem parar quando o conversor cai, o timeout da releitura tirado ou o paralelo
+# reduzido a 1, os testes de cada um ficam vermelhos). Revisão do cliente, 8 achados: queda só de dependência,
+# 409 como espera que o laço interrompe, relato que sobrevive a Ctrl-C, exits 3/4/5 e as quatro linhas do exit 1.
+# Guarda da arq:0089: o verbo não importa subprocess, psycopg, boto3, minio nem docker.
+tests/test_acervo_ficha.py
