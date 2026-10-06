@@ -106,7 +106,9 @@ def carrega_particao(st, conn, particao):
                     "WHERE indice_id = ANY(%s::uuid[]) AND dimensao = 1024", (ind,))
         for alvo, emb in cur:
             ids.append(alvo)
-            vecs.append(np.asarray(emb, dtype=np.float16))
+            # pgvector recente devolve Vector, nao ndarray
+            vecs.append(np.asarray(emb.to_numpy() if hasattr(emb, "to_numpy") else emb,
+                                   dtype=np.float16))
     cm.close()
     meta = {}
     for i in range(0, len(ids), 5000):
