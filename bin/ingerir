@@ -409,8 +409,10 @@ def formatar_tabela_plano(lote: dict) -> str:
         detalhes = []
         for p in it.get("portoes", []):
             if p.get("resultado") != "aprovado":
-                detalhes.append(f"{p.get('portao')}:{p.get('title', p.get('resultado'))}")
-        det = ", ".join(detalhes) if detalhes else "todos aprovados"
+                # o motivo da recusa (#3307): a obra que já tem o arquivo, o formato que os bytes dizem
+                motivo = f" — {p['detail']}" if p.get("detail") else ""
+                detalhes.append(f"{p.get('portao')}:{p.get('title', p.get('resultado'))}{motivo}")
+        det = "; ".join(detalhes) if detalhes else "todos aprovados"
         fmt = descrever_ficha(it)
         if len(fmt) > 22:
             fmt = fmt[:21] + "…"
