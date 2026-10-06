@@ -31,7 +31,7 @@ def test_pythonpath_leva_rag_e_conversor_da_bancada(monkeypatch, tmp_path):
     (wt / "rag").mkdir(parents=True)
     (wt / "conversor").mkdir()
     rodadas = []
-    monkeypatch.setattr(mod, "bancada_do_repo", lambda: wt)
+    monkeypatch.setattr(mod, "bancada_do_repo", lambda chave="": wt)  # --bancada <chave>, #3163
     monkeypatch.setattr(mod, "python_do_rag", lambda: "/bin/true")
     monkeypatch.setattr(mod, "ambiente_da_ingestao", lambda: {"EMBED_MODEL": "x"})
     monkeypatch.setattr(mod, "roda", lambda titulo, cmd, cwd, env: rodadas.append(env))
