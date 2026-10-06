@@ -61,7 +61,7 @@
 # escreve: psql=acervo.*
 # escreve: balde=acervo.obra,minio
 # consome: motor_acervo_rest, rag_extractor_pg
-# ambiente: PLATAFIRMA_INSTANCIA[=/srv/platafirma/casa] (ingerir casa le o suporte platafirma-casa pelo sha no espelho bare <instancia>/var/acervo/suporte/platafirma-casa.git, com a credencial da conta; nunca release, nunca clone de bancada; ler/listar casa so leem o origin/main ja buscado dele, para o campo servido), PF_SUPORTE_ESPELHO (opcional, override do espelho), PF_SUPORTE_URL[=https://github.com/plcarvalho301/platafirma-casa.git] (opcional, forge do suporte), RAG_API_BASE (opcional, url do motor), RAG_API_TOKEN (opcional, auth do motor)
+# ambiente: PLATAFIRMA_INSTANCIA[=/srv/platafirma/casa] (ingerir casa le o suporte platafirma-casa pelo sha no espelho bare <instancia>/var/acervo/suporte/platafirma-casa.git, com a credencial da conta; nunca release, nunca clone de bancada; ler/listar casa so leem o origin/main ja buscado dele, para o campo servido), PF_SUPORTE_ESPELHO (opcional, override do espelho), PF_SUPORTE_URL[=https://github.com/plcarvalho301/platafirma-casa.git] (opcional, forge do suporte), RAG_API_BASE (opcional, url do motor), RAG_API_TOKEN (opcional, auth do motor), MOTOR_ACERVO_URL e RAG_API_URL (opcionais, url do motor; valem mais que RAG_API_BASE; a ficha as le nesta ordem), PF_CADEIRA e PF_CONTA (opcionais, o autor de `ingerir biblioteca ficha`; --autor vale mais)
 # depende: docker, git, psql
 # substitui: situacao, escada, descobrir, bancada
 #

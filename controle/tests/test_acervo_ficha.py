@@ -7,11 +7,16 @@ conversor cai, o autor no corpo e os exits.
 """
 from __future__ import annotations
 
+import ast
 import importlib.machinery
 import importlib.util
 import json
 import os
+import re
 import subprocess
+import sys
+import threading
+import types
 from pathlib import Path
 
 import pytest
@@ -19,6 +24,8 @@ import pytest
 REPO = Path(__file__).resolve().parents[2]
 FICHA = REPO / "bin" / "_acervo" / "ficha"
 BIN = REPO / "bin" / "acervo"
+
+LINHAS_DO_EXIT_1 = ("varrido", "parecidos", "vizinho", "cura")      # spec acervo §4: todo exit 1 de consulta as traz
 
 UUID = "0d9fc4f8-c022-44e3-9979-d66e0ccbdbc0"
 OUTRO = "0d9fc4ff-ffff-4444-8888-000000000000"
@@ -42,15 +49,17 @@ class Rota:
 
     def __init__(self, mod, **respostas):
         self.mod, self.respostas, self.chamadas = mod, {k: list(v) for k, v in respostas.items()}, []
+        self.timeouts = []
 
     def __call__(self, metodo, caminho, *, params=None, corpo=None, timeout=60):
         self.chamadas.append((metodo, caminho, params, corpo))
+        self.timeouts.append((metodo, timeout))
         chave = f"{metodo} {caminho}"
         fila = self.respostas.get(chave)
         if not fila:
             raise AssertionError(f"chamada que o teste não previu: {chave} {params} {corpo}")
         r = fila.pop(0) if len(fila) > 1 else fila[0]
-        if isinstance(r, Exception):
+        if isinstance(r, BaseException):
             raise r
         return r if len(r) == 3 else (r[0], r[1], {})
 
@@ -91,7 +100,7 @@ def _resumo(sha=SHA, **kw):
     return r
 
 
-def _releitura(obra_id=UUID, tinha=False, aplicado=True, **resumo):
+def _releitura(obra_id=UUID, *, tinha=False, aplicado=True, **resumo):
     return 200, {"modo": "aplicado" if aplicado else "plano", "obra_id": obra_id, "objeto": f"acervo/{SHA}",
                  "tinha_ficha": tinha, "ficha": _resumo(**resumo)}
 
@@ -149,11 +158,40 @@ def test_termo_ambiguo_sai_2_e_lista_os_candidatos(mod, monkeypatch, capsys):
     assert "ambíguo, 2 obra(s)" in err and UUID in err and OUTRO in err
 
 
-def test_obra_que_nao_casa_sai_1_com_varrido_e_vizinho(mod, monkeypatch, capsys):
+def test_obra_que_nao_casa_sai_1_com_as_quatro_linhas_fixas(mod, monkeypatch, capsys):
     monkeypatch.setattr(mod, "_chamar", Rota(mod, **{"GET /acervo/obras": [(200, _colecao())]}))
     assert mod.main(["ler", "ffffffff"]) == 1
     err = capsys.readouterr().err
-    assert "obra não encontrada: ffffffff" in err and "varrido:" in err and "vizinho:" in err
+    assert "obra não encontrada: ffffffff" in err
+    assert all(f"{linha}:" in err for linha in LINHAS_DO_EXIT_1)
+
+def test_vizinho_quota_o_termo_para_rodar_como_esta(mod, monkeypatch, capsys):
+    monkeypatch.setattr(mod, "_chamar", Rota(mod, **{"GET /acervo/obras": [(200, _colecao())]}))
+    assert mod.main(["ler", "modelo de requisitos"]) == 1
+    assert "acervo listar biblioteca obra --sobre 'modelo de requisitos'" in capsys.readouterr().err
+
+def test_uuid_sem_hifens_vale_como_uuid(mod, monkeypatch):
+    rota = Rota(mod)
+    monkeypatch.setattr(mod, "_chamar", rota)
+    assert mod.classificar_termo(UUID.replace("-", "")) == ("uuid", UUID)
+    assert mod.resolver_obra(UUID.replace("-", "")) == {"obra_id": UUID} and rota.chamadas == []
+
+def test_prefixo_sem_hifen_de_9_hex_ou_mais_casa_o_uuid_com_hifens(mod, monkeypatch):
+    monkeypatch.setattr(mod, "_chamar", Rota(mod, **{"GET /acervo/obras": [(200, _colecao((UUID, "A")))]}))
+    assert mod.resolver_obra("0d9fc4f8c022")["obra_id"] == UUID
+
+def test_colecao_que_passa_a_paginar_sai_5_em_vez_de_dizer_que_nao_achou(mod, monkeypatch, capsys):
+    pagina = {"itens": [], "proximo": "cursor-2"}
+    monkeypatch.setattr(mod, "_chamar", Rota(mod, **{"GET /acervo/obras": [(200, pagina)]}))
+    assert mod.main(["ler", "0d9fc4f8"]) == 5
+    assert "paginar" in capsys.readouterr().err
+
+def test_titulo_nao_latino_nao_vira_vazio_nem_casa_qualquer_titulo_vazio(mod, monkeypatch):
+    assert mod._normal("Теория управления") == "теория управления"
+    itens = _colecao((UUID, "Теория управления"), (OUTRO, "!!!"))
+    monkeypatch.setattr(mod, "_chamar", Rota(mod, **{"GET /acervo/obras": [(200, itens)]}))
+    assert mod.resolver_obra("теория управления")["obra_id"] == UUID
+    assert mod.main(["ler", "???"]) == 1                  # termo que normaliza para vazio não casa o título vazio
 
 
 def test_colecao_que_responde_5xx_sai_5_e_nunca_diz_que_nao_achou(mod, monkeypatch, capsys):
@@ -206,6 +244,15 @@ def test_ler_obra_sem_ficha_sai_1_e_diz_a_cura(mod, monkeypatch, capsys):
     assert "sem ficha: Obra 0d9fc4f8 não tem ficha" in err
     assert f"vizinho:   acervo ler biblioteca obra {UUID}" in err
     assert f"cura:      acervo ingerir biblioteca ficha {UUID} --apply" in err
+    assert all(f"{linha}:" in err for linha in LINHAS_DO_EXIT_1)
+
+def test_ler_obra_catalogada_sem_arquivo_nao_manda_reler_porque_reler_sai_2(mod, monkeypatch, capsys):
+    resposta = (404, {"title": "FichaNaoEncontrada", "detail": f"Obra {UUID} está catalogada sem arquivo (não armazenada): a ficha é do arquivo"})
+    monkeypatch.setattr(mod, "_chamar", Rota(mod, **{f"GET /acervo/obras/{UUID}/ficha": [resposta]}))
+    assert mod.main(["ler", UUID]) == 1
+    err = capsys.readouterr().err
+    assert "ingerir biblioteca ficha" not in err and "reler não resolve" in err
+    assert all(f"{linha}:" in err for linha in LINHAS_DO_EXIT_1)
 
 
 def test_ler_obra_inexistente_pelo_uuid_sai_1_sem_dizer_sem_ficha(mod, monkeypatch, capsys):
@@ -213,7 +260,21 @@ def test_ler_obra_inexistente_pelo_uuid_sai_1_sem_dizer_sem_ficha(mod, monkeypat
     monkeypatch.setattr(mod, "_chamar", Rota(mod, **{f"GET /acervo/obras/{UUID}/ficha": [resposta]}))
     assert mod.main(["ler", UUID]) == 1
     err = capsys.readouterr().err
-    assert "ObraNaoEncontrada" in err and "sem ficha" not in err
+    assert f"obra não encontrada: Obra {UUID} não encontrada" in err and "sem ficha" not in err
+    assert all(f"{linha}:" in err for linha in LINHAS_DO_EXIT_1)
+
+@pytest.mark.parametrize("resposta, esperado", [
+    ((404, {"detail": "Not Found"}), (3, "RotaAusente")),                   # servidor sem a rota: JSON do Starlette, sem `title`
+    ((404, {"title": "HTTP 404", "detail": "texto"}), (3, "RotaAusente")),   # corpo que não é JSON: o _chamar o rotula assim
+    ((401, {"title": "NaoAutenticado", "detail": "token"}), (4, "RecusaDaBorda")),
+    ((403, {"detail": "Forbidden"}), (4, "RecusaDaBorda")),
+    ((503, {"title": "FonteIndisponivel", "detail": "banco fora"}), (5, "FonteIndisponivel")),
+])
+def test_o_exit_da_rota_que_nao_e_de_merito(mod, monkeypatch, capsys, resposta, esperado):
+    monkeypatch.setattr(mod, "_chamar", Rota(mod, **{f"GET /acervo/obras/{UUID}/ficha": [resposta]}))
+    assert mod.main(["ler", UUID]) == esperado[0]
+    assert "sem ficha" not in capsys.readouterr().err
+    assert mod._falha(*resposta).classe == esperado[1]
 
 
 def test_ler_com_a_rota_fora_sai_3(mod, monkeypatch, capsys):
@@ -289,12 +350,29 @@ def test_espera_pedida_pelo_servico_tem_teto_e_piso(mod, monkeypatch):
 
 
 def test_esperas_esgotadas_viram_falha_da_obra_exit_5_sem_gravar(mod, monkeypatch, capsys):
-    monkeypatch.setattr(mod, "TENTATIVAS_OCUPADO", 3)
+    monkeypatch.setattr(mod, "ESPERA_TOTAL_MAX_S", 3)
     ocupada = (409, {"title": "ConversaoOcupada", "detail": "ocupada"}, {"Retry-After": "1"})
     rota = Rota(mod, **{f"POST /acervo/obras/{UUID}/ficha/releitura": [ocupada]})
     monkeypatch.setattr(mod, "_chamar", rota)
     assert mod.main(["ingerir", UUID, "--apply"]) == 5
-    assert len(rota.posts()) == 3 and "seguiram ocupadas depois de 3 esperas" in capsys.readouterr().err
+    err = capsys.readouterr().err
+    assert len(rota.posts()) == 4 and "seguiram ocupadas por 3 s de espera" in err
+    assert err.count("espera   0d9fc4f8") == 1             # a espera avisa uma vez por obra, não a cada passo
+
+def test_retry_after_que_nao_e_numero_cai_no_padrao(mod, monkeypatch):
+    ocupada = lambda valor: (409, {"title": "ConversaoOcupada"}, {"Retry-After": valor})
+    rota = Rota(mod, **{f"POST /acervo/obras/{UUID}/ficha/releitura": [ocupada("abc"), ocupada("Wed, 21 Oct 2026 07:28:00 GMT"), _releitura()]})
+    monkeypatch.setattr(mod, "_chamar", rota)
+    assert mod.main(["ingerir", UUID, "--apply"]) == 0
+    assert mod._esperas == [mod.ESPERA_PADRAO_S, mod.ESPERA_PADRAO_S]
+
+def test_a_releitura_pede_o_timeout_longo_e_a_leitura_o_curto(mod, monkeypatch):
+    rota = Rota(mod, **{f"POST /acervo/obras/{UUID}/ficha/releitura": [_releitura()],
+                        f"GET /acervo/obras/{UUID}/ficha": [(200, _ficha_da_rota())]})
+    monkeypatch.setattr(mod, "_chamar", rota)
+    assert mod.main(["ingerir", UUID, "--apply"]) == 0 and mod.main(["ler", UUID]) == 0
+    assert rota.timeouts == [("POST", mod.TIMEOUT_RELEITURA_S), ("GET", mod.TIMEOUT_LEITURA_S)]
+    assert mod.TIMEOUT_RELEITURA_S > 180                 # a rota do servidor desiste aos 180 s
 
 
 def test_fixidez_quebrada_nao_se_repete_e_a_obra_vai_a_lista_de_falhas(mod, monkeypatch, capsys):
@@ -320,10 +398,11 @@ def test_tres_quedas_seguidas_param_o_laco_e_as_que_nao_comecaram_nao_sao_lidas(
     respostas.update({f"POST /acervo/obras/{i}/ficha/releitura": [fora] for i, _ in obras})
     rota = Rota(mod, **respostas)
     monkeypatch.setattr(mod, "_chamar", rota)
-    assert mod.main(["ingerir", "--sem-ficha", "--apply", "--paralelo", "1"]) == 1
+    assert mod.main(["ingerir", "--sem-ficha", "--apply", "--paralelo", "1"]) == 5      # laco parado: não se sabe se o resto se faz
     assert len(rota.posts()) == 3
     cap = capsys.readouterr()
     assert "parei: 3 obras seguidas com o conversor ou o catálogo fora" in cap.err
+    assert "obras da sequência: 00000000, 00000001, 00000002" in cap.err and "--pular 00000000,00000001,00000002" in cap.err
     assert cap.out.count("falhou  ") == 3 and "3 falharam" in cap.out
 
 
@@ -357,6 +436,108 @@ def test_sem_nada_a_ler_diz_que_ja_esta_tudo_e_nao_chama_a_leitura(mod, monkeypa
     assert "carga: nada a ler · 930 de 930 obras com arquivo já têm ficha" in capsys.readouterr().out and rota.posts() == []
 
 
+def _obras(n):
+    return [(f"0000000{i}-0000-0000-0000-000000000000", f"O{i}") for i in range(n)]
+
+def _laco_com(mod, monkeypatch, obras, por_obra, **cobertura_final):
+    """A rota de dúble de um laço: `por_obra` dá a resposta (ou a lista de respostas) do POST de cada obra."""
+    respostas = {"GET /acervo/fichas/cobertura": [(200, _cobertura(obras)), (200, _cobertura(obras, **cobertura_final))]}
+    respostas.update({f"POST /acervo/obras/{i}/ficha/releitura": por_obra(n, i) for n, (i, _) in enumerate(obras)})
+    rota = Rota(mod, **respostas)
+    monkeypatch.setattr(mod, "_chamar", rota)
+    return rota
+
+def test_o_paralelo_atende_varias_ao_mesmo_tempo(mod, monkeypatch, capsys):
+    obras = _obras(2)
+    rota = _laco_com(mod, monkeypatch, obras, lambda n, i: [_releitura(i)])
+    barreira = threading.Barrier(2, timeout=5)          # com um só trabalhador a segunda chamada nunca chega
+    def chamar(metodo, caminho, **kw):
+        if metodo == "POST":
+            barreira.wait()
+        return rota(metodo, caminho, **kw)
+    monkeypatch.setattr(mod, "_chamar", chamar)
+    assert mod.main(["ingerir", "--sem-ficha", "--apply", "--paralelo", "2"]) == 0
+    assert capsys.readouterr().out.count("feita   ") == 2
+
+def test_quedas_por_prazo_de_uma_obra_so_ou_por_espera_esgotada_nao_contam_e_o_laco_percorre_a_lista(mod, monkeypatch, capsys):
+    prazo = (503, {"title": "ConversorIndisponivel", "detail": "a ficha estourou o prazo do serviço"})
+    sem_resposta = mod.Falha(5, "indeterminável: ReadTimeout: sem resposta em 200 s", "ReadTimeout")
+    tipos = [prazo, sem_resposta, prazo, sem_resposta, prazo, _releitura("x")]
+    obras = _obras(6)
+    rota = _laco_com(mod, monkeypatch, obras, lambda n, i: [tipos[n] if n < 5 else _releitura(i)])
+    assert mod.main(["ingerir", "--sem-ficha", "--apply", "--paralelo", "1"]) == 1
+    cap = capsys.readouterr()
+    assert len(rota.posts()) == 6 and "parei" not in cap.err and "feita   00000005" in cap.out
+
+def test_rota_ausente_ou_recusa_da_borda_param_o_laco_na_hora(mod, monkeypatch, capsys):
+    obras = _obras(5)
+    rota = _laco_com(mod, monkeypatch, obras, lambda n, i: [(404, {"detail": "Not Found"})])
+    assert mod.main(["ingerir", "--sem-ficha", "--apply", "--paralelo", "1"]) == 5
+    assert len(rota.posts()) == 1
+    assert "parei: rota fora" in capsys.readouterr().err
+
+def test_pular_tira_da_lista_as_obras_que_o_laco_apontou(mod, monkeypatch, capsys):
+    obras = _obras(4)
+    rota = _laco_com(mod, monkeypatch, obras, lambda n, i: [_releitura(i)])
+    assert mod.main(["ingerir", "--sem-ficha", "--apply", "--paralelo", "1", "--pular", "00000000, 00000002"]) == 0
+    assert [c[1].split("/")[3][:8] for c in rota.posts()] == ["00000001", "00000003"]
+
+@pytest.mark.parametrize("argv", [["ingerir", "--sem-ficha", "--pular", "abc"], ["ingerir", "--sem-ficha", "--pular", "nao-hex"],
+                                  ["ingerir", UUID, "--pular", "0d9fc4f8"]])
+def test_pular_mal_formado_ou_sem_o_laco_sai_2(mod, monkeypatch, argv):
+    monkeypatch.setattr(mod, "_chamar", lambda *a, **k: pytest.fail("não podia chamar a rota"))
+    assert mod.main(argv) == 2
+
+def test_excecao_que_o_cliente_nao_previu_vira_falha_da_obra_e_o_laco_segue(mod, monkeypatch, capsys):
+    obras = _obras(2)
+    _laco_com(mod, monkeypatch, obras, lambda n, i: [RuntimeError("boom")] if n == 0 else [_releitura(i)])
+    assert mod.main(["ingerir", "--sem-ficha", "--apply", "--paralelo", "1"]) == 1
+    saida = capsys.readouterr().out
+    assert "falhou  00000000 RuntimeError: boom" in saida and "feita   00000001" in saida and "carga: 1 obra(s)" in saida
+
+def test_cobertura_final_que_falha_nao_esconde_os_totais_e_o_exit_e_5(mod, monkeypatch, capsys):
+    obras = _obras(1)
+    rota = Rota(mod, **{"GET /acervo/fichas/cobertura": [(200, _cobertura(obras)), (503, {"title": "FonteIndisponivel", "detail": "banco fora"})],
+                        f"POST /acervo/obras/{obras[0][0]}/ficha/releitura": [_releitura(obras[0][0])]})
+    monkeypatch.setattr(mod, "_chamar", rota)
+    assert mod.main(["ingerir", "--sem-ficha", "--apply", "--paralelo", "1"]) == 5
+    saida = capsys.readouterr().out
+    assert "carga: 1 obra(s) lida(s) e gravada(s) · 0 falharam · cobertura final indisponível (FonteIndisponivel: banco fora)" in saida
+
+def test_ctrl_c_fecha_o_relato_com_os_totais_e_sai_5(mod, monkeypatch, capsys):
+    obras = _obras(4)
+    _laco_com(mod, monkeypatch, obras, lambda n, i: [KeyboardInterrupt()] if n == 1 else [_releitura(i)])
+    assert mod.main(["ingerir", "--sem-ficha", "--apply", "--paralelo", "1"]) == 5
+    cap = capsys.readouterr()
+    assert "feita   00000000" in cap.out and re.search(r"carga: \d+ obra\(s\) lida\(s\) e gravada\(s\)", cap.out)
+    assert "interrompido" in cap.err
+
+def test_erro_no_proprio_relato_nao_perde_os_totais_e_depois_sobe(mod, monkeypatch, capsys):
+    obras = _obras(2)
+    _laco_com(mod, monkeypatch, obras, lambda n, i: [_releitura(i, tamanho=None)])         # `_humano(None)` quebra ao relatar
+    with pytest.raises(TypeError):
+        mod.main(["ingerir", "--sem-ficha", "--apply", "--paralelo", "1"])
+    assert "carga: " in capsys.readouterr().out
+
+def test_a_espera_do_409_dorme_em_passos_e_acorda_quando_o_laco_manda_parar(mod):
+    parar = threading.Event()
+    assert mod._esperar(5, parar) is True and mod._esperas == [1, 1, 1, 1, 1]
+    parar.set()
+    mod._esperas.clear()
+    assert mod._esperar(30, parar) is False and mod._esperas == []
+    assert mod._esperar(30, None) is True and mod._esperas == [30]           # sem laco, dorme de uma vez
+
+def test_obra_em_espera_do_409_e_interrompida_quando_o_laco_para_e_nao_conta_como_falha(mod, monkeypatch, capsys):
+    monkeypatch.setattr(mod, "_dormir", lambda s: threading.Event().wait(0.005))        # um passo de espera custa 5 ms
+    obras = _obras(6)
+    ocupada = (409, {"title": "ConversaoOcupada", "detail": "ocupada"}, {"Retry-After": "60"})
+    fora = (503, {"title": "ConversorIndisponivel", "detail": "caiu"})
+    _laco_com(mod, monkeypatch, obras, lambda n, i: [ocupada] if n == 0 else [fora])
+    assert mod.main(["ingerir", "--sem-ficha", "--apply", "--paralelo", "2"]) == 5
+    cap = capsys.readouterr()
+    assert "parei: 3 obras seguidas" in cap.err and "falhou  00000000" not in cap.out
+    assert cap.err.count("espera   00000000") <= 1          # avisa uma vez por obra, nunca a cada passo
+
 def test_uma_obra_com_apply_grava_e_diz_se_ja_tinha_ficha(mod, monkeypatch, capsys):
     rota = Rota(mod, **{f"POST /acervo/obras/{UUID}/ficha/releitura": [_releitura(tinha=True)]})
     monkeypatch.setattr(mod, "_chamar", rota)
@@ -379,18 +560,91 @@ def test_uso_errado_sai_2_com_a_usage_e_antes_de_chamar_a_rota(mod, monkeypatch,
 # --- o verbo é cliente fino (arq:0089) -------------------------------------------------------------
 
 def test_o_verbo_nao_abre_o_banco_nem_o_balde_nem_roda_programa(mod):
-    fonte = FICHA.read_text(encoding="utf-8")
-    for proibido in ("docker", "psql", "subprocess", "boto3", "minio", "psycopg"):
-        assert proibido not in fonte.lower(), f"arq:0089 §2: o verbo é cliente da rota e não usa {proibido}"
+    arvore = ast.parse(FICHA.read_text(encoding="utf-8"))
+    nos = list(ast.walk(arvore))
+    importados = ({a.name.split(".")[0] for no in nos if isinstance(no, ast.Import) for a in no.names}
+                  | {no.module.split(".")[0] for no in nos if isinstance(no, ast.ImportFrom) and no.module})
+    proibidos = {"subprocess", "psycopg", "psycopg2", "boto3", "minio", "docker", "sqlalchemy", "pty"}
+    assert not importados & proibidos, f"arq:0089 §2: o verbo é cliente da rota; importa {importados & proibidos}"
+
+# --- o cliente HTTP: o que sai e como volta ---------------------------------------------------------
+
+def _requests_falso(monkeypatch, *, resposta=None, erro=None):
+    """Um módulo `requests` de dúble: guarda o que o cliente mandou e devolve a resposta ou levanta o erro dado."""
+    class RequestException(Exception):
+        pass
+    class ConnectionError(RequestException):
+        pass
+    class Timeout(RequestException):
+        pass
+    visto = {}
+    def request(metodo, url, **kw):
+        visto.update(metodo=metodo, url=url, **kw)
+        if erro:
+            raise {"conexao": ConnectionError, "prazo": Timeout, "outro": RequestException}[erro]("x")
+        return resposta
+    m = types.ModuleType("requests")
+    m.request = request
+    m.exceptions = types.SimpleNamespace(RequestException=RequestException, ConnectionError=ConnectionError, Timeout=Timeout)
+    monkeypatch.setitem(sys.modules, "requests", m)
+    return visto
+
+class _Resposta:
+    def __init__(self, status=200, corpo=b"{}", json_=None):
+        self.status_code, self.content, self.text, self.headers = status, corpo, corpo.decode(), {}
+        self._json = json_
+
+    def json(self):
+        if self._json is None:
+            raise ValueError("não é JSON")
+        return self._json
+
+def test_chamar_leva_timeout_traceparent_e_token_e_o_ambiente_vale_mais_que_o_adaptador(mod, monkeypatch):
+    visto = _requests_falso(monkeypatch, resposta=_Resposta(json_={"ok": 1}))
+    for var in ("MOTOR_ACERVO_URL", "RAG_API_URL", "RAG_API_BASE", "RAG_API_TOKEN"):
+        monkeypatch.delenv(var, raising=False)
+    monkeypatch.setenv("RAG_API_BASE", "http://base:1")
+    monkeypatch.setenv("RAG_API_URL", "http://url:2/")
+    monkeypatch.setenv("RAG_API_TOKEN", "t0k")
+    assert mod._chamar("POST", "/x", corpo={"a": 1}, timeout=200) == (200, {"ok": 1}, {})
+    assert visto["url"] == "http://url:2/x" and visto["timeout"] == 200 and visto["json"] == {"a": 1}
+    assert visto["headers"]["authorization"] == "Bearer t0k"
+    assert re.fullmatch(r"00-[0-9a-f]{32}-[0-9a-f]{16}-01", visto["headers"]["traceparent"])
+    monkeypatch.setenv("MOTOR_ACERVO_URL", "http://motor:3")
+    mod._chamar("GET", "/y")
+    assert visto["url"] == "http://motor:3/y" and visto["timeout"] == mod.TIMEOUT_LEITURA_S
+
+@pytest.mark.parametrize("erro, codigo, classe", [("conexao", 3, None), ("prazo", 5, "ReadTimeout"), ("outro", 5, None)])
+def test_chamar_falha_de_rede_e_falha_com_o_exit_certo(mod, monkeypatch, erro, codigo, classe):
+    _requests_falso(monkeypatch, erro=erro)
+    with pytest.raises(mod.Falha) as e:
+        mod._chamar("GET", "/x")
+    assert e.value.codigo == codigo and e.value.classe == classe
+
+def test_chamar_corpo_que_nao_e_json_vira_title_http_e_corpo_vazio_vira_dict_vazio(mod, monkeypatch):
+    _requests_falso(monkeypatch, resposta=_Resposta(status=502, corpo=b"<html>bad gateway</html>"))
+    status, dados, _ = mod._chamar("GET", "/x")
+    assert status == 502 and dados == {"title": "HTTP 502", "detail": "<html>bad gateway</html>"}
+    _requests_falso(monkeypatch, resposta=_Resposta(status=204, corpo=b""))
+    assert mod._chamar("GET", "/x")[1] == {}
+
+def test_renderizar_aguenta_texto_e_arquivo_nulos(mod):
+    d = _ficha_da_rota(texto=None)
+    d["obra"]["arquivo"] = None
+    saida = mod.renderizar(d)
+    assert "arquivo: —" in saida and "texto:" not in saida
 
 
 # --- o despachante ---------------------------------------------------------------------------------
 
 def _acervo(*args, env=None):
-    return subprocess.run([str(BIN), *args], capture_output=True, text=True, env={**os.environ, **(env or {})})
+    return subprocess.run([str(BIN), *args], capture_output=True, text=True, env={**os.environ, **(env or {})},
+                          check=False, timeout=60)
 
 
-ROTA_FECHADA = {"MOTOR_ACERVO_URL": "http://127.0.0.1:9", "RAG_API_URL": "", "RAG_API_BASE": ""}
+# o `requests` usa proxy do ambiente até para 127.0.0.1; sem limpá-lo, a resposta do proxy sairia 5 e o teste dependeria da máquina
+ROTA_FECHADA = {"MOTOR_ACERVO_URL": "http://127.0.0.1:9", "RAG_API_URL": "", "RAG_API_BASE": "",
+                "http_proxy": "", "https_proxy": "", "HTTP_PROXY": "", "HTTPS_PROXY": "", "no_proxy": "*", "NO_PROXY": "*"}
 
 
 def test_a_usage_do_acervo_lista_as_duas_formas_da_ficha():
