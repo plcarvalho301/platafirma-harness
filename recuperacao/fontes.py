@@ -79,7 +79,10 @@ def _constroi_fontes(caminho: Path | str | None = None, texto: str | None = None
             FonteInfo("mesa", "memoria", "ia", "postgres", "exata", "", "", 0),
             FonteInfo("registro", "decisao", "gestao-estrategica", "git", "exata", "", "", 0),
             FonteInfo("wiki", "conhecimento", "dados", "HTTP", "exata", "", "", 0),
-            FonteInfo("acervo", "conhecimento", "dados", "HTTP", "semantica", "", "", 0),
+            # busca é do motor (ia), leitura do conhecimento (dados): papéis na 079
+            FonteInfo("acervo", "conhecimento", "dados", "HTTP", "semantica",
+                      "busca pelo motor (endereço), leitura por acervo ler <particao> secao "
+                      "(texto); papéis em ferramental_fonte_papel", "", 0),
         ]
 
     membros = {info.slug.upper().replace("-", "_"): info.slug for info in infos}

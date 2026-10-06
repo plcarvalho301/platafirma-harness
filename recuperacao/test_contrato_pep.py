@@ -17,7 +17,7 @@ import pytest
 
 from recuperacao.envelope import Causa, Cobertura, ContratoViolado
 from recuperacao.fontes import DOMINIO, PREFIXO_SOBRE, TIPO, Fonte
-from recuperacao.pep import ACAO, PEP, Negativa, recusa_por_concessao
+from recuperacao.pep import ACAO, ACAO_ACERVO, PEP, Negativa, recusa_por_concessao
 
 RAIZ = Path(__file__).resolve().parents[1]
 POLITICA = RAIZ / "politica-acesso"
@@ -74,7 +74,9 @@ def test_cada_fonte_leva_o_proprio_dominio_e_tipo(pep):
 
 
 def test_acao_por_fonte_e_o_verbo_humano_da_materia(pep):
-    assert pep.acao(Fonte("acervo")) == "rag_buscar"
+    assert pep.acao(Fonte("acervo")) == "rag_buscar", "o `recuperar` no acervo é a busca"
+    assert ACAO_ACERVO == {"busca": "rag_buscar", "leitura": "acervo_ler"}, (
+        "busca e leitura do acervo têm ação própria (arq:0119 §4, #3312)")
     assert pep.acao(Fonte("wiki")) == "wiki_ler"
     assert pep.acao(Fonte("fila")) == "msg_ler"
     for f in (Fonte("board"), Fonte("mesa"), Fonte("registro")):

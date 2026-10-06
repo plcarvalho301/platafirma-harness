@@ -1,5 +1,5 @@
 {
-  "descricao": "Recupera estado da plataforma consultando fontes declaradas.\nFontes disponíveis:\n- board (exata): capacidade trabalho, dono TI — HTTP do rastreador + header de identidade\n- fila (exata): capacidade mensagem, dono TI — XINFO STREAM · XRANGE no motor-msg\n- mesa (exata): capacidade memoria, dono dados — mapa por chave (arq:0062)\n- registro (exata): capacidade decisao, dono gestao-estrategica — decisions/INDICE.md, mantido na escrita\n- wiki (exata): capacidade conhecimento, dono dados — API do MediaWiki\n- acervo (semantica): capacidade conhecimento, dono dados — API do rag",
+  "descricao": "Recupera estado da plataforma consultando fontes declaradas.\nFontes disponíveis:\n- board (exata): capacidade trabalho, dono TI — HTTP do rastreador + header de identidade\n- fila (exata): capacidade mensagem, dono TI — XINFO STREAM · XRANGE no motor-msg\n- mesa (exata): capacidade memoria, dono dados — mapa por chave (arq:0062)\n- registro (exata): capacidade decisao, dono gestao-estrategica — decisions/INDICE.md, mantido na escrita\n- wiki (exata): capacidade conhecimento, dono dados — API do MediaWiki\n- acervo (semantica): capacidade conhecimento, dono dados — busca pelo motor (endereço), leitura por acervo ler <particao> secao (texto); papéis em ferramental_fonte_papel",
   "tokens": 165,
   "fontes": [
     {
@@ -53,7 +53,7 @@
       "dono": "dados",
       "transporte": "HTTP",
       "classe": "semantica",
-      "contrato_de_leitura": "API do rag",
+      "contrato_de_leitura": "busca pelo motor (endereço), leitura por acervo ler <particao> secao (texto); papéis em ferramental_fonte_papel",
       "gold": "nao-calibrada"
     }
   ]

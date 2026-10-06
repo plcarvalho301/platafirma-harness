@@ -1,5 +1,11 @@
 """Adaptador do acervo — a única fonte semântica das seis.
 
+Dois papéis, dois donos (arq:0119 §1.2 e §4; migração 079, `ferramental_fonte_papel`): a
+BUSCA pelo sentido é da capacidade `motor` (dona ia) e devolve só endereço — obra, seção,
+escore, cobertura; a LEITURA do texto pelo endereço é da capacidade `conhecimento` (dona
+dados), na rota `POST /acervo/secoes/consulta`. O adaptador encadeia as duas e não monta
+texto por conta própria (#3312).
+
 `spec_recuperador.md` §5: contrato = API do rag; classe **semântica**; carimbo =
 `indice_carimbo`; `dominio = plataforma-acervo`; `tipo = acervo`; prefixo de `sobre` =
 `acervo:<colecao>/*`. §4: chave = `acervo:<sha256 do objeto>#<âncora>[:p<idx>]`, versão =
@@ -39,7 +45,6 @@ from __future__ import annotations
 
 import json
 import os
-import re
 import urllib.error
 import urllib.request
 
@@ -54,14 +59,15 @@ CHAVE_CURTA = os.environ.get("PF_ACERVO_CHAVE_CURTA") == "1"
 
 FORMATO_COMPLETO = "completo-v1"
 
-# `texto="secao"` não devolve a seção POR FONTE: o rag monta uma fita única em `contexto`,
-# numerada `[n] (arquivo · section_id) — breadcrumb`, e deixa `fontes[].texto` nulo. É a
-# recuperação contextual do §5 do lado deles — o trecho recolado à seção que lhe dá
-# sentido —, e sem desmembrar a fita o envelope serviria só rótulo onde a fonte serviu
-# texto. O corte casa `[n]` com `fontes[n-1]`, e SÓ vale quando a contagem bate: bloco a
-# menos, e o adaptador cai para `ref` em vez de emparelhar texto com a procedência errada,
-# que é o pior defeito possível numa citação.
-_BLOCO = re.compile(r"^\[(\d+)\] \(", re.MULTILINE)
+# arq:0119 §1.2 e §3: a busca (capacidade motor, dona ia) devolve endereço, escore e
+# cobertura; a consulta termina com a fonte entregue pelo acervo (capacidade conhecimento,
+# dona dados). Por isso o adaptador pede à busca SEMPRE `texto="nenhum"` e, quando o
+# chamador quer texto, lê a seção na rota de leitura pelo `secao_id` que a busca devolveu —
+# a mesma rota que o verbo `acervo ler <particao> secao` consome, e é isso que faz o texto
+# servido aqui ser o mesmo do verbo no mesmo endereço (#3312).
+ROTA_BUSCA = "/acervo/trechos/consulta"
+ROTA_LEITURA = "/acervo/secoes/consulta"
+LOTE_LEITURA = 50  # teto da rota de leitura por chamada
 
 # Rótulo do rag → enum do §3. O rag não tem `nao-calibrada` nem `fonte-nao-indexada`:
 # aquele é juízo do adaptador (§13, sem gold), este é falha de alcance.
@@ -137,13 +143,14 @@ class AdaptadorAcervo(Adaptador):
         pergunta = (alvo or "").strip()
         if not pergunta:
             return []
-        corpo = {"pergunta": pergunta, "k": k, "texto": texto}
+        # A busca devolve só o endereço; o texto vem da leitura (arq:0119 §1.2).
+        corpo = {"pergunta": pergunta, "k": k, "texto": "nenhum"}
         for eixo in ("dominio", "subdominio", "frente", "colecao"):
             if filtros.get(eixo):
                 corpo[eixo] = filtros[eixo]
         if filtros.get("rerank"):
             corpo["rerank"] = True
-        d = self._http("/acervo/trechos/consulta", corpo)
+        d = self._http(ROTA_BUSCA, corpo)
         if d.get("erro"):
             raise FonteIndisponivel(Causa.FORA_DO_AR, str(d["erro"])[:120])
         self._ultimo = d
@@ -159,23 +166,34 @@ class AdaptadorAcervo(Adaptador):
         # `/facets`, memoizado. Sem isto a versão sairia `sem-carimbo`, medido em 20/08.
         carimbo = self._carimbo().removeprefix("acervo:")
         fontes = d.get("fontes") or []
-        secoes = self._secoes(d, len(fontes)) if texto == "secao" else {}
-        return [self._item(f, texto, carimbo, secoes.get(f.get("n")))
+        textos: dict[str, str] = {}
+        if texto != "nenhum" and fontes:
+            particao = ((d.get("filtro") or {}).get("particao") or "").strip()
+            ids = [str(f["secao_id"]).lower() for f in fontes if f.get("secao_id")]
+            textos = self._le_secoes(particao, ids)
+        return [self._item(f, texto, carimbo,
+                           textos.get(str(f.get("secao_id") or "").lower()))
                 for f in fontes]
 
-    @staticmethod
-    def _secoes(d: dict, n_fontes: int) -> dict[int, str]:
-        """A fita de `contexto` partida por `[n]`, e só se a contagem bater."""
-        fita = d.get("contexto") or ""
-        if not fita:
+    def _le_secoes(self, particao: str, ids: list[str]) -> dict[str, str]:
+        """O texto de cada seção pela rota de leitura do acervo, chaveado pelo `secao_id`.
+
+        A partição vem uma vez por resposta da busca (`filtro.particao`); cada busca é
+        numa partição só. Seção que a leitura não serve (`nao_achadas`: fora de serviço,
+        retirada, só parte não textual) fica sem texto, e o item sai por `ref` — nunca com
+        texto de outra seção. Falha de transporte da leitura levanta: a fonte não entregou.
+        """
+        if not particao or not ids:
             return {}
-        marcas = list(_BLOCO.finditer(fita))
-        if len(marcas) != n_fontes:
-            return {}
-        saida = {}
-        for i, m in enumerate(marcas):
-            fim = marcas[i + 1].start() if i + 1 < len(marcas) else len(fita)
-            saida[int(m.group(1))] = fita[m.start():fim].strip()
+        unicos = list(dict.fromkeys(ids))
+        saida: dict[str, str] = {}
+        for i in range(0, len(unicos), LOTE_LEITURA):
+            lote = unicos[i:i + LOTE_LEITURA]
+            r = self._http(ROTA_LEITURA, {"particao": particao, "secao_ids": lote})
+            for s in r.get("secoes") or []:
+                sid, corpo = str(s.get("secao_id") or "").lower(), s.get("texto")
+                if sid in lote and corpo is not None:
+                    saida[sid] = corpo
         return saida
 
     def _item(self, f: dict, texto: str, carimbo: str, secao: str | None = None) -> Item:
@@ -190,7 +208,7 @@ class AdaptadorAcervo(Adaptador):
         versao = Versao(tipo=VersaoTipo.DIGEST, valor=(carimbo or "sem-carimbo")[:12])
         proc = Procedencia(fonte=Fonte.ACERVO, chave=chave, versao=versao)
         casamento = Casamento.EXATO if f.get("codigo_exato") else Casamento.APROXIMADO
-        corpo = secao if texto == "secao" else f.get("texto")
+        corpo = secao
         if texto == "nenhum" or corpo is None:
             trilha = " › ".join(f.get("breadcrumb") or [])
             ref = f"{f.get('obra', '?')}" + (f" — {trilha}" if trilha else "")
