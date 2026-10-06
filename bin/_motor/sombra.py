@@ -5,19 +5,27 @@ Roda DENTRO do contêiner do rag (rag-extractor-api), lançado por
 em banco nenhum, não muda env do serviço, carrega os candidatos num processo à parte, num venv
 que herda o torch da imagem e só sobe transformers/sentence-transformers.
 
+Duas regras que a primeira rodada (05/10/2026) ensinou a escrever:
+- o banco se lê em autocommit: transação aberta por horas segura AccessShareLock e trava
+  qualquer DDL do acervo;
+- o corpus nunca se junta na memória: embeda um bloco, compara com todas as perguntas, guarda o
+  top-k corrente e descarta o bloco. A matriz inteira de 261 mil trechos derrubou a máquina.
+
+Corpus da biblioteca: um SUBCORPUS, não a partição inteira — os trechos-alvo do gabarito, até 300
+trechos de cada obra-alvo, o top-50 do servido (vetor) e da palavra exata para cada pergunta, e
+uma amostra aleatória como distração. Viés declarado: o pool do servido entra, o dos candidatos
+não (montá-lo exigiria embedar tudo); acerto de candidato fora do pool não conta. A casa é pequena
+e entra inteira.
+
 O que mede, por partição:
-- o braço de significado ISOLADO (os outros braços da fusão não dependem do embedder): top-k
-  exato do servido (vetores gravados em motor.vetor + embed_query do próprio serviço, com a
-  instrução da pergunta servida) contra o top-k exato de cada candidato, com o corpus inteiro da
-  partição reembeddado em memória, no mesmo teto de 512 tokens do serviço;
+- o braço de significado ISOLADO: top-k exato de cada variante sobre o mesmo corpus;
 - no gabarito (biblioteca): hit@k e MRR por família, e o piso de abstenção que melhor separa
   positivas de negativas, por modelo — o piso é do embedder, não do motor;
-- no replay das perguntas reais do log (acervo.evento_recuperacao): um juiz de fora das duas
-  famílias (cross-encoder BAAI/bge-reranker-v2-m3, base XLM-R) pontua o pool unido; nDCG@k por
-  modelo e vitória/empate/derrota contra o servido. O juiz é conferido contra o gabarito na
-  mesma rodada: concordância de sinal com o MRR do gabarito.
+- no replay das perguntas reais do log: juiz de fora das duas famílias (cross-encoder
+  BAAI/bge-reranker-v2-m3) pontua o pool unido; nDCG@k e vitória/empate/derrota contra o
+  servido; o juiz é conferido contra o gabarito na mesma rodada.
 
-Saída: <saida>/log.txt (progresso) e <saida>/resultado.json (tudo que o verbo resume).
+Saída: <saida>/log.txt (progresso) e <saida>/resultado.json (o que o verbo resume).
 """
 import gc
 import json
@@ -28,11 +36,16 @@ import re
 import sys
 import time
 import traceback
+from types import SimpleNamespace
 
 ARGS = json.loads(os.environ["SOMBRA_ARGS"])
 SAIDA = ARGS["saida"]
 K = int(ARGS.get("k", 8))
 MAX_PERGUNTAS = int(ARGS.get("max_perguntas", 1000))
+POOL = 50            # candidatos por pergunta, por braço, no subcorpus
+AMOSTRA = 10000      # trechos aleatórios de distração
+POR_OBRA = 300       # teto de trechos por obra-alvo do gabarito
+BLOCO = 2048         # trechos por bloco de embed: é o que vive na memória
 _LOG = open(os.path.join(SAIDA, "log.txt"), "a", buffering=1)
 
 
@@ -48,8 +61,6 @@ from pgvector.psycopg import register_vector  # noqa: E402
 
 DEV = "cuda" if torch.cuda.is_available() else "cpu"
 
-# Por candidato: prefixo da pergunta e do trecho (o do cartão do modelo), dimensões a medir
-# (a primeira é a que caberia no esquema servido, vetor_d1024), dtype e trust_remote_code.
 CANDIDATOS = {
     "nvidia/Nemotron-3-Embed-1B-BF16": {
         "curto": "Nemotron-3-Embed-1B", "q": "query: ", "p": "passage: ",
@@ -81,6 +92,11 @@ def _base(sid):
     return re.sub(r"~\d+$", "", sid or "")
 
 
+def _arr(emb):
+    # pgvector recente devolve Vector, nao ndarray
+    return np.asarray(emb.to_numpy() if hasattr(emb, "to_numpy") else emb, dtype=np.float16)
+
+
 def versoes():
     out = {"torch": torch.__version__, "cuda": DEV}
     for mod in ("transformers", "sentence_transformers"):
@@ -91,51 +107,122 @@ def versoes():
     return out
 
 
-def carrega_particao(st, conn, particao):
-    """ids, textos e matriz do servido (vetores gravados) dos trechos servindo da partição."""
-    api = _API[particao]
-    cm = psycopg.connect(st.motor_dsn)
+def conectar_motor(st):
+    cm = psycopg.connect(st.motor_dsn, autocommit=True)
     register_vector(cm)
-    ind = [str(r[0]) for r in cm.execute(
+    return cm
+
+
+def indices_servindo(cm, api):
+    return [str(r[0]) for r in cm.execute(
         "SELECT id FROM motor.indice WHERE estado = 'servindo' AND remissao = 'vetorial' "
         "AND particao = %s", (api,)).fetchall()]
+
+
+def subcorpus_biblioteca(conn, cm, ind, perguntas, Qs, gold):
+    """ids de trecho do subcorpus da biblioteca (ver docstring do módulo)."""
+    sel = set()
+    secs = sorted({_base(g["alvo_section_id"]) for g in gold if g.get("alvo_section_id")})
+    obras = sorted({o for g in gold for o in (g.get("alvo_obra_ids") or [])})
+    if secs:
+        sel |= {r[0] for r in conn.execute(
+            """SELECT t.id::text FROM acervo.trecho t
+                 JOIN acervo.secao s ON s.id = t.secao_id
+                 JOIN acervo.impressao i ON i.id = t.impressao_id
+                WHERE i.estado = 'servindo'
+                  AND regexp_replace(s.ancora, '~[0-9]+$', '') = ANY(%s)""", (secs,)).fetchall()}
+    if obras:
+        sel |= {r[0] for r in conn.execute(
+            """SELECT id FROM (
+                 SELECT t.id::text AS id,
+                        row_number() OVER (PARTITION BY i.obra_id ORDER BY random()) AS rn
+                   FROM acervo.trecho t JOIN acervo.impressao i ON i.id = t.impressao_id
+                  WHERE i.estado = 'servindo' AND i.obra_id = ANY(%s::uuid[])) x
+                WHERE rn <= %s""", (obras, POR_OBRA)).fetchall()}
+    n_gold = len(sel)
+    from motor_acervo.store import acervo_store as acs
+    from motor_acervo.store import motor_store as ms
+    escopo = SimpleNamespace(particao="obra", dominios=[], subdominios=[], serve_a=[], colecoes=[])
+    n_vet = n_lex = 0
+    for qi, q in enumerate(perguntas):
+        try:
+            v = ms._ann(cm, ind, Qs[qi].float().numpy(), 1024, POOL)
+            n_vet += len(v)
+            sel |= set(v)
+        except Exception as e:  # noqa: BLE001
+            log(f"  ann falhou na pergunta {qi}: {e}")
+        try:
+            lx = acs.candidatos_lexicais(conn, escopo, q[:500], POOL)
+            n_lex += len(lx)
+            sel |= set(lx)
+        except Exception as e:  # noqa: BLE001
+            log(f"  lexical falhou na pergunta {qi}: {e}")
+    sel |= {r[0] for r in cm.execute(
+        "SELECT alvo_id::text FROM motor.vetor WHERE indice_id = ANY(%s::uuid[]) "
+        "AND dimensao = 1024 ORDER BY random() LIMIT %s", (ind, AMOSTRA)).fetchall()}
+    log(f"subcorpus biblioteca: {len(sel)} trechos (gabarito {n_gold}, "
+        f"pool vetor {n_vet}, pool lexical {n_lex}, amostra {AMOSTRA})")
+    return sel
+
+
+def carrega_corpus(conn, cm, api, ind, sel=None):
+    """ids, textos e vetores do servido. `sel` restringe a um conjunto de ids."""
     ids, vecs = [], []
-    with cm.cursor(name=f"sombra_{api}") as cur:
-        cur.itersize = 5000
-        cur.execute("SELECT alvo_id::text, embedding::vector(1024) FROM motor.vetor "
-                    "WHERE indice_id = ANY(%s::uuid[]) AND dimensao = 1024", (ind,))
-        for alvo, emb in cur:
-            ids.append(alvo)
-            # pgvector recente devolve Vector, nao ndarray
-            vecs.append(np.asarray(emb.to_numpy() if hasattr(emb, "to_numpy") else emb,
-                                   dtype=np.float16))
-    cm.close()
+    if sel is None:
+        rows = cm.execute("SELECT alvo_id::text, embedding::vector(1024) FROM motor.vetor "
+                          "WHERE indice_id = ANY(%s::uuid[]) AND dimensao = 1024", (ind,)).fetchall()
+        for a, e in rows:
+            ids.append(a)
+            vecs.append(_arr(e))
+    else:
+        lista = sorted(sel)
+        for i in range(0, len(lista), 5000):
+            for a, e in cm.execute(
+                    "SELECT alvo_id::text, embedding::vector(1024) FROM motor.vetor "
+                    "WHERE indice_id = ANY(%s::uuid[]) AND dimensao = 1024 "
+                    "AND alvo_id = ANY(%s::uuid[])", (ind, lista[i:i + 5000])).fetchall():
+                ids.append(a)
+                vecs.append(_arr(e))
+    vistos, uniq, uvec = set(), [], []
+    for a, v in zip(ids, vecs):
+        if a not in vistos:
+            vistos.add(a)
+            uniq.append(a)
+            uvec.append(v)
     meta = {}
-    for i in range(0, len(ids), 5000):
-        for r in conn.execute(SQL_TXT[api], (ids[i:i + 5000],)).fetchall():
+    for i in range(0, len(uniq), 5000):
+        for r in conn.execute(SQL_TXT[api], (uniq[i:i + 5000],)).fetchall():
             meta[r[0]] = {"texto": r[1] or "", "obra": r[2], "ancora": r[3] or "", "arquivo": r[4]}
-    manter = [j for j, a in enumerate(ids) if a in meta and meta[a]["texto"].strip()]
-    ids = [ids[j] for j in manter]
-    mat = np.stack([vecs[j] for j in manter]) if manter else np.zeros((0, 1024), np.float16)
-    log(f"particao {particao}: {len(ind)} indices servindo, {len(ids)} trechos com texto")
-    return {"ids": ids, "meta": meta, "servido": mat}
-
-
-def topk(Q, C, k):
-    """top-k exato por cosseno (Q e C normalizados). Devolve (sims, indices) em numpy."""
-    sims, idx = [], []
-    C = C.to(DEV)
-    for i in range(0, Q.shape[0], 256):
-        s = (Q[i:i + 256].to(DEV, C.dtype) @ C.T).float()
-        v, ix = torch.topk(s, min(k, C.shape[0]), dim=1)
-        sims.append(v.cpu().numpy())
-        idx.append(ix.cpu().numpy())
-    del C
-    return np.concatenate(sims), np.concatenate(idx)
+    manter = [j for j, a in enumerate(uniq) if a in meta and meta[a]["texto"].strip()]
+    return {"ids": [uniq[j] for j in manter], "meta": meta,
+            "servido": np.stack([uvec[j] for j in manter])}
 
 
 def _norm(t):
     return F.normalize(t.float(), dim=-1)
+
+
+class TopK:
+    """top-k corrente por pergunta, atualizado bloco a bloco: a memória é a de um bloco."""
+
+    def __init__(self, Q, k):
+        self.Q = Q.to(DEV).half()
+        n = Q.shape[0]
+        self.k = k
+        self.v = torch.full((n, k), -float("inf"), device=DEV)
+        self.i = torch.full((n, k), -1, dtype=torch.long, device=DEV)
+
+    def bloco(self, offset, E):
+        s = (self.Q @ E.to(DEV).half().T).float()
+        kk = min(self.k, s.shape[1])
+        v, ix = torch.topk(s, kk, dim=1)
+        cv = torch.cat([self.v, v], 1)
+        ci = torch.cat([self.i, ix + offset], 1)
+        self.v, pos = torch.topk(cv, self.k, dim=1)
+        self.i = torch.gather(ci, 1, pos)
+
+    def fim(self):
+        return self.v.cpu().numpy(), self.i.cpu().numpy()
 
 
 def carrega_candidato(nome, cfg):
@@ -149,19 +236,10 @@ def carrega_candidato(nome, cfg):
     return m
 
 
-def encode(m, textos, prefixo, lote=4096):
-    """Encode em blocos, devolvido em fp16 na CPU; prompt='' desliga prompt default do modelo
-    (o prefixo do cartão vai à mão, uma vez só)."""
-    partes, t0 = [], time.time()
-    for i in range(0, len(textos), lote):
-        e = m.encode([prefixo + t for t in textos[i:i + lote]], batch_size=32, prompt="",
-                     convert_to_tensor=True, normalize_embeddings=False, show_progress_bar=False)
-        partes.append(e.float().cpu().half())
-        if len(textos) > lote:
-            feito = min(i + lote, len(textos))
-            taxa = feito / max(time.time() - t0, 1e-6)
-            log(f"    {feito}/{len(textos)} ({taxa:.0f}/s, faltam ~{(len(textos) - feito) / taxa / 60:.0f} min)")
-    return torch.cat(partes) if partes else torch.zeros((0, 1))
+def _enc(m, textos, prefixo):
+    """prompt='' desliga o prompt default do modelo; o prefixo do cartão vai à mão, uma vez."""
+    return m.encode([prefixo + t for t in textos], batch_size=32, prompt="",
+                    convert_to_tensor=True, normalize_embeddings=False, show_progress_bar=False)
 
 
 def agrega(ranks):
@@ -176,12 +254,11 @@ def agrega(ranks):
 
 def melhor_piso(pos, neg):
     """Piso único de similaridade do 1º lugar que minimiza erro total (positiva abaixo + negativa
-    acima). É o mesmo critério do ajuste aviso-de-cobertura-fraca."""
+    acima) — o critério do ajuste aviso-de-cobertura-fraca."""
     if not pos or not neg:
         return None
-    cands = sorted(set(pos) | set(neg))
     melhor = None
-    for t in cands:
+    for t in sorted(set(pos) | set(neg)):
         err = sum(1 for p in pos if p < t) + sum(1 for x in neg if x >= t)
         if melhor is None or err < melhor[0]:
             melhor = (err, t)
@@ -199,18 +276,14 @@ def main():
     from motor_acervo.store.db import get_conn
     st = load_settings()
     conn = get_conn(st)
+    conn.autocommit = True     # nada de transação aberta segurando lock no acervo
+    cm = conectar_motor(st)
     res = {"id": ARGS["id"], "em": time.strftime("%Y-%m-%dT%H:%M:%S%z"), "k": K,
            "versoes": versoes(), "instrucao_servida": os.environ.get("EMBED_QUERY_INSTRUCTION", ""),
-           "embedder_servido": st.embed_model, "modelos": {}, "corpus": {}}
+           "embedder_servido": st.embed_model, "modelos": {}, "corpus": {},
+           "subcorpus": {"pool_por_braco": POOL, "amostra": AMOSTRA, "por_obra_alvo": POR_OBRA}}
     log(f"versoes: {res['versoes']}")
 
-    particoes = [p for p in ARGS["particoes"]]
-    corpus = {}
-    for p in particoes:
-        corpus[p] = carrega_particao(st, conn, p)
-        res["corpus"][p] = len(corpus[p]["ids"])
-
-    # perguntas: gabarito (só biblioteca) e replay do log (todas as partições)
     gold = [json.loads(l) for l in open(ARGS["gabarito"], encoding="utf-8") if l.strip()]
     gold = [g for g in gold if g.get("pergunta")]
     linhas = conn.execute("SELECT pergunta FROM acervo.evento_recuperacao "
@@ -226,50 +299,61 @@ def main():
     perguntas = [g["pergunta"] for g in gold] + replay
     n_gold = len(gold)
 
-    # ranking[variante][particao] = (sims, idx) sobre `perguntas`
-    ranking = {}
-
-    # servido: embed_query do próprio serviço (instrução servida) + vetores gravados
     from motor_acervo.ingestao.embedding import embed_query
-    t0 = time.time()
-    Qs = torch.tensor(np.stack([embed_query(q, st) for q in perguntas])).half()
-    Qs = _norm(Qs)
+    Qs = _norm(torch.tensor(np.stack([embed_query(q, st) for q in perguntas])))
+
+    particoes = list(ARGS["particoes"])
+    corpus = {}
+    for p in particoes:
+        api = _API[p]
+        ind = indices_servindo(cm, api)
+        sel = subcorpus_biblioteca(conn, cm, ind, perguntas, Qs, gold) if p == "biblioteca" else None
+        corpus[p] = carrega_corpus(conn, cm, api, ind, sel)
+        res["corpus"][p] = len(corpus[p]["ids"])
+        log(f"particao {p}: {len(ind)} indices servindo, {res['corpus'][p]} trechos no corpus da medida")
+
+    ranking = {}
     variante = f"{SERVIDO}:{st.embed_model.split('/')[-1]}"
     ranking[variante] = {}
     for p in particoes:
-        C = _norm(torch.tensor(corpus[p]["servido"]))
-        ranking[variante][p] = topk(Qs, C.half(), K)
-        del C
-    res["modelos"][variante] = {"perguntas_s": round(time.time() - t0, 1)}
+        tk = TopK(Qs, K)
+        mat = corpus[p]["servido"]
+        for off in range(0, len(mat), BLOCO):
+            tk.bloco(off, _norm(torch.tensor(mat[off:off + BLOCO])))
+        ranking[variante][p] = tk.fim()
     log(f"{variante}: rankings prontos")
-    gc.collect()
-    torch.cuda.empty_cache()
 
     for nome in ARGS["modelos"]:
         cfg = CANDIDATOS.get(nome)
         if not cfg:
             res["modelos"][nome] = {"erro": "candidato sem configuracao em sombra.py (prefixos, dims)"}
-            log(f"{nome}: sem configuracao, pulado")
             continue
         try:
             log(f"{nome}: carregando")
             m = carrega_candidato(nome, cfg)
-            Q = encode(m, perguntas, cfg["q"])
+            Q = torch.cat([_enc(m, perguntas[i:i + 256], cfg["q"]).float().cpu()
+                           for i in range(0, len(perguntas), 256)])
             info = {}
             for p in particoes:
+                ids = corpus[p]["ids"]
+                textos = [corpus[p]["meta"][a]["texto"] for a in ids]
+                dims = [d for d in cfg["dims"]]
+                tks = {d: TopK(_norm(Q[:, :d]), K) for d in dims}
                 t0 = time.time()
-                log(f"{nome}: embeddando {len(corpus[p]['ids'])} trechos de {p}")
-                E = encode(m, [corpus[p]["meta"][a]["texto"] for a in corpus[p]["ids"]], cfg["p"])
-                dur = time.time() - t0
-                info[p] = {"segundos": round(dur, 1),
-                           "trechos_por_s": round(len(corpus[p]["ids"]) / max(dur, 1e-6), 1),
-                           "dim_nativa": int(E.shape[1])}
-                for d in cfg["dims"]:
-                    if d > E.shape[1]:
-                        continue
-                    v = f"{cfg['curto']}@{d}"
-                    ranking.setdefault(v, {})[p] = topk(_norm(Q[:, :d]).half(), _norm(E[:, :d]).half(), K)
-                del E
+                for off in range(0, len(textos), BLOCO):
+                    E = _enc(m, textos[off:off + BLOCO], cfg["p"])
+                    for d in dims:
+                        if d <= E.shape[1]:
+                            tks[d].bloco(off, _norm(E[:, :d]))
+                    del E
+                    feito = min(off + BLOCO, len(textos))
+                    taxa = feito / max(time.time() - t0, 1e-6)
+                    log(f"    {nome} {p}: {feito}/{len(textos)} ({taxa:.0f}/s)")
+                info[p] = {"segundos": round(time.time() - t0, 1),
+                           "trechos_por_s": round(len(textos) / max(time.time() - t0, 1e-6), 1)}
+                for d in dims:
+                    ranking.setdefault(f"{cfg['curto']}@{d}", {})[p] = tks[d].fim()
+                del tks
                 gc.collect()
                 torch.cuda.empty_cache()
             res["modelos"][nome] = info
@@ -282,9 +366,8 @@ def main():
 
     variantes = list(ranking)
 
-    # gabarito (biblioteca): hit@k, MRR por família, piso de abstenção
     res["gabarito"] = {}
-    rank_gold = {}  # variante -> lista de rank (None) por item positivo, na mesma ordem
+    rank_gold = {}
     if "biblioteca" in particoes:
         cp = corpus["biblioteca"]
         for v in variantes:
@@ -294,7 +377,7 @@ def main():
             fam = {"codigo": [], "sentido": []}
             pos, neg, rk = [], [], []
             for gi, g in enumerate(gold):
-                ids = [cp["ids"][j] for j in idx[gi]]
+                ids = [cp["ids"][j] for j in idx[gi] if j >= 0]
                 top1 = float(sims[gi][0])
                 if g.get("relevancia") == "negativa":
                     neg.append(top1)
@@ -325,7 +408,6 @@ def main():
                                   "geral": agrega(fam["codigo"] + fam["sentido"]),
                                   "abstencao": melhor_piso(pos, neg)}
 
-    # juiz: cross-encoder de outra família sobre o pool unido de cada pergunta
     log("juiz: carregando BAAI/bge-reranker-v2-m3")
     from sentence_transformers import CrossEncoder
     ce = CrossEncoder("BAAI/bge-reranker-v2-m3", max_length=512, device=DEV)
@@ -335,17 +417,20 @@ def main():
     except Exception:  # noqa: BLE001
         pass
     res["juiz"] = {"modelo": "BAAI/bge-reranker-v2-m3"}
-    ganho = {}  # (p, qi, alvo) -> prob
-    pares, chaves = [], []
+
+    def top_ids(v, p, qi):
+        ids_p = corpus[p]["ids"]
+        return [ids_p[j] for j in ranking[v][p][1][qi] if j >= 0]
+
+    ganho, pares, chaves = {}, [], []
     for p in particoes:
         meta = corpus[p]["meta"]
-        ids_p = corpus[p]["ids"]
         faixa = range(len(perguntas)) if p == "biblioteca" else range(n_gold, len(perguntas))
         for qi in faixa:
             pool = set()
             for v in variantes:
                 if p in ranking[v]:
-                    pool.update(ids_p[j] for j in ranking[v][p][1][qi])
+                    pool.update(top_ids(v, p, qi))
             for a in pool:
                 chaves.append((p, qi, a))
                 pares.append((perguntas[qi][:1000], meta[a]["texto"][:1500]))
@@ -371,28 +456,25 @@ def main():
         return dcg / idcg if idcg > 0 else 0.0
 
     serv = variantes[0]
-    res["replay"], amostra = {}, []
-    nd = {}  # (v, p, qi) -> ndcg
+    res["replay"], amostra, nd = {}, [], {}
     for p in particoes:
-        ids_p = corpus[p]["ids"]
         faixa = list(range(n_gold, len(perguntas)))
         out = {}
         for qi in range(len(perguntas)):
             if p != "biblioteca" and qi < n_gold:
                 continue
-            pool = {ids_p[j] for v in variantes if p in ranking[v] for j in ranking[v][p][1][qi]}
+            pool = {a for v in variantes if p in ranking[v] for a in top_ids(v, p, qi)}
             pg = [ganho[(p, qi, a)] for a in pool]
             for v in variantes:
                 if p in ranking[v]:
-                    nd[(v, p, qi)] = ndcg(p, qi, [ids_p[j] for j in ranking[v][p][1][qi]], pg)
+                    nd[(v, p, qi)] = ndcg(p, qi, top_ids(v, p, qi), pg)
         for v in variantes:
             if p not in ranking[v]:
                 continue
             vit = emp = der = 0
             jac = []
             for qi in faixa:
-                a_set = {ids_p[j] for j in ranking[v][p][1][qi]}
-                s_set = {ids_p[j] for j in ranking[serv][p][1][qi]}
+                a_set, s_set = set(top_ids(v, p, qi)), set(top_ids(serv, p, qi))
                 jac.append(len(a_set & s_set) / max(len(a_set | s_set), 1))
                 d = nd[(v, p, qi)] - nd[(serv, p, qi)]
                 if a_set == s_set or abs(d) < 0.02:
@@ -405,10 +487,9 @@ def main():
                       "vitorias": vit, "empates": emp, "derrotas": der,
                       "jaccard_com_servido": round(float(np.mean(jac)), 3) if jac else None,
                       "melhor_trecho_top3_medio": round(float(np.mean([
-                          max(ganho[(p, qi, ids_p[j])] for j in ranking[v][p][1][qi][:3])
-                          for qi in faixa])), 4) if faixa else None}
+                          max(ganho[(p, qi, a)] for a in top_ids(v, p, qi)[:3]) for qi in faixa])), 4)
+                      if faixa else None}
         res["replay"][p] = out
-        # amostra: as perguntas em que o melhor candidato e o servido mais discordam
         cands = [v for v in variantes[1:] if p in ranking[v]]
         if cands and faixa:
             melhor = max(cands, key=lambda v: out[v]["ndcg_medio"] or 0)
@@ -416,32 +497,29 @@ def main():
             meta = corpus[p]["meta"]
             for qi in difs:
                 def tops(v):
-                    return [{"arquivo": meta[ids_p[j]]["arquivo"], "ancora": meta[ids_p[j]]["ancora"],
-                             "juiz": round(ganho[(p, qi, ids_p[j])], 3),
-                             "texto": meta[ids_p[j]]["texto"][:200]}
-                            for j in ranking[v][p][1][qi][:3]]
+                    return [{"arquivo": meta[a]["arquivo"], "ancora": meta[a]["ancora"],
+                             "juiz": round(ganho[(p, qi, a)], 3), "texto": meta[a]["texto"][:200]}
+                            for a in top_ids(v, p, qi)[:3]]
                 amostra.append({"particao": p, "pergunta": perguntas[qi][:300],
                                 "servido": {"ndcg": round(nd[(serv, p, qi)], 3), "top3": tops(serv)},
                                 melhor: {"ndcg": round(nd[(melhor, p, qi)], 3), "top3": tops(melhor)}})
     res["amostra"] = amostra
 
-    # o juiz contra o gabarito: concordância de sinal entre ΔnDCG do juiz e ΔMRR do gabarito
     conc = {}
     if serv in rank_gold:
-        ms = {gi: (1.0 / r if r else 0.0) for gi, r in rank_gold[serv]}
+        ms_ = {gi: (1.0 / r if r else 0.0) for gi, r in rank_gold[serv]}
         for v in variantes[1:]:
             if v not in rank_gold:
                 continue
             ok = tot = 0
             for gi, r in rank_gold[v]:
-                dm = (1.0 / r if r else 0.0) - ms.get(gi, 0.0)
+                dm = (1.0 / r if r else 0.0) - ms_.get(gi, 0.0)
                 dj = nd[(v, "biblioteca", gi)] - nd[(serv, "biblioteca", gi)]
                 if dm == 0 or abs(dj) < 0.02:
                     continue
                 tot += 1
                 ok += int((dm > 0) == (dj > 0))
-            conc[v] = {"concordam": ok, "comparaveis": tot,
-                       "taxa": round(ok / tot, 3) if tot else None}
+            conc[v] = {"concordam": ok, "comparaveis": tot, "taxa": round(ok / tot, 3) if tot else None}
     res["juiz"]["concordancia_com_gabarito"] = conc
     res["segundos"] = round(time.time() - t_ini, 1)
     with open(os.path.join(SAIDA, "resultado.json"), "w", encoding="utf-8") as f:
